@@ -1,0 +1,479 @@
+-- A JSON parser (#65): a document read whole from standard input, parsed by recursive descent
+-- into an owned value, then a field of it and the whole of it serialised again. The input is lent
+-- once as bytes at `'t`, after a check that it is UTF-8; the parser reads it at run-time indices
+-- (`json-tokens`' scanners), and every string and number it keeps is copied out of the view, so
+-- the value owns all of it. `value`, `array` and `object` call one another: one recursive group,
+-- driven by `bounded`. An object is a `Vec` of pairs: a value recursive through a `Map` is not
+-- provided (`data` recursion goes through `data` and `Vec` only).
+--
+-- A malformed document raises `Fail[JsonError]`, the code of what was wrong and the byte where it
+-- was, from whatever depth it is found at: the raise unwinds every enclosing level, consuming the
+-- buffers and strings each holds. A document nested past the budget of depth performs `Exhausted`
+-- and unwinds the same way. `main` parses three documents, each under its own handlers: the
+-- input, a document missing a comma three levels down, and twelve thousand `[`.
+--
+-- Answer: the field `name` and the input serialised again, one per line, then
+-- `(inl i32[N], (inr inl (i32[2], i32[29]), inr inr ()))`: N values in the input; error 2 (not a
+-- `,` or `]` after an element) at byte 29; the deep document exhausted. A parser that lost an
+-- escape, a surrogate pair or an exponent changes a line; one that swallowed the missing comma
+-- answers `inl`; `live 0` holds only if every abandoned level's partial data was consumed.
+
+include rec
+include fail
+include float
+
+-- What was wrong, and the byte where it was found. Codes: 1 no value starts here; 2 not `,` or
+-- `]` after an element; 3 not `,` or `}` after a member; 4 not a string where a key belongs;
+-- 5 not `:` after a key; 6 a string not closed; 7 a bad escape; 8 a control byte in a string;
+-- 9 a malformed number; 10 a malformed `true`, `false` or `null`; 11 bytes after the value;
+-- 12 the input is not UTF-8.
+type JsonError = i32 * i32
+
+data Json = Null | Bool(bool) | Num(f64) | Str(string) | Arr(Vec[Json]) | Obj(Vec[Json * string])
+
+-- The view of the bytes `[i, j)` of `t`, clamped to it.
+fn sub<'a>(t: text 'a, i: i32, j: i32) -> text 'a =
+  let left = match split_at(t, j) { inl (l, r) -> array_release['a, u8](r); l | inr t -> t };
+  match split_at(left, i) { inl (l, r) -> array_release['a, u8](l); r | inr l -> array_release['a, u8](l); slice_empty_imm['a, u8] }
+
+-- The index of the first byte at or after `i` that is not white space.
+fn skip_ws<'a>(t: text 'a, i: i32) -> i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let (t, (j, _)) = count_fold[text 'a * (i32 * bool)](
+    !{ (k, (t, (j, go))) ->
+      let (t, w) = array_copy['a, u8] t;
+      let sp = is_space(at(w, k, b'x'));
+      if go && sp { (t, (k + 1, true)) } else { (t, (j, false)) } },
+    len(u), i, (t, (i, true)));
+  array_release['a, u8](t);
+  j
+
+-- The byte at `i`, or 0 past the end.
+fn byte<'a>(t: text 'a, i: i32) -> u8 = at(t, i, 0)
+
+-- The index of the quote closing a string whose body starts at `i`, or `inr` of the length when
+-- there is none. A backslash escapes the byte after it.
+fn scan_string<'a>(t: text 'a, i: i32) -> i32 + i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let n = len(u);
+  let (t, (_, r)) = count_fold[text 'a * (bool * (i32 + 1))](
+    !{ (k, (t, (esc, r))) ->
+      match r {
+        inl j -> (t, (esc, inl j))
+      | inr u ->
+          let (t, w) = array_copy['a, u8] t;
+          let c = at(w, k, b'x');
+          if esc { (t, (false, inr ())) }
+          else { if c == b'\\' { (t, (true, inr ())) }
+          else { if c == b'"' { (t, (false, inl k)) } else { (t, (false, inr ())) } } }
+      } },
+    n, i, (t, (false, inr ())));
+  array_release['a, u8](t);
+  match r { inl j -> inl j | inr u -> inr n }
+
+-- The value of a hexadecimal digit, or -1.
+fn hex(c: u8) -> i32 =
+  if b'0' <= c && c <= b'9' { to_i32(c) - 48 }
+  else { if b'a' <= c && c <= b'f' { to_i32(c) - 87 }
+  else { if b'A' <= c && c <= b'F' { to_i32(c) - 55 } else { 0 - 1 } } }
+
+-- The four hexadecimal digits at `i` as a code unit, or -1 when one is not a digit.
+fn hex4<'a>(t: text 'a, i: i32) -> i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let a = hex(byte(u, i));
+  let (t, u) = array_copy['a, u8] t;
+  let b = hex(byte(u, i + 1));
+  let (t, u) = array_copy['a, u8] t;
+  let c = hex(byte(u, i + 2));
+  let d = hex(byte(t, i + 3));
+  if a < 0 || b < 0 || c < 0 || d < 0 { 0 - 1 } else { ((a * 16 + b) * 16 + c) * 16 + d }
+
+-- The escape at `i` (the byte after the backslash) decoded: the code point and the index after
+-- it. `\uD8xx\uDCxx` is one code point; a lone surrogate is an error.
+fn escape<'a>(t: text 'a, i: i32) -> i32 * i32 with Fail[JsonError] =
+  let (t, u) = array_copy['a, u8] t;
+  let c = byte(u, i);
+  if c == b'u' {
+    let (t, u) = array_copy['a, u8] t;
+    let h = hex4(u, i + 1);
+    if h < 0 { array_release['a, u8](t); raise((7, i)) }
+    else { if 55296 <= h && h < 56320 {
+      let (t, u) = array_copy['a, u8] t;
+      let (t, w) = array_copy['a, u8] t;
+      if byte(u, i + 5) == b'\\' && byte(w, i + 6) == b'u' {
+        let l = hex4(t, i + 7);
+        if 56320 <= l && l < 57344 { (65536 + (h - 55296) * 1024 + (l - 56320), i + 11) }
+        else { raise((7, i + 6)) }
+      } else { array_release['a, u8](t); raise((7, i)) } }
+    else { array_release['a, u8](t);
+      if 56320 <= h && h < 57344 { raise((7, i)) } else { (h, i + 5) } } }
+  } else {
+    array_release['a, u8](t);
+    if c == b'"' || c == b'\\' || c == b'/' { (to_i32(c), i + 1) }
+    else { if c == b'n' { (10, i + 1) }
+    else { if c == b't' { (9, i + 1) }
+    else { if c == b'r' { (13, i + 1) }
+    else { if c == b'b' { (8, i + 1) }
+    else { if c == b'f' { (12, i + 1) } else { raise((7, i)) } } } } } }
+  }
+
+-- The body of a string starting at `i`, decoded into an owned string, and the index after its
+-- closing quote. Bytes other than escapes are copied as they are: the input is UTF-8.
+fn string_lit<'a>(t: text 'a, i: i32) -> string * i32 with Fail[JsonError] =
+  let (t, u) = array_copy['a, u8] t;
+  match scan_string(u, i) {
+    inr n -> array_release['a, u8](t); raise((6, i))
+  | inl e ->
+      let mut t = t;
+      let mut s = string_new(e - i);
+      let mut j = i;
+      for k in 0..(e - i) {
+        if j < e {
+          let (t2, u) = array_copy['a, u8] t;
+          t = t2;
+          let c = byte(u, j);
+          if c == b'\\' {
+            let (t2, u) = array_copy['a, u8] t;
+            t = t2;
+            let (cp, j2) = escape(u, j + 1);
+            let cur = s;
+            let (s2, _) = push_char(cur, cp);
+            s = s2;
+            j = j2
+          } else { if c < 32 { raise((8, j)) } else {
+            let cur = s;
+            let (s2, _) = push_byte(cur, c);
+            s = s2;
+            j = j + 1 } }
+        } else { () }
+      };
+      array_release['a, u8](t);
+      (s, e + 1)
+  }
+
+-- The end of a number starting at `i`: `-? (0 | [1-9][0-9]*) (. [0-9]+)? ([eE] [+-]? [0-9]+)?`.
+-- The states: 0 start, 1 after `-`, 2 after a leading `0`, 3 in the integer digits, 4 after `.`,
+-- 5 in the fraction, 6 after `e`, 7 after its sign, 8 in the exponent; 2, 3, 5 and 8 accept.
+fn scan_number<'a>(t: text 'a, i: i32) -> i32 with Fail[JsonError] =
+  let (t, u) = array_copy['a, u8] t;
+  let n = len(u);
+  let mut t = t;
+  let mut st = 0;
+  let mut j = i;
+  let mut go = true;
+  for k in 0..(n - i + 1) {
+    if go {
+      let (t2, u) = array_copy['a, u8] t;
+      t = t2;
+      let c = byte(u, j);
+      let d = b'0' <= c && c <= b'9';
+      let nx =
+        if st == 0 { if c == b'-' { 1 } else { if c == b'0' { 2 } else { if d { 3 } else { 0 - 1 } } } }
+        else { if st == 1 { if c == b'0' { 2 } else { if d { 3 } else { 0 - 1 } } }
+        else { if st == 2 || st == 3 {
+          if d && st == 3 { 3 } else { if c == b'.' { 4 } else { if c == b'e' || c == b'E' { 6 } else { 0 - 1 } } } }
+        else { if st == 4 || st == 5 {
+          if d { 5 } else { if st == 5 && (c == b'e' || c == b'E') { 6 } else { 0 - 1 } } }
+        else { if st == 6 { if c == b'+' || c == b'-' { 7 } else { if d { 8 } else { 0 - 1 } } }
+        else { if d { 8 } else { 0 - 1 } } } } } };
+      if nx < 0 { go = false } else { st = nx; j = j + 1 }
+    } else { () }
+  };
+  array_release['a, u8](t);
+  if st == 2 || st == 3 || st == 5 || st == 8 { j } else { raise((9, j)) }
+
+-- The word `w` at `i`, and the index after it.
+fn word<'a>(t: text 'a, i: i32, w: lit) -> i32 with Fail[JsonError] =
+  let n = lit_len(w);
+  if eq_lit(sub(t, i, i + n), w) { i + n } else { raise((10, i)) }
+
+-- A number at `i`, as an `f64`, and the index after it.
+fn number<'a>(t: text 'a, i: i32) -> Json * i32 with Fail[JsonError] =
+  let (t, u) = array_copy['a, u8] t;
+  let j = scan_number(u, i);
+  let x = with map_err[FloatParseError, JsonError, f64](!{ e -> (9, i) }) { parse_f64(sub(t, i, j)) };
+  (Num(x), j)
+
+-- The value at or after `i`, and the index after it.
+fn value<'a>(t: text 'a, i: i32) -> Json * i32 with Fail[JsonError], Exhausted =
+  let (t, u) = array_copy['a, u8] t;
+  let i = skip_ws(u, i);
+  let (t, u) = array_copy['a, u8] t;
+  let c = byte(u, i);
+  if c == b'{' { object(t, i + 1) }
+  else { if c == b'[' { array(t, i + 1) }
+  else { if c == b'"' { let (s, j) = string_lit(t, i + 1); (Str(s), j) }
+  else { if c == b'-' || (b'0' <= c && c <= b'9') { number(t, i) }
+  else { if c == b't' { let j = word(t, i, "true"); (Bool(true), j) }
+  else { if c == b'f' { let j = word(t, i, "false"); (Bool(false), j) }
+  else { if c == b'n' { let j = word(t, i, "null"); (Null, j) }
+  else { array_release['a, u8](t); raise((1, i)) } } } } } } }
+
+-- The elements of an array whose `[` is before `i`, and the index after its `]`. Each element
+-- takes at least one byte, so the input's length bounds the loop.
+fn array<'a>(t: text 'a, i: i32) -> Json * i32 with Fail[JsonError], Exhausted =
+  let (t, u) = array_copy['a, u8] t;
+  let i = skip_ws(u, i);
+  let (t, u) = array_copy['a, u8] t;
+  if byte(u, i) == b']' { array_release['a, u8](t); (Arr(Vec(box buf[Json](0))), i + 1) } else {
+    let (t, u) = array_copy['a, u8] t;
+    let n = len(u);
+    let mut t = t;
+    let mut b = box buf[Json](4);
+    let mut j = i;
+    let mut go = true;
+    for k in 0..n {
+      if go {
+        let (t2, u) = array_copy['a, u8] t;
+        t = t2;
+        let (x, j2) = value(u, j);
+        let cur = b;
+        let (b2, _) = push(cur, x);
+        b = b2;
+        let (t2, u) = array_copy['a, u8] t;
+        t = t2;
+        let j3 = skip_ws(u, j2);
+        let (t2, u) = array_copy['a, u8] t;
+        t = t2;
+        let c = byte(u, j3);
+        if c == b',' { j = j3 + 1 }
+        else { if c == b']' { j = j3 + 1; go = false } else { raise((2, j3)) } }
+      } else { () }
+    };
+    array_release['a, u8](t);
+    if go { raise((2, j)) } else { (Arr(Vec(b)), j) }
+  }
+
+-- The members of an object whose `{` is before `i`, and the index after its `}`.
+fn object<'a>(t: text 'a, i: i32) -> Json * i32 with Fail[JsonError], Exhausted =
+  let (t, u) = array_copy['a, u8] t;
+  let i = skip_ws(u, i);
+  let (t, u) = array_copy['a, u8] t;
+  if byte(u, i) == b'}' { array_release['a, u8](t); (Obj(Vec(box buf[Json * string](0))), i + 1) } else {
+    let (t, u) = array_copy['a, u8] t;
+    let n = len(u);
+    let mut t = t;
+    let mut b = box buf[Json * string](4);
+    let mut j = i;
+    let mut go = true;
+    for k in 0..n {
+      if go {
+        let (t2, u) = array_copy['a, u8] t;
+        t = t2;
+        let j1 = skip_ws(u, j);
+        let (t2, u) = array_copy['a, u8] t;
+        t = t2;
+        if byte(u, j1) != b'"' { raise((4, j1)) } else {
+          let (t2, u) = array_copy['a, u8] t;
+          t = t2;
+          let (key, j2) = string_lit(u, j1 + 1);
+          let (t2, u) = array_copy['a, u8] t;
+          t = t2;
+          let j3 = skip_ws(u, j2);
+          let (t2, u) = array_copy['a, u8] t;
+          t = t2;
+          if byte(u, j3) != b':' { raise((5, j3)) } else {
+            let (t2, u) = array_copy['a, u8] t;
+            t = t2;
+            let (x, j4) = value(u, j3 + 1);
+            let cur = b;
+            let (b2, _) = push(cur, (x, key));
+            b = b2;
+            let (t2, u) = array_copy['a, u8] t;
+            t = t2;
+            let j5 = skip_ws(u, j4);
+            let (t2, u) = array_copy['a, u8] t;
+            t = t2;
+            let c = byte(u, j5);
+            if c == b',' { j = j5 + 1 }
+            else { if c == b'}' { j = j5 + 1; go = false } else { raise((3, j5)) } }
+          }
+        }
+      } else { () }
+    };
+    array_release['a, u8](t);
+    if go { raise((3, j)) } else { (Obj(Vec(b)), j) }
+  }
+
+-- The document: one value, then only white space.
+fn parse<'a>(t: text 'a) -> Json with Fail[JsonError], Exhausted =
+  let (t, u) = array_copy['a, u8] t;
+  let (t, w) = array_copy['a, u8] t;
+  let v = with map_err[i32, JsonError, text 'a](!{ e -> (12, e) }) { str_from_utf8(w) };
+  array_release['a, u8](v);
+  let (t, u2) = array_copy['a, u8] t;
+  let (j, k) = value(u, 0);
+  let e = skip_ws(u2, k);
+  if e < len(t) { raise((11, e)) } else { j }
+
+-- `s` appended as a JSON string: quoted, with `"`, `\` and the control bytes escaped.
+fn push_json_str(out: string, s: string) -> string * string =
+  let (out, _) = push_byte(out, b'"');
+  let (s, n) = len_of(s);
+  let (out, s) = borrow imm s { v ->
+    let (v, w) = array_copy[u8] v;
+    let (v, out) = count_fold[text 'v * string](
+      !{ (k, (v, out)) ->
+        let (v, w) = array_copy[u8] v;
+        let c = byte(w, k);
+        let out =
+          if c == b'"' || c == b'\\' { let (out, _) = push_byte(out, b'\\'); let (out, _) = push_byte(out, c); out }
+          else { if c == 10 { let (out, _) = push_lit(out, "\\n"); out }
+          else { if c == 9 { let (out, _) = push_lit(out, "\\t"); out }
+          else { if c == 13 { let (out, _) = push_lit(out, "\\r"); out }
+          else { if c < 32 {
+            let (out, _) = push_lit(out, "\\u00");
+            let (out, _) = push_byte(out, if c < 16 { b'0' } else { b'1' });
+            let h = to_i32(c) - (to_i32(c) / 16) * 16;
+            let (out, _) = push_byte(out, to_u8(if h < 10 { 48 + h } else { 87 + h }));
+            out }
+          else { let (out, _) = push_byte(out, c); out } } } } };
+        (v, out) },
+      len(w), 0, (v, out));
+    array_release[u8](v);
+    out };
+  let (out, _) = push_byte(out, b'"');
+  (out, s)
+
+-- `j` appended to `out` in JSON, without white space; `j` is handed back.
+fn ser(j: Json, out: string) -> Json * string with Exhausted =
+  match j {
+    Null -> let (out, _) = push_lit(out, "null"); (Null, out)
+  | Bool(b) -> let (out, _) = push_lit(out, if b { "true" } else { "false" }); (Bool(b), out)
+  | Num(x) -> let (out, _) = push_f64(out, x); (Num(x), out)
+  | Str(s) -> let (out, s) = push_json_str(out, s); (Str(s), out)
+  | Arr(Vec(b)) ->
+      let (out, _) = push_byte(out, b'[');
+      let (b, n) = len_of(b);
+      let mut b = b;
+      let mut out = out;
+      for i in 0..n {
+        if i > 0 { let cur = out; let (o2, _) = push_byte(cur, b','); out = o2 } else { () };
+        let (b2, o) = take(b, i);
+        let (a, m) = b2;
+        let cur = out;
+        let (a, o2) = match o {
+          inl x -> let (x, o3) = ser(x, cur); (array_set(a, i, x), o3)
+        | inr u -> (a, cur) };
+        b = (a, m);
+        out = o2
+      };
+      let (out, _) = push_byte(out, b']');
+      (Arr(Vec(b)), out)
+  | Obj(Vec(b)) ->
+      let (out, _) = push_byte(out, b'{');
+      let (b, n) = len_of(b);
+      let mut b = b;
+      let mut out = out;
+      for i in 0..n {
+        if i > 0 { let cur = out; let (o2, _) = push_byte(cur, b','); out = o2 } else { () };
+        let (b2, o) = take(b, i);
+        let (a, m) = b2;
+        let cur = out;
+        let (a, o2) = match o {
+          inl (x, key) ->
+            let (o3, key) = push_json_str(cur, key);
+            let (o3, _) = push_byte(o3, b':');
+            let (x, o3) = ser(x, o3);
+            (array_set(a, i, (x, key)), o3)
+        | inr u -> (a, cur) };
+        b = (a, m);
+        out = o2
+      };
+      let (out, _) = push_byte(out, b'}');
+      (Obj(Vec(b)), out)
+  }
+
+-- The member `k` of an object appended to `out` in JSON, or `null` when there is none; `j` is
+-- handed back.
+fn field(j: Json, k: lit, out: string) -> Json * string with Exhausted =
+  match j {
+    Obj(Vec(b)) ->
+      let (b, n) = len_of(b);
+      let mut b = b;
+      let mut out = out;
+      let mut found = false;
+      for i in 0..n {
+        let (b2, o) = take(b, i);
+        let (a, m) = b2;
+        let cur = out;
+        let (a, o2, f) = match o {
+          inl (x, key) ->
+            let (key, hit) = borrow imm key { v -> eq_lit(v, k) };
+            if hit && not(found) { let (x, o3) = ser(x, cur); (array_set(a, i, (x, key)), o3, true) }
+            else { (array_set(a, i, (x, key)), cur, found) }
+        | inr u -> (a, cur, found) };
+        b = (a, m);
+        out = o2;
+        found = f
+      };
+      let out = if found { out } else { let (out, _) = push_lit(out, "null"); out };
+      (Obj(Vec(b)), out)
+  | j -> let (out, _) = push_lit(out, "null"); (j, out)
+  }
+
+-- The number of values in `j`, counting `j`; `j` is handed back.
+fn size(j: Json) -> Json * i32 with Exhausted =
+  match j {
+    Arr(Vec(b)) ->
+      let (b, n) = len_of(b);
+      let mut b = b;
+      let mut c = 1;
+      for i in 0..n {
+        let (b2, o) = take(b, i);
+        let (a, m) = b2;
+        let (a, d) = match o { inl x -> let (x, d) = size(x); (array_set(a, i, x), d) | inr u -> (a, 0) };
+        b = (a, m);
+        c = c + d
+      };
+      (Arr(Vec(b)), c)
+  | Obj(Vec(b)) ->
+      let (b, n) = len_of(b);
+      let mut b = b;
+      let mut c = 1;
+      for i in 0..n {
+        let (b2, o) = take(b, i);
+        let (a, m) = b2;
+        let (a, d) = match o {
+          inl (x, key) -> let (x, d) = size(x); (array_set(a, i, (x, key)), d)
+        | inr u -> (a, 0) };
+        b = (a, m);
+        c = c + d
+      };
+      (Obj(Vec(b)), c)
+  | j -> (j, 1)
+  }
+
+-- The document in `s` parsed: the number of its values, its error, or `inr ()` when it is nested
+-- past the budget. When `show` holds, its field `name` and itself are printed, one per line.
+fn run(s: string, show: bool) -> (i32 + JsonError) + 1 =
+  with exhausted_to_option[i32 + JsonError] {
+    with to_result[JsonError, i32] {
+      let j = borrow imm s { 't, t -> parse(t) };
+      let (j, n) = size(j);
+      if show {
+        let (j, out) = field(j, "name", string_new(64));
+        let (out, _) = push_byte(out, b'\n');
+        let (j, out) = ser(j, out);
+        let (out, _) = push_byte(out, b'\n');
+        let out = print_string(out);
+        n
+      } else { n }
+    }
+  }
+
+-- A document missing a `,` three levels down: error 2 at byte 29.
+def broken : lit = "{\"a\": [1, {\"b\": [true, null] \"c\"}]}"
+
+-- `n` copies of `[`.
+fn nested(n: i32) -> string =
+  let mut s = string_new(n);
+  for k in 0..n { let cur = s; let (s2, _) = push_byte(cur, b'['); s = s2 };
+  s
+
+main -> (i32 + JsonError) + 1 * ((i32 + JsonError) + 1 * ((i32 + JsonError) + 1)) =
+  let inp = read_all(&mut stdin);
+  let a = run(inp, true);
+  let b = run(string_of_lit(broken), false);
+  let c = run(nested(12000), false);
+  (a, (b, c))
