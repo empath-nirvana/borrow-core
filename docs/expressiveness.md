@@ -222,7 +222,7 @@ blocker. "Runs (shape)" means it runs only in a shape the language forces, named
 | nested loops where an inner loop is unbounded or a looping function is called per element (sieve's strike loop inside its passes; a scan inside a sort's outer loop) — written today as separate functions | `reject/while-in-counted-for.bc`, #503, `docs/loops.md` S1/S2 | refused (recorded) | T03, T04, sieve's forced shape |
 | a loop that updates a collection only on some elements (append when a test passes) — the update is a lend in one arm | `for-in-if-lend` (#502), #538 | refused (measured) | T03, T06 |
 | a loop body that reuses a name the enclosing code also uses (an innocent local shadowing an owner) | `loop-shadow-*`, `loop-handler-binder` (#493) | refused (measured) | quicksort's forced shape |
-| backtracking: a loop over candidates that recurses, pushing and popping a path | `rec-in-for-linear`, `lc-0039` (#492) | refused (measured) | outside |
+| backtracking: a loop over candidates that recurses, pushing and popping a path | `rec-in-for-linear`, `leetcode/dp/0039-combination-sum-loop` (#492) | runs (#848) | outside |
 | a callback or block that updates a local of its caller (a visitor accumulating a sum) | #586 | **runs with a silent wrong answer** (recorded on the issue) | T12 |
 | borrowing a value while already working inside another borrow, then using the outer value after | `borrow-nested-handback` (#495) | refused (measured) | outside |
 
@@ -759,7 +759,7 @@ gen-digits.bc: gen-digits.bc:18:27: `io_it1`, of type `U (iter u8 (ref input) (r
 gen-lazy.bc: gen-lazy.bc:22:5: `o`, of type `ref output`, is live across a computation that may abort, and its type is linear and not consumable, and an abort abandons only a value that holds no owned cell
 gen-lines.bc: gen-lines.bc:23:18: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its t
 io-two-tasks.bc: io-two-tasks.bc:22:11: two tasks spawned in this block are given the capability of `Stdout`: a capability is lent to one task at
-lc-0039-combination-sum.bc: lc-0039-combination-sum.bc:58:28: in this `case`, `out` is consumed in the `inr` arm but not in the `inl` arm
+lc-0039-combination-sum.bc: runs since #848, as `corpus/leetcode/dp/0039-combination-sum-loop.bc` (SPEC §12 *Handled bodies*); its error was `out` is consumed in the `inr` arm but not in the `inl` arm
 lc-0070-climbing-stairs-memo.bc: lc-0070-climbing-stairs-memo.bc:38:32: no handler `memo` is declared before this `with`
 lc-0208-trie-boxed.bc: runs since #722, as `corpus/leetcode/trees/0208-implement-trie-boxed.bc` (the consume at the class `P`, SPEC §61); its error was `io_d23` is not consumed in its scope, and its type `(1 + (mu X. (1 + 1) * array (1 + X))) + 
 lend-nested.bc: lend-nested.bc:33:38: type mismatch: expected `i32`, but this has type `ref array i32 * i32`
@@ -773,7 +773,7 @@ operator-reconcile.bc: operator-reconcile.bc:97:34: type mismatch: expected `mut
 parse-recover-gen.bc: parse-recover-gen.bc:136:7: the iterator of this `for` holds the borrow of `v`: a borrow block over a loop lends its place 
 print-borrowed-list.bc: print-borrowed-list.bc:37:12: expected a value, found `iter`
 raise-in-fold.bc: raise-in-fold.bc:70:69: `sum_alg` performs `Fail` and is passed as a value: it can only be called (effectful callbacks, #161)
-rec-in-for-linear.bc: rec-in-for-linear.bc:19:20: in this `case`, `a` is consumed in the `inr` arm but not in the `inl` arm
+rec-in-for-linear.bc: runs since #848, as `corpus/rec-in-for-linear.bc` (SPEC §12 *Handled bodies*); its error was `a` is consumed in the `inr` arm but not in the `inl` arm
 state-machine-audit.bc: state-machine-audit.bc:72:1: this borrow block's result has type `mut 'fx_l_audit (i32 * i32 * i32) * i32`, which has the
 two-writers.bc: two-writers.bc:42:9: `io_lm42_3` is used twice here, and its type `mut 'io_lb42_3 output` is linear
 ```

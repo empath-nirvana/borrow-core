@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.38 · 2026-11-05
+Version 1.40 · 2026-11-07
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1486,6 +1486,17 @@ does not, the checker consumes it by its consume:
   components of `<M, N>`, the bodies of `fun` and `Fun`, and through `nu_in` and
   ascriptions. An owed variable that the head `M` of `x <- M; N` mentions is owed to `M`, which
   must then consume it on every path of `M`, consuming it where it does not.
+- **Handled bodies.** A handler site `handle[k] (H) M` (a `with`; every `for` body, a per-iteration
+  handler; the budget's site of a recursion) is not terminal: an owed variable that the handled
+  body `M` mentions is owed to `M`, as to the head of `x <- M; N`, and the others are consumed
+  before the site, at its end of path. So a path of `M` that ends in an abortive operation (a
+  `raise`, a budget's `exhausted`, a loop's exit) consumes before the abort what `M` is owed and
+  that path has not used, and a `case` in `M` whose one arm aborts and whose other uses such a
+  variable merges. The handler's pair uses only persistent slots (`[handle]`'s `Γ₁`), and an owed
+  slot is never persistent, so the split of the site is unchanged; a variable `M` mentions is used
+  by `M` on every path already, so the outlives premise of a boxed `κ` (§28) asks nothing new. The
+  consumes are `consumeOne`'s nodes, and `[handle]` and `[sub]` are unchanged. The variables `M`
+  does not mention stay consumed before the site, where they were. (#848, #492)
 - **Not moved across effects.** A consume is never placed earlier than the path's terminal
   computation. Codata `close` runs code, so moving it would reorder effects.
 - `<>` and `absurd V` absorb any context (§11 of `docs/syntax-core.md`), so no consume is inserted
@@ -11612,6 +11623,17 @@ checker or the old backend.
   `lendR_plain`: `[lend-R]` at the empty row is the plain lend, the finaliser never run. Backend2
   reads both and compiles every corpus program. No change to `CDerives`, the relation, the
   machine, the checker or the old backend.
+- **1.40** (2026-11-07) — §12 (#848, #492): a handler site is not terminal for the insertion
+  policy (*Handled bodies*): the handled body is owed the owed variables it mentions, as the head
+  of `x <- M; N` is, so an abortive arm inside a `with`, a `for` body or a recursion releases an
+  owned variable bound outside the site by its consume. Programs with a `raise`, or a recursive
+  call, in one arm and an outer owned value used in the other are accepted
+  (`corpus/handle-arm-releases.bc`, `corpus/for-arm-raises-owned.bc`,
+  `corpus/rec-for-owned-state.bc`; the pending `rec-in-for-linear.bc` and
+  `lc-0039-combination-sum.bc` run, as `corpus/rec-in-for-linear.bc` and
+  `corpus/leetcode/dp/0039-combination-sum-loop.bc`). No change to `CDerives`,
+  the kernel, the theorems or the backends; every other corpus program checks as before.
+
 - **1.38** (2026-11-04) — §62 (*Semantic types read at the tree*): `F A` is a bare `cerwpT` run
   (`SCmp.ret`), Core's `cC (.ret A)`; the Kripke quantifier over later worlds and lists sits at
   `U` only. Thunks are introduced as Core's `thunkF_compatC` does, from the computation at every

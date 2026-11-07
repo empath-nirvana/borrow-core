@@ -255,6 +255,10 @@ corpus/effects-tunnel.bc 2.0 cancellable abortive: branch; agree
 corpus/filler-mu.bc 1.0 cancellable abortive: -; agree
 corpus/float-roundtrip.bc 1.0 cancellable abortive: branch; agree
 corpus/float-roundtrip.bc 2.0 cancellable abortive: branch; agree
+corpus/for-arm-raises-owned.bc 1.0 cancellable abortive: branch; agree
+corpus/for-arm-raises-owned.bc 2.0 cancellable abortive: branch; agree
+corpus/for-arm-raises-owned.bc 3.0 cancellable abortive: branch; agree
+corpus/for-arm-raises-owned.bc 4.0 cancellable abortive: branch; agree
 corpus/for-data-div.bc 2.0 cancellable tail: direct; agree
 corpus/for-data-div.bc 3.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/for-data-div.bc 4.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
@@ -351,6 +355,7 @@ corpus/gen-value.bc 3.0 cancellable stored,tail: machine: a path of the clause d
 corpus/gen-value.bc 2.0 cancellable tail: direct; agree
 corpus/gen-value.bc 4.0 cancellable resume-or-cancel,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-value.bc 1.0 cancellable tail: direct; agree
+corpus/handle-arm-releases.bc 1.0 cancellable abortive: branch; agree
 corpus/hygiene-clause-global.bc 2.0 cancellable abortive: branch; agree
 corpus/hygiene-clause-global.bc 1.0 cancellable tail: direct; agree
 corpus/hygiene-handler-after.bc 1.0 cancellable abortive: -; agree
@@ -366,6 +371,7 @@ corpus/io-task.bc 2.0 cancellable stored: machine: a path of the clause does not
 corpus/io-task.bc 2.1 cancellable tail: -; agree
 corpus/io-task.bc 1.0 cancellable abortive: branch; agree
 corpus/key-value.bc 1.0 cancellable abortive: branch; agree
+corpus/leetcode/dp/0039-combination-sum-loop.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/dp/0039-combination-sum.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/dp/0070-climbing-stairs.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/graphs/0200-number-of-islands.bc 1.0 cancellable abortive: branch; agree
@@ -454,8 +460,12 @@ corpus/rec-emit.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-emit.bc 2.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/rec-even-odd.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-fib.bc 1.0 cancellable abortive: branch; agree
+corpus/rec-for-owned-state.bc 1.0 cancellable abortive: branch; agree
+corpus/rec-for-owned-state.bc 2.0 cancellable abortive: branch; agree
+corpus/rec-for-owned-state.bc 3.0 cancellable abortive: branch; agree
 corpus/rec-generic-layer.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-generic-mutual.bc 1.0 cancellable abortive: branch; agree
+corpus/rec-in-for-linear.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-layer.bc 2.0 cancellable abortive: branch; agree
 corpus/rec-layer.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-lifetimes.bc 3.0 cancellable abortive: branch; agree
