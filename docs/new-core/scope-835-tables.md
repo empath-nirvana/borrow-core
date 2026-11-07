@@ -379,3 +379,107 @@ At one world, `tabF_unit` and `erwp_tabF_unit` turn each statement back into tod
 - **Unused uniqueness/functionality results:** none.
 - **Not in this unit:** `cN`/`vN` at `KW` and the re-pointing, `hs_schedOKN` at `KW`, E10, the
   Capture family, the Imm Frame's cancellable layers.
+
+## 10. `cN` at `KW` and the typed layer re-pointed: the plan
+
+### 10.1 How `cN` changes
+
+**The relation takes the scheduler names.** `vN`'s `U` clause reads `cN`, and `cN` at `KW` reads
+the scheduler names `S` through each entry's order (`KW.OwedS S m`). So every member of the mutual
+block takes `S`: a thunk's computation is read at the program's scheduler names. No fixed `S` does:
+`S = ∅` makes a lend callback's `await` owe along `KW.OwedR`, which the Mut Frame's fold cannot
+give (`Kappa835N.not_extRFoldTransfer`); a larger `S` makes an ordinary handler's `κ` owe along
+`KW.Owed`, which `U` does not read (`flooredExit`). `vN`'s clauses do not change: `U` reads `ExtR`
+at the share with no floor (`scope-835-lendexit.md` §2).
+
+**The tables read the new values.** The `F_Σ` clause's table reads payloads and answers at the
+new `vN`, not at today's: a payload `U C` (the scheduler's task, a callback) must be a thunk of the
+new `cN`. So the table is `tabF (rdKWv (vNW S) id δ) S C`, where `rdKWv vr g δ` is `rdKW g δ`
+reading values at `vr`, and `rdKW g δ` is `rdKWv vN g δ`. This is §9.4's clause with the value
+reading made explicit.
+
+**Beside, not in place.** Redefining `Goal791N`'s block in place would break, at once, every proof
+that opens `cN`'s `F`/`F_Σ` clause (39 files); the branch would not build until all were
+re-proved. So the relation at `KW` is a new block, `Core/Chain/CNW835N.lean`:
+`vNWE`/`vOWE`/`cNW`/`cBNW`/`retNXW`/`tabNW`/`finNW`/`retNW`, clause for clause `Goal791N`'s, with
+`S` an explicit parameter. `Goal791N`'s block and every statement over it are unchanged.
+
+| Clause | At `KW` |
+|---|---|
+| `F A` | `∀ lo, erwpK KW.PostK (·.Θ.view ·.c) (opTableK ·.lo OpTabK.empty) (vNW S A δ ·.Θ) ⟨Θ, c, lo⟩` |
+| `F_Σ R` | `∀ lo, erwpK KW.PostK (·.Θ.view ·.c) (opTableK ·.lo (tabNW S S C δ ·)) (retNW S C δ ·.Θ) ⟨Θ, c, lo⟩` |
+| `⊸`, `&`, `⊤`, `∀`, `ν` | `Goal791N`'s, at `cNW S` |
+| `cBNW`'s `F`/`F_Σ` | as `cNW`'s, the leaves at `retNXW` |
+
+- **`tabNW S μ C δ x`** is `tabNK`'s recursion inside the block (an entry at `m` owes along
+  `x.OwedS μ m`, its cancel row under `finSched μ m`), reading `vNW S`. `tabNW_eq`:
+  `tabNW S μ C δ x = tabF (rdKWv (vNW S) id δ) μ C x`, so every lemma over the family applies.
+- **The floor is `∀ lo`.** No lemma relates a lend's floor to the lender's (`foldTwin_owed`
+  takes `min f x.lo`); the scheduler's `[handle]` holds at every floor
+  (`erwpK_handle_schedKW_tab`); a callback is read at the lend's world, whose floor is the lend's
+  (`KW.lend`). A post keeps the floor (`KW.PostK`).
+- **`F` at the empty table** is `erwp` at the empty table at every floor (no entry, no stop;
+  `cNW_ret_iff`): its meaning is unchanged.
+
+**`RowRd` reads values at a field.** `RowRd` gains `vr`, the value relation its entries' payloads
+and answers are read at; `RowRd.OK` gains `vrDown` (closed in the index) and `vrPers` (a value of a
+persistent type owns nothing), the two facts about `vN` the family's lemmas use; `PayExt` reads
+`vr`. `rdKW` and `rdU` set `vr := vN`, so their statements and every statement over them are
+unchanged.
+
+### 10.2 The laws
+
+| Law | At `cNW` |
+|---|---|
+| `vN`'s μ machinery (`vBN`, `vN_roll`/`unfold`/`mu_iff`/`ind`, `vFN`), the environment lemmas | proof text unchanged, at `vNW S` |
+| `vN_extR`, `vN_outlives(Le)`, `vN_extend_of_not_free`, `vN_local`, `vN_inStratum_bnd`, `vN_add_eq_bnd`, `vN_above`, `vN_fam_down`, `vN_empty_of_persistent` | unchanged: no clause but `U` reads `cN`, and `U` reads it only through `ExtR`/`δ` |
+| `cN_down`, `cN_le`, `cBN_le` | `erwpK_le` at `Inv = (·.Θ.Down)`, the tables by `tabF_downI` |
+| `tabN_down`, `finN_down` | `tabF_downI` (at `rdKWv`) |
+| `cN_congr`, `tabN_congr`, `finN_congr`, `cBN_congr`, `cBN_poly_ty` | the same recursion at `tabNW`/`finNW` |
+| `cBN_mono`, `cN_nu_*`, `cN_head` | `erwpK_mono`, `erwpK_det` |
+| `cN_effOf` | `tabNW` at `CTy.effOf` |
+| `cN_extA` | the world changes along `ExtA`: a re-indexing of `erwpK` (§10.3, `erwpK_reindex`) |
+| new: `rdKWv_ok`, `rdKWv_payExt` at `vNW S` | from `vNW_down`, `vNW_empty_of_persistent`, `vNW_extR` |
+
+### 10.3 The compatibility lemmas
+
+| Class | Lemmas | At `KW` |
+|---|---|---|
+| no stop owed (values, `ret`, `bind`, the heap and family operations) | `Rules834N` (22), `Fundamental831N` (18), `Fam836N` (21), `FamNew/Slice/Swap836N`, `Count834N`, `Mu836N`, `Nu837N`, `mutSub`/`immSub`/`allI` | the original proof at `erwpK_val`, `erwpK_of_rwp`, `erwpK_bind`, `erwpK_mono` at every floor |
+| stops at the row | `perform_compatN`, `raise_compatN`, `sub_compatN`, `await_compatN`, `let_compatN`, `then_compatN`, `thenDiv_compatN`, `iterate_compatN`, `divFuel_compatN` | `erwpK_perform`, `tabF_rowLe_entry`/`finF_mono` for `sub`; `erwpK_frame_then` at `rdKWv`; `erwpK_iterateCI` at `rdKWv` (`erwpK_iterate_tabKW` restated over `vr`) |
+| handlers | `handleT_compatN`, `handleL_compatN` | `erwpK_frame_plain_or`, `erwpK_consistentPA`, `KapRelK.extF`, `erwpK_handle_le` |
+| lends | `w2`, `w3`, `wF`, `wl`, `sm` (the `*S_compat`), `withbor1/2/3`, `withload`, their `U` forms, `sliceBorrowM/I`, `foldOwnG`, `foldImm`, `withswap` | the frames at the typed tables (§3, §7, §8), restated over `vr`; the callback by `erwpK_reindex` |
+
+**What the lend class needs that is not built.**
+- **The table layer over `vr`.** `tabNK`, `tabRK`, `tabGK`, `tabListK` and their lemmas
+  (`TabK835N`, `TabKW835N`, `TabKW835N2`, `FrameListKW835N`) read `vN`. They are restated over
+  `vr`, reading the facts `vN_extend_of_not_free`, `vN_inStratum_bnd`, `vN_add_eq_bnd`,
+  `vN_extR`, `vN_local` of `vr`; the old statements are the instance `vr = vN`.
+- **`erwpK_reindex`.** A callback `U F` gives `cNW S F (δ.extend x α) Θ′ c′` at the lend's world
+  `x.lend ℓ α F`, its tables indexed by its own worlds. The frame reads it indexed by the lender's
+  worlds, at `tabNK S (·.lend ℓ α F)`. The step is `erwpK` along a world map `g` whose image of an
+  owed world is owed (`KW.lend` preserves `KW.Owed`), with the values moved by `vN_add_eq_bnd`.
+
+### 10.4 Order
+
+1. `RowRd.vr`; the block `CNW835N.lean`; `tabNW_eq`; the laws of §10.2; `rdKWv_ok`,
+   `rdKWv_payExt`.
+2. The table layer over `vr`; `erwpK_reindex`; the constants' compat lemmas `w2`, `w3`, `wF`, `wl`,
+   `sm`.
+3. `let`, `then`, `iterate`, `await`, `perform`, `raise`, `sub`; the handlers T and L.
+4. The rest of §10.3.
+5. `SemJNW`, `ConstNW`, `FundamentalNW`, `fundamentalNW_all`; `Goal791SchedNW`.
+
+### 10.5 The headlines
+
+No headline's statement or proof changes: each is a statement over `Goal791N`'s `cN`, `erwp` or a
+program, and none of those changes.
+
+| Headline | At `KW` |
+|---|---|
+| `*_compatN`, `constN_*`, `constN_*_inst`, `constsN_of`, `fundamentalN_of`, `fundamentalN_all` | a new statement beside, over `cNW S` (`*_compatNW`, …, `fundamentalNW_all` with `MissingNW`). The old one does not follow from it (another relation) and is not replaced in this unit. |
+| `goal791Sched_of*`, `goal791SchedN_of_handlerLaw` | `Goal791SchedNW` beside: the same conclusion (`OrDiverges` of the scheduled program), with `Restrict835 (· = n₀)` and the scheduler's contract at `KW` (`SchedOKNKW`) in place of `SchedOKN`. The old one is replaced once `hs_schedOKN` at `KW` and E10 close `Goal791SchedNW`. |
+| `*_of_K`, the `erwp` laws, `erwp_consistent`, the `#820` `*Prog` results | unchanged: they are about `erwp` and concrete programs. |
+
+No headline changes meaning: the old ones keep theirs, and the new ones say the same thing about
+the relation at `KW`.
