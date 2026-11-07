@@ -2247,22 +2247,24 @@ theorem vN_local (A : VTy) (δ : LSub) (Θ : LocTy) (l₀ : Loc) (α : Life)
   vN_extR A δ n v ρ (LocTy.extR_of_add Θ l₀ F hs) h
 
 
-/-- **A value of a type outliving the bound lies in the stratum of every lend below it.** -/
-theorem vN_inStratum_bnd {A : VTy} {bnd : Lifetime.Life} (hO : VOutlives LifeCtx.empty bnd A)
-    {δ : LSub} {α : Life} (hLt : LtLife δ bnd α) {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes}
-    (h : vN (ℍ := ℍ) A δ Θ n v ρ) : ρ.InStratum α := by
+/-- **A value of a type outliving the bound lies in the stratum of every lend below it**, at every
+`δ ⊨ Δ` for the context `Δ` the outliving is read at.  `[spec §62]` -/
+theorem vN_inStratum_bnd {Δ : LifeCtx} {A : VTy} {bnd : Lifetime.Life} (hO : VOutlives Δ bnd A)
+    {δ : LSub} (hδ : Δ.Models δ) {α : Life} (hLt : LtLife δ bnd α) {Θ : LocTy} {n : Nat} {v : Val}
+    {ρ : WRes} (h : vN (ℍ := ℍ) A δ Θ n v ρ) : ρ.InStratum α := by
   obtain ⟨γ, hγ, hlt⟩ := hLt
-  exact (vN_outlives (models_empty_any _) hγ hO Θ n v ρ h).mono hlt.le
+  exact (vN_outlives hδ hγ hO Θ n v ρ h).mono hlt.le
 
 
 /-- **A fresh lend below the bound does not change `𝒱⟦A⟧` of a type outliving the bound**: its
-values are in the lend's stratum, so `vN_local` and `vN_extA` relate the two worlds both ways. -/
-theorem vN_add_eq_bnd {A : VTy} {bnd : Lifetime.Life} (hO : VOutlives LifeCtx.empty bnd A)
-    (δ : LSub) {α : Life} (hLt : LtLife δ bnd α) {Θ : LocTy} (hf : Θ.Fresh α) (l : Loc)
-    (F : Nat → Val → SPropS Loc Val α) :
+values are in the lend's stratum, so `vN_local` and `vN_extA` relate the two worlds both ways.
+At every `δ ⊨ Δ`.  `[spec §62]` -/
+theorem vN_add_eq_bnd {Δ : LifeCtx} {A : VTy} {bnd : Lifetime.Life} (hO : VOutlives Δ bnd A)
+    (δ : LSub) (hδ : Δ.Models δ) {α : Life} (hLt : LtLife δ bnd α) {Θ : LocTy} (hf : Θ.Fresh α)
+    (l : Loc) (F : Nat → Val → SPropS Loc Val α) :
     vN (ℍ := ℍ) A δ (Θ.add l α F) = vN (ℍ := ℍ) A δ Θ := by
   funext n v ρ
-  exact propext ⟨fun h => vN_local A δ Θ l α F n v ρ (vN_inStratum_bnd hO hLt h) h,
+  exact propext ⟨fun h => vN_local A δ Θ l α F n v ρ (vN_inStratum_bnd hO hδ hLt h) h,
     fun h => vN_extA A δ (LocTy.extA_add hf l F) n v ρ h⟩
 
 
@@ -2487,8 +2489,8 @@ theorem valRelOK_vN : ValRelOK (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k 
   pers := fun A hA _ _ _ _ _ h => vN_empty_of_persistent A hA h
   extend := fun h δ α => vN_extend_of_not_free h δ α
   inStratum := by
-    intro A bnd hO δ α hLt Θ n v ρ h
-    exact vN_inStratum_bnd hO hLt h
+    intro Δ A bnd hO δ hδ α hLt Θ n v ρ h
+    exact vN_inStratum_bnd hO hδ hLt h
   extR := fun A δ _ _ n v ρ hE h => vN_extR A δ n v ρ hE h
 
 /-- **`cN`'s table is the typed table at `vN`**, the lender's (`g = id`). -/

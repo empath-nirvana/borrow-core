@@ -242,8 +242,8 @@ def closingOp (n i n' i' : UInt32) : OpSig :=
 
 /-- **`Row.Suspend` admits a cancel row with a layer**: the row of `closingOp` suspends, so the
 cancel-row clause does not rule out cleanup that performs. -/
-theorem suspend_closingOp (x : LifeVar) (bnd : Lifetime.Life) {n i n' i' : UInt32} (hn : n ≠ 0) :
-    Row.Suspend [closingOp n i n' i'] x bnd := by
+theorem suspend_closingOp (Δ : LifeCtx) (x : LifeVar) (bnd : Lifetime.Life) {n i n' i' : UInt32}
+    (hn : n ≠ 0) : Row.Suspend [closingOp n i n' i'] Δ x bnd := by
   intro o ho
   simp only [List.mem_singleton] at ho
   subst ho
@@ -262,8 +262,10 @@ def parkSig : OpSig := ⟨BoCa.Fig16.Tree.Wp.SchedProgs.Park.nP, 0, .cancel, .un
 holding the record's and the field's borrows, and nothing else. -/
 def hardestRow : Row := [parkSig]
 
-/-- **The hardest case's callback row suspends**, at every borrow variable and bound. -/
-theorem hardestRow_suspend (x : LifeVar) (bnd : Lifetime.Life) : hardestRow.Suspend x bnd := by
+/-- **The hardest case's callback row suspends**, at every lifetime context, borrow variable and
+bound. -/
+theorem hardestRow_suspend (Δ : LifeCtx) (x : LifeVar) (bnd : Lifetime.Life) :
+    hardestRow.Suspend Δ x bnd := by
   intro o ho
   simp only [hardestRow, List.mem_singleton] at ho
   subst ho

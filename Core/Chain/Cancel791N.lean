@@ -227,10 +227,11 @@ theorem layer_cdepth : ∀ (F : CTy) {q : Qual} {A B : VTy} {fin : CTy}, F.Layer
   | .nu _, _, _, _, _, h => h.elim
 
 /-- A layer of a row meeting `CTy.SuspendC` meets its clauses. -/
-theorem layer_suspend {x : LifeVar} {bnd : Lifetime.Life} : ∀ (F : CTy), F.SuspendC x bnd →
+theorem layer_suspend {Δ : LifeCtx} {x : LifeVar} {bnd : Lifetime.Life} :
+    ∀ (F : CTy), F.SuspendC Δ x bnd →
     ∀ {q : Qual} {A B : VTy} {fin : CTy}, F.LayerOf q A B fin →
-    q ≠ .unr ∧ ¬ VFree x A ∧ ¬ VFree x B ∧ VOutlives LifeCtx.empty bnd A ∧
-      VOutlives LifeCtx.empty bnd B ∧ (capB q B = true → fin.SuspendC x bnd)
+    q ≠ .unr ∧ ¬ VFree x A ∧ ¬ VFree x B ∧ VOutlives Δ bnd A ∧
+      VOutlives Δ bnd B ∧ (capB q B = true → fin.SuspendC Δ x bnd)
   | .eff _ _ q₀ A₀ B₀ fin₀ _ C, ⟨h, hC⟩, q, A, B, fin, hL => by
       simp only [CTy.LayerOf] at hL
       rcases hL with ⟨rfl, rfl, rfl, rfl⟩ | hL
@@ -264,14 +265,45 @@ def claimX (R : Nat → WProp) (c : Loc → Option Life) : Nat → WProp :=
 /-! ### The suspending lend's row -/
 
 /-- `Row.Suspend` is `CTy.SuspendC` of the row's computation type. -/
-theorem suspendC_effOf {S : Row} {x : LifeVar} {bnd : Lifetime.Life} (hS : S.Suspend x bnd)
-    (R : VTy) : (CTy.effOf S R).SuspendC x bnd := by
+theorem suspendC_effOf {S : Row} {Δ : LifeCtx} {x : LifeVar} {bnd : Lifetime.Life}
+    (hS : S.Suspend Δ x bnd) (R : VTy) : (CTy.effOf S R).SuspendC Δ x bnd := by
   induction S with
   | nil => trivial
   | cons o S ih =>
       obtain ⟨h1, -, h3, h4, h5, h6, h7⟩ := hS o (List.mem_cons_self ..)
       exact ⟨⟨h1, h3, h4, h5, h6, h7⟩,
         ih (fun o' ho' => hS o' (List.mem_cons_of_mem _ ho'))⟩
+
+/-- A layer of a row meeting `CTy.AnsC P` has its answer in `P`, and its cancel row meets
+`CTy.AnsC P` where it is capturable.  `[spec §62]` -/
+theorem layer_ans {P : VTy → Prop} : ∀ (F : CTy), F.AnsC P →
+    ∀ {q : Qual} {A B : VTy} {fin : CTy}, F.LayerOf q A B fin →
+    P B ∧ (capB q B = true → fin.AnsC P)
+  | .eff _ _ q₀ A₀ B₀ fin₀ _ C, ⟨h, hC⟩, q, A, B, fin, hL => by
+      simp only [CTy.LayerOf] at hL
+      rcases hL with ⟨rfl, rfl, rfl, rfl⟩ | hL
+      · exact h
+      · exact layer_ans C hC hL
+  | .ret _, _, _, _, _, _, h => h.elim
+  | .arr _ _, _, _, _, _, _, h => h.elim
+  | .amp _ _, _, _, _, _, _, h => h.elim
+  | .top, _, _, _, _, _, h => h.elim
+  | .all _ _ _, _, _, _, _, _, h => h.elim
+  | .nu _, _, _, _, _, _, h => h.elim
+
+/-- `Row.AnsC` is `CTy.AnsC` of the row's computation type.  `[spec §62]` -/
+theorem ansC_effOf {P : VTy → Prop} {S : Row} (hS : S.AnsC P) (R : VTy) :
+    (CTy.effOf S R).AnsC P := by
+  induction S with
+  | nil => trivial
+  | cons o S ih =>
+      exact ⟨hS o (List.mem_cons_self ..), ih (fun o' ho' => hS o' (List.mem_cons_of_mem _ ho'))⟩
+
+/-- `CTy.AnsC` is monotone in the property.  `[spec §62]` -/
+theorem ansC_mono {P P' : VTy → Prop} (hP : ∀ B, P B → P' B) : ∀ F : CTy, F.AnsC P → F.AnsC P'
+  | .eff _ _ _ _ _ fin _ C, ⟨⟨hB, hfin⟩, hC⟩ =>
+      ⟨⟨hP _ hB, fun hcap => ansC_mono hP fin (hfin hcap)⟩, ansC_mono hP C hC⟩
+  | .ret _, _ | .arr _ _, _ | .amp _ _, _ | .top, _ | .all _ _ _, _ | .nu _, _ => trivial
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

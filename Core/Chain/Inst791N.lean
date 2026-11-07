@@ -35,7 +35,7 @@ open BoCa.Fig16.LogRel.Core
 open BoCa.Fig16.LogRel.Core.Chain.SI
 open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-open BoCa.Fig16.Tree.Wp.Goal791 (Const791 defines_meetOfDom_empty)
+open BoCa.Fig16.Tree.Wp.Goal791 (Const791 defines_meetOfDom_empty ansC_of_suspend)
 open BoCa.BoLo (Head Kont performE opPayload freeE)
 open BoCa.Fig16.LogRel.Core.Chain.SI.LendProg (noOwn_single_mut)
 
@@ -56,8 +56,8 @@ theorem dFree_closed : closedAt 0 dFree = true := by decide
 /-- A must-resume operation `1 ↠^lin 1`. -/
 def linSig (n i : UInt32) : OpSig := ⟨n, i, .lin, .unit, .unit, .ret .unit, false⟩
 
-theorem linSig_suspend {n i : UInt32} (hn : n ≠ 0) (x : LifeVar) (bnd : Lifetime.Life) :
-    Row.Suspend [linSig n i] x bnd := by
+theorem linSig_suspend {n i : UInt32} (hn : n ≠ 0) (Δ : LifeCtx) (x : LifeVar)
+    (bnd : Lifetime.Life) : Row.Suspend [linSig n i] Δ x bnd := by
   intro o ho
   simp only [List.mem_singleton] at ho
   subst ho
@@ -74,8 +74,8 @@ def cbPerform (n i : UInt32) : Val :=
 the payload `1`. -/
 theorem w2_ok (x : LifeVar) :
     (Const791.w2 x LifeCtx.empty.meetOfDom .unit .unit hardestRow (.val (.prim .free))).OK :=
-  ⟨defines_meetOfDom_empty, ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩, id, id, hardestRow_suspend x _,
-    rfl, .free .nil⟩
+  ⟨defines_meetOfDom_empty, ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩, id, id, hardestRow_suspend _ x _,
+    ⟨_, defines_meetOfDom_empty, ansC_of_suspend (hardestRow_suspend _ x _)⟩, rfl, .free .nil⟩
 
 /-- `dRelease` is Core's `forget`. -/
 theorem dRelease_eq_forget : dRelease = BoCa.forget := rfl
@@ -84,13 +84,17 @@ theorem dRelease_eq_forget : dRelease = BoCa.forget := rfl
 `forget`, derived by `CDerives.releaseMut`. -/
 theorem w3_ok (a : Lifetime.Life) (x : LifeVar) :
     (Const791.w3 a x LifeCtx.empty.meetOfDom .unit .unit hardestRow dRelease).OK :=
-  ⟨defines_meetOfDom_empty, id, id, hardestRow_suspend x _, dRelease_closed, .releaseMut .nil⟩
+  ⟨defines_meetOfDom_empty, id, id, hardestRow_suspend _ x _,
+    ⟨_, defines_meetOfDom_empty, ansC_of_suspend (hardestRow_suspend _ x _)⟩, dRelease_closed,
+    .releaseMut .nil⟩
 
 /-- **`wF`'s antecedent holds** at the instance's constant, its finaliser `dRelease` at
 `Mut @a (Ref 1) ⊸ 1` derived by `CDerives.releaseMut`. -/
 theorem wF_ok (a : Lifetime.Life) (x : LifeVar) :
     (Const791.wF a x LifeCtx.empty.meetOfDom .unit .unit hardestRow dRelease).OK :=
-  ⟨defines_meetOfDom_empty, id, id, hardestRow_suspend x _, dRelease_closed, .releaseMut .nil⟩
+  ⟨defines_meetOfDom_empty, id, id, hardestRow_suspend _ x _,
+    ⟨_, defines_meetOfDom_empty, ansC_of_suspend (hardestRow_suspend _ x _)⟩, dRelease_closed,
+    .releaseMut .nil⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
