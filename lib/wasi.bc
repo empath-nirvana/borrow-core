@@ -1,7 +1,7 @@
 -- The WASI preview 1 platform (SPEC §34): the system interface (`lib/sys.bc`) served by externs,
 -- each handler's state the capability's cell, lent to each clause. `main` performs the interface
 -- under these handlers, outermost; each clause is a direct call of the extern on the lent cell.
--- The externs' host implementations are the runtime's (`Backend/Wasm/Runtime.lean`) and their
+-- The externs' host implementations are the runtime's (`Target/Wasm/Runtime.lean`) and their
 -- contracts are `Core/Stdio.lean`'s; `bcc trusted` lists them.
 
 include sys

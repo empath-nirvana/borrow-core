@@ -31,7 +31,7 @@ in `Backend/README.md`:
   the entry's last act when a division's error reached `main` (SPEC §39).
 - `$sp` is the stack pointer of the frames of scoped cells (SPEC §35): a function with a frame
   lowers it by the frame's size on entry, trapping when it would pass `$stackLimit`, and raises it
-  back before it returns or tail-calls (`Backend/Wasm/Lower.lean`, `lowerFn`). A slot is no range
+  back before it returns or tail-calls (`Target/Wasm/Lower.lean`, `lowerFn`). A slot is no range
   and is never given to `$free`.
 - `$now c` answers the nanoseconds of the monotonic clock since the clock's first use, saturating
   at `2^63 − 1`, and `$sleep c ns` waits at least `ns` nanoseconds when `ns > 0` (`poll_oneoff`
@@ -43,7 +43,7 @@ and `$getv`'s, bytes `64–71` the clock's reading, `72–79` `$args`'s sizes, `
 subscription, `192–231` its event and count; `1024 + 4s` holds the head of the
 free list of ranges of `s` words, for `s < 1024`; the program's data (its literals' bytes, then a
 word for each capability's cell) starts at `16384`; a module with frames has its stack after the
-data (`Backend/Wasm/Print.lean`, `stackBytes`), growing down from its top; ranges start after
+data (`Target/Wasm/Print.lean`, `stackBytes`), growing down from its top; ranges start after
 that, each preceded by a word holding its size. `$alloc` pops the free list of its size, or else bumps `$heap`, growing
 memory as needed. A freed range of `s < 1024` words is pushed onto its free list (its first
 word links the list); a larger one is not reused.

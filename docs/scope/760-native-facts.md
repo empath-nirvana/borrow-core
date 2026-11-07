@@ -19,7 +19,7 @@ a named compiler assumption listed by `bcc trusted`. A candidate with neither is
   LangRef text (LLVM 21.x, `llvm/docs/LangRef.rst`, the release that matches the toolchain's
   `clang` 21) next to the fact that licenses it.
 
-## 0. What is emitted today (SPEC §50, `Backend/Native/Lower.lean`, `Backend2/Lower.lean`)
+## 0. What is emitted today (SPEC §50, `Target/Native/Lower.lean`, `Backend2/Lower.lean`)
 
 | emitted | where | cited |
 |---|---|---|
@@ -151,9 +151,9 @@ Wasm impact; the test; and whether it is an improvement candidate, with any gain
 |---|---|---|---|---|---|---|---|---|
 | A | `memory(none)` / `memory(argmem: read)` | "`memory(none)`: Does not access any memory." / "`argmem`: … accesses that are based on pointer arguments"; "`read`: … Writing to the location is immediate undefined behavior." | **none today.** The row does not track allocation (alloc is not yet an effect), and every allocating function writes `bc_alloc`'s globals and arena. Capabilities are `mut` arguments, not row entries. | n/a | informational | none | n/a | **not emitted.** Licence would be: an allocation effect in the row (the decided alloc-is-an-effect direction) and the function's parameter types (no `mut`, no capability), read off `LTy`. Recorded as a candidate behind alloc-as-effect. |
 | B | `willreturn` (+`mustprogress`) | "a call of this function will either exhibit undefined behavior or comes back …" | termination: `total_open`/`total_call`/`total_subrun`, **elaborated, not yet in the tree** (section 1); the bridge from a native call to their premises is **not derived** (section 1, step 1), and `HostReturns` is needed | would be an empty-row bit per LIR function (not carried) | informational | none | n/a | **not emitted** (section 1, steps 1–3). |
-| N | `nounwind` (already emitted) | "the function never raises an exception. … functions marked nounwind may still trap" | **named compiler assumption `NoUnwind`**: the emitted IR has no `invoke`, `landingpad` or `resume`; errors and cancels are branches (SPEC §47, and the erasure count `corpus/erasure-backend2.expected` shows no `handle`/`perform` left); every extern is a C function of `Backend/Native/Runtime.lean`, and C does not unwind. `abort` and `llvm.trap` are traps, which LangRef permits. The runtime
+| N | `nounwind` (already emitted) | "the function never raises an exception. … functions marked nounwind may still trap" | **named compiler assumption `NoUnwind`**: the emitted IR has no `invoke`, `landingpad` or `resume`; errors and cancels are branches (SPEC §47, and the erasure count `corpus/erasure-backend2.expected` shows no `handle`/`perform` left); every extern is a C function of `Target/Native/Runtime.lean`, and C does not unwind. `abort` and `llvm.trap` are traps, which LangRef permits. The runtime
 runs the entry on a pthread and never calls `pthread_cancel`, so the forced unwinding at a
-cancellation point (`read`, `write`, `nanosleep`) does not arise. That is part of `NoUnwind`. | the emitter (no unwinding instruction exists in `Backend/Native/Lower.lean`), and the runtime's source | informational | none | a grep of the emitted IR for `invoke`/`landingpad`/`resume` (none), in `native-facts.sh` | **keep; cite it** above each definition, and list `NoUnwind` in `bcc trusted`. |
+cancellation point (`read`, `write`, `nanosleep`) does not arise. That is part of `NoUnwind`. | the emitter (no unwinding instruction exists in `Target/Native/Lower.lean`), and the runtime's source | informational | none | a grep of the emitted IR for `invoke`/`landingpad`/`resume` (none), in `native-facts.sh` | **keep; cite it** above each definition, and list `NoUnwind` in `bcc trusted`. |
 | C | `captures(none)` on a borrow argument | "`provenance`: The ability to access the pointer for both read and write after the function returns." "`captures(none)`: Pointer not captured." | **none today** (section 4) | the parameter's lifetime is needed, and `LTy` erases lifetimes | informational | none | n/a | **not emitted.** Section 4 gives the rule and what it needs. |
 | P | `llvm.loop.parallel_accesses` + `llvm.loop.vectorize.enable` | "If there is a loop-carried dependency, the behavior is undefined." / `vectorize.enable` "selectively enables … vectorization" (a hint) | for disjoint leaves of a `mut` family: `ResU.CompatS` disjointness (`ResU.CompatS.disjoint_of_immFree`) at the family's split; for `imm` leaves no write exists | would be the walk mark (`TExpr.walk`, `Convert.lean` `walkRead`) | **informational (hint)** | none | n/a | **not emitted here.** The vectorised loop of #537 is a candidate for our own lowering (section 6). Emitting `parallel_accesses` alone would also need a proof that the step's every access is to the current leaf, which `walk_index_lt` does not state. |
 | S | `!noalias` / `!alias.scope` | "If accesses from different collections alias, the behavior is undefined." | the same as the parameter facts (`CellU.CompatS.kinds`, `CellU.CompatS`), at the scope of a call that `alwaysinline` inlines | `Fn.inline` and each parameter's `LTy` | informational | none | the differential run | **not emitted in this unit.** LLVM already turns `noalias` parameters into scopes when it inlines ("noalias function parameters are turned into noalias scope metadata"), so a scope we emit is only worth it where a parameter attribute is too coarse (SPEC §50 *Open*, #531). That needs a measured case first. Candidate. |
@@ -230,7 +230,7 @@ produces step functions for which it does not hold.
   `%a0 == %a1`).
 - `@f12` calls `@f8(%a0)`, the borrower's finaliser, which stores through the borrow. It then
   calls `@f3(%a1)`, which reaches the cell through the owner's word and calls `bc_free`.
-  `bc_free` writes the free-list link into the cell's first word (`Backend/Native/Runtime.lean`).
+  `bc_free` writes the free-list link into the cell's first word (`Target/Native/Runtime.lean`).
 - So a location modified through `%a0` is accessed, during `@f12`'s execution, through pointers
   not based on `%a0`. That is LangRef's `noalias` undefined behaviour ("If there are other accesses
   not based on the argument or return value, the behavior is undefined"). The cell is also freed
@@ -293,7 +293,7 @@ Each function that loses facts is measured (section 7).
   and `walk_get_leaf` (`Frontend/Check/Derived.lean`), `ResU.CompatS.disjoint_of_immFree`
   (`Paper/S6_1_StandardLemmas/Lemmas.lean`).
 - `bcc trusted` lists today the Wasm runtime, the WAT printer and wasmtime. For the native target
-  it also lists the native runtime (`Backend/Native/Runtime.lean`), `clang`, the width-class
+  it also lists the native runtime (`Target/Native/Runtime.lean`), `clang`, the width-class
   assumption, and `NoUnwind` (row N).
 
 ## 4. `captures(none)`: which rows license it

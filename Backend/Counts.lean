@@ -13,7 +13,7 @@ import Pipeline.Counts
     lake exe bcc-counts --cells <file>
     lake exe bcc-counts [--backend new] --frames <file> [-- arg…]
 
-Run the program at the flat IR (`Backend/Flat/Interp.lean`) and under `wasmtime`, each built to
+Run the program at the flat IR (`Target/Flat/Interp.lean`) and under `wasmtime`, each built to
 count, and print `allocs N indirect M copies K loads L stores S bounds B`: the objects the run
 allocates, the indirect calls it makes, and the copies of a variable at a non-trivial type it
 makes, on which the two stages must agree; and, at the flat IR only, its loads (each `load` and

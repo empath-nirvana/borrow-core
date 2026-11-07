@@ -2,8 +2,8 @@
 # Backend — the native runtime  `[spec §40]`
 
 The allocator and the POSIX platform of the native target, written in C and compiled with the
-program's LLVM IR (`Backend/Native/Lower.lean`). They are the trusted part of the target, with
-the specification of the Wasm runtime's (`Backend/Wasm/Runtime.lean`, `Backend/README.md`, The
+program's LLVM IR (`Target/Native/Lower.lean`). They are the trusted part of the target, with
+the specification of the Wasm runtime's (`Target/Wasm/Runtime.lean`, `Backend/README.md`, The
 allocator), so that `live` and the counts agree:
 
 - `bc_alloc n` (`n ≥ 1` words) returns an 8-aligned address `a` such that `[a, a + 8n)` is

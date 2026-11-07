@@ -67,7 +67,7 @@ Beyond the erasure, the backend reads two booleans from the checked program:
   to find the platform's `main_div_error`.
 - `IOMain.loopB` (`Driver.lean:104`), which comes from `main`'s type.
 
-`Backend/Clos/*` and `Backend/Flat/*` do not import `Frontend` at all. So every fact a rule proves
+`Backend/Clos/*`, `Backend/Flat/*` and `Target/Flat/*` do not import `Frontend` at all. So every fact a rule proves
 beyond its term is either re-derived from the erasure or consumed:
 - the masks, re-derived as copies and consumes by `plan2`, `Convert.lean:200`;
 - the qualifiers, consumed at `Convert.lean:740`;
@@ -408,7 +408,7 @@ with `Collapse` reading the node. `iterate`, `divFuel` and `reify` once B2 produ
 ### Surprises
 
 1. **The backend reads no typed fact except whether `main` is served `main_div_error`.**
-   - `Backend/Clos` and `Backend/Flat` do not import `Frontend`.
+   - `Backend/Clos`, `Backend/Flat` and `Target/Flat` do not import `Frontend`.
    - No lowering code mentions a Core declaration.
    - Every one of C1–C4b's fields is unread by the backend: the masks, the clause kinds, the
      sites, the `inside` frames, the cell classes, `sigs` and `pins`. `Cells.lean` compares

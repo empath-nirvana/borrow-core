@@ -3,7 +3,7 @@ import Target.Flat.Syntax
 /-!
 # Backend — host operations at the word IR  `[spec §8, §37]`
 
-What the word IR (`Backend/Flat/Syntax.lean`) and its targets need to know of a host operation:
+What the word IR (`Target/Flat/Syntax.lean`) and its targets need to know of a host operation:
 its operands' width, whether it takes a pair, the kind of its result, and the range at which a
 float-to-integer `trunc` has an answer. Shared by every backend that lowers to the word IR and by
 the Wasm and LLVM emitters.

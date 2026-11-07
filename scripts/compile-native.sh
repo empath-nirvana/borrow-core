@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The native target (SPEC §40, Backend/Native/), checked against the flat IR. Needs a C compiler
+# The native target (SPEC §40, Target/Native/), checked against the flat IR. Needs a C compiler
 # that builds LLVM IR (`bcc cc`); without one the script says so and passes, as the gate does for
 # mdbook.
 #

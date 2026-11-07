@@ -99,9 +99,9 @@ def compileWat (file src : String) (counts : Bool := false) : Except String Stri
 
 /-! ### The native target  `[spec §40]`
 
-`bcc compile --target native` prints the program's LLVM IR (`Backend/Native/Lower.lean`), for
+`bcc compile --target native` prints the program's LLVM IR (`Target/Native/Lower.lean`), for
 the host's target; `bcc run --native` builds it with `clang`, beside the runtime
-(`Backend/Native/Runtime.lean`), and runs it. -/
+(`Target/Native/Runtime.lean`), and runs it. -/
 
 /-- The program as LLVM IR; with `counts`, it counts dispatched calls and copies and writes the
 run's counts after the report. -/

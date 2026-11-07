@@ -275,7 +275,7 @@ structure Prog where
   deriving Repr, Inhabited
 
 /-- The address of the program's data: the Wasm target's, after its runtime's own memory and
-before the heap (`Backend/Wasm/Runtime.lean`). It is a detail of that backend, not of the IR
+before the heap (`Target/Wasm/Runtime.lean`). It is a detail of that backend, not of the IR
 (`Backend.Flat.dataBase`). -/
 def dataBase : Nat := 16384
 
