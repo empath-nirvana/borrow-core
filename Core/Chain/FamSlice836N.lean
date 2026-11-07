@@ -1,7 +1,7 @@
 import Core.Chain.Fam836N
 
 /-!
-# Writes through a `mut` slice at `SemJN`  `[spec §9]`
+# Writes through a `mut` slice at `SemJN₀`  `[spec §9]`
 
 Core's `sliceReplaceM_compatX` (`Core/SliceOps.lean`) is `arrReplace_compatX` with the picked leaf
 a `Mut @a A` borrow: the Mut Anti-Frame at the leaf (`wpTS_M_antiFrameX`) opens the cell for the
@@ -42,12 +42,12 @@ theorem sepRange_pickW {P : Loc → WProp} {ℓ : Loc} {n i : Nat} (hi : i < n) 
   rw [hn]
   exact sepRange_append hρ' (sepRange_mono' hPQ ha) ⟨σ, ρc, hσc, hP, sepRange_mono' hPQ hc⟩
 
-/-- **`slice_replace_mut` at `SemJN`** (Core's `sliceReplaceM_compatX`): in range, the picked
+/-- **`slice_replace_mut` at `SemJN₀`** (Core's `sliceReplaceM_compatX`): in range, the picked
 leaf's cell is opened by the Mut Anti-Frame at the view (`erwp_M_antiFrame`), read (`rwp_load`)
 and written (`rwp_store`), and sealed again holding the new element, the leaf back in the family
 beside the old element; out of range, the element is handed back. -/
 theorem sliceReplaceM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
-    (hΓ : Ctx.DeadP Γ) : SemJN (ℍ := ℍ) Δ Γ (.val replaceV) (.val (sliceReplaceMTy a A)) := by
+    (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val replaceV) (.val (sliceReplaceMTy a A)) := by
   refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   rw [eq_of_compS_empty_left hcomp] at hcon ⊢
@@ -55,9 +55,9 @@ theorem sliceReplaceM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} 
     ⟨⟨i, rfl⟩, rfl⟩, hx⟩ := hv
   rw [eq_of_compS_empty_left hc₂] at hc
   have hΦ := LocTy.view_down hΘ'.1 c''
-  have hQd : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ)
+  have hQd : PostN.Down (fun k _ v ρ => vN₀ (ℍ := ℍ)
       (.tensor (.sliceMut a A) (.sum A A)) δ Θ' k v ρ) :=
-    fun k _ v ρ h => vN_down _ δ Θ' k v ρ h
+    fun k _ v ρ h => vN_down₀ _ δ Θ' k v ρ h
   have hTd := opTableN_down OpTabN.empty_down
   refine erwp_det hΦ hTd hQd (fun μ => step1Only_plug (Head.beta μ _ _) rfl .hole) ?_
   simp only [Kont.plug]
@@ -83,7 +83,7 @@ theorem sliceReplaceM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} 
     obtain ⟨ρi, ρr, hci, hPi, hback⟩ := sepRange_pickW hi hs
     -- the leaf: a `Mut @a A` borrow, its cell at its view lifetime
     obtain ⟨α₀, hα₀, b, hα₀b, hm₁, hunif⟩ := hPi
-    set P : CPredL := fun Θ₀ j u r => vN (ℍ := ℍ) A δ Θ₀ j u r with hP
+    set P : CPredL := fun Θ₀ j u r => vN₀ (ℍ := ℍ) A δ Θ₀ j u r with hP
     obtain ⟨l', w₀, σ₀, hσ₀, j₀, hw₀, hkj, hl', hlΘ, rfl⟩ := id hm₁
     obtain rfl : ℓ + i.toNat = l' := loc_inj hl'
     -- `σ = cell ● F`, `F = ρr ● σx`
@@ -97,7 +97,7 @@ theorem sliceReplaceM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} 
       rwa [CellU.at_mutOf] at h
     refine erwp_M_antiFrame hΦ (LocTy.view_some hcb hlΘ) (T := OpTabN.empty)
       (fun _ _ _ h => by cases h) _ ls' _ w₀ σ₀ hσ₀ j₀ hw₀ F σ hσ (fun W X hW hX => ?_)
-    have hwA : vN (ℍ := ℍ) A δ Θ' j₀ w₀ σ₀ := (vN_above A δ Θ' hσ₀).mp hw₀
+    have hwA : vN₀ (ℍ := ℍ) A δ Θ' j₀ w₀ σ₀ := (vN_above₀ A δ Θ' hσ₀).mp hw₀
     -- `X = own(w₀) ● rest`, `rest = F ● σ₀`
     obtain ⟨rest, hrest, hXr⟩ := compS_lcomm (ResU.CompS.comm hW) hX
     refine erwp_bindR hΦ (opTableG_local _ _)
@@ -132,19 +132,19 @@ theorem sliceReplaceM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} 
     refine erwp_val (v := Val.pair (Val.arr ℓ cn) (Val.inj₁ w₀)) ?_
     -- the cell sealed again at the new element; the leaf back in the family beside the old one
     have hσx : σx.InStratum b := hunif _ _ _ _ hx
-    have hwx : famL b P Θ' m x ⟨σx, hσx⟩ := (vN_above A δ Θ' hσx).mpr (vN_le (by omega) hx)
+    have hwx : famL b P Θ' m x ⟨σx, hσx⟩ := (vN_above₀ A δ Θ' hσx).mpr (vN_le₀ (by omega) hx)
     -- `rest = F ● σ₀`, `F = ρr ● σx`: `rest = σx ● R`, `R = ρr ● σ₀`
     obtain ⟨R, hR, hrestR⟩ := compS_reassoc (ResU.CompS.comm hF) hrest
     refine ⟨x, σx, hσx, hwx, R, rest, ResU.CompS.comm hp₃, hrestR, fun X' hX' => ?_⟩
     -- `X' = R ● leaf = (ρr ● leaf) ● σ₀`
     obtain ⟨L, hL, hX'L⟩ := compS_exch hR hX'
-    have hleaf : vN (ℍ := ℍ) (.mut a A) δ Θ' m (Val.loc (ℓ + i.toNat))
+    have hleaf : vN₀ (ℍ := ℍ) (.mut a A) δ Θ' m (Val.loc (ℓ + i.toNat))
         (ResU.single (ℓ + i.toNat) (CellU.mutOf b x σx hσx (famL b P Θ' m) hwx)) :=
       ⟨α₀, hα₀, b, hα₀b, ⟨ℓ + i.toNat, x, σx, hσx, m, hwx, le_rfl, rfl, hlΘ, rfl⟩, hunif⟩
-    have hfam : vN (ℍ := ℍ) (.sliceMut a A) δ Θ' m (Val.arr ℓ cn) L :=
-      vN_fam_mk hn (hback _ (fun _ _ h => vN_le (by omega) h) _ L (ResU.CompS.comm hL) hleaf)
+    have hfam : vN₀ (ℍ := ℍ) (.sliceMut a A) δ Θ' m (Val.arr ℓ cn) L :=
+      vN_fam_mk hn (hback _ (fun _ _ h => vN_le₀ (by omega) h) _ L (ResU.CompS.comm hL) hleaf)
     exact ⟨_, _, L, σ₀, rfl, hX'L, hfam,
-      .inl ⟨w₀, rfl, vN_le (by omega) hwA⟩⟩
+      .inl ⟨w₀, rfl, vN_le₀ (by omega) hwA⟩⟩
   · rw [he]
     refine erwp_det hΦ hTd hQd
       (fun μ => step1Only_plug (Head.case₂ μ Val.unit _ _) rfl .hole) ?_

@@ -1,7 +1,7 @@
 import Core.Chain.Stop835N
 
 /-!
-# `[sub]`, `[perform]` and `[raise]` at `SemJN`  `[spec §19, §27]`
+# `[sub]`, `[perform]` and `[raise]` at `SemJN₀`  `[spec §19, §27]`
 
 Core's `sub_compatC`, `perform_compatC` and `raise_compatC` (`Core/EffFin.lean`), step by step, at
 the chain relation, over the interface entries they reach for (`scope-831-interface.md` E3, E5,
@@ -136,13 +136,13 @@ open BoCa.BoLo (Heap Kont performE raiseE cancelVal opPayload)
 `Row.tab`, read through `Row.tab_find`/`Row.tab_some`). -/
 theorem tabN_effOf_find (S : Row) (R : VTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life)
     (n i : UInt32) :
-    tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c n i = (Row.find S n i).map (fun o =>
-      entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c)) := by
+    tabN₀ (ℍ := ℍ) (CTy.effOf S R) δ Θ c n i = (Row.find S n i).map (fun o =>
+      entN o.q o.B (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) o.fin δ Θ c)) := by
   induction S with
-  | nil => simp [CTy.effOf, tabN, OpTabN.empty, Row.find]
+  | nil => simp [CTy.effOf, tabN₀, OpTabN.empty, Row.find]
   | cons o S ih =>
-      show extTabN o.n o.i _ (tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c) n i = _
+      show extTabN o.n o.i _ (tabN₀ (ℍ := ℍ) (CTy.effOf S R) δ Θ c) n i = _
       unfold extTabN Row.find
       by_cases h : n = o.n ∧ i = o.i
       · simp only [if_pos h, List.find?_cons, decide_eq_true h, Option.map_some]
@@ -151,41 +151,41 @@ theorem tabN_effOf_find (S : Row) (R : VTy) (δ : LSub) (Θ : LocTy) (c : Loc �
 
 /-- **An entry of a row's table is the entry of an operation the row finds.** -/
 theorem tabN_effOf_some_find {S : Row} {R : VTy} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life}
-    {n i : UInt32} {en : OpEntN} (h : tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c n i = some en) :
-    ∃ o, Row.find S n i = some o ∧ en = entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c) := by
+    {n i : UInt32} {en : OpEntN} (h : tabN₀ (ℍ := ℍ) (CTy.effOf S R) δ Θ c n i = some en) :
+    ∃ o, Row.find S n i = some o ∧ en = entN o.q o.B (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+      (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) o.fin δ Θ c) := by
   rw [tabN_effOf_find] at h
   obtain ⟨o, hf, rfl⟩ := Option.map_eq_some_iff.mp h
   exact ⟨o, hf, rfl⟩
 
 /-- The table of a cancel row is the table of its layers. -/
 theorem tabN_rowOf (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) :
-    ∀ F : CTy, tabN (ℍ := ℍ) F δ Θ c = tabN (ℍ := ℍ) (CTy.effOf F.rowOf .unit) δ Θ c
+    ∀ F : CTy, tabN₀ (ℍ := ℍ) F δ Θ c = tabN₀ (ℍ := ℍ) (CTy.effOf F.rowOf .unit) δ Θ c
   | .eff m i q A B fin rc C => by
-      simp only [CTy.rowOf, CTy.effOf, tabN]
+      simp only [CTy.rowOf, CTy.effOf, tabN₀]
       rw [tabN_rowOf δ Θ c C]
-  | .ret _ => by simp [CTy.rowOf, CTy.effOf, tabN]
-  | .arr _ _ => by simp [CTy.rowOf, CTy.effOf, tabN]
-  | .amp _ _ => by simp [CTy.rowOf, CTy.effOf, tabN]
-  | .top => by simp [CTy.rowOf, CTy.effOf, tabN]
-  | .all _ _ _ => by simp [CTy.rowOf, CTy.effOf, tabN]
-  | .nu _ => by simp [CTy.rowOf, CTy.effOf, tabN]
+  | .ret _ => by simp [CTy.rowOf, CTy.effOf, tabN₀]
+  | .arr _ _ => by simp [CTy.rowOf, CTy.effOf, tabN₀]
+  | .amp _ _ => by simp [CTy.rowOf, CTy.effOf, tabN₀]
+  | .top => by simp [CTy.rowOf, CTy.effOf, tabN₀]
+  | .all _ _ _ => by simp [CTy.rowOf, CTy.effOf, tabN₀]
+  | .nu _ => by simp [CTy.rowOf, CTy.effOf, tabN₀]
 
 /-- **A cancel row's obligation** (Core's `finObl_eq`): none at `⊤`; otherwise the cancel run at
 the row's table, read at the view. -/
 theorem finN_eq_ite (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (F : CTy) :
-    finN (ℍ := ℍ) F δ Θ c =
-      if F.isTop then none else some (cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) F δ Θ c)) := by
-  cases F <;> simp [finN, tabN, CTy.isTop]
+    finN₀ (ℍ := ℍ) F δ Θ c =
+      if F.isTop then none else some (cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) F δ Θ c)) := by
+  cases F <;> simp [finN₀, tabN₀, CTy.isTop]
 
 /-- The entry of an operation at its key. -/
 theorem entN_le_of_leF {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {o o' : OpSig}
     (hs : o.Sig o')
-    (hfin : capB o.q o.B = true → FinLeSN (finN (ℍ := ℍ) o.fin δ Θ c) (finN (ℍ := ℍ) o'.fin δ Θ c)) :
-    (entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c)).Le
-      (entN o'.q o'.B (fun k v ρ => vN (ℍ := ℍ) o'.A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) o'.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o'.fin δ Θ c)) := by
+    (hfin : capB o.q o.B = true → FinLeSN (finN₀ (ℍ := ℍ) o.fin δ Θ c) (finN₀ (ℍ := ℍ) o'.fin δ Θ c)) :
+    (entN o.q o.B (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) o.fin δ Θ c)).Le
+      (entN o'.q o'.B (fun k v ρ => vN₀ (ℍ := ℍ) o'.A δ Θ k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) o'.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) o'.fin δ Θ c)) := by
   obtain ⟨-, -, hq, hA, hB, -⟩ := hs
   refine ⟨hq, by simp [entN, hq, hB], by simp [entN, hA], by simp [entN, hB], rfl,
     fun ha hq' => ?_⟩
@@ -201,7 +201,7 @@ theorem entN_le_of_leF {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {o o' 
 /-- **A cancel row's obligation grows with the row** (Core's `finObl_mono`), along `FinLe`, by
 Core's recursion on the cancel row. -/
 theorem finN_mono (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (F : CTy) :
-    ∀ {F' : CTy}, FinLe F F' → FinLeSN (finN (ℍ := ℍ) F δ Θ c) (finN (ℍ := ℍ) F' δ Θ c) := by
+    ∀ {F' : CTy}, FinLe F F' → FinLeSN (finN₀ (ℍ := ℍ) F δ Θ c) (finN₀ (ℍ := ℍ) F' δ Θ c) := by
   intro F' h
   rw [finLe_iff] at h
   rw [finN_eq_ite δ Θ c F, finN_eq_ite δ Θ c F']
@@ -225,7 +225,7 @@ decreasing_by exact rowOf_fin_lt F (Row.find_mem (by assumption)).1
 `OpTabN.Le` of their tables, at every answer type, world and view. -/
 theorem tabN_le_of_rowLe {S S' : Row} (hle : RowLe S S') (R R' : VTy) (δ : LSub) (Θ : LocTy)
     (c : Loc → Option Life) :
-    (tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c).Le (tabN (ℍ := ℍ) (CTy.effOf S' R') δ Θ c) := by
+    (tabN₀ (ℍ := ℍ) (CTy.effOf S R) δ Θ c).Le (tabN₀ (ℍ := ℍ) (CTy.effOf S' R') δ Θ c) := by
   intro n i en hT
   obtain ⟨o, hf, rfl⟩ := tabN_effOf_some_find hT
   obtain ⟨o', hf', hs, hfl⟩ := hle n i o hf
@@ -235,15 +235,15 @@ theorem tabN_le_of_rowLe {S S' : Row} (hle : RowLe S S') (R R' : VTy) (δ : LSub
 /-- **`erwp` at a row grows with the row** (Core's `effWp_sub`). -/
 theorem erwp_rowLe {S S' : Row} (hle : RowLe S S') {A : VTy} {δ : LSub} {Θ : LocTy}
     {c : Loc → Option Life} {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes}
-    (h : cN (ℍ := ℍ) (CTy.effOf S A) δ Θ c n ls e ρ) : cN (ℍ := ℍ) (CTy.effOf S' A) δ Θ c n ls e ρ :=
-  (cN_effOf S' A δ Θ c n ls e ρ).mpr (erwp_tabLe (tabN_le_of_rowLe hle A A δ Θ c) n ls e ρ
-    ((cN_effOf S A δ Θ c n ls e ρ).mp h))
+    (h : cN₀ (ℍ := ℍ) (CTy.effOf S A) δ Θ c n ls e ρ) : cN₀ (ℍ := ℍ) (CTy.effOf S' A) δ Θ c n ls e ρ :=
+  (cN_effOf₀ S' A δ Θ c n ls e ρ).mpr (erwp_tabLe (tabN_le_of_rowLe hle A A δ Θ c) n ls e ρ
+    ((cN_effOf₀ S A δ Θ c n ls e ρ).mp h))
 
 /-- **E6: an entry's cancel obligation holds of the empty region** (Core's `ent_start`). -/
 theorem entN_start (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (o : OpSig) (k : Nat)
     (ls : List SRec) :
-    cancelOKN (entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c)) k ls .hole
+    cancelOKN (entN o.q o.B (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+      (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) o.fin δ Θ c)) k ls .hole
       PMap.empty := by
   intro P hP
   simp only [entN] at hP
@@ -258,7 +258,7 @@ theorem entN_start (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (o : OpSig
 
 /-- **A value of an own-free type owns nothing** (Core's `vC_noOwn_of_ownFree`). -/
 theorem vN_noOwn_of_ownFree {A : VTy} (hA : A.OwnFree) :
-    ∀ {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes}, vN (ℍ := ℍ) A δ Θ n v ρ → NoOwn ρ := by
+    ∀ {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes}, vN₀ (ℍ := ℍ) A δ Θ n v ρ → NoOwn ρ := by
   induction hA with
   | unit => intro δ Θ n v ρ h; rw [h.2]; exact noOwn_empty
   | zero => intro δ Θ n v ρ h; exact h.elim
@@ -288,8 +288,8 @@ theorem vN_noOwn_of_ownFree {A : VTy} (hA : A.OwnFree) :
 
 /-- **`[sub]`** (Core's `sub_compatC`): a row may grow, its entries' cancel rows with it. -/
 theorem sub_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {S S' : Row} {A : VTy}
-    (hle : RowLe S S') (h : SemJN (ℍ := ℍ) Δ Γ e (.comp (CTy.effOf S A))) :
-    SemJN (ℍ := ℍ) Δ Γ e (.comp (CTy.effOf S' A)) := by
+    (hle : RowLe S S') (h : SemJN₀ (ℍ := ℍ) Δ Γ e (.comp (CTy.effOf S A))) :
+    SemJN₀ (ℍ := ℍ) Δ Γ e (.comp (CTy.effOf S' A)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   exact erwp_rowLe hle (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
 
@@ -297,20 +297,20 @@ theorem sub_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {S S' : Row} {A : V
 stops, and the operation stops at once at its entry. -/
 theorem perform_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : OpSig}
     (hf : Row.find S o.n o.i = some o) (hna : o.abort = false)
-    (h : SemJN (ℍ := ℍ) Δ Γ V (.val o.A)) :
-    SemJN (ℍ := ℍ) Δ Γ (performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B)) := by
+    (h : SemJN₀ (ℍ := ℍ) Δ Γ V (.val o.A)) :
+    SemJN₀ (ℍ := ℍ) Δ Γ (performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
-  refine (cN_effOf S o.B δ Θ c n ls _ ρ).mpr ?_
+  refine (cN_effOf₀ S o.B δ Θ c n ls _ ρ).mpr ?_
   change erwp (ℍ := ℍ) _ _ _ n ls ((Kont.appR (.val (.prim .perform))
     (.pairR (Val.i32 o.n) (.pairR (Val.i32 o.i) .hole))).plug (substAll γ V)) ρ
   refine erwp_bind_pure_frame (LocTy.view_down hΘ.1 c) (opTableN_local _) _ _ ls
-    (fun k _ v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ) (fun _ => BoLo.emp) (fun _ _ _ _ h => h) ?_
+    (fun k _ v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ) (fun _ => BoLo.emp) (fun _ _ _ _ h => h) ?_
     (ResU.comp_empty_right ρ) (rwp_of_erwp_empty (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)) ⟨rfl, trivial⟩
   rintro k ls' v σ ⟨σ₁, σ₂, hc', hv, rfl, -⟩
   rw [ResU.CompS.functional hc' (ResU.comp_empty_right σ₁)]
-  have hT : tabN (ℍ := ℍ) (CTy.effOf S o.B) δ Θ c o.n o.i = some (entN o.q o.B
-      (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
-      (finN (ℍ := ℍ) o.fin δ Θ c)) := by
+  have hT : tabN₀ (ℍ := ℍ) (CTy.effOf S o.B) δ Θ c o.n o.i = some (entN o.q o.B
+      (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ) (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
+      (finN₀ (ℍ := ℍ) o.fin δ Θ c)) := by
     rw [tabN_effOf_find, hf]; rfl
   exact erwp_perform_here hT (by simpa [entN, OpSig.abort] using hna)
     (entN_start δ Θ c o) (fun _ _ _ _ h => h.1) hv
@@ -319,21 +319,21 @@ theorem perform_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : 
 `raise_compatC`). -/
 theorem raise_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : OpSig} {B : VTy}
     (hf : Row.find S o.n o.i = some o) (ha : o.abort = true)
-    (hd : ∀ δ Θ n v ρ, vN (ℍ := ℍ) o.A δ Θ n v ρ → NoOwn ρ)
-    (h : SemJN (ℍ := ℍ) Δ Γ V (.val o.A)) :
-    SemJN (ℍ := ℍ) Δ Γ (raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B)) := by
+    (hd : ∀ δ Θ n v ρ, vN₀ (ℍ := ℍ) o.A δ Θ n v ρ → NoOwn ρ)
+    (h : SemJN₀ (ℍ := ℍ) Δ Γ V (.val o.A)) :
+    SemJN₀ (ℍ := ℍ) Δ Γ (raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
-  refine (cN_effOf S B δ Θ c n ls _ ρ).mpr ?_
+  refine (cN_effOf₀ S B δ Θ c n ls _ ρ).mpr ?_
   change erwp (ℍ := ℍ) _ _ _ n ls ((Kont.appR (.val (.prim .raise))
     (.pairR (Val.i32 o.n) (.pairR (Val.i32 o.i) .hole))).plug (substAll γ V)) ρ
   refine erwp_bind_pure_frame (LocTy.view_down hΘ.1 c) (opTableN_local _) _ _ ls
-    (fun k _ v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ) (fun _ => BoLo.emp) (fun _ _ _ _ h => h) ?_
+    (fun k _ v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ) (fun _ => BoLo.emp) (fun _ _ _ _ h => h) ?_
     (ResU.comp_empty_right ρ) (rwp_of_erwp_empty (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)) ⟨rfl, trivial⟩
   rintro k ls' v σ ⟨σ₁, σ₂, hc', hv, rfl, -⟩
   rw [ResU.CompS.functional hc' (ResU.comp_empty_right σ₁)]
-  have hT : tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c o.n o.i = some (entN o.q o.B
-      (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
-      (finN (ℍ := ℍ) o.fin δ Θ c)) := by
+  have hT : tabN₀ (ℍ := ℍ) (CTy.effOf S B) δ Θ c o.n o.i = some (entN o.q o.B
+      (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ) (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
+      (finN₀ (ℍ := ℍ) o.fin δ Θ c)) := by
     rw [tabN_effOf_find, hf]; rfl
   exact erwp_raise_here hT (by simpa [entN, OpSig.abort] using ha) hv (hd _ _ _ _ _ hv)
 

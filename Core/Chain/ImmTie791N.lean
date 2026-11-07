@@ -4,8 +4,8 @@ import Core.Chain.ImmRec791N
 # A tie between the world's `imm` records and a run's records  `[spec §62]`
 
 **The design choice this file justifies**: the tie between the world's `imm` records and the
-run's list sits at the relation's entry (`ImmTieL`), not on `cN`'s run clauses. A guard on `cN`'s
-`F_Σ` clause fails `cN_effOf` (`not_effOf_guarded`); the entry form gives Core's `CohE` at the
+run's list sits at the relation's entry (`ImmTieL`), not on `cN₀`'s run clauses. A guard on `cN₀`'s
+`F_Σ` clause fails `cN_effOf₀` (`not_effOf_guarded`); the entry form gives Core's `CohE` at the
 run's list (`ImmTieL.tie`, `immTie_agree`).
 
 `chain-interpretation.md` Appendix A.9. Step 8 of `withload_compatX` needs the source `Imm @a A` cell to be the
@@ -30,7 +30,7 @@ each with the lifetime it was lent at) and checks what it gives and what it excl
   fails for it. At `world_ref`'s list it holds (`immTie_ref`).
 
 Where the tie can be placed, and what each placement meets, is §12; `not_effOf_guarded` is the
-check for a guard on `cN`'s run clauses. The relation carries the tie in its list form at its entry
+check for a guard on `cN₀`'s run clauses. The relation carries the tie in its list form at its entry
 (`ImmTieL`, `SI/UpdN.lean`; `chain-interpretation.md` §2.5): every record of the location typing's
 `imm` list is a record of the run's list. `ImmTieL.tie` gives `ImmTie` from it at every resource;
 `immTieL_world_ref` shows it holds at `world_ref`'s list and fails at `world_thunk`'s.
@@ -146,7 +146,7 @@ theorem immTieL_world_ref (δ : LSub) (l l' : Loc) (α : Life) :
     simp only [List.mem_singleton] at this
     exact recT_ne (congrArg Prod.fst this)
 
-/-! ### A guard on `cN`'s run clauses -/
+/-! ### A guard on `cN₀`'s run clauses -/
 
 /-- The trivial run `()` at the post `False` fails at `world_ref`'s entry. -/
 theorem not_erwp_false (δ : LSub) {l l' : Loc} (hl : l ≠ l') (α : Life) (Φ : LocFam)
@@ -166,8 +166,8 @@ theorem not_erwp_false (δ : LSub) {l l' : Loc} (hl : l ≠ l') (α : Life) (Φ 
   · obtain ⟨⟨-, -, hTe, -⟩, -⟩ := pure_sep_iff.mp hp
     cases hTe
 
-/-- **A guard on `cN`'s run clauses does not keep `cN_effOf`.** Read `cN`'s run clause as
-`G ls ρ → erwp …`. At a list and resource where `G` fails, `cN_effOf`'s `↔` would make the run
+/-- **A guard on `cN₀`'s run clauses does not keep `cN_effOf₀`.** Read `cN₀`'s run clause as
+`G ls ρ → erwp …`. At a list and resource where `G` fails, `cN_effOf₀`'s `↔` would make the run
 hold, and the run `()` at the post `False` does not hold at `world_ref`'s entry. -/
 theorem not_effOf_guarded (G : List SRec → WRes → Prop) (δ : LSub) {l l' : Loc} (hl : l ≠ l')
     (α : Life) (Φ : LocFam) (hΦ : ImmTieL Φ.imm [(recT (.ref .unit) δ l l', α)])

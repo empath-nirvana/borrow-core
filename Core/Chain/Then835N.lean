@@ -1,7 +1,7 @@
 import Core.Chain.Iter835N
 
 /-!
-# `[then]` at `SemJN`: a finaliser that performs and raises  `[spec §19, §27]`
+# `[then]` at `SemJN₀`: a finaliser that performs and raises  `[spec §19, §27]`
 
 Interface entry E9 (`scope-831-interface.md`): Core's finaliser frame (`Core/EffFin.lean`), each
 lemma at `erwp`, by induction on the index where Core inducts on `ewpTS`'s least fixed point:
@@ -48,10 +48,10 @@ open BoCa.BoLo (Heap Head Kont performE raiseE cancelVal opPayload cfinE ubindE 
 cancel row. -/
 theorem tabN_find_sig {S : Row} {R : VTy} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life}
     {n i : UInt32} {o o' : OpSig} (hf : Row.find S n i = some o') (hs : o.Sig o') :
-    tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c n i = some (entN o.q o.B
-      (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
-      (finN (ℍ := ℍ) o'.fin δ Θ c)) := by
+    tabN₀ (ℍ := ℍ) (CTy.effOf S R) δ Θ c n i = some (entN o.q o.B
+      (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+      (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
+      (finN₀ (ℍ := ℍ) o'.fin δ Θ c)) := by
   obtain ⟨-, -, hq, hA, hB, -⟩ := hs
   rw [tabN_effOf_find, hf, hq, hA, hB]; rfl
 
@@ -61,8 +61,8 @@ theorem errOkN_of_sub {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {P P' :
     (h : ∀ n i o, Row.find P n i = some o → o.abort = true →
       ∃ o', Row.find P' n i = some o' ∧ o.Sig o') {k : Nat} {ls : List SRec} :
     ∀ {err : Option Val} {ρ : WRes},
-      errOkN (tabN (ℍ := ℍ) (CTy.effOf P .unit) δ Θ c) k ls err ρ →
-      errOkN (tabN (ℍ := ℍ) (CTy.effOf P' .unit) δ Θ c) k ls err ρ
+      errOkN (tabN₀ (ℍ := ℍ) (CTy.effOf P .unit) δ Θ c) k ls err ρ →
+      errOkN (tabN₀ (ℍ := ℍ) (CTy.effOf P' .unit) δ Θ c) k ls err ρ
   | none, _, h => h
   | some _, _, ⟨m, j, w, en, h'⟩ => by
       obtain ⟨⟨h₁, hT, ha⟩, h₅⟩ := pure_sep_iff.mp h'
@@ -73,9 +73,9 @@ theorem errOkN_of_sub {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {P P' :
 
 /-- A cancel row's table is the table of its layers, at a key. -/
 theorem tabN_rowOf_find {G : CTy} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {n i : UInt32}
-    {en : OpEntN} (h : tabN (ℍ := ℍ) G δ Θ c n i = some en) :
-    ∃ o, Row.find G.rowOf n i = some o ∧ en = entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c) := by
+    {en : OpEntN} (h : tabN₀ (ℍ := ℍ) G δ Θ c n i = some en) :
+    ∃ o, Row.find G.rowOf n i = some o ∧ en = entN o.q o.B (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+      (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) o.fin δ Θ c) := by
   rw [tabN_rowOf] at h
   exact tabN_effOf_some_find h
 
@@ -83,9 +83,9 @@ theorem tabN_rowOf_find {G : CTy} {δ : LSub} {Θ : LocTy} {c : Loc → Option L
 `⊤`. -/
 theorem entN_fin_cancel {q : Qual} {B : VTy} {PA PB : Nat → Val → WRes → Prop} {F : CTy}
     {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {P : Nat → List SRec → Expr → WProp}
-    (hP : (entN q B PA PB (finN (ℍ := ℍ) F δ Θ c)).fin = some P) :
+    (hP : (entN q B PA PB (finN₀ (ℍ := ℍ) F δ Θ c)).fin = some P) :
     capB q B = true ∧ F.isTop = false ∧
-      P = cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) F δ Θ c) := by
+      P = cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) F δ Θ c) := by
   simp only [entN] at hP
   split at hP
   · rename_i hcap
@@ -101,8 +101,8 @@ theorem entN_fin_cancel {q : Qual} {B : VTy} {PA PB : Nat → Val → WRes → P
 theorem entN_fin_of {q : Qual} {B : VTy} {PA PB : Nat → Val → WRes → Prop} {F : CTy}
     {δ : LSub} {Θ : LocTy} {c : Loc → Option Life}
     (hcap : capB q B = true) (hT : F.isTop = false) :
-    (entN q B PA PB (finN (ℍ := ℍ) F δ Θ c)).fin =
-        some (cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) F δ Θ c)) := by
+    (entN q B PA PB (finN₀ (ℍ := ℍ) F δ Θ c)).fin =
+        some (cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) F δ Θ c)) := by
   simp only [entN, hcap, if_true, finN_eq_ite, hT, Bool.false_eq_true, if_false]
 
 /-! ### A finaliser under a cancel's `cfin` -/
@@ -114,16 +114,16 @@ not `⊤`. At its end the kept error, the earlier, wins; its operations' nested 
 theorem cfin_cancelN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option Life} (P : Row)
     (err : Option Val) (G : CTy) :
     ∀ {G' : CTy}, PendLe P G G' → G'.isTop = false →
-    ∀ n ls e ρ, cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) G δ Θ c) n ls e ρ →
-      ∀ σe ρ', errOkN (tabN (ℍ := ℍ) (CTy.effOf P .unit) δ Θ c) n ls err σe →
+    ∀ n ls e ρ, cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) G δ Θ c) n ls e ρ →
+      ∀ σe ρ', errOkN (tabN₀ (ℍ := ℍ) (CTy.effOf P .unit) δ Θ c) n ls err σe →
         (G.FinUnr → σe = PMap.empty) → ResU.CompS ρ σe ρ' →
-        cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) G' δ Θ c) n ls
+        cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) G' δ Θ c) n ls
           ((cfinK (cancelVal err)).plug e) ρ' := by
   intro G' hle hG'
   rw [PendLe, hG'] at hle
   obtain ⟨-, hGG, hPG⟩ := hle.resolve_left (by simp)
   have hΦ := LocTy.view_down hΘ c
-  have hL := cancelTabN_local (tabN (ℍ := ℍ) G δ Θ c)
+  have hL := cancelTabN_local (tabN₀ (ℍ := ℍ) G δ Θ c)
   have hPD := erwpPost_down (cancelTabN_down (tabN_down G' δ Θ hΘ c)) falsePost_down
   intro n
   induction n using Nat.strong_induction_on with
@@ -169,10 +169,10 @@ theorem cfin_cancelN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Optio
     have hT₀ := hT
     obtain ⟨o, hf, rfl⟩ := tabN_rowOf_find hT
     obtain ⟨o', hf', hs, hfin⟩ := hGG m i o hf
-    have hT' : tabN (ℍ := ℍ) G' δ Θ c m i = some (entN o.q o.B
-        (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
-        (finN (ℍ := ℍ) o'.fin δ Θ c)) := by
+    have hT' : tabN₀ (ℍ := ℍ) G' δ Θ c m i = some (entN o.q o.B
+        (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
+        (finN₀ (ℍ := ℍ) o'.fin δ Θ c)) := by
       rw [tabN_rowOf]; exact tabN_find_sig hf' hs
     obtain ⟨ρk', hk', hcσ'⟩ := compS_reassoc hcak hcτ
     have hKo : ((cfinK (cancelVal err)).comp K₁).HasHnd m = false := by
@@ -222,14 +222,14 @@ theorem cfin_runN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option L
       ∃ o', Row.find T.rowOf n i = some o' ∧ o.Sig o')
     (hNZ : ∀ n i o, Row.find E n i = some o → o.n ≠ 0)
     {Qd : PostN} (hQd : ∀ k ls v ρ, Qd k ls v ρ → NoOwn ρ) :
-    ∀ n ls d ρ, erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)) Qd
+    ∀ n ls d ρ, erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)) Qd
         n ls d ρ →
-      ∀ σe ρ', errOkN (tabN (ℍ := ℍ) (CTy.effOf P .unit) δ Θ c) n ls err σe →
+      ∀ σe ρ', errOkN (tabN₀ (ℍ := ℍ) (CTy.effOf P .unit) δ Θ c) n ls err σe →
         (E.UnrD → σe = PMap.empty) → ResU.CompS ρ σe ρ' →
-        cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) T δ Θ c) n ls
+        cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) T δ Θ c) n ls
           (cfinE (cancelVal err) d) ρ' := by
   have hΦ := LocTy.view_down hΘ c
-  have hL := opTableN_local (tabN (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)
+  have hL := opTableN_local (tabN₀ (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)
   have hPD := erwpPost_down (cancelTabN_down (tabN_down T δ Θ hΘ c)) falsePost_down
   intro n
   induction n using Nat.strong_induction_on with
@@ -256,10 +256,10 @@ theorem cfin_runN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option L
     have hT₀ := hTn
     obtain ⟨o, hf, rfl⟩ := tabN_effOf_some_find hTn
     obtain ⟨o', hf', hs, hfin⟩ := hE m i o hf
-    have hT' : tabN (ℍ := ℍ) T δ Θ c m i = some (entN o.q o.B
-        (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
-        (finN (ℍ := ℍ) o'.fin δ Θ c)) := by
+    have hT' : tabN₀ (ℍ := ℍ) T δ Θ c m i = some (entN o.q o.B
+        (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
+        (finN₀ (ℍ := ℍ) o'.fin δ Θ c)) := by
       rw [tabN_rowOf]; exact tabN_find_sig hf' hs
     obtain ⟨ρk', hk', hcσ'⟩ := compS_reassoc hcak hcτ
     have hKo : ((cfinK (cancelVal err)).comp K₁).HasHnd m = false := by
@@ -313,8 +313,8 @@ theorem cfin_runN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option L
         subst hτ₂
         rw [eq_of_compS_empty_left (ResU.CompS.comm hcτ)]
         obtain ⟨o', hf', hs, -⟩ := hE m j o hf
-        refine ⟨ρa, ρn, hcan, ⟨m, j, w, entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-          (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o'.fin δ Θ c),
+        refine ⟨ρa, ρn, hcan, ⟨m, j, w, entN o.q o.B (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+          (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) o'.fin δ Θ c),
           pure_sep_mk ⟨rfl, ?_, ha⟩ ⟨hPA, hnA⟩⟩, hnn⟩
         rw [tabN_rowOf]; exact tabN_find_sig hf' hs
 
@@ -323,13 +323,13 @@ theorem cfin_runN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option L
 theorem errOkN_empty_of_pers {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {F : CTy}
     (hF : F.FinPers) {k : Nat} {ls : List SRec} :
     ∀ {err : Option Val} {ρ : WRes},
-      errOkN (tabN (ℍ := ℍ) (CTy.effOf F.rowOf .unit) δ Θ c) k ls err ρ → ρ = PMap.empty
+      errOkN (tabN₀ (ℍ := ℍ) (CTy.effOf F.rowOf .unit) δ Θ c) k ls err ρ → ρ = PMap.empty
   | none, _, h => h.1
   | some _, _, ⟨m, j, w, en, h⟩ => by
       obtain ⟨⟨-, hT, ha⟩, hA, -⟩ := pure_sep_iff.mp h
       obtain ⟨o, hf, rfl⟩ := tabN_effOf_some_find hT
       have ha' : o.abort = true := by simpa [entN, OpSig.abort] using ha
-      exact vN_empty_of_persistent _ ((finPers_of_mem hF (Row.find_mem hf).1).1 ha') hA
+      exact vN_empty_of_persistent₀ _ ((finPers_of_mem hF (Row.find_mem hf).1).1 ha') hA
 
 /-! ### A cancel run through the finaliser frame -/
 
@@ -347,19 +347,19 @@ theorem then_cancelN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Optio
     (hFe : ∀ ls ls' ρ σ ρ', ResU.CompS ρ σ ρ' → extF ls ls' ρ' → Fr ls σ → Fr ls' σ)
     {Qd : PostN} (hQd : ∀ k ls v ρ, Qd k ls v ρ → NoOwn ρ) (N₀ : Nat)
     (hD : ∀ k, k ≤ N₀ → ∀ ls ρ, Fr ls ρ →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)) Qd k ls
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)) Qd k ls
         (.app (.val Dv) (.val .unit)) ρ)
     (F : CTy) : ∀ {T : CTy}, ThenLe F E T → T.isTop = false →
       (T.FinUnr → ∀ ls σ, Fr ls σ → σ = PMap.empty) → (E.UnrD → F.FinPers) →
-      ∀ n, n ≤ N₀ → ∀ ls e ρ, cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) F δ Θ c) n ls e ρ →
+      ∀ n, n ≤ N₀ → ∀ ls e ρ, cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) F δ Θ c) n ls e ρ →
         ∀ σ ρ', Fr ls σ → ResU.CompS ρ σ ρ' →
-          cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) T δ Θ c) n ls
+          cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) T δ Θ c) n ls
             ((ubindK Nv Dv).plug e) ρ' := by
   intro T hle hT hunr hpers
   rw [ThenLe, hT] at hle
   obtain ⟨-, hFT, hET⟩ := hle.resolve_left (by simp)
   have hΦ := LocTy.view_down hΘ c
-  have hL := cancelTabN_local (tabN (ℍ := ℍ) F δ Θ c)
+  have hL := cancelTabN_local (tabN₀ (ℍ := ℍ) F δ Θ c)
   have hPD := erwpPost_down (cancelTabN_down (tabN_down T δ Θ hΘ c)) falsePost_down
   intro n
   induction n using Nat.strong_induction_on with
@@ -388,10 +388,10 @@ theorem then_cancelN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Optio
     have hT₀ := hTn
     obtain ⟨o, hf, rfl⟩ := tabN_rowOf_find hTn
     obtain ⟨o', hf', hs, hfin⟩ := hFT m i o hf
-    have hT' : tabN (ℍ := ℍ) T δ Θ c m i = some (entN o.q o.B
-        (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
-        (finN (ℍ := ℍ) o'.fin δ Θ c)) := by
+    have hT' : tabN₀ (ℍ := ℍ) T δ Θ c m i = some (entN o.q o.B
+        (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
+        (finN₀ (ℍ := ℍ) o'.fin δ Θ c)) := by
       rw [tabN_rowOf]; exact tabN_find_sig hf' hs
     obtain ⟨ρk', hk', hcσ'⟩ := compS_reassoc hcak hcτ
     have hKo : ((ubindK Nv Dv).comp K₁).HasHnd m = false := by
@@ -438,16 +438,16 @@ decreasing_by exact rowOf_fin_lt F (Row.find_mem hf).1
 theorem tabN_rowLe_entry {S S' : Row} (hle : RowLe S S') {δ : LSub} {Θ : LocTy}
     {c : Loc → Option Life} {n i : UInt32} {o : OpSig} (hf : Row.find S n i = some o) :
     ∃ o', Row.find S' n i = some o' ∧ o.Sig o' ∧
-      tabN (ℍ := ℍ) (CTy.effOf S' .unit) δ Θ c n i = some (entN o'.q o'.B
-        (fun k v ρ => vN (ℍ := ℍ) o'.A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) o'.B δ Θ k v ρ ∧ ConsistentX c ρ)
-        (finN (ℍ := ℍ) o'.fin δ Θ c)) ∧
-      (entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
-        (finN (ℍ := ℍ) o.fin δ Θ c)).Le (entN o'.q o'.B
-        (fun k v ρ => vN (ℍ := ℍ) o'.A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) o'.B δ Θ k v ρ ∧ ConsistentX c ρ)
-        (finN (ℍ := ℍ) o'.fin δ Θ c)) := by
+      tabN₀ (ℍ := ℍ) (CTy.effOf S' .unit) δ Θ c n i = some (entN o'.q o'.B
+        (fun k v ρ => vN₀ (ℍ := ℍ) o'.A δ Θ k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) o'.B δ Θ k v ρ ∧ ConsistentX c ρ)
+        (finN₀ (ℍ := ℍ) o'.fin δ Θ c)) ∧
+      (entN o.q o.B (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
+        (finN₀ (ℍ := ℍ) o.fin δ Θ c)).Le (entN o'.q o'.B
+        (fun k v ρ => vN₀ (ℍ := ℍ) o'.A δ Θ k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) o'.B δ Θ k v ρ ∧ ConsistentX c ρ)
+        (finN₀ (ℍ := ℍ) o'.fin δ Θ c)) := by
   obtain ⟨o', hf', hs, hfl⟩ := hle n i o hf
   exact ⟨o', hf', hs, by rw [tabN_effOf_find, hf']; rfl, entN_le_of_leF hs fun hcap =>
     finN_mono δ Θ c o.fin (hfl (by simp [OpSig.finRead, hcap]))⟩
@@ -460,23 +460,23 @@ theorem seq_raise_runN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Opt
     (hES : RowLe E S) {n i : UInt32} {v : Val} {o : OpSig} (hfo : Row.find S n i = some o)
     (ha : o.abort = true) {Qd : PostN} (hQd : ∀ k ls v ρ, Qd k ls v ρ → v = .unit ∧ NoOwn ρ)
     {Q : PostN} (hQ : Q.Down) :
-    ∀ k ls d ρ, erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)) Qd
+    ∀ k ls d ρ, erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)) Qd
         k ls d ρ →
-      ∀ σp ρ', (vN (ℍ := ℍ) o.A δ Θ k v σp ∧ NoOwn σp) → (E.UnrD → σp = PMap.empty) →
+      ∀ σp ρ', (vN₀ (ℍ := ℍ) o.A δ Θ k v σp ∧ NoOwn σp) → (E.UnrD → σp = PMap.empty) →
         ResU.CompS ρ σp ρ' →
-        erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)) Q k ls
+        erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)) Q k ls
           (.seq d (raiseE (.val (opPayload n i v)))) ρ' := by
   have hΦ := LocTy.view_down hΘ c
-  have hL := opTableN_local (tabN (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)
-  have hLS := opTableN_local (tabN (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)
+  have hL := opTableN_local (tabN₀ (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)
+  have hLS := opTableN_local (tabN₀ (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)
   have hPD := erwpPost_down (opTableN_down (tabN_down (CTy.effOf S .unit) δ Θ hΘ c)) hQ
-  have hTn : tabN (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c n i = some (entN o.q o.B
-      (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c)) := by
+  have hTn : tabN₀ (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c n i = some (entN o.q o.B
+      (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+      (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) o.fin δ Θ c)) := by
     rw [tabN_effOf_find, hfo]; rfl
-  have ha' : (entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
-      (finN (ℍ := ℍ) o.fin δ Θ c)).abort = true := by simpa [entN, OpSig.abort] using ha
+  have ha' : (entN o.q o.B (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+      (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ)
+      (finN₀ (ℍ := ℍ) o.fin δ Θ c)).abort = true := by simpa [entN, OpSig.abort] using ha
   intro k
   induction k using Nat.strong_induction_on with
   | _ k ih =>
@@ -488,7 +488,7 @@ theorem seq_raise_runN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Opt
     (erwp_unfold_at hL le_rfl h) rfl
   refine rwpG_mono_le (fun k₁ hk₁ ls' t τ ⟨τ₁, τ₂, hcτ, hq, hτ₂⟩ => ?_) hfr
   subst hτ₂
-  have hp' : vN (ℍ := ℍ) o.A δ Θ k₁ v τ₂ ∧ NoOwn τ₂ := ⟨vN_le hk₁ hp.1, hp.2⟩
+  have hp' : vN₀ (ℍ := ℍ) o.A δ Θ k₁ v τ₂ ∧ NoOwn τ₂ := ⟨vN_le₀ hk₁ hp.1, hp.2⟩
   rcases hq with ⟨w, rfl, hw⟩ | ⟨K₁, m, j, w, en₁, hq⟩ | ⟨K₁, m, j, w, en₁, hq⟩
   · -- the finaliser finished: the raise goes on
     obtain ⟨rfl, hnw⟩ := hQd _ _ _ _ hw
@@ -520,11 +520,11 @@ theorem seq_raise_runN {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Opt
       have h₁ := (hcont ls'' hwc).1 k' hk'' w' τ₃ z (hLB ▸ hB) hz
       simp only [erwpC, show k' < k by omega, if_true] at h₁ ⊢
       rw [Kont.plug_comp]
-      exact ih k' (by omega) ls'' _ z h₁ τ₂ τ₄ ⟨vN_le (by omega) hp'.1, hp'.2⟩ hu hcz
+      exact ih k' (by omega) ls'' _ z h₁ τ₂ τ₄ ⟨vN_le₀ (by omega) hp'.1, hp'.2⟩ hu hcz
     · have hwc := (tabN_down _ δ Θ hΘ c).wcl m j _ hTm₀ ls' ls'' ρk τ₂ ρk' hk' (hLw ▸ hext)
-      have hq₁ : (entN o₁.q o₁.B (fun k v ρ => vN (ℍ := ℍ) o₁.A δ Θ k v ρ)
-          (fun k v ρ => vN (ℍ := ℍ) o₁.B δ Θ k v ρ ∧ ConsistentX c ρ)
-          (finN (ℍ := ℍ) o₁.fin δ Θ c)).q ≠ .lin := hLq ▸ hq'
+      have hq₁ : (entN o₁.q o₁.B (fun k v ρ => vN₀ (ℍ := ℍ) o₁.A δ Θ k v ρ)
+          (fun k v ρ => vN₀ (ℍ := ℍ) o₁.B δ Θ k v ρ ∧ ConsistentX c ρ)
+          (finN₀ (ℍ := ℍ) o₁.fin δ Θ c)).q ≠ .lin := hLq ▸ hq'
       have hplain := entN_plain hΦ (seqRaiseK (opPayload n i v)) (seqRaiseK_hasHnd _)
         (seqRaiseK_catches _ 0) hp'.2 o₁ (fun P₀ hP₀ => (hcont ls'' hwc).2 hq₁ P₀ hP₀) hk'
       exact finLeSN_apply (hLf ha₁ hq₁) hP' (fun P₀ hP₀ => hplain P₀ hP₀)
@@ -562,20 +562,20 @@ theorem erwp_frame_then {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Op
     (hU : S.UnrD → ∀ ls ρ, Fr ls ρ → ρ = PMap.empty)
     {Qd : PostN} (hQd : ∀ k ls v ρ, Qd k ls v ρ → v = .unit ∧ NoOwn ρ) (N₀ : Nat)
     (hD : ∀ k, k ≤ N₀ → ∀ ls ρ, Fr ls ρ →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf SD .unit) δ Θ c)) Qd k ls
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf SD .unit) δ Θ c)) Qd k ls
         (.app (.val Dv) (.val .unit)) ρ)
     (Q₁ Q : PostN) (hQ : Q.Down)
     (hkv : ∀ k, k ≤ N₀ → ∀ ls (v : Val) ρ, (Q₁ k ls v ⋆ Fr ls) ρ →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)) Q k ls
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)) Q k ls
         ((ubindK Nv Dv).plug (.val v)) ρ) :
     ∀ n, n ≤ N₀ → ∀ ls e ρ,
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf SM .unit) δ Θ c)) Q₁ n ls e ρ →
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf SM .unit) δ Θ c)) Q₁ n ls e ρ →
       ∀ ρ₂ ρ', Fr ls ρ₂ → ResU.CompS ρ ρ₂ ρ' →
-        erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)) Q n ls
+        erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)) Q n ls
           ((ubindK Nv Dv).plug e) ρ' := by
   have hΦ := LocTy.view_down hΘ c
-  have hL := opTableN_local (tabN (ℍ := ℍ) (CTy.effOf SM .unit) δ Θ c)
-  have hLS := opTableN_local (tabN (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)
+  have hL := opTableN_local (tabN₀ (ℍ := ℍ) (CTy.effOf SM .unit) δ Θ c)
+  have hLS := opTableN_local (tabN₀ (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)
   have hPD := erwpPost_down (opTableN_down (tabN_down (CTy.effOf S .unit) δ Θ hΘ c)) hQ
   have hNZD : ∀ n i o, Row.find SD n i = some o → o.n ≠ 0 := by
     intro n i o hf
@@ -644,15 +644,15 @@ theorem erwp_frame_then {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Op
     obtain ⟨z, hz, hcz⟩ := compS_reassoc hcan hcσ
     obtain ⟨y, hy, hcy⟩ := compS_lcomm hz hcz
     refine erwp_unfold_at hLS hk (erwp_garbage (ResU.CompS.comm hcy) hn ?_)
-    have hPA' : vN (ℍ := ℍ) o'.A δ Θ k v ρa := by rw [← hs.2.2.2.1]; exact hPA
+    have hPA' : vN₀ (ℍ := ℍ) o'.A δ Θ k v ρa := by rw [← hs.2.2.2.1]; exact hPA
     exact seq_raise_runN hΘ S SD hDS hf' (by rw [← hs.abort_eq]; exact hao) hQd hQ k ls' _ σ₂
       (hD k (by omega) ls' σ₂ hF') ρa y ⟨hPA', hnA⟩
-      (fun hu => vN_empty_of_persistent _ (((hP hu) o (Row.find_mem hf).1).1 hao) hPA)
+      (fun hu => vN_empty_of_persistent₀ _ (((hP hu) o (Row.find_mem hf).1).1 hao) hPA)
       (ResU.CompS.comm hy)
 
 /-! ### The rules -/
 
-/-- **`[then]` at `SemJN`** (Core's `then_compatC`): `M then x. N unwind D` at `Σ`, `M` at
+/-- **`[then]` at `SemJN₀`** (Core's `then_compatC`): `M then x. N unwind D` at `Σ`, `M` at
 `Σ_M ≤ Σ`, the finaliser at `Σ_D ≤ Σ`, each capturable operation of `Σ_M` with
 `Σ(o).fin ≥ Σ_M(o).fin ⋈ Σ_D`, the errors pending at the finaliser persistent where `Σ_D` has an
 unrestricted operation. `erwp_frame_then` around `M`, the frame the context of `N` and `D`
@@ -664,52 +664,52 @@ theorem then_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A
     (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
       capB o.q o.B = true → ThenLe o.fin SD o'.fin)
     (hP : SD.UnrD → SM.PendPers)
-    (hM : SemJN (ℍ := ℍ) Δ Γ₁ M (.comp (CTy.effOf SM A)))
-    (hN : SemJN (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
-    (hD : SemJN (ℍ := ℍ) Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
-    SemJN (ℍ := ℍ) Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) := by
+    (hM : SemJN₀ (ℍ := ℍ) Δ Γ₁ M (.comp (CTy.effOf SM A)))
+    (hN : SemJN₀ (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
+    (hD : SemJN₀ (ℍ := ℍ) Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+    SemJN₀ (ℍ := ℍ) Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   have hΦ := LocTy.view_down hΘ.1 c
-  refine (cN_effOf S B δ Θ c n ls _ ρ).mpr (erwp_of_valid fun hv => ?_)
+  refine (cN_effOf₀ S B δ Θ c n ls _ ρ).mpr (erwp_of_valid fun hv => ?_)
   obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂, hc₁, hc₂⟩ := gN_splitC hsp hg hc hv
   obtain ⟨hlw₁, hlw₂⟩ := hsp.liveWithin hlw
-  have hM' := (cN_effOf SM A δ Θ c n ls _ ρ₁).mp (hM δ γ Θ c n ls ρ₁ hδ hΘ hc₁ hlw₁ hg₁)
+  have hM' := (cN_effOf₀ SM A δ Θ c n ls _ ρ₁).mp (hM δ γ Θ c n ls ρ₁ hδ hΘ hc₁ hlw₁ hg₁)
   rw [tabN_effOf_ret SM A .unit] at hM'
   have hM'' := erwp_consistentAns (tabN_ansC _ δ Θ c) n n le_rfl ls _ ρ₁ hM' hc₁
   have hQd : ∀ (k : Nat) (ls : List SRec) (v : Val) (ρ : WRes),
-      vN (ℍ := ℍ) .unit δ Θ k v ρ → v = .unit ∧ NoOwn ρ := by
+      vN₀ (ℍ := ℍ) .unit δ Θ k v ρ → v = .unit ∧ NoOwn ρ := by
     rintro k ls' v σ ⟨rfl, rfl⟩
     exact ⟨rfl, noOwn_empty⟩
   -- the finaliser, from the frame
-  have hD' : ∀ k, k ≤ n → ∀ ls' σ, (gN (ℍ := ℍ) δ Θ Γ₂ γ n σ ∧ ConsistentX c σ) →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf SD .unit) δ Θ c))
-        (fun k _ v ρ => vN (ℍ := ℍ) .unit δ Θ k v ρ) k ls'
+  have hD' : ∀ k, k ≤ n → ∀ ls' σ, (gN₀ (ℍ := ℍ) δ Θ Γ₂ γ n σ ∧ ConsistentX c σ) →
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf SD .unit) δ Θ c))
+        (fun k _ v ρ => vN₀ (ℍ := ℍ) .unit δ Θ k v ρ) k ls'
         (.app (.val (Val.lam (Expr.psub 1 γ D))) (.val .unit)) σ := by
     rintro k hk ls' σ ⟨hσ, hcσ⟩
     refine erwp_det hΦ (opTableN_down (tabN_down _ δ Θ hΘ.1 c))
-      (fun k _ v ρ h => vN_down _ δ Θ k v ρ h)
+      (fun k _ v ρ h => vN_down₀ _ δ Θ k v ρ h)
       (fun μ => step1Only_plug (Head.beta μ (Expr.psub 1 γ D) Val.unit) rfl .hole) ?_
     rw [show Kont.hole.plug (Expr.subst 0 Val.unit (Expr.psub 1 γ D)) =
       substAll (Val.unit :: γ) D from (substAll_cons_psub Val.unit γ D).symm]
-    exact (cN_effOf SD .unit δ Θ c k ls' _ σ).mp
+    exact (cN_effOf₀ SD .unit δ Θ c k ls' _ σ).mp
       (hD δ (Val.unit :: γ) Θ c k ls' σ hδ hΘ hcσ hlw₂ (gN_dead_cons .unit Val.unit (gN_le hk hσ)))
   -- the continuation, from the value beside the frame
   have hk : ∀ k, k ≤ n → ∀ ls' (v : Val) σ, ((fun (k : Nat) (_ : List SRec) (v : Val) (ρ : WRes) => k ≤ n ∧
-      vN (ℍ := ℍ) A δ Θ k v ρ ∧ ConsistentX c ρ ∧ ResU.Valid ρ) k ls' v ⋆
-        fun σ => gN (ℍ := ℍ) δ Θ Γ₂ γ n σ ∧ ConsistentX c σ) σ →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c))
-        (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) k ls'
+      vN₀ (ℍ := ℍ) A δ Θ k v ρ ∧ ConsistentX c ρ ∧ ResU.Valid ρ) k ls' v ⋆
+        fun σ => gN₀ (ℍ := ℍ) δ Θ Γ₂ γ n σ ∧ ConsistentX c σ) σ →
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c))
+        (fun k _ v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ) k ls'
         ((ubindK (Val.lam (Expr.psub 1 γ N)) (Val.lam (Expr.psub 1 γ D))).plug (.val v)) σ := by
     rintro k hk ls' v σ ⟨σ₁, σ₂, hcσ, ⟨-, hv, hcv, -⟩, hg₂', hc₂'⟩
     have hTd := opTableN_down (tabN_down (CTy.effOf S .unit) δ Θ hΘ.1 c)
-    have hQ : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) :=
-      fun k _ v ρ h => vN_down _ δ Θ k v ρ h
+    have hQ : PostN.Down (fun k _ v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ) :=
+      fun k _ v ρ h => vN_down₀ _ δ Θ k v ρ h
     refine erwp_det hΦ hTd hQ (fun μ => step1Only_plug (Head.uthen μ _ _ v) rfl .hole) ?_
     refine erwp_det hΦ hTd hQ
       (fun μ => step1Only_plug (Head.beta μ (Expr.psub 1 γ N) v) rfl .hole) ?_
     rw [show Kont.hole.plug (Expr.subst 0 v (Expr.psub 1 γ N)) = substAll (v :: γ) N
       from (substAll_cons_psub v γ N).symm]
-    have h₁ := (cN_effOf S B δ Θ c k ls' _ σ).mp
+    have h₁ := (cN_effOf₀ S B δ Θ c k ls' _ σ).mp
       (hN δ (v :: γ) Θ c k ls' σ hδ hΘ (consistentX_compS hcσ hcv hc₂') hlw₂
         (gN_live_cons hcσ hv (gN_le hk hg₂')))
     rwa [tabN_effOf_ret S B .unit] at h₁
@@ -717,9 +717,9 @@ theorem then_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A
     ((ubindK (Val.lam (Expr.psub 1 γ N)) (Val.lam (Expr.psub 1 γ D))).plug (substAll γ M)) ρ
   rw [tabN_effOf_ret S B .unit]
   exact erwp_frame_then hΘ.1 S SM SD hNZ hMS hDS hfin hP _ _
-    (fun _ σ => gN (ℍ := ℍ) δ Θ Γ₂ γ n σ ∧ ConsistentX c σ) (fun _ _ _ _ h => h)
+    (fun _ σ => gN₀ (ℍ := ℍ) δ Θ Γ₂ γ n σ ∧ ConsistentX c σ) (fun _ _ _ _ h => h)
     (fun _ _ _ _ _ _ _ h => h) (fun hu _ σ h => gN_persistent (hU hu) h.1) hQd n hD' _ _
-    (fun k _ v ρ h => vN_down _ δ Θ k v ρ h) hk n le_rfl ls _ ρ₁ hM'' ρ₂ ρ ⟨hg₂, hc₂⟩ hcρ
+    (fun k _ v ρ h => vN_down₀ _ δ Θ k v ρ h) hk n le_rfl ls _ ρ₁ hM'' ρ₂ ρ ⟨hg₂, hc₂⟩ hcρ
 
 /-- **`[then]` with a finaliser that may loop** (Core's `then_compatC_div`): `M`'s row has no
 capturable operation (`hcap`), so `then_compatN`'s cancel-row record holds of no operation. A
@@ -730,10 +730,10 @@ theorem thenDiv_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr}
     {S SM SD : Row} (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hU : S.UnrD → Ctx.Banged Γ₂)
     (hMS : RowLe SM S) (hDS : RowLe SD S)
     (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false)
-    (hM : SemJN (ℍ := ℍ) Δ Γ₁ M (.comp (CTy.effOf SM A)))
-    (hN : SemJN (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
-    (hD : SemJN (ℍ := ℍ) Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
-    SemJN (ℍ := ℍ) Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+    (hM : SemJN₀ (ℍ := ℍ) Δ Γ₁ M (.comp (CTy.effOf SM A)))
+    (hN : SemJN₀ (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
+    (hD : SemJN₀ (ℍ := ℍ) Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+    SemJN₀ (ℍ := ℍ) Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
   then_compatN hsp hNZ hU hMS hDS (fun _ _ o _ hf _ h => by
     rw [hcap o (Row.find_mem hf).1] at h; cases h) hP hM hN hD
 

@@ -1,4 +1,4 @@
-import Core.Chain.Goal791N
+import Core.Chain.Goal791N0
 
 /-!
 # `Mut` read per location on the chain, at a reborrow: a configuration  `[spec §62]`
@@ -189,7 +189,7 @@ of the index left. The chain's anti-frames (`rwpG_M_antiFrameG`, `erwp_M_antiFra
 types the cell (`PredStep`, `hF : Φ ℓ = some ⟨β, F⟩`). At a location `Φ` does not type the
 reseal must keep `F j`, and the content need not be in it.
 
-The configuration: `𝒱⟦U(F 1)⟧`'s family (`vN`, at the empty world) strictly decreases
+The configuration: `𝒱⟦U(F 1)⟧`'s family (`vN₀`, at the empty world) strictly decreases
 (`λ_. () ()` is in it at `1`, not at `2`); a value of the per-location `Mut` clause the
 interpretation read before the per-lend world (`mutCellPL`) at the index `2` exists (its cell
 holds `λ_. ()` at the member `2`); and at a location `Φ` does not type, no `↭` step at any index
@@ -209,7 +209,7 @@ def unitV : Val := Val.lam Val.unit.1
 
 /-- `𝒱⟦U(F 1)⟧`'s member at an index, at the empty world. -/
 abbrev thunkUnit (δ : LSub) (k : Nat) : Val → WRes → Prop :=
-  vN (ℍ := ℍ) (.thunk (.ret .unit)) δ LocTy.empty k
+  vN₀ (ℍ := ℍ) (.thunk (.ret .unit)) δ LocTy.empty k
 
 /-- **The per-location `Mut` clause**: a location whose `mut` cell at `α` holds the member
 `j ≥ n` of `P`, with no entry of the location typing read. -/
@@ -257,7 +257,7 @@ theorem unitV_all (δ : LSub) (k : Nat) : thunkUnit (ℍ := ℍ) δ k unitV PMap
   have hΦ := LocTy.view_down hOK.1 c
   show erwp (ℍ := ℍ) (Θ'.view c) _ _ k ls (.app unitV.1 (.val .unit)) PMap.empty
   refine erwp_det hΦ (opTableN_down OpTabN.empty_down)
-    (fun k _ v ρ h => vN_down _ δ _ k v ρ h)
+    (fun k _ v ρ h => vN_down₀ _ δ _ k v ρ h)
     (fun μ => step1Only_plug (ℍ := ℍ) (Head.beta μ Val.unit.1 Val.unit) rfl .hole) ?_
   have e : Kont.hole.plug (Expr.subst 0 Val.unit Val.unit.1) = Val.unit.1 := by
     simp [Kont.plug, Expr.subst, Val.unit]

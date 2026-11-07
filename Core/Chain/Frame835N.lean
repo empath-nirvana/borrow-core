@@ -230,8 +230,8 @@ theorem cancelOblN_plain₀ {δ : LSub} {Θ : LocTy} {c : Loc → Option Life}
     (hΦ : (Θ.view c).Down) (K : Kont) (hH : ∀ n, K.HasHnd n = false) (hC : K.Catches 0 = false)
     (G : CTy) :
     ∀ {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes},
-      cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) G δ Θ c) n ls e ρ →
-      cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) G δ Θ c) n ls (K.plug e) ρ := by
+      cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) G δ Θ c) n ls e ρ →
+      cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) G δ Θ c) n ls (K.plug e) ρ := by
   intro n ls e ρ h
   refine cancelOblN_frame hΦ K hH hC noOwn_empty (fun _ _ _ _ _ _ => rfl)
     (fun _ _ _ _ _ _ ρ₁ ρ₁' hc₁ he => by
@@ -258,7 +258,7 @@ decreasing_by exact rowOf_fin_lt G (Row.find_mem hf).1
 /-- **A row's table carries its cancel obligations through a plain context with no frame**
 (Core's `Row.tab_plainCancel`). -/
 theorem tabN_plainCancel {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} (hΦ : (Θ.view c).Down)
-    (G : CTy) : (tabN (ℍ := ℍ) G δ Θ c).PlainCancel := by
+    (G : CTy) : (tabN₀ (ℍ := ℍ) G δ Θ c).PlainCancel := by
   intro m i en hT _ _ K hH hC k ls K₁ ρ hcan P hP
   rw [tabN_rowOf] at hT
   obtain ⟨o, -, rfl⟩ := tabN_effOf_some_find hT
@@ -279,11 +279,11 @@ theorem tabN_plainCancel {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} (hΦ
 theorem entN_plain {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} (hΦ : (Θ.view c).Down)
     (K : Kont) (hH : ∀ n, K.HasHnd n = false) (hC : K.Catches 0 = false) {σ : WRes}
     (hσ : NoOwn σ) (o : OpSig) {k : Nat} {ls : List SRec} {K₁ : Kont} {ρ ρ' : WRes}
-    (hcan : cancelOKN (entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c)) k ls K₁ ρ)
+    (hcan : cancelOKN (entN o.q o.B (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+      (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) o.fin δ Θ c)) k ls K₁ ρ)
     (hc : ResU.CompS ρ σ ρ') :
-    cancelOKN (entN o.q o.B (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) o.fin δ Θ c)) k ls (K.comp K₁) ρ' := by
+    cancelOKN (entN o.q o.B (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
+      (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) o.fin δ Θ c)) k ls (K.comp K₁) ρ' := by
   intro P hP
   have hP' := hP
   simp only [entN] at hP'

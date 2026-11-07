@@ -6,7 +6,7 @@ import Core.Integers
 
 `docs/new-core/scope-831-interface.md` §2, unit L1. The relation-level lemmas Core's
 compatibility proofs (`Core/Compat.lean`, `Core/Compatibility.lean`, `Core/Computation.lean`)
-reach for, at the chain (`vN`/`cN`/`gN`/`erwp`), under Core's names with `N` for `C`:
+reach for, at the chain (`vN₀`/`cN₀`/`gN₀`/`erwp`), under Core's names with `N` for `C`:
 
 * **G1/G12** `gN_split`, `gN_splitC`: Core's `gDenC_split`, the parts consistent with the view at
   a valid resource; `cN_of_valid`: a computation may assume its resource valid, at every type, so
@@ -18,9 +18,9 @@ reach for, at the chain (`vN`/`cN`/`gN`/`erwp`), under Core's names with `N` for
   at the index the run leaves, the view kept consistent.
 * **C2** `cN_bind`: Core's `cC_bind`, by induction on `C`.
 * **W7** `erwp_box`: Core's `wpTS_box`.
-* **V8** `vN_noOwn_of_ownFree`; **F2** `bang_app`; **F4** `host_call_sound` at `vN`.
+* **V8** `vN_noOwn_of_ownFree`; **F2** `bang_app`; **F4** `host_call_sound` at `vN₀`.
 
-Core's `⊸` is a plain wand (`cC .arr`), and so is the chain's (`cN .arr`): the argument is read at
+Core's `⊸` is a plain wand (`cC .arr`), and so is the chain's (`cN₀ .arr`): the argument is read at
 the function's own world, at every later index and every view consistent with the composite. The
 index is the chain's step index (Core has none); the view is the chain's `ConsistentX` (Core has
 none).
@@ -51,36 +51,36 @@ theorem _root_.BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.extR_empty (Θ Θ' : LocTy)
 
 /-! ### G11, G6, G8: the context relation down the index, along the order, at agreeing `δ` -/
 
-/-- **`𝒢⟦Γ⟧` at a lower index** (chain only): `vN_le` slot by slot. -/
+/-- **`𝒢⟦Γ⟧` at a lower index** (chain only): `vN_le₀` slot by slot. -/
 theorem gN_le {δ : LSub} {Θ : LocTy} {k n : Nat} (hkn : k ≤ n) :
-    ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}, gN (ℍ := ℍ) δ Θ Γ γ n ρ → gN (ℍ := ℍ) δ Θ Γ γ k ρ
+    ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}, gN₀ (ℍ := ℍ) δ Θ Γ γ n ρ → gN₀ (ℍ := ℍ) δ Θ Γ γ k ρ
   | [], _, _, h => h
   | _ :: _, [], _, h => h
   | s :: Γ, v :: γ, ρ, h => by
-      unfold gN at h ⊢
+      unfold gN₀ at h ⊢
       split
       · rename_i hl
         rw [if_pos hl] at h
         obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
-        exact ⟨ρ₁, ρ₂, hc, vN_le hkn h₁, gN_le hkn h₂⟩
+        exact ⟨ρ₁, ρ₂, hc, vN_le₀ hkn h₁, gN_le hkn h₂⟩
       · rename_i hl
         rw [if_neg hl] at h
         exact gN_le hkn h
 
 /-- **`𝒢⟦Γ⟧` along the resource-relative order** (Core's `gSepC_local`/`gDenC_local`):
-`vN_extR` slot by slot, the order cut to each slot's part (`ExtR.left`/`.right`). -/
+`vN_extR₀` slot by slot, the order cut to each slot's part (`ExtR.left`/`.right`). -/
 theorem gN_extR {δ : LSub} {Θ Θ' : LocTy} {n : Nat} :
     ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}, Θ.ExtR Θ' ρ →
-      gN (ℍ := ℍ) δ Θ Γ γ n ρ → gN (ℍ := ℍ) δ Θ' Γ γ n ρ
+      gN₀ (ℍ := ℍ) δ Θ Γ γ n ρ → gN₀ (ℍ := ℍ) δ Θ' Γ γ n ρ
   | [], _, _, _, h => h
   | _ :: _, [], _, _, h => h
   | s :: Γ, v :: γ, ρ, hE, h => by
-      unfold gN at h ⊢
+      unfold gN₀ at h ⊢
       split
       · rename_i hl
         rw [if_pos hl] at h
         obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
-        exact ⟨ρ₁, ρ₂, hc, vN_extR s.ty δ n v ρ₁ (hE.left hc) h₁, gN_extR (hE.right hc) h₂⟩
+        exact ⟨ρ₁, ρ₂, hc, vN_extR₀ s.ty δ n v ρ₁ (hE.left hc) h₁, gN_extR (hE.right hc) h₂⟩
       · rename_i hl
         rw [if_neg hl] at h
         exact gN_extR hE h
@@ -88,8 +88,8 @@ theorem gN_extR {δ : LSub} {Θ Θ' : LocTy} {n : Nat} :
 /-- **`𝒢⟦Γ⟧` at two `δ` its live slots read alike** (Core's `gSepC_congr`). -/
 theorem gN_congr {δ₁ δ₂ : LSub} {Θ : LocTy} :
     ∀ {Γ : Ctx VTy} {γ : List Val},
-      (∀ s ∈ Γ, s.live = true → vN (ℍ := ℍ) s.ty δ₁ = vN (ℍ := ℍ) s.ty δ₂) →
-      gN (ℍ := ℍ) δ₁ Θ Γ γ = gN (ℍ := ℍ) δ₂ Θ Γ γ := by
+      (∀ s ∈ Γ, s.live = true → vN₀ (ℍ := ℍ) s.ty δ₁ = vN₀ (ℍ := ℍ) s.ty δ₂) →
+      gN₀ (ℍ := ℍ) δ₁ Θ Γ γ = gN₀ (ℍ := ℍ) δ₂ Θ Γ γ := by
   intro Γ
   induction Γ with
   | nil => intro γ _; cases γ <;> rfl
@@ -98,23 +98,23 @@ theorem gN_congr {δ₁ δ₂ : LSub} {Θ : LocTy} :
       cases γ with
       | nil => rfl
       | cons v γ' =>
-          have htail : ∀ t ∈ Γ', t.live = true → vN (ℍ := ℍ) t.ty δ₁ = vN (ℍ := ℍ) t.ty δ₂ :=
+          have htail : ∀ t ∈ Γ', t.live = true → vN₀ (ℍ := ℍ) t.ty δ₁ = vN₀ (ℍ := ℍ) t.ty δ₂ :=
             fun t ht => h t (List.mem_cons_of_mem _ ht)
           funext n ρ
           by_cases hl : s.live
-          · simp only [gN, if_pos hl, ih htail, h s (List.mem_cons_self ..) hl]
-          · simp only [gN, if_neg hl, ih htail]
+          · simp only [gN₀, if_pos hl, ih htail, h s (List.mem_cons_self ..) hl]
+          · simp only [gN₀, if_neg hl, ih htail]
 
 /-! ### G1, G2, G4: the context relation at the splits -/
 
 /-- A persistent live slot holds only at `∅` (Core's `gSepC_cons_persistent`). -/
 theorem gN_cons_persistent {δ : LSub} {Θ : LocTy} {n : Nat} {T : VTy} (hT : T.Persistent)
     {Γ : Ctx VTy} {v : Val} {γ : List Val} {ρ : WRes}
-    (h : gN (ℍ := ℍ) δ Θ (⟨T, true⟩ :: Γ) (v :: γ) n ρ) :
-    vN (ℍ := ℍ) T δ Θ n v PMap.empty ∧ gN (ℍ := ℍ) δ Θ Γ γ n ρ := by
-  simp only [gN, if_true] at h
+    (h : gN₀ (ℍ := ℍ) δ Θ (⟨T, true⟩ :: Γ) (v :: γ) n ρ) :
+    vN₀ (ℍ := ℍ) T δ Θ n v PMap.empty ∧ gN₀ (ℍ := ℍ) δ Θ Γ γ n ρ := by
+  simp only [gN₀, if_true] at h
   obtain ⟨ρ₁, ρ₂, hc, hv, hrest⟩ := h
-  obtain rfl := vN_empty_of_persistent _ hT hv
+  obtain rfl := vN_empty_of_persistent₀ _ hT hv
   rw [eq_of_compS_empty_left hc]
   exact ⟨hv, hrest⟩
 
@@ -122,8 +122,8 @@ theorem gN_cons_persistent {δ : LSub} {Θ : LocTy} {n : Nat} {T : VTy} (hT : T.
 `gSepC_splitP`, `gDenC_split`). -/
 theorem gN_split {δ : LSub} {Θ : LocTy} {n : Nat} :
     ∀ {Γ Γ₁ Γ₂ : Ctx VTy}, Ctx.SplitP Γ Γ₁ Γ₂ → ∀ {γ : List Val} {ρ : WRes},
-      gN (ℍ := ℍ) δ Θ Γ γ n ρ →
-        ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ ∧ gN (ℍ := ℍ) δ Θ Γ₁ γ n ρ₁ ∧ gN (ℍ := ℍ) δ Θ Γ₂ γ n ρ₂ := by
+      gN₀ (ℍ := ℍ) δ Θ Γ γ n ρ →
+        ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ ∧ gN₀ (ℍ := ℍ) δ Θ Γ₁ γ n ρ₁ ∧ gN₀ (ℍ := ℍ) δ Θ Γ₂ γ n ρ₂ := by
   intro Γ Γ₁ Γ₂ hsp
   induction hsp with
   | nil =>
@@ -135,7 +135,7 @@ theorem gN_split {δ : LSub} {Θ : LocTy} {n : Nat} :
       cases γ with
       | nil => exact ⟨ρ, PMap.empty, ResU.comp_empty_right ρ, h, rfl⟩
       | cons v γ' =>
-          simp only [gN, if_true, Bool.false_eq_true, if_false] at h ⊢
+          simp only [gN₀, if_true, Bool.false_eq_true, if_false] at h ⊢
           obtain ⟨ρ₁, ρ₂, hc, hv, hrest⟩ := h
           obtain ⟨σ₁, σ₂, hcσ, h₁, h₂⟩ := ih (γ := γ') hrest
           obtain ⟨x, hx, hxρ⟩ := compS_reassoc' hcσ hc
@@ -145,7 +145,7 @@ theorem gN_split {δ : LSub} {Θ : LocTy} {n : Nat} :
       cases γ with
       | nil => exact ⟨ρ, PMap.empty, ResU.comp_empty_right ρ, h, rfl⟩
       | cons v γ' =>
-          simp only [gN, if_true, Bool.false_eq_true, if_false] at h ⊢
+          simp only [gN₀, if_true, Bool.false_eq_true, if_false] at h ⊢
           obtain ⟨ρ₁, ρ₂, hc, hv, hrest⟩ := h
           obtain ⟨σ₁, σ₂, hcσ, h₁, h₂⟩ := ih (γ := γ') hrest
           obtain ⟨x, hx, hxρ⟩ := compS_lcomm hcσ hc
@@ -155,7 +155,7 @@ theorem gN_split {δ : LSub} {Θ : LocTy} {n : Nat} :
       cases γ with
       | nil => exact ⟨ρ, PMap.empty, ResU.comp_empty_right ρ, h, rfl⟩
       | cons v γ' =>
-          simp only [gN, Bool.false_eq_true, if_false] at h ⊢
+          simp only [gN₀, Bool.false_eq_true, if_false] at h ⊢
           exact ih (γ := γ') h
   | dup hT _ ih =>
       intro γ ρ h
@@ -164,7 +164,7 @@ theorem gN_split {δ : LSub} {Θ : LocTy} {n : Nat} :
       | cons v γ' =>
           obtain ⟨hv, hrest⟩ := gN_cons_persistent hT h
           obtain ⟨σ₁, σ₂, hcσ, h₁, h₂⟩ := ih (γ := γ') hrest
-          simp only [gN, if_true]
+          simp only [gN₀, if_true]
           exact ⟨σ₁, σ₂, hcσ, ⟨PMap.empty, σ₁, compS_empty_left σ₁, hv, h₁⟩,
             ⟨PMap.empty, σ₂, compS_empty_left σ₂, hv, h₂⟩⟩
 
@@ -173,8 +173,8 @@ resource consistent with `c`, each part of the split is consistent with `c`
 (`consistentX_left`/`_right`). -/
 theorem gN_splitC {δ : LSub} {Θ : LocTy} {n : Nat} {Γ Γ₁ Γ₂ : Ctx VTy}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) {γ : List Val} {ρ : WRes} {c : Loc → Option Life}
-    (hg : gN (ℍ := ℍ) δ Θ Γ γ n ρ) (hc : ConsistentX c ρ) (hv : ResU.Valid ρ) :
-    ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ ∧ gN (ℍ := ℍ) δ Θ Γ₁ γ n ρ₁ ∧ gN (ℍ := ℍ) δ Θ Γ₂ γ n ρ₂ ∧
+    (hg : gN₀ (ℍ := ℍ) δ Θ Γ γ n ρ) (hc : ConsistentX c ρ) (hv : ResU.Valid ρ) :
+    ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ ∧ gN₀ (ℍ := ℍ) δ Θ Γ₁ γ n ρ₁ ∧ gN₀ (ℍ := ℍ) δ Θ Γ₂ γ n ρ₂ ∧
       ConsistentX c ρ₁ ∧ ConsistentX c ρ₂ := by
   obtain ⟨ρ₁, ρ₂, hcρ, h₁, h₂⟩ := gN_split hsp hg
   exact ⟨ρ₁, ρ₂, hcρ, h₁, h₂, consistentX_left hcρ hc hv, consistentX_right hcρ hc hv⟩
@@ -182,8 +182,8 @@ theorem gN_splitC {δ : LSub} {Θ : LocTy} {n : Nat} {Γ Γ₁ Γ₂ : Ctx VTy}
 /-- **`ID`'s context, up to persistent slots** (Core's `gSepC_soloP`). -/
 theorem gN_soloP {δ : LSub} {Θ : LocTy} {n : Nat} :
     ∀ {Γ : Ctx VTy} {i : Nat} {T : VTy}, Ctx.SoloP Γ i T → ∀ {γ : List Val} {ρ : WRes},
-      i < γ.length → gN (ℍ := ℍ) δ Θ Γ γ n ρ →
-        ∃ v, γ[i]? = some v ∧ vN (ℍ := ℍ) T δ Θ n v ρ := by
+      i < γ.length → gN₀ (ℍ := ℍ) δ Θ Γ γ n ρ →
+        ∃ v, γ[i]? = some v ∧ vN₀ (ℍ := ℍ) T δ Θ n v ρ := by
   intro Γ i T hs
   induction hs with
   | here hdead =>
@@ -191,7 +191,7 @@ theorem gN_soloP {δ : LSub} {Θ : LocTy} {n : Nat} :
       cases γ with
       | nil => simp at hlen
       | cons v γ' =>
-          simp only [gN, if_true] at hg
+          simp only [gN₀, if_true] at hg
           obtain ⟨ρ₁, ρ₂, hc, hv, hrest⟩ := hg
           rw [gN_deadP hdead hrest] at hc
           rw [ResU.CompS.functional hc (ResU.comp_empty_right ρ₁)]
@@ -201,7 +201,7 @@ theorem gN_soloP {δ : LSub} {Θ : LocTy} {n : Nat} :
       cases γ with
       | nil => simp at hlen
       | cons v γ' =>
-          simp only [gN, Bool.false_eq_true, if_false] at hg
+          simp only [gN₀, Bool.false_eq_true, if_false] at hg
           obtain ⟨w, hw, hv⟩ := ih (γ := γ') (by simpa using hlen) hg
           exact ⟨w, by simpa using hw, hv⟩
   | skip hS _ ih =>
@@ -216,12 +216,12 @@ theorem gN_soloP {δ : LSub} {Θ : LocTy} {n : Nat} :
 /-- **`!Γ` holds no resource** (Core's `gSepC_persistent`, `gDenC_persistent`). -/
 theorem gN_persistent {δ : LSub} {Θ : LocTy} {n : Nat} :
     ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}, Ctx.Banged Γ →
-      gN (ℍ := ℍ) δ Θ Γ γ n ρ → ρ = PMap.empty
+      gN₀ (ℍ := ℍ) δ Θ Γ γ n ρ → ρ = PMap.empty
   | [], _, _, _, h => h
   | _ :: _, [], _, _, h => h
   | s :: Γ, v :: γ, ρ, hp, h => by
       have hp' : Ctx.Banged Γ := fun t ht hl => hp t (List.mem_cons_of_mem _ ht) hl
-      unfold gN at h
+      unfold gN₀ at h
       split at h
       · rename_i hl
         obtain ⟨T, hT⟩ := hp s List.mem_cons_self hl
@@ -235,12 +235,12 @@ theorem gN_persistent {δ : LSub} {Θ : LocTy} {n : Nat} :
 /-! ### G7: an outliving context lies in the stratum -/
 
 /-- **`Δ ⊨ Γ ⊐ @a`: `𝒢⟦Γ⟧` lies in `Res_α`** (Core's `gSepC_outlives`, `[TR]` 6.62 at 6.60):
-`vN_outlives` at each live slot, folded over the context. -/
+`vN_outlives₀` at each live slot, folded over the context. -/
 theorem gN_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life} {Θ : LocTy} {n : Nat}
     (hδ : Δ.Models δ) (ha : a.interp δ = some α) :
     ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes},
       (∀ s ∈ Γ, s.live = true → VOutlives Δ a s.ty) →
-      gN (ℍ := ℍ) δ Θ Γ γ n ρ → ρ.InStratum α := by
+      gN₀ (ℍ := ℍ) δ Θ Γ γ n ρ → ρ.InStratum α := by
   intro Γ
   induction Γ with
   | nil =>
@@ -256,12 +256,12 @@ theorem gN_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life} {
           have hT' : ∀ t ∈ Γ, t.live = true → VOutlives Δ a t.ty :=
             fun t ht => hT t (List.mem_cons.mpr (Or.inr ht))
           by_cases hl : s.live = true
-          · simp only [gN, if_pos hl] at hg
+          · simp only [gN₀, if_pos hl] at hg
             obtain ⟨ρ₁, ρ₂, hc, hv, hrest⟩ := hg
             exact inStratum_compS hc
-              (vN_outlives hδ ha (hT s (List.mem_cons.mpr (Or.inl rfl)) hl) Θ n v ρ₁ hv)
+              (vN_outlives₀ hδ ha (hT s (List.mem_cons.mpr (Or.inl rfl)) hl) Θ n v ρ₁ hv)
               (ih hT' hrest)
-          · simp only [gN, if_neg hl] at hg
+          · simp only [gN₀, if_neg hl] at hg
             exact ih hT' hg
 
 /-! ### V8, G9: own-free types own nothing -/
@@ -269,7 +269,7 @@ theorem gN_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life} {
 /-- **A value of an own-free type owns no cell** (Core's `vC_noOwn_of_ownFree`). -/
 theorem vN_noOwn_of_ownFree {A : VTy} (hA : A.OwnFree) :
     ∀ {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes},
-      vN (ℍ := ℍ) A δ Θ n v ρ → NoOwn ρ := by
+      vN₀ (ℍ := ℍ) A δ Θ n v ρ → NoOwn ρ := by
   induction hA with
   | unit => intro δ Θ n v ρ h; rw [h.2]; exact noOwn_empty
   | zero => intro δ Θ n v ρ h; exact h.elim
@@ -302,11 +302,11 @@ theorem vN_noOwn_of_ownFree {A : VTy} (hA : A.OwnFree) :
 /-- **An own-free context owns no cell** (Core's `gSepC_noOwn`, `gDenC_noOwn`). -/
 theorem gN_noOwn {δ : LSub} {Θ : LocTy} {n : Nat} :
     ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}, Γ.OwnFree →
-      gN (ℍ := ℍ) δ Θ Γ γ n ρ → NoOwn ρ
+      gN₀ (ℍ := ℍ) δ Θ Γ γ n ρ → NoOwn ρ
   | [], _, _, _, h => by rw [h]; exact noOwn_empty
   | _ :: _, [], _, _, h => by rw [h]; exact noOwn_empty
   | s :: Γ, v :: γ, ρ, hd, h => by
-      unfold gN at h
+      unfold gN₀ at h
       split at h
       · rename_i hl
         obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
@@ -319,7 +319,7 @@ theorem gN_noOwn {δ : LSub} {Θ : LocTy} {n : Nat} :
 /-- **One unfolding may assume its resource valid**: `cN_of_valid`'s induction on the tree. -/
 theorem cBN_of_valid (S : VTy) (Rc : CandN) : ∀ (D : CTy) (δ : LSub) (Θ : LocTy)
     (c : Loc → Option Life) (n : Nat) (ls : List SRec) (e : Expr) (ρ : WRes),
-    (ResU.Valid ρ → cBN (ℍ := ℍ) S Rc D δ Θ c n ls e ρ) → cBN (ℍ := ℍ) S Rc D δ Θ c n ls e ρ
+    (ResU.Valid ρ → cBN₀ (ℍ := ℍ) S Rc D δ Θ c n ls e ρ) → cBN₀ (ℍ := ℍ) S Rc D δ Θ c n ls e ρ
   | .ret _, _, _, _, _, _, _, _, h => erwp_of_valid h
   | .arr _ D, δ, Θ, _, _, ls, _, _, h => fun c' k hk v ρv ρ' hcomp hv hcon =>
       cBN_of_valid S Rc D δ Θ c' k ls _ ρ'
@@ -341,7 +341,7 @@ unfolding). This is what gives a split's consistency (`gN_splitC`) at a conclusi
 `F`/`F_Σ`. -/
 theorem cN_of_valid : ∀ (C : CTy) (δ : LSub) (Θ : LocTy)
     (c : Loc → Option Life) (n : Nat) (ls : List SRec) (e : Expr) (ρ : WRes),
-    (ResU.Valid ρ → cN (ℍ := ℍ) C δ Θ c n ls e ρ) → cN (ℍ := ℍ) C δ Θ c n ls e ρ
+    (ResU.Valid ρ → cN₀ (ℍ := ℍ) C δ Θ c n ls e ρ) → cN₀ (ℍ := ℍ) C δ Θ c n ls e ρ
   | .ret _, _, _, _, _, _, _, _, h => erwp_of_valid h
   | .arr _ C, δ, Θ, _, _, ls, _, _, h => fun c' k hk v ρv ρ' hcomp hv hcon =>
       cN_of_valid C δ Θ c' k ls _ ρ'
@@ -353,12 +353,12 @@ theorem cN_of_valid : ∀ (C : CTy) (δ : LSub) (Θ : LocTy)
   | .all x _ C, δ, Θ, c, n, ls, _, ρ, h => fun α hα =>
       cN_of_valid C (δ.extend x α) Θ c n ls _ ρ (fun hv => h hv α hα)
   | .nu C, δ, Θ, c, n, ls, e, ρ, h => fun hS => by
-      refine ⟨fun Θ c n ls e ρ => ResU.Valid ρ → nuCand (ℍ := ℍ) C δ Θ c n ls e ρ, ?_, h⟩
+      refine ⟨fun Θ c n ls e ρ => ResU.Valid ρ → nuCand₀ (ℍ := ℍ) C δ Θ c n ls e ρ, ?_, h⟩
       intro Θ' c' k ls' e' ρ' hR
       refine cBN_of_valid _ _ C δ Θ' c' k ls' e' ρ' fun hv => ?_
-      exact cBN_mono (R' := fun Θ c n ls e ρ => ResU.Valid ρ → nuCand (ℍ := ℍ) C δ Θ c n ls e ρ)
+      exact cBN_mono₀ (R' := fun Θ c n ls e ρ => ResU.Valid ρ → nuCand₀ (ℍ := ℍ) C δ Θ c n ls e ρ)
         (fun _ _ _ _ _ _ _ h'' _ => h'') hS.nuLeaf δ Θ' c' k ls' e' ρ'
-        (cN_nu_out hS δ Θ' c' k ls' e' ρ' (hR hv))
+        (cN_nu_out₀ hS δ Θ' c' k ls' e' ρ' (hR hv))
   | .eff _ _ _ _ _ _ _ _, _, _, _, _, _, _, _, h => erwp_of_valid h
 
 /-! ### W4: bind with a frame -/
@@ -389,11 +389,11 @@ theorem cBN_bind (S : VTy) (Rc : CandN) : ∀ (C : CTy) (δ : LSub) (Θ : LocTy)
     ∀ (K : Kont) (M : Expr) (P : PostN), P.Down → ∀ (R : Nat → WRes → Prop),
     (∀ k k' ρ, k' ≤ k → R k ρ → R k' ρ) →
     (∀ (c : Loc → Option Life) k ls' (v : Val) (σ₁ σ₂ σ : WRes), ResU.CompS σ₁ σ₂ σ →
-      P k ls' v σ₁ → R k σ₂ → ConsistentX c σ → cBN (ℍ := ℍ) S Rc C δ Θ c k ls' (K.plug v.1) σ) →
+      P k ls' v σ₁ → R k σ₂ → ConsistentX c σ → cBN₀ (ℍ := ℍ) S Rc C δ Θ c k ls' (K.plug v.1) σ) →
     ∀ (c : Loc → Option Life) (n : Nat) (ls : List SRec) (ρ₁ ρ₂ ρ : WRes),
       ResU.CompS ρ₁ ρ₂ ρ →
       (∀ c', ConsistentX c' ρ₁ → erwp (ℍ := ℍ) (Θ.view c') (opTableN OpTabN.empty) P n ls M ρ₁) →
-      R n ρ₂ → ConsistentX c ρ → cBN (ℍ := ℍ) S Rc C δ Θ c n ls (K.plug M) ρ
+      R n ρ₂ → ConsistentX c ρ → cBN₀ (ℍ := ℍ) S Rc C δ Θ c n ls (K.plug M) ρ
   | .ret _, _, Θ, hΘ, K, _, _, _, R, hR, h, c, n, _, _, _, _, hcρ, hM, hR₂, hc =>
       erwp_of_valid fun hv => erwp_bind_frame (LocTy.view_down hΘ c) (opTableN_local _) K (R n)
         hcρ hc (hM c (consistentX_left hcρ hc hv)) hR₂
@@ -408,8 +408,8 @@ theorem cBN_bind (S : VTy) (Rc : CandN) : ∀ (C : CTy) (δ : LSub) (Θ : LocTy)
       fun c' k hk v ρv ρ' hcomp hv hcon => by
         obtain ⟨y, hy, hyx⟩ := compS_reassoc hcρ hcomp
         refine cBN_bind S Rc C δ Θ hΘ (.appL K v) M P hP
-          (fun j σ => ∃ a b, ResU.CompS a b σ ∧ R j a ∧ vN (ℍ := ℍ) A δ Θ j v b)
-          (fun j j' σ hj ⟨a, b, hab, hRa, hvb⟩ => ⟨a, b, hab, hR j j' a hj hRa, vN_le hj hvb⟩)
+          (fun j σ => ∃ a b, ResU.CompS a b σ ∧ R j a ∧ vN₀ (ℍ := ℍ) A δ Θ j v b)
+          (fun j j' σ hj ⟨a, b, hab, hRa, hvb⟩ => ⟨a, b, hab, hR j j' a hj hRa, vN_le₀ hj hvb⟩)
           (fun c'' j ls' w σ₁ σ₂ σ' hcσ hPw ⟨a, b, hab, hRa, hvb⟩ hcon' => ?_)
           c' k ls ρ₁ y ρ' hyx
           (fun c'' hc'' => erwp_le (LocTy.view_down hΘ c'') (opTableN_local _)
@@ -440,17 +440,17 @@ the run leaves. `erwp_bind_frame` at `F`/`F_Σ`; at `⊸` the stack's argument j
 at the wand's index; at `&` and `∀` by their parts; at `ν` by unfolding, `cBN_bind`, and rolling (Core's `cC_bind`).
 
 The chain's obligations are in the premises: `M`'s run is asked at every view consistent with its
-own part (`SemJN`'s reading), and `cN_of_valid` gives that part's consistency from the
+own part (`SemJN₀`'s reading), and `cN_of_valid` gives that part's consistency from the
 composite's at each `⊸` the stack passes. -/
 theorem cN_bind : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down →
     ∀ (K : Kont) (M : Expr) (P : PostN), P.Down → ∀ (R : Nat → WRes → Prop),
     (∀ k k' ρ, k' ≤ k → R k ρ → R k' ρ) →
     (∀ (c : Loc → Option Life) k ls' (v : Val) (σ₁ σ₂ σ : WRes), ResU.CompS σ₁ σ₂ σ →
-      P k ls' v σ₁ → R k σ₂ → ConsistentX c σ → cN (ℍ := ℍ) C δ Θ c k ls' (K.plug v.1) σ) →
+      P k ls' v σ₁ → R k σ₂ → ConsistentX c σ → cN₀ (ℍ := ℍ) C δ Θ c k ls' (K.plug v.1) σ) →
     ∀ (c : Loc → Option Life) (n : Nat) (ls : List SRec) (ρ₁ ρ₂ ρ : WRes),
       ResU.CompS ρ₁ ρ₂ ρ →
       (∀ c', ConsistentX c' ρ₁ → erwp (ℍ := ℍ) (Θ.view c') (opTableN OpTabN.empty) P n ls M ρ₁) →
-      R n ρ₂ → ConsistentX c ρ → cN (ℍ := ℍ) C δ Θ c n ls (K.plug M) ρ
+      R n ρ₂ → ConsistentX c ρ → cN₀ (ℍ := ℍ) C δ Θ c n ls (K.plug M) ρ
   | .ret _, _, Θ, hΘ, K, _, _, _, R, hR, h, c, n, _, _, _, _, hcρ, hM, hR₂, hc =>
       erwp_of_valid fun hv => erwp_bind_frame (LocTy.view_down hΘ c) (opTableN_local _) K (R n)
         hcρ hc (hM c (consistentX_left hcρ hc hv)) hR₂
@@ -465,8 +465,8 @@ theorem cN_bind : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down →
       fun c' k hk v ρv ρ' hcomp hv hcon => by
         obtain ⟨y, hy, hyx⟩ := compS_reassoc hcρ hcomp
         refine cN_bind C δ Θ hΘ (.appL K v) M P hP
-          (fun j σ => ∃ a b, ResU.CompS a b σ ∧ R j a ∧ vN (ℍ := ℍ) A δ Θ j v b)
-          (fun j j' σ hj ⟨a, b, hab, hRa, hvb⟩ => ⟨a, b, hab, hR j j' a hj hRa, vN_le hj hvb⟩)
+          (fun j σ => ∃ a b, ResU.CompS a b σ ∧ R j a ∧ vN₀ (ℍ := ℍ) A δ Θ j v b)
+          (fun j j' σ hj ⟨a, b, hab, hRa, hvb⟩ => ⟨a, b, hab, hR j j' a hj hRa, vN_le₀ hj hvb⟩)
           (fun c'' j ls' w σ₁ σ₂ σ' hcσ hPw ⟨a, b, hab, hRa, hvb⟩ hcon' => ?_)
           c' k ls ρ₁ y ρ' hyx
           (fun c'' hc'' => erwp_le (LocTy.view_down hΘ c'') (opTableN_local _)
@@ -489,9 +489,9 @@ theorem cN_bind : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down →
         (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' => h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' α hα)
         c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc
   | .nu C, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc => fun hS =>
-      (cN_nu_unfold hS δ Θ c n ls _ ρ).mpr (cBN_bind _ _ C δ Θ hΘ K M P hP R hR
+      (cN_nu_unfold₀ hS δ Θ c n ls _ ρ).mpr (cBN_bind _ _ C δ Θ hΘ K M P hP R hR
         (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' =>
-          (cN_nu_unfold hS δ Θ c' k ls' _ σ).mp (h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ'))
+          (cN_nu_unfold₀ hS δ Θ c' k ls' _ σ).mp (h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ'))
         c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc) hS
 
 /-! ### W7: a run from `Res_α` ends in `Res_α` -/
@@ -522,15 +522,15 @@ theorem erwp_box {Φ : LocFam} {Q : PostN} {n : Nat} {ls : List SRec} {e : Expr}
 nothing, so every world is an extension at its resource (`LocTy.extR_empty`); the `⊸` clause is
 then read at the argument's world, index and view. -/
 theorem bang_app {A B : VTy} {δ : LSub} {Θ Θ' : LocTy} (hΘ' : Θ'.OK) {n k : Nat} (hk : k ≤ n)
-    {f v : Val} {ρv : WRes} (hf : vN (ℍ := ℍ) (.bang (.lolli A B)) δ Θ n f PMap.empty)
-    {c : Loc → Option Life} (hc : ConsistentX c ρv) (hv : vN (ℍ := ℍ) A δ Θ' k v ρv)
+    {f v : Val} {ρv : WRes} (hf : vN₀ (ℍ := ℍ) (.bang (.lolli A B)) δ Θ n f PMap.empty)
+    {c : Loc → Option Life} (hc : ConsistentX c ρv) (hv : vN₀ (ℍ := ℍ) A δ Θ' k v ρv)
     (ls : List SRec) :
-    erwp (ℍ := ℍ) (Θ'.view c) (opTableN OpTabN.empty) (fun k _ w ρ => vN (ℍ := ℍ) B δ Θ' k w ρ)
+    erwp (ℍ := ℍ) (Θ'.view c) (opTableN OpTabN.empty) (fun k _ w ρ => vN₀ (ℍ := ℍ) B δ Θ' k w ρ)
       k ls (.app (.val f) (.val v)) ρv :=
   hf.2 Θ' (LocTy.extR_empty Θ Θ') hΘ' c (consistentX_empty c) ls c k hk v ρv ρv
     (compS_empty_left ρv) hv hc
 
-/-! ### F4: the host operations at `vN` -/
+/-! ### F4: the host operations at `vN₀` -/
 
 /-- **The first-order value types**: `1`, `0`, the integer widths, `⊗`, `⊕`. The host operations'
 signatures (`hostArg`, `hostRes`) are among them. -/
@@ -539,10 +539,10 @@ def _root_.BoCa.Fig16.LogRel.Core.VTy.isFO : VTy → Bool
   | .tensor A B | .sum A B => A.isFO && B.isFO
   | _ => false
 
-/-- **At a first-order type `vN` is Core's `vP`**, at every world, index and list: the clauses
+/-- **At a first-order type `vN₀` is Core's `vP`**, at every world, index and list: the clauses
 are Core's with `⋆` written as `ResU.CompS` and `⌜p⌝` as `p ∧ ρ = ∅` (F1). -/
 theorem vN_iff_vP : ∀ {A : VTy}, A.isFO = true → ∀ {δ : LSub} {Θ : LocTy} {n : Nat}
-    {ls : List SRec} {v : Val} {ρ : WRes}, vN (ℍ := ℍ) A δ Θ n v ρ ↔ vP A ls δ v ρ
+    {ls : List SRec} {v : Val} {ρ : WRes}, vN₀ (ℍ := ℍ) A δ Θ n v ρ ↔ vP A ls δ v ρ
   | .unit, _, _, _, _, _, _, _ => ⟨fun ⟨h₁, h₂⟩ => ⟨h₂, h₁⟩, fun ⟨h₁, h₂⟩ => ⟨h₂, h₁⟩⟩
   | .zero, _, _, _, _, _, _, _ => Iff.rfl
   | .int _, _, _, _, _, _, _, _ => ⟨fun ⟨h₁, h₂⟩ => ⟨h₂, h₁⟩, fun ⟨h₁, h₂⟩ => ⟨h₂, h₁⟩⟩
@@ -580,12 +580,12 @@ theorem hostArg_isFO (op : HostOp) : (hostArg op).isFO = true := by
 theorem hostRes_isFO (op : HostOp) : (hostRes op).isFO = true := by
   cases op <;> rfl
 
-/-- **Every host answers at the stated type** (Core's `host_call_sound`), at `vN`: the
-signatures are first-order (`hostArg_isFO`, `hostRes_isFO`), where `vN` is Core's `vP`
+/-- **Every host answers at the stated type** (Core's `host_call_sound`), at `vN₀`: the
+signatures are first-order (`hostArg_isFO`, `hostRes_isFO`), where `vN₀` is Core's `vP`
 (`vN_iff_vP`), and Core's lemma reads the rest. -/
 theorem host_call_sound (op : HostOp) {δ : LSub} {Θ Θ' : LocTy} {n n' : Nat} {v : Val}
-    {ρ : WRes} (h : vN (ℍ := ℍ) (hostArg op) δ Θ n v ρ) :
-    ρ = PMap.empty ∧ ∃ r, ℍ.call op v = some r ∧ vN (ℍ := ℍ) (hostRes op) δ Θ' n' r PMap.empty := by
+    {ρ : WRes} (h : vN₀ (ℍ := ℍ) (hostArg op) δ Θ n v ρ) :
+    ρ = PMap.empty ∧ ∃ r, ℍ.call op v = some r ∧ vN₀ (ℍ := ℍ) (hostRes op) δ Θ' n' r PMap.empty := by
   obtain ⟨hρ, r, hr, hres⟩ := BoCa.Fig16.LogRel.Core.host_call_sound ℍ op (ls := []) (ls' := [])
     ((vN_iff_vP (hostArg_isFO op)).mp h)
   exact ⟨hρ, r, hr, (vN_iff_vP (hostRes_isFO op)).mpr hres⟩

@@ -614,8 +614,8 @@ theorem gNFrame_carryKW (δ : LSub) (Γ : Ctx VTy) (γ : List Val) (N : Nat) :
     ∀ (S : UInt32 → Prop) (m : UInt32) (x : KW) (f : Life) (y : KW) (ls ls' : List SRec)
       (ρ σ ρ' : WRes), ResU.CompS ρ σ ρ' → ResU.Valid ρ' → (rdKW id δ).wk S m x f y ρ' →
       extF ls ls' ρ' →
-      (gN (ℍ := ℍ) δ x.Θ Γ γ N σ ∧ ConsistentX x.c σ) →
-      gN (ℍ := ℍ) δ y.Θ Γ γ N σ ∧ ConsistentX y.c σ := by
+      (gN₀ (ℍ := ℍ) δ x.Θ Γ γ N σ ∧ ConsistentX x.c σ) →
+      gN₀ (ℍ := ℍ) δ y.Θ Γ γ N σ ∧ ConsistentX y.c σ := by
   intro S m x f y ls ls' ρ σ ρ' hc hv hy _ hF
   have hy' : x.OwedS S m f y ρ' := hy
   exact ⟨gN_extR ((KW.OwedS.extR hy').right hc) hF.1,
@@ -661,26 +661,26 @@ theorem erwpK_frame_then_tabKW (S : UInt32 → Prop) {δ : LSub} (SS SM SD : Row
 /-- `cancelOblN` at a row's table is the one-world reading's cancel run at `tabF`. -/
 theorem canc_tabF_unit (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (F : CTy) :
     (rdU δ Θ c).canc (ℍ := ℍ) (fun x => tabF (ℍ := ℍ) (rdU δ Θ c) () F x) () =
-      cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) F δ Θ c) := by
-  rw [show (fun x => tabF (ℍ := ℍ) (rdU δ Θ c) () F x) = fun _ => liftTabK (tabN (ℍ := ℍ) F δ Θ c)
+      cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) F δ Θ c) := by
+  rw [show (fun x => tabF (ℍ := ℍ) (rdU δ Θ c) () F x) = fun _ => liftTabK (tabN₀ (ℍ := ℍ) F δ Θ c)
     from funext (tabF_unit δ Θ c F), canc_unit]
 
 theorem errOk_tabF_unit (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (F : CTy) (k : Nat)
     (ls : List SRec) (err : Option Val) (ρ : WRes) :
     errOkK (tabF (ℍ := ℍ) (rdU δ Θ c) () F ()) k ls err ρ ↔
-      errOkN (tabN (ℍ := ℍ) F δ Θ c) k ls err ρ := by
+      errOkN (tabN₀ (ℍ := ℍ) F δ Θ c) k ls err ρ := by
   rw [tabF_unit]; exact errOkK_lift _ k ls err ρ
 
 /-- `erwp` at a row's table is the one-world reading's `erwpK` at `tabF`. -/
 theorem erwp_tabF_unit (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (F : CTy) (Q : PostN)
     (n : Nat) (ls : List SRec) (e : Expr) :
-    erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) F δ Θ c)) Q n ls e =
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) F δ Θ c)) Q n ls e =
       erwpK (ℍ := ℍ) (rdU δ Θ c).V (rdU δ Θ c).Φ
         (fun z => opTableK ((rdU δ Θ c).fl z) (tabF (ℍ := ℍ) (rdU δ Θ c) () F z)) (fun _ => Q)
         () n ls e := by
   rw [erwp_opTableN_eq_erwpK 0]
   rw [show (fun z => opTableK ((rdU δ Θ c).fl z) (tabF (ℍ := ℍ) (rdU δ Θ c) () F z)) =
-    fun _ => opTableK 0 (liftTabK (tabN (ℍ := ℍ) F δ Θ c)) from funext fun z => by
+    fun _ => opTableK 0 (liftTabK (tabN₀ (ℍ := ℍ) F δ Θ c)) from funext fun z => by
       rw [tabF_unit]; rfl]
   rfl
 
@@ -688,10 +688,10 @@ theorem erwp_tabF_unit (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (F : C
 theorem cfin_cancelN_of_K {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option Life} (P : Row)
     (err : Option Val) (G : CTy) :
     ∀ {G' : CTy}, PendLe P G G' → G'.isTop = false →
-    ∀ n ls e ρ, cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) G δ Θ c) n ls e ρ →
-      ∀ σe ρ', errOkN (tabN (ℍ := ℍ) (CTy.effOf P .unit) δ Θ c) n ls err σe →
+    ∀ n ls e ρ, cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) G δ Θ c) n ls e ρ →
+      ∀ σe ρ', errOkN (tabN₀ (ℍ := ℍ) (CTy.effOf P .unit) δ Θ c) n ls err σe →
         (G.FinUnr → σe = PMap.empty) → ResU.CompS ρ σe ρ' →
-        cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) G' δ Θ c) n ls
+        cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) G' δ Θ c) n ls
           ((cfinK (cancelVal err)).plug e) ρ' := by
   intro G' hle hG' n ls e ρ h σe ρ' he hu hc
   rw [← canc_tabF_unit] at h ⊢
@@ -708,11 +708,11 @@ theorem cfin_runN_of_K {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Opt
       ∃ o', Row.find T.rowOf n i = some o' ∧ o.Sig o')
     (hNZ : ∀ n i o, Row.find E n i = some o → o.n ≠ 0)
     {Qd : PostN} (hQd : ∀ k ls v ρ, Qd k ls v ρ → NoOwn ρ) :
-    ∀ n ls d ρ, erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)) Qd
+    ∀ n ls d ρ, erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)) Qd
         n ls d ρ →
-      ∀ σe ρ', errOkN (tabN (ℍ := ℍ) (CTy.effOf P .unit) δ Θ c) n ls err σe →
+      ∀ σe ρ', errOkN (tabN₀ (ℍ := ℍ) (CTy.effOf P .unit) δ Θ c) n ls err σe →
         (E.UnrD → σe = PMap.empty) → ResU.CompS ρ σe ρ' →
-        cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) T δ Θ c) n ls
+        cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) T δ Θ c) n ls
           (cfinE (cancelVal err) d) ρ' := by
   intro n ls d ρ h σe ρ' he hu hc
   rw [erwp_tabF_unit] at h
@@ -728,13 +728,13 @@ theorem then_cancelN_of_K {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → 
     (hFe : ∀ ls ls' ρ σ ρ', ResU.CompS ρ σ ρ' → extF ls ls' ρ' → Fr ls σ → Fr ls' σ)
     {Qd : PostN} (hQd : ∀ k ls v ρ, Qd k ls v ρ → NoOwn ρ) (N₀ : Nat)
     (hD : ∀ k, k ≤ N₀ → ∀ ls ρ, Fr ls ρ →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)) Qd k ls
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)) Qd k ls
         (.app (.val Dv) (.val .unit)) ρ)
     (F : CTy) : ∀ {T : CTy}, ThenLe F E T → T.isTop = false →
       (T.FinUnr → ∀ ls σ, Fr ls σ → σ = PMap.empty) → (E.UnrD → F.FinPers) →
-      ∀ n, n ≤ N₀ → ∀ ls e ρ, cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) F δ Θ c) n ls e ρ →
+      ∀ n, n ≤ N₀ → ∀ ls e ρ, cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) F δ Θ c) n ls e ρ →
         ∀ σ ρ', Fr ls σ → ResU.CompS ρ σ ρ' →
-          cancelOblN (ℍ := ℍ) (Θ.view c) (tabN (ℍ := ℍ) T δ Θ c) n ls
+          cancelOblN (ℍ := ℍ) (Θ.view c) (tabN₀ (ℍ := ℍ) T δ Θ c) n ls
             ((ubindK Nv Dv).plug e) ρ' := by
   intro T hle hT hunr hpers n hnN ls e ρ h σ ρ' hF hc
   rw [← canc_tabF_unit] at h ⊢
@@ -751,11 +751,11 @@ theorem seq_raise_runN_of_K {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc �
     (hES : RowLe E S) {n i : UInt32} {v : Val} {o : OpSig} (hfo : Row.find S n i = some o)
     (ha : o.abort = true) {Qd : PostN} (hQd : ∀ k ls v ρ, Qd k ls v ρ → v = .unit ∧ NoOwn ρ)
     {Q : PostN} (hQ : Q.Down) :
-    ∀ k ls d ρ, erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)) Qd
+    ∀ k ls d ρ, erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf E .unit) δ Θ c)) Qd
         k ls d ρ →
-      ∀ σp ρ', (vN (ℍ := ℍ) o.A δ Θ k v σp ∧ NoOwn σp) → (E.UnrD → σp = PMap.empty) →
+      ∀ σp ρ', (vN₀ (ℍ := ℍ) o.A δ Θ k v σp ∧ NoOwn σp) → (E.UnrD → σp = PMap.empty) →
         ResU.CompS ρ σp ρ' →
-        erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)) Q k ls
+        erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)) Q k ls
           (.seq d (raiseE (.val (opPayload n i v)))) ρ' := by
   intro k ls d ρ h σp ρ' hp hu hc
   rw [erwp_tabF_unit] at h ⊢
@@ -774,16 +774,16 @@ theorem erwp_frame_then_of_K {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc �
     (hU : S.UnrD → ∀ ls ρ, Fr ls ρ → ρ = PMap.empty)
     {Qd : PostN} (hQd : ∀ k ls v ρ, Qd k ls v ρ → v = .unit ∧ NoOwn ρ) (N₀ : Nat)
     (hD : ∀ k, k ≤ N₀ → ∀ ls ρ, Fr ls ρ →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf SD .unit) δ Θ c)) Qd k ls
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf SD .unit) δ Θ c)) Qd k ls
         (.app (.val Dv) (.val .unit)) ρ)
     (Q₁ Q : PostN) (hQ : Q.Down)
     (hkv : ∀ k, k ≤ N₀ → ∀ ls (v : Val) ρ, (Q₁ k ls v ⋆ Fr ls) ρ →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)) Q k ls
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)) Q k ls
         ((ubindK Nv Dv).plug (.val v)) ρ) :
     ∀ n, n ≤ N₀ → ∀ ls e ρ,
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf SM .unit) δ Θ c)) Q₁ n ls e ρ →
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf SM .unit) δ Θ c)) Q₁ n ls e ρ →
       ∀ ρ₂ ρ', Fr ls ρ₂ → ResU.CompS ρ ρ₂ ρ' →
-        erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)) Q n ls
+        erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S .unit) δ Θ c)) Q n ls
           ((ubindK Nv Dv).plug e) ρ' := by
   intro n hnN ls e ρ h ρ₂ ρ' hF hc
   rw [erwp_tabF_unit] at h ⊢

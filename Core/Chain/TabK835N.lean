@@ -11,7 +11,7 @@ import Core.Chain.PoolN
 
 * **an entry's order** (`KW.OwedS`): an entry at a scheduler name owes its continuation along
   `KW.Owed` (`ExtP` at the floor the stop chose); every other entry along `KW.OwedR` (`ExtR`, no
-  floor), the order `vN`'s `U` reads (`scope-835-lendexit.md`). The entries of the cancel row of a
+  floor), the order `vN₀`'s `U` reads (`scope-835-lendexit.md`). The entries of the cancel row of a
   scheduler entry owe along `KW.Owed` whatever their names: that cancel run is the scheduler's,
   at a table inside its own (`SchedOKNLe.fin`), and it runs inside the stopped continuation, under
   the lends live there;
@@ -147,23 +147,23 @@ name in the cancel row of a scheduler entry. -/
 def finSched (S : UInt32 → Prop) (m : UInt32) : UInt32 → Prop := fun n => S m ∨ S n
 
 mutual
-/-- **The table of a row's layers at the typed world** (`tabN`), at the stop's world `x`: an
+/-- **The table of a row's layers at the typed world** (`tabN₀`), at the stop's world `x`: an
 entry at `m` owes its continuation at `g y` along `KW.OwedS` from `g x`. -/
 def tabNK (S : UInt32 → Prop) (g : KW → KW) : CTy → LSub → KW → OpTabK KW
   | .eff m i q A B fin _ C, δ, x => extTabK m i
-      (entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x.Θ k v ρ)
-        (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+      (entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x.Θ k v ρ)
+        (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
         (finNK (finSched S m) g fin δ) (fun f y ρ => (g x).OwedS S m f (g y) ρ))
       (tabNK S g C δ x)
   | _, _, _ => OpTabK.empty
-/-- **The cancel obligation of a cancel row at the typed world** (`finN`): `none` at `⊤`;
+/-- **The cancel obligation of a cancel row at the typed world** (`finN₀`): `none` at `⊤`;
 otherwise the cancel run at the row's `tabNK`. -/
 def finNK (S : UInt32 → Prop) (g : KW → KW) : CTy → LSub →
     Option (KW → Nat → List SRec → Expr → WProp)
   | .top, _ => none
   | .eff m i q A B fin _ C, δ => some (cancelOblK (ℍ := ℍ) g (fun x => extTabK m i
-      (entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x.Θ k v ρ)
-        (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+      (entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x.Θ k v ρ)
+        (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
         (finNK (finSched S m) g fin δ) (fun f y ρ => (g x).OwedS S m f (g y) ρ))
       (tabNK S g C δ x)))
   | .ret _, _ => some (cancelOblK (ℍ := ℍ) g (fun _ => OpTabK.empty))
@@ -178,8 +178,8 @@ mutual
 cancel run ending at `R`. -/
 def tabRK (R : Nat → WProp) (S : UInt32 → Prop) (g : KW → KW) : CTy → LSub → KW → OpTabK KW
   | .eff m i q A B fin _ C, δ, x => extTabK m i
-      (entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x.Θ k v ρ)
-        (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+      (entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x.Θ k v ρ)
+        (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
         (finRK R (finSched S m) g fin δ) (fun f y ρ => (g x).OwedS S m f (g y) ρ))
       (tabRK R S g C δ x)
   | _, _, _ => OpTabK.empty
@@ -188,8 +188,8 @@ def finRK (R : Nat → WProp) (S : UInt32 → Prop) (g : KW → KW) : CTy → LS
     Option (KW → Nat → List SRec → Expr → WProp)
   | .top, _ => none
   | .eff m i q A B fin _ C, δ => some (cancelOblRK (ℍ := ℍ) g (fun x => extTabK m i
-      (entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x.Θ k v ρ)
-        (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+      (entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x.Θ k v ρ)
+        (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
         (finRK R (finSched S m) g fin δ) (fun f y ρ => (g x).OwedS S m f (g y) ρ))
       (tabRK R S g C δ x)) R)
   | .ret _, _ => some (cancelOblRK (ℍ := ℍ) g (fun _ => OpTabK.empty) R)
@@ -214,13 +214,13 @@ key.** -/
 theorem tab_lookupNK : ∀ (F : CTy) {S : UInt32 → Prop} {g : KW → KW} {δ : LSub} {x : KW}
     {m j : UInt32} {en : OpEntK KW},
     tabNK (ℍ := ℍ) S g F δ x m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
-      en = entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x.Θ k v ρ)
-        (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+      en = entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x.Θ k v ρ)
+        (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
         (finNK (ℍ := ℍ) (finSched S m) g fin δ) (fun f y ρ => (g x).OwedS S m f (g y) ρ) ∧
       ∀ (R : Nat → WProp) (S₂ : UInt32 → Prop) (g₂ : KW → KW) (δ₂ : LSub) (x₂ : KW),
         tabRK (ℍ := ℍ) R S₂ g₂ F δ₂ x₂ m j =
-          some (entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ₂ x₂.Θ k v ρ)
-            (fun y k v ρ => vN (ℍ := ℍ) B δ₂ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+          some (entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ₂ x₂.Θ k v ρ)
+            (fun y k v ρ => vN₀ (ℍ := ℍ) B δ₂ y.Θ k v ρ ∧ ConsistentX y.c ρ)
             (finRK (ℍ := ℍ) R (finSched S₂ m) g₂ fin δ₂)
             (fun f y ρ => (g₂ x₂).OwedS S₂ m f (g₂ y) ρ))
   | .eff m₀ i₀ q A B fin rc C, S, g, δ, x, m, j, en, h => by
@@ -309,15 +309,15 @@ theorem tabNK_lendOKCR {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy
   pa := fun m i en h k ls v ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupNK F h
     obtain ⟨-, hA, -, hOA, -⟩ := layer_suspend F hF hL
-    have hp' : vN (ℍ := ℍ) A (δ.extend xv α) x.Θ k v ρ := hp
-    rw [vN_extend_of_not_free hA] at hp'
-    exact vN_inStratum_bnd hOA hLt hp'
+    have hp' : vN₀ (ℍ := ℍ) A (δ.extend xv α) x.Θ k v ρ := hp
+    rw [vN_extend_of_not_free₀ hA] at hp'
+    exact vN_inStratum_bnd₀ hOA hLt hp'
   pb := fun m i en h y k ls w ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupNK F h
     obtain ⟨-, -, hB, -, hOB, -⟩ := layer_suspend F hF hL
-    have hp' : vN (ℍ := ℍ) B (δ.extend xv α) y.Θ k w ρ := hp.1
-    rw [vN_extend_of_not_free hB] at hp'
-    exact (vN_inStratum_bnd hOB hLt hp').mono (Life.down_sqsubset α).le
+    have hp' : vN₀ (ℍ := ℍ) B (δ.extend xv α) y.Θ k w ρ := hp.1
+    rw [vN_extend_of_not_free₀ hB] at hp'
+    exact (vN_inStratum_bnd₀ hOB hLt hp').mono (Life.down_sqsubset α).le
 
 /-- **The callback's table and the lender's twin across the fold, at the typed world.** The
 callback's entries, indexed by the lender's worlds, owe at the lend's world (`KW.lend`); the
@@ -339,8 +339,8 @@ theorem tabNK_foldTwin {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy
   obtain ⟨-, hA, hB, -, -, -⟩ := layer_suspend F hF hL
   refine ⟨_, hR R S id δ x, rfl, rfl, ?_, ?_, rfl, fun ha => ⟨fun f z ρ hz => hz.owedS,
     fun f z ρ hz => hz.owed (hm ha)⟩⟩
-  · simp only [entNK, vN_extend_of_not_free (ℍ := ℍ) hA δ α]
-  · simp only [entNK, vN_extend_of_not_free (ℍ := ℍ) hB δ α]
+  · simp only [entNK, vN_extend_of_not_free₀ (ℍ := ℍ) hA δ α]
+  · simp only [entNK, vN_extend_of_not_free₀ (ℍ := ℍ) hB δ α]
 
 /-- **The lender's cancel obligations from the callback's, at the typed world** (`tabR_can` at
 `KW`, the premise `CanFold`), by induction on how deep cancel rows nest. At a capturable entry, the

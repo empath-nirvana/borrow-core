@@ -1,7 +1,7 @@
 import Core.Chain.Rules834N
 
 /-!
-# `withswap` at `SemJN`  `[spec §62]`
+# `withswap` at `SemJN₀`  `[spec §62]`
 
 Core's `withswap_compatX` (`Core/Compatibility.lean`), step by step, at the per-lend world and the
 pure row. The source's cell is at its view lifetime and the view types it with its family
@@ -38,10 +38,10 @@ def withswapAt (l : Loc) : Val :=
   Val.lam (.letpair (.app BoCa.v0 (eLoad l))
     (.seq (.app (.app store' (.val (.loc l))) BoCa.v1) (.pair (.val (.loc l)) BoCa.v0)))
 
-/-- **`withswap` at `SemJN`** (Core's `withswap_compatX`):
+/-- **`withswap` at `SemJN₀`** (Core's `withswap_compatX`):
 `Mut @a A ⊸ (A ⊸ A ⊗ B) ⊸ Mut @a A ⊗ B` at the pure row. -/
 theorem withswap_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy}
-    (hΓ : Ctx.DeadP Γ) : SemJN (ℍ := ℍ) Δ Γ withswap (.val (axWithswapTy a A B)) := by
+    (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ withswap (.val (axWithswapTy a A B)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
   obtain rfl := gN_deadP hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withswap) _
@@ -53,7 +53,7 @@ theorem withswap_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
   obtain ⟨α₀, hα₀, b, hα₀b, hm₁, hunif⟩ := hv₁
   obtain ⟨l, -, -, -, -, -, -, rfl, -, -⟩ := id hm₁
   have hΦ₁ : (Θ₁.view c₂).Down := LocTy.view_down hΘ₁.1 c₂
-  refine erwp_det hΦ₁ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ Θ₁ k v ρ h)
+  refine erwp_det hΦ₁ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ₁ k v ρ h)
     (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
   have e₁ : Kont.hole.plug (Expr.subst 0 (Val.loc l)
       (Expr.val (Val.lam (.letpair (.app BoCa.v0 (.app load' BoCa.v1))
@@ -66,12 +66,12 @@ theorem withswap_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
   -- the callback, at the world the body's `U` reached; the source arrives there along `ExtR`
   intro Θ₂ hE₂ hΘ₂ _ _ ls₂ c₄ k₂ hk₂ vf ρf τ₂ hc₂ hvf hcon
   have hΦ : (Θ₂.view c₄).Down := LocTy.view_down hΘ₂.1 c₄
-  set P : CPredL := fun Θ' j u r => vN (ℍ := ℍ) A δ Θ' j u r with hP
+  set P : CPredL := fun Θ' j u r => vN₀ (ℍ := ℍ) A δ Θ' j u r with hP
   have hm : mutL b P Θ₂ k₂ (Val.loc l) ρ₁ := by
     obtain ⟨l₀, w, χ, hχ, j, hw, hj, h₁, h₂, h₃⟩ := hm₁
     exact mutL_extR hE₂ ⟨l₀, w, χ, hχ, j, hw, by omega, h₁, h₂, h₃⟩
-  set Q : PostN := fun k _ v ρ => vN (ℍ := ℍ) (.tensor (.mut a A) B) δ Θ₂ k v ρ with hQ
-  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ Θ₂ k v ρ h)
+  set Q : PostN := fun k _ v ρ => vN₀ (ℍ := ℍ) (.tensor (.mut a A) B) δ Θ₂ k v ρ with hQ
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ₂ k v ρ h)
     (fun μ => step1Only_plug (Head.beta μ _ vf) rfl .hole) ?_
   have e₂ : Kont.hole.plug (Expr.subst 0 vf (.letpair (.app BoCa.v0 (eLoad l))
       (.seq (.app (.app store' (.val (.loc l))) BoCa.v1) (.pair (.val (.loc l)) BoCa.v0)))) =
@@ -98,7 +98,7 @@ theorem withswap_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
   -- `wp-m-anti-frame` at the view; the payload it hands over is the cell's own
   refine erwp_M_antiFrame hΦ (LocTy.view_some hcb hlΘ) (T := OpTabN.empty)
     (fun _ _ _ h => by cases h) k₂ ls₂ _ w₀ σ₀ hσ₀ j₀ hw₀ ρf τ₂ hc₂ (fun W X hW hX => ?_)
-  have hwA : vN (ℍ := ℍ) A δ Θ₂ j₀ w₀ σ₀ := (vN_above A δ Θ₂ hσ₀).mp hw₀
+  have hwA : vN₀ (ℍ := ℍ) A δ Θ₂ j₀ w₀ σ₀ := (vN_above₀ A δ Θ₂ hσ₀).mp hw₀
   -- `wp-bind` at the argument `load ℓ`, then `wp-load`
   obtain ⟨rest, hrest, hXr⟩ := compS_lcomm (ResU.CompS.comm hW) hX
   refine erwp_bindR hΦ (opTableG_local _ _) _ ?_
@@ -110,7 +110,7 @@ theorem withswap_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
   have hcrest : ConsistentX c₄ rest := consistentX_compS hrest hcf hcσ
   have hcX : ConsistentX c₄ X := consistentX_compS hXr (consistentX_single_own c₄ l w₀) hcrest
   have happ := hvf Θ₂ (LocTy.extR_refl _ _) hΘ₂ c₄ hcf ls₂ c₄ (k₂ - 1) (Nat.sub_le _ _) w₀ σ₀ rest
-    hrest (vN_le (by omega) hwA) hcrest
+    hrest (vN_le₀ (by omega) hwA) hcrest
   refine erwp_bind_frame hΦ (opTableG_local _ _)
     (.letpair .hole (.seq (.app (.app store' (.val (.loc l))) BoCa.v1) (.pair (.val (.loc l)) BoCa.v0)))
     (ptoOwn l w₀) (ResU.CompS.comm hXr) hcX happ rfl ?_
@@ -146,26 +146,26 @@ theorem withswap_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
   -- the resealed cell: the stored component, at its index, beside the result
   have hρ₃ : ρ₃.InStratum b := hunif _ _ _ _ h₃
   have hw₃ : famL b P Θ₂ m' w₃ ⟨ρ₃, hρ₃⟩ :=
-    (vN_above A δ Θ₂ hρ₃).mpr (vN_le (by omega) h₃)
+    (vN_above₀ A δ Θ₂ hρ₃).mpr (vN_le₀ (by omega) h₃)
   refine ⟨w₃, ρ₃, hρ₃, hw₃, ρ₄, σ₁, ResU.CompS.comm hct, hc34, fun X' hX' => ?_⟩
   exact ⟨Val.loc l, w₄, _, ρ₄, rfl, ResU.CompS.comm hX',
     ⟨α₀, hα₀, b, hα₀b, ⟨l, w₃, ρ₃, hρ₃, m', hw₃, le_rfl, rfl, hlΘ, rfl⟩, hunif⟩,
-    vN_le (by omega) h₄⟩
+    vN_le₀ (by omega) h₄⟩
 
 /-! ### `withbor (3)` at the pure row -/
 
-/-- **`withbor (3)` at `SemJN`** (Core's `withbor3_compatX`):
+/-- **`withbor (3)` at `SemJN₀`** (Core's `withbor3_compatX`):
 `Mut @a A ⊸ (∀'x ⊏ @Δ. Mut 'x A ⊸ ['x] B) ⊸ Mut @a A ⊗ B` at the pure row. Core's steps: the
 source's `Mut` value at the callback's world; the anti-frame at its cell (`wpTS_M_antiFrameX`),
 the opened content lent at a fresh `α` below the cell, the bound and the callback's stratum
 (`wpTS_M_frameX`), the two together `erwp_withbor3` at the view (the source's cell at its view
 lifetime, `consistentX_get`); `f ()` and the borrow's application under the pair, framed beside
 the borrow (`wpTS_bind (.pairR ℓ □)`, `wpTS_bind_frame`); the result `['x] B` back at the world
-without the lend (`vN_local`); the content handed back in `F_i k` is in `F_o k` (`hunif`), and the
+without the lend (`vN_local₀`); the content handed back in `F_i k` is in `F_o k` (`hunif`), and the
 resealed cell is a `Mut @a A` value again. -/
 theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hA : ¬ VFree x A) (hB : ¬ VFree x B) :
-    SemJN (ℍ := ℍ) Δ Γ withbor (.val (axWithbor3Ty a x Δ.meetOfDom A B)) := by
+    SemJN₀ (ℍ := ℍ) Δ Γ withbor (.val (axWithbor3Ty a x Δ.meetOfDom A B)) := by
   intro δ γ Θ c n ls ρ hδ _ _ _ hg
   obtain rfl := gN_deadP hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withbor) _
@@ -176,7 +176,7 @@ theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
   obtain ⟨α₀, hα₀, b, hα₀b, hm₁, hunif⟩ := hv₁
   obtain ⟨l, -, -, -, -, -, -, rfl, -, -⟩ := id hm₁
   have hΦ₁ : (Θ₁.view c₂).Down := LocTy.view_down hΘ₁.1 c₂
-  refine erwp_det hΦ₁ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ Θ₁ k v ρ h)
+  refine erwp_det hΦ₁ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ₁ k v ρ h)
     (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
   have e₁ : Kont.hole.plug (Expr.subst 0 (Val.loc l)
       (Val.lam (.pair BoCa.v1 (.app (.app BoCa.v0 unit') BoCa.v1))).1) = (withborAt l).1 := by
@@ -187,12 +187,12 @@ theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
   -- the callback, at the world the body's `U` reached; the source arrives there along `ExtR`
   intro Θ₂ hE₂ hΘ₂ _ _ ls₂ c k₂ hk₂ f ρf τ₂ hc₂ hf hcon
   have hΦ : (Θ₂.view c).Down := LocTy.view_down hΘ₂.1 c
-  set P : CPredL := fun Θ' j u r => vN (ℍ := ℍ) A δ Θ' j u r with hP
+  set P : CPredL := fun Θ' j u r => vN₀ (ℍ := ℍ) A δ Θ' j u r with hP
   have hm : mutL b P Θ₂ k₂ (Val.loc l) ρ₁ := by
     obtain ⟨l₀, w, χ, hχ, j, hw, hj, h₁, h₂, h₃⟩ := hm₁
     exact mutL_extR hE₂ ⟨l₀, w, χ, hχ, j, hw, by omega, h₁, h₂, h₃⟩
-  set Q : PostN := fun k _ v ρ => vN (ℍ := ℍ) (.tensor (.mut a A) B) δ Θ₂ k v ρ with hQ
-  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ Θ₂ k v ρ h)
+  set Q : PostN := fun k _ v ρ => vN₀ (ℍ := ℍ) (.tensor (.mut a A) B) δ Θ₂ k v ρ with hQ
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ₂ k v ρ h)
     (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
   have e₂ : Kont.hole.plug (Expr.subst 0 f
       (.pair (.val (Val.loc l)) (.app (.app BoCa.v0 unit') (.val (Val.loc l))))) =
@@ -227,18 +227,18 @@ theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
     ((Life.down_sqsubset α).le.trans (hαlt.le.trans (inf_le_left.trans inf_le_right)))
   have hLt : LtLife δ Δ.meetOfDom α := ⟨γb, hγb, lt_of_lt_of_le hαlt inf_le_right⟩
   set δ' := δ.extend x α with hδ'
-  have hAδ : vN (ℍ := ℍ) A δ' = vN (ℍ := ℍ) A δ := vN_extend_of_not_free hA δ α
-  have hBδ : vN (ℍ := ℍ) B δ' = vN (ℍ := ℍ) B δ := vN_extend_of_not_free hB δ α
-  set P' : CPredL := fun Θ' j u r => vN (ℍ := ℍ) A δ' Θ' j u r with hP'
+  have hAδ : vN₀ (ℍ := ℍ) A δ' = vN₀ (ℍ := ℍ) A δ := vN_extend_of_not_free₀ hA δ α
+  have hBδ : vN₀ (ℍ := ℍ) B δ' = vN₀ (ℍ := ℍ) B δ := vN_extend_of_not_free₀ hB δ α
+  set P' : CPredL := fun Θ' j u r => vN₀ (ℍ := ℍ) A δ' Θ' j u r with hP'
   set Fam : Nat → Val → SPropS Loc Val α := famL α P' Θ₂ with hFam
-  have hFamD : DownFam α Fam := vN_fam_down A δ' α Θ₂
+  have hFamD : DownFam α Fam := vN_fam_down₀ A δ' α Θ₂
   have hwit : Fam j₀ w₀ ⟨σ₀, houtP⟩ :=
-    (vN_above A δ' Θ₂ houtP).mpr (by rw [hAδ]; exact (vN_above A δ Θ₂ hσ₀).mp hw₀)
+    (vN_above₀ A δ' Θ₂ houtP).mpr (by rw [hAδ]; exact (vN_above₀ A δ Θ₂ hσ₀).mp hw₀)
   have hoi : ∀ k w σ (h : σ.InStratum α), Fam k w ⟨σ, h⟩ →
       ∃ h' : σ.InStratum b, famL b P Θ₂ k w ⟨σ, h'⟩ := by
     intro k w σ h hw
-    have hv' : vN (ℍ := ℍ) A δ Θ₂ k w σ := by rw [← hAδ]; exact (vN_above A δ' Θ₂ h).mp hw
-    exact ⟨hunif Θ₂ k w σ hv', (vN_above A δ Θ₂ (hunif Θ₂ k w σ hv')).mpr hv'⟩
+    have hv' : vN₀ (ℍ := ℍ) A δ Θ₂ k w σ := by rw [← hAδ]; exact (vN_above₀ A δ' Θ₂ h).mp hw
+    exact ⟨hunif Θ₂ k w σ hv', (vN_above₀ A δ Θ₂ (hunif Θ₂ k w σ hv')).mpr hv'⟩
   -- the callback's world and view
   set Θ' := Θ₂.add l α Fam with hΘ'
   set c' := setLife c l α with hc'def
@@ -259,7 +259,7 @@ theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
   -- the callback, at the lend's world and view, from the borrow
   rw [← hview]
   have hΦi : (Θ'.view c').Down := LocTy.view_down hOK'.1 c'
-  have hcell : vN (ℍ := ℍ) (.mut (.var x) A) δ' Θ' k₂ (Val.loc l)
+  have hcell : vN₀ (ℍ := ℍ) (.mut (.var x) A) δ' Θ' k₂ (Val.loc l)
       (ResU.single l (CellU.mutOf α w₀ σ₀ houtP (Fam j₀) hwit)) :=
     ⟨α, interp_ext_self δ x α, α, le_rfl, lend_mutL Θ₂ l α P' hkj houtP hwit,
       fun Θ₃ j u r h => (hunif Θ₃ j u r (by rw [← hAδ]; exact h)).mono hαβ⟩
@@ -273,7 +273,7 @@ theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
     (consistentX_compS hBM hcf' hcm))
   obtain ⟨⟨τg, τm, hcτ, hgv, rfl⟩, hcτ', hvτ⟩ := hg
   have happ := hgv Θ' (LocTy.extR_refl _ _) hOK' c' (consistentX_left hcτ hcτ' hvτ) ls₃
-    c' j le_rfl (Val.loc l) _ τ hcτ (vN_le hj hcell) hcτ'
+    c' j le_rfl (Val.loc l) _ τ hcτ (vN_le₀ hj hcell) hcτ'
   show rwp (ℍ := ℍ) _ _ j ls₃ ((Kont.pairR (Val.loc l) Kont.hole).plug
     (.app (.val g) (.val (Val.loc l)))) τ
   refine rwp_bind hΦi _ ?_
@@ -286,8 +286,8 @@ theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
   -- the result back at `Θ₂`; the content in `F_o k`, the cell resealed
   obtain ⟨h', hw'⟩ := hoi j' w σ hσ hFσ
   obtain ⟨ac, hac, hacZ⟩ := compS_exch hY hZ
-  have hbB' : vN (ℍ := ℍ) B δ Θ₂ j' b' ρb :=
-    vN_local B δ Θ₂ l α Fam j' b' ρb hst (by rw [← hBδ]; exact hbB)
+  have hbB' : vN₀ (ℍ := ℍ) B δ Θ₂ j' b' ρb :=
+    vN_local₀ B δ Θ₂ l α Fam j' b' ρb hst (by rw [← hBδ]; exact hbB)
   exact ⟨w, σ, h', hw', ρb, ac, ResU.CompS.comm hacZ, ResU.CompS.comm hac, fun X' hX' =>
     ⟨Val.loc l, b', _, ρb, rfl, ResU.CompS.comm hX',
       ⟨α₀, hα₀, b, hα₀b, ⟨l, w, σ, h', j', hw', le_rfl, rfl, hlΘ, rfl⟩, hunif⟩, hbB'⟩⟩
@@ -296,48 +296,48 @@ theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
 
 /-- **The pure callback at the image**: the callback `U(∀'x ⊏ @bnd. F(U(Imm̲ 'x A ⊸ F(['x] B))))`,
 at `β ⊏ @bnd`, its `f ()` run beside the image (`erwp_bind_frame`), then applied to the image's
-value; its result `['x] B` read at `B` (`vN_extend_of_not_free`). The pure row's `withload_compatX`
+value; its result `['x] B` read at `B` (`vN_extend_of_not_free₀`). The pure row's `withload_compatX`
 reads the callback this way, where the unwinding form reads `callback_at_image`. -/
 theorem callback_at_imageP {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     (hB : ¬ VFree x B) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {n : Nat} {ls : List SRec} {f u : Val} {ρf χ Bχ : WRes} {β : Life}
     (hLt : LtLife δ bnd β)
-    (hf : vN (ℍ := ℍ) (.all x bnd (.lolli (A.immReborrow (.var x)) (.box (.var x) B))) δ Θ n f ρf)
+    (hf : vN₀ (ℍ := ℍ) (.all x bnd (.lolli (A.immReborrow (.var x)) (.box (.var x) B))) δ Θ n f ρf)
     (hcf : ConsistentX c ρf) (hχ : ∀ m (ψ : CellU Loc Val), χ.get m = some ψ → ψ.kind = Kind.imm)
-    (himg : vN (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u χ)
+    (himg : vN₀ (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u χ)
     (hBχ : ResU.CompS ρf χ Bχ) :
     erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty)
-      (RebPost β (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ)) n ls
+      (RebPost β (fun k _ v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ)) n ls
       (.app (.app (.val f) (.val .unit)) (.val u)) Bχ := by
   have hΦ := LocTy.view_down hΘ.1 c
   have hcon : ConsistentX c Bχ := consistentX_compS hBχ hcf (consistentX_allImm hχ c)
   have h1 := hf Θ (LocTy.extR_refl _ _) hΘ c hcf ls β hLt
   show erwp (ℍ := ℍ) _ _ _ n ls ((Kont.appL .hole u).plug (.app (.val f) (.val .unit))) Bχ
   refine erwp_bind_frame hΦ (opTableN_local _) (.appL .hole u)
-    (vN (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u) hBχ hcon h1 himg ?_
+    (vN₀ (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u) hBχ hcon h1 himg ?_
   intro k hk ls' g σ₁ σ₂ σ hcσ hg hu hcσ' hvσ
   have h2 := hg Θ (LocTy.extR_refl _ _) hΘ c (consistentX_left hcσ hcσ' hvσ) ls' c k le_rfl u σ₂ σ
-    hcσ (vN_le hk hu) hcσ'
+    hcσ (vN_le₀ hk hu) hcσ'
   refine erwp_mono (fun k' _ w ρ hb => ?_) (opTableN_local _) k ls' _ σ h2
   obtain ⟨α', hα', hbB, hst⟩ := hb
   rw [interp_ext_self] at hα'
   cases Option.some.inj hα'
-  rw [vN_extend_of_not_free hB] at hbB
+  rw [vN_extend_of_not_free₀ hB] at hbB
   exact ⟨hbB, hst⟩
 
 /-- `withload`'s inner abstraction at the source `ℓ`: `λf. f () (load ℓ)`. -/
 def withloadAt (l : Loc) : Val :=
   Val.lam (.app (.app BoCa.v0 unit') (.app load' (.val (.loc l))))
 
-/-- **`withload` at `SemJN`** (Core's `withload_compatX`):
+/-- **`withload` at `SemJN₀`** (Core's `withload_compatX`):
 `Imm @a A ⊸ (∀'x ⊏ @Δ. Imm̲ 'x A ⊸ ['x] B) ⊸ B` at the pure row. Core's steps: the `Imm`
-argument at the callback's world (`vC_local`, here `vN_extR`); the load (`wpTS_load_I`, here
+argument at the callback's world (`vC_local`, here `vN_extR₀`); the load (`wpTS_load_I`, here
 `rwp_load_cell` under `erwp_bindR`); 6.150 at the record the program's own `Imm` value
 witnesses (`wpTS_reborrow`, here `withload_reb` at the empty row), the callback run at the image
 (`callback_at_imageP`). -/
 theorem withload_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hA : ¬ VFree x A) (hB : ¬ VFree x B) :
-    SemJN (ℍ := ℍ) Δ Γ withload (.val (axWithloadTy a x Δ.meetOfDom A B)) := by
+    SemJN₀ (ℍ := ℍ) Δ Γ withload (.val (axWithloadTy a x Δ.meetOfDom A B)) := by
   intro δ γ Θ c n ls ρ hδ _ _ _ hg
   obtain rfl := gN_deadP hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withload) _
@@ -347,7 +347,7 @@ theorem withload_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
   obtain rfl := eq_of_compS_empty_left hcomp
   obtain ⟨-, -, ⟨l, -, -, -, -, rfl, -, -, -⟩, -⟩ := id hv₁
   have hΦ₁ : (Θ₁.view c₂).Down := LocTy.view_down hΘ₁.1 c₂
-  refine erwp_det hΦ₁ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ Θ₁ k v ρ h)
+  refine erwp_det hΦ₁ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ₁ k v ρ h)
     (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
   have e₁ : Kont.hole.plug (Expr.subst 0 (Val.loc l)
       (Val.lam (.app (.app BoCa.v0 unit') (.app load' BoCa.v1))).1) = (withloadAt l).1 := by
@@ -359,9 +359,9 @@ theorem withload_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
   intro Θ₂ hE₂ hΘ₂ _ _ ls₂ c k₂ hk₂ f ρf ρ'' hc' hf hcon
   have hΦ : (Θ₂.view c).Down := LocTy.view_down hΘ₂.1 c
   obtain ⟨α₀, hα₀, ⟨l', s, w, σ, hσs, hl', rfl, hα₀s, hpay⟩, hwit⟩ :=
-    vN_le hk₂ (vN_extR _ δ k₁ _ _ hE₂ hv₁)
+    vN_le₀ hk₂ (vN_extR₀ _ δ k₁ _ _ hE₂ hv₁)
   obtain rfl : l = l' := by have := congrArg Subtype.val hl'; simpa [Val.loc] using this
-  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ Θ₂ k v ρ h)
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ₂ k v ρ h)
     (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
   have e₂ : Kont.hole.plug (Expr.subst 0 f
       (.app (.app BoCa.v0 unit') (.app load' (.val (.loc l))))) =
@@ -380,7 +380,7 @@ theorem withload_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
       (Lifetime.meetOfDomL_wf Δ.entries)) hA (fun o ho => absurd ho List.not_mem_nil)
     (vO_le (Nat.sub_le k₂ 1) hpay) (hwit l s w σ hσs rfl)
     (fun β hLt u χ Bχ hχ _ _ himg hBχ =>
-      callback_at_imageP hB hΘ₂ hLt (vN_le (Nat.sub_le k₂ 1) hf) hcf hχ himg hBχ) hc'
+      callback_at_imageP hB hΘ₂ hLt (vN_le₀ (Nat.sub_le k₂ 1) hf) hcf hχ himg hBχ) hc'
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

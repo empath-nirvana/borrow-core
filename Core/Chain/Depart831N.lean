@@ -13,7 +13,7 @@ inside a run, at the Imm Frame's exit, by `not_rel_lineage` from the run's `Fram
 `ICpAt`. The chain does the same at the run's record list: `erwp_I_frameR`'s `hQ` is Core's `Ext`
 on lists, and its exit is Core's.
 
-The world's records (`LocTy.imm`) are a second carrier, which `vN`'s `Imm` clause reads.
+The world's records (`LocTy.imm`) are a second carrier, which `vN₀`'s `Imm` clause reads.
 `tabN_unwind_eq` (`Core/Chain/ImmLend833N.lean`) moves the world-level step outside any run. It
 identifies the callback's table at `Θ + (p, α)` with the lender's at `Θ`, and it does that by
 moving every value of every operation's argument type, at a resource in `Res_α`, from the world
@@ -42,7 +42,7 @@ holds `Div` Core takes the greatest fixed point over segments (`cwp`, `Core/DivD
 `erwp` at `n` constrains only the runs of fewer than `n` steps that reach a final configuration.
 So a computation with no final configuration is in `erwp` at every index, whatever the table
 and the postcondition (`erwp_of_noFinal`), and no fixed point needs to be added to admit it. The
-chain's `F_Σ R` is `erwp` at the row's table at every row (`cN_effOf`), whether or not the row
+chain's `F_Σ R` is `erwp` at the row's table at every row (`cN_effOf₀`), whether or not the row
 holds `Div` (`cN_effOf_divB`). Core's split on `Row.divB` is a split between `CDerives`
 constructors (`effThen`, `effThenDiv`) and between `effWp`'s branches. The first is kept as
 printed. Under the second, both branches go to `erwp`.
@@ -81,7 +81,7 @@ the world with a record lent at `α`, at a resource in `Res_α`, is at an extens
 without the record. -/
 def UnwindArgStepLoc : Prop :=
   ∀ (Θ : LocTy) (p : FrameRec) (α : Life) (a : Lifetime.Life) (A : VTy) (δ : LSub) (n : Nat)
-    (v : Val) (ρ : WRes), Θ.OK → vN (ℍ := ℍ) (.imm a A) δ (Θ.addImm (p, α)) n v ρ →
+    (v : Val) (ρ : WRes), Θ.OK → vN₀ (ℍ := ℍ) (.imm a A) δ (Θ.addImm (p, α)) n v ρ →
     ρ.InStratum α → (Θ.addImm (p, α)).ExtRLoc Θ ρ
 
 /-- The configuration's world: the one record `q`, lent at `γ = 1`. -/
@@ -110,7 +110,7 @@ theorem unwindArg_inst (y : LifeVar) (l l' : Loc) (n : Nat) :
     let Θ := Θq y l l'
     let α : Life := OrderDual.toDual 2
     Θ.OK ∧
-    vN (ℍ := ℍ) (.imm (.var y) (.ref .unit)) (LSub.empty.extend y (OrderDual.toDual 1))
+    vN₀ (ℍ := ℍ) (.imm (.var y) (.ref .unit)) (LSub.empty.extend y (OrderDual.toDual 1))
       (Θ.addImm (pRec l l', α)) n (Val.loc l) (cellI (OrderDual.toDual 1) l l') ∧
     (cellI (OrderDual.toDual 1) l l').InStratum α ∧
     (Θ.addImm (pRec l l', α)).ExtR Θ (cellI (OrderDual.toDual 1) l l') ∧
@@ -166,10 +166,10 @@ theorem erwp_of_noFinal {Φ : LocFam} {Tb : TableN} {Q : PostN} {n : Nat} {ls : 
 /-- **`F_Σ R` is `erwp` at the row's table on both sides of Core's split on `Row.divB`.** -/
 theorem cN_effOf_divB (S : Row) (b : Bool) (_hb : Row.divB S = b) (R : VTy) (δ : LSub)
     (Θ : LocTy) (c : Loc → Option Life) (n : Nat) (ls : List SRec) (e : Expr) (ρ : WRes) :
-    cN (ℍ := ℍ) (CTy.effOf S R) δ Θ c n ls e ρ ↔
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c))
-        (fun k _ v ρ => vN (ℍ := ℍ) R δ Θ k v ρ) n ls e ρ :=
-  cN_effOf S R δ Θ c n ls e ρ
+    cN₀ (ℍ := ℍ) (CTy.effOf S R) δ Θ c n ls e ρ ↔
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S R) δ Θ c))
+        (fun k _ v ρ => vN₀ (ℍ := ℍ) R δ Θ k v ρ) n ls e ρ :=
+  cN_effOf₀ S R δ Θ c n ls e ρ
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Depart831N
 

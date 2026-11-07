@@ -3,7 +3,7 @@ import Core.Chain.SI.ErwpK
 /-!
 # Posts across a lend's exit, at the Kripke stop  `[spec §19, §27]`
 
-`docs/new-core/scope-835-lendexit.md`. After `vN_local`, a lend's callback result is a value at the
+`docs/new-core/scope-835-lendexit.md`. After `vN_local₀`, a lend's callback result is a value at the
 lender's location typing `Θ`. If `U` read its futures along `ExtP` at the world's floor, that value
 would be one at the lend's floor `α` only, and the lender would post at the lower floor. A stop the
 lender makes afterwards would then owe its continuation along `ExtP α`. A handler around the lender
@@ -14,10 +14,10 @@ reading `κ` at `U` at its own floor `lo > α` asks for more than that.
 no lend frame between the `perform` and its handler, and the Mut Frame's fold, the one producer that
 needs `ExtP` (`Kappa835N.not_extRFoldTransfer`), never builds it. Its entry may owe the continuation
 along `ExtR` at the continuation's share, at every valid location typing and every consistent view:
-`KW.OwedR`. That is the order `vN`'s `U` clause reads today (`Goal791N.vN`, `.thunk`). It reads no
+`KW.OwedR`. That is the order `vN₀`'s `U` clause reads today (`Goal791N.vN₀`, `.thunk`). It reads no
 floor, so the floor of the world the stop was made at, and the floor the stop chose, do not change
 what is owed (`contShareK_owedR_lo`), and the obligation has `U`'s quantifiers at every floor
-(`contShareK_owedR_U`). `vN` at `U` is `KapRelR`, the same quantifiers (`vN_thunk_iff_kapRelR`).
+(`contShareK_owedR_U`). `vN₀` at `U` is `KapRelR`, the same quantifiers (`vN_thunk_iff_kapRelR`).
 
 **Configurations** (each hypothesis discharged):
 
@@ -89,7 +89,7 @@ theorem contShareK_owedR_lo {x : KW} {en : OpEntK KW} (hwk : ∀ f y ρ, en.wk f
 
 /-- **E10's world step at the Kripke stop**: a stop at an entry owing along `OwedR` owes its
 continuation at every location typing `ExtR` reaches at the share, every view consistent with the
-share and every floor, which are the futures `vN`'s `U` clause reads. -/
+share and every floor, which are the futures `vN₀`'s `U` clause reads. -/
 theorem contShareK_owedR_U {x : KW} {en : OpEntK KW} (hwk : ∀ f y ρ, en.wk f y ρ ↔ x.OwedR y ρ)
     {lo : Life} {k : Nat} {ls : List SRec} {K : Kont} {Ψ : ContK KW} {ρ : WRes}
     (h : contShareK en lo k ls K Ψ ρ) :
@@ -113,18 +113,18 @@ open BoCa.Lifetime (LSub LifeVar)
 every view consistent with the share and every record list, `κ` is in `𝒞⟦C⟧`. -/
 def KapRelR (C : CTy) (δ : LSub) (Θ : LocTy) (n : Nat) (κ : Val) (ρ : WRes) : Prop :=
   ∀ Θ' : LocTy, Θ.ExtR Θ' ρ → Θ'.OK → ∀ c, ConsistentX c ρ → ∀ ls,
-    cN (ℍ := ℍ) C δ Θ' c n ls (forceE C κ.1) ρ
+    cN₀ (ℍ := ℍ) C δ Θ' c n ls (forceE C κ.1) ρ
 
-/-- **`U` at `vN` is `KapRelR`.** -/
+/-- **`U` at `vN₀` is `KapRelR`.** -/
 theorem vN_thunk_iff_kapRelR (C : CTy) (δ : LSub) (Θ : LocTy) (n : Nat) (κ : Val) (ρ : WRes) :
-    vN (ℍ := ℍ) (.thunk C) δ Θ n κ ρ ↔ KapRelR (ℍ := ℍ) C δ Θ n κ ρ :=
+    vN₀ (ℍ := ℍ) (.thunk C) δ Θ n κ ρ ↔ KapRelR (ℍ := ℍ) C δ Θ n κ ρ :=
   Iff.rfl
 
 /-- **A public extension of the empty world at `α` holds no `Mut` value at a lifetime above `α`**:
 such a value is at a key at or above its lifetime, and `ExtP α` adds no key above `α`. -/
 theorem not_bMut_extP (x : LifeVar) (δ : LSub) {α β : Life} (hαβ : α < β) {Θ' : LocTy}
     {ρ : WRes} (hE : LocTy.empty.ExtP α Θ' ρ) {k : Nat} {w : Val} {σ : WRes} :
-    ¬ vN (ℍ := ℍ) (bMut x) (δ.extend x β) Θ' k w σ := by
+    ¬ vN₀ (ℍ := ℍ) (bMut x) (δ.extend x β) Θ' k w σ := by
   rintro ⟨a, ha, b, hab, ⟨l, _, _, _, _, _, _, _, hl, _⟩, -⟩
   rw [interp_ext_self] at ha
   cases Option.some.inj ha

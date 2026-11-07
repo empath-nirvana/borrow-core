@@ -1370,7 +1370,7 @@ open BoCa.BoLo (Heap Kont ubindE Head performE raiseE cancelVal opPayload)
 theorem tabR_tabN_twinLiftK (R : Nat → WProp) (F : CTy) (δ : LSub) (Θ : LocTy)
     (c : Loc → Option Life) :
     ∀ (_ : Unit) m i en, liftTabK (tabR (ℍ := ℍ) R F δ Θ c) m i = some en →
-      ∃ en', liftTabK (tabN (ℍ := ℍ) F δ Θ c) m i = some en' ∧ en'.q = en.q ∧
+      ∃ en', liftTabK (tabN₀ (ℍ := ℍ) F δ Θ c) m i = some en' ∧ en'.q = en.q ∧
         en'.abort = en.abort ∧ en'.PA = en.PA ∧ en'.PB = en.PB ∧ en'.wc = en.wc ∧
         en'.wk = en.wk := by
   intro _ m i en h
@@ -1380,24 +1380,24 @@ theorem tabR_tabN_twinLiftK (R : Nat → WProp) (F : CTy) (δ : LSub) (Θ : LocT
 
 /-- The lifted row table's abortive payloads are read lower and at every list. -/
 theorem tabN_paLeLiftK (F : CTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) :
-    ∀ (_ : Unit) m i en, liftTabK (tabN (ℍ := ℍ) F δ Θ c) m i = some en → en.abort = true →
+    ∀ (_ : Unit) m i en, liftTabK (tabN₀ (ℍ := ℍ) F δ Θ c) m i = some en → en.abort = true →
       ∀ k k' ls ls' v ρ, k' ≤ k → en.PA k ls v ρ → en.PA k' ls' v ρ := by
   intro _ m i en h _ k k' ls ls' v ρ hk hPA
   obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h
   obtain ⟨q, A, B, fin, -, rfl, -⟩ := tab_lookupN F h₀
-  exact vN_le hk hPA
+  exact vN_le₀ hk hPA
 
 /-- At one world, a cancellable stop's cancel run at its cancel row's `tabR` passes the frame to
-one at its `tabN`, given that transfer at the cancel row (`hrun`). -/
+one at its `tabN₀`, given that transfer at the cancel row (`hrun`). -/
 theorem tabR_ubindCanLiftK {R : Nat → WProp} {F : CTy} {δ : LSub} {Θ : LocTy}
     {c : Loc → Option Life} {N D : Val}
     (hrun : ∀ fin : CTy, fin.cdepth < F.cdepth → ∀ n ls x ρ,
       erwp (ℍ := ℍ) (Θ.view c) (cancelTabR (tabR (ℍ := ℍ) R fin δ Θ c) R) (fun _ _ _ _ => False)
         n ls x ρ →
-      erwp (ℍ := ℍ) (Θ.view c) (cancelTabN (tabN (ℍ := ℍ) fin δ Θ c)) (fun _ _ _ _ => False) n
+      erwp (ℍ := ℍ) (Θ.view c) (cancelTabN (tabN₀ (ℍ := ℍ) fin δ Θ c)) (fun _ _ _ _ => False) n
         ls ((ubK N D).plug x) ρ) :
     ∀ (_ : Unit) m i en en', liftTabK (tabR (ℍ := ℍ) R F δ Θ c) m i = some en →
-      liftTabK (tabN (ℍ := ℍ) F δ Θ c) m i = some en' → en.q ≠ .lin → ∀ y k ls (K₁ : Kont) ρ,
+      liftTabK (tabN₀ (ℍ := ℍ) F δ Θ c) m i = some en' → en.q ≠ .lin → ∀ y k ls (K₁ : Kont) ρ,
         cancelOKK en y k ls K₁ ρ → cancelOKK en' y k ls ((ubK N D).comp K₁) ρ := by
   intro _ m i en en' h h' hql y k ls'' K₁ ρk hc
   obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h
@@ -1411,11 +1411,11 @@ theorem tabR_ubindCanLiftK {R : Nat → WProp} {F : CTy} {δ : LSub} {Θ : LocTy
   by_cases hcap : capB q B = true
   · simp only [entN, hcap, if_true] at hP hc'
     by_cases htop : fin = .top
-    · subst htop; simp [finN] at hP
-    rw [finN_eq htop] at hP
+    · subst htop; simp [finN₀] at hP
+    rw [finN_eq₀ htop] at hP
     cases Option.some.inj hP
     have hin := hc' _ (finR_eq R htop δ Θ c)
-    show erwp (ℍ := ℍ) (Θ.view c) (cancelTabN (tabN (ℍ := ℍ) fin δ Θ c)) (fun _ _ _ _ => False)
+    show erwp (ℍ := ℍ) (Θ.view c) (cancelTabN (tabN₀ (ℍ := ℍ) fin δ Θ c)) (fun _ _ _ _ => False)
       k ls'' (((ubK N D).comp K₁).dead.plug _) ρk
     rw [dead_comp, ubK_dead, Kont.plug_comp]
     exact hrun fin (layer_cdepth F hLy) k ls'' _ ρk hin
@@ -1432,7 +1432,7 @@ theorem erwp_ubind_cancelRunCR_of_K {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Op
     ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → ∀ n ls x ρ,
       erwp (ℍ := ℍ) (Θ.view c) (cancelTabR (tabR (ℍ := ℍ) R F δ Θ c) R) (fun _ _ _ _ => False)
         n ls x ρ →
-      erwp (ℍ := ℍ) (Θ.view c) (cancelTabN (tabN (ℍ := ℍ) F δ Θ c)) (fun _ _ _ _ => False) n ls
+      erwp (ℍ := ℍ) (Θ.view c) (cancelTabN (tabN₀ (ℍ := ℍ) F δ Θ c)) (fun _ _ _ _ => False) n ls
         ((ubK N D).plug x) ρ := by
   intro d
   induction d using Nat.strong_induction_on with
@@ -1443,7 +1443,7 @@ theorem erwp_ubind_cancelRunCR_of_K {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Op
   exact erwpK_ubind_cancelRunCR (ℍ := ℍ) (V := fun _ _ => True) (Φ := fun _ => Θ.view c)
     (fun _ => LocTy.view_down hΘ c) (fl := fun _ => 0)
     (Ti := fun _ => liftTabK (tabR (ℍ := ℍ) R F δ Θ c))
-    (To := fun _ => liftTabK (tabN (ℍ := ℍ) F δ Θ c))
+    (To := fun _ => liftTabK (tabN₀ (ℍ := ℍ) F δ Θ c))
     (fun _ => (tabN_down F δ Θ hΘ c).liftK) (tabR_tabN_twinLiftK R F δ Θ c) (tabN_paLeLiftK F δ Θ c) N D
     (tabR_ubindCanLiftK fun fin hfin => ihd fin.cdepth (by omega) fin le_rfl) (fun _ => hD)
     n () ls x ρ h
@@ -1451,16 +1451,16 @@ theorem erwp_ubind_cancelRunCR_of_K {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Op
 /-- `erwp_ubindClaimRT` from `erwpK_ubindClaimRT`. -/
 theorem erwp_ubindClaimRT_of_K {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option Life} {F : CTy}
     {δ : LSub}
-    (hTr : ∀ m i en, tabN (ℍ := ℍ) F δ Θ c m i = some en → en.abort = true → m ≠ 0)
+    (hTr : ∀ m i en, tabN₀ (ℍ := ℍ) F δ Θ c m i = some en → en.abort = true → m ≠ 0)
     {R : Nat → WProp} (N D : Val)
     (hD : ∀ k ls ρ, R k ρ → rwp (ℍ := ℍ) (Θ.view c)
       (fun _ _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) k ls (.app (.val D) (.val .unit)) ρ)
     {Qin Qout : PostN} (hQout : Qout.Down)
     (hN : ∀ k ls (v : Val) ρ, Qin k ls v ρ →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) F δ Θ c)) Qout k ls
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) F δ Θ c)) Qout k ls
         (.app (.val N) (.val v)) ρ) :
     ∀ n ls M ρ, erwp (ℍ := ℍ) (Θ.view c) (opTableR (tabR (ℍ := ℍ) R F δ Θ c) R) Qin n ls M ρ →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) F δ Θ c)) Qout n ls
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) F δ Θ c)) Qout n ls
         (ubindE (.pair N D) M) ρ := by
   have hD' : ∀ k ls ρ, R k ρ →
       rwp (ℍ := ℍ) (Θ.view c) (fun _ _ _ ρ' => ρ' = PMap.empty) k ls
@@ -1472,7 +1472,7 @@ theorem erwp_ubindClaimRT_of_K {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option 
   refine erwpK_ubindClaimRT (ℍ := ℍ) (V := fun _ _ => True) (fun _ _ _ _ _ => trivial)
     (Φ := fun _ => Θ.view c) (fun _ => LocTy.view_down hΘ c) (fun _ _ _ => rfl) (fl := fun _ => 0)
     (Ti := fun _ => liftTabK (tabR (ℍ := ℍ) R F δ Θ c))
-    (To := fun _ => liftTabK (tabN (ℍ := ℍ) F δ Θ c))
+    (To := fun _ => liftTabK (tabN₀ (ℍ := ℍ) F δ Θ c))
     (fun _ => (tabN_down F δ Θ hΘ c).liftK) (fun _ _ _ _ _ _ _ _ h => h)
     (tabR_tabN_twinLiftK R F δ Θ c) (tabN_paLeLiftK F δ Θ c) ?_ N D
     (tabR_ubindCanLiftK fun fin _ => erwp_ubind_cancelRunCR_of_K hΘ N D hD' δ fin.cdepth fin le_rfl)

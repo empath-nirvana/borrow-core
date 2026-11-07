@@ -396,7 +396,7 @@ theorem tabR_pbcLiftK {x : LifeVar} {bnd : Lifetime.Life} (hbnd : LifeCtx.empty.
   obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h
   obtain ⟨q, A, B, fin, hLy, rfl, -, -⟩ := tab_lookupR R F h₀
   obtain ⟨-, -, -, -, hOB, -⟩ := layer_suspend F hF hLy
-  exact consistentX_of_top (vN_outlives (models_empty_any _)
+  exact consistentX_of_top (vN_outlives₀ (models_empty_any _)
     (interp_top_of_defines_empty hbnd δ) hOB Θ k w ρ hB.1) c
 
 /-- `erwp_cancelRun_claimX` from `erwpK_cancelRun_claimX`, by induction on how deep cancel rows

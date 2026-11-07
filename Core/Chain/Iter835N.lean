@@ -2,7 +2,7 @@ import Core.Chain.Fuel835N
 import Core.DivIterate
 
 /-!
-# `iterate` at `SemJN`  `[spec §14]`
+# `iterate` at `SemJN₀`  `[spec §14]`
 
 Core's `iterate_compatX` (`Core/DivIterate.lean`) reads the step `f` at `!U(S ⊸ F_Σ(B ⊕ S) & F_Σ R)`
 and runs `cwp_iterate` with the invariant `𝒱⟦S⟧` on the state. A `Div` row is a row of the
@@ -23,7 +23,7 @@ read these steps at any `f` and `s′`, so `erwp_iterateCI` asks no closedness o
 
 * `erwp_iterateCI`: E14 at an invariant read at the index, up to an index `N`;
 * `tickB_sig`: a row holding `Div` finds `tick`'s signature at `Div`'s key;
-* `iterate_compatN`: the constant at `SemJN` (Core's `iterate_compatX`).
+* `iterate_compatN`: the constant at `SemJN₀` (Core's `iterate_compatX`).
 -/
 
 noncomputable section
@@ -118,14 +118,14 @@ theorem tickB_sig {q : Qual} {A B : VTy} (h : tickB q A B = true) :
   cases B₁ <;> cases B₂ <;> simp [VTy.isUnitB] at hB
   exact ⟨rfl, rfl, rfl⟩
 
-/-- **`iterate` is sound at `SemJN`**, at a row holding `Div` (Core's `iterate_compatX`): the step
+/-- **`iterate` is sound at `SemJN₀`**, at a row holding `Div` (Core's `iterate_compatX`): the step
 `f` and the state `s` from the argument; the step read at the loop's own world and view
 (`LocTy.extR_refl`, its resource empty); E14 at the invariant `𝒱⟦S⟧ ∧ ConsistentX`, read at the
 index (`erwp_iterateCI`), the turn's answer consistent with the view (`erwp_consistentAns`), the
 tick the row's `tick` (`Row.divB_find`). -/
 theorem iterate_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {Sg : Row} {St B R : VTy}
     (hS : Row.divB Sg = true) (hΓ : Ctx.DeadP Γ) :
-    SemJN (ℍ := ℍ) Δ Γ (.val (.prim .iterate)) (.val (iterTy Sg St B R)) := by
+    SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .iterate)) (.val (iterTy Sg St B R)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
   obtain rfl := gN_deadP hΓ hg
   show erwp (ℍ := ℍ) _ _ _ n ls (substAll γ (.val (.prim .iterate))) PMap.empty
@@ -138,33 +138,33 @@ theorem iterate_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {Sg : Row} {St B R : VTy}
   obtain rfl := eq_of_compS_empty_left hcfs
   have hΦ := LocTy.view_down hΘ'.1 c''
   have hTd := tabN_down (ℍ := ℍ) (CTy.effOf Sg (.sum B R)) δ Θ' hΘ'.1 c''
-  refine (cN_effOf Sg (.sum B R) δ Θ' c'' k ls' _ _).mpr ?_
+  refine (cN_effOf₀ Sg (.sum B R) δ Θ' c'' k ls' _ _).mpr ?_
   -- the row's `tick`
   obtain ⟨o, hfo, hto⟩ := Row.divB_find hS
   obtain ⟨hoq, hoA, hoB⟩ := tickB_sig hto
-  have htick : tabN (ℍ := ℍ) (CTy.effOf Sg (.sum B R)) δ Θ' c'' divEff 0 = some (entN o.q o.B
-      (fun k v ρ => vN (ℍ := ℍ) o.A δ Θ' k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) o.B δ Θ' k v ρ ∧ ConsistentX c'' ρ)
-      (finN (ℍ := ℍ) o.fin δ Θ' c'')) := by
+  have htick : tabN₀ (ℍ := ℍ) (CTy.effOf Sg (.sum B R)) δ Θ' c'' divEff 0 = some (entN o.q o.B
+      (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ' k v ρ)
+      (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ' k v ρ ∧ ConsistentX c'' ρ)
+      (finN₀ (ℍ := ℍ) o.fin δ Θ' c'')) := by
     rw [tabN_effOf_find, hfo]; rfl
   -- the step, at the loop's world and view
-  have hstep : ∀ j, j ≤ k → ∀ s' ls₁ ρ₁, vN (ℍ := ℍ) St δ Θ' j s' ρ₁ → ConsistentX c'' ρ₁ →
-      cN (ℍ := ℍ) (.amp (CTy.effOf Sg (.sum B St)) (CTy.effOf Sg R)) δ Θ' c'' j ls₁
+  have hstep : ∀ j, j ≤ k → ∀ s' ls₁ ρ₁, vN₀ (ℍ := ℍ) St δ Θ' j s' ρ₁ → ConsistentX c'' ρ₁ →
+      cN₀ (ℍ := ℍ) (.amp (CTy.effOf Sg (.sum B St)) (CTy.effOf Sg R)) δ Θ' c'' j ls₁
         (.app (.val f) (.val s')) ρ₁ := by
     intro j hj s' ls₁ ρ₁ hs' hc'
     exact hf Θ' (LocTy.extR_refl Θ' _) hΘ' c'' (consistentX_empty c'') ls₁ c'' j hj s' ρ₁ ρ₁
       (compS_empty_left ρ₁) hs' hc'
-  let I : Nat → Val → WProp := fun j s' ρ₁ => vN (ℍ := ℍ) St δ Θ' j s' ρ₁ ∧ ConsistentX c'' ρ₁
-  refine erwp_iterateCI (I := I) (QL := fun k _ v ρ => vN (ℍ := ℍ) (.sum B R) δ Θ' k v ρ)
-    (QR := fun k _ v ρ => vN (ℍ := ℍ) R δ Θ' k v ρ) hΦ hTd
+  let I : Nat → Val → WProp := fun j s' ρ₁ => vN₀ (ℍ := ℍ) St δ Θ' j s' ρ₁ ∧ ConsistentX c'' ρ₁
+  refine erwp_iterateCI (I := I) (QL := fun k _ v ρ => vN₀ (ℍ := ℍ) (.sum B R) δ Θ' k v ρ)
+    (QR := fun k _ v ρ => vN₀ (ℍ := ℍ) R δ Θ' k v ρ) hΦ hTd
     (tabN_ctxClosed hΦ _ _ (fun m => by simp [iterK, Kont.HasHnd]) (by simp [iterK, Kont.Catches]))
     (tabN_ctxClosed hΦ _ _ inrK_plain.1 (inrK_plain.2 0))
-    (fun k _ v ρ h => vN_down _ δ Θ' k v ρ h)
-    (fun j j' s' ρ₁ hj ⟨h₁, h₂⟩ => ⟨vN_le hj h₁, h₂⟩) htick
+    (fun k _ v ρ h => vN_down₀ _ δ Θ' k v ρ h)
+    (fun j j' s' ρ₁ hj ⟨h₁, h₂⟩ => ⟨vN_le₀ hj h₁, h₂⟩) htick
     (by simp [entN, hoq])
     hoq (fun j _ => by rw [hoA]; exact ⟨rfl, rfl⟩)
     (fun j _ w ρ₁ hB => by
-      have hB' : vN (ℍ := ℍ) o.B δ Θ' j w ρ₁ := hB.1
+      have hB' : vN₀ (ℍ := ℍ) o.B δ Θ' j w ρ₁ := hB.1
       rw [hoB] at hB'
       rcases hB' with ⟨v₁, rfl, rfl, rfl⟩ | ⟨v₂, rfl, rfl, rfl⟩
       · exact ⟨Or.inl rfl, rfl⟩
@@ -172,7 +172,7 @@ theorem iterate_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {Sg : Row} {St B R : VTy}
     k ?_ ?_ (fun _ _ r _ h => Or.inr ⟨r, rfl, h⟩) k le_rfl s ls' _ ⟨hs, hcon⟩
   · -- a turn: `(f s′).1`, its answer consistent with the view
     rintro j hj s' ls₁ ρ₁ ⟨hs', hc'⟩
-    have h₁ := (cN_effOf Sg (.sum B St) δ Θ' c'' j ls₁ _ _).mp (hstep j hj s' ls₁ ρ₁ hs' hc').1
+    have h₁ := (cN_effOf₀ Sg (.sum B St) δ Θ' c'' j ls₁ _ _).mp (hstep j hj s' ls₁ ρ₁ hs' hc').1
     rw [tabN_effOf_ret Sg (.sum B St) (.sum B R)] at h₁
     have h₂ := erwp_consistentAns (tabN_ansC _ δ Θ' c'') j j le_rfl ls₁ _ ρ₁ h₁ hc'
     refine erwp_mono (fun k₁ ls₂ v₁ ρ₂ hq => ?_) (opTableN_local _) j ls₁ _ ρ₁ h₂
@@ -182,7 +182,7 @@ theorem iterate_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {Sg : Row} {St B R : VTy}
     · exact Or.inr ⟨s'', rfl, hs'', hcq⟩
   · -- the close path's observation `(f s′).2`
     rintro j hj s' ls₁ ρ₁ ⟨hs', hc'⟩
-    have h₂ := (cN_effOf Sg R δ Θ' c'' j ls₁ _ _).mp (hstep j hj s' ls₁ ρ₁ hs' hc').2
+    have h₂ := (cN_effOf₀ Sg R δ Θ' c'' j ls₁ _ _).mp (hstep j hj s' ls₁ ρ₁ hs' hc').2
     rw [tabN_effOf_ret Sg R (.sum B R)] at h₂
     exact h₂
 

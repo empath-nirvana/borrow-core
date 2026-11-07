@@ -45,11 +45,11 @@ theorem entN_fin_congr {q : Qual} {B : VTy} {PA PB : Nat → Val → WRes → Pr
 
 /-- A row's cancel obligation reads `δ` only through its table. -/
 theorem finN_of_tabN : ∀ (F : CTy) {δ₁ δ₂ : LSub} {Θ : LocTy} {c : Loc → Option Life},
-    tabN (ℍ := ℍ) F δ₁ Θ c = tabN (ℍ := ℍ) F δ₂ Θ c →
-      finN (ℍ := ℍ) F δ₁ Θ c = finN (ℍ := ℍ) F δ₂ Θ c
+    tabN₀ (ℍ := ℍ) F δ₁ Θ c = tabN₀ (ℍ := ℍ) F δ₂ Θ c →
+      finN₀ (ℍ := ℍ) F δ₁ Θ c = finN₀ (ℍ := ℍ) F δ₂ Θ c
   | .eff _ _ _ _ _ _ _ _, _, _, _, _, h => by
-      simp only [tabN] at h
-      simp only [finN, h]
+      simp only [tabN₀] at h
+      simp only [finN₀, h]
   | .ret _, _, _, _, _, _ => rfl
   | .arr _ _, _, _, _, _, _ => rfl
   | .amp _ _, _, _, _, _, _ => rfl
@@ -60,13 +60,13 @@ theorem finN_of_tabN : ∀ (F : CTy) {δ₁ δ₂ : LSub} {Θ : LocTy} {c : Loc 
 /-- **A row whose layers do not mention `'x` has one table at `δ` and `δ['x ↦ α]`.** -/
 theorem tabN_extend_suspendC {x : LifeVar} {bnd : Lifetime.Life} (α : Life) :
     ∀ (F : CTy), F.SuspendC x bnd → ∀ (δ : LSub) (Θ : LocTy) (c : Loc → Option Life),
-      tabN (ℍ := ℍ) F (δ.extend x α) Θ c = tabN (ℍ := ℍ) F δ Θ c
+      tabN₀ (ℍ := ℍ) F (δ.extend x α) Θ c = tabN₀ (ℍ := ℍ) F δ Θ c
   | .eff m i q A B fin rc C, hF, δ, Θ, c => by
       obtain ⟨⟨_, hA, hB, _, _, hfin⟩, hC⟩ := hF
-      simp only [tabN]
-      rw [vN_extend_of_not_free hA, vN_extend_of_not_free hB,
+      simp only [tabN₀]
+      rw [vN_extend_of_not_free₀ hA, vN_extend_of_not_free₀ hB,
         tabN_extend_suspendC α C hC δ Θ c,
-        entN_fin_congr (f := finN (ℍ := ℍ) fin (δ.extend x α) Θ c) (f' := finN (ℍ := ℍ) fin δ Θ c)
+        entN_fin_congr (f := finN₀ (ℍ := ℍ) fin (δ.extend x α) Θ c) (f' := finN₀ (ℍ := ℍ) fin δ Θ c)
           (fun hcap => finN_of_tabN fin (tabN_extend_suspendC α fin (hfin hcap) δ Θ c))]
   | .ret _, _, _, _, _ => rfl
   | .arr _ _, _, _, _, _ => rfl
@@ -79,18 +79,18 @@ theorem tabN_extend_suspendC {x : LifeVar} {bnd : Lifetime.Life} (α : Life) :
 its layers' payload and answer types outlive the bound, so their values lie in `Res_β`. -/
 theorem tabN_rebOKR {x : LifeVar} {bnd : Lifetime.Life} {β : Life} {F : CTy}
     (hF : F.SuspendC x bnd) (δ : LSub) (hLt : LtLife δ bnd β) (Θ : LocTy)
-    (c : Loc → Option Life) : (tabN (ℍ := ℍ) F δ Θ c).RebOKR β where
+    (c : Loc → Option Life) : (tabN₀ (ℍ := ℍ) F δ Θ c).RebOKR β where
   entry := fun m i en h _ => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupN F h
     exact ⟨(layer_suspend F hF hL).1, rfl⟩
   pa := fun m i en h k ls v ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupN F h
     obtain ⟨-, -, -, hOA, -⟩ := layer_suspend F hF hL
-    exact vN_inStratum_bnd hOA hLt hp
+    exact vN_inStratum_bnd₀ hOA hLt hp
   pb := fun m i en h k ls w ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupN F h
     obtain ⟨-, -, -, -, hOB, -⟩ := layer_suspend F hF hL
-    exact vN_inStratum_bnd hOB hLt hp.1
+    exact vN_inStratum_bnd₀ hOB hLt hp.1
 
 /-- **The cancel obligations of a row meeting `CTy.SuspendC` are closed under a reborrow at
 `β ⊏ @bnd`**, by induction on how deep cancel rows nest: each is a cancel run at its cancel row's
@@ -104,7 +104,7 @@ theorem tab_rebClosed {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {Θ : LocT
     (hOk : ∀ (ls ls'' lsO : List SRec) (ψ Ks : WRes), Ok ls → (∀ y, y ∈ ls'' ↔ y ∈ ls) →
       ResU.CompS ψ (ResU.single le (CellU.immOf s v R hs)) Ks → extF ls'' lsO Ks → Ok lsO) :
     ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x bnd →
-      RebClosed β (ResU.single le (CellU.immOf s v R hs)) χ Ok (tabN (ℍ := ℍ) F δ Θ c) := by
+      RebClosed β (ResU.single le (CellU.immOf s v R hs)) χ Ok (tabN₀ (ℍ := ℍ) F δ Θ c) := by
   intro d
   induction d with
   | zero =>
@@ -119,8 +119,8 @@ theorem tab_rebClosed {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {Θ : LocT
   have hfd : fin.cdepth ≤ d := by have := layer_cdepth F hL; omega
   simp only [entN, hcap, if_true] at hP
   by_cases htop : fin = .top
-  · subst htop; simp [finN] at hP
-  rw [finN_eq htop] at hP
+  · subst htop; simp [finN₀] at hP
+  rw [finN_eq₀ htop] at hP
   cases Option.some.inj hP
   refine ⟨fun k ls e ρb ρ hc hb hr hA => ?_, fun k ls e ρ g ρg hc hg h => erwp_garbage hc hg h⟩
   exact erwp_rebGen_cancelRun hE hreb hOk (tabN_rebOKR hfin δ hLt Θ c) (ih fin hfd hfin)
@@ -223,12 +223,12 @@ theorem immWitW_childMut {I : List SRec} {x : SRec} (hx : x ∈ I) {d : FrameRec
 /-! ### Small facts -/
 
 theorem vO_le {A : VTy} {δ : LSub} {Θ : LocTy} {k n : Nat} (hkn : k ≤ n) {v : Val} {ρ : WRes}
-    (h : vO (ℍ := ℍ) A δ Θ n v ρ) : vO (ℍ := ℍ) A δ Θ k v ρ := by
+    (h : vO₀ (ℍ := ℍ) A δ Θ n v ρ) : vO₀ (ℍ := ℍ) A δ Θ k v ρ := by
   obtain ⟨d, rfl⟩ := Nat.exists_eq_add_of_le hkn
   clear hkn
   induction d with
   | zero => exact h
-  | succ d ihd => exact ihd (vO_down A δ Θ _ v ρ (by rwa [← Nat.add_assoc] at h))
+  | succ d ihd => exact ihd (vO_down₀ A δ Θ _ v ρ (by rwa [← Nat.add_assoc] at h))
 
 /-- An image's cells are `imm` cells. -/
 theorem reb_allImm {β : Life} {R c : WRes} (hr : ResU.Reb β R c) :
@@ -376,23 +376,23 @@ theorem callback_at_image {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : R
     (hB : ¬ VFree x B) (hS : S.Suspend x bnd) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {n : Nat} {ls : List SRec} {f u : Val} {ρf χ Bχ : WRes} {β : Life}
     (hLt : LtLife δ bnd β)
-    (hf : vN (ℍ := ℍ) (cbUTy x bnd (A.immReborrow (.var x)) B S) δ Θ n f ρf)
+    (hf : vN₀ (ℍ := ℍ) (cbUTy x bnd (A.immReborrow (.var x)) B S) δ Θ n f ρf)
     (hcf : ConsistentX c ρf) (hχ : ∀ m (ψ : CellU Loc Val), χ.get m = some ψ → ψ.kind = Kind.imm)
-    (himg : vN (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u χ)
+    (himg : vN₀ (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u χ)
     (hBχ : ResU.CompS ρf χ Bχ) :
-    erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
-      (RebPost β (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ)) n ls
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
+      (RebPost β (fun k _ v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ)) n ls
       (.app (.app (.val f) (.val .unit)) (.val u)) Bχ := by
   have h1 := (hf Θ (LocTy.extR_refl _ _) hΘ c hcf ls) β hLt
   have hcon : ConsistentX c Bχ := consistentX_compS hBχ hcf (consistentX_allImm hχ c)
   have h2 := h1 c n le_rfl u χ Bχ hBχ himg hcon
-  rw [cN_effOf, tabN_extend_suspendC β _ (suspendC_effOf hS _) δ Θ c,
+  rw [cN_effOf₀, tabN_extend_suspendC β _ (suspendC_effOf hS _) δ Θ c,
     tabN_effOf_base S (.box (.var x) B) B δ Θ c] at h2
   refine erwp_mono (fun k _ w ρ hb => ?_) (opTableN_local _) n ls _ Bχ h2
   obtain ⟨α', hα', hbB, hst⟩ := hb
   rw [interp_ext_self] at hα'
   cases Option.some.inj hα'
-  rw [vN_extend_of_not_free hB] at hbB
+  rw [vN_extend_of_not_free₀ hB] at hbB
   exact ⟨hbB, hst⟩
 
 /-- **Step 8 at the run's first entry** (`withload_compatX`'s steps 6–11): the loaded cell
@@ -409,7 +409,7 @@ form. -/
 theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {δ : LSub} (hbnd : ∃ γ, bnd.interp δ = some γ) (hA : ¬ VFree x A)
     {Θ : LocTy} {c : Loc → Option Life}
-    (hTab : ∀ β, LtLife δ bnd β → (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c).RebOKR β)
+    (hTab : ∀ β, LtLife δ bnd β → (tabN₀ (ℍ := ℍ) (CTy.effOf S B) δ Θ c).RebOKR β)
     (hClo : ∀ β, LtLife δ bnd β → ∀ {le : Loc} {s : LSet} {v : Val} {R : WRes}
       {hs : R.InStratum s.join} {χ : WRes} {Ok : List SRec → Prop},
       RebEntryG (ℍ := ℍ) (Θ.view c) β (ResU.single le (CellU.immOf s v R hs)) χ R Ok →
@@ -417,19 +417,19 @@ theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
       (∀ (ls ls'' lsO : List SRec) (ψ Ks : WRes), Ok ls → (∀ y, y ∈ ls'' ↔ y ∈ ls) →
         ResU.CompS ψ (ResU.single le (CellU.immOf s v R hs)) Ks → extF ls'' lsO Ks → Ok lsO) →
       RebClosed β (ResU.single le (CellU.immOf s v R hs)) χ Ok
-        (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
+        (tabN₀ (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
     {n : Nat} {ls : List SRec} {f v : Val} {l : Loc} {s : LSet} {σ : WRes}
     {h : σ.InStratum s.join} {ρf X : WRes}
-    (hpay : vO (ℍ := ℍ) A δ Θ n v σ) (hwit : ImmWitW Θ.imm l s A δ)
+    (hpay : vO₀ (ℍ := ℍ) A δ Θ n v σ) (hwit : ImmWitW Θ.imm l s A δ)
     (hcb : ∀ β, LtLife δ bnd β → ∀ (u : Val) (χ Bχ : WRes),
       (∀ m (ψ : CellU Loc Val), χ.get m = some ψ → ψ.kind = Kind.imm) → u = v → ResU.Reb β σ χ →
-      vN (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u χ → ResU.CompS ρf χ Bχ →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
-        (RebPost β (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ)) n ls
+      vN₀ (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u χ → ResU.CompS ρf χ Bχ →
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
+        (RebPost β (fun k _ v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ)) n ls
         (.app (.app (.val f) (.val .unit)) (.val u)) Bχ)
     (hX : ResU.CompS (ResU.single l (CellU.immOf s v σ h)) ρf X) :
-    erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
-      (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) n ls
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
+      (fun k _ v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ) n ls
       (.app (.app (.val f) (.val .unit)) (.val v)) X := by
   rw [erwp_eq]
   intro ρF fρ ps μ hF hcF hT htg hI hl hfd j μ' e' hj hrun hfin
@@ -473,7 +473,7 @@ theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     have hSt : TmplSpec d (tmpl d) := tmpl_spec (tmpl_exists hT hdmem hcell hy hreb₀ hsh₀)
     have hheA : TyEq A δ d.T d.δ := he.trans (TyEq.of_agree d.T hag)
     -- step 8: the image re-taken at `β`, typed at `Imm̲ 'x A`
-    have himg : vN (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n d.v (canon d β) := by
+    have himg : vN₀ (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n d.v (canon d β) := by
       obtain ⟨β₁, x₁, hx₁, hreb₁, hden₁, -⟩ := hSt
       have hden₁' : vShape (A.immReborrow (.var x)) (δ.extend x β₁) d.v (tmpl d) := by
         rw [vShape_tyEq (tyEq_immReb hheA hA hx₁ β₁)]; exact hden₁
@@ -490,7 +490,7 @@ theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
       (fun z hz => hβs.le.trans (s.meet_least z hz))
     have hcan := hClo β hLt hE hreb okKept_top
     have hrun' := erwp_rebGen hE hreb okKept_top hT' hcan
-      (Q := fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) n ls
+      (Q := fun k _ v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ) n ls
       (.app (.app (.val f) (.val .unit)) (.val d.v)) ρf X hX hbβ hdmem
       (fun Bχ hBχ => hcb β hLt _ _ Bχ (reb_allImm hreb) rfl hreb himg hBχ)
     rw [erwp_eq] at hrun'
@@ -516,7 +516,7 @@ theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
       tmplD_spec (tmplD_exists hch hT hdmem hcell hy hreb₀ hsh₀)
     have hheA : TyEq A δ S₀ d.δ := he.trans (TyEq.of_agree S₀ hag)
     -- step 8: the view's image re-taken at `β`, typed at `Imm̲ 'x A`
-    have himg : vN (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n v
+    have himg : vN₀ (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n v
         (canonD d S₀ v σ β) := by
       obtain ⟨β₁, x₁, hx₁, hreb₁, hden₁, -⟩ := hSt
       have hden₁' : vShape (A.immReborrow (.var x)) (δ.extend x β₁) v (tmplD d S₀ v σ) := by
@@ -534,7 +534,7 @@ theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     have hE := rebEntryG_deep (ℍ := ℍ) (Φ := Θ.view c) d hch y hy hSt hσβ hβc hshape
     have hcan := hClo β hLt hE hreb (okKept_deep hch)
     have hrun' := erwp_rebGen hE hreb (okKept_deep hch) hT' hcan
-      (Q := fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) n ls
+      (Q := fun k _ v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ) n ls
       (.app (.app (.val f) (.val .unit)) (.val v)) ρf X hX hbβ hdmem
       (fun Bχ hBχ => hcb β hLt _ _ Bχ (reb_allImm hreb) rfl hreb himg hBχ)
     rw [erwp_eq] at hrun'
@@ -547,16 +547,16 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     (hS : S.Suspend x bnd) {Θ : LocTy} {c : Loc → Option Life}
     {n : Nat} {ls : List SRec} {f v : Val} {l : Loc} {s : LSet} {σ : WRes}
     {h : σ.InStratum s.join} {ρf X : WRes}
-    (hpay : vO (ℍ := ℍ) A δ Θ n v σ) (hwit : ImmWitW Θ.imm l s A δ)
+    (hpay : vO₀ (ℍ := ℍ) A δ Θ n v σ) (hwit : ImmWitW Θ.imm l s A δ)
     (hcb : ∀ β, LtLife δ bnd β → ∀ (u : Val) (χ Bχ : WRes),
       (∀ m (ψ : CellU Loc Val), χ.get m = some ψ → ψ.kind = Kind.imm) → u = v → ResU.Reb β σ χ →
-      vN (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u χ → ResU.CompS ρf χ Bχ →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
-        (RebPost β (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ)) n ls
+      vN₀ (ℍ := ℍ) (A.immReborrow (.var x)) (δ.extend x β) Θ n u χ → ResU.CompS ρf χ Bχ →
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
+        (RebPost β (fun k _ v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ)) n ls
         (.app (.app (.val f) (.val .unit)) (.val u)) Bχ)
     (hX : ResU.CompS (ResU.single l (CellU.immOf s v σ h)) ρf X) :
-    erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
-      (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) n ls
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
+      (fun k _ v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ) n ls
       (.app (.app (.val f) (.val .unit)) (.val v)) X :=
   withload_rebT hbnd hA (fun _ hLt => tabN_rebOKR (ℍ := ℍ) (suspendC_effOf hS B) δ hLt Θ c)
     (fun _ hLt _ _ _ _ _ _ _ hE hreb hOk => tab_rebClosed (ℍ := ℍ) (x := x) (δ := δ) (Θ := Θ)
@@ -569,7 +569,7 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
 Core's `withload_compatX`, step by step (`chain-interpretation.md` §6.3):
 
 1. the context owns nothing: the constant at `PMap.empty`;
-2. the `Imm` argument is `loc ℓ` (`vN`'s `Imm` clause);
+2. the `Imm` argument is `loc ℓ` (`vN₀`'s `Imm` clause);
 3. the callback, at the same world: `⊸` is a plain wand;
 4. both are at the world `Θ` the run is at, which the thunk's `U` reached;
 5. the load: its payload observable at `A` (`rwp_load_I` under `erwp_bindR`);
@@ -578,7 +578,7 @@ Core's `withload_compatX`, step by step (`chain-interpretation.md` §6.3):
    `tmplD_exists`); the image typed at `Imm̲ 'x A` (`relabel_vN`); the fresh `β`; 6.150 across the
    callback's stops, raises and layered cancel runs (`erwp_rebGen`); the callback at `δ['x ↦ β]`
    (`callback_at_image`);
-12.–13. the result `['x] B` read at `B` (`vN_extend_of_not_free`).
+12.–13. the result `['x] B` read at `B` (`vN_extend_of_not_free₀`).
 
 Premises, and the rule that supplies each: `hbnd` is the bound's definedness (`Const791.OK`'s
 first conjunct); `hA`, `hB`, `hS` are `withloadU`'s with `Row.Suspend` for `Row.Unwind`
@@ -586,7 +586,7 @@ first conjunct); `hA`, `hB`, `hS` are `withloadU`'s with `Row.Suspend` for `Row.
 theorem withloadS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
     (hS : S.Suspend x bnd) (δ : LSub) (Θ₀ : LocTy) (n : Nat) :
-    vN (ℍ := ℍ) (.bang (withloadUTy a x bnd A B S)) δ Θ₀ n withloadV PMap.empty := by
+    vN₀ (ℍ := ℍ) (.bang (withloadUTy a x bnd A B S)) δ Θ₀ n withloadV PMap.empty := by
   -- step 1
   refine ⟨rfl, fun Θ _ hΘ c₁ _ ls => ?_⟩
   intro c₂ k hk u ρv ρu hc hu _
@@ -594,14 +594,14 @@ theorem withloadS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   -- steps 2–4
   intro c k' hk' f ρf ρ'' hc' hf hcon
   obtain ⟨α₀, hα₀, ⟨l, s, w, σ, hσs, rfl, rfl, hα₀s, hpay⟩, hwit⟩ :=
-    vN_le hk' hu
-  rw [cN_effOf]
+    vN_le₀ hk' hu
+  rw [cN_effOf₀]
   refine erwp_of_valid fun hv'' => ?_
   have hcf : ConsistentX c ρf := consistentX_right hc' hcon hv''
   have hΦ : (Θ.view c).Down := LocTy.view_down hΘ.1 c
   have hTd := opTableN_down (tabN_down (ℍ := ℍ) (CTy.effOf S B) δ Θ hΘ.1 c)
-  have hQo : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ) :=
-    fun k _ v ρ h => vN_down _ δ Θ k v ρ h
+  have hQo : PostN.Down (fun k _ v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ) :=
+    fun k _ v ρ h => vN_down₀ _ δ Θ k v ρ h
   refine erwp_det hΦ hTd hQo
     (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl (.appL .hole f)) ?_
   refine erwp_det hΦ hTd hQo (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
@@ -620,7 +620,7 @@ theorem withloadS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   exact withload_reb (hbnd δ (models_empty_any _)) hA hS (vO_le (Nat.sub_le k' 1) hpay)
     (hwit l s w σ hσs rfl)
     (fun β hLt u χ Bχ hχ _ _ himg hBχ =>
-      callback_at_image hB hS hΘ hLt (vN_le (Nat.sub_le k' 1) hf) hcf hχ himg hBχ) hc' 
+      callback_at_image hB hS hΘ hLt (vN_le₀ (Nat.sub_le k' 1) hf) hcf hχ himg hBχ) hc' 
 
 /-- **`ConstN` for `withload` at a suspending row**, from its rule's premises. -/
 theorem constN_wl {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
@@ -631,7 +631,7 @@ theorem constN_wl {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B :
 /-- **`withload` at the hardest case's row**, every hypothesis of `withloadS_compat` discharged:
 an `Imm @a 1` source at the bound `LifeCtx.empty.meetOfDom`. -/
 theorem withloadS_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
-    vN (ℍ := ℍ) (.bang (withloadUTy a x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
+    vN₀ (ℍ := ℍ) (.bang (withloadUTy a x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
       withloadV PMap.empty :=
   withloadS_compat defines_meetOfDom_empty id id (hardestRow_suspend x _) δ Θ n
 
@@ -643,7 +643,7 @@ theorem wl_ok (a : Lifetime.Life) (x : LifeVar) :
 /-- **`ConstN` at the hardest case's `withload`**, its antecedent discharged (`wl_ok`). -/
 theorem constN_wl_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat)
     (hΘ : Θ.OK) :
-    vN (ℍ := ℍ) (.bang (Const791.wl a x LifeCtx.empty.meetOfDom .unit .unit hardestRow).ty) δ Θ n
+    vN₀ (ℍ := ℍ) (.bang (Const791.wl a x LifeCtx.empty.meetOfDom .unit .unit hardestRow).ty) δ Θ n
       (Const791.wl a x LifeCtx.empty.meetOfDom .unit .unit hardestRow).val PMap.empty :=
   constN_wl (wl_ok a x) δ Θ n hΘ
 

@@ -42,13 +42,13 @@ key.** -/
 theorem tab_lookupRK : ∀ (F : CTy) {R : Nat → WProp} {S : UInt32 → Prop} {g : KW → KW}
     {δ : LSub} {x : KW} {m j : UInt32} {en : OpEntK KW},
     tabRK (ℍ := ℍ) R S g F δ x m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
-      en = entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x.Θ k v ρ)
-        (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+      en = entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x.Θ k v ρ)
+        (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
         (finRK (ℍ := ℍ) R (finSched S m) g fin δ) (fun f y ρ => (g x).OwedS S m f (g y) ρ) ∧
       ∀ (R₂ : Nat → WProp) (S₂ : UInt32 → Prop) (g₂ : KW → KW) (δ₂ : LSub) (x₂ : KW),
         tabRK (ℍ := ℍ) R₂ S₂ g₂ F δ₂ x₂ m j =
-          some (entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ₂ x₂.Θ k v ρ)
-            (fun y k v ρ => vN (ℍ := ℍ) B δ₂ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+          some (entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ₂ x₂.Θ k v ρ)
+            (fun y k v ρ => vN₀ (ℍ := ℍ) B δ₂ y.Θ k v ρ ∧ ConsistentX y.c ρ)
             (finRK (ℍ := ℍ) R₂ (finSched S₂ m) g₂ fin δ₂)
             (fun f y ρ => (g₂ x₂).OwedS S₂ m f (g₂ y) ρ))
   | .eff m₀ i₀ q A B fin rc C, R, S, g, δ, x, m, j, en, h => by
@@ -97,10 +97,10 @@ theorem tabRK_lendOKCR {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy
     exact ⟨(layer_suspend F hF hL).1, rfl⟩
   pa := fun m i en h k ls v ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupRK F h
-    exact vN_inStratum_bnd (layer_suspend F hF hL).2.2.2.1 hLt hp
+    exact vN_inStratum_bnd₀ (layer_suspend F hF hL).2.2.2.1 hLt hp
   pb := fun m i en h y k ls w ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupRK F h
-    exact (vN_inStratum_bnd (layer_suspend F hF hL).2.2.2.2.1 hLt hp.1).mono
+    exact (vN_inStratum_bnd₀ (layer_suspend F hF hL).2.2.2.2.1 hLt hp.1).mono
       (Life.down_sqsubset α).le
 
 /-- **The frame's callback table and its lender's twin across the fold, under a world map**: the
@@ -320,21 +320,21 @@ one. Every premise of `erwpK_M_frameCRR` is discharged from the tables (`tabRK_l
 `tabRK_canRK`, `foldTwin_owedG` with `tabRK_foldTwinR`); the claim is joined to the inner frames'
 by `tabRK_finLe`. The frame's invariant is `FoldInv α` at `g y`. -/
 theorem erwpK_M_frameCRR_listKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β : Life}
-    (hunif : ∀ Θ j u r, vN (ℍ := ℍ) A δ Θ j u r → r.InStratum β) {xv : LifeVar}
+    (hunif : ∀ Θ j u r, vN₀ (ℍ := ℍ) A δ Θ j u r → r.InStratum β) {xv : LifeVar}
     {bnd : Lifetime.Life} {F : CTy} (hF : F.SuspendC xv bnd) {S : UInt32 → Prop}
     (hS : F.SchedOnly S) (Ψ : LocTy → PostN) (g : KW → KW) (Θ : LocTy) (ℓ : Loc) {α : Life}
     (hLt : LtLife δ bnd α) (hαβ : α ≤ β) (I : List Loc) :
     KFrame (ℍ := ℍ) V (fun y => (g y).Θ.view (g y).c) (fun y => (g y).Θ.FoldInv α) ℓ α
-      (famL α (fun Θ' j w r => vN (ℍ := ℍ) A δ Θ' j w r) Θ)
-      (tabListK (ℍ := ℍ) A δ F S (Θ.add ℓ α (famL α (fun Θ' j w r => vN (ℍ := ℍ) A δ Θ' j w r) Θ))
-        (fun y => (g y).lend ℓ α (famL α (fun Θ' j w r => vN (ℍ := ℍ) A δ Θ' j w r) Θ)) I)
+      (famL α (fun Θ' j w r => vN₀ (ℍ := ℍ) A δ Θ' j w r) Θ)
+      (tabListK (ℍ := ℍ) A δ F S (Θ.add ℓ α (famL α (fun Θ' j w r => vN₀ (ℍ := ℍ) A δ Θ' j w r) Θ))
+        (fun y => (g y).lend ℓ α (famL α (fun Θ' j w r => vN₀ (ℍ := ℍ) A δ Θ' j w r) Θ)) I)
       (tabListK (ℍ := ℍ) A δ F S Θ g (ℓ :: I))
-      (fun _ => MFPost ℓ α (famL α (fun Θ' j w r => vN (ℍ := ℍ) A δ Θ' j w r) Θ)
+      (fun _ => MFPost ℓ α (famL α (fun Θ' j w r => vN₀ (ℍ := ℍ) A δ Θ' j w r) Θ)
         (listPostN (ℍ := ℍ) A δ Ψ Θ (ℓ :: I)))
       (fun _ => listPostN (ℍ := ℍ) A δ Ψ Θ (ℓ :: I)) := by
   set Fm : Nat → Val → SPropS Loc Val α :=
-    famL α (fun Θ' j w r => vN (ℍ := ℍ) A δ Θ' j w r) Θ with hFm
-  have hFmD : DownFam α Fm := vN_fam_down A δ α Θ
+    famL α (fun Θ' j w r => vN₀ (ℍ := ℍ) A δ Θ' j w r) Θ with hFm
+  have hFmD : DownFam α Fm := vN_fam_down₀ A δ α Θ
   set Θ₁ := Θ.add ℓ α Fm with hΘ₁
   have hRs : ∀ k ρ', claimL (ℍ := ℍ) A δ Θ₁ I k ρ' → ρ'.InStratum α := fun k ρ' h =>
     sepList_closed (ResU.inStratum_empty α) (fun _ _ _ hc a b => inStratum_compS hc a b)
@@ -342,11 +342,11 @@ theorem erwpK_M_frameCRR_listKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {
   have hcl' : ∀ k ρ', (claimR ℓ α Fm k ⋆ claimL (ℍ := ℍ) A δ Θ₁ I k) ρ' →
       claimL (ℍ := ℍ) A δ Θ (ℓ :: I) k ρ' := by
     rintro k ρ' ⟨ρ₁, ρ₂, hc12, ⟨w, σ', hσ', hFσ, hcw⟩, hr⟩
-    refine ⟨ρ₁, ρ₂, hc12, ⟨ℓ, w, σ', rfl, hcw, (vN_above A δ Θ hσ').mp hFσ⟩, ?_⟩
+    refine ⟨ρ₁, ρ₂, hc12, ⟨ℓ, w, σ', rfl, hcw, (vN_above₀ A δ Θ hσ').mp hFσ⟩, ?_⟩
     exact sepList_mono_down (R := fun τ => τ.InStratum α)
       (fun _ _ _ hc h => ⟨ResU.CompS.inStratum_left hc h,
         ResU.CompS.inStratum_left (ResU.CompS.comm hc) h⟩)
-      (fun m τ hτ hm => vN_local (.ref A) δ Θ ℓ α Fm k _ τ hτ hm) (hRs k ρ₂ hr) hr
+      (fun m τ hτ hm => vN_local₀ (.ref A) δ Θ ℓ α Fm k _ τ hτ hm) (hRs k ρ₂ hr) hr
   have hM := erwpK_M_frameCRR (ℍ := ℍ) (V := V) (Φ := fun y => (g y).Θ.view (g y).c)
     (Inv := fun y => (g y).Θ.FoldInv α) (flI := fun _ => α) (flO := fun y => (g y).lo)
     (Ti := fun x => tabRK (ℍ := ℍ) (claimL (ℍ := ℍ) A δ Θ₁ I) S (fun y => (g y).lend ℓ α Fm) F δ x)
@@ -364,7 +364,7 @@ worlds, after the lends `g` the frames before took, each frame `erwpK_M_frameCRR
 `j` lends its leaf at `αⱼ`, fresh and below every `imm` record of `g x` (`LocTy.exists_foldInv`),
 below the frame's rest, `β`, `β′` and the bound, as in the original. -/
 theorem erwpK_M_frameListKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β β' : Life}
-    (hunif : ∀ Θ j u r, vN (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
+    (hunif : ∀ Θ j u r, vN₀ (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
     {xv : LifeVar} {bnd : Lifetime.Life} {mb : Life} (hmb : bnd.interp δ = some mb) {F : CTy}
     (hF : F.SuspendC xv bnd) {S : UInt32 → Prop} (hS : F.SchedOnly S)
     (Ψ : LocTy → PostN) (hΨs : ∀ Θ k ls v ρ, Ψ Θ k ls v ρ → ρ.InStratum β')
@@ -373,7 +373,7 @@ theorem erwpK_M_frameListKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β �
     (e : Expr) (ls : List SRec) (x : KW) :
     ∀ (I : List Loc) (g : KW → KW), KW.LendMap g → ∀ (n : Nat) (ρo ρH ρ : WRes) (γ : Life),
       (g x).Θ.OK → ConsistentX (g x).c ρ → ResU.CompS ρo ρH ρ →
-      sepList (fun m => vN (ℍ := ℍ) (.ref A) δ (g x).Θ n (Val.loc m)) I ρo →
+      sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ (g x).Θ n (Val.loc m)) I ρo →
       (∀ α, α < γ → ρH.InStratum α ∧ ∀ g', KW.LendMap g' → (g x).Θ.ExtA (g' x).Θ →
         (g' x).Θ.OK → ∀ ρm ρ', sepList (mutLeafN (ℍ := ℍ) A δ α (g' x).Θ n) I ρm →
           ResU.CompS ρH ρm ρ' → ConsistentX (g' x).c ρ' →
@@ -413,12 +413,12 @@ theorem erwpK_M_frameListKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β �
       have hα₁β' : α₁ ≤ β' := hα₁lt.le.trans (inf_le_left.trans inf_le_right)
       have hα₁mb : α₁ < mb := lt_of_lt_of_le hα₁lt inf_le_right
       have hLt : LtLife δ bnd α₁ := ⟨mb, hmb, hα₁mb⟩
-      set P : CPredL := fun Θ' j w r => vN (ℍ := ℍ) A δ Θ' j w r with hP
+      set P : CPredL := fun Θ' j w r => vN₀ (ℍ := ℍ) A δ Θ' j w r with hP
       set Fm : Nat → Val → SPropS Loc Val α₁ := famL α₁ P (g x).Θ with hFm
       have houtP : σ.InStratum α₁ := (hunif (g x).Θ n u σ hu).mono hα₁β
       have houtb : Fr.InStratum (↓α₁) := hβF.mono ((Life.down_sqsubset α₁).le.trans hα₁F)
-      have hwit : Fm n u ⟨σ, houtP⟩ := (vN_above A δ (g x).Θ houtP).mpr hu
-      have hFmD : DownFam α₁ Fm := vN_fam_down A δ α₁ (g x).Θ
+      have hwit : Fm n u ⟨σ, houtP⟩ := (vN_above₀ A δ (g x).Θ houtP).mpr hu
+      have hFmD : DownFam α₁ Fm := vN_fam_down₀ A δ α₁ (g x).Θ
       set g₁ : KW → KW := fun y => (g y).lend ℓ α₁ Fm with hg₁
       have hg₁L : KW.LendMap g₁ := KW.LendMap.lend hg ℓ α₁ Fm
       have hOK₁ : (g₁ x).Θ.OK := LocTy.ok_add hΘ ℓ hFmD
@@ -438,8 +438,8 @@ theorem erwpK_M_frameListKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β �
       have hcBM : ConsistentX (g₁ x).c BM := consistentX_compS hBM hcF₁
         (consistentX_single_mut hcσ₁ (by simp [hg₁, KW.lend, setLife]))
       obtain ⟨βR, hβR⟩ := ResU.exists_stratum R
-      have hrest₁ : sepList (fun m => vN (ℍ := ℍ) (.ref A) δ (g₁ x).Θ n (Val.loc m)) I ρr :=
-        sepList_mono' (fun m τ h => vN_extA (.ref A) δ hE₁ n _ τ h) hrest
+      have hrest₁ : sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ (g₁ x).Θ n (Val.loc m)) I ρr :=
+        sepList_mono' (fun m τ h => vN_extA₀ (.ref A) δ hE₁ n _ τ h) hrest
       refine erwpK_mono (fun _ _ h => h) (fun _ k ls' v ρ' h => ?_)
         (fun y k ls t Ψ Ψ' ρ hΨ h => tabListK_local A δ F S _ g₁ I y k ls t Ψ Ψ' ρ hΨ h) n x ls
         e BM
@@ -453,13 +453,13 @@ theorem erwpK_M_frameListKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β �
           (fun m τ hm => ownLeafN_inStratum hα₁β hunif hm) ho1
         have hs2 : ρ₂.InStratum α₁ := (hΨs _ _ _ _ _ hψ).mono hα₁β'
         refine ⟨inStratum_compS hc12 hs1 hs2, fun w Y hY σ' ⟨hσ', hFσ⟩ Z hZ => ?_⟩
-        have ho1' : sepList (fun m => vN (ℍ := ℍ) (.ref A) δ (g x).Θ k (Val.loc m)) I ρ₁ :=
+        have ho1' : sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ (g x).Θ k (Val.loc m)) I ρ₁ :=
           sepList_mono_down (R := fun τ => τ.InStratum α₁)
             (fun _ _ _ hc h => ⟨ResU.CompS.inStratum_left hc h,
               ResU.CompS.inStratum_left (ResU.CompS.comm hc) h⟩)
-            (fun m τ hτ hm => vN_local (.ref A) δ (g x).Θ ℓ α₁ Fm k _ τ hτ hm) hs1 ho1
+            (fun m τ hτ hm => vN_local₀ (.ref A) δ (g x).Θ ℓ α₁ Fm k _ τ hτ hm) hs1 ho1
         have hψ' := hΨl (g x).Θ ℓ α₁ Fm k ls' v ρ₂ hs2 hψ
-        have hwA : vN (ℍ := ℍ) A δ (g x).Θ k w σ' := (vN_above A δ (g x).Θ hσ').mp hFσ
+        have hwA : vN₀ (ℍ := ℍ) A δ (g x).Θ k w σ' := (vN_above₀ A δ (g x).Θ hσ').mp hFσ
         obtain ⟨cp, hcp, hZ'⟩ := compS_reassoc hY hZ
         obtain ⟨oc, hoc, hZ''⟩ := compS_exch hc12 hZ'
         exact ⟨oc, ρ₂, hZ'', ⟨cp, ρ₁, ResU.CompS.comm hoc, ⟨ℓ, w, σ', rfl, hcp, hwA⟩, ho1'⟩, hψ'⟩

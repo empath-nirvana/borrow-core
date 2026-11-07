@@ -531,7 +531,7 @@ cancel obligation the cancel run at its cancel row's own guarded table, its stop
 ending at `R`. The Mut Frame inside an anti-frame produces it (`erwp_M_frame_cancelRunCRG`). -/
 def tabG (R : Nat → WProp) (G : ShareG) : CTy → LSub → LocTy → (Loc → Option Life) → OpTabN
   | .eff m i q A B fin _ C, δ, Θ, c => extTabN m i
-      (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ)
+      (entN q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ) (fun k v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ)
         (finG R G fin δ Θ c))
       (tabG R G C δ Θ c)
   | _, _, _, _ => OpTabN.empty
@@ -540,7 +540,7 @@ def finG (R : Nat → WProp) (G : ShareG) : CTy → LSub → LocTy → (Loc → 
     Option (Nat → List SRec → Expr → WProp)
   | .top, _, _, _ => none
   | .eff m i q A B fin _ C, δ, Θ, c => some (cancelOblGN (ℍ := ℍ) (Θ.view c) (extTabN m i
-      (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ)
+      (entN q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ) (fun k v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ)
         (finG R G fin δ Θ c))
       (tabG R G C δ Θ c)) G R)
   | .ret _, _, Θ, c => some (cancelOblGN (ℍ := ℍ) (Θ.view c) OpTabN.empty G R)
@@ -556,18 +556,18 @@ theorem finG_eq (R : Nat → WProp) (G : ShareG) {F : CTy} (hF : F ≠ .top) (δ
       some (cancelOblGN (ℍ := ℍ) (Θ.view c) (tabG (ℍ := ℍ) R G F δ Θ c) G R) := by
   cases F <;> simp_all [finG, tabG]
 
-/-- **An entry of `tabN` is a layer's, and every `tabG` has the layer's entry at the same key.** -/
+/-- **An entry of `tabN₀` is a layer's, and every `tabG` has the layer's entry at the same key.** -/
 theorem tab_lookupNG (R : Nat → WProp) (G : ShareG) : ∀ (F : CTy) {δ₁ : LSub} {Θ₁ : LocTy}
     {c₁ : Loc → Option Life} {m j : UInt32} {en : OpEntN},
-    tabN (ℍ := ℍ) F δ₁ Θ₁ c₁ m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
-      en = entN q B (fun k v ρ => vN (ℍ := ℍ) A δ₁ Θ₁ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) B δ₁ Θ₁ k v ρ ∧ ConsistentX c₁ ρ) (finN (ℍ := ℍ) fin δ₁ Θ₁ c₁) ∧
+    tabN₀ (ℍ := ℍ) F δ₁ Θ₁ c₁ m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
+      en = entN q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ₁ Θ₁ k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) B δ₁ Θ₁ k v ρ ∧ ConsistentX c₁ ρ) (finN₀ (ℍ := ℍ) fin δ₁ Θ₁ c₁) ∧
       ∀ (δ₂ : LSub) (Θ₂ : LocTy) (c₂ : Loc → Option Life),
         tabG (ℍ := ℍ) R G F δ₂ Θ₂ c₂ m j =
-          some (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ₂ Θ₂ k v ρ)
-            (fun k v ρ => vN (ℍ := ℍ) B δ₂ Θ₂ k v ρ ∧ ConsistentX c₂ ρ) (finG (ℍ := ℍ) R G fin δ₂ Θ₂ c₂))
+          some (entN q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ₂ Θ₂ k v ρ)
+            (fun k v ρ => vN₀ (ℍ := ℍ) B δ₂ Θ₂ k v ρ ∧ ConsistentX c₂ ρ) (finG (ℍ := ℍ) R G fin δ₂ Θ₂ c₂))
   | .eff m₀ i₀ q A B fin rc C, δ₁, Θ₁, c₁, m, j, en, h => by
-      simp only [tabN] at h
+      simp only [tabN₀] at h
       unfold extTabN at h
       split at h
       · rename_i hmj
@@ -578,22 +578,22 @@ theorem tab_lookupNG (R : Nat → WProp) (G : ShareG) : ∀ (F : CTy) {δ₁ : L
         obtain ⟨q', A', B', fin', hL, he, hR⟩ := tab_lookupNG R G C h
         exact ⟨q', A', B', fin', .inr hL, he, fun δ₂ Θ₂ c₂ => by
           simp only [tabG, extTabN, if_neg hmj]; exact hR δ₂ Θ₂ c₂⟩
-  | .ret _, _, _, _, _, _, _, h => by simp [tabN, OpTabN.empty] at h
-  | .arr _ _, _, _, _, _, _, _, h => by simp [tabN, OpTabN.empty] at h
-  | .amp _ _, _, _, _, _, _, _, h => by simp [tabN, OpTabN.empty] at h
-  | .top, _, _, _, _, _, _, h => by simp [tabN, OpTabN.empty] at h
-  | .all _ _ _, _, _, _, _, _, _, h => by simp [tabN, OpTabN.empty] at h
-  | .nu _, _, _, _, _, _, _, h => by simp [tabN, OpTabN.empty] at h
+  | .ret _, _, _, _, _, _, _, h => by simp [tabN₀, OpTabN.empty] at h
+  | .arr _ _, _, _, _, _, _, _, h => by simp [tabN₀, OpTabN.empty] at h
+  | .amp _ _, _, _, _, _, _, _, h => by simp [tabN₀, OpTabN.empty] at h
+  | .top, _, _, _, _, _, _, h => by simp [tabN₀, OpTabN.empty] at h
+  | .all _ _ _, _, _, _, _, _, _, h => by simp [tabN₀, OpTabN.empty] at h
+  | .nu _, _, _, _, _, _, _, h => by simp [tabN₀, OpTabN.empty] at h
 
 /-- **An entry of `tabG` is a layer's, and every `tabR` has the layer's entry at the same key.** -/
 theorem tab_lookupG (R : Nat → WProp) (G : ShareG) : ∀ (F : CTy) {δ : LSub} {Θ : LocTy}
     {c : Loc → Option Life} {m j : UInt32} {en : OpEntN},
     tabG (ℍ := ℍ) R G F δ Θ c m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
-      en = entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) (finG (ℍ := ℍ) R G fin δ Θ c) ∧
+      en = entN q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) (finG (ℍ := ℍ) R G fin δ Θ c) ∧
       ∀ R' : Nat → WProp, tabR (ℍ := ℍ) R' F δ Θ c m j =
-        some (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ)
-          (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) (finR (ℍ := ℍ) R' fin δ Θ c))
+        some (entN q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ)
+          (fun k v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) (finR (ℍ := ℍ) R' fin δ Θ c))
   | .eff m₀ i₀ q A B fin rc C, δ, Θ, c, m, j, en, h => by
       simp only [tabG] at h
       unfold extTabN at h
@@ -618,14 +618,14 @@ theorem tab_lookupG (R : Nat → WProp) (G : ShareG) : ∀ (F : CTy) {δ : LSub}
 theorem tabN_tabG_twin {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy}
     (hbnd : LifeCtx.empty.Defines bnd) (hF : F.SuspendC x bnd) (R : Nat → WProp)
     (G : ShareG) (δ : LSub) (Θ₁ Θ₂ : LocTy) (c₁ c₂ : Loc → Option Life)
-    (hΘ : ∀ A : VTy, VOutlives LifeCtx.empty bnd A → vN (ℍ := ℍ) A δ Θ₁ = vN (ℍ := ℍ) A δ Θ₂) :
-    (tabN (ℍ := ℍ) F (δ.extend x α) Θ₁ c₁).Twin (tabG (ℍ := ℍ) R G F δ Θ₂ c₂) := by
+    (hΘ : ∀ A : VTy, VOutlives LifeCtx.empty bnd A → vN₀ (ℍ := ℍ) A δ Θ₁ = vN₀ (ℍ := ℍ) A δ Θ₂) :
+    (tabN₀ (ℍ := ℍ) F (δ.extend x α) Θ₁ c₁).Twin (tabG (ℍ := ℍ) R G F δ Θ₂ c₂) := by
   intro m i en h
   obtain ⟨q, A, B, fin, hL, rfl, hR⟩ := tab_lookupNG R G F h
   obtain ⟨-, hA, hB, hOA, hOB, -⟩ := layer_suspend F hF hL
   refine ⟨_, hR δ Θ₂ c₂, rfl, rfl, ?_, ?_, rfl⟩
-  · simp only [entN, vN_extend_of_not_free (ℍ := ℍ) hA δ α, hΘ A hOA]
-  · simp only [entN, vN_extend_of_not_free (ℍ := ℍ) hB δ α, hΘ B hOB]
+  · simp only [entN, vN_extend_of_not_free₀ (ℍ := ℍ) hA δ α, hΘ A hOA]
+  · simp only [entN, vN_extend_of_not_free₀ (ℍ := ℍ) hB δ α, hΘ B hOB]
     funext k _ v ρ
     exact propext ⟨fun h => ⟨h.1, consistentX_of_outlives hbnd hOB h.1 c₁⟩,
       fun h => ⟨h.1, consistentX_of_outlives hbnd hOB h.1 c₂⟩⟩
@@ -658,7 +658,7 @@ theorem tabG_can {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub} {Θ
     (hbnd : LifeCtx.empty.Defines bnd) (hf : Θ.Fresh α) (hLt : LtLife δ bnd α) {c : Loc → Option Life} {l : Loc}
     {Fam : Nat → Val → SPropS Loc Val α} (hFam : DownFam α Fam) :
     ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC x bnd →
-    ∀ m i en en', tabN (ℍ := ℍ) F (δ.extend x α) (Θ.add l α Fam) (setLife c l α) m i = some en →
+    ∀ m i en en', tabN₀ (ℍ := ℍ) F (δ.extend x α) (Θ.add l α Fam) (setLife c l α) m i = some en →
       tabG (ℍ := ℍ) (claimR l α Fam) (CellFold l α Fam) F δ Θ c m i = some en' → en.abort = false →
       en.q ≠ .lin →
       ∀ k ls (K : Kont) (ρk ρp Z ρkL W'' : WRes) (v'' : Val) (χ : WRes) (hχ : χ.InStratum α)
@@ -690,11 +690,11 @@ theorem tabG_can {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub} {Θ
   · subst htop; simp [finG] at hP'
   rw [finG_eq _ _ htop] at hP'
   cases Option.some.inj hP'
-  have hin := hc _ (finN_eq htop _ _ _)
+  have hin := hc _ (finN_eq₀ htop _ _ _)
   refine erwp_M_frame_cancelRunCRG (Φ := Θ.view c) hFam
     (tabN_lendOKCR_C hfin δ hLt (Θ.add l α Fam) (setLife c l α))
     (tabN_tabG_twin hbnd hfin _ _ δ (Θ.add l α Fam) Θ (setLife c l α) c
-      (fun A' hO => vN_add_eq_bnd hO δ hLt hf l Fam))
+      (fun A' hO => vN_add_eq_bnd₀ hO δ hLt hf l Fam))
     (ih fin hfd hfin) k k le_rfl ls _ v'' χ W'' (Z.del l) ρkL hχ hdZd P'' hPk hw''
     (ResU.CompS.comm hW'') (ResU.CompS.comm hkL) (fun BM hBM => ?_)
   obtain rfl := ResU.CompS.functional hBM hZd
@@ -749,9 +749,9 @@ theorem tabR_canA {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {Θ : LocTy} (
 /-- **The finaliser consumes the source**: `λ_. d ℓ` from a `Mut @a A` value at `ℓ`, by `d`'s
 judgment at `Mut @a A ⊸ 1` (`fin_claim` at the reborrow's source). -/
 theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
-    (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.mut a A) .unit))) {δ : LSub}
+    (hd : SemJN₀ (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.mut a A) .unit))) {δ : LSub}
     {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life} {l : Loc} {k : Nat} {ls : List SRec}
-    {ρ : WRes} (h : vN (ℍ := ℍ) (.mut a A) δ Θ k (Val.loc l) ρ) (hc : ConsistentX c ρ) :
+    {ρ : WRes} (h : vN₀ (ℍ := ℍ) (.mut a A) δ Θ k (Val.loc l) ρ) (hc : ConsistentX c ρ) :
     rwp (ℍ := ℍ) (Θ.view c) (fun _ _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) k ls
       (.app (.val (Val.lam (.app d (.val (Val.loc l))))) (.val .unit)) ρ := by
   have hΦ := LocTy.view_down hΘ.1 c
@@ -769,7 +769,7 @@ theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d 
   refine rwp_mono_le (fun k' hk' ls' v τ hv => ?_) (rwp_consistentXV hfr hc)
   obtain ⟨⟨τ₁, τ₂, hcτ, hP, rfl⟩, hcτ', hvτ⟩ := hv
   have := hP Θ (LocTy.extR_refl Θ _) hΘ c (consistentX_left hcτ hcτ' hvτ) ls'
-    c k' le_rfl (Val.loc l) τ₂ τ hcτ (vN_le hk' h) hcτ'
+    c k' le_rfl (Val.loc l) τ₂ τ hcτ (vN_le₀ hk' h) hcτ'
   exact rwp_of_erwp_empty this
 
 /-! ### The suspending reborrow -/
@@ -780,7 +780,7 @@ theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d 
 
 1. the context owns nothing: the constant at `PMap.empty`;
 2. the source is `loc ℓ` with its cell `ℓ ↦ mut(β, w₀, σ₀, F_o j₀)`, `F_o = famL β 𝒱⟦A⟧ Θ` and
-   `Θ (ℓ, β) = F_o` (`vN`'s `Mut` clause);
+   `Θ (ℓ, β) = F_o` (`vN₀`'s `Mut` clause);
 3. the callback, at the same world: `⊸` is a plain wand;
 4. both are at the world `Θ` the run is at, which the thunk's `U` reached;
 5. the cell unpacked (`mutL`);
@@ -794,12 +794,12 @@ theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d 
    runs (`erwp_M_antiFrameCR`, `tabR_canA`), the Mut Frame's cancel runs at their rows' guarded
    tables (`tabG_can`);
 9. the fresh lifetime from `LocTy.exists_fresh`;
-10. the borrow `Mut @α A` at `δ[x ↦ α]` (`vN_extend_of_not_free`, `lend_mutL`);
+10. the borrow `Mut @α A` at `δ[x ↦ α]` (`vN_extend_of_not_free₀`, `lend_mutL`);
 11. the callback at the world `Θ + (ℓ, α) ↦ famL α 𝒱⟦A⟧ Θ` and the view `setLife c ℓ α`, the
     relation's `Φ[ℓ ↦ (α, …)]` (`LocTy.view_add`), its table the guarded twin at `Θ`
-    (`tabN_tabG_twin`, `vN_add_eq_bnd`);
-12. its result `['x] B` back at `Θ` (`vN_local`);
-13. the content handed back in `F_i k` is in `F_o k` (`hunif`, `vN_above`), and the resealed cell
+    (`tabN_tabG_twin`, `vN_add_eq_bnd₀`);
+12. its result `['x] B` back at `Θ` (`vN_local₀`);
+13. the content handed back in `F_i k` is in `F_o k` (`hunif`, `vN_above₀`), and the resealed cell
     is a `Mut @a A` value again, beside the result and in every raise's claim; the claim is
     consistent (`erwp_claimX`) and the finaliser frame consumes it with `d`
     (`erwp_ubindClaimRT`, `fin_claimM`).
@@ -812,29 +812,29 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     {S : Row} {d : Expr} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
     (hS : S.Suspend x bnd)
     (hdc : closedAt 0 d = true)
-    (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.mut a A) .unit))) (δ : LSub)
+    (hd : SemJN₀ (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.mut a A) .unit))) (δ : LSub)
     (Θ₀ : LocTy) (n : Nat) :
-    vN (ℍ := ℍ) (.bang (withbor3UTy a x bnd A B S)) δ Θ₀ n (withborUV d) PMap.empty := by
+    vN₀ (ℍ := ℍ) (.bang (withbor3UTy a x bnd A B S)) δ Θ₀ n (withborUV d) PMap.empty := by
   -- step 1
   refine ⟨rfl, fun Θ _ hΘ c₁ _ ls => ?_⟩
   intro c₂ k hk u ρv ρu hc hu _
   obtain rfl := eq_of_compS_empty_left hc
   -- steps 2–4
   intro c k' hk' f ρf ρ'' hc' hf hcon
-  set P : CPredL := fun Θ' j u r => vN (ℍ := ℍ) A δ Θ' j u r with hP
-  obtain ⟨α₀, hα₀, (β : Life), hα₀β, hm, hunif⟩ := vN_le hk' hu
+  set P : CPredL := fun Θ' j u r => vN₀ (ℍ := ℍ) A δ Θ' j u r with hP
+  obtain ⟨α₀, hα₀, (β : Life), hα₀β, hm, hunif⟩ := vN_le₀ hk' hu
   -- step 5
   obtain ⟨l, w₀, σ₀, hσ₀, j₀, hw₀, hkj, rfl, hl, rfl⟩ := id hm
-  rw [cN_effOf]
+  rw [cN_effOf₀]
   refine erwp_of_valid fun hv'' => ?_
   have hΦ : (Θ.view c).Down := LocTy.view_down hΘ.1 c
   set Fo := CTy.effOf S (.tensor (.mut a A) B) with hFo
-  set T := tabN (ℍ := ℍ) Fo δ Θ c with hTdef
+  set T := tabN₀ (ℍ := ℍ) Fo δ Θ c with hTdef
   have hTd : T.Down := tabN_down _ δ Θ hΘ.1 c
-  have hQo : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ) (.tensor (.mut a A) B) δ Θ k v ρ) :=
-    fun k _ v ρ h => vN_down _ δ Θ k v ρ h
+  have hQo : PostN.Down (fun k _ v ρ => vN₀ (ℍ := ℍ) (.tensor (.mut a A) B) δ Θ k v ρ) :=
+    fun k _ v ρ h => vN_down₀ _ δ Θ k v ρ h
   set Qin : PostN := fun k _ b ρ =>
-    vN (ℍ := ℍ) (.tensor (.mut a A) B) δ Θ k (Val.pair (Val.loc l) b) ρ with hQin
+    vN₀ (ℍ := ℍ) (.tensor (.mut a A) B) δ Θ k (Val.pair (Val.loc l) b) ρ with hQin
   refine erwp_det hΦ (opTableN_down hTd) hQo
     (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl (.appL .hole f)) ?_
   refine erwp_det hΦ (opTableN_down hTd) hQo (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
@@ -857,7 +857,7 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     have h := consistentX_get hcon hv'' hget (CellU.kind_mutOf _ _ _ _ _ _)
     rwa [CellU.at_mutOf] at h
   obtain ⟨-, -, -, -, -, -, -, hFv, -⟩ :=
-    reseal_at_entry (Θ' := Θ) (fun _ _ _ h => h) hcl (vN_fam_down A δ β Θ) hm
+    reseal_at_entry (Θ' := Θ) (fun _ _ _ h => h) hcl (vN_fam_down₀ A δ β Θ) hm
   -- the parts of the start are consistent with the view
   have hcf : ConsistentX c ρf := consistentX_right hc' hcon hv''
   have hcσ : ConsistentX c σ₀ := consistentX_mut_wit (consistentX_left hc' hcon hv'') hvu
@@ -873,19 +873,19 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   have hLt : LtLife δ bnd α := ⟨γ, hγ, lt_of_lt_of_le hαlt inf_le_right⟩
   -- step 10
   set δ' := δ.extend x α with hδ'
-  have hAδ : vN (ℍ := ℍ) A δ' = vN (ℍ := ℍ) A δ := vN_extend_of_not_free hA δ α
-  have hBδ : vN (ℍ := ℍ) B δ' = vN (ℍ := ℍ) B δ := vN_extend_of_not_free hB δ α
-  set P' : CPredL := fun Θ' j u r => vN (ℍ := ℍ) A δ' Θ' j u r with hP'
+  have hAδ : vN₀ (ℍ := ℍ) A δ' = vN₀ (ℍ := ℍ) A δ := vN_extend_of_not_free₀ hA δ α
+  have hBδ : vN₀ (ℍ := ℍ) B δ' = vN₀ (ℍ := ℍ) B δ := vN_extend_of_not_free₀ hB δ α
+  set P' : CPredL := fun Θ' j u r => vN₀ (ℍ := ℍ) A δ' Θ' j u r with hP'
   set Fam : Nat → Val → SPropS Loc Val α := famL α P' Θ with hFam
-  have hFamD : DownFam α Fam := vN_fam_down A δ' α Θ
+  have hFamD : DownFam α Fam := vN_fam_down₀ A δ' α Θ
   have hwit : Fam j₀ w₀ ⟨σ₀, houtP⟩ :=
-    (vN_above A δ' Θ houtP).mpr (by rw [hAδ]; exact (vN_above A δ Θ hσ₀).mp hw₀)
+    (vN_above₀ A δ' Θ houtP).mpr (by rw [hAδ]; exact (vN_above₀ A δ Θ hσ₀).mp hw₀)
   -- step 13's inclusion: the content handed back in `F_i k` is in `F_o k`
   have hoi : ∀ k w σ (h : σ.InStratum α), Fam k w ⟨σ, h⟩ →
       ∃ h' : σ.InStratum β, famL β P Θ k w ⟨σ, h'⟩ := by
     intro k w σ h hw
-    have hv : vN (ℍ := ℍ) A δ Θ k w σ := by rw [← hAδ]; exact (vN_above A δ' Θ h).mp hw
-    exact ⟨hunif Θ k w σ hv, (vN_above A δ Θ (hunif Θ k w σ hv)).mpr hv⟩
+    have hv : vN₀ (ℍ := ℍ) A δ Θ k w σ := by rw [← hAδ]; exact (vN_above₀ A δ' Θ h).mp hw
+    exact ⟨hunif Θ k w σ hv, (vN_above₀ A δ Θ (hunif Θ k w σ hv)).mpr hv⟩
   have hG : ∀ k ls ρ, CellFold l α Fam k ls ρ → CellFold l β (famL β P Θ) k ls ρ := by
     rintro k ls ρ ⟨w, χ, h, hw, R, rest, h1, h2⟩
     obtain ⟨h', hw'⟩ := hoi k w χ h hw
@@ -894,7 +894,7 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     rintro k ρ ⟨w, σ, h, hw, hcl'⟩
     obtain ⟨h', hw'⟩ := hoi k w σ h hw
     exact ⟨w, σ, h', hw', hcl'⟩
-  set Rout : Nat → WProp := fun k ρ => vN (ℍ := ℍ) (.mut a A) δ Θ k (Val.loc l) ρ with hRoutd
+  set Rout : Nat → WProp := fun k ρ => vN₀ (ℍ := ℍ) (.mut a A) δ Θ k (Val.loc l) ρ with hRoutd
   have hRout : ∀ k (w : Val) (σ : WRes) (h : σ.InStratum β) (hw : famL β P Θ k w ⟨σ, h⟩),
       Rout k (ResU.single l (CellU.mutOf β w σ h (famL β P Θ k) hw)) :=
     fun k w σ h hw => ⟨α₀, hα₀, β, hα₀β, ⟨l, w, σ, h, k, hw, le_rfl, rfl, hl, rfl⟩, hunif⟩
@@ -912,12 +912,12 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   set Rc := claimR l α Fam with hRc
   set Gc := CellFold l α Fam with hGc
   have hFS : Fo.SuspendC x bnd := suspendC_effOf hS _
-  have hbase : tabN (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c' =
-      tabN (ℍ := ℍ) Fo δ' Θ' c' := tabN_effOf_base S _ _ δ' Θ' c'
-  have hTw : (tabN (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c').Twin
+  have hbase : tabN₀ (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c' =
+      tabN₀ (ℍ := ℍ) Fo δ' Θ' c' := tabN_effOf_base S _ _ δ' Θ' c'
+  have hTw : (tabN₀ (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c').Twin
       (tabG (ℍ := ℍ) Rc Gc Fo δ Θ c) := by
     rw [hbase]
-    exact tabN_tabG_twin hbnd hFS Rc Gc δ Θ' Θ c' c (fun A' hO => vN_add_eq_bnd hO δ hLt hfr l Fam)
+    exact tabN_tabG_twin hbnd hFS Rc Gc δ Θ' Θ c' c (fun A' hO => vN_add_eq_bnd₀ hO δ hLt hfr l Fam)
   have hcanM := tabG_can (ℍ := ℍ) (δ := δ) hbnd hfr hLt (c := c) (l := l) hFamD Fo.cdepth Fo le_rfl hFS
   rw [← hbase] at hcanM
   have hcanA := tabR_canA (ℍ := ℍ) (x := x) (δ := δ) hΘ.1 hFv hG hRin hRout Fo.cdepth Fo le_rfl
@@ -945,14 +945,14 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   -- step 11: the callback, at the lend's world and view, from the borrow
   rw [← hview]
   have h1 := (hf Θ' ((LocTy.extA_add hfr l Fam).extR ρf) hOK' c' hcf' ls) α hLt
-  have hcell : vN (ℍ := ℍ) (.mut (.var x) A) δ' Θ' k' (Val.loc l)
+  have hcell : vN₀ (ℍ := ℍ) (.mut (.var x) A) δ' Θ' k' (Val.loc l)
       (ResU.single l (CellU.mutOf α w₀ σ₀ houtP (Fam j₀) hwit)) :=
     ⟨α, interp_ext_self δ x α, α, le_rfl, lend_mutL Θ l α P' hkj houtP hwit,
       fun Θ'' j u r h => (hunif Θ'' j u r (by rw [← hAδ]; exact h)).mono hαβ⟩
   have hcBM : ConsistentX c' BM := consistentX_compS hBM hcf'
     (consistentX_single_mut hcσ' (by simp [hc'def, setLife]))
   have h2 := h1 c' k' le_rfl (Val.loc l) _ BM hBM hcell hcBM
-  rw [cN_effOf] at h2
+  rw [cN_effOf₀] at h2
   refine erwp_mono (fun k ls' b ρ' hb => ?_) (opTableN_local _) k' ls _ BM h2
   obtain ⟨β', hβ', hbB, hst⟩ := hb
   rw [interp_ext_self] at hβ'
@@ -961,8 +961,8 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   -- step 12: the result back at `Θ`; step 13: the content in `F_o k`, the cell resealed
   obtain ⟨h', hw'⟩ := hoi k w σ hσ hFσ
   obtain ⟨ac, hac, hacZ⟩ := compS_exch hY hZ
-  have hbB' : vN (ℍ := ℍ) B δ Θ k b ρ' :=
-    vN_local B δ Θ l α Fam k b ρ' hst (by rw [← hBδ]; exact hbB)
+  have hbB' : vN₀ (ℍ := ℍ) B δ Θ k b ρ' :=
+    vN_local₀ B δ Θ l α Fam k b ρ' hst (by rw [← hBδ]; exact hbB)
   exact ⟨w, σ, h', hw', ρ', ac, ResU.CompS.comm hacZ, ResU.CompS.comm hac, fun X' hX' =>
     ⟨Val.loc l, b, _, ρ', rfl, ResU.CompS.comm hX', hRout k w σ h' hw', hbB'⟩⟩
 

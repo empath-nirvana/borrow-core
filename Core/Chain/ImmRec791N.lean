@@ -1,9 +1,9 @@
-import Core.Chain.Goal791N
+import Core.Chain.Goal791N0
 
 /-!
 # The record an `imm` value's reborrow reads, and what an `Imm` clause sees  `[spec §62]`
 
-**The design choice this file justifies**: `vN`'s `Imm` clause reads its witness in the world's
+**The design choice this file justifies**: `vN₀`'s `Imm` clause reads its witness in the world's
 `imm` records (`Goal791N.ImmWitW`), not off the value alone. A clause that reads only the type,
 substitution, world, index, value and resource, with no record in the world, cannot give
 `withload`'s step 8 (`not_wlImage_vN`), nor can one strengthened by any agreement read off a
@@ -17,7 +17,7 @@ record's template, which is chosen at the record's type `r.T`. The callback's ar
 `Imm̲ 'x A`, at the source's type `A`. Core links the two by `CohE` (`Core/Relation.lean`): the
 source's type is the record's, up to `TyEq`, and `CohE` reads the record list.
 
-`WlImage P` is step 8 at an `Imm` clause `P` read, as `vN` is, at the type, the substitution, the
+`WlImage P` is step 8 at an `Imm` clause `P` read, as `vN₀` is, at the type, the substitution, the
 world, the index, the value and the resource only: at a run's first entry, wherever the source
 is a record's cell and every premise of `erwp_reborrow` holds, the canonical image is a value of
 `Imm̲ 'x A`.
@@ -29,14 +29,14 @@ both worlds are typed, tagged and lowered. At `U (F 1)` the template is `∅` (`
 whose shape is `emp`), so the canonical image is `∅` at every `β` (`canon_thunk`). Every premise
 of `erwp_reborrow` holds there. A clause that admits the cell at `Imm @a (Ref 1)` (as the lend
 recorded at `Ref 1` needs) and has no value of `Imm 'x 1` at `∅` refutes `WlImage`
-(`not_wlImage`); `vN`'s is one (`not_wlImage_vN`).
+(`not_wlImage`); `vN₀`'s is one (`not_wlImage_vN`).
 
 An agreement between the world and the source's record, read off a run's first entry
 (`ImmAgreeErwp`), does not change this. `erwp`'s first entry is `rwpG`'s, universally quantified
 over the typed worlds holding the resource, and no part of `erwp` reads an `imm` record against
 the world; so every such agreement holds, at one world, at both records of the cell
 (`immAgreeErwp_both`). With the agreement among step 8's premises (`WlImageA`), the same
-configuration refutes step 8 (`not_wlImageA`), at `vN`'s clause strengthened by any condition on
+configuration refutes step 8 (`not_wlImageA`), at `vN₀`'s clause strengthened by any condition on
 the world at the cell (`not_wlImageA_vN`).
 
 This is the step, not the constant: no run of `ConstN (.wl …)` is refuted.
@@ -235,9 +235,9 @@ theorem not_wlImage (P : VTy → LSub → LocTy → Nat → Val → WRes → Pro
 def ΘRef (δ : LSub) (l l' : Loc) (α : Life) : LocTy :=
   ⟨fun _ _ => none, [(recT (.ref .unit) δ l l', α)]⟩
 
-/-- `vN`'s `Imm` clause admits the cell at `Imm @a (Ref 1)`, at the world holding its record. -/
+/-- `vN₀`'s `Imm` clause admits the cell at `Imm @a (Ref 1)`, at the world holding its record. -/
 theorem vN_cellI (x : LifeVar) (α : Life) (l l' : Loc) (n : Nat) :
-    vN (ℍ := ℍ) (.imm (.var x) (.ref .unit)) (LSub.empty.extend x α)
+    vN₀ (ℍ := ℍ) (.imm (.var x) (.ref .unit)) (LSub.empty.extend x α)
       (ΘRef (LSub.empty.extend x α) l l' α) n (Val.loc l) (cellI α l l') := by
   refine ⟨α, interp_ext_self _ x α, ⟨l, LSet.singleton α, Val.loc l', escU l',
     escU_inStratum l' _, rfl, rfl, le_refl _, l', Val.unit, PMap.empty, rfl,
@@ -248,16 +248,16 @@ theorem vN_cellI (x : LifeVar) (α : Life) (l l' : Loc) (n : Nat) :
     LSub.empty.extend x α, TyEq.refl _ _,
     Or.inl ⟨_, List.mem_singleton_self _, rfl, rfl, fun _ _ => rfl⟩⟩
 
-/-- `vN` has no value of an `Imm` type at `∅`. -/
+/-- `vN₀` has no value of an `Imm` type at `∅`. -/
 theorem not_vN_imm_empty (a : BoCa.Lifetime.Life) (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat)
-    (v : Val) : ¬ vN (ℍ := ℍ) (.imm a A) δ Θ n v PMap.empty := by
+    (v : Val) : ¬ vN₀ (ℍ := ℍ) (.imm a A) δ Θ n v PMap.empty := by
   rintro ⟨-, -, ⟨m, s, u, σ, hs, -, hρ, -⟩, -⟩
   have := congrArg (fun ρ : WRes => ρ.get m) hρ
   simp at this
 
-/-- **`vN`'s `Imm` clause alone does not meet step 8**, at `ℓ = 0`, `ℓ′ = 1`, `α = 1`: `WlImage`
+/-- **`vN₀`'s `Imm` clause alone does not meet step 8**, at `ℓ = 0`, `ℓ′ = 1`, `α = 1`: `WlImage`
 has no entry tie, and the run it reads may be entered at `world_thunk`'s list. -/
-theorem not_wlImage_vN : ¬ WlImage (fun A δ Θ n v ρ => vN (ℍ := ℍ) A δ Θ n v ρ) :=
+theorem not_wlImage_vN : ¬ WlImage (fun A δ Θ n v ρ => vN₀ (ℍ := ℍ) A δ Θ n v ρ) :=
   not_wlImage _ (l := 0) (l' := 1) (by decide) 1 (.var 0) (LSub.empty.extend 0 1)
     (ΘRef (LSub.empty.extend 0 1) 0 1 1) 0 1
     (vN_cellI 0 1 0 1 0) (not_vN_imm_empty _ _ _ _ _ _)
@@ -341,13 +341,13 @@ theorem not_wlImageA (P : VTy → LSub → LocTy → Nat → Val → WRes → Pr
   rw [canon_thunk hT] at hc
   exact h₂ hc
 
-/-- `not_wlImageA` at the clause that reads, besides `vN`'s `Imm`, any condition `G` on the world
+/-- `not_wlImageA` at the clause that reads, besides `vN₀`'s `Imm`, any condition `G` on the world
 at the cell's location and type which the world holding the cell's record at `Ref 1` meets: every
 such clause with every agreement from `erwp`, at `ℓ = 0`, `ℓ′ = 1`, `α = 1`. -/
 theorem not_wlImageA_vN (G : LocTy → Loc → VTy → LSub → Prop)
     {Agree : LocTy → Loc → VTy → LSub → Prop} (hA : ImmAgreeErwp (ℍ := ℍ) Agree)
     (hG : G (ΘRef (LSub.empty.extend 0 1) 0 1 1) 0 (.ref .unit) (LSub.empty.extend 0 1)) :
-    ¬ WlImageA (fun A δ Θ' n v ρ => vN (ℍ := ℍ) A δ Θ' n v ρ ∧
+    ¬ WlImageA (fun A δ Θ' n v ρ => vN₀ (ℍ := ℍ) A δ Θ' n v ρ ∧
       ∀ a B l, A = .imm a B → v = Val.loc l → G Θ' l B δ) Agree :=
   not_wlImageA _ hA (l := 0) (l' := 1) (by decide) 1 (.var 0) (LSub.empty.extend 0 1)
     (ΘRef (LSub.empty.extend 0 1) 0 1 1) 0 0

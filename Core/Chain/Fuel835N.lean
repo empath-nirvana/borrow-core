@@ -2,7 +2,7 @@ import Core.Chain.Let835N
 import Core.DivFuel
 
 /-!
-# `div_fuel` at `SemJN`  `[spec §14]`
+# `div_fuel` at `SemJN₀`  `[spec §14]`
 
 Core's `divFuel_compatX` (`Core/DivFuel.lean`), step by step, at the chain relation (interface
 entries E8, E11, E13):
@@ -22,7 +22,7 @@ entries E8, E11, E13):
   whether it is answered *next* or *close*. An operation of `Σ` passes the handler with its frame
   (Core's `fuel_fwd`, `hnd_fwd`), its cancel carried through the plain frame
   (`tabN_plainCancel`);
-* `divFuel_compatN`: the constant at `SemJN`. The callback runs at the function's own world
+* `divFuel_compatN`: the constant at `SemJN₀`. The callback runs at the function's own world
   (`LocTy.extR_refl`) and view.
 
 No typed code runs after a resumption here: an answer of `Σ` goes back into the callback's own
@@ -177,11 +177,11 @@ open BoCa.BoLo (Heap Head Kont performE raiseE cancelVal opPayload hndE hndVal)
 
 /-- The table of `tick, Σ`: the tick's entry over the table of `Σ`. -/
 theorem tabN_tick (S : Row) (A : VTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) :
-    tabN (ℍ := ℍ) (CTy.effOf (tickSig :: S) A) δ Θ c = extTabN divEff 0
-      (entN .lin nextTy (fun k v ρ => vN (ℍ := ℍ) .unit δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) nextTy δ Θ k v ρ ∧ ConsistentX c ρ)
-        (finN (ℍ := ℍ) (.ret .unit) δ Θ c))
-      (tabN (ℍ := ℍ) (CTy.effOf S A) δ Θ c) := rfl
+    tabN₀ (ℍ := ℍ) (CTy.effOf (tickSig :: S) A) δ Θ c = extTabN divEff 0
+      (entN .lin nextTy (fun k v ρ => vN₀ (ℍ := ℍ) .unit δ Θ k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) nextTy δ Θ k v ρ ∧ ConsistentX c ρ)
+        (finN₀ (ℍ := ℍ) (.ret .unit) δ Θ c))
+      (tabN₀ (ℍ := ℍ) (CTy.effOf S A) δ Θ c) := rfl
 
 /-- **`div_fuel` is total** (Core's `fuel_total`): under a frame at any budget, a computation at
 the row `tick, Σ` is, handled, at `Σ`. By induction on the index: a tick's continuation, answered
@@ -190,24 +190,24 @@ operation of `Σ` passes the handler with its frame. -/
 theorem fuel_totalN {S : Row} (hS : ∀ o ∈ S, o.n ≠ divEff) {A : VTy} {δ : LSub} {Θ : LocTy}
     (hΘ : Θ.Down) {c : Loc → Option Life} :
     ∀ (n : Nat) (k : UInt32) (K : Kont), FuelFrame k K → ∀ (ls : List SRec) (e : Expr) (ρ : WRes),
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf (tickSig :: S) A) δ Θ c))
-        (fun k _ v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) n ls e ρ →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S A) δ Θ c))
-        (fun k _ v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) n ls (K.plug (hndE fuelH e)) ρ := by
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf (tickSig :: S) A) δ Θ c))
+        (fun k _ v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ) n ls e ρ →
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S A) δ Θ c))
+        (fun k _ v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ) n ls (K.plug (hndE fuelH e)) ρ := by
   have hΦ := LocTy.view_down hΘ c
   have hToutD := tabN_down (ℍ := ℍ) (CTy.effOf S A) δ Θ hΘ c
-  have hLin := opTableN_local (tabN (ℍ := ℍ) (CTy.effOf (tickSig :: S) A) δ Θ c)
-  have hLout := opTableN_local (tabN (ℍ := ℍ) (CTy.effOf S A) δ Θ c)
+  have hLin := opTableN_local (tabN₀ (ℍ := ℍ) (CTy.effOf (tickSig :: S) A) δ Θ c)
+  have hLout := opTableN_local (tabN₀ (ℍ := ℍ) (CTy.effOf S A) δ Θ c)
   have hDout := opTableN_down hToutD
-  have hQ : PostN.Down (fun k (_ : List SRec) v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) :=
-    fun k _ v ρ h => vN_down A δ Θ k v ρ h
+  have hQ : PostN.Down (fun k (_ : List SRec) v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ) :=
+    fun k _ v ρ h => vN_down₀ A δ Θ k v ρ h
   have hsame : ∀ m i, ¬ (m = divEff ∧ i = 0) →
-      tabN (ℍ := ℍ) (CTy.effOf (tickSig :: S) A) δ Θ c m i =
-        tabN (ℍ := ℍ) (CTy.effOf S A) δ Θ c m i := by
+      tabN₀ (ℍ := ℍ) (CTy.effOf (tickSig :: S) A) δ Θ c m i =
+        tabN₀ (ℍ := ℍ) (CTy.effOf S A) δ Θ c m i := by
     intro m i h
     rw [tabN_tick]
     simp only [extTabN, h, if_false]
-  have hnone : ∀ i, tabN (ℍ := ℍ) (CTy.effOf S A) δ Θ c divEff i = none := by
+  have hnone : ∀ i, tabN₀ (ℍ := ℍ) (CTy.effOf S A) δ Θ c divEff i = none := by
     intro i
     rw [tabN_effOf_find]
     cases hf : Row.find S divEff i with
@@ -247,9 +247,9 @@ theorem fuel_totalN {S : Row} (hS : ∀ o ∈ S, o.n ≠ divEff) {A : VTy} {δ :
       rcases Nat.lt_or_ge k' 1 with hk1 | hk1
       · obtain rfl : k' = 0 := by omega
         exact erwp_zero
-      have hres : ∀ w, vN (ℍ := ℍ) nextTy δ Θ (k' - 1 - 1) w PMap.empty →
-          erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf (tickSig :: S) A) δ Θ c))
-            (fun k _ v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (k' - 1 - 1) ls' (K₁.plug (.val w)) σ := by
+      have hres : ∀ w, vN₀ (ℍ := ℍ) nextTy δ Θ (k' - 1 - 1) w PMap.empty →
+          erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf (tickSig :: S) A) δ Θ c))
+            (fun k _ v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ) (k' - 1 - 1) ls' (K₁.plug (.val w)) σ := by
         intro w hw
         have h₁ := (hcont ls' (extF_refl ls' σ)).1 (k' - 1 - 1) (by omega) w PMap.empty σ
           ⟨hw, consistentX_empty c⟩ (ResU.comp_empty_right σ)
@@ -312,13 +312,13 @@ theorem fuel_totalN {S : Row} (hS : ∀ o ∈ S, o.n ≠ divEff) {A : VTy} {δ :
         ⟨(K.comp (hndK fuelH)).comp K₁, m, i, v, en, pure_sep_mk ⟨rfl, hKo, hT', ha⟩
           ⟨ρa, ρn, hcan, ⟨hPA, hnA⟩, hnn⟩⟩))
 
-/-- **`div_fuel` at `SemJN`** (Core's `divFuel_compatX`): total at the rest of the row. The
+/-- **`div_fuel` at `SemJN₀`** (Core's `divFuel_compatX`): total at the rest of the row. The
 callback is forced at the function's own world (`LocTy.extR_refl`) and view, applied at `()`;
 `div_fuel (t, k)` steps to the handler under the budget's frame (`divFuel_steps`), and
 `fuel_totalN` takes it to the row `Σ`. -/
 theorem divFuel_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy}
     (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
-    SemJN (ℍ := ℍ) Δ Γ (.val divFuelV) (.val (divFuelTy S A)) := by
+    SemJN₀ (ℍ := ℍ) Δ Γ (.val divFuelV) (.val (divFuelTy S A)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
   obtain rfl := gN_deadP hΓ hg
   show erwp (ℍ := ℍ) _ _ _ n ls (substAll γ (.val divFuelV)) PMap.empty
@@ -331,10 +331,10 @@ theorem divFuel_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy}
   have hΦ := LocTy.view_down hΘ'.1 c''
   have ht' := ht Θ' (LocTy.extR_refl Θ' _) hΘ' c'' hcon ls' c'' k le_rfl Val.unit PMap.empty _
     (ResU.comp_empty_right _) ⟨rfl, rfl⟩ hcon
-  have hin := (cN_effOf (tickSig :: S) A δ Θ' c'' k ls' _ _).mp ht'
-  refine (cN_effOf S A δ Θ' c'' k ls' _ _).mpr ?_
+  have hin := (cN_effOf₀ (tickSig :: S) A δ Θ' c'' k ls' _ _).mp ht'
+  refine (cN_effOf₀ S A δ Θ' c'' k ls' _ _).mpr ?_
   refine erwp_pureSteps hΦ (opTableN_down (tabN_down _ δ Θ' hΘ'.1 c''))
-    (fun k _ v ρ h => vN_down A δ Θ' k v ρ h) (divFuel_steps t kk) ?_
+    (fun k _ v ρ h => vN_down₀ A δ Θ' k v ρ h) (divFuel_steps t kk) ?_
   exact fuel_totalN hS hΘ'.1 k kk (fuelK kk) (fuelK_frame kk) ls' _ _ hin
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N

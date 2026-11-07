@@ -1,10 +1,10 @@
-import Core.Chain.Goal791N
+import Core.Chain.Goal791N0
 
 /-!
-# The observable view and the image of a reborrow at `vN`  `[spec §62]`
+# The observable view and the image of a reborrow at `vN₀`  `[spec §62]`
 
-`withload_compatX`'s steps 5, 7 and 8 (`chain-interpretation.md` §6.3) at `vN`'s `Imm` clause, which
-reads its payload in the observable view `vO` (Core's `vCE false`) and its location's witness in
+`withload_compatX`'s steps 5, 7 and 8 (`chain-interpretation.md` §6.3) at `vN₀`'s `Imm` clause, which
+reads its payload in the observable view `vO₀` (Core's `vCE false`) and its location's witness in
 the world's `imm` records (`ImmWitW`, Core's `CohE`):
 
 * `vN_vO`: a value is observable (Core's `vC` at `true` read at `false`);
@@ -32,11 +32,11 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-! ### A value is observable -/
 
-/-- **A value is in the observable view** (`U` read as `True`; Core's `vO_obs`, by `vN_ind`). -/
+/-- **A value is in the observable view** (`U` read as `True`; Core's `vO_obs`, by `vN_ind₀`). -/
 theorem vN_vO : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes),
-    vN (ℍ := ℍ) A δ Θ n v ρ → vO (ℍ := ℍ) A δ Θ n v ρ := by
+    vN₀ (ℍ := ℍ) A δ Θ n v ρ → vO₀ (ℍ := ℍ) A δ Θ n v ρ := by
   intro A δ Θ n v ρ h
-  refine vN_ind δ (fun _ T Θ n v ρ => vO (ℍ := ℍ) T δ Θ n v ρ) ?_ true A Θ n v ρ h
+  refine vN_ind₀ δ (fun _ T Θ n v ρ => vO₀ (ℍ := ℍ) T δ Θ n v ρ) ?_ true A Θ n v ρ h
   intro b T Θ n v ρ h
   cases T with
   | unit => exact h
@@ -64,26 +64,26 @@ theorem vN_vO : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ :
       obtain ⟨α, hα, h₁, h₂⟩ := h
       exact ⟨α, hα, h₁.2, h₂⟩
   | bang A => exact ⟨h.1, h.2.1⟩
-  | mu A => exact vBN_roll (b := false) h.1 h.2.1 h.2.2.2
+  | mu A => exact vBN_roll₀ (b := false) h.1 h.2.1 h.2.2.2
   | fam L =>
       obtain ⟨l, c, h₁, h₂, h₃⟩ := h
       exact ⟨l, c, h₁, h₂, sepRange_mono' (fun m σ hm => hm.2) h₃⟩
 
-/-- Extending `δ` at a variable `A` does not mention leaves `vO⟦A⟧` alone. -/
+/-- Extending `δ` at a variable `A` does not mention leaves `vO₀⟦A⟧` alone. -/
 theorem vO_extend_of_not_free {x : LifeVar} {A : VTy} (h : ¬ VFree x A) (δ : LSub) (α : Life) :
-    vO (ℍ := ℍ) A (δ.extend x α) = vO (ℍ := ℍ) A δ :=
-  vO_congr A fun y hy => BoCa.Fig16.LogRel.find?_extend_ne δ α (fun e => by subst e; exact h hy)
+    vO₀ (ℍ := ℍ) A (δ.extend x α) = vO₀ (ℍ := ℍ) A δ :=
+  vO_congr₀ A fun y hy => BoCa.Fig16.LogRel.find?_extend_ne δ α (fun e => by subst e; exact h hy)
 
-/-- `vN` and `vO` agree at `Imm`. -/
+/-- `vN₀` and `vO₀` agree at `Imm`. -/
 theorem vN_imm_eq (a : Lifetime.Life) (A : VTy) :
-    vN (ℍ := ℍ) (.imm a A) = vO (ℍ := ℍ) (.imm a A) := rfl
+    vN₀ (ℍ := ℍ) (.imm a A) = vO₀ (ℍ := ℍ) (.imm a A) := rfl
 
 /-! ### The shape of a value -/
 
-/-- **A value has its type's shape, in both modes** (Core's `vC_vShape`, by `vN_ind`). -/
+/-- **A value has its type's shape, in both modes** (Core's `vC_vShape`, by `vN_ind₀`). -/
 theorem vBN_vShape (b : Bool) (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes)
-    (h : vBN (ℍ := ℍ) none b A δ Θ n v ρ) : vShape A δ v ρ := by
-  refine vN_ind δ (fun _ T _ _ v ρ => vShape T δ v ρ) ?_ b A Θ n v ρ h
+    (h : vBN₀ (ℍ := ℍ) none b A δ Θ n v ρ) : vShape A δ v ρ := by
+  refine vN_ind₀ δ (fun _ T _ _ v ρ => vShape T δ v ρ) ?_ b A Θ n v ρ h
   intro b T Θ n v ρ h
   cases T with
   | unit => obtain ⟨hv, hρ⟩ := h; subst hρ; exact ⟨rfl, hv⟩
@@ -108,9 +108,9 @@ theorem vBN_vShape (b : Bool) (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : 
       exact ⟨α, hα, l, pure_sep_mk rfl ⟨s, u, σ, hs, rfl, h₄.2, h₃⟩⟩
   | «mut» a A =>
       obtain ⟨hm, hsub⟩ := h
-      have hm' : vN (ℍ := ℍ) (.mut a A) δ Θ n v ρ := by cases b <;> exact hm
+      have hm' : vN₀ (ℍ := ℍ) (.mut a A) δ Θ n v ρ := by cases b <;> exact hm
       obtain ⟨α, hα, b, hab, ⟨l, w, χ, hχ, j, hw, -, rfl, -, rfl⟩, -⟩ := hm'
-      refine ⟨α, hα, l, pure_sep_mk rfl ⟨ofS (famL b (fun Θ' j u r => vN (ℍ := ℍ) A δ Θ' j u r) Θ j),
+      refine ⟨α, hα, l, pure_sep_mk rfl ⟨ofS (famL b (fun Θ' j u r => vN₀ (ℍ := ℍ) A δ Θ' j u r) Θ j),
         ⟨b, w, χ, hχ, _, hw, hab, rfl, rfl⟩, fun u σ hu => ?_⟩⟩
       obtain ⟨h', hu'⟩ := hu
       exact (hsub _ j u σ hu').2
@@ -127,12 +127,12 @@ theorem vBN_vShape (b : Bool) (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : 
 
 /-- **A value has its type's shape** (Core's `vC_vShape`). -/
 theorem vN_vShape (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes)
-    (h : vN (ℍ := ℍ) A δ Θ n v ρ) : vShape A δ v ρ :=
+    (h : vN₀ (ℍ := ℍ) A δ Θ n v ρ) : vShape A δ v ρ :=
   vBN_vShape true A δ Θ n v ρ h
 
 /-- **An observable value has its type's shape.** -/
 theorem vO_vShape (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes)
-    (h : vO (ℍ := ℍ) A δ Θ n v ρ) : vShape A δ v ρ :=
+    (h : vO₀ (ℍ := ℍ) A δ Θ n v ρ) : vShape A δ v ρ :=
   vBN_vShape false A δ Θ n v ρ h
 
 /-! ### The observable view transfers between pieces of one escrow -/
@@ -195,10 +195,10 @@ and an `Imm` cell's witness is its location's, which the two pieces share; `B`'s
 longer-lived than it (`LifeBoundW`). -/
 theorem vO_transfer {R : WRes} : ∀ (T : VTy) {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val}
     {A B : WRes}, CellMatch R A → CellMatch R B → LifeBoundW Θ.imm B →
-    vO (ℍ := ℍ) T δ Θ n v A → vShape T δ v B → vO (ℍ := ℍ) T δ Θ n v B := by
+    vO₀ (ℍ := ℍ) T δ Θ n v A → vShape T δ v B → vO₀ (ℍ := ℍ) T δ Θ n v B := by
   intro T δ Θ n v A B hA hB hL h hs
-  refine vN_ind δ (fun b T Θ n v A => b = false → ∀ B, CellMatch R A → CellMatch R B →
-      LifeBoundW Θ.imm B → vShape T δ v B → vO (ℍ := ℍ) T δ Θ n v B) ?_ false T Θ n v A h rfl B
+  refine vN_ind₀ δ (fun b T Θ n v A => b = false → ∀ B, CellMatch R A → CellMatch R B →
+      LifeBoundW Θ.imm B → vShape T δ v B → vO₀ (ℍ := ℍ) T δ Θ n v B) ?_ false T Θ n v A h rfl B
     hA hB hL hs
   intro b T Θ n v A h hb B hA hB hL hs
   subst hb
@@ -212,7 +212,7 @@ theorem vO_transfer {R : WRes} : ∀ (T : VTy) {δ : LSub} {Θ : LocTy} {n : Nat
   | tvar _ => exact h.elim
   | mu M =>
       obtain ⟨hnm, hcl, hG⟩ := h
-      exact vBN_roll (b := false) hnm hcl (hG.2 rfl B hA hB hL (vShape_unfold hs).2)
+      exact vBN_roll₀ (b := false) hnm hcl (hG.2 rfl B hA hB hL (vShape_unfold hs).2)
   | fam L =>
       obtain ⟨l, c, he, hn, hsA⟩ := h
       obtain ⟨l', c', hk'⟩ := hs
@@ -301,19 +301,19 @@ theorem vO_transfer {R : WRes} : ∀ (T : VTy) {δ : LSub} {Θ : LocTy} {n : Nat
       rw [← e]
       exact ⟨α, hα, b, hab, hm, hu⟩
 
-/-! ### The image of a reborrow, re-taken at `β`, at `vN` -/
+/-! ### The image of a reborrow, re-taken at `β`, at `vN₀` -/
 
 /-- `Imm̲` at a closed `μ` is read at the reborrow of the unrolling (Core's
 `vC_immReborrow_mu_iff`). -/
 theorem vN_immReborrow_mu_iff {A : VTy} (hA : A.Cl 1) (c : Lifetime.Life) {δ : LSub} {Θ : LocTy}
     {n : Nat} {v : Val} {ρ : WRes} :
-    vN (ℍ := ℍ) ((VTy.mu A).immReborrow c) δ Θ n v ρ ↔
-      vN (ℍ := ℍ) ((VTy.inst (.mu A) A).immReborrow c) δ Θ n v ρ := by
-  rw [VTy.immReborrow_mu c hA, VTy.immReborrow_unroll' c hA, vN_mu_iff]
+    vN₀ (ℍ := ℍ) ((VTy.mu A).immReborrow c) δ Θ n v ρ ↔
+      vN₀ (ℍ := ℍ) ((VTy.inst (.mu A) A).immReborrow c) δ Θ n v ρ := by
+  rw [VTy.immReborrow_mu c hA, VTy.immReborrow_unroll' c hA, vN_mu_iff₀]
   exact ⟨fun h => h.2.2, fun h => ⟨VTy.noMut_immX c hA 0, VTy.Cl_immX c hA, h⟩⟩
 
 /-- **An image re-taken at `β` is a value of `Imm̲ 'x T` at `δ['x ↦ β]`** (Core's `relabel_obs`,
-at `vN`): an old image `c` shaped at `Imm̲ 'x₀ T` at `δ['x₀ ↦ β₀]`, over an escrow `R` whose part
+at `vN₀`): an old image `c` shaped at `Imm̲ 'x₀ T` at `δ['x₀ ↦ β₀]`, over an escrow `R` whose part
 `Rl` at the position is observable at `T`; the new cells at the `Ref` and `Mut` positions are
 witnessed in the world's `imm` records (`hcr`, `hcm`). At a `Ref`/`Mut` position the new cell's
 payload is observable because the old image's witness is a piece of the escrow (`vO_transfer`) or
@@ -322,7 +322,7 @@ the `mut` cell's content (its stored family); at an `Imm` position the kept cell
 theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSub} {x x₀ : LifeVar} :
     ∀ (T : VTy), ¬ VFree x T → ¬ VFree x₀ T → ∀ {v : Val} {c Rl : WRes},
       vShape (T.immReborrow (.var x₀)) (δ.extend x₀ β₀) v c →
-      vO (ℍ := ℍ) T δ Θ n v Rl → CellMatch R Rl →
+      vO₀ (ℍ := ℍ) T δ Θ n v Rl → CellMatch R Rl →
       (∀ m ψ, c.get m = some ψ → ∃ ζ, R.get m = some ζ ∧ ψ.erase = ζ.erase ∧
           (ζ.kind ≠ Kind.own → ψ.wit = ζ.wit) ∧ (ζ.kind = Kind.own → CellMatch R ψ.wit)) →
       (∀ m ψ, c.get m = some ψ → (∃ ζ, R.get m = some ζ ∧ ζ.kind ≠ Kind.imm) →
@@ -332,9 +332,9 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
       (∀ m S u, RefPos T v m S → R.get m = some (CellU.ownOf u) →
         ImmWitW Θ.imm m (LSet.singleton β) S (δ.extend x β)) →
       (∀ m S, MutPos T v m S → ImmWitW Θ.imm m (LSet.singleton β) S (δ.extend x β)) →
-      vN (ℍ := ℍ) (T.immReborrow (.var x)) (δ.extend x β) Θ n v (relRes R β c) := by
+      vN₀ (ℍ := ℍ) (T.immReborrow (.var x)) (δ.extend x β) Θ n v (relRes R β c) := by
   intro T hx hx₀ v c Rl hc hR hRl hcR hs hLk hLo hcr hcm
-  refine vN_ind δ (fun b T Θ n v Rl => b = false → ¬ VFree x T → ¬ VFree x₀ T →
+  refine vN_ind₀ δ (fun b T Θ n v Rl => b = false → ¬ VFree x T → ¬ VFree x₀ T →
       ∀ c, vShape (T.immReborrow (.var x₀)) (δ.extend x₀ β₀) v c → CellMatch R Rl →
       (∀ m ψ, c.get m = some ψ → ∃ ζ, R.get m = some ζ ∧ ψ.erase = ζ.erase ∧
           (ζ.kind ≠ Kind.own → ψ.wit = ζ.wit) ∧ (ζ.kind = Kind.own → CellMatch R ψ.wit)) →
@@ -345,12 +345,12 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
       (∀ m S u, RefPos T v m S → R.get m = some (CellU.ownOf u) →
         ImmWitW Θ.imm m (LSet.singleton β) S (δ.extend x β)) →
       (∀ m S, MutPos T v m S → ImmWitW Θ.imm m (LSet.singleton β) S (δ.extend x β)) →
-      vN (ℍ := ℍ) (T.immReborrow (.var x)) (δ.extend x β) Θ n v (relRes R β c)) ?_
+      vN₀ (ℍ := ℍ) (T.immReborrow (.var x)) (δ.extend x β) Θ n v (relRes R β c)) ?_
     false T Θ n v Rl hR rfl hx hx₀ c hc hRl hcR hs hLk hLo hcr hcm
   intro b T Θ n v Rl hR hb hx hx₀ c hc hRl hcR hs hLk hLo hcr hcm
   subst hb
-  have hRv : vO (ℍ := ℍ) T δ Θ n v Rl :=
-    (vFN_vN δ false T Θ n v Rl).mpr (vFN_mono (fun _ _ _ _ _ _ h => h.1) δ false T Θ n v Rl hR)
+  have hRv : vO₀ (ℍ := ℍ) T δ Θ n v Rl :=
+    (vFN_vN₀ δ false T Θ n v Rl).mpr (vFN_mono₀ (fun _ _ _ _ _ _ h => h.1) δ false T Θ n v Rl hR)
   cases T with
   | unit =>
       obtain ⟨rfl, hv⟩ := hc; rw [relRes_empty]; exact ⟨hv, rfl⟩
@@ -434,7 +434,7 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
       obtain ⟨rfl, -⟩ := hc
       obtain ⟨rfl, hS⟩ := hR
       rw [relRes_empty]
-      exact ⟨rfl, vN_cast (vN_extend_of_not_free (A := S) hx δ β).symm hS.1⟩
+      exact ⟨rfl, vN_cast₀ (vN_extend_of_not_free₀ (A := S) hx δ β).symm hS.1⟩
   | ref S =>
       obtain ⟨α, hα, l', hk₁⟩ := hc
       obtain ⟨hl, s', w, W, hW, rfl, hWd, -⟩ := pure_sep_iff.mp hk₁
@@ -457,11 +457,11 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
       rw [relRes_single, relCell_fire eζ kne hβ]
       have hS₀ : ¬ VFree x₀ S := hx₀
       rw [vShape_extend_of_not_free hS₀] at hWd
-      have hobs : vO (ℍ := ℍ) S δ Θ n w W :=
+      have hobs : vO₀ (ℍ := ℍ) S δ Θ n w W :=
         vO_transfer S (hRl.right hab) hWm (by
           have := hLo l' _ (ResU.single_get_self _ _) ⟨w, eζ⟩
           rwa [CellU.wit_immOf] at this) hRb.1 hWd
-      have hobs' : vO (ℍ := ℍ) S (δ.extend x β) Θ n w W := by
+      have hobs' : vO₀ (ℍ := ℍ) S (δ.extend x β) Θ n w W := by
         rw [vO_extend_of_not_free (A := S) hx]
         exact hobs
       refine ⟨β, interp_ext_self δ x β, ⟨l', LSet.singleton β, w, W, hβ, rfl, rfl, le_refl _,
@@ -479,8 +479,8 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
       obtain ⟨ζ, eζ, kζ, -, -, -⟩ := hRl l'' _ (ResU.single_get_self _ _)
       have kζ' : ζ.kind = Kind.imm := by rw [kζ]; simp
       rw [relRes_single, relCell_keep eζ kζ']
-      show vN (ℍ := ℍ) (.imm a S) (δ.extend x β) Θ n _ _
-      rw [vN_extend_of_not_free hx, vN_imm_eq]
+      show vN₀ (ℍ := ℍ) (.imm a S) (δ.extend x β) Θ n _ _
+      rw [vN_extend_of_not_free₀ hx, vN_imm_eq]
       rw [vShape_extend_of_not_free hx₀] at hc'
       refine vO_transfer (.imm a S) hRl ?_ ?_ hRv hc'
       rotate_left
@@ -514,9 +514,9 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
       rw [CellU.wit_immOf] at hβ
       rw [relRes_single, relCell_fire eζ kne hβ]
       have hS : ¬ VFree x S := fun h => hx (Or.inr h)
-      have hvS : vN (ℍ := ℍ) S δ Θ n w W :=
-        vN_le hnj ((vN_above S δ Θ hχ).mp hw)
-      have hobs' : vO (ℍ := ℍ) S (δ.extend x β) Θ n w W := by
+      have hvS : vN₀ (ℍ := ℍ) S δ Θ n w W :=
+        vN_le₀ hnj ((vN_above₀ S δ Θ hχ).mp hw)
+      have hobs' : vO₀ (ℍ := ℍ) S (δ.extend x β) Θ n w W := by
         rw [vO_extend_of_not_free hS]
         exact vN_vO S δ Θ n w W hvS
       refine ⟨β, interp_ext_self δ x β, ⟨l'', LSet.singleton β, w, W, hβ, rfl, rfl, le_refl _,

@@ -2,7 +2,7 @@ import Core.Chain.Fam836N
 import Core.Slices
 
 /-!
-# The `n`-cell Mut Frame and `slice_borrow_mut` at `SemJN`  `[spec §9, §23]`
+# The `n`-cell Mut Frame and `slice_borrow_mut` at `SemJN₀`  `[spec §9, §23]`
 
 Core's `wpTS_M_frameList` (`Core/SliceFrames.lean`) is one Mut Frame per place of a finite list,
 around one expression, by induction on the list; `wpTS_M_frameFam` is its instance at an array's
@@ -16,7 +16,7 @@ range. `rwp_M_frameListN` is that induction at the chain, over the one-cell fram
   `Mut 'x A` at every `α ⊑ αⱼ` through `Mut`'s slack `@aδ ⊑ b` (`mutLeafN`), where Core uses
   `ptoMutS_antitone`;
 * a frame's postcondition returns its leaf and moves what the inner frames returned to the world
-  without the frame's key (`vN_local`), the leaves and the result being in the frame's stratum.
+  without the frame's key (`vN_local₀`), the leaves and the result being in the frame's stratum.
 
 `sliceBorrowM_compatN` is Core's `sliceBorrowM_compatX` against it, with `withbor2_compatN`'s
 steps around the callback.
@@ -39,43 +39,43 @@ open BoCa.BoLo (Heap Kont Head)
 /-- **A `mut` leaf at `α`** at the world `Θ`: `Mut`'s clause read at `α` (Core's `mutLeaf`), the
 cell at some `b ⊒ α` holding a member of the payload stored at the world's key `(ℓ, b)`. -/
 def mutLeafN (A : VTy) (δ : LSub) (α : Life) (Θ : LocTy) (n : Nat) (m : Loc) : WProp := fun ρ =>
-  ∃ b : Life, α ≤ b ∧ mutL b (fun Θ' j u r => vN (ℍ := ℍ) A δ Θ' j u r) Θ n (Val.loc m) ρ ∧
-    ∀ (Θ' : LocTy) (j : Nat) (u : Val) (r : WRes), vN (ℍ := ℍ) A δ Θ' j u r → r.InStratum b
+  ∃ b : Life, α ≤ b ∧ mutL b (fun Θ' j u r => vN₀ (ℍ := ℍ) A δ Θ' j u r) Θ n (Val.loc m) ρ ∧
+    ∀ (Θ' : LocTy) (j : Nat) (u : Val) (r : WRes), vN₀ (ℍ := ℍ) A δ Θ' j u r → r.InStratum b
 
 /-- A `mut` leaf at `α` is a value of `Mut 'x A` at `δ['x ↦ α]`. -/
 theorem vN_mutLeaf {x : LifeVar} {A : VTy} (hx : ¬ VFree x A) {δ : LSub} {α : Life} {Θ : LocTy}
     {n : Nat} {m : Loc} {ρ : WRes} (h : mutLeafN (ℍ := ℍ) A δ α Θ n m ρ) :
-    vN (ℍ := ℍ) (.mut (.var x) A) (δ.extend x α) Θ n (Val.loc m) ρ := by
+    vN₀ (ℍ := ℍ) (.mut (.var x) A) (δ.extend x α) Θ n (Val.loc m) ρ := by
   obtain ⟨b, hab, hm, hu⟩ := h
-  have hAδ : vN (ℍ := ℍ) A (δ.extend x α) = vN (ℍ := ℍ) A δ := vN_extend_of_not_free hx δ α
+  have hAδ : vN₀ (ℍ := ℍ) A (δ.extend x α) = vN₀ (ℍ := ℍ) A δ := vN_extend_of_not_free₀ hx δ α
   refine ⟨α, interp_ext_self δ x α, b, hab, ?_, fun Θ' j u r h => hu Θ' j u r (hAδ ▸ h)⟩
   rw [hAδ]; exact hm
 
 /-- An owned leaf lies in every stratum below its payload's. -/
 theorem ownLeafN_inStratum {A : VTy} {δ : LSub} {β α : Life} (hαβ : α ≤ β)
-    (hunif : ∀ Θ j u r, vN (ℍ := ℍ) A δ Θ j u r → r.InStratum β) {Θ : LocTy} {n : Nat}
-    {m : Loc} {ρ : WRes} (h : vN (ℍ := ℍ) (.ref A) δ Θ n (Val.loc m) ρ) : ρ.InStratum α := by
+    (hunif : ∀ Θ j u r, vN₀ (ℍ := ℍ) A δ Θ j u r → r.InStratum β) {Θ : LocTy} {n : Nat}
+    {m : Loc} {ρ : WRes} (h : vN₀ (ℍ := ℍ) (.ref A) δ Θ n (Val.loc m) ρ) : ρ.InStratum α := by
   obtain ⟨l, u, σ, -, hc, hu⟩ := h
   exact inStratum_compS hc (ResU.inStratum_single_own α l u) ((hunif _ _ _ _ hu).mono hαβ)
 
 /-- **One Mut Frame per place, around one expression** (Core's `wpTS_M_frameList`), at the chain:
 the list induction over `rwp_M_frame`, each frame its own key in the world. `Ψ` is the
 callback's postcondition at the world it ends at: in the stratum `β′`, and stable from a world
-with one more key to the world without it at a resource in the key's stratum (`vN_local`). -/
+with one more key to the world without it at a resource in the key's stratum (`vN_local₀`). -/
 theorem rwp_M_frameListN {A : VTy} {δ : LSub} {β β' : Life}
-    (hunif : ∀ Θ j u r, vN (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
+    (hunif : ∀ Θ j u r, vN₀ (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
     (Ψ : LocTy → PostN) (hΨs : ∀ Θ k ls v ρ, Ψ Θ k ls v ρ → ρ.InStratum β')
     (hΨl : ∀ (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc Val α) k ls v ρ,
       ρ.InStratum α → Ψ (Θ.add l α F) k ls v ρ → Ψ Θ k ls v ρ)
     (e : Expr) (ls : List SRec) :
     ∀ (I : List Loc) (Θ : LocTy) (c : Loc → Option Life) (n : Nat) (ρo ρH ρ : WRes) (γ : Life),
       Θ.OK → ConsistentX c ρ → ResU.CompS ρo ρH ρ →
-      sepList (fun m => vN (ℍ := ℍ) (.ref A) δ Θ n (Val.loc m)) I ρo →
+      sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ Θ n (Val.loc m)) I ρo →
       (∀ α, α < γ → ρH.InStratum α ∧ ∀ (Θ' : LocTy) (c' : Loc → Option Life), Θ.ExtA Θ' →
         Θ'.OK → ∀ ρm ρ', sepList (mutLeafN (ℍ := ℍ) A δ α Θ' n) I ρm → ResU.CompS ρH ρm ρ' →
           ConsistentX c' ρ' → rwp (ℍ := ℍ) (Θ'.view c') (Ψ Θ') n ls e ρ') →
       rwp (ℍ := ℍ) (Θ.view c) (fun k ls' v ρ' => ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ' ∧
-        sepList (fun m => vN (ℍ := ℍ) (.ref A) δ Θ k (Val.loc m)) I ρ₁ ∧ Ψ Θ k ls' v ρ₂)
+        sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ Θ k (Val.loc m)) I ρ₁ ∧ Ψ Θ k ls' v ρ₂)
         n ls e ρ
   | [], Θ, c, n, ρo, ρH, ρ, γ, hΘ, hc, hcρ, ho, hH => by
       obtain ⟨rfl, -⟩ := ho
@@ -103,11 +103,11 @@ theorem rwp_M_frameListN {A : VTy} {δ : LSub} {β β' : Life}
       have hα₁F : α₁ ≤ βF := hα₁le.trans (inf_le_left.trans inf_le_left)
       have hα₁β : α₁ ≤ β := hα₁le.trans (inf_le_left.trans inf_le_right)
       have hα₁β' : α₁ ≤ β' := hα₁le.trans inf_le_right
-      set P : CPredL := fun Θ' j w r => vN (ℍ := ℍ) A δ Θ' j w r with hP
+      set P : CPredL := fun Θ' j w r => vN₀ (ℍ := ℍ) A δ Θ' j w r with hP
       set Fm : Nat → Val → SPropS Loc Val α₁ := famL α₁ P Θ with hFm
-      have hFmD : DownFam α₁ Fm := vN_fam_down A δ α₁ Θ
+      have hFmD : DownFam α₁ Fm := vN_fam_down₀ A δ α₁ Θ
       have houtP : σ.InStratum α₁ := (hunif Θ n u σ hu).mono hα₁β
-      have hwit : Fm n u ⟨σ, houtP⟩ := (vN_above A δ Θ houtP).mpr hu
+      have hwit : Fm n u ⟨σ, houtP⟩ := (vN_above₀ A δ Θ houtP).mpr hu
       set Θ₁ := Θ.add ℓ α₁ Fm with hΘ₁
       set c₁ := setLife c ℓ α₁ with hc₁
       have hOK₁ : Θ₁.OK := by
@@ -127,8 +127,8 @@ theorem rwp_M_frameListN {A : VTy} {δ : LSub} {β β' : Life}
       have hcBM : ConsistentX c₁ BM := consistentX_compS hBM hcF₁
         (consistentX_single_mut hcσ₁ (by simp [hc₁, setLife]))
       obtain ⟨βR, hβR⟩ := ResU.exists_stratum R
-      have hrest₁ : sepList (fun m => vN (ℍ := ℍ) (.ref A) δ Θ₁ n (Val.loc m)) I ρr :=
-        sepList_mono' (fun m τ h => vN_extA (.ref A) δ hE₁ n _ τ h) hrest
+      have hrest₁ : sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ Θ₁ n (Val.loc m)) I ρr :=
+        sepList_mono' (fun m τ h => vN_extA₀ (.ref A) δ hE₁ n _ τ h) hrest
       refine rwp_mono (fun k ls' v ρ' h => ?_)
         (rwp_M_frameListN hunif Ψ hΨs hΨl e ls I Θ₁ c₁ n ρr R BM (βR ⊓ α₁ ⊓ γ) hOK₁ hcBM hBMR
           hrest₁ (fun α₂ hα₂ => ⟨hβR.mono (le_of_lt (lt_of_lt_of_le hα₂
@@ -140,13 +140,13 @@ theorem rwp_M_frameListN {A : VTy} {δ : LSub} {β β' : Life}
           (fun m τ hm => ownLeafN_inStratum hα₁β hunif hm) ho1
         have hs2 : ρ₂.InStratum α₁ := (hΨs _ _ _ _ _ hψ).mono hα₁β'
         refine ⟨inStratum_compS hc12 hs1 hs2, fun w Y hY σ' ⟨hσ', hFσ⟩ Z hZ => ?_⟩
-        have ho1' : sepList (fun m => vN (ℍ := ℍ) (.ref A) δ Θ k (Val.loc m)) I ρ₁ :=
+        have ho1' : sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ Θ k (Val.loc m)) I ρ₁ :=
           sepList_mono_down (R := fun τ => τ.InStratum α₁)
             (fun _ _ _ hc h => ⟨ResU.CompS.inStratum_left hc h,
               ResU.CompS.inStratum_left (ResU.CompS.comm hc) h⟩)
-            (fun m τ hτ hm => vN_local (.ref A) δ Θ ℓ α₁ Fm k _ τ hτ hm) hs1 ho1
+            (fun m τ hτ hm => vN_local₀ (.ref A) δ Θ ℓ α₁ Fm k _ τ hτ hm) hs1 ho1
         have hψ' := hΨl Θ ℓ α₁ Fm k ls' v ρ₂ hs2 hψ
-        have hwA : vN (ℍ := ℍ) A δ Θ k w σ' := (vN_above A δ Θ hσ').mp hFσ
+        have hwA : vN₀ (ℍ := ℍ) A δ Θ k w σ' := (vN_above₀ A δ Θ hσ').mp hFσ
         obtain ⟨cp, hcp, hZ'⟩ := compS_reassoc hY hZ
         obtain ⟨oc, hoc, hZ''⟩ := compS_exch hc12 hZ'
         exact ⟨oc, ρ₂, hZ'', ⟨cp, ρ₁, ResU.CompS.comm hoc, ⟨ℓ, w, σ', rfl, hcp, hwA⟩, ho1'⟩, hψ'⟩
@@ -170,9 +170,9 @@ def withborAtV (a : Val) : Val :=
 
 /-- **`slice_borrow_mut` is a value of its type** (Core's `sliceBorrowM_compatX`):
 `withbor` at `Array A ⊸ (∀'x ⊏ @Δ. [Mut 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`. The source family at
-the callback's world (`vN_extR`); the `n` Mut Frames around the callback (`rwp_M_frameListN` at
+the callback's world (`vN_extR₀`); the `n` Mut Frames around the callback (`rwp_M_frameListN` at
 the family's range, `sepRange_eq_sepList`), the payloads' stratum and the result's from the side
-conditions by 6.60 at `↓@bδ` (`vN_outlivesLe`), the callback's lifetimes below the bound and the
+conditions by 6.60 at `↓@bδ` (`vN_outlivesLe₀`), the callback's lifetimes below the bound and the
 callback's stratum; inside, `withbor2_compatN`'s steps: `f ()` framed beside the leaves, the
 result applied to the family `[Mut 'x A]` (`vN_mutLeaf` at each leaf), the result `['x] B` read at
 `δ`. -/
@@ -180,12 +180,12 @@ theorem sliceBorrowM_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (h
     (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
     (Θ₀ : LocTy) (n : Nat) :
-    vN (ℍ := ℍ) (sliceBorrowMTy x Δ.meetOfDom A B) δ Θ₀ n withborVal PMap.empty := by
+    vN₀ (ℍ := ℍ) (sliceBorrowMTy x Δ.meetOfDom A B) δ Θ₀ n withborVal PMap.empty := by
   intro Θ₂ _ hΘ₂ c₁ _ ls c₂ k hk u ρv ρu hc hu _
   obtain rfl := eq_of_compS_empty_left hc
   obtain ⟨l, cn, rfl, hn, hs⟩ := hu
   have hΦ₂ : (Θ₂.view c₂).Down := LocTy.view_down hΘ₂.1 c₂
-  refine erwp_det hΦ₂ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ Θ₂ k v ρ h)
+  refine erwp_det hΦ₂ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ₂ k v ρ h)
     (fun μ => step1Only_plug (Head.beta μ _ (Val.arr l cn)) rfl .hole) ?_
   have e₁ : Kont.hole.plug (Expr.subst 0 (Val.arr l cn)
       (Val.lam (.pair BoCa.v1 (.app (.app BoCa.v0 unit') BoCa.v1))).1) =
@@ -195,11 +195,11 @@ theorem sliceBorrowM_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (h
   rw [e₁]
   refine erwp_val (v := withborAtV (Val.arr l cn)) ?_
   intro Θ' hE₃ hΘ' c _ ls' c' k' hk' f ρf ρ'' hc' hf hcon
-  obtain ⟨l₁, cn₁, he, hn', hs'⟩ := vN_le hk'
-    (vN_extR (.array A) δ k _ ρu hE₃ ⟨l, cn, rfl, hn, hs⟩)
+  obtain ⟨l₁, cn₁, he, hn', hs'⟩ := vN_le₀ hk'
+    (vN_extR₀ (.array A) δ k _ ρu hE₃ ⟨l, cn, rfl, hn, hs⟩)
   obtain ⟨rfl, rfl⟩ := Val.arr_inj he
   have hΦ : (Θ'.view c').Down := LocTy.view_down hΘ'.1 c'
-  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down _ δ Θ' k v ρ h)
+  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ' k v ρ h)
     (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
   have e₂ : Kont.hole.plug (Expr.subst 0 f
       (.pair (.val (Val.arr l cn)) (.app (.app BoCa.v0 unit') (.val (Val.arr l cn))))) =
@@ -211,25 +211,25 @@ theorem sliceBorrowM_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (h
   -- the side conditions: the payloads' and the result's strata (6.60 at `↓@bδ`)
   obtain ⟨a, hdefa, hOa⟩ := hsideA
   obtain ⟨βP, hβP⟩ := hdefa δ hδ
-  have hunif : ∀ Θ j w r, vN (ℍ := ℍ) A δ Θ j w r → r.InStratum (↓βP) :=
-    vN_outlivesLe hδ hβP (Life.down_sqsubset βP) hOa
+  have hunif : ∀ Θ j w r, vN₀ (ℍ := ℍ) A δ Θ j w r → r.InStratum (↓βP) :=
+    vN_outlivesLe₀ hδ hβP (Life.down_sqsubset βP) hOa
   obtain ⟨b, hdefb, hOb⟩ := hsideB
   obtain ⟨βB, hβB⟩ := hdefb δ hδ
-  have hBs : ∀ Θ j w r, vN (ℍ := ℍ) B δ Θ j w r → r.InStratum (↓βB) :=
-    vN_outlivesLe hδ hβB (Life.down_sqsubset βB) hOb
+  have hBs : ∀ Θ j w r, vN₀ (ℍ := ℍ) B δ Θ j w r → r.InStratum (↓βB) :=
+    vN_outlivesLe₀ hδ hβB (Life.down_sqsubset βB) hOb
   obtain ⟨m, hm⟩ : ∃ m, Δ.meetOfDom.interp δ = some m :=
     Lifetime.Life.interp_defined_of_wf hδ (Lifetime.meetOfDomL_wf Δ.entries)
   obtain ⟨βf, hβf⟩ := ResU.exists_stratum ρf
-  have hAδ : ∀ α, vN (ℍ := ℍ) A (δ.extend x α) = vN (ℍ := ℍ) A δ :=
-    fun α => vN_extend_of_not_free hA δ α
-  have hBδ : ∀ α, vN (ℍ := ℍ) B (δ.extend x α) = vN (ℍ := ℍ) B δ :=
-    fun α => vN_extend_of_not_free hB δ α
+  have hAδ : ∀ α, vN₀ (ℍ := ℍ) A (δ.extend x α) = vN₀ (ℍ := ℍ) A δ :=
+    fun α => vN_extend_of_not_free₀ hA δ α
+  have hBδ : ∀ α, vN₀ (ℍ := ℍ) B (δ.extend x α) = vN₀ (ℍ := ℍ) B δ :=
+    fun α => vN_extend_of_not_free₀ hB δ α
   -- the frames' postcondition: the handle beside a result of `B`
   let Ψ : LocTy → PostN := fun Θ k _ v ρ => ∃ w, v = Val.pair (Val.arr l cn) w ∧
-    vN (ℍ := ℍ) B δ Θ k w ρ
+    vN₀ (ℍ := ℍ) B δ Θ k w ρ
   refine erwp_of_rwp (rwp_mono (fun k ls₁ v ρ' h => ?_)
     (rwp_M_frameListN hunif Ψ (fun Θ k _ v ρ ⟨w, _, hw⟩ => hBs Θ k w ρ hw)
-      (fun Θ l₀ α F k _ v ρ hρ ⟨w, hvw, hw⟩ => ⟨w, hvw, vN_local B δ Θ l₀ α F k w ρ hρ hw⟩)
+      (fun Θ l₀ α F k _ v ρ hρ ⟨w, hvw, hw⟩ => ⟨w, hvw, vN_local₀ B δ Θ l₀ α F k w ρ hρ hw⟩)
       _ ls' (rangeLocs l cn.toNat) Θ' c' k' ρu ρf ρ'' (m ⊓ βf) hΘ' hcon hc'
       (by rw [← sepRange_eq_sepList]; exact hs') (fun α hα => ⟨hβf.mono (le_of_lt
         (lt_of_lt_of_le hα inf_le_right)), ?_⟩)))
@@ -244,7 +244,7 @@ theorem sliceBorrowM_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (h
   have hΦi : (Θ''.view c'').Down := LocTy.view_down hOK''.1 c''
   have hcf : ConsistentX c'' ρf := consistentX_left hcomp hc'' hv₃
   have hcm : ConsistentX c'' ρm := consistentX_right hcomp hc'' hv₃
-  have hfam : vN (ℍ := ℍ) (.sliceMut (.var x) A) (δ.extend x α) Θ'' k' (Val.arr l cn) ρm :=
+  have hfam : vN₀ (ℍ := ℍ) (.sliceMut (.var x) A) (δ.extend x α) Θ'' k' (Val.arr l cn) ρm :=
     ⟨l, cn, rfl, hn', by rw [sepRange_eq_sepList]; exact sepList_mono' (fun _ _ h => vN_mutLeaf hA h) hml⟩
   refine rwp_bind hΦi _ ?_
   have hcb := (hf Θ'' (hE.extR ρf) hOK'' c'' hcf ls') α hLt
@@ -252,7 +252,7 @@ theorem sliceBorrowM_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (h
   refine rwp_mono_le (fun j hj ls₂ g τ hg => ?_) (rwp_consistentXV hfr' hc'')
   obtain ⟨⟨τg, τm, hcτ, hgv, rfl⟩, hcτ', hvτ⟩ := hg
   have happ := hgv Θ'' (LocTy.extR_refl _ _) hOK'' c'' (consistentX_left hcτ hcτ' hvτ) ls₂
-    c'' j le_rfl (Val.arr l cn) _ τ hcτ (vN_le hj hfam) hcτ'
+    c'' j le_rfl (Val.arr l cn) _ τ hcτ (vN_le₀ hj hfam) hcτ'
   show rwp (ℍ := ℍ) _ _ j ls₂ ((Kont.pairR (Val.arr l cn) Kont.hole).plug
     (.app (.val g) (.val (Val.arr l cn)))) τ
   refine rwp_bind hΦi _ ?_
@@ -261,12 +261,12 @@ theorem sliceBorrowM_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (h
   obtain ⟨β, hβ, hwB, -⟩ := hw
   exact ⟨w, rfl, by rw [← hBδ α]; exact hwB⟩
 
-/-- **`slice_borrow_mut` at `SemJN`** (Core's `sliceBorrowM_compatX`). -/
+/-- **`slice_borrow_mut` at `SemJN₀`** (Core's `sliceBorrowM_compatX`). -/
 theorem sliceBorrowM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : LifeVar)
     (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A)
     (hfree₂ : ¬ VFree x B) :
-    SemJN (ℍ := ℍ) Δ Γ withbor (.val (sliceBorrowMTy x Δ.meetOfDom A B)) := by
+    SemJN₀ (ℍ := ℍ) Δ Γ withbor (.val (sliceBorrowMTy x Δ.meetOfDom A B)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   obtain rfl := gN_deadP hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withbor) _

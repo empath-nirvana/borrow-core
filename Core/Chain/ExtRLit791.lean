@@ -1,8 +1,8 @@
-import Core.Chain.Goal791N
+import Core.Chain.Goal791N0
 import Core.Chain.SI.CaptureScopeM
 
 /-!
-# Core's `Ext` read literally on the per-lend world breaks `vN_extA` at `U`  `[spec §62]`
+# Core's `Ext` read literally on the per-lend world breaks `vN_extA₀` at `U`  `[spec §62]`
 
 `docs/new-core/chain-interpretation.md` §5, D4. `LocTy.ExtR Θ Θ′ ρ` asks that nothing be added above a
 lifetime `a` only where `a` is a key of `Θ` with `CellIn ρ a`. Core's `Ext ls ls′ ρ`
@@ -18,8 +18,8 @@ holds the argument `ℓ′ ↦ mut(α, (), ∅, 𝒱⟦1⟧)`, and the thunk is 
 (`not_valid_at_lend`): the run of `() ℓ′` from the typed world of the two cells (`world_two`)
 is stuck at its first configuration.
 
-`vUgen E` is `vN`'s `U` clause, reading the order `E`, followed by `cN`'s `⊸` clause at this type,
-a plain wand at the world `U` reached; at `E = LocTy.ExtR` it is `vN` itself (`vN_eq_vUgen`). The `Mut` and `F` clauses do not
+`vUgen E` is `vN₀`'s `U` clause, reading the order `E`, followed by `cN₀`'s `⊸` clause at this type,
+a plain wand at the world `U` reached; at `E = LocTy.ExtR` it is `vN₀` itself (`vN_eq_vUgen`). The `Mut` and `F` clauses do not
 read the order, so `vUgen ExtRL` is the literal reading's `𝒱⟦U(Mut 'x 1 ⊸ F 1)⟧`.
 -/
 
@@ -47,19 +47,19 @@ theorem extRL_refl (Θ : LocTy) (ρ : WRes) : ExtRL Θ Θ ρ := ⟨fun _ _ _ h _
 /-- `Mut 'x 1 ⊸ F 1`. -/
 def tyC (x : LifeVar) : CTy := .arr (.mut (.var x) .unit) (.ret .unit)
 
-/-- **`𝒱⟦U(Mut 'x 1 ⊸ F 1)⟧` with the Kripke order `E`**: `vN`'s `U` clause, reading `E` where
-`vN` reads `LocTy.ExtR`, then `cN`'s `⊸` clause at the world reached. -/
+/-- **`𝒱⟦U(Mut 'x 1 ⊸ F 1)⟧` with the Kripke order `E`**: `vN₀`'s `U` clause, reading `E` where
+`vN₀` reads `LocTy.ExtR`, then `cN₀`'s `⊸` clause at the world reached. -/
 def vUgen (E : LocTy → LocTy → WRes → Prop) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat)
     (v : Val) (ρ : WRes) : Prop :=
   ∀ Θ' : LocTy, E Θ Θ' ρ → Θ'.OK → ∀ c, ConsistentX c ρ → ∀ ls : List SRec,
     ∀ c', ∀ k, k ≤ n → ∀ (w : Val) (ρv ρ' : WRes),
-      ResU.CompS ρ ρv ρ' → vN (ℍ := ℍ) (.mut (.var x) .unit) δ Θ' k w ρv → ConsistentX c' ρ' →
-        cN (ℍ := ℍ) (.ret .unit) δ Θ' c' k ls (.app (forceE (tyC x) v.1) (.val w)) ρ'
+      ResU.CompS ρ ρv ρ' → vN₀ (ℍ := ℍ) (.mut (.var x) .unit) δ Θ' k w ρv → ConsistentX c' ρ' →
+        cN₀ (ℍ := ℍ) (.ret .unit) δ Θ' c' k ls (.app (forceE (tyC x) v.1) (.val w)) ρ'
 
-/-- At the interpretation's own order, `vUgen` is `vN`. -/
+/-- At the interpretation's own order, `vUgen` is `vN₀`. -/
 theorem vN_eq_vUgen (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes) :
-    vN (ℍ := ℍ) (.thunk (tyC x)) δ Θ n v ρ ↔ vUgen (ℍ := ℍ) LocTy.ExtR x δ Θ n v ρ := by
-  simp only [vNE, cN, tyC, vUgen]
+    vN₀ (ℍ := ℍ) (.thunk (tyC x)) δ Θ n v ρ ↔ vUgen (ℍ := ℍ) LocTy.ExtR x δ Θ n v ρ := by
+  simp only [vNE₀, cN₀, tyC, vUgen]
 
 /-- The thunk's resource: one `mut` cell at `b`. -/
 def ρb (m : Loc) (b : Life) : WRes :=
@@ -130,18 +130,18 @@ holds the argument `ℓ′ ↦ mut(α, (), ∅, 𝒱⟦1⟧)`, and `() ℓ′` i
 theorem not_valid_at_lend (x : LifeVar) (δ : LSub) {N α b : Life} (hNα : N < α) {m l' : Loc}
     (hml : l' ≠ m) {n : Nat} (hn : 0 < n) :
     ¬ vUgen (ℍ := ℍ) ExtRL x (δ.extend x α)
-      (LocTy.empty.add l' α (famL α (fun Θ j u r => vN (ℍ := ℍ) .unit (δ.extend x α) Θ j u r)
+      (LocTy.empty.add l' α (famL α (fun Θ j u r => vN₀ (ℍ := ℍ) .unit (δ.extend x α) Θ j u r)
         LocTy.empty)) n Val.unit (ρb m b) := by
   intro h
-  let P : CPredL := fun Θ j u r => vN (ℍ := ℍ) .unit (δ.extend x α) Θ j u r
+  let P : CPredL := fun Θ j u r => vN₀ (ℍ := ℍ) .unit (δ.extend x α) Θ j u r
   let Θ₁ := LocTy.empty.add l' α (famL α P LocTy.empty)
-  have hfam : DownFam α (famL α P LocTy.empty) := vN_fam_down .unit _ α _
+  have hfam : DownFam α (famL α P LocTy.empty) := vN_fam_down₀ .unit _ α _
   have hOK : Θ₁.OK := ⟨LocTy.down_add LocTy.empty_down l' hfam,
     ⟨N, LocTy.fresh_add (N := N) (fun _ _ h => absurd rfl h) le_rfl hNα l' _⟩⟩
   have hw : famL α P LocTy.empty n Val.unit ⟨PMap.empty, ResU.inStratum_empty α⟩ := ⟨rfl, rfl⟩
   let cell : WRes := ResU.single l' (CellU.mutOf α Val.unit PMap.empty
     (ResU.inStratum_empty α) (famL α P LocTy.empty n) hw)
-  have hv : vN (ℍ := ℍ) (.mut (.var x) .unit) (δ.extend x α) Θ₁ n (Val.loc l') cell :=
+  have hv : vN₀ (ℍ := ℍ) (.mut (.var x) .unit) (δ.extend x α) Θ₁ n (Val.loc l') cell :=
     ⟨α, interp_ext_self δ x α, α, le_rfl, lend_mutL LocTy.empty l' α P le_rfl _ hw,
       fun _ _ _ r h => by obtain ⟨-, rfl⟩ := h; exact ResU.inStratum_empty α⟩
   obtain ⟨ρ', hρ'⟩ := (ResU.compS_defined_iff (ρb m b) cell).mpr
@@ -170,10 +170,10 @@ theorem not_valid_at_lend (x : LifeVar) (δ : LSub) {N α b : Life} (hNα : N < 
   · exact absurd (pure_sep_iff.mp h'').1.2.2.1 (by simp [OpTabN.empty])
   · exact absurd (pure_sep_iff.mp h'').1.2.2.1 (by simp [OpTabN.empty])
 
-/-- **The literal reading of Core's `Ext` breaks `vN_extA` at `U`.** Both worlds are `OK`, the
+/-- **The literal reading of Core's `Ext` breaks `vN_extA₀` at `U`.** Both worlds are `OK`, the
 second is an `ExtA` extension of the first (a fresh lend), and a value of
 `U(Mut 'x 1 ⊸ F 1)` under the literal order at the first is not one at the second. At the
-interpretation's order `LocTy.ExtR`, `vN_extA` holds at every type. -/
+interpretation's order `LocTy.ExtR`, `vN_extA₀` holds at every type. -/
 theorem extRL_breaks_extA :
     ∃ (x : LifeVar) (δ : LSub) (Θ Θ' : LocTy) (n : Nat) (v : Val) (ρ : WRes),
       Θ.OK ∧ Θ'.OK ∧ Θ.ExtA Θ' ∧ vUgen (ℍ := ℍ) ExtRL x δ Θ n v ρ ∧
@@ -181,8 +181,8 @@ theorem extRL_breaks_extA :
   let α : Life := OrderDual.toDual 1
   let b : Life := OrderDual.toDual 2
   have hbα : b < α := OrderDual.toDual_lt_toDual.mpr (by decide)
-  let P : CPredL := fun Θ j u r => vN (ℍ := ℍ) .unit ((LSub.empty : LSub).extend 0 α) Θ j u r
-  have hfam : DownFam α (famL α P LocTy.empty) := vN_fam_down .unit _ α _
+  let P : CPredL := fun Θ j u r => vN₀ (ℍ := ℍ) .unit ((LSub.empty : LSub).extend 0 α) Θ j u r
+  have hfam : DownFam α (famL α P LocTy.empty) := vN_fam_down₀ .unit _ α _
   refine ⟨0, LSub.empty.extend 0 α, LocTy.empty, LocTy.empty.add 1 α (famL α P LocTy.empty), 1, Val.unit,
     ρb 0 b, LocTy.empty_ok, ⟨LocTy.down_add LocTy.empty_down 1 hfam,
       ⟨b, LocTy.fresh_add (N := b) (fun _ _ h => absurd rfl h) le_rfl hbα 1 _⟩⟩,

@@ -7,11 +7,11 @@ import Core.Chain.HandleS835N
 Core's `let_compatC` (`Core/EffFin.lean`) is `ewp_frame_plain` around `M`, the frame the context of
 `N`, with `ent_plain` carrying a cancel through the frame. At the chain the same proof reaches one
 more fact: `N`'s judgment is read at the run's view `c`, so the resource it starts from, `M`'s
-value beside the frame, must be consistent with `c` (`SemJN`'s `ConsistentX`). The frame is (the
+value beside the frame, must be consistent with `c` (`SemJN₀`'s `ConsistentX`). The frame is (the
 context's part, `gN_splitC`). `M`'s value is too when its run never stops (`rwp_consistentXV`, as
 `bind_compatN` reads it); across a stop it is the continuation's share beside the answer the stop
-was resumed at, and a row's table reads its answers at the view (`tabN`'s `ConsistentX c`), as
-`SemJN` reads the resource a run starts from and `⊸` the argument's composite.
+was resumed at, and a row's table reads its answers at the view (`tabN₀`'s `ConsistentX c`), as
+`SemJN₀` reads the resource a run starts from and `⊸` the argument's composite.
 
 * `OpTabN.AnsC c T`: the answers of every entry of `T` are consistent with `c`.
 * `erwp_consistentAns`: a run from a resource consistent with `c`, at a table whose answers are,
@@ -105,27 +105,27 @@ open BoCa.BoLo (Heap Head Kont performE raiseE cancelVal opPayload)
 
 /-- A row's table does not read the answer type. -/
 theorem tabN_effOf_ret (S : Row) (A B : VTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) :
-    tabN (ℍ := ℍ) (CTy.effOf S A) δ Θ c = tabN (ℍ := ℍ) (CTy.effOf S B) δ Θ c := by
+    tabN₀ (ℍ := ℍ) (CTy.effOf S A) δ Θ c = tabN₀ (ℍ := ℍ) (CTy.effOf S B) δ Θ c := by
   induction S with
-  | nil => simp [CTy.effOf, tabN]
-  | cons o S ih => simp only [CTy.effOf, tabN]; rw [ih]
+  | nil => simp [CTy.effOf, tabN₀]
+  | cons o S ih => simp only [CTy.effOf, tabN₀]; rw [ih]
 
-/-- **A row's table reads its answers at its view**: every answer of `tabN C δ Θ c` is consistent
-with `c` (`tabN`'s answers are `vN B δ Θ ∧ ConsistentX c`). -/
+/-- **A row's table reads its answers at its view**: every answer of `tabN₀ C δ Θ c` is consistent
+with `c` (`tabN₀`'s answers are `vN₀ B δ Θ ∧ ConsistentX c`). -/
 theorem tabN_ansC : ∀ (C : CTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life),
-    (tabN (ℍ := ℍ) C δ Θ c).AnsC c
+    (tabN₀ (ℍ := ℍ) C δ Θ c).AnsC c
   | .eff _ _ _ _ _ _ _ C, δ, Θ, c => by
       intro m' i' en hT k ls w ρ hB
-      simp only [tabN] at hT
+      simp only [tabN₀] at hT
       rcases extTabN_some hT with ⟨-, -, rfl⟩ | hT
       · exact hB.2
       · exact tabN_ansC C δ Θ c m' i' en hT k ls w ρ hB
-  | .ret _, _, _, _ => fun _ _ _ h => by simp [tabN, OpTabN.empty] at h
-  | .arr _ _, _, _, _ => fun _ _ _ h => by simp [tabN, OpTabN.empty] at h
-  | .amp _ _, _, _, _ => fun _ _ _ h => by simp [tabN, OpTabN.empty] at h
-  | .top, _, _, _ => fun _ _ _ h => by simp [tabN, OpTabN.empty] at h
-  | .all _ _ _, _, _, _ => fun _ _ _ h => by simp [tabN, OpTabN.empty] at h
-  | .nu _, _, _, _ => fun _ _ _ h => by simp [tabN, OpTabN.empty] at h
+  | .ret _, _, _, _ => fun _ _ _ h => by simp [tabN₀, OpTabN.empty] at h
+  | .arr _ _, _, _, _ => fun _ _ _ h => by simp [tabN₀, OpTabN.empty] at h
+  | .amp _ _, _, _, _ => fun _ _ _ h => by simp [tabN₀, OpTabN.empty] at h
+  | .top, _, _, _ => fun _ _ _ h => by simp [tabN₀, OpTabN.empty] at h
+  | .all _ _ _, _, _, _ => fun _ _ _ h => by simp [tabN₀, OpTabN.empty] at h
+  | .nu _, _, _, _ => fun _ _ _ h => by simp [tabN₀, OpTabN.empty] at h
 
 /-- **`[let]`** (Core's `let_compatC`): `ewp_frame_plain` around `M` with the context of `N` as the
 frame, its cancels carried by `ent_plain`, left behind owning nothing where the row cancels (`hW`),
@@ -134,15 +134,15 @@ beside the frame: `M`'s value is consistent with that view across its resumption
 (`erwp_consistentAns`), the row's answers being read at the view (`tabN_ansC`). -/
 theorem let_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy} {S : Row}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hW : S.Cancels → Γ₂.OwnFree) (hU : S.Unr → Ctx.Banged Γ₂)
-    (hM : SemJN (ℍ := ℍ) Δ Γ₁ M (.comp (CTy.effOf S A)))
-    (hN : SemJN (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
-    SemJN (ℍ := ℍ) Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B)) := by
+    (hM : SemJN₀ (ℍ := ℍ) Δ Γ₁ M (.comp (CTy.effOf S A)))
+    (hN : SemJN₀ (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
+    SemJN₀ (ℍ := ℍ) Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   have hΦ := LocTy.view_down hΘ.1 c
-  refine (cN_effOf S B δ Θ c n ls _ ρ).mpr (erwp_of_valid fun hv => ?_)
+  refine (cN_effOf₀ S B δ Θ c n ls _ ρ).mpr (erwp_of_valid fun hv => ?_)
   obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂, hc₁, hc₂⟩ := gN_splitC hsp hg hc hv
   obtain ⟨hlw₁, hlw₂⟩ := hsp.liveWithin hlw
-  have hM' := (cN_effOf S A δ Θ c n ls _ ρ₁).mp (hM δ γ Θ c n ls ρ₁ hδ hΘ hc₁ hlw₁ hg₁)
+  have hM' := (cN_effOf₀ S A δ Θ c n ls _ ρ₁).mp (hM δ γ Θ c n ls ρ₁ hδ hΘ hc₁ hlw₁ hg₁)
   rw [tabN_effOf_ret S A B] at hM'
   have hM'' := erwp_consistentAns (tabN_ansC _ δ Θ c) n n le_rfl ls _ ρ₁ hM' hc₁
   have hK : ∀ m, (Kont.appR (.val (.lam (Expr.psub 1 γ N))) .hole).HasHnd m = false :=
@@ -152,7 +152,7 @@ theorem let_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B 
   change erwp (ℍ := ℍ) _ _ _ n ls
     ((Kont.appR (.val (.lam (Expr.psub 1 γ N))) .hole).plug (substAll γ M)) ρ
   refine erwp_frame_plain hΦ _ _ hK hC
-    (fun _ σ => gN (ℍ := ℍ) δ Θ Γ₂ γ n σ ∧ ConsistentX c σ) (fun _ _ _ _ h => h)
+    (fun _ σ => gN₀ (ℍ := ℍ) δ Θ Γ₂ γ n σ ∧ ConsistentX c σ) (fun _ _ _ _ h => h)
     (fun m i en hT ls ls' ρ σ ρ' hc' he =>
       (tabN_down _ δ Θ hΘ.1 c).wcl m i en hT ls ls' ρ σ ρ' hc' he)
     (fun _ _ _ _ _ _ _ _ _ _ _ h => h) ?_ ?_ ?_ _ _ ?_ n ls _ ρ₁ hM'' ρ₂ ρ ⟨hg₂, hc₂⟩ hcρ
@@ -168,8 +168,8 @@ theorem let_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B 
     obtain ⟨o, hf, rfl⟩ := tabN_effOf_some_find hT
     exact entN_plain hΦ _ hK (hC 0) (gN_noOwn (hW ⟨o, (Row.find_mem hf).1, hq⟩) hσ) o hcan hc'
   · rintro k ls' v σ ⟨σ₁, σ₂, hcσ, ⟨hkn, hv, hcv, -⟩, hg₂', hc₂'⟩
-    refine (cN_effOf S B δ Θ c k ls' _ σ).mp ?_
-    refine cN_head (CTy.effOf S B) δ Θ hΘ.1 c k ls' σ .hole _ _
+    refine (cN_effOf₀ S B δ Θ c k ls' _ σ).mp ?_
+    refine cN_head₀ (CTy.effOf S B) δ Θ hΘ.1 c k ls' σ .hole _ _
       (fun μ => Head.beta μ (Expr.psub 1 γ N) v) rfl ?_
     rw [show Kont.hole.plug (Expr.subst 0 v (Expr.psub 1 γ N)) = substAll (v :: γ) N
       from (substAll_cons_psub v γ N).symm]
@@ -182,15 +182,15 @@ from the start; no premise on the row's answers is read. -/
 theorem let_compatN_persist {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy} {S : Row}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hW : S.Cancels → Γ₂.OwnFree) (hU : S.Unr → Ctx.Banged Γ₂)
     (hA : A.Persistent)
-    (hM : SemJN (ℍ := ℍ) Δ Γ₁ M (.comp (CTy.effOf S A)))
-    (hN : SemJN (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
-    SemJN (ℍ := ℍ) Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B)) := by
+    (hM : SemJN₀ (ℍ := ℍ) Δ Γ₁ M (.comp (CTy.effOf S A)))
+    (hN : SemJN₀ (ℍ := ℍ) Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
+    SemJN₀ (ℍ := ℍ) Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   have hΦ := LocTy.view_down hΘ.1 c
-  refine (cN_effOf S B δ Θ c n ls _ ρ).mpr (erwp_of_valid fun hv => ?_)
+  refine (cN_effOf₀ S B δ Θ c n ls _ ρ).mpr (erwp_of_valid fun hv => ?_)
   obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂, hc₁, hc₂⟩ := gN_splitC hsp hg hc hv
   obtain ⟨hlw₁, hlw₂⟩ := hsp.liveWithin hlw
-  have hM' := (cN_effOf S A δ Θ c n ls _ ρ₁).mp (hM δ γ Θ c n ls ρ₁ hδ hΘ hc₁ hlw₁ hg₁)
+  have hM' := (cN_effOf₀ S A δ Θ c n ls _ ρ₁).mp (hM δ γ Θ c n ls ρ₁ hδ hΘ hc₁ hlw₁ hg₁)
   rw [tabN_effOf_ret S A B] at hM'
   have hM'' := erwp_idxLe n n le_rfl ls _ ρ₁ hM'
   have hK : ∀ m, (Kont.appR (.val (.lam (Expr.psub 1 γ N))) .hole).HasHnd m = false :=
@@ -200,7 +200,7 @@ theorem let_compatN_persist {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Exp
   change erwp (ℍ := ℍ) _ _ _ n ls
     ((Kont.appR (.val (.lam (Expr.psub 1 γ N))) .hole).plug (substAll γ M)) ρ
   refine erwp_frame_plain hΦ _ _ hK hC
-    (fun _ σ => gN (ℍ := ℍ) δ Θ Γ₂ γ n σ ∧ ConsistentX c σ) (fun _ _ _ _ h => h)
+    (fun _ σ => gN₀ (ℍ := ℍ) δ Θ Γ₂ γ n σ ∧ ConsistentX c σ) (fun _ _ _ _ h => h)
     (fun m i en hT ls ls' ρ σ ρ' hc' he =>
       (tabN_down _ δ Θ hΘ.1 c).wcl m i en hT ls ls' ρ σ ρ' hc' he)
     (fun _ _ _ _ _ _ _ _ _ _ _ h => h) ?_ ?_ ?_ _ _ ?_ n ls _ ρ₁ hM'' ρ₂ ρ ⟨hg₂, hc₂⟩ hcρ
@@ -216,10 +216,10 @@ theorem let_compatN_persist {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Exp
     obtain ⟨o, hf, rfl⟩ := tabN_effOf_some_find hT
     exact entN_plain hΦ _ hK (hC 0) (gN_noOwn (hW ⟨o, (Row.find_mem hf).1, hq⟩) hσ) o hcan hc'
   · rintro k ls' v σ ⟨σ₁, σ₂, hcσ, ⟨hkn, hv⟩, hg₂', hc₂'⟩
-    obtain rfl := vN_empty_of_persistent _ hA hv
+    obtain rfl := vN_empty_of_persistent₀ _ hA hv
     rw [eq_of_compS_empty_left hcσ]
-    refine (cN_effOf S B δ Θ c k ls' _ σ₂).mp ?_
-    refine cN_head (CTy.effOf S B) δ Θ hΘ.1 c k ls' σ₂ .hole _ _
+    refine (cN_effOf₀ S B δ Θ c k ls' _ σ₂).mp ?_
+    refine cN_head₀ (CTy.effOf S B) δ Θ hΘ.1 c k ls' σ₂ .hole _ _
       (fun μ => Head.beta μ (Expr.psub 1 γ N) v) rfl ?_
     rw [show Kont.hole.plug (Expr.subst 0 v (Expr.psub 1 γ N)) = substAll (v :: γ) N
       from (substAll_cons_psub v γ N).symm]
@@ -227,54 +227,54 @@ theorem let_compatN_persist {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Exp
       (gN_live_cons (compS_empty_left σ₂) hv (gN_le hkn hg₂'))
 
 /-- **A table's answers at a persistent type read alike at every view**: their values own
-nothing (`vN_empty_of_persistent`), consistent with every view. -/
+nothing (`vN_empty_of_persistent₀`), consistent with every view. -/
 theorem ansN_persistent {B : VTy} (hB : B.Persistent) (δ : LSub) (Θ : LocTy)
     (c : Loc → Option Life) :
-    (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) = fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ := by
+    (fun k v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) = fun k v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ := by
   funext k v ρ
   exact propext ⟨fun h => h.1, fun h => ⟨h, by
-    rw [vN_empty_of_persistent _ hB h]; exact consistentX_empty c⟩⟩
+    rw [vN_empty_of_persistent₀ _ hB h]; exact consistentX_empty c⟩⟩
 
 /-- **The row's table answers `park` as `TJN` does**: at `(nP, 0)` the answer of the row's table
 is `enParkN`'s, at every view, the answer type `1` being persistent (`ansN_persistent`). -/
 theorem hardestRow_entry_PB (Θ : LocTy) (c : Loc → Option Life) :
-    ∃ en, rowTabN (ℍ := ℍ) hardestRow Θ c BoCa.Fig16.Tree.Wp.SchedProgs.Park.nP 0 = some en ∧
+    ∃ en, rowTabN₀ (ℍ := ℍ) hardestRow Θ c BoCa.Fig16.Tree.Wp.SchedProgs.Park.nP 0 = some en ∧
       en.PB = (PoolSpawn.enParkN (ℍ := ℍ) (Θ.view c)).PB := by
-  refine ⟨entN .cancel .unit (fun k v ρ => vN (ℍ := ℍ) .unit LSub.empty Θ k v ρ)
-      (fun k v ρ => vN (ℍ := ℍ) .unit LSub.empty Θ k v ρ ∧ ConsistentX c ρ)
-      (finN (ℍ := ℍ) (.ret .unit) LSub.empty Θ c),
-    by simp [rowTabN, hardestRow, parkSig, CTy.effOf, tabN, extTabN], ?_⟩
+  refine ⟨entN .cancel .unit (fun k v ρ => vN₀ (ℍ := ℍ) .unit LSub.empty Θ k v ρ)
+      (fun k v ρ => vN₀ (ℍ := ℍ) .unit LSub.empty Θ k v ρ ∧ ConsistentX c ρ)
+      (finN₀ (ℍ := ℍ) (.ret .unit) LSub.empty Θ c),
+    by simp [rowTabN₀, hardestRow, parkSig, CTy.effOf, tabN₀, extTabN], ?_⟩
   have h := ansN_persistent (ℍ := ℍ) (B := .unit) (by decide) LSub.empty Θ c
   funext k ls v ρ
   exact (congrFun (congrFun (congrFun h k) v) ρ).trans rfl
 
-/-- **`[await-c]` at `SemJN`** (Core's `await_compatC`): `[perform]` of the cancellable `a`, then
+/-- **`[await-c]` at `SemJN₀`** (Core's `await_compatC`): `[perform]` of the cancellable `a`, then
 a `case` whose `inl` arm returns and whose `inr` arm raises the cancel target `c`, each by its own
 compatibility lemma, under `[let]`. The bound answer is at `1 + 1`, persistent, so the `[let]` is
 `let_compatN_persist`. -/
 theorem await_compatN {Δ : LifeCtx} {S : Row} {n : UInt32} {a c : OpSig}
     (hfa : Row.find S n 0 = some a) (ha : a.Cancellable) (haA : a.A = .unit)
     (hfc : Row.find S n 1 = some c) (hc : c.CancelTarget) :
-    SemJN (ℍ := ℍ) Δ [] (awaitE n) (.comp (CTy.effOf S .unit)) := by
+    SemJN₀ (ℍ := ℍ) Δ [] (awaitE n) (.comp (CTy.effOf S .unit)) := by
   obtain ⟨-, han, hai⟩ := Row.find_mem hfa
   obtain ⟨-, hcn, hci⟩ := Row.find_mem hfc
   obtain ⟨-, hq, hB⟩ := ha
   obtain ⟨-, hcab, hcA⟩ := hc
   have hna : a.abort = false := by simp [OpSig.abort, hq]
-  have hunit : SemJN (ℍ := ℍ) Δ [] (.val .unit) (.val a.A) := by
+  have hunit : SemJN₀ (ℍ := ℍ) Δ [] (.val .unit) (.val a.A) := by
     rw [haA]
     intro δ γ Θ c' n' ls ρ _ _ _ _ hg
     obtain rfl : ρ = PMap.empty := hg
     exact erwp_val (v := Val.unit) ⟨rfl, rfl⟩
-  have hP : SemJN (ℍ := ℍ) Δ [] (performE (opArgE n 0 (.val .unit)))
+  have hP : SemJN₀ (ℍ := ℍ) Δ [] (performE (opArgE n 0 (.val .unit)))
       (.comp (CTy.effOf S (.sum .unit .unit))) := by
     have h := perform_compatN (Δ := Δ) (Γ := []) (V := .val .unit) (o := a)
       (by rw [han, hai]; exact hfa) hna hunit
     rw [han, hai, hB] at h; exact h
-  have h₁ : SemJN (ℍ := ℍ) Δ [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩] (.var 0)
+  have h₁ : SemJN₀ (ℍ := ℍ) Δ [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩] (.var 0)
       (.comp (CTy.effOf S .unit)) :=
     sub_compatN (S := []) (RowLe.nil S) (var_compatN (.here (.cons .nil)))
-  have h₂ : SemJN (ℍ := ℍ) Δ [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩]
+  have h₂ : SemJN₀ (ℍ := ℍ) Δ [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩]
       (raiseE (opArgE n 1 (.var 0))) (.comp (CTy.effOf S .unit)) := by
     have h := raise_compatN (Δ := Δ) (Γ := [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩])
       (V := .var 0) (o := c) (B := .unit) (by rw [hcn, hci]; exact hfc) hcab

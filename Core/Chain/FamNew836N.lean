@@ -2,7 +2,7 @@ import Core.Chain.FamSwap836N
 import Core.EffCancelRuns
 
 /-!
-# `array_new` at `SemJN`  `[spec §9]`
+# `array_new` at `SemJN₀`  `[spec §9]`
 
 Core's `arrNew_compatX` (`Core/Arrays.lean`) is the `tab` step (`wpTS_tab`, `Core/ArrayWp.lean`)
 then the fill (`tabFill_wp`). On the chain:
@@ -145,13 +145,13 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 below the `!`-function's; by induction on `k`. -/
 theorem tabFill_wpN {A : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {M : Nat} (f : Val) (l : Loc)
     (N : UInt32) (hN31 : N.toNat < 2 ^ 31)
-    (hf : vN (ℍ := ℍ) (.bang (.lolli (.int .w32) A)) δ Θ M f PMap.empty) :
+    (hf : vN₀ (ℍ := ℍ) (.bang (.lolli (.int .w32) A)) δ Θ M f PMap.empty) :
     ∀ (k i m : Nat) (ls : List SRec) (ρd ρt ρ : WRes) (c : Loc → Option Life), m ≤ M →
       ConsistentX c ρ → i + k = N.toNat →
-      sepRange (fun x => vN (ℍ := ℍ) (.ref A) δ Θ m (Val.loc x)) l i ρd →
+      sepRange (fun x => vN₀ (ℍ := ℍ) (.ref A) δ Θ m (Val.loc x)) l i ρd →
       sepRange (fun m => ptoOwn m .unit) (l + i) k ρt → ResU.CompS ρd ρt ρ →
       erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty)
-        (fun k _ v ρ => vN (ℍ := ℍ) (.array A) δ Θ k v ρ) m ls (tabFill f l N i k) ρ
+        (fun k _ v ρ => vN₀ (ℍ := ℍ) (.array A) δ Θ k v ρ) m ls (tabFill f l N i k) ρ
   | 0, i, m, ls, ρd, ρt, ρ, c, _, _, hN, hd, ht, hc => by
       obtain ⟨rfl, -⟩ := ht
       rw [ResU.CompS.functional hc (ResU.comp_empty_right ρd)]
@@ -167,7 +167,7 @@ theorem tabFill_wpN {A : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {M : Nat} (
       refine erwp_bind_frame hΦ (opTableN_local _) _
         (fun σ => ∃ σc σr, ResU.CompS σc σr σ ∧ ptoOwn (l + i) .unit σc ∧ ∃ σd σt,
           ResU.CompS σd σt σr ∧
-          sepRange (fun x => vN (ℍ := ℍ) (.ref A) δ Θ m (Val.loc x)) l i σd ∧
+          sepRange (fun x => vN₀ (ℍ := ℍ) (.ref A) δ Θ m (Val.loc x)) l i σd ∧
           sepRange (fun m => ptoOwn m .unit) (l + i + 1) k σt)
         (compS_empty_left ρ) hcon
         (bang_app hΘ hm hf (consistentX_empty c) (k := m) ⟨⟨_, rfl⟩, rfl⟩ ls)
@@ -182,7 +182,7 @@ theorem tabFill_wpN {A : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {M : Nat} (
       obtain rfl := hc₃
       simp only [Kont.plug]
       refine erwp_det hΦ (opTableN_down OpTabN.empty_down)
-        (fun k _ v ρ h => vN_down _ δ Θ k v ρ h)
+        (fun k _ v ρ h => vN_down₀ _ δ Θ k v ρ h)
         (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
       -- the new leaf `σw ● cell`, beside the filled cells and the rest of the placeholders
       obtain ⟨L, hL, hσ₃⟩ := compS_exch hG hcomp₃
@@ -196,18 +196,18 @@ theorem tabFill_wpN {A : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {M : Nat} (
       have hcL : ConsistentX c L :=
         consistentX_compS (ResU.CompS.comm hL) (consistentX_single_own c (l + i) w) hcw
       have hc₃ : ConsistentX c σ₃ := consistentX_compS hσ₃ hcL hcR'
-      have hleaf : vN (ℍ := ℍ) (.ref A) δ Θ (k' - 1) (Val.loc (l + i)) L :=
-        ⟨l + i, w, σw, rfl, ResU.CompS.comm hL, vN_le (by omega) hw⟩
+      have hleaf : vN₀ (ℍ := ℍ) (.ref A) δ Θ (k' - 1) (Val.loc (l + i)) L :=
+        ⟨l + i, w, σw, rfl, ResU.CompS.comm hL, vN_le₀ (by omega) hw⟩
       refine tabFill_wpN hΘ f l N hN31 hf k (i + 1) (k' - 1) ls' D σt σ₃ c (by omega) hc₃
         (by rw [← hN]; ring) (sepRange_append hD
-          (sepRange_mono' (fun _ _ h => vN_le (by omega) h) hd')
+          (sepRange_mono' (fun _ _ h => vN_le₀ (by omega) h) hd')
           ⟨L, PMap.empty, ResU.comp_empty_right L, hleaf, ⟨rfl, trivial⟩⟩) ?_ hσ₃''
       rwa [show l + i + 1 = l + (i + 1) by ring] at ht''
 
-/-- **`array_new` at `SemJN`** (Core's `arrNew_compatX`): the `tab` step (`erwp_tab`), then the
+/-- **`array_new` at `SemJN₀`** (Core's `arrNew_compatX`): the `tab` step (`erwp_tab`), then the
 fill from no filled cell (`tabFill_wpN`). -/
 theorem arrNew_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
-    SemJN (ℍ := ℍ) Δ Γ (.val (.prim .tab)) (.val (arrNewTy A)) := by
+    SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .tab)) (.val (arrNewTy A)) := by
   refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   rw [eq_of_compS_empty_left hcomp] at hcon ⊢

@@ -1,44 +1,28 @@
-import Core.Chain.Hardest791N
-import Core.Chain.SI.TabLeN
-import Core.Chain.SI.StopRaiseN
-import Core.Chain.SI.LocTy
+import Core.Chain.RowFamK835N
 
 /-!
-# #791 at the rule level over the chain relation: the interpretation and the statements
-`[spec §62]`
+# #791 at the rule level: the relation at the typed world  `[spec §19, §27, §62]`
 
-`docs/new-core/chain-interpretation.md` is the design: the world, the interpretation, the
-departures from Core. `Core/TreeGoal791.lean` states #791's end goal over the tree relation; here the
-interpretation and the statements are restated over Core's step-indexed chain relation `erwp`
-(`Core/Chain/SI/*`), at the per-lend world `LocTy` (`Core/Chain/SI/LocTy.lean`).
+`docs/new-core/scope-835-tables.md` §10, `docs/new-core/scope-835-qualifier.md` §5. Core's
+interpretation clause by clause over the chain's step-indexed run, with `F` and `F_Σ` read through
+`erwpK` at the typed world `KW`:
 
-* **§1. The interpretation.** `vN A δ Θ k v ρ` (`𝒱⟦A⟧δ` at the world `Θ` and the index `k`) and
-  `cN C δ Θ c k ls e ρ` (`𝒞⟦C⟧δ` at the world `Θ`, the run's live lifetimes `c`, the index `k`
-  and the record list `ls`). Every run is `erwp` at the view `Θ.view c`, the relation's `LocFam`.
-  `F_Σ R` is read at the table of the row's layers (`tabN`, each capturable entry with its cancel
-  row's obligation `finN`) and its answer `retN`. A table's answers are read at the view: an
-  answer's resource enters the run, and is consistent with the view as every resource entering a
-  run is (`SemJN`'s start, `U`'s thunk, `⊸`'s composite). Core's `vCE`/`cC`/`effTab`/`finObl`/`effRet`
-  clause by clause, with `ewpTS`/`wpTS` replaced by `erwp`:
-  - `Mut` is Core's `ptoMutS` shape over the world: the cell at some `b ⊒ @aδ` (`mutL b`) holds a
-    member of the payload read at the world above `b`, the family the world stores at the lend's
-    key, and every value of the payload is in `Res_b`;
-  - `U C` is Kripke along Core's resource-relative order (`LocTy.ExtR` at the thunk's
-    resource), at every view consistent with the resource (`ConsistentX`); `⊸` is Core's plain
-    wand at the same world, step-indexed (every later index) and at every view consistent with
-    the composite.
-  - `Imm` is Core's `ptoImmS` shape over the world: one `imm` cell, its payload in the
-    observable view `vO` (Core's `vCE false`), its location witnessed in the world's `imm`
-    records (`ImmWitW`, Core's `CohE`); the relation's entry tie (`ImmTieL`) puts the witness's
-    record on the run's list.
-  `gN`, `SemJN`.
-* **§2. Laws.** Downward closure of every piece; `vN`/`cN` read `δ` only at free variables
-  (`vN_congr`); values stable along the resource-relative order (`vN_extR`), hence along the
-  world-relative `ExtA` (`vN_extA`), computations too except at an effect row (`cN_extA`); values in
-  a lend's stratum do not read the lend (`vN_local`); `𝒱⟦A⟧` of an outliving `A` in the stratum
-  (`vN_outlives`); `F_Σ R` as `erwp` at the row's table (`cN_effOf`).
-* **§3. The statements**: `ConstN`, `ConstsN`, `FundamentalN`, `BridgeN`, `Goal791SchedN`, and
-  `goal791Sched_of`: `Goal791SchedN` from `FundamentalN` and `ConstsN`.
+* **`F A`, `F_Σ R`** are runs at every floor, from the world `⟨Θ, c, lo⟩`. `F A` is at the empty
+  table, so it reads no world (`cN_ret_iff`: it is `erwp` at the empty table). `F_Σ R`'s table is
+  the row's table at the typed world (`tabN`, which is `tabF (rdN δ) ()`): every entry, and every
+  entry of a cancel row, owes its continuation along `KW.Owed`; payloads are read at the stop's
+  world, answers and cancel obligations at the resumption world.
+* **`𝒱⟦A⟧`** (`vN`): `Mut` is Core's `ptoMutS` shape over the world, `Imm` Core's `ptoImmS` with
+  its witness in the world's `imm` records, and `U C` reads `𝒞⟦C⟧` along `ExtR` at the thunk's
+  resource, with no floor (`scope-835-lendexit.md` §2).
+* `⊸`, `&`, `⊤`, `∀`, `ν` are Core's, at the same world.
+
+The laws: downward closure (`cN_down`, `tabN_downI`), `δ` read only at free variables
+(`cN_congr`), values along the resource-relative order (`vN_extR`), values in a lend's stratum
+(`vN_local`, `vN_outlives`), the `μ`/`ν` fixed points (`vN_ind`, `cN_nu_unfold`), `F_Σ R` at the
+row's table (`cN_effOf`, `cN_effOf_tabF`).
+
+`Goal791N0` holds the one-world relation (`cN₀`, `vN₀`, …) and the statements still read over it.
 -/
 
 noncomputable section
@@ -56,94 +40,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 jdgC)
 open BoCa.BoLo (Heap Kont hndE hndVal)
 
-/-! ## §1. The interpretation -/
-
-/-- An entry of a row's table: the qualifier; abortive as Core's (`B` empty, not `lin`); payload
-and answer at their value types, at every record list; the cancel obligation where Core's `capB`
-reads one; resumed under `extF`. -/
-def entN (q : Qual) (B : VTy) (PA PB : Nat → Val → WRes → Prop)
-    (fin : Option (Nat → List SRec → Expr → WProp)) : OpEntN where
-  q := q
-  abort := B.isZero && q != .lin
-  PA := fun k _ v ρ => PA k v ρ
-  PB := fun k _ v ρ => PB k v ρ
-  fin := if capB q B then fin else none
-  wc := extF
-
-/-- One more layer of a table: the first match wins. -/
-def extTabN (n i : UInt32) (en : OpEntN) (T : OpTabN) : OpTabN :=
-  fun m j => if m = n ∧ j = i then some en else T m j
-
-/-- **An `imm` borrow at `α`** (`ptoImmS`, `Core/Relation.lean`, without the record list): one
-`imm` cell `imm(β̄, u, σ)` with `α ⊑ ⊓β̄` whose payload is in `P`. -/
-def immCell (α : Life) (P : Val → WRes → Prop) (v : Val) (ρ : WRes) : Prop :=
-  ∃ (l : Loc) (s : LSet) (u : Val) (σ : WRes) (h : σ.InStratum s.join), v = Val.loc l ∧
-    ρ = ResU.single l (CellU.immOf s u σ h) ∧ α ⊑ s.meet ∧ P u σ
-
-/-- **The witness of an `imm` cell `imm(s, …)` at `ℓ` of type `A` at `δ`** in the world's `imm`
-records: a record of the world lent no shorter-lived than the cell (`⊓s ⊑ x.2`), and Core's `CohE`
-at a descendant `d` of it, a record of the world's lineage whose own cell is at `ℓ` or one of whose
-chain positions is `ℓ`, at a type `TyEq` to `A`. The lifetime match is what makes the witness
-relevant to the cell (`LocTy.Keeps`): the orders keep it at the cell's resource, and a record lent
-below a stratum witnesses no cell in it. The relation's entry tie (`ImmTieL`) puts the record on
-the run's list, whose typed world holds its descendants (`TI`). -/
-def ImmWitW (I : List SRec) (l : Loc) (s : LSet) (A : VTy) (δ : LSub) : Prop :=
-  ∃ x ∈ I, s.meet ≤ x.2 ∧ ∃ d, DescR x.1 d ∧ CohE [d] l A δ
-
-/-- **A candidate for `νX. C`** at a fixed `δ`: `cN`'s signature with `δ` applied (Core's
-`CPred`, with the world, the view and the index). -/
-abbrev CandN := LocTy → (Loc → Option Life) → Nat → List SRec → Expr → WRes → Prop
-
-/-- `R ⊆ R′` pointwise. -/
-def CandN.Le (R R' : CandN) : Prop :=
-  ∀ Θ c n ls e ρ, R Θ c n ls e ρ → R' Θ c n ls e ρ
-
-/-- **`U X` at the candidate `R`** (Core's `thunkR`): `vN`'s `U` clause with `R` in place of
-`𝒞⟦νX. C⟧`, at every extension of the world along `ExtR` at the thunk's resource, every view
-consistent with it and every record list. -/
-def thunkRN (R : CandN) : LocTy → Nat → Val → WRes → Prop := fun Θ n v ρ =>
-  ∀ Θ' : LocTy, Θ.ExtR Θ' ρ → Θ'.OK → ∀ c, ConsistentX c ρ → ∀ ls, R Θ' c n ls v.1 ρ
-
-/-- **An entry of `vNE`'s type-variable environment** (Core's `TEnt`): the closed type the
-variable stands for, which the `Imm` clause's witness reads, and the candidate it is read at, over
-the mode (`true` the program's relation `vN`, `false` the observable view `vO`), the world, the
-index and the value. -/
-structure TEntN where
-  ty : VTy
-  P : Bool → LocTy → Nat → Val → WRes → Prop
-
-/-- The environment of a closed type: every variable is empty (Core's `tEnv`). -/
-def tEnvN : Option (Nat → TEntN) → Nat → TEntN
-  | none => fun n => ⟨.tvar n, fun _ _ _ _ _ => False⟩
-  | some η => η
-
-/-- A variable's candidate (Core's `tEnvP`). -/
-def tEnvPN : Option (Nat → TEntN) → Nat → Bool → LocTy → Nat → Val → WRes → Prop
-  | none, _, _, _, _, _, _ => False
-  | some η, n, b, Θ, k, v, ρ => (η n).P b Θ k v ρ
-
-/-- The closed type a type stands for under the environment (Core's `tClose`). -/
-def tCloseN : Option (Nat → TEntN) → VTy → VTy
-  | none, A => A
-  | some η, A => A.subst (fun n => (η n).ty)
-
-/-- **`X`'s candidate in `νX. C`'s one-entry environment** (Core's `nuP`): `P` in the program's
-relation, `True` in the observable view. -/
-def nuPN (P : LocTy → Nat → Val → WRes → Prop) : Bool → LocTy → Nat → Val → WRes → Prop
-  | true => P
-  | false => fun _ _ _ _ => True
-
-/-- **The one-entry environment of a `ν` observation** (Core's `nuEnv`): `X` (index `0`) stands for
-the closed type `S` and is read at `nuPN P`; every other variable is empty. -/
-def nuEnvN (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) : Option (Nat → TEntN) :=
-  some (VTy.scons ⟨S, nuPN P⟩ (tEnvN none))
-
-section
--- Inside the definition, `vN`/`vO` are the relations at the empty environment.
-set_option hygiene false in
-local notation "vN" => vNE none
-set_option hygiene false in
-local notation "vO" => vOE none
+/-! ## The interpretation -/
 
 mutual
 /-- **`𝒱⟦A⟧δ` at the world and the index, under a type-variable environment `η`.** Core's `vCE`
@@ -232,19 +129,21 @@ def vOE : (η : Option (Nat → TEntN)) → VTy → LSub → LocTy → Nat → V
       sepRange (fun m => vOE η L δ Θ n (Val.loc m)) l c.toNat ρ
   | _, .opq k, _, _, _, v, ρ => k.rel v ρ
   termination_by structural _ x => x
-/-- **`𝒞⟦C⟧δ` at the world, the run's live lifetimes, the index and the record list.** Every
-run is `erwp` at the view `Θ.view c`. `F A` is `erwp` at the empty table; `F_Σ R` is `erwp` at the
-table of the row's layers; `⊸` is Core's plain wand at the same world, read at every view
+/-- **`𝒞⟦C⟧δ` at the typed world.** `F A` and `F_Σ R` are runs at
+every floor `lo`, `erwpK` from the world `⟨Θ, c, lo⟩`: each world's view its location family, its
+posts at the run's own world (`KW.PostK`); `F A` at the empty table, `F_Σ R` at the row's table at
+the typed world (`tabN`), its stops Kripke, its answer `retN` read at the post's world; `⊸` is Core's plain wand at the same world, read at every view
 consistent with the argument's and the function's resource and every later index (the
 step-indexed `−∗`); `∀'x ⊏ @c` every `α ⊏ @cδ` (Core's `cC`: vacuous where `@c` has no
 interpretation; a constant's premises carry its bound's definedness, `Const791.OK`); `νX. C` at a
 `NuShape` body some candidate below one unfolding of `C` at it (`cBN`, Core's greatest fixed
 point). -/
 def cN : CTy → LSub → LocTy → (Loc → Option Life) → Nat → List SRec → Expr → WRes → Prop
-  | .ret A, δ, Θ, c, n, ls, e, ρ =>
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (fun k _ v ρ => vN A δ Θ k v ρ) n ls e ρ
+  | .ret A, δ, Θ, c, n, ls, e, ρ => ∀ lo : Life,
+      erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c) (fun z => opTableK z.lo OpTabK.empty)
+        (fun z k _ v ρ => vNE none A δ z.Θ k v ρ) ⟨Θ, c, lo⟩ n ls e ρ
   | .arr A C, δ, Θ, _, n, ls, e, ρ => ∀ c',
-      ∀ k, k ≤ n → ∀ (v : Val) (ρv ρ' : WRes), ResU.CompS ρ ρv ρ' → vN A δ Θ k v ρv →
+      ∀ k, k ≤ n → ∀ (v : Val) (ρv ρ' : WRes), ResU.CompS ρ ρv ρ' → vNE none A δ Θ k v ρv →
         ConsistentX c' ρ' → cN C δ Θ c' k ls (.app e (.val v)) ρ'
   | .amp C D, δ, Θ, c, n, ls, e, ρ => cN C δ Θ c n ls (.app e (.val (Val.inj₁ .unit))) ρ ∧
       cN D δ Θ c n ls (.app e (.val (Val.inj₂ .unit))) ρ
@@ -253,31 +152,33 @@ def cN : CTy → LSub → LocTy → (Loc → Option Life) → Nat → List SRec 
       ∀ α, LtLife δ c' α → cN C (δ.extend x α) Θ c n ls (.app e (.val .unit)) ρ
   | .nu C, δ, Θ, c, n, ls, e, ρ => C.NuShape →
       ∃ R : CandN, R.Le (cBN (.thunk (.nu C)) R C δ) ∧ R Θ c n ls e ρ
-  | .eff m i q A B fin _ C, δ, Θ, c, n, ls, e, ρ =>
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (extTabN m i
-          (entN q B (fun k v ρ => vN A δ Θ k v ρ) (fun k v ρ => vN B δ Θ k v ρ ∧ ConsistentX c ρ)
-          (finN fin δ Θ c))
-          (tabN C δ Θ c)))
-        (fun k _ v ρ => retN C δ Θ k v ρ) n ls e ρ
+  | .eff m i q A B fin _ C, δ, Θ, c, n, ls, e, ρ => ∀ lo : Life,
+      erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
+        (fun z => opTableK z.lo (extTabK m i (entNK q B (fun k v ρ => vNE none A δ z.Θ k v ρ)
+            (fun y k v ρ => vNE none B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+            (finN fin δ) (fun f y ρ => z.Owed f y ρ))
+          (tabN C δ z)))
+        (fun z k _ v ρ => retN C δ z.Θ k v ρ) ⟨Θ, c, lo⟩ n ls e ρ
   termination_by structural x => x
 /-- **One unfolding of an observation tree at the candidate `R`** (Core's `cB`): `cN`'s `F`, `&`,
 `F_Σ`, `⊸` and `∀` clauses, each leaf's answer read by `vNE` at `nuEnvN S (thunkRN R)`; a row's operation
 types and an observation's argument are closed and read by `vN`, a row's answers at the view as in
 `cN`. Other formers are not observation trees and hold trivially. -/
 def cBN (S : VTy) (R : CandN) : CTy → LSub → CandN
-  | .ret A, δ, Θ, c, n, ls, e, ρ =>
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty)
-        (fun k _ v ρ => vNE (nuEnvN S (thunkRN R)) A δ Θ k v ρ) n ls e ρ
+  | .ret A, δ, Θ, c, n, ls, e, ρ => ∀ lo : Life,
+      erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c) (fun z => opTableK z.lo OpTabK.empty)
+        (fun z k _ v ρ => vNE (nuEnvN S (thunkRN R)) A δ z.Θ k v ρ) ⟨Θ, c, lo⟩ n ls e ρ
   | .amp C D, δ, Θ, c, n, ls, e, ρ => cBN S R C δ Θ c n ls (.app e (.val (Val.inj₁ .unit))) ρ ∧
       cBN S R D δ Θ c n ls (.app e (.val (Val.inj₂ .unit))) ρ
-  | .eff m i q A B fin _ C, δ, Θ, c, n, ls, e, ρ =>
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (extTabN m i
-          (entN q B (fun k v ρ => vN A δ Θ k v ρ) (fun k v ρ => vN B δ Θ k v ρ ∧ ConsistentX c ρ)
-          (finN fin δ Θ c))
-          (tabN C δ Θ c)))
-        (fun k _ v ρ => retNX S (thunkRN R) C δ Θ k v ρ) n ls e ρ
+  | .eff m i q A B fin _ C, δ, Θ, c, n, ls, e, ρ => ∀ lo : Life,
+      erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
+        (fun z => opTableK z.lo (extTabK m i (entNK q B (fun k v ρ => vNE none A δ z.Θ k v ρ)
+            (fun y k v ρ => vNE none B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+            (finN fin δ) (fun f y ρ => z.Owed f y ρ))
+          (tabN C δ z)))
+        (fun z k _ v ρ => retNX S (thunkRN R) C δ z.Θ k v ρ) ⟨Θ, c, lo⟩ n ls e ρ
   | .arr A D, δ, Θ, _, n, ls, e, ρ => ∀ c',
-      ∀ k, k ≤ n → ∀ (v : Val) (ρv ρ' : WRes), ResU.CompS ρ ρv ρ' → vN A δ Θ k v ρv →
+      ∀ k, k ≤ n → ∀ (v : Val) (ρv ρ' : WRes), ResU.CompS ρ ρv ρ' → vNE none A δ Θ k v ρv →
         ConsistentX c' ρ' → cBN S R D δ Θ c' k ls (.app e (.val v)) ρ'
   | .all x c' D, δ, Θ, c, n, ls, e, ρ =>
       ∀ α, LtLife δ c' α → cBN S R D (δ.extend x α) Θ c n ls (.app e (.val .unit)) ρ
@@ -295,32 +196,34 @@ def retNX (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
   | .all _ _ _, _, _, _, _, _ => False
   | .nu _, _, _, _, _, _ => False
   termination_by structural x => x
-/-- The table of a row's layers below the top one, its answers read at the view `c`. -/
-def tabN : CTy → LSub → LocTy → (Loc → Option Life) → OpTabN
-  | .eff m i q A B fin _ C, δ, Θ, c => extTabN m i
-      (entN q B (fun k v ρ => vN A δ Θ k v ρ) (fun k v ρ => vN B δ Θ k v ρ ∧ ConsistentX c ρ)
-          (finN fin δ Θ c))
-      (tabN C δ Θ c)
-  | _, _, _, _ => OpTabN.empty
+/-- **The table of a row's layers at the typed world**, its values at `vN`: every entry owes its
+continuation along `KW.Owed`, at the floor the stop chooses. -/
+def tabN : CTy → LSub → KW → OpTabK KW
+  | .eff m i q A B fin _ C, δ, x => extTabK m i
+      (entNK q B (fun k v ρ => vNE none A δ x.Θ k v ρ)
+        (fun y k v ρ => vNE none B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+        (finN fin δ) (fun f y ρ => x.Owed f y ρ))
+      (tabN C δ x)
+  | _, _, _ => OpTabK.empty
   termination_by structural x => x
-/-- **The cancel obligation of a cancel row**: `none` at `⊤`; otherwise the cancel run at the
-table of the row's layers, read at the view. -/
-def finN : CTy → LSub → LocTy → (Loc → Option Life) →
-    Option (Nat → List SRec → Expr → WProp)
-  | .top, _, _, _ => none
-  | .eff m i q A B fin _ C, δ, Θ, c => some (cancelOblN (ℍ := ℍ) (Θ.view c) (extTabN m i
-      (entN q B (fun k v ρ => vN A δ Θ k v ρ) (fun k v ρ => vN B δ Θ k v ρ ∧ ConsistentX c ρ)
-          (finN fin δ Θ c))
-      (tabN C δ Θ c)))
-  | .ret _, _, Θ, c => some (cancelOblN (ℍ := ℍ) (Θ.view c) OpTabN.empty)
-  | .arr _ _, _, Θ, c => some (cancelOblN (ℍ := ℍ) (Θ.view c) OpTabN.empty)
-  | .amp _ _, _, Θ, c => some (cancelOblN (ℍ := ℍ) (Θ.view c) OpTabN.empty)
-  | .all _ _ _, _, Θ, c => some (cancelOblN (ℍ := ℍ) (Θ.view c) OpTabN.empty)
-  | .nu _, _, Θ, c => some (cancelOblN (ℍ := ℍ) (Θ.view c) OpTabN.empty)
+/-- **The cancel obligation of a cancel row at the typed world** (`finNK` at `id`): `none` at `⊤`;
+otherwise the cancel run at the row's `tabN`. -/
+def finN : CTy → LSub → Option (KW → Nat → List SRec → Expr → WProp)
+  | .top, _ => none
+  | .eff m i q A B fin _ C, δ => some (cancelOblK (ℍ := ℍ) id (fun x => extTabK m i
+      (entNK q B (fun k v ρ => vNE none A δ x.Θ k v ρ)
+        (fun y k v ρ => vNE none B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+        (finN fin δ) (fun f y ρ => x.Owed f y ρ))
+      (tabN C δ x)))
+  | .ret _, _ => some (cancelOblK (ℍ := ℍ) id (fun _ => OpTabK.empty))
+  | .arr _ _, _ => some (cancelOblK (ℍ := ℍ) id (fun _ => OpTabK.empty))
+  | .amp _ _, _ => some (cancelOblK (ℍ := ℍ) id (fun _ => OpTabK.empty))
+  | .all _ _ _, _ => some (cancelOblK (ℍ := ℍ) id (fun _ => OpTabK.empty))
+  | .nu _, _ => some (cancelOblK (ℍ := ℍ) id (fun _ => OpTabK.empty))
   termination_by structural x => x
 /-- The answer of a row's layers. -/
 def retN : CTy → LSub → LocTy → Nat → Val → WRes → Prop
-  | .ret A, δ, Θ, k, v, ρ => vN A δ Θ k v ρ
+  | .ret A, δ, Θ, k, v, ρ => vNE none A δ Θ k v ρ
   | .eff _ _ _ _ _ _ _ C, δ, Θ, k, v, ρ => retN C δ Θ k v ρ
   | .arr _ _, _, _, _, _, _ => False
   | .amp _ _, _, _, _, _, _ => False
@@ -328,8 +231,6 @@ def retN : CTy → LSub → LocTy → Nat → Val → WRes → Prop
   | .all _ _ _, _, _, _, _, _ => False
   | .nu _, _, _, _, _, _ => False
   termination_by structural x => x
-
-end
 
 end
 
@@ -365,40 +266,17 @@ macro_rules
 macro_rules
   | `(vOX (ℍ := $h) $S $P $args*) => `(vOE (ℍ := $h) (nuEnvN $S $P) $args*)
 
-/-! ### The environment (Core's `RelMu`)
-
-`vNE η` reads a type variable at its entry in `η` and `μX. A` at the least fixed point, the
-candidate joint over the mode, the world and the index. `vBN η b` is `vNE η` (`b = true`) or
-`vOE η` (`b = false`), Core's `vCE η b`. Every law below is Core's (`Core/RelMu.lean`), read at
-the chain's arguments. -/
-
 /-- `vNE` in the mode `b` (Core's `vCE η b`). -/
 def vBN (η : Option (Nat → TEntN)) : Bool → VTy → LSub → LocTy → Nat → Val → WRes → Prop
   | true => vNE (ℍ := ℍ) η
   | false => vOE (ℍ := ℍ) η
 
-theorem TEntN.ext' {a b : TEntN} (h₁ : a.ty = b.ty) (h₂ : a.P = b.P) : a = b := by
-  cases a; cases b; simp only at h₁ h₂; subst h₁; subst h₂; rfl
-
-theorem tEnvPN_eq (η : Option (Nat → TEntN)) (n : Nat) (b : Bool) (Θ : LocTy) (k : Nat) (v : Val)
-    (ρ : WRes) : tEnvPN η n b Θ k v ρ = (tEnvN η n).P b Θ k v ρ := by
-  cases η <;> rfl
-
-theorem tCloseN_eq (η : Option (Nat → TEntN)) (A : VTy) :
-    tCloseN η A = A.subst (fun n => (tEnvN η n).ty) := by
-  cases η with
-  | none => exact (VTy.subst_id A).symm
-  | some η => rfl
-
-/-- The environment of one unfolding of `μX. A` under `η` at the candidate `P`. -/
-def muEnvN (η : Option (Nat → TEntN)) (A : VTy) (P : Bool → LocTy → Nat → Val → WRes → Prop) :
-    Option (Nat → TEntN) :=
-  some (VTy.scons ⟨tCloseN η (.mu A), P⟩ (tEnvN η))
 
 /-- `P` is closed under one unfolding of `μX. A` under `η`, in both modes. -/
 def MuClosedN (η : Option (Nat → TEntN)) (A : VTy) (δ : LSub)
     (P : Bool → LocTy → Nat → Val → WRes → Prop) : Prop :=
   ∀ b Θ k u r, vBN (ℍ := ℍ) (muEnvN η A P) b A δ Θ k u r → P b Θ k u r
+
 
 /-- The `μ` clause in both modes. -/
 theorem vBN_mu {η : Option (Nat → TEntN)} {A : VTy} {δ : LSub} {b : Bool} {Θ : LocTy} {n : Nat}
@@ -412,11 +290,13 @@ theorem vBN_mu {η : Option (Nat → TEntN)} {A : VTy} {δ : LSub} {b : Bool} {�
   · exact ⟨fun ⟨h₁, h₂, h₃⟩ => ⟨h₁, h₂, fun P hP => h₃ P (hP true) (hP false)⟩,
       fun ⟨h₁, h₂, h₃⟩ => ⟨h₁, h₂, fun P ht hf => h₃ P (fun b => by cases b; exacts [hf, ht])⟩⟩
 
+
 /-- The two modes of an equation of `vBN`. -/
 theorem vBN_eq_both {η₁ η₂ : Option (Nat → TEntN)} {A A' : VTy}
     (h : ∀ b, vBN (ℍ := ℍ) η₁ b A = vBN (ℍ := ℍ) η₂ b A') :
     vNE (ℍ := ℍ) η₁ A = vNE η₂ A' ∧ vOE (ℍ := ℍ) η₁ A = vOE η₂ A' :=
   ⟨h true, h false⟩
+
 
 /-- The relation reads its environment only through `tEnvN` (Core's `vCE_some`). -/
 theorem vBN_some (η : Option (Nat → TEntN)) :
@@ -470,6 +350,7 @@ theorem vBN_some (η : Option (Nat → TEntN)) :
       intro b
       have e : tCloseN η (.mu A) = tCloseN (some (tEnvN η)) (.mu A) := by rw [tCloseN_eq]; rfl
       cases b <;> funext δ Θ n v ρ <;> simp only [vBN, vNE, vOE, e] <;> rfl
+
 
 /-- The relation reads only the entries of the variables that occur (Core's `vCE_congr_occ`). -/
 theorem vBN_congr_occ : ∀ (A : VTy) (η₁ η₂ : Nat → TEntN), (∀ n, A.Occ n → η₁ n = η₂ n) →
@@ -541,7 +422,6 @@ theorem vBN_congr_occ : ∀ (A : VTy) (η₁ η₂ : Nat → TEntN), (∀ n, A.O
       simp only [hb]
 
 
-/-! ### Renaming and substitution -/
 
 theorem vBN_rename : ∀ (A : VTy) (η : Nat → TEntN) (r : Nat → Nat) (b : Bool),
     vBN (ℍ := ℍ) (some η) b (A.rename r) = vBN (ℍ := ℍ) (some (η ∘ r)) b A := by
@@ -609,9 +489,11 @@ theorem vBN_rename : ∀ (A : VTy) (η : Nat → TEntN) (r : Nat → Nat) (b : B
       unfold MuClosedN
       simp only [hb]
 
+
 /-- The environment a substitution moves into (Core's `substEnv`). -/
 def substEnvN (η : Nat → TEntN) (σ : Nat → VTy) (δ : LSub) : Nat → TEntN :=
   fun n => ⟨(σ n).subst (fun k => (η k).ty), fun b => vBN (ℍ := ℍ) (some η) b (σ n) δ⟩
+
 
 theorem vBN_subst : ∀ (A : VTy) (η : Nat → TEntN) (σ : Nat → VTy) (δ : LSub) (b : Bool),
     vBN (ℍ := ℍ) (some η) b (A.subst σ) δ = vBN (ℍ := ℍ) (some (substEnvN (ℍ := ℍ) η σ δ)) b A δ := by
@@ -705,7 +587,6 @@ theorem vBN_subst : ∀ (A : VTy) (η : Nat → TEntN) (σ : Nat → VTy) (δ : 
       unfold MuClosedN
       simp only [hb]
 
-/-! ### Monotonicity in an entry outside every `Mut` payload -/
 
 /-- The relation is monotone in the entry of a variable that occurs in no `Mut` payload (Core's
 `vCE_mono_at`). -/
@@ -802,12 +683,12 @@ theorem vBN_mono_at : ∀ (A : VTy) (k : Nat) (η₁ η₂ : Nat → TEntN), A.N
         | succ n => exact hP n (fun e => hn (by rw [e]))
       · exact hPk
 
-/-! ### The unroll equation -/
 
 /-- One unfolding of `μX. A` at the candidate `P` (Core's `cBody`). -/
 def bodyN (A : VTy) (δ : LSub) (P : Bool → LocTy → Nat → Val → WRes → Prop) :
     Bool → LocTy → Nat → Val → WRes → Prop :=
   fun b => vBN (ℍ := ℍ) (muEnvN none A P) b A δ
+
 
 /-- `A[μX. A/X]` is the body at `𝒱⟦μX. A⟧` (Core's `vC_inst`). -/
 theorem vN_inst (A : VTy) (δ : LSub) (b : Bool) :
@@ -826,6 +707,7 @@ theorem vN_inst (A : VTy) (δ : LSub) (b : Bool) :
       refine TEntN.ext' rfl ?_
       funext b; cases b <;> rfl
 
+
 theorem bodyN_mono (A : VTy) (δ : LSub) (hA : A.NoMut 0)
     {P Q : Bool → LocTy → Nat → Val → WRes → Prop}
     (h : ∀ b Θ k v ρ, P b Θ k v ρ → Q b Θ k v ρ) :
@@ -836,6 +718,7 @@ theorem bodyN_mono (A : VTy) (δ : LSub) (hA : A.NoMut 0)
       | zero => exact absurd rfl hn
       | succ n => rfl) h b δ Θ k v ρ
 
+
 /-- `roll` (Core's `vC_roll`), at the same index: the machine has no `roll` step. -/
 theorem vBN_roll {A : VTy} {b : Bool} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes}
     (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0)
@@ -844,6 +727,7 @@ theorem vBN_roll {A : VTy} {b : Bool} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Va
   rw [vN_inst] at h
   exact vBN_mu.mpr ⟨hA, hc, fun P hP => hP b Θ n v ρ
     (bodyN_mono A δ hA (fun b' Θ' k' v' ρ' h' => (vBN_mu.mp h').2.2 P hP) b Θ n v ρ h)⟩
+
 
 /-- `unroll` (Core's `vC_unfold`), at the same index. -/
 theorem vBN_unfold {A : VTy} {b : Bool} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes}
@@ -856,11 +740,13 @@ theorem vBN_unfold {A : VTy} {b : Bool} {δ : LSub} {Θ : LocTy} {n : Nat} {v : 
     bodyN_mono A δ hA (fun b'' Θ'' k'' v'' ρ'' h'' => vBN_roll hA hc (by rw [vN_inst]; exact h''))
       b' Θ' k' v' ρ' h')
 
+
 /-- **The unroll equation** (Core's `vC_mu_iff`), at the same index. -/
 theorem vBN_mu_iff {A : VTy} {b : Bool} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes} :
     vBN (ℍ := ℍ) none b (.mu A) δ Θ n v ρ ↔
       A.NoMut 0 ∧ (VTy.mu A).Cl 0 ∧ vBN (ℍ := ℍ) none b (VTy.inst (.mu A) A) δ Θ n v ρ :=
   ⟨vBN_unfold, fun ⟨hA, hc, h⟩ => vBN_roll hA hc h⟩
+
 
 /-- `roll` at `vN`. -/
 theorem vN_roll {A : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes}
@@ -868,17 +754,20 @@ theorem vN_roll {A : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRe
     vN (ℍ := ℍ) (.mu A) δ Θ n v ρ :=
   vBN_roll (b := true) hA hc h
 
+
 /-- `unroll` at `vN`. -/
 theorem vN_unfold {A : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes}
     (h : vN (ℍ := ℍ) (.mu A) δ Θ n v ρ) :
     A.NoMut 0 ∧ (VTy.mu A).Cl 0 ∧ vN (ℍ := ℍ) (VTy.inst (.mu A) A) δ Θ n v ρ :=
   vBN_unfold (b := true) h
 
+
 /-- **The unroll equation at `vN`.** -/
 theorem vN_mu_iff {A : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes} :
     vN (ℍ := ℍ) (.mu A) δ Θ n v ρ ↔
       A.NoMut 0 ∧ (VTy.mu A).Cl 0 ∧ vN (ℍ := ℍ) (VTy.inst (.mu A) A) δ Θ n v ρ :=
   vBN_mu_iff (b := true)
+
 
 /-- `roll` under an environment: the body at the environment whose new entry is `μX. A` itself is a
 value of `μX. A`. -/
@@ -895,6 +784,7 @@ theorem vBN_rollE {η : Option (Nat → TEntN)} {A : VTy} {δ : LSub} {b : Bool}
         | succ m => rfl)
       (fun b' Θ' k' v' ρ' (h' : vBN (ℍ := ℍ) η b' (.mu A) δ Θ' k' v' ρ') => (vBN_mu.mp h').2.2 P hP)
       b δ Θ n v ρ h)⟩
+
 
 /-- **Induction on the least fixed point at `μX. A` under an environment** (Core's `vC_mu_ind`): a
 property closed under one unfolding of the body, read at the relation and the property at `X`,
@@ -920,7 +810,6 @@ theorem vBN_mu_ind {η : Option (Nat → TEntN)} {A : VTy} {δ : LSub}
       | succ m => rfl)
     (fun _ _ _ _ _ h => h.1) b' δ Θ' n' v' ρ' h'
 
-/-! ### The induction principle -/
 
 /-- One unfolding of the relation at every type (Core's `vF`), with `S` at the positions the
 clauses recurse to: the `Mut` clause is kept, with `S` at every value of its payload's type; at
@@ -951,6 +840,7 @@ def vFN (S : Bool → VTy → LocTy → Nat → Val → WRes → Prop) (δ : LSu
   | _, .tvar _, _, _, _, _ => False
   | b, .mu A, Θ, n, v, ρ => A.NoMut 0 ∧ (VTy.mu A).Cl 0 ∧ S b (VTy.inst (.mu A) A) Θ n v ρ
 
+
 /-- The relation is its own unfolding (Core's `vF_vC`). -/
 theorem vFN_vN (δ : LSub) : ∀ (b : Bool) (T : VTy) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes),
     vBN (ℍ := ℍ) none b T δ Θ n v ρ ↔
@@ -971,6 +861,7 @@ theorem vFN_vN (δ : LSub) : ∀ (b : Bool) (T : VTy) (Θ : LocTy) (n : Nat) (v 
   | b, .unk, _, _, _, _ => by cases b <;> exact Iff.rfl
   | b, .tvar _, _, _, _, _ => by cases b <;> exact Iff.rfl
   | _, .mu _, _, _, _, _ => vBN_mu_iff
+
 
 theorem vFN_mono {S₁ S₂ : Bool → VTy → LocTy → Nat → Val → WRes → Prop}
     (h : ∀ b T Θ n v ρ, S₁ b T Θ n v ρ → S₂ b T Θ n v ρ) (δ : LSub) :
@@ -1005,6 +896,7 @@ theorem vFN_mono {S₁ S₂ : Bool → VTy → LocTy → Nat → Val → WRes �
   | _, .unk, _, _, _, _, hs => hs
   | _, .tvar _, _, _, _, _, hs => hs
   | b, .mu _, Θ, n, v, ρ, hs => ⟨hs.1, hs.2.1, h b _ Θ n v ρ hs.2.2⟩
+
 
 /-- **Induction on the least fixed points, at every type, in both modes** (Core's `vC_ind`). A
 property of the relation closed under one unfolding of every clause (`vFN` with the relation
@@ -1147,6 +1039,7 @@ theorem vN_ind (δ : LSub) (Φ : Bool → VTy → LocTy → Nat → Val → WRes
 
 
 
+
 /-- **`𝒢⟦Γ⟧δγ` at the world and the index**: the live slots' values over a split of the
 resource. -/
 def gN (δ : LSub) (Θ : LocTy) : Ctx VTy → List Val → Nat → WRes → Prop
@@ -1156,66 +1049,19 @@ def gN (δ : LSub) (Θ : LocTy) : Ctx VTy → List Val → Nat → WRes → Prop
       ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ ∧ vN (ℍ := ℍ) s.ty δ Θ n v ρ₁ ∧ gN δ Θ Γ γ n ρ₂
     else gN δ Θ Γ γ n ρ
 
-/-- **`Δ; Γ ⊨ e : j` over `erwp`**: at every `δ ⊨ Δ`, every world, every view consistent with the
+
+/-- **`Δ; Γ ⊨ e : j` at the typed world**: at every `δ ⊨ Δ`, every world, every view consistent with the
 resource, index and record list, from every resource meeting the context. -/
 def SemJN (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg) : Prop :=
   ∀ (δ : LSub) (γ : List Val) (Θ : LocTy) (c : Loc → Option Life) (n : Nat) (ls : List SRec)
     (ρ : WRes), Δ.Models δ → Θ.OK → ConsistentX c ρ → Ctx.LiveWithin Γ γ →
       gN (ℍ := ℍ) δ Θ Γ γ n ρ → cN (ℍ := ℍ) (jdgC j) δ Θ c n ls (substAll γ e) ρ
 
-/-- **The table a task at the row `S` runs at**, at the world `Θ` and the view `c`. -/
-def rowTabN (S : Row) (Θ : LocTy) (c : Loc → Option Life) : OpTabN :=
-  tabN (ℍ := ℍ) (CTy.effOf S .unit) LSub.empty Θ c
 
-/-! ## §2. Laws -/
+/-- **The table a task at the row `S` runs at**, at the typed world. -/
+def rowTabN (S : Row) : KW → OpTabK KW :=
+  tabN (ℍ := ℍ) (CTy.effOf S .unit) LSub.empty
 
-theorem extTabN_some {n i m j : UInt32} {en en' : OpEntN} {T : OpTabN}
-    (h : extTabN n i en T m j = some en') : (m = n ∧ j = i ∧ en' = en) ∨ T m j = some en' := by
-  unfold extTabN at h
-  split at h
-  · rename_i hmj; exact .inl ⟨hmj.1, hmj.2, (Option.some.inj h).symm⟩
-  · exact .inr h
-
-theorem extTabN_down {n i : UInt32} {q : Qual} {B : VTy} {PA PB : Nat → Val → WRes → Prop}
-    {fin : Option (Nat → List SRec → Expr → WProp)} {T : OpTabN}
-    (hA : ∀ k v ρ, PA (k + 1) v ρ → PA k v ρ)
-    (hfin : ∀ P, fin = some P → ∀ k ls e ρ, P (k + 1) ls e ρ → P k ls e ρ) (hT : T.Down) :
-    (extTabN n i (entN q B PA PB fin) T).Down where
-  pa := fun m j en h k ls v ρ hp => by
-    rcases extTabN_some h with ⟨-, -, rfl⟩ | h
-    · exact hA k v ρ hp
-    · exact hT.pa _ _ _ h k ls v ρ hp
-  fin := fun m j en P h hP k ls e ρ hp => by
-    rcases extTabN_some h with ⟨-, -, rfl⟩ | h
-    · simp only [entN] at hP
-      split at hP
-      · exact hfin P hP k ls e ρ hp
-      · cases hP
-    · exact hT.fin _ _ _ _ h hP k ls e ρ hp
-  wcl := fun m j en h => by
-    rcases extTabN_some h with ⟨-, -, rfl⟩ | h
-    · exact extF_left
-    · exact hT.wcl _ _ _ h
-
-theorem cancelOblN_down {Φ : LocFam} (hΦ : Φ.Down) {T : OpTabN} (hT : T.Down) :
-    ∀ k ls e ρ, cancelOblN (ℍ := ℍ) Φ T (k + 1) ls e ρ → cancelOblN (ℍ := ℍ) Φ T k ls e ρ :=
-  fun _ _ _ _ h => erwp_le hΦ (cancelTabN_local T) (cancelTabN_down hT) falsePost_down
-    (Nat.le_succ _) h
-
-/-- Every entry of the environment is downward closed in the index. -/
-def EnvDownN (η : Option (Nat → TEntN)) : Prop :=
-  ∀ m b Θ k v ρ, (tEnvN η m).P b Θ (k + 1) v ρ → (tEnvN η m).P b Θ k v ρ
-
-theorem envDownN_none : EnvDownN none := fun _ _ _ _ _ _ h => h
-
-/-- A property down the index, from one step. -/
-theorem down_iter {F : Nat → Prop} (step : ∀ i, F (i + 1) → F i) {j k : Nat} (hjk : j ≤ k)
-    (h : F k) : F j := by
-  obtain ⟨d, rfl⟩ := Nat.exists_eq_add_of_le hjk
-  clear hjk
-  induction d with
-  | zero => exact h
-  | succ d ihd => exact ihd (step _ (by rwa [← Nat.add_assoc] at h))
 
 /-- `μ` down the index, from the body's law at every downward-closed environment: the least
 fixed point lies in `{x | every lower index of x is in the candidate}`. -/
@@ -1244,23 +1090,6 @@ theorem vBN_mu_down {η : Option (Nat → TEntN)} {A : VTy} {δ : LSub} {b : Boo
     | succ m => rfl
   exact hl Q hQ n (Nat.le_succ n)
 
-/-! ### `ν`: the candidate's order -/
-
-/-- `R ⊆ R′` at every `OK` world: the only worlds `U X` reads a candidate at. -/
-def CandN.LeOK (R R' : CandN) : Prop :=
-  ∀ Θ : LocTy, Θ.OK → ∀ c n ls e ρ, R Θ c n ls e ρ → R' Θ c n ls e ρ
-
-/-- A candidate downward closed in the index at every `OK` world. -/
-def CandN.Down (R : CandN) : Prop :=
-  ∀ Θ : LocTy, Θ.OK → ∀ c n ls e ρ, R Θ c (n + 1) ls e ρ → R Θ c n ls e ρ
-
-theorem thunkRN_mono {R R' : CandN} (h : R.LeOK R') :
-    ∀ Θ n v ρ, thunkRN R Θ n v ρ → thunkRN R' Θ n v ρ :=
-  fun _ _ _ _ hv Θ' hE hOK c hc ls => h Θ' hOK c _ ls _ _ (hv Θ' hE hOK c hc ls)
-
-theorem thunkRN_down {R : CandN} (h : R.Down) :
-    ∀ Θ n v ρ, thunkRN R Θ (n + 1) v ρ → thunkRN R Θ n v ρ :=
-  fun _ _ _ _ hv Θ' hE hOK c hc ls => h Θ' hOK c _ ls _ _ (hv Θ' hE hOK c hc ls)
 
 /-- **`vNX` does not read `X`'s entry at a type `X` does not occur in** (Core's
 `vCE_congr_occ` at index `0`): neither the candidate nor the closed type. -/
@@ -1271,12 +1100,14 @@ theorem vNX_occ (S S' : VTy) (P P' : LocTy → Nat → Val → WRes → Prop) :
     | zero => exact absurd hn h
     | succ n => rfl) true
 
+
 theorem vOX_occ (S S' : VTy) (P P' : LocTy → Nat → Val → WRes → Prop) :
     ∀ (A : VTy), ¬ A.Occ 0 → vOX (ℍ := ℍ) S P A = vOX (ℍ := ℍ) S' P' A :=
   fun A h => vBN_congr_occ A _ _ (fun n hn => by
     cases n with
     | zero => exact absurd hn h
     | succ n => rfl) false
+
 
 /-- **`vNX` is monotone in the candidate at a polynomial type** (Core's `vCE_mono_at` at
 `VTy.noMut_of_poly`): `X` occurs only under `⊗`, `⊕` and `[@a]`. -/
@@ -1294,6 +1125,7 @@ theorem vNX_mono {S : VTy} {P P' : LocTy → Nat → Val → WRes → Prop}
       | true => exact hP Θ j v ρ hp
       | false => trivial) true δ Θ n v ρ hv
 
+
 /-- The answer of an effectful observation is monotone in the candidate (Core's `effRetE_mono`). -/
 theorem retNX_mono {S : VTy} {P P' : LocTy → Nat → Val → WRes → Prop}
     (hP : ∀ Θ n v ρ, P Θ n v ρ → P' Θ n v ρ) :
@@ -1302,22 +1134,35 @@ theorem retNX_mono {S : VTy} {P P' : LocTy → Nat → Val → WRes → Prop}
   | .ret _, h, δ, Θ, n, v, ρ, hv => vNX_mono hP h δ Θ n v ρ hv
   | .eff _ _ _ _ _ _ _ D, h, δ, Θ, n, v, ρ, hv => retNX_mono hP (D := D) h.2.2 δ Θ n v ρ hv
 
+
+/-- `erwpK` at a local table is monotone in its postcondition. -/
+theorem erwpK_postMono {V : KW → KW → Prop} {Φ : KW → LocFam} {Tb : KW → TableK KW}
+    (hL : ∀ x, (Tb x).Local) {Q Q' : KW → PostN} (hQ : ∀ y k ls v ρ, Q y k ls v ρ → Q' y k ls v ρ)
+    {n : Nat} {x : KW} {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : erwpK (ℍ := ℍ) V Φ Tb Q x n ls e ρ) : erwpK (ℍ := ℍ) V Φ Tb Q' x n ls e ρ :=
+  erwpK_mono (fun _ _ h => h) hQ (fun x k ls t Ψ Ψ' ρ hΨ h => hL x k ls t Ψ Ψ' ρ hΨ h) n x ls e ρ h
+
 /-- **One unfolding of an observation tree is monotone in the candidate** (Core's `cB_mono`). -/
 theorem cBN_mono {S : VTy} {R R' : CandN} (hR : R.LeOK R') :
     ∀ {D : CTy}, D.NuLeaf → ∀ δ, (cBN (ℍ := ℍ) S R D δ).Le (cBN (ℍ := ℍ) S R' D δ)
-  | .ret _, hA, δ, Θ, _, n, ls, e, ρ, h =>
-      erwp_mono (fun k _ v ρ h => vNX_mono (thunkRN_mono hR) hA δ Θ k v ρ h) (opTableN_local _)
-        n ls e ρ h
+  | .ret _, hA, δ, Θ, c, n, ls, e, ρ, h => fun lo => by
+      have h' := h lo
+      refine erwpK_postMono ?_ ?_ h'
+      · exact fun _ => opTableK_local _ _
+      · exact fun z k _ v ρ h => vNX_mono (thunkRN_mono hR) hA δ z.Θ k v ρ h
   | .amp _ _, hD, δ, Θ, c, n, ls, _, ρ, h =>
       ⟨cBN_mono hR hD.1 δ Θ c n ls _ ρ h.1, cBN_mono hR hD.2 δ Θ c n ls _ ρ h.2⟩
-  | .eff _ _ _ _ _ _ _ D, hD, δ, Θ, _, n, ls, e, ρ, h =>
-      erwp_mono (fun k _ v ρ h => retNX_mono (thunkRN_mono hR) (D := D) hD.2.2 δ Θ k v ρ h)
-        (opTableN_local _) n ls e ρ h
+  | .eff _ _ _ _ _ _ _ D, hD, δ, Θ, c, n, ls, e, ρ, h => fun lo => by
+      have h' := h lo
+      refine erwpK_postMono ?_ ?_ h'
+      · exact fun _ => opTableK_local _ _
+      · exact fun z k _ v ρ h => retNX_mono (thunkRN_mono hR) (D := D) hD.2.2 δ z.Θ k v ρ h
   | .arr _ D, hD, δ, Θ, _, _, ls, _, _, h => fun c' k hk v ρv ρ' hc hv hcon =>
       cBN_mono hR (D := D) hD.2 δ Θ c' k ls _ ρ' (h c' k hk v ρv ρ' hc hv hcon)
   | .all x _ D, hD, δ, Θ, c, n, ls, _, ρ, h => fun α hα =>
       cBN_mono hR (D := D) hD (δ.extend x α) Θ c n ls _ ρ (h α hα)
   | .top, hD, _, _, _, _, _, _, _, _ | .nu _, hD, _, _, _, _, _, _, _, _ => hD.elim
+
 
 /-- **At a polynomial type `vNX` does not read `X`'s closed type** (Core's `cB_poly_ty` at a
 leaf): `X` occurs only under `⊗`, `⊕` and `[@a]`, and the `Imm` witness reads the closed type only
@@ -1340,6 +1185,7 @@ theorem vNX_poly_ty (S S' : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
   | .unit, h | .zero, h | .unk, h | .int _, h | .opq _, h | .thunk _, h | .mu _, h | .ref _, h
   | .imm _ _, h | .mut _ _, h | .bang _, h | .fam _, h => vNX_occ S S' P P _ h
 
+
 theorem retNX_poly_ty (S S' : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
     ∀ {D : CTy}, D.EffLeaf → retNX (ℍ := ℍ) S P D = retNX (ℍ := ℍ) S' P D
   | .ret A, h => by
@@ -1348,6 +1194,7 @@ theorem retNX_poly_ty (S S' : VTy) (P : LocTy → Nat → Val → WRes → Prop)
   | .eff _ _ _ _ _ _ _ D, h => by
       have h₁ := retNX_poly_ty S S' P (D := D) h.2.2
       funext δ Θ n v ρ; simp only [retNX, h₁]
+
 
 /-- **One unfolding of an observation tree does not read `X`'s closed type** (Core's
 `cB_poly_ty`). -/
@@ -1371,15 +1218,85 @@ theorem cBN_poly_ty (S S' : VTy) (R : CandN) :
       funext δ Θ c n ls e ρ; simp only [cBN, h₁]
   | .top, h | .nu _, h => h.elim
 
-/-- `ν`'s one-entry environment is downward closed at a downward closed candidate. -/
-theorem envDownN_nu {S : VTy} {P : LocTy → Nat → Val → WRes → Prop}
-    (hP : ∀ Θ n v ρ, P Θ (n + 1) v ρ → P Θ n v ρ) : EnvDownN (nuEnvN S P) := by
-  intro m b Θ k v ρ h
-  cases m with
-  | zero => cases b with
-    | true => exact hP Θ k v ρ h
-    | false => trivial
-  | succ m => exact h
+
+/-- **One more entry of a table at the typed world is closed in the index** at the worlds whose
+location typing is downward closed: its payload is, its cancel obligation is at those worlds, and
+every world it owes at is one (`KW.Owed` gives a valid location typing). -/
+theorem extTabK_entNK_downI {m i : UInt32} {q : Qual} {B : VTy} {PA : Nat → Val → WRes → Prop}
+    {PB : KW → Nat → Val → WRes → Prop} {fin : Option (KW → Nat → List SRec → Expr → WProp)}
+    {x : KW} {T : OpTabK KW}
+    (hA : ∀ k v ρ, PA (k + 1) v ρ → PA k v ρ)
+    (hfin : ∀ P, fin = some P → ∀ y : KW, y.Θ.Down → ∀ k ls e ρ,
+      P y (k + 1) ls e ρ → P y k ls e ρ)
+    (hT : T.DownI (fun z : KW => z.Θ.Down)) :
+    (extTabK m i (entNK q B PA PB fin (fun f y ρ => x.Owed f y ρ)) T).DownI
+      (fun z : KW => z.Θ.Down) where
+  pa := fun n j en h k ls v ρ hp => by
+    rcases extTabK_some h with ⟨-, -, rfl⟩ | h
+    · exact hA k v ρ hp
+    · exact hT.pa _ _ _ h k ls v ρ hp
+  fin := fun n j en P h hP y hy k ls e ρ hp => by
+    rcases extTabK_some h with ⟨-, -, rfl⟩ | h
+    · simp only [entNK] at hP
+      split at hP
+      · exact hfin P hP y hy k ls e ρ hp
+      · cases hP
+    · exact hT.fin _ _ _ _ h hP y hy k ls e ρ hp
+  wkI := fun n j en h f y ρ hy => by
+    rcases extTabK_some h with ⟨-, -, rfl⟩ | h
+    · exact hy.2.1.1
+    · exact hT.wkI _ _ _ h f y ρ hy
+
+/-- The cancel run at a table closed in the index is, at the worlds whose location typing is
+downward closed. -/
+theorem cancelOblK_id_down {T : KW → OpTabK KW} (hT : ∀ x, (T x).DownI (fun z : KW => z.Θ.Down)) :
+    ∀ y : KW, y.Θ.Down → ∀ k ls e ρ,
+      cancelOblK (ℍ := ℍ) id T y (k + 1) ls e ρ → cancelOblK (ℍ := ℍ) id T y k ls e ρ := by
+  intro y hy _ _ _ _ h
+  exact erwpK_le (x := y) (Φ := fun z : KW => (id z).Θ.view (id z).c) (LocTy.view_down hy y.c)
+    (fun _ => cancelTabK_local _ _)
+    (cancelTabK_downI (hT y)) (fun _ => falsePost_down) (Nat.le_succ _) h
+
+/-- **`F_Σ`'s clause is closed in the index** from its parts': the payload, the cancel row's
+obligation and the rest of the row at the worlds whose location typing is downward closed, and
+the answer. -/
+theorem cN_eff_down {m i : UInt32} {q : Qual} {A B : VTy} {fin : CTy} {rc : Bool} {C : CTy}
+    {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down)
+    (hA : ∀ Θ k v ρ, vNE (ℍ := ℍ) none A δ Θ (k + 1) v ρ → vNE (ℍ := ℍ) none A δ Θ k v ρ)
+    (hfin : ∀ P, finN (ℍ := ℍ) fin δ = some P → ∀ y : KW, y.Θ.Down →
+      ∀ k ls e ρ, P y (k + 1) ls e ρ → P y k ls e ρ)
+    (hT : ∀ x, (tabN (ℍ := ℍ) C δ x).DownI (fun z : KW => z.Θ.Down))
+    (hR : ∀ Θ k v ρ, retN (ℍ := ℍ) C δ Θ (k + 1) v ρ → retN (ℍ := ℍ) C δ Θ k v ρ)
+    {c : Loc → Option Life} {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : cN (ℍ := ℍ) (.eff m i q A B fin rc C) δ Θ c (n + 1) ls e ρ) :
+    cN (ℍ := ℍ) (.eff m i q A B fin rc C) δ Θ c n ls e ρ := by
+  simp only [cN] at h ⊢
+  intro lo
+  have h' := h lo
+  refine erwpK_le (x := (⟨Θ, c, lo⟩ : KW)) (Φ := fun z : KW => z.Θ.view z.c) (LocTy.view_down hΘ c)
+    ?_ ?_ (fun (z : KW) k _ v ρ h => hR z.Θ k v ρ h) (Nat.le_succ n) h'
+  · exact fun _ => opTableK_local _ _
+  · exact opTableK_downI (extTabK_entNK_downI (fun k v ρ h => hA Θ k v ρ h) hfin (hT _))
+
+/-- One unfolding's `F_Σ` clause is closed in the index, from its parts'. -/
+theorem cBN_eff_le {S : VTy} {R : CandN} {m i : UInt32} {q : Qual} {A B : VTy} {fin : CTy}
+    {rc : Bool} {D : CTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down)
+    (hA : ∀ Θ k v ρ, vNE (ℍ := ℍ) none A δ Θ (k + 1) v ρ → vNE (ℍ := ℍ) none A δ Θ k v ρ)
+    (hfin : ∀ P, finN (ℍ := ℍ) fin δ = some P → ∀ y : KW, y.Θ.Down →
+      ∀ k ls e ρ, P y (k + 1) ls e ρ → P y k ls e ρ)
+    (hT : ∀ x, (tabN (ℍ := ℍ) D δ x).DownI (fun z : KW => z.Θ.Down))
+    (hR : ∀ Θ k v ρ, retNX (ℍ := ℍ) S (thunkRN R) D δ Θ (k + 1) v ρ →
+      retNX (ℍ := ℍ) S (thunkRN R) D δ Θ k v ρ)
+    {c : Loc → Option Life} {k n : Nat} (hkn : k ≤ n) {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : cBN (ℍ := ℍ) S R (.eff m i q A B fin rc D) δ Θ c n ls e ρ) :
+    cBN (ℍ := ℍ) S R (.eff m i q A B fin rc D) δ Θ c k ls e ρ := by
+  simp only [cBN] at h ⊢
+  intro lo
+  have h' := h lo
+  refine erwpK_le (x := (⟨Θ, c, lo⟩ : KW)) (Φ := fun z : KW => z.Θ.view z.c) (LocTy.view_down hΘ c)
+    ?_ ?_ (fun (z : KW) k _ v ρ h => hR z.Θ k v ρ h) hkn h'
+  · exact fun _ => opTableK_local _ _
+  · exact opTableK_downI (extTabK_entNK_downI (fun k v ρ h => hA Θ k v ρ h) hfin (hT _))
 
 mutual
 theorem vNE_down : ∀ (A : VTy) (η : Option (Nat → TEntN)), EnvDownN η → ∀ (δ : LSub) (Θ : LocTy)
@@ -1468,9 +1385,11 @@ theorem vOE_down : ∀ (A : VTy) (η : Option (Nat → TEntN)), EnvDownN η → 
 theorem cN_down : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down → ∀ (c : Loc → Option Life)
     (n : Nat) (ls : List SRec) (e : Expr) (ρ : WRes),
     cN (ℍ := ℍ) C δ Θ c (n + 1) ls e ρ → cN (ℍ := ℍ) C δ Θ c n ls e ρ
-  | .ret A, δ, Θ, hΘ, c, n, ls, e, ρ, h =>
-      erwp_le (LocTy.view_down hΘ c) (opTableN_local _) (opTableN_down OpTabN.empty_down)
-        (fun k _ v ρ h => vNE_down A none envDownN_none δ Θ k v ρ h) (Nat.le_succ n) h
+  | .ret A, δ, Θ, hΘ, c, n, ls, e, ρ, h => fun lo =>
+      erwpK_le (x := ⟨Θ, c, lo⟩) (Φ := fun z : KW => z.Θ.view z.c) (LocTy.view_down hΘ c)
+        (fun _ => opTableK_local _ _)
+        (opTableK_downI (OpTabK.empty_downI (fun z : KW => z.Θ.Down)))
+        (fun z k _ v ρ h => vNE_down A none envDownN_none δ z.Θ k v ρ h) (Nat.le_succ n) (h lo)
   | .arr A C, δ, Θ, hΘ, c, n, ls, e, ρ, h => fun c' k hk => h c' k (by omega)
   | .amp C D, δ, Θ, hΘ, c, n, ls, e, ρ, h =>
       ⟨cN_down C δ Θ hΘ c n ls _ ρ h.1, cN_down D δ Θ hΘ c n ls _ ρ h.2⟩
@@ -1487,18 +1406,19 @@ theorem cN_down : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down → ∀ (c : L
         (cBN_mono (fun Θ hOK _ k _ _ _ h => ⟨hOK.1, k, le_rfl, h⟩) hS.nuLeaf δ Θ' c' m ls' e' ρ'
           (hR Θ' c' m ls' e' ρ' hm))
   | .eff m i q A B fin rc C, δ, Θ, hΘ, c, n, ls, e, ρ, h =>
-      erwp_le (LocTy.view_down hΘ c) (opTableN_local _)
-        (opTableN_down (extTabN_down (fun k v ρ h => vNE_down A none envDownN_none δ Θ k v ρ h)
-          (finN_down fin δ Θ hΘ c) (tabN_down C δ Θ hΘ c)))
-        (fun k _ v ρ h => retN_down C δ Θ k v ρ h) (Nat.le_succ n) h
+      cN_eff_down hΘ (fun Θ k v ρ h => vNE_down A none envDownN_none δ Θ k v ρ h)
+        (finN_downI fin δ) (tabN_downI C δ)
+        (fun Θ k v ρ h => retN_down C δ Θ k v ρ h) h
   termination_by structural x => x
 /-- One unfolding at a candidate downward closed in the index is downward closed. -/
 theorem cBN_le (S : VTy) (R : CandN) (hR : R.Down) : ∀ (D : CTy) (δ : LSub) (Θ : LocTy),
     Θ.Down → ∀ (c : Loc → Option Life) (k n : Nat), k ≤ n → ∀ (ls : List SRec) (e : Expr)
     (ρ : WRes), cBN (ℍ := ℍ) S R D δ Θ c n ls e ρ → cBN (ℍ := ℍ) S R D δ Θ c k ls e ρ
-  | .ret A, δ, Θ, hΘ, c, k, n, hkn, ls, e, ρ, h =>
-      erwp_le (LocTy.view_down hΘ c) (opTableN_local _) (opTableN_down OpTabN.empty_down)
-        (fun k _ v ρ h => vNE_down A _ (envDownN_nu (thunkRN_down hR)) δ Θ k v ρ h) hkn h
+  | .ret A, δ, Θ, hΘ, c, k, n, hkn, ls, e, ρ, h => fun lo =>
+      erwpK_le (x := ⟨Θ, c, lo⟩) (Φ := fun z : KW => z.Θ.view z.c) (LocTy.view_down hΘ c)
+        (fun _ => opTableK_local _ _)
+        (opTableK_downI (OpTabK.empty_downI (fun z : KW => z.Θ.Down)))
+        (fun z k _ v ρ h => vNE_down A _ (envDownN_nu (thunkRN_down hR)) δ z.Θ k v ρ h) hkn (h lo)
   | .arr A D, δ, Θ, hΘ, c, k, n, hkn, ls, e, ρ, h => fun c' k' hk' => h c' k' (le_trans hk' hkn)
   | .amp C D, δ, Θ, hΘ, c, k, n, hkn, ls, e, ρ, h =>
       ⟨cBN_le S R hR C δ Θ hΘ c k n hkn ls _ ρ h.1, cBN_le S R hR D δ Θ hΘ c k n hkn ls _ ρ h.2⟩
@@ -1507,10 +1427,9 @@ theorem cBN_le (S : VTy) (R : CandN) (hR : R.Down) : ∀ (D : CTy) (δ : LSub) (
       fun α hα => cBN_le S R hR D (δ.extend x α) Θ hΘ c k n hkn ls _ ρ (h α hα)
   | .nu _, _, _, _, _, _, _, _, _, _, _, h => h
   | .eff m i q A B fin rc D, δ, Θ, hΘ, c, k, n, hkn, ls, e, ρ, h =>
-      erwp_le (LocTy.view_down hΘ c) (opTableN_local _)
-        (opTableN_down (extTabN_down (fun k v ρ h => vNE_down A none envDownN_none δ Θ k v ρ h)
-          (finN_down fin δ Θ hΘ c) (tabN_down D δ Θ hΘ c)))
-        (fun k _ v ρ h => retNX_down S _ (thunkRN_down hR) D δ Θ k v ρ h) hkn h
+      cBN_eff_le hΘ (fun Θ k v ρ h => vNE_down A none envDownN_none δ Θ k v ρ h)
+        (finN_downI fin δ) (tabN_downI D δ)
+        (fun Θ k v ρ h => retNX_down S _ (thunkRN_down hR) D δ Θ k v ρ h) hkn h
   termination_by structural x => x
 /-- The answer of a row's layers with one type variable is downward closed. -/
 theorem retNX_down (S : VTy) (P : LocTy → Nat → Val → WRes → Prop)
@@ -1525,42 +1444,43 @@ theorem retNX_down (S : VTy) (P : LocTy → Nat → Val → WRes → Prop)
   | .all _ _ _, _, _, _, _, _, h => h
   | .nu _, _, _, _, _, _, h => h
   termination_by structural x => x
-theorem tabN_down : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down → ∀ (c : Loc → Option Life),
-    (tabN (ℍ := ℍ) C δ Θ c).Down
-  | .eff m i q A B fin rc C, δ, Θ, hΘ, c =>
-      extTabN_down (fun k v ρ h => vNE_down A none envDownN_none δ Θ k v ρ h) (finN_down fin δ Θ hΘ c)
-        (tabN_down C δ Θ hΘ c)
-  | .ret _, _, _, _, _ => OpTabN.empty_down
-  | .arr _ _, _, _, _, _ => OpTabN.empty_down
-  | .amp _ _, _, _, _, _ => OpTabN.empty_down
-  | .top, _, _, _, _ => OpTabN.empty_down
-  | .all _ _ _, _, _, _, _ => OpTabN.empty_down
-  | .nu _, _, _, _, _ => OpTabN.empty_down
+theorem tabN_downI : ∀ (C : CTy) (δ : LSub) (x : KW),
+    (tabN (ℍ := ℍ) C δ x).DownI (fun z : KW => z.Θ.Down)
+  | .eff m i q A B fin rc C, δ, x =>
+      extTabK_entNK_downI (fun k v ρ h => vNE_down A none envDownN_none δ x.Θ k v ρ h)
+        (finN_downI fin δ) (tabN_downI C δ x)
+  | .ret _, _, _ => OpTabK.empty_downI _
+  | .arr _ _, _, _ => OpTabK.empty_downI _
+  | .amp _ _, _, _ => OpTabK.empty_downI _
+  | .top, _, _ => OpTabK.empty_downI _
+  | .all _ _ _, _, _ => OpTabK.empty_downI _
+  | .nu _, _, _ => OpTabK.empty_downI _
   termination_by structural x => x
-theorem finN_down : ∀ (F : CTy) (δ : LSub) (Θ : LocTy), Θ.Down → ∀ (c : Loc → Option Life),
-    ∀ P, finN (ℍ := ℍ) F δ Θ c = some P → ∀ k ls e ρ, P (k + 1) ls e ρ → P k ls e ρ
-  | .top, _, _, _, _, _, h => by cases h
-  | .eff m i q A B fin rc C, δ, Θ, hΘ, c, P, h => by
+theorem finN_downI : ∀ (F : CTy) (δ : LSub) P,
+    finN (ℍ := ℍ) F δ = some P → ∀ y : KW, y.Θ.Down → ∀ k ls e ρ,
+      P y (k + 1) ls e ρ → P y k ls e ρ
+  | .top, _, _, h => by cases h
+  | .eff m i q A B fin rc C, δ, P, h => by
       simp only [finN, Option.some.injEq] at h
       subst h
-      exact cancelOblN_down (LocTy.view_down hΘ c)
-        (extTabN_down (fun k v ρ h => vNE_down A none envDownN_none δ Θ k v ρ h)
-          (finN_down fin δ Θ hΘ c) (tabN_down C δ Θ hΘ c))
-  | .ret _, _, Θ, hΘ, c, P, h => by
+      exact cancelOblK_id_down (fun x => extTabK_entNK_downI
+        (fun k v ρ h => vNE_down A none envDownN_none δ x.Θ k v ρ h)
+        (finN_downI fin δ) (tabN_downI C δ x))
+  | .ret _, _, P, h => by
       simp only [finN, Option.some.injEq] at h; subst h
-      exact cancelOblN_down (LocTy.view_down hΘ c) OpTabN.empty_down
-  | .arr _ _, _, Θ, hΘ, c, P, h => by
+      exact cancelOblK_id_down (fun _ => OpTabK.empty_downI _)
+  | .arr _ _, _, P, h => by
       simp only [finN, Option.some.injEq] at h; subst h
-      exact cancelOblN_down (LocTy.view_down hΘ c) OpTabN.empty_down
-  | .amp _ _, _, Θ, hΘ, c, P, h => by
+      exact cancelOblK_id_down (fun _ => OpTabK.empty_downI _)
+  | .amp _ _, _, P, h => by
       simp only [finN, Option.some.injEq] at h; subst h
-      exact cancelOblN_down (LocTy.view_down hΘ c) OpTabN.empty_down
-  | .all _ _ _, _, Θ, hΘ, c, P, h => by
+      exact cancelOblK_id_down (fun _ => OpTabK.empty_downI _)
+  | .all _ _ _, _, P, h => by
       simp only [finN, Option.some.injEq] at h; subst h
-      exact cancelOblN_down (LocTy.view_down hΘ c) OpTabN.empty_down
-  | .nu _, _, Θ, hΘ, c, P, h => by
+      exact cancelOblK_id_down (fun _ => OpTabK.empty_downI _)
+  | .nu _, _, P, h => by
       simp only [finN, Option.some.injEq] at h; subst h
-      exact cancelOblN_down (LocTy.view_down hΘ c) OpTabN.empty_down
+      exact cancelOblK_id_down (fun _ => OpTabK.empty_downI _)
   termination_by structural x => x
 theorem retN_down : ∀ (C : CTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes),
     retN (ℍ := ℍ) C δ Θ (n + 1) v ρ → retN (ℍ := ℍ) C δ Θ n v ρ
@@ -1578,12 +1498,14 @@ theorem vN_down (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRe
     (h : vN (ℍ := ℍ) A δ Θ (n + 1) v ρ) : vN (ℍ := ℍ) A δ Θ n v ρ :=
   vNE_down A none envDownN_none δ Θ n v ρ h
 
+
 /-- `vNX` is downward closed at a downward closed candidate. -/
 theorem vNX_down (S : VTy) (P : LocTy → Nat → Val → WRes → Prop)
     (hP : ∀ Θ n v ρ, P Θ (n + 1) v ρ → P Θ n v ρ) :
     ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes),
     vNX (ℍ := ℍ) S P A δ Θ (n + 1) v ρ → vNX (ℍ := ℍ) S P A δ Θ n v ρ :=
   fun A δ Θ n v ρ h => vNE_down A _ (envDownN_nu hP) δ Θ n v ρ h
+
 
 /-- `vOX` is downward closed at a downward closed candidate. -/
 theorem vOX_down (S : VTy) (P : LocTy → Nat → Val → WRes → Prop)
@@ -1592,9 +1514,11 @@ theorem vOX_down (S : VTy) (P : LocTy → Nat → Val → WRes → Prop)
     vOX (ℍ := ℍ) S P A δ Θ (n + 1) v ρ → vOX (ℍ := ℍ) S P A δ Θ n v ρ :=
   fun A δ Θ n v ρ h => vOE_down A _ (envDownN_nu hP) δ Θ n v ρ h
 
+
 theorem vO_down (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes)
     (h : vO (ℍ := ℍ) A δ Θ (n + 1) v ρ) : vO (ℍ := ℍ) A δ Θ n v ρ :=
   vOE_down A none envDownN_none δ Θ n v ρ h
+
 
 theorem vN_le {A : VTy} {δ : LSub} {Θ : LocTy} {k n : Nat} (hkn : k ≤ n) {v : Val} {ρ : WRes}
     (h : vN (ℍ := ℍ) A δ Θ n v ρ) : vN (ℍ := ℍ) A δ Θ k v ρ := by
@@ -1603,6 +1527,7 @@ theorem vN_le {A : VTy} {δ : LSub} {Θ : LocTy} {k n : Nat} (hkn : k ≤ n) {v 
   induction d with
   | zero => exact h
   | succ d ihd => exact ihd (vN_down A δ Θ _ v ρ (by rwa [← Nat.add_assoc] at h))
+
 
 theorem cN_le {C : CTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option Life} {k n : Nat}
     (hkn : k ≤ n) {ls : List SRec} {e : Expr} {ρ : WRes} (h : cN (ℍ := ℍ) C δ Θ c n ls e ρ) :
@@ -1613,13 +1538,13 @@ theorem cN_le {C : CTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Op
   | zero => exact h
   | succ d ihd => exact ihd (cN_down C δ Θ hΘ c _ ls e ρ (by rwa [← Nat.add_assoc] at h))
 
+
 /-- A `Mut` payload's family, as the world stores it, is downward closed (the anti-frame's
 `DownFam` premise, `reseal_at_entry`). -/
 theorem vN_fam_down (A : VTy) (δ : LSub) (α : Life) (Θ : LocTy) :
     DownFam α (famL α (fun Θ' j u r => vN (ℍ := ℍ) A δ Θ' j u r) Θ) :=
   fun k u r h => vN_down A δ _ k u r.1 h
 
-/-! ### Rows -/
 
 /-- A row's answer is its base's value type. -/
 theorem retN_effOf (S : Row) (R : VTy) (δ : LSub) (Θ : LocTy) :
@@ -1628,59 +1553,20 @@ theorem retN_effOf (S : Row) (R : VTy) (δ : LSub) (Θ : LocTy) :
   | nil => funext k v ρ; simp only [CTy.effOf, retN]
   | cons o S ih => funext k v ρ; simp only [CTy.effOf, retN]; rw [ih]
 
-/-- **`F_Σ R` is `erwp` at the view, the row's table and `𝒱⟦R⟧`.** -/
+
+/-- **`F_Σ R` is `erwpK` at every floor, at the row's table at the typed world and `𝒱⟦R⟧`.** -/
 theorem cN_effOf (S : Row) (R : VTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (n : Nat)
     (ls : List SRec) (e : Expr) (ρ : WRes) :
-    cN (ℍ := ℍ) (CTy.effOf S R) δ Θ c n ls e ρ ↔
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c))
-        (fun k _ v ρ => vN (ℍ := ℍ) R δ Θ k v ρ) n ls e ρ := by
+    cN (ℍ := ℍ) (CTy.effOf S R) δ Θ c n ls e ρ ↔ ∀ lo : Life,
+      erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
+        (fun z => opTableK z.lo (tabN (ℍ := ℍ) (CTy.effOf S R) δ z))
+        (fun z k _ v ρ => vN (ℍ := ℍ) R δ z.Θ k v ρ) ⟨Θ, c, lo⟩ n ls e ρ := by
   cases S with
   | nil => simp only [CTy.effOf, cN, tabN]
   | cons o S =>
       simp only [CTy.effOf, cN, tabN]
-      rw [retN_effOf]
+      simp only [retN_effOf]
 
-/-! ### `δ` is read only at free variables -/
-
-/-- `CohE` reads `δ` only at the type's free variables. -/
-theorem cohE_congr_ty {rs : List FrameRec} {l : Loc} {A : VTy} {δ δ' : LSub}
-    (h : ∀ y, VFree y A → δ.find? y = δ'.find? y) : CohE rs l A δ ↔ CohE rs l A δ' :=
-  ⟨fun ⟨S₀, δ₀, he, hc⟩ => ⟨S₀, δ₀, (TyEq.of_agree A fun y hy => (h y hy).symm).trans he, hc⟩,
-    fun ⟨S₀, δ₀, he, hc⟩ => ⟨S₀, δ₀, (TyEq.of_agree A h).trans he, hc⟩⟩
-
-/-- `ImmWitW` reads `δ` only at the type's free variables. -/
-theorem immWitW_congr {A : VTy} {δ δ' : LSub} (h : ∀ y, VFree y A → δ.find? y = δ'.find? y)
-    (I : List SRec) (l : Loc) (s : LSet) : ImmWitW I l s A δ = ImmWitW I l s A δ' := by
-  unfold ImmWitW
-  apply propext
-  constructor
-  · rintro ⟨x, hx, hs, d, hd, hc⟩; exact ⟨x, hx, hs, d, hd, (cohE_congr_ty h).mp hc⟩
-  · rintro ⟨x, hx, hs, d, hd, hc⟩; exact ⟨x, hx, hs, d, hd, (cohE_congr_ty h).mpr hc⟩
-
-/-- `δ` and `δ'` agree on the free lifetime variables of every type the environment holds (Core's
-`EnvAgree`). -/
-def EnvAgreeN (η : Option (Nat → TEntN)) (δ₁ δ₂ : LSub) : Prop :=
-  ∀ n y, VFree y (tEnvN η n).ty → δ₁.find? y = δ₂.find? y
-
-theorem envAgreeN_none (δ₁ δ₂ : LSub) : EnvAgreeN none δ₁ δ₂ := fun _ _ hy => hy.elim
-
-theorem envAgreeN_tClose {η : Option (Nat → TEntN)} {δ₁ δ₂ : LSub} (hη : EnvAgreeN η δ₁ δ₂)
-    {A : VTy} (h : ∀ y, VFree y A → δ₁.find? y = δ₂.find? y) :
-    ∀ y, VFree y (tCloseN η A) → δ₁.find? y = δ₂.find? y := by
-  intro y hy
-  rw [tCloseN_eq] at hy
-  rcases vFree_subst A _ hy with hy | ⟨n, hn⟩
-  · exact h y hy
-  · exact hη n y hn
-
-
-/-- `ν`'s one-entry environment agrees at `δ₁`, `δ₂` where `S` does. -/
-theorem envAgreeN_nu {S : VTy} {P : LocTy → Nat → Val → WRes → Prop} {δ₁ δ₂ : LSub}
-    (hS : ∀ y, VFree y S → δ₁.find? y = δ₂.find? y) : EnvAgreeN (nuEnvN S P) δ₁ δ₂ := by
-  intro n y hy
-  cases n with
-  | zero => exact hS y hy
-  | succ n => exact hy.elim
 
 mutual
 theorem vNE_congr : ∀ (A : VTy) (η : Option (Nat → TEntN)) {δ δ' : LSub},
@@ -1839,7 +1725,8 @@ theorem cBN_congr (S : VTy) (R : CandN) : ∀ (C : CTy) {δ δ' : LSub},
       have h₁ := vNE_congr A none (δ := δ) (δ' := δ') (fun y hy => h y (.inl hy)) (envAgreeN_none _ _)
       have h₂ := vNE_congr B none (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inl hy)))
         (envAgreeN_none _ _)
-      have h₃ := finN_congr fin (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inr (.inl hy))))
+      have h₃ := finN_congr fin (δ := δ) (δ' := δ')
+        (fun y hy => h y (.inr (.inr (.inl hy))))
       have h₄ := tabN_congr C (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inr (.inr hy))))
       have h₅ := retNX_congr S (thunkRN R) C (δ := δ) (δ' := δ')
         (fun y hy => h y (.inr (.inr (.inr hy)))) hS
@@ -1895,19 +1782,21 @@ theorem cN_congr : ∀ (C : CTy) {δ δ' : LSub}, (∀ y, CFree y C → δ.find?
   | .eff m i q A B fin rc C, δ, δ', h => by
       have h₁ := vNE_congr A none (δ := δ) (δ' := δ') (fun y hy => h y (.inl hy)) (envAgreeN_none _ _)
       have h₂ := vNE_congr B none (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inl hy))) (envAgreeN_none _ _)
-      have h₃ := finN_congr fin (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inr (.inl hy))))
+      have h₃ := finN_congr fin (δ := δ) (δ' := δ')
+        (fun y hy => h y (.inr (.inr (.inl hy))))
       have h₄ := tabN_congr C (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inr (.inr hy))))
       have h₅ := retN_congr C (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inr (.inr hy))))
       funext Θ c n ls e ρ; simp only [cN, h₁, h₂, h₃, h₄, h₅]
   termination_by structural x => x
-theorem tabN_congr : ∀ (C : CTy) {δ δ' : LSub}, (∀ y, CFree y C → δ.find? y = δ'.find? y) →
-    tabN (ℍ := ℍ) C δ = tabN (ℍ := ℍ) C δ'
+theorem tabN_congr : ∀ (C : CTy) {δ δ' : LSub},
+    (∀ y, CFree y C → δ.find? y = δ'.find? y) → tabN (ℍ := ℍ) C δ = tabN (ℍ := ℍ) C δ'
   | .eff m i q A B fin rc C, δ, δ', h => by
       have h₁ := vNE_congr A none (δ := δ) (δ' := δ') (fun y hy => h y (.inl hy)) (envAgreeN_none _ _)
       have h₂ := vNE_congr B none (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inl hy))) (envAgreeN_none _ _)
-      have h₃ := finN_congr fin (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inr (.inl hy))))
+      have h₃ := finN_congr fin (δ := δ) (δ' := δ')
+        (fun y hy => h y (.inr (.inr (.inl hy))))
       have h₄ := tabN_congr C (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inr (.inr hy))))
-      funext Θ c; simp only [tabN, h₁, h₂, h₃, h₄]
+      funext x; simp only [tabN, h₁, h₂, h₃, h₄]
   | .ret _, _, _, _ => rfl
   | .arr _ _, _, _, _ => rfl
   | .amp _ _, _, _, _ => rfl
@@ -1915,14 +1804,15 @@ theorem tabN_congr : ∀ (C : CTy) {δ δ' : LSub}, (∀ y, CFree y C → δ.fin
   | .all _ _ _, _, _, _ => rfl
   | .nu _, _, _, _ => rfl
   termination_by structural x => x
-theorem finN_congr : ∀ (F : CTy) {δ δ' : LSub}, (∀ y, CFree y F → δ.find? y = δ'.find? y) →
-    finN (ℍ := ℍ) F δ = finN (ℍ := ℍ) F δ'
+theorem finN_congr : ∀ (F : CTy) {δ δ' : LSub},
+    (∀ y, CFree y F → δ.find? y = δ'.find? y) → finN (ℍ := ℍ) F δ = finN (ℍ := ℍ) F δ'
   | .eff m i q A B fin rc C, δ, δ', h => by
       have h₁ := vNE_congr A none (δ := δ) (δ' := δ') (fun y hy => h y (.inl hy)) (envAgreeN_none _ _)
       have h₂ := vNE_congr B none (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inl hy))) (envAgreeN_none _ _)
-      have h₃ := finN_congr fin (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inr (.inl hy))))
+      have h₃ := finN_congr fin (δ := δ) (δ' := δ')
+        (fun y hy => h y (.inr (.inr (.inl hy))))
       have h₄ := tabN_congr C (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inr (.inr hy))))
-      funext Θ c; simp only [finN, h₁, h₂, h₃, h₄]
+      simp only [finN, h₁, h₂, h₃, h₄]
   | .ret _, _, _, _ => rfl
   | .arr _ _, _, _, _ => rfl
   | .amp _ _, _, _, _ => rfl
@@ -1951,30 +1841,34 @@ theorem vN_cast {A A' : VTy} {δ δ' : LSub} (h : vN (ℍ := ℍ) A' δ' = vN (�
     {j : Nat} {u : Val} {r : WRes} (hv : vN (ℍ := ℍ) A' δ' Θ j u r) : vN (ℍ := ℍ) A δ Θ j u r :=
   h ▸ hv
 
+
 theorem vN_congr (A : VTy) {δ δ' : LSub} (h : ∀ y, VFree y A → δ.find? y = δ'.find? y) :
     vN (ℍ := ℍ) A δ = vN (ℍ := ℍ) A δ' :=
   vNE_congr A none h (envAgreeN_none _ _)
 
+
 theorem vO_congr (A : VTy) {δ δ' : LSub} (h : ∀ y, VFree y A → δ.find? y = δ'.find? y) :
     vO (ℍ := ℍ) A δ = vO (ℍ := ℍ) A δ' :=
   vOE_congr A none h (envAgreeN_none _ _)
+
 
 theorem vNX_congr (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) : ∀ (A : VTy) {δ δ' : LSub},
     (∀ y, VFree y A → δ.find? y = δ'.find? y) → (∀ y, VFree y S → δ.find? y = δ'.find? y) →
     vNX (ℍ := ℍ) S P A δ = vNX (ℍ := ℍ) S P A δ' :=
   fun A _ _ h hS => vNE_congr A _ h (envAgreeN_nu hS)
 
+
 theorem vOX_congr (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) : ∀ (A : VTy) {δ δ' : LSub},
     (∀ y, VFree y A → δ.find? y = δ'.find? y) → (∀ y, VFree y S → δ.find? y = δ'.find? y) →
     vOX (ℍ := ℍ) S P A δ = vOX (ℍ := ℍ) S P A δ' :=
   fun A _ _ h hS => vOE_congr A _ h (envAgreeN_nu hS)
+
 
 /-- Extending `δ` at a variable `A` does not mention leaves `𝒱⟦A⟧` alone. -/
 theorem vN_extend_of_not_free {x : LifeVar} {A : VTy} (h : ¬ VFree x A) (δ : LSub) (α : Life) :
     vN (ℍ := ℍ) A (δ.extend x α) = vN (ℍ := ℍ) A δ :=
   vN_congr A fun y hy => BoCa.Fig16.LogRel.find?_extend_ne δ α (fun e => by subst e; exact h hy)
 
-/-! ### Outliving types lie in the stratum -/
 
 /-- **`Δ ⊢ A ⊐ @a`: `𝒱⟦A⟧` lies in `Res_α`, `α = @aδ`** (Core's `vC_outlives`), at every
 world. -/
@@ -2040,10 +1934,12 @@ theorem vNE_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life} 
       exact sepRange_closed (R := fun σ => σ.InStratum α) (ResU.inStratum_empty α)
         (fun _ _ _ hc o₁ o₂ => inStratum_compS hc o₁ o₂) (fun m σ hm => ih hη Θ n _ σ hm) hs
 
+
 theorem vN_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life} (hδ : Δ.Models δ)
     (ha : a.interp δ = some α) {T : VTy} (hT : VOutlives Δ a T) :
     ∀ Θ n v ρ, vN (ℍ := ℍ) T δ Θ n v ρ → ρ.InStratum α :=
   vNE_outlives hδ ha hT (η := none) (fun _ _ _ _ _ h => h.elim)
+
 
 /-- **`Δ ⊢ A ⊒ @a`: `𝒱⟦A⟧` lies in every stratum strictly below `α = @aδ`** (Core's
 `vC_outlivesLe`, `[TR]` 6.60 at the non-strict side condition), at every world. -/
@@ -2111,26 +2007,13 @@ theorem vNE_outlivesLe {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α γ : L
       exact sepRange_closed (R := fun σ => σ.InStratum γ) (ResU.inStratum_empty γ)
         (fun _ _ _ hc o₁ o₂ => inStratum_compS hc o₁ o₂) (fun m σ hm => ih hη Θ n _ σ hm) hs
 
+
 theorem vN_outlivesLe {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α γ : Life}
     (hδ : Δ.Models δ) (ha : a.interp δ = some α) (hγ : γ < α) {T : VTy}
     (hT : VOutlivesLe Δ a T) :
     ∀ Θ n v ρ, vN (ℍ := ℍ) T δ Θ n v ρ → ρ.InStratum γ :=
   vNE_outlivesLe hδ ha hγ hT (η := none) (fun _ _ _ _ _ h => h.elim)
 
-/-! ### Values along the Kripke order -/
-
-/-- One cell at one location determines both. -/
-theorem single_immOf_inj {l l' : Loc} {ψ ψ' : CellU Loc Val}
-    (e : ResU.single l ψ = ResU.single l' ψ') : l = l' ∧ ψ = ψ' := by
-  have h : (ResU.single l' ψ').get l = some ψ := e ▸ ResU.single_get_self l ψ
-  exact ResU.single_get_eq_some h
-
-
-/-- Every entry of the environment is stable along the resource-relative order. -/
-def EnvExtRN (η : Option (Nat → TEntN)) : Prop :=
-  ∀ m b (Θ Θ' : LocTy) k v ρ, Θ.ExtR Θ' ρ → (tEnvN η m).P b Θ k v ρ → (tEnvN η m).P b Θ' k v ρ
-
-theorem envExtRN_none : EnvExtRN none := fun _ _ _ _ _ _ _ _ h => h
 
 /-- `μ` along the resource-relative order, from the body's law at every stable environment: the
 least fixed point lies in `{x | x is in the candidate at every extension}`. -/
@@ -2158,6 +2041,7 @@ theorem vBN_mu_extR {η : Option (Nat → TEntN)} {A : VTy} {δ : LSub} {b : Boo
     | zero => exact absurd rfl hm
     | succ m => rfl
   exact hl Q hQ Θ' hE
+
 
 mutual
 /-- **`𝒱⟦A⟧` is stable along the resource-relative order at the value's resource** (Core's
@@ -2281,36 +2165,53 @@ theorem vN_extR (A : VTy) (δ : LSub) {Θ Θ' : LocTy} (n : Nat) (v : Val) (ρ :
     (hE : Θ.ExtR Θ' ρ) (h : vN (ℍ := ℍ) A δ Θ n v ρ) : vN (ℍ := ℍ) A δ Θ' n v ρ :=
   vNE_extR A none envExtRN_none δ n v ρ hE h
 
+
 theorem vO_extR (A : VTy) (δ : LSub) {Θ Θ' : LocTy} (n : Nat) (v : Val) (ρ : WRes)
     (hE : Θ.ExtR Θ' ρ) (h : vO (ℍ := ℍ) A δ Θ n v ρ) : vO (ℍ := ℍ) A δ Θ' n v ρ :=
   vOE_extR A none envExtRN_none δ n v ρ hE h
+
 
 /-- **`𝒱⟦A⟧` is stable along `ExtA`**, at every type: `ExtA` is `ExtR` at every resource. -/
 theorem vN_extA (A : VTy) (δ : LSub) {Θ Θ' : LocTy} (hE : Θ.ExtA Θ') (n : Nat) (v : Val)
     (ρ : WRes) (h : vN (ℍ := ℍ) A δ Θ n v ρ) : vN (ℍ := ℍ) A δ Θ' n v ρ :=
   vN_extR A δ n v ρ (hE.extR ρ) h
 
-/-- The computation types `cN_extA` covers: `F A` and `⊤`, read through `&` and `∀`. Not
-an effect row (`F_Σ R`), and not `⊸`: a plain wand at `Θ` reads its argument at `Θ`, and an
-argument at an extension `Θ′` is not one at `Θ`. Not `ν`, whose observation trees hold both. -/
-def noEffSpine : CTy → Prop
-  | .ret _ => True
-  | .arr _ _ => False
-  | .amp C D => noEffSpine C ∧ noEffSpine D
-  | .top => True
-  | .all _ _ C => noEffSpine C
-  | .nu _ => False
-  | .eff _ _ _ _ _ _ _ _ => False
 
-/-- **`𝒞⟦C⟧` is stable along `ExtA`**: `F A` by `erwp_extΦ` at the view (which grows along the
+/-- The empty table allows no stop. -/
+theorem opTableK_empty_false {ι : Type} {lo : Life} {k : Nat} {ls : List SRec} {t : Expr}
+    {Ψ : ContK ι} {ρ : WRes} (h : opTableK lo (OpTabK.empty : OpTabK ι) k ls t Ψ ρ) : False := by
+  rcases h with ⟨K, n, i, v, en, h⟩ | ⟨K, n, i, v, en, h⟩
+  · exact absurd (pure_sep_iff.mp h).1.2.2.1 (by simp [OpTabK.empty])
+  · exact absurd (pure_sep_iff.mp h).1.2.2.1 (by simp [OpTabK.empty])
+
+/-- **A run at the empty table moves to another world**: no stop reads a world, so the run is
+one at any world whose location family extends the first's, its values posted there. -/
+theorem erwpK_empty_move {ι ι' : Type} {V : ι → ι → Prop} {V' : ι' → ι' → Prop} {Φ : ι → LocFam}
+    {Φ' : ι' → LocFam} {lo : ι → Life} {lo' : ι' → Life} {Q : ι → PostN} {Q' : ι' → PostN}
+    {x : ι} {x' : ι'} (hE : (Φ x).Ext (Φ' x')) (hEI : (Φ x).ImmLe (Φ' x')) (hV : V' x' x')
+    (hQ : ∀ y k ls v ρ, V x y → Q y k ls v ρ → Q' x' k ls v ρ) {n : Nat} {ls : List SRec}
+    {e : Expr} {ρ : WRes}
+    (h : erwpK (ℍ := ℍ) V Φ (fun z => opTableK (lo z) OpTabK.empty) Q x n ls e ρ) :
+    erwpK (ℍ := ℍ) V' Φ' (fun z => opTableK (lo' z) OpTabK.empty) Q' x' n ls e ρ := by
+  rw [erwpK_eq] at h ⊢
+  refine rwpG_extΦ hE hEI (rwpG_mono (fun k ls t ρ ht => ?_) h)
+  rcases ht with ⟨v, hv, y, hy, hq⟩ | ht
+  · exact Or.inl ⟨v, hv, x', hV, hQ y _ _ _ _ hy hq⟩
+  · exact (opTableK_empty_false ht).elim
+
+/-- **`𝒞⟦C⟧` is stable along `ExtA`**: `F A` by `erwpK_empty_move` at the view (which grows along the
 order, `LocTy.view_ext`) and `vN_extA` for its values. Not at an effect row: there the table's answer `vN B δ Θ` is what the continuation was proved to accept,
 and the table at `Θ′` hands back answers at `Θ′`. -/
 theorem cN_extA : ∀ (C : CTy), noEffSpine C → ∀ (δ : LSub) {Θ Θ' : LocTy}, Θ.ExtA Θ' →
     ∀ c n ls e ρ, cN (ℍ := ℍ) C δ Θ c n ls e ρ → cN (ℍ := ℍ) C δ Θ' c n ls e ρ
-  | .ret A, _, δ, _, _, hE, c, n, ls, e, ρ, h =>
-      erwp_mono (fun k _ v ρ h => vN_extA A δ hE k v ρ h) (opTableN_local _) n ls e ρ
-        (erwp_extΦ (LocTy.view_ext (LocTy.ext_of_extA hE) c) (LocTy.view_immLe hE.2.2 c)
-          (opTableN_local _) n ls e ρ h)
+  | .ret A, _, δ, Θ, Θ', hE, c, n, ls, e, ρ, h => fun lo =>
+      erwpK_empty_move (x := (⟨Θ, c, lo⟩ : KW)) (x' := (⟨Θ', c, lo⟩ : KW)) (V' := KW.PostK)
+        (Φ' := fun z : KW => z.Θ.view z.c) (lo' := fun z : KW => z.lo)
+        (Q' := fun (z : KW) k _ v ρ => vNE none A δ z.Θ k v ρ)
+        (LocTy.view_ext (LocTy.ext_of_extA hE) c) (LocTy.view_immLe hE.2.2 c) (KW.postK_refl _)
+        (fun y k ls v ρ hy hq => by
+          subst hy
+          exact vN_extA A δ hE k v ρ hq) (h lo)
   | .arr _ _, hC, _, _, _, _, _, _, _, _, _, _ => hC.elim
   | .amp C D, hC, δ, _, _, hE, c, n, ls, e, ρ, h =>
       ⟨cN_extA C hC.1 δ hE c n ls _ ρ h.1, cN_extA D hC.2 δ hE c n ls _ ρ h.2⟩
@@ -2320,7 +2221,6 @@ theorem cN_extA : ∀ (C : CTy), noEffSpine C → ∀ (δ : LSub) {Θ Θ' : LocT
   | .nu _, hC, _, _, _, _, _, _, _, _, _, _ => hC.elim
   | .eff _ _ _ _ _ _ _ _, hC, _, _, _, _, _, _, _, _, _, _ => hC.elim
 
-/-! ### Values in a lend's stratum do not read the lend -/
 
 /-- **Locality** (Core's `vC_local` along `ext_drop`): a value at the world with a lend at `α`,
 whose resource is in `α`'s stratum, is one at the world without it, at every type, `U` included:
@@ -2330,12 +2230,14 @@ theorem vN_local (A : VTy) (δ : LSub) (Θ : LocTy) (l₀ : Loc) (α : Life)
     (h : vN (ℍ := ℍ) A δ (Θ.add l₀ α F) n v ρ) : vN (ℍ := ℍ) A δ Θ n v ρ :=
   vN_extR A δ n v ρ (LocTy.extR_of_add Θ l₀ F hs) h
 
+
 /-- **A value of a type outliving the bound lies in the stratum of every lend below it.** -/
 theorem vN_inStratum_bnd {A : VTy} {bnd : Lifetime.Life} (hO : VOutlives LifeCtx.empty bnd A)
     {δ : LSub} {α : Life} (hLt : LtLife δ bnd α) {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes}
     (h : vN (ℍ := ℍ) A δ Θ n v ρ) : ρ.InStratum α := by
   obtain ⟨γ, hγ, hlt⟩ := hLt
   exact (vN_outlives (models_empty_any _) hγ hO Θ n v ρ h).mono hlt.le
+
 
 /-- **A fresh lend below the bound does not change `𝒱⟦A⟧` of a type outliving the bound**: its
 values are in the lend's stratum, so `vN_local` and `vN_extA` relate the two worlds both ways. -/
@@ -2347,24 +2249,27 @@ theorem vN_add_eq_bnd {A : VTy} {bnd : Lifetime.Life} (hO : VOutlives LifeCtx.em
   exact propext ⟨fun h => vN_local A δ Θ l α F n v ρ (vN_inStratum_bnd hO hLt h) h,
     fun h => vN_extA A δ (LocTy.extA_add hf l F) n v ρ h⟩
 
+
 /-- **A stored family is the payload at the world** on content in the cell's stratum. -/
 theorem vN_above (A : VTy) (δ : LSub) (Θ : LocTy) {a : Life} {n : Nat} {v : Val} {ρ : WRes}
     (hρ : ρ.InStratum a) : vN (ℍ := ℍ) A δ (Θ.above a) n v ρ ↔ vN (ℍ := ℍ) A δ Θ n v ρ :=
   ⟨vN_extR A δ n v ρ (LocTy.extR_above Θ hρ).1, vN_extR A δ n v ρ (LocTy.extR_above Θ hρ).2⟩
 
-/-! ### `ν`: the greatest fixed point -/
 
 /-- **`𝒞⟦νX. C⟧δ` as a candidate.** -/
 abbrev nuCand (C : CTy) (δ : LSub) : CandN := fun Θ c n ls e ρ => cN (ℍ := ℍ) (.nu C) δ Θ c n ls e ρ
 
+
 theorem nuCand_down (C : CTy) (δ : LSub) : (nuCand (ℍ := ℍ) C δ).Down :=
   fun Θ hOK c n ls e ρ h => cN_down (.nu C) δ Θ hOK.1 c n ls e ρ h
+
 
 /-- **Coinduction** (Core's `nuRel_coind`): a post-fixed point of one unfolding is below
 `𝒞⟦νX. C⟧`. -/
 theorem cN_nu_coind {C : CTy} {δ : LSub} {R : CandN}
     (hR : R.Le (cBN (ℍ := ℍ) (.thunk (.nu C)) R C δ)) : R.Le (nuCand (ℍ := ℍ) C δ) :=
   fun _ _ _ _ _ _ h _ => ⟨R, hR, h⟩
+
 
 /-- **`out`** (Core's `nuRel_out`). -/
 theorem cN_nu_out {C : CTy} (hS : C.NuShape) (δ : LSub) :
@@ -2374,11 +2279,13 @@ theorem cN_nu_out {C : CTy} (hS : C.NuShape) (δ : LSub) :
   exact cBN_mono (fun Θ' _ c' k ls' e' ρ' h' => cN_nu_coind hR Θ' c' k ls' e' ρ' h') hS.nuLeaf δ
     Θ c n ls e ρ (hR Θ c n ls e ρ hr)
 
+
 /-- **`roll`** (Core's `nuRel_roll`). -/
 theorem cN_nu_roll {C : CTy} (hS : C.NuShape) (δ : LSub) :
     (cBN (ℍ := ℍ) (.thunk (.nu C)) (nuCand (ℍ := ℍ) C δ) C δ).Le (nuCand (ℍ := ℍ) C δ) :=
   cN_nu_coind (cBN_mono (fun Θ' _ c' k ls' e' ρ' h' => cN_nu_out hS δ Θ' c' k ls' e' ρ' h')
     hS.nuLeaf δ)
+
 
 /-- **`𝒞⟦νX. C⟧` is one unfolding of `C` at `𝒞⟦νX. C⟧`** (Core's `cC_nu_unfold`). -/
 theorem cN_nu_unfold {C : CTy} (hS : C.NuShape) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life)
@@ -2387,15 +2294,57 @@ theorem cN_nu_unfold {C : CTy} (hS : C.NuShape) (δ : LSub) (Θ : LocTy) (c : Lo
       cBN (ℍ := ℍ) (.thunk (.nu C)) (nuCand (ℍ := ℍ) C δ) C δ Θ c n ls e ρ :=
   ⟨cN_nu_out hS δ Θ c n ls e ρ, cN_nu_roll hS δ Θ c n ls e ρ⟩
 
+
+/-- `F A`'s clause is closed under a deterministic step backwards. -/
+theorem erwpK_ret_det {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option Life} {lo : Life}
+    {P : KW → Nat → Val → WRes → Prop} (hP : ∀ z k v ρ, P z (k + 1) v ρ → P z k v ρ) {n : Nat}
+    {ls : List SRec} {e e' : Expr} {ρ : WRes} (hdet : ∀ μ, Step1Only (ℍ := ℍ) μ e μ e')
+    (h : erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c) (fun z => opTableK z.lo OpTabK.empty)
+      (fun z k _ v ρ => P z k v ρ) ⟨Θ, c, lo⟩ n ls e' ρ) :
+    erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c) (fun z => opTableK z.lo OpTabK.empty)
+      (fun z k _ v ρ => P z k v ρ) ⟨Θ, c, lo⟩ n ls e ρ := by
+  refine erwpK_det (x := (⟨Θ, c, lo⟩ : KW)) (Φ := fun z : KW => z.Θ.view z.c)
+    (LocTy.view_down hΘ c) ?_ (fun z k _ v ρ h => hP z k v ρ h) hdet h
+  exact opTableK_downI (OpTabK.empty_downI (fun z : KW => z.Θ.Down))
+
+/-- `F_Σ`'s clause is closed under a deterministic step backwards. -/
+theorem cN_eff_det {m i : UInt32} {q : Qual} {A B : VTy} {fin : CTy} {rc : Bool} {C : CTy}
+    {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option Life} {n : Nat} {ls : List SRec}
+    {e e' : Expr} {ρ : WRes} (hdet : ∀ μ, Step1Only (ℍ := ℍ) μ e μ e')
+    (h : cN (ℍ := ℍ) (.eff m i q A B fin rc C) δ Θ c n ls e' ρ) :
+    cN (ℍ := ℍ) (.eff m i q A B fin rc C) δ Θ c n ls e ρ := by
+  simp only [cN] at h ⊢
+  intro lo
+  have h' := h lo
+  refine erwpK_det (x := (⟨Θ, c, lo⟩ : KW)) (Φ := fun z : KW => z.Θ.view z.c)
+    (LocTy.view_down hΘ c) ?_ (fun (z : KW) k _ v ρ h => retN_down C δ z.Θ k v ρ h) hdet h'
+  exact opTableK_downI (extTabK_entNK_downI (fun k v ρ h => vN_down A δ Θ k v ρ h)
+    (finN_downI fin δ) (tabN_downI C δ _))
+
+/-- One unfolding's `F_Σ` clause is closed under a deterministic step backwards. -/
+theorem cBN_eff_det {S : VTy} {R : CandN} (hR : R.Down) {m i : UInt32} {q : Qual} {A B : VTy}
+    {fin : CTy} {rc : Bool} {D : CTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down)
+    {c : Loc → Option Life} {n : Nat} {ls : List SRec} {e e' : Expr} {ρ : WRes}
+    (hdet : ∀ μ, Step1Only (ℍ := ℍ) μ e μ e')
+    (h : cBN (ℍ := ℍ) S R (.eff m i q A B fin rc D) δ Θ c n ls e' ρ) :
+    cBN (ℍ := ℍ) S R (.eff m i q A B fin rc D) δ Θ c n ls e ρ := by
+  simp only [cBN] at h ⊢
+  intro lo
+  have h' := h lo
+  refine erwpK_det (x := (⟨Θ, c, lo⟩ : KW)) (Φ := fun z : KW => z.Θ.view z.c)
+    (LocTy.view_down hΘ c) ?_
+    (fun (z : KW) k _ v ρ h => retNX_down S _ (thunkRN_down hR) D δ z.Θ k v ρ h) hdet h'
+  exact opTableK_downI (extTabK_entNK_downI (fun k v ρ h => vN_down A δ Θ k v ρ h)
+    (finN_downI fin δ) (tabN_downI D δ _))
+
 /-- **One unfolding is closed under a pure head step backwards** (Core's `cB_step`). -/
 theorem cBN_head (S : VTy) {R : CandN} (hR : R.Down) : ∀ (D : CTy) (δ : LSub) (Θ : LocTy),
     Θ.Down → ∀ (c : Loc → Option Life) (n : Nat) (ls : List SRec) (ρ : WRes) (K : Kont)
     (a a' : Expr), (∀ μ, BoCa.BoLo.Head (ℍ := ℍ) μ a μ a') → a.allocs = false →
     cBN (ℍ := ℍ) S R D δ Θ c n ls (K.plug a') ρ → cBN (ℍ := ℍ) S R D δ Θ c n ls (K.plug a) ρ
-  | .ret A, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
-      erwp_det (LocTy.view_down hΘ c) (opTableN_down OpTabN.empty_down)
-        (fun k _ v ρ h => vNX_down S _ (thunkRN_down hR) A δ Θ k v ρ h)
-        (fun μ => step1Only_plug (hh μ) hn K) h
+  | .ret A, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h => fun lo =>
+      erwpK_ret_det hΘ (fun z k v ρ h => vNX_down S _ (thunkRN_down hR) A δ z.Θ k v ρ h)
+        (fun μ => step1Only_plug (hh μ) hn K) (h lo)
   | .arr A D, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
       fun c' k hk v ρv ρ' hc hv hcon =>
         cBN_head S hR D δ Θ hΘ c' k ls ρ' (.appL K v) a a' hh hn (h c' k hk v ρv ρ' hc hv hcon)
@@ -2407,13 +2356,8 @@ theorem cBN_head (S : VTy) {R : CandN} (hR : R.Down) : ∀ (D : CTy) (δ : LSub)
       fun α hα => cBN_head S hR D (δ.extend x α) Θ hΘ c n ls ρ (.appL K _) a a' hh hn (h α hα)
   | .nu _, _, _, _, _, _, _, _, _, _, _, _, _, h => h
   | .eff m i q A B fin rc D, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
-      erwp_det (LocTy.view_down hΘ c)
-        (opTableN_down (extTabN_down (fun k v ρ h => vNE_down A none envDownN_none δ Θ k v ρ h)
-          (finN_down fin δ Θ hΘ c) (tabN_down D δ Θ hΘ c)))
-        (fun k _ v ρ h => retNX_down S _ (thunkRN_down hR) D δ Θ k v ρ h)
-        (fun μ => step1Only_plug (hh μ) hn K) h
+      cBN_eff_det hR hΘ (fun μ => step1Only_plug (hh μ) hn K) h
 
-/-! ### Rule checks: `⊑mut`, `⊑imm`, `∀I` at `SemJN` -/
 
 /-- **`𝒞⟦C⟧` is closed under a pure head step backwards**, in every evaluation context: the
 `F`/`F_Σ` clauses by `erwp_det`, the others by their parts (Core's `cC_head`). -/
@@ -2421,9 +2365,9 @@ theorem cN_head : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down → ∀ (c : L
     (n : Nat) (ls : List SRec) (ρ : WRes) (K : Kont) (a a' : Expr),
     (∀ μ, BoCa.BoLo.Head (ℍ := ℍ) μ a μ a') → a.allocs = false →
     cN (ℍ := ℍ) C δ Θ c n ls (K.plug a') ρ → cN (ℍ := ℍ) C δ Θ c n ls (K.plug a) ρ
-  | .ret A, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
-      erwp_det (LocTy.view_down hΘ c) (opTableN_down OpTabN.empty_down)
-        (fun k _ v ρ h => vN_down A δ Θ k v ρ h) (fun μ => step1Only_plug (hh μ) hn K) h
+  | .ret A, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h => fun lo =>
+      erwpK_ret_det hΘ (fun z k v ρ h => vN_down A δ z.Θ k v ρ h)
+        (fun μ => step1Only_plug (hh μ) hn K) (h lo)
   | .arr A C, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
       fun c' k hk v ρv ρ' hc hv hcon =>
         cN_head C δ Θ hΘ c' k ls ρ' (.appL K v) a a' hh hn (h c' k hk v ρv ρ' hc hv hcon)
@@ -2437,271 +2381,140 @@ theorem cN_head : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down → ∀ (c : L
       (cN_nu_unfold hS δ Θ c n ls _ ρ).mpr (cBN_head _ (nuCand_down C δ) C δ Θ hΘ c n ls ρ K a a'
         hh hn ((cN_nu_unfold hS δ Θ c n ls _ ρ).mp h)) hS
   | .eff m i q A B fin rc C, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
-      erwp_det (LocTy.view_down hΘ c)
-        (opTableN_down (extTabN_down (fun k v ρ h => vN_down A δ Θ k v ρ h)
-          (finN_down fin δ Θ hΘ c) (tabN_down C δ Θ hΘ c)))
-        (fun k _ v ρ h => retN_down C δ Θ k v ρ h) (fun μ => step1Only_plug (hh μ) hn K) h
+      cN_eff_det hΘ (fun μ => step1Only_plug (hh μ) hn K) h
 
-/-- `Δ ⊨ a ⊑ b`'s order on interpretations is `Life`'s. -/
-theorem sLe_life {m n : Life} (h : BoCa.Lifetime.SLife.Le m n) : m ≤ n := h
 
-/-- **`⊑mut` at `SemJN`** (`mutSub`, `Core/Fundamental.lean`): Core's `mutSub_compatC` by
-`ptoMutS_antitone`. The `Mut` clause's slack `@aδ ⊑ b` absorbs `@aδ ⊑ @bδ`: the cell stays at
-its `b`, its key and its uniform conjunct unchanged. -/
-theorem mutSub_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.Life} {A : VTy}
-    (h : SemJN (ℍ := ℍ) Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) :
-    SemJN (ℍ := ℍ) Δ Γ e (.val (.mut a A)) := by
-  intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
-  obtain ⟨α, β, ha, hb, hle'⟩ := hle δ hδ
-  refine erwp_mono (fun k _ v ρ hv => ?_) (opTableN_local _) n ls _ ρ
-    (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
-  obtain ⟨β', hβ', b', hβb', hm, hu⟩ := hv
-  rw [hb] at hβ'
-  cases Option.some.inj hβ'
-  exact ⟨α, ha, b', le_trans (sLe_life hle') hβb', hm, hu⟩
 
-/-- **`⊑imm` at `SemJN`** (`immSub`): Core's `immSub_compatC` by `ptoImmS_antitone`. -/
-theorem immSub_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.Life} {A : VTy}
-    (h : SemJN (ℍ := ℍ) Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) :
-    SemJN (ℍ := ℍ) Δ Γ e (.val (.imm a A)) := by
-  intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
-  obtain ⟨α, β, ha, hb, hle'⟩ := hle δ hδ
-  refine erwp_mono (fun k _ v ρ hv => ?_) (opTableN_local _) n ls _ ρ
-    (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
-  obtain ⟨β', hβ', ⟨l, s, u, σ, hs, h₁, h₂, h₃, h₄⟩, hw⟩ := hv
-  rw [hb] at hβ'
-  cases Option.some.inj hβ'
-  exact ⟨α, ha, ⟨l, s, u, σ, hs, h₁, h₂, le_trans (sLe_life hle') h₃, h₄⟩, hw⟩
+/-! ## The reading through the family -/
 
-/-- `𝒢⟦Γ⟧` does not read `δ` at a variable no live slot mentions. -/
-theorem gN_extend_of_not_free {x : LifeVar} (δ : LSub) (α : Life) (Θ : LocTy) :
-    ∀ (Γ : Ctx VTy), (∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty) → ∀ γ n ρ,
-      gN (ℍ := ℍ) δ Θ Γ γ n ρ → gN (ℍ := ℍ) (δ.extend x α) Θ Γ γ n ρ
-  | [], _, _, _, _, h => h
-  | _ :: _, _, [], _, _, h => h
-  | s :: Γ, hΓ, v :: γ, n, ρ, h => by
-      have ih := gN_extend_of_not_free δ α Θ Γ (fun s' hs' => hΓ s' (List.mem_cons_of_mem _ hs'))
-      unfold gN at h ⊢
-      split
-      · rename_i hl
-        rw [if_pos hl] at h
-        obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
-        refine ⟨ρ₁, ρ₂, hc, ?_, ih γ n ρ₂ h₂⟩
-        rw [vN_extend_of_not_free (hΓ s (List.mem_cons_self ..) hl)]
-        exact h₁
-      · rename_i hl
-        rw [if_neg hl] at h
-        exact ih γ n ρ h
+/-- **At a persistent type `𝒱⟦A⟧` holds only at `∅`** (`vN_empty_of_persistent`). -/
+theorem vN_empty_of_persistent : ∀ (A : VTy), A.Persistent → ∀ {δ : LSub} {Θ : LocTy} {n : Nat}
+    {v : Val} {ρ : WRes}, vN (ℍ := ℍ) A δ Θ n v ρ → ρ = PMap.empty := by
+  intro A hA δ Θ n v ρ h
+  refine vN_ind δ (fun _ T _ _ _ ρ => T.Persistent → ρ = PMap.empty) ?_ true A Θ n v ρ h hA
+  intro b T Θ n v ρ h hp
+  cases T with
+  | unit => exact h.2
+  | zero => exact h.elim
+  | unk => exact h
+  | int _ => exact h.2
+  | bang _ => exact h.1
+  | tvar _ => exact h.elim
+  | opq _ => simp [VTy.Persistent, VTy.persistent] at hp
+  | thunk _ => simp [VTy.Persistent, VTy.persistent] at hp
+  | ref _ => simp [VTy.Persistent, VTy.persistent] at hp
+  | imm _ _ => simp [VTy.Persistent, VTy.persistent] at hp
+  | «mut» _ _ => simp [VTy.Persistent, VTy.persistent] at hp
+  | fam _ => simp [VTy.Persistent, VTy.persistent] at hp
+  | tensor A B =>
+      simp only [VTy.Persistent, VTy.persistent, Bool.and_eq_true] at hp
+      obtain ⟨v₁, v₂, ρ₁, ρ₂, -, hc, h₁, h₂⟩ := h
+      rw [h₁.2 hp.1, h₂.2 hp.2] at hc
+      exact eq_empty_of_compS_empty hc
+  | sum A B =>
+      simp only [VTy.Persistent, VTy.persistent, Bool.and_eq_true] at hp
+      rcases h with ⟨v₁, -, h₁⟩ | ⟨v₂, -, h₂⟩
+      · exact h₁.2 hp.1
+      · exact h₂.2 hp.2
+  | box _ A =>
+      obtain ⟨α, -, hb, -⟩ := h
+      exact hb.2 hp
+  | mu A =>
+      exact h.2.2.2 (by
+        show (VTy.inst (.mu A) A).persistent = true
+        rw [Inversions.persistent_inst_mu]; exact hp)
 
-/-- **`∀I` at `SemJN`** (`allI`, `Core/Fundamental.lean`): Core's `allI_compatC`. At every
-`α ⊏ @bδ`, `δ[x ↦ α]` models `Δ, 'x ⊏ @b` (the bound and `Δ`'s bounds do not mention `'x`), the
-context's reading does not change (`gN_extend_of_not_free`), and the body is one β step away
-(`cN_head`). The `∀` clause reads no definedness of `@b`, as Core's `cC`, so the rule needs none. -/
-theorem allI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.Life} {M : Expr}
-    {S : VTy} {C : CTy} (hbx : b.mentions x = false)
-    (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
-    (hΓx : ∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty)
-    (h : SemJN (ℍ := ℍ) (Δ.extend x b) (⟨S, false⟩ :: Γ) M (.comp C)) :
-    SemJN (ℍ := ℍ) Δ Γ (.val (.lam M)) (.comp (.all x b C)) := by
-  intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg α hα
-  obtain ⟨β, hβ, hlt⟩ := hα
-  have hδ' : (Δ.extend x b).Models (δ.extend x α) := by
-    intro y u hy
-    rw [LifeCtx.find?_extend] at hy
-    by_cases hxy : x = y
-    · subst hxy
-      rw [if_pos rfl] at hy
-      obtain rfl := Option.some.inj hy
-      exact ⟨α, β, BoCa.Fig16.LogRel.find?_extend_self δ x α,
-        by rw [BoCa.Fig16.LogRel.interp_extend_of_not_mentions hbx]; exact hβ, hlt⟩
-    · rw [if_neg hxy] at hy
-      obtain ⟨m, k, hm, hk, hlk⟩ := hδ y u hy
-      exact ⟨m, k, by rw [BoCa.Fig16.LogRel.find?_extend_ne δ α hxy]; exact hm,
-        by rw [BoCa.Fig16.LogRel.interp_extend_of_not_mentions (hΔx y u hy)]; exact hk, hlk⟩
-  show cN (ℍ := ℍ) C (δ.extend x α) Θ c n ls
-    (Kont.hole.plug (.app (.val (.lam (Expr.psub 1 γ M))) (.val .unit))) ρ
-  refine cN_head C _ Θ hΘ.1 c n ls ρ .hole _ _
-    (fun μ => BoCa.BoLo.Head.beta μ (Expr.psub 1 γ M) Val.unit) rfl ?_
-  rw [show Kont.hole.plug (Expr.subst 0 Val.unit (Expr.psub 1 γ M)) = substAll (Val.unit :: γ) M
-    from (substAll_cons_psub Val.unit γ M).symm]
-  exact h (δ.extend x α) (Val.unit :: γ) Θ c n ls ρ hδ' hΘ hc hlw
-    (gN_extend_of_not_free δ α Θ Γ hΓx γ n ρ hg)
+/-- **The relation's reading of a row's table**: values at `vN`, at the world's location typing
+and view; every entry, and every entry of a cancel row, owes its continuation along `KW.Owed`, so
+the reading has one mode; the runs at the world's view and floor, posted at their own world, read
+at the worlds whose location typing is downward closed. -/
+def rdN (δ : LSub) : RowRd KW Unit where
+  vr := fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ
+  δ := δ
+  Θ := fun x => x.Θ
+  c := fun x => x.c
+  wk := fun _ _ x f y ρ => x.Owed f y ρ
+  sub := fun _ _ => ()
+  le := fun _ _ => True
+  V := KW.PostK
+  Φ := fun z => z.Θ.view z.c
+  fl := fun z => z.lo
+  Inv := fun z => z.Θ.Down
 
-/-! ## §3. The statements -/
+theorem rdN_ok (δ : LSub) : (rdN (ℍ := ℍ) δ).OK where
+  vrDown := fun A Θ k v ρ h => vN_down A δ Θ k v ρ h
+  vrPers := fun A hA _ _ _ _ h => vN_empty_of_persistent A hA h
+  wkInv := fun _ _ _ _ _ _ h => h.2.1.1
+  ΦDown := fun x hx => LocTy.view_down hx x.c
+  wkLeft := fun _ _ _ _ _ _ _ _ hc hv h => KW.Owed.left hc hv h
+  le_refl := fun _ => trivial
+  le_trans := fun _ _ _ _ _ => trivial
+  le_sub := fun _ _ => trivial
+  sub_mono := fun _ _ _ _ => trivial
+  wk_anti := fun _ _ _ _ _ _ _ _ h => h
+  Veq := fun _ _ h => h
 
-mutual
-/-- **The formers the interpretation covers**: every former. `μ` is covered at a covered body, a
-type variable always (its environment entry, empty at the empty environment). `ν` is covered at a
-covered body, whose variable `X` (`VTy.inFragNu`) `cN` reads at the candidate. Families (arrays and
-slices) are covered at a covered leaf, and opaque types (`Tok` and the host types) always.
-Decidable. -/
-def _root_.BoCa.Fig16.LogRel.Core.VTy.inFrag : VTy → Bool
-  | .unit | .zero | .unk | .int _ | .opq _ => true
-  | .tensor A B | .sum A B => A.inFrag && B.inFrag
-  | .thunk C => C.inFrag
-  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A | .mu A => A.inFrag
-  | .tvar _ => true
-/-- The computation-type formers the interpretation covers. -/
-def _root_.BoCa.Fig16.LogRel.Core.CTy.inFrag : CTy → Bool
-  | .ret A => A.inFrag
-  | .arr A C => A.inFrag && C.inFrag
-  | .amp C D => C.inFrag && D.inFrag
-  | .top => true
-  | .all _ _ C => C.inFrag
-  | .nu C => C.inFragNu
-  | .eff _ _ _ A B fin _ C => A.inFrag && B.inFrag && fin.inFrag && C.inFrag
-/-- The value-type formers a `ν` body covers: `VTy.inFrag`'s, and the body's variable `X`
-(index `0`). A thunk is read by `vN`, where `X` does not occur. -/
-def _root_.BoCa.Fig16.LogRel.Core.VTy.inFragNu : VTy → Bool
-  | .tvar 0 => true
-  | .unit | .zero | .unk | .int _ | .opq _ => true
-  | .tensor A B | .sum A B => A.inFragNu && B.inFragNu
-  | .thunk C => C.inFrag
-  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A => A.inFragNu
-  | .tvar (_ + 1) | .mu _ => false
-/-- The computation-type formers a `ν` body covers. -/
-def _root_.BoCa.Fig16.LogRel.Core.CTy.inFragNu : CTy → Bool
-  | .ret A => A.inFragNu
-  | .arr A C => A.inFragNu && C.inFragNu
-  | .amp C D => C.inFragNu && D.inFragNu
-  | .top => true
-  | .all _ _ C => C.inFragNu
-  | .nu C => C.inFragNu
-  | .eff _ _ _ A B fin _ C => A.inFragNu && B.inFragNu && fin.inFrag && C.inFragNu
-end
+/-- **The payload reading along `KW.Owed`** (`rdKW_payExt`): the order is `ExtR` at the share, so
+at a part of it, along which `𝒱⟦A⟧` is kept (`vN_extR`). -/
+theorem rdN_payExt (δ : LSub) : (rdN (ℍ := ℍ) δ).PayExt := by
+  intro _ _ x f y ρa ρb ρ hc hy A k v hv
+  exact vN_extR A δ k v ρa (hy.1.extR.left hc) hv
 
-/-- **A judgment inside the fragment**: its context's types and its own type use only the formers
-the interpretation covers. -/
-def JdgInFrag (Γ : Ctx VTy) (j : Jdg) : Bool :=
-  Γ.all (fun s => s.ty.inFrag) &&
-    match j with
-    | .val A => A.inFrag
-    | .comp C => C.inFrag
+/-- **`tabN` is `tabF` at `rdN`, and `finN` is `finF`.** -/
+theorem tabN_finN_eq (δ : LSub) : ∀ F : CTy,
+    (∀ x, tabN (ℍ := ℍ) F δ x = tabF (ℍ := ℍ) (rdN (ℍ := ℍ) δ) () F x) ∧
+      finN (ℍ := ℍ) F δ = finF (ℍ := ℍ) (rdN (ℍ := ℍ) δ) () F
+  | .eff m i q A B fin rc C => by
+      have hf := tabN_finN_eq δ fin
+      have hC := tabN_finN_eq δ C
+      refine ⟨fun x => ?_, ?_⟩
+      · simp only [tabF, tabN, hf.2, hC.1]; rfl
+      · simp only [finF, finN, hf.2, hC.1]; rfl
+  | .ret _ => ⟨fun _ => by simp [tabF, tabN], by simp [finF, finN]; rfl⟩
+  | .arr _ _ => ⟨fun _ => by simp [tabF, tabN], by simp [finF, finN]; rfl⟩
+  | .amp _ _ => ⟨fun _ => by simp [tabF, tabN], by simp [finF, finN]; rfl⟩
+  | .top => ⟨fun _ => by simp [tabF, tabN], by simp [finF, finN]⟩
+  | .all _ _ _ => ⟨fun _ => by simp [tabF, tabN], by simp [finF, finN]; rfl⟩
+  | .nu _ => ⟨fun _ => by simp [tabF, tabN], by simp [finF, finN]; rfl⟩
+  termination_by structural F => F
 
-/-- **A #791 constant is a value of `!` its type**, at every `δ`, world and index, from its
-rule's premises. -/
-def ConstN (c : Const791) : Prop :=
-  c.OK → ∀ (δ : LSub) (Θ : LocTy) (n : Nat), Θ.OK →
-    vN (ℍ := ℍ) (.bang c.ty) δ Θ n c.val PMap.empty
+theorem tabN_eq (F : CTy) (δ : LSub) (x : KW) :
+    tabN (ℍ := ℍ) F δ x = tabF (ℍ := ℍ) (rdN (ℍ := ℍ) δ) () F x :=
+  (tabN_finN_eq δ F).1 x
 
-/-- **A #791 constant inside the fragment**: its type uses only the formers the interpretation
-covers. -/
-def _root_.BoCa.Fig16.Tree.Wp.Goal791.Const791.InFrag (c : Const791) : Prop := c.ty.inFrag = true
+theorem finN_eq (F : CTy) (δ : LSub) :
+    finN (ℍ := ℍ) F δ = finF (ℍ := ℍ) (rdN (ℍ := ℍ) δ) () F :=
+  (tabN_finN_eq δ F).2
 
-/-- Every #791 constant inside the fragment. -/
-def ConstsN : Prop := ∀ c : Const791, c.InFrag → ConstN (ℍ := ℍ) c
+/-- **`F A` is `erwp` at the empty table**: a run that stops nowhere reads no world, so at every
+floor it is the one-world run. -/
+theorem cN_ret_iff (A : VTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (n : Nat)
+    (ls : List SRec) (e : Expr) (ρ : WRes) :
+    cN (ℍ := ℍ) (.ret A) δ Θ c n ls e ρ ↔
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (fun k _ v ρ => vN (ℍ := ℍ) A δ Θ k v ρ)
+        n ls e ρ := by
+  rw [erwp_empty_eq_K 0]
+  constructor
+  · intro h
+    exact erwpK_empty_move (x := (⟨Θ, c, 0⟩ : KW)) (x' := ()) (V' := fun _ _ => True)
+      (Φ' := fun _ => Θ.view c) (lo' := fun _ => 0)
+      (Q' := fun _ k _ v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (fun _ _ h => h) (fun _ h => h) trivial
+      (fun y k ls v ρ hy hq => by subst hy; exact hq) (h 0)
+  · intro h lo
+    exact erwpK_empty_move (x := ()) (x' := (⟨Θ, c, lo⟩ : KW)) (V' := KW.PostK)
+      (Φ' := fun z : KW => z.Θ.view z.c) (lo' := fun z : KW => z.lo)
+      (Q' := fun (z : KW) k _ v ρ => vN (ℍ := ℍ) A δ z.Θ k v ρ) (fun _ _ h => h) (fun _ h => h)
+      (KW.postK_refl _) (fun _ k ls v ρ _ hq => hq) h
 
-/-- **The fundamental property over `erwp`, on the fragment**: every derivation of the existing
-judgment whose context and type lie in the fragment (`JdgInFrag`). The rules whose conclusion is
-at a type outside the fragment (a `ν` body outside `CTy.inFragNu`) conclude outside it and are
-not quantified over. No rule's chain lemma reads the fragment, so the induction on the derivation
-(`fundamentalN_all`, `Core/Chain/Fundamental831N.lean`) proves `SemJN` at every derivation, one
-that cuts through a type outside the fragment included.
-
-The rule-by-rule map is `docs/new-core/scope-831-map.md`. Its answers on the two risks it named:
-* An `imm` lend (`withbor1`, `withbor1U`) runs its callback at the world with the lend's record.
-  With `LocTy.above` Core's `ls₀` and `ExtR`'s record conjunct Core's `Keeps`, that world is an
-  extension at the callback's resource (`LocTy.extR_addImm`, Core's `ext_add`) and the world
-  without the record is one at the result's (`LocTy.extR_of_addImm`, Core's `ext_drop`);
-  `withbor1_compatN` and `withbor1U_compatN` (`Core/Chain/ImmLend833N.lean`) follow Core's proofs,
-  as do `withbor2_compatN` and `withbor2U_compatN` (the latter at any `Δ` and a `Row.Unwind` row).
-  At a `Row.Unwind` row the reborrows `withbor3U_compatN` and `withloadU_compatN`
-  (`Core/Chain/Unwind833N.lean`) follow Core's proofs too: the Mut Anti-Frame at the row's own
-  table (`erwp_M_antiFrameU`), and 6.150 across the row's raises, abortive unrestricted operations
-  included (`withload_rebT`).
-* `cN_extA` at an effect row `F_Σ R` is needed by no rule: Core carries the callback's table along
-  `Ext` only in `withbor1U_compatX` and `sliceBorrowIU_compatX` (`opTable_ext`), and the chain's
-  table does not read the record list. -/
-def FundamentalN : Prop :=
-  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg), CDerives Δ Γ e j → JdgInFrag Γ j = true →
-    SemJN (ℍ := ℍ) Δ Γ e j
-
-/-- A finaliser's judgment `L ⊸ 1` is in the fragment where `L` is. -/
-theorem jdgInFrag_lolli {L : VTy} (h : L.inFrag = true) :
-    JdgInFrag [] (.val (.lolli L .unit)) = true := by
-  simp [JdgInFrag, VTy.lolli, VTy.inFrag, CTy.inFrag, h]
-
-/-- **The adequacy bridge**: a closed run of `F 1` over `erwp` is `OrDiverges`. -/
-def BridgeN : Prop :=
-  ∀ e : Expr, (∀ (Θ : LocTy) (c : Loc → Option Life), Θ.OK → ∀ n,
-    cN (ℍ := ℍ) (.ret .unit) LSub.empty Θ c n [] e (PMap.empty : WRes)) → OrDiverges (ℍ := ℍ) e
-
-/-- **#791's end goal under a scheduler at the top, over `erwp`**: `poolSchedAdequacyN`'s form,
-at the view of any world holding no `imm` record (the task starts at the empty list, which the
-relation's entry tie `ImmTieL` reads against the world's `imm` records). A task typed at `F_Σ 1`
-from the constants, run by a scheduler meeting `SchedOKN` at the row's table, is safe,
-leak-free, or diverges. Scoped to the fragment: the constants' types and the row's
-(`Const791.InFrag`, `VTy.inFrag`). -/
-def Goal791SchedN : Prop :=
-  ∀ (cs : List Const791), (∀ c ∈ cs, c.OK) → (∀ c ∈ cs, c.InFrag) → ∀ (S : Row) (e₀ : Expr),
-    (CTy.effOf S .unit).inFrag = true →
-    CDerives LifeCtx.empty (ctx791 cs) e₀ (.comp (CTy.effOf S .unit)) →
-    ∀ (Θ : LocTy) (c : Loc → Option Life) (n₀ : UInt32) (qs hr hs : Val) (Q : PostN)
-      (Inv : List StoredN → Prop),
-      Θ.OK → Θ.imm = [] → (∀ k ls v ρ, Q k ls v ρ → ρ = PMap.empty) → Inv [] →
-      SchedOKN (ℍ := ℍ) (Θ.view c) (rowTabN (ℍ := ℍ) S Θ c) n₀ qs hr hs
-        (fun k _ v ρ => vN (ℍ := ℍ) .unit LSub.empty Θ k v ρ)
-        (PoolAnsN (ℍ := ℍ) (Θ.view c) Q (hndVal n₀ qs hr hs) Inv) →
-      OrDiverges (ℍ := ℍ)
-        (.app (hndE (hndVal n₀ qs hr hs) (substAll (vals791 cs) e₀))
-          (stateValN (hndVal n₀ qs hr hs) []).1)
-
-/-- `withbor (2)` at a suspending row. -/
-def Withbor2SN : Prop := ∀ x bnd A B S d, ConstN (ℍ := ℍ) (.w2 x bnd A B S d)
-/-- `withbor (3)` at a suspending row. -/
-def Withbor3SN : Prop := ∀ a x bnd A B S d, ConstN (ℍ := ℍ) (.w3 a x bnd A B S d)
-/-- The field reborrow at a suspending row. -/
-def WithborFSN : Prop := ∀ a x bnd A B S d, ConstN (ℍ := ℍ) (.wF a x bnd A B S d)
-/-- `withload` at a suspending row. -/
-def WithloadSN : Prop := ∀ a x bnd A B S, ConstN (ℍ := ℍ) (.wl a x bnd A B S)
-/-- `slice_borrow_mut` at a suspending row. -/
-def SliceBorrowMSN : Prop := ∀ x bnd A B S d, ConstN (ℍ := ℍ) (.sm x bnd A B S d)
-
-/-! ### What is proved of the statements -/
-
-/-- **The adequacy bridge holds**: `erwp_adequacy` at `F 1`, whose values own nothing, at the
-empty world, whose view types nothing. -/
-theorem bridgeN : BridgeN (ℍ := ℍ) := fun e h =>
-  erwp_adequacy (Φ := LocFam.empty)
-    (Q := fun k _ v ρ => vN (ℍ := ℍ) .unit LSub.empty LocTy.empty k v ρ) (fun _ _ _ _ hq => hq.2)
-    (fun n => by
-      have := h LocTy.empty (fun _ => none) LocTy.empty_ok n
-      simp only [cN] at this
-      rwa [LocTy.view_empty] at this)
-
-theorem liveWithin_ctx791 : ∀ cs : List Const791, Ctx.LiveWithin (ctx791 cs) (vals791 cs)
-  | [] => trivial
-  | _ :: cs => liveWithin_ctx791 cs
-
-theorem gN_ctx791 (hC : ConstsN (ℍ := ℍ)) (δ : LSub) {Θ : LocTy} (hΘ : Θ.OK) (n : Nat) :
-    ∀ cs : List Const791, (∀ c ∈ cs, c.OK) → (∀ c ∈ cs, c.InFrag) →
-      gN (ℍ := ℍ) δ Θ (ctx791 cs) (vals791 cs) n PMap.empty
-  | [], _, _ => rfl
-  | c :: cs, hcs, hfr => by
-      simp only [ctx791, vals791, List.map_cons, gN, if_true]
-      exact ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _,
-        hC c (hfr c (by simp)) (hcs c (by simp)) δ Θ n hΘ,
-        gN_ctx791 hC δ hΘ n cs (fun c' h => hcs c' (by simp [h])) (fun c' h => hfr c' (by simp [h]))⟩
-
-theorem jdgInFrag_ctx791 (cs : List Const791) (hfr : ∀ c ∈ cs, c.InFrag) {S : Row}
-    (hS : (CTy.effOf S .unit).inFrag = true) :
-    JdgInFrag (ctx791 cs) (.comp (CTy.effOf S .unit)) = true := by
-  simp only [JdgInFrag, Bool.and_eq_true, List.all_eq_true]
-  refine ⟨fun s hs => ?_, hS⟩
-  obtain ⟨c, hc, rfl⟩ := List.mem_map.mp hs
-  simpa [VTy.inFrag, Const791.InFrag] using hfr c hc
-
-/-- **`Goal791SchedN` from the fundamental property and the constants**, through
-`poolSchedAdequacyN` at the view. -/
-theorem goal791Sched_of (hF : FundamentalN (ℍ := ℍ)) (hC : ConstsN (ℍ := ℍ)) :
-    Goal791SchedN (ℍ := ℍ) := by
-  intro cs hcs hfr S e₀ hSf hder Θ c n₀ qs hr hs Q Inv hΘ hΘI hQ hInv hS
-  refine poolSchedAdequacyN (Θ.view c) (rowTabN S Θ c) n₀ qs hr hs _ Q Inv _
-    (LocTy.view_down hΘ.1 c) hΘI hQ hInv hS (fun n => ?_)
-  have h := hF _ _ _ _ hder (jdgInFrag_ctx791 cs hfr hSf) LSub.empty (vals791 cs) Θ c n []
-    PMap.empty (BoCa.Fig16.LogRel.Core.models_empty_any _) hΘ (consistentX_empty c)
-    (liveWithin_ctx791 cs) (gN_ctx791 hC LSub.empty hΘ n cs hcs hfr)
-  exact (cN_effOf S .unit LSub.empty Θ c n [] _ _).mp h
+/-- **`F_Σ R` at the family**: `cN_effOf` with the row's table read through `tabF` at `rdN`. -/
+theorem cN_effOf_tabF (S : Row) (R : VTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life)
+    (n : Nat) (ls : List SRec) (e : Expr) (ρ : WRes) :
+    cN (ℍ := ℍ) (CTy.effOf S R) δ Θ c n ls e ρ ↔ ∀ lo : Life,
+      erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
+        (fun z => opTableK z.lo (tabF (ℍ := ℍ) (rdN (ℍ := ℍ) δ) () (CTy.effOf S R) z))
+        (fun z k _ v ρ => vN (ℍ := ℍ) R δ z.Θ k v ρ) ⟨Θ, c, lo⟩ n ls e ρ := by
+  rw [cN_effOf]
+  simp only [tabN_eq]
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

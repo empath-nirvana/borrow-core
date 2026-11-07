@@ -1,10 +1,10 @@
-import Core.Chain.CNW835N
+import Core.Chain.Goal791N
 
 /-!
 # A run re-indexed along a world map  `[spec §19, §27]`
 
 `docs/new-core/scope-835-tables.md` §10.3. A lend's callback is a thunk of the relation at the
-typed world: `cNW` at the lend's world, its tables indexed by its own worlds. The Mut Frame reads
+typed world: `cN` at the lend's world, its tables indexed by its own worlds. The Mut Frame reads
 the callback's run indexed by the lender's worlds, at the tables under the lend's world map
 (`KW.lend`). `erwpK_comap` moves a run along a world map `g`: a run from `g x`, indexed by `ι`, is
 a run from `x`, indexed by `ι′`, when the location family at `y` is the one at `g y`, every post
@@ -61,15 +61,15 @@ theorem LocTy.extR_add (Θ : LocTy) (l₀ : Loc) {α : Life} (F : Nat → Val �
 
 open Goal791N in
 /-- **A lend below a bound is invisible to `𝒱⟦A⟧` of an `A` outliving the bound**, at every
-world (`vNW_add_eq_bnd` without freshness): the value's resource is in `Res_α`
-(`vNW_inStratum_bnd`), where adding and dropping the lend are both extensions. -/
-theorem vNW_add_eq {Sch : UInt32 → Prop} {A : VTy} {bnd : Lifetime.Life}
+world (`vN_add_eq_bnd` without freshness): the value's resource is in `Res_α`
+(`vN_inStratum_bnd`), where adding and dropping the lend are both extensions. -/
+theorem vN_add_eq {A : VTy} {bnd : Lifetime.Life}
     (hO : VOutlives BoCa.Lifetime.LifeCtx.empty bnd A) (δ : BoCa.Lifetime.LSub) {α : Life}
     (hLt : LogRel.LtLife δ bnd α) (Θ : LocTy) (l : Loc) (F : Nat → Val → SPropS Loc Val α) :
-    vNW Sch (ℍ := ℍ) A δ (Θ.add l α F) = vNW Sch (ℍ := ℍ) A δ Θ := by
+    vN (ℍ := ℍ) A δ (Θ.add l α F) = vN (ℍ := ℍ) A δ Θ := by
   funext n v ρ
-  exact propext ⟨fun h => vNW_local A δ Θ l α F n v ρ (vNW_inStratum_bnd hO hLt h) h,
-    fun h => vNW_extR A δ n v ρ (LocTy.extR_add Θ l F (vNW_inStratum_bnd hO hLt h)) h⟩
+  exact propext ⟨fun h => vN_local A δ Θ l α F n v ρ (vN_inStratum_bnd hO hLt h) h,
+    fun h => vN_extR A δ n v ρ (LocTy.extR_add Θ l F (vN_inStratum_bnd hO hLt h)) h⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 

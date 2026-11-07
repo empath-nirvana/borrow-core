@@ -3,14 +3,14 @@ import Core.Chain.SI.HandleN
 import Core.Chain.Cancel791N
 
 /-!
-# `κ` read at `vN`: Core's `vC_kTy_of_kapRel` at the chain  `[spec §19, §27]`
+# `κ` read at `vN₀`: Core's `vC_kTy_of_kapRel` at the chain  `[spec §19, §27]`
 
 `docs/new-core/scope-831-interface.md` §10.1, E10. Core's handler (`ewp_handle_vals`,
 `Core/EffFin.lean`) hands each clause `κ` with `KapRel` at the stop's list and reads it at `κ`'s type
 `kTy Σ R q B F` by `vC_kTy_of_kapRel`: `KapRel` is Kripke along `Ext` from the stop's list, which is
 `vC`'s `U` at that list, since one world, the record list, indexes both. At the chain the clause gets
 `KapRelN` (`SI/HandleN.lean`): the handled continuation owed at the run's view `Θ.view c`, at the
-tables read at `Θ` and `c`, and along `extF` from the stop's list. `vN`'s `U` clause at `kTy` asks it
+tables read at `Θ` and `c`, and along `extF` from the stop's list. `vN₀`'s `U` clause at `kTy` asks it
 at every `Θ′` with `Θ.ExtR Θ′ ρ`, every view consistent with `κ`'s share, and every list.
 
 `KapRelKTyN` is Core's step at the chain. Two configurations refute it, each with every hypothesis
@@ -23,7 +23,7 @@ discharged, each at the stop's own list:
   typed world of two cells (`ExtRLit791.world_two`).
 * **The view** (`kapRelN_view`, `not_kTy_view`). The stop at the world with the key `(ℓ′, α)`, at a
   view with no lifetime at `ℓ′`: the answer at the key is not consistent with the run's view, which
-  a row's table reads (`tabN`'s `ConsistentX c`), so `KapRelN` holds of `κ = ()` again. At the same
+  a row's table reads (`tabN₀`'s `ConsistentX c`), so `KapRelN` holds of `κ = ()` again. At the same
   world and list, `U` reads `κ` at a view consistent with its share that puts `ℓ′` at `α`, and the
   same run is stuck.
 
@@ -57,12 +57,12 @@ def KapRelKTyN : Prop :=
   ∀ (S : Row) (R A B : VTy) (q : Qual) (F : CTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life)
     (Tc : Option OpTabN) (k : Nat) (ls : List SRec) (κ : Val) (ρ : WRes),
     Θ.OK → ConsistentX c ρ →
-    KapRelN (ℍ := ℍ) (Θ.view c) (opTableN (tabN (ℍ := ℍ) (CTy.effOf S R) δ Θ c))
-      (fun k _ v ρ => retN (ℍ := ℍ) (CTy.effOf S R) δ Θ k v ρ)
-      (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) F δ Θ c))
+    KapRelN (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S R) δ Θ c))
+      (fun k _ v ρ => retN₀ (ℍ := ℍ) (CTy.effOf S R) δ Θ k v ρ)
+      (entN q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) F δ Θ c))
       Tc (k + 1) ls κ ρ →
-    vN (ℍ := ℍ) (kTy S R q B F) δ Θ k κ ρ
+    vN₀ (ℍ := ℍ) (kTy S R q B F) δ Θ k κ ρ
 
 /-- The answer type of the configurations: `Mut 'x 1`. -/
 abbrev bMut (x : LifeVar) : VTy := .mut (.var x) .unit
@@ -75,11 +75,11 @@ theorem kTy_eq (x : LifeVar) : kTy [] .unit .lin (bMut x) (.ret .unit) = .thunk 
 
 /-- The world with one key `(ℓ′, α) ↦ 𝒱⟦1⟧`. -/
 abbrev Θ₁ (_x : LifeVar) (δ : LSub) (α : Life) (l' : Loc) : LocTy :=
-  LocTy.empty.add l' α (famL α (fun Θ j u r => vN (ℍ := ℍ) .unit δ Θ j u r) LocTy.empty)
+  LocTy.empty.add l' α (famL α (fun Θ j u r => vN₀ (ℍ := ℍ) .unit δ Θ j u r) LocTy.empty)
 
 theorem Θ₁_ok (x : LifeVar) (δ : LSub) {N α : Life} (hNα : N < α) (l' : Loc) :
     (Θ₁ (ℍ := ℍ) x δ α l').OK :=
-  ⟨LocTy.down_add LocTy.empty_down l' (vN_fam_down .unit _ α _),
+  ⟨LocTy.down_add LocTy.empty_down l' (vN_fam_down₀ .unit _ α _),
     ⟨N, LocTy.fresh_add (N := N) (fun _ _ h => absurd rfl h) le_rfl hNα l' _⟩⟩
 
 /-- **`U((Mut 'x 1 ⊸ F 1) & ⊤)` fails at the stuck thunk `()` wherever `U` reaches the world with
@@ -87,14 +87,14 @@ the key `(ℓ′, α)` at a view putting `ℓ′` at `α`**: that world holds th
 `ℓ′ ↦ mut(α, (), ∅, 𝒱⟦1⟧)`, and `() (inj₁ ()) ℓ′` is stuck from the typed world of the two cells. -/
 theorem not_kTy_at (x : LifeVar) (δ : LSub) {α b : Life} {m l' : Loc}
     (hml : l' ≠ m) (c : Loc → Option Life) (hcm : c m = some b) (hcl : c l' = some α) :
-    ¬ cN (ℍ := ℍ) (kTyC x) (δ.extend x α) (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') c 1 []
+    ¬ cN₀ (ℍ := ℍ) (kTyC x) (δ.extend x α) (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') c 1 []
       Val.unit.1 (ρb m b) := by
   intro h
-  let P : CPredL := fun Θ j u r => vN (ℍ := ℍ) .unit (δ.extend x α) Θ j u r
+  let P : CPredL := fun Θ j u r => vN₀ (ℍ := ℍ) .unit (δ.extend x α) Θ j u r
   have hw : famL α P LocTy.empty 1 Val.unit ⟨PMap.empty, ResU.inStratum_empty α⟩ := ⟨rfl, rfl⟩
   let cell : WRes := ResU.single l' (CellU.mutOf α Val.unit PMap.empty
     (ResU.inStratum_empty α) (famL α P LocTy.empty 1) hw)
-  have hv : vN (ℍ := ℍ) (bMut x) (δ.extend x α) (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') 1
+  have hv : vN₀ (ℍ := ℍ) (bMut x) (δ.extend x α) (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') 1
       (Val.loc l') cell :=
     ⟨α, interp_ext_self δ x α, α, le_rfl, lend_mutL LocTy.empty l' α P le_rfl _ hw,
       fun _ _ _ r h => by obtain ⟨-, rfl⟩ := h; exact ResU.inStratum_empty α⟩
@@ -124,7 +124,7 @@ theorem not_kTy_at (x : LifeVar) (δ : LSub) {α b : Life} {m l' : Loc}
 theorem not_kTy_of_extR (x : LifeVar) (δ : LSub) {N α b : Life} (hNα : N < α) {m l' : Loc}
     (hml : l' ≠ m) (c : Loc → Option Life) (hcm : c m = some b) (hcl : c l' = some α)
     {Θ : LocTy} (hE : Θ.ExtR (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') (ρb m b)) :
-    ¬ vN (ℍ := ℍ) (kTy [] .unit .lin (bMut x) (.ret .unit)) (δ.extend x α) Θ 1 Val.unit
+    ¬ vN₀ (ℍ := ℍ) (kTy [] .unit .lin (bMut x) (.ret .unit)) (δ.extend x α) Θ 1 Val.unit
       (ρb m b) := by
   intro h
   exact not_kTy_at x δ hml c hcm hcl (h _ hE (Θ₁_ok x _ hNα l') c
@@ -136,15 +136,15 @@ theorem not_kTy_of_extR (x : LifeVar) (δ : LSub) {N α b : Life} (hNα : N < α
 theorem kapRelN_world (x : LifeVar) (δ : LSub) (c : Loc → Option Life) (ls : List SRec) {m : Loc}
     {b : Life} :
     KapRelN (ℍ := ℍ) (LocTy.empty.view c)
-      (opTableN (tabN (ℍ := ℍ) (CTy.effOf [] .unit) δ LocTy.empty c))
-      (fun k _ v ρ => retN (ℍ := ℍ) (CTy.effOf [] .unit) δ LocTy.empty k v ρ)
-      (entN .lin (bMut x) (fun k v ρ => vN (ℍ := ℍ) .unit δ LocTy.empty k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) (bMut x) δ LocTy.empty k v ρ ∧ ConsistentX c ρ)
-        (finN (ℍ := ℍ) (.ret .unit) δ LocTy.empty c))
+      (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf [] .unit) δ LocTy.empty c))
+      (fun k _ v ρ => retN₀ (ℍ := ℍ) (CTy.effOf [] .unit) δ LocTy.empty k v ρ)
+      (entN .lin (bMut x) (fun k v ρ => vN₀ (ℍ := ℍ) .unit δ LocTy.empty k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) (bMut x) δ LocTy.empty k v ρ ∧ ConsistentX c ρ)
+        (finN₀ (ℍ := ℍ) (.ret .unit) δ LocTy.empty c))
       none 2 ls Val.unit (ρb m b) := by
   unfold KapRelN
   refine ⟨(fun h => by cases h), fun ls' _ k' _ => ⟨fun w σ₁ σ₂ hB _ => ?_, fun hq => absurd rfl hq⟩⟩
-  have hB' : vN (ℍ := ℍ) (bMut x) δ LocTy.empty k' w σ₁ := hB.1
+  have hB' : vN₀ (ℍ := ℍ) (bMut x) δ LocTy.empty k' w σ₁ := hB.1
   obtain ⟨β, _, b', _, ⟨l, _, _, _, _, _, _, _, hl, _⟩, -⟩ := hB'
   simp at hl
 
@@ -155,16 +155,16 @@ theorem not_kTy_world (x : LifeVar) (δ : LSub) {N α b : Life} (hNα : N < α) 
     (hml : l' ≠ m) (c : Loc → Option Life) (hcm : c m = some b) (hcl : c l' = some α) :
     LocTy.empty.OK ∧ ConsistentX c (ρb m b) ∧
       KapRelN (ℍ := ℍ) (LocTy.empty.view c)
-        (opTableN (tabN (ℍ := ℍ) (CTy.effOf [] .unit) (δ.extend x α) LocTy.empty c))
-        (fun k _ v ρ => retN (ℍ := ℍ) (CTy.effOf [] .unit) (δ.extend x α) LocTy.empty k v ρ)
-        (entN .lin (bMut x) (fun k v ρ => vN (ℍ := ℍ) .unit (δ.extend x α) LocTy.empty k v ρ)
-          (fun k v ρ => vN (ℍ := ℍ) (bMut x) (δ.extend x α) LocTy.empty k v ρ ∧ ConsistentX c ρ)
-          (finN (ℍ := ℍ) (.ret .unit) (δ.extend x α) LocTy.empty c))
+        (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf [] .unit) (δ.extend x α) LocTy.empty c))
+        (fun k _ v ρ => retN₀ (ℍ := ℍ) (CTy.effOf [] .unit) (δ.extend x α) LocTy.empty k v ρ)
+        (entN .lin (bMut x) (fun k v ρ => vN₀ (ℍ := ℍ) .unit (δ.extend x α) LocTy.empty k v ρ)
+          (fun k v ρ => vN₀ (ℍ := ℍ) (bMut x) (δ.extend x α) LocTy.empty k v ρ ∧ ConsistentX c ρ)
+          (finN₀ (ℍ := ℍ) (.ret .unit) (δ.extend x α) LocTy.empty c))
         none 2 [] Val.unit (ρb m b) ∧
       LocTy.empty.ExtR (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') (ρb m b) ∧
-      ¬ cN (ℍ := ℍ) (kTyC x) (δ.extend x α) (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') c 1 []
+      ¬ cN₀ (ℍ := ℍ) (kTyC x) (δ.extend x α) (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') c 1 []
         Val.unit.1 (ρb m b) ∧
-      ¬ vN (ℍ := ℍ) (kTy [] .unit .lin (bMut x) (.ret .unit)) (δ.extend x α) LocTy.empty 1
+      ¬ vN₀ (ℍ := ℍ) (kTy [] .unit .lin (bMut x) (.ret .unit)) (δ.extend x α) LocTy.empty 1
         Val.unit (ρb m b) :=
   have hE : LocTy.empty.ExtR (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') (ρb m b) :=
     (LocTy.extA_add (fun _ _ h => absurd rfl h) l' _).extR _
@@ -179,17 +179,17 @@ consistent with the run's view. -/
 theorem kapRelN_view (x : LifeVar) (δ : LSub) (α : Life) {l' : Loc} (c : Loc → Option Life)
     (hcl : c l' = none) (ls : List SRec) {m : Loc} {b : Life} :
     KapRelN (ℍ := ℍ) ((Θ₁ (ℍ := ℍ) x δ α l').view c)
-      (opTableN (tabN (ℍ := ℍ) (CTy.effOf [] .unit) δ (Θ₁ (ℍ := ℍ) x δ α l') c))
-      (fun k _ v ρ => retN (ℍ := ℍ) (CTy.effOf [] .unit) δ (Θ₁ (ℍ := ℍ) x δ α l') k v ρ)
-      (entN .lin (bMut x) (fun k v ρ => vN (ℍ := ℍ) .unit δ (Θ₁ (ℍ := ℍ) x δ α l') k v ρ)
-        (fun k v ρ => vN (ℍ := ℍ) (bMut x) δ (Θ₁ (ℍ := ℍ) x δ α l') k v ρ ∧ ConsistentX c ρ)
-        (finN (ℍ := ℍ) (.ret .unit) δ (Θ₁ (ℍ := ℍ) x δ α l') c))
+      (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf [] .unit) δ (Θ₁ (ℍ := ℍ) x δ α l') c))
+      (fun k _ v ρ => retN₀ (ℍ := ℍ) (CTy.effOf [] .unit) δ (Θ₁ (ℍ := ℍ) x δ α l') k v ρ)
+      (entN .lin (bMut x) (fun k v ρ => vN₀ (ℍ := ℍ) .unit δ (Θ₁ (ℍ := ℍ) x δ α l') k v ρ)
+        (fun k v ρ => vN₀ (ℍ := ℍ) (bMut x) δ (Θ₁ (ℍ := ℍ) x δ α l') k v ρ ∧ ConsistentX c ρ)
+        (finN₀ (ℍ := ℍ) (.ret .unit) δ (Θ₁ (ℍ := ℍ) x δ α l') c))
       none 2 ls Val.unit (ρb m b) := by
   unfold KapRelN
   refine ⟨(fun h => by cases h), fun ls' _ k' _ => ⟨fun w σ₁ σ₂ hB hc => ?_, fun hq => absurd rfl hq⟩⟩
   refine erwp_of_valid fun hv => ?_
   exfalso
-  have hB' : vN (ℍ := ℍ) (bMut x) δ (Θ₁ (ℍ := ℍ) x δ α l') k' w σ₁ := hB.1
+  have hB' : vN₀ (ℍ := ℍ) (bMut x) δ (Θ₁ (ℍ := ℍ) x δ α l') k' w σ₁ := hB.1
   have hBc : ConsistentX c σ₁ := hB.2
   obtain ⟨-, -, b', -, ⟨l, u, χ, hχ, j, hw, -, -, hl, rfl⟩, -⟩ := hB'
   have hll : l = l' := by
@@ -211,20 +211,20 @@ theorem not_kTy_view (x : LifeVar) (δ : LSub) {N α b : Life} (hNα : N < α) {
     (hcm : c m = some b) (hcl : c l' = some α) :
     (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l').OK ∧ ConsistentX c₀ (ρb m b) ∧
       KapRelN (ℍ := ℍ) ((Θ₁ (ℍ := ℍ) x (δ.extend x α) α l').view c₀)
-        (opTableN (tabN (ℍ := ℍ) (CTy.effOf [] .unit) (δ.extend x α)
+        (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf [] .unit) (δ.extend x α)
           (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') c₀))
-        (fun k _ v ρ => retN (ℍ := ℍ) (CTy.effOf [] .unit) (δ.extend x α)
+        (fun k _ v ρ => retN₀ (ℍ := ℍ) (CTy.effOf [] .unit) (δ.extend x α)
           (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') k v ρ)
         (entN .lin (bMut x)
-          (fun k v ρ => vN (ℍ := ℍ) .unit (δ.extend x α) (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') k v ρ)
-          (fun k v ρ => vN (ℍ := ℍ) (bMut x) (δ.extend x α)
+          (fun k v ρ => vN₀ (ℍ := ℍ) .unit (δ.extend x α) (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') k v ρ)
+          (fun k v ρ => vN₀ (ℍ := ℍ) (bMut x) (δ.extend x α)
             (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') k v ρ ∧ ConsistentX c₀ ρ)
-          (finN (ℍ := ℍ) (.ret .unit) (δ.extend x α) (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') c₀))
+          (finN₀ (ℍ := ℍ) (.ret .unit) (δ.extend x α) (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') c₀))
         none 2 [] Val.unit (ρb m b) ∧
       ConsistentX c (ρb m b) ∧
-      ¬ cN (ℍ := ℍ) (kTyC x) (δ.extend x α) (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') c 1 []
+      ¬ cN₀ (ℍ := ℍ) (kTyC x) (δ.extend x α) (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') c 1 []
         Val.unit.1 (ρb m b) ∧
-      ¬ vN (ℍ := ℍ) (kTy [] .unit .lin (bMut x) (.ret .unit)) (δ.extend x α)
+      ¬ vN₀ (ℍ := ℍ) (kTy [] .unit .lin (bMut x) (.ret .unit)) (δ.extend x α)
         (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') 1 Val.unit (ρb m b) :=
   ⟨Θ₁_ok x _ hNα l', consistentX_single_mut (consistentX_empty c₀) hc₀m,
     kapRelN_view x _ α c₀ hc₀l [], consistentX_single_mut (consistentX_empty c) hcm,

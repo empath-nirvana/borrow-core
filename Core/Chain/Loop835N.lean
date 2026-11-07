@@ -110,7 +110,7 @@ handler that catches no cancel carries every cancel obligation of the table
 (`cancelOblN_plain₀`). -/
 theorem tabN_ctxClosed {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} (hΦ : (Θ.view c).Down)
     (G : CTy) (K : Kont) (hH : ∀ m, K.HasHnd m = false) (hC : K.Catches 0 = false) :
-    (tabN (ℍ := ℍ) G δ Θ c).CtxClosed K := by
+    (tabN₀ (ℍ := ℍ) G δ Θ c).CtxClosed K := by
   intro m i en P hT hP k ls K' x ρ h
   rw [tabN_rowOf] at hT
   obtain ⟨o, -, rfl⟩ := tabN_effOf_some_find hT

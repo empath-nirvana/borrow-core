@@ -15,17 +15,17 @@ How the table reads a world is a record (`RowRd`):
   an entry owes at fewer worlds;
 * the cancel runs' location family, floor, post order and the worlds they run at (`Inv`).
 
-The cancel-row structure (`PendLe`, `ThenLe`) and the recursion on `CTy` are `tabN`'s. Two
+The cancel-row structure (`PendLe`, `ThenLe`) and the recursion on `CTy` are `tabN₀`'s. Two
 instances:
 
-* **one world** (`rdU`): every entry owes at the one world, one mode; `tabF` is `tabN` lifted
+* **one world** (`rdU`): every entry owes at the one world, one mode; `tabF` is `tabN₀` lifted
   (`tabF_unit`, `finF_unit`);
 * **the typed world** (`rdKW`): the mode is the scheduler names, an entry at `m` owes along
   `KW.OwedS` from `g x`, its cancel row's mode `finSched`; `tabF` is `tabNK` (`tabF_KW`,
   `finF_KW`).
 
 The interface lemmas (`tabF_effOf_find`, `tabF_rowOf`, `tabF_find_sig`, `tabF_rowOf_find`,
-`entF_fin_cancel`, `entF_fin_of`, `errOkF_of_sub`, `tabF_rowLe_entry`, `finF_mono`) are `tabN`'s,
+`entF_fin_cancel`, `entF_fin_of`, `errOkF_of_sub`, `tabF_rowLe_entry`, `finF_mono`) are `tabN₀`'s,
 proved once over the record. E5 (`tabF_ctxClosed`) is proved here and read at `KW`
 (`tabNK_ctxClosed`).
 
@@ -143,13 +143,13 @@ def canc (R : RowRd ι M) (T : ι → OpTabK ι) : ι → Nat → List SRec → 
 end RowRd
 
 mutual
-/-- **The table of a row's layers over a world index** (`tabN`, `tabNK`): an entry at `m` under
+/-- **The table of a row's layers over a world index** (`tabN₀`, `tabNK`): an entry at `m` under
 the mode `μ`, its cancel row's under `sub μ m`. -/
 def tabF (R : RowRd ι M) (μ : M) : CTy → ι → OpTabK ι
   | .eff m i q A B fin _ C, x => extTabK m i
       (R.ent μ m q A B (finF R (R.sub μ m) fin) x) (tabF R μ C x)
   | _, _ => OpTabK.empty
-/-- **The cancel obligation of a cancel row over a world index** (`finN`, `finNK`): `none` at `⊤`;
+/-- **The cancel obligation of a cancel row over a world index** (`finN₀`, `finNK`): `none` at `⊤`;
 otherwise the cancel run at the row's table. -/
 def finF (R : RowRd ι M) (μ : M) : CTy → Option (ι → Nat → List SRec → Expr → WProp)
   | .top => none
@@ -185,7 +185,7 @@ def rdKWv (vr : VTy → LSub → LocTy → Nat → Val → WRes → Prop) (g : K
 
 /-- **The typed world's reading** (`tabNK`): `rdKWv` at `𝒱⟦·⟧`. -/
 def rdKW (g : KW → KW) (δ : LSub) : RowRd KW (UInt32 → Prop) :=
-  rdKWv (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) g δ
+  rdKWv (fun A δ Θ k v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ) g δ
 
 theorem rdKWv_ok {vr : VTy → LSub → LocTy → Nat → Val → WRes → Prop}
     (hD : ∀ A δ Θ k v ρ, vr A δ Θ (k + 1) v ρ → vr A δ Θ k v ρ)
@@ -208,8 +208,8 @@ theorem rdKWv_ok {vr : VTy → LSub → LocTy → Nat → Val → WRes → Prop}
   Veq := fun _ _ h => h
 
 theorem rdKW_ok (g : KW → KW) (δ : LSub) : (rdKW (ℍ := ℍ) g δ).OK :=
-  rdKWv_ok (fun A δ Θ k v ρ h => vN_down A δ Θ k v ρ h)
-    (fun A hA _ _ _ _ _ h => vN_empty_of_persistent A hA h) g δ
+  rdKWv_ok (fun A δ Θ k v ρ h => vN_down₀ A δ Θ k v ρ h)
+    (fun A hA _ _ _ _ _ h => vN_empty_of_persistent₀ A hA h) g δ
 
 /-- Both orders make the resumption world's view consistent with the share. -/
 theorem KW.OwedS.consistent {S : UInt32 → Prop} {m : UInt32} {x y : KW} {f : Life} {ρ : WRes}
@@ -219,10 +219,10 @@ theorem KW.OwedS.consistent {S : UInt32 → Prop} {m : UInt32} {x y : KW} {f : L
   · exact (h.2 hm).2.2
 
 /-- **The payload reading along the typed order** at the lender's tables: the order is `ExtR` at
-the share (`KW.OwedS.extR`), so at a part of it, along which `𝒱⟦A⟧` is kept (`vN_extR`). -/
+the share (`KW.OwedS.extR`), so at a part of it, along which `𝒱⟦A⟧` is kept (`vN_extR₀`). -/
 theorem rdKW_payExt (δ : LSub) : (rdKW (ℍ := ℍ) id δ).PayExt := by
   intro S m x f y ρa ρb ρ hc hy A k v hv
-  exact vN_extR A δ k v ρa ((KW.OwedS.extR hy).left hc) hv
+  exact vN_extR₀ A δ k v ρa ((KW.OwedS.extR hy).left hc) hv
 
 /-- **`tabF` at the typed world is `tabNK`, and `finF` is `finNK`.** -/
 theorem tabF_finF_KW (g : KW → KW) (δ : LSub) : ∀ F : CTy,
@@ -252,10 +252,10 @@ theorem finF_KW (g : KW → KW) (δ : LSub) (S : UInt32 → Prop) (F : CTy) :
 
 /-! ### One world -/
 
-/-- **The one-world reading** (`tabN`): every value at `Θ` and `c`; one mode; every entry owes at
+/-- **The one-world reading** (`tabN₀`): every value at `Θ` and `c`; one mode; every entry owes at
 the one world; the runs at `Θ.view c`. -/
 def rdU (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) : RowRd Unit Unit where
-  vr := fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ
+  vr := fun A δ Θ k v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ
   δ := δ
   Θ := fun _ => Θ
   c := fun _ => c
@@ -269,8 +269,8 @@ def rdU (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) : RowRd Unit Unit whe
 
 theorem rdU_ok {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) (c : Loc → Option Life) :
     (rdU (ℍ := ℍ) δ Θ c).OK where
-  vrDown := fun A Θ k v ρ h => vN_down A δ Θ k v ρ h
-  vrPers := fun A hA _ _ _ _ h => vN_empty_of_persistent A hA h
+  vrDown := fun A Θ k v ρ h => vN_down₀ A δ Θ k v ρ h
+  vrPers := fun A hA _ _ _ _ h => vN_empty_of_persistent₀ A hA h
   wkInv := fun _ _ _ _ _ _ _ => trivial
   ΦDown := fun _ _ => LocTy.view_down hΘ c
   wkLeft := fun _ _ _ _ _ _ _ _ _ _ _ => trivial
@@ -299,53 +299,53 @@ theorem liftTabK_extTabN (n i : UInt32) (en : OpEntN) (T : OpTabN) :
   simp only [liftTabK, extTabN, extTabK]
   split <;> rfl
 
-/-- **`tabF` at one world is `tabN` lifted, and `finF` is `finN` lifted.** -/
+/-- **`tabF` at one world is `tabN₀` lifted, and `finF` is `finN₀` lifted.** -/
 theorem tabF_finF_unit (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) : ∀ F : CTy,
-    (∀ x, tabF (ℍ := ℍ) (rdU δ Θ c) () F x = liftTabK (tabN (ℍ := ℍ) F δ Θ c)) ∧
-      finF (ℍ := ℍ) (rdU δ Θ c) () F = (finN (ℍ := ℍ) F δ Θ c).map (fun P _ => P)
+    (∀ x, tabF (ℍ := ℍ) (rdU δ Θ c) () F x = liftTabK (tabN₀ (ℍ := ℍ) F δ Θ c)) ∧
+      finF (ℍ := ℍ) (rdU δ Θ c) () F = (finN₀ (ℍ := ℍ) F δ Θ c).map (fun P _ => P)
   | .eff m i q A B fin rc C => by
       have hf := tabF_finF_unit δ Θ c fin
       have hC := tabF_finF_unit δ Θ c C
       have he : ∀ x, (rdU δ Θ c).ent () m q A B (finF (ℍ := ℍ) (rdU δ Θ c) () fin) x =
-          liftEntK (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ)
-            (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) fin δ Θ c)) := by
+          liftEntK (entN q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ)
+            (fun k v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) fin δ Θ c)) := by
         intro x
         rw [hf.2]
         simp only [RowRd.ent, liftEntK, entN, rdU]
         congr 1
         split <;> rfl
       have hT : ∀ x, tabF (ℍ := ℍ) (rdU δ Θ c) () (.eff m i q A B fin rc C) x =
-          liftTabK (tabN (ℍ := ℍ) (.eff m i q A B fin rc C) δ Θ c) := by
+          liftTabK (tabN₀ (ℍ := ℍ) (.eff m i q A B fin rc C) δ Θ c) := by
         intro x
-        simp only [tabF, tabN]
+        simp only [tabF, tabN₀]
         rw [liftTabK_extTabN, he x, hC.1 x]
       refine ⟨hT, ?_⟩
       have hT' : (fun x => extTabK m i ((rdU δ Θ c).ent () m q A B
           (finF (ℍ := ℍ) (rdU δ Θ c) ((rdU δ Θ c).sub () m) fin) x)
           (tabF (ℍ := ℍ) (rdU δ Θ c) () C x)) =
-          fun _ => liftTabK (tabN (ℍ := ℍ) (.eff m i q A B fin rc C) δ Θ c) := funext hT
-      simp only [finF, finN, Option.map_some]
+          fun _ => liftTabK (tabN₀ (ℍ := ℍ) (.eff m i q A B fin rc C) δ Θ c) := funext hT
+      simp only [finF, finN₀, Option.map_some]
       rw [hT', canc_unit]
       rfl
-  | .ret _ => ⟨fun _ => by simp [tabF, tabN, liftTabK_empty], by
-      simp only [finF, finN, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
-  | .arr _ _ => ⟨fun _ => by simp [tabF, tabN, liftTabK_empty], by
-      simp only [finF, finN, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
-  | .amp _ _ => ⟨fun _ => by simp [tabF, tabN, liftTabK_empty], by
-      simp only [finF, finN, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
-  | .all _ _ _ => ⟨fun _ => by simp [tabF, tabN, liftTabK_empty], by
-      simp only [finF, finN, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
-  | .nu _ => ⟨fun _ => by simp [tabF, tabN, liftTabK_empty], by
-      simp only [finF, finN, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
-  | .top => ⟨fun _ => by simp [tabF, tabN, liftTabK_empty], by simp [finF, finN]⟩
+  | .ret _ => ⟨fun _ => by simp [tabF, tabN₀, liftTabK_empty], by
+      simp only [finF, finN₀, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
+  | .arr _ _ => ⟨fun _ => by simp [tabF, tabN₀, liftTabK_empty], by
+      simp only [finF, finN₀, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
+  | .amp _ _ => ⟨fun _ => by simp [tabF, tabN₀, liftTabK_empty], by
+      simp only [finF, finN₀, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
+  | .all _ _ _ => ⟨fun _ => by simp [tabF, tabN₀, liftTabK_empty], by
+      simp only [finF, finN₀, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
+  | .nu _ => ⟨fun _ => by simp [tabF, tabN₀, liftTabK_empty], by
+      simp only [finF, finN₀, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
+  | .top => ⟨fun _ => by simp [tabF, tabN₀, liftTabK_empty], by simp [finF, finN₀]⟩
   termination_by structural F => F
 
 theorem tabF_unit (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (F : CTy) (x : Unit) :
-    tabF (ℍ := ℍ) (rdU δ Θ c) () F x = liftTabK (tabN (ℍ := ℍ) F δ Θ c) :=
+    tabF (ℍ := ℍ) (rdU δ Θ c) () F x = liftTabK (tabN₀ (ℍ := ℍ) F δ Θ c) :=
   (tabF_finF_unit δ Θ c F).1 x
 
 theorem finF_unit (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (F : CTy) :
-    finF (ℍ := ℍ) (rdU δ Θ c) () F = (finN (ℍ := ℍ) F δ Θ c).map (fun P _ => P) :=
+    finF (ℍ := ℍ) (rdU δ Θ c) () F = (finN₀ (ℍ := ℍ) F δ Θ c).map (fun P _ => P) :=
   (tabF_finF_unit δ Θ c F).2
 
 /-! ### The interface -/

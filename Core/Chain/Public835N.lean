@@ -198,7 +198,7 @@ every public extension of the stop's world at the floor `lo`, every view consist
 share and every record list, `κ` is in `𝒞⟦C⟧`. -/
 def KapRelP (lo : Life) (C : CTy) (δ : LSub) (Θ : LocTy) (n : Nat) (κ : Val) (ρ : WRes) : Prop :=
   ∀ Θ' : LocTy, Θ.ExtP lo Θ' ρ → Θ'.OK → ∀ c, ConsistentX c ρ → ∀ ls,
-    cN (ℍ := ℍ) C δ Θ' c n ls (forceE C κ.1) ρ
+    cN₀ (ℍ := ℍ) C δ Θ' c n ls (forceE C κ.1) ρ
 
 /-- **The world with the key `(ℓ′, α)` is a public extension of the empty world** at every floor
 the key is below. -/
@@ -240,11 +240,11 @@ theorem kapRelN_not_kapRelP (x : LifeVar) (δ : LSub) {N α b lo : Life} (hNα :
     (hα : α ≤ lo) {m l' : Loc} (hml : l' ≠ m) (c : Loc → Option Life) (hcm : c m = some b)
     (hcl : c l' = some α) :
     KapRelN (ℍ := ℍ) (LocTy.empty.view c)
-        (opTableN (tabN (ℍ := ℍ) (CTy.effOf [] .unit) (δ.extend x α) LocTy.empty c))
-        (fun k _ v ρ => retN (ℍ := ℍ) (CTy.effOf [] .unit) (δ.extend x α) LocTy.empty k v ρ)
-        (entN .lin (bMut x) (fun k v ρ => vN (ℍ := ℍ) .unit (δ.extend x α) LocTy.empty k v ρ)
-          (fun k v ρ => vN (ℍ := ℍ) (bMut x) (δ.extend x α) LocTy.empty k v ρ ∧ ConsistentX c ρ)
-          (finN (ℍ := ℍ) (.ret .unit) (δ.extend x α) LocTy.empty c))
+        (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf [] .unit) (δ.extend x α) LocTy.empty c))
+        (fun k _ v ρ => retN₀ (ℍ := ℍ) (CTy.effOf [] .unit) (δ.extend x α) LocTy.empty k v ρ)
+        (entN .lin (bMut x) (fun k v ρ => vN₀ (ℍ := ℍ) .unit (δ.extend x α) LocTy.empty k v ρ)
+          (fun k v ρ => vN₀ (ℍ := ℍ) (bMut x) (δ.extend x α) LocTy.empty k v ρ ∧ ConsistentX c ρ)
+          (finN₀ (ℍ := ℍ) (.ret .unit) (δ.extend x α) LocTy.empty c))
         none 2 [] Val.unit (ρb m b) ∧
       ¬ KapRelP (ℍ := ℍ) lo (kTyC x) (δ.extend x α) LocTy.empty 1 Val.unit (ρb m b) :=
   ⟨kapRelN_world x _ c [], not_kapRelP_world x δ hNα hα hml c hcm hcl⟩

@@ -86,7 +86,7 @@ import Core.Chain.PoolSpawnN
 import Core.Chain.Hardest791N
 
 import Core.Chain.Cancel791N
-import Core.Chain.Goal791N
+import Core.Chain.Goal791N0
 import Core.Chain.Lend791N
 import Core.Chain.Shape791N
 import Core.Chain.ImmShape791N
@@ -159,5 +159,5 @@ import Core.Chain.RFrameK835N
 import Core.Chain.RowFamK835N
 import Core.Chain.ThenK835N
 import Core.Chain.IterKW835N
-import Core.Chain.CNW835N
+import Core.Chain.Goal791N
 import Core.Chain.ReindexK835N

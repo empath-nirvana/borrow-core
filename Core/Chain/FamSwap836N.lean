@@ -1,7 +1,7 @@
 import Core.Chain.FamSlice836N
 
 /-!
-# Swapping two leaves of a `mut` slice at `SemJN`  `[spec §9]`
+# Swapping two leaves of a `mut` slice at `SemJN₀`  `[spec §9]`
 
 Core's `sliceSwapM_compatX` (`Core/SliceOps.lean`): both indices in range, the two picked leaves
 are `Mut @a A` borrows. At one leaf (`i = j`) one Mut Anti-Frame opens the cell, which is read
@@ -75,7 +75,7 @@ theorem swap_body₁ (v : Val) :
   simp [Expr.subst, slSwapCellsE]
 
 theorem sliceSwapM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
-    (hΓ : Ctx.DeadP Γ) : SemJN (ℍ := ℍ) Δ Γ (.val swapV) (.val (sliceSwapMTy a A)) := by
+    (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val swapV) (.val (sliceSwapMTy a A)) := by
   refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   rw [eq_of_compS_empty_left hcomp] at hcon ⊢
@@ -84,8 +84,8 @@ theorem sliceSwapM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A 
   rw [eq_of_compS_empty_left hc₂] at hc
   obtain rfl := ResU.CompS.functional hc (ResU.comp_empty_right σ₁)
   have hΦ := LocTy.view_down hΘ'.1 c''
-  have hQd : PostN.Down (fun k _ v ρ => vN (ℍ := ℍ) (.sliceMut a A) δ Θ' k v ρ) :=
-    fun k _ v ρ h => vN_down _ δ Θ' k v ρ h
+  have hQd : PostN.Down (fun k _ v ρ => vN₀ (ℍ := ℍ) (.sliceMut a A) δ Θ' k v ρ) :=
+    fun k _ v ρ h => vN_down₀ _ δ Θ' k v ρ h
   have hTd := opTableN_down OpTabN.empty_down
   refine erwp_det hΦ hTd hQd (fun μ => step1Only_plug (Head.beta μ _ _) rfl .hole) ?_
   simp only [Kont.plug]
@@ -129,7 +129,7 @@ theorem sliceSwapM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A 
     (fun μ => step1Only_plug (Head.case₁ μ (Val.loc (ℓ + j.toNat)) _ _) rfl .hole) ?_
   show erwp _ _ _ _ _ (slSwapCells ℓ cn (ℓ + i.toNat) (ℓ + j.toNat)) _
   refine erwp_of_valid fun hv => ?_
-  set P : CPredL := fun Θ₀ j u r => vN (ℍ := ℍ) A δ Θ₀ j u r with hP
+  set P : CPredL := fun Θ₀ j u r => vN₀ (ℍ := ℍ) A δ Θ₀ j u r with hP
   by_cases hij : i = j
   · -- one leaf, read twice and written twice
     subst hij
@@ -146,7 +146,7 @@ theorem sliceSwapM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A 
       rwa [CellU.at_mutOf] at h
     refine erwp_M_antiFrame hΦ (LocTy.view_some hcb hlΘ) (T := OpTabN.empty)
       (fun _ _ _ h => by cases h) _ ls' _ w₀ σ₀ hσ₀ j₀ hw₀ ρr σ hci (fun W X hW hX => ?_)
-    have hwA : vN (ℍ := ℍ) A δ Θ' j₀ w₀ σ₀ := (vN_above A δ Θ' hσ₀).mp hw₀
+    have hwA : vN₀ (ℍ := ℍ) A δ Θ' j₀ w₀ σ₀ := (vN_above₀ A δ Θ' hσ₀).mp hw₀
     -- `X = own(w₀) ● rest`, `rest = ρr ● σ₀`
     obtain ⟨rest, hrest, hXr⟩ := compS_lcomm (ResU.CompS.comm hW) hX
     refine erwp_bindR hΦ (opTableG_local _ _) (.appR (.val (.lam _)) .hole) ?_
@@ -201,13 +201,13 @@ theorem sliceSwapM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A 
     refine erwp_step (opTableG_local _ _) (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
     refine erwp_val (v := Val.arr ℓ cn) ?_
     -- the cell sealed again at its content; the leaf back in the family
-    have hwx : famL b P Θ' m w₀ ⟨σ₀, hσ₀⟩ := (vN_above A δ Θ' hσ₀).mpr (vN_le (by omega) hwA)
+    have hwx : famL b P Θ' m w₀ ⟨σ₀, hσ₀⟩ := (vN_above₀ A δ Θ' hσ₀).mpr (vN_le₀ (by omega) hwA)
     refine ⟨w₀, σ₀, hσ₀, hwx, ρr, rest, ResU.CompS.comm hp₄, ResU.CompS.comm hrest,
       fun X' hX' => ?_⟩
-    have hleaf : vN (ℍ := ℍ) (.mut a A) δ Θ' m (Val.loc (ℓ + i.toNat))
+    have hleaf : vN₀ (ℍ := ℍ) (.mut a A) δ Θ' m (Val.loc (ℓ + i.toNat))
         (ResU.single (ℓ + i.toNat) (CellU.mutOf b w₀ σ₀ hσ₀ (famL b P Θ' m) hwx)) :=
       ⟨α₀, hα₀, b, hα₀b, ⟨ℓ + i.toNat, w₀, σ₀, hσ₀, m, hwx, le_rfl, rfl, hlΘ, rfl⟩, hunif⟩
-    exact vN_fam_mk hn (hback _ (fun _ _ h => vN_le (by omega) h) _ X' (ResU.CompS.comm hX') hleaf)
+    exact vN_fam_mk hn (hback _ (fun _ _ h => vN_le₀ (by omega) h) _ X' (ResU.CompS.comm hX') hleaf)
   · -- two leaves, each opened by its own Anti-Frame
     have hij' : i.toNat ≠ j.toNat := fun h => hij (UInt32.toNat_inj.mp h)
     obtain ⟨ρi, ρj, ρr, ρ₁, h₁r, hi₁, hPi, hPj, hback⟩ := sepRange_pick2NW hij' hi hj hs
@@ -233,8 +233,8 @@ theorem sliceSwapM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A 
       have h := consistentX_get (consistentX_right hi₁ hcon hv) (ResU.Valid.split hi₁ hv).2 hgetj
         (CellU.kind_mutOf _ _ _ _ _ _)
       rwa [CellU.at_mutOf] at h
-    have hwAi : vN (ℍ := ℍ) A δ Θ' ji wi σi := (vN_above A δ Θ' hσi).mp hwi
-    have hwAj : vN (ℍ := ℍ) A δ Θ' jj wj σj := (vN_above A δ Θ' hσj).mp hwj
+    have hwAi : vN₀ (ℍ := ℍ) A δ Θ' ji wi σi := (vN_above₀ A δ Θ' hσi).mp hwi
+    have hwAj : vN₀ (ℍ := ℍ) A δ Θ' jj wj σj := (vN_above₀ A δ Θ' hσj).mp hwj
     refine erwp_M_antiFrame hΦ (LocTy.view_some hcbi hliΘ) (T := OpTabN.empty)
       (fun _ _ _ h => by cases h) _ ls' _ wi σi hσi ji hwi ρ₁ σ hi₁ (fun W X hW hX => ?_)
     -- `X = ρj ● G`, `G = ρr ● W`
@@ -310,9 +310,9 @@ theorem sliceSwapM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A 
     have hσij : σi.InStratum bj := hunifj _ _ _ _ hwAi
     have hσji : σj.InStratum bi := hunifi _ _ _ _ hwAj
     have hwi' : famL bj P Θ' m wi ⟨σi, hσij⟩ :=
-      (vN_above A δ Θ' hσij).mpr (vN_le (by omega) hwAi)
+      (vN_above₀ A δ Θ' hσij).mpr (vN_le₀ (by omega) hwAi)
     have hwj' : famL bi P Θ' m wj ⟨σj, hσji⟩ :=
-      (vN_above A δ Θ' hσji).mpr (vN_le (by omega) hwAj)
+      (vN_above₀ A δ Θ' hσji).mpr (vN_le₀ (by omega) hwAj)
     -- the cell at `j` sealed at `wi`: `N' = σi ● R`, `R = own_i(wj) ● S`, `S = ρr ● σj`
     obtain ⟨S, hS, hLS⟩ := compS_reassoc (ResU.CompS.comm hH) hL
     obtain ⟨R, hR, hN'R⟩ := compS_lcomm hLS hN'
@@ -321,13 +321,13 @@ theorem sliceSwapM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A 
     obtain ⟨T, hT, hYT⟩ := compS_reassoc hR hY
     obtain ⟨R', hR', hTR'⟩ := compS_reassoc (ResU.CompS.comm hS) hT
     refine ⟨wj, σj, hσji, hwj', R', T, hYT, hTR', fun Z hZ => ?_⟩
-    have hleafi : vN (ℍ := ℍ) (.mut a A) δ Θ' m (Val.loc (ℓ + i.toNat))
+    have hleafi : vN₀ (ℍ := ℍ) (.mut a A) δ Θ' m (Val.loc (ℓ + i.toNat))
         (ResU.single (ℓ + i.toNat) (CellU.mutOf bi wj σj hσji (famL bi P Θ' m) hwj')) :=
       ⟨αi, hαi, bi, hαbi, ⟨ℓ + i.toNat, wj, σj, hσji, m, hwj', le_rfl, rfl, hliΘ, rfl⟩, hunifi⟩
-    have hleafj : vN (ℍ := ℍ) (.mut a A) δ Θ' m (Val.loc (ℓ + j.toNat))
+    have hleafj : vN₀ (ℍ := ℍ) (.mut a A) δ Θ' m (Val.loc (ℓ + j.toNat))
         (ResU.single (ℓ + j.toNat) (CellU.mutOf bj wi σi hσij (famL bj P Θ' m) hwi')) :=
       ⟨αj, hαj, bj, hαbj, ⟨ℓ + j.toNat, wi, σi, hσij, m, hwi', le_rfl, rfl, hljΘ, rfl⟩, hunifj⟩
-    exact vN_fam_mk hn (hback _ (fun _ _ h => vN_le (by omega) h) _ _ R' Z
+    exact vN_fam_mk hn (hback _ (fun _ _ h => vN_le₀ (by omega) h) _ _ R' Z
       (ResU.CompS.comm hR') (ResU.CompS.comm hZ) hleafi hleafj)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N

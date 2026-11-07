@@ -16,7 +16,7 @@ typed tables at `KW`:
   being valid;
 * **the abortive payload across a finaliser's stops** (`tabNK_raiseOwed`, the premise `hTk` of
   `erwpK_ubindRaiseF`): an entry's order at the joint share is `ExtR` there (`KW.OwedS.extR`), so
-  the payload, a value in `𝒱⟦A⟧` at a part of it, is one at the resumption world (`vN_extR`).
+  the payload, a value in `𝒱⟦A⟧` at a part of it, is one at the resumption world (`vN_extR₀`).
 -/
 
 noncomputable section
@@ -66,12 +66,12 @@ same key.** -/
 theorem tab_lookupNNK : ∀ (F : CTy) {S : UInt32 → Prop} {g : KW → KW} {δ : LSub} {x : KW}
     {m j : UInt32} {en : OpEntK KW},
     tabNK (ℍ := ℍ) S g F δ x m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
-      en = entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x.Θ k v ρ)
-        (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+      en = entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x.Θ k v ρ)
+        (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
         (finNK (ℍ := ℍ) (finSched S m) g fin δ) (fun f y ρ => (g x).OwedS S m f (g y) ρ) ∧
       ∀ x₂ : KW, tabNK (ℍ := ℍ) S g F δ x₂ m j =
-        some (entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x₂.Θ k v ρ)
-          (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+        some (entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x₂.Θ k v ρ)
+          (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
           (finNK (ℍ := ℍ) (finSched S m) g fin δ) (fun f y ρ => (g x₂).OwedS S m f (g y) ρ))
   | .eff m₀ i₀ q A B fin rc C, S, g, δ, x, m, j, en, h => by
       simp only [tabNK] at h
@@ -98,12 +98,12 @@ the same key, its cancel run at its own guard and claim.** -/
 theorem tab_lookupGGK : ∀ (F : CTy) {R : Nat → WProp} {G : ShareG} {S : UInt32 → Prop}
     {g : KW → KW} {δ : LSub} {x : KW} {m j : UInt32} {en : OpEntK KW},
     tabGK (ℍ := ℍ) R G S g F δ x m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
-      en = entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x.Θ k v ρ)
-        (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+      en = entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x.Θ k v ρ)
+        (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
         (finGK (ℍ := ℍ) R G (finSched S m) g fin δ) (fun f y ρ => (g x).OwedS S m f (g y) ρ) ∧
       ∀ (R' : Nat → WProp) (G' : ShareG), tabGK (ℍ := ℍ) R' G' S g F δ x m j =
-        some (entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x.Θ k v ρ)
-          (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+        some (entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x.Θ k v ρ)
+          (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
           (finGK (ℍ := ℍ) R' G' (finSched S m) g fin δ) (fun f y ρ => (g x).OwedS S m f (g y) ρ))
   | .eff m₀ i₀ q A B fin rc C, R, G, S, g, δ, x, m, j, en, h => by
       simp only [tabGK] at h
@@ -254,7 +254,7 @@ theorem erwpK_handle_schedKW_tab {S : UInt32 → Prop} {F : CTy} {δ : LSub} {N 
 /-- **An abortive entry's payload is one at every world a stop at the same table owes its
 continuation at**, at a part of the stop's share (the premise `hTk` of `erwpK_ubindRaiseF` at the
 typed tables): the stop's order is `ExtR` at its share (`KW.OwedS.extR`), so at the part
-(`LocTy.ExtR.left`), along which `𝒱⟦A⟧` is kept (`vN_extR`). -/
+(`LocTy.ExtR.left`), along which `𝒱⟦A⟧` is kept (`vN_extR₀`). -/
 theorem tabNK_raiseOwed {S : UInt32 → Prop} (F : CTy) (δ : LSub) :
     ∀ x m' i' en', tabNK (ℍ := ℍ) S id F δ x m' i' = some en' → en'.abort = false →
       ∀ f y (ρa ρb ρ : WRes), ResU.CompS ρa ρb ρ → en'.wk f y ρ →
@@ -265,7 +265,7 @@ theorem tabNK_raiseOwed {S : UInt32 → Prop} (F : CTy) (δ : LSub) :
   obtain ⟨_, _, _, _, _, rfl, -⟩ := tab_lookupNNK F h'
   have hE : x.Θ.ExtR y.Θ ρa := (KW.OwedS.extR hy).left hc
   obtain ⟨q, A, B, fin, -, rfl, hR⟩ := tab_lookupNNK F h
-  exact ⟨_, hR y, ha, fun k ls v hv => vN_extR A δ k v ρa hE hv⟩
+  exact ⟨_, hR y, ha, fun k ls v hv => vN_extR₀ A δ k v ρa hE hv⟩
 
 /-- **The finaliser's raise along the post order at the typed tables** (the premise `hTVr` of
 `erwpK_ubindRaiseF`): a post's world is the run's own. -/

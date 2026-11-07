@@ -57,8 +57,8 @@ capturable one's cancel run at its cancel row's own guarded table, ending at `R`
 def tabGK (R : Nat → WProp) (G : ShareG) (S : UInt32 → Prop) (g : KW → KW) :
     CTy → LSub → KW → OpTabK KW
   | .eff m i q A B fin _ C, δ, x => extTabK m i
-      (entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x.Θ k v ρ)
-        (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+      (entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x.Θ k v ρ)
+        (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
         (finGK R G (finSched S m) g fin δ) (fun f y ρ => (g x).OwedS S m f (g y) ρ))
       (tabGK R G S g C δ x)
   | _, _, _ => OpTabK.empty
@@ -67,8 +67,8 @@ def finGK (R : Nat → WProp) (G : ShareG) (S : UInt32 → Prop) (g : KW → KW)
     Option (KW → Nat → List SRec → Expr → WProp)
   | .top, _ => none
   | .eff m i q A B fin _ C, δ => some (cancelOblGK (ℍ := ℍ) g (fun x => extTabK m i
-      (entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x.Θ k v ρ)
-        (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+      (entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x.Θ k v ρ)
+        (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
         (finGK R G (finSched S m) g fin δ) (fun f y ρ => (g x).OwedS S m f (g y) ρ))
       (tabGK R G S g C δ x)) G R)
   | .ret _, _ => some (cancelOblGK (ℍ := ℍ) g (fun _ => OpTabK.empty) G R)
@@ -89,14 +89,14 @@ key.** -/
 theorem tab_lookupNGK : ∀ (F : CTy) {S : UInt32 → Prop} {g : KW → KW} {δ : LSub} {x : KW}
     {m j : UInt32} {en : OpEntK KW},
     tabNK (ℍ := ℍ) S g F δ x m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
-      en = entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x.Θ k v ρ)
-        (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+      en = entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x.Θ k v ρ)
+        (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
         (finNK (ℍ := ℍ) (finSched S m) g fin δ) (fun f y ρ => (g x).OwedS S m f (g y) ρ) ∧
       ∀ (R : Nat → WProp) (G : ShareG) (S₂ : UInt32 → Prop) (g₂ : KW → KW) (δ₂ : LSub)
         (x₂ : KW),
         tabGK (ℍ := ℍ) R G S₂ g₂ F δ₂ x₂ m j =
-          some (entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ₂ x₂.Θ k v ρ)
-            (fun y k v ρ => vN (ℍ := ℍ) B δ₂ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+          some (entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ₂ x₂.Θ k v ρ)
+            (fun y k v ρ => vN₀ (ℍ := ℍ) B δ₂ y.Θ k v ρ ∧ ConsistentX y.c ρ)
             (finGK (ℍ := ℍ) R G (finSched S₂ m) g₂ fin δ₂)
             (fun f y ρ => (g₂ x₂).OwedS S₂ m f (g₂ y) ρ))
   | .eff m₀ i₀ q A B fin rc C, S, g, δ, x, m, j, en, h => by
@@ -124,12 +124,12 @@ key.** -/
 theorem tab_lookupGK : ∀ (F : CTy) {R : Nat → WProp} {G : ShareG} {S : UInt32 → Prop}
     {g : KW → KW} {δ : LSub} {x : KW} {m j : UInt32} {en : OpEntK KW},
     tabGK (ℍ := ℍ) R G S g F δ x m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
-      en = entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x.Θ k v ρ)
-        (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+      en = entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x.Θ k v ρ)
+        (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
         (finGK (ℍ := ℍ) R G (finSched S m) g fin δ) (fun f y ρ => (g x).OwedS S m f (g y) ρ) ∧
       ∀ R' : Nat → WProp, tabRK (ℍ := ℍ) R' S g F δ x m j =
-        some (entNK q B (fun k v ρ => vN (ℍ := ℍ) A δ x.Θ k v ρ)
-          (fun y k v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+        some (entNK q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ x.Θ k v ρ)
+          (fun y k v ρ => vN₀ (ℍ := ℍ) B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
           (finRK (ℍ := ℍ) R' (finSched S m) g fin δ) (fun f y ρ => (g x).OwedS S m f (g y) ρ))
   | .eff m₀ i₀ q A B fin rc C, R, G, S, g, δ, x, m, j, en, h => by
       simp only [tabGK] at h
@@ -186,8 +186,8 @@ theorem tabNK_foldTwinG {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CT
   obtain ⟨-, hA, hB, -, -, -⟩ := layer_suspend F hF hL
   refine ⟨_, hR R G S id δ x, rfl, rfl, ?_, ?_, rfl, fun ha => ⟨fun f z ρ hz => hz.owedS,
     fun f z ρ hz => hz.owed (hm ha)⟩⟩
-  · simp only [entNK, vN_extend_of_not_free (ℍ := ℍ) hA δ α]
-  · simp only [entNK, vN_extend_of_not_free (ℍ := ℍ) hB δ α]
+  · simp only [entNK, vN_extend_of_not_free₀ (ℍ := ℍ) hA δ α]
+  · simp only [entNK, vN_extend_of_not_free₀ (ℍ := ℍ) hB δ α]
 
 /-- **The lender's guarded cancel obligations from the callback's, at the typed world**
 (`tabG_can` at `KW`, the premise `CanFold` of the guarded Mut Frame), by induction on how deep
@@ -385,10 +385,10 @@ theorem tabNK_rebOKR_K {xv : LifeVar} {bnd : Lifetime.Life} {β : Life} {F : CTy
     exact ⟨(layer_suspend F hF hL).1, rfl⟩
   pa := fun m i en h k ls v ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupNK F h
-    exact vN_inStratum_bnd (layer_suspend F hF hL).2.2.2.1 hLt hp
+    exact vN_inStratum_bnd₀ (layer_suspend F hF hL).2.2.2.1 hLt hp
   pb := fun m i en h y k ls w ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupNK F h
-    exact vN_inStratum_bnd (layer_suspend F hF hL).2.2.2.2.1 hLt hp.1
+    exact vN_inStratum_bnd₀ (layer_suspend F hF hL).2.2.2.2.1 hLt hp.1
 
 /-- **The table twins itself across the reborrow, at the typed world**: a world `KW.Owed` owes is
 one an entry owes, and, the row's resuming layers being at scheduler names (`hS`), a world an entry
@@ -507,15 +507,15 @@ theorem tabNK_ilendOKCR {xv : LifeVar} {bnd : Lifetime.Life} {A : Life} {F : CTy
   pa := fun m i en h k ls v ρ hp => by
     obtain ⟨q, A', B, fin, hL, rfl, -⟩ := tab_lookupNK F h
     obtain ⟨-, hA, -, hOA, -⟩ := layer_suspend F hF hL
-    have hp' : vN (ℍ := ℍ) A' (δ.extend xv A) x.Θ k v ρ := hp
-    rw [vN_extend_of_not_free hA] at hp'
-    exact vN_inStratum_bnd hOA hLt hp'
+    have hp' : vN₀ (ℍ := ℍ) A' (δ.extend xv A) x.Θ k v ρ := hp
+    rw [vN_extend_of_not_free₀ hA] at hp'
+    exact vN_inStratum_bnd₀ hOA hLt hp'
   pb := fun m i en h y k ls w ρ hp => by
     obtain ⟨q, A', B, fin, hL, rfl, -⟩ := tab_lookupNK F h
     obtain ⟨-, -, hB, -, hOB, -⟩ := layer_suspend F hF hL
-    have hp' : vN (ℍ := ℍ) B (δ.extend xv A) y.Θ k w ρ := hp.1
-    rw [vN_extend_of_not_free hB] at hp'
-    exact vN_inStratum_bnd hOB hLt hp'
+    have hp' : vN₀ (ℍ := ℍ) B (δ.extend xv A) y.Θ k w ρ := hp.1
+    rw [vN_extend_of_not_free₀ hB] at hp'
+    exact vN_inStratum_bnd₀ hOB hLt hp'
   paExt := fun m i en h k ls₁ ls₂ v ρ _ hp => by
     obtain ⟨q, A', B, fin, -, rfl, -⟩ := tab_lookupNK F h
     exact hp
@@ -541,8 +541,8 @@ theorem tabNK_ifoldTwin {xv : LifeVar} {bnd : Lifetime.Life} {A : Life} {F : CTy
   obtain ⟨-, hA, hB, -, -, -⟩ := layer_suspend F hF hL
   refine ⟨_, hR Rr S id δ x, rfl, rfl, ?_, ?_, rfl, fun ha => ⟨fun f z ρ hz => hz.owedS,
     fun f z ρ hz => hz.owed (hm ha)⟩⟩
-  · simp only [entNK, vN_extend_of_not_free (ℍ := ℍ) hA δ A]
-  · simp only [entNK, vN_extend_of_not_free (ℍ := ℍ) hB δ A]
+  · simp only [entNK, vN_extend_of_not_free₀ (ℍ := ℍ) hA δ A]
+  · simp only [entNK, vN_extend_of_not_free₀ (ℍ := ℍ) hB δ A]
 
 /-- A row whose every layer is must-resume. -/
 def _root_.BoCa.Fig16.LogRel.Core.CTy.LinOnly : CTy → Prop
