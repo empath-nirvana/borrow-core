@@ -31,7 +31,9 @@ verifies and never fills in:
 namespace Backend2.Lint
 open Backend2 BoCa.Fig16.LogRel.Core
 
-/-- What a path leaves unconsumed; `none` on a path that ends at `absurd`. -/
+/-- What a path leaves unconsumed; `none` on a path that ends at `absurd` (or `unreachable`), which
+never returns: a variable still owned there needs no consume. It is how `absurd` (`zeroE`) absorbs
+the slots its value does not read (`Convert.splitCtx`, SPEC §66). -/
 abbrev Left := Option (Std.HashSet Var)
 
 structure St where
@@ -81,9 +83,12 @@ def copiesAt : CopyRule → LTy → Bool
   (`Consumable.arrayMut` at `[Mut A]`: `consumeAt` is `idx` then `forget`);
 - `unused`: an unrestricted type, the premise of the weakening the part that receives the slot
   applies at its leaves (`Ctx.DeadP.weaken`); a persistent value holds no resource
-  (`vP_empty_of_persistent`), so consuming it at the split is the same. A slot the part absorbs
-  instead (`⊤`, `absurd`) is refused here, not consumed: that no checked program has one of a type
-  that is not persistent is `UNPROVED:` (`Check.SplitMasks.NeitherAbsorbed` states the cases);
+  (`vP_empty_of_persistent`), so consuming it at the split is the same. The absorbing nodes do not
+  reach this rule: at `absurd` (`zeroE`) a slot neither mask holds is left unconsumed on a path
+  that ends at `Tm.absurd`, which `lintTm` admits (`Left` is `none` there), and `⊤` (`topI`)
+  abandons its context (`Abandon.top`). That no other rule leaves a slot of a type that is not
+  persistent in neither part is `UNPROVED:` (`Check.SplitMasks.NeitherAbsorbed` states the cases);
+  such a consume is refused here.  [spec §66]
 - `stackK` (`UNPROVED:`, F3, `StackKHandOver`): a closure of a `&` code, the rest of its
   premise read from the node (`handsOver`, checked by `lintTm`).
 No rule consumes a value that owns an opaque value: an abort abandons it (`abandon`). -/

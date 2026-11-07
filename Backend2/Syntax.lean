@@ -197,9 +197,10 @@ inductive ConsumeRule where
   | consume
   /-- A live slot of a split's context that neither part's mask holds: weakened
   (`Ctx.DeadP.weaken`), at a persistent type, where the kernel weakens it at the leaves of the part
-  that receives it. The kernel may instead absorb it (`⊤`, `absurd`); `Lint` refuses such a consume
-  at a type that is not persistent. `UNPROVED:` that no checked program has one
-  (`Check.SplitMasks.NeitherAbsorbed`). -/
+  that receives it. At the absorbing nodes no such consume is made: `absurd` (`zeroE`) leaves the
+  slot on a path that ends at `Tm.absurd`, and `⊤` (`topI`) abandons it (`Abandon.top`). `Lint`
+  refuses this consume at a type that is not persistent. `UNPROVED:` that no other rule leaves one
+  in neither part (`Check.SplitMasks.NeitherAbsorbed`).  [spec §66] -/
   | unused
   /-- A stack machine's hand-over (`genStackMach`): a level's suspended computation, a closure
   `clos kc [a]` of the machine's code over a frame's address, consumed for `clos kc [base]`, which

@@ -371,8 +371,12 @@ def leaf (ctx : Ctx) (keep : Option Nat) (b : Tm) : Tm :=
   consumes .dead others b
 
 /-- The context at a split, by its masks: the parts' contexts and the copies and consumes made at the
-split. -/
-def splitCtx (ctx : Ctx) (m : Masks) (rule : String := "?") : CM ((Tm → Tm) × Ctx × Ctx) := do
+split. `absorbs` is set only at `absurd` (`zeroE`), whose path ends at `Tm.absurd`: a live slot
+neither mask holds is absorbed there, as `zeroE`'s second part is, and left unconsumed (`Lint`
+admits a variable left on a path that ends at `absurd`). At every other rule such a slot is
+consumed at the rule `unused`, which `Lint` admits at a persistent type only.  [spec §66] -/
+def splitCtx (ctx : Ctx) (m : Masks) (rule : String := "?") (absorbs : Bool := false) :
+    CM ((Tm → Tm) × Ctx × Ctx) := do
   if m.ms.length != ctx.length then
     throw s!"LIR: masks of {m.ms.length} slots at a context of {ctx.length}"
   let mut pre : List (Tm → Tm) := []
@@ -390,9 +394,15 @@ def splitCtx (ctx : Ctx) (m : Masks) (rule : String := "?") : CM ((Tm → Tm) ×
     | some x, true, false => c₁ := c₁.push (some x); c₂ := c₂.push none
     | some x, false, true => c₁ := c₁.push none; c₂ := c₂.push (some x)
     | some x, false, false =>
-      -- F5: weakened here, at a persistent type (`Lint` checks it); a slot the part absorbs
-      -- instead is refused. `UNPROVED:` that none reaches here (`Check.SplitMasks.NeitherAbsorbed`).
-      pre := (fun t => .consume .unused x t) :: pre
+      if absorbs then
+        -- F5 at `absurd`: `zeroE` absorbs the slot (`Check.AbsorbsAt`) and its path ends at
+        -- `Tm.absurd`, which never returns: no consume.  [spec §66]
+        readFact s!"{rule}:absorbs"
+      else
+        -- F5: weakened here, at a persistent type (`Lint` checks it). `UNPROVED:` that no rule
+        -- but `zeroE` (above) and `topI` (no split: it abandons its context) leaves a slot of
+        -- another type in neither part (`Check.SplitMasks.NeitherAbsorbed`); `Lint` refuses one.
+        pre := (fun t => .consume .unused x t) :: pre
       c₁ := c₁.push none; c₂ := c₂.push none
   readFact s!"{rule}:masks"
   return (fun t => pre.foldl (fun t f => f t) t, c₁.toList, c₂.toList)
@@ -2534,6 +2544,8 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     | some (some x) => return leaf ctx (some i) (.var x)
     | _ => throw s!"LIR: variable {i} is not live"
   | .unitI .. => return leaf ctx none .unit
+  -- `⊤` absorbs its whole context (`Check.AbsorbsAt`): it is not split, and every live slot is
+  -- abandoned at `topI`, whose premise `Lint` reads from the node (`Abandon.top`).  [spec §66]
   | .topI .. => return abandons .top (live ctx) .unit
   | .lit _ _ c => return leaf ctx none (.lit c)
   | .tensorI _ j _ _ u t₁ t₂ => do
@@ -2688,7 +2700,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       let x ← fresh aT; let y ← fresh bT
       return .case sv x (← conv fuel (some x :: c₂) t₁) y (← conv fuel (some y :: c₂) t₂))
   | .zeroE _ _ _ u tV => do
-    let (pre, c₁, _) ← splitCtx ctx u "zeroE"
+    -- `absurd` absorbs its second part and every slot neither part holds: the path ends at
+    -- `Tm.absurd`, so they are left unconsumed.  [spec §66]
+    let (pre, c₁, _) ← splitCtx ctx u "zeroE" (absorbs := true)
     return pre (← bindTm (← conv fuel c₁ tV) .zero fun v => pure (.absurd v))
   | .allE _ _ _ _ _ _ c | .allEV _ _ _ _ _ _ c => do
     -- An instantiation is its operand.  [spec §44]
@@ -2874,7 +2888,9 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
     return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .consume .dead v (← convK fuel c₂ tM K args))
   | .zeroE _ _ _ u tV => do
-    let (pre, c₁, _) ← splitCtx ctx u "zeroE"
+    -- `absurd` absorbs its second part and every slot neither part holds: the path ends at
+    -- `Tm.absurd`, so they are left unconsumed.  [spec §66]
+    let (pre, c₁, _) ← splitCtx ctx u "zeroE" (absorbs := true)
     return pre (← bindTm (← conv fuel c₁ tV) .zero fun v => pure (.absurd v))
   | .effSub _ _ _ _ _ c => do
     readFact "effSub:rows"
