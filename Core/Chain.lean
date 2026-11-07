@@ -188,3 +188,4 @@ import Core.Chain.HandlerLawN
 import Core.Chain.Adequacy791N
 import Core.Chain.ConfigsKW835N
 import Core.Chain.StopKW835N
+import Core.Chain.Spike844N
