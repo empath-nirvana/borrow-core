@@ -373,6 +373,8 @@ What follows for the three rules `MissingN` names (`Fundamental831N.lean`):
 **`HandlerLawN` can go.** It lives on `rule-791`, `Core/Chain/HandlerLaw.lean`; `handlerLawN_iff`
 shows it is `MissingN`. Once the three rows above are chain lemmas at the reworked block, `MissingN`
 is a theorem, `fundamentalN_all` needs no hypothesis, and `HandlerLawN` has nothing left to name.
+Until then, a program whose derivation and constants' finalisers use none of the three has
+`goal791N_noVal`, with no hypothesis. Shrinking or discharging the assertion is #838.
 
 `handle_resume_inst`, `semJN_resumeCT` and the `kappa_*` lemmas carry over as the template for
 §3.3. `goal791SchedN_premises_inst` is restated at `Goal835`.

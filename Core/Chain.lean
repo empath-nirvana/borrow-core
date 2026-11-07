@@ -185,6 +185,7 @@ import Core.Chain.FuelKW835N
 import Core.Chain.UnwindKW835N
 import Core.Chain.NuKW835N
 import Core.Chain.FundamentalKW835N
+import Core.Chain.FundamentalNV835N
 import Core.Chain.HandlerLawN
 import Core.Chain.Adequacy791N
 import Core.Chain.ConfigsKW835N

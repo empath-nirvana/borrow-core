@@ -5477,7 +5477,8 @@ use R1 keeps them unconditionally.
 The chain interpretation of §62 has a second named hypothesis of the same form, `HandlerLawN`
 (`Core/Chain/HandlerLawN.lean`): the compatibility lemmas of `[handle]` at a value form, BOXED-κ
 `[handle]` and `reify`, from which `FundamentalN` and plain adequacy `Goal791N` are proved (§62,
-*The named assertion*).
+*The named assertion*). A program that uses none of the three needs no hypothesis
+(`goal791N_noVal`); discharging the rest is #838.
 
 *Decision 71 is void (decision 72); R1 and `PinLaw` stay as stated here until §62's PRs land.*
 
@@ -11043,6 +11044,21 @@ The top-level theorem is plain adequacy, every handler inside the program
 No scheduler, scheduler contract (`SchedOKN`) or restriction on handler names is quantified over:
 a program that suspends handles its operations inside itself, and those handlers are typed by
 `CDerives`'s handler rules.
+
+**Programs that do not depend on the assertion.** `CDerivesNV` (`Core/NoValDerives.lean`,
+generated from `CDerives` by `scripts/gen-nv.py`) is `CDerives` without `effHandleV`, `effHandleVB`
+and `reify`; `CDerivesNV.toC` embeds it. `fundamentalN_noVal : CDerivesNV Δ Γ e j → SemJN Δ Γ e j`
+is `fundamentalN_all`'s induction without its three `MissingN` cases, and has no hypothesis. A
+constant's finaliser is read by the fundamental property too, so `Const791.FinNV` asks it of each
+finaliser. `goal791N_noVal` concludes `OrDiverges (substAll (vals791 cs) e₀)` from `c.OK` and
+`c.FinNV` for every `c ∈ cs` and a `CDerivesNV` derivation of `e₀` at `F 1`, with no
+`HandlerLawN`. So a program is outside the assertion when every handler in it, and in its
+constants' finalisers, is a tail handler (`effHandleT`, clauses resuming `κ` in tail position, an
+abortive operation's clause its function) or a last handler (`effHandleL`, resume or cancel at the
+last step), and it makes no loop value with `reify`. A handler at a value form that keeps or
+reuses `κ`, a BOXED-κ handler, the two-variable `[handle]` (`CDerives.effHandle`, `to_result`),
+and `reify` stay under `HandlerLawN`. `prog791_orDiverges_uncond` is `prog791` this way
+(`d_prog791NV`, `lendC_finNV`). Shrinking or discharging the assertion is #838.
 
 It is believed because Core proves all three on its own relation, and `PinLaw` already rests on
 the same belief: a borrow held across a suspension is sound under a handler written in the

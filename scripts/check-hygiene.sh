@@ -36,4 +36,6 @@ fi
 # The extended judgment of SPEC §29 and the typed term of SPEC §3 are generated from `CDerives`:
 # they must be up to date.
 python3 scripts/gen-pin.py --check
+# `CDerivesNV` and `fundamentalN_noVal` are generated from `CDerives` and `fundamentalN_all`.
+python3 scripts/gen-nv.py --check
 lake env lean --run scripts/CheckAxioms.lean

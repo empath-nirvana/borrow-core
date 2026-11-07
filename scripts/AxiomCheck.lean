@@ -2423,6 +2423,15 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.lendC_ok
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.goal791N_premises_inst
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.prog791_orDiverges
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fundamentalN_noVal
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.gN_ctx791_of
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_noVal
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.goal791N_of_sem
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.goal791N_noVal
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.d_prog791NV
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.lendC_finNV
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.prog791_orDiverges_uncond
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesNV.toC
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_ansIn
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.opTableKS_le
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.SemCSN.semJN

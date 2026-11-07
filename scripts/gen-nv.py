@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""Generate `CDerivesNV` and its fundamental property at `SemJN` (SPEC §62).
+
+`CDerivesNV` (`Core/NoValDerives.lean`) is `CDerives` without the three rules the relation at
+`KW` has no compatibility lemma for: `effHandleV`, `effHandleVB` and `reify`. Every other
+constructor is copied from `Core/Fundamental.lean`, every premise read in `CDerivesNV`.
+`CDerivesNV.toC` (every `CDerivesNV` derivation is a `CDerives` one) is generated from the
+constructors' explicit binders.
+
+`fundamentalN_noVal` (`Core/Chain/FundamentalNV835N.lean`) is `fundamentalN_all`'s induction
+(`Core/Chain/FundamentalKW835N.lean`), case for case, without the three cases. A rule added to
+`CDerives`, or a case changed in `fundamentalN_all`, is picked up by rerunning this script.
+
+    python3 scripts/gen-nv.py           write the two files
+    python3 scripts/gen-nv.py --check   fail if either differs from what would be written
+"""
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+CHECK = "--check" in sys.argv[1:]
+DROP = ("effHandleV", "effHandleVB", "reify")
+
+src = (ROOT / "Core" / "Fundamental.lean").read_text().splitlines()
+i0 = next(k for k, l in enumerate(src) if l.startswith("inductive CDerives "))
+i1 = next(k for k in range(i0 + 1, len(src)) if src[k] and not src[k].startswith(" "))
+body = src[i0 + 1:i1]
+while body and body[-1].strip() == "":
+    body.pop()
+
+# Drop doc comments and line comments: the constructors' documentation is `CDerives`'s.
+code, in_doc = [], False
+for l in body:
+    s = l.strip()
+    if in_doc:
+        in_doc = not s.endswith("-/")
+        continue
+    if s.startswith("/-"):
+        in_doc = not s.endswith("-/")
+        continue
+    if s.startswith("--"):
+        continue
+    code.append(l)
+
+# Split into constructors and drop the three.
+ctors, cur = [], None
+for l in code:
+    m = re.match(r"^  \| (\S+)", l)
+    if m:
+        cur = [m.group(1), [l]]
+        ctors.append(cur)
+    else:
+        cur[1].append(l)
+names = [c[0] for c in ctors]
+for d in DROP:
+    if d not in names:
+        sys.exit(f"gen-nv: no constructor {d} in CDerives")
+kept = [c for c in ctors if c[0] not in DROP]
+
+
+def rename(t):
+    return re.sub(r"\bCDerives\b", "CDerivesNV", t)
+
+
+ind_lines = [rename(l) for c in kept for l in c[1]]
+
+
+def explicit_binders(rest):
+    """`(name, mentions CDerives)` for each explicit binder of a constructor."""
+    out, depth, k, start, kind = [], 0, 0, None, None
+    while k < len(rest):
+        c = rest[k]
+        if c in "({[":
+            if depth == 0:
+                start, kind = k + 1, c
+            depth += 1
+        elif c in ")}]":
+            depth -= 1
+            if depth == 0 and kind == "(":
+                grp = rest[start:k]
+                d, colon = 0, None
+                for q, ch in enumerate(grp):
+                    if ch in "({[":
+                        d += 1
+                    elif ch in ")}]":
+                        d -= 1
+                    elif ch == ":" and d == 0 and grp[q:q + 2] != ":=":
+                        colon = q
+                        break
+                for nm in grp[:colon].split():
+                    out.append((nm, "CDerives" in grp[colon + 1:]))
+        elif c == ":" and depth == 0:
+            break
+        k += 1
+    return out
+
+
+toc = []
+for name, lines in kept:
+    rest = "\n".join(lines)[len(f"  | {name}"):]
+    ex = explicit_binders(rest)
+    pat = [f"a{i}" for i in range(len(ex))]
+    ihs, args = [], []
+    for i, (_, rec) in enumerate(ex):
+        if rec:
+            ihs.append(f"ih{len(ihs)}")
+            args.append(ihs[-1])
+        else:
+            args.append(f"a{i}")
+    toc.append(f"  | {' '.join([name] + pat + ihs)} => exact CDerives.{' '.join([name] + args)}")
+
+# fundamentalN_all's cases, without the three.
+fsrc = (ROOT / "Core" / "Chain" / "FundamentalKW835N.lean").read_text().splitlines()
+f0 = next(k for k, l in enumerate(fsrc) if l.startswith("theorem fundamentalN_all "))
+f1 = next(k for k in range(f0, len(fsrc)) if fsrc[k].strip() == "induction h with") + 1
+f2 = next(k for k in range(f1, len(fsrc)) if fsrc[k] and not fsrc[k].startswith(" "))
+fcases, keep = [], True
+for l in fsrc[f1:f2]:
+    m = re.match(r"^  \| @?(\S+)", l)
+    if m:
+        keep = m.group(1) not in DROP
+    if keep:
+        fcases.append(l)
+while fcases and fcases[-1].strip() == "":
+    fcases.pop()
+dropped_f = {re.match(r"^  \| @?(\S+)", l).group(1) for l in fsrc[f1:f2]
+             if re.match(r"^  \| @?(\S+)", l)} - {re.match(r"^  \| @?(\S+)", l).group(1)
+                                                  for l in fcases if re.match(r"^  \| @?(\S+)", l)}
+if dropped_f != set(DROP):
+    sys.exit(f"gen-nv: fundamentalN_all's dropped cases are {sorted(dropped_f)}")
+
+DER = """import Core.Fundamental
+
+/-!
+# Core — `CDerivesNV`: `CDerives` without the value-form handlers and `reify`  `[spec §62]`
+
+GENERATED by `scripts/gen-nv.py` from `Core/Fundamental.lean`. Edit the script, not this file.
+
+`CDerivesNV Δ Γ e j` holds when `e` has a `CDerives` derivation at `j` that uses none of
+`effHandleV`, `effHandleVB` and `reify` anywhere inside it. Its constructors are `CDerives`'s,
+those three excepted, each with its premises read in `CDerivesNV`; their documentation is at
+`CDerives`. `CDerives` is a proposition, so the property is stated as this judgment rather than
+as a predicate on a derivation.
+
+* `CDerivesNV.toC`: every `CDerivesNV` derivation is a `CDerives` one.
+-/
+
+namespace BoCa.Fig16.LogRel.Core
+open BoCa
+open BoCa.Fig16
+open BoCa.Fig16.BoLo
+open BoCa.BoLo (Heap Steps Step1 Head Kont eLoad eStore)
+open BoCa.Lifetime (LSub LifeCtx LifeVar)
+
+/-- **`CDerives` without `effHandleV`, `effHandleVB` and `reify`.** -/
+inductive CDerivesNV : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
+@IND@
+
+/-- **A `CDerivesNV` derivation is a `CDerives` one**, constructor for constructor. -/
+theorem CDerivesNV.toC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
+    (h : CDerivesNV Δ Γ e j) : CDerives Δ Γ e j := by
+  induction h with
+@TOC@
+
+end BoCa.Fig16.LogRel.Core
+"""
+
+FUN = """import Core.Chain.FundamentalKW835N
+import Core.NoValDerives
+
+/-!
+# `FundamentalN` without `MissingN`, at `CDerivesNV`  `[spec §62]`
+
+GENERATED by `scripts/gen-nv.py` from `Core/Chain/FundamentalKW835N.lean`. Edit the script or
+`fundamentalN_all`, not this file.
+
+`fundamentalN_noVal` is `fundamentalN_all`'s induction at `CDerivesNV`, case for case: the three
+cases that read `MissingN` (`reify`, `effHandleV`, `effHandleVB`) are not constructors of
+`CDerivesNV`, and every other case calls its `*_compatN` as `fundamentalN_all` does. It has no
+hypothesis.
+-/
+
+noncomputable section
+
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
+namespace BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
+open BoCa
+open BoCa.Fig16
+open BoCa.Fig16.BoLo
+open BoCa.Fig16.LogRel.Core
+open BoCa.Fig16.LogRel.Core.Chain.SI
+open BoCa.Fig16.LogRel (LtLife substAll)
+open BoCa.Lifetime (LSub LifeCtx LifeVar)
+open BoCa.Fig16.Tree.Wp.Goal791 (jdgC)
+
+/-- **Every `CDerivesNV` derivation is sound at `SemJN`**, with no hypothesis: `fundamentalN_all`
+without its three `MissingN` cases. -/
+theorem fundamentalN_noVal {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
+    (h : CDerivesNV Δ Γ e j) : SemJN (ℍ := ℍ) Δ Γ e j := by
+  induction h with
+@CASES@
+
+end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
+
+end
+"""
+
+der = DER.replace("@IND@", "\n".join(ind_lines)).replace("@TOC@", "\n".join(toc))
+fun = FUN.replace("@CASES@", "\n".join(fcases))
+
+stale = []
+outs = (("Core/NoValDerives.lean", der), ("Core/Chain/FundamentalNV835N.lean", fun))
+for name, txt in outs:
+    path = ROOT / name
+    if CHECK:
+        if not path.exists() or path.read_text() != txt:
+            stale.append(name)
+    else:
+        path.write_text(txt)
+if CHECK:
+    if stale:
+        print("stale: " + ", ".join(stale) + " (run python3 scripts/gen-nv.py)")
+        sys.exit(1)
+    print(", ".join(n for n, _ in outs) + f" up to date ({len(kept)} constructors)")
+else:
+    print(f"{len(kept)} constructors copied, {len(DROP)} dropped")
