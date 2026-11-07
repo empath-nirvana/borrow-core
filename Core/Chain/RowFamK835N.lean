@@ -72,12 +72,13 @@ theorem cancelTabK_downI {Inv : ι → Prop} {lo : Life} {T : OpTabK ι} (hT : T
 
 /-! ### How a row's table reads a world -/
 
-/-- **How a row's table reads a world.** `Θ`/`c`: the location typing and view a world reads
-values at; `wk μ m x f y ρ`: under the mode `μ`, an entry at the name `m` of the table at `x`, at
+/-- **How a row's table reads a world.** `vr`: the value relation payloads and answers are read
+at; `Θ`/`c`: the location typing and view a world reads values at; `wk μ m x f y ρ`: under the mode `μ`, an entry at the name `m` of the table at `x`, at
 the floor `f`, owes its continuation at `y` at the share `ρ`; `sub μ m`: the mode of the cancel row
 of an entry at `m`; `le`: the order on modes; `V`, `Φ`, `fl`: the post order, location family and
 floor bound of the runs at the table; `Inv`: the worlds those runs are read at. -/
 structure RowRd (ι M : Type) where
+  vr : VTy → LSub → LocTy → Nat → Val → WRes → Prop
   δ : LSub
   Θ : ι → LocTy
   c : ι → Loc → Option Life
@@ -89,11 +90,14 @@ structure RowRd (ι M : Type) where
   fl : ι → Life
   Inv : ι → Prop
 
-/-- **What the interface needs of a reading.** Every world an entry owes at is one the runs are
+/-- **What the interface needs of a reading.** The value relation is closed in the index and a
+value of a persistent type owns nothing; every world an entry owes at is one the runs are
 read at, and the location family is downward closed there; an entry's order passes to a part of
 a valid share; a cancel row's mode is above the entry's, and `sub` is monotone; an entry at a
 higher mode owes at fewer worlds; a run's values are posted at its own world. -/
 structure RowRd.OK (R : RowRd ι M) : Prop where
+  vrDown : ∀ A Θ k v ρ, R.vr A R.δ Θ (k + 1) v ρ → R.vr A R.δ Θ k v ρ
+  vrPers : ∀ A, A.Persistent → ∀ Θ k v ρ, R.vr A R.δ Θ k v ρ → ρ = PMap.empty
   wkInv : ∀ μ m x f y ρ, R.wk μ m x f y ρ → R.Inv y
   ΦDown : ∀ x, R.Inv x → (R.Φ x).Down
   wkLeft : ∀ μ m x f y (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ → ResU.Valid ρ → R.wk μ m x f y ρ →
@@ -105,11 +109,17 @@ structure RowRd.OK (R : RowRd ι M) : Prop where
   wk_anti : ∀ μ μ' m x f y ρ, R.le μ μ' → R.wk μ' m x f y ρ → R.wk μ m x f y ρ
   Veq : ∀ x y, R.V x y → y = x
 
+theorem RowRd.OK.vr_le {R : RowRd ι M} (hR : R.OK) {A : VTy} {Θ : LocTy} {k k' : Nat}
+    (hk : k' ≤ k) {v : Val} {ρ : WRes} (h : R.vr A R.δ Θ k v ρ) : R.vr A R.δ Θ k' v ρ := by
+  induction hk with
+  | refl => exact h
+  | step _ ih => exact ih (hR.vrDown A Θ _ v ρ h)
+
 /-- **A value at a part of a stop's share is one at every world the stop owes**: the payload
 reading carried along an entry's order (Core's `errOk_local`, the error carried along `Ext`). -/
 def RowRd.PayExt (R : RowRd ι M) : Prop :=
   ∀ μ m x f y (ρa ρb ρ : WRes), ResU.CompS ρa ρb ρ → R.wk μ m x f y ρ →
-    ∀ (A : VTy) k v, vN (ℍ := ℍ) A R.δ (R.Θ x) k v ρa → vN (ℍ := ℍ) A R.δ (R.Θ y) k v ρa
+    ∀ (A : VTy) k v, R.vr A R.δ (R.Θ x) k v ρa → R.vr A R.δ (R.Θ y) k v ρa
 
 namespace RowRd
 
@@ -119,8 +129,8 @@ def ent (R : RowRd ι M) (μ : M) (m : UInt32) (q : Qual) (A B : VTy)
     (fin : Option (ι → Nat → List SRec → Expr → WProp)) (x : ι) : OpEntK ι where
   q := q
   abort := B.isZero && q != .lin
-  PA := fun k _ v ρ => vN (ℍ := ℍ) A R.δ (R.Θ x) k v ρ
-  PB := fun y k _ v ρ => vN (ℍ := ℍ) B R.δ (R.Θ y) k v ρ ∧ ConsistentX (R.c y) ρ
+  PA := fun k _ v ρ => R.vr A R.δ (R.Θ x) k v ρ
+  PB := fun y k _ v ρ => R.vr B R.δ (R.Θ y) k v ρ ∧ ConsistentX (R.c y) ρ
   fin := if capB q B then fin else none
   wc := extF
   wk := R.wk μ m x
@@ -137,14 +147,14 @@ mutual
 the mode `μ`, its cancel row's under `sub μ m`. -/
 def tabF (R : RowRd ι M) (μ : M) : CTy → ι → OpTabK ι
   | .eff m i q A B fin _ C, x => extTabK m i
-      (R.ent (ℍ := ℍ) μ m q A B (finF R (R.sub μ m) fin) x) (tabF R μ C x)
+      (R.ent μ m q A B (finF R (R.sub μ m) fin) x) (tabF R μ C x)
   | _, _ => OpTabK.empty
 /-- **The cancel obligation of a cancel row over a world index** (`finN`, `finNK`): `none` at `⊤`;
 otherwise the cancel run at the row's table. -/
 def finF (R : RowRd ι M) (μ : M) : CTy → Option (ι → Nat → List SRec → Expr → WProp)
   | .top => none
   | .eff m i q A B fin _ C => some (R.canc (ℍ := ℍ) (fun x => extTabK m i
-      (R.ent (ℍ := ℍ) μ m q A B (finF R (R.sub μ m) fin) x) (tabF R μ C x)))
+      (R.ent μ m q A B (finF R (R.sub μ m) fin) x) (tabF R μ C x)))
   | .ret _ => some (R.canc (ℍ := ℍ) (fun _ => OpTabK.empty))
   | .arr _ _ => some (R.canc (ℍ := ℍ) (fun _ => OpTabK.empty))
   | .amp _ _ => some (R.canc (ℍ := ℍ) (fun _ => OpTabK.empty))
@@ -154,11 +164,14 @@ end
 
 /-! ### The typed world -/
 
-/-- **The typed world's reading** (`tabNK`): values at the world's location typing and view; an
-entry at `m` owes along `KW.OwedS` from `g x` to `g y`; a cancel row's mode is `finSched`; modes
-ordered by inclusion; the cancel runs at `g`'s view and floor, posted at their own world, read at
-the worlds whose location typing under `g` is downward closed. -/
-def rdKW (g : KW → KW) (δ : LSub) : RowRd KW (UInt32 → Prop) where
+/-- **The typed world's reading at a value relation** (`tabNK`): values at `vr`, at the world's
+location typing and view; an entry at `m` owes along `KW.OwedS` from `g x` to `g y`; a cancel
+row's mode is `finSched`; modes ordered by inclusion; the cancel runs at `g`'s view and floor,
+posted at their own world, read at the worlds whose location typing under `g` is downward
+closed. -/
+def rdKWv (vr : VTy → LSub → LocTy → Nat → Val → WRes → Prop) (g : KW → KW) (δ : LSub) :
+    RowRd KW (UInt32 → Prop) where
+  vr := vr
   δ := δ
   Θ := fun x => x.Θ
   c := fun x => x.c
@@ -170,7 +183,16 @@ def rdKW (g : KW → KW) (δ : LSub) : RowRd KW (UInt32 → Prop) where
   fl := fun z => (g z).lo
   Inv := fun z => (g z).Θ.Down
 
-theorem rdKW_ok (g : KW → KW) (δ : LSub) : (rdKW g δ).OK where
+/-- **The typed world's reading** (`tabNK`): `rdKWv` at `𝒱⟦·⟧`. -/
+def rdKW (g : KW → KW) (δ : LSub) : RowRd KW (UInt32 → Prop) :=
+  rdKWv (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) g δ
+
+theorem rdKWv_ok {vr : VTy → LSub → LocTy → Nat → Val → WRes → Prop}
+    (hD : ∀ A δ Θ k v ρ, vr A δ Θ (k + 1) v ρ → vr A δ Θ k v ρ)
+    (hP : ∀ A, A.Persistent → ∀ δ Θ k v ρ, vr A δ Θ k v ρ → ρ = PMap.empty)
+    (g : KW → KW) (δ : LSub) : (rdKWv vr g δ).OK where
+  vrDown := fun A Θ k v ρ h => hD A δ Θ k v ρ h
+  vrPers := fun A hA Θ k v ρ h => hP A hA δ Θ k v ρ h
   wkInv := fun S m x f y ρ h => by
     by_cases hm : S m
     · exact (h.1 hm).2.1.1
@@ -185,6 +207,10 @@ theorem rdKW_ok (g : KW → KW) (δ : LSub) : (rdKW g δ).OK where
     ⟨fun hm => h.1 (hle m hm), fun _ => h.owedR⟩
   Veq := fun _ _ h => h
 
+theorem rdKW_ok (g : KW → KW) (δ : LSub) : (rdKW (ℍ := ℍ) g δ).OK :=
+  rdKWv_ok (fun A δ Θ k v ρ h => vN_down A δ Θ k v ρ h)
+    (fun A hA _ _ _ _ _ h => vN_empty_of_persistent A hA h) g δ
+
 /-- Both orders make the resumption world's view consistent with the share. -/
 theorem KW.OwedS.consistent {S : UInt32 → Prop} {m : UInt32} {x y : KW} {f : Life} {ρ : WRes}
     (h : x.OwedS S m f y ρ) : ConsistentX y.c ρ := by
@@ -194,7 +220,7 @@ theorem KW.OwedS.consistent {S : UInt32 → Prop} {m : UInt32} {x y : KW} {f : L
 
 /-- **The payload reading along the typed order** at the lender's tables: the order is `ExtR` at
 the share (`KW.OwedS.extR`), so at a part of it, along which `𝒱⟦A⟧` is kept (`vN_extR`). -/
-theorem rdKW_payExt (δ : LSub) : (rdKW id δ).PayExt (ℍ := ℍ) := by
+theorem rdKW_payExt (δ : LSub) : (rdKW (ℍ := ℍ) id δ).PayExt := by
   intro S m x f y ρa ρb ρ hc hy A k v hv
   exact vN_extR A δ k v ρa ((KW.OwedS.extR hy).left hc) hv
 
@@ -229,6 +255,7 @@ theorem finF_KW (g : KW → KW) (δ : LSub) (S : UInt32 → Prop) (F : CTy) :
 /-- **The one-world reading** (`tabN`): every value at `Θ` and `c`; one mode; every entry owes at
 the one world; the runs at `Θ.view c`. -/
 def rdU (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) : RowRd Unit Unit where
+  vr := fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ
   δ := δ
   Θ := fun _ => Θ
   c := fun _ => c
@@ -240,7 +267,10 @@ def rdU (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) : RowRd Unit Unit whe
   fl := fun _ => 0
   Inv := fun _ => True
 
-theorem rdU_ok {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) (c : Loc → Option Life) : (rdU δ Θ c).OK where
+theorem rdU_ok {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) (c : Loc → Option Life) :
+    (rdU (ℍ := ℍ) δ Θ c).OK where
+  vrDown := fun A Θ k v ρ h => vN_down A δ Θ k v ρ h
+  vrPers := fun A hA _ _ _ _ h => vN_empty_of_persistent A hA h
   wkInv := fun _ _ _ _ _ _ _ => trivial
   ΦDown := fun _ _ => LocTy.view_down hΘ c
   wkLeft := fun _ _ _ _ _ _ _ _ _ _ _ => trivial
@@ -251,7 +281,7 @@ theorem rdU_ok {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) (c : Loc → Option Life
   wk_anti := fun _ _ _ _ _ _ _ _ _ => trivial
   Veq := fun _ _ _ => rfl
 
-theorem rdU_payExt (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) : (rdU δ Θ c).PayExt (ℍ := ℍ) :=
+theorem rdU_payExt (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) : (rdU (ℍ := ℍ) δ Θ c).PayExt :=
   fun _ _ _ _ _ _ _ _ _ _ _ _ _ h => h
 
 /-- `cancelOblN` is the one-world reading's cancel run at the lifted table. -/
@@ -276,12 +306,12 @@ theorem tabF_finF_unit (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) : ∀ 
   | .eff m i q A B fin rc C => by
       have hf := tabF_finF_unit δ Θ c fin
       have hC := tabF_finF_unit δ Θ c C
-      have he : ∀ x, (rdU δ Θ c).ent (ℍ := ℍ) () m q A B (finF (ℍ := ℍ) (rdU δ Θ c) () fin) x =
+      have he : ∀ x, (rdU δ Θ c).ent () m q A B (finF (ℍ := ℍ) (rdU δ Θ c) () fin) x =
           liftEntK (entN q B (fun k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ)
             (fun k v ρ => vN (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) (finN (ℍ := ℍ) fin δ Θ c)) := by
         intro x
         rw [hf.2]
-        simp only [RowRd.ent, liftEntK, entN]
+        simp only [RowRd.ent, liftEntK, entN, rdU]
         congr 1
         split <;> rfl
       have hT : ∀ x, tabF (ℍ := ℍ) (rdU δ Θ c) () (.eff m i q A B fin rc C) x =
@@ -290,7 +320,7 @@ theorem tabF_finF_unit (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) : ∀ 
         simp only [tabF, tabN]
         rw [liftTabK_extTabN, he x, hC.1 x]
       refine ⟨hT, ?_⟩
-      have hT' : (fun x => extTabK m i ((rdU δ Θ c).ent (ℍ := ℍ) () m q A B
+      have hT' : (fun x => extTabK m i ((rdU δ Θ c).ent () m q A B
           (finF (ℍ := ℍ) (rdU δ Θ c) ((rdU δ Θ c).sub () m) fin) x)
           (tabF (ℍ := ℍ) (rdU δ Θ c) () C x)) =
           fun _ => liftTabK (tabN (ℍ := ℍ) (.eff m i q A B fin rc C) δ Θ c) := funext hT
@@ -327,7 +357,7 @@ variable (R : RowRd ι M)
 (`tabN_effOf_find`). -/
 theorem tabF_effOf_find (μ : M) (S : Row) (Rt : VTy) (x : ι) (n i : UInt32) :
     tabF (ℍ := ℍ) R μ (CTy.effOf S Rt) x n i = (Row.find S n i).map (fun o =>
-      R.ent (ℍ := ℍ) μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o.fin) x) := by
+      R.ent μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o.fin) x) := by
   induction S with
   | nil => simp [CTy.effOf, tabF, OpTabK.empty, Row.find]
   | cons o S ih =>
@@ -344,7 +374,7 @@ variable {R}
 theorem tabF_effOf_some_find {μ : M} {S : Row} {Rt : VTy} {x : ι} {n i : UInt32}
     {en : OpEntK ι} (h : tabF (ℍ := ℍ) R μ (CTy.effOf S Rt) x n i = some en) :
     ∃ o, Row.find S n i = some o ∧
-      en = R.ent (ℍ := ℍ) μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o.fin) x := by
+      en = R.ent μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o.fin) x := by
   rw [tabF_effOf_find] at h
   obtain ⟨o, hf, rfl⟩ := Option.map_eq_some_iff.mp h
   exact ⟨o, hf, rfl⟩
@@ -370,7 +400,7 @@ variable {R}
 theorem tabF_find_sig {μ : M} {S : Row} {Rt : VTy} {x : ι} {n i : UInt32} {o o' : OpSig}
     (hf : Row.find S n i = some o') (hs : o.Sig o') :
     tabF (ℍ := ℍ) R μ (CTy.effOf S Rt) x n i =
-      some (R.ent (ℍ := ℍ) μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o'.fin) x) := by
+      some (R.ent μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o'.fin) x) := by
   obtain ⟨-, -, hq, hA, hB, -⟩ := hs
   rw [tabF_effOf_find, hf, hq, hA, hB]; rfl
 
@@ -378,7 +408,7 @@ theorem tabF_find_sig {μ : M} {S : Row} {Rt : VTy} {x : ι} {n i : UInt32} {o o
 theorem tabF_rowOf_find {μ : M} {G : CTy} {x : ι} {n i : UInt32} {en : OpEntK ι}
     (h : tabF (ℍ := ℍ) R μ G x n i = some en) :
     ∃ o, Row.find G.rowOf n i = some o ∧
-      en = R.ent (ℍ := ℍ) μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o.fin) x := by
+      en = R.ent μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o.fin) x := by
   rw [tabF_rowOf] at h
   exact tabF_effOf_some_find h
 
@@ -386,9 +416,9 @@ theorem tabF_rowOf_find {μ : M} {G : CTy} {x : ι} {n i : UInt32} {en : OpEntK 
 theorem tabF_at {μ : M} {G : CTy} {x : ι} {n i : UInt32} {en : OpEntK ι}
     (h : tabF (ℍ := ℍ) R μ G x n i = some en) :
     ∃ o, Row.find G.rowOf n i = some o ∧
-      en = R.ent (ℍ := ℍ) μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o.fin) x ∧
+      en = R.ent μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o.fin) x ∧
       ∀ y, tabF (ℍ := ℍ) R μ G y n i =
-        some (R.ent (ℍ := ℍ) μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o.fin) y) := by
+        some (R.ent μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o.fin) y) := by
   obtain ⟨o, hf, rfl⟩ := tabF_rowOf_find h
   exact ⟨o, hf, rfl, fun y => by rw [tabF_rowOf, tabF_effOf_find, hf]; rfl⟩
 
@@ -407,7 +437,7 @@ variable {R}
 `⊤` (`entN_fin_cancel`). -/
 theorem entF_fin_cancel {μ μ' : M} {m : UInt32} {q : Qual} {A B : VTy} {F : CTy} {x : ι}
     {P : ι → Nat → List SRec → Expr → WProp}
-    (hP : (R.ent (ℍ := ℍ) μ' m q A B (finF (ℍ := ℍ) R μ F) x).fin = some P) :
+    (hP : (R.ent μ' m q A B (finF (ℍ := ℍ) R μ F) x).fin = some P) :
     capB q B = true ∧ F.isTop = false ∧ P = R.canc (ℍ := ℍ) (fun x => tabF (ℍ := ℍ) R μ F x) := by
   simp only [RowRd.ent] at hP
   split at hP
@@ -423,7 +453,7 @@ theorem entF_fin_cancel {μ μ' : M} {m : UInt32} {q : Qual} {A B : VTy} {F : CT
 /-- The entry at a capturable key has the cancel obligation at its cancel row (`entN_fin_of`). -/
 theorem entF_fin_of {μ μ' : M} {m : UInt32} {q : Qual} {A B : VTy} {F : CTy} {x : ι}
     (hcap : capB q B = true) (hT : F.isTop = false) :
-    (R.ent (ℍ := ℍ) μ' m q A B (finF (ℍ := ℍ) R μ F) x).fin =
+    (R.ent μ' m q A B (finF (ℍ := ℍ) R μ F) x).fin =
       some (R.canc (ℍ := ℍ) (fun x => tabF (ℍ := ℍ) R μ F x)) := by
   simp only [RowRd.ent, hcap, if_true, finF_eq_ite, hT, Bool.false_eq_true, if_false]
 
@@ -444,16 +474,16 @@ theorem errOkF_of_sub {μ μ' : M} {x : ι} {P P' : Row}
       exact ⟨m, j, w, _, pure_sep_mk ⟨h₁, tabF_find_sig hf' hs, ha⟩ h₅⟩
 
 /-- An error read at a lower index and any list (`errOkN_tabN_le`). -/
-theorem errOkF_le {μ : M} {F : CTy} {x : ι} {k k' : Nat} (hk : k' ≤ k) {ls ls' : List SRec} :
+theorem errOkF_le (hR : R.OK) {μ : M} {F : CTy} {x : ι} {k k' : Nat} (hk : k' ≤ k) {ls ls' : List SRec} :
     ∀ {err : Option Val} {ρ : WRes}, errOkK (tabF (ℍ := ℍ) R μ F x) k ls err ρ →
       errOkK (tabF (ℍ := ℍ) R μ F x) k' ls' err ρ :=
   errOkK_le (fun m i en hT _ k k' ls ls' v ρ hk hv => by
     obtain ⟨o, -, rfl⟩ := tabF_rowOf_find hT
-    exact vN_le hk hv) hk
+    exact hR.vr_le hk hv) hk
 
 /-- **An error at a part of a stop's share is one at every world the stop owes** (Core's
 `errOk_local`, the error carried along the stop's order). -/
-theorem errOkF_ext (hP : R.PayExt (ℍ := ℍ)) {μ μ' : M} {F : CTy} {m' : UInt32} {x y : ι}
+theorem errOkF_ext (hP : R.PayExt) {μ μ' : M} {F : CTy} {m' : UInt32} {x y : ι}
     {f : Life} {ρa ρb ρ : WRes} (hc : ResU.CompS ρa ρb ρ) (hy : R.wk μ' m' x f y ρ) {k : Nat}
     {ls : List SRec} : ∀ {err : Option Val}, errOkK (tabF (ℍ := ℍ) R μ F x) k ls err ρa →
       errOkK (tabF (ℍ := ℍ) R μ F y) k ls err ρa
@@ -481,10 +511,10 @@ theorem extTabK_ent_downI (hR : R.OK) {μ : M} {m i : UInt32} {q : Qual} {A B : 
     {fin : Option (ι → Nat → List SRec → Expr → WProp)}
     (hfin : ∀ P, fin = some P → ∀ y, R.Inv y → ∀ k ls e ρ, P y (k + 1) ls e ρ → P y k ls e ρ)
     {T : OpTabK ι} (hT : T.DownI R.Inv) (x : ι) :
-    (extTabK m i (R.ent (ℍ := ℍ) μ m q A B fin x) T).DownI R.Inv where
+    (extTabK m i (R.ent μ m q A B fin x) T).DownI R.Inv where
   pa := fun n j en h k ls v ρ hp => by
     rcases extTabK_some h with ⟨-, -, rfl⟩ | h
-    · exact vN_down A R.δ (R.Θ x) k v ρ hp
+    · exact hR.vrDown A (R.Θ x) k v ρ hp
     · exact hT.pa _ _ _ h k ls v ρ hp
   fin := fun n j en P h hP y hy k ls e ρ hp => by
     rcases extTabK_some h with ⟨-, -, rfl⟩ | h
@@ -642,9 +672,9 @@ theorem tabF_ctxClosed (hR : R.OK) (G : CTy) (K : Kont) (hH : ∀ m, K.HasHnd m 
 theorem entF_plain (hR : R.OK) (K : Kont) (hH : ∀ n, K.HasHnd n = false)
     (hC : K.Catches 0 = false) {σ : WRes} (hσ : NoOwn σ) {μ μ' : M} {m : UInt32} (o : OpSig)
     {x y : ι} (hy : R.Inv y) {k : Nat} {ls : List SRec} {K₁ : Kont} {ρ ρ' : WRes}
-    (hcan : cancelOKK (R.ent (ℍ := ℍ) μ' m o.q o.A o.B (finF (ℍ := ℍ) R μ o.fin) x) y k ls K₁ ρ)
+    (hcan : cancelOKK (R.ent μ' m o.q o.A o.B (finF (ℍ := ℍ) R μ o.fin) x) y k ls K₁ ρ)
     (hc : ResU.CompS ρ σ ρ') :
-    cancelOKK (R.ent (ℍ := ℍ) μ' m o.q o.A o.B (finF (ℍ := ℍ) R μ o.fin) x) y k ls
+    cancelOKK (R.ent μ' m o.q o.A o.B (finF (ℍ := ℍ) R μ o.fin) x) y k ls
       (K.comp K₁) ρ' := by
   intro P hP
   have hP₀ := hP
@@ -691,8 +721,8 @@ variable (R : RowRd ι M)
 theorem entF_le_of_leF {μ μ₁ : M} {m : UInt32} {o o' : OpSig} {x : ι} (hs : o.Sig o')
     (hfin : capB o.q o.B = true →
       FinLeSK (finF (ℍ := ℍ) R μ₁ o.fin) (finF (ℍ := ℍ) R μ₁ o'.fin)) :
-    (R.ent (ℍ := ℍ) μ m o.q o.A o.B (finF (ℍ := ℍ) R μ₁ o.fin) x).Le
-      (R.ent (ℍ := ℍ) μ m o'.q o'.A o'.B (finF (ℍ := ℍ) R μ₁ o'.fin) x) := by
+    (R.ent μ m o.q o.A o.B (finF (ℍ := ℍ) R μ₁ o.fin) x).Le
+      (R.ent μ m o'.q o'.A o'.B (finF (ℍ := ℍ) R μ₁ o'.fin) x) := by
   obtain ⟨-, -, hq, hA, hB, -⟩ := hs
   refine ⟨hq, by simp [RowRd.ent, hq, hB], by simp [RowRd.ent, hA], by simp [RowRd.ent, hB], rfl,
     fun _ _ _ h => h, fun ha hq' => ?_⟩
@@ -737,9 +767,9 @@ theorem tabF_rowLe_entry {S S' : Row} (hle : RowLe S S') {μ : M} {x : ι} {n i 
     {o : OpSig} (hf : Row.find S n i = some o) :
     ∃ o', Row.find S' n i = some o' ∧ o.Sig o' ∧
       tabF (ℍ := ℍ) R μ (CTy.effOf S' .unit) x n i =
-        some (R.ent (ℍ := ℍ) μ n o'.q o'.A o'.B (finF (ℍ := ℍ) R (R.sub μ n) o'.fin) x) ∧
-      (R.ent (ℍ := ℍ) μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o.fin) x).Le
-        (R.ent (ℍ := ℍ) μ n o'.q o'.A o'.B (finF (ℍ := ℍ) R (R.sub μ n) o'.fin) x) := by
+        some (R.ent μ n o'.q o'.A o'.B (finF (ℍ := ℍ) R (R.sub μ n) o'.fin) x) ∧
+      (R.ent μ n o.q o.A o.B (finF (ℍ := ℍ) R (R.sub μ n) o.fin) x).Le
+        (R.ent μ n o'.q o'.A o'.B (finF (ℍ := ℍ) R (R.sub μ n) o'.fin) x) := by
   obtain ⟨o', hf', hs, hfl⟩ := hle n i o hf
   exact ⟨o', hf', hs, by rw [tabF_effOf_find, hf']; rfl, entF_le_of_leF R hs fun hcap =>
     finF_mono R (R.sub μ n) o.fin (hfl (by simp [OpSig.finRead, hcap]))⟩

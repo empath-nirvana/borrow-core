@@ -159,3 +159,4 @@ import Core.Chain.RFrameK835N
 import Core.Chain.RowFamK835N
 import Core.Chain.ThenK835N
 import Core.Chain.IterKW835N
+import Core.Chain.CNW835N

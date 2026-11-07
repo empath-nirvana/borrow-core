@@ -54,7 +54,7 @@ theorem tabNK_tick (S : UInt32 → Prop) {Sg : Row} (hS : Row.divB Sg = true) (S
         vN (ℍ := ℍ) St δ y.Θ k s ρ ∧ ConsistentX y.c ρ := by
   obtain ⟨o, hfo, hto⟩ := Row.divB_find hS
   obtain ⟨hoq, hoA, hoB⟩ := tickB_sig hto
-  have hT : tabNK (ℍ := ℍ) S id (CTy.effOf Sg Rt) δ x divEff 0 = some ((rdKW id δ).ent (ℍ := ℍ)
+  have hT : tabNK (ℍ := ℍ) S id (CTy.effOf Sg Rt) δ x divEff 0 = some ((rdKW id δ).ent
       S divEff o.q o.A o.B (finF (ℍ := ℍ) (rdKW id δ) ((rdKW id δ).sub S divEff) o.fin) x) := by
     rw [← tabF_KW, tabF_effOf_find, hfo]; rfl
   refine ⟨_, hT, by simp [RowRd.ent, hoq], hoq, fun k ls => ?_, fun y k ls w ρ hB => ?_,
