@@ -37,7 +37,8 @@ theorem tabN_effOf_base (S : Row) (R₁ R₂ : VTy) (δ : LSub) (x : KW) :
   | cons o S ih => simp only [CTy.effOf, tabN, ih]
 
 /-- An abortive entry of a `Row.Suspend` row's table is at a nonzero name. -/
-theorem tabN_suspend_raise {S : Row} {x : LifeVar} {bnd : Lifetime.Life} (hS : S.Suspend x bnd)
+theorem tabN_suspend_raise {S : Row} {Δ : LifeCtx} {x : LifeVar} {bnd : Lifetime.Life}
+    (hS : S.Suspend Δ x bnd)
     (R : VTy) (δ : LSub) :
     ∀ (z : KW) m i en, tabNK (ℍ := ℍ) (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) id
       (CTy.effOf S R) δ z m i = some en → en.abort = true → m ≠ 0 := by
@@ -50,9 +51,9 @@ theorem tabN_suspend_raise {S : Row} {x : LifeVar} {bnd : Lifetime.Life} (hS : S
 
 /-- The finaliser `λ_. d ℓ` consumes the lend's claim at `SemJN`: `d`'s judgment at `Ref A ⊸ 1`,
 applied to the cell owned again with its content in `A`'s family. -/
-theorem fin_claim {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
-    (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) {δ δ' : LSub}
-    (hδ : vN (ℍ := ℍ) A δ' = vN (ℍ := ℍ) A δ) {Θ : LocTy} (hΘ : Θ.OK)
+theorem fin_claim {Δ : LifeCtx} {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
+    (hd : SemJN (ℍ := ℍ) Δ [] d (.val (.lolli (.ref A) .unit))) {δ δ' : LSub}
+    (hΔδ : Δ.Models δ) (hδ : vN (ℍ := ℍ) A δ' = vN (ℍ := ℍ) A δ) {Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {l : Loc} {α : Life} {k : Nat} {ls : List SRec} {ρ : WRes}
     (h : claimR l α (fun j u r => vN (ℍ := ℍ) A δ' Θ j u r.1) k ρ) (hc : ConsistentX c ρ) :
     rwp (ℍ := ℍ) (Θ.view c) (fun _ _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) k ls
@@ -67,7 +68,7 @@ theorem fin_claim {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     simp [Kont.plug, Expr.subst, subst_closedAt d (s := _) hdc (Nat.zero_le _), Val.loc]
   rw [e]
   refine rwp_bind hΦ _ ?_
-  have hd0 := hd δ [] Θ c k ls PMap.empty (models_empty_any _) hΘ (consistentX_empty c) trivial rfl
+  have hd0 := hd δ [] Θ c k ls PMap.empty hΔδ hΘ (consistentX_empty c) trivial rfl
   rw [show substAll [] d = d from psub_closedAt d [] hdc (Nat.zero_le 0)] at hd0
   have hfr := rwp_frame (fun _ τ => τ = ρ) (fun _ _ _ _ h => h) (compS_empty_left ρ)
     (rwp_of_erwp_empty (erwp_of_cN_ret hd0)) rfl
@@ -117,12 +118,16 @@ at the world it is raised at (`erwpK_ubindClaimRWK`, `fin_claim`), the claim's c
 `A` there (`vN_above` at `LendInv`). The callback's result `['x] B` returns to the world without the
 lend by `vN_local`.
 
-Premises those of the rule; `hd` is `d`'s judgment at `SemJN`. -/
-theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
-    (hbnd : LifeCtx.empty.Defines bnd)
-    (hO : ∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b A)
-    (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Suspend x bnd) (hdc : closedAt 0 d = true)
-    (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) (δ : LSub)
+Premises those of the rule at the lifetime context `Δ`, read at every `δ ⊨ Δ`; `hd` is `d`'s
+judgment at `SemJN`; the answers outlive a closed bound (`hAns`), which gives `AnsNoMut`
+(`ansNoMut_of_closed`).  `[spec §62]` -/
+theorem withbor2S_compat {Δ : LifeCtx} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row}
+    {d : Expr} (hbnd : Δ.Defines bnd)
+    (hO : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+    (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Suspend Δ x bnd)
+    (hAns : ∃ b, LifeCtx.empty.Defines b ∧ S.AnsC (VOutlives LifeCtx.empty b))
+    (hdc : closedAt 0 d = true)
+    (hd : SemJN (ℍ := ℍ) Δ [] d (.val (.lolli (.ref A) .unit))) (δ : LSub) (hδ : Δ.Models δ)
     (Θ₀ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (.bang (withbor2UTy x bnd A B S)) δ Θ₀ n (withborUV d) PMap.empty := by
   refine ⟨rfl, fun Θ _ hΘ c₁ _ ls => ?_⟩
@@ -145,10 +150,10 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
     (ResU.CompS.get_left_of_ne_imm hcl (ResU.single_get_self _ _) hko).2
   -- the lend's lifetime: `FoldInv` at `Θ`, below the bound, the source's content's stratum and
   -- the callback's
-  obtain ⟨γ, hγ⟩ := hbnd δ (models_empty_any _)
+  obtain ⟨γ, hγ⟩ := hbnd δ hδ
   -- `[TR]` 6.60 at the side condition `⊢ A ⊒ @b`: every value of `A` below `@bδ`
   obtain ⟨b, hdef, hOb⟩ := hO
-  obtain ⟨βP, hβP⟩ : ∃ β : Life, b.interp δ = some β := hdef δ (models_empty_any _)
+  obtain ⟨βP, hβP⟩ : ∃ β : Life, b.interp δ = some β := hdef δ hδ
   obtain ⟨βf, hβf⟩ := ResU.exists_stratum ρf
   obtain ⟨α, hαle, hfold⟩ := LocTy.exists_foldInv hΘ.2 (↓(βP ⊓ βf ⊓ γ))
   have hfr : Θ.Fresh α := hfold.1
@@ -156,7 +161,7 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
   have hαP : α < βP := lt_of_lt_of_le hαlt (inf_le_left.trans inf_le_left)
   have hunif : ∀ (Θ' : LocTy) (j : Nat) (u : Val) (r : WRes), vN (ℍ := ℍ) A δ Θ' j u r →
       r.InStratum α :=
-    vN_outlivesLe (models_empty_any _) hβP hαP hOb
+    vN_outlivesLe hδ hβP hαP hOb
   have houtP : σ₀.InStratum α := hunif Θ k' w₀ σ₀ hw₀
   have houtf : ρf.InStratum (↓α) := hβf.mono
     ((Life.down_sqsubset α).le.trans (hαlt.le.trans (inf_le_left.trans inf_le_right)))
@@ -186,7 +191,10 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
   have hcσ' : ConsistentX c' σ₀ :=
     consistentX_setLife hcσ (exS_none_of_part hcl hvu (ResU.single_get_self _ _) hko) α
   set Rc := claimR l α Fam with hRc
-  have hFS : Fo.SuspendC x bnd := suspendC_effOf hS _
+  have hFS : Fo.SuspendC Δ x bnd := suspendC_effOf hS _
+  have hFA : Fo.AnsC (fun B => AnsNoMut (ℍ := ℍ) B δ') := by
+    obtain ⟨b₀, hb₀, h₀⟩ := hAns
+    exact ansNoMut_of_closed ⟨b₀, hb₀, ansC_effOf h₀ _⟩ δ'
   -- the lender at the floor no higher than `α`
   set x₁ : KW := KW.flr α ⟨Θ, c, lo⟩ with hx₁
   have hx₁I : LendInv Θ α x₁ := ⟨hΘ, min_le_right _ _, rfl⟩
@@ -217,7 +225,7 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
   set Ql : KW → PostN := fun z k _ b ρ => z.Θ.above α = Θ.above α →
     vN (ℍ := ℍ) (.tensor (.ref A) B) δ z.Θ k (Val.pair (Val.loc l) b) ρ with hQl
   -- the Mut Frame, the callback read as `cN` reads it
-  have hM := erwpK_M_frameCR_cN (ℍ := ℍ) hbnd hLt hFamD hFS (Q := Ql)
+  have hM := erwpK_M_frameCR_cN (ℍ := ℍ) hδ hLt hFamD hFS hFA (Q := Ql)
     (Qc := fun z k _ v ρ => vN (ℍ := ℍ) (.box (.var x) B) δ' z.Θ k v ρ) ?_ k' k' le_rfl x₁ hfold
     ls (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) w₀ σ₀ ρu ρf ρ'' houtP houtf
     (Fam k') (fun _ _ h => h) hwit hcl hc' ?_
@@ -229,7 +237,7 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
       _ ρ'' hM'
     · simpa only [tabNK_vN] using hfin
     · rintro z hz j ls' ρ ⟨⟨w, σ, hσ, hF, hclm⟩, hcR⟩
-      exact fin_claim hdc hd hAδ hz.1 ⟨w, σ, hσ, hFamV z hz j w σ hσ hF, hclm⟩ hcR
+      exact fin_claim hdc hd hδ hAδ hz.1 ⟨w, σ, hσ, hFamV z hz j w σ hσ hF, hclm⟩ hcR
     · intro z hz j ls' bv ρ hq
       have hTdz : (opTableK z.lo (tabNK (ℍ := ℍ) (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ)
           id Fo δ z)).Down := opTableK_downI (tabNK_downI valRelOK_vN id Fo δ z)

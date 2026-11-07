@@ -27,18 +27,22 @@ open BoCa.BoLo (Heap Kont Head ubindE)
 /-- **`withborF` at a suspending row is a value of `!` its type, at `SemJN`**:
 `withborF d` at
 `Mut @a (Ref A) ⊸ (∀'x ⊏ @bnd. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Mut @a (Ref A) ⊗ B)`, `Σ` a
-`Row.Suspend x bnd` row. `withbor3S_compat`'s steps at the source `Mut @a (Ref A)`, with three
+`Row.Suspend Δ x bnd` row. `withbor3S_compat`'s steps at the source `Mut @a (Ref A)`, with three
 changes: the source's content read as a `Ref A` value
 `ℓ₂ ↦ own(u₀) ● σ_u`; the `load` from the opened cell `ℓ ↦ own(loc ℓ₂)` (`rwp_load`); the guarded
 Mut Frame at `ℓ₂` (`erwpK_M_frameCRG_cN`), the opened cell framed outside it
 (`erwpK_frameGR_tab`), `hunif` at `A` and the inclusion into `F_o` from `hunif` at `Ref A`.
 
-Premises those of the rule; `hd` is `d`'s judgment at `SemJN`. -/
+Premises those of the rule at the lifetime context `Δ`, read at every `δ ⊨ Δ`; `hd` is `d`'s
+judgment at `SemJN`; the answers outlive a closed bound (`hAns`), which gives `AnsNoMut`
+(`ansNoMut_of_closed`).  `[spec §62]` -/
 theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} {d : Expr} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
-    (hS : S.Suspend x bnd)
+    {S : Row} {d : Expr} {Δ : LifeCtx} (hbnd : Δ.Defines bnd) (hA : ¬ VFree x A)
+    (hB : ¬ VFree x B) (hS : S.Suspend Δ x bnd)
+    (hAns : ∃ b, LifeCtx.empty.Defines b ∧ S.AnsC (VOutlives LifeCtx.empty b))
     (hdc : closedAt 0 d = true)
-    (hd : SemJN (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.mut a (.ref A)) .unit))) (δ : LSub)
+    (hd : SemJN (ℍ := ℍ) Δ [] d (.val (.lolli (.mut a (.ref A)) .unit))) (δ : LSub)
+    (hδ : Δ.Models δ)
     (Θ₀ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (.bang (withborFSTy a x bnd A B S)) δ Θ₀ n (withborFV d) PMap.empty := by
   refine ⟨rfl, fun Θ _ hΘ c₁ _ ls => ?_⟩
@@ -88,7 +92,7 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
     exact ResU.CompS.inStratum_left hX
       (hunif Θ' j (Val.loc l') X ⟨l', u, r, rfl, ResU.CompS.comm hX, h⟩)
   -- the lend's lifetime: `FoldInv` at `Θ`, below `β`, the bound and the callback's stratum
-  obtain ⟨γ, hγ⟩ := hbnd δ (models_empty_any _)
+  obtain ⟨γ, hγ⟩ := hbnd δ hδ
   obtain ⟨βf, hβf⟩ := ResU.exists_stratum ρf
   obtain ⟨α, hαle, hfold⟩ := LocTy.exists_foldInv hΘ.2 (↓(β ⊓ βf ⊓ γ))
   have hfr : Θ.Fresh α := hfold.1
@@ -160,7 +164,10 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   have hcσu' : ConsistentX c' σu := consistentX_setLife hcσu
     (exS_none_of_walk hσ₀s he₀ fun e₁ he₁ =>
       ⟨_, ExS.get_of_ne_imm he₁ (ResU.single_get_self _ _) hkown, hkown⟩) α
-  have hFS : Fo.SuspendC x bnd := suspendC_effOf hS _
+  have hFS : Fo.SuspendC Δ x bnd := suspendC_effOf hS _
+  have hFA : Fo.AnsC (fun B => AnsNoMut (ℍ := ℍ) B (δ.extend x α)) := by
+    obtain ⟨b₀, hb₀, h₀⟩ := hAns
+    exact ansNoMut_of_closed ⟨b₀, hb₀, ansC_effOf h₀ _⟩ _
   -- the lender at the floor no higher than `α`
   set x₁ : KW := KW.flr α ⟨Θ, c, lo⟩ with hx₁
   have hx₁I : LendInv Θ α x₁ := ⟨hΘ, min_le_right _ _, rfl⟩
@@ -197,7 +204,7 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
       _ ρ'' hM'
     · simpa only [tabNK_vN] using hfin
     · rintro z hz j ls' ρ ⟨⟨hR, hRs⟩, hcR⟩
-      exact fin_claimM hdc hd hz.1 (hmove _ z hz j _ ρ hRs hR) hcR
+      exact fin_claimM hdc hd hδ hz.1 (hmove _ z hz j _ ρ hRs hR) hcR
     · intro z hz j ls' bv ρ hq
       have hTdz : (opTableK z.lo (tabNK (ℍ := ℍ) (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ)
           id Fo δ z)).Down := opTableK_downI (tabNK_downI valRelOK_vN id Fo δ z)
@@ -236,7 +243,7 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
       (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) δ Rc Gc (Q := Q₁) Fr _ x₁ ls _ X'' _ ρ₂ h2
       rfl ?_)
   -- the field lent at `α`
-  refine erwpK_M_frameCRG_cN (ℍ := ℍ) hbnd hLt hFamD hFS (Q := Q₁)
+  refine erwpK_M_frameCRG_cN (ℍ := ℍ) hδ hLt hFamD hFS hFA (Q := Q₁)
     (Qc := fun z k _ v ρ => vN (ℍ := ℍ) (.box (.var x) B) δ' z.Θ k v ρ) ?_ (k' - 1) j₀
     (by omega) x₁ hfold ls _ u₀ σu σ₀ ρf X'' houtP houtf (Fam j₀) (fun _ _ h => h) hwit hσ₀s
     (ResU.CompS.comm hX''1) ?_

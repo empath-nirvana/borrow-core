@@ -16,8 +16,8 @@ The callback's table step (`tabNK_lend_comap`, `erwpK_lend_comap`) is `erwpK_com
 at `tabNK vN g F δ′`, the table the Mut Frame reads. The payload and the answer move between the
 lend's world and the index world (`vN_lend_eq`: the lend's variable unread, `vN_add_eq` below the
 bound), the answer's view moved from the lender's to the lend's by `consistentX_setLife_iff` (the
-answer has no `mut` cell at `ℓ`, `noMutAt_of_outlivesN`: the constants' bound is closed), the
-order is the same, and each cancel obligation moves by `erwpK_comap` again, by induction on how
+answer has no `mut` cell at `ℓ`: the premise `AnsNoMut` of every answer, which the constants
+discharge at their closed answer bound by `noMutAt_of_outlivesN`), the order is the same, and each cancel obligation moves by `erwpK_comap` again, by induction on how
 deep cancel rows nest.
 -/
 
@@ -71,14 +71,15 @@ theorem LocTy.extR_add (Θ : LocTy) (l₀ : Loc) {α : Life} (F : Nat → Val �
 open Goal791N in
 /-- **A lend below a bound is invisible to `𝒱⟦A⟧` of an `A` outliving the bound**, at every
 world (`vN_add_eq_bnd` without freshness): the value's resource is in `Res_α`
-(`vN_inStratum_bnd`), where adding and dropping the lend are both extensions. -/
-theorem vN_add_eq {A : VTy} {bnd : Lifetime.Life}
-    (hO : VOutlives BoCa.Lifetime.LifeCtx.empty bnd A) (δ : BoCa.Lifetime.LSub) {α : Life}
+(`vN_inStratum_bnd`), where adding and dropping the lend are both extensions. At every
+`δ ⊨ Δ`.  `[spec §62]` -/
+theorem vN_add_eq {Δ : BoCa.Lifetime.LifeCtx} {A : VTy} {bnd : Lifetime.Life}
+    (hO : VOutlives Δ bnd A) (δ : BoCa.Lifetime.LSub) (hδ : Δ.Models δ) {α : Life}
     (hLt : LogRel.LtLife δ bnd α) (Θ : LocTy) (l : Loc) (F : Nat → Val → SPropS Loc Val α) :
     vN (ℍ := ℍ) A δ (Θ.add l α F) = vN (ℍ := ℍ) A δ Θ := by
   funext n v ρ
-  exact propext ⟨fun h => vN_local A δ Θ l α F n v ρ (vN_inStratum_bnd hO hLt h) h,
-    fun h => vN_extR A δ n v ρ (LocTy.extR_add Θ l F (vN_inStratum_bnd hO hLt h)) h⟩
+  exact propext ⟨fun h => vN_local A δ Θ l α F n v ρ (vN_inStratum_bnd hO hδ hLt h) h,
+    fun h => vN_extR A δ n v ρ (LocTy.extR_add Θ l F (vN_inStratum_bnd hO hδ hLt h)) h⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 
@@ -110,22 +111,41 @@ theorem consistentX_of_outlivesN {bnd : Lifetime.Life} (hbnd : LifeCtx.empty.Def
     {ρ : WRes} (h : vN (ℍ := ℍ) B δ Θ k v ρ) (c : Loc → Option Life) : ConsistentX c ρ :=
   consistentX_of_noMutAt (noMutAt_of_outlivesN hbnd hOB h) c
 
+/-- **The answer's premise at a bound that may name variables** (#844 T1.3): every value of `B` at
+`δ`, at every world, holds no `mut` cell on its exclusive walk, at any location. The callback's
+table steps read it of every answer of the row and of its cancel rows (`CTy.AnsC`) to move the
+answer's consistency from the lender's view to the lend's (`consistentX_setLife_iff`). At a closed
+bound it holds (`ansNoMut_of_closed`); at a bound with a variable the answer's stratum does not
+give it (`not_noMutAt_inStratum_down`).  `[spec §62]` -/
+def AnsNoMut (B : VTy) (δ : LSub) : Prop :=
+  ∀ (Θ : LocTy) (k : Nat) (v : Val) (ρ : WRes), vN (ℍ := ℍ) B δ Θ k v ρ → ∀ l, NoMutAt l ρ
+
+/-- **Answers outliving a closed bound meet `AnsNoMut`** (`noMutAt_of_outlivesN`), at every
+`δ`.  `[spec §62]` -/
+theorem ansNoMut_of_closed {F : CTy}
+    (h : ∃ b, LifeCtx.empty.Defines b ∧ F.AnsC (VOutlives LifeCtx.empty b)) (δ : LSub) :
+    F.AnsC (fun B => AnsNoMut (ℍ := ℍ) B δ) := by
+  obtain ⟨b, hb, hF⟩ := h
+  exact ansC_mono (fun B hB _ _ _ _ hv l => noMutAt_of_outlivesN hb hB hv l) F hF
+
 /-- **A layer's types read alike at the lend's world and the lender's**: the lend's variable is
 not mentioned (`vN_extend_of_not_free`) and the lend lies below the bound the type outlives
-(`vN_add_eq`). -/
-theorem vN_lend_eq {xv : LifeVar} {bnd : Lifetime.Life} {A : VTy} (hA : ¬ VFree xv A)
-    (hO : VOutlives LifeCtx.empty bnd A) {δ : LSub} {α : Life} (hLt : LtLife δ bnd α) (y : KW)
+(`vN_add_eq`), at every `δ ⊨ Δ`.  `[spec §62]` -/
+theorem vN_lend_eq {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life} {A : VTy}
+    (hA : ¬ VFree xv A) (hO : VOutlives Δ bnd A) {δ : LSub} (hδ : Δ.Models δ) {α : Life}
+    (hLt : LtLife δ bnd α) (y : KW)
     (l : Loc) (Fam : Nat → Val → SPropS Loc Val α) :
     vN (ℍ := ℍ) A (δ.extend xv α) (y.lend l α Fam).Θ = vN (ℍ := ℍ) A (δ.extend xv α) y.Θ := by
   rw [vN_extend_of_not_free hA]
-  exact vN_add_eq hO δ hLt y.Θ l Fam
+  exact vN_add_eq hO δ hδ hLt y.Θ l Fam
 
 /-- **An entry of the callback's own table at the lend's world is an entry of its table under
 the lend's world map, at the same key**: same qualifier, abortiveness and order, the payload moved
 from the lend's world to the index world (`vN_lend_eq`). -/
-theorem tabNK_lend_entry {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub}
-    (hLt : LtLife δ bnd α) (l : Loc) (Fam : Nat → Val → SPropS Loc Val α) {F : CTy}
-    (hF : F.SuspendC xv bnd) {y : KW} {n i : UInt32} {en : OpEntK KW}
+theorem tabNK_lend_entry {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub}
+    (hδ : Δ.Models δ) (hLt : LtLife δ bnd α) (l : Loc) (Fam : Nat → Val → SPropS Loc Val α)
+    {F : CTy}
+    (hF : F.SuspendC Δ xv bnd) {y : KW} {n i : UInt32} {en : OpEntK KW}
     (h : tabNK (ℍ := ℍ) (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) id F (δ.extend xv α)
       (y.lend l α Fam) n i = some en) :
     ∃ en', tabNK (ℍ := ℍ) (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) (·.lend l α Fam) F
@@ -135,14 +155,15 @@ theorem tabNK_lend_entry {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : 
   obtain ⟨-, hA, -, hOA, -, -⟩ := layer_suspend F hF hL
   refine ⟨_, hR _ y, rfl, rfl, fun k ls v ρ hp => ?_⟩
   have hp' : vN (ℍ := ℍ) A (δ.extend xv α) (y.lend l α Fam).Θ k v ρ := hp
-  rw [vN_lend_eq hA hOA hLt y l Fam] at hp'
+  rw [vN_lend_eq hA hOA hδ hLt y l Fam] at hp'
   exact hp'
 
 /-- **The error a cancel raise carries, at the callback's tables**: an abortive entry's payload at
 the lend's world is one under the lend's world map. -/
-theorem errOkK_lend {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub}
-    (hLt : LtLife δ bnd α) (l : Loc) (Fam : Nat → Val → SPropS Loc Val α) {F : CTy}
-    (hF : F.SuspendC xv bnd) (y : KW) {k : Nat} {ls : List SRec} :
+theorem errOkK_lend {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub}
+    (hδ : Δ.Models δ) (hLt : LtLife δ bnd α) (l : Loc) (Fam : Nat → Val → SPropS Loc Val α)
+    {F : CTy}
+    (hF : F.SuspendC Δ xv bnd) (y : KW) {k : Nat} {ls : List SRec} :
     ∀ {err : Option Val} {ρ : WRes},
       errOkK (tabNK (ℍ := ℍ) (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) id F (δ.extend xv α)
         (y.lend l α Fam)) k ls err ρ →
@@ -152,18 +173,21 @@ theorem errOkK_lend {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub}
   | some _, _, h => by
       obtain ⟨m, j, w, en, he⟩ := h
       obtain ⟨⟨hE, hTe, ha⟩, hPA, hn⟩ := pure_sep_iff.mp he
-      obtain ⟨en', h', -, hab, hPA'⟩ := tabNK_lend_entry hLt l Fam hF hTe
+      obtain ⟨en', h', -, hab, hPA'⟩ := tabNK_lend_entry hδ hLt l Fam hF hTe
       exact ⟨m, j, w, en', pure_sep_mk ⟨hE, h', hab ▸ ha⟩ ⟨hPA' _ _ _ _ hPA, hn⟩⟩
 
 /-- **The callback's table step** (`erwpK_comap`'s `hT` at `g = (·.lend ℓ α F)`): a stop at the
 callback's own table at the lend's world is a stop at its table under the lend's world map. The
 payload and the answer move between the lend's world and the index world by `vN_lend_eq`; the
-answer's view from the lender's to the lend's by `consistentX_setLife_iff` at
-`noMutAt_of_outlivesN` (the bound closed); the order is the same; the cancel
-obligations move by `erwpK_comap` again, by induction on how deep cancel rows nest. -/
-theorem tabNK_lend_comap {xv : LifeVar} {bnd : Lifetime.Life} (hbnd : LifeCtx.empty.Defines bnd)
-    {α : Life} {δ : LSub} (hLt : LtLife δ bnd α) (l : Loc) (Fam : Nat → Val → SPropS Loc Val α) :
-    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC xv bnd →
+answer's view from the lender's to the lend's by `consistentX_setLife_iff` at the premise
+`AnsNoMut` of every answer (`CTy.AnsC`); the order is the same; the cancel obligations move by
+`erwpK_comap` again, by induction on how deep cancel rows nest. The layers' outliving clauses are
+read at `Δ`, at `δ ⊨ Δ`.  `[spec §62]` -/
+theorem tabNK_lend_comap {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life}
+    {α : Life} {δ : LSub} (hδ : Δ.Models δ) (hLt : LtLife δ bnd α) (l : Loc)
+    (Fam : Nat → Val → SPropS Loc Val α) :
+    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC Δ xv bnd →
+      F.AnsC (fun B => AnsNoMut (ℍ := ℍ) B (δ.extend xv α)) →
       ∀ (lo : Life) (y : KW) k ls t (Ψ Ψ' : ContK KW) ρ,
         (∀ y' k', k' < k → ∀ ls e ρ, Ψ (y'.lend l α Fam) k' ls e ρ → Ψ' y' k' ls e ρ) →
         performStopK lo (tabNK (ℍ := ℍ) (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) id F
@@ -173,13 +197,13 @@ theorem tabNK_lend_comap {xv : LifeVar} {bnd : Lifetime.Life} (hbnd : LifeCtx.em
   intro d
   induction d with
   | zero =>
-      intro F hd hF lo y k ls t Ψ Ψ' ρ _ h
+      intro F hd hF _ lo y k ls t Ψ Ψ' ρ _ h
       obtain ⟨K, n, i, v, en, h⟩ := h
       obtain ⟨⟨-, -, h₃, -⟩, -⟩ := pure_sep_iff.mp h
       obtain ⟨q, A, B, fin, hL, -, -⟩ := tab_lookupNNK F h₃
       exact absurd (layer_cdepth F hL) (by omega)
   | succ d ih =>
-  intro F hd hF lo y k ls t Ψ Ψ' ρ hΨ h
+  intro F hd hF hans lo y k ls t Ψ Ψ' ρ hΨ h
   obtain ⟨K, n, i, v, en, h⟩ := h
   obtain ⟨⟨h₁, h₂, h₃, h₄⟩, ρa, ρk, hc, hA, hu, f, hf, hcont⟩ := pure_sep_iff.mp h
   obtain ⟨q, A, B, fin, hL, rfl, hR⟩ := tab_lookupNNK F h₃
@@ -189,13 +213,13 @@ theorem tabNK_lend_comap {xv : LifeVar} {bnd : Lifetime.Life} (hbnd : LifeCtx.em
     ⟨ρa, ρk, hc, ?_, hu, f, hf, fun y' hy' ls' he => ⟨fun k' hk' w σ₁ σ₂ hB hcσ => ?_,
       fun hq P hP => ?_⟩⟩⟩
   · have hp : vN (ℍ := ℍ) A (δ.extend xv α) (y.lend l α Fam).Θ k v ρa := hA
-    rw [vN_lend_eq hnA hOA hLt y l Fam] at hp
+    rw [vN_lend_eq hnA hOA hδ hLt y l Fam] at hp
     exact hp
   · have hB' : vN (ℍ := ℍ) B (δ.extend xv α) y'.Θ k' w σ₁ := hB.1
     have hBs : vN (ℍ := ℍ) B (δ.extend xv α) (y'.lend l α Fam).Θ k' w σ₁ := by
-      rw [vN_lend_eq hnB hOB hLt y' l Fam]; exact hB'
+      rw [vN_lend_eq hnB hOB hδ hLt y' l Fam]; exact hB'
     exact hΨ y' k' hk' _ _ _ ((hcont (y'.lend l α Fam) hy' ls' he).1 k' hk' w σ₁ σ₂
-      ⟨hBs, (consistentX_setLife_iff (noMutAt_of_outlivesN hbnd hOB hB' l) y'.c α).mpr hB.2⟩
+      ⟨hBs, (consistentX_setLife_iff ((layer_ans F hans hL).1 _ _ _ _ hB' l) y'.c α).mpr hB.2⟩
       hcσ)
   · simp only [entNK] at hP hq
     by_cases hcap : capB q B = true
@@ -211,11 +235,11 @@ theorem tabNK_lend_comap {xv : LifeVar} {bnd : Lifetime.Life} (hbnd : LifeCtx.em
         (fun _ => rfl) (fun _ _ _ _ _ _ _ _ hq => hq.elim) ?_ k y' trivial ls' _ ρk hs
       intro z _ k₁ ls₁ t₁ Ψ₁ Ψ₁' ρ₁ hΨ₁ h₁
       rcases h₁ with h₁ | ⟨K₁, err, h₁⟩
-      · exact Or.inl (ih fin hfd hfin _ z k₁ ls₁ t₁ Ψ₁ Ψ₁' ρ₁
+      · exact Or.inl (ih fin hfd hfin ((layer_ans F hans hL).2 hcap) _ z k₁ ls₁ t₁ Ψ₁ Ψ₁' ρ₁
           (fun y'' k'' hk'' ls'' e'' ρ'' h => hΨ₁ y'' k'' hk'' trivial ls'' e'' ρ'' h) h₁)
       · obtain ⟨hK, hr⟩ := pure_sep_iff.mp h₁
         obtain ⟨τ₁, τ₂, hτ, he₁, hn⟩ := hr
-        exact Or.inr ⟨K₁, err, pure_sep_mk hK ⟨τ₁, τ₂, hτ, errOkK_lend hLt l Fam hfin z he₁, hn⟩⟩
+        exact Or.inr ⟨K₁, err, pure_sep_mk hK ⟨τ₁, τ₂, hτ, errOkK_lend hδ hLt l Fam hfin z he₁, hn⟩⟩
     · rw [if_neg hcap] at hP; cases hP
 
 /-- **The callback's run under the lend's world map** (`erwpK_comap` at `g = (·.lend ℓ α F)`): the
@@ -223,9 +247,11 @@ callback's run at its own table, from the lend's world, is its run indexed by th
 at its table under the lend's world map, its location family the lend's world's view, its floor
 the lend's. Every stop moves by `tabNK_lend_comap`, every raise by `tabNK_lend_entry`; the posts
 are moved by `hQ`. -/
-theorem erwpK_lend_comap {xv : LifeVar} {bnd : Lifetime.Life} (hbnd : LifeCtx.empty.Defines bnd)
-    {α : Life} {δ : LSub} (hLt : LtLife δ bnd α) (l : Loc) (Fam : Nat → Val → SPropS Loc Val α)
-    {F : CTy} (hF : F.SuspendC xv bnd) {Q Q' : KW → PostN}
+theorem erwpK_lend_comap {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life}
+    {α : Life} {δ : LSub} (hδ : Δ.Models δ) (hLt : LtLife δ bnd α) (l : Loc)
+    (Fam : Nat → Val → SPropS Loc Val α)
+    {F : CTy} (hF : F.SuspendC Δ xv bnd)
+    (hans : F.AnsC (fun B => AnsNoMut (ℍ := ℍ) B (δ.extend xv α))) {Q Q' : KW → PostN}
     (hQ : ∀ x y k ls v ρ, KW.PostK (x.lend l α Fam) y → Q y k ls v ρ →
       ∃ y', KW.PostK x y' ∧ Q' y' k ls v ρ) :
     ∀ n x ls e ρ,
@@ -240,10 +266,10 @@ theorem erwpK_lend_comap {xv : LifeVar} {bnd : Lifetime.Life} (hbnd : LifeCtx.em
     (fun x _ y k ls v ρ hy hq => hQ x y k ls v ρ hy hq) ?_ n x trivial ls e ρ h
   intro z _ k₁ ls₁ t₁ Ψ₁ Ψ₁' ρ₁ hΨ₁ h₁
   rcases h₁ with h₁ | ⟨K₁, m, j, w, en, h₁⟩
-  · exact Or.inl (tabNK_lend_comap hbnd hLt l Fam F.cdepth F le_rfl hF α z k₁ ls₁ t₁ Ψ₁ Ψ₁' ρ₁
+  · exact Or.inl (tabNK_lend_comap hδ hLt l Fam F.cdepth F le_rfl hF hans α z k₁ ls₁ t₁ Ψ₁ Ψ₁' ρ₁
       (fun y'' k'' hk'' ls'' e'' ρ'' h => hΨ₁ y'' k'' hk'' trivial ls'' e'' ρ'' h) h₁)
   · obtain ⟨⟨hE, hK, hTe, ha⟩, hr⟩ := pure_sep_iff.mp h₁
-    obtain ⟨en', h', -, hab, hPA'⟩ := tabNK_lend_entry hLt l Fam hF hTe
+    obtain ⟨en', h', -, hab, hPA'⟩ := tabNK_lend_entry hδ hLt l Fam hF hTe
     obtain ⟨τ₁, τ₂, hτ, ⟨hPA, hnA⟩, hn⟩ := hr
     exact Or.inr ⟨K₁, m, j, w, en', pure_sep_mk ⟨hE, hK, h', hab ▸ ha⟩
       ⟨τ₁, τ₂, hτ, ⟨hPA' _ _ _ _ hPA, hnA⟩, hn⟩⟩
@@ -252,9 +278,11 @@ theorem erwpK_lend_comap {xv : LifeVar} {bnd : Lifetime.Life} (hbnd : LifeCtx.em
 (`erwpK_M_frameCR_tab` at `vN`, its callback moved by `erwpK_lend_comap`): the callback is read as
 a thunk of `cN` reads it, at `tabN F δ′` from `x.lend ℓ α F`, its posts `Qc`; the lender runs at
 its twin `tabRK` at `vN`, ending at the lend's claim. -/
-theorem erwpK_M_frameCR_cN {xv : LifeVar} {bnd : Lifetime.Life} (hbnd : LifeCtx.empty.Defines bnd)
-    {α : Life} {δ : LSub} (hLt : LtLife δ bnd α) {l : Loc} {Fam : Nat → Val → SPropS Loc Val α}
-    (hFam : DownFam α Fam) {F : CTy} (hF : F.SuspendC xv bnd) {Q Qc : KW → PostN}
+theorem erwpK_M_frameCR_cN {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life}
+    {α : Life} {δ : LSub} (hδ : Δ.Models δ) (hLt : LtLife δ bnd α) {l : Loc}
+    {Fam : Nat → Val → SPropS Loc Val α}
+    (hFam : DownFam α Fam) {F : CTy} (hF : F.SuspendC Δ xv bnd)
+    (hans : F.AnsC (fun B => AnsNoMut (ℍ := ℍ) B (δ.extend xv α))) {Q Qc : KW → PostN}
     (hQ : ∀ x k ls v ρ, Qc (x.lend l α Fam) k ls v ρ → MFPost l α Fam (Q x) k ls v ρ) :
     ∀ n j, n ≤ j → ∀ (x : KW), x.Θ.FoldInv α → ∀ ls e (v : Val) (ρP ρlP ρb ρ : WRes)
       (houtP : ρP.InStratum α), ρb.InStratum (↓α) → ∀ (P : Val → SPropS Loc Val α),
@@ -265,16 +293,17 @@ theorem erwpK_M_frameCR_cN {xv : LifeVar} {bnd : Lifetime.Life} (hbnd : LifeCtx.
           (fun z => opTableK z.lo (tabN F (δ.extend xv α) z)) Qc (x.lend l α Fam) n ls e BM) →
       erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
         (fun y => opTableRK y.lo (tabRK (ℍ := ℍ) (claimR l α Fam)
-          (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) id F δ y) (claimR l α Fam)) Q x n ls e ρ := by
+          (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) id F δ y)
+          (claimR l α Fam)) Q x n ls e ρ := by
   intro n j hnj x hx ls e v ρP ρlP ρb ρ houtP houtb P hPF hwit hcl hcρ hcb
   refine erwpK_M_frameCR_tab (ℍ := ℍ) valRelOK_vN (V := KW.PostK) (Φ := fun z => z.Θ.view z.c)
-    hLt hFam hF (Q := Q) n j hnj x hx ls e v ρP ρlP ρb ρ houtP houtb P hPF hwit hcl hcρ
+    hδ hLt hFam hF (Q := Q) n j hnj x hx ls e v ρP ρlP ρb ρ houtP houtb P hPF hwit hcl hcρ
     (fun BM hBM => ?_)
   have hΦ : (fun y : KW => (y.Θ.view y.c).set l α Fam) =
       fun y : KW => (y.lend l α Fam).Θ.view (y.lend l α Fam).c :=
     funext fun y => (KW.lend_view y l α Fam).symm
   rw [hΦ]
-  refine erwpK_lend_comap hbnd hLt l Fam hF (Q := Qc) (Q' := fun y => MFPost l α Fam (Q y))
+  refine erwpK_lend_comap hδ hLt l Fam hF hans (Q := Qc) (Q' := fun y => MFPost l α Fam (Q y))
     (fun x' y k ls v ρ hy hq => ⟨x', rfl, ?_⟩) n x ls e BM (hcb BM hBM)
   have hy' : y = x'.lend l α Fam := hy
   subst hy'

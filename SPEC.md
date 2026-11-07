@@ -11123,18 +11123,25 @@ of a lend that encloses the suspending one.
   `Δ.Models δ`. The `∅` forms are their instances at `models_empty_any`. The constants'
   compatibility lemmas (`withbor2S_compat`, `withbor3S_compat`, `withborFS_compat`,
   `withloadS_compat`, `sliceBorrowMS_compat`) are stated at `Δ` and `δ ⊨ Δ`.
-- **The answer's view.** At a closed bound an answer lies in `Res_⊤` and is consistent with every
-  view (`consistentX_of_outlivesN`). At a bound with a variable it need not be. The step that moves
-  an answer from the lender's view to the lend's (`tabNK_lend_comap`, and its slice form) carries
-  that move as a named premise, `AnsViewG`; the constants discharge it from `Row.AnsC`.
+- **The answer's view** (*The answer's view across a lend* above). The step that moves an answer
+  from the lender's view to the lend's (`tabNK_lend_comap`, `tabNK_lendMapB_comap`) reads
+  `NoMutAt ℓ` of the answer. At a bound with a variable the answer's stratum does not give it, so
+  these steps carry it as a named premise of every answer of the row and its cancel rows,
+  `AnsNoMut B δ ≜ ∀ Θ k v ρ, 𝒱⟦B⟧δ Θ k v ρ → ∀ ℓ, NoMutAt ℓ ρ` (`CTy.AnsC`). The constants
+  discharge it from `Row.AnsC` at a closed bound (`ansNoMut_of_closed`, by
+  `noMutAt_of_outlivesN`).
+- **Inhabited at a variable bound**: `polyC_ok`, the constant `Λ'1 ⊏ ⊤. Λ'2 ⊏ '1. withbor2U` at
+  `∀'0 ⊏ '2`, its row yielding `Imm '1 1`, a borrow of the enclosing lifetime.
 
 **Baseline preserved.** `goal791N : HandlerLawN → Goal791N`, its statement unchanged but for
 `Const791.OK`'s shape; `fundamentalN_all`; `handlerLawN_iff`; `goal791N_premises_inst`; the
 instances at the hardest case's row (`w2_ok`, `w3_ok`, `wF_ok`, `wl_ok`, the `*S_inst`). No change
 to `CDerives`, the checker, the backends or the corpus.
 
-**Open.** The answer at a bound with a variable (#844 T1.3): `AnsViewG` without `Row.AnsC`, so
-that an answer may hold a borrow of an enclosing lend. A closed instance yielding an outer `imm`
+**Open.** The answer at a bound with a variable: `AnsNoMut` without `Row.AnsC`, so that an answer
+may hold a borrow of an enclosing lend. Not derived from the answer's type: the index world may
+key `ℓ` at a lifetime above the bound, where a `Mut` answer type outliving the bound has values
+holding a `mut` cell at `ℓ`; the obstruction is not verified. A closed instance yielding an outer `imm`
 slice across an inner suspending lend (T1.4).
 
 ### Not claimed
@@ -11603,7 +11610,7 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
   suspending lend constants under lifetime binders (`Const791.poly`, typed at `VTy.all`), their
   premises at the constant's own context (`Const791.OKAt`), `Row.Suspend`/`CTy.SuspendC` at a
   context, and the laws that read the callback bound at `δ ⊨ Δ`. The answer's move between views
-  is a named premise (`AnsViewG`), discharged by answers outliving a closed bound (`Row.AnsC`).
+  is a named premise (`AnsNoMut`), discharged by answers outliving a closed bound (`Row.AnsC`).
   `goal791N` keeps its statement. No change to `CDerives`, the checker, the backends or the corpus.
 - **1.39** (2026-11-07) — §62 (*The answer's view across a lend*, #844 T1.3): `NoMutAt`,
   `consistentX_setLife_iff`; `consistentX_of_outlivesN`, `consistentX_of_top` and

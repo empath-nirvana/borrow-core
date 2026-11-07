@@ -52,8 +52,8 @@ theorem finN_of_tabN : ∀ (F : CTy) {δ₁ δ₂ : LSub},
 
 /-- **A row whose layers do not mention `'x` has one table at the typed world at `δ` and
 `δ['x ↦ α]`.** -/
-theorem tabN_extend_suspendC {x : LifeVar} {bnd : Lifetime.Life} (α : Life) :
-    ∀ (F : CTy), F.SuspendC x bnd → ∀ (δ : LSub) (y : KW),
+theorem tabN_extend_suspendC {Δ : LifeCtx} {x : LifeVar} {bnd : Lifetime.Life} (α : Life) :
+    ∀ (F : CTy), F.SuspendC Δ x bnd → ∀ (δ : LSub) (y : KW),
       tabN (ℍ := ℍ) F (δ.extend x α) y = tabN (ℍ := ℍ) F δ y
   | .eff m i q A B fin rc C, hF, δ, y => by
       obtain ⟨⟨_, hA, hB, _, _, hfin⟩, hC⟩ := hF
@@ -72,8 +72,8 @@ theorem tabN_extend_suspendC {x : LifeVar} {bnd : Lifetime.Life} (α : Life) :
 /-- **The callback at the image, at `SemJN`**: the callback, at
 `β ⊏ @bnd`, applied to the image `χ` of the loaded payload, typed at `Imm̲ 'x A`, runs at the
 constant's table at the typed world, with `[β]𝒱⟦B⟧` as its post, from every world at `Θ`. -/
-theorem callback_at_image {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row}
-    (hB : ¬ VFree x B) (hS : S.Suspend x bnd) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK)
+theorem callback_at_image {Δ : LifeCtx} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+    {S : Row} (hB : ¬ VFree x B) (hS : S.Suspend Δ x bnd) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {n : Nat} {ls : List SRec} {f u : Val} {ρf χ Bχ : WRes} {β : Life}
     (hLt : LtLife δ bnd β)
     (hf : vN (ℍ := ℍ) (cbUTy x bnd (A.immReborrow (.var x)) B S) δ Θ n f ρf)
@@ -109,9 +109,9 @@ the callback's stratum and the bound is a value of `Imm̲ 'x A` (`relabel_vN`), 
 the callback's stops, raises and layered cancel runs at the row's table at the typed world
 (`erwpK_rebGen_tab`, its entry at every view: `rebEntryGV_top`, `rebEntryGV_deep`) gives the
 run. -/
-theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} {δ : LSub} (hbnd : ∃ γ, bnd.interp δ = some γ) (hA : ¬ VFree x A)
-    (hS : S.Suspend x bnd) {y₀ : KW}
+theorem withload_reb {Δ : LifeCtx} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+    {S : Row} {δ : LSub} (hδ : Δ.Models δ) (hbnd : ∃ γ, bnd.interp δ = some γ) (hA : ¬ VFree x A)
+    (hS : S.Suspend Δ x bnd) {y₀ : KW}
     {n : Nat} {ls : List SRec} {f v : Val} {l : Loc} {s : LSet} {σ : WRes}
     {h : σ.InStratum s.join} {ρf X : WRes}
     (hpay : vO (ℍ := ℍ) A δ y₀.Θ n v σ) (hwit : ImmWitW y₀.Θ.imm l s A δ)
@@ -143,7 +143,7 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
         (fun y => RebPost β (fun k _ v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ))
         (fun y k _ v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ) := by
     intro β hLt le s v R hs χ Ok hE hreb hOk
-    have hfr := erwpK_rebGen_tab (ℍ := ℍ) valRelOK_vN (V := KW.PostK) hLt hE hreb hOk hFS
+    have hfr := erwpK_rebGen_tab (ℍ := ℍ) valRelOK_vN (V := KW.PostK) hδ hLt hE hreb hOk hFS
       (Q := fun y k _ v ρ => vN (ℍ := ℍ) B δ y.Θ k v ρ)
     simpa only [tabNK_vN] using hfr
   rw [erwpK_eq]
@@ -252,15 +252,15 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     exact hrun' ρF fρ ps μ hF hcF hT htg hI hl hfd j μ' e' hj hrun hfin
 
 /-- **`withload` at a suspending row is a value of `!` its type, at `SemJN`**: at
-`Imm @a A ⊸ (∀'x ⊏ @bnd. Imm̲ 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ B` with `Σ` a `Row.Suspend x bnd` row.
+`Imm @a A ⊸ (∀'x ⊏ @bnd. Imm̲ 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ B` with `Σ` a `Row.Suspend Δ x bnd` row.
 Its steps at every floor: the load (`rwp_load_cell` under `erwpK_bindR`); at the
 run's first entry the record, its template and the image (`withload_reb`); 6.150 at the row's table
 at the typed world; the callback at the image as a thunk of `cN` (`callback_at_image`).
 
-Premises those of the rule. -/
+Premises those of the rule at the lifetime context `Δ`, read at every `δ ⊨ Δ`.  `[spec §62]` -/
 theorem withloadS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} (hbnd : LifeCtx.empty.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
-    (hS : S.Suspend x bnd) (δ : LSub) (Θ₀ : LocTy) (n : Nat) :
+    {S : Row} {Δ : LifeCtx} (hbnd : Δ.Defines bnd) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
+    (hS : S.Suspend Δ x bnd) (δ : LSub) (hδ : Δ.Models δ) (Θ₀ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (.bang (withloadUTy a x bnd A B S)) δ Θ₀ n withloadV PMap.empty := by
   refine ⟨rfl, fun Θ _ hΘ c₁ _ ls => ?_⟩
   intro c₂ k hk u ρv ρu hc hu _
@@ -294,7 +294,7 @@ theorem withloadS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   refine rwp_load_cell ls l s w σ hσs _ hc' ?_
   -- 6.150 at the record, the callback at the image
   simp only [Kont.plug]
-  exact withload_reb (y₀ := ⟨Θ, c, lo⟩) (hbnd δ (models_empty_any _)) hA hS
+  exact withload_reb (y₀ := ⟨Θ, c, lo⟩) hδ (hbnd δ hδ) hA hS
     (vO_le (Nat.sub_le k' 1) hpay) (hwit l s w σ hσs rfl)
     (fun β hLt u χ Bχ hχ _ _ himg hBχ =>
       callback_at_image hB hS hΘ hLt (vN_le (Nat.sub_le k' 1) hf) hcf hχ himg hBχ lo) hc'

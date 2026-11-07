@@ -155,8 +155,8 @@ theorem tab_lookupGK : ∀ (F : CTy) {R : Nat → WProp} {G : ShareG} {vr : VRel
 /-- **The callback's table and the lender's guarded twin across the fold, at the typed world**
 (`tabNK_foldTwin` with the guarded twin). -/
 theorem tabNK_foldTwinG {vr : VRel} (hv : ValRelOK vr)
-    {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy}
-    (hF : F.SuspendC xv bnd) (R : Nat → WProp)
+    {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {F : CTy}
+    (hF : F.SuspendC Δ xv bnd) (R : Nat → WProp)
     (G : ShareG) (δ : LSub) (l : Loc) (Fam : Nat → Val → SPropS Loc Val α) (x : KW) :
     ∀ m i en, tabNK (ℍ := ℍ) vr (·.lend l α Fam) F (δ.extend xv α) x m i = some en →
       ∃ en', tabGK (ℍ := ℍ) R G vr id F δ x m i = some en' ∧
@@ -179,9 +179,10 @@ indexed by the lender's worlds at the lend's world, framed by `erwpK_M_frame_can
 cancel row's tables (`FoldTwin` by `foldTwin_owed`), its own nested cancel obligations by the
 induction. -/
 theorem tabGK_canK {vr : VRel} (hv : ValRelOK vr)
-    {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub}
-    (hLt : LtLife δ bnd α) {l : Loc} {Fam : Nat → Val → SPropS Loc Val α} (hFam : DownFam α Fam) :
-    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC xv bnd →
+    {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub}
+    (hδ : Δ.Models δ) (hLt : LtLife δ bnd α) {l : Loc} {Fam : Nat → Val → SPropS Loc Val α}
+    (hFam : DownFam α Fam) :
+    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC Δ xv bnd →
       CanFold (fun y : KW => y.Θ.FoldInv α)
         (fun x => tabNK (ℍ := ℍ) vr (·.lend l α Fam) F (δ.extend xv α) x)
         (fun x => tabGK (ℍ := ℍ) (claimR l α Fam) (CellFold l α Fam) vr id F δ x) l α Fam := by
@@ -219,7 +220,7 @@ theorem tabGK_canK {vr : VRel} (hv : ValRelOK vr)
     (flO := fun z => z.lo)
     (Ti := fun x => tabNK (ℍ := ℍ) vr (·.lend l α Fam) fin (δ.extend xv α) x)
     (To := fun x => tabGK (ℍ := ℍ) (claimR l α Fam) (CellFold l α Fam) vr id fin δ x)
-    hFam (fun x => tabNK_lendOKCR hv hfin _ δ hLt x) (ih fin hfd hfin)
+    hFam (fun x => tabNK_lendOKCR hv hfin _ δ hδ hLt x) (ih fin hfd hfin)
     (fun x hx => foldTwin_owed hFam hx (tabNK_foldTwinG hv hfin _ _ δ l Fam x))
   refine hM k k le_rfl y hy ls _ v'' χ W'' (Z.del l) ρkL hχ hdZd P'' hPk hw''
     (ResU.CompS.comm hW'') (ResU.CompS.comm hkL) (fun BM hBM => ?_)
@@ -236,10 +237,10 @@ guarded by the fold, ending at the lend's claim. Every premise of `erwpK_M_frame
 `LendOKCR` (`tabNK_lendOKCR`), `CanFold` (`tabGK_canK`) and the twin across the fold
 (`foldTwin_owed`, `tabNK_foldTwinG`). -/
 theorem erwpK_M_frameCRG_tab {vr : VRel} (hv : ValRelOK vr)
-    {V : KW → KW → Prop} {Φ : KW → LocFam} {xv : LifeVar}
-    {bnd : Lifetime.Life} {α : Life} {δ : LSub} (hLt : LtLife δ bnd α) {l : Loc}
+    {V : KW → KW → Prop} {Φ : KW → LocFam} {Δ : LifeCtx} {xv : LifeVar}
+    {bnd : Lifetime.Life} {α : Life} {δ : LSub} (hδ : Δ.Models δ) (hLt : LtLife δ bnd α) {l : Loc}
     {Fam : Nat → Val → SPropS Loc Val α} (hFam : DownFam α Fam) {F : CTy}
-    (hF : F.SuspendC xv bnd) {Q : KW → PostN} :
+    (hF : F.SuspendC Δ xv bnd) {Q : KW → PostN} :
     KFrame (ℍ := ℍ) V Φ (fun y => y.Θ.FoldInv α) l α Fam
       (fun y => opTableK α (tabNK (ℍ := ℍ) vr (·.lend l α Fam) F (δ.extend xv α) y))
       (fun y => opTableGRK y.lo
@@ -247,13 +248,14 @@ theorem erwpK_M_frameCRG_tab {vr : VRel} (hv : ValRelOK vr)
         (claimR l α Fam))
       (fun y => MFPost l α Fam (Q y)) Q :=
   erwpK_M_frameCRG (flI := fun _ => α) (flO := fun y => y.lo) hFam
-    (fun x => tabNK_lendOKCR hv hF _ δ hLt x) (tabGK_canK hv hLt hFam F.cdepth F le_rfl hF)
+    (fun x => tabNK_lendOKCR hv hF _ δ hδ hLt x) (tabGK_canK hv hδ hLt hFam F.cdepth F le_rfl hF)
     (fun x hx => foldTwin_owed hFam hx (tabNK_foldTwinG hv hF _ _ δ l Fam x))
 
 /-! ### The anti-frame at the typed tables -/
 
 /-- A row meeting `CTy.SuspendC` may be stopped at under an anti-frame. -/
-theorem tabGK_afok {xv : LifeVar} {bnd : Lifetime.Life} {F : CTy} (hF : F.SuspendC xv bnd)
+theorem tabGK_afok {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life} {F : CTy}
+    (hF : F.SuspendC Δ xv bnd)
     (R : Nat → WProp) (G : ShareG) (vr : VRel) (g : KW → KW) (δ : LSub) :
     ∀ x m i en, tabGK (ℍ := ℍ) R G vr g F δ x m i = some en → en.abort = false →
       en.q ≠ .unr ∧ en.wc = extF := by
@@ -283,13 +285,14 @@ capturable entry the inner cancel run, from the opened cell at its cancel row's 
 the anti-frame's cancel run from the sealed cell at that row's `tabRK`
 (`erwpK_M_antiFrame_cancelRunCR` at `KW`, `SealTwin` by `sealTwin_owed`), at the resumption world,
 where the anti-frame's invariant holds; its own nested cancel obligations by the induction. -/
-theorem tabRK_canAK {vr : VRel} {xv : LifeVar} {bnd : Lifetime.Life} {l : Loc} {β : Life}
+theorem tabRK_canAK {vr : VRel} {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life} {l : Loc}
+    {β : Life}
     {Fo : Nat → Val → SPropS Loc Val β} {G : ShareG}
     (hG : ∀ k ls ρ, G k ls ρ → CellFold l β Fo k ls ρ)
     {Rin Rout : Nat → WProp} (hRin : ∀ k ρ, Rin k ρ → claimR l β Fo k ρ)
     (hRout : ∀ k (w : Val) (σ : WRes) (h : σ.InStratum β) (hw : Fo k w ⟨σ, h⟩),
       Rout k (ResU.single l (CellU.mutOf β w σ h (Fo k) hw))) (δ : LSub) :
-    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC xv bnd →
+    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC Δ xv bnd →
       ASealCan (KW.SealInv l β Fo) (fun x => tabGK (ℍ := ℍ) Rin G vr id F δ x)
         (fun x => tabRK (ℍ := ℍ) Rout vr id F δ x) l β Fo := by
   intro d
@@ -336,9 +339,9 @@ table is the row's guarded twin `tabGK`, the anti-frame's the lender's twin `tab
 anti-frame's world. Every premise of `erwpK_M_antiFrameCR_KW` is discharged from the tables: the
 entries' shape (`tabGK_afok`), the twin across the seal (`tabGK_sealTw`) and `ASealCan`
 (`tabRK_canAK`). `hG`, `hRin`, `hRout` are the original's premises on the guard and the claims. -/
-theorem erwpK_M_antiFrameCR_tab {vr : VRel} {V : KW → KW → Prop} {xv : LifeVar}
+theorem erwpK_M_antiFrameCR_tab {vr : VRel} {V : KW → KW → Prop} {Δ : LifeCtx} {xv : LifeVar}
     {bnd : Lifetime.Life}
-    {l : Loc} {β : Life} {Fo : Nat → Val → SPropS Loc Val β} {F : CTy} (hF : F.SuspendC xv bnd)
+    {l : Loc} {β : Life} {Fo : Nat → Val → SPropS Loc Val β} {F : CTy} (hF : F.SuspendC Δ xv bnd)
     (δ : LSub) {G : ShareG}
     (hG : ∀ k ls ρ, G k ls ρ → CellFold l β Fo k ls ρ)
     {Rin Rout : Nat → WProp} (hRin : ∀ k ρ, Rin k ρ → claimR l β Fo k ρ)
@@ -356,18 +359,19 @@ theorem erwpK_M_antiFrameCR_tab {vr : VRel} {V : KW → KW → Prop} {xv : LifeV
 
 /-- **A row meeting `CTy.SuspendC` may be stopped at under a reborrow at `β ⊏ @bnd`, at the typed
 world**. -/
-theorem tabNK_rebOKR_K {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Lifetime.Life}
-    {β : Life} {F : CTy} (hF : F.SuspendC xv bnd) (g : KW → KW) (δ : LSub)
-    (hLt : LtLife δ bnd β) (x : KW) : (tabNK (ℍ := ℍ) vr g F δ x).RebOKR β where
+theorem tabNK_rebOKR_K {vr : VRel} (hv : ValRelOK vr) {Δ : LifeCtx} {xv : LifeVar}
+    {bnd : Lifetime.Life}
+    {β : Life} {F : CTy} (hF : F.SuspendC Δ xv bnd) (g : KW → KW) (δ : LSub)
+    (hδ : Δ.Models δ) (hLt : LtLife δ bnd β) (x : KW) : (tabNK (ℍ := ℍ) vr g F δ x).RebOKR β where
   entry := fun m i en h _ => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupNK F h
     exact ⟨(layer_suspend F hF hL).1, rfl⟩
   pa := fun m i en h k ls v ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupNK F h
-    exact hv.inStratum (layer_suspend F hF hL).2.2.2.1 hLt hp
+    exact hv.inStratum (layer_suspend F hF hL).2.2.2.1 hδ hLt hp
   pb := fun m i en h y k ls w ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupNK F h
-    exact hv.inStratum (layer_suspend F hF hL).2.2.2.2.1 hLt hp.1
+    exact hv.inStratum (layer_suspend F hF hL).2.2.2.2.1 hδ hLt hp.1
 
 /-- **The table twins itself across the reborrow, at the typed world**: a world `KW.Owed` owes is
 one an entry owes, and a world an entry owes is one `KW.Owed` owes. -/
@@ -386,16 +390,17 @@ theorem tabNK_rebTw {vr : VRel} {F : CTy} (δ : LSub) (x : KW) :
 typed world** (the premise `RebCanK`), by induction on how deep cancel
 rows nest: each is a cancel run at its cancel row's table, closed by `erwpK_rebGen_cancelRun` at
 `KW` (`RebTwin` by `rebTwin_owed`), whose own cancel obligations are closed by the induction. -/
-theorem tabNK_rebCanK {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Lifetime.Life}
+theorem tabNK_rebCanK {vr : VRel} (hv : ValRelOK vr) {Δ : LifeCtx} {xv : LifeVar}
+    {bnd : Lifetime.Life}
     {δ : LSub} {β : Life}
-    (hLt : LtLife δ bnd β) {le : Loc} {s : LSet} {v : Val} {R : WRes}
+    (hδ : Δ.Models δ) (hLt : LtLife δ bnd β) {le : Loc} {s : LSet} {v : Val} {R : WRes}
     {hs : R.InStratum s.join} {χ : WRes} {Ok : List SRec → Prop}
     (hE : ∀ x : KW, RebEntryGP (ℍ := ℍ) (x.Θ.view x.c) β (ResU.single le (CellU.immOf s v R hs))
       χ R Ok (fun w Y => ResU.Valid w ∧ ResU.Valid Y))
     (hreb : ResU.Reb β R χ)
     (hOk : ∀ (ls ls'' lsO : List SRec) (ψ Ks : WRes), Ok ls → (∀ y, y ∈ ls'' ↔ y ∈ ls) →
       ResU.CompS ψ (ResU.single le (CellU.immOf s v R hs)) Ks → extF ls'' lsO Ks → Ok lsO) :
-    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC xv bnd →
+    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC Δ xv bnd →
       RebCanK (fun _ : KW => True) (fun x => tabNK (ℍ := ℍ) vr id F δ x)
         (fun x => tabNK (ℍ := ℍ) vr id F δ x) β (ResU.single le (CellU.immOf s v R hs)) χ R Ok := by
   have hχsplit := ResU.restrictDom_split hreb
@@ -435,7 +440,7 @@ theorem tabNK_rebCanK {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Lifet
     (flO := fun z => z.lo)
     (Ti := fun x => tabNK (ℍ := ℍ) vr id fin δ x)
     (To := fun x => tabNK (ℍ := ℍ) vr id fin δ x)
-    (fun x _ => hE x) hreb hOk (fun x => tabNK_rebOKR_K hv hfin id δ hLt x)
+    (fun x _ => hE x) hreb hOk (fun x => tabNK_rebOKR_K hv hfin id δ hδ hLt x)
     (fun x _ => rebTwin_owed hreb (tabNK_rebTw δ x)) (ih fin hfd hfin)
   refine hM k y trivial ls _ ψ Ks (ResU.CompS.comm hKs) hψβ hok (fun Bχ hBχ => ?_)
   obtain ⟨Xk, g, hXk, hXkg, hg⟩ :=
@@ -450,33 +455,35 @@ stop at the row's `tabNK` at the same world. Every table premise of `erwpK_rebGe
 (`tabNK_rebCanK`). `hE`, `hreb`, `hOk` are the original's premises on the reborrow's entry; `hE`
 holds at every view (`rebEntryGV_top`, `rebEntryGV_deep`). -/
 theorem erwpK_rebGen_tab {vr : VRel} (hv : ValRelOK vr)
-    {V : KW → KW → Prop} {xv : LifeVar} {bnd : Lifetime.Life} {δ : LSub}
-    {β : Life} (hLt : LtLife δ bnd β) {le : Loc} {s : LSet} {v : Val} {R : WRes}
+    {V : KW → KW → Prop} {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life} {δ : LSub}
+    {β : Life} (hδ : Δ.Models δ) (hLt : LtLife δ bnd β) {le : Loc} {s : LSet} {v : Val} {R : WRes}
     {hs : R.InStratum s.join} {χ : WRes} {Ok : List SRec → Prop}
     (hE : ∀ x : KW, RebEntryGP (ℍ := ℍ) (x.Θ.view x.c) β (ResU.single le (CellU.immOf s v R hs))
       χ R Ok (fun w Y => ResU.Valid w ∧ ResU.Valid Y))
     (hreb : ResU.Reb β R χ)
     (hOk : ∀ (ls ls'' lsO : List SRec) (ψ Ks : WRes), Ok ls → (∀ y, y ∈ ls'' ↔ y ∈ ls) →
       ResU.CompS ψ (ResU.single le (CellU.immOf s v R hs)) Ks → extF ls'' lsO Ks → Ok lsO)
-    {F : CTy} (hF : F.SuspendC xv bnd)
+    {F : CTy} (hF : F.SuspendC Δ xv bnd)
     {Q : KW → PostN} :
     RKFrame (ℍ := ℍ) V (fun y => y.Θ.view y.c) (fun _ => True) β
       (ResU.single le (CellU.immOf s v R hs)) χ Ok
       (fun y => opTableK y.lo (tabNK (ℍ := ℍ) vr id F δ y))
       (fun y => opTableK y.lo (tabNK (ℍ := ℍ) vr id F δ y)) (fun y => RebPost β (Q y)) Q :=
   erwpK_rebGen (flI := fun y => y.lo) (flO := fun y => y.lo) (fun x _ => hE x) hreb hOk
-    (fun x => tabNK_rebOKR_K hv hF id δ hLt x)
+    (fun x => tabNK_rebOKR_K hv hF id δ hδ hLt x)
     (fun x _ => rebTwin_owed hreb (tabNK_rebTw δ x))
-    (tabNK_rebCanK hv hLt hE hreb hOk F.cdepth F le_rfl hF)
+    (tabNK_rebCanK hv hδ hLt hE hreb hOk F.cdepth F le_rfl hF)
 
 /-! ### The Imm Frame at the typed tables -/
 
 /-- **The callback's table may be stopped at under an `imm` lend at `A ⊏ @bnd`, at the typed
 world** (`ILendOKCR` at `KW`): the payload and the answer at every resumption world in `Res_A`,
 neither reading the record list. -/
-theorem tabNK_ilendOKCR {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Lifetime.Life}
-    {A : Life} {F : CTy} (hF : F.SuspendC xv bnd) (g : KW → KW) (δ : LSub)
-    (hLt : LtLife δ bnd A) (x : KW) : (tabNK (ℍ := ℍ) vr g F (δ.extend xv A) x).ILendOKCR A where
+theorem tabNK_ilendOKCR {vr : VRel} (hv : ValRelOK vr) {Δ : LifeCtx} {xv : LifeVar}
+    {bnd : Lifetime.Life}
+    {A : Life} {F : CTy} (hF : F.SuspendC Δ xv bnd) (g : KW → KW) (δ : LSub)
+    (hδ : Δ.Models δ) (hLt : LtLife δ bnd A) (x : KW) : (tabNK (ℍ := ℍ) vr g F
+    (δ.extend xv A) x).ILendOKCR A where
   entry := fun m i en h _ => by
     obtain ⟨q, A', B, fin, hL, rfl, -⟩ := tab_lookupNK F h
     exact ⟨(layer_suspend F hF hL).1, rfl⟩
@@ -485,13 +492,13 @@ theorem tabNK_ilendOKCR {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Lif
     obtain ⟨-, hA, -, hOA, -⟩ := layer_suspend F hF hL
     have hp' : vr A' (δ.extend xv A) x.Θ k v ρ := hp
     rw [hv.extend hA] at hp'
-    exact hv.inStratum hOA hLt hp'
+    exact hv.inStratum hOA hδ hLt hp'
   pb := fun m i en h y k ls w ρ hp => by
     obtain ⟨q, A', B, fin, hL, rfl, -⟩ := tab_lookupNK F h
     obtain ⟨-, -, hB, -, hOB, -⟩ := layer_suspend F hF hL
     have hp' : vr B (δ.extend xv A) y.Θ k w ρ := hp.1
     rw [hv.extend hB] at hp'
-    exact hv.inStratum hOB hLt hp'
+    exact hv.inStratum hOB hδ hLt hp'
   paExt := fun m i en h k ls₁ ls₂ v ρ _ hp => by
     obtain ⟨q, A', B, fin, -, rfl, -⟩ := tab_lookupNK F h
     exact hp
@@ -502,8 +509,9 @@ theorem tabNK_ilendOKCR {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Lif
 /-- **The callback's table and the lender's twin across the `imm` fold, at the typed world**
 (`tabNK_foldTwin` for an `imm` lend): the callback's entries, indexed by the lender's worlds, owe at
 the lend's world (`KW.lendImm`); the lender's at its own. -/
-theorem tabNK_ifoldTwin {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Lifetime.Life}
-    {A : Life} {F : CTy} (hF : F.SuspendC xv bnd) (Rr : Nat → WProp)
+theorem tabNK_ifoldTwin {vr : VRel} (hv : ValRelOK vr) {Δ : LifeCtx} {xv : LifeVar}
+    {bnd : Lifetime.Life}
+    {A : Life} {F : CTy} (hF : F.SuspendC Δ xv bnd) (Rr : Nat → WProp)
     (δ : LSub) (r : FrameRec) (x : KW) :
     ∀ m i en, tabNK (ℍ := ℍ) vr (·.lendImm r A) F (δ.extend xv A) x m i = some en →
       ∃ en', tabRK (ℍ := ℍ) Rr vr id F δ x m i = some en' ∧
@@ -553,8 +561,9 @@ theorem erwpK_I_frame_tab {vr : VRel} (hv : ValRelOK vr)
     {A : Life} {ρP ρlP : WRes} (houtP : ρP.InStratum A)
     (hclP : ResU.CompS (ResU.single l (CellU.ownOf v)) ρP ρlP)
     {ds : List FrameRec} (hds : ∀ d, d ∈ ds ↔ Desc ⟨l, v, ρP, Ty, δr⟩ d)
-    {xv : LifeVar} {bnd : Lifetime.Life} {δ : LSub} (hLt : LtLife δ bnd A) {F : CTy}
-    (hF : F.SuspendC xv bnd) (hlin : F.LinOnly)
+    {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life} {δ : LSub} (hδ : Δ.Models δ)
+    (hLt : LtLife δ bnd A) {F : CTy}
+    (hF : F.SuspendC Δ xv bnd) (hlin : F.LinOnly)
     (Rr : Nat → WProp) {Q : KW → PostN}
     (hQ : ∀ y k ls₁ ls₂ w ρ, Ext ls₁ ls₂ ρ → Q y k ls₁ w ρ → Q y k ls₂ w ρ) :
     IKFrame (ℍ := ℍ) V Φ (fun y => y.Θ.FoldInv A) l Ty δr v P A ρP ρlP houtP ds
@@ -563,7 +572,7 @@ theorem erwpK_I_frame_tab {vr : VRel} (hv : ValRelOK vr)
       (fun y => opTableK y.lo (tabRK (ℍ := ℍ) Rr vr id F δ y))
       (fun y => IFPost l v P A (Q y)) Q :=
   erwpK_I_frameT_KW l Ty δr hadm v P hPshape hPloc houtP hclP hds
-    (fun x => tabNK_ilendOKCR hv hF _ δ hLt x)
+    (fun x => tabNK_ilendOKCR hv hF _ δ hδ hLt x)
     (fun _ _ _ _ h => (tabNK_linOnly hlin h).2)
     (icanK_of_lin fun _ _ _ _ h _ => (tabNK_linOnly hlin h).1)
     (fun x _ => tabNK_ifoldTwin hv hF Rr δ _ x) hQ

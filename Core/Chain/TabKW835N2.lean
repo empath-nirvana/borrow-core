@@ -127,9 +127,10 @@ theorem tabGK_tabGK_twin (R : Nat → WProp) (G : ShareG) (R' : Nat → WProp) (
 nest: at a capturable entry the cancel run at its cancel row's guarded table is framed
 (`erwpK_frame_cancelRunGR`), its entries' order read at the run's share (`KW.Owed.left`), its own
 nested cancel obligations by the induction. -/
-theorem tabGK_canF {xv : LifeVar} {bnd : Lifetime.Life} {δ : LSub} (R : Nat → WProp) (G : ShareG)
+theorem tabGK_canF {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life} {δ : LSub} (R : Nat → WProp)
+    (G : ShareG)
     (Fr : WProp) :
-    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC xv bnd → ∀ (vr : VRel) (x : KW)
+    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC Δ xv bnd → ∀ (vr : VRel) (x : KW)
       (m i : UInt32) (en en' : OpEntK KW), tabGK (ℍ := ℍ) R G vr id F δ x m i = some en →
       tabGK (ℍ := ℍ) (fun k => R k ⋆ Fr) (G.sep fun _ => Fr) vr id F δ x m i = some en' →
       en.abort = false → en.q ≠ .lin →
@@ -180,8 +181,8 @@ reborrow's frame of `ℓ ↦ own(loc ℓ₂)` outside the Mut Frame at the field
 `erwpK_frameGR` is read off the tables: the twin (`tabGK_tabGK_twin`), the entries' shape
 (`tabGK_afok`), the order at the run's share (`KW.Owed.left`) and the cancel transfer
 (`tabGK_canF`). -/
-theorem erwpK_frameGR_tab {V : KW → KW → Prop} {Φ : KW → LocFam} {xv : LifeVar}
-    {bnd : Lifetime.Life} {F : CTy} (hF : F.SuspendC xv bnd) (vr : VRel) (δ : LSub)
+theorem erwpK_frameGR_tab {V : KW → KW → Prop} {Φ : KW → LocFam} {Δ : LifeCtx} {xv : LifeVar}
+    {bnd : Lifetime.Life} {F : CTy} (hF : F.SuspendC Δ xv bnd) (vr : VRel) (δ : LSub)
     (R : Nat → WProp) (G : ShareG) {Q : KW → PostN} (Fr : WProp) :
     ∀ n x ls e (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ → Fr ρ₂ →
       erwpK (ℍ := ℍ) V Φ (fun z => opTableGRK z.lo (tabGK (ℍ := ℍ) R G vr id F δ z) G R) Q

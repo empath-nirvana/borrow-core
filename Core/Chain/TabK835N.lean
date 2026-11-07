@@ -241,9 +241,11 @@ theorem tabNK_wk {vr : VRel} {F : CTy} {δ : LSub} {x : KW} {m j : UInt32} {en :
 
 /-- **The callback's table at the typed world may be stopped at under a lend at `α ⊏ @bnd`**: at
 every world, the answer read at every resumption world. -/
-theorem tabNK_lendOKCR {vr : VRel} (hv : ValRelOK vr) {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life}
+theorem tabNK_lendOKCR {vr : VRel} (hv : ValRelOK vr) {Δ : LifeCtx} {xv : LifeVar}
+    {bnd : Lifetime.Life}
     {α : Life} {F : CTy} (hF : F.SuspendC Δ xv bnd) (g : KW → KW) (δ : LSub)
-    (hδ : Δ.Models δ) (hLt : LtLife δ bnd α) (x : KW) : (tabNK (ℍ := ℍ) vr g F (δ.extend xv α) x).LendOKCR α where
+    (hδ : Δ.Models δ) (hLt : LtLife δ bnd α) (x : KW) : (tabNK (ℍ := ℍ) vr g F
+    (δ.extend xv α) x).LendOKCR α where
   entry := fun m i en h _ => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupNK F h
     exact ⟨(layer_suspend F hF hL).1, rfl⟩
@@ -265,7 +267,8 @@ callback's entries, indexed by the lender's worlds, owe at the lend's world (`KW
 lender's at its own. They agree but for the cancel obligations (`'x` is read by no layer's types);
 a world the lend's order owes is one the callback's entry owes, and a world the lender's entry owes
 is one `KW.Owed` owes. -/
-theorem tabNK_foldTwin {vr : VRel} (hv : ValRelOK vr) {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life}
+theorem tabNK_foldTwin {vr : VRel} (hv : ValRelOK vr) {Δ : LifeCtx} {xv : LifeVar}
+    {bnd : Lifetime.Life}
     {α : Life} {F : CTy} (hF : F.SuspendC Δ xv bnd) (R : Nat → WProp)
     (δ : LSub) (l : Loc) (Fam : Nat → Val → SPropS Loc Val α) (x : KW) :
     ∀ m i en, tabNK (ℍ := ℍ) vr (·.lend l α Fam) F (δ.extend xv α) x m i = some en →
@@ -288,7 +291,8 @@ callback's cancel run at its cancel row's table, indexed by the lender's worlds 
 world, framed by `erwpK_M_frame_cancelRunCR` at the cancel row's tables (`FoldTwin` by
 `foldTwin_owed`), its own nested cancel obligations by the induction. -/
 theorem tabRK_canK {vr : VRel} (hv : ValRelOK vr) {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life}
-    {α : Life} {δ : LSub} (hδ : Δ.Models δ) (hLt : LtLife δ bnd α) {l : Loc} {Fam : Nat → Val → SPropS Loc Val α}
+    {α : Life} {δ : LSub} (hδ : Δ.Models δ) (hLt : LtLife δ bnd α) {l : Loc}
+    {Fam : Nat → Val → SPropS Loc Val α}
     (hFam : DownFam α Fam) :
     ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC Δ xv bnd →
       CanFold (fun y : KW => y.Θ.FoldInv α)

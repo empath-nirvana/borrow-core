@@ -25,7 +25,8 @@ open BoCa.Fig16.LogRel.Core
 open BoCa.Fig16.LogRel.Core.Chain.SI
 open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-open BoCa.Fig16.Tree.Wp.Goal791 (Const791 defines_meetOfDom_empty withborFSTy withborFV)
+open BoCa.Fig16.Tree.Wp.Goal791 (Const791 defines_meetOfDom_empty withborFSTy withborFV withborFE
+  ansC_of_suspend)
 open BoCa.BoLo (Head Kont performE opPayload freeE)
 open BoCa.Fig16.LogRel.Core.Chain.SI.LendProg (noOwn_single_mut)
 
@@ -37,6 +38,17 @@ def ConstN (c : Const791) : Prop :=
   c.OK → ∀ (δ : LSub) (Θ : LocTy) (n : Nat), Θ.OK →
     vN (ℍ := ℍ) (.bang c.ty) δ Θ n c.val PMap.empty
 
+/-- **A #791 constant is a value of `!` its type at the lifetime context `Δ`**: from its
+premises at `Δ`, at every `δ ⊨ Δ`, world and index.  `[spec §62]` -/
+def ConstNAt (Δ : LifeCtx) (c : Const791) : Prop :=
+  c.OKAt Δ → ∀ (δ : LSub), Δ.Models δ → ∀ (Θ : LocTy) (n : Nat), Θ.OK →
+    vN (ℍ := ℍ) (.bang c.ty) δ Θ n c.val PMap.empty
+
+/-- `ConstN` is `ConstNAt` at the empty context, which every `δ` models. -/
+theorem constN_of_at {c : Const791} (h : ConstNAt (ℍ := ℍ) LifeCtx.empty c) :
+    ConstN (ℍ := ℍ) c :=
+  fun hc δ Θ n hΘ => h hc δ (models_empty_any δ) Θ n hΘ
+
 /-- Every #791 constant inside the fragment, at the typed world. -/
 def ConstsN : Prop := ∀ c : Const791, c.InFrag → ConstN (ℍ := ℍ) c
 
@@ -46,62 +58,128 @@ def FundamentalN : Prop :=
   ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg), CDerives Δ Γ e j → JdgInFrag Γ j = true →
     SemJN (ℍ := ℍ) Δ Γ e j
 
+/-! ### A constant under a lifetime binder -/
+
+/-- **A constant's value is closed**, from its premises: a lend constant's term closes over its
+finaliser, closed by the premise; a binder's is `λ_.` over its body's.  `[spec §62]` -/
+theorem _root_.BoCa.Fig16.Tree.Wp.Goal791.Const791.val_closed : ∀ {Δ : LifeCtx}
+    (c : Const791), c.OKAt Δ →
+    closedAt 0 c.val.1 = true
+  | _, .w2 .., ⟨_, _, _, _, _, _, hdc, _⟩ => withborUE_closed hdc
+  | _, .w3 .., ⟨_, _, _, _, _, hdc, _⟩ => withborUE_closed hdc
+  | _, .wF .., ⟨_, _, _, _, _, hdc, _⟩ => by
+      have h := withborUE_closed hdc
+      simp_all [withborUE, Const791.val, withborFV, withborFE, closedAt, thenE]
+  | _, .wl .., _ => rfl
+  | _, .sm .., ⟨_, _, _, _, _, _, _, hdc, _⟩ => withborUE_closed hdc
+  | _, .poly _ _ c, ⟨_, _, hc⟩ => closedAt_mono c.val.1 (c.val_closed hc) (Nat.zero_le 1)
+
+/-- **`δ[y ↦ α]` models `Δ, 'y ⊏ @b`** at `α ⊏ @bδ`, `δ ⊨ Δ`, when neither `@b` nor `Δ`'s bounds
+mention `'y` (`allI`'s side conditions; `allI_compatN`'s argument).  `[spec §62]` -/
+theorem models_extend_of {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) {y : LifeVar}
+    {b : Lifetime.Life} (hby : b.mentions y = false)
+    (hΔy : ∀ z u, Δ.find? z = some u → u.mentions y = false) {α : Life} (hα : LtLife δ b α) :
+    (Δ.extend y b).Models (δ.extend y α) := by
+  obtain ⟨β, hβ, hlt⟩ := hα
+  intro z u hz
+  rw [LifeCtx.find?_extend] at hz
+  by_cases hyz : y = z
+  · subst hyz
+    rw [if_pos rfl] at hz
+    obtain rfl := Option.some.inj hz
+    exact ⟨α, β, BoCa.Fig16.LogRel.find?_extend_self δ y α,
+      by rw [BoCa.Fig16.LogRel.interp_extend_of_not_mentions hby]; exact hβ, hlt⟩
+  · rw [if_neg hyz] at hz
+    obtain ⟨m, k, hm, hk, hlk⟩ := hδ z u hz
+    exact ⟨m, k, by rw [BoCa.Fig16.LogRel.find?_extend_ne δ α hyz]; exact hm,
+      by rw [BoCa.Fig16.LogRel.interp_extend_of_not_mentions (hΔy z u hz)]; exact hk, hlk⟩
+
+/-- **`ConstNAt` under a lifetime binder** (`∀I` at a value): at every `α ⊏ @bδ` the body is one
+β step from the body constant's value, closed (`Const791.val_closed`), read at `δ[y ↦ α]`, which
+models `Δ, 'y ⊏ @b` (`models_extend_of`).  `[spec §62]` -/
+theorem constNAt_poly {y : LifeVar} {b : Lifetime.Life} {c : Const791}
+    (hc : ∀ Δ', ConstNAt (ℍ := ℍ) Δ' c) (Δ : LifeCtx) : ConstNAt (ℍ := ℍ) Δ (.poly y b c) := by
+  rintro ⟨hby, hΔy, hok⟩ δ hδ Θ₀ n _
+  have hcl := c.val_closed hok
+  refine ⟨rfl, fun Θ _ hΘ c₁ _ ls α hα => ?_⟩
+  have hδ' := models_extend_of hδ hby hΔy hα
+  show cN (ℍ := ℍ) (.ret c.ty) (δ.extend y α) Θ c₁ n ls
+    (Kont.hole.plug (.app (.val (.lam c.val.1)) (.val .unit))) PMap.empty
+  refine cN_head (.ret c.ty) _ Θ hΘ.1 c₁ n ls PMap.empty .hole _ _
+    (fun μ => BoCa.BoLo.Head.beta μ c.val.1 Val.unit) rfl ?_
+  rw [show Kont.hole.plug (Expr.subst 0 Val.unit c.val.1) = c.val.1 by
+    simp [Kont.plug, subst_closedAt c.val.1 (s := Val.unit) hcl le_rfl]]
+  exact cN_ret_of (erwp_val (hc _ hok _ hδ' Θ n hΘ).2)
+
 /-! ### Each constant -/
 
-/-- **`ConstN` for `withbor (2)` at a suspending row**, from the fundamental property at the
-finaliser's derivation. -/
+/-- **`ConstNAt` for `withbor (2)` at a suspending row**, from the fundamental property at the
+finaliser's derivation.  `[spec §62]` -/
 theorem constN_w2 (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} {d : Expr} (hfr : (Const791.w2 x bnd A B S d).InFrag) :
-    ConstN (ℍ := ℍ) (.w2 x bnd A B S d) := by
-  rintro ⟨hbnd, hO, hA, hB, hS, hdc, hder⟩ δ Θ n _
+    {S : Row} {d : Expr} (hfr : (Const791.w2 x bnd A B S d).InFrag) (Δ : LifeCtx) :
+    ConstNAt (ℍ := ℍ) Δ (.w2 x bnd A B S d) := by
+  rintro ⟨hbnd, hO, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
   have hL : (VTy.ref A).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, withbor2UTy, withborUTy, VTy.inFrag, CTy.inFrag]
-  exact withbor2S_compat hbnd hO hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
+  exact withbor2S_compat hbnd hO hA hB hS hAns hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ hδ Θ n
 
-/-- **`ConstN` for `withbor (3)` at a suspending row**, from the fundamental property at the
-finaliser's derivation. -/
+/-- **`ConstNAt` for `withbor (3)` at a suspending row**, from the fundamental property at the
+finaliser's derivation.  `[spec §62]` -/
 theorem constN_w3 (hF : FundamentalN (ℍ := ℍ)) {a : Lifetime.Life} {x : LifeVar}
     {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
-    (hfr : (Const791.w3 a x bnd A B S d).InFrag) : ConstN (ℍ := ℍ) (.w3 a x bnd A B S d) := by
-  rintro ⟨hbnd, hA, hB, hS, hdc, hder⟩ δ Θ n _
+    (hfr : (Const791.w3 a x bnd A B S d).InFrag) (Δ : LifeCtx) :
+    ConstNAt (ℍ := ℍ) Δ (.w3 a x bnd A B S d) := by
+  rintro ⟨hbnd, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
   have hL : (VTy.mut a A).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, withbor3UTy, withborUTy, VTy.inFrag, CTy.inFrag]
-  exact withbor3S_compat hbnd hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
+  exact withbor3S_compat hbnd hA hB hS hAns hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ hδ Θ n
 
-/-- **`ConstN` for the field reborrow at a suspending row**, from the fundamental property at the
-finaliser's derivation. -/
+/-- **`ConstNAt` for the field reborrow at a suspending row**, from the fundamental property at
+the finaliser's derivation.  `[spec §62]` -/
 theorem constN_wF (hF : FundamentalN (ℍ := ℍ)) {a : Lifetime.Life} {x : LifeVar}
     {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
-    (hfr : (Const791.wF a x bnd A B S d).InFrag) : ConstN (ℍ := ℍ) (.wF a x bnd A B S d) := by
-  rintro ⟨hbnd, hA, hB, hS, hdc, hder⟩ δ Θ n _
+    (hfr : (Const791.wF a x bnd A B S d).InFrag) (Δ : LifeCtx) :
+    ConstNAt (ℍ := ℍ) Δ (.wF a x bnd A B S d) := by
+  rintro ⟨hbnd, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
   have hL : (VTy.mut a (.ref A)).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, withborFSTy, withborUTy, VTy.inFrag, CTy.inFrag]
-  exact withborFS_compat hbnd hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
+  exact withborFS_compat hbnd hA hB hS hAns hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ hδ Θ n
 
-/-- **`ConstN` for `withload` at a suspending row**, from its rule's premises. -/
+/-- **`ConstNAt` for `withload` at a suspending row**, from its rule's premises.
+`[spec §62]` -/
 theorem constN_wl {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} : ConstN (ℍ := ℍ) (.wl a x bnd A B S) := by
-  rintro ⟨hbnd, hA, hB, hS⟩ δ Θ n _
-  exact withloadS_compat hbnd hA hB hS δ Θ n
+    {S : Row} (Δ : LifeCtx) : ConstNAt (ℍ := ℍ) Δ (.wl a x bnd A B S) := by
+  rintro ⟨hbnd, hA, hB, hS, -⟩ δ hδ Θ n _
+  exact withloadS_compat hbnd hA hB hS δ hδ Θ n
 
-/-- **`ConstN` for `slice_borrow_mut` at a suspending row**, from the fundamental property at the
-finaliser's derivation. -/
+/-- **`ConstNAt` for `slice_borrow_mut` at a suspending row**, from the fundamental property at
+the finaliser's derivation.  `[spec §62]` -/
 theorem constN_sm (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} {d : Expr} (hfr : (Const791.sm x bnd A B S d).InFrag) :
-    ConstN (ℍ := ℍ) (.sm x bnd A B S d) := by
-  rintro ⟨hbnd, hOA, hOB, hA, hB, hS, hdc, hder⟩ δ Θ n _
+    {S : Row} {d : Expr} (hfr : (Const791.sm x bnd A B S d).InFrag) (Δ : LifeCtx) :
+    ConstNAt (ℍ := ℍ) Δ (.sm x bnd A B S d) := by
+  rintro ⟨hbnd, hOA, hOB, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
   have hL : (VTy.array A).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, sliceBorrowMUTy, withborUTy, VTy.inFrag, CTy.inFrag]
-  exact sliceBorrowMS_compat hbnd hOA hOB hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
+  exact sliceBorrowMS_compat hbnd hOA hOB hA hB hS hAns hdc
+    (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ hδ Θ n
 
-/-- **`ConstsN` from the fundamental property at the typed world**: each of the five constants
-inside the fragment, the finalisers' judgments read by the fundamental property. -/
-theorem constsN_of (hF : FundamentalN (ℍ := ℍ)) : ConstsN (ℍ := ℍ)
+/-- **`ConstNAt` from the fundamental property at the typed world**, at every context: each lend
+constant inside the fragment by its compatibility lemma, a binder by `constNAt_poly`.
+`[spec §62]` -/
+theorem constNAt_of (hF : FundamentalN (ℍ := ℍ)) :
+    ∀ c : Const791, c.InFrag → ∀ Δ, ConstNAt (ℍ := ℍ) Δ c
   | .w2 .., hfr => constN_w2 hF hfr
   | .w3 .., hfr => constN_w3 hF hfr
   | .wF .., hfr => constN_wF hF hfr
   | .wl .., _ => constN_wl
   | .sm .., hfr => constN_sm hF hfr
+  | .poly _ _ c, hfr => constNAt_poly (constNAt_of hF c (by
+      simpa [Const791.InFrag, Const791.ty, VTy.inFrag, CTy.inFrag] using hfr))
+
+/-- **`ConstsN` from the fundamental property at the typed world**: every constant inside the
+fragment, at the empty context (`constNAt_of`). -/
+theorem constsN_of (hF : FundamentalN (ℍ := ℍ)) : ConstsN (ℍ := ℍ) :=
+  fun c hfr => constN_of_at (constNAt_of hF c hfr LifeCtx.empty)
 
 /-! ### The finalisers at `SemJN` -/
 
@@ -187,15 +265,18 @@ theorem withbor2S_inst (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (.bang (withbor2UTy x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
       (withborUV dFree) PMap.empty :=
   withbor2S_compat defines_meetOfDom_empty
-    ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id (hardestRow_suspend x _) dFree_closed dFree_sem δ Θ n
+    ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id (hardestRow_suspend _ x _)
+    ⟨_, defines_meetOfDom_empty, ansC_of_suspend
+    (hardestRow_suspend _ x _)⟩ dFree_closed dFree_sem δ (models_empty_any δ) Θ n
 
 /-- **`withbor (3)` at the hardest case's row, at `vN`**, every hypothesis of `withbor3S_compat`
 discharged: a `Mut @a 1` source reborrowed, finalised by `dRelease`. -/
 theorem withbor3S_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (.bang (withbor3UTy a x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
       (withborUV dRelease) PMap.empty :=
-  withbor3S_compat defines_meetOfDom_empty id id (hardestRow_suspend x _) dRelease_closed
-    (dRelease_sem a .unit) δ Θ n
+  withbor3S_compat defines_meetOfDom_empty id id (hardestRow_suspend _ x _)
+    ⟨_, defines_meetOfDom_empty, ansC_of_suspend (hardestRow_suspend _ x _)⟩ dRelease_closed
+    (dRelease_sem a .unit) δ (models_empty_any δ) Θ n
 
 /-- **The field reborrow at the hardest case's row, at `vN`**, every hypothesis of
 `withborFS_compat` discharged: a `Mut @a (Ref 1)` source, its field reborrowed, finalised by
@@ -203,15 +284,17 @@ theorem withbor3S_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy
 theorem withborFS_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (.bang (withborFSTy a x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
       (withborFV dRelease) PMap.empty :=
-  withborFS_compat defines_meetOfDom_empty id id (hardestRow_suspend x _) dRelease_closed
-    (dRelease_sem a (.ref .unit)) δ Θ n
+  withborFS_compat defines_meetOfDom_empty id id (hardestRow_suspend _ x _)
+    ⟨_, defines_meetOfDom_empty, ansC_of_suspend (hardestRow_suspend _ x _)⟩ dRelease_closed
+    (dRelease_sem a (.ref .unit)) δ (models_empty_any δ) Θ n
 
 /-- **`withload` at the hardest case's row, at `vN`**, every hypothesis of `withloadS_compat`
 discharged: an `Imm @a 1` source at the bound `LifeCtx.empty.meetOfDom`. -/
 theorem withloadS_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (.bang (withloadUTy a x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
       withloadV PMap.empty :=
-  withloadS_compat defines_meetOfDom_empty id id (hardestRow_suspend x _) δ Θ n
+  withloadS_compat defines_meetOfDom_empty id id (hardestRow_suspend _ x _) δ (models_empty_any δ)
+    Θ n
 
 /-- **`ConstN` at the hardest case's `withload`, at `vN`**, its antecedent discharged
 (`wl_ok`). -/
@@ -219,7 +302,7 @@ theorem constN_wl_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy
     (hΘ : Θ.OK) :
     vN (ℍ := ℍ) (.bang (Const791.wl a x LifeCtx.empty.meetOfDom .unit .unit hardestRow).ty) δ Θ n
       (Const791.wl a x LifeCtx.empty.meetOfDom .unit .unit hardestRow).val PMap.empty :=
-  constN_wl (wl_ok a x) δ Θ n hΘ
+  constN_wl LifeCtx.empty (wl_ok a x) δ (models_empty_any δ) Θ n hΘ
 
 /-- **`slice_borrow_mut` at the hardest case's row, at `vN`**, every hypothesis of
 `sliceBorrowMS_compat` discharged: an `Array 1` lent cell by cell at the bound
@@ -228,8 +311,9 @@ theorem sliceBorrowMS_inst (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN (ℍ := ℍ) (.bang (sliceBorrowMUTy x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
       (withborUV dArrFree) PMap.empty :=
   sliceBorrowMS_compat defines_meetOfDom_empty ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩
-    ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id (hardestRow_suspend x _) dArrFree_closed
-    dArrFree_sem δ Θ n
+    ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id (hardestRow_suspend _ x _)
+    ⟨_, defines_meetOfDom_empty, ansC_of_suspend
+    (hardestRow_suspend _ x _)⟩ dArrFree_closed dArrFree_sem δ (models_empty_any δ) Θ n
 
 /-! ### A callback that performs while holding the borrow -/
 
@@ -292,8 +376,9 @@ theorem withbor2S_perform (x : LifeVar) {n i : UInt32} (hn : n ≠ 0) (δ : LSub
   have hv : vN (ℍ := ℍ) (.ref .unit) δ Θ k (Val.loc l) (ResU.single l (CellU.ownOf Val.unit)) :=
     ⟨l, Val.unit, PMap.empty, rfl, ResU.comp_empty_right _, rfl, rfl⟩
   have h := (withbor2S_compat (ℍ := ℍ) (A := .unit) (B := .unit) defines_meetOfDom_empty
-    ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id (linSig_suspend (i := i) hn x _) dFree_closed dFree_sem
-    δ Θ k).2 Θ (LocTy.extR_refl _ _) hOK c (consistentX_empty c) ls
+    ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id (linSig_suspend (i := i) hn _ x _)
+    ⟨_, defines_meetOfDom_empty, ansC_of_suspend (linSig_suspend (i := i) hn _ x _)⟩ dFree_closed
+    dFree_sem δ (models_empty_any δ) Θ k).2 Θ (LocTy.extR_refl _ _) hOK c (consistentX_empty c) ls
   have h2 := h c k le_rfl (Val.loc l) _ _ (compS_empty_left _) hv hcon
   exact h2 c k le_rfl (cbPerform n i) PMap.empty _
     (ResU.comp_empty_right _) (cbPerform_sem n i Θ k) hcon

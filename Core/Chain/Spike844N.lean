@@ -46,15 +46,15 @@ with the clauses `¬ VFree x o.A`, `¬ VFree x o.B` and the outliving clauses re
 and the answer may name `'x`. With `'x` read as `⊤` (`substL`), they outlive `@bnd`, so whatever
 they hold besides the callback's own borrows lies above the lend. The cancel row clause is
 unchanged. -/
-def RowSuspendB (S : Row) (x : LifeVar) (bnd : Lifetime.Life)
+def RowSuspendB (S : Row) (Δ : LifeCtx) (x : LifeVar) (bnd : Lifetime.Life)
     (substL : VTy → VTy) : Prop :=
   ∀ o ∈ S, o.q ≠ .unr ∧ o.n ≠ 0 ∧
-    VOutlives LifeCtx.empty bnd (substL o.A) ∧ VOutlives LifeCtx.empty bnd (substL o.B) ∧
-    (capB o.q o.B = true → o.fin.SuspendC x bnd)
+    VOutlives Δ bnd (substL o.A) ∧ VOutlives Δ bnd (substL o.B) ∧
+    (capB o.q o.B = true → o.fin.SuspendC Δ x bnd)
 
 /-- `Row.Suspend` is `RowSuspendB` at a substitution that leaves the types alone. -/
-theorem rowSuspendB_of_suspend {S : Row} {x : LifeVar}
-    {bnd : Lifetime.Life} (h : S.Suspend x bnd) : RowSuspendB S x bnd id :=
+theorem rowSuspendB_of_suspend {S : Row} {Δ : LifeCtx} {x : LifeVar}
+    {bnd : Lifetime.Life} (h : S.Suspend Δ x bnd) : RowSuspendB S Δ x bnd id :=
   fun o ho => ⟨(h o ho).1, (h o ho).2.1, (h o ho).2.2.2.2.1, (h o ho).2.2.2.2.2.1,
     (h o ho).2.2.2.2.2.2⟩
 
