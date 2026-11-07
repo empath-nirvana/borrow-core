@@ -8817,9 +8817,10 @@ No change: no type, rule, term, typing, elaboration or semantics. A program's er
 
 - **`nuEta f s t`** (`TExpr.nuEta`, `scripts/pin/TExpr.tmpl.lean`), over the typed term `t` of a
   `thunkv` at a `ν` type, with the variables `f` and (optionally) `s` it observes. Its typed rule
-  (`TDerivesAt.nuEta`, `TDerivesP.nuEta`) says the term's erasure is the scheme `nuEtaE f s rb`:
+  (`TDerivesAt.nuEta`, `TDerivesP.nuEta`) says the term's erasure is the scheme `nuEtaB f s`:
   the `&` of `f s (inj₁ ())` and `f s (inj₂ ())` (with no `s`, of `f`), each arm optionally
-  binding `f` to a name of its own first (`g <- return (unbang f); …`). The checker builds it at
+  binding `f` to a name of its own first (`g <- return (unbang f); …`). §65 generalises the
+  scheme to an η-tree of the observations at any depth (`NuTree`). The checker builds it at
   `thunkv` when the erasure is the scheme (`rNuEta`, `nuEtaOf?`, `Frontend/Check/Rules.lean`);
   the node is kept by moving the term's variables (`nuEtaB_shift`, `TExpr.shift`).
 - **The fact** (`Frontend/Check/Derived.lean`): the thunk's observations are `f s`'s, by pure
@@ -11493,6 +11494,113 @@ stage of Backend2, with `live 0` where its golden has it.
 
 ---
 
+## 65. Entry 64 — the new backend: codata's η-thunk at any depth (#842)
+
+### Motivation
+
+Backend2 compiled the observations of a protocol object as indirect calls where the old backend
+made direct ones (#842). `corpus/nu-file-*.bc` build their object as an η-thunk whose observations
+are nested, `thunkv nu_in < < (nu_out (force f s)).1 .1, (nu_out (force f s)).1 .2 >,
+(nu_out (force f s)).2 >`, and `alpha-nu-in.bc` builds one whose observation is written under the
+binders of its arguments, `Λ'x. λb. (nu_out (force f k)).1['x] b`. §45's derived node recognised
+only the flat form, the `&` of `f s`'s two observations. The thunk was compiled as a code of its
+own, so the codata's closure class held two codes, `unfold`'s and the thunk's, and every
+observation through a value read out of data (a pair, the rest an observation answers) dispatched
+on them. The old backend made these calls direct with its closure flow analysis (`Backend/Clos/Flow.lean`), which follows a closure through
+pairs; Backend2's flow reads data by its layout class (`Backend2/Flow.lean`), so it is the class
+that must hold one code.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration, semantics or erasure.
+
+### The derived node
+
+- **The η-tree** (`NuTree`, `NuArg`, `NuTree.toE`, `scripts/pin/TExpr.tmpl.lean`). A thunk that
+  observes codata `f s` (`f`, with no state) by η-expansion is the erasure of a tree: an `amp` is
+  a `&` (`withPair`) of the observations at `inj₁ ()` and `inj₂ ()`, a `lam` a `λx` passing `x` on,
+  a `dead` a `Λ` (`λ_`) passing `()` on, and a `leaf` the observation made so far, `f s o₁ … oₙ`,
+  directly or through a binding of `f` first (`(λg. g s o₁ … oₙ) f`, `g <- return (unbang f); …`).
+  `NuTree.toE t f s os` is that erasure over the arguments `f`, `s` and the observation `os` made
+  above it; §45's flat scheme is the tree `amp (leaf rb) (leaf rb)`.
+- **`nuEta f s t`**'s premise `nuEtaB f s t.erase` (§45) now reads: the erasure is
+  `NuTree.toE t' (var f) (s.map var) []` for some tree `t'` (`NuTree.parse` proposes the trees
+  the shape allows; `NuTree.mem_parse`: it proposes every tree over a variable). The node is kept
+  by moving the term's variables (`NuTree.toE_shift`, `nuEtaB_shift`, the same statement as
+  §45's). The checker reads the variables at the first leaf (`nuEtaOf?`,
+  `Frontend/Check/Rules.lean`) and checks them with `nuEtaB`.
+
+### The fact
+
+`Frontend/Check/Derived.lean`. Filling a variable of a tree's erasure fills it in the tree's
+arguments (`NuTree.toE_subst`), so at a run the thunk is the tree over values `fv`, `sv`. An
+observation `ps` of the tree that reaches the subtree `t'` (`NuTree.Reach t ps t'`: a projection at
+an `amp`, any value at a `lam`, `()` at a `dead`) reaches it by pure steps, at every memory:
+
+    nuEta_reach : t.Reach ps t' →
+      PureSteps (nuAppsE (t.toE fv sv os) ps) (t'.toE fv sv (os ++ ps))
+
+so an observation that stops inside the tree answers a `&` or a `λ`, a value, and touches no
+memory; one that reaches a leaf reaches the same observation of `f s` (`nuEta_leaf`, `nuEta_obs`),
+of `f` with no state (`nuEta_var`):
+
+    nuEta_obs : t.Reach ps (leaf rb) →
+      PureSteps (nuAppsE (t.toE fv sv []) ps) (nuAppsE (fv sv) ps)
+
+and at `f = unfold step` (`hN C g`), the same observation of `etaN C g s`, which `f s` steps to
+by one β at every memory (`nuEta_unfold`, from `hN_steps`). §45's three statements are these at
+the flat tree, and are replaced by them.
+
+### The lowering
+
+Unchanged (§45): Backend2 reads the `nuEta` node, whatever its tree. With no state it is its
+variable; with a state, when `f` is a variable a `bind` bound to `unfold step`, it is the call
+`f s` made there; any other is compiled as its thunk.
+
+### Programs
+
+Every corpus program at its golden at every stage of Backend2. In `corpus/counts-backend2.expected`:
+
+| program | before | after | old backend |
+|---|---|---|---|
+| `nu-file-twice` | `2 7 0 11 11 0` | `2 0 0 11 11 0` | `2 0 0 11 11 0` |
+| `nu-file-contexts` | `3 5 0 10 9 0` | `3 0 0 10 9 0` | `3 0 0 10 9 0` |
+| `nu-file-read` | `2 5 0 7 6 0` | `2 0 0 7 6 0` | `2 0 0 7 6 0` |
+| `nu-file-consumed` | `2 3 0 5 5 0` | `2 0 0 5 5 0` | `2 0 0 5 5 0` |
+| `alpha-nu-in` | `5 3 0 12 13 0` | `4 3 0 9 9 0` | `1 0 0 2 1 0` |
+
+(`allocs indirect copies loads stores bounds`.)
+
+No other line changes.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the elaboration, the old backend's output, a
+kernel program or any program's erasure. `corpus/counts.expected` unchanged.
+
+### Open
+
+- **`tree-view-tasks.bc`, 600 indirect calls: the η-thunk's `f` is threaded through the `for`
+  loop's state, and no fact says the loop hands it on unchanged.** The thunk is a `nuEta` node
+  (flat), but `for t in 0..tasks` carries `f` in its state with the rest the body uses
+  (`forData`), so `f` reaches the node out of the state's `letpair`, not from the `bind` of
+  `unfold step`. The thunk is compiled as its own code, the class `nu. F (i64 + X) & F 1` holds it
+  beside `unfold`'s, and every `resume_at`/`cancel_at` dispatches. A fact on the loop's node that
+  a state component is handed on unchanged (as a walk's `read`, §46, fixes its view), or an
+  elaboration that captures a `!` variable instead of threading it, would carry `f`.
+- **`alpha-nu-in.bc`, 3 indirect calls and 4 allocations (the old backend's 0 and 1): a closure
+  read out of a pair is read by its layout class.** `mk`'s thunk is now `unfold`'s call, but
+  `wrap`'s object is a second code of the class (it is not an η-thunk: its `close` adds 100).
+  Backend2's flow gives a value read out of a pair every code of its class, so three calls
+  dispatch: `obs_read`'s `.1` on `w`, which the call passes in the pair of its arguments; the call
+  of the closure that projection answers; and `obs_close`'s `.2` on the rest read out of
+  `obs_read`'s answer. The class's layout is on the heap, since `wrap`'s code holds a value of the
+  class itself, so each of the three objects is an allocation. Which code a value read out of a
+  pair is, is not a fact of the typed term; a flow that follows a closure through a pair (as the
+  old backend's did) or per-code layouts would make the calls direct and the objects inline.
+
+---
+
 ## 66. Entry 65 — the new backend: the slots `absurd` absorbs (#862)
 
 ### Motivation
@@ -12203,7 +12311,7 @@ the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Target/Wasm/
 `Paper/`, `Support/` or the checker. Entry 43 (§44) is implemented in `Frontend/Check/Derived.lean`
 (`allI_inst`), `Backend2/Types.lean` (`ofU`) and `Backend2/Convert.lean`; no change to `CDerives`,
 `Core/`, `Paper/`, `Support/`, the checker or the old backend. Entry 44 (§45) is implemented in
-`scripts/pin/` (`nuEtaE`, `nuEtaB`, `nuEtaB_shift`, `TExpr.nuEta` and its typed rules),
+`scripts/pin/` (`NuTree`, `nuEtaB`, `nuEtaB_shift`, `TExpr.nuEta` and its typed rules),
 `Frontend/Check/TShift.lean`, `Frontend/Check/Weaken.lean`, `Frontend/Check/TTied.lean`,
 `Frontend/Check/Rules.lean` (`rNuEta`), `Frontend/Check/Derived.lean` (`nuEta_obs`, `nuEta_var`,
 `nuEta_unfold`) and `Backend2/` (`isUnfoldApp`, the `nuEta` case, `litCode`, `Op.litByte`,
@@ -12280,9 +12388,21 @@ case, the `lendR` case of `conv`); no change to `CDerives`, `Core/`, `Paper/`, `
 checker or the old backend.
 
 
+Entry 63 (§64) is implemented in `Backend2/Lower.lean` (`LState.spare`, `getField`'s `keep`,
+`putField`'s `reuse`, the spare boxes freed in `lowerCall`, `emit` and `case`); no change to
+`CDerives`, `Core/`, `Paper/`, `Support/`, the checker, `Convert` or the old backend.
+
+Entry 64 (§65) is implemented in `scripts/pin/TExpr.tmpl.lean` (`NuArg`, `NuTree`, `NuTree.toE`,
+`NuTree.parse`, `nuEtaB`, `NuTree.toE_shift`, `NuTree.mem_parse`, `nuEtaB_shift`),
+`Frontend/Check/Rules.lean` (`nuEtaOf?`) and `Frontend/Check/Derived.lean` (`NuTree.toE_subst`,
+`NuTree.toE_closedAt`, `NuTree.Reach`, `nuEta_reach`, `nuEta_leaf`, `nuEta_obs`, `nuEta_var`,
+`nuEta_unfold`); Backend2's `nuEta` case is unchanged. No change to `CDerives`, `Core/`, `Paper/`,
+`Support/` or the old backend.
+
 Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cutRev`, `plugRev`,
 `genFoldRev`, the `foldOwn`/`foldReuse` case of `conv`); no change to `CDerives`, `Core/`, `Paper/`,
 `Support/`, the checker or the old backend.
+
 ---
 
 ## Changelog
@@ -12351,6 +12471,19 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
   `data-abbr-nested`, `data-abbr-block`, `data-abbr-root`; rejects `data-rec-abbr-list`, `data-rec-abbr-mu`,
   `data-rec-abbr-nested`, `data-box-not-block`. No change to the kernel, the checker, the backends
   or any existing program's output.
+- **1.44** (2026-11-07) — §65 (#842): codata's η-thunk at any depth. §45's `nuEta` node's scheme
+  is an η-tree (`NuTree`): `&`s of the projections, `λ`s and `Λ`s, every leaf the observation of
+  `f s` along its path, read by `nuEtaB` (`NuTree.parse`, `NuTree.mem_parse`, `NuTree.toE_shift`).
+  `nuEta_reach`, `nuEta_obs`, `nuEta_var` and `nuEta_unfold` state §45's fact over every tree.
+  Backend2 reads the node as before, so a protocol object built from `unfold` is `unfold`'s code
+  alone and its observations are direct calls. No change to `CDerives`, the relation, the machine,
+  the elaboration or the old backend.
+- **1.43** (2026-11-07) — §64 (#651): Backend2's lowering keeps a boxed field's object taken apart
+  by a `letpair` or a `case` as a spare box, reused by the next box of its words built before a
+  call, a return or the arm's end, and freed there otherwise: the token put back by
+  `rec-parser`, `parse-recover` and `parse-recover-gen` allocates nothing. The other #651 rises
+  are one box a node, as in Rust (recorded under kill criterion 6). No change to `CDerives`, the relation, the
+  machine, the checker or the old backend.
 - **1.42** (2026-11-07) — §62 (#844 Tier 1, *Lifetime-polymorphic suspending constants*): the
   suspending lend constants under lifetime binders (`Const791.poly`, typed at `VTy.all`), their
   premises at the constant's own context (`Const791.OKAt`), `Row.Suspend`/`CTy.SuspendC` at a
@@ -12364,12 +12497,6 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
   `consistentX_setLife` become corollaries; the callback's table steps move the lender's view to
   the lend's. No change to `CDerives`, `fundamentalN_all`, `goal791N`, the checker, the backends or
   the corpus.
-- **1.40** (2026-11-07) — §64 (#651): Backend2's lowering keeps a boxed field's object taken apart
-  by a `letpair` or a `case` as a spare box, reused by the next box of its words built before a
-  call, a return or the arm's end, and freed there otherwise: the token put back by
-  `rec-parser`, `parse-recover` and `parse-recover-gen` allocates nothing. The other #651 rises
-  are one box a node, as in Rust, and stay Open. No change to `CDerives`, the relation, the
-  machine, the checker or the old backend.
 - **1.40** (2026-11-07) — §12 (#848, #492): a handler site is not terminal for the insertion
   policy (*Handled bodies*): the handled body is owed the owed variables it mentions, as the head
   of `x <- M; N` is, so an abortive arm inside a `with`, a `for` body or a recursion releases an

@@ -2881,8 +2881,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     return r
   | .selfCall _ _ _ _ c => conv fuel ctx c
   | .nuEta _ _ f s c => do
-    -- The η-thunk of codata is the codata it observes (`nuEta_var`, `nuEta_unfold`)  [spec §45]:
-    -- with no state, the variable itself; at `f = unfold step`, the call `f s`, made here.
+    -- The η-thunk of codata, an η-tree of its observations at any depth, is the codata it
+    -- observes (`nuEta_var`, `nuEta_unfold`)  [spec §45, §65]: with no state, the variable
+    -- itself; at `f = unfold step`, the call `f s`, made here.
     match ctx[f]?, s with
     | some (some fv), none =>
       readFact "nuEta:eta"
