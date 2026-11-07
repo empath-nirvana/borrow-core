@@ -11,7 +11,8 @@
 #
 # The sanity gate (`gateSteps` below) checks that the library builds; hygiene (no forbidden
 # keyword, every declaration's axioms within propext, Classical.choice and Quot.sound) and the
-# axioms of the theorems SPEC.md names; the typing-judgment freeze and the new backend's import
+# axioms of the theorems SPEC.md names (listed in `scripts/axioms/*.names`, read by
+# `scripts/AxiomCheck.lean`); the typing-judgment freeze and the new backend's import
 # fence; that every type comparison goes through the one `[α]` helper (`type equality`); that the
 # corpus parses and checks, and elaborates the same under a renaming of its binders (`renaming`);
 # and that every corpus program, compiled to WebAssembly
@@ -125,7 +126,7 @@ if [ "$changed" = 1 ]; then
   for f in $files; do
     case "$f" in
       experiments/*) ;;
-      *.lean|lakefile.toml|lake-manifest.json|lean-toolchain) lean=1 ;;
+      *.lean|scripts/axioms/*.names|lakefile.toml|lake-manifest.json|lean-toolchain) lean=1 ;;
     esac
   done
   if [ "$lean" = 0 ]; then

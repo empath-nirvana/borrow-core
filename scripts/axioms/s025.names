@@ -1,0 +1,10 @@
+-- SPEC §25 (entry 24): the capture cell
+BoCa.Fig16.LogRel.Core.ewp_alloc
+BoCa.Fig16.LogRel.Core.ewp_free
+BoCa.Fig16.LogRel.Core.kappaCBody_subst
+BoCa.Fig16.LogRel.Core.ewp_kappaCell
+BoCa.Fig16.LogRel.Core.ewp_kappaC_resume
+BoCa.Fig16.LogRel.Core.ewp_kappaC_cancel
+BoCa.Fig16.LogRel.Core.capTag_ofEff
+BoCa.Fig16.LogRel.Core.ewp_handle
+BoCa.Fig16.LogRel.Core.handle_compatC

@@ -1,0 +1,8 @@
+-- SPEC §18: effects and handlers, the laws of the elaboration schemas
+BoCa.Fig16.LogRel.Core.Handlers.op_tail
+BoCa.Fig16.LogRel.Core.Handlers.clauseRun_answers
+BoCa.Fig16.LogRel.Core.Handlers.op_answer
+BoCa.Fig16.LogRel.Core.Handlers.abort_passes
+BoCa.Fig16.LogRel.Core.Handlers.return_resumes
+BoCa.Fig16.LogRel.Core.Handlers.handle_fold
+BoCa.Fig16.LogRel.Core.Handlers.loop_abort
