@@ -16,7 +16,7 @@ borrow.
   the claim consistent (`erwp_claimX_abort`), the finaliser frame at a raise (`erwp_ubindRaise`,
   `fin_claimMN`).
 * `withloadU_sem`, `withloadU_compatN`: `withloadS_compat`'s steps, 6.150 across the row's raises
-  (`withload_rebT`, `erwp_rebGen`). An unwinding row may hold an unrestricted operation; it is
+  (`withload_rebT₀`, `erwp_rebGen`). An unwinding row may hold an unrestricted operation; it is
   abortive, so it never resumes and the reborrow is never re-entered through it
   (`OpTabN.RebOKR.entry` reads only resumable entries). The row's table admits the reborrow at
   every `β` (`tabN_unwind_rebOKR`) and has no cancel obligation (`tabN_unwind_rebClosed`).
@@ -344,7 +344,7 @@ theorem withbor3U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
   refine erwp_val (v := withborUV d) (withbor3U_sem hδ hfree₁ hfree₂ hS hdc Θ n
     (fun Θ' hΘ' c' k hk ls' => ?_))
   have h := hd δ γ Θ' c' k ls' PMap.empty hδ hΘ' (consistentX_empty c') hlw
-    (gN_dead_any hΓ hg Θ' k hk)
+    (gN_dead_any₀ hΓ hg Θ' k hk)
   rwa [show substAll γ d = d from psub_closedAt d γ hdc (Nat.zero_le 0)] at h
 
 /-! ### `withload` at an unwinding row -/
@@ -377,7 +377,7 @@ theorem callback_at_imageU {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : 
 /-- **`withload` at an unwinding row is a value of its type**: at
 `Imm @a A ⊸ (∀'x ⊏ @Δ. Imm̲ 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ B` with `Σ` a `Row.Unwind x` row. Core's
 `withloadU_compatX`, step by step, as `withloadS_compat`: the `Imm` argument is `loc ℓ`; the
-load (`rwp_load_cell` under `erwp_bindR`); 6.150 at the run's first entry (`withload_rebT`),
+load (`rwp_load_cell` under `erwp_bindR`); 6.150 at the run's first entry (`withload_rebT₀`),
 across the row's raises (`erwp_rebGen`): the row's table admits the reborrow at every `β`
 (`tabN_unwind_rebOKR`; an unrestricted operation of the row is abortive, so it never resumes) and
 has no cancel obligation (`tabN_unwind_rebClosed`); the callback at the image
@@ -414,10 +414,10 @@ theorem withloadU_sem {Δ : LifeCtx} {a : Lifetime.Life} {x : LifeVar} {A B : VT
   refine rwp_load_cell ls l s w σ hσs _ hc' ?_
   simp only [Kont.plug]
   -- 6.150 across the row's raises, the callback at the image
-  exact withload_rebT (Lifetime.Life.interp_defined_of_wf hδ (Lifetime.meetOfDomL_wf Δ.entries))
+  exact withload_rebT₀ (Lifetime.Life.interp_defined_of_wf hδ (Lifetime.meetOfDomL_wf Δ.entries))
     hA (fun β _ => tabN_unwind_rebOKR hS B δ Θ c β)
     (fun β _ _ _ _ _ _ χ Ok _ _ _ => tabN_unwind_rebClosed hS B δ Θ c β _ χ Ok)
-    (vO_le (Nat.sub_le k' 1) hpay) (hwit l s w σ hσs rfl)
+    (vO_le₀ (Nat.sub_le k' 1) hpay) (hwit l s w σ hσs rfl)
     (fun β hLt u χ Bχ hχ _ _ himg hBχ =>
       callback_at_imageU hB hS hΘ hLt (vN_le₀ (Nat.sub_le k' 1) hf) hcf hχ himg hBχ) hc'
 

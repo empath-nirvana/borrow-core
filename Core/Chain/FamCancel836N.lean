@@ -1171,7 +1171,7 @@ theorem sliceBorrowMU_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
   refine erwp_val (v := withborUV d) (sliceBorrowMU_sem hδ hsideA hsideB hfree₁ hfree₂ hS hdc Θ n
     (fun Θ' hΘ' c' k hk ls' => ?_))
   have h := hd δ γ Θ' c' k ls' PMap.empty hδ hΘ' (consistentX_empty c') hlw
-    (gN_dead_any hΓ hg Θ' k hk)
+    (gN_dead_any₀ hΓ hg Θ' k hk)
   rwa [show substAll γ d = d from psub_closedAt d γ hdc (Nat.zero_le 0)] at h
 
 /-! ### `slice_borrow_mut` at the hardest case's row -/

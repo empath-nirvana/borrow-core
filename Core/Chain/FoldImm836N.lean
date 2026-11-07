@@ -67,10 +67,10 @@ theorem withload_sizedN {T₁ : VTy} (x : LifeVar) (hfree₁ : ¬ VFree x T₁) 
   refine rwp_load_cell ls ℓ s w σ hσs _ hc ?_
   simp only [Kont.plug]
   exact withload_reb (S := []) (bnd := LifeCtx.empty.meetOfDom) ⟨_, rfl⟩ hfree₁
-    (fun o ho => absurd ho List.not_mem_nil) (vO_le (Nat.sub_le n 1) hpay) (hwit ℓ s w σ hσs rfl)
+    (fun o ho => absurd ho List.not_mem_nil) (vO_le₀ (Nat.sub_le n 1) hpay) (hwit ℓ s w σ hσs rfl)
     (fun β hLt u χ Bχ hχ hu hreb himg hBχ => by
       subst hu
-      exact hcb β u χ Bχ hLt ⟨σ, hK s u σ hσs rfl, vO_le (Nat.sub_le n 1) hpay, hreb⟩ himg hBχ
+      exact hcb β u χ Bχ hLt ⟨σ, hK s u σ hσs rfl, vO_le₀ (Nat.sub_le n 1) hpay, hreb⟩ himg hBχ
         (consistentX_compS hBχ hc₂ (consistentX_allImm hχ c))) hc
 
 /-! ### The measure at the view -/
@@ -83,11 +83,11 @@ theorem good_of_imageN {M : VTy} {x : LifeVar} {δ : LSub} {Θ : LocTy} {k k' : 
     (hview : vN₀ (ℍ := ℍ) (M.immReborrow (.var x)) (δ.extend x β) Θ k' w χ) :
     Good M w χ (dsize σ) := by
   intro l S hp ψ e
-  obtain ⟨u, P, B, hB, -, hle⟩ := own_split M (vO_vShape M δ Θ k w σ hobs) hp
+  obtain ⟨u, P, B, hB, -, hle⟩ := own_split M (vO_vShape₀ M δ Θ k w σ hobs) hp
   have hown : σ.get l = some (CellU.ownOf u) :=
     own_of_le hle (ResU.CompS.get_left_of_ne_imm hB (ResU.single_get_self _ _) (by simp)).2
   obtain ⟨q, hq, eχ, hqσ, hql, -⟩ :=
-    typed_image_pos hx hp hown hreb (vN_vShape _ _ _ _ _ _ hview)
+    typed_image_pos hx hp hown hreb (vN_vShape₀ _ _ _ _ _ _ hview)
   rw [eχ] at e
   cases Option.some.inj e
   simpa using dsize_del_lt hqσ hql
@@ -349,7 +349,7 @@ theorem hSpec_allN {F : FShape} (hF : F.WF) (hG : F.Guarded) (hΘ : Θ.OK) {g : 
     | succ K ihK =>
         intro w χ j ls hj hlt hview hgood hc
         refine hV_appN hΦ (vPostN_down₀ _ _ Θ) F g w ?_
-        have hview' := (vN_immReborrow_mu_iff (ℍ := ℍ) (A := F.ty) (FShape.Cl_ty hF) (.var y)).mp
+        have hview' := (vN_immReborrow_mu_iff₀ (ℍ := ℍ) (A := F.ty) (FShape.Cl_ty hF) (.var y)).mp
           hview
         refine erwp_bind_frame hΦ (opTableN_local _)
           (.appR (.val (.lam (.app (.app (.val (g.shift 1 0)) (.val .unit)) (.var 0)))) .hole)

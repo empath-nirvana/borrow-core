@@ -600,10 +600,10 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | arrEmpty _ hΓ => exact arrEmpty_compatN₀ hΓ
   | sliceReplaceM _ _ hΓ => exact sliceReplaceM_compatN₀ hΓ
   | sliceSwapM _ _ hΓ => exact sliceSwapM_compatN₀ hΓ
-  | withbor1 x hΓ _ hsc₁ hf₁ hf₂ => exact withbor1_compatN x hΓ hsc₁ hf₁ hf₂
-  | withbor2 x hΓ _ hside hf₁ hf₂ => exact withbor2_compatN x hΓ hside hf₁ hf₂
+  | withbor1 x hΓ _ hsc₁ hf₁ hf₂ => exact withbor1_compatN₀ x hΓ hsc₁ hf₁ hf₂
+  | withbor2 x hΓ _ hside hf₁ hf₂ => exact withbor2_compatN₀ x hΓ hside hf₁ hf₂
   | withbor3 x hΓ _ hf₁ hf₂ => exact withbor3_compatN₀ x hΓ hf₁ hf₂
-  | withload x hΓ _ hf₁ hf₂ => exact withload_compatN x hΓ hf₁ hf₂
+  | withload x hΓ _ hf₁ hf₂ => exact withload_compatN₀ x hΓ hf₁ hf₂
   | withswap hΓ => exact withswap_compatN₀ hΓ
   | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS hdc _ ihd =>
       exact withbor1U_compatN x hΓ hsc₁ hf₁ hf₂ hS hdc ihd

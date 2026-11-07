@@ -222,7 +222,7 @@ theorem immWitW_childMut {I : List SRec} {x : SRec} (hx : x ∈ I) {d : FrameRec
 
 /-! ### Small facts -/
 
-theorem vO_le {A : VTy} {δ : LSub} {Θ : LocTy} {k n : Nat} (hkn : k ≤ n) {v : Val} {ρ : WRes}
+theorem vO_le₀ {A : VTy} {δ : LSub} {Θ : LocTy} {k n : Nat} (hkn : k ≤ n) {v : Val} {ρ : WRes}
     (h : vO₀ (ℍ := ℍ) A δ Θ n v ρ) : vO₀ (ℍ := ℍ) A δ Θ k v ρ := by
   obtain ⟨d, rfl⟩ := Nat.exists_eq_add_of_le hkn
   clear hkn
@@ -400,13 +400,13 @@ theorem callback_at_image {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : R
 records, and the callback. At the run's first entry the tie puts the witness's record on the
 run's list (`cohE_of_immWitW`); the cell is that record's own cell (`TI`'s `leInvW`) or one of
 its chain views (`exIn`); the image re-taken at a `β` below the cell, the callback's stratum and
-the bound is a value of `Imm̲ 'x A` (`relabel_vN`), and 6.150 across the callback's stops, raises
+the bound is a value of `Imm̲ 'x A` (`relabel_vN₀`), and 6.150 across the callback's stops, raises
 and layered cancel runs (`erwp_rebGen`) gives the run. The table's premises are `hTab` (the
 table may be stopped at under the reborrow) and `hClo` (its cancel obligations are closed under
 it). The callback's run at the image is the premise `hcb`: at a suspending row
 `callback_at_image`, at an unwinding row `callback_at_imageU`, at the pure row its `F (U …)`
 form. -/
-theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+theorem withload_rebT₀ {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {δ : LSub} (hbnd : ∃ γ, bnd.interp δ = some γ) (hA : ¬ VFree x A)
     {Θ : LocTy} {c : Loc → Option Life}
     (hTab : ∀ β, LtLife δ bnd β → (tabN₀ (ℍ := ℍ) (CTy.effOf S B) δ Θ c).RebOKR β)
@@ -477,14 +477,14 @@ theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
       obtain ⟨β₁, x₁, hx₁, hreb₁, hden₁, -⟩ := hSt
       have hden₁' : vShape (A.immReborrow (.var x)) (δ.extend x β₁) d.v (tmpl d) := by
         rw [vShape_tyEq (tyEq_immReb hheA hA hx₁ β₁)]; exact hden₁
-      exact relabel_vN A hA hA hden₁' hpay (CellMatch.of_le ⟨_, ResU.comp_empty_right _⟩)
+      exact relabel_vN₀ A hA hA hden₁' hpay (CellMatch.of_le ⟨_, ResU.comp_empty_right _⟩)
         (fun m ψ e => reb_cell_match hreb₁ e) (reb_wit_stratum hσβ hreb₁)
         (lifeBoundOn_reb hreb₁ hLσ) (lifeBoundWit_reb hreb₁ hLσ)
         (fun m S u hpos hown => immWitW_root hxr hd he hag hA hβx hpos hown)
         (fun m S hpos => immWitW_rootMut hxr hd hR₀ he hag hA hβx hpos)
     have hshape : vShape (d.T.immReborrow (.var y)) (d.δ.extend y β) d.v (canon d β) := by
       rw [← vShape_tyEq (tyEq_immReb hheA hA hy β)]
-      exact vN_vShape _ _ _ _ _ _ himg
+      exact vN_vShape₀ _ _ _ _ _ _ himg
     have hreb := canon_reb hSt hσβ
     have hE := rebEntryG_top (ℍ := ℍ) (Φ := Θ.view c) (hs := h) d y hy hSt hσβ hshape
       (fun z hz => hβs.le.trans (s.meet_least z hz))
@@ -521,14 +521,14 @@ theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
       obtain ⟨β₁, x₁, hx₁, hreb₁, hden₁, -⟩ := hSt
       have hden₁' : vShape (A.immReborrow (.var x)) (δ.extend x β₁) v (tmplD d S₀ v σ) := by
         rw [vShape_tyEq (tyEq_immReb hheA hA hx₁ β₁)]; exact hden₁
-      exact relabel_vN A hA hA hden₁' hpay (CellMatch.of_le ⟨_, ResU.comp_empty_right _⟩)
+      exact relabel_vN₀ A hA hA hden₁' hpay (CellMatch.of_le ⟨_, ResU.comp_empty_right _⟩)
         (fun m ψ e => reb_cell_match hreb₁ e) (reb_wit_stratum hσβ hreb₁)
         (lifeBoundOn_reb hreb₁ hLσ) (lifeBoundWit_reb hreb₁ hLσ)
         (fun m S u hpos hown => immWitW_child hxr hd hch he hag hA hβx hpos (hσown m u hown))
         (fun m S hpos => immWitW_childMut hxr hd hR₀ hch he hag hA hβx hpos)
     have hshape : vShape (S₀.immReborrow (.var y)) (d.δ.extend y β) v (canonD d S₀ v σ β) := by
       rw [← vShape_tyEq (tyEq_immReb hheA hA hy β)]
-      exact vN_vShape _ _ _ _ _ _ himg
+      exact vN_vShape₀ _ _ _ _ _ _ himg
     have hreb := canonD_reb hSt hσβ
     have hβc : (CellU.immOf s v σ h).InStratum β := (CellU.inStratum_immOf β s v σ h).mpr hβs
     have hE := rebEntryG_deep (ℍ := ℍ) (Φ := Θ.view c) d hch y hy hSt hσβ hβc hshape
@@ -540,7 +540,7 @@ theorem withload_rebT {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     rw [erwp_eq] at hrun'
     exact hrun' ρF fρ ps μ hF hcF hT htg hI hl hfd j μ' e' hj hrun hfin
 
-/-- **`withload_rebT` at a suspending row**: the row's table may be stopped at under the
+/-- **`withload_rebT₀` at a suspending row**: the row's table may be stopped at under the
 reborrow (`tabN_rebOKR`), and its cancel obligations are closed under it (`tab_rebClosed`). -/
 theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {δ : LSub} (hbnd : ∃ γ, bnd.interp δ = some γ) (hA : ¬ VFree x A)
@@ -558,7 +558,7 @@ theorem withload_reb {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S B) δ Θ c))
       (fun k _ v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ) n ls
       (.app (.app (.val f) (.val .unit)) (.val v)) X :=
-  withload_rebT hbnd hA (fun _ hLt => tabN_rebOKR (ℍ := ℍ) (suspendC_effOf hS B) δ hLt Θ c)
+  withload_rebT₀ hbnd hA (fun _ hLt => tabN_rebOKR (ℍ := ℍ) (suspendC_effOf hS B) δ hLt Θ c)
     (fun _ hLt _ _ _ _ _ _ _ hE hreb hOk => tab_rebClosed (ℍ := ℍ) (x := x) (δ := δ) (Θ := Θ)
       (c := c) hLt hE hreb hOk _ _ le_rfl (suspendC_effOf hS B)) hpay hwit hcb hX
 
@@ -575,7 +575,7 @@ Core's `withload_compatX`, step by step (`chain-interpretation.md` §6.3):
 5. the load: its payload observable at `A` (`rwp_load_I` under `erwp_bindR`);
 6.–11. at the run's first entry (`withload_reb`): the record whose cell or chain view the source
    is, at the source's type (the tie and `TI`); its template (6.132, `tmpl_exists`,
-   `tmplD_exists`); the image typed at `Imm̲ 'x A` (`relabel_vN`); the fresh `β`; 6.150 across the
+   `tmplD_exists`); the image typed at `Imm̲ 'x A` (`relabel_vN₀`); the fresh `β`; 6.150 across the
    callback's stops, raises and layered cancel runs (`erwp_rebGen`); the callback at `δ['x ↦ β]`
    (`callback_at_image`);
 12.–13. the result `['x] B` read at `B` (`vN_extend_of_not_free₀`).
@@ -617,7 +617,7 @@ theorem withloadS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   refine rwp_load_cell ls l s w σ hσs _ hc' ?_
   -- steps 6–13
   simp only [Kont.plug]
-  exact withload_reb (hbnd δ (models_empty_any _)) hA hS (vO_le (Nat.sub_le k' 1) hpay)
+  exact withload_reb (hbnd δ (models_empty_any _)) hA hS (vO_le₀ (Nat.sub_le k' 1) hpay)
     (hwit l s w σ hσs rfl)
     (fun β hLt u χ Bχ hχ _ _ himg hBχ =>
       callback_at_image hB hS hΘ hLt (vN_le₀ (Nat.sub_le k' 1) hf) hcf hχ himg hBχ) hc' 

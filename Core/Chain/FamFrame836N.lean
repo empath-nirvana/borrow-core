@@ -18,7 +18,7 @@ range. `rwp_M_frameListN₀` is that induction at the chain, over the one-cell f
 * a frame's postcondition returns its leaf and moves what the inner frames returned to the world
   without the frame's key (`vN_local₀`), the leaves and the result being in the frame's stratum.
 
-`sliceBorrowM_compatN₀` is Core's `sliceBorrowM_compatX` against it, with `withbor2_compatN`'s
+`sliceBorrowM_compatN₀` is Core's `sliceBorrowM_compatX` against it, with `withbor2_compatN₀`'s
 steps around the callback.
 -/
 
@@ -173,7 +173,7 @@ def withborAtV (a : Val) : Val :=
 the callback's world (`vN_extR₀`); the `n` Mut Frames around the callback (`rwp_M_frameListN₀` at
 the family's range, `sepRange_eq_sepList`), the payloads' stratum and the result's from the side
 conditions by 6.60 at `↓@bδ` (`vN_outlivesLe₀`), the callback's lifetimes below the bound and the
-callback's stratum; inside, `withbor2_compatN`'s steps: `f ()` framed beside the leaves, the
+callback's stratum; inside, `withbor2_compatN₀`'s steps: `f ()` framed beside the leaves, the
 result applied to the family `[Mut 'x A]` (`vN_mutLeaf₀` at each leaf), the result `['x] B` read at
 `δ`. -/
 theorem sliceBorrowM_sem₀ {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (hδ : Δ.Models δ)

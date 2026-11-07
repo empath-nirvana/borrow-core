@@ -7,11 +7,11 @@ import Core.Chain.Goal791N0
 reads its payload in the observable view `vO₀` (Core's `vCE false`) and its location's witness in
 the world's `imm` records (`ImmWitW`, Core's `CohE`):
 
-* `vN_vO`: a value is observable (Core's `vC` at `true` read at `false`);
-* `vN_vShape`, `vO_vShape`: the shape of a value (Core's `vC_vShape`);
-* `vO_transfer`: the observable view transfers between two pieces of one escrow (Core's
+* `vN_vO₀`: a value is observable (Core's `vC` at `true` read at `false`);
+* `vN_vShape₀`, `vO_vShape₀`: the shape of a value (Core's `vC_vShape`);
+* `vO_transfer₀`: the observable view transfers between two pieces of one escrow (Core's
   `obs_transfer`);
-* `relabel_vN`: an image of an escrow re-taken at `β` is a value of `Imm̲ 'x A` at `δ['x ↦ β]`
+* `relabel_vN₀`: an image of an escrow re-taken at `β` is a value of `Imm̲ 'x A` at `δ['x ↦ β]`
   (Core's `relabel_obs`), the witnesses of the image's new cells supplied at the escrow's `Ref`
   and `Mut` positions;
 * `RefPos.tyEq`, `MutPos.tyEq`: positions read across `TyEq`.
@@ -33,7 +33,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 /-! ### A value is observable -/
 
 /-- **A value is in the observable view** (`U` read as `True`; Core's `vO_obs`, by `vN_ind₀`). -/
-theorem vN_vO : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes),
+theorem vN_vO₀ : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes),
     vN₀ (ℍ := ℍ) A δ Θ n v ρ → vO₀ (ℍ := ℍ) A δ Θ n v ρ := by
   intro A δ Θ n v ρ h
   refine vN_ind₀ δ (fun _ T Θ n v ρ => vO₀ (ℍ := ℍ) T δ Θ n v ρ) ?_ true A Θ n v ρ h
@@ -70,18 +70,18 @@ theorem vN_vO : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ :
       exact ⟨l, c, h₁, h₂, sepRange_mono' (fun m σ hm => hm.2) h₃⟩
 
 /-- Extending `δ` at a variable `A` does not mention leaves `vO₀⟦A⟧` alone. -/
-theorem vO_extend_of_not_free {x : LifeVar} {A : VTy} (h : ¬ VFree x A) (δ : LSub) (α : Life) :
+theorem vO_extend_of_not_free₀ {x : LifeVar} {A : VTy} (h : ¬ VFree x A) (δ : LSub) (α : Life) :
     vO₀ (ℍ := ℍ) A (δ.extend x α) = vO₀ (ℍ := ℍ) A δ :=
   vO_congr₀ A fun y hy => BoCa.Fig16.LogRel.find?_extend_ne δ α (fun e => by subst e; exact h hy)
 
 /-- `vN₀` and `vO₀` agree at `Imm`. -/
-theorem vN_imm_eq (a : Lifetime.Life) (A : VTy) :
+theorem vN_imm_eq₀ (a : Lifetime.Life) (A : VTy) :
     vN₀ (ℍ := ℍ) (.imm a A) = vO₀ (ℍ := ℍ) (.imm a A) := rfl
 
 /-! ### The shape of a value -/
 
 /-- **A value has its type's shape, in both modes** (Core's `vC_vShape`, by `vN_ind₀`). -/
-theorem vBN_vShape (b : Bool) (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes)
+theorem vBN_vShape₀ (b : Bool) (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes)
     (h : vBN₀ (ℍ := ℍ) none b A δ Θ n v ρ) : vShape A δ v ρ := by
   refine vN_ind₀ δ (fun _ T _ _ v ρ => vShape T δ v ρ) ?_ b A Θ n v ρ h
   intro b T Θ n v ρ h
@@ -126,14 +126,14 @@ theorem vBN_vShape (b : Bool) (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : 
       exact ⟨l, c, pure_sep_mk rfl (sepRange_mono' (fun m σ hm => hm.2) h₃)⟩
 
 /-- **A value has its type's shape** (Core's `vC_vShape`). -/
-theorem vN_vShape (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes)
+theorem vN_vShape₀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes)
     (h : vN₀ (ℍ := ℍ) A δ Θ n v ρ) : vShape A δ v ρ :=
-  vBN_vShape true A δ Θ n v ρ h
+  vBN_vShape₀ true A δ Θ n v ρ h
 
 /-- **An observable value has its type's shape.** -/
-theorem vO_vShape (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes)
+theorem vO_vShape₀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes)
     (h : vO₀ (ℍ := ℍ) A δ Θ n v ρ) : vShape A δ v ρ :=
-  vBN_vShape false A δ Θ n v ρ h
+  vBN_vShape₀ false A δ Θ n v ρ h
 
 /-! ### The observable view transfers between pieces of one escrow -/
 
@@ -193,7 +193,7 @@ theorem LifeBoundWit.left {I : List SRec} {R c₁ c₂ c : WRes} (hc : ResU.Comp
 At a `U` position both sides are `True`; at an `Imm` or `Mut` position the cell is read off `R`'s,
 and an `Imm` cell's witness is its location's, which the two pieces share; `B`'s cell is no
 longer-lived than it (`LifeBoundW`). -/
-theorem vO_transfer {R : WRes} : ∀ (T : VTy) {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val}
+theorem vO_transfer₀ {R : WRes} : ∀ (T : VTy) {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val}
     {A B : WRes}, CellMatch R A → CellMatch R B → LifeBoundW Θ.imm B →
     vO₀ (ℍ := ℍ) T δ Θ n v A → vShape T δ v B → vO₀ (ℍ := ℍ) T δ Θ n v B := by
   intro T δ Θ n v A B hA hB hL h hs
@@ -305,7 +305,7 @@ theorem vO_transfer {R : WRes} : ∀ (T : VTy) {δ : LSub} {Θ : LocTy} {n : Nat
 
 /-- `Imm̲` at a closed `μ` is read at the reborrow of the unrolling (Core's
 `vC_immReborrow_mu_iff`). -/
-theorem vN_immReborrow_mu_iff {A : VTy} (hA : A.Cl 1) (c : Lifetime.Life) {δ : LSub} {Θ : LocTy}
+theorem vN_immReborrow_mu_iff₀ {A : VTy} (hA : A.Cl 1) (c : Lifetime.Life) {δ : LSub} {Θ : LocTy}
     {n : Nat} {v : Val} {ρ : WRes} :
     vN₀ (ℍ := ℍ) ((VTy.mu A).immReborrow c) δ Θ n v ρ ↔
       vN₀ (ℍ := ℍ) ((VTy.inst (.mu A) A).immReborrow c) δ Θ n v ρ := by
@@ -316,10 +316,10 @@ theorem vN_immReborrow_mu_iff {A : VTy} (hA : A.Cl 1) (c : Lifetime.Life) {δ : 
 at `vN₀`): an old image `c` shaped at `Imm̲ 'x₀ T` at `δ['x₀ ↦ β₀]`, over an escrow `R` whose part
 `Rl` at the position is observable at `T`; the new cells at the `Ref` and `Mut` positions are
 witnessed in the world's `imm` records (`hcr`, `hcm`). At a `Ref`/`Mut` position the new cell's
-payload is observable because the old image's witness is a piece of the escrow (`vO_transfer`) or
+payload is observable because the old image's witness is a piece of the escrow (`vO_transfer₀`) or
 the `mut` cell's content (its stored family); at an `Imm` position the kept cell is the escrow's
-(`vO_transfer` at the cell). -/
-theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSub} {x x₀ : LifeVar} :
+(`vO_transfer₀` at the cell). -/
+theorem relabel_vN₀ {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSub} {x x₀ : LifeVar} :
     ∀ (T : VTy), ¬ VFree x T → ¬ VFree x₀ T → ∀ {v : Val} {c Rl : WRes},
       vShape (T.immReborrow (.var x₀)) (δ.extend x₀ β₀) v c →
       vO₀ (ℍ := ℍ) T δ Θ n v Rl → CellMatch R Rl →
@@ -367,7 +367,7 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
   | mu M =>
       obtain ⟨-, hcl, hG⟩ := hR
       have hM : M.Cl 1 := hcl
-      refine (vN_immReborrow_mu_iff hM _).mpr ?_
+      refine (vN_immReborrow_mu_iff₀ hM _).mpr ?_
       exact hG.2 rfl (fun h => (vFree_inst h).elim hx hx) (fun h => (vFree_inst h).elim hx₀ hx₀)
         _ ((vShape_immReborrow_mu_iff hM _ _ v c).mp hc) hRl hcR hs hLk hLo
         (fun m S u h => hcr m S u (RefPos.mu hcl h)) (fun m S h => hcm m S (MutPos.mu hcl h))
@@ -458,11 +458,11 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
       have hS₀ : ¬ VFree x₀ S := hx₀
       rw [vShape_extend_of_not_free hS₀] at hWd
       have hobs : vO₀ (ℍ := ℍ) S δ Θ n w W :=
-        vO_transfer S (hRl.right hab) hWm (by
+        vO_transfer₀ S (hRl.right hab) hWm (by
           have := hLo l' _ (ResU.single_get_self _ _) ⟨w, eζ⟩
           rwa [CellU.wit_immOf] at this) hRb.1 hWd
       have hobs' : vO₀ (ℍ := ℍ) S (δ.extend x β) Θ n w W := by
-        rw [vO_extend_of_not_free (A := S) hx]
+        rw [vO_extend_of_not_free₀ (A := S) hx]
         exact hobs
       refine ⟨β, interp_ext_self δ x β, ⟨l', LSet.singleton β, w, W, hβ, rfl, rfl, le_refl _,
         hobs'⟩, fun l₀ s₀ u₀ σ₀ h₀ e => ?_⟩
@@ -480,9 +480,9 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
       have kζ' : ζ.kind = Kind.imm := by rw [kζ]; simp
       rw [relRes_single, relCell_keep eζ kζ']
       show vN₀ (ℍ := ℍ) (.imm a S) (δ.extend x β) Θ n _ _
-      rw [vN_extend_of_not_free₀ hx, vN_imm_eq]
+      rw [vN_extend_of_not_free₀ hx, vN_imm_eq₀]
       rw [vShape_extend_of_not_free hx₀] at hc'
-      refine vO_transfer (.imm a S) hRl ?_ ?_ hRv hc'
+      refine vO_transfer₀ (.imm a S) hRl ?_ ?_ hRv hc'
       rotate_left
       · intro m t u σ h e _
         exact hLk m t u σ h e (by
@@ -517,8 +517,8 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
       have hvS : vN₀ (ℍ := ℍ) S δ Θ n w W :=
         vN_le₀ hnj ((vN_above₀ S δ Θ hχ).mp hw)
       have hobs' : vO₀ (ℍ := ℍ) S (δ.extend x β) Θ n w W := by
-        rw [vO_extend_of_not_free hS]
-        exact vN_vO S δ Θ n w W hvS
+        rw [vO_extend_of_not_free₀ hS]
+        exact vN_vO₀ S δ Θ n w W hvS
       refine ⟨β, interp_ext_self δ x β, ⟨l'', LSet.singleton β, w, W, hβ, rfl, rfl, le_refl _,
         hobs'⟩, fun l₀ s₀ u₀ σ₀ h₀ e => ?_⟩
       obtain ⟨rfl, e'⟩ := single_immOf_inj e

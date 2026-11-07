@@ -171,3 +171,6 @@ import Core.Chain.FamOpsKW835N
 import Core.Chain.MuKW835N
 import Core.Chain.FoldGKW835N
 import Core.Chain.BorrowKW835N
+import Core.Chain.ImmImageKW835N
+import Core.Chain.ImmLendKW835N
+import Core.Chain.WithloadKW835N

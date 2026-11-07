@@ -19,7 +19,7 @@ chain:
   inner frames returned to the world without its record (`LocTy.extR_of_addImm`), and its claim
   joins theirs, the cells owned again (`claimL₀`);
 * `sliceBorrowI_compatN` and `sliceBorrowIU_compatN` are Core's `sliceBorrowI_compatX` and
-  `sliceBorrowIU_compatX` against it, with `withbor1_sem`'s and `withbor1U_sem`'s steps around
+  `sliceBorrowIU_compatX` against it, with `withbor1_sem₀`'s and `withbor1U_sem`'s steps around
   the callback.
 -/
 
@@ -245,7 +245,7 @@ theorem vN_immLeaf {x : LifeVar} {A : VTy} (hx : ¬ VFree x A) {δ : LSub} {α :
   have hag : ∀ y, VFree y A → δ.find? y = (δ.extend x α).find? y := fun y hy =>
     (BoCa.Fig16.LogRel.find?_extend_ne δ α (fun e => by subst e; exact hx hy)).symm
   refine ⟨α, interp_ext_self δ x α, ?_, fun l s u σ hs e => ?_⟩
-  · rw [vO_extend_of_not_free hx]; exact h.1
+  · rw [vO_extend_of_not_free₀ hx]; exact h.1
   · exact (immWitW_congr hag Θ.imm l s) ▸ h.2 l s u σ hs e
 
 /-- **One Imm Frame per place, around one expression, across raises** (Core's
@@ -310,7 +310,7 @@ theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A
       -- the record and its lineage
       set p : FrameRec := ⟨ℓ, u, σ, A, δ⟩ with hpdef
       obtain ⟨-, eR, -, heR, -, -⟩ := hvσ
-      obtain ⟨ds, hds⟩ := lineage_list (r := p) (vN_vShape A δ Θ n u σ hu) hadm heR
+      obtain ⟨ds, hds⟩ := lineage_list (r := p) (vN_vShape₀ A δ Θ n u σ hu) hadm heR
       set Θ₁ := Θ.addImm (p, α₁) with hΘ₁
       set ls₁ := frameList p ds α₁ ls with hls₁
       set ρi : WRes := ResU.single ℓ (CellU.immOf (LSet.singleton α₁) u σ houtP) with hρi
@@ -337,7 +337,7 @@ theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A
         sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ Θ k (Val.loc m)) (ℓ :: I) ρ₁ ∧
           Ψ Θ k ls' v ρ₂ with hQ
       have hIF := erwp_I_frameRR (Φ := Θ.view c) ℓ A δ hadm u
-        (fun _ v ρ => vN₀ (ℍ := ℍ) A δ Θ n v ρ) (fun _ ρ h => vN_vShape A δ Θ n u ρ h)
+        (fun _ v ρ => vN₀ (ℍ := ℍ) A δ Θ n v ρ) (fun _ ρ h => vN_vShape₀ A δ Θ n u ρ h)
         (fun _ _ _ _ h => h) (hTok α₁) hRs (Q := Q)
         (fun k _ _ w ρ _ ⟨ρ₁, ρ₂, hc12, ho1, hψ⟩ => ⟨ρ₁, ρ₂, hc12, ho1, hΨls _ _ _ _ _ _ hψ⟩)
         n ls e σ ρ0 Fr ρ houtP houtb hu hcl hρ ds hds (fun BI hBI => ?_)
@@ -387,7 +387,7 @@ theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A
           refine ⟨⟨ℓ, LSet.singleton α₁, u, σ, houtP, rfl, rfl, hα₂α₁.le, ?_⟩,
             fun l₀ s₀ u₀ σ₀ h₀ e => ?_⟩
           · refine vO_extR₀ A δ n u σ (LocTy.extR_addImms Θ _ fun x hx => ?_)
-              (vN_vO A δ Θ n u σ hu)
+              (vN_vO₀ A δ Θ n u σ hu)
             rcases List.mem_append.mp hx with hx | hx
             · exact houtP.mono ((hxs x hx).1.le.trans hγ₁α₁)
             · rw [List.mem_singleton.mp hx]; exact houtP
@@ -412,7 +412,7 @@ steps with the `n` Imm Frames around the callback (`erwp_I_frameListRN` at the f
 the pure row's table): the payloads' and the result's strata from the side conditions by 6.60 at
 `↓@bδ` (`vN_outlivesLe₀`), the frames' lifetimes below the bound and the callback's stratum; the
 callback at the world holding the records (`LocTy.extR_addImms` at its resource), the family
-`[Imm 'x A]` at the innermost lifetime (`vN_immLeaf`), `withbor1_sem`'s steps inside. -/
+`[Imm 'x A]` at the innermost lifetime (`vN_immLeaf`), `withbor1_sem₀`'s steps inside. -/
 theorem sliceBorrowI_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (hδ : Δ.Models δ)
     (hadm : AdmWf A δ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
@@ -692,7 +692,7 @@ theorem sliceBorrowIU_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
   refine erwp_val (v := withborUV d) (sliceBorrowIU_sem hδ (admWf_of_vScoped hsc hδ) hsideA hsideB
     hfree₁ hfree₂ hS hdc Θ n (fun Θ' hΘ' c' k hk ls' => ?_))
   have h := hd δ γ Θ' c' k ls' PMap.empty hδ hΘ' (consistentX_empty c') hlw
-    (gN_dead_any hΓ hg Θ' k hk)
+    (gN_dead_any₀ hΓ hg Θ' k hk)
   rwa [show substAll γ d = d from psub_closedAt d γ hdc (Nat.zero_le 0)] at h
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
