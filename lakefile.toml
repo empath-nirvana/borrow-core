@@ -53,6 +53,12 @@ root = "KernelCensus"
 
 # Experiments: not default targets; the library never imports them.
 
+# The size of per-code closure types over the corpus (#855 K0, SPEC §68).
+[[lean_exe]]
+name = "code-size"
+srcDir = "experiments/CodeSize"
+root = "CodeSize"
+
 [[lean_lib]]
 name = "CBPVCore"
 srcDir = "experiments/CBPVCore"
