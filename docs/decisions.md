@@ -1057,3 +1057,32 @@ Each entry: the decision, and why. Newest last.
       this doesn't work and we need to unwind", and "what i would like to do is start merging
       _downstream_ stretch-goal prs into tree-core as we resolve outstanding issues and then merge
       it when that whole unit of work is done with no gaps".
+    - *Status (decision 75):* `tree-core` merged to `main` with #839, on the chain relation rather
+      than the tree. What landed in place of the done-when above: `fundamentalN_all`, every
+      `CDerives` rule compatible at `SemJN` over the chain relation with Kripke stops, except
+      `effHandleV`, `effHandleVB` and `reify`; and plain adequacy, `goal791N : HandlerLawN →
+      Goal791N`, for every closed program typed at `F 1` with its handlers inside it. The three
+      rules are the named assertion `HandlerLawN`, the one stand-in hypothesis, accepted by
+      decision 75. `Goal791Top` over the tree relation is not proved, and no Lean lemma relates it
+      to `Goal791N`. `tree-core` is no longer the integration branch.
+75. **#839 is on `main`: the Kripke-stop relation, plain adequacy, and `HandlerLawN` as a named
+    assertion (2026-11-07; #839, #838).**
+    - **The relation.** A step-indexed chain relation with Kripke stops, `erwpK` over the typed
+      world `KW`, with one interpretation `vN`/`cN`/`SemJN` (`Core/Chain/Goal791N.lean`;
+      `docs/new-core/chain-interpretation.md`). The suspending lends `withbor2S`, `withbor3S`,
+      `withborFS`, `withloadS` and `sliceBorrowMS` hold `imm`/`mut` lends, reborrows, field and
+      slice borrows across a suspending operation (`Row.Suspend`), resumed or cancelled, with
+      cleanup that may perform effects.
+    - **Plain adequacy.** `goal791N : HandlerLawN → Goal791N` (`Core/Chain/Adequacy791N.lean`):
+      every closed program typed at `F 1` from constants meeting their premises, its handlers
+      inside it, is `OrDiverges`. No scheduler hypothesis is quantified over. It is non-vacuous at
+      `prog791`, which lends a cell, performs while holding the borrow, and handles the operation
+      inside the program.
+    - **`HandlerLawN` is accepted as a named assertion on the same footing as `PinLaw`**
+      (`Core/Chain/HandlerLawN.lean`, SPEC §62 *The named assertion*): the compatibility of
+      `effHandleV`, `effHandleVB` and `reify`. It is a hypothesis, never an `axiom`; no
+      configuration in the tree refutes it, and it is non-vacuous at a handler that resumes `κ`.
+      Shrinking or discharging it is #838.
+    - The checker does not emit the new rules yet; it enforces T1 (SPEC §19) until the surface
+      catch-up (#843) lands. Decision 71 stays void (decision 72).
+

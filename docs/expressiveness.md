@@ -40,15 +40,11 @@ kill criterion.
 
 ## 0. Summary
 
-*Decision 71 is void (decision 72, 2026-11-01); this is the checker's rule today, until SPEC §62's PRs land.*
-
-**B5 is closed by decision 71 (2026-10-31).** T1 is the permanent rule: no borrow is held across
-a suspension, and data that crosses one is owned, moved in and back out. The routes below that
-lift T1 or elaborate around it (the spanning lend K1, "T1 at tail-resumptive operations" and spike
-S-T, the lend split at `await` as an elaboration, the lending cursor elaborated from a generator
-over a borrow, R1 widened) are tombstoned:
-[`docs/tombstones/lends-across-suspensions.md`](tombstones/lends-across-suspensions.md). The
-programs of B5 are written in the rule's idiom (`corpus/async-bank.bc`, `parse-recover-gen.bc`,
+**B5 and T1.** The checker enforces T1: no borrow is held across a suspension, and data that
+crosses one is owned, moved in and back out. Decision 71, which made T1 permanent and tombstoned
+the routes below that lift it or elaborate around it, is void (decision 72); the kernel proves borrows held across a suspending operation since #839 (decision 75, SPEC §62),
+and the checker keeps T1 until the surface catch-up (#843) emits the new rules. The
+programs of B5 are written in T1's idiom for now (`corpus/async-bank.bc`, `parse-recover-gen.bc`,
 `print-borrowed-list.bc`). The scoring below is kept as it was made.
 
 **Read §16–§19 first.** The second pass (2026-10-19) re-scores every program against the
@@ -117,7 +113,7 @@ first; within them, the one whose fix is the deeper foundation comes first.
 | B7 elaboration refusals | the already-designed units: loops U2–U4, ergonomics E1, #586's write rule | n/a |
 | B3 records, variants, nested data | data declarations (#489) whose nested containers **elaborate to one recursive type**, as Lean elaborates nested inductives into mutual ones | partly: Rust's enums and structs, without its `Box` ceremony |
 | B4 suspended computations owning capabilities | the close-with-residual that S0 proved for loops ("unknown 2: the residual … proved", `experiments/DivEffect/README.md`: a loop closed early hands back its residual by a resume with `close`, not a cancel), applied to generators | no: Rust relies on `Consume`; we have no derived drop for a capability |
-| B5 borrows across a suspension (**closed, decision 71**: [tombstone](tombstones/lends-across-suspensions.md)) | for tasks, **the lend split at each `await`** (measured: the split program runs `unconditional`, with no `PinLaw`); for generators, **a lending cursor**, whose state is owned (an index) and which is lent the source at each pull. The spanning lend K1 (#172) is not needed for the target set | Rust's own answer for generators is the same index cursor; its self-borrowing generators are not stable |
+| B5 borrows across a suspension (decision 71's closure is void; kernel rules since #839, checker in #843) | for tasks, **the lend split at each `await`** (measured: the split program runs `unconditional`, with no `PinLaw`); for generators, **a lending cursor**, whose state is owned (an index) and which is lent the source at each pull. The spanning lend K1 (#172) is not needed for the target set | Rust's own answer for generators is the same index cursor; its self-borrowing generators are not stable |
 
 **The research threads** (§7): used — handler-owned state, SILL_S manifest sharing (as the reading
 of the per-turn lend), the Links soundness hazard (as the check on it), the mutation report's
@@ -205,9 +201,9 @@ blocker. "Runs (shape)" means it runs only in a shape the language forces, named
 
 | functionality | program | today | target |
 |---|---|---|---|
-| a tokenizer generator over a borrowed source, consumed by a `for` inside the borrow | `corpus/parse-recover-gen.bc` (rewritten: the generator owns the literal, decision 71) | runs, rewritten (decision 71); before: refused: "the iterator of this `for` holds the borrow of `v`" (measured); pulling by hand runs (`corpus/gen-borrowed.bc`, recorded) | T03 (generator form) |
-| a teller task that opens a `mut` borrow of its own account and keeps it across `await` while reading its other variables | `corpus/async-bank.bc` (rewritten: the lend ends before each `await`, decision 71) | runs, rewritten (decision 71); before: refused by R1's closed-body premise (measured); **with the lend split at each `await` by hand it runs, `unconditional`, no `PinLaw`** (measured, `bank-split.bc`); with the account lent from outside to a task of `spawn_in`, it runs too (T13, measured) | outside (T13 runs) |
-| an iterator over a borrowed list yielding its elements in order | `corpus/print-borrowed-list.bc` (#57; rewritten: the list copied out, decision 71) | runs, rewritten (decision 71); before: refused (measured: `iter` does not parse as a value) | outside |
+| a tokenizer generator over a borrowed source, consumed by a `for` inside the borrow | `corpus/parse-recover-gen.bc` (rewritten under T1: the generator owns the literal) | runs, rewritten under T1; before: refused: "the iterator of this `for` holds the borrow of `v`" (measured); pulling by hand runs (`corpus/gen-borrowed.bc`, recorded) | T03 (generator form) |
+| a teller task that opens a `mut` borrow of its own account and keeps it across `await` while reading its other variables | `corpus/async-bank.bc` (rewritten under T1: the lend ends before each `await`) | runs, rewritten under T1; before: refused by R1's closed-body premise (measured); **with the lend split at each `await` by hand it runs, `unconditional`, no `PinLaw`** (measured, `bank-split.bc`); with the account lent from outside to a task of `spawn_in`, it runs too (T13, measured) | outside (T13 runs) |
+| an iterator over a borrowed list yielding its elements in order | `corpus/print-borrowed-list.bc` (#57; rewritten under T1: the list copied out) | runs, rewritten under T1; before: refused (measured: `iter` does not parse as a value) | outside |
 | a function over a borrowed view whose helper loops (a text walker) | `aoc-2020-07`, `for-view-local` (#491) | refused, but this is B7: the source is untyped when the loop is classified (recorded) | — |
 
 **B6: more than one lend at a call.**
@@ -296,7 +292,7 @@ report for T01, T02, T07, T09 and T10 are correct; T08's and T14's were checked 
 | B2 | a handler around a div computation is not provided | SPEC §21 *Open*; measured `op-e` |
 | B3 | no `data` declarations; a `mu` nested in a `mu` must be closed; record fields and variants in place are limited | parser; SPEC §5 *Open*, §31 *Open*; #182, #32, #19; measured `json2` |
 | B4 | `yield` is cancellable; what is live across it must consume; a capability is not consumable; a cancel answers `()` | SPEC §15 *Open*, §19 `[let]`; measured `gen-*` |
-| B5 | a resuming operation cannot cross a borrow (T1, permanent by decision 71); R1 relaxes it only for a body closed but for its view, and is frozen | SPEC §19, §29; [tombstone](tombstones/lends-across-suspensions.md) |
+| B5 | a resuming operation cannot cross a borrow (T1, the checker's rule until #843); R1 relaxes it only for a body closed but for its view | SPEC §19, §29; [tombstone](tombstones/lends-across-suspensions.md) |
 | B6 | a call lends one place; a looping callee takes one borrow, re-lent each step; a lend in a capability-threading call, and a capability through `for … in &a`, are not provided | SPEC §14 *Open*, §18 *Not provided* and *Open* |
 | B7 | elaboration decisions taken too early or by name (loop class before typing, threaded variables by name, assignments outside joins) | `docs/loops.md` §1; `docs/ergonomics.md` §7.1; #586 |
 | B8 | no type parameters on an answering effect; no layer of its own state; map upsert and lookups at other lifetimes | SPEC §18 *Not provided*, §21 *Open*, §36 *Not provided* |
@@ -462,12 +458,11 @@ none.
 
 ### 4.6 B5: a borrow held across a resuming operation
 
-*Decision 71 is void (decision 72, 2026-11-01); this is the checker's rule today, until SPEC §62's PRs land.*
-
-**Closed by decision 71 (tombstoned).** T1 stays; the forms that run are the ones a programmer
-writes: the borrow ended before each `await` (as `corpus/async-bank.bc` now is), the owned value
+**Today.** Decision 71, which closed this section, is void (decision 72); the kernel proves borrows held across a suspending operation since #839 (decision 75, SPEC §62),
+and the checker keeps T1 until the surface catch-up (#843) emits the new rules. Under T1 the
+forms that run are the ones a programmer writes: the borrow ended before each `await` (as `corpus/async-bank.bc` now is), the owned value
 moved in and out, the place lent from outside to a task of `spawn_in`, and a generator over owned
-data or by index. The elaborations proposed below are not built:
+data or by index. The elaborations proposed below are not built; their record, void as a rule, is
 [`docs/tombstones/lends-across-suspensions.md`](tombstones/lends-across-suspensions.md).
 
 **What fails.** T1 (#172): "only an abortive operation crosses a borrow's scope" (recorded,
@@ -693,9 +688,9 @@ intended).
 | # | unit | removes | acceptance | done when |
 |---|---|---|---|---|
 | 15 | **close with a residual** for generators, on S0's residual (unit 1) | B4 | `gen-digits`, `gen-lines`, `gen-lazy`, `gen-adapters-io` | all four move to `corpus/` with goldens |
-| 16 | *(tombstoned, decision 71)* **lend split at suspensions** (tasks): a borrow block whose body awaits is one lend per turn, by U3's live variables | B5 (tasks) | `corpus/async-bank.bc` (rewritten by hand, decision 71); T13 in the report's shape (the borrow block inside the teller) | `async-bank.bc` moves to `corpus/` with its golden and `bcc trusted` reports it `unconditional` |
-| 17 | *(tombstoned, decision 71)* **spike S-C**: yes/no — when no variable live across a `yield` holds the borrow except the source parameter, does the generator elaborate to a step function over its owned live set that the checker accepts inside the source's borrow block, unchanged? | B5 (generators) | `parse-recover-gen.bc` | **yes**: unit 18. **Kill**: the cursor stays hand-written (`corpus/json-tokens.bc`'s shape), documented as the way |
-| 18 | *(tombstoned, decision 71)* **the lending cursor**: that elaboration | B5 | `parse-recover-gen.bc`; T03's generator form | both run with goldens |
+| 16 | *(tombstoned by decision 71, void)* **lend split at suspensions** (tasks): a borrow block whose body awaits is one lend per turn, by U3's live variables | B5 (tasks) | `corpus/async-bank.bc` (rewritten by hand under T1); T13 in the report's shape (the borrow block inside the teller) | `async-bank.bc` moves to `corpus/` with its golden and `bcc trusted` reports it `unconditional` |
+| 17 | *(tombstoned by decision 71, void)* **spike S-C**: yes/no — when no variable live across a `yield` holds the borrow except the source parameter, does the generator elaborate to a step function over its owned live set that the checker accepts inside the source's borrow block, unchanged? | B5 (generators) | `parse-recover-gen.bc` | **yes**: unit 18. **Kill**: the cursor stays hand-written (`corpus/json-tokens.bc`'s shape), documented as the way |
+| 18 | *(tombstoned by decision 71, void)* **the lending cursor**: that elaboration | B5 | `parse-recover-gen.bc`; T03's generator form | both run with goldens |
 
 **Track 6: lowering** (the bench rows; independent of tracks 2–5, except L-2 after unit 1).
 
@@ -717,7 +712,7 @@ build unit or a documented limit.
 as library code); threads (#212); multi-shot search; allocation tracking (`noalloc`); folds with
 `X` under `U` (`fold-under-u`); digging and same-lifetime boxing (`dig-bang`, `box-dup`); a
 borrowed list's iterator (#57);
-K1 itself (#172), closed by decision 71 ([tombstone](tombstones/lends-across-suspensions.md)).
+K1 itself (#172), whose kernel rules landed with #839 (SPEC §62) and reach the checker in #843.
 
 ## 10. Reproduction
 
@@ -2302,9 +2297,9 @@ The first pass blurred two things.
 
 ### 16.2 T1, scored honestly
 
-**Closed by decision 71 (tombstoned).** T1 is permanent, and the candidate below, "T1 at
-tail-resumptive operations", and spike S-T are closed
-([tombstone](tombstones/lends-across-suspensions.md)).
+*Decision 71, which closed the candidate below ("T1 at tail-resumptive operations") and spike
+S-T, is void (decision 72).* The kernel proves borrows held across a suspending operation since #839 (decision 75, SPEC §62),
+and the checker keeps T1 until the surface catch-up (#843) emits the new rules.
 
 Under the premise of limited borrows plus linearity, the question for every borrow-across-a-
 suspension workaround is: is the borrow-free form the natural one? Measured, it often is not.
@@ -2561,8 +2556,8 @@ acceptance of the units that reach them.
 
 | # | unit | removes | these programs reach zero cost |
 |---|---|---|---|
-| 13 | *(tombstoned, decision 71)* **spike S-T**: yes/no — is `[handle]` at a tail-resumptive clause sound for a body that holds a lend across the operation, by the frame lemmas of a call (no K1)? This covers a `while`'s `tick` under the driver and a `for`'s `yield` into a tail-resumptive clause. Kill path: the lending cursor (S-C) for generators, and no `while` over a borrowed view, documented as a limit of the premise | B5 (loops, generators) | — |
-| 14 | *(tombstoned, decision 71; the B5 programs are rewritten in the rule's idiom)* **T1 at tail-resumptive operations** (if S-T says yes), else **the lending cursor**; and **the lend split at `await`** for tasks | B5 | T03 and T04 with `while` over their views (no owned copy); `parse-recover-gen`; `bank-split` and `async-bank-inbox` as written (borrow block across `await`), `unconditional` |
+| 13 | *(tombstoned by decision 71, void)* **spike S-T**: yes/no — is `[handle]` at a tail-resumptive clause sound for a body that holds a lend across the operation, by the frame lemmas of a call (no K1)? This covers a `while`'s `tick` under the driver and a `for`'s `yield` into a tail-resumptive clause. Kill path: the lending cursor (S-C) for generators, and no `while` over a borrowed view, documented as a limit of the premise | B5 (loops, generators) | — |
+| 14 | *(tombstoned by decision 71, void; the B5 programs are rewritten in T1's idiom)* **T1 at tail-resumptive operations** (if S-T says yes), else **the lending cursor**; and **the lend split at `await`** for tasks | B5 | T03 and T04 with `while` over their views (no owned copy); `parse-recover-gen`; `bank-split` and `async-bank-inbox` as written (borrow block across `await`), `unconditional` |
 | 15 | **`Arena[T]`/`Id[T]` and the `region` elaboration**, then **spike S-G** (#119's branded handles: is in-bounds by the region-length fact one lemma?). Kill path: checked indices, documented as the arena's cost | B13 | Richards, DeltaBlue, Havlak, CD in the index form without ceremony (with units 4 and 16); with S-G, their per-access checks gone. jlox, clox and the doubly linked list reach *within reach*, not zero: their natural form (a shared, mutated environment; pointers into the stack) stays refused under the premise unless #119's region accepts it, which S-G's program must show |
 | 16 | **#58 and #142, and a borrowed walk of `mu`** (C-5) | B9 (copies, walks) | List at Rust's 31 allocations and 0 copies; jlox without the per-call body copy; T05, wordcount, the AoC ports without `array_copy` |
 | 17 | **spike S-F** (#174), then K2′ if yes. Kill path: `mut`-taking read functions stay the API, and quicksort, sort-generic and T04 stay "ceremony, out of reach", documented | B9 (reborrow) | quicksort, sort-generic, T04 with `get` and `len` through `&*v` |

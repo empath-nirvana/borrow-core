@@ -4,9 +4,7 @@
 
 Capture, which freezes a computation at an operation, and resume both preserve the global invariant (`TW.inv`, extended to W), including lends that span the suspension.
 
-*Decision 71 is void (decision 72, 2026-11-01); SPEC §62 is the design for lends across suspensions. T1 stays the checker's rule until §62's PRs land.*
-
-**Closed in part by decision 71 (`docs/decisions.md`).** No borrow is held across a suspension, so the clause for lends that span it is not a target: `docs/tombstones/lends-across-suspensions.md`.
+*Decision 71, which closed the clause for lends that span a suspension, is void (decision 72).* That clause is a target again: borrows held across a suspending operation are kernel rules since #839 (decision 75, SPEC §62), and the checker keeps T1 until the surface catch-up, #843.
 
 As a binder: the relation and the invariant are equivariant under bijections of locations and instances and under order-respecting renamings of lifetimes. Resume and placement are instantiations.
 
