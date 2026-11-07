@@ -2,8 +2,9 @@
 """The benchmark harness (`make bench`, issue #537).
 
 Each benchmark is a directory `bench/<name>/` holding the same program three times: `main.bc`
-(ours, built natively: `bcc compile --target native`, then `clang -O2` with the native runtime,
-as `bcc run --native` builds it), `main.rs` (built as `cargo build --release` builds a binary:
+(ours, built natively by Backend2, the default backend, or with `--backend old` by the old
+backend: `bcc compile --target native`, then `clang -O2` with the native runtime, as
+`bcc run --native` builds it), `main.rs` (built as `cargo build --release` builds a binary:
 the flags below are the ones cargo passes) and, where C is natural, `main.c` (`clang -O2`).
 A benchmark's `args` file gives its arguments, and its `gen.py`, for one that reads standard
 input, writes the input. Every side gets the same arguments and the same input; the sizes are
@@ -15,7 +16,7 @@ median of `--runs` runs after one warm-up, with the spread (the lowest and highe
 outputs of the sides must be equal (ours without the `main` value and `live` lines the runtime
 prints after the output).
 
-    python3 bench/bench.py [--runs N] [--only name,name]
+    python3 bench/bench.py [--runs N] [--only name,name] [--backend old|new]
 
 writes `bench/out/results.md` (the table of `bench/README.md`) and `bench/out/results.json`.
 """
@@ -96,12 +97,12 @@ def runtime_c():
     return src[start:src.index('"##', start)]
 
 
-def build(name, d, side, rt):
-    """Build one side; (executable, build times) or raise."""
+def build(name, d, side, rt, backend):
+    """Build one side, ours by `backend`; (executable, build times) or raise."""
     exe = os.path.join(d, side)
     if side == "bc":
         ll = os.path.join(d, "main.ll")
-        r, tb = run([BCC, "compile", "--target", "native",
+        r, tb = run([BCC, "compile", "--backend", backend, "--target", "native",
                      os.path.join(BENCH, name, "main.bc"), "-o", ll])
         if r.returncode != 0:
             raise RuntimeError(f"bcc: {r.stderr.decode()[:2000]}")
@@ -149,6 +150,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", type=int, default=11)
     ap.add_argument("--only", default="")
+    ap.add_argument("--backend", choices=["old", "new"], default="new",
+                    help="the backend that builds ours: Backend2 (new, the default) or the old one")
     a = ap.parse_args()
     all_benches = benches()
     names = [n for n in all_benches if not a.only or n in a.only.split(",")]
@@ -164,13 +167,13 @@ def main():
         d = os.path.join(OUT, name)
         os.makedirs(d, exist_ok=True)
         inp = subprocess.run([sys.executable, gen], capture_output=True, check=True).stdout if gen else b""
-        res = {"args": args, "sides": {}}
+        res = {"args": args, "backend": a.backend, "sides": {}}
         outputs = {}
         for side, src in (("bc", "main.bc"), ("rs", "main.rs"), ("c", "main.c")):
             if not os.path.exists(os.path.join(BENCH, name, src)):
                 continue
             try:
-                exe, bt = build(name, d, side, rt)
+                exe, bt = build(name, d, side, rt, a.backend)
                 times, out = time_runs(exe, args, inp, a.runs)
             except RuntimeError as e:
                 print(f"{name} [{side}]: {e}", file=sys.stderr)
