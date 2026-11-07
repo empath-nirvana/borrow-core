@@ -82,7 +82,7 @@ program() {
   old=""; new=""
   # A program the old backend refuses (`-- check: old-backend-refuses`) has no old count to compare.
   if ! grep -q '^-- check: old-backend-refuses' "$f" && [ "$("$bccCounts" --sites "$f" 2>/dev/null | sed -n 's/.*scoped-cells framed \([0-9]*\).*/\1/p')" != 0 ]; then
-    old=$("$bccCounts" --frames "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>/dev/null | sed -n 's/^slots //p')
+    old=$("$bccCounts" --backend old --frames "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>/dev/null | sed -n 's/^slots //p')
     new=$("$bccCounts" --backend new --frames "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>/dev/null | sed -n 's/^slots //p')
     if [ -z "$old" ] || [ -z "$new" ]; then echo "$f: no frame slot counts (old '$old', new '$new')"; return 1; fi
     if [ "$new" -lt "$old" ]; then

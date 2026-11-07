@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Compile and run the corpus. Every corpus/*.bc, corpus/surface/*.bc, corpus/axes/*.bc,
+# Compile and run the corpus on the old backend (`Backend/`, `--backend old`), which stays checked
+# until it is retired (N7); scripts/compile-backend2.sh runs the corpus on Backend2, the default.
+# Every corpus/*.bc, corpus/surface/*.bc, corpus/axes/*.bc,
 # corpus/aoc/*.bc and corpus/leetcode/*/*.bc with a `main` (except a file marked `-- check: parse-only`) has a golden output
 # `<name>.out` beside it: the reference semantics, what `Support`'s interpreter (`bcc interp`, the
 # source stage) prints.
 # It reads `<name>.in` as standard input (the empty input if there is none), and `<name>.args`, one
 # argument per line, as its arguments (SPEC §34; none if there is no such file). At the closure-IR
-# and flat-IR interpreters (`bcc interp --stage clos|flat`) and in WebAssembly under wasmtime
-# (`bcc run`), its whole standard output, the program's bytes followed by the report `live N`,
+# and flat-IR interpreters (`bcc interp --backend old --stage clos|flat`) and in WebAssembly under
+# wasmtime (`bcc run --backend old`), its whole standard output, the program's bytes followed by the report `live N`,
 # must equal `<name>.out`, its standard error `<name>.err` (empty if there is none), and its exit
 # status `<name>.status` (`0` if there is none: a program that a division's error ends exits with
 # `1`, SPEC §39). The first stage that differs is named. The report must be `live 0`: no object is live once the
@@ -50,7 +52,7 @@
 # No I/O program has a bound on its input: `corpus/io-cat.bc` also copies a generated input of
 # 4860 bytes, at every stage (at the source stage when the source stage runs on io-cat.bc).
 #
-# Counts. Every program run is also run by `bcc-counts` (the flat IR and wasm, built to count,
+# Counts. Every program run is also run by `bcc-counts --backend old` (the flat IR and wasm, built to count,
 # which must agree): the objects it allocates, the indirect calls it makes (the closure
 # calls whose code a `switch` on the closure's tag chooses at run time), and the copies it makes of
 # a variable at a non-trivial type (deep copies the ownership discipline inserts where a variable
@@ -152,7 +154,7 @@ counts() {
   local name got a i c l s b want wa wi wc wl ws wb note
   name=${1#corpus/}; name=${name%.bc}
   argsOf "$1"
-  if ! got=$("$bccCounts" "$1" -- "${args[@]+"${args[@]}"}" < "$2" 2>&1); then echo "$1: counts: $got"; return 1; fi
+  if ! got=$("$bccCounts" --backend old "$1" -- "${args[@]+"${args[@]}"}" < "$2" 2>&1); then echo "$1: counts: $got"; return 1; fi
   a=$(echo "$got" | awk '{print $2}'); i=$(echo "$got" | awk '{print $4}')
   c=$(echo "$got" | awk '{print $6}')
   l=$(echo "$got" | awk '{print $8}'); s=$(echo "$got" | awk '{print $10}')
@@ -181,9 +183,9 @@ counts() {
 runStage() {
   local rc=0
   argsOf "$2"
-  if [ "$1" = wasm ]; then "$bcc" run "$2" "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err" || rc=$?
+  if [ "$1" = wasm ]; then "$bcc" run --backend old "$2" "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err" || rc=$?
   elif [ "$1" = source ]; then "$bcc" interp "$2" -- "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err" || rc=$?
-  else "$bcc" interp --stage "$1" "$2" -- "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err" || rc=$?; fi
+  else "$bcc" interp --backend old --stage "$1" "$2" -- "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err" || rc=$?; fi
   [ "$rc" = "$(statusOf "$2")" ]
 }
 # Whether the source stage runs on program $1 (scripts/source-stage.sh); reports an unverified
@@ -228,7 +230,7 @@ program() {
   local old=1
   if grep -q '^-- check: old-backend-refuses' "$f"; then
     old=0; stages=""
-    if "$bcc" interp --stage flat "$f" < "$in" > /dev/null 2>&1; then
+    if "$bcc" interp --backend old --stage flat "$f" < "$in" > /dev/null 2>&1; then
       echo "$f: marked old-backend-refuses, but the old backend runs it: remove the mark"; return 1
     fi
   fi

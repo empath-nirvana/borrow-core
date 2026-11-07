@@ -12,23 +12,27 @@ import Backend2.Driver
     lake exe bcc parse <file>   parse, and check that printing and re-parsing gives the same AST
     lake exe bcc print <file>   parse and print in the canonical ASCII spelling
     lake exe bcc check <file>   parse and type-check: print each declaration's type, or the error
-    lake exe bcc compile [--timings] <file> -o <out.wat>
-                                compile a closed `main` to WebAssembly text (`Backend/`); with
-                                `--timings`, write each stage's time and output size to
-                                standard error
-    lake exe bcc compile --target native <file> -o <out.ll>
-                                compile to LLVM IR for the host (`Backend/Native/`, SPEC §40)
-    lake exe bcc run <file> [arg…]
+    lake exe bcc compile [--backend old|new] [--timings] <file> -o <out.wat>
+                                compile a closed `main` to WebAssembly text by Backend2
+                                (`Backend2/`), or with `--backend old` by the old backend
+                                (`Backend/`); with `--timings`, write each stage's time and
+                                output size to standard error
+    lake exe bcc compile [--backend old|new] --target native [--no-facts] <file> -o <out.ll>
+                                compile to LLVM IR for the host (`Target/Native/`, SPEC §40);
+                                `--no-facts` (Backend2) leaves the parameters' facts out (SPEC §50)
+    lake exe bcc run [--backend old|new] <file> [arg…]
                                 compile, and run under `wasmtime` with the arguments: `main`'s
                                 value, then the number of live objects after it is consumed
-    lake exe bcc run --native <file> [arg…]
+    lake exe bcc run [--backend old|new] --native [--no-facts] <file> [arg…]
                                 compile to LLVM IR, build it with `clang` beside the native
                                 runtime, and run it with the arguments
-    lake exe bcc interp [--stage S] <file>
-                                run `main` in the interpreter of stage `S` (`Backend/`):
-                                `source` (the default), `clos`, `flat`; a program that
-                                declares `stdin` reads all of standard input first; the words
-                                after `--` are the program's arguments (SPEC §34)
+    lake exe bcc interp [--backend old|new] [--stage S] <file>
+                                run `main` in the interpreter of stage `S`: `source` (the
+                                default), `Support`'s; Backend2's `lir` and `flat` (also
+                                `lflat`), or with `--backend old` the old backend's `clos` and
+                                `flat`; a program that declares `stdin` reads all of standard
+                                input first; the words after `--` are the program's arguments
+                                (SPEC §34)
     lake exe bcc interp (--check fresh|tags | --alloc least) [--stats] <file>
                                 the falsifier (`Backend/Falsify.lean`): the source stage with
                                 a never-reuse allocator (`fresh`), with lend tags (`tags`), or
@@ -52,7 +56,11 @@ import Backend2.Driver
     lake exe bcc kernel (list | negatives | interp [--stage S | --check M | --alloc least] <name>
                           | compile <name> -o <out.wat> | run [--native] <name>)
                                 the kernel programs of `Backend/Kernel.lean`, which the surface
-                                cannot spell (SPEC §19), at a stage, compiled, or run
+                                cannot spell (SPEC §19), at a stage, compiled, or run: on the
+                                old backend, whose stages are `clos` and `flat`
+
+Backend2 is the default backend of `compile`, `run` and `interp`'s stages; `--backend old`
+selects the old backend (`Backend/`) until it is retired (N7, #859).
 
 Exit code 0 on success, 1 on a syntax error, a round-trip mismatch or a type error, 2 on bad
 usage. A successful `check` has built a `CDerivesP` derivation of `main`'s erasure
@@ -69,15 +77,28 @@ def readAll (h : IO.FS.Stream) : Nat → ByteArray → IO ByteArray
     let b ← h.read 65536
     if b.isEmpty then return acc else readAll h n (acc ++ b)
 
-/-- Write a stage's output on `file` (`Backend.interpStage`): the program's standard output and
-the report, and its standard error. -/
-def interp (stage file : String) (args : List String) : IO UInt32 := do
+/-- The stage `stage` of `bcc interp` on a checked program. `source` is `Support`'s interpreter,
+whichever the backend. Backend2's (the default): `lir`, the LIR interpreter; `flat` (or `lflat`),
+the word IR's interpreter at Backend2's lowering; `flat-counts` (or `lflat-counts`), its counting
+build. The old backend's (`old`, `--backend old`): `clos`, the closure IR's interpreter; `flat`
+and `flat-counts`, the word IR's at the old backend's lowering. -/
+def interpAt (old : Bool) (stage file : String) (k : Except String Backend.CheckedProg)
+    (input args : List UInt8) : Except String Backend.Output :=
+  if stage == "source" || old then Backend.interpStage stage file k input args
+  else match stage with
+    | "flat" | "lflat" => Backend2.interpStage "lflat" k input args
+    | "flat-counts" | "lflat-counts" => Backend2.interpStage "lflat-counts" k input args
+    | "clos" => throw "stage `clos` is the old backend's: `bcc interp --backend old --stage clos`"
+    | _ => Backend2.interpStage stage k input args
+
+/-- Write a stage's output on `file` (`interpAt`): the program's standard output and the report,
+and its standard error. -/
+def interp (old : Bool) (stage file : String) (args : List String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   let k := Backend.checkedOf file src
   let input ← if Backend.readsInput k then readAll (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
-  let r := if stage == "lir" || stage == "lflat" || stage == "lflat-counts" then Backend2.interpStage stage k input.toList (Backend.argsBytes args)
-    else Backend.interpStage stage file k input.toList (Backend.argsBytes args)
+  let r := interpAt old stage file k input.toList (Backend.argsBytes args)
   match r with
   | .ok o =>
     let out ← IO.getStdout
@@ -111,9 +132,12 @@ def interpChecked (mode file : String) (stats : Bool) (args : List String) : IO 
     return o.status
   | .error e => IO.eprintln e; return 1
 
-/-- The options of `bcc interp` and `bcc kernel interp`: the stage, the falsifier's mode, and
-whether to write its statistics; then the file or name. -/
+/-- The options of `bcc interp` and `bcc kernel interp`: the backend whose stage `stage` names
+(`bcc interp` only: the kernel programs are the old backend's), the stage, the falsifier's mode,
+and whether to write its statistics; then the file or name. -/
 structure InterpArgs where
+  /-- `--backend old`: the old backend's stages. -/
+  old : Bool := false
   stage : String := "source"
   check : Option String := none
   stats : Bool := false
@@ -123,6 +147,8 @@ structure InterpArgs where
 
 def parseInterpArgs : List String → InterpArgs → Option InterpArgs
   | ["--stats"], _ => none
+  | "--backend" :: "old" :: rest, a => parseInterpArgs rest { a with old := true }
+  | "--backend" :: "new" :: rest, a => parseInterpArgs rest { a with old := false }
   | "--stage" :: st :: rest, a => parseInterpArgs rest { a with stage := st }
   | "--check" :: m :: rest, a => parseInterpArgs rest { a with check := some m }
   | "--alloc" :: m :: rest, a => parseInterpArgs rest { a with check := some m }
@@ -544,49 +570,72 @@ def roundTrip (p : Program) : Except String Unit := do
     if q.strip == p.strip then pure ()
     else throw s!"printing and re-parsing changed the program:\n{out}"
 
-def main (argv : List String) : IO UInt32 := do
-  match argv with
-  | "kernel" :: args => kernel args
-  | ["compile", "--backend", "new", "--timings", file, "-o", out] => do
+/-- The backend `bcc compile` and `bcc run` use: Backend2 (`Backend2/`) unless the words start
+with `--backend old`; `--backend new` names Backend2 explicitly. Whether it is the old backend,
+and the words after the option. -/
+def backendOf : List String → Bool × List String
+  | "--backend" :: "old" :: rest => (true, rest)
+  | "--backend" :: "new" :: rest => (false, rest)
+  | rest => (false, rest)
+
+/-- `bcc compile [--backend old|new] …`, given the words after the backend: WAT, timed or not, or
+with `--target native` LLVM IR (on Backend2 with `--no-facts`, the differential run's: the
+parameters' attributes left out, SPEC §50). -/
+def compileCmd (old : Bool) : List String → IO UInt32
+  | ["--timings", file, "-o", out] => do
+    if old then return ← compileTimed file out
     match ← Backend2.watTimed file (← IO.FS.readFile file) with
     | .ok wat => IO.FS.writeFile out wat; return 0
     | .error e => IO.eprintln e; return 1
-  | ["compile", "--backend", "new", file, "-o", out] => do
+  | [file, "-o", out] | ["--target", "wasm", file, "-o", out] => do
+    if old then return ← compile file out
     match ← compile2 false file with
     | .ok wat => IO.FS.writeFile out wat; return 0
     | .error e => IO.eprintln e; return 1
-  | ["compile", "--backend", "new", "--target", "native", file, "-o", out] => do
+  | ["--target", "native", file, "-o", out] => do
+    if old then return ← compileNative file out
     match ← compile2 true file with
     | .ok ll => IO.FS.writeFile out ll; return 0
     | .error e => IO.eprintln e; return 1
-  -- The differential run of the native target's facts (SPEC §50): the parameters' attributes left out.
-  | ["compile", "--backend", "new", "--target", "native", "--no-facts", file, "-o", out] => do
+  | ["--target", "native", "--no-facts", file, "-o", out] => do
+    if old then IO.eprintln "bcc compile: `--no-facts` is Backend2's"; return 2
     match ← compile2 true file (facts := false) with
     | .ok ll => IO.FS.writeFile out ll; return 0
     | .error e => IO.eprintln e; return 1
-  | ["compile", "--backend", "old", file, "-o", out] => compile file out
-  | "run" :: "--backend" :: "new" :: "--native" :: "--no-facts" :: file :: args => do
+  | _ => do
+    IO.eprintln "usage: bcc compile [--backend old|new] [--timings | --target wasm|native [--no-facts]] <file> -o <out>"
+    return 2
+
+/-- `bcc run [--backend old|new] …`, given the words after the backend: in Wasm under `wasmtime`,
+or with `--native` built natively (on Backend2 with `--no-facts`, the differential run's build). -/
+def runCmd (old : Bool) : List String → IO UInt32
+  | "--native" :: "--no-facts" :: file :: args => do
+    if old then IO.eprintln "bcc run: `--no-facts` is Backend2's"; return 2
     runLL (← compile2 true file (facts := false)) args
-  | "run" :: "--backend" :: "new" :: "--native" :: file :: args => do
-    runLL (← compile2 true file) args
-  | "run" :: "--backend" :: "new" :: file :: args => run2 file args
-  | "run" :: "--backend" :: "old" :: file :: args => run file args
-  | ["compile", file, "-o", out] => compile file out
-  | ["compile", "--timings", file, "-o", out] => compileTimed file out
-  | ["compile", "--target", "native", file, "-o", out] => compileNative file out
-  | ["compile", "--target", "wasm", file, "-o", out] => compile file out
-  | "run" :: "--native" :: file :: args => runNative file args
-  | "run" :: file :: args => run file args
+  | "--native" :: file :: args => do
+    if old then runNative file args else runLL (← compile2 true file) args
+  | file :: args => do
+    if file.startsWith "--" then
+      IO.eprintln "usage: bcc run [--backend old|new] [--native [--no-facts]] <file> [arg…]"; return 2
+    if old then run file args else run2 file args
+  | [] => do
+    IO.eprintln "usage: bcc run [--backend old|new] [--native [--no-facts]] <file> [arg…]"; return 2
+
+def main (argv : List String) : IO UInt32 := do
+  match argv with
+  | "kernel" :: args => kernel args
+  | "compile" :: rest => let (old, rest) := backendOf rest; compileCmd old rest
+  | "run" :: rest => let (old, rest) := backendOf rest; runCmd old rest
   | "interp" :: rest =>
     match parseInterpArgs rest {} with
-    | some { stage, check := none, target, args, .. } => interp stage target args
-    | some { stage, check := some m, stats, target, args } =>
+    | some { old, stage, check := none, target, args, .. } => interp old stage target args
+    | some { stage, check := some m, stats, target, args, .. } =>
       if stage != "source" then
         IO.eprintln "bcc interp: a check runs at the source stage only"
         return 2
       interpChecked m target stats args
     | _ =>
-      IO.eprintln "usage: bcc interp [--stage S | --check fresh|tags | --alloc least] [--stats] <file>"
+      IO.eprintln "usage: bcc interp [--backend old|new] [--stage S | --check fresh|tags | --alloc least] [--stats] <file>"
       return 2
   | ["hostops", stage] => hostops stage
   | ["cc"] => match ← Backend.nativeCC with
@@ -663,5 +712,5 @@ def main (argv : List String) : IO UInt32 := do
         IO.println s!"{file}: ok, {p.decls.length} declarations"
         return 0
   | _ =>
-    IO.eprintln "usage: bcc (parse | print | check | run | trusted | desugar | erase | interp [--stage S]) <file>\n       bcc compile <file> -o <out.wat>"
+    IO.eprintln "usage: bcc (parse | print | check | run [--backend old|new] | trusted | desugar | erase | interp [--backend old|new] [--stage S]) <file>\n       bcc compile [--backend old|new] <file> -o <out.wat>"
     return 2
