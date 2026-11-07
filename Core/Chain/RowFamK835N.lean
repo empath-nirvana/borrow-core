@@ -104,7 +104,6 @@ structure RowRd.OK (R : RowRd ι M) : Prop where
   sub_mono : ∀ μ μ' m, R.le μ μ' → R.le (R.sub μ m) (R.sub μ' m)
   wk_anti : ∀ μ μ' m x f y ρ, R.le μ μ' → R.wk μ' m x f y ρ → R.wk μ m x f y ρ
   Veq : ∀ x y, R.V x y → y = x
-  Vrefl : ∀ x, R.V x x
 
 /-- **A value at a part of a stop's share is one at every world the stop owes**: the payload
 reading carried along an entry's order (Core's `errOk_local`, the error carried along `Ext`). -/
@@ -185,7 +184,6 @@ theorem rdKW_ok (g : KW → KW) (δ : LSub) : (rdKW g δ).OK where
   wk_anti := fun S S' m x f y ρ hle h =>
     ⟨fun hm => h.1 (hle m hm), fun _ => h.owedR⟩
   Veq := fun _ _ h => h
-  Vrefl := fun _ => rfl
 
 /-- Both orders make the resumption world's view consistent with the share. -/
 theorem KW.OwedS.consistent {S : UInt32 → Prop} {m : UInt32} {x y : KW} {f : Life} {ρ : WRes}
@@ -252,7 +250,6 @@ theorem rdU_ok {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) (c : Loc → Option Life
   sub_mono := fun _ _ _ _ => trivial
   wk_anti := fun _ _ _ _ _ _ _ _ _ => trivial
   Veq := fun _ _ _ => rfl
-  Vrefl := fun _ => trivial
 
 theorem rdU_payExt (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) : (rdU δ Θ c).PayExt (ℍ := ℍ) :=
   fun _ _ _ _ _ _ _ _ _ _ _ _ _ h => h
