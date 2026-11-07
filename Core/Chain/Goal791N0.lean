@@ -2625,87 +2625,9 @@ theorem jdgInFrag_lolli {L : VTy} (h : L.inFrag = true) :
     JdgInFrag [] (.val (.lolli L .unit)) = true := by
   simp [JdgInFrag, VTy.lolli, VTy.inFrag, CTy.inFrag, h]
 
-/-- **The adequacy bridge**: a closed run of `F 1` over `erwp` is `OrDiverges`. -/
-def BridgeN : Prop :=
-  ∀ e : Expr, (∀ (Θ : LocTy) (c : Loc → Option Life), Θ.OK → ∀ n,
-    cN₀ (ℍ := ℍ) (.ret .unit) LSub.empty Θ c n [] e (PMap.empty : WRes)) → OrDiverges (ℍ := ℍ) e
-
-/-- **#791's end goal under a scheduler at the top, over `erwp`**: `poolSchedAdequacyN`'s form,
-at the view of any world holding no `imm` record (the task starts at the empty list, which the
-relation's entry tie `ImmTieL` reads against the world's `imm` records). A task typed at `F_Σ 1`
-from the constants, run by a scheduler meeting `SchedOKN` at the row's table, is safe,
-leak-free, or diverges. Scoped to the fragment: the constants' types and the row's
-(`Const791.InFrag`, `VTy.inFrag`). -/
-def Goal791SchedN : Prop :=
-  ∀ (cs : List Const791), (∀ c ∈ cs, c.OK) → (∀ c ∈ cs, c.InFrag) → ∀ (S : Row) (e₀ : Expr),
-    (CTy.effOf S .unit).inFrag = true →
-    CDerives LifeCtx.empty (ctx791 cs) e₀ (.comp (CTy.effOf S .unit)) →
-    ∀ (Θ : LocTy) (c : Loc → Option Life) (n₀ : UInt32) (qs hr hs : Val) (Q : PostN)
-      (Inv : List StoredN → Prop),
-      Θ.OK → Θ.imm = [] → (∀ k ls v ρ, Q k ls v ρ → ρ = PMap.empty) → Inv [] →
-      SchedOKN (ℍ := ℍ) (Θ.view c) (rowTabN₀ (ℍ := ℍ) S Θ c) n₀ qs hr hs
-        (fun k _ v ρ => vN₀ (ℍ := ℍ) .unit LSub.empty Θ k v ρ)
-        (PoolAnsN (ℍ := ℍ) (Θ.view c) Q (hndVal n₀ qs hr hs) Inv) →
-      OrDiverges (ℍ := ℍ)
-        (.app (hndE (hndVal n₀ qs hr hs) (substAll (vals791 cs) e₀))
-          (stateValN (hndVal n₀ qs hr hs) []).1)
-
-/-- `withbor (2)` at a suspending row. -/
-def Withbor2SN : Prop := ∀ x bnd A B S d, ConstN₀ (ℍ := ℍ) (.w2 x bnd A B S d)
-/-- `withbor (3)` at a suspending row. -/
-def Withbor3SN : Prop := ∀ a x bnd A B S d, ConstN₀ (ℍ := ℍ) (.w3 a x bnd A B S d)
-/-- The field reborrow at a suspending row. -/
-def WithborFSN : Prop := ∀ a x bnd A B S d, ConstN₀ (ℍ := ℍ) (.wF a x bnd A B S d)
-/-- `withload` at a suspending row. -/
-def WithloadSN : Prop := ∀ a x bnd A B S, ConstN₀ (ℍ := ℍ) (.wl a x bnd A B S)
-/-- `slice_borrow_mut` at a suspending row. -/
-def SliceBorrowMSN : Prop := ∀ x bnd A B S d, ConstN₀ (ℍ := ℍ) (.sm x bnd A B S d)
-
-/-! ### What is proved of the statements -/
-
-/-- **The adequacy bridge holds**: `erwp_adequacy` at `F 1`, whose values own nothing, at the
-empty world, whose view types nothing. -/
-theorem bridgeN : BridgeN (ℍ := ℍ) := fun e h =>
-  erwp_adequacy (Φ := LocFam.empty)
-    (Q := fun k _ v ρ => vN₀ (ℍ := ℍ) .unit LSub.empty LocTy.empty k v ρ) (fun _ _ _ _ hq => hq.2)
-    (fun n => by
-      have := h LocTy.empty (fun _ => none) LocTy.empty_ok n
-      simp only [cN₀] at this
-      rwa [LocTy.view_empty] at this)
-
 theorem liveWithin_ctx791 : ∀ cs : List Const791, Ctx.LiveWithin (ctx791 cs) (vals791 cs)
   | [] => trivial
   | _ :: cs => liveWithin_ctx791 cs
-
-theorem gN_ctx791 (hC : ConstsN₀ (ℍ := ℍ)) (δ : LSub) {Θ : LocTy} (hΘ : Θ.OK) (n : Nat) :
-    ∀ cs : List Const791, (∀ c ∈ cs, c.OK) → (∀ c ∈ cs, c.InFrag) →
-      gN₀ (ℍ := ℍ) δ Θ (ctx791 cs) (vals791 cs) n PMap.empty
-  | [], _, _ => rfl
-  | c :: cs, hcs, hfr => by
-      simp only [ctx791, vals791, List.map_cons, gN₀, if_true]
-      exact ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _,
-        hC c (hfr c (by simp)) (hcs c (by simp)) δ Θ n hΘ,
-        gN_ctx791 hC δ hΘ n cs (fun c' h => hcs c' (by simp [h])) (fun c' h => hfr c' (by simp [h]))⟩
-
-theorem jdgInFrag_ctx791 (cs : List Const791) (hfr : ∀ c ∈ cs, c.InFrag) {S : Row}
-    (hS : (CTy.effOf S .unit).inFrag = true) :
-    JdgInFrag (ctx791 cs) (.comp (CTy.effOf S .unit)) = true := by
-  simp only [JdgInFrag, Bool.and_eq_true, List.all_eq_true]
-  refine ⟨fun s hs => ?_, hS⟩
-  obtain ⟨c, hc, rfl⟩ := List.mem_map.mp hs
-  simpa [VTy.inFrag, Const791.InFrag] using hfr c hc
-
-/-- **`Goal791SchedN` from the fundamental property and the constants**, through
-`poolSchedAdequacyN` at the view. -/
-theorem goal791Sched_of (hF : FundamentalN₀ (ℍ := ℍ)) (hC : ConstsN₀ (ℍ := ℍ)) :
-    Goal791SchedN (ℍ := ℍ) := by
-  intro cs hcs hfr S e₀ hSf hder Θ c n₀ qs hr hs Q Inv hΘ hΘI hQ hInv hS
-  refine poolSchedAdequacyN (Θ.view c) (rowTabN₀ S Θ c) n₀ qs hr hs _ Q Inv _
-    (LocTy.view_down hΘ.1 c) hΘI hQ hInv hS (fun n => ?_)
-  have h := hF _ _ _ _ hder (jdgInFrag_ctx791 cs hfr hSf) LSub.empty (vals791 cs) Θ c n []
-    PMap.empty (BoCa.Fig16.LogRel.Core.models_empty_any _) hΘ (consistentX_empty c)
-    (liveWithin_ctx791 cs) (gN_ctx791 hC LSub.empty hΘ n cs hcs hfr)
-  exact (cN_effOf₀ S .unit LSub.empty Θ c n [] _ _).mp h
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

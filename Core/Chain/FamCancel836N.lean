@@ -1250,10 +1250,6 @@ theorem constsN_of₀ (hF : FundamentalN₀ (ℍ := ℍ)) : ConstsN₀ (ℍ := �
   | .wl .., _ => constN_wl₀
   | .sm .., hfr => constN_sm₀ hF hfr
 
-/-- **`Goal791SchedN` from the fundamental property alone**: `goal791Sched_of` at `constsN_of₀`. -/
-theorem goal791Sched_of_fundamental (hF : FundamentalN₀ (ℍ := ℍ)) : Goal791SchedN (ℍ := ℍ) :=
-  goal791Sched_of hF (constsN_of₀ hF)
-
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
 end
