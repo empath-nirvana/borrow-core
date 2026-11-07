@@ -34,7 +34,7 @@ open BoCa.Fig16.LogRel.Core
 open BoCa.Fig16.LogRel.Core.Chain.SI
 open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-open BoCa.Fig16.Tree.Wp.Goal791 (Const791 defines_meetOfDom_empty)
+open BoCa.Fig16.Tree.Wp.Goal791 (Const791 defines_meetOfDom_empty ansC_of_suspend)
 open BoCa.BoLo (Heap Kont Head performE raiseE cancelVal opPayload)
 
 /-! ### The callback's table -/
@@ -290,7 +290,7 @@ theorem tyEq_immReb {A T : VTy} {δ δ' : LSub} (he : TyEq A δ T δ') {x y : Li
 /-- **`wl`'s antecedent holds** at the hardest case's row. -/
 theorem wl_ok (a : Lifetime.Life) (x : LifeVar) :
     (Const791.wl a x LifeCtx.empty.meetOfDom .unit .unit hardestRow).OK :=
-  ⟨defines_meetOfDom_empty, id, id, hardestRow_suspend x _⟩
+  ⟨defines_meetOfDom_empty, id, id, hardestRow_suspend _ x _⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

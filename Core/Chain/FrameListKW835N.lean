@@ -78,18 +78,20 @@ theorem tab_lookupRK : ∀ (F : CTy) {R : Nat → WProp} {vr : VRel} {g : KW →
 
 /-- **The frame's callback table may be stopped at under a lend at `α ⊏ @bnd`, at the typed
 world**. -/
-theorem tabRK_lendOKCR {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Lifetime.Life}
-    {α : Life} {F : CTy} (hF : F.SuspendC xv bnd) (R : Nat → WProp) (g : KW → KW) (δ : LSub)
-    (hLt : LtLife δ bnd α) (x : KW) : (tabRK (ℍ := ℍ) R vr g F δ x).LendOKCR α where
+theorem tabRK_lendOKCR {vr : VRel} (hv : ValRelOK vr) {Δ : LifeCtx} {xv : LifeVar}
+    {bnd : Lifetime.Life}
+    {α : Life} {F : CTy} (hF : F.SuspendC Δ xv bnd) (R : Nat → WProp) (g : KW → KW) (δ : LSub)
+    (hδ : Δ.Models δ) (hLt : LtLife δ bnd α) (x : KW) : (tabRK
+    (ℍ := ℍ) R vr g F δ x).LendOKCR α where
   entry := fun m i en h _ => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupRK F h
     exact ⟨(layer_suspend F hF hL).1, rfl⟩
   pa := fun m i en h k ls v ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupRK F h
-    exact hv.inStratum (layer_suspend F hF hL).2.2.2.1 hLt hp
+    exact hv.inStratum (layer_suspend F hF hL).2.2.2.1 hδ hLt hp
   pb := fun m i en h y k ls w ρ hp => by
     obtain ⟨q, A, B, fin, hL, rfl, -⟩ := tab_lookupRK F h
-    exact (hv.inStratum (layer_suspend F hF hL).2.2.2.2.1 hLt hp.1).mono
+    exact (hv.inStratum (layer_suspend F hF hL).2.2.2.2.1 hδ hLt hp.1).mono
       (Life.down_sqsubset α).le
 
 /-- **The frame's callback table and its lender's twin across the fold, under a world map**: the
@@ -135,11 +137,13 @@ theorem foldTwin_owedG {g : KW → KW} {x : KW} {l : Loc} {A : Life}
 capturable entry, the callback's cancel run at its cancel row's twin, ending at `R`, is framed by
 `erwpK_M_frame_cancelRunCRR` at the cancel row's tables (`FoldTwin` by `foldTwin_owedG`), its own
 nested cancel obligations by the induction. -/
-theorem tabRK_canRK {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Lifetime.Life}
+theorem tabRK_canRK {vr : VRel} (hv : ValRelOK vr) {Δ : LifeCtx} {xv : LifeVar}
+    {bnd : Lifetime.Life}
     {α : Life} {δ : LSub}
-    (hLt : LtLife δ bnd α) {l : Loc} {Fam : Nat → Val → SPropS Loc Val α} (hFam : DownFam α Fam)
+    (hδ : Δ.Models δ) (hLt : LtLife δ bnd α) {l : Loc} {Fam : Nat → Val → SPropS Loc Val α}
+    (hFam : DownFam α Fam)
     {R : Nat → WProp} (hR : ∀ k ρ, R k ρ → ρ.InStratum α) (g : KW → KW) :
-    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC xv bnd →
+    ∀ (d : Nat) (F : CTy), F.cdepth ≤ d → F.SuspendC Δ xv bnd →
       CanFold (fun y : KW => (g y).Θ.FoldInv α)
         (fun x => tabRK (ℍ := ℍ) R vr (fun y => (g y).lend l α Fam) F δ x)
         (fun x => tabRK (ℍ := ℍ) (fun k => claimR l α Fam k ⋆ R k) vr g F δ x) l α Fam := by
@@ -177,7 +181,7 @@ theorem tabRK_canRK {vr : VRel} (hv : ValRelOK vr) {xv : LifeVar} {bnd : Lifetim
     (flI := fun _ => α) (flO := fun z => (g z).lo)
     (Ti := fun x => tabRK (ℍ := ℍ) R vr (fun y => (g y).lend l α Fam) fin δ x)
     (To := fun x => tabRK (ℍ := ℍ) (fun k => claimR l α Fam k ⋆ R k) vr g fin δ x)
-    hFam (fun x => tabRK_lendOKCR hv hfin R _ δ hLt x) (ih fin hfd hfin) hR
+    hFam (fun x => tabRK_lendOKCR hv hfin R _ δ hδ hLt x) (ih fin hfd hfin) hR
     (fun x hx => foldTwin_owedG hFam hx (tabRK_foldTwinR R _ g δ l Fam x))
   refine hM k k le_rfl y hy ls _ v'' χ W'' (Z.del l) ρkL hχ hdZd P'' hPk hw''
     (ResU.CompS.comm hW'') (ResU.CompS.comm hkL) (fun BM hBM => ?_)
@@ -332,10 +336,10 @@ one. Every premise of `erwpK_M_frameCRR` is discharged from the tables (`tabRK_l
 `tabRK_canRK`, `foldTwin_owedG` with `tabRK_foldTwinR`); the claim is joined to the inner frames'
 by `tabRK_finLe`. The frame's invariant is `FoldInv α` at `g y`. -/
 theorem erwpK_M_frameCRR_listKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β : Life}
-    (hunif : ∀ Θ j u r, vN (ℍ := ℍ) A δ Θ j u r → r.InStratum β) {xv : LifeVar}
-    {bnd : Lifetime.Life} {F : CTy} (hF : F.SuspendC xv bnd) (Ψ : LocTy → PostN) (g : KW → KW)
+    (hunif : ∀ Θ j u r, vN (ℍ := ℍ) A δ Θ j u r → r.InStratum β) {Δ : LifeCtx} {xv : LifeVar}
+    {bnd : Lifetime.Life} {F : CTy} (hF : F.SuspendC Δ xv bnd) (Ψ : LocTy → PostN) (g : KW → KW)
     (Θ : LocTy) (ℓ : Loc) {α : Life}
-    (hLt : LtLife δ bnd α) (hαβ : α ≤ β) (I : List Loc) :
+    (hδ : Δ.Models δ) (hLt : LtLife δ bnd α) (hαβ : α ≤ β) (I : List Loc) :
     KFrame (ℍ := ℍ) V (fun y => (g y).Θ.view (g y).c) (fun y => (g y).Θ.FoldInv α) ℓ α
       (famL α (fun Θ' j w r => vN (ℍ := ℍ) A δ Θ' j w r) Θ)
       (tabListK (ℍ := ℍ) A δ F (Θ.add ℓ α (famL α (fun Θ' j w r => vN (ℍ := ℍ) A δ Θ' j w r) Θ))
@@ -367,8 +371,8 @@ theorem erwpK_M_frameCRR_listKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {
     (To := fun x => tabRK (ℍ := ℍ) (fun k => claimR ℓ α Fm k ⋆ claimL (ℍ := ℍ) A δ Θ₁ I k)
       (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) g F δ x)
     (Q := fun _ => listPostN (ℍ := ℍ) A δ Ψ Θ (ℓ :: I)) hFmD
-    (fun x => tabRK_lendOKCR valRelOK_vN hF _ _ δ hLt x)
-    (tabRK_canRK valRelOK_vN hLt hFmD hRs g F.cdepth F le_rfl hF)
+    (fun x => tabRK_lendOKCR valRelOK_vN hF _ _ δ hδ hLt x)
+    (tabRK_canRK valRelOK_vN hδ hLt hFmD hRs g F.cdepth F le_rfl hF)
     hRs (fun x hx => foldTwin_owedG hFmD hx (tabRK_foldTwinR _ _ g δ ℓ Fm x))
   exact KFrame.conv hM (fun _ => or_local (performStopK_local _ _) (raiseStopRK_free _ _))
     (fun y k ls t Ψ' ρ h => opTableRK_finLe (tabRK_finLe hcl' g δ F.cdepth F le_rfl _ y) hcl' k ls t
@@ -382,8 +386,8 @@ lend below the bound and `β′` (`hLm`), each frame `erwpK_M_frameCRR_listKW`. 
 below the frame's rest, `β`, `β′` and the bound, as in the original. -/
 theorem erwpK_M_frameListKWP {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β β' : Life}
     (hunif : ∀ Θ j u r, vN (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
-    {xv : LifeVar} {bnd : Lifetime.Life} {mb : Life} (hmb : bnd.interp δ = some mb) {F : CTy}
-    (hF : F.SuspendC xv bnd)
+    {Δ : LifeCtx} (hδ : Δ.Models δ) {xv : LifeVar} {bnd : Lifetime.Life} {mb : Life}
+    (hmb : bnd.interp δ = some mb) {F : CTy} (hF : F.SuspendC Δ xv bnd)
     (Ψ : LocTy → PostN) (hΨs : ∀ Θ k ls v ρ, Ψ Θ k ls v ρ → ρ.InStratum β')
     (hΨl : ∀ (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc Val α) k ls v ρ,
       ρ.InStratum α → Ψ (Θ.add l α F) k ls v ρ → Ψ Θ k ls v ρ)
@@ -446,7 +450,7 @@ theorem erwpK_M_frameListKWP {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β 
         consistentX_setLife hcF (exS_none_of_part hρ hv hown hko) α₁
       have hcσ₁ : ConsistentX (g₁ x).c σ :=
         consistentX_setLife hcσ (exS_none_of_part hcl hvρ0 (ResU.single_get_self _ _) hko) α₁
-      refine erwpK_M_frameCRR_listKW hunif hF Ψ g (g x).Θ ℓ hLt hα₁β I n n le_rfl x hfi ls e
+      refine erwpK_M_frameCRR_listKW hunif hF Ψ g (g x).Θ ℓ hδ hLt hα₁β I n n le_rfl x hfi ls e
         u σ ρ0 Fr ρ houtP houtb (Fm n) (fun _ _ h => h) hwit hcl hρ (fun BM hBM => ?_)
       have hΦ₁ : (fun y => ((g y).Θ.view (g y).c).set ℓ α₁ Fm) =
           fun y => (g₁ y).Θ.view (g₁ y).c :=
@@ -462,7 +466,7 @@ theorem erwpK_M_frameListKWP {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β 
       refine erwpK_mono (fun _ _ h => h) (fun _ k ls' v ρ' h => ?_)
         (fun y k ls t Ψ Ψ' ρ hΨ h => tabListK_local A δ F _ g₁ I y k ls t Ψ Ψ' ρ hΨ h) n x ls
         e BM
-        (erwpK_M_frameListKWP hunif hmb hF Ψ hΨs hΨl e ls x Lm hLm I g₁ hg₁L n ρr R BM
+        (erwpK_M_frameListKWP hunif hδ hmb hF Ψ hΨs hΨl e ls x Lm hLm I g₁ hg₁L n ρr R BM
           (βR ⊓ α₁ ⊓ γ) hOK₁ hcBM hBMR hrest₁ (fun α₂ hα₂ => ⟨hβR.mono (le_of_lt
             (lt_of_lt_of_le hα₂ (inf_le_left.trans inf_le_left))), ?_⟩))
       · -- the outer frame's postcondition from the inner ones'
@@ -499,8 +503,8 @@ at `KW.LendMap`. Frame `j` lends its leaf at `αⱼ`, fresh and below every `imm
 (`LocTy.exists_foldInv`), below the frame's rest, `β`, `β′` and the bound, as in the original. -/
 theorem erwpK_M_frameListKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β β' : Life}
     (hunif : ∀ Θ j u r, vN (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
-    {xv : LifeVar} {bnd : Lifetime.Life} {mb : Life} (hmb : bnd.interp δ = some mb) {F : CTy}
-    (hF : F.SuspendC xv bnd)
+    {Δ : LifeCtx} (hδ : Δ.Models δ) {xv : LifeVar} {bnd : Lifetime.Life} {mb : Life}
+    (hmb : bnd.interp δ = some mb) {F : CTy} (hF : F.SuspendC Δ xv bnd)
     (Ψ : LocTy → PostN) (hΨs : ∀ Θ k ls v ρ, Ψ Θ k ls v ρ → ρ.InStratum β')
     (hΨl : ∀ (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc Val α) k ls v ρ,
       ρ.InStratum α → Ψ (Θ.add l α F) k ls v ρ → Ψ Θ k ls v ρ)
@@ -515,7 +519,7 @@ theorem erwpK_M_frameListKW {V : KW → KW → Prop} {A : VTy} {δ : LSub} {β �
             (tabListK (ℍ := ℍ) A δ F (g' x).Θ g' []) (fun _ => Ψ (g' x).Θ) x n ls e ρ') →
       erwpK (ℍ := ℍ) V (fun y => (g y).Θ.view (g y).c) (tabListK (ℍ := ℍ) A δ F (g x).Θ g I)
         (fun _ => listPostN (ℍ := ℍ) A δ Ψ (g x).Θ I) x n ls e ρ :=
-  erwpK_M_frameListKWP hunif hmb hF Ψ hΨs hΨl e ls x KW.LendMap
+  erwpK_M_frameListKWP hunif hδ hmb hF Ψ hΨs hΨl e ls x KW.LendMap
     (fun _ hg ℓ α Fm _ _ => KW.LendMap.lend hg ℓ α Fm)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N

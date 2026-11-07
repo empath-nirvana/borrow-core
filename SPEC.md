@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.40 · 2026-11-07
+Version 1.42 · 2026-11-07
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -10967,11 +10967,13 @@ given the entries'); the typing rules and the fundamental theorem over these typ
   Multi-shot continuations over duplicable state are a hypothesis, not a rule.
 - **A lend's callback `∀'x ⊏ @bnd` may suspend at a row `Row.Suspend 'x @bnd`**
   (`Core/TreeGoal791.lean`): every operation named and not unrestricted; its payload and answer
-  types free of `'x` and outliving `@bnd` (`VOutlives ∅ bnd`), so their values lie in the stratum
-  of every lend `α ⊏ @bnd`, what the Mut Frame asks of a stop (the relation's `LendOK`); and each
-  capturable operation's cancel row meeting the same clauses (`CTy.SuspendC`), since the cancel
-  run stops at its layers under the live lend. The constants are stated at the empty lifetime
-  context, where the bound, being defined, is closed and so `⊤`; an answer, which arrives from
+  types free of `'x` and outliving `@bnd` at the constant's context (`VOutlives Δ bnd`), so their
+  values lie in the stratum of every lend `α ⊏ @bnd`, what the Mut Frame asks of a stop (the
+  relation's `LendOK`); and each capturable operation's cancel row meeting the same clauses
+  (`CTy.SuspendC`), since the cancel run stops at its layers under the live lend. A constant is
+  stated at its own lifetime context (*Lifetime-polymorphic suspending constants* below); at the
+  empty context the bound, being defined, is closed and so `⊤`. Answers are kept at a closed
+  bound (`Row.AnsC`); an answer, which arrives from
   outside the borrowed run, then lies in the top stratum and holds no borrow cell, so it is
   consistent with the run's view. `VOutlives ∅ bnd` excludes exactly the payload and answer types
   with, outside a box or `!`, an `Imm @b A` or `Mut @b A` (no `@b` is strictly longer-lived than
@@ -11079,6 +11081,109 @@ value is posted at, and are proved (`handleT_compatN`, `handleL_compatN`).
   residual `λx. x` (`reifyN_premises_inst`); no instance of its conclusion is proved. `Goal791N`'s
   premises hold at `prog791` (`goal791N_premises_inst`): a cell lent `mut` with `withbor (2)`,
   its callback performing `wait` while it holds the borrow, `wait` handled inside the program.
+
+### The answer's view across a lend (#844, T1.3)
+
+A lend's callback reads an answer at its own view `setLife c ℓ α`; the lender's table reads it at
+`c`. Consistency moves between the two by what the answer holds at `ℓ`, not by its stratum
+(`Core/Chain/SI/LocTy.lean`):
+
+    NoMutAt ℓ ρ               ≜ ∀ e, ExS ρ e → ∀ ψ, e.get ℓ = some ψ → ψ.kind ≠ mut
+    consistentX_setLife_iff   : NoMutAt ℓ ρ → (ConsistentX (setLife c ℓ α) ρ ↔ ConsistentX c ρ)
+    consistentX_of_noMutAt    : (∀ ℓ, NoMutAt ℓ ρ) → ConsistentX c ρ
+    noMutAt_of_top            : ρ.InStratum ⊤ → NoMutAt ℓ ρ
+    noMutAt_of_setLife        : ρ.InStratum s → α ≤ s → ConsistentX (setLife c ℓ α) ρ → NoMutAt ℓ ρ
+    not_noMutAt_inStratum_down: some ρ in Res_{↓α} has a `mut` cell at ℓ, at α, consistent with
+                                setLife c ℓ α and with no view c where c ℓ ≠ α
+
+`consistentX_setLife` (a walk missing `ℓ`) and `consistentX_of_top` are corollaries, and so is
+`consistentX_of_outlivesN` (`Core/Chain/ReindexK835N.lean`), in place: at the closed bound the
+answer is in `Res_⊤`, so `NoMutAt ℓ` holds at every `ℓ`. The callback's table steps
+(`tabNK_lend_comap`, `tabNK_lendMapB_comap`) read the answer's consistency with the lender's view
+and move it to the lend's view by `consistentX_setLife_iff`, at each lend of a `KW.LendMapB` map;
+the closed bound is read only for `NoMutAt`.
+
+- **Baseline.** No statement changes: `consistentX_of_outlivesN`, `consistentX_of_top`,
+  `consistentX_setLife`, `tabNK_lend_comap`, `tabNK_lendMapB_comap`, `goal791N`.
+- **Open.** At a non-closed bound the answer's stratum does not give `NoMutAt ℓ`: `Res_{↓α}` admits
+  a `mut` cell at `ℓ` (`not_noMutAt_inStratum_down`), and `Res_s` for `α < s` admits one at a
+  lifetime above `s`, which the lender's view can read and the lend's cannot. The stratum gives
+  only the converse move, from the lend's view to the lender's (`noMutAt_of_setLife`). The
+  lender-to-lend move needs `NoMutAt ℓ` carried in from where the answer is disjoint from the lent
+  cell; no table carries it yet.
+
+### Lifetime-polymorphic suspending constants (#844, Tier 1)
+
+**What it adds.** The suspending lend constants (`Const791`) are typed at a lifetime context of
+their own, so a callback's bound `@bnd` may name lifetime variables and a payload may hold a borrow
+of a lend that encloses the suspending one.
+- **The constant.** `Const791.poly 'y @b c` is `c` under one lifetime binder: its type is
+  `∀'y ⊏ @b. c.ty` (the existing former `VTy.all`, `U(∀'y ⊏ @b. F A)`), its value `λ_. c.val`. A
+  constant under binders `'y₁ ⊏ @b₁, …` is typed at `!∀'y₁ ⊏ @b₁. … c.ty`; a program instantiates
+  it by `allEV`. No `VTy` former, `CTy` former or `CDerives` rule is added.
+- **The premises at a context.** `Const791.OKAt Δ c`: at `poly 'y @b c`, `∀I`'s side conditions
+  (`@b` and `Δ`'s bounds do not mention `'y`) and `c.OKAt (Δ, 'y ⊏ @b)`; at a lend constant, its
+  rule's premises with the empty context replaced by `Δ`: `Δ ⊨ @bnd`, the outliving premises at
+  `Δ`, the row `Row.Suspend Δ 'x @bnd`, the finaliser typed at `Δ`. `Const791.OK c` is
+  `c.OKAt ∅`. One clause is kept closed: every answer of the row and of its cancel rows outlives a
+  bound defined at the empty context (`Row.AnsC`), which is today's answer clause. `withloadU`
+  (`wl`) does not carry it: its compatibility lemma moves no answer between views.
+- **`Row.Suspend Δ 'x @bnd`**, `CTy.SuspendC Δ 'x @bnd`: the outliving clauses at `Δ`
+  (`VOutlives Δ bnd`) instead of `∅`.
+- **The laws** read at `δ ⊨ Δ`: `vN_inStratum_bnd`, `vN_add_eq_bnd`, `vN_add_eq`, `vN_lend_eq`,
+  `ValRelOK.inStratum`, `tabNK_lendOKCR` and `tabNK_lend_comap` take `VOutlives Δ bnd` and
+  `Δ.Models δ`. The `∅` forms are their instances at `models_empty_any`. The constants'
+  compatibility lemmas (`withbor2S_compat`, `withbor3S_compat`, `withborFS_compat`,
+  `withloadS_compat`, `sliceBorrowMS_compat`) are stated at `Δ` and `δ ⊨ Δ`.
+- **The answer's view** (*The answer's view across a lend* above). The step that moves an answer
+  from the lender's view to the lend's (`tabNK_lend_comap`, `tabNK_lendMapB_comap`) reads
+  `NoMutAt ℓ` of the answer. At a bound with a variable the answer's stratum does not give it, so
+  these steps carry it as a named premise of every answer of the row and its cancel rows,
+  `AnsNoMut B δ ≜ ∀ Θ k v ρ, 𝒱⟦B⟧δ Θ k v ρ → ∀ ℓ, NoMutAt ℓ ρ` (`CTy.AnsC`). The constants
+  discharge it from `Row.AnsC` at a closed bound (`ansNoMut_of_closed`, by
+  `noMutAt_of_outlivesN`).
+- **Inhabited at a variable bound**: `polyC_ok`, the constant `Λ'1 ⊏ ⊤. Λ'2 ⊏ '1. withbor2U` at
+  `∀'0 ⊏ '2`, its row yielding `Imm '1 1`, a borrow of the enclosing lifetime.
+- **A closed instance at `goal791N`** (T1.4, `Core/Chain/Nest844N.lean`): an outer `imm` lend's
+  borrow yielded across an inner suspending lend to a handler between them, resumed and
+  cancelled. The constant is `nestC = Λ'1 ⊏ ⊤. Λ'2 ⊏ '1. withbor3U` at `∀'0 ⊏ '2`, its row
+  `yield : Imm '1 1 ↠^cancel 1` (cancel row `F 1`), finalised by `forget`. The program, in `F 1`
+  at the empty context from `nestC` alone:
+
+      r ← alloc (); (r, ()) ← withbor1U r (Λ'3. λi.                 -- outer imm lend of the input
+        s ← alloc (); (s, ()) ← withbor2U s (Λ'4. λc.               -- the scratch cell, 'w = '4 ⊏ '3
+          handle_yield (                                            -- the handler, inside '3, outside '0
+            (c, ()) ← nestC ['3] ['4] c (Λ'0. λm. yield i; forget m); forget c)
+          with H; ['4] ());
+        free s; ['3] ()); free r
+
+  `'3` and `'4` come from Core's own lends (`withbor1U`, `withbor2U` at the empty row); `nestC`
+  is instantiated by `allEV` at `'3 ⊏ ⊤` and `'4 ⊏ '3`, so its callback bound is the variable `'4`
+  and its payload `Imm '3 1` borrows the enclosing lend. `H` resumes `κ` (`progRes`) or cancels it
+  (`progCan`), each clause releasing the payload with `forget`. Each meets every premise of
+  `Goal791N` (`nestC_ok`, `d_progRes`, `d_progCan`), so `goal791N` concludes `OrDiverges` of each
+  from `HandlerLawN` (`progRes_orDiverges`, `progCan_orDiverges`). The answer is `1`, closed.
+
+- **Where the present relation stops** (`Core/Chain/Spike844N.lean`), each a configuration with
+  every hypothesis discharged: `lender_mut_payload_empty` (the lender reads a `Mut 'x A` payload at
+  `δ`, where `'x` is unbound, and it has no values); `lend_mut_payload_not_inStratum` and
+  `lendOKCR_pa_fails` (the callback's own borrow is not in `Res_α`, so the Mut Frame's `pa`
+  fails); `CrossStop.erwpK_refuses_borrowOut` (a segment starting with `ℓ` owned cannot stop with
+  a borrow of `ℓ` in its payload, at any world index) and `CrossStop.not_crossTaskMLendK`
+  (`erwpK_M_frame`'s statement at `KW`, `KW.PostK` and `Θ.view c` with `LendOKCR.pa` dropped is
+  refuted). `RowSuspendB` is `Row.Suspend` with the payload and answer allowed to name `'x`
+  (`rowSuspendB_of_suspend`). These bound Tier 2 (the callback's own borrow as a payload), which
+  needs a new stop clause; they change no statement.
+
+**Baseline preserved.** `goal791N : HandlerLawN → Goal791N`, its statement unchanged but for
+`Const791.OK`'s shape; `fundamentalN_all`; `handlerLawN_iff`; `goal791N_premises_inst`; the
+instances at the hardest case's row (`w2_ok`, `w3_ok`, `wF_ok`, `wl_ok`, the `*S_inst`). No change
+to `CDerives`, the checker, the backends or the corpus.
+
+**Open.** The answer at a bound with a variable: `AnsNoMut` without `Row.AnsC`, so that an answer
+may hold a borrow of an enclosing lend. Not derived from the answer's type: the index world may
+key `ℓ` at a lifetime above the bound, where a `Mut` answer type outliving the bound has values
+holding a `mut` cell at `ℓ`; the obstruction is not verified. Tracked as #853.
 
 ### Not claimed
 
@@ -11718,6 +11823,19 @@ checker or the old backend.
 
 ## Changelog
 
+- **1.42** (2026-11-07) — §62 (#844 Tier 1, *Lifetime-polymorphic suspending constants*): the
+  suspending lend constants under lifetime binders (`Const791.poly`, typed at `VTy.all`), their
+  premises at the constant's own context (`Const791.OKAt`), `Row.Suspend`/`CTy.SuspendC` at a
+  context, and the laws that read the callback bound at `δ ⊨ Δ`. The answer's move between views
+  is a named premise (`AnsNoMut`), discharged by answers outliving a closed bound (`Row.AnsC`).
+  `goal791N` keeps its statement. A closed instance (T1.4): an outer `imm` lend's borrow yielded
+  across an inner suspending lend to a handler between them, resumed and cancelled, at `goal791N`.
+  No change to `CDerives`, the checker, the backends or the corpus.
+- **1.41** (2026-11-07) — §62 (*The answer's view across a lend*, #844 T1.3): `NoMutAt`,
+  `consistentX_setLife_iff`; `consistentX_of_outlivesN`, `consistentX_of_top` and
+  `consistentX_setLife` become corollaries; the callback's table steps move the lender's view to
+  the lend's. No change to `CDerives`, `fundamentalN_all`, `goal791N`, the checker, the backends or
+  the corpus.
 - **1.40** (2026-11-07) — §64 (#651): Backend2's lowering keeps a boxed field's object taken apart
   by a `letpair` or a `case` as a spare box, reused by the next box of its words built before a
   call, a return or the arm's end, and freed there otherwise: the token put back by

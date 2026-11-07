@@ -31,28 +31,37 @@ open BoCa.Fig16.LogRel.Core
 open BoCa.Fig16.LogRel.Core.Chain.SI
 open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 defines_meetOfDom_empty)
+open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 defines_meetOfDom_empty ansC_of_suspend)
 open BoCa.BoLo (performE)
 open BoCa.Programs (alloc' free')
 open BoCa.Fig16.LogRel.Core.EffPrograms (callbackUW)
 open BoCa.Fig16.LogRel.Core.CancelIntercept (idV)
 
-/-- **Every #791 constant is a value of `!` its type**, from `MissingN`: each constant's
-compatibility lemma at `cN`, its finaliser's judgment read by `fundamentalN_all`. -/
-theorem constN_all (hm : MissingN (ℍ := ℍ)) : ∀ c : Const791, ConstN (ℍ := ℍ) c
-  | .w2 .. => by
-      rintro ⟨hbnd, hO, hA, hB, hS, hdc, hder⟩ δ Θ n _
-      exact withbor2S_compat hbnd hO hA hB hS hdc (fundamentalN_all hm hder) δ Θ n
-  | .w3 .. => by
-      rintro ⟨hbnd, hA, hB, hS, hdc, hder⟩ δ Θ n _
-      exact withbor3S_compat hbnd hA hB hS hdc (fundamentalN_all hm hder) δ Θ n
-  | .wF .. => by
-      rintro ⟨hbnd, hA, hB, hS, hdc, hder⟩ δ Θ n _
-      exact withborFS_compat hbnd hA hB hS hdc (fundamentalN_all hm hder) δ Θ n
-  | .wl .. => constN_wl
-  | .sm .. => by
-      rintro ⟨hbnd, hOA, hOB, hA, hB, hS, hdc, hder⟩ δ Θ n _
-      exact sliceBorrowMS_compat hbnd hOA hOB hA hB hS hdc (fundamentalN_all hm hder) δ Θ n
+/-- **Every #791 constant is a value of `!` its type at every lifetime context**, from
+`MissingN`: each lend constant's compatibility lemma at `cN`, its finaliser's judgment read by
+`fundamentalN_all`; a binder by `constNAt_poly`.  `[spec §62]` -/
+theorem constNAt_all (hm : MissingN (ℍ := ℍ)) : ∀ (c : Const791) (Δ : LifeCtx),
+    ConstNAt (ℍ := ℍ) Δ c
+  | .w2 .., _ => by
+      rintro ⟨hbnd, hO, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
+      exact withbor2S_compat hbnd hO hA hB hS hAns hdc (fundamentalN_all hm hder) δ hδ Θ n
+  | .w3 .., _ => by
+      rintro ⟨hbnd, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
+      exact withbor3S_compat hbnd hA hB hS hAns hdc (fundamentalN_all hm hder) δ hδ Θ n
+  | .wF .., _ => by
+      rintro ⟨hbnd, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
+      exact withborFS_compat hbnd hA hB hS hAns hdc (fundamentalN_all hm hder) δ hδ Θ n
+  | .wl .., Δ => constN_wl Δ
+  | .sm .., _ => by
+      rintro ⟨hbnd, hOA, hOB, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
+      exact sliceBorrowMS_compat hbnd hOA hOB hA hB hS hAns hdc (fundamentalN_all hm hder) δ hδ
+        Θ n
+  | .poly _ _ c, Δ => constNAt_poly (constNAt_all hm c) Δ
+
+/-- **Every #791 constant is a value of `!` its type**, from `MissingN`: `constNAt_all` at the
+empty context. -/
+theorem constN_all (hm : MissingN (ℍ := ℍ)) : ∀ c : Const791, ConstN (ℍ := ℍ) c :=
+  fun c => constN_of_at (constNAt_all hm c LifeCtx.empty)
 
 /-- **The constants' context is met by their values**, at every world, with no resource. -/
 theorem gN_ctx791 (hC : ∀ c : Const791, ConstN (ℍ := ℍ) c) (δ : LSub) {Θ : LocTy} (hΘ : Θ.OK)
@@ -184,13 +193,16 @@ theorem d_prog791 :
   exact .tensorI (.dead .nil) (CancelIntercept.d_idVΓ (.cons .nil) [] .unit)
     (.tensorI (.dead .nil) (CancelIntercept.d_idVΓ (.cons .nil) [] .unit) (.unitI (.cons .nil)))
 
-theorem lendC_ok : lendC.OK := by
-  refine ⟨defines_meetOfDom_empty, ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩, id, id, ?_, by decide,
-    consume_wf (.ref .unit) .nil⟩
+theorem waitRow_suspend : waitRow.Suspend LifeCtx.empty 0 LifeCtx.empty.meetOfDom := by
   intro o ho
   simp [Row.ofEff] at ho
   subst ho
   exact ⟨by decide, by decide, id, id, .unit, .unit, fun _ => trivial⟩
+
+theorem lendC_ok : lendC.OK :=
+  ⟨defines_meetOfDom_empty, ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩, id, id, waitRow_suspend,
+    ⟨_, defines_meetOfDom_empty, ansC_of_suspend waitRow_suspend⟩, by decide,
+    consume_wf (.ref .unit) .nil⟩
 
 /-- **Every premise of `Goal791N` holds at `prog791`**: the constant meets its rule's premises,
 and the program, its handler inside it, is typed at `F 1` from it. -/
