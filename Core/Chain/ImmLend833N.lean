@@ -19,10 +19,10 @@ Core's `withbor1U_compatX` (`Core/EffBorrow.lean`) and `withbor1_compatX`
 * the Imm Frame across the row's raises (`erwp_I_frameR`, Core's `ewpTS_I_frameU`);
 * the callback's result `['x] B` returns to the world without the record (`LocTy.extR_of_addImm`,
   Core's `ext_drop`);
-* the finaliser frame consumes the lend's claim at a raise (`erwp_ubindRaise`, `fin_claimI`).
+* the finaliser frame consumes the lend's claim at a raise (`erwp_ubindRaise`, `fin_claimI₀`).
 
 The same steps give the `mut` lend `withbor (2)` at the pure row and at an unwinding row, at any
-`Δ` (`withbor2_compatN₀`, `withbor2U_compatN`): the Mut Frame across raises (`erwp_M_frameR`), the
+`Δ` (`withbor2_compatN₀`, `withbor2U_compatN₀`): the Mut Frame across raises (`erwp_M_frameR`), the
 claim consistent with the view (`erwp_claimX_abort`).
 -/
 
@@ -243,7 +243,7 @@ theorem tabN_unwind_named {S : Row} {x : LifeVar} (hS : S.Unwind x) (R : VTy) (�
 /-- **The finaliser `λ_. d ℓ` consumes an `imm` lend's claim**: the cell owned again with the
 content it was lent with, `d`'s judgment at `Ref A ⊸ 1` read at the world and an index below the
 content's. -/
-theorem fin_claimI {A : VTy} {d : Expr} (hdc : closedAt 0 d = true) {δ : LSub} {Θ : LocTy}
+theorem fin_claimI₀ {A : VTy} {d : Expr} (hdc : closedAt 0 d = true) {δ : LSub} {Θ : LocTy}
     (hΘ : Θ.OK) {c : Loc → Option Life} {N : Nat}
     (hd : ∀ k, k ≤ N → ∀ ls, cN₀ (ℍ := ℍ) (.ret (.lolli (.ref A) .unit)) δ Θ c k ls d PMap.empty)
     {l : Loc} {w : Val} {σ : WRes} (hw : vN₀ (ℍ := ℍ) A δ Θ N w σ) {k : Nat} (hk : k ≤ N)
@@ -287,11 +287,11 @@ theorem fin_claimI {A : VTy} {d : Expr} (hdc : closedAt 0 d = true) {δ : LSub} 
 7. the Imm Frame across the row's raises (`erwp_I_frameR`, Core's `ewpTS_I_frameU`), the
    callback's result `['x] B` back at `Θ` (`LocTy.extR_of_addImm`, Core's `ext_drop`);
 8. the finaliser frame: at a return `(ℓ, b)`, at a raise `d ℓ` consumes the claim
-   (`erwp_ubindRaise`, `fin_claimI`).
+   (`erwp_ubindRaise`, `fin_claimI₀`).
 
 Premises: `hδ`, `hadm` (Core's `admWf_of_vScoped hsc₁ hδ`), `hfree₁`, `hfree₂`, `hS`, `hdc` are
 the rule's; `hd` is the finaliser's judgment at the run's world and every lower index. -/
-theorem withbor1U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Expr} {δ : LSub}
+theorem withbor1U_sem₀ {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Expr} {δ : LSub}
     (hδ : Δ.Models δ) (hadm : AdmWf A δ) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
     (hS : S.Unwind x) (hdc : closedAt 0 d = true) (Θ₀ : LocTy) (n : Nat)
     (hd : ∀ (Θ : LocTy), Θ.OK → ∀ c k, k ≤ n → ∀ ls,
@@ -374,7 +374,7 @@ theorem withbor1U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Ex
     · obtain ⟨hcl', hj⟩ := hR
       have hcρ : ConsistentX c ρ :=
         consistentX_compS hcl' (consistentX_of_top (ResU.inStratum_single_own _ l w₀) c) hcσ
-      exact fin_claimI hdc hΘ (fun j hj ls => hd Θ hΘ c j (hj.trans (hk'.trans hk)) ls) hw₀ hj
+      exact fin_claimI₀ hdc hΘ (fun j hj ls => hd Θ hΘ c j (hj.trans (hk'.trans hk)) ls) hw₀ hj
         hcl' hcρ
     · refine erwp_det hΦ (opTableN_down hTd) hQo
         (fun μ => step1Only_plug (Head.beta μ _ b) rfl .hole) ?_
@@ -423,9 +423,9 @@ theorem withbor1U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Ex
       hbB'⟩
 
 /-- **`withbor1U` at `SemJN₀`** (Core's `withbor1U_compatX`): the context owns nothing, the term
-is the value `withborU d`, a value of its type at every `δ ⊨ Δ` (`withbor1U_sem`), the finaliser's
+is the value `withborU d`, a value of its type at every `δ ⊨ Δ` (`withbor1U_sem₀`), the finaliser's
 judgment read at the run's world and every lower index (`gN_dead_any₀`). -/
-theorem withbor1U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
+theorem withbor1U_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A)
     (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hdc : closedAt 0 d = true)
     (hd : SemJN₀ (ℍ := ℍ) Δ Γ d (.val (.lolli (.ref A) .unit))) :
@@ -435,7 +435,7 @@ theorem withbor1U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
   rw [show substAll γ (withborUE d) = withborUE d from
     psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
-  refine erwp_val (v := withborUV d) (withbor1U_sem hδ (admWf_of_vScoped hsc₁ hδ) hfree₁ hfree₂
+  refine erwp_val (v := withborUV d) (withbor1U_sem₀ hδ (admWf_of_vScoped hsc₁ hδ) hfree₁ hfree₂
     hS hdc Θ n (fun Θ' hΘ' c' k hk ls' => ?_))
   have h := hd δ γ Θ' c' k ls' PMap.empty hδ hΘ' (consistentX_empty c') hlw
     (gN_dead_any₀ hΓ hg Θ' k hk)
@@ -674,8 +674,8 @@ theorem erwp_claimX_abort {Θ : LocTy} {c : Loc → Option Life} {T : OpTabN}
 `[TR]` 6.60's stratum at the side condition `Δ ⊢ A ⊒ @b` and the callback's; the callback at the
 world with the lend (`LocTy.view_add`); the Mut Frame across the row's raises (`erwp_M_frameR`,
 Core's `ewpTS_M_frameU`); the claim consistent with the view (`erwp_claimX_abort`); the finaliser
-frame at a raise (`erwp_ubindRaise`, `fin_claimI` at the claim's content). -/
-theorem withbor2U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Expr} {δ : LSub}
+frame at a raise (`erwp_ubindRaise`, `fin_claimI₀` at the claim's content). -/
+theorem withbor2U_sem₀ {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Expr} {δ : LSub}
     (hδ : Δ.Models δ) (hO : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hA : ¬ VFree x A)
     (hB : ¬ VFree x B) (hS : S.Unwind x) (hdc : closedAt 0 d = true) (Θ₀ : LocTy) (n : Nat)
     (hd : ∀ (Θ : LocTy), Θ.OK → ∀ c k, k ≤ n → ∀ ls,
@@ -769,7 +769,7 @@ theorem withbor2U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Ex
       (NFv l) (DFv d l) (fun j ls' ρ hR => ?_) hQo (fun j ls' b ρ hq => ?_) k' ls _ ρ'' hM''
     · obtain ⟨⟨⟨w, σ, hσ, hF, hclm⟩, hcR⟩, hj⟩ := hR
       have hwσ : vN₀ (ℍ := ℍ) A δ Θ j w σ := by rw [← hAδ]; exact (vN_above₀ A δ' Θ hσ).mp hF
-      exact fin_claimI hdc hΘ (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hj.trans (hk'.trans hk))) ls)
+      exact fin_claimI₀ hdc hΘ (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hj.trans (hk'.trans hk))) ls)
         hwσ le_rfl hclm hcR
     · refine erwp_det hΦ (opTableN_down hTd) hQo
         (fun μ => step1Only_plug (Head.beta μ _ b) rfl .hole) ?_
@@ -800,7 +800,7 @@ theorem withbor2U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Ex
     exact ⟨Val.loc l, b, Wc, ρ', rfl, ResU.CompS.comm hZ', ⟨l, w, σ, rfl, hWc, hwσ⟩, hbB'⟩
 
 /-- **`withbor2U` at `SemJN₀`** (Core's `withbor2U_compatX`), at an unwinding row and any `Δ`. -/
-theorem withbor2U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
+theorem withbor2U_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hdc : closedAt 0 d = true)
     (hd : SemJN₀ (ℍ := ℍ) Δ Γ d (.val (.lolli (.ref A) .unit))) :
@@ -810,7 +810,7 @@ theorem withbor2U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
   rw [show substAll γ (withborUE d) = withborUE d from
     psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
-  refine erwp_val (v := withborUV d) (withbor2U_sem hδ hside hfree₁ hfree₂ hS hdc Θ n
+  refine erwp_val (v := withborUV d) (withbor2U_sem₀ hδ hside hfree₁ hfree₂ hS hdc Θ n
     (fun Θ' hΘ' c' k hk ls' => ?_))
   have h := hd δ γ Θ' c' k ls' PMap.empty hδ hΘ' (consistentX_empty c') hlw
     (gN_dead_any₀ hΓ hg Θ' k hk)

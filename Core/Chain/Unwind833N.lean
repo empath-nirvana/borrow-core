@@ -11,11 +11,11 @@ borrow.
 * `erwp_M_antiFrameU`: the Mut Anti-Frame at an unwinding row (Core's `ewpTS_M_antiFrameU`),
   `erwp_M_antiFrameCR` at the row's own table as its twin. The twin guards no stop; only the
   raises' claim (`hRin`/`hRout`) remains, and the cancel obligations are vacuous.
-* `withbor3U_sem`, `withbor3U_compatN`: `withbor3S_compat₀`'s steps with the bound `Δ.meetOfDom`,
+* `withbor3U_sem₀`, `withbor3U_compatN₀`: `withbor3S_compat₀`'s steps with the bound `Δ.meetOfDom`,
   the callback's table the lender's (`tabN_unwind_eq_add`), the anti-frame `erwp_M_antiFrameU`,
   the claim consistent (`erwp_claimX_abort`), the finaliser frame at a raise (`erwp_ubindRaise`,
-  `fin_claimMN`).
-* `withloadU_sem`, `withloadU_compatN`: `withloadS_compat₀`'s steps, 6.150 across the row's raises
+  `fin_claimMN₀`).
+* `withloadU_sem₀`, `withloadU_compatN₀`: `withloadS_compat₀`'s steps, 6.150 across the row's raises
   (`withload_rebT₀`, `erwp_rebGen`). An unwinding row may hold an unrestricted operation; it is
   abortive, so it never resumes and the reborrow is never re-entered through it
   (`OpTabN.RebOKR.entry` reads only resumable entries). The row's table admits the reborrow at
@@ -125,7 +125,7 @@ theorem tabN_unwind_extend {S : Row} {x : LifeVar} (hS : S.Unwind x) (R₁ R₂ 
 /-- **The finaliser `λ_. d ℓ` consumes a `Mut @a A` source**, `d`'s judgment at `Mut @a A ⊸ 1`
 read at the world and an index at or below `N` (`fin_claimM₀` with the judgment at the run's
 world). -/
-theorem fin_claimMN {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
+theorem fin_claimMN₀ {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life} {N : Nat}
     (hd : ∀ k, k ≤ N → ∀ ls,
       cN₀ (ℍ := ℍ) (.ret (.lolli (.mut a A) .unit)) δ Θ c k ls d PMap.empty)
@@ -168,11 +168,11 @@ row. Core's `withbor3U_compatX`, step by step, as `withbor3S_compat₀`:
    (`hunif`, `vN_above₀`), and the resealed cell is a `Mut @a A` value again, beside the result and
    in every raise's claim;
 8. the claim consistent with the view (`erwp_claimX_abort`) and the finaliser frame consuming it
-   with `d` (`erwp_ubindRaise`, `fin_claimMN`).
+   with `d` (`erwp_ubindRaise`, `fin_claimMN₀`).
 
 Premises: `hδ`, `hA`, `hB`, `hS`, `hdc` are the rule's; `hd` is the finaliser's judgment at the
 run's world and every lower index. -/
-theorem withbor3U_sem {Δ : LifeCtx} {a : Lifetime.Life} {x : LifeVar} {A B : VTy} {S : Row}
+theorem withbor3U_sem₀ {Δ : LifeCtx} {a : Lifetime.Life} {x : LifeVar} {A B : VTy} {S : Row}
     {d : Expr} {δ : LSub} (hδ : Δ.Models δ) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
     (hS : S.Unwind x) (hdc : closedAt 0 d = true) (Θ₀ : LocTy) (n : Nat)
     (hd : ∀ (Θ : LocTy), Θ.OK → ∀ c k, k ≤ n → ∀ ls,
@@ -293,7 +293,7 @@ theorem withbor3U_sem {Δ : LifeCtx} {a : Lifetime.Life} {x : LifeVar} {A B : VT
         exact hp)
       (NFv l) (DFv d l) (fun j ls' ρ hR => ?_) hQo (fun j ls' b ρ hq => ?_) k' ls _ ρ'' hM''
     · obtain ⟨⟨hRj, hcR⟩, hj⟩ := hR
-      exact fin_claimMN hdc hΘ
+      exact fin_claimMN₀ hdc hΘ
         (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hj.trans (hk'.trans hk))) ls) le_rfl hRj hcR
     · refine erwp_det hΦ (opTableN_down hTd) hQo
         (fun μ => step1Only_plug (Head.beta μ _ b) rfl .hole) ?_
@@ -331,7 +331,7 @@ theorem withbor3U_sem {Δ : LifeCtx} {a : Lifetime.Life} {x : LifeVar} {A B : VT
     ⟨Val.loc l, b, _, ρ', rfl, ResU.CompS.comm hX', hRout k w σ h' hw', hbB'⟩⟩
 
 /-- **`withbor3U` at `SemJN₀`** (Core's `withbor3U_compatX`), at an unwinding row and any `Δ`. -/
-theorem withbor3U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy} {S : Row}
+theorem withbor3U_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy} {S : Row}
     {d : Expr} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
     (hS : S.Unwind x) (hdc : closedAt 0 d = true)
     (hd : SemJN₀ (ℍ := ℍ) Δ Γ d (.val (.lolli (.mut a A) .unit))) :
@@ -341,7 +341,7 @@ theorem withbor3U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
   rw [show substAll γ (withborUE d) = withborUE d from
     psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
-  refine erwp_val (v := withborUV d) (withbor3U_sem hδ hfree₁ hfree₂ hS hdc Θ n
+  refine erwp_val (v := withborUV d) (withbor3U_sem₀ hδ hfree₁ hfree₂ hS hdc Θ n
     (fun Θ' hΘ' c' k hk ls' => ?_))
   have h := hd δ γ Θ' c' k ls' PMap.empty hδ hΘ' (consistentX_empty c') hlw
     (gN_dead_any₀ hΓ hg Θ' k hk)
@@ -352,7 +352,7 @@ theorem withbor3U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
 /-- **The unwinding callback at the image**: the callback, at `β ⊏ @bnd`, applied to the image
 `χ` of the loaded payload, typed at `Imm̲ 'x A`, runs at the row's table with `[β]𝒱⟦B⟧` as its
 post (`callback_at_image₀` at a `Row.Unwind` row, its table by `tabN_unwind_extend`). -/
-theorem callback_at_imageU {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row}
+theorem callback_at_imageU₀ {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row}
     (hB : ¬ VFree x B) (hS : S.Unwind x) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {n : Nat} {ls : List SRec} {f u : Val} {ρf χ Bχ : WRes} {β : Life}
     (hLt : LtLife δ bnd β)
@@ -381,9 +381,9 @@ load (`rwp_load_cell` under `erwp_bindR`); 6.150 at the run's first entry (`with
 across the row's raises (`erwp_rebGen`): the row's table admits the reborrow at every `β`
 (`tabN_unwind_rebOKR`; an unrestricted operation of the row is abortive, so it never resumes) and
 has no cancel obligation (`tabN_unwind_rebClosed`); the callback at the image
-(`callback_at_imageU`), its result `['x] B` read at `B`. The source is consumed by the load, so
+(`callback_at_imageU₀`), its result `['x] B` read at `B`. The source is consumed by the load, so
 nothing goes back to the lender and there is no finaliser. -/
-theorem withloadU_sem {Δ : LifeCtx} {a : Lifetime.Life} {x : LifeVar} {A B : VTy} {S : Row}
+theorem withloadU_sem₀ {Δ : LifeCtx} {a : Lifetime.Life} {x : LifeVar} {A B : VTy} {S : Row}
     {δ : LSub} (hδ : Δ.Models δ) (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Unwind x)
     (Θ₀ : LocTy) (n : Nat) :
     vN₀ (ℍ := ℍ) (withloadUTy a x Δ.meetOfDom A B S) δ Θ₀ n withloadV PMap.empty := by
@@ -419,11 +419,11 @@ theorem withloadU_sem {Δ : LifeCtx} {a : Lifetime.Life} {x : LifeVar} {A B : VT
     (fun β _ _ _ _ _ _ χ Ok _ _ _ => tabN_unwind_rebClosed hS B δ Θ c β _ χ Ok)
     (vO_le₀ (Nat.sub_le k' 1) hpay) (hwit l s w σ hσs rfl)
     (fun β hLt u χ Bχ hχ _ _ himg hBχ =>
-      callback_at_imageU hB hS hΘ hLt (vN_le₀ (Nat.sub_le k' 1) hf) hcf hχ himg hBχ) hc'
+      callback_at_imageU₀ hB hS hΘ hLt (vN_le₀ (Nat.sub_le k' 1) hf) hcf hχ himg hBχ) hc'
 
 /-- **`withloadU` at `SemJN₀`** (Core's `withloadU_compatX`), at an unwinding row and any `Δ`,
 abortive unrestricted operations included. -/
-theorem withloadU_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy} {S : Row}
+theorem withloadU_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy} {S : Row}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
     (hS : S.Unwind x) :
     SemJN₀ (ℍ := ℍ) Δ Γ withload (.val (withloadUTy a x Δ.meetOfDom A B S)) := by
@@ -431,7 +431,7 @@ theorem withloadU_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
   obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withload) _
   rw [show substAll γ withload = withload from psub_closedAt _ γ (by decide) (Nat.zero_le 0)]
-  exact erwp_val (v := withloadV) (withloadU_sem hδ hfree₁ hfree₂ hS Θ n)
+  exact erwp_val (v := withloadV) (withloadU_sem₀ hδ hfree₁ hfree₂ hS Θ n)
 
 /-! ### An unwinding row with an unrestricted operation -/
 
@@ -446,10 +446,10 @@ theorem unrRaiseRow_unwind (x : LifeVar) : unrRaiseRow.Unwind x := by
   exact ⟨rfl, by decide, id, fun _ _ => .unit⟩
 
 /-- **`withloadU` at the row with an unrestricted operation**, every hypothesis discharged. -/
-theorem withloadU_unr_inst (Δ : LifeCtx) (a : Lifetime.Life) (x : LifeVar) :
+theorem withloadU_unr_inst₀ (Δ : LifeCtx) (a : Lifetime.Life) (x : LifeVar) :
     SemJN₀ (ℍ := ℍ) Δ [] withload
       (.val (withloadUTy a x Δ.meetOfDom .unit .unit unrRaiseRow)) :=
-  withloadU_compatN x .nil id id (unrRaiseRow_unwind x)
+  withloadU_compatN₀ x .nil id id (unrRaiseRow_unwind x)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

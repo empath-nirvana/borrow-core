@@ -2607,9 +2607,9 @@ The rule-by-rule map is `docs/new-core/scope-831-map.md`. Its answers on the two
   With `LocTy.above` Core's `ls₀` and `ExtR`'s record conjunct Core's `Keeps`, that world is an
   extension at the callback's resource (`LocTy.extR_addImm`, Core's `ext_add`) and the world
   without the record is one at the result's (`LocTy.extR_of_addImm`, Core's `ext_drop`);
-  `withbor1_compatN₀` and `withbor1U_compatN` (`Core/Chain/ImmLend833N.lean`) follow Core's proofs,
-  as do `withbor2_compatN₀` and `withbor2U_compatN` (the latter at any `Δ` and a `Row.Unwind` row).
-  At a `Row.Unwind` row the reborrows `withbor3U_compatN` and `withloadU_compatN`
+  `withbor1_compatN₀` and `withbor1U_compatN₀` (`Core/Chain/ImmLend833N.lean`) follow Core's proofs,
+  as do `withbor2_compatN₀` and `withbor2U_compatN₀` (the latter at any `Δ` and a `Row.Unwind` row).
+  At a `Row.Unwind` row the reborrows `withbor3U_compatN₀` and `withloadU_compatN₀`
   (`Core/Chain/Unwind833N.lean`) follow Core's proofs too: the Mut Anti-Frame at the row's own
   table (`erwp_M_antiFrameU`), and 6.150 across the row's raises, abortive unrestricted operations
   included (`withload_rebT₀`).

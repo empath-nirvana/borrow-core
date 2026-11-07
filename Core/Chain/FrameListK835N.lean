@@ -3,7 +3,7 @@ import Core.Chain.TabK835N
 /-!
 # The `n`-cell Mut Frame at `erwpK`  `[spec §19, §27, §62]`
 
-`docs/new-core/scope-835-tables.md` §4. `erwp_M_frameListCRN` and `erwp_M_frameListRN`
+`docs/new-core/scope-835-tables.md` §4. `erwp_M_frameListCRN` and `erwp_M_frameListRN₀`
 (`FamCancel836N.lean`) are one list induction, each step a Mut Frame. `erwpK_M_frameList` is that
 induction at `erwpK` over any world index: the run at the world `x`, its location family
 `Φ Θ c` and its tables `TbL Θ c I` read at the location typing and the view the frames before it
@@ -50,7 +50,7 @@ def listPostN₀ (A : VTy) (δ : LSub) (Ψ : LocTy → PostN) (Θ : LocTy) (I : 
     sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ Θ k (Val.loc m)) I ρ₁ ∧ Ψ Θ k ls' v ρ₂
 
 /-- **One Mut Frame per place, around one expression, at `erwpK`** (`erwp_M_frameListCRN`,
-`erwp_M_frameListRN`): the list induction, each frame's step `hstep`. -/
+`erwp_M_frameListRN₀`): the list induction, each frame's step `hstep`. -/
 theorem erwpK_M_frameList {V : ι → ι → Prop} {A : VTy} {δ : LSub} {β β' mb : Life}
     (hunif : ∀ Θ j u r, vN₀ (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
     (Φ : LocTy → (Loc → Option Life) → ι → LocFam)
@@ -250,7 +250,7 @@ theorem erwp_M_frameListCRN_of_K {A : VTy} {δ : LSub} {β β' : Life}
   rw [erwp_eq_erwpK]
   exact h
 
-/-- `erwp_M_frameListRN` from `erwpK_M_frameList` at one world: each step the frame
+/-- `erwp_M_frameListRN₀` from `erwpK_M_frameList` at one world: each step the frame
 `erwp_M_frameRR` at the table `τ`, which reads no fresh key. -/
 theorem erwp_M_frameListRN_of_K {A : VTy} {δ : LSub} {β β' : Life}
     (hunif : ∀ Θ j u r, vN₀ (ℍ := ℍ) A δ Θ j u r → r.InStratum β)

@@ -606,15 +606,15 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | withload x hΓ _ hf₁ hf₂ => exact withload_compatN₀ x hΓ hf₁ hf₂
   | withswap hΓ => exact withswap_compatN₀ hΓ
   | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS hdc _ ihd =>
-      exact withbor1U_compatN x hΓ hsc₁ hf₁ hf₂ hS hdc ihd
+      exact withbor1U_compatN₀ x hΓ hsc₁ hf₁ hf₂ hS hdc ihd
   | withbor2U x hΓ _ hside hf₁ hf₂ hS hdc _ ihd =>
-      exact withbor2U_compatN x hΓ hside hf₁ hf₂ hS hdc ihd
-  | withbor3U x hΓ _ hf₁ hf₂ hS hdc _ ihd => exact withbor3U_compatN x hΓ hf₁ hf₂ hS hdc ihd
-  | withloadU x hΓ _ hf₁ hf₂ hS => exact withloadU_compatN x hΓ hf₁ hf₂ hS
+      exact withbor2U_compatN₀ x hΓ hside hf₁ hf₂ hS hdc ihd
+  | withbor3U x hΓ _ hf₁ hf₂ hS hdc _ ihd => exact withbor3U_compatN₀ x hΓ hf₁ hf₂ hS hdc ihd
+  | withloadU x hΓ _ hf₁ hf₂ hS => exact withloadU_compatN₀ x hΓ hf₁ hf₂ hS
   | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS hdc _ ihd =>
-      exact sliceBorrowMU_compatN x hΓ hA hB hf₁ hf₂ hS hdc ihd
+      exact sliceBorrowMU_compatN₀ x hΓ hA hB hf₁ hf₂ hS hdc ihd
   | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS hdc _ ihd =>
-      exact sliceBorrowIU_compatN x hΓ hsc hA hB hf₁ hf₂ hS hdc ihd
+      exact sliceBorrowIU_compatN₀ x hΓ hsc hA hB hf₁ hf₂ hS hdc ihd
   | lolliE hs _ _ iha ihf => exact lolliE_compatN₀ hs iha ihf
   | allEV _ hlt ih => exact allEV_compatN₀ ih hlt
   | ofRet _ ih => exact ofRet_compatN₀ ih

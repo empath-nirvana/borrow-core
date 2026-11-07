@@ -14,12 +14,12 @@ chain:
   lifetime `αⱼ` below the frame's rest, the payloads' and the result's strata and the callback's
   bound, its record `(pⱼ, αⱼ)` in the inner frames' world (`LocTy.addImm`); the run of the inner
   frames is read at the lender's view by `erwp_tieEntryR` (the table is abortive), as in
-  `withbor1U_sem`. The callback receives every leaf at the innermost lifetime (`immCell` reads
+  `withbor1U_sem₀`. The callback receives every leaf at the innermost lifetime (`immCell` reads
   `α ⊑ ⊓s`), at the world holding every record (`LocTy.addImms`). Frame `j`'s output moves what the
   inner frames returned to the world without its record (`LocTy.extR_of_addImm`), and its claim
   joins theirs, the cells owned again (`claimL₀`);
-* `sliceBorrowI_compatN₀` and `sliceBorrowIU_compatN` are Core's `sliceBorrowI_compatX` and
-  `sliceBorrowIU_compatX` against it, with `withbor1_sem₀`'s and `withbor1U_sem`'s steps around
+* `sliceBorrowI_compatN₀` and `sliceBorrowIU_compatN₀` are Core's `sliceBorrowI_compatX` and
+  `sliceBorrowIU_compatX` against it, with `withbor1_sem₀`'s and `withbor1U_sem₀`'s steps around
   the callback.
 -/
 
@@ -560,14 +560,14 @@ theorem tabN_unwind_addImms {S : Row} {x : LifeVar} (hS : S.Unwind x) (R : VTy) 
 /-- **`slice_borrow` at an unwinding row is a value of its type** (Core's
 `sliceBorrowIU_compatX`): `withborU d` at
 `Array A ⊸ (∀'x ⊏ @Δ. [Imm 'x A] ⊸ F_Σ(['x] B)) ⊸ F_Σ(Array A ⊗ B)`, `Σ` a `Row.Unwind x` row.
-`sliceBorrowMU_sem`'s steps with the `n` Imm Frames across the row's raises
+`sliceBorrowMU_sem₀`'s steps with the `n` Imm Frames across the row's raises
 (`erwp_I_frameListRN₀`, Core's `wpG_I_frameFam`) at the lender's table, which reads no record
 (`tabN_unwind_addImms`); the payloads' and the result's strata from the side conditions by 6.60
 at `↓@bδ`; the callback at the world holding the records receives the family `[Imm 'x A]` at the
 innermost lifetime; the composite claim, the array owned again, consistent with the view
 (`erwp_claimX_abort`), is consumed by the finaliser at a raise (`erwp_ubindRaise`,
-`fin_claimArrI`). -/
-theorem sliceBorrowIU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Expr}
+`fin_claimArrI₀`). -/
+theorem sliceBorrowIU_sem₀ {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Expr}
     {δ : LSub} (hδ : Δ.Models δ) (hadm : AdmWf A δ)
     (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
@@ -643,7 +643,7 @@ theorem sliceBorrowIU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
       (NFa (Val.arr l cn)) (DFa d (Val.arr l cn)) (fun j ls' ρ hR => ?_) hQo
       (fun j ls' b ρ hq => ?_) k' ls _ ρ'' hM''
     · obtain ⟨⟨hR, hcR⟩, hj⟩ := hR
-      exact fin_claimArrI hdc hΘ (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hk'.trans hk)) ls)
+      exact fin_claimArrI₀ hdc hΘ (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hk'.trans hk)) ls)
         (hj.trans le_rfl) (vN_le₀ hj ⟨l, cn, rfl, hn, by rw [sepRange_eq_sepList]; exact hR⟩) hcR
     · obtain ⟨ρ₁, ρ₂, hc12, ho, hb⟩ := hq
       refine erwp_det hΦ (opTableN_down hTd) hQo
@@ -677,7 +677,7 @@ theorem sliceBorrowIU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
 
 /-- **`sliceBorrowIU` at `SemJN₀`** (Core's `sliceBorrowIU_compatX`), at an unwinding row and any
 `Δ`. -/
-theorem sliceBorrowIU_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
+theorem sliceBorrowIU_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A)
     (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A)
@@ -689,7 +689,7 @@ theorem sliceBorrowIU_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
   rw [show substAll γ (withborUE d) = withborUE d from
     psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
-  refine erwp_val (v := withborUV d) (sliceBorrowIU_sem hδ (admWf_of_vScoped hsc hδ) hsideA hsideB
+  refine erwp_val (v := withborUV d) (sliceBorrowIU_sem₀ hδ (admWf_of_vScoped hsc hδ) hsideA hsideB
     hfree₁ hfree₂ hS hdc Θ n (fun Θ' hΘ' c' k hk ls' => ?_))
   have h := hd δ γ Θ' c' k ls' PMap.empty hδ hΘ' (consistentX_empty c') hlw
     (gN_dead_any₀ hΓ hg Θ' k hk)

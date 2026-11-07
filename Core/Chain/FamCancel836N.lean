@@ -895,7 +895,7 @@ induction over `erwp_M_frameRR`. The table `τ Θ c` does not read a fresh key (
 frame's callback runs at the lender's table; frame `j`'s claim joins the inner frames' at a
 raise, and the cells it claims are moved to the world without its key (`vN_local₀`), as in
 `erwp_M_frameListCRN`. -/
-theorem erwp_M_frameListRN {A : VTy} {δ : LSub} {β β' : Life}
+theorem erwp_M_frameListRN₀ {A : VTy} {δ : LSub} {β β' : Life}
     (hunif : ∀ Θ j u r, vN₀ (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
     (τ : LocTy → (Loc → Option Life) → OpTabN)
     (hτ : ∀ (Θ : LocTy) (l : Loc) (α : Life) (F : Nat → Val → SPropS Loc Val α) c,
@@ -987,7 +987,7 @@ theorem erwp_M_frameListRN {A : VTy} {δ : LSub} {β β' : Life}
       have hrest₁ : sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ Θ₁ n (Val.loc m)) I ρr :=
         sepList_mono' (fun m τ h => vN_extA₀ (.ref A) δ hE₁ n _ τ h) hrest
       refine erwp_mono (fun k ls' v ρ' h => ?_) (opTableR_local _ _) n ls e BM
-        (erwp_M_frameListRN hunif τ hτ hτok Ψ hΨs hΨl e ls I Θ₁ c₁ n ρr R BM (βR ⊓ α₁ ⊓ γ) hOK₁
+        (erwp_M_frameListRN₀ hunif τ hτ hτok Ψ hΨs hΨl e ls I Θ₁ c₁ n ρr R BM (βR ⊓ α₁ ⊓ γ) hOK₁
           hcBM hBMR hrest₁ (fun α₂ hα₂ => ⟨hβR.mono (le_of_lt (lt_of_lt_of_le hα₂
             (inf_le_left.trans inf_le_left))), ?_⟩))
       · obtain ⟨ρ₁, ρ₂, hc12, ho1, hψ⟩ := h
@@ -1017,9 +1017,9 @@ theorem erwp_M_frameListRN {A : VTy} {δ : LSub} {β β' : Life}
         exact (hH α₂ hα₂γ).2 Θ' c' (LocTy.extA_trans hE₁ hE) hOK' X ρ' ⟨_, ρm₂, hX, hlead, hm₂⟩
           hρ'X hc'
 
-/-- **The finaliser consumes the source array, its judgment read at the index** (`fin_claimI`
+/-- **The finaliser consumes the source array, its judgment read at the index** (`fin_claimI₀`
 at `Array A`). -/
-theorem fin_claimArrI {A : VTy} {d : Expr} (hdc : closedAt 0 d = true) {δ : LSub} {Θ : LocTy}
+theorem fin_claimArrI₀ {A : VTy} {d : Expr} (hdc : closedAt 0 d = true) {δ : LSub} {Θ : LocTy}
     (hΘ : Θ.OK) {c : Loc → Option Life} {N : Nat}
     (hd : ∀ k, k ≤ N → ∀ ls, cN₀ (ℍ := ℍ) (.ret (.lolli (.array A) .unit)) δ Θ c k ls d PMap.empty)
     {a : Val} {k : Nat} (hk : k ≤ N) {ls : List SRec} {ρ : WRes}
@@ -1047,13 +1047,13 @@ theorem fin_claimArrI {A : VTy} {d : Expr} (hdc : closedAt 0 d = true) {δ : LSu
 /-- **`slice_borrow_mut` at an unwinding row is a value of its type** (Core's
 `sliceBorrowMU_compatX`): `withborU d` at
 `Array A ⊸ (∀'x ⊏ @Δ. [Mut 'x A] ⊸ F_Σ(['x] B)) ⊸ F_Σ(Array A ⊗ B)`, `Σ` a `Row.Unwind x`
-row. `withbor2U_sem`'s steps with the one-cell frame replaced by the `n`-cell frame across the
-row's raises (`erwp_M_frameListRN`, Core's `wpG_M_frameFam`), the row's table reading no fresh
+row. `withbor2U_sem₀`'s steps with the one-cell frame replaced by the `n`-cell frame across the
+row's raises (`erwp_M_frameListRN₀`, Core's `wpG_M_frameFam`), the row's table reading no fresh
 key (`tabN_unwind_add`); the payloads' and the result's strata from the side conditions by 6.60
 at `↓@bδ`; the callback receives the family `[Mut 'x A]` at the innermost lifetime; the
 composite claim, the array owned again, consistent with the view (`erwp_claimX_abort`), is
-consumed by the finaliser at a raise (`erwp_ubindRaise`, `fin_claimArrI`). -/
-theorem sliceBorrowMU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Expr}
+consumed by the finaliser at a raise (`erwp_ubindRaise`, `fin_claimArrI₀`). -/
+theorem sliceBorrowMU_sem₀ {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Expr}
     {δ : LSub} (hδ : Δ.Models δ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
     (hS : S.Unwind x) (hdc : closedAt 0 d = true) (Θ₀ : LocTy) (n : Nat)
@@ -1099,7 +1099,7 @@ theorem sliceBorrowMU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
     fun α => vN_extend_of_not_free₀ hB δ α
   set I := rangeLocs l cn.toNat with hI
   let Ψ : LocTy → PostN := fun Θ k _ v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ
-  have hM := erwp_M_frameListRN hunif (fun Θ c => tabN₀ (ℍ := ℍ) Fo δ Θ c)
+  have hM := erwp_M_frameListRN₀ hunif (fun Θ c => tabN₀ (ℍ := ℍ) Fo δ Θ c)
     (fun Θ l₀ α F c₀ hf₀ => tabN_unwind_add hS _ δ hf₀ l₀ F _ c₀)
     (fun Θ c₀ α => tabN_unwind_lendOKR hS _ δ Θ c₀ α) Ψ
     (fun Θ k _ v ρ hw => hBs Θ k v ρ hw)
@@ -1126,7 +1126,7 @@ theorem sliceBorrowMU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
       (NFa (Val.arr l cn)) (DFa d (Val.arr l cn)) (fun j ls' ρ hR => ?_) hQo
       (fun j ls' b ρ hq => ?_) k' ls _ ρ'' hM''
     · obtain ⟨⟨hR, hcR⟩, hj⟩ := hR
-      exact fin_claimArrI hdc hΘ (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hk'.trans hk)) ls)
+      exact fin_claimArrI₀ hdc hΘ (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hk'.trans hk)) ls)
         (hj.trans le_rfl) ⟨l, cn, rfl, hn, by rw [sepRange_eq_sepList]; exact hR⟩ hcR
     · obtain ⟨ρ₁, ρ₂, hc12, ho, hb⟩ := hq
       refine erwp_det hΦ (opTableN_down hTd) hQo
@@ -1157,7 +1157,7 @@ theorem sliceBorrowMU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
 
 /-- **`sliceBorrowMU` at `SemJN₀`** (Core's `sliceBorrowMU_compatX`), at an unwinding row and any
 `Δ`. -/
-theorem sliceBorrowMU_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
+theorem sliceBorrowMU_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A)
     (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hdc : closedAt 0 d = true)
@@ -1168,7 +1168,7 @@ theorem sliceBorrowMU_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
   rw [show substAll γ (withborUE d) = withborUE d from
     psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
-  refine erwp_val (v := withborUV d) (sliceBorrowMU_sem hδ hsideA hsideB hfree₁ hfree₂ hS hdc Θ n
+  refine erwp_val (v := withborUV d) (sliceBorrowMU_sem₀ hδ hsideA hsideB hfree₁ hfree₂ hS hdc Θ n
     (fun Θ' hΘ' c' k hk ls' => ?_))
   have h := hd δ γ Θ' c' k ls' PMap.empty hδ hΘ' (consistentX_empty c') hlw
     (gN_dead_any₀ hΓ hg Θ' k hk)
