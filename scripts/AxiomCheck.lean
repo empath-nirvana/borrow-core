@@ -2437,3 +2437,5 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.opTableK_downI
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.OpTabK.CtxClosed.ctxClosedI
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_bind_leI
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.gNFrame_carryKW
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_frame_then_tabKW

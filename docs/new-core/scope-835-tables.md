@@ -235,5 +235,147 @@ location typing), read off every world the handled table's entries and the cance
 owe a continuation at; the location family is downward closed there. A clause gets the stopped
 run's Kripke stop (`KapRelK`) at the floor the stop chose.
 
-**Not in this unit.** `hs_schedOKN` at `KW` (the pool's clauses at `KapRelK`); E5 at `KW`
-(`tabNK` closed under a plain context, which `iterate`'s `hK`/`hKi` read).
+**Not in this unit.** `hs_schedOKN` at `KW` (the pool's clauses at `KapRelK`). E5 at `KW` is §9.
+
+## 9. A row's table over a world index
+
+The Lean is in `Core/Chain/RowFamK835N.lean` (the family, its two instances, the interface, E5),
+`Core/Chain/ThenK835N.lean` (`[then]`'s producers) and `Core/Chain/IterKW835N.lean` (the loop at
+`KW`).
+
+### 9.1 The interface
+
+A row's table, its cancel obligations and its entries are defined once over any world index `ι`,
+from a record saying how they read a world (`RowRd ι M`):
+
+| Field | Reading | One world (`rdU δ Θ c`) | Typed world (`rdKW g δ`) |
+|---|---|---|---|
+| `Θ`, `c` | where values and views are read | `Θ`, `c` | `x.Θ`, `x.c` |
+| `wk μ m x f y ρ` | an entry at `m` under the mode `μ` owes at `y` | `True` | `(g x).OwedS μ m f (g y) ρ` |
+| `M`, `sub`, `le` | the mode, a cancel row's mode, the order | `Unit` | scheduler names, `finSched`, inclusion |
+| `V`, `Φ`, `fl` | the runs' post order, location family, floor | `True`, `Θ.view c`, `0` | `KW.PostK`, `(g z)`'s view and floor |
+| `Inv` | the worlds the runs are read at | `True` | `(g z).Θ.Down` |
+
+- **The family.** `tabF R μ C x`, `finF R μ C` and `R.ent` are `tabN`/`finN`/`entN`'s mutual
+  recursion on `CTy`, an entry at `m` under `μ` and its cancel row under `sub μ m`; the cancel run
+  is `R.canc T = erwpK R.V R.Φ (cancelTabK (R.fl ·) (T ·)) False`.
+- **The instances.** `tabF_KW`/`finF_KW`: `tabF (rdKW g δ) S F x = tabNK S g F δ x`, and
+  `finF` is `finNK`. `tabF_unit`/`finF_unit`: `tabF (rdU δ Θ c) () F x = liftTabK (tabN F δ Θ c)`,
+  and `finF` is `finN` lifted (`canc_unit`: `cancelOblN` is the one-world `canc`).
+- **What the interface needs** (`RowRd.OK`): every owed world satisfies `Inv`, where `Φ` is
+  downward closed; an entry's order passes to a part of a valid share (`wkLeft`); `le` is a
+  preorder, `sub` monotone with `μ ≤ sub μ m`; an entry under a higher mode owes at fewer worlds
+  (`wk_anti`); posts are at the run's own world (`Veq`). `rdKW_ok`, `rdU_ok`.
+- **`RowRd.PayExt`**: a value at a part of a stop's share is one at every world the stop owes. It is
+  Core's `errOk_local` (`cfin_cancel` carries the kept error along `Ext`). `rdKW_payExt` (`g = id`,
+  by `KW.OwedS.extR`, `LocTy.ExtR.left`, `vN_extR`), `rdU_payExt`.
+- **The lemmas** are `tabN`'s, proved once: `tabF_effOf_find`, `tabF_effOf_some_find`,
+  `tabF_rowOf`, `tabF_find_sig`, `tabF_rowOf_find`, `tabF_at`, `finF_eq_ite`, `entF_fin_cancel`,
+  `entF_fin_of`, `errOkF_of_sub` (across modes), `errOkF_le`, `errOkF_ext`, `tabF_downI`,
+  `tabF_wkLeft`, `tabF_wcl`, `entF_le_of_leF`, `finF_mono`, `tabF_rowLe_entry`, `tabF_plain₀`,
+  `entF_plain`, `tabF_ctxClosed`.
+
+**Why the modes.** At `KW` an entry's order depends on its name and on whether it sits in a
+scheduler entry's cancel row (§1). A finaliser `D` is typed at its own row, under the scheduler
+names `S`; the cancel run it is part of is the cancel row's, under `finSched S m₀ ⊇ S`. An entry
+under the larger set owes along `KW.Owed` at least wherever it would under `S`, and `KW.Owed`
+implies `KW.OwedR`, so a stop of `D` is a stop of the cancel run (`wk_anti`). At one world there
+is one mode and nothing to read.
+
+**Why `Inv`.** A run at a world needs that world's location family downward closed
+(`rwpG_bind`, `rwpG_le`). At `KW` that holds where the location typing is downward closed, which
+every owed world's is (`KW.Owed`/`KW.OwedR` give `Θ.OK`), but not at every `KW`. So the tables'
+closure in the index and under a plain context are read at those worlds: `OpTabK.DownI`,
+`OpTabK.CtxClosedI` (with `opTableK_downI`, `cancelTabK_downI`). At one world `Inv = True`, and
+`OpTabK.Down.downI`, `OpTabK.CtxClosed.ctxClosedI` recover the unguarded forms.
+
+### 9.2 `[then]`'s producers
+
+| Original (`Then835N`) | Over the family | `_of_K` |
+|---|---|---|
+| `cfin_cancelN` | `cfin_cancelK` | `cfin_cancelN_of_K` |
+| `cfin_runN` | `cfin_runK` | `cfin_runN_of_K` |
+| `then_cancelN` | `then_cancelK` | `then_cancelN_of_K` |
+| `seq_raise_runN` | `seq_raise_runK` | `seq_raise_runN_of_K` |
+| `erwp_frame_then` | `erwpK_frame_then` | `erwp_frame_then_of_K` |
+
+Each is the original's induction on the index and recursion on the cancel row. A script comparing
+source text (`scratch-archive/rule791/cmp_ofK55.py`) confirms that each `_of_K` statement is the
+original's word for word. What a world adds:
+
+- **the joint share.** A producer puts a frame (the kept error, the pending raise, `[then]`'s
+  context) beside a stop's continuation. The new stop owes at the joint share; the inner stop's
+  order is read at its part (`wkLeft`, the joint share valid by `rwpG_validK`).
+- **what rides is carried to the resumption world.** The kept error (`errOkF_ext`) and the
+  pending raise's payload by `PayExt`; `[then]`'s frame by `hFe`, now read along the stop's order
+  at a valid joint share:
+  - old: `hFe : ∀ ls ls' ρ σ ρ', CompS ρ σ ρ' → extF ls ls' ρ' → Fr ls σ → Fr ls' σ`;
+  - new: `hFe : ∀ μ' m x f y ls ls' ρ σ ρ', CompS ρ σ ρ' → Valid ρ' → R.wk μ' m x f y ρ' →
+    extF ls ls' ρ' → Fr x ls σ → Fr y ls' σ`.
+
+  At one world the new premise is the old one (the `_of_K` proofs pass it through). At `KW`,
+  `gNFrame_carryKW` discharges it for `[then]`'s context `𝒢⟦Γ₂⟧ ∧ ConsistentX`.
+- **modes.** `cfin_cancelK`, `cfin_runK` and `then_cancelK` cross from a mode to any higher one;
+  `then_cancelK`'s recursion reads `D` under its own mode below the cancel row's.
+- **`D` and the continuation** are read at every world satisfying `Inv`.
+
+`erwpK_frame_then_tabKW` is `erwpK_frame_then` at `tabNK` under the scheduler names `S`, the
+reading's premises discharged. What it leaves is `erwp_frame_then`'s premises at every world whose
+location typing is downward closed, plus `hFe`.
+
+### 9.3 E5 and the loop at `KW`
+
+- **E5** (`tabNK_ctxClosed`): `(tabNK S g G δ x).CtxClosedI (fun z => (g z).Θ.Down) K` for a
+  context with no handler that catches no cancel, by `tabF_ctxClosed`. That is `tabF_plain₀`,
+  which is `cancelOblN_plain₀`'s recursion on the cancel row with `cancelK_plainI` (the cancel run
+  under a plain context at `erwpK`, read at `Inv` worlds) for its step.
+- **Closure in the index** (`tabNK_downI`).
+- **The tick's invariant** (`tabNK_tickInv`): at the lender's tables (`g = id`), `𝒱⟦A⟧ ∧
+  ConsistentX` at the stop's world, at the stop's whole share, is the same at every world the
+  entry owes. The order is `ExtR` at the share (`KW.OwedS.extR`), along which `vN_extR` keeps the
+  value, and the order makes the new view consistent with the share (`KW.OwedS.consistent`).
+  `tabNK_tick` is `erwpK_iterateCI`'s `htick` at `tabNK` with `iterate_compatN`'s invariant.
+- **The loop** (`erwpK_iterate_tabKW`): `erwpK_iterateCI` at `KW` at a row holding `Div`, with
+  every table premise discharged. It leaves `erwp_iterateCI`'s turn, close path and answer, each
+  read at every world whose location typing is downward closed.
+
+**One statement changed: `erwpK_iterateCI` reads its runs at `Inv` worlds.**
+- Old: `hΦ : ∀ x, (Φ x).Down`, `hTD : ∀ x, (T x).Down`, `hK`/`hKi : ∀ x, (T x).CtxClosed _`,
+  `hturn`/`hclose` at every `y`, conclusion `∀ n, n ≤ N → ∀ x s ls ρ, …`.
+- New: an invariant `Inv`, with `hΦ : ∀ x, Inv x → (Φ x).Down` and
+  `hVI : ∀ x y, V x y → Inv x → Inv y`; `hTD : ∀ x, (T x).DownI Inv` (which also says every owed
+  world satisfies `Inv`); `hK`/`hKi : ∀ x, (T x).CtxClosedI Inv _`; `hturn`/`hclose` at
+  every `y` with `Inv y`; conclusion `∀ n, n ≤ N → ∀ x, Inv x → ∀ s ls ρ, …`.
+- The old statement is the case `Inv = True`. `erwp_iterateCI_of_K` keeps its statement; its
+  proof passes `Inv = True`. The new step is `erwpK_bind_leI`, `erwpK_bind_le` read at `Inv` worlds.
+- No other existing statement or definition changed. `OpTabK.DownI`, `OpTabK.CtxClosedI` and
+  `opTableK_downI` live in `MechK835N5.lean`, beside the loop that reads them.
+
+### 9.4 How `cN` reads the family
+
+`cN`'s `F_Σ` clause at `C = .eff m i q A B fin rc C'` is `erwp` at
+`opTableN (extTabN m i (entN …) (tabN C' δ Θ c))`, and that table is `tabN C δ Θ c`. At `KW` the
+re-pointed clause is
+
+```lean
+erwpK KW.PostK (fun z => z.Θ.view z.c) (fun z => opTableK z.lo (tabF (rdKW id δ) S C z))
+  (fun z => retN C δ z.Θ) x n ls e ρ
+```
+
+that is, `tabNK S id C δ` by `tabF_KW`, with `S` the program's scheduler names (`Restrict835`).
+Every lemma over the family then applies at `μ = S`, `R = rdKW id δ`:
+- `then_compatN` at `KW` is `erwpK_frame_then_tabKW` with `Fr` the context and `gNFrame_carryKW`;
+- `iterate_compatN` at `KW` is `erwpK_iterate_tabKW`;
+- the lemmas that read `tabN`'s shape (`tabN_effOf_find`, `tabN_rowOf`, `tabN_rowLe_entry`,
+  `finN_mono`) are read through their `tabF` forms.
+
+At one world, `tabF_unit` and `erwp_tabF_unit` turn each statement back into today's.
+
+### 9.5 Bookkeeping
+
+- **Unspent hypotheses:** none. `RowRd.OK.le_refl` is read by `erwpK_frame_then`
+  (`then_cancelK`'s `μ ≤ μ′` at one mode), `Veq` by the value cases, `PayExt` by
+  `cfin_cancelK`, `cfin_runK` and `seq_raise_runK`.
+- **Unused uniqueness/functionality results:** none.
+- **Not in this unit:** `cN`/`vN` at `KW` and the re-pointing, `hs_schedOKN` at `KW`, E10, the
+  Capture family, the Imm Frame's cancellable layers.

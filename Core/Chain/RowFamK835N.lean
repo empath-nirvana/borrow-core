@@ -187,6 +187,13 @@ theorem rdKW_ok (g : KW → KW) (δ : LSub) : (rdKW g δ).OK where
   Veq := fun _ _ h => h
   Vrefl := fun _ => rfl
 
+/-- Both orders make the resumption world's view consistent with the share. -/
+theorem KW.OwedS.consistent {S : UInt32 → Prop} {m : UInt32} {x y : KW} {f : Life} {ρ : WRes}
+    (h : x.OwedS S m f y ρ) : ConsistentX y.c ρ := by
+  by_cases hm : S m
+  · exact (h.1 hm).2.2.1
+  · exact (h.2 hm).2.2
+
 /-- **The payload reading along the typed order** at the lender's tables: the order is `ExtR` at
 the share (`KW.OwedS.extR`), so at a part of it, along which `𝒱⟦A⟧` is kept (`vN_extR`). -/
 theorem rdKW_payExt (δ : LSub) : (rdKW id δ).PayExt (ℍ := ℍ) := by

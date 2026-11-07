@@ -30,13 +30,6 @@ open BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.BoLo (Kont)
 
-/-- Both orders make the resumption world's view consistent with the share. -/
-theorem KW.OwedS.consistent {S : UInt32 → Prop} {m : UInt32} {x y : KW} {f : Life} {ρ : WRes}
-    (h : x.OwedS S m f y ρ) : ConsistentX y.c ρ := by
-  by_cases hm : S m
-  · exact (h.1 hm).2.2.1
-  · exact (h.2 hm).2.2
-
 /-- **The loop's invariant along an entry's order, at the lender's tables**: a value of `A` at the
 stop's world, consistent with its view, is one at every world the entry owes its continuation at,
 at the same resource (the whole share). -/
