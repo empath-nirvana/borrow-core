@@ -7,10 +7,10 @@ import Core.FoldImm
 
 Core's `foldImm_compatX` (`Core/FoldImm.lean`) at the chain, line by line: Core's term
 (`foldImmV`, `travK`, `selfF`, `hV`) and its reductions, and Core's induction on a bound of the
-borrowed cell's witness size and then on the view's size. `withload_sizedN` is Core's
+borrowed cell's witness size and then on the view's size. `withload_sizedN₀` is Core's
 `withload_sized` at the empty row: `withload_reb`, its callback handed the image's relation to the
 loaded witness (`ResU.Reb β σ χ`), so the view handed over is `Good` at the witness's size
-(`good_of_imageN`).
+(`good_of_imageN₀`).
 -/
 
 noncomputable section
@@ -34,7 +34,7 @@ attribute [local simp] Expr.subst Val.val_shift Expr.shift_shift Expr.shift_zero
 /-- **`withload ℓ v_f` at the empty row with a sized callback**: the borrow's cell witness has
 the property `K`, and the callback is asked only at the views `χ` that are images `Reb β σ χ` of
 the loaded witness `σ` (with `K σ`, observable at `T₁`), at `β ⊏ ⊤`. -/
-theorem withload_sizedN {T₁ : VTy} (x : LifeVar) (hfree₁ : ¬ VFree x T₁) {a : Lifetime.Life}
+theorem withload_sizedN₀ {T₁ : VTy} (x : LifeVar) (hfree₁ : ¬ VFree x T₁) {a : Lifetime.Life}
     {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life} {ℓ : Loc} {vf : Val}
     {ρ₁ ρ₂ τ : WRes} {n : Nat} {ls : List SRec} (K : WRes → Prop) (R : VTy)
     (hv : vN₀ (ℍ := ℍ) (.imm a T₁) δ Θ n (.loc ℓ) ρ₁)
@@ -77,7 +77,7 @@ theorem withload_sizedN {T₁ : VTy} (x : LifeVar) (hfree₁ : ¬ VFree x T₁) 
 
 /-- **The view `withload` hands over is `Good` at the loaded witness's size** (Core's
 `good_of_image`). -/
-theorem good_of_imageN {M : VTy} {x : LifeVar} {δ : LSub} {Θ : LocTy} {k k' : Nat} {β : Life}
+theorem good_of_imageN₀ {M : VTy} {x : LifeVar} {δ : LSub} {Θ : LocTy} {k k' : Nat} {β : Life}
     {w : Val} {σ χ : WRes} (hx : ¬ VFree x M) (hobs : vO₀ (ℍ := ℍ) M δ Θ k w σ)
     (hreb : ResU.Reb β σ χ)
     (hview : vN₀ (ℍ := ℍ) (M.immReborrow (.var x)) (δ.extend x β) Θ k' w χ) :
@@ -93,7 +93,7 @@ theorem good_of_imageN {M : VTy} {x : LifeVar} {δ : LSub} {Θ : LocTy} {k k' : 
   simpa using dsize_del_lt hqσ hql
 
 /-- Every borrow's cell witness has a size (Core's `witLt_exists`). -/
-theorem witLt_existsN {a : Lifetime.Life} {T : VTy} {δ : LSub} {Θ : LocTy} {k : Nat} {ℓ : Loc}
+theorem witLt_existsN₀ {a : Lifetime.Life} {T : VTy} {δ : LSub} {Θ : LocTy} {k : Nat} {ℓ : Loc}
     {ρ : WRes} (hv : vN₀ (ℍ := ℍ) (.imm a T) δ Θ k (.loc ℓ) ρ) : ∃ n, WitLt ℓ ρ n := by
   obtain ⟨-, -, ⟨l', s, u, σ, hσ, hl', rfl, -, -⟩, -⟩ := hv
   obtain rfl : ℓ = l' := loc_inj hl'
@@ -152,7 +152,7 @@ end Red
 
 /-- **The algebra applied**: `g [] r` at `β ⊏ ⊤` runs to a value of `R` (Core's `alg_call`). The
 algebra holds the empty resource and is read at the run's world. -/
-theorem alg_callN {A R : VTy} {y : LifeVar} {δ : LSub} {Θ₀ Θ : LocTy} (hΘ : Θ.OK)
+theorem alg_callN₀ {A R : VTy} {y : LifeVar} {δ : LSub} {Θ₀ Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {N j : Nat} {ls : List SRec} {g r : Val} {β : Life} {ρ : WRes}
     (hyR : ¬ VFree y R) (hβ : LtLife δ LifeCtx.empty.meetOfDom β) (hj : j ≤ N)
     (hg : vN₀ (ℍ := ℍ) (.bang (VTy.all y LifeCtx.empty.meetOfDom (VTy.lolli A R))) δ Θ₀ N g
@@ -179,22 +179,22 @@ variable (M R : VTy) (y : LifeVar) (δ : LSub) (Θ : LocTy) (c : Loc → Option 
 
 /-- The recursive call through a sub-borrow `Imm 'y M` at witness size below `n` (Core's
 `PSpec`). -/
-def PSpecN (n : Nat) (h : Val) : Prop :=
+def PSpecN₀ (n : Nat) (h : Val) : Prop :=
   ∀ α ℓ ρ j ls, j ≤ Nb → vN₀ (ℍ := ℍ) (.imm (.var y) M) (δ.extend y α) Θ j (.loc ℓ) ρ →
     WitLt ℓ ρ n → ConsistentX c ρ →
     erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN₀ R δ Θ) j ls
       (.app (.app withload (.val (.loc ℓ))) (.val (cbOf h))) ρ
 
 /-- The recursive call `h w` on a view `w` of `M` at `β` smaller than `K` (Core's `HSpec`). -/
-def HSpecN (β : Life) (n K : Nat) (h : Val) : Prop :=
+def HSpecN₀ (β : Life) (n K : Nat) (h : Val) : Prop :=
   ∀ w χ j ls, j ≤ Nb → sizeOf w.1 < K →
     vN₀ (ℍ := ℍ) (M.immReborrow (.var y)) (δ.extend y β) Θ j w χ → Good M w χ n →
     ConsistentX c χ →
     erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN₀ R δ Θ) j ls (.app (.val h) (.val w)) χ
 
 /-- **The traversal** (Core's `trav_spec`). -/
-theorem trav_specKN (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VFree y R)
-    (hP : PSpecN (ℍ := ℍ) M R y δ Θ c Nb n h) (hH : HSpecN (ℍ := ℍ) M R y δ Θ c Nb β n K h) :
+theorem trav_specKN₀ (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VFree y R)
+    (hP : PSpecN₀ (ℍ := ℍ) M R y δ Θ c Nb n h) (hH : HSpecN₀ (ℍ := ℍ) M R y δ Θ c Nb β n K h) :
     ∀ (G : FShape), G.WF → ∀ w χ j ls, j ≤ Nb → sizeOf w.1 ≤ K → (G = .varX → sizeOf w.1 < K) →
       vN₀ (ℍ := ℍ) ((VTy.inst M G.ty).immReborrow (.var y)) (δ.extend y β) Θ j w χ →
       Good (VTy.inst M G.ty) w χ n → ConsistentX c χ →
@@ -237,7 +237,7 @@ theorem trav_specKN (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VF
         (.appR (.val (.lam (bindE (.app (.app (.val (travK G)) (.val (h.shift 1 0)))
           (.val (v₂.shift 1 0))) (.pair (.var 1) (.var 0))))) .hole)
         (fun X => X = χ₂) hcχ hc
-        (trav_specKN hΘ hyR hP hH F hFG.1 v₁ χ₁ j ls hj (le_of_lt hs₁) (fun _ => hs₁) h₁
+        (trav_specKN₀ hΘ hyR hP hH F hFG.1 v₁ χ₁ j ls hj (le_of_lt hs₁) (fun _ => hs₁) h₁
           (Good.tensorL hgood hcχ) (consistentX_left hcχ hc hvχ)) rfl ?_
       rintro k₁ hk₁ ls₁ r₁ σ₁ X σ hcσ hr₁ rfl hcσ' hvσ
       simp only [Kont.plug]
@@ -246,7 +246,7 @@ theorem trav_specKN (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VF
       refine erwp_bind_frame hΦ (opTableN_local _)
         (.appR (.val (.lam (.pair (.val (r₁.shift 1 0)) (.var 0)))) .hole)
         (fun Y => Y = σ₁) (ResU.CompS.comm hcσ) hcσ'
-        (trav_specKN hΘ hyR hP hH G hFG.2 v₂ X k₁ ls₁ (hk₁.trans hj) (le_of_lt hs₂) (fun _ => hs₂)
+        (trav_specKN₀ hΘ hyR hP hH G hFG.2 v₂ X k₁ ls₁ (hk₁.trans hj) (le_of_lt hs₂) (fun _ => hs₂)
           (vN_le₀ hk₁ h₂) (Good.tensorR hgood hcχ) (consistentX_right hcσ hcσ' hvσ)) rfl ?_
       rintro k₂ hk₂ ls₂ r₂ τ₁ Y τ hcτ hr₂ rfl _ _
       simp only [Kont.plug]
@@ -266,7 +266,7 @@ theorem trav_specKN (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VF
         rw [sum_branch F h v Expr.inj₁ (fun _ _ _ => rfl)]
         refine erwp_bind_frame hΦ (opTableN_local _) (.appR (.val (.lam (Expr.inj₁ (.var 0)))) .hole)
           (fun E => E = PMap.empty) (ResU.comp_empty_right χ) hc
-          (trav_specKN hΘ hyR hP hH F hFG.1 v χ j ls hj (le_of_lt hsz) (fun _ => hsz) hv
+          (trav_specKN₀ hΘ hyR hP hH F hFG.1 v χ j ls hj (le_of_lt hsz) (fun _ => hsz) hv
             (Good.sumL hgood) hc) rfl ?_
         rintro k' _ ls' r σ₁ E σ hcσ hr rfl _ _
         obtain rfl := ResU.CompS.functional hcσ (ResU.comp_empty_right σ₁)
@@ -283,7 +283,7 @@ theorem trav_specKN (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VF
         rw [sum_branch G h v Expr.inj₂ (fun _ _ _ => rfl)]
         refine erwp_bind_frame hΦ (opTableN_local _) (.appR (.val (.lam (Expr.inj₂ (.var 0)))) .hole)
           (fun E => E = PMap.empty) (ResU.comp_empty_right χ) hc
-          (trav_specKN hΘ hyR hP hH G hFG.2 v χ j ls hj (le_of_lt hsz) (fun _ => hsz) hv
+          (trav_specKN₀ hΘ hyR hP hH G hFG.2 v χ j ls hj (le_of_lt hsz) (fun _ => hsz) hv
             (Good.sumR hgood) hc) rfl ?_
         rintro k' _ ls' r σ₁ E σ hcσ hr rfl _ _
         obtain rfl := ResU.CompS.functional hcσ (ResU.comp_empty_right σ₁)
@@ -299,29 +299,29 @@ section Ind
 variable {M R : VTy} {y : LifeVar} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} {Nb : Nat}
 
 /-- No borrow has a witness of fewer than `0` cells (Core's `pSpec_zero`). -/
-theorem pSpec_zeroN {h : Val} : PSpecN (ℍ := ℍ) M R y δ Θ c Nb 0 h := by
+theorem pSpec_zeroN₀ {h : Val} : PSpecN₀ (ℍ := ℍ) M R y δ Θ c Nb 0 h := by
   intro α ℓ ρ j ls _ hv hn _
   obtain ⟨-, -, ⟨l', s, u, σ, hσ, hl', rfl, -, -⟩, -⟩ := hv
   exact absurd (hn s u σ hσ (by rw [loc_inj hl'])) (Nat.not_lt_zero _)
 
-/-- **A sub-borrow at witness size below `m + 1`** (Core's `pSpec_succ`): `withload_sizedN` at
+/-- **A sub-borrow at witness size below `m + 1`** (Core's `pSpec_succ`): `withload_sizedN₀` at
 the borrow; the view it hands over is `Good` at the loaded witness's size, at most `m`. Its result
 leaves the callback's `['x]` because `R` outlives every lifetime (6.60). -/
-theorem pSpec_succN (hΘ : Θ.OK) {m : Nat} {h : Val} (hyM : ¬ VFree y M) (hyR : ¬ VFree y R)
+theorem pSpec_succN₀ (hΘ : Θ.OK) {m : Nat} {h : Val} (hyM : ¬ VFree y M) (hyR : ¬ VFree y R)
     (hR : ∀ Δ a, VOutlives Δ a R)
     (hH : ∀ β, LtLife δ LifeCtx.empty.meetOfDom β → ∀ K,
-      HSpecN (ℍ := ℍ) M R y δ Θ c Nb β m K h) :
-    PSpecN (ℍ := ℍ) M R y δ Θ c Nb (m + 1) h := by
+      HSpecN₀ (ℍ := ℍ) M R y δ Θ c Nb β m K h) :
+    PSpecN₀ (ℍ := ℍ) M R y δ Θ c Nb (m + 1) h := by
   intro α ℓ ρ j ls hj hv hn hc
   have hΦ := LocTy.view_down hΘ.1 c
-  have hrun := withload_sizedN (T₁ := M) y hyM hΘ (vf := cbOf h) (ls := ls) (K := fun σ => dsize σ < m + 1)
+  have hrun := withload_sizedN₀ (T₁ := M) y hyM hΘ (vf := cbOf h) (ls := ls) (K := fun σ => dsize σ < m + 1)
     (R := R) hv hn (ResU.comp_empty_right ρ) hc ?_
   · refine erwp_mono (fun k _ v ρ' hv' => ?_) (opTableN_local _) j ls _ ρ hrun
     exact vN_cast₀ (vN_extend_of_not_free₀ hyR δ α) hv'
   intro β w χ Bχ hLt ⟨σ, hKσ, hobs, hreb⟩ hview hcomp hcB
   obtain rfl := eq_of_compS_empty_left hcomp
   refine cbOf_appN hΦ (fun k _ v ρ h => ⟨vN_down₀ _ _ _ _ _ _ h.1, h.2⟩) h w ?_
-  have hgood := (good_of_imageN hyM hobs hreb hview).mono (Nat.lt_succ_iff.mp hKσ)
+  have hgood := (good_of_imageN₀ hyM hobs hreb hview).mono (Nat.lt_succ_iff.mp hKσ)
   have e := vN_congr₀ (ℍ := ℍ) (M.immReborrow (.var y)) (δ := (δ.extend y α).extend y β)
     (δ' := δ.extend y β) (fun z _ => find?_extend_twice δ y α β z)
   obtain ⟨γ, hγ, hβγ⟩ := hLt
@@ -334,15 +334,15 @@ theorem pSpec_succN (hΘ : Θ.OK) {m : Nat} {h : Val} (hyM : ¬ VFree y M) (hyR 
     (vN_cast₀ (vN_extend_of_not_free₀ hyR δ β).symm hv)
 
 /-- **The recursive call on a view**, at every witness bound `n` (Core's `hSpec_all`). -/
-theorem hSpec_allN {F : FShape} (hF : F.WF) (hG : F.Guarded) (hΘ : Θ.OK) {g : Val} {Θ₀ : LocTy}
+theorem hSpec_allN₀ {F : FShape} (hF : F.WF) (hG : F.Guarded) (hΘ : Θ.OK) {g : Val} {Θ₀ : LocTy}
     (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ a, VOutlives Δ a R)
     (hg : vN₀ (ℍ := ℍ) (algTy F y R) δ Θ₀ Nb g PMap.empty) :
     ∀ n β, LtLife δ LifeCtx.empty.meetOfDom β → ∀ K,
-      HSpecN (ℍ := ℍ) (.mu F.ty) R y δ Θ c Nb β n K (hV F g) := by
+      HSpecN₀ (ℍ := ℍ) (.mu F.ty) R y δ Θ c Nb β n K (hV F g) := by
   have hΦ := LocTy.view_down hΘ.1 c
-  have step : ∀ n, PSpecN (ℍ := ℍ) (.mu F.ty) R y δ Θ c Nb n (hV F g) →
+  have step : ∀ n, PSpecN₀ (ℍ := ℍ) (.mu F.ty) R y δ Θ c Nb n (hV F g) →
       ∀ β, LtLife δ LifeCtx.empty.meetOfDom β → ∀ K,
-        HSpecN (ℍ := ℍ) (.mu F.ty) R y δ Θ c Nb β n K (hV F g) := by
+        HSpecN₀ (ℍ := ℍ) (.mu F.ty) R y δ Θ c Nb β n K (hV F g) := by
     intro n hP β hβ K
     induction K with
     | zero => intro w χ j ls _ hlt; exact absurd hlt (Nat.not_lt_zero _)
@@ -354,7 +354,7 @@ theorem hSpec_allN {F : FShape} (hF : F.WF) (hG : F.Guarded) (hΘ : Θ.OK) {g : 
         refine erwp_bind_frame hΦ (opTableN_local _)
           (.appR (.val (.lam (.app (.app (.val (g.shift 1 0)) (.val .unit)) (.var 0)))) .hole)
           (fun E => E = PMap.empty) (ResU.comp_empty_right χ) hc
-          (trav_specKN (.mu F.ty) R y δ Θ c Nb hΘ hyR hP ihK F hF w χ j ls hj
+          (trav_specKN₀ (.mu F.ty) R y δ Θ c Nb hΘ hyR hP ihK F hF w χ j ls hj
             (Nat.lt_succ_iff.mp hlt) (fun e => by subst e; exact hG.elim) hview'
             (hgood.unroll (FShape.Cl_ty hF)) hc) rfl ?_
         rintro k' hk' ls' r σ₁ E σ hcσ hr rfl hcσ' _
@@ -362,18 +362,18 @@ theorem hSpec_allN {F : FShape} (hF : F.WF) (hG : F.Guarded) (hΘ : Θ.OK) {g : 
         simp only [Kont.plug]
         refine erwp_headE hΦ (vPostN_down₀ _ _ Θ) .hole (fun μ => Head.beta μ _ r) rfl ?_
         rw [alg_subst]
-        exact alg_callN hΘ hyR hβ (hk'.trans hj) hg hr hcσ'
+        exact alg_callN₀ hΘ hyR hβ (hk'.trans hj) hg hr hcσ'
   intro n
   induction n with
-  | zero => exact step 0 pSpec_zeroN
-  | succ m ih => exact step (m + 1) (pSpec_succN hΘ hyM hyR hR ih)
+  | zero => exact step 0 pSpec_zeroN₀
+  | succ m ih => exact step (m + 1) (pSpec_succN₀ hΘ hyM hyR hR ih)
 
-theorem pSpec_allN {F : FShape} (hF : F.WF) (hG : F.Guarded) (hΘ : Θ.OK) {g : Val} {Θ₀ : LocTy}
+theorem pSpec_allN₀ {F : FShape} (hF : F.WF) (hG : F.Guarded) (hΘ : Θ.OK) {g : Val} {Θ₀ : LocTy}
     (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ a, VOutlives Δ a R)
     (hg : vN₀ (ℍ := ℍ) (algTy F y R) δ Θ₀ Nb g PMap.empty) :
-    ∀ n, PSpecN (ℍ := ℍ) (.mu F.ty) R y δ Θ c Nb n (hV F g)
-  | 0 => pSpec_zeroN
-  | m + 1 => pSpec_succN hΘ hyM hyR hR (hSpec_allN hF hG hΘ hyM hyR hR hg m)
+    ∀ n, PSpecN₀ (ℍ := ℍ) (.mu F.ty) R y δ Θ c Nb n (hV F g)
+  | 0 => pSpec_zeroN₀
+  | m + 1 => pSpec_succN₀ hΘ hyM hyR hR (hSpec_allN₀ hF hG hΘ hyM hyR hR hg m)
 
 end Ind
 
@@ -382,7 +382,7 @@ end Ind
 /-- **The borrowed fold at `SemJN₀`** (Core's `foldImm_compatX`): `foldImm : !U(∀'y ⊏ ⊤. A_R ⊸
 F R) ⊸ !U(∀'y ⊏ @c. Imm 'y (μX. T) ⊸ F R)` at every `T` of the class `FShape`, at a result type
 `R` that outlives every lifetime, with `'y` free in neither `μX. T` nor `R`. -/
-theorem foldImm_compatN {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (hF : F.WF) (hG : F.Guarded)
+theorem foldImm_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (hF : F.WF) (hG : F.Guarded)
     (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.DeadP Γ)
     (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ a, VOutlives Δ a R) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (foldImmV F)) (.val (.lolli (algTy F y R) (foldTy F y c R))) := by
@@ -415,10 +415,10 @@ theorem foldImm_compatN {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (hF : F.WF) (
   rw [foldLam_subst]
   refine travK_appN hΦ₃ (vPostN_down₀ _ _ Θ₃) _ _ _ ?_
   rw [tB_refX]
-  obtain ⟨m, hm⟩ := witLt_existsN hv
+  obtain ⟨m, hm⟩ := witLt_existsN₀ hv
   refine erwp_mono (fun k _ v' ρ₀ hv' => vN_cast₀ (vN_extend_of_not_free₀ hyR δ α).symm hv')
     (opTableN_local _) k₂ ls₃ _ ρ'' ?_
-  exact pSpec_allN (Nb := k₂) (c := c₅) hF hG hOK₃ hyM hyR hR (vN_le₀ hk₂ hv₁) m α ℓ ρ'' k₂ ls₃
+  exact pSpec_allN₀ (Nb := k₂) (c := c₅) hF hG hOK₃ hyM hyR hR (vN_le₀ hk₂ hv₁) m α ℓ ρ'' k₂ ls₃
     le_rfl hv hm hc₅
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N

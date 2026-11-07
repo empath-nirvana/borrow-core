@@ -10,7 +10,7 @@ chain:
 
 * `erwp_I_frameRR` is the one-cell frame `erwp_I_frameR` with the callback's raises already
   carrying the inner frames' claims (as `erwp_M_frameRR` is for the Mut Frame);
-* `erwp_I_frameListRN` is the list induction over it. Frame `j` lends its leaf `imm` at a
+* `erwp_I_frameListRN₀` is the list induction over it. Frame `j` lends its leaf `imm` at a
   lifetime `αⱼ` below the frame's rest, the payloads' and the result's strata and the callback's
   bound, its record `(pⱼ, αⱼ)` in the inner frames' world (`LocTy.addImm`); the run of the inner
   frames is read at the lender's view by `erwp_tieEntryR` (the table is abortive), as in
@@ -18,7 +18,7 @@ chain:
   `α ⊑ ⊓s`), at the world holding every record (`LocTy.addImms`). Frame `j`'s output moves what the
   inner frames returned to the world without its record (`LocTy.extR_of_addImm`), and its claim
   joins theirs, the cells owned again (`claimL₀`);
-* `sliceBorrowI_compatN` and `sliceBorrowIU_compatN` are Core's `sliceBorrowI_compatX` and
+* `sliceBorrowI_compatN₀` and `sliceBorrowIU_compatN` are Core's `sliceBorrowI_compatX` and
   `sliceBorrowIU_compatX` against it, with `withbor1_sem₀`'s and `withbor1U_sem`'s steps around
   the callback.
 -/
@@ -234,13 +234,13 @@ open BoCa.BoLo (Heap Kont Head ubindE)
 /-- **An `imm` leaf at `α`** at the world `Θ`: `Imm`'s clause read at `α` (Core's `immLeaf`), one
 `imm` cell longer-lived than `α` with its payload in the observable view, witnessed in the world's
 records. -/
-def immLeafN (A : VTy) (δ : LSub) (α : Life) (Θ : LocTy) (n : Nat) (m : Loc) : WProp := fun ρ =>
+def immLeafN₀ (A : VTy) (δ : LSub) (α : Life) (Θ : LocTy) (n : Nat) (m : Loc) : WProp := fun ρ =>
   immCell α (fun u σ => vO₀ (ℍ := ℍ) A δ Θ n u σ) (Val.loc m) ρ ∧
     ∀ l s u σ h, ρ = ResU.single l (CellU.immOf s u σ h) → ImmWitW Θ.imm l s A δ
 
 /-- An `imm` leaf at `α` is a value of `Imm 'x A` at `δ['x ↦ α]` (Core's `immLeaf_to_vP`). -/
-theorem vN_immLeaf {x : LifeVar} {A : VTy} (hx : ¬ VFree x A) {δ : LSub} {α : Life} {Θ : LocTy}
-    {n : Nat} {m : Loc} {ρ : WRes} (h : immLeafN (ℍ := ℍ) A δ α Θ n m ρ) :
+theorem vN_immLeaf₀ {x : LifeVar} {A : VTy} (hx : ¬ VFree x A) {δ : LSub} {α : Life} {Θ : LocTy}
+    {n : Nat} {m : Loc} {ρ : WRes} (h : immLeafN₀ (ℍ := ℍ) A δ α Θ n m ρ) :
     vN₀ (ℍ := ℍ) (.imm (.var x) A) (δ.extend x α) Θ n (Val.loc m) ρ := by
   have hag : ∀ y, VFree y A → δ.find? y = (δ.extend x α).find? y := fun y hy =>
     (BoCa.Fig16.LogRel.find?_extend_ne δ α (fun e => by subst e; exact hx hy)).symm
@@ -260,7 +260,7 @@ below the bound and on the callback's list, and receives every leaf at the inner
 `Ψ` is the callback's postcondition: in the stratum `β′`, read at the world without a record at
 a resource in the record's stratum, and not reading the list. The claim a `raise` carries is the
 cells owned again (`claimL₀`, at the frames' index). -/
-theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A δ)
+theorem erwp_I_frameListRN₀ {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A δ)
     (hunif : ∀ Θ j u r, vN₀ (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
     (Tb : OpTabN) (hab : ∀ m i en, Tb m i = some en → en.abort = true)
     (hTok : ∀ α, Tb.ILendOKR α)
@@ -273,7 +273,7 @@ theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A
       sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ Θ n (Val.loc m)) I ρo →
       (∀ α, α < γ → ρH.InStratum α ∧ ∀ (xs ls' : List SRec), (∀ x ∈ xs, x.2 < γ ∧ x ∈ ls') →
         (∀ y ∈ ls, y ∈ ls') → ∀ ρm ρ',
-          sepList (immLeafN (ℍ := ℍ) A δ α (Θ.addImms xs) n) I ρm → ResU.CompS ρH ρm ρ' →
+          sepList (immLeafN₀ (ℍ := ℍ) A δ α (Θ.addImms xs) n) I ρm → ResU.CompS ρH ρm ρ' →
           ConsistentX c ρ' →
           erwp (ℍ := ℍ) ((Θ.addImms xs).view c) (opTableR Tb (fun _ => claimL₀ (ℍ := ℍ) A δ Θ [] n))
             (Ψ (Θ.addImms xs)) n ls' e ρ') →
@@ -359,7 +359,7 @@ theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A
         · exact .inl hy) ?_
       refine erwp_mono_le n (fun k hk ls' v ρ' h => ?_)
         (fun j _ ls' t Ψ' Ψ'' ρ hΨ h => opTableR_local _ _ j ls' t Ψ' Ψ'' ρ hΨ h) n le_rfl _ _ BI
-        (erwp_I_frameListRN hadm hunif Tb hab hTok Ψ hΨs hΨl hΨls e c I Θ₁ n ls₁ ρr R BI
+        (erwp_I_frameListRN₀ hadm hunif Tb hab hTok Ψ hΨs hΨl hΨls e c I Θ₁ n ls₁ ρr R BI
           (βR ⊓ α₁ ⊓ γ) hcR hBIR hrest₁ (fun α₂ hα₂ => ⟨hβR.mono (le_of_lt (lt_of_lt_of_le hα₂
             (inf_le_left.trans inf_le_left))), ?_⟩))
       · -- the outer frame's postcondition from the inner ones'
@@ -383,7 +383,7 @@ theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A
         have hγ₁γ : βR ⊓ α₁ ⊓ γ ≤ γ := inf_le_right
         obtain ⟨X, hX, hρ'X⟩ := compS_reassoc hR hcomp
         rw [LocTy.addImm_addImms] at hm₂ ⊢
-        have hlead : immLeafN (ℍ := ℍ) A δ α₂ (Θ.addImms (xs ++ [(p, α₁)])) n ℓ ρi := by
+        have hlead : immLeafN₀ (ℍ := ℍ) A δ α₂ (Θ.addImms (xs ++ [(p, α₁)])) n ℓ ρi := by
           refine ⟨⟨ℓ, LSet.singleton α₁, u, σ, houtP, rfl, rfl, hα₂α₁.le, ?_⟩,
             fun l₀ s₀ u₀ σ₀ h₀ e => ?_⟩
           · refine vO_extR₀ A δ n u σ (LocTy.extR_addImms Θ _ fun x hx => ?_)
@@ -408,12 +408,12 @@ theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A
 
 /-- **`slice_borrow` is a value of its type** (Core's `sliceBorrowI_compatX`):
 `withbor` at `Array A ⊸ (∀'x ⊏ @Δ. [Imm 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`. `sliceBorrowM_sem₀`'s
-steps with the `n` Imm Frames around the callback (`erwp_I_frameListRN` at the family's range,
+steps with the `n` Imm Frames around the callback (`erwp_I_frameListRN₀` at the family's range,
 the pure row's table): the payloads' and the result's strata from the side conditions by 6.60 at
 `↓@bδ` (`vN_outlivesLe₀`), the frames' lifetimes below the bound and the callback's stratum; the
 callback at the world holding the records (`LocTy.extR_addImms` at its resource), the family
-`[Imm 'x A]` at the innermost lifetime (`vN_immLeaf`), `withbor1_sem₀`'s steps inside. -/
-theorem sliceBorrowI_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (hδ : Δ.Models δ)
+`[Imm 'x A]` at the innermost lifetime (`vN_immLeaf₀`), `withbor1_sem₀`'s steps inside. -/
+theorem sliceBorrowI_sem₀ {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (hδ : Δ.Models δ)
     (hadm : AdmWf A δ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
     (Θ₀ : LocTy) (n : Nat) :
@@ -463,7 +463,7 @@ theorem sliceBorrowI_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (h
   -- the frames' postcondition: the handle beside a result of `B`
   let Ψ : LocTy → PostN := fun Θ k _ v ρ => ∃ w, v = Val.pair (Val.arr l cn) w ∧
     vN₀ (ℍ := ℍ) B δ Θ k w ρ
-  have hI := erwp_I_frameListRN hadm hunif OpTabN.empty
+  have hI := erwp_I_frameListRN₀ hadm hunif OpTabN.empty
     (fun _ _ _ h => by simp [OpTabN.empty] at h) empty_iLendOKR Ψ
     (fun Θ k _ v ρ ⟨w, _, hw⟩ => hBs Θ k w ρ hw)
     (fun Θ r α k _ v ρ hρ ⟨w, hvw, hw⟩ =>
@@ -494,7 +494,7 @@ theorem sliceBorrowI_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (h
   have hcm : ConsistentX c' ρm := consistentX_right hcomp hc'' hv₃
   have hfam : vN₀ (ℍ := ℍ) (.arrayImm (.var x) A) (δ.extend x α) W k' (Val.arr l cn) ρm :=
     ⟨l, cn, rfl, hn', by
-      rw [sepRange_eq_sepList]; exact sepList_mono' (fun _ _ h => vN_immLeaf hA h) hml⟩
+      rw [sepRange_eq_sepList]; exact sepList_mono' (fun _ _ h => vN_immLeaf₀ hA h) hml⟩
   refine rwp_bind hΦi _ ?_
   have hcb := (hf W hEW hOKW c' hcf ls₂) α hLt
   have hfr' := rwp_frame (fun _ τ => τ = ρm) (fun _ _ _ _ h => h) hcomp (rwp_of_erwp_empty hcb) rfl
@@ -511,7 +511,7 @@ theorem sliceBorrowI_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {δ : LSub} (h
   exact ⟨w, rfl, by rw [← hBδ α]; exact hwB⟩
 
 /-- **`slice_borrow` at `SemJN₀`** (Core's `sliceBorrowI_compatX`). -/
-theorem sliceBorrowI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : LifeVar)
+theorem sliceBorrowI_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : LifeVar)
     (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A)
     (hfree₂ : ¬ VFree x B) :
@@ -521,7 +521,7 @@ theorem sliceBorrowI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : Life
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withbor) _
   rw [show substAll γ withbor = withbor from psub_closedAt _ γ (by decide) (Nat.zero_le 0)]
   exact erwp_val (v := withborVal)
-    (sliceBorrowI_sem hδ (admWf_of_vScoped hsc hδ) hsideA hsideB hfree₁ hfree₂ Θ n)
+    (sliceBorrowI_sem₀ hδ (admWf_of_vScoped hsc hδ) hsideA hsideB hfree₁ hfree₂ Θ n)
 
 /-! ### `slice_borrow` at an unwinding row -/
 
@@ -561,7 +561,7 @@ theorem tabN_unwind_addImms {S : Row} {x : LifeVar} (hS : S.Unwind x) (R : VTy) 
 `sliceBorrowIU_compatX`): `withborU d` at
 `Array A ⊸ (∀'x ⊏ @Δ. [Imm 'x A] ⊸ F_Σ(['x] B)) ⊸ F_Σ(Array A ⊗ B)`, `Σ` a `Row.Unwind x` row.
 `sliceBorrowMU_sem`'s steps with the `n` Imm Frames across the row's raises
-(`erwp_I_frameListRN`, Core's `wpG_I_frameFam`) at the lender's table, which reads no record
+(`erwp_I_frameListRN₀`, Core's `wpG_I_frameFam`) at the lender's table, which reads no record
 (`tabN_unwind_addImms`); the payloads' and the result's strata from the side conditions by 6.60
 at `↓@bδ`; the callback at the world holding the records receives the family `[Imm 'x A]` at the
 innermost lifetime; the composite claim, the array owned again, consistent with the view
@@ -616,7 +616,7 @@ theorem sliceBorrowIU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
   set I := rangeLocs l cn.toNat with hI
   let Ψ : LocTy → PostN := fun Θ k _ v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ
   have hab := tabN_unwind_abort (ℍ := ℍ) hS (.tensor (.array A) B) δ Θ c
-  have hM := erwp_I_frameListRN hadm hunif T hab
+  have hM := erwp_I_frameListRN₀ hadm hunif T hab
     (fun α => tabN_unwind_iLendOKR hS _ δ Θ c α) Ψ
     (fun Θ k _ v ρ hw => hBs Θ k v ρ hw)
     (fun Θ r α k _ v ρ hρ hw => vN_extR₀ B δ k v ρ (LocTy.extR_of_addImm Θ r hρ) hw)
@@ -661,7 +661,7 @@ theorem sliceBorrowIU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
   have hLt : LtLife δ Δ.meetOfDom α := ⟨m, hm, lt_of_lt_of_le hα inf_le_left⟩
   have hfam : vN₀ (ℍ := ℍ) (.arrayImm (.var x) A) (δ.extend x α) W k' (Val.arr l cn) ρm :=
     ⟨l, cn, rfl, hn, by
-      rw [sepRange_eq_sepList]; exact sepList_mono' (fun _ _ h => vN_immLeaf hA h) hml⟩
+      rw [sepRange_eq_sepList]; exact sepList_mono' (fun _ _ h => vN_immLeaf₀ hA h) hml⟩
   have h1 := (hf W hEW hOKW c hcf ls₂) α hLt
   have h2 := h1 c k' le_rfl (Val.arr l cn) _ ρ₃ hcomp hfam hc''
   rw [cN_effOf₀, tabN_unwind_extend hS (.box (.var x) B) (.tensor (.array A) B) δ W α c,
