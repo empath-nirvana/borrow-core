@@ -76,6 +76,9 @@ the program.
 A program reads standard input and writes standard output as usual, and takes arguments after
 the file name: `bcc run tool.bc a b < input`.
 
+`bcc run` and `bcc compile` use the compiler's current backend by default. Until the old backend
+is retired, `--backend old` right after the command selects it: `bcc run --backend old file.bc`.
+
 The [next chapter](guide/basics.md) starts the language from here. [Recipes](recipes.md) has
 short programs for everyday tasks, and the [Language reference](language-reference.md) and
 [Standard library](stdlib.md) are for looking things up. For larger programs, see the
