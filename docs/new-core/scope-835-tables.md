@@ -200,3 +200,40 @@ this is off every constant's path.
   lemmas) still read the frames at `erwp`.
 - The handlers: `hs_schedOKN` at `KW` and the scheduler's `[handle]` at `erwpK`.
 - The Imm Frame's cancellable layers (§7.2).
+
+## 8. The field frame, the scheduler's `[handle]` and the finaliser's raise at `KW`
+
+The Lean is in `Core/Chain/TabKW835N2.lean`; the producers it discharges are in
+`Core/Chain/MechK835N4.lean` and `Core/Chain/HandleK835N.lean`.
+
+**An entry's order at a part of the share.** `KW.Owed` and `KW.OwedR` read `ConsistentX` at the
+continuation's share, and consistency passes to a part of a share only when the share is valid
+(`consistentX_left`). So the producers that put a frame into the continuation's share read the
+entry's order at the joint share with its validity, which every resource a run returns has
+(`rwpG_validK`): `KW.OwedS.left`.
+
+| Premise | Producer | At `KW` |
+|---|---|---|
+| order at the run's share, twin's cancel with the frame | `erwpK_frameGR` (`wF`) | `KW.OwedS.left`, `tabGK_canF`; together `erwpK_frameGR_tab` |
+| the cancel row's frame | `erwpK_frame_cancelRunGR` | the step of `tabGK_canF` |
+| the scheduler's order at `κ`'s share, every owed world valid | `erwpK_handle_schedKW` | `tabNK_wkLeft`, `tabNK_wkOK`; together `erwpK_handle_schedKW_tab` |
+| the abortive payload across `D ()`'s stops (`hTk`) | `erwpK_ubindRaiseF` | `tabNK_raiseOwed` (`ExtR` at the share, `vN_extR` at its part) |
+| the abortive payload at `D ()`'s post (`hTVr`) | `erwpK_ubindRaiseF` | `tabNK_raisePost` |
+
+**Premise shapes changed.**
+- `hTk` of `erwpK_ubindRaiseF` reads the payload at a part of the share the stop's order is read
+  at (old: at every resource, which `𝒱⟦A⟧` along `ExtR` at the share does not give).
+- `hRk` of `erwpK_frameL` receives the order at the joint share (old: at the run's share).
+- The share-shrinking premises of `erwpK_frame_plain` (`hkl`, `hFk`), `erwpK_frameL`,
+  `erwpK_ubindRaiseF`, `erwpK_cfin_run`, `erwpK_ubind_cancelRunF` and `cancelOblNK_ubind` (`hwk`)
+  receive the joint share's validity (old: without it), so `KW.OwedS.left` discharges them.
+
+Each premise is weaker or equal; at `Unit` each is trivial, and no `_of_K` statement changed.
+
+**The handler at a world.** `erwpK_handleLe_le` carries an invariant `Inv` on worlds (at `KW`, a valid
+location typing), read off every world the handled table's entries and the cancel tables' entries
+owe a continuation at; the location family is downward closed there. A clause gets the stopped
+run's Kripke stop (`KapRelK`) at the floor the stop chose.
+
+**Not in this unit.** `hs_schedOKN` at `KW` (the pool's clauses at `KapRelK`); E5 at `KW`
+(`tabNK` closed under a plain context, which `iterate`'s `hK`/`hKi` read).

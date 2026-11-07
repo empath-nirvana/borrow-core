@@ -490,7 +490,7 @@ theorem cancelOblNK_ubind {V : ι → ι → Prop} {Φ : ι → LocFam} (hΦ : �
     (hwcl : ∀ x m i en, T₁ x m i = some en → ∀ ls ls' (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
       en.wc ls ls' ρ → en.wc ls ls' ρ₁)
     (hwk : ∀ x m i en, T₁ x m i = some en → ∀ f y (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
-      en.wk f y ρ → en.wk f y ρ₁)
+      ResU.Valid ρ → en.wk f y ρ → en.wk f y ρ₁)
     (hT₁e : ∀ x m i en, T₁ x m i = some en → en.abort = false ∧ en.q = .lin) (N D : Val)
     {ρD : WRes} (hD : ∀ x, FinOK (ℍ := ℍ) (Φ x) D ρD) :
     ∀ n x ls e ρ X, ResU.CompS ρ ρD X →
@@ -508,7 +508,8 @@ theorem cancelOblNK_ubind {V : ι → ι → Prop} {Φ : ι → LocFam} (hΦ : �
   refine rwpG_bind (hΦ x) (ubK N D) ?_
   have hfr := rwpG_frame (fun _ τ => τ = ρD) (fun _ _ _ _ h => h) hX
     (erwpK_unfold_at hL le_rfl h) rfl
-  refine rwpG_mono_le (fun k hk ls' t σ ⟨σ₁, σ₂, hσ, ht, hσ₂⟩ => ?_) hfr
+  refine rwpG_mono_le (fun k hk ls' t σ ⟨⟨σ₁, σ₂, hσ, ht, hσ₂⟩, hvσ⟩ => ?_)
+    (rwpG_validK hfr)
   rw [hσ₂] at hσ
   rcases ht with ⟨_, _, _, _, hf⟩ | ⟨K₁, m, i, v, en, hp⟩ | ⟨K', err, hp⟩
   · exact hf.elim
@@ -526,7 +527,7 @@ theorem cancelOblNK_ubind {V : ι → ι → Prop} {Φ : ι → LocFam} (hΦ : �
           fun y hy ls'' he => ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_,
             fun hq' => absurd hq hq'⟩⟩⟩))
     have he' : en.wc ls' ls'' ρk := hwcl x _ _ _ hT _ _ _ _ _ hkD he
-    have hy' : en.wk f y ρk := hwk x _ _ _ hT _ _ _ _ _ hkD hy
+    have hy' : en.wk f y ρk := hwk x _ _ _ hT _ _ _ _ _ hkD (ResU.Valid.split haX hvσ).2 hy
     obtain ⟨z, hz, hzτ⟩ := compS_exch hkD hcτ
     have hc := (hcont y hy' ls'' he').1 k' hk' w τ₁ z hB hz
     simp only [erwpCK, show k' < n by omega, if_true] at hc ⊢
@@ -571,7 +572,7 @@ theorem cancelOblN_ubind_of_K {Φ : LocFam} (hΦ : Φ.Down) {T₁ : OpTabN} (hT�
     (fun _ m i en h₁ => by
       obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h₁
       exact hT₁.wcl m i en₀ h₀)
-    (fun _ m i en h₁ _ _ _ _ _ _ _ => by
+    (fun _ m i en h₁ _ _ _ _ _ _ _ _ => by
       obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h₁
       trivial)
     (fun _ m i en h₁ => by
@@ -728,7 +729,7 @@ theorem erwpK_cfin_run {V : ι → ι → Prop} {Φ : ι → LocFam} (hΦ : ∀ 
     (hwcl : ∀ x m i en, T₁ x m i = some en → ∀ ls ls' (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
       en.wc ls ls' ρ → en.wc ls ls' ρ₁)
     (hwk : ∀ x m i en, T₁ x m i = some en → ∀ f y (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
-      en.wk f y ρ → en.wk f y ρ₁)
+      ResU.Valid ρ → en.wk f y ρ → en.wk f y ρ₁)
     (hT₁e : ∀ x m i en, T₁ x m i = some en → en.abort = false ∧ en.q = .lin) :
     ∀ n x ls e (ρ g σ : WRes), ResU.CompS ρ g σ → NoOwn g →
       erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (T₁ z))
@@ -744,8 +745,8 @@ theorem erwpK_cfin_run {V : ι → ι → Prop} {Φ : ι → LocFam} (hΦ : ∀ 
     (Q := fun _ _ _ _ _ => False) (fun _ => falsePost_down)
   rw [erwpK_eq] at h ⊢
   refine rwpG_bind (hΦ x) (cfK _) ?_
-  refine rwpG_mono_le (fun k hk ls' t τ ⟨τ₁, τ₂, hτ, ht, hτ₂⟩ => ?_)
-    (rwpG_frame (fun _ τ => NoOwn τ) (fun _ _ _ _ h => h) hc h hg)
+  refine rwpG_mono_le (fun k hk ls' t τ ⟨⟨τ₁, τ₂, hτ, ht, hτ₂⟩, hvτ⟩ => ?_)
+    (rwpG_validK (rwpG_frame (fun _ τ => NoOwn τ) (fun _ _ _ _ h => h) hc h hg))
   rcases ht with ⟨w, rfl, -, -, rfl, rfl⟩ | ⟨K₁, m, i, v, en, hp⟩ | ⟨K₁, m, i, v, en, hp⟩
   · -- `D ()` answered: `[cfin-ret]`
     obtain rfl := eq_of_compS_empty_left hτ
@@ -770,7 +771,7 @@ theorem erwpK_cfin_run {V : ι → ι → Prop} {Φ : ι → LocFam} (hΦ : ∀ 
         ⟨ρa, ρk₂, haσ, hA, fun hu' => absurd (hql.symm.trans hu') (by simp), f, hf,
           fun y hy ls'' he => ⟨fun k' hk' w σ₁ σ₂ hB hcσ => ?_, fun hq' => absurd hql hq'⟩⟩⟩))
     have he' : en.wc ls' ls'' ρk := hwcl x _ _ _ hT _ _ _ _ _ hk₂ he
-    have hy' : en.wk f y ρk := hwk x _ _ _ hT _ _ _ _ _ hk₂ hy
+    have hy' : en.wk f y ρk := hwk x _ _ _ hT _ _ _ _ _ hk₂ (ResU.Valid.split haσ hvτ).2 hy
     obtain ⟨z, hz, hzσ⟩ := compS_exch hk₂ hcσ
     have hc' := (hcont y hy' ls'' he').1 k' hk' w σ₁ z hB hz
     rw [Kont.plug_comp]
@@ -794,7 +795,7 @@ theorem erwp_cfin_run_of_K {Φ : LocFam} (hΦ : Φ.Down) {T₁ : OpTabN} (hT₁ 
     (fun _ m i en h₁ => by
       obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h₁
       exact hT₁.wcl m i en₀ h₀)
-    (fun _ m i en h₁ _ _ _ _ _ _ _ => by
+    (fun _ m i en h₁ _ _ _ _ _ _ _ _ => by
       obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h₁
       trivial)
     (fun _ m i en h₁ => by
@@ -808,7 +809,7 @@ theorem erwpK_ubind_cancelRunF {V : ι → ι → Prop} {Φ : ι → LocFam} (h�
     (hwcl : ∀ x m i en, T₁ x m i = some en → ∀ ls ls' (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
       en.wc ls ls' ρ → en.wc ls ls' ρ₁)
     (hwk : ∀ x m i en, T₁ x m i = some en → ∀ f y (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
-      en.wk f y ρ → en.wk f y ρ₁)
+      ResU.Valid ρ → en.wk f y ρ → en.wk f y ρ₁)
     (hT₁e : ∀ x m i en, T₁ x m i = some en → en.abort = false ∧ en.q = .lin) {R : Nat → WProp}
     (N D : Val)
     (hD : ∀ x k ls ρ, R k ρ →
@@ -880,7 +881,7 @@ theorem erwp_ubind_cancelRunF_of_K {Φ : LocFam} (hΦ : Φ.Down) {T₁ : OpTabN}
     (fun _ m i en h₁ => by
       obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h₁
       exact hT₁.wcl m i en₀ h₀)
-    (fun _ m i en h₁ _ _ _ _ _ _ _ => by
+    (fun _ m i en h₁ _ _ _ _ _ _ _ _ => by
       obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h₁
       trivial)
     (fun _ m i en h₁ => by
@@ -939,7 +940,7 @@ theorem erwpK_frameL {V : ι → ι → Prop} {Φ : ι → LocFam} {fl : ι → 
     (hwcl : ∀ x m i en, T x m i = some en → ∀ ls ls' (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
       en.wc ls ls' ρ → en.wc ls ls' ρ₁)
     (hwk : ∀ x m i en, T x m i = some en → ∀ f y (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
-      en.wk f y ρ → en.wk f y ρ₁)
+      ResU.Valid ρ → en.wk f y ρ → en.wk f y ρ₁)
     (hq : ∀ x m i en, T x m i = some en → en.abort = false → en.q = .lin)
     {Q : ι → PostN} (R : ι → List SRec → WProp)
     (hR : ∀ x ls ls', (∀ a, a ∈ ls' ↔ a ∈ ls) → ∀ ρ, R x ls ρ → R x ls' ρ)
@@ -958,8 +959,8 @@ theorem erwpK_frameL {V : ι → ι → Prop} {Φ : ι → LocFam} {fl : ι → 
   | _ n ih =>
   intro x ls e ρ₁ ρ₂ ρ hc hR₂ h
   rw [erwpK_eq] at h ⊢
-  refine rwpG_mono_le (fun k hk ls' t σ ⟨σ₁, σ₂, hσ, ht, hσ₂⟩ => ?_)
-    (rwpG_frame (R x) (hR x) hc h hR₂)
+  refine rwpG_mono_le (fun k hk ls' t σ ⟨⟨σ₁, σ₂, hσ, ht, hσ₂⟩, hvσ⟩ => ?_)
+    (rwpG_validK (rwpG_frame (R x) (hR x) hc h hR₂))
   rcases ht with ⟨v, rfl, y, hy, hv⟩ | ⟨K, m, i, v, en, hp⟩ | ⟨K, m, i, v, en, hp⟩
   · exact Or.inl ⟨v, rfl, y, hy, σ₁, σ₂, hσ, hv, hRV x y hy ls' σ₂ hσ₂⟩
   · obtain ⟨⟨rfl, hK, hT, ha⟩, ρa, ρk, hcak, hA, hu, f, hf, hcont⟩ := pure_sep_iff.mp hp
@@ -969,7 +970,7 @@ theorem erwpK_frameL {V : ι → ι → Prop} {Φ : ι → LocFam} {fl : ι → 
       fun hu' => absurd (hql.symm.trans hu') (by simp), f, hf, fun y hy ls'' he =>
         ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_, fun hq' => absurd hql hq'⟩⟩⟩)
     have he' : en.wc ls' ls'' ρk := hwcl x _ _ _ hT _ _ _ _ _ hk₂ he
-    have hy' : en.wk f y ρk := hwk x _ _ _ hT _ _ _ _ _ hk₂ hy
+    have hy' : en.wk f y ρk := hwk x _ _ _ hT _ _ _ _ _ hk₂ (ResU.Valid.split haσ hvσ).2 hy
     obtain ⟨z, hz, hzτ⟩ := compS_exch hk₂ hcτ
     have hc' := (hcont y hy' ls'' he').1 k' hk' w τ₁ z hB hz
     simp only [erwpCK, show k' < n by omega, if_true] at hc' ⊢
@@ -999,7 +1000,7 @@ theorem erwp_frameL_of_K {Φ : LocFam} {T : OpTabN} (hTD : T.Down)
     (fun _ m i en h₁ => by
       obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h₁
       exact hTD.wcl m i en₀ h₀)
-    (fun _ m i en h₁ _ _ _ _ _ _ _ => by
+    (fun _ m i en h₁ _ _ _ _ _ _ _ _ => by
       obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h₁
       trivial)
     (fun _ m i en h₁ => by
@@ -1021,7 +1022,7 @@ theorem erwpK_ubindRaiseF {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V
     (hwcl : ∀ x m i en, T x m i = some en → ∀ ls ls' (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
       en.wc ls ls' ρ → en.wc ls ls' ρ₁)
     (hwk : ∀ x m i en, T x m i = some en → ∀ f y (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
-      en.wk f y ρ → en.wk f y ρ₁)
+      ResU.Valid ρ → en.wk f y ρ → en.wk f y ρ₁)
     (hTe : ∀ x m i en, T x m i = some en → en.abort = false → en.q = .lin ∧ en.wc = extF)
     (hfinN : ∀ x m i en, T x m i = some en → en.fin = none)
     (hTr : ∀ x m i en, T x m i = some en → en.abort = true → m ≠ 0)
@@ -1154,7 +1155,7 @@ theorem erwp_ubindRaiseF_of_K {Φ : LocFam} (hΦ : Φ.Down) {T : OpTabN} (hTD : 
   · intro _ m i en h₁
     obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h₁
     exact hTD.wcl m i en₀ h₀
-  · intro _ m i en h₁ _ _ _ _ _ _ _
+  · intro _ m i en h₁ _ _ _ _ _ _ _ _
     obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some h₁
     trivial
   · intro _ m i en h₁

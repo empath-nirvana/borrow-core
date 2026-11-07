@@ -480,9 +480,21 @@ theorem erwpK_bind {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z �
 
 /-! ### The plain frame -/
 
+/-- **A run's returned resource is valid**: `↭` gives it. -/
+theorem rwpG_validK {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : rwpG (ℍ := ℍ) Φ Q n ls e ρ) :
+    rwpG (ℍ := ℍ) Φ (fun k ls t ρ' => Q k ls t ρ' ∧ ResU.Valid ρ') n ls e ρ := by
+  intro ρf fρ ps μ hf hcf hT htg hI hl hfd j μ' e' hj hrun hfin
+  obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
+    h₁₃⟩ := h ρf fρ ps μ hf hcf hT htg hI hl hfd j μ' e' hj hrun hfin
+  exact ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
+    h₁₃, (ResU.Valid.split h₆ h₇.2.2).1⟩
+
 /-- **A plain frame around an effectful computation at `erwpK`** (`erwp_frame_plain`), the frame
 read at a world. At a stop the frame joins the continuation's share and is read at the world the
-continuation is resumed at (`hFk`); at a value, at the world the value was posted at (`hFV`). -/
+continuation is resumed at (`hFk`), the entry's order read at the run's own share (`hkl`), both at
+the joint share, which is valid (`rwpG_validK`); at a value, at the world the value was posted at
+(`hFV`). -/
 theorem erwpK_frame_plain {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z → V x z)
     {Φ : ι → LocFam} (hΦ : ∀ x, (Φ x).Down) (hΦV : ∀ x y, V x y → Φ y = Φ x) {fl : ι → Life}
     {T : ι → OpTabK ι} (hTV : ∀ x y, V x y → (opTableK (fl y) (T y)).Le (opTableK (fl x) (T x)))
@@ -492,12 +504,12 @@ theorem erwpK_frame_plain {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V
     (hFV : ∀ x y, V x y → ∀ ls ρ, Fr x ls ρ → Fr y ls ρ)
     (hwl : ∀ x n i en, T x n i = some en → ∀ ls ls' ρ σ ρ', ResU.CompS ρ σ ρ' →
       en.wc ls ls' ρ' → en.wc ls ls' ρ)
-    (hkl : ∀ x n i en, T x n i = some en → ∀ f y ρ σ ρ', ResU.CompS ρ σ ρ' →
+    (hkl : ∀ x n i en, T x n i = some en → ∀ f y ρ σ ρ', ResU.CompS ρ σ ρ' → ResU.Valid ρ' →
       en.wk f y ρ' → en.wk f y ρ)
     (hFe : ∀ x n i en, T x n i = some en → ∀ ls ls' ρ σ ρ', ResU.CompS ρ σ ρ' →
       en.wc ls ls' ρ' → Fr x ls σ → Fr x ls' σ)
     (hFk : ∀ x n i en, T x n i = some en → ∀ f y ls ρ σ ρ', ResU.CompS ρ σ ρ' →
-      en.wk f y ρ' → Fr x ls σ → Fr y ls σ)
+      ResU.Valid ρ' → en.wk f y ρ' → Fr x ls σ → Fr y ls σ)
     (hW : ∀ x n i en, T x n i = some en → en.abort = true → ∀ ls ρ, Fr x ls ρ → NoOwn ρ)
     (hU : ∀ x n i en, T x n i = some en → en.q = .unr → ∀ ls ρ, Fr x ls ρ → ρ = PMap.empty)
     (hK : ∀ x n i en, T x n i = some en → en.abort = false → en.q ≠ .lin →
@@ -516,14 +528,15 @@ theorem erwpK_frame_plain {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V
   intro x ls e ρ h ρ₂ ρ' hF hc
   rw [erwpK_eq] at h ⊢
   refine rwpG_bind (hΦ x) K ?_
-  refine rwpG_mono_le (fun k hk ls' t σ ⟨σ₁, σ₂, hcσ, hp, hF'⟩ => ?_)
-    (rwpG_frame (Fr x) (hFs x) hc h hF)
+  refine rwpG_mono_le (fun k hk ls' t σ ⟨⟨σ₁, σ₂, hcσ, hp, hF'⟩, hvσ⟩ => ?_)
+    (rwpG_validK (rwpG_frame (Fr x) (hFs x) hc h hF))
   rcases hp with ⟨v, rfl, y, hy, hv⟩ | ⟨K₁, m, i, v, en, hp⟩ | ⟨K₁, m, i, v, en, hp⟩
   · exact erwpK_shift hVt hΦV hTV hL hy hk
       (hkv y k ls' v σ ⟨σ₁, σ₂, hcσ, hv, hFV x y hy ls' σ₂ hF'⟩)
   · -- a `perform`: the frame joins the continuation's share
     obtain ⟨⟨rfl, hK₁, hT, ha⟩, ρa, ρk, hcak, hA, hu, f, hf, hcont⟩ := pure_sep_iff.mp hp
     obtain ⟨ρk', hk', hcσ'⟩ := compS_reassoc hcak hcσ
+    have hvk : ResU.Valid ρk' := (ResU.Valid.split hcσ' hvσ).2
     have hKo : (K.comp K₁).HasHnd m = false := by rw [hasHnd_comp, hH, hK₁]; rfl
     have ht' : K.plug (K₁.plug (performE (.val (opPayload m i v)))) =
         (K.comp K₁).plug (opE false (opPayload m i v)) := by
@@ -535,8 +548,8 @@ theorem erwpK_frame_plain {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V
           fun hq P hP => ?_⟩⟩⟩))
     · rw [hu hq, hU x m i en hT hq ls' σ₂ hF'] at hk'
       exact eq_of_compS_empty_left hk'
-    · have hyk := hkl x m i en hT f y ρk σ₂ ρk' hk' hy
-      have hFy := hFk x m i en hT f y ls'' ρk σ₂ ρk' hk' hy
+    · have hyk := hkl x m i en hT f y ρk σ₂ ρk' hk' hvk hy
+      have hFy := hFk x m i en hT f y ls'' ρk σ₂ ρk' hk' hvk hy
         (hFe x m i en hT ls' ls'' ρk σ₂ ρk' hk' he hF')
       obtain ⟨z, hz, hcz⟩ := compS_exch hk' hcτ
       have h₁ := (hcont y hyk ls'' (hwl x m i en hT ls' ls'' ρk σ₂ ρk' hk' he)).1 k' hk'' w τ₁ z
@@ -544,8 +557,8 @@ theorem erwpK_frame_plain {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V
       simp only [erwpCK, show k' < n by omega, if_true] at h₁ ⊢
       rw [Kont.plug_comp]
       exact ih k' (by omega) y ls'' _ z h₁ σ₂ τ₂ hFy hcz
-    · have hyk := hkl x m i en hT f y ρk σ₂ ρk' hk' hy
-      have hFy := hFk x m i en hT f y ls'' ρk σ₂ ρk' hk' hy
+    · have hyk := hkl x m i en hT f y ρk σ₂ ρk' hk' hvk hy
+      have hFy := hFk x m i en hT f y ls'' ρk σ₂ ρk' hk' hvk hy
         (hFe x m i en hT ls' ls'' ρk σ₂ ρk' hk' he hF')
       exact hK x m i en hT ha hq y k ls'' K₁ ρk σ₂ ρk'
         (fun P hP => (hcont y hyk ls'' (hwl x m i en hT ls' ls'' ρk σ₂ ρk' hk' he)).2 hq P hP)
@@ -675,12 +688,12 @@ theorem erwp_frame_plain_of_K (lo : Life) {Φ : LocFam} (hΦ : Φ.Down) (T : OpT
     (Φ := fun _ => Φ) (fun _ => hΦ) (fun _ _ _ => rfl) (fl := fun _ => lo)
     (T := fun _ => liftTabK T) (fun _ _ _ _ _ _ _ _ h => h) K hH hC (fun _ => Fr)
     (fun _ => hFs) (fun _ _ _ _ ρ h => h) ?_ ?_ ?_
-    (fun _ _ _ _ _ _ _ _ _ _ _ _ _ h => h) ?_ ?_ ?_ (fun _ => Q₁) (fun _ => Q) ?_
+    (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ h => h) ?_ ?_ ?_ (fun _ => Q₁) (fun _ => Q) ?_
     n () ls e ρ h ρ₂ ρ' hF hc
   · intro _ m i en hT
     obtain ⟨en₀, hT₀, rfl⟩ := liftTabK_some hT
     exact hwl m i en₀ hT₀
-  · intro _ m i en hT _ _ _ _ _ _ _
+  · intro _ m i en hT _ _ _ _ _ _ _ _
     obtain ⟨en₀, hT₀, rfl⟩ := liftTabK_some hT
     trivial
   · intro _ m i en hT

@@ -27,16 +27,6 @@ open BoCa.BoLo (Heap Head Kont performE raiseE cancelVal opPayload)
 
 variable {ι : Type}
 
-/-- **A run's returned resource is valid**: `↭` gives it. -/
-theorem rwpG_validK {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes}
-    (h : rwpG (ℍ := ℍ) Φ Q n ls e ρ) :
-    rwpG (ℍ := ℍ) Φ (fun k ls t ρ' => Q k ls t ρ' ∧ ResU.Valid ρ') n ls e ρ := by
-  intro ρf fρ ps μ hf hcf hT htg hI hl hfd j μ' e' hj hrun hfin
-  obtain ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
-    h₁₃⟩ := h ρf fρ ps μ hf hcf hT htg hI hl hfd j μ' e' hj hrun hfin
-  exact ⟨ρ', ρp, fρ', fρ'p, π, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀, h₁₁, h₁₂,
-    h₁₃, (ResU.Valid.split h₆ h₇.2.2).1⟩
-
 /-- `OpTabN.Twin` at the lifted tables. -/
 theorem OpTabN.Twin.liftK {T T' : OpTabN} (h : T.Twin T') : (liftTabK T).Twin (liftTabK T') := by
   intro m i en hT
