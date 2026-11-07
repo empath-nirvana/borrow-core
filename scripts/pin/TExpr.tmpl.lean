@@ -346,43 +346,250 @@ theorem lendCellB_shift {e : Expr} (h : lendCellB e = true) (d k : Nat) :
   match e, h with
   | .app (.app _ (.app (.prim .alloc) _)) _, _ => rfl
 
-/-- An observation of codata through its variables, at the projection `o`: `f s o` (the state
-`s`), or `f o` with no state.  `[spec §45]` -/
-def nuObsE (f : Nat) (s : Option Nat) (o : Val) : Expr :=
-  match s with
-  | some s => .app (.app (.var f) (.var s)) (.val o)
-  | none => .app (.var f) (.val o)
+/-! ### Codata's η-tree  `[spec §45, §65]`
 
-/-- An observation through `g`, bound to `f` first (`g <- return (unbang f); …`): `(λg. g s o) f`,
-or with no state `(λg. g o) f`.  `[spec §45]` -/
-def nuObsRE (f : Nat) (s : Option Nat) (o : Val) : Expr :=
-  .app (.val (.lam (nuObsE 0 (s.map (· + 1)) o))) (.var f)
+A thunk that observes codata `f s` (`f`, with no state) by η-expansion: a tree of `&`s, `λ`s and
+`Λ`s whose every leaf is the observation of `f s` along the leaf's path. The library and the
+elaboration write it because `thunkv` takes only a λ (`thunkv nu_in < (nu_out (force f s)).1,
+(nu_out (force f s)).2 >`); a protocol object writes its observations nested
+(`< < … .1 .1, … .1 .2 >, … .2 >`) or under the binders of an observation's arguments
+(`Λ'x. λb. (nu_out (force f s)).1['x] b`). -/
 
-/-- **The η-thunk of codata**  `[spec §45]`: the erasure of
-`thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >` (and with no `s`,
-`< (nu_out (force f)).1, (nu_out (force f)).2 >`): the `&` of the two observations, under its two
-binders; with `rb`, each arm binds `f` to a name of its own first
-(`g <- return (unbang f); (nu_out (force g s)).k`). -/
-def nuEtaE (f : Nat) (s : Option Nat) (rb : Bool) : Expr :=
-  let obs := if rb then nuObsRE else nuObsE
-  withPair (obs (f + 2) (s.map (· + 2)) (.inj₁ .unit)) (obs (f + 2) (s.map (· + 2)) (.inj₂ .unit))
+/-- An argument of an observation in an η-tree: a variable, or a closed value (a projection
+`inj₁ ()`/`inj₂ ()`, a `Λ`'s `()`; at a run, any value). -/
+inductive NuArg where
+  | var (i : Nat)
+  | val (v : Val)
 
-/-- The term is the η-thunk of codata at the variables `f` and `s`, in either form. -/
+namespace NuArg
+
+def toE : NuArg → Expr
+  | .var i => .var i
+  | .val v => .val v
+
+/-- The argument under `n` more binders. -/
+def up (n : Nat) : NuArg → NuArg
+  | .var i => .var (i + n)
+  | .val v => .val v
+
+/-- The argument after `d` slots are inserted at `c` (`sIdx`). -/
+def sh (d c : Nat) : NuArg → NuArg
+  | .var i => .var (sIdx d c i)
+  | .val v => .val v
+
+/-- A value argument is closed. -/
+def Closed : NuArg → Prop
+  | .var _ => True
+  | .val v => closedAt 0 v.1 = true
+
+theorem var_closed (i : Nat) : (NuArg.var i).Closed := trivial
+
+theorem val_closed {v : Val} (h : closedAt 0 v.1 = true) : (NuArg.val v).Closed := h
+
+theorem toE_shift {a : NuArg} (h : a.Closed) (d c : Nat) : a.toE.shift d c = (a.sh d c).toE := by
+  cases a with
+  | var i => exact var_shift d c i
+  | val v => exact shift_closed0 h d c
+
+theorem up_closed {a : NuArg} (h : a.Closed) (n : Nat) : (a.up n).Closed := by
+  cases a
+  · trivial
+  · exact h
+
+theorem sh_up (a : NuArg) (n d c : Nat) : (a.up n).sh d (c + n) = (a.sh d c).up n := by
+  cases a with
+  | var i =>
+    show NuArg.var (sIdx d (c + n) (i + n)) = NuArg.var (sIdx d c i + n)
+    rw [show sIdx d (c + n) (i + n) = sIdx d c i + n by unfold sIdx; split_ifs <;> omega]
+  | val v => rfl
+
+theorem sh_val (v : Val) (d c : Nat) : (NuArg.val v).sh d c = .val v := rfl
+
+theorem map_up_sh (xs : List NuArg) (n d c : Nat) :
+    (xs.map (·.up n)).map (·.sh d (c + n)) = (xs.map (·.sh d c)).map (·.up n) := by
+  induction xs with
+  | nil => rfl
+  | cons a as ih => simp only [List.map_cons, ih, sh_up]
+
+theorem omap_up_sh (s : Option NuArg) (n d c : Nat) :
+    (s.map (·.up n)).map (·.sh d (c + n)) = (s.map (·.sh d c)).map (·.up n) := by
+  cases s <;> simp only [Option.map_none, Option.map_some, sh_up]
+
+theorem omap_up_closed {s : Option NuArg} (hs : ∀ a ∈ s, a.Closed) (n : Nat) :
+    ∀ a ∈ s.map (·.up n), a.Closed := by
+  intro a ha
+  cases s with
+  | none => cases ha
+  | some b => cases ha; exact up_closed (hs b rfl) n
+
+theorem map_up_closed {os : List NuArg} (hos : ∀ a ∈ os, a.Closed) (n : Nat) (extra : NuArg)
+    (he : extra.Closed) : ∀ a ∈ os.map (·.up n) ++ [extra], a.Closed := by
+  intro a ha
+  simp only [List.mem_append, List.mem_map, List.mem_singleton] at ha
+  rcases ha with ⟨b, hb, rfl⟩ | rfl
+  · exact up_closed (hos b hb) n
+  · exact he
+
+end NuArg
+
+/-- **The η-tree of codata**: a `leaf` is the observation made so far, directly (`rb = false`) or
+through a binding of `f` first (`g <- return (unbang f); …`, `rb = true`); an `amp` is a `&` of
+the observations at `inj₁ ()` and `inj₂ ()`; a `lam` is a `λx` passing `x` on; a `dead` is a `Λ`,
+passing `()` on. -/
+inductive NuTree where
+  | leaf (rb : Bool)
+  | amp (l r : NuTree)
+  | lam (t : NuTree)
+  | dead (t : NuTree)
+
+/-- `h a₁ … aₙ`. -/
+def nuAppsE (h : Expr) : List NuArg → Expr
+  | [] => h
+  | a :: as => nuAppsE (.app h a.toE) as
+
+/-- The codata observed: `f s`, or `f` with no state. -/
+def nuHeadE (f : NuArg) : Option NuArg → Expr
+  | some s => .app f.toE s.toE
+  | none => f.toE
+
+/-- The erasure of the η-tree `t` over `f` and `s`, the observation `os` made so far. -/
+def NuTree.toE : NuTree → NuArg → Option NuArg → List NuArg → Expr
+  | .leaf false, f, s, os => nuAppsE (nuHeadE f s) os
+  | .leaf true, f, s, os =>
+      .app (.val (.lam (nuAppsE (nuHeadE (.var 0) (s.map (·.up 1))) (os.map (·.up 1))))) f.toE
+  | .amp l r, f, s, os =>
+      withPair (l.toE (f.up 2) (s.map (·.up 2)) (os.map (·.up 2) ++ [.val (.inj₁ .unit)]))
+        (r.toE (f.up 2) (s.map (·.up 2)) (os.map (·.up 2) ++ [.val (.inj₂ .unit)]))
+  | .lam t, f, s, os =>
+      .val (.lam (t.toE (f.up 1) (s.map (·.up 1)) (os.map (·.up 1) ++ [.var 0])))
+  | .dead t, f, s, os =>
+      .val (.lam (t.toE (f.up 1) (s.map (·.up 1)) (os.map (·.up 1) ++ [.val .unit])))
+
+/-- The η-trees whose erasure `e` may be, read off its shape (a superset: `nuEtaB` checks). -/
+def NuTree.parse : Expr → List NuTree
+  | .lam b =>
+      (match _hb : b with
+       | .case (.var 0) (.seq (.var 0) M) (.seq (.var 0) N) =>
+           (parse M).flatMap fun l => (parse N).map (NuTree.amp l)
+       | _ => []) ++ ((parse b).map .lam ++ (parse b).map .dead)
+  | .app _ _ => [.leaf false, .leaf true]
+  | .var _ => [.leaf false]
+  | _ => []
+termination_by e => sizeOf e
+decreasing_by all_goals (subst_vars; simp_wf; try omega)
+
+/-- **The term is codata's η-thunk** at the variables `f` and `s`: the erasure of an η-tree over
+them.  `[spec §45, §65]` -/
 def nuEtaB (f : Nat) (s : Option Nat) (e : Expr) : Bool :=
-  e == nuEtaE f s false || e == nuEtaE f s true
+  (NuTree.parse e).any fun t => t.toE (.var f) (s.map .var) [] == e
 
-theorem nuEtaE_shift (f : Nat) (s : Option Nat) (rb : Bool) (d k : Nat) :
-    (nuEtaE f s rb).shift d k = nuEtaE (sIdx d k f) (s.map (sIdx d k)) rb := by
-  have hv (i : Nat) : (if i < k then Expr.var (i + 2) else Expr.var (i + 2 + d)) =
-      Expr.var (sIdx d k i + 2) := by
-    unfold sIdx; split <;> simp <;> omega
-  cases rb <;> cases s <;> simp [nuEtaE, nuObsE, nuObsRE, withPair, Expr.shift, hv] <;>
-    (try rfl) <;> (unfold sIdx; split <;> simp <;> omega)
+theorem nuAppsE_shift (h : Expr) : ∀ (os : List NuArg), (∀ a ∈ os, a.Closed) → ∀ (d c : Nat),
+    (nuAppsE h os).shift d c = nuAppsE (h.shift d c) (os.map (·.sh d c))
+  | [], _, _, _ => rfl
+  | a :: as, hos, d, c => by
+      simp only [nuAppsE, List.map_cons]
+      rw [nuAppsE_shift _ as (fun x hx => hos x (List.mem_cons_of_mem _ hx))]
+      simp only [Expr.shift, NuArg.toE_shift (hos a (List.mem_cons_self ..))]
+
+theorem nuHeadE_shift {f : NuArg} {s : Option NuArg} (hf : f.Closed) (hs : ∀ a ∈ s, a.Closed)
+    (d c : Nat) : (nuHeadE f s).shift d c = nuHeadE (f.sh d c) (s.map (·.sh d c)) := by
+  cases s with
+  | none => exact NuArg.toE_shift hf d c
+  | some a =>
+    simp only [nuHeadE, Expr.shift, Option.map_some, NuArg.toE_shift hf,
+      NuArg.toE_shift (hs a rfl)]
+
+theorem withPair_shift2 (M N : Expr) (d c : Nat) :
+    (withPair M N).shift d c = withPair (M.shift d (c + 2)) (N.shift d (c + 2)) :=
+  withPair_shift M N d c
+
+theorem lam_shift (b : Expr) (d c : Nat) :
+    (Expr.val (.lam b)).shift d c = .val (.lam (b.shift d (c + 1))) := rfl
+
+theorem NuTree.toE_shift : ∀ (t : NuTree) (f : NuArg) (s : Option NuArg) (os : List NuArg),
+    f.Closed → (∀ a ∈ s, a.Closed) → (∀ a ∈ os, a.Closed) → ∀ (d c : Nat),
+    (t.toE f s os).shift d c = t.toE (f.sh d c) (s.map (·.sh d c)) (os.map (·.sh d c))
+  | .leaf false, f, s, os, hf, hs, hos, d, c => by
+      simp only [NuTree.toE]
+      rw [nuAppsE_shift _ os hos, nuHeadE_shift hf hs]
+  | .leaf true, f, s, os, hf, hs, hos, d, c => by
+      have hos' : ∀ a ∈ os.map (·.up 1), a.Closed := by
+        intro a ha; simp only [List.mem_map] at ha
+        obtain ⟨b, hb, rfl⟩ := ha; exact NuArg.up_closed (hos b hb) 1
+      simp only [NuTree.toE]
+      rw [Expr.shift, lam_shift, nuAppsE_shift _ _ hos',
+        nuHeadE_shift (NuArg.var_closed 0) (NuArg.omap_up_closed hs 1), NuArg.toE_shift hf,
+        NuArg.map_up_sh, NuArg.omap_up_sh]
+      rfl
+  | .amp l r, f, s, os, hf, hs, hos, d, c => by
+      simp only [NuTree.toE]
+      rw [withPair_shift2,
+        NuTree.toE_shift l _ _ _ (NuArg.up_closed hf 2) (NuArg.omap_up_closed hs 2)
+          (NuArg.map_up_closed hos 2 _ (NuArg.val_closed rfl)),
+        NuTree.toE_shift r _ _ _ (NuArg.up_closed hf 2) (NuArg.omap_up_closed hs 2)
+          (NuArg.map_up_closed hos 2 _ (NuArg.val_closed rfl))]
+      simp only [List.map_append, List.map_cons, List.map_nil, NuArg.sh_val, NuArg.sh_up,
+        NuArg.map_up_sh, NuArg.omap_up_sh]
+  | .lam t, f, s, os, hf, hs, hos, d, c => by
+      simp only [NuTree.toE]
+      rw [lam_shift, NuTree.toE_shift t _ _ _ (NuArg.up_closed hf 1) (NuArg.omap_up_closed hs 1)
+          (NuArg.map_up_closed hos 1 _ (NuArg.var_closed 0))]
+      have e0 : (NuArg.var 0).sh d (c + 1) = .var 0 := by
+        show NuArg.var _ = _; rw [sIdx_zero_succ]
+      simp only [List.map_append, List.map_cons, List.map_nil, e0, NuArg.sh_up,
+        NuArg.map_up_sh, NuArg.omap_up_sh]
+  | .dead t, f, s, os, hf, hs, hos, d, c => by
+      simp only [NuTree.toE]
+      rw [lam_shift, NuTree.toE_shift t _ _ _ (NuArg.up_closed hf 1) (NuArg.omap_up_closed hs 1)
+          (NuArg.map_up_closed hos 1 _ (NuArg.val_closed rfl))]
+      simp only [List.map_append, List.map_cons, List.map_nil, NuArg.sh_val, NuArg.sh_up,
+        NuArg.map_up_sh, NuArg.omap_up_sh]
+
+/-- An application chain from a variable or an application parses as a direct leaf. -/
+theorem NuTree.leaf_mem_parse : ∀ (h : Expr) (os : List NuArg), (h matches .var _ | .app _ _) →
+    NuTree.leaf false ∈ NuTree.parse (nuAppsE h os)
+  | h, [], hh => by cases h <;> simp_all [nuAppsE, NuTree.parse]
+  | _, _ :: as, _ => NuTree.leaf_mem_parse _ as rfl
+
+theorem NuTree.mem_parse_lam {b : Expr} {x : NuTree}
+    (h : x ∈ (NuTree.parse b).map .lam ++ (NuTree.parse b).map .dead) :
+    x ∈ NuTree.parse (.lam b) := by
+  rw [NuTree.parse.eq_def]; exact List.mem_append_right _ h
+
+/-- **The parse finds every η-tree over a variable** in the erasure it gives. -/
+theorem NuTree.mem_parse : ∀ (t : NuTree) (i : Nat) (s : Option NuArg) (os : List NuArg),
+    t ∈ NuTree.parse (t.toE (.var i) s os)
+  | .leaf false, i, s, os => by
+      simp only [NuTree.toE]
+      exact NuTree.leaf_mem_parse _ os (by cases s <;> rfl)
+  | .leaf true, i, s, os => by simp [NuTree.toE, NuTree.parse]
+  | .amp l r, i, s, os => by
+      simp only [NuTree.toE, withPair, Val.val_lam, NuArg.up]
+      rw [NuTree.parse]
+      refine List.mem_append_left _ ?_
+      simp only [List.mem_flatMap, List.mem_map]
+      exact ⟨l, NuTree.mem_parse l _ _ _, r, NuTree.mem_parse r _ _ _, rfl⟩
+  | .lam t, i, s, os => by
+      simp only [NuTree.toE, Val.val_lam, NuArg.up]
+      exact NuTree.mem_parse_lam (List.mem_append_left _
+        (List.mem_map.2 ⟨t, NuTree.mem_parse t _ _ _, rfl⟩))
+  | .dead t, i, s, os => by
+      simp only [NuTree.toE, Val.val_lam, NuArg.up]
+      exact NuTree.mem_parse_lam (List.mem_append_right _
+        (List.mem_map.2 ⟨t, NuTree.mem_parse t _ _ _, rfl⟩))
 
 theorem nuEtaB_shift {f : Nat} {s : Option Nat} {e : Expr} (h : nuEtaB f s e = true) (d k : Nat) :
     nuEtaB (sIdx d k f) (s.map (sIdx d k)) (e.shift d k) = true := by
-  simp only [nuEtaB, Bool.or_eq_true, beq_iff_eq] at h ⊢
-  rcases h with h | h <;> rw [h, nuEtaE_shift] <;> simp
+  simp only [nuEtaB, List.any_eq_true, beq_iff_eq] at h ⊢
+  obtain ⟨t, -, rfl⟩ := h
+  have hs : ∀ a ∈ s.map NuArg.var, a.Closed := by
+    intro a ha; simp only [Option.mem_def, Option.map_eq_some_iff] at ha
+    obtain ⟨b, -, rfl⟩ := ha; trivial
+  have e := NuTree.toE_shift t (.var f) (s.map .var) [] trivial hs (by simp) d k
+  have es : (s.map NuArg.var).map (·.sh d k) = (s.map (sIdx d k)).map NuArg.var := by
+    cases s <;> rfl
+  rw [e, es]
+  exact ⟨t, NuTree.mem_parse t _ _ _, rfl⟩
 
 /-! ### Terms a node's erasure reads off a child's
 

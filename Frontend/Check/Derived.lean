@@ -198,55 +198,18 @@ theorem lendR_plain {ℍ : Host} [HostIs ℍ] {S : Row} (hS : S.isEmpty = true) 
   · obtain ⟨⟨-, -, hT, -⟩, -⟩ := pure_sep_iff.mp hp
     rw [hE n i] at hT; cases hT
 
-/-! ### Codata's η-thunk  `[spec §45]`
+/-! ### Codata's η-thunk  `[spec §45, §65]`
 
-A loop's codata is written as the η-thunk of an observation of `f s`
-(`thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >`, `nuEtaE`), since `thunkv`
-takes only a λ. Its two observations are the observations of `f s`: each is a β, a `case` and a
-`;` away (`nuEta_obs`). When `f` is `unfold step` (`hN`, the value `unfold step` steps to),
-`f s` is itself one β at every memory to the codata `etaN C g s` (`hN_steps`), so the thunk's every
-observation reaches the same observation of that value by pure steps (`nuEta_unfold`): the value
-may be computed where the thunk is built. With no state, the thunk's observations are those of
-`f` (`nuEta_var`). -/
-
-/-- An arm of the closed η-thunk at the observation `o`: `fv sv o`, `fv o` with no state; with
-`rb`, through a binding of `fv` first. -/
-def nuArmV (fv : Val) (sv : Option Val) (rb : Bool) (o : Val) : Expr :=
-  let body : Option Val → Expr
-    | some sv => .app (.app (.var 0) (.val sv)) (.val o)
-    | none => .app (.var 0) (.val o)
-  if rb then .app (.val (.lam (body sv))) (.val fv) else (body sv).subst 0 fv
-
-/-- `nuEtaE` at closed values: the `&` of the two arms. -/
-def nuEtaV (fv : Val) (sv : Option Val) (rb : Bool) : Expr :=
-  withPair (nuArmV fv sv rb (.inj₁ .unit)) (nuArmV fv sv rb (.inj₂ .unit))
-
-/-- The observation `fv sv o` (`fv o` with no state). -/
-def nuObsV (fv : Val) (sv : Option Val) (o : Val) : Expr :=
-  match sv with
-  | some sv => .app (.app (.val fv) (.val sv)) (.val o)
-  | none => .app (.val fv) (.val o)
-
-theorem nuArmV_closed {ℍ : Host} [HostIs ℍ] {fv : Val} {sv : Option Val} {rb : Bool} {o : Val}
-    (hf : closedAt 0 fv.1 = true) (hs : ∀ v ∈ sv, closedAt 0 v.1 = true)
-    (ho : closedAt 0 o.1 = true) :
-    closedAt 0 (nuArmV fv sv rb o) = true ∧ PureSteps (ℍ := ℍ) (nuArmV fv sv rb o) (nuObsV fv sv o) := by
-  cases sv with
-  | none =>
-    cases rb
-    · simp [nuArmV, nuObsV, Expr.subst, closed_subst ho, closedAt, hf, ho]; exact .refl
-    · refine ⟨by simp [nuArmV, closedAt, hf, closedAt_mono _ ho (Nat.zero_le _)], ?_⟩
-      have := PureSteps.beta (ℍ := ℍ) (.app (.var 0) (.val o)) fv
-      simpa [nuArmV, nuObsV, Expr.subst, closed_subst ho] using this
-  | some sv =>
-    have hs' := hs sv rfl
-    cases rb
-    · simp [nuArmV, nuObsV, Expr.subst, closed_subst ho, closed_subst hs', closedAt, hf, ho, hs']
-      exact .refl
-    · refine ⟨by simp [nuArmV, closedAt, hf, closedAt_mono _ ho (Nat.zero_le _),
-        closedAt_mono _ hs' (Nat.zero_le _)], ?_⟩
-      have := PureSteps.beta (ℍ := ℍ) (.app (.app (.var 0) (.val sv)) (.val o)) fv
-      simpa [nuArmV, nuObsV, Expr.subst, closed_subst ho, closed_subst hs'] using this
+A thunk that observes codata by η-expansion is the erasure of an η-tree over `f` and `s`
+(`NuTree.toE`, `nuEtaB`): `&`s of the projections, `λ`s and `Λ`s, every leaf the observation of
+`f s` along its path. Filling its variables with values (`NuTree.toE_subst`) gives the tree over
+the values. Every observation of the thunk that reaches a subtree reaches, by pure steps, that
+subtree's erasure over the observation made (`nuEta_reach`): a `&` or a `λ`, a value, with no step
+that touches memory; at a leaf, the same observation of `f s` (`nuEta_obs`). When `f` is
+`unfold step` (`hN`, the value `unfold step` steps to), `f s` is itself one β at every memory to
+the codata `etaN C g s` (`hN_steps`), so the thunk's every observation reaches the same
+observation of that value (`nuEta_unfold`): the value may be computed where the thunk is built.
+With no state, the thunk's observations are `f`'s (`nuEta_var`). -/
 
 /-- `⟨M, N⟩` observed at `inj₁ ()` is `M`, at `inj₂ ()` `N`, for closed `M`, `N`. -/
 theorem withPair_obs {ℍ : Host} [HostIs ℍ] {M N : Expr} (hM : closedAt 0 M = true)
@@ -272,34 +235,384 @@ theorem withPair_obs {ℍ : Host} [HostIs ℍ] {M N : Expr} (hM : closedAt 0 M =
     rw [subst_closedAt N _ hN (Nat.zero_le _)]
     exact PureSteps.head (fun μ => BoCa.BoLo.Head.seq μ _) rfl
 
-/-- **The η-thunk's observations are `f s`'s**: at `inj₁ ()` and `inj₂ ()`, by pure steps. -/
-theorem nuEta_obs {ℍ : Host} [HostIs ℍ] {fv : Val} {sv : Option Val} (rb k : Bool)
+namespace NuArg
+
+/-- The argument with the variable `j` filled by `v`. -/
+def sub (j : Nat) (v : Val) : NuArg → NuArg
+  | .var i => if i = j then .val v else if i > j then .var (i - 1) else .var i
+  | .val w => .val w
+
+/-- Every variable of the argument is below `k`; a value is closed. -/
+def ClosedAt (k : Nat) : NuArg → Prop
+  | .var i => i < k
+  | .val v => closedAt 0 v.1 = true
+
+theorem toE_subst {a : NuArg} (h : a.Closed) (j : Nat) (v : Val) :
+    a.toE.subst j v = (a.sub j v).toE := by
+  cases a with
+  | var i => simp only [toE, sub, Expr.subst]; split_ifs <;> rfl
+  | val w => exact closed_subst h j v
+
+theorem sub_up (a : NuArg) (n j : Nat) (v : Val) : (a.up n).sub (j + n) v = (a.sub j v).up n := by
+  cases a with
+  | var i =>
+    simp only [up, sub]
+    by_cases h₁ : i = j
+    · subst h₁; simp
+    · by_cases h₂ : i > j
+      · rw [if_neg (by omega), if_pos (by omega), if_neg h₁, if_pos h₂]
+        show NuArg.var _ = NuArg.var _; congr 1; omega
+      · rw [if_neg (by omega), if_neg (by omega), if_neg h₁, if_neg h₂]
+  | val w => rfl
+
+theorem sub_closed {a : NuArg} (h : a.Closed) (j : Nat) {v : Val} (hv : closedAt 0 v.1 = true) :
+    (a.sub j v).Closed := by
+  cases a with
+  | var i => simp only [sub]; split_ifs <;> first | exact hv | trivial
+  | val w => exact h
+
+theorem sub_val (w : Val) (j : Nat) (v : Val) : (NuArg.val w).sub j v = .val w := rfl
+
+theorem up_val (w : Val) (n : Nat) : (NuArg.val w).up n = .val w := rfl
+
+theorem map_up_sub (xs : List NuArg) (n j : Nat) (v : Val) :
+    (xs.map (·.up n)).map (·.sub (j + n) v) = (xs.map (·.sub j v)).map (·.up n) := by
+  induction xs with
+  | nil => rfl
+  | cons a as ih => simp only [List.map_cons, ih, sub_up]
+
+theorem omap_up_sub (s : Option NuArg) (n j : Nat) (v : Val) :
+    (s.map (·.up n)).map (·.sub (j + n) v) = (s.map (·.sub j v)).map (·.up n) := by
+  cases s <;> simp only [Option.map_none, Option.map_some, sub_up]
+
+theorem map_val_up (xs : List Val) (n : Nat) : (xs.map NuArg.val).map (·.up n) = xs.map .val := by
+  induction xs with
+  | nil => rfl
+  | cons a as ih => simp only [List.map_cons, ih, up_val]
+
+theorem omap_val_up (s : Option Val) (n : Nat) : (s.map NuArg.val).map (·.up n) = s.map .val := by
+  cases s <;> rfl
+
+theorem map_val_sub (xs : List Val) (j : Nat) (v : Val) :
+    (xs.map NuArg.val).map (·.sub j v) = xs.map .val := by
+  induction xs with
+  | nil => rfl
+  | cons a as ih => simp only [List.map_cons, ih, sub_val]
+
+theorem omap_val_sub (s : Option Val) (j : Nat) (v : Val) :
+    (s.map NuArg.val).map (·.sub j v) = s.map .val := by
+  cases s <;> rfl
+
+theorem closedAt_toE {a : NuArg} {k : Nat} (h : a.ClosedAt k) : closedAt k a.toE = true := by
+  cases a with
+  | var i => have : i < k := h; simp [toE, closedAt, this]
+  | val w => exact closedAt_mono _ h (Nat.zero_le _)
+
+theorem up_closedAt {a : NuArg} {k : Nat} (h : a.ClosedAt k) (n : Nat) : (a.up n).ClosedAt (k + n) := by
+  cases a with
+  | var i => show i + n < k + n; have : i < k := h; omega
+  | val w => exact h
+
+end NuArg
+
+theorem nuAppsE_subst (h : Expr) : ∀ (os : List NuArg), (∀ a ∈ os, a.Closed) → ∀ (j : Nat) (v : Val),
+    (nuAppsE h os).subst j v = nuAppsE (h.subst j v) (os.map (·.sub j v))
+  | [], _, _, _ => rfl
+  | a :: as, hos, j, v => by
+      simp only [nuAppsE, List.map_cons]
+      rw [nuAppsE_subst _ as (fun x hx => hos x (List.mem_cons_of_mem _ hx))]
+      simp only [Expr.subst, NuArg.toE_subst (hos a (List.mem_cons_self ..))]
+
+theorem nuHeadE_subst {f : NuArg} {s : Option NuArg} (hf : f.Closed) (hs : ∀ a ∈ s, a.Closed)
+    (j : Nat) (v : Val) : (nuHeadE f s).subst j v = nuHeadE (f.sub j v) (s.map (·.sub j v)) := by
+  cases s with
+  | none => exact NuArg.toE_subst hf j v
+  | some a =>
+    simp only [nuHeadE, Expr.subst, Option.map_some, NuArg.toE_subst hf,
+      NuArg.toE_subst (hs a rfl)]
+
+theorem val_shift_closed {v : Val} (hv : closedAt 0 v.1 = true) (n c : Nat) : v.shift n c = v :=
+  Val.ext (closed_shift hv n c)
+
+theorem withPair_subst2 (M N : Expr) {v : Val} (hv : closedAt 0 v.1 = true) (j : Nat) :
+    (withPair M N).subst j v = withPair (M.subst (j + 2) v) (N.subst (j + 2) v) := by
+  simp [withPair, Expr.subst, val_shift_closed hv]
+
+theorem lam_subst (b : Expr) {v : Val} (hv : closedAt 0 v.1 = true) (j : Nat) :
+    (Expr.val (.lam b)).subst j v = .val (.lam (b.subst (j + 1) v)) := by
+  simp [Expr.subst, val_shift_closed hv]
+
+/-- **Filling a variable of an η-tree's erasure** fills it in the tree's arguments. -/
+theorem NuTree.toE_subst : ∀ (t : NuTree) (f : NuArg) (s : Option NuArg) (os : List NuArg),
+    f.Closed → (∀ a ∈ s, a.Closed) → (∀ a ∈ os, a.Closed) → ∀ (j : Nat) {v : Val},
+    closedAt 0 v.1 = true →
+    (t.toE f s os).subst j v = t.toE (f.sub j v) (s.map (·.sub j v)) (os.map (·.sub j v))
+  | .leaf false, f, s, os, hf, hs, hos, j, v, _ => by
+      simp only [NuTree.toE]
+      rw [nuAppsE_subst _ os hos, nuHeadE_subst hf hs]
+  | .leaf true, f, s, os, hf, hs, hos, j, v, hv => by
+      have hos' : ∀ a ∈ os.map (·.up 1), a.Closed := by
+        intro a ha; simp only [List.mem_map] at ha
+        obtain ⟨b, hb, rfl⟩ := ha; exact NuArg.up_closed (hos b hb) 1
+      simp only [NuTree.toE]
+      rw [Expr.subst, lam_subst _ hv, nuAppsE_subst _ _ hos',
+        nuHeadE_subst (NuArg.var_closed 0) (NuArg.omap_up_closed hs 1), NuArg.toE_subst hf,
+        NuArg.map_up_sub, NuArg.omap_up_sub]
+      rfl
+  | .amp l r, f, s, os, hf, hs, hos, j, v, hv => by
+      simp only [NuTree.toE]
+      rw [withPair_subst2 _ _ hv,
+        NuTree.toE_subst l _ _ _ (NuArg.up_closed hf 2) (NuArg.omap_up_closed hs 2)
+          (NuArg.map_up_closed hos 2 _ (NuArg.val_closed rfl)) _ hv,
+        NuTree.toE_subst r _ _ _ (NuArg.up_closed hf 2) (NuArg.omap_up_closed hs 2)
+          (NuArg.map_up_closed hos 2 _ (NuArg.val_closed rfl)) _ hv]
+      simp only [List.map_append, List.map_cons, List.map_nil, NuArg.sub_val, NuArg.sub_up,
+        NuArg.map_up_sub, NuArg.omap_up_sub]
+  | .lam t, f, s, os, hf, hs, hos, j, v, hv => by
+      simp only [NuTree.toE]
+      rw [lam_subst _ hv, NuTree.toE_subst t _ _ _ (NuArg.up_closed hf 1)
+        (NuArg.omap_up_closed hs 1) (NuArg.map_up_closed hos 1 _ (NuArg.var_closed 0)) _ hv]
+      have e0 : (NuArg.var 0).sub (j + 1) v = .var 0 := by
+        simp only [NuArg.sub]; rw [if_neg (by omega), if_neg (by omega)]
+      simp only [List.map_append, List.map_cons, List.map_nil, e0, NuArg.sub_up,
+        NuArg.map_up_sub, NuArg.omap_up_sub]
+  | .dead t, f, s, os, hf, hs, hos, j, v, hv => by
+      simp only [NuTree.toE]
+      rw [lam_subst _ hv, NuTree.toE_subst t _ _ _ (NuArg.up_closed hf 1)
+        (NuArg.omap_up_closed hs 1) (NuArg.map_up_closed hos 1 _ (NuArg.val_closed rfl)) _ hv]
+      simp only [List.map_append, List.map_cons, List.map_nil, NuArg.sub_val, NuArg.sub_up,
+        NuArg.map_up_sub, NuArg.omap_up_sub]
+
+theorem nuAppsE_closedAt {k : Nat} : ∀ {h : Expr} (os : List NuArg), closedAt k h = true →
+    (∀ a ∈ os, a.ClosedAt k) → closedAt k (nuAppsE h os) = true
+  | _, [], hh, _ => hh
+  | _, a :: as, hh, hos =>
+      nuAppsE_closedAt as (by simp [closedAt, hh, NuArg.closedAt_toE (hos a (List.mem_cons_self ..))])
+        (fun x hx => hos x (List.mem_cons_of_mem _ hx))
+
+theorem nuHeadE_closedAt {k : Nat} {f : NuArg} {s : Option NuArg} (hf : f.ClosedAt k)
+    (hs : ∀ a ∈ s, a.ClosedAt k) : closedAt k (nuHeadE f s) = true := by
+  cases s with
+  | none => exact NuArg.closedAt_toE hf
+  | some a => simp [nuHeadE, closedAt, NuArg.closedAt_toE hf, NuArg.closedAt_toE (hs a rfl)]
+
+theorem omap_up_closedAt {k : Nat} {s : Option NuArg} (hs : ∀ a ∈ s, a.ClosedAt k) (n : Nat) :
+    ∀ a ∈ s.map (·.up n), a.ClosedAt (k + n) := by
+  intro a ha
+  cases s with
+  | none => cases ha
+  | some b => cases ha; exact NuArg.up_closedAt (hs b rfl) n
+
+theorem map_up_closedAt {k : Nat} {os : List NuArg} (hos : ∀ a ∈ os, a.ClosedAt k) (n : Nat)
+    (extra : List NuArg) (he : ∀ a ∈ extra, a.ClosedAt (k + n)) :
+    ∀ a ∈ os.map (·.up n) ++ extra, a.ClosedAt (k + n) := by
+  intro a ha
+  simp only [List.mem_append, List.mem_map] at ha
+  rcases ha with ⟨b, hb, rfl⟩ | ha
+  · exact NuArg.up_closedAt (hos b hb) n
+  · exact he a ha
+
+/-- An η-tree's erasure over arguments below `k` is closed below `k`. -/
+theorem NuTree.toE_closedAt : ∀ (t : NuTree) {k : Nat} {f : NuArg} {s : Option NuArg}
+    {os : List NuArg}, f.ClosedAt k → (∀ a ∈ s, a.ClosedAt k) → (∀ a ∈ os, a.ClosedAt k) →
+    closedAt k (t.toE f s os) = true
+  | .leaf false, _, _, _, _, hf, hs, hos => nuAppsE_closedAt _ (nuHeadE_closedAt hf hs) hos
+  | .leaf true, k, f, s, os, hf, hs, hos => by
+      simp only [NuTree.toE, closedAt, Val.val_lam, Bool.and_eq_true]
+      refine ⟨nuAppsE_closedAt _ (nuHeadE_closedAt (show 0 < k + 1 by omega)
+        (omap_up_closedAt hs 1)) (by simpa using map_up_closedAt hos 1 [] (by simp)),
+        NuArg.closedAt_toE hf⟩
+  | .amp l r, k, f, s, os, hf, hs, hos => by
+      simp only [NuTree.toE, withPair, closedAt, Val.val_lam, Bool.and_eq_true, decide_eq_true_eq]
+      refine ⟨⟨by omega, by omega, ?_⟩, by omega, ?_⟩
+      · exact NuTree.toE_closedAt l (NuArg.up_closedAt hf 2) (omap_up_closedAt hs 2)
+          (map_up_closedAt hos 2 _ (by simp [NuArg.ClosedAt]; rfl))
+      · exact NuTree.toE_closedAt r (NuArg.up_closedAt hf 2) (omap_up_closedAt hs 2)
+          (map_up_closedAt hos 2 _ (by simp [NuArg.ClosedAt]; rfl))
+  | .lam t, k, f, s, os, hf, hs, hos => by
+      simp only [NuTree.toE, closedAt, Val.val_lam]
+      exact NuTree.toE_closedAt t (NuArg.up_closedAt hf 1) (omap_up_closedAt hs 1)
+        (map_up_closedAt hos 1 _ (by simp [NuArg.ClosedAt]))
+  | .dead t, k, f, s, os, hf, hs, hos => by
+      simp only [NuTree.toE, closedAt, Val.val_lam]
+      exact NuTree.toE_closedAt t (NuArg.up_closedAt hf 1) (omap_up_closedAt hs 1)
+        (map_up_closedAt hos 1 _ (by simp [NuArg.ClosedAt]; rfl))
+
+/-- An observation `ps` of an η-tree from `t` reaches its subtree `t'`: a projection at an `amp`,
+any value at a `lam`, `()` at a `dead`. -/
+inductive NuTree.Reach : NuTree → List Val → NuTree → Prop
+  | refl (t : NuTree) : NuTree.Reach t [] t
+  | inl {l r t : NuTree} {ps : List Val} :
+      NuTree.Reach l ps t → NuTree.Reach (.amp l r) (.inj₁ .unit :: ps) t
+  | inr {l r t : NuTree} {ps : List Val} :
+      NuTree.Reach r ps t → NuTree.Reach (.amp l r) (.inj₂ .unit :: ps) t
+  | lam {u t : NuTree} {ps : List Val} (v : Val) :
+      NuTree.Reach u ps t → NuTree.Reach (.lam u) (v :: ps) t
+  | dead {u t : NuTree} {ps : List Val} :
+      NuTree.Reach u ps t → NuTree.Reach (.dead u) (.unit :: ps) t
+
+/-- The observations `ps` made on `a` reduce as `a` does. -/
+theorem nuAppsE_steps {ℍ : Host} [HostIs ℍ] : ∀ (ps : List Val) {a b : Expr},
+    PureSteps (ℍ := ℍ) a b → PureSteps (ℍ := ℍ) (nuAppsE a (ps.map .val)) (nuAppsE b (ps.map .val))
+  | [], _, _, h => h
+  | v :: ps, _, _, h => nuAppsE_steps ps (PureSteps.plug (.appL .hole v) h)
+
+theorem nuAppsE_append (h : Expr) : ∀ (xs ys : List NuArg),
+    nuAppsE h (xs ++ ys) = nuAppsE (nuAppsE h xs) ys
+  | [], _ => rfl
+  | _ :: xs, ys => nuAppsE_append _ xs ys
+
+theorem vals_closed {xs : List Val} (h : ∀ v ∈ xs, closedAt 0 v.1 = true) :
+    ∀ a ∈ xs.map NuArg.val, a.Closed := by
+  intro a ha; simp only [List.mem_map] at ha; obtain ⟨v, hv, rfl⟩ := ha; exact h v hv
+
+theorem vals_closedAt {xs : List Val} (h : ∀ v ∈ xs, closedAt 0 v.1 = true) (k : Nat) :
+    ∀ a ∈ xs.map NuArg.val, a.ClosedAt k := by
+  intro a ha; simp only [List.mem_map] at ha; obtain ⟨v, hv, rfl⟩ := ha; exact h v hv
+
+theorem oval_closed {s : Option Val} (h : ∀ v ∈ s, closedAt 0 v.1 = true) :
+    ∀ a ∈ s.map NuArg.val, a.Closed := by
+  intro a ha; cases s with
+  | none => cases ha
+  | some v => cases ha; exact h v rfl
+
+theorem oval_closedAt {s : Option Val} (h : ∀ v ∈ s, closedAt 0 v.1 = true) (k : Nat) :
+    ∀ a ∈ s.map NuArg.val, a.ClosedAt k := by
+  intro a ha; cases s with
+  | none => cases ha
+  | some v => cases ha; exact h v rfl
+
+theorem vals_app_closed {os : List Val} (hos : ∀ v ∈ os, closedAt 0 v.1 = true) {x : NuArg}
+    (hx : x.Closed) : ∀ a ∈ os.map NuArg.val ++ [x], a.Closed := by
+  intro a ha
+  rcases List.mem_append.1 ha with h | h
+  · exact vals_closed hos a h
+  · rw [List.mem_singleton.1 h]; exact hx
+
+theorem app_closed {os : List Val} (hos : ∀ v ∈ os, closedAt 0 v.1 = true) {x : Val}
+    (hx : closedAt 0 x.1 = true) : ∀ v ∈ os ++ [x], closedAt 0 v.1 = true := by
+  intro v hv
+  rcases List.mem_append.1 hv with h | h
+  · exact hos v h
+  · rw [List.mem_singleton.1 h]; exact hx
+
+/-- **An observation of the η-thunk reaches the subtree it reaches**: by pure steps, the
+subtree's erasure over the observation made.  `[spec §45, §65]` -/
+theorem nuEta_reach {ℍ : Host} [HostIs ℍ] {fv : Val} {sv : Option Val}
     (hf : closedAt 0 fv.1 = true) (hs : ∀ v ∈ sv, closedAt 0 v.1 = true) :
-    PureSteps (ℍ := ℍ) (.app (nuEtaV fv sv rb) (.val (if k then .inj₂ .unit else .inj₁ .unit)))
-      (nuObsV fv sv (if k then .inj₂ .unit else .inj₁ .unit)) := by
-  have h₁ := nuArmV_closed (ℍ := ℍ) (rb := rb) (o := .inj₁ .unit) hf hs rfl
-  have h₂ := nuArmV_closed (ℍ := ℍ) (rb := rb) (o := .inj₂ .unit) hf hs rfl
-  refine (withPair_obs h₁.1 h₂.1 k).trans ?_
-  cases k
-  · exact h₁.2
-  · exact h₂.2
+    ∀ {t ps t'}, NuTree.Reach t ps t' → ∀ (os : List Val), (∀ v ∈ os, closedAt 0 v.1 = true) →
+      (∀ v ∈ ps, closedAt 0 v.1 = true) →
+      PureSteps (ℍ := ℍ) (nuAppsE (t.toE (.val fv) (sv.map .val) (os.map .val)) (ps.map .val))
+        (t'.toE (.val fv) (sv.map .val) ((os ++ ps).map .val))
+  | _, _, _, .refl t, os, _, _ => by
+      simp only [nuAppsE, List.map_nil, List.append_nil]; exact .refl
+  | _, _, _, .inl (l := l) (r := r) (ps := ps) h, os, hos, hps => by
+      have hM := NuTree.toE_closedAt l (k := 0) (f := .val fv) (s := sv.map .val)
+        (os := (os ++ [Val.inj₁ Val.unit]).map .val) hf (oval_closedAt hs 0)
+        (vals_closedAt (app_closed hos rfl) 0)
+      have hN := NuTree.toE_closedAt r (k := 0) (f := .val fv) (s := sv.map .val)
+        (os := (os ++ [Val.inj₂ Val.unit]).map .val) hf (oval_closedAt hs 0)
+        (vals_closedAt (app_closed hos rfl) 0)
+      have hw := withPair_obs (ℍ := ℍ) hM hN false
+      simp only [Bool.false_eq_true, if_false] at hw
+      have ih := nuEta_reach hf hs h (os ++ [Val.inj₁ Val.unit]) (app_closed hos rfl)
+        (fun v hv => hps v (List.mem_cons_of_mem _ hv))
+      simp only [List.append_assoc, List.singleton_append] at ih
+      refine PureSteps.trans ?_ ih
+      simp only [NuTree.toE, NuArg.up_val, NuArg.omap_val_up, NuArg.map_val_up, List.map_cons,
+        nuAppsE, NuArg.toE]
+      have := nuAppsE_steps (ℍ := ℍ) ps hw
+      simpa [List.map_append] using this
+  | _, _, _, .inr (l := l) (r := r) (ps := ps) h, os, hos, hps => by
+      have hM := NuTree.toE_closedAt l (k := 0) (f := .val fv) (s := sv.map .val)
+        (os := (os ++ [Val.inj₁ Val.unit]).map .val) hf (oval_closedAt hs 0)
+        (vals_closedAt (app_closed hos rfl) 0)
+      have hN := NuTree.toE_closedAt r (k := 0) (f := .val fv) (s := sv.map .val)
+        (os := (os ++ [Val.inj₂ Val.unit]).map .val) hf (oval_closedAt hs 0)
+        (vals_closedAt (app_closed hos rfl) 0)
+      have hw := withPair_obs (ℍ := ℍ) hM hN true
+      simp only [if_true] at hw
+      have ih := nuEta_reach hf hs h (os ++ [Val.inj₂ Val.unit]) (app_closed hos rfl)
+        (fun v hv => hps v (List.mem_cons_of_mem _ hv))
+      simp only [List.append_assoc, List.singleton_append] at ih
+      refine PureSteps.trans ?_ ih
+      simp only [NuTree.toE, NuArg.up_val, NuArg.omap_val_up, NuArg.map_val_up, List.map_cons,
+        nuAppsE, NuArg.toE]
+      have := nuAppsE_steps (ℍ := ℍ) ps hw
+      simpa [List.map_append] using this
+  | _, _, _, .lam (u := u) (ps := ps) v h, os, hos, hps => by
+      have hv : closedAt 0 v.1 = true := hps v (List.mem_cons_self ..)
+      have ih := nuEta_reach hf hs h (os ++ [v]) (app_closed hos hv)
+        (fun w hw => hps w (List.mem_cons_of_mem _ hw))
+      simp only [List.append_assoc, List.singleton_append] at ih
+      refine PureSteps.trans ?_ ih
+      simp only [NuTree.toE, NuArg.up_val, NuArg.omap_val_up, NuArg.map_val_up, List.map_cons,
+        nuAppsE, NuArg.toE]
+      refine (nuAppsE_steps (ℍ := ℍ) ps (PureSteps.beta _ v)).trans ?_
+      rw [NuTree.toE_subst u _ _ _ (NuArg.val_closed hf) (oval_closed hs)
+        (vals_app_closed hos (NuArg.var_closed 0)) 0 hv]
+      simp [NuArg.sub, List.map_append]
+      exact .refl
+  | _, _, _, .dead (u := u) (ps := ps) h, os, hos, hps => by
+      have ih := nuEta_reach hf hs h (os ++ [Val.unit]) (app_closed hos rfl)
+        (fun w hw => hps w (List.mem_cons_of_mem _ hw))
+      simp only [List.append_assoc, List.singleton_append] at ih
+      refine PureSteps.trans ?_ ih
+      simp only [NuTree.toE, NuArg.up_val, NuArg.omap_val_up, NuArg.map_val_up, List.map_cons,
+        nuAppsE, NuArg.toE]
+      refine (nuAppsE_steps (ℍ := ℍ) ps (PureSteps.beta _ .unit)).trans ?_
+      rw [NuTree.toE_subst u _ _ _ (NuArg.val_closed hf) (oval_closed hs)
+        (vals_app_closed hos (NuArg.val_closed rfl)) 0 rfl]
+      simp [NuArg.sub_val, List.map_append]
+      exact .refl
+
+/-- A leaf of the η-tree is the observation of `f s` made so far, by at most one β. -/
+theorem nuEta_leaf {ℍ : Host} [HostIs ℍ] {fv : Val} {sv : Option Val}
+    (hs : ∀ v ∈ sv, closedAt 0 v.1 = true) (rb : Bool) (os : List Val)
+    (hos : ∀ v ∈ os, closedAt 0 v.1 = true) :
+    PureSteps (ℍ := ℍ) ((NuTree.leaf rb).toE (.val fv) (sv.map .val) (os.map .val))
+      (nuAppsE (nuHeadE (.val fv) (sv.map .val)) (os.map .val)) := by
+  cases rb with
+  | false => exact .refl
+  | true =>
+    simp only [NuTree.toE, NuArg.omap_val_up, NuArg.map_val_up, NuArg.toE]
+    refine (PureSteps.beta _ fv).trans ?_
+    rw [nuAppsE_subst _ _ (vals_closed hos), nuHeadE_subst (NuArg.var_closed 0) (oval_closed hs),
+      NuArg.map_val_sub, NuArg.omap_val_sub]
+    exact .refl
+
+/-- **The η-thunk's observations are `f s`'s**: an observation `ps` of the thunk that reaches a
+leaf of its η-tree reaches, by pure steps, the same observation of `f s` (of `f`, with no
+state).  `[spec §45, §65]` -/
+theorem nuEta_obs {ℍ : Host} [HostIs ℍ] {fv : Val} {sv : Option Val} {t : NuTree} {ps : List Val}
+    {rb : Bool} (hf : closedAt 0 fv.1 = true) (hs : ∀ v ∈ sv, closedAt 0 v.1 = true)
+    (hps : ∀ v ∈ ps, closedAt 0 v.1 = true) (h : t.Reach ps (.leaf rb)) :
+    PureSteps (ℍ := ℍ) (nuAppsE (t.toE (.val fv) (sv.map .val) []) (ps.map .val))
+      (nuAppsE (nuHeadE (.val fv) (sv.map .val)) (ps.map .val)) := by
+  have := nuEta_reach (ℍ := ℍ) hf hs h [] (by simp) hps
+  simp only [List.map_nil, List.nil_append] at this
+  exact this.trans (nuEta_leaf hs rb ps hps)
 
 /-- **With no state, the η-thunk is its variable**: its observations are `f`'s. -/
-theorem nuEta_var {ℍ : Host} [HostIs ℍ] {fv : Val} (rb k : Bool) (hf : closedAt 0 fv.1 = true) :
-    PureSteps (ℍ := ℍ) (.app (nuEtaV fv none rb) (.val (if k then .inj₂ .unit else .inj₁ .unit)))
-      (.app (.val fv) (.val (if k then .inj₂ .unit else .inj₁ .unit))) :=
-  nuEta_obs rb k hf (by simp)
+theorem nuEta_var {ℍ : Host} [HostIs ℍ] {fv : Val} {t : NuTree} {ps : List Val} {rb : Bool}
+    (hf : closedAt 0 fv.1 = true) (hps : ∀ v ∈ ps, closedAt 0 v.1 = true)
+    (h : t.Reach ps (.leaf rb)) :
+    PureSteps (ℍ := ℍ) (nuAppsE (t.toE (.val fv) none []) (ps.map .val))
+      (nuAppsE (.val fv) (ps.map .val)) :=
+  nuEta_obs (sv := none) hf (by simp) hps h
 
 /-- **At `f = unfold step`, the η-thunk is the codata `f s` computes**: its every observation
-reaches by pure steps the same observation of `etaN C g s`, which `f s` steps to by one β at
-every memory (`hN_steps`). -/
-theorem nuEta_unfold {ℍ : Host} [HostIs ℍ] (C : CTy) (g sv : Val) (rb k : Bool)
-    (hf : closedAt 0 (hN C g).1 = true) (hs : closedAt 0 sv.1 = true) :
-    PureSteps (ℍ := ℍ) (.app (nuEtaV (hN C g) (some sv) rb) (.val (if k then .inj₂ .unit else .inj₁ .unit)))
-      (.app (.val (etaN C g sv)) (.val (if k then .inj₂ .unit else .inj₁ .unit))) ∧
+that reaches a leaf reaches by pure steps the same observation of `etaN C g s`, which `f s` steps
+to by one β at every memory (`hN_steps`).  `[spec §45, §65]` -/
+theorem nuEta_unfold {ℍ : Host} [HostIs ℍ] (C : CTy) (g sv : Val) {t : NuTree} {ps : List Val}
+    {rb : Bool} (hf : closedAt 0 (hN C g).1 = true) (hs : closedAt 0 sv.1 = true)
+    (hps : ∀ v ∈ ps, closedAt 0 v.1 = true) (h : t.Reach ps (.leaf rb)) :
+    PureSteps (ℍ := ℍ) (nuAppsE (t.toE (.val (hN C g)) (some (.val sv)) []) (ps.map .val))
+      (nuAppsE (.val (etaN C g sv)) (ps.map .val)) ∧
     PureSteps (ℍ := ℍ) (.app (.val (hN C g)) (.val sv)) (.val (etaN C g sv)) := by
-  refine ⟨(nuEta_obs rb k hf (by simpa using hs)).trans ?_, hN_steps C g sv⟩
-  exact PureSteps.plug (.appL .hole _) (hN_steps C g sv)
+  refine ⟨?_, hN_steps C g sv⟩
+  have := nuEta_obs (ℍ := ℍ) (sv := some sv) hf (by simpa using hs) hps h
+  exact this.trans (nuAppsE_steps ps (hN_steps C g sv))
 
 /-! ### A walk's read  `[spec §46]`
 

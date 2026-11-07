@@ -278,17 +278,34 @@ def rThunkF {A : CVTy} (r : Res Δ (.unit :: T) (.comp (.ret A))) :
   let F ← r.F.popDead
   pure ⟨.thunkF i (.val (.thunk (.ret A))) A r.t, r.sigs, r.pins, F.map fun _ h => TTied.thunkF i h⟩
 
-/-- The variables of the η-thunk of codata (`nuEtaE`), when the term is one. -/
-def nuEtaOf? : Expr → Option (Nat × Option Nat)
-  | .lam (.case (.var 0) (.seq (.var 0) (.app (.app (.var f) (.var s)) _)) _) =>
-    if 2 ≤ f && 2 ≤ s then some (f - 2, some (s - 2)) else none
-  | .lam (.case (.var 0) (.seq (.var 0) (.app (.lam (.app (.app (.var 0) (.var s)) _)) (.var f))) _) =>
-    if 2 ≤ f && 3 ≤ s then some (f - 2, some (s - 3)) else none
-  | .lam (.case (.var 0) (.seq (.var 0) (.app (.lam (.app (.var 0) _)) (.var f))) _) =>
-    if 2 ≤ f then some (f - 2, none) else none
-  | .lam (.case (.var 0) (.seq (.var 0) (.app (.var f) _)) _) =>
-    if 2 ≤ f then some (f - 2, none) else none
+/-- The application chain `e` with its last `n` arguments taken off. -/
+def nuStrip : Nat → Expr → Option Expr
+  | 0, e => some e
+  | n + 1, .app g _ => nuStrip n g
+  | _, _ => none
+
+/-- The variables `f s` (`f`, with no state) at the head of an η-tree's leaf under `b` binders. -/
+def nuHeadOf? (b : Nat) : Expr → Option (Nat × Option Nat)
+  | .app (.var f) (.var s) => if b ≤ f && b ≤ s then some (f - b, some (s - b)) else none
+  | .var f => if b ≤ f then some (f - b, none) else none
   | _ => none
+
+/-- The variables of codata's η-thunk (an η-tree's erasure, `NuTree.toE`), read at its first
+leaf, when the term may be one; `nuEtaB` checks it.  `[spec §45, §65]` -/
+def nuEtaOf? (e : Expr) : Option (Nat × Option Nat) := go 0 0 e
+where
+  /-- Under `b` binders, with `n` observation arguments made. -/
+  go (b n : Nat) : Expr → Option (Nat × Option Nat)
+    | .lam (.case (.var 0) (.seq (.var 0) M) _) => go (b + 2) (n + 1) M
+    | .lam e => go (b + 1) (n + 1) e
+    | .app (.lam e) (.var f) =>
+      if b ≤ f then
+        match nuStrip n e with
+        | some (.app (.var 0) (.var s)) => if b + 1 ≤ s then some (f - b, some (s - (b + 1))) else none
+        | some (.var 0) => some (f - b, none)
+        | _ => none
+      else none
+    | e => (nuStrip n e).bind (nuHeadOf? b)
 
 /-- The η-thunk of codata as its derived node (SPEC §45), when the thunk's erasure is the scheme. -/
 def rNuEta {C : CCTy} (r : Res Δ T (.val (.thunk C))) : Res Δ T (.val (.thunk C)) :=
