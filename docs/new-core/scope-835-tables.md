@@ -588,3 +588,34 @@ obligation moves by `erwpK_comap`, by induction on how deep cancel rows nest. `e
 indexed by the lender's worlds at the table `erwpK_M_frameCR_tab` reads. `erwpK_M_frameCR_cN` is the
 Mut Frame with its callback read that way: a run at `tabN F δ′` from the lend's world, the lender
 at its twin `tabRK` at `vN`.
+
+### 10.10 The compatibility lemmas at `cN`: what is restated
+
+Every restated lemma takes the real name; the one-world one keeps its proof under `₀`.
+
+- **`F A` is `erwp` at the empty table** (`cN_ret_iff`), so every rule whose conclusion and premises
+  are value judgments keeps its one-world proof, `F A` built by `cN_ret_of` and read by
+  `erwp_of_cN_ret` (`RulesKW835N`, `FamKW835N`, `CountKW835N`, `FamOpsKW835N`, `MuKW835N`,
+  `FoldGKW835N`, `FoldImmKW835N`). The pure-row lends are such rules: their callbacks stop nowhere,
+  so the one-world Mut/Imm Frames and the reborrow apply at the empty table (`BorrowKW835N`,
+  `ImmLendKW835N`, `WithloadKW835N` with `withload_rebT` over a table `T`, `FamImmKW835N`).
+- **`F_Σ R` is `erwpK` at every floor.** `cN_bind` binds a stop-free run into it
+  (`erwpK_bind_frame`); `[sub]` by `tabF_le_of_rowLe`; `[perform]`/`[raise]` stop at once
+  (`erwpK_perform_here`, `erwpK_raise_here`, `entN_start`); `[let]`/`[await]` by the plain frame at
+  the worlds whose location typing is `OK` (`erwpK_frame_plainI`), the frame `letFrN` carried along
+  `KW.Owed`; `[then]` by `erwpK_frame_then` at `rdN`; `iterate` by `erwpK_iterateCI` at the `OK`
+  worlds (`tabN_downI_OK`, `tabN_ctxClosed_OK`), its step read at the world the loop is at.
+
+**Not restated.** `divFuel`; the tail and last handlers; `ν` (`nuIn`, `nuOut`, `unfoldN`); the
+unwinding-row lends (`withbor1U`/`2U`/`3U`, `withloadU`, `sliceBorrowMU`/`IU`); the suspending
+lends (`withbor2S`/`3S`/`FS`, `withloadS`, `sliceBorrowMS`) and their `_inst`; `MissingN`,
+`fundamentalN_all` at `SemJN`. What each needs that is not built:
+- the finaliser frame (`erwpK_ubindClaimRT`, `erwpK_ubind_cancelRunCR`) is stated with
+  `∀ x, (Φ x).Down` and its outer table `Down` at every world, and `erwpK_handle_le` with its tables
+  `Down` at every world; at `KW` these are built only at the worlds whose location typing is
+  downward closed (`tabNK_downI`), so each is wanted in its form at the worlds an invariant holds
+  at, as `erwpK_frame_plainI` is `erwpK_frame_plain`'s;
+- the lender's twin carrying the view's consistency to its claim (`erwp_claimX`) and the finaliser
+  over its cancel runs, at `tabRK`, by induction on how deep cancel rows nest;
+- `ν`'s one unfolding at `F A` and `F_Σ` (`cBN_step`, `node_okN`) at `erwpK`;
+- `div_fuel`'s handler by hand (`fuel_totalN`) at `erwpK`, its tick resumed at the stop's own world.
