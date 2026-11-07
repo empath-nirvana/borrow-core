@@ -554,8 +554,7 @@ erases what the old stage cannot hold. The order runs front to back: types into 
   The list may only grow, and every frontend change must keep it. A feature that lands in the
   frontend while the new backend is in progress either passes there, or is added to the new
   backend's list of known failures with its unit named. The list must be empty at the switch.
-- `bcc compile --backend old|new` (spelling provisional) selects the backend. The gate runs both
-  until the switch.
+- `--backend old|new` selects the backend (§5.5). The gate runs both until N7.
 
 ## 5. The test before building
 
@@ -637,6 +636,22 @@ N2 and N3. (a) and (d) are unchanged.
    after N1. Re-examine R against S at that point.
 6. **Performance**: at the switch, a #537 row is slower than the old backend's by more than 10%,
    or a count of `counts.expected` rises.
+
+### 5.5 Selecting the backend
+
+Backend2 is the default backend (N6, #859). `bcc compile`, `bcc run` (`--native` too), `bcc interp
+--stage`, `bcc-counts`, `scripts/book-doctest.sh`, `scripts/compile-scaling.sh`,
+`scripts/compile-native.sh` and `bench/bench.py` use it. `--backend old` selects the old backend
+until N7 retires it: right after `bcc compile`, `bcc run` and `bcc interp`, first for `bcc-counts`,
+and as an option of each script. `bcc interp`'s stages are `source` on either backend; Backend2's
+`lir` and `flat` (`lflat` is the same stage); with `--backend old`, the old backend's `clos` and
+`flat`. The kernel programs (`bcc kernel`, `bcc-counts --kernel`, `scripts/compile-kernel.sh`)
+stay on the old backend until N7.
+
+The gate checks every corpus program on both: `corpus (Backend2)` (`scripts/compile-backend2.sh`,
+by the default spellings, its counts against `corpus/counts-backend2.expected`) and `corpus (old
+backend)` (`scripts/compile-corpus.sh`, by `--backend old`, its counts against
+`corpus/counts.expected`), each with its `final` run in `make gate`.
 
 ## 6. Build plan
 

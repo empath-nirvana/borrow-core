@@ -112,6 +112,10 @@ live 0
 | `bcc compile file.bc -o out.wat` | write the WebAssembly text |
 | `bcc compile --target native file.bc -o out.ll` | write the LLVM IR |
 
+`bcc run` and `bcc compile` use the compiler's current backend (`Backend2/`) by default.
+`--backend old` right after the command (`bcc run --backend old file.bc`) selects the old
+backend (`Backend/`), which remains available until it is retired.
+
 The [book](https://empath-nirvana.github.io/borrow-core/) teaches the language from there, starting
 with [Getting started](https://empath-nirvana.github.io/borrow-core/getting-started.html), and has
 [Recipes](book/src/recipes.md), a [Language reference](book/src/language-reference.md) and the
