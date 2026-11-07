@@ -1688,6 +1688,143 @@ where
   /-- The algebra's answer (its `∀` at `fold_imm` erased: SPEC §44). -/
   answerOf' (gT : LTy) : CM (Option LTy × LTy) := answerOf gT
 
+/-! #### An owned fold by pointer reversal (SPEC §67)
+
+At a `foldOwn` or `foldReuse` node whose shape `F` is `1 ⊕ C` (or `C ⊕ 1`), `C` a product of
+closed leaves with exactly one recursive position (`X` or `Ref X`), the fold is two loops of tail
+calls. The descent (`fold_down`) takes each node's `C` apart, puts the stack at the recursive
+position (the node's own field: a boxed `X`, or the `Ref X` cell by `swap`), rolls it as a node of
+`μX. T` and goes on with the child; the stack is a `μX. T` whose bottom is the base node `1`. At
+the base it applies the algebra and starts the ascent (`fold_up`), which takes each stored node
+apart, puts the result at the recursive position (at `Ref X` the cell freed under `foldOwn`; under
+`foldReuse` its contents swapped for `()` and the emptied cell paired with the result), applies
+the algebra and goes on with the link. -/
+
+/-- The recursive positions of a shape. -/
+def shapeXCount : FShape → Nat
+  | .leaf _ => 0
+  | .refX | .varX => 1
+  | .tensor F G | .sum F G => shapeXCount F + shapeXCount G
+
+/-- A product of leaves, `X` and `Ref X`: no `⊕`. -/
+def shapeIsProd : FShape → Bool
+  | .leaf _ | .refX | .varX => true
+  | .tensor F G => shapeIsProd F && shapeIsProd G
+  | .sum .. => false
+
+/-- The shape's reversal (SPEC §67): when `F` is `1 ⊕ C` or `C ⊕ 1` with `C` a product with one
+recursive position, `C` and whether the base `1` is the right summand. -/
+def shapeReversal? : FShape → Option (FShape × Bool)
+  | .sum (.leaf .unit) C => if shapeIsProd C && shapeXCount C == 1 then some (C, false) else none
+  | .sum C (.leaf .unit) => if shapeIsProd C && shapeXCount C == 1 then some (C, true) else none
+  | _ => none
+
+/-- The descent's step at a node's `C` part `p`: `p'`, `p` with the stack `st` at its recursive
+position, and the child taken from there, given to `k`. Every type is `p`'s own. -/
+def cutRev (muT : LTy) (st : Var) : FShape → Var → (Var → Var → CM Tm) → CM Tm
+  | .varX, p, k => k st p
+  | .refX, p, k => do
+    let pr ← fresh (.pair (← tyOf p) muT)
+    let p' ← freshLike p; let c ← fresh muT
+    return .letv pr (.prim .swap [p, st]) (.letpair p' c pr (← k p' c))
+  | .tensor F G, p, k => do
+    let .pair aT bT := (← tyOf p).peel | throw "LIR: a fold's shape `⊗` at a non-pair"
+    let a ← fresh aT; let b ← fresh bT
+    let q ← freshLike p
+    if shapeXCount F == 1 then
+      return .letpair a b p (← cutRev muT st F a fun a' c => do
+        return .letv q (.pair a' b) (← k q c))
+    else
+      return .letpair a b p (← cutRev muT st G b fun b' c => do
+        return .letv q (.pair a b') (← k q c))
+  | _, _, _ => throw "LIR: a reversed fold's step at no recursive position"
+
+/-- The ascent's step at a stored node's `C` part `p`: `q`, `p` with the result `r` at its
+recursive position (at `Ref X` under `foldReuse`, the emptied cell and `r`), and the link taken
+from there, given to `kk`. -/
+def plugRev (k : FoldKind) (muT : LTy) (r : Var) : FShape → Var → (Var → Var → CM Tm) → CM Tm
+  | .varX, p, kk => kk r p
+  | .refX, p, kk => do
+    let l ← fresh muT
+    match k with
+    | .reuse => do
+      let u ← fresh .unit
+      let pr ← fresh (.pair (.ref .unit) muT)
+      let c ← fresh (.ref .unit)
+      let q ← fresh (.pair (.ref .unit) (← tyOf r))
+      return .letv u .unit (.letv pr (.prim .swap [p, u]) (.letpair c l pr
+        (.letv q (.pair c r) (← kk q l))))
+    | _ => return .letv l (.prim .free [p]) (← kk r l)
+  | .tensor F G, p, kk => do
+    let .pair aT bT := (← tyOf p).peel | throw "LIR: a fold's shape `⊗` at a non-pair"
+    let a ← fresh aT; let b ← fresh bT
+    if shapeXCount F == 1 then
+      return .letpair a b p (← plugRev k muT r F a fun a' l => do
+        let q ← fresh (.pair (← tyOf a') bT)
+        return .letv q (.pair a' b) (← kk q l))
+    else
+      return .letpair a b p (← plugRev k muT r G b fun b' l => do
+        let q ← fresh (.pair aT (← tyOf b'))
+        return .letv q (.pair a b') (← kk q l))
+  | _, _, _ => throw "LIR: a reversed fold's step at no recursive position"
+
+/-- The fold of `genFoldFns` by pointer reversal (SPEC §67), at the shape `1 ⊕ C` (`C ⊕ 1` when
+`baseR`): the entry function on `(g, u)`, which runs the descent from the bottom of the stack.
+
+The structure is the fold's own: the node's type is `μX. T ⊸ F R` (`foldOTy`), so every node and
+every `Ref X` cell of `u` is owned by `u` alone, and the descent's stack is made of them: a boxed
+`X` is rebuilt in the object its child was taken from (a spare box, SPEC §64), a `Ref X` cell
+takes the stack by `swap`. Nothing is allocated.
+
+UNPROVED: that the two loops compute the recursive fold's answer (`foldOwnV`/`foldReuseV`'s
+`travO`/`travR`, as `genFoldFns`' recursion does): the algebra applied at the same arguments in
+the same order, innermost node first, and the same cells freed, a `Ref X` cell at the ascent
+rather than the descent. The algebra never sees a reversed link: it is applied only to the base
+and to nodes whose recursive position holds a result. A mismatch shows as a disagreement with
+the source stage or with `live 0`. -/
+def genFoldRev (k : FoldKind) (C : FShape) (baseR : Bool) (muT gT : LTy) : CM Nat := do
+  let entry ← reserveFn "fold"
+  let down ← reserveFn "fold_down"
+  let up ← reserveFn "fold_up"
+  let .mu body := muT.peel | throw s!"LIR: a fold over a non-μ type: {muT}"
+  let wT := body.unrollMu
+  let .sum lT rT := wT.peel | throw "LIR: a reversed fold's node is not a sum"
+  let (baseT, cT) := if baseR then (rT, lT) else (lT, rT)
+  let (some argT, R) ← answerOf gT | throw "LIR: a fold's algebra takes no argument"
+  -- The descent: `fold_down (g, u, st)`.
+  let g ← fresh gT; let u ← fresh muT; let st ← fresh muT
+  let w ← fresh wT
+  let b ← fresh baseT; let p ← fresh cT
+  let baseArm ← do
+    let g' ← freshLike g
+    let a ← fresh argT; let r ← fresh R
+    pure (.copy .dup g g' (.letv a (.inj baseR b) (.letv r (.app g' a) (.call up [g, st, r]))))
+  let recArm ← cutRev muT st C p fun p' c => do
+    let s ← fresh wT; let st' ← fresh muT
+    return .letv s (.inj (!baseR) p') (.letv st' (.prim .roll [s]) (.call down [g, c, st']))
+  let caseD := if baseR then Tm.case w p recArm b baseArm else Tm.case w b baseArm p recArm
+  setFn down { name := "fold_down", params := [g, u, st], ret := R,
+               body := .letv w (.prim .unroll [u]) caseD }
+  -- The ascent: `fold_up (g, st, r)`.
+  let g ← fresh gT; let st ← fresh muT; let r ← fresh R
+  let w ← fresh wT
+  let b ← fresh baseT; let p ← fresh cT
+  let bottom := Tm.consume .dead b (.consume .dead g (.var r))
+  let frame ← plugRev k muT r C p fun q l => do
+    let g' ← freshLike g
+    let a ← fresh argT; let r' ← fresh R
+    return .copy .dup g g' (.letv a (.inj (!baseR) q) (.letv r' (.app g' a) (.call up [g, l, r'])))
+  let caseU := if baseR then Tm.case w p frame b bottom else Tm.case w b bottom p frame
+  setFn up { name := "fold_up", params := [g, st, r], ret := R,
+             body := .letv w (.prim .unroll [st]) caseU }
+  -- The entry: the stack's bottom is the base node `1`.
+  let g ← fresh gT; let u ← fresh muT
+  let z ← fresh baseT; let s ← fresh wT; let bot ← fresh muT
+  setFn entry { name := "fold", params := [g, u], ret := R,
+                body := .letv z .unit (.letv s (.inj baseR z) (.letv bot (.prim .roll [s])
+                  (.call down [g, u, bot]))) }
+  return entry
+
 /-- The recursive functions of a fold at the node's shape `F`: on a value of `μX. T` (`recV`), and
 at `fold_imm` on a borrow of one (`recL`, whose cell's contents it reads as `Imm̲`). `muT` is the
 type of the values `recV` folds, `gT` the algebra's. -/
@@ -3750,7 +3887,15 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     let .thunk fk := resT.peel | throw "LIR: a fold's answer is not a closure"
     let (some muT, R) ← answerOf resT | throw "LIR: a fold takes no structure"
     readFact s!"{ruleName c}:shape"
-    let (recV, _) ← genFoldFns k F muT muT (← tyOf g)
+    -- The node consumes the structure (`μX. T ⊸ F R`); at a shape `1 ⊕ C` with one recursive
+    -- position the fold reverses its links (SPEC §67), at any other it recurses.
+    let recV ← match shapeReversal? F with
+      | some (C, baseR) => do
+        readFact s!"{ruleName c}:reverse"
+        genFoldRev k C baseR muT (← tyOf g)
+      | none => do
+        let (recV, _) ← genFoldFns k F muT muT (← tyOf g)
+        pure recV
     mkClos "fold" [some g] fk (some muT) R fun ctx' => do
       match ctx' with
       | some x :: some g' :: _ => return .call recV [g', x]
