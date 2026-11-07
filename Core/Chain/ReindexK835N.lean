@@ -15,7 +15,8 @@ The callback's table step (`tabNK_lend_comap`, `erwpK_lend_comap`) is `erwpK_com
 `g = (·.lend ℓ α F)`: a stop at the callback's own table `tabN F δ′` at the lend's world is a stop
 at `tabNK vN g F δ′`, the table the Mut Frame reads. The payload and the answer move between the
 lend's world and the index world (`vN_lend_eq`: the lend's variable unread, `vN_add_eq` below the
-bound), the answer's view by `consistentX_of_outlivesN` (the constants' bound is closed), the
+bound), the answer's view moved from the lender's to the lend's by `consistentX_setLife_iff` (the
+answer has no `mut` cell at `ℓ`, `noMutAt_of_outlivesN`: the constants' bound is closed), the
 order is the same, and each cancel obligation moves by `erwpK_comap` again, by induction on how
 deep cancel rows nest.
 -/
@@ -94,14 +95,20 @@ open BoCa.BoLo (Kont performE raiseE cancelVal opPayload)
 
 /-! ### The callback's table step -/
 
-/-- **An answer of a type outliving a closed bound is consistent with every view**: the bound is
-`⊤`, the value's resource in `Res_⊤` (`vN_outlives`), which holds no borrow cell
-(`consistentX_of_top`). -/
+/-- **An answer of a type outliving a closed bound has no `mut` cell on its exclusive walk**: the
+bound is `⊤`, the value's resource in `Res_⊤` (`vN_outlives`, `noMutAt_of_top`). `[spec §62]` -/
+theorem noMutAt_of_outlivesN {bnd : Lifetime.Life} (hbnd : LifeCtx.empty.Defines bnd)
+    {B : VTy} (hOB : VOutlives LifeCtx.empty bnd B) {δ : LSub} {Θ : LocTy} {k : Nat} {v : Val}
+    {ρ : WRes} (h : vN (ℍ := ℍ) B δ Θ k v ρ) (l : Loc) : NoMutAt l ρ :=
+  noMutAt_of_top (vN_outlives (models_empty_any _) (interp_top_of_defines_empty hbnd δ) hOB
+    Θ k v ρ h) l
+
+/-- **An answer of a type outliving a closed bound is consistent with every view**
+(`noMutAt_of_outlivesN`, `consistentX_of_noMutAt`). `[spec §62]` -/
 theorem consistentX_of_outlivesN {bnd : Lifetime.Life} (hbnd : LifeCtx.empty.Defines bnd)
     {B : VTy} (hOB : VOutlives LifeCtx.empty bnd B) {δ : LSub} {Θ : LocTy} {k : Nat} {v : Val}
     {ρ : WRes} (h : vN (ℍ := ℍ) B δ Θ k v ρ) (c : Loc → Option Life) : ConsistentX c ρ :=
-  consistentX_of_top (vN_outlives (models_empty_any _) (interp_top_of_defines_empty hbnd δ) hOB
-    Θ k v ρ h) c
+  consistentX_of_noMutAt (noMutAt_of_outlivesN hbnd hOB h) c
 
 /-- **A layer's types read alike at the lend's world and the lender's**: the lend's variable is
 not mentioned (`vN_extend_of_not_free`) and the lend lies below the bound the type outlives
@@ -151,7 +158,8 @@ theorem errOkK_lend {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : LSub}
 /-- **The callback's table step** (`erwpK_comap`'s `hT` at `g = (·.lend ℓ α F)`): a stop at the
 callback's own table at the lend's world is a stop at its table under the lend's world map. The
 payload and the answer move between the lend's world and the index world by `vN_lend_eq`; the
-answer's view by `consistentX_of_outlivesN` (the bound closed); the order is the same; the cancel
+answer's view from the lender's to the lend's by `consistentX_setLife_iff` at
+`noMutAt_of_outlivesN` (the bound closed); the order is the same; the cancel
 obligations move by `erwpK_comap` again, by induction on how deep cancel rows nest. -/
 theorem tabNK_lend_comap {xv : LifeVar} {bnd : Lifetime.Life} (hbnd : LifeCtx.empty.Defines bnd)
     {α : Life} {δ : LSub} (hLt : LtLife δ bnd α) (l : Loc) (Fam : Nat → Val → SPropS Loc Val α) :
@@ -187,7 +195,8 @@ theorem tabNK_lend_comap {xv : LifeVar} {bnd : Lifetime.Life} (hbnd : LifeCtx.em
     have hBs : vN (ℍ := ℍ) B (δ.extend xv α) (y'.lend l α Fam).Θ k' w σ₁ := by
       rw [vN_lend_eq hnB hOB hLt y' l Fam]; exact hB'
     exact hΨ y' k' hk' _ _ _ ((hcont (y'.lend l α Fam) hy' ls' he).1 k' hk' w σ₁ σ₂
-      ⟨hBs, consistentX_of_outlivesN hbnd hOB hBs _⟩ hcσ)
+      ⟨hBs, (consistentX_setLife_iff (noMutAt_of_outlivesN hbnd hOB hB' l) y'.c α).mpr hB.2⟩
+      hcσ)
   · simp only [entNK] at hP hq
     by_cases hcap : capB q B = true
     · rw [if_pos hcap] at hP

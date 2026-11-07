@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.39 · 2026-11-07
+Version 1.40 · 2026-11-07
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -11071,6 +11071,36 @@ value is posted at, and are proved (`handleT_compatN`, `handleL_compatN`).
   premises hold at `prog791` (`goal791N_premises_inst`): a cell lent `mut` with `withbor (2)`,
   its callback performing `wait` while it holds the borrow, `wait` handled inside the program.
 
+### The answer's view across a lend (#844, T1.3)
+
+A lend's callback reads an answer at its own view `setLife c ℓ α`; the lender's table reads it at
+`c`. Consistency moves between the two by what the answer holds at `ℓ`, not by its stratum
+(`Core/Chain/SI/LocTy.lean`):
+
+    NoMutAt ℓ ρ               ≜ ∀ e, ExS ρ e → ∀ ψ, e.get ℓ = some ψ → ψ.kind ≠ mut
+    consistentX_setLife_iff   : NoMutAt ℓ ρ → (ConsistentX (setLife c ℓ α) ρ ↔ ConsistentX c ρ)
+    consistentX_of_noMutAt    : (∀ ℓ, NoMutAt ℓ ρ) → ConsistentX c ρ
+    noMutAt_of_top            : ρ.InStratum ⊤ → NoMutAt ℓ ρ
+    noMutAt_of_setLife        : ρ.InStratum s → α ≤ s → ConsistentX (setLife c ℓ α) ρ → NoMutAt ℓ ρ
+    not_noMutAt_inStratum_down: some ρ in Res_{↓α} has a `mut` cell at ℓ, at α, consistent with
+                                setLife c ℓ α and with no view c where c ℓ ≠ α
+
+`consistentX_setLife` (a walk missing `ℓ`) and `consistentX_of_top` are corollaries, and so is
+`consistentX_of_outlivesN` (`Core/Chain/ReindexK835N.lean`), in place: at the closed bound the
+answer is in `Res_⊤`, so `NoMutAt ℓ` holds at every `ℓ`. The callback's table steps
+(`tabNK_lend_comap`, `tabNK_lendMapB_comap`) read the answer's consistency with the lender's view
+and move it to the lend's view by `consistentX_setLife_iff`, at each lend of a `KW.LendMapB` map;
+the closed bound is read only for `NoMutAt`.
+
+- **Baseline.** No statement changes: `consistentX_of_outlivesN`, `consistentX_of_top`,
+  `consistentX_setLife`, `tabNK_lend_comap`, `tabNK_lendMapB_comap`, `goal791N`.
+- **Open.** At a non-closed bound the answer's stratum does not give `NoMutAt ℓ`: `Res_{↓α}` admits
+  a `mut` cell at `ℓ` (`not_noMutAt_inStratum_down`), and `Res_s` for `α < s` admits one at a
+  lifetime above `s`, which the lender's view can read and the lend's cannot. The stratum gives
+  only the converse move, from the lend's view to the lender's (`noMutAt_of_setLife`). The
+  lender-to-lend move needs `NoMutAt ℓ` carried in from where the answer is disjoint from the lent
+  cell; no table carries it yet.
+
 ### Lifetime-polymorphic suspending constants (#844, Tier 1)
 
 **What it adds.** The suspending lend constants (`Const791`) are typed at a lifetime context of
@@ -11569,12 +11599,17 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
-- **1.39** (2026-11-07) — §62 (#844 Tier 1, *Lifetime-polymorphic suspending constants*): the
+- **1.40** (2026-11-07) — §62 (#844 Tier 1, *Lifetime-polymorphic suspending constants*): the
   suspending lend constants under lifetime binders (`Const791.poly`, typed at `VTy.all`), their
   premises at the constant's own context (`Const791.OKAt`), `Row.Suspend`/`CTy.SuspendC` at a
   context, and the laws that read the callback bound at `δ ⊨ Δ`. The answer's move between views
   is a named premise (`AnsViewG`), discharged by answers outliving a closed bound (`Row.AnsC`).
   `goal791N` keeps its statement. No change to `CDerives`, the checker, the backends or the corpus.
+- **1.39** (2026-11-07) — §62 (*The answer's view across a lend*, #844 T1.3): `NoMutAt`,
+  `consistentX_setLife_iff`; `consistentX_of_outlivesN`, `consistentX_of_top` and
+  `consistentX_setLife` become corollaries; the callback's table steps move the lender's view to
+  the lend's. No change to `CDerives`, `fundamentalN_all`, `goal791N`, the checker, the backends or
+  the corpus.
 - **1.38** (2026-11-04) — §62 (*Semantic types read at the tree*): `F A` is a bare `cerwpT` run
   (`SCmp.ret`), Core's `cC (.ret A)`; the Kripke quantifier over later worlds and lists sits at
   `U` only. Thunks are introduced as Core's `thunkF_compatC` does, from the computation at every

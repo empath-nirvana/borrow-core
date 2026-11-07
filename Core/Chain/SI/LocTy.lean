@@ -676,13 +676,30 @@ theorem consistentX_get {ρ : WRes} {c : Loc → Option Life} (hc : ConsistentX 
   obtain ⟨σ, ex, a, hex, -, -⟩ := hv
   exact hc ex hex l ψ (ExS.get_of_ne_imm hex e (by rw [hk]; decide)) hk
 
+/-- **No `mut` cell at `ℓ` on a resource's exclusive walk.** `[spec §62]` -/
+def NoMutAt (l : Loc) (ρ : WRes) : Prop :=
+  ∀ e, ExS ρ e → ∀ ψ, e.get l = some ψ → ψ.kind ≠ Kind.mut
+
+/-- **A view moved at `ℓ` is consistent with a resource exactly when the view is**, for a
+resource with no `mut` cell at `ℓ` on its exclusive walk: consistency reads the view only at the
+walk's `mut` cells. `[spec §62]` -/
+theorem consistentX_setLife_iff {ρ : WRes} {l : Loc} (h : NoMutAt l ρ) (c : Loc → Option Life)
+    (α : Life) : ConsistentX (setLife c l α) ρ ↔ ConsistentX c ρ := by
+  constructor
+  · intro hc e he x ψ hg hk
+    have hx : x ≠ l := by rintro rfl; exact h e he ψ hg hk
+    have h' := hc e he x ψ hg hk
+    simp only [setLife, if_neg hx] at h'
+    exact h'
+  · intro hc e he x ψ hg hk
+    have hx : x ≠ l := by rintro rfl; exact h e he ψ hg hk
+    simp only [setLife, if_neg hx]
+    exact hc e he x ψ hg hk
+
 /-- A view moved at a location the resource's exclusive walk does not hold stays consistent. -/
 theorem consistentX_setLife {c : Loc → Option Life} {ρ : WRes} (hc : ConsistentX c ρ) {l : Loc}
-    (hl : ∀ e, ExS ρ e → e.get l = none) (α : Life) : ConsistentX (setLife c l α) ρ := by
-  intro e he x ψ hg hk
-  have hx : x ≠ l := fun h => by subst h; rw [hl e he] at hg; cases hg
-  simp only [setLife, if_neg hx]
-  exact hc e he x ψ hg hk
+    (hl : ∀ e, ExS ρ e → e.get l = none) (α : Life) : ConsistentX (setLife c l α) ρ :=
+  (consistentX_setLife_iff (fun e he ψ hg => by rw [hl e he] at hg; cases hg) c α).mpr hc
 
 /-- **An operand's exclusive walk misses a location the other operand holds a non-`imm` cell at**,
 in a valid composite. -/
@@ -717,16 +734,66 @@ theorem consistentX_single_mut {c : Loc → Option Life} {l : Loc} {b : Life} {w
     exact absurd (CellU.CompatS.kinds (hcomp.1 x _ ζ₂ f₁ f₂)).1
       (by rw [CellU.kind_mutOf]; exact fun c => Kind.noConfusion c)
 
-/-- **A resource in the top stratum is consistent with every view**: it holds no borrow cell, and
-neither does its exclusive walk. -/
-theorem consistentX_of_top {σ : WRes} (h : σ.InStratum (OrderDual.toDual 0))
-    (c : Loc → Option Life) : ConsistentX c σ := by
-  intro e he x ψ hg hk
-  have hin := ExW.inStratum BoLo.compS_hC he _ h x ψ hg
+/-- **A resource with no `mut` cell on its exclusive walk is consistent with every view.**
+`[spec §62]` -/
+theorem consistentX_of_noMutAt {σ : WRes} (h : ∀ l, NoMutAt l σ) (c : Loc → Option Life) :
+    ConsistentX c σ :=
+  fun e he x ψ hg hk => absurd hk (h x e he ψ hg)
+
+/-- **A resource in the top stratum has no `mut` cell on its exclusive walk**: its walk is in the
+top stratum too, where a `mut` cell would need a lifetime above `⊤`. `[spec §62]` -/
+theorem noMutAt_of_top {σ : WRes} (h : σ.InStratum (OrderDual.toDual 0)) (l : Loc) :
+    NoMutAt l σ := by
+  intro e he ψ hg hk
+  have hin := ExW.inStratum BoLo.compS_hC he _ h l ψ hg
   rcases ψ with _ | _ | m
   · cases hk
   · cases hk
   · exact absurd hin (fun h' => Nat.not_lt_zero _ h')
+
+/-- **A resource in the top stratum is consistent with every view**: it holds no borrow cell, and
+neither does its exclusive walk. -/
+theorem consistentX_of_top {σ : WRes} (h : σ.InStratum (OrderDual.toDual 0))
+    (c : Loc → Option Life) : ConsistentX c σ :=
+  consistentX_of_noMutAt (noMutAt_of_top h) c
+
+/-- **Consistency with the lend's view at a stratum not below the lend gives `NoMutAt`**: a `mut`
+cell of the walk at `ℓ` would be at `α` by the lend's view, and above `s ⊒ α` by the stratum.
+`[spec §62]` -/
+theorem noMutAt_of_setLife {ρ : WRes} {s α : Life} (hs : ρ.InStratum s) (hαs : α ≤ s)
+    {c : Loc → Option Life} {l : Loc} (hc : ConsistentX (setLife c l α) ρ) : NoMutAt l ρ := by
+  intro e he ψ hg hk
+  have hin := ExW.inStratum BoLo.compS_hC he _ hs l ψ hg
+  have hat := hc e he l ψ hg hk
+  simp only [setLife] at hat
+  rcases ψ with _ | _ | m
+  · cases hk
+  · cases hk
+  · have hβ : m.β = α := (Option.some.inj hat).symm
+    have hlt : s < m.β := hin
+    rw [hβ] at hlt
+    exact absurd (lt_of_le_of_lt hαs hlt) (lt_irrefl _)
+
+/-- **The answer's stratum `Res_{↓α}` does not give `NoMutAt ℓ`**: `ℓ ↦ mut(α, v, ∅)` is in
+`Res_{↓α}`, consistent with the lend's view `setLife c ℓ α`, and with no view that reads `ℓ` at
+another lifetime. `[spec §62]` -/
+theorem not_noMutAt_inStratum_down (l : Loc) (α : Life) (v : Val) :
+    ∃ ρ : WRes, ρ.InStratum (↓α) ∧ ¬ NoMutAt l ρ ∧
+      (∀ c : Loc → Option Life, ConsistentX (setLife c l α) ρ) ∧
+      ∀ c : Loc → Option Life, c l ≠ some α → ¬ ConsistentX c ρ := by
+  have hχ : ResU.InStratum α (PMap.empty : WRes) := ResU.inStratum_empty α
+  let ψ : CellU Loc Val := CellU.mutOf α v PMap.empty hχ (fun _ _ => True) trivial
+  have hk : ψ.kind = Kind.mut := CellU.kind_mutOf _ _ _ _ _ _
+  have hex : ExS (ResU.single l ψ) (ResU.single l ψ) :=
+    ExW.single_mut exW_empty (ResU.comp_empty_right _)
+  have hg : (ResU.single l ψ).get l = some ψ := ResU.single_get_self _ _
+  refine ⟨ResU.single l ψ, ResU.inStratum_single l (Life.down_sqsubset α),
+    fun h => h _ hex ψ hg hk, fun c e he x φ hφ hkφ => ?_, fun c hc h => ?_⟩
+  · obtain rfl := ExS.functional he hex
+    by_cases hx : x = l
+    · subst hx; rw [hg] at hφ; cases Option.some.inj hφ; simp [setLife, ψ]
+    · rw [ResU.single_get_ne _ hx] at hφ; cases hφ
+  · exact hc (h _ hex l ψ hg hk)
 
 /-- The ancestor transfer (`ResU.upd_ag_imm_wit_factor`) from `↭`'s `imm` clause alone, the
 only clause its proof reads. -/

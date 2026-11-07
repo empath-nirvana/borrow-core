@@ -45,6 +45,15 @@ theorem _root_.BoCa.Fig16.LogRel.Core.Chain.SI.KW.LendMapB.lo_le {δ : LSub} {bn
   | id => exact hy
   | lend _ l α _ hc F => exact hc
 
+/-- **The lender's view moves to the lends' view** for a resource with no `mut` cell on its
+exclusive walk at any location (`consistentX_setLife_iff`, along the lends). `[spec §62]` -/
+theorem consistentX_lendMapB {δ : LSub} {bnd : Lifetime.Life} {c : Life} {g : KW → KW}
+    (hg : KW.LendMapB δ bnd c g) {ρ : WRes} (hρ : ∀ l, NoMutAt l ρ) (y : KW)
+    (h : ConsistentX y.c ρ) : ConsistentX (g y).c ρ := by
+  induction hg with
+  | id => exact h
+  | lend _ l α _ _ F ih => exact (consistentX_setLife_iff (hρ l) _ α).mpr ih
+
 /-- **A type outliving the bound reads alike across lends below it** (`vN_add_eq`, along the
 lends). -/
 theorem vN_lendMapB_eq {A : VTy} {bnd : Lifetime.Life} (hO : VOutlives LifeCtx.empty bnd A)
@@ -94,7 +103,7 @@ theorem errOkK_lendMapB {xv : LifeVar} {bnd : Lifetime.Life} {α : Life} {δ : L
 world is a stop at the lender's twin under the lends, its claim `R₀` owning nothing, at the worlds an
 invariant `J` kept along `KW.Owed` at floors no higher than the world's holds at. The payload and
 the answer move between the lends' world and the index world (`vN_lendMapB_eq`); the answer's view
-by `consistentX_of_outlivesN`; the order is the same; each cancel obligation moves by
+from the lender's to the lends' by `consistentX_lendMapB` at `noMutAt_of_outlivesN`; the order is the same; each cancel obligation moves by
 `erwpK_comap` again, by induction on how deep cancel rows nest. -/
 theorem tabNK_lendMapB_comap {xv : LifeVar} {bnd : Lifetime.Life}
     (hbnd : LifeCtx.empty.Defines bnd) {α : Life} {δ : LSub} {c : Life} {g : KW → KW}
@@ -132,8 +141,8 @@ theorem tabNK_lendMapB_comap {xv : LifeVar} {bnd : Lifetime.Life}
     have hBs : vN (ℍ := ℍ) B (δ.extend xv α) (g y').Θ k' w σ₁ := by
       rw [vN_extend_of_not_free hnB, vN_lendMapB_eq hOB hg y']; exact hB'
     exact hΨ y' k' hk' (hJ (g y) hJy f hf (g y') ρk hy') _ _ _
-      ((hcont (g y') hy' ls' he).1 k' hk' w σ₁ σ₂ ⟨hBs, consistentX_of_outlivesN hbnd hOB hBs _⟩
-        hcσ)
+      ((hcont (g y') hy' ls' he).1 k' hk' w σ₁ σ₂
+        ⟨hBs, consistentX_lendMapB hg (noMutAt_of_outlivesN hbnd hOB hB') y' hB.2⟩ hcσ)
   · simp only [entNK] at hP hq
     by_cases hcap : capB q B = true
     · rw [if_pos hcap] at hP
