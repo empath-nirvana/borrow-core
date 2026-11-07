@@ -2563,3 +2563,17 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Nest844N.goal791N_premises_can
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Nest844N.progRes_orDiverges
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Nest844N.progCan_orDiverges
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.consistentX_setLife_iff
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.consistentX_of_noMutAt
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.noMutAt_of_top
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.noMutAt_of_setLife
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.not_noMutAt_inStratum_down
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.noMutAt_of_outlivesN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.ansNoMut_of_closed
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.consistentX_lendMapB
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Spike844N.rowSuspendB_of_suspend
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Spike844N.lender_mut_payload_empty
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Spike844N.lend_mut_payload_not_inStratum
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Spike844N.lendOKCR_pa_fails
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Spike844N.CrossStop.erwpK_refuses_borrowOut
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Spike844N.CrossStop.not_crossTaskMLendK

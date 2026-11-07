@@ -149,7 +149,7 @@ theorem constN_wF (hF : FundamentalN (ℍ := ℍ)) {a : Lifetime.Life} {x : Life
 `[spec §62]` -/
 theorem constN_wl {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} (Δ : LifeCtx) : ConstNAt (ℍ := ℍ) Δ (.wl a x bnd A B S) := by
-  rintro ⟨hbnd, hA, hB, hS, -⟩ δ hδ Θ n _
+  rintro ⟨hbnd, hA, hB, hS⟩ δ hδ Θ n _
   exact withloadS_compat hbnd hA hB hS δ hδ Θ n
 
 /-- **`ConstNAt` for `slice_borrow_mut` at a suspending row**, from the fundamental property at

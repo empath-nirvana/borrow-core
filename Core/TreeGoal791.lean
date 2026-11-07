@@ -190,8 +190,7 @@ def Const791.OKAt : LifeCtx → Const791 → Prop
       ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend Δ x bnd ∧
       (∃ b, LifeCtx.empty.Defines b ∧ S.AnsC (VOutlives LifeCtx.empty b)) ∧
       closedAt 0 d = true ∧ CDerives Δ [] d (.val (.lolli (.mut a (.ref A)) .unit))
-  | Δ, .wl _ x bnd A B S => Δ.Defines bnd ∧ ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend Δ x bnd ∧
-      (∃ b, LifeCtx.empty.Defines b ∧ S.AnsC (VOutlives LifeCtx.empty b))
+  | Δ, .wl _ x bnd A B S => Δ.Defines bnd ∧ ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend Δ x bnd
   | Δ, .sm x bnd A B S d => Δ.Defines bnd ∧
       (∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) ∧
       (∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) ∧

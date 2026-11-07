@@ -4,8 +4,9 @@ import Core.TreeGoal791
 /-!
 # Borrowed payloads at a suspending lend: where the present constants stop  `[spec §62]`
 
-`docs/new-core/scope-844-borrowed-payloads.md`. A scratch file for #844: the row a callback would
-suspend at if its operations' payloads and answers could carry its own borrow, and three steps of
+`docs/new-core/scope-844-borrowed-payloads.md`. Where the present constants and relation stop at
+a borrowed payload (#844, Tier 2): the row a callback would suspend at if its operations' payloads
+and answers could carry its own borrow, and three steps of
 `withbor2S_compat` that such a row does not meet, each a configuration with every hypothesis
 discharged.
 
@@ -108,8 +109,7 @@ The relation's `↭` (`UpdVN`) is asked at every configuration a segment ends at
 stop with a payload holding a borrow of `ℓ` (`erwpK_refuses_borrowOut`), at any world index. So the
 Mut Frame's conclusion fails at a table whose payload is the borrow itself, at the typed world `KW`,
 the view `Θ.view c` and the posts `KW.PostK` that `Goal791N` reads (`not_crossTaskMLendK`),
-whatever premise replaces `LendOKCR.pa`. These are the statements of branch `cross-821`
-(`Core/Chain/CrossStopN.lean` at bbf8f16a), restated at this relation. -/
+whatever premise replaces `LendOKCR.pa`. -/
 
 namespace BoCa.Fig16.LogRel.Core.Chain.SI.Spike844N.CrossStop
 open BoCa

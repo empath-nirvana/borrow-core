@@ -111,7 +111,7 @@ theorem consistentX_of_outlivesN {bnd : Lifetime.Life} (hbnd : LifeCtx.empty.Def
     {ρ : WRes} (h : vN (ℍ := ℍ) B δ Θ k v ρ) (c : Loc → Option Life) : ConsistentX c ρ :=
   consistentX_of_noMutAt (noMutAt_of_outlivesN hbnd hOB h) c
 
-/-- **The answer's premise at a bound that may name variables** (#844 T1.3): every value of `B` at
+/-- **The answer's premise at a bound that may name variables**: every value of `B` at
 `δ`, at every world, holds no `mut` cell on its exclusive walk, at any location. The callback's
 table steps read it of every answer of the row and of its cancel rows (`CTy.AnsC`) to move the
 answer's consistency from the lender's view to the lend's (`consistentX_setLife_iff`). At a closed

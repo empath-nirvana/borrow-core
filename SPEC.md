@@ -11115,7 +11115,8 @@ of a lend that encloses the suspending one.
   rule's premises with the empty context replaced by `Δ`: `Δ ⊨ @bnd`, the outliving premises at
   `Δ`, the row `Row.Suspend Δ 'x @bnd`, the finaliser typed at `Δ`. `Const791.OK c` is
   `c.OKAt ∅`. One clause is kept closed: every answer of the row and of its cancel rows outlives a
-  bound defined at the empty context (`Row.AnsC`), which is today's answer clause.
+  bound defined at the empty context (`Row.AnsC`), which is today's answer clause. `withloadU`
+  (`wl`) does not carry it: its compatibility lemma moves no answer between views.
 - **`Row.Suspend Δ 'x @bnd`**, `CTy.SuspendC Δ 'x @bnd`: the outliving clauses at `Δ`
   (`VOutlives Δ bnd`) instead of `∅`.
 - **The laws** read at `δ ⊨ Δ`: `vN_inStratum_bnd`, `vN_add_eq_bnd`, `vN_add_eq`, `vN_lend_eq`,
@@ -11152,6 +11153,17 @@ of a lend that encloses the suspending one.
   `Goal791N` (`nestC_ok`, `d_progRes`, `d_progCan`), so `goal791N` concludes `OrDiverges` of each
   from `HandlerLawN` (`progRes_orDiverges`, `progCan_orDiverges`). The answer is `1`, closed.
 
+- **Where the present relation stops** (`Core/Chain/Spike844N.lean`), each a configuration with
+  every hypothesis discharged: `lender_mut_payload_empty` (the lender reads a `Mut 'x A` payload at
+  `δ`, where `'x` is unbound, and it has no values); `lend_mut_payload_not_inStratum` and
+  `lendOKCR_pa_fails` (the callback's own borrow is not in `Res_α`, so the Mut Frame's `pa`
+  fails); `CrossStop.erwpK_refuses_borrowOut` (a segment starting with `ℓ` owned cannot stop with
+  a borrow of `ℓ` in its payload, at any world index) and `CrossStop.not_crossTaskMLendK`
+  (`erwpK_M_frame`'s statement at `KW`, `KW.PostK` and `Θ.view c` with `LendOKCR.pa` dropped is
+  refuted). `RowSuspendB` is `Row.Suspend` with the payload and answer allowed to name `'x`
+  (`rowSuspendB_of_suspend`). These bound Tier 2 (the callback's own borrow as a payload), which
+  needs a new stop clause; they change no statement.
+
 **Baseline preserved.** `goal791N : HandlerLawN → Goal791N`, its statement unchanged but for
 `Const791.OK`'s shape; `fundamentalN_all`; `handlerLawN_iff`; `goal791N_premises_inst`; the
 instances at the hardest case's row (`w2_ok`, `w3_ok`, `wF_ok`, `wl_ok`, the `*S_inst`). No change
@@ -11160,7 +11172,7 @@ to `CDerives`, the checker, the backends or the corpus.
 **Open.** The answer at a bound with a variable: `AnsNoMut` without `Row.AnsC`, so that an answer
 may hold a borrow of an enclosing lend. Not derived from the answer's type: the index world may
 key `ℓ` at a lifetime above the bound, where a `Mut` answer type outliving the bound has values
-holding a `mut` cell at `ℓ`; the obstruction is not verified.
+holding a `mut` cell at `ℓ`; the obstruction is not verified. Tracked as #853.
 
 ### Not claimed
 
