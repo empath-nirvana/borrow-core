@@ -3613,6 +3613,17 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       match k, W' with
       | "alloc", W' => do
         let A ← need W.span "`alloc`'s argument" ((← refresh c).tyV W')
+        -- A cell where its content is expected: `box C(…)` of a constructor that is not a block
+        -- allocates a cell holding the value (SPEC §42, E2), which is never of the value's type.
+        -- A constructor's value is ascribed its declaration's name when it has one.
+        if let some E := exp then
+          if tyEqV E A then
+            let T := match W with
+              | .ascribe _ _ (.name _ N) => N
+              | _ => ppT A
+            throw ⟨sp, s!"this allocates a cell, `ref {T}`, where a `{T}` is expected: written " ++
+              "`box C(…)`, the constructor `C` is not a block (SPEC §42, E2), so `box` allocates " ++
+              "a cell holding its value; build it without `box`"⟩
         pure (.app sp (.const ksp (.alloc (← c.surface ksp A))) W')
       | "free", W' => do
         let A ← match (← refresh c).tyV W' with
@@ -6150,12 +6161,15 @@ reading the library, as the kernel evaluates the cross-checked programs
 def preludeData : List String := ["Option", "Vec"]
 
 /-- The program's `data` declarations elaborated to `type` and `shape` declarations, in place
-(`Data.typeDecls`), the prelude's that the program names first (SPEC §42, D1–D3). -/
+(`Data.typeDecls`), the prelude's that the program names first (SPEC §42, D1–D3). The table holds
+the program's `type` abbreviations, its included modules' first, a later one of a name hiding an
+earlier one, as the parser's does (`Parser.dataOf`; SPEC §61).  `[spec §42, §61]` -/
 def dataDecls (ds : List Decl) : Except Error (List Decl) := do
-  let own : Data.Table := ds.filterMap fun | .data _ d => some d | _ => none
+  let own : List DataDecl := ds.filterMap fun | .data _ d => some d | _ => none
+  let abbrevs := ds.filterMap Data.Abbrev.ofDecl?
   let wanted := preludeData.filter fun n =>
     !own.any (·.name.name == n) && ds.any (·.mentionsTy n)
-  let prelude : Data.Table ← if wanted.isEmpty then pure [] else
+  let prelude : List DataDecl ← if wanted.isEmpty then pure [] else
     match libSrc "prelude" with
     | some src => match parseProgram src with
       | .ok p =>
@@ -6167,7 +6181,7 @@ def dataDecls (ds : List Decl) : Except Error (List Decl) := do
       | .error e => throw ⟨e.span, s!"lib/prelude.bc: {e.msg}"⟩
     | none => pure []
   let named := prelude.filter (wanted.contains ·.name.name)
-  let tab := named ++ own
+  let tab : Data.Table := { decls := named ++ own, abbrevs }
   let pre ← named.flatMapM (Data.typeDecls tab Span.none)
   let rest ← ds.flatMapM fun
     | .data sp d => Data.typeDecls tab sp d

@@ -166,6 +166,8 @@ corpus/core-effects-tail.bc 2.0 must-resume tail: direct; agree
 corpus/core-yield-loop.bc 1.0 cancellable resume-or-cancel,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-yield-pull.bc 1.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-yield-pull.bc 2.0 cancellable tail: direct; agree
+corpus/data-abbr-block.bc 1.0 cancellable abortive: branch; agree
+corpus/data-abbr-nested.bc 1.0 cancellable abortive: branch; agree
 corpus/data-array-tree.bc 1.0 cancellable abortive: branch; agree
 corpus/data-box-tree.bc 1.0 cancellable abortive: branch; agree
 corpus/data-config.bc 1.0 cancellable abortive: branch; agree
@@ -173,11 +175,13 @@ corpus/data-config.bc 3.0 cancellable abortive: branch; agree
 corpus/data-config.bc 2.0 cancellable abortive: branch; agree
 corpus/data-eval.bc 1.0 cancellable abortive: branch; agree
 corpus/data-group.bc 1.0 cancellable abortive: branch; agree
+corpus/data-json-map.bc 1.0 cancellable abortive: branch; agree
 corpus/data-json-vec.bc 1.0 cancellable abortive: branch; agree
 corpus/data-option-block.bc 1.0 cancellable abortive: branch; agree
 corpus/data-option.bc 1.0 cancellable abortive: branch; agree
 corpus/data-rose-vec.bc 1.0 cancellable abortive: branch; agree
 corpus/data-rose.bc 1.0 cancellable abortive: branch; agree
+corpus/data-set-rec.bc 1.0 cancellable abortive: branch; agree
 corpus/decl-guard.bc 1.0 cancellable abortive: branch; agree
 corpus/decl-guard.bc 2.0 cancellable abortive: -; agree
 corpus/decl-handler-state.bc 2.0 must-resume tail+state: error: capture: the name 2 has both control and abortive operations, which is not lowered; disagree
