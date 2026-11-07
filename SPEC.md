@@ -11506,6 +11506,174 @@ the consumes no longer made are on paths that end at `absurd`, which never run.
 
 ---
 
+## 68. Entry 67 — per-code closure types: `Code⟨N; E⟩ C` (#855, K0)
+
+### Motivation
+
+Every closure has the one type `U C`, and every codata `U (νX. C)`, so the type does not say which
+code a value is. Backend2 rebuilds the code sets with two flow analyses (`Backend2/Flow.lean`,
+`Layout.lean`'s closure classes) and a per-use reconversion (`takesClos`), all `UNPROVED:`. This
+entry states a value type that names its code, as Rust's closure types do, with an explicit
+erasing coercion to `U C` (`dyn`). The design is `docs/new-core/scope-855-per-code-types.md`
+(option (a), decided 2026-11-07); this entry is its unit K0. It adds the syntactic and semantic
+lemmas the later units reuse, and no `VTy` former, rule or relation clause (K1–K4).
+
+### Language
+
+- **The former** (K1). `VTy.code (N : Expr) (E : VTy) (C : CTy)`, written `Code⟨N; E⟩ C`: a thunk
+  of `C` whose code is `N` and whose captured environment has type `E`. It is a separate former
+  beside `U C`; no rule that asks for `U C` accepts a `Code⟨N; E⟩ C`.
+- **A code** (`Core/CapNorm.lean`). For a closure `λM`:
+  - `Expr.occs k e`: the free variables of `e` under `k` binders, counted from the binders.
+  - `Expr.capVars e`: the captures, `occs 0 e` sorted without repeats.
+  - `Expr.capNorm e`: `e` with each free variable `i` renamed to its rank in `capVars e`
+    (`Expr.ren`). The code of `λM` is `N = capNorm (λM)`, itself a `λ`.
+  - `Expr.capEnv e γ`: the captured values of a closing substitution, in rank order.
+- **The environment type.** `E = A₀ ⊗ (A₁ ⊗ (… ⊗ (Aₙ₋₁ ⊗ 1)))`, the captures' slot types in rank
+  order, ending in `1`; `1` when nothing is captured. Its values are `tupleV us`, right-nested
+  pairs ending in `()`. The trailing `1` makes the tuple decide the capture list (`tupleV_two`
+  at two captures): the scope's `A₀ ⊗ A₁` without it would let `[g, (s, t)]` and `[g, s, t]` share
+  a tuple.
+- **`[α]` and equality** (K1). `alphaB` at `code`: `N` equal as an `Expr` (`DecidableEq`), `alphaB`
+  at `E` and at `C`. `N` holds no lifetime and no name.
+- **Free lifetimes** (K1). `VFree x (Code⟨N; E⟩ C) ≜ VFree x E ∨ CFree x C`. No `VOutlives` rule
+  for `code`, as there is none for `U`.
+- **Persistence.** `Code⟨N; E⟩ C` is not persistent; `!Code⟨N; E⟩ C` is.
+- **Printing.** Types contain bodies. `ppVT` and the checker's messages print a code as a digest
+  (`{closure@span}` with `E`), never the body.
+
+### The relation
+
+```
+𝒱⟦Code⟨N; E⟩ C⟧ v ρ  ≜  (∃ us. v = N[us] ∧ 𝒱⟦E⟧(tupleV us) ρ)  ∧  𝒱⟦U C⟧ v ρ
+```
+
+- `N[us]` is `Expr.psub 0 us N`. The first conjunct is the code (`codeP`); the second is the `U`
+  clause (`codeRelC`). In the observable view the clause is `True`, as `U C`'s is.
+- At the chain's relation (`codePN`, `codeRelN`, `Core/Chain/CodeNuKW835N.lean`) the conjunct reads
+  `vN E δ Θ n (tupleV us) ρ` at the value's world and index.
+- **The environment holds the whole resource.** The scope's clause split `ρ = ρE ⋆ ρR` with `ρR`
+  unread. `nuOutK` needs the state's resource to be the codata's (`candN` holds the state at the
+  whole `ρ`); with `ρR` the step is not derived (obstruction not verified). So the clause holds `E`
+  at `ρ`, and `codeI` carries a premise that makes that true (below).
+
+### The rules
+
+Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP`, `CDerivesAt` and
+`TDerives*` by `scripts/gen-pin.py`. No new index and no new judgment.
+
+| Rule | Statement | Unit |
+|---|---|---|
+| `codeI` | `Γ ⊢ λM : U C` and `Γ.CapOK (λM)` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
+| `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C` | K3 |
+| `erase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
+| `eraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
+| `force` (restated) | `Ctx.SoloP Γ i T`, `T` is `U C` or `Code⟨N; E⟩ C` ⟹ `forceE C (.var i) : C` | K3 |
+| `unfoldK` | `unfold : !G ⊸ !Code⟨hCode C; !G ⊗ 1⟩ (S ⊸ Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C))`, `G` either `U(S ⊸ C[S/X])` or a code type of it | K4 |
+| `nuOutK` | `x : Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)` ⟹ `force x : C[Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)/X]` | K4 |
+
+- `Γ.capTy e`: the tensor of `Γ`'s slot types at `capVars e`, in rank order, ending in `1`.
+- `Γ.CapOK e`, a decidable side condition the checker tests: every captured slot is live, and every
+  live slot of `Γ` that `e` does not capture is persistent. With it the uncaptured slots hold `∅`
+  (`vCE_empty_of_persistent`), so the closure's resource is its captures'. It is a premise, not
+  an inversion of `CDerives`.
+- `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
+  the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
+- `erase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
+  which Backend2 reads (B4). In the machine it is the identity.
+- `eraseD` (covariant erasure inside `C`, K6) is not in this entry.
+
+### Erasure policy
+
+- **C1, specific by default.** A function or codata type written in a parameter or return position
+  is an `impl`: the parameter becomes a template parameter, instantiated at the argument's code
+  type. `dyn` is written to opt in, and means `U C`.
+- **C2, silently at a lend's exit.** Where a code type captures `'x` and the rule asks `¬ VFree x B`
+  (`withbor1` and the lend rules), the elaborator inserts `erase` to `U C`, which is today's
+  typing.
+- **C3, silently at a join.** Two different codes joined (`if`/`match` arms) with no expected type
+  are erased to `U C`; S1's census counts these sites.
+- Wherever the expected type is `U C` (parameters written `dyn`, data fields, arrays, `Ref`
+  contents, handler arguments and state), `convVal` inserts the `erase` node.
+- **The growing-instantiation guard.** A template whose instantiation reaches itself at a type
+  argument containing the previous one is instantiated at the argument's erasure, with a note
+  (scope §4.4). It is load-bearing: without it nested `Code⟨…⟩` inside `E` grows without bound.
+- A closure capturing a value of its own code type is not formable (`E` would contain the type);
+  the elaborator erases that capture.
+
+### The library code of this entry
+
+`Core/CapNorm.lean`:
+- `Expr.capNorm_shift : Expr.capNorm (Expr.shift d c e) = Expr.capNorm e`.
+- `Expr.psub_capNorm : (∀ i ∈ Expr.occs 0 e, i < γ.length) →
+  Expr.psub 0 (Expr.capEnv e γ) (Expr.capNorm e) = Expr.psub 0 γ e`, and its form at a thunk,
+  `Expr.lam_psub_capNorm`: `λ(γ(M)) = (capNorm (λM))[capEnv (λM) γ]`, the value
+  `thunkF_compatC` builds.
+- `Expr.occs_capNorm_lt`: a code's free variables are below its number of captures.
+
+`Core/CodeNu.lean`: `tupleV`, `codeP`, `codeRelC`, `etaCode`, `etaEnv`, `codeCand`;
+`occs_lt_of_closedAt` (with `closedAt_of_derives`, `codeI`'s hypothesis on `γ`);
+`etaCode_capNorm`, `etaN_code`, `etaN_codeRel`, `codeRel_etaN`, `candN_le_codeCand`, and
+**`nuOutK_step : (codeCand C G S δ).Le (nuF C δ (codeCand C G S δ))`**, at a `G` whose values are
+`U(S ⊸ C[S/X])`'s.
+
+`Core/Chain/CodeNuKW835N.lean`: `codePN`, `codeRelN`, `codeCandN`, `etaN_codeRelN`,
+`codeRelN_etaN`, `candNN_le_codeCandN`, and **`nuOutK_stepN : (codeCandN C G S δ).Le (cBN (U(νX. C))
+(codeCandN C G S δ) C δ)`**.
+
+### Size
+
+`experiments/CodeSize` (`lake build code-size`) walks each corpus program's typed term, each
+`use` body once per key, and measures `capNorm` of each closure node and the type with codes nested
+inside `E` (a capture bound by `bind`/`letPoly` to a closure counts that closure's nested size;
+any other capture counts `1`).
+
+Over the 330 corpus programs that check this way (10 of 340 do not: they need the library's
+data table, which the experiment does not load), at 9,152 closure nodes, in `Expr` nodes:
+
+| | median | p95 | max | total |
+|---|---|---|---|---|
+| code `N` | 38 | 921 | 135,827 | 4,672,257 |
+| type, codes nested in `E` | 39 | 929 | 135,829 | 4,691,273 |
+| captures per closure | 0 | 2 | 6 | 3,537 |
+| `etaCode C` (424 `unfold` nodes) | 239 | 369 | 437 | 110,380 |
+| type at each use of a closure-bound slot (784 uses) | 61.5 | 913 | 20,824 | 223,199 |
+
+- The largest type is `corpus/float-roundtrip.bc`'s, 135,829 nodes, a closure around nearly the
+  whole program (its erased `main` is 143,317 nodes). Stored unshared its codes total 1,106,707
+  nodes, 7.7 times the program: a closure's code contains every closure nested in it.
+- Nesting through `E` is rare (156 closures; at most 1,142 nodes added): most closures capture
+  nothing (median 0), and the bulk is the code itself.
+- **So `N` is held by reference, not rebuilt.** A code is the erased subterm itself, shared, with
+  a digest (a hash of `capNorm`, computed once per node) for keys and comparisons, structural
+  equality on a digest match. With sharing the codes are linear in the program; rebuilt per type
+  they are quadratic in the nesting depth. Structural `N` stays the kernel's statement: the digest
+  is the checker's and Backend2's representation of it, and printing uses the digest too.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the checker, the elaborator or a backend.
+`fundamentalC`, `adequacyC` and `goal791N : HandlerLawN → Goal791N` keep their statements and
+proofs; every corpus and kernel program its output. The later units must preserve the same three.
+
+### Open
+
+- **Not built:** the former and its arms (K1), the relation clauses and their laws (K2), the rules
+  and their compatibility lemmas (K3, K4), the lend-exit lemma (K5), `eraseD` (K6).
+- **`codeI`'s semantic step** is not checked: from `gDenC` and `Γ.CapOK`, that the captured slots'
+  resources compose to `𝒱⟦Γ.capTy (λM)⟧ (tupleV (capEnv (λM) γ))` at the whole `ρ`. Its syntactic
+  half is `lam_psub_capNorm` and `occs_lt_of_closedAt`.
+- **`nuOutK`'s compatibility lemma** needs, beyond `nuOutK_step`, that `C[Code⟨…⟩(νX. C)/X]` read
+  at the code clause is `nuF` at `codeCand` (Core's `vC_inst_envS`/`cB_unroll` at a code type); not
+  built. `unfoldK`'s, that `unfold step` is in the clause at `hCode C`, is not built.
+- **The scope's `ρR`.** With a part of the resource the environment does not hold, `nuOutK` is not
+  derived; obstruction not verified. This entry drops `ρR` and moves the obligation to `codeI`'s
+  premise `Γ.CapOK`. That a well-typed closure always meets `CapOK` (no live non-persistent slot
+  goes unused) is not derived; where it fails, the checker keeps `U C`.
+- **The observable view** at `code` is stated `True`, not built.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -11949,6 +12117,15 @@ checker or the old backend.
 
 ## Changelog
 
+- **1.49** (2026-11-07) — §68 (#855 K0, *Per-code closure types*): the entry for `Code⟨N; E⟩ C`, a
+  value type beside `U C` naming a closure's code, with the explicit erasing coercion `erase` to
+  `U C`, the rules `codeI`, `codeIB`, `erase`, `eraseB`, `unfoldK`, `nuOutK` and the restated
+  `force`, and the erasure policy (C1 specific by default, C2 and C3 erase silently at lend exits and
+  joins). The relation clause holds the environment at the whole resource, so `codeI` carries the
+  premise `Γ.CapOK`. Library code: `capNorm` and `capNorm_shift`, `psub_capNorm`, the code predicate
+  and `nuOutK_step` at Core's relation and the chain's (`Core/CapNorm.lean`, `Core/CodeNu.lean`,
+  `Core/Chain/CodeNuKW835N.lean`); the size measurement `experiments/CodeSize`. No change to
+  `CDerives`, the relation, the checker, the backends or any program's output.
 - **1.47** (2026-11-07) — §15 (#849, #686, *A local whose type is not known*): inference's slot
   types are `Option`s, so a local whose binding it does not type is not known to it, rather than
   `1`, and every reader handles that. An unannotated injection bound and passed to a generic
