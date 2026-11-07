@@ -272,7 +272,7 @@ from a record saying how they read a world (`RowRd ι M`):
 - **The lemmas** are `tabN`'s, proved once: `tabF_effOf_find`, `tabF_effOf_some_find`,
   `tabF_rowOf`, `tabF_find_sig`, `tabF_rowOf_find`, `tabF_at`, `finF_eq_ite`, `entF_fin_cancel`,
   `entF_fin_of`, `errOkF_of_sub` (across modes), `errOkF_le`, `errOkF_ext`, `tabF_downI`,
-  `tabF_wkLeft`, `tabF_wcl`, `entF_le_of_leF`, `finF_mono`, `tabF_rowLe_entry`, `tabF_plain₀`,
+  `tabF_wkLeft`, `tabF_wcl`, `entF_le_of_leF`, `finF_mono`, `tabF_rowLe_entry`, `tabF_plain_cancel`,
   `entF_plain`, `tabF_ctxClosed`.
 
 **Why the modes.** At `KW` an entry's order depends on its name and on whether it sits in a
@@ -326,7 +326,7 @@ location typing is downward closed, plus `hFe`.
 ### 9.3 E5 and the loop at `KW`
 
 - **E5** (`tabNK_ctxClosed`): `(tabNK S g G δ x).CtxClosedI (fun z => (g z).Θ.Down) K` for a
-  context with no handler that catches no cancel, by `tabF_ctxClosed`. That is `tabF_plain₀`,
+  context with no handler that catches no cancel, by `tabF_ctxClosed`. That is `tabF_plain_cancel`,
   which is `cancelOblN_plain₀`'s recursion on the cancel row with `cancelK_plainI` (the cancel run
   under a plain context at `erwpK`, read at `Inv` worlds) for its step.
 - **Closure in the index** (`tabNK_downI`).

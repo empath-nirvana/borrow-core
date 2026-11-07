@@ -193,62 +193,6 @@ open BoCa.Lifetime (LSub LifeVar)
 
 /-! ### The stop's obligation along `ExtP` -/
 
-/-- **The handled continuation owed along the public order** (DNB's `K⟦τ⟧`, read at `U`): at
-every public extension of the stop's world at the floor `lo`, every view consistent with the
-share and every record list, `κ` is in `𝒞⟦C⟧`. -/
-def KapRelP (lo : Life) (C : CTy) (δ : LSub) (Θ : LocTy) (n : Nat) (κ : Val) (ρ : WRes) : Prop :=
-  ∀ Θ' : LocTy, Θ.ExtP lo Θ' ρ → Θ'.OK → ∀ c, ConsistentX c ρ → ∀ ls,
-    cN₀ (ℍ := ℍ) C δ Θ' c n ls (forceE C κ.1) ρ
-
-/-- **The world with the key `(ℓ′, α)` is a public extension of the empty world** at every floor
-the key is below. -/
-theorem extP_world (x : LifeVar) (δ : LSub) {α lo : Life} (hα : α ≤ lo) (l' : Loc) (ρ : WRes) :
-    LocTy.empty.ExtP lo (Θ₁ (ℍ := ℍ) x δ α l') ρ :=
-  LocTy.extP_add (fun _ _ h => absurd rfl h) hα l' _ ρ
-
-/-- Above the key, the same world is a private move. -/
-theorem not_extP_world (x : LifeVar) (δ : LSub) {α lo : Life} (hlo : lo < α) (l' : Loc)
-    (ρ : WRes) : ¬ LocTy.empty.ExtP lo (Θ₁ (ℍ := ℍ) x δ α l') ρ := by
-  intro h
-  have := h.2.1 l' α hlo
-  rw [LocTy.add_self] at this
-  simp [LocTy.empty] at this
-
-/-- **The world configuration is excluded by the public reading**: the stuck `κ = ()` is not owed
-along `ExtP` at the empty world, at any floor above the key. -/
-theorem not_kapRelP_world (x : LifeVar) (δ : LSub) {N α b lo : Life} (hNα : N < α) (hα : α ≤ lo)
-    {m l' : Loc} (hml : l' ≠ m) (c : Loc → Option Life) (hcm : c m = some b)
-    (hcl : c l' = some α) :
-    ¬ KapRelP (ℍ := ℍ) lo (kTyC x) (δ.extend x α) LocTy.empty 1 Val.unit (ρb m b) := fun h =>
-  not_kTy_at x δ hml c hcm hcl (h _ (extP_world x _ hα l' _) (Θ₁_ok x _ hNα l') c
-    (consistentX_single_mut (consistentX_empty c) hcm) [])
-
-/-- **The view configuration is excluded by the public reading**: at the world with the key, the
-obligation reaches the view that puts `ℓ′` at `α`. -/
-theorem not_kapRelP_view (x : LifeVar) (δ : LSub) {N α b : Life} (hNα : N < α) (lo : Life)
-    {m l' : Loc} (hml : l' ≠ m) (c : Loc → Option Life) (hcm : c m = some b)
-    (hcl : c l' = some α) :
-    ¬ KapRelP (ℍ := ℍ) lo (kTyC x) (δ.extend x α) (Θ₁ (ℍ := ℍ) x (δ.extend x α) α l') 1 Val.unit
-      (ρb m b) := fun h =>
-  not_kTy_at x δ hml c hcm hcl (h _ (LocTy.extP_refl _ _ _) (Θ₁_ok x _ hNα l') c
-    (consistentX_single_mut (consistentX_empty c) hcm) [])
-
-/-- **`KapRelN` does not give the public reading**: at the empty world the stuck `κ = ()` meets
-`KapRelN` (`kapRelN_world`) and fails `KapRelP` at every floor above the key. The stop of a run at
-one location typing owes less than the public reading asks. -/
-theorem kapRelN_not_kapRelP (x : LifeVar) (δ : LSub) {N α b lo : Life} (hNα : N < α)
-    (hα : α ≤ lo) {m l' : Loc} (hml : l' ≠ m) (c : Loc → Option Life) (hcm : c m = some b)
-    (hcl : c l' = some α) :
-    KapRelN (ℍ := ℍ) (LocTy.empty.view c)
-        (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf [] .unit) (δ.extend x α) LocTy.empty c))
-        (fun k _ v ρ => retN₀ (ℍ := ℍ) (CTy.effOf [] .unit) (δ.extend x α) LocTy.empty k v ρ)
-        (entN .lin (bMut x) (fun k v ρ => vN₀ (ℍ := ℍ) .unit (δ.extend x α) LocTy.empty k v ρ)
-          (fun k v ρ => vN₀ (ℍ := ℍ) (bMut x) (δ.extend x α) LocTy.empty k v ρ ∧ ConsistentX c ρ)
-          (finN₀ (ℍ := ℍ) (.ret .unit) (δ.extend x α) LocTy.empty c))
-        none 2 [] Val.unit (ρb m b) ∧
-      ¬ KapRelP (ℍ := ℍ) lo (kTyC x) (δ.extend x α) LocTy.empty 1 Val.unit (ρb m b) :=
-  ⟨kapRelN_world x _ c [], not_kapRelP_world x δ hNα hα hml c hcm hcl⟩
-
 end Public835N
 
 end BoCa.Fig16.LogRel.Core.Chain.SI

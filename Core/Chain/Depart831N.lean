@@ -76,14 +76,6 @@ def _root_.BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.ExtRLoc (Θ Θ' : LocTy) (ρ : 
   (∀ l a F, Θ l a = some F → CellIn ρ a → Θ' l a = some F ∧ Θ'.above a = Θ.above a) ∧
     Θ.KeepsLoc Θ' ρ
 
-/-- **The step `tabN_unwind_eq` takes, under the location reading**: a value of an `Imm` type at
-the world with a record lent at `α`, at a resource in `Res_α`, is at an extension of the world
-without the record. -/
-def UnwindArgStepLoc : Prop :=
-  ∀ (Θ : LocTy) (p : FrameRec) (α : Life) (a : Lifetime.Life) (A : VTy) (δ : LSub) (n : Nat)
-    (v : Val) (ρ : WRes), Θ.OK → vN₀ (ℍ := ℍ) (.imm a A) δ (Θ.addImm (p, α)) n v ρ →
-    ρ.InStratum α → (Θ.addImm (p, α)).ExtRLoc Θ ρ
-
 /-- The configuration's world: the one record `q`, lent at `γ = 1`. -/
 def Θq (y : LifeVar) (l l' : Loc) : LocTy :=
   LocTy.empty.addImm (recT (.ref .unit) (LSub.empty.extend y (OrderDual.toDual 1)) l l',
@@ -102,50 +94,6 @@ theorem Θq_ok (y : LifeVar) (l l' : Loc) : (Θq y l l').OK :=
   ⟨fun l₀ b F h => LocTy.empty_down l₀ b F h,
     let ⟨N, hN⟩ := LocTy.empty_bounded; ⟨N, fun l₀ b h => hN l₀ b h⟩⟩
 
-/-- **The configuration, every hypothesis discharged.** At `Θq + (p, α)`, `α = 2`, the resource
-`ℓ ↦ imm({γ}, loc ℓ′, ℓ′ ↦ own(()))` is a value of `Imm 'y (Ref 1)` at `δ['y ↦ γ]`, witnessed by
-`q`. It lies in `Res_α` and the lifetime reading moves it to `Θq` (`LocTy.extR_of_addImm`).
-The location reading does not: `Rel p ρ` holds at `ℓ`, and `p` is not a record of `Θq`. -/
-theorem unwindArg_inst (y : LifeVar) (l l' : Loc) (n : Nat) :
-    let Θ := Θq y l l'
-    let α : Life := OrderDual.toDual 2
-    Θ.OK ∧
-    vN₀ (ℍ := ℍ) (.imm (.var y) (.ref .unit)) (LSub.empty.extend y (OrderDual.toDual 1))
-      (Θ.addImm (pRec l l', α)) n (Val.loc l) (cellI (OrderDual.toDual 1) l l') ∧
-    (cellI (OrderDual.toDual 1) l l').InStratum α ∧
-    (Θ.addImm (pRec l l', α)).ExtR Θ (cellI (OrderDual.toDual 1) l l') ∧
-    ¬ (Θ.addImm (pRec l l', α)).ExtRLoc Θ (cellI (OrderDual.toDual 1) l l') := by
-  intro Θ α
-  let γ : Life := OrderDual.toDual 1
-  let δ := LSub.empty.extend y γ
-  have hst : (cellI γ l l').InStratum α := by
-    refine ResU.inStratum_single l ?_
-    rw [CellU.inStratum_immOf]
-    exact OrderDual.toDual_lt_toDual.mpr (by decide)
-  refine ⟨Θq_ok y l l', ?_, hst, LocTy.extR_of_addImm Θ _ hst, ?_⟩
-  · refine ⟨γ, interp_ext_self _ y γ, ⟨l, LSet.singleton γ, Val.loc l', escU l',
-      escU_inStratum l' _, rfl, rfl, le_refl _, l', Val.unit, PMap.empty, rfl,
-      ResU.comp_empty_right _, rfl, rfl⟩, fun l₀ s₀ u₀ σ₀ h₀ e => ?_⟩
-    obtain ⟨rfl, e'⟩ := single_immOf_inj e
-    obtain ⟨rfl, -⟩ := CellU.immOf_inj e'
-    exact ⟨(recT (.ref .unit) δ l l', γ), List.mem_cons_of_mem _ (List.mem_singleton_self _),
-      le_refl _, _, DescR.refl _, .ref .unit, δ, TyEq.refl _ _,
-      Or.inl ⟨_, List.mem_singleton_self _, rfl, rfl, fun _ _ => rfl⟩⟩
-  · rintro ⟨-, hk⟩
-    have hrel : Rel (pRec l l') (cellI γ l l') :=
-      ⟨l, _, ResU.single_get_self _ _, CellU.kind_immOf _ _ _ _, Or.inl rfl⟩
-    have hp : pRec l l' ∈ rsOf (Θ.addImm (pRec l l', α)).imm :=
-      mem_rsOf.mpr ⟨α, List.mem_cons_self ..⟩
-    obtain ⟨t, ht⟩ := mem_rsOf.mp (hk _ hp hrel)
-    have e := congrArg Prod.fst (List.mem_singleton.mp ht)
-    exact pRec_ne y l l' e
-
-/-- **The step fails under the location reading.** -/
-theorem not_unwindArgStepLoc : ¬ UnwindArgStepLoc (ℍ := ℍ) := by
-  intro h
-  obtain ⟨hok, hv, hst, -, hn⟩ := unwindArg_inst (ℍ := ℍ) (0 : LifeVar) 0 1 0
-  exact hn (h _ _ _ _ _ _ _ _ _ hok hv hst)
-
 /-- **The same step under the lifetime reading holds at every value** (`LocTy.extR_of_addImm`). -/
 theorem unwindArgStep (Θ : LocTy) (p : FrameRec) {α : Life} {ρ : WRes}
     (hρ : ρ.InStratum α) : (Θ.addImm (p, α)).ExtR Θ ρ :=
@@ -162,14 +110,6 @@ theorem erwp_of_noFinal {Φ : LocFam} {Tb : TableN} {Q : PostN} {n : Nat} {ls : 
   rw [erwp_eq]
   intro _ _ _ μ _ _ _ _ _ _ _ j μ' e' _ hrun hfin
   exact absurd hfin (h μ j μ' e' hrun)
-
-/-- **`F_Σ R` is `erwp` at the row's table on both sides of Core's split on `Row.divB`.** -/
-theorem cN_effOf_divB (S : Row) (b : Bool) (_hb : Row.divB S = b) (R : VTy) (δ : LSub)
-    (Θ : LocTy) (c : Loc → Option Life) (n : Nat) (ls : List SRec) (e : Expr) (ρ : WRes) :
-    cN₀ (ℍ := ℍ) (CTy.effOf S R) δ Θ c n ls e ρ ↔
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (CTy.effOf S R) δ Θ c))
-        (fun k _ v ρ => vN₀ (ℍ := ℍ) R δ Θ k v ρ) n ls e ρ :=
-  cN_effOf₀ S R δ Θ c n ls e ρ
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Depart831N
 

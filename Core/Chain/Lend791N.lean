@@ -1,4 +1,4 @@
-import Core.Chain.Goal791N0
+import Core.Chain.RelBase791N
 
 /-!
 # The suspending `mut` lend over the chain relation  `[spec §62]`
@@ -214,97 +214,6 @@ theorem OpTabN.Twin.trans {T₁ T₂ T₃ : OpTabN} (h₁ : T₁.Twin T₂) (h�
   obtain ⟨en₃, h₃', a2, b2, c2, d2, e2⟩ := h₂ m i en₂ h₂'
   exact ⟨en₃, h₃', a2.trans a1, b2.trans b1, c2.trans c1, d2.trans d1, e2.trans e1⟩
 
-/-- An entry of a row's table is one of its operations'. -/
-theorem tabN_effOf_some {S : Row} {R : VTy} {δ : LSub} {Θ : LocTy} {c : Loc → Option Life}
-    {m i : UInt32} {en : OpEntN} (h : tabN₀ (ℍ := ℍ) (CTy.effOf S R) δ Θ c m i = some en) :
-    ∃ o ∈ S, m = o.n ∧ en = entN o.q o.B (fun k v ρ => vN₀ (ℍ := ℍ) o.A δ Θ k v ρ)
-      (fun k v ρ => vN₀ (ℍ := ℍ) o.B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) o.fin δ Θ c) := by
-  induction S with
-  | nil => simp [CTy.effOf, tabN₀, OpTabN.empty] at h
-  | cons o S ih =>
-      simp only [CTy.effOf, tabN₀] at h
-      rcases extTabN_some h with ⟨hm, -, rfl⟩ | h
-      · exact ⟨o, List.mem_cons_self .., hm, rfl⟩
-      · obtain ⟨o', ho', hm, rfl⟩ := ih h
-        exact ⟨o', List.mem_cons_of_mem _ ho', hm, rfl⟩
-
-/-- **The callback's table and the lender's are twins** at one world and view: they differ in
-`'x`, which no operation type of the row mentions. -/
-theorem tabN_effOf_twin {x : LifeVar} {α : Life} {S : Row}
-    (hS : ∀ o ∈ S, ¬ VFree x o.A ∧ ¬ VFree x o.B) (R₁ R₂ : VTy) (δ : LSub) (Θ : LocTy)
-    (c : Loc → Option Life) :
-    (tabN₀ (ℍ := ℍ) (CTy.effOf S R₁) (δ.extend x α) Θ c).Twin
-      (tabN₀ (ℍ := ℍ) (CTy.effOf S R₂) δ Θ c) := by
-  induction S with
-  | nil => intro m i en h; simp [CTy.effOf, tabN₀, OpTabN.empty] at h
-  | cons o S ih =>
-      intro m j en h
-      simp only [CTy.effOf, tabN₀] at h ⊢
-      unfold extTabN at h ⊢
-      split at h
-      · rename_i hmj
-        cases Option.some.inj h
-        rw [if_pos hmj]
-        have hA := vN_extend_of_not_free₀ (ℍ := ℍ) (hS o (List.mem_cons_self ..)).1 δ α
-        have hB := vN_extend_of_not_free₀ (ℍ := ℍ) (hS o (List.mem_cons_self ..)).2 δ α
-        refine ⟨_, rfl, rfl, rfl, ?_, ?_, rfl⟩
-        · simp only [entN, hA]
-        · simp only [entN, hB]
-      · rename_i hmj
-        rw [if_neg hmj]
-        exact ih (fun o' ho' => hS o' (List.mem_cons_of_mem _ ho')) m j en h
-
-/-- **The callback's table may be stopped at under a lend at `α ⊏ @bnd`**: `Row.Suspend`'s
-qualifier, payload and answer clauses; the payload and answer types, free of `'x` and outliving
-`@bnd`, have their values in the lend's stratum (`vN_inStratum_bnd₀`). -/
-theorem tabN_lendOKCR {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {S : Row}
-    (hS : S.Suspend x bnd) (R : VTy) (δ : LSub) (hLt : LtLife δ bnd α) (Θ : LocTy)
-    (c : Loc → Option Life) :
-    (tabN₀ (ℍ := ℍ) (CTy.effOf S R) (δ.extend x α) Θ c).LendOKCR α where
-  entry := fun m i en h _ => by
-    obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
-    exact ⟨(hS o ho).1, rfl⟩
-  pa := fun m i en h k ls v ρ hp => by
-    obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
-    have hp' : vN₀ (ℍ := ℍ) o.A (δ.extend x α) Θ k v ρ := hp
-    rw [vN_extend_of_not_free₀ (hS o ho).2.2.1] at hp'
-    exact vN_inStratum_bnd₀ (hS o ho).2.2.2.2.1 hLt hp'
-  pb := fun m i en h k ls w ρ hp => by
-    obtain ⟨o, ho, -, rfl⟩ := tabN_effOf_some h
-    have hp' : vN₀ (ℍ := ℍ) o.B (δ.extend x α) Θ k w ρ := hp.1
-    rw [vN_extend_of_not_free₀ (hS o ho).2.2.2.1] at hp'
-    exact (vN_inStratum_bnd₀ (hS o ho).2.2.2.2.2.1 hLt hp').mono (Life.down_sqsubset α).le
-
-/-- The finaliser `λ_. d ℓ` consumes the lend's claim: `d`'s judgment at `Ref A ⊸ 1`, applied to
-the cell owned again with its content in `A`'s family. -/
-theorem fin_claim₀ {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
-    (hd : SemJN₀ (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) {δ δ' : LSub}
-    (hδ : vN₀ (ℍ := ℍ) A δ' = vN₀ (ℍ := ℍ) A δ) {Θ : LocTy} (hΘ : Θ.OK)
-    {c : Loc → Option Life} {l : Loc} {α : Life} {k : Nat} {ls : List SRec} {ρ : WRes}
-    (h : claimR l α (fun j u r => vN₀ (ℍ := ℍ) A δ' Θ j u r.1) k ρ) (hc : ConsistentX c ρ) :
-    rwp (ℍ := ℍ) (Θ.view c) (fun _ _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) k ls
-      (.app (.val (Val.lam (.app d (.val (Val.loc l))))) (.val .unit)) ρ := by
-  have hΦ := LocTy.view_down hΘ.1 c
-  obtain ⟨w, σ, hσ, hF, hcl⟩ := h
-  have hF' : vN₀ (ℍ := ℍ) A δ Θ k w σ := by rw [← hδ]; exact hF
-  refine rwp_det'' (Q := fun _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) hΦ
-    (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
-  have e : Kont.hole.plug (Expr.subst 0 Val.unit (.app d (.val (Val.loc l)))) =
-      (Kont.appL .hole (Val.loc l)).plug d := by
-    simp [Kont.plug, Expr.subst, subst_closedAt d (s := _) hdc (Nat.zero_le _), Val.loc,
-      Expr.loc]
-  rw [e]
-  refine rwp_bind hΦ _ ?_
-  have hd0 := hd δ [] Θ c k ls PMap.empty (models_empty_any _) hΘ (consistentX_empty c) trivial rfl
-  rw [show substAll [] d = d from psub_closedAt d [] hdc (Nat.zero_le 0)] at hd0
-  have hfr := rwp_frame (fun _ τ => τ = ρ) (fun _ _ _ _ h => h) (compS_empty_left ρ)
-    (rwp_of_erwp_empty hd0) rfl
-  refine rwp_mono_le (fun k' hk' ls' v τ hv => ?_) (rwp_consistentXV hfr hc)
-  obtain ⟨⟨τ₁, τ₂, hcτ, hP, rfl⟩, hcτ', hvτ⟩ := hv
-  have := hP Θ (LocTy.extR_refl Θ _) hΘ c (consistentX_left hcτ hcτ' hvτ) ls'
-    c k' le_rfl (Val.loc l) τ₂ τ hcτ ⟨l, w, σ, rfl, hcl, vN_le₀ hk' hF'⟩ hcτ'
-  exact rwp_of_erwp_empty this
-
 /-- `withborU`'s `then`: `λb. (ℓ, b)`. -/
 def NFv (l : Loc) : Val := Val.lam (.pair (.val (Val.loc l)) (.var 0))
 
@@ -316,60 +225,10 @@ def DFv (d : Expr) (l : Loc) : Val := Val.lam (.app d (.val (Val.loc l)))
 /-- The callback `λ_. λu. ()`: it releases the borrow at once. -/
 def cbRelease : Val := Val.lam (.val (Val.lam (.val .unit)))
 
-/-- **`λ_. λu. ()` is a callback of the lend at the empty row and the answer `1`**: it performs
-nothing, and the borrow is left as garbage at the return (admissible: Core has `releaseMut`).
-A callback that performs at a suspending row while holding the borrow is `cbPerform_sem₀`
-(`Core/Chain/Inst791N.lean`). -/
-theorem cbRelease_sem {x : LifeVar} {bnd : Lifetime.Life} {A : VTy} {δ : LSub}
-    (Θ : LocTy) (n : Nat) :
-    vN₀ (ℍ := ℍ) (cbUTy x bnd (.mut (.var x) A) .unit []) δ Θ n cbRelease PMap.empty := by
-  intro Θ' _ hOK c _ ls
-  refine fun α _ c' k _ v ρv ρ' hc hv _ => ?_
-  obtain rfl := eq_of_compS_empty_left hc
-  obtain ⟨β, hβ, b, -, ⟨l, w, χ, hχ, j, hw, -, rfl, -, rfl⟩, -⟩ := hv
-  have hΦ := LocTy.view_down hOK.1 c'
-  have hQ : PostN.Down
-      (fun k _ v ρ => vN₀ (ℍ := ℍ) (.box (.var x) .unit) (δ.extend x α) Θ' k v ρ) :=
-    fun k _ v ρ h => vN_down₀ _ _ _ k v ρ h
-  show erwp (ℍ := ℍ) (Θ'.view c') (opTableN OpTabN.empty) _ k ls
-    (.app (.app cbRelease.1 (.val .unit)) (.val (Val.loc l))) _
-  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) hQ
-    (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl (.appL .hole (Val.loc l))) ?_
-  refine erwp_det hΦ (opTableN_down OpTabN.empty_down) hQ
-    (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
-  simp only [Kont.plug, Expr.subst, Val.unit, Expr.val]
-  exact erwp_garbage (compS_empty_left _) (noOwn_single_mut l)
-    (erwp_val (v := Val.unit) ⟨α, interp_ext_self δ x α, ⟨rfl, rfl⟩, ResU.inStratum_empty α⟩)
-
 /-! ### The answer clause: where the frame's stratum premise is not met -/
 
 /-- The thunk `λ_. ()`. -/
 def unitThunk : Val := Val.lam (.val .unit)
-
-/-- **`U(F 1)` has values outside every stratum `↓α`**: `λ_. ()` holding a `mut` cell at a
-lifetime shorter than `↓α`, left as garbage at the return. So an operation answering `U(F 1)`
-does not meet `OpTabN.LendOKCR.pb` at any lend lifetime `α`, and `Row.Suspend`'s
-`¬ VFree x o.B` does not give `erwp_M_frameCR`'s premise there; `Row.Suspend`'s answer clause
-(`VOutlives ∅ @bnd`, which has no `U` constructor) does.
-This is a configuration for the premise, not a refutation of the constant. -/
-theorem answer_not_inStratum (δ : LSub) (α : Life) (l : Loc) :
-    ∃ ρ : WRes, (∀ Θ n, vN₀ (ℍ := ℍ) (.thunk (.ret .unit)) δ Θ n unitThunk ρ) ∧
-      ¬ ρ.InStratum (↓α) := by
-  refine ⟨ResU.single l (CellU.mutOf (↓(↓α)) Val.unit PMap.empty
-    (ResU.inStratum_empty _) (fun _ _ => True) trivial), fun Θ n Θ' _ hOK c _ ls => ?_,
-    fun h => ?_⟩
-  · have hΦ := LocTy.view_down hOK.1 c
-    show erwp (ℍ := ℍ) (Θ'.view c) (opTableN OpTabN.empty) _ n ls
-      (.app unitThunk.1 (.val .unit)) _
-    refine erwp_det hΦ (opTableN_down OpTabN.empty_down)
-      (fun k _ v ρ h => vN_down₀ _ _ _ k v ρ h)
-      (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
-    simp only [Kont.plug, Expr.subst, Val.unit, Expr.val]
-    exact erwp_garbage (compS_empty_left _) (noOwn_single_mut l)
-      (erwp_val (v := Val.unit) ⟨rfl, rfl⟩)
-  · have := h l _ (ResU.single_get_self _ _)
-    rw [CellU.inStratum_mutOf] at this
-    exact lt_asymm this (Life.down_sqsubset _)
 
 /-! ### The cancel-row clause admits cleanup that performs -/
 
@@ -406,20 +265,6 @@ theorem hardestRow_suspend (x : LifeVar) (bnd : Lifetime.Life) : hardestRow.Susp
   simp only [hardestRow, List.mem_singleton] at ho
   subst ho
   exact ⟨by simp [parkSig], by decide, id, id, .unit, .unit, fun _ => trivial⟩
-
-/-- **The row's table is `park`'s entry in `TJN`**: at `(nP, 0)` the row's table has `enParkN`'s
-qualifier, abort flag, cancel obligation (the pure row's) and resumption order, at the view. -/
-theorem hardestRow_entry (Θ : LocTy) (c : Loc → Option Life) :
-    ∃ en, rowTabN₀ (ℍ := ℍ) hardestRow Θ c BoCa.Fig16.Tree.Wp.SchedProgs.Park.nP 0 = some en ∧
-      en.q = (PoolSpawn.enParkN (ℍ := ℍ) (Θ.view c)).q ∧
-      en.abort = (PoolSpawn.enParkN (ℍ := ℍ) (Θ.view c)).abort ∧
-      en.fin = (PoolSpawn.enParkN (ℍ := ℍ) (Θ.view c)).fin ∧
-      en.wc = (PoolSpawn.enParkN (ℍ := ℍ) (Θ.view c)).wc :=
-  ⟨entN .cancel .unit (fun k v ρ => vN₀ (ℍ := ℍ) .unit LSub.empty Θ k v ρ)
-      (fun k v ρ => vN₀ (ℍ := ℍ) .unit LSub.empty Θ k v ρ ∧ ConsistentX c ρ)
-      (finN₀ (ℍ := ℍ) (.ret .unit) LSub.empty Θ c),
-    by simp [rowTabN₀, hardestRow, parkSig, CTy.effOf, tabN₀, extTabN], rfl, rfl,
-    by simp [entN, capB, finN₀, PoolSpawn.enParkN, VTy.isZero], rfl⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

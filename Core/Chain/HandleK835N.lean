@@ -747,52 +747,6 @@ theorem erwpK_handle {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z 
 
 /-! ### The scheduler's `[handle]` -/
 
-/-- **The scheduler's `[handle]` at `erwpK`**: a scheduler meeting the contract at `erwpK`
-(`SchedOKNLeK`) is a handler of its name at the empty outer table, every stopped task received as
-its Kripke stop at the floor the task's stop chose. The entries' order at `κ`'s share is read at the
-part the stop left (`hwk`). -/
-theorem erwpK_handle_sched {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z → V x z)
-    (hVr : ∀ y, V y y) {Φ : ι → LocFam} {Inv : ι → Prop} (hΦ : ∀ x, Inv x → (Φ x).Down)
-    (hΦV : ∀ x y, V x y → Φ y = Φ x) {fl : ι → Life}
-    (hTV : ∀ x y, V x y → (opTableK (fl y) (OpTabK.empty : OpTabK ι)).Le
-      (opTableK (fl x) OpTabK.empty))
-    {N : Nat} {T : ι → OpTabK ι} {n₀ : UInt32} {qs hr hs : Val} {Qin Qout : ι → PostN}
-    (hS : SchedOKNLeK (ℍ := ℍ) V Φ fl N T n₀ qs hr hs Qin Qout)
-    (hwk : ∀ x i en, T x n₀ i = some en → en.abort = false → ∀ f y (ρ₁ ρ₂ ρ : WRes),
-      ResU.CompS ρ₁ ρ₂ ρ → ResU.Valid ρ → en.wk f y ρ → en.wk f y ρ₁)
-    (hInvW : ∀ x m i en, T x m i = some en → en.abort = false → ∀ f y ρ, en.wk f y ρ → Inv y) :
-    ∀ n, n ≤ N → ∀ x, Inv x → ∀ ls e ρ,
-      erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (T z)) Qin x n ls e ρ →
-      erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) OpTabK.empty) Qout x n ls
-        (hndE (hndVal n₀ qs hr hs) e) ρ :=
-  erwpK_handle_le hVt hΦ hΦV N T (fun _ => OpTabK.empty) hS.down (fun _ => ⟨fun _ _ _ h => by simp [OpTabK.empty] at h,
-      fun _ _ _ _ h => by simp [OpTabK.empty] at h⟩) hTV n₀
-    (fun x m i hm => hS.names x m i hm) qs hr hs Qin Qout hS.qdown hS.tags hS.wcl hwk
-    (fun _ => some T)
-    (fun x i en hT ha hq Tk hTk => by
-      cases Option.some.inj hTk
-      obtain ⟨T₁, hf, hsub⟩ := hS.fin x i en hT ha hq
-      exact ⟨T₁, hf, hsub, hS.down⟩) hVr hInvW
-    (fun i Tk hTk => by cases Option.some.inj hTk; exact hInvW) hS.ret hS.op
-
-/-- **The scheduler's `[handle]` at the typed world**: `erwpK_handle_sched` at `KW`, posts at the
-run's own world. -/
-theorem erwpK_handle_schedKW {N : Nat} {T : KW → OpTabK KW} {n₀ : UInt32} {qs hr hs : Val}
-    {Qin Qout : KW → PostN}
-    (hS : SchedOKNLeK (ℍ := ℍ) KW.PostK (fun x => x.Θ.view x.c) (fun x => x.lo) N T n₀ qs hr hs
-      Qin Qout)
-    (hwk : ∀ x i en, T x n₀ i = some en → en.abort = false → ∀ f y (ρ₁ ρ₂ ρ : WRes),
-      ResU.CompS ρ₁ ρ₂ ρ → ResU.Valid ρ → en.wk f y ρ → en.wk f y ρ₁)
-    (hOK : ∀ x m i en, T x m i = some en → en.abort = false → ∀ f y ρ, en.wk f y ρ → y.Θ.OK) :
-    ∀ n, n ≤ N → ∀ x : KW, x.Θ.OK → ∀ ls e ρ,
-      erwpK (ℍ := ℍ) KW.PostK (fun x => x.Θ.view x.c) (fun z => opTableK z.lo (T z)) Qin x n ls
-        e ρ →
-      erwpK (ℍ := ℍ) KW.PostK (fun x => x.Θ.view x.c) (fun z => opTableK z.lo OpTabK.empty) Qout
-        x n ls (hndE (hndVal n₀ qs hr hs) e) ρ :=
-  erwpK_handle_sched (fun _ _ _ h₁ h₂ => h₁.trans h₂) KW.postK_refl (Inv := fun x => x.Θ.OK)
-    (fun x hx => LocTy.view_down hx.1 x.c) (fun _ _ h => by rw [h])
-    (fun _ _ h => tabLe_postK (fun z : KW => opTableK z.lo OpTabK.empty) h) hS hwk hOK
-
 /-! ### At one world -/
 
 /-- `KapRelN` at any table is `KapRelK` at one world, at any floor (`kapRelK_lift_iff` at the

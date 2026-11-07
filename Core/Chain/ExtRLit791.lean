@@ -1,4 +1,4 @@
-import Core.Chain.Goal791N0
+import Core.Chain.RelBase791N
 import Core.Chain.SI.CaptureScopeM
 
 /-!
@@ -47,20 +47,6 @@ theorem extRL_refl (Θ : LocTy) (ρ : WRes) : ExtRL Θ Θ ρ := ⟨fun _ _ _ h _
 /-- `Mut 'x 1 ⊸ F 1`. -/
 def tyC (x : LifeVar) : CTy := .arr (.mut (.var x) .unit) (.ret .unit)
 
-/-- **`𝒱⟦U(Mut 'x 1 ⊸ F 1)⟧` with the Kripke order `E`**: `vN₀`'s `U` clause, reading `E` where
-`vN₀` reads `LocTy.ExtR`, then `cN₀`'s `⊸` clause at the world reached. -/
-def vUgen (E : LocTy → LocTy → WRes → Prop) (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat)
-    (v : Val) (ρ : WRes) : Prop :=
-  ∀ Θ' : LocTy, E Θ Θ' ρ → Θ'.OK → ∀ c, ConsistentX c ρ → ∀ ls : List SRec,
-    ∀ c', ∀ k, k ≤ n → ∀ (w : Val) (ρv ρ' : WRes),
-      ResU.CompS ρ ρv ρ' → vN₀ (ℍ := ℍ) (.mut (.var x) .unit) δ Θ' k w ρv → ConsistentX c' ρ' →
-        cN₀ (ℍ := ℍ) (.ret .unit) δ Θ' c' k ls (.app (forceE (tyC x) v.1) (.val w)) ρ'
-
-/-- At the interpretation's own order, `vUgen` is `vN₀`. -/
-theorem vN_eq_vUgen (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ : WRes) :
-    vN₀ (ℍ := ℍ) (.thunk (tyC x)) δ Θ n v ρ ↔ vUgen (ℍ := ℍ) LocTy.ExtR x δ Θ n v ρ := by
-  simp only [vNE₀, cN₀, tyC, vUgen]
-
 /-- The thunk's resource: one `mut` cell at `b`. -/
 def ρb (m : Loc) (b : Life) : WRes :=
   ResU.single m (CellU.mutOf b Val.unit PMap.empty (ResU.inStratum_empty b)
@@ -71,21 +57,6 @@ theorem cellIn_ρb (m : Loc) (b : Life) : CellIn (ρb m b) b := by
     (ResU.inStratum_empty b) (fun _ _ => True) trivial)
     (by rw [CellU.kind_mutOf]; exact fun c => Kind.noConfusion c)
   rwa [CellU.at_mutOf] at h
-
-/-- **Under the literal order the thunk is valid at the empty world**: every literal extension
-keeps nothing above `b`, so none has a key at `α > b`, and no `Mut @α 1` argument exists. -/
-theorem valid_at_empty (x : LifeVar) (δ : LSub) {α b : Life} (hbα : b < α) (m : Loc) (n : Nat)
-    (v : Val) : vUgen (ℍ := ℍ) ExtRL x (δ.extend x α) LocTy.empty n v (ρb m b) := by
-  intro Θ' hE _ c _ ls c' k _ w ρv ρ' _ hv _
-  exfalso
-  obtain ⟨β, hβ, b', hβb', ⟨l', _, _, _, _, _, _, _, hl, _⟩, -⟩ := hv
-  rw [interp_ext_self] at hβ
-  cases Option.some.inj hβ
-  have habove := hE.2 b (cellIn_ρb m b)
-  have h := congrArg (fun Θ : LocTy => Θ l' b') habove
-  simp only [LocTy.above_apply, if_pos (lt_of_lt_of_le hbα hβb'), LocTy.empty_apply] at h
-  rw [h] at hl
-  cases hl
 
 /-- **The typed world of two `mut` cells**: `m ↦ mut(b, (), ∅, P)` beside
 `ℓ′ ↦ mut(α, (), ∅, P′)`, entered as two allocations and two `mut` lends (`TWNC.alloc`,
@@ -124,70 +95,6 @@ theorem world_two {m l' : Loc} (hml : l' ≠ m) {b α : Life} (P : Val → SProp
   obtain rfl := eq_of_compS_empty_left hfρ'
   obtain rfl := ResU.CompS.functional hBM' hρ'
   exact ⟨_, hHBM', hTfρ', htg₀ _, hlfρ', lower_finDom hlfρ'⟩
-
-/-- **Under the literal order the thunk is not valid at the world with a lend at `α`**: that world
-holds the argument `ℓ′ ↦ mut(α, (), ∅, 𝒱⟦1⟧)`, and `() ℓ′` is stuck. -/
-theorem not_valid_at_lend (x : LifeVar) (δ : LSub) {N α b : Life} (hNα : N < α) {m l' : Loc}
-    (hml : l' ≠ m) {n : Nat} (hn : 0 < n) :
-    ¬ vUgen (ℍ := ℍ) ExtRL x (δ.extend x α)
-      (LocTy.empty.add l' α (famL α (fun Θ j u r => vN₀ (ℍ := ℍ) .unit (δ.extend x α) Θ j u r)
-        LocTy.empty)) n Val.unit (ρb m b) := by
-  intro h
-  let P : CPredL := fun Θ j u r => vN₀ (ℍ := ℍ) .unit (δ.extend x α) Θ j u r
-  let Θ₁ := LocTy.empty.add l' α (famL α P LocTy.empty)
-  have hfam : DownFam α (famL α P LocTy.empty) := vN_fam_down₀ .unit _ α _
-  have hOK : Θ₁.OK := ⟨LocTy.down_add LocTy.empty_down l' hfam,
-    ⟨N, LocTy.fresh_add (N := N) (fun _ _ h => absurd rfl h) le_rfl hNα l' _⟩⟩
-  have hw : famL α P LocTy.empty n Val.unit ⟨PMap.empty, ResU.inStratum_empty α⟩ := ⟨rfl, rfl⟩
-  let cell : WRes := ResU.single l' (CellU.mutOf α Val.unit PMap.empty
-    (ResU.inStratum_empty α) (famL α P LocTy.empty n) hw)
-  have hv : vN₀ (ℍ := ℍ) (.mut (.var x) .unit) (δ.extend x α) Θ₁ n (Val.loc l') cell :=
-    ⟨α, interp_ext_self δ x α, α, le_rfl, lend_mutL LocTy.empty l' α P le_rfl _ hw,
-      fun _ _ _ r h => by obtain ⟨-, rfl⟩ := h; exact ResU.inStratum_empty α⟩
-  obtain ⟨ρ', hρ'⟩ := (ResU.compS_defined_iff (ρb m b) cell).mpr
-    (compatS_single_of_get_none (ResU.single_get_ne _ hml))
-  let c : Loc → Option Life := fun y => if y = m then some b else none
-  let c' : Loc → Option Life := fun y => if y = m then some b else if y = l' then some α else none
-  have hcb : ConsistentX c (ρb m b) :=
-    consistentX_single_mut (consistentX_empty c) (by simp [c])
-  have hcb' : ConsistentX c' (ρb m b) :=
-    consistentX_single_mut (consistentX_empty c') (by simp [c'])
-  have hcc : ConsistentX c' cell :=
-    consistentX_single_mut (consistentX_empty c') (by simp [c', hml])
-  have hc' : ConsistentX c' ρ' := consistentX_compS hρ' hcb' hcc
-  have h' := h Θ₁ (extRL_refl _ _) hOK c hcb [] c' n le_rfl (Val.loc l') cell ρ' hρ' hv hc'
-  obtain ⟨μ, hH, hT, htg, hl, hfd⟩ := world_two hml _ trivial _ hw hρ'
-  change erwp (ℍ := ℍ) _ _ _ n [] (BoCa.BoLo.Kont.hole.plug (.app .unit (Val.loc l').1)) ρ' at h'
-  rw [erwp_eq] at h'
-  have hfin : Final (ℍ := ℍ) μ (BoCa.BoLo.Kont.hole.plug (.app .unit (Val.loc l').1)) :=
-    fun _ _ hs => stuck_no_step (stuckAt_unit_app (Val.loc l')) .hole hs
-  have hE := h' PMap.empty ρ' [] μ hH (compS_empty_left ρ') hT htg
-    (ImmTieL.of_nil rfl _) hl hfd 0 _ _ hn (.refl _ _) hfin
-  obtain ⟨_, _, _, _, _, _, _, -, -, -, -, -, -, -, -, -, -, -, -, hq⟩ := hE
-  rcases hq with ⟨v, hv, -⟩ | ⟨_, _, _, _, _, h''⟩ | ⟨_, _, _, _, _, h''⟩
-  · have : IsVal (BoCa.BoLo.Kont.hole.plug (.app .unit (Val.loc l').1)) := hv ▸ v.2
-    exact (stuckAt_unit_app (ℍ := ℍ) (Val.loc l')).not_val this
-  · exact absurd (pure_sep_iff.mp h'').1.2.2.1 (by simp [OpTabN.empty])
-  · exact absurd (pure_sep_iff.mp h'').1.2.2.1 (by simp [OpTabN.empty])
-
-/-- **The literal reading of Core's `Ext` breaks `vN_extA₀` at `U`.** Both worlds are `OK`, the
-second is an `ExtA` extension of the first (a fresh lend), and a value of
-`U(Mut 'x 1 ⊸ F 1)` under the literal order at the first is not one at the second. At the
-interpretation's order `LocTy.ExtR`, `vN_extA₀` holds at every type. -/
-theorem extRL_breaks_extA :
-    ∃ (x : LifeVar) (δ : LSub) (Θ Θ' : LocTy) (n : Nat) (v : Val) (ρ : WRes),
-      Θ.OK ∧ Θ'.OK ∧ Θ.ExtA Θ' ∧ vUgen (ℍ := ℍ) ExtRL x δ Θ n v ρ ∧
-        ¬ vUgen (ℍ := ℍ) ExtRL x δ Θ' n v ρ := by
-  let α : Life := OrderDual.toDual 1
-  let b : Life := OrderDual.toDual 2
-  have hbα : b < α := OrderDual.toDual_lt_toDual.mpr (by decide)
-  let P : CPredL := fun Θ j u r => vN₀ (ℍ := ℍ) .unit ((LSub.empty : LSub).extend 0 α) Θ j u r
-  have hfam : DownFam α (famL α P LocTy.empty) := vN_fam_down₀ .unit _ α _
-  refine ⟨0, LSub.empty.extend 0 α, LocTy.empty, LocTy.empty.add 1 α (famL α P LocTy.empty), 1, Val.unit,
-    ρb 0 b, LocTy.empty_ok, ⟨LocTy.down_add LocTy.empty_down 1 hfam,
-      ⟨b, LocTy.fresh_add (N := b) (fun _ _ h => absurd rfl h) le_rfl hbα 1 _⟩⟩,
-    LocTy.extA_add (fun _ _ h => absurd rfl h) 1 _, valid_at_empty 0 _ hbα 0 1 _,
-    not_valid_at_lend 0 _ hbα (by decide) (by decide)⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.ExtRLit791
 

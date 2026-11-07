@@ -244,101 +244,11 @@ theorem finF_N (vr : VRel) (g : KW → KW) (δ : LSub) (F : CTy) :
 
 /-! ### One world -/
 
-/-- **The one-world reading** (`tabN₀`): every value at `Θ` and `c`; one mode; every entry owes at
-the one world; the runs at `Θ.view c`. -/
-def rdU (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) : RowRd Unit Unit where
-  vr := fun A δ Θ k v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ
-  δ := δ
-  Θ := fun _ => Θ
-  c := fun _ => c
-  wk := fun _ _ _ _ _ _ => True
-  sub := fun _ _ => ()
-  le := fun _ _ => True
-  V := fun _ _ => True
-  Φ := fun _ => Θ.view c
-  fl := fun _ => 0
-  Inv := fun _ => True
-
-theorem rdU_ok {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down) (c : Loc → Option Life) :
-    (rdU (ℍ := ℍ) δ Θ c).OK where
-  vrDown := fun A Θ k v ρ h => vN_down₀ A δ Θ k v ρ h
-  vrPers := fun A hA _ _ _ _ h => vN_empty_of_persistent₀ A hA h
-  wkInv := fun _ _ _ _ _ _ _ => trivial
-  ΦDown := fun _ _ => LocTy.view_down hΘ c
-  wkLeft := fun _ _ _ _ _ _ _ _ _ _ _ => trivial
-  le_refl := fun _ => trivial
-  le_trans := fun _ _ _ _ _ => trivial
-  le_sub := fun _ _ => trivial
-  sub_mono := fun _ _ _ _ => trivial
-  wk_anti := fun _ _ _ _ _ _ _ _ _ => trivial
-  Veq := fun _ _ _ => rfl
-
-theorem rdU_payExt (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) : (rdU (ℍ := ℍ) δ Θ c).PayExt :=
-  fun _ _ _ _ _ _ _ _ _ _ _ _ _ h => h
-
-/-- `cancelOblN` is the one-world reading's cancel run at the lifted table. -/
-theorem canc_unit (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (T : OpTabN) :
-    (rdU δ Θ c).canc (ℍ := ℍ) (fun _ => liftTabK T) = fun _ => cancelOblN (ℍ := ℍ) (Θ.view c) T := by
-  funext y k ls e ρ
-  cases y
-  show erwpK (ℍ := ℍ) (fun _ _ => True) (fun _ => Θ.view c) (fun _ => cancelTabK 0 (liftTabK T))
-      (fun _ _ _ _ _ => False) () k ls e ρ = erwp (ℍ := ℍ) (Θ.view c) (cancelTabN T) _ k ls e ρ
-  rw [erwp_eq_erwpK_of (cancelTabK_lift 0 T) (Θ.view c) _]
-
 theorem liftTabK_extTabN (n i : UInt32) (en : OpEntN) (T : OpTabN) :
     liftTabK (extTabN n i en T) = extTabK n i (liftEntK en) (liftTabK T) := by
   funext m j
   simp only [liftTabK, extTabN, extTabK]
   split <;> rfl
-
-/-- **`tabF` at one world is `tabN₀` lifted, and `finF` is `finN₀` lifted.** -/
-theorem tabF_finF_unit (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) : ∀ F : CTy,
-    (∀ x, tabF (ℍ := ℍ) (rdU δ Θ c) () F x = liftTabK (tabN₀ (ℍ := ℍ) F δ Θ c)) ∧
-      finF (ℍ := ℍ) (rdU δ Θ c) () F = (finN₀ (ℍ := ℍ) F δ Θ c).map (fun P _ => P)
-  | .eff m i q A B fin rc C => by
-      have hf := tabF_finF_unit δ Θ c fin
-      have hC := tabF_finF_unit δ Θ c C
-      have he : ∀ x, (rdU δ Θ c).ent () m q A B (finF (ℍ := ℍ) (rdU δ Θ c) () fin) x =
-          liftEntK (entN q B (fun k v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ)
-            (fun k v ρ => vN₀ (ℍ := ℍ) B δ Θ k v ρ ∧ ConsistentX c ρ) (finN₀ (ℍ := ℍ) fin δ Θ c)) := by
-        intro x
-        rw [hf.2]
-        simp only [RowRd.ent, liftEntK, entN, rdU]
-        congr 1
-        split <;> rfl
-      have hT : ∀ x, tabF (ℍ := ℍ) (rdU δ Θ c) () (.eff m i q A B fin rc C) x =
-          liftTabK (tabN₀ (ℍ := ℍ) (.eff m i q A B fin rc C) δ Θ c) := by
-        intro x
-        simp only [tabF, tabN₀]
-        rw [liftTabK_extTabN, he x, hC.1 x]
-      refine ⟨hT, ?_⟩
-      have hT' : (fun x => extTabK m i ((rdU δ Θ c).ent () m q A B
-          (finF (ℍ := ℍ) (rdU δ Θ c) ((rdU δ Θ c).sub () m) fin) x)
-          (tabF (ℍ := ℍ) (rdU δ Θ c) () C x)) =
-          fun _ => liftTabK (tabN₀ (ℍ := ℍ) (.eff m i q A B fin rc C) δ Θ c) := funext hT
-      simp only [finF, finN₀, Option.map_some]
-      rw [hT', canc_unit]
-      rfl
-  | .ret _ => ⟨fun _ => by simp [tabF, tabN₀, liftTabK_empty], by
-      simp only [finF, finN₀, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
-  | .arr _ _ => ⟨fun _ => by simp [tabF, tabN₀, liftTabK_empty], by
-      simp only [finF, finN₀, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
-  | .amp _ _ => ⟨fun _ => by simp [tabF, tabN₀, liftTabK_empty], by
-      simp only [finF, finN₀, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
-  | .all _ _ _ => ⟨fun _ => by simp [tabF, tabN₀, liftTabK_empty], by
-      simp only [finF, finN₀, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
-  | .nu _ => ⟨fun _ => by simp [tabF, tabN₀, liftTabK_empty], by
-      simp only [finF, finN₀, Option.map_some]; rw [← liftTabK_empty, canc_unit]⟩
-  | .top => ⟨fun _ => by simp [tabF, tabN₀, liftTabK_empty], by simp [finF, finN₀]⟩
-  termination_by structural F => F
-
-theorem tabF_unit (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (F : CTy) (x : Unit) :
-    tabF (ℍ := ℍ) (rdU δ Θ c) () F x = liftTabK (tabN₀ (ℍ := ℍ) F δ Θ c) :=
-  (tabF_finF_unit δ Θ c F).1 x
-
-theorem finF_unit (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (F : CTy) :
-    finF (ℍ := ℍ) (rdU δ Θ c) () F = (finN₀ (ℍ := ℍ) F δ Θ c).map (fun P _ => P) :=
-  (tabF_finF_unit δ Θ c F).2
 
 /-! ### The interface -/
 
@@ -630,7 +540,7 @@ variable {R : RowRd ι M}
 
 /-- **A cancel run under a plain context, at a cancel row's table, beside no frame**
 (`cancelOblN_plain₀`, Core's `plain_cancel₀`), by recursion on the cancel row. -/
-theorem tabF_plain₀ (hR : R.OK) (K : Kont) (hH : ∀ n, K.HasHnd n = false)
+theorem tabF_plain_cancel (hR : R.OK) (K : Kont) (hH : ∀ n, K.HasHnd n = false)
     (hC : K.Catches 0 = false) (G : CTy) :
     ∀ {μ : M} {y : ι}, R.Inv y → ∀ {n : Nat} {ls : List SRec} {e : Expr} {ρ : WRes},
       R.canc (ℍ := ℍ) (fun x => tabF (ℍ := ℍ) R μ G x) y n ls e ρ →
@@ -643,13 +553,13 @@ theorem tabF_plain₀ (hR : R.OK) (K : Kont) (hH : ∀ n, K.HasHnd n = false)
   obtain ⟨hcap, hnT, rfl⟩ := entF_fin_cancel hP
   show R.canc (ℍ := ℍ) _ y' k ls₁ ((K.comp K₁).dead.plug _) ρ₁
   rw [dead_comp, dead_plain K hH hC, Kont.plug_comp]
-  exact tabF_plain₀ hR K hH hC o.fin hy' (hcan _ (entF_fin_of hcap hnT))
+  exact tabF_plain_cancel hR K hH hC o.fin hy' (hcan _ (entF_fin_of hcap hnT))
 termination_by sizeOf G
 decreasing_by exact rowOf_fin_lt G (Row.find_mem hf).1
 
 /-- **E5: a row's table is closed under a plain context** (`tabN_ctxClosed`), at the worlds the
 runs are read at: a context with no handler that catches no cancel carries every cancel
-obligation of the table (`tabF_plain₀`). -/
+obligation of the table (`tabF_plain_cancel`). -/
 theorem tabF_ctxClosed (hR : R.OK) (G : CTy) (K : Kont) (hH : ∀ m, K.HasHnd m = false)
     (hC : K.Catches 0 = false) (μ : M) (x : ι) :
     (tabF (ℍ := ℍ) R μ G x).CtxClosedI R.Inv K := by
@@ -657,7 +567,7 @@ theorem tabF_ctxClosed (hR : R.OK) (G : CTy) (K : Kont) (hH : ∀ m, K.HasHnd m 
   obtain ⟨o, -, rfl⟩ := tabF_rowOf_find hT
   obtain ⟨-, -, rfl⟩ := entF_fin_cancel hP
   rw [dead_comp, dead_plain K hH hC, Kont.plug_comp]
-  exact tabF_plain₀ hR K hH hC o.fin hy h
+  exact tabF_plain_cancel hR K hH hC o.fin hy h
 
 /-- **An entry's cancel obligation under a plain context, beside a frame holding nothing owned**
 (`entN_plain`, Core's `ent_plain`): the frame is left behind (`erwpK_garbage`). -/
@@ -673,7 +583,7 @@ theorem entF_plain (hR : R.OK) (K : Kont) (hH : ∀ n, K.HasHnd n = false)
   obtain ⟨-, -, rfl⟩ := entF_fin_cancel hP₀
   show R.canc (ℍ := ℍ) _ y k ls ((K.comp K₁).dead.plug _) ρ'
   rw [dead_comp, dead_plain K hH hC, Kont.plug_comp]
-  exact erwpK_garbage hc hσ (tabF_plain₀ hR K hH hC o.fin hy (hcan _ hP))
+  exact erwpK_garbage hc hσ (tabF_plain_cancel hR K hH hC o.fin hy (hcan _ hP))
 
 end Plain
 

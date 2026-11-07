@@ -1,6 +1,5 @@
 import Core.Chain.MFrameK835N
 import Core.Chain.LendExit835N
-import Core.Chain.Restrict835N
 import Core.Chain.PoolN
 
 /-!
@@ -377,49 +376,6 @@ def KapRelK (V : ι → ι → Prop) (Φ : ι → LocFam) (fl : ι → Life) (Tb
       erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (Tk z)) (fun _ => unitPost) y k' ls'
         (.app κ.1 (.val (Val.inj₂ .unit))) ρ)
 
-/-- **The scheduler's contract at `erwpK`, at the stops up to `N`** (`SchedOKNLe`), at every
-world `x`: the table's conditions; a cancellable entry's cancel obligation a cancel run, read at
-the resumption world, at a table inside the scheduler's; the return clause and every operation's
-clause at the empty table, each stopped task received as its Kripke stop (`KapRelK`) at a floor
-the clause does not know. -/
-structure SchedOKNLeK (V : ι → ι → Prop) (Φ : ι → LocFam) (fl : ι → Life) (N : Nat)
-    (T : ι → OpTabK ι) (n₀ : UInt32) (qs hr hs : Val) (Qin Qout : ι → PostN) : Prop where
-  down : ∀ x, (T x).Down
-  wcl : ∀ x n i en, T x n i = some en → ∀ ls ls' (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
-    en.wc ls ls' ρ → en.wc ls ls' ρ₁
-  names : ∀ x m i, m ≠ n₀ → T x m i = none
-  tags : ∀ x i en, T x n₀ i = some en → en.abort = false → capTag qs.1 i.toNat = en.q.tag
-  fin : ∀ x i en, T x n₀ i = some en → en.abort = false → en.q ≠ .lin →
-    ∃ T₁ : ι → OpTabK ι, en.fin = some (fun y k ls e => erwpK (ℍ := ℍ) V Φ
-      (fun z => cancelTabK (fl z) (T₁ z)) (fun _ _ _ _ _ => False) y k ls e) ∧
-      ∀ z, (T₁ z).Sub (T z)
-  wc : ∀ x i en, T x n₀ i = some en → ∀ (ls ls' : List SRec) (ρ : WRes),
-    (∀ s, s ∈ ls' ↔ s ∈ ls) → en.wc ls ls' ρ
-  qdown : ∀ x, (Qout x).Down
-  ret : ∀ x k, k ≤ N → ∀ ls v ρ, Qin x k ls v ρ →
-    erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) OpTabK.empty) Qout x k ls
-      (.app (.val hr) (.val v)) ρ
-  op : ∀ x i en, T x n₀ i = some en → ∃ c, clauseAt hs.1 i.toNat = some c ∧
-    (en.abort = false → ∀ k, k ≤ N → ∀ ls v (κ : Val) ρ,
-      (en.PA k ls v ⋆ KapRelK (ℍ := ℍ) V Φ fl (fun z => opTableK (fl z) OpTabK.empty) Qout en
-        (fl x) (some T) k ls κ) ρ →
-      erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) OpTabK.empty) Qout x k ls
-        (.app (.val c) (.pair (.val v) κ.1)) ρ) ∧
-    (en.abort = true → ∀ k, k ≤ N → ∀ ls v ρ, en.PA k ls v ρ →
-      erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) OpTabK.empty) Qout x k ls
-        (.app (.val c) (.val v)) ρ)
-
-/-- **The scheduler's contract at `erwpK`, at every stop index** (`SchedOKN`). -/
-def SchedOKNK (V : ι → ι → Prop) (Φ : ι → LocFam) (fl : ι → Life) (T : ι → OpTabK ι)
-    (n₀ : UInt32) (qs hr hs : Val) (Qin Qout : ι → PostN) : Prop :=
-  ∀ N, SchedOKNLeK (ℍ := ℍ) V Φ fl N T n₀ qs hr hs Qin Qout
-
-/-- **The scheduler's contract at the typed world**: the location family the world's view, posts
-at the run's world, each world's floor, the scheduler's table at every world. -/
-abbrev SchedOKNKW (T : KW → OpTabK KW) (n₀ : UInt32) (qs hr hs : Val) (Qin Qout : KW → PostN) :
-    Prop :=
-  SchedOKNK (ℍ := ℍ) KW.PostK (fun x => x.Θ.view x.c) (fun x => x.lo) T n₀ qs hr hs Qin Qout
-
 /-! #### At one world -/
 
 theorem liftTabK_empty : liftTabK OpTabN.empty = (OpTabK.empty : OpTabK Unit) := by
@@ -464,103 +420,6 @@ theorem cancelOblN_eq_K (lo : Life) (Φ : LocFam) (T : OpTabN) :
   funext y k ls e
   cases y
   exact erwp_eq_erwpK_of (cancelTabK_lift lo T) Φ _ k ls e
-
-/-- **`SchedOKNLe` is `SchedOKNLeK` at one world**, at any floor. -/
-theorem schedOKNLe_iff_K (lo : Life) (Φ : LocFam) (N : Nat) (T : OpTabN) (n₀ : UInt32)
-    (qs hr hs : Val) (Qin Qout : PostN) :
-    SchedOKNLeK (ℍ := ℍ) (fun _ _ => True) (fun _ => Φ) (fun _ => lo) N (fun _ => liftTabK T) n₀
-        qs hr hs (fun _ => Qin) (fun _ => Qout) ↔
-      SchedOKNLe (ℍ := ℍ) Φ N T n₀ qs hr hs Qin Qout := by
-  constructor
-  · intro h
-    refine ⟨⟨fun n i en hT => (h.down ()).pa n i _ (liftTabK_of_some hT),
-      fun n i en P hT hP k ls e ρ hk => ?_, fun n i en hT => h.wcl () n i _ (liftTabK_of_some hT)⟩,
-      fun m i hm => ?_, fun i en hT => h.tags () i _ (liftTabK_of_some hT),
-      fun i en hT ha hq => ?_, fun i en hT => h.wc () i _ (liftTabK_of_some hT), h.qdown (),
-      fun k hk ls v ρ hq => ?_, fun i en hT => ?_⟩
-    · exact (h.down ()).fin n i _ (fun _ => P) (liftTabK_of_some hT)
-        (by simp [liftEntK, hP]) () k ls e ρ hk
-    · have := h.names () m i hm
-      simpa [liftTabK] using this
-    · obtain ⟨T₁, hf, hsub⟩ := h.fin () i _ (liftTabK_of_some hT) ha hq
-      classical
-      let T₂ : OpTabN := fun m j => if (T₁ () m j).isSome then T m j else none
-      have hT₂ : liftTabK T₂ = T₁ () := by
-        funext m j
-        cases h₁ : T₁ () m j with
-        | none => simp [T₂, liftTabK, h₁]
-        | some e =>
-            have h2 := hsub () m j e h₁
-            show (T₂ m j).map liftEntK = some e
-            simp only [T₂, h₁, Option.isSome_some, if_true]
-            exact h2
-      refine ⟨T₂, ?_, fun m j e he => ?_⟩
-      · simp only [liftEntK, Option.map_eq_some_iff] at hf
-        obtain ⟨P₀, hP₀, hPe⟩ := hf
-        rw [hP₀]
-        congr 1
-        have := congrFun hPe ()
-        have hT₁ : T₁ = fun _ => liftTabK T₂ := funext fun u => by cases u; exact hT₂.symm
-        rw [hT₁] at this
-        rw [this]
-        funext k ls e
-        simp only [cancelOblN]
-        exact (erwp_eq_erwpK_of (cancelTabK_lift lo T₂) Φ _ k ls e).symm
-      · simp only [T₂] at he
-        split_ifs at he
-        exact he
-    · rw [erwp_empty_eq_K lo]; exact h.ret () k hk ls v ρ hq
-    · obtain ⟨c, hc, h₁, h₂⟩ := h.op () i _ (liftTabK_of_some hT)
-      refine ⟨c, hc, fun ha k hk ls v κ ρ hp => ?_, fun ha k hk ls v ρ hp => ?_⟩
-      · obtain ⟨ρa, ρk, hcak, hA, hK⟩ := hp
-        have := h₁ ha k hk ls v κ ρ ⟨ρa, ρk, hcak, hA,
-          (kapRelK_lift_iff lo Φ Qout en (some T) k ls κ ρk).mpr hK⟩
-        rw [erwp_empty_eq_K lo]; exact this
-      · rw [erwp_empty_eq_K lo]; exact h₂ ha k hk ls v ρ hp
-  · intro h
-    refine ⟨fun _ => ⟨fun n i en hT => ?_, fun n i en P hT hP => ?_⟩,
-      fun _ n i en hT => ?_, fun _ m i hm => by simp [liftTabK, h.names m i hm],
-      fun _ i en hT => ?_, fun _ i en hT ha hq => ?_, fun _ i en hT => ?_, fun _ => h.qdown,
-      fun _ k hk ls v ρ hq => ?_, fun _ i en hT => ?_⟩
-    · obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some hT
-      exact h.down.pa n i en₀ h₀
-    · obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some hT
-      simp only [liftEntK, Option.map_eq_some_iff] at hP
-      obtain ⟨P₀, hP₀, rfl⟩ := hP
-      exact fun y k ls e ρ hk => h.down.fin n i en₀ P₀ h₀ hP₀ k ls e ρ hk
-    · obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some hT
-      exact h.down.wcl n i en₀ h₀
-    · obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some hT
-      exact h.tags i en₀ h₀
-    · obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some hT
-      obtain ⟨T₁, hf, hsub⟩ := h.fin i en₀ h₀ ha hq
-      refine ⟨fun _ => liftTabK T₁, ?_, fun _ m j e he => ?_⟩
-      · simp only [liftEntK, hf, Option.map_some]
-        rw [cancelOblN_eq_K lo Φ T₁]
-      · obtain ⟨e₀, he₀, rfl⟩ := liftTabK_some he
-        exact liftTabK_of_some (hsub m j e₀ he₀)
-    · obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some hT
-      exact h.wc i en₀ h₀
-    · have := h.ret k hk ls v ρ hq
-      rw [erwp_empty_eq_K lo] at this; exact this
-    · obtain ⟨en₀, h₀, rfl⟩ := liftTabK_some hT
-      obtain ⟨c, hc, h₁, h₂⟩ := h.op i en₀ h₀
-      refine ⟨c, hc, fun ha k hk ls v κ ρ hp => ?_, fun ha k hk ls v ρ hp => ?_⟩
-      · obtain ⟨ρa, ρk, hcak, hA, hK⟩ := hp
-        have := h₁ ha k hk ls v κ ρ ⟨ρa, ρk, hcak, hA,
-          (kapRelK_lift_iff lo Φ Qout en₀ (some T) k ls κ ρk).mp hK⟩
-        rw [erwp_empty_eq_K lo] at this; exact this
-      · have := h₂ ha k hk ls v ρ hp
-        rw [erwp_empty_eq_K lo] at this; exact this
-
-/-- **`SchedOKN` is `SchedOKNK` at one world**, at any floor. -/
-theorem schedOKN_iff_K (lo : Life) (Φ : LocFam) (T : OpTabN) (n₀ : UInt32) (qs hr hs : Val)
-    (Qin Qout : PostN) :
-    SchedOKNK (ℍ := ℍ) (fun _ _ => True) (fun _ => Φ) (fun _ => lo) (fun _ => liftTabK T) n₀
-        qs hr hs (fun _ => Qin) (fun _ => Qout) ↔
-      SchedOKN (ℍ := ℍ) Φ T n₀ qs hr hs Qin Qout :=
-  ⟨fun h N => (schedOKNLe_iff_K lo Φ N T n₀ qs hr hs Qin Qout).mp (h N),
-    fun h N => (schedOKNLe_iff_K lo Φ N T n₀ qs hr hs Qin Qout).mpr (h N)⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 

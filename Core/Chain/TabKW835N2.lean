@@ -219,21 +219,6 @@ theorem tabNK_wkOK {vr : VRel} (F : CTy) (δ : LSub) :
   obtain ⟨_, _, _, _, _, rfl, -⟩ := tab_lookupNNK F h
   exact hy.2.1
 
-/-- **The scheduler's `[handle]` at a row's table at the typed world**: a scheduler meeting the
-contract at `erwpK` at the table of a row type, every stopped task received as its Kripke stop.
-The order's premises are read off the table (`tabNK_wkLeft`, `tabNK_wkOK`). -/
-theorem erwpK_handle_schedKW_tab {vr : VRel} {F : CTy} {δ : LSub} {N : Nat}
-    {n₀ : UInt32} {qs hr hs : Val} {Qin Qout : KW → PostN}
-    (hS : SchedOKNLeK (ℍ := ℍ) KW.PostK (fun x => x.Θ.view x.c) (fun x => x.lo) N
-      (fun x => tabNK (ℍ := ℍ) vr id F δ x) n₀ qs hr hs Qin Qout) :
-    ∀ n, n ≤ N → ∀ x : KW, x.Θ.OK → ∀ ls e ρ,
-      erwpK (ℍ := ℍ) KW.PostK (fun x => x.Θ.view x.c)
-        (fun z => opTableK z.lo (tabNK (ℍ := ℍ) vr id F δ z)) Qin x n ls e ρ →
-      erwpK (ℍ := ℍ) KW.PostK (fun x => x.Θ.view x.c) (fun z => opTableK z.lo OpTabK.empty) Qout
-        x n ls (hndE (hndVal n₀ qs hr hs) e) ρ :=
-  erwpK_handle_schedKW hS (fun x i en h _ => tabNK_wkLeft F δ x n₀ i en h)
-    (fun x m i en h _ => tabNK_wkOK F δ x m i en h)
-
 /-! ### The abortive payload across a finaliser's stops -/
 
 /-- **An abortive entry's payload is one at every world a stop at the same table owes its

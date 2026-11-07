@@ -105,25 +105,6 @@ open BoCa.Fig16.LogRel.Core.Chain.SI
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.BoLo (Kont)
 
-/-- **E5: a row's table is closed under a plain context** (`OpTabN.CtxClosed`): a context with no
-handler that catches no cancel carries every cancel obligation of the table
-(`cancelOblN_plain₀`). -/
-theorem tabN_ctxClosed {δ : LSub} {Θ : LocTy} {c : Loc → Option Life} (hΦ : (Θ.view c).Down)
-    (G : CTy) (K : Kont) (hH : ∀ m, K.HasHnd m = false) (hC : K.Catches 0 = false) :
-    (tabN₀ (ℍ := ℍ) G δ Θ c).CtxClosed K := by
-  intro m i en P hT hP k ls K' x ρ h
-  rw [tabN_rowOf] at hT
-  obtain ⟨o, -, rfl⟩ := tabN_effOf_some_find hT
-  simp only [entN] at hP
-  split at hP
-  · rw [finN_eq_ite] at hP
-    split at hP
-    · cases hP
-    · cases hP
-      rw [dead_comp, dead_plain K hH hC, Kont.plug_comp]
-      exact cancelOblN_plain₀ hΦ K hH hC o.fin h
-  · cases hP
-
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
 end

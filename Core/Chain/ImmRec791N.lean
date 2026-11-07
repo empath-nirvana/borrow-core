@@ -1,4 +1,4 @@
-import Core.Chain.Goal791N0
+import Core.Chain.RelBase791N
 
 /-!
 # The record an `imm` value's reborrow reads, and what an `Imm` clause sees  `[spec §62]`
@@ -235,33 +235,6 @@ theorem not_wlImage (P : VTy → LSub → LocTy → Nat → Val → WRes → Pro
 def ΘRef (δ : LSub) (l l' : Loc) (α : Life) : LocTy :=
   ⟨fun _ _ => none, [(recT (.ref .unit) δ l l', α)]⟩
 
-/-- `vN₀`'s `Imm` clause admits the cell at `Imm @a (Ref 1)`, at the world holding its record. -/
-theorem vN_cellI (x : LifeVar) (α : Life) (l l' : Loc) (n : Nat) :
-    vN₀ (ℍ := ℍ) (.imm (.var x) (.ref .unit)) (LSub.empty.extend x α)
-      (ΘRef (LSub.empty.extend x α) l l' α) n (Val.loc l) (cellI α l l') := by
-  refine ⟨α, interp_ext_self _ x α, ⟨l, LSet.singleton α, Val.loc l', escU l',
-    escU_inStratum l' _, rfl, rfl, le_refl _, l', Val.unit, PMap.empty, rfl,
-    ResU.comp_empty_right _, rfl, rfl⟩, fun l₀ s₀ u₀ σ₀ h₀ e => ?_⟩
-  obtain ⟨rfl, e'⟩ := single_immOf_inj e
-  obtain ⟨rfl, -⟩ := CellU.immOf_inj e'
-  exact ⟨_, List.mem_singleton_self _, le_refl _, _, DescR.refl _, .ref .unit,
-    LSub.empty.extend x α, TyEq.refl _ _,
-    Or.inl ⟨_, List.mem_singleton_self _, rfl, rfl, fun _ _ => rfl⟩⟩
-
-/-- `vN₀` has no value of an `Imm` type at `∅`. -/
-theorem not_vN_imm_empty (a : BoCa.Lifetime.Life) (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat)
-    (v : Val) : ¬ vN₀ (ℍ := ℍ) (.imm a A) δ Θ n v PMap.empty := by
-  rintro ⟨-, -, ⟨m, s, u, σ, hs, -, hρ, -⟩, -⟩
-  have := congrArg (fun ρ : WRes => ρ.get m) hρ
-  simp at this
-
-/-- **`vN₀`'s `Imm` clause alone does not meet step 8**, at `ℓ = 0`, `ℓ′ = 1`, `α = 1`: `WlImage`
-has no entry tie, and the run it reads may be entered at `world_thunk`'s list. -/
-theorem not_wlImage_vN : ¬ WlImage (fun A δ Θ n v ρ => vN₀ (ℍ := ℍ) A δ Θ n v ρ) :=
-  not_wlImage _ (l := 0) (l' := 1) (by decide) 1 (.var 0) (LSub.empty.extend 0 1)
-    (ΘRef (LSub.empty.extend 0 1) 0 1 1) 0 1
-    (vN_cellI 0 1 0 1 0) (not_vN_imm_empty _ _ _ _ _ _)
-
 /-! ### An agreement between the world and a record, read off a run's first entry -/
 
 /-- **An `imm` consistency fact from `erwp`.** `Agree Θ ℓ T δ` relates the world `Θ` to the type
@@ -340,24 +313,6 @@ theorem not_wlImageA (P : VTy → LSub → LocTy → Nat → Val → WRes → Pr
     (fun y hy => by simp [LSet.singleton] at hy; subst hy; exact le_refl _) h₁
   rw [canon_thunk hT] at hc
   exact h₂ hc
-
-/-- `not_wlImageA` at the clause that reads, besides `vN₀`'s `Imm`, any condition `G` on the world
-at the cell's location and type which the world holding the cell's record at `Ref 1` meets: every
-such clause with every agreement from `erwp`, at `ℓ = 0`, `ℓ′ = 1`, `α = 1`. -/
-theorem not_wlImageA_vN (G : LocTy → Loc → VTy → LSub → Prop)
-    {Agree : LocTy → Loc → VTy → LSub → Prop} (hA : ImmAgreeErwp (ℍ := ℍ) Agree)
-    (hG : G (ΘRef (LSub.empty.extend 0 1) 0 1 1) 0 (.ref .unit) (LSub.empty.extend 0 1)) :
-    ¬ WlImageA (fun A δ Θ' n v ρ => vN₀ (ℍ := ℍ) A δ Θ' n v ρ ∧
-      ∀ a B l, A = .imm a B → v = Val.loc l → G Θ' l B δ) Agree :=
-  not_wlImageA _ hA (l := 0) (l' := 1) (by decide) 1 (.var 0) (LSub.empty.extend 0 1)
-    (ΘRef (LSub.empty.extend 0 1) 0 1 1) 0 0
-    ⟨vN_cellI 0 1 0 1 0, fun a B l hA hv => by
-      cases hA
-      obtain rfl : l = 0 := by
-        have := congrArg Subtype.val hv
-        simpa [Val.loc] using this.symm
-      exact hG⟩
-    (fun h => not_vN_imm_empty _ _ _ _ _ _ h.1)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.ImmRec791N
 
