@@ -11656,8 +11656,8 @@ checker or the old backend.
   `Obj(JMap)` is accepted; such a `type` declaration written before the `data` one is placed after
   its group. The data table (`Data.Table`) carries the abbreviations in scope; the parser's and the
   typed elaboration's are built by one function (`Parser.tableOf`), a later one of a name hiding an
-  earlier one. `pTy`'s `UNPROVED:`
-  assumption narrows to type parameters. A recursive abbreviation around the root is refused with
+  earlier one; the I/O library brought in for an ambient `main` is in neither. `pTy`'s
+  `UNPROVED:` assumption narrows to type parameters. A recursive abbreviation around the root is refused with
   U3's message before it is opened; `box C(…)` of a constructor that is not a block, where its value
   is expected, is refused with a message saying so. New programs `data-json-map`, `data-set-rec`,
   `data-abbr-nested`, `data-abbr-block`, `data-abbr-root`; rejects `data-rec-abbr-list`, `data-rec-abbr-mu`,
