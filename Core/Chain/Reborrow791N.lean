@@ -747,7 +747,7 @@ theorem tabR_canA {x : LifeVar} {bnd : Lifetime.Life} {δ : LSub} {Θ : LocTy} (
   exact hc W X hW hX _ (by simp only [entN, hcap, if_true]; exact finG_eq Rin G htop δ Θ c)
 
 /-- **The finaliser consumes the source**: `λ_. d ℓ` from a `Mut @a A` value at `ℓ`, by `d`'s
-judgment at `Mut @a A ⊸ 1` (`fin_claim` at the reborrow's source). -/
+judgment at `Mut @a A ⊸ 1` (`fin_claim₀` at the reborrow's source). -/
 theorem fin_claimM {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     (hd : SemJN₀ (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.mut a A) .unit))) {δ : LSub}
     {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life} {l : Loc} {k : Nat} {ls : List SRec}
@@ -913,7 +913,7 @@ theorem withbor3S_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
   set Gc := CellFold l α Fam with hGc
   have hFS : Fo.SuspendC x bnd := suspendC_effOf hS _
   have hbase : tabN₀ (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c' =
-      tabN₀ (ℍ := ℍ) Fo δ' Θ' c' := tabN_effOf_base S _ _ δ' Θ' c'
+      tabN₀ (ℍ := ℍ) Fo δ' Θ' c' := tabN_effOf_base₀ S _ _ δ' Θ' c'
   have hTw : (tabN₀ (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c').Twin
       (tabG (ℍ := ℍ) Rc Gc Fo δ Θ c) := by
     rw [hbase]

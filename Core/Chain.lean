@@ -176,3 +176,5 @@ import Core.Chain.ImmLendKW835N
 import Core.Chain.WithloadKW835N
 import Core.Chain.FoldImmKW835N
 import Core.Chain.FamImmKW835N
+import Core.Chain.ClaimKW835N
+import Core.Chain.CancelKW835N

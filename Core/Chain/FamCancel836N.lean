@@ -718,7 +718,7 @@ def NFa (a : Val) : Val := Val.lam (.pair (.val a) (.var 0))
 /-- `withborU`'s `unwind` at the source `a`: `λ_. d a`. -/
 def DFa (d : Expr) (a : Val) : Val := Val.lam (.app d (.val a))
 
-/-- **The finaliser consumes the source array** (`fin_claim` at `Array A`): `d`'s judgment at
+/-- **The finaliser consumes the source array** (`fin_claim₀` at `Array A`): `d`'s judgment at
 `Array A ⊸ 1`, applied to the array owned again. -/
 theorem fin_claimArr {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     (hd : SemJN₀ (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.array A) .unit))) {δ : LSub}
@@ -750,7 +750,7 @@ theorem fin_claimArr {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
 `Array A ⊸ (∀'x ⊏ @bnd. [Mut 'x A] ⊸ F_Σ(['x] B)) ⊸ F_Σ(Array A ⊗ B)`, `Σ` a
 `Row.Suspend x bnd` row, cleanup that performs included.
 
-`withbor2S_compat`'s structure, with the one-cell frame replaced by the `n`-cell frame across
+`withbor2S_compat₀`'s structure, with the one-cell frame replaced by the `n`-cell frame across
 stops, raises and layered cancel runs (`erwp_M_frameListCRN`, Core's `wpG_M_frameFam` at the
 array's range): the payloads' stratum and the result's from the side conditions by 6.60 at
 `↓@bδ` (`vN_outlivesLe₀`), the frames' lifetimes below the bound; the callback, at the innermost
@@ -845,7 +845,7 @@ theorem sliceBorrowMS_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S 
       rw [sepRange_eq_sepList]; exact sepList_mono' (fun _ _ h => vN_mutLeaf₀ hA h) hml⟩
   have h1 := (hf Θ'' (hE.extR ρf) hOK'' c'' hcf ls) α hLt
   have h2 := h1 c'' k' le_rfl (Val.arr l cn) _ ρ₃ hcomp hfam hc''
-  rw [cN_effOf₀, tabN_effOf_base S (.box (.var x) B) (.tensor (.array A) B)] at h2
+  rw [cN_effOf₀, tabN_effOf_base₀ S (.box (.var x) B) (.tensor (.array A) B)] at h2
   refine erwp_opTableN_R (tabN_tabR_le (R₀ := claimL₀ (ℍ := ℍ) A δ Θ'' []) (fun _ => ⟨rfl, trivial⟩)
     δ Θ'' c'' Fo.cdepth Fo le_rfl hFS) (fun _ => ⟨rfl, trivial⟩) k' ls _ ρ₃
     (erwp_mono (fun k ls' b ρ' hb => ?_) (opTableN_local _) k' ls _ ρ₃ h2)

@@ -232,13 +232,14 @@ theorem opTableN_le_of_K {T T' : OpTabN} (hT : T.Le T') :
 
 /-! ### Cancel runs -/
 
-/-- **A cancel run caught at `ccatch`, at `erwpK`, the cancel run's table below the handler's**
-(`erwp_ccatchLe`), by induction on the index: the cancel's `raise` answers `()` at the run's own
+/-- **A cancel run caught at `ccatch`, at `erwpK`, the cancel run's table below the handler's, at
+the worlds `Inv` holds at** (`erwp_ccatchLe`), the handler's table closed in the index there, by
+induction on the index: the cancel's `raise` answers `()` at the run's own
 world; a stop of the cancel run passes `ccatch` at the wider entry and the same floor, its
 continuation re-entered at the resumption world. -/
-theorem erwpK_ccatchLe {V : ι → ι → Prop} (hV : ∀ y, V y y) {Φ : ι → LocFam} {Inv : ι → Prop}
+theorem erwpK_ccatchLeI {V : ι → ι → Prop} (hV : ∀ y, V y y) {Φ : ι → LocFam} {Inv : ι → Prop}
     (hΦ : ∀ x, Inv x → (Φ x).Down) {fl : ι → Life} {T Tout : ι → OpTabK ι}
-    (hT : ∀ z, (T z).Le (Tout z)) (hToutD : ∀ z, (Tout z).Down)
+    (hT : ∀ z, (T z).Le (Tout z)) (hToutD : ∀ z, Inv z → (opTableK (fl z) (Tout z)).Down)
     (hInv : ∀ z m i en, Tout z m i = some en → en.abort = false → ∀ f y ρ, en.wk f y ρ → Inv y) :
     ∀ n x, Inv x → ∀ ls e ρ, erwpK (ℍ := ℍ) V Φ (fun z => cancelTabK (fl z) (T z)) (fun _ _ _ _ _ => False)
         x n ls e ρ →
@@ -249,7 +250,7 @@ theorem erwpK_ccatchLe {V : ι → ι → Prop} (hV : ∀ y, V y y) {Φ : ι →
   induction n using Nat.strong_induction_on with
   | _ n ih =>
   intro x hx ls e ρ h
-  have hPD := erwpPostK_down (V := V x) (opTableK_down (lo := fl x) (hToutD x))
+  have hPD := erwpPostK_down (V := V x) (hToutD x hx)
     (Q := fun _ => unitPost) (fun _ => unitPost_down)
   rw [erwpK_eq]
   show rwpG (ℍ := ℍ) (Φ x) _ n ls (ccatchK.plug e) ρ
@@ -301,6 +302,18 @@ theorem erwpK_ccatchLe {V : ι → ι → Prop} (hV : ∀ y, V y y) {Φ : ι →
           final_opPlug (payloadName_opPayload m j w) (by simp [OpFree, Kont.Catches])
         exact rwpG_here hfin (Or.inr (Or.inr ⟨.hole, m, j, w, en',
           pure_sep_mk ⟨rfl, rfl, hTe', hle.2.1 ▸ ha⟩ ⟨τa, τb, hcab, ⟨hle.2.2.1 ▸ hPA, hnA⟩, hnb⟩⟩))
+
+/-- **A cancel run caught at `ccatch`, at `erwpK`, the cancel run's table below the handler's**:
+`erwpK_ccatchLeI` with the handler's table closed in the index at every world. -/
+theorem erwpK_ccatchLe {V : ι → ι → Prop} (hV : ∀ y, V y y) {Φ : ι → LocFam} {Inv : ι → Prop}
+    (hΦ : ∀ x, Inv x → (Φ x).Down) {fl : ι → Life} {T Tout : ι → OpTabK ι}
+    (hT : ∀ z, (T z).Le (Tout z)) (hToutD : ∀ z, (Tout z).Down)
+    (hInv : ∀ z m i en, Tout z m i = some en → en.abort = false → ∀ f y ρ, en.wk f y ρ → Inv y) :
+    ∀ n x, Inv x → ∀ ls e ρ, erwpK (ℍ := ℍ) V Φ (fun z => cancelTabK (fl z) (T z)) (fun _ _ _ _ _ => False)
+        x n ls e ρ →
+      erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (Tout z)) (fun _ => unitPost) x n ls
+        (ccatchE e) ρ :=
+  erwpK_ccatchLeI hV hΦ hT (fun z _ => opTableK_down (hToutD z)) hInv
 
 /-- **A cancel run caught at `ccatch`, at `erwpK`** (`erwp_ccatch`): `erwpK_ccatchLe` at a table
 included in the handler's. -/
@@ -365,17 +378,18 @@ theorem erwpK_kappaC_cancel {V : ι → ι → Prop} {Φ : ι → LocFam} {Tb : 
 /-! ### The handler -/
 
 /-- **A handler at `erwpK`, its clauses asked at the stops up to `N`, each cancel row's table below
-the cancel table** (`erwp_handle_le` with `OpTabK.Le`), by induction on the index. A clause at the handler's name receives the stopped run's Kripke stop
+the cancel table, at the worlds `Inv` holds at** (`erwp_handle_le` with `OpTabK.Le`), the tables
+closed in the index there, by induction on the index. A clause at the handler's name receives the stopped run's Kripke stop
 (`KapRelK`) at the floor the stop chose, owed at every world the entry allows there; it is read
 at the clause's own world. A value of the handled run is posted at a world the post order allows;
 the return clause runs there. The table of the handled run and the handler's agree off the
 handler's name (`hTin`), and the post order allows no more stops of the handler's table
 (`hTV`). -/
-theorem erwpK_handleLe_le {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z → V x z)
+theorem erwpK_handleLe_leI {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z → V x z)
     {Φ : ι → LocFam} {Inv : ι → Prop} (hΦ : ∀ x, Inv x → (Φ x).Down)
     (hΦV : ∀ x y, V x y → Φ y = Φ x) {fl : ι → Life}
-    (N : Nat) (Tin Tout : ι → OpTabK ι) (hTinD : ∀ x, (Tin x).Down)
-    (hTout : ∀ x, (Tout x).Down)
+    (N : Nat) (Tin Tout : ι → OpTabK ι) (hTinD : ∀ x, Inv x → (Tin x).DownAt Inv)
+    (hTout : ∀ x, Inv x → (opTableK (fl x) (Tout x)).Down)
     (hTV : ∀ x y, V x y → (opTableK (fl y) (Tout y)).Le (opTableK (fl x) (Tout x)))
     (n₀ : UInt32) (hTin : ∀ x m i, m ≠ n₀ → Tin x m i = Tout x m i) (qs hr hs : Val)
     (Qin Qout : ι → PostN) (hQout : ∀ x, (Qout x).Down)
@@ -388,7 +402,8 @@ theorem erwpK_handleLe_le {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V
     (hTc : ∀ x i en, Tin x n₀ i = some en → en.abort = false → en.q ≠ .lin → ∀ Tk,
       Tc i = some Tk → ∃ T₁ : ι → OpTabK ι,
         en.fin = some (fun y k ls e => erwpK (ℍ := ℍ) V Φ (fun z => cancelTabK (fl z) (T₁ z))
-          (fun _ _ _ _ _ => False) y k ls e) ∧ (∀ z, (T₁ z).Le (Tk z)) ∧ ∀ z, (Tk z).Down)
+          (fun _ _ _ _ _ => False) y k ls e) ∧ (∀ z, (T₁ z).Le (Tk z)) ∧
+          ∀ z, Inv z → (opTableK (fl z) (Tk z)).Down)
     (hVr : ∀ y, V y y)
     (hInvW : ∀ x m i en, Tin x m i = some en → en.abort = false → ∀ f y ρ, en.wk f y ρ → Inv y)
     (hInvC : ∀ i Tk, Tc i = some Tk → ∀ z m j en, Tk z m j = some en → en.abort = false →
@@ -411,12 +426,12 @@ theorem erwpK_handleLe_le {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V
         (hndE (hndVal n₀ qs hr hs) e) ρ := by
   have hLin : ∀ z, (opTableK (fl z) (Tin z)).Local := fun z => opTableK_local _ _
   have hLout : ∀ z, (opTableK (fl z) (Tout z)).Local := fun z => opTableK_local _ _
-  have hDout : ∀ z, (opTableK (fl z) (Tout z)).Down := fun z => opTableK_down (hTout z)
+  have hDout : ∀ z, Inv z → (opTableK (fl z) (Tout z)).Down := hTout
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
   intro hnN x hx ls e ρ h
-  have hPD := erwpPostK_down (V := V x) (hDout x) hQout
+  have hPD := erwpPostK_down (V := V x) (hDout x hx) hQout
   set H := hndVal n₀ qs hr hs with hH
   rw [erwpK_eq]
   show rwpG (ℍ := ℍ) (Φ x) _ n ls ((hndK H).plug e) ρ
@@ -453,13 +468,13 @@ theorem erwpK_handleLe_le {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V
         intro y hyI ρ' ls'' _ hco hq' Tk hTk k'' hk''
         obtain ⟨T₁, hfn, hsub, hTkD⟩ := hTc x i en hT ha hq' Tk hTk
         have hP := hco hq' _ hfn
-        exact erwpK_ccatchLe hVr hΦ hsub hTkD (hInvC i Tk hTk) k'' y hyI ls'' _ ρ'
-          ((hTinD x).fin_le hT hfn hk'' hP)
-      have hDk : ∀ Tk : ι → OpTabK ι, Tc i = some Tk → en.q ≠ .lin → ∀ z,
+        exact erwpK_ccatchLeI hVr hΦ hsub hTkD (hInvC i Tk hTk) k'' y hyI ls'' _ ρ'
+          ((hTinD x hx).fin_le hT hfn hyI hk'' hP)
+      have hDk : ∀ Tk : ι → OpTabK ι, Tc i = some Tk → en.q ≠ .lin → ∀ z, Inv z →
           (opTableK (fl z) (Tk z)).Down := by
-        intro Tk hTk hq' z
+        intro Tk hTk hq' z hz
         obtain ⟨-, -, -, hTkD⟩ := hTc x i en hT ha hq' Tk hTk
-        exact opTableK_down (hTkD z)
+        exact hTkD z hz
       rw [hq x i en hT ha, kappaAt_tag]
       cases hqq : en.q with
       | unr =>
@@ -471,19 +486,19 @@ theorem erwpK_handleLe_le {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V
           · have h₁ := hcontIH y hyI k' hk' _ _ _
               ((hcont y hy ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ)
             simp only [erwpCK, show k' < n by omega, if_true] at h₁
-            exact erwpK_kappa_resume (hΦ y hyI) (hDout y) hQout H K₁ w h₁
-          · exact erwpK_kappa_cancel (hΦ y hyI) (hDk Tk hTk hq' y) (fun _ => unitPost_down) H K₁
+            exact erwpK_kappa_resume (hΦ y hyI) (hDout y hyI) hQout H K₁ w h₁
+          · exact erwpK_kappa_cancel (hΦ y hyI) (hDk Tk hTk hq' y hyI) (fun _ => unitPost_down) H K₁
               (hcan y hyI ρk ls'' he (hcont y hy ls'' he).2 hq' Tk hTk k' (by omega))
       | lin | cancel =>
           -- the cell is allocated, one step; `κ` is `kappaC` at it, owning the cell and the share
-          refine erwpK_unfold_at hLout hk (erwpK_kappaCellV hLout (hΦ x hx) (hDout x) hQout _ H K₁
+          refine erwpK_unfold_at hLout hk (erwpK_kappaCellV hLout (hΦ x hx) (hDout x hx) hQout _ H K₁
             (.appR (.val c) (.pairR v .hole)) (fun ℓ σ₁ σ₂ hcell hc₂ hv₂ => ?_))
           obtain ⟨y₀, hy₁, hy₂⟩ := compS_reassoc hcak hc₂
           have hvy : ResU.Valid y₀ := (ResU.Valid.split hy₂ hv₂).2
           have hA' : en.PA (k - 1) ls' v ρa := by
             cases k with
             | zero => exact hA
-            | succ k₀ => exact (hTinD x).pa _ _ _ hT _ _ _ _ hA
+            | succ k₀ => exact (hTinD x hx).pa _ _ _ hT _ _ _ _ hA
           refine hna ha (k - 1) (by omega) ls' v ⟨_, isVal_kappaC _ ℓ H K₁⟩ σ₂
             ⟨ρa, y₀, hy₂, hA', fun hq' => absurd (hqq.symm.trans hq') (by simp), f, hf, ?_⟩
           intro y hy ls'' he k' hk'
@@ -495,13 +510,13 @@ theorem erwpK_handleLe_le {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V
             have h₁ := hcontIH y hyI k' (by omega) _ _ _
               ((hcont y hyk ls'' hek).1 k' (by omega) w τ₁ z hB hz)
             simp only [erwpCK, show k' < n by omega, if_true] at h₁
-            exact erwpK_kappaC_resume hLout (hΦ y hyI) (hDout y) hQout _ ℓ H K₁ w
+            exact erwpK_kappaC_resume hLout (hΦ y hyI) (hDout y hyI) hQout _ ℓ H K₁ w
               ⟨σ₁, z, ResU.CompS.comm hzτ, hcell,
-                erwpK_le (hΦ y hyI) hLout (hDout y) hQout (Nat.sub_le k' 1) h₁⟩
+                erwpK_le (hΦ y hyI) hLout (hDout y hyI) hQout (Nat.sub_le k' 1) h₁⟩
           · first
               | exact absurd hqq hq'
               | exact erwpK_kappaC_cancel (fun z => opTableK_local _ _) (hΦ y hyI)
-                  (hDk Tk hTk hq' y)
+                  (hDk Tk hTk hq' y hyI)
                   (fun _ => unitPost_down) ℓ H K₁ ⟨σ₁, ρk, ResU.CompS.comm hy₁, hcell,
                     hcan y hyI ρk ls'' hek (hcont y hyk ls'' hek).2 hq' Tk hTk (k' - 1)
                       (by omega)⟩
@@ -546,13 +561,102 @@ theorem erwpK_handleLe_le {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V
         ⟨(hndK H).comp K₁, m, i, v, en, pure_sep_mk ⟨rfl, hKo, (hTin x m i hm) ▸ hT, ha⟩
           ⟨ρa, ρn, hcan, ⟨hPA, hnA⟩, hnn⟩⟩))
 
+/-- **A handler at `erwpK`, its clauses asked at the stops up to `N`, each cancel row's table below
+the cancel table** (`erwp_handle_le` with `OpTabK.Le`): `erwpK_handleLe_leI` with the tables closed
+in the index at every world. -/
+theorem erwpK_handleLe_le {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z → V x z)
+    {Φ : ι → LocFam} {Inv : ι → Prop} (hΦ : ∀ x, Inv x → (Φ x).Down)
+    (hΦV : ∀ x y, V x y → Φ y = Φ x) {fl : ι → Life}
+    (N : Nat) (Tin Tout : ι → OpTabK ι) (hTinD : ∀ x, (Tin x).Down)
+    (hTout : ∀ x, (Tout x).Down)
+    (hTV : ∀ x y, V x y → (opTableK (fl y) (Tout y)).Le (opTableK (fl x) (Tout x)))
+    (n₀ : UInt32) (hTin : ∀ x m i, m ≠ n₀ → Tin x m i = Tout x m i) (qs hr hs : Val)
+    (Qin Qout : ι → PostN) (hQout : ∀ x, (Qout x).Down)
+    (hq : ∀ x i en, Tin x n₀ i = some en → en.abort = false → capTag qs.1 i.toNat = en.q.tag)
+    (hwcl : ∀ x m i en, Tin x m i = some en → ∀ ls ls' (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
+      en.wc ls ls' ρ → en.wc ls ls' ρ₁)
+    (hwk : ∀ x i en, Tin x n₀ i = some en → en.abort = false → ∀ f y (ρ₁ ρ₂ ρ : WRes),
+      ResU.CompS ρ₁ ρ₂ ρ → ResU.Valid ρ → en.wk f y ρ → en.wk f y ρ₁)
+    (Tc : UInt32 → Option (ι → OpTabK ι))
+    (hTc : ∀ x i en, Tin x n₀ i = some en → en.abort = false → en.q ≠ .lin → ∀ Tk,
+      Tc i = some Tk → ∃ T₁ : ι → OpTabK ι,
+        en.fin = some (fun y k ls e => erwpK (ℍ := ℍ) V Φ (fun z => cancelTabK (fl z) (T₁ z))
+          (fun _ _ _ _ _ => False) y k ls e) ∧ (∀ z, (T₁ z).Le (Tk z)) ∧ ∀ z, (Tk z).Down)
+    (hVr : ∀ y, V y y)
+    (hInvW : ∀ x m i en, Tin x m i = some en → en.abort = false → ∀ f y ρ, en.wk f y ρ → Inv y)
+    (hInvC : ∀ i Tk, Tc i = some Tk → ∀ z m j en, Tk z m j = some en → en.abort = false →
+      ∀ f y ρ, en.wk f y ρ → Inv y)
+    (hret : ∀ x k, k ≤ N → ∀ ls v ρ, Qin x k ls v ρ →
+      erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (Tout z)) Qout x k ls
+        (.app (.val hr) (.val v)) ρ)
+    (hop : ∀ x i en, Tin x n₀ i = some en → ∃ c, clauseAt hs.1 i.toNat = some c ∧
+      (en.abort = false → ∀ k, k ≤ N → ∀ ls v (κ : Val) ρ,
+        (en.PA k ls v ⋆ KapRelK (ℍ := ℍ) V Φ fl (fun z => opTableK (fl z) (Tout z)) Qout en
+          (fl x) (Tc i) k ls κ) ρ →
+        erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (Tout z)) Qout x k ls
+          (.app (.val c) (.pair (.val v) κ.1)) ρ) ∧
+      (en.abort = true → ∀ k, k ≤ N → ∀ ls v ρ, en.PA k ls v ρ →
+        erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (Tout z)) Qout x k ls
+          (.app (.val c) (.val v)) ρ)) :
+    ∀ n, n ≤ N → ∀ x, Inv x → ∀ ls e ρ,
+      erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (Tin z)) Qin x n ls e ρ →
+      erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (Tout z)) Qout x n ls
+        (hndE (hndVal n₀ qs hr hs) e) ρ :=
+  erwpK_handleLe_leI hVt hΦ hΦV N Tin Tout (fun x _ => (hTinD x).downAt Inv)
+    (fun x _ => opTableK_down (hTout x)) hTV n₀ hTin qs hr hs Qin Qout hQout hq hwcl hwk Tc
+    (fun x i en hT ha hq' Tk hTk => by
+      obtain ⟨T₁, hf, hsub, hTkD⟩ := hTc x i en hT ha hq' Tk hTk
+      exact ⟨T₁, hf, hsub, fun z _ => opTableK_down (hTkD z)⟩) hVr hInvW hInvC hret hop
+
+/-- **A handler at `erwpK`, its clauses asked at the stops up to `N`, at the worlds `Inv` holds
+at** (`erwp_handle_le`): `erwpK_handleLe_leI` at cancel tables included in the handler's, the
+tables closed in the index at the worlds `Inv` holds at. -/
+theorem erwpK_handle_leI {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z → V x z)
+    {Φ : ι → LocFam} {Inv : ι → Prop} (hΦ : ∀ x, Inv x → (Φ x).Down)
+    (hΦV : ∀ x y, V x y → Φ y = Φ x) {fl : ι → Life}
+    (N : Nat) (Tin Tout : ι → OpTabK ι) (hTinD : ∀ x, Inv x → (Tin x).DownAt Inv)
+    (hTout : ∀ x, Inv x → (opTableK (fl x) (Tout x)).Down)
+    (hTV : ∀ x y, V x y → (opTableK (fl y) (Tout y)).Le (opTableK (fl x) (Tout x)))
+    (n₀ : UInt32) (hTin : ∀ x m i, m ≠ n₀ → Tin x m i = Tout x m i) (qs hr hs : Val)
+    (Qin Qout : ι → PostN) (hQout : ∀ x, (Qout x).Down)
+    (hq : ∀ x i en, Tin x n₀ i = some en → en.abort = false → capTag qs.1 i.toNat = en.q.tag)
+    (hwcl : ∀ x m i en, Tin x m i = some en → ∀ ls ls' (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
+      en.wc ls ls' ρ → en.wc ls ls' ρ₁)
+    (hwk : ∀ x i en, Tin x n₀ i = some en → en.abort = false → ∀ f y (ρ₁ ρ₂ ρ : WRes),
+      ResU.CompS ρ₁ ρ₂ ρ → ResU.Valid ρ → en.wk f y ρ → en.wk f y ρ₁)
+    (Tc : UInt32 → Option (ι → OpTabK ι))
+    (hTc : ∀ x i en, Tin x n₀ i = some en → en.abort = false → en.q ≠ .lin → ∀ Tk,
+      Tc i = some Tk → ∃ T₁ : ι → OpTabK ι,
+        en.fin = some (fun y k ls e => erwpK (ℍ := ℍ) V Φ (fun z => cancelTabK (fl z) (T₁ z))
+          (fun _ _ _ _ _ => False) y k ls e) ∧ (∀ z, (T₁ z).Sub (Tk z)) ∧
+          ∀ z, Inv z → (opTableK (fl z) (Tk z)).Down)
+    (hVr : ∀ y, V y y)
+    (hInvW : ∀ x m i en, Tin x m i = some en → en.abort = false → ∀ f y ρ, en.wk f y ρ → Inv y)
+    (hInvC : ∀ i Tk, Tc i = some Tk → ∀ z m j en, Tk z m j = some en → en.abort = false →
+      ∀ f y ρ, en.wk f y ρ → Inv y)
+    (hret : ∀ x k, k ≤ N → ∀ ls v ρ, Qin x k ls v ρ →
+      erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (Tout z)) Qout x k ls
+        (.app (.val hr) (.val v)) ρ)
+    (hop : ∀ x i en, Tin x n₀ i = some en → ∃ c, clauseAt hs.1 i.toNat = some c ∧
+      (en.abort = false → ∀ k, k ≤ N → ∀ ls v (κ : Val) ρ,
+        (en.PA k ls v ⋆ KapRelK (ℍ := ℍ) V Φ fl (fun z => opTableK (fl z) (Tout z)) Qout en
+          (fl x) (Tc i) k ls κ) ρ →
+        erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (Tout z)) Qout x k ls
+          (.app (.val c) (.pair (.val v) κ.1)) ρ) ∧
+      (en.abort = true → ∀ k, k ≤ N → ∀ ls v ρ, en.PA k ls v ρ →
+        erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (Tout z)) Qout x k ls
+          (.app (.val c) (.val v)) ρ)) :
+    ∀ n, n ≤ N → ∀ x, Inv x → ∀ ls e ρ,
+      erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (Tin z)) Qin x n ls e ρ →
+      erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (Tout z)) Qout x n ls
+        (hndE (hndVal n₀ qs hr hs) e) ρ :=
+  erwpK_handleLe_leI hVt hΦ hΦV N Tin Tout hTinD hTout hTV n₀ hTin qs hr hs Qin Qout hQout hq hwcl
+    hwk Tc (fun x i en hT ha hq' Tk hTk => by
+      obtain ⟨T₁, hf, hsub, hTkD⟩ := hTc x i en hT ha hq' Tk hTk
+      exact ⟨T₁, hf, fun z => (hsub z).le, hTkD⟩) hVr hInvW hInvC hret hop
+
 /-- **A handler at `erwpK`, its clauses asked at the stops up to `N`** (`erwp_handle_le`):
-`erwpK_handleLe_le` at cancel tables included in the handler's. By induction on the index. A clause at the handler's name receives the stopped run's Kripke stop
-(`KapRelK`) at the floor the stop chose, owed at every world the entry allows there; it is read
-at the clause's own world. A value of the handled run is posted at a world the post order allows;
-the return clause runs there. The table of the handled run and the handler's agree off the
-handler's name (`hTin`), and the post order allows no more stops of the handler's table
-(`hTV`). -/
+`erwpK_handle_leI` with the tables closed in the index at every world. -/
 theorem erwpK_handle_le {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z → V x z)
     {Φ : ι → LocFam} {Inv : ι → Prop} (hΦ : ∀ x, Inv x → (Φ x).Down)
     (hΦV : ∀ x y, V x y → Φ y = Φ x) {fl : ι → Life}
@@ -591,10 +695,11 @@ theorem erwpK_handle_le {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y
       erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (Tin z)) Qin x n ls e ρ →
       erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (Tout z)) Qout x n ls
         (hndE (hndVal n₀ qs hr hs) e) ρ :=
-  erwpK_handleLe_le hVt hΦ hΦV N Tin Tout hTinD hTout hTV n₀ hTin qs hr hs Qin Qout hQout hq hwcl
-    hwk Tc (fun x i en hT ha hq' Tk hTk => by
+  erwpK_handle_leI hVt hΦ hΦV N Tin Tout (fun x _ => (hTinD x).downAt Inv)
+    (fun x _ => opTableK_down (hTout x)) hTV n₀ hTin qs hr hs Qin Qout hQout hq hwcl hwk Tc
+    (fun x i en hT ha hq' Tk hTk => by
       obtain ⟨T₁, hf, hsub, hTkD⟩ := hTc x i en hT ha hq' Tk hTk
-      exact ⟨T₁, hf, fun z => (hsub z).le, hTkD⟩) hVr hInvW hInvC hret hop
+      exact ⟨T₁, hf, hsub, fun z _ => opTableK_down (hTkD z)⟩) hVr hInvW hInvC hret hop
 
 /-- **A handler at `erwpK`** (`erwp_handle`): `erwpK_handle_le` at `N = n`. -/
 theorem erwpK_handle {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z → V x z)

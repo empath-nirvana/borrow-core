@@ -1460,7 +1460,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_extA₀
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vN_local₀
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vN_fam_down₀
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claim
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claim₀
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_lendOKCR
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vN_outlives₀
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_effOf₀
@@ -1569,7 +1569,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_claimX
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_ubind_cancelRunCR
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_ubindClaimRT
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor2S_compat
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor2S_compat₀
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_w2
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.consistentX_get
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.consistentX_left
@@ -2686,3 +2686,16 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fundamentalN_all
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fundamentalN_of
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.goal791SchedN_of_missing
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_ccatchLeI
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_handleLe_leI
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_handle_leI
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_ubind_cancelRunCRI
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_ubindClaimRTI
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_cancelRun_claimXK
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_claimXK
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.tabRWK_ubindCan
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_ubindClaimRWK
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.tabNK_flr_comap
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_flr
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claim
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor2S_compat

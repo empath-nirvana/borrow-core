@@ -18,7 +18,7 @@ on the index, each case the existing one:
   twin table `T′`, its raises carrying the claim (`opTableR`).
 
 The lender's cancel obligations, the finaliser frame and the compatibility of `withbor (2)` at a
-suspending row (`withbor2S_compat`) are in `Core/Chain/Cancel791N.lean`, where each cancel run
+suspending row (`withbor2S_compat₀`) are in `Core/Chain/Cancel791N.lean`, where each cancel run
 runs at its own cancel row's table.
 -/
 
@@ -277,7 +277,7 @@ theorem tabN_lendOKCR {x : LifeVar} {bnd : Lifetime.Life} {α : Life} {S : Row}
 
 /-- The finaliser `λ_. d ℓ` consumes the lend's claim: `d`'s judgment at `Ref A ⊸ 1`, applied to
 the cell owned again with its content in `A`'s family. -/
-theorem fin_claim {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
+theorem fin_claim₀ {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
     (hd : SemJN₀ (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) {δ δ' : LSub}
     (hδ : vN₀ (ℍ := ℍ) A δ' = vN₀ (ℍ := ℍ) A δ) {Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {l : Loc} {α : Life} {k : Nat} {ls : List SRec} {ρ : WRes}

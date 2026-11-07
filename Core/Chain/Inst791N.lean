@@ -3,7 +3,7 @@ import Core.Chain.Field791N
 /-!
 # #791: the compatibility lemmas' hypotheses discharged  `[spec §62]`
 
-`withbor2S_compat`, `withbor3S_compat` and `withborFS_compat` take the finaliser's semantic
+`withbor2S_compat₀`, `withbor3S_compat` and `withborFS_compat` take the finaliser's semantic
 judgment `hd` beside `Const791.OK`'s clauses. Here each is instantiated with every hypothesis
 discharged, so none of them is vacuous:
 
@@ -92,12 +92,12 @@ theorem dFree_sem :
 
 /-! ### The constants at the hardest case's row -/
 
-/-- **`withbor (2)` at the hardest case's row**, every hypothesis of `withbor2S_compat`
+/-- **`withbor (2)` at the hardest case's row**, every hypothesis of `withbor2S_compat₀`
 discharged: `Ref 1` lent at the bound `LifeCtx.empty.meetOfDom`, finalised by `dFree`. -/
 theorem withbor2S_inst (x : LifeVar) (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN₀ (ℍ := ℍ) (.bang (withbor2UTy x LifeCtx.empty.meetOfDom .unit .unit hardestRow)) δ Θ n
       (withborUV dFree) PMap.empty :=
-  withbor2S_compat defines_meetOfDom_empty
+  withbor2S_compat₀ defines_meetOfDom_empty
     ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id (hardestRow_suspend x _) dFree_closed dFree_sem δ Θ n
 
 /-- **`withbor (3)` at the hardest case's row**, every hypothesis of `withbor3S_compat`
@@ -203,7 +203,7 @@ theorem wF_ok (a : Lifetime.Life) (x : LifeVar) :
 /-- **`withbor (2)` applied to a cell and to `cbPerform`**: at the one-operation row
 `[linSig n i]`, `withborU dFree ℓ cbPerform` runs at `F_Σ(Ref 1 ⊗ 1)` from `ℓ ↦ own(())`. The
 callback stops at the must-resume operation with the borrow of `ℓ` in the continuation's share
-(`cbPerform_sem`); `withbor2S_compat` gives the rest. -/
+(`cbPerform_sem`); `withbor2S_compat₀` gives the rest. -/
 theorem withbor2S_perform (x : LifeVar) {n i : UInt32} (hn : n ≠ 0) (δ : LSub) (Θ : LocTy)
     (hOK : Θ.OK) (c : Loc → Option Life) (k : Nat) (ls : List SRec) (l : Loc) :
     cN₀ (ℍ := ℍ) (CTy.effOf [linSig n i] (.tensor (.ref .unit) .unit)) δ Θ c k ls
@@ -213,7 +213,7 @@ theorem withbor2S_perform (x : LifeVar) {n i : UInt32} (hn : n ≠ 0) (δ : LSub
     consistentX_of_top (ResU.inStratum_single_own _ l Val.unit) c
   have hv : vN₀ (ℍ := ℍ) (.ref .unit) δ Θ k (Val.loc l) (ResU.single l (CellU.ownOf Val.unit)) :=
     ⟨l, Val.unit, PMap.empty, rfl, ResU.comp_empty_right _, rfl, rfl⟩
-  have h := (withbor2S_compat (ℍ := ℍ) (A := .unit) (B := .unit) defines_meetOfDom_empty ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩
+  have h := (withbor2S_compat₀ (ℍ := ℍ) (A := .unit) (B := .unit) defines_meetOfDom_empty ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩
     id id (linSig_suspend (i := i) hn x _) dFree_closed dFree_sem δ Θ k).2 Θ (LocTy.extR_refl _ _) hOK c
     (consistentX_empty c) ls
   have h2 := h c k le_rfl (Val.loc l) _ _ (compS_empty_left _) hv hcon

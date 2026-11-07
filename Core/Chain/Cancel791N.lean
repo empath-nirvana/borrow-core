@@ -21,7 +21,7 @@ own cancel row's table.
   at `cancelTabN (tabN₀ …)`: `D` consumes the claim at the cancel's `raise`, with or without an
   error payload; a nested cancel run passes the frame by the same lemma one level down.
 * `erwp_ubindClaimRT`: the finaliser frame around a body at `opTableR (tabR …)`.
-* `withbor2S_compat`: the suspending lend, its premises those of the rule.
+* `withbor2S_compat₀`: the suspending lend, its premises those of the rule.
 -/
 
 noncomputable section
@@ -486,7 +486,7 @@ theorem errOkN_tabN_le {F : CTy} {δ : LSub} {Θ : LocTy} {c : Loc → Option Li
 /-! ### The claim with the view's consistency -/
 
 /-- **The claim, consistent with the view.** The finaliser consumes the claim by `d`'s judgment,
-whose argument clause reads a view consistent with the argument (`fin_claim`). -/
+whose argument clause reads a view consistent with the argument (`fin_claim₀`). -/
 def claimX (R : Nat → WProp) (c : Loc → Option Life) : Nat → WProp :=
   fun k ρ => R k ρ ∧ ConsistentX c ρ
 
@@ -775,7 +775,7 @@ theorem erwp_ubindClaimRT {Θ : LocTy} (hΘ : Θ.Down) {c : Loc → Option Life}
 /-! ### The suspending lend -/
 
 /-- A row's table does not read its base. -/
-theorem tabN_effOf_base (S : Row) (R₁ R₂ : VTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) :
+theorem tabN_effOf_base₀ (S : Row) (R₁ R₂ : VTy) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) :
     tabN₀ (ℍ := ℍ) (CTy.effOf S R₁) δ Θ c = tabN₀ (ℍ := ℍ) (CTy.effOf S R₂) δ Θ c := by
   induction S with
   | nil => rfl
@@ -807,14 +807,14 @@ the relation's `Φ[ℓ ↦ (α, …)]` (`LocTy.view_add`), from the borrow (`len
 outliving the bound, `vN_add_eq_bnd₀`); its raises end at the lend's claim, and its cancel runs,
 each at its cancel row's own table, end there too (`tabR_can`); the claim is consistent with `c`
 (`erwp_claimX`); the finaliser frame `then b. (ℓ, b) unwind d ℓ` consumes it with `d`
-(`erwp_ubindClaimRT`, `fin_claim`). The callback's result `['x] B` returns to the world without
+(`erwp_ubindClaimRT`, `fin_claim₀`). The callback's result `['x] B` returns to the world without
 the lend by `vN_local₀`.
 
 Premises, and the rule that supplies each: `hbnd` is the bound's definedness, which Core's rule
 gets from its bound `Δ.meetOfDom` (`Const791.OK`); `hO`, `hA`, `hB`, `hS`, `hdc` are `withbor2U`'s with
 `Row.Suspend` for `Row.Unwind` (`Const791.OK`); `hd` is the fundamental property at `d`'s
 derivation, the premise `CDerives Δ Γ d (Ref A ⊸ 1)` read semantically. -/
-theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
+theorem withbor2S_compat₀ {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
     (hbnd : LifeCtx.empty.Defines bnd) (hO : ∃ b, LifeCtx.empty.Defines b ∧ VOutlivesLe LifeCtx.empty b A)
     (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hS : S.Suspend x bnd) (hdc : closedAt 0 d = true)
     (hd : SemJN₀ (ℍ := ℍ) LifeCtx.empty [] d (.val (.lolli (.ref A) .unit))) (δ : LSub)
@@ -888,7 +888,7 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
   set Rc := claimR l α Fam with hRc
   have hFS : Fo.SuspendC x bnd := suspendC_effOf hS _
   have hbase : tabN₀ (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c' =
-      tabN₀ (ℍ := ℍ) Fo δ' Θ' c' := tabN_effOf_base S _ _ δ' Θ' c'
+      tabN₀ (ℍ := ℍ) Fo δ' Θ' c' := tabN_effOf_base₀ S _ _ δ' Θ' c'
   have hTw : (tabN₀ (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c').Twin
       (tabR (ℍ := ℍ) Rc Fo δ Θ c) := by
     rw [hbase]
@@ -906,7 +906,7 @@ theorem withbor2S_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : Ro
       (fun m i en h _ => by obtain ⟨o, ho, rfl, -⟩ := tabN_effOf_some h; exact (hS o ho).2.1)
       (NFv l) (DFv d l) (fun k ls ρ hR => ?_) hQo (fun k ls b ρ hq => ?_) k' ls _ ρ'' hM'
     · obtain ⟨⟨w, σ, hσ, hF, hclm⟩, hcR⟩ := hR
-      exact fin_claim hdc hd hAδ hΘ ⟨w, σ, hσ, (vN_above₀ A δ' Θ hσ).mp hF, hclm⟩ hcR
+      exact fin_claim₀ hdc hd hAδ hΘ ⟨w, σ, hσ, (vN_above₀ A δ' Θ hσ).mp hF, hclm⟩ hcR
     · refine erwp_det hΦ (opTableN_down hTd) hQo
         (fun μ => step1Only_plug (Head.beta μ _ b) rfl .hole) ?_
       simp [Kont.plug, Expr.subst, NFv]
@@ -943,7 +943,7 @@ theorem constN_w2 (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime
   rintro ⟨hbnd, hO, hA, hB, hS, hdc, hder⟩ δ Θ n _
   have hL : (VTy.ref A).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, withbor2UTy, withborUTy, VTy.inFrag, CTy.inFrag]
-  exact withbor2S_compat hbnd hO hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
+  exact withbor2S_compat₀ hbnd hO hA hB hS hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ Θ n
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

@@ -669,7 +669,7 @@ theorem erwp_claimX_abort {Θ : LocTy} {c : Loc → Option Life} {T : OpTabN}
 
 /-- **`withbor (2)` at an unwinding row is a value of its type**: `withborU d` at
 `Ref A ⊸ (∀'x ⊏ @Δ. Mut 'x A ⊸ F_Σ(['x] B)) ⊸ F_Σ(Ref A ⊗ B)`, `Σ` a `Row.Unwind x` row. Core's
-`withbor2U_compatX`, step by step, as `withbor2S_compat` with the bound `Δ.meetOfDom` defined at
+`withbor2U_compatX`, step by step, as `withbor2S_compat₀` with the bound `Δ.meetOfDom` defined at
 `δ ⊨ Δ` and the row's table abortive: the lend at a lifetime fresh for the world, below the bound,
 `[TR]` 6.60's stratum at the side condition `Δ ⊢ A ⊒ @b` and the callback's; the callback at the
 world with the lend (`LocTy.view_add`); the Mut Frame across the row's raises (`erwp_M_frameR`,

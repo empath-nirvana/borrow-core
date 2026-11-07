@@ -63,6 +63,25 @@ theorem opTableRK_local (lo : Life) (T : OpTabK ι) (R : Nat → WProp) :
   · exact Or.inl (performStopK_localK lo T k ls t Ψ Ψ' ρ hΨ h)
   · exact Or.inr h
 
+/-- **`OpTabK.Down` with the cancel obligations closed at the worlds `Inv` holds at**: payloads
+downward closed; cancel obligations downward closed at every world `Inv` holds at. -/
+structure OpTabK.DownAt (Inv : ι → Prop) (T : OpTabK ι) : Prop where
+  pa : ∀ n i en, T n i = some en → ∀ k ls v ρ, en.PA (k + 1) ls v ρ → en.PA k ls v ρ
+  fin : ∀ n i en P, T n i = some en → en.fin = some P → ∀ y, Inv y → ∀ k ls e ρ,
+    P y (k + 1) ls e ρ → P y k ls e ρ
+
+theorem OpTabK.Down.downAt {T : OpTabK ι} (h : T.Down) (Inv : ι → Prop) : T.DownAt Inv :=
+  ⟨h.pa, fun n i en P hT hP y _ => h.fin n i en P hT hP y⟩
+
+/-- A cancel obligation read lower, at a world `Inv` holds at. -/
+theorem OpTabK.DownAt.fin_le {Inv : ι → Prop} {T : OpTabK ι} (hT : T.DownAt Inv) {n i : UInt32}
+    {en : OpEntK ι} (hn : T n i = some en) {P : ι → Nat → List SRec → Expr → WProp}
+    (hP : en.fin = some P) {y : ι} (hy : Inv y) {m k : Nat} (h : m ≤ k) {ls : List SRec}
+    {e : Expr} {ρ : WRes} (hk : P y k ls e ρ) : P y m ls e ρ := by
+  induction h with
+  | refl => exact hk
+  | step _ ih => exact ih (hT.fin _ _ _ _ hn hP _ hy _ _ _ _ hk)
+
 /-- `cancelTabN_down` over a world index. -/
 theorem cancelTabK_down {lo : Life} {T : OpTabK ι} (hT : T.Down) : (cancelTabK lo T).Down := by
   intro k ls t Ψ ρ h
@@ -1192,38 +1211,43 @@ theorem errOkK_le {T : OpTabK ι}
       obtain ⟨⟨hE, hTe, ha⟩, hPA, hn⟩ := pure_sep_iff.mp he
       exact ⟨m, j, w, en, pure_sep_mk ⟨hE, hTe, ha⟩ ⟨hPAle m j en hTe ha _ _ _ _ _ _ hk hPA, hn⟩⟩
 
-/-- **The finaliser frame over a cancel run that stops, at `erwpK`** (`erwp_ubind_cancelRunCR`).
+/-- **The finaliser frame over a cancel run that stops, at `erwpK`, at the worlds `Inv` holds at**
+(`erwp_ubind_cancelRunCR`), its claim read at a world.
 The cancel run's table `Ti` is the outer `To` but for the cancel obligations; at the cancel's
 `raise`, `D` consumes `R` beside the error payload and `[cfin-ret]` re-raises; a cancellable stop's
-cancel run passes the frame by `hcan`, read at the resumption world. -/
-theorem erwpK_ubind_cancelRunCR {V : ι → ι → Prop} {Φ : ι → LocFam} (hΦ : ∀ x, (Φ x).Down)
-    {fl : ι → Life} {Ti To : ι → OpTabK ι} (hToD : ∀ x, (To x).Down)
+cancel run passes the frame by `hcan`, read at the resumption world. Every world a stop at a floor
+no higher than the run's own is resumed at is one `Inv` holds at (`hInvW`). -/
+theorem erwpK_ubind_cancelRunCRI {V : ι → ι → Prop} {Φ : ι → LocFam} {Inv : ι → Prop}
+    (hΦ : ∀ x, Inv x → (Φ x).Down)
+    {fl : ι → Life} {Ti To : ι → OpTabK ι} (hToD : ∀ x, Inv x → (cancelTabK (fl x) (To x)).Down)
     (hTw : ∀ x m i en, Ti x m i = some en → ∃ en', To x m i = some en' ∧ en'.q = en.q ∧
       en'.abort = en.abort ∧ en'.PA = en.PA ∧ en'.PB = en.PB ∧ en'.wc = en.wc ∧ en'.wk = en.wk)
     (hPAle : ∀ x m i en, To x m i = some en → en.abort = true → ∀ k k' ls ls' v ρ, k' ≤ k →
       en.PA k ls v ρ → en.PA k' ls' v ρ)
-    {R : Nat → WProp} (N D : Val)
-    (hcan : ∀ x m i en en', Ti x m i = some en → To x m i = some en' → en.q ≠ .lin →
-      ∀ y k ls (K₁ : Kont) ρ, cancelOKK en y k ls K₁ ρ →
+    {R : ι → Nat → WProp} (N D : Val)
+    (hInvW : ∀ x, Inv x → ∀ m i en, Ti x m i = some en → en.abort = false → ∀ f, f ≤ fl x →
+      ∀ y ρ, en.wk f y ρ → Inv y)
+    (hcan : ∀ x, Inv x → ∀ m i en en', Ti x m i = some en → To x m i = some en' → en.q ≠ .lin →
+      ∀ y, Inv y → ∀ k ls (K₁ : Kont) ρ, cancelOKK en y k ls K₁ ρ →
         cancelOKK en' y k ls ((ubK N D).comp K₁) ρ)
-    (hD : ∀ x k ls ρ, R k ρ →
+    (hD : ∀ x, Inv x → ∀ k ls ρ, R x k ρ →
       rwp (ℍ := ℍ) (Φ x) (fun _ _ _ ρ' => ρ' = PMap.empty) k ls (.app (.val D) (.val .unit)) ρ) :
-    ∀ n x ls e ρ, erwpK (ℍ := ℍ) V Φ (fun z => cancelTabRK (fl z) (Ti z) R)
+    ∀ n x, Inv x → ∀ ls e ρ, erwpK (ℍ := ℍ) V Φ (fun z => cancelTabRK (fl z) (Ti z) (R z))
         (fun _ _ _ _ _ => False) x n ls e ρ →
       erwpK (ℍ := ℍ) V Φ (fun z => cancelTabK (fl z) (To z)) (fun _ _ _ _ _ => False) x n ls
         ((ubK N D).plug e) ρ := by
-  have hL : ∀ z, (cancelTabRK (fl z) (Ti z) R).Local := fun z => cancelTabRK_local _ _ _
+  have hL : ∀ z, (cancelTabRK (fl z) (Ti z) (R z)).Local := fun z => cancelTabRK_local _ _ _
   have hTT : ∀ x, (Ti x).Twin (To x) := fun x m i en h => by
     obtain ⟨en', h', h₁, h₂, h₃, h₄, h₅, -⟩ := hTw x m i en h
     exact ⟨en', h', h₁, h₂, h₃, h₄, h₅⟩
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
-  intro x ls e ρ h
-  have hPD := erwpPostK_down (V := V x) (cancelTabK_down (lo := fl x) (hToD x))
+  intro x hx ls e ρ h
+  have hPD := erwpPostK_down (V := V x) (hToD x hx)
     (Q := fun _ _ _ _ _ => False) (fun _ => falsePost_down)
   rw [erwpK_eq]
-  refine rwpG_bind (hΦ x) (ubK N D) ?_
+  refine rwpG_bind (hΦ x hx) (ubK N D) ?_
   refine rwpG_mono_le (fun k hk ls' t σ ht => ?_) (erwpK_unfold_at hL le_rfl h)
   rcases ht with ⟨_, _, _, _, hf⟩ | ⟨K₁, m, i, v, en, hp⟩ | ⟨K', err, hp⟩
   · exact hf.elim
@@ -1243,35 +1267,153 @@ theorem erwpK_ubind_cancelRunCR {V : ι → ι → Prop} {Φ : ι → LocFam} (h
       rw [hwk] at hy; rw [hwc] at he; rw [hPB] at hB
       have hc := (hcont y hy ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ
       simp only [erwpCK, show k' < n by omega, if_true] at hc ⊢
-      exact ih k' (by omega) y _ _ _ hc
+      exact ih k' (by omega) y (hInvW x hx m i en hT ha f hf y ρk hy) _ _ _ hc
     · rw [hwk] at hy; rw [hwc] at he
       have hql' : en.q ≠ .lin := hq ▸ hql
-      exact hcan x m i en en' hT hT' hql' y k ls'' K₁ ρk ((hcont y hy ls'' he).2 hql')
+      exact hcan x hx m i en en' hT hT' hql' y (hInvW x hx m i en hT ha f hf y ρk hy) k ls'' K₁ ρk
+        ((hcont y hy ls'' he).2 hql')
   · -- the cancel's `raise`: `[finalise-cancel]`, `D` consumes the claim, `[cfin-ret]`
     obtain ⟨⟨rfl, hK'⟩, y1, y2, hy, hy1, hR⟩ := pure_sep_iff.mp hp
     have hy1' : (errOkK (To x) k ls' err ⋆ fun ρ => NoOwn ρ) y1 := by
       obtain ⟨τa, τb, hcab, herr, hnb⟩ := hy1
       exact ⟨τa, τb, hcab, errOkK_twin (hTT x) herr, hnb⟩
-    refine rwpG_det (hΦ x) (hPD _)
+    refine rwpG_det (hΦ x hx) (hPD _)
       (fun μ => step1Only_plug (Head.ufinC μ N D err K' hK') rfl .hole) ?_
     rw [Kont.plug_hole, ← cfK_plug]
-    refine rwpG_bind (hΦ x) (cfK _) ?_
+    refine rwpG_bind (hΦ x hx) (cfK _) ?_
     have hDr := rwpG_frame (fun _ τ => (errOkK (To x) k ls' err ⋆ fun ρ => NoOwn ρ) τ)
-      (fun _ _ _ _ h => h) (ResU.CompS.comm hy) (rwp_iff_rwpG.mp (hD x k ls' y2 hR)) hy1'
+      (fun _ _ _ _ h => h) (ResU.CompS.comm hy) (rwp_iff_rwpG.mp (hD x hx k ls' y2 hR)) hy1'
     refine rwpG_mono_le (fun k₂ hk₂ ls₂ t₂ σ₂ ht₂ => ?_) hDr
     obtain ⟨σa, σb, hcσ, ⟨w, rfl, rfl⟩, hσb⟩ := ht₂
     obtain rfl := eq_of_compS_empty_left hcσ
-    refine rwpG_det (hΦ x) (hPD _) (fun μ => step1Only_plug (Head.cfret μ err w) rfl .hole) ?_
+    refine rwpG_det (hΦ x hx) (hPD _) (fun μ => step1Only_plug (Head.cfret μ err w) rfl .hole) ?_
     have hfin : ∀ μ, Final (ℍ := ℍ) μ (Kont.hole.plug (opE true (cancelVal err))) :=
       final_opPlug (payloadName_cancelVal err) (by simp [OpFree, Kont.Catches])
     obtain ⟨τa, τb, hcab, herr, hnb⟩ := hσb
     exact rwpG_here hfin (Or.inr (Or.inr ⟨.hole, err, pure_sep_mk ⟨rfl, rfl⟩
       ⟨τa, τb, hcab, errOkK_le (hPAle x) hk₂ herr, hnb⟩⟩))
 
+/-- **The finaliser frame over a cancel run that stops, at `erwpK`** (`erwp_ubind_cancelRunCR`):
+`erwpK_ubind_cancelRunCRI` at every world, its claim the same at every world. -/
+theorem erwpK_ubind_cancelRunCR {V : ι → ι → Prop} {Φ : ι → LocFam} (hΦ : ∀ x, (Φ x).Down)
+    {fl : ι → Life} {Ti To : ι → OpTabK ι} (hToD : ∀ x, (To x).Down)
+    (hTw : ∀ x m i en, Ti x m i = some en → ∃ en', To x m i = some en' ∧ en'.q = en.q ∧
+      en'.abort = en.abort ∧ en'.PA = en.PA ∧ en'.PB = en.PB ∧ en'.wc = en.wc ∧ en'.wk = en.wk)
+    (hPAle : ∀ x m i en, To x m i = some en → en.abort = true → ∀ k k' ls ls' v ρ, k' ≤ k →
+      en.PA k ls v ρ → en.PA k' ls' v ρ)
+    {R : Nat → WProp} (N D : Val)
+    (hcan : ∀ x m i en en', Ti x m i = some en → To x m i = some en' → en.q ≠ .lin →
+      ∀ y k ls (K₁ : Kont) ρ, cancelOKK en y k ls K₁ ρ →
+        cancelOKK en' y k ls ((ubK N D).comp K₁) ρ)
+    (hD : ∀ x k ls ρ, R k ρ →
+      rwp (ℍ := ℍ) (Φ x) (fun _ _ _ ρ' => ρ' = PMap.empty) k ls (.app (.val D) (.val .unit)) ρ) :
+    ∀ n x ls e ρ, erwpK (ℍ := ℍ) V Φ (fun z => cancelTabRK (fl z) (Ti z) R)
+        (fun _ _ _ _ _ => False) x n ls e ρ →
+      erwpK (ℍ := ℍ) V Φ (fun z => cancelTabK (fl z) (To z)) (fun _ _ _ _ _ => False) x n ls
+        ((ubK N D).plug e) ρ := by
+  intro n x ls e ρ h
+  exact erwpK_ubind_cancelRunCRI (Inv := fun _ => True) (R := fun _ => R) (fun x _ => hΦ x)
+    (fun x _ => cancelTabK_down (hToD x)) hTw hPAle N D (fun _ _ _ _ _ _ _ _ _ _ _ _ => trivial)
+    (fun x _ m i en en' h h' hq y _ => hcan x m i en en' h h' hq y) (fun x _ => hD x) n x trivial
+    ls e ρ h
+
 /-- **The finaliser frame around a body whose table is the outer one but for the cancel
-obligations, its raises carrying `R`, at `erwpK`** (`erwp_ubindClaimRT`): `[then]` at a return; at
+obligations, its raises carrying `R`, at `erwpK`, at the worlds `Inv` holds at**
+(`erwp_ubindClaimRT`), its claim read at a world: `[then]` at a return; at
 a stop the frame passes outward, a cancellable stop's cancel obligation by `hcan`; at a `raise`,
-`[finalise]` runs `D ()`, which consumes the claim, and the `raise` goes on at the outer table. -/
+`[finalise]` runs `D ()`, which consumes the claim, and the `raise` goes on at the outer table.
+A post's world, and every world a stop at a floor no higher than the run's own is resumed at, is
+one `Inv` holds at (`hVI`, `hInvW`). -/
+theorem erwpK_ubindClaimRTI {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z → V x z)
+    {Φ : ι → LocFam} {Inv : ι → Prop} (hΦ : ∀ x, Inv x → (Φ x).Down)
+    (hΦV : ∀ x y, V x y → Φ y = Φ x) (hVI : ∀ x y, V x y → Inv x → Inv y) {fl : ι → Life}
+    {Ti To : ι → OpTabK ι} (hToD : ∀ x, Inv x → (opTableK (fl x) (To x)).Down)
+    (hTV : ∀ x y, V x y → (opTableK (fl y) (To y)).Le (opTableK (fl x) (To x)))
+    (hTw : ∀ x m i en, Ti x m i = some en → ∃ en', To x m i = some en' ∧ en'.q = en.q ∧
+      en'.abort = en.abort ∧ en'.PA = en.PA ∧ en'.PB = en.PB ∧ en'.wc = en.wc ∧ en'.wk = en.wk)
+    (hPAle : ∀ x m i en, To x m i = some en → en.abort = true → ∀ k k' ls ls' v ρ, k' ≤ k →
+      en.PA k ls v ρ → en.PA k' ls' v ρ)
+    (hTr : ∀ x m i en, To x m i = some en → en.abort = true → m ≠ 0)
+    {R : ι → Nat → WProp} (N D : Val)
+    (hInvW : ∀ x, Inv x → ∀ m i en, Ti x m i = some en → en.abort = false → ∀ f, f ≤ fl x →
+      ∀ y ρ, en.wk f y ρ → Inv y)
+    (hcan : ∀ x, Inv x → ∀ m i en en', Ti x m i = some en → To x m i = some en' → en.q ≠ .lin →
+      ∀ y, Inv y → ∀ k ls (K₁ : Kont) ρ, cancelOKK en y k ls K₁ ρ →
+        cancelOKK en' y k ls ((ubK N D).comp K₁) ρ)
+    (hD : ∀ x, Inv x → ∀ k ls ρ, R x k ρ → rwp (ℍ := ℍ) (Φ x)
+      (fun _ _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) k ls (.app (.val D) (.val .unit)) ρ)
+    {Qin Qout : ι → PostN} (hQout : ∀ y, (Qout y).Down)
+    (hN : ∀ y, Inv y → ∀ k ls (v : Val) ρ, Qin y k ls v ρ →
+      erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (To z)) Qout y k ls
+        (.app (.val N) (.val v)) ρ) :
+    ∀ n x, Inv x → ∀ ls M ρ,
+      erwpK (ℍ := ℍ) V Φ (fun z => opTableRK (fl z) (Ti z) (R z)) Qin x n ls M ρ →
+      erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (To z)) Qout x n ls
+        (ubindE (.pair N D) M) ρ := by
+  have hL : ∀ z, (opTableRK (fl z) (Ti z) (R z)).Local := fun z => opTableRK_local _ _ _
+  have hLo : ∀ z, (opTableK (fl z) (To z)).Local := fun z => opTableK_local _ _
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+  intro x hx ls M ρ h
+  have hPD := erwpPostK_down (V := V x) (hToD x hx) hQout
+  rw [← ubK_plug, erwpK_eq]
+  refine rwpG_bind (hΦ x hx) (ubK N D) ?_
+  refine rwpG_mono_le (fun k hk ls' t σ ht => ?_) (erwpK_unfold_at hL le_rfl h)
+  rcases ht with ⟨v, rfl, y, hy, hv⟩ | ⟨K₁, m, i, v, en, hp⟩ | ⟨K₁, m, i, v, en, hp⟩
+  · -- `[then]`, at the world the body's value was posted at
+    have hstep := fun μ => then_ret (ℍ := ℍ) μ N D v .hole
+    simp only [Kont.plug_hole] at hstep
+    exact rwpG_det (hΦ x hx) (hPD _) hstep
+      (erwpK_shift hVt hΦV hTV hLo hy hk (hN y (hVI x y hy hx) k ls' v σ hv))
+  · -- a stop passes the frame; a cancellable one's cancel obligation through the frame
+    obtain ⟨⟨rfl, hK₁, hT, ha⟩, ρa, ρk, hcak, hA, hu, f, hf, hcont⟩ := pure_sep_iff.mp hp
+    obtain ⟨en', hT', hq, hab', hPA, hPB, hwc, hwk⟩ := hTw x m i en hT
+    have hKo : ((ubK N D).comp K₁).HasHnd m = false := by simp [hasHnd_comp, hK₁]
+    have ht' : (ubK N D).plug (K₁.plug (performE (.val (opPayload m i v)))) =
+        ((ubK N D).comp K₁).plug (opE false (opPayload m i v)) := by
+      rw [Kont.plug_comp]; rfl
+    rw [ht']
+    refine rwpG_here (final_opPlug (payloadName_opPayload m i v) hKo) (Or.inr (Or.inl
+      ⟨(ubK N D).comp K₁, m, i, v, en', pure_sep_mk ⟨rfl, hKo, hT', hab'.trans ha⟩
+        ⟨ρa, ρk, hcak, hPA ▸ hA, fun hu' => hu (hq ▸ hu'), f, hf, fun y hy ls'' he =>
+          ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_, fun hql => ?_⟩⟩⟩))
+    · rw [Kont.plug_comp]
+      rw [hwk] at hy; rw [hwc] at he; rw [hPB] at hB
+      have hc := (hcont y hy ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ
+      simp only [erwpCK, show k' < n by omega, if_true] at hc ⊢
+      exact ih k' (by omega) y (hInvW x hx m i en hT ha f hf y ρk hy) _ _ _ hc
+    · rw [hwk] at hy; rw [hwc] at he
+      have hql' : en.q ≠ .lin := hq ▸ hql
+      exact hcan x hx m i en en' hT hT' hql' y (hInvW x hx m i en hT ha f hf y ρk hy) k ls'' K₁ ρk
+        ((hcont y hy ls'' he).2 hql')
+  · -- `[finalise]`: `D (); raise p`, `D` consuming the claim
+    obtain ⟨⟨rfl, hK₁, hT, hab⟩, σ₁, ρR, hcσ, ⟨ρa, ρn, hcan', ⟨hPA, hnA⟩, hnn⟩, hR⟩ :=
+      pure_sep_iff.mp hp
+    obtain ⟨en', hT', -, hab', hPA', -, -, -⟩ := hTw x m i en hT
+    have hab'' : en'.abort = true := hab'.trans hab
+    have hm0 := hTr x m i en' hT' hab''
+    refine rwpG_det (hΦ x hx) (hPD _)
+      (fun μ => (then_fin (ℍ := ℍ) (μ := μ) (i := i) N D v hm0 hK₁ .hole).1) ?_
+    rw [Kont.plug_hole]
+    refine rwpG_bind (hΦ x hx) _ ?_
+    have hDr := rwpG_frame
+      (fun _ τ => ((fun ρ => en'.PA k ls' v ρ ∧ NoOwn ρ) ⋆ (fun ρ => NoOwn ρ)) τ)
+      (fun _ _ _ _ h => h) (ResU.CompS.comm hcσ)
+      (rwp_iff_rwpG.mp (hD x hx k ls' ρR hR)) ⟨ρa, ρn, hcan', ⟨hPA' ▸ hPA, hnA⟩, hnn⟩
+    refine rwpG_mono_le (fun k₂ hk₂ ls₂ t₂ σ₂ ht₂ => ?_) hDr
+    obtain ⟨σa, σb, hcσ', ⟨w, rfl, rfl, rfl⟩, ⟨τa, τn, hcτ, ⟨hPAτ, hnτ⟩, hnn'⟩⟩ := ht₂
+    obtain rfl := eq_of_compS_empty_left hcσ'
+    refine rwpG_det (hΦ x hx) (hPD _)
+      (fun μ => (then_fin (ℍ := ℍ) (μ := μ) (i := i) N D v hm0 hK₁ .hole).2.2) ?_
+    exact rwpG_here (final_opPlug (K := .hole) (r := true) (payloadName_opPayload m i v)
+      (by simp [OpFree, Kont.Catches])) (Or.inr (Or.inr ⟨.hole, m, i, v, en',
+        pure_sep_mk ⟨rfl, rfl, hT', hab''⟩ ⟨τa, τn, hcτ,
+          ⟨hPAle x m i en' hT' hab'' _ _ _ _ _ _ hk₂ hPAτ, hnτ⟩, hnn'⟩⟩))
+
+/-- **The finaliser frame around a body whose table is the outer one but for the cancel
+obligations, its raises carrying `R`, at `erwpK`** (`erwp_ubindClaimRT`): `erwpK_ubindClaimRTI` at
+every world, its claim the same at every world. -/
 theorem erwpK_ubindClaimRT {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V y z → V x z)
     {Φ : ι → LocFam} (hΦ : ∀ x, (Φ x).Down) (hΦV : ∀ x y, V x y → Φ y = Φ x) {fl : ι → Life}
     {Ti To : ι → OpTabK ι} (hToD : ∀ x, (To x).Down)
@@ -1294,65 +1436,12 @@ theorem erwpK_ubindClaimRT {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → 
     ∀ n x ls M ρ, erwpK (ℍ := ℍ) V Φ (fun z => opTableRK (fl z) (Ti z) R) Qin x n ls M ρ →
       erwpK (ℍ := ℍ) V Φ (fun z => opTableK (fl z) (To z)) Qout x n ls
         (ubindE (.pair N D) M) ρ := by
-  have hL : ∀ z, (opTableRK (fl z) (Ti z) R).Local := fun z => opTableRK_local _ _ _
-  have hLo : ∀ z, (opTableK (fl z) (To z)).Local := fun z => opTableK_local _ _
-  intro n
-  induction n using Nat.strong_induction_on with
-  | _ n ih =>
-  intro x ls M ρ h
-  have hPD := erwpPostK_down (V := V x) (opTableK_down (lo := fl x) (hToD x)) hQout
-  rw [← ubK_plug, erwpK_eq]
-  refine rwpG_bind (hΦ x) (ubK N D) ?_
-  refine rwpG_mono_le (fun k hk ls' t σ ht => ?_) (erwpK_unfold_at hL le_rfl h)
-  rcases ht with ⟨v, rfl, y, hy, hv⟩ | ⟨K₁, m, i, v, en, hp⟩ | ⟨K₁, m, i, v, en, hp⟩
-  · -- `[then]`, at the world the body's value was posted at
-    have hstep := fun μ => then_ret (ℍ := ℍ) μ N D v .hole
-    simp only [Kont.plug_hole] at hstep
-    exact rwpG_det (hΦ x) (hPD _) hstep
-      (erwpK_shift hVt hΦV hTV hLo hy hk (hN y k ls' v σ hv))
-  · -- a stop passes the frame; a cancellable one's cancel obligation through the frame
-    obtain ⟨⟨rfl, hK₁, hT, ha⟩, ρa, ρk, hcak, hA, hu, f, hf, hcont⟩ := pure_sep_iff.mp hp
-    obtain ⟨en', hT', hq, hab', hPA, hPB, hwc, hwk⟩ := hTw x m i en hT
-    have hKo : ((ubK N D).comp K₁).HasHnd m = false := by simp [hasHnd_comp, hK₁]
-    have ht' : (ubK N D).plug (K₁.plug (performE (.val (opPayload m i v)))) =
-        ((ubK N D).comp K₁).plug (opE false (opPayload m i v)) := by
-      rw [Kont.plug_comp]; rfl
-    rw [ht']
-    refine rwpG_here (final_opPlug (payloadName_opPayload m i v) hKo) (Or.inr (Or.inl
-      ⟨(ubK N D).comp K₁, m, i, v, en', pure_sep_mk ⟨rfl, hKo, hT', hab'.trans ha⟩
-        ⟨ρa, ρk, hcak, hPA ▸ hA, fun hu' => hu (hq ▸ hu'), f, hf, fun y hy ls'' he =>
-          ⟨fun k' hk' w τ₁ τ₂ hB hcτ => ?_, fun hql => ?_⟩⟩⟩))
-    · rw [Kont.plug_comp]
-      rw [hwk] at hy; rw [hwc] at he; rw [hPB] at hB
-      have hc := (hcont y hy ls'' he).1 k' hk' w τ₁ τ₂ hB hcτ
-      simp only [erwpCK, show k' < n by omega, if_true] at hc ⊢
-      exact ih k' (by omega) y _ _ _ hc
-    · rw [hwk] at hy; rw [hwc] at he
-      have hql' : en.q ≠ .lin := hq ▸ hql
-      exact hcan x m i en en' hT hT' hql' y k ls'' K₁ ρk ((hcont y hy ls'' he).2 hql')
-  · -- `[finalise]`: `D (); raise p`, `D` consuming the claim
-    obtain ⟨⟨rfl, hK₁, hT, hab⟩, σ₁, ρR, hcσ, ⟨ρa, ρn, hcan', ⟨hPA, hnA⟩, hnn⟩, hR⟩ :=
-      pure_sep_iff.mp hp
-    obtain ⟨en', hT', -, hab', hPA', -, -, -⟩ := hTw x m i en hT
-    have hab'' : en'.abort = true := hab'.trans hab
-    have hm0 := hTr x m i en' hT' hab''
-    refine rwpG_det (hΦ x) (hPD _)
-      (fun μ => (then_fin (ℍ := ℍ) (μ := μ) (i := i) N D v hm0 hK₁ .hole).1) ?_
-    rw [Kont.plug_hole]
-    refine rwpG_bind (hΦ x) _ ?_
-    have hDr := rwpG_frame
-      (fun _ τ => ((fun ρ => en'.PA k ls' v ρ ∧ NoOwn ρ) ⋆ (fun ρ => NoOwn ρ)) τ)
-      (fun _ _ _ _ h => h) (ResU.CompS.comm hcσ)
-      (rwp_iff_rwpG.mp (hD x k ls' ρR hR)) ⟨ρa, ρn, hcan', ⟨hPA' ▸ hPA, hnA⟩, hnn⟩
-    refine rwpG_mono_le (fun k₂ hk₂ ls₂ t₂ σ₂ ht₂ => ?_) hDr
-    obtain ⟨σa, σb, hcσ', ⟨w, rfl, rfl, rfl⟩, ⟨τa, τn, hcτ, ⟨hPAτ, hnτ⟩, hnn'⟩⟩ := ht₂
-    obtain rfl := eq_of_compS_empty_left hcσ'
-    refine rwpG_det (hΦ x) (hPD _)
-      (fun μ => (then_fin (ℍ := ℍ) (μ := μ) (i := i) N D v hm0 hK₁ .hole).2.2) ?_
-    exact rwpG_here (final_opPlug (K := .hole) (r := true) (payloadName_opPayload m i v)
-      (by simp [OpFree, Kont.Catches])) (Or.inr (Or.inr ⟨.hole, m, i, v, en',
-        pure_sep_mk ⟨rfl, rfl, hT', hab''⟩ ⟨τa, τn, hcτ,
-          ⟨hPAle x m i en' hT' hab'' _ _ _ _ _ _ hk₂ hPAτ, hnτ⟩, hnn'⟩⟩))
+  intro n x ls M ρ h
+  exact erwpK_ubindClaimRTI (Inv := fun _ => True) (R := fun _ => R) hVt (fun x _ => hΦ x) hΦV
+    (fun _ _ _ _ => trivial) (fun x _ => opTableK_down (hToD x)) hTV hTw hPAle hTr N D
+    (fun _ _ _ _ _ _ _ _ _ _ _ _ => trivial)
+    (fun x _ m i en en' h h' hq y _ => hcan x m i en en' h h' hq y) (fun x _ => hD x) hQout
+    (fun y _ => hN y) n x trivial ls M ρ h
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 

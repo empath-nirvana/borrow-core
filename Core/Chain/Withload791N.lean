@@ -387,7 +387,7 @@ theorem callback_at_image {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S : R
   have hcon : ConsistentX c Bχ := consistentX_compS hBχ hcf (consistentX_allImm hχ c)
   have h2 := h1 c n le_rfl u χ Bχ hBχ himg hcon
   rw [cN_effOf₀, tabN_extend_suspendC β _ (suspendC_effOf hS _) δ Θ c,
-    tabN_effOf_base S (.box (.var x) B) B δ Θ c] at h2
+    tabN_effOf_base₀ S (.box (.var x) B) B δ Θ c] at h2
   refine erwp_mono (fun k _ w ρ hb => ?_) (opTableN_local _) n ls _ Bχ h2
   obtain ⟨α', hα', hbB, hst⟩ := hb
   rw [interp_ext_self] at hα'

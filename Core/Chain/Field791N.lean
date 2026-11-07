@@ -414,7 +414,7 @@ theorem withborFS_compat {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life}
       ⟨_, ExS.get_of_ne_imm he₁ (ResU.single_get_self _ _) hkown, hkown⟩) α
   have hFS : Fo.SuspendC x bnd := suspendC_effOf hS _
   have hbase : tabN₀ (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c' =
-      tabN₀ (ℍ := ℍ) Fo δ' Θ' c' := tabN_effOf_base S _ _ δ' Θ' c'
+      tabN₀ (ℍ := ℍ) Fo δ' Θ' c' := tabN_effOf_base₀ S _ _ δ' Θ' c'
   have hTw : (tabN₀ (ℍ := ℍ) (CTy.effOf S (.box (.var x) B)) δ' Θ' c').Twin
       (tabG (ℍ := ℍ) Rc Gc Fo δ Θ c) := by
     rw [hbase]
