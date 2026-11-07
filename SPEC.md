@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.47 · 2026-11-07
+Version 1.50 · 2026-11-07
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -12158,7 +12158,7 @@ checker or the old backend.
 
 ## Changelog
 
-- **1.TBD** — §36 (#879): a map iterates at any key type. `lib/map.bc`'s table is three arrays,
+- **1.50** (2026-11-07) — §36 (#879): a map iterates at any key type. `lib/map.bc`'s table is three arrays,
   `Map[K, V] = ((array (1 + i32) * array K) * array V) * i32`, the slot hashes, the keys and the
   values, so that a lent map, `MapRef[K, V]<'h, 'k, 'x>`, lends each entry's key and value as array
   elements; `K` has a filler as `V` does. New: `map_entries(r)`, every entry in slot order as
