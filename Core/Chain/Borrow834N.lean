@@ -43,7 +43,7 @@ def withswapAt (l : Loc) : Val :=
 theorem withswap_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ withswap (.val (axWithswapTy a A B)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withswap) _
   rw [show substAll γ withswap = withswap from psub_closedAt _ γ (by decide) (Nat.zero_le 0)]
   refine erwp_val (v := withswapV) ?_
@@ -167,7 +167,7 @@ theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hA : ¬ VFree x A) (hB : ¬ VFree x B) :
     SemJN₀ (ℍ := ℍ) Δ Γ withbor (.val (axWithbor3Ty a x Δ.meetOfDom A B)) := by
   intro δ γ Θ c n ls ρ hδ _ _ _ hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withbor) _
   rw [show substAll γ withbor = withbor from psub_closedAt _ γ (by decide) (Nat.zero_le 0)]
   refine erwp_val (v := withborVal) ?_
@@ -339,7 +339,7 @@ theorem withload_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hA : ¬ VFree x A) (hB : ¬ VFree x B) :
     SemJN₀ (ℍ := ℍ) Δ Γ withload (.val (axWithloadTy a x Δ.meetOfDom A B)) := by
   intro δ γ Θ c n ls ρ hδ _ _ _ hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withload) _
   rw [show substAll γ withload = withload from psub_closedAt _ γ (by decide) (Nat.zero_le 0)]
   refine erwp_val (v := withloadV) ?_

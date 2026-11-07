@@ -337,7 +337,7 @@ theorem withbor3U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
     (hd : SemJN₀ (ℍ := ℍ) Δ Γ d (.val (.lolli (.mut a A) .unit))) :
     SemJN₀ (ℍ := ℍ) Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
   rw [show substAll γ (withborUE d) = withborUE d from
     psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
@@ -428,7 +428,7 @@ theorem withloadU_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
     (hS : S.Unwind x) :
     SemJN₀ (ℍ := ℍ) Δ Γ withload (.val (withloadUTy a x Δ.meetOfDom A B S)) := by
   intro δ γ Θ c n ls ρ hδ _ _ _ hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withload) _
   rw [show substAll γ withload = withload from psub_closedAt _ γ (by decide) (Nat.zero_le 0)]
   exact erwp_val (v := withloadV) (withloadU_sem hδ hfree₁ hfree₂ hS Θ n)

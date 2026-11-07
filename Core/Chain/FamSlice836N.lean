@@ -7,7 +7,7 @@ Core's `sliceReplaceM_compatX` (`Core/SliceOps.lean`) is `arrReplace_compatX` wi
 a `Mut @a A` borrow: the Mut Anti-Frame at the leaf (`wpTS_M_antiFrameX`) opens the cell for the
 load and the store, and the leaf is sealed again holding the new element. On the chain the
 anti-frame is `erwp_M_antiFrame` at the view, the leaf's cell at its view lifetime
-(`consistentX_get`), as in `withswap_compatN`; the steps inside it are `arrReplace_compatN`'s, each
+(`consistentX_get`), as in `withswap_compatN`; the steps inside it are `arrReplace_compatN₀`'s, each
 at the index it costs (the anti-frame's postcondition reads the cell's member at the index of the
 end).
 -/
@@ -48,7 +48,7 @@ and written (`rwp_store`), and sealed again holding the new element, the leaf ba
 beside the old element; out of range, the element is handed back. -/
 theorem sliceReplaceM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val replaceV) (.val (sliceReplaceMTy a A)) := by
-  refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
+  refine sem_constN₀ hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   rw [eq_of_compS_empty_left hcomp] at hcon ⊢
   obtain ⟨v₁, v₂, σ₁, σ₂, rfl, hc, ⟨ℓ, cn, rfl, hn, hs⟩, w₁, x, ρ₀, σx, rfl, hc₂,
@@ -142,7 +142,7 @@ theorem sliceReplaceM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} 
         (ResU.single (ℓ + i.toNat) (CellU.mutOf b x σx hσx (famL b P Θ' m) hwx)) :=
       ⟨α₀, hα₀, b, hα₀b, ⟨ℓ + i.toNat, x, σx, hσx, m, hwx, le_rfl, rfl, hlΘ, rfl⟩, hunif⟩
     have hfam : vN₀ (ℍ := ℍ) (.sliceMut a A) δ Θ' m (Val.arr ℓ cn) L :=
-      vN_fam_mk hn (hback _ (fun _ _ h => vN_le₀ (by omega) h) _ L (ResU.CompS.comm hL) hleaf)
+      vN_fam_mk₀ hn (hback _ (fun _ _ h => vN_le₀ (by omega) h) _ L (ResU.CompS.comm hL) hleaf)
     exact ⟨_, _, L, σ₀, rfl, hX'L, hfam,
       .inl ⟨w₀, rfl, vN_le₀ (by omega) hwA⟩⟩
   · rw [he]
@@ -151,7 +151,7 @@ theorem sliceReplaceM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} 
     simp only [Kont.plug]
     rw [replace_out]
     exact erwp_val (v := Val.pair (Val.arr ℓ cn) (Val.inj₂ x))
-      ⟨_, _, σ₁, σx, rfl, hc, vN_fam_mk hn hs, .inr ⟨x, rfl, hx⟩⟩
+      ⟨_, _, σ₁, σx, rfl, hc, vN_fam_mk₀ hn hs, .inr ⟨x, rfl, hx⟩⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

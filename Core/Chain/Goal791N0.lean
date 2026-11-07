@@ -2452,7 +2452,7 @@ theorem sLe_life {m n : Life} (h : BoCa.Lifetime.SLife.Le m n) : m ≤ n := h
 /-- **`⊑mut` at `SemJN₀`** (`mutSub`, `Core/Fundamental.lean`): Core's `mutSub_compatC` by
 `ptoMutS_antitone`. The `Mut` clause's slack `@aδ ⊑ b` absorbs `@aδ ⊑ @bδ`: the cell stays at
 its `b`, its key and its uniform conjunct unchanged. -/
-theorem mutSub_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.Life} {A : VTy}
+theorem mutSub_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.Life} {A : VTy}
     (h : SemJN₀ (ℍ := ℍ) Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) :
     SemJN₀ (ℍ := ℍ) Δ Γ e (.val (.mut a A)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
@@ -2465,7 +2465,7 @@ theorem mutSub_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.
   exact ⟨α, ha, b', le_trans (sLe_life hle') hβb', hm, hu⟩
 
 /-- **`⊑imm` at `SemJN₀`** (`immSub`): Core's `immSub_compatC` by `ptoImmS_antitone`. -/
-theorem immSub_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.Life} {A : VTy}
+theorem immSub_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.Life} {A : VTy}
     (h : SemJN₀ (ℍ := ℍ) Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) :
     SemJN₀ (ℍ := ℍ) Δ Γ e (.val (.imm a A)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
@@ -2478,13 +2478,13 @@ theorem immSub_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.
   exact ⟨α, ha, ⟨l, s, u, σ, hs, h₁, h₂, le_trans (sLe_life hle') h₃, h₄⟩, hw⟩
 
 /-- `𝒢⟦Γ⟧` does not read `δ` at a variable no live slot mentions. -/
-theorem gN_extend_of_not_free {x : LifeVar} (δ : LSub) (α : Life) (Θ : LocTy) :
+theorem gN_extend_of_not_free₀ {x : LifeVar} (δ : LSub) (α : Life) (Θ : LocTy) :
     ∀ (Γ : Ctx VTy), (∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty) → ∀ γ n ρ,
       gN₀ (ℍ := ℍ) δ Θ Γ γ n ρ → gN₀ (ℍ := ℍ) (δ.extend x α) Θ Γ γ n ρ
   | [], _, _, _, _, h => h
   | _ :: _, _, [], _, _, h => h
   | s :: Γ, hΓ, v :: γ, n, ρ, h => by
-      have ih := gN_extend_of_not_free δ α Θ Γ (fun s' hs' => hΓ s' (List.mem_cons_of_mem _ hs'))
+      have ih := gN_extend_of_not_free₀ δ α Θ Γ (fun s' hs' => hΓ s' (List.mem_cons_of_mem _ hs'))
       unfold gN₀ at h ⊢
       split
       · rename_i hl
@@ -2499,9 +2499,9 @@ theorem gN_extend_of_not_free {x : LifeVar} (δ : LSub) (α : Life) (Θ : LocTy)
 
 /-- **`∀I` at `SemJN₀`** (`allI`, `Core/Fundamental.lean`): Core's `allI_compatC`. At every
 `α ⊏ @bδ`, `δ[x ↦ α]` models `Δ, 'x ⊏ @b` (the bound and `Δ`'s bounds do not mention `'x`), the
-context's reading does not change (`gN_extend_of_not_free`), and the body is one β step away
+context's reading does not change (`gN_extend_of_not_free₀`), and the body is one β step away
 (`cN_head₀`). The `∀` clause reads no definedness of `@b`, as Core's `cC`, so the rule needs none. -/
-theorem allI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.Life} {M : Expr}
+theorem allI_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.Life} {M : Expr}
     {S : VTy} {C : CTy} (hbx : b.mentions x = false)
     (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
     (hΓx : ∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty)
@@ -2529,7 +2529,7 @@ theorem allI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.L
   rw [show Kont.hole.plug (Expr.subst 0 Val.unit (Expr.psub 1 γ M)) = substAll (Val.unit :: γ) M
     from (substAll_cons_psub Val.unit γ M).symm]
   exact h (δ.extend x α) (Val.unit :: γ) Θ c n ls ρ hδ' hΘ hc hlw
-    (gN_extend_of_not_free δ α Θ Γ hΓx γ n ρ hg)
+    (gN_extend_of_not_free₀ δ α Θ Γ hΓx γ n ρ hg)
 
 /-! ## §3. The statements -/
 

@@ -416,7 +416,7 @@ theorem unfoldN_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hC : C.NuOk) (S
     (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   rw [substAll_closed (unfoldV_closed C)]
   refine erwp_val (v := unfoldV C) ?_
   intro Θ' _ hΘ' _ _ ls' c'' k _ g σ τ hcomp hv hcon

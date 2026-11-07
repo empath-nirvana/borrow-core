@@ -127,7 +127,7 @@ theorem iterate_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {Sg : Row} {St B R : VTy}
     (hS : Row.divB Sg = true) (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .iterate)) (.val (iterTy Sg St B R)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) _ _ _ n ls (substAll γ (.val (.prim .iterate))) PMap.empty
   rw [show substAll γ (.val (.prim .iterate)) = .val (.prim .iterate) from
     psub_closedAt _ γ (by decide) (Nat.zero_le 0)]

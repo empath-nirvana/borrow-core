@@ -11,7 +11,7 @@ reductions, each pure step `erwp_det` at the same index; Core's induction on the
 the loop invariant `ArrInv`, and the lexicographic induction on cells, value size and key rank
 (`hs_all`). Every run is at one world `Θ` and one view `c`, every call at an index up to `N`;
 each split's part is consistent with the view because the whole is valid (`erwp_of_valid`). The
-algebras have the empty resource and are read at the run's world (`bang_app`).
+algebras have the empty resource and are read at the run's world (`bang_app₀`).
 -/
 
 noncomputable section
@@ -380,7 +380,7 @@ theorem arr_specN (hΘ : Θ.OK) (k : Nat) {t s : Val} (ht : closedAt 0 t.1 = tru
       (.app (.app (.val (travOf (arrE k (FoldP.stepV k t)))) (.val s)) (.val w)) χ := by
   have hΦ := LocTy.view_down hΘ.1 c
   have hQ := vPostN_down (ℍ := ℍ) RA δ Θ
-  obtain ⟨ℓ, N, rfl, hN, hsl⟩ := vN_fam_iff.mp hw
+  obtain ⟨ℓ, N, rfl, hN, hsl⟩ := vN_fam_iff₀.mp hw
   have hf := FoldP.stepV_closed k ht
   refine travOf_appN hΦ hQ _ s _ ?_
   simp [arrE, bindE, tagE_subst, subst_shift_succ, closed_subst hf, closed_shift hf,
@@ -430,7 +430,7 @@ theorem arr_specN (hΘ : Θ.OK) (k : Nat) {t s : Val} (ht : closedAt 0 t.1 = tru
     (ResU.CompS.comm hc') hc₂ ?_ rfl ?_
   · refine erwp_headE hΦ (vPostN_down (ℍ := ℍ) .unit δ Θ) .hole
       (fun μ => Head.drop μ unitF ℓ N) rfl ?_
-    exact dropFill_wpN hΘ unitF ℓ (dropU_sem δ Θ k₂) N.toNat 0 k₂ ls₂ ρd c le_rfl hcd
+    exact dropFill_wpN₀ hΘ unitF ℓ (dropU_sem δ Θ k₂) N.toNat 0 k₂ ls₂ ρd c le_rfl hcd
       (by simpa using todo_doneN (ℍ := ℍ) (δ := δ) (Θ := Θ) (j := k₂) htodo)
   rintro k₃ hk₃ ls₃ u τ₁ A τ hcτ ⟨rfl, rfl⟩ rfl _ _
   simp only [Kont.plug]
@@ -826,7 +826,7 @@ theorem tup_splitN {δ : LSub} {Θ : LocTy} {j : Nat} :
         | succ p => exact hvs p a' A' (by simpa using h₁') (by simpa using h₂')
 
 /-- The algebras out of a tuple valid at the keys' algebra types (Core's `algsOK_of_tuple`):
-each is read at the run's world by `bang_app`, at every index up to the tuple's. -/
+each is read at the run's world by `bang_app₀`, at every index up to the tuple's. -/
 theorem algsOK_of_tupleN (ks : List Bnd) (G : Algs) (δ : LSub) {Θ₀ Θ : LocTy} (hΘ : Θ.OK)
     (c : Loc → Option Life) {Nb : Nat} (vs : List Val) (hlen : vs.length = ks.length)
     (hvs : ∀ (p : Nat) (a : Val) (A : VTy), vs[p]? = some a → (ks.map (FoldP.algTy G))[p]? = some A →
@@ -846,7 +846,7 @@ theorem algsOK_of_tupleN (ks : List Bnd) (G : Algs) (δ : LSub) {Θ₀ Θ : LocT
     obtain ⟨a, ha, hva⟩ := hget k hk
     rw [hA] at hva
     rw [← hlen]
-    exact proj_runN hΦ (vPostN_down _ δ Θ) vs _ a ha r (bang_app hΘ hj hva hc hr ls)
+    exact proj_runN hΦ (vPostN_down _ δ Θ) vs _ a ha r (bang_app₀ hΘ hj hva hc hr ls)
   exact ⟨fun B Bs hm => hrun _ hm _ _ rfl, fun Bs S hm => hrun _ hm _ _ rfl⟩
 
 /-- **The general owned fold at `SemJN₀`** (Core's `foldOwnG_compatX`): `foldOwnG : Algs ⊸
@@ -855,7 +855,7 @@ theorem foldOwnG_compatN {Δ : LifeCtx} {Γ : Ctx VTy} (B₀ : VTy) (hB : PBody 
     (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (foldOwnGV B₀)) (.val (foldGTy B₀ Rs)) := by
   intro δ γ Θ c n ls ρ _ hΘ _ _ hg₀
-  have hρ : ρ = PMap.empty := gN_deadP hΓ hg₀
+  have hρ : ρ = PMap.empty := gN_deadP₀ hΓ hg₀
   subst hρ
   show erwp (ℍ := ℍ) _ _ _ n ls (substAll γ (.val (foldOwnGV B₀))) _
   rw [substAll_closed (foldOwnGV_closed B₀)]

@@ -257,7 +257,7 @@ theorem entN_start (δ : LSub) (Θ : LocTy) (c : Loc → Option Life) (o : OpSig
 /-! ### Values owning nothing -/
 
 /-- **A value of an own-free type owns nothing** (Core's `vC_noOwn_of_ownFree`). -/
-theorem vN_noOwn_of_ownFree {A : VTy} (hA : A.OwnFree) :
+theorem vN_noOwn_of_ownFree₀ {A : VTy} (hA : A.OwnFree) :
     ∀ {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes}, vN₀ (ℍ := ℍ) A δ Θ n v ρ → NoOwn ρ := by
   induction hA with
   | unit => intro δ Θ n v ρ h; rw [h.2]; exact noOwn_empty

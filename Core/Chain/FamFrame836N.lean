@@ -268,7 +268,7 @@ theorem sliceBorrowM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : Life
     (hfree₂ : ¬ VFree x B) :
     SemJN₀ (ℍ := ℍ) Δ Γ withbor (.val (sliceBorrowMTy x Δ.meetOfDom A B)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withbor) _
   rw [show substAll γ withbor = withbor from psub_closedAt _ γ (by decide) (Nat.zero_le 0)]
   exact erwp_val (v := withborVal) (sliceBorrowM_sem hδ hsideA hsideB hfree₁ hfree₂ Θ n)

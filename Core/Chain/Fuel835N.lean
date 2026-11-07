@@ -320,7 +320,7 @@ theorem divFuel_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy}
     (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val divFuelV) (.val (divFuelTy S A)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) _ _ _ n ls (substAll γ (.val divFuelV)) PMap.empty
   rw [substAll_closed divFuelV_closed]
   refine erwp_val (v := divFuelV) ⟨rfl, ?_⟩

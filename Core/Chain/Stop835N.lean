@@ -17,7 +17,7 @@ Core's `stop_sem` (`Core/EffBoxed.lean`), step by step, at the chain relation:
   `Res_α` stops only with its share in `Res_α`, and a resumption starts at the share and the
   answer, in `Res_α`. Core inducts on `ewpTS`'s least fixed point; `erwp` is recursive on the
   index, so the induction is on the index;
-* `stop_semN` (Core's `stop_sem`): the context's resource is in `Res_{δ(d)}` (`gN_outlives`,
+* `stop_semN` (Core's `stop_sem`): the context's resource is in `Res_{δ(d)}` (`gN_outlives₀`,
   Core's `gSepC_outlives`) and the row's answers are (`tabN_ansIn`, Core's
   `Row.ansIn_of_ansOutlives`).
 
@@ -168,7 +168,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-- **A context outliving `@a` has its resource in `Res_α`** (Core's `gSepC_outlives`): the fold
 of `vN_outlives₀` over the live slots. -/
-theorem gN_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life} {Θ : LocTy}
+theorem gN_outlives₀ {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life} {Θ : LocTy}
     {n : Nat} (hδ : Δ.Models δ) (ha : a.interp δ = some α) :
     ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes},
       (∀ s ∈ Γ, s.live = true → VOutlives Δ a s.ty) →
@@ -228,7 +228,7 @@ theorem stop_semN {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {S : Row} {A : VTy}
     {d : Lifetime.Life} (hM : SemJN₀ (ℍ := ℍ) Δ Γ M (.comp (CTy.effOf S A)))
     (hΓ : CtxOutlives Δ Γ d) (hS : Row.AnsOutlives Δ d S) : SemCSN (ℍ := ℍ) Δ Γ M S A d := by
   intro δ γ Θ c n ls ρ α hδ hd hΘ hc hlw hg
-  exact erwp_stratify (tabN_ansIn hδ hd hS A Θ c) n ls _ ρ (gN_outlives hδ hd hΓ.2 hg)
+  exact erwp_stratify (tabN_ansIn hδ hd hS A Θ c) n ls _ ρ (gN_outlives₀ hδ hd hΓ.2 hg)
     ((cN_effOf₀ S A δ Θ c n ls _ ρ).mp (hM δ γ Θ c n ls ρ hδ hΘ hc hlw hg))
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N

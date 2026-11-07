@@ -1164,7 +1164,7 @@ theorem sliceBorrowMU_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
     (hd : SemJN₀ (ℍ := ℍ) Δ Γ d (.val (.lolli (.array A) .unit))) :
     SemJN₀ (ℍ := ℍ) Δ Γ (withborUE d) (.val (sliceBorrowMUTy x Δ.meetOfDom A B S)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
   rw [show substAll γ (withborUE d) = withborUE d from
     psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
@@ -1200,7 +1200,7 @@ theorem dropU_sem (δ : LSub) (Θ : LocTy) (n : Nat) :
   exact erwp_val (v := Val.unit) ⟨rfl, rfl⟩
 
 /-- **`λa. drop (λu. (), a)` is a finaliser of an `Array 1` source**: the cells are freed in
-order by `dropFill` (`dropFill_wpN`). -/
+order by `dropFill` (`dropFill_wpN₀`). -/
 theorem dArrFree_sem :
     SemJN₀ (ℍ := ℍ) LifeCtx.empty [] dArrFree (.val (.lolli (.array .unit) .unit)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
@@ -1225,7 +1225,7 @@ theorem dArrFree_sem :
   rw [e]
   refine erwp_det hΦ (opTableN_down OpTabN.empty_down) hQd
     (fun μ => step1Only_plug (Head.drop μ dropU l cn) rfl .hole) ?_
-  exact dropFill_wpN hOK dropU l (dropU_sem δ Θ'' k) cn.toNat 0 k ls' ρ' c'' le_rfl hcon
+  exact dropFill_wpN₀ hOK dropU l (dropU_sem δ Θ'' k) cn.toNat 0 k ls' ρ' c'' le_rfl hcon
     (by simpa using hs)
 
 /-- **`slice_borrow_mut` at the hardest case's row**, every hypothesis of `sliceBorrowMS_compat`

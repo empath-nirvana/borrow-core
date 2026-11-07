@@ -6,7 +6,7 @@ import Core.CountFold
 
 Core's `countLoop_wp`/`countFold_compatX` and `countTryLoop_wp`/`countTry_compatX`
 (`Core/CountFold.lean`), step by step: the induction on `len(n) − i`; one `count` step (here
-`erwp_det`); `f (i, s)` by the `!` function's validity (`bang_app`), framed through its run
+`erwp_det`); `f (i, s)` by the `!` function's validity (`bang_app₀`), framed through its run
 (`erwp_bind_frame`, the frame `∅`); the loop from `i + 1`, at the index the run leaves.
 -/
 
@@ -72,7 +72,7 @@ theorem countLoop_wpN {S : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N : Nat}
       refine erwp_bind_frame hΦ (opTableN_local _)
         (.appR (.val (.prim .count)) (.pairR f (.pairR (Val.i32 n) (.pairR (Val.i32 (i + 1)) .hole))))
         (fun σ => σ = PMap.empty) (ResU.comp_empty_right ρ) hc
-        (bang_app hΘ hm hf hc (vN_i32_pair i hs) ls) rfl ?_
+        (bang_app₀ hΘ hm hf hc (vN_i32_pair i hs) ls) rfl ?_
       rintro k' hk' ls' v σ₁ σ₂ σ hcσ hv rfl hcσ' -
       rw [ResU.CompS.functional hcσ (ResU.comp_empty_right σ₁)] at hcσ' ⊢
       exact ih (i + 1) k' ls' v σ₁ c (hk'.trans hm) (by omega) hcσ' hv
@@ -81,7 +81,7 @@ theorem countLoop_wpN {S : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N : Nat}
 theorem countFold_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {S : VTy} (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .count)) (.val (countFoldTy S)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   refine erwp_val (v := Val.prim .count) ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k hk v σ τ hcomp hv hcon
   obtain rfl := eq_of_compS_empty_left hcomp
@@ -142,7 +142,7 @@ theorem countTryLoop_wpN {S E : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N :
       let e₂ : Expr := .inj₂ (.var 0)
       refine erwp_bind_frame hΦ (opTableN_local _) (.case .hole e₁ e₂)
         (fun σ => σ = PMap.empty) (ResU.comp_empty_right ρ) hc
-        (bang_app hΘ hm hf hc (vN_i32_pair i hs) ls) rfl ?_
+        (bang_app₀ hΘ hm hf hc (vN_i32_pair i hs) ls) rfl ?_
       rintro k' hk' ls' v σ₁ σ₂ σ hcσ hv rfl hcσ' -
       rw [ResU.CompS.functional hcσ (ResU.comp_empty_right σ₁)] at hcσ' ⊢
       rcases hv with ⟨s', rfl, hs₁⟩ | ⟨e, rfl, he₁⟩
@@ -159,7 +159,7 @@ theorem countTryLoop_wpN {S E : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N :
 theorem countTry_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {S E : VTy} (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .countTry)) (.val (countTryTy S E)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   refine erwp_val (v := Val.prim .countTry) ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k hk v σ τ hcomp hv hcon
   obtain rfl := eq_of_compS_empty_left hcomp

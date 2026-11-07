@@ -9,11 +9,11 @@ import Core.SliceOps
 `docs/new-core/scope-831-interface.md` §11. Each rule's chain proof is Core's compatibility lemma
 (`Core/Tok.lean`, `Core/Arrays.lean`, `Core/Slices.lean`, `Core/SliceOps.lean`), line by line,
 against `vN₀`'s `opq` and family clauses:
-* `Tok`: `tokMint_compatN`, `tokBurn_compatN`, the cell by `erwp_alloc`/`erwp_free`;
-* a family whose leaves own nothing: `arrLen_compatN`, `arrGet_compatN`, `arrCopy_compatN`,
-  `arrRelease_compatN`, `sliceGetM_compatN`, the leaves released by `erwp_garbage`;
-* every family: `famSize_compatN` (`arrSize`, `sliceLenM`), `famEmpty_compatN` (`arrEmpty`,
-  `sliceEmptyI`, `sliceEmptyM`), `famSplit_compatN` (`sliceSplitI`, `sliceSplitM`).
+* `Tok`: `tokMint_compatN₀`, `tokBurn_compatN₀`, the cell by `erwp_alloc`/`erwp_free`;
+* a family whose leaves own nothing: `arrLen_compatN₀`, `arrGet_compatN₀`, `arrCopy_compatN₀`,
+  `arrRelease_compatN₀`, `sliceGetM_compatN₀`, the leaves released by `erwp_garbage`;
+* every family: `famSize_compatN₀` (`arrSize`, `sliceLenM`), `famEmpty_compatN₀` (`arrEmpty`,
+  `sliceEmptyI`, `sliceEmptyM`), `famSplit_compatN₀` (`sliceSplitI`, `sliceSplitM`).
 -/
 
 noncomputable section
@@ -32,18 +32,18 @@ open BoCa.BoLo (Heap Kont Head eLoad eStore)
 
 /-! ### The relation at a family -/
 
-theorem vN_fam_iff {L : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes} :
+theorem vN_fam_iff₀ {L : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes} :
     vN₀ (ℍ := ℍ) (.fam L) δ Θ n v ρ ↔
       ∃ l c, v = Val.arr l c ∧ c.toNat < 2 ^ 31 ∧
         sepRange (fun m => vN₀ (ℍ := ℍ) L δ Θ n (Val.loc m)) l c.toNat ρ := Iff.rfl
 
-theorem vN_fam_mk {L : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {l : Loc} {c : UInt32} {ρ : WRes}
+theorem vN_fam_mk₀ {L : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {l : Loc} {c : UInt32} {ρ : WRes}
     (hc : c.toNat < 2 ^ 31) (hs : sepRange (fun m => vN₀ (ℍ := ℍ) L δ Θ n (Val.loc m)) l c.toNat ρ) :
     vN₀ (ℍ := ℍ) (.fam L) δ Θ n (Val.arr l c) ρ :=
   ⟨l, c, rfl, hc, hs⟩
 
 /-- The argument of an operation on a family and an index (Core's `vP_fam_idx`). -/
-theorem vN_fam_idx {L : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes}
+theorem vN_fam_idx₀ {L : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : WRes}
     (h : vN₀ (ℍ := ℍ) (.tensor (.fam L) (.int .w32)) δ Θ n v ρ) :
     ∃ l c i, v = Val.pair (Val.arr l c) (Val.i32 i) ∧ c.toNat < 2 ^ 31 ∧
       sepRange (fun m => vN₀ (ℍ := ℍ) L δ Θ n (Val.loc m)) l c.toNat ρ := by
@@ -52,19 +52,19 @@ theorem vN_fam_idx {L : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val} {ρ : 
   exact ⟨l, c, i, rfl, hn, hs⟩
 
 /-- An `imm` leaf holds no `own` cell (Core's `noOwn_imm`). -/
-theorem noOwn_immN {a : Lifetime.Life} {A : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val}
+theorem noOwn_immN₀ {a : Lifetime.Life} {A : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val}
     {ρ : WRes} (h : vN₀ (ℍ := ℍ) (.imm a A) δ Θ n v ρ) : NoOwn ρ := by
   obtain ⟨α, -, ⟨l, s, u, σ, hs, -, rfl, -, -⟩, -⟩ := h
   exact ResU.restrict_single_other (by simp)
 
 /-- A `mut` leaf holds no `own` cell (Core's `noOwn_mut`). -/
-theorem noOwn_mutN {a : Lifetime.Life} {A : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val}
+theorem noOwn_mutN₀ {a : Lifetime.Life} {A : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val}
     {ρ : WRes} (h : vN₀ (ℍ := ℍ) (.mut a A) δ Θ n v ρ) : NoOwn ρ := by
   obtain ⟨α, -, b, -, ⟨l, w, χ, hχ, j, hw, -, -, -, rfl⟩, -⟩ := h
   exact ResU.restrict_single_other (by simp)
 
 /-- A family of leaves that hold no `own` cell holds none (Core's `noOwn_fam`). -/
-theorem noOwn_famN {L : VTy} {δ : LSub} {Θ : LocTy} {n : Nat}
+theorem noOwn_famN₀ {L : VTy} {δ : LSub} {Θ : LocTy} {n : Nat}
     (hL : ∀ m ρ, vN₀ (ℍ := ℍ) L δ Θ n (Val.loc m) ρ → NoOwn ρ) {v : Val} {ρ : WRes}
     (h : vN₀ (ℍ := ℍ) (.fam L) δ Θ n v ρ) : NoOwn ρ := by
   obtain ⟨l, c, -, -, hs⟩ := h
@@ -73,13 +73,13 @@ theorem noOwn_famN {L : VTy} {δ : LSub} {Θ : LocTy} {n : Nat}
 /-! ### The constants at a dead context -/
 
 /-- **A closed value at a dead context** (Core's `sem_const`): its resource is `∅`. -/
-theorem sem_constN {Δ : LifeCtx} {Γ : Ctx VTy} {v : Val} {A : VTy} (hΓ : Ctx.DeadP Γ)
+theorem sem_constN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {v : Val} {A : VTy} (hΓ : Ctx.DeadP Γ)
     (hcl : closedAt 0 v.1 = true)
     (h : ∀ (δ : LSub) (Θ : LocTy) (n : Nat), Δ.Models δ → Θ.OK →
       vN₀ (ℍ := ℍ) A δ Θ n v PMap.empty) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val v) (.val A) := by
   intro δ γ Θ c n ls ρ hδ hΘ _ _ hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (.val v)) _
   rw [substAll_closed hcl]
   exact erwp_val (h δ Θ n hδ hΘ)
@@ -93,9 +93,9 @@ def mintV : Val := ⟨mintE, .lam⟩
 def burnV : Val := ⟨burnE, .lam⟩
 
 /-- **`mint` at `SemJN₀`** (Core's `tokMint_compatX`, `[TR]` 6.141 at the cell): `1 ⊸ Tok`. -/
-theorem tokMint_compatN {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
+theorem tokMint_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ mintE (.val mintTy) := by
-  refine sem_constN (v := mintV) hΓ rfl fun δ Θ n _ _ => ?_
+  refine sem_constN₀ (v := mintV) hΓ rfl fun δ Θ n _ _ => ?_
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   obtain rfl := eq_of_compS_empty_left hcomp
   obtain ⟨rfl, rfl⟩ := hv
@@ -112,9 +112,9 @@ theorem tokMint_compatN {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
   exact erwp_val (v := Val.loc l) (Opaque.rel_tok_intro l)
 
 /-- **`burn` at `SemJN₀`** (Core's `tokBurn_compatX`, `[TR]` 6.142 at the cell): `Tok ⊸ 1`. -/
-theorem tokBurn_compatN {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
+theorem tokBurn_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ burnE (.val burnTy) := by
-  refine sem_constN (v := burnV) hΓ rfl fun δ Θ n _ _ => ?_
+  refine sem_constN₀ (v := burnV) hΓ rfl fun δ Θ n _ _ => ?_
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   obtain rfl := eq_of_compS_empty_left hcomp
   rcases Opaque.rel_cases hv with ⟨hk, -, -⟩ | ⟨-, l, rfl, rfl⟩
@@ -132,7 +132,7 @@ theorem tokBurn_compatN {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
 
 /-- An `imm` leaf is duplicable (Core's `vP_imm_dup`): the cell composes with itself
 (`compS_imm_dup`) and its witness is the cell's. -/
-theorem vN_imm_dupN {a : Lifetime.Life} {A : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val}
+theorem vN_imm_dupN₀ {a : Lifetime.Life} {A : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} {v : Val}
     {ρ : WRes} (h : vN₀ (ℍ := ℍ) (.imm a A) δ Θ n v ρ) :
     ∃ τ₁ τ₂, ResU.CompS τ₁ τ₂ ρ ∧ vN₀ (ℍ := ℍ) (.imm a A) δ Θ n v τ₁ ∧
       vN₀ (ℍ := ℍ) (.imm a A) δ Θ n v τ₂ := by
@@ -140,14 +140,14 @@ theorem vN_imm_dupN {a : Lifetime.Life} {A : VTy} {δ : LSub} {Θ : LocTy} {n : 
   exact ⟨_, _, compS_imm_dup l s u σ hs, h, h⟩
 
 /-- **`array_len` at `SemJN₀`** (Core's `arrLen_compatX`). -/
-theorem arrLen_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
+theorem arrLen_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val arrLenV) (.val (arrLenTy a A)) := by
-  refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
+  refine sem_constN₀ hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   rw [eq_of_compS_empty_left hcomp]
   obtain ⟨l, c, rfl, -, -⟩ := id hv
   have hΦ := LocTy.view_down hΘ'.1 c''
-  refine erwp_garbage (compS_empty_left σ) (noOwn_famN (fun _ _ h => noOwn_immN h) hv) ?_
+  refine erwp_garbage (compS_empty_left σ) (noOwn_famN₀ (fun _ _ h => noOwn_immN₀ h) hv) ?_
   refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ' k v ρ h)
     (fun μ => step1Only_plug (Head.beta μ _ (Val.arr l c)) rfl .hole) ?_
   refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ' k v ρ h)
@@ -156,14 +156,14 @@ theorem arrLen_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VT
 
 /-- **`array_get` and `slice_get_mut`'s term on a family whose leaves own nothing** (Core's
 `famGet_compatX`): the leaf at the index, the rest released. -/
-theorem famGet_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ)
+theorem famGet_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ)
     (hL : ∀ δ Θ n m ρ, vN₀ (ℍ := ℍ) L δ Θ n (Val.loc m) ρ → NoOwn ρ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .idx))
       (.val (.bang (.lolli (.tensor (.fam L) (.int .w32)) (.sum L .unit)))) := by
-  refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
+  refine sem_constN₀ hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   rw [eq_of_compS_empty_left hcomp]
-  obtain ⟨l, c, i, rfl, -, hs⟩ := vN_fam_idx hv
+  obtain ⟨l, c, i, rfl, -, hs⟩ := vN_fam_idx₀ hv
   have hΦ := LocTy.view_down hΘ'.1 c''
   refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ' k v ρ h)
     (fun μ => step1Only_plug (Head.idx μ l c i) rfl .hole) ?_
@@ -178,53 +178,53 @@ theorem famGet_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP 
     refine erwp_garbage (compS_empty_left σ) hσ ?_
     exact erwp_val (v := Val.inj₂ Val.unit) (.inr ⟨_, rfl, rfl, rfl⟩)
 
-theorem arrGet_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
+theorem arrGet_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .idx)) (.val (arrGetTy a A)) :=
-  famGet_compatN hΓ fun _ _ _ _ _ h => noOwn_immN h
+  famGet_compatN₀ hΓ fun _ _ _ _ _ h => noOwn_immN₀ h
 
-theorem sliceGetM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
+theorem sliceGetM_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .idx)) (.val (sliceGetMTy a A)) :=
-  famGet_compatN hΓ fun _ _ _ _ _ h => noOwn_mutN h
+  famGet_compatN₀ hΓ fun _ _ _ _ _ h => noOwn_mutN₀ h
 
 /-- **`array_copy` at `SemJN₀`** (Core's `arrCopy_compatX`): every leaf duplicated. -/
-theorem arrCopy_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
+theorem arrCopy_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val copyV) (.val (arrCopyTy a A)) := by
-  refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
+  refine sem_constN₀ hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   rw [eq_of_compS_empty_left hcomp]
   obtain ⟨l, c, rfl, hn, hs⟩ := hv
   have hΦ := LocTy.view_down hΘ'.1 c''
   refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ' k v ρ h)
     (fun μ => step1Only_plug (Head.beta μ _ (Val.arr l c)) rfl .hole) ?_
-  obtain ⟨τ₁, τ₂, hc, h₁, h₂⟩ := sepRange_dup (fun _ _ h => vN_imm_dupN h) hs
+  obtain ⟨τ₁, τ₂, hc, h₁, h₂⟩ := sepRange_dup (fun _ _ h => vN_imm_dupN₀ h) hs
   exact erwp_val (v := Val.pair (Val.arr l c) (Val.arr l c))
-    ⟨_, _, τ₁, τ₂, rfl, hc, vN_fam_mk hn h₁, vN_fam_mk hn h₂⟩
+    ⟨_, _, τ₁, τ₂, rfl, hc, vN_fam_mk₀ hn h₁, vN_fam_mk₀ hn h₂⟩
 
 /-- **A family whose leaves hold no `own` cell is released by `λp. ()`** (Core's
 `release_fam_compatX`). -/
-theorem release_fam_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ)
+theorem release_fam_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ)
     (hL : ∀ δ Θ n m ρ, vN₀ (ℍ := ℍ) L δ Θ n (Val.loc m) ρ → NoOwn ρ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val releaseV) (.val (.bang (.lolli (.fam L) .unit))) := by
-  refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
+  refine sem_constN₀ hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   rw [eq_of_compS_empty_left hcomp]
   have hΦ := LocTy.view_down hΘ'.1 c''
-  refine erwp_garbage (compS_empty_left σ) (noOwn_famN (hL δ Θ' k) hv) ?_
+  refine erwp_garbage (compS_empty_left σ) (noOwn_famN₀ (hL δ Θ' k) hv) ?_
   refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ' k v ρ h)
     (fun μ => step1Only_plug (Head.beta μ _ v) rfl .hole) ?_
   exact erwp_val (v := Val.unit) ⟨rfl, rfl⟩
 
-theorem arrRelease_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
+theorem arrRelease_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val releaseV) (.val (arrReleaseTy a A)) :=
-  release_fam_compatN hΓ fun _ _ _ _ _ h => noOwn_immN h
+  release_fam_compatN₀ hΓ fun _ _ _ _ _ h => noOwn_immN₀ h
 
 /-! ### Every family -/
 
 /-- **`array_size`'s term on any family** (Core's `famSize_compatX`, `arrSize_compatX`): the
 family handed back beside its length. -/
-theorem famSize_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ) :
+theorem famSize_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val sizeV) (.val (.bang (.lolli (.fam L) (.tensor (.fam L) (.int .w32))))) := by
-  refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
+  refine sem_constN₀ hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   rw [eq_of_compS_empty_left hcomp]
   obtain ⟨l, c, rfl, hn, hs⟩ := hv
@@ -234,35 +234,35 @@ theorem famSize_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP
   refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ' k v ρ h)
     (fun μ => step1Only_plug (Head.letpair μ (Val.loc l) (Val.i32 c) _) rfl .hole) ?_
   exact erwp_val (v := Val.pair (Val.arr l c) (Val.i32 c))
-    ⟨_, _, σ, PMap.empty, rfl, ResU.comp_empty_right σ, vN_fam_mk hn hs, ⟨⟨c, rfl⟩, rfl⟩⟩
+    ⟨_, _, σ, PMap.empty, rfl, ResU.comp_empty_right σ, vN_fam_mk₀ hn hs, ⟨⟨c, rfl⟩, rfl⟩⟩
 
-theorem arrSize_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
+theorem arrSize_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val sizeV) (.val (arrSizeTy A)) :=
-  famSize_compatN hΓ
+  famSize_compatN₀ hΓ
 
-theorem sliceLenM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
+theorem sliceLenM_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val sizeV) (.val (sliceLenMTy a A)) :=
-  famSize_compatN hΓ
+  famSize_compatN₀ hΓ
 
 /-- **The empty family at any leaf** (Core's `famEmpty_compatX`): no leaves, no resource. -/
-theorem famEmpty_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ) :
+theorem famEmpty_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val emptyFamV) (.val (.fam L)) :=
-  sem_constN hΓ rfl fun _ _ _ _ _ => vN_fam_mk (by decide) ⟨rfl, trivial⟩
+  sem_constN₀ hΓ rfl fun _ _ _ _ _ => vN_fam_mk₀ (by decide) ⟨rfl, trivial⟩
 
-theorem sliceEmptyI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
+theorem sliceEmptyI_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val emptyFamV) (.val (.arrayImm a A)) :=
-  famEmpty_compatN hΓ
+  famEmpty_compatN₀ hΓ
 
-theorem sliceEmptyM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
+theorem sliceEmptyM_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val emptyFamV) (.val (.sliceMut a A)) :=
-  famEmpty_compatN hΓ
+  famEmpty_compatN₀ hΓ
 
-theorem arrEmpty_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy}
+theorem arrEmpty_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val emptyFamV) (.val (.array A)) :=
-  famEmpty_compatN hΓ
+  famEmpty_compatN₀ hΓ
 
 /-- **A family splits at a run-time index `i ≤ n`, at every leaf** (Core's `vP_fam_split`). -/
-theorem vN_fam_split {L : VTy} {δ : LSub} {Θ : LocTy} {k : Nat} {l : Loc} {n i : UInt32}
+theorem vN_fam_split₀ {L : VTy} {δ : LSub} {Θ : LocTy} {k : Nat} {l : Loc} {n i : UInt32}
     {ρ : WRes} (hv : vN₀ (ℍ := ℍ) (.fam L) δ Θ k (Val.arr l n) ρ) (hi : i ≤ n) :
     ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ ∧ vN₀ (ℍ := ℍ) (.fam L) δ Θ k (Val.arr l i) ρ₁ ∧
       vN₀ (ℍ := ℍ) (.fam L) δ Θ k (Val.arr (l + i.toNat) (n - i)) ρ₂ := by
@@ -271,41 +271,41 @@ theorem vN_fam_split {L : VTy} {δ : LSub} {Θ : LocTy} {k : Nat} {l : Loc} {n i
   have hin : i.toNat ≤ n.toNat := UInt32.le_iff_toNat_le.mp hi
   rw [show n.toNat = i.toNat + (n.toNat - i.toNat) by omega] at hs
   obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := sepRange_split hs
-  refine ⟨ρ₁, ρ₂, hc, vN_fam_mk (by omega) h₁, vN_fam_mk (by rw [uint32_sub_toNat hi]; omega) ?_⟩
+  refine ⟨ρ₁, ρ₂, hc, vN_fam_mk₀ (by omega) h₁, vN_fam_mk₀ (by rw [uint32_sub_toNat hi]; omega) ?_⟩
   rwa [uint32_sub_toNat hi]
 
 /-- **`split` on a family at any leaf** (Core's `famSplit_compatX`). -/
-theorem famSplit_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ) :
+theorem famSplit_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .split)) (.val (famSplitTy L)) := by
-  refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
+  refine sem_constN₀ hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   rw [eq_of_compS_empty_left hcomp]
-  obtain ⟨l, c, i, rfl, hn, hs⟩ := vN_fam_idx hv
+  obtain ⟨l, c, i, rfl, hn, hs⟩ := vN_fam_idx₀ hv
   have hΦ := LocTy.view_down hΘ'.1 c''
   refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ' k v ρ h)
     (fun μ => step1Only_plug (Head.split μ l c i) rfl .hole) ?_
-  have hfam : vN₀ (ℍ := ℍ) (.fam L) δ Θ' k (Val.arr l c) σ := vN_fam_mk hn hs
+  have hfam : vN₀ (ℍ := ℍ) (.fam L) δ Θ' k (Val.arr l c) σ := vN_fam_mk₀ hn hs
   rcases splitAns_cases l c i with ⟨hi, he⟩ | he
   · rw [he]
-    obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := vN_fam_split hfam hi
+    obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := vN_fam_split₀ hfam hi
     exact erwp_val (v := Val.inj₁ (Val.pair (Val.arr l i) (Val.arr (l + i.toNat) (c - i))))
       (.inl ⟨_, rfl, _, _, ρ₁, ρ₂, rfl, hc, h₁, h₂⟩)
   · rw [he]
     exact erwp_val (v := Val.inj₂ (Val.arr l c)) (.inr ⟨_, rfl, hfam⟩)
 
-theorem sliceSplitI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
+theorem sliceSplitI_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .split)) (.val (sliceSplitITy a A)) :=
-  famSplit_compatN hΓ
+  famSplit_compatN₀ hΓ
 
-theorem sliceSplitM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
+theorem sliceSplitM_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .split)) (.val (sliceSplitMTy a A)) :=
-  famSplit_compatN hΓ
+  famSplit_compatN₀ hΓ
 
 /-! ### `array_free` -/
 
 /-- **The drain** (Core's `dropFill_wp`): the cells `ℓ + i, …, ℓ + i + k − 1` are freed in order,
 each value handed to the consumer, at every index below the consumer's; by induction on `k`. -/
-theorem dropFill_wpN {A : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N : Nat} (f : Val) (l : Loc)
+theorem dropFill_wpN₀ {A : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N : Nat} (f : Val) (l : Loc)
     (hf : vN₀ (ℍ := ℍ) (.bang (.lolli A .unit)) δ Θ N f PMap.empty) :
     ∀ (k i m : Nat) (ls : List SRec) (ρ : WRes) (c : Loc → Option Life), m ≤ N →
       ConsistentX c ρ → sepRange (fun x => vN₀ (ℍ := ℍ) (.ref A) δ Θ m (Val.loc x)) (l + i) k ρ →
@@ -331,21 +331,21 @@ theorem dropFill_wpN {A : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N : Nat} 
         (.app (.val f) (.val w))) R
       refine erwp_bind_frame hΦ (opTableN_local _) _
         (sepRange (fun x => vN₀ (ℍ := ℍ) (.ref A) δ Θ (m - 1) (Val.loc x)) (l + i + 1) k) hR hcR
-        (bang_app hΘ ((Nat.sub_le m 1).trans hm) hf hcw' (vN_le₀ (Nat.sub_le m 1) hw) ls)
+        (bang_app₀ hΘ ((Nat.sub_le m 1).trans hm) hf hcw' (vN_le₀ (Nat.sub_le m 1) hw) ls)
         (sepRange_mono' (fun x τ h => vN_le₀ (Nat.sub_le m 1) h) hrest) ?_
       intro k' hk' ls' u σ₁ σ₂ σ hcσ hu hr hcσ' _
       obtain ⟨rfl, rfl⟩ := hu
       rw [eq_of_compS_empty_left hcσ] at hcσ' ⊢
       refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ k v ρ h)
         (fun μ => step1Only_plug (Head.seq μ _) rfl .hole) ?_
-      refine dropFill_wpN hΘ f l hf k (i + 1) k' ls' σ₂ c (hk'.trans ((Nat.sub_le m 1).trans hm)) hcσ' ?_
+      refine dropFill_wpN₀ hΘ f l hf k (i + 1) k' ls' σ₂ c (hk'.trans ((Nat.sub_le m 1).trans hm)) hcσ' ?_
       rw [← Nat.add_assoc]
       exact sepRange_mono' (fun x τ h => vN_le₀ hk' h) hr
 
 /-- **`array_free` at `SemJN₀`** (Core's `arrFree_compatX`). -/
-theorem arrFree_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
+theorem arrFree_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .drop)) (.val (arrFreeTy A)) := by
-  refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
+  refine sem_constN₀ hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   rw [eq_of_compS_empty_left hcomp] at hcon ⊢
   obtain ⟨f, v₂, σ₁, σ₂, rfl, hc, hf, l, cn, rfl, hn, hs⟩ := hv
@@ -354,7 +354,7 @@ theorem arrFree_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP
   have hΦ := LocTy.view_down hΘ'.1 c''
   refine erwp_det hΦ (opTableN_down OpTabN.empty_down) (fun k _ v ρ h => vN_down₀ _ δ Θ' k v ρ h)
     (fun μ => step1Only_plug (Head.drop μ f l cn) rfl .hole) ?_
-  exact dropFill_wpN hΘ' f l hf cn.toNat 0 k ls' σ₂ c'' le_rfl hcon (by simpa using hs)
+  exact dropFill_wpN₀ hΘ' f l hf cn.toNat 0 k ls' σ₂ c'' le_rfl hcon (by simpa using hs)
 
 /-! ### `array_replace` -/
 
@@ -364,9 +364,9 @@ theorem eStore_storeV (c : Loc) (x : Val) :
 /-- **`array_replace` at `SemJN₀`** (Core's `arrReplace_compatX`): in range, the leaf's cell is
 read (`rwp_load`) and written (`rwp_store`), and the leaf goes back into the family with the new
 payload beside the old one; out of range, the element is handed back. -/
-theorem arrReplace_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
+theorem arrReplace_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val replaceV) (.val (arrReplaceTy A)) := by
-  refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
+  refine sem_constN₀ hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   rw [eq_of_compS_empty_left hcomp]
   obtain ⟨v₁, v₂, σ₁, σ₂, rfl, hc, ⟨ℓ, cn, rfl, hn, hs⟩, w₁, x, ρ₀, σx, rfl, hc₂,
@@ -423,7 +423,7 @@ theorem arrReplace_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.De
     obtain ⟨X, hX, hp₃'⟩ := compS_exch (ResU.CompS.comm hG) hp₃
     obtain ⟨L, hL, hXL⟩ := compS_reassoc hF hX
     have hfam : vN₀ (ℍ := ℍ) (.array A) δ Θ' k (Val.arr ℓ cn) X :=
-      vN_fam_mk hn (hback L X (ResU.CompS.comm hXL)
+      vN_fam_mk₀ hn (hback L X (ResU.CompS.comm hXL)
         ⟨ℓ + i.toNat, x, σx, rfl, ResU.CompS.comm hL, hx⟩)
     exact erwp_val (v := Val.pair (Val.arr ℓ cn) (Val.inj₁ old))
       (vN_le₀ (by omega) ⟨_, _, X, ρold, rfl, hp₃', hfam, .inl ⟨old, rfl, hold⟩⟩)
@@ -433,7 +433,7 @@ theorem arrReplace_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.De
     simp only [Kont.plug]
     rw [replace_out]
     exact erwp_val (v := Val.pair (Val.arr ℓ cn) (Val.inj₂ x))
-      ⟨_, _, σ₁, σx, rfl, hc, vN_fam_mk hn hs, .inr ⟨x, rfl, hx⟩⟩
+      ⟨_, _, σ₁, σx, rfl, hc, vN_fam_mk₀ hn hs, .inr ⟨x, rfl, hx⟩⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

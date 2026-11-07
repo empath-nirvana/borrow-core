@@ -76,7 +76,7 @@ theorem swap_body₁ (v : Val) :
 
 theorem sliceSwapM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val swapV) (.val (sliceSwapMTy a A)) := by
-  refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
+  refine sem_constN₀ hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   rw [eq_of_compS_empty_left hcomp] at hcon ⊢
   obtain ⟨v₁, v₂, σ₁, σ₂, rfl, hc, ⟨ℓ, cn, rfl, hn, hs⟩, w₁, w₂, ρ₀, ρ₀', rfl, hc₂,
@@ -105,7 +105,7 @@ theorem sliceSwapM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A 
   swap
   · rw [he]
     refine erwp_det hΦ hTd hQd (fun μ => step1Only_plug (Head.case₂ μ Val.unit _ _) rfl .hole) ?_
-    exact erwp_val (v := Val.arr ℓ cn) (vN_fam_mk hn hs)
+    exact erwp_val (v := Val.arr ℓ cn) (vN_fam_mk₀ hn hs)
   rw [he]
   refine erwp_det hΦ hTd hQd
     (fun μ => step1Only_plug (Head.case₁ μ (Val.loc (ℓ + i.toNat)) _ _) rfl .hole) ?_
@@ -123,7 +123,7 @@ theorem sliceSwapM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A 
   swap
   · rw [he']
     refine erwp_det hΦ hTd hQd (fun μ => step1Only_plug (Head.case₂ μ Val.unit _ _) rfl .hole) ?_
-    exact erwp_val (v := Val.arr ℓ cn) (vN_fam_mk hn hs)
+    exact erwp_val (v := Val.arr ℓ cn) (vN_fam_mk₀ hn hs)
   rw [he']
   refine erwp_det hΦ hTd hQd
     (fun μ => step1Only_plug (Head.case₁ μ (Val.loc (ℓ + j.toNat)) _ _) rfl .hole) ?_
@@ -207,7 +207,7 @@ theorem sliceSwapM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A 
     have hleaf : vN₀ (ℍ := ℍ) (.mut a A) δ Θ' m (Val.loc (ℓ + i.toNat))
         (ResU.single (ℓ + i.toNat) (CellU.mutOf b w₀ σ₀ hσ₀ (famL b P Θ' m) hwx)) :=
       ⟨α₀, hα₀, b, hα₀b, ⟨ℓ + i.toNat, w₀, σ₀, hσ₀, m, hwx, le_rfl, rfl, hlΘ, rfl⟩, hunif⟩
-    exact vN_fam_mk hn (hback _ (fun _ _ h => vN_le₀ (by omega) h) _ X' (ResU.CompS.comm hX') hleaf)
+    exact vN_fam_mk₀ hn (hback _ (fun _ _ h => vN_le₀ (by omega) h) _ X' (ResU.CompS.comm hX') hleaf)
   · -- two leaves, each opened by its own Anti-Frame
     have hij' : i.toNat ≠ j.toNat := fun h => hij (UInt32.toNat_inj.mp h)
     obtain ⟨ρi, ρj, ρr, ρ₁, h₁r, hi₁, hPi, hPj, hback⟩ := sepRange_pick2NW hij' hi hj hs
@@ -327,7 +327,7 @@ theorem sliceSwapM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A 
     have hleafj : vN₀ (ℍ := ℍ) (.mut a A) δ Θ' m (Val.loc (ℓ + j.toNat))
         (ResU.single (ℓ + j.toNat) (CellU.mutOf bj wi σi hσij (famL bj P Θ' m) hwi')) :=
       ⟨αj, hαj, bj, hαbj, ⟨ℓ + j.toNat, wi, σi, hσij, m, hwi', le_rfl, rfl, hljΘ, rfl⟩, hunifj⟩
-    exact vN_fam_mk hn (hback _ (fun _ _ h => vN_le₀ (by omega) h) _ _ R' Z
+    exact vN_fam_mk₀ hn (hback _ (fun _ _ h => vN_le₀ (by omega) h) _ _ R' Z
       (ResU.CompS.comm hR') (ResU.CompS.comm hZ) hleafi hleafj)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N

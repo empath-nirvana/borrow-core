@@ -163,7 +163,7 @@ theorem last_contN (hΘ : Θ.OK) {T' : OpTabN} (hT' : T'.Down) {G : CTy}
       (ResU.CompS.comm hc)
     · rintro m i en₁ hT₁ ha₁ ls' τ ⟨hτ, -⟩
       obtain ⟨o, hf, rfl⟩ := tabN_rowOf_find hT₁
-      refine vN_noOwn_of_ownFree (hXd ⟨o, (Row.find_mem hf).1, ?_⟩) hτ
+      refine vN_noOwn_of_ownFree₀ (hXd ⟨o, (Row.find_mem hf).1, ?_⟩) hτ
       simp only [entN, Bool.and_eq_true, bne_iff_ne, ne_eq] at ha₁
       exact ha₁.2
     · rintro m i en₁ hT₁ hq₁
@@ -172,7 +172,7 @@ theorem last_contN (hΘ : Θ.OK) {T' : OpTabN} (hT' : T'.Down) {G : CTy}
     · rintro m i en₁ hT₁ - hq₁ k' ls' K₁ ρ' τ ρ'' hcan₁ ⟨hτ, -⟩ hc'
       obtain ⟨o, hf, rfl⟩ := tabN_rowOf_find hT₁
       exact entN_plain hΦ _ (exitK_plain j vn z).1 ((exitK_plain j vn z).2 0)
-        (vN_noOwn_of_ownFree (hXd ⟨o, (Row.find_mem hf).1, hq₁⟩) hτ) o hcan₁ hc'
+        (vN_noOwn_of_ownFree₀ (hXd ⟨o, (Row.find_mem hf).1, hq₁⟩) hτ) o hcan₁ hc'
     · rintro k' ls' w τ ⟨τa, τb, hcab, ⟨hk'', hw⟩, ⟨hz', hcz'⟩⟩
       obtain ⟨rfl, rfl⟩ := hw
       rw [eq_of_compS_empty_left hcab]
@@ -313,7 +313,7 @@ end
 written out from the works `ws` and the exits `nfs` (`lastTuple`). The handler's values are read
 off its run at the run's start (`erwp_val_post`), as Core reads them off `wpTS`; the handled
 computation runs at its row's table from the part of the resource consistent with the view
-(`gN_splitC`), and the handler is `erwp_handle_last`. A `Div` row is a row of the chain's table
+(`gN_splitC₀`), and the handler is `erwp_handle_last`. A `Div` row is a row of the chain's table
 (E13), so Core's split at `Row.divB S` has no counterpart, and neither do the rule's `n ≠ 0` and
 `n ≠ Div`, which only that split and Core's `ewp_handle` read. -/
 theorem handleL_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hw Hn e : Expr} {S SW : Row}
@@ -331,9 +331,9 @@ theorem handleL_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hw Hn e : 
       (.comp (CTy.effOf S R)) := by
   intro δ γ Θ c N ls ρ hδ hΘ hcρ hlw hg
   refine (cN_effOf₀ S R δ Θ c N ls _ ρ).mpr (erwp_of_valid fun hv => ?_)
-  obtain ⟨ρ₁, ρ₂, hc12, hg₁, hg₂, -, hc₂⟩ := gN_splitC hsp hg hcρ hv
+  obtain ⟨ρ₁, ρ₂, hc12, hg₁, hg₂, -, hc₂⟩ := gN_splitC₀ hsp hg hcρ hv
   obtain ⟨hlw₁, hlw₂⟩ := hsp.liveWithin hlw
-  have hρ₁ : ρ₁ = PMap.empty := gN_deadP hd hg₁
+  have hρ₁ : ρ₁ = PMap.empty := gN_deadP₀ hd hg₁
   subst hρ₁
   rw [eq_of_compS_empty_left hc12]
   have hval : IsVal (substAll γ (.pair Hr (.pair Hw Hn))) :=

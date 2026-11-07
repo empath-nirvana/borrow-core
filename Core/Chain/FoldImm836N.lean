@@ -387,7 +387,7 @@ theorem foldImm_compatN {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (hF : F.WF) (
     (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ a, VOutlives Δ a R) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (foldImmV F)) (.val (.lolli (algTy F y R) (foldTy F y c R))) := by
   intro δ γ Θ cv n ls ρ _ hΘ _ _ hg₀
-  have hρ : ρ = PMap.empty := gN_deadP hΓ hg₀
+  have hρ : ρ = PMap.empty := gN_deadP₀ hΓ hg₀
   subst hρ
   show erwp (ℍ := ℍ) _ _ _ n ls (substAll γ (.val (foldImmV F))) _
   rw [substAll_closed (foldImmV_closed F)]

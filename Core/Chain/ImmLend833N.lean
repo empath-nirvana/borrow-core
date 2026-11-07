@@ -8,7 +8,7 @@ import Core.Chain.SI.IStopRaiseN
 Core's `withbor1U_compatX` (`Core/EffBorrow.lean`) and `withbor1_compatX`
 (`Core/Compatibility.lean`), step by step, at the per-lend world:
 
-* the context owns nothing (`gN_deadP`) and the finaliser's judgment holds at every world and
+* the context owns nothing (`gN_deadP₀`) and the finaliser's judgment holds at every world and
   lower index (`gN_dead_any`, Core's `semV_dead_closed`);
 * the lend's record goes into the callback's world (`LocTy.addImm`), an extension at the
   callback's resource in the lend's stratum (`LocTy.extR_addImm`, Core's `ext_add`); the
@@ -80,7 +80,7 @@ theorem vN_empty_of_persistent₀ : ∀ (A : VTy), A.Persistent → ∀ {δ : LS
         rw [Inversions.persistent_inst_mu]; exact hp)
 
 /-- **A consumed context, up to persistent slots, owns nothing** (Core's `gSepC_deadP`). -/
-theorem gN_deadP {δ : LSub} {Θ : LocTy} {n : Nat} : ∀ {Γ : Ctx VTy}, Ctx.DeadP Γ →
+theorem gN_deadP₀ {δ : LSub} {Θ : LocTy} {n : Nat} : ∀ {Γ : Ctx VTy}, Ctx.DeadP Γ →
     ∀ {γ : List Val} {ρ : WRes}, gN₀ (ℍ := ℍ) δ Θ Γ γ n ρ → ρ = PMap.empty := by
   intro Γ hd
   induction hd with
@@ -431,7 +431,7 @@ theorem withbor1U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
     (hd : SemJN₀ (ℍ := ℍ) Δ Γ d (.val (.lolli (.ref A) .unit))) :
     SemJN₀ (ℍ := ℍ) Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
   rw [show substAll γ (withborUE d) = withborUE d from
     psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
@@ -594,7 +594,7 @@ theorem withbor1_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : LifeVar)
     (hΓ : Ctx.DeadP Γ) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
     SemJN₀ (ℍ := ℍ) Δ Γ withbor (.val (axWithbor1Ty x Δ.meetOfDom A B)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withbor) _
   rw [show substAll γ withbor = withbor from psub_closedAt _ γ (by decide) (Nat.zero_le 0)]
   exact erwp_val (v := withborVal) (withbor1_sem hδ (admWf_of_vScoped hsc₁ hδ) hfree₁ hfree₂ Θ n)
@@ -806,7 +806,7 @@ theorem withbor2U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
     (hd : SemJN₀ (ℍ := ℍ) Δ Γ d (.val (.lolli (.ref A) .unit))) :
     SemJN₀ (ℍ := ℍ) Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
   rw [show substAll γ (withborUE d) = withborUE d from
     psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
@@ -953,7 +953,7 @@ theorem withbor2_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : LifeVar)
     (hfree₂ : ¬ VFree x B) :
     SemJN₀ (ℍ := ℍ) Δ Γ withbor (.val (axWithbor2Ty x Δ.meetOfDom A B)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
-  obtain rfl := gN_deadP hΓ hg
+  obtain rfl := gN_deadP₀ hΓ hg
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ withbor) _
   rw [show substAll γ withbor = withbor from psub_closedAt _ γ (by decide) (Nat.zero_le 0)]
   exact erwp_val (v := withborVal) (withbor2_sem hδ hside hfree₁ hfree₂ Θ n)

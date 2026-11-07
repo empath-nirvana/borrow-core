@@ -21,7 +21,7 @@ Two readings the chain adds, each where `erwp_frame_plain` adds it:
   reached at, below the index the frame (the context of `N` and `D`) is read at; every lemma here
   is owed up to that index `N₀`;
 * **the view.** `N` and `D` are read at the run's view, from the frame beside a value or beside
-  nothing, each consistent with it (the frame by `gN_splitC`, the value across `M`'s resumptions
+  nothing, each consistent with it (the frame by `gN_splitC₀`, the value across `M`'s resumptions
   by `erwp_consistentAns`, the row's answers being read at the view).
 
 A `Div` row is a row of the chain's table (E13), so Core's table beside the operation table (`Px`,
@@ -671,7 +671,7 @@ theorem then_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   have hΦ := LocTy.view_down hΘ.1 c
   refine (cN_effOf₀ S B δ Θ c n ls _ ρ).mpr (erwp_of_valid fun hv => ?_)
-  obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂, hc₁, hc₂⟩ := gN_splitC hsp hg hc hv
+  obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂, hc₁, hc₂⟩ := gN_splitC₀ hsp hg hc hv
   obtain ⟨hlw₁, hlw₂⟩ := hsp.liveWithin hlw
   have hM' := (cN_effOf₀ SM A δ Θ c n ls _ ρ₁).mp (hM δ γ Θ c n ls ρ₁ hδ hΘ hc₁ hlw₁ hg₁)
   rw [tabN_effOf_ret SM A .unit] at hM'
@@ -692,7 +692,7 @@ theorem then_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A
     rw [show Kont.hole.plug (Expr.subst 0 Val.unit (Expr.psub 1 γ D)) =
       substAll (Val.unit :: γ) D from (substAll_cons_psub Val.unit γ D).symm]
     exact (cN_effOf₀ SD .unit δ Θ c k ls' _ σ).mp
-      (hD δ (Val.unit :: γ) Θ c k ls' σ hδ hΘ hcσ hlw₂ (gN_dead_cons .unit Val.unit (gN_le hk hσ)))
+      (hD δ (Val.unit :: γ) Θ c k ls' σ hδ hΘ hcσ hlw₂ (gN_dead_cons₀ .unit Val.unit (gN_le₀ hk hσ)))
   -- the continuation, from the value beside the frame
   have hk : ∀ k, k ≤ n → ∀ ls' (v : Val) σ, ((fun (k : Nat) (_ : List SRec) (v : Val) (ρ : WRes) => k ≤ n ∧
       vN₀ (ℍ := ℍ) A δ Θ k v ρ ∧ ConsistentX c ρ ∧ ResU.Valid ρ) k ls' v ⋆
@@ -711,14 +711,14 @@ theorem then_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A
       from (substAll_cons_psub v γ N).symm]
     have h₁ := (cN_effOf₀ S B δ Θ c k ls' _ σ).mp
       (hN δ (v :: γ) Θ c k ls' σ hδ hΘ (consistentX_compS hcσ hcv hc₂') hlw₂
-        (gN_live_cons hcσ hv (gN_le hk hg₂')))
+        (gN_live_cons₀ hcσ hv (gN_le₀ hk hg₂')))
     rwa [tabN_effOf_ret S B .unit] at h₁
   change erwp (ℍ := ℍ) _ _ _ n ls
     ((ubindK (Val.lam (Expr.psub 1 γ N)) (Val.lam (Expr.psub 1 γ D))).plug (substAll γ M)) ρ
   rw [tabN_effOf_ret S B .unit]
   exact erwp_frame_then hΘ.1 S SM SD hNZ hMS hDS hfin hP _ _
     (fun _ σ => gN₀ (ℍ := ℍ) δ Θ Γ₂ γ n σ ∧ ConsistentX c σ) (fun _ _ _ _ h => h)
-    (fun _ _ _ _ _ _ _ h => h) (fun hu _ σ h => gN_persistent (hU hu) h.1) hQd n hD' _ _
+    (fun _ _ _ _ _ _ _ h => h) (fun hu _ σ h => gN_persistent₀ (hU hu) h.1) hQd n hD' _ _
     (fun k _ v ρ h => vN_down₀ _ δ Θ k v ρ h) hk n le_rfl ls _ ρ₁ hM'' ρ₂ ρ ⟨hg₂, hc₂⟩ hcρ
 
 /-- **`[then]` with a finaliser that may loop** (Core's `then_compatC_div`): `M`'s row has no

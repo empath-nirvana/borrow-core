@@ -12,7 +12,7 @@ then the fill (`tabFill_wp`). On the chain:
 * `rwpG_tab` is `wpTS_tab` at the step index: the `tab` step is one allocating head step to a
   term that is not a value, so the run after it is the continuation's run from the world
   `alloc_blockN` builds, the index paying for the step; `erwp_tab` is the same at `erwp`.
-* `tabFill_wpN` is `tabFill_wp`, by Core's induction: `bang_app` for the call of the
+* `tabFill_wpN` is `tabFill_wp`, by Core's induction: `bang_app₀` for the call of the
   `!`-function, `erwp_bind_frame` for Core's `wpTS_bind_frame`, `rwp_store`, and the `1↦` step.
 -/
 
@@ -155,7 +155,7 @@ theorem tabFill_wpN {A : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {M : Nat} (
   | 0, i, m, ls, ρd, ρt, ρ, c, _, _, hN, hd, ht, hc => by
       obtain ⟨rfl, -⟩ := ht
       rw [ResU.CompS.functional hc (ResU.comp_empty_right ρd)]
-      refine erwp_val (v := Val.arr l N) (vN_fam_mk hN31 ?_)
+      refine erwp_val (v := Val.arr l N) (vN_fam_mk₀ hN31 ?_)
       rw [← hN]; exact hd
   | k + 1, i, m, ls, ρd, ρt, ρ, c, hm, hcon, hN, hd, ⟨cl, ρt', hct, hcl, ht'⟩, hc => by
       have hΦ := LocTy.view_down hΘ.1 c
@@ -170,7 +170,7 @@ theorem tabFill_wpN {A : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {M : Nat} (
           sepRange (fun x => vN₀ (ℍ := ℍ) (.ref A) δ Θ m (Val.loc x)) l i σd ∧
           sepRange (fun m => ptoOwn m .unit) (l + i + 1) k σt)
         (compS_empty_left ρ) hcon
-        (bang_app hΘ hm hf (consistentX_empty c) (k := m) ⟨⟨_, rfl⟩, rfl⟩ ls)
+        (bang_app₀ hΘ hm hf (consistentX_empty c) (k := m) ⟨⟨_, rfl⟩, rfl⟩ ls)
         ⟨cl, R, hρ, hcl, ρd, ρt', hR, hd, ht'⟩ ?_
       intro k' hk' ls' w σw σr σ hσ hw ⟨c', R', hR', hc', σd, σt, hdt, hd', ht''⟩ hcσ hvσ
       obtain rfl := hc'
@@ -208,7 +208,7 @@ theorem tabFill_wpN {A : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {M : Nat} (
 fill from no filled cell (`tabFill_wpN`). -/
 theorem arrNew_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .tab)) (.val (arrNewTy A)) := by
-  refine sem_constN hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
+  refine sem_constN₀ hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
   rw [eq_of_compS_empty_left hcomp] at hcon ⊢
   obtain ⟨v₁, f, σ₁, σ₂, rfl, hc, ⟨⟨cn, rfl⟩, rfl⟩, hf⟩ := hv

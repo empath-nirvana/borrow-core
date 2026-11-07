@@ -265,7 +265,7 @@ theorem foldOwn_compatN {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (hF : F.WF) (
     (R : VTy) (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (foldOwnV F)) (.val (.lolli (algOTy F R) (foldOTy F R))) := by
   intro δ γ Θ c n ls ρ _ hΘ _ _ hg₀
-  have hρ : ρ = PMap.empty := gN_deadP hΓ hg₀
+  have hρ : ρ = PMap.empty := gN_deadP₀ hΓ hg₀
   subst hρ
   show erwp (ℍ := ℍ) _ _ _ n ls (substAll γ (.val (foldOwnV F))) _
   rw [substAll_closed (foldOwnV_closed F)]
@@ -561,7 +561,7 @@ theorem foldReuse_compatN {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (hF : F.WF)
     (R : VTy) (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (foldReuseV F)) (.val (.lolli (algRTy F R) (foldOTy F R))) := by
   intro δ γ Θ c n ls ρ _ hΘ _ _ hg₀
-  have hρ : ρ = PMap.empty := gN_deadP hΓ hg₀
+  have hρ : ρ = PMap.empty := gN_deadP₀ hΓ hg₀
   subst hρ
   show erwp (ℍ := ℍ) _ _ _ n ls (substAll γ (.val (foldReuseV F))) _
   rw [substAll_closed (foldReuseV_closed F)]

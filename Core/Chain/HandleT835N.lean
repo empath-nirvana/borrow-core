@@ -430,7 +430,7 @@ end
 `handle_n e with (h_ret, gs)`, the clauses written out from the answering functions `gs`
 (`tailTuple`). The handler's value is read off its run at the run's start (`erwp_val_post`), as
 Core reads it off `wpTS`; the handled computation runs at its row's table from the part of the
-resource consistent with the view (`gN_splitC`), and the handler is `erwp_handle_tail`. A `Div`
+resource consistent with the view (`gN_splitC₀`), and the handler is `erwp_handle_tail`. A `Div`
 row is a row of the chain's table (E13), so Core's split at `Row.divB S` has no counterpart, and neither do the rule's `n ≠ 0` and
 `n ≠ Div`, which only that split and Core's `ewp_handle` read. -/
 theorem handleT_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hc e : Expr} {S SN : Row}
@@ -444,9 +444,9 @@ theorem handleT_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hc e : Exp
       (.comp (CTy.effOf S R)) := by
   intro δ γ Θ c N ls ρ hδ hΘ hcρ hlw hg
   refine (cN_effOf₀ S R δ Θ c N ls _ ρ).mpr (erwp_of_valid fun hv => ?_)
-  obtain ⟨ρ₁, ρ₂, hc12, hg₁, hg₂, -, hc₂⟩ := gN_splitC hsp hg hcρ hv
+  obtain ⟨ρ₁, ρ₂, hc12, hg₁, hg₂, -, hc₂⟩ := gN_splitC₀ hsp hg hcρ hv
   obtain ⟨hlw₁, hlw₂⟩ := hsp.liveWithin hlw
-  have hρ₁ : ρ₁ = PMap.empty := gN_deadP hd hg₁
+  have hρ₁ : ρ₁ = PMap.empty := gN_deadP₀ hd hg₁
   subst hρ₁
   rw [eq_of_compS_empty_left hc12]
   have hval : IsVal (substAll γ (.pair Hr Hc)) := isVal_psub_valFormIn hlw₁ (.pair hHr hHc)

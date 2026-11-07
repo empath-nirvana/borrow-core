@@ -8,8 +8,8 @@ Core's `let_compatC` (`Core/EffFin.lean`) is `ewp_frame_plain` around `M`, the f
 `N`, with `ent_plain` carrying a cancel through the frame. At the chain the same proof reaches one
 more fact: `N`'s judgment is read at the run's view `c`, so the resource it starts from, `M`'s
 value beside the frame, must be consistent with `c` (`SemJN₀`'s `ConsistentX`). The frame is (the
-context's part, `gN_splitC`). `M`'s value is too when its run never stops (`rwp_consistentXV`, as
-`bind_compatN` reads it); across a stop it is the continuation's share beside the answer the stop
+context's part, `gN_splitC₀`). `M`'s value is too when its run never stops (`rwp_consistentXV`, as
+`bind_compatN₀` reads it); across a stop it is the continuation's share beside the answer the stop
 was resumed at, and a row's table reads its answers at the view (`tabN₀`'s `ConsistentX c`), as
 `SemJN₀` reads the resource a run starts from and `⊸` the argument's composite.
 
@@ -18,10 +18,10 @@ was resumed at, and a row's table reads its answers at the view (`tabN₀`'s `Co
   returns consistent resources at every value it reaches, resumptions included (by induction on
   the index: at a stop the share is a part of a consistent valid resource, `consistentX_right`;
   the resumed composite is consistent by `consistentX_compS`). Its post also carries the index
-  bound and validity, which the frame's context reads (`gN_le`).
+  bound and validity, which the frame's context reads (`gN_le₀`).
 * `tabN_ansC`: a row's table reads its answers at its view, so they are consistent with it.
 * `let_compatN`: Core's `let_compatC`, step for step (`erwp_frame_plain`, `entN_plain`,
-  `gN_noOwn`, `gN_persistent`).
+  `gN_noOwn₀`, `gN_persistent₀`).
 * `let_compatN_persist`: the same proof binding a persistent type: the bound value owns nothing, so `N` starts from the frame's resource (`erwp_idxLe` gives the
   index bound the frame's context is read at).
 * `await_compatN`: Core's `await_compatC`, `[perform]`, `[case]`, `[sub]` and `[raise]` under
@@ -140,7 +140,7 @@ theorem let_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B 
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   have hΦ := LocTy.view_down hΘ.1 c
   refine (cN_effOf₀ S B δ Θ c n ls _ ρ).mpr (erwp_of_valid fun hv => ?_)
-  obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂, hc₁, hc₂⟩ := gN_splitC hsp hg hc hv
+  obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂, hc₁, hc₂⟩ := gN_splitC₀ hsp hg hc hv
   obtain ⟨hlw₁, hlw₂⟩ := hsp.liveWithin hlw
   have hM' := (cN_effOf₀ S A δ Θ c n ls _ ρ₁).mp (hM δ γ Θ c n ls ρ₁ hδ hΘ hc₁ hlw₁ hg₁)
   rw [tabN_effOf_ret S A B] at hM'
@@ -158,15 +158,15 @@ theorem let_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B 
     (fun _ _ _ _ _ _ _ _ _ _ _ h => h) ?_ ?_ ?_ _ _ ?_ n ls _ ρ₁ hM'' ρ₂ ρ ⟨hg₂, hc₂⟩ hcρ
   · rintro m i en hT ha ls' σ ⟨h, -⟩
     obtain ⟨o, hf, rfl⟩ := tabN_effOf_some_find hT
-    refine gN_noOwn (hW ⟨o, (Row.find_mem hf).1, ?_⟩) h
+    refine gN_noOwn₀ (hW ⟨o, (Row.find_mem hf).1, ?_⟩) h
     simp only [entN, Bool.and_eq_true, bne_iff_ne, ne_eq] at ha
     exact ha.2
   · rintro m i en hT hq ls' σ ⟨h, -⟩
     obtain ⟨o, hf, rfl⟩ := tabN_effOf_some_find hT
-    exact gN_persistent (hU ⟨o, (Row.find_mem hf).1, hq⟩) h
+    exact gN_persistent₀ (hU ⟨o, (Row.find_mem hf).1, hq⟩) h
   · rintro m i en hT ha hq k ls' K₁ ρ' σ ρ'' hcan ⟨hσ, -⟩ hc'
     obtain ⟨o, hf, rfl⟩ := tabN_effOf_some_find hT
-    exact entN_plain hΦ _ hK (hC 0) (gN_noOwn (hW ⟨o, (Row.find_mem hf).1, hq⟩) hσ) o hcan hc'
+    exact entN_plain hΦ _ hK (hC 0) (gN_noOwn₀ (hW ⟨o, (Row.find_mem hf).1, hq⟩) hσ) o hcan hc'
   · rintro k ls' v σ ⟨σ₁, σ₂, hcσ, ⟨hkn, hv, hcv, -⟩, hg₂', hc₂'⟩
     refine (cN_effOf₀ S B δ Θ c k ls' _ σ).mp ?_
     refine cN_head₀ (CTy.effOf S B) δ Θ hΘ.1 c k ls' σ .hole _ _
@@ -174,7 +174,7 @@ theorem let_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B 
     rw [show Kont.hole.plug (Expr.subst 0 v (Expr.psub 1 γ N)) = substAll (v :: γ) N
       from (substAll_cons_psub v γ N).symm]
     exact hN δ (v :: γ) Θ c k ls' σ hδ hΘ (consistentX_compS hcσ hcv hc₂') hlw₂
-      (gN_live_cons hcσ hv (gN_le hkn hg₂'))
+      (gN_live_cons₀ hcσ hv (gN_le₀ hkn hg₂'))
 
 /-- **`[let]` binding a persistent type** (Core's `let_compatC`, the bound value owning nothing):
 `M`'s value holds `∅`, so the resource `N` starts from is the frame's, consistent with the view
@@ -188,7 +188,7 @@ theorem let_compatN_persist {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Exp
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   have hΦ := LocTy.view_down hΘ.1 c
   refine (cN_effOf₀ S B δ Θ c n ls _ ρ).mpr (erwp_of_valid fun hv => ?_)
-  obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂, hc₁, hc₂⟩ := gN_splitC hsp hg hc hv
+  obtain ⟨ρ₁, ρ₂, hcρ, hg₁, hg₂, hc₁, hc₂⟩ := gN_splitC₀ hsp hg hc hv
   obtain ⟨hlw₁, hlw₂⟩ := hsp.liveWithin hlw
   have hM' := (cN_effOf₀ S A δ Θ c n ls _ ρ₁).mp (hM δ γ Θ c n ls ρ₁ hδ hΘ hc₁ hlw₁ hg₁)
   rw [tabN_effOf_ret S A B] at hM'
@@ -206,15 +206,15 @@ theorem let_compatN_persist {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Exp
     (fun _ _ _ _ _ _ _ _ _ _ _ h => h) ?_ ?_ ?_ _ _ ?_ n ls _ ρ₁ hM'' ρ₂ ρ ⟨hg₂, hc₂⟩ hcρ
   · rintro m i en hT ha ls' σ ⟨h, -⟩
     obtain ⟨o, hf, rfl⟩ := tabN_effOf_some_find hT
-    refine gN_noOwn (hW ⟨o, (Row.find_mem hf).1, ?_⟩) h
+    refine gN_noOwn₀ (hW ⟨o, (Row.find_mem hf).1, ?_⟩) h
     simp only [entN, Bool.and_eq_true, bne_iff_ne, ne_eq] at ha
     exact ha.2
   · rintro m i en hT hq ls' σ ⟨h, -⟩
     obtain ⟨o, hf, rfl⟩ := tabN_effOf_some_find hT
-    exact gN_persistent (hU ⟨o, (Row.find_mem hf).1, hq⟩) h
+    exact gN_persistent₀ (hU ⟨o, (Row.find_mem hf).1, hq⟩) h
   · rintro m i en hT ha hq k ls' K₁ ρ' σ ρ'' hcan ⟨hσ, -⟩ hc'
     obtain ⟨o, hf, rfl⟩ := tabN_effOf_some_find hT
-    exact entN_plain hΦ _ hK (hC 0) (gN_noOwn (hW ⟨o, (Row.find_mem hf).1, hq⟩) hσ) o hcan hc'
+    exact entN_plain hΦ _ hK (hC 0) (gN_noOwn₀ (hW ⟨o, (Row.find_mem hf).1, hq⟩) hσ) o hcan hc'
   · rintro k ls' v σ ⟨σ₁, σ₂, hcσ, ⟨hkn, hv⟩, hg₂', hc₂'⟩
     obtain rfl := vN_empty_of_persistent₀ _ hA hv
     rw [eq_of_compS_empty_left hcσ]
@@ -224,7 +224,7 @@ theorem let_compatN_persist {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Exp
     rw [show Kont.hole.plug (Expr.subst 0 v (Expr.psub 1 γ N)) = substAll (v :: γ) N
       from (substAll_cons_psub v γ N).symm]
     exact hN δ (v :: γ) Θ c k ls' σ₂ hδ hΘ hc₂' hlw₂
-      (gN_live_cons (compS_empty_left σ₂) hv (gN_le hkn hg₂'))
+      (gN_live_cons₀ (compS_empty_left σ₂) hv (gN_le₀ hkn hg₂'))
 
 /-- **A table's answers at a persistent type read alike at every view**: their values own
 nothing (`vN_empty_of_persistent₀`), consistent with every view. -/
@@ -273,17 +273,17 @@ theorem await_compatN {Δ : LifeCtx} {S : Row} {n : UInt32} {a c : OpSig}
     rw [han, hai, hB] at h; exact h
   have h₁ : SemJN₀ (ℍ := ℍ) Δ [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩] (.var 0)
       (.comp (CTy.effOf S .unit)) :=
-    sub_compatN (S := []) (RowLe.nil S) (var_compatN (.here (.cons .nil)))
+    sub_compatN (S := []) (RowLe.nil S) (var_compatN₀ (.here (.cons .nil)))
   have h₂ : SemJN₀ (ℍ := ℍ) Δ [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩]
       (raiseE (opArgE n 1 (.var 0))) (.comp (CTy.effOf S .unit)) := by
     have h := raise_compatN (Δ := Δ) (Γ := [⟨.unit, true⟩, ⟨.sum .unit .unit, false⟩])
       (V := .var 0) (o := c) (B := .unit) (by rw [hcn, hci]; exact hfc) hcab
-      (fun _ _ _ _ _ h => vN_noOwn_of_ownFree (by rw [hcA]; exact .unit) h)
-      (by rw [hcA]; exact var_compatN (.here (.cons .nil)))
+      (fun _ _ _ _ _ h => vN_noOwn_of_ownFree₀ (by rw [hcA]; exact .unit) h)
+      (by rw [hcA]; exact var_compatN₀ (.here (.cons .nil)))
     rw [hcn, hci] at h; exact h
   exact let_compatN_persist .nil (fun _ s hs => absurd hs List.not_mem_nil)
     (fun _ s hs => absurd hs List.not_mem_nil) (by decide) hP
-    (sumE_compatN (.left .nil) (var_compatN (.here .nil)) h₁ h₂)
+    (sumE_compatN₀ (.left .nil) (var_compatN₀ (.here .nil)) h₁ h₂)
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
