@@ -36,7 +36,7 @@ BCC = os.path.join(ROOT, ".lake", "build", "bin", "bcc")
 RUSTC = ["rustc", "--edition=2024", "--crate-type", "bin", "-C", "opt-level=3",
          "-C", "embed-bitcode=no", "-C", "strip=debuginfo"]
 CFLAGS = ["-O2", "-w"]
-# What `bcc run --native` passes (`Backend/Driver.lean`, `clangArgs`).
+# What `bcc run --native` passes (`Pipeline/Driver.lean`, `clangArgs`).
 BC_CFLAGS = ["-O2", "-w", "-pthread"]
 
 
@@ -90,8 +90,8 @@ def text_size(exe):
 
 
 def runtime_c():
-    """The native runtime's C source, from `Backend/Native/Runtime.lean` (`runtimeC`)."""
-    src = open(os.path.join(ROOT, "Backend", "Native", "Runtime.lean")).read()
+    """The native runtime's C source, from `Target/Native/Runtime.lean` (`runtimeC`)."""
+    src = open(os.path.join(ROOT, "Target", "Native", "Runtime.lean")).read()
     start = src.index('r##"', src.index("def runtimeC")) + 4
     return src[start:src.index('"##', start)]
 

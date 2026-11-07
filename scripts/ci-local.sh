@@ -27,8 +27,8 @@
 # programs), so by default it runs only where a golden is unverified: on the corpus programs and
 # book blocks that are new or changed since the merge base (scripts/source-stage.sh). With
 # `--source`, it runs on every program and book block, and every golden is re-verified. The full
-# gate is required when Paper/, Support/ (the interpreter and the machine) or Backend/ changed
-# since the merge base; the sanity gate says so when they have. `--changed` never runs the
+# gate is required when Paper/, Support/ (the interpreter and the machine), Target/, Pipeline/ or
+# Backend/ changed since the merge base; the sanity gate says so when they have. `--changed` never runs the
 # interpreter: it lists the unverified programs instead.
 #
 # A gate builds everything (`lake build`), then (the full gate) runs the compile-time guard alone
@@ -60,8 +60,8 @@ esac
 # A change that reaches the reference semantics or the compiler needs the full gate.
 reach=""
 if [ "$full" = 0 ] && base=${CI_LOCAL_BASE:-$(git merge-base origin/main HEAD 2>/dev/null)}; then
-  reach=$({ git diff --name-only "$base"; git ls-files --others --exclude-standard; } | grep -E '^(Paper|Support|Backend)/' | head -1 || true)
-  [ -z "$reach" ] || echo "ci-local: $reach (and perhaps more of Paper/, Support/, Backend/) changed since $(git rev-parse --short "$base"): \`make gate-full\` is required as well"
+  reach=$({ git diff --name-only "$base"; git ls-files --others --exclude-standard; } | grep -E '^(Paper|Support|Target|Pipeline|Backend)/' | head -1 || true)
+  [ -z "$reach" ] || echo "ci-local: $reach (and perhaps more of Paper/, Support/, Target/, Pipeline/, Backend/) changed since $(git rev-parse --short "$base"): \`make gate-full\` is required as well"
 fi
 start=$SECONDS
 out=$(mktemp -d)
