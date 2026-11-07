@@ -10326,10 +10326,20 @@ stand for any other (`P_of_closed`), and that a type the table does not open, a 
 closed once elaborated.
 
 The table the parser and the typed elaboration read holds the abbreviations in scope beside the
-`data` declarations (`Data.Table`): the parser's (`Parser.dataOf`) reads them in the same pass as
-the declarations, the included modules' first, and the typed elaboration's (`Sugar.dataDecls`)
-takes the program's `type` declarations, its included modules' first; in both a later abbreviation
-of a name hides an earlier one, so they agree on which constructors are blocks. An abbreviation is
+`data` declarations (`Data.Table`). Both take their abbreviations from one function,
+`Parser.tableOf`: the prelude's and those of the modules the program's `include`s name, read in the
+pass that reads the declarations, then the program's own, a later abbreviation of a name hiding an
+earlier one, so they agree on which constructors are blocks. The I/O library the typed elaboration
+brings in for a `main` that uses the streams ambiently (§34) is not one the program includes, and
+is in neither table.
+
+An abbreviation's body is read through wherever a field's names are: the group of a declaration
+is found through the bodies of the abbreviations its fields name (`type JMap = Map[string, Json]`
+with `Obj(JMap)` makes `Json` recursive), and an abbreviation that names a member of the group, in its
+arguments or its body, is opened at the field before the members are substituted
+(`Data.openMembers`), so no `type` or `shape` declaration of the group names one. A `type`
+declaration whose body names a `data` declaration written after it is placed after that
+declaration's group, in the order written. An abbreviation is
 recursive when its body, with the abbreviations it names opened, has a `μ`; one around `X` is
 refused before it is opened (U3, below), so the opening substitutes into a body that binds no type
 name, and `X` is chosen apart from every name an abbreviation writes, so it neither captures nor is
@@ -10395,6 +10405,7 @@ the checker's; that one is found at every type with a finite value whose leaves 
 | `corpus/data-json-map.bc` | `data Json = Null \| Num(i32) \| Obj(Map[string, Json])` through the abbreviation `Map`, no `box`; nested objects, some consumed implicitly | `i32[73]` | 39 |
 | `corpus/data-set-rec.bc` | `Node(Set[i32], Map[i32, Tree])`: `Set` left closed, `Map` opened | `i32[453]` | 12 |
 | `corpus/data-abbr-nested.bc` | `Node(Bag[T])`, `type Bag[A] = Map[i32, Pair[A]]`: an abbreviation inside an abbreviation | `i32[7]` | 4 |
+| `corpus/data-abbr-root.bc` | `type JMap = Map[string, Json]` before `data Json = … \| Obj(JMap)`: the abbreviation's body names the root | `i32[83]` | 39 |
 | `corpus/data-abbr-block.bc` | `Node(Pair[T])`, `type Pair[A] = A * A`: bare, a block, with `box` | `i32[15]` | 6 |
 | `corpus/reject/data-rec-abbr-list.bc`, `data-rec-abbr-mu.bc`, `data-rec-abbr-nested.bc` | a recursive abbreviation around the root | refused (U3) | — |
 | `corpus/reject/data-box-not-block.bc` | `box Obj(m)` where a `Json` is expected | refused: not a block | — |
@@ -10442,10 +10453,6 @@ in `P` and runs (`corpus/data-option-block.bc`); the reject is now a field under
   recursive declaration or `type` abbreviation around the root is a `μ` mentioning the enclosing
   variable, which the checker refuses (U3): the elaboration refuses it before opening it, naming
   the declaration or abbreviation the field writes. Both refusals name their cause.
-- **Recursion through an abbreviation's body**: an abbreviation that names the declaration itself
-  (`type JMap = Map[string, Json]` with `Obj(JMap)`) is not a reference of the group: the group is
-  read off the fields' names, not the abbreviations' bodies, and the declaration is refused as an
-  unknown type. Write the abbreviation's arguments at the field.
 - **A filler at a block's cells**: a mutual group through `Vec` whose member is a block
   (`Obj(Vec[Pair])`, `data Pair = Pair(i32, Json)`) has none: a filler of a cell would allocate.
   Mutual groups are U5.
@@ -11644,12 +11651,16 @@ checker or the old backend.
 - **1.40** (2026-11-07) — §61 *Declarations*, §42 (#846): `type` abbreviations are opened at their
   type and lifetime arguments wherever a non-recursive `data` declaration is (`openX`, the block
   classification `bareIn`), so `data Json = … | Obj(Map[string, Json])` is accepted, `Obj` not a
-  block. The data table (`Data.Table`) carries the abbreviations in scope; the parser's and the
-  typed elaboration's agree, a later one of a name hiding an earlier one. `pTy`'s `UNPROVED:`
+  block. The group is read through the bodies of the abbreviations a field names, and one that
+  names a member is opened at the field (`openMembers`), so `type JMap = Map[string, Json]` with
+  `Obj(JMap)` is accepted; such a `type` declaration written before the `data` one is placed after
+  its group. The data table (`Data.Table`) carries the abbreviations in scope; the parser's and the
+  typed elaboration's are built by one function (`Parser.tableOf`), a later one of a name hiding an
+  earlier one. `pTy`'s `UNPROVED:`
   assumption narrows to type parameters. A recursive abbreviation around the root is refused with
   U3's message before it is opened; `box C(…)` of a constructor that is not a block, where its value
   is expected, is refused with a message saying so. New programs `data-json-map`, `data-set-rec`,
-  `data-abbr-nested`, `data-abbr-block`; rejects `data-rec-abbr-list`, `data-rec-abbr-mu`,
+  `data-abbr-nested`, `data-abbr-block`, `data-abbr-root`; rejects `data-rec-abbr-list`, `data-rec-abbr-mu`,
   `data-rec-abbr-nested`, `data-box-not-block`. No change to the kernel, the checker, the backends
   or any existing program's output.
 - **1.39** (2026-11-07) — §63 (#847): `allI_inst` generalised from a body that erases to a

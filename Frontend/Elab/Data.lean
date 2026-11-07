@@ -158,9 +158,21 @@ def Abbrev.at (a : Abbrev) (As : List VTy) (ls : List Life) : VTy :=
   let B := if a.lps.isEmpty then a.body else a.body.renameLife (substLives (a.lps.zip ls))
   B.subst (a.tps.zip As)
 
-/-- The data declarations `d`'s fields name. -/
+/-- The type names `A` mentions, and those the bodies of the abbreviations it names mention, within
+`fuel` steps: `JMap`, `type JMap = Map[string, Json]`, mentions `Map`, `string` and `Json`. A name
+of a `data` declaration hides an abbreviation of the same name, as in `openX`.  `[spec §61]` -/
+def Table.namesOf (t : Table) : Nat → VTy → List String
+  | 0, A => A.tyNames
+  | k + 1, A =>
+    let ns := A.tyNames.eraseDups
+    ns ++ ns.flatMap fun n => match t.decl? n, t.abbrev? n with
+      | none, some a => (t.namesOf k a.body).filter (!a.tps.contains ·)
+      | _, _ => []
+
+/-- The data declarations `d`'s fields name, directly or through the bodies of the abbreviations
+they name.  `[spec §42, §61]` -/
 def _root_.Frontend.DataDecl.refs (t : Table) (d : DataDecl) : List String :=
-  (d.cons.flatMap fun c => c.fields.flatMap (·.ty.tyNames)).eraseDups.filter fun n =>
+  (d.cons.flatMap fun c => c.fields.flatMap (t.namesOf 16 ·.ty)).eraseDups.filter fun n =>
     (t.decl? n).isSome
 
 /-- The names reachable from `n` along the declarations' references, within `fuel` steps. -/
@@ -262,7 +274,7 @@ def bareIn (t : Table) : Nat → List String → VTy → Bool
         bareIn t k ns (S.subst (d.tps.map (·.name) |>.zip As))
       | none => match t.abbrev? h with
         | some a =>
-          if t.abbrevRec 16 h || !(As.any (mentions ns)) then A.bare ns else
+          if t.abbrevRec 16 h || !((t.namesOf 16 A).any ns.contains) then A.bare ns else
           bareIn t k ns (a.at As ls)
         | none => A.bare ns
     | none => match A with
@@ -325,6 +337,46 @@ def substHeads (σ : TySubst) : Nat → VTy → VTy
       | .mut sp a B => .mut sp a (substHeads σ j B)
       | A => A
 
+/-- The refusal of a recursive declaration or abbreviation `h` around the variable of a `μ`. -/
+def recUnder (h : String) : String :=
+  s!"the recursive type occurs under `{h}`, which is recursive itself: its `mu` would mention " ++
+    "the enclosing recursive type, and a `mu` must be closed (B14, U3)"
+
+/-- `A` with each application of an abbreviation that mentions one of the names `ns`, in its
+arguments or its body (`namesOf`), replaced by its body at its arguments, under every former, so
+that the members of a group a field names through an abbreviation are written in it:
+`Obj(JMap)` is `Obj(Map[string, Json])`. A recursive abbreviation is refused, as `openX` refuses it
+around the root.  `[spec §61]` -/
+def openMembers (t : Table) (ns : List String) : Nat → VTy → Except String VTy
+  | 0, A => pure A
+  | k + 1, A => do
+    if !((t.namesOf 16 A).any ns.contains) then return A
+    if let some (h, As, ls) := headOf A then
+      if (t.decl? h).isNone then
+        if let some a := t.abbrev? h then
+          if t.abbrevRec 16 h then throw (recUnder h)
+          unless As.length == a.tps.length do
+            throw <| s!"`{h}` takes {a.tps.length} type argument" ++
+              s!"{if a.tps.length == 1 then "" else "s"}, but {As.length} " ++
+              s!"{if As.length == 1 then "is" else "are"} given"
+          return ← openMembers t ns k (a.at As ls)
+    match A with
+    | .app sp F B => return .app sp (← openMembers t ns k F) (← openMembers t ns k B)
+    | .lapp sp F a => return .lapp sp (← openMembers t ns k F) a
+    | .tensor sp B C => return .tensor sp (← openMembers t ns k B) (← openMembers t ns k C)
+    | .sum sp B C => return .sum sp (← openMembers t ns k B) (← openMembers t ns k C)
+    | .lolli sp B C => return .lolli sp (← openMembers t ns k B) (← openMembers t ns k C)
+    | .ref sp B => return .ref sp (← openMembers t ns k B)
+    | .array sp B => return .array sp (← openMembers t ns k B)
+    | .arrayImm sp a B => return .arrayImm sp a (← openMembers t ns k B)
+    | .arrayMut sp a B => return .arrayMut sp a (← openMembers t ns k B)
+    | .imm sp a B => return .imm sp a (← openMembers t ns k B)
+    | .mut sp a B => return .mut sp a (← openMembers t ns k B)
+    | .box sp a B => return .box sp a (← openMembers t ns k B)
+    | .view sp a B => return .view sp a (← openMembers t ns k B)
+    | .bang sp B => return .bang sp (← openMembers t ns k B)
+    | A => pure A
+
 mutual
 /-- The structure of the member `n` of the group `g` whose root is `root`, its fields' types
 elaborated (`fieldTyOf`) and a block's fields cells. `toX` is the variable of the root's `μ`
@@ -346,11 +398,14 @@ def structOf (t : Table) (g : List String) (root : String) (toX : Option String)
     pure (sumTy .none pays)
 
 /-- A field's type with the members of the group substituted: the root by its name, or by the
-variable `toX`; every other member by its structure. -/
+variable `toX`; every other member by its structure. An abbreviation that names a member or the
+root is opened first (`openMembers`), so the structure names no abbreviation of the group.
+`[spec §42, §61]` -/
 def fieldTyOf (t : Table) (g : List String) (root : String) (toX : Option String) :
     Nat → VTy → Except String VTy
   | 0, A => pure A
   | k + 1, A => do
+    let A ← openMembers t (root :: g) 64 A
     let names := (A.tyNames.filter g.contains).eraseDups
     if names.isEmpty then return A
     let mut σ : TySubst := []
@@ -360,11 +415,6 @@ def fieldTyOf (t : Table) (g : List String) (root : String) (toX : Option String
       else σ := σ ++ [(m, ← structOf t g root toX k m)]
     pure (substHeads σ 64 A)
 end
-
-/-- The refusal of a recursive declaration or abbreviation `h` around the variable of a `μ`. -/
-def recUnder (h : String) : String :=
-  s!"the recursive type occurs under `{h}`, which is recursive itself: its `mu` would mention " ++
-    "the enclosing recursive type, and a `mu` must be closed (B14, U3)"
 
 /-- `T` with each application of a non-recursive declaration of the table that holds the
 variable `X` replaced by that declaration's structure at its arguments, and each such application
@@ -545,13 +595,16 @@ def typeDecls (t : Table) (sp : Span) (d : DataDecl) : Except Error (List Decl) 
           | .error msg => err msg
         out := out ++ [mk m S]
         done := done ++ [m]
-  -- The blocks' shapes, at the declarations' named types.
+  -- The blocks' shapes, at the declarations' named types; an abbreviation that names a member is
+  -- opened (`openMembers`), so no declaration of the group names one.
   for m in members do
     let some e := t.decl? m | continue
     if !(e.tps.isEmpty && e.lps.isEmpty) then continue
     for c in consInfo t e rec_ root do
       if !c.block then continue
-      let leaves := c.fields.map fun f => Shape.leaf sp f.fullTy
+      let leaves ← c.fields.mapM fun f => match openMembers t (root :: members) 64 f.fullTy with
+        | .ok A => pure (Shape.leaf sp A)
+        | .error msg => err msg
       let rec node : List Shape → Shape
         | [] => .leaf sp (.unit sp)
         | [σ] => σ

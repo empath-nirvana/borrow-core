@@ -168,6 +168,7 @@ corpus/core-yield-pull.bc 1.0 cancellable stored,tail: machine: a path of the cl
 corpus/core-yield-pull.bc 2.0 cancellable tail: direct; agree
 corpus/data-abbr-block.bc 1.0 cancellable abortive: branch; agree
 corpus/data-abbr-nested.bc 1.0 cancellable abortive: branch; agree
+corpus/data-abbr-root.bc 1.0 cancellable abortive: branch; agree
 corpus/data-array-tree.bc 1.0 cancellable abortive: branch; agree
 corpus/data-box-tree.bc 1.0 cancellable abortive: branch; agree
 corpus/data-config.bc 1.0 cancellable abortive: branch; agree

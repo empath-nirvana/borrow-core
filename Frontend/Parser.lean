@@ -3296,12 +3296,18 @@ def dataOfModules (lib : String → Option String) : Nat → List String → Lis
 def runP {α} (p : Nat → P α) (src : String) (resolve : Bool := false) : Except Error α :=
   (·.1) <$> runPS p src resolve
 
+/-- The table of a program that includes the modules `incs` and whose own table is `own` (SPEC
+§42, §61): the prelude's, the included modules', and its own, `lib` giving a module's source; a
+later one of a name hides an earlier one (`Data.Table`). The parser's table and the typed
+elaboration's are both this one (`dataOf`, `Sugar.dataDecls`).  `[spec §61]` -/
+def tableOf (lib : String → Option String) (incs : List String) (own : Data.Table) : Data.Table :=
+  (dataOfModules lib 64 ("prelude" :: incs) []).1 ++ own
+
 /-- The `data` declarations and the `type` abbreviations in scope in the source `src` (SPEC §42,
-§61): the prelude's, the included modules', and its own, `lib` giving a module's source; a later
-one of a name hides an earlier one (`Data.Table`). -/
+§61), `lib` giving a module's source (`tableOf`). -/
 def dataOf (lib : String → Option String) (src : String) : Data.Table :=
   match lex src with
-  | .ok toks => (dataOfModules lib 64 ("prelude" :: includesIn toks) []).1 ++ dataIn toks
+  | .ok toks => tableOf lib (includesIn toks) (dataIn toks)
   | .error _ => {}
 
 /-- The declarations of a source file. At most one `main` is accepted. Its names are resolved
