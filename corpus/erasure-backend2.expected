@@ -201,6 +201,7 @@ gen-div erased handles 0 performs 0 raises 0 machines 6 suspends 4 left 0 0
 gen-fib erased handles 0 performs 0 raises 0 machines 4 suspends 2 left 0 0
 gen-from erased handles 0 performs 0 raises 0 machines 6 suspends 6 left 0 0
 gen-nested erased handles 0 performs 0 raises 0 machines 6 suspends 3 left 0 0
+gen-take-print erased handles 0 performs 0 raises 0 machines 4 suspends 2 left 0 0
 gen-pipeline erased handles 0 performs 0 raises 0 machines 6 suspends 3 left 0 0
 gen-pipeline-adapters erased handles 0 performs 0 raises 0 machines 10 suspends 5 left 0 0
 gen-pipeline-pipe erased handles 0 performs 0 raises 0 machines 20 suspends 10 left 0 0

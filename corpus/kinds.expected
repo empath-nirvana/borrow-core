@@ -348,6 +348,8 @@ corpus/gen-produce.bc 1.0 cancellable tail: direct; agree
 corpus/gen-return.bc 2.0 cancellable tail: machine: the clause captures values; disagree
 corpus/gen-return.bc 3.0 cancellable tail: machine: the clause captures values; disagree
 corpus/gen-return.bc 1.0 cancellable tail: direct; agree
+corpus/gen-take-print.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-take-print.bc 1.0 cancellable tail: machine: the clause captures values; disagree
 corpus/gen-tokenize-parse.bc 3.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-tokenize-parse.bc 1.0 cancellable abortive: branch; agree
 corpus/gen-tokenize-parse.bc 2.0 cancellable abortive: branch; agree

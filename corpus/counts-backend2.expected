@@ -201,6 +201,7 @@ gen-div 3 0 0 3 3 0
 gen-fib 3 0 0 3 3 0
 gen-from 3 0 0 3 3 0
 gen-nested 3 0 0 3 3 0
+gen-take-print 3 0 0 9 3 0
 gen-pipeline 3 0 0 3 3 0
 gen-pipeline-adapters 3 0 0 3 3 0
 gen-pipeline-pipe 3 0 0 3 3 0
