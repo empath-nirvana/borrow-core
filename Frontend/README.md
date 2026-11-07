@@ -264,8 +264,8 @@ being checked: variables bound by `x <- M; N`, `let (x, y) = V; M`, a `case` arm
 type is linear and consumable (`consumableB`, which decides `Consumable`: `consumableB_iff`; the
 owed slot is exactly `LinearConsumable A`, `Env.pushOwn_own`). What is owed flows into tail positions:
 the body of `<-` and `let` (less what the head or `V` used), both `case` arms, both `<,>`
-components, `fun`/`Fun` bodies, `nu_in` and ascriptions. The head `M` of `x <- M; N` is owed the
-owed variables it mentions by name (`mentionsC`). A value, and so every computation inside one,
+components, `fun`/`Fun` bodies, `nu_in` and ascriptions. The head `M` of `x <- M; N`, and the
+handled body of a handler site, are owed the owed variables they mention by name (`mentionsC`). A value, and so every computation inside one,
 starts with nothing owed. At a terminal computation (`Comp.terminal`), the checker checks it with
 nothing owed, then wraps the result in `consumeE A xᵢ; …` for each owed slot `i` it neither used nor
 absorbed, the lowest index outermost (`consumeOwed`). Each wrap is `rConsume`, which applies

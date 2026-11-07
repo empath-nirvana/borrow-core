@@ -22,10 +22,10 @@ array-sum 1 0 0 3000 3000 2024
 ascii-upper 4 0 0 4286 4179 192
 async-bank 14 0 0 439 431 16
 async-bank-inbox 14 0 0 453 445 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
-async-borrow 29 5 0 402 399 3
+async-borrow 10 5 0 402 399 3
 async-cancel 8 0 0 140 137 6 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
 async-lend-slots 10 0 0 337 325 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
-async-logged 25 0 0 209 191 0
+async-logged 15 0 0 209 191 0
 async-map 21 0 0 254 231 10 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
 async-mapreduce 25 0 1 492 438 30 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value; the recursion's frames on its task's stack, κ in the stack's region
 async-r1-cancel 4 0 0 5 5 0
@@ -38,7 +38,7 @@ async-r1-nested 2 0 0 4 4 0
 async-r1-step-lend 1 0 0 3 3 0
 async-race 3 0 0 3 3 0
 async-scheduler 8 0 0 449 443 20 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
-async-scoped 25 0 0 263 253 0
+async-scoped 9 0 0 263 253 0
 async-stack-cancel 406 0 0 4917 2495 0 # SPEC §52 stress: each level's cell, freed by the cancel
 async-stack-deep 1367 4750 0 268158 230105 14412 # SPEC §52 stress: each level's cell; a resume dispatches between the two task bodies' codes
 async-stack-nested 16 0 0 1254 1090 40 # SPEC §52 stress: the inner tasks' stacks
@@ -46,7 +46,7 @@ async-timers 40 5 0 398 380 0
 async-try-join 28 0 0 378 372 0
 async-unr-site 7 0 0 411 331 18 # SPEC §52: an unr site does not switch stacks
 async-worker-pool 11 0 1 489 475 20
-async-workers-scoped 43 0 1 756 740 0
+async-workers-scoped 14 0 1 756 740 0
 axes/borrow-across-loop 5 0 0 32 15 4
 axes/codata-coeffects 2 0 0 27 10 16
 axes/codata-effects 3 0 0 13 3 0
@@ -82,6 +82,9 @@ clause-captures 6 3 0 10 10 0
 clo-capture 1 0 0 3 3 0
 clo-coerce 1 0 0 3 3 0
 clo-counter 2 0 0 17 17 0
+for-arm-raises-owned 8 0 0 54 54 18
+handle-arm-releases 2 0 0 13 13 5
+leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 695
 lend-call-raise 9 0 0 34 31 4
 lend-call-record 1 0 0 6 2 0
 lit-lend-raise 6 0 0 69 30 39
@@ -110,7 +113,7 @@ core-effects-tail 0 0 0 0 0 0
 core-yield-loop 3 0 0 3 3 0
 core-yield-pull 3 0 0 3 3 0
 count-down 0 0 0 0 0 0
-count-down-exact 6 0 0 18 12 0
+count-down-exact 3 0 0 18 12 0
 count-fold 0 0 0 0 0 0
 count-try 0 0 0 0 0 0
 data-array-tree 4 0 0 80 80 8
@@ -244,7 +247,7 @@ io-hex 3 0 0 47 3 0
 io-laws 13 0 0 436 228 121
 io-lines 3 0 0 20 3 0
 io-sections 3 0 0 29 3 0
-io-task 31 7 0 459 447 0
+io-task 14 7 0 459 447 0
 io-upper 3 0 0 136 3 0
 io-upper-effects 3 0 0 136 3 0
 io-wc 3 0 0 62 3 0
@@ -380,10 +383,10 @@ name-clash 0 0 0 0 0 0
 native-willreturn 8 0 0 22 12 0
 nats-sum 0 0 0 0 0 0
 needs-stdout 3 0 0 9 3 0
-operator-rounds 90 0 24 803 519 0
+operator-rounds 83 0 24 803 519 0
 parse-int 4 0 0 240 80 105
-parse-recover 259 0 31 1848 1036 0
-parse-recover-gen 240 0 31 1983 1199 108
+parse-recover 245 0 31 1848 1036 0
+parse-recover-gen 226 0 31 1983 1199 108
 pipe-handlers 0 0 0 0 0 0
 poly-operators 0 0 0 0 0 0
 poly-providers 2 0 0 90 48 22
@@ -396,24 +399,26 @@ rec-deep 30043 0 0 2169443 2169443 436560
 rec-emit 6 0 0 252 252 0
 rec-even-odd 0 0 0 0 0 0
 rec-fib 0 0 0 0 0 0
+rec-for-owned-state 9 0 0 346 346 199
 rec-generic-deep 120057 0 0 1888403 1888403 502080
 rec-generic-layer 6 0 0 23 20 0
 rec-generic-mutual 11 0 0 45 33 0
+rec-in-for-linear 1 0 0 1 1 0
 rec-layer 2 0 0 17 17 0
 rec-lifetimes 2 0 0 16 6 23
 rec-log 1 0 0 7 7 0
 rec-mixed 0 0 0 0 0 0
 rec-overflow 10101 0 0 10101 10101 0
-rec-parser 22 0 0 66 66 0
+rec-parser 17 0 0 66 66 0
 rec-tree 127 0 0 635 635 0
 rec-yield 0 0 0 0 0 0
 reconcile-chain 16 3 0 398 380 0
 reconcile-clock 25 8 0 282 246 0
 retry-block 2 0 0 5 5 0
 reverse-bytes 4 0 0 133 92 39
-sched-a 43 18 0 445 441 0
-sched-a-div 14 5 0 384 380 0
-sched-b 44 18 0 448 442 0
+sched-a 40 18 0 445 441 0
+sched-a-div 11 5 0 384 380 0
+sched-b 41 18 0 448 442 0
 slice-imm 1 0 0 6 5 2
 slice-lib 3 0 0 38 25 30
 slice-mut 1 0 0 8 8 4

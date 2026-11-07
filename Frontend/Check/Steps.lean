@@ -886,10 +886,11 @@ def mentionsC (x : String) : Comp → Bool
 end
 
 /-- A path's terminal computation: every form except those that pass what is owed on to a tail
-position (`x <- M; N`, `let`, `case`, `<M, N>`, `fun`, `Fun`, `nu_in`, an ascription). -/
+position (`x <- M; N`, `let`, `case`, `<M, N>`, `fun`, `Fun`, `nu_in`, an ascription) and the
+handler site, which owes its handled body the owed variables the body mentions.  `[spec §12]` -/
 def _root_.Frontend.Comp.terminal : Comp → Bool
   | .bind .. | .letUnit .. | .letPair .. | .case .. | .with_ .. | .lam .. | .lamL ..
-  | .nuIn .. | .ascribe .. | .unwind .. => false
+  | .nuIn .. | .ascribe .. | .unwind .. | .handle .. => false
   | _ => true
 
 /-- The slots to consume before a terminal computation: owed, and neither used nor absorbed by it. -/

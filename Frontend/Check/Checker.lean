@@ -460,6 +460,9 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let ⟨_, r⟩ ← abortIt n E Δ T sp k i V .zero
       pure ⟨_, r⟩
     | .handle sp k st hr hc M => do
+      -- The handled body is owed the owed variables it mentions, as the head of `x <- M; N` is;
+      -- the others are consumed before the site (`consumeOwed`).  `[spec §12]`
+      let EM := E.ownIn (mentionsC · M)
       -- The handler's pair: the answer clause and the clauses, values checked here, whose
       -- slots are persistent (`[handle]`'s `Γ₁`).
       let what (V : Val) (d : String) : String := match V with
@@ -499,11 +502,12 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                           let Sh := BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S
                           if hSd : ansOutlivesB Δ d Sh = true then
                             let site ← siteOf E Δ sp k st Es
-                            let rM ← chkC n E Δ T M (effOf Sh A)
+                            let rM ← chkC n EM Δ T M (effOf Sh A)
                             if hso : usedSat (outlivesB Δ d) T rM.F.u = true then
                               if h₂ : overlapOK T rH.F.u rM.F.u = true then
-                                pure ⟨_, rEffHandleB (at_ sp) (classifyHandler Es rH.t) site hr' hc' rH
-                                  hp hv hn0 hnS hlen hdv hwf hSd rM hso h₂⟩
+                                pure ⟨_, ← consumeOwed E sp (rEffHandleB (at_ sp)
+                                  (classifyHandler Es rH.t) site hr' hc' rH hp hv hn0 hnS hlen
+                                  hdv hwf hSd rM hso h₂)⟩
                               else throw (splitErr E T sp rH.F.u rM.F.u)
                             else match firstBad (outlivesB Δ d) T rM.F.u with
                               | some i => err sp (s!"the clauses box `κ` at `{E.ppL d}`, so the " ++
@@ -533,11 +537,11 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                        if hdv : BoCa.Fig16.LogRel.Core.Row.divB
                            (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) = false then
                         let site ← siteOf E Δ sp k st Es
-                        let rM ← chkC n E Δ T M
+                        let rM ← chkC n EM Δ T M
                           (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) A)
                         if h₂ : overlapOK T rH.F.u rM.F.u = true then
-                          pure ⟨_, rEffHandle (at_ sp) (classifyHandler Es rH.t) site hr' hc' rH hp hv
-                            hn0 hnS hlen hdv rM h₂⟩
+                          pure ⟨_, ← consumeOwed E sp (rEffHandle (at_ sp)
+                            (classifyHandler Es rH.t) site hr' hc' rH hp hv hn0 hnS hlen hdv rM h₂)⟩
                         else throw (splitErr E T sp rH.F.u rM.F.u)
                        else err sp divHandleMsg
                       else err sp "a handler has at most 2^32 operations"

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.41 · 2026-11-07
+Version 1.42 · 2026-11-07
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1486,6 +1486,17 @@ does not, the checker consumes it by its consume:
   components of `<M, N>`, the bodies of `fun` and `Fun`, and through `nu_in` and
   ascriptions. An owed variable that the head `M` of `x <- M; N` mentions is owed to `M`, which
   must then consume it on every path of `M`, consuming it where it does not.
+- **Handled bodies.** A handler site `handle[k] (H) M` (a `with`; every `for` body, a per-iteration
+  handler; the budget's site of a recursion) is not terminal: an owed variable that the handled
+  body `M` mentions is owed to `M`, as to the head of `x <- M; N`, and the others are consumed
+  before the site, at its end of path. So a path of `M` that ends in an abortive operation (a
+  `raise`, a budget's `exhausted`, a loop's exit) consumes before the abort what `M` is owed and
+  that path has not used, and a `case` in `M` whose one arm aborts and whose other uses such a
+  variable merges. The handler's pair uses only persistent slots (`[handle]`'s `Γ₁`), and an owed
+  slot is never persistent, so the split of the site is unchanged; a variable `M` mentions is used
+  by `M` on every path already, so the outlives premise of a boxed `κ` (§28) asks nothing new. The
+  consumes are `consumeOne`'s nodes, and `[handle]` and `[sub]` are unchanged. The variables `M`
+  does not mention stay consumed before the site, where they were. (#848, #492)
 - **Not moved across effects.** A consume is never placed earlier than the path's terminal
   computation. Codata `close` runs code, so moving it would reorder effects.
 - `<>` and `absurd V` absorb any context (§11 of `docs/syntax-core.md`), so no consume is inserted
@@ -11269,6 +11280,106 @@ backend's output or a kernel program. `corpus/counts-backend2.expected` and
 
 ---
 
+## 64. Entry 63 — the new backend: a box taken apart is reused by the next box of its size (#651)
+
+### Motivation
+
+Backend2 allocated more than the old backend on six programs (#651). Each extra allocation is a
+boxed field of a recursive type (§35, *one box a node*) built by a `roll`; Backend2 lays every
+`μ` out on its type's own graph (`Backend2/Layout.lean`), one box a node. They have two causes.
+
+- **A node taken apart and built again.** `match unroll ts { inr (t, rest) -> … cons(t, rest) }`
+  (the token put back by `rec-parser`, `parse-recover` and `parse-recover-gen`): the `unroll`'s
+  `case` and the payload's `letpair` load the boxed tail and free its object, and the `roll`
+  allocates an object of the same words for the same tail. Rust moves the `Box` and allocates
+  nothing. The old backend allocated nothing there only where its layout types, unified over
+  the erased closure IR with no `μ` (`Backend/Clos/Types.lean`), put the rebuilt node off the
+  type's cycle, its tail inline; on the cycle it freed and allocated as Backend2 did.
+- **A node built with a fresh tail.** `count3`'s list in `effects-fail-list` (5), `map`'s
+  elements `[[1, 2], [3]]` and `cons(0, l)` in `list-generic` (5), `evens`/`odds` in
+  `rec-generic-mutual` (3). The old backend's unification laid these out with fewer boxes than
+  nodes: a list built to a fixed depth and read only to that depth has an acyclic layout type,
+  and a cycle through two functions' types is unrolled, one box for two nodes. That is a fact
+  about the program's value flow, rebuilt by unification with no proof, and not one the checker
+  states. Rust allocates one `Box` a node in each; so does Backend2, §35's target. They stay
+  (Open).
+
+### Language
+
+No change: no type, rule, term, typing, elaboration, semantics or erasure. Only Backend2's
+lowering to the word IR changes.
+
+### Lowering
+
+- **Spare boxes** (`Backend2/Lower.lean`, `getField`, `putField`, `LState.spare`). Where a
+  `letpair` or a `case` takes a boxed field apart, its words are loaded as before and its object's
+  free is deferred: the object is a *spare box* of its words. A pair or an injection the term
+  builds (`Tm.pair`, `Tm.inj`) whose boxed field has as many words as a spare box stores them in
+  it, and allocates nothing.
+- **Where a spare box is freed.** Before a call (`lowerCall`), before a return (`emit` at
+  `Dest.ret`), and at the end of each arm of a `case` for those the arm has not used: every arm
+  starts with the boxes held before the `case`, and none is held past the join. So a spare box
+  is reused only on a stretch of the path with no call between its free and the build, and every
+  object is freed on every path that does not build into it.
+- **What it rests on.** The deferred free is the free the lowering made before, at the same
+  object, moved later on the same path past statements that do not read the object (its words are
+  in locals). A build into it writes all its words before any read. So the reuse is sound
+  exactly when that free was: when the box has one owner, the value taken apart. That is
+  `Backend2/Layout.lean`'s existing `UNPROVED:` assumption on boxed fields (the LIR consumes each
+  variable once on every path, which `Lint` checks of every compiled program), restated at
+  `getField`. No kernel fact is read or rebuilt: the kernel has no boxes, and the choice of
+  object is the allocator's bookkeeping below the typed term.
+
+### Programs
+
+Counts per run (`allocs indirect copies loads stores bounds`), Backend2 before and after, and
+the old backend:
+
+| program | before | after | old backend |
+|---|---|---|---|
+| `rec-parser` | `22 0 0 66 66 0` | `17 0 0 66 66 0` | `17 0 0 51 51 0` |
+| `parse-recover` | `259 0 31 1848 1036 0` | `245 0 31 1848 1036 0` | `246 0 31 1808 984 28` |
+| `parse-recover-gen` | `240 0 31 1983 1199 108` | `226 0 31 1983 1199 108` | `227 0 31 1943 1147 108` |
+| `effects-fail-list` | `5 0 0 15 15 0` | unchanged | `0 0 0 0 0 0` |
+| `list-generic` | `32 0 0 158 105 0` | unchanged | `27 0 0 148 102 0` |
+| `rec-generic-mutual` | `11 0 0 45 33 0` | unchanged | `8 0 0 44 32 0` |
+
+Every other count that changed is an `allocs` that fell, where a program takes a node of a
+recursive type apart and builds one of the same words before a call: `count-down-exact` 6 to 3
+(the counter's node moved to the accumulator), `operator-rounds` 90 to 83, and the
+task programs, `async-borrow` 29 to 10, `async-logged` 25 to 15, `async-scoped` 25 to 9,
+`async-workers-scoped` 43 to 14, `io-task` 31 to 14, `sched-a` 43 to 40, `sched-a-div` 14 to 11,
+`sched-b` 44 to 41. No count rose.
+
+A function that builds its boxes in spare boxes calls no allocator, so §50's `willreturn` class
+(the functions at the empty row calling no runtime function but `bc_free`) can grow: `io-task`'s
+has 9 functions where it had 5 (`corpus/trusted/io-task.txt`), each at the same two assumptions,
+`CallRelated` and `HostStack`.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the checker, the elaboration, `Convert`, the
+layouts, the old backend or a kernel program. Every corpus program keeps its output at every
+stage of Backend2, with `live 0` where its golden has it.
+
+### Open
+
+- **The fresh-tail nodes** above (`effects-fail-list` 5, `list-generic` 32, `rec-generic-mutual`
+  11, against the old backend's 0, 27 and 8) are one box a node, as in Rust: they meet §35's
+  target and are recorded as explained rises under the switch's kill criterion 6
+  (`docs/compiler.md` §5.4). The old backend's lower counts came from its layout unification, a
+  value-flow fact rebuilt with no proof, which compiling from checked facts rules out. The
+  intended way to remove them is fusion: an unfold followed by a fold (a hylomorphism) fused,
+  so that the intermediate `μ` list is never built (#651).
+- **The move.** Rust keeps the moved tail behind its pointer; the reuse still loads its words and
+  stores them back (the loads and stores above are unchanged). Holding a taken-apart field as
+  its pointer until a use needs its words would remove them.
+- **Across a call.** A spare box is freed at the next call: `map` and `filter` (`lib/list.bc`)
+  free a node before their recursive call and build one after it, as Rust does. Reuse across
+  calls (Perceus's reuse tokens) would build them in place.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -11712,7 +11823,7 @@ checker or the old backend.
 
 ## Changelog
 
-- **1.41** (2026-11-07) — §62 (#844 Tier 1, *Lifetime-polymorphic suspending constants*): the
+- **1.42** (2026-11-07) — §62 (#844 Tier 1, *Lifetime-polymorphic suspending constants*): the
   suspending lend constants under lifetime binders (`Const791.poly`, typed at `VTy.all`), their
   premises at the constant's own context (`Const791.OKAt`), `Row.Suspend`/`CTy.SuspendC` at a
   context, and the laws that read the callback bound at `δ ⊨ Δ`. The answer's move between views
@@ -11720,16 +11831,33 @@ checker or the old backend.
   `goal791N` keeps its statement. A closed instance (T1.4): an outer `imm` lend's borrow yielded
   across an inner suspending lend to a handler between them, resumed and cancelled, at `goal791N`.
   No change to `CDerives`, the checker, the backends or the corpus.
-- **1.40** (2026-11-07) — §62 (*The answer's view across a lend*, #844 T1.3): `NoMutAt`,
+- **1.41** (2026-11-07) — §62 (*The answer's view across a lend*, #844 T1.3): `NoMutAt`,
   `consistentX_setLife_iff`; `consistentX_of_outlivesN`, `consistentX_of_top` and
   `consistentX_setLife` become corollaries; the callback's table steps move the lender's view to
   the lend's. No change to `CDerives`, `fundamentalN_all`, `goal791N`, the checker, the backends or
   the corpus.
+- **1.40** (2026-11-07) — §64 (#651): Backend2's lowering keeps a boxed field's object taken apart
+  by a `letpair` or a `case` as a spare box, reused by the next box of its words built before a
+  call, a return or the arm's end, and freed there otherwise: the token put back by
+  `rec-parser`, `parse-recover` and `parse-recover-gen` allocates nothing. The other #651 rises
+  are one box a node, as in Rust, and stay Open. No change to `CDerives`, the relation, the
+  machine, the checker or the old backend.
 - **1.39** (2026-11-07) — §63 (#847): `allI_inst` generalised from a body that erases to a
   λ-value to one that erases to a value form not naming the binder's dead slot (`valFormB`);
   `lendR_plain`: `[lend-R]` at the empty row is the plain lend, the finaliser never run. Backend2
   reads both and compiles every corpus program. No change to `CDerives`, the relation, the
   machine, the checker or the old backend.
+- **1.40** (2026-11-07) — §12 (#848, #492): a handler site is not terminal for the insertion
+  policy (*Handled bodies*): the handled body is owed the owed variables it mentions, as the head
+  of `x <- M; N` is, so an abortive arm inside a `with`, a `for` body or a recursion releases an
+  owned variable bound outside the site by its consume. Programs with a `raise`, or a recursive
+  call, in one arm and an outer owned value used in the other are accepted
+  (`corpus/handle-arm-releases.bc`, `corpus/for-arm-raises-owned.bc`,
+  `corpus/rec-for-owned-state.bc`; the pending `rec-in-for-linear.bc` and
+  `lc-0039-combination-sum.bc` run, as `corpus/rec-in-for-linear.bc` and
+  `corpus/leetcode/dp/0039-combination-sum-loop.bc`). No change to `CDerives`,
+  the kernel, the theorems or the backends; every other corpus program checks as before.
+
 - **1.38** (2026-11-04) — §62 (*Semantic types read at the tree*): `F A` is a bare `cerwpT` run
   (`SCmp.ret`), Core's `cC (.ret A)`; the Kripke quantifier over later worlds and lists sits at
   `U` only. Thunks are introduced as Core's `thunkF_compatC` does, from the computation at every
