@@ -11676,7 +11676,7 @@ proofs; every corpus and kernel program its output. The later units must preserv
   330 corpus programs, none fails `CapOK` and none captures a dead slot; 14 contain a `topI` or
   `zeroE`, 2 of them with a live slot, which they capture; 3 leave a live slot unread, each
   persistent.
-- **Removing `CapOK` later.** Two ways keep `Code⟨N; E⟩ C` and every rule but `codeI` as stated.
+- **Removing `CapOK` later** (#894; route (b) preferred). Two ways keep `Code⟨N; E⟩ C` and every rule but `codeI` as stated.
   The frame `ρR` back in the clause changes only `codeI` (its premise dropped) and the clause, but
   `nuOutK`'s step is then not derived. Or `E` lists the absorbed slots after the captures and the
   clause reads `v = N[take k us]`: this changes `codeI`'s `capTy` and the clause, and leaves
