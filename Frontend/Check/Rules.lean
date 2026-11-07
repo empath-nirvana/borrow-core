@@ -291,7 +291,7 @@ def nuHeadOf? (b : Nat) : Expr → Option (Nat × Option Nat)
   | _ => none
 
 /-- The variables of codata's η-thunk (an η-tree's erasure, `NuTree.toE`), read at its first
-leaf, when the term may be one; `nuEtaB` checks it.  `[spec §45, §64]` -/
+leaf, when the term may be one; `nuEtaB` checks it.  `[spec §45, §65]` -/
 def nuEtaOf? (e : Expr) : Option (Nat × Option Nat) := go 0 0 e
 where
   /-- Under `b` binders, with `n` observation arguments made. -/

@@ -198,7 +198,7 @@ theorem lendR_plain {ℍ : Host} [HostIs ℍ] {S : Row} (hS : S.isEmpty = true) 
   · obtain ⟨⟨-, -, hT, -⟩, -⟩ := pure_sep_iff.mp hp
     rw [hE n i] at hT; cases hT
 
-/-! ### Codata's η-thunk  `[spec §45, §64]`
+/-! ### Codata's η-thunk  `[spec §45, §65]`
 
 A thunk that observes codata by η-expansion is the erasure of an η-tree over `f` and `s`
 (`NuTree.toE`, `nuEtaB`): `&`s of the projections, `λ`s and `Λ`s, every leaf the observation of
@@ -497,7 +497,7 @@ theorem app_closed {os : List Val} (hos : ∀ v ∈ os, closedAt 0 v.1 = true) {
   · rw [List.mem_singleton.1 h]; exact hx
 
 /-- **An observation of the η-thunk reaches the subtree it reaches**: by pure steps, the
-subtree's erasure over the observation made.  `[spec §45, §64]` -/
+subtree's erasure over the observation made.  `[spec §45, §65]` -/
 theorem nuEta_reach {ℍ : Host} [HostIs ℍ] {fv : Val} {sv : Option Val}
     (hf : closedAt 0 fv.1 = true) (hs : ∀ v ∈ sv, closedAt 0 v.1 = true) :
     ∀ {t ps t'}, NuTree.Reach t ps t' → ∀ (os : List Val), (∀ v ∈ os, closedAt 0 v.1 = true) →
@@ -583,7 +583,7 @@ theorem nuEta_leaf {ℍ : Host} [HostIs ℍ] {fv : Val} {sv : Option Val}
 
 /-- **The η-thunk's observations are `f s`'s**: an observation `ps` of the thunk that reaches a
 leaf of its η-tree reaches, by pure steps, the same observation of `f s` (of `f`, with no
-state).  `[spec §45, §64]` -/
+state).  `[spec §45, §65]` -/
 theorem nuEta_obs {ℍ : Host} [HostIs ℍ] {fv : Val} {sv : Option Val} {t : NuTree} {ps : List Val}
     {rb : Bool} (hf : closedAt 0 fv.1 = true) (hs : ∀ v ∈ sv, closedAt 0 v.1 = true)
     (hps : ∀ v ∈ ps, closedAt 0 v.1 = true) (h : t.Reach ps (.leaf rb)) :
@@ -603,7 +603,7 @@ theorem nuEta_var {ℍ : Host} [HostIs ℍ] {fv : Val} {t : NuTree} {ps : List V
 
 /-- **At `f = unfold step`, the η-thunk is the codata `f s` computes**: its every observation
 that reaches a leaf reaches by pure steps the same observation of `etaN C g s`, which `f s` steps
-to by one β at every memory (`hN_steps`).  `[spec §45, §64]` -/
+to by one β at every memory (`hN_steps`).  `[spec §45, §65]` -/
 theorem nuEta_unfold {ℍ : Host} [HostIs ℍ] (C : CTy) (g sv : Val) {t : NuTree} {ps : List Val}
     {rb : Bool} (hf : closedAt 0 (hN C g).1 = true) (hs : closedAt 0 sv.1 = true)
     (hps : ∀ v ∈ ps, closedAt 0 v.1 = true) (h : t.Reach ps (.leaf rb)) :

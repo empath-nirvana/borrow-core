@@ -122,7 +122,7 @@ pulled forward from N4, and the walk's typed fact (L-3). SPEC §44–§46.
 | item | status |
 |---|---|
 | `Λ` erased by a proved rule (§44) | met: `allI_inst` (one β at every memory to the body's λ-value); `∀'x. C` is `C` in the LIR's types; no `∀` type in any program's LIR. Counts unchanged (the instantiations were direct calls) |
-| codata's η-thunk as a derived node (§45) | met: `nuEta`, built by the checker at `thunkv`; `nuEta_obs`, `nuEta_var`, `nuEta_unfold`; at `f = unfold step` the call `f s` is made where the thunk is built. Every program's `indirect` at most the old backend's: 37 in all, equal on all 222 (part 1: 2024917). Two programs' rise was literal tables, now one code over the literal's offset and length |
+| codata's η-thunk as a derived node (§45) | met: `nuEta`, built by the checker at `thunkv` over an η-tree of the observations at any depth (`NuTree`, §65); `nuEta_reach`, `nuEta_obs`, `nuEta_var`, `nuEta_unfold`; at `f = unfold step` the call `f s` is made where the thunk is built. Every program's `indirect` at most the old backend's: 37 in all, equal on all 222 (part 1: 2024917). Two programs' rise was literal tables, now one code over the literal's offset and length |
 | L-3: the walk's read (§46) | met: `walk`'s `read` (`walkReadB`), the marked read `walkGet`; the 33 programs of the fragment with a walk have no test at the walk's read. The step's tails handing the view on is fixed of the term, not proved of the runs (§46 *Open*) |
 | NEW-b | not in reach: every `bounded_fix` program has an effect node, outside the fragment; counts are gated on Wasm |
 | U1's block as one object | deferred (decision on #636) |

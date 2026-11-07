@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.40 · 2026-11-07
+Version 1.41 · 2026-11-07
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8736,7 +8736,7 @@ No change: no type, rule, term, typing, elaboration or semantics. A program's er
   `thunkv` at a `ν` type, with the variables `f` and (optionally) `s` it observes. Its typed rule
   (`TDerivesAt.nuEta`, `TDerivesP.nuEta`) says the term's erasure is the scheme `nuEtaB f s`:
   the `&` of `f s (inj₁ ())` and `f s (inj₂ ())` (with no `s`, of `f`), each arm optionally
-  binding `f` to a name of its own first (`g <- return (unbang f); …`). §64 generalises the
+  binding `f` to a name of its own first (`g <- return (unbang f); …`). §65 generalises the
   scheme to an η-tree of the observations at any depth (`NuTree`). The checker builds it at
   `thunkv` when the erasure is the scheme (`rNuEta`, `nuEtaOf?`, `Frontend/Check/Rules.lean`);
   the node is kept by moving the term's variables (`nuEtaB_shift`, `TExpr.shift`).
@@ -11163,7 +11163,7 @@ backend's output or a kernel program. `corpus/counts-backend2.expected` and
   (§47) never cancels the callback either, but its proof needs the resumption, which is
   `PinLaw`'s ground (§29); such a lend stays a machine's.
 
-## 64. Entry 63 — the new backend: codata's η-thunk at any depth (#842)
+## 65. Entry 64 — the new backend: codata's η-thunk at any depth (#842)
 
 ### Motivation
 
@@ -11249,22 +11249,24 @@ kernel program or any program's erasure. `corpus/counts.expected` unchanged.
 
 ### Open
 
-- **`tree-view-tasks.bc`**: its 600 indirect calls are the same class of two codes, `unfold`'s and
-  an η-thunk's (`nu. F (i64 + X) & F 1`). Its thunk is a `nuEta` node, flat, but its `f` reaches it
-  through a counted loop's state (`for t in 0..tasks` threads `f` with the rest of what the body
-  uses), so no `bind` of `unfold step` is its binder and the thunk is compiled as its own code.
-  That the loop hands that component on unchanged is the elaboration's (`forData`); a fact on the
-  loop's node, as a walk's `read` (§46) fixes its view, or an elaboration that captures a `!`
-  variable instead of threading it, would carry it.
-- **`alpha-nu-in.bc`**: `mk`'s thunk is now `unfold`'s call, but `wrap` builds a second object,
-  which is not an η-thunk (its `close` adds 100), so the codata's class keeps two codes,
-  `unfold`'s and `wrap`'s. Its three indirect calls are observations of a value read out of a
-  pair, which Backend2's flow reads at its class: `obs_read`'s `.1` on `w`, which its call passes
-  in the pair of its arguments, the call of the closure that projection answers, and `obs_close`'s
-  `.2` on the rest `obs_read` answers. Its closures are on the heap, `wrap`'s object holding `o`,
-  a value of the class itself. A flow that follows a closure through a pair, as the old backend's
-  did, or per-code layouts would make them direct; which code a value read out of a pair is, is
-  not a fact of the typed term.
+- **`tree-view-tasks.bc`, 600 indirect calls: the η-thunk's `f` is threaded through the `for`
+  loop's state, and no fact says the loop hands it on unchanged.** The thunk is a `nuEta` node
+  (flat), but `for t in 0..tasks` carries `f` in its state with the rest the body uses
+  (`forData`), so `f` reaches the node out of the state's `letpair`, not from the `bind` of
+  `unfold step`. The thunk is compiled as its own code, the class `nu. F (i64 + X) & F 1` holds it
+  beside `unfold`'s, and every `resume_at`/`cancel_at` dispatches. A fact on the loop's node that
+  a state component is handed on unchanged (as a walk's `read`, §46, fixes its view), or an
+  elaboration that captures a `!` variable instead of threading it, would carry `f`.
+- **`alpha-nu-in.bc`, 3 indirect calls and 4 allocations (the old backend's 0 and 1): a closure
+  read out of a pair is read by its layout class.** `mk`'s thunk is now `unfold`'s call, but
+  `wrap`'s object is a second code of the class (it is not an η-thunk: its `close` adds 100).
+  Backend2's flow gives a value read out of a pair every code of its class, so three calls
+  dispatch: `obs_read`'s `.1` on `w`, which the call passes in the pair of its arguments; the call
+  of the closure that projection answers; and `obs_close`'s `.2` on the rest read out of
+  `obs_read`'s answer. The class's layout is on the heap, since `wrap`'s code holds a value of the
+  class itself, so each of the three objects is an allocation. Which code a value read out of a
+  pair is, is not a fact of the typed term; a flow that follows a closure through a pair (as the
+  old backend's did) or per-code layouts would make the calls direct and the objects inline.
 
 ---
 
@@ -11707,7 +11709,7 @@ Entry 62 (§63) is implemented in `Frontend/Check/Derived.lean` (`allI_inst`,
 case, the `lendR` case of `conv`); no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the
 checker or the old backend.
 
-Entry 63 (§64) is implemented in `scripts/pin/TExpr.tmpl.lean` (`NuArg`, `NuTree`, `NuTree.toE`,
+Entry 64 (§65) is implemented in `scripts/pin/TExpr.tmpl.lean` (`NuArg`, `NuTree`, `NuTree.toE`,
 `NuTree.parse`, `nuEtaB`, `NuTree.toE_shift`, `NuTree.mem_parse`, `nuEtaB_shift`),
 `Frontend/Check/Rules.lean` (`nuEtaOf?`) and `Frontend/Check/Derived.lean` (`NuTree.toE_subst`,
 `NuTree.toE_closedAt`, `NuTree.Reach`, `nuEta_reach`, `nuEta_leaf`, `nuEta_obs`, `nuEta_var`,
@@ -11718,7 +11720,7 @@ Entry 63 (§64) is implemented in `scripts/pin/TExpr.tmpl.lean` (`NuArg`, `NuTre
 
 ## Changelog
 
-- **1.40** (2026-11-07) — §64 (#842): codata's η-thunk at any depth. §45's `nuEta` node's scheme
+- **1.41** (2026-11-07) — §65 (#842): codata's η-thunk at any depth. §45's `nuEta` node's scheme
   is an η-tree (`NuTree`): `&`s of the projections, `λ`s and `Λ`s, every leaf the observation of
   `f s` along its path, read by `nuEtaB` (`NuTree.parse`, `NuTree.mem_parse`, `NuTree.toE_shift`).
   `nuEta_reach`, `nuEta_obs`, `nuEta_var` and `nuEta_unfold` state §45's fact over every tree.

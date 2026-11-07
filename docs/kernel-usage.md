@@ -89,7 +89,7 @@ at every split, the consume's type, the slot swap, the fold's shape, the literal
 safe divisor, the `use` keys, and every type former a layout is built from. The old backend, the
 default until N6, reads what this section's first paragraph says; the classes below are the new
 backend's where they changed. Part 2 (SPEC §44–§46) adds: `allI`'s body a λ-value (the `Λ` erased), the
-derived node `nuEta` with the `bind` of `unfold step` it calls, and a walk's `read` with its
+derived node `nuEta` (an η-tree of the observations at any depth since §65) with the `bind` of `unfold step` it calls, and a walk's `read` with its
 `walkGet`; `nuIn`, `nuOut`, `unfoldN` and `walk` move to A. N2 (#647, SPEC §47) adds the rows
 (`C.eff`'s payload), the clause kinds at `effHandleV`, the direct calls `directFacts` licenses,
 and `effThen` and the unwinding borrows on the abort path, for the 50 effectful programs whose
@@ -209,7 +209,7 @@ baseline).
 | 82 | [`foldImm`](../Core/Fundamental.lean#L362) | §6 | 11 | 15 | 17 | no recogniser: compiled as the generic Z fixed point (`fixBody?`, `Convert.lean:303`) | **A** | — |
 | 83 | [`foldOwn`](../Core/Fundamental.lean#L368) | §6 | 15 | 23 | 28 | the new backend reads `F` and `R` from the node: the fold is a function generated from the shape (`genFoldFns`, `travF`, `Backend2/Convert.lean:488`); no pointer reversal yet (B6) | **A** | B6: pointer reversal from the node |
 | 84 | [`foldReuse`](../Core/Fundamental.lean#L373) | §6 | 3 | 3 | 3 | as `foldOwn`: the emptied cell handed to the algebra as the node's type says (`travF`'s reuse, `Backend2/Convert.lean:444`) | **A** | B6 |
-| 85 | [`nuIn`](../Core/Fundamental.lean#L377) | §7, §45 | 204 | 768 | 814 | erasure only (identity); the η-thunk around it is the derived node `nuEta`, which the new backend reads (row 113); the old backend (the default until N6) re-recognises it (`collapse?`, `Backend/Clos/Collapse.lean:74`) | **A** | N6 (the old backend deleted) |
+| 85 | [`nuIn`](../Core/Fundamental.lean#L377) | §7, §45 | 204 | 768 | 814 | erasure only (identity); the η-thunk around it, an η-tree of the observations at any depth (§65), is the derived node `nuEta`, which the new backend reads (row 113); the old backend (the default until N6) re-recognises it (`collapse?`, `Backend/Clos/Collapse.lean:74`) | **A** | N6 (the old backend deleted) |
 | 86 | [`nuOut`](../Core/Fundamental.lean#L379) | §7, §45 | 204 | 2434 | 2604 | as `nuIn` | **A** | N6 |
 | 87 | [`unfoldN`](../Core/Fundamental.lean#L383) | §7, §45 | 197 | 634 | 663 | the new backend reads `C` and `S` (`genUnfold`) and that a `bind` binds `unfold step` (`isUnfoldApp`, `Backend2/Convert.lean:903`), so a `nuEta` over it is the call `f s` | **A** | N6 |
 | 88 | [`effSub`](../Core/Fundamental.lean#L386) | §19 | 151 | 3024 | 3844 | the new backend reads `S` and `S'`: the payload of `S`'s abortive operations re-injected at `S'`'s (`coerceRes`, `Backend2/Convert.lean:1138`; SPEC §47); the old backend (the default until N6) re-derives the rows by the 0-CFA (`SFacts.of`, `Backend/Clos/Capture.lean:469`) | **A** | N6 (the old backend deleted) |
@@ -250,7 +250,7 @@ ones have their run facts (`Frontend/Check/Derived.lean`).
 | 110 | [`walkGet`](../Frontend/Check/TExpr.lean#L561) | §46 | 63 | 82 | 126 | the new backend's read with no test inside a walk with `read` (`Backend2/Convert.lean:1108`) | **A** | — |
 | 111 | [`selfCall`](../Frontend/Check/TExpr.lean#L387) | §21 | 53 | 225 | 287 | re-derived: the fixed point is re-recognised (`fixBody?`, `Convert.lean:303`); the new backend compiles the call it marks as a call of `bounded_fix`'s self-reference, which the 0-CFA makes direct (SPEC §48), and does not read the node's fact | **B** | direct self-calls from the node |
 | 112 | [`lendCell`](../Frontend/Check/TExpr.lean#L390) | §35, §41 | 26 | 52 | 74 | re-derived: the scoped cell is re-recognised (`markScoped`, `Convert.lean:544`) | **D** | N5 (framing from the node); its producers are workarounds (see class D): `lendBorrow`'s value branch (`Frontend/Sugar.lean:2276`, ergonomics N1) and `withBlk`'s state cell (`Sugar.lean:3526`) → #626/#632 |
-| 113 | [`nuEta`](../Frontend/Check/TExpr.lean#L570) | §45 | 197 | 634 | 663 | the new backend reads `f` and `s`: at a variable a `bind` bound to `unfold step` the codata is the call `f s`, made where the thunk is built (`nuEta_unfold`; `Backend2/Convert.lean:1118`); with no state, the variable itself (`nuEta_var`) | **A** | — |
+| 113 | [`nuEta`](../Frontend/Check/TExpr.lean#L570) | §45, §65 | 197 | 634 | 663 | over an η-tree of the observations at any depth (`NuTree`, §65), the new backend reads `f` and `s`: at a variable a `bind` bound to `unfold step` the codata is the call `f s`, made where the thunk is built (`nuEta_unfold`; `Backend2/Convert.lean:1118`); with no state, the variable itself (`nuEta_var`) | **A** | — |
 | 114 | [`use`](../Frontend/Check/TExpr.lean#L393) | §3 | 347 | 10571 | 19615 | the new backend converts each key's body once and instantiates it at later uses; a body that takes a closure at each use (`convUse`, `Backend2/Convert.lean:1232`) | **A** | #541: keys with the argument codes |
 
 ## 6. Type formers

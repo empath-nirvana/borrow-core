@@ -346,7 +346,7 @@ theorem lendCellB_shift {e : Expr} (h : lendCellB e = true) (d k : Nat) :
   match e, h with
   | .app (.app _ (.app (.prim .alloc) _)) _, _ => rfl
 
-/-! ### Codata's η-tree  `[spec §45, §64]`
+/-! ### Codata's η-tree  `[spec §45, §65]`
 
 A thunk that observes codata `f s` (`f`, with no state) by η-expansion: a tree of `&`s, `λ`s and
 `Λ`s whose every leaf is the observation of `f s` along the leaf's path. The library and the
@@ -479,7 +479,7 @@ termination_by e => sizeOf e
 decreasing_by all_goals (subst_vars; simp_wf; try omega)
 
 /-- **The term is codata's η-thunk** at the variables `f` and `s`: the erasure of an η-tree over
-them.  `[spec §45, §64]` -/
+them.  `[spec §45, §65]` -/
 def nuEtaB (f : Nat) (s : Option Nat) (e : Expr) : Bool :=
   (NuTree.parse e).any fun t => t.toE (.var f) (s.map .var) [] == e
 
