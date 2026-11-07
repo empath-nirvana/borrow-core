@@ -7,7 +7,7 @@ The subset of Wasm the backend emits: `i64` locals, one linear memory, `i64` loa
 the integer instructions of §8 (`HostOp`), direct and tail calls, functions of several `i64`
 results (multi-value), `if`, and `block` with `br` and `br_table` (a switch). There is no function
 table and no indirect call. Functions are named; a function refers to another by
-name. The runtime functions (`Backend/Wasm/Runtime.lean`) are written in WAT and referred to
+name. The runtime functions (`Target/Wasm/Runtime.lean`) are written in WAT and referred to
 by name: `$alloc`, `$free`, `$live`, `$putc`.
 -/
 
@@ -64,7 +64,7 @@ structure Module where
   funcs : List Func
   /-- The read-only data, at `Flat.dataBase`. -/
   data : Array UInt8 := #[]
-  /-- Some function has a frame: the module has a stack (`Backend/Wasm/Runtime.lean`). -/
+  /-- Some function has a frame: the module has a stack (`Target/Wasm/Runtime.lean`). -/
   stack : Bool := false
   deriving Repr, Inhabited
 

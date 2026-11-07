@@ -9,7 +9,7 @@ below to `bench/out/results.md`. It is not part of the gate. The work is issue #
 ## How it is measured
 
 - **Ours**: `bcc compile --target native`, then `clang -O2 -w -pthread` with the native
-  runtime (`Backend/Native/Runtime.lean`). This is what `bcc run --native` does (SPEC §40).
+  runtime (`Target/Native/Runtime.lean`). This is what `bcc run --native` does (SPEC §40).
 - **Rust**: idiomatic safe Rust, std only, no `unsafe`. Iterators are used where a Rust
   programmer would use them. It is built with the flags `cargo build --release` passes to rustc
   1.97.1: `--edition=2024 -C opt-level=3 -C embed-bitcode=no -C strip=debuginfo`. That is the

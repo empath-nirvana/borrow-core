@@ -1,5 +1,5 @@
 ; The loop of bench/sum two ways: addressed as the native target addresses (`inttoptr` of integer
-; arithmetic, Backend/Native/Lower.lean, `ptrAt`) and from a pointer base (`getelementptr`).
+; arithmetic, Target/Native/Lower.lean, `ptrAt`) and from a pointer base (`getelementptr`).
 ; `xcrun clang -O2 -S vectorize.ll -o -`: @sum_int stays scalar, @sum_gep is `add.2d` ×4.
 define i64 @sum_int(i64 %base, i64 %n) {
 entry:

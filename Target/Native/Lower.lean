@@ -1,6 +1,6 @@
 import Std.Data.HashSet
-import Backend.Flat.Syntax
-import Backend.Flat.Host
+import Target.Flat.Syntax
+import Target.Flat.Host
 
 /-!
 # Backend — flat IR to LLVM IR  `[spec §40]`
@@ -926,7 +926,7 @@ def dataConst (bs : Array UInt8) : String :=
   "c\"" ++ String.join (bs.toList.map fun b =>
     "\\" ++ (hex (b.toNat / 16)).toString ++ (hex (b.toNat % 16)).toString) ++ "\""
 
-/-- The runtime's declarations (`Backend/Native/Runtime.lean`). -/
+/-- The runtime's declarations (`Target/Native/Runtime.lean`). -/
 def runtimeDecls : List String := [
   "@bc_live = external global i64",
   "@bc_allocs = external global i64",

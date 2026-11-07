@@ -1,6 +1,6 @@
 import Std.Data.HashMap
-import Backend.Flat.Syntax
-import Backend.Flat.Host
+import Target.Flat.Syntax
+import Target.Flat.Host
 import Backend2.Layout
 
 /-!

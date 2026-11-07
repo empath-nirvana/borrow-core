@@ -1,6 +1,7 @@
 import Backend.Driver
 import Backend.Cells
 import Backend2.Driver
+import Pipeline.Counts
 
 /-!
 # Backend — `bcc-counts`
@@ -12,7 +13,7 @@ import Backend2.Driver
     lake exe bcc-counts --cells <file>
     lake exe bcc-counts [--backend new] --frames <file> [-- arg…]
 
-Run the program at the flat IR (`Backend/Flat/Interp.lean`) and under `wasmtime`, each built to
+Run the program at the flat IR (`Target/Flat/Interp.lean`) and under `wasmtime`, each built to
 count, and print `allocs N indirect M copies K loads L stores S bounds B`: the objects the run
 allocates, the indirect calls it makes, and the copies of a variable at a non-trivial type it
 makes, on which the two stages must agree; and, at the flat IR only, its loads (each `load` and
@@ -55,22 +56,6 @@ compares the new backend's with the old backend's (SPEC §50).
 With `--backend new` first, the program is compiled by the new backend (`Backend2/`, the pure
 fragment): its word IR and its Wasm or native build, counted the same way.
 -/
-
-/-- All of standard input, read in at most `fuel` chunks of 64 KiB. -/
-def readAllIn (h : IO.FS.Stream) : Nat → ByteArray → IO ByteArray
-  | 0, _ => throw (IO.userError "standard input is too long")
-  | n + 1, acc => do
-    let b ← h.read 65536
-    if b.isEmpty then return acc else readAllIn h n (acc ++ b)
-
-/-- The counts a counting run writes after its report: its last three lines. -/
-def countsOf (out : String) : Option (String × String × String) :=
-  match (out.splitOn "\n").reverse with
-  | "" :: c :: i :: a :: _ =>
-    if a.startsWith "allocs " && i.startsWith "indirect " && c.startsWith "copies " then
-      some ((a.drop 7).toString, (i.drop 9).toString, (c.drop 7).toString)
-    else none
-  | _ => none
 
 /-- The call-site report of `--sites`. -/
 def sites (file src : String) : Except String String := do

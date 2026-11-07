@@ -1,4 +1,4 @@
-import Backend.Flat.Interp
+import Target.Flat.Interp
 import Backend.Clos.Types
 
 /-!
@@ -21,7 +21,7 @@ operations that act on bits (`abs`, `neg`, `copysign`, `reinterpret`) print thei
 `tailTest n` loops `n` times through tail calls between functions of different parameters, at
 two widths of result: nine words (through the result pointer) and two (by value). `bcc tailcalls
 n` builds it natively and runs it on a stack of 64 KiB (`BC_STACK`,
-`Backend/Native/Runtime.lean`), where a frame per call would exhaust the stack within a few
+`Target/Native/Runtime.lean`), where a frame per call would exhaust the stack within a few
 thousand calls; its output must be `tailExpected n`.
 -/
 

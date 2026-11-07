@@ -1,5 +1,5 @@
 name = "borrow_core"
-defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Backend", "Backend2", "bcc", "bcc-counts"]
+defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Target", "Pipeline", "Backend", "Backend2", "bcc", "bcc-counts"]
 
 [[require]]
 name = "mathlib"
@@ -20,6 +20,15 @@ name = "Core"
 
 [[lean_lib]]
 name = "Frontend"
+
+# The word IR, its interpreter, the Wasm and native emitters and their runtimes, and the
+# observable values every stage prints.
+[[lean_lib]]
+name = "Target"
+
+# The checked program, the source run, and the run and compile plumbing every backend shares.
+[[lean_lib]]
+name = "Pipeline"
 
 [[lean_lib]]
 name = "Backend"

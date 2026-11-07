@@ -1,4 +1,8 @@
-import Backend.Driver
+import Pipeline.Driver
+import Target.Flat.Interp
+import Target.Wasm.Lower
+import Target.Wasm.Print
+import Target.Native.Lower
 import Backend2.Convert
 import Backend2.Print
 import Backend2.Interp
@@ -11,10 +15,11 @@ import Frontend.Check.Handled
 /-!
 # Backend2 — driver
 
-From a checked program (`Backend.CheckedProg`, the one check every stage shares) to the new
-backend's stages. This module is the new backend's one contact with the frontend: it reads
-`Checked`'s typed term, context, type and the externs' roles, and hands the stages plain data.
-It is outside the import fence (`scripts/check-backend2.sh`).
+From a checked program (`Backend.CheckedProg`, `Pipeline/Driver.lean`, the one check every stage
+shares) to the new backend's stages. This module is the new backend's one contact with the
+frontend: it reads `Checked`'s typed term, context, type and the externs' roles, and hands the
+stages plain data. The import fence (`scripts/check-backend2.sh`) lets it reach the elaboration,
+through the parse and check, and keeps it, as every module of `Backend2/`, off the old backend.
 -/
 
 namespace Backend2
@@ -549,7 +554,7 @@ def willreturnFns (k : Backend.CheckedProg) : Except String (List String) := do
 
 - `NoUnwind`: no native function unwinds, so each is `nounwind`. The emitter writes no `invoke`,
   `landingpad` or `resume`; errors and cancels are branches (SPEC §47); every extern is a C
-  function of `Backend/Native/Runtime.lean`, C does not unwind, and the runtime cancels no thread
+  function of `Target/Native/Runtime.lean`, C does not unwind, and the runtime cancels no thread
   (no `pthread_cancel`, so no forced unwinding at a cancellation point). `abort` and `llvm.trap`
   are traps, which LangRef's `nounwind` permits.
 - `WidthClass`: a cell holds, over its life, only types of the width class its allocation carries,
@@ -567,7 +572,7 @@ def willreturnFns (k : Backend.CheckedProg) : Except String (List String) := do
 
 `CallRelated` and `HostStack` are listed at each `willreturn` function (`willreturnFns`), the
 others at every program the new backend compiles.
-- The native runtime (`Backend/Native/Runtime.lean`) meets its contracts, and `clang` compiles the
+- The native runtime (`Target/Native/Runtime.lean`) meets its contracts, and `clang` compiles the
   emitted IR by LangRef. -/
 def nativeAssumptions : List String :=
   ["backend (native): NoUnwind (Backend2/Driver.lean, nativeAssumptions), every function nounwind: " ++

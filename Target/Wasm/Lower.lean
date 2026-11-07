@@ -1,6 +1,6 @@
-import Backend.Flat.Syntax
-import Backend.Flat.Host
-import Backend.Wasm.Syntax
+import Target.Flat.Syntax
+import Target.Flat.Host
+import Target.Wasm.Syntax
 
 /-!
 # Backend — flat IR to Wasm

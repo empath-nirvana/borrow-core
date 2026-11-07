@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # The new backend's fence and ban list (docs/compiler.md §5.2, docs/n1-plan.md). Fails when:
 #
-#   * a module of Backend2/ other than Backend2/Driver.lean (the one contact with the frontend)
-#     imports, directly or through the repository's modules, anything of the old backend's
-#     reconstruction (Backend.Clos.*, Backend.Flat.Lower, Backend.Driver) or of the elaboration
-#     (Frontend.Elab.*, Frontend.Sugar, Frontend.Parser);
-#   * a module of Backend2/ names the erasure (`.erase`), matches on the untyped term's
-#     constructors, or names a pass the new backend replaces (a recogniser of user code, a
-#     unifier of types, an ownership inference from occurrences).
+#   * a module of Backend2/, Backend2/Driver.lean included, imports, directly or through the
+#     repository's modules, any module of the old backend (`Backend` or `Backend.*`): what
+#     Backend2 shares with it is in Target/ and Pipeline/;
+#   * a module of Backend2/ other than Backend2/Driver.lean (the one contact with the frontend,
+#     which parses and checks through Pipeline/Driver.lean) imports, directly or through the
+#     repository's modules, the elaboration (Frontend.Elab.*, Frontend.Sugar, Frontend.Parser);
+#   * a module of Backend2/ other than Backend2/Driver.lean names the erasure (`.erase`), matches
+#     on the untyped term's constructors, or names a pass the new backend replaces (a recogniser
+#     of user code, a unifier of types, an ownership inference from occurrences).
 #
 #     scripts/check-backend2.sh
 set -euo pipefail
@@ -18,10 +20,10 @@ fail=0
 imports() { sed -n 's/^import \([A-Za-z0-9_.]*\).*/\1/p' "$1"; }
 fileOf() { echo "${1//.//}.lean"; }
 
-banned='^(Backend\.Clos(\..*)?|Backend\.Flat\.Lower|Backend\.Driver|Frontend\.Elab(\..*)?|Frontend\.Sugar|Frontend\.Parser)$'
+oldBackend='^Backend(\..*)?$'
+frontend='^(Frontend\.Elab(\..*)?|Frontend\.Sugar|Frontend\.Parser)$'
 
 for m in Backend2/*.lean; do
-  [ "$m" = Backend2/Driver.lean ] && continue
   # The transitive imports within the repository, breadth first.
   seen=" "
   todo=$(imports "$m")
@@ -30,7 +32,8 @@ for m in Backend2/*.lean; do
     for i in $todo; do
       case "$seen" in *" $i "*) continue ;; esac
       seen="$seen$i "
-      if [[ "$i" =~ $banned ]]; then
+      if [[ "$i" =~ $oldBackend ]] ||
+         { [ "$m" != Backend2/Driver.lean ] && [[ "$i" =~ $frontend ]]; }; then
         echo "check-backend2: $m imports $i (through its imports): outside the fence"
         fail=1
       fi

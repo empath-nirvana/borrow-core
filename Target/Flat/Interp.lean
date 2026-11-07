@@ -1,7 +1,7 @@
 import Std.Data.HashMap
 import Support.Dynamics.Host
-import Backend.Flat.Syntax
-import Backend.Value
+import Target.Flat.Syntax
+import Target.Value
 
 /-!
 # Backend — flat-IR interpreter
@@ -62,7 +62,7 @@ structure FState where
   /-- The frames of the calls running, innermost first: each one's base address and words. -/
   frames : List (Nat × Nat) := []
   /-- The arguments have been read: the runtime's reservation of their memory, at their first
-  read, is counted as one allocation, as `$args` counts it (`Backend/Wasm/Runtime.lean`). -/
+  read, is counted as one allocation, as `$args` counts it (`Target/Wasm/Runtime.lean`). -/
   argsRead : Bool := false
   /-- The exit status the run ends with (SPEC §39). -/
   status : UInt32 := 0

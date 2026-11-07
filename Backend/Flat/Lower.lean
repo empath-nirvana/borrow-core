@@ -2,7 +2,7 @@ import Std.Data.HashMap
 import Backend.Clos.Syntax
 import Backend.Clos.Types
 import Backend.Clos.Flow
-import Backend.Flat.Syntax
+import Target.Flat.Syntax
 
 /-!
 # Backend — closure IR to flat IR

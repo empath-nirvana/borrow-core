@@ -377,8 +377,8 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
   `corpus/alpha-generic-arg.bc` infers a generic argument from two α-variant types.
 
   `scripts/check-type-eq.sh` (a gate step) reads the elaborated declarations of every compiled
-  module (`bcc`'s import closure outside `Core`, `Support` and `Paper`: `Frontend`, `Backend`,
-  `Backend2`) and refuses any other equality of `VTy`, `CTy`, `OpSig` or a row decided at run
+  module (`bcc`'s import closure outside `Core`, `Support` and `Paper`: `Frontend`, `Target`,
+  `Pipeline`, `Backend`, `Backend2`) and refuses any other equality of `VTy`, `CTy`, `OpSig` or a row decided at run
   time, directly or through a kernel declaration that decides one (`scripts/TypeEq.lean`).
 
   Surface types name their binders, so α does arise there. The elaborator compares them up to the
@@ -2688,7 +2688,7 @@ Each is elaborated before checking into core terms the unchanged checker checks.
 - **Literals in read-only data.** A literal's `t` (the shape above) becomes a closure of one
   shared code over the address and length of its bytes (`Backend/Clos/Convert.lean`,
   `litTable?`, `litClosure`), whose body is a load (`litByte`). The bytes are emitted once, in the
-  program's data before the heap, at an address the target chooses (`Backend/Flat/Syntax.lean`,
+  program's data before the heap, at an address the target chooses (`Target/Flat/Syntax.lean`,
   `dataBase`; the Wasm target's data segment is from `16384`). Every literal is one code, so a call of one is
   direct.
 - **Literal views point into the data.** The erased shape of a literal view — the array lent by
@@ -6629,7 +6629,7 @@ effects, at `io-upper`'s counts (`2 0 0`), and every §11 program keeps its coun
   counts as one allocation (§35); the clock's and the arguments' cells are words of the program's
   data (§35); the
   `args` cell holds the stream `0xFFFFFFFF`, which `$getc` and `$getv` read from there
-  (`Backend/Wasm/Runtime.lean`). `bcc interp … -- arg…`, `bcc run <file> arg…`,
+  (`Target/Wasm/Runtime.lean`). `bcc interp … -- arg…`, `bcc run <file> arg…`,
   `bcc-counts <file> -- arg…`, and `<name>.args` (one argument per line) in
   `scripts/compile-corpus.sh` and `scripts/falsify.sh`.
 
@@ -6779,7 +6779,7 @@ is the one it was, and every program's output. Only the backend changes, below t
   `Stmt.unslot`, `Fn.frame`). The slot is no allocation and no live range. The Wasm module then
   has a stack of 1 MiB between the data and the heap, as clang and rustc lay out the shadow
   stack: `$sp` is lowered by a function's frame on entry, with a trap past the stack's end, and
-  raised back before each return and tail call (`Backend/Wasm/Lower.lean`, `lowerFn`). A raise
+  raised back before each return and tail call (`Target/Wasm/Lower.lean`, `lowerFn`). A raise
   returns through the frame and consumes the cell with it. LLVM's counterpart is an `alloca`.
 - **A suspension inside a scope.** A code that may suspend is a state machine whose state holds
   the variables live at its resumption point, and whose resume code is a new call with a frame of
@@ -7242,10 +7242,10 @@ definitions above (`Support/Dynamics/Floats.lean`).
 A float is one word holding its bits, an `f32`'s zero-extended, as an `i32`'s (Backend README,
 *Representation*): no new local type, and `reinterpret` is the word itself. A float operation
 reinterprets each operand as `f32`/`f64` as it is pushed and its result back to an integer
-(`Backend/Wasm/Lower.lean`, `floatIn`, `floatOut`), so the module uses Wasm's `f32`/`f64`
+(`Target/Wasm/Lower.lean`, `floatIn`, `floatOut`), so the module uses Wasm's `f32`/`f64`
 instructions. `trunc` is lowered as its range test (two float comparisons against the bounds of
 Wasm's range, false at a NaN) and `trunc_sat` inside it, so the compiled code never traps. Printed,
-a float value is `f32[n]`/`f64[n]`, its bits, as an integer prints its bits (`Backend/Value.lean`).
+a float value is `f32[n]`/`f64[n]`, its bits, as an integer prints its bits (`Target/Value.lean`).
 
 ### Surface
 
@@ -7672,7 +7672,7 @@ cell) and answers `inr ()`. `Frontend/Elab/Effects.lean`, `divMain`:
 - The unwind runs the finalisers of what `main` built (§19), and the run ends with `live 0`.
 - **The exit status.** `main` is served when its typed term has a `handle` node whose site is
   `main_div_error`'s for `Fail` (`Check.Checked.exitsOnDivError`, §19 *Handler sites*); its value `inl v` is reported as `v`, and `inr ()` as no value, the live
-  count, and exit status `1` (`Backend/Value.lean`, `reportExit`). Every stage does the same: the source stage's model run
+  count, and exit status `1` (`Target/Value.lean`, `reportExit`). Every stage does the same: the source stage's model run
   (`ioOutputN`), the closure IR (`Clos.Prog.exits`), the flat IR (`Stmt.status`, `entryFn`) and
   Wasm (`$exit`, WASI `proc_exit`, the entry's last act). `bcc interp` and `bcc run` exit with it;
   `bcc-counts` checks that the flat IR and Wasm end with the same status.
@@ -7777,7 +7777,7 @@ included (§34).
 
 #529, part of #21: the language targets native code through `clang`, and Wasm stays the target
 the proofs are run against. Both are implementations of SPEC's operations (§8, §37), neither of
-the other: no Wasm quirk is carried into native code. The flat IR (`Backend/Flat/Syntax.lean`)
+the other: no Wasm quirk is carried into native code. The flat IR (`Target/Flat/Syntax.lean`)
 was built for this: 64-bit words, numbered locals, explicit allocation and free, direct calls of
 several results, `switch`, explicit tail calls.
 
@@ -7809,7 +7809,7 @@ Everything here is backend: no change to the language, the kernel, the checker o
   saturates (`llvm.fpto[su]i.sat`), `min`/`max` propagate NaN (`llvm.minimum`/`maximum`),
   `nearest` rounds ties to even; no instruction has `nsw`, `nuw` or fast-math flags. The table
   per operation is `Backend/README.md`, Native.
-- The runtime (`Backend/Native/Runtime.lean`, C, trusted) is the allocator with the Wasm
+- The runtime (`Target/Native/Runtime.lean`, C, trusted) is the allocator with the Wasm
   runtime's specification and algorithm, so `live` and the counts agree, and the POSIX platform
   of §11 and §34: `read`/`write` on the descriptors, unbuffered; the arguments from `argv`;
   `CLOCK_MONOTONIC` and `nanosleep`; the exit status of §39. The entry runs on a thread of a
@@ -8640,13 +8640,15 @@ refused by the new backend ("outside the pure fragment") and compiled by the old
 - **Literal views** (`Backend2/LitViews.lean`): an array tabulated from a literal's table and only
   read (lent shared, then destroyed) is the literal's bytes in the data when its length is within
   the literal's.
-- **The word IR** (`Backend2/Lower.lean`) is the old backend's `Backend/Flat/Syntax.lean`, with
+- **The word IR** (`Backend2/Lower.lean`) is `Target/Flat/Syntax.lean`, with
   `load32`/`store32` for 4-byte slots, and its Wasm and LLVM emitters are shared
-  (`Backend/Flat/Host.lean` holds what they read of a host operation).
+  (`Target/Flat/Host.lean` holds what they read of a host operation).
 - **Checks**: the LIR interpreter (`Backend2/Interp.lean`: consumption, copies and consumes at
   types that own no cell, cell writes, live objects) and the LIR lint (`Backend2/Lint.lean`);
-  `scripts/check-backend2.sh` fences `Backend2/`'s imports off the old backend's reconstruction
-  and the elaboration, and bans the erasure and the deleted passes' names.
+  `scripts/check-backend2.sh` fences every module of `Backend2/` off the old backend (no `Backend`
+  module in its imports, directly or not; what the two share is in `Target/` and `Pipeline/`) and
+  every module but `Driver.lean` off the elaboration, and bans the erasure and the deleted passes'
+  names.
 - **The closure classes, checked** (#674, `Backend2/LayoutCheck.lean`, docs/compiler.md §10.1):
   every compile checks the layouts' and the closure flow's results, not their analyses, before
   anything reads them. A failure is the compiler's error (`internal: closure classes not a fixed
@@ -9311,7 +9313,7 @@ facts), `bcc lir --frames` and `bcc-counts --frames`.
 - **`nounwind`** on every function, as before, now cited: the named assumption `NoUnwind`
   (`Backend2.nativeAssumptions`, `bcc trusted`): no `invoke`, `landingpad` or `resume` is emitted;
   errors and cancels are branches (§47); every extern is a C function of
-  `Backend/Native/Runtime.lean`, C does not unwind, and the runtime cancels no thread. `abort` and
+  `Target/Native/Runtime.lean`, C does not unwind, and the runtime cancels no thread. `abort` and
   `llvm.trap` are traps, which LangRef's `nounwind` permits.
 - **`musttail`** on every tail call, as §40; LLVM's verifier rejects one it cannot honour, and the
   native stage of `scripts/compile-backend2.sh` builds every program.
@@ -11575,7 +11577,7 @@ Entry 28 (§29) is implemented: `Core/PinDerives.lean` and `Core/PinFundamental.
 checker's derivations (`TiedDer`, `Frontend/Check/Tied.lean`), R1 (`Frontend/Check/Pin.lean`,
 `withbor2r` in `Frontend/Check/Checker.lean`), the sugar (`relaxedC?`, `Frontend/Sugar.lean`), the
 core form (`Frontend/Syntax.lean`, `Frontend/Parser.lean`, `Frontend/Print.lean`), and the reports
-(`Pins.assurance`, `Frontend/Check/Program.lean`; `typingReport`, `Backend/Driver.lean`). No change to
+(`Pins.assurance`, `Frontend/Check/Program.lean`; `typingReport`, `Pipeline/Driver.lean`). No change to
 `CDerives`, the machine or the relation.
 
 Entry 29 (§30) is implemented in `Frontend/Elab/Effects.lean` (`blockArgs`, `blockCall`,
@@ -11629,7 +11631,7 @@ Entry 34 (§35) is implemented in `Backend/` alone: `Backend/Clos/Convert.lean` 
 `staticWord`), `Backend/Clos/Syntax.lean` (`Op.scopedAlloc`, `Op.scopedFree`, `Op.staticCell`,
 `Prog.suspendedScopes`), `Backend/Clos/Capture.lean` (`crossedScopes`), `Backend/Clos/Types.lean`
 (`sumBoxes`), `Backend/Flat/` (`frameScopes`, `Exp.slot`, `Stmt.unslot`, `Fn.frame`, the
-interpreter's frames) and `Backend/Wasm/` (`$sp`, the stack, `lowerFn`), with the library's
+interpreter's frames) and `Target/Wasm/` (`$sp`, the stack, `lowerFn`), with the library's
 comments in `lib/buf.bc`, `lib/text.bc` and `lib/rec.bc`; no change to `CDerives`, `Core/`,
 `Paper/`, `Support/`, the checker or the elaboration.
 
@@ -11667,7 +11669,7 @@ rules.
 §8 and §37 as restated in 0.70 are implemented in `Support/Dynamics/Floats.lean` (`NaNs`, every
 float operation at a resolution, `NaNEq` and its lemmas), `Support/Dynamics/Host.lean`
 (`Prim`, `wasmHostAt`, `Host.Conforms`, `wasmHostAt_conforms`, `wasmHost_conforms`),
-`Backend/Clos/Interp.lean` (`closHost`), `Backend/Flat/Interp.lean` (`flatHost`) and
+`Backend/Clos/Interp.lean` (`closHost`), `Target/Flat/Interp.lean` (`flatHost`) and
 `Backend/Flat/Lower.lean` (`hostVals` without the NaN test); no change to `CDerives`, the relation,
 the machine, `Core/`, `Paper/` or the checker.
 
@@ -11718,9 +11720,9 @@ and the core form `Val.mark` (`Frontend/Syntax.lean`, printed as the value it ma
 `CDerives`, `Core/`, the relation, the machine, or any program's erasure, output, goldens or
 counts.
 
-Entry 39 (§40) is implemented in `Backend/Native/Lower.lean` (the LLVM IR), `Backend/Native/Runtime.lean`
+Entry 39 (§40) is implemented in `Target/Native/Lower.lean` (the LLVM IR), `Target/Native/Runtime.lean`
 (the runtime), `Backend/Native/Tests.lean` (`bcc hostops`, `bcc tailcalls`), `Backend/Driver.lean`
-(`compileLL`, `buildNative`), `Frontend/Main.lean` and `Backend/Counts.lean` (the commands),
+(`compileLL`), `Pipeline/Driver.lean` (`buildNative`), `Frontend/Main.lean` and `Backend/Counts.lean` (the commands),
 `Op.dataAddr` and `Exp.data` in the closure IR and the flat IR, and `scripts/compile-native.sh`;
 no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the checker.
 
@@ -11737,7 +11739,7 @@ Entry 40 (§41) is implemented in `Frontend/Parser.lean` (R1: `bindName`, `lookN
 (`generatedName`, `pushBinder`, `resolutionOf`, `unrename`), `Frontend/Main.lean` (`bcc alpha`)
 and `scripts/alpha-check.py`. Entry 42 (§43) is implemented in `Backend2/` (the typed term to the
 LIR, its interpreter and lint, the closure flow, the layouts, the literal views, the frame slots,
-the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Backend/Wasm/` and
+the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Target/Wasm/` and
 `Backend/Native/`, `bcc`'s `--backend new` and `lir` commands, `bcc-counts --backend new`, and
 `scripts/check-backend2.sh` and `scripts/compile-backend2.sh`; no change to `CDerives`, `Core/`,
 `Paper/`, `Support/` or the checker. Entry 43 (§44) is implemented in `Frontend/Check/Derived.lean`
@@ -11761,8 +11763,8 @@ payloads, `convHandle`, `ensureWork`, `convWork`, `prepWorks`, `genLendU`, the e
 implemented in `Backend2/Convert.lean` (`genFix`, the `boundedFix` case), `Op.cntPred` in
 `Backend2/Syntax.lean`, `Interp.lean`, `Lower.lean` and `Print.lean`, `Backend2/Driver.lean`
 (`watTimed`) and `Core/DivDrive.lean`; no change to `CDerives`, `Paper/`, `Support/`, the checker or
-the old backend. Entry 49 (§50) is implemented in `Backend/Flat/Syntax.lean` (`Exp.gep`, `PFact`,
-`Fn.ptrs`, `Fn.facts`, `Fn.inline`), `Backend/Native/Lower.lean` (the typed mode: `texpr`,
+the old backend. Entry 49 (§50) is implemented in `Target/Flat/Syntax.lean` (`Exp.gep`, `PFact`,
+`Fn.ptrs`, `Fn.facts`, `Fn.inline`), `Target/Native/Lower.lean` (the typed mode: `texpr`,
 `tstmt`, `tlowerFn`, `classPtrs`), `Backend2/Lower.lean` (`addrKinds`, `vote`, `paramFacts`),
 `Backend2/Convert.lean` (`Frame.cellF`, `withMachineK`, `threadedOf`, `stepInline`),
 `Backend2/Driver.lean` (`lirOf`'s second conversion, `framesLine`) and
@@ -11771,7 +11773,7 @@ the old backend's output. Entry 51 (§52) is implemented in `Backend2/Convert.le
 (`genKap`'s region and swap, `convDrive`'s site stack, `Frame.stackF`, `Frame.stackH`,
 `genStackMach`, `stackedOf`), `Backend2/Driver.lean` (`stackOps`, `lirOf`), `Backend2/Syntax.lean`,
 `Interp.lean`, `Layout.lean`, `Lint.lean`, `Lower.lean` and `Print.lean` (the stack operations and
-the stack's push and pop), `Backend/Native/Lower.lean` (frame pointers), `Backend/Clos/`
+the stack's push and pop), `Target/Native/Lower.lean` (frame pointers), `Backend/Clos/`
 (`Op.swapSlot`) and `lib/async.bc`; no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the
 checker.
 Entries 52 (§53) and 53 (§54) are retired; their code is removed.
@@ -11788,7 +11790,7 @@ rules (`scripts/pin/`), `Frontend/Check/TShift.lean`, `Weaken.lean`, `TTied.lean
 change to `CDerives`, the relation, any erasure or Backend2's outputs.
 Entry 57 (§58) is implemented in `Backend2/` (`Syntax.lean`, `Convert.lean`, `Driver.lean`,
 `Layout.lean`, `Lower.lean`, `Lint.lean`, `Interp.lean`, `Print.lean`; `Frames.lean` and
-`LitViews.lean` deleted), `Backend/Flat/Interp.lean` and `scripts/compile-corpus.sh`.
+`LitViews.lean` deleted), `Target/Flat/Interp.lean` and `scripts/compile-corpus.sh`.
 Entry 58 (§59) is implemented in `Backend2/` (`Types.lean`, `Syntax.lean`, `Convert.lean`,
 `Layout.lean`, `Flow.lean`, `Lower.lean`, `Interp.lean`, `Lint.lean`, `LintTests.lean`).
 Entry 59 (§60) is implemented in `Frontend/Elab/Data.lean` (`foldComp`, `foldBox`, `FoldCx`,

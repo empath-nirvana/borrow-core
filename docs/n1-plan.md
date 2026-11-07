@@ -30,9 +30,10 @@ when N2 lands.
   calls, primitives, `case`, `letpair`, structured loops for `count_fold` and `count_try`, and
   explicit `copy` and `consume`. Every variable is consumed exactly once on every path.
 - **Machine form**: the layout stage lowers LIR to the existing target-neutral word IR
-  (`Backend/Flat/Syntax.lean`), so the Wasm and LLVM emitters (`Backend/Wasm/Lower.lean`,
-  `Backend/Native/Lower.lean`) are shared with the old backend until N6. They are made
-  independent of `Backend/Clos` (their two helpers move to a shared module) so the fence holds.
+  (`Target/Flat/Syntax.lean`), so the Wasm and LLVM emitters (`Target/Wasm/Lower.lean`,
+  `Target/Native/Lower.lean`) are shared with the old backend. They live in `Target/`, with the
+  word IR's interpreter, the runtimes and the observable values, and the checked program and the
+  run and compile helpers in `Pipeline/`: no module of `Backend2/` imports `Backend/`.
 
 ## Stages, and what each reads from `TExpr`
 
@@ -57,8 +58,10 @@ when N2 lands.
   its counts are compared with the old backend's, which they may not exceed (`allocs`,
   `indirect`, `copies`).
 - **The fence** (`scripts/check-backend2.sh`): `Backend2/` imports only the typed term, the
-  checker's `Checked`, Core's types and the shared word IR and emitters; never `Frontend.Elab`,
-  `Frontend.Sugar`, `Backend.Clos`, `Backend.Flat.Lower`.
+  checker's `Checked`, Core's types, the shared word IR and emitters (`Target/`) and the checked
+  program (`Pipeline/`); no module of it, `Driver.lean` included, reaches any `Backend` module, and
+  none but `Driver.lean` (which parses and checks) reaches `Frontend.Elab`, `Frontend.Sugar` or
+  `Frontend.Parser`.
 - **The ban list**: no `TExpr.erase`, no match on `BoCa.Expr`'s constructors, none of the names
   §3.6 deletes (`isSwap`, `travShape?`, `fixBody?`, `litTable?`, `plan2`, `markScoped`, `polyLet`,
   unification).
@@ -99,7 +102,7 @@ What the build changed from the plan above, and where each acceptance item stand
   use's (the key with the argument codes of `docs/compiler.md` §3.1 is #541's).
 - **Two passes over the LIR's ownership**, each reading an owner's one consumer: frame slots for
   `lendCell`'s cell (`Backend2/Frames.lean`) and literal views (`Backend2/LitViews.lean`).
-- **The word IR** is the old backend's (`Backend/Flat/Syntax.lean`), with `load32`/`store32`.
+- **The word IR** is the old backend's (`Target/Flat/Syntax.lean`), with `load32`/`store32`.
 
 | item | status |
 |---|---|

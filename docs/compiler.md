@@ -456,7 +456,7 @@ LIR replaces the closure IR and the flat IR. It is target-neutral, as the flat I
 
 ### 3.4 The targets
 
-- **Wasm.** As `Wasm/Lower.lean` today, from LIR. Frame slots on the shadow stack (SPEC §35).
+- **Wasm.** As `Target/Wasm/Lower.lean` today, from LIR. Frame slots on the shadow stack (SPEC §35).
   Locals are reused across disjoint live ranges, which removes #509's local-count failure
   together with the per-use copies.
 - **LLVM.**
@@ -465,7 +465,7 @@ LIR replaces the closure IR and the flat IR. It is target-neutral, as the flat I
   - `alloca` for frame slots.
   - **Forcing annotations, with a check.**
     - `musttail` on every LIR tail call. LLVM's verifier rejects a `musttail` it cannot honour,
-      and the build fails then. `classArity`'s prototype classes stay (`Native/Lower.lean:557–572`).
+      and the build fails then. `classArity`'s prototype classes stay (`Target/Native/Lower.lean:557–572`).
     - `alwaysinline` only where LIR asks for it, with a check that no call to the function
       remains in the optimised IR.
   - **Facts.** `noalias` and `readonly` from `mut` and `imm`, `dereferenceable` and `nonnull`
@@ -499,9 +499,9 @@ stop.
 | `Clos/Flow.lean` | **kept**, run once on LIR (and on MIR for specialisation) | which closure code reaches a `U C` value is not a typing fact |
 | `Clos/Interp.lean` | **replaced** by an LIR interpreter | the stage check against the goldens stays |
 | `Flat/Lower.lean` | **rewritten** as LIR's layout and lowering; defunctionalisation, pointer reversal (now from `foldOwn`/`foldReuse` nodes), count loops kept; `drive` only for unfold-based codata until B2, then only inside `reify` | — |
-| `Flat/Interp.lean` | **replaced** by the LIR interpreter, keeping its checks (unwritten reads, live frames) | — |
-| `Wasm/*` | **kept**, from LIR; local reuse added | — |
-| `Native/*` | **rewritten** at typed pointers, attributes, `alloca` slots | §3.4 |
+| `Target/Flat/Interp.lean` | **replaced** by the LIR interpreter, keeping its checks (unwritten reads, live frames) | — |
+| `Target/Wasm/*` | **kept**, from LIR; local reuse added | — |
+| `Target/Native/*` | **rewritten** at typed pointers, attributes, `alloca` slots | §3.4 |
 | `Backend/Falsify.lean` | **kept**, with lend kinds from the typed term (B1) | — |
 | `Backend/Counts.lean` | **kept**; `--sites` reads LIR and adds the postcondition count | — |
 
@@ -576,7 +576,8 @@ erases what the old stage cannot hold. The order runs front to back: types into 
 2. **An import fence.** The new backend's modules import only the typed term
    (`Frontend/Check/Typed.lean`, name provisional) and their own modules. Not `Frontend.Elab`,
    `Frontend.Sugar`, `Backend.Clos.*` or `BoCa.Expr`'s constructors. A script in the gate checks
-   the import graph.
+   the import graph (`scripts/check-backend2.sh`: no `Backend` module anywhere in `Backend2/`'s
+   imports; what the backends share is in `Target/` and `Pipeline/`).
 3. **A ban list.** No unifier, no fixed-point solver over rows, no recogniser of user code in the
    new backend: no function that takes an untyped `Expr`, and none of the names deleted in §3.6.
    The script fails on a match.
@@ -783,7 +784,7 @@ directory, writing to a scratch directory.
 - `bcc compile --timings bench/sieve/main.bc -o x.wat`, and the same for
   `bench/chain-gen/main.bc` and `corpus/float-arith.bc`: §1.1's and §1.3's timings.
 - `bcc-counts --sites bench/chain-yield/main.bc`: the version check of the header.
-- The greps of §1.1: `grep -rn 'sigs\|CVTy\|CCTy\|EffCtx' Backend/`, and `grep -n 'noalias\|readonly\|dereferenceable\|nonnull' Backend/Native/`.
+- The greps of §1.1: `grep -rn 'sigs\|CVTy\|CCTy\|EffCtx' Backend/`, and `grep -n 'noalias\|readonly\|dereferenceable\|nonnull' Target/Native/`.
 
 ## 10. Backend2's rebuilt facts (#712)
 

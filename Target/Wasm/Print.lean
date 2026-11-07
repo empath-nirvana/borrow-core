@@ -1,12 +1,12 @@
-import Backend.Wasm.Syntax
-import Backend.Wasm.Runtime
-import Backend.Flat.Syntax
+import Target.Wasm.Syntax
+import Target.Wasm.Runtime
+import Target.Flat.Syntax
 
 /-!
 # Backend — WAT printer
 
 The module in the WebAssembly text format, in flat (non-folded) instruction syntax. The runtime
-of `Backend/Wasm/Runtime.lean` is inserted as written. This is the one step of the pipeline
+of `Target/Wasm/Runtime.lean` is inserted as written. This is the one step of the pipeline
 that no interpreter observes.
 -/
 

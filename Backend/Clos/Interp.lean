@@ -1,7 +1,7 @@
 import Std.Data.HashMap
 import Support.Dynamics.Host
 import Support.Dynamics.Arrays
-import Backend.Value
+import Target.Value
 import Backend.Clos.Syntax
 
 /-!

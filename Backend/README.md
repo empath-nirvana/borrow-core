@@ -1,7 +1,7 @@
 # Backend: the compiler
 
 `bcc` compiles a checked, closed `main` (`Frontend/`) through the closure IR and the flat IR to a
-target. The flat IR is target-neutral (`Flat/Syntax.lean`): its operations are SPEC §8's and
+target. The flat IR is target-neutral (`Target/Flat/Syntax.lean`): its operations are SPEC §8's and
 §37's, and where its data lives is the target's choice. WebAssembly is one target, compiled to
 text and run under `wasmtime`; a native target through LLVM is #529. The input is `main`'s erasure, the untyped BoLo `Expr` that
 `Frontend.Check.checkProgram_soundP` derives `CDerivesP` for (`CDerives` at `assurance:
@@ -24,7 +24,7 @@ from it (`Clos/Types.lean`), and every stage from the flat IR on lays values out
     scripts/compile-scaling.sh                 compile time against program size, per stage
 
 Every stage prints the same report: `main`'s value, then `live N`, the number of objects live
-after the value has been consumed (`Backend.report`, `Backend/Value.lean`). Values print in
+after the value has been consumed (`Backend.report`, `Target/Value.lean`). Values print in
 the syntax of `docs/syntax-core.md` (`inl`, `inr`, pairs, `()`, `i32[n]`/`i64[n]` unsigned);
 a function prints as `<fun>` and a location as `<loc>`. A `main` whose value is codata (a thunk
 of a `nu` type such as `delay`, `stream` or `iter`) prints `<fun>`; the corpus drives such values
@@ -38,16 +38,22 @@ runtime's `$exit`).
 
 | stage | file | what it is | interpreter |
 |---|---|---|---|
-| source | `Source.lean` | `main`'s erasure | `Support`'s `step` at `wasmHost` (the reference; the canonical NaN) |
+| source | `Pipeline/Source.lean` | `main`'s erasure | `Support`'s `step` at `wasmHost` (the reference; the canonical NaN) |
 | closure IR | `Clos/Syntax.lean`, `Clos/Convert.lean`, `Clos/Poly.lean`, `Clos/Capture.lean`, `Clos/Unwind.lean`, `Clos/Collapse.lean` | named A-normal form, explicit environments and ownership; a let used at different rows per use; §19's handlers, operations and cancels lowered | `Clos/Interp.lean` (at `wasmHostAt .negative`) |
 | layout types | `Clos/Types.lean` | a layout type for every closure-IR variable, code and constructor; each type's layout; each closure type's union of codes | — |
 | closure flow | `Clos/Flow.lean` | a 0-CFA: the codes each call may call | — |
-| flat IR | `Flat/Syntax.lean`, `Flat/Lower.lean` | functions over words, locals, allocation, calls and tail calls of several results, `ite`; target-neutral | `Flat/Interp.lean` (at `wasmHostAt .payload`) |
-| Wasm | `Wasm/Syntax.lean`, `Wasm/Lower.lean` | the Wasm subset, as an AST | `wasmtime` |
-| WAT | `Wasm/Print.lean`, `Wasm/Runtime.lean` | text; the runtime inserted as written | — |
-| LLVM IR | `Native/Lower.lean`, `Native/Runtime.lean` | text from the flat IR, beside the native runtime in C, built by `clang` | — |
+| flat IR | `Target/Flat/Syntax.lean`, `Flat/Lower.lean` | functions over words, locals, allocation, calls and tail calls of several results, `ite`; target-neutral | `Target/Flat/Interp.lean` (at `wasmHostAt .payload`) |
+| Wasm | `Target/Wasm/Syntax.lean`, `Target/Wasm/Lower.lean` | the Wasm subset, as an AST | `wasmtime` |
+| WAT | `Target/Wasm/Print.lean`, `Target/Wasm/Runtime.lean` | text; the runtime inserted as written | — |
+| LLVM IR | `Target/Native/Lower.lean`, `Target/Native/Runtime.lean` | text from the flat IR, beside the native runtime in C, built by `clang` | — |
 
 All passes are structural recursion (the interpreters take fuel); `Driver.lean` composes them.
+The word IR (the flat IR's syntax, its host operations and its interpreter), the Wasm and native
+emitters with their runtimes, and the observable values every stage prints (`Target/Value.lean`)
+are in `Target/`, shared with the new backend (`Backend2/`); the checked program every stage
+starts from (`CheckedProg`, `checkedOf`), the source run and the `wasmtime` and `clang`
+invocations are in `Pipeline/` (`Pipeline/Driver.lean`, `Pipeline/Source.lean`). The paths in
+this file are relative to `Backend/` unless they start with `Target/` or `Pipeline/`.
 
 **The falsifier** (`Falsify.lean`, `FalsifyTests.lean`; docs/async-capabilities.md §6.1) is a
 dynamic check at the source stage, outside the semantics: `bcc interp --alloc least` runs the
@@ -206,7 +212,7 @@ so a `let` whose value's words are already in locals (a variable, a component, a
 binds its variable to those locals, and moves no word; only words computed there get locals of
 their own.
 
-**Wasm** (`Wasm/Lower.lean`). One Wasm function per flat-IR function, `i64` locals, several
+**Wasm** (`Target/Wasm/Lower.lean`). One Wasm function per flat-IR function, `i64` locals, several
 results as a multi-value function, tail calls as `return_call`, a `switch` as `br_table` over
 nested blocks. There is no function table and no `call_indirect`. `_start` runs the entry, which
 prints through WASI `fd_write`. The LLVM counterpart of a multi-value function is a function
@@ -216,9 +222,9 @@ union its fields as separate SSA values, of `switch` LLVM's `switch`, and of a t
 
 ## Native (LLVM, SPEC §40)
 
-`Native/Lower.lean` prints LLVM IR text from the flat IR, as `Wasm/Lower.lean` builds Wasm from
+`Target/Native/Lower.lean` prints LLVM IR text from the flat IR, as `Target/Wasm/Lower.lean` builds Wasm from
 it: the two are implementations of SPEC, and neither is the other's reference. `bcc run --native`
-writes the IR and the runtime (`Native/Runtime.lean`, C) to a temporary directory and builds them
+writes the IR and the runtime (`Target/Native/Runtime.lean`, C) to a temporary directory and builds them
 with `clang -O2` (no `opt` or `llc` is needed). The compiler is `Backend.nativeCC` (`bcc cc`
 prints it): `$BC_CC` when set; else on macOS `xcrun clang`, the Xcode toolchain's `clang` with
 the SDK `xcrun` finds; else the first `clang` on `PATH` outside a Lean toolchain. It is not
@@ -276,7 +282,7 @@ those as `ptr`s, computes addresses with `getelementptr`, and states the paramet
 (`Fn.facts`: `noalias`, `readonly`, `nonnull`, `dereferenceable`) as attributes (SPEC §50).
 
 **Host operations, with no undefined behaviour or poison.** Each `HostOp` is emitted as follows
-(`Native/Lower.lean`, `hostOp`), with no `nsw`, `nuw`, `exact` or fast-math flag anywhere:
+(`Target/Native/Lower.lean`, `hostOp`), with no `nsw`, `nuw`, `exact` or fast-math flag anywhere:
 
 | operation | LLVM | where LLVM is undefined or poison, and why it is not reached |
 |---|---|---|
@@ -308,7 +314,7 @@ requires the same text. A partial operation is applied where it has an answer; a
 arithmetic operation answers prints as `nan`, its payload being unspecified (SPEC §37), and the
 operations on bits print theirs.
 
-**The runtime** (`Native/Runtime.lean`, trusted as the Wasm runtime is) is the allocator with the
+**The runtime** (`Target/Native/Runtime.lean`, trusted as the Wasm runtime is) is the allocator with the
 Wasm runtime's specification and algorithm (a size word before each range, a free list per size
 below 1024 words, a bump arena of 1 MiB chunks; a larger range is a `malloc` of its own, and is
 given back to `free`), so `live` and `bcc-counts` agree with the flat IR and Wasm; and the POSIX
@@ -336,7 +342,7 @@ word is an `i64` local; `|A|` is the number of words of `A`.
 |---|---|---|
 | `1` | 0 | nothing |
 | `i32`, `i64`, `u8` | 1 | the integer (an `i32` or a `u8` zero-extended) |
-| `f32`, `f64` | 1 | the float's bits (an `f32`'s zero-extended); a float operation reinterprets its operands as `f32`/`f64` and its result back (`Wasm/Lower.lean`), and is the target's float instruction alone: a NaN result's sign and payload are the target's (SPEC §37) |
+| `f32`, `f64` | 1 | the float's bits (an `f32`'s zero-extended); a float operation reinterprets its operands as `f32`/`f64` and its result back (`Target/Wasm/Lower.lean`), and is the target's float instruction alone: a NaN result's sign and payload are the target's (SPEC §37) |
 | `A ⊗ B` | `\|A\| + \|B\|` | `A`'s words, then `B`'s |
 | `A ⊕ B` | `1 + max \|A\| \|B\|` | a tag word (`0` for `inl`), then the payload's words, padded |
 | `⊕[A₀, …, Aₙ₋₁]` | `1 + maxᵢ \|Aᵢ\|` | a tag word `i`, then variant `i`'s payload's words, padded: a suspended computation's state, an operation's payload |
@@ -420,7 +426,7 @@ Not objects:
   `litCode`, capturing the address and length of the literal's bytes; its body is `litByte`, a
   compare and a byte load. The bytes are the program's read-only data (`Prog.data`), each literal
   once, at `dataBase`; the heap starts past them. Where that data lives is the target's choice
-  (`Flat/Syntax.lean`, `dataBase`): the Wasm target's is a data segment from `16384`. A literal is then two
+  (`Target/Flat/Syntax.lean`, `dataBase`): the Wasm target's is a data segment from `16384`. A literal is then two
   words and no object, and every literal is one code, so a call of one is direct. A literal
   view's array (the borrow block on a literal: `tab` of the literal, lent to a callback that
   first copies the family, then consumed; `litView?`) is `litTab`: `(address, n)` in the data when
@@ -546,7 +552,7 @@ consumed, the live count is 0 exactly when the source run ends with empty memory
 
 ## The allocator (trusted)
 
-The allocator is WAT, in `Wasm/Runtime.lean`. Its specification is the hypothesis every stage
+The allocator is WAT, in `Target/Wasm/Runtime.lean`. Its specification is the hypothesis every stage
 from the flat IR on relies on:
 
 1. `alloc n`, for `n ≥ 1`, returns an 8-aligned address `a` such that the range
@@ -561,7 +567,7 @@ below 1024 words and bumps a heap pointer otherwise, growing memory as needed; e
 preceded by a word holding its size, and the runtime's own data sits below address 16384.
 A module with frames has a stack of 1 MiB between the program's data and the heap, growing down;
 `$sp` is its pointer, lowered by a function's frame on entry and raised back before each return
-and tail call (`Wasm/Lower.lean`, `lowerFn`), with a trap past its end. Frame slots are no
+and tail call (`Target/Wasm/Lower.lean`, `lowerFn`), with a trap past its end. Frame slots are no
 ranges: `live` does not count them, and the flat-IR interpreter gives each call fresh frame
 addresses and checks every access to a slot against the slot's scope and its frame's call.
 `live` is exported as `live_objects`; `$putc` writes a byte to standard output, `$putfd` a byte to a
@@ -683,7 +689,7 @@ IR's runtime invariants are now layout-aware:
   by its tag and padded payload, a boxed field by an object of the field's layout, a closure by
   its code's tag in the union and its captured values' words, related to the environment
   object's fields, or at a recursive closure type by `2t + 1` or an environment object);
-- the words of every live object are written (`Flat/Interp.lean` checks every read), and a cell
+- the words of every live object are written (`Target/Flat/Interp.lean` checks every read), and a cell
   is as wide as its class;
 - a call's results match the callee's signature, which the flat-IR interpreter checks, and
   Wasm validation checks for every direct call and tail call;
