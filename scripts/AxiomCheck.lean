@@ -459,6 +459,9 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Check.walk_get_leaf
 #print axioms BoCa.Fig16.LogRel.Core.Check.walk_split_first
 #print axioms BoCa.Fig16.LogRel.Core.Check.allI_inst
+#print axioms BoCa.Fig16.LogRel.Core.Check.valFormB_subst_dead
+#print axioms BoCa.Fig16.LogRel.Core.Check.rowTab_isEmpty
+#print axioms BoCa.Fig16.LogRel.Core.Check.lendR_plain
 #print axioms BoCa.Fig16.LogRel.Core.Check.nuEtaB_shift
 #print axioms BoCa.Fig16.LogRel.Core.Check.nuEta_obs
 #print axioms BoCa.Fig16.LogRel.Core.Check.nuEta_var
