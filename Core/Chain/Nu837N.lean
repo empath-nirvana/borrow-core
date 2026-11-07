@@ -10,15 +10,15 @@ import Core.Nu
 (`Core/NuRel.lean`) at the chain's signature: a candidate below one unfolding of the observation
 tree (`cBN₀`), the leaves read by `vNX₀` with `X` at the candidate. Here, Core's `cC_nu_iff`:
 
-* `vNX_inst_occ`, `vNX_inst_poly`: `vNX₀` at the reading `vN₀ S` of `X` is `vN₀` at `A[S/X]`
+* `vNX_inst_occ₀`, `vNX_inst_poly₀`: `vNX₀` at the reading `vN₀ S` of `X` is `vN₀` at `A[S/X]`
   (Core's `vCE_nuEnv`, `vC_inst_envS`), where `X` does not occur and at a polynomial `A`;
-* `cBN_unroll`: one unfolding at `𝒞⟦νX. C⟧` is `𝒞⟦C[U(νX. C)/X]⟧` (Core's `cB_unroll`), the
+* `cBN_unroll₀`: one unfolding at `𝒞⟦νX. C⟧` is `𝒞⟦C[U(νX. C)/X]⟧` (Core's `cB_unroll`), the
   candidate at `δ₀` and the tree at `δ`, agreeing on the free variables of `νX. C`;
-* `cN_nu_iff`: `𝒞⟦νX. C⟧ = 𝒞⟦C[U(νX. C)/X]⟧` at a positive `C`;
-* `nuIn_compatN`, `nuOut_compatN` (Core's `nuIn_compatX`, `nuOut_compatX`);
-* `unfoldN_compatN` (Core's `unfold_compatX`): coinduction at the greatest fixed point with the
-  candidate `{unfold step s | s ∈ 𝒱⟦S⟧}` (`candNN`, `candNN_post`), through Core's terms and
-  their reductions (`Core/Nu.lean`) and the chain's `map_okN`, `node_okN`. The candidate holds at
+* `cN_nu_iff₀`: `𝒞⟦νX. C⟧ = 𝒞⟦C[U(νX. C)/X]⟧` at a positive `C`;
+* `nuIn_compatN₀`, `nuOut_compatN₀` (Core's `nuIn_compatX`, `nuOut_compatX`);
+* `unfoldN_compatN₀` (Core's `unfold_compatX`): coinduction at the greatest fixed point with the
+  candidate `{unfold step s | s ∈ 𝒱⟦S⟧}` (`candNN₀`, `candNN_post₀`), through Core's terms and
+  their reductions (`Core/Nu.lean`) and the chain's `map_okN₀`, `node_okN₀`. The candidate holds at
   the indices the step is valid at, at `OK` worlds and views consistent with the resource, which
   is where `U X` reads it.
 -/
@@ -40,7 +40,7 @@ open BoCa.Fig16.LogRel.Core.Chain.SI.LendProg (empty_ctxClosed)
 
 /-- **`A[S/X]` is `A` at the environment `X ↦ 𝒱⟦S⟧`** (Core's `vC_inst_envS`), in both modes:
 Core's substitution law (`vBN_subst₀`) at the empty environment. -/
-theorem vBN_inst_env (S A : VTy) (δ : LSub) (b : Bool) :
+theorem vBN_inst_env₀ (S A : VTy) (δ : LSub) (b : Bool) :
     vBN₀ (ℍ := ℍ) none b (VTy.inst S A) δ =
       vBN₀ (ℍ := ℍ) (some (VTy.scons ⟨S, fun b => vBN₀ (ℍ := ℍ) none b S δ⟩ (tEnvN none))) b A δ := by
   rw [vBN_some₀ none, VTy.inst, vBN_subst₀]
@@ -58,67 +58,67 @@ theorem vBN_inst_env (S A : VTy) (δ : LSub) (b : Bool) :
 
 /-- **Where `X` does not occur, `vNX₀` is `vN₀` at the closed type** (Core's `vCE_subst` at an
 environment whose variable does not occur). -/
-theorem vNX_inst_occ (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
+theorem vNX_inst_occ₀ (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
     ∀ (A : VTy), ¬ A.Occ 0 → ∀ δ, vNX₀ (ℍ := ℍ) S P A δ = vN₀ (ℍ := ℍ) (VTy.inst S A) δ :=
   fun A h δ => (congrFun (vBN_congr_occ₀ A _ _ (fun n hn => by
     cases n with
     | zero => exact absurd hn h
-    | succ n => rfl) true) δ).trans (vBN_inst_env S A δ true).symm
+    | succ n => rfl) true) δ).trans (vBN_inst_env₀ S A δ true).symm
 
 /-- The observable view where `X` does not occur. -/
-theorem vOX_inst_occ (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
+theorem vOX_inst_occ₀ (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
     ∀ (A : VTy), ¬ A.Occ 0 → ∀ δ, vOX₀ (ℍ := ℍ) S P A δ = vO₀ (ℍ := ℍ) (VTy.inst S A) δ :=
   fun A h δ => (congrFun (vBN_congr_occ₀ A _ _ (fun n hn => by
     cases n with
     | zero => exact absurd hn h
-    | succ n => rfl) false) δ).trans (vBN_inst_env S A δ false).symm
+    | succ n => rfl) false) δ).trans (vBN_inst_env₀ S A δ false).symm
 
 /-- **At a polynomial type, `vNX₀` with `X` read as `𝒱⟦S⟧` is `𝒱⟦A[S/X]⟧`** (Core's
 `vC_inst_envS`, `vCE_nuEnv`). -/
-theorem vNX_inst_poly (S : VTy) (δ : LSub) :
+theorem vNX_inst_poly₀ (S : VTy) (δ : LSub) :
     ∀ {A : VTy}, A.Poly → vNX₀ (ℍ := ℍ) S (vN₀ (ℍ := ℍ) S δ) A δ = vN₀ (ℍ := ℍ) (VTy.inst S A) δ
   | .tensor A B, h => by
-      have h₁ := vNX_inst_poly S δ (A := A) h.1
-      have h₂ := vNX_inst_poly S δ (A := B) h.2
+      have h₁ := vNX_inst_poly₀ S δ (A := A) h.1
+      have h₂ := vNX_inst_poly₀ S δ (A := B) h.2
       simp only [VTy.inst] at h₁ h₂ ⊢
       funext Θ n v ρ; simp only [vNE₀, VTy.subst, h₁, h₂]
   | .sum A B, h => by
-      have h₁ := vNX_inst_poly S δ (A := A) h.1
-      have h₂ := vNX_inst_poly S δ (A := B) h.2
+      have h₁ := vNX_inst_poly₀ S δ (A := A) h.1
+      have h₂ := vNX_inst_poly₀ S δ (A := B) h.2
       simp only [VTy.inst] at h₁ h₂ ⊢
       funext Θ n v ρ; simp only [vNE₀, VTy.subst, h₁, h₂]
   | .box _ A, h => by
-      have h₁ := vNX_inst_poly S δ (A := A) h
+      have h₁ := vNX_inst_poly₀ S δ (A := A) h
       simp only [VTy.inst] at h₁ ⊢
       funext Θ n v ρ; simp only [vNE₀, VTy.subst, h₁]
   | .tvar 0, _ => rfl
   | .tvar (_ + 1), _ => rfl
   | .unit, h | .zero, h | .unk, h | .int _, h | .opq _, h | .thunk _, h | .mu _, h | .ref _, h
-  | .imm _ _, h | .mut _ _, h | .bang _, h | .fam _, h => vNX_inst_occ S _ _ h δ
+  | .imm _ _, h | .mut _ _, h | .bang _, h | .fam _, h => vNX_inst_occ₀ S _ _ h δ
 
 /-- The answer of an effectful observation at `X` read as `𝒱⟦S⟧` is the unrolled row's answer
 (Core's `effRet_instT_ans`). -/
-theorem retNX_inst (S : VTy) (δ : LSub) :
+theorem retNX_inst₀ (S : VTy) (δ : LSub) :
     ∀ {D : CTy}, D.EffLeaf → retNX₀ (ℍ := ℍ) S (vN₀ (ℍ := ℍ) S δ) D δ = retN₀ (ℍ := ℍ) (D.instT S) δ
   | .ret A, h => by
-      have h₁ := vNX_inst_poly S δ (A := A) h
+      have h₁ := vNX_inst_poly₀ S δ (A := A) h
       funext Θ n v ρ; simp only [retNX₀, retN₀, CTy.instT, h₁]
   | .eff _ _ _ _ _ _ _ D, h => by
-      have h₁ := retNX_inst S δ (D := D) h.2.2
+      have h₁ := retNX_inst₀ S δ (D := D) h.2.2
       funext Θ n v ρ; simp only [retNX₀, retN₀, CTy.instT, h₁]
 
 /-- The table of a row's layers does not read `X` (Core's `effTab_instT`): the operation types
 are closed. -/
-theorem tabN_instT (S : VTy) : ∀ (D : CTy) (δ : LSub),
+theorem tabN_instT₀ (S : VTy) : ∀ (D : CTy) (δ : LSub),
     tabN₀ (ℍ := ℍ) (D.instT S) δ = tabN₀ (ℍ := ℍ) D δ
   | .eff m i q A B fin rc D, δ => by
-      have h₁ := tabN_instT S D δ
+      have h₁ := tabN_instT₀ S D δ
       funext Θ c; simp only [CTy.instT, tabN₀, h₁]
   | .ret _, _ | .amp _ _, _ | .arr _ _, _ | .top, _ | .all _ _ _, _ | .nu _, _ => by
       funext Θ c; simp only [CTy.instT, tabN₀]
 
 /-- `U X` at `𝒞⟦νX. C⟧δ₀` is `𝒱⟦U(νX. C)⟧δ`, at a `δ` agreeing with `δ₀` on `νX. C`. -/
-theorem thunkRN_nuCand (C : CTy) {δ₀ δ : LSub} (hag : ∀ y, CFree y C → δ₀.find? y = δ.find? y) :
+theorem thunkRN_nuCand₀ (C : CTy) {δ₀ δ : LSub} (hag : ∀ y, CFree y C → δ₀.find? y = δ.find? y) :
     thunkRN (nuCand₀ (ℍ := ℍ) C δ₀) = vN₀ (ℍ := ℍ) (.thunk (.nu C)) δ := by
   have h := cN_congr₀ (ℍ := ℍ) (.nu C) (δ := δ₀) (δ' := δ) hag
   funext Θ n v ρ
@@ -129,26 +129,26 @@ theorem thunkRN_nuCand (C : CTy) {δ₀ δ : LSub} (hag : ∀ y, CFree y C → �
 `δ₀` and the tree read at `δ`, agreeing on the free variables of `νX. C`. Under a `∀'x` leaf the
 tree is read at `δ[x ↦ α]`, which still agrees with `δ₀` on `νX. C` because `'x` is not free in
 `C`. -/
-theorem cBN_unroll (C : CTy) (δ₀ : LSub) : ∀ {D : CTy}, D.NuLeaf →
+theorem cBN_unroll₀ (C : CTy) (δ₀ : LSub) : ∀ {D : CTy}, D.NuLeaf →
     (∀ x, D.LeafBinds x → ¬ CFree x C) → ∀ (δ : LSub),
     (∀ y, CFree y C → δ₀.find? y = δ.find? y) →
     cBN₀ (ℍ := ℍ) (.thunk (.nu C)) (nuCand₀ (ℍ := ℍ) C δ₀) D δ =
       cN₀ (ℍ := ℍ) (D.instT (.thunk (.nu C))) δ
   | .ret A, hA, _, δ, hag => by
-      have hP := thunkRN_nuCand (ℍ := ℍ) C hag
-      have h₁ := vNX_inst_poly (ℍ := ℍ) (.thunk (.nu C)) δ (A := A) hA
+      have hP := thunkRN_nuCand₀ (ℍ := ℍ) C hag
+      have h₁ := vNX_inst_poly₀ (ℍ := ℍ) (.thunk (.nu C)) δ (A := A) hA
       funext Θ c n ls e ρ; simp only [cBN₀, cN₀, CTy.instT, hP, h₁]
   | .amp D₁ D₂, hD, hfr, δ, hag => by
-      have h₁ := cBN_unroll C δ₀ hD.1 (fun x hx => hfr x (Or.inl hx)) δ hag
-      have h₂ := cBN_unroll C δ₀ hD.2 (fun x hx => hfr x (Or.inr hx)) δ hag
+      have h₁ := cBN_unroll₀ C δ₀ hD.1 (fun x hx => hfr x (Or.inl hx)) δ hag
+      have h₂ := cBN_unroll₀ C δ₀ hD.2 (fun x hx => hfr x (Or.inr hx)) δ hag
       funext Θ c n ls e ρ; simp only [cBN₀, cN₀, CTy.instT, h₁, h₂]
   | .eff m i q A B fin rc D, hD, _, δ, hag => by
-      have hP := thunkRN_nuCand (ℍ := ℍ) C hag
-      have h₁ := retNX_inst (ℍ := ℍ) (.thunk (.nu C)) δ (D := D) hD.2.2
-      have h₂ := tabN_instT (ℍ := ℍ) (.thunk (.nu C)) D δ
+      have hP := thunkRN_nuCand₀ (ℍ := ℍ) C hag
+      have h₁ := retNX_inst₀ (ℍ := ℍ) (.thunk (.nu C)) δ (D := D) hD.2.2
+      have h₂ := tabN_instT₀ (ℍ := ℍ) (.thunk (.nu C)) D δ
       funext Θ c n ls e ρ; simp only [cBN₀, cN₀, CTy.instT, hP, h₁, h₂]
   | .arr A D, hD, hfr, δ, hag => by
-      have h₁ := cBN_unroll C δ₀ (D := D) hD.2 hfr δ hag
+      have h₁ := cBN_unroll₀ C δ₀ (D := D) hD.2 hfr δ hag
       funext Θ c n ls e ρ; simp only [cBN₀, cN₀, CTy.instT, h₁]
   | .all x b D, hD, hfr, δ, hag => by
       have hag' : ∀ α, ∀ y, CFree y C → δ₀.find? y = (δ.extend x α).find? y := by
@@ -157,30 +157,30 @@ theorem cBN_unroll (C : CTy) (δ₀ : LSub) : ∀ {D : CTy}, D.NuLeaf →
         exact (hag y hy).trans (BoCa.Fig16.LogRel.find?_extend_ne δ α hxy).symm
       have h₁ : ∀ α : Life, cBN₀ (ℍ := ℍ) (.thunk (.nu C)) (nuCand₀ (ℍ := ℍ) C δ₀) D (δ.extend x α) =
           cN₀ (ℍ := ℍ) (D.instT (.thunk (.nu C))) (δ.extend x α) := fun α =>
-        cBN_unroll C δ₀ (D := D) hD (fun y hy => hfr y (Or.inr hy)) (δ.extend x α) (hag' α)
+        cBN_unroll₀ C δ₀ (D := D) hD (fun y hy => hfr y (Or.inr hy)) (δ.extend x α) (hag' α)
       funext Θ c n ls e ρ; simp only [cBN₀, cN₀, CTy.instT, h₁]
   | .top, hD, _, _, _ | .nu _, hD, _, _, _ => hD.elim
 
 /-- **`νX. C` is its unrolling**: `𝒞⟦νX. C⟧ = 𝒞⟦C[U(νX. C)/X]⟧` at a positive `C` (Core's
 `cC_nu_iff`). -/
-theorem cN_nu_iff {C : CTy} (hC : C.NuOk) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life)
+theorem cN_nu_iff₀ {C : CTy} (hC : C.NuOk) (δ : LSub) (Θ : LocTy) (c : Loc → Option Life)
     (n : Nat) (ls : List SRec) (e : Expr) (ρ : WRes) :
     cN₀ (ℍ := ℍ) (.nu C) δ Θ c n ls e ρ ↔ cN₀ (ℍ := ℍ) C.unroll δ Θ c n ls e ρ := by
-  rw [cN_nu_unfold₀ hC.1, cBN_unroll C δ hC.1.nuLeaf hC.2 δ (fun _ _ => rfl)]
+  rw [cN_nu_unfold₀ hC.1, cBN_unroll₀ C δ hC.1.nuLeaf hC.2 δ (fun _ _ => rfl)]
 
 /-- **`nuIn` at `SemJN₀`** (Core's `nuIn_compatX`): a computation of `C[U(νX. C)/X]` is one of
 `νX. C`. -/
-theorem nuIn_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy} (hC : C.NuOk)
+theorem nuIn_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy} (hC : C.NuOk)
     (h : SemJN₀ (ℍ := ℍ) Δ Γ e (.comp C.unroll)) : SemJN₀ (ℍ := ℍ) Δ Γ e (.comp (.nu C)) :=
   fun δ γ Θ c n ls ρ hδ hΘ hc hlw hg =>
-    (cN_nu_iff hC δ Θ c n ls _ ρ).mpr (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
+    (cN_nu_iff₀ hC δ Θ c n ls _ ρ).mpr (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
 
 /-- **`nuOut` at `SemJN₀`** (Core's `nuOut_compatX`): a computation of `νX. C` is one of
 `C[U(νX. C)/X]`. -/
-theorem nuOut_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy} (hC : C.NuOk)
+theorem nuOut_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy} (hC : C.NuOk)
     (h : SemJN₀ (ℍ := ℍ) Δ Γ e (.comp (.nu C))) : SemJN₀ (ℍ := ℍ) Δ Γ e (.comp C.unroll) :=
   fun δ γ Θ c n ls ρ hδ hΘ hc hlw hg =>
-    (cN_nu_iff hC δ Θ c n ls _ ρ).mp (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
+    (cN_nu_iff₀ hC δ Θ c n ls _ ρ).mp (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
 
 /-! ### Coiteration -/
 
@@ -191,7 +191,7 @@ theorem step1Only_of_step1N {μ : BoCa.BoLo.Heap} {e e' : Expr}
   exact step1Only_plug hh hn K
 
 /-- **One unfolding is closed under a pure step in front** (Core's `cB_step`). -/
-theorem cBN_step (S : VTy) {R : CandN} (hR : R.Down) : ∀ (D : CTy) (δ : LSub) (Θ : LocTy),
+theorem cBN_step₀ (S : VTy) {R : CandN} (hR : R.Down) : ∀ (D : CTy) (δ : LSub) (Θ : LocTy),
     Θ.Down → ∀ (c : Loc → Option Life) (n : Nat) (ls : List SRec) (ρ : WRes) (e e' : Expr),
     (∀ μ, BoCa.BoLo.Step1N (ℍ := ℍ) μ e μ e') →
     cBN₀ (ℍ := ℍ) S R D δ Θ c n ls e' ρ → cBN₀ (ℍ := ℍ) S R D δ Θ c n ls e ρ
@@ -201,14 +201,14 @@ theorem cBN_step (S : VTy) {R : CandN} (hR : R.Down) : ∀ (D : CTy) (δ : LSub)
         (fun μ => step1Only_of_step1N (hs μ)) h
   | .arr A D, δ, Θ, hΘ, c, n, ls, ρ, e, e', hs, h =>
       fun c' k hk v ρv ρ' hc hv hcon =>
-        cBN_step S hR D δ Θ hΘ c' k ls ρ' _ _ (fun μ => (hs μ).plug (Kont.appL .hole v))
+        cBN_step₀ S hR D δ Θ hΘ c' k ls ρ' _ _ (fun μ => (hs μ).plug (Kont.appL .hole v))
           (h c' k hk v ρv ρ' hc hv hcon)
   | .amp C D, δ, Θ, hΘ, c, n, ls, ρ, e, e', hs, h =>
-      ⟨cBN_step S hR C δ Θ hΘ c n ls ρ _ _ (fun μ => (hs μ).plug (Kont.appL .hole _)) h.1,
-        cBN_step S hR D δ Θ hΘ c n ls ρ _ _ (fun μ => (hs μ).plug (Kont.appL .hole _)) h.2⟩
+      ⟨cBN_step₀ S hR C δ Θ hΘ c n ls ρ _ _ (fun μ => (hs μ).plug (Kont.appL .hole _)) h.1,
+        cBN_step₀ S hR D δ Θ hΘ c n ls ρ _ _ (fun μ => (hs μ).plug (Kont.appL .hole _)) h.2⟩
   | .top, _, _, _, _, _, _, _, _, _, _, h => h
   | .all x c' D, δ, Θ, hΘ, c, n, ls, ρ, e, e', hs, h =>
-      fun α hα => cBN_step S hR D (δ.extend x α) Θ hΘ c n ls ρ _ _
+      fun α hα => cBN_step₀ S hR D (δ.extend x α) Θ hΘ c n ls ρ _ _
         (fun μ => (hs μ).plug (Kont.appL .hole _)) (h α hα)
   | .nu _, _, _, _, _, _, _, _, _, _, _, h => h
   | .eff m i q A B fin rc D, δ, Θ, hΘ, c, n, ls, ρ, e, e', hs, h =>
@@ -219,67 +219,67 @@ theorem cBN_step (S : VTy) {R : CandN} (hR : R.Down) : ∀ (D : CTy) (δ : LSub)
         (fun μ => step1Only_of_step1N (hs μ)) h
 
 /-- Pure steps in front of one unfolding (Core's `cB_pureSteps`). -/
-theorem cBN_pureSteps (S : VTy) {R : CandN} (hR : R.Down) (D : CTy) (δ : LSub) {Θ : LocTy}
+theorem cBN_pureSteps₀ (S : VTy) {R : CandN} (hR : R.Down) (D : CTy) (δ : LSub) {Θ : LocTy}
     (hΘ : Θ.Down) (c : Loc → Option Life) (n : Nat) (ls : List SRec) (ρ : WRes) {e e' : Expr}
     (h : PureSteps e e') (hw : cBN₀ (ℍ := ℍ) S R D δ Θ c n ls e' ρ) :
     cBN₀ (ℍ := ℍ) S R D δ Θ c n ls e ρ := by
   induction h with
   | refl => exact hw
-  | tail _ hs ih => exact ih (cBN_step S hR D δ Θ hΘ c n ls ρ _ _ hs hw)
+  | tail _ hs ih => exact ih (cBN_step₀ S hR D δ Θ hΘ c n ls ρ _ _ hs hw)
 
 /-- The answer of an effectful observation is the answer type's (Core's `effRetE_ans`). -/
-theorem retNX_ans (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
+theorem retNX_ans₀ (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
     ∀ {D : CTy}, D.EffLeaf → retNX₀ (ℍ := ℍ) S P D = vNX₀ (ℍ := ℍ) S P (effAns D)
   | .ret _, _ => by funext δ Θ n v ρ; rfl
   | .eff _ _ _ _ _ _ _ D, h => by
-      have h₁ := retNX_ans S P (D := D) h.2.2
+      have h₁ := retNX_ans₀ S P (D := D) h.2.2
       funext δ Θ n v ρ; simp only [retNX₀, effAns, h₁]
 
 /-- **The candidate**: the codata `unfold step s` at a state `s ∈ 𝒱⟦S⟧` (Core's `candN`), at the
 indices up to the step's, at `OK` worlds and views consistent with the resource. -/
-def candNN (C : CTy) (g : Val) (S : VTy) (δ : LSub) (kg : Nat) : CandN := fun Θ c j _ e ρ =>
+def candNN₀ (C : CTy) (g : Val) (S : VTy) (δ : LSub) (kg : Nat) : CandN := fun Θ c j _ e ρ =>
   j ≤ kg ∧ Θ.OK ∧ ConsistentX c ρ ∧ ∃ s, e = (etaN C g s).1 ∧ vN₀ (ℍ := ℍ) S δ Θ j s ρ
 
-theorem candNN_down (C : CTy) (g : Val) (S : VTy) (δ : LSub) (kg : Nat) :
-    (candNN (ℍ := ℍ) C g S δ kg).Down :=
+theorem candNN_down₀ (C : CTy) (g : Val) (S : VTy) (δ : LSub) (kg : Nat) :
+    (candNN₀ (ℍ := ℍ) C g S δ kg).Down :=
   fun _ _ _ _ _ _ _ ⟨hj, hΘ, hc, s, he, hs⟩ =>
     ⟨Nat.le_of_succ_le hj, hΘ, hc, s, he, vN_down₀ S δ _ _ s _ hs⟩
 
 /-- The candidate depends on `δ` only at the state type's free variables (Core's
 `candN_congr`). -/
-theorem candNN_congr (C : CTy) (g : Val) (S : VTy) {δ₁ δ₂ : LSub}
+theorem candNN_congr₀ (C : CTy) (g : Val) (S : VTy) {δ₁ δ₂ : LSub}
     (h : ∀ y, VFree y S → δ₁.find? y = δ₂.find? y) (kg : Nat) :
-    candNN (ℍ := ℍ) C g S δ₁ kg = candNN (ℍ := ℍ) C g S δ₂ kg := by
+    candNN₀ (ℍ := ℍ) C g S δ₁ kg = candNN₀ (ℍ := ℍ) C g S δ₂ kg := by
   have hv := vN_congr₀ (ℍ := ℍ) S (δ := δ₁) (δ' := δ₂) h
   funext Θ c j ls e ρ
-  simp only [candNN, hv]
+  simp only [candNN₀, hv]
 
 /-- **The map lemma** (Core's `map_ok`): `map_A (unfold step)` takes a value of `A[S/X]` to one of
 `A` with `X` at the candidate, on the same resource, by pure steps. -/
-theorem map_okN (C : CTy) (g : Val) (S : VTy) (δ : LSub) (kg : Nat) :
+theorem map_okN₀ (C : CTy) (g : Val) (S : VTy) (δ : LSub) (kg : Nat) :
     ∀ (A : VTy), A.Poly → ∀ (Θ : LocTy) (k : Nat), k ≤ kg → ∀ (w : Val) (σ : WRes),
       vNX₀ (ℍ := ℍ) S (vN₀ (ℍ := ℍ) S δ) A δ Θ k w σ →
       ∃ w', PureSteps (.app (.app (.val (mapV A)) (.val (hN C g))) (.val w)) (.val w') ∧
-        vNX₀ (ℍ := ℍ) (.thunk (.nu C)) (thunkRN (candNN (ℍ := ℍ) C g S δ kg)) A δ Θ k w' σ
+        vNX₀ (ℍ := ℍ) (.thunk (.nu C)) (thunkRN (candNN₀ (ℍ := ℍ) C g S δ kg)) A δ Θ k w' σ
   | .tvar 0, _, Θ, k, hk, w, σ, hw =>
       ⟨etaN C g w, (mapV_var_steps _ w).trans (hN_steps C g w),
         fun _ hE hOK _ hc _ => ⟨hk, hOK, hc, w, rfl, vN_extR₀ S δ k w σ hE hw⟩⟩
   | .tvar (_ + 1), _, _, _, _, _, _, hw => hw.elim
   | .tensor A B, hP, Θ, k, hk, _, _, hw => by
       obtain ⟨v₁, v₂, σ₁, σ₂, rfl, hc, h₁, h₂⟩ := hw
-      obtain ⟨w₁, hs₁, h₁'⟩ := map_okN C g S δ kg A hP.1 Θ k hk v₁ σ₁ h₁
-      obtain ⟨w₂, hs₂, h₂'⟩ := map_okN C g S δ kg B hP.2 Θ k hk v₂ σ₂ h₂
+      obtain ⟨w₁, hs₁, h₁'⟩ := map_okN₀ C g S δ kg A hP.1 Θ k hk v₁ σ₁ h₁
+      obtain ⟨w₂, hs₂, h₂'⟩ := map_okN₀ C g S δ kg B hP.2 Θ k hk v₂ σ₂ h₂
       exact ⟨.pair w₁ w₂, (mapV_tensor_steps A B _ v₁ v₂).trans (pair_steps hs₁ hs₂),
         w₁, w₂, σ₁, σ₂, rfl, hc, h₁', h₂'⟩
   | .sum A B, hP, Θ, k, hk, _, σ, hw => by
       rcases hw with ⟨v, rfl, h⟩ | ⟨v, rfl, h⟩
-      · obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg A hP.1 Θ k hk v σ h
+      · obtain ⟨w', hs, h'⟩ := map_okN₀ C g S δ kg A hP.1 Θ k hk v σ h
         exact ⟨.inj₁ w', (mapV_sum₁_steps A B _ v).trans (inj₁_steps hs), Or.inl ⟨w', rfl, h'⟩⟩
-      · obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg B hP.2 Θ k hk v σ h
+      · obtain ⟨w', hs, h'⟩ := map_okN₀ C g S δ kg B hP.2 Θ k hk v σ h
         exact ⟨.inj₂ w', (mapV_sum₂_steps A B _ v).trans (inj₂_steps hs), Or.inr ⟨w', rfl, h'⟩⟩
   | .box _ A, hP, Θ, k, hk, w, σ, hw => by
       obtain ⟨α, hα, hb, ho⟩ := hw
-      obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg A hP Θ k hk w σ hb
+      obtain ⟨w', hs, h'⟩ := map_okN₀ C g S δ kg A hP Θ k hk w σ hb
       exact ⟨w', hs, α, hα, h', ho⟩
   | .unit, hP, _, _, _, w, _, hw | .zero, hP, _, _, _, w, _, hw | .thunk _, hP, _, _, _, w, _, hw
   | .ref _, hP, _, _, _, w, _, hw | .imm _ _, hP, _, _, _, w, _, hw
@@ -292,19 +292,19 @@ theorem map_okN (C : CTy) (g : Val) (S : VTy) (δ : LSub) (kg : Nat) :
 `node_D (unfold step) c` is one unfolding of `D` at the candidate. At a `∀'x` leaf the tree is
 read at `δ[x ↦ α]`, and the candidate at `δ` is the candidate there because `'x` is not free in
 the state type. -/
-theorem node_okN (C : CTy) (g : Val) (S : VTy) (kg : Nat) :
+theorem node_okN₀ (C : CTy) (g : Val) (S : VTy) (kg : Nat) :
     ∀ (D : CTy), D.NuLeaf → (∀ x, D.LeafBinds x → ¬ VFree x S) → ∀ (δ : LSub) (Θ : LocTy),
       Θ.OK → ∀ (c : Loc → Option Life) (j : Nat), j ≤ kg → ∀ (cv : Val) (M : Expr)
       (ls : List SRec) (ρ : WRes),
       PureSteps (.app (.val cv) (.val .unit)) M → cN₀ (ℍ := ℍ) (D.instT S) δ Θ c j ls M ρ →
-      cBN₀ (ℍ := ℍ) (.thunk (.nu C)) (candNN (ℍ := ℍ) C g S δ kg) D δ Θ c j ls
+      cBN₀ (ℍ := ℍ) (.thunk (.nu C)) (candNN₀ (ℍ := ℍ) C g S δ kg) D δ Θ c j ls
         (.app (.app (.val (nodeV D)) (.val (hN C g))) (.val cv)) ρ
   | .ret A, hA, _, δ, Θ, hΘ, c, j, hj, cv, M, ls, ρ, hc, hM => by
       have hΦ := LocTy.view_down hΘ.1 c
       have hTd := opTableN_down OpTabN.empty_down
       have hQd : PostN.Down (fun k _ v ρ => vNX₀ (ℍ := ℍ) (.thunk (.nu C))
-          (thunkRN (candNN (ℍ := ℍ) C g S δ kg)) A δ Θ k v ρ) :=
-        fun k _ v ρ h => vNX_down₀ _ _ (thunkRN_down (candNN_down C g S δ kg)) A δ Θ k v ρ h
+          (thunkRN (candNN₀ (ℍ := ℍ) C g S δ kg)) A δ Θ k v ρ) :=
+        fun k _ v ρ h => vNX_down₀ _ _ (thunkRN_down (candNN_down₀ C g S δ kg)) A δ Θ k v ρ h
       refine erwp_pureSteps hΦ hTd hQd (nodeV_ret_steps A _ cv) ?_
       refine erwp_pureSteps hΦ hTd hQd (PureSteps.plug (.appR (.val (.lam _)) .hole) hc) ?_
       have hM' := erwp_mono_le (ℍ := ℍ) (Q' := fun k ls v ρ => k ≤ kg ∧
@@ -313,8 +313,8 @@ theorem node_okN (C : CTy) (g : Val) (S : VTy) (kg : Nat) :
       refine erwp_bind hΦ (.appR (.val (.lam _)) .hole) (fun _ => by simp [Kont.HasHnd])
         (fun _ => by simp [Kont.Catches]) (empty_ctxClosed _) ?_ j ls M ρ hM'
       rintro k ls' w σ ⟨hk, hw⟩
-      rw [← vNX_inst_poly S δ hA] at hw
-      obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg A hA Θ k hk w σ hw
+      rw [← vNX_inst_poly₀ S δ hA] at hw
+      obtain ⟨w', hs, h'⟩ := map_okN₀ C g S δ kg A hA Θ k hk w σ hw
       refine erwp_det hΦ hTd hQd (fun μ => step1Only_plug (Head.beta μ _ w) rfl .hole) ?_
       have e : Expr.subst 0 w (.app (.app (.val (mapV A)) (.val ((hN C g).shift 1 0))) (.var 0))
           = .app (.app (.val (mapV A)) (.val (hN C g))) (.val w) := by
@@ -328,8 +328,8 @@ theorem node_okN (C : CTy) (g : Val) (S : VTy) (kg : Nat) :
       have hTd := opTableN_down (tabN_down (.eff m i q A B fin rc D) δ Θ hΘ.1 c)
       have hR := EffLeaf.ans_poly (C := D) hD.2.2
       have hQd : PostN.Down (fun k _ v ρ => retNX₀ (ℍ := ℍ) (.thunk (.nu C))
-          (thunkRN (candNN (ℍ := ℍ) C g S δ kg)) D δ Θ k v ρ) :=
-        fun k _ v ρ h => retNX_down₀ _ _ (thunkRN_down (candNN_down C g S δ kg)) D δ Θ k v ρ h
+          (thunkRN (candNN₀ (ℍ := ℍ) C g S δ kg)) D δ Θ k v ρ) :=
+        fun k _ v ρ h => retNX_down₀ _ _ (thunkRN_down (candNN_down₀ C g S δ kg)) D δ Θ k v ρ h
       show erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (.eff m i q A B fin rc D) δ Θ c)) _ j ls
         _ ρ
       refine erwp_pureSteps hΦ hTd hQd (nodeV_eff_steps m i q A B fin D _ cv) ?_
@@ -337,7 +337,7 @@ theorem node_okN (C : CTy) (g : Val) (S : VTy) (kg : Nat) :
       have hM₀ : erwp (ℍ := ℍ) (Θ.view c) (opTableN (tabN₀ (ℍ := ℍ) (.eff m i q A B fin rc D) δ Θ c))
           (fun k _ v ρ => retN₀ (ℍ := ℍ) (D.instT S) δ Θ k v ρ) j ls M ρ := by
         have h' := hM
-        simp only [CTy.instT, cN₀, tabN_instT] at h'
+        simp only [CTy.instT, cN₀, tabN_instT₀] at h'
         exact h'
       have hM' := erwp_mono_le (ℍ := ℍ) (Q' := fun k ls v ρ => k ≤ kg ∧
           retN₀ (ℍ := ℍ) (D.instT S) δ Θ k v ρ) kg (fun k hk _ _ _ h => ⟨hk, h⟩)
@@ -347,8 +347,8 @@ theorem node_okN (C : CTy) (g : Val) (S : VTy) (kg : Nat) :
         (tabN_ctxClosed hΦ _ _ (fun _ => by simp [Kont.HasHnd]) (by simp [Kont.Catches])) ?_
         j ls M ρ hM'
       rintro k ls' w σ ⟨hk, hw⟩
-      rw [← retNX_inst S δ hD.2.2, retNX_ans S _ hD.2.2] at hw
-      obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg (effAns D) hR Θ k hk w σ hw
+      rw [← retNX_inst₀ S δ hD.2.2, retNX_ans₀ S _ hD.2.2] at hw
+      obtain ⟨w', hs, h'⟩ := map_okN₀ C g S δ kg (effAns D) hR Θ k hk w σ hw
       refine erwp_det hΦ hTd hQd (fun μ => step1Only_plug (Head.beta μ _ w) rfl .hole) ?_
       have e : Expr.subst 0 w (.app (.app (.val (mapV (effAns D))) (.val ((hN C g).shift 1 0)))
           (.var 0)) = .app (.app (.val (mapV (effAns D))) (.val (hN C g))) (.val w) := by
@@ -357,31 +357,31 @@ theorem node_okN (C : CTy) (g : Val) (S : VTy) (kg : Nat) :
       simp only [Kont.plug]
       rw [e]
       refine erwp_pureSteps hΦ hTd hQd hs (erwp_val ?_)
-      rw [retNX_ans _ _ hD.2.2]
+      rw [retNX_ans₀ _ _ hD.2.2]
       exact h'
   | .amp D₁ D₂, hD, hS, δ, Θ, hΘ, c, j, hj, cv, M, ls, ρ, hc, hM =>
-      ⟨cBN_pureSteps _ (candNN_down C g S δ kg) D₁ δ hΘ.1 c j ls ρ (nodeV_amp₁_steps D₁ D₂ _ cv)
-        (node_okN C g S kg D₁ hD.1 (fun x hx => hS x (Or.inl hx)) δ Θ hΘ c j hj _
+      ⟨cBN_pureSteps₀ _ (candNN_down₀ C g S δ kg) D₁ δ hΘ.1 c j ls ρ (nodeV_amp₁_steps D₁ D₂ _ cv)
+        (node_okN₀ C g S kg D₁ hD.1 (fun x hx => hS x (Or.inl hx)) δ Θ hΘ c j hj _
           (.app M (.val (.inj₁ .unit))) ls ρ
           ((childV_steps cv _ rfl).trans (PureSteps.plug (.appL .hole _) hc)) hM.1),
-       cBN_pureSteps _ (candNN_down C g S δ kg) D₂ δ hΘ.1 c j ls ρ (nodeV_amp₂_steps D₁ D₂ _ cv)
-        (node_okN C g S kg D₂ hD.2 (fun x hx => hS x (Or.inr hx)) δ Θ hΘ c j hj _
+       cBN_pureSteps₀ _ (candNN_down₀ C g S δ kg) D₂ δ hΘ.1 c j ls ρ (nodeV_amp₂_steps D₁ D₂ _ cv)
+        (node_okN₀ C g S kg D₂ hD.2 (fun x hx => hS x (Or.inr hx)) δ Θ hΘ c j hj _
           (.app M (.val (.inj₂ .unit))) ls ρ
           ((childV_steps cv _ rfl).trans (PureSteps.plug (.appL .hole _) hc)) hM.2)⟩
   | .arr A D, hD, hS, δ, Θ, hΘ, _, j, hj, cv, M, ls, _, hc, hM =>
       fun c' k hk v ρv ρ' hcomp hv hcon =>
-        cBN_pureSteps _ (candNN_down C g S δ kg) D δ hΘ.1 c' k ls ρ' (nodeV_arr_steps A D _ cv v)
-          (node_okN C g S kg D hD.2 hS δ Θ hΘ c' k (le_trans hk hj) (childA cv v) (.app M (.val v))
+        cBN_pureSteps₀ _ (candNN_down₀ C g S δ kg) D δ hΘ.1 c' k ls ρ' (nodeV_arr_steps A D _ cv v)
+          (node_okN₀ C g S kg D hD.2 hS δ Θ hΘ c' k (le_trans hk hj) (childA cv v) (.app M (.val v))
             ls ρ' ((childA_steps cv v).trans (PureSteps.plug (.appL .hole _) hc))
             (hM c' k hk v ρv ρ' hcomp hv hcon))
   | .all x b D, hD, hS, δ, Θ, hΘ, c, j, hj, cv, M, ls, ρ, hc, hM => fun α hα => by
-      have hcand : candNN (ℍ := ℍ) C g S δ kg = candNN (ℍ := ℍ) C g S (δ.extend x α) kg :=
-        candNN_congr C g S (fun y hy =>
+      have hcand : candNN₀ (ℍ := ℍ) C g S δ kg = candNN₀ (ℍ := ℍ) C g S (δ.extend x α) kg :=
+        candNN_congr₀ C g S (fun y hy =>
           (BoCa.Fig16.LogRel.find?_extend_ne δ α
             (fun e => by subst e; exact hS x (Or.inl rfl) hy)).symm) kg
       rw [hcand]
-      exact cBN_pureSteps _ (candNN_down C g S _ kg) D _ hΘ.1 c j ls ρ (nodeV_all_steps x b D _ cv)
-        (node_okN C g S kg D hD (fun y hy => hS y (Or.inr hy)) (δ.extend x α) Θ hΘ c j hj
+      exact cBN_pureSteps₀ _ (candNN_down₀ C g S _ kg) D _ hΘ.1 c j ls ρ (nodeV_all_steps x b D _ cv)
+        (node_okN₀ C g S kg D hD (fun y hy => hS y (Or.inr hy)) (δ.extend x α) Θ hΘ c j hj
           (childA cv .unit) (.app M (.val .unit)) ls ρ
           ((childA_steps cv .unit).trans (PureSteps.plug (.appL .hole _) hc)) (hM α hα))
   | .top, hD, _, _, _, _, _, _, _, _, _, _, _, _, _ | .nu _, hD, _, _, _, _, _, _, _, _, _, _, _, _, _ =>
@@ -390,11 +390,11 @@ theorem node_okN (C : CTy) (g : Val) (S : VTy) (kg : Nat) :
 /-- **The candidate is a post-fixed point of `νX. C`'s unfolding** (Core's `candN_post`): each
 observation path runs the same path of the step and returns its result with every state `s′`
 replaced by `unfold step s′`, back in the candidate. -/
-theorem candNN_post {C : CTy} (hC : C.NuOk) {S : VTy} (hS : ∀ x, C.LeafBinds x → ¬ VFree x S)
+theorem candNN_post₀ {C : CTy} (hC : C.NuOk) {S : VTy} (hS : ∀ x, C.LeafBinds x → ¬ VFree x S)
     {δ : LSub} {g : Val} {kg : Nat}
     (hg : ∀ Θ : LocTy, vN₀ (ℍ := ℍ) (.bang (.thunk (.arr S (C.instT S)))) δ Θ kg g PMap.empty) :
-    (candNN (ℍ := ℍ) C g S δ kg).Le
-      (cBN₀ (ℍ := ℍ) (.thunk (.nu C)) (candNN (ℍ := ℍ) C g S δ kg) C δ) := by
+    (candNN₀ (ℍ := ℍ) C g S δ kg).Le
+      (cBN₀ (ℍ := ℍ) (.thunk (.nu C)) (candNN₀ (ℍ := ℍ) C g S δ kg) C δ) := by
   rintro Θ c j ls e ρ ⟨hj, hΘ, hc, s, rfl, hs⟩
   obtain ⟨-, hthunk⟩ := hg Θ
   have hstep : cN₀ (ℍ := ℍ) (C.instT S) δ Θ c j ls (.app (.val g) (.val s)) ρ :=
@@ -402,17 +402,17 @@ theorem candNN_post {C : CTy} (hC : C.NuOk) {S : VTy} (hS : ∀ x, C.LeafBinds x
       (compS_empty_left ρ) hs hc
   cases C with
   | amp C₁ C₂ =>
-      have hN := node_okN (ℍ := ℍ) (.amp C₁ C₂) g S kg (.amp C₁ C₂) hC.1 hS δ Θ hΘ c j hj
+      have hN := node_okN₀ (ℍ := ℍ) (.amp C₁ C₂) g S kg (.amp C₁ C₂) hC.1 hS δ Θ hΘ c j hj
         (rootV g s) _ ls ρ (rootV_steps g s) hstep
-      exact ⟨cBN_pureSteps _ (candNN_down _ g S δ kg) C₁ δ hΘ.1 c j ls ρ (etaN_obs _ g s _) hN.1,
-        cBN_pureSteps _ (candNN_down _ g S δ kg) C₂ δ hΘ.1 c j ls ρ (etaN_obs _ g s _) hN.2⟩
+      exact ⟨cBN_pureSteps₀ _ (candNN_down₀ _ g S δ kg) C₁ δ hΘ.1 c j ls ρ (etaN_obs _ g s _) hN.1,
+        cBN_pureSteps₀ _ (candNN_down₀ _ g S δ kg) C₂ δ hΘ.1 c j ls ρ (etaN_obs _ g s _) hN.2⟩
   | _ => exact hC.1.elim
 
 /-- **`unfold` at `SemJN₀`** (Core's `unfold_compatX`): `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)`
 at every positive `C` and every `S` in which no lifetime bound by a `∀` leaf of `C` is free. The
 step is at every world (`!` owns nothing, `LocTy.extR_empty`); the codata `unfold step s` is in the
 candidate at the step's index, which is below `𝒞⟦νX. C⟧` by coinduction. -/
-theorem unfoldN_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hC : C.NuOk) (S : VTy)
+theorem unfoldN_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hC : C.NuOk) (S : VTy)
     (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
@@ -438,7 +438,7 @@ theorem unfoldN_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hC : C.NuOk) (S
   refine cN_head₀ (.nu C) δ Θ₂ hΘ₂.1 c₃ k' ls₂ _ .hole _ _ (fun μ => Head.beta μ _ s) rfl ?_
   simp only [Kont.plug]
   rw [hN_subst]
-  exact cN_nu_coind₀ (candNN_post hC hS (fun Θ'' => vN_le₀ hk' (hg' Θ''))) Θ₂ c₃ k' ls₂ _ _
+  exact cN_nu_coind₀ (candNN_post₀ hC hS (fun Θ'' => vN_le₀ hk' (hg' Θ''))) Θ₂ c₃ k' ls₂ _ _
     ⟨le_rfl, hΘ₂, hcon', s, rfl, hs⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
