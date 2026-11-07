@@ -43,6 +43,8 @@ import Core.FoldOwnG
 import Core.FoldOwnGTerm
 import Core.FoldClass
 import Core.Nu
+import Core.CapNorm
+import Core.CodeNu
 import Core.Alpha
 import Core.Fundamental
 import Core.Examples
