@@ -5,18 +5,27 @@ The structure SPEC §62 is built against, and its rules. Lean names and branches
 
 ## 1. The target theorem
 
-For every closed, well-typed Core program `P` (including borrows live across suspensions,
-carried by the one-shot continuation a handler stores for the suspended task, and borrows shared
-with spawned tasks):
+For every closed, well-typed Core program `P`, including programs that hold borrows across
+suspensions and, after that, programs that share borrows with the tasks they spawn (#821):
 
 > `OrDiverges P`: every reachable configuration is a value or steps; a value is reached only at
 > the empty memory; every `free` finds its cell.
 
-To be proved through **one** step-indexed linear relation: `fundamentalC` (every typing rule is
-compatible) followed by adequacy. Termination is not claimed. Totality results stay with the
-existing total relation, for the derivations that don't use the new rules (§8).
+A suspended task carries its borrow in the one-shot continuation its handler stores. Stored
+continuations are that mechanism, not a target of their own.
+
+To be proved through **one** step-indexed linear relation: the fundamental theorem (every typing
+rule is compatible) followed by adequacy. Termination is not claimed. Totality results stay with
+the existing total relation, for the derivations that don't use the new rules (§8).
 
 Done means that theorem. Passing test programs doesn't count.
+
+**Where it stands.** Borrows held across suspension are proved at the rule level over the chain
+relation (§3, `chain-interpretation.md`): `fundamentalN_all` gives every `CDerives` rule at
+`SemJN` but `effHandleV`, `effHandleVB` and `reify`, and `goal791N : HandlerLawN → Goal791N` gives
+`OrDiverges` for every closed program typed at `F 1` from the #791 constants, its handlers inside
+it. The three rules are the named assertion `HandlerLawN` (decision 75; #838). Borrows shared with
+spawned tasks are #821.
 
 ## 2. What is proved and reused as is
 

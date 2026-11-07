@@ -305,8 +305,9 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   borrow that `↭` lets outlive the run that opens it. That change is not verified sound, and
   nothing here shows the spanning lend unsound." "**A lending yield in pull form … is excluded
   in every route here.**"
-- **Status:** per-observation lend proved and landed (SPEC §5, §14), kept as the design; the
-  spanning lend closed by decision 71 ([tombstone](tombstones/lends-across-suspensions.md)).
+- **Status:** per-observation lend proved and landed (SPEC §5, §14), kept as the design;
+  the spanning lend was closed by decision 71, which decision 72 voids; borrows held across a
+  suspending operation are proved in the kernel since #839 (decision 75, SPEC §62).
 - **Key results:** `not_upd_of_new_mut`, `not_upd_of_ended_mut`, `not_upd_of_new_imm`,
   `ext_of_cellIn`, `refoldKripke_false`, `refold_fails_at_consumer_frame`, `wpTS_M_refold`,
   `refoldKripkeD`, `not_markerInstallable`, `upd_borrow_top`, `borrowFree_after_run`,
@@ -627,7 +628,7 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   an experiment." Its §9 lists what it has "not established", including "That the projection
   form of §7.3 has a derived type in the core" and the handler laws beyond one effect.
 - **Status:** design; S1 built (SPEC §18).
-- **Open kernel items:** K1 → [T1](#t1-the-spanning-lend-k1) (closed, decision 71); K2 → [T8](#t8-observations-that-take-input-k2);
+- **Open kernel items:** K1 → [T1](#t1-the-spanning-lend-k1) (kernel rules since #839; checker in #843); K2 → [T8](#t8-observations-that-take-input-k2);
   K3 → [T9](#t9-retired-consumes-that-perform-io-or-fail-k3) (retired); K4 → [T10](#t10-early-exit-from-a-kernel-fold-k4);
   K5 → [T11](#t11-structural-and-borrowed-descent-for-rec-k5); projection operations →
   [T21](#t21-the-derived-type-of-projection-operations).
@@ -653,7 +654,7 @@ obstruction exist unless a Lean name is given.
 
 | # | Problem | Issue |
 |---|---|---|
-| T1 | The spanning lend (K1): closed by decision 71, which decision 72 voids; SPEC §62 | [#172] |
+| T1 | The spanning lend (K1): the suspending lends are proved in the kernel (#839, SPEC §62); the checker still enforces T1 (#843) | [#172] |
 | T2 | An outlives rule for thunks `U C` | [#173] |
 | T3 | Lending a `Mut` as an `Imm` (strings K2′) | [#174] |
 | T4 | Same-lifetime views through a pointer | [#175] |
@@ -677,12 +678,12 @@ obstruction exist unless a Lean name is given.
 
 ### T1. The spanning lend (K1)
 
-*Decision 71 is void (decision 72, 2026-11-01); this is the checker's rule today, until SPEC §62's PRs land.* SPEC §62 is the design that lifts T1.
-
-- **Closed by decision 71 (tombstoned, 2026-10-31).** T1, "no borrow is held across a
-  suspension", is the permanent rule (SPEC §19): data that crosses a suspension is owned, moved
-  in and moved back out. Lifting it is not open work. Every approach tried, why each stopped,
-  where the artefacts are, and the reopen condition (only a breakthrough the user brings) are in
+- **Status.** Decision 71, which closed this line, is void (decision 72). The kernel proves
+  borrows held across a suspending operation at the rule level since #839 (decision 75): the
+  suspending lends at `Row.Suspend` and `goal791N : HandlerLawN → Goal791N` (SPEC §62,
+  `docs/new-core/chain-interpretation.md`). The checker still enforces T1, "no borrow is held
+  across a suspension" (SPEC §19), until the surface catch-up (#843) emits the new rules. The
+  approaches tried before are recorded, as history, in
   [`docs/tombstones/lends-across-suspensions.md`](tombstones/lends-across-suspensions.md). The
   entry below is kept as the record of the problem.
 - **Statement.** A rule that lends a place across observations of codata, e.g. `withborLoop :

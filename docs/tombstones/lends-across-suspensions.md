@@ -1,11 +1,13 @@
 # Tombstone: lends held across suspensions (VOID)
 
-**Void by decision 72 (2026-11-01).** The line this page closed was reopened by the reset and is
-now SPEC §62 (#771). Kept as history only.
+> **VOID. Decision 72 voids decision 71 and this page; nothing here is a rule.** Borrows held
+> across a suspension are proved in the kernel on `main` (#839, decision 75): the suspending lends
+> at `Row.Suspend`, and plain adequacy `goal791N : HandlerLawN → Goal791N` (SPEC §62,
+> `docs/new-core/chain-interpretation.md`). The checker still enforces T1 (SPEC §19) until the
+> surface catch-up, #843. What follows is kept as history only, including its closing and reopen
+> conditions, which no longer apply.
 
-**Closed by decision 71 (`docs/decisions.md`), 2026-10-31.** This page records a research line
-that is closed. Do not propose reopening it, or any of the approaches below, unless the user
-brings a breakthrough (*Reopen condition*).
+*Historical:* closed by decision 71 (`docs/decisions.md`), 2026-10-31.
 
 ## The rule
 

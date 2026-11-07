@@ -10458,8 +10458,10 @@ The theorem sees memory only: a host resource counts as closed only if its handl
 and its type is linear with `close` its only eliminator. Divergence is allowed, and termination is
 not claimed. This is LinearActris's adequacy shape
 (Jacobs, Hinrichsen, Krebbers, POPL 2024). It is stated as `OrDiverges`
-(`Core/StepsN.lean`), and proved at one branch of the tree world (`topAdequacyT`). To be proved by `fundamentalC` over every typing rule and
-adequacy, at one step-indexed safety relation. The existing total relation keeps the termination
+(`Core/StepsN.lean`), and proved at one branch of the tree world (`topAdequacyT`). Over the chain
+relation with Kripke stops it is proved for every closed program typed at `F 1` with its handlers
+inside it, under the named assertion `HandlerLawN` (`goal791N`, *The named assertion* below). To be
+proved by `fundamentalC` over every typing rule and adequacy, at one step-indexed safety relation. The existing total relation keeps the termination
 results (`total_every_run`, `Closing`, `total_open`/`total_call`/`total_subrun`) for derivations
 that use none of the new rules.
 

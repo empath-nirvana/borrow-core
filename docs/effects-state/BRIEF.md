@@ -1,10 +1,9 @@
 # Effects: the shared starting brief
 
-*Decision 71 is void (decision 72, 2026-11-01); SPEC §62 is the design for lends across suspensions. T1 stays the checker's rule until §62's PRs land.*
-
-**Closed by decision 71 (2026-10-31).** No lend stays open across a suspension handled outside it; lifting T1 is tombstoned,
-and the open items here about lends across suspensions are closed:
-`docs/tombstones/lends-across-suspensions.md`. The text is kept as the record.
+*Decision 71, which closed the open items here about lends across suspensions, is void
+(decision 72).* Borrows held across a suspending operation are kernel rules since #839 (decision
+75, SPEC §62); the checker keeps T1 (SPEC §19) until the surface catch-up, #843. The text is kept
+as the record.
 
 Every agent working on the effect calculus gets this file in full. It says:
 - what exists;
