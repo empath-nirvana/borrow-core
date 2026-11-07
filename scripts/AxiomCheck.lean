@@ -2797,3 +2797,5 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowIU_sem
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowIU_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabUN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.tabRK_id_eq
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.finRK_id_eq

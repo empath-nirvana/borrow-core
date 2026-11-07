@@ -667,3 +667,46 @@ lender's run reaches has the location typing above `a` of `Θ` (`LocTy.ExtP.abov
 **Not restated.** `divFuel`; the tail and last handlers (`erwpK_handle_leI` is ready for them);
 `ν`; the unwinding-row lends; `MissingN` and `fundamentalN_all` at `SemJN`; the instance with a
 callback that performs (`withbor2S_perform`).
+
+### 10.12 The handlers, `div_fuel` and the unwinding-row lends at `cN`
+
+**The handlers** (`HandleTKW835N`, `HandleLKW835N`). `erwp_handle_tail` and `erwp_handle_last` at
+`erwpK` are `erwpK_handle_leI` at the handled row's table, pre-passed by `erwpK_postPA`.
+- **The pre-pass.** A stop at the handler's name records in its payload the view's consistency and
+  that its world's location typing is `OK`. It also owes its continuation at the worlds at its own
+  location typing and view, at a floor no higher (`postOK`). The stop's share is consistent with
+  its own world's view (`rwpG_consistentXV`), so the entry owes it there (`KW.owed_of_post`).
+- **A clause** pays its `β` step. It then runs its answering function, or its work, from the floor
+  `f` the handled stop chose (`erwpK_flr_tabN`), under the resume frame
+  (`erwpK_frame_plain_orI`) or the finaliser frame (`erwpK_frame_then_tabKW`).
+- **The frame** is `κ`'s relation, with the world reached owed from the clause's world at `f`, at
+  the frame's share. Each of the function's stops is taken at a floor no higher than `f`. Its world
+  is owed at `f` from the last (`KW.Owed.floor_le`, `KW.Owed.of_post`, `KW.Owed.trans`). So `κ` is
+  resumed or cancelled at the world the function's value is posted at.
+- The frames' `hFk`/`hFe` receive the stop's floor bound, which `erwpK_frame_then` and
+  `then_cancelK` already had in scope.
+- `[handle-last]`'s exit runs at the world the cancel run of `κ` returns at. Its argument is carried
+  to each world that run resumes at (`vN_extR`).
+
+**`div_fuel`** (`FuelKW835N`). `fuel_totalN` at `erwpK`, by induction on the index, from a resource
+consistent with the view of a world whose location typing is `OK`. A tick is resumed at the stop's
+own world, which the tick's entry owes at every floor (`KW.owed_self`). An operation of `Σ` passes
+the handler; the run goes on at each world its entry owes.
+
+**The unwinding-row lends** (`UnwindKW835N`). An unwinding row's operations are abortive, so a run
+at its table stops only at `raise`s, which owe no continuation and read no world. `F_Σ R` at such a
+row is therefore one run at one world (`cN_unwind_iff`, by `erwpK_abort_move` both ways), at the
+one-world table `tabUN`, whose payloads are read at `vN`. `withbor1U`, `withbor2U`, `withbor3U`,
+`withloadU`, `sliceBorrowMU` and `sliceBorrowIU` are the one-world proofs, with `tabUN`'s facts in
+place of `tabN₀`'s.
+
+**`tabRWK` and `tabRK`.**
+- At `g = id`, `tabRK R vr id` is `tabRWK (fun _ => R) vr` (`tabRK_id_eq`, `finRK_id_eq`).
+- `tabRWK` cannot replace `tabRK` as defined. `tabRK` is read under world maps other than `id`:
+  the lend-shifted twin `(g ·).lend ℓ α F` in `FrameListKW835N` (`tabRK_foldTwinR`, `tabRK_canRK`)
+  and `ReindexK835N`. `tabRWK` has no world map.
+- One definition can cover both: `tabRWK` with a world map, its claim read at a world. That changes
+  the claim argument of every statement over `tabRK`.
+
+**Not restated.** `ν` (`nuIn`, `nuOut`, `unfoldN`); `MissingN` and `fundamentalN_all` at `SemJN`;
+BOXED-κ's `stop_semN`/`SemCSN`, which is not a compatibility lemma.

@@ -145,6 +145,35 @@ theorem tab_lookupRWK : ∀ (F : CTy) {RW : KW → Nat → WProp} {vr : VRel} {�
   | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabRWK, OpTabK.empty] at h
   | .nu _, _, _, _, _, _, _, _, h => by simp [tabRWK, OpTabK.empty] at h
 
+mutual
+/-- **`tabRK` at `g = id` is `tabRWK` at a claim read alike at every world.** -/
+theorem tabRK_id_eq (R : Nat → WProp) (vr : VRel) : ∀ (F : CTy) (δ : LSub) (x : KW),
+    tabRK (ℍ := ℍ) R vr id F δ x = tabRWK (ℍ := ℍ) (fun _ => R) vr F δ x
+  | .eff m i q A B fin _ C, δ, x => by
+      simp only [tabRK, tabRWK]
+      rw [finRK_id_eq R vr fin δ, tabRK_id_eq R vr C δ x]; rfl
+  | .ret _, _, _ => by simp [tabRK, tabRWK]
+  | .arr _ _, _, _ => by simp [tabRK, tabRWK]
+  | .amp _ _, _, _ => by simp [tabRK, tabRWK]
+  | .top, _, _ => by simp [tabRK, tabRWK]
+  | .all _ _ _, _, _ => by simp [tabRK, tabRWK]
+  | .nu _, _, _ => by simp [tabRK, tabRWK]
+/-- `finRK` at `g = id` is `finRWK` at a claim read alike at every world. -/
+theorem finRK_id_eq (R : Nat → WProp) (vr : VRel) : ∀ (F : CTy) (δ : LSub),
+    finRK (ℍ := ℍ) R vr id F δ = finRWK (ℍ := ℍ) (fun _ => R) vr F δ
+  | .eff m i q A B fin _ C, δ => by
+      simp only [finRK, finRWK]
+      have h2 : ∀ x, tabRK (ℍ := ℍ) R vr id C δ x = tabRWK (ℍ := ℍ) (fun _ => R) vr C δ x :=
+        fun x => tabRK_id_eq R vr C δ x
+      rw [finRK_id_eq R vr fin δ]; simp only [h2]; rfl
+  | .ret _, _ => rfl
+  | .arr _ _, _ => rfl
+  | .amp _ _, _ => rfl
+  | .top, _ => rfl
+  | .all _ _ _, _ => rfl
+  | .nu _, _ => rfl
+end
+
 /-- `tabRK` at `g = id` and `tabRWK` agree but for the cancel obligations. -/
 theorem tabRK_tabRWK_twin (R : Nat → WProp) (RW : KW → Nat → WProp) (vr : VRel) (F : CTy)
     (δ : LSub) (x : KW) :
