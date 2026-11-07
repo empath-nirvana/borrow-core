@@ -466,6 +466,12 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Check.nuEta_obs
 #print axioms BoCa.Fig16.LogRel.Core.Check.nuEta_var
 #print axioms BoCa.Fig16.LogRel.Core.Check.nuEta_unfold
+#print axioms BoCa.Fig16.LogRel.Core.Check.NuTree.toE_shift
+#print axioms BoCa.Fig16.LogRel.Core.Check.NuTree.mem_parse
+#print axioms BoCa.Fig16.LogRel.Core.Check.NuTree.toE_subst
+#print axioms BoCa.Fig16.LogRel.Core.Check.NuTree.toE_closedAt
+#print axioms BoCa.Fig16.LogRel.Core.Check.nuEta_reach
+#print axioms BoCa.Fig16.LogRel.Core.Check.nuEta_leaf
 #print axioms BoCa.Fig16.LogRel.Core.Check.normAt_shift
 #print axioms BoCa.Fig16.LogRel.Core.Check.walkReadB_shift
 #print axioms BoCa.Fig16.LogRel.Core.Check.walkGetB_shift
