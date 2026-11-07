@@ -9,7 +9,7 @@ import Core.Compat
 (`Core/Compat.lean`, `Core/Compatibility.lean`, `Core/Integers.lean`, `Core/Alpha.lean`,
 `Core/Fundamental.lean`), line by line, against the interface of `Core/Chain/Iface834N.lean` and
 `Core/Chain/TyEq834N.lean`: `gDenC_split ↦ gN_split`/`gN_splitC`, `wpTS_bind_frame ↦
-erwp_bind_frame`, `cC_bind ↦ cN_bind`, `gDenC_local ↦ gN_extR`, `cC_tyEq ↦ cN_tyEq`.
+erwp_bind_frame`, `cC_bind ↦ cN_bind`, `gDenC_local ↦ gN_extR₀`, `cC_tyEq ↦ cN_tyEq`.
 
 The chain's judgment carries a world, a view consistent with the resource and a step index
 (`SemJN₀`'s `Θ`, `c`, `n`); Core's has none. They enter at the same places in every rule:
@@ -17,7 +17,7 @@ The chain's judgment carries a world, a view consistent with the resource and a 
   resource is valid (`gN_splitC`): at `F`/`F_Σ` by `erwp_of_valid`, elsewhere by `cN_of_valid`,
   at every conclusion;
 * a premise read after a run is read at the index the run leaves (`gN_le`, `vN_le₀`);
-* a thunk moves its context along `ExtR` to the world it is forced at (`gN_extR`), as Core's
+* a thunk moves its context along `ExtR` to the world it is forced at (`gN_extR₀`), as Core's
   `gDenC_local`; `⊸` is a plain wand and moves nothing.
 -/
 
@@ -115,7 +115,7 @@ theorem tensorI_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {e₁ e₂ : E
     ⟨v₁, v₂, τ₂, τ₁, rfl, ResU.CompS.comm hcτ, vN_le₀ hk' hv₁', hv₂⟩
 
 /-- The thunk `λ_. M` of `thunk M : U (F A)` is a value of `U (F A)`: the closure runs at every
-extension along `ExtR`, its environment moved there by `gN_extR` (Core's `gDenC_local`). -/
+extension along `ExtR`, its environment moved there by `gN_extR₀` (Core's `gDenC_local`). -/
 theorem thunkF_sem {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy}
     (h : SemJN₀ (ℍ := ℍ) Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) {δ : LSub} {γ : List Val}
     {Θ : LocTy} {n : Nat} {ρ : WRes} (hδ : Δ.Models δ) (hlw : Ctx.LiveWithin Γ γ)
@@ -126,7 +126,7 @@ theorem thunkF_sem {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy}
     (fun μ => Head.beta μ (Expr.psub 1 γ M) Val.unit) rfl ?_
   rw [show Kont.hole.plug (Expr.subst 0 Val.unit (Expr.psub 1 γ M)) = substAll (Val.unit :: γ) M
     from (substAll_cons_psub Val.unit γ M).symm]
-  exact h δ (Val.unit :: γ) Θ' c' n ls' ρ hδ hΘ' hc' hlw (gN_dead_cons _ _ (gN_extR hE hg))
+  exact h δ (Val.unit :: γ) Θ' c' n ls' ρ hδ hΘ' hc' hlw (gN_dead_cons _ _ (gN_extR₀ hE hg))
 
 /-- **`thunk M : U (F A)` at `SemJN₀`** (Core's `thunkF_compatC`). -/
 theorem thunkF_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy}
@@ -137,7 +137,7 @@ theorem thunkF_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy}
   exact erwp_val (v := Val.lam (Expr.psub 1 γ M)) (thunkF_sem h hδ hlw hg)
 
 /-- The λ-value `V : C`, `C` not an `F`, is a value of `U C`: it runs at every extension along
-`ExtR`, its environment moved there by `gN_extR`. -/
+`ExtR`, its environment moved there by `gN_extR₀`. -/
 theorem thunkV_sem {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hC : C.isRet = false)
     (h : SemJN₀ (ℍ := ℍ) Δ Γ (.val (.lam N)) (.comp C)) {δ : LSub} {γ : List Val}
     {Θ : LocTy} {n : Nat} {ρ : WRes} (hδ : Δ.Models δ) (hlw : Ctx.LiveWithin Γ γ)
@@ -145,7 +145,7 @@ theorem thunkV_sem {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hC : C.is
     vN₀ (ℍ := ℍ) (.thunk C) δ Θ n (Val.lam (Expr.psub 1 γ N)) ρ := by
   intro Θ' hE hΘ' c' hc' ls'
   rw [forceE_of_not_ret hC]
-  exact h δ γ Θ' c' n ls' ρ hδ hΘ' hc' hlw (gN_extR hE hg)
+  exact h δ γ Θ' c' n ls' ρ hδ hΘ' hc' hlw (gN_extR₀ hE hg)
 
 /-- **`thunk V : U C`, `C` not an `F`, at `SemJN₀`** (Core's `thunkV_compatC`). -/
 theorem thunkV_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hC : C.isRet = false)

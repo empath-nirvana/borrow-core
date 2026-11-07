@@ -555,3 +555,36 @@ the relation at `KW`.
   left.
 - The table layer at `vr` starts at `rdNv vr g δ` (`RowFamK835N`), `rdKWv` at one mode, with
   `rdNv_ok` and `rdNv_payExt`. `tabNK`/`tabRK`/`tabGK`/`tabListK` still read `vN₀`.
+
+### 10.9 The table layer at one mode, and the callback's table step
+
+**The tables at a value relation, one mode.** `tabNK vr g`, `finNK`, `tabRK R vr g`, `finRK`,
+`tabGK R G vr g`, `finGK` (`TabK835N`, `TabKW835N`) read values at `vr` and owe every entry, and
+every entry of a cancel row, along `KW.Owed` from `g x` to `g y`. `tabF_N`/`finF_N`:
+`tabF (rdNv vr g δ) () F x = tabNK vr g F δ x`; `tabNK_vN`/`finNK_vN`: at `vr = vN`, `g = id` it is
+`cN`'s `tabN`/`finN`. What the frames read of `vr` is `ValRelOK` (closed in the index, empty at a
+persistent type, blind to an unmentioned variable, in the stratum below a bound the type outlives,
+kept along `ExtR`); `valRelOK_vN` discharges it.
+
+- Every frame lemma of §3, §7, §8 is restated with `S` replaced by `vr` and `hv : ValRelOK vr`
+  where it reads a value fact. With one mode, every twin's lender entry owes along `KW.Owed` at
+  every name, so the premise `F.SchedOnly S` is gone from `erwpK_M_frameCR_tab`,
+  `erwpK_M_frameCRG_tab`, `erwpK_M_antiFrameCR_tab`, `erwpK_rebGen_tab`, `erwpK_I_frame_tab`,
+  `erwpK_M_frameListKW` and their transfers. `KW.OwedS`, `finSched`, `CTy.SchedOnly`,
+  `rdKW`/`rdKWv` and the `*_sched` lookups are removed; nothing outside the layer read them.
+- The list frames (`FrameListKW835N`) are at `vN`: `claimL`, `listPostN`, `mutLeafN`,
+  `ownLeafN_inStratum` at `vN`, the old ones renamed `₀`.
+- `[then]` and the loop are stated at `cN`'s `tabN` (`erwpK_frame_then_tabKW`,
+  `erwpK_iterate_tabKW`, `tabN_tick`), `[then]`'s frame carried by `gN_extR` at `KW`
+  (`Iface834N`'s is `gN_extR₀`).
+
+**The callback's table step** (`ReindexK835N`). `tabNK_lend_comap`: a stop at
+`tabNK vN id F δ′` at `y.lend ℓ α F` is a stop at `tabNK vN (·.lend ℓ α F) F δ′` at `y`. The
+payload and the answer move by `vN_lend_eq` (`vN_extend_of_not_free`, then `vN_add_eq`); the
+answer's view by `consistentX_of_outlivesN`, which reads the constants' closed bound
+(`LifeCtx.empty.Defines bnd`, a conjunct of `Const791.OK`); the order is the same; a cancel
+obligation moves by `erwpK_comap`, by induction on how deep cancel rows nest. `erwpK_lend_comap` is
+`erwpK_comap` with that step: the callback's run at `tabN F δ′` from the lend's world is its run
+indexed by the lender's worlds at the table `erwpK_M_frameCR_tab` reads. `erwpK_M_frameCR_cN` is the
+Mut Frame with its callback read that way: a run at `tabN F δ′` from the lend's world, the lender
+at its twin `tabRK` at `vN`.

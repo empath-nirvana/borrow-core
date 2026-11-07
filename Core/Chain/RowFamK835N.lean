@@ -20,9 +20,9 @@ instances:
 
 * **one world** (`rdU`): every entry owes at the one world, one mode; `tabF` is `tabN₀` lifted
   (`tabF_unit`, `finF_unit`);
-* **the typed world** (`rdKW`): the mode is the scheduler names, an entry at `m` owes along
-  `KW.OwedS` from `g x`, its cancel row's mode `finSched`; `tabF` is `tabNK` (`tabF_KW`,
-  `finF_KW`).
+* **the typed world** (`rdNv vr g δ`): one mode; every entry, and every entry of a cancel row,
+  owes along `KW.Owed` from `g x`, its values at `vr`; `tabF` is `tabNK` (`tabF_N`, `finF_N`).
+  `cN`'s table is the instance `vr = vN`, `g = id` (`rdN`, `tabN_eq`).
 
 The interface lemmas (`tabF_effOf_find`, `tabF_rowOf`, `tabF_find_sig`, `tabF_rowOf_find`,
 `entF_fin_cancel`, `entF_fin_of`, `errOkF_of_sub`, `tabF_rowLe_entry`, `finF_mono`) are `tabN₀`'s,
@@ -164,49 +164,6 @@ end
 
 /-! ### The typed world -/
 
-/-- **The typed world's reading at a value relation** (`tabNK`): values at `vr`, at the world's
-location typing and view; an entry at `m` owes along `KW.OwedS` from `g x` to `g y`; a cancel
-row's mode is `finSched`; modes ordered by inclusion; the cancel runs at `g`'s view and floor,
-posted at their own world, read at the worlds whose location typing under `g` is downward
-closed. -/
-def rdKWv (vr : VTy → LSub → LocTy → Nat → Val → WRes → Prop) (g : KW → KW) (δ : LSub) :
-    RowRd KW (UInt32 → Prop) where
-  vr := vr
-  δ := δ
-  Θ := fun x => x.Θ
-  c := fun x => x.c
-  wk := fun S m x f y ρ => (g x).OwedS S m f (g y) ρ
-  sub := finSched
-  le := fun S S' => ∀ n, S n → S' n
-  V := KW.PostK
-  Φ := fun z => (g z).Θ.view (g z).c
-  fl := fun z => (g z).lo
-  Inv := fun z => (g z).Θ.Down
-
-/-- **The typed world's reading** (`tabNK`): `rdKWv` at `𝒱⟦·⟧`. -/
-def rdKW (g : KW → KW) (δ : LSub) : RowRd KW (UInt32 → Prop) :=
-  rdKWv (fun A δ Θ k v ρ => vN₀ (ℍ := ℍ) A δ Θ k v ρ) g δ
-
-theorem rdKWv_ok {vr : VTy → LSub → LocTy → Nat → Val → WRes → Prop}
-    (hD : ∀ A δ Θ k v ρ, vr A δ Θ (k + 1) v ρ → vr A δ Θ k v ρ)
-    (hP : ∀ A, A.Persistent → ∀ δ Θ k v ρ, vr A δ Θ k v ρ → ρ = PMap.empty)
-    (g : KW → KW) (δ : LSub) : (rdKWv vr g δ).OK where
-  vrDown := fun A Θ k v ρ h => hD A δ Θ k v ρ h
-  vrPers := fun A hA Θ k v ρ h => hP A hA δ Θ k v ρ h
-  wkInv := fun S m x f y ρ h => by
-    by_cases hm : S m
-    · exact (h.1 hm).2.1.1
-    · exact (h.2 hm).2.1.1
-  ΦDown := fun x hx => LocTy.view_down hx (g x).c
-  wkLeft := fun _ _ _ _ _ _ _ _ hc hv h => KW.OwedS.left hc hv h
-  le_refl := fun _ _ h => h
-  le_trans := fun _ _ _ h₁ h₂ n h => h₂ n (h₁ n h)
-  le_sub := fun _ _ _ h => Or.inr h
-  sub_mono := fun _ _ _ h n hn => hn.elim (fun h' => Or.inl (h _ h')) (fun h' => Or.inr (h _ h'))
-  wk_anti := fun S S' m x f y ρ hle h =>
-    ⟨fun hm => h.1 (hle m hm), fun _ => h.owedR⟩
-  Veq := fun _ _ h => h
-
 /-- **The typed world's reading at one mode**, at a value relation and a world map: values at
 `vr`, at the world's location typing and view; every entry, and every entry of a cancel row, owes
 its continuation at `g y` along `KW.Owed` from `g x`; the cancel runs at `g`'s view and floor,
@@ -250,48 +207,40 @@ theorem rdNv_payExt {vr : VTy → LSub → LocTy → Nat → Val → WRes → Pr
   intro _ _ x f y ρa ρb ρ hc hy A k v hv
   exact hE A δ k v ρa (hy.1.extR.left hc) hv
 
-theorem rdKW_ok (g : KW → KW) (δ : LSub) : (rdKW (ℍ := ℍ) g δ).OK :=
-  rdKWv_ok (fun A δ Θ k v ρ h => vN_down₀ A δ Θ k v ρ h)
-    (fun A hA _ _ _ _ _ h => vN_empty_of_persistent₀ A hA h) g δ
+theorem ValRelOK.rdNv_ok {vr : VRel} (hv : ValRelOK vr) (g : KW → KW) (δ : LSub) :
+    (rdNv vr g δ).OK :=
+  SI.rdNv_ok hv.down hv.pers g δ
 
-/-- Both orders make the resumption world's view consistent with the share. -/
-theorem KW.OwedS.consistent {S : UInt32 → Prop} {m : UInt32} {x y : KW} {f : Life} {ρ : WRes}
-    (h : x.OwedS S m f y ρ) : ConsistentX y.c ρ := by
-  by_cases hm : S m
-  · exact (h.1 hm).2.2.1
-  · exact (h.2 hm).2.2
-
-/-- **The payload reading along the typed order** at the lender's tables: the order is `ExtR` at
-the share (`KW.OwedS.extR`), so at a part of it, along which `𝒱⟦A⟧` is kept (`vN_extR₀`). -/
-theorem rdKW_payExt (δ : LSub) : (rdKW (ℍ := ℍ) id δ).PayExt := by
-  intro S m x f y ρa ρb ρ hc hy A k v hv
-  exact vN_extR₀ A δ k v ρa ((KW.OwedS.extR hy).left hc) hv
+theorem ValRelOK.rdNv_payExt {vr : VRel} (hv : ValRelOK vr) (δ : LSub) : (rdNv vr id δ).PayExt :=
+  SI.rdNv_payExt (fun A δ _ _ k v ρ hE h => hv.extR A δ k v ρ hE h) δ
 
 /-- **`tabF` at the typed world is `tabNK`, and `finF` is `finNK`.** -/
-theorem tabF_finF_KW (g : KW → KW) (δ : LSub) : ∀ F : CTy,
-    (∀ S x, tabF (ℍ := ℍ) (rdKW g δ) S F x = tabNK (ℍ := ℍ) S g F δ x) ∧
-      ∀ S, finF (ℍ := ℍ) (rdKW g δ) S F = finNK (ℍ := ℍ) S g F δ
+theorem tabF_finF_N (vr : VRel) (g : KW → KW) (δ : LSub) : ∀ F : CTy,
+    (∀ x, tabF (ℍ := ℍ) (rdNv vr g δ) () F x = tabNK (ℍ := ℍ) vr g F δ x) ∧
+      finF (ℍ := ℍ) (rdNv vr g δ) () F = finNK (ℍ := ℍ) vr g F δ
   | .eff m i q A B fin rc C => by
-      have hf := tabF_finF_KW g δ fin
-      have hC := tabF_finF_KW g δ C
-      refine ⟨fun S x => ?_, fun S => ?_⟩
+      have hf := tabF_finF_N vr g δ fin
+      have hC := tabF_finF_N vr g δ C
+      refine ⟨fun x => ?_, ?_⟩
       · simp only [tabF, tabNK, hf.2, hC.1]; rfl
       · simp only [finF, finNK, hf.2, hC.1]; rfl
-  | .ret _ => ⟨fun _ _ => by simp [tabF, tabNK], fun _ => by simp [finF, finNK]; rfl⟩
-  | .arr _ _ => ⟨fun _ _ => by simp [tabF, tabNK], fun _ => by simp [finF, finNK]; rfl⟩
-  | .amp _ _ => ⟨fun _ _ => by simp [tabF, tabNK], fun _ => by simp [finF, finNK]; rfl⟩
-  | .top => ⟨fun _ _ => by simp [tabF, tabNK], fun _ => by simp [finF, finNK]⟩
-  | .all _ _ _ => ⟨fun _ _ => by simp [tabF, tabNK], fun _ => by simp [finF, finNK]; rfl⟩
-  | .nu _ => ⟨fun _ _ => by simp [tabF, tabNK], fun _ => by simp [finF, finNK]; rfl⟩
+  | .ret _ => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]; rfl⟩
+  | .arr _ _ => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]; rfl⟩
+  | .amp _ _ => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]; rfl⟩
+  | .top => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]⟩
+  | .all _ _ _ => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]; rfl⟩
+  | .nu _ => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]; rfl⟩
   termination_by structural F => F
 
-theorem tabF_KW (g : KW → KW) (δ : LSub) (S : UInt32 → Prop) (F : CTy) (x : KW) :
-    tabF (ℍ := ℍ) (rdKW g δ) S F x = tabNK (ℍ := ℍ) S g F δ x :=
-  (tabF_finF_KW g δ F).1 S x
+/-- **The typed tables are the family at the one-mode reading**: `tabNK vr g` is
+`tabF (rdNv vr g δ) ()`. -/
+theorem tabF_N (vr : VRel) (g : KW → KW) (δ : LSub) (F : CTy) (x : KW) :
+    tabF (ℍ := ℍ) (rdNv vr g δ) () F x = tabNK (ℍ := ℍ) vr g F δ x :=
+  (tabF_finF_N vr g δ F).1 x
 
-theorem finF_KW (g : KW → KW) (δ : LSub) (S : UInt32 → Prop) (F : CTy) :
-    finF (ℍ := ℍ) (rdKW g δ) S F = finNK (ℍ := ℍ) S g F δ :=
-  (tabF_finF_KW g δ F).2 S
+theorem finF_N (vr : VRel) (g : KW → KW) (δ : LSub) (F : CTy) :
+    finF (ℍ := ℍ) (rdNv vr g δ) () F = finNK (ℍ := ℍ) vr g F δ :=
+  (tabF_finF_N vr g δ F).2
 
 /-! ### One world -/
 
@@ -824,18 +773,18 @@ end Widen
 /-- **E5 at `KW`: a row's table is closed under a plain context** (`tabN_ctxClosed` at `KW`), at
 every world whose location typing under `g` is downward closed, which every world an entry owes
 at is. -/
-theorem tabNK_ctxClosed (S : UInt32 → Prop) (g : KW → KW) (G : CTy) (δ : LSub) (K : Kont)
-    (hH : ∀ m, K.HasHnd m = false) (hC : K.Catches 0 = false) (x : KW) :
-    (tabNK (ℍ := ℍ) S g G δ x).CtxClosedI (fun z => (g z).Θ.Down) K := by
-  rw [← tabF_KW]
-  exact tabF_ctxClosed (rdKW_ok g δ) G K hH hC S x
+theorem tabNK_ctxClosed {vr : VRel} (hv : ValRelOK vr) (g : KW → KW) (G : CTy) (δ : LSub)
+    (K : Kont) (hH : ∀ m, K.HasHnd m = false) (hC : K.Catches 0 = false) (x : KW) :
+    (tabNK (ℍ := ℍ) vr g G δ x).CtxClosedI (fun z => (g z).Θ.Down) K := by
+  rw [← tabF_N]
+  exact tabF_ctxClosed (hv.rdNv_ok g δ) G K hH hC () x
 
 /-- **`tabNK` is closed in the index at those worlds**, and every world an entry owes at is
 one. -/
-theorem tabNK_downI (S : UInt32 → Prop) (g : KW → KW) (G : CTy) (δ : LSub) (x : KW) :
-    (tabNK (ℍ := ℍ) S g G δ x).DownI (fun z => (g z).Θ.Down) := by
-  rw [← tabF_KW]
-  exact tabF_downI (rdKW_ok g δ) S G x
+theorem tabNK_downI {vr : VRel} (hv : ValRelOK vr) (g : KW → KW) (G : CTy) (δ : LSub) (x : KW) :
+    (tabNK (ℍ := ℍ) vr g G δ x).DownI (fun z => (g z).Θ.Down) := by
+  rw [← tabF_N]
+  exact tabF_downI (hv.rdNv_ok g δ) () G x
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 

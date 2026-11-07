@@ -13,7 +13,7 @@ range. `rwp_M_frameListN` is that induction at the chain, over the one-cell fram
 * `αⱼ` lies below the frame's rest, the payloads' stratum `β` and the result's stratum `β′`, as
   Core's `aF ⊓ β′ ⊓ β`; the frames after it are chosen below it (Core's `aR ⊓ α₁ ⊓ γH`);
 * the callback receives every leaf at the innermost lifetime: a leaf lent at `αⱼ` is a value of
-  `Mut 'x A` at every `α ⊑ αⱼ` through `Mut`'s slack `@aδ ⊑ b` (`mutLeafN`), where Core uses
+  `Mut 'x A` at every `α ⊑ αⱼ` through `Mut`'s slack `@aδ ⊑ b` (`mutLeafN₀`), where Core uses
   `ptoMutS_antitone`;
 * a frame's postcondition returns its leaf and moves what the inner frames returned to the world
   without the frame's key (`vN_local₀`), the leaves and the result being in the frame's stratum.
@@ -38,13 +38,13 @@ open BoCa.BoLo (Heap Kont Head)
 
 /-- **A `mut` leaf at `α`** at the world `Θ`: `Mut`'s clause read at `α` (Core's `mutLeaf`), the
 cell at some `b ⊒ α` holding a member of the payload stored at the world's key `(ℓ, b)`. -/
-def mutLeafN (A : VTy) (δ : LSub) (α : Life) (Θ : LocTy) (n : Nat) (m : Loc) : WProp := fun ρ =>
+def mutLeafN₀ (A : VTy) (δ : LSub) (α : Life) (Θ : LocTy) (n : Nat) (m : Loc) : WProp := fun ρ =>
   ∃ b : Life, α ≤ b ∧ mutL b (fun Θ' j u r => vN₀ (ℍ := ℍ) A δ Θ' j u r) Θ n (Val.loc m) ρ ∧
     ∀ (Θ' : LocTy) (j : Nat) (u : Val) (r : WRes), vN₀ (ℍ := ℍ) A δ Θ' j u r → r.InStratum b
 
 /-- A `mut` leaf at `α` is a value of `Mut 'x A` at `δ['x ↦ α]`. -/
 theorem vN_mutLeaf {x : LifeVar} {A : VTy} (hx : ¬ VFree x A) {δ : LSub} {α : Life} {Θ : LocTy}
-    {n : Nat} {m : Loc} {ρ : WRes} (h : mutLeafN (ℍ := ℍ) A δ α Θ n m ρ) :
+    {n : Nat} {m : Loc} {ρ : WRes} (h : mutLeafN₀ (ℍ := ℍ) A δ α Θ n m ρ) :
     vN₀ (ℍ := ℍ) (.mut (.var x) A) (δ.extend x α) Θ n (Val.loc m) ρ := by
   obtain ⟨b, hab, hm, hu⟩ := h
   have hAδ : vN₀ (ℍ := ℍ) A (δ.extend x α) = vN₀ (ℍ := ℍ) A δ := vN_extend_of_not_free₀ hx δ α
@@ -52,7 +52,7 @@ theorem vN_mutLeaf {x : LifeVar} {A : VTy} (hx : ¬ VFree x A) {δ : LSub} {α :
   rw [hAδ]; exact hm
 
 /-- An owned leaf lies in every stratum below its payload's. -/
-theorem ownLeafN_inStratum {A : VTy} {δ : LSub} {β α : Life} (hαβ : α ≤ β)
+theorem ownLeafN_inStratum₀ {A : VTy} {δ : LSub} {β α : Life} (hαβ : α ≤ β)
     (hunif : ∀ Θ j u r, vN₀ (ℍ := ℍ) A δ Θ j u r → r.InStratum β) {Θ : LocTy} {n : Nat}
     {m : Loc} {ρ : WRes} (h : vN₀ (ℍ := ℍ) (.ref A) δ Θ n (Val.loc m) ρ) : ρ.InStratum α := by
   obtain ⟨l, u, σ, -, hc, hu⟩ := h
@@ -72,7 +72,7 @@ theorem rwp_M_frameListN {A : VTy} {δ : LSub} {β β' : Life}
       Θ.OK → ConsistentX c ρ → ResU.CompS ρo ρH ρ →
       sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ Θ n (Val.loc m)) I ρo →
       (∀ α, α < γ → ρH.InStratum α ∧ ∀ (Θ' : LocTy) (c' : Loc → Option Life), Θ.ExtA Θ' →
-        Θ'.OK → ∀ ρm ρ', sepList (mutLeafN (ℍ := ℍ) A δ α Θ' n) I ρm → ResU.CompS ρH ρm ρ' →
+        Θ'.OK → ∀ ρm ρ', sepList (mutLeafN₀ (ℍ := ℍ) A δ α Θ' n) I ρm → ResU.CompS ρH ρm ρ' →
           ConsistentX c' ρ' → rwp (ℍ := ℍ) (Θ'.view c') (Ψ Θ') n ls e ρ') →
       rwp (ℍ := ℍ) (Θ.view c) (fun k ls' v ρ' => ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ' ∧
         sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ Θ k (Val.loc m)) I ρ₁ ∧ Ψ Θ k ls' v ρ₂)
@@ -137,7 +137,7 @@ theorem rwp_M_frameListN {A : VTy} {δ : LSub} {β β' : Life}
         obtain ⟨ρ₁, ρ₂, hc12, ho1, hψ⟩ := h
         have hs1 : ρ₁.InStratum α₁ := sepList_closed (ResU.inStratum_empty α₁)
           (fun _ _ _ hc a b => inStratum_compS hc a b)
-          (fun m τ hm => ownLeafN_inStratum hα₁β hunif hm) ho1
+          (fun m τ hm => ownLeafN_inStratum₀ hα₁β hunif hm) ho1
         have hs2 : ρ₂.InStratum α₁ := (hΨs _ _ _ _ _ hψ).mono hα₁β'
         refine ⟨inStratum_compS hc12 hs1 hs2, fun w Y hY σ' ⟨hσ', hFσ⟩ Z hZ => ?_⟩
         have ho1' : sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ Θ k (Val.loc m)) I ρ₁ :=
@@ -155,7 +155,7 @@ theorem rwp_M_frameListN {A : VTy} {δ : LSub} {β β' : Life}
         have hα₂γ : α₂ < γ := lt_of_lt_of_le hα₂ inf_le_right
         have hα₂α₁ : α₂ ≤ α₁ := le_of_lt (lt_of_lt_of_le hα₂ (inf_le_left.trans inf_le_right))
         obtain ⟨X, hX, hρ'X⟩ := compS_reassoc hR hcomp
-        have hlead : mutLeafN (ℍ := ℍ) A δ α₂ Θ' n ℓ
+        have hlead : mutLeafN₀ (ℍ := ℍ) A δ α₂ Θ' n ℓ
             (ResU.single ℓ (CellU.mutOf α₁ u σ houtP (Fm n) hwit)) :=
           ⟨α₁, hα₂α₁, mutL_extR (hE.extR _) (lend_mutL Θ ℓ α₁ P le_rfl houtP hwit),
             fun Θ'' j w r h => (hunif Θ'' j w r h).mono hα₁β⟩

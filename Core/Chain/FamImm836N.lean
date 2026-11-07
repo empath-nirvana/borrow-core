@@ -17,7 +17,7 @@ chain:
   `withbor1U_sem`. The callback receives every leaf at the innermost lifetime (`immCell` reads
   `α ⊑ ⊓s`), at the world holding every record (`LocTy.addImms`). Frame `j`'s output moves what the
   inner frames returned to the world without its record (`LocTy.extR_of_addImm`), and its claim
-  joins theirs, the cells owned again (`claimL`);
+  joins theirs, the cells owned again (`claimL₀`);
 * `sliceBorrowI_compatN` and `sliceBorrowIU_compatN` are Core's `sliceBorrowI_compatX` and
   `sliceBorrowIU_compatX` against it, with `withbor1_sem`'s and `withbor1U_sem`'s steps around
   the callback.
@@ -259,7 +259,7 @@ bound is `@R ⊓ αⱼ ⊓ γ` as printed. The callback runs at the world holdin
 below the bound and on the callback's list, and receives every leaf at the innermost lifetime.
 `Ψ` is the callback's postcondition: in the stratum `β′`, read at the world without a record at
 a resource in the record's stratum, and not reading the list. The claim a `raise` carries is the
-cells owned again (`claimL`, at the frames' index). -/
+cells owned again (`claimL₀`, at the frames' index). -/
 theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A δ)
     (hunif : ∀ Θ j u r, vN₀ (ℍ := ℍ) A δ Θ j u r → r.InStratum β)
     (Tb : OpTabN) (hab : ∀ m i en, Tb m i = some en → en.abort = true)
@@ -275,9 +275,9 @@ theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A
         (∀ y ∈ ls, y ∈ ls') → ∀ ρm ρ',
           sepList (immLeafN (ℍ := ℍ) A δ α (Θ.addImms xs) n) I ρm → ResU.CompS ρH ρm ρ' →
           ConsistentX c ρ' →
-          erwp (ℍ := ℍ) ((Θ.addImms xs).view c) (opTableR Tb (fun _ => claimL (ℍ := ℍ) A δ Θ [] n))
+          erwp (ℍ := ℍ) ((Θ.addImms xs).view c) (opTableR Tb (fun _ => claimL₀ (ℍ := ℍ) A δ Θ [] n))
             (Ψ (Θ.addImms xs)) n ls' e ρ') →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableR Tb (fun _ => claimL (ℍ := ℍ) A δ Θ I n))
+      erwp (ℍ := ℍ) (Θ.view c) (opTableR Tb (fun _ => claimL₀ (ℍ := ℍ) A δ Θ I n))
         (fun k ls' v ρ' => ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ' ∧
           sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ Θ k (Val.loc m)) I ρ₁ ∧ Ψ Θ k ls' v ρ₂)
         n ls e ρ
@@ -317,10 +317,10 @@ theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A
       have hci : ConsistentX c ρi := consistentX_allImm (fun m ψ e => by
         obtain ⟨-, rfl⟩ := ResU.single_get_eq_some e
         exact CellU.kind_immOf _ _ _ _) c
-      have hRs : ∀ k ρ', (fun _ : Nat => claimL (ℍ := ℍ) A δ Θ₁ I n) k ρ' → ρ'.InStratum α₁ :=
+      have hRs : ∀ k ρ', (fun _ : Nat => claimL₀ (ℍ := ℍ) A δ Θ₁ I n) k ρ' → ρ'.InStratum α₁ :=
         fun k ρ' h =>
           sepList_closed (ResU.inStratum_empty α₁) (fun _ _ _ hc a b => inStratum_compS hc a b)
-            (fun m τ hm => ownLeafN_inStratum hα₁β hunif hm) h
+            (fun m τ hm => ownLeafN_inStratum₀ hα₁β hunif hm) h
       -- the cells of `I` at the world without the record
       have hdrop : ∀ k ρ', ρ'.InStratum α₁ →
           sepList (fun m => vN₀ (ℍ := ℍ) (.ref A) δ Θ₁ k (Val.loc m)) I ρ' →
@@ -329,8 +329,8 @@ theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A
           (fun _ _ _ hc h => ⟨ResU.CompS.inStratum_left hc h,
             ResU.CompS.inStratum_left (ResU.CompS.comm hc) h⟩)
           (fun m τ hτ hm => vN_extR₀ (.ref A) δ k _ τ (LocTy.extR_of_addImm Θ p hτ) hm) hs h
-      have hcl' : ∀ k ρ', (claimI ℓ u σ k ⋆ (fun _ : Nat => claimL (ℍ := ℍ) A δ Θ₁ I n) k) ρ' →
-          claimL (ℍ := ℍ) A δ Θ (ℓ :: I) n ρ' := by
+      have hcl' : ∀ k ρ', (claimI ℓ u σ k ⋆ (fun _ : Nat => claimL₀ (ℍ := ℍ) A δ Θ₁ I n) k) ρ' →
+          claimL₀ (ℍ := ℍ) A δ Θ (ℓ :: I) n ρ' := by
         rintro k ρ' ⟨ρ₁, ρ₂, hc12, hcw, hr⟩
         exact ⟨ρ₁, ρ₂, hc12, ⟨ℓ, u, σ, rfl, hcw, hu⟩, hdrop n ρ₂ (hRs k ρ₂ hr) hr⟩
       set Q : PostN := fun k ls' v ρ' => ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ' ∧
@@ -366,7 +366,7 @@ theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A
         obtain ⟨ρ₁, ρ₂, hc12, ho1, hψ⟩ := h
         have hs1 : ρ₁.InStratum α₁ := sepList_closed (ResU.inStratum_empty α₁)
           (fun _ _ _ hc a b => inStratum_compS hc a b)
-          (fun m τ hm => ownLeafN_inStratum hα₁β hunif hm) ho1
+          (fun m τ hm => ownLeafN_inStratum₀ hα₁β hunif hm) ho1
         have hs2 : ρ₂.InStratum α₁ := (hΨs _ _ _ _ _ hψ).mono hα₁β'
         refine ⟨fun Y X hY hX σ' Z hσ' hZ => ?_, inStratum_compS hc12 hs1 hs2⟩
         subst hY
@@ -625,7 +625,7 @@ theorem sliceBorrowIU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
     (fun α hα => ⟨hβf.mono (le_of_lt (lt_of_lt_of_le hα inf_le_right)), ?_⟩)
   · have hM' := erwp_claimX_abort hab hcon hM
     have hM'' := erwp_mono_le
-      (Tb' := opTableR T (fun j ρ => claimX (fun _ => claimL (ℍ := ℍ) A δ Θ I k') c j ρ ∧
+      (Tb' := opTableR T (fun j ρ => claimX (fun _ => claimL₀ (ℍ := ℍ) A δ Θ I k') c j ρ ∧
         j ≤ k')) k'
       (fun _ _ _ _ _ h => h) (fun j hj ls' t Ψ Ψ' ρ hΨ h => by
         rcases h with ⟨K, m, i, v, en, h⟩ | ⟨K, m, i, v, en, h⟩
@@ -667,7 +667,7 @@ theorem sliceBorrowIU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
   rw [cN_effOf₀, tabN_unwind_extend hS (.box (.var x) B) (.tensor (.array A) B) δ W α c,
     hW, tabN_unwind_addImms hS _ δ Θ c xs] at h2
   refine erwp_opTableN_R (OpTabN.Sub.le fun _ _ _ h => h)
-    (R₀ := fun _ => claimL (ℍ := ℍ) A δ Θ [] k') (fun _ => ⟨rfl, trivial⟩) k' ls₂ _ ρ₃
+    (R₀ := fun _ => claimL₀ (ℍ := ℍ) A δ Θ [] k') (fun _ => ⟨rfl, trivial⟩) k' ls₂ _ ρ₃
     (erwp_mono (fun k ls' b ρ' hb => ?_) (opTableN_local _) k' ls₂ _ ρ₃ h2)
   obtain ⟨β, hβ, hbB, -⟩ := hb
   rw [interp_ext_self] at hβ

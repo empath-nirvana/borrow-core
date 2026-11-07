@@ -1,4 +1,4 @@
-import Core.Chain.RowFamK835N
+import Core.Chain.Goal791N
 
 /-!
 # `[then]`'s producers at `erwpK`, over a row's table at a world  `[spec §19, §27, §62]`
@@ -608,52 +608,50 @@ theorem erwpK_frame_then (hR : R.OK) (hPE : R.PayExt) (S SM SD : Row) (hNZ : S.N
 /-- **`[then]`'s frame along an entry's order at the typed world**: the context of `N` and `D`,
 `𝒢⟦Γ⟧` at the stop's world and consistent with its view, at a part of a valid share at which the
 lender's entry owes `y`, is that at `y` (`gN_extR` along `ExtR` at the part; the view from the
-order, `KW.OwedS.consistent`, at the part, `consistentX_right`). This is `hFe` of
-`then_cancelK` and `erwpK_frame_then` at `KW`. -/
+order, at the part, `consistentX_right`). This is `hFe` of `then_cancelK` and `erwpK_frame_then`
+at `KW`. -/
 theorem gNFrame_carryKW (δ : LSub) (Γ : Ctx VTy) (γ : List Val) (N : Nat) :
-    ∀ (S : UInt32 → Prop) (m : UInt32) (x : KW) (f : Life) (y : KW) (ls ls' : List SRec)
-      (ρ σ ρ' : WRes), ResU.CompS ρ σ ρ' → ResU.Valid ρ' → (rdKW id δ).wk S m x f y ρ' →
+    ∀ (μ : Unit) (m : UInt32) (x : KW) (f : Life) (y : KW) (ls ls' : List SRec)
+      (ρ σ ρ' : WRes), ResU.CompS ρ σ ρ' → ResU.Valid ρ' → (rdN (ℍ := ℍ) δ).wk μ m x f y ρ' →
       extF ls ls' ρ' →
-      (gN₀ (ℍ := ℍ) δ x.Θ Γ γ N σ ∧ ConsistentX x.c σ) →
-      gN₀ (ℍ := ℍ) δ y.Θ Γ γ N σ ∧ ConsistentX y.c σ := by
-  intro S m x f y ls ls' ρ σ ρ' hc hv hy _ hF
-  have hy' : x.OwedS S m f y ρ' := hy
-  exact ⟨gN_extR ((KW.OwedS.extR hy').right hc) hF.1,
-    consistentX_right hc (KW.OwedS.consistent hy') hv⟩
+      (gN (ℍ := ℍ) δ x.Θ Γ γ N σ ∧ ConsistentX x.c σ) →
+      gN (ℍ := ℍ) δ y.Θ Γ γ N σ ∧ ConsistentX y.c σ := by
+  intro _ m x f y ls ls' ρ σ ρ' hc hv hy _ hF
+  have hy' : x.Owed f y ρ' := hy
+  exact ⟨gN_extR (hy'.1.extR.right hc) hF.1, consistentX_right hc hy'.2.2.1 hv⟩
 
-/-- **The finaliser frame at the typed tables** (`erwpK_frame_then` at `KW`): every table the
-row's `tabNK` under the scheduler names `S`, the lender's (`g = id`); the reading's premises
-discharged (`rdKW_ok`, `rdKW_payExt`). What is left is `erwp_frame_then`'s, read at every world
-whose location typing is downward closed, and the frame carried along the order (`hFe`, which
-`gNFrame_carryKW` discharges for `[then]`'s context). -/
-theorem erwpK_frame_then_tabKW (S : UInt32 → Prop) {δ : LSub} (SS SM SD : Row) (hNZ : SS.NZ)
+/-- **The finaliser frame at `cN`'s tables** (`erwpK_frame_then` at `KW`): every table the row's
+`tabN`, the reading's premises discharged (`rdN_ok`, `rdN_payExt`). What is left is
+`erwp_frame_then`'s, read at every world whose location typing is downward closed, and the frame
+carried along the order (`hFe`, which `gNFrame_carryKW` discharges for `[then]`'s context). -/
+theorem erwpK_frame_then_tabKW {δ : LSub} (SS SM SD : Row) (hNZ : SS.NZ)
     (hMS : RowLe SM SS) (hDS : RowLe SD SS)
     (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find SS n i = some o' →
       capB o.q o.B = true → ThenLe o.fin SD o'.fin)
     (hP : SD.UnrD → SM.PendPers) (Nv Dv : Val) (Fr : KW → List SRec → WProp)
     (hFs : ∀ x ls ls', (∀ r, r ∈ ls' ↔ r ∈ ls) → ∀ ρ, Fr x ls ρ → Fr x ls' ρ)
-    (hFe : ∀ (S' : UInt32 → Prop) m x f y ls ls' ρ σ ρ', ResU.CompS ρ σ ρ' → ResU.Valid ρ' →
-      (rdKW id δ).wk S' m x f y ρ' → extF ls ls' ρ' → Fr x ls σ → Fr y ls' σ)
+    (hFe : ∀ (μ : Unit) m x f y ls ls' ρ σ ρ', ResU.CompS ρ σ ρ' → ResU.Valid ρ' →
+      (rdN (ℍ := ℍ) δ).wk μ m x f y ρ' → extF ls ls' ρ' → Fr x ls σ → Fr y ls' σ)
     (hU : SS.UnrD → ∀ x ls ρ, Fr x ls ρ → ρ = PMap.empty)
     {Qd : KW → PostN} (hQd : ∀ y k ls v ρ, Qd y k ls v ρ → v = .unit ∧ NoOwn ρ) (N₀ : Nat)
     (hD : ∀ x : KW, x.Θ.Down → ∀ k, k ≤ N₀ → ∀ ls ρ, Fr x ls ρ →
       erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
-        (fun z => opTableK z.lo (tabNK (ℍ := ℍ) S id (CTy.effOf SD .unit) δ z)) Qd x k ls
+        (fun z => opTableK z.lo (tabN (ℍ := ℍ) (CTy.effOf SD .unit) δ z)) Qd x k ls
         (.app (.val Dv) (.val .unit)) ρ)
     (Q₁ Q : KW → PostN) (hQ : ∀ y, (Q y).Down)
     (hkv : ∀ x : KW, x.Θ.Down → ∀ k, k ≤ N₀ → ∀ ls (v : Val) ρ, (Q₁ x k ls v ⋆ Fr x ls) ρ →
       erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
-        (fun z => opTableK z.lo (tabNK (ℍ := ℍ) S id (CTy.effOf SS .unit) δ z)) Q x k ls
+        (fun z => opTableK z.lo (tabN (ℍ := ℍ) (CTy.effOf SS .unit) δ z)) Q x k ls
         ((ubindK Nv Dv).plug (.val v)) ρ) :
     ∀ n, n ≤ N₀ → ∀ x : KW, x.Θ.Down → ∀ ls e ρ,
       erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
-        (fun z => opTableK z.lo (tabNK (ℍ := ℍ) S id (CTy.effOf SM .unit) δ z)) Q₁ x n ls e ρ →
+        (fun z => opTableK z.lo (tabN (ℍ := ℍ) (CTy.effOf SM .unit) δ z)) Q₁ x n ls e ρ →
       ∀ ρ₂ ρ', Fr x ls ρ₂ → ResU.CompS ρ ρ₂ ρ' →
         erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
-          (fun z => opTableK z.lo (tabNK (ℍ := ℍ) S id (CTy.effOf SS .unit) δ z)) Q x n ls
+          (fun z => opTableK z.lo (tabN (ℍ := ℍ) (CTy.effOf SS .unit) δ z)) Q x n ls
           ((ubindK Nv Dv).plug e) ρ' := by
-  simp only [← tabF_KW] at hD hkv ⊢
-  exact erwpK_frame_then (rdKW_ok id δ) (rdKW_payExt δ) SS SM SD hNZ hMS hDS hfin hP Nv Dv Fr hFs
+  simp only [tabN_eq] at hD hkv ⊢
+  exact erwpK_frame_then (rdN_ok δ) (rdN_payExt δ) SS SM SD hNZ hMS hDS hfin hP Nv Dv Fr hFs
     hFe hU hQd N₀ hD Q₁ Q hQ hkv
 
 /-! ### At one world -/

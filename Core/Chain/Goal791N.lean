@@ -2165,6 +2165,24 @@ theorem vN_extR (A : VTy) (δ : LSub) {Θ Θ' : LocTy} (n : Nat) (v : Val) (ρ :
     (hE : Θ.ExtR Θ' ρ) (h : vN (ℍ := ℍ) A δ Θ n v ρ) : vN (ℍ := ℍ) A δ Θ' n v ρ :=
   vNE_extR A none envExtRN_none δ n v ρ hE h
 
+/-- **`𝒢⟦Γ⟧` along the resource-relative order**: `vN_extR` slot by slot, the order cut to each
+slot's part (`ExtR.left`/`.right`). -/
+theorem gN_extR {δ : LSub} {Θ Θ' : LocTy} {n : Nat} :
+    ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}, Θ.ExtR Θ' ρ →
+      gN (ℍ := ℍ) δ Θ Γ γ n ρ → gN (ℍ := ℍ) δ Θ' Γ γ n ρ
+  | [], _, _, _, h => h
+  | _ :: _, [], _, _, h => h
+  | s :: Γ, v :: γ, ρ, hE, h => by
+      unfold gN at h ⊢
+      split
+      · rename_i hl
+        rw [if_pos hl] at h
+        obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
+        exact ⟨ρ₁, ρ₂, hc, vN_extR s.ty δ n v ρ₁ (hE.left hc) h₁, gN_extR (hE.right hc) h₂⟩
+      · rename_i hl
+        rw [if_neg hl] at h
+        exact gN_extR hE h
+
 
 theorem vO_extR (A : VTy) (δ : LSub) {Θ Θ' : LocTy} (n : Nat) (v : Val) (ρ : WRes)
     (hE : Θ.ExtR Θ' ρ) (h : vO (ℍ := ℍ) A δ Θ n v ρ) : vO (ℍ := ℍ) A δ Θ' n v ρ :=
@@ -2433,8 +2451,7 @@ theorem rdN_ok (δ : LSub) : (rdN (ℍ := ℍ) δ).OK :=
   rdNv_ok (fun A δ Θ k v ρ h => vN_down A δ Θ k v ρ h)
     (fun A hA _ _ _ _ _ h => vN_empty_of_persistent A hA h) id δ
 
-/-- **The payload reading along `KW.Owed`** (`rdKW_payExt`): `𝒱⟦A⟧` is kept along `ExtR`
-(`vN_extR`). -/
+/-- **The payload reading along `KW.Owed`**: `𝒱⟦A⟧` is kept along `ExtR` (`vN_extR`). -/
 theorem rdN_payExt (δ : LSub) : (rdN (ℍ := ℍ) δ).PayExt :=
   rdNv_payExt (fun A δ _ _ k v ρ hE h => vN_extR A δ k v ρ hE h) δ
 
@@ -2463,6 +2480,28 @@ theorem tabN_eq (F : CTy) (δ : LSub) (x : KW) :
 theorem finN_eq (F : CTy) (δ : LSub) :
     finN (ℍ := ℍ) F δ = finF (ℍ := ℍ) (rdN (ℍ := ℍ) δ) () F :=
   (tabN_finN_eq δ F).2
+
+/-- **`𝒱⟦·⟧` meets what the typed tables read of a value relation**: closed in the index, empty at
+a persistent type, blind to a variable the type does not mention, in the stratum below a bound the
+type outlives, kept along `ExtR`. -/
+theorem valRelOK_vN : ValRelOK (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) where
+  down := fun A δ Θ k v ρ h => vN_down A δ Θ k v ρ h
+  pers := fun A hA _ _ _ _ _ h => vN_empty_of_persistent A hA h
+  extend := fun h δ α => vN_extend_of_not_free h δ α
+  inStratum := by
+    intro A bnd hO δ α hLt Θ n v ρ h
+    exact vN_inStratum_bnd hO hLt h
+  extR := fun A δ _ _ n v ρ hE h => vN_extR A δ n v ρ hE h
+
+/-- **`cN`'s table is the typed table at `vN`**, the lender's (`g = id`). -/
+theorem tabNK_vN (F : CTy) (δ : LSub) (x : KW) :
+    tabNK (ℍ := ℍ) (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) id F δ x =
+      tabN (ℍ := ℍ) F δ x := by
+  rw [tabN_eq, ← tabF_N]; rfl
+
+theorem finNK_vN (F : CTy) (δ : LSub) :
+    finNK (ℍ := ℍ) (fun A δ Θ k v ρ => vN (ℍ := ℍ) A δ Θ k v ρ) id F δ = finN (ℍ := ℍ) F δ := by
+  rw [finN_eq, ← finF_N]; rfl
 
 /-- **`F A` is `erwp` at the empty table**: a run that stops nowhere reads no world, so at every
 floor it is the one-world run. -/

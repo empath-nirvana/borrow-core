@@ -11,7 +11,7 @@ reach for, at the chain (`vN₀`/`cN₀`/`gN₀`/`erwp`), under Core's names wit
 * **G1/G12** `gN_split`, `gN_splitC`: Core's `gDenC_split`, the parts consistent with the view at
   a valid resource; `cN_of_valid`: a computation may assume its resource valid, at every type, so
   a split's consistency holds at a conclusion that is not `F`/`F_Σ`.
-* **G2** `gN_soloP`, **G4** `gN_persistent`, **G6** `gN_extR`, **G7** `gN_outlives`, **G8**
+* **G2** `gN_soloP`, **G4** `gN_persistent`, **G6** `gN_extR₀`, **G7** `gN_outlives`, **G8**
   `gN_congr`, **G9** `gN_noOwn`, **G11** `gN_le`.
 * **K5** `LocTy.extR_empty`: every two worlds are related at `∅` (Core's `ext_empty'`).
 * **W4** `erwp_bind_frame`: Core's `wpTS_bind_frame`, the frame carried through the run and read
@@ -69,7 +69,7 @@ theorem gN_le {δ : LSub} {Θ : LocTy} {k n : Nat} (hkn : k ≤ n) :
 
 /-- **`𝒢⟦Γ⟧` along the resource-relative order** (Core's `gSepC_local`/`gDenC_local`):
 `vN_extR₀` slot by slot, the order cut to each slot's part (`ExtR.left`/`.right`). -/
-theorem gN_extR {δ : LSub} {Θ Θ' : LocTy} {n : Nat} :
+theorem gN_extR₀ {δ : LSub} {Θ Θ' : LocTy} {n : Nat} :
     ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}, Θ.ExtR Θ' ρ →
       gN₀ (ℍ := ℍ) δ Θ Γ γ n ρ → gN₀ (ℍ := ℍ) δ Θ' Γ γ n ρ
   | [], _, _, _, h => h
@@ -80,10 +80,10 @@ theorem gN_extR {δ : LSub} {Θ Θ' : LocTy} {n : Nat} :
       · rename_i hl
         rw [if_pos hl] at h
         obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
-        exact ⟨ρ₁, ρ₂, hc, vN_extR₀ s.ty δ n v ρ₁ (hE.left hc) h₁, gN_extR (hE.right hc) h₂⟩
+        exact ⟨ρ₁, ρ₂, hc, vN_extR₀ s.ty δ n v ρ₁ (hE.left hc) h₁, gN_extR₀ (hE.right hc) h₂⟩
       · rename_i hl
         rw [if_neg hl] at h
-        exact gN_extR hE h
+        exact gN_extR₀ hE h
 
 /-- **`𝒢⟦Γ⟧` at two `δ` its live slots read alike** (Core's `gSepC_congr`). -/
 theorem gN_congr {δ₁ δ₂ : LSub} {Θ : LocTy} :
