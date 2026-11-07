@@ -11235,6 +11235,11 @@ task programs, `async-borrow` 29 to 10, `async-logged` 25 to 15, `async-scoped` 
 `async-workers-scoped` 43 to 14, `io-task` 31 to 14, `sched-a` 43 to 40, `sched-a-div` 14 to 11,
 `sched-b` 44 to 41. No count rose.
 
+A function that builds its boxes in spare boxes calls no allocator, so §50's `willreturn` class
+(the functions at the empty row calling no runtime function but `bc_free`) can grow: `io-task`'s
+has 9 functions where it had 5 (`corpus/trusted/io-task.txt`), each at the same two assumptions,
+`CallRelated` and `HostStack`.
+
 ### Baseline
 
 No change to `CDerives`, the relation, the machine, the checker, the elaboration, `Convert`, the
