@@ -1591,9 +1591,10 @@ chosen in a definition of its own) must be refused (#746):
   - `abandon` at `[let]`'s abort (`hW`) and at a superseded raise payload (`effRaise`'s `hd`), at a
     type with no owned cell; at `⊤`, anything.
   A live slot no part's mask holds is consumed at the rule `unused`, at a persistent type only: the
-  weakening its part applies at its leaves (`Ctx.DeadP.weaken`). A slot the kernel absorbs instead
-  (`⊤`, `absurd`) at another type is refused by `Lint`, not consumed; that no checked program has one
-  is `UNPROVED:` (`Check.SplitMasks.NeitherAbsorbed`, which `neitherAbsorbed_of` reduces to
+  weakening its part applies at its leaves (`Ctx.DeadP.weaken`). At `absurd`'s own split such a
+  slot is absorbed, left unconsumed on the path that ends at `absurd` (§66), and `⊤` abandons its
+  context; a slot another rule leaves in neither part at another type is refused by `Lint`, not
+  consumed; that no checked program has one is `UNPROVED:` (`Check.SplitMasks.NeitherAbsorbed`, which `neitherAbsorbed_of` reduces to
   `Check.UnmentionedAbsorbed`). A must-resume `κ`'s cancel component is `⊤`, which has no
   elimination: `Lint` refuses an observation of it, and its cancel entry is unreachable (`kTy_lin`).
   `[nil-dead]` is at a context with no live slot. A stack machine's consume of a level's suspended
@@ -11382,6 +11383,60 @@ stage of Backend2, with `live 0` where its golden has it.
 
 ---
 
+## 66. Entry 65 — the new backend: the slots `absurd` absorbs (#862)
+
+### Motivation
+
+Backend2 refused a checked program (#862, `book/src/guide/iteration.md`'s `take(6, fib())`, with
+`fn fib() -> 0 with Yield[i32]`): `LIR lint: … x379 consumed at ref Output (unused), where the
+rule's premise does not hold`. The `for` inside `take` meets its source's end at `absurd`
+(`zeroE`, the source's answer is `0`), and `main`'s output capability, a `ref Output`, is live
+across that arm. `absurd`'s masks hold it in neither part, and `splitCtx` consumed it at the rule
+`unused`, which `Lint` admits at a persistent type only (§12). This is F5's absorb case (§55,
+`Check.AbsorbsAt`): `absurd` types the term at every type of a slot it does not read.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration, semantics or erasure.
+
+### The rule
+
+- **At `absurd`** (`Backend2/Convert.lean`, the `zeroE` cases of `conv` and `convK`; `splitCtx`'s
+  `absorbs`). `CDerives.zeroE hs hV` gives `V : 0` the part `Γ₁` of the split and absorbs the rest:
+  `Γ₂` and every slot neither mask holds. Backend2 converts `V` in `Γ₁`'s slots and ends the path
+  at `Tm.absurd v`; the slots of `Γ₂`, and now the slots neither mask holds, are left unconsumed.
+  Only the `zeroE` cases pass `absorbs`; at every other rule a slot neither mask holds is consumed
+  at the rule `unused`, at a persistent type only, as before.
+- **What `Lint` reads.** `lintTm` gives a path that ends at `absurd` (or `unreachable`) no
+  leftover set (`Left` is `none`): a path that never returns needs no consume of what it still
+  owns. The premise is the `absurd` node at the path's end, read from the LIR; the slot's type is
+  not tested. A variable left on a path that returns is refused at the function's end, at every
+  type (`Backend2/LintTests.lean`, `absorbProg`).
+- **At `⊤`.** `topI` is not split: Backend2 abandons its whole context at `Abandon.top`, whose
+  premise (none: `topI` has no premise) `Lint` reads from the node (§12). Nothing changes there.
+
+### Programs
+
+`book/src/guide/iteration.md`'s `take(6, fib())` block on Backend2 at its answer, in Wasm and
+natively. `corpus/gen-take-print.bc`: `take(3, naturals())` printed by `main`, with
+`naturals() -> 0`: the output capability live across `absurd`'s arm.
+
+### Baseline
+
+No change to `CDerives`, `Core/`, the relation, the machine, the checker, the elaboration, the old
+backend or a kernel program. No other corpus program's output, erasure line or count changes:
+the consumes no longer made are on paths that end at `absurd`, which never run.
+
+### Open
+
+- `UNPROVED:` that no rule but `zeroE` and `topI` leaves a slot of a type that is not persistent
+  in neither part of its split (`Check.SplitMasks.NeitherAbsorbed`, reduced to
+  `Check.UnmentionedAbsorbed`). A slot a deeper `absurd` or `⊤` absorbs, unmentioned by the whole
+  part above it, would reach another rule's split; `Lint` refuses its `unused` consume, so such a
+  program fails to compile rather than run unsound.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -11825,6 +11880,12 @@ checker or the old backend.
 
 ## Changelog
 
+- **1.43** (2026-11-07) — §66 (#862): at `absurd` (`zeroE`) Backend2 leaves a live slot neither
+  mask holds unconsumed, as it leaves `zeroE`'s absorbed part, on the path that ends at
+  `Tm.absurd`; `Lint` admits it from that node, at every type. Every other rule's weakening at a
+  split stays at a persistent type. `book/src/guide/iteration.md`'s `take(6, fib())` and
+  `corpus/gen-take-print.bc` compile on Backend2. No change to `CDerives`, `Core/`, the checker or
+  the old backend.
 - **1.42** (2026-11-07) — §62 (#844 Tier 1, *Lifetime-polymorphic suspending constants*): the
   suspending lend constants under lifetime binders (`Const791.poly`, typed at `VTy.all`), their
   premises at the constant's own context (`Const791.OKAt`), `Row.Suspend`/`CTy.SuspendC` at a
