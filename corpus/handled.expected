@@ -684,6 +684,19 @@ corpus/float-roundtrip.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/float-roundtrip.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/fn-lifetime.bc flows [0, 4294967295]; main []
 corpus/for-adapters.bc flows [0, 4294967295]; main []
+corpus/for-arm-raises-owned.bc flows [0, 1, 2, 3, 4, 4294967295]; main [1, 2, 3, 4]
+corpus/for-arm-raises-owned.bc 30:16: handle 4: inside [4]; row []; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/for-arm-raises-owned.bc 15:3: handle 4: inside []; row []; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/for-arm-raises-owned.bc 31:16: handle 3: inside [3]; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/for-arm-raises-owned.bc 15:3: handle 3: inside []; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/for-arm-raises-owned.bc 32:16: handle 2: inside [2]; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/for-arm-raises-owned.bc 24:3: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/for-arm-raises-owned.bc 33:16: handle 1: inside [1]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/for-arm-raises-owned.bc 24:3: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/for-arm-raises-owned.bc 4.0 abortive: branch; condition 2 holds; -
+corpus/for-arm-raises-owned.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/for-arm-raises-owned.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/for-arm-raises-owned.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/for-data-div.bc flows [0, 1, 2, 3, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser
 corpus/for-data-div.bc 51:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
 corpus/for-data-div.bc 56:7: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
@@ -959,6 +972,9 @@ corpus/gen-value.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/generated-names.bc flows [0, 4294967295]; main []
 corpus/generic-in-def.bc flows [0, 4294967295]; main []
 corpus/generic-pair-arg.bc flows [0, 4294967295]; main []
+corpus/handle-arm-releases.bc flows [0, 4294967295]; main [1]
+corpus/handle-arm-releases.bc 13:3: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/handle-arm-releases.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/hello.bc flows [0, 4294967295]; main []
 corpus/http-request.bc flows [0, 4294967295]; main []
 corpus/hygiene-answering-state.bc flows [0, 4294967295]; main []
@@ -1059,6 +1075,10 @@ corpus/leetcode/binary/0191-number-of-1-bits.bc flows [0, 4294967295]; main []
 corpus/leetcode/binary/0268-missing-number.bc flows [0, 4294967295]; main []
 corpus/leetcode/binary/0338-counting-bits.bc flows [0, 4294967295]; main []
 corpus/leetcode/binary/0371-sum-of-two-integers.bc flows [0, 4294967295]; main []
+corpus/leetcode/dp/0039-combination-sum-loop.bc flows [0, 1, 4294967295]; main [1]
+corpus/leetcode/dp/0039-combination-sum-loop.bc 66:9: handle 1: inside [1]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/dp/0039-combination-sum-loop.bc 51:5: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/dp/0039-combination-sum-loop.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/dp/0039-combination-sum.bc flows [0, 1, 4294967295]; main [1]
 corpus/leetcode/dp/0039-combination-sum.bc 61:9: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/dp/0039-combination-sum.bc 1.0 abortive: branch; condition 2 holds; -
@@ -1383,6 +1403,16 @@ corpus/rec-even-odd.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-fib.bc flows [0, 4294967295]; main [1]
 corpus/rec-fib.bc 18:15: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/rec-fib.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/rec-for-owned-state.bc flows [0, 1, 2, 3, 4294967295]; main [1, 2, 3]
+corpus/rec-for-owned-state.bc 29:11: handle 3: inside [3]; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/rec-for-owned-state.bc 16:3: handle 3: inside []; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/rec-for-owned-state.bc 30:11: handle 2: inside [2]; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/rec-for-owned-state.bc 22:3: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/rec-for-owned-state.bc 31:11: handle 1: inside [1]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/rec-for-owned-state.bc 22:3: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/rec-for-owned-state.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/rec-for-owned-state.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/rec-for-owned-state.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-generic-deep.bc flows [0, 4294967295]; main []
 corpus/rec-generic-layer.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
 corpus/rec-generic-layer.bc 19:47: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
@@ -1390,6 +1420,10 @@ corpus/rec-generic-layer.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-generic-mutual.bc flows [0, 4294967295], finaliser; main [1], finaliser
 corpus/rec-generic-mutual.bc 17:34: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/rec-generic-mutual.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/rec-in-for-linear.bc flows [0, 1, 4294967295]; main [1]
+corpus/rec-in-for-linear.bc 22:15: handle 1: inside [1]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/rec-in-for-linear.bc 14:5: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/rec-in-for-linear.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-layer.bc flows [0, 1, 2, 4294967295]; main [1, 2]
 corpus/rec-layer.bc 29:47: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/rec-layer.bc 31:5: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds

@@ -82,6 +82,9 @@ clause-captures 6 3 0 10 10 0
 clo-capture 1 0 0 3 3 0
 clo-coerce 1 0 0 3 3 0
 clo-counter 2 0 0 17 17 0
+for-arm-raises-owned 8 0 0 54 54 18
+handle-arm-releases 2 0 0 13 13 5
+leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 695
 lend-call-raise 9 0 0 34 31 4
 lend-call-record 1 0 0 6 2 0
 lit-lend-raise 6 0 0 69 30 39
@@ -396,9 +399,11 @@ rec-deep 30043 0 0 2169443 2169443 436560
 rec-emit 6 0 0 252 252 0
 rec-even-odd 0 0 0 0 0 0
 rec-fib 0 0 0 0 0 0
+rec-for-owned-state 9 0 0 346 346 199
 rec-generic-deep 120057 0 0 1888403 1888403 502080
 rec-generic-layer 6 0 0 23 20 0
 rec-generic-mutual 11 0 0 45 33 0
+rec-in-for-linear 1 0 0 1 1 0
 rec-layer 2 0 0 17 17 0
 rec-lifetimes 2 0 0 16 6 23
 rec-log 1 0 0 7 7 0
