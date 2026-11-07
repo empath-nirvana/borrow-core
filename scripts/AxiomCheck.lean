@@ -2557,3 +2557,9 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constNAt_of
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constNAt_all
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.polyC_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Nest844N.nestC_ok
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Nest844N.d_prog
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Nest844N.goal791N_premises_res
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Nest844N.goal791N_premises_can
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Nest844N.progRes_orDiverges
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Nest844N.progCan_orDiverges
