@@ -2461,3 +2461,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabNW_eq
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cNW_ret_iff
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cNW_effOf_tabF
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_comap
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.LocTy.extR_add
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.vNW_add_eq

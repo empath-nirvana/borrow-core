@@ -483,3 +483,56 @@ program, and none of those changes.
 
 No headline changes meaning: the old ones keep theirs, and the new ones say the same thing about
 the relation at `KW`.
+
+### 10.6 What is built
+
+**Checkpoint 1: the relation and its laws** (`Core/Chain/CNW835N.lean`).
+- The block `vNWE`/`vOWE`/`cNW`/`cBNW`/`retNXW`/`tabNW`/`finNW`/`retNW` of §10.1, with `gNW` and
+  `SemJNW`. `tabNW_eq`/`finNW_eq`: `tabNW Sch μ F δ x = tabF (rdW Sch δ) μ F x`, with
+  `rdW Sch δ = rdKWv (vNW Sch) id δ`; `rdW_ok`, `rdW_payExt`.
+- Every law of `Goal791N` §2 at `cNW`, including the μ/ν machinery.
+  - Proof text unchanged except for the renaming: `vNW_extR`, `vNW_local`, `vNW_inStratum_bnd`,
+    `vNW_add_eq_bnd`, `vNW_above`, `vNW_outlives(Le)`, `vNW_extend_of_not_free`, `vNW_congr`,
+    `vNW_ind`, `cNW_nu_*`.
+  - Re-proved at the new clauses:
+    - `cNW_down` and `cBNW_le` (with `cNW_eff_down`/`cBNW_eff_le`), by `erwpK_le`. The tables are
+      closed in the index at the worlds whose location typing is downward closed (`tabNW_downI`,
+      `finNW_downI`, by `extTabK_entNK_downI`, `cancelOblK_id_down`).
+    - `tabNW_congr`/`finNW_congr` (now with the mode), `cNW_congr`, `cBNW_congr`.
+    - `cBNW_mono`, by `erwpK_postMono`.
+    - `cNW_effOf` (`F_Σ R` at every floor at `tabNW`) and `cNW_effOf_tabF` (the same at `tabF`).
+    - `cNW_extA`, by `erwpK_empty_move` (a run at the empty table reads no world).
+    - `cNW_head`/`cBNW_head`, by `erwpK_ret_det`, `cNW_eff_det`, `cBNW_eff_det`.
+    - `vNW_empty_of_persistent`.
+  - `cNW_ret_iff`: `F A` at `KW` is `erwp` at the empty table, so `F`'s meaning is unchanged.
+- **`RowRd` reads values at a field** (`RowFamK835N`). `RowRd.vr`, `RowRd.OK.vrDown`/`vrPers`,
+  `RowRd.OK.vr_le`, and `rdKWv`. `rdKW` is `rdKWv` at `vN`; `rdU` sets `vr := vN`.
+  - Restated: `RowRd.ent`/`PayExt` read `R.vr`.
+  - `errOkF_le` and `errOkF_empty_of_pers` take `hR : R.OK`.
+  - `seq_raise_runK`'s pending payload is read at `R.vr`.
+  - The `_of_K` statements, `tabF_KW`, `tabF_unit` and every statement at `rdKW`/`rdU` are
+    unchanged.
+
+**Toward checkpoint 2** (`Core/Chain/ReindexK835N.lean`).
+- `erwpK_comap`: a run from `g x` indexed by `ι` is a run from `x` indexed by `ι′`. It needs the
+  location family at `y` to be `g y`'s, the posts carried, and each stop at `g y`'s table to be a
+  stop at `y`'s whose continuation is owed only at images. It is read at the worlds an invariant
+  holds at.
+- `LocTy.extR_add`: adding a lend at `α` is an extension at a resource in `Res_α`, without
+  freshness. So `vNW_add_eq` holds at every world: `𝒱⟦A⟧` of an `A` outliving the bound does not
+  see a lend below it. The callback's payloads and answers therefore move between the lender's
+  world and the lend's world with no `FoldInv`.
+
+### 10.7 What is left
+
+- **The callback's table step**, read by `erwpK_comap` at `g = (·.lend ℓ α F)`: a stop at
+  `tabF (rdW Sch δ′) μ F (g y)` is a stop at `tabF (rdKWv (vNW Sch) g δ′) μ F y`.
+  - The payload and answer move by `vNW_add_eq` and `vNW_extend_of_not_free`; the answer's view
+    by `consistentX_of_outlives`.
+  - The order is the same.
+  - The cancel obligations move by `erwpK_comap` again, by recursion on the cancel row.
+- **The table layer over `vr`.** `tabNK`/`tabRK`/`tabGK`/`tabListK` and the frame lemmas of §3,
+  §7 and §8 are read at `vN`. They need to be restated at `rdKWv vr`, or as `tabF` at a reading
+  with the lender's twin, so that the frames apply to `vNW`'s tables.
+- **The compatibility lemmas** of §10.3, all classes; `SemJNW`-level statements, `FundamentalNW`,
+  `fundamentalNW_all`, `Goal791SchedNW`.
