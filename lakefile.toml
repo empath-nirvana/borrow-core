@@ -59,6 +59,12 @@ name = "code-size"
 srcDir = "experiments/CodeSize"
 root = "CodeSize"
 
+# The closures of the corpus that fail `CapOK` (#855 K0, SPEC §68).
+[[lean_exe]]
+name = "cap-ok"
+srcDir = "experiments/CapOK"
+root = "CapOK"
+
 [[lean_lib]]
 name = "CBPVCore"
 srcDir = "experiments/CBPVCore"
