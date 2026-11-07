@@ -2,7 +2,7 @@
 -- is a `type` abbreviation, opened at its arguments where a non-recursive `data` declaration is,
 -- so `Json` occurs under the array of the map's values, as under `Vec`'s buffer in
 -- `corpus/data-json-vec.bc`: `Obj` is not a block and is built without `box`. `Json` elaborates
--- to `mu X. 1 + i32 + (array (1 + i32 * string) * array X) * i32`, in the fold class `P`; its
+-- to `mu X. 1 + i32 + ((array (1 + i32) * array string) * array X) * i32`, in the fold class `P`; its
 -- consume frees each value left in a map's arrays, then the arrays (SPEC §61).
 --
 -- Answer: i32[73]. `sum` adds the numbers under the keys "a" and "b", recursively: 3 + (4 + 0) = 7

@@ -7058,8 +7058,8 @@ Each elaborates into existing core terms:
 
 ### The map and set: `lib/map.bc`
 
-    type Map[K, V] = (array (1 + (i32 * K)) * array V) * i32
-    type MapRef[K, V]<'k, 'x> = (array_imm 'k (1 + (i32 * K)) * array_imm 'x V) * i32
+    type Map[K, V] = ((array (1 + i32) * array K) * array V) * i32
+    type MapRef[K, V]<'h, 'k, 'x> = ((array_imm 'h (1 + i32) * array_imm 'k K) * array_imm 'x V) * i32
     type Set[K] = Map[K, 1]
 
 | function | type | |
@@ -7070,20 +7070,51 @@ Each elaborates into existing core terms:
 | `map_contains(&m, k)` | `bool` | |
 | `map_remove(&mut m, k)` | `V + 1` | the value taken out |
 | `map_len(&m)` | `i32` | |
-| `map_get(r, k)` | `imm 'x V + 1` | a view of the value, `r : MapRef[K, V]<'k, 'x>` |
-| `map_iter(r)` | `sized … (K * imm 'x V)` | every entry in slot order, the key copied out of its slot (a key that is its own view) |
+| `map_get(r, k)` | `imm 'x V + 1` | a view of the value, `r : MapRef[K, V]<'h, 'k, 'x>` |
+| `map_entries(r)` | `sized D i32 (imm 'k K * imm 'x V)` | every entry in slot order, the key lent at `'k` and the value at `'x` |
+| `map_iter(r)` | `sized D i32 (K * imm 'x V)` | every entry in slot order, the key copied out of its slot (a key that is its own view) |
+| `map_fold(r, f, s)` | `S` | `f : !((imm 'k K * imm 'x V) * S => S)` over `map_entries(r)`'s entries from `s` |
+| `map_drain(m)` | `sized (i32 * i32) (i32 * T) (K * V)` | consumes `m`: every entry taken out in slot order, owned |
 | `map_size(r)` | `i32` | |
 | `set_new[K](cap)`, `set_insert(&mut s, k)`, `set_contains(&s, k)`, `set_remove(&mut s, k)`, `set_len(&s)` | | `set_insert` answers whether `k` was new |
 
 `r` is the map lent as a family, `borrow imm m { 'x, r -> … }` (above); while it is lent the map
-cannot change, so no view outlives a growth (linearity, as §17's *No view across growth*).
+cannot change, so no view outlives a growth (linearity, as §17's *No view across growth*). `D` is
+the lent record's three views, `((array_imm 'h (1 + i32) * array_imm 'k K) * array_imm 'x V)`, and
+`T` the owned one's, `(array (1 + i32) * array K) * array V`.
+
+**Iteration** (#879). Each iterator is a sized iterator (§16) whose state is the slot, so a `for`
+over it is counted by its data's length:
+
+- `map_entries(r)` answers, at each occupied slot, the key's element of the keys' family
+  (`array_get`, `imm 'k K`) and the value's (`imm 'x V`): any key type, owned ones included. A key
+  is read through a load, `borrow imm *k { 'y, s -> … }`, whose view of a `string` is
+  `array_imm 'y u8 * i32`, its text `key_prefix(s) : text 'y` (`lib/key.bc`).
+- `map_iter(r)` is `map_entries(r)` with the key copied out through a load: only where the key's
+  view is the key (`view 'y K = K`: an integer, a view, a pair of them).
+- `map_fold(r, f, s)` is a `for` over `map_entries(r)`, as `fold_lines` of `lib/text.bc` is over
+  lines.
+- `map_drain(m)` takes `m`; its data is the count `(0, cap)` of slots and its state the slot and
+  the owned table. Each step takes the entry at the slot out (`array_replace` with the fillers,
+  the slot left empty) and answers it, or a skip at an empty slot. A loop that stops early
+  (`break`, `return`, an abort) leaves the iterator's state, and with it the table and every entry
+  not yet taken, to its consume (§12): the map is consumed either way, and with a consumable `K`
+  and `V` every entry is.
+
+**The order.** Every iteration visits the entries in slot order, from slot 0 up. A key's slot is a
+function of its hash (deterministic, `lib/key.bc`), the table's size and the keys inserted and
+removed before it, so the order is the same on every run, engine and backend for the same
+sequence of insertions and removals; it is not the insertion order and not sorted.
 
 **The table.** Open addressing with linear probing over a power-of-two table at most half full,
-grown by doubling; each slot holds `inl ()` or `inr (h, k)`, the key with its slot hash, and the
-value at the same index, the filler of `V` where there is no entry (so `V` has a filler: integers,
-views, arrays, buffers, and pairs and sums of them). Removal shifts the entries after the hole
-back over it, each whose probe sequence passes it (Knuth's algorithm R), so a search never meets a
-tombstone. A probe compares slot hashes, then `equal` on the two keys' views. Every loop is
+grown by doubling. Three arrays of the table's size: the slots, each `inl ()` or `inr h`, the
+entry's slot hash; the keys; and the values, the key and the value of an entry at its slot's
+index and the fillers of `K` and `V` where there is none (so `K` and `V` have a filler: integers,
+views, arrays, buffers, and pairs and sums of them). Keys and values are arrays of their own so
+that the map lent fieldwise lends each entry's key and value as array elements (`array_get`), at
+`'k` and `'x`; a key inside a sum (`1 + (i32 * K)`) has only a load's view, at a lifetime that
+cannot leave the load. Removal shifts the entries after the hole back over it, each whose probe
+sequence passes it (Knuth's algorithm R), so a search never meets a tombstone. A probe compares slot hashes, then `equal` on the two keys' views. Every loop is
 counted by the table's size; a search ends at an empty slot, which a half-full table has.
 
 **Keys and values.** A key sought is given by value and consumed after the search: it is lent to
@@ -7101,9 +7132,11 @@ are no `data` declarations (§31 *Open*), so the representation is not hidden ou
 |---|---|---|---|
 | `corpus/poly-operators.bc` | `(+)`, `(*)`, `(==)` at `Complex`; a generic `dot` at `i32` (the instructions) and at `Complex` (the cases) | `(32, ((-9, 12), true))` | `0 0 0` |
 | `corpus/poly-providers.bc` | `equal`, `hash` and `order` at strings of two capacities, views, sums; specificity of `buf A` over `A * B`; a family of the program's | `(111, (7, -1))` | `2 0 0` |
-| `corpus/map-views.bc` | views of buffer values, two at once, read through `borrow imm *v`; `map_iter`; 200 colliding keys, every third removed | `(106, (52, (133, 13267)))` | `24 0 0` |
-| `corpus/aoc/2024-01.bc`, `2024-11.bc`, `2022-21.bc` | #490's map days: counts, interning to indices, keys that are views of the input | the Rust answers | `5 0 0`, `271 0 0`, `12 0 0` |
-| `corpus/leetcode/arrays/0001-two-sum.bc`, `0217-contains-duplicate.bc`, `strings/0049-group-anagrams.bc`, `graphs/0128-longest-consecutive-sequence.bc`, `heaps/0347-top-k-frequent-elements.bc` | a map, a set, `string` keys, `map_iter` | as their headers | `19`, `13`, `70`, `15`, `31` allocations, no indirect call or copy |
+| `corpus/map-views.bc` | views of buffer values, two at once, read through `borrow imm *v`; `map_iter`; 200 colliding keys, every third removed | `(106, (52, (133, 13267)))` | `32 0 0` |
+| `corpus/map-iter-owned.bc` | `Map[string, i32]` iterated by `map_entries`, each key printed from its text view; `map_fold`; the map looked up, grown and iterated again after the lend | five lines, then `6636065` | `16 0 0` |
+| `corpus/map-drain.bc` | `map_drain` of `Map[i32, string]` to its end, and stopped by `break` with three entries left, `live 0` | `91625` | `23 0 0` |
+| `corpus/aoc/2024-01.bc`, `2024-11.bc`, `2022-21.bc` | #490's map days: counts, interning to indices, keys that are views of the input | the Rust answers | `9 0 0`, `276 0 0`, `18 0 0` |
+| `corpus/leetcode/arrays/0001-two-sum.bc`, `0217-contains-duplicate.bc`, `strings/0049-group-anagrams.bc`, `graphs/0128-longest-consecutive-sequence.bc`, `heaps/0347-top-k-frequent-elements.bc` | a map, a set, `string` keys, `map_iter` | as their headers | `28`, `22`, `79`, `24`, `40` allocations, no indirect call or copy |
 
 `corpus/aoc/2024-11.bc` is `-- check: no-source`: the source interpreter takes about half an
 hour over it, and its golden is that interpreter's output, written once from it.
@@ -7122,7 +7155,10 @@ read `map_lookup(&m, k)`, the copy; `0347` visits its entries with the map lent 
 No change to `CDerives`, the relation, the machine, `PinLaw`, the checker or the backend, and no
 kernel program changes (`corpus/kernel-counts.expected` unchanged). `fundamentalC`, `adequacyC`,
 `fundamentalD` and `adequacyD` keep their statements and cover every elaborated program. Every
-existing corpus program keeps its output, golden and counts.
+existing corpus program keeps its output, golden and counts. The table of three arrays (#879)
+keeps every map program's output and golden; each allocates one array more per table, at
+`map_new` and at each growth, and its loads, stores and bounds checks move with the probe, which
+reads a slot's hash from an array of `1 + i32` and loads a key only when the hashes agree.
 
 ### Not provided
 
@@ -7138,7 +7174,12 @@ existing corpus program keeps its output, golden and counts.
   value.
 - **Cases at recursive types** (a list's equality): see above.
 - **`borrow mut` of a map as a family** (`get_mut`), and a fieldwise `mut` lend.
-- **`map_iter` at a key that is not its own view** (`string`): the key is copied out of its slot.
+- **A recursive walk of what a load exposes** (`corpus/pending/data-json-map-ser.bc`): a load
+  block's body (`borrow imm *j { 'y, v -> … }`) that performs an abortive operation (recursion's
+  `Exhausted`, §20) is refused, "its place has no unwinding form here": the kernel's `withload`
+  has its unwinding form (§19 *Borrows*), but the load form does not elaborate to it. So a borrowed
+  `Json` whose objects are `Map[string, Json]` is not serialised by borrow; its entries are
+  iterated (`map_entries`), but the recursion into a value is refused. An elaborator change (#879).
 - **`!=` from `==`**, or any family's case derived from another's.
 - Swiss tables and other performance work; laws proved in Lean.
 
@@ -12116,6 +12157,21 @@ checker or the old backend.
 ---
 
 ## Changelog
+
+- **1.TBD** — §36 (#879): a map iterates at any key type. `lib/map.bc`'s table is three arrays,
+  `Map[K, V] = ((array (1 + i32) * array K) * array V) * i32`, the slot hashes, the keys and the
+  values, so that a lent map, `MapRef[K, V]<'h, 'k, 'x>`, lends each entry's key and value as array
+  elements; `K` has a filler as `V` does. New: `map_entries(r)`, every entry in slot order as
+  `imm 'k K * imm 'x V` (a `string` key's text through a load and `key_prefix`); `map_fold(r, f,
+  s)`; `map_drain(m)`, the map consumed, its entries taken out owned, what a `break` leaves
+  consumed with the iterator. `map_iter(r)` keeps its type over the new `MapRef`. The order is
+  stated: slot order, a function of the hash and of the insertions and removals. *Not provided*
+  loses `map_iter` at owned keys and gains the recursive walk under a load (an elaborator gap,
+  `corpus/pending/data-json-map-ser.bc`). `corpus/map-iter-owned.bc`, `corpus/map-drain.bc`;
+  `corpus/map-views.bc` names the three lifetimes. Every map program keeps its output; each
+  allocates one array more per table (at `map_new` and each growth), and its loads, stores and
+  bounds move with the new probe (`counts.expected`, `counts-backend2.expected`). No change to
+  `CDerives`, `Core/`, the relation, the machine, the checker, the elaboration or a backend.
 
 - **1.49** (2026-11-07) — §68 (#855 K0, *Per-code closure types*): the entry for `Code⟨N; E⟩ C`, a
   value type beside `U C` naming a closure's code, with the explicit erasing coercion `erase` to
