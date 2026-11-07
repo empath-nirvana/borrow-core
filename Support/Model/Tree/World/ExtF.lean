@@ -235,6 +235,57 @@ theorem extFT.rr {Θ' : CodeTy} {ls ls₂ : List (SRecT K)} {ls' ls₂' : List (
   rw [RecRR.func hrr hrr']
   exact hr''
 
+/-! ### The records a share reads, kept -/
+
+/-- **The resume list keeps the records the share reads**: every record of the stop list `ls`
+relevant to the share `ρ` (`RelFT`, read at the stop) has its re-reading in `ls′`. Records of `ls`
+the share does not read are not asked for: another branch may end them.
+
+**Departure (D13, `docs/new-core/scope-781.md` §8).** In-house, as `extFT` (D10): the resume
+condition of a stored continuation depends only on the records its share reads. `extFT` asked
+for a re-reading of the whole stop list first, which fails at a resume after another branch ended
+a record of its own that was open at the stop. -/
+def KeepRel {K K' : WCactus} (Θ' : CodeTy) (ls : List (SRecT K)) (ls' : List (SRecT K'))
+    (ρ : TRes K) : Prop :=
+  ∀ r ∈ rsOfT ls, RelFT r ρ → ∃ r' ∈ rsOfT ls', RecRR Θ' r r'
+
+/-- At the stop's own list, every record is its own re-reading. -/
+theorem KeepRel.refl {Θ : CodeTy} {ls : List (SRecT K)} (hc : ∀ x ∈ ls, CovR (sem Θ) K x.1.R)
+    (ρ : TRes K) : KeepRel (K' := K) Θ ls ls ρ := by
+  intro r hr _
+  obtain ⟨x, hx, rfl⟩ := List.mem_map.mp hr
+  exact ⟨x.1, hr, RecRR.refl (hc x hx)⟩
+
+/-- **A re-reading of the whole stop list, with `extFT` against it, keeps the records the share
+reads**: every resume the whole-list condition admits, `KeepRel` admits. -/
+theorem keepRel_of_extFT {Θ' : CodeTy} {ls : List (SRecT K)} {lsR ls' : List (SRecT K')}
+    {ρ : TRes K} {ρ' : TRes K'} (hl : SRecsRR Θ' ls lsR) (hr : RR (sem Θ') ρ ρ')
+    (hx : extFT lsR ls' ρ') : KeepRel Θ' ls ls' ρ := by
+  intro r hr₀ hrel
+  obtain ⟨r', hr', hrr⟩ := hl.mem_fwd hr₀
+  exact ⟨r', hx r' hr' ((RelFT.rr_iff hrr hr).mp hrel), hrr⟩
+
+/-- **`KeepRel` composes** along an extension, the share re-read in between. -/
+theorem KeepRel.trans {K₃ : WCactus} (hE : K'.Ext K₃) {Θ₂ Θ₃ : CodeTy} {ls : List (SRecT K)}
+    {ls₂ : List (SRecT K')} {ls₃ : List (SRecT K₃)} {ρ : TRes K} {ρ₂ : TRes K'}
+    (hr : RR (sem Θ₂) ρ ρ₂) (h : KeepRel Θ₂ ls ls₂ ρ) (h' : KeepRel Θ₃ ls₂ ls₃ ρ₂) :
+    KeepRel Θ₃ ls ls₃ ρ := by
+  intro r hr₀ hrel
+  obtain ⟨r₂, hr₂, e₂⟩ := h r hr₀ hrel
+  obtain ⟨r₃, hr₃, e₃⟩ := h' r₂ hr₂ ((RelFT.rr_iff e₂ hr).mp hrel)
+  exact ⟨r₃, hr₃, RecRR.trans hE e₂ e₃⟩
+
+/-- `KeepRel` at a part of a share. -/
+theorem KeepRel.of_compS_left {Θ' : CodeTy} {ls : List (SRecT K)} {ls' : List (SRecT K')}
+    {ρ₁ ρ₂ ρ : TRes K} (hc : ResUT.CompS ρ₁ ρ₂ ρ) (h : KeepRel Θ' ls ls' ρ) :
+    KeepRel Θ' ls ls' ρ₁ :=
+  fun r hr hrel => h r hr (hrel.of_compS_left hc)
+
+/-- `KeepRel` at a re-reading of the stop list, read at the stop list. -/
+theorem KeepRel.of_srecsRR {Θ' : CodeTy} {ls : List (SRecT K)} {ls' : List (SRecT K')}
+    (h : SRecsRR Θ' ls ls') (ρ : TRes K) : KeepRel Θ' ls ls' ρ :=
+  fun _ hr _ => h.mem_fwd hr
+
 end BoCa.Fig16.Tree.Wp
 
 end

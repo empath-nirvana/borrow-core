@@ -1030,3 +1030,30 @@ Each entry: the decision, and why. Newest last.
       decided.
     - In the user's words: "The implicit close of co-data is fine." The implicit consume at
       codata calls its `close`; that is decided.
+74. **The scheduler's invariant is in pool form; the stretch track lands on `tree-core` (the
+    user's decisions of 2026-11-03 and 2026-11-04; #781, #789).**
+    - The stored branches of a scheduler are held by the per-branch share and an invariant in pool
+      shape, not by `CactusInvT` over several branches. In the user's words (2026-11-03): "The fix
+      is the per-branch share (`KeepRel`: only the records the share reads), plus the invariant in
+      the pool shape (pairwise `FdEsc`, no points)"; the user approved "that path". In the library
+      (SPEC §62, `docs/new-core/scope-781.md` §4): `multiBranchAdequacyT` goes through
+      `cerwpT_adequacy` at one branch, and the stored continuations are carried by `KapSchedT` and
+      `PoolT` in `cerwpT_schedHandle`'s induction, each share resuming at `KeepRel` and every two
+      apart at each other's record masks (`fdMask`, `recMask`).
+    - Since #795 (SPEC 1.37) the pool is a stack, `PoolTJ` (`Core/TreePoolShare.lean`): each entry
+      is apart from the entries below it at their record masks except at the lent locations its
+      nearest joiner shares, so tasks above a joiner hold views of what it shares and hand them
+      back at their end. The pool form, the per-branch share `KeepRel` and the absence of branch
+      points are unchanged.
+    - The merge rule for the stretch track (refined 2026-11-03): it merges only when every important
+      gap has a demonstrated route.
+    - The integration branch (2026-11-04): stretch-track PRs target `tree-core`, not `main`.
+      Downstream stretch-track PRs merge into `tree-core` as each outstanding issue is resolved, and
+      `main` is merged into `tree-core` periodically. `tree-core` merges to `main` once, when the
+      whole unit of work is done with no gaps: #789's done-when holds (`fundamentalC` over the
+      tree relation for every `CDerives` rule, and adequacy for every closed well-typed program),
+      with no stand-in hypotheses and no open gap. In the user's words: "i don't want to start
+      merging stuff to main until this whole track is done because there is still a huge risk that
+      this doesn't work and we need to unwind", and "what i would like to do is start merging
+      _downstream_ stretch-goal prs into tree-core as we resolve outstanding issues and then merge
+      it when that whole unit of work is done with no gaps".

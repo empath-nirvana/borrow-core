@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.32 · 2026-11-04
+Version 1.38 · 2026-11-05
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -5474,6 +5474,11 @@ R1 of `docs/async-capabilities.md` §3.3 as a rule of an extended judgment besid
 states its soundness as `PinLaw`. `CDerives` and its theorems are unchanged; a program that does not
 use R1 keeps them unconditionally.
 
+The chain interpretation of §62 has a second named hypothesis of the same form, `HandlerLawN`
+(`Core/Chain/HandlerLawN.lean`): the compatibility lemmas of `[handle]` at a value form, BOXED-κ
+`[handle]` and `reify`, from which `FundamentalN` and plain adequacy `Goal791N` are proved (§62,
+*The named assertion*).
+
 *Decision 71 is void (decision 72); R1 and `PinLaw` stay as stated here until §62's PRs land.*
 
 **Frozen for now (decision 71, the user's "Freeze r1 for now").** R1, with §29a's cancel-path
@@ -10557,13 +10562,21 @@ tested by programs with one child and a fixed order of events (`CrossProg`, `Cro
 `Core/TreeWpEff.lean`, `Core/TreeCactus.lean`, `Core/TreeStepKeep.lean`, `Core/TreeHeadlines.lean`).
 `twp` is the step-indexed relation at a world that grows: a run starts at any extension of its
 world, from the re-reading of its resource, and ends at an extension of the start, the frame
-re-read there and the start and end related by row 5.27's `↭` masked at the run's own records
-(`EndT`, `UpdX`). Its rules: downward closure, the Kripke rule, bind, the frame (`twp_frame`, and
+re-read there and the start and end related by row 5.27's `↭` masked at the run's own records,
+read along the walks (`EndT`, `UpdA`, #806): an `imm` cell may be given up to the end world while
+another part holds a copy, and a `mut` cell is read through the `imm` cell it sits beneath
+(`[TR]` 6.48's ancestor technique; `UpdA.frame`, `UpdA.trans`). A run gives up a copy of a view
+another part holds (`twp_consume_view_framed`; a callee, `twp_frame_callee_consume`; a spawned
+task, `twp_child_consume`, each at a frame condition holding a copy); the last copy is refused
+(`twp_refuses_last_copy`), a lend does not end while another part holds a live copy
+(`twp_refuses_lendEnd_live_copy`), and ends by `twp_lendEnd` as it stands once every copy is
+back (`twp_lendEnd_after_framed_consume`). Its rules: downward closure, the Kripke rule, bind, the frame (`twp_frame`, and
 `twp_frame_w`, whose frame obligation also reads the start world's invariants), world and resource
 changes at a segment's start (`twp_extend`, `twp_update`), and row 5.27's `mut` clause at every end
 (`endT_inv`). `cerwpT` adds operations: a stop at a non-abortive entry of the table leaves a
-continuation share (`contShareT`), a Kripke wand resumed at any extension and any list `extFT`
-allows (`contShareT_resume`). `CactusInvT` is kept by a step, by tree growth, by moving a part
+continuation share (`contShareT`), a Kripke wand resumed at any extension and any list keeping
+the re-readings of the stop list's records the share reads (`KeepRel`, `contShareT_resume`; the
+whole-list condition with `extFT` against it implies it, `contShareT_resume_ext`). `CactusInvT` is kept by a step, by tree growth, by moving a part
 between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactusT_move`,
 `cactusT_spawn`, `cactusT_join`). Proved at one branch (`Core/TreeHeadlines.lean`):
 - **adequacy** (`topAdequacyT`, `cerwpT_adequacy`): a closed program at `cerwpT` at the empty table,
@@ -10587,35 +10600,349 @@ between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactu
   `extLT_admits_drop`, `not_extLT_drop_relevant` and `not_extLT_drop_longer` show what each clause
   admits and refuses.
 
-No program is proved there yet.
+**Over several branches** (`Core/TreeHeap.lean`, `Core/TreeHandle.lean`, `Core/TreeSched.lean`):
+`[handle]` without `hdv` at `cerwpT` for a scheduler at the program's top (`cerwpT_schedHandle`,
+by induction on the index), with `κ`'s cell, resume and cancel at `twp` (`twp_kappaCell`,
+`twp_kappaC_resume`, `twp_kappa_cancel`, `twp_kappaC_cancel`) and allocation, freeing, load and
+store at `twp` (`twp_alloc`, `twp_free`, `twp_load`, `twp_store`). A scheduler meets `SchedOKT`:
+every operation of the tasks' table is its own, each continuation tag is its entry's qualifier, the
+entry's resumer guarantee follows from the join's (`fdJoinT`), and its clauses hold at the empty
+table, each `κ` read by `KapSchedT`: resumable beside a state the clause keeps when that state is
+valid and holds nothing at the masks of the records the branch owns at its stop (`fdMask`; `FdEsc`
+read at locations). `cerwpT Tb Q Fb F` carries a base frame condition `Fb`: a stop hands the table
+`Fb`, so a continuation resumes at `fdAt en v Fb O′`, the base and its resumer's guarantee at the
+records it owns at that resume, with nothing from earlier stops. A task may start owning records:
+its present frame condition avoids them, its base need not. **Multi-branch adequacy** (`multiBranchAdequacyT`): `hnd H e₀` is `OrDiverges` for
+every scheduler `H` meeting `SchedOKT` and every task `e₀` at its table (`SchedOKT` fixes neither
+how many continuations a clause holds nor which it resumes); derived through `cerwpT_adequacy` at
+one branch (`cactusT_step`, the running branch alone in `CactusInvT`). The stored continuations are
+not branches of `CactusInvT`: `KapSchedT` (and `PoolTJ`, below) carries them through
+`cerwpT_schedHandle`'s induction on the index. The invariant over them is in pool form, each share
+resuming at `KeepRel` and each entry of the stack apart from those below it at their record masks
+(`fdMask`, `recMask`) except at what its nearest joiner shares, with no branch points (decision
+74), since branch points are not kept
+along tree extension (`not_joinPtKeptT`) and locations are (`fdMask_mono`). The
+task runs at any base and present frame conditions every valid frame meets (`⊤` among them): the
+scheduler's state is in the resumed branch's frame, and a valid frame avoids the task's records
+from their opening, so the task may end a lend it opened. A
+stopped branch's clause knows its frame holds nothing of the branch's lends, those it opened
+during the segment included (`twp_bind_fd`, `noneAt_recMask_end`). One program is proved through
+the headline (`Core/TreeSchedProgs.lean`, `asyncProg_safe`): a scheduler that resumes a task beside
+a state of its own, its cells owned rather than borrowed. For `pingpong-mut` the stepper each task
+runs under meets `SchedOKT` (`schedS_ok`, its answers a step-indexed fixpoint) and both tasks are
+proved; the relay that hands the borrow between them is not.
+
+**The resume condition reads only the share's own lineage** (D13): `contShareT` and `KapSchedT`
+resume at any list keeping the re-readings of the stop list's records the share is relevant to
+(`KeepRel`, `Support/Model/Tree/World/ExtF.lean`); the whole-list condition implies it
+(`keepRel_of_extFT`, `contShareT_resume_ext`), and a share is carried along `KeepRel`
+(`contShareT_kripke`, `KapSchedT.kripke`).
+
+**A stored continuation across another branch's run** (`Core/TreeResume.lean`,
+`Core/TreePool.lean`): a run that owns no record at its start ends at a list holding the
+re-reading of every record of its start list (`twp_keepsList`), so a `κ` held beside it
+(`KapAtT`: captured at its stop, share and records re-read, the records its share reads kept) is
+held at the run's end (`twp_keepsKap`) and resumed there (`KapAtT.resume`,
+`kapAtT_resume_beside`). A runner that owns records, opens lends and ends lends of its own, those
+open at `κ`'s stop included, keeps `κ` held when the two hold nothing at each other's record masks
+(`twp_frame_keep`, `twp_keepsKap_sep`): a record `κ`'s share reads is in the lineage of a record
+proper (`TIT`); not the runner's, since the share would then hold part of the runner's lend
+(`relFT_not_fdEsc`), so the frame's, which `EndT` re-reads. The separation is kept both ways at the
+end (`MaskDiff`; R1 by `fdEsc_of_updX`). At the scheduler's interface: `kapAtT_resume_keep`, one
+stored task resumed beside another, the other held at the end. Where `κ`'s share holds part of the
+runner's lend, R2 at the stored branch (`kapStored_end_refused`) refuses the runner's end of it.
+`config_resumable_after_open`: at `World/Config.lean`'s world, a record-free branch lending a fresh
+location keeps the child's share, a view of the parent's lend, resumable. Record lists have
+re-readings wherever the code typing agrees on their escrows (`SRecsRR.exists_retype`).
+
+**Opening and ending a lend at `twp`** (`Core/TreeLend.lean`), each a `twp_update` instance, for a
+lend of `ℓ ↦ own(())` with the empty escrow (record `lendRec ℓ`). Open (`twp_lendOpen`): the cell
+becomes the lend cell `ℓ ↦ imm({α}, (), ∅)`, the run owns the record and the list carries it
+tagged `α` (`TWNT.immFrame`; the record's frame lifetime read off the lend cell, the only view at
+`ℓ`; other records' frame lifetimes kept since `ℓ` is no lineage location of theirs,
+`le_not_linLoc`). End (`twp_lendEnd`): the lend cell goes back to `own`, the record leaves the
+run's records and the list (`TWNT.immEnd`), when the rest of the run's resource and the frame hold
+nothing at `ℓ` at any depth (`FdEsc ℓ ∅`). The lend cell splits into copies (`viewRes_dup`), each
+a shared view another branch may hold across a stop; the end needs every copy back. Neither rule
+asks anything of `α`. Escrows that hand out views of their contents (`TWNT.reb`) are not covered.
+
+**Cancel in the scheduler interface.** A cancel is a resume into the continuation's cancel branch.
+At a cancellable entry (`q ≠ lin`, `OpEntT.fin`), `contShareT` owes the unwinding
+`ccatch (K†[raise …])` as a continuation, below the index, like a resume; `KapSchedT` (naming its
+scheduler `H`) offers `hnd H (κ (inj₂ ()))` at `cerwpT` at the empty table, under the same frames
+as a resume. An unwinding that performs one of `H`'s operations (an effectful finaliser) stops and
+comes back to `H`'s clause as an ordinary stored continuation. `cerwpT_schedHandle` proves the
+offering by its induction hypothesis (`twp_kappa_cancel_in`, `twp_kappaC_cancel_in`).
+`MultiBranchAdequacyT`'s statement is unchanged. The unwinding is §19's: the raise passes
+`[then]` frames, which run their finalisers, and the unwinding borrow forms (`withborU`), which end
+the branch's lends; there is no per-type close (decision 73). #793 keeps this rule: a cancelled task
+may hold `own` cells, `mut` cells, a copy of a view that only the frame holds, or a view's last
+copy, and none of these may be discarded without running the branch.
+
+**The scheduler's pool** (`Core/TreeSchedPool.lean`). `PoolT` is a list of stored tasks, each a
+continuation held at the present world (`KapAtT`) whose mask is its present records' masks, every
+two apart both ways (`NoneAt` of each other's record masks, and record locations distinct). Every
+scheduler operation keeps it: a segment (`twp_keepsPool`, from `twp_frame_keep`: the run may open,
+end, allocate and free, those lends open when a stored task stopped included), a park
+(`poolT_park`), a resume (`poolT_resume`) and a cancel (`poolT_cancel`), the last two with the rest
+of the pool beside the resumed run and a pool again at its every end (`PoolPost`: apart both ways,
+records at distinct lent locations, so a task that parks again rejoins it).
+
+**The park stepper** (`Core/TreeSchedRelay.lean`). The stepper `HP` (`schedP_ok`) hands a parked
+task's continuation back, at the masks of the records the task owns at its stop. The loop `drive`
+(`driveV`, the Z combinator) resumes a parked task each time it parks until it answers;
+`drive_twp` keeps a pool of any length beside it, by strong induction on the index through
+`poolT_park` and `poolT_resume`. These are lemmas, not a headline.
+
+**Pool-scheduler adequacy** (`Core/TreePoolSched.lean`, over `Core/TreePoolShare.lean`). A
+scheduler handler keeps its stopped tasks in its state as a **stack**: the state value is the
+handler with the entries, each a tag beside a continuation (`stateVal H ts`, `poolVal ts`), and its
+resource is `PoolTJ`. Each entry is held apart from the entries below it at their masks, except at
+the lent locations its nearest **joiner** below shares (`shTop`, `AvoidUnsh`); the entries below
+hold nothing at its masks; its `imm` cells sit at its own masks or where that joiner shares
+(`HoldsIn`); a joiner shares only lent locations of its own or shared with it. A joiner collects
+the copies of lends (`ViewsT`) the tasks above it hand back when they end (`PoolTJ.deposit`), and is
+resumed with them. The scheduler's answers are functions of the state (`PoolAns Q H Inv`: applied
+to any stack meeting the scheduler's invariant `Inv`, of any length, whose tasks run under `H` and
+answer in `PoolAns` again (`GoodT`), **with the answer's resource meeting the running task's
+conditions against the stack** (the stack holds nothing at its masks; it holds nothing at the masks
+of the stack's records not lent at what the nearest joiner shares, and its `imm` cells only at its
+own masks or there), it answers the program's `Q` under every frame condition whose frames avoid
+all their records). `SchedOKT` is unchanged; it is read at `Qout = PoolAns Q H Inv`.
+`PoolSchedAdequacyT` (`poolSchedAdequacyT`): `(hnd H e₀) (H, [])` is `OrDiverges` for every such
+scheduler meeting `SchedOKT`, every `Inv` the empty stack meets, and every task at its table at
+frame conditions every valid frame meets; through `cerwpT_schedHandle`, `twp_holdsIn`, `poolTJ_nil`
+and `topAdequacyT`. It is tied to one representation of the scheduler's state and to answers of
+the form `PoolAns`; `MultiBranchAdequacyT` is the general statement, with no state representation
+fixed. Every condition is per record and is kept by every run beside the stack (`twp_keepsPoolJ`,
+from `twp_frame_keep_sh`, `twp_frame_keep` with the separation from the frame read record by record
+and the shared records exempt, and `twp_holdsIn`, which every run keeps by `UpdA`'s end clause:
+an end `imm` cell is kept or absorbed by a start `imm` cell, and a cell from beneath a start
+ancestor is `mut`). A clause proves its answer by the stack's moves, each a preservation lemma:
+run a task beside the stack (`poolAns_run`, `poolAns_run_le`), park the stopped task as a ready task or a
+joiner (`poolAns_park`), resume the top with what it has collected (`poolAns_resume`,
+`poolTJ_resume`), resume or cancel the second with the first in its place, neither a joiner
+(`poolAns_resumeSnd`, `poolAns_cancelSnd`, `PoolTJ.swap`), cancel the top (`poolAns_cancel`,
+`poolTJ_cancel`), or hand a finished task's copies to the nearest joiner and resume the top
+(`poolAns_depositResume`: at a joiner on top this is the join). The stack scheduler
+(`Core/TreePoolSchedProgs.lean`, `stack_schedOK`) meets `SchedOKT` at `PoolAns` for every stack, its
+return clause (`stackRet`, `stackRet_okAt`) the deposit-and-resume move; `stackProg_safe` is a
+closed program through the headline.
+
+**Limits of the interface.** It is depth-first across joiners (the stack discipline): the moves
+reach only the top two entries, a joiner is resumed only from the top, once every task above it
+has ended, and only two entries neither a joiner are exchanged. A scheduler picks among the ready
+tasks above the nearest joiner; FIFO or round-robin across joiners needs a new `PoolTJ` move, not
+only a new clause. Each view a joiner collects is a copy of a lend of `own(())` with the empty
+escrow (`ViewsT`); the stack reads only that its cells are `imm`, the join's end of the lend reads
+the shape. This is generalised when #791 lands lends with a non-empty escrow.
+
+**Ending a lend at its copies composed** (`Core/TreeLendJoin.lean`). Copies of a lend cell compose
+to `ℓ ↦ imm(S, (), ∅)`, `S` the union of their lifetime sets (`viewResS_compS`). In every world `S`
+is the lend's lifetime: a tagged record proper's frame is at its tag (`frameLife_of_tagged`, from
+`TaggedT` and `not_desc_proper`), and every cell at its location carries that lifetime and no other
+(`proper_view_single`, from `view_at_lender`). So `twp_lendEnd_imm` ends a lend at the composed
+copies, the run owning the lend's record (its tag read from the start world's list, `RecInv`),
+through `twp_lendEnd` unchanged.
+
+**A scheduler with spawn, cancel and join** (`Core/TreePoolSpawn.lean`). `SchedOKTLe N` is
+`SchedOKT` with the return clause and the clauses asked only at stops `k ≤ N`;
+`cerwpT_schedHandle_le` is `[handle]` at every index `n ≤ N` from it. A clause that runs a task
+under its own scheduler proves its stop at `k` from `SchedOKTLe` below `k`, so `∀ N, SchedOKTLe N`
+is proved by strong induction and is `SchedOKT` (`schedOKT_of_le`). `HS` has four operations:
+`park` (the stopped task parked; the top ready, it is resumed with the parked task beneath it,
+`poolAns_resumeSnd`; otherwise the stopped task resumed), `spawn th` (the spawner parked, the child
+run holding nothing, `poolAns_run_le`), `cancel` (the stopped task parked; the top ready, it is
+cancelled, `poolAns_cancelSnd`) and `par (th₁, th₂)` (the payload's resource split between two
+children, each holding copies; the parent parked as a joiner sharing what it owns or is shared with
+it, the second child stored unstarted above it as a continuation the clause builds, `κU`,
+`kapSchedT_κU`, and the first child run); a task's end hands its copies to the nearest joiner and
+resumes the top. Children are verified at tables that themselves have `spawn` and `par`: the tables
+are indexed (`tabAt k`, its children's tables those below `k`), and `tabAt k` agrees with the
+scheduler's table `TJ` at the stops up to `k` (`tabAt_inclLe`, `cerwpT_table_mono_le`,
+`cerwpT_tabAt`), so children spawn and join at every depth. `hs_schedOK`: `SchedOKT` at `PoolAns`
+for every stack. Limits of this scheduler: `park` exchanges the stopped task with a ready top
+rather than queueing it; a joiner is never cancelled (`cancel` cancels only a ready top); `par`
+children hold only copies of lends (`ViewsT`); `spawn` children hold nothing.
+
+**Interleaved lends across parks** (`Core/TreePoolSpawnProgs.lean`), three closed programs
+`(hnd HS root) (HS, [])`, each `OrDiverges` through `poolSchedAdequacyT` with every premise
+discharged. The program text has no borrow form: each task's lend is opened and ended in the proof,
+by `twp_lendOpen` and `twp_lendEnd` (each a `twp_update` instance) around the task's own code. Each
+task holds one lend, of its own cell, and every lend is at the same lifetime `α₀`. The loan task
+`L = let a = alloc () in ubind (λ_. free a, λ_. free a) (park ())` opens a lend of `a`
+(`twp_lendOpen`) and parks holding the lend cell (an `imm` view, its own copy) with the record
+open; resumed or cancelled, it merges the view, ends the lend at the resumer's guarantee
+(`twp_lendEnd`) and frees `a`. `progLoan_safe`: the root spawns `B = L` and runs `L`; B parks with
+its lend open, the root parks holding its view, B resumes and ends its lend, then the root ends its
+own. `progCancel_safe`: the root runs `LC` (as `L`, its finaliser parking again inside its own
+`ubind`) and spawns `park (); cancel ()`, which cancels the root while it is parked holding its
+view; the finaliser parks, is resumed, and ends the lend. `progDepth3_safe`: the root spawns two
+`L`s and runs a third; three tasks hold a lend open across a park at once.
+
+**A lend shared by a tree of tasks** (`Core/TreePoolJoinProgs.lean`). `rootJ d = let a = alloc ()
+in let _ = par (node d, node d) in free a`, with `node 0 = λ_. park (); cancel (); ()` and
+`node (d + 1) = λ_. let _ = par (node d, node d) in ()`. The root opens a lend of `a`; every task of
+the tree holds a copy of it (`viewRes_dup`), every inner node a joiner; leaves interleave by parking
+and cancel a ready sibling on top. Each task's end hands its copies to its parent; the root,
+resumed with every copy, ends the lend at them (`twp_joinEndFree`, `twp_lendEnd_imm`) and frees `a`.
+`progJoin_safe d`: `(hnd HS (rootJ d)) (HS, [])` is `OrDiverges` at every depth `d`, through
+`poolSchedAdequacyT` with every premise discharged; `progJoin_depth1` and `progJoin_depth3` are its
+instances at `d = 0` and `d = 2`. **The early join is refused**
+(`twp_refuses_join_early`): a scheduler that resumed a joiner while an entry above it still holds
+a copy `viewRes β ℓ` of its lend would run it under a frame holding that copy, and no such run
+ends the lend; the interface's resume condition `fdMask` at the joiner's masks excludes that frame
+(`not_fdMask_above_copy`).
+
+**Borrow edges point to ancestors, in `CactusInvT` configurations** (`borrowEdges_ancestors`,
+`lender_ancestor`; no scheduler instance). In `CactusInvT`, every view a part of a branch's
+resource holds (a stored continuation's share among them) carries only lifetimes enclosing the
+branch point; and if the part holds any cell at the location of a record proper framed at `α`
+(`FrameLifeT`), `α` encloses the branch point. The second reads the invariant alone, with no
+premise linking the cell to `α`: a part on a branch not inside `α` holding a cell there is refused
+(`fd_le_of_branch`: a view carries `α`, an `own` cell is beneath a borrow, `TWNT.noOwnUnder`, a
+`mut` cell is refused by `NoMutT`). A view there carries `α` and nothing else
+(`view_at_lender`, `lender_view_carries`). Instances (`Core/TreeBorrowEdges.lean`), built from
+the empty world by `TWNT.alloc` and `TWNT.immFrame` (`recWInv_lendStep`, `twp_lendOpen`'s update
+at the world), the second branch added by hand with `cactusT_spawn`: `lenderEdge_depth1` (a branch
+at a lend's own lifetime holding its view) and `lenderEdge_depth3` (three lends nested
+`α₃ ⊏ α₂ ⊏ α₁` on the chain tree, a branch at `α₃` holding the outermost view, its lender two
+levels up). These are properties of `CactusInvT` configurations. The scheduler's stored tasks are
+carried by `PoolT`/`KapAtT`, not as branches of `CactusInvT`, and nothing yet connects the two:
+deriving the property for `PoolT`/`KapAtT` shares is open (#789).
 
 *Open*:
 - adequacy derived from invariant preservation, at the relation the typing rules use;
 - preservation at spawn and join;
 - the frame rules as instances of capture;
 - one relation with abortive stops and forwarding (the two relations `erwp`/`cerwp` merge);
-- adequacy over several branches at the tree world (a scheduler as a handler; #781 slice (d)), and `[handle]` without `hdv` at `cerwpT`.
+- the lend rules at `twp` over the tree for escrows with contents (reborrows, `TWNT.reb`), and
+  multi-branch programs whose tasks borrow each other's lends other than as views of what a
+  joiner below them shares (`PoolTJ`);
+- borrow edges to ancestors for the scheduler's stored shares (`PoolT`/`KapAtT`, #789);
+- a FIFO scheduling policy (a recursive append in the clause); `pingpong-mut`'s relay is not yet
+  written through the pool. Across joiners, FIFO or round-robin needs a new `PoolTJ` move, not only
+  a new clause: the stack interface is depth-first across joiners;
+- views of lends with a non-empty escrow collected at a joiner (`ViewsT` fixes `imm(S, (), ∅)`;
+  with #791).
 
-### Semantic types read at the tree
+### Semantic types read at the tree (#782)
 
-The relation's types are read at the current tree and are monotone along its extension. This is
-proved for `1`, `+`, `Imm`, `ref` and `[a]` (box), each from its components' (`kmono_unit`,
-`kmono_sum`, `kmono_imm`, `kmono_ref`, `kmono_box`). `kmono_mut` and `kmono_thunk` hold for
-every `τ` (for thunks, every computation predicate) by the definitions of `vMut` and `vThunk`:
-they are not results about the contents of a `mut` cell or a thunk.
-A `mut` cell's invariant is its store type, re-read when the tree grows (`reread`), not a fixed
-predicate. Carried unchanged, a cell leaves `Mut`'s meaning (`trU_not_kmono`). Re-read, a stored
-task may write the handler's newer borrow into a cell it made before the graft (for example
-`round7_write`). Store types are syntactic codes read at the tree. The store typing grows at a
-`mut` lend of a location it does not type, and a location keeps its type for the run
-(`TWd.addTy_ext`, `Cov.mono`, `RR.mono` on `tree-wp`, over semantic types). Re-reading and the
-codes are in the library (`Support/Model/Tree/Reread.lean`, `World/Codes.lean`: `RR`, `KTy`,
-`interp_retype`, `RR.exists_retype`); a code's meaning is carried along the re-reading of a
-covered resource, at every re-typing that agrees on the locations it holds a `mut` cell at. One `mut` cell per location at any depth is an
-invariant of the typed tree world (`TWNT.mutOne`); without it clause 3 of two covered cells is not
-covered (`clause3_not_cov`).
+The relation's types are read at the current tree and are monotone along its extension. Two
+layers (`docs/new-core/scope-782.md`):
 
-*Open*: monotonicity at μ, ν, ∀, ⊗ and families; store typing growth at the codes.
+- **Store types** are syntactic codes (`KTy`: `1`, `+`, `Imm`, `Mut`, `[a]`, `ref`) read at the
+  tree; a `mut` cell's invariant is its location's code read at the current tree, re-read when the
+  tree grows. A code's meaning is carried along the re-reading of a covered resource, at every
+  re-typing that agrees on the locations it holds a `mut` cell at (`interp_retype`,
+  `RR.exists_retype`; `Support/Model/Tree/Reread.lean`, `World/Codes.lean`).
+- **The relation's value types** (`STy`, `Core/TreeSem.lean`) are step-indexed predicates at the
+  tree world and the record list, each downward closed in the index and monotone along world
+  extension, on the re-reading, at every list keeping the re-readings of the records of the old
+  list the resource reads (`KeepRel`: records it does not read may have been ended, and records
+  opened, by other branches). Every former is one, each law proved from the components': codes, `1`, `0`, `+`,
+  `⊗`, `Imm`, `Mut` (at a store code), `[a]`, `ref`, `!`, `Unk`, the integers, the opaque types,
+  the families `[L]`, thunks, `μ` (least fixed point over value-type candidates, with fold and
+  unfold at a monotone body: every former `VTy.NoMut` lets `X` occur under is monotone in it, and
+  `μ` in its body (`STy.mu_le`), shown at `STy.allBody_mono`; `List`'s cons folds,
+  `STy.list_cons`; a map from `NoMut` bodies to monotone bodies is not built) and type variables. A value stored
+  before a graft meets its type after it (`STy.reread`; at a proper extension, on a view nested
+  three deep, `reread_v3`). **The computation types** (`SCmp`,
+  `Core/TreeSemC.lean`) are downward closed: `F A` (`SCmp.ret`), `⊸`, `&`, `⊤`, `∀α ⊏ c` over the
+  lifetimes below `c` in the current tree, and `ν` (greatest fixed point over candidates).
+- **`F A` is a bare run** (`SCmp.ret`), as Core's `cC (.ret A)` is a bare `wpTS` run: a
+  `cerwpT` run at the world and list it is read at, owning no records, to a value of `A`. It is
+  Kripke along the re-reading of its whole list (`SCmp.ret_reread`, from `cerwpT_kripke`) and not
+  along `KeepRel`: a bare `cerwpT` run owning no records, the records `F A` runs at, is not
+  (`Obs.cerwpT_not_keepKripkeNil`, `Core/TreeSemObs.lean`). `cerwpT` quantifies over starts whose
+  list re-reads its list whole, a resource holding a view has none at `[]` (`cerwpT_nil_of_imm`),
+  and the property would make the stuck `() ()` over a lend's view a run at the lend's list owning
+  no records; framed beside the lend's record (`twp_frame`), `let a = alloc () in () ()` would be
+  a run at the empty world, which adequacy (`cerwpT_adequacy`) refutes. `F A` is monotone in `A`
+  (`SCmp.ret_le`, from `cerwpT_post_mono`), and `U` in its computation type (`STy.thunkC_le`).
+  As in Core, the Kripke quantifier sits at `U` only: a thunk is a run at every world extension
+  and every list keeping what it reads, monotone by definition. **A thunk is introduced as Core's
+  `thunkF_compatC`/`thunkV_compatC` introduce one**: from its computation at every world and list
+  over a resource in which the environment is a value of its type, the environment carried to the
+  later world and list by its monotonicity (`TEnv.Mono`, the tree's `gDenC_local`, met at every
+  value type by `STy.env_mono`), at every computation type (`STy.thunk_intro_env`), at `F A`
+  (`STy.thunkRet_intro_env`), for `λ_. M` with the forcing's head step paid from the index
+  (`STy.thunkRet_lam_env`; met at `λ_. inj₁ ()`, `STy.thunkRet_constInl`), each with a corollary
+  at an environment read at a value type (`STy.thunk_intro`, `STy.thunkRet_intro`,
+  `STy.thunkRet_lam`), and of a value (`STy.thunkC_val`).
+  `ν` folds and unfolds at Core's body shape `F(A ⊕ U X) & F B` (`SCmp.loopBody_mono`), and is not
+  empty there (`SCmp.loop_nonempty`).
+- **Continuation and task types** (`Core/TreeSemK.lean`) are thunks and boxed thunks, no new
+  former: a continuation is `U (B ⊸ C)` (`STy.kont`), boxed at `@d` by BOXED-κ (`STy.kontBox`),
+  a task `[@d] U C` (`STy.task`). The value types read the record list because a thunk is a run,
+  and a run is at a list: read at a list fixed in advance (`[]`), a thunk type holds of every
+  thunk holding a borrow, since no world with an empty list holds an `imm` cell
+  (`cerwpT_nil_of_imm`; a stuck thunk is one, `nilRun_stuck`). Read at the list, a thunk's
+  quantifier is the resume condition of the relation's continuation share (`contShareT`, per
+  branch: `KeepRel`), so **a continuation captured at a stop, holding a view of an open lend, is a
+  value of its type** at every answer type, result type, lifetime and nesting
+  (`STy.kont_of_share`); boxed at a lifetime its share outlives, it is carried along any extension
+  in which other branches opened and ended records of their own, and resumed there at its type
+  (`STy.kontBox_resume_after`): the resume is read off the carried value (`STy.kont_resume` at
+  the reflexive extension), at a list whose records are covered, which a start provides
+  (`RecInv.cov_ls`). Instances (`Core/TreeSemKEx.lean`) at a proper
+  extension of the tree (a fresh child grafted into a chain, `dExt`, `dExt_proper`), with the
+  resume list adding a record at the lifetime the extension opened and not a re-reading of the stop
+  list: a lend at depth 1 (`kontBox_depth1`), and a view whose witness holds the views of its two
+  enclosing lends (`kontBox_depth3`), whose share reads all three records, re-read at the new tree
+  while a fourth is dropped (`relFT_d3`, `keep_d3`). The instances use an empty operation table
+  (`tbE`), a must-resume entry (`q = .lin`, so the cancel branch is vacuous) and the answer `()`
+  at type `1`. The depth-1 resume configuration has starts (`Obs.d1_nonvacuous`: else
+  `let a = alloc () in let b = alloc () in () ()`, opening its two lends, would be a run at the
+  empty world); for the depth-3 one no start is exhibited, since no rule yet builds a view whose
+  witness holds views (no reborrow rule at the tree, row 6). A continuation owning the records of lends its own branch opened is row
+  6's: the value types own no records. These are results about one share at `KeepRel`; a
+  scheduler's stored shares are carried in pool form (`KapSchedT`, `PoolTJ`, decision 74), each
+  resuming at the same `KeepRel`.
+
+On the semantic store typing (`KSem`, `Support/Model/Tree/KSem.lean`) monotonicity is proved for
+`1`, `+`, `Imm`, `ref` and `[a]`, each from its components' (`kmono_unit`, `kmono_sum`,
+`kmono_imm`, `kmono_ref`, `kmono_box`), and the re-reading exists when every assigned type is
+monotone (`reread`). `kmono_mut` and `kmono_thunk` hold for every `τ` (for thunks, every
+computation predicate) by the definitions of `vMut` and `vThunk`: they are not results about the
+contents of a `mut` cell or a thunk. That a re-read cell's invariant is its location's code read
+at the new tree (`RC.mut_inv`), that a lender reads back a value of the store type
+(`RC.mut_readback`) and that another invariant is not a re-reading (`not_rc_of_inv_ne`) hold by
+`RC`'s definition. What carries `Mut` is that the re-reading exists (`RR.exists_retype`) and that
+it holds wherever the old invariant held on carried resources (`RC.mut_extends`,
+`reread_extends`); at round 7's cell, at codes, along the graft, the re-read invariant admits the
+value stored before it and the handler's borrow the old reading refuses (`round7_codes`). Carried by `trU` (row 5.57's extension by falsity), a cell is not a value of
+this `Mut`, whose invariant is the store type read at the current tree (`trU_not_kmono`): that
+rules out `trU` with this `Mut`. Against a `Mut` that keeps the predicate a cell was stored with,
+the evidence is expressiveness: it refuses round 7's write (`graft_carried_refuses`, against
+`round7_write`).
+
+What this rules out:
+- **a value type not monotone along extension**: every `STy` carries monotonicity as a field;
+- **a bare run read as `F A`**: `F A` at `[]` over a view would otherwise hold of the stuck
+  `() ()` (`cerwpT_nil_of_imm`, `nilRun_stuck`); read at every later list it asks the run at the
+  lend's own list too, where a bare run is refuted (`Obs.cerwpT_not_keepKripkeNil`).
+- **a continuation stored past its lend**: a boxed value holding a view at `α` is not of `[@d] A`
+  unless `d` is strictly below `α` (`STy.not_box_of_view`, `STy.not_kontBox_of_view`): the `κ`
+  above boxed at its lend's lifetime or at the root is not of its type (`not_kontBox_at_lend`,
+  `not_kontBox_at_root`).
+
+Re-read, a stored task may write the handler's newer borrow into a cell it made before the graft
+(`round7_write`). The store typing grows at a `mut` lend of a location it does not type, and a
+location keeps its type for the run (`TWd.addTy_ext`, `Cov.mono`, `RR.mono` on `tree-wp`, over
+semantic types). One `mut` cell per location at any depth is an invariant of the typed tree world
+(`TWNT.mutOne`); without it clause 3 of two covered cells is not covered (`clause3_not_cov`).
+
+Departures: `Mut`'s payload is a store code, since a cell's invariant is index-free and a
+step-indexed payload (a thunk in a cell) would need step-indexed cell invariants; one mode (no
+observable view at `Imm`); the value types read the record list but own no records, and a thunk
+runs owning none; `⊸` reads its argument at every index up to `n`.
+
+*Open*: store typing growth at the codes; `Mut` at a payload that is not a store code (#790); a
+continuation owning the records of lends its own branch opened (row 6); effect rows (`F_Σ`,
+`CTy.eff`): no `SCmp` former, since `SCmp.ret` takes a table with its `Local` and `Down` proofs
+and nothing yet builds a row's table with its entries downward closed (`opTableT_down` does it
+given the entries'); the typing rules and the fundamental theorem over these types.
 
 ### Typing: suspension, scoped spawn, join
 
@@ -10625,6 +10952,19 @@ covered (`clause3_not_cov`).
   (argued), so its share owns nothing, a clause of the share's definition (`contShareN`), and an
   unrestricted operation is excluded while a borrow or owned resource is live.
   Multi-shot continuations over duplicable state are a hypothesis, not a rule.
+- **A lend's callback `∀'x ⊏ @bnd` may suspend at a row `Row.Suspend 'x @bnd`**
+  (`Core/TreeGoal791.lean`): every operation named and not unrestricted; its payload and answer
+  types free of `'x` and outliving `@bnd` (`VOutlives ∅ bnd`), so their values lie in the stratum
+  of every lend `α ⊏ @bnd`, what the Mut Frame asks of a stop (the relation's `LendOK`); and each
+  capturable operation's cancel row meeting the same clauses (`CTy.SuspendC`), since the cancel
+  run stops at its layers under the live lend. The constants are stated at the empty lifetime
+  context, where the bound, being defined, is closed and so `⊤`; an answer, which arrives from
+  outside the borrowed run, then lies in the top stratum and holds no borrow cell, so it is
+  consistent with the run's view. `VOutlives ∅ bnd` excludes exactly the payload and answer types
+  with, outside a box or `!`, an `Imm @b A` or `Mut @b A` (no `@b` is strictly longer-lived than
+  `⊤`), a thunk `U C` or `Unk` (no outliving rule), or a box `[@b] A` at a `@b` with a variable;
+  and the same in cancel rows. A box at a closed lifetime, whatever it holds (`[@⊤] U C`
+  included), and `! A` pass. Cleanup that performs is kept: a cancel row may have layers.
 - **Lends shared across tasks end only at a join**: scoped spawn. A branch resumed from a join
   asks that no other branch's flattening hold the joined location (`JoinReady`), which gives the
   resumer's frame condition (`joinFd`, `joinReady_fd`). The scheduler establishes it by finishing
@@ -10639,7 +10979,8 @@ covered (`clause3_not_cov`).
   (`immEnd_valid_of_fdEsc`); the condition at the lent location alone does not
   (`immEnd_esc_config`). It follows from a branch point not inside the frame (`fdEscOfBranch`,
   `escBeneathT`, `fdEsc_of_points`), and a run whose start and end are related by row 5.27's `↭`
-  masked at the run's own records (`UpdX`) keeps it (`fdEsc_of_updX`). The mask is needed
+  masked at the run's own records keeps it (`fdEsc_of_updX`; along the walks, `fdEsc_of_updA`).
+  The mask is needed
   (`lend_open_needs_mask`). The condition holds at a join from the cactus invariant
   (`fdEsc_at_join`), other branches' steps keep it (`stepKeepsFdEsc`), and an end of the lend is
   valid only where it holds (`fdEsc_of_end_valid`).
@@ -10675,6 +11016,56 @@ passes through.
 - **Raise, cancel and panic unwind only through closeable points.** A raise passes a `[let]` frame
   only at a row that cancels, where the rule above holds; a cancel runs `κ.2`, which exists only at
   a `cancel` operation. Core has no panic: an integer division with no answer raises (§39).
+
+### The named assertion: `HandlerLawN` (#835)
+
+Over the chain, at the relation at the typed world `KW` (`Core/Chain/Goal791N.lean`), every
+`CDerives` rule but three has a compatibility lemma, and `fundamentalN_all` proves `SemJN` at every
+derivation from those three, `MissingN`. `HandlerLawN` (`Core/Chain/HandlerLawN.lean`) names them
+as one hypothesis, a `Prop` and not an axiom, in `PinLaw`'s form (§29): three fields, each over
+`SemJN` premises only, at every row, qualifier, handler and handled computation.
+
+| Field | Rule | Core's lemma |
+|---|---|---|
+| `handleV : HandleVN` | `effHandleV`, `[handle]` at a value form | `handleV_compatC` |
+| `handleVB : HandleVBN` | `effHandleVB`, BOXED-κ `[handle]` | `handleV_compatCB` |
+| `reify : ReifyN` | `reify` | `reify_compatX` |
+
+The top-level theorem is plain adequacy, every handler inside the program
+(`Core/Chain/Adequacy791N.lean`):
+
+    Goal791N : every cs, e₀ with (∀ c ∈ cs, c.OK) and CDerives ∅ (ctx791 cs) e₀ (F 1)
+               has OrDiverges (substAll (vals791 cs) e₀)
+    goal791N            : HandlerLawN → Goal791N
+    fundamentalN_all    : MissingN → CDerives Δ Γ e j → SemJN Δ Γ e j
+    handlerLawN_iff     : HandlerLawN ↔ MissingN
+
+No scheduler, scheduler contract (`SchedOKN`) or restriction on handler names is quantified over:
+a program that suspends handles its operations inside itself, and those handlers are typed by
+`CDerives`'s handler rules.
+
+It is believed because Core proves all three on its own relation, and `PinLaw` already rests on
+the same belief: a borrow held across a suspension is sound under a handler written in the
+program. The step `cN` does not give is the one `docs/new-core/assert-boundary.md` §2.2 names: a
+clause that keeps `κ` hands it to `vN`'s `U` clause, which reads `KW.OwedR`, where the stop owes it
+along `KW.Owed` at the floor the stop chose; `reify` reads its loop through the same clause. The
+tail and last handlers (`effHandleT`, `effHandleL`) resume or cancel `κ` at the world the clause's
+value is posted at, and are proved (`handleT_compatN`, `handleL_compatN`).
+
+- **Not refuted.** Every configuration in the tree was checked against the three fields
+  (`docs/new-core/configurations.md`, *Against `HandlerLawN`*): each is pointwise over a `κ`, a
+  world or a share, and those at a `κ` use the thunk `κ = ()`, which no `[op]` step hands a clause
+  (`kappa_ne_unit`, `kappaC_ne_unit`), and whose resumption is final (`unit_resume_final`), where
+  every handed `κ`'s resumption steps (`kappa_resume_not_final`, `kappaC_resume_not_final`). Not
+  verified that no typed instance refutes a field.
+- **Not vacuous.** `handle_resume_inst`: the conclusion of `HandleVN` and `HandleVBN` at the
+  relation at `KW` holds at the handler `resumeH`, whose one clause receives `κ` and resumes it,
+  over every handled computation at every outer row (`handleVN_at_resumeH`,
+  `handleVBN_at_resumeH`); every premise of each holds there over `perform`
+  (`handleVN_resume_premises`, `handleVBN_resume_premises`). `ReifyN`'s premises hold at the
+  residual `λx. x` (`reifyN_premises_inst`); no instance of its conclusion is proved. `Goal791N`'s
+  premises hold at `prog791` (`goal791N_premises_inst`): a cell lent `mut` with `withbor (2)`,
+  its callback performing `wait` while it holds the borrow, `wait` handled inside the program.
 
 ### Not claimed
 
@@ -11138,6 +11529,60 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
 
 ## Changelog
 
+- **1.38** (2026-11-04) — §62 (*Semantic types read at the tree*): `F A` is a bare `cerwpT` run
+  (`SCmp.ret`), Core's `cC (.ret A)`; the Kripke quantifier over later worlds and lists sits at
+  `U` only. Thunks are introduced as Core's `thunkF_compatC` does, from the computation at every
+  world and list with the environment carried by its monotonicity (`TEnv.Mono`; `STy.thunk_intro_env`,
+  `STy.thunkRet_intro_env`, `STy.thunkRet_lam_env`, and their corollaries at a value type). `SCmp.ret_kripke`, `SCmp.ret_run`, `SCmp.ret_of_run`,
+  `CSem.Kripke`, `SCmp.amp_kripke` and `SCmp.nu_kripke_of` are retired; `SCmp.ret_reread` is
+  `F A`'s Kripke property along the whole-list re-reading. `SCmp.ret_val` takes the resource's
+  coverage. `STy.kont_of_share`, `STy.kontBox_resume_after` and the instances keep their
+  statements. No change to `twp`, `EndT`, `cerwpT`, `CDerives`, `fundamentalC`, `adequacyC`,
+  `adequacyD`, the checker, the backends or the corpus.
+- **1.37** (2026-11-04) — §62 (#795): the scheduler interface over the running task and a stack
+  pool (`PoolTJ`, `PoolAns`): tasks above a joiner hold views of what it shares, hand them back at
+  their end (`PoolTJ.deposit`), and the joiner is resumed with them; `poolSchedAdequacyT` at the new
+  interface. A lend ended at its copies composed (`twp_lendEnd_imm`, through `twp_lendEnd`
+  unchanged). `HS` with `par` (a joiner and an unstarted child, `κU`) and indexed tables, so
+  children spawn and join at every depth; `progJoin_safe` at every depth. `twp_frame_keep_sh` and
+  `twp_holdsIn` read `EndT` at `UpdA` and `InvKeptA` (1.36). The early join refused
+  (`twp_refuses_join_early`). No change to `twp`'s rules, `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the backends or the
+  corpus.
+- **1.36** (2026-11-04) — §62 (#806): `EndT` reads row 5.27's `↭` along the walks (`UpdA`), with
+  row 5.27's `mut` clause read by `InvKeptA`: an `imm` cell may be given up to the end world while
+  another part holds a copy, and a `mut` cell is read through the `imm` cell it sits beneath
+  (`[TR]` 6.48's ancestor technique; `UpdA.frame`, `UpdA.trans`, `recMaskClosed`). Every `twp` rule
+  keeps its statement. A run gives up a copy of a view another part holds
+  (`twp_consume_view_framed`, at a frame holding a copy, `HoldsCopy`; through a callee,
+  `twp_frame_callee_consume`; with a spawned task, `twp_child_consume`); a lend does not end while
+  another part holds a live copy (`twp_refuses_lendEnd_live_copy`) and ends by `twp_lendEnd` once
+  every copy is back (`twp_lendEnd_after_framed_consume`). `endT_inv`, `StepKeepsFdEsc` and
+  `copy_run_keeps_fdEsc` read `UpdA`. `UpdX.frame`, `xopt_comp`, `xcell_compR` and
+  `not_xoptWFrameAt` are retired with #793's refusals (`docs/new-core/scope-806.md`, *Retired
+  results*). Open, #789: the consume at a frame holding the copy only inside another view's
+  witness (`HoldsView`). No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the
+  checker, the backends or the corpus.
+- **1.35** (2026-11-04) — §62 (#782): the relation's types at the tree (*Semantic types read at
+  the tree*): value types (`STy`) read the record list, downward closed and monotone along
+  extension and `KeepRel` for every former (`Mut` at a store code); computation types (`SCmp`)
+  downward closed, `F A` Kripke along `KeepRel` (`SCmp.ret_kripke`; a bare `cerwpT` run owning
+  no records is not, `Obs.cerwpT_not_keepKripkeNil`); continuation and task types as thunks and
+  boxed thunks, a captured `κ` a value of its type (`STy.kont_of_share`,
+  `STy.kontBox_resume_after`), with instances at a proper extension of the tree. In *The safety
+  relation*, `contShareT_resume`'s list condition reads "the re-readings of the stop list's
+  records the share reads", with `contShareT_resume_ext` for the whole-list condition. No change to
+  `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, `twp`, `cerwpT`, the checker, the backends
+  or the corpus.
+- **1.34** (2026-11-04) — §62 (#781, slice (d)): the per-branch share (`KeepRel`) in
+  `contShareT_resume`'s list condition; a lend's open and end at `twp` (`twp_lendOpen`,
+  `twp_lendEnd`); `[handle]` for a scheduler at the program's top (`cerwpT_schedHandle`) and
+  adequacy over several branches (`multiBranchAdequacyT`), through `cerwpT_adequacy` at one branch
+  with the stored continuations in pool form (`KapSchedT`, `PoolT`, `poolT_park`, `poolT_resume`,
+  `poolT_cancel`; decision 74); `PoolSchedAdequacyT` at one state
+  representation; a cancel as a resume into the cancel branch (D15). Cross-task borrows are
+  excluded by the pool invariant. Borrow edges to ancestors are properties of `CactusInvT`
+  configurations, with no scheduler instance. No change to `CDerives`, `fundamentalC`,
+  `adequacyC`, `adequacyD`, the checker, the backends or the corpus.
 - **1.33** (2026-11-05) — §18, §39 (#810–#814): surface fixes, each an elaboration into existing
   kernel forms; no `CDerives`, judgment or theorem changes. A borrow block's body boxes no terminal
   that never returns (#810). The consume glue's finaliser consumes in §12's reverse binding order

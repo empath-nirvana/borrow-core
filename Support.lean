@@ -59,6 +59,8 @@ import Support.Model.Tree.ChainSix4
 import Support.Model.Tree.ChainUpd
 import Support.Model.Tree.Comparability
 import Support.Model.Tree.Graft
+import Support.Model.Tree.KSem
+import Support.Model.Tree.KSemGraft
 import Support.Model.Tree.Order
 import Support.Model.Tree.Parent
 import Support.Model.Tree.Port.AgBeneath
@@ -118,6 +120,7 @@ import Support.Model.Tree.World.InvSimple
 import Support.Model.Tree.World.InvUses
 import Support.Model.Tree.World.NoOwnUnder
 import Support.Model.Tree.World.RebRR
+import Support.Model.Tree.World.RecMask
 import Support.Model.Tree.World.Records
 import Support.Model.Tree.World.Recs
 import Support.Model.Tree.World.ShapeMutT
@@ -133,6 +136,10 @@ import Support.Model.Tree.World.TInvReb
 import Support.Model.Tree.World.TInvReread
 import Support.Model.Tree.World.Templ
 import Support.Model.Tree.World.UpdX
+import Support.Model.Tree.World.UpdXW
+import Support.Model.Tree.World.UpdA
+import Support.Model.Tree.World.UpdAFrame
+import Support.Model.Tree.World.UpdATrans
 import Support.Model.Tree.World.UpdXInv
 import Support.Model.Tree.World.UpdXMasks
 import Support.Model.Tree.World.World

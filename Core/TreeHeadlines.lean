@@ -1,4 +1,5 @@
 import Core.TreeStepKeep
+import Core.TreeSched
 import Support.Model.Tree.World.ExtExtF
 
 /-!
@@ -12,6 +13,16 @@ and proved below it:
   result holds nothing, is safe or diverges, reaches a value only at the empty memory, and every
   `free` finds its cell. It is `cerwpT_adequacy`, derived through `CactusInvT`'s `cactusT_step`
   (`Core/TreeCactus.lean`).
+* **Multi-branch adequacy** (`MultiBranchAdequacyT`, `multiBranchAdequacyT`,
+  `Core/TreeSched.lean`): a scheduler meeting `SchedOKT` around a task at its table is safe or
+  diverges. Derived through the scheduler's `[handle]` (`cerwpT_schedHandle`) and
+  `cerwpT_adequacy` at one branch; the stored continuations are carried by `KapSchedT` in
+  `cerwpT_schedHandle`'s induction, not as branches of `CactusInvT`.
+* **Pool-scheduler adequacy** (`PoolSchedAdequacyT`, `poolSchedAdequacyT`,
+  `Core/TreePoolSched.lean`): `MultiBranchAdequacyT` for a scheduler whose state is one fixed
+  representation, the handler and the pool's entries (`stateVal`, `poolVal`), its answers
+  functions of that state (`PoolAns`), its pool a stack held by `PoolTJ` with the running task's
+  conditions against it. `MultiBranchAdequacyT` is the general statement.
 * **R1, a step keeps every other branch's open lend** (`R1_StepKeepsFdEsc`,
   `r1_stepKeepsFdEsc`): a branch that holds nothing of a frame record's lend before its run holds
   nothing of it after, in every post-configuration `twp` admits. Beside it,
@@ -65,8 +76,8 @@ def w₀ (P : ParentFn) : TWd := ⟨P, fun _ => none, tmplT _ (fun _ => none)⟩
 def TopAdequacyT : Prop :=
   ∀ (P : ParentFn) (Q : TPostV) (P₀ : Expr),
     (∀ k w ls O v ρ, Q k w ls O v ρ → ρ = PMap.empty) →
-    (∀ n, cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Q (fun _ ρf => ρf = PMap.empty) n (w₀ P) [] []
-      P₀ (PMap.empty : TRes (WCactus.ofParent P))) →
+    (∀ n, cerwpT (ℍ := ℍ) (opTableT OpTabT.empty) Q (fun _ ρf => ρf = PMap.empty)
+      (fun _ ρf => ρf = PMap.empty) n (w₀ P) [] [] P₀ (PMap.empty : TRes (WCactus.ofParent P))) →
     OrDiverges (ℍ := ℍ) P₀
 
 theorem topAdequacyT : TopAdequacyT (ℍ := ℍ) :=

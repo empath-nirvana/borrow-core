@@ -28,7 +28,7 @@ files with a `Tree` prefix (Core has no subdirectories; it groups files by prefi
 | `…/World/Records.lean`, `Images.lean` | `TreeWp/Records`, `ImagesT` | `FrameRecT`, positions and lineages, `TChoice`, `canonTc`, `RecRR`, `TWNT` |
 | `…/World/Inv*.lean`, `Shape*.lean`, `TInv*.lean`, `Templ`, `Coherent`, `NoOwnUnder`, `RebRR`, `SimL` | the same `TreeWp/` files | `TWNT.inv`, `templ_reread`, `mutOne`, `tcCoherent`, `noOwnUnder`, `twnt_invHolds` |
 | `…/World/Recs.lean` | top of `TreeWp/Rel` (before `twp`) | `SRecT`, `rsOfT`, `TaggedT`, `SplitT`, `RecInv`, `RecsRR`, `SRecsRR` |
-| `…/World/UpdX.lean`, `UpdXInv.lean` | `TreeWp/UpdX`, `UpdXInv` | `UpdX`, `recMask`, `NoneAt`, `MaskDiff`, `InvKept`, `UpdX.frame`, `UpdX.inv` |
+| `…/World/UpdX.lean`, `UpdXInv.lean` | `TreeWp/UpdX`, `UpdXInv` | `UpdX`, `recMask`, `NoneAt`, `MaskDiff`, `InvKept`, `UpdX.inv` (`UpdX.frame` retired by #806) |
 | `…/World/FdEsc.lean` | `TreeWp/ImmEndEsc`, `FdEscCactus` (def only), `FdEscBranch`, `EscBeneath` (less `fdEsc_at_join`), `StepKeep` | `FdEsc`, `immEnd_valid_of_fdEsc`, `EscBeneathT`, `escBeneathT`, `fdEsc_of_points`, `fdEsc_of_updX` |
 | `…/World/ExtF.lean` | `TreeWp/ExtFT` | `InDomT`, `FrzT`, `RelAtT`, `RelFT`, `extFT`, `extFT.rr` |
 | `Core/StepsN.lean` | `SI/WpN`, `SI/LoopN`, `SI/RwpG`, `SI/HandleN`, `SI/Frag`, `LoopAwait` (16 decls) | `StepsN`, `Final`, `stepsN_of_steps`, `final_opPlug`, the `FinDom` step lemmas, `OrDiverges` |
@@ -64,7 +64,8 @@ No chain-world declaration is in the closure: no `erwp`, `cerwp`, `crwpG`, `TW`,
 **Not ported:**
 - `TreeWp/Ops.lean` (`TWd.graft`, fresh child, `setTy`): no headline uses it today. The
   multi-branch slice ports what it reads (graft at a resume).
-- `Tree/KSem.lean`'s `KMono`, `MonoΘ`, `reread`, `kmono_*`, `vMut`, `vThunk`: these go to #782.
+- `Tree/KSem.lean`'s `KMono`, `MonoΘ`, `reread`, `kmono_*`, `vMut`, `vThunk`: these go to #782
+  (landed: `Support/Model/Tree/KSem.lean`; `docs/new-core/scope-782.md`).
 - `TreeWp/TInvConfig.lean` (`tit_twnt_config`): this was the non-vacuity check of
   `TWNT.InvHolds` while it was a hypothesis. `twnt_invHolds` now discharges it, so it is history.
 - Every chain-world `SI/` result (`erwp`/`cerwp`/`crwpG`, `HandleN`, `CaptureScope*`,
@@ -131,10 +132,11 @@ becomes `Core/TreeHeadlines.lean`, with the namespaces of §1.
 | Statement | Status |
 |---|---|
 | `TopAdequacyT` | proved (`topAdequacyT`, from `cerwpT_adequacy`); one branch at the top |
-| `MultiBranchAdequacyT` | **open**; `SchedOKT` not defined (a parameter only so the text elaborates; it becomes a definition, see §5) |
+| `MultiBranchAdequacyT` | proved (`multiBranchAdequacyT`, `Core/TreeSched.lean`); `SchedOKT` a definition (`Core/TreeHandle.lean`). It goes through `cerwpT_adequacy` at one branch (`cactusT_step`, no other branch in `CactusInvT`); the stored continuations are carried by `KapSchedT` (and `PoolTJ`) in `cerwpT_schedHandle`'s induction, not as branches of `CactusInvT` (below, *The invariant is in pool form*). Changed from the draft below: the task runs at base and present frame conditions every valid frame meets, not the empty frame (the scheduler's state is in a resumed branch's frame). `PoolSchedAdequacyT` (`Core/TreePoolSched.lean`) reads `SchedOKT` at `Qout = PoolAns`, the scheduler's answers functions of one fixed state representation (`stateVal`, `poolVal`; D18); `MultiBranchAdequacyT` is the general statement. Instances: `stackProg_safe`; `progLoan_safe`, `progCancel_safe`, `progDepth3_safe` under the spawning scheduler `HS` (`Core/TreePoolSpawnProgs.lean`, D19, D20); `progJoin_safe d` (a lend shared by a tree of tasks of every depth, `Core/TreePoolJoinProgs.lean`, #795) |
 | `R1_StepKeepsFdEsc` | proved (`r1_stepKeepsFdEsc`, `stepKeepsFdEsc`) |
 | `R2_EndBlockedByHolder` | proved (`r2_endBlockedByHolder`, from `fdEsc_of_end_valid`) |
 | `R3_JoinEndNeedsFdEsc` | proved (`r3_joinEndNeedsFdEsc`, from `fdEsc_of_end_valid`; the converse direction is `fdEsc_at_join` + `immEnd_valid_of_fdEsc`) |
+| Borrow edges to ancestors, in `CactusInvT` configurations | proved as properties of `CactusInvT` (`borrowEdges_ancestors`, `lender_ancestor`, `Core/TreeSchedPool.lean`): a part of a branch at point `n` holding any cell at the location of a record proper framed at `α` has `n` inside `α`, from `CactusInvT` alone (`fd_le_of_branch`). Instances at depth 1 and 3 (`lenderEdge_depth1`, `lenderEdge_depth3`, `Core/TreeBorrowEdges.lean`) add the second branch by hand (`cactusT_spawn`). **No scheduler instance:** the stored tasks are carried by `PoolT`/`KapAtT`, not as branches of `CactusInvT`, and nothing connects the two. **Open, #789:** derive the property for `PoolT`/`KapAtT` shares |
 | `R4_ExtExtFT` | proved (`r4_extExtFT`, from `ext_extFT`, `Support/Model/Tree/World/ExtExtF.lean`); `RelT`, `KeepsT`, `CellInT`, `ExtLT` defined there (Core's `Rel`, `Keeps`, `CellIn`, `Ext` over the tree carrier), the statement as below |
 
 Names that do not exist yet anywhere: `SchedOKT`, `RelT`, `KeepsT`, `CellInT`, `ExtLT` (the last
@@ -177,8 +179,8 @@ def TopAdequacyT : Prop :=
 /-- **H0b, any number of branches.** A closed program `hnd H e₀`: the task `e₀` at `cerwpT` at the
 scheduler's table `T`, the scheduler `H = hndVal n₀ qs hr hs` meeting `SchedOKT` (its clauses at
 `cerwpT` at the empty table, each `κ` read by the continuation's predicate at the tree, the
-handler's state carrying `CactusInvT` over the branches it stores). `SchedOKT` is not defined
-yet: it is the parameter here only so that the statement elaborates. -/
+stored continuations carried by that predicate). `SchedOKT` is not defined yet: it is the
+parameter here only so that the statement elaborates. -/
 def MultiBranchAdequacyT
     (SchedOKT : OpTabT → UInt32 → Val → Val → Val → TPostV → TPostV → Prop) : Prop :=
   ∀ (P : ParentFn) (T : OpTabT) (n₀ : UInt32) (qs hr hs : Val) (Qin Qout : TPostV) (e₀ : Expr),
@@ -272,9 +274,20 @@ single-threaded. Spawned tasks and stored continuations are values held by a sch
 handler in the program (`lib/async.bc`; `structure.md` §9, "under a storing scheduler … a
 forwarding handler between the task and the scheduler"). So "any number of branches, any
 schedule" is a statement about `hnd H e₀` for every scheduler `H` that meets its specification:
-`H` chooses which stored branch to resume. The handler's state carries `CactusInvT` over the
-branches it stores. It needs to: a resume's frame condition (`fdAt`, the join's `FdEsc`) is a fact
-about every other branch, and only the invariant over all of them gives it (`fdEsc_at_join`). The
+`H` chooses which stored branch to resume.
+
+**The invariant is in pool form** (decision 74, the user's of 2026-11-03). A resume's frame condition
+(`fdAt`, the join's `FdEsc`) is a fact about every other branch, so the stored branches need an
+invariant over all of them. It is not `CactusInvT` over several branches. `multiBranchAdequacyT`
+uses `CactusInvT` at one branch only (`cerwpT_adequacy` through `cactusT_step`, the running branch
+alone). The stored continuations are values the scheduler's clauses hold, each read by
+`KapSchedT` (and, held as a pool, by `PoolT`/`KapAtT`; since #795 by the stack `PoolTJ`), and `cerwpT_schedHandle`'s induction on
+the index carries them. The invariant over them has two parts: each stored share resumes at the
+per-branch share condition `KeepRel` (D13), and every two are apart at each other's record masks
+(`fdMask`, `recMask`; pairwise `FdEsc` in location form, D12), with no branch points. Since #795 the pool is a stack (`PoolTJ`, `scope-795.md`): each entry is apart from the entries below it at their record masks except at the lent locations its nearest joiner shares, so tasks above a joiner hold views of what it shares. The
+pool form is the invariant because branch points are not kept along tree extension
+(`not_joinPtKeptT`), while the location form is (`fdMask_mono`), and a share holding views at
+incomparable lifetimes has no point (#781 issuecomment-6612202867). The
 alternative is a separate machine with a pool of branches (LinearActris's thread pool). It is not
 recommended: it is a second operational semantics that the closed programs of #771's target
 theorem do not run on, and a later PR would have to connect it to `hnd` or throw it away.
@@ -284,9 +297,10 @@ theorem do not run on, and a later PR would have to connect it to `hnd` or throw
 | Item | Reads | Size (estimate) | Risk |
 |---|---|---|---|
 | **R4: tree `ext_extF`** (done, slice (c)) | `ExtLT`; `inDomT_imm_or_xex`, `CellAt.inStratum`, `desc_of_xexT`, `tag_ge_nestedT`, `not_relAt_xexT` over `LinPathT`, `DescRT`, `LinLocT`, `FrameLifeT`, `TaggedT`; `LinDisj`/`DLinDisj`/`EscEx` not ported (D11): `TWNT.exclUnique`, `desc_comparable`, `not_desc_proper`, `le_not_linLoc` take their role | about 480 lines with the examples | resolved. The lifetime clause leaves records incomparable with `b` free, and the proof never asks about one: the tag it bounds is reached from `b` by `b ⊏ z ⊑ t`, `z` a lifetime of the nested view (strata), `z ⊑ t` by `FrameLifeT` of the root `TaggedT` names, the root found by `root_unique` on one branch. |
-| **`fdAt` monotone** (`TFrame.Mono (fdAt en v F O′)`) | `OpEntT.fd` monotone along re-reading (a table condition, to add as a premise callers discharge), and that a record list has a re-reading at every extension (from `RR.exists_retype` per escrow) | 150–300 lines | low. Needed when a resumed run is bound (`twp_bind`'s `hFm`), so by the multi-branch slice. |
+| **`fdAt` monotone** (`TFrame.Mono (fdAt en v F O′)`; done: `fdAt_mono`, the re-reading's existence a premise, `fdJoinT_fdMono`) | `OpEntT.fd` monotone along re-reading (a table condition, to add as a premise callers discharge), and that a record list has a re-reading at every extension (from `RR.exists_retype` per escrow) | 150–300 lines | low. Needed when a resumed run is bound (`twp_bind`'s `hFm`), so by the multi-branch slice. |
 | **Tree `extF_fold`/`extF_seal`** (with `FrzT.del_or`, `FrzT.of_del`, `not_frzT_single_own`, …) | `FrzT`, `InDomT` and the composition lemmas in `ExtFT` | 200–400 lines | low. Read only by the frame rules across stops (`erwp_M_frame`, `erwp_M_antiFrame` analogues), which are row 6. **Recommendation:** move them to row 6 unless the scheduler's specification reads `extFT` through a fold; the top-level scheduler holds no lend. |
-| **The multi-branch scheduler** (`MultiBranchAdequacyT`) | `[handle]` at `cerwpT` over the tree (no tree version exists: the spike's `[handle]` without `hdv` is `ewp_handle`/`erwp_handle`, over `ewp` and chain `erwp`, which `cerwpT` does not reuse); `κ` cells and cancel at the tree (`cerwp_kappaCell`, `cerwp_kappaC_resume/cancel` at chain); `SchedOKT`; `cactusT_move` at capture, `cactusT_extend` + `TWd.graft` (`Ops`) at a resume, `cactusT_spawn`/`cactusT_join`; `stepKeepsFdEsc` for every stored branch across each segment; `fdEsc_at_join` + `immEnd_valid_of_fdEsc` at a join; `contShareT_resume` at the resumer's list | 3k–5k lines | **high** |
+| **The multi-branch scheduler** (`MultiBranchAdequacyT`; done for a scheduler at the program's top: `cerwpT_schedHandle`, `multiBranchAdequacyT`) | `[handle]` at `cerwpT` over the tree (no tree version exists: the spike's `[handle]` without `hdv` is `ewp_handle`/`erwp_handle`, over `ewp` and chain `erwp`, which `cerwpT` does not reuse); `κ` cells and cancel at the tree (`cerwp_kappaCell`, `cerwp_kappaC_resume/cancel` at chain); `SchedOKT`; `cactusT_move` at capture, `cactusT_extend` + `TWd.graft` (`Ops`) at a resume, `cactusT_spawn`/`cactusT_join`; `stepKeepsFdEsc` for every stored branch across each segment; `fdEsc_at_join` + `immEnd_valid_of_fdEsc` at a join; `contShareT_resume` at the resumer's list | 3k–5k lines | **high** |
+| **T1 at the flattening-level `HoldsView`** (#806, open): a frame holding the copy only at depth, inside another view's witness. `twp_consume_view_framed` is stated at `HoldsCopy` (`ρf = Y ● v`, user's decision 2026-11-04). #789's compatibility lemmas are where a consume would need it, if a frame condition there supplies only `HoldsView` | `consume_view_world` needs `ρf ● v = ρf`; a world invariant for giving up a nested copy would be needed instead | not estimated | not checked |
 
 **Missing from #781's open list: `[handle]` without `hdv` at the tree relation.** #771 row 4 says
 it lands here. It exists only over the chain relations. Porting it means re-proving
@@ -296,11 +310,10 @@ do not).
 **Riskiest step: what the scheduler's resume asks, and who supplies it.** At a resume, `fdAt`
 asks the resumer's frame for the entry's `fd` at the resumed run's records. For a join, that is
 `FdEsc` against every other branch. `fdEsc_at_join` derives it from `CactusInvT`'s points
-(`JoinPtT`). But `twp` knows no points: they live only in `CactusInvT`. So the scheduler's
-clauses must carry `CactusInvT` over their stored branches as a resource predicate of the
-handler's state. Then `cerwpT`'s frame for the handler's run must be read with that invariant
-inside. If it cannot be read that way, `twp`/`EndT`/`contShareT` change (for example, a points
-clause in `EndT`). Every rule of slice (b) would then be re-proved. Next in risk: the invariant must carry
+(`JoinPtT`). But `twp` knows no points: they live only in `CactusInvT`. Resolved without points
+and without changing `twp`, `EndT` or the rules of slice (b): the resumer's guarantee is read in
+location form (`fdMask`, `fdJoinT`), and the stored branches are held in pool form (§4, *The
+invariant is in pool form*). Next in risk: the invariant must carry
 `FdEsc` of each branch against every other branch's open records. `stepKeepsFdEsc` keeps it
 across a segment for the records the frame held at the segment's start (`p ∈ psF`). A record the
 segment opens needs it established at the open: the other branches hold nothing of a location the
@@ -344,9 +357,10 @@ carrier sits beside the printed one. Unlike #777 (`chainEquiv`), there is no the
 - Porting chain-world results (`erwp`, `cerwp`, `TWNC`, `Core.C`, `ext_extF` at `WRes`) to have
   something to merge.
 - A second relation, or a pool machine beside the BoLo machine (§4).
-- Adequacy proved around the invariant: `MultiBranchAdequacyT` must go through `CactusInvT`'s
-  operations (`cactusT_step/move/extend/spawn/join`), not through a direct induction on runs
-  that ignores the stored branches.
+- Adequacy proved around the invariant: `MultiBranchAdequacyT` must carry every stored branch
+  through an invariant, not through a direct induction on runs that ignores them. The code goes
+  through `cerwpT_adequacy` at one branch, with the stored branches carried by `KapSchedT`/`PoolT`
+  in `cerwpT_schedHandle`'s induction under the pool-form invariant (§4, decision 74); dropping `KeepRel` or the pool's two-way separation would be going around it.
 - Hypotheses standing in for open items: no `FdEsc`, `ExtLT ⇒ extFT`, `fdAt` monotonicity or
   `SchedOKT` property taken as a premise of a headline. `SchedOKT` is a parameter in §4 only so
   the text elaborates; landing it as a parameter is a stop.
@@ -364,14 +378,27 @@ carrier sits beside the printed one. Unlike #777 (`chainEquiv`), there is no the
 | D1 | `UpdX`: row 5.27/5.33's `↭` masked at the run's own records' lent and escrow locations (`recMask`), read across the re-reading `w₀ → w′` | A lend left open at a stop turns `own` into the lend cell and hands out the escrow's views (`lend_open_admitted`). Without the mask that end is refused (`lend_open_needs_mask`). Unmasked locations read row 5.27 exactly (`updX_refl_imm`), and printed `UpdV ⇒ UpdX` (`UpdX.of_updV`) | `↭` unmasked across a lend left open (6.39's use) |
 | D2 | `P̂` in `↭`'s `mut` clause read as "the same code at `ℓ`, each side read at its own world" (`InvKept`, `XInv`), not as equal predicates | A `○` composite's `P̂ ∧ Q̂` re-read is not the re-read of the composite. A flattened `mut` cell's `P̂` is its location's code (`flat_mut_inv`). At the identity re-reading the two agree (`updX_refl_mut`) | `P̂` compared as a predicate across `↭` |
 | D3 | `MutOne`: one `mut` cell per location at any depth (`TWNT.mutOne`) | Makes a flattened `mut` cell a stored one. Without it, clause 3 of two covered cells is not covered (`clause3_not_cov`, also on the printed chain) | reasoning about clause 3's `P̂ ∧ Q̂` composite |
-| D4 | No `ρ⁺` (row 5.33, `ρ ↭ ρ′ ● ρ⁺`, `ρ⁺∣own = ∅`); `twp` relates `ρ₀` and `ρ′` | Inherited from `crwpG` | garbage `ρ⁺` (`wpG_garbage`; the chain has `rwpG_garbage`) |
-| D5 | `UpdX.frame`, a masked cross-world 6.48, proved pointwise (`flat_compR`, `xopt_comp`) | Shorter route | **6.48's ancestor technique** (a `mut` cell of the aliasable walk accounted for by its immutable ancestor) is not built in `UpdX.frame`. It exists at the tree in `Support/Model/Tree/Port/Six48.lean`, and `fdEsc_of_updX` uses it (`innermost_view`). **Recommendation:** in the port, prove `UpdX.frame` along `Port/Six48`, or record the route in its docstring. This is the pattern `borrow_lang` CLAUDE.md §1 warns about (6.59 needed the ancestor technique). |
+| D4 | No `ρ⁺` (row 5.33, `ρ ↭ ρ′ ● ρ⁺`, `ρ⁺∣own = ∅`); `twp` relates `ρ₀` and `ρ′` | Inherited from `crwpG` | garbage `ρ⁺` (`wpG_garbage`; the chain has `rwpG_garbage`) **#793's result** (`Core/TreeConsume.lean` on `spike-793`, 6e6ac79e; `twp` unchanged): a run may give up a copy of an `imm` view when the run itself holds another copy (`twp_consume_view_held`, and through `twp_bind`, `twp_bind_callee_consume`), and the lender may give up a spare copy before `twp_lendEnd` (`twp_lendEnd_after_consume`); it is refused when the other copy is held only outside the run, by a callee proved on its own copy (`twp_frame_callee_refused`) or a spawned task (`twp_child_refused`), from `UpdX`'s start-side `imm` clause alone. Restoring `ρ⁺` literally puts another branch's garbage in the lender's frame, which fails `twp_lendEnd`'s `hF` (`not_noneAt_view`). **Resolved by #806 (design (b), `UpdA`):** `EndT` reads `UpdA`, under which an `imm` cell may leave `⦇ρ′⦈` when the end world still holds it; the refusals above are retired, and a run may give up its copy when a callee proved on its own copy (`twp_frame_callee_consume`) or a spawned task (`twp_child_consume`) holds another, and at `HoldsCopy` (`twp_consume_view_framed`); still no `ρ⁺`. Open for #789: T1 at `HoldsView`. |
+| D5 | `UpdX.frame`, a masked cross-world 6.48, proved pointwise (`flat_compR`, `xopt_comp`) | Shorter route | **6.48's ancestor technique** (a `mut` cell of the aliasable walk accounted for by its immutable ancestor) is not built in `UpdX.frame`. It exists at the tree in `Support/Model/Tree/Port/Six48.lean`, and `fdEsc_of_updX` uses it (`innermost_view`). **Recommendation:** in the port, prove `UpdX.frame` along `Port/Six48`, or record the route in its docstring. This is the pattern `borrow_lang` CLAUDE.md §1 warns about (6.59 needed the ancestor technique). **#806:** `EndT` reads `UpdA`, whose frame step `UpdA.frame` is proved along the walks (`Flat.split_factors`, then the ancestor: `AgW.mut_beneath`, `Beneath.lift`), so the technique is built on `EndT`'s path. **Retired (C-2, user's decision 2026-11-04):** `UpdX.frame`, `xopt_comp`, `xcell_compR`, deleted as unused once off `EndT`'s path; `UpdA.frame` along the walks replaces it. Restore with `git show a66b0538:Support/Model/Tree/World/UpdX.lean` lines 212–413 (see `scope-806.md`, "Retired results"). |
 | D6 | `FdEsc` (nothing at `ℓ` nor at any location of `ex(R)`, at any depth) as the join's condition, from branch points | Printed 6.64 reads H24/H6 (the frame fixed for the run), which the tree does not have. `joinFd` at `ℓ` alone is not enough (`immEnd_esc_config`) | 6.64's H24/H6 route |
-| D7 | Branch points in `CactusInvT` (`AtPoints`, `JoinPtT`) | Without them `FdEsc` does not follow (`cactusT_not_fdEsc`) | — (not printed) |
+| D7 | Retired: branch points are not used by the scheduler, whose stored tasks are held in pool form (D12, D13; §4, decision 74). `CactusInvT` keeps its points for top-level adequacy (`cactusT_not_fdEsc`) | — | — |
 | D8 | `escBeneathT` is a new derivation with its own case splits, not a port | — | Check it in review against `borrow_lang` CLAUDE.md §6: the splits are ours |
-| D9 | Store types as codes `KTy`, no substitution `δ`/`AdmWf` | Ruling of condition 16 | — |
-| D10 | `extF`/`extFT`, `contShareT`'s resume at any `extFT` list | In-house design (`SI/ExtF.lean`: "not a transcription") | — |
+| D9 | Store types as codes `KTy`, no substitution `δ`/`AdmWf` | Ruling of condition 16 | — **Open, #790:** a `mut` payload is a code, so no closures, thunks or continuations in cells. |
+| D10 | `extF`/`extFT`, the in-house extension condition R4 reads (`ext_extFT`); its use as the resume condition is retired (see D13) | In-house design (`SI/ExtF.lean`: "not a transcription") | — |
 | D11 | `ext_extFT`'s `desc_of_xexT` reads the owner of an exclusive cell off `TWNT.exclUnique` (with `desc_comparable`, `not_desc_proper`, `le_not_linLoc`), not off the chain's `DLinDisj`, `EscEx` and `xpath_unique` in the root's escrow | Those results are already proved of `TWNT`, its `reread` case included; `DLinDisj`/`EscEx` would need a new `reread` case | — (the chain statements are in-house designs, not printed) |
+| D12 | The scheduler's join condition in location form (`fdMask`, `recMask`, `fdJoinT`), carried by the clause's state, not branch points | Points are not kept along tree extension (spike `not_joinPtKeptT`); locations are (`fdMask_mono`) | — (not printed) |
+| D13 | `contShareT`/`KapSchedT` resume at any list keeping the re-readings of the stop list's records the share reads (`KeepRel`), not at a re-reading of the whole stop list with `extFT` against it | A resume after another branch ended a record of its own that was open at the stop has no re-reading of the stop list; the share reads only its own lineage. The D10 condition implies it (`keepRel_of_extFT`, `contShareT_resume_ext`) | — (not printed) |
+| D14 | Opening and ending a lend as two `twp_update` instances (`twp_lendOpen`, `twp_lendEnd`, `Core/TreeLend.lean`), not the scoped Imm Frame (6.64: open, run the body, end); the empty escrow only | A lend open across a stop is opened in one segment and ended in another (#781 slice (d), item 1). The end's condition is `FdEsc ℓ ∅` against the rest of the world, read off the frame and the run's other part; the escrow's contents and their views (`TWNT.reb`) are not covered | 6.64's scoped proof (H12–H36); reborrows of the escrow at `twp` **Open, #791:** non-empty escrows and reborrows of their contents (the empty-escrow limit is coverage, not design). |
+| D15 | Cancel is a resume into the cancel branch: `contShareT` owes the unwinding `ccatch (K†[raise …])` as a continuation at a cancellable entry (`OpEntT.fin` a flag), and `KapSchedT` (which now names its scheduler `H`) offers `hnd H (κ (inj₂ ()))` at `cerwpT`, so an unwinding that performs comes back to `H`'s clause as a stored continuation | #781 issuecomment-6612871618. `cerwpT_schedHandle` proves the offering by its induction hypothesis (`twp_kappa_cancel_in`, `twp_kappaC_cancel_in`); the cancel answer is in the task's answer predicate. Kept after #793 (issuecomment-6634439429): a cancelled task may hold `own` cells (decision 73: used, not lost), `mut` cells (one holder), a copy only the frame holds, or the last copy of a view, so the cancel branch has to run. The unwinding it runs is `[then]` and the unwinding borrow forms (`withborU`, §19), which end the branch's lends; there is no per-type close (decision 73). The tree has no `withborU` rule yet (row 6): the closed programs end their lends through `ubind` finalisers in the program and `twp_lendEnd` in the proof | a separate answer predicate for cancelled tasks |
+| D16 | Retired as a departure: `[handle]` at `cerwpT` for a top-level scheduler only, with no forwarding, is open coverage (#792; below) | — | — |
+| D17 | `cerwpT Tb Q Fb F` carries a base frame condition: a stop hands the table the base `Fb`, not the frame condition current at the stop | A resumed task's frame condition is the base and its resumer's guarantee at its records at that resume, so a stored continuation's mask is its records' at its stop and the scheduler's interface has no mask history. `cerwpT_schedHandle` asks only that every valid frame meet the base | the frame condition at the stop handed to the table |
+| D18 | A scheduler handler's state is a value `(H, pool)` and its answers are functions of it (`PoolAns Q H Inv`); `SchedOKT` is read at `Qout = PoolAns` | A deep handler has no parameter, so the pool is threaded as the answer's argument; the state carries `H` so a clause runs a new task or a stored task's cancel branch under its own handler without naming itself (a clause cannot contain the handler value it belongs to). `Inv` is the scheduler's own invariant on its pool, the empty pool meeting it. `PoolSchedAdequacyT` is tied to this one state representation (`stateVal`, `poolVal`); `MultiBranchAdequacyT` is the general statement, fixing no representation | a parameterised-handler form; the pool kept in a heap cell |
+| D19 | A scheduler whose clause runs a task under itself proves `SchedOKT` through `SchedOKTLe N` (clauses asked at stops `k ≤ N`), by strong induction on `N` (`cerwpT_schedHandle_le`, `poolAns_run_le`, `schedOKT_of_le`) | A spawn clause at stop `k` needs `[handle]` for its own scheduler; the child runs at least one step below `k`, so `SchedOKTLe` below `k` suffices and no premise on the scheduler is added | a step-indexed fixpoint of the scheduler's relation |
+| D20 | `spawn`'s entry `enSpawnP` and `par`'s entry `enParP` (`Core/TreePoolSpawn.lean`): `spawn`'s payload is a thunk owning nothing, `par`'s two thunks splitting copies of lends (`parPA`), each verified as a child (`ChildOK`) at the indexed table `tabAt j` for every stop index `j` below the clause's, at base and present frame conditions every valid frame meets | A table cannot name itself in its own entry; indexing the tables (`tabAt k` reading its children at `tabAt j`, `j < k`) and `tabAt_inclLe`/`cerwpT_tabAt` lift a child to the scheduler's table `TJ`, so children spawn and join at every depth. Cross-task borrows are admitted through `PoolTJ` (#795, SPEC 1.37): each entry is apart from the entries below it except at the lent locations its nearest joiner shares, and a joiner collects the copies handed back (`PoolTJ.deposit`). Limits of `HS`: `spawn` children hold nothing, `par` children hold only copies of lends | — |
+
+Open coverage, not departures: `[handle]` at `cerwpT` for a top-level scheduler only, with no
+forwarding handler between a task and its scheduler (#792, D16); borrow edges to ancestors for the
+scheduler's stored shares (`PoolT`/`KapAtT`, #789).
 
 Unspent printed hypotheses: 6.64's H24 and H6 (D6). Unused uniqueness results: none
 (`RecRR.func`, `RecsRR.func`, `RR.func`, `Flat.functional`, `CompR.functional` are used).
@@ -467,7 +494,7 @@ Computed from `tree-inv` 92b6cc49; generated names (`.rec`, `.casesOn`, `match_`
 
 `TreeWp/Templ.lean` (13): `ChainT.rr_back`, `RC.own_inv`, `RR.own_back`, `RootT.rr_back`, `TWNT.templ_reread`, `TcCoherent`, `TemplAtT`, `TemplDAtT`, `agW_rr_back`, `tcCarried_exists`, `tcCoherent_of_inj`, `templAt_reread`, `templDAt_reread`.
 
-`TreeWp/UpdX.lean` (37): `CellUT.CompR.eq_right_of_own`, `ExDom`, `ExDom.deep`, `ExDom.rr`, `ExDom.rr_back`, `ExDom.rr_iff`, `ExDom.top`, `LsSim.xcell`, `MaskDiff`, `NoneAt`, `NoneAt.mono`, `NoneAt.of_compS_left`, `NoneAt.of_compS_right`, `NoneAt.of_false`, `NoneAt.or`, `NoneAt.rr`, `UpdX`, `UpdX.congr`, `UpdX.frame`, `UpdX.of_rr`, `UpdX.of_updV`, `UpdX.trans`, `UpdX.widen`, `XCell`, `XCell.trans`, `XOpt`, `XOpt.trans`, `escLocs`, `flat_lsSim_self`, `imm_eq_of`, `maskDiff_trans`, `recMask`, `recMask_append`, `recMask_rr`, `updX_refl_imm`, `xcell_compR`, `xopt_comp`.
+`TreeWp/UpdX.lean` (34): `CellUT.CompR.eq_right_of_own`, `ExDom`, `ExDom.deep`, `ExDom.rr`, `ExDom.rr_back`, `ExDom.rr_iff`, `ExDom.top`, `LsSim.xcell`, `MaskDiff`, `NoneAt`, `NoneAt.mono`, `NoneAt.of_compS_left`, `NoneAt.of_compS_right`, `NoneAt.of_false`, `NoneAt.or`, `NoneAt.rr`, `UpdX`, `UpdX.congr`, `UpdX.of_rr`, `UpdX.of_updV`, `UpdX.trans`, `UpdX.widen`, `XCell`, `XCell.trans`, `XOpt`, `XOpt.trans`, `escLocs`, `flat_lsSim_self`, `imm_eq_of`, `maskDiff_trans`, `recMask`, `recMask_append`, `recMask_rr`, `updX_refl_imm` (`UpdX.frame`, `xcell_compR`, `xopt_comp` retired by #806).
 
 `TreeWp/UpdXInv.lean` (29): `AgW.mutIn`, `CellAt.cov`, `ExW.mutIn`, `InvKept`, `InvKept.frame`, `InvKept.mono`, `InvKept.of_agree`, `InvKept.refl`, `InvKept.trans`, `MutCov`, `MutIn`, `MutIn.bigComp`, `MutIn.comp`, `MutIn.mono`, `MutIn.restrict`, `MutKeep`, `MutUniq`, `MutUniq.of_sub`, `TCell.eq_mut`, `UpdX.inv`, `XCell.mut_right`, `XInv`, `compR_mut_side`, `flat_mut_cellAt`, `flat_mut_inv`, `mutKeep_compR`, `mutKeep_compS`, `sem_some`, `updX_refl_mut`.
 

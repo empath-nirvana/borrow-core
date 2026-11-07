@@ -5,8 +5,9 @@ The structure SPEC §62 is built against, and its rules. Lean names and branches
 
 ## 1. The target theorem
 
-For every closed, well-typed Core program `P` (including handlers that store one-shot
-continuations, borrows live across suspensions, and borrows shared with spawned tasks):
+For every closed, well-typed Core program `P` (including borrows live across suspensions,
+carried by the one-shot continuation a handler stores for the suspended task, and borrows shared
+with spawned tasks):
 
 > `OrDiverges P`: every reachable configuration is a value or steps; a value is reached only at
 > the empty memory; every `free` finds its cell.
@@ -33,6 +34,9 @@ Done means that theorem. Passing test programs doesn't count.
 
 Stated but not yet used by any proof: `CactusInv` and its preservation lemmas (§5).
 
+#791's rule-level work reads the chain relation `erwp` (rows 1, 2 and 6 of the table), not
+`cerwp` or the tree; its place relative to the one relation is in §3.
+
 ## 3. One relation
 
 There are two relations: `erwp`, where a stop is treated like a return and the lend is folded,
@@ -54,6 +58,24 @@ records, `TWNT` and `TaggedT` (condition 21).
 Open: are the table fields `fd` (resumer guarantee), `PBv` (payload-dependent answer) and `oc`
 (owned records) principled? Each must be supplied by a typing rule (§6) or removed.
 
+**#791 at the rule level reads the chain, not the tree** (plan of record, #791, 2026-11-05). The
+design is `chain-interpretation.md`; its configurations are indexed in `configurations.md`. The
+interpretation `vN`/`cN` (`Core/Chain/Goal791N.lean`) runs every computation at `erwp`, over a
+per-lend world `LocTy` (`Core/Chain/SI/LocTy.lean`): a family per location and lend lifetime, so
+a reborrow adds a key and keeps the source's, as Core's records do, and the `imm` records with
+the lifetimes they were lent at. A run is read at the world's view `Θ.view c`, the relation's
+`LocFam`, at every view consistent with the run's resource (`ConsistentX`: each `mut` cell of the
+exclusive walk at its view lifetime); consistency takes the place of the tree's
+`Covers`/`vThunk`. The relation's `↭` (`UpdN`, `PredStep`, `MutStep`) and `EndOKG` are
+unchanged; `LocFam` carries the `imm` records, and the relation's entry (`rwp`, `rwpG`, `rwpG0`)
+carries the tie `ImmTieL` (every `imm` record of the location typing is on the run's list). This
+is a second track beside the one relation above, not an instance of it.
+
+The bridge to the tree goal: `Goal791N` is `TreeGoal791`'s `Goal791Top` over the chain, with the
+same constants (`Const791`, `Const791.OK`), context (`ctx791`), program at `F 1` and conclusion
+(`OrDiverges`). It differs in the world (`LocTy` and `KW`, not `TWd`) and in its hypothesis
+(`HandlerLawN`). No Lean lemma relates the two.
+
 ## 4. Lifetimes as a tree; the carrier; re-reading
 
 **The tree order.** Lifetimes form a well-founded cactus. A fresh lifetime is a child of the
@@ -74,10 +96,16 @@ A valid world stays valid, carried, across a graft, with no renaming.
 
 **Re-reading.** Semantic types are read at the current tree. A `mut` cell's invariant is its store
 type read at the current tree, re-read when the tree grows (`reread`), not a fixed predicate:
-carried unchanged, a cell leaves `Mut`'s meaning (`trU_not_kmono`). Store types are syntactic
+a cell carried unchanged by `trU` is not a value of this `Mut` (`trU_not_kmono`). Store types are syntactic
 codes read at the tree; the store typing grows at allocation and a location keeps its type
-(condition 16). Monotonicity along the tree is proved for `1`, `+`, `Imm`, `Mut`, `ref`, `[a]` and
-thunks; μ, ν, ∀, ⊗ and families are open.
+(condition 16). The relation's value types (`STy`, `Core/TreeSem.lean`) read the record list and
+are downward closed and monotone along the tree and `KeepRel` for every former, `Mut` only at a
+store-code payload (E1, #790), continuation and task types included (`Core/TreeSemK.lean`: a
+captured `κ` is a value of its type); the computation types (`SCmp`, `Core/TreeSemC.lean`) are
+downward closed, `F A` is a bare run, Kripke along the whole-list re-reading (`SCmp.ret_reread`),
+and they reach values under `U`, whose quantifier over later lists is the only one
+(`STy.thunk`); thunks are introduced by `STy.thunk_intro`. Effect rows
+(`CTy.eff`) have no `SCmp` former yet (`docs/new-core/scope-782.md`).
 
 ## 5. The cactus invariant carries the proofs
 
@@ -90,7 +118,10 @@ The operations, each to be proved to preserve it:
 - **capture:** a branch, with its live lends' records, goes into a one-shot κ;
 - **graft:** resuming κ attaches its branch, possibly under frames opened since, or under another
   parent; the tree grows and every branch is re-read;
-- **unwind:** cancel or raise runs a branch's consumes and ends its lends in order;
+- **unwind:** a raise, or a cancel (a resume into the continuation's cancel branch, §62 D15),
+  runs the branch's `[then]` finalisers, and its unwinding borrow forms (`withborU`) end its lends
+  in order. The tree has no `withborU` rule yet (row 6): the closed programs end their lends
+  through `ubind` finalisers in the program and `twp_lendEnd` in the proof;
 - **spawn / join:** a lend's record is shared into children and passes back at the join.
 
 **Adequacy is derived from preservation** (LinearActris Thm 5.4 shape), and the frame rules are
@@ -98,9 +129,16 @@ instances of these operations. A proof that goes around the invariant is not the
 
 Status: `CactusInv` is stated with `cactus_step`, `cactus_move`, `joinReady_fd`, and not yet used.
 Over the tree world (`Core/TreeCactus.lean`), `CactusInvT` is kept by step, growth, move, spawn and
-join, and `cerwpT_adequacy` is derived through `cactusT_step` at one branch, with no programs. Open:
-adequacy over several branches from preservation; adequacy at the relation the typing rules use;
-the frame rules as instances of capture (condition 20).
+join, and `cerwpT_adequacy` is derived through `cactusT_step` at one branch. Adequacy over several
+branches (`multiBranchAdequacyT`, `poolSchedAdequacyT`) goes through `cerwpT_adequacy` at one
+branch, the stored branches carried in pool form (`KapSchedT`, `PoolTJ`: each share resuming at
+`KeepRel`, the pool a stack whose entries hold views only of what their nearest joiner shares, no
+branch points), not as branches of `CactusInvT`; this is decision 74 (`scope-781.md` §4,
+`scope-795.md`). Open: adequacy at the
+relation the typing rules use; the frame rules as instances of capture (condition 20).
+
+The chain interpretation of §3 does not go through the cactus invariant: `goal791N` derives
+`Goal791N` from `fundamentalN_all` and `erwp_adequacy` at the empty world, under `HandlerLawN`.
 
 Threads: the invariant is per computation. The two dependencies on sequential scheduling (a frame
 fixed for a whole segment; `JoinReady` read at the resume) are kept separate, so a concurrent
@@ -139,13 +177,40 @@ condition Core lacks.
 Over the single relation:
 1. `Row.tabN`, then 𝒱/𝒞 for every type: Imm, Mut (`vMut`), boxes, lifetimes, thunks
    (`vThunk`/`Covers`), μ, ν, ∀, type variables, families, opaque types, κ and task types. All
-   downward closed and monotone along the tree.
+   downward closed; the value types, thunks included, monotone along the tree and `KeepRel`. Of
+   the computation types, `F A` is a bare run, Kripke along the whole-list re-reading
+   (`SCmp.ret_reread`); the quantifier over later lists is `U`'s alone (`STy.thunk`), and thunks
+   are introduced by `STy.thunk_intro`. Done at the tree (`STy`, `SCmp`, κ and task
+   types, `Core/TreeSem.lean`, `Core/TreeSemC.lean`, `Core/TreeSemK.lean`) for every former but
+   `Mut` at a payload that is not a store code (#790) and effect rows (`CTy.eff`).
 2. `SemJ`, then compatibility for every `CDerives` rule. The new rules are lend/reborrow/Anti-Frame
-   across stops, spawn/join, and `[handle]` without `hdv`.
+   across stops (with the unwinding borrow forms `withborU`), `[then]` across stops (the
+   unwinding rule), spawn/join, and `[handle]` without `hdv`.
 3. Adequacy to `OrDiverges` via §5.
 
 Core's plain results over canonical worlds are `Core.C` (condition 8); over the tree world they
 are part of step 2.
+
+**Over the chain (#791, §3).** `chain-interpretation.md` §3, §6, §7.
+1. 𝒱/𝒞 at `LocTy` and the typed world `KW` (`vN`, `vO`, `cN`, `tabN`, `finN`, `retN`, `gN`,
+   `SemJN`): `Mut` at Core's `ptoMutS` shape (a cell at `b ⊒ @aδ`, the uniform conjunct at `b`),
+   `Imm` at Core's `ptoImmS` shape (the payload in the observable view `vO`, the location
+   witnessed in the world's `imm` records, `ImmWitW`), `U` and `⊸` Kripke along the
+   resource-relative `LocTy.ExtR`, `∀` as Core's `cC`, μ and type variables through Core's
+   `RelMu` environment, ν as Core's greatest fixed point. `F A` and `F_Σ R` are `erwpK` at every
+   floor, each table entry owing along `KW.Owed`. Laws: downward closure, `vN_extR`, `vN_local`,
+   `vN_outlives`.
+2. Every `CDerives` rule at `SemJN` but `effHandleV`, `effHandleVB` and `reify`; the five
+   constants (`withbor2S_compat`, `withbor3S_compat`, `withborFS_compat`, `withloadS_compat`,
+   `sliceBorrowMS_compat`). `fundamentalN_all : MissingN → CDerives Δ Γ e j → SemJN Δ Γ e j` by
+   induction on the derivation. The three missing rules are the named assertion `HandlerLawN`
+   (`Core/Chain/HandlerLawN.lean`), a `Prop` hypothesis in `PinLaw`'s form; non-vacuous at a
+   handler whose clause resumes `κ` (`handle_resume_inst`).
+3. Adequacy: `goal791N : HandlerLawN → Goal791N`. `Goal791N`: every closed program typed at
+   `F 1` from the constants (each meeting its rule's premises), every handler it uses inside it,
+   is `OrDiverges`. No scheduler, scheduler contract or restriction on handler names is
+   quantified over. Non-vacuous at `prog791`, a lend callback that performs while it holds a
+   `mut` borrow, under a handler inside the program (`goal791N_premises_inst`).
 
 ## 8. Termination
 

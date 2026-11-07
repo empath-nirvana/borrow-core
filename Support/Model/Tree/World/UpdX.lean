@@ -32,9 +32,8 @@ is "the same code at `ℓ` on both sides" (`InvKept`), and with `UpdX`'s `β̄` 
 printed `mut` clause with `P̂` re-read as `RC.mut` re-reads it (`UpdX.inv`); at the identity
 re-reading it is the printed clause (`updX_refl_mut`).
 
-What is proved of it: re-reading is an update (`UpdX.of_rr`), updates compose
-(`UpdX.trans`), and a frame re-read beside an update is kept (`UpdX.frame`), given that the frame
-holds nothing where only one side is masked.
+What is proved of it: re-reading is an update (`UpdX.of_rr`) and updates compose (`UpdX.trans`).
+The frame step `EndT` reads is `UpdA.frame` (`World/UpdAFrame.lean`), along the walks.
 -/
 
 noncomputable section
@@ -195,7 +194,7 @@ theorem UpdX.congr {Θ : LocTy} {E E' F F' : BoCa.Loc → Prop} (hF : ∀ l, F l
   · obtain ⟨h₁, rest⟩ := (hx l).2 ψ' e hk (fun c => hE₀ ((hF' l).mpr c))
     exact ⟨fun c => h₁ ((hF l).mp c), rest⟩
 
-/-! ### The frame -/
+/-! ### `○` with an `own` operand -/
 
 /-- `ψ₁ ○ ψ₂` with `ψ₁` an `own` cell and the composite not: the composite is `ψ₂`. -/
 theorem CellUT.CompR.eq_right_of_own {ψ₁ ψ₂ ψ : TCell K} (h : CellUT.CompR ψ₁ ψ₂ ψ)
@@ -209,208 +208,6 @@ theorem CellUT.CompR.eq_right_of_own {ψ₁ ψ₂ ψ : TCell K} (h : CellUT.Comp
   · rfl
   · rw [h₁] at k₁; cases k₁
   · rw [h₁] at k₁; cases k₁
-
-/-- **`○` across a re-reading**: the left operands `↭`-related, the right ones re-read. -/
-theorem xcell_compR {Θ : LocTy} (hE : K.Ext K') {a c ψ : TCell K} {a' c' ψ' : TCell K'}
-    (ha : XCell Θ a a') (hc : LsSim Θ c' c) (hka : a.kind ≠ Kind.own)
-    (h : CellUT.CompR a c ψ) (h' : CellUT.CompR a' c' ψ') : XCell Θ ψ ψ' := by
-  have hkψ : ψ'.kind = ψ.kind := by
-    rw [CellUT.CompR.kind_eq h', CellUT.CompR.kind_eq h, ha.1, hc.1]
-  refine ⟨hkψ, ?_, fun hk => ⟨?_, ?_⟩⟩
-  · rw [CellUT.CompR.lsOf_eq h', CellUT.CompR.lsOf_eq h, CellUT.CompR.kind_eq h, ha.1, hc.1,
-      ha.2.1, hc.2.2.2, rlsOf_lsc hE]
-  · obtain ⟨e₁, e₂⟩ := CellUT.CompR.erase h
-    obtain ⟨e₁', e₂'⟩ := CellUT.CompR.erase h'
-    rw [e₂', e₁', e₂, e₁, hc.2.1]
-  · have hw := CellUT.CompR.wit_eq h
-    have hw' := CellUT.CompR.wit_eq h'
-    rw [if_neg hka] at hw
-    rw [if_neg (by rw [ha.1]; exact hka)] at hw'
-    rw [hw, hw']
-    by_cases hkc : c.kind = Kind.own
-    · have : ψ.kind = a.kind := by rw [CellUT.CompR.kind_eq h, hkc]; cases a.kind <;> rfl
-      exact (ha.2.2 (this ▸ hk)).2
-    · have e : a.wit = c.wit := (CellUT.compatR_iff.mp ⟨ψ, h⟩).2 hka hkc
-      have e' : a'.wit = c'.wit :=
-        (CellUT.compatR_iff.mp ⟨ψ', h'⟩).2 (by rw [ha.1]; exact hka) (by rw [hc.1]; exact hkc)
-      rw [e, e']
-      exact hc.2.2.1
-
-/-- **The frame at one location.** -/
-theorem xopt_comp {Θ : LocTy} (hE : K.Ext K') {E E' : Prop} {oa oc o : Option (TCell K)}
-    {oa' oc' o' : Option (TCell K')} (hx : XOpt Θ E E' oa oa')
-    (hs : Option.Rel (LsSim Θ) oc' oc) (hn : (E ∧ ¬ E') ∨ (E' ∧ ¬ E) → oc' = none)
-    (h : G.OptComp CellUT.CompR oa oc o) (h' : G.OptComp CellUT.CompR oa' oc' o') :
-    XOpt Θ E E' o o' := by
-  have hn₀ : (E ∧ ¬ E') ∨ (E' ∧ ¬ E) → oc = none := fun c => by
-    have := hn c; rw [this] at hs; cases hs; rfl
-  -- an `own` or absent left operand leaves the right one
-  have own_left : ∀ {oa : Option (TCell K)} {oc o : Option (TCell K)} {ψ : TCell K},
-      (∀ a, oa = some a → a.kind = Kind.own) → G.OptComp CellUT.CompR oa oc o → o = some ψ →
-      ψ.kind ≠ Kind.own → oc = some ψ := by
-    intro oa oc o ψ hown hcomp ho hk
-    cases oa with
-    | none => cases oc <;> simp_all [G.OptComp]
-    | some a =>
-        cases oc with
-        | none => simp only [G.OptComp] at hcomp; rw [hcomp] at ho; cases ho
-                  exact absurd (hown _ rfl) hk
-        | some c =>
-            obtain ⟨χ, eχ, hχ⟩ := hcomp
-            rw [eχ] at ho; cases ho
-            rw [CellUT.CompR.eq_right_of_own hχ (hown _ rfl) hk]
-  have own_left' : ∀ {oa : Option (TCell K')} {oc o : Option (TCell K')} {ψ : TCell K'},
-      (∀ a, oa = some a → a.kind = Kind.own) → G.OptComp CellUT.CompR oa oc o → o = some ψ →
-      ψ.kind ≠ Kind.own → oc = some ψ := by
-    intro oa oc o ψ hown hcomp ho hk
-    cases oa with
-    | none => cases oc <;> simp_all [G.OptComp]
-    | some a =>
-        cases oc with
-        | none => simp only [G.OptComp] at hcomp; rw [hcomp] at ho; cases ho
-                  exact absurd (hown _ rfl) hk
-        | some c =>
-            obtain ⟨χ, eχ, hχ⟩ := hcomp
-            rw [eχ] at ho; cases ho
-            rw [CellUT.CompR.eq_right_of_own hχ (hown _ rfl) hk]
-  -- the right operand alone
-  have right_only : ∀ {oc o : Option (TCell K')} {c : TCell K'} (_ : oc = some c)
-      (_ : c.kind ≠ Kind.own) (oa : Option (TCell K')),
-      (∀ a, oa = some a → a.kind = Kind.own) → G.OptComp CellUT.CompR oa oc o → o = some c := by
-    intro oc o c ec hk oa hown hcomp
-    subst ec
-    cases oa with
-    | none => exact hcomp
-    | some a =>
-        obtain ⟨χ, eχ, hχ⟩ := hcomp
-        rw [eχ]
-        have : χ.kind ≠ Kind.own := by
-          rw [CellUT.CompR.kind_eq hχ, hown a rfl]; exact hk
-        rw [CellUT.CompR.eq_right_of_own hχ (hown a rfl) this]
-  have right_only₀ : ∀ {oc o : Option (TCell K)} {c : TCell K} (_ : oc = some c)
-      (_ : c.kind ≠ Kind.own) (oa : Option (TCell K)),
-      (∀ a, oa = some a → a.kind = Kind.own) → G.OptComp CellUT.CompR oa oc o → o = some c := by
-    intro oc o c ec hk oa hown hcomp
-    subst ec
-    cases oa with
-    | none => exact hcomp
-    | some a =>
-        obtain ⟨χ, eχ, hχ⟩ := hcomp
-        rw [eχ]
-        have : χ.kind ≠ Kind.own := by
-          rw [CellUT.CompR.kind_eq hχ, hown a rfl]; exact hk
-        rw [CellUT.CompR.eq_right_of_own hχ (hown a rfl) this]
-  refine ⟨fun ψ e hk hE₀ => ?_, fun ψ' e hk hE₀ => ?_⟩
-  · -- forward
-    by_cases ha : ∃ a, oa = some a ∧ a.kind ≠ Kind.own
-    · obtain ⟨a, rfl, hka⟩ := ha
-      obtain ⟨hE₁, a', rfl, hxa⟩ := hx.1 a rfl hka hE₀
-      refine ⟨hE₁, ?_⟩
-      cases oc with
-      | none =>
-          have : oc' = none := by cases hs; rfl
-          subst this
-          simp only [G.OptComp] at h h'
-          rw [h] at e; cases e
-          exact ⟨a', h', hxa⟩
-      | some c =>
-          cases oc' with
-          | none => cases hs
-          | some c' =>
-              cases hs with
-              | some hsc =>
-                  obtain ⟨χ, eχ, hχ⟩ := h
-                  obtain ⟨χ', eχ', hχ'⟩ := h'
-                  rw [eχ] at e; cases e
-                  exact ⟨χ', eχ', xcell_compR hE hxa hsc hka hχ hχ'⟩
-    · have hown : ∀ a, oa = some a → a.kind = Kind.own := fun a ea => by
-        by_contra hk'; exact ha ⟨a, ea, hk'⟩
-      have hc := own_left hown h e hk
-      have hE₁ : ¬ E' := fun c => by rw [hn₀ (Or.inr ⟨c, hE₀⟩)] at hc; cases hc
-      refine ⟨hE₁, ?_⟩
-      rw [hc] at hs
-      cases oc' with
-      | none => cases hs
-      | some c' =>
-          cases hs with
-          | some hsc =>
-              have hown' : ∀ a', oa' = some a' → a'.kind = Kind.own := fun a' ea' => by
-                by_contra hk'
-                obtain ⟨-, a, ea, hxa⟩ := hx.2 a' ea' hk' hE₁
-                exact hk' (hxa.1.trans (hown a ea))
-              exact ⟨c', right_only rfl (by rw [hsc.1]; exact hk) oa' hown' h', LsSim.xcell hsc⟩
-  · -- backward
-    by_cases ha : ∃ a', oa' = some a' ∧ a'.kind ≠ Kind.own
-    · obtain ⟨a', rfl, hka'⟩ := ha
-      obtain ⟨hE₁, a, rfl, hxa⟩ := hx.2 a' rfl hka' hE₀
-      have hka : a.kind ≠ Kind.own := fun c => hka' (hxa.1.trans c)
-      refine ⟨hE₁, ?_⟩
-      cases oc' with
-      | none =>
-          have : oc = none := by cases hs; rfl
-          subst this
-          simp only [G.OptComp] at h h'
-          rw [h'] at e; cases e
-          exact ⟨a, h, hxa⟩
-      | some c' =>
-          cases oc with
-          | none => cases hs
-          | some c =>
-              cases hs with
-              | some hsc =>
-                  obtain ⟨χ, eχ, hχ⟩ := h
-                  obtain ⟨χ', eχ', hχ'⟩ := h'
-                  rw [eχ'] at e; cases e
-                  exact ⟨χ, eχ, xcell_compR hE hxa hsc hka hχ hχ'⟩
-    · have hown' : ∀ a', oa' = some a' → a'.kind = Kind.own := fun a' ea' => by
-        by_contra hk'; exact ha ⟨a', ea', hk'⟩
-      have hc' := own_left' hown' h' e hk
-      have hE₁ : ¬ E := fun c => by rw [hn (Or.inl ⟨c, hE₀⟩)] at hc'; cases hc'
-      refine ⟨hE₁, ?_⟩
-      rw [hc'] at hs
-      cases oc with
-      | none => cases hs
-      | some c =>
-          cases hs with
-          | some hsc =>
-              have hown : ∀ a, oa = some a → a.kind = Kind.own := fun a ea => by
-                by_contra hk'
-                obtain ⟨-, a', ea', hxa⟩ := hx.1 a ea hk' hE₁
-                exact hk' ((hxa.1.symm.trans (hown' a' ea')))
-              exact ⟨c, right_only₀ rfl (by rw [← hsc.1]; exact hk) oa hown h, LsSim.xcell hsc⟩
-
-/-- **A frame re-read beside an update is kept**: `a ↭ a′` across the re-reading, the frame `c`
-re-read to `c′`, both composites valid, and the frame holding nothing where only one side is
-masked. This is `[TR]` 6.48 at the masked cross-world `↭`.
-
-**Departure (D5, `docs/new-core/scope-781.md` §8): proved pointwise, by a shorter route than the
-printed one.** The proof reads `⦇a ● c⦈ = ⦇a⦈ ○ ⦇c⦈` (`flat_compR`) and relates the two
-composites one location at a time (`xopt_comp`, `xcell_compR`). The printed proof splits
-`⦇ρ₁ ● ρⱼ⦈ = ex(ρ₁)_● ● ex(ρⱼ)_● ● (ag(ρ₁) ○ ag(ρⱼ))` (6.20, 6.18) and, in the aliasable case,
-accounts for a `mut` cell of `ag(ρ₂)` by its `imm` ancestor. **That ancestor technique is not
-built here.** It is built at the tree carrier for the unmasked `↭` in `Tree/Port/Six48.lean`
-(`Tree.ResUT.upd_ag_eq_of_ne_own`, read by `updV_frame`), and `fdEsc_of_updX` uses the ancestor
-view (`innermost_view`).
-
-Not derived at this reading, and no obstruction verified: the printed step "the cell sits beneath
-`ag(ρ₂)(ℓ′) = imm(_, _, ρ′)`, which the update carries to `ag(ρ₃)(ℓ′)`". At `UpdX` the update says
-nothing at a masked location (`XOpt` at `E ℓ′` is vacuous), and this statement constrains no mask
-at the ancestor `ℓ′` of an unmasked cell (`hn` reads only the frame `c′`). -/
-theorem UpdX.frame {Θ : LocTy} (hE : K.Ext K') {E E' : BoCa.Loc → Prop} {a c ac : TRes K}
-    {a' c' ac' : TRes K'} (h : UpdX Θ E E' a a') (hr : RR Θ c c') (h₁ : ResUT.CompS a c ac)
-    (h₂ : ResUT.CompS a' c' ac') (hv₁ : ResUT.Valid ac) (hv₂ : ResUT.Valid ac')
-    (hn : NoneAt (fun l => (E l ∧ ¬ E' l) ∨ (E' l ∧ ¬ E l)) c') : UpdX Θ E E' ac ac' := by
-  obtain ⟨σa, σa', hσa, hσa', hx⟩ := h
-  obtain ⟨τ, hτ⟩ := hv₁
-  obtain ⟨τ', hτ'⟩ := hv₂
-  obtain ⟨σ₁, σc, f₁, fc, hσ⟩ := BoLo.flat_compR h₁ hτ
-  obtain ⟨σ₁', σc', f₁', fc', hσ'⟩ := BoLo.flat_compR h₂ hτ'
-  obtain rfl := ResUT.Flat.functional f₁ hσa
-  obtain rfl := ResUT.Flat.functional f₁' hσa'
-  obtain ⟨σc'', fc'', hs⟩ := ResUT.Flat.rrLs hE fc hr
-  obtain rfl := ResUT.Flat.functional fc'' fc'
-  exact ⟨τ, τ', hτ, hτ', fun l => xopt_comp hE (hx l) (hs l) (fun c => hn σc'' fc'' l c)
-    (hσ.2 l) (hσ'.2 l)⟩
 
 /-! ### The masks of a run -/
 
