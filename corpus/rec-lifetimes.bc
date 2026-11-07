@@ -1,9 +1,9 @@
 -- Recursive functions with lifetime parameters (SPEC §20, §23): `vsum` and `count_if` walk a
 -- shared view by calling themselves on its tail, at the view's lifetime `'a`. A group's lifetime
--- parameters are its generator's and its copies', outside the capabilities' lifetimes, so a call
--- of itself is at the group's own `'a`; a call from outside instantiates them at the borrow's
--- lifetime, as any call does. `count_if` is generic in its element type too, used at `i32` and at
--- `bool`.
+-- parameters are quantified in each member's field of its fixed-point record, so a call of itself
+-- instantiates them at its argument's lifetimes, here the group's own `'a` (SPEC §31); a call from
+-- outside instantiates the copy's at the borrow's lifetime, as any call does. `count_if` is generic
+-- in its element type too, used at `i32` and at `bool`.
 --
 -- Answer: `(10, (2, 1))`: `1 + 2 + 3 + 4`; two elements of `[1, 2, 3, 4]` exceed 2; one element
 -- of `[false, true]` is true.

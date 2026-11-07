@@ -479,6 +479,9 @@ corpus/rec-generic-mutual.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-in-for-linear.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-layer.bc 2.0 cancellable abortive: branch; agree
 corpus/rec-layer.bc 1.0 cancellable abortive: branch; agree
+corpus/rec-life-cap.bc 1.0 cancellable abortive: branch; agree
+corpus/rec-life-mutual.bc 1.0 cancellable abortive: branch; agree
+corpus/rec-life-rounds.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-lifetimes.bc 3.0 cancellable abortive: branch; agree
 corpus/rec-lifetimes.bc 2.0 cancellable abortive: branch; agree
 corpus/rec-lifetimes.bc 1.0 cancellable abortive: branch; agree

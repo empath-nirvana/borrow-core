@@ -1465,6 +1465,15 @@ corpus/rec-layer.bc 29:47: handle 2: inside []; row []; ops 2.0 abortive; names 
 corpus/rec-layer.bc 31:5: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/rec-layer.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/rec-layer.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/rec-life-cap.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/rec-life-cap.bc 31:32: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/rec-life-cap.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/rec-life-mutual.bc flows [0, 4294967295], finaliser; main [1], finaliser
+corpus/rec-life-mutual.bc 53:15: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/rec-life-mutual.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/rec-life-rounds.bc flows [0, 4294967295], finaliser; main [1], finaliser
+corpus/rec-life-rounds.bc 51:29: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/rec-life-rounds.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-lifetimes.bc flows [0, 1, 2, 3, 4294967295]; main [1, 2, 3]
 corpus/rec-lifetimes.bc 33:35: handle 3: inside []; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
 corpus/rec-lifetimes.bc 34:35: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds

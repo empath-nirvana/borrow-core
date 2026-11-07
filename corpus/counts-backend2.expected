@@ -417,6 +417,9 @@ rec-generic-layer 6 0 0 23 20 0
 rec-generic-mutual 11 0 0 45 33 0
 rec-in-for-linear 1 0 0 1 1 0
 rec-layer 2 0 0 17 17 0
+rec-life-cap 3 0 0 29 15 15
+rec-life-mutual 4 0 0 75 44 47
+rec-life-rounds 5 0 0 59 35 59
 rec-lifetimes 2 0 0 16 6 23
 rec-load-exhausted 1 0 0 68 56 7
 rec-load-walk 4 0 0 128 104 18

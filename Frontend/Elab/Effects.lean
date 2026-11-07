@@ -162,8 +162,9 @@ structure RGroup where
   /-- The type parameters of a generic group (SPEC §15, §20), each member's: its generator and its
   copies are templates in them, instantiated where a copy is called.  `[spec §31]` -/
   tps : List Ident := []
-  /-- The lifetime parameters of the group, each member's (SPEC §15, §20): its generator and its
-  copies are generic in them, outside the capabilities' lifetimes.  `[spec §31]` -/
+  /-- The lifetime parameters of the group, each member's (SPEC §15, §20): quantified in each
+  member's field of the fixed-point record and instantiated at each call of a member; its copies
+  are generic in them, before the capabilities' lifetimes.  `[spec §31]` -/
   lives : List (Ident × Life) := []
 
 /-- What the elaboration knows, each declared before the point being elaborated. -/
@@ -288,6 +289,9 @@ structure RSelf where
   /-- Under a heap driver: a call of itself is a call of the self-reference `fx_rself{j}` of the
   group's machine source, which the typed elaboration turns into a request (`recMachine`). -/
   deep : Bool := false
+  /-- The group's own lifetime parameters, quantified in each member's field of `R` and
+  instantiated afresh at each call of a member (SPEC §31).  `[spec §31]` -/
+  lives : List String := []
 
 /-- A report for `bcc check` (SPEC §18, #126). A line of its kind (`effect`, `row`, `lowering`,
 `call`) says what the elaboration did. A handler site says what it is, its static name and its
@@ -881,6 +885,20 @@ def projAt (sp : Span) : Nat → Nat → Comp → Comp
   | _, 0, M | _, 1, M => M
   | 0, _, M => .proj sp true M
   | j + 1, n + 1, M => projAt sp j n (.proj sp false M)
+
+/-- `∀'a₁ < b₁. … ∀'aₙ < bₙ. C`, the lifetimes nested in the order given: a recursive group's
+member's field of its fixed-point record (SPEC §31).  `[spec §31]` -/
+def forallLives (sp : Span) (lives : List (Ident × Life)) (C : CTy) : CTy :=
+  lives.foldr (fun (a, b) C => .all sp a b C) C
+
+/-- `Fun 'a₁ < b₁. … Fun 'aₙ < bₙ. M`, the code of `forallLives`.  `[spec §31]` -/
+def lamLives (sp : Span) (lives : List (Ident × Life)) (M : Comp) : Comp :=
+  lives.foldr (fun (a, b) M => .lamL sp a b M) M
+
+/-- `M ['a₁] … ['aₙ]`, `forallLives` instantiated at the lifetimes named as its binders.
+`[spec §31]` -/
+def instLives (sp : Span) (lives : List (Ident × Life)) (M : Comp) : Comp :=
+  lives.foldl (fun M (a, _) => .inst sp M (.var sp a.name)) M
 
 /-- The tuple of the variables `xs`: `()` when there are none. -/
 def paramsTuple (sp : Span) : List String → Val
@@ -2150,7 +2168,9 @@ def memberCall (sp : Span) (rs : RSelf) (j : Nat) (g f z a : String) (W : Val) :
 /-- `g(W)` of a member `g` of the recursive group whose generator is being elaborated (SPEC §20):
 a direct call of the self-reference, `case self { inl _ ⇒ abort[e.0] () | inr f ⇒ (force f ()).j
 (E, W) }`, `j` the member's field of the record the fixed point is taken at, and `E` the
-environment, the capabilities the group threads, handed back beside the answer. When the budget
+environment, the capabilities the group threads, handed back beside the answer. The member's
+lifetime parameters are instantiated at the call's lifetimes by the typed elaboration, which reads
+them off the argument's type (SPEC §31). When the budget
 is spent (`self` is `inl ()`) it performs the exhaustion effect's operation. Bound before the value
 it is in. -/
 def selfCall : Nat → Cx → List Cap → Span → RSelf → String → Nat → Val → EM (List Bind × Val)
@@ -2183,14 +2203,24 @@ def selfCall : Nat → Cx → List Cap → Span → RSelf → String → Nat →
     let a ← fresh "fx_a"
     let n := rs.members.length
     let C := (rs.Cs[j]?).getD (.top sp)
-    let res : CTy := match C with
+    -- The member's answer under its lifetime parameters' binders (`forallLives`).
+    let rec under : CTy → CTy
+      | .all _ _ _ C => under C
       | .arr _ _ R => R
       | C => C
+    let res : CTy := under C
+    -- An answer that names the member's lifetime parameters is at the call's lifetimes, which the
+    -- typed elaboration fills (SPEC §31): the abort is then not ascribed, and the checker types it
+    -- at the other branch's answer.  `[spec §31]`
+    let named : Bool := match res with
+      | .eff _ _ T => T.lifeVars.any rs.lives.contains
+      | _ => !rs.lives.isEmpty
+    let abortC : Comp := if named then .abort sp rs.e 0 (.unit sp)
+      else .ascribe sp (.abort sp rs.e 0 (.unit sp)) res
     report sp "call" (s!"{x} → the group's self-reference, called directly" ++
       (if rs.env.isEmpty then "" else ", passing the capabilities") ++
       s!"; at the end of the budget abort[{rs.e}.0]")
-    let call : Comp := .case sp (.var sp rs.self) ⟨u, sp⟩
-      (.ascribe sp (.abort sp rs.e 0 (.unit sp)) res) ⟨g, sp⟩
+    let call : Comp := .case sp (.var sp rs.self) ⟨u, sp⟩ abortC ⟨g, sp⟩
       (memberCall sp rs j g f z a W')
     let bind : Bind := .caps sp t none call rs.env r false id
     pure (b ++ [bind], .var sp r)
@@ -3013,7 +3043,8 @@ def layerCopy : Nat → Env → Span → String → RGroup → List Cap → List
                         caps := cs, sites := ss, fnCaps := cs, layerCall := some ⟨callN.name, gv, j, rs⟩ }
       let body ← trC k cxL cs true (M.subst σ)
       let pp ← fresh "fx_pp"
-      fields := fields ++ [.lam gsp ⟨pp, gsp⟩ (capsTy gsp cs fm.P) (← unpack gsp cs y.name pp body)]
+      fields := fields ++ [lamLives gsp G.lives
+        (.lam gsp ⟨pp, gsp⟩ (capsTy gsp cs fm.P) (← unpack gsp cs y.name pp body))]
     let sv ← fresh "fx_ls"; let qv ← fresh "fx_lq"; let self ← fresh "fx_lself"
     let u ← fresh "fx_lu"; let e ← fresh "fx_le"; let z ← fresh "fx_lz"; let self₂ ← fresh "fx_lself"
     let sf ← fresh "fx_lf"; let yv ← fresh "fx_ly"
@@ -3038,11 +3069,12 @@ def layerCopy : Nat → Env → Span → String → RGroup → List Cap → List
 
 /-- The copy of the recursive group `gn` for the answering handlers `hs` and the sites `ss` (keys
 `keys`), made once (SPEC §20): the group is the bounded fixed point of its **generator**, taken at
-the record of its members, `R = &ⱼ (E ⊗ Pⱼ ⊸ F_Σ (E ⊗ Tⱼ))`. The generator `gn__step__…` takes
+the record of its members, `R = &ⱼ ∀'a⃗ < b⃗. (E ⊗ Pⱼ ⊸ F_Σ (E ⊗ Tⱼ))`, `'a⃗` the group's lifetime
+parameters (SPEC §31). The generator `gn__step__…` takes
 the self-reference `1 + !U(1 ⊸ R)` and answers the record of the members' bodies, each taking the
 environment `E` (the capabilities the group uses, as every copy takes them) first and handing it
 back first; a call of a member inside it is a direct call of the self-reference (`selfCall`). A
-member's copy is `(bounded_fix[1, R] (gen, (budget, ()))).j`, the budget `recBudget`; it has the
+member's copy is `(bounded_fix[1, R] (gen, (budget, ()))).j ['a⃗]`, the budget `recBudget`; it has the
 type a copy of the member has, so a call of it is a call of a copy. Answers the copy of `x`. -/
 def groupCopy : Nat → Env → Span → String → List Inst → List String → List HSig → List Site →
     List String → String → List Blk → EM String
@@ -3085,18 +3117,22 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
       ((cs.filterMap (·.thr)).filter fun W => !(ss.filterMap (·.thr)).any (·.2 == W))).map
         fun W => ⟨W, gsp⟩
     let tArgs : List VTy := tps.map fun t => .name gsp t.name
-    let lives : List (Ident × Life) := G.lives ++
+    -- The capabilities' lifetimes, outside the fixed point and fixed for the whole recursion; the
+    -- group's own lifetime parameters are quantified in each member's field of `R`, instantiated
+    -- afresh at each call (`forallLives`, `selfCall`).  `[spec §31]`
+    let capLives : List (Ident × Life) :=
       (cs.filter (·.thr.isNone)).map fun c => ((⟨c.life, gsp⟩ : Ident), Life.top gsp)
+    let lives : List (Ident × Life) := G.lives ++ capLives
     let rowR := env.rowOf (ssR ++ (ssAll.filter fun s => !ss.any (·.n == s.n)).map fun s =>
       { s with sp := gsp, what := "the caller" })
     let ss := ssR
     let n := G.members.length
     let Cs : List CTy := G.members.map fun (_, f) =>
-      .arr gsp (capsTy gsp cs f.P) (.eff gsp rowR (capsTy gsp cs f.T))
+      forallLives gsp G.lives (.arr gsp (capsTy gsp cs f.P) (.eff gsp rowR (capsTy gsp cs f.T)))
     let R := ampTys gsp Cs
     let selfT : VTy := .sum gsp (.unit gsp) (.bang gsp (.thunk gsp (.arr gsp (.unit gsp) R)))
     let self := "fx_self"
-    let rs : RSelf := ⟨G.members.map (·.1), e.n, self, Cs, cs, ss, false⟩
+    let rs : RSelf := ⟨G.members.map (·.1), e.n, self, Cs, cs, ss, false, G.lives.map (·.1.name)⟩
     let cx : Cx := { env, caps := cs, sites := ss, fnCaps := cs, recSelf := some rs, cbs := named }
     -- The generator's record: each member's body, taking the environment first.
     let mut fields : List Comp := []
@@ -3106,10 +3142,11 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
         | _ => env.owner
       let body ← trC k { cx with env := { cx.env with owner } } cs true f.body
       if cs.isEmpty then
-        fields := fields ++ [.lam gsp f.p f.P body]
+        fields := fields ++ [lamLives gsp G.lives (.lam gsp f.p f.P body)]
       else
         let pp ← fresh "fx_pp"
-        fields := fields ++ [.lam gsp ⟨pp, gsp⟩ (capsTy gsp cs f.P) (← unpack gsp cs f.p.name pp body)]
+        fields := fields ++ [lamLives gsp G.lives
+          (.lam gsp ⟨pp, gsp⟩ (capsTy gsp cs f.P) (← unpack gsp cs f.p.name pp body))]
     let ps ← fresh "fx_rsp"
     let pu ← fresh "fx_ru"
     let P : VTy := .tensor gsp selfT (.unit gsp)
@@ -3118,7 +3155,7 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
     -- `!U (P -o R)`, under the capabilities' lifetimes when there are any.
     let genT : VTy := .bang gsp (.thunk gsp (.arr gsp P R))
     let genV : Val := .bangThunkv gsp gen
-    let (sA, sV) : VTy × Val := match lives.foldr (fun (a, b) (T, V) =>
+    let (sA, sV) : VTy × Val := match capLives.foldr (fun (a, b) (T, V) =>
         (VTy.all gsp a b T, Val.thunkv gsp (.lamL gsp a b (.ret gsp V)))) (genT, genV) with
       | (T@(.all ..), .thunkv _ M) => (.bang gsp T, .bangThunkv gsp M)
       | TV => TV
@@ -3133,7 +3170,7 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
     -- The layers, innermost first: each a transformer of the generator.
     let mut trs : List String := []
     for L in layers do
-      trs := trs ++ [← layerCopy k env gsp L G cs ss rs selfT R lives tps keys]
+      trs := trs ++ [← layerCopy k env gsp L G cs ss rs selfT R capLives tps keys]
     -- Each member's copy: `(bounded_fix[1, R] (Lₙ(… L₁(gen))), (budget, ()))).j`.
     let genRef : Val := if tps.isEmpty then .var gsp stepName else .defApp gsp stepName tArgs
     for ((mn, f), j) in G.members.zipIdx do
@@ -3141,15 +3178,15 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
       let sv ← fresh "fx_rst"
       let fb ← fresh "fx_rbf"
       let fa ← fresh "fx_rba"
-      let inst : Val := lives.foldl (fun V (a, _) => .inst gsp V (.var gsp a.name))
-        (if lives.isEmpty then genRef else .unbang gsp genRef)
+      let inst : Val := capLives.foldl (fun V (a, _) => .inst gsp V (.var gsp a.name))
+        (if capLives.isEmpty then genRef else .unbang gsp genRef)
       let mut tv := sv
       let mut applied : List (String × Val) := []
       for t in trs do
         let tv' ← fresh "fx_rst"
         let tref : Val := if tps.isEmpty then .var gsp t else .defApp gsp t tArgs
-        let tinst : Val := lives.foldl (fun V (a, _) => .inst gsp V (.var gsp a.name))
-          (if lives.isEmpty then tref else .unbang gsp tref)
+        let tinst : Val := capLives.foldl (fun V (a, _) => .inst gsp V (.var gsp a.name))
+          (if capLives.isEmpty then tref else .unbang gsp tref)
         applied := applied ++ [(tv', .app gsp tinst (.var gsp tv))]
         tv := tv'
       let arg : Val := .pair gsp (.var gsp tv)
@@ -3157,7 +3194,8 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
       let fixC : Comp :=
           (.bind gsp ⟨fb, gsp⟩ none (.ret gsp (.unbang gsp (.const gsp (.boundedFix (.unit gsp) R))))
             (.bind gsp ⟨fa, gsp⟩ none (.ret gsp arg)
-              (.app gsp (projAt gsp j n (.app gsp (.force gsp ⟨fb, gsp⟩) ⟨fa, gsp⟩)) ⟨p, gsp⟩)))
+              (.app gsp (instLives gsp G.lives
+                (projAt gsp j n (.app gsp (.force gsp ⟨fb, gsp⟩) ⟨fa, gsp⟩))) ⟨p, gsp⟩)))
       let body : Comp :=
         .bind gsp ⟨sv, gsp⟩ none (.ret gsp inst) (applied.foldr (fun (y, V) K =>
           .bind gsp ⟨y, gsp⟩ none (.ret gsp V) K) fixC)
@@ -3192,6 +3230,11 @@ def deepCopy : Nat → Env → Span → String → String → String → EM Stri
     let tArgs : List VTy := G.tps.map fun t => .name gsp t.name
     let mk : Mark := if G.tps.isEmpty then .none else .template .none
     let machV : Val := if G.tps.isEmpty then .var gsp mach else .defApp gsp mach tArgs
+    -- A group with lifetime parameters: the machine's frames would hold views at the lifetimes of
+    -- the calls that pushed them (SPEC §31).  `[spec §31]`
+    if let some (a, _) := G.lives.head? then
+      throw ⟨sp, s!"`{x}` has the lifetime parameter `'{a.name}`: a recursion with lifetime " ++
+        s!"parameters is not provided under the heap driver `{d}`"⟩
     if let some i := g₀.row.find? (·.eff != exh.name) then
       throw ⟨sp, s!"`{x}` performs `{i.eff}`: a recursion that performs an effect is not provided " ++
         s!"under the heap driver `{d}`"⟩
@@ -3201,7 +3244,7 @@ def deepCopy : Nat → Env → Span → String → String → String → EM Stri
     if let some (y, _) := G.members.find? (!·.2.T.alphaEq B) then
       throw ⟨sp, s!"`{y}` answers a type other than `{x}`'s: members with different result types " ++
         s!"are not provided under the heap driver `{d}`"⟩
-    let rs : RSelf := ⟨G.members.map (·.1), 0, "", [], [], [], true⟩
+    let rs : RSelf := ⟨G.members.map (·.1), 0, "", [], [], [], true, []⟩
     let cx : Cx := { env, caps := [], recSelf := some rs }
     let mut bodies : List (Ident × Comp) := []
     for (_, f) in G.members do
