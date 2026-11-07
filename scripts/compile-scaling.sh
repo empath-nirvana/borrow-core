@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Compile time against program size (#122). Generates programs whose `main` is k copies of one
 # body, for k in 1 2 4 8 16, and compiles each with `bcc compile --timings`, which writes every
-# stage's time and output size (Backend/Driver.lean, `compileWatTimed`). Prints the table of
+# stage's time and output size: by Backend2, the default backend (Backend2/Driver.lean,
+# `watTimed`), or with `--backend old` by the old backend (Backend/Driver.lean,
+# `compileWatTimed`). Prints the table of
 # times per stage and scale, and each stage's fitted growth: the exponent b of time ≈ a·kᵇ, by
 # least squares on log time against log k (b = 1 is linear).
 #
@@ -18,16 +20,19 @@
 #     scripts/compile-scaling.sh --guard     the gate's check: the 8× program compiles in at most
 #                                            GUARD (default 16) times the 1× program's time
 #     scripts/compile-scaling.sh --keep DIR  leave the generated programs in DIR
+#     scripts/compile-scaling.sh --backend old|new
+#                                            the backend that compiles (Backend2, `new`, by default)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc >/dev/null
 bcc=.lake/build/bin/bcc
-guard=0; keep=""
+guard=0; keep=""; backend=new
 scales=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --guard) guard=1; shift ;;
     --keep) keep="$2"; shift 2 ;;
+    --backend) case "${2:-}" in old|new) backend=$2; shift 2 ;; *) echo "usage: scripts/compile-scaling.sh [--guard] [--keep DIR] [--backend old|new] [k…]"; exit 2 ;; esac ;;
     *) scales+=("$1"); shift ;;
   esac
 done
@@ -140,24 +145,30 @@ echo "  (t, m)"
 # Seconds of stage $2 in timings file $1 (the total when $2 is `total`).
 stageMs() { awk -F': ' -v s="$2" '$1 == s { split($2, a, " "); print a[1] }' "$1"; }
 
-stages=("check" "elaborate" "convert" "collapse" "flat" "wasm" "print" "total")
+# The stages each backend's `--timings` writes (Backend/Driver.lean `compileWatTimed`,
+# Backend2/Driver.lean `watTimed`).
+if [ "$backend" = old ]; then
+  stages=("parse" "check" "io main" "convert" "effects" "collapse" "flat" "wasm" "print" "total")
+else
+  stages=("parse" "check" "io main" "lir" "layout" "layout check" "flow" "flow check" "lower" "wasm" "print" "total")
+fi
 for k in "${scales[@]}"; do
   gen "$k" > "$tmp/scale$k.bc"
-  "$bcc" compile --timings "$tmp/scale$k.bc" -o "$tmp/scale$k.wat" 2> "$tmp/scale$k.times"
+  "$bcc" compile --backend "$backend" --timings "$tmp/scale$k.bc" -o "$tmp/scale$k.wat" 2> "$tmp/scale$k.times"
 done
 
 if [ "$guard" = 1 ]; then
   limit=${GUARD:-16}
   t1=$(stageMs "$tmp/scale1.times" total); t8=$(stageMs "$tmp/scale8.times" total)
   ratio=$(awk -v a="$t1" -v b="$t8" 'BEGIN { printf "%.1f", b / (a > 0 ? a : 1) }')
-  echo "compile time: 1× ${t1} ms, 8× ${t8} ms, ratio ${ratio} (limit ${limit}; 8 is linear)"
+  echo "compile time ($([ "$backend" = new ] && echo Backend2 || echo "the old backend")): 1× ${t1} ms, 8× ${t8} ms, ratio ${ratio} (limit ${limit}; 8 is linear)"
   awk -v r="$ratio" -v l="$limit" 'BEGIN { exit !(r <= l) }' || { echo "compile time grows too fast"; exit 1; }
   exit 0
 fi
 
-printf '%-10s' "stage"; for k in "${scales[@]}"; do printf '%9s' "${k}×"; done; printf '%9s\n' "growth"
+printf '%-13s' "stage"; for k in "${scales[@]}"; do printf '%9s' "${k}×"; done; printf '%9s\n' "growth"
 for s in "${stages[@]}"; do
-  printf '%-10s' "$s"
+  printf '%-13s' "$s"
   xs=""; ys=""
   for k in "${scales[@]}"; do
     ms=$(stageMs "$tmp/scale$k.times" "$s"); printf '%9s' "${ms}ms"
@@ -171,6 +182,6 @@ for s in "${stages[@]}"; do
     d = n * sxx - sx * sx
     if (n < 2 || d == 0) printf "%9s\n", "-"; else printf "%9.2f\n", (n * sxy - sx * sy) / d }'
 done
-printf '%-10s' "wat bytes"
+printf '%-13s' "wat bytes"
 for k in "${scales[@]}"; do printf '%9s' "$(( $(wc -c < "$tmp/scale$k.wat") / 1000 ))k"; done
 echo
