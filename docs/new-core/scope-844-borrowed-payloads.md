@@ -15,7 +15,8 @@ Read at `main` e52174e1 (worktree `borrow-core-scope844`, branch `scope-844`).
     suspending lend, and the handler sits between the two lends. This case needs no change to the
     relation's stop clause. It needs the constants to be polymorphic in lifetimes, so that their
     bound is no longer `⊤`, plus a generalisation of three laws from `∅` to `Δ`.
-    **Additive, about 4 units.**
+    **Additive, about 4 units.** As built (SPEC §62, 1.39–1.40), Tier 1 generalises payloads
+    only; answers stay at a closed bound (`Row.AnsC`), for the reason in §1.3's Tier 1 paragraph.
   - **Tier 2, the callback's own borrow passed to a handler outside the lend.** This is #844's
     actual ask, and it is the hard form of both grounding programs. Three layers block it today:
     1. **Typing.** The row is shared between the callback's type and the lender's, and `'x` is
@@ -116,6 +117,16 @@ For Tier 1 none of the three fires:
 - The inner lender's segment started holding them, so `↭` holds (copies and `mut` cells are
   unchanged across the segment).
 - `'x` is not named.
+
+**The answer's view is the exception (T1.3).** The comap from the lender's view `c` to the lend's
+view `setLife c ℓ α` needs the answer to hold no `mut` cell at `ℓ` (`NoMutAt ℓ`,
+`consistentX_setLife_iff`). `pb`'s `Res_↓α` does not give it: `not_noMutAt_inStratum_down` is a
+resource in `Res_↓α` with a `mut` cell at `ℓ`. At a closed answer bound it follows from the type
+(`noMutAt_of_outlivesN`). At a non-closed one it is carried as `AnsNoMut` and not derived: a
+`LocTy` may hold keys at `ℓ` at several lifetimes, so the type alone does not exclude a `mut`
+value at `ℓ`; ownership of `ℓ` (the share, or validity of the composite) would have to supply it.
+Not derived; obstruction not verified. So the built Tier 1 keeps answers closed (`Row.AnsC`) and
+generalises payloads.
 
 ## 2. What "lend to the handler for the duration of the stop" needs (Tier 2)
 
@@ -238,7 +249,7 @@ holds the borrow must read `(ℓ, α)`: `mutL` asks `Θ ℓ α = some (famL α P
 | `↭` at a stop (`UpdVN`, `rwpG`) | unchanged | changed: the lender masked at a loaned location (#821 stage 1/2) |
 | tables (`tabNK`, `tabRK`, `tabGK`, `tabListK`), `tabNK_foldTwin`, `tabRK_canK`, `tabNK_lend_comap` | `∅ → Δ` in their side conditions | new entry shape for borrow-carrying operations; twins differ at them |
 | `vN_add_eq`, `vN_lend_eq`, `vN_inStratum_bnd` | generalised from `∅` to `Δ` with `δ ⊨ Δ` | as Tier 1, plus the payload at the lend's world |
-| `consistentX_of_outlivesN` | replaced by consistency read through the view (the answer has no cell on the exclusive walk at `ℓ`) | replaced: the answer is read at the lend's view |
+| `consistentX_of_outlivesN` | a corollary of `consistentX_setLife_iff` at `NoMutAt ℓ`; `NoMutAt` from a closed answer bound (`Row.AnsC`); non-closed answers open (§1.3) | replaced: the answer is read at the lend's view |
 | fold results (`extF_fold`, `foldTwin_owed`, `kw_owed_fold`) | unchanged | unchanged for the share; unused at a loan stop |
 | `erwpK_handle_leI` | unchanged | unchanged as a lemma; its clause premise reads the new entry |
 | tail/last handler proofs | unchanged | restated at the binder and the cancel component |
