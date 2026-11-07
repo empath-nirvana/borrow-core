@@ -1,0 +1,8 @@
+-- expect: 6:6: the recursive type occurs under `L`, which is recursive itself: its `mu` would mention the enclosing recursive type, and a `mu` must be closed (B14, U3)
+-- The program's own recursive abbreviation around the recursive type (SPEC §61 Open, U3): it is
+-- refused before it is opened, so its `mu X` does not capture the variable `T` elaborates to,
+-- whatever that variable's name.
+type L[A] = mu X. 1 + (A * X)
+data T = Leaf(i32) | Node(L[T])
+
+main -> i32 = 0

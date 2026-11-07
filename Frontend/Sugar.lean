@@ -3613,6 +3613,17 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       match k, W' with
       | "alloc", W' => do
         let A ← need W.span "`alloc`'s argument" ((← refresh c).tyV W')
+        -- A cell where its content is expected: `box C(…)` of a constructor that is not a block
+        -- allocates a cell holding the value (SPEC §42, E2), which is never of the value's type.
+        -- A constructor's value is ascribed its declaration's name when it has one.
+        if let some E := exp then
+          if tyEqV E A then
+            let T := match W with
+              | .ascribe _ _ (.name _ N) => N
+              | _ => ppT A
+            throw ⟨sp, s!"this allocates a cell, `ref {T}`, where a `{T}` is expected: written " ++
+              "`box C(…)`, the constructor `C` is not a block (SPEC §42, E2), so `box` allocates " ++
+              "a cell holding its value; build it without `box`"⟩
         pure (.app sp (.const ksp (.alloc (← c.surface ksp A))) W')
       | "free", W' => do
         let A ← match (← refresh c).tyV W' with
@@ -6150,12 +6161,17 @@ reading the library, as the kernel evaluates the cross-checked programs
 def preludeData : List String := ["Option", "Vec"]
 
 /-- The program's `data` declarations elaborated to `type` and `shape` declarations, in place
-(`Data.typeDecls`), the prelude's that the program names first (SPEC §42, D1–D3). -/
-def dataDecls (ds : List Decl) : Except Error (List Decl) := do
-  let own : Data.Table := ds.filterMap fun | .data _ d => some d | _ => none
+(`Data.typeDecls`), the prelude's that the program names first (SPEC §42, D1–D3). The table's
+abbreviations are `abbrevs`, the parser's (`Parser.tableOf`; SPEC §61). A `type` declaration whose
+body names a `data` declaration not yet elaborated, directly or through other abbreviations
+(`type JMap = Map[string, Json]` before `data Json`), is placed after the declaration's group, in
+the order written: the group's own declarations name no such abbreviation (`Data.openMembers`).
+`[spec §42, §61]` -/
+def dataDecls (ds : List Decl) (abbrevs : List Data.Abbrev) : Except Error (List Decl) := do
+  let own : List DataDecl := ds.filterMap fun | .data _ d => some d | _ => none
   let wanted := preludeData.filter fun n =>
     !own.any (·.name.name == n) && ds.any (·.mentionsTy n)
-  let prelude : Data.Table ← if wanted.isEmpty then pure [] else
+  let prelude : List DataDecl ← if wanted.isEmpty then pure [] else
     match libSrc "prelude" with
     | some src => match parseProgram src with
       | .ok p =>
@@ -6167,12 +6183,31 @@ def dataDecls (ds : List Decl) : Except Error (List Decl) := do
       | .error e => throw ⟨e.span, s!"lib/prelude.bc: {e.msg}"⟩
     | none => pure []
   let named := prelude.filter (wanted.contains ·.name.name)
-  let tab := named ++ own
+  let tab : Data.Table := { decls := named ++ own, abbrevs }
   let pre ← named.flatMapM (Data.typeDecls tab Span.none)
-  let rest ← ds.flatMapM fun
-    | .data sp d => Data.typeDecls tab sp d
-    | d => pure [d]
-  pure (pre ++ rest)
+  let typeNames (es : List Decl) : List String := es.filterMap fun | .type _ n .. => some n.name | _ => none
+  let dataNames := own.map (·.name.name)
+  let mut out : List Decl := []
+  let mut done : List String := typeNames pre
+  -- A `type` declaration names a `data` declaration of `ds` not in `done`.
+  let early (done : List String) : Decl → Bool
+    | .type _ _ tps _ A => (tab.namesOf 16 A).any fun n =>
+        !tps.any (·.name == n) && dataNames.contains n && !done.contains n
+    | _ => false
+  -- The `type` declarations waiting for a `data` declaration their bodies name.
+  let mut waiting : List Decl := []
+  for d in ds do
+    match d with
+    | .data sp e =>
+      let es ← Data.typeDecls tab sp e
+      out := out ++ es
+      done := done ++ typeNames es
+      out := out ++ waiting.filter (!early done ·)
+      waiting := waiting.filter (early done)
+    | .type .. =>
+      if early done d then waiting := waiting ++ [d] else out := out ++ [d]
+    | d => out := out ++ [d]
+  pure (pre ++ out ++ waiting)
 
 /-! ### `poly` declarations  `[spec §36]` -/
 
@@ -6273,7 +6308,13 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
           if let some cl := f.close then
             let g := (f.name.map (·.name)).getD s!"{j + 1} of `{c.name.name}`"
             modify (· ++ [(sp, .closes dd.name.name g (cl.map (·.name)))])
-  let decls₀ ← (dataDecls decls₀ : Except Error _)
+  -- The abbreviations of the data table: the parser's, of the modules the program includes and
+  -- its own (`Parser.tableOf`), so the two tables are one. A program that includes no module
+  -- has them without reading the library, as the kernel evaluates the cross-checked programs.
+  let incs := p₀.decls.filterMap fun | .include _ m => some m.name | _ => none
+  let ownAbbrevs := p₀.decls.filterMap Data.Abbrev.ofDecl?
+  let abbrevs := (tableOf libSrc incs { abbrevs := ownAbbrevs }).abbrevs
+  let decls₀ ← (dataDecls decls₀ abbrevs : Except Error _)
   -- A program's declaration shadows an included module's of the same name (SPEC §41, rule R1):
   -- the module's is renamed, and so is every use of it in the module's own declarations.
   let declName : Decl → Option String

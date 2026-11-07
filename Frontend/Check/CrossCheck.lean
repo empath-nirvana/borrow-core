@@ -17,6 +17,9 @@ evaluation (`decide +kernel`) of the checker.
   at the empty context and erase to those terms exactly. The judgments `sumProg_derives` and
   `countDownProg_derives` then follow a second time, from `bcc`'s derivations
   (`sumProg_derives_bcc`, `countDownProg_derives_bcc`).
+* `corpus/decl-txn.bc`, a program with a `data` declaration, checks (`declTxn_checks`): the
+  data table is built without reading a library module for a program that includes none
+  (`Parser.tableOf`).
 
 The parser runs at elaboration time (`bcc_program%` reads a corpus file and embeds its AST);
 the kernel evaluates only the checker. Parsing in the kernel is not cheap enough for files of
@@ -157,5 +160,14 @@ theorem countDownExact_main :
 theorem countDownProg_derives_bcc :
     CDerives BoCa.Lifetime.LifeCtx.empty [] countDownProg (.comp (.ret (.sum natN .unit))) :=
   derives_of_mainOf countDownExact_main
+
+/-- `corpus/decl-txn.bc`, a program with a `data` declaration and no `include`. -/
+def declTxn : Program := bcc_program% "corpus/decl-txn.bc"
+
+set_option maxRecDepth 100000 in
+/-- Its `main` checks: the elaboration of a `data` declaration, with the data table it builds
+(`Parser.tableOf`), reads no library module, so the kernel evaluates it.  `[spec §61]` -/
+theorem declTxn_checks : (mainOf declTxn).isSome = true := by
+  decide +kernel
 
 end Frontend.Check

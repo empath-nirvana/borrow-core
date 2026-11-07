@@ -8199,7 +8199,8 @@ The declaration elaborates to a `type` declaration of the same name and paramete
 The name, its constructors and its fields live in the elaborator's table (`Data.Table`), which the
 parser holds, read before the module is parsed: a declaration is in scope in the whole module that
 declares it and in every program that includes that module, and the prelude's in every program.
-Its `type` declaration is placed where the group's first member is, so a type declared later is
+The table holds the `type` abbreviations in scope too, read in the same pass, which the block
+classification and the class `P` open (§61). Its `type` declaration is placed where the group's first member is, so a type declared later is
 named only after it.
 
 ### Recursion: blocks and a written `box`
@@ -8220,13 +8221,17 @@ written.
   a block (`data Tree = Tip(i32) | Node(i32, array Tree)` is `μX. i32 ⊕ (i32 ⊗ array X)`), and a
   block's field may be an array of the root.
 - **The class decides the positions** (§61): a declaration's recursion is accepted exactly when
-  its `μ` body, each application of a non-recursive declaration opened to its structure, is in §6's
-  class `P` (`FoldP.PB`, `pBodyB`). So the root may sit inside another type under any cell or
-  array: a block's `tail: Option[List]` is the cell `ref (X ⊕ 1)`, `Vec[Option[Trie]]` is
-  `array (X ⊕ 1) ⊗ i32`.
+  its `μ` body, each application of a non-recursive declaration opened to its structure and each
+  application of a non-recursive `type` abbreviation to its body (§61), is in §6's class `P`
+  (`FoldP.PB`, `pBodyB`). So the root may sit inside another type under any cell or array: a
+  block's `tail: Option[List]` is the cell `ref (X ⊕ 1)`, `Vec[Option[Trie]]` is
+  `array (X ⊕ 1) ⊗ i32`, `Map[string, Json]` holds it under the array of the map's values. Whether
+  a constructor is a block is read the same way: `Obj(Map[string, Json])` is not one,
+  `Node(Pair[T])` with `type Pair[A] = A * A` is.
 - **Refused**: a field whose recursion is outside `P`, at the declaration, naming the former
   (`X` under `imm`, `mut`, a view, `!`, `[@a]` or an array of borrows; under `U` the checker
-  refuses it); a recursive declaration around the root (a `μ` nested in a `μ`, U3); and a block
+  refuses it); a recursive declaration or abbreviation around the root (a `μ` nested in a `μ`,
+  U3); and a block
   constructor written without `box`, at the construction (E3).
 - **Regular recursion**: inside its group a parameterised member occurs at its own parameters.
   A nested datatype (`Tree[(T, T)]`, D2) is refused: not provided.
@@ -10327,21 +10332,54 @@ constructor's hypotheses. The checker's `consumableAtB` mirrors it (`Frontend/Ch
 §42: a declaration's recursion is accepted exactly when its `μ` body is in `P`, decided by the
 kernel's `FoldP.PB` and `pBodyB` (`Frontend/Elab/Data.lean`, `pClass`), not by a predicate of the
 elaborator's own. The body is read with each application of a non-recursive declaration opened to
-its structure under every value former (`openX`) and mapped to the kernel type `P` reads (`pTy`):
-`X` its index, each former the kernel's, a subterm without `X` the leaf `1`. That map is marked
-`UNPROVED:` at the site: it assumes `P` reads no lifetime, that a closed subterm may stand for any
-other (`P_of_closed`), and that a type the table does not open is closed once elaborated.
+its structure, and each application of a non-recursive `type` abbreviation to its body, at their
+type and lifetime arguments, under every value former (`openX`), and mapped to the kernel type `P`
+reads (`pTy`): `X` its index, each former the kernel's, a subterm without `X` the leaf `1`. That
+map is marked `UNPROVED:` at the site: it assumes `P` reads no lifetime, that a closed subterm may
+stand for any other (`P_of_closed`), and that a type the table does not open, a type parameter, is
+closed once elaborated.
+
+The table the parser and the typed elaboration read holds the abbreviations in scope beside the
+`data` declarations (`Data.Table`). Both take their abbreviations from one function,
+`Parser.tableOf`: those of the modules the program's `include`s name, read in the pass that reads
+the declarations, then the program's own, a later abbreviation of a name hiding an earlier one, so
+they agree on which constructors are blocks. The prelude's `data` declarations are in the table
+and its abbreviations are not (it declares none, which `scripts/check-hygiene.sh`
+checks), so a program that includes no module has its abbreviations without
+reading the library: the kernel evaluates the cross-checked programs' elaboration
+(`Frontend/Check/CrossCheck.lean`, `declTxn_checks`), and cannot read a module, whose source is read
+when `bcc` starts (`Sugar.libSources`, an `opaque`). The I/O library the typed elaboration
+brings in for a `main` that uses the streams ambiently (§34) is not one the program includes, and
+is in neither table.
+
+An abbreviation's body is read through wherever a field's names are: the group of a declaration
+is found through the bodies of the abbreviations its fields name (`type JMap = Map[string, Json]`
+with `Obj(JMap)` makes `Json` recursive), and an abbreviation that names a member of the group, in its
+arguments or its body, is opened at the field before the members are substituted
+(`Data.openMembers`), so no `type` or `shape` declaration of the group names one. A `type`
+declaration whose body names a `data` declaration written after it is placed after that
+declaration's group, in the order written. An abbreviation is
+recursive when its body, with the abbreviations it names opened, has a `μ`; one around `X` is
+refused before it is opened (U3, below), so the opening substitutes into a body that binds no type
+name, and `X` is chosen apart from every name an abbreviation writes, so it neither captures nor is
+captured.
 
 So an array is a recursive position with no `box` (data-declarations §6.11): its recursion is
 under the array's allocation, and a constructor whose recursion is only under arrays and cells is
 not a block. `data Tree = Tip(i32) | Node(i32, array Tree)` is `μX. i32 ⊕ (i32 ⊗ Array X)`;
 `data Trie = Trie(bool, Vec[Option[Trie]])` is `μX. bool ⊗ (Array (X ⊕ 1) ⊗ i32)`, Rust's
-`Vec<Option<Trie>>`; `Node(array (i32 * T))` is `Array (i32 ⊗ X)`. A block's cell may hold the
-root inside another type (`tail: Option[List]`, `ref (X ⊕ 1)`). `box` is still asked for where
-the recursion is bare (a block), which is where a layout would be infinite. A field outside `P` is
-refused at the declaration, the message naming the former that puts it outside (a borrow, `!`, a
-lifetime box, an array of borrows). A recursive declaration around the root is refused: its `μ`
-would mention the enclosing variable, which the checker refuses (U3).
+`Vec<Option<Trie>>`; `Node(array (i32 * T))` is `Array (i32 ⊗ X)`. An abbreviation is read the
+same way: `data Json = Null | Num(i32) | Obj(Map[string, Json])`, `Map` the abbreviation of
+`lib/map.bc`, is `μX. 1 ⊕ (i32 ⊕ ((Array (1 ⊕ (i32 ⊗ string)) ⊗ Array X) ⊗ i32))`, and `Obj` is not
+a block; `Pair[T]`, `type Pair[A] = A * A`, holds `T` bare, and a constructor of it is. A block's
+cell may hold the root inside another type (`tail: Option[List]`, `ref (X ⊕ 1)`). `box` is still
+asked for where the recursion is bare (a block), which is where a layout would be infinite;
+`box C(…)` of a constructor that is not a block is E2's cell holding the value, and where its
+value's type is expected the typed elaboration says so. A field outside `P` is refused at the
+declaration, the message naming the former that puts it outside (a borrow, `!`, a lifetime box, an
+array of borrows). A recursive declaration or abbreviation around the root (`List[T]`,
+`type L[A] = mu X. …`, `Queue[T]`) is refused, naming it: its `μ` would mention the enclosing
+variable, which the checker refuses (U3).
 
 **The filler** (§17, design §5.4) of a buffer's unused slots is computed structurally
 (`Frontend/Sugar.lean`, `fillerOf`), under §6's stack of binders: `0`, `()`, componentwise at `⊗`,
@@ -10383,6 +10421,13 @@ the checker's; that one is found at every type with a finite value whose leaves 
 | `corpus/leetcode/trees/0208-implement-trie-boxed.bc` | a trie whose nodes own arrays of their children | the arena form's answers, `i32[4]` | 58 (58) |
 | `corpus/data-array-tree.bc` | a `data` tree recursive under an array, with no `box` | `i32[12]` | 4 |
 | `corpus/data-json-vec.bc` | `data Json = Num(i32) \| Arr(Vec[Json])`, no `box`; a buffer of `Json` with the filler `Num(0)` | `i32[10]` | 6 |
+| `corpus/data-json-map.bc` | `data Json = Null \| Num(i32) \| Obj(Map[string, Json])` through the abbreviation `Map`, no `box`; nested objects, some consumed implicitly | `i32[73]` | 39 |
+| `corpus/data-set-rec.bc` | `Node(Set[i32], Map[i32, Tree])`: `Set` left closed, `Map` opened | `i32[453]` | 12 |
+| `corpus/data-abbr-nested.bc` | `Node(Bag[T])`, `type Bag[A] = Map[i32, Pair[A]]`: an abbreviation inside an abbreviation | `i32[7]` | 4 |
+| `corpus/data-abbr-root.bc` | `type JMap = Map[string, Json]` before `data Json = … \| Obj(JMap)`: the abbreviation's body names the root | `i32[83]` | 39 |
+| `corpus/data-abbr-block.bc` | `Node(Pair[T])`, `type Pair[A] = A * A`: bare, a block, with `box` | `i32[15]` | 6 |
+| `corpus/reject/data-rec-abbr-list.bc`, `data-rec-abbr-mu.bc`, `data-rec-abbr-nested.bc` | a recursive abbreviation around the root | refused (U3) | — |
+| `corpus/reject/data-box-not-block.bc` | `box Obj(m)` where a `Json` is expected | refused: not a block | — |
 | `corpus/data-rose.bc` | #32's rose tree, `Rose`/`Forest`, `kids: box Forest` | `i32[16]` | 14 |
 | `corpus/data-eval.bc` | #32's `Tm`/`Val`/`Env` evaluator, `ECons(Val, box Env)`, copies by hand | `i32[42]` | 10 |
 | `corpus/leetcode/trees/0208-implement-trie-vec.bc` | the trie as Rust's struct, `data Trie = Trie(bool, Vec[Option[Trie]])`, no `box` | the arena form's answers, `i32[4]` | 58 (58) |
@@ -10424,8 +10469,9 @@ in `P` and runs (`corpus/data-option-block.bc`); the reject is now a field under
   structure recurses on the native stack there, as a non-linear `fold_own` does.
 - **Declarations refused by the checker, not by `P`**: a recursive type under a function type is
   a leaf of `P` (`U C` is closed for it) and the checker refuses the `μ` variable under `U`; a
-  recursive declaration around the root is a `μ` mentioning the enclosing variable, which the
-  checker refuses (U3). Both refusals name their cause.
+  recursive declaration or `type` abbreviation around the root is a `μ` mentioning the enclosing
+  variable, which the checker refuses (U3): the elaboration refuses it before opening it, naming
+  the declaration or abbreviation the field writes. Both refusals name their cause.
 - **A filler at a block's cells**: a mutual group through `Vec` whose member is a block
   (`Obj(Vec[Pair])`, `data Pair = Pair(i32, Json)`) has none: a filler of a cell would allocate.
   Mutual groups are U5.
@@ -11886,6 +11932,23 @@ checker or the old backend.
   split stays at a persistent type. `book/src/guide/iteration.md`'s `take(6, fib())` and
   `corpus/gen-take-print.bc` compile on Backend2. No change to `CDerives`, `Core/`, the checker or
   the old backend.
+- **1.45** (2026-11-07) — §61 *Declarations*, §42 (#846): `type` abbreviations are opened at their
+  type and lifetime arguments wherever a non-recursive `data` declaration is (`openX`, the block
+  classification `bareIn`), so `data Json = … | Obj(Map[string, Json])` is accepted, `Obj` not a
+  block. The group is read through the bodies of the abbreviations a field names, and one that
+  names a member is opened at the field (`openMembers`), so `type JMap = Map[string, Json]` with
+  `Obj(JMap)` is accepted; such a `type` declaration written before the `data` one is placed after
+  its group. The data table (`Data.Table`) carries the abbreviations in scope; the parser's and the
+  typed elaboration's are built by one function (`Parser.tableOf`), a later one of a name hiding an
+  earlier one; the I/O library brought in for an ambient `main` is in neither, and the prelude's
+  abbreviations are not read, so a program with `data` declarations that includes no module
+  cross-checks in the kernel (`declTxn_checks`). `pTy`'s
+  `UNPROVED:` assumption narrows to type parameters. A recursive abbreviation around the root is refused with
+  U3's message before it is opened; `box C(…)` of a constructor that is not a block, where its value
+  is expected, is refused with a message saying so. New programs `data-json-map`, `data-set-rec`,
+  `data-abbr-nested`, `data-abbr-block`, `data-abbr-root`; rejects `data-rec-abbr-list`, `data-rec-abbr-mu`,
+  `data-rec-abbr-nested`, `data-box-not-block`. No change to the kernel, the checker, the backends
+  or any existing program's output.
 - **1.42** (2026-11-07) — §62 (#844 Tier 1, *Lifetime-polymorphic suspending constants*): the
   suspending lend constants under lifetime binders (`Const791.poly`, typed at `VTy.all`), their
   premises at the constant's own context (`Const791.OKAt`), `Row.Suspend`/`CTy.SuspendC` at a
@@ -11905,11 +11968,6 @@ checker or the old backend.
   `rec-parser`, `parse-recover` and `parse-recover-gen` allocates nothing. The other #651 rises
   are one box a node, as in Rust, and stay Open. No change to `CDerives`, the relation, the
   machine, the checker or the old backend.
-- **1.39** (2026-11-07) — §63 (#847): `allI_inst` generalised from a body that erases to a
-  λ-value to one that erases to a value form not naming the binder's dead slot (`valFormB`);
-  `lendR_plain`: `[lend-R]` at the empty row is the plain lend, the finaliser never run. Backend2
-  reads both and compiles every corpus program. No change to `CDerives`, the relation, the
-  machine, the checker or the old backend.
 - **1.40** (2026-11-07) — §12 (#848, #492): a handler site is not terminal for the insertion
   policy (*Handled bodies*): the handled body is owed the owed variables it mentions, as the head
   of `x <- M; N` is, so an abortive arm inside a `with`, a `for` body or a recursion releases an
@@ -11921,6 +11979,11 @@ checker or the old backend.
   `corpus/leetcode/dp/0039-combination-sum-loop.bc`). No change to `CDerives`,
   the kernel, the theorems or the backends; every other corpus program checks as before.
 
+- **1.39** (2026-11-07) — §63 (#847): `allI_inst` generalised from a body that erases to a
+  λ-value to one that erases to a value form not naming the binder's dead slot (`valFormB`);
+  `lendR_plain`: `[lend-R]` at the empty row is the plain lend, the finaliser never run. Backend2
+  reads both and compiles every corpus program. No change to `CDerives`, the relation, the
+  machine, the checker or the old backend.
 - **1.38** (2026-11-04) — §62 (*Semantic types read at the tree*): `F A` is a bare `cerwpT` run
   (`SCmp.ret`), Core's `cC (.ret A)`; the Kripke quantifier over later worlds and lists sits at
   `U` only. Thunks are introduced as Core's `thunkF_compatC` does, from the computation at every
