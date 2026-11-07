@@ -4,7 +4,7 @@ import Backend.Flat.Host
 import Backend2.Layout
 
 /-!
-# Backend2 — the LIR to the word IR  `[spec §35, §37]`
+# Backend2 — the LIR to the word IR  `[spec §35, §37, §64]`
 
 Each LIR variable is the words of its layout node (`Backend2/Layout.lean`), held in locals; each
 LIR function a word-IR function of its parameters' words, answering its result's words. The
@@ -12,7 +12,9 @@ word IR (`Backend/Flat/Syntax.lean`) is target-neutral: the Wasm and LLVM emitte
 
 - **Pairs** are their fields' words; a **sum** a tag word and its payload's, padded. A field the
   layout boxes is a pointer to an object holding its words: built by allocating it, taken apart
-  by loading and freeing it.
+  by loading and freeing it. A box a `letpair` or a `case` takes apart is a spare box until the
+  path's next call, return or arm's end, and the next box of its words built before then is
+  built in it (SPEC §64).
 - **Closures** are defunctionalized: a closure is its code's tag in its class, then its captured
   values' words, padded to the class's widest. A call of a closure whose class has one code is a
   direct call of that code's function; any other is a call of the class's dispatcher, a `switch`
@@ -70,6 +72,10 @@ structure LState where
   intVote : Std.HashSet Nat := {}
   /-- `addrKinds` per node, as computed. -/
   kinds : Std.HashMap Nat (List (Option Bool)) := {}
+  /-- The spare boxes on the path being lowered (SPEC §64): each a boxed field's object whose
+  words a `letpair` or a `case` has loaded and whose free is deferred, as the local holding its
+  address and its words. -/
+  spare : List (Nat × Nat) := []
 
 abbrev LM := ReaderT LCtx (StateT LState (Except String))
 
@@ -157,12 +163,14 @@ def helper (h : Helper) : LM Nat := do
 words, and the locals that hold an address (`ptrVote`, `intVote`). -/
 def inFnF (params : Nat) (act : LM α) : LM (α × Nat × Nat × List Nat) := do
   let saved ← get
-  set { saved with locals := {}, next := params, frame := 0, ptrVote := {}, intVote := {} }
+  set { saved with locals := {}, next := params, frame := 0, ptrVote := {}, intVote := {},
+                   spare := [] }
   let a ← act
   let st ← get
   let ptrs := st.ptrVote.toList.filter (!st.intVote.contains ·) |>.mergeSort (· ≤ ·)
   modify fun s => { s with locals := saved.locals, next := saved.next, frame := saved.frame,
-                           ptrVote := saved.ptrVote, intVote := saved.intVote }
+                           ptrVote := saved.ptrVote, intVote := saved.intVote,
+                           spare := saved.spare }
   pure (a, st.next - params, st.frame, ptrs)
 
 def inFn (params : Nat) (act : LM α) : LM (α × Nat × List Nat) := do
@@ -179,13 +187,24 @@ inductive Dest where
   | ret (k : Nat)
   | bind (x : Var)
 
+/-- Free the spare boxes (SPEC §64), keeping them listed: at a return, after which nothing on the
+path runs, while another path lowered after it may still hold them. -/
+def freeSpares : LM (List Stmt) := do
+  return (← get).spare.map fun (t, _) => .free (.loc t)
+
+/-- Free the spare boxes (SPEC §64) and forget them: the path goes on past the frees. -/
+def dropSpares : LM (List Stmt) := do
+  let s ← freeSpares
+  modify fun st => { st with spare := [] }
+  return s
+
 def emit : Dest → List Exp → LM (List Stmt)
   | .to ls, vs => do
     if ls.length != vs.length then throw s!"word IR: {vs.length} words for {ls.length} locals"
     pure (ls.zip vs |>.map fun (l, e) => .set l e)
   | .ret k, vs => do
     if vs.length > k then throw s!"word IR: {vs.length} words returned for {k}"
-    pure [.ret (vs ++ zeros (k - vs.length))]
+    pure ((← freeSpares) ++ [.ret (vs ++ zeros (k - vs.length))])
   | .bind x, vs => do
     let mut ls : Array Nat := #[]
     let mut ss : Array Stmt := #[]
@@ -215,19 +234,41 @@ def child (n k : Nat) : LM Nat := do
   | .pair _ b, _ | .sum _ b, _ => pure b
   | s, _ => throw s!"word IR: no field {k} of {reprStr s |>.take 40}"
 
-/-- Field `k` of `n` built from its words: behind a pointer when it is boxed. -/
-def putField (n k : Nat) (vs : List Exp) : LM (List Stmt × List Exp) := do
+/-- Field `k` of `n` built from its words: behind a pointer when it is boxed. With `reuse`, a spare
+box of the same words (SPEC §64) holds them, and none is allocated.  `[spec §64]` -/
+def putField (n k : Nat) (vs : List Exp) (reuse : Bool := false) : LM (List Stmt × List Exp) := do
   if !(← L).isBoxed n k then return ([], vs)
+  let w := max 1 vs.length
+  if reuse then
+    let sp := (← get).spare
+    if let some (t, _) := sp.find? (·.2 == w) then
+      modify fun st => { st with spare := sp.erase (t, w) }
+      return (storeAt (.loc t) 0 vs, [.loc t])
   let t ← fresh1
-  return ([.set t (.alloc (.c64 (max 1 vs.length).toUInt64))] ++ storeAt (.loc t) 0 vs, [.loc t])
+  return ([.set t (.alloc (.c64 w.toUInt64))] ++ storeAt (.loc t) 0 vs, [.loc t])
 
 /-- The words of field `k` of `n` from the field's locals: loaded from behind a pointer when boxed,
-the object freed when `consume`. -/
-def getField (n k : Nat) (ls : List Nat) (consume : Bool) : LM (List Stmt × List Nat) := do
+the object freed when `consume`. With `keep`, its free is deferred instead: the object is a spare
+box (SPEC §64), freed at the path's next call or end unless a box of its words is built first.
+`[spec §64]` -/
+def getField (n k : Nat) (ls : List Nat) (consume : Bool) (keep : Bool := false) :
+    LM (List Stmt × List Nat) := do
   if !(← L).isBoxed n k then return ([], ls)
   let c ← child n k
   let p := Exp.loc (ls.headD 0)
-  let (s, vs) ← loadAt p 0 (← wordsN c)
+  let w ← wordsN c
+  let (s, vs) ← loadAt p 0 w
+  if consume && keep then
+    -- UNPROVED: that the object has one owner, the value taken apart here, so that deferring
+    -- its free to the next call, return or arm's end, or building the next box of its words in
+    -- it, aliases nothing. It is `Layout.resolve`'s assumption on boxed fields, on which the
+    -- free made here otherwise rests too: the LIR consumes each variable once on every path,
+    -- which `Lint` checks of each program it compiles. If it fails, a box is written while
+    -- another value still reads it.
+    let t ← fresh1
+    modify fun st => { st with spare := st.spare ++ [(t, max 1 w)],
+                                ptrVote := st.ptrVote.insert t }
+    return (s ++ [.set t p], vs)
   return (s ++ (if consume then [.free p] else []), vs)
 
 /-- The locals of field `k` of a pair's or a sum's locals. -/
@@ -239,24 +280,27 @@ def fieldLocals (n k : Nat) (ls : List Nat) : LM (List Nat) := do
     pure (if k == 0 then ls.take w₀ else (ls.drop w₀).take (L.fieldW n 1))
   | _ => pure ((ls.drop 1).take (L.fieldW n k))
 
-def mkPair (n : Nat) (a b : List Exp) : LM (List Stmt × List Exp) := do
-  let (s₁, v₁) ← putField n 0 a
-  let (s₂, v₂) ← putField n 1 b
+def mkPair (n : Nat) (a b : List Exp) (reuse : Bool := false) : LM (List Stmt × List Exp) := do
+  let (s₁, v₁) ← putField n 0 a reuse
+  let (s₂, v₂) ← putField n 1 b reuse
   pure (s₁ ++ s₂, v₁ ++ v₂)
 
-def mkInj (n : Nat) (r : Bool) (a : List Exp) : LM (List Stmt × List Exp) := do
-  let (s, v) ← putField n (if r then 1 else 0) a
+def mkInj (n : Nat) (r : Bool) (a : List Exp) (reuse : Bool := false) :
+    LM (List Stmt × List Exp) := do
+  let (s, v) ← putField n (if r then 1 else 0) a reuse
   let pw := (← wordsN n) - 1
   pure (s, [.c64 (if r then 1 else 0)] ++ v ++ zeros (pw - v.length))
 
-def splitPair (n : Nat) (ls : List Nat) (consume : Bool) : LM (List Stmt × List Nat × List Nat) := do
-  let (s₁, a) ← getField n 0 (← fieldLocals n 0 ls) consume
-  let (s₂, b) ← getField n 1 (← fieldLocals n 1 ls) consume
+def splitPair (n : Nat) (ls : List Nat) (consume : Bool) (keep : Bool := false) :
+    LM (List Stmt × List Nat × List Nat) := do
+  let (s₁, a) ← getField n 0 (← fieldLocals n 0 ls) consume keep
+  let (s₂, b) ← getField n 1 (← fieldLocals n 1 ls) consume keep
   pure (s₁ ++ s₂, a, b)
 
-def payload (n : Nat) (r : Bool) (ls : List Nat) (consume : Bool) : LM (List Stmt × List Nat) := do
+def payload (n : Nat) (r : Bool) (ls : List Nat) (consume : Bool) (keep : Bool := false) :
+    LM (List Stmt × List Nat) := do
   let k := if r then 1 else 0
-  getField n k (← fieldLocals n k ls) consume
+  getField n k (← fieldLocals n k ls) consume keep
 
 /-! ### Cells -/
 
@@ -421,6 +465,8 @@ def divLitVals (o : HostOp) (byte : Bool) (ls : List Nat) : LM (List Exp) := do
 
 /-- Call `f` on `args`, answering `k` words, to `d`. -/
 def lowerCall (pre : List Stmt) (f : Nat) (args : List Exp) (k : Nat) (d : Dest) : LM (List Stmt) := do
+  -- The spare boxes are freed before a call (SPEC §64).
+  let pre := (← dropSpares) ++ pre
   match d with
   | .ret k' => if k' == k then return pre ++ [.tailCall f args] else pure ()
   | .to ls => if ls.length == k then return pre ++ [.call ls f args] else pure ()
@@ -774,10 +820,10 @@ def lowerTm (fuel : Nat) (t : Tm) (n : Nat) (d : Dest) : LM (List Stmt) := do
   | .lit c => emit d [.c64 (match c with
       | .i32 k => k.toUInt64 | .i64 k => k | .u8 k => k.toUInt64 | .f32 k => k.toUInt64 | .f64 k => k)]
   | .pair a b => do
-    let (s, vs) ← mkPair n (locs (← vals a)) (locs (← vals b))
+    let (s, vs) ← mkPair n (locs (← vals a)) (locs (← vals b)) (reuse := true)
     return s ++ (← emit d vs)
   | .inj r a => do
-    let (s, vs) ← mkInj n r (locs (← vals a))
+    let (s, vs) ← mkInj n r (locs (← vals a)) (reuse := true)
     return s ++ (← emit d vs)
   | .clos c env => do
     let ws ← env.mapM vals
@@ -812,20 +858,27 @@ def lowerTm (fuel : Nat) (t : Tm) (n : Nat) (d : Dest) : LM (List Stmt) := do
     return s₁ ++ (← lowerTm f b n d)
   | .letpair x y p b => do
     let pn ← nodeV p
-    let (s, a, c) ← splitPair pn (← vals p) true
+    let (s, a, c) ← splitPair pn (← vals p) true (keep := true)
     bindVals x a
     bindVals y c
     return s ++ (← lowerTm f b n d)
   | .case sv x b₁ y b₂ => do
     let sn ← nodeV sv
     let ls ← vals sv
-    let (s₁, a) ← payload sn false ls true
-    let (s₂, c) ← payload sn true ls true
+    -- Each arm starts with the spare boxes held before the `case` and ends by freeing those it
+    -- has not used (at a return, `emit` has freed them), so none is held past the join.
+    let sp := (← get).spare
+    let (s₁, a) ← payload sn false ls true (keep := true)
     bindVals x a
-    bindVals y c
     let t₁ ← lowerTm f b₁ n d
+    let e₁ ← dropSpares
+    modify fun st => { st with spare := sp }
+    let (s₂, c) ← payload sn true ls true (keep := true)
+    bindVals y c
     let t₂ ← lowerTm f b₂ n d
-    return [.ite (eqz64 (.loc (ls.headD 0))) (s₁ ++ t₁) (s₂ ++ t₂)]
+    let e₂ ← dropSpares
+    let tail (e : List Stmt) : List Stmt := match d with | .ret _ => [] | _ => e
+    return [.ite (eqz64 (.loc (ls.headD 0))) (s₁ ++ t₁ ++ tail e₁) (s₂ ++ t₂ ++ tail e₂)]
   | .absurd _ => return [.trap]
   | .copy _ x x' b => do
     let (s, ls) ← copyVals (← nodeV x) (← vals x) (tick := true)
