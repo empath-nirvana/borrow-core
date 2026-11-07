@@ -1,0 +1,57 @@
+-- A JSON-like value whose objects are `lib/map.bc`'s `Map[string, Json]` (SPEC §42, §61). `Map`
+-- is a `type` abbreviation, opened at its arguments where a non-recursive `data` declaration is,
+-- so `Json` occurs under the array of the map's values, as under `Vec`'s buffer in
+-- `corpus/data-json-vec.bc`: `Obj` is not a block and is built without `box`. `Json` elaborates
+-- to `mu X. 1 + i32 + (array (1 + i32 * string) * array X) * i32`, in the fold class `P`; its
+-- consume frees each value left in a map's arrays, then the arrays (SPEC §61).
+--
+-- Answer: i32[73]. `sum` adds the numbers under the keys "a" and "b", recursively: 3 + (4 + 0) = 7
+-- in `outer`; `count` finds the three keys of `dropped`; 7 * 10 + 3. `live 0`: what `sum` leaves in
+-- each map (the key "z", an object of two numbers among them), the map `count` leaves, and
+-- `unused`, never read, are all consumed implicitly. An implementation that does not open `Map`
+-- refuses the declaration; one that reads `Obj` as a block refuses `Obj(m)`, asking for `box`; one
+-- whose consume skips a map's values leaves `live` above 0.
+include rec
+include buf
+include text
+include map
+
+data Json = Null | Num(i32) | Obj(Map[string, Json])
+
+-- The numbers under "a" and "b", recursively, consuming the value; the rest of a map is consumed
+-- with it.
+fn sum(j: Json) -> i32 = match j {
+    Null -> 0
+  | Num(n) -> n
+  | Obj(m) ->
+      let (m, a) = map_remove(m, string_of_lit("a"));
+      let (m, b) = map_remove(m, string_of_lit("b"));
+      let sa = match a { inl x -> sum(x) | inr u -> 0 };
+      let sb = match b { inl x -> sum(x) | inr u -> 0 };
+      sa + sb
+  }
+
+-- The number of keys of an object, 0 of any other value.
+fn count(j: Json) -> i32 = match j {
+    Obj(m) -> let (m, n) = map_len(m); n
+  | Num(n) -> 0
+  | Null -> 0
+  }
+
+-- `{ "a": x, "b": y, "z": z }`.
+fn obj(x: Json, y: Json, z: Json) -> Json =
+  let m = map_new[string, Json](4);
+  let (m, _) = map_insert(m, string_of_lit("a"), x);
+  let (m, _) = map_insert(m, string_of_lit("b"), y);
+  let (m, _) = map_insert(m, string_of_lit("z"), z);
+  Obj(m)
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let inner = obj(Num(4), Null, obj(Num(1000), Num(1000), Null));
+  let outer = obj(Num(3), inner, Num(100));
+  let dropped = obj(obj(Num(1), Num(2), Null), Num(5), Null);
+  let unused = obj(Num(7), obj(Num(8), Null, Null), Null);
+  let s = sum(outer);
+  let t = count(dropped);
+  s * 10 + t
+}

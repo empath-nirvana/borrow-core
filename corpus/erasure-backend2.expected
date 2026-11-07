@@ -119,6 +119,9 @@ count-down erased handles 0 performs 0 raises 0 left 0 0
 count-down-exact erased handles 0 performs 0 raises 0 left 0 0
 count-fold erased handles 0 performs 0 raises 0 left 0 0
 count-try erased handles 0 performs 0 raises 0 left 0 0
+data-abbr-block erased handles 1 performs 0 raises 2 left 0 0
+data-abbr-nested erased handles 1 performs 0 raises 2 left 0 0
+data-abbr-root erased handles 1 performs 0 raises 2 left 0 0
 data-array-tree erased handles 2 performs 0 raises 3 left 0 0
 data-box-tree erased handles 1 performs 0 raises 2 left 0 0
 data-config erased handles 4 performs 0 raises 7 left 0 0
@@ -132,12 +135,14 @@ data-fold-list erased handles 0 performs 0 raises 0 left 0 0
 data-fold-tree erased handles 0 performs 0 raises 0 left 0 0
 data-fold-whole erased handles 0 performs 0 raises 0 left 0 0
 data-group erased handles 1 performs 0 raises 4 left 0 0
+data-json-map erased handles 1 performs 0 raises 2 left 0 0
 data-json-vec erased handles 2 performs 0 raises 2 left 0 0
 data-option erased handles 1 performs 0 raises 1 left 0 0
 data-option-block erased handles 1 performs 0 raises 1 left 0 0
 data-particles erased handles 0 performs 0 raises 0 left 0 0
 data-rose erased handles 1 performs 0 raises 3 left 0 0
 data-rose-vec erased handles 3 performs 0 raises 4 left 0 0
+data-set-rec erased handles 1 performs 0 raises 2 left 0 0
 data-turnstile erased handles 0 performs 0 raises 0 left 0 0
 decl-guard erased handles 2 performs 0 raises 1 left 0 0
 decl-handler-state erased handles 0 performs 0 raises 2 machines 2 suspends 2 left 0 0

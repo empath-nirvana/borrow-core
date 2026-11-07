@@ -209,9 +209,9 @@ structure PState where
   written, and the number of its binder, one per binder of the source (`resolutionOf`,
   `bcc alpha`). -/
   occs : List (Pos × String × String × Nat) := []
-  /-- The `data` declarations in scope (SPEC §42): the prelude's, the included modules', and the
-  program's own, wherever they are in it. -/
-  data : Data.Table := []
+  /-- The `data` declarations and `type` abbreviations in scope (SPEC §42, §61): the prelude's, the
+  included modules', and the program's own, wherever they are in it. -/
+  data : Data.Table := {}
   /-- In the value of a field update `x.f = e` (SPEC §42, E6): the variable `x` resolves to, and
   the record `r` its body takes apart; `x.g` in `e` reads `r`'s field `g`, the variable `r_g`. -/
   updating : Option (String × String) := none
@@ -3237,7 +3237,7 @@ def decls (n : Nat) : Nat → List Decl → P (List Decl)
 /-- Run a parser over the tokens of `src`, requiring it to consume all of them. With `resolve`,
 each name is resolved to its binder (SPEC §41, rule R1), and no fresh binder is named as a name
 of the source. -/
-def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data : Data.Table := [])
+def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data : Data.Table := {})
     (internal : Bool := false) :
     Except Error (α × PState) := do
   let toks ← lex src
@@ -3251,18 +3251,22 @@ def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data
     | _ => none) |>.eraseDups else []
   go.run { toks, pos := 0, lastStop := ⟨1, 1⟩, resolve, taken, data, internal }
 
-/-- The `data` declarations written in the tokens `toks`, each read where it is (SPEC §42): a
-declaration is in scope in its whole module. A declaration that does not read is left to the
-parse proper, which reports it. -/
-def dataIn (toks : Array Token) : List DataDecl := Id.run do
+/-- The table of the tokens `toks`: the `data` declarations (SPEC §42) and the `type`
+abbreviations (SPEC §61) written in them, each read where it is: a declaration is in scope in its
+whole module. A declaration that does not read is left to the parse proper, which reports it.
+`[spec §42, §61]` -/
+def dataIn (toks : Array Token) : Data.Table := Id.run do
   let fuel := fuelPerToken * (toks.size + 1)
-  let mut out : List DataDecl := []
+  let mut out : Data.Table := {}
   for i in [0:toks.size] do
-    let isData := toks[i]!.tok == .ident "data" &&
-      (match toks[i + 1]?.map Token.tok with | some (Tok.uident _) => true | _ => false)
-    if isData then
+    let named := match toks[i + 1]?.map Token.tok with | some (Tok.uident _) => true | _ => false
+    if named && toks[i]!.tok == .ident "data" then
       match (dataDecl fuel).run { toks, pos := i, lastStop := ⟨1, 1⟩ } with
-      | .ok (d, _) => out := out ++ [d]
+      | .ok (d, _) => out := { out with decls := out.decls ++ [d] }
+      | .error _ => pure ()
+    else if named && toks[i]!.tok == .kw "type" then
+      match (decl fuel).run { toks, pos := i, lastStop := ⟨1, 1⟩ } with
+      | .ok (d, _) => out := { out with abbrevs := out.abbrevs ++ (Data.Abbrev.ofDecl? d).toList }
       | .error _ => pure ()
   out
 
@@ -3274,12 +3278,12 @@ def includesIn (toks : Array Token) : List String := Id.run do
       if let some (Tok.ident m) := toks[i + 1]?.map Token.tok then out := out ++ [m]
   out
 
-/-- The `data` declarations of the modules `ms` and of the modules they include, each once,
-`lib` giving a module's source: what has been read, and the modules read. -/
+/-- The table of the modules `ms` and of the modules they include, each once, `lib` giving a
+module's source: what has been read, and the modules read. -/
 def dataOfModules (lib : String → Option String) : Nat → List String → List String →
     Data.Table × List String
-  | 0, _, seen => ([], seen)
-  | _ + 1, [], seen => ([], seen)
+  | 0, _, seen => ({}, seen)
+  | _ + 1, [], seen => ({}, seen)
   | k + 1, m :: ms, seen =>
     if seen.contains m then dataOfModules lib k ms seen else
     match (lib m).map lex with
@@ -3292,12 +3296,28 @@ def dataOfModules (lib : String → Option String) : Nat → List String → Lis
 def runP {α} (p : Nat → P α) (src : String) (resolve : Bool := false) : Except Error α :=
   (·.1) <$> runPS p src resolve
 
-/-- The `data` declarations in scope in the source `src` (SPEC §42): the prelude's, the included
-modules', and its own, `lib` giving a module's source. -/
+/-- The table of a program that includes the modules `incs` and whose own table is `own` (SPEC
+§42, §61), `lib` giving a module's source; a later one of a name hides an earlier one
+(`Data.Table`). Its `data` declarations are the prelude's, the included modules' and its own; its
+abbreviations are the included modules' and its own. The parser's table and the typed
+elaboration's abbreviations are both this one (`dataOf`, `Sugar.dataDecls`).
+
+The abbreviations do not depend on the prelude's source: the included modules are read with the
+prelude counted as read, so a program that includes no module has its abbreviations without
+reading the library. The kernel evaluates the cross-checked programs' elaboration
+(`Frontend/Check/CrossCheck.lean`), and cannot read a module: `Sugar.libSources` is read when
+`bcc` starts.  `[spec §61]` -/
+def tableOf (lib : String → Option String) (incs : List String) (own : Data.Table) : Data.Table :=
+  let pre := (dataOfModules lib 64 ["prelude"] []).1
+  let mods := (dataOfModules lib 64 incs ["prelude"]).1
+  { decls := pre.decls ++ mods.decls ++ own.decls, abbrevs := mods.abbrevs ++ own.abbrevs }
+
+/-- The `data` declarations and the `type` abbreviations in scope in the source `src` (SPEC §42,
+§61), `lib` giving a module's source (`tableOf`). -/
 def dataOf (lib : String → Option String) (src : String) : Data.Table :=
   match lex src with
-  | .ok toks => (dataOfModules lib 64 ("prelude" :: includesIn toks) []).1 ++ dataIn toks
-  | .error _ => []
+  | .ok toks => tableOf lib (includesIn toks) (dataIn toks)
+  | .error _ => {}
 
 /-- The declarations of a source file. At most one `main` is accepted. Its names are resolved
 (`resolve`) unless it is code the elaborator generated. -/

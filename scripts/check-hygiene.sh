@@ -34,6 +34,11 @@ if grep -rhE '^import ' Frontend Frontend.lean Target Target.lean Pipeline Pipel
     | grep -vE '^import +(Frontend|Target|Pipeline|Backend|Backend2|Support|Paper|Examples|Core|Std)([. ]|$)'; then
   echo "Frontend/, Target/, Pipeline/, Backend/ or Backend2/ imports a module outside the library."; exit 1
 fi
+# The prelude declares no `type` abbreviation: the data table reads none from it
+# (`Parser.tableOf`, SPEC §61), so one would not be opened around a recursive declaration.
+if grep -nE '^type ' lib/prelude.bc; then
+  echo "lib/prelude.bc declares a type abbreviation, which Parser.tableOf does not read (SPEC §61)."; exit 1
+fi
 # The extended judgment of SPEC §29 and the typed term of SPEC §3 are generated from `CDerives`:
 # they must be up to date.
 python3 scripts/gen-pin.py --check
