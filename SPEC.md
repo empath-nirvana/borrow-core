@@ -11243,8 +11243,13 @@ stage of Backend2, with `live 0` where its golden has it.
 
 ### Open
 
-- **The fresh-tail nodes** above: removing them needs a layout per value flow, a fact the
-  checker does not state; with no such fact they are one box a node, as in Rust.
+- **The fresh-tail nodes** above (`effects-fail-list` 5, `list-generic` 32, `rec-generic-mutual`
+  11, against the old backend's 0, 27 and 8) are one box a node, as in Rust: they meet §35's
+  target and are recorded as explained rises under the switch's kill criterion 6
+  (`docs/compiler.md` §5.4). The old backend's lower counts came from its layout unification, a
+  value-flow fact rebuilt with no proof, which compiling from checked facts rules out. The
+  intended way to remove them is fusion: an unfold followed by a fold (a hylomorphism) fused,
+  so that the intermediate `μ` list is never built (#651).
 - **The move.** Rust keeps the moved tail behind its pointer; the reuse still loads its words and
   stores them back (the loads and stores above are unchanged). Holding a taken-apart field as
   its pointer until a use needs its words would remove them.
