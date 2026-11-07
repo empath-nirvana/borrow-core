@@ -349,7 +349,12 @@ neither part's mask holds. The kernel does not consume it there: the part that r
 at its leaves (`Ctx.DeadP.weaken`, persistent), or absorbs it in `⊤` (`topI`) or `absurd` (`zeroE`),
 which type the term at every type of that slot. An abort (`effLet`'s `hW`) is not a third case: it
 abandons `N`'s context, and `N` still weakens or absorbs the slot itself. `UnmentionedAbsorbed` states that these are the only cases; it is not proved.
-`neitherAbsorbed_of` reduces the split's form (`SplitMasks.NeitherAbsorbed`) to it. -/
+`neitherAbsorbed_of` reduces the split's form (`SplitMasks.NeitherAbsorbed`) to it.
+
+Backend2 handles the absorbing nodes themselves: at `zeroE`'s split a slot neither mask holds is left
+unconsumed on the path that ends at `absurd`, and `topI` abandons its whole context (`Abandon.top`);
+`Lint` reads each premise from the LIR, never from the slot's type. What stays `UNPROVED:` is that no
+*other* rule's split leaves a slot of a type that is not persistent in neither part.  [spec §66] -/
 
 /-- A derivation **absorbs** slot `k` of its context: it is a derivation at every type of that slot,
 live. `⊤` (`topI`) and `absurd` (`zeroE`) absorb every slot they do not read. -/
@@ -368,8 +373,9 @@ def UnmentionedAbsorbed : Prop :=
 /-- `UNPROVED:` (F5, at a split) **a live slot of a split's context that neither part's mask holds**
 is unrestricted, or the part that receives it absorbs it (`⊤`, `absurd`). Backend2 consumes
 such a slot at the rule `unused` (`splitCtx`, `leaf`, the frames of `abortK`/`cancelK`) when it is
-persistent, the weakening the part applies at its leaves, and refuses it otherwise; this states
-which other cases a checked program may have. -/
+persistent, the weakening the part applies at its leaves, and refuses it otherwise, except at
+`zeroE`'s own split, which absorbs it (`splitCtx`'s `absorbs`); this states which other cases a
+checked program may have.  [spec §66] -/
 def SplitMasks.NeitherAbsorbed : Prop :=
   ∀ {Δ : Lifetime.LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {e₁ e₂ : Expr} {j₁ j₂ : Jdg} {m : Masks} {k : Nat}
     {s : Slot VTy}, Ctx.SplitP Γ Γ₁ Γ₂ → CDerives Δ Γ₁ e₁ j₁ → CDerives Δ Γ₂ e₂ j₂ →
