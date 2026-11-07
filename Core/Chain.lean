@@ -166,3 +166,8 @@ import Core.Chain.FamKW835N
 import Core.Chain.EffKW835N
 import Core.Chain.LetKW835N
 import Core.Chain.ThenKW835N
+import Core.Chain.CountKW835N
+import Core.Chain.FamOpsKW835N
+import Core.Chain.MuKW835N
+import Core.Chain.FoldGKW835N
+import Core.Chain.BorrowKW835N

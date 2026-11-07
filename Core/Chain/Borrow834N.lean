@@ -40,7 +40,7 @@ def withswapAt (l : Loc) : Val :=
 
 /-- **`withswap` at `SemJN₀`** (Core's `withswap_compatX`):
 `Mut @a A ⊸ (A ⊸ A ⊗ B) ⊸ Mut @a A ⊗ B` at the pure row. -/
-theorem withswap_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy}
+theorem withswap_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ withswap (.val (axWithswapTy a A B)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
   obtain rfl := gN_deadP₀ hΓ hg
@@ -163,7 +163,7 @@ lifetime, `consistentX_get`); `f ()` and the borrow's application under the pair
 the borrow (`wpTS_bind (.pairR ℓ □)`, `wpTS_bind_frame`); the result `['x] B` back at the world
 without the lend (`vN_local₀`); the content handed back in `F_i k` is in `F_o k` (`hunif`), and the
 resealed cell is a `Mut @a A` value again. -/
-theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy}
+theorem withbor3_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hA : ¬ VFree x A) (hB : ¬ VFree x B) :
     SemJN₀ (ℍ := ℍ) Δ Γ withbor (.val (axWithbor3Ty a x Δ.meetOfDom A B)) := by
   intro δ γ Θ c n ls ρ hδ _ _ _ hg
@@ -298,7 +298,7 @@ theorem withbor3_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
 at `β ⊏ @bnd`, its `f ()` run beside the image (`erwp_bind_frame`), then applied to the image's
 value; its result `['x] B` read at `B` (`vN_extend_of_not_free₀`). The pure row's `withload_compatX`
 reads the callback this way, where the unwinding form reads `callback_at_image`. -/
-theorem callback_at_imageP {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+theorem callback_at_imageP₀ {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     (hB : ¬ VFree x B) {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK)
     {c : Loc → Option Life} {n : Nat} {ls : List SRec} {f u : Val} {ρf χ Bχ : WRes} {β : Life}
     (hLt : LtLife δ bnd β)
@@ -334,7 +334,7 @@ def withloadAt (l : Loc) : Val :=
 argument at the callback's world (`vC_local`, here `vN_extR₀`); the load (`wpTS_load_I`, here
 `rwp_load_cell` under `erwp_bindR`); 6.150 at the record the program's own `Imm` value
 witnesses (`wpTS_reborrow`, here `withload_reb` at the empty row), the callback run at the image
-(`callback_at_imageP`). -/
+(`callback_at_imageP₀`). -/
 theorem withload_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hA : ¬ VFree x A) (hB : ¬ VFree x B) :
     SemJN₀ (ℍ := ℍ) Δ Γ withload (.val (axWithloadTy a x Δ.meetOfDom A B)) := by
@@ -380,7 +380,7 @@ theorem withload_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B 
       (Lifetime.meetOfDomL_wf Δ.entries)) hA (fun o ho => absurd ho List.not_mem_nil)
     (vO_le (Nat.sub_le k₂ 1) hpay) (hwit l s w σ hσs rfl)
     (fun β hLt u χ Bχ hχ _ _ himg hBχ =>
-      callback_at_imageP hB hΘ₂ hLt (vN_le₀ (Nat.sub_le k₂ 1) hf) hcf hχ himg hBχ) hc'
+      callback_at_imageP₀ hB hΘ₂ hLt (vN_le₀ (Nat.sub_le k₂ 1) hf) hcf hχ himg hBχ) hc'
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

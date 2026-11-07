@@ -25,14 +25,14 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open BoCa.BoLo (Heap Kont Head)
 
 /-- `(i, s)` at `I32 ⊗ S`. -/
-theorem vN_i32_pair {S : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} (i : UInt32) {s : Val} {ρ : WRes}
+theorem vN_i32_pair₀ {S : VTy} {δ : LSub} {Θ : LocTy} {n : Nat} (i : UInt32) {s : Val} {ρ : WRes}
     (hs : vN₀ (ℍ := ℍ) S δ Θ n s ρ) :
     vN₀ (ℍ := ℍ) (.tensor (.int .w32) S) δ Θ n (Val.pair (Val.i32 i) s) ρ :=
   ⟨Val.i32 i, s, PMap.empty, ρ, rfl, compS_empty_left ρ, ⟨⟨i, rfl⟩, rfl⟩, hs⟩
 
 /-- **The loop** (Core's `countLoop_wp`). From `i`, with the state `s` in `𝒱⟦S⟧`, the loop runs
 to a state in `𝒱⟦S⟧`, at every index below the function's. By induction on `len(n) − i`. -/
-theorem countLoop_wpN {S : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N : Nat} (f : Val)
+theorem countLoop_wpN₀ {S : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N : Nat} (f : Val)
     (n : UInt32) (hf : vN₀ (ℍ := ℍ) (.bang (.lolli (.tensor (.int .w32) S) S)) δ Θ N f PMap.empty) :
     ∀ (k : Nat) (i : UInt32) (m : Nat) (ls : List SRec) (s : Val) (ρ : WRes)
       (c : Loc → Option Life), m ≤ N → (arrLen n).toNat - i.toNat = k → ConsistentX c ρ →
@@ -72,13 +72,13 @@ theorem countLoop_wpN {S : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N : Nat}
       refine erwp_bind_frame hΦ (opTableN_local _)
         (.appR (.val (.prim .count)) (.pairR f (.pairR (Val.i32 n) (.pairR (Val.i32 (i + 1)) .hole))))
         (fun σ => σ = PMap.empty) (ResU.comp_empty_right ρ) hc
-        (bang_app₀ hΘ hm hf hc (vN_i32_pair i hs) ls) rfl ?_
+        (bang_app₀ hΘ hm hf hc (vN_i32_pair₀ i hs) ls) rfl ?_
       rintro k' hk' ls' v σ₁ σ₂ σ hcσ hv rfl hcσ' -
       rw [ResU.CompS.functional hcσ (ResU.comp_empty_right σ₁)] at hcσ' ⊢
       exact ih (i + 1) k' ls' v σ₁ c (hk'.trans hm) (by omega) hcσ' hv
 
 /-- **`count_fold` at `SemJN₀`** (Core's `countFold_compatX`), at every host. -/
-theorem countFold_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {S : VTy} (hΓ : Ctx.DeadP Γ) :
+theorem countFold_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {S : VTy} (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .count)) (.val (countFoldTy S)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
   obtain rfl := gN_deadP₀ hΓ hg
@@ -92,11 +92,11 @@ theorem countFold_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {S : VTy} (hΓ : Ctx.Dea
   obtain rfl := eq_of_compS_empty_left hc₂
   obtain ⟨vi, s, ρi, ρs, rfl, hc₃, ⟨⟨i, rfl⟩, rfl⟩, hs⟩ := h₃
   obtain rfl := eq_of_compS_empty_left hc₃
-  exact countLoop_wpN hΘ' f n' hf _ i k ls' s _ c'' le_rfl rfl hcon hs
+  exact countLoop_wpN₀ hΘ' f n' hf _ i k ls' s _ c'' le_rfl rfl hcon hs
 
-/-- **The loop with an exit** (Core's `countTryLoop_wp`): `countLoop_wpN`'s induction with one
+/-- **The loop with an exit** (Core's `countTryLoop_wp`): `countLoop_wpN₀`'s induction with one
 more case, the step's `inj₂`. -/
-theorem countTryLoop_wpN {S E : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N : Nat} (f : Val)
+theorem countTryLoop_wpN₀ {S E : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N : Nat} (f : Val)
     (n : UInt32)
     (hf : vN₀ (ℍ := ℍ) (.bang (.lolli (.tensor (.int .w32) S) (.sum S E))) δ Θ N f PMap.empty) :
     ∀ (k : Nat) (i : UInt32) (m : Nat) (ls : List SRec) (s : Val) (ρ : WRes)
@@ -142,7 +142,7 @@ theorem countTryLoop_wpN {S E : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N :
       let e₂ : Expr := .inj₂ (.var 0)
       refine erwp_bind_frame hΦ (opTableN_local _) (.case .hole e₁ e₂)
         (fun σ => σ = PMap.empty) (ResU.comp_empty_right ρ) hc
-        (bang_app₀ hΘ hm hf hc (vN_i32_pair i hs) ls) rfl ?_
+        (bang_app₀ hΘ hm hf hc (vN_i32_pair₀ i hs) ls) rfl ?_
       rintro k' hk' ls' v σ₁ σ₂ σ hcσ hv rfl hcσ' -
       rw [ResU.CompS.functional hcσ (ResU.comp_empty_right σ₁)] at hcσ' ⊢
       rcases hv with ⟨s', rfl, hs₁⟩ | ⟨e, rfl, he₁⟩
@@ -156,7 +156,7 @@ theorem countTryLoop_wpN {S E : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {N :
         exact erwp_val (v := Val.inj₂ e) (Or.inr ⟨e, rfl, he₁⟩)
 
 /-- **`count_try` at `SemJN₀`** (Core's `countTry_compatX`), at every host. -/
-theorem countTry_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {S E : VTy} (hΓ : Ctx.DeadP Γ) :
+theorem countTry_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {S E : VTy} (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .countTry)) (.val (countTryTy S E)) := by
   intro δ γ Θ c n ls ρ _ _ _ _ hg
   obtain rfl := gN_deadP₀ hΓ hg
@@ -170,7 +170,7 @@ theorem countTry_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {S E : VTy} (hΓ : Ctx.De
   obtain rfl := eq_of_compS_empty_left hc₂
   obtain ⟨vi, s, ρi, ρs, rfl, hc₃, ⟨⟨i, rfl⟩, rfl⟩, hs⟩ := h₃
   obtain rfl := eq_of_compS_empty_left hc₃
-  exact countTryLoop_wpN hΘ' f n' hf _ i k ls' s _ c'' le_rfl rfl hcon hs
+  exact countTryLoop_wpN₀ hΘ' f n' hf _ i k ls' s _ c'' le_rfl rfl hcon hs
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

@@ -407,7 +407,7 @@ theorem erwp_I_frameListRN {A : VTy} {δ : LSub} {β β' : Life} (hadm : AdmWf A
 /-! ### `slice_borrow` at the pure row -/
 
 /-- **`slice_borrow` is a value of its type** (Core's `sliceBorrowI_compatX`):
-`withbor` at `Array A ⊸ (∀'x ⊏ @Δ. [Imm 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`. `sliceBorrowM_sem`'s
+`withbor` at `Array A ⊸ (∀'x ⊏ @Δ. [Imm 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`. `sliceBorrowM_sem₀`'s
 steps with the `n` Imm Frames around the callback (`erwp_I_frameListRN` at the family's range,
 the pure row's table): the payloads' and the result's strata from the side conditions by 6.60 at
 `↓@bδ` (`vN_outlivesLe₀`), the frames' lifetimes below the bound and the callback's stratum; the

@@ -8,7 +8,7 @@ are `Mut @a A` borrows. At one leaf (`i = j`) one Mut Anti-Frame opens the cell,
 twice and written twice; at two leaves each is opened by its own Mut Anti-Frame
 (`sepRange_pick2N`), the two contents are read and written crosswise, and both leaves are sealed
 again, each holding the other's content. On the chain each anti-frame is `erwp_M_antiFrame` at the
-view, the leaf's cell at its view lifetime (`consistentX_get`), as in `sliceReplaceM_compatN`; the
+view, the leaf's cell at its view lifetime (`consistentX_get`), as in `sliceReplaceM_compatN₀`; the
 inner anti-frame runs at the outer one's table (`erwp_mono`: the empty table stops nowhere). The
 steps inside are taken at the index each one costs, and the content moved into the other cell keeps
 its witness, which is in that cell's stratum (the leaf's uniformity clause).
@@ -74,7 +74,7 @@ theorem swap_body₁ (v : Val) :
           (.var 4))) := by
   simp [Expr.subst, slSwapCellsE]
 
-theorem sliceSwapM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
+theorem sliceSwapM_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val swapV) (.val (sliceSwapMTy a A)) := by
   refine sem_constN₀ hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon

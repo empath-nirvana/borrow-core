@@ -568,7 +568,7 @@ def claimL₀ (A : VTy) (δ : LSub) (Θ : LocTy) (I : List Loc) : Nat → WProp 
 
 /-- **One Mut Frame per place, around one expression, across stops, raises and layered cancel
 runs** (Core's `wpG_M_frameList`, the frames of `sliceBorrowMU_compatX`), at the chain: the list
-induction over `erwp_M_frameCRR`, each frame its own key in the world, as `rwp_M_frameListN`.
+induction over `erwp_M_frameCRR`, each frame its own key in the world, as `rwp_M_frameListN₀`.
 
 Frame `j` lends its leaf at `αⱼ` fresh for the world the frames before it reached and below the
 bound, so the row's types read alike at the two worlds (`vN_add_eq_bnd₀`). The callback of
@@ -754,7 +754,7 @@ theorem fin_claimArr {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
 stops, raises and layered cancel runs (`erwp_M_frameListCRN`, Core's `wpG_M_frameFam` at the
 array's range): the payloads' stratum and the result's from the side conditions by 6.60 at
 `↓@bδ` (`vN_outlivesLe₀`), the frames' lifetimes below the bound; the callback, at the innermost
-lifetime `α`, receives the family `[Mut 'x A]` (`vN_mutLeaf` at each leaf) and runs at its row's
+lifetime `α`, receives the family `[Mut 'x A]` (`vN_mutLeaf₀` at each leaf) and runs at its row's
 `tabN₀`, below the lender's twin at the empty claim (`tabN_tabR_le`); the composite claim, the
 cells owned again at `Θ` (`claimL₀`), is the array; it is consistent with the view
 (`erwp_claimX`), and the finaliser frame `then b. (a, b) unwind d a` consumes it with `d`
@@ -842,7 +842,7 @@ theorem sliceBorrowMS_compat {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy} {S 
   have hcf : ConsistentX c'' ρf := consistentX_left hcomp hc'' hv₃
   have hfam : vN₀ (ℍ := ℍ) (.sliceMut (.var x) A) (δ.extend x α) Θ'' k' (Val.arr l cn) ρm :=
     ⟨l, cn, rfl, hn, by
-      rw [sepRange_eq_sepList]; exact sepList_mono' (fun _ _ h => vN_mutLeaf hA h) hml⟩
+      rw [sepRange_eq_sepList]; exact sepList_mono' (fun _ _ h => vN_mutLeaf₀ hA h) hml⟩
   have h1 := (hf Θ'' (hE.extR ρf) hOK'' c'' hcf ls) α hLt
   have h2 := h1 c'' k' le_rfl (Val.arr l cn) _ ρ₃ hcomp hfam hc''
   rw [cN_effOf₀, tabN_effOf_base S (.box (.var x) B) (.tensor (.array A) B)] at h2
@@ -1142,7 +1142,7 @@ theorem sliceBorrowMU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
   have hcf : ConsistentX c'' ρf := consistentX_left hcomp hc'' hv₃
   have hfam : vN₀ (ℍ := ℍ) (.sliceMut (.var x) A) (δ.extend x α) Θ'' k' (Val.arr l cn) ρm :=
     ⟨l, cn, rfl, hn, by
-      rw [sepRange_eq_sepList]; exact sepList_mono' (fun _ _ h => vN_mutLeaf hA h) hml⟩
+      rw [sepRange_eq_sepList]; exact sepList_mono' (fun _ _ h => vN_mutLeaf₀ hA h) hml⟩
   have h1 := (hf Θ'' (hE.extR ρf) hOK'' c'' hcf ls) α hLt
   have h2 := h1 c'' k' le_rfl (Val.arr l cn) _ ρ₃ hcomp hfam hc''
   rw [cN_effOf₀, tabN_unwind_extend hS (.box (.var x) B) (.tensor (.array A) B) δ Θ'' α c''] at h2
@@ -1185,7 +1185,7 @@ def dArrFree : Expr := .val (Val.lam (.app (.val (.prim .drop)) (.pair (.val dro
 theorem dArrFree_closed : closedAt 0 dArrFree = true := by decide
 
 /-- `λu. ()` is a value of `!(1 ⊸ 1)`. -/
-theorem dropU_sem (δ : LSub) (Θ : LocTy) (n : Nat) :
+theorem dropU_sem₀ (δ : LSub) (Θ : LocTy) (n : Nat) :
     vN₀ (ℍ := ℍ) (.bang (.lolli .unit .unit)) δ Θ n dropU PMap.empty := by
   refine ⟨rfl, ?_⟩
   intro Θ'' _ hOK c' _ ls' c'' k _ v ρv ρ' hc hv _
@@ -1225,7 +1225,7 @@ theorem dArrFree_sem :
   rw [e]
   refine erwp_det hΦ (opTableN_down OpTabN.empty_down) hQd
     (fun μ => step1Only_plug (Head.drop μ dropU l cn) rfl .hole) ?_
-  exact dropFill_wpN₀ hOK dropU l (dropU_sem δ Θ'' k) cn.toNat 0 k ls' ρ' c'' le_rfl hcon
+  exact dropFill_wpN₀ hOK dropU l (dropU_sem₀ δ Θ'' k) cn.toNat 0 k ls' ρ' c'' le_rfl hcon
     (by simpa using hs)
 
 /-- **`slice_borrow_mut` at the hardest case's row**, every hypothesis of `sliceBorrowMS_compat`

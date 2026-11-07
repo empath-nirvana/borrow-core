@@ -12,7 +12,7 @@ then the fill (`tabFill_wp`). On the chain:
 * `rwpG_tab` is `wpTS_tab` at the step index: the `tab` step is one allocating head step to a
   term that is not a value, so the run after it is the continuation's run from the world
   `alloc_blockN` builds, the index paying for the step; `erwp_tab` is the same at `erwp`.
-* `tabFill_wpN` is `tabFill_wp`, by Core's induction: `bang_app₀` for the call of the
+* `tabFill_wpN₀` is `tabFill_wp`, by Core's induction: `bang_app₀` for the call of the
   `!`-function, `erwp_bind_frame` for Core's `wpTS_bind_frame`, `rwp_store`, and the `1↦` step.
 -/
 
@@ -143,7 +143,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 /-- **The fill** (Core's `tabFill_wp`): with the cells `ℓ, …, ℓ + i − 1` filled and
 `ℓ + i, …, ℓ + i + k − 1` holding `()`, the rest of `tabFill` runs to the array, at every index
 below the `!`-function's; by induction on `k`. -/
-theorem tabFill_wpN {A : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {M : Nat} (f : Val) (l : Loc)
+theorem tabFill_wpN₀ {A : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {M : Nat} (f : Val) (l : Loc)
     (N : UInt32) (hN31 : N.toNat < 2 ^ 31)
     (hf : vN₀ (ℍ := ℍ) (.bang (.lolli (.int .w32) A)) δ Θ M f PMap.empty) :
     ∀ (k i m : Nat) (ls : List SRec) (ρd ρt ρ : WRes) (c : Loc → Option Life), m ≤ M →
@@ -198,15 +198,15 @@ theorem tabFill_wpN {A : VTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {M : Nat} (
       have hc₃ : ConsistentX c σ₃ := consistentX_compS hσ₃ hcL hcR'
       have hleaf : vN₀ (ℍ := ℍ) (.ref A) δ Θ (k' - 1) (Val.loc (l + i)) L :=
         ⟨l + i, w, σw, rfl, ResU.CompS.comm hL, vN_le₀ (by omega) hw⟩
-      refine tabFill_wpN hΘ f l N hN31 hf k (i + 1) (k' - 1) ls' D σt σ₃ c (by omega) hc₃
+      refine tabFill_wpN₀ hΘ f l N hN31 hf k (i + 1) (k' - 1) ls' D σt σ₃ c (by omega) hc₃
         (by rw [← hN]; ring) (sepRange_append hD
           (sepRange_mono' (fun _ _ h => vN_le₀ (by omega) h) hd')
           ⟨L, PMap.empty, ResU.comp_empty_right L, hleaf, ⟨rfl, trivial⟩⟩) ?_ hσ₃''
       rwa [show l + i + 1 = l + (i + 1) by ring] at ht''
 
 /-- **`array_new` at `SemJN₀`** (Core's `arrNew_compatX`): the `tab` step (`erwp_tab`), then the
-fill from no filled cell (`tabFill_wpN`). -/
-theorem arrNew_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
+fill from no filled cell (`tabFill_wpN₀`). -/
+theorem arrNew_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
     SemJN₀ (ℍ := ℍ) Δ Γ (.val (.prim .tab)) (.val (arrNewTy A)) := by
   refine sem_constN₀ hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
@@ -219,7 +219,7 @@ theorem arrNew_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP 
   · exact erwp_zero
   refine erwp_tab hΦ (opTableN_local _) fun ℓ cells x hcells hx => ?_
   rw [eq_of_compS_empty_left hx]
-  exact tabFill_wpN hΘ' f ℓ (arrLen cn) (arrLen_bound cn) hf (arrLen cn).toNat 0 k ls'
+  exact tabFill_wpN₀ hΘ' f ℓ (arrLen cn) (arrLen_bound cn) hf (arrLen cn).toNat 0 k ls'
     PMap.empty cells cells c'' (Nat.le_succ k)
     (consistentX_sepRange_own c'' .unit _ ℓ hcells) (by simp) ⟨rfl, trivial⟩
     (by simpa using hcells) (compS_empty_left cells)

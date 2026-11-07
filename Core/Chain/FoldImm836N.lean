@@ -44,14 +44,14 @@ theorem withload_sizedN {T₁ : VTy} (x : LifeVar) (hfree₁ : ¬ VFree x T₁) 
       (∃ σ, K σ ∧ vO₀ (ℍ := ℍ) T₁ δ Θ (n - 1) w σ ∧ ResU.Reb β σ χ) →
       vN₀ (ℍ := ℍ) (T₁.immReborrow (.var x)) (δ.extend x β) Θ (n - 1) w χ → ResU.CompS ρ₂ χ Bχ →
       ConsistentX c Bχ →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (RebPost β (vPostN R δ Θ)) (n - 1) ls
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (RebPost β (vPostN₀ R δ Θ)) (n - 1) ls
         (.app (.app (.val vf) (.val .unit)) (.val w)) Bχ) :
-    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN R δ Θ) n ls
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN₀ R δ Θ) n ls
       (.app (.app withload (.val (.loc ℓ))) (.val vf)) τ := by
   obtain ⟨α₀, _, ⟨l', s, w, σ, hσs, hl', rfl, _, hpay⟩, hwit⟩ := hv
   obtain rfl : ℓ = l' := loc_inj hl'
   have hΦ := LocTy.view_down hΘ.1 c
-  have hQ := vPostN_down (ℍ := ℍ) R δ Θ
+  have hQ := vPostN_down₀ (ℍ := ℍ) R δ Θ
   refine erwp_headE hΦ hQ (.appL .hole vf) (fun μ => Head.beta μ _ (Val.loc ℓ)) rfl ?_
   refine erwp_headE hΦ hQ .hole (fun μ => Head.beta μ _ vf) rfl ?_
   have e₃ : Kont.hole.plug (Expr.subst 0 vf (Expr.subst (0 + 1) (Val.shift 1 0 (Val.loc ℓ))
@@ -158,7 +158,7 @@ theorem alg_callN {A R : VTy} {y : LifeVar} {δ : LSub} {Θ₀ Θ : LocTy} (hΘ 
     (hg : vN₀ (ℍ := ℍ) (.bang (VTy.all y LifeCtx.empty.meetOfDom (VTy.lolli A R))) δ Θ₀ N g
       PMap.empty)
     (hr : vN₀ (ℍ := ℍ) A (δ.extend y β) Θ j r ρ) (hc : ConsistentX c ρ) :
-    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN R δ Θ) j ls
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN₀ R δ Θ) j ls
       (.app (.app (.val g) (.val .unit)) (.val r)) ρ := by
   have hΦ := LocTy.view_down hΘ.1 c
   have hwp := hg.2 Θ (LocTy.extR_empty Θ₀ Θ) hΘ c (consistentX_empty c) ls β hβ
@@ -182,7 +182,7 @@ variable (M R : VTy) (y : LifeVar) (δ : LSub) (Θ : LocTy) (c : Loc → Option 
 def PSpecN (n : Nat) (h : Val) : Prop :=
   ∀ α ℓ ρ j ls, j ≤ Nb → vN₀ (ℍ := ℍ) (.imm (.var y) M) (δ.extend y α) Θ j (.loc ℓ) ρ →
     WitLt ℓ ρ n → ConsistentX c ρ →
-    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN R δ Θ) j ls
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN₀ R δ Θ) j ls
       (.app (.app withload (.val (.loc ℓ))) (.val (cbOf h))) ρ
 
 /-- The recursive call `h w` on a view `w` of `M` at `β` smaller than `K` (Core's `HSpec`). -/
@@ -190,7 +190,7 @@ def HSpecN (β : Life) (n K : Nat) (h : Val) : Prop :=
   ∀ w χ j ls, j ≤ Nb → sizeOf w.1 < K →
     vN₀ (ℍ := ℍ) (M.immReborrow (.var y)) (δ.extend y β) Θ j w χ → Good M w χ n →
     ConsistentX c χ →
-    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN R δ Θ) j ls (.app (.val h) (.val w)) χ
+    erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN₀ R δ Θ) j ls (.app (.val h) (.val w)) χ
 
 /-- **The traversal** (Core's `trav_spec`). -/
 theorem trav_specKN (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VFree y R)
@@ -198,16 +198,16 @@ theorem trav_specKN (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VF
     ∀ (G : FShape), G.WF → ∀ w χ j ls, j ≤ Nb → sizeOf w.1 ≤ K → (G = .varX → sizeOf w.1 < K) →
       vN₀ (ℍ := ℍ) ((VTy.inst M G.ty).immReborrow (.var y)) (δ.extend y β) Θ j w χ →
       Good (VTy.inst M G.ty) w χ n → ConsistentX c χ →
-      erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN (G.res y R) (δ.extend y β) Θ) j ls
+      erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) (vPostN₀ (G.res y R) (δ.extend y β) Θ) j ls
         (.app (.app (.val (travK G)) (.val h)) (.val w)) χ
   | .leaf A, hA, w, χ, j, ls, _, _, _, hview, _, _ => by
-      refine travK_appN (LocTy.view_down hΘ.1 c) (vPostN_down _ _ Θ) _ h w ?_
+      refine travK_appN (LocTy.view_down hΘ.1 c) (vPostN_down₀ _ _ Θ) _ h w ?_
       rw [tB_leaf]
       have e : VTy.inst M A = A := VTy.subst_closed0 hA _
       simp only [FShape.ty, e] at hview
       exact erwp_val hview
   | .refX, _, w, χ, j, ls, hj, _, _, hview, hgood, hc => by
-      refine travK_appN (LocTy.view_down hΘ.1 c) (vPostN_down _ _ Θ) _ h w ?_
+      refine travK_appN (LocTy.view_down hΘ.1 c) (vPostN_down₀ _ _ Θ) _ h w ?_
       rw [tB_refX]
       change vN₀ (ℍ := ℍ) (.imm (.var y) M) (δ.extend y β) Θ j w χ at hview
       obtain ⟨ℓ, rfl⟩ : ∃ ℓ, w = Val.loc ℓ := by
@@ -217,7 +217,7 @@ theorem trav_specKN (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VF
         (hP β ℓ χ j ls hj hview (Good.witLt hgood) hc)
       exact vN_cast₀ (vN_extend_of_not_free₀ hyR δ β).symm hv
   | .varX, _, w, χ, j, ls, hj, _, hlt, hview, hgood, hc => by
-      refine travK_appN (LocTy.view_down hΘ.1 c) (vPostN_down _ _ Θ) _ h w ?_
+      refine travK_appN (LocTy.view_down hΘ.1 c) (vPostN_down₀ _ _ Θ) _ h w ?_
       rw [tB_varX]
       refine erwp_mono (fun k _ v ρ hv => ?_) (opTableN_local _) j ls _ χ
         (hH w χ j ls hj (hlt rfl) hview hgood hc)
@@ -227,9 +227,9 @@ theorem trav_specKN (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VF
       obtain ⟨v₁, v₂, χ₁, χ₂, rfl, hcχ, h₁, h₂⟩ := hview
       have hs₁ : sizeOf v₁.1 < K := by rw [sizeOf_pair] at hK; omega
       have hs₂ : sizeOf v₂.1 < K := by rw [sizeOf_pair] at hK; omega
-      refine travK_appN hΦ (vPostN_down _ _ Θ) _ h _ ?_
+      refine travK_appN hΦ (vPostN_down₀ _ _ Θ) _ h _ ?_
       rw [tB_tensor]
-      refine erwp_headE hΦ (vPostN_down _ _ Θ) .hole (fun μ => Head.letpair μ v₁ v₂ _) rfl ?_
+      refine erwp_headE hΦ (vPostN_down₀ _ _ Θ) .hole (fun μ => Head.letpair μ v₁ v₂ _) rfl ?_
       simp only [Kont.plug]
       rw [tensor_body]
       refine erwp_of_valid fun hvχ => ?_
@@ -241,7 +241,7 @@ theorem trav_specKN (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VF
           (Good.tensorL hgood hcχ) (consistentX_left hcχ hc hvχ)) rfl ?_
       rintro k₁ hk₁ ls₁ r₁ σ₁ X σ hcσ hr₁ rfl hcσ' hvσ
       simp only [Kont.plug]
-      refine erwp_headE hΦ (vPostN_down _ _ Θ) .hole (fun μ => Head.beta μ _ r₁) rfl ?_
+      refine erwp_headE hΦ (vPostN_down₀ _ _ Θ) .hole (fun μ => Head.beta μ _ r₁) rfl ?_
       rw [tensor_body₂]
       refine erwp_bind_frame hΦ (opTableN_local _)
         (.appR (.val (.lam (.pair (.val (r₁.shift 1 0)) (.var 0)))) .hole)
@@ -250,7 +250,7 @@ theorem trav_specKN (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VF
           (vN_le₀ hk₁ h₂) (Good.tensorR hgood hcχ) (consistentX_right hcσ hcσ' hvσ)) rfl ?_
       rintro k₂ hk₂ ls₂ r₂ τ₁ Y τ hcτ hr₂ rfl _ _
       simp only [Kont.plug]
-      refine erwp_headE hΦ (vPostN_down _ _ Θ) .hole (fun μ => Head.beta μ _ r₂) rfl ?_
+      refine erwp_headE hΦ (vPostN_down₀ _ _ Θ) .hole (fun μ => Head.beta μ _ r₂) rfl ?_
       rw [tensor_body₃]
       exact erwp_val ⟨r₁, r₂, Y, τ₁, rfl, ResU.CompS.comm hcτ, vN_le₀ hk₂ hr₁, hr₂⟩
   | .sum F G, hFG, w, χ, j, ls, hj, hK, _, hview, hgood, hc => by
@@ -259,9 +259,9 @@ theorem trav_specKN (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VF
       · have hsz : sizeOf v.1 < K := by
           have : sizeOf (Val.inj₁ v).1 = 1 + sizeOf v.1 := rfl
           omega
-        refine travK_appN hΦ (vPostN_down _ _ Θ) _ h _ ?_
+        refine travK_appN hΦ (vPostN_down₀ _ _ Θ) _ h _ ?_
         rw [tB_sum]
-        refine erwp_headE hΦ (vPostN_down _ _ Θ) .hole (fun μ => Head.case₁ μ v _ _) rfl ?_
+        refine erwp_headE hΦ (vPostN_down₀ _ _ Θ) .hole (fun μ => Head.case₁ μ v _ _) rfl ?_
         simp only [Kont.plug]
         rw [sum_branch F h v Expr.inj₁ (fun _ _ _ => rfl)]
         refine erwp_bind_frame hΦ (opTableN_local _) (.appR (.val (.lam (Expr.inj₁ (.var 0)))) .hole)
@@ -271,14 +271,14 @@ theorem trav_specKN (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VF
         rintro k' _ ls' r σ₁ E σ hcσ hr rfl _ _
         obtain rfl := ResU.CompS.functional hcσ (ResU.comp_empty_right σ₁)
         simp only [Kont.plug]
-        refine erwp_headE hΦ (vPostN_down _ _ Θ) .hole (fun μ => Head.beta μ _ r) rfl ?_
+        refine erwp_headE hΦ (vPostN_down₀ _ _ Θ) .hole (fun μ => Head.beta μ _ r) rfl ?_
         exact erwp_val (v := Val.inj₁ r) (.inl ⟨r, rfl, hr⟩)
       · have hsz : sizeOf v.1 < K := by
           have : sizeOf (Val.inj₂ v).1 = 1 + sizeOf v.1 := rfl
           omega
-        refine travK_appN hΦ (vPostN_down _ _ Θ) _ h _ ?_
+        refine travK_appN hΦ (vPostN_down₀ _ _ Θ) _ h _ ?_
         rw [tB_sum]
-        refine erwp_headE hΦ (vPostN_down _ _ Θ) .hole (fun μ => Head.case₂ μ v _ _) rfl ?_
+        refine erwp_headE hΦ (vPostN_down₀ _ _ Θ) .hole (fun μ => Head.case₂ μ v _ _) rfl ?_
         simp only [Kont.plug]
         rw [sum_branch G h v Expr.inj₂ (fun _ _ _ => rfl)]
         refine erwp_bind_frame hΦ (opTableN_local _) (.appR (.val (.lam (Expr.inj₂ (.var 0)))) .hole)
@@ -288,7 +288,7 @@ theorem trav_specKN (hΘ : Θ.OK) {β : Life} {n K : Nat} {h : Val} (hyR : ¬ VF
         rintro k' _ ls' r σ₁ E σ hcσ hr rfl _ _
         obtain rfl := ResU.CompS.functional hcσ (ResU.comp_empty_right σ₁)
         simp only [Kont.plug]
-        refine erwp_headE hΦ (vPostN_down _ _ Θ) .hole (fun μ => Head.beta μ _ r) rfl ?_
+        refine erwp_headE hΦ (vPostN_down₀ _ _ Θ) .hole (fun μ => Head.beta μ _ r) rfl ?_
         exact erwp_val (v := Val.inj₂ r) (.inr ⟨r, rfl, hr⟩)
 
 end Trav
@@ -348,7 +348,7 @@ theorem hSpec_allN {F : FShape} (hF : F.WF) (hG : F.Guarded) (hΘ : Θ.OK) {g : 
     | zero => intro w χ j ls _ hlt; exact absurd hlt (Nat.not_lt_zero _)
     | succ K ihK =>
         intro w χ j ls hj hlt hview hgood hc
-        refine hV_appN hΦ (vPostN_down _ _ Θ) F g w ?_
+        refine hV_appN hΦ (vPostN_down₀ _ _ Θ) F g w ?_
         have hview' := (vN_immReborrow_mu_iff (ℍ := ℍ) (A := F.ty) (FShape.Cl_ty hF) (.var y)).mp
           hview
         refine erwp_bind_frame hΦ (opTableN_local _)
@@ -360,7 +360,7 @@ theorem hSpec_allN {F : FShape} (hF : F.WF) (hG : F.Guarded) (hΘ : Θ.OK) {g : 
         rintro k' hk' ls' r σ₁ E σ hcσ hr rfl hcσ' _
         obtain rfl := ResU.CompS.functional hcσ (ResU.comp_empty_right σ₁)
         simp only [Kont.plug]
-        refine erwp_headE hΦ (vPostN_down _ _ Θ) .hole (fun μ => Head.beta μ _ r) rfl ?_
+        refine erwp_headE hΦ (vPostN_down₀ _ _ Θ) .hole (fun μ => Head.beta μ _ r) rfl ?_
         rw [alg_subst]
         exact alg_callN hΘ hyR hβ (hk'.trans hj) hg hr hcσ'
   intro n
@@ -397,12 +397,12 @@ theorem foldImm_compatN {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (hF : F.WF) (
   subst hρv
   obtain rfl := eq_of_compS_empty_left hcomp
   have hΦ := LocTy.view_down hOK₁.1 c₂
-  refine erwp_headE hΦ (vPostN_down _ δ Θ₁) .hole (fun μ => Head.beta μ _ g) rfl ?_
+  refine erwp_headE hΦ (vPostN_down₀ _ δ Θ₁) .hole (fun μ => Head.beta μ _ g) rfl ?_
   rw [foldImmV_subst]
   refine erwp_val ⟨rfl, ?_⟩
   intro Θ₂ _ hOK₂ c₃ _ ls₂ α hα
   have hΦ₂ := LocTy.view_down hOK₂.1 c₃
-  refine erwp_headE hΦ₂ (vPostN_down _ _ Θ₂) .hole (fun μ => Head.beta μ _ Val.unit) rfl ?_
+  refine erwp_headE hΦ₂ (vPostN_down₀ _ _ Θ₂) .hole (fun μ => Head.beta μ _ Val.unit) rfl ?_
   rw [foldCl_subst]
   refine erwp_val ?_
   intro Θ₃ _ hOK₃ c₄ _ ls₃ c₅ k₂ hk₂ v ρv ρ'' hcomp' hv hc₅
@@ -411,9 +411,9 @@ theorem foldImm_compatN {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (hF : F.WF) (
   obtain ⟨ℓ, rfl⟩ : ∃ ℓ, v = Val.loc ℓ := by
     obtain ⟨-, -, ⟨ℓ, -, -, -, -, hw, -, -, -⟩, -⟩ := hv
     exact ⟨ℓ, hw⟩
-  refine erwp_headE hΦ₃ (vPostN_down _ _ Θ₃) .hole (fun μ => Head.beta μ _ (Val.loc ℓ)) rfl ?_
+  refine erwp_headE hΦ₃ (vPostN_down₀ _ _ Θ₃) .hole (fun μ => Head.beta μ _ (Val.loc ℓ)) rfl ?_
   rw [foldLam_subst]
-  refine travK_appN hΦ₃ (vPostN_down _ _ Θ₃) _ _ _ ?_
+  refine travK_appN hΦ₃ (vPostN_down₀ _ _ Θ₃) _ _ _ ?_
   rw [tB_refX]
   obtain ⟨m, hm⟩ := witLt_existsN hv
   refine erwp_mono (fun k _ v' ρ₀ hv' => vN_cast₀ (vN_extend_of_not_free₀ hyR δ α).symm hv')

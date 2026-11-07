@@ -7,7 +7,7 @@ Core's `sliceReplaceM_compatX` (`Core/SliceOps.lean`) is `arrReplace_compatX` wi
 a `Mut @a A` borrow: the Mut Anti-Frame at the leaf (`wpTS_M_antiFrameX`) opens the cell for the
 load and the store, and the leaf is sealed again holding the new element. On the chain the
 anti-frame is `erwp_M_antiFrame` at the view, the leaf's cell at its view lifetime
-(`consistentX_get`), as in `withswap_compatN`; the steps inside it are `arrReplace_compatN₀`'s, each
+(`consistentX_get`), as in `withswap_compatN₀`; the steps inside it are `arrReplace_compatN₀`'s, each
 at the index it costs (the anti-frame's postcondition reads the cell's member at the index of the
 end).
 -/
@@ -46,7 +46,7 @@ theorem sepRange_pickW {P : Loc → WProp} {ℓ : Loc} {n i : Nat} (hi : i < n) 
 leaf's cell is opened by the Mut Anti-Frame at the view (`erwp_M_antiFrame`), read (`rwp_load`)
 and written (`rwp_store`), and sealed again holding the new element, the leaf back in the family
 beside the old element; out of range, the element is handed back. -/
-theorem sliceReplaceM_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
+theorem sliceReplaceM_compatN₀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy}
     (hΓ : Ctx.DeadP Γ) : SemJN₀ (ℍ := ℍ) Δ Γ (.val replaceV) (.val (sliceReplaceMTy a A)) := by
   refine sem_constN₀ hΓ rfl fun δ Θ n _ _ => ⟨rfl, ?_⟩
   intro Θ' _ hΘ' _ _ ls' c'' k _ v σ τ hcomp hv hcon
