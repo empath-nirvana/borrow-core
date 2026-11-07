@@ -933,7 +933,8 @@ theorem erwp_ubindClaimF_of_K {Φ : LocFam} (hΦ : Φ.Down) {T T₁ : OpTabN} (h
 /-- **The frame at `erwpK`, across must-resume stops** (`erwp_frameL`). The frame `R`, read at a
 world, owns nothing; at a stop it joins the continuation's share, so the entries' list order and
 world order pass to a part of the share (`hwcl`, `hwk`), and it is read again at the resumption
-world (`hRk`); a value is posted with it at the world the run chose (`hRV`). -/
+world (`hRk`, the order read at the joint share); a value is posted with it at the world the
+run chose (`hRV`). -/
 theorem erwpK_frameL {V : ι → ι → Prop} {Φ : ι → LocFam} {fl : ι → Life} {T : ι → OpTabK ι}
     (hwcl : ∀ x m i en, T x m i = some en → ∀ ls ls' (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
       en.wc ls ls' ρ → en.wc ls ls' ρ₁)
@@ -945,7 +946,7 @@ theorem erwpK_frameL {V : ι → ι → Prop} {Φ : ι → LocFam} {fl : ι → 
     (hRwc : ∀ x m i en, T x m i = some en → en.abort = false → ∀ ls ls' (ρk ρ₂ ρ : WRes),
       ResU.CompS ρk ρ₂ ρ → en.wc ls ls' ρ → R x ls ρ₂ → R x ls' ρ₂)
     (hRk : ∀ x m i en, T x m i = some en → en.abort = false → ∀ f y ls (ρk ρ₂ ρ : WRes),
-      ResU.CompS ρk ρ₂ ρ → en.wk f y ρk → R x ls ρ₂ → R y ls ρ₂)
+      ResU.CompS ρk ρ₂ ρ → en.wk f y ρ → R x ls ρ₂ → R y ls ρ₂)
     (hRV : ∀ x y, V x y → ∀ ls ρ, R x ls ρ → R y ls ρ)
     (hRno : ∀ x ls ρ, R x ls ρ → NoOwn ρ) :
     ∀ n x ls e (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ → R x ls ρ₂ →
@@ -973,7 +974,7 @@ theorem erwpK_frameL {V : ι → ι → Prop} {Φ : ι → LocFam} {fl : ι → 
     have hc' := (hcont y hy' ls'' he').1 k' hk' w τ₁ z hB hz
     simp only [erwpCK, show k' < n by omega, if_true] at hc' ⊢
     exact ih k' (by omega) y ls'' _ z σ₂ τ₂ hzτ
-      (hRk x m i en hT ha f y ls'' ρk σ₂ ρk₂ hk₂ hy'
+      (hRk x m i en hT ha f y ls'' ρk σ₂ ρk₂ hk₂ hy
         (hRwc x m i en hT ha ls' ls'' ρk σ₂ ρk₂ hk₂ he hσ₂)) hc'
   · obtain ⟨hpur, τa, τn, hcan, hPA, hnn⟩ := pure_sep_iff.mp hp
     obtain ⟨τn₂, hn₂, haσ⟩ := (ResU.CompS.assoc τa τn σ₂ σ).mpr ⟨σ₁, hcan, hσ⟩
@@ -1026,9 +1027,10 @@ theorem erwpK_ubindRaiseF {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V
     (hTr : ∀ x m i en, T x m i = some en → en.abort = true → m ≠ 0)
     (hPAls : ∀ x m i en, T x m i = some en → ∀ k ls ls' v ρ, extF ls ls' ρ →
       en.PA k ls v ρ → en.PA k ls' v ρ)
-    (hTk : ∀ x m' i' en', T x m' i' = some en' → en'.abort = false → ∀ f y (ρk : WRes),
-      en'.wk f y ρk → ∀ m i en, T x m i = some en → en.abort = true → ∃ en'',
-        T y m i = some en'' ∧ en''.abort = true ∧ ∀ k ls v ρ, en.PA k ls v ρ → en''.PA k ls v ρ)
+    (hTk : ∀ x m' i' en', T x m' i' = some en' → en'.abort = false → ∀ f y (ρa ρb ρ : WRes),
+      ResU.CompS ρa ρb ρ → en'.wk f y ρ → ∀ m i en, T x m i = some en → en.abort = true →
+        ∃ en'', T y m i = some en'' ∧ en''.abort = true ∧
+          ∀ k ls v, en.PA k ls v ρa → en''.PA k ls v ρa)
     (hTVr : ∀ x y, V x y → ∀ m i en, T x m i = some en → en.abort = true → ∃ en'',
       T y m i = some en'' ∧ en''.abort = true ∧ ∀ k ls v ρ, en.PA k ls v ρ → en''.PA k ls v ρ)
     {R : Nat → WProp} (N D : Val)
@@ -1097,10 +1099,11 @@ theorem erwpK_ubindRaiseF {V : ι → ι → Prop} (hVt : ∀ x y z, V x y → V
         rw [(hTe x' m' i' en' h ha').2] at he
         exact ⟨en₀, h₀, ha₀, τa, τn, hcτ, ⟨hPAls x' _ _ _ h₀ _ _ _ _ _
           (extF_left _ _ _ _ _ hcτ (extF_right hc₃ he)) hPAτ, hn⟩, hnn⟩)
-      (fun x' m' i' en' h ha' f y ls₀ ρk ρ₂ ρ₃ _ hy ⟨en₀, h₀, ha₀, hrest⟩ => by
-        obtain ⟨en'', h'', ha'', hP''⟩ := hTk x' m' i' en' h ha' f y ρk hy m i en₀ h₀ ha₀
+      (fun x' m' i' en' h ha' f y ls₀ ρk ρ₂ ρ₃ hc₃ hy ⟨en₀, h₀, ha₀, hrest⟩ => by
         obtain ⟨τa, τn, hcτ, ⟨hPAτ, hn⟩, hnn⟩ := hrest
-        exact ⟨en'', h'', ha'', τa, τn, hcτ, ⟨hP'' _ _ _ _ hPAτ, hn⟩, hnn⟩)
+        obtain ⟨X, -, hX⟩ := compS_reassoc hcτ (ResU.CompS.comm hc₃)
+        obtain ⟨en'', h'', ha'', hP''⟩ := hTk x' m' i' en' h ha' f y τa X ρ₃ hX hy m i en₀ h₀ ha₀
+        exact ⟨en'', h'', ha'', τa, τn, hcτ, ⟨hP'' _ _ _ hPAτ, hn⟩, hnn⟩)
       (fun x' y hxy ls₀ τ ⟨en₀, h₀, ha₀, hrest⟩ => by
         obtain ⟨en'', h'', ha'', hP''⟩ := hTVr x' y hxy m i en₀ h₀ ha₀
         obtain ⟨τa, τn, hcτ, ⟨hPAτ, hn⟩, hnn⟩ := hrest
@@ -1145,7 +1148,7 @@ theorem erwp_ubindRaiseF_of_K {Φ : LocFam} (hΦ : Φ.Down) {T : OpTabN} (hTD : 
   refine erwpK_ubindRaiseF (ℍ := ℍ) (V := fun _ _ => True) (fun _ _ _ _ _ => trivial)
     (Φ := fun _ => Φ) (fun _ => hΦ) (fun _ _ _ => rfl) (fl := fun _ => 0)
     (T := fun _ => liftTabK T) (fun _ => hTD.liftK) (fun _ _ _ _ _ _ _ _ h => h) ?_ ?_ ?_ ?_ ?_ ?_
-    (fun _ _ _ _ _ _ _ _ _ _ _ _ en h ha => ⟨en, h, ha, fun _ _ _ _ h => h⟩)
+    (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ en h ha => ⟨en, h, ha, fun _ _ _ h => h⟩)
     (fun _ _ _ _ _ en h ha => ⟨en, h, ha, fun _ _ _ _ h => h⟩) N D ?_ (fun _ => hQout) ?_
     n () ls M ρ h
   · intro _ m i en h₁
