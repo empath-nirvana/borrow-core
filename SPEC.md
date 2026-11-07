@@ -11132,6 +11132,25 @@ of a lend that encloses the suspending one.
   `noMutAt_of_outlivesN`).
 - **Inhabited at a variable bound**: `polyC_ok`, the constant `Λ'1 ⊏ ⊤. Λ'2 ⊏ '1. withbor2U` at
   `∀'0 ⊏ '2`, its row yielding `Imm '1 1`, a borrow of the enclosing lifetime.
+- **A closed instance at `goal791N`** (T1.4, `Core/Chain/Nest844N.lean`): an outer `imm` lend's
+  borrow yielded across an inner suspending lend to a handler between them, resumed and
+  cancelled. The constant is `nestC = Λ'1 ⊏ ⊤. Λ'2 ⊏ '1. withbor3U` at `∀'0 ⊏ '2`, its row
+  `yield : Imm '1 1 ↠^cancel 1` (cancel row `F 1`), finalised by `forget`. The program, in `F 1`
+  at the empty context from `nestC` alone:
+
+      r ← alloc (); (r, ()) ← withbor1U r (Λ'3. λi.                 -- outer imm lend of the input
+        s ← alloc (); (s, ()) ← withbor2U s (Λ'4. λc.               -- the scratch cell, 'w = '4 ⊏ '3
+          handle_yield (                                            -- the handler, inside '3, outside '0
+            (c, ()) ← nestC ['3] ['4] c (Λ'0. λm. yield i; forget m); forget c)
+          with H; ['4] ());
+        free s; ['3] ()); free r
+
+  `'3` and `'4` come from Core's own lends (`withbor1U`, `withbor2U` at the empty row); `nestC`
+  is instantiated by `allEV` at `'3 ⊏ ⊤` and `'4 ⊏ '3`, so its callback bound is the variable `'4`
+  and its payload `Imm '3 1` borrows the enclosing lend. `H` resumes `κ` (`progRes`) or cancels it
+  (`progCan`), each clause releasing the payload with `forget`. Each meets every premise of
+  `Goal791N` (`nestC_ok`, `d_progRes`, `d_progCan`), so `goal791N` concludes `OrDiverges` of each
+  from `HandlerLawN` (`progRes_orDiverges`, `progCan_orDiverges`). The answer is `1`, closed.
 
 **Baseline preserved.** `goal791N : HandlerLawN → Goal791N`, its statement unchanged but for
 `Const791.OK`'s shape; `fundamentalN_all`; `handlerLawN_iff`; `goal791N_premises_inst`; the
@@ -11141,8 +11160,7 @@ to `CDerives`, the checker, the backends or the corpus.
 **Open.** The answer at a bound with a variable: `AnsNoMut` without `Row.AnsC`, so that an answer
 may hold a borrow of an enclosing lend. Not derived from the answer's type: the index world may
 key `ℓ` at a lifetime above the bound, where a `Mut` answer type outliving the bound has values
-holding a `mut` cell at `ℓ`; the obstruction is not verified. A closed instance yielding an outer `imm`
-slice across an inner suspending lend (T1.4).
+holding a `mut` cell at `ℓ`; the obstruction is not verified.
 
 ### Not claimed
 
@@ -11611,7 +11629,9 @@ at one branch). No relation the typing rules use reads them yet. The rest of §6
   premises at the constant's own context (`Const791.OKAt`), `Row.Suspend`/`CTy.SuspendC` at a
   context, and the laws that read the callback bound at `δ ⊨ Δ`. The answer's move between views
   is a named premise (`AnsNoMut`), discharged by answers outliving a closed bound (`Row.AnsC`).
-  `goal791N` keeps its statement. No change to `CDerives`, the checker, the backends or the corpus.
+  `goal791N` keeps its statement. A closed instance (T1.4): an outer `imm` lend's borrow yielded
+  across an inner suspending lend to a handler between them, resumed and cancelled, at `goal791N`.
+  No change to `CDerives`, the checker, the backends or the corpus.
 - **1.39** (2026-11-07) — §62 (*The answer's view across a lend*, #844 T1.3): `NoMutAt`,
   `consistentX_setLife_iff`; `consistentX_of_outlivesN`, `consistentX_of_top` and
   `consistentX_setLife` become corollaries; the callback's table steps move the lender's view to
