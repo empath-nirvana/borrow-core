@@ -465,4 +465,7 @@ main -> 1 =
 `borrow imm m { 'x, r -> … }` lends the map's entries: `map_iter(r)` visits every entry, each
 value as a view, and `map_get(r, k)` answers a view of one value in place, so values that aren't
 copyable, such as vectors, are read without copying. While the map is lent it can't change. The
-hash is deterministic, so the order of iteration is the same on every run.
+hash is deterministic, so the order of iteration is the same on every run. `map_iter` copies
+each key out, so its keys are integers or views; `map_entries(r)` lends each key as well,
+`imm 'k K`, for keys such as strings, and `map_drain(m)` consumes the map, each entry taken out
+as an owned pair.

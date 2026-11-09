@@ -378,6 +378,8 @@ loop-shadow-linear erased handles 0 performs 0 raises 0 left 0 0
 loop-shadow-owner erased handles 0 performs 0 raises 0 left 0 0
 loop-shadow-persistent erased handles 0 performs 0 raises 0 left 0 0
 main-lifetime erased handles 0 performs 0 raises 0 left 0 0
+map-drain erased handles 0 performs 0 raises 0 left 0 0
+map-iter-owned erased handles 0 performs 0 raises 0 left 0 0
 map-reuse erased handles 0 performs 0 raises 0 left 0 0
 map-views erased handles 0 performs 0 raises 0 left 0 0
 mut-bind-arm erased handles 0 performs 0 raises 0 left 0 0

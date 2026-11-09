@@ -1,0 +1,49 @@
+-- The hash map of `lib/map.bc` (SPEC §36) at owned keys, `Map[string, i32]`, iterated by borrow:
+-- `borrow imm m { 'x, r -> … }` lends it, and `map_entries(r)` visits every entry in slot order,
+-- each key lent as `imm 'k string` and its value as `imm 'x i32`. A key is read through a load,
+-- `borrow imm *k { 'y, s -> … }`, whose view of the string is `key_prefix(s) : text 'y`, printed
+-- as it is. `map_fold(r, f, s)` folds the same entries. The map is handed back intact: after the
+-- lend it is looked up, grown by a sixth key, iterated again and consumed (`live 0`).
+--
+-- Answer: the five keys and their values, one per line, in slot order (`a 1`, `apple 3`, `date 5`,
+-- `bee 2`, `cherry 4`: fixed by the hash and the insertion sequence), then `i32[6636065]`: the fold
+-- `Σ len(key) · value = 1·1 + 3·2 + 5·3 + 6·4 + 4·5 = 66`, the lookup of "apple" after the lend
+-- (3), the 6 entries once "fig" is in (a growth), and the second iteration's sum of the values
+-- `1 + 2 + 3 + 4 + 5 + 50 = 65`, as `66·100000 + 3·10000 + 6·1000 + 65`. A key printed from its
+-- buffer's whole array rather than its prefix prints filler bytes; an iteration that skips or
+-- repeats a slot changes the fold or the second sum; a lend that loses an entry changes the
+-- lookup or the count; a lend that keeps the keys leaves `live` above 0.
+include textio
+include map
+
+-- `len(key) · value` over the entries.
+fn weigh<'h, 'k, 'x>(r: MapRef[string, i32]<'h, 'k, 'x>) -> i32 =
+  map_fold(r, !{ ((k, v), s) ->
+    let n = borrow imm *k { 'y, b -> len(key_prefix(b)) };
+    s + n * *v }, 0)
+
+main -> i32 =
+  let mut m = map_new[string, i32](2);
+  let o = map_insert(&mut m, string_of_lit("a"), 1);
+  let o = map_insert(&mut m, string_of_lit("bee"), 2);
+  let o = map_insert(&mut m, string_of_lit("apple"), 3);
+  let o = map_insert(&mut m, string_of_lit("cherry"), 4);
+  let o = map_insert(&mut m, string_of_lit("date"), 5);
+  borrow imm m { 'x, r ->
+    for e in map_entries(r) {
+      let (k, v) = e;
+      borrow imm *k { 'y, b -> print_str(key_prefix(b)) };
+      print_byte(b' ');
+      print_dec(*v);
+      print_byte(b'\n')
+    } };
+  let w = borrow imm m { 'x, r -> weigh(r) };
+  let o = map_lookup(&m, string_of_lit("apple"));
+  let a = match o { inl v -> v | inr u -> 0 };
+  let o = map_insert(&mut m, string_of_lit("fig"), 50);
+  let n = map_len(&m);
+  let s = borrow imm m { 'x, r ->
+    let mut s = 0;
+    for e in map_entries(r) { let (k, v) = e; s = s + *v };
+    s };
+  w * 100000 + a * 10000 + n * 1000 + s
