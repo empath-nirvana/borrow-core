@@ -377,7 +377,7 @@ def inferC : Nat → Env → LifeCtx → Slots → Option CCTy → Comp → IM T
       let B' := (E.elabV Δ B).toOption
       let S := (E.elabRow Δ sp r).toOption
       let v := Δ.freshVar
-      let E' : Env := { E with vars := [some m.name], own := [false], nExt := 0,
+      let E' : Env := { E with vars := [some m.name], own := [false], cap := [], nExt := 0,
                                 lenv := (x.name, v) :: E.lenv, row := S }
       let bm ← mkBinder m.name (A'.map (.mut (.var v)))
       let body ← inferC n E' (Δ.extend v bl) [A'.map (.mut (.var v))]
@@ -393,7 +393,7 @@ def externsBefore (ds : Array Decl) (upto : Nat) : List (String × CVTy) :=
   (List.range upto).foldl (init := []) fun acc k =>
     match (ds[k]? : Option Decl) with
     | some (.extern _ n A) =>
-      match (⟨⟨ds, k, [], []⟩, [], [], [], [], 0, none⟩ : Env).elabV LifeCtx.empty A with
+      match (⟨⟨ds, k, [], []⟩, [], [], [], [], 0, none, []⟩ : Env).elabV LifeCtx.empty A with
       | .ok A' => acc ++ [(n.name, A')]
       | .error _ => acc
     | _ => acc

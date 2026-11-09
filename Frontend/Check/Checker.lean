@@ -224,28 +224,28 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
     | .inl sp _ => err sp "the type of `inl V` cannot be synthesized: ascribe it, `(inl V : A + B)`"
     | .inr sp _ => err sp "the type of `inr V` cannot be synthesized: ascribe it, `(inr V : A + B)`"
     | .thunk sp M => do
-      let ⟨C, r⟩ ← synC n (E.push none) Δ (.unit :: T) M
+      let ⟨C, r⟩ ← synC n ((E.capture (mentionsC · M)).push none) Δ (.unit :: T) M
       match C, r with
       | .ret _, r => match rThunkF (at_ sp) r with
         | some r' => pure ⟨_, r'⟩
         | none => err sp "internal error: a dead binder is used"
       | C, _ => err sp s!"`thunk M` needs `M : F A`, but `M : {E.ppC C}`; use `thunkv`"
     | .thunkv sp N => do
-      let ⟨C, r⟩ ← synC n E Δ T N
+      let ⟨C, r⟩ ← synC n (E.capture (mentionsC · N)) Δ T N
       if hC : C.isRet = false then
         match rThunkV (at_ sp) hC r with
         | some r' => pure ⟨_, r'⟩
         | none => err sp thunkvLam
       else err sp s!"`thunkv N` needs `N` not of type `F A`, but `N : {E.ppC C}`; use `thunk`"
     | .bangThunk sp M => do
-      let ⟨C, r⟩ ← synC n (E.push none) Δ (.unit :: T) M
+      let ⟨C, r⟩ ← synC n ((E.capture fun _ => false).push none) Δ (.unit :: T) M
       match C, r with
       | .ret _, r => match rBangThunkF (at_ sp) r with
         | .ok r' => pure ⟨_, r'⟩
         | .error i => throw (notBang E T sp i)
       | C, _ => err sp s!"`!thunk M` needs `M : F A`, but `M : {E.ppC C}`; use `!thunkv`"
     | .bangThunkv sp N => do
-      let ⟨C, r⟩ ← synC n E Δ T N
+      let ⟨C, r⟩ ← synC n (E.capture fun _ => false) Δ T N
       if hC : C.isRet = false then
         match rBangThunkV (at_ sp) hC r with
         | .ok r' => pure ⟨_, r'⟩
@@ -283,7 +283,7 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
       | .mu _, r => pure ⟨_, rUnroll (at_ sp) r⟩
       | A, _ => err sp s!"`unroll V` needs `V : mu X. A`, but `V : {E.ppV A}`"
     | .run sp M => do
-      let ⟨C, r⟩ ← synC n E Δ T M
+      let ⟨C, r⟩ ← synC n (E.capture (mentionsC · M)) Δ T M
       match C, r with
       | .ret _, r => pure ⟨_, rOfRet (at_ sp) r⟩
       | C, _ => err sp s!"`run M` needs `M : F A`, but `M : {E.ppC C}`"
@@ -347,7 +347,7 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
     | .thunk sp M =>
       match A with
       | .thunk (.ret A) => do
-        let r ← chkC n (E.push none) Δ (.unit :: T) M (.ret A)
+        let r ← chkC n ((E.capture (mentionsC · M)).push none) Δ (.unit :: T) M (.ret A)
         match rThunkF (at_ sp) r with
         | some r' => pure r'
         | none => err sp "internal error: a dead binder is used"
@@ -358,7 +358,7 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
       | .code _ _ _ => err sp "code types (§68) are not yet elaborated" -- [spec §68]
       | .thunk C =>
         if hC : C.isRet = false then do
-          let r ← chkC n E Δ T N C
+          let r ← chkC n (E.capture (mentionsC · N)) Δ T N C
           match rThunkV (at_ sp) hC r with
           | some r' => pure r'
           | none => err sp thunkvLam
@@ -367,7 +367,7 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
     | .bangThunk sp M =>
       match A with
       | .bang (.thunk (.ret A)) => do
-        let r ← chkC n (E.push none) Δ (.unit :: T) M (.ret A)
+        let r ← chkC n ((E.capture fun _ => false).push none) Δ (.unit :: T) M (.ret A)
         match rBangThunkF (at_ sp) r with
         | .ok r' => pure r'
         | .error i => throw (notBang E T sp i)
@@ -376,7 +376,7 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
       match A with
       | .bang (.thunk C) =>
         if hC : C.isRet = false then do
-          let r ← chkC n E Δ T N C
+          let r ← chkC n (E.capture fun _ => false) Δ T N C
           match rBangThunkV (at_ sp) hC r with
           | .ok r' => pure r'
           | .error i => throw (notBang E T sp i)
@@ -401,7 +401,7 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
           else err sp s!"`roll` at `{E.ppV (.mu A)}`, which is not closed"
         else err sp s!"`roll` at `{E.ppV (.mu A)}`, whose variable occurs under `mut`"
       | A => err sp s!"`roll V` is checked against `{E.ppV A}`, which is not a `mu` type"
-    | .run sp M => do pure (rOfRet (at_ sp) (← chkC n E Δ T M (.ret A)))
+    | .run sp M => do pure (rOfRet (at_ sp) (← chkC n (E.capture (mentionsC · M)) Δ T M (.ret A)))
     | .mark sp k V => do markIt sp k (← chkV n E Δ T V A)
     | v => do convV E v.span A (← synV n E Δ T v)
 
@@ -699,8 +699,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                   if hBn : noThunkB B' = true then
                     let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A')
                     let E' : Env :=
-                      { E with vars := [], own := [], nExt := 0, lenv := (x.name, v) :: E.lenv,
-                               row := some S }
+                      { E with vars := [], own := [], cap := [], nExt := 0,
+                               lenv := (x.name, v) :: E.lenv, row := some S }
                     let rM ← chkC n (E'.pushOwn m.name (.mut (.var v) A')) (Δ.extend v bl)
                       [.mut (.var v) A'] M (effOf S (.box (.var v) B'))
                     if hL : subL (allL [.mut (.var v) A']) (orL rM.F.u rM.F.w) = true then

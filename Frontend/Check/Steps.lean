@@ -516,6 +516,10 @@ structure Env where
   checked has, set where a computation is checked against one; `none` in a value, where a
   computation is synthesized with no type expected. `[spec §19]` -/
   row : Option CRow
+  /-- The slots owed to the computation a value is in, held for the values in it: a computation
+  inside a value (`thunk M`, `thunkv N`, `run M`) is owed those it mentions (SPEC §12 *Captured
+  variables*). Indexed like `vars`; a slot past its end is not held.  `[spec §12]` -/
+  cap : List Bool := []
 
 /-- The depth bound for elaborating a type. -/
 def tyFuel : Nat := 65536
@@ -543,8 +547,15 @@ def Env.atC (E : Env) (C : CCTy) : Env :=
   | some (S, _) => { E with row := some S }
   | none => E
 
-/-- A value: nothing owed, and no row. -/
-def Env.forVal (E : Env) : Env := { E with own := [], row := none }
+/-- `a ∨ b` pointwise, a slot past the end of one list taken from the other. -/
+def orPad : List Bool → List Bool → List Bool
+  | a :: as, b :: bs => (a || b) :: orPad as bs
+  | [], bs => bs
+  | as, [] => as
+
+/-- A value: nothing owed, what the computation it is in is owed held for the computations inside
+it (`Env.cap`), and no row.  `[spec §12]` -/
+def Env.forVal (E : Env) : Env := { E with own := [], cap := orPad E.own E.cap, row := none }
 
 def ppRow (E : Env) (S : CRow) : String :=
   "[" ++ ", ".intercalate (S.map fun o =>
@@ -797,12 +808,14 @@ def lookupVar (x : String) : List (Option String) → Option Nat
   | y :: ys => if y == some x then some 0 else (lookupVar x ys).map (· + 1)
 
 /-- A slot that is not owed: a dead binder. -/
-def Env.push (E : Env) (x : Option String) : Env := { E with vars := x :: E.vars, own := false :: E.own }
+def Env.push (E : Env) (x : Option String) : Env :=
+  { E with vars := x :: E.vars, own := false :: E.own, cap := false :: E.cap }
 
 /-- A binder's live slot `x : A`, owed to its scope when `A` is linear and is consumable
 (SPEC §12). -/
 def Env.pushOwn (E : Env) (x : String) (A : CVTy) : Env :=
-  { E with vars := some x :: E.vars, own := (!A.persistent && consumableB A) :: E.own }
+  { E with vars := some x :: E.vars, own := (!A.persistent && consumableB A) :: E.own,
+           cap := false :: E.cap }
 
 /-- A binder owes exactly the slot that is consumable.  `[spec §12]` -/
 theorem Env.pushOwn_own (E : Env) (x : String) (A : CVTy) :
@@ -811,13 +824,15 @@ theorem Env.pushOwn_own (E : Env) (x : String) (A : CVTy) :
   rw [Bool.eq_iff_iff]
   simp [LinearConsumable, Linear, consumableB_iff]
 
-/-- Nothing owed: a value, or a computation that is not in tail position. -/
-def Env.clearOwn (E : Env) : Env := { E with own := [] }
+/-- Nothing owed: a terminal computation, checked before what it leaves owed is consumed. What it
+was owed is held for the values in it (`Env.cap`).  `[spec §12]` -/
+def Env.clearOwn (E : Env) : Env := { E with own := [], cap := orPad E.own E.cap }
 
 
 
 /-- What is still owed after the slots `u` are consumed. -/
-def Env.minus (E : Env) (u : List Bool) : Env := { E with own := andL E.own (u.map (! ·)) }
+def Env.minus (E : Env) (u : List Bool) : Env :=
+  { E with own := andL E.own (u.map (! ·)), cap := andL E.cap (u.map (! ·)) }
 
 /-- The owed slots a computation mentions by name, where the name is not shadowed. -/
 def Env.ownIn (E : Env) (p : String → Bool) : Env :=
@@ -826,6 +841,12 @@ def Env.ownIn (E : Env) (p : String → Bool) : Env :=
         | some (some x) => lookupVar x E.vars == some i && p x
         | _ => false }
 
+/-- The environment of a computation inside a value (`thunk M`, `thunkv N`, `run M`): owed the
+slots owed to the computation the value is in that it mentions, as the head of `x <- M; N` is,
+and holding nothing.  `[spec §12]` -/
+def Env.capture (E : Env) (p : String → Bool) : Env :=
+  ({ E with own := orPad E.own E.cap, cap := [] } : Env).ownIn p
+
 /-- The environment of a `def`'s body at a use: its own scope, no variables or lifetimes of the
 use site but the persistent externs (the operations of SPEC §11, which carry no authority; a
 capability is not persistent), its type parameters bound. -/
@@ -833,7 +854,7 @@ def Env.forDef (E : Env) (T : List CVTy) (d : DefInfo) (tps : List (String × CV
   let n := E.vars.length
   let vars := (List.range n).map fun i =>
     if n ≤ i + E.nExt && (T[i]?.map (·.persistent)).getD false then E.vars.getD i none else none
-  ⟨d.scope, vars, [], tps, [], E.nExt, none⟩
+  ⟨d.scope, vars, [], tps, [], E.nExt, none, []⟩
 
 def inDef (x : String) (sp : Span) (e : Error) : Error :=
   { e with msg := s!"{e.msg}\n  in the body of `{x}`, used at {sp.start.render}" }
