@@ -1,0 +1,41 @@
+-- A `let mut` declared inside an inner `with` and lent there (#881): `name` is the inner body's,
+-- so neither body hands it back, and the outer control handler's body lends nothing declared
+-- outside it. A block's body hands back the places it lends that are declared outside it (SPEC
+-- §41, the rule table); a name declared in a block it runs in place (here the inner `with`) is
+-- not one of them, at any depth. `count` lends its own `let mut` three handlers deep the same
+-- way.
+--
+-- Answer: `(inl (inl i32[2]), inl i32[3])`: two bytes pushed, then three. Taking `name` for a
+-- place declared outside the outer `with`, as before, refuses the program ("the body of `with
+-- exhausted_to_option` assigns a `let mut` variable declared outside it, or lends a place
+-- declared outside it"); a fix that dropped the lend would leave `name` empty and answer 0.
+include rec
+include fail
+include text
+
+fn named() -> (i32 + i32) + 1 =
+  with exhausted_to_option[i32 + i32] {
+    with to_result[i32, i32] {
+      let mut name = string_new(4);
+      push_byte(&mut name, b'x');
+      push_byte(&mut name, b'y');
+      let (name, k) = len_of(name);
+      k
+    }
+  }
+
+fn count() -> i32 + 1 =
+  with exhausted_to_option[i32] {
+    with default[1, i32](0) {
+      with on_exhausted(!{ u -> 0 - 1 }) {
+        let mut s = string_new(4);
+        push_byte(&mut s, b'a');
+        push_byte(&mut s, b'b');
+        push_byte(&mut s, b'c');
+        let (s, k) = len_of(s);
+        k
+      }
+    }
+  }
+
+main -> ((i32 + i32) + 1) * (i32 + 1) = (named(), count())

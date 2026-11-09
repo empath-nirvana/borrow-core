@@ -576,5 +576,10 @@ corpus/tree-map.bc 3.0 cancellable abortive: branch; agree
 corpus/tree-map.bc 2.0 cancellable abortive: branch; agree
 corpus/trim-replace.bc 1.0 cancellable abortive: branch; agree
 corpus/utf8-count.bc 1.0 cancellable abortive: branch; agree
+corpus/with-nested-lend.bc 1.0 cancellable abortive: -; agree
+corpus/with-nested-lend.bc 2.0 cancellable abortive: -; agree
+corpus/with-nested-lend.bc 3.0 cancellable abortive: -; agree
+corpus/with-nested-lend.bc 4.0 cancellable abortive: -; agree
+corpus/with-nested-lend.bc 5.0 cancellable abortive: -; agree
 corpus/yield-callback.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/yield-callback.bc 1.0 cancellable tail: direct; agree

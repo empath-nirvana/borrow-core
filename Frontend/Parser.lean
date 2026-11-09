@@ -1029,6 +1029,48 @@ def Comp.lentNames (vars : Bool := false) : Comp → List String
 end
 
 mutual
+/-- The names bound in a value whose computations run in place: a borrow block's or a `with`'s
+body, its parameter, and a `run`, outside nested closures (as `Val.lentNames` reads them). -/
+def Val.declNames : Val → List String
+  | .app _ (.app _ (.sugar _ (.borrow _ _)) P) (.thunkv _ (.lam _ b _ M))
+  | .app _ (.app _ (.sugar _ (.handle _ _ _ _)) P) (.thunkv _ (.lam _ b _ M)) =>
+    P.declNames ++ b.name :: M.declNames
+  | .pair _ V W | .app _ V W => V.declNames ++ W.declNames
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.declNames
+  | .run _ M => M.declNames
+  | _ => []
+
+/-- The names a computation binds, outside nested closures, with those bound in the borrow
+blocks, `with` bodies and `run`s it runs in place (`Val.declNames`). -/
+def Comp.declNames : Comp → List String
+  | .ret _ V | .absurd _ V => V.declNames
+  | .bind _ x _ M N => x.name :: (M.declNames ++ N.declNames)
+  | .letUnit _ V M => V.declNames ++ M.declNames
+  | .letPair _ x y V M => x.name :: y.name :: (V.declNames ++ M.declNames)
+  | .case _ V x M y N => x.name :: y.name :: (V.declNames ++ M.declNames ++ N.declNames)
+  | .loop _ _ src V M N => src.bound ++ (V.declNames ++ M.declNames ++ N.declNames)
+  | .lam _ x _ M => x.name :: M.declNames
+  | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.declNames
+  | .perform _ _ _ V | .abort _ _ _ V => V.declNames
+  | .handle _ _ _ hr hc M => hr.declNames ++ hc.declNames ++ M.declNames
+  | .unwind _ x _ M D N => x.name :: (M.declNames ++ D.declNames ++ N.declNames)
+  | _ => []
+end
+
+/-- The places a block's body `M` lends that are declared outside the block, for the block to
+hand back: those `M` lends that it does not bind itself (`bound`) and, in a program's source, that
+are not declared in a block `M` runs in place, a name of which is not in scope at the block
+(`outer`): a `let mut` declared in an inner `with` and lent there is the inner body's (#881).
+Binders are resolved (SPEC §41, R1), so a name declared inside shadows nothing outside; a binder of
+a name in scope outside (a capability, rebound) is not a declaration.  [spec §41] -/
+def Comp.lentOuter (M : Comp) (bound : List String) (resolved : Bool) (outer : List String) :
+    List String :=
+  let inner := if !resolved then [] else
+    M.declNames.filter fun y => !outer.contains y && !capabilityNames.contains y
+  M.lentNames.filter fun x => !bound.contains x && !inner.contains x
+
+mutual
 /-- The cells lent to a `with h(&mut c)` in a value, outside nested closures, that are not bound
 in `local`: an enclosing block hands them back (SPEC §18). -/
 def Val.withPlaces (loc : List String) : Val → List String
@@ -1753,6 +1795,8 @@ def borrowBlock : Nat → P Val
       else if k == .modify then pure "" else freshName "io_l"
     let p ← pat n
     expectSym "->"
+    let ps₀ ← get
+    let outer := ps₀.scope.map (·.2.1)
     let ((p, M), w) ← frame (withScope do
       let p ← bindPatNames p
       pure (p, ← comp n))
@@ -1764,7 +1808,7 @@ def borrowBlock : Nat → P Val
     -- standard capabilities it uses.
     let bound := M.boundNames ++ (match p with | .var b => [b.name] | _ => [])
     let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
-    let thr := (w ++ (M.lentNames.filter (fun x => !bound.contains x)) ++
+    let thr := (w ++ M.lentOuter bound (ps₀.resolve && ps₀.surf) outer ++
       M.withPlaces (match p with | .var b => [b.name] | _ => []) ++ caps).eraseDups
     -- A body already handing its variables back (a printed program read again) is kept. A
     -- `modify` hands back only the variables it writes: its body's value is the place's new
@@ -1827,6 +1871,8 @@ def withBlock : Nat → P Val
         expectSym "->"
         pure (x.name, b)
       else pure (← freshName "fx_l", (⟨← freshName "fx_c", t.span⟩ : Ident))
+    let ps₀ ← get
+    let outer := ps₀.scope.map (·.2.1)
     let ((b, M), w) ← frame (withScope do
       let b ← bindName b
       pure (b, ← comp n))
@@ -1834,7 +1880,7 @@ def withBlock : Nat → P Val
     let sp ← spanFrom st
     let bound := b.name :: M.boundNames
     let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
-    let thr := (w ++ (M.lentNames.filter (fun x => !bound.contains x)) ++ M.withPlaces [b.name] ++
+    let thr := (w ++ M.lentOuter bound (ps₀.resolve && ps₀.surf) outer ++ M.withPlaces [b.name] ++
       caps).eraseDups
     let thr := if bound.contains "io_bt" then [] else thr
     let M := if thr.isEmpty then M else handOn { t := "io_bt" } thr M

@@ -1819,6 +1819,17 @@ corpus/trim-replace.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/utf8-count.bc flows [0, 1, 4294967295]; main [1]
 corpus/utf8-count.bc 21:15: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/utf8-count.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/with-nested-lend.bc flows [0, 2, 4, 5, 4294967295]; main [1, 2, 3, 4, 5]
+corpus/with-nested-lend.bc 17:3: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/with-nested-lend.bc 18:5: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/with-nested-lend.bc 28:3: handle 3: inside [4, 5]; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/with-nested-lend.bc 29:5: handle 4: inside [5]; row [3]; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/with-nested-lend.bc 30:7: handle 5: inside []; row [4, 3]; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/with-nested-lend.bc 1.0 abortive: -; condition 2 holds; -
+corpus/with-nested-lend.bc 2.0 abortive: -; condition 2 holds; -
+corpus/with-nested-lend.bc 3.0 abortive: -; condition 2 holds; -
+corpus/with-nested-lend.bc 4.0 abortive: -; condition 2 holds; -
+corpus/with-nested-lend.bc 5.0 abortive: -; condition 2 holds; -
 corpus/yield-callback.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/yield-callback.bc 23:12: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
 corpus/yield-callback.bc 23:12: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
