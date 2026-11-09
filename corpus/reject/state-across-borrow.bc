@@ -1,4 +1,4 @@
--- expect: 19:5: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a continuation held across a lend is T1, decision 71). End the borrow before the operation, or move the value into the code that suspends and have it handed back
+-- expect: 19:5: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a borrow held across a suspension is not supported yet; planned: surface A1). End the borrow before the operation, or move the value into the code that suspends and have it handed back
 -- A `let mut` as an instance of the ordinary control effect `State` (#611), its state the
 -- handler's parameter: an assignment inside a borrow block is an operation of the handler inside the
 -- borrow's callback. Every borrow callback's row is empty, unwind-only (every operation abortive) or,
