@@ -1,5 +1,5 @@
--- pending: a load block (`borrow imm *j`) whose body performs an abortive operation has no unwinding form in the elaborator (#879)
--- now: 24:11: this borrow block's body performs an abortive operation, and its place has no unwinding form here: not provided
+-- pending: a recursion on a load's view at a shorter lifetime: a recursive group calls itself at its own lifetime parameters (#890; the load at an abortive row is #887)
+-- now: 37:15: type mismatch: expected `imm 'a (mu X. 1 + i32 + ((array (1 + i32) * array (array u8 * i32)) * array X) * i32) * array u8 * i32`, but this has type `imm 'y (mu X. 1 + i32 + ((array (1 + i32) * array (array u8 * i32)) * array X) * i32) * array u8 * i32`
 --
 -- J1's need in miniature: a `Json` whose objects are `Map[string, Json]` (SPEC §36, §42)
 -- serialised by borrow, recursively, then consumed. `ser` lends the value, matches its view
