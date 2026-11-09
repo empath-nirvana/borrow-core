@@ -5221,9 +5221,9 @@ Decision E (2026-10-08). Tier 1's expressiveness properties state their schemas 
 callback body: a closed computation `M` at `F_Σ B` is passed
 as the callback `λ_. M`, which the higher-order function calls at `()`. As built, Core types
 `λx. M` at `1 ⊸ F_Σ B` only by `[λ]`, with `x`'s slot live. `M` does not use `x`, so a leaf of
-`M`'s derivation must consume the slot, and the rules with a `!Γ` premise (`!`-promotion of a thunk;
-`[let]` and `[then]` at a row with an unrestricted operation) take a context whose live slots are
-all `!`: a live slot of `1` is not one. `thunk M : U (F A)` takes `M` under a dead binder, at the
+`M`'s derivation must consume the slot, and the rules with a `!Γ` premise (`[let]` and `[then]` at
+a row with an unrestricted operation) take a context whose live slots are all `!`: a live slot of
+`1` is not one. `thunk M : U (F A)` takes `M` under a dead binder, at the
 pure returner only.
 
 ### Typing
@@ -5258,9 +5258,11 @@ statements, over the extended judgment. `CDerives` gains `lamDead`. The callback
 and no borrow lemma changes. The checker emits the rule for `fun (x : 1) -> M` at `1 -o F_Σ B`
 whose body does not use `x`: the body is checked under the binder's slot as before, and the slot is
 closed dead (`lamIt`, `rLamDead`, `TiedDer.lamDead`, `Frontend/Check/`); otherwise `[λ]`. The term
-is the λ either way, so every program erases as before. A callback whose answer is a `!` promotion
-is accepted where it was rejected: under `[λ]` the binder is live, and the promotion's `!Γ` premise
-does not take a live slot of `1` (`corpus/core-callback-dead.bc`, counts `0 0 0`).
+is the λ either way, so every program erases as before. The promotion (§10) takes a live slot of
+`1`, since `1` is persistent; `[let]` and `[then]` at a row with an unrestricted operation (§19)
+keep `!Γ` and do not, so `[λ]` with a dead binder is what binds a unit argument in a body that
+contains them. The checker gives every unused `1` binder the dead form
+(`corpus/core-callback-dead.bc`, counts `0 0 0`).
 
 ### Open
 
