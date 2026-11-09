@@ -305,6 +305,10 @@ Each entry: the decision, and why. Newest last.
     - *Kept and confirmed by decision 71* (2026-10-31): the per-observation lend is the design,
       not a step toward a spanning lend, and the objection that it is the elaborator deciding lend
       extents is overruled.
+    - *Status (decisions 72, 78):* decision 71's confirmation is void. The per-observation lend
+      over loops is still what the checker enforces (decision 72: "LoopLend's per-observation lend
+      over loops"). The objection that it is the elaborator deciding lend extents is now settled
+      by decision 78: an inserted lend that the kernel checks is elaboration.
     - **Per observation, not spanning.** A borrow scope around a loop lends its owner again at
       each observation (`experiments/LoopBorrow`); no rule lends across observations. The
       elaboration is `Frontend/Elab/LoopLend.lean`, with two hooks in `Sugar.lean` (a binding
