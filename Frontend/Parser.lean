@@ -194,6 +194,9 @@ structure PState where
   scope : List (String × String × Nat) := []
   /-- The number of the next binder. -/
   nextBinder : Nat := 0
+  /-- The names bound in scope, innermost first, in core text too (where `scope` is not kept):
+  what a block's body may lend that is declared outside it (`Comp.lentOuter`).  [spec §41] -/
+  declared : List String := []
   /-- The names a renamed binder may not take: every name the source writes, and the binders
   renamed so far. -/
   taken : List String := []
@@ -237,7 +240,8 @@ def noteOcc (sp : Span) (x y : String) (b : Nat) : P Unit := do
 the source of its own (`occs`). -/
 def pushBinder (x : Ident) (y : String) : P Unit := do
   let b := (← get).nextBinder
-  modify fun s => { s with scope := (x.name, y, b) :: s.scope, nextBinder := b + 1 }
+  modify fun s => { s with scope := (x.name, y, b) :: s.scope, nextBinder := b + 1,
+                           declared := y :: s.declared }
   noteOcc x.span x.name y b
 
 /-- The binder an occurrence of the name `x` (written at `sp`) resolves to: the innermost in
@@ -274,7 +278,9 @@ generated code's (SPEC §41, rule R1). -/
 def bindName (x : Ident) : P Ident := do
   let s ← get
   -- Core text has no assignment: a binding of a name in scope is how it passes a variable on.
-  if !s.resolve || !s.surf || x.name == "_" then return x
+  if !s.resolve || !s.surf || x.name == "_" then
+    if x.name != "_" then modify fun s => { s with declared := x.name :: s.declared }
+    return x
   -- A capability is a place named by the platform: a binder of its name rebinds it (SPEC §11).
   if capabilityNames.contains x.name then
     pushBinder x x.name
@@ -288,8 +294,9 @@ def bindName (x : Ident) : P Ident := do
 /-- Run `p` with the scope as it is now restored after it: the binders `p` makes are local to it. -/
 def withScope {α} (p : P α) : P α := do
   let sc := (← get).scope
+  let dc := (← get).declared
   let r ← p
-  modify fun s => { s with scope := sc }
+  modify fun s => { s with scope := sc, declared := dc }
   pure r
 
 /-- The `let mut` variable a name written `x` resolves to, if it resolves to one. -/
@@ -1059,15 +1066,13 @@ def Comp.declNames : Comp → List String
 end
 
 /-- The places a block's body `M` lends that are declared outside the block, for the block to
-hand back: those `M` lends that it does not bind itself (`bound`) and, in a program's source, that
-are not declared in a block `M` runs in place, a name of which is not in scope at the block
-(`outer`): a `let mut` declared in an inner `with` and lent there is the inner body's (#881).
-Binders are resolved (SPEC §41, R1), so a name declared inside shadows nothing outside; a binder of
-a name in scope outside (a capability, rebound) is not a declaration.  [spec §41] -/
-def Comp.lentOuter (M : Comp) (bound : List String) (resolved : Bool) (outer : List String) :
-    List String :=
-  let inner := if !resolved then [] else
-    M.declNames.filter fun y => !outer.contains y && !capabilityNames.contains y
+hand back: those `M` lends that it does not bind itself (`bound`), and that are not declared in a
+block `M` runs in place, a name of which is not bound where the block begins (`outer`): a `let mut`
+declared in an inner `with` and lent there is the inner body's (#881). A binder of a name bound
+outside (a capability rebound, a variable core text passes on) is no declaration; in a program's
+source every other binder is renamed (SPEC §41, R1), so it shadows nothing outside.  [spec §41] -/
+def Comp.lentOuter (M : Comp) (bound : List String) (outer : List String) : List String :=
+  let inner := M.declNames.filter fun y => !outer.contains y && !capabilityNames.contains y
   M.lentNames.filter fun x => !bound.contains x && !inner.contains x
 
 mutual
@@ -1795,8 +1800,7 @@ def borrowBlock : Nat → P Val
       else if k == .modify then pure "" else freshName "io_l"
     let p ← pat n
     expectSym "->"
-    let ps₀ ← get
-    let outer := ps₀.scope.map (·.2.1)
+    let outer := (← get).declared
     let ((p, M), w) ← frame (withScope do
       let p ← bindPatNames p
       pure (p, ← comp n))
@@ -1808,7 +1812,7 @@ def borrowBlock : Nat → P Val
     -- standard capabilities it uses.
     let bound := M.boundNames ++ (match p with | .var b => [b.name] | _ => [])
     let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
-    let thr := (w ++ M.lentOuter bound (ps₀.resolve && ps₀.surf) outer ++
+    let thr := (w ++ M.lentOuter bound outer ++
       M.withPlaces (match p with | .var b => [b.name] | _ => []) ++ caps).eraseDups
     -- A body already handing its variables back (a printed program read again) is kept. A
     -- `modify` hands back only the variables it writes: its body's value is the place's new
@@ -1871,8 +1875,7 @@ def withBlock : Nat → P Val
         expectSym "->"
         pure (x.name, b)
       else pure (← freshName "fx_l", (⟨← freshName "fx_c", t.span⟩ : Ident))
-    let ps₀ ← get
-    let outer := ps₀.scope.map (·.2.1)
+    let outer := (← get).declared
     let ((b, M), w) ← frame (withScope do
       let b ← bindName b
       pure (b, ← comp n))
@@ -1880,7 +1883,7 @@ def withBlock : Nat → P Val
     let sp ← spanFrom st
     let bound := b.name :: M.boundNames
     let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
-    let thr := (w ++ M.lentOuter bound (ps₀.resolve && ps₀.surf) outer ++ M.withPlaces [b.name] ++
+    let thr := (w ++ M.lentOuter bound outer ++ M.withPlaces [b.name] ++
       caps).eraseDups
     let thr := if bound.contains "io_bt" then [] else thr
     let M := if thr.isEmpty then M else handOn { t := "io_bt" } thr M
