@@ -3,7 +3,7 @@
 -- Axes: data × effects × coeffects × scope: a borrowed list (an `imm` demand) whose elements are
 -- written one by one, with an effect at each element.
 --
--- Idiom: copy the value out (decision 71). An iterator over the borrowed list, whose state is a
+-- Idiom: copy the value out. An iterator over the borrowed list, whose state is a
 -- view of the rest, would hold the borrow across its steps, and no borrow is held across a loop's
 -- tick; a `fold_imm` cannot write either, since its algebra is `!` code and its result outlives
 -- every lifetime. So the borrowed list is copied out by a `fold_imm` into an owned list, inside

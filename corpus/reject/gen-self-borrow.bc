@@ -2,7 +2,7 @@
 -- A generator that would hold a borrow of its own local across a `yield` (a self-reference,
 -- which Rust's generators forbid and its `async` needs `Pin` for). A borrow block's body may
 -- perform only abortive operations (SPEC §19): `yield` resumes, and a continuation held across a
--- lend is T1, the permanent rule of decision 71 (`docs/tombstones/lends-across-suspensions.md`).
+-- lend is T1, not supported yet (planned: surface A1).
 -- What is allowed is to own the cell in the generator's state and borrow it
 -- anew at each step (`corpus/gen-cell.bc`).
 
