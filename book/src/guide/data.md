@@ -140,7 +140,9 @@ main -> 1 =
 itself, which is what `on_exhausted` is for ([Recursion](#recursion), next). A node with a fixed
 number of children can hold an array of itself in the same way,
 `data Tree = Tip(i32) | Node(i32, array Tree)`, and a trie node is
-`data Trie = Trie(bool, Vec[Option[Trie]])`.
+`data Trie = Trie(bool, Vec[Option[Trie]])`. A map can hold the type too, as a JSON value's
+object does: `data Json = Null | Num(i32) | Obj(Map[string, Json])`
+([Maps and sets](#maps-and-sets)).
 
 ## Recursion
 
