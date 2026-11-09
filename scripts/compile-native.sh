@@ -17,8 +17,8 @@
 #   * Every host operation, on a table of operands, must answer at native what the flat-IR
 #     interpreter's host (`flatHost`) answers (`bcc hostops`, Backend/Native/Tests.lean).
 #   * Loops of tail calls run in constant stack: in a stack of 64 KiB, a generated loop of 10^8
-#     turns, the kernel program loop-tail and corpus/deep-list.bc (on the old backend: Backend2
-#     has no pointer reversal for owned folds yet, B6).
+#     turns, the kernel program loop-tail and corpus/deep-list.bc (owned folds by pointer
+#     reversal, SPEC §67).
 #
 #     scripts/compile-native.sh [--backend old|new] [file.bc…]
 #                                            every check, or the corpus programs named only
@@ -113,18 +113,16 @@ if [ "$named" = 0 ]; then
   # Constant stack: loops of tail calls on a stack of 64 KiB (`BC_STACK`), where a frame per call
   # would last a few thousand calls: a generated loop of 10^8 turns (`bcc tailcalls`), the kernel
   # program loop-tail (10^5 operations, each a turn of a loop of tail calls through a handler),
-  # and corpus/deep-list.bc (lists of 50000 built and summed by loops, folded by pointer reversal).
-  # deep-list runs on the old backend whichever `--backend` is: Backend2 has no pointer reversal
-  # for owned folds yet (B6, SPEC §43 Open), so its build of deep-list recurses per list node and
-  # needs a stack of some MiB; it runs on the default stack above.
+  # and corpus/deep-list.bc (lists of 50000 built and summed by loops, folded by pointer reversal,
+  # SPEC §67 on Backend2), on the backend `--backend` selects.
   "$bcc" tailcalls 100000000 || bad=$((bad + 1))
   want=$("$bcc" kernel interp --stage flat loop-tail 2>&1) || true
   out=$(BC_STACK=65536 "$bcc" kernel run --native loop-tail 2>&1) || true
   if [ "$out" = "$want" ]; then echo "kernel loop-tail: native in a stack of 64 KiB"
   else echo "kernel loop-tail: native in a stack of 64 KiB fails: $out"; bad=$((bad + 1)); fi
-  if BC_STACK=65536 "$bcc" run --backend old --native corpus/deep-list.bc < /dev/null > "$tmp/out" 2> "$tmp/err" &&
+  if BC_STACK=65536 "$bcc" run --backend "$backend" --native corpus/deep-list.bc < /dev/null > "$tmp/out" 2> "$tmp/err" &&
       cmp -s "$tmp/out" corpus/deep-list.out; then
-    echo "corpus/deep-list.bc: native in a stack of 64 KiB, on the old backend (Backend2: not yet, B6)"
+    echo "corpus/deep-list.bc: native in a stack of 64 KiB ($backend)"
   else
     echo "corpus/deep-list.bc: native in a stack of 64 KiB fails: $(head -3 "$tmp/err")"; bad=$((bad + 1))
   fi
