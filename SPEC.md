@@ -1028,9 +1028,9 @@ both.
 
 A context is persistent when every live slot's type is:
 
-    Persistent(Γ)  ≜  ∀ s ∈ Γ. s.live ⇒ s.ty persistent        (Ctx.Persistent, Core/Persistent.lean)
+    Persistent(Γ)  ≜  ∀ s ∈ Γ. s.live ⇒ s.ty persistent        (Ctx.PersistentLive, Core/Persistent.lean)
 
-`!Γ` (`Ctx.Banged`, every live slot at a type `!A`) implies it (`Ctx.Banged.persistent`), since
+`!Γ` (`Ctx.Banged`, every live slot at a type `!A`) implies it (`Ctx.Banged.persistentLive`), since
 `!A` is persistent. The premise of Core's two promotion rules, which §3 takes from §2's `!I-λ` and
 `!I-Λ`, is `Persistent(Γ)`:
 
