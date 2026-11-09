@@ -11993,8 +11993,9 @@ reported as an intended change.
   (`vCE_code`: the clause is `codeRelC`), `vNE` (`vNE_code`: `codeRelN`) and `vOE` (`True`); every
   law of the relation at `code`, with no new hypothesis. `fundamentalC`, `adequacyC` and `goal791N`
   keep their statements.
-- **Not built:** the rules and their compatibility lemmas (K3, K4), the lend-exit lemma (K5),
-  `eraseD` (K6).
+- **Not built until their units land:** the rules and their compatibility lemmas (K3: `codeI`,
+  `codeIB`, `erase`, `eraseB`, `force`; K4: `unfoldK`, `nuOutK`), the lend-exit lemma (K5), `eraseD`
+  (K6).
 - **No code type in the checker.** No rule of the checker synthesises a code type before S1, so
   the corpus is unchanged by K3.
 - **`CapOK`** is a premise of `codeI` until #894 removes it.
