@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.57 · 2026-11-09
+Version 1.58 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2387,8 +2387,11 @@ and §19 is preserved: every construct of this entry is elaborated into core bef
 - **A total consumer of a generator that loops.** A `for` over one is div: its turns are
   unbounded. A finite source written as data, or a sized iterator (§16), is total, and so is a
   generator whose body does not loop.
-- **Stored generators over a row.** A stored generator's observations are pure: a generator that
-  performs another effect besides its iteration effect (a `Fail`) is not stored.
+- **Stored generators over a row.** A generator that performs another effect besides its iteration
+  effect (a `Fail`) is not stored: the surface does not provide it yet, and the elaborator refuses
+  it (`pullView` in `Frontend/Sugar.lean`, `pullSite` in `Frontend/Elab/Effects.lean`). The kernel
+  admits effectful observations (§7's ν rules, whose leaves may be `F_Σ` by §19's `EffLeaf`;
+  `CTy.NuOk`). #910.
 - **The source interpreter** (`bcc interp`, `Support`'s substitution machine) substitutes into
   the whole step at each observation, so its time per observation grows with the size of the
   body's machine.
@@ -12503,6 +12506,9 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.58** (2026-11-09) — §15 *Open* (#910): a stored generator over a row is a limit of the
+  surface, not of the kernel. The elaborator refuses it; the kernel's ν rules admit effectful
+  observations. No change to the code.
 - **1.57** (2026-11-09) — §68 (#855 K3): the rules `codeI`, `codeIB`, `erase` and `eraseB`, and
   `force` at `U C` or `Code⟨N; E⟩ C`. `codeI` and `codeIB` ask the captured types closed,
   `(Γ.capTy (λM)).Cl 0`, beside `CapOK`; where either fails the closure stays at `U C`. `LamCls`
