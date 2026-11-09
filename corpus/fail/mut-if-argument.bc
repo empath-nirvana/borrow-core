@@ -1,0 +1,9 @@
+-- expect: 9:9: this `if` assigns an enclosing `let mut` variable inside an expression, where what it writes cannot be handed back: bind it first, `let r = if …;` (SPEC §41, rule R3)
+-- An `if` as a call argument is `run` of it (#882, `corpus/if-match-argument.bc`), so one that
+-- assigns an enclosing `let mut` inside the argument is refused as `run` is
+-- (`corpus/mut-run-nested.bc`): what it writes is handed back where it is bound, so it is bound
+-- first. Accepting it would drop the write to `m`.
+fn twice(x: i32) -> i32 = x * 2
+main -> i32 =
+  let b = true; let mut m = 0;
+  twice(if b { m = 1; 1 } else { 2 }) + m

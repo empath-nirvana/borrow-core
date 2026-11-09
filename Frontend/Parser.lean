@@ -200,8 +200,9 @@ structure PState where
   /-- Each renamed binder, and the name the source writes it with. -/
   renamed : List (String × String) := []
   /-- A `run` just read that hands back what it writes (`blockThreads`): its binding must take
-  them apart (SPEC §41, rule R3). -/
-  pendingRun : Option Span := none
+  them apart (SPEC §41, rule R3). With it, the construct as written: `run`, or the `if` or
+  `match` read as `run` of it inside an expression. -/
+  pendingRun : Option (Span × String) := none
   /-- In an arm of a `fold_reuse` block, where a block written without `box` is reassembled from
   its cells (SPEC §60, F2). -/
   reuseArm : Bool := false
@@ -1109,10 +1110,11 @@ def Val.handsBack : Val → Bool
 /-- A `run` that writes, read in the value `V` of a statement or binding, is `V` itself: inside an
 expression what it writes could not be handed back (SPEC §41, rule R3). -/
 def checkRun (V : Val) : P Unit := do
-  if let some sp := (← get).pendingRun then
+  if let some (sp, what) := (← get).pendingRun then
     unless V matches .run .. do
-      failAt sp ("this `run` assigns an enclosing `let mut` variable inside an expression, where " ++
-        "what it writes cannot be handed back: bind it first, `let r = run …;` (SPEC §41, rule R3)")
+      failAt sp (s!"this `{what}` assigns an enclosing `let mut` variable inside an expression, " ++
+        s!"where what it writes cannot be handed back: bind it first, `let r = {what} …;` " ++
+        "(SPEC §41, rule R3)")
 
 /-- `p = V; M` for a value `V`: a borrow block or `modify` on a place rebinds the place, which the
 block hands back first; a value with a lent capability is bound first; the core forms
@@ -1423,14 +1425,16 @@ def valPrefix : Nat → P Val
       expectSym "]"
       let V ← valPrefix n
       pure (.boxed (← spanFrom st) a V)
-    | .kw "run" =>
+    | .kw "run" | .kw "if" | .kw "match" =>
       -- `run M` hands back what `M` writes beside its value, which its binding takes apart
-      -- (SPEC §41, rule R3).
-      discard bump
+      -- (SPEC §41, rule R3). An `if` or a `match` where a value is expected is `run` of it
+      -- [spec §41]: the same value form, which the kernel checks as it checks a written `run`.
+      let what := match t.tok with | .kw "if" => "if" | .kw "match" => "match" | _ => "run"
+      if what == "run" then discard bump
       let (M, w) ← inClosure (frame (compPrefix n))
       let sp ← spanFrom st
       if w.isEmpty then return .run sp M
-      modify fun s => { s with blockThreads := w, joined := [], pendingRun := some sp }
+      modify fun s => { s with blockThreads := w, joined := [], pendingRun := some (sp, what) }
       pure (.run sp (handOn { t := "io_bt" } w M))
     | .kw "writes" =>
       -- `writes(x, …) V`, as `bcc print` writes a closure that assigns (SPEC §41, rule R3); in a
