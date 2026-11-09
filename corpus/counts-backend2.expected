@@ -82,6 +82,7 @@ clause-captures 6 3 0 10 10 0
 clo-capture 1 0 0 3 3 0
 clo-coerce 1 0 0 3 3 0
 clo-counter 2 0 0 17 17 0
+effects-load-raise 4 0 0 204 184 15
 for-arm-raises-owned 8 0 0 54 54 18
 handle-arm-releases 2 0 0 13 13 5
 infer-local-from-call 4 0 0 16 16 0
@@ -417,6 +418,8 @@ rec-generic-mutual 11 0 0 45 33 0
 rec-in-for-linear 1 0 0 1 1 0
 rec-layer 2 0 0 17 17 0
 rec-lifetimes 2 0 0 16 6 23
+rec-load-exhausted 1 0 0 68 56 7
+rec-load-walk 4 0 0 128 104 18
 rec-log 1 0 0 7 7 0
 rec-mixed 0 0 0 0 0 0
 rec-overflow 10101 0 0 10101 10101 0

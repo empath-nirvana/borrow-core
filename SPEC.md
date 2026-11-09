@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.50 · 2026-11-07
+Version 1.51 · 2026-11-07
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2889,7 +2889,11 @@ names.
   (`slice_borrow_*_u`), ascribed the scheme's type (`corpus/buf-lend-raise.bc`,
   `lit-lend-raise.bc`). The unwinding form of a marked scheme (a lent cell's, a literal's view,
   §57) is not marked, so a literal's view crossed by an abort tabulates its table into an array
-  that is not the literal's read-only bytes.
+  that is not the literal's read-only bytes. A load block (`borrow imm *g { 'y, v -> … }`, §36)
+  is `withloadU`, `withload` at the callback's row: the load consumes only the `imm` borrow `g`,
+  so an unwind ends the reborrow and hands nothing back, there is no finaliser, and the place `g`
+  borrows is left as it was. So a load's body may raise, and may call a recursion, which performs
+  `Exhausted` (§20) (`corpus/effects-load-raise.bc`, `rec-load-walk.bc`, `rec-load-exhausted.bc`).
 - *In a call that lends a place*: `f(…, &mut x, …)` or `f(…, &x, …)` at a borrow parameter of a
   function that performs operations of the row is the borrow of the call (§11's lend) in its
   unwinding form at those operations, which must be abortive: `withbor2U`/`withbor1U` of a cell,
@@ -3454,7 +3458,8 @@ Six rules, over `CDerives` with its context premises (§10):
     `d : src ⊸ F 1` typed by a premise. The elaborator passes the source's consume `consumeE src`
     (§12), which is `forget` at `Mut`/`Imm`;
   - `withload`'s source is consumed by its load, so nothing goes back to the lender: its unwinding
-    form is `withload`'s own term at the effectful type;
+    form is `withload`'s own term at the effectful type (`withloadU`), with no finaliser. The
+    elaborator gives a load block whose body performs abortive operations this form (§18, §36);
   - the callback's row is `Row.Unwind 'x`: every operation abortive and of a nonzero name, and its
     argument type closed data, free of `'x` and outliving every lifetime;
   - `withswap` is not a borrow: its callback takes the payload by value, and an unwind would
@@ -7036,7 +7041,9 @@ Each elaborates into existing core terms:
 - **A load through a borrow**, `borrow imm *g { 'y, v -> S }`, `g : imm 'a A`, is
   `withload['a, 'y, A, B] g (Fun 'y < dom. fun (v : view 'y A) -> S)`, `B` free of `'y`; the
   block's value is `((), B)`, nothing handed back. It reads any content, where `*g` copies a
-  persistent one.
+  persistent one. At a body that performs operations, which must be abortive, the load is
+  `withloadU['a, 'y, A, B, [r]]` (§19 *Borrows*), `r` the operations the body performs, and the
+  block's value `((), b)` for the `b` it answers (§18 *In a borrow block's body*).
 - **A record lent fieldwise**, `borrow imm r { 'x, v -> S }` at a place whose type is a tree of
   `⊗` of owned arrays and persistent values (at least one array; a buffer `array A * i32` keeps
   §17's form, its prefix): each array is lent by its own `slice_borrow_imm` (§9), nested left to
@@ -12407,6 +12414,21 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.51** (2026-11-07) — §18, §19 *Borrows*, §36 (#887): a load block (`borrow imm *g { 'y, v -> … }`) whose
+  body performs abortive operations elaborates to `withloadU`, `withload` at the callback's row,
+  as the cell and slice borrows elaborate to their unwinding forms (`Const.unwinding`,
+  `unwindingC?`, `Frontend/Sugar.lean`); it was refused as having no unwinding form. The load
+  consumes only the `imm` borrow, so an unwind hands nothing back, runs no finaliser, and leaves
+  the place as it was. A load's body may now raise or call a recursion
+  (`corpus/effects-load-raise.bc`, `rec-load-walk.bc`, `rec-load-exhausted.bc`, at every stage
+  and on Backend2 at `live 0`). Preserves: `CDerives`, the kernel, the checker, the theorems and
+  the backends are unchanged; every other corpus program checks and runs as before. Open: a
+  recursion on what a load exposes is still refused, because a group's call of itself is at its
+  own lifetime parameters (§20 *Generic recursive groups*) and the load's view is at a shorter
+  `'y`; and an abort inside a borrow callback cannot consume a linear variable the callback
+  captures (§12: a value starts with nothing owed), so a recursion inside a load that passes
+  `g` or another captured linear value is refused at the budget's `case`. Each needs its own
+  entry.
 - **1.50** (2026-11-07) — §36 (#879): a map iterates at any key type. `lib/map.bc`'s table is three arrays,
   `Map[K, V] = ((array (1 + i32) * array K) * array V) * i32`, the slot hashes, the keys and the
   values, so that a lent map, `MapRef[K, V]<'h, 'k, 'x>`, lends each entry's key and value as array
