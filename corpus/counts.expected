@@ -102,6 +102,7 @@ leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 4861 # as 0039-combinatio
 lend-call-raise 9 0 0 34 31 4 # the cells of the eight lending runs, those scoped to a call included, and the table
 lend-call-record 1 0 0 6 2 0 # the cell scoped to the call, freed by the unwinding lend's finaliser
 lit-lend-raise 6 0 0 69 30 39 # one array per literal view: the unwinding form is not marked as a literal's view (SPEC §18), so the table is tabulated into the heap
+load-for-linear 1 0 0 155 65 19
 nu-file-read 2 0 0 7 6 0 # the buffer and the file's content cell; the observations are direct calls
 nu-file-twice 2 0 0 11 11 0 # as nu-file-read: three reads, one through a reborrow
 nu-file-consumed 2 0 0 5 5 0 # the buffer and the content cell, freed by the object's consume

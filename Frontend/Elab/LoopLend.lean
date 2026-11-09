@@ -394,6 +394,13 @@ the binding.  `[spec §14]` -/
 def lendBind (c : TCx) (divCall : Val → Bool) (fin' : TCx → Finite) (sp : Span) (x : Ident)
     (A : Option VTy) (V : Val) (N : Comp) : Except Error (Option Comp) := do
   let some B := Block.of? V | return none
+  -- A load `borrow imm *g { … }` has no place to lend again: the rewrite binds its content
+  -- first, a copy, so it applies only to a persistent content. A load of a linear content is
+  -- elaborated as a load, its loops in place (#880).  [spec §14, §36]
+  if let .app _ (.sugar _ .deref) G := B.P then
+    match c.tyV G with
+    | some (.imm _ A) => if Class.of A != .unrestricted then return none
+    | _ => pure ()
   -- A `for` in the block's body is read in the body's context, where the block's borrow is bound:
   -- on an owned array it is a view, and a `for` over it a counted loop (SPEC §16).
   let cB : TCx := match c.tyV B.P, c.elabL (.dom B.lsp) with
