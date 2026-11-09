@@ -4490,9 +4490,13 @@ is typed by the existing rules (`bounded_fix`, `[handle]`, `[let]`); `fundamenta
 
 - **A recursion whose body loops.** Its members are div (§14), so the fixed point is taken at
   loops, which `bounded_fix` types at every computation type (the spike's P3). But the budget runs
-  out inside a loop's observation, where `Exhausted` has no handler: a handler around a div
-  computation is not provided for any effect (`with to_result { f(x) }`, `f` looping and raising,
-  is rejected the same way). Rejected with that reason (`corpus/reject/rec-loop.bc`).
+  out inside a loop's observation, where `Exhausted` has no handler: the surface provides no
+  handler around a div computation, for any effect (`with to_result { f(x) }`, `f` looping and
+  raising, is rejected the same way). Rejected with that reason (`corpus/reject/rec-loop.bc`). The
+  kernel handles a div computation per observation: one observation `(nu_out l).1`, at a
+  `Div`-free row, is handled by `effHandleV` inside `unfold`, and the continuation is stored as the
+  rest of the codata for the next observation (`corpus/core-yield-pull.bc`; the surface's
+  generators use it, `corpus/gen-div.bc`). Looping tasks under `spawn` by this route are #917.
 - A native handler parameter (§19 *Open*).
 - **`memo`**, a layer, needs a map (#211) and a layer of its own state: an answering effect with
   type parameters (§18 *Open*).
@@ -5836,8 +5840,8 @@ Three pieces of the surface were missing (unit U2 of `docs/async-capabilities.md
    passed as a value (§18 *Not provided*), so a higher-order function could not be given an
    awaiting callback.
 2. **A counted loop at a resuming row.** A `for` over data whose body performs an operation that
-   resumes was always a div loop (§16 *Effectful bodies*), and no handler wraps a div computation
-   (§21 *Open*), so a task with a counted loop that awaits could not be spawned.
+   resumes was always a div loop (§16 *Effectful bodies*), and the surface wraps no handler around
+   a div computation (§21 *Open*), so a task with a counted loop that awaits could not be spawned.
 3. **BOXED-κ from a surface handler.** Only core-text `handle_with` emitted §28's rule, so a
    library scheduler could not store a task's continuation in a queue.
 
@@ -12506,9 +12510,11 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
-- **1.58** (2026-11-09) — §15 *Open* (#910): a stored generator over a row is a limit of the
-  surface, not of the kernel. The elaborator refuses it; the kernel's ν rules admit effectful
-  observations. No change to the code.
+- **1.58** (2026-11-09) — §15 *Open* (#910), §21 *Open*, §30: limits of the surface that read as
+  the kernel's. A stored generator over a row is refused by the elaborator; the kernel's ν rules
+  admit effectful observations. A handler around a div computation is not provided by the
+  surface; the kernel handles one per observation, by `effHandleV` inside `unfold` (#917). No
+  change to the code.
 - **1.57** (2026-11-09) — §68 (#855 K3): the rules `codeI`, `codeIB`, `erase` and `eraseB`, and
   `force` at `U C` or `Code⟨N; E⟩ C`. `codeI` and `codeIB` ask the captured types closed,
   `(Γ.capTy (λM)).Cl 0`, beside `CapOK`; where either fails the closure stays at `U C`. `LamCls`
