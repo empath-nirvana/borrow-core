@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.58 · 2026-11-09
+Version 1.59 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1349,6 +1349,14 @@ elaborate to the same term.
   `c : A` (`alloc`, the borrow, `free`); the borrow's result `(c, x)` rebinds `c` the same way
   (`docs/typed-elaboration.md` §5.1). The earlier spelling `&c` for an exclusive lend is
   retired: `&c` is the shared lend.
+- **A lending call in tail position** (the last expression of a function, a `with` body, a block
+  or an arm) that lends one place is `let r = f(…, &p, …); r`, the head's form: the place is
+  rebound from what the call hands back and the call's answer returned. At a row whose
+  operations the call performs, the typed pass reads it as that binding, so the borrow is the
+  unwinding form at those operations (§18); elsewhere the last step of the lend sugar
+  (`Comp.elab`) does, as for a head. A refusal of such a call names the function as written, not
+  the copy the elaborator makes for its handlers (`get_or_fail`, not `get_or_fail__n1`). A tail
+  call lending two places is refused, as in a head.
 - **`for x in bytes c { M }; N`**: the form of draft 0 of the surface syntax
   (`docs/surface-cbpv.md`). It loops without bound, so it is a div construct: it may appear in
   any function, which is then div, and in `main` anywhere on its spine (§14, which withdraws the
@@ -1970,6 +1978,12 @@ form, before the other sugar, with no kernel or checker change:
   block of its own, per step; stretches that do not use it are left outside any block. The `for`
   is then on the enclosing spine and threads the place, which each step rebinds. This is
   `loop_lend_*` written inline, so each step is known code.
+- **A load block whose body loops** (`borrow imm *g { 'y, v -> S }`, §36) is rewritten per
+  observation only when the loaded content is persistent: the content is bound first,
+  `let t = *g`, a copy, and `t` is lent at each step. A load of a linear content is not
+  rewritten: it is elaborated as a load (§36), its body, loops included, in place, where the
+  types of the loop's sources are known. A `for` over data there is the counted loop (§16), and a
+  loop that ticks (an operation that resumes) is refused as any borrow across a suspension is.
 - **`let r = &x; S`** (or `&mut x`) is `borrow imm x { r -> S }` over the rest of the body; `x` is
   not used in `S`. A loop-invariant borrow is thus lent per observation.
 - **A div function over a borrow**: a `def f : !(all 'a < b. P => Q)` whose body loops, with one
@@ -2146,6 +2160,9 @@ obligation for a looping `main` is §11's.
   functions*), and its instance is specialized as any function is, so a div function may be
   generic (a `fn f[A](g: U (pull A 1 1)) -> …` that drains `g`).
 - **`div_fuel` is `driveE`** by construction, not by a proved equation.
+- **A loop source bound inside the body is not typed by LoopLend** (one bound in a `match` arm,
+  say), so a load of persistent content whose body loops over such a source is rewritten per step
+  with the source's type not known there.
 - **`[handle]` of another name at a clause given `κ`** around a computation that ticks
   (`handle_general`, #564), beyond `effHandleT`'s and `effHandleL`'s (§51) classes.
 - **Finalisers are total, as a theorem** (decision 69): every run of a finaliser whose row is
@@ -2864,7 +2881,9 @@ static name `n` of its own, and an operation is resolved lexically to the innerm
 instance (§38): `perform[n.i](v)`, or `abort[n.i](v)` for an abortive operation. The site is
 `handle_with[n]((V_r : T_r), (V_c : T_c)) M`: the return clause `V_r` and the tuple `V_c` of the
 operation clauses, `!` closures at the types `[handle]` gives them (`T_r`, `T_c`), the handler's type
-parameters matched against the body's type and its arguments' types. The node holds its clauses:
+parameters matched against the body's type and its arguments' types. The body's type is read
+with the body's lends elaborated (`TCx.tyCL`, §11 *Sugar*), as a borrow block's result is, and so
+is the result of a block `{ … }` whose body loops. The node holds its clauses:
 its erasure is `hnd (n, (qs, (V_r, V_c))) e`, and the clauses are the `handle` node's own
 (§19 *Clause kinds*). The clauses run outside the site: their operations go to the sites around the
 `with`.
@@ -3042,6 +3061,8 @@ program's derivation gives it (`checkProgram_letPoly`).
 - A capability threaded through a `for` over `&a` of an owned array: the lend around the loop
   takes `top` as its bound, so the loop's state cannot hold a borrow (`corpus/effects-map.bc`
   passes a view instead).
+- Sites other than a handler site and a looping block's result may read a computation's type
+  before its lends are elaborated (`tyC` where `tyCL` is meant).
 
 ---
 
@@ -8115,15 +8136,31 @@ what its parts write and has no boundary of its own.
 | `if`, `match`, `case` (a statement) | `W(arm₁) ∪ W(arm₂)` | each arm hands on `W` (`handArms`); the statement rebinds it |
 | `let p = if/match …`, `x <- M` (a head) | `W(M)` | each terminal hands on `(value, W)`; the binding takes it apart (`bindForm`) |
 | `for x in V { M }`, `while`, `loop`, `for` over a generator | `W(M)` | a turn: the loop's state is `W` and the variables it reads (§14, §15, §16); each turn hands it on |
-| `borrow k P { b -> S }` | `{P} ∪ W(S)` | the callback hands back `(result, W)` beside the places it lends; the binding rebinds `P` and `W` |
+| `borrow k P { b -> S }` | `{P} ∪ W(S)` | the callback hands back `(result, W)` beside the places declared outside it that it lends; the binding rebinds `P` and `W` |
 | `modify P { v -> S }` | `{P} ∪ W(S)` | the callback hands back `(c, (r, W))`, the new content `c` and the result `r` (`()` when there is none; `Sugar.modifyBody`); of a `let mut` value, the body runs in place |
 | `with h(e) { S }`, answering | `W(S)` | as a borrow block of the state's cell (§18) |
 | `with h(…) { S }`, control | — | refused when `W(S)` is not empty |
 | `run M` | `W(M)` | `M` hands back `(value, W)` where it is bound; inside an expression, refused |
+| `if …`, `match …` inside an expression | `W(M)` | read as `run M` (a call argument, an operand, a pair component, the right side of `x = …`, a field initialiser): `f(if b { 1 } else { 2 })` is `f(run if b { 1 } else { 2 })`; where it is bound it hands back `(value, W)`; inside an expression, refused when `W` is not empty, the refusal naming the construct as written |
 | a closure: `{ p -> S }`, `!{ … }`, `{ S }`, `thunk`, `thunkv` and their `!` forms | `W(S)` | marked `writes(W) V` (`VSugar.writes`); at a block parameter of a call, the copy passes `W` in and out at each call; elsewhere refused |
 | a `for`'s `else { d }` | — | refused when `W(d)` is not empty |
 | a handler's clause | its `mut` parameters only | the state is threaded by §18 |
 | a declaration (`fn`, `main`, `def`, a `poly` case) | its own `let mut`s | no `let mut` reaches another declaration |
+
+**Places declared inside a block.** The places a borrow block or a `with` body hands back, or at a
+control `with` is refused for, are the places it lends that are declared outside it. A lent name
+is declared inside the block when a binder in the body declares it, at any depth of the borrow
+blocks, `with` bodies and `run`s the body runs in place, and the name is not bound where the block
+begins: a `let mut x` declared in an inner `with`'s body and lent there is the inner body's. A
+binder of a name already bound outside (a capability rebound, `let (stdout, …) = …`) is not a
+declaration, and that place stays the outer block's. R1 renames every other shadowing binder in a
+program's source, so a name declared inside never stands for an outer place; core text is read by
+the same rule (`bcc print` round-trips; `corpus/with-nested-lend.bc`).
+
+**`if` and `match` as expressions.** The parser inserts `run M` for an `if` or `match` where a
+value is expected; the kernel checks it as a written `run`. At a statement or a `let` head an
+`if`/`match` is read by the computation grammar as before (`startsComp`), and juxtaposition
+(`V W`) does not start at one (`startsValAtom`).
 
 `writes(x, …) V` is printed by `bcc print` for a closure that writes; in a surface body it is not
 written (the parser finds it), and in core text it is read as printed.
@@ -8268,8 +8305,8 @@ whose meaning depended on two names coinciding.
 
 ### Open
 
-- **A control handler's body that writes**, and a `run` that writes inside an expression, are
-  refused. The first needs the handler's clauses to hand the variables back when the body is
+- **A control handler's body that writes or lends an outer place** (#885), and a `run` that
+  writes inside an expression, are refused. The first needs the handler's clauses to hand the variables back when the body is
   abandoned; the second, the expression's calls lifted in order around it.
 - **The target pairs** that are not met (`docs/research/let-mut-state/README.md`): what separates
   each is the counted loop (§16), the state machine of a div body (§14), §32's calling convention,
@@ -8284,6 +8321,8 @@ whose meaning depended on two names coinciding.
 - **A block that writes, passed through a closure** in its callee (`{ x -> f(x) }` given to
   another block parameter), is refused with a message about `!thunk` promotion: the copy's row
   for a block parameter (`cbRows`) does not carry its `let mut` capabilities.
+- **`case V { … }` and `for` as expressions** are not read as `run`: `case` is printed core, and
+  `for` as a value needs its loop result bound (`let r = for …`).
 
 ---
 
@@ -8328,6 +8367,11 @@ The declaration elaborates to a `type` declaration of the same name and paramete
 The name, its constructors and its fields live in the elaborator's table (`Data.Table`), which the
 parser holds, read before the module is parsed: a declaration is in scope in the whole module that
 declares it and in every program that includes that module, and the prelude's in every program.
+Every source position carries the module it was read from: the program, written as the program's
+path, or a library module `m`, written `lib/m.bc`. A diagnostic at a position inside an included
+module, a parse error among them, is reported as `lib/m.bc:L:C: …`, and a span it quotes is that
+module's text. Line and column numbering is unchanged, and names generated from positions use
+the line and column only, so the elaborated term is unchanged.
 The table holds the `type` abbreviations in scope too, read in the same pass, which the block
 classification and the class `P` open (§61). Its `type` declaration is placed where the group's first member is, so a type declared later is
 named only after it.
@@ -8717,6 +8761,9 @@ programs get rows.
   `mut` borrow is a `withswap` of the whole record: loads and stores where Rust touches one field
   (the ports of `docs/expressiveness-probes/zero-cost/data/`, L-1: N2). The allocations are the
   probes'.
+- **A position quoted inside a message's text** (a family's case, a loop note) renders as `L:C`
+  without its module, and Backend2's driver (`Backend2/Driver.lean`) prints a front-end error
+  under the program's path.
 
 ---
 
@@ -12510,6 +12557,19 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.59** (2026-11-09) — the small-gaps batch (#880–#883, #892, #893). No change to `CDerives`,
+  the kernel or a checker rule; every golden unchanged. Refusal messages no longer cite decision
+  71.
+  - §41 (#882): an `if` or `match` where a value is expected is `run` of it.
+  - §41 (#881): a block hands back only the places declared outside it that it lends, at any depth
+    of nesting (`corpus/with-nested-lend.bc`).
+  - §42 (#883): a source position carries its module; a diagnostic inside an included module is
+    reported as `lib/m.bc:L:C`.
+  - §11 (#892): a call in tail position that lends one place is the head's form,
+    `let r = f(…, &p, …); r`; its refusal names the function as written.
+  - §14 (#880): a load block whose body loops is rewritten per observation only when its content
+    is persistent; a load of a linear content is elaborated in place.
+  - §18 (#893): a control handler's site reads its body's type with the body's lends elaborated.
 - **1.58** (2026-11-09) — §15 *Open* (#910), §21 *Open*, §30: limits of the surface that read as
   the kernel's. A stored generator over a row is refused by the elaborator; the kernel's ν rules
   admit effectful observations. A handler around a div computation is not provided by the
