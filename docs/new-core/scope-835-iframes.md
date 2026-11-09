@@ -1,5 +1,7 @@
 # #835: the `imm` frames, reborrows and anti-frames across Kripke stops
 
+*History: a unit of #835, merged with #839. The code (`Core/Chain/`) is now its reference, and `chain-interpretation.md` the design. The text below is kept as the record.*
+
 This unit restates the 12 Fi producers (`imm` frames and reborrows) and the 4 Fa producers
 (anti-frames) of `scope-835-kripke-stop.md` §2 at `erwpK`, the stop choosing its floor
 (`Core/Chain/SI/ErwpK.lean`), as `scope-835-mframes.md` did for the 13 `mut` frames. Each `erwp`

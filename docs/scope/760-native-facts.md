@@ -1,5 +1,7 @@
 # #760: native facts from the kernel
 
+*History: the scope of #760; it landed as SPEC §50 (1.23, 1.24). The text below is kept as the record.*
+
 Scope for #760, written before any code and read at `origin/main` 32bbf65d. Backend only: no
 change to Core, `CDerives`, the checker or the language. Section 8 records the review.
 

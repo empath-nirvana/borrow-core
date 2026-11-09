@@ -1,5 +1,7 @@
 # Surface syntax: CBPV made visible, and pleasant — draft 0
 
+*History: draft 0 of the surface, superseded by [`syntax-core.md`](syntax-core.md) and [`typed-elaboration.md`](typed-elaboration.md). The text below is kept as the record.*
+
 Status: design only (issue #54, step 1). Nothing here is implemented. The parser extension is
 step 2 and comes after general `ν` (#31). The core syntax this desugars to is
 [`syntax-core.md`](syntax-core.md) (draft 1); section numbers `§N` below refer to it unless they
@@ -45,7 +47,7 @@ CBPV has two shifts. `U C` turns a computation into a value (a thunk); `F A` tur
 computation (`return`, eliminated by `x <- M; N`). A shift *cancels* when its introduction meets
 its elimination in known code: `force (thunk M) = M` and `x <- return V; N = N[V/x]`. A
 cancelled shift leaves no closure, no indirect call and no stored continuation (dream property
-C2, [`dream-properties.md`](dream-properties.md)). A shift *survives* when its introduction and
+C2, [`archive/dream-properties.md`](archive/dream-properties.md)). A shift *survives* when its introduction and
 elimination are separated by an unknown or escaping value: a thunk stored, returned or passed to
 code that keeps it; a continuation handed to a handler that keeps it; a codata object observed
 later.

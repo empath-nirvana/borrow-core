@@ -1,5 +1,7 @@
 # Effects and handlers (#18): scoping
 
+*History: superseded by SPEC §18 (S1) and §62. The text below is kept as the record.*
+
 Status: a scoping pass, not the design. Stage S1 is being built from it: S1a (effect signatures,
 stateful handlers, `with`), S1b (`Fail`) and S1c (the laws and the reports) are SPEC §18. Every surface spelling is provisional unless §6 marks it
 as a one-way door. It answers the user's

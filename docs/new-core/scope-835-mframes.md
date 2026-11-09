@@ -1,5 +1,7 @@
 # #835: the `mut` lend frames across Kripke stops
 
+*History: a unit of #835, merged with #839. The code (`Core/Chain/`) is now its reference, and `chain-interpretation.md` the design. The text below is kept as the record.*
+
 This unit restates the 13 `mut` lend frames of `scope-835-kripke-stop.md` §2's Fm class at
 `erwpK`, the stop choosing its floor (`Core/Chain/SI/ErwpK.lean`). Each `erwp` statement stays,
 word for word, and is proved again from its restated frame at one world.

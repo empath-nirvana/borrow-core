@@ -1,5 +1,7 @@
 # Scope: recursion without step-indexing (`μ`, `ν`, the delay monad)
 
+*History: a scoping note; `μ` and `ν` are SPEC entries, which cite it. The text below is kept as the record.*
+
 This is a scoping note. It changes no code, and nothing below is decided. It works out where
 `μ`/`ν` and a delay monad would go, what each touches, and which parts are risky. Each claim
 is marked in one of three ways:
@@ -16,7 +18,7 @@ would need the model step-indexed in the standard way, which weakens leak freedo
 terminating executions. The design below takes a different route. Non-termination is kept
 out of `F`-typed computations. It appears only as codata whose type says so (`ν`, `D`), and it
 is observed a finite number of times. So the claim `F 1` programs terminate and leave memory
-empty (`SPEC.md` §1, `docs/dream-properties.md` F2) is kept as it is, and the statement for
+empty (`SPEC.md` §1, `docs/archive/dream-properties.md` F2) is kept as it is, and the statement for
 programs that may diverge is a new one (§4). This is a different extension from the one
 415:25 describes. It does not dispute it.
 
@@ -433,32 +435,32 @@ question.
   `μL. 1 ⊕ (Ref A ⊗ L)`, can be borrowed at one lifetime by a `withborN` defined by fold, with
   a higher-order result `(∀'c. List(Mut 'c A) ⊸ ['c]T) ⊸ …`. An `IterMut` whose state is
   `List(Mut 'c A)` is then a `ν` boxed at `'d ⊏ 'c`. That is the dynamic-length version of
-  Places (e), and a good U4 test (`docs/dream-properties.md:17`). The Places side condition
+  Places (e), and a good U4 test (`docs/archive/dream-properties.md:17`). The Places side condition
   excludes `⊸`/`∀`/`Unk` in the result type outside `!` (`Places/README.md:58-61`), so a
   result holding a stream must be `[@d]`-boxed.
 - **Iterator adapters** (U1). `map`/`zip`/`take` are productive coiterations. `filter`,
   `skip_while` and `find` are not productive on a possibly infinite stream, so their `next`
   lands in `D` (or the iterator is `νX. D(…)`). Rust leaves this implicit; here it is in the
   type.
-- **Handlers and `yield`** (E1, `dream-properties.md:72`).
+- **Handlers and `yield`** (E1, `archive/dream-properties.md:72`).
   - A generator is the resumption `νX. F(B ⊕ (Op ⊗ U(Res ⊸ X)))`, and a handler is a
     coiteration over it.
   - Deep handlers of possibly infinite computations land in `D`. Total deep handlers exist for
     the `μ` (W-type) free monad, which needs §2.2's admission of `X` under a `U`-codomain.
   - One-shot linear continuations are `U(Res ⊸ X)` used once (C6).
-- **Deforestation (C1, `dream-properties.md:38`).**
+- **Deforestation (C1, `archive/dream-properties.md:38`).**
   - `unfold` followed by `fold` is a hylomorphism. It terminates when the intermediate is `μ`,
     and lands in `D` when it is `ν`.
   - Fusion is an *equation*, and the model here is unary. Stating C1 needs a binary relation,
     which nothing here builds.
   - To keep fusion stateable, give fold and unfold as named constants with their own rules,
     not as ad hoc Z-terms.
-- **The corpus (U1, `dream-properties.md:14`).**
+- **The corpus (U1, `archive/dream-properties.md:14`).**
   - Linked list: `μ` + `Ref` + fold.
   - Parser: fold over the input, or `D`.
   - Graph algorithms: `D` or fuel.
   - Growable vectors and hash maps need dynamic arrays, which this note does not address.
-- **F4** (`dream-properties.md:29`). This design is an alternative to a second,
+- **F4** (`archive/dream-properties.md:29`). This design is an alternative to a second,
   step-indexed model. Divergence is a *type* (`D`), not a capability, and leak freedom at
   `D` holds on every finite prefix once there is a `close`. Whether F4 is still wanted once
   `D` exists is open.

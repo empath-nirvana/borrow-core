@@ -143,7 +143,7 @@ branches (`multiBranchAdequacyT`, `poolSchedAdequacyT`) goes through `cerwpT_ade
 branch, the stored branches carried in pool form (`KapSchedT`, `PoolTJ`: each share resuming at
 `KeepRel`, the pool a stack whose entries hold views only of what their nearest joiner shares, no
 branch points), not as branches of `CactusInvT`; this is decision 74 (`scope-781.md` §4,
-`scope-795.md`). Open: adequacy at the
+`../archive/new-core/scope-795.md`). Open: adequacy at the
 relation the typing rules use; the frame rules as instances of capture (condition 20).
 
 The chain interpretation of §3 does not go through the cactus invariant: `goal791N` derives

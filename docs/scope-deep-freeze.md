@@ -1,5 +1,7 @@
 # Scope: deep freeze held at the top level (option B)
 
+*History: a scoping note; it decided nothing, and nothing in it is a rule. The text below is kept as the record.*
+
 This is a scoping note. It changes no code. It asks whether changing how frozen data is
 *represented* would let `↭` accept a same-lifetime interior view, and what that would cost.
 Each claim is marked as either machine-checked (with where), read off a definition (with

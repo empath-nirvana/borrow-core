@@ -31,4 +31,4 @@ borrow-core already works, and it does a lot with effects (see [What works today
 - **PAPER:** a paper-level encoding.
 - **probe:** a draft definition in `experiments/`.
 
-**Shared context.** Agents working on any track read [`docs/effects-state/BRIEF.md`](../../../docs/effects-state/BRIEF.md) first.
+**Shared context.** Agents working on any track read [`docs/archive/effects-state/BRIEF.md`](../../../docs/archive/effects-state/BRIEF.md) first.

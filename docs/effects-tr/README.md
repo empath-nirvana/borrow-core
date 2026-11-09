@@ -1,5 +1,7 @@
 # The effect calculus: a technical report
 
+*History: the paper proof of #235's effect calculus, superseded by the new Core (SPEC §62, `new-core/chain-interpretation.md`). The text below is kept as the record.*
+
 *Decision 71, which closed the open items here about lends across suspensions, is void
 (decision 72).* Borrows held across a suspending operation are kernel rules since #839 (decision
 75, SPEC §62); the checker keeps T1 (SPEC §19) until the surface catch-up, #843. The text is kept
