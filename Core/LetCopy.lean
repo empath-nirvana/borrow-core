@@ -23,12 +23,6 @@ noncomputable section
 
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
-namespace BoCa
-
-deriving instance DecidableEq for Expr
-
-end BoCa
-
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

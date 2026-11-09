@@ -111,10 +111,17 @@ def nuP (R : CPred) : Bool → List SRec → Val → WProp
 the variable `0` is `U(νX. C)`, read at `nuP R`. -/
 def nuEnv (C : CTy) (R : CPred) : Nat → TEnt := VTy.scons ⟨.thunk (.nu C), nuP R⟩ (tEnv none)
 
+/-- A capture list as one value: right-nested pairs ending in `()`.  `[spec §68]` -/
+def tupleV : List Val → Val
+  | []      => .unit
+  | u :: us => .pair u (tupleV us)
+
 mutual
 /-- `𝒱⟦A⟧(ls)δ(v)` under a type-variable environment.  `full = true`: the program's relation.
 `full = false`: the observable view an `Imm` payload is held at, with `U` positions relaxed to
-`True`.  At a variable the environment's candidate; at `μX. A` the least fixed point
+`True`.  `Code⟨N; E⟩ C` is its code conjunct (`v` is `N` closed by captured values whose tuple
+is in `𝒱⟦E⟧`, read at no environment, as `U C` reads `C`) and the `U C` clause (`[spec §68]`).
+At a variable the environment's candidate; at `μX. A` the least fixed point
 `⋂{P | A[P/X] ⊆ P}`, joint over the mode and the list and written in `Prop`
 (`docs/scope-recursion.md` §2.1), empty unless `X` is outside `A`'s `Mut` payloads (§2.2) and
 the `μ` is closed.  `[spec §3]` -/
@@ -129,6 +136,10 @@ def vCE : Option (Nat → TEnt) → Bool → VTy → List SRec → LSub → Val 
   | _, true, .thunk C, ls, δ, v => fun ρ =>
       ∀ ls', Ext ls ls' ρ → cC C ls' δ (forceE C (.val v)) ρ
   | _, false, .thunk _, _, _, _ => fun _ => True
+  | _, true, .code N E C, ls, δ, v => fun ρ =>
+      (∃ us : List Val, v.1 = Expr.psub 0 us N ∧ vCE none true E ls δ (tupleV us) ρ) ∧
+        ∀ ls', Ext ls ls' ρ → cC C ls' δ (forceE C (.val v)) ρ
+  | _, false, .code _ _ _, _, _, _ => fun _ => True
   | η, _, .bang A, ls, δ, v => fun ρ => ρ = PMap.empty ∧ vCE η true A ls δ v ρ
   | η, b, .box a A, ls, δ, v => atLife δ a fun α => box α (vCE η b A ls δ v)
   | η, b, .ref A, ls, δ, v =>

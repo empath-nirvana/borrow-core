@@ -29,11 +29,6 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-! ### The code predicate -/
 
-/-- A capture list as one value: right-nested pairs ending in `()`.  `[spec §68]` -/
-def tupleV : List Val → Val
-  | []      => .unit
-  | u :: us => .pair u (tupleV us)
-
 /-- **The code conjunct** of `𝒱⟦Code⟨N; E⟩ C⟧`: `v` is `N` closed by captured values `us` whose
 tuple is in `𝒱⟦E⟧` at the whole resource.  `[spec §68]` -/
 def codeP (N : Expr) (E : VTy) (ls : List SRec) (δ : LSub) (v : Val) : WProp := fun ρ =>

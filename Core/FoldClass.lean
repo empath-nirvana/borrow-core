@@ -40,7 +40,7 @@ def clB : Nat → VTy → Bool
   | k, .mu A => clB (k + 1) A
   | _, .unit => true
   | _, .zero => true
-  | _, .thunk _ => true
+  | _, .thunk _ | _, .code _ _ _ => true
   | _, .unk => true
   | _, .int _ => true
   | _, .opq _ => true
@@ -58,7 +58,7 @@ theorem clB_iff : ∀ (k : Nat) (A : VTy), clB k A = true ↔ A.Cl k
   | k, .mu A => by simp [clB, VTy.Cl, clB_iff (k + 1) A]
   | _, .unit => by simp [clB, VTy.Cl]
   | _, .zero => by simp [clB, VTy.Cl]
-  | _, .thunk _ => by simp [clB, VTy.Cl]
+  | _, .thunk _ | _, .code _ _ _ => by simp [clB, VTy.Cl]
   | _, .unk => by simp [clB, VTy.Cl]
   | _, .int _ => by simp [clB, VTy.Cl]
   | _, .opq _ => by simp [clB, VTy.Cl]
@@ -97,7 +97,7 @@ def headB : VTy → Bool
 theorem headB_iff : ∀ B : VTy, headB B = true ↔ head B
   | .tvar _ => by simp [headB, head]
   | .mu B => by simp [headB, head, headB_iff B]
-  | .unit | .tensor _ _ | .zero | .sum _ _ | .thunk _ | .ref _ | .imm _ _ | .mut _ _ | .box _ _
+  | .unit | .tensor _ _ | .zero | .sum _ _ | .thunk _ | .code _ _ _ | .ref _ | .imm _ _ | .mut _ _ | .box _ _ 
   | .bang _ | .unk | .int _ | .fam _ | .opq _ => by simp [headB, head]
 
 /-- `P` as a `Bool`. -/
@@ -118,11 +118,11 @@ theorem PB_iff : ∀ (d : Nat) (A : VTy), PB d A = true ↔ P d A
   | d, .ref S => by simp [PB, P, PB_iff d S]
   | d, .fam (.ref S) => by simp [PB, P, PB_iff d S]
   | d, .fam (.unit) | d, .fam (.tensor _ _) | d, .fam (.zero) | d, .fam (.sum _ _)
-  | d, .fam (.thunk _) | d, .fam (.imm _ _) | d, .fam (.mut _ _) | d, .fam (.box _ _)
+  | d, .fam (.thunk _) | d, .fam (.code _ _ _) | d, .fam (.imm _ _) | d, .fam (.mut _ _) | d, .fam (.box _ _) 
   | d, .fam (.bang _) | d, .fam (.unk) | d, .fam (.tvar _) | d, .fam (.mu _) | d, .fam (.int _)
   | d, .fam (.fam _) | d, .fam (.opq _) => by simp only [PB, P, clB_iff]
   | d, .mu B => by simp [PB, P, PB_iff (d + 1) B, clB_iff, headB_iff, Hd]
-  | _, .unit | _, .zero | _, .thunk _ | _, .imm _ _ | _, .mut _ _ | _, .box _ _ | _, .bang _
+  | _, .unit | _, .zero | _, .thunk _ | _, .code _ _ _ | _, .imm _ _ | _, .mut _ _ | _, .box _ _ | _, .bang _
   | _, .unk | _, .int _ | _, .opq _ => by simp only [PB, P, clB_iff]
 
 /-- `PBody` as a `Bool`. -/
@@ -143,11 +143,11 @@ theorem P_of_closed : ∀ {A : VTy} (d : Nat), A.Cl 0 → P d A
   | .ref S, d, h => P_of_closed (A := S) d h
   | .fam (.ref S), d, h => P_of_closed (A := S) d h
   | .fam (.unit), _, h | .fam (.tensor _ _), _, h | .fam (.zero), _, h | .fam (.sum _ _), _, h
-  | .fam (.thunk _), _, h | .fam (.imm _ _), _, h | .fam (.mut _ _), _, h | .fam (.box _ _), _, h
+  | .fam (.thunk _), _, h | .fam (.code _ _ _), _, h | .fam (.imm _ _), _, h | .fam (.mut _ _), _, h | .fam (.box _ _), _, h 
   | .fam (.bang _), _, h | .fam (.unk), _, h | .fam (.tvar _), _, h | .fam (.mu _), _, h
   | .fam (.int _), _, h | .fam (.fam _), _, h | .fam (.opq _), _, h => h
   | .mu _, _, h => Or.inl h
-  | .unit, _, h | .zero, _, h | .thunk _, _, h | .imm _ _, _, h | .mut _ _, _, h | .box _ _, _, h
+  | .unit, _, h | .zero, _, h | .thunk _, _, h | .code _ _ _, _, h | .imm _ _, _, h | .mut _ _, _, h | .box _ _, _, h
   | .bang _, _, h | .unk, _, h | .int _, _, h | .opq _, _, h => h
 
 /-- **`P ⊇ FShape`**: every body of the class `FShape` is a body of `P`. -/
@@ -176,7 +176,7 @@ theorem Cl_of_P : ∀ {A : VTy} {d : Nat}, P d A → A.Cl d
   | .ref S, _, h => Cl_of_P (A := S) h
   | .fam (.ref S), _, h => Cl_of_P (A := S) h
   | .fam (.unit), d, h | .fam (.tensor _ _), d, h | .fam (.zero), d, h | .fam (.sum _ _), d, h
-  | .fam (.thunk _), d, h | .fam (.imm _ _), d, h | .fam (.mut _ _), d, h | .fam (.box _ _), d, h
+  | .fam (.thunk _), d, h | .fam (.code _ _ _), d, h | .fam (.imm _ _), d, h | .fam (.mut _ _), d, h | .fam (.box _ _), d, h 
   | .fam (.bang _), d, h | .fam (.unk), d, h | .fam (.tvar _), d, h | .fam (.mu _), d, h
   | .fam (.int _), d, h | .fam (.fam _), d, h | .fam (.opq _), d, h =>
       VTy.Cl_mono _ h (Nat.zero_le d)
@@ -184,7 +184,7 @@ theorem Cl_of_P : ∀ {A : VTy} {d : Nat}, P d A → A.Cl d
       rcases h with h | ⟨h, -⟩
       · exact VTy.Cl_mono B h (by omega)
       · exact Cl_of_P (A := B) h
-  | .unit, d, h | .zero, d, h | .thunk _, d, h | .imm _ _, d, h | .mut _ _, d, h | .box _ _, d, h
+  | .unit, d, h | .zero, d, h | .thunk _, d, h | .code _ _ _, d, h | .imm _ _, d, h | .mut _ _, d, h | .box _ _, d, h
   | .bang _, d, h | .unk, d, h | .int _, d, h | .opq _, d, h => VTy.Cl_mono _ h (Nat.zero_le d)
 
 /-! ### Binders and the closed types in scope -/

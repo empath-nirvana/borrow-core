@@ -79,6 +79,9 @@ theorem VTy.alphaB_sound : ∀ {ρ : List (LifeVar × LifeVar)} {δ δ' : LSub} 
   | _, _, _, .thunk C, A', h, hα => by
       cases A' <;> simp only [VTy.alphaB, reduceCtorEq] at hα
       exact CTy.alphaB_sound C _ h hα
+  | _, _, _, .code _ E C, A', h, hα => by
+      cases A' <;> simp only [VTy.alphaB, Bool.and_eq_true, decide_eq_true_eq, reduceCtorEq] at hα
+      exact ⟨hα.1.1, VTy.alphaB_sound E _ h hα.1.2, CTy.alphaB_sound C _ h hα.2⟩
   | _, _, _, .ref A, A', h, hα => by
       cases A' <;> simp only [VTy.alphaB, reduceCtorEq] at hα
       exact VTy.alphaB_sound A _ h hα
@@ -174,6 +177,7 @@ theorem VTy.alphaB_diag : ∀ {ρ : List (LifeVar × LifeVar)}, AlphaDiag ρ →
   | _, h, .tensor A B | _, h, .sum A B => by
       simp [VTy.alphaB, VTy.alphaB_diag h A, VTy.alphaB_diag h B]
   | _, h, .thunk C => by simp [VTy.alphaB, CTy.alphaB_diag h C]
+  | _, h, .code _ E C => by simp [VTy.alphaB, VTy.alphaB_diag h E, CTy.alphaB_diag h C]
   | _, h, .ref A | _, h, .bang A | _, h, .fam A | _, h, .mu A => by
       simp [VTy.alphaB, VTy.alphaB_diag h A]
   | _, h, .imm a A | _, h, .mut a A | _, h, .box a A => by
@@ -237,6 +241,9 @@ theorem VTy.alphaB_swap : ∀ (ρ : List (LifeVar × LifeVar)) (A A' : VTy),
   | ρ, .thunk C, A', h => by
       cases A' <;> simp only [VTy.alphaB, reduceCtorEq] at h ⊢
       exact CTy.alphaB_swap ρ C _ h
+  | ρ, .code _ E C, A', h => by
+      cases A' <;> simp only [VTy.alphaB, Bool.and_eq_true, decide_eq_true_eq, reduceCtorEq] at h ⊢
+      exact ⟨⟨h.1.1.symm, VTy.alphaB_swap ρ E _ h.1.2⟩, CTy.alphaB_swap ρ C _ h.2⟩
   | ρ, .ref A, A', h => by
       cases A' <;> simp only [VTy.alphaB, reduceCtorEq] at h ⊢; exact VTy.alphaB_swap ρ A _ h
   | ρ, .bang A, A', h => by
@@ -368,6 +375,11 @@ theorem VTy.alphaB_trans : ∀ {ρ₁ ρ₂ : List (LifeVar × LifeVar)}, AlphaM
       cases B <;> simp only [VTy.alphaB, reduceCtorEq] at h₁
       cases C <;> simp only [VTy.alphaB, reduceCtorEq] at h₂ ⊢
       exact CTy.alphaB_trans hm _ _ _ h₁ h₂
+  | _, _, hm, .code _ E D, B, C, h₁, h₂ => by
+      cases B <;> simp only [VTy.alphaB, Bool.and_eq_true, decide_eq_true_eq, reduceCtorEq] at h₁
+      cases C <;> simp only [VTy.alphaB, Bool.and_eq_true, decide_eq_true_eq, reduceCtorEq] at h₂ ⊢
+      exact ⟨⟨h₁.1.1.trans h₂.1.1, VTy.alphaB_trans hm _ _ _ h₁.1.2 h₂.1.2⟩,
+        CTy.alphaB_trans hm _ _ _ h₁.2 h₂.2⟩
   | _, _, hm, .ref A, B, C, h₁, h₂ => by
       cases B <;> simp only [VTy.alphaB, reduceCtorEq] at h₁
       cases C <;> simp only [VTy.alphaB, reduceCtorEq] at h₂ ⊢
@@ -460,7 +472,7 @@ reaches under a `U`, so under no lifetime binder. -/
 theorem VTy.alphaB_persistent {ρ : List (LifeVar × LifeVar)} (A : VTy) :
     ∀ {A' : VTy}, VTy.alphaB ρ A A' = true → A.persistent = A'.persistent := by
   induction A using VTy.recV with
-  | unit | zero | unk | int _ | opq _ | tvar _ | thunk _ =>
+  | unit | zero | unk | int _ | opq _ | tvar _ | thunk _ | code _ _ _ _ =>
       intro A' h; cases A' <;> simp_all [VTy.alphaB, VTy.persistent]
   | tensor A B ihA ihB | sum A B ihA ihB =>
       intro A' h
@@ -485,7 +497,7 @@ theorem VTy.alphaB_rename {ρ : List (LifeVar × LifeVar)} (A : VTy) :
     ∀ {A' : VTy} (r : Nat → Nat), VTy.alphaB ρ A A' = true →
       VTy.alphaB ρ (A.rename r) (A'.rename r) = true := by
   induction A using VTy.recV with
-  | unit | zero | unk | int _ | opq _ | thunk _ =>
+  | unit | zero | unk | int _ | opq _ | thunk _ | code _ _ _ _ =>
       intro A' r h; cases A' <;> simp_all [VTy.alphaB, VTy.rename]
   | tvar n =>
       intro A' r h; cases A' <;> simp_all [VTy.alphaB, VTy.rename]
@@ -510,7 +522,7 @@ theorem VTy.alphaB_subst {ρ : List (LifeVar × LifeVar)} (A : VTy) :
     ∀ {A' : VTy} {σ σ' : Nat → VTy}, (∀ n, VTy.alphaB ρ (σ n) (σ' n) = true) →
       VTy.alphaB ρ A A' = true → VTy.alphaB ρ (A.subst σ) (A'.subst σ') = true := by
   induction A using VTy.recV with
-  | unit | zero | unk | int _ | opq _ | thunk _ =>
+  | unit | zero | unk | int _ | opq _ | thunk _ | code _ _ _ _ =>
       intro A' σ σ' _ h; cases A' <;> simp_all [VTy.alphaB, VTy.subst]
   | tvar n =>
       intro A' σ σ' hσ h
@@ -657,6 +669,10 @@ theorem VTy.alphaB_insert (ρ₀ ρ : List (LifeVar × LifeVar)) :
   | ρ₁, .thunk C, A', hv, h => by
       cases A' <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at h ⊢
       exact CTy.alphaB_insert ρ₀ ρ ρ₁ C _ (by avoid_part hv) h
+  | ρ₁, .code _ E C, A', hv, h => by
+      cases A' <;> simp only [VTy.alphaB, Bool.and_eq_true, decide_eq_true_eq, reduceCtorEq, Bool.false_eq_true] at h ⊢
+      exact ⟨⟨h.1.1, VTy.alphaB_insert ρ₀ ρ ρ₁ E _ (by avoid_part hv) h.1.2⟩,
+        CTy.alphaB_insert ρ₀ ρ ρ₁ C _ (by avoid_part hv) h.2⟩
   | ρ₁, .ref A, A', hv, h => by
       cases A' <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at h ⊢
       exact VTy.alphaB_insert ρ₀ ρ ρ₁ A _ (by avoid_part hv) h

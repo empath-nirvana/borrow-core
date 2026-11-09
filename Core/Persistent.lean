@@ -44,7 +44,7 @@ def VTy.persistent : VTy → Bool
   | .sum A B => A.persistent && B.persistent
   | .box _ A => A.persistent
   | .mu A => A.persistent
-  | .thunk _ => false
+  | .thunk _ | .code _ _ _ => false
   | .ref _ => false
   | .imm _ _ => false
   | .mut _ _ => false

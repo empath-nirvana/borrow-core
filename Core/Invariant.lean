@@ -913,6 +913,8 @@ theorem image_dom_mut {x : LifeVar} {δ δ' : LSub} :
         exact ⟨S, MutPos.tensorR hS⟩
   | thunk _ =>
       rw [empty_of_pure hc, PMap.empty_get] at e; cases e
+  | code _ _ _ =>
+      rw [empty_of_pure hc, PMap.empty_get] at e; cases e
   | ref S =>
       obtain ⟨ζ', eζ', hown⟩ := image_dom (.ref S) hc hRv e
       rw [eζ] at eζ'; cases Option.some.inj eζ'

@@ -284,6 +284,8 @@ def ofV (ms : MachSet) : VTy → Except String LTy
   | .opq k => pure (.opq k)
   | .unk => pure .unk
   | .thunk C => ofU ms false C
+  -- [spec §68] A per-code closure type has no LIR type yet; nothing past `ofV` sees one.
+  | .code _ _ _ => throw "LIR: a per-code closure type is not lowered yet (#855 B1, SPEC §68)"
 
 /-- The LIR type of `U C`, under `∀`s when `under`: `U (∀'x. F A)` is `A`. -/
 def ofU (ms : MachSet) (under : Bool) : CTy → Except String LTy
@@ -399,7 +401,7 @@ theorem ofV_persistent {ms : MachSet} : ∀ {A : VTy} {t : LTy}, A.persistent = 
       cases hA : ofV ms A <;> cases hB : ofV ms B <;> rw [hA, hB] at h <;> cases h
       simp [LTy.persistent, ofV_persistent hp.1 hA, ofV_persistent hp.2 hB]
   | .opq _, _, hp, _ | .thunk _, _, hp, _ | .ref _, _, hp, _ | .imm _ _, _, hp, _
-  | .mut _ _, _, hp, _ | .fam _, _, hp, _ => by simp [VTy.persistent] at hp
+  | .mut _ _, _, hp, _ | .fam _, _, hp, _ | .code _ _ _, _, hp, _ => by simp [VTy.persistent] at hp
 
 /-- The LIR type of a `VTy.Consume` type consumes. -/
 theorem ofV_consumes {ms : MachSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, ofV ms A = .ok t →

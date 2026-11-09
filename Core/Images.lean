@@ -758,6 +758,8 @@ theorem image_dom {x : LifeVar} {δ δ' : LSub} :
         exact ⟨ζ, eζ, fun k => let ⟨S, hS⟩ := hζ₂ (kζ ▸ k); ⟨S, RefPos.tensorR hS⟩⟩
   | thunk _ =>
       rw [empty_of_pure hc, PMap.empty_get] at e; cases e
+  | code _ _ _ =>
+      rw [empty_of_pure hc, PMap.empty_get] at e; cases e
   | ref S =>
       obtain ⟨α, -, l', hk⟩ := hc
       obtain ⟨hl, s, w, W, hW, rfl, -, -⟩ := pure_sep_iff.mp hk

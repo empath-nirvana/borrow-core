@@ -258,8 +258,8 @@ theorem tE_closed (ks : List Bnd) (Bs : Stack) :
       simp only [tE]; split
       · rfl
       · exact callE_closed ks _
-  | .unit | .zero | .thunk _ | .imm _ _ | .mut _ _ | .box _ _ | .bang _ | .unk | .int _ | .opq _ => rfl
-  | .fam .unit | .fam (.tensor _ _) | .fam .zero | .fam (.sum _ _) | .fam (.thunk _)
+  | .unit | .zero | .thunk _ | .code _ _ _ | .imm _ _ | .mut _ _ | .box _ _ | .bang _ | .unk | .int _ | .opq _ => rfl
+  | .fam .unit | .fam (.tensor _ _) | .fam .zero | .fam (.sum _ _) | .fam (.thunk _) | .fam (.code _ _ _)
   | .fam (.imm _ _) | .fam (.mut _ _) | .fam (.box _ _) | .fam (.bang _) | .fam .unk
   | .fam (.tvar _) | .fam (.mu _) | .fam (.int _) | .fam (.fam _) | .fam (.opq _) => rfl
 
@@ -318,10 +318,10 @@ theorem tE_leaf (ks : List Bnd) (Bs : Stack) :
   | .ref _, h => by simp only [clB] at h; simp only [tE, if_pos h]
   | .fam (.ref _), h => by simp only [clB] at h; simp only [tE, if_pos h]
   | .mu _, h => by simp only [tE, if_pos h]
-  | .unit, _ | .zero, _ | .thunk _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _
+  | .unit, _ | .zero, _ | .thunk _, _ | .code _ _ _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _ 
   | .unk, _ | .int _, _ | .opq _, _ => rfl
   | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
-  | .fam (.thunk _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
+  | .fam (.thunk _), _ | .fam (.code _ _ _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
   | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
   | .fam (.fam _), _ | .fam (.opq _), _ => rfl
 
@@ -334,10 +334,10 @@ theorem resO_leaf (G : Algs) (Bs : Stack) :
   | .ref _, h => by simp only [clB] at h; simp only [resO, if_pos h]
   | .fam (.ref _), h => by simp only [clB] at h; simp only [resO, if_pos h]
   | .mu _, h => by simp only [resO, if_pos h]
-  | .unit, _ | .zero, _ | .thunk _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _
+  | .unit, _ | .zero, _ | .thunk _, _ | .code _ _ _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _ 
   | .unk, _ | .int _, _ | .opq _, _ => rfl
   | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
-  | .fam (.thunk _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
+  | .fam (.thunk _), _ | .fam (.code _ _ _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
   | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
   | .fam (.fam _), _ | .fam (.opq _), _ => rfl
 

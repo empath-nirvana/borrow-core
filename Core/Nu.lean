@@ -66,7 +66,7 @@ theorem mapV_closed : ∀ A : VTy, closedAt 0 (mapV A).1 = true
       simp [mapV, closedAt, closedAt_mono _ (mapV_closed A) (Nat.zero_le _),
         closedAt_mono _ (mapV_closed B) (Nat.zero_le _)]
   | .box _ A => mapV_closed A
-  | .tvar (_ + 1) | .unit | .zero | .thunk _ | .ref _ | .imm _ _ | .mut _ _
+  | .tvar (_ + 1) | .unit | .zero | .thunk _ | .code _ _ _ | .ref _ | .imm _ _ | .mut _ _ 
   | .bang _ | .unk | .mu _ | .int _ | .opq _ | .fam _ => rfl
 
 /-- `λ_. c () o`: the step's computation at the child `o` of the node `c` runs. -/
@@ -401,7 +401,7 @@ theorem map_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
       obtain ⟨α, hα, hb, ho⟩ := hw
       obtain ⟨w', hs, h'⟩ := map_ok C g S δ A hP ls w σ hb
       exact ⟨w', hs, α, hα, h', ho⟩
-  | .unit, hP, _, w, _, hw | .zero, hP, _, w, _, hw | .thunk _, hP, _, w, _, hw
+  | .unit, hP, _, w, _, hw | .zero, hP, _, w, _, hw | .thunk _, hP, _, w, _, hw | .code _ _ _, hP, _, w, _, hw 
   | .ref _, hP, _, w, _, hw | .imm _ _, hP, _, w, _, hw | .mut _ _, hP, _, w, _, hw
   | .bang _, hP, _, w, _, hw | .unk, hP, _, w, _, hw
   | .mu _, hP, _, w, _, hw | .int _, hP, _, w, _, hw | .opq _, hP, _, w, _, hw
