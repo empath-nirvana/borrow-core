@@ -82,6 +82,7 @@ clause-captures 6 3 0 10 10 0
 clo-capture 1 0 0 3 3 0
 clo-coerce 1 0 0 3 3 0
 clo-counter 2 0 0 17 17 0
+data-json-map-ser 16 0 0 555 420 133
 effects-load-raise 4 0 0 204 184 15
 for-arm-raises-owned 8 0 0 54 54 18
 handle-arm-releases 2 0 0 13 13 5
