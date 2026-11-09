@@ -2160,6 +2160,9 @@ obligation for a looping `main` is §11's.
   functions*), and its instance is specialized as any function is, so a div function may be
   generic (a `fn f[A](g: U (pull A 1 1)) -> …` that drains `g`).
 - **`div_fuel` is `driveE`** by construction, not by a proved equation.
+- **A loop source bound inside the body is not typed by LoopLend** (one bound in a `match` arm,
+  say), so a load of persistent content whose body loops over such a source is rewritten per step
+  with the source's type not known there.
 - **`[handle]` of another name at a clause given `κ`** around a computation that ticks
   (`handle_general`, #564), beyond `effHandleT`'s and `effHandleL`'s (§51) classes.
 - **Finalisers are total, as a theorem** (decision 69): every run of a finaliser whose row is
@@ -3058,6 +3061,8 @@ program's derivation gives it (`checkProgram_letPoly`).
 - A capability threaded through a `for` over `&a` of an owned array: the lend around the loop
   takes `top` as its bound, so the loop's state cannot hold a borrow (`corpus/effects-map.bc`
   passes a view instead).
+- Sites other than a handler site and a looping block's result may read a computation's type
+  before its lends are elaborated (`tyC` where `tyCL` is meant).
 
 ---
 
@@ -12553,7 +12558,8 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 ## Changelog
 
 - **1.59** (2026-11-09) — the small-gaps batch (#880–#883, #892, #893). No change to `CDerives`,
-  the kernel or the checker; every golden unchanged.
+  the kernel or a checker rule; every golden unchanged. Refusal messages no longer cite decision
+  71.
   - §41 (#882): an `if` or `match` where a value is expected is `run` of it.
   - §41 (#881): a block hands back only the places declared outside it that it lends, at any depth
     of nesting (`corpus/with-nested-lend.bc`).
