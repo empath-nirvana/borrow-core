@@ -2601,3 +2601,15 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.codeRelN_etaN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.candNN_le_codeCandN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.nuOutK_stepN
+#print axioms BoCa.Fig16.LogRel.Core.VTy.alphaB_refl_code
+#print axioms BoCa.Fig16.LogRel.Core.vCE_code
+#print axioms BoCa.Fig16.LogRel.Core.vC_ind
+#print axioms BoCa.Fig16.LogRel.Core.vC_local
+#print axioms BoCa.Fig16.LogRel.Core.vCE_congr
+#print axioms BoCa.Fig16.LogRel.Core.vCE_tyEq
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vNE_code
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vOE_code
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vN_ind
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vNE_down
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vNE_congr
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vNE_extR

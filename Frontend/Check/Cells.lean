@@ -39,6 +39,7 @@ def _root_.BoCa.Fig16.LogRel.Core.VTy.eraseLife : VTy → VTy
   | .zero => .zero
   | .sum A B => .sum A.eraseLife B.eraseLife
   | .thunk C => .thunk C.eraseLife
+  | .code N E C => .code N E.eraseLife C.eraseLife -- [spec §68]
   | .ref A => .ref A.eraseLife
   | .imm _ A => .imm .top A.eraseLife
   | .mut _ A => .mut .top A.eraseLife
@@ -82,6 +83,10 @@ theorem _root_.BoCa.Fig16.LogRel.Core.VTy.eraseLife_of_alphaB :
   | _, .thunk C, B, h => by
       cases B <;> simp only [VTy.alphaB, reduceCtorEq] at h
       simp [VTy.eraseLife, CTy.eraseLife_of_alphaB C h]
+  | _, .code N E C, B, h => by
+      cases B <;> simp only [VTy.alphaB, Bool.and_eq_true, decide_eq_true_eq, reduceCtorEq] at h
+      obtain ⟨⟨rfl, hE⟩, hC⟩ := h
+      simp [VTy.eraseLife, VTy.eraseLife_of_alphaB E hE, CTy.eraseLife_of_alphaB C hC]
   | _, .ref A, B, h => by
       cases B <;> simp only [VTy.alphaB, reduceCtorEq] at h
       simp [VTy.eraseLife, VTy.eraseLife_of_alphaB A h]

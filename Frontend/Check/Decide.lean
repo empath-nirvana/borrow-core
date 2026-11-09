@@ -41,7 +41,7 @@ def VTy.clB : Nat → VTy → Bool
   | k, .tensor A B => VTy.clB k A && VTy.clB k B
   | _, .zero => true
   | k, .sum A B => VTy.clB k A && VTy.clB k B
-  | _, .thunk _ => true
+  | _, .thunk _ | _, .code _ _ _ => true
   | k, .ref A => VTy.clB k A
   | k, .imm _ A => VTy.clB k A
   | k, .mut _ A => VTy.clB k A
@@ -63,7 +63,7 @@ theorem VTy.clB_sound : ∀ (k : Nat) (A : VTy), VTy.clB k A = true → A.Cl k
   | k, .sum A B, h => by
       simp only [VTy.clB, Bool.and_eq_true] at h
       exact ⟨clB_sound k A h.1, clB_sound k B h.2⟩
-  | _, .thunk _, _ => trivial
+  | _, .thunk _, _ | _, .code _ _ _, _ => trivial
   | k, .ref A, h => clB_sound k A h
   | k, .imm _ A, h => clB_sound k A h
   | k, .mut _ A, h => clB_sound k A h
@@ -82,7 +82,7 @@ theorem VTy.clB_complete : ∀ (k : Nat) (A : VTy), A.Cl k → VTy.clB k A = tru
   | k, .tensor A B, h => by simp [VTy.clB, clB_complete k A h.1, clB_complete k B h.2]
   | _, .zero, _ => rfl
   | k, .sum A B, h => by simp [VTy.clB, clB_complete k A h.1, clB_complete k B h.2]
-  | _, .thunk _, _ => rfl
+  | _, .thunk _, _ | _, .code _ _ _, _ => rfl
   | k, .ref A, h => clB_complete k A h
   | k, .imm _ A, h => clB_complete k A h
   | k, .mut _ A, h => clB_complete k A h
@@ -101,7 +101,7 @@ def VTy.occB : Nat → VTy → Bool
   | k, .tensor A B => VTy.occB k A || VTy.occB k B
   | _, .zero => false
   | k, .sum A B => VTy.occB k A || VTy.occB k B
-  | _, .thunk _ => false
+  | _, .thunk _ | _, .code _ _ _ => false
   | k, .ref A => VTy.occB k A
   | k, .imm _ A => VTy.occB k A
   | k, .mut _ A => VTy.occB k A
@@ -139,7 +139,7 @@ theorem VTy.not_occ_of_occB : ∀ (k : Nat) (A : VTy), VTy.occB k A = false → 
   | k, .mu A, hb, h => not_occ_of_occB (k + 1) A hb h
 
 theorem VTy.occ_of_occB : ∀ (k : Nat) (A : VTy), VTy.occB k A = true → A.Occ k
-  | _, .unit, h | _, .zero, h | _, .thunk _, h | _, .unk, h | _, .int _, h | _, .opq _, h => by
+  | _, .unit, h | _, .zero, h | _, .thunk _, h | _, .code _ _ _, h | _, .unk, h | _, .int _, h | _, .opq _, h => by
       simp [VTy.occB] at h
   | k, .tensor A B, h => by
       simp only [VTy.occB, Bool.or_eq_true] at h
@@ -167,7 +167,7 @@ def VTy.noMutB : Nat → VTy → Bool
   | k, .tensor A B => VTy.noMutB k A && VTy.noMutB k B
   | _, .zero => true
   | k, .sum A B => VTy.noMutB k A && VTy.noMutB k B
-  | _, .thunk _ => true
+  | _, .thunk _ | _, .code _ _ _ => true
   | k, .ref A => VTy.noMutB k A
   | k, .imm _ A => VTy.noMutB k A
   | k, .mut _ A => !VTy.occB k A
@@ -189,7 +189,7 @@ theorem VTy.noMutB_sound : ∀ (k : Nat) (A : VTy), VTy.noMutB k A = true → A.
   | k, .sum A B, h => by
       simp only [VTy.noMutB, Bool.and_eq_true] at h
       exact ⟨noMutB_sound k A h.1, noMutB_sound k B h.2⟩
-  | _, .thunk _, _ => trivial
+  | _, .thunk _, _ | _, .code _ _ _, _ => trivial
   | k, .ref A, h => noMutB_sound k A h
   | k, .imm _ A, h => noMutB_sound k A h
   | k, .mut _ A, h => by
@@ -223,7 +223,7 @@ theorem VTy.polyB_sound : ∀ A : VTy, VTy.polyB A = true → A.Poly
       exact ⟨polyB_sound A h.1, polyB_sound B h.2⟩
   | .tvar _, _ => trivial
   | .box _ A, h => polyB_sound A (by simpa [VTy.polyB] using h)
-  | .unit, h | .zero, h | .thunk _, h | .unk, h | .int _, h | .opq _, h | .ref _, h | .imm _ _, h
+  | .unit, h | .zero, h | .thunk _, h | .code _ _ _, h | .unk, h | .int _, h | .opq _, h | .ref _, h | .imm _ _, h
   | .mut _ _, h | .bang _, h | .mu _, h | .fam _, h =>
       VTy.not_occ_of_occB 0 _ (by simpa [VTy.polyB] using h)
 
@@ -279,7 +279,7 @@ theorem VTy.polyB_complete : ∀ A : VTy, A.Poly → VTy.polyB A = true
   | .sum A B, h => by simp [VTy.polyB, polyB_complete A h.1, polyB_complete B h.2]
   | .tvar _, _ => rfl
   | .box _ A, h => by simpa [VTy.polyB] using polyB_complete A h
-  | .unit, h | .zero, h | .thunk _, h | .unk, h | .int _, h | .opq _, h | .ref _, h | .imm _ _, h
+  | .unit, h | .zero, h | .thunk _, h | .code _ _ _, h | .unk, h | .int _, h | .opq _, h | .ref _, h | .imm _ _, h
   | .mut _ _, h | .bang _, h | .mu _, h | .fam _, h => by
       simp only [VTy.polyB, Bool.not_eq_true']
       exact VTy.occB_false_of_not_occ 0 _ h
@@ -336,6 +336,7 @@ def vfreeB (x : LifeVar) : VTy → Bool
   | .tensor A B => vfreeB x A || vfreeB x B
   | .sum A B => vfreeB x A || vfreeB x B
   | .thunk C => cfreeB x C
+  | .code _ E C => vfreeB x E || cfreeB x C -- [spec §68]
   | .ref A => vfreeB x A
   | .bang A => vfreeB x A
   | .fam A => vfreeB x A
@@ -365,6 +366,7 @@ theorem vfreeB_iff (x : LifeVar) : ∀ A : VTy, vfreeB x A = true ↔ VFree x A
   | .tensor A B => by simp [vfreeB, VFree, vfreeB_iff x A, vfreeB_iff x B]
   | .sum A B => by simp [vfreeB, VFree, vfreeB_iff x A, vfreeB_iff x B]
   | .thunk C => by simp [vfreeB, VFree, cfreeB_iff x C]
+  | .code _ E C => by simp [vfreeB, VFree, vfreeB_iff x E, cfreeB_iff x C]
   | .ref A => by simp [vfreeB, VFree, vfreeB_iff x A]
   | .bang A => by simp [vfreeB, VFree, vfreeB_iff x A]
   | .fam A => by simp [vfreeB, VFree, vfreeB_iff x A]
@@ -590,7 +592,7 @@ def outlivesB (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Bool
   | .imm b _ => ltB Δ a b
   | .mut b _ => ltB Δ a b
   | .mu A => outlivesB Δ a A
-  | .thunk _ => false
+  | .thunk _ | .code _ _ _ => false
   | .unk => false
 
 theorem outlivesB_sound (Δ : LifeCtx) (a : Lifetime.Life) :
@@ -613,7 +615,7 @@ theorem outlivesB_sound (Δ : LifeCtx) (a : Lifetime.Life) :
   | .imm _ _, h => .imm (ltB_sound h)
   | .mut _ _, h => .mut (ltB_sound h)
   | .mu A, h => .mu (outlivesB_sound Δ a A h)
-  | .thunk _, h => by simp [outlivesB] at h
+  | .thunk _, h | .code _ _ _, h => by simp [outlivesB] at h
   | .unk, h => by simp [outlivesB] at h
 
 /-- BOXED-κ's answer premise `Row.AnsOutlives Δ d S`: every non-abortive operation's answer type
@@ -645,7 +647,7 @@ def outlivesLeB (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Bool
   | .imm b _ => leB Δ a b
   | .mut b _ => leB Δ a b
   | .mu A => outlivesLeB Δ a A
-  | .thunk _ => false
+  | .thunk _ | .code _ _ _ => false
   | .unk => false
 
 theorem outlivesLeB_sound (Δ : LifeCtx) (a : Lifetime.Life) :
@@ -668,7 +670,7 @@ theorem outlivesLeB_sound (Δ : LifeCtx) (a : Lifetime.Life) :
   | .imm _ _, h => .imm (leB_sound h)
   | .mut _ _, h => .mut (leB_sound h)
   | .mu A, h => .mu (outlivesLeB_sound Δ a A h)
-  | .thunk _, h => by simp [outlivesLeB] at h
+  | .thunk _, h | .code _ _ _, h => by simp [outlivesLeB] at h
   | .unk, h => by simp [outlivesLeB] at h
 
 /-- foldImm's `∀ Δ' a, VOutlives Δ' a R`: true at `1`, `0`, `I32`/`I64`, `!`, `X`, and `⊗`,
@@ -689,7 +691,7 @@ def outlivesAllB : VTy → Bool
   | .box _ _ => false
   | .imm _ _ => false
   | .mut _ _ => false
-  | .thunk _ => false
+  | .thunk _ | .code _ _ _ => false
   | .unk => false
 
 theorem outlivesAllB_sound : ∀ R : VTy, outlivesAllB R = true → ∀ Δ' a, VOutlives Δ' a R
@@ -711,7 +713,7 @@ theorem outlivesAllB_sound : ∀ R : VTy, outlivesAllB R = true → ∀ Δ' a, V
   | .box _ _, h, _, _ => by simp [outlivesAllB] at h
   | .imm _ _, h, _, _ => by simp [outlivesAllB] at h
   | .mut _ _, h, _, _ => by simp [outlivesAllB] at h
-  | .thunk _, h, _, _ => by simp [outlivesAllB] at h
+  | .thunk _, h, _, _ | .code _ _ _, h, _, _ => by simp [outlivesAllB] at h
   | .unk, h, _, _ => by simp [outlivesAllB] at h
 
 /-- Every variable of `a` is in `ex` or bound by `Δ`. -/
@@ -749,6 +751,7 @@ def vScopedB (Δ : LifeCtx) (ex : List LifeVar) : VTy → Bool
   | .tensor A B => vScopedB Δ ex A && vScopedB Δ ex B
   | .sum A B => vScopedB Δ ex A && vScopedB Δ ex B
   | .thunk C => cScopedB Δ ex C
+  | .code _ E C => vScopedB Δ ex E && cScopedB Δ ex C -- [spec §68]
   | .ref A => vScopedB Δ ex A
   | .bang A => vScopedB Δ ex A
   | .fam A => vScopedB Δ ex A
@@ -784,6 +787,9 @@ theorem vScopedB_sound {Δ : LifeCtx} {y : LifeVar} : ∀ {ex : List LifeVar} (A
       simp only [vScopedB, Bool.and_eq_true] at h
       exact hf.elim (vScopedB_sound A h.1) (vScopedB_sound B h.2)
   | _, .thunk C, h, hf => cScopedB_sound C h hf
+  | _, .code _ E C, h, hf => by
+      simp only [vScopedB, Bool.and_eq_true] at h
+      exact hf.elim (vScopedB_sound E h.1) (cScopedB_sound C h.2)
   | _, .ref A, h, hf => vScopedB_sound A h hf
   | _, .bang A, h, hf => vScopedB_sound A h hf
   | _, .fam A, h, hf => vScopedB_sound A h hf

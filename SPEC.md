@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.53 · 2026-11-07
+Version 1.55 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -11972,8 +11972,28 @@ proofs; every corpus and kernel program its output. The later units must preserv
 
 ### Open
 
-- **Not built:** the former and its arms (K1), the relation clauses and their laws (K2), the rules
-  and their compatibility lemmas (K3, K4), the lend-exit lemma (K5), `eraseD` (K6).
+- **Built (K1, K2):** `VTy.code` (`Core/Types.lean`) and its arm at every match in `Core/`,
+  `Frontend/` and `Backend2/`; `[α]` at `code` (`VTy.alphaB_refl_code`); the clauses `vCE`
+  (`vCE_code`: the clause is `codeRelC`), `vNE` (`vNE_code`: `codeRelN`) and `vOE` (`True`); every
+  law of the relation at `code`, with no new hypothesis. `fundamentalC`, `adequacyC` and `goal791N`
+  keep their statements.
+- **Not built:** the rules and their compatibility lemmas (K3, K4), the lend-exit lemma (K5),
+  `eraseD` (K6).
+- **Choices K1 made that the entry does not state:**
+  - A type substitution (`VTy.rename`, `VTy.subst`) leaves `Code⟨N; E⟩ C` as it is, as it leaves
+    `U C`: no `μ` variable reaches `E`, `Cl k` holds, `Occ` fails. The clause reads `E` at no
+    environment, as `U C` reads `C`. So K3's `codeI` must give a closed `E` (`E.Cl 0`, no `μ`
+    variable free in a capture's type), as a premise or from the context's types.
+  - `vC_ind` and `vN_ind` keep the code clause in one unfolding (`vF`, `vFN`) with the property at
+    every value of `E`, from an outer induction on the type's size: `E` is smaller and no
+    substitution enters it.
+  - `TyEq` at `code`: equal `N`, `TyEq` at `E` and `C`. `VTy.inFrag` at `code`: `E` and `C`.
+    `NoThunkT` at `code` is `False`, as at `U`. `VTy.persistent`, `VOutlives`: as `U`.
+  - The step-indexed model (`Core/Chain/SI/Sem.lean`) and the tree model (`Core/TreeGoal791.lean`)
+    read `code` as empty, as they read `μ`.
+  - Printing: the checker prints `Code⟨#h; E⟩ C`, `#h` a hash of `N`'s serialisation, not
+    `{closure@span}` (a kernel type has no span). Backend2's `useKey` prints a type `ofV` refuses
+    exactly (`keyVT`, `N` in full), so two codes are two keys; `ofV` refuses `code` (B1).
 - **`codeI`'s semantic step** is not checked: from `gDenC` and `Γ.CapOK`, that the captured slots'
   resources compose to `𝒱⟦Γ.capTy (λM)⟧ (tupleV (capEnv (λM) γ))` at the whole `ρ`. Its syntactic
   half is `lam_psub_capNorm` and `occs_lt_of_closedAt`.
@@ -11984,7 +12004,6 @@ proofs; every corpus and kernel program its output. The later units must preserv
   derived; obstruction not verified. This entry drops `ρR` and moves the obligation to `codeI`'s
   premise `Γ.CapOK`. That a well-typed closure always meets `CapOK` (no live non-persistent slot
   goes unused) is not derived; where it fails, the checker keeps `U C`.
-- **The observable view** at `code` is stated `True`, not built.
 
 ---
 
@@ -12447,6 +12466,12 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.55** (2026-11-09) — §68 (#855 K1+K2): the former `Code⟨N; E⟩ C` (`VTy.code`) across
+  `Core/`, with its relation clauses (`vCE`'s and the chain's `vNE` are K0's `codeRelC`/`codeRelN`,
+  by `Iff.rfl`; `vOE` is `True`) and every law at it with no new hypothesis; `TyEq`/`alphaB` compare
+  a code type only with a code type. The checker and Backend2's `ofV` refuse a code type until K3,
+  S1 and B1. No `CDerives` rule produces one, so no program's typing or output changes.
+  `fundamentalC`, `adequacyC` and `goal791N` keep their statements.
 - **1.53** (2026-11-07) — §31, §21 (#890, *Generic recursive groups*): a recursive group's lifetime
   parameters are quantified in each member's field of its fixed-point record, `∀'a⃗ < b⃗. (E ⊗ Pⱼ ⊸
   F_Σ (E ⊗ Tⱼ))`, nested in declaration order; only the capabilities' lifetimes stay outside the

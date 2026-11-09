@@ -54,6 +54,7 @@ theorem vShapeE_some (η : Option (Nat → SEnt)) :
   | zero => rfl
   | sum A B ihA ihB => funext δ v; simp only [vShapeE, ihA, ihB]
   | thunk _ => rfl
+  | code _ _ _ _ => rfl
   | ref A ih => funext δ v; simp only [vShapeE, ih]
   | fam L ih => funext δ v; simp only [vShapeE, ih]
   | imm a A ih => funext δ v; simp only [vShapeE, ih]
@@ -93,6 +94,7 @@ theorem vShapeE_rename : ∀ (A : VTy) (ρ : Nat → SEnt) (r : Nat → Nat),
   | zero => intro ρ r; rfl
   | sum A B ihA ihB => intro ρ r; funext δ v; simp only [VTy.rename, vShapeE, ihA, ihB]
   | thunk _ => intro ρ r; rfl
+  | code _ _ _ _ => intro ρ r; rfl
   | ref A ih => intro ρ r; funext δ v; simp only [VTy.rename, vShapeE, ih]
   | fam L ih => intro ρ r; funext δ v; simp only [VTy.rename, vShapeE, ih]
   | imm a A ih => intro ρ r; funext δ v; simp only [VTy.rename, vShapeE, ih]
@@ -121,6 +123,7 @@ theorem vShapeE_subst : ∀ (A : VTy) (ρ : Nat → SEnt) (σ : Nat → VTy) (δ
   | zero => intro ρ σ δ; rfl
   | sum A B ihA ihB => intro ρ σ δ; funext v; simp only [VTy.subst, vShapeE, ihA, ihB]
   | thunk _ => intro ρ σ δ; rfl
+  | code _ _ _ _ => intro ρ σ δ; rfl
   | ref A ih => intro ρ σ δ; funext v; simp only [VTy.subst, vShapeE, ih]
   | fam L ih => intro ρ σ δ; funext v; simp only [VTy.subst, vShapeE, ih]
   | imm a A ih => intro ρ σ δ; funext v; simp only [VTy.subst, vShapeE, ih]
@@ -187,6 +190,7 @@ theorem vShapeE_mono : ∀ (A : VTy) (η₁ η₂ : Nat → SEnt), (∀ n, (η�
       · exact Or.inl ⟨v₁, ρ₀, ρ₁, hc, hp, ihA η₁ η₂ ht hP δ v₁ ρ₁ h₁⟩
       · exact Or.inr ⟨v₂, ρ₀, ρ₂, hc, hp, ihB η₁ η₂ ht hP δ v₂ ρ₂ h₂⟩
   | thunk _ => intro _ _ _ _ _ _ _ h; exact h
+  | code _ _ _ _ => intro _ _ _ _ _ _ _ h; exact h
   | ref A ih =>
       intro η₁ η₂ ht hP δ v ρ h
       obtain ⟨ℓ, v', ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', ho, h₂⟩ := h
@@ -285,7 +289,7 @@ def sF (S : VTy → Val → WProp) (δ : LSub) : VTy → Val → WProp
   | .sum T₁ T₂, v =>
       BoLo.or (ex fun v₁ => ⌜v = .inj₁ v₁⌝ ⋆ S T₁ v₁) (ex fun v₂ => ⌜v = .inj₂ v₂⌝ ⋆ S T₂ v₂)
   | .zero, _ => fun _ => False
-  | .thunk _, _ => fun _ => True
+  | .thunk _, _ | .code _ _ _, _ => fun _ => True
   | .box a T, v => atLife δ a fun α => box α (S T v)
   | .ref T, v => ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ S T v'
   | .fam L, v => ex fun ℓ => ex fun c => ⌜v = Val.arr ℓ c⌝ ⋆ sepRange (fun m => S L (.loc m)) ℓ c.toNat
@@ -306,7 +310,7 @@ theorem sF_vShape (δ : LSub) : ∀ (T : VTy) (v : Val) (ρ : WRes),
   | .tensor _ _, _, _ => Iff.rfl
   | .sum _ _, _, _ => Iff.rfl
   | .zero, _, _ => Iff.rfl
-  | .thunk _, _, _ => Iff.rfl
+  | .thunk _, _, _ | .code _ _ _, _, _ => Iff.rfl
   | .box _ _, _, _ => Iff.rfl
   | .ref _, _, _ => Iff.rfl
   | .fam _, _, _ => Iff.rfl
@@ -330,7 +334,7 @@ theorem sF_mono {S₁ S₂ : VTy → Val → WProp} (h : ∀ T v ρ, S₁ T v ρ
       · exact Or.inl ⟨v₁, ρ₀, ρ₁, hc, hp, h T₁ v₁ ρ₁ h₁⟩
       · exact Or.inr ⟨v₂, ρ₀, ρ₂, hc, hp, h T₂ v₂ ρ₂ h₂⟩
   | .zero, _, _, hs => hs
-  | .thunk _, _, _, hs => hs
+  | .thunk _, _, _, hs | .code _ _ _, _, _, hs => hs
   | .box _ T, _, _, hs => by
       obtain ⟨α, hα, hb, ho⟩ := hs
       exact ⟨α, hα, h T _ _ hb, ho⟩
@@ -396,6 +400,7 @@ theorem vShape_ind (δ : LSub) (Φ : VTy → Val → WRes → Prop)
         · exact hG _ v r (Or.inl ⟨v₁, ρ₀, ρ₁, hc, hp, ihA ρe σ ht hP v₁ ρ₁ h₁⟩)
         · exact hG _ v r (Or.inr ⟨v₂, ρ₀, ρ₂, hc, hp, ihB ρe σ ht hP v₂ ρ₂ h₂⟩)
     | thunk _ => intro _ _ _ _ v r hr; exact hG _ v r hr
+    | code _ _ _ _ => intro _ _ _ _ v r hr; exact hG _ v r hr
     | ref A ih =>
         intro ρe σ ht hP v r hr
         obtain ⟨ℓ, v', ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', ho, h₂⟩ := hr
@@ -463,6 +468,7 @@ theorem vShapeE_congr : ∀ (T : VTy) (η : Option (Nat → SEnt)) {δ₁ δ₂ 
       intro η δ₁ δ₂ h; funext v
       simp only [vShapeE, ihA η (fun y hy => h y (Or.inl hy)), ihB η (fun y hy => h y (Or.inr hy))]
   | thunk _ => intros; rfl
+  | code _ _ _ _ => intros; rfl
   | ref A ih => intro η δ₁ δ₂ h; funext v; simp only [vShapeE, ih η h]
   | fam L ih => intro η δ₁ δ₂ h; funext v; simp only [vShapeE, ih η h]
   | imm a A ih =>
@@ -507,6 +513,9 @@ theorem tyEq_symm : ∀ (S : VTy) {S' : VTy} {δ δ' : LSub}, TyEq S δ S' δ' �
   | .thunk C, S', _, _, h => by
       cases S' <;> simp only [TyEq] at h ⊢
       exact cTyEq_symm C h
+  | .code N E C, S', _, _, h => by
+      cases S' <;> simp only [TyEq] at h ⊢
+      exact ⟨h.1.symm, tyEq_symm E h.2.1, cTyEq_symm C h.2.2⟩
   | .ref A, S', _, _, h => by
       cases S' <;> simp only [TyEq] at h ⊢
       exact tyEq_symm A h
@@ -578,6 +587,10 @@ theorem tyEq_trans : ∀ (S : VTy) {S' S'' : VTy} {δ δ' δ'' : LSub}, TyEq S �
       cases S' <;> simp only [TyEq] at h
       cases S'' <;> simp only [TyEq] at h' ⊢
       exact cTyEq_trans C h h'
+  | .code N E C, S', S'', _, _, _, h, h' => by
+      cases S' <;> simp only [TyEq] at h
+      cases S'' <;> simp only [TyEq] at h' ⊢
+      exact ⟨h.1.trans h'.1, tyEq_trans E h.2.1 h'.2.1, cTyEq_trans C h.2.2 h'.2.2⟩
   | .ref A, S', S'', _, _, _, h, h' => by
       cases S' <;> simp only [TyEq] at h
       cases S'' <;> simp only [TyEq] at h' ⊢
@@ -658,6 +671,8 @@ theorem TyEq.of_agree : ∀ (T : VTy) {δ₁ δ₂ : LSub},
   | .sum A B, _, _, h => ⟨TyEq.of_agree A (fun y hy => h y (Or.inl hy)),
       TyEq.of_agree B (fun y hy => h y (Or.inr hy))⟩
   | .thunk C, _, _, h => CTyEq.of_agree C h
+  | .code _ E C, _, _, h => ⟨rfl, TyEq.of_agree E (fun y hy => h y (Or.inl hy)),
+      CTyEq.of_agree C (fun y hy => h y (Or.inr hy))⟩
   | .ref A, _, _, h => TyEq.of_agree A h
   | .fam A, _, _, h => TyEq.of_agree A h
   | .bang A, _, _, h => TyEq.of_agree A h
@@ -707,6 +722,7 @@ theorem TyEq.rename : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (r : Nat → Nat)
   | zero => intro A' _ _ r h; cases A' <;> simp_all [TyEq, VTy.rename]
   | unk => intro A' _ _ r h; cases A' <;> simp_all [TyEq, VTy.rename]
   | thunk C => intro A' _ _ r h; cases A' <;> simp_all [TyEq, VTy.rename]
+  | code _ _ C _ => intro A' _ _ r h; cases A' <;> simp_all [TyEq, VTy.rename]
   | tvar n => intro A' _ _ r h; cases A' <;> simp_all [TyEq, VTy.rename]
   | tensor A B ihA ihB =>
       intro A' _ _ r h; cases A' <;> simp only [TyEq, VTy.rename] at h ⊢
@@ -736,6 +752,7 @@ theorem TyEq.subst : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (σ σ' : Nat → 
   | zero => intro A' _ _ σ σ' h _; cases A' <;> simp_all [TyEq, VTy.subst]
   | unk => intro A' _ _ σ σ' h _; cases A' <;> simp_all [TyEq, VTy.subst]
   | thunk C => intro A' _ _ σ σ' h _; cases A' <;> simp_all [TyEq, VTy.subst]
+  | code _ _ C _ => intro A' _ _ σ σ' h _; cases A' <;> simp_all [TyEq, VTy.subst]
   | tvar n =>
       intro A' _ _ σ σ' h hσ; cases A' <;> simp only [TyEq] at h
       subst h; exact hσ _
@@ -777,6 +794,7 @@ theorem TyEq.Cl_iff : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (k : Nat),
   | zero => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Cl]
   | unk => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Cl]
   | thunk C => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Cl]
+  | code _ _ C _ => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Cl]
   | tvar n => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; subst h; exact Iff.rfl
   | tensor A B ihA ihB =>
       intro A' _ _ k h; cases A' <;> simp only [TyEq] at h
@@ -802,6 +820,7 @@ theorem TyEq.occ_iff : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (k : Nat),
   | zero => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Occ]
   | unk => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Occ]
   | thunk C => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Occ]
+  | code _ _ C _ => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Occ]
   | tvar n => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; subst h; exact Iff.rfl
   | tensor A B ihA ihB =>
       intro A' _ _ k h; cases A' <;> simp only [TyEq] at h
@@ -827,6 +846,7 @@ theorem TyEq.noMut_iff : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (k : Nat),
   | zero => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.NoMut]
   | unk => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.NoMut]
   | thunk C => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.NoMut]
+  | code _ _ C _ => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.NoMut]
   | tvar n => intro A' _ _ k h; cases A' <;> simp only [TyEq] at h; subst h; exact Iff.rfl
   | tensor A B ihA ihB =>
       intro A' _ _ k h; cases A' <;> simp only [TyEq] at h
@@ -868,6 +888,7 @@ theorem vShapeE_tyEq : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (η η' : Nat �
   | zero => intro A' _ _ η η' h _; cases A' <;> first | rfl | simp_all [TyEq]
   | unk => intro A' _ _ η η' h _; cases A' <;> first | rfl | simp_all [TyEq]
   | thunk C => intro A' _ _ η η' h _; cases A' <;> first | rfl | simp_all [TyEq]
+  | code _ _ C _ => intro A' _ _ η η' h _; cases A' <;> first | rfl | simp_all [TyEq]
   | tvar n =>
       intro A' _ _ η η' h hη; cases A' <;> simp only [TyEq] at h
       subst h; funext v; exact congrFun (hη n).1 v

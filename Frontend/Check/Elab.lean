@@ -140,6 +140,14 @@ def ppLifeP (nm : List (String × LifeVar)) (p : Nat) : CLife → String
 
 def tvName (d : Nat) : String := if d == 0 then "X" else s!"X{d}"
 
+/-- A per-code closure type's code, printed as a digest: the code is a closure body, printed in
+full it would grow with the program.  `[spec §68]` -/
+def codeDigest (N : BoCa.Expr) : String :=
+  let h := hash (reprStr N)
+  "#" ++ String.ofList (Nat.toDigits 16 (h.toNat % 2 ^ 32))
+
+-- The case split of `ppC`'s nested `ν` patterns over every value-type former exceeds the default.
+set_option maxHeartbeats 800000 in
 mutual
 /-- A value type in the surface syntax, at precedence `p` (syntax-core §4: `0` binders, `1`
 `-o`/`=>`, `2` `&`, `3` `+`, `4` `*`, `5` prefix); `d` is the number of enclosing `μ`s, and
@@ -176,6 +184,8 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .fam (.imm a A) => parenIf (p > 5) s!"array_imm {ppLifeP nm 1 a} {ppV nm d 5 A}"
   | .fam (.mut a A) => parenIf (p > 5) s!"array_mut {ppLifeP nm 1 a} {ppV nm d 5 A}"
   | .fam L => parenIf (p > 5) s!"[{ppV nm d 0 L}]"
+  -- [spec §68]
+  | .code N E C => parenIf (p > 5) s!"Code⟨{codeDigest N}; {ppV nm d 0 E}⟩ {ppC nm 6 C}"
 /-- A computation type in the surface syntax, at precedence `p`. -/
 def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
   | .ret A => parenIf (p > 5) s!"F {ppV nm 0 5 A}"

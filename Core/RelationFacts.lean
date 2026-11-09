@@ -61,6 +61,7 @@ theorem TyEq.immG {c c' : Lifetime.Life} {δ δ' : LSub} (hc : c.interp δ = c'.
   | zero => intro A' _ _ h _; cases A' <;> simp_all [TyEq, VTy.immG]
   | unk => intro A' _ _ h _; cases A' <;> simp_all [TyEq, VTy.immG]
   | thunk C => intro A' _ _ h _; cases A' <;> simp_all [TyEq, VTy.immG]
+  | code _ _ C _ => intro A' _ _ h _; cases A' <;> simp_all [TyEq, VTy.immG]
   | tvar n => intro A' _ _ h _; cases A' <;> simp_all [TyEq, VTy.immG]
   | tensor A B ihA ihB =>
       intro A' pay pay' h hp; cases A' <;> simp only [TyEq] at h
@@ -116,6 +117,9 @@ theorem TyEq.applyLSub : ∀ (T : VTy) (σ : Lifetime.LSubst) (δ δ' : LSub),
   | .bang T, σ, δ, δ', h => TyEq.applyLSub T σ δ δ' h
   | .fam T, σ, δ, δ', h => TyEq.applyLSub T σ δ δ' h
   | .thunk C, σ, δ, δ', h => CTyEq.applyLSub C σ δ δ' h
+  | .code _ E C, σ, δ, δ', h =>
+      ⟨rfl, TyEq.applyLSub E σ δ δ' (fun y hy => h y (Or.inl hy)),
+       CTyEq.applyLSub C σ δ δ' (fun y hy => h y (Or.inr hy))⟩
   | .sum T₁ T₂, σ, δ, δ', h =>
       ⟨TyEq.applyLSub T₁ σ δ δ' (fun y hy => h y (Or.inl hy)),
        TyEq.applyLSub T₂ σ δ δ' (fun y hy => h y (Or.inr hy))⟩
@@ -285,6 +289,11 @@ theorem vC_local : ∀ (b : Bool) (T : VTy) {ls ls' : List SRec} {δ : LSub} {v 
       cases b
       · exact h
       · exact fun ls'' hk' => h ls'' (hk.trans hk')
+  | code _ E C =>
+      cases b
+      · trivial
+      · obtain ⟨⟨⟨us, hv, hE⟩, hc⟩, hIH⟩ := h
+        exact ⟨⟨us, hv, (hIH _ _ _ hE).2 _ hk⟩, fun ls'' hk' => hc ls'' (hk.trans hk')⟩
   | bang T => exact ⟨h.1, h.2.2 _ hk⟩
   | box a T =>
       obtain ⟨α, hα, hb, ho⟩ := h
@@ -346,6 +355,7 @@ theorem vO_obs : ∀ (T : VTy) {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes
       · exact Or.inr ⟨v₂, ρ₀, ρ₂, hc, hp, h₂.2⟩
   | zero => exact h
   | thunk _ => trivial
+  | code _ _ _ => trivial
   | box a T =>
       obtain ⟨α, hα, hb, ho⟩ := h
       exact ⟨α, hα, hb.2, ho⟩
@@ -383,6 +393,7 @@ theorem vC_vShape : ∀ (b : Bool) (T : VTy) {ls : List SRec} {δ : LSub} {v : V
       · exact Or.inr ⟨v₂, ρ₀, ρ₂, hc, hp, h₂.2⟩
   | zero => exact h
   | thunk _ => trivial
+  | code _ _ _ => trivial
   | bang _ => exact ⟨h.1, trivial⟩
   | box a T =>
       obtain ⟨α, hα, hb, ho⟩ := h
@@ -550,6 +561,7 @@ theorem vC_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
             (show (CellU.mutOf b w σ hσ Q hw).InStratum α from
               lt_of_lt_of_le (show (α : Life) < β from hlt') hle)
   | thunk _ => cases hT
+  | code _ _ _ => cases hT
   | unk => cases hT
   | tvar _ => exact h.elim
   | mu A => exact h.2.2.2 hT.unroll
@@ -651,6 +663,7 @@ theorem vC_outlivesLe {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
             (show (CellU.mutOf b w σ hσ Q hw).InStratum γ from
               lt_of_lt_of_le hγ (le_trans (show (α : Life) ≤ β from hle') hle))
   | thunk _ => cases hT
+  | code _ _ _ => cases hT
   | unk => cases hT
   | tvar _ => exact h.elim
   | mu A => exact h.2.2.2 hT.unroll
@@ -736,6 +749,12 @@ theorem vCE_congr : ∀ (A : VTy) (η : Option (Nat → TEnt)) {δ₁ δ₂ : LS
       funext v; cases b
       · rfl
       · simp only [vCE, hC]
+  | .code N E C, _, _, _, h, _, b, ls => by
+      have hE := vCE_congr E none (fun y hy => h y (Or.inl hy)) (envAgree_none _ _) true
+      have hC := cC_congr C (fun y hy => h y (Or.inr hy))
+      funext v; cases b
+      · rfl
+      · simp only [vCE, hE, hC]
   | .ref A, η, _, _, h, hη, b, ls => by
       have ih := vCE_congr A η h hη
       funext v; cases b <;> simp only [vCE, ih]
@@ -937,7 +956,7 @@ theorem TyEq.poly_iff : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub}, TyEq A δ A' �
       simp only [VTy.Poly]
       exact TyEq.poly_iff A h.2
   | .tvar _, A', _, _, h => by cases A' <;> simp only [TyEq] at h; subst h; exact Iff.rfl
-  | .unit, A', _, _, h | .zero, A', _, _, h | .thunk _, A', _, _, h | .unk, A', _, _, h
+  | .unit, A', _, _, h | .zero, A', _, _, h | .thunk _, A', _, _, h | .code _ _ _, A', _, _, h | .unk, A', _, _, h
   | .int _, A', _, _, h | .opq _, A', _, _, h | .ref _, A', _, _, h | .imm _ _, A', _, _, h | .mut _ _, A', _, _, h
   | .bang _, A', _, _, h | .mu _, A', _, _, h | .fam _, A', _, _, h => by
       have ho := TyEq.occ_iff _ 0 h
@@ -1034,7 +1053,7 @@ theorem vCE_poly_ty (P : Bool → List SRec → Val → WProp) (T T' : VTy) (η 
       simp only [vCE, vCE_poly_ty P T T' η A h b]
   | .tvar 0, _, _ => rfl
   | .tvar (_ + 1), _, _ => rfl
-  | .unit, h, b | .zero, h, b | .thunk _, h, b | .unk, h, b | .int _, h, b | .opq _, h, b
+  | .unit, h, b | .zero, h, b | .thunk _, h, b | .code _ _ _, h, b | .unk, h, b | .int _, h, b | .opq _, h, b
   | .ref _, h, b | .imm _ _, h, b | .mut _ _, h, b | .bang _, h, b | .fam _, h, b
   | .mu _, h, b =>
       vCE_congr_occ _ _ _ (fun n hn => by
@@ -1122,6 +1141,15 @@ theorem vCE_tyEq : ∀ (S : VTy) {S' : VTy} {δ δ' : LSub} (η η' : Option (Na
       intro b ls; funext v; cases b
       · rfl
       · simp only [vCE, ih, hf]
+  | .code N E C, S', _, _, _, _, h, _ => by
+      cases S' <;> simp only [TyEq] at h
+      obtain ⟨rfl, hE, hC⟩ := h
+      have ihE := vCE_tyEq E none none hE (envEq_none _ _) true
+      have ih := cC_tyEq_aux C hC
+      have hf := forceE_of_cTyEq hC
+      intro b ls; funext v; cases b
+      · rfl
+      · simp only [vCE, ihE, ih, hf]
   | .ref A, S', _, _, η, η', h, hη => by
       cases S' <;> simp only [TyEq] at h
       have ih := vCE_tyEq A η η' h hη
@@ -1423,6 +1451,7 @@ theorem obs_transfer {R : WRes} {ls : List SRec} (hLB : WitLB ls R) :
   | unk => exact hs
   | zero => exact h
   | thunk _ => trivial
+  | code _ _ _ => trivial
   | tvar _ => exact h.elim
   | tensor T₁ T₂ =>
       obtain ⟨v₁, v₂, hk⟩ := h
@@ -1663,6 +1692,9 @@ theorem relabel_obs {R : WRes} {ls : List SRec} {β β₀ : Life} {δ : LSub} {x
       obtain ⟨hce, hv⟩ := hc
       subst hce; rw [relRes_empty]; exact ⟨rfl, hv⟩
   | thunk _ =>
+      obtain ⟨hce, -⟩ := hc
+      subst hce; rw [relRes_empty]; exact ⟨rfl, trivial⟩
+  | code _ _ _ =>
       obtain ⟨hce, -⟩ := hc
       subst hce; rw [relRes_empty]; exact ⟨rfl, trivial⟩
   | zero => exact False.elim hc

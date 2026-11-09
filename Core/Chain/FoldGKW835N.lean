@@ -476,7 +476,7 @@ theorem trav_specN (hΘ : Θ.OK) (s : Val) (hAH : AHN (ℍ := ℍ) ks G δ Θ c 
       exact hH w χ j ls hj hK hv hn hc
   | .unit, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
   | .zero, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
-  | .thunk _, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .thunk _, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _ | .code _ _ _, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
   | .imm _ _, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
   | .mut _ _, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
   | .box _ _, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
@@ -488,7 +488,7 @@ theorem trav_specN (hΘ : Θ.OK) (s : Val) (hAH : AHN (ℍ := ℍ) ks G δ Θ c 
   | .fam (.tensor _ _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
   | .fam .zero, Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
   | .fam (.sum _ _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
-  | .fam (.thunk _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
+  | .fam (.thunk _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _ | .fam (.code _ _ _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
   | .fam (.imm _ _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
   | .fam (.mut _ _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _
   | .fam (.box _ _), Bs, _, _, _, _, hP, _, _, _, w, χ, j, ls, _, _, _, hv, _, _

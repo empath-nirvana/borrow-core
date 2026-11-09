@@ -15,7 +15,8 @@ other: `tick` is one entry, `1 ↠ Next`. There is no `cwp` and no `Closing`.
 `⊸`, `∀`-free: the arrow reads its argument at every later index (the step-indexed `−∗`).
 
 Not transcribed here: `Imm`, `Mut`, `[@a]`, `Unk`, type variables, `μ`, families, opaque host
-types (each read as empty), and `∀'x`, `νX` (empty). These are the borrow model and the recursive
+types and per-code closure types `Code⟨N; E⟩ C` (`[spec §68]`) (each read as empty), and `∀'x`,
+`νX` (empty). These are the borrow model and the recursive
 types.
 -/
 
@@ -43,6 +44,7 @@ def sV : VTy → Nat → Val → Heap → Prop
   | .zero, _, _, _ => False
   | .sum A B, n, v, σ => (∃ v₁, v = Val.inj₁ v₁ ∧ sV A n v₁ σ) ∨ (∃ v₂, v = Val.inj₂ v₂ ∧ sV B n v₂ σ)
   | .thunk C, n, v, σ => sC C n (forceE C v.1) σ
+  | .code _ _ _, _, _, _ => False
   | .ref A, n, v, σ => ∃ ℓ u σ', v = Val.loc ℓ ∧ σ' ℓ = none ∧ σ = un (single ℓ u) σ' ∧ sV A n u σ'
   | .bang A, n, v, σ => σ = emp ∧ sV A n v σ
   | .int w, _, v, σ => v.IsInt w ∧ σ = emp
@@ -114,6 +116,7 @@ theorem sV_down : ∀ (A : VTy) (n : Nat) (v : Val) (σ : Heap),
   | .thunk C, n, v, σ, h => by
       simp only [sV] at h ⊢
       exact sC_down C n _ σ h
+  | .code _ _ _, _, _, _, h => by simp [sV] at h
   | .ref A, n, v, σ, h => by
       simp only [sV] at h ⊢
       obtain ⟨ℓ, u, σ', h₁, h₂, h₃, h₄⟩ := h

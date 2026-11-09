@@ -92,7 +92,7 @@ theorem vNX_inst_poly (S : VTy) (δ : LSub) :
       funext Θ n v ρ; simp only [vNE, VTy.subst, h₁]
   | .tvar 0, _ => rfl
   | .tvar (_ + 1), _ => rfl
-  | .unit, h | .zero, h | .unk, h | .int _, h | .opq _, h | .thunk _, h | .mu _, h | .ref _, h
+  | .unit, h | .zero, h | .unk, h | .int _, h | .opq _, h | .thunk _, h | .code _ _ _, h | .mu _, h | .ref _, h
   | .imm _ _, h | .mut _ _, h | .bang _, h | .fam _, h => vNX_inst_occ S _ _ h δ
 
 /-- The answer of an effectful observation at `X` read as `𝒱⟦S⟧` is the unrolled row's answer
@@ -269,7 +269,7 @@ theorem map_okN (C : CTy) (g : Val) (S : VTy) (δ : LSub) (kg : Nat) :
       obtain ⟨α, hα, hb, ho⟩ := hw
       obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg A hP Θ k hk w σ hb
       exact ⟨w', hs, α, hα, h', ho⟩
-  | .unit, hP, _, _, _, w, _, hw | .zero, hP, _, _, _, w, _, hw | .thunk _, hP, _, _, _, w, _, hw
+  | .unit, hP, _, _, _, w, _, hw | .zero, hP, _, _, _, w, _, hw | .thunk _, hP, _, _, _, w, _, hw | .code _ _ _, hP, _, _, _, w, _, hw
   | .ref _, hP, _, _, _, w, _, hw | .imm _ _, hP, _, _, _, w, _, hw
   | .mut _ _, hP, _, _, _, w, _, hw | .bang _, hP, _, _, _, w, _, hw
   | .unk, hP, _, _, _, w, _, hw | .mu _, hP, _, _, _, w, _, hw | .int _, hP, _, _, _, w, _, hw

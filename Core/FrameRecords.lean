@@ -201,6 +201,7 @@ def TyEq : VTy → LSub → VTy → LSub → Prop
   | .tensor A B, δ, .tensor A' B', δ' => TyEq A δ A' δ' ∧ TyEq B δ B' δ'
   | .sum A B, δ, .sum A' B', δ' => TyEq A δ A' δ' ∧ TyEq B δ B' δ'
   | .thunk C, δ, .thunk C', δ' => CTyEq C δ C' δ'
+  | .code N E C, δ, .code N' E' C', δ' => N = N' ∧ TyEq E δ E' δ' ∧ CTyEq C δ C' δ'
   | .ref A, δ, .ref A', δ' => TyEq A δ A' δ'
   | .bang A, δ, .bang A', δ' => TyEq A δ A' δ'
   | .box a A, δ, .box a' A', δ' => a.interp δ = a'.interp δ' ∧ TyEq A δ A' δ'

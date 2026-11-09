@@ -58,7 +58,9 @@ separation of the resource (`sepRange`). A lifetime with no interpretation reads
 variable is its environment entry's candidate (empty at the empty environment); `μX. A` is Core's
 least fixed point `⋂{P | A[P/X] ⊆ P}`, the candidate joint over the mode, the world and the index,
 empty unless `X` is outside `A`'s `Mut` payloads and the `μ` is closed. The `U` clause reads no
-environment (Core's `vCE` at `U`: `cC` has none). -/
+environment (Core's `vCE` at `U`: `cC` has none). `Code⟨N; E⟩ C` is Core's code clause: `v` is
+`N` closed by captured values whose tuple is in `𝒱⟦E⟧` at the same world, index and resource,
+read at no environment, and the `U C` clause; `True` in the observable view.  `[spec §68]` -/
 def vNE : (η : Option (Nat → TEntN)) → VTy → LSub → LocTy → Nat → Val → WRes → Prop
   | _, .unit, _, _, _, v, ρ => v = Val.unit ∧ ρ = PMap.empty
   | η, .tensor A B, δ, Θ, n, v, ρ => ∃ v₁ v₂ ρ₁ ρ₂, v = Val.pair v₁ v₂ ∧ ResU.CompS ρ₁ ρ₂ ρ ∧
@@ -68,6 +70,10 @@ def vNE : (η : Option (Nat → TEntN)) → VTy → LSub → LocTy → Nat → V
       (∃ v₁, v = Val.inj₁ v₁ ∧ vNE η A δ Θ n v₁ ρ) ∨ (∃ v₂, v = Val.inj₂ v₂ ∧ vNE η B δ Θ n v₂ ρ)
   | _, .thunk C, δ, Θ, n, v, ρ => ∀ Θ' : LocTy, Θ.ExtR Θ' ρ → Θ'.OK → ∀ c, ConsistentX c ρ →
       ∀ ls, cN C δ Θ' c n ls (forceE C v.1) ρ
+  | _, .code N E C, δ, Θ, n, v, ρ =>
+      (∃ us : List Val, v.1 = Expr.psub 0 us N ∧ vNE none E δ Θ n (tupleV us) ρ) ∧
+        ∀ Θ' : LocTy, Θ.ExtR Θ' ρ → Θ'.OK → ∀ c, ConsistentX c ρ →
+          ∀ ls, cN C δ Θ' c n ls (forceE C v.1) ρ
   | η, .ref A, δ, Θ, n, v, ρ => ∃ (l : Loc) (u : Val) (σ : WRes), v = Val.loc l ∧
       ResU.CompS (ResU.single l (CellU.ownOf u)) σ ρ ∧ vNE η A δ Θ n u σ
   | η, .imm a A, δ, Θ, n, v, ρ => ∃ α, a.interp δ = some α ∧
@@ -103,6 +109,7 @@ def vOE : (η : Option (Nat → TEntN)) → VTy → LSub → LocTy → Nat → V
   | η, .sum A B, δ, Θ, n, v, ρ =>
       (∃ v₁, v = Val.inj₁ v₁ ∧ vOE η A δ Θ n v₁ ρ) ∨ (∃ v₂, v = Val.inj₂ v₂ ∧ vOE η B δ Θ n v₂ ρ)
   | _, .thunk _, _, _, _, _, _ => True
+  | _, .code _ _ _, _, _, _, _, _ => True
   | η, .ref A, δ, Θ, n, v, ρ => ∃ (l : Loc) (u : Val) (σ : WRes), v = Val.loc l ∧
       ResU.CompS (ResU.single l (CellU.ownOf u)) σ ρ ∧ vOE η A δ Θ n u σ
   | η, .imm a A, δ, Θ, n, v, ρ => ∃ α, a.interp δ = some α ∧
@@ -307,6 +314,7 @@ theorem vBN_some (η : Option (Nat → TEntN)) :
   | zero => intro b; cases b <;> rfl
   | unk => intro b; cases b <;> rfl
   | thunk _ => intro b; cases b <;> rfl
+  | code _ _ _ _ => intro b; cases b <;> rfl
   | tensor A B ihA ihB =>
       intro b
       obtain ⟨hA₁, hA₂⟩ := vBN_eq_both (ℍ := ℍ) ihA
@@ -361,6 +369,7 @@ theorem vBN_congr_occ : ∀ (A : VTy) (η₁ η₂ : Nat → TEntN), (∀ n, A.O
   | zero => intro _ _ _ b; cases b <;> rfl
   | unk => intro _ _ _ b; cases b <;> rfl
   | thunk _ => intro _ _ _ b; cases b <;> rfl
+  | code _ _ _ _ => intro _ _ _ b; cases b <;> rfl
   | tensor A B ihA ihB =>
       intro η₁ η₂ h b
       obtain ⟨hA₁, hA₂⟩ := vBN_eq_both (ℍ := ℍ) (ihA η₁ η₂ (fun n hn => h n (Or.inl hn)))
@@ -431,6 +440,7 @@ theorem vBN_rename : ∀ (A : VTy) (η : Nat → TEntN) (r : Nat → Nat) (b : B
   | zero => intro _ _ b; cases b <;> rfl
   | unk => intro _ _ b; cases b <;> rfl
   | thunk _ => intro _ _ b; cases b <;> rfl
+  | code _ _ _ _ => intro _ _ b; cases b <;> rfl
   | tvar n => intro _ _ b; cases b <;> rfl
   | tensor A B ihA ihB =>
       intro η r b
@@ -503,6 +513,7 @@ theorem vBN_subst : ∀ (A : VTy) (η : Nat → TEntN) (σ : Nat → VTy) (δ : 
   | zero => intro _ _ _ b; cases b <;> rfl
   | unk => intro _ _ _ b; cases b <;> rfl
   | thunk _ => intro _ _ _ b; cases b <;> rfl
+  | code _ _ _ _ => intro _ _ _ b; cases b <;> rfl
   | tvar n => intro _ _ _ b; cases b <;> rfl
   | tensor A B ihA ihB =>
       intro η σ δ b
@@ -600,6 +611,7 @@ theorem vBN_mono_at : ∀ (A : VTy) (k : Nat) (η₁ η₂ : Nat → TEntN), A.N
   | zero => intro _ _ _ _ _ _ _ b _ _ _ _ _ h; cases b <;> exact h
   | unk => intro _ _ _ _ _ _ _ b _ _ _ _ _ h; cases b <;> exact h
   | thunk _ => intro _ _ _ _ _ _ _ b _ _ _ _ _ h; cases b <;> exact h
+  | code _ _ _ _ => intro _ _ _ _ _ _ _ b _ _ _ _ _ h; cases b <;> exact h
   | tensor A B ihA ihB =>
       intro k η₁ η₂ hk ht hP hPk b δ Θ j v ρ h
       cases b <;>
@@ -810,8 +822,9 @@ theorem vBN_mu_ind {η : Option (Nat → TEntN)} {A : VTy} {δ : LSub}
 
 
 /-- One unfolding of the relation at every type (Core's `vF`), with `S` at the positions the
-clauses recurse to: the `Mut` clause is kept, with `S` at every value of its payload's type; at
-`μX. A` the unrolling `A[μX. A/X]`. -/
+clauses recurse to: the `Mut` clause is kept, with `S` at every value of its payload's type; the
+`Code⟨N; E⟩ C` clause is kept, with `S` at every value of `E` (`[spec §68]`); at `μX. A` the
+unrolling `A[μX. A/X]`. -/
 def vFN (S : Bool → VTy → LocTy → Nat → Val → WRes → Prop) (δ : LSub) :
     Bool → VTy → LocTy → Nat → Val → WRes → Prop
   | _, .unit, _, _, v, ρ => v = Val.unit ∧ ρ = PMap.empty
@@ -823,6 +836,8 @@ def vFN (S : Bool → VTy → LocTy → Nat → Val → WRes → Prop) (δ : LSu
   | b, .sum A B, Θ, n, v, ρ =>
       (∃ v₁, v = Val.inj₁ v₁ ∧ S b A Θ n v₁ ρ) ∨ (∃ v₂, v = Val.inj₂ v₂ ∧ S b B Θ n v₂ ρ)
   | b, .thunk C, Θ, n, v, ρ => vBN (ℍ := ℍ) none b (.thunk C) δ Θ n v ρ
+  | b, .code N E C, Θ, n, v, ρ => vBN (ℍ := ℍ) none b (.code N E C) δ Θ n v ρ ∧
+      ∀ Θ' j u σ, vN (ℍ := ℍ) E δ Θ' j u σ → S true E Θ' j u σ
   | _, .bang A, Θ, n, v, ρ => ρ = PMap.empty ∧ S true A Θ n v ρ
   | b, .box a A, Θ, n, v, ρ => ∃ α, a.interp δ = some α ∧ S b A Θ n v ρ ∧ ρ.InStratum α
   | b, .ref A, Θ, n, v, ρ => ∃ (l : Loc) (u : Val) (σ : WRes), v = Val.loc l ∧
@@ -850,6 +865,7 @@ theorem vFN_vN (δ : LSub) : ∀ (b : Bool) (T : VTy) (Θ : LocTy) (n : Nat) (v 
   | b, .sum _ _, _, _, _, _ => by cases b <;> exact Iff.rfl
   | b, .zero, _, _, _, _ => by cases b <;> exact Iff.rfl
   | b, .thunk _, _, _, _, _ => Iff.rfl
+  | _, .code _ _ _, _, _, _, _ => ⟨fun h => ⟨h, fun _ _ _ _ h => h⟩, And.left⟩
   | b, .box _ _, _, _, _, _ => by cases b <;> exact Iff.rfl
   | b, .ref _, _, _, _, _ => by cases b <;> exact Iff.rfl
   | b, .fam _, _, _, _, _ => by cases b <;> exact Iff.rfl
@@ -877,6 +893,7 @@ theorem vFN_mono {S₁ S₂ : Bool → VTy → LocTy → Nat → Val → WRes �
       · exact .inr ⟨v₂, h₁, h b T₂ Θ n v₂ ρ h₂⟩
   | _, .zero, _, _, _, _, hs => hs
   | _, .thunk _, _, _, _, _, hs => hs
+  | _, .code _ E _, _, _, _, _, hs => ⟨hs.1, fun Θ' j u σ hu => h true E Θ' j u σ (hs.2 Θ' j u σ hu)⟩
   | b, .box _ T, Θ, n, v, ρ, hs => by
       obtain ⟨α, hα, h₁, h₂⟩ := hs
       exact ⟨α, hα, h b T Θ n v ρ h₁, h₂⟩
@@ -898,7 +915,9 @@ theorem vFN_mono {S₁ S₂ : Bool → VTy → LocTy → Nat → Val → WRes �
 
 /-- **Induction on the least fixed points, at every type, in both modes** (Core's `vC_ind`). A
 property of the relation closed under one unfolding of every clause (`vFN` with the relation
-and the property at the positions it recurses to, the unrolling at `μ`) holds of the relation. -/
+and the property at the positions it recurses to, the unrolling at `μ`) holds of the relation.
+At `Code⟨N; E⟩ C` the property at `E`, a smaller type no substitution enters, comes from an
+outer induction on the type's size. -/
 theorem vN_ind (δ : LSub) (Φ : Bool → VTy → LocTy → Nat → Val → WRes → Prop)
     (h : ∀ b T Θ n v ρ, vFN (ℍ := ℍ)
       (fun b T Θ n v ρ => vBN (ℍ := ℍ) none b T δ Θ n v ρ ∧ Φ b T Θ n v ρ) δ b T Θ n v ρ →
@@ -909,55 +928,66 @@ theorem vN_ind (δ : LSub) (Φ : Bool → VTy → LocTy → Nat → Val → WRes
   have hG : ∀ b T Θ n v ρ, vFN (ℍ := ℍ) G δ b T Θ n v ρ → G b T Θ n v ρ := fun b T Θ n v ρ hs =>
     ⟨(vFN_vN δ b T Θ n v ρ).mpr (vFN_mono (fun _ _ _ _ _ _ h => h.1) δ b T Θ n v ρ hs),
       h b T Θ n v ρ hs⟩
-  have gen : ∀ (A : VTy) (η₀ : Nat → TEntN) (σ : Nat → VTy), (∀ n, (η₀ n).ty = σ n) →
+  suffices key : ∀ m (T : VTy), sizeOf T ≤ m →
+      ∀ b Θ n v ρ, vBN (ℍ := ℍ) none b T δ Θ n v ρ → G b T Θ n v ρ from
+    fun b T Θ n v ρ hT => (key _ T le_rfl b Θ n v ρ hT).2
+  intro m
+  induction m using Nat.strong_induction_on with
+  | _ m ihm =>
+  have gen : ∀ (A : VTy), sizeOf A ≤ m → ∀ (η₀ : Nat → TEntN) (σ : Nat → VTy), (∀ n, (η₀ n).ty = σ n) →
       (∀ n b Θ k v r, (η₀ n).P b Θ k v r → G b (σ n) Θ k v r) →
       (∀ n, ¬ A.NoMut n → (η₀ n).P = fun b => vBN (ℍ := ℍ) none b (σ n) δ) →
       ∀ b Θ k v r, vBN (ℍ := ℍ) (some η₀) b A δ Θ k v r → G b (A.subst σ) Θ k v r := by
     intro A
     induction A using VTy.recV with
-    | unit => intro _ _ _ _ _ b Θ k v r hr; exact hG b _ Θ k v r (by cases b <;> exact hr)
-    | int w => intro _ _ _ _ _ b Θ k v r hr; exact hG b _ Θ k v r (by cases b <;> exact hr)
-    | opq _ => intro _ _ _ _ _ b Θ k v r hr; exact hG b _ Θ k v r (by cases b <;> exact hr)
-    | unk => intro _ _ _ _ _ b Θ k v r hr; exact hG b _ Θ k v r (by cases b <;> exact hr)
-    | zero => intro _ _ _ _ _ b _ _ _ _ hr; cases b <;> exact hr.elim
-    | thunk _ => intro _ _ _ _ _ b Θ k v r hr; exact hG b _ Θ k v r (by cases b <;> exact hr)
+    | unit => intro _ _ _ _ _ _ b Θ k v r hr; exact hG b _ Θ k v r (by cases b <;> exact hr)
+    | int w => intro _ _ _ _ _ _ b Θ k v r hr; exact hG b _ Θ k v r (by cases b <;> exact hr)
+    | opq _ => intro _ _ _ _ _ _ b Θ k v r hr; exact hG b _ Θ k v r (by cases b <;> exact hr)
+    | unk => intro _ _ _ _ _ _ b Θ k v r hr; exact hG b _ Θ k v r (by cases b <;> exact hr)
+    | zero => intro _ _ _ _ _ _ b _ _ _ _ hr; cases b <;> exact hr.elim
+    | thunk _ => intro _ _ _ _ _ _ b Θ k v r hr; exact hG b _ Θ k v r (by cases b <;> exact hr)
+    | code N E C _ =>
+        intro hsz _ _ _ _ _ b Θ k v r hr
+        have hE : sizeOf E < m := lt_of_lt_of_le (by simp <;> omega) hsz
+        exact hG b _ Θ k v r ⟨by cases b <;> exact hr,
+          fun Θ' j u σ' hu => ihm _ hE E le_rfl true Θ' j u σ' hu⟩
     | tensor A B ihA ihB =>
-        intro η₀ σ ht hP hex b Θ k v r hr
+        intro hsz η₀ σ ht hP hex b Θ k v r hr
         have hr' : ∃ v₁ v₂ ρ₁ ρ₂, v = Val.pair v₁ v₂ ∧ ResU.CompS ρ₁ ρ₂ r ∧
             vBN (ℍ := ℍ) (some η₀) b A δ Θ k v₁ ρ₁ ∧ vBN (ℍ := ℍ) (some η₀) b B δ Θ k v₂ ρ₂ := by
           cases b <;> exact hr
         obtain ⟨v₁, v₂, ρ₁, ρ₂, h₁, h₂, h₃, h₄⟩ := hr'
         exact hG b _ Θ k v r ⟨v₁, v₂, ρ₁, ρ₂, h₁, h₂,
-          ihA η₀ σ ht hP (fun n hn => hex n (fun h => hn h.1)) b Θ k v₁ ρ₁ h₃,
-          ihB η₀ σ ht hP (fun n hn => hex n (fun h => hn h.2)) b Θ k v₂ ρ₂ h₄⟩
+          ihA (le_trans (by simp <;> omega) hsz) η₀ σ ht hP (fun n hn => hex n (fun h => hn h.1)) b Θ k v₁ ρ₁ h₃,
+          ihB (le_trans (by simp <;> omega) hsz) η₀ σ ht hP (fun n hn => hex n (fun h => hn h.2)) b Θ k v₂ ρ₂ h₄⟩
     | sum A B ihA ihB =>
-        intro η₀ σ ht hP hex b Θ k v r hr
+        intro hsz η₀ σ ht hP hex b Θ k v r hr
         have hr' : (∃ v₁, v = Val.inj₁ v₁ ∧ vBN (ℍ := ℍ) (some η₀) b A δ Θ k v₁ r) ∨
             (∃ v₂, v = Val.inj₂ v₂ ∧ vBN (ℍ := ℍ) (some η₀) b B δ Θ k v₂ r) := by
           cases b <;> exact hr
         rcases hr' with ⟨v₁, h₁, h₂⟩ | ⟨v₂, h₁, h₂⟩
         · exact hG b _ Θ k v r (.inl ⟨v₁, h₁,
-            ihA η₀ σ ht hP (fun n hn => hex n (fun h => hn h.1)) b Θ k v₁ r h₂⟩)
+            ihA (le_trans (by simp <;> omega) hsz) η₀ σ ht hP (fun n hn => hex n (fun h => hn h.1)) b Θ k v₁ r h₂⟩)
         · exact hG b _ Θ k v r (.inr ⟨v₂, h₁,
-            ihB η₀ σ ht hP (fun n hn => hex n (fun h => hn h.2)) b Θ k v₂ r h₂⟩)
+            ihB (le_trans (by simp <;> omega) hsz) η₀ σ ht hP (fun n hn => hex n (fun h => hn h.2)) b Θ k v₂ r h₂⟩)
     | ref A ih =>
-        intro η₀ σ ht hP hex b Θ k v r hr
+        intro hsz η₀ σ ht hP hex b Θ k v r hr
         have hr' : ∃ (l : Loc) (u : Val) (σ' : WRes), v = Val.loc l ∧
             ResU.CompS (ResU.single l (CellU.ownOf u)) σ' r ∧
               vBN (ℍ := ℍ) (some η₀) b A δ Θ k u σ' := by
           cases b <;> exact hr
         obtain ⟨l, u, σ', h₁, h₂, h₃⟩ := hr'
-        exact hG b _ Θ k v r ⟨l, u, σ', h₁, h₂, ih η₀ σ ht hP hex b Θ k u σ' h₃⟩
+        exact hG b _ Θ k v r ⟨l, u, σ', h₁, h₂, ih (le_trans (by simp <;> omega) hsz) η₀ σ ht hP hex b Θ k u σ' h₃⟩
     | fam L ih =>
-        intro η₀ σ ht hP hex b Θ k v r hr
+        intro hsz η₀ σ ht hP hex b Θ k v r hr
         have hr' : ∃ (l : Loc) (c : UInt32), v = Val.arr l c ∧ c.toNat < 2 ^ 31 ∧
             sepRange (fun m => vBN (ℍ := ℍ) (some η₀) b L δ Θ k (Val.loc m)) l c.toNat r := by
           cases b <;> exact hr
         obtain ⟨l, c, h₁, h₂, h₃⟩ := hr'
         exact hG b _ Θ k v r ⟨l, c, h₁, h₂,
-          sepRange_mono' (fun m σ' hm => ih η₀ σ ht hP hex b Θ k _ σ' hm) h₃⟩
+          sepRange_mono' (fun m σ' hm => ih (le_trans (by simp <;> omega) hsz) η₀ σ ht hP hex b Θ k _ σ' hm) h₃⟩
     | imm a A ih =>
-        intro η₀ σ ht hP hex b Θ k v r hr
+        intro hsz η₀ σ ht hP hex b Θ k v r hr
         have e : tCloseN (some η₀) A = A.subst σ := by
           simp only [tCloseN]; congr 1; funext n; exact ht n
         have hr' : ∃ α, a.interp δ = some α ∧
@@ -968,9 +998,9 @@ theorem vN_ind (δ : LSub) (Φ : Bool → VTy → LocTy → Nat → Val → WRes
         obtain ⟨α, hα, ⟨l, s, u, σ', hs, h₁, h₂, h₃, h₄⟩, hw⟩ := hr'
         rw [e] at hw
         exact hG b _ Θ k v r ⟨α, hα, ⟨l, s, u, σ', hs, h₁, h₂, h₃,
-          ih η₀ σ ht hP hex false Θ k u σ' h₄⟩, hw⟩
+          ih (le_trans (by simp <;> omega) hsz) η₀ σ ht hP hex false Θ k u σ' h₄⟩, hw⟩
     | «mut» a A ih =>
-        intro η₀ σ ht hP hex b Θ k v r hr
+        intro hsz η₀ σ ht hP hex b Θ k v r hr
         have hmut : vNE (ℍ := ℍ) (some η₀) A δ = vNE (ℍ := ℍ) none (A.subst σ) δ := by
           have h₁ := vBN_subst (ℍ := ℍ) A (tEnvN none) σ δ true
           have h₂ := vBN_some (ℍ := ℍ) none (A.subst σ) true
@@ -987,32 +1017,32 @@ theorem vN_ind (δ : LSub) (Φ : Bool → VTy → LocTy → Nat → Val → WRes
             rw [← hmut]; exact hm
         refine hG b _ Θ k v r ⟨hr', fun Θ' j u σ' hu => ?_⟩
         replace hu : vNE (ℍ := ℍ) (some η₀) A δ Θ' j u σ' := by rw [hmut]; exact hu
-        exact ih η₀ σ ht hP (fun n hn => hex n (fun h => hn (VTy.noMut_of_not_occ A h)))
+        exact ih (le_trans (by simp <;> omega) hsz) η₀ σ ht hP (fun n hn => hex n (fun h => hn (VTy.noMut_of_not_occ A h)))
           true Θ' j u σ' hu
     | box a A ih =>
-        intro η₀ σ ht hP hex b Θ k v r hr
+        intro hsz η₀ σ ht hP hex b Θ k v r hr
         have hr' : ∃ α, a.interp δ = some α ∧ vBN (ℍ := ℍ) (some η₀) b A δ Θ k v r ∧
             r.InStratum α := by
           cases b <;> exact hr
         obtain ⟨α, hα, h₁, h₂⟩ := hr'
-        exact hG b _ Θ k v r ⟨α, hα, ih η₀ σ ht hP hex b Θ k v r h₁, h₂⟩
+        exact hG b _ Θ k v r ⟨α, hα, ih (le_trans (by simp <;> omega) hsz) η₀ σ ht hP hex b Θ k v r h₁, h₂⟩
     | bang A ih =>
-        intro η₀ σ ht hP hex b Θ k v r hr
+        intro hsz η₀ σ ht hP hex b Θ k v r hr
         have hr' : r = PMap.empty ∧ vBN (ℍ := ℍ) (some η₀) true A δ Θ k v r := by
           cases b <;> exact hr
-        exact hG b _ Θ k v r ⟨hr'.1, ih η₀ σ ht hP hex true Θ k v r hr'.2⟩
+        exact hG b _ Θ k v r ⟨hr'.1, ih (le_trans (by simp <;> omega) hsz) η₀ σ ht hP hex true Θ k v r hr'.2⟩
     | tvar n =>
-        intro η₀ σ _ hP _ b Θ k v r hr
+        intro _ η₀ σ _ hP _ b Θ k v r hr
         exact hP n b Θ k v r (by cases b <;> exact hr)
     | mu B ih =>
-        intro η₀ σ ht hP hex b Θ k v r hr
+        intro hsz η₀ σ ht hP hex b Θ k v r hr
         obtain ⟨hnm, hcl, hlfp⟩ := vBN_mu.mp hr
         have hM : tCloseN (some η₀) (.mu B) = (VTy.mu B).subst σ := by
           simp only [tCloseN]; congr 1; funext n; exact ht n
         rw [hM] at hcl
         refine hlfp (fun b Θ k v r => G b ((VTy.mu B).subst σ) Θ k v r) (fun b' Θ' k' v' r' h' => ?_)
-          
-        have hB := ih (VTy.scons ⟨tCloseN (some η₀) (.mu B),
+
+        have hB := ih (le_trans (by simp <;> omega) hsz) (VTy.scons ⟨tCloseN (some η₀) (.mu B),
             fun b Θ k v r => G b ((VTy.mu B).subst σ) Θ k v r⟩ η₀)
           (VTy.scons ((VTy.mu B).subst σ) σ)
           (fun n => by cases n with
@@ -1026,13 +1056,13 @@ theorem vN_ind (δ : LSub) (Φ : Bool → VTy → LocTy → Nat → Val → WRes
             | succ n => exact hex n hn) b' Θ' k' v' r' h'
         rw [VTy.subst_scons_eq_inst] at hB
         exact hG _ _ _ _ _ _ ⟨(VTy.noMut_upS_iff B σ).mpr hnm, hcl, hB⟩
-  intro b T Θ n v ρ hT
-  rw [vBN_some none] at hT
-  have := gen T (tEnvN none) .tvar (fun _ => rfl) (fun _ _ _ _ _ _ h => h.elim)
+  intro T hT b Θ n v ρ hv
+  rw [vBN_some none] at hv
+  have := gen T hT (tEnvN none) .tvar (fun _ => rfl) (fun _ _ _ _ _ _ h => h.elim)
     (fun _ _ => by funext b; cases b <;> rfl)
-    b Θ n v ρ hT
+    b Θ n v ρ hv
   rw [VTy.subst_id] at this
-  exact this.2
+  exact this
 
 
 
@@ -1180,7 +1210,7 @@ theorem vNX_poly_ty (S S' : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
       funext δ Θ n v ρ; simp only [vNE, h₁]
   | .tvar 0, _ => rfl
   | .tvar (_ + 1), _ => rfl
-  | .unit, h | .zero, h | .unk, h | .int _, h | .opq _, h | .thunk _, h | .mu _, h | .ref _, h
+  | .unit, h | .zero, h | .unk, h | .int _, h | .opq _, h | .thunk _, h | .code _ _ _, h | .mu _, h | .ref _, h
   | .imm _ _, h | .mut _ _, h | .bang _, h | .fam _, h => vNX_occ S S' P P _ h
 
 
@@ -1311,6 +1341,9 @@ theorem vNE_down : ∀ (A : VTy) (η : Option (Nat → TEntN)), EnvDownN η → 
       · exact .inr ⟨v₂, h₁, vNE_down B η hη δ Θ n v₂ ρ h₂⟩
   | .thunk C, η, hη, δ, Θ, n, v, ρ, h => fun Θ' hE hOK c hc ls =>
       cN_down C δ Θ' hOK.1 c n ls _ ρ (h Θ' hE hOK c hc ls)
+  | .code _ E C, η, hη, δ, Θ, n, v, ρ, h =>
+      ⟨let ⟨us, hv, hu⟩ := h.1; ⟨us, hv, vNE_down E none envDownN_none δ Θ n _ ρ hu⟩,
+        fun Θ' hE hOK c hc ls => cN_down C δ Θ' hOK.1 c n ls _ ρ (h.2 Θ' hE hOK c hc ls)⟩
   | .ref A, η, hη, δ, Θ, n, _, _, h => by
       obtain ⟨l, u, σ, h₁, h₂, h₃⟩ := h
       exact ⟨l, u, σ, h₁, h₂, vNE_down A η hη δ Θ n u σ h₃⟩
@@ -1351,7 +1384,7 @@ theorem vOE_down : ∀ (A : VTy) (η : Option (Nat → TEntN)), EnvDownN η → 
       rcases h with ⟨v₁, h₁, h₂⟩ | ⟨v₂, h₁, h₂⟩
       · exact .inl ⟨v₁, h₁, vOE_down A η hη δ Θ n v₁ ρ h₂⟩
       · exact .inr ⟨v₂, h₁, vOE_down B η hη δ Θ n v₂ ρ h₂⟩
-  | .thunk _, η, hη, _, _, _, _, _, _ => trivial
+  | .thunk _, η, hη, _, _, _, _, _, _ | .code _ _ _, η, hη, _, _, _, _, _, _ => trivial
   | .ref A, η, hη, δ, Θ, n, _, _, h => by
       obtain ⟨l, u, σ, h₁, h₂, h₃⟩ := h
       exact ⟨l, u, σ, h₁, h₂, vOE_down A η hη δ Θ n u σ h₃⟩
@@ -1583,6 +1616,11 @@ theorem vNE_congr : ∀ (A : VTy) (η : Option (Nat → TEntN)) {δ δ' : LSub},
   | .thunk C, η, δ, δ', h, hη => by
       have h₁ := cN_congr C (δ := δ) (δ' := δ') h
       funext Θ n v ρ; simp only [vNE, h₁]
+  | .code N E C, η, δ, δ', h, hη => by
+      have h₀ := vNE_congr E none (δ := δ) (δ' := δ') (fun y hy => h y (.inl hy))
+        (envAgreeN_none δ δ')
+      have h₁ := cN_congr C (δ := δ) (δ' := δ') (fun y hy => h y (.inr hy))
+      funext Θ n v ρ; simp only [vNE, h₀, h₁]
   | .ref A, η, δ, δ', h, hη => by
       have h₁ := vNE_congr A η (δ := δ) (δ' := δ') h hη
       funext Θ n v ρ; simp only [vNE, h₁]
@@ -1638,7 +1676,7 @@ theorem vOE_congr : ∀ (A : VTy) (η : Option (Nat → TEntN)) {δ δ' : LSub},
       have h₁ := vOE_congr A η (δ := δ) (δ' := δ') (fun y hy => h y (.inl hy)) hη
       have h₂ := vOE_congr B η (δ := δ) (δ' := δ') (fun y hy => h y (.inr hy)) hη
       funext Θ n v ρ; simp only [vOE, h₁, h₂]
-  | .thunk _, _, _, _, _, _ => rfl
+  | .thunk _, _, _, _, _, _ | .code _ _ _, _, _, _, _, _ => rfl
   | .ref A, η, δ, δ', h, hη => by
       have h₁ := vOE_congr A η (δ := δ) (δ' := δ') h hη
       funext Θ n v ρ; simp only [vOE, h₁]
@@ -2061,6 +2099,9 @@ theorem vNE_extR : ∀ (A : VTy) (η : Option (Nat → TEntN)), EnvExtRN η → 
       · exact .inr ⟨v₂, h₁, vNE_extR B η hη δ n v₂ ρ hE h₂⟩
   | .thunk _, η, hη, _, _, _, _, _, _, hE, h => fun Θ'' hE' hOK c hc ls =>
       h Θ'' (hE.trans hE') hOK c hc ls
+  | .code _ E _, η, hη, δ, _, _, n, _, ρ, hE, h =>
+      ⟨let ⟨us, hv, hu⟩ := h.1; ⟨us, hv, vNE_extR E none envExtRN_none δ n _ ρ hE hu⟩,
+        fun Θ'' hE' hOK c hc ls => h.2 Θ'' (hE.trans hE') hOK c hc ls⟩
   | .ref A, η, hη, δ, _, _, n, _, _, hE, h => by
       obtain ⟨l, u, σ, h₁, h₂, h₃⟩ := h
       exact ⟨l, u, σ, h₁, h₂, vNE_extR A η hη δ n u σ (hE.right h₂) h₃⟩
@@ -2116,7 +2157,7 @@ theorem vOE_extR : ∀ (A : VTy) (η : Option (Nat → TEntN)), EnvExtRN η → 
       rcases h with ⟨v₁, h₁, h₂⟩ | ⟨v₂, h₁, h₂⟩
       · exact .inl ⟨v₁, h₁, vOE_extR A η hη δ n v₁ ρ hE h₂⟩
       · exact .inr ⟨v₂, h₁, vOE_extR B η hη δ n v₂ ρ hE h₂⟩
-  | .thunk _, η, hη, _, _, _, _, _, _, _, _ => trivial
+  | .thunk _, η, hη, _, _, _, _, _, _, _, _ | .code _ _ _, η, hη, _, _, _, _, _, _, _, _ => trivial
   | .ref A, η, hη, δ, _, _, n, _, _, hE, h => by
       obtain ⟨l, u, σ, h₁, h₂, h₃⟩ := h
       exact ⟨l, u, σ, h₁, h₂, vOE_extR A η hη δ n u σ (hE.right h₂) h₃⟩
@@ -2420,6 +2461,7 @@ theorem vN_empty_of_persistent : ∀ (A : VTy), A.Persistent → ∀ {δ : LSub}
   | tvar _ => exact h.elim
   | opq _ => simp [VTy.Persistent, VTy.persistent] at hp
   | thunk _ => simp [VTy.Persistent, VTy.persistent] at hp
+  | code _ _ _ => simp [VTy.Persistent, VTy.persistent] at hp
   | ref _ => simp [VTy.Persistent, VTy.persistent] at hp
   | imm _ _ => simp [VTy.Persistent, VTy.persistent] at hp
   | «mut» _ _ => simp [VTy.Persistent, VTy.persistent] at hp

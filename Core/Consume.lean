@@ -73,12 +73,12 @@ theorem toFShape_ty : ∀ A : VTy, (toFShape A).ty = A
   | .tvar (_ + 1) => rfl
   | .unit => rfl
   | .zero => rfl
-  | .thunk _ => rfl
+  | .thunk _ | .code _ _ _ => rfl
   | .ref .unit => rfl
   | .ref (.tensor _ _) => rfl
   | .ref .zero => rfl
   | .ref (.sum _ _) => rfl
-  | .ref (.thunk _) => rfl
+  | .ref (.thunk _) | .ref (.code _ _ _) => rfl
   | .ref (.ref _) => rfl
   | .ref (.imm _ _) => rfl
   | .ref (.mut _ _) => rfl
@@ -218,11 +218,12 @@ theorem algE_closed : ∀ (A : VTy), FoldP.clB 0 A = true → consumeAt true A =
       simp [consumeAt, h]
   | .mu A, h => by simp [consumeAt, h]
   | .thunk C, _ => consumeAt_thunk true C
+  | .code _ _ _, _ => rfl
   | .tvar _, h => by simp [FoldP.clB] at h
   | .unit, _ | .zero, _ | .box _ _, _ | .bang _, _ | .unk, _ | .int _, _ | .opq _, _
   | .imm _ _, _ | .mut _ _, _ => rfl
   | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
-  | .fam (.thunk _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
+  | .fam (.thunk _), _ | .fam (.code _ _ _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
   | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
   | .fam (.fam _), _ | .fam (.opq _), _ => rfl
 
@@ -259,8 +260,9 @@ theorem algE_eqP (Bs : FoldP.Stack) :
       · rw [FoldP.resO_leaf consumeAlgs Bs h]; exact algE_closed _ h
       · simp [FoldP.resO, h, consumeAt, consumeAlgs]
   | .thunk C => consumeAt_thunk true C
+  | .code _ _ _ => rfl
   | .unit | .zero | .box _ _ | .bang _ | .unk | .int _ | .opq _ | .imm _ _ | .mut _ _ => rfl
-  | .fam .unit | .fam (.tensor _ _) | .fam .zero | .fam (.sum _ _) | .fam (.thunk _)
+  | .fam .unit | .fam (.tensor _ _) | .fam .zero | .fam (.sum _ _) | .fam (.thunk _) | .fam (.code _ _ _)
   | .fam (.imm _ _) | .fam (.mut _ _) | .fam (.box _ _) | .fam (.bang _) | .fam .unk
   | .fam (.tvar _) | .fam (.mu _) | .fam (.int _) | .fam (.fam _) | .fam (.opq _) => rfl
 
@@ -275,11 +277,11 @@ theorem toFShape_resO_closed (R : VTy) : ∀ {A : VTy}, FoldP.clB 0 A = true →
   | .tvar _, h => by simp [FoldP.clB] at h
   | .ref (.tvar _), h => by simp [FoldP.clB] at h
   | .ref .unit, _ | .ref (.tensor _ _), _ | .ref .zero, _ | .ref (.sum _ _), _
-  | .ref (.thunk _), _ | .ref (.ref _), _ | .ref (.imm _ _), _ | .ref (.mut _ _), _
+  | .ref (.thunk _), _ | .ref (.code _ _ _), _ | .ref (.ref _), _ | .ref (.imm _ _), _ | .ref (.mut _ _), _
   | .ref (.box _ _), _ | .ref (.bang _), _ | .ref .unk, _ | .ref (.mu _), _ | .ref (.int _), _
   | .ref (.opq _), _ | .ref (.fam _), _ => rfl
-  | .unit, _ | .zero, _ | .thunk _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _
-  | .unk, _ | .mu _, _ | .int _, _ | .opq _, _ | .fam _, _ => rfl
+  | .unit, _ | .zero, _ | .thunk _, _ | .code _ _ _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _
+  | .bang _, _ | .unk, _ | .mu _, _ | .int _, _ | .opq _, _ | .fam _, _ => rfl
 
 /-- At a body in `FShape`, the result type at `1` is the `FShape` one. -/
 theorem resO_toFShape (Bs : FoldP.Stack) :
@@ -301,9 +303,10 @@ theorem resO_toFShape (Bs : FoldP.Stack) :
   | .tvar (_ + 1), h => by simp [toFShape, FShape.WF, VTy.Cl] at h
   | .ref (.tvar (_ + 1)), h => by simp [toFShape, FShape.WF, VTy.Cl] at h
   | .ref .unit, h | .ref (.tensor _ _), h | .ref .zero, h | .ref (.sum _ _), h
-  | .ref (.thunk _), h | .ref (.ref _), h | .ref (.imm _ _), h | .ref (.mut _ _), h
+  | .ref (.thunk _), h | .ref (.code _ _ _), h | .ref (.ref _), h | .ref (.imm _ _), h | .ref (.mut _ _), h
   | .ref (.box _ _), h | .ref (.bang _), h | .ref .unk, h | .ref (.mu _), h | .ref (.int _), h
-  | .ref (.opq _), h | .ref (.fam _), h | .unit, h | .zero, h | .thunk _, h | .imm _ _, h
+  | .ref (.opq _), h | .ref (.fam _), h | .unit, h | .zero, h | .thunk _, h | .code _ _ _, h
+  | .imm _ _, h
   | .mut _ _, h | .box _ _, h | .bang _, h | .unk, h | .mu _, h | .int _, h | .opq _, h
   | .fam _, h => by
       have hc := (FoldP.clB_iff 0 _).mpr h
@@ -328,9 +331,10 @@ theorem keysIn_toFShape (Bs : FoldP.Stack) :
   | .tvar _, _ => rfl
   | .ref (.tvar (_ + 1)), h => by simp [toFShape, FShape.WF, VTy.Cl] at h
   | .ref .unit, h | .ref (.tensor _ _), h | .ref .zero, h | .ref (.sum _ _), h
-  | .ref (.thunk _), h | .ref (.ref _), h | .ref (.imm _ _), h | .ref (.mut _ _), h
+  | .ref (.thunk _), h | .ref (.code _ _ _), h | .ref (.ref _), h | .ref (.imm _ _), h | .ref (.mut _ _), h
   | .ref (.box _ _), h | .ref (.bang _), h | .ref .unk, h | .ref (.mu _), h | .ref (.int _), h
-  | .ref (.opq _), h | .ref (.fam _), h | .unit, h | .zero, h | .thunk _, h | .imm _ _, h
+  | .ref (.opq _), h | .ref (.fam _), h | .unit, h | .zero, h | .thunk _, h | .code _ _ _, h
+  | .imm _ _, h
   | .mut _ _, h | .box _ _, h | .bang _, h | .unk, h | .mu _, h | .int _, h | .opq _, h
   | .fam _, h => keysIn_closed Bs ((FoldP.clB_iff 0 _).mpr h)
 where
@@ -345,10 +349,10 @@ where
     | .fam (.ref S), h => by simp [FoldP.keysIn, show FoldP.clB 0 S = true from h]
     | .mu B, h => by simp [FoldP.keysIn, h]
     | .tvar _, h => by simp [FoldP.clB] at h
-    | .unit, _ | .zero, _ | .thunk _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _
-    | .unk, _ | .int _, _ | .opq _, _ => rfl
+    | .unit, _ | .zero, _ | .thunk _, _ | .code _ _ _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _
+    | .bang _, _ | .unk, _ | .int _, _ | .opq _, _ => rfl
     | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
-    | .fam (.thunk _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
+    | .fam (.thunk _), _ | .fam (.code _ _ _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
     | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
     | .fam (.fam _), _ | .fam (.opq _), _ => rfl
 
@@ -371,10 +375,10 @@ theorem algsIn_eq : ∀ (A : VTy) (Bs : FoldP.Stack), algsIn A = (FoldP.keysIn B
       by_cases h : FoldP.clB 0 (.mu B) = true
       · simp [algsIn, FoldP.keysIn, h]
       · simp only [algsIn, FoldP.keysIn, if_neg h, List.map_cons, keyAlg, algsIn_eq B (B :: Bs)]
-  | .unit, _ | .zero, _ | .thunk _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _
+  | .unit, _ | .zero, _ | .thunk _, _ | .code _ _ _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _
   | .unk, _ | .int _, _ | .opq _, _ | .tvar _, _ => rfl
   | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
-  | .fam (.thunk _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
+  | .fam (.thunk _), _ | .fam (.code _ _ _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
   | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
   | .fam (.fam _), _ | .fam (.opq _), _ => rfl
 

@@ -36,6 +36,33 @@ def ppVT (A : VTy) (ms : MachSet := {}) : String := match ofV ms A with
   | .ok a => a.pp
   | .error e => s!"<{e}>"
 
+-- [spec §68] A key's type is printed exactly where `ofV` refuses it, as at a per-code closure type.
+deriving instance Repr for BoCa.Fig16.LogRel.Core.VTy, BoCa.Fig16.LogRel.Core.CTy
+
+mutual
+/-- A value type holds a per-code closure type `Code⟨N; E⟩ C`.  `[spec §68]` -/
+def hasCodeV : VTy → Bool
+  | .code _ _ _ => true
+  | .tensor A B | .sum A B => hasCodeV A || hasCodeV B
+  | .thunk C => hasCodeC C
+  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .mu A | .fam A => hasCodeV A
+  | .unit | .zero | .unk | .tvar _ | .int _ | .opq _ => false
+/-- A computation type holds a per-code closure type.  `[spec §68]` -/
+def hasCodeC : CTy → Bool
+  | .ret A => hasCodeV A
+  | .arr A C => hasCodeV A || hasCodeC C
+  | .amp C D => hasCodeC C || hasCodeC D
+  | .all _ _ C | .nu C => hasCodeC C
+  | .eff _ _ _ A B fin _ C => hasCodeV A || hasCodeV B || hasCodeC fin || hasCodeC C
+  | .top => false
+end
+
+/-- A type in a `use` key (`useKey`): as `ppVT` prints it; a type holding a per-code closure type
+`Code⟨N; E⟩ C` is its exact serialisation, the code `N` in full, so that two codes are two keys.
+`[spec §68]` -/
+def keyVT (A : VTy) (ms : MachSet := {}) : String :=
+  if hasCodeV A then "exact:" ++ reprStr A else ppVT A ms
+
 def ppMasks (m : Masks) : String :=
   String.ofList (m.ms.map fun (a, b) => match a, b with
     | true, true => 'B' | true, false => 'L' | false, true => 'R' | false, false => '.')

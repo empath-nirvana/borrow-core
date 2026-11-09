@@ -63,7 +63,7 @@ def vShapeE : Option (Nat → SEnt) → VTy → LSub → Val → WProp
       BoLo.or (ex fun v₁ => ⌜v = .inj₁ v₁⌝ ⋆ vShapeE η T₁ δ v₁)
               (ex fun v₂ => ⌜v = .inj₂ v₂⌝ ⋆ vShapeE η T₂ δ v₂)
   | _, .zero, _, _ => fun _ => False
-  | _, .thunk _, _, _ => fun _ => True
+  | _, .thunk _, _, _ | _, .code _ _ _, _, _ => fun _ => True
   | η, .box a T, δ, v => atLife δ a fun α => box α (vShapeE η T δ v)
   | η, .ref T, δ, v => ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vShapeE η T δ v'
   | _, .bang _, _, _ => emp
