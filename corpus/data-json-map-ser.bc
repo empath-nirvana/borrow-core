@@ -1,18 +1,16 @@
--- pending: a recursion on a load's view at a shorter lifetime: a recursive group calls itself at its own lifetime parameters (#890; the load at an abortive row is #887)
--- now: 37:15: type mismatch: expected `imm 'a (mu X. 1 + i32 + ((array (1 + i32) * array (array u8 * i32)) * array X) * i32) * array u8 * i32`, but this has type `imm 'y (mu X. 1 + i32 + ((array (1 + i32) * array (array u8 * i32)) * array X) * i32) * array u8 * i32`
---
--- J1's need in miniature: a `Json` whose objects are `Map[string, Json]` (SPEC §36, §42)
+-- J1's need in miniature (#65): a `Json` whose objects are `Map[string, Json]` (SPEC §36, §42),
 -- serialised by borrow, recursively, then consumed. `ser` lends the value, matches its view
 -- through a load (`borrow imm *j { 'y, v -> … }`), and at an object iterates the entries with
--- `map_entries`, each key printed from its text view and each value serialised by the recursive
+-- `map_entries`, printing each key from its text view and serialising each value by the recursive
 -- call. The recursion performs `Exhausted` (SPEC §20), an abortive operation, inside the load
--- block; the kernel's `withload` has its unwinding form (`withloadU`, SPEC §19 *Borrows*), but the
--- load form does not elaborate to it (`unwindingC?`, `Frontend/Sugar.lean`, covers the cell and
--- slice borrows only).
--- `fold_imm` is no way round: `array X` (the map's values) is not a fold shape.
+-- block, so the load is `withloadU` (SPEC §19 *Borrows*, #887). The recursive call is at the
+-- load's shorter lifetime `'y`: each member's lifetime parameters are instantiated afresh at each
+-- call (SPEC §31 *Generic recursive groups*, #890).
 --
--- Answer, once it checks: `{"n":3,"o":{"a":1,"b":null}}` up to the slot order of each object's
--- keys, then `i32[0]` and `live 0` (the value consumed after the walk).
+-- Answer: `{"o":{"b":null,"a":1},"n":3}` (each object's keys in the map's slot order), then
+-- `i32[0]` and `live 0` (the value consumed after the walk). A walk that consumed the value would
+-- leave nothing to consume after it; one that skipped a level drops a key; a leaked key string or
+-- view shows in `live`.
 include rec
 include textio
 include map

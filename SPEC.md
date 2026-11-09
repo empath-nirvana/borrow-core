@@ -4354,20 +4354,26 @@ capabilities its copy takes, §18: the answering effects' capabilities in the or
 the variable a `for`'s site threads), is the bounded fixed point of its **generator** at the record
 of its members (Bekič):
 
-    R = &ⱼ (E ⊗ Pⱼ ⊸ F_Σ (E ⊗ Tⱼ))                  (one member: its function type)
+    R = &ⱼ ∀'a⃗ < b⃗. (E ⊗ Pⱼ ⊸ F_Σ (E ⊗ Tⱼ))          (one member: its function type)
     gen : !U ((1 ⊕ !U(1 ⊸ R)) ⊗ 1 ⊸ R)               (`g__step__…`)
+
+`'a⃗ < b⃗` are the group's own lifetime parameters (§31, *Generic recursive groups*), quantified in
+each member's field of the record, so that each call of a member instantiates them afresh; a group
+without lifetime parameters has no `∀` there.  `[spec §31]`
 
 - **The generator** answers the record of the members' bodies, each taking `E` first and handing it
   back first, as a copy does. It is `!` code that holds nothing; when `E` has capabilities it is
   `!(∀'l₁ … 'lₙ. !U(…))` over their lifetimes.
 - **A call of member `j` inside it** is a direct call of the self-reference:
 
-      case self { inj₁ _ ⇒ abort[e.0] () | inj₂ g ⇒ (force (unbang g) ()).j (E, W) }
+      case self { inj₁ _ ⇒ abort[e.0] () | inj₂ g ⇒ (force (unbang g) ()).j [ℓ⃗] (E, W) }
 
-  with `E` bound again after, `e` the site of the exhaustion effect. It is a call's binding (§18,
+  with `E` bound again after, `e` the site of the exhaustion effect, and `[ℓ⃗]` the member's lifetime
+  parameters instantiated at the call's lifetimes (§31). It is a call's binding (§18,
   *A call's binding*), so a terminal that is its answer is the call itself, in tail position; a
   layer's `call` likewise.
-- **A member's copy** is `(bounded_fix[1, R] (gen, (budget, ()))).j`, at the budget `recBudget`. It
+- **A member's copy** is `(bounded_fix[1, R] (gen, (budget, ()))).j [ℓ⃗]`, at the budget `recBudget`,
+  `ℓ⃗` the copy's own lifetime parameters. It
   has the type a copy of the member has, so a call of it from outside is a call of a copy.
 
 So an answering capability flows through a recursion as part of its argument and answer, an
@@ -5996,9 +6002,28 @@ A recursive group (§20) may be generic. Its members take the **same type parame
   in the group's type parameters, made once per copy (per row and blocks, as in §18 and §30) and
   instantiated per use at the call's types (§15): a call from outside is a call of the copy, whose
   type arguments are read off the arguments as at any template;
-- the group's lifetime parameters are the generator's and the copies' `all 'a < @.`, outside the
-  capabilities' lifetimes (§21); a call of a member inside the group is at the group's own type and
-  lifetime parameters, through the self-reference;
+- the group's lifetime parameters are **quantified in its fixed-point type**: each member's field
+  of the record `R` (§21) is `∀'a₁ < b₁. … ∀'aₙ < bₙ. (E ⊗ Pⱼ ⊸ F_Σ (E ⊗ Tⱼ))`, the parameters
+  nested in the order they are declared, so that a bound naming an earlier parameter is under its
+  binder. The generator's field for a member is `Fun 'a₁ < b₁. … fun p → body`. Only the
+  capabilities' lifetimes `'l` stay outside the fixed point, fixed for the whole recursion: the
+  generator, each layer's transformer and the fixed point's `R` are generic in them alone
+  (`!(∀'l⃗. !U(…))`). A member's copy keeps the type a copy has, `all 'a < @.` over the group's
+  lifetime parameters and then the capabilities', and instantiates the field at its own `'a⃗` after
+  projecting it;  `[spec §31]`
+- **a call of a member inside the group instantiates the member's lifetime parameters afresh**, at
+  the call's lifetimes: `((force (unbang g) ()).j ['ℓ₁] … ['ℓₙ]) (E, W)`. A member may so call itself
+  on a view at a shorter lifetime than its own, the view of a child a load exposes (`'y` of
+  `borrow imm *t { 'y, v -> … }`). The effects elaboration writes the application without the
+  lifetimes; the typed elaboration fills them, by one general rule: **an application `M x` of a
+  computation whose type is `∀'a⃗ < b⃗. P ⊸ C`, its lifetimes not written, is `M ['ℓ⃗] x`, each `'ℓ`
+  read off `x`'s type matched against `P`**, as the lifetime arguments of a call of a generic
+  function are (§15). A lifetime `x`'s type does not determine is the meet of the lifetimes in
+  scope. The kernel checks the instantiation against each bound, as at any `.inst`, and refuses one
+  that does not hold. A call of itself is at the group's own type parameters;  `[spec §31]`
+- the abortive branch of a call of itself, `abort[e.0] ()`, is ascribed the member's result when
+  the result names none of the group's lifetime parameters; otherwise it is not ascribed, and the
+  checker types it at the other branch's answer (`case`'s synthesis inside a row, §19);  `[spec §31]`
 - under the heap driver (§20), the machine's source `g__mach_src` is a template, and each of its
   instances `g__gN__mach_src` is made into its machine `g__gN__mach` (`recMachine`), its frames at
   the instance's types; a member's copy `x__deep` names the machine at its type arguments,
@@ -6009,8 +6034,12 @@ does; its reports are not printed, as a library copy's are not.
 
 **Not provided**, each rejected with a message:
 
-- **Polymorphic recursion**, a member calling itself at other type arguments: the self-reference
-  is at the group's own types, and the call is a type error at its argument.
+- **Polymorphic recursion at types**, a member calling itself at other type arguments: the
+  self-reference is at the group's own types, and the call is a type error at its argument.
+  (Recursion at other lifetimes is provided, above.)
+- **A group with lifetime parameters under the heap driver** (`with deep`): the machine's frames
+  would hold views at the lifetimes of the calls that pushed them. Rejected with a message.
+  `[spec §31]`
 - **A recursive template sharing its name** with another function (`map` of `lib/list.bc` and of
   `lib/iters.bc` in one program): templates of one name are chosen by the arguments' types (§15),
   after the effects are elaborated, but a recursive group is found by name before that. A call of
@@ -6051,7 +6080,11 @@ kept) and `fold` (from the left). `lib/async.bc` includes it for `List`.
 `list-blocks.bc` (blocks that recurse and that raise, given to the generic `map`), `async-map.bc`
 (A4, now the generic `map`: output and counts unchanged), `rec-generic-mutual.bc`,
 `rec-generic-layer.bc`, `rec-generic-deep.bc` (three times the budget, under `deep`),
-`rec-lifetimes.bc` (recursion with a lifetime parameter, generic and not), `generic-pair-arg.bc`
+`rec-lifetimes.bc` (recursion with a lifetime parameter, generic and not), `rec-life-rounds.bc`
+(a recursion over a borrowed array calling itself on a view lent at a shorter lifetime),
+`rec-life-mutual.bc` (two members calling each other at shorter lifetimes and at their own),
+`rec-life-cap.bc` (a group with a capability whose lifetime stays fixed while its two view
+lifetimes swap at each call), `generic-pair-arg.bc`
 (#135), `generic-in-def.bc` (#136), `text-lend-lifetime.bc` (#167's S5 case);
 rejects `corpus/reject/rec-generic-params.bc`, `rec-name-clash.bc`, `double-use-in-callee.bc`
 (#145: reported at the use).
@@ -12439,6 +12472,30 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
   a code type only with a code type. The checker and Backend2's `ofV` refuse a code type until K3,
   S1 and B1. No `CDerives` rule produces one, so no program's typing or output changes.
   `fundamentalC`, `adequacyC` and `goal791N` keep their statements.
+- **1.53** (2026-11-07) — §31, §21 (#890, *Generic recursive groups*): a recursive group's lifetime
+  parameters are quantified in each member's field of its fixed-point record, `∀'a⃗ < b⃗. (E ⊗ Pⱼ ⊸
+  F_Σ (E ⊗ Tⱼ))`, nested in declaration order; only the capabilities' lifetimes stay outside the
+  fixed point. A call of a member inside the group instantiates them afresh at the call's
+  lifetimes, so a walk of a borrowed tree recurses on a child's view at a load's shorter lifetime.
+  The typed elaboration fills the lifetimes of an application of a computation of type
+  `∀'a⃗ < b⃗. P ⊸ C`, read off the argument's type, as at a generic call. A group with lifetime
+  parameters under the heap driver is rejected with a message (it failed before, at inference).
+  New programs `rec-life-rounds`, `rec-life-mutual`, `rec-life-cap`. No change to `CDerives`, the
+  kernel, the checker, the theorems or the backends.
+- **1.52** (2026-11-07) — #884: the source interpreter (`bcc interp`, `Support`'s `step`) runs
+  faster; what it computes is unchanged. Compiled code runs `Expr.substFast` in place of
+  `Expr.subst` (a closed value is substituted without shifting it at each binder, and a subterm
+  the substitution leaves unchanged is kept, not copied) and `stepFast` in place of `step` (a
+  value answers itself, not rebuilt), `Expr.shiftFast` in place of `Expr.shift` (an unchanged
+  subterm is kept), and `runFocused` in place of the driver's `runSource` (the evaluation context
+  is kept as a stack of frames and the focus alone is stepped, so a step no longer costs the
+  context's depth; a focus that is stuck or stops at an operation has the whole term step). Each
+  is by `@[csimp]` over a proof that the two are equal (`Expr.subst_eq_substFast`,
+  `step_eq_stepFast`, `Expr.shift_eq_shiftFast`, `runSource_eq_runFocused`). Every statement still
+  reads `Expr.subst`, `Expr.shift`, `step` and `runSource`, and kernel evaluation (`decide`) is
+  unchanged. No spec text describes the
+  interpreter's representation; nothing in `Paper/` or `Core/` changes, and every golden is the
+  same.
 - **1.51** (2026-11-07) — §18, §19 *Borrows*, §36 (#887): a load block (`borrow imm *g { 'y, v -> … }`) whose
   body performs abortive operations elaborates to `withloadU`, `withload` at the callback's row,
   as the cell and slice borrows elaborate to their unwinding forms (`Const.unwinding`,

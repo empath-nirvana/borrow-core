@@ -4451,7 +4451,31 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         | _ => (c.elabV A, none)
       let As ← if isHoleTy A then c.surface sp (← need sp s!"`{x.name}`" A') else pure A
       pure (.lam sp x As (← surfC n (c.push x.name (c.elabV As)) C M))
-    | .app sp M x => do pure (.app sp (← surfC n c none M) x)
+    | .app sp M x => do
+      let M' ← surfC n c none M
+      -- An application of a computation of type `∀'a⃗ < b⃗. P ⊸ C`, its lifetimes not written: each
+      -- read off the argument's type matched against `P`, as at a call of a generic function
+      -- (a recursive group's call of a member, SPEC §31). One `x`'s type leaves open is the meet
+      -- of the lifetimes in scope; the kernel checks each against its bound.  `[spec §31]`
+      let rec binders : Nat → CCTy → List BoCa.Lifetime.LifeVar × Option CVTy
+        | 0, _ => ([], none)
+        | k + 1, .all v _ C => let (vs, P) := binders k C; (v :: vs, P)
+        | _, .arr P _ => ([], some P)
+        | _, _ => ([], none)
+      match c.tyC M' with
+      | some C@(.all ..) =>
+        let (vs, P?) := binders 64 C
+        match P?, c.tyV (.var x.span x.name) with
+        | some P, some T =>
+          let m₀ : MatchSt := { ty := #[], binders := vs }
+          let m := (matchV m₀ 0 P T).getD m₀
+          let mut g := M'
+          for v in vs do
+            let l := (m.life.lookup v).getD c.Δ.meetOfDom
+            g := .inst sp g (← c.surfaceL sp l)
+          pure (.app sp g x)
+        | _, _ => pure (.app sp M' x)
+      | _ => pure (.app sp M' x)
     | .with_ sp M N => do
       let (a, b) := match exp with
         | some (.amp C D) => (some C, some D)

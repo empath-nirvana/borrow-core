@@ -176,6 +176,7 @@ corpus/data-config.bc 3.0 cancellable abortive: branch; agree
 corpus/data-config.bc 2.0 cancellable abortive: branch; agree
 corpus/data-eval.bc 1.0 cancellable abortive: branch; agree
 corpus/data-group.bc 1.0 cancellable abortive: branch; agree
+corpus/data-json-map-ser.bc 1.0 cancellable abortive: branch; agree
 corpus/data-json-map.bc 1.0 cancellable abortive: branch; agree
 corpus/data-json-vec.bc 1.0 cancellable abortive: branch; agree
 corpus/data-option-block.bc 1.0 cancellable abortive: branch; agree
@@ -479,6 +480,9 @@ corpus/rec-generic-mutual.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-in-for-linear.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-layer.bc 2.0 cancellable abortive: branch; agree
 corpus/rec-layer.bc 1.0 cancellable abortive: branch; agree
+corpus/rec-life-cap.bc 1.0 cancellable abortive: branch; agree
+corpus/rec-life-mutual.bc 1.0 cancellable abortive: branch; agree
+corpus/rec-life-rounds.bc 1.0 cancellable abortive: branch; agree
 corpus/rec-lifetimes.bc 3.0 cancellable abortive: branch; agree
 corpus/rec-lifetimes.bc 2.0 cancellable abortive: branch; agree
 corpus/rec-lifetimes.bc 1.0 cancellable abortive: branch; agree

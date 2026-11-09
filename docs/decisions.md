@@ -305,6 +305,10 @@ Each entry: the decision, and why. Newest last.
     - *Kept and confirmed by decision 71* (2026-10-31): the per-observation lend is the design,
       not a step toward a spanning lend, and the objection that it is the elaborator deciding lend
       extents is overruled.
+    - *Status (decisions 72, 78):* decision 71's confirmation is void. The per-observation lend
+      over loops is still what the checker enforces (decision 72: "LoopLend's per-observation lend
+      over loops"). The objection that it is the elaborator deciding lend extents is now settled
+      by decision 78: an inserted lend that the kernel checks is elaboration.
     - **Per observation, not spanning.** A borrow scope around a loop lends its owner again at
       each observation (`experiments/LoopBorrow`); no rule lends across observations. The
       elaboration is `Frontend/Elab/LoopLend.lean`, with two hooks in `Sugar.lean` (a binding
@@ -641,8 +645,8 @@ Each entry: the decision, and why. Newest last.
       - S2: named capabilities and platform bundles;
       - S3: `rec`, drivers, layers and `|>`;
       - S4: `Yield`, projections and stored callbacks;
-      - S5: with #52, suspension with input and cancellation (K1–K3; K1, the spanning lend, is
-        tombstoned by decision 71).
+      - S5: with #52, suspension with input and cancellation (K1–K3; K1, the spanning lend, was
+        tombstoned by decision 71, which is void, decision 72).
     - **Syntax (provisional):** Effekt's semantics with a `with` clause. Capabilities are implicit
       and lexical, and a name is required only when two instances are in scope. The cost
       vocabulary is Koka's (`fun`, `ctl`, `final ctl`), plus `finally`.
@@ -769,7 +773,8 @@ Each entry: the decision, and why. Newest last.
       operation, made per group, is withdrawn by decision 59: a group is the fixed point of its
       generator, called directly.
     - **A `for` over data whose body performs an operation that resumes is a div loop** over the
-      source's cursor; `&a` and `&mut a` stay rejected there (T1, permanent by decision 71).
+      source's cursor; `&a` and `&mut a` stay rejected there (T1, the checker's rule until
+      the surface catch-up, #843; decision 71, which made it permanent, is void, decision 72).
     - **Spellings (provisional):** `include rec`; `with deep { … }`; `on_exhausted(!{ u -> d })`;
       `exhausted_to_option`; the reports' `row … (a recursive group …)` lines. Decision 57's
       pattern, a per-level handler around the recursive call, is rejected (recursion through a
@@ -915,8 +920,8 @@ Each entry: the decision, and why. Newest last.
       `κ`, or uses it before its last step, around a body that ticks stays restricted:
       `handle_general` (R-4) is not proved.
     - No program that runs today is rejected: the frontend writes no `Div` in any row until B2 (#644
-      B2, loops as the kernel's `Div`; still open after decision 71, which closes only its route to
-      a lend across a tick), and
+      B2, loops as the kernel's `Div`; still open after decision 71, now void, which closed only its
+      route to a lend across a tick), and
       every kernel program's handled rows are without `Div`. `operator-reconcile.bc` is already
       pending.
     - *Status (decision 72):* superseded as design by SPEC §62's `[handle]` without `hdv`. The
@@ -1085,4 +1090,35 @@ Each entry: the decision, and why. Newest last.
       Shrinking or discharging it is #838.
     - The checker does not emit the new rules yet; it enforces T1 (SPEC §19) until the surface
       catch-up (#843) lands. Decision 71 stays void (decision 72).
+76. **Per-code closure and codata types (the user's decisions of 2026-11-07; #855).**
+    - Each closure and each `unfold` has its own type, as in Rust, with an erasing coercion to
+      the shared `U C` or `ν` type where `dyn` is wanted; Backend2 monomorphises over the
+      per-code types. This carries out #542's specialisation per closure code.
+    - **C1: specific by default.** A written function or codata type means the caller's exact
+      closure type, as `impl Fn` does; `dyn` is asked for.
+    - **C2 and C3: erase silently** wherever the specific type is not needed: at a lend's exit
+      for a code that captures the lent lifetime, and at a join of two different closures.
+    - **C4: (a), a new value-type former** `Code⟨N; E⟩ C` beside `U C`, `N` the closure's body
+      and `E` its captures' types, not a code coordinate on `U` and `ν`. In the user's words:
+      "I agree with a".
+    - K0, the entry, is SPEC §68 (`docs/new-core/scope-855-per-code-types.md`); the kernel,
+      the elaborator and Backend2 are not built yet.
+77. **Primitive scalars are persistent by default (the user's decision of 2026-11-07; #886).**
+    - `i32`, `i64`, `u8`, `bool` and the floats are `!` types, so a `!{…}` closure can capture
+      them. In the user's words: "On copyable by default I think of course?"
+    - The kernel's `VTy.persistent` already counts them; the premise of `bangThunkF` and
+      `bangThunkV`, every live slot literally `!A`, is what changes. Not built yet.
+78. **Elaboration may insert kernel-checked forms; a backend reads only what the kernel checked
+    (the user's ruling of 2026-11-07; #885).**
+    - The rule, in the user's words: "Basically I don't want the backend to be doing anything
+      based on surface info that hasn't passed through the kernel."
+    - An elaborator insertion of a form the kernel then checks is elaboration, even when it
+      chooses where a lend starts and ends (#885: lending an outer `let mut` around a control
+      `with`). In the user's words: "my main concern was stuff going straight from the surface
+      to the backend and not using the kernel. That just feels like normal elaboration/sugar."
+    - What the rule rules out is a path from the surface to a backend that skips the kernel.
+      Known instances are tracked: Backend2 reads elaborator-only facts in `useKey`'s `DefKey`
+      and in merging stored-continuation sites by handler name (#896), and a value-form test it
+      evaluates on the erasure (#860). The planned
+      fix reads `Code⟨N; E⟩` (decision 76) once #855 reaches the backend.
 
