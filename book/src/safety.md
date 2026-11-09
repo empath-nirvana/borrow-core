@@ -22,6 +22,12 @@ test suite gives the same output compiled as in the reference interpreter, and e
 ([Async tasks](guide/async.md#borrows-across-await)) relies on one stated assumption, which is not
 proved; `bcc check` names the programs that rely on it.
 
+Borrows held across any suspension, an `await` or a `yield`, are not implemented yet. The proof
+for them is done and rests on one named assumption about handlers, `HandlerLawN`: that a handler
+which keeps an operation's continuation to resume later, and the step that turns a suspended
+loop back into a value, keep the safety rules. It is stated in Lean and checked against every
+case found so far, but not yet proved. For now it covers programs that do no I/O.
+
 [`SPEC.md`](https://github.com/empath-nirvana/borrow-core/blob/main/SPEC.md) is the precise
 definition of the language, and
 [`docs/internals/proved.md`](https://github.com/empath-nirvana/borrow-core/blob/main/docs/internals/proved.md)
