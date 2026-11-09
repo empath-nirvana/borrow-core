@@ -45,6 +45,7 @@ import Core.FoldClass
 import Core.Nu
 import Core.CapNorm
 import Core.CodeNu
+import Core.CodeRules
 import Core.Alpha
 import Core.Fundamental
 import Core.Examples

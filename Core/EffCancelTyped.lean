@@ -382,7 +382,7 @@ theorem cancelCT_jr {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F : C
   have hslotP : (⟨P', true⟩ :: Γ : Ctx VTy)[0]? = some ⟨P', true⟩ := rfl
   rcases varCls_of_le hslotP (splitP_le_left hs) hV with hc | ⟨_, hT, -, -⟩
   swap
-  · subst hT; simp [VTy.alphaB] at hP'
+  · cases P' <;> simp [VTy.forceTy, VTy.alphaB] at hT hP'
   obtain ⟨-, hK⟩ := vview_tensor (hc.of_alpha (VTy.alphaB_symm hP'))
   have hslotK : (⟨B', true⟩ :: ⟨A', true⟩ :: Γ₂ : Ctx VTy)[0]? = some ⟨B', true⟩ := rfl
   obtain ⟨j₁, hb₁, hr₁⟩ := der_app hB₂ _ _ rfl
@@ -391,8 +391,10 @@ theorem cancelCT_jr {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F : C
     cases ob with
     | none => exact .refl
     | some d => exact .single (VS.boxI d _)
-  have hB'u : ∀ C₀, B' ≠ .thunk C₀ := by
-    rintro C₀ rfl; rcases ob with _ | d <;> simp [kBoxO, kTy, VTy.alphaB] at hK
+  have hB'u : ∀ C₀, B'.forceTy ≠ some C₀ := by
+    intro C₀ h
+    cases B' <;> simp only [VTy.forceTy, reduceCtorEq] at h <;>
+      (rcases ob with _ | d <;> simp [kBoxO, kTy, VTy.alphaB] at hK)
   refine Relation.ReflTransGen.trans (Relation.ReflTransGen.trans ?_ hr₁) hr
   rcases hb₁ with ⟨Γ₃, Γ₄, A₀, B₀, hs', hY, hX, rfl⟩ | ⟨Γ₃, Γ₄, i, A₀, C₀, hi, hs', hX, hx, rfl⟩ |
     ⟨N', Γ₃, Γ₄, A₀, S₀, C₀, hXe, hs', hM, hN, rfl⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ |
@@ -1489,7 +1491,7 @@ theorem timeoutCl_finds {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F
   have hslotP : (⟨P', true⟩ :: Γ : Ctx VTy)[0]? = some ⟨P', true⟩ := rfl
   rcases varCls_of_le hslotP (splitP_le_left hs) hV with hc | ⟨_, hT, -, -⟩
   swap
-  · subst hT; simp [VTy.alphaB] at hP'
+  · cases P' <;> simp [VTy.forceTy, VTy.alphaB] at hT hP'
   obtain ⟨-, hK⟩ := vview_tensor (hc.of_alpha (VTy.alphaB_symm hP'))
   have hslotK : (⟨B', true⟩ :: ⟨A', true⟩ :: Γ₂ : Ctx VTy)[0]? = some ⟨B', true⟩ := rfl
   replace hK : VTy.alphaB [] (kBoxO ob (.thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy S F)))) B' =

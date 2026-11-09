@@ -19,6 +19,7 @@ import Core.Chain.ImmLendKW835N
 import Core.Chain.WithloadKW835N
 import Core.Chain.RulesKW835N
 import Core.Fundamental
+import Core.Chain.CodeRulesKW835N
 
 /-!
 # `FundamentalN` assembled by induction on `CDerives`  `[spec §62]`
@@ -103,7 +104,7 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | thunkV hC _ ih => exact thunkV_compatN hC ih
   | ret _ ih => exact ret_compatN ih
   | bind hs _ _ ihM ihN => exact bind_compatN hs ihM ihN
-  | force h => exact force_compatN h
+  | force h hT => exact force_compatN h hT
   | lam _ ih => exact lam_compatN ih
   | lamDead _ ih => exact lamDead_compatN ih
   | app hs _ hx ih => exact app_compatN hs ih hx
@@ -119,6 +120,10 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | allE _ hlt ih => exact allE_compatN ih hlt
   | bangThunkF hp _ ih => exact bangThunkF_compatN hp ih
   | bangThunkV hp hC _ ih => exact bangThunkV_compatN hp hC ih
+  | codeI _ hok _ ih => exact codeI_compatN ih hok
+  | codeIB hp _ hok _ ih => exact codeIB_compatN hp ih hok
+  | erase _ ih => exact erase_compatN ih
+  | eraseB _ ih => exact eraseB_compatN ih
   | bangE _ ih => exact bangE_compatN ih
   | copyBang hΓ => exact copyBang_compatN hΓ
   | releaseBang hΓ => exact releaseBang_compatN hΓ

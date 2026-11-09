@@ -1922,6 +1922,12 @@ theorem not_vview_bang_thunk_code {C₀ : CTy} {N : Expr} {E : VTy} {C : CTy}
   · cases h'
   · cases h'
 
+/-- A type forced at `C` is viewed at `U C`.  `[spec §68]` -/
+theorem vview_forceTy {T : VTy} {C : CTy} (h : T.forceTy = some C) : VView T (.thunk C) := by
+  cases T <;> simp only [VTy.forceTy, Option.some.injEq, reduceCtorEq] at h
+  · subst h; exact .refl
+  · subst h; exact .single (VS.erase _ _ _)
+
 /-- A slot forced at `C` whose type is no code type is at `U C`.  `[spec §68]` -/
 theorem eq_thunk_of_forceTy {T : VTy} {C : CTy} (h : T.forceTy = some C)
     (hc : ∀ N E C', T ≠ .code N E C') : T = .thunk C := by
@@ -2625,6 +2631,28 @@ theorem ValCls.at {T₀ T : VTy} {j : Jdg} (h : ValCls T₀ j)
   · obtain ⟨S', Y, he, hY⟩ := h
     obtain ⟨-, rfl⟩ := effOf_inj he
     exact hY
+
+/-- A thunk's reading, at a value or a row over it, viewed at a thunk: at the thunk's computation
+type, up to α-equivalence.  `[spec §68]` -/
+theorem ThunkCls.at_thunk {Γ : Ctx VTy} {D C : CTy} {T : VTy} {j : Jdg} (h : ThunkCls Γ D j)
+    (hj : j = .val T ∨ ∃ S, j = .comp (CTy.effOf S T)) (hv : VView T (.thunk C)) :
+    CTy.alphaB [] D C = true := by
+  rcases h with h | ⟨-, h⟩ | ⟨_, _, h⟩ | ⟨-, _, _, h⟩
+  · exact vview_thunk ((h.at hj).trans hv)
+  · exact vview_bang_thunk ((h.at hj).trans hv)
+  · exact vview_code_thunk ((h.at hj).trans hv)
+  · exact vview_bangCode_thunk ((h.at hj).trans hv)
+
+/-- A λ-constant's reading, at a value or a row over it, viewed at a thunk: a view of its type.
+`[spec §68]` -/
+theorem ValClsC.at_thunk {T₀ T : VTy} {C : CTy} {j : Jdg} (h : ValClsC T₀ j)
+    (hj : j = .val T ∨ ∃ S, j = .comp (CTy.effOf S T)) (hv : VView T (.thunk C)) :
+    VView T₀ (.thunk C) := by
+  rcases h with h | ⟨_, _, C₁, hT, h⟩ | ⟨_, _, C₁, hT, h⟩
+  · exact (h.at hj).trans hv
+  · exact hT.tail (.alpha (A := .thunk C₁) (B := .thunk C) (vview_code_thunk ((h.at hj).trans hv)))
+  · exact (hT.tail (.bang _)).tail (.alpha (A := .thunk C₁) (B := .thunk C)
+      (vview_bangCode_thunk ((h.at hj).trans hv)))
 
 /-! ### The rows a computation is read at
 

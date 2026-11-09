@@ -1016,14 +1016,21 @@ theorem thunkV_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hC : 
 
 /-! ### Computations -/
 
-/-- **`force x : C` at `SemJN`** (Core's `force_compatC`): the thunk at its own world. -/
-theorem force_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {C : CTy}
-    (h : Ctx.SoloP Γ i (.thunk C)) : SemJN (ℍ := ℍ) Δ Γ (forceE C (.var i)) (.comp C) := by
+/-- **`force x : C` at `SemJN`** (Core's `force_compatC`): the thunk at its own world, `x` at
+`U C` or at `Code⟨N; E⟩ C`.  `[spec §68]` -/
+theorem force_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {T : VTy} {C : CTy}
+    (h : Ctx.SoloP Γ i T) (hT : T.forceTy = some C) :
+    SemJN (ℍ := ℍ) Δ Γ (forceE C (.var i)) (.comp C) := by
   intro δ γ Θ c n ls ρ _ hΘ hc hlw hg
   obtain ⟨v, hv, hval⟩ := gN_soloP h (h.lt_of_liveWithin hlw) hg
+  -- the slot at `U C`, or at `Code⟨N; E⟩ C` read at its `U C` conjunct  `[spec §68]`
+  have hU : vN (ℍ := ℍ) (.thunk C) δ Θ n v ρ := by
+    cases T <;> simp only [VTy.forceTy, Option.some.injEq, reduceCtorEq] at hT
+    · subst hT; exact hval
+    · subst hT; exact hval.2
   show cN (ℍ := ℍ) C δ Θ c n ls (substAll γ (forceE C (.var i))) ρ
   rw [substAll_forceE hv]
-  exact hval Θ (LocTy.extR_refl Θ ρ) hΘ c hc ls
+  exact hU Θ (LocTy.extR_refl Θ ρ) hΘ c hc ls
 
 /-- **`λx. M : A ⊸ C` at `SemJN`** (Core's `lam_compatC`): the arrow runs at the world and the
 view it is applied at; its context is read at the application's index (`gN_le`). -/

@@ -133,7 +133,7 @@ theorem not_release_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
     · simp [withPair, Expr.val, Val.lam] at hwp
     · rcases hx with ⟨-, T₀, hT₀, hc₀⟩ | ⟨d, he, -⟩ | ⟨ho, -⟩
       · rcases hT₀ with ⟨X, rfl, hX⟩ | ⟨a, A', rfl⟩
-        · have hα := vview_thunk hc₀
+        · have hα := vview_thunk hc₀.val_thunk
           simp only [CTy.alphaB, Bool.and_eq_true] at hα
           rcases hX with ⟨X', rfl⟩ | ⟨a, X', rfl⟩ | ⟨a, X', rfl⟩ | rfl <;>
             cases A <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true, false_and] at hα
@@ -141,7 +141,7 @@ theorem not_release_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
           · exact hi _ _ rfl
           · exact hm _ _ rfl
           · exact hu rfl
-        · have hα := vview_bang_thunk hc₀
+        · have hα := vview_bang_thunk hc₀.val_thunk
           simp only [CTy.alphaB, Bool.and_eq_true] at hα
           cases A <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true, false_and] at hα
           exact hfam _ rfl
@@ -175,9 +175,7 @@ theorem not_release_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
       cases A <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true, false_and] at hα
       simp [VTy.persistent] at hAp
     · have := hcl.comp_rigid (rigid_arr _ _); simp [CTy.alphaB] at this
-    · rcases hcl with hcl | ⟨-, hcl⟩
-      · obtain ⟨S, Y, he, -⟩ := hcl; exact effOf_ne_arr _ _ _ _ he.symm
-      · obtain ⟨S, Y, he, -⟩ := hcl; exact effOf_ne_arr _ _ _ _ he.symm
+    · obtain ⟨S, Y, he⟩ := hcl.comp_effOf; exact effOf_ne_arr _ _ _ _ he.symm
     · simp [withPair, Expr.val, Val.lam] at hwp
     · have := hx'.not_comp; simp [CTy.isRet] at this
   · -- `[let]`: `κ` at a row over `A`, `()` under `A`
@@ -192,7 +190,8 @@ theorem not_release_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
       · obtain ⟨-, rfl⟩ := effOf_inj he
         have := (kviewO ob (hv.of_alpha hTα)).1
         simp [VTy.Persistent, this] at hAp
-      · subst hC'
+      · obtain rfl := eq_thunk_of_forceTy hC' fun _ _ _ he => by
+          subst he; rcases ob with _ | d <;> simp [kBoxO, VTy.alphaB] at hTα
         rcases ob with _ | d <;> simp only [kBoxO, VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hTα
         cases C' <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hTα
         obtain ⟨D', he, hD'⟩ := hr''.ampNu (.inl ⟨_, _, rfl⟩)
@@ -586,14 +585,13 @@ theorem wb_view {Δ : LifeCtx} {Γ : Ctx VTy} {d : Expr} {j : Jdg} {T : VTy} {A 
       CTy.alphaB [] (.arr (cbUTy x bnd L B S) (CTy.effOf S R)) C = true ∧ L.persistent = false := by
   have hcls : ∀ D', Rigid D' → LamCls Γ D' j → CTy.alphaB [] D' (.arr A C) = true := by
     intro D' hD hcl
-    rcases hcl with ⟨D'', rfl, hα⟩ | hc | ⟨-, hc⟩
+    rcases hcl with ⟨D'', rfl, hα⟩ | hc
     · rcases hj with h' | ⟨S, h'⟩
       · cases h'
       · cases h'
         obtain ⟨_, _, he, -, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
         exact (hD.1 _ _ he).elim
-    · exact vview_thunk ((hc.at hj).trans hv)
-    · exact vview_bang_thunk ((hc.at hj).trans hv)
+    · exact hc.at_thunk hj hv
   rcases der_lam h _ rfl with ⟨A', D, hM, hcl⟩ | ⟨S, B, hM, hcl⟩ | ⟨x, b, Δ', S, C', hM, hcl⟩ |
     ⟨A', hM, hcl⟩ | ⟨M₁, M₂, hw⟩ | hx
   · have hα := hcls _ (rigid_arr _ _) hcl
@@ -606,13 +604,11 @@ theorem wb_view {Δ : LifeCtx} {Γ : Ctx VTy} {d : Expr} {j : Jdg} {T : VTy} {A 
     cases A <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true, false_and] at hα
     exact .inl rfl
   · have := hcls _ (rigid_all _ _ _) hcl; simp [CTy.alphaB] at this
-  · rcases hcl with hc | ⟨-, hc⟩
-    · have := vview_thunk ((hc.at hj).trans hv); simp [CTy.alphaB] at this
-    · have := vview_bang_thunk ((hc.at hj).trans hv); simp [CTy.alphaB] at this
+  · have := hcl.at_thunk hj hv; simp [CTy.alphaB] at this
   · simp [withPair, Expr.val, Val.lam] at hw
   · rcases hx with ⟨he, -⟩ | ⟨d', -, T₀, ⟨src, x, bnd, L, B, S, R, rfl, hL⟩, hc⟩ | ⟨ho, -⟩
     · simp [forget, Expr.val, Val.lam, unit'] at he
-    · have hα := vview_thunk ((hc.at hj).trans hv)
+    · have hα := vview_thunk (hc.at_thunk hj hv)
       simp only [withborUTy, CTy.alphaB, Bool.and_eq_true] at hα
       exact .inr ⟨x, bnd, L, B, S, R, hα.2, hL⟩
     · not_other ho
@@ -681,7 +677,7 @@ theorem at05_M {Δ : LifeCtx} {Γ : Ctx VTy} {W F : Expr} {j : Jdg}
     have hAp := vview_ref_np hv
     rcases hc.w with rfl | rfl
     · obtain ⟨T_w, hTw, hcw⟩ := der_var hf 0 rfl
-      rcases hcw with ⟨S', Y, he, -⟩ | ⟨C_w, rfl, hCw, hr'⟩
+      rcases hcw with ⟨S', Y, he, -⟩ | ⟨C_w, hTwC, hCw, hr'⟩
       · exact (effOf_ne_arr _ _ _ _ he.symm).elim
       · have hCwα : CTy.alphaB [] C_w (.arr A C) = true := by
           rcases rigid_or_ampNu hCw with hR | hN
@@ -690,7 +686,7 @@ theorem at05_M {Δ : LifeCtx} {Γ : Ctx VTy} {W F : Expr} {j : Jdg}
             cases he
             rcases hD' with ⟨_, _, h'⟩ | ⟨_, h'⟩ <;> cases h'
         obtain ⟨Δ', Γ', S', hW⟩ := hc.wt rfl _ (splitP_le_left hs _ _ hTw)
-        rcases wb_view hW (.inr ⟨S', rfl⟩) (.single (VS.alpha (A := .thunk C_w) hCwα)) with
+        rcases wb_view hW (.inr ⟨S', rfl⟩) ((vview_forceTy hTwC).tail (VS.alpha (A := .thunk C_w) hCwα)) with
           hp | ⟨x, bnd, L, B, S'', R, hα, hL⟩
         · simp [VTy.Persistent, hAp] at hp
         · have hC : Rigid C := by
@@ -711,9 +707,7 @@ theorem at05_M {Δ : LifeCtx} {Γ : Ctx VTy} {W F : Expr} {j : Jdg}
         cases A <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true, false_and] at hα
         simp [VTy.persistent] at hAp
       · have := hcl.comp_rigid (rigid_arr _ _); simp [CTy.alphaB] at this
-      · rcases hcl with hcl | ⟨-, hcl⟩
-        · obtain ⟨S'', Y, he, -⟩ := hcl; exact (effOf_ne_arr _ _ _ _ he.symm).elim
-        · obtain ⟨S'', Y, he, -⟩ := hcl; exact (effOf_ne_arr _ _ _ _ he.symm).elim
+      · obtain ⟨S'', Y, he⟩ := hcl.comp_effOf; exact (effOf_ne_arr _ _ _ _ he.symm).elim
       · simp [withPair, Expr.val, Val.lam] at hw
       · have := hx'.not_comp; simp [CTy.isRet] at this
   · -- `[let]`: `W` is `withborU dFlag` itself, its source at a row over `A`
@@ -723,12 +717,12 @@ theorem at05_M {Δ : LifeCtx} {Γ : Ctx VTy} {W F : Expr} {j : Jdg}
       subst hN
       obtain ⟨T, hT, hcT⟩ := der_var hY 2 rfl
       obtain ⟨A₀, hv⟩ := hc.c T (splitP_le_left hs _ _ hT)
-      rcases hcT with ⟨S'', Y, he, hY'⟩ | ⟨C', rfl, -, -⟩
+      rcases hcT with ⟨S'', Y, he, hY'⟩ | ⟨C', hC', -, -⟩
       · obtain ⟨-, rfl⟩ := effOf_inj he
         have hAp := vview_ref_np (hv.trans hY')
         have := wb_generic (d := dFlag) hU
         simp [VTy.Persistent, hAp] at this
-      · exact (vview_ref_thunk hv).elim
+      · exact (vview_ref_thunk (hv.trans (vview_forceTy hC'))).elim
   · cases hb
   · cases hu
   · cases hu
@@ -746,12 +740,11 @@ theorem not_at05F_cb {Δ : LifeCtx} {Γ : Ctx VTy} {S S' : Row} {x : BoCa.Lifeti
   have hcb : ∀ D, Rigid D → LamCls Γ D (.comp (CTy.effOf S (cbUTy x bnd L B S'))) →
       CTy.alphaB [] D (.all x bnd (.arr L (CTy.effOf S' (.box (.var x) B)))) = true := by
     intro D hD hcl
-    rcases hcl with ⟨D', he, hα⟩ | hcl | ⟨-, hcl⟩
+    rcases hcl with ⟨D', he, hα⟩ | hcl
     · cases he
       obtain ⟨_, _, he, -, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
       exact (hD.1 _ _ he).elim
-    · exact vview_thunk (hcl.at (.inr ⟨S, rfl⟩))
-    · exact vview_bang_thunk (hcl.at (.inr ⟨S, rfl⟩))
+    · exact hcl.at_thunk (.inr ⟨S, rfl⟩) .refl
   rcases der_lam h _ rfl with ⟨A', D, hM, hcl⟩ | ⟨S₀, B₀, hM, hcl⟩ |
     ⟨x', b', Δ', S₀, C', hM, hcl⟩ | ⟨A', hM, hcl⟩ | ⟨M₁, M₂, hw⟩ | hx
   · have := hcb _ (rigid_arr _ _) hcl; simp [CTy.alphaB] at this
@@ -797,23 +790,16 @@ theorem not_at05F_cb {Δ : LifeCtx} {Γ : Ctx VTy} {S S' : Row} {x : BoCa.Lifeti
       have := hcl'.comp_rigid hC'
       cases C' <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true]
         at hαC this
-    · rcases hcl' with hcl' | ⟨-, hcl'⟩
-      · obtain ⟨S'', Y, he, -⟩ := hcl'
-        cases C' <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true]
-          at hαC
-        exact effOf_ne_arr _ _ _ _ he.symm
-      · obtain ⟨S'', Y, he, -⟩ := hcl'
-        cases C' <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true]
-          at hαC
-        exact effOf_ne_arr _ _ _ _ he.symm
+    · obtain ⟨S'', Y, he⟩ := hcl'.comp_effOf
+      cases C' <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true]
+        at hαC
+      exact effOf_ne_arr _ _ _ _ he.symm
     · simp [withPair, Expr.val, Val.lam] at hw
     · have := hx'.not_comp
       cases C' <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true]
         at hαC
       simp [CTy.isRet] at this
-  · rcases hcl with hcl | ⟨-, hcl⟩
-    · have := vview_thunk (hcl.at (.inr ⟨S, rfl⟩)); simp [CTy.alphaB] at this
-    · have := vview_bang_thunk (hcl.at (.inr ⟨S, rfl⟩)); simp [CTy.alphaB] at this
+  · have := hcl.at_thunk (.inr ⟨S, rfl⟩) .refl; simp [CTy.alphaB] at this
   · simp [withPair, Expr.val, Val.lam] at hw
   · rcases hx with ⟨he, -⟩ | ⟨d, he, -⟩ | ⟨ho, -⟩
     · simp [forget, Expr.val, Val.lam, unit'] at he

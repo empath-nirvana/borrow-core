@@ -67,8 +67,8 @@ theorem topI : TTied [] [] Δ Γ (.topI i (.comp .top)) (.comp .top) :=
   ofAt fun _ => .topI
 
 theorem force {k : Nat} {C : CCTy} (h : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ k (.thunk C)) :
-    TTied [] [] Δ Γ (.force i (.comp C) k C) (.comp C) :=
-  ofAt fun _ => .force h
+    TTied [] [] Δ Γ (.force i (.comp C) k (.thunk C) C) (.comp C) :=
+  ofAt fun _ => .force h rfl
 
 theorem tensorI (u : Masks) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {t₁ t₂ : TExpr} {A B : CVTy}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
