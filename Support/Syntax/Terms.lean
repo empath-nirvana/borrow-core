@@ -103,6 +103,245 @@ def Val.subst (j : Nat) (s : Val) (v : Val) : Val := ⟨v.1.subst j s, v.2.subst
 @[simp] theorem Val.val_subst (j : Nat) (s v : Val) :
     (Val.subst j s v).val = v.val.subst j s := rfl
 
+/-! ### Shifting and substituting, executably
+
+`Expr.subst` shifts the value it substitutes at each binder it passes, which rebuilds the value
+each time, and `Expr.shift` and `Expr.subst` copy every node, changed or not. A closed value is
+unchanged by a shift, so substituting one needs no shift: `Expr.substFast` checks closedness
+once and substitutes without shifting, and both `Expr.substFast` and `Expr.shiftFast` keep each
+subterm they leave unchanged instead of copying it. `Expr.subst_eq_substFast` and
+`Expr.shift_eq_shiftFast` prove them equal to `Expr.subst` and `Expr.shift`, so compiled code
+runs them in their place (`@[csimp]`). Every statement still reads `Expr.subst` and
+`Expr.shift`. -/
+
+/-- Every free variable of `e` is below `k`. -/
+def Expr.closedAt (k : Nat) : Expr → Bool
+  | .var i         => decide (i < k)
+  | .unit          => true
+  | .pair e₁ e₂    => e₁.closedAt k && e₂.closedAt k
+  | .inj₁ e        => e.closedAt k
+  | .inj₂ e        => e.closedAt k
+  | .lam b         => b.closedAt (k + 1)
+  | .loc _         => true
+  | .prim _        => true
+  | .seq e₁ e₂     => e₁.closedAt k && e₂.closedAt k
+  | .letpair e₁ e₂ => e₁.closedAt k && e₂.closedAt (k + 2)
+  | .case e e₁ e₂  => e.closedAt k && e₁.closedAt (k + 1) && e₂.closedAt (k + 1)
+  | .app f a       => f.closedAt k && a.closedAt k
+
+/-- A shift at or above every free variable is the identity. -/
+theorem Expr.shift_of_closedAt : ∀ (e : Expr) {k : Nat} (d c : Nat),
+    e.closedAt k = true → k ≤ c → e.shift d c = e
+  | .var i, k, d, c, h, hc => by
+      simp only [closedAt, decide_eq_true_eq] at h
+      simp only [shift]; rw [if_pos (by omega)]
+  | .unit, _, _, _, _, _ => rfl
+  | .loc _, _, _, _, _, _ => rfl
+  | .prim _, _, _, _, _, _ => rfl
+  | .pair a b, k, d, c, h, hc => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [shift, a.shift_of_closedAt d c h.1 hc, b.shift_of_closedAt d c h.2 hc]
+  | .seq a b, k, d, c, h, hc => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [shift, a.shift_of_closedAt d c h.1 hc, b.shift_of_closedAt d c h.2 hc]
+  | .app a b, k, d, c, h, hc => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [shift, a.shift_of_closedAt d c h.1 hc, b.shift_of_closedAt d c h.2 hc]
+  | .inj₁ a, k, d, c, h, hc => by
+      simp only [closedAt] at h; simp only [shift, a.shift_of_closedAt d c h hc]
+  | .inj₂ a, k, d, c, h, hc => by
+      simp only [closedAt] at h; simp only [shift, a.shift_of_closedAt d c h hc]
+  | .lam b, k, d, c, h, hc => by
+      simp only [closedAt] at h; simp only [shift, b.shift_of_closedAt d (c + 1) h (by omega)]
+  | .letpair a b, k, d, c, h, hc => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [shift, a.shift_of_closedAt d c h.1 hc,
+        b.shift_of_closedAt d (c + 2) h.2 (by omega)]
+  | .case e a b, k, d, c, h, hc => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [shift, e.shift_of_closedAt d c h.1.1 hc,
+        a.shift_of_closedAt d (c + 1) h.1.2 (by omega), b.shift_of_closedAt d (c + 1) h.2 (by omega)]
+
+/-- A closed value is unchanged by a shift. -/
+theorem Val.shift_of_closed {s : Val} (h : s.val.closedAt 0 = true) (d c : Nat) :
+    s.shift d c = s :=
+  Subtype.ext (Expr.shift_of_closedAt s.val d c h (Nat.zero_le c))
+
+/-- `Expr.subst` of `s`, not shifted at the binders it passes. -/
+def Expr.substClosed (j : Nat) (s : Expr) : Expr → Expr
+  | .var i         => if i = j then s else if i > j then .var (i - 1) else .var i
+  | .unit          => .unit
+  | .pair e₁ e₂    => .pair (substClosed j s e₁) (substClosed j s e₂)
+  | .inj₁ e        => .inj₁ (substClosed j s e)
+  | .inj₂ e        => .inj₂ (substClosed j s e)
+  | .lam b         => .lam (substClosed (j + 1) s b)
+  | .loc ℓ         => .loc ℓ
+  | .prim p        => .prim p
+  | .seq e₁ e₂     => .seq (substClosed j s e₁) (substClosed j s e₂)
+  | .letpair e₁ e₂ => .letpair (substClosed j s e₁) (substClosed (j + 2) s e₂)
+  | .case e e₁ e₂  =>
+      .case (substClosed j s e) (substClosed (j + 1) s e₁) (substClosed (j + 1) s e₂)
+  | .app f a       => .app (substClosed j s f) (substClosed j s a)
+
+theorem Expr.substClosed_eq {s : Val} (hs : s.val.closedAt 0 = true) :
+    ∀ (e : Expr) (j : Nat), substClosed j s.val e = e.subst j s
+  | .var i, j => rfl
+  | .unit, _ | .loc _, _ | .prim _, _ => rfl
+  | .pair a b, j | .seq a b, j | .app a b, j => by
+      simp only [substClosed, subst, substClosed_eq hs a j, substClosed_eq hs b j]
+  | .inj₁ a, j | .inj₂ a, j => by simp only [substClosed, subst, substClosed_eq hs a j]
+  | .lam b, j => by
+      simp only [substClosed, subst, Val.shift_of_closed hs, substClosed_eq hs b (j + 1)]
+  | .letpair a b, j => by
+      simp only [substClosed, subst, Val.shift_of_closed hs, substClosed_eq hs a j,
+        substClosed_eq hs b (j + 2)]
+  | .case e a b, j => by
+      simp only [substClosed, subst, Val.shift_of_closed hs, substClosed_eq hs e j,
+        substClosed_eq hs a (j + 1), substClosed_eq hs b (j + 1)]
+
+/-- A node of one child rebuilt when its child changed (`some`), else unchanged (`none`). -/
+@[inline] def Expr.rebuild1 (k : Expr → Expr) : Option Expr → Option Expr
+  | none => none
+  | some a' => some (k a')
+
+/-- A node of two children rebuilt when either changed. -/
+@[inline] def Expr.rebuild2 (k : Expr → Expr → Expr) (a b : Expr) :
+    Option Expr → Option Expr → Option Expr
+  | none, none => none
+  | a', b' => some (k (a'.getD a) (b'.getD b))
+
+/-- A node of three children rebuilt when any changed. -/
+@[inline] def Expr.rebuild3 (k : Expr → Expr → Expr → Expr) (a b c : Expr) :
+    Option Expr → Option Expr → Option Expr → Option Expr
+  | none, none, none => none
+  | a', b', c' => some (k (a'.getD a) (b'.getD b) (c'.getD c))
+
+theorem Expr.rebuild2_getD (k : Expr → Expr → Expr) (a b : Expr) (oa ob : Option Expr) :
+    (rebuild2 k a b oa ob).getD (k a b) = k (oa.getD a) (ob.getD b) := by
+  cases oa <;> cases ob <;> rfl
+
+theorem Expr.rebuild3_getD (k : Expr → Expr → Expr → Expr) (a b c : Expr)
+    (oa ob oc : Option Expr) :
+    (rebuild3 k a b c oa ob oc).getD (k a b c) = k (oa.getD a) (ob.getD b) (oc.getD c) := by
+  cases oa <;> cases ob <;> cases oc <;> rfl
+
+/-- `substClosed j s e` when it differs from `e` (`some`), and `none` where it is `e`: a subterm
+with no variable at or above its index is kept, not copied. -/
+def Expr.substO (j : Nat) (s : Expr) : Expr → Option Expr
+  | .var i         => if i = j then some s else if i > j then some (.var (i - 1)) else none
+  | .unit          => none
+  | .pair e₁ e₂    => rebuild2 .pair e₁ e₂ (substO j s e₁) (substO j s e₂)
+  | .inj₁ e        => rebuild1 .inj₁ (substO j s e)
+  | .inj₂ e        => rebuild1 .inj₂ (substO j s e)
+  | .lam b         => rebuild1 .lam (substO (j + 1) s b)
+  | .loc _         => none
+  | .prim _        => none
+  | .seq e₁ e₂     => rebuild2 .seq e₁ e₂ (substO j s e₁) (substO j s e₂)
+  | .letpair e₁ e₂ => rebuild2 .letpair e₁ e₂ (substO j s e₁) (substO (j + 2) s e₂)
+  | .case e e₁ e₂  =>
+      rebuild3 .case e e₁ e₂ (substO j s e) (substO (j + 1) s e₁) (substO (j + 1) s e₂)
+  | .app f a       => rebuild2 .app f a (substO j s f) (substO j s a)
+
+theorem Expr.substO_getD (s : Expr) : ∀ (e : Expr) (j : Nat),
+    (substO j s e).getD e = substClosed j s e
+  | .var i, j => by
+      simp only [substO, substClosed]
+      split
+      · rfl
+      · split <;> rfl
+  | .unit, _ | .loc _, _ | .prim _, _ => rfl
+  | .pair a b, j => by
+      rw [substO, substClosed, ← substO_getD s a j, ← substO_getD s b j]
+      exact rebuild2_getD _ a b _ _
+  | .seq a b, j => by
+      rw [substO, substClosed, ← substO_getD s a j, ← substO_getD s b j]
+      exact rebuild2_getD _ a b _ _
+  | .app a b, j => by
+      rw [substO, substClosed, ← substO_getD s a j, ← substO_getD s b j]
+      exact rebuild2_getD _ a b _ _
+  | .letpair a b, j => by
+      rw [substO, substClosed, ← substO_getD s a j, ← substO_getD s b (j + 2)]
+      exact rebuild2_getD _ a b _ _
+  | .inj₁ a, j => by
+      rw [substO, substClosed, ← substO_getD s a j]
+      cases substO j s a <;> rfl
+  | .inj₂ a, j => by
+      rw [substO, substClosed, ← substO_getD s a j]
+      cases substO j s a <;> rfl
+  | .lam b, j => by
+      rw [substO, substClosed, ← substO_getD s b (j + 1)]
+      cases substO (j + 1) s b <;> rfl
+  | .case e a b, j => by
+      rw [substO, substClosed, ← substO_getD s e j, ← substO_getD s a (j + 1),
+        ← substO_getD s b (j + 1)]
+      exact rebuild3_getD _ e a b _ _ _
+
+/-- `e.shift d c` when it differs from `e` (`some`), and `none` where it is `e`. -/
+def Expr.shiftO (d : Nat) : Nat → Expr → Option Expr
+  | c, .var i         => if i < c then none else some (.var (i + d))
+  | _, .unit          => none
+  | c, .pair e₁ e₂    => rebuild2 .pair e₁ e₂ (shiftO d c e₁) (shiftO d c e₂)
+  | c, .inj₁ e        => rebuild1 .inj₁ (shiftO d c e)
+  | c, .inj₂ e        => rebuild1 .inj₂ (shiftO d c e)
+  | c, .lam b         => rebuild1 .lam (shiftO d (c + 1) b)
+  | _, .loc _         => none
+  | _, .prim _        => none
+  | c, .seq e₁ e₂     => rebuild2 .seq e₁ e₂ (shiftO d c e₁) (shiftO d c e₂)
+  | c, .letpair e₁ e₂ => rebuild2 .letpair e₁ e₂ (shiftO d c e₁) (shiftO d (c + 2) e₂)
+  | c, .case e e₁ e₂  =>
+      rebuild3 .case e e₁ e₂ (shiftO d c e) (shiftO d (c + 1) e₁) (shiftO d (c + 1) e₂)
+  | c, .app f a       => rebuild2 .app f a (shiftO d c f) (shiftO d c a)
+
+theorem Expr.shiftO_getD (d : Nat) : ∀ (e : Expr) (c : Nat), (shiftO d c e).getD e = e.shift d c
+  | .var i, c => by
+      simp only [shiftO, shift]
+      split <;> rfl
+  | .unit, _ | .loc _, _ | .prim _, _ => rfl
+  | .pair a b, c => by
+      rw [shiftO, shift, ← shiftO_getD d a c, ← shiftO_getD d b c]
+      exact rebuild2_getD _ a b _ _
+  | .seq a b, c => by
+      rw [shiftO, shift, ← shiftO_getD d a c, ← shiftO_getD d b c]
+      exact rebuild2_getD _ a b _ _
+  | .app a b, c => by
+      rw [shiftO, shift, ← shiftO_getD d a c, ← shiftO_getD d b c]
+      exact rebuild2_getD _ a b _ _
+  | .letpair a b, c => by
+      rw [shiftO, shift, ← shiftO_getD d a c, ← shiftO_getD d b (c + 2)]
+      exact rebuild2_getD _ a b _ _
+  | .inj₁ a, c => by
+      rw [shiftO, shift, ← shiftO_getD d a c]
+      cases shiftO d c a <;> rfl
+  | .inj₂ a, c => by
+      rw [shiftO, shift, ← shiftO_getD d a c]
+      cases shiftO d c a <;> rfl
+  | .lam b, c => by
+      rw [shiftO, shift, ← shiftO_getD d b (c + 1)]
+      cases shiftO d (c + 1) b <;> rfl
+  | .case e a b, c => by
+      rw [shiftO, shift, ← shiftO_getD d e c, ← shiftO_getD d a (c + 1),
+        ← shiftO_getD d b (c + 1)]
+      exact rebuild3_getD _ e a b _ _ _
+
+/-- `Expr.shift`, keeping each subterm the shift leaves unchanged. -/
+def Expr.shiftFast (d c : Nat) (e : Expr) : Expr := (shiftO d c e).getD e
+
+@[csimp] theorem Expr.shift_eq_shiftFast : @Expr.shift = @Expr.shiftFast := by
+  funext d c e
+  exact (shiftO_getD d e c).symm
+
+/-- `Expr.subst`, substituting a closed value without shifting it, and keeping each subterm the
+substitution leaves unchanged. -/
+def Expr.substFast (j : Nat) (s : Val) (e : Expr) : Expr :=
+  if s.val.closedAt 0 then (substO j s.val e).getD e else e.subst j s
+
+@[csimp] theorem Expr.subst_eq_substFast : @Expr.subst = @Expr.substFast := by
+  funext j s e
+  unfold Expr.substFast
+  split
+  · rw [substO_getD]; exact (Expr.substClosed_eq ‹_› e j).symm
+  · rfl
+
 end BoCa
 
 namespace BoCa.Val

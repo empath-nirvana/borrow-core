@@ -37,6 +37,144 @@ def runSource (fuel : Nat) (μ : Mem) (e : Expr) : Except String (Val × Mem) :=
     | .stuck r => .error s!"source interpreter: stuck ({repr r})"
     | .op _ _ _ => .error "source interpreter: an operation no handler catches"
 
+/-! ### The run, executably
+
+`runSource` steps the whole term each time, so a step costs the depth of its evaluation context.
+`runFocused` keeps the context as a stack of frames and steps the focus alone: a step of the
+focus is a step of the whole term (`plugAll_next`), and moving the focus into or out of a frame
+changes nothing, the term being the same. Where the focus does anything but step (it is stuck,
+or stops at an operation a frame outside may catch), the whole term takes the step, and the run
+goes on from it. `runSource_eq_runFocused` proves the
+two equal, so compiled code runs `runFocused` in `runSource`'s place (`@[csimp]`). -/
+
+/-- A frame of the evaluation context the run keeps as a stack: the frames of `step` whose hole
+is stepped first, without condition (`[spec §3]`, row 3.37). -/
+inductive Frame where
+  | pairL   (e₂ : Expr)
+  | pairR   (v : Val)
+  | inj₁
+  | inj₂
+  | seq     (e₂ : Expr)
+  | letpair (e₂ : Expr)
+  | case    (e₁ e₂ : Expr)
+  | appR    (f : Expr)
+
+/-- `F[e]`. -/
+def Frame.plug : Frame → Expr → Expr
+  | .pairL e₂, e    => .pair e e₂
+  | .pairR v, e     => .pair v.1 e
+  | .inj₁, e        => .inj₁ e
+  | .inj₂, e        => .inj₂ e
+  | .seq e₂, e      => .seq e e₂
+  | .letpair e₂, e  => .letpair e e₂
+  | .case e₁ e₂, e  => .case e e₁ e₂
+  | .appR f, e      => .app f e
+
+/-- The stack `K`, innermost first, filled with `e`. -/
+def plugAll : List Frame → Expr → Expr
+  | [], e => e
+  | F :: K, e => plugAll K (F.plug e)
+
+theorem Frame.step_next {μ μ' : Mem} {e e' : Expr} (F : Frame)
+    (h : step wasmHost μ e = .next μ' e') :
+    step wasmHost μ (F.plug e) = .next μ' (F.plug e') := by
+  cases F with
+  | pairR v => simp only [Frame.plug, step, step_of_isVal wasmHost μ v.2, h]
+  | _ => simp only [Frame.plug, step, h]
+
+theorem plugAll_next {μ μ' : Mem} : ∀ (K : List Frame) {e e' : Expr},
+    step wasmHost μ e = .next μ' e' → step wasmHost μ (plugAll K e) = .next μ' (plugAll K e')
+  | [], _, _, h => h
+  | F :: K, _, _, h => plugAll_next K (F.step_next h)
+
+/-- The frame whose hole is the first part of `e` to step, and that part, when it is not a
+value. -/
+def decomp : Expr → Option (Frame × Expr)
+  | .pair a b =>
+    if ha : isValB a = true then
+      if isValB b then none else some (.pairR ⟨a, isVal_of_isValB a ha⟩, b)
+    else some (.pairL b, a)
+  | .inj₁ a => if isValB a then none else some (.inj₁, a)
+  | .inj₂ a => if isValB a then none else some (.inj₂, a)
+  | .seq a b => if isValB a then none else some (.seq b, a)
+  | .letpair a b => if isValB a then none else some (.letpair b, a)
+  | .case a b c => if isValB a then none else some (.case b c, a)
+  | .app f a => if isValB a then none else some (.appR f, a)
+  | _ => none
+
+theorem decomp_plug : ∀ {e e₀ : Expr} {F : Frame}, decomp e = some (F, e₀) → F.plug e₀ = e
+  | .pair a b, _, _, h => by
+      simp only [decomp] at h
+      split at h
+      · split at h
+        · cases h
+        · cases h; rfl
+      · cases h; rfl
+  | .inj₁ _, _, _, h | .inj₂ _, _, _, h | .seq _ _, _, _, h | .letpair _ _, _, _, h
+  | .case _ _ _, _, _, h | .app _ _, _, _, h => by
+      simp only [decomp] at h
+      split at h
+      · cases h
+      · cases h; rfl
+  | .var _, _, _, h | .unit, _, _, h | .lam _, _, _, h | .loc _, _, _, h | .prim _, _, _, h => by
+      simp [decomp] at h
+
+/-- `runSource fuel μ (plugAll K e)`, stepping the focus `e` alone. Each move of the focus spends
+one of `gas`; when `gas` is spent the run goes on as `runSource`. -/
+def runFocus : Nat → Nat → Mem → List Frame → Expr → Except String (Val × Mem)
+  | fuel, 0, μ, K, e => runSource fuel μ (plugAll K e)
+  | fuel, g + 1, μ, K, e =>
+    match valOf? e, K with
+    | some _, F :: K' => runFocus fuel g μ K' (F.plug e)
+    | some _, [] => runSource fuel μ e
+    | none, _ =>
+      match decomp e with
+      | some (F, e₀) => runFocus fuel g μ (F :: K) e₀
+      | none =>
+        match fuel with
+        | 0 => runSource 0 μ (plugAll K e)
+        | n + 1 =>
+          match step wasmHost μ e with
+          | .next μ' e' => runFocus n g μ' K e'
+          | _ =>
+            match step wasmHost μ (plugAll K e) with
+            | .next μ' e' => runFocus n g μ' [] e'
+            | _ => runSource (n + 1) μ (plugAll K e)
+
+theorem runFocus_eq : ∀ (g fuel : Nat) (μ : Mem) (K : List Frame) (e : Expr),
+    runFocus fuel g μ K e = runSource fuel μ (plugAll K e)
+  | 0, _, _, _, _ => by simp only [runFocus]
+  | g + 1, fuel, μ, K, e => by
+    unfold runFocus
+    split
+    · rw [runFocus_eq g]; rfl
+    · rfl
+    · split
+      · rename_i F e₀ hd
+        rw [runFocus_eq g, plugAll, decomp_plug hd]
+      · split
+        · rfl
+        · rename_i n
+          split
+          · rename_i μ' e' hs
+            rw [runFocus_eq g]
+            conv => rhs; unfold runSource
+            rw [plugAll_next _ hs]
+          · split
+            · rename_i μ' e' hs
+              rw [runFocus_eq g]
+              conv => rhs; unfold runSource
+              rw [hs]; rfl
+            · rfl
+
+/-- `runSource`, stepping the focus alone (`runFocus`). -/
+def runFocused (fuel : Nat) (μ : Mem) (e : Expr) : Except String (Val × Mem) :=
+  runFocus fuel (2 ^ 62) μ [] e
+
+@[csimp] theorem runSource_eq_runFocused : @runSource = @runFocused := by
+  funext fuel μ e
+  exact (runFocus_eq _ fuel μ [] e).symm
+
 /-- The source interpreter's report: the value and the number of cells left. -/
 def interpSource (fuel : Nat) (e : Expr) : Except String Output := do
   let (v, μ) ← runSource fuel Mem.empty e

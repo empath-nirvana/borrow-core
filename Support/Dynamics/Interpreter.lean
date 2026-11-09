@@ -313,6 +313,128 @@ def step (H : Host) (μ : Mem) : Expr → Step
     | .stuck r    => .stuck r
     | .op r K p   => catchOp μ f r K p
 
+/-! ### `step`, executably
+
+`step` at a value rebuilds the value, node by node, to answer `.value`. `stepFast` answers a
+value with the term itself (`valOf?`), and steps every other term as `step` does;
+`step_eq_stepFast` proves the two equal, so compiled code runs `stepFast` in `step`'s place
+(`@[csimp]`). Every statement still reads `step`. -/
+
+/-- `step` at a value answers the value. -/
+theorem step_of_isVal (H : Host) (μ : Mem) : ∀ {e : Expr} (h : IsVal e),
+    step H μ e = .value ⟨e, h⟩
+  | _, .unit | _, .lam | _, .loc | _, .prim => rfl
+  | _, .pair h₁ h₂ => by simp only [step, step_of_isVal H μ h₁, step_of_isVal H μ h₂]; rfl
+  | _, .inj₁ h => by simp only [step, step_of_isVal H μ h]; rfl
+  | _, .inj₂ h => by simp only [step, step_of_isVal H μ h]; rfl
+  | _, .storeV h => by simp only [step, step_of_isVal H μ h, effApp?, delta]; rfl
+
+/-- `step`, answering a value without rebuilding it. -/
+def stepFast (H : Host) (μ : Mem) (e : Expr) : Step :=
+  match valOf? e with
+  | some v => .value v
+  | none =>
+  match e with
+  | .var _  => .stuck .unboundVar
+  | .unit   => .value .unit
+  | .lam b  => .value (.lam b)
+  | .loc ℓ  => .value (.loc ℓ)
+  | .prim p => .value (.prim p)
+
+  | .pair e₁ e₂ =>
+    match stepFast H μ e₁ with
+    | .value v₁    => match stepFast H μ e₂ with
+                      | .value v₂    => .value (.pair v₁ v₂)
+                      | .next μ' e₂' => .next μ' (.pair e₁ e₂')
+                      | .stuck r     => .stuck r
+                      | .op r K p    => .op r (.pairR v₁ K) p
+    | .next μ' e₁' => .next μ' (.pair e₁' e₂)
+    | .stuck r     => .stuck r
+    | .op r K p    => .op r (.pairL K e₂) p
+
+  | .inj₁ e => match stepFast H μ e with
+    | .value v    => .value (.inj₁ v)
+    | .next μ' e' => .next μ' (.inj₁ e')
+    | .stuck r    => .stuck r
+    | .op r K p   => .op r (.inj₁ K) p
+
+  | .inj₂ e => match stepFast H μ e with
+    | .value v    => .value (.inj₂ v)
+    | .next μ' e' => .next μ' (.inj₂ e')
+    | .stuck r    => .stuck r
+    | .op r K p   => .op r (.inj₂ K) p
+
+  | .seq e₁ e₂ => match stepFast H μ e₁ with
+    | .value ⟨.unit, _⟩ => .next μ e₂
+    | .value _          => .stuck .notAUnit
+    | .next μ' e₁'      => .next μ' (.seq e₁' e₂)
+    | .stuck r          => .stuck r
+    | .op r K p         => .op r (.seq K e₂) p
+
+  | .letpair e₁ e₂ => match stepFast H μ e₁ with
+    | .value ⟨.pair a b, h⟩ =>
+        .next μ ((e₂.subst 0 (Val.shift 1 0 ⟨b, h.pair_right⟩)).subst 0 ⟨a, h.pair_left⟩)
+    | .value _     => .stuck .notAPair
+    | .next μ' e₁' => .next μ' (.letpair e₁' e₂)
+    | .stuck r     => .stuck r
+    | .op r K p    => .op r (.letpair K e₂) p
+
+  | .case e e₁ e₂ => match stepFast H μ e with
+    | .value ⟨.inj₁ a, h⟩ => .next μ (e₁.subst 0 ⟨a, h.inj₁_inv⟩)
+    | .value ⟨.inj₂ a, h⟩ => .next μ (e₂.subst 0 ⟨a, h.inj₂_inv⟩)
+    | .value _            => .stuck .notASum
+    | .next μ' e'         => .next μ' (.case e' e₁ e₂)
+    | .stuck r            => .stuck r
+    | .op r K p           => .op r (.case K e₁ e₂) p
+
+  | .app f a => match stepFast H μ a with
+    | .value v    => match effApp? μ f v with
+                     | some st => st
+                     | none =>
+                       match stepFast H μ f with
+                       | .value w    => match w.val with
+                                        | .lam b      => .next μ (b.subst 0 v)
+                                        | .prim p     => delta H μ (.prim p) v
+                                        | .app f' a'  => delta H μ (.app f' a') v
+                                        | _           => .stuck .notAFunction
+                       | .next μ' f' => .next μ' (.app f' a)
+                       | .stuck r    => .stuck r
+                       | .op r K p   => .op r (.appL K v) p
+    | .next μ' a' => .next μ' (.app f a')
+    | .stuck r    => .stuck r
+    | .op r K p   => catchOp μ f r K p
+
+theorem stepFast_eq (H : Host) (μ : Mem) : ∀ e : Expr, stepFast H μ e = step H μ e := by
+  intro e
+  induction e with
+  | var => simp [stepFast, step, valOf?, isValB]
+  | unit | lam | loc | prim =>
+    unfold stepFast; split
+    · rename_i v hv
+      simp only [valOf?] at hv; split at hv <;> simp at hv; subst hv; rfl
+    · rfl
+  | pair _ _ ih₁ ih₂ | seq _ _ ih₁ ih₂ | letpair _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ =>
+    unfold stepFast; split
+    · rename_i v hv
+      simp only [valOf?] at hv; split at hv <;> simp at hv; subst hv
+      exact (step_of_isVal H μ _).symm
+    · simp only [step, ih₁, ih₂]
+  | inj₁ _ ih | inj₂ _ ih =>
+    unfold stepFast; split
+    · rename_i v hv
+      simp only [valOf?] at hv; split at hv <;> simp at hv; subst hv
+      exact (step_of_isVal H μ _).symm
+    · simp only [step, ih]
+  | case _ _ _ ih₀ _ _ =>
+    unfold stepFast; split
+    · rename_i v hv
+      simp only [valOf?] at hv; split at hv <;> simp at hv; subst hv
+      exact (step_of_isVal H μ _).symm
+    · simp only [step, ih₀]
+
+@[csimp] theorem step_eq_stepFast : @step = @stepFast := by
+  funext H μ e; exact (stepFast_eq H μ e).symm
+
 /-- Outcome of a bounded run. Fuel keeps everything total. -/
 inductive Outcome where
   | value   (v : Val) (leaked : Bool)

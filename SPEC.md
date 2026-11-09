@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.51 · 2026-11-07
+Version 1.52 · 2026-11-07
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -12414,6 +12414,20 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.52** (2026-11-07) — #884: the source interpreter (`bcc interp`, `Support`'s `step`) runs
+  faster; what it computes is unchanged. Compiled code runs `Expr.substFast` in place of
+  `Expr.subst` (a closed value is substituted without shifting it at each binder, and a subterm
+  the substitution leaves unchanged is kept, not copied) and `stepFast` in place of `step` (a
+  value answers itself, not rebuilt), `Expr.shiftFast` in place of `Expr.shift` (an unchanged
+  subterm is kept), and `runFocused` in place of the driver's `runSource` (the evaluation context
+  is kept as a stack of frames and the focus alone is stepped, so a step no longer costs the
+  context's depth; a focus that is stuck or stops at an operation has the whole term step). Each
+  is by `@[csimp]` over a proof that the two are equal (`Expr.subst_eq_substFast`,
+  `step_eq_stepFast`, `Expr.shift_eq_shiftFast`, `runSource_eq_runFocused`). Every statement still
+  reads `Expr.subst`, `Expr.shift`, `step` and `runSource`, and kernel evaluation (`decide`) is
+  unchanged. No spec text describes the
+  interpreter's representation; nothing in `Paper/` or `Core/` changes, and every golden is the
+  same.
 - **1.51** (2026-11-07) — §18, §19 *Borrows*, §36 (#887): a load block (`borrow imm *g { 'y, v -> … }`) whose
   body performs abortive operations elaborates to `withloadU`, `withload` at the callback's row,
   as the cell and slice borrows elaborate to their unwinding forms (`Const.unwinding`,
