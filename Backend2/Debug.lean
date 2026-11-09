@@ -36,6 +36,16 @@ def ppVT (A : VTy) (ms : MachSet := {}) : String := match ofV ms A with
   | .ok a => a.pp
   | .error e => s!"<{e}>"
 
+-- [spec §68] A key's type is printed exactly where `ofV` refuses it, as at a per-code closure type.
+deriving instance Repr for BoCa.Fig16.LogRel.Core.VTy, BoCa.Fig16.LogRel.Core.CTy
+
+/-- A type in a `use` key (`useKey`): its LIR type, as `ppVT` prints it; a type `ofV` refuses,
+as one holding a per-code closure type `Code⟨N; E⟩ C`, is its exact serialisation, the code `N` in
+full, so that two codes are two keys.  `[spec §68]` -/
+def keyVT (A : VTy) (ms : MachSet := {}) : String := match ofV ms A with
+  | .ok a => a.pp
+  | .error _ => "exact:" ++ reprStr A
+
 def ppMasks (m : Masks) : String :=
   String.ofList (m.ms.map fun (a, b) => match a, b with
     | true, true => 'B' | true, false => 'L' | false, true => 'R' | false, false => '.')

@@ -64,7 +64,7 @@ def consumableAtB : Bool → CVTy → Bool
   | _, .thunk (.amp _ (.ret .unit)) => true
   | _, .thunk (.nu (.amp C (.ret R))) =>
       CTy.nuOkB (.amp C (.ret R)) && VTy.clB 0 R && consumableAtB false R
-  | _, .thunk _ => false
+  | _, .thunk _ | _, .code _ _ _ => false
   | _, .unit | _, .zero | _, .int _ | _, .unk | _, .bang _ | _, .imm _ _ | _, .mut _ _ => true
   | alg, .fam (.ref A) => if alg && !clB 0 A then consumableAtB true A else consumableAtB false A
   | _, .fam (.imm _ _) => true
@@ -84,6 +84,7 @@ theorem consumableAtB_thunk : ∀ (b : Bool) (C : CCTy), consumableAtB b (.thunk
   | _, .amp _ (.ret (.mut _ _)) | _, .amp _ (.ret (.box _ _)) | _, .amp _ (.ret (.bang _))
   | _, .amp _ (.ret .unk) | _, .amp _ (.ret (.tvar _)) | _, .amp _ (.ret (.mu _))
   | _, .amp _ (.ret (.int _)) | _, .amp _ (.ret (.fam _)) | _, .amp _ (.ret (.opq _))
+  | _, .amp _ (.ret (.code _ _ _))
   | _, .amp _ (.arr _ _) | _, .amp _ (.amp _ _) | _, .amp _ .top | _, .amp _ (.all _ _ _)
   | _, .amp _ (.nu _) | _, .amp _ (.eff _ _ _ _ _ _ _ _) => rfl
 
@@ -106,9 +107,9 @@ theorem consumableAtB_closed : ∀ (A : CVTy), clB 0 A = true → consumableAtB 
   | .tvar _, h => by simp [BoCa.Fig16.LogRel.Core.FoldP.clB] at h
   | .thunk C, _ => consumableAtB_thunk true C
   | .unit, _ | .zero, _ | .box _ _, _ | .bang _, _ | .unk, _ | .int _, _
-  | .opq _, _ | .imm _ _, _ | .mut _ _, _ => rfl
+  | .opq _, _ | .imm _ _, _ | .mut _ _, _ | .code _ _ _, _ => rfl
   | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
-  | .fam (.thunk _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
+  | .fam (.thunk _), _ | .fam (.code _ _ _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
   | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
   | .fam (.fam _), _ | .fam (.opq _), _ => rfl
 
@@ -169,14 +170,14 @@ theorem consumableAtB_sound : ∀ (A : CVTy), consumableAtB false A = true → C
   | .thunk (.amp _ (.ret (.bang _))), h | .thunk (.amp _ (.ret .unk)), h
   | .thunk (.amp _ (.ret (.tvar _))), h | .thunk (.amp _ (.ret (.mu _))), h
   | .thunk (.amp _ (.ret (.int _))), h | .thunk (.amp _ (.ret (.fam _))), h
-  | .thunk (.amp _ (.ret (.opq _))), h
+  | .thunk (.amp _ (.ret (.opq _))), h | .thunk (.amp _ (.ret (.code _ _ _))), h
   | .thunk (.amp _ (.arr _ _)), h
   | .thunk (.amp _ (.amp _ _)), h | .thunk (.amp _ .top), h
   | .thunk (.amp _ (.all _ _ _)), h | .thunk (.amp _ (.nu _)), h => by simp [consumableAtB] at h
   | .unit, _ => .unit
   | .zero, _ => .zero
   | .int _, _ => .int
-  | .opq _, h => by simp [consumableAtB] at h
+  | .opq _, h | .code _ _ _, h => by simp [consumableAtB] at h
   | .unk, _ => .unk
   | .bang _, _ => .bang
   | .imm _ _, _ => .imm
@@ -185,7 +186,7 @@ theorem consumableAtB_sound : ∀ (A : CVTy), consumableAtB false A = true → C
   | .fam (.imm _ _), _ => .arrayImm
   | .fam (.mut _ _), _ => .arrayMut
   | .fam .unit, h | .fam (.tensor _ _), h | .fam .zero, h | .fam (.sum _ _), h
-  | .fam (.thunk _), h | .fam (.box _ _), h
+  | .fam (.thunk _), h | .fam (.code _ _ _), h | .fam (.box _ _), h
   | .fam (.bang _), h | .fam .unk, h | .fam (.tvar _), h | .fam (.mu _), h
   | .fam (.int _), h | .fam (.fam _), h => by simp [consumableAtB] at h
 
@@ -277,7 +278,7 @@ theorem consumableAtB_soundA : ∀ (A : CVTy), consumableAtB true A = true → �
   | .thunk (.amp _ (.ret (.bang _))), h, _ | .thunk (.amp _ (.ret .unk)), h, _
   | .thunk (.amp _ (.ret (.tvar _))), h, _ | .thunk (.amp _ (.ret (.mu _))), h, _
   | .thunk (.amp _ (.ret (.int _))), h, _ | .thunk (.amp _ (.ret (.fam _))), h, _
-  | .thunk (.amp _ (.ret (.opq _))), h, _
+  | .thunk (.amp _ (.ret (.opq _))), h, _ | .thunk (.amp _ (.ret (.code _ _ _))), h, _
   | .thunk (.amp _ (.arr _ _)), h, _
   | .thunk (.amp _ (.amp _ _)), h, _ | .thunk (.amp _ .top), h, _
   | .thunk (.amp _ (.all _ _ _)), h, _ | .thunk (.amp _ (.nu _)), h, _ => by simp [consumableAtB] at h
@@ -288,11 +289,11 @@ theorem consumableAtB_soundA : ∀ (A : CVTy), consumableAtB true A = true → �
   | .bang A, _, Bs => algConsumeLeaf (.bang A) .bang Bs
   | .imm a A, _, Bs => algConsumeLeaf (.imm a A) .imm Bs
   | .mut a A, _, Bs => algConsumeLeaf (.mut a A) .mut Bs
-  | .opq _, h, _ => by simp [consumableAtB] at h
+  | .opq _, h, _ | .code _ _ _, h, _ => by simp [consumableAtB] at h
   | .fam (.imm a A), _, Bs => algConsumeLeaf (.fam (.imm a A)) .arrayImm Bs
   | .fam (.mut a A), _, Bs => algConsumeLeaf (.fam (.mut a A)) .arrayMut Bs
   | .fam .unit, h, _ | .fam (.tensor _ _), h, _ | .fam .zero, h, _ | .fam (.sum _ _), h, _
-  | .fam (.thunk _), h, _ | .fam (.box _ _), h, _
+  | .fam (.thunk _), h, _ | .fam (.code _ _ _), h, _ | .fam (.box _ _), h, _
   | .fam (.bang _), h, _ | .fam .unk, h, _ | .fam (.tvar _), h, _ | .fam (.mu _), h, _
   | .fam (.int _), h, _ | .fam (.fam _), h, _ | .fam (.opq _), h, _ => by simp [consumableAtB] at h
 end
@@ -343,7 +344,7 @@ theorem consumableAtB_complete : ∀ A : CVTy, Consumable A → consumableAtB fa
   | .thunk (.amp _ (.ret (.bang _))), h | .thunk (.amp _ (.ret .unk)), h
   | .thunk (.amp _ (.ret (.tvar _))), h | .thunk (.amp _ (.ret (.mu _))), h
   | .thunk (.amp _ (.ret (.int _))), h | .thunk (.amp _ (.ret (.fam _))), h
-  | .thunk (.amp _ (.ret (.opq _))), h
+  | .thunk (.amp _ (.ret (.opq _))), h | .thunk (.amp _ (.ret (.code _ _ _))), h
   | .thunk (.amp _ (.arr _ _)), h
   | .thunk (.amp _ (.amp _ _)), h | .thunk (.amp _ .top), h
   | .thunk (.amp _ (.all _ _ _)), h | .thunk (.amp _ (.nu _)), h
@@ -355,7 +356,7 @@ theorem consumableAtB_complete : ∀ A : CVTy, Consumable A → consumableAtB fa
       | array h => simpa [consumableAtB] using consumableAtB_complete A h
   | .fam (.imm _ _), _ | .fam (.mut _ _), _ => rfl
   | .fam .unit, h | .fam (.tensor _ _), h | .fam .zero, h | .fam (.sum _ _), h
-  | .fam (.thunk _), h | .fam (.box _ _), h
+  | .fam (.thunk _), h | .fam (.code _ _ _), h | .fam (.box _ _), h
   | .fam (.bang _), h | .fam .unk, h | .fam (.tvar _), h | .fam (.mu _), h
   | .fam (.int _), h | .fam (.fam _), h | .fam (.opq _), h => by cases h
 

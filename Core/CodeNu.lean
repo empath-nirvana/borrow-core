@@ -4,9 +4,9 @@ import Core.Nu
 /-!
 # Core — the code predicate and `unfold`'s codata at its own code  `[spec §68]`
 
-`𝒱⟦Code⟨N; E⟩ C⟧`, stated over existing definitions: the value is the code `N` closed by a list
-of captured values whose tuple is in `𝒱⟦E⟧` at the value's whole resource (`codeP`), and it is
-in `𝒱⟦U C⟧` (`codeRelC`).
+`𝒱⟦Code⟨N; E⟩ C⟧`: the value is the code `N` closed by a list of captured values whose tuple is
+in `𝒱⟦E⟧` at the value's whole resource (`codeP`), and it is in `𝒱⟦U C⟧` (`codeRelC`); `vCE`'s
+clause at `VTy.code` is this predicate (`vCE_code`).
 
 `unfold step s` is `etaN C g s`, the code `etaCode C` closed by `[g, s]` (`etaN_code`), at the
 environment type `!G ⊗ (S ⊗ 1)` (`etaEnv`). `nuOutK`'s step:
@@ -42,6 +42,16 @@ def codeRelC (N : Expr) (E : VTy) (C : CTy) (ls : List SRec) (δ : LSub) (v : Va
 /-- The code predicate is below `𝒱⟦U C⟧` (`erase`'s semantic content). -/
 theorem codeRelC_thunk {N : Expr} {E : VTy} {C : CTy} {ls : List SRec} {δ : LSub} {v : Val}
     {ρ : WRes} (h : codeRelC N E C ls δ v ρ) : vC true (.thunk C) ls δ v ρ := h.2
+
+/-- **`vCE`'s clause at `Code⟨N; E⟩ C` is the code predicate**, under every environment: the
+clause reads `E` and `C` at no environment.  `[spec §68]` -/
+theorem vCE_code {η : Option (Nat → TEnt)} {N : Expr} {E : VTy} {C : CTy} {ls : List SRec}
+    {δ : LSub} {v : Val} {ρ : WRes} :
+    vCE η true (.code N E C) ls δ v ρ ↔ codeRelC N E C ls δ v ρ := Iff.rfl
+
+/-- In the observable view a code value is unconstrained, as a `U C` one is.  `[spec §68]` -/
+theorem vCE_code_obs {η : Option (Nat → TEnt)} {N : Expr} {E : VTy} {C : CTy} {ls : List SRec}
+    {δ : LSub} {v : Val} {ρ : WRes} : vCE η false (.code N E C) ls δ v ρ := trivial
 
 /-! ### `unfold`'s codata as a code -/
 

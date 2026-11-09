@@ -351,9 +351,11 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
         match rThunkF (at_ sp) r with
         | some r' => pure r'
         | none => err sp "internal error: a dead binder is used"
+      | .code _ _ _ => err sp "code types (§68) are not yet elaborated" -- [spec §68]
       | A => err sp s!"`thunk M` is checked against `{E.ppV A}`, which is not `U (F A)`"
     | .thunkv sp N =>
       match A with
+      | .code _ _ _ => err sp "code types (§68) are not yet elaborated" -- [spec §68]
       | .thunk C =>
         if hC : C.isRet = false then do
           let r ← chkC n E Δ T N C
@@ -560,6 +562,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | some i =>
         match h : T[i]? with
         | some (.thunk C) => pure ⟨C, rForce { sp, name := x.name } i C h⟩
+        | some (.code _ _ _) => err sp "code types (§68) are not yet elaborated" -- [spec §68]
         | some A => err sp s!"`force {x.name}` needs a `U` type, but `{x.name} : {E.ppV A}`"
         | none => err sp "internal error: variable out of range"
       | none => err x.span s!"`force` takes a variable, and `{x.name}` is not one in scope; bind it first"

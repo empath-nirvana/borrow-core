@@ -6,7 +6,8 @@ import Core.CodeNu
 
 `Core/CodeNu.lean` at `vN`/`cN`, the relation `goal791N` reads. `𝒱⟦Code⟨N; E⟩ C⟧` is the code
 conjunct (`codePN`: `v` is `N` closed by captured values whose tuple is in `𝒱⟦E⟧` at the same
-world, index and resource) and `𝒱⟦U C⟧` (`codeRelN`).
+world, index and resource) and `𝒱⟦U C⟧` (`codeRelN`); `vNE`'s clause at `VTy.code` is this
+predicate (`vNE_code`).
 
 * `etaN_codeRelN`, `codeRelN_etaN`: `unfold step s` is in the code predicate at `etaCode C` and
   `!G ⊗ (S ⊗ 1)`, and every value there is such a codata.
@@ -35,6 +36,16 @@ def codePN (N : Expr) (E : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ
 def codeRelN (N : Expr) (E : VTy) (C : CTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val)
     (ρ : WRes) : Prop :=
   codePN (ℍ := ℍ) N E δ Θ n v ρ ∧ vN (ℍ := ℍ) (.thunk C) δ Θ n v ρ
+
+/-- **`vNE`'s clause at `Code⟨N; E⟩ C` is the code predicate** at the chain's relation, under
+every environment.  `[spec §68]` -/
+theorem vNE_code {η : Option (Nat → TEntN)} {N : Expr} {E : VTy} {C : CTy} {δ : LSub} {Θ : LocTy}
+    {n : Nat} {v : Val} {ρ : WRes} :
+    vNE (ℍ := ℍ) η (.code N E C) δ Θ n v ρ ↔ codeRelN (ℍ := ℍ) N E C δ Θ n v ρ := Iff.rfl
+
+/-- `vOE` at `Code⟨N; E⟩ C` is `True`, as at `U C`.  `[spec §68]` -/
+theorem vOE_code {η : Option (Nat → TEntN)} {N : Expr} {E : VTy} {C : CTy} {δ : LSub} {Θ : LocTy}
+    {n : Nat} {v : Val} {ρ : WRes} : vOE (ℍ := ℍ) η (.code N E C) δ Θ n v ρ := trivial
 
 /-- `!G` at the step, at every world. -/
 theorem bang_step_ofN {G S : VTy} {C : CTy} {δ : LSub} {g : Val} {k : Nat}

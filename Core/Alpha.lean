@@ -202,6 +202,11 @@ theorem VTy.alphaB_refl (A : VTy) : VTy.alphaB [] A A = true :=
 theorem CTy.alphaB_refl (C : CTy) : CTy.alphaB [] C C = true :=
   CTy.alphaB_diag (fun _ h => absurd h List.not_mem_nil) C
 
+/-- `[α]` is reflexive at `Code⟨N; E⟩ C`: the code is equal, `E` and `C` are reflexive.
+`[spec §68]` -/
+theorem VTy.alphaB_refl_code (N : Expr) (E : VTy) (C : CTy) :
+    VTy.alphaB [] (.code N E C) (.code N E C) = true := VTy.alphaB_refl _
+
 /-- The binder pairs read the other way. -/
 def alphaSwap (ρ : List (LifeVar × LifeVar)) : List (LifeVar × LifeVar) := ρ.map Prod.swap
 

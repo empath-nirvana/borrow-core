@@ -23,6 +23,7 @@ def noThunkB : VTy → Bool
   | .tensor A B => noThunkB A && noThunkB B
   | .sum A B => noThunkB A && noThunkB B
   | .thunk _ => false
+  | .code _ _ _ => false -- [spec §68]
   | .bang A => noThunkB A
   | .ref A => noThunkB A
   | .box _ A => noThunkB A
@@ -33,7 +34,7 @@ theorem noThunkB_sound : ∀ {A : VTy}, noThunkB A = true → NoThunkT A
   | .tensor A B, h | .sum A B, h => by
       simp only [noThunkB, Bool.and_eq_true] at h
       exact ⟨noThunkB_sound h.1, noThunkB_sound h.2⟩
-  | .thunk _, h => by simp [noThunkB] at h
+  | .thunk _, h | .code _ _ _, h => by simp [noThunkB] at h
   | .bang A, h | .ref A, h | .box _ A, h | .fam A, h => noThunkB_sound (A := A) h
   | .unit, _ | .zero, _ | .imm _ _, _ | .mut _ _, _ | .unk, _ | .tvar _, _ | .mu _, _
   | .int _, _ | .opq _, _ => by simp [NoThunkT]

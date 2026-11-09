@@ -146,6 +146,8 @@ def codeDigest (N : BoCa.Expr) : String :=
   let h := hash (reprStr N)
   "#" ++ String.ofList (Nat.toDigits 16 (h.toNat % 2 ^ 32))
 
+-- The case split of `ppC`'s nested `ν` patterns over every value-type former exceeds the default.
+set_option maxHeartbeats 800000 in
 mutual
 /-- A value type in the surface syntax, at precedence `p` (syntax-core §4: `0` binders, `1`
 `-o`/`=>`, `2` `&`, `3` `+`, `4` `*`, `5` prefix); `d` is the number of enclosing `μ`s, and
@@ -159,8 +161,6 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .thunk (.all x b (.ret A)) =>
       parenIf (p > 0) s!"all {ppLVar x} < {ppLifeP nm 1 b}. {ppV (nm.filter (·.2 != x)) d 0 A}"
   | .thunk C => parenIf (p > 5) s!"U {ppC nm 6 C}"
-  -- [spec §68]
-  | .code N E C => parenIf (p > 5) s!"Code⟨{codeDigest N}; {ppV nm d 0 E}⟩ {ppC nm 6 C}"
   | .ref A => parenIf (p > 5) s!"ref {ppV nm d 5 A}"
   | .imm a A => parenIf (p > 5) s!"imm {ppLifeP nm 1 a} {ppV nm d 5 A}"
   | .mut a A => parenIf (p > 5) s!"mut {ppLifeP nm 1 a} {ppV nm d 5 A}"
@@ -184,6 +184,8 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .fam (.imm a A) => parenIf (p > 5) s!"array_imm {ppLifeP nm 1 a} {ppV nm d 5 A}"
   | .fam (.mut a A) => parenIf (p > 5) s!"array_mut {ppLifeP nm 1 a} {ppV nm d 5 A}"
   | .fam L => parenIf (p > 5) s!"[{ppV nm d 0 L}]"
+  -- [spec §68]
+  | .code N E C => parenIf (p > 5) s!"Code⟨{codeDigest N}; {ppV nm d 0 E}⟩ {ppC nm 6 C}"
 /-- A computation type in the surface syntax, at precedence `p`. -/
 def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
   | .ret A => parenIf (p > 5) s!"F {ppV nm 0 5 A}"
