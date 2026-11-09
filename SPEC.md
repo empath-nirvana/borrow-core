@@ -11949,7 +11949,8 @@ proofs; every corpus and kernel program its output. The later units must preserv
 - **Choices K1 made that the entry does not state:**
   - A type substitution (`VTy.rename`, `VTy.subst`) leaves `Code⟨N; E⟩ C` as it is, as it leaves
     `U C`: no `μ` variable reaches `E`, `Cl k` holds, `Occ` fails. The clause reads `E` at no
-    environment, as `U C` reads `C`.
+    environment, as `U C` reads `C`. So K3's `codeI` must give a closed `E` (`E.Cl 0`, no `μ`
+    variable free in a capture's type), as a premise or from the context's types.
   - `vC_ind` and `vN_ind` keep the code clause in one unfolding (`vF`, `vFN`) with the property at
     every value of `E`, from an outer induction on the type's size: `E` is smaller and no
     substitution enters it.

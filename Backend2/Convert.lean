@@ -300,7 +300,7 @@ def formersV (acc : List String) : VTy → List String
   | .tensor A B => formersV (formersV ("V.tensor" :: acc) A) B
   | .sum A B => formersV (formersV ("V.sum" :: acc) A) B
   | .thunk C => formersC ("V.thunk" :: acc) C
-  | .code _ _ C => formersC ("V.thunk" :: acc) C -- [spec §68]
+  | .code _ E C => formersC (formersV ("V.code" :: acc) E) C -- [spec §68]
   | .ref A => formersV ("V.ref" :: acc) A
   | .imm _ A => formersV ("V.imm" :: acc) A
   | .mut _ A => formersV ("V.mut" :: acc) A
