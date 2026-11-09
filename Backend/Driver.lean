@@ -156,11 +156,11 @@ def compileWatTimed (file src : String) : IO (Except String String) := do
     let p₀ ← ExceptT.mk <| stage "parse" (fun (p : Frontend.Program) => s!"{p.decls.length} declarations")
       fun _ => match Frontend.parseProgram src (lib := Frontend.Sugar.libSrc) with
         | .ok p => pure p
-        | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
+        | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
     let r ← ExceptT.mk <| stage "check" (fun _ => "") fun _ =>
       match Frontend.Check.checkProgram p₀ with
         | .ok r => pure r
-        | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
+        | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
     let some c := r.main | throw s!"{file}: no `main`"
     let io ← ExceptT.mk <| stage "io main" (fun _ => "") fun _ =>
       match Frontend.Check.ioMainOf r.el.prog c with

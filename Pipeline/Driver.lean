@@ -43,10 +43,10 @@ structure CheckedProg where
 def checkedOf (file src : String) : Except String CheckedProg := do
   let p₀ ← match Frontend.parseProgram src (lib := Frontend.Sugar.libSrc) with
     | .ok p => pure p
-    | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
+    | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
   let r ← match Frontend.Check.checkProgram p₀ with
     | .ok r => pure r
-    | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
+    | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
   let some c := r.main | throw s!"{file}: no `main`"
   match Frontend.Check.ioMainOf r.el.prog c with
   | .ok io => pure ⟨r.el.prog, c, io, r.el.keys⟩
@@ -175,14 +175,14 @@ def typingReport (c : Frontend.Check.Checked) : String :=
 def trusted (file src : String) : Except String String := do
   let p ← match Frontend.parseProgram src (lib := Frontend.Sugar.libSrc) with
     | .ok p => pure p
-    | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
+    | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
   let r ← match Frontend.Check.checkProgram p with
     | .ok r => pure r
-    | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
+    | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
   let typing := (r.main.map typingReport).toList
   let xs ← match Frontend.Check.externs r.el.prog.decls.toArray with
     | .ok xs => pure xs
-    | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
+    | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
   -- The externs `main`'s erasure uses: a library's extern that the program never reaches is not
   -- in its trusted base (SPEC §34). The last declared is at index 0 of `main`'s context.
   let xs := match r.main with

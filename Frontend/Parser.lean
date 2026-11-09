@@ -3242,9 +3242,9 @@ def decls (n : Nat) : Nat → List Decl → P (List Decl)
 each name is resolved to its binder (SPEC §41, rule R1), and no fresh binder is named as a name
 of the source. -/
 def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data : Data.Table := {})
-    (internal : Bool := false) :
+    (internal : Bool := false) (file : String := "") :
     Except Error (α × PState) := do
-  let toks ← lex src
+  let toks ← lex src file
   let fuel := fuelPerToken * (toks.size + 1)
   let go : P α := do
     let a ← p fuel
@@ -3253,7 +3253,7 @@ def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data
   let taken := if resolve then toks.toList.filterMap (fun t => match t.tok with
     | .ident s => some s
     | _ => none) |>.eraseDups else []
-  go.run { toks, pos := 0, lastStop := ⟨1, 1⟩, resolve, taken, data, internal }
+  go.run { toks, pos := 0, lastStop := ⟨1, 1, file⟩, resolve, taken, data, internal }
 
 /-- The table of the tokens `toks`: the `data` declarations (SPEC §42) and the `type`
 abbreviations (SPEC §61) written in them, each read where it is: a declaration is in scope in its
@@ -3261,15 +3261,16 @@ whole module. A declaration that does not read is left to the parse proper, whic
 `[spec §42, §61]` -/
 def dataIn (toks : Array Token) : Data.Table := Id.run do
   let fuel := fuelPerToken * (toks.size + 1)
+  let start : Pos := ⟨1, 1, (toks[0]?.map (·.span.start.file)).getD ""⟩
   let mut out : Data.Table := {}
   for i in [0:toks.size] do
     let named := match toks[i + 1]?.map Token.tok with | some (Tok.uident _) => true | _ => false
     if named && toks[i]!.tok == .ident "data" then
-      match (dataDecl fuel).run { toks, pos := i, lastStop := ⟨1, 1⟩ } with
+      match (dataDecl fuel).run { toks, pos := i, lastStop := start } with
       | .ok (d, _) => out := { out with decls := out.decls ++ [d] }
       | .error _ => pure ()
     else if named && toks[i]!.tok == .kw "type" then
-      match (decl fuel).run { toks, pos := i, lastStop := ⟨1, 1⟩ } with
+      match (decl fuel).run { toks, pos := i, lastStop := start } with
       | .ok (d, _) => out := { out with abbrevs := out.abbrevs ++ (Data.Abbrev.ofDecl? d).toList }
       | .error _ => pure ()
   out
@@ -3290,7 +3291,7 @@ def dataOfModules (lib : String → Option String) : Nat → List String → Lis
   | _ + 1, [], seen => ({}, seen)
   | k + 1, m :: ms, seen =>
     if seen.contains m then dataOfModules lib k ms seen else
-    match (lib m).map lex with
+    match (lib m).map (lex · m) with
     | some (.ok toks) =>
       let (inner, seen) := dataOfModules lib k (includesIn toks) (m :: seen)
       let (rest, seen) := dataOfModules lib k ms seen
@@ -3318,19 +3319,20 @@ def tableOf (lib : String → Option String) (incs : List String) (own : Data.Ta
 
 /-- The `data` declarations and the `type` abbreviations in scope in the source `src` (SPEC §42,
 §61), `lib` giving a module's source (`tableOf`). -/
-def dataOf (lib : String → Option String) (src : String) : Data.Table :=
-  match lex src with
+def dataOf (lib : String → Option String) (src : String) (file : String := "") : Data.Table :=
+  match lex src file with
   | .ok toks => tableOf lib (includesIn toks) (dataIn toks)
   | .error _ => {}
 
 /-- The declarations of a source file. At most one `main` is accepted. Its names are resolved
 (`resolve`) unless it is code the elaborator generated. -/
 def parseProgram (src : String) (resolve : Bool := true)
-    (lib : String → Option String := fun _ => none) (internal : Bool := false) :
-    Except Error Program := do
+    (lib : String → Option String := fun _ => none) (internal : Bool := false)
+    (file : String := "") : Except Error Program := do
   -- The `data` declarations in scope (SPEC §42): the prelude's, the included modules', the
-  -- program's own.
-  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src) internal
+  -- program's own. `file` is the library module `src` is (`""` for the program), which its
+  -- positions carry (#883).
+  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src file) internal file
   let mains := ds.filter fun | .main .. => true | _ => false
   match mains with
   | _ :: .main sp _ _ :: _ => .error ⟨sp, "a program has at most one `main`"⟩
@@ -3386,18 +3388,24 @@ def srcText (src : String) (sp : Span) : String :=
 
 /-- A marker a message holds for the source text of a span (`Error.renderIn` writes it out). -/
 def spanMark (sp : Span) : String :=
-  s!"⟦{sp.start.line}:{sp.start.col}:{sp.stop.line}:{sp.stop.col}⟧"
+  let m := if sp.start.file == "" then "" else s!"{sp.start.file}@"
+  s!"⟦{m}{sp.start.line}:{sp.start.col}:{sp.stop.line}:{sp.stop.col}⟧"
 
-/-- Each span marker of `msg` replaced by the span's source text. -/
-def unmark (src : String) (msg : String) : String :=
+/-- Each span marker of `msg` replaced by the span's source text: the program's `src`, or the
+library module's that the marker names (`lib`).  `[spec §42]` -/
+def unmark (src : String) (msg : String) (lib : String → Option String := fun _ => none) :
+    String :=
   match msg.splitOn "⟦" with
   | [] => msg
   | first :: rest => rest.foldl (fun acc piece =>
       match piece.splitOn "⟧" with
       | m :: after =>
+        let (text, m) := match m.splitOn "@" with
+          | [f, m] => ((lib f).getD "", m)
+          | _ => (src, m)
         match (m.splitOn ":").map String.toNat? with
         | [some a, some b, some c, some d] =>
-          acc ++ srcText src ⟨⟨a, b⟩, ⟨c, d⟩⟩ ++ "⟧".intercalate after
+          acc ++ srcText text ⟨⟨a, b, ""⟩, ⟨c, d, ""⟩⟩ ++ "⟧".intercalate after
         | _ => acc ++ "⟦" ++ piece
       | [] => acc ++ "⟦" ++ piece) first
 
@@ -3405,6 +3413,20 @@ def unmark (src : String) (msg : String) : String :=
 it (`unrename`), and each span marker as its source text (`unmark`). -/
 def Error.renderIn (src : String) (e : Error) (lib : String → Option String := fun _ => none) :
     String :=
-  { e with msg := unmark src (unrename (renamesOf src lib) e.msg) }.render
+  let renames := renamesOf src lib ++ (match lib e.span.start.file with
+    | some msrc => if e.span.start.file == "" then [] else renamesOf msrc lib
+    | none => [])
+  { e with msg := unmark src (unrename renames e.msg) lib }.render
+
+/-- The file a position is in: the program's path `file`, or `lib/m.bc` for a position in the
+library module `m` (#883).  `[spec §42]` -/
+def Pos.fileIn (file : String) (p : Pos) : String :=
+  if p.file == "" then file else s!"lib/{p.file}.bc"
+
+/-- An error about the program `file`, whose source is `src`, rendered as `path:line:col: message`,
+the path the file the error's position is in (`Pos.fileIn`).  `[spec §42]` -/
+def Error.renderAt (file src : String) (e : Error) (lib : String → Option String := fun _ => none) :
+    String :=
+  s!"{e.span.start.fileIn file}:{e.renderIn src lib}"
 
 end Frontend

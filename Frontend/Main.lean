@@ -135,9 +135,9 @@ def parseInterpArgs : List String → InterpArgs → Option InterpArgs
 def desugar (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match parseProgram src (lib := Frontend.Sugar.libSrc) with
-  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+  | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
   | .ok p => match Frontend.Elab.elaborate p with
-    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+    | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
     | .ok el => IO.print el.prog.pp; return 0
 
 /-- Print the erasure of `file`'s checked `main`. -/
@@ -182,10 +182,10 @@ def trusted (file : String) : IO UInt32 := do
 def kinds (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match parseProgram src (lib := Frontend.Sugar.libSrc) with
-  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+  | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
   | .ok p =>
     match Check.checkProgram p with
-    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+    | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
     | .ok r =>
       for h in r.handles do
         let ks := (List.range h.ks.length).zip h.ks |>.map fun (i, k) => k.render h.n i
@@ -208,10 +208,10 @@ whether `main` holds a handler whose name is not a literal. -/
 def handled (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match parseProgram src (lib := Frontend.Sugar.libSrc) with
-  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+  | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
   | .ok p =>
     match Check.checkProgram p with
-    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+    | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
     | .ok r =>
       let some c := r.main | return 0
       let V := c.flows
@@ -249,10 +249,10 @@ clause kinds: `sp: handle n: kind eff[args] by handler (as slot), state (x: A, �
 def sites (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match parseProgram src (lib := Frontend.Sugar.libSrc) with
-  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+  | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
   | .ok p =>
     match Check.checkProgram p with
-    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+    | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
     | .ok r =>
       for h in r.handles do
         let ks := (List.range h.ks.length).zip h.ks |>.map fun (i, k) => k.render h.n i
@@ -517,7 +517,7 @@ def alphaRename (src : String) :
     let cs := out[l - 1]!.toList
     if (cs.drop (c - 1)).take x.length != x.toList then
       throw ⟨Span.none, s!"alpha: `{x}` is not written at {l}:{c}"⟩
-    let x' := if short.contains ⟨l, c⟩ && x' != x then s!"{x}: {x'}" else x'
+    let x' := if short.contains ⟨l, c, ""⟩ && x' != x then s!"{x}: {x'}" else x'
     out := out.set! (l - 1) (String.ofList (cs.take (c - 1) ++ x'.toList ++ cs.drop (c - 1 + x.length)))
   pure ("\n".intercalate out.toList, edits)
 
@@ -525,7 +525,7 @@ def alphaRename (src : String) :
 def alpha (map : Bool) (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match alphaRename src with
-  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+  | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
   | .ok (out, edits) =>
     if map then
       for (l, c, x, x', v) in edits do IO.println s!"{l} {c} {x} {x'} {v}"
@@ -639,7 +639,7 @@ def main (argv : List String) : IO UInt32 := do
     let src ← IO.FS.readFile file
     match parseProgram src (lib := Frontend.Sugar.libSrc) with
     | .error e =>
-      IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
+      IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc)
       return 1
     | .ok p =>
       if cmd == "print" then
@@ -648,7 +648,7 @@ def main (argv : List String) : IO UInt32 := do
       if cmd == "check" then
         match Check.checkProgram p with
         | .error e =>
-          IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
+          IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc)
           return 1
         | .ok r =>
           let rs := renamesOf src Frontend.Sugar.libSrc

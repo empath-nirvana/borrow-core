@@ -6178,9 +6178,10 @@ def expandIncludes : Nat → List Decl → List Decl × List String →
       match library m.name with
       | some (.error e) => throw ⟨sp, e⟩
       | some (.ok src) => do
-        let l ← match parseProgram src (lib := libSrc) with
+        -- The module's positions name it (#883).  [spec §42]
+        let l ← match parseProgram src (lib := libSrc) (file := m.name) with
           | .ok l => pure l.decls
-          | .error e => throw ⟨e.span, s!"lib/{m.name}.bc: {e.msg}"⟩
+          | .error e => throw e
         match fuel with
         | 0 => throw ⟨sp, s!"the modules include each other: `{m.name}`"⟩
         | fuel + 1 => expandIncludes fuel l (acc, m.name :: inc)
@@ -6225,14 +6226,14 @@ def dataDecls (ds : List Decl) (abbrevs : List Data.Abbrev) : Except Error (List
     !own.any (·.name.name == n) && ds.any (·.mentionsTy n)
   let prelude : List DataDecl ← if wanted.isEmpty then pure [] else
     match libSrc "prelude" with
-    | some src => match parseProgram src with
+    | some src => match parseProgram src (file := "prelude") with
       | .ok p =>
         let pd := p.decls.filterMap fun | .data _ d => some d | _ => none
         if let some d := pd.find? (!preludeData.contains ·.name.name) then
           throw ⟨d.name.span, s!"internal error: lib/prelude.bc declares `{d.name.name}`, which " ++
             "`Sugar.preludeData` does not list"⟩
         pure pd
-      | .error e => throw ⟨e.span, s!"lib/prelude.bc: {e.msg}"⟩
+      | .error e => throw e
     | none => pure []
   let named := prelude.filter (wanted.contains ·.name.name)
   let tab : Data.Table := { decls := named ++ own, abbrevs }
@@ -6329,10 +6330,10 @@ recording the origins of generated code.  `[spec §11, §14]` -/
 def elaborateS (p : Program) : SM (Program × Nat) := do
   let libRaw (m : String) : Except Error (List Decl) :=
     match library m with
-    | some (.ok src) => match parseProgram src (lib := libSrc) with
+    | some (.ok src) => match parseProgram src (lib := libSrc) (file := m) with
       -- A module's `data` declarations are the program's (`dataDecls`).
       | .ok l => pure (l.decls.filter fun | .data .. => false | _ => true)
-      | .error e => throw ⟨e.span, s!"lib/{m}.bc: {e.msg}"⟩
+      | .error e => throw e
     | some (.error e) => throw ⟨Span.none, e⟩
     | none => throw ⟨Span.none, s!"no library module `{m}`"⟩
   -- The libraries are in scope for typing when the program may use them: the I/O library when
