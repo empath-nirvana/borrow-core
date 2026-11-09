@@ -142,6 +142,9 @@ corpus/block-yield-inner.bc 2.0 cancellable tail: direct; agree
 corpus/btree-boxed.bc 1.0 cancellable abortive: branch; agree
 corpus/buf-lend-raise.bc 1.0 cancellable abortive: branch; agree
 corpus/buf-lend-raise.bc 2.0 cancellable abortive: branch; agree
+corpus/callback-arm-raises.bc 1.0 cancellable abortive: branch; agree
+corpus/callback-rec-arm.bc 2.0 cancellable abortive: branch; agree
+corpus/callback-rec-arm.bc 1.0 cancellable abortive: branch; agree
 corpus/capture-await-raise.bc 1.0 cancellable tail: direct; agree
 corpus/capture-await-raise.bc 2.0 cancellable abortive: branch; agree
 corpus/capture-store-raise.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree

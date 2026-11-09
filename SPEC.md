@@ -1497,11 +1497,29 @@ does not, the checker consumes it by its consume:
   by `M` on every path already, so the outlives premise of a boxed `κ` (§28) asks nothing new. The
   consumes are `consumeOne`'s nodes, and `[handle]` and `[sub]` are unchanged. The variables `M`
   does not mention stay consumed before the site, where they were. (#848, #492)
+- **Captured variables.** A computation inside a value (`thunk M`, `thunkv N`, `run M`: a borrow
+  block's callback, a closure, a handler's clause) is owed the owed variables of the computation
+  the value is in that it mentions, as the head of `x <- M; N` is; the others stay with that
+  computation. "Owed to the computation the value is in" is what its terminal computation was
+  owed before its own consumes (`Env.clearOwn`), or, for a value of a `let`, `case` or `<-` head,
+  what that form is owed (`Env.forVal`); both are held in `Env.cap` and handed to the inner
+  computation by `Env.capture`. So a path of the callback that ends in an abortive operation (a
+  `raise`, a recursion's budget `exhausted`) consumes before the abort the captured variables it
+  has not used, and a `case` in the callback whose one arm aborts and whose other uses a captured
+  variable merges. Sound against the kernel: `thunkF` and `thunkV` type the body in the thunk's
+  own context, whose slots are exactly what it captures, and the body must use each linear one
+  on every path, which an owed slot gets by `consumeOne`'s nodes; a variable the body mentions is
+  used by the body already on the paths that mention it, so the thunk's context, and the split of
+  the value it is in, are unchanged. A captured variable is consumed later than before, at the end
+  of the callback's path instead of before the terminal computation of the enclosing path, which
+  §12's *Not moved across effects* allows: it is never earlier than the path's terminal
+  computation. A `!` thunk uses only persistent slots, and an owed slot is never persistent, so it
+  captures nothing. `[thunkF]`, `[thunkV]`, `[ofRet]` and `CDerives` are unchanged. (#891)
 - **Not moved across effects.** A consume is never placed earlier than the path's terminal
   computation. Codata `close` runs code, so moving it would reorder effects.
 - `<>` and `absurd V` absorb any context (§11 of `docs/syntax-core.md`), so no consume is inserted
-  before them. A value (`thunk M`, `run M`, …) starts its computations with nothing owed: a thunk
-  that captures a variable consumes it.
+  before them. A value owes nothing itself: a computation inside it is owed only the variables it
+  captures (*Captured variables*), and a thunk that captures a variable consumes it.
 
 **A value that must not be consumed.** A value whose silent destruction is a bug, such as a
 transaction that must be committed or aborted, needs a type in group 3, which the program must
@@ -12472,6 +12490,14 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
   a code type only with a code type. The checker and Backend2's `ofV` refuse a code type until K3,
   S1 and B1. No `CDerives` rule produces one, so no program's typing or output changes.
   `fundamentalC`, `adequacyC` and `goal791N` keep their statements.
+- **1.54** (2026-11-07) — §12 (#891, *Captured variables*): a computation inside a value
+  (`thunk M`, `thunkv N`, `run M`) is owed the owed variables of the computation the value is in
+  that it mentions, as the head of `x <- M; N` is; before, a value started its computations with
+  nothing owed. So a borrow callback (`withbor1U`, `withloadU`, …) that captures a linear value
+  and raises, or recurses (the budget's abortive arm), in one arm consumes the captured value on
+  that arm. New corpus programs `callback-arm-raises.bc`, `callback-rec-arm.bc`,
+  `callback-load-owned.bc`. No change to `CDerives`, the kernel, the theorems or the backends;
+  every other corpus program checks as before.
 - **1.53** (2026-11-07) — §31, §21 (#890, *Generic recursive groups*): a recursive group's lifetime
   parameters are quantified in each member's field of its fixed-point record, `∀'a⃗ < b⃗. (E ⊗ Pⱼ ⊸
   F_Σ (E ⊗ Tⱼ))`, nested in declaration order; only the capabilities' lifetimes stay outside the

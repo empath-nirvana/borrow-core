@@ -124,7 +124,7 @@ def checkFuel : Nat := 1 <<< 20
 elaboration generates (`DefKey`). -/
 def Env.top (ds : Array Decl) (k : Nat) (keys : List DefKey := [])
     (closes : List (String × String × Option String) := []) : Env :=
-  ⟨⟨ds, k, keys, closes⟩, [], [], [], [], 0, none⟩
+  ⟨⟨ds, k, keys, closes⟩, [], [], [], [], 0, none, []⟩
 
 /-- The externs, in declaration order, each elaborated in the declarations before it. -/
 def externs (ds : Array Decl) : Except Error (List (String × CVTy)) :=
