@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.60 · 2026-11-09
+Version 1.56 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -169,7 +169,8 @@ data is materialized, and gives codata (`&`, and the formers of §7) a home.
 
 `CDerives Δ Γ e j`, with `j` either `val A` or `comp C`, over BoLo expressions in A-normal form:
 the CBPV formers (`thunk`, `force`, `return`, `to`, `λ`, application, `⟨·,·⟩`, projections),
-the lifetime `∀` (elimination at every `C`), the `!` rules of §2, `[]I` at every value type,
+the lifetime `∀` (elimination at every `C`), the `!` rules of §2 (promotion over a persistent
+context, §10), `[]I` at every value type,
 `⊑Imm`/`⊑Mut`, one constant per borrow axiom of `[TR]` p. 3 at arbitrary value-type payloads,
 three call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), and conversion up to the names of
 lifetime binders (`[α]`, *Lifetime binders and `[α]`* below). No new machine rules.
@@ -1023,10 +1024,54 @@ more programs: `checkProgram_sound` and every theorem are unchanged. Which varia
 copies is read off its node's masks (§3): the slots both parts use, which the derivation gives to
 both.
 
+### Promotion over a persistent context
+
+A context is persistent when every live slot's type is:
+
+    Persistent(Γ)  ≜  ∀ s ∈ Γ. s.live ⇒ s.ty persistent        (Ctx.Persistent, Core/Persistent.lean)
+
+`!Γ` (`Ctx.Banged`, every live slot at a type `!A`) implies it (`Ctx.Banged.persistent`), since
+`!A` is persistent. The premise of Core's two promotion rules, which §3 takes from §2's `!I-λ` and
+`!I-Λ`, is `Persistent(Γ)`:
+
+    Persistent(Γ)    Δ; _ : 1 (dead), Γ ⊢ M : F A
+    ─────────────────────────────────────────────  !thunk     (bangThunkF)
+    Δ; Γ ⊢ λ_. M : !U (F A)
+
+    Persistent(Γ)    C ≠ F _    Δ; Γ ⊢ λN : C
+    ─────────────────────────────────────────  !thunkv    (bangThunkV)
+    Δ; Γ ⊢ λN : !U C
+
+So a `!` closure may capture a live variable of any persistent type: `I32`, `I64`, `U8`, the
+floats (`.int _`, §8), `1 + 1`, `1`, `0`, `!A`, and `⊗`, `⊕`, `[@a]` and `μ` over persistent types
+(a `μ`-list of `I32`, say). `U C`, `Ref`, `Imm`, `Mut` and the opaque host types (§11) are not
+persistent, so a closure capturing one is not promoted.
+
+- **Soundness.** The compatibility lemmas (`bangThunkF_compatC`, `bangThunkV_compatC`, and the
+  chain's `bangThunkF_compatN`, `bangThunkV_compatN`) need only that the context relation holds at
+  `∅`. `gSepC_persistent` (the chain's `gN_persistent`) gives it from `Persistent(Γ)`, slot by
+  slot, through `vCE_empty_of_persistent` (`vN_empty_of_persistent`).
+- **Mirrors.** `CDerivesAt` (`Core/Tied.lean`) and the generated `CDerivesP`, `TDerivesAt` and
+  `TDerivesP` (`scripts/gen-pin.py`) take the same premise. The checker's promotion test
+  (`Frontend/Check/Rules.lean`) asks `VTy.persistent` of each live slot. The inversion of a λ read
+  at a `!` thunk (`LamCls`, `lam_bang`) gives a persistent context, and AT06's rejection reads
+  that the captured cell's type, a view of `Ref`, is not persistent.
+- **Where `!Γ` stays.** `[let]` and `[then]` at a row with an unrestricted operation (§19), and
+  `Count`, `Inversions` (`banged_slot`), `Weaken` and `Embedding`, keep `!Γ`.
+- **Backend.** A captured persistent value is copied into a `!` closure's environment as a `!`
+  value is: Backend2 deep-copies the environments of `!` closures, and `LTy.persistent` agrees with
+  `VTy.persistent` (`ofV_persistent`). A captured `μ` value is copied deep at each copy of the
+  closure, and `bcc-counts` counts it.
+
+Baselines: every existing derivation still holds, since `!Γ ⇒ Persistent(Γ)` and the rules only
+widen; program derivations in `Core/` pass `(…).persistent` or a proof generic in the predicate.
+The fundamental property (`fundamentalC`, the pinned and the chain versions) and adequacy are
+unchanged in statement. Every rejection theorem (AT06 among them) holds, restated over the wider
+inversion. Every corpus program and golden is unchanged. No `CDerives` index or rule is added, and
+the judgment freeze is unchanged.
+
 ### Open
 
-- The promotion premise `!Γ` (every live slot at `!A`) is not widened to "every live slot
-  persistent".
 - A persistent closure (`!(A ⇒ B)`) that captures recursive data is copied deep too; its type
   does not say what it captures, so that copy is not checked (`bcc-counts` counts it).
 
@@ -1562,8 +1607,8 @@ twice here, and its type `…` is linear").
   the parts are checked, so each is checked once (`Frontend/Check/DerivedCopy.lean`).
 - **Not here.** A merge (`case` arms, `<M, N>`, `[then]`'s continuation and finaliser) uses a
   variable once per side. A handler's clauses use only unrestricted slots (`[handle]`'s `Γ₁`),
-  `!thunk` only `!` slots, and a relaxed lend's body only its view: an `imm` there is refused with
-  those rules' messages. Inside a thunk, a clause's body, a loop's or a fold's generated function
+  `!thunk` only persistent slots (§10), and a relaxed lend's body only its view: an `imm` there is
+  refused with those rules' messages. Inside a thunk, a clause's body, a loop's or a fold's generated function
   or a `def`, the rule applies at the splits there.
 - **The kernel rule.** `copyIt` builds the term from `rVar`, the constant's node, `rLolliE`,
   `rRet`, `rTensorE` and `rBind`; its erasure has `copyE`'s shape with the kernel's `copyC A`
@@ -6515,7 +6560,7 @@ and runs as before, with the same output, counts and reports, except `retry-bloc
   - *its tunneled row*: none (a stored callback performs only what its type provides, and its
     creator's handlers are out of reach once it is stored, which R3's site freshness asks), or
     fixed at the binding and checked at each call to be in scope there;
-  - *its captures*: `!` values only (§2's promotion, #9 to widen), or a box at a lifetime
+  - *its captures*: persistent values only (§10's promotion), or a box at a lifetime
     (`[@c] !U(…)`, §28), with the answering capabilities passed in by each caller (R6);
   - *the join of rows* across the elements of one data value: written, or the union inferred.
   Each is a decision about what a stored value means, not an elaboration detail: §32 *Open*
@@ -12105,7 +12150,7 @@ reported as an intended change.
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
 `adequacyC` covering every rule; §7's `νX. C` is `Core/NuRel.lean` and `Core/Nu.lean`, and the
-checker reads `nu X. C`, `iter A R R'`, `nu_in`/`nu_out` and `unfold[C, S]`. Entries 7 and 9 (§8, §10) are implemented; §8 extends `Paper/` and `Support/` with the literal
+checker reads `nu X. C`, `iter A R R'`, `nu_in`/`nu_out` and `unfold[C, S]`. Entries 7 and 9 (§8, §10) are implemented, except §10's promotion over a persistent context (#886); §8 extends `Paper/` and `Support/` with the literal
 and host-step forms. Entry 8 (§9, arrays) is implemented: the former and its lemmas in `Core/Types.lean` and the typed
 world, the constants in `Core/Arrays.lean` (`Core/ArrayWp.lean` for the steps), the three machine
 steps in `Paper/` and `Support/`, the checker (`array`, `array_imm`, syntax-core §8b) and the
@@ -12560,6 +12605,15 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.56** (2026-11-09) — §10 (#886, *Promotion over a persistent context*): the premise of Core's
+  promotion rules `!thunk` and `!thunkv` (`bangThunkF`, `bangThunkV`) is `Persistent(Γ)`, every
+  live slot at a persistent type, in place of `!Γ`. `!Γ ⇒ Persistent(Γ)`, so the rules only widen:
+  a `!` closure may capture integers, floats, `bool`, and data over them, a `μ`-list of `I32`
+  among them. `gSepC_persistent` and `gN_persistent` are re-proved from the new premise through
+  `vCE_empty_of_persistent` and `vN_empty_of_persistent`; `CDerivesAt`, the generated pins, the
+  checker's promotion test and `lam_bang` follow. The fundamental property, adequacy, every
+  rejection theorem and every golden are unchanged; no `CDerives` index or rule is added. Closes
+  §10's first *Open* item.
 - **1.60** (2026-11-09) — §14, §15, §16, §19, §29, §30, §32, §35, §39: the citations of decision 71,
   which decision 72 voids, are removed. T1 is stated as the checker's rule until surface A1
   (#843), which lifts it for §62's suspending constants' shapes, for programs without host
