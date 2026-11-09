@@ -27,10 +27,15 @@ The checker and the compilers have not caught up yet. Until they do, the checker
    - Backend2 becomes the default compiler, then the old backend is retired;
    - the corpus: programs that exercise the new rules.
 2. **Borrowed payloads to handlers (#844).** A borrow passed in an operation's payload, lent to the
-   handler for the duration of the stop. Tier 1, outer borrows, comes first; Tier 2, a callback's
-   own borrow such as `read(sock, &mut buf)` across `await`, goes together with cross-task lends
-   (#821).
-3. **The trusted base (#838, #840).** Shrink or discharge `HandlerLawN` (#838), and the follow-ups
+   handler for the duration of the stop. Tier 1, outer borrows, is in the kernel (#861, SPEC §62):
+   the suspending lends are lifetime-polymorphic, so a payload can carry a borrow lent outside the
+   suspending lend. Tier 2, a callback's own borrow such as `read(sock, &mut buf)` across `await`,
+   goes together with cross-task lends (#821).
+3. **Per-code closure and codata types (#855, decision 76).** Each closure and `unfold` gets its
+   own type, `Code⟨N; E⟩ C`, erased to `U C` where `dyn` is wanted, and Backend2 monomorphises
+   over them; the backend then reads which code a closure is from a checked type (decision 78).
+   The entry is SPEC §68; the kernel comes first.
+4. **The trusted base (#838, #840).** Shrink or discharge `HandlerLawN` (#838), and the follow-ups
    from #839's review (#840).
 
 ## North star
