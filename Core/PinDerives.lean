@@ -34,8 +34,9 @@ open BoCa.Fig16.BoLo
 open BoCa.BoLo (Heap Steps Step1 Head Kont eLoad eStore)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
-/-- A value type with no `U` and no `Code⟨N; E⟩ C` at a position read componentwise (`Law2`'s `NoThunkT`, on the
-`law2-typed-world` branch): an answer read back at the kernel's relation after a re-lend. -/
+/-- A value type with no `U` and no `Code⟨N; E⟩ C` at a position read componentwise (`Law2`'s
+`NoThunkT`, on the `law2-typed-world` branch): an answer read back at the kernel's relation after a
+re-lend. -/
 def NoThunkT : VTy → Prop
   | .tensor A B => NoThunkT A ∧ NoThunkT B
   | .sum A B => NoThunkT A ∧ NoThunkT B

@@ -277,7 +277,7 @@ theorem toFShape_resO_closed (R : VTy) : ∀ {A : VTy}, FoldP.clB 0 A = true →
   | .tvar _, h => by simp [FoldP.clB] at h
   | .ref (.tvar _), h => by simp [FoldP.clB] at h
   | .ref .unit, _ | .ref (.tensor _ _), _ | .ref .zero, _ | .ref (.sum _ _), _
-  | .ref (.thunk _), _ | .ref (.code _ _ _), _ | .ref (.ref _), _ | .ref (.imm _ _), _ | .ref (.mut _ _), _ 
+  | .ref (.thunk _), _ | .ref (.code _ _ _), _ | .ref (.ref _), _ | .ref (.imm _ _), _ | .ref (.mut _ _), _
   | .ref (.box _ _), _ | .ref (.bang _), _ | .ref .unk, _ | .ref (.mu _), _ | .ref (.int _), _
   | .ref (.opq _), _ | .ref (.fam _), _ => rfl
   | .unit, _ | .zero, _ | .thunk _, _ | .code _ _ _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _
@@ -303,7 +303,7 @@ theorem resO_toFShape (Bs : FoldP.Stack) :
   | .tvar (_ + 1), h => by simp [toFShape, FShape.WF, VTy.Cl] at h
   | .ref (.tvar (_ + 1)), h => by simp [toFShape, FShape.WF, VTy.Cl] at h
   | .ref .unit, h | .ref (.tensor _ _), h | .ref .zero, h | .ref (.sum _ _), h
-  | .ref (.thunk _), h | .ref (.code _ _ _), h | .ref (.ref _), h | .ref (.imm _ _), h | .ref (.mut _ _), h 
+  | .ref (.thunk _), h | .ref (.code _ _ _), h | .ref (.ref _), h | .ref (.imm _ _), h | .ref (.mut _ _), h
   | .ref (.box _ _), h | .ref (.bang _), h | .ref .unk, h | .ref (.mu _), h | .ref (.int _), h
   | .ref (.opq _), h | .ref (.fam _), h | .unit, h | .zero, h | .thunk _, h | .code _ _ _, h
   | .imm _ _, h
@@ -331,7 +331,7 @@ theorem keysIn_toFShape (Bs : FoldP.Stack) :
   | .tvar _, _ => rfl
   | .ref (.tvar (_ + 1)), h => by simp [toFShape, FShape.WF, VTy.Cl] at h
   | .ref .unit, h | .ref (.tensor _ _), h | .ref .zero, h | .ref (.sum _ _), h
-  | .ref (.thunk _), h | .ref (.code _ _ _), h | .ref (.ref _), h | .ref (.imm _ _), h | .ref (.mut _ _), h 
+  | .ref (.thunk _), h | .ref (.code _ _ _), h | .ref (.ref _), h | .ref (.imm _ _), h | .ref (.mut _ _), h
   | .ref (.box _ _), h | .ref (.bang _), h | .ref .unk, h | .ref (.mu _), h | .ref (.int _), h
   | .ref (.opq _), h | .ref (.fam _), h | .unit, h | .zero, h | .thunk _, h | .code _ _ _, h
   | .imm _ _, h
@@ -375,7 +375,7 @@ theorem algsIn_eq : ∀ (A : VTy) (Bs : FoldP.Stack), algsIn A = (FoldP.keysIn B
       by_cases h : FoldP.clB 0 (.mu B) = true
       · simp [algsIn, FoldP.keysIn, h]
       · simp only [algsIn, FoldP.keysIn, if_neg h, List.map_cons, keyAlg, algsIn_eq B (B :: Bs)]
-  | .unit, _ | .zero, _ | .thunk _, _ | .code _ _ _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _ 
+  | .unit, _ | .zero, _ | .thunk _, _ | .code _ _ _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _
   | .unk, _ | .int _, _ | .opq _, _ | .tvar _, _ => rfl
   | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
   | .fam (.thunk _), _ | .fam (.code _ _ _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _

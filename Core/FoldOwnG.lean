@@ -813,7 +813,7 @@ theorem trav_spec (s : Val) (hAH : AH ks G δ s) :
       exact hH w χ ls hK hv hn
   | .unit, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _
   | .zero, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _
-  | .thunk _, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _ | .code _ _ _, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _ 
+  | .thunk _, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _ | .code _ _ _, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _
   | .imm _ _, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _
   | .mut _ _, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _
   | .box _ _, Bs, _, _, _, _, hP, _, _, _, w, χ, ls, _, _, hv, _

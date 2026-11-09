@@ -318,7 +318,7 @@ theorem tE_leaf (ks : List Bnd) (Bs : Stack) :
   | .ref _, h => by simp only [clB] at h; simp only [tE, if_pos h]
   | .fam (.ref _), h => by simp only [clB] at h; simp only [tE, if_pos h]
   | .mu _, h => by simp only [tE, if_pos h]
-  | .unit, _ | .zero, _ | .thunk _, _ | .code _ _ _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _ 
+  | .unit, _ | .zero, _ | .thunk _, _ | .code _ _ _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _
   | .unk, _ | .int _, _ | .opq _, _ => rfl
   | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
   | .fam (.thunk _), _ | .fam (.code _ _ _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
@@ -334,7 +334,7 @@ theorem resO_leaf (G : Algs) (Bs : Stack) :
   | .ref _, h => by simp only [clB] at h; simp only [resO, if_pos h]
   | .fam (.ref _), h => by simp only [clB] at h; simp only [resO, if_pos h]
   | .mu _, h => by simp only [resO, if_pos h]
-  | .unit, _ | .zero, _ | .thunk _, _ | .code _ _ _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _ 
+  | .unit, _ | .zero, _ | .thunk _, _ | .code _ _ _, _ | .imm _ _, _ | .mut _ _, _ | .box _ _, _ | .bang _, _
   | .unk, _ | .int _, _ | .opq _, _ => rfl
   | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
   | .fam (.thunk _), _ | .fam (.code _ _ _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _

@@ -1041,7 +1041,7 @@ theorem vN_ind (δ : LSub) (Φ : Bool → VTy → LocTy → Nat → Val → WRes
           simp only [tCloseN]; congr 1; funext n; exact ht n
         rw [hM] at hcl
         refine hlfp (fun b Θ k v r => G b ((VTy.mu B).subst σ) Θ k v r) (fun b' Θ' k' v' r' h' => ?_)
-          
+
         have hB := ih (le_trans (by simp <;> omega) hsz) (VTy.scons ⟨tCloseN (some η₀) (.mu B),
             fun b Θ k v r => G b ((VTy.mu B).subst σ) Θ k v r⟩ η₀)
           (VTy.scons ((VTy.mu B).subst σ) σ)

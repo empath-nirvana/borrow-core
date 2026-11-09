@@ -1335,7 +1335,7 @@ theorem rcE_mapV : ∀ A : VTy, rcE q (mapV A).1 = true
   | .tensor A B => by simp [mapV, rcE, rcE_app, rcE_mapV A, rcE_mapV B]
   | .sum A B => by simp [mapV, rcE, rcE_app, rcE_mapV A, rcE_mapV B]
   | .box _ A => rcE_mapV A
-  | .tvar (_ + 1) | .unit | .zero | .thunk _ | .code _ _ _ | .ref _ | .imm _ _ | .mut _ _ 
+  | .tvar (_ + 1) | .unit | .zero | .thunk _ | .code _ _ _ | .ref _ | .imm _ _ | .mut _ _
   | .bang _ | .unk | .mu _ | .int _ | .opq _ | .fam _ => rfl
 
 theorem rcE_nodeV : ∀ C : CTy, rcE q (nodeV C).1 = true

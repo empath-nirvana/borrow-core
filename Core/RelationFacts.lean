@@ -956,7 +956,7 @@ theorem TyEq.poly_iff : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub}, TyEq A δ A' �
       simp only [VTy.Poly]
       exact TyEq.poly_iff A h.2
   | .tvar _, A', _, _, h => by cases A' <;> simp only [TyEq] at h; subst h; exact Iff.rfl
-  | .unit, A', _, _, h | .zero, A', _, _, h | .thunk _, A', _, _, h | .code _ _ _, A', _, _, h | .unk, A', _, _, h 
+  | .unit, A', _, _, h | .zero, A', _, _, h | .thunk _, A', _, _, h | .code _ _ _, A', _, _, h | .unk, A', _, _, h
   | .int _, A', _, _, h | .opq _, A', _, _, h | .ref _, A', _, _, h | .imm _ _, A', _, _, h | .mut _ _, A', _, _, h
   | .bang _, A', _, _, h | .mu _, A', _, _, h | .fam _, A', _, _, h => by
       have ho := TyEq.occ_iff _ 0 h
@@ -1053,7 +1053,7 @@ theorem vCE_poly_ty (P : Bool → List SRec → Val → WProp) (T T' : VTy) (η 
       simp only [vCE, vCE_poly_ty P T T' η A h b]
   | .tvar 0, _, _ => rfl
   | .tvar (_ + 1), _, _ => rfl
-  | .unit, h, b | .zero, h, b | .thunk _, h, b | .code _ _ _, h, b | .unk, h, b | .int _, h, b | .opq _, h, b 
+  | .unit, h, b | .zero, h, b | .thunk _, h, b | .code _ _ _, h, b | .unk, h, b | .int _, h, b | .opq _, h, b
   | .ref _, h, b | .imm _ _, h, b | .mut _ _, h, b | .bang _, h, b | .fam _, h, b
   | .mu _, h, b =>
       vCE_congr_occ _ _ _ (fun n hn => by

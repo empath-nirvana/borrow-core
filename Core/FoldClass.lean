@@ -97,7 +97,7 @@ def headB : VTy → Bool
 theorem headB_iff : ∀ B : VTy, headB B = true ↔ head B
   | .tvar _ => by simp [headB, head]
   | .mu B => by simp [headB, head, headB_iff B]
-  | .unit | .tensor _ _ | .zero | .sum _ _ | .thunk _ | .code _ _ _ | .ref _ | .imm _ _ | .mut _ _ | .box _ _ 
+  | .unit | .tensor _ _ | .zero | .sum _ _ | .thunk _ | .code _ _ _ | .ref _ | .imm _ _ | .mut _ _ | .box _ _
   | .bang _ | .unk | .int _ | .fam _ | .opq _ => by simp [headB, head]
 
 /-- `P` as a `Bool`. -/
@@ -118,7 +118,7 @@ theorem PB_iff : ∀ (d : Nat) (A : VTy), PB d A = true ↔ P d A
   | d, .ref S => by simp [PB, P, PB_iff d S]
   | d, .fam (.ref S) => by simp [PB, P, PB_iff d S]
   | d, .fam (.unit) | d, .fam (.tensor _ _) | d, .fam (.zero) | d, .fam (.sum _ _)
-  | d, .fam (.thunk _) | d, .fam (.code _ _ _) | d, .fam (.imm _ _) | d, .fam (.mut _ _) | d, .fam (.box _ _) 
+  | d, .fam (.thunk _) | d, .fam (.code _ _ _) | d, .fam (.imm _ _) | d, .fam (.mut _ _) | d, .fam (.box _ _)
   | d, .fam (.bang _) | d, .fam (.unk) | d, .fam (.tvar _) | d, .fam (.mu _) | d, .fam (.int _)
   | d, .fam (.fam _) | d, .fam (.opq _) => by simp only [PB, P, clB_iff]
   | d, .mu B => by simp [PB, P, PB_iff (d + 1) B, clB_iff, headB_iff, Hd]
@@ -143,7 +143,7 @@ theorem P_of_closed : ∀ {A : VTy} (d : Nat), A.Cl 0 → P d A
   | .ref S, d, h => P_of_closed (A := S) d h
   | .fam (.ref S), d, h => P_of_closed (A := S) d h
   | .fam (.unit), _, h | .fam (.tensor _ _), _, h | .fam (.zero), _, h | .fam (.sum _ _), _, h
-  | .fam (.thunk _), _, h | .fam (.code _ _ _), _, h | .fam (.imm _ _), _, h | .fam (.mut _ _), _, h | .fam (.box _ _), _, h 
+  | .fam (.thunk _), _, h | .fam (.code _ _ _), _, h | .fam (.imm _ _), _, h | .fam (.mut _ _), _, h | .fam (.box _ _), _, h
   | .fam (.bang _), _, h | .fam (.unk), _, h | .fam (.tvar _), _, h | .fam (.mu _), _, h
   | .fam (.int _), _, h | .fam (.fam _), _, h | .fam (.opq _), _, h => h
   | .mu _, _, h => Or.inl h
@@ -176,7 +176,7 @@ theorem Cl_of_P : ∀ {A : VTy} {d : Nat}, P d A → A.Cl d
   | .ref S, _, h => Cl_of_P (A := S) h
   | .fam (.ref S), _, h => Cl_of_P (A := S) h
   | .fam (.unit), d, h | .fam (.tensor _ _), d, h | .fam (.zero), d, h | .fam (.sum _ _), d, h
-  | .fam (.thunk _), d, h | .fam (.code _ _ _), d, h | .fam (.imm _ _), d, h | .fam (.mut _ _), d, h | .fam (.box _ _), d, h 
+  | .fam (.thunk _), d, h | .fam (.code _ _ _), d, h | .fam (.imm _ _), d, h | .fam (.mut _ _), d, h | .fam (.box _ _), d, h
   | .fam (.bang _), d, h | .fam (.unk), d, h | .fam (.tvar _), d, h | .fam (.mu _), d, h
   | .fam (.int _), d, h | .fam (.fam _), d, h | .fam (.opq _), d, h =>
       VTy.Cl_mono _ h (Nat.zero_le d)
