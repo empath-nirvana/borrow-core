@@ -70,6 +70,9 @@ borrow-in-scope 2 0 0 4 3 0
 btree-boxed 80 0 0 22932 19398 6795
 buf-lend-raise 4 0 0 24 20 12
 bytes-upper 1 0 0 80 52 54
+callback-arm-raises 4 0 0 18 15 5
+callback-load-owned 4 0 0 17 15 5
+callback-rec-arm 10058 0 0 30441 10339 165
 capability-bang-width 3 0 0 10 8 0
 capability-swap-width 3 0 0 8 6 0
 capture-await-raise 0 0 0 0 0 0

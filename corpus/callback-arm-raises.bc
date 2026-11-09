@@ -1,0 +1,24 @@
+-- SPEC §12 *Captured variables* (#891): a borrow callback that captures an owned string `s` and
+-- raises in one arm. `borrow imm c { … }` raises inside its callback, so it is the unwinding form
+-- `withbor1U`, and the callback is a thunk whose body is owed `s`: the raising arm consumes `s`
+-- before its abort, the other uses it, and the arms merge. Before, the callback started with
+-- nothing owed and the `case` was refused (`s` consumed in one arm but not the other).
+--
+-- `go(1, 123)` reads 1 and answers the string's length, 3; `go(7, 45)` reads 7 and raises 7, its
+-- string freed on that path. Answer: `(inl i32[3], inr i32[7])` and `live 0`: a fix that let the
+-- raising arm drop `s` unconsumed would leave its string behind (`live 1`).
+
+include text
+include fail
+
+fn g(k: i32, s: string) -> i32 with Fail[i32] =
+  let c = alloc(k);
+  let r = borrow imm c { 'y, x -> if *x > 3 { raise(*x) } else { let (s, n) = len_of[u8](s); n } };
+  let z = free(c);
+  r
+
+fn go(k: i32, n: i32) -> i32 + i32 =
+  let (s, _) = push_dec(string_new(4), n);
+  with to_result { g(k, s) }
+
+main -> (i32 + i32) * (i32 + i32) = (go(1, 123), go(7, 45))

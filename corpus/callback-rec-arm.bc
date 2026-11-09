@@ -1,0 +1,27 @@
+-- SPEC §12 *Captured variables* (#891): a recursive call inside a borrow callback that captures an
+-- owned string `s`. The call elaborates to a `case` on the budget, one arm the budget's abort and
+-- the other the call on `s`; the callback (`withbor1U`, the unwinding form) is owed `s`, so the
+-- abort arm consumes it. Before, the callback started with nothing owed and the `case` was refused.
+--
+-- `d(50)` recurses 50 deep, each level inside the borrow of its own cell, and pushes one byte a
+-- level: length 51. `d(20000)` runs out of the recursion budget (10000): the string, passed down to
+-- the deepest level, is freed by that level's abort arm, and every level's cell by its borrow's
+-- unwinding: `-1`. Answer: `i32[509]` (51 · 10 − 1) and `live 0`: a fix that dropped the captured
+-- string on the abort arm would leave it behind (`live 1`).
+
+include rec
+include text
+
+fn d(n: i32, s: string) -> string with Exhausted =
+  let c = alloc(n);
+  let r = borrow imm c { 'y, x -> if *x > 0 { d(*x - 1, s) } else { s } };
+  let z = free(c);
+  let (r, _) = push_byte(r, 120);
+  r
+
+fn size(s: string) -> i32 = let (s, n) = len_of[u8](s); n
+
+main -> i32 =
+  let a = with on_exhausted(!{ u -> 0 - 1 }) { size(d(50, string_new(1))) };
+  let b = with on_exhausted(!{ u -> 0 - 1 }) { size(d(20000, string_new(1))) };
+  a * 10 + b
