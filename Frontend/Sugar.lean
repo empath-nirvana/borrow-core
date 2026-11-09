@@ -138,7 +138,15 @@ def _root_.Frontend.Comp.elab (lend : Bool) : Comp → Except Error Comp
       let r : Ident := ⟨"io_lend", c.span⟩
       return .bind sp r none (← M.elab true) (.letPair sp c x (.var c.span r.name) (← N.elab false))
     | _ => throw ⟨sp, "a call lends at most one capability with `&`"⟩
-  | .ret sp V => return .ret sp (← V.elab lend)
+  | .ret sp V => do
+    -- A tail that lends a place is `r <- M; return r` (#892): the head's form, the place
+    -- rebound and the call's answer returned.  [spec §11, §18]
+    if let (false, [c]) := (lend, V.takeLends.2) then
+      let r : Ident := ⟨s!"io_lt{sp.start.line}_{sp.start.col}", sp⟩
+      let l : Ident := ⟨"io_lend", c.span⟩
+      return .bind sp l none (.ret sp (← V.elab true))
+        (.letPair sp c r (.var c.span l.name) (.ret sp (.var sp r.name)))
+    return .ret sp (← V.elab lend)
   | .absurd sp V => return .absurd sp (← V.elab lend)
   | .force sp x => pure (.force sp x)
   | .lam sp x A M => return .lam sp x A (← M.elab false)
@@ -4379,6 +4387,13 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
             | some M' => return M'
             | none => throw ⟨V.span, "this borrow block's body performs an abortive operation, and " ++
                 "its place has no unwinding form here: not provided"⟩
+      -- A call in tail position that lends a place and performs operations of the row is
+      -- `let r = f(…, &p, …); r` (#892): the binding's lending call, whose borrow is the
+      -- unwinding form (`lendEffCall`).  [spec §18]
+      if let (.app fsp _ W, some S@(_ :: _)) := (V, c.E.row) then
+        if W.lends && (opsC c divFuel (.ret sp V)).any (fun (k, _) => S.any (·.n.toNat == k)) then
+          let r : Ident := ⟨s!"io_lt{fsp.start.line}_{fsp.start.col}", sp⟩
+          return ← surfC n c exp (.bind sp r none (.ret sp V) (.ret sp (.var sp r.name)))
       let V' ← surfV n c (match exp.bind rowRes? with | some (_, A) => some A | _ => none) V
       let c' ← refresh c
       match effCall? c' V' with
@@ -5941,7 +5956,10 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
           sig.binders.map fun (v, _) => m.life.lookup v
         match ← lendCall c sp base (argOf W argsL) (some apps) with
         | some V => return some V
-        | none => throw ⟨sp, s!"the lend in this call of `{fname}` is not at a borrow parameter"⟩
+        | none =>
+          -- A copy made for the handlers of its effects is named for the function it copies.
+          throw ⟨sp, s!"the lend in this call of `{(fname.splitOn "__").headD fname}` is not at " ++
+            "a borrow parameter"⟩
     let mut g := if sig.bang then Val.unbang f.span base else base
     -- An instance at types with lifetimes takes the call's lifetimes first (`makeInst`).
     for v in extras do g := .inst sp g (← c.surfaceL sp (.var v))

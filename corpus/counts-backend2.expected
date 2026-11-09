@@ -96,6 +96,7 @@ infer-local-unit 2 0 0 4 4 1
 leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 695
 lend-call-raise 9 0 0 34 31 4
 lend-call-record 1 0 0 6 2 0
+lend-tail-call 1 0 0 10 6 0
 lit-lend-raise 6 0 0 69 30 39
 load-for-linear 1 0 0 115 65 3
 nu-file-read 2 0 0 7 6 0

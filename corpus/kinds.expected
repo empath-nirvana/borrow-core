@@ -434,6 +434,7 @@ corpus/lend-div.bc 1.0 cancellable tail: machine: the handlers of the name have 
 corpus/lend-pipeline.bc 3.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/lend-pipeline.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/lend-pipeline.bc 1.0 cancellable tail: direct; agree
+corpus/lend-tail-call.bc 1.0 cancellable abortive: branch; agree
 corpus/list-blocks.bc 1.0 cancellable abortive: branch; agree
 corpus/list-blocks.bc 2.0 cancellable abortive: branch; agree
 corpus/list-blocks.bc 3.0 cancellable abortive: branch; agree
