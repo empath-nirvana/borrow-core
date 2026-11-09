@@ -87,6 +87,7 @@ clo-coerce 1 0 0 3 3 0 # the counter's cell; `main`'s lifetime is a cell of no w
 clo-counter 2 0 0 29 29 0 # the cell the closure is stored in, and the counter's cell; the calls through `mut` are direct
 clo-depth 2 0 0 49 49 0 # as clo-counter: four calls through three functions and a reborrow, all direct
 clo-consume 3 0 0 5 5 0 # three counters' cells, each freed by its `close`
+data-json-map-ser 16 0 0 699 420 205
 effects-load-raise 4 0 0 204 184 15
 for-arm-raises-owned 8 0 0 54 54 54
 handle-arm-releases 2 0 0 13 13 13
@@ -423,6 +424,9 @@ rec-generic-layer 6 0 0 23 20 0
 rec-generic-mutual 8 0 0 44 32 0
 rec-in-for-linear 1 0 0 1 1 0
 rec-layer 2 0 0 17 17 0 # the two cells only: the layers wrap the self-reference with no allocation
+rec-life-cap 3 0 0 29 15 15
+rec-life-mutual 4 0 0 75 44 47
+rec-life-rounds 5 0 0 59 35 59
 rec-lifetimes 2 0 0 16 6 23
 rec-load-exhausted 1 0 0 68 56 7
 rec-load-walk 4 0 0 128 104 18
