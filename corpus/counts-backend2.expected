@@ -467,6 +467,7 @@ tree-map 29 0 2 209 161 0
 tree-view-tasks 1205 600 0 48087 27039 8727
 trim-replace 8 0 0 4640 4179 569
 utf8-count 4 0 0 341 109 199
+with-lend-head-type 0 0 0 4 4 0
 with-nested-lend 2 0 0 13 13 5
 yield-callback 3 0 0 3 3 0
 alpha-app-arg 1 0 0 2 1 0

@@ -577,6 +577,8 @@ corpus/tree-map.bc 3.0 cancellable abortive: branch; agree
 corpus/tree-map.bc 2.0 cancellable abortive: branch; agree
 corpus/trim-replace.bc 1.0 cancellable abortive: branch; agree
 corpus/utf8-count.bc 1.0 cancellable abortive: branch; agree
+corpus/with-lend-head-type.bc 1.0 cancellable abortive: branch; agree
+corpus/with-lend-head-type.bc 2.0 cancellable abortive: branch; agree
 corpus/with-nested-lend.bc 1.0 cancellable abortive: -; agree
 corpus/with-nested-lend.bc 2.0 cancellable abortive: -; agree
 corpus/with-nested-lend.bc 3.0 cancellable abortive: -; agree

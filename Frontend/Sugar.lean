@@ -3672,7 +3672,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       -- A block whose body loops: the loop that runs it at its first observation.
       let B ← match exp.bind loopOf with
         | some (B, _) => pure B
-        | none => need sp "the block's result" ((resultOfC ((← refresh c).tyC M')).map Frontend.Elab.direct)
+        | none => need sp "the block's result" ((resultOfC ((← refresh c).tyCL M')).map Frontend.Elab.direct)
       let cx ← (loopCxOf sp B M' : Except Error LoopCx)
       let M'' ← (divBody cx c M' : SM Comp)
       let abort ← (template sp "a block that loops (`div_defer`)" s!"return {cx.rSrc}" : SM Comp)
@@ -4667,7 +4667,9 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let rowB := BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat i.n) ops 0 ++ S
     let cB : TCx := { c with E := { c.E with row := some rowB } }
     let M' ← surfC n cB none M
-    let CM ← need M.span s!"the type of the body `{i.name}` handles" ((← refresh cB).tyC M')
+    -- The body's type once its lends are elaborated (`TCx.tyCL`): a lending call's head answers
+    -- the place beside its value, which the binding takes apart (#893).  [spec §19]
+    let CM ← need M.span s!"the type of the body `{i.name}` handles" ((← refresh cB).tyCL M')
     let (_, A) ← need M.span s!"the type of the body `{i.name}` handles" (rowRes? CM)
     let As ← (c.surface sp A : Except Error VTy)
     match Elab.Effects.matchTyBy (sameTy c) i.tps σ i.retA As with
