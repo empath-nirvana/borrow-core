@@ -297,14 +297,15 @@ def toCode (δ : LSub) : VTy → Option KTy
 
 mutual
 /-- **`𝒱⟦A⟧δ` at the tree**, over `STy`'s formers. `Mut` at a payload with a store code (E1),
-empty otherwise (#790). `μ` and type variables are outside #791's fragment and read as empty
-(I11). A lifetime term with no interpretation at `δ` reads as empty. -/
+empty otherwise (#790). `μ`, type variables and `Code⟨N; E⟩ C` (`[spec §68]`) are outside
+#791's fragment and read as empty (I11). A lifetime term with no interpretation at `δ` reads as empty. -/
 def vT : VTy → LSub → STy
   | .unit, _ => STy.unit
   | .tensor A B, δ => STy.tensor (vT A δ) (vT B δ)
   | .zero, _ => STy.zero
   | .sum A B, δ => STy.sum (vT A δ) (vT B δ)
   | .thunk C, δ => STy.thunkC (cT C δ) (fun v => forceE C (.val v))
+  | .code _ _ _, _ => STy.zero
   | .ref A, δ => STy.ref (vT A δ)
   | .imm a A, δ => match a.interp δ with
     | some α => STy.imm (OrderDual.toDual α) (vT A δ)

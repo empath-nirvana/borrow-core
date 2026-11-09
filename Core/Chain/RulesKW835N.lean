@@ -620,6 +620,13 @@ theorem vNE_tyEq : ∀ (S : VTy) {S' : VTy} {δ δ' : LSub} (η η' : Option (Na
       have ih := cN_tyEq C h
       have hf := forceE_of_cTyEq h
       funext Θ n v ρ; simp only [vNE, ih, hf]
+  | .code N E C, S', _, _, η, η', h, hη => by
+      cases S' <;> simp only [TyEq] at h
+      obtain ⟨rfl, hE, hC⟩ := h
+      have ihE := vNE_tyEq E none none hE (envEqN_none _ _)
+      have ih := cN_tyEq C hC
+      have hf := forceE_of_cTyEq hC
+      funext Θ n v ρ; simp only [vNE, ihE, ih, hf]
   | .ref A, S', _, _, η, η', h, hη => by
       cases S' <;> simp only [TyEq] at h
       have ih := vNE_tyEq A η η' h hη
@@ -687,6 +694,7 @@ theorem vOE_tyEq : ∀ (S : VTy) {S' : VTy} {δ δ' : LSub} (η η' : Option (Na
       have ihB := vOE_tyEq B η η' h.2 hη
       funext Θ n v ρ; simp only [vOE, ihA, ihB]
   | .thunk C, S', _, _, η, η', h, hη => by cases S' <;> simp only [TyEq] at h; rfl
+  | .code N E C, S', _, _, η, η', h, hη => by cases S' <;> simp only [TyEq] at h; rfl
   | .ref A, S', _, _, η, η', h, hη => by
       cases S' <;> simp only [TyEq] at h
       have ih := vOE_tyEq A η η' h hη

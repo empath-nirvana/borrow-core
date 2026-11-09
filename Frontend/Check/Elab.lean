@@ -140,6 +140,12 @@ def ppLifeP (nm : List (String × LifeVar)) (p : Nat) : CLife → String
 
 def tvName (d : Nat) : String := if d == 0 then "X" else s!"X{d}"
 
+/-- A per-code closure type's code, printed as a digest: the code is a closure body, printed in
+full it would grow with the program.  `[spec §68]` -/
+def codeDigest (N : BoCa.Expr) : String :=
+  let h := hash (reprStr N)
+  "#" ++ String.ofList (Nat.toDigits 16 (h.toNat % 2 ^ 32))
+
 mutual
 /-- A value type in the surface syntax, at precedence `p` (syntax-core §4: `0` binders, `1`
 `-o`/`=>`, `2` `&`, `3` `+`, `4` `*`, `5` prefix); `d` is the number of enclosing `μ`s, and
@@ -153,6 +159,8 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .thunk (.all x b (.ret A)) =>
       parenIf (p > 0) s!"all {ppLVar x} < {ppLifeP nm 1 b}. {ppV (nm.filter (·.2 != x)) d 0 A}"
   | .thunk C => parenIf (p > 5) s!"U {ppC nm 6 C}"
+  -- [spec §68]
+  | .code N E C => parenIf (p > 5) s!"Code⟨{codeDigest N}; {ppV nm d 0 E}⟩ {ppC nm 6 C}"
   | .ref A => parenIf (p > 5) s!"ref {ppV nm d 5 A}"
   | .imm a A => parenIf (p > 5) s!"imm {ppLifeP nm 1 a} {ppV nm d 5 A}"
   | .mut a A => parenIf (p > 5) s!"mut {ppLifeP nm 1 a} {ppV nm d 5 A}"

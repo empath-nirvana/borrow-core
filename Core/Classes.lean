@@ -160,8 +160,8 @@ theorem tE_effFree (ks : List Bnd) (Bs : Stack) : ∀ A : VTy, (tE ks Bs A).effF
       simp only [tE]; split
       · rfl
       · exact callE_effFree ks _
-  | .unit | .zero | .thunk _ | .imm _ _ | .mut _ _ | .box _ _ | .bang _ | .unk | .int _ | .opq _ => rfl
-  | .fam .unit | .fam (.tensor _ _) | .fam .zero | .fam (.sum _ _) | .fam (.thunk _)
+  | .unit | .zero | .thunk _ | .code _ _ _ | .imm _ _ | .mut _ _ | .box _ _ | .bang _ | .unk | .int _ | .opq _ => rfl
+  | .fam .unit | .fam (.tensor _ _) | .fam .zero | .fam (.sum _ _) | .fam (.thunk _) | .fam (.code _ _ _)
   | .fam (.imm _ _) | .fam (.mut _ _) | .fam (.box _ _) | .fam (.bang _) | .fam .unk
   | .fam (.tvar _) | .fam (.mu _) | .fam (.int _) | .fam (.fam _) | .fam (.opq _) => rfl
 
@@ -245,6 +245,7 @@ theorem consumeAt_effFree : ∀ (b : Bool) (A : VTy), (consumeAt b A).effFree = 
       | .nu (.amp _ (.all _ _ _)) | .nu (.amp _ (.nu _)) | .nu (.amp _ (.eff _ _ _ _ _ _ _ _))
       | .nu (.eff _ _ _ _ _ _ _ _) | .eff _ _ _ _ _ _ _ _ | .nu (.ret _) | .nu (.arr _ _) | .nu .top
       | .nu (.all _ _ _) | .nu (.nu _) | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ => rfl
+  | _, .code _ _ _ => rfl
   | b, .fam (.ref A) => by
       simp only [consumeAt]; split
       · rfl
@@ -253,7 +254,7 @@ theorem consumeAt_effFree : ∀ (b : Bool) (A : VTy), (consumeAt b A).effFree = 
   | _, .unit | _, .zero | _, .imm _ _ | _, .mut _ _ | _, .bang _ | _, .unk | _, .tvar _
   | _, .int _ | _, .opq _ => rfl
   | _, .fam .unit | _, .fam (.tensor _ _) | _, .fam .zero | _, .fam (.sum _ _)
-  | _, .fam (.thunk _) | _, .fam (.imm _ _) | _, .fam (.box _ _) | _, .fam (.bang _)
+  | _, .fam (.thunk _) | _, .fam (.code _ _ _) | _, .fam (.imm _ _) | _, .fam (.box _ _) | _, .fam (.bang _)
   | _, .fam .unk | _, .fam (.tvar _) | _, .fam (.mu _) | _, .fam (.int _) | _, .fam (.fam _)
   | _, .fam (.opq _) => rfl
 

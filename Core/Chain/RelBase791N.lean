@@ -309,11 +309,12 @@ mutual
 type variable always (its environment entry, empty at the empty environment). `ν` is covered at a
 covered body, whose variable `X` (`VTy.inFragNu`) `cN` reads at the candidate. Families (arrays and
 slices) are covered at a covered leaf, and opaque types (`Tok` and the host types) always.
-Decidable. -/
+`Code⟨N; E⟩ C` is covered at a covered `E` and `C` (`[spec §68]`). Decidable. -/
 def _root_.BoCa.Fig16.LogRel.Core.VTy.inFrag : VTy → Bool
   | .unit | .zero | .unk | .int _ | .opq _ => true
   | .tensor A B | .sum A B => A.inFrag && B.inFrag
   | .thunk C => C.inFrag
+  | .code _ E C => E.inFrag && C.inFrag
   | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A | .mu A => A.inFrag
   | .tvar _ => true
 /-- The computation-type formers the interpretation covers. -/
@@ -332,6 +333,7 @@ def _root_.BoCa.Fig16.LogRel.Core.VTy.inFragNu : VTy → Bool
   | .unit | .zero | .unk | .int _ | .opq _ => true
   | .tensor A B | .sum A B => A.inFragNu && B.inFragNu
   | .thunk C => C.inFrag
+  | .code _ E C => E.inFrag && C.inFrag
   | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A => A.inFragNu
   | .tvar (_ + 1) | .mu _ => false
 /-- The computation-type formers a `ν` body covers. -/

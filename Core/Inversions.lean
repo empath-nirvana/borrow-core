@@ -196,7 +196,7 @@ theorem VView.eq_of_heads {T T' : VTy} (hv : VView T T') (hTb : ∀ a A, T ≠ .
 /-! ### Persistence is a property of the head -/
 
 theorem persistent_rename (r : Nat → Nat) : ∀ A : VTy, (A.rename r).persistent = A.persistent
-  | .unit | .zero | .unk | .int _ | .opq _ | .tvar _ | .thunk _ => rfl
+  | .unit | .zero | .unk | .int _ | .opq _ | .tvar _ | .thunk _ | .code _ _ _ => rfl
   | .tensor A B | .sum A B => by
       simp only [VTy.rename, VTy.persistent, persistent_rename r A, persistent_rename r B]
   | .ref _ | .imm _ _ | .mut _ _ | .fam _ | .bang _ => rfl
@@ -207,7 +207,7 @@ theorem persistent_subst_false : ∀ (A : VTy) (σ : Nat → VTy), A.persistent 
     (A.subst σ).persistent = false
   | .unit, _, h | .zero, _, h | .unk, _, h | .int _, _, h | .tvar _, _, h | .bang _, _, h => by
       simp [VTy.persistent] at h
-  | .opq _, _, _ | .thunk _, _, _ | .ref _, _, _ | .imm _ _, _, _ | .mut _ _, _, _ | .fam _, _, _ =>
+  | .opq _, _, _ | .thunk _, _, _ | .code _ _ _, _, _ | .ref _, _, _ | .imm _ _, _, _ | .mut _ _, _, _ | .fam _, _, _ =>
       rfl
   | .tensor A B, σ, h | .sum A B, σ, h => by
       simp only [VTy.persistent, Bool.and_eq_false_iff] at h

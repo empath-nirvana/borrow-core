@@ -351,7 +351,7 @@ theorem releasable_immReborrow (b : Lifetime.Life) : ∀ A : VTy, A.SpineMuFree 
   | .zero, _ => .zero
   | .tensor A B, ⟨h₁, h₂⟩ => .tensor (releasable_immReborrow b A h₁) (releasable_immReborrow b B h₂)
   | .sum A B, ⟨h₁, h₂⟩ => .sum (releasable_immReborrow b A h₁) (releasable_immReborrow b B h₂)
-  | .thunk _, _ => .unk
+  | .thunk _, _ | .code _ _ _, _ => .unk
   | .opq _, _ => .unk
   | .ref _, _ => .imm
   | .imm _ _, _ => .imm

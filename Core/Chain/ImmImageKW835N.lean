@@ -38,6 +38,7 @@ theorem vN_vO : ∀ (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (ρ :
   | zero => exact h.elim
   | tvar _ => exact h.elim
   | thunk _ => trivial
+  | code _ _ _ => trivial
   | tensor A B =>
       obtain ⟨v₁, v₂, ρ₁, ρ₂, h₁, h₂, h₃, h₄⟩ := h
       exact ⟨v₁, v₂, ρ₁, ρ₂, h₁, h₂, h₃.2, h₄.2⟩
@@ -85,6 +86,7 @@ theorem vBN_vShape (b : Bool) (A : VTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : 
   | zero => exact h.elim
   | tvar _ => exact h.elim
   | thunk _ => trivial
+  | code _ _ _ => trivial
   | tensor A B =>
       obtain ⟨v₁, v₂, ρ₁, ρ₂, rfl, h₂, h₃, h₄⟩ := h
       exact ⟨v₁, v₂, pure_sep_mk rfl ⟨ρ₁, ρ₂, h₂, h₃.2, h₄.2⟩⟩
@@ -150,6 +152,7 @@ theorem vO_transfer {R : WRes} : ∀ (T : VTy) {δ : LSub} {Θ : LocTy} {n : Nat
   | opq _ => exact hs
   | zero => exact h.elim
   | thunk _ => trivial
+  | code _ _ _ => trivial
   | tvar _ => exact h.elim
   | mu M =>
       obtain ⟨hnm, hcl, hG⟩ := h
@@ -300,6 +303,8 @@ theorem relabel_vN {R : WRes} {Θ : LocTy} {n : Nat} {β β₀ : Life} {δ : LSu
   | opq _ =>
       obtain ⟨rfl, -⟩ := hc; rw [relRes_empty]; rfl
   | thunk _ =>
+      obtain ⟨rfl, -⟩ := hc; rw [relRes_empty]; rfl
+  | code _ _ _ =>
       obtain ⟨rfl, -⟩ := hc; rw [relRes_empty]; rfl
   | unk =>
       obtain ⟨rfl, -⟩ := hc; rw [relRes_empty]; rfl

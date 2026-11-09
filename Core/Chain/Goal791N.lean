@@ -314,6 +314,7 @@ theorem vBN_some (η : Option (Nat → TEntN)) :
   | zero => intro b; cases b <;> rfl
   | unk => intro b; cases b <;> rfl
   | thunk _ => intro b; cases b <;> rfl
+  | code _ _ _ _ => intro b; cases b <;> rfl
   | tensor A B ihA ihB =>
       intro b
       obtain ⟨hA₁, hA₂⟩ := vBN_eq_both (ℍ := ℍ) ihA
@@ -368,6 +369,7 @@ theorem vBN_congr_occ : ∀ (A : VTy) (η₁ η₂ : Nat → TEntN), (∀ n, A.O
   | zero => intro _ _ _ b; cases b <;> rfl
   | unk => intro _ _ _ b; cases b <;> rfl
   | thunk _ => intro _ _ _ b; cases b <;> rfl
+  | code _ _ _ _ => intro _ _ _ b; cases b <;> rfl
   | tensor A B ihA ihB =>
       intro η₁ η₂ h b
       obtain ⟨hA₁, hA₂⟩ := vBN_eq_both (ℍ := ℍ) (ihA η₁ η₂ (fun n hn => h n (Or.inl hn)))
@@ -438,6 +440,7 @@ theorem vBN_rename : ∀ (A : VTy) (η : Nat → TEntN) (r : Nat → Nat) (b : B
   | zero => intro _ _ b; cases b <;> rfl
   | unk => intro _ _ b; cases b <;> rfl
   | thunk _ => intro _ _ b; cases b <;> rfl
+  | code _ _ _ _ => intro _ _ b; cases b <;> rfl
   | tvar n => intro _ _ b; cases b <;> rfl
   | tensor A B ihA ihB =>
       intro η r b
@@ -510,6 +513,7 @@ theorem vBN_subst : ∀ (A : VTy) (η : Nat → TEntN) (σ : Nat → VTy) (δ : 
   | zero => intro _ _ _ b; cases b <;> rfl
   | unk => intro _ _ _ b; cases b <;> rfl
   | thunk _ => intro _ _ _ b; cases b <;> rfl
+  | code _ _ _ _ => intro _ _ _ b; cases b <;> rfl
   | tvar n => intro _ _ _ b; cases b <;> rfl
   | tensor A B ihA ihB =>
       intro η σ δ b
@@ -607,6 +611,7 @@ theorem vBN_mono_at : ∀ (A : VTy) (k : Nat) (η₁ η₂ : Nat → TEntN), A.N
   | zero => intro _ _ _ _ _ _ _ b _ _ _ _ _ h; cases b <;> exact h
   | unk => intro _ _ _ _ _ _ _ b _ _ _ _ _ h; cases b <;> exact h
   | thunk _ => intro _ _ _ _ _ _ _ b _ _ _ _ _ h; cases b <;> exact h
+  | code _ _ _ _ => intro _ _ _ _ _ _ _ b _ _ _ _ _ h; cases b <;> exact h
   | tensor A B ihA ihB =>
       intro k η₁ η₂ hk ht hP hPk b δ Θ j v ρ h
       cases b <;>
@@ -1205,7 +1210,7 @@ theorem vNX_poly_ty (S S' : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
       funext δ Θ n v ρ; simp only [vNE, h₁]
   | .tvar 0, _ => rfl
   | .tvar (_ + 1), _ => rfl
-  | .unit, h | .zero, h | .unk, h | .int _, h | .opq _, h | .thunk _, h | .mu _, h | .ref _, h
+  | .unit, h | .zero, h | .unk, h | .int _, h | .opq _, h | .thunk _, h | .code _ _ _, h | .mu _, h | .ref _, h
   | .imm _ _, h | .mut _ _, h | .bang _, h | .fam _, h => vNX_occ S S' P P _ h
 
 
@@ -1336,6 +1341,9 @@ theorem vNE_down : ∀ (A : VTy) (η : Option (Nat → TEntN)), EnvDownN η → 
       · exact .inr ⟨v₂, h₁, vNE_down B η hη δ Θ n v₂ ρ h₂⟩
   | .thunk C, η, hη, δ, Θ, n, v, ρ, h => fun Θ' hE hOK c hc ls =>
       cN_down C δ Θ' hOK.1 c n ls _ ρ (h Θ' hE hOK c hc ls)
+  | .code _ E C, η, hη, δ, Θ, n, v, ρ, h =>
+      ⟨let ⟨us, hv, hu⟩ := h.1; ⟨us, hv, vNE_down E none envDownN_none δ Θ n _ ρ hu⟩,
+        fun Θ' hE hOK c hc ls => cN_down C δ Θ' hOK.1 c n ls _ ρ (h.2 Θ' hE hOK c hc ls)⟩
   | .ref A, η, hη, δ, Θ, n, _, _, h => by
       obtain ⟨l, u, σ, h₁, h₂, h₃⟩ := h
       exact ⟨l, u, σ, h₁, h₂, vNE_down A η hη δ Θ n u σ h₃⟩
@@ -1376,7 +1384,7 @@ theorem vOE_down : ∀ (A : VTy) (η : Option (Nat → TEntN)), EnvDownN η → 
       rcases h with ⟨v₁, h₁, h₂⟩ | ⟨v₂, h₁, h₂⟩
       · exact .inl ⟨v₁, h₁, vOE_down A η hη δ Θ n v₁ ρ h₂⟩
       · exact .inr ⟨v₂, h₁, vOE_down B η hη δ Θ n v₂ ρ h₂⟩
-  | .thunk _, η, hη, _, _, _, _, _, _ => trivial
+  | .thunk _, η, hη, _, _, _, _, _, _ | .code _ _ _, η, hη, _, _, _, _, _, _ => trivial
   | .ref A, η, hη, δ, Θ, n, _, _, h => by
       obtain ⟨l, u, σ, h₁, h₂, h₃⟩ := h
       exact ⟨l, u, σ, h₁, h₂, vOE_down A η hη δ Θ n u σ h₃⟩
@@ -1608,6 +1616,11 @@ theorem vNE_congr : ∀ (A : VTy) (η : Option (Nat → TEntN)) {δ δ' : LSub},
   | .thunk C, η, δ, δ', h, hη => by
       have h₁ := cN_congr C (δ := δ) (δ' := δ') h
       funext Θ n v ρ; simp only [vNE, h₁]
+  | .code N E C, η, δ, δ', h, hη => by
+      have h₀ := vNE_congr E none (δ := δ) (δ' := δ') (fun y hy => h y (.inl hy))
+        (envAgreeN_none δ δ')
+      have h₁ := cN_congr C (δ := δ) (δ' := δ') (fun y hy => h y (.inr hy))
+      funext Θ n v ρ; simp only [vNE, h₀, h₁]
   | .ref A, η, δ, δ', h, hη => by
       have h₁ := vNE_congr A η (δ := δ) (δ' := δ') h hη
       funext Θ n v ρ; simp only [vNE, h₁]
@@ -1663,7 +1676,7 @@ theorem vOE_congr : ∀ (A : VTy) (η : Option (Nat → TEntN)) {δ δ' : LSub},
       have h₁ := vOE_congr A η (δ := δ) (δ' := δ') (fun y hy => h y (.inl hy)) hη
       have h₂ := vOE_congr B η (δ := δ) (δ' := δ') (fun y hy => h y (.inr hy)) hη
       funext Θ n v ρ; simp only [vOE, h₁, h₂]
-  | .thunk _, _, _, _, _, _ => rfl
+  | .thunk _, _, _, _, _, _ | .code _ _ _, _, _, _, _, _ => rfl
   | .ref A, η, δ, δ', h, hη => by
       have h₁ := vOE_congr A η (δ := δ) (δ' := δ') h hη
       funext Θ n v ρ; simp only [vOE, h₁]
@@ -2086,6 +2099,9 @@ theorem vNE_extR : ∀ (A : VTy) (η : Option (Nat → TEntN)), EnvExtRN η → 
       · exact .inr ⟨v₂, h₁, vNE_extR B η hη δ n v₂ ρ hE h₂⟩
   | .thunk _, η, hη, _, _, _, _, _, _, hE, h => fun Θ'' hE' hOK c hc ls =>
       h Θ'' (hE.trans hE') hOK c hc ls
+  | .code _ E _, η, hη, δ, _, _, n, _, ρ, hE, h =>
+      ⟨let ⟨us, hv, hu⟩ := h.1; ⟨us, hv, vNE_extR E none envExtRN_none δ n _ ρ hE hu⟩,
+        fun Θ'' hE' hOK c hc ls => h.2 Θ'' (hE.trans hE') hOK c hc ls⟩
   | .ref A, η, hη, δ, _, _, n, _, _, hE, h => by
       obtain ⟨l, u, σ, h₁, h₂, h₃⟩ := h
       exact ⟨l, u, σ, h₁, h₂, vNE_extR A η hη δ n u σ (hE.right h₂) h₃⟩
@@ -2141,7 +2157,7 @@ theorem vOE_extR : ∀ (A : VTy) (η : Option (Nat → TEntN)), EnvExtRN η → 
       rcases h with ⟨v₁, h₁, h₂⟩ | ⟨v₂, h₁, h₂⟩
       · exact .inl ⟨v₁, h₁, vOE_extR A η hη δ n v₁ ρ hE h₂⟩
       · exact .inr ⟨v₂, h₁, vOE_extR B η hη δ n v₂ ρ hE h₂⟩
-  | .thunk _, η, hη, _, _, _, _, _, _, _, _ => trivial
+  | .thunk _, η, hη, _, _, _, _, _, _, _, _ | .code _ _ _, η, hη, _, _, _, _, _, _, _, _ => trivial
   | .ref A, η, hη, δ, _, _, n, _, _, hE, h => by
       obtain ⟨l, u, σ, h₁, h₂, h₃⟩ := h
       exact ⟨l, u, σ, h₁, h₂, vOE_extR A η hη δ n u σ (hE.right h₂) h₃⟩
@@ -2445,6 +2461,7 @@ theorem vN_empty_of_persistent : ∀ (A : VTy), A.Persistent → ∀ {δ : LSub}
   | tvar _ => exact h.elim
   | opq _ => simp [VTy.Persistent, VTy.persistent] at hp
   | thunk _ => simp [VTy.Persistent, VTy.persistent] at hp
+  | code _ _ _ => simp [VTy.Persistent, VTy.persistent] at hp
   | ref _ => simp [VTy.Persistent, VTy.persistent] at hp
   | imm _ _ => simp [VTy.Persistent, VTy.persistent] at hp
   | «mut» _ _ => simp [VTy.Persistent, VTy.persistent] at hp
