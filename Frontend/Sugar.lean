@@ -3192,6 +3192,7 @@ def Const.unwinding (r : Frontend.Row) : Const → Option Const
   | .withbor1 x A B => some (.withbor1U x A B r)
   | .withbor2 x b A B => some (.withbor2U x b A B r)
   | .withbor3 a x A B => some (.withbor3U a x A B r)
+  | .withload a x A B => some (.withloadU a x A B r)
   | .sliceBorrowMut x b A B => some (.sliceBorrowMutU x b A B r)
   | .sliceBorrowImm x b A B => some (.sliceBorrowImmU x b A B r)
   | _ => none
@@ -3208,7 +3209,8 @@ is that scheme as a computation, its lend in the unwinding form (`unwindingM?`),
 same type. -/
 def unwindingC? (sp : Span) : Val → Option Comp
   | .app _ (.app _ (.const ksp C) P) cb => match C with
-    | .withbor1U .. | .withbor2U .. | .withbor3U .. | .sliceBorrowMutU .. | .sliceBorrowImmU .. =>
+    | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU .. | .sliceBorrowMutU ..
+    | .sliceBorrowImmU .. =>
       let sfx := s!"{sp.start.line}_{sp.start.col}"
       let k : Ident := ⟨s!"io_uk{sfx}", sp⟩
       let p : Ident := ⟨s!"io_up{sfx}", sp⟩
@@ -3219,6 +3221,7 @@ def unwindingC? (sp : Span) : Val → Option Comp
         | .withbor1U x A B r => some (unwindingTy sp x (.imm sp (.var sp x.name) A) B r)
         | .withbor2U x _ A B r | .withbor3U _ x A B r =>
           some (unwindingTy sp x (.mut sp (.var sp x.name) A) B r)
+        | .withloadU _ x A B r => some (unwindingTy sp x (.view sp (.var sp x.name) A) B r)
         | .sliceBorrowMutU x _ A B r => some (unwindingTy sp x (.arrayMut sp (.var sp x.name) A) B r)
         | .sliceBorrowImmU x _ A B r => some (unwindingTy sp x (.arrayImm sp (.var sp x.name) A) B r)
         | _ => none
@@ -3232,6 +3235,10 @@ def unwindingC? (sp : Span) : Val → Option Comp
   -- A marked scheme's unwinding form is not marked: a mark fixes the shape of the pure scheme
   -- (SPEC §57), and the unwinding form is a computation of another shape.
   | .mark _ _ V => unwindingC? sp V
+  -- A load block's value `((), B)` (SPEC §36): its load in the unwinding form, paired after it.
+  | .pair psp (.unit usp) V => (unwindingC? sp V).map fun M =>
+    let t : Ident := ⟨s!"io_ul{sp.start.line}_{sp.start.col}", psp⟩
+    .bind psp t none M (.ret psp (.pair psp (.unit usp) (.var psp t.name)))
   | .ascribe asp V T => (unwindingC? sp V).map fun M =>
     let t : Ident := ⟨s!"io_ut{sp.start.line}_{sp.start.col}", asp⟩
     .bind asp t (some T) M (.ret asp (.var asp t.name))
@@ -3859,14 +3866,20 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let c₁ := c.pushLife x dom
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := A.immReborrow (.var v)
-        let S' ← surfC n (c₁.push b.name (some Tb)) none S
-        let B ← need tsp "the block's result" (resultOfC ((← refresh c₁).push b.name (some Tb) |>.tyCL S'))
+        let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
+        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
         let Bs ← c.surface ksp B
         let xi : Ident := ⟨x, ksp⟩
+        -- At a body that performs abortive operations, the load's unwinding form `withloadU`
+        -- (SPEC §19): the load consumed only the `imm` borrow, so nothing goes back to `*g`'s
+        -- place, which an unwind leaves as it was.  `[spec §36]`
         let C := Const.withload (← c.surfaceL dsp a) xi As Bs
+        let C ← match cbr with
+          | some r => do pure ((Const.unwinding (← (surfRow c ksp r : Except Error Frontend.Row)) C).getD C)
+          | none => pure C
         let Tbs := VTy.view lsp (.var lsp x) As
         return .pair sp (.unit sp) (.app sp (.app sp₂ (.const ksp C) G') (.thunkv tsp (.lamL lsp xi (.dom lsp)
           (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))

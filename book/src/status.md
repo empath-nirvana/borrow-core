@@ -13,7 +13,7 @@ book lists what isn't built yet.
 - **Numbers**: `i32`, `i64`, `u8`, `f32`, `f64`; integer division by zero raises an error you can
   handle ([Numbers](guide/basics.md#numbers), [Division](guide/errors.md#division))
 - **Records and variants** with `match` ([Records and variants](guide/basics.md#records-and-variants))
-- **Recursive data**: lists and trees, folds, and types that hold a `Vec` or an array of
+- **Recursive data**: lists and trees, folds, and types that hold a `Vec`, an array or a map of
   themselves ([Data and generics](guide/data.md))
 - **Recursion**, with deep recursion on the heap ([Recursion](guide/data.md#recursion))
 - **Arrays, views and slices**: split, swap, sort ([Arrays](guide/data.md#arrays))
@@ -56,8 +56,9 @@ book lists what isn't built yet.
 - `&x` and `&mut x` must be the whole call of a `let` or statement: write
   `let n = len(&v); f(n)`, not `f(len(&v))`
   ([#510](https://github.com/empath-nirvana/borrow-core/issues/510)).
-- A heap cell can't be lent with `&c` to a function that does I/O or performs an effect; lend it
-  with a block instead, `borrow imm c { r -> show(r) }`.
+- A heap cell can't be lent with `&c` to a function that does I/O or performs an answering
+  (`fn`) operation; lend it with a block instead, `borrow imm c { r -> show(r) }`. A function
+  that may `raise` takes `&c` like any other.
 - A borrow can't be lent on with `&mut m`; pass it and hand it back instead
   ([Borrow blocks](guide/ownership.md#borrow-blocks)).
 - Two borrow blocks can't be nested over two different owners; inside a block, lend the second
@@ -93,8 +94,8 @@ book lists what isn't built yet.
 - Async is cooperative and single-threaded, with no event loop over real I/O, platform timers or
   wakers yet ([#52](https://github.com/empath-nirvana/borrow-core/issues/52)).
 - A task can hold a `mut` borrow of its own cell across `await`, and a task of `spawn_in` a
-  borrow lent from outside its scheduler, but no other borrow: what crosses an `await` is owned,
-  by design ([Async tasks](guide/async.md#borrows-across-await)).
+  borrow lent from outside its scheduler. Other borrows held across an `await` or a `yield` are
+  not implemented yet ([Async tasks](guide/async.md#borrows-across-await)).
   Two tasks can't share one output stream.
 
 **Performance**

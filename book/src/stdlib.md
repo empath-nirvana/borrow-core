@@ -415,8 +415,8 @@ main -> 1 =
 ## map
 
 A hash map and a set, keyed by [`key`](#key)'s families. A map is a value: an operation takes it
-with `&m` or `&mut m`. `borrow imm m { 'x, r -> … }` lends it as `r : MapRef[K, V]<'k, 'x>`, to
-read values in place. [Maps and sets](guide/data.md#maps-and-sets) teaches them.
+with `&m` or `&mut m`. `borrow imm m { 'x, r -> … }` lends it as `r : MapRef[K, V]<'h, 'k, 'x>`,
+to read keys and values in place. [Maps and sets](guide/data.md#maps-and-sets) teaches them.
 
 | name | signature | |
 |---|---|---|
@@ -427,16 +427,21 @@ read values in place. [Maps and sets](guide/data.md#maps-and-sets) teaches them.
 | `map_contains` | `map_contains[K, V](m: Map[K, V], k: K) -> Map[K, V] * bool` | whether `k` has a value |
 | `map_remove` | `map_remove[K, V](m: Map[K, V], k: K) -> Map[K, V] * (V + 1)` | the entry at `k` taken out |
 | `map_len` | `map_len[K, V](m: Map[K, V]) -> Map[K, V] * i32` | the number of entries |
-| `map_get` | `map_get[K, V]<'k, 'x>(r: MapRef[K, V]<'k, 'x>, k: K) -> imm 'x V + 1` | the value at `k`, lent |
-| `map_size` | `map_size[K, V]<'k, 'x>(r: MapRef[K, V]<'k, 'x>) -> i32` | the number of entries of a lent map |
-| `map_iter` | `map_iter(r)` | a `for` source: each key with a view of its value, `K * imm 'x V` |
+| `map_get` | `map_get[K, V]<'h, 'k, 'x>(r: MapRef[K, V]<'h, 'k, 'x>, k: K) -> imm 'x V + 1` | the value at `k`, lent |
+| `map_size` | `map_size[K, V]<'h, 'k, 'x>(r: MapRef[K, V]<'h, 'k, 'x>) -> i32` | the number of entries of a lent map |
+| `map_entries` | `map_entries(r)` | a `for` source: each key and its value lent, `imm 'k K * imm 'x V`, in slot order |
+| `map_iter` | `map_iter(r)` | a `for` source: each key copied (a key that is its own view: an integer, a `text`) with a view of its value, `K * imm 'x V` |
+| `map_fold` | `map_fold[K, V, S]<'h, 'k, 'x>(r: MapRef[K, V]<'h, 'k, 'x>, f: !((imm 'k K * imm 'x V) * S => S), s: S) -> S` | `f` over the entries |
+| `map_drain` | `map_drain(m)` | a `for` source that consumes `m`: each entry taken out, `K * V`; what a `break` leaves is consumed |
 | `set_new` | `set_new[K](cap: i32) -> Set[K]` | an empty set |
 | `set_insert` | `set_insert[K](s: Set[K], k: K) -> Set[K] * bool` | `k` added; whether it was new |
 | `set_contains` | `set_contains[K](s: Set[K], k: K) -> Set[K] * bool` | |
 | `set_remove` | `set_remove[K](s: Set[K], k: K) -> Set[K] * bool` | `k` taken out; whether it was there |
 | `set_len` | `set_len[K](s: Set[K]) -> Set[K] * i32` | |
 
-The values need a placeholder, as a buffer's elements do.
+The keys and values need a placeholder, as a buffer's elements do. Every iteration is in slot
+order: the same on every run for the same insertions and removals, but neither insertion order
+nor sorted.
 
 ```bc
 include textio

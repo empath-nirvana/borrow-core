@@ -1,5 +1,5 @@
 -- The hash map of `lib/map.bc` (SPEC §36) at a value that is not persistent, a buffer, and its
--- views. `borrow imm m { 'x, r -> … }` lends the map as a family (its keys and its values each
+-- views. `borrow imm m { 'x, r -> … }` lends the map as a family (its slots, keys and values each
 -- lent as an array is), and `map_get(r, k)` answers a view of the value at `'x`, as `get` of
 -- `lib/slice.bc` does of an element: two views are live at once, passed to a function and read
 -- through a load (`borrow imm *v`), with no copy of the buffers and no block per lookup.
@@ -25,18 +25,19 @@ fn first<'z>(v: imm 'z (buf i32)) -> i32 =
   r
 
 -- Two values of the lent map, both views at once.
-fn two<'k, 'x>(r: MapRef[i32, buf i32]<'k, 'x>) -> i32 =
-  let ((ks, vs), n) = r;
-  let (ks, ks2) = array_copy['k, 1 + (i32 * i32)](ks);
+fn two<'h, 'k, 'x>(r: MapRef[i32, buf i32]<'h, 'k, 'x>) -> i32 =
+  let (((hs, ks), vs), n) = r;
+  let (hs, hs2) = array_copy['h, 1 + i32](hs);
+  let (ks, ks2) = array_copy['k, i32](ks);
   let (vs, vs2) = array_copy['x, buf i32](vs);
-  let a = map_get(((ks, vs), n), 3);
-  let b = map_get(((ks2, vs2), n), 7);
+  let a = map_get((((hs, ks), vs), n), 3);
+  let b = map_get((((hs2, ks2), vs2), n), 7);
   let x = match a { inl v -> first(v) | inr u -> 0 };
   let y = match b { inl v -> first(v) | inr u -> 0 };
   x + y
 
 -- Every entry: its key, and its value's length and first element's last digit.
-fn each<'k, 'x>(r: MapRef[i32, buf i32]<'k, 'x>) -> i32 =
+fn each<'h, 'k, 'x>(r: MapRef[i32, buf i32]<'h, 'k, 'x>) -> i32 =
   let mut s = 0;
   for e in map_iter(r) {
     let (k, v) = e;

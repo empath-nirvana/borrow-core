@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.47 · 2026-11-07
+Version 1.51 · 2026-11-07
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2889,7 +2889,11 @@ names.
   (`slice_borrow_*_u`), ascribed the scheme's type (`corpus/buf-lend-raise.bc`,
   `lit-lend-raise.bc`). The unwinding form of a marked scheme (a lent cell's, a literal's view,
   §57) is not marked, so a literal's view crossed by an abort tabulates its table into an array
-  that is not the literal's read-only bytes.
+  that is not the literal's read-only bytes. A load block (`borrow imm *g { 'y, v -> … }`, §36)
+  is `withloadU`, `withload` at the callback's row: the load consumes only the `imm` borrow `g`,
+  so an unwind ends the reborrow and hands nothing back, there is no finaliser, and the place `g`
+  borrows is left as it was. So a load's body may raise, and may call a recursion, which performs
+  `Exhausted` (§20) (`corpus/effects-load-raise.bc`, `rec-load-walk.bc`, `rec-load-exhausted.bc`).
 - *In a call that lends a place*: `f(…, &mut x, …)` or `f(…, &x, …)` at a borrow parameter of a
   function that performs operations of the row is the borrow of the call (§11's lend) in its
   unwinding form at those operations, which must be abortive: `withbor2U`/`withbor1U` of a cell,
@@ -3454,7 +3458,8 @@ Six rules, over `CDerives` with its context premises (§10):
     `d : src ⊸ F 1` typed by a premise. The elaborator passes the source's consume `consumeE src`
     (§12), which is `forget` at `Mut`/`Imm`;
   - `withload`'s source is consumed by its load, so nothing goes back to the lender: its unwinding
-    form is `withload`'s own term at the effectful type;
+    form is `withload`'s own term at the effectful type (`withloadU`), with no finaliser. The
+    elaborator gives a load block whose body performs abortive operations this form (§18, §36);
   - the callback's row is `Row.Unwind 'x`: every operation abortive and of a nonzero name, and its
     argument type closed data, free of `'x` and outliving every lifetime;
   - `withswap` is not a borrow: its callback takes the payload by value, and an unwind would
@@ -7036,7 +7041,9 @@ Each elaborates into existing core terms:
 - **A load through a borrow**, `borrow imm *g { 'y, v -> S }`, `g : imm 'a A`, is
   `withload['a, 'y, A, B] g (Fun 'y < dom. fun (v : view 'y A) -> S)`, `B` free of `'y`; the
   block's value is `((), B)`, nothing handed back. It reads any content, where `*g` copies a
-  persistent one.
+  persistent one. At a body that performs operations, which must be abortive, the load is
+  `withloadU['a, 'y, A, B, [r]]` (§19 *Borrows*), `r` the operations the body performs, and the
+  block's value `((), b)` for the `b` it answers (§18 *In a borrow block's body*).
 - **A record lent fieldwise**, `borrow imm r { 'x, v -> S }` at a place whose type is a tree of
   `⊗` of owned arrays and persistent values (at least one array; a buffer `array A * i32` keeps
   §17's form, its prefix): each array is lent by its own `slice_borrow_imm` (§9), nested left to
@@ -7058,8 +7065,8 @@ Each elaborates into existing core terms:
 
 ### The map and set: `lib/map.bc`
 
-    type Map[K, V] = (array (1 + (i32 * K)) * array V) * i32
-    type MapRef[K, V]<'k, 'x> = (array_imm 'k (1 + (i32 * K)) * array_imm 'x V) * i32
+    type Map[K, V] = ((array (1 + i32) * array K) * array V) * i32
+    type MapRef[K, V]<'h, 'k, 'x> = ((array_imm 'h (1 + i32) * array_imm 'k K) * array_imm 'x V) * i32
     type Set[K] = Map[K, 1]
 
 | function | type | |
@@ -7070,20 +7077,51 @@ Each elaborates into existing core terms:
 | `map_contains(&m, k)` | `bool` | |
 | `map_remove(&mut m, k)` | `V + 1` | the value taken out |
 | `map_len(&m)` | `i32` | |
-| `map_get(r, k)` | `imm 'x V + 1` | a view of the value, `r : MapRef[K, V]<'k, 'x>` |
-| `map_iter(r)` | `sized … (K * imm 'x V)` | every entry in slot order, the key copied out of its slot (a key that is its own view) |
+| `map_get(r, k)` | `imm 'x V + 1` | a view of the value, `r : MapRef[K, V]<'h, 'k, 'x>` |
+| `map_entries(r)` | `sized D i32 (imm 'k K * imm 'x V)` | every entry in slot order, the key lent at `'k` and the value at `'x` |
+| `map_iter(r)` | `sized D i32 (K * imm 'x V)` | every entry in slot order, the key copied out of its slot (a key that is its own view) |
+| `map_fold(r, f, s)` | `S` | `f : !((imm 'k K * imm 'x V) * S => S)` over `map_entries(r)`'s entries from `s` |
+| `map_drain(m)` | `sized (i32 * i32) (i32 * T) (K * V)` | consumes `m`: every entry taken out in slot order, owned |
 | `map_size(r)` | `i32` | |
 | `set_new[K](cap)`, `set_insert(&mut s, k)`, `set_contains(&s, k)`, `set_remove(&mut s, k)`, `set_len(&s)` | | `set_insert` answers whether `k` was new |
 
 `r` is the map lent as a family, `borrow imm m { 'x, r -> … }` (above); while it is lent the map
-cannot change, so no view outlives a growth (linearity, as §17's *No view across growth*).
+cannot change, so no view outlives a growth (linearity, as §17's *No view across growth*). `D` is
+the lent record's three views, `((array_imm 'h (1 + i32) * array_imm 'k K) * array_imm 'x V)`, and
+`T` the owned one's, `(array (1 + i32) * array K) * array V`.
+
+**Iteration** (#879). Each iterator is a sized iterator (§16) whose state is the slot, so a `for`
+over it is counted by its data's length:
+
+- `map_entries(r)` answers, at each occupied slot, the key's element of the keys' family
+  (`array_get`, `imm 'k K`) and the value's (`imm 'x V`): any key type, owned ones included. A key
+  is read through a load, `borrow imm *k { 'y, s -> … }`, whose view of a `string` is
+  `array_imm 'y u8 * i32`, its text `key_prefix(s) : text 'y` (`lib/key.bc`).
+- `map_iter(r)` is `map_entries(r)` with the key copied out through a load: only where the key's
+  view is the key (`view 'y K = K`: an integer, a view, a pair of them).
+- `map_fold(r, f, s)` is a `for` over `map_entries(r)`, as `fold_lines` of `lib/text.bc` is over
+  lines.
+- `map_drain(m)` takes `m`; its data is the count `(0, cap)` of slots and its state the slot and
+  the owned table. Each step takes the entry at the slot out (`array_replace` with the fillers,
+  the slot left empty) and answers it, or a skip at an empty slot. A loop that stops early
+  (`break`, `return`, an abort) leaves the iterator's state, and with it the table and every entry
+  not yet taken, to its consume (§12): the map is consumed either way, and with a consumable `K`
+  and `V` every entry is.
+
+**The order.** Every iteration visits the entries in slot order, from slot 0 up. A key's slot is a
+function of its hash (deterministic, `lib/key.bc`), the table's size and the keys inserted and
+removed before it, so the order is the same on every run, engine and backend for the same
+sequence of insertions and removals; it is not the insertion order and not sorted.
 
 **The table.** Open addressing with linear probing over a power-of-two table at most half full,
-grown by doubling; each slot holds `inl ()` or `inr (h, k)`, the key with its slot hash, and the
-value at the same index, the filler of `V` where there is no entry (so `V` has a filler: integers,
-views, arrays, buffers, and pairs and sums of them). Removal shifts the entries after the hole
-back over it, each whose probe sequence passes it (Knuth's algorithm R), so a search never meets a
-tombstone. A probe compares slot hashes, then `equal` on the two keys' views. Every loop is
+grown by doubling. Three arrays of the table's size: the slots, each `inl ()` or `inr h`, the
+entry's slot hash; the keys; and the values, the key and the value of an entry at its slot's
+index and the fillers of `K` and `V` where there is none (so `K` and `V` have a filler: integers,
+views, arrays, buffers, and pairs and sums of them). Keys and values are arrays of their own so
+that the map lent fieldwise lends each entry's key and value as array elements (`array_get`), at
+`'k` and `'x`; a key inside a sum (`1 + (i32 * K)`) has only a load's view, at a lifetime that
+cannot leave the load. Removal shifts the entries after the hole back over it, each whose probe
+sequence passes it (Knuth's algorithm R), so a search never meets a tombstone. A probe compares slot hashes, then `equal` on the two keys' views. Every loop is
 counted by the table's size; a search ends at an empty slot, which a half-full table has.
 
 **Keys and values.** A key sought is given by value and consumed after the search: it is lent to
@@ -7101,9 +7139,11 @@ are no `data` declarations (§31 *Open*), so the representation is not hidden ou
 |---|---|---|---|
 | `corpus/poly-operators.bc` | `(+)`, `(*)`, `(==)` at `Complex`; a generic `dot` at `i32` (the instructions) and at `Complex` (the cases) | `(32, ((-9, 12), true))` | `0 0 0` |
 | `corpus/poly-providers.bc` | `equal`, `hash` and `order` at strings of two capacities, views, sums; specificity of `buf A` over `A * B`; a family of the program's | `(111, (7, -1))` | `2 0 0` |
-| `corpus/map-views.bc` | views of buffer values, two at once, read through `borrow imm *v`; `map_iter`; 200 colliding keys, every third removed | `(106, (52, (133, 13267)))` | `24 0 0` |
-| `corpus/aoc/2024-01.bc`, `2024-11.bc`, `2022-21.bc` | #490's map days: counts, interning to indices, keys that are views of the input | the Rust answers | `5 0 0`, `271 0 0`, `12 0 0` |
-| `corpus/leetcode/arrays/0001-two-sum.bc`, `0217-contains-duplicate.bc`, `strings/0049-group-anagrams.bc`, `graphs/0128-longest-consecutive-sequence.bc`, `heaps/0347-top-k-frequent-elements.bc` | a map, a set, `string` keys, `map_iter` | as their headers | `19`, `13`, `70`, `15`, `31` allocations, no indirect call or copy |
+| `corpus/map-views.bc` | views of buffer values, two at once, read through `borrow imm *v`; `map_iter`; 200 colliding keys, every third removed | `(106, (52, (133, 13267)))` | `32 0 0` |
+| `corpus/map-iter-owned.bc` | `Map[string, i32]` iterated by `map_entries`, each key printed from its text view; `map_fold`; the map looked up, grown and iterated again after the lend | five lines, then `6636065` | `16 0 0` |
+| `corpus/map-drain.bc` | `map_drain` of `Map[i32, string]` to its end, and stopped by `break` with three entries left, `live 0` | `91625` | `23 0 0` |
+| `corpus/aoc/2024-01.bc`, `2024-11.bc`, `2022-21.bc` | #490's map days: counts, interning to indices, keys that are views of the input | the Rust answers | `9 0 0`, `276 0 0`, `18 0 0` |
+| `corpus/leetcode/arrays/0001-two-sum.bc`, `0217-contains-duplicate.bc`, `strings/0049-group-anagrams.bc`, `graphs/0128-longest-consecutive-sequence.bc`, `heaps/0347-top-k-frequent-elements.bc` | a map, a set, `string` keys, `map_iter` | as their headers | `28`, `22`, `79`, `24`, `40` allocations, no indirect call or copy |
 
 `corpus/aoc/2024-11.bc` is `-- check: no-source`: the source interpreter takes about half an
 hour over it, and its golden is that interpreter's output, written once from it.
@@ -7122,7 +7162,10 @@ read `map_lookup(&m, k)`, the copy; `0347` visits its entries with the map lent 
 No change to `CDerives`, the relation, the machine, `PinLaw`, the checker or the backend, and no
 kernel program changes (`corpus/kernel-counts.expected` unchanged). `fundamentalC`, `adequacyC`,
 `fundamentalD` and `adequacyD` keep their statements and cover every elaborated program. Every
-existing corpus program keeps its output, golden and counts.
+existing corpus program keeps its output, golden and counts. The table of three arrays (#879)
+keeps every map program's output and golden; each allocates one array more per table, at
+`map_new` and at each growth, and its loads, stores and bounds checks move with the probe, which
+reads a slot's hash from an array of `1 + i32` and loads a key only when the hashes agree.
 
 ### Not provided
 
@@ -7138,7 +7181,12 @@ existing corpus program keeps its output, golden and counts.
   value.
 - **Cases at recursive types** (a list's equality): see above.
 - **`borrow mut` of a map as a family** (`get_mut`), and a fieldwise `mut` lend.
-- **`map_iter` at a key that is not its own view** (`string`): the key is copied out of its slot.
+- **A recursive walk of what a load exposes** (`corpus/pending/data-json-map-ser.bc`): a load
+  block's body (`borrow imm *j { 'y, v -> … }`) that performs an abortive operation (recursion's
+  `Exhausted`, §20) is refused, "its place has no unwinding form here": the kernel's `withload`
+  has its unwinding form (§19 *Borrows*), but the load form does not elaborate to it. So a borrowed
+  `Json` whose objects are `Map[string, Json]` is not serialised by borrow; its entries are
+  iterated (`map_entries`), but the recursion into a value is refused. An elaborator change (#879).
 - **`!=` from `==`**, or any family's case derived from another's.
 - Swiss tables and other performance work; laws proved in Lean.
 
@@ -8776,9 +8824,10 @@ No change: no type, rule, term, typing, elaboration or semantics. A program's er
 
 - **`nuEta f s t`** (`TExpr.nuEta`, `scripts/pin/TExpr.tmpl.lean`), over the typed term `t` of a
   `thunkv` at a `ν` type, with the variables `f` and (optionally) `s` it observes. Its typed rule
-  (`TDerivesAt.nuEta`, `TDerivesP.nuEta`) says the term's erasure is the scheme `nuEtaE f s rb`:
+  (`TDerivesAt.nuEta`, `TDerivesP.nuEta`) says the term's erasure is the scheme `nuEtaB f s`:
   the `&` of `f s (inj₁ ())` and `f s (inj₂ ())` (with no `s`, of `f`), each arm optionally
-  binding `f` to a name of its own first (`g <- return (unbang f); …`). The checker builds it at
+  binding `f` to a name of its own first (`g <- return (unbang f); …`). §65 generalises the
+  scheme to an η-tree of the observations at any depth (`NuTree`). The checker builds it at
   `thunkv` when the erasure is the scheme (`rNuEta`, `nuEtaOf?`, `Frontend/Check/Rules.lean`);
   the node is kept by moving the term's variables (`nuEtaB_shift`, `TExpr.shift`).
 - **The fact** (`Frontend/Check/Derived.lean`): the thunk's observations are `f s`'s, by pure
@@ -11452,6 +11501,113 @@ stage of Backend2, with `live 0` where its golden has it.
 
 ---
 
+## 65. Entry 64 — the new backend: codata's η-thunk at any depth (#842)
+
+### Motivation
+
+Backend2 compiled the observations of a protocol object as indirect calls where the old backend
+made direct ones (#842). `corpus/nu-file-*.bc` build their object as an η-thunk whose observations
+are nested, `thunkv nu_in < < (nu_out (force f s)).1 .1, (nu_out (force f s)).1 .2 >,
+(nu_out (force f s)).2 >`, and `alpha-nu-in.bc` builds one whose observation is written under the
+binders of its arguments, `Λ'x. λb. (nu_out (force f k)).1['x] b`. §45's derived node recognised
+only the flat form, the `&` of `f s`'s two observations. The thunk was compiled as a code of its
+own, so the codata's closure class held two codes, `unfold`'s and the thunk's, and every
+observation through a value read out of data (a pair, the rest an observation answers) dispatched
+on them. The old backend made these calls direct with its closure flow analysis (`Backend/Clos/Flow.lean`), which follows a closure through
+pairs; Backend2's flow reads data by its layout class (`Backend2/Flow.lean`), so it is the class
+that must hold one code.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration, semantics or erasure.
+
+### The derived node
+
+- **The η-tree** (`NuTree`, `NuArg`, `NuTree.toE`, `scripts/pin/TExpr.tmpl.lean`). A thunk that
+  observes codata `f s` (`f`, with no state) by η-expansion is the erasure of a tree: an `amp` is
+  a `&` (`withPair`) of the observations at `inj₁ ()` and `inj₂ ()`, a `lam` a `λx` passing `x` on,
+  a `dead` a `Λ` (`λ_`) passing `()` on, and a `leaf` the observation made so far, `f s o₁ … oₙ`,
+  directly or through a binding of `f` first (`(λg. g s o₁ … oₙ) f`, `g <- return (unbang f); …`).
+  `NuTree.toE t f s os` is that erasure over the arguments `f`, `s` and the observation `os` made
+  above it; §45's flat scheme is the tree `amp (leaf rb) (leaf rb)`.
+- **`nuEta f s t`**'s premise `nuEtaB f s t.erase` (§45) now reads: the erasure is
+  `NuTree.toE t' (var f) (s.map var) []` for some tree `t'` (`NuTree.parse` proposes the trees
+  the shape allows; `NuTree.mem_parse`: it proposes every tree over a variable). The node is kept
+  by moving the term's variables (`NuTree.toE_shift`, `nuEtaB_shift`, the same statement as
+  §45's). The checker reads the variables at the first leaf (`nuEtaOf?`,
+  `Frontend/Check/Rules.lean`) and checks them with `nuEtaB`.
+
+### The fact
+
+`Frontend/Check/Derived.lean`. Filling a variable of a tree's erasure fills it in the tree's
+arguments (`NuTree.toE_subst`), so at a run the thunk is the tree over values `fv`, `sv`. An
+observation `ps` of the tree that reaches the subtree `t'` (`NuTree.Reach t ps t'`: a projection at
+an `amp`, any value at a `lam`, `()` at a `dead`) reaches it by pure steps, at every memory:
+
+    nuEta_reach : t.Reach ps t' →
+      PureSteps (nuAppsE (t.toE fv sv os) ps) (t'.toE fv sv (os ++ ps))
+
+so an observation that stops inside the tree answers a `&` or a `λ`, a value, and touches no
+memory; one that reaches a leaf reaches the same observation of `f s` (`nuEta_leaf`, `nuEta_obs`),
+of `f` with no state (`nuEta_var`):
+
+    nuEta_obs : t.Reach ps (leaf rb) →
+      PureSteps (nuAppsE (t.toE fv sv []) ps) (nuAppsE (fv sv) ps)
+
+and at `f = unfold step` (`hN C g`), the same observation of `etaN C g s`, which `f s` steps to
+by one β at every memory (`nuEta_unfold`, from `hN_steps`). §45's three statements are these at
+the flat tree, and are replaced by them.
+
+### The lowering
+
+Unchanged (§45): Backend2 reads the `nuEta` node, whatever its tree. With no state it is its
+variable; with a state, when `f` is a variable a `bind` bound to `unfold step`, it is the call
+`f s` made there; any other is compiled as its thunk.
+
+### Programs
+
+Every corpus program at its golden at every stage of Backend2. In `corpus/counts-backend2.expected`:
+
+| program | before | after | old backend |
+|---|---|---|---|
+| `nu-file-twice` | `2 7 0 11 11 0` | `2 0 0 11 11 0` | `2 0 0 11 11 0` |
+| `nu-file-contexts` | `3 5 0 10 9 0` | `3 0 0 10 9 0` | `3 0 0 10 9 0` |
+| `nu-file-read` | `2 5 0 7 6 0` | `2 0 0 7 6 0` | `2 0 0 7 6 0` |
+| `nu-file-consumed` | `2 3 0 5 5 0` | `2 0 0 5 5 0` | `2 0 0 5 5 0` |
+| `alpha-nu-in` | `5 3 0 12 13 0` | `4 3 0 9 9 0` | `1 0 0 2 1 0` |
+
+(`allocs indirect copies loads stores bounds`.)
+
+No other line changes.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the elaboration, the old backend's output, a
+kernel program or any program's erasure. `corpus/counts.expected` unchanged.
+
+### Open
+
+- **`tree-view-tasks.bc`, 600 indirect calls: the η-thunk's `f` is threaded through the `for`
+  loop's state, and no fact says the loop hands it on unchanged.** The thunk is a `nuEta` node
+  (flat), but `for t in 0..tasks` carries `f` in its state with the rest the body uses
+  (`forData`), so `f` reaches the node out of the state's `letpair`, not from the `bind` of
+  `unfold step`. The thunk is compiled as its own code, the class `nu. F (i64 + X) & F 1` holds it
+  beside `unfold`'s, and every `resume_at`/`cancel_at` dispatches. A fact on the loop's node that
+  a state component is handed on unchanged (as a walk's `read`, §46, fixes its view), or an
+  elaboration that captures a `!` variable instead of threading it, would carry `f`.
+- **`alpha-nu-in.bc`, 3 indirect calls and 4 allocations (the old backend's 0 and 1): a closure
+  read out of a pair is read by its layout class.** `mk`'s thunk is now `unfold`'s call, but
+  `wrap`'s object is a second code of the class (it is not an η-thunk: its `close` adds 100).
+  Backend2's flow gives a value read out of a pair every code of its class, so three calls
+  dispatch: `obs_read`'s `.1` on `w`, which the call passes in the pair of its arguments; the call
+  of the closure that projection answers; and `obs_close`'s `.2` on the rest read out of
+  `obs_read`'s answer. The class's layout is on the heap, since `wrap`'s code holds a value of the
+  class itself, so each of the three objects is an allocation. Which code a value read out of a
+  pair is, is not a fact of the typed term; a flow that follows a closure through a pair (as the
+  old backend's did) or per-code layouts would make the calls direct and the objects inline.
+
+---
+
 ## 66. Entry 65 — the new backend: the slots `absurd` absorbs (#862)
 
 ### Motivation
@@ -11503,6 +11659,131 @@ the consumes no longer made are on paths that end at `absurd`, which never run.
   `Check.UnmentionedAbsorbed`). A slot a deeper `absurd` or `⊤` absorbs, unmentioned by the whole
   part above it, would reach another rule's split; `Lint` refuses its `unused` consume, so such a
   program fails to compile rather than run unsound.
+
+---
+
+## 67. Entry 66 — the new backend: an owned fold by pointer reversal (#876, B6)
+
+### Motivation
+
+Backend2 compiled every owned fold as a function that calls itself once per node
+(`Backend2/Convert.lean`, `genFoldFns`), so a fold over a list of `n` nodes takes `n` native
+frames: `corpus/deep-list.bc` (50000 nodes, `fold_own[1 + (i32 * X), i32]`) ran in a native
+stack of 64 KiB on the old backend and needed 1–4 MiB on Backend2 (#876). The old backend
+reverses pointers in an owned fold (`Backend/README.md`, *Stack*), but on a term it recognises,
+assuming the ownership (`docs/compiler.md` §7.2, defect 6). The ownership is the rule's: §6's
+`foldOwn` and `foldReuse` take the structure as `μX. T ⊸ F R`.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration, semantics or erasure. Only Backend2's
+conversion of a `foldOwn` or `foldReuse` node changes.
+
+### The fact
+
+The node itself, with its shape `F : FShape` (`TExpr.foldOwn`, `TExpr.foldReuse`;
+`TDerives.foldOwn`, `TDerives.foldReuse`, `Frontend/Check/TDerives.lean`; `CDerives.foldOwn`,
+`CDerives.foldReuse`, `Core/Fundamental.lean`, by `foldOwn_compatX` (`Core/FoldOwn.lean`) and
+`foldReuse_compatX` (`Core/FoldReuse.lean`)). Its type `!U(A′_R ⊸ F R) ⊸ !U(μX. F.ty ⊸ F R)`
+(`algOTy`, `foldOTy`; `A″_R`, `algRTy`, at `foldReuse`) says:
+
+- the fold consumes the structure: `μX. F.ty` is taken by `⊸` and given back nowhere, so every
+  node of it, and every cell at a `Ref X`, is the fold's own while it runs;
+- where the recursive positions are: `F`'s `varX` and `refX` leaves;
+- what the algebra is applied to: `F.resO R` (`F.resR R`), `R` at each recursive position, never
+  a node of the structure.
+
+The conversion reads `F` and nothing else: no term is recognised.
+
+### The rule
+
+- **The shapes** (`shapeReversal?`): `F = 1 ⊕ C` or `C ⊕ 1`, with `C` a product (`⊗`) of
+  closed leaves and exactly one recursive position, `X` or `Ref X` (`shapeIsProd`,
+  `shapeXCount`). Every other shape keeps `genFoldFns`' recursion.
+- **The lowering** (`genFoldRev`): an entry function and two loops of tail calls. The stack is a
+  value of the structure's own type `μX. T`, its bottom the base node `1`. The descent
+  (`fold_down`) unrolls a node; at `C` it puts the stack at the recursive position and the node
+  becomes the stack's top (`cutRev`: a boxed `X` rebuilt by a pair or an injection, a `Ref X`
+  cell given the stack by `swap`), and it goes on with the child; at the base it applies the
+  algebra and calls the ascent. The ascent (`fold_up`) unrolls the stack; at a node it takes the
+  link from the recursive position and puts the result there (`plugRev`: at `Ref X` the cell is
+  freed under `foldOwn`, and under `foldReuse` its contents swapped for `()` and the emptied cell
+  paired with the result, as `travR` does), applies the algebra and goes on with the link; at the
+  bottom it answers the result.
+- **Nothing is allocated.** A boxed `X` taken apart by the descent is a spare box of the node's
+  words (§64), and the node rebuilt with the stack in it is of the same type, so it is built in
+  that box before the tail call; a `Ref X` cell holds the stack in place of the child, at the same
+  type. The ascent frees each box and cell once, as the recursion did.
+
+### What it rests on
+
+- **Read:** the node's ownership of the structure (above). The stack is made of the structure's
+  nodes, so no other word reaches them while they are reversed. In the LIR the reversal is
+  values taken apart and rebuilt, each consumed once (`Lint`); the in-place storage is §64's spare
+  box, at `Backend2/Layout.lean`'s existing `UNPROVED:` assumption on boxed fields, and a `swap`
+  on a cell the fold owns.
+- **`UNPROVED:`** (`genFoldRev`): that the two loops compute the fold the kernel's term computes
+  (`foldOwnV`'s `travO`, `foldReuseV`'s `travR`): the algebra applied to the same arguments in the
+  same order, the innermost node first, and the same cells freed, a `Ref X` cell at the ascent
+  rather than at the descent. The algebra never receives a reversed link: it is applied to the
+  base and to nodes whose recursive position holds a result. A mismatch shows as a disagreement
+  with the source stage, or a leak or a double free in `live`.
+
+### Programs
+
+`corpus/deep-list.bc` runs natively on Backend2 in a stack of 64 KiB (and of 16 KiB), with its
+golden output and `live 0`; its owned fold's 50000 nodes take no frame each. Every corpus program
+keeps its output at every stage of Backend2 (`scripts/compile-backend2.sh`: the LIR, the word IR,
+Wasm and native).
+
+Counts per run (`bcc-counts --backend new`): no `allocs`, `indirect`, `copies` or `bounds` count
+changes. `loads` and `stores` rise on the 19 programs whose owned folds run (below): the descent
+stores each node back with the link in it and the ascent loads it again, where the recursion
+kept the node's words in its frame. `deep-list`'s are now the old backend's (`450003 450003`).
+`corpus/counts-backend2.expected` takes the new lines.
+
+| program | loads stores before | after |
+|---|---|---|
+| `deep-list` | `300003 300003` | `450003 450003` |
+| `13-2-sum-prog` | `120 78` | `153 111` |
+| `sum-prog-exact` | `120 78` | `153 111` |
+| `axes/data-effects` | `94 67` | `118 91` |
+| `axes/result-fold-own` | `28 28` | `49 49` |
+| `axes/scope-data-effects` | `52 33` | `61 42` |
+| `clone-reuse` | `27 18` | `36 27` |
+| `data-fold-bang` | `8 8` | `14 14` |
+| `data-fold-generic` | `20 11` | `26 17` |
+| `data-fold-list` | `42 27` | `60 45` |
+| `data-fold-whole` | `92 50` | `107 65` |
+| `decl-promise` | `15 15` | `24 24` |
+| `gen-adapters` | `18 18` | `33 33` |
+| `gen-adapters-fail` | `27 27` | `51 51` |
+| `map-reuse` | `30 30` | `48 48` |
+| `surface/map-reuse` | `24 24` | `42 42` |
+| `print-borrowed-list` | `67 42` | `76 51` |
+| `sched-a` | `445 441` | `477 473` |
+| `sched-b` | `448 442` | `480 474` |
+
+The owned folds that keep the recursion: `data-fold-tree`, `data-fold-forest`, `data-fold-group`
+and `consumes` in `data-fold-whole` (a second recursive position, there under a `⊕`), and
+`axes/free-monad` (`i32 + i32 * X`, a base with data). `sum-i32` has no fold node: its list is
+freed by a consume (§12).
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the checker, the elaboration, the layouts,
+the word-IR lowering, the old backend or a kernel program. Every corpus program keeps its output
+at every stage of Backend2.
+
+### Open
+
+- **A base with data.** `i32 + i32 * X` and other shapes whose base summand is not `1` keep the
+  recursion: the stack's bottom must be a node of `μX. T`, and only `1` is one without data.
+- **More than one recursive summand, or a recursive position under a `⊕` of `C`** (the old
+  backend's *linear* shapes, e.g. `A ⊕ X ⊕ (B ⊗ X)`) keep the recursion.
+- **Two recursive positions** (trees, `data-fold-tree`, `data-fold-forest`) keep a frame a level,
+  as `fold_imm` does everywhere.
+- **`foldOwnG`** (§61) and the consume of a `μ` (`genConsume`, §12) recurse once per node.
 
 ---
 
@@ -12055,7 +12336,7 @@ the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Target/Wasm/
 `Paper/`, `Support/` or the checker. Entry 43 (§44) is implemented in `Frontend/Check/Derived.lean`
 (`allI_inst`), `Backend2/Types.lean` (`ofU`) and `Backend2/Convert.lean`; no change to `CDerives`,
 `Core/`, `Paper/`, `Support/`, the checker or the old backend. Entry 44 (§45) is implemented in
-`scripts/pin/` (`nuEtaE`, `nuEtaB`, `nuEtaB_shift`, `TExpr.nuEta` and its typed rules),
+`scripts/pin/` (`NuTree`, `nuEtaB`, `nuEtaB_shift`, `TExpr.nuEta` and its typed rules),
 `Frontend/Check/TShift.lean`, `Frontend/Check/Weaken.lean`, `Frontend/Check/TTied.lean`,
 `Frontend/Check/Rules.lean` (`rNuEta`), `Frontend/Check/Derived.lean` (`nuEta_obs`, `nuEta_var`,
 `nuEta_unfold`) and `Backend2/` (`isUnfoldApp`, the `nuEta` case, `litCode`, `Op.litByte`,
@@ -12131,9 +12412,55 @@ Entry 62 (§63) is implemented in `Frontend/Check/Derived.lean` (`allI_inst`,
 case, the `lendR` case of `conv`); no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the
 checker or the old backend.
 
+
+Entry 63 (§64) is implemented in `Backend2/Lower.lean` (`LState.spare`, `getField`'s `keep`,
+`putField`'s `reuse`, the spare boxes freed in `lowerCall`, `emit` and `case`); no change to
+`CDerives`, `Core/`, `Paper/`, `Support/`, the checker, `Convert` or the old backend.
+
+Entry 64 (§65) is implemented in `scripts/pin/TExpr.tmpl.lean` (`NuArg`, `NuTree`, `NuTree.toE`,
+`NuTree.parse`, `nuEtaB`, `NuTree.toE_shift`, `NuTree.mem_parse`, `nuEtaB_shift`),
+`Frontend/Check/Rules.lean` (`nuEtaOf?`) and `Frontend/Check/Derived.lean` (`NuTree.toE_subst`,
+`NuTree.toE_closedAt`, `NuTree.Reach`, `nuEta_reach`, `nuEta_leaf`, `nuEta_obs`, `nuEta_var`,
+`nuEta_unfold`); Backend2's `nuEta` case is unchanged. No change to `CDerives`, `Core/`, `Paper/`,
+`Support/` or the old backend.
+
+Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cutRev`, `plugRev`,
+`genFoldRev`, the `foldOwn`/`foldReuse` case of `conv`); no change to `CDerives`, `Core/`, `Paper/`,
+`Support/`, the checker or the old backend.
+
 ---
 
 ## Changelog
+
+- **1.51** (2026-11-07) — §18, §19 *Borrows*, §36 (#887): a load block (`borrow imm *g { 'y, v -> … }`) whose
+  body performs abortive operations elaborates to `withloadU`, `withload` at the callback's row,
+  as the cell and slice borrows elaborate to their unwinding forms (`Const.unwinding`,
+  `unwindingC?`, `Frontend/Sugar.lean`); it was refused as having no unwinding form. The load
+  consumes only the `imm` borrow, so an unwind hands nothing back, runs no finaliser, and leaves
+  the place as it was. A load's body may now raise or call a recursion
+  (`corpus/effects-load-raise.bc`, `rec-load-walk.bc`, `rec-load-exhausted.bc`, at every stage
+  and on Backend2 at `live 0`). Preserves: `CDerives`, the kernel, the checker, the theorems and
+  the backends are unchanged; every other corpus program checks and runs as before. Open: a
+  recursion on what a load exposes is still refused, because a group's call of itself is at its
+  own lifetime parameters (§20 *Generic recursive groups*) and the load's view is at a shorter
+  `'y`; and an abort inside a borrow callback cannot consume a linear variable the callback
+  captures (§12: a value starts with nothing owed), so a recursion inside a load that passes
+  `g` or another captured linear value is refused at the budget's `case`. Each needs its own
+  entry.
+- **1.50** (2026-11-07) — §36 (#879): a map iterates at any key type. `lib/map.bc`'s table is three arrays,
+  `Map[K, V] = ((array (1 + i32) * array K) * array V) * i32`, the slot hashes, the keys and the
+  values, so that a lent map, `MapRef[K, V]<'h, 'k, 'x>`, lends each entry's key and value as array
+  elements; `K` has a filler as `V` does. New: `map_entries(r)`, every entry in slot order as
+  `imm 'k K * imm 'x V` (a `string` key's text through a load and `key_prefix`); `map_fold(r, f,
+  s)`; `map_drain(m)`, the map consumed, its entries taken out owned, what a `break` leaves
+  consumed with the iterator. `map_iter(r)` keeps its type over the new `MapRef`. The order is
+  stated: slot order, a function of the hash and of the insertions and removals. *Not provided*
+  loses `map_iter` at owned keys and gains the recursive walk under a load (an elaborator gap,
+  `corpus/pending/data-json-map-ser.bc`). `corpus/map-iter-owned.bc`, `corpus/map-drain.bc`;
+  `corpus/map-views.bc` names the three lifetimes. Every map program keeps its output; each
+  allocates one array more per table (at `map_new` and each growth), and its loads, stores and
+  bounds move with the new probe (`counts.expected`, `counts-backend2.expected`). No change to
+  `CDerives`, `Core/`, the relation, the machine, the checker, the elaboration or a backend.
 
 - **1.49** (2026-11-07) — §68 (#855 K0, *Per-code closure types*): the entry for `Code⟨N; E⟩ C`, a
   value type beside `U C` naming a closure's code, with the explicit erasing coercion `erase` to
@@ -12144,6 +12471,12 @@ checker or the old backend.
   and `nuOutK_step` at Core's relation and the chain's (`Core/CapNorm.lean`, `Core/CodeNu.lean`,
   `Core/Chain/CodeNuKW835N.lean`); the size measurement `experiments/CodeSize`. No change to
   `CDerives`, the relation, the checker, the backends or any program's output.
+- **1.48** (2026-11-07) — §67 (#876, B6): Backend2 lowers a `foldOwn` or `foldReuse` node whose
+  shape is `1 ⊕ C`, `C` a product with one recursive position, by pointer reversal: two loops of
+  tail calls whose stack is the structure's own nodes, read from the node's ownership of the
+  structure and its `FShape`. `deep-list` runs natively in 64 KiB; no allocation is added; loads
+  and stores rise on 19 programs. Other shapes keep the recursion. No change to `CDerives`, the
+  relation, the machine, the checker or the old backend.
 - **1.47** (2026-11-07) — §15 (#849, #686, *A local whose type is not known*): inference's slot
   types are `Option`s, so a local whose binding it does not type is not known to it, rather than
   `1`, and every reader handles that. An unannotated injection bound and passed to a generic
@@ -12178,6 +12511,19 @@ checker or the old backend.
   `data-abbr-nested`, `data-abbr-block`, `data-abbr-root`; rejects `data-rec-abbr-list`, `data-rec-abbr-mu`,
   `data-rec-abbr-nested`, `data-box-not-block`. No change to the kernel, the checker, the backends
   or any existing program's output.
+- **1.44** (2026-11-07) — §65 (#842): codata's η-thunk at any depth. §45's `nuEta` node's scheme
+  is an η-tree (`NuTree`): `&`s of the projections, `λ`s and `Λ`s, every leaf the observation of
+  `f s` along its path, read by `nuEtaB` (`NuTree.parse`, `NuTree.mem_parse`, `NuTree.toE_shift`).
+  `nuEta_reach`, `nuEta_obs`, `nuEta_var` and `nuEta_unfold` state §45's fact over every tree.
+  Backend2 reads the node as before, so a protocol object built from `unfold` is `unfold`'s code
+  alone and its observations are direct calls. No change to `CDerives`, the relation, the machine,
+  the elaboration or the old backend.
+- **1.43** (2026-11-07) — §64 (#651): Backend2's lowering keeps a boxed field's object taken apart
+  by a `letpair` or a `case` as a spare box, reused by the next box of its words built before a
+  call, a return or the arm's end, and freed there otherwise: the token put back by
+  `rec-parser`, `parse-recover` and `parse-recover-gen` allocates nothing. The other #651 rises
+  are one box a node, as in Rust (recorded under kill criterion 6). No change to `CDerives`, the relation, the
+  machine, the checker or the old backend.
 - **1.42** (2026-11-07) — §62 (#844 Tier 1, *Lifetime-polymorphic suspending constants*): the
   suspending lend constants under lifetime binders (`Const791.poly`, typed at `VTy.all`), their
   premises at the constant's own context (`Const791.OKAt`), `Row.Suspend`/`CTy.SuspendC` at a
@@ -12191,12 +12537,6 @@ checker or the old backend.
   `consistentX_setLife` become corollaries; the callback's table steps move the lender's view to
   the lend's. No change to `CDerives`, `fundamentalN_all`, `goal791N`, the checker, the backends or
   the corpus.
-- **1.40** (2026-11-07) — §64 (#651): Backend2's lowering keeps a boxed field's object taken apart
-  by a `letpair` or a `case` as a spare box, reused by the next box of its words built before a
-  call, a return or the arm's end, and freed there otherwise: the token put back by
-  `rec-parser`, `parse-recover` and `parse-recover-gen` allocates nothing. The other #651 rises
-  are one box a node, as in Rust, and stay Open. No change to `CDerives`, the relation, the
-  machine, the checker or the old backend.
 - **1.40** (2026-11-07) — §12 (#848, #492): a handler site is not terminal for the insertion
   policy (*Handled bodies*): the handled body is owed the owed variables it mentions, as the head
   of `x <- M; N` is, so an abortive arm inside a `with`, a `for` body or a recursion releases an

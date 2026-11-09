@@ -385,9 +385,9 @@ main -> i32 = match run_it(5) { inl v -> v | inr e -> 0 - e }
 
 ## Compared with Rust
 
-Rust's non-`Copy` types are *affine*: a value may be used at most once, and any value may go
-unused. A type can say what happens when it goes unused by implementing `Consume`, written by hand
-and free to do anything, and leaking a value (`mem::forget`) is safe. There is no way for a type
+In Rust, a value of a non-`Copy` type may be used at most once, and any value may go unused. A
+type can attach cleanup code that runs when a value goes out of scope, written by hand and free
+to do anything, and leaking a value (`mem::forget`) is safe. There is no way for a type
 to insist on being consumed; `#[must_use]` is a warning.
 
 Here every type that isn't unrestricted is linear, and the difference shows in three places:
@@ -396,10 +396,11 @@ Here every type that isn't unrestricted is linear, and the difference shows in t
   structure, and does nothing else. Cleanup that does something more is a call the program
   writes, in a `finally`, a handler or a consuming function.
 - **A type can have no consume.** `must_close`, `must_resume ctl` and one-shot functions are linear
-  that is not consumable, and leaving one unused is a type error, not a lint.
+  and not consumable, and leaving one unused is a type error, not a lint.
 - **An abort runs only derived consumes.** What an abort passes over either holds no owned cell and
   is abandoned, or is consumed implicitly in a finaliser the compiler places, or is
-  refused. No code a type wrote runs on the way out; Rust unwinds by running each value's `Consume`.
+  refused. No code a type wrote runs on the way out, where Rust unwinds by running each value's
+  cleanup code.
 
 Most programs see little of this: a cell, a string or a record of them is consumed where its scope
 ends, as in Rust.

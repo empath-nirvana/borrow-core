@@ -2,7 +2,7 @@
 -- program's `Map[i32, Pair[T]]`, `Map` the library's. Each is opened at its arguments, one inside
 -- the other, so `T` occurs under the array of the map's values, in a pair: `Node` is not a block
 -- and is built without `box`, and `T` elaborates to
--- `mu X. i32 + (array (1 + i32 * i32) * array (X * X)) * i32`, in the fold class `P`.
+-- `mu X. i32 + ((array (1 + i32) * array i32) * array (X * X)) * i32`, in the fold class `P`.
 --
 -- Answer: i32[7]. `sum` reads the pair under the key 1, `(Leaf(2), Leaf(5))`, and adds it; the
 -- pair under the key 2 is consumed with the map. `live 0`. An implementation that opens only the

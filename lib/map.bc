@@ -1,21 +1,25 @@
 -- The hash map and set (SPEC §36, #211's implementation note): open addressing, linear probing,
 -- backward-shift deletion, and growth by doubling at half full. Keys are hashed and compared by
 -- their type's case of `hash` and `equal` (`lib/key.bc`), one of each per type, so every map at
--- a key type agrees with every other. The hash is deterministic, so a run is reproducible.
+-- a key type agrees with every other. The hash is deterministic, so a run is reproducible, and so
+-- is the slot order every iteration follows.
 --
 -- A map is a plain value: `map_insert(&mut m, k, v)`, `map_lookup(&m, k)`, `map_len(&m)` take
 -- it and hand it back (a lend at a parameter of the map's own type moves and rebinds it, SPEC
--- §15). `borrow imm m { 'x, r -> … }` lends it as a family, `r : MapRef[K, V]<'k, 'x>`, its keys
--- at a lifetime of their own and its values at `'x` (SPEC §36, a record lent fieldwise); then
--- `map_get(r, k)` is a view of the value at `k` at `'x`, as `get` of `lib/slice.bc` is of an
--- element, and `map_iter(r)` iterates the entries. The map cannot change while it is lent.
+-- §15). `borrow imm m { 'x, r -> … }` lends it as a family, `r : MapRef[K, V]<'h, 'k, 'x>`, its
+-- slots, keys and values each at a lifetime of its own, the values at `'x` (SPEC §36, a record
+-- lent fieldwise); then `map_get(r, k)` is a view of the value at `k` at `'x`, as `get` of
+-- `lib/slice.bc` is of an element, `map_entries(r)` iterates the entries, each key lent at `'k`
+-- and its value at `'x`, and `map_fold(r, f, s)` folds them. The map cannot change while it is
+-- lent. `map_drain(m)` consumes the map, its entries taken out as owned pairs.
 --
--- The representation: `keys` holds a slot per entry, `inl ()` empty or `inr (h, k)`, the key
--- with its hash; `vals` holds the value at the same index, and the filler of `V` where there is
--- none (`filler`, SPEC §17), so `V` has one: integers, views, arrays, buffers, and pairs and sums
--- of them. A key may be a view (`text 't`): the map's type then mentions its lifetime, and the
--- map does not outlive what its keys borrow. A linear `K` or `V` makes the map linear: it has a
--- consume exactly when its keys and values do.
+-- The representation: `slots` holds a slot per entry, `inl ()` empty or `inr h`, the key's slot
+-- hash; `keys` and `vals` hold the key and the value at the same index, each array the filler of
+-- its type where there is no entry (`filler`, SPEC §17), so `K` and `V` have one: integers, views,
+-- arrays, buffers, and pairs and sums of them. Each is an array of its own so that an entry's key
+-- and value are each lent as an element is (`get`). A key may be a view (`text 't`): the map's
+-- type then mentions its lifetime, and the map does not outlive what its keys borrow. A linear `K`
+-- or `V` makes the map linear: it has a consume exactly when its keys and values do. `[spec §36]`
 --
 -- The key sought is given by value and consumed after the search (a persistent key or a view costs
 -- nothing); it is lent to the search, a cell of the caller's frame. `map_insert` answers the
@@ -29,9 +33,9 @@
 include key
 include buf
 
-type Map[K, V] = (array (1 + (i32 * K)) * array V) * i32
+type Map[K, V] = ((array (1 + i32) * array K) * array V) * i32
 
-type MapRef[K, V]<'k, 'x> = (array_imm 'k (1 + (i32 * K)) * array_imm 'x V) * i32
+type MapRef[K, V]<'h, 'k, 'x> = ((array_imm 'h (1 + i32) * array_imm 'k K) * array_imm 'x V) * i32
 
 type Set[K] = Map[K, 1]
 
@@ -53,231 +57,288 @@ fn map_table_size(n: i32) -> i32 =
   for _ in 0..31 { if c < 2 * n { c = c * 2 } else { break } };
   c
 
--- Where the key `q` points at (slot hash `h`) is among the slots `ks`: `inl i` at slot `i`, or
--- `inr i` the first empty slot of its map_probe sequence. A slot is compared by its hash first and
--- then by `equal` on the two keys' views.
-fn map_probe[K]<'k, 'q>(ks: array_imm 'k (1 + (i32 * K)), q: imm 'q K, h: i32) -> i32 + i32 =
-  let (ks, k0) = array_copy['k, 1 + (i32 * K)](ks);
-  let cap = len(k0);
+-- What slot `i` holds: `inr h`, an entry of slot hash `h`, or `inl ()`, none (also past the end).
+fn map_slot_at<'h>(hs: array_imm 'h (1 + i32), i: i32) -> 1 + i32 = at(hs, i, (inl () : 1 + i32))
+
+-- Where the key `q` points at (slot hash `h`) is among the slots `hs` and keys `ks`: `inl i` at
+-- slot `i`, or `inr i` the first empty slot of its probe sequence. A slot is compared by its hash
+-- first and then by `equal` on the two keys' views.
+fn map_probe[K]<'h, 'k, 'q>(hs: array_imm 'h (1 + i32), ks: array_imm 'k K, q: imm 'q K, h: i32)
+    -> i32 + i32 =
+  let (hs, h0) = array_copy['h, 1 + i32](hs);
+  let cap = len(h0);
   let mut res : i32 + i32 = inr (0 - 1);
   let mut i = host[and32](h, cap - 1);
+  let mut slots = hs;
   let mut rest = ks;
   let mut key = q;
   for _ in 0..cap {
-    let (r, r0) = array_copy['k, 1 + (i32 * K)](rest);
+    let (s, s0) = array_copy['h, 1 + i32](slots);
+    slots = s;
+    let (r, r0) = array_copy['k, K](rest);
     rest = r;
     let (c, c0) = copy['q, K](key);
     key = c;
-    match get(r0, i) {
-      inl g ->
-        let found = borrow imm *g { 'y, s -> match s {
-            inl u -> release_imm['q, K](c0); 0
-          | inr (hs, kv) ->
-              if hs == h { let same = borrow imm *c0 { 'u, qv -> equal[K](kv, qv) }; if same { 1 } else { 2 } }
-              else { release_imm['q, K](c0); 2 } } };
-        if found == 0 { res = (inr i : i32 + i32); break } else {
-          if found == 1 { res = (inl i : i32 + i32); break } else { i = host[and32](i + 1, cap - 1) } }
-    | inr u -> release_imm['q, K](c0); break
-    }
+    let found = match map_slot_at(s0, i) {
+        inl u -> array_release['k, K](r0); release_imm['q, K](c0); 0
+      | inr hk ->
+          if hk == h {
+            match get(r0, i) {
+              inl g ->
+                let same = borrow imm *g { 'y, kv ->
+                  borrow imm *c0 { 'u, qv -> equal[K](kv, qv) } };
+                if same { 1 } else { 2 }
+            | inr u -> release_imm['q, K](c0); 0 }
+          } else { array_release['k, K](r0); release_imm['q, K](c0); 2 } };
+    if found == 0 { res = (inr i : i32 + i32); break } else {
+      if found == 1 { res = (inl i : i32 + i32); break } else { i = host[and32](i + 1, cap - 1) } }
   };
   res
 
 -- `map_probe` for the key `q` points at, its hash computed.
-fn map_probe_key[K]<'k, 'q>(ks: array_imm 'k (1 + (i32 * K)), q: imm 'q K) -> i32 + i32 =
+fn map_probe_key[K]<'h, 'k, 'q>(hs: array_imm 'h (1 + i32), ks: array_imm 'k K, q: imm 'q K)
+    -> i32 + i32 =
   let (q, q0) = copy['q, K](q);
-  map_probe(ks, q, map_key_hash(q0))
+  map_probe(hs, ks, q, map_key_hash(q0))
 
--- The map's own slots lent to `map_probe`: the slots handed back, the key's slot hash, and where it is.
-fn map_locate[K]<'q>(keys: array (1 + (i32 * K)), q: imm 'q K) -> (array (1 + (i32 * K)) * i32) * (i32 + i32) =
+-- The map's own slots and keys lent to `map_probe`: the two handed back, the key's slot hash, and
+-- where it is.
+fn map_locate[K]<'q>(slots: array (1 + i32), keys: array K, q: imm 'q K)
+    -> ((array (1 + i32) * array K) * i32) * (i32 + i32) =
   let (q, q0) = copy['q, K](q);
   let h = map_key_hash(q0);
+  let mut slots = slots;
   let mut keys = keys;
-  let r = borrow imm keys { 'k, ks -> map_probe(ks, q, h) };
-  ((keys, h), r)
+  let r = borrow imm slots { 'h, hs -> borrow imm keys { 'k, ks -> map_probe(hs, ks, q, h) } };
+  (((slots, keys), h), r)
 
 -- The first empty slot from slot hash `h` on.
-fn map_first_empty[K]<'k>(ks: array_imm 'k (1 + (i32 * K)), h: i32) -> i32 =
-  let (ks, k0) = array_copy['k, 1 + (i32 * K)](ks);
-  let cap = len(k0);
+fn map_first_empty<'h>(hs: array_imm 'h (1 + i32), h: i32) -> i32 =
+  let (hs, h0) = array_copy['h, 1 + i32](hs);
+  let cap = len(h0);
   let mut i = host[and32](h, cap - 1);
-  let mut rest = ks;
+  let mut rest = hs;
   for _ in 0..cap {
-    let (r, r0) = array_copy['k, 1 + (i32 * K)](rest);
+    let (r, r0) = array_copy['h, 1 + i32](rest);
     rest = r;
-    match get(r0, i) {
-      inl g ->
-        let empty = borrow imm *g { 'y, s -> match s { inl u -> true | inr e -> false } };
-        if empty { break } else { i = host[and32](i + 1, cap - 1) }
-    | inr u -> break
-    }
+    match map_slot_at(r0, i) { inl u -> break | inr e -> i = host[and32](i + 1, cap - 1) }
   };
   i
-
--- The slot hash of the entry at `i`, or `inr ()` where the slot is empty.
-fn map_slot_at[K]<'k>(ks: array_imm 'k (1 + (i32 * K)), i: i32) -> i32 + 1 =
-  match get(ks, i) {
-    inl g ->
-      let h = borrow imm *g { 'y, s ->
-        match s { inl u -> (inr () : i32 + 1) | inr (hs, kv) -> (inl hs : i32 + 1) } };
-      h
-  | inr u -> inr ()
-  }
 
 -- ### Building
 
 -- An empty map with room for `cap` entries before it grows.
 fn map_new[K, V](cap: i32) -> Map[K, V] =
   let c = map_table_size(cap);
-  ((array_new[1 + (i32 * K)] (c, !{ i -> inl () }), array_new[V] (c, !{ i -> filler[V] })), 0)
+  (((array_new[1 + i32] (c, !{ i -> inl () }), array_new[K] (c, !{ i -> filler[K] })),
+    array_new[V] (c, !{ i -> filler[V] })), 0)
 
--- The entry `(h, k)`, `v` put in the empty slot `i`.
-fn map_put_at[K, V](keys: array (1 + (i32 * K)), vals: array V, i: i32, h: i32, k: K, v: V)
-    -> array (1 + (i32 * K)) * array V =
-  let (keys, _) = array_replace[1 + (i32 * K)] (keys, i, inr (h, k));
+-- The entry `k`, `v` of slot hash `h` put in the empty slot `i`; the fillers there are consumed.
+fn map_put_at[K, V](slots: array (1 + i32), keys: array K, vals: array V, i: i32, h: i32, k: K,
+    v: V) -> (array (1 + i32) * array K) * array V =
+  let (slots, _) = array_replace[1 + i32] (slots, i, inr h);
+  let (keys, _) = array_replace[K] (keys, i, k);
   let (vals, _) = array_replace[V] (vals, i, v);
-  (keys, vals)
+  ((slots, keys), vals)
+
+-- The entry at `i` taken out, the slot left empty with fillers: its slot hash, key and value, or
+-- `inr ()` where the slot is empty (also past the end).  `[spec §36]`
+fn map_take_at[K, V](slots: array (1 + i32), keys: array K, vals: array V, i: i32)
+    -> ((array (1 + i32) * array K) * array V) * ((i32 * (K * V)) + 1) =
+  let (slots, s) = array_replace[1 + i32] (slots, i, inl ());
+  let e : 1 + i32 = match s { inl e -> e | inr e -> e };
+  match e {
+    inl u -> (((slots, keys), vals), inr ())
+  | inr h ->
+      let (keys, x) = array_replace[K] (keys, i, filler[K]);
+      let (vals, y) = array_replace[V] (vals, i, filler[V]);
+      -- `i` is a slot, so neither `inr` (past the end) occurs; each would answer the filler.
+      let k = match x { inl k -> k | inr k -> k };
+      let v = match y { inl v -> v | inr v -> v };
+      (((slots, keys), vals), inl (h, (k, v)))
+  }
 
 -- Twice the table, every entry moved to the first empty slot from its hash.
-fn map_grow[K, V](keys: array (1 + (i32 * K)), vals: array V) -> array (1 + (i32 * K)) * array V =
-  let (keys, cap) = array_size[1 + (i32 * K)](keys);
-  let mut old_k = keys;
-  let mut old_v = vals;
-  let mut nk = array_new[1 + (i32 * K)] (cap * 2, !{ i -> inl () });
-  let mut nv = array_new[V] (cap * 2, !{ i -> filler[V] });
+fn map_grow[K, V](slots: array (1 + i32), keys: array K, vals: array V)
+    -> (array (1 + i32) * array K) * array V =
+  let (slots, cap) = array_size[1 + i32](slots);
+  let mut old = ((slots, keys), vals);
+  let mut nt = ((array_new[1 + i32] (cap * 2, !{ i -> inl () }),
+    array_new[K] (cap * 2, !{ i -> filler[K] })), array_new[V] (cap * 2, !{ i -> filler[V] }));
   for i in 0..cap {
-    let (ok, s) = array_replace[1 + (i32 * K)] (old_k, i, inl ());
-    let (ov, x) = array_replace[V] (old_v, i, filler[V]);
-    old_k = ok;
-    old_v = ov;
-    match s {
-      inl e -> match e {
-        inl u -> ()
-      | inr (h, k) -> match x {
-          inl v ->
-            let j = borrow imm nk { 'k, ks -> map_first_empty(ks, h) };
-            let (k2, v2) = map_put_at(nk, nv, j, h, k, v);
-            nk = k2;
-            nv = v2
-        | inr v -> () }
-      }
-    | inr e -> ()
+    let ((os, ok), ov) = old;
+    let (o, e) = map_take_at(os, ok, ov, i);
+    old = o;
+    match e {
+      inl (h, (k, v)) ->
+        let ((ns, nk), nv) = nt;
+        let mut ns = ns;
+        let j = borrow imm ns { 'h, hs -> map_first_empty(hs, h) };
+        nt = map_put_at(ns, nk, nv, j, h, k, v)
+    | inr u -> ()
     }
   };
-  (nk, nv)
+  nt
 
 -- `v` at `k`, and the value it displaces.
 fn map_insert[K, V](m: Map[K, V], k: K, v: V) -> Map[K, V] * (V + 1) =
-  let ((keys, vals), n) = m;
-  let (keys, cap) = array_size[1 + (i32 * K)](keys);
-  let (keys, vals) = if cap < 2 * (n + 1) { map_grow(keys, vals) } else { (keys, vals) };
+  let (((slots, keys), vals), n) = m;
+  let (slots, cap) = array_size[1 + i32](slots);
+  let ((slots, keys), vals) =
+    if cap < 2 * (n + 1) { map_grow(slots, keys, vals) } else { ((slots, keys), vals) };
   let mut k = k;
-  let ((keys, h), r) = map_locate(keys, &k);
+  let (((slots, keys), h), r) = map_locate(slots, keys, &k);
   match r {
     inl i ->
       -- `i` is a slot, so `inr` (past the end) does not occur; it would answer `v` itself.
       let (vals, o) = array_replace[V] (vals, i, v);
       let old : V + 1 = match o { inl x -> inl x | inr x -> inl x };
-      (((keys, vals), n), old)
-  | inr i ->
-      let (keys, vals) = map_put_at(keys, vals, i, h, k, v);
-      (((keys, vals), n + 1), inr ())
+      ((((slots, keys), vals), n), old)
+  | inr i -> ((map_put_at(slots, keys, vals, i, h, k, v), n + 1), inr ())
   }
 
 -- ### Reading
 
 -- The number of entries.
-fn map_len[K, V](m: Map[K, V]) -> Map[K, V] * i32 = let (kv, n) = m; ((kv, n), n)
+fn map_len[K, V](m: Map[K, V]) -> Map[K, V] * i32 = let (t, n) = m; ((t, n), n)
 
 -- Whether `k` has a value.
 fn map_contains[K, V](m: Map[K, V], k: K) -> Map[K, V] * bool =
-  let ((keys, vals), n) = m;
+  let (((slots, keys), vals), n) = m;
   let mut k = k;
-  let ((keys, _), r) = map_locate(keys, &k);
+  let (((slots, keys), _), r) = map_locate(slots, keys, &k);
   let found = match r { inl i -> true | inr i -> false };
-  (((keys, vals), n), found)
+  ((((slots, keys), vals), n), found)
 
 -- A copy of the value at `k` (`V` persistent), or `inr ()`.
 fn map_lookup[K, V](m: Map[K, V], k: K) -> Map[K, V] * (V + 1) =
-  let ((keys, vals), n) = m;
+  let (((slots, keys), vals), n) = m;
   let mut k = k;
-  let ((keys, _), r) = map_locate(keys, &k);
+  let (((slots, keys), _), r) = map_locate(slots, keys, &k);
   match r {
-    inl i -> let x = at(&vals, i, filler[V]); (((keys, vals), n), inl x)
-  | inr i -> (((keys, vals), n), inr ())
+    inl i -> let x = at(&vals, i, filler[V]); ((((slots, keys), vals), n), inl x)
+  | inr i -> ((((slots, keys), vals), n), inr ())
   }
 
 -- The value at `k` as a view at the map's lifetime `'x`, or `inr ()`.
-fn map_get[K, V]<'k, 'x>(r: MapRef[K, V]<'k, 'x>, k: K) -> imm 'x V + 1 =
-  let ((ks, vs), n) = r;
+fn map_get[K, V]<'h, 'k, 'x>(r: MapRef[K, V]<'h, 'k, 'x>, k: K) -> imm 'x V + 1 =
+  let (((hs, ks), vs), n) = r;
   let mut k = k;
-  let o = map_probe_key(ks, &k);
+  let o = map_probe_key(hs, ks, &k);
   match o { inl i -> get(vs, i) | inr i -> array_release['x, V](vs); inr () }
 
 -- The number of entries of a lent map.
-fn map_size[K, V]<'k, 'x>(r: MapRef[K, V]<'k, 'x>) -> i32 = let (d, n) = r; n
+fn map_size[K, V]<'h, 'k, 'x>(r: MapRef[K, V]<'h, 'k, 'x>) -> i32 = let (d, n) = r; n
+
+-- The entry at slot `i` of a lent map, its key lent at `'k` and its value at `'x`; `inr (inl ())`
+-- where the slot is empty, `inr (inr ())` past the end: a step of a sized iterator's answer.
+-- `[spec §36]`
+fn map_entry_at[K, V]<'h, 'k, 'x>(hs: array_imm 'h (1 + i32), ks: array_imm 'k K,
+    vs: array_imm 'x V, i: i32) -> (imm 'k K * imm 'x V) + (1 + 1) =
+  let (hs, h0) = array_copy['h, 1 + i32](hs);
+  if i < len(h0) {
+    match map_slot_at(hs, i) {
+      inl u -> array_release['k, K](ks); array_release['x, V](vs); inr (inl ())
+    | inr h -> match get(ks, i) {
+          inl kb -> match get(vs, i) {
+              inl vb -> inl (kb, vb)
+            | inr u -> release_imm['k, K](kb); inr (inr ()) }
+        | inr u -> array_release['x, V](vs); inr (inr ()) }
+    }
+  } else {
+    array_release['h, 1 + i32](hs); array_release['k, K](ks); array_release['x, V](vs);
+    inr (inr ())
+  }
+
+-- The entries of a lent map, in slot order: each key lent at `'k` and its value at `'x`. The
+-- state is the slot.  `[spec §36]`
+fn map_entries[K, V]<'h, 'k, 'x>(r: MapRef[K, V]<'h, 'k, 'x>)
+    -> sized ((array_imm 'h (1 + i32) * array_imm 'k K) * array_imm 'x V) i32
+         (imm 'k K * imm 'x V) =
+  let (d, n) = r;
+  (d, (0, !{ (((hs, ks), vs), i) ->
+    let (hs, h0) = array_copy['h, 1 + i32](hs);
+    let (ks, k0) = array_copy['k, K](ks);
+    let (vs, v0) = array_copy['x, V](vs);
+    ((((hs, ks), vs), i + 1), map_entry_at(h0, k0, v0, i)) }))
 
 -- The entries of a lent map, in slot order: each key copied out of its slot (a key that is its
 -- own view: an integer, a view, a pair of them) and a view of its value.
-fn map_iter[K, V]<'k, 'x>(r: MapRef[K, V]<'k, 'x>)
-    -> sized (array_imm 'k (1 + (i32 * K)) * array_imm 'x V) i32 (K * imm 'x V) =
+fn map_iter[K, V]<'h, 'k, 'x>(r: MapRef[K, V]<'h, 'k, 'x>)
+    -> sized ((array_imm 'h (1 + i32) * array_imm 'k K) * array_imm 'x V) i32 (K * imm 'x V) =
   let (d, n) = r;
-  (d, (0, !{ ((ks, vs), i) ->
-    let (ks, k0) = array_copy['k, 1 + (i32 * K)](ks);
+  (d, (0, !{ (((hs, ks), vs), i) ->
+    let (hs, h0) = array_copy['h, 1 + i32](hs);
+    let (ks, k0) = array_copy['k, K](ks);
     let (vs, v0) = array_copy['x, V](vs);
-    match get(k0, i) {
-      inl g ->
-        let o = borrow imm *g { 'y, s ->
-          match s { inl u -> (inr () : K + 1) | inr (h, kv) -> (inl kv : K + 1) } };
-        match o {
-          inl key -> match get(v0, i) {
-              inl vw -> (((ks, vs), i + 1), inl (key, vw))
-            | inr u -> (((ks, vs), i + 1), inr (inl ())) }
-        | inr u -> array_release['x, V](v0); (((ks, vs), i + 1), inr (inl ()))
-        }
-    | inr u -> array_release['x, V](v0); (((ks, vs), i), inr (inr ()))
+    match map_entry_at(h0, k0, v0, i) {
+      inl (kb, vb) ->
+        let key : K = borrow imm *kb { 'y, kv -> kv };
+        ((((hs, ks), vs), i + 1), inl (key, vb))
+    | inr q -> ((((hs, ks), vs), i + 1), inr q)
+    } }))
+
+-- `f` over the entries of a lent map in slot order, from `s`: each key lent at `'k` and its value
+-- at `'x`.  `[spec §36]`
+fn map_fold[K, V, S]<'h, 'k, 'x>(r: MapRef[K, V]<'h, 'k, 'x>, f: !((imm 'k K * imm 'x V) * S => S),
+    s: S) -> S =
+  let mut s = s;
+  for e in map_entries(r) { s = f(e, s) };
+  s
+
+-- The entries of a map, taken out in slot order, each its key and value owned. The data is the
+-- count of slots, the state the slot and the table; what a loop that stops early leaves in the
+-- table is consumed with it.  `[spec §36]`
+fn map_drain[K, V](m: Map[K, V])
+    -> sized (i32 * i32) (i32 * ((array (1 + i32) * array K) * array V)) (K * V) =
+  let (((slots, keys), vals), n) = m;
+  let (slots, cap) = array_size[1 + i32](slots);
+  ((0, cap), ((0, ((slots, keys), vals)), !{ (d, (i, ((s, k), v))) ->
+    let (t, e) = map_take_at(s, k, v, i);
+    let (lo, hi) = d;
+    match e {
+      inl (h, kv) -> ((d, (i + 1, t)), inl kv)
+    | inr u -> if i < hi { ((d, (i + 1, t)), inr (inl ())) } else { ((d, (i, t)), inr (inr ())) }
     } }))
 
 -- ### Removing
 
 -- The entry at `k` taken out, and its value; the entries after it in its run are shifted back
--- over the hole, each one whose map_probe sequence passes the hole (Knuth's algorithm R).
+-- over the hole, each one whose probe sequence passes the hole (Knuth's algorithm R).
 fn map_remove[K, V](m: Map[K, V], k: K) -> Map[K, V] * (V + 1) =
-  let ((keys, vals), n) = m;
+  let (((slots, keys), vals), n) = m;
   let mut k = k;
-  let ((keys, _), r) = map_locate(keys, &k);
+  let (((slots, keys), _), r) = map_locate(slots, keys, &k);
   match r {
     inl i ->
-      let (keys, cap) = array_size[1 + (i32 * K)](keys);
+      let (slots, cap) = array_size[1 + i32](slots);
       let mask = cap - 1;
-      let (keys, _) = array_replace[1 + (i32 * K)] (keys, i, inl ());
-      let (vals, o) = array_replace[V] (vals, i, filler[V]);
-      let mut ks = keys;
-      let mut vs = vals;
+      let (t, e) = map_take_at(slots, keys, vals, i);
+      let mut t = t;
       let mut hole = i;
       let mut j = i;
       for _ in 0..cap {
         j = host[and32](j + 1, mask);
-        let at_j = borrow imm ks { 'k, kv -> map_slot_at(kv, j) };
-        let empty = match at_j { inl h -> false | inr u -> true };
-        let h = match at_j { inl h -> h | inr u -> 0 };
-        if empty { break } else {
-          if host[and32](j - h, mask) >= host[and32](j - hole, mask) {
-            let (k2, s) = array_replace[1 + (i32 * K)] (ks, j, inl ());
-            let e = match s { inl e -> e | inr e -> e };
-            let (k3, _) = array_replace[1 + (i32 * K)] (k2, hole, e);
-            let (v2, x) = array_replace[V] (vs, j, filler[V]);
-            let (v3, _) = match x {
-              inl x -> array_replace[V] (v2, hole, x)
-            | inr x -> array_replace[V] (v2, hole, x) };
-            ks = k3;
-            vs = v3;
-            hole = j
-          } else { () }
+        let ((ts, tk), tv) = t;
+        let mut ts = ts;
+        let at_j = borrow imm ts { 'h, hs -> map_slot_at(hs, j) };
+        match at_j {
+          inl u -> t = ((ts, tk), tv); break
+        | inr h ->
+            if host[and32](j - h, mask) >= host[and32](j - hole, mask) {
+              let (t2, e2) = map_take_at(ts, tk, tv, j);
+              match e2 {
+                inl (h2, (k2, v2)) ->
+                  let ((s3, k3), v3) = t2;
+                  t = map_put_at(s3, k3, v3, hole, h2, k2, v2)
+              | inr u -> t = t2 };
+              hole = j
+            } else { t = ((ts, tk), tv) }
         }
       };
-      let old : V + 1 = match o { inl x -> inl x | inr x -> inl x };
-      (((ks, vs), n - 1), old)
-  | inr i -> (((keys, vals), n), inr ())
+      let old : V + 1 = match e { inl (h, (ok, v)) -> inl v | inr u -> inr () };
+      ((t, n - 1), old)
+  | inr i -> ((((slots, keys), vals), n), inr ())
   }
 
 -- ### The set: a map to `1`
