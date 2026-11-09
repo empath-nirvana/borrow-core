@@ -1024,48 +1024,51 @@ more programs: `checkProgram_sound` and every theorem are unchanged. Which varia
 copies is read off its node's masks (§3): the slots both parts use, which the derivation gives to
 both.
 
-### Promotion over a persistent context
+### Promotion over a flat context
 
-A context is persistent when every live slot's type is:
+A value type is **flat** when it is persistent and holds no recursive data (`VTy.flat`): `I32`,
+`I64`, `U8`, the floats (`.int _`, §8), `1`, `0`, `!A`, and `⊗`, `⊕` and `[@a]` over flat types.
+`μ` is not flat. `flat A ⇒ persistent A`. A context is flat when every live slot's type is:
 
-    Persistent(Γ)  ≜  ∀ s ∈ Γ. s.live ⇒ s.ty persistent        (Ctx.PersistentLive, Core/Persistent.lean)
+    Flat(Γ)  ≜  ∀ s ∈ Γ. s.live ⇒ s.ty flat        (Ctx.FlatLive, Core/Persistent.lean)
 
-`!Γ` (`Ctx.Banged`, every live slot at a type `!A`) implies it (`Ctx.Banged.persistentLive`), since
-`!A` is persistent. The premise of Core's two promotion rules, which §3 takes from §2's `!I-λ` and
-`!I-Λ`, is `Persistent(Γ)`:
+`!Γ` (`Ctx.Banged`, every live slot at a type `!A`) implies it (`Ctx.Banged.flatLive`), since `!A`
+is flat. The premise of Core's two promotion rules, which §3 takes from §2's `!I-λ` and `!I-Λ`, is
+`Flat(Γ)`:
 
-    Persistent(Γ)    Δ; _ : 1 (dead), Γ ⊢ M : F A
-    ─────────────────────────────────────────────  !thunk     (bangThunkF)
+    Flat(Γ)    Δ; _ : 1 (dead), Γ ⊢ M : F A
+    ───────────────────────────────────────  !thunk     (bangThunkF)
     Δ; Γ ⊢ λ_. M : !U (F A)
 
-    Persistent(Γ)    C ≠ F _    Δ; Γ ⊢ λN : C
-    ─────────────────────────────────────────  !thunkv    (bangThunkV)
+    Flat(Γ)    C ≠ F _    Δ; Γ ⊢ λN : C
+    ───────────────────────────────────  !thunkv    (bangThunkV)
     Δ; Γ ⊢ λN : !U C
 
-So a `!` closure may capture a live variable of any persistent type: `I32`, `I64`, `U8`, the
-floats (`.int _`, §8), `1 + 1`, `1`, `0`, `!A`, and `⊗`, `⊕`, `[@a]` and `μ` over persistent types
-(a `μ`-list of `I32`, say). `U C`, `Ref`, `Imm`, `Mut` and the opaque host types (§11) are not
-persistent, so a closure capturing one is not promoted.
+So a `!` closure may capture a live variable of any flat type: the scalars, `1 + 1`, `1`, `0`,
+`!A`, and `⊗`, `⊕` and `[@a]` over flat types. `U C`, `Ref`, `Imm`, `Mut` and the opaque host types
+(§11) are not persistent, and `μ` data (a list) is not flat, so a closure capturing one is not
+promoted. It is an ordinary closure `U C`, moved with no copy at capture, and duplicating it is an
+explicit clone: Rust's split between `Copy` (implicit duplication, flat captures only) and `Clone`
+(explicit).
 
 - **Soundness.** The compatibility lemmas (`bangThunkF_compatC`, `bangThunkV_compatC`, and the
   chain's `bangThunkF_compatN`, `bangThunkV_compatN`) need only that the context relation holds at
-  `∅`. `gSepC_persistent` (the chain's `gN_persistent`) gives it from `Persistent(Γ)`, slot by
-  slot, through `vCE_empty_of_persistent` (`vN_empty_of_persistent`).
+  `∅`. `gSepC_persistent` (the chain's `gN_persistent`) gives it from `Flat(Γ)` through
+  `flat ⇒ persistent`, slot by slot, by `vCE_empty_of_persistent` (`vN_empty_of_persistent`).
 - **Mirrors.** `CDerivesAt` (`Core/Tied.lean`) and the generated `CDerivesP`, `TDerivesAt` and
   `TDerivesP` (`scripts/gen-pin.py`) take the same premise. The checker's promotion test
-  (`Frontend/Check/Rules.lean`) asks `VTy.persistent` of each live slot. The inversion of a λ read
-  at a `!` thunk (`LamCls`, `lam_bang`) gives a persistent context, and AT06's rejection reads
-  that the captured cell's type, a view of `Ref`, is not persistent.
+  (`Frontend/Check/Rules.lean`) asks `VTy.flat` of each live slot. The inversion of a λ read at a
+  `!` thunk (`LamCls`, `lam_bang`) gives a flat context, and AT06's rejection reads that the
+  captured cell's type, a view of `Ref`, is not flat.
 - **Where `!Γ` stays.** `[let]` and `[then]` at a row with an unrestricted operation (§19), and
   `Count`, `Inversions` (`banged_slot`), `Weaken` and `Embedding`, keep `!Γ`.
-- **Backend.** A captured persistent value is copied into a `!` closure's environment as a `!`
-  value is: Backend2 deep-copies the environments of `!` closures, and `LTy.persistent` agrees with
-  `VTy.persistent` (`ofV_persistent`). A captured `μ` value is copied deep at each copy of the
-  closure, and `bcc-counts` counts it.
+- **Backend.** A captured flat value is copied into a `!` closure's environment as a `!` value is,
+  as a scalar or a flat tuple: Backend2 copies the environments of `!` closures, and
+  `LTy.persistent` agrees with `VTy.persistent` (`ofV_persistent`).
 
-Baselines: every existing derivation still holds, since `!Γ ⇒ Persistent(Γ)` and the rules only
-widen; program derivations in `Core/` pass `(…).persistent` or a proof generic in the predicate.
-The fundamental property (`fundamentalC`, the pinned and the chain versions) and adequacy are
+Baselines: every existing derivation still holds, since `!Γ ⇒ Flat(Γ)` and the rules only widen;
+program derivations in `Core/` pass `(…).flatLive` or a proof generic in the predicate. The
+fundamental property (`fundamentalC`, the pinned and the chain versions) and adequacy are
 unchanged in statement. Every rejection theorem (AT06 among them) holds, restated over the wider
 inversion. Every corpus program and golden is unchanged. No `CDerives` index or rule is added, and
 the judgment freeze is unchanged.
@@ -1607,7 +1610,7 @@ twice here, and its type `…` is linear").
   the parts are checked, so each is checked once (`Frontend/Check/DerivedCopy.lean`).
 - **Not here.** A merge (`case` arms, `<M, N>`, `[then]`'s continuation and finaliser) uses a
   variable once per side. A handler's clauses use only unrestricted slots (`[handle]`'s `Γ₁`),
-  `!thunk` only persistent slots (§10), and a relaxed lend's body only its view: an `imm` there is
+  `!thunk` only flat slots (§10), and a relaxed lend's body only its view: an `imm` there is
   refused with those rules' messages. Inside a thunk, a clause's body, a loop's or a fold's generated function
   or a `def`, the rule applies at the splits there.
 - **The kernel rule.** `copyIt` builds the term from `rVar`, the constant's node, `rLolliE`,
@@ -6562,7 +6565,7 @@ and runs as before, with the same output, counts and reports, except `retry-bloc
   - *its tunneled row*: none (a stored callback performs only what its type provides, and its
     creator's handlers are out of reach once it is stored, which R3's site freshness asks), or
     fixed at the binding and checked at each call to be in scope there;
-  - *its captures*: persistent values only (§10's promotion), or a box at a lifetime
+  - *its captures*: flat values only (§10's promotion), or a box at a lifetime
     (`[@c] !U(…)`, §28), with the answering capabilities passed in by each caller (R6);
   - *the join of rows* across the elements of one data value: written, or the union inferred.
   Each is a decision about what a stored value means, not an elaboration detail: §32 *Open*
@@ -12152,7 +12155,7 @@ reported as an intended change.
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
 `adequacyC` covering every rule; §7's `νX. C` is `Core/NuRel.lean` and `Core/Nu.lean`, and the
-checker reads `nu X. C`, `iter A R R'`, `nu_in`/`nu_out` and `unfold[C, S]`. Entries 7 and 9 (§8, §10) are implemented, except §10's promotion over a persistent context (#886); §8 extends `Paper/` and `Support/` with the literal
+checker reads `nu X. C`, `iter A R R'`, `nu_in`/`nu_out` and `unfold[C, S]`. Entries 7 and 9 (§8, §10) are implemented, except §10's promotion over a flat context (#886); §8 extends `Paper/` and `Support/` with the literal
 and host-step forms. Entry 8 (§9, arrays) is implemented: the former and its lemmas in `Core/Types.lean` and the typed
 world, the constants in `Core/Arrays.lean` (`Core/ArrayWp.lean` for the steps), the three machine
 steps in `Paper/` and `Support/`, the checker (`array`, `array_imm`, syntax-core §8b) and the
@@ -12607,6 +12610,15 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.56** (2026-11-09) — §10 (#886, *Promotion over a flat context*): the premise of Core's
+  promotion rules `!thunk` and `!thunkv` (`bangThunkF`, `bangThunkV`) is `Flat(Γ)`, every live slot
+  at a flat type (the scalars, and `⊗`, `⊕` and `[@a]` over them, `!A`), in place of `!Γ`.
+  `!Γ ⇒ Flat(Γ)`, so the rules only widen. `μ` data is not flat: a closure capturing it stays `U C`,
+  and duplicating it is an explicit clone. `gSepC_persistent` and `gN_persistent` are reached from
+  the new premise through `flat ⇒ persistent`; `CDerivesAt`, the generated pins, the checker's
+  promotion test and `lam_bang` follow. The fundamental property, adequacy, every rejection theorem
+  and every golden are unchanged; no `CDerives` index or rule is added. Closes §10's first *Open*
+  item.
 - **1.56** (2026-11-09) — §10 (#886, *Promotion over a persistent context*): the premise of Core's
   promotion rules `!thunk` and `!thunkv` (`bangThunkF`, `bangThunkV`) is `Persistent(Γ)`, every
   live slot at a persistent type, in place of `!Γ`. `!Γ ⇒ Persistent(Γ)`, so the rules only widen:
