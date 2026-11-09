@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.55 · 2026-11-09
+Version 1.57 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -11878,7 +11878,7 @@ Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP
 
 | Rule | Statement | Unit |
 |---|---|---|
-| `codeI` | `Γ ⊢ λM : U C` and `Γ.CapOK (λM)` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
+| `codeI` | `Γ ⊢ λM : U C`, `Γ.CapOK (λM)` and `(Γ.capTy (λM)).Cl 0` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
 | `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C` | K3 |
 | `erase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
 | `eraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
@@ -11891,11 +11891,21 @@ Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP
   live slot of `Γ` that `e` does not capture is persistent. With it the uncaptured slots hold `∅`
   (`vCE_empty_of_persistent`), so the closure's resource is its captures'. It is a premise, not
   an inversion of `CDerives`.
+- `(Γ.capTy (λM)).Cl 0`, decidable and tested by the checker beside `CapOK`: no `μ` variable is free
+  in a captured slot's type. A type substitution leaves `Code⟨N; E⟩ C` as it is (§68 *Open*, K1's
+  choices), so the clause reads `E` at no environment, and a capture whose type has a free `μ`
+  variable would read `E` as empty. Where the premise fails, the closure stays at `U C`.
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
 - `erase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
   which Backend2 reads (B4). In the machine it is the identity.
 - `eraseD` (covariant erasure inside `C`, K6) is not in this entry.
+- **The inversion's cost** (CLAUDE.md, *Do not invert `CDerives` casually*). `codeI` types the
+  term `λM` at a new type, so the λ-value inversion `LamCls` (`Core/Inversions.lean`) gains a
+  disjunct: the λ read at `Code⟨capNorm (λM); E⟩ D` and at `!Code⟨…⟩ D`. `erase` and `eraseB` add a
+  view step from a code type to `U`. The proofs restated are `LamCls`'s cases (`step`, `thunkV`,
+  `bangThunkV`, `val_*`), `lam_bang`, and `lam_bang`'s uses in `Core/Rejections.lean` and
+  `Core/EffCancelTyped.lean`. No inversion is added and no substitution over derivations.
 
 ### Erasure policy
 
@@ -11970,6 +11980,12 @@ No change to `CDerives`, the relation, the machine, the checker, the elaborator 
 `fundamentalC`, `adequacyC` and `goal791N : HandlerLawN → Goal791N` keep their statements and
 proofs; every corpus and kernel program its output. The later units must preserve the same three.
 
+K3 (the four rules and the restated `force`): `fundamentalC`, `adequacyC` and `goal791N :
+HandlerLawN → Goal791N` keep their statements and cover the new rules, the chain's through
+`FundamentalKW835N`. The judgment freeze holds: no new judgment, and the rules join `CDerives`,
+mirrored by `scripts/gen-pin.py`. Every rejection theorem keeps its verdict; one that flips is
+reported as an intended change.
+
 ### Open
 
 - **Built (K1, K2):** `VTy.code` (`Core/Types.lean`) and its arm at every match in `Core/`,
@@ -11979,18 +11995,20 @@ proofs; every corpus and kernel program its output. The later units must preserv
   keep their statements.
 - **Not built:** the rules and their compatibility lemmas (K3, K4), the lend-exit lemma (K5),
   `eraseD` (K6).
+- **No code type in the checker.** No rule of the checker synthesises a code type before S1, so
+  the corpus is unchanged by K3.
+- **`CapOK`** is a premise of `codeI` until #894 removes it.
 - **Choices K1 made that the entry does not state:**
   - A type substitution (`VTy.rename`, `VTy.subst`) leaves `Code⟨N; E⟩ C` as it is, as it leaves
     `U C`: no `μ` variable reaches `E`, `Cl k` holds, `Occ` fails. The clause reads `E` at no
-    environment, as `U C` reads `C`. So K3's `codeI` must give a closed `E` (`E.Cl 0`, no `μ`
-    variable free in a capture's type), as a premise or from the context's types.
+    environment, as `U C` reads `C`. So `codeI` asks `E.Cl 0`.
   - `vC_ind` and `vN_ind` keep the code clause in one unfolding (`vF`, `vFN`) with the property at
     every value of `E`, from an outer induction on the type's size: `E` is smaller and no
     substitution enters it.
   - `TyEq` at `code`: equal `N`, `TyEq` at `E` and `C`. `VTy.inFrag` at `code`: `E` and `C`.
     `NoThunkT` at `code` is `False`, as at `U`. `VTy.persistent`, `VOutlives`: as `U`.
   - The step-indexed model (`Core/Chain/SI/Sem.lean`) and the tree model (`Core/TreeGoal791.lean`)
-    read `code` as empty, as they read `μ`.
+    read `code` as empty, as they read `μ` (#840).
   - Printing: the checker prints `Code⟨#h; E⟩ C`, `#h` a hash of `N`'s serialisation, not
     `{closure@span}` (a kernel type has no span). Backend2's `useKey` prints a type `ofV` refuses
     exactly (`keyVT`, `N` in full), so two codes are two keys; `ofV` refuses `code` (B1).
@@ -12466,6 +12484,12 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.57** (2026-11-09) — §68 (#855 K3): the rules `codeI`, `codeIB`, `erase` and `eraseB`, and
+  `force` at `U C` or `Code⟨N; E⟩ C`. `codeI` and `codeIB` ask the captured types closed,
+  `(Γ.capTy (λM)).Cl 0`, beside `CapOK`; where either fails the closure stays at `U C`. `LamCls`
+  gains the code disjunct and `lam_bang`'s uses are restated; no inversion is added.
+  `fundamentalC`, `adequacyC` and `goal791N` keep their statements and cover the rules. No checker
+  rule synthesises a code type before S1, so no program changes.
 - **1.55** (2026-11-09) — §68 (#855 K1+K2): the former `Code⟨N; E⟩ C` (`VTy.code`) across
   `Core/`, with its relation clauses (`vCE`'s and the chain's `vNE` are K0's `codeRelC`/`codeRelN`,
   by `Iff.rfl`; `vOE` is `True`) and every law at it with no new hypothesis; `TyEq`/`alphaB` compare
