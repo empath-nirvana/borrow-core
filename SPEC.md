@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.51 · 2026-11-07
+Version 1.55 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -12432,6 +12432,12 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.55** (2026-11-09) — §68 (#855 K1+K2): the former `Code⟨N; E⟩ C` (`VTy.code`) across
+  `Core/`, with its relation clauses (`vCE`'s and the chain's `vNE` are K0's `codeRelC`/`codeRelN`,
+  by `Iff.rfl`; `vOE` is `True`) and every law at it with no new hypothesis; `TyEq`/`alphaB` compare
+  a code type only with a code type. The checker and Backend2's `ofV` refuse a code type until K3,
+  S1 and B1. No `CDerives` rule produces one, so no program's typing or output changes.
+  `fundamentalC`, `adequacyC` and `goal791N` keep their statements.
 - **1.51** (2026-11-07) — §18, §19 *Borrows*, §36 (#887): a load block (`borrow imm *g { 'y, v -> … }`) whose
   body performs abortive operations elaborates to `withloadU`, `withload` at the callback's row,
   as the cell and slice borrows elaborate to their unwinding forms (`Const.unwinding`,
