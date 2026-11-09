@@ -109,8 +109,8 @@ the corpus programs that are new or changed since the merge base with origin/mai
 gate-full` adds every other check (the clos, flat, LIR and word-IR stages, counts, native, the
 kernel programs, the static tables, the sugar pairs, `let mut` combinations, the book)
 and runs the interpreter on every program and book block, re-verifying every golden. `make
-gate-full` is required when `Paper/`, `Support/` (the interpreter and the machine) or `Backend/`
-changed, and `make gate` says so then. Run it by hand too after a `Frontend/` or `lib/` change that
+gate-full` is required when `Paper/`, `Support/` (the interpreter and the machine), `Backend/`,
+`Target/` or `Pipeline/` changed, and `make gate` says so then. Run it by hand too after a `Frontend/` or `lib/` change that
 changes what programs mean. `make goldens` (`scripts/compile-corpus.sh --write-goldens [file…]`)
 writes corpus goldens, only ever from the interpreter.
 
@@ -122,7 +122,8 @@ is the merge requirement.
 ## Working loop
 
 - While iterating, check only what you touched: `lake build <Module>`; `bcc check`,
-  `bcc interp --stage clos|flat` or `bcc run` on the one program; the one script on the one file
+  `bcc interp --stage lir|flat` (Backend2; `--backend old --stage clos|flat` for the old backend)
+  or `bcc run` on the one program; the one script on the one file
   (`scripts/compile-corpus.sh corpus/foo.bc`, `scripts/check-corpus.sh corpus/foo.bc`,
   `scripts/book-doctest.sh book/src/guide/foo.md[:line]`).
 - At milestones, `make gate-fast`.
