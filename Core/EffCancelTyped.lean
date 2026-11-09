@@ -247,8 +247,8 @@ theorem d_cancelCT {Δ : LifeCtx} {S : Row} {F : CTy} (hF : F.isTop = false)
       ⟨kTy S .unit .unr .unit F, false⟩, ⟨.unit, true⟩,
       ⟨.tensor .unit (kTy S .unit .unr .unit F), false⟩]
       (.app (.var 0) (.val (Val.inj₂ Val.unit))) (.comp (cancelTy S F)) :=
-    .proj₂ (.force (C := .amp (.arr .unit (CTy.effOf S .unit)) (cancelTy S F))
-      (.here (.cons (.weaken rfl (.cons .nil)))))
+    .proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S .unit)) (cancelTy S F))
+      (.here (.cons (.weaken rfl (.cons .nil)))) rfl)
   have hC : cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit := by simp [cancelTy, hF]
   refine .effSub hle ?_
   rw [← hC]
@@ -264,8 +264,8 @@ theorem d_resumeCT {Δ : LifeCtx} (S : Row) (R : VTy) (F : CTy) :
   refine .bind (A := .thunk (.amp (.arr .unit (CTy.effOf S R)) (cancelTy S F)))
     (.left (.right (.dead .nil))) (.ret (.bangE (.var (.here (.cons (.cons .nil)))))) ?_
   exact .app (.left (.dead (.right (.dead .nil))))
-    (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf S R)) (cancelTy S F))
-      (.here (.cons (.cons (.cons .nil))))))
+    (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S R)) (cancelTy S F))
+      (.here (.cons (.cons (.cons .nil)))) rfl))
     (.there (.there (.here (.cons .nil))))
 
 /-- **The `[then]` of `progT`**: `perform 1 then x. x unwind raise 2` at `{2, 1⟨{2}⟩}`.  The cancel
@@ -1718,8 +1718,8 @@ theorem d_timeoutCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
   · have hct : cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit := by simp [cancelTy, hF]
     refine .effSub hFS ?_
     rw [← hct]
-    exact .proj₂ (.force (C := .amp (.arr .unit (CTy.effOf S (.sum X .unit))) (cancelTy S F))
-      (.here (.weaken rfl (.cons hΓ.toP))))
+    exact .proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (.sum X .unit))) (cancelTy S F))
+      (.here (.weaken rfl (.cons hΓ.toP))) rfl)
   · exact .effSub (RowLe.nil S) (.ret (.sumI₂ (.unitI (.weaken rfl (.cons (.cons (.cons hΓ.toP)))))))
 
 section Tied

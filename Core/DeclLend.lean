@@ -204,7 +204,7 @@ theorem d_declAcrossBody :
   refine .effLet (A := .tensor (.ref N₁) .zero) (.left (.left (.left (.dead (.dead .nil)))))
     (fun _ => Ctx.Dead.consumes (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))
-    exact .app (.left (.dead (.right (.dead (.dead .nil))))) (.force (.here (by cdead)))
+    exact .app (.left (.dead (.right (.dead (.dead .nil))))) (.force (T := .thunk _) (.here (by cdead)) rfl)
       (.there (.there (.here (by cdead))))
   · refine .tensorE (.left (deadSplit (by cdead))) (.var (.here (by cdead))) ?_
     exact .zeroE (.left (.right (deadSplit (by cdead)))) (.var (.here (by cdead)))

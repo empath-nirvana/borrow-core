@@ -90,8 +90,9 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (.ret A)))
       (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp C)) :
       CDerivesAt Ξ Δ Γ (.app (.val (.lam N)) M) (.comp C)
-  /-- `force x`: `x ()` at `F A`, `x` itself at any other computation type. -/
-  | force {Δ Γ i C} (h : Ctx.SoloP Γ i (.thunk C)) :
+  /-- `force x`: `x ()` at `F A`, `x` itself at any other computation type; `x` at `U C` or at
+  `Code⟨N; E⟩ C` (`VTy.forceTy`).  `[spec §68]` -/
+  | force {Δ Γ i T C} (h : Ctx.SoloP Γ i T) (hT : T.forceTy = some C) :
       CDerivesAt Ξ Δ Γ (forceE C (.var i)) (.comp C)
   | lam {Δ Γ M A C} (h : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ) M (.comp C)) :
       CDerivesAt Ξ Δ Γ (.val (.lam M)) (.comp (.arr A C))
@@ -144,6 +145,23 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   | bangThunkV {Δ Γ N C} (hp : Ctx.Banged Γ) (hC : C.isRet = false)
       (h : CDerivesAt Ξ Δ Γ (.val (.lam N)) (.comp C)) :
       CDerivesAt Ξ Δ Γ (.val (.lam N)) (.val (.bang (.thunk C)))
+  /-- `[code-I]`: a closure `λM : U C` at its code type.  `[spec §68]` -/
+  | codeI {Δ Γ M C} (h : CDerivesAt Ξ Δ Γ (.val (.lam M)) (.val (.thunk C)))
+      (hok : Ctx.CapOK Γ (.lam M)) (hE : (Ctx.capTy Γ (.lam M)).Cl 0) :
+      CDerivesAt Ξ Δ Γ (.val (.lam M))
+        (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))
+  /-- `[code-I]` under `!`, over `!Γ`.  `[spec §68]` -/
+  | codeIB {Δ Γ M C} (hp : Ctx.Banged Γ)
+      (h : CDerivesAt Ξ Δ Γ (.val (.lam M)) (.val (.bang (.thunk C))))
+      (hok : Ctx.CapOK Γ (.lam M)) (hE : (Ctx.capTy Γ (.lam M)).Cl 0) :
+      CDerivesAt Ξ Δ Γ (.val (.lam M))
+        (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))
+  /-- `[erase]`.  `[spec §68]` -/
+  | erase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.code N E C))) :
+      CDerivesAt Ξ Δ Γ e (.val (.thunk C))
+  /-- `[erase]` under `!`.  `[spec §68]` -/
+  | eraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.bang (.code N E C)))) :
+      CDerivesAt Ξ Δ Γ e (.val (.bang (.thunk C)))
   /-- Dereliction. -/
   | bangE {Δ Γ e A} (h : CDerivesAt Ξ Δ Γ e (.val (.bang A))) : CDerivesAt Ξ Δ Γ e (.val A)
   | copyBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
@@ -506,7 +524,7 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | thunkV hC _ ih1 => exact .thunkV hC ih1
   | ret _ ih1 => exact .ret ih1
   | bind hs _ _ ih1 ih2 => exact .bind hs ih1 ih2
-  | force h => exact .force h
+  | force h hT => exact .force h hT
   | lam _ ih1 => exact .lam ih1
   | lamDead _ ih1 => exact .lamDead ih1
   | app hs _ hx ih1 => exact .app hs ih1 hx
@@ -522,6 +540,10 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | allE _ hlt ih1 => exact .allE ih1 hlt
   | bangThunkF hp _ ih1 => exact .bangThunkF hp ih1
   | bangThunkV hp hC _ ih1 => exact .bangThunkV hp hC ih1
+  | codeI _ hok hE ih1 => exact .codeI ih1 hok hE
+  | codeIB hp _ hok hE ih1 => exact .codeIB hp ih1 hok hE
+  | erase _ ih1 => exact .erase ih1
+  | eraseB _ ih1 => exact .eraseB ih1
   | bangE _ ih1 => exact .bangE ih1
   | copyBang hΓ => exact .copyBang hΓ
   | releaseBang hΓ => exact .releaseBang hΓ
@@ -901,7 +923,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | thunkV hC _ ih1 => exact .thunkV hC (ih1 he)
   | ret _ ih1 => exact .ret (ih1 he)
   | bind hs _ _ ih1 ih2 => exact .bind hs (ih1 (by eff_free)) (ih2 (by eff_free))
-  | force h => exact .force h
+  | force h hT => exact .force h hT
   | lam _ ih1 => exact .lam (ih1 (by eff_free))
   | lamDead _ ih1 => exact .lamDead (ih1 (by eff_free))
   | app hs _ hx ih1 => exact .app hs (ih1 (by eff_free)) hx
@@ -918,6 +940,10 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | allE _ hlt ih1 => exact .allE (ih1 (by eff_free)) hlt
   | bangThunkF hp _ ih1 => exact .bangThunkF hp (ih1 (by eff_free))
   | bangThunkV hp hC _ ih1 => exact .bangThunkV hp hC (ih1 he)
+  | codeI _ hok hE ih1 => exact .codeI (ih1 he) hok hE
+  | codeIB hp _ hok hE ih1 => exact .codeIB hp (ih1 he) hok hE
+  | erase _ ih1 => exact .erase (ih1 he)
+  | eraseB _ ih1 => exact .eraseB (ih1 he)
   | bangE _ ih1 => exact .bangE (ih1 he)
   | copyBang hΓ => exact .copyBang hΓ
   | releaseBang hΓ => exact .releaseBang hΓ

@@ -43,7 +43,7 @@ def progS (A : VTy) (s₀ : Expr) (step : Val) (K : Expr) : Expr :=
 theorem d_fsS {A S : VTy} :
     CDerives LifeCtx.empty (withCtx [⟨.thunk (.arr S (.stream A)), true⟩, ⟨S, true⟩])
       (.app (.var 2) (.var 3)) (.comp (.stream A)) :=
-  .app (.dead (.dead (.left (.right .nil)))) (.force (.there (.there (.here (.cons .nil)))))
+  .app (.dead (.dead (.left (.right .nil)))) (.force (T := .thunk _) (.there (.there (.here (.cons .nil)))) rfl)
     (.there (.there (.there (.here .nil))))
 
 /-- `⟨(f s) π₁, (f s) π₂⟩ : U(Stream A)`. -/
@@ -75,9 +75,9 @@ def takeE : ℕ → Expr
 
 theorem d_takeE : ∀ (n : ℕ) {Γ : Ctx VTy}, Ctx.Dead Γ →
     CDerives LifeCtx.empty (⟨.thunk (.stream .unit), true⟩ :: Γ) (takeE n) (.comp (.ret .unit))
-  | 0, _, hΓ => .proj₂ (.streamOut (.force (.here hΓ)))
+  | 0, _, hΓ => .proj₂ (.streamOut (.force (T := .thunk _) (.here hΓ) rfl))
   | n + 1, _, hΓ =>
-      .bind (.left (deadSplit hΓ)) (.proj₁ (.streamOut (.force (.here hΓ))))
+      .bind (.left (deadSplit hΓ)) (.proj₁ (.streamOut (.force (T := .thunk _) (.here hΓ) rfl)))
         (.tensorE (.left (.dead (deadSplit hΓ))) (.var (.here (.cons hΓ)))
           (.unitE (.right (.left (.dead (.dead (deadSplit hΓ))))) (.var (.there (.here (.cons (.cons hΓ)))))
             (d_takeE n (.cons (.cons (.cons hΓ))))))
@@ -179,11 +179,11 @@ theorem d_sumK : ∀ (n : ℕ) {Γ : Ctx VTy}, Ctx.Dead Γ →
     CDerives LifeCtx.empty (⟨natN, true⟩ :: ⟨.thunk (.stream natN), true⟩ :: Γ) (sumK n)
       (.comp (.ret natN))
   | 0, _, hΓ =>
-      .bind (.right (.left (deadSplit hΓ))) (.proj₂ (.streamOut (.force (.there (.here hΓ)))))
+      .bind (.right (.left (deadSplit hΓ))) (.proj₂ (.streamOut (.force (T := .thunk _) (.there (.here hΓ)) rfl)))
         (.unitE (.left (.right (.dead (deadSplit hΓ)))) (.var (.here (.cons (.cons hΓ))))
           (.ret (.var (.there (.here (.cons hΓ))))))
   | n + 1, _, hΓ =>
-      .bind (.right (.left (deadSplit hΓ))) (.proj₁ (.streamOut (.force (.there (.here hΓ)))))
+      .bind (.right (.left (deadSplit hΓ))) (.proj₁ (.streamOut (.force (T := .thunk _) (.there (.here hΓ)) rfl)))
         (.tensorE (.left (.right (.dead (deadSplit hΓ)))) (.var (.here (.cons (.cons hΓ))))
           (.bind (.right (.left (.dead (.left (.dead (deadSplit hΓ))))))
             (.ret (.lolliE (.dead (.right (.dead (.left (.dead (deadSplit hΓ))))))

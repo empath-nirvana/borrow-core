@@ -69,7 +69,7 @@ macro "not_withPairH" : tactic => `(tactic| (intro M₁ M₂ h; simp [withPair, 
 theorem kview {C₁ C₂ : CTy} {A : VTy} (h : VView (.thunk (.amp C₁ C₂)) A) :
     A.persistent = false ∧ ∃ C', Hnf A (.thunk C') ∧ CTy.alphaB [] (.amp C₁ C₂) C' = true := by
   obtain ⟨h', hh, hα⟩ := h.hnf_of (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
-    (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
+    (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ _ h => by cases h)
   cases h' <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
   exact ⟨by rw [hh.persistent]; rfl, _, hh, hα⟩
 
@@ -83,7 +83,7 @@ theorem kviewO {C₁ C₂ : CTy} {A : VTy} (ob : Option Lifetime.Life)
     | none => exact hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)
     | some d => exact .box (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
   obtain ⟨h', hh, hα⟩ := h.hnf_of hT (fun _ h => by cases h) (fun _ _ h => by cases h)
-    (fun _ _ h => by cases h)
+    (fun _ _ h => by cases h) (fun _ _ _ h => by cases h)
   cases h' <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
   exact ⟨by rw [hh.persistent]; rfl, _, hh, hα⟩
 
@@ -129,9 +129,7 @@ theorem not_release_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
       cases A <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true, false_and] at hα
       exact hun rfl
     · have := hcl.val_thunk; simp [CTy.alphaB] at this
-    · rcases hcl with hcl | ⟨-, hcl⟩
-      · have := vview_thunk hcl; simp [CTy.alphaB] at this
-      · have := vview_bang_thunk hcl; simp [CTy.alphaB] at this
+    · have := hcl.val_thunk; simp [CTy.alphaB] at this
     · simp [withPair, Expr.val, Val.lam] at hwp
     · rcases hx with ⟨-, T₀, hT₀, hc₀⟩ | ⟨d, he, -⟩ | ⟨ho, -⟩
       · rcases hT₀ with ⟨X, rfl, hX⟩ | ⟨a, A', rfl⟩
@@ -340,7 +338,7 @@ theorem alloc_row {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {T : VTy}
 /-- A view of a `Ref` is no `!`. -/
 theorem vview_ref_bang {A X : VTy} (h : VView (.ref A) (.bang X)) : False := by
   obtain ⟨h', hh, hα⟩ := h.hnf_of (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
-    (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
+    (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ _ h => by cases h)
   rw [hh.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
   simp [VTy.alphaB] at hα
 
@@ -384,7 +382,7 @@ theorem not_der_at06 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ
 /-- A view of a `Ref` that is a `Ref` has its content. -/
 theorem vview_ref {A A' : VTy} (h : VView (.ref A) (.ref A')) : VTy.alphaB [] A A' = true :=
   h.eq_of_heads (fun _ _ h => by cases h) (fun _ h => by cases h) (fun _ h => by cases h)
-    (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
+    (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ _ h => by cases h) (fun _ _ h => by cases h)
     (fun _ h => by cases h)
 
 /-- **`alloc x`, `x` a variable, read at a row**: `x` is read at `A`, and the row's type is a view
@@ -522,7 +520,7 @@ theorem d_at08OnceCl {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     (deadSplit hΓ)))))))))) (.var (by csolo)) ?_
   exact .app (.left (.dead (.dead (.dead (.dead (.dead (.dead (.right (.dead
       (deadSplit hΓ))))))))))
-    (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf [] .unit)) .top) (.here (by cdead))))
+    (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf [] .unit)) .top) (.here (by cdead)) rfl))
     (by csolo)
 
 /-- **AT08 with the copy used once is typed** by Core's kernel at `F 1`: the cell's reads and
@@ -643,13 +641,13 @@ theorem At05Ctx.le {Γ Γ' : Ctx VTy} {W F : Expr} (h : At05Ctx Γ W F) (hle : C
 /-- A view of a `Ref` is not persistent. -/
 theorem vview_ref_np {A T : VTy} (h : VView (.ref A) T) : T.persistent = false := by
   obtain ⟨h', hh, hα⟩ := h.hnf_of (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
-    (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
+    (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ _ h => by cases h)
   rw [hh.persistent, ← VTy.alphaB_persistent _ hα]; rfl
 
 /-- A view of a `Ref` is no thunk. -/
 theorem vview_ref_thunk {A : VTy} {C : CTy} (h : VView (.ref A) (.thunk C)) : False := by
   obtain ⟨h', hh, hα⟩ := h.hnf_of (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
-    (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
+    (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ _ h => by cases h)
   rw [hh.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
   simp [VTy.alphaB] at hα
 

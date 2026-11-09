@@ -328,8 +328,8 @@ theorem d_hBody : CDerives ΔM ΓH hBody (.comp (CTy.effOf [ySigI] .unit)) := by
   refine bindW (.ret (d_cbI rfl)) ?_
   refine effLetW (fun _ => ctxOwnFree_of rfl) (fun h => absurd h rowI_not_unr)
     (A := .tensor (.mut (.var 4) .unit) .unit)
-    (appVW (appVW (.force (C := .arr (.mut (.var 4) .unit) (.arr cbITy
-      (CTy.effOf [ySigI] (.tensor (.mut (.var 4) .unit) .unit))))  ?_) ?_) ?_) ?_
+    (appVW (appVW (.force (T := .thunk _) (C := .arr (.mut (.var 4) .unit) (.arr cbITy
+      (CTy.effOf [ySigI] (.tensor (.mut (.var 4) .unit) .unit))))  ?_ rfl) ?_) ?_) ?_
   · csolo
   · csolo
   · csolo
@@ -345,8 +345,8 @@ theorem d_clRes {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   refine .bangThunkV (dead_noLive hΓ) rfl (.lam ?_)
   refine letpairW (.var (by csolo)) ?_
   refine bindW (.ret (appW (.var (by csolo)) (.releaseImm (by cdead)))) ?_
-  exact appVW (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf [] .unit)) (.ret .unit))
-    (by csolo))) (by csolo)
+  exact appVW (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf [] .unit)) (.ret .unit))
+    (by csolo) rfl)) (by csolo)
 
 /-- **The cancelling clause** releases the payload and cancels `κ`. -/
 theorem d_clCan {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
@@ -354,7 +354,7 @@ theorem d_clCan {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   refine .bangThunkV (dead_noLive hΓ) rfl (.lam ?_)
   refine letpairW (.var (by csolo)) ?_
   exact seqCW (appW (.var (by csolo)) (.releaseImm (by cdead)))
-    (.proj₂ (.force (C := .amp (.arr .unit (CTy.effOf [] .unit)) (.ret .unit)) (by csolo)))
+    (.proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf [] .unit)) (.ret .unit)) (by csolo) rfl))
 
 /-- **The handler of `yield`** around the handled body, at `F 1`. -/
 theorem d_hnd {cl : Val} (hcl : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives ΔM Γ (.val cl) (.val clTy))
@@ -410,8 +410,8 @@ theorem d_cbO {cl : Val} (hcl : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives ΔM
     (fun _ h => absurd h List.not_mem_nil) (by decide) (.free (by cdead)))) ?_
   refine .bind (.right (.right (.left (.dead (.dead (.dead (.left .nil))))))) (.ret (d_cbM hcl rfl)) ?_
   refine bindW (A := .tensor (.ref .unit) .unit)
-    (appVW (appVW (.force (C := .arr (.ref .unit) (.arr cbMTy
-      (CTy.effOf [] (.tensor (.ref .unit) .unit)))) ?_) ?_) ?_) ?_
+    (appVW (appVW (.force (T := .thunk _) (C := .arr (.ref .unit) (.arr cbMTy
+      (CTy.effOf [] (.tensor (.ref .unit) .unit)))) ?_ rfl) ?_) ?_) ?_
   · csolo
   · csolo
   · csolo
@@ -428,8 +428,8 @@ theorem d_prog {cl : Val} (hcl : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ
     (fun _ h => absurd h List.not_mem_nil) (by decide) (.free (by cdead)))) ?_
   refine .bind (.right (.right (.left .nil))) (.ret (d_cbO hcl rfl)) ?_
   refine bindW (A := .tensor (.ref .unit) .unit)
-    (appVW (appVW (.force (C := .arr (.ref .unit) (.arr cbOTy
-      (CTy.effOf [] (.tensor (.ref .unit) .unit)))) ?_) ?_) ?_) ?_
+    (appVW (appVW (.force (T := .thunk _) (C := .arr (.ref .unit) (.arr cbOTy
+      (CTy.effOf [] (.tensor (.ref .unit) .unit)))) ?_ rfl) ?_) ?_) ?_
   · csolo
   · csolo
   · csolo

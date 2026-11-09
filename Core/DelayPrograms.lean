@@ -56,11 +56,11 @@ theorem d_driveL {Δ : LifeCtx} (A B : VTy) :
       CDerives Δ (⟨.thunk (.loop A B), true⟩ :: Γ) (driveE n) (.comp (.ret (.sum A B)))
   | 0, _, hΓ =>
       .bind (.left (deadSplit hΓ))
-        (.proj₂ (.loopOut (.force (.here hΓ))))
+        (.proj₂ (.loopOut (.force (T := .thunk _) (.here hΓ) rfl)))
         (.ret (.sumI₂ (.var (.here (.cons hΓ)))))
   | n + 1, _, hΓ =>
       .bind (.left (deadSplit hΓ))
-        (.proj₁ (.loopOut (.force (.here hΓ))))
+        (.proj₁ (.loopOut (.force (T := .thunk _) (.here hΓ) rfl)))
         (.sumE (.left (.dead (deadSplit hΓ))) (.var (.here (.cons hΓ)))
           (.ret (.sumI₁ (.var (.here (.cons (.cons hΓ))))))
           (d_driveL A B n (.cons (.cons hΓ))))
@@ -134,7 +134,7 @@ def progD (A : VTy) (s₀ : Expr) (step : Val) (n : ℕ) : Expr :=
 theorem d_fs {A S : VTy} :
     CDerives LifeCtx.empty (withCtx [⟨.thunk (.arr S (.delay A)), true⟩, ⟨S, true⟩])
       (.app (.var 2) (.var 3)) (.comp (.delay A)) :=
-  .app (.dead (.dead (.left (.right .nil)))) (.force (.there (.there (.here (.cons .nil)))))
+  .app (.dead (.dead (.left (.right .nil)))) (.force (T := .thunk _) (.there (.there (.here (.cons .nil)))) rfl)
     (.there (.there (.there (.here .nil))))
 
 /-- `⟨(f s) π₁, (f s) π₂⟩ : U(D A)`. -/

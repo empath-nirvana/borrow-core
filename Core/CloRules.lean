@@ -90,7 +90,7 @@ theorem d_pack {Γ : Ctx VTy} {c : Lifetime.Life} {A B S : VTy} (hA : A.Cl 0) (h
       withCtx (⟨cloCodeT c A B S, false⟩ :: ⟨S, true⟩ :: Γ))
       (.app (.var 0) (.var 4)) (.comp (cloC c A B)) :=
     .app (.left (.dead (.dead (.dead (.right (deadSplit hΓ))))))
-      (.force (.here (.cons (.cons (.cons (.cons hΓ.toP))))))
+      (.force (T := .thunk _) (.here (.cons (.cons (.cons (.cons hΓ.toP))))) rfl)
       (.there (.there (.there (.there (.here hΓ.toP)))))
   have hf : CDerives Δ (withCtx (⟨cloCodeT c A B S, true⟩ :: ⟨S, false⟩ :: Γ)) (.var 2)
       (.comp (.ret (.thunk (.arr S (cloC c A B))))) :=
@@ -172,12 +172,12 @@ def closeE (i : Nat) : Expr := .app (.var i) (.val (.inj₂ .unit))
 theorem d_callClo {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {A B : VTy} {i j : Nat} (hA : A.Cl 0)
     (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hf : Ctx.SoloP Γ₁ i (cloT c A B)) (ha : Ctx.SoloP Γ₂ j A) :
     CDerives Δ Γ (callE i j) (.comp (.ret (.tensor B (cloBox c A B)))) :=
-  .app hs (.proj₁ (.cloOut hA (.force hf))) ha
+  .app hs (.proj₁ (.cloOut hA (.force hf rfl))) ha
 
 /-- **Close.**  `f : U(Clo^c A B) ⊢ f π₂ : F 1`. -/
 theorem d_close {Γ : Ctx VTy} {c : Lifetime.Life} {A B : VTy} {i : Nat} (hA : A.Cl 0)
     (hf : Ctx.SoloP Γ i (cloT c A B)) : CDerives Δ Γ (closeE i) (.comp (.ret .unit)) :=
-  .proj₂ (.cloOut hA (.force hf))
+  .proj₂ (.cloOut hA (.force hf rfl))
 
 /-- `x to y. N` at `x : [@c] T`: `N` with the unboxed `y : T` at `0` (`[]E`). -/
 theorem d_unbox {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {T : VTy} {C : CTy} {i : Nat} {N : Expr}

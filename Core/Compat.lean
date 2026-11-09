@@ -141,14 +141,23 @@ private theorem substAll_forceE {γ : List Val} {i : Nat} {v : Val} (hv : γ[i]?
       rw [← substAll, substAll_var hv]; rfl
   | _ => exact substAll_var hv
 
-/-- `force x : C` for `x : U C`, written `forceE C x`. -/
-theorem force_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {C : CTy}
-    (h : Ctx.SoloP Γ i (.thunk C)) : SemC Δ Γ (forceE C (.var i)) C := by
+/-- A value at a type forced at `C` (`U C`, `Code⟨N; E⟩ C`) is in `𝒱⟦U C⟧`: at a code type,
+the `U C` conjunct.  `[spec §68]` -/
+theorem vC_thunk_of_forceTy {T : VTy} {C : CTy} (hT : T.forceTy = some C) {ls : List SRec}
+    {δ : LSub} {v : Val} {ρ : WRes} (h : vC true T ls δ v ρ) : vC true (.thunk C) ls δ v ρ := by
+  cases T <;> simp only [VTy.forceTy, Option.some.injEq, reduceCtorEq] at hT
+  · subst hT; exact h
+  · subst hT; exact h.2
+
+/-- `force x : C` for `x : U C` or `x : Code⟨N; E⟩ C`, written `forceE C x`: the `U C`
+reading of the slot.  `[spec §68]` -/
+theorem force_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {T : VTy} {C : CTy}
+    (h : Ctx.SoloP Γ i T) (hT : T.forceTy = some C) : SemC Δ Γ (forceE C (.var i)) C := by
   intro δ γ ls ρ _ hg
   obtain ⟨hlen, hs⟩ := gDenC_iff.mp hg
   obtain ⟨v, hv, hval⟩ := gSepC_soloP h (h.lt_of_liveWithin hlen) hs
   rw [substAll_forceE hv]
-  exact hval ls (Ext.refl _ _)
+  exact vC_thunk_of_forceTy hT hval ls (Ext.refl _ _)
 
 /-- `λx. M : A ⊸ C`.  No Kripke quantifier: the arrow runs at the list it is applied at. -/
 theorem lam_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} {C : CTy}

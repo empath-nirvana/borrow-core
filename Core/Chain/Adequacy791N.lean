@@ -170,7 +170,7 @@ theorem d_bodyE :
   refine .effLet (A := .tensor (.ref .unit) .unit) (.left (.left (.left (.dead .nil))))
     (fun h => absurd h waitRow_not_cancels) (fun h => absurd h waitRow_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead .nil)))) ?_ (.there (.here (by cdead)))
-    exact .app (.left (.dead (.right (.dead .nil)))) (.force (.here (by cdead)))
+    exact .app (.left (.dead (.right (.dead .nil)))) (.force (T := .thunk _) (.here (by cdead)) rfl)
       (.there (.there (.here (by cdead))))
   · refine .tensorE (.left (.dead (.dead (.dead (.dead .nil))))) (.var (.here (by cdead))) ?_
     refine .unitE (.left (.right (.dead (.dead (.dead (.dead (.dead .nil)))))))

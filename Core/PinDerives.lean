@@ -143,8 +143,9 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | bind {Δ Γ Γ₁ Γ₂ M N A C} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hM : CDerivesP Δ Γ₁ M (.comp (.ret A))) (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp C)) :
       CDerivesP Δ Γ (.app (.val (.lam N)) M) (.comp C)
-  /-- `force x`: `x ()` at `F A`, `x` itself at any other computation type. -/
-  | force {Δ Γ i C} (h : Ctx.SoloP Γ i (.thunk C)) :
+  /-- `force x`: `x ()` at `F A`, `x` itself at any other computation type; `x` at `U C` or at
+  `Code⟨N; E⟩ C` (`VTy.forceTy`).  `[spec §68]` -/
+  | force {Δ Γ i T C} (h : Ctx.SoloP Γ i T) (hT : T.forceTy = some C) :
       CDerivesP Δ Γ (forceE C (.var i)) (.comp C)
   | lam {Δ Γ M A C} (h : CDerivesP Δ (⟨A, true⟩ :: Γ) M (.comp C)) :
       CDerivesP Δ Γ (.val (.lam M)) (.comp (.arr A C))
@@ -197,6 +198,24 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | bangThunkV {Δ Γ N C} (hp : Ctx.Banged Γ) (hC : C.isRet = false)
       (h : CDerivesP Δ Γ (.val (.lam N)) (.comp C)) :
       CDerivesP Δ Γ (.val (.lam N)) (.val (.bang (.thunk C)))
+  /-- `[code-I]`: a closure `λM : U C` at its code type, `capNorm (λM)` with the environment
+  type `Γ.capTy (λM)`, every captured slot live and every other live slot persistent
+  (`Ctx.CapOK`), the environment type closed.  `[spec §68]` -/
+  | codeI {Δ Γ M C} (h : CDerivesP Δ Γ (.val (.lam M)) (.val (.thunk C)))
+      (hok : Ctx.CapOK Γ (.lam M)) (hE : (Ctx.capTy Γ (.lam M)).Cl 0) :
+      CDerivesP Δ Γ (.val (.lam M))
+        (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))
+  /-- `[code-I]` under `!`, over `!Γ`.  `[spec §68]` -/
+  | codeIB {Δ Γ M C} (hp : Ctx.Banged Γ) (h : CDerivesP Δ Γ (.val (.lam M)) (.val (.bang (.thunk C))))
+      (hok : Ctx.CapOK Γ (.lam M)) (hE : (Ctx.capTy Γ (.lam M)).Cl 0) :
+      CDerivesP Δ Γ (.val (.lam M))
+        (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))
+  /-- `[erase]`: a code type read at `U C`, on the same term.  `[spec §68]` -/
+  | erase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesP Δ Γ e (.val (.code N E C))) :
+      CDerivesP Δ Γ e (.val (.thunk C))
+  /-- `[erase]` under `!`.  `[spec §68]` -/
+  | eraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesP Δ Γ e (.val (.bang (.code N E C)))) :
+      CDerivesP Δ Γ e (.val (.bang (.thunk C)))
   /-- Dereliction. -/
   | bangE {Δ Γ e A} (h : CDerivesP Δ Γ e (.val (.bang A))) : CDerivesP Δ Γ e (.val A)
   | copyBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :

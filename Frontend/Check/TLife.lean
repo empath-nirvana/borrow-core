@@ -153,7 +153,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .thunkV ii jj C t => t.lifeBinders
   | .ret ii jj A t => t.lifeBinders
   | .bind ii jj A C u tM tN => tM.lifeBinders ++ tN.lifeBinders
-  | .force ii jj i C => []
+  | .force ii jj i T C => []
   | .lam ii jj A C t => t.lifeBinders
   | .lamDead ii jj S B t => t.lifeBinders
   | .app ii jj i A C u tM => tM.lifeBinders
@@ -169,6 +169,10 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .allE ii jj x b a C t => t.lifeBinders
   | .bangThunkF ii jj A t => t.lifeBinders
   | .bangThunkV ii jj C t => t.lifeBinders
+  | .codeI ii jj C t => t.lifeBinders
+  | .codeIB ii jj C t => t.lifeBinders
+  | .erase ii jj C E t => t.lifeBinders
+  | .eraseB ii jj C E t => t.lifeBinders
   | .bangE ii jj A t => t.lifeBinders
   | .copyBang ii jj A => []
   | .releaseBang ii jj A => []
@@ -269,7 +273,7 @@ def TExpr.domFree : TExpr → Bool
   | .thunkV ii jj C t => t.domFree
   | .ret ii jj A t => t.domFree
   | .bind ii jj A C u tM tN => tM.domFree && tN.domFree
-  | .force ii jj i C => true
+  | .force ii jj i T C => true
   | .lam ii jj A C t => t.domFree
   | .lamDead ii jj S B t => t.domFree
   | .app ii jj i A C u tM => tM.domFree
@@ -285,6 +289,10 @@ def TExpr.domFree : TExpr → Bool
   | .allE ii jj x b a C t => t.domFree
   | .bangThunkF ii jj A t => t.domFree
   | .bangThunkV ii jj C t => t.domFree
+  | .codeI ii jj C t => t.domFree
+  | .codeIB ii jj C t => t.domFree
+  | .erase ii jj C E t => t.domFree
+  | .eraseB ii jj C E t => t.domFree
   | .bangE ii jj A t => t.domFree
   | .copyBang ii jj A => true
   | .releaseBang ii jj A => true
@@ -384,7 +392,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .thunkV ii jj C t => .thunkV ii jj C (t.reAb Δr)
   | .ret ii jj A t => .ret ii jj A (t.reAb Δr)
   | .bind ii jj A C u tM tN => .bind ii jj A C u (tM.reAb Δr) (tN.reAb Δr)
-  | .force ii jj i C => .force ii jj i C
+  | .force ii jj i T C => .force ii jj i T C
   | .lam ii jj A C t => .lam ii jj A C (t.reAb Δr)
   | .lamDead ii jj S B t => .lamDead ii jj S B (t.reAb Δr)
   | .app ii jj i A C u tM => .app ii jj i A C u (tM.reAb Δr)
@@ -400,6 +408,10 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .allE ii jj x b a C t => .allE ii jj x b a C (t.reAb Δr)
   | .bangThunkF ii jj A t => .bangThunkF ii jj A (t.reAb Δr)
   | .bangThunkV ii jj C t => .bangThunkV ii jj C (t.reAb Δr)
+  | .codeI ii jj C t => .codeI ii jj C (t.reAb Δr)
+  | .codeIB ii jj C t => .codeIB ii jj C (t.reAb Δr)
+  | .erase ii jj C E t => .erase ii jj C E (t.reAb Δr)
+  | .eraseB ii jj C E t => .eraseB ii jj C E (t.reAb Δr)
   | .bangE ii jj A t => .bangE ii jj A (t.reAb Δr)
   | .copyBang ii jj A => .copyBang ii jj A
   | .releaseBang ii jj A => .releaseBang ii jj A
@@ -642,9 +654,9 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | bind a0 a1 a2 a3 a4 ih0 ih1 =>
       intro Δ' he hd
       exact TDerivesP.bind a0 a1 (by simpa only [TExpr.reAb_erase] using a2) (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | force a0 =>
+  | force a0 a1 =>
       intro Δ' he hd
-      exact TDerivesP.force a0
+      exact TDerivesP.force a0 a1
   | lam a0 ih0 =>
       intro Δ' he hd
       exact TDerivesP.lam (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
@@ -690,6 +702,18 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | bangThunkV a0 a1 a2 a3 ih0 =>
       intro Δ' he hd
       exact TDerivesP.bangThunkV a0 a1 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a3)
+  | codeI a0 a1 a2 a3 ih0 =>
+      intro Δ' he hd
+      exact TDerivesP.codeI (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a1) a2 a3
+  | codeIB a0 a1 a2 a3 a4 ih0 =>
+      intro Δ' he hd
+      exact TDerivesP.codeIB a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a2) a3 a4
+  | erase a0 ih0 =>
+      intro Δ' he hd
+      exact TDerivesP.erase (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
+  | eraseB a0 ih0 =>
+      intro Δ' he hd
+      exact TDerivesP.eraseB (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
   | bangE a0 ih0 =>
       intro Δ' he hd
       exact TDerivesP.bangE (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
@@ -973,9 +997,9 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | bind a0 a1 a2 a3 a4 ih0 ih1 =>
       intro Δ' he hd
       exact TDerivesAt.bind a0 a1 (by simpa only [TExpr.reAb_erase] using a2) (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | force a0 =>
+  | force a0 a1 =>
       intro Δ' he hd
-      exact TDerivesAt.force a0
+      exact TDerivesAt.force a0 a1
   | lam a0 ih0 =>
       intro Δ' he hd
       exact TDerivesAt.lam (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
@@ -1021,6 +1045,18 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | bangThunkV a0 a1 a2 a3 ih0 =>
       intro Δ' he hd
       exact TDerivesAt.bangThunkV a0 a1 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a3)
+  | codeI a0 a1 a2 a3 ih0 =>
+      intro Δ' he hd
+      exact TDerivesAt.codeI (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a1) a2 a3
+  | codeIB a0 a1 a2 a3 a4 ih0 =>
+      intro Δ' he hd
+      exact TDerivesAt.codeIB a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a2) a3 a4
+  | erase a0 ih0 =>
+      intro Δ' he hd
+      exact TDerivesAt.erase (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
+  | eraseB a0 ih0 =>
+      intro Δ' he hd
+      exact TDerivesAt.eraseB (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
   | bangE a0 ih0 =>
       intro Δ' he hd
       exact TDerivesAt.bangE (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
