@@ -549,6 +549,8 @@ slice-split erased handles 0 performs 0 raises 0 left 0 0
 sort-lines erased handles 1 performs 0 raises 1 left 0 0
 sort-numbers erased handles 0 performs 0 raises 0 left 0 0
 split-at-mut erased handles 0 performs 0 raises 0 left 0 0
+state-across-generator erased handles 0 performs 0 raises 0 machines 8 suspends 10 left 0 0
+state-across-while erased handles 0 performs 0 raises 0 machines 4 suspends 9 left 0 0
 state-machine erased handles 1 performs 0 raises 4 machines 1 suspends 12 left 0 0
 state-machine-audit erased handles 1 performs 0 raises 4 left 0 0
 state-row-unused-site erased handles 2 performs 1 raises 0 machines 1 suspends 1 left 0 0
@@ -568,6 +570,9 @@ tree-view-tasks erased handles 0 performs 0 raises 0 left 0 0
 trim-replace erased handles 1 performs 0 raises 1 left 0 0
 utf8-count erased handles 1 performs 0 raises 1 left 0 0
 with-lend-head-type erased handles 2 performs 0 raises 2 left 0 0
+with-loop-abort erased handles 8 performs 0 raises 4 machines 6 suspends 3 left 0 0
+with-loop-resume erased handles 0 performs 0 raises 0 machines 3 suspends 5 left 0 0
+with-loop-unwind erased handles 0 performs 0 raises 1 machines 4 suspends 3 left 0 0
 with-nested-lend erased handles 5 performs 0 raises 0 left 0 0
 yield-callback erased handles 0 performs 0 raises 0 machines 4 suspends 2 left 0 0
 alpha-app-arg erased handles 0 performs 0 raises 0 left 0 0

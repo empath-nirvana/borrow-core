@@ -1,0 +1,18 @@
+-- expect: 9:3: the clause of `ask` resumes `k` more than once: around a loop, `k` is the rest of one turn, which a clause resumes at most once, last
+-- SPEC §75, Part A: a clause that resumes `k` more than once (`multi ctl`) is refused around a
+-- loop: `k` is the rest of one turn.
+
+effect Ask { multi ctl ask() -> i32 }
+
+handler both: Ask, i32 -> i32 = {
+  return(x) = x;
+  ask(k) = { let a = k(1); let b = k(2); a + b }
+}
+
+main -> i32 =
+  with both {
+    let mut t = 0;
+    let mut i = 0;
+    while i < 3 { t = t + ask(); i = i + 1 };
+    t
+  }

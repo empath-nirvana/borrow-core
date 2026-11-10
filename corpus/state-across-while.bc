@@ -1,8 +1,11 @@
--- expect: 17:13: the type of the type of the body `state` handles is not determined here: ascribe it
--- A `let mut` as an instance of `State` (#611), assigned in a `while`: the loop is div, a loop
--- value observed one turn at a time (SPEC §14), and no handler wraps a div computation (§21 *Open*;
--- in the kernel, a handler around ticking code has the stateless clauses of `effHandleT`, decision
--- 68). The handler is installed per observation, with its state in the loop's state (§19).
+-- A `let mut` as an instance of `State` (#611), assigned in a `while`: two `State` instances
+-- across the loop. The loop is div, and each handler around it is installed per observation
+-- (SPEC §75), its state (the handler's `mut` parameter) carried in the loop's state from turn to
+-- turn (§19). The `while`'s condition performs `get`, so it is tested before each turn.
+--
+-- Answer: `(i32[5], inr ())`: `5` is the first `i` whose square passes `20`, and `found` is
+-- `true`, which prints as `inr ()`.
+
 effect State[T] { must_resume ctl get() -> T; must_resume ctl put(v: T) }
 
 handler state[T, A](mut s: T): State[T], A -> A * T = {

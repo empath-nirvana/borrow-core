@@ -1,5 +1,5 @@
--- pending: SPEC §21 Open (a div computation, a nested run_until_empty, inside a task of spawn)
--- now: 30:16: this argument of `push` has type `i32 * (mu X. 1 + ((mu X1. 1 + i32 * X1) + box top U (nu X. F ((mu X. 1 + i32 * X) + box top U X) & F 1)) * X)`, which is not `array A * i32`
+-- pending: #917 (a div computation, a nested run_until_empty, inside a task of spawn, whose clause keeps `k`: a storing clause around a loop, SPEC §75)
+-- now: lib/async.bc:44:3: the clause of `await` keeps `k`; around a loop `k` is one turn of it, which a handler written for a whole computation does not expect (#917)
 -- A task that fans out: a request handler task spawns one subtask per backend it queries and
 -- runs them to completion with a scheduler of its own, then combines their answers. The outer
 -- scheduler runs two such handlers.

@@ -1864,6 +1864,16 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
           report sp "lowering" (s!"for over {g}: its body performs a control operation or " ++
             "loops, so it drains the stored generator")
           chain bs (.loop sp ℓ src V' (← trC n cx [] false M) (← trC n cx cs wrap N))
+      | .while_, _ =>
+        let (bs, V') ← trV n cx cs V
+        if bs.isEmpty then
+          return .loop sp ℓ src V' (← trC n cx [] false M) (← trC n cx cs wrap N)
+        -- A condition that performs is tested before each turn: each turn runs its calls, then
+        -- leaves when it is false, as `while true { if c { M } else { break } }`.  [spec §14]
+        let test ← chain bs (.case sp V' ⟨"io_wf", sp⟩ (.ret sp (.sugar sp .brk)) ⟨"io_wt", sp⟩
+          (← trC n cx [] false M))
+        let always : Val := .ascribe sp (.inr sp (.unit sp)) (.sum sp (.unit sp) (.unit sp))
+        pure (.loop sp ℓ src always test (← trC n cx cs wrap N))
       | _, _ =>
         let (bs, V') ← trV n cx cs V
         -- The body rebinds the capabilities it uses by name, and the loop threads them.
@@ -3632,8 +3642,8 @@ def defineGroup (env : Env) (ms : List (Span × Ident × List Ident × VTy × Va
       throw ⟨n.span, s!"`{n.name}` is recursive and is not a persistent function"⟩
     if hasWhile fuel f.body then
       throw ⟨n.span, s!"`{n.name}` is recursive and its body has a `while` or a `loop`, so it is " ++
-        "div: the `Exhausted` of its budget would be performed inside its loop, and a handler around " ++
-        "a div computation is not provided"⟩
+        "div: the `Exhausted` of its budget would be performed inside its loop, and a recursion " ++
+        "whose body loops has no handler for its budget yet (#955)"⟩
     let (written, _) := splitRow mk
     let env := { env with owner := Instances.ownerKey n.name n.span, ownerTps := tps₀.map (·.name) }
     (env.checkWritten n.span n.name written (rowNames mk) : Except Error Unit)

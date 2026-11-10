@@ -3615,6 +3615,211 @@ def recMachine (scope : List Decl) (d : Decl) : SM Decl := do
     (.tensor sp (.bang sp (.lolli sp A Out)) (.bang sp (.lolli sp (.tensor sp K B) Out)))
     (.pair sp start resume) .none)
 
+/-! ### A frame around a computation that loops  `[spec §75]`
+
+A handler site, a `with … finally` or an `unwind` whose computation loops (§14's `loopsAt`) is
+installed **per observation**: the computation is lifted into a loop value at its own row
+(`liftLoop`, the machine of a div body at a row, which runs nothing when it is made), and the frame
+is a direct-style call of the `unfold` that handles one observation of it at a time
+(`obsFrame`), its state the loop and the frame's own state. A clause around a loop resumes last
+or does not resume (`obsTail`): its answer is the turn's, so a resume passes the turn's end on,
+and any other answer finishes the loop. The form applies only where the computation loops, which
+no frame elaborated before. -/
+
+/-- The result type of a computation that loops, read off its spine: the type of its terminal past
+its loops, or the `B` of a terminal call of a div function in direct style. A terminal that never
+returns (`0`) leaves it to another arm.  `[spec §75]` -/
+def spineResTy (c : TCx) : Nat → Comp → Option CVTy
+  | 0, _ => none
+  | k + 1, .bind _ x A M N => spineResTy (c.push x.name (bindTy c A M)) k N
+  | k + 1, .letUnit _ _ M => spineResTy c k M
+  | k + 1, .letPair _ x y V M =>
+    let (Ax, Ay) := pairTys c V
+    spineResTy ((c.push x.name Ax).push y.name Ay) k M
+  | k + 1, .case _ V x M y N =>
+    let (Ax, Ay) := sumTys c V
+    let some' (T : Option CVTy) : Option CVTy := T.filter (!tyEqV · .zero)
+    (some' (spineResTy (c.push x.name Ax) k M)).orElse fun _ => spineResTy (c.push y.name Ay) k N
+  | k + 1, .loop _ _ _ _ _ N => spineResTy c k N
+  | k + 1, .unwind _ x A M _ N => spineResTy (c.push x.name (bindTy c A M)) k N
+  | _ + 1, .ret _ V => match directCall c none V with
+    | some (B, _) => some B
+    | none => c.tyVL V
+  | _ + 1, T => (c.tyCL T).bind fun C => (Frontend.Check.effRow? C).map (·.2)
+
+/-- `x <- M; N` with the bindings of `M`'s spine brought out, so that each head is a computation of
+its own: a frame per observation is a chain whose last head is a call in direct style, which the
+machine of the body around it reads only on the spine.  `[spec §75]` -/
+def assocBind (sp : Span) (x : Ident) (A : Option VTy) : Comp → Comp → Comp
+  | .bind sp' y B M₁ M₂, N => .bind sp' y B M₁ (assocBind sp x A M₂ N)
+  | .letPair sp' y z V M₁, N => .letPair sp' y z V (assocBind sp x A M₁ N)
+  | M, N => .bind sp x A M N
+
+/-- `assocBind` when no name `M` binds on its spine occurs in `N`, else `x <- M; N` as it is. -/
+def assocFree (sp : Span) (x : Ident) (A : Option VTy) (M N : Comp) : Comp :=
+  let rec binders : Comp → List String
+    | .bind _ y _ _ M₂ => y.name :: binders M₂
+    | .letPair _ y z _ M₁ => y.name :: z.name :: binders M₁
+    | _ => []
+  if (binders M).any (mentionsC · N) then .bind sp x A M N else assocBind sp x A M N
+
+/-- A chain that holds, on its spine, the call of a frame per observation (`obsFrame`'s
+`io_hwf…`). -/
+def hasFrameCall : Comp → Bool
+  | .bind _ _ _ (.ret _ (.app _ (.unbang _ (.var _ f)) _)) N =>
+    f.startsWith "io_hwfo" || f.startsWith "io_hwfu" || hasFrameCall N
+  | .bind _ _ _ _ N | .letPair _ _ _ _ N | .letUnit _ _ N => hasFrameCall N
+  | _ => false
+
+/-- A resume of a clause's `κ`, `(force k).1 a`, `k` among `ks` (`κ` and its copies). -/
+def isResumeOf (ks : List String) : Comp → Bool
+  | .app _ (.proj _ true (.force _ k)) _ => ks.contains k.name
+  | _ => false
+
+/-- In a handler with a state, the answer of a resume applied to the state, `force g s`, `g` among
+`gs` (the answers bound from a resume). -/
+def isStResume (gs : List String) : Comp → Bool
+  | .app _ (.force _ g) _ => gs.contains g.name
+  | _ => false
+
+mutual
+/-- `κ` (one of `ks`) occurs in a value other than forced: kept, passed or stored. -/
+def bareKV (ks : List String) : Val → Bool
+  | .var _ x | .clone _ x => ks.contains x
+  | .pair _ V W | .app _ V W => bareKV ks V || bareKV ks W
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => bareKV ks V
+  | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => bareKC ks M
+  | _ => false
+
+/-- `bareKV` of a computation; a copy `x <- return k` is `κ` too. -/
+def bareKC (ks : List String) : Comp → Bool
+  | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => bareKV ks V
+  | .bind _ x _ (.ret _ (.var _ y)) N =>
+    if ks.contains y then bareKC (x.name :: ks) N else bareKC ks N
+  | .bind _ _ _ M N | .with_ _ M N => bareKC ks M || bareKC ks N
+  | .app _ M x => ks.contains x.name || bareKC ks M
+  | .lam _ _ _ M | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M | .nuOut _ M
+  | .ascribe _ M _ => bareKC ks M
+  | .letUnit _ V M | .letPair _ _ _ V M => bareKV ks V || bareKC ks M
+  | .case _ V _ M _ N | .loop _ _ _ V M N => bareKV ks V || bareKC ks M || bareKC ks N
+  | .handle _ _ _ hr hc M => bareKV ks hr || bareKV ks hc || bareKC ks M
+  | .unwind _ _ _ M D N => bareKC ks M || bareKC ks D || bareKC ks N
+  | .withbor2r _ _ _ _ _ _ p m M => ks.contains p.name || ks.contains m.name || bareKC ks M
+  | .force .. | .top _ => false
+end
+
+/-- The most resumes of `κ` on one path of a clause's code (a handler with a state resumes inside
+the function of its state). -/
+def resumesOn (ks : List String) : Nat → Comp → Nat
+  | 0, _ => 0
+  | k + 1, .bind _ x _ (.ret _ (.var _ y)) N =>
+    if ks.contains y then resumesOn (x.name :: ks) k N else resumesOn ks k N
+  | k + 1, .bind _ _ _ M N => resumesOn ks k M + resumesOn ks k N
+  | k + 1, .letUnit _ _ M | k + 1, .letPair _ _ _ _ M => resumesOn ks k M
+  | k + 1, .case _ _ _ M _ N => max (resumesOn ks k M) (resumesOn ks k N)
+  | k + 1, .unwind _ _ _ M D N => resumesOn ks k M + max (resumesOn ks k D) (resumesOn ks k N)
+  | k + 1, .ret _ (.thunkv _ (.lam _ _ _ M)) => resumesOn ks k M
+  | _ + 1, T => if isResumeOf ks T then 1 else 0
+
+/-- The terminals of a clause's code around a loop: a resume of `κ` (in a handler with a state,
+the resume's answer applied to the state) stays, its answer the turn's; any other terminal is
+`wrap`ped, an answer that finishes the loop. `none` when the clause works after resuming. -/
+def obsTail (ks : List String) (stateful : Bool) (wrap : Comp → Comp) :
+    Nat → List String → Comp → Option Comp
+  | 0, _, M => some M
+  | k + 1, gs, .bind sp x A M N => do
+    if let .ret _ (.var _ y) := M then
+      if ks.contains y then return .bind sp x A M (← obsTail (x.name :: ks) stateful wrap k gs N)
+    if isResumeOf ks M then
+      if !stateful || !gs.isEmpty then none
+      return .bind sp x A M (← obsTail ks stateful wrap k [x.name] N)
+    if isStResume gs M || resumesOn ks divFuel M > 0 then none
+    return .bind sp x A M (← obsTail ks stateful wrap k gs N)
+  | k + 1, gs, .letUnit sp V M => do pure (.letUnit sp V (← obsTail ks stateful wrap k gs M))
+  | k + 1, gs, .letPair sp x y V M => do pure (.letPair sp x y V (← obsTail ks stateful wrap k gs M))
+  | k + 1, gs, .case sp V x M y N => do
+    pure (.case sp V x (← obsTail ks stateful wrap k gs M) y (← obsTail ks stateful wrap k gs N))
+  | k + 1, gs, .unwind sp x A M D N => do
+    if resumesOn ks divFuel M > 0 || resumesOn ks divFuel D > 0 then none
+    pure (.unwind sp x A M D (← obsTail ks stateful wrap k gs N))
+  | _ + 1, gs, T =>
+    if (!stateful && isResumeOf ks T) || isStResume gs T then some T
+    else if resumesOn ks divFuel T > 0 then none
+    else match T with
+      | .absurd .. | .abort .. => some T
+      | T => some (wrap T)
+
+/-- `wrapTail` whose `f` may fail. -/
+def wrapTailO (f : Comp → Option Comp) : Comp → Option Comp
+  | .bind sp x A M N => (wrapTailO f N).map (.bind sp x A M ·)
+  | .letUnit sp V M => (wrapTailO f M).map (.letUnit sp V ·)
+  | .letPair sp x y V M => (wrapTailO f M).map (.letPair sp x y V ·)
+  | .case sp V x M y N => do pure (.case sp V x (← wrapTailO f M) y (← wrapTailO f N))
+  | .unwind sp x A M D N => (wrapTailO f N).map (.unwind sp x A M D ·)
+  | T => f T
+
+/-- A leaf of a tuple type is linear and not consumable. -/
+def linLeaf : Nat → CVTy → Bool
+  | k + 1, .tensor A B => linLeaf k A || linLeaf k B
+  | _, T => strictlyLinear T
+
+/-- The application of a handler with a state's answer to its initial state, which follows the
+site bound to `x` (`Effects.withCtl`): `g <- return x; s <- return S0; t <- force g s; N`. The
+initial state `S0`, `t` and `N`. -/
+def stRun? (x : String) : Comp → Option (Val × Option (Ident × Option VTy × Comp))
+  | .bind _ g _ (.ret _ (.var _ y)) (.bind _ sv _ (.ret _ S0) (.bind _ t tA (.app _ (.force _ g') sv') N)) =>
+    if y == x && g'.name == g.name && sv'.name == sv.name then some (S0, some (t, tA, N)) else none
+  | .bind _ g _ (.ret _ (.var _ y)) (.bind _ sv _ (.ret _ S0) (.app _ (.force _ g') sv')) =>
+    if y == x && g'.name == g.name && sv'.name == sv.name then some (S0, none) else none
+  | _ => none
+
+/-- A terminal answer `inl`, which finishes the loop of a frame per observation. -/
+def obsFinish (A : VTy) (T : Comp) : Comp := match T with
+  | .ret sp V => .ret sp (.inl sp V)
+  | T => .bind T.span ⟨"io_ow", T.span⟩ (some A) T (.ret T.span (.inl T.span (.var T.span "io_ow")))
+
+/-- The context of a frame's computation lifted into a loop value at the row `row`: the variables
+it uses that are not bound in it, its externs among them taken as locals.  `[spec §75]` -/
+def liftLoop (c : TCx) (sp : Span) (row : Frontend.Check.CRow) (A : CVTy) (M : Comp) :
+    SM (Comp × LoopCx) := do
+  let locals ← (latest c.locals).filterMapM fun (y, T) =>
+    if !(mentionsC y M || M.rebinds y) then pure none else match T with
+      | some T => pure (some (y, T))
+      | none => throw ⟨sp, s!"the loop threads `{y}`, whose type is not determined: ascribe it"⟩
+  let exts := (mExterns c).filter fun (y, T) =>
+    !T.persistent && mentionsC y M && !c.locals.any (·.1 == y)
+  let ws := exts ++ locals
+  let cx ← (loopCxOf sp A M (bare := !row.isEmpty) : Except Error LoopCx)
+  let cL₀ := exts.foldl (fun c (y, T) => c.push y (some T)) c
+  let cL := { cL₀ with E := { cL₀.E with row := some row } }
+  let (closes, _) := closeGiven cx (ws.map fun (y, T) => (y, some T))
+  let ab ← template sp "the close of a loop a frame observes, before it starts"
+    s!"{closes}return {cx.rSrc}"
+  pure (← divMachine cx row cL ws ab M, cx)
+
+/-- The frame per observation (SPEC §75, item 2): the loop `io_l` lifted from the computation, then
+the direct-style call of the `unfold` over the state `Q` (the loop, or the loop and the frame's
+state `st0`) whose step is `obs` and `cls`, written over the state `io_hs{sfx}`. `Lw` is the
+frame's loop, `Rans` its answer.  `[spec §75]` -/
+def obsFrame (sp : Span) (sfx : String) (Lg Q Lw Rans : String) (st0 : Option (String × Val))
+    (lift obs cls : Comp) : SM Comp := do
+  let (bindSt, arg) := match st0 with
+    | some (St, _) => (s!"io_st{sfx} : {St} <- return io_hole_st0;\n", s!"(io_l{sfx}, io_st{sfx})")
+    | none => ("", s!"io_l{sfx}")
+  let src := s!"io_l{sfx} : {Lg} <- force io_hole_lift;
+{bindSt}io_hwf{sfx} : !({Q} => U ({Lw})) <- return (!thunkv fun (io_hl{sfx} : {Q}) ->
+  io_hf{sfx} <- return (unbang (unfold[{Lw}, {Q}] (!thunkv fun (io_hs{sfx} : {Q}) ->
+    < force io_hole_obs, force io_hole_cls >)));
+  return (thunkv nu_in < (nu_out (force io_hf{sfx} io_hl{sfx})).1, (nu_out (force io_hf{sfx} io_hl{sfx})).2 >));
+io_j{sfx} : {Rans} <- return ((unbang io_hwf{sfx}) {arg});
+return io_j{sfx}"
+  let L ← template sp "a frame around a computation that loops, installed per observation" src
+  pure (L.fill (fun v => if v == "io_hole_st0" then st0.map (·.2) else none)
+    (fun v => if v == "io_hole_lift" then some lift else if v == "io_hole_obs" then some obs
+      else if v == "io_hole_cls" then some cls else none))
+
+set_option maxHeartbeats 400000 in
 mutual
 /-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/
 def surfV : Nat → TCx → Option CVTy → Val → DM Val
@@ -4418,7 +4623,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       | none => c
     match M with
     | .ret sp V => do
-      if let some (i, P, R, cls, B) := hndCtl? V then return ← hndCtlC n c sp i P R cls B
+      if let some (i, P, R, cls, B) := hndCtl? V then return (← hndCtlC n c sp i P R cls B none).1
       if let .app _ (.sugar _ (.pullSite i)) call := V then return ← pullView n c sp i call
       if let some B := borrowBlock? V then
         if let some S := c.E.row then
@@ -4535,12 +4740,34 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
             Frontend.Check.effOf S T
           else .ret T
         | _ => .ret T
-      let M' ← match M with
-        | .ret rsp V => match hndCtl? V with
-          | some (i, P, R, cls, B) => hndCtlC n c rsp i P R cls B
-          | none => surfC n c atA M
-        | _ => surfC n c atA M
+      if let .ret rsp V := M then
+        if let some (i, P, R, cls, B) := hndCtl? V then
+          -- A handler with a state around a loop takes its initial state from the application
+          -- of its answer that follows (`stRun?`).  [spec §75]
+          let run? := if i.stateful then stRun? x.name N else none
+          let (M', took, T?) ← hndCtlC n c rsp i P R cls B (run?.map (·.1))
+          let c ← refresh c
+          match T?, run? with
+          | none, _ =>
+            let N' ← surfC n (c.push x.name (bindTy c A M')) exp N
+            return .bind sp x A M' N'
+          | some T, some (_, rest) =>
+            if took then
+              let some (t, tA, N₁) := rest | return M'
+              let N' ← surfC n (c.push t.name (some T)) exp N₁
+              return assocBind sp t tA M' N'
+            let N' ← surfC n (c.push x.name (some T)) exp N
+            return assocBind sp x A M' N'
+          | some T, none =>
+            let N' ← surfC n (c.push x.name (some T)) exp N
+            return assocBind sp x A M' N'
+      let M' ← surfC n c atA M
       let c ← refresh c
+      -- A head that is a chain with a frame per observation in it: its bindings brought out, so
+      -- that the frame's call is on the spine.  [spec §75]
+      if hasFrameCall M' then
+        let N' ← surfC n (c.push x.name ((A.bind c.elabV) <|> spineResTy c divFuel M')) exp N
+        return assocFree sp x A M' N'
       let N' ← surfC n (c.push x.name (bindTy c A M')) exp N
       pure (.bind sp x A M' N')
     | .lam sp x A M => do
@@ -4679,6 +4906,29 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let c := { c with E := { c.E with row := S } }
       let D' ← surfC n c.pushDead
         (S.map fun _ => Frontend.Check.effOf [] .unit) D
+      -- A computation that loops (SPEC §14): its cleanup guards each observation, and the close
+      -- between turns (SPEC §75, item 2).  [spec §75]
+      if (loopsAt c none M').isSome then
+        let S₀ := S.getD []
+        let A' ← need M.span "the computation the cleanup guards"
+          ((A.bind c.elabV) <|> spineResTy c divFuel M')
+        let (lift, cx) ← (liftLoop c sp S₀ A' M' : SM (Comp × LoopCx))
+        let Lc := BoCa.Fig16.LogRel.Core.CTy.loopEff S₀ A' cx.R
+        let pp (T : CVTy) : String := Frontend.Check.ppV c.E.lenv 0 0 T
+        let Lg := pp (.thunk Lc)
+        let sfx := s!"u{sp.start.line}_{sp.start.col}"
+        let obsC ← template sp "a turn of a loop, guarded by its cleanup"
+          s!"io_uo{sfx} <- (nu_out (force io_hs{sfx})).1 unwind (force io_hole_d); return io_uo{sfx}"
+        let clsC ← template sp "the close of a loop, guarded by its cleanup"
+          (s!"io_uc{sfx} <- (nu_out (force io_hs{sfx})).2 unwind (force io_hole_d);\n" ++
+            s!"io_ud{sfx} <- force io_hole_d;\nreturn io_uc{sfx}")
+        let fillD (L : Comp) : Comp := L.fill (fun _ => none) fun v => if v == "io_hole_d" then some D' else none
+        let frame ← obsFrame sp sfx Lg Lg (Frontend.Check.ppC c.E.lenv 0 Lc) (pp A') none lift
+          (fillD obsC) (fillD clsC)
+        if !(← get).quiet then
+          report sp "the cleanup is installed per observation: the computation it guards loops"
+        let N' ← surfC n (c.push x.name (some A')) exp N
+        return assocBind sp x A frame N'
       let N' ← surfC n (c.push x.name ((A.bind c.elabV) <|> hd.map (·.2))) exp N
       pure (.unwind sp x A M' D' N')
     | M => pure M
@@ -4764,10 +5014,13 @@ def cancelDropped (S : Frontend.Check.CRow) (F : CCTy) (q : Frontend.Check.CQual
 /-- A handler site of a control effect (SPEC §19): its arguments bound, its body elaborated
 with the site's operations innermost in the row, the handler's type parameters matched against
 its arguments' types and the body's, and its clauses as `!` closures at the types `[handle]`
-gives them; then `handle_with[n](hr, hc) M`. -/
-def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp → DM Comp
-  | 0, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: a handler nested too deeply"⟩
-  | n + 1, c, sp, i₀, P, R₀, cls₀, M => do
+gives them; then `handle_with[n](hr, hc) M`. A body that loops is handled per observation
+(`obsFrame`, SPEC §75); a handler with a state then takes its initial state `st0`, the application
+of the site's answer to it that follows the site, and the answer says it took it. -/
+def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp → Option Val →
+    DM (Comp × Bool × Option CVTy)
+  | 0, _, sp, _, _, _, _, _, _ => throw ⟨sp, "internal error: a handler nested too deeply"⟩
+  | n + 1, c, sp, i₀, P, R₀, cls₀, M, st0 => do
     let S := c.E.row.getD []
     let mismatch (what : String) : Error :=
       ⟨sp, s!"the handler `{i₀.name}`: {what} does not have the type its declaration gives it"⟩
@@ -4799,10 +5052,16 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let rowB := BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat i.n) ops 0 fs ++ S
     let cB : TCx := { c with E := { c.E with row := some rowB } }
     let M' ← surfC n cB none M
-    -- The body's type once its lends are elaborated (`TCx.tyCL`): a lending call's head answers
-    -- the place beside its value, which the binding takes apart (#893).  [spec §18]
-    let CM ← need M.span s!"the type of the body `{i.name}` handles" ((← refresh cB).tyCL M')
-    let (_, A) ← need M.span s!"the type of the body `{i.name}` handles" (rowRes? CM)
+    let cB' ← refresh cB
+    -- A body that loops (SPEC §14) is handled per observation: its type is its spine's.  [spec §75]
+    let perObs := (loopsAt cB' none M').isSome
+    let A ← if perObs then need M.span s!"the body `{i.name}` handles" (spineResTy cB' divFuel M')
+      else do
+        -- The body's type once its lends are elaborated (`TCx.tyCL`): a lending call's head
+        -- answers the place beside its value, which the binding takes apart (#893).  [spec §18]
+        let CM ← need M.span s!"the type of the body `{i.name}` handles" (cB'.tyCL M')
+        let (_, A) ← need M.span s!"the type of the body `{i.name}` handles" (rowRes? CM)
+        pure A
     let As ← (c.surface sp A : Except Error VTy)
     match Elab.Effects.matchTyBy (sameTy c) i.tps σ i.retA As with
     | some σ' => σ := σ'
@@ -4843,53 +5102,210 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
       let Rs ← (cP.surface sp (← need sp s!"the answer type of `{i.name}`" (cP.elabV (Ra.subst σ))) :
         Except Error VTy)
       modify fun st => { st with siteRes := (s!"fx_res{i.n}", Rs) :: st.siteRes }
+    -- Per observation (SPEC §75): the body lifted into a loop at its row `rowB`, and a turn
+    -- handled, whose answer `Rc'` finishes the loop (`inl`) or passes its rest on (`inr`). A
+    -- handler with a state answers a function of its state, and a turn hands the state on beside
+    -- the rest. The close of the loop is handled by `Hc`, at the answer `RcC`, handing back the
+    -- loop's residual and the state's capabilities.  [spec §75]
+    let obsP? : Option (Comp × LoopCx × CVTy × CVTy × Option CVTy) ← if !perObs then pure none else do
+      let (lift, cx) ← (liftLoop cB' sp rowB A M' : SM (Comp × LoopCx))
+      let Lg : CVTy := .thunk (BoCa.Fig16.LogRel.Core.CTy.loopEff rowB A cx.R)
+      if !i.stateful then pure (some (lift, cx, Lg, .sum Rc Lg, none)) else
+      match Rc with
+      | .thunk (.arr St C) => match Frontend.Check.effRow? C with
+        | some (_, Ans) =>
+          pure (some (lift, cx, Lg, .thunk (.arr St (BoCa.Fig16.LogRel.Core.CTy.effOf S
+            (.sum Ans (.tensor Lg St)))), some St))
+        | none => throw ⟨sp, s!"internal error: the answer of `{i.name}`, a handler with a state"⟩
+      | _ => throw ⟨sp, s!"internal error: the answer of `{i.name}`, a handler with a state"⟩
+    let RcO : CVTy := match obsP? with
+      | some (_, _, _, R', _) => R'
+      | none => Rc
+    let ansO : CCTy := BoCa.Fig16.LogRel.Core.CTy.effOf S RcO
+    let sfx := s!"o{sp.start.line}_{sp.start.col}"
+    let vx (x : String) : Ident := ⟨s!"{x}{sfx}", sp⟩
     -- The return clause.
-    let hr ← match R with
+    let (hr, hrO) ← match R with
       | .thunkv _ (.lam lsp x _ body) => do
         let body' ← surfC n (cS.push x.name (some A)) (some ans) (body.subst σ)
-        pure (Val.bangThunkv sp (.lam lsp x As body'))
+        let hr := Val.bangThunkv sp (.lam lsp x As body')
+        match obsP? with
+        | none => pure (hr, hr)
+        | some (_, _, Lg, _, St?) =>
+          -- A turn's end: the return clause applied to the body's value, or the rest of the loop.
+          let ALg ← (cP.surface sp (.sum A Lg) : Except Error VTy)
+          let (ov, orr, ol, og, os, oa) := (vx "io_ov", vx "io_or", vx "io_ol", vx "io_og", vx "io_os", vx "io_oa")
+          let arms ← match St? with
+            | none => pure (Comp.bind sp orr (some (← (cP.surface sp Rc : Except Error VTy))) body'
+                (.ret sp (.inl sp (.var sp orr.name))),
+                Comp.ret sp (.inr sp (.var sp ol.name)))
+            | some St => do
+              let Sts ← (cP.surface sp St : Except Error VTy)
+              pure (Comp.bind sp og (some (← (cP.surface sp Rc : Except Error VTy))) body'
+                (.ret sp (.thunkv sp (.lam sp os Sts
+                  (.bind sp oa none (.app sp (.force sp og) os) (.ret sp (.inl sp (.var sp oa.name))))))),
+                Comp.ret sp (.thunkv sp (.lam sp os Sts
+                  (.ret sp (.inr sp (.pair sp (.var sp ol.name) (.var sp os.name)))))))
+          pure (hr, Val.bangThunkv sp (.lam lsp ov ALg (.case sp (.var sp ov.name) x arms.1 ol arms.2)))
       | _ => throw ⟨sp, "internal error: a handler's return clause"⟩
     -- The operation clauses, each at its type.
+    let names := (← get).opNames
+    let opName (n i : Nat) : String := match names.lookup (n, i) with
+      | some s => s!"`{s}` ({n}.{i})"
+      | none => s!"{n}.{i}"
+    -- A function's row as the effects pass wrote it in its type (`Fins.fnRows`, the fact the
+    -- inference reads too); a name in this context, a block parameter's, by its type here; a
+    -- handler site (`Fins.siteMark`) the row it is typed at, `S`, its clauses'.  `[spec §27]`
+    let fnRows := (← get).fnRows
+    let rowOf (g : String) : List (Nat × Nat) :=
+      if g == Elab.Fins.siteMark then S.map fun o => (o.n.toNat, o.i.toNat)
+      else match fnRows.lookup g with
+      | some r => r
+      | none => ((cS.tyV (.var .none g)).map fun T =>
+          (fnRowOf T).map fun o => (o.n.toNat, o.i.toNat)).getD []
+    -- A clause at the answer `Ra`: its parameter's type and its code.
+    let clauseAt (Ra : CVTy) (q : BoCa.Fig16.LogRel.Core.Qual) (Ai Bi : CVTy) (j : Nat) (x : Ident)
+        (body : Comp) : DM (CVTy × Comp) := do
+      let K := BoCa.Fig16.LogRel.Core.kTy S Ra q Bi (fs j)
+      let T : CVTy := if BoCa.Fig16.LogRel.Core.ClauseKinds.isAbortive (q, Ai, Bi) then Ai
+        else .tensor Ai (if i.boxK then .box kBound K else K)
+      let body ← (cancelDropped S (fs j) q Bi i.boxK i.stateful x.name rowOf opName
+        body : Except Error Comp)
+      let body' ← surfC n (cS.push x.name (some T)) (some (BoCa.Fig16.LogRel.Core.CTy.effOf S Ra))
+        (body.subst σ)
+      pure (T, body')
     let mut hcs : List Val := []
     for ((cl, (q, Ai, Bi)), j) in ((clauseList cls).zip ops).zipIdx do
       match cl with
       | .thunkv csp (.lam lsp x _ body) =>
-        let K := BoCa.Fig16.LogRel.Core.kTy S Rc q Bi (fs j)
-        let T : CVTy := if BoCa.Fig16.LogRel.Core.ClauseKinds.isAbortive (q, Ai, Bi) then Ai
-          else .tensor Ai (if i.boxK then .box kBound K else K)
-        let names := (← get).opNames
-        let opName (n i : Nat) : String := match names.lookup (n, i) with
-          | some s => s!"`{s}` ({n}.{i})"
-          | none => s!"{n}.{i}"
-        -- A function's row as the effects pass wrote it in its type (`Fins.fnRows`, the fact the
-        -- inference reads too); a name in this context, a block parameter's, by its type here; a
-        -- handler site (`Fins.siteMark`) the row it is typed at, `S`, its clauses'.  `[spec §27]`
-        let fnRows := (← get).fnRows
-        let rowOf (g : String) : List (Nat × Nat) :=
-          if g == Elab.Fins.siteMark then S.map fun o => (o.n.toNat, o.i.toNat)
-          else match fnRows.lookup g with
-          | some r => r
-          | none => ((cS.tyV (.var .none g)).map fun T =>
-              (fnRowOf T).map fun o => (o.n.toNat, o.i.toNat)).getD []
-        let body ← (cancelDropped S (fs j) q Bi i.boxK i.stateful x.name rowOf opName
-          body : Except Error Comp)
-        let body' ← surfC n (cS.push x.name (some T)) (some ans) (body.subst σ)
+        let (T, body') ← clauseAt RcO q Ai Bi j x body
+        -- Around a loop (SPEC §75, item 3): a clause resumes last, its answer the turn's, or does
+        -- not resume, its answer finishing the loop; one that keeps `κ`, works after resuming it,
+        -- or resumes it twice is refused.  [spec §75]
+        let body' ← if !perObs then pure body' else do
+          let opN : String := ((names.lookup (i.n, j)).map fun s => (s.splitOn ".").getLast!).getD s!"{i.n}.{j}"
+          let kv? : Option String := match body' with
+            | .letPair _ _ kv (.var _ p) _ => if p == x.name then some kv.name else none
+            | _ => none
+          let ks := kv?.toList
+          let kN := (kv?.map Hygiene.written).getD "k"
+          if bareKC ks body' then
+            throw ⟨csp, s!"the clause of `{opN}` keeps `{kN}`; around a loop `{kN}` is one turn of " ++
+              "it, which a handler written for a whole computation does not expect (#917)"⟩
+          if resumesOn ks divFuel body' > 1 then
+            throw ⟨csp, s!"the clause of `{opN}` resumes `{kN}` more than once: around a loop, " ++
+              s!"`{kN}` is the rest of one turn, which a clause resumes at most once, last"⟩
+          let after : Error := ⟨csp, s!"the clause of `{opN}` works after resuming `{kN}`, which " ++
+            "would span turns of the loop: around a loop, a clause resumes last or does not resume"⟩
+          -- The answer a terminal that does not resume gives: the handler's, or in a handler
+          -- with a state, its function's.
+          let Ra ← match i.stateful, Rc with
+            | true, .thunk (.arr _ C) => need sp "a handler's answer" ((Frontend.Check.effRow? C).map (·.2))
+            | _, R => pure R
+          let Ras ← (cP.surface sp Ra : Except Error VTy)
+          let tails : Option Comp := if !i.stateful then obsTail ks false (obsFinish Ras) divFuel [] body'
+            else wrapTailO (fun
+              | .ret rsp (.thunkv tsp (.lam lsp' s St inner)) =>
+                (obsTail ks true (obsFinish Ras) divFuel [] inner).map fun inner' =>
+                  .ret rsp (.thunkv tsp (.lam lsp' s St inner'))
+              | T => some T) body'
+          match tails with
+          | some b => pure b
+          | none => throw after
         hcs := hcs ++ [.bangThunkv csp (.lam lsp x (← (cP.surface lsp T : Except Error VTy)) body')]
       | _ => throw ⟨sp, "internal error: a handler's clause"⟩
     let hcV := hcs.foldr (fun v t => Val.pair sp v t) (.unit sp)
     let hrTy ← (cP.surface sp (BoCa.Fig16.LogRel.Core.retTy S A Rc) : Except Error VTy)
-    let hcTy ← (cP.surface sp (if i.boxK then BoCa.Fig16.LogRel.Core.clausesTyB S Rc kBound ops fs
-      else BoCa.Fig16.LogRel.Core.clausesTy S Rc ops fs) : Except Error VTy)
+    let hcTy ← (cP.surface sp (if i.boxK then BoCa.Fig16.LogRel.Core.clausesTyB S RcO kBound ops fs
+      else BoCa.Fig16.LogRel.Core.clausesTy S RcO ops fs) : Except Error VTy)
     -- The node holds its clauses, each at its type, and the site's record, at the handler's
     -- lifetimes and type arguments here.
     let site := i₀.site.mapTy fun A => (lv A).subst σ
-    let hd : Comp := .handle sp i.n (some site) (.ascribe sp hr hrTy) (.ascribe sp hcV hcTy) M'
+    let (hd, ansTy) : Comp × Option CVTy ← match obsP? with
+      | none => pure (.handle sp i.n (some site) (.ascribe sp hr hrTy) (.ascribe sp hcV hcTy) M', none)
+      | some (lift, cx, Lg, _, St?) => do
+        let pp (T : CVTy) : String := Frontend.Check.ppV c.E.lenv 0 0 T
+        let ppS (T : CVTy) : DM String := do pure (← (cP.surface sp T : Except Error VTy)).pp
+        let Rr := cx.R
+        -- The close: the state's capabilities handed back beside the residual (SPEC §75).
+        let stLin := (St?.map fun St => linLeaf divFuel St).getD false
+        let RrO : CVTy := match St? with
+          | some St => if stLin then .tensor St Rr else Rr
+          | none => Rr
+        let RcC : CVTy := match St? with
+          | some St => .thunk (.arr St (BoCa.Fig16.LogRel.Core.CTy.effOf S RrO))
+          | none => Rr
+        let (cr, cs, cq, ck, cp) := (vx "io_cr", vx "io_cs", vx "io_cq", vx "io_ck", vx "io_cp")
+        let stTh (V : Val) : DM Val := do
+          let some St := St? | pure V
+          pure (.thunkv sp (.lam sp cs (← (cP.surface sp St : Except Error VTy)) (.ret sp
+            (if stLin then .pair sp (.var sp cs.name) V else V))))
+        let hrC := Val.bangThunkv sp (.lam sp cr (← (cP.surface sp Rr : Except Error VTy))
+          (.ret sp (← stTh (.var sp cr.name))))
+        let r0 ← stTh (.unit sp)
+        let mut hcsC : List Val := []
+        for ((cl, (q, Ai, Bi)), j) in ((clauseList cls).zip ops).zipIdx do
+          match cl with
+          | .thunkv csp (.lam lsp x _ body) =>
+            if BoCa.Fig16.LogRel.Core.ClauseKinds.isAbortive (q, Ai, Bi) then
+              hcsC := hcsC ++ [.bangThunkv csp (.lam lsp cp (← (cP.surface lsp Ai : Except Error VTy))
+                (.ret csp r0))]
+            else
+              -- A `must_resume` operation's own clause, which resumes; any other's `κ` cancelled.
+              let (x', body) := if q == .lin then (x, body)
+                else (cp, .letPair csp cq ck (.var csp cp.name) (.ret csp r0))
+              let (T, body') ← clauseAt RcC q Ai Bi j x' body
+              hcsC := hcsC ++ [.bangThunkv csp (.lam lsp x' (← (cP.surface lsp T : Except Error VTy)) body')]
+          | _ => throw ⟨sp, "internal error: a handler's clause"⟩
+        let hcC := hcsC.foldr (fun v t => Val.pair sp v t) (.unit sp)
+        let hrTyO ← (cP.surface sp (BoCa.Fig16.LogRel.Core.retTy S (.sum A Lg) RcO) : Except Error VTy)
+        let hrTyC ← (cP.surface sp (BoCa.Fig16.LogRel.Core.retTy S Rr RcC) : Except Error VTy)
+        let hcTyC ← (cP.surface sp (BoCa.Fig16.LogRel.Core.clausesTy S RcC ops fs) : Except Error VTy)
+        let Rans : CVTy ← match St? with
+          | none => pure Rc
+          | some _ => match Rc with
+            | .thunk (.arr _ C) => match Frontend.Check.effRow? C with
+              | some (_, Ans) => pure Ans
+              | none => throw ⟨sp, "internal error: a handler with a state's answer"⟩
+            | _ => throw ⟨sp, "internal error: a handler with a state's answer"⟩
+        let Lw := BoCa.Fig16.LogRel.Core.CTy.loopEff S Rans RrO
+        let Lws := Frontend.Check.ppC c.E.lenv 0 Lw
+        let hv (v : String) : Option Val :=
+          if v == "io_hole_hro" then some (.ascribe sp hrO hrTyO)
+          else if v == "io_hole_hco" then some (.ascribe sp hcV hcTy)
+          else if v == "io_hole_hrc" then some (.ascribe sp hrC hrTyC)
+          else if v == "io_hole_hcc" then some (.ascribe sp hcC hcTyC) else none
+        let hdl (h : String) (l : String) (k : Nat) : String :=
+          s!"handle_with[{i.n}](io_hole_hr{h}, io_hole_hc{h}) ((nu_out (force {l})).{k})"
+        let (Q, st0', obsS, clsS) ← match St? with
+          | none => pure (pp Lg, none, hdl "o" s!"io_hs{sfx}" 1, hdl "c" s!"io_hs{sfx}" 2)
+          | some St => do
+            let some v := st0 | throw ⟨sp, s!"internal error: the state of `{i.name}` around a loop"⟩
+            let Sts ← ppS St
+            let un (k : Nat) (h : String) : String :=
+              s!"let (io_hl{k}{sfx}, io_hs{k}{sfx}) = io_hs{sfx};\nio_hg{k}{sfx} <- " ++
+              hdl h s!"io_hl{k}{sfx}" k ++ s!";\nforce io_hg{k}{sfx} io_hs{k}{sfx}"
+            pure (s!"({pp Lg}) * ({Sts})", some (Sts, v), un 1 "o", un 2 "c")
+        let obsC ← template sp "a turn of a frame around a loop, handled" obsS
+        let clsC ← template sp "the close of a frame around a loop, handled" clsS
+        let frame ← obsFrame sp sfx (pp Lg) Q Lws (pp Rans) st0' lift (obsC.fill hv (fun _ => none))
+          (clsC.fill hv (fun _ => none))
+        if !(← get).quiet then
+          report sp s!"`with {i.name}` is installed per observation: its body loops"
+        pure (frame.fillS (fun _ => none) (fun _ => none) fun k => if k == i.n then some site else none,
+          some Rans)
     -- A site whose clauses run after it answers its arguments beside its own answer.
     let core ← if i.after.isNone then pure hd else do
       let r : Ident := ⟨s!"io_ar{i.n}", sp⟩
-      pure (.bind sp r none hd (.ret sp (binds.foldr (fun (x, _, _) t => Val.pair sp (.var sp x.name) t)
+      pure (assocBind sp r none hd (.ret sp (binds.foldr (fun (x, _, _) t => Val.pair sp (.var sp x.name) t)
         (.var sp r.name))))
-    pure (binds.foldr (fun (x, T, a) K => Comp.bind sp x (some T) (.ret sp a) K) core)
+    let ansTy ← match ansTy, i.after with
+      | some T, some _ => do
+        let Ts ← binds.mapM fun (_, Tx, _) => need sp "a handler's argument" (cP.elabV Tx)
+        pure (some (Ts.foldr .tensor T))
+      | T, _ => pure T
+    pure (binds.foldr (fun (x, T, a) K => Comp.bind sp x (some T) (.ret sp a) K) core,
+      perObs && i.stateful, ansTy)
 
 /-- `for x in V' { M }; N` over a sized source (`dataSrcOf`), `V'` elaborated: a counted loop,
 `count_try` over the length of the source's data (the section *The total `for` over data*);

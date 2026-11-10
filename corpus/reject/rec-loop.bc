@@ -1,8 +1,8 @@
--- expect: 9:4: `spin` is recursive and its body has a `while` or a `loop`, so it is div: the `Exhausted` of its budget would be performed inside its loop, and a handler around a div computation is not provided
+-- expect: 9:4: `spin` is recursive and its body has a `while` or a `loop`, so it is div: the `Exhausted` of its budget would be performed inside its loop, and a recursion whose body loops has no handler for its budget yet (#955)
 -- A recursion whose body loops is div (SPEC §14): each level answers a loop. The fixed point is
 -- taken at loops as at any computation type (SPEC §20), but the recursion's budget runs out
--- inside a loop's observation, where `Exhausted` has no handler: a handler around a div
--- computation is not provided (SPEC §20, *Open*).
+-- inside a loop's observation. A frame around a loop is installed per observation (SPEC §75); a
+-- recursion whose body loops has no handler for its budget yet (#955, SPEC §21 *Open*).
 
 include rec
 

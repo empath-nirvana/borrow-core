@@ -540,6 +540,8 @@ slice-split 1 0 0 19 13 20
 sort-lines 5 0 0 4466 4273 4370 # the input string and the buffer of line views
 sort-numbers 4 0 0 167 133 137
 split-at-mut 4 0 0 133 93 51
+state-across-generator 3 69 0 3 3 0
+state-across-while 3 76 0 3 3 0
 state-machine 0 0 0 0 0 0 # the generator's yields are direct calls of the loop's body
 state-machine-audit 1 0 0 15 15 0
 state-row-unused-site 3 2 0 4 3 0 # stdout's cell; the indirect calls are of `tm`'s answer, a function of its state
@@ -559,6 +561,8 @@ tree-view-tasks 1205 0 0 50505 29457 8727
 trim-replace 8 0 0 4640 4179 4707 # the input string, and one replaced string per line (four)
 utf8-count 4 0 0 341 109 263 # the line buffer, reused; the stdin, stdout and stderr cells are words of the program's data
 with-lend-head-type 0 0 0 4 4 0
+with-loop-abort 3 0 0 3 3 0
+with-loop-resume 3 14 0 12 3 0
 with-nested-lend 2 0 0 13 13 13
 yield-callback 3 0 0 3 3 0
 clause-loop-value 0 0 0 0 0 0

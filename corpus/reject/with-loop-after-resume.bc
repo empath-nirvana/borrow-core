@@ -1,0 +1,20 @@
+-- expect: 11:3: the clause of `ask` works after resuming `k`, which would span turns of the loop: around a loop, a clause resumes last or does not resume
+-- SPEC §75, Part A: around a loop, a clause resumes last or does not resume. `twice`'s clause adds
+-- `1` to what `k(1)` answers: around a loop, `k` is the rest of one turn, which ends at the next
+-- operation or at the turn's end, so work after it would run between turns, not after the whole
+-- computation.
+
+effect Ask { ctl ask() -> i32 }
+
+handler twice: Ask, i32 -> i32 = {
+  return(x) = x;
+  ask(k) = k(1) + 1
+}
+
+main -> i32 =
+  with twice {
+    let mut t = 0;
+    let mut i = 0;
+    while i < 3 { t = t + ask(); i = i + 1 };
+    t
+  }

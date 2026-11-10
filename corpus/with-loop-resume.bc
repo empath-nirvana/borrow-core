@@ -1,0 +1,32 @@
+-- SPEC §75, Part A, clause class (a): a clause that works, then resumes last, around a `while`
+-- that assigns a `let mut` declared before it; then its unrolled twin, the same four operations
+-- written out. `show`'s clause prints the operation's argument before it resumes, so it uses the
+-- capability `stdout`: the handler has a state, carried in the loop's state from turn to turn.
+-- Per-observation handling is the deep handler, turn by turn: both print the same digits and
+-- answer the same value.
+--
+-- Answer: `1234.1234((i32[5], i32[10]), i32[10])`.
+
+include io
+
+effect Tick { ctl tick(n: i32) -> i32 }
+
+handler show[A]: Tick, A -> A = {
+  return(x) = x;
+  tick(n, k) = { print_dec(n); k(n) }
+}
+
+main -> (i32 * i32) * i32 =
+  let r = with show[i32 * i32] {
+    let mut t = 0;
+    let mut i = 0;
+    while i < 4 { i = i + 1; t = t + tick(i) };
+    (i + 1, t)
+  };
+  print_byte(b'.');
+  let r2 = with show[i32] {
+    let mut u = 0;
+    u = u + tick(1); u = u + tick(2); u = u + tick(3); u = u + tick(4);
+    u
+  };
+  (r, r2)

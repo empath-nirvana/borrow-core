@@ -1,0 +1,45 @@
+-- SPEC §75, Part A: a handler around a computation that loops, installed per observation (#910's
+-- `t1`–`t3`). `t1`: a `for` over a looping generator under `with to_result`; `t2`: a `while` under
+-- `with to_result`; then `with to_result` around a call of `sum`, a div function at the row `Fail`
+-- whose generator raises at `4` (`sum(4)`) or never (`sum(20)`). The body is lifted into a loop
+-- value at its row, and each observation is handled, `effHandleV` inside `unfold`: `raise` is
+-- abortive, so its clause's answer finishes the loop.
+--
+-- Answer: `((inl i32[45], inl i32[45]), (inr i32[4], inl i32[45]))`: the sums of `0..10`, and the
+-- raise at `4`.
+
+include yield
+include fail
+
+fn upto(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 }
+
+fn upto_bad(lo: i32, hi: i32, bad: i32) -> 1 with Yield[i32], Fail[i32] =
+  let mut i = lo;
+  while i < hi { if i == bad { raise(i) } else { () }; yield(i); i = i + 1 }
+
+fn chk(x: i32) -> i32 with Fail[i32] = if x > 100 { raise(x) } else { x }
+
+fn sum(bad: i32) -> i32 with Fail[i32] =
+  let mut t = 0;
+  for y in upto_bad(0, 10, bad) { t = t + y };
+  t
+
+fn t1() -> i32 + i32 =
+  with to_result {
+    let mut t = 0;
+    for y in upto(0, 10) { t = t + y };
+    chk(t)
+  }
+
+fn t2() -> i32 + i32 =
+  with to_result[i32, i32] {
+    let mut t = 0;
+    let mut i = 0;
+    while i < 10 { t = t + chk(i); i = i + 1 };
+    t
+  }
+
+main -> ((i32 + i32) * (i32 + i32)) * ((i32 + i32) * (i32 + i32)) =
+  ((t1(), t2()), (with to_result { sum(4) }, with to_result { sum(20) }))

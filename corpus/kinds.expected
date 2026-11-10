@@ -765,6 +765,17 @@ corpus/sched-a-div.bc 1.0 cancellable stored: machine: the handlers of the name 
 corpus/sched-a.bc 1.0 cancellable stored: machine: the handlers of the name have 2 clauses for it; agree
 corpus/sched-b.bc 1.0 cancellable stored: machine: the handlers of the name have 2 clauses for it; agree
 corpus/sort-lines.bc 1.0 cancellable abortive: branch; agree
+corpus/state-across-generator.bc 4.0 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/state-across-generator.bc 4.1 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/state-across-generator.bc 3.0 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/state-across-generator.bc 3.1 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/state-across-generator.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/state-across-generator.bc 1.0 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/state-across-generator.bc 1.1 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/state-across-while.bc 2.0 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/state-across-while.bc 2.1 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/state-across-while.bc 1.0 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/state-across-while.bc 1.1 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/state-machine-audit.bc 1.0 cancellable abortive: branch; agree
 corpus/state-machine.bc 2.0 cancellable abortive: branch; agree
 corpus/state-machine.bc 1.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
@@ -817,6 +828,17 @@ corpus/trim-replace.bc 1.0 cancellable abortive: branch; agree
 corpus/utf8-count.bc 1.0 cancellable abortive: branch; agree
 corpus/with-lend-head-type.bc 1.0 cancellable abortive: branch; agree
 corpus/with-lend-head-type.bc 2.0 cancellable abortive: branch; agree
+corpus/with-loop-abort.bc 2.0 cancellable tail: direct; agree
+corpus/with-loop-abort.bc 1.0 cancellable abortive: branch; agree
+corpus/with-loop-abort.bc 3.0 cancellable abortive: branch; agree
+corpus/with-loop-abort.bc 5.0 cancellable tail: direct; agree
+corpus/with-loop-abort.bc 7.0 cancellable tail: direct; agree
+corpus/with-loop-abort.bc 6.0 cancellable abortive: branch; agree
+corpus/with-loop-abort.bc 4.0 cancellable abortive: branch; agree
+corpus/with-loop-resume.bc 1.0 cancellable tail+state: machine: the clause captures values; agree
+corpus/with-loop-resume.bc 2.0 cancellable tail+state,stored: machine: the clause captures values; agree
+corpus/with-loop-unwind.bc 2.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/with-loop-unwind.bc 1.0 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/with-nested-lend.bc 1.0 cancellable abortive: -; agree
 corpus/with-nested-lend.bc 2.0 cancellable abortive: -; agree
 corpus/with-nested-lend.bc 3.0 cancellable abortive: -; agree

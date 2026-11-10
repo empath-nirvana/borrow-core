@@ -1,0 +1,34 @@
+-- check: old-backend-refuses
+-- SPEC §75, Part A, a finaliser frame: `x <- upto(bad) unwind (note(9))` around a loop, the call
+-- of a div function at the row `Fail`. The cleanup guards each observation and the close between
+-- turns. `go(3)` raises at the loop's third turn, so the cleanup runs (`9`) and `to_result`
+-- answers `inr 3`; `go(10)` does not raise, so the cleanup does not run. `show` prints the cleanup's
+-- `note`, a handler around the whole program, which loops: it too is installed per observation.
+--
+-- Answer: `9(inr i32[3], inl i32[3])`.
+
+include io
+include fail
+
+effect Trace { must_resume ctl note(d: i32) }
+
+handler show[A]: Trace, A -> A = {
+  return(x) = x;
+  note(d, k) = { print_dec(d); k(()) }
+}
+
+fn chk(i: i32, bad: i32) -> i32 with Fail[i32] = if i == bad { raise(i) } else { i }
+
+fn upto(bad: i32) -> i32 with Fail[i32] =
+  let mut i = 0;
+  let mut t = 0;
+  while i < 3 { i = i + 1; t = chk(i, bad) };
+  t
+
+fn go(bad: i32) -> i32 + i32 with Trace =
+  with to_result[i32, i32] {
+    x <- upto(bad) unwind (note(9));
+    x
+  }
+
+main -> (i32 + i32) * (i32 + i32) = with show[(i32 + i32) * (i32 + i32)] { (go(3), go(10)) }

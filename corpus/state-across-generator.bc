@@ -1,7 +1,10 @@
--- expect: 18:13: the type of the type of the body `state` handles is not determined here: ascribe it
 -- A generator's `let mut` as an instance of `State` (#611), live across `yield`: the generator's
--- loop is div, and no handler wraps a div computation (§21 *Open*). The state is carried in the
--- loop's state, as the generator's variables are.
+-- loop is div, and each `State` handler around it is installed per observation (SPEC §75), its
+-- state carried in the loop's state, as the generator's variables are. The sum is a third `State`
+-- instance, around a `for` over the generator.
+--
+-- Answer: `i32[12]`: `0 + 2 + 4 + 6`.
+
 effect State[T] { must_resume ctl get() -> T; must_resume ctl put(v: T) }
 
 handler state[T, A](mut s: T): State[T], A -> A * T = {
