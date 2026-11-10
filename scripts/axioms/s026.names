@@ -1,0 +1,4 @@
+-- SPEC §26 (entry 25): a λ whose binder is dead, at an effectful returner
+BoCa.Fig16.LogRel.Core.gDenC_unit_dead
+BoCa.Fig16.LogRel.Core.lamDead_compatC
+Frontend.Check.TiedDer.lamDead
