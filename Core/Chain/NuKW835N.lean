@@ -243,38 +243,48 @@ theorem candNN_congr (C : CTy) (g : Val) (S : VTy) {δ₁ δ₂ : LSub}
   simp only [candNN, hv]
 
 /-- **The map lemma** (Core's `map_ok`): `map_A (unfold step)` takes a value of `A[S/X]` to one of
-`A` with `X` at the candidate, on the same resource, by pure steps. -/
-theorem map_okN (C : CTy) (g : Val) (S : VTy) (δ : LSub) (kg : Nat) :
+`A` with `X` read at `P` (its closed type `T`), on the same resource, by pure steps, when
+`unfold step s′` is in `P` for every state `s′ ∈ 𝒱⟦S⟧` up to the step's index. `node_okN` reads `X`
+at the candidate (`candNN_wrap`); `node_okK` at a code type.  `[spec §68]` -/
+theorem map_okN (C : CTy) (g : Val) (S : VTy) (δ : LSub) (kg : Nat) (T : VTy)
+    (P : LocTy → Nat → Val → WRes → Prop)
+    (hW : ∀ Θ k w σ, k ≤ kg → vN (ℍ := ℍ) S δ Θ k w σ → P Θ k (etaN C g w) σ) :
     ∀ (A : VTy), A.Poly → ∀ (Θ : LocTy) (k : Nat), k ≤ kg → ∀ (w : Val) (σ : WRes),
       vNX (ℍ := ℍ) S (vN (ℍ := ℍ) S δ) A δ Θ k w σ →
       ∃ w', PureSteps (.app (.app (.val (mapV A)) (.val (hN C g))) (.val w)) (.val w') ∧
-        vNX (ℍ := ℍ) (.thunk (.nu C)) (thunkRN (candNN (ℍ := ℍ) C g S δ kg)) A δ Θ k w' σ
+        vNX (ℍ := ℍ) T P A δ Θ k w' σ
   | .tvar 0, _, Θ, k, hk, w, σ, hw =>
-      ⟨etaN C g w, (mapV_var_steps _ w).trans (hN_steps C g w),
-        fun _ hE hOK _ hc _ => ⟨hk, hOK, hc, w, rfl, vN_extR S δ k w σ hE hw⟩⟩
+      ⟨etaN C g w, (mapV_var_steps _ w).trans (hN_steps C g w), hW Θ k w σ hk hw⟩
   | .tvar (_ + 1), _, _, _, _, _, _, hw => hw.elim
   | .tensor A B, hP, Θ, k, hk, _, _, hw => by
       obtain ⟨v₁, v₂, σ₁, σ₂, rfl, hc, h₁, h₂⟩ := hw
-      obtain ⟨w₁, hs₁, h₁'⟩ := map_okN C g S δ kg A hP.1 Θ k hk v₁ σ₁ h₁
-      obtain ⟨w₂, hs₂, h₂'⟩ := map_okN C g S δ kg B hP.2 Θ k hk v₂ σ₂ h₂
+      obtain ⟨w₁, hs₁, h₁'⟩ := map_okN C g S δ kg T P hW A hP.1 Θ k hk v₁ σ₁ h₁
+      obtain ⟨w₂, hs₂, h₂'⟩ := map_okN C g S δ kg T P hW B hP.2 Θ k hk v₂ σ₂ h₂
       exact ⟨.pair w₁ w₂, (mapV_tensor_steps A B _ v₁ v₂).trans (pair_steps hs₁ hs₂),
         w₁, w₂, σ₁, σ₂, rfl, hc, h₁', h₂'⟩
   | .sum A B, hP, Θ, k, hk, _, σ, hw => by
       rcases hw with ⟨v, rfl, h⟩ | ⟨v, rfl, h⟩
-      · obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg A hP.1 Θ k hk v σ h
+      · obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg T P hW A hP.1 Θ k hk v σ h
         exact ⟨.inj₁ w', (mapV_sum₁_steps A B _ v).trans (inj₁_steps hs), Or.inl ⟨w', rfl, h'⟩⟩
-      · obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg B hP.2 Θ k hk v σ h
+      · obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg T P hW B hP.2 Θ k hk v σ h
         exact ⟨.inj₂ w', (mapV_sum₂_steps A B _ v).trans (inj₂_steps hs), Or.inr ⟨w', rfl, h'⟩⟩
   | .box _ A, hP, Θ, k, hk, w, σ, hw => by
       obtain ⟨α, hα, hb, ho⟩ := hw
-      obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg A hP Θ k hk w σ hb
+      obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg T P hW A hP Θ k hk w σ hb
       exact ⟨w', hs, α, hα, h', ho⟩
-  | .unit, hP, _, _, _, w, _, hw | .zero, hP, _, _, _, w, _, hw | .thunk _, hP, _, _, _, w, _, hw | .code _ _ _, hP, _, _, _, w, _, hw
+  | .unit, hP, _, _, _, w, _, hw | .zero, hP, _, _, _, w, _, hw | .thunk _, hP, _, _, _, w, _, hw
+  | .code _ _ _, hP, _, _, _, w, _, hw
   | .ref _, hP, _, _, _, w, _, hw | .imm _ _, hP, _, _, _, w, _, hw
   | .mut _ _, hP, _, _, _, w, _, hw | .bang _, hP, _, _, _, w, _, hw
   | .unk, hP, _, _, _, w, _, hw | .mu _, hP, _, _, _, w, _, hw | .int _, hP, _, _, _, w, _, hw
   | .opq _, hP, _, _, _, w, _, hw | .fam _, hP, _, _, _, w, _, hw =>
-      ⟨w, mapV_id_steps rfl _ w, by rw [← vNX_occ S _ (vN (ℍ := ℍ) S δ) _ _ hP]; exact hw⟩
+      ⟨w, mapV_id_steps rfl _ w, by rw [vNX_occ T S P (vN (ℍ := ℍ) S δ) _ hP]; exact hw⟩
+
+/-- `unfold step s′` is in the candidate's `U X` at every state `s′` up to the step's index. -/
+theorem candNN_wrap (C : CTy) (g : Val) (S : VTy) (δ : LSub) (kg : Nat) :
+    ∀ Θ k w σ, k ≤ kg → vN (ℍ := ℍ) S δ Θ k w σ →
+      thunkRN (candNN (ℍ := ℍ) C g S δ kg) Θ k (etaN C g w) σ :=
+  fun _ k w σ hk hw _ hE hOK _ hc _ => ⟨hk, hOK, hc, w, rfl, vN_extR S δ k w σ hE hw⟩
 
 /-- **The node lemma** (Core's `node_ok`): when `c ()` runs a computation of `D[S/X]`,
 `node_D (unfold step) c` is one unfolding of `D` at the candidate. At a `∀'x` leaf the tree is
@@ -310,7 +320,7 @@ theorem node_okN (C : CTy) (g : Val) (S : VTy) (kg : Nat) :
         (fun _ _ _ _ h => by cases h) kg ?_ j hj (⟨Θ, c, lo⟩ : KW) hΘ ls M ρ (hM lo)
       rintro y hy k ls' w σ hk hw
       rw [← vNX_inst_poly S δ hA] at hw
-      obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg A hA y.Θ k hk w σ hw
+      obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg _ _ (candNN_wrap C g S δ kg) A hA y.Θ k hk w σ hw
       have hTy : (opTableK y.lo (OpTabK.empty : OpTabK KW)).Down := opTableK_downI (hDI y)
       refine erwpK_det (x := y) (Φ := fun z : KW => z.Θ.view z.c) (hΦ y hy) hTy hQd
         (fun μ => step1Only_plug (Head.beta μ _ w) rfl .hole) ?_
@@ -358,7 +368,7 @@ theorem node_okN (C : CTy) (g : Val) (S : VTy) (kg : Nat) :
         (⟨Θ, c, lo⟩ : KW) hΘ ls M ρ hM₀
       rintro y hy k ls' w σ hk hw
       rw [← retNX_inst S δ hD.2.2, retNX_ans S _ hD.2.2] at hw
-      obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg (effAns D) hR y.Θ k hk w σ hw
+      obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg _ _ (candNN_wrap C g S δ kg) (effAns D) hR y.Θ k hk w σ hw
       have hTy : (opTableK y.lo (tabN (ℍ := ℍ) (.eff m i q A B fin rc D) δ y)).Down :=
         opTableK_downI (hDI y)
       refine erwpK_det (x := y) (Φ := fun z : KW => z.Θ.view z.c) (hΦ y hy) hTy hQd

@@ -20,7 +20,7 @@ the code clause reads the environment at the leaf's own world. So the leaf of `c
 `codeCandN` gives the code clause only at those extensions, and `cBN (.thunk (.nu C)) codeCandN D
 ⊆ cN (D[Code⟨…⟩ (νX. C)/X])` is not derived from `nuOutK_stepN` (obstruction not verified). The
 observation is read at the unrolled type directly instead: `node_okK` is `node_okN` with every
-leaf mapped into `𝒱⟦A[Code⟨…⟩ (νX. C)/X]⟧` (`map_okK`), each rest `unfold step s′` in the code
+leaf mapped into `𝒱⟦A[Code⟨…⟩ (νX. C)/X]⟧` (`map_okN` at the code type), each rest `unfold step s′` in the code
 clause at the leaf's world (`etaN_codeRelN` at the state's world and index).
 -/
 
@@ -117,48 +117,12 @@ theorem cN_pureSteps (C : CTy) (δ : LSub) {Θ : LocTy} (hΘ : Θ.Down) (c : Loc
   | refl => exact hw
   | tail _ hs ih => exact ih (cN_step C δ Θ hΘ c n ls ρ _ _ hs hw)
 
-/-- **The map lemma at a code type** (`map_okN` with each state `s′` mapped into the code type
-`T` at the leaf's own world): `map_A (unfold step)` takes a value of `A[S/X]` to one of
-`A[T/X]`, on the same resource, by pure steps, when `unfold step s′ ∈ 𝒱⟦T⟧` for every state
-`s′ ∈ 𝒱⟦S⟧` up to the step's index.  `[spec §68]` -/
-theorem map_okK (C : CTy) (g : Val) (S T : VTy) (δ : LSub) (kg : Nat)
-    (hW : ∀ Θ k w σ, k ≤ kg → vN (ℍ := ℍ) S δ Θ k w σ → vN (ℍ := ℍ) T δ Θ k (etaN C g w) σ) :
-    ∀ (A : VTy), A.Poly → ∀ (Θ : LocTy) (k : Nat), k ≤ kg → ∀ (w : Val) (σ : WRes),
-      vNX (ℍ := ℍ) S (vN (ℍ := ℍ) S δ) A δ Θ k w σ →
-      ∃ w', PureSteps (.app (.app (.val (mapV A)) (.val (hN C g))) (.val w)) (.val w') ∧
-        vNX (ℍ := ℍ) T (vN (ℍ := ℍ) T δ) A δ Θ k w' σ
-  | .tvar 0, _, Θ, k, hk, w, σ, hw =>
-      ⟨etaN C g w, (mapV_var_steps _ w).trans (hN_steps C g w), hW Θ k w σ hk hw⟩
-  | .tvar (_ + 1), _, _, _, _, _, _, hw => hw.elim
-  | .tensor A B, hP, Θ, k, hk, _, _, hw => by
-      obtain ⟨v₁, v₂, σ₁, σ₂, rfl, hc, h₁, h₂⟩ := hw
-      obtain ⟨w₁, hs₁, h₁'⟩ := map_okK C g S T δ kg hW A hP.1 Θ k hk v₁ σ₁ h₁
-      obtain ⟨w₂, hs₂, h₂'⟩ := map_okK C g S T δ kg hW B hP.2 Θ k hk v₂ σ₂ h₂
-      exact ⟨.pair w₁ w₂, (mapV_tensor_steps A B _ v₁ v₂).trans (pair_steps hs₁ hs₂),
-        w₁, w₂, σ₁, σ₂, rfl, hc, h₁', h₂'⟩
-  | .sum A B, hP, Θ, k, hk, _, σ, hw => by
-      rcases hw with ⟨v, rfl, h⟩ | ⟨v, rfl, h⟩
-      · obtain ⟨w', hs, h'⟩ := map_okK C g S T δ kg hW A hP.1 Θ k hk v σ h
-        exact ⟨.inj₁ w', (mapV_sum₁_steps A B _ v).trans (inj₁_steps hs), Or.inl ⟨w', rfl, h'⟩⟩
-      · obtain ⟨w', hs, h'⟩ := map_okK C g S T δ kg hW B hP.2 Θ k hk v σ h
-        exact ⟨.inj₂ w', (mapV_sum₂_steps A B _ v).trans (inj₂_steps hs), Or.inr ⟨w', rfl, h'⟩⟩
-  | .box _ A, hP, Θ, k, hk, w, σ, hw => by
-      obtain ⟨α, hα, hb, ho⟩ := hw
-      obtain ⟨w', hs, h'⟩ := map_okK C g S T δ kg hW A hP Θ k hk w σ hb
-      exact ⟨w', hs, α, hα, h', ho⟩
-  | .unit, hP, _, _, _, w, _, hw | .zero, hP, _, _, _, w, _, hw | .thunk _, hP, _, _, _, w, _, hw
-  | .code _ _ _, hP, _, _, _, w, _, hw
-  | .ref _, hP, _, _, _, w, _, hw | .imm _ _, hP, _, _, _, w, _, hw
-  | .mut _ _, hP, _, _, _, w, _, hw | .bang _, hP, _, _, _, w, _, hw
-  | .unk, hP, _, _, _, w, _, hw | .mu _, hP, _, _, _, w, _, hw | .int _, hP, _, _, _, w, _, hw
-  | .opq _, hP, _, _, _, w, _, hw | .fam _, hP, _, _, _, w, _, hw =>
-      ⟨w, mapV_id_steps rfl _ w, by rw [vNX_occ T S (vN (ℍ := ℍ) T δ) (vN (ℍ := ℍ) S δ) _ hP]; exact hw⟩
-
 /-- **The node lemma at a code type** (`node_okN` read at the unrolled type): when `c ()` runs a
 computation of `D[S/X]`, `node_D (unfold step) c` is a computation of `D[T/X]`, each state `s′`
 mapped to `unfold step s′ ∈ 𝒱⟦T⟧`.  The tree is read at `δ`, agreeing with `δ₀` on `T`'s free
 variables; under a `∀'x` leaf at `δ[x ↦ α]`, which still agrees because `'x` is not free in `T`.
 `[spec §68]` -/
+-- A near-copy of `node_okN` at target `cN (D.instT T)`; to be merged by generalising `cBN` (#947).
 theorem node_okK (C : CTy) (g : Val) (S T : VTy) (δ₀ : LSub) (kg : Nat)
     (hW : ∀ δ, (∀ y, VFree y T → δ₀.find? y = δ.find? y) → ∀ Θ k w σ, k ≤ kg →
       vN (ℍ := ℍ) S δ Θ k w σ → vN (ℍ := ℍ) T δ Θ k (etaN C g w) σ) :
@@ -191,7 +155,7 @@ theorem node_okK (C : CTy) (g : Val) (S T : VTy) (δ₀ : LSub) (kg : Nat)
         (fun _ _ _ _ h => by cases h) kg ?_ j hj (⟨Θ, c, lo⟩ : KW) hΘ ls M ρ (hM lo)
       rintro y hy k ls' w σ hk hw
       rw [← vNX_inst_poly S δ hA] at hw
-      obtain ⟨w', hs, h'⟩ := map_okK C g S T δ kg (hW δ hag) A hA y.Θ k hk w σ hw
+      obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg T _ (hW δ hag) A hA y.Θ k hk w σ hw
       rw [vNX_inst_poly T δ hA] at h'
       have hTy : (opTableK y.lo (OpTabK.empty : OpTabK KW)).Down := opTableK_downI (hDI y)
       refine erwpK_det (x := y) (Φ := fun z : KW => z.Θ.view z.c) (hΦ y hy) hTy hQd
@@ -242,7 +206,7 @@ theorem node_okK (C : CTy) (g : Val) (S T : VTy) (δ₀ : LSub) (kg : Nat)
         (⟨Θ, c, lo⟩ : KW) hΘ ls M ρ hM₀
       rintro y hy k ls' w σ hk hw
       rw [← retNX_inst S δ hD.2.2, retNX_ans S _ hD.2.2] at hw
-      obtain ⟨w', hs, h'⟩ := map_okK C g S T δ kg (hW δ hag) (effAns D) hR y.Θ k hk w σ hw
+      obtain ⟨w', hs, h'⟩ := map_okN C g S δ kg T _ (hW δ hag) (effAns D) hR y.Θ k hk w σ hw
       have hTy : (opTableK y.lo (tabN (ℍ := ℍ) (.eff m i q A B fin rc D) δ y)).Down :=
         opTableK_downI (hDI y)
       refine erwpK_det (x := y) (Φ := fun z : KW => z.Θ.view z.c) (hΦ y hy) hTy hQd

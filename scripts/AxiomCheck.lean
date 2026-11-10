@@ -2640,7 +2640,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.unfoldK_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_step
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_pureSteps
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.map_okK
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.node_okK
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.nuOutK_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.CodeLoop855N.d_progK
