@@ -178,7 +178,7 @@ substitute. "From the typed term" is what compiling from it gives. All by inspec
 
 | # | fact | proved at | lost at | rebuilt by | from the typed term |
 |---|---|---|---|---|---|
-| B1 | a value is an `imm` or `mut` borrow, at a lifetime | `withbor1`/`2`/`3`, `withload`, `withswap`, slices (`Consts.lean:253–282`, `:146–203`, `:332–430`); `immSub`/`mutSub` | erasure: a borrow is a location word | never consulted. The falsifier cannot tell `withbor1` from `withbor2` (`Backend/Falsify.lean:36–38`). LLVM gets `inttoptr` at every access and no attribute (`Native/Lower.lean:98–101`; no `noalias`, `readonly`, `nonnull`, `dereferenceable` anywhere) | `noalias`/`readonly`/`dereferenceable`/`nonnull` (#531); typed pointers with `getelementptr` (#537 fix 5); lend kinds in the falsifier |
+| B1 | a value is an `imm` or `mut` borrow, at a lifetime | `withbor1`/`2`/`3`, `withload`, `withswap`, slices (`Consts.lean:253–282`, `:146–203`, `:332–430`); `immSub`/`mutSub` | erasure: a borrow is a location word | never consulted. The falsifier cannot tell `withbor1` from `withbor2` (`Reference/Falsify.lean:35–37`). LLVM gets `inttoptr` at every access and no attribute (`Native/Lower.lean:98–101`; no `noalias`, `readonly`, `nonnull`, `dereferenceable` anywhere) | `noalias`/`readonly`/`dereferenceable`/`nonnull` (#531); typed pointers with `getelementptr` (#537 fix 5); lend kinds in the falsifier |
 | B2 | an array is only read | the `imm` family's type | erasure | `litView?` guesses `imm` from the callback's `λx.(x, x)` shape (`Convert.lean:401–417`), then a run-time test on tag and length (`Flat/Lower.lean:574–595`) | the type |
 | B3 | a lend's lifetime ends inside its block, and no resumption point crosses it | `withbor*U`: a fresh `x` (`hx : Δ.find? x = none`) and the callback at an unwind-only row (`Row.Unwind`, T1) | erasure | `markScoped`, a syntactic match of `let (c, r) = withbor (alloc v) cb; b` with one `free` (`Convert.lean:528–563`); `crossedScopes`, an interval walk over `pollAt` (`Capture.lean:1042–1061`); `frameScopes` (`Flat/Lower.lean:1577–1580`). SPEC §35 says of the crossing case: "No program has one: the typing refuses a resuming operation across a borrow block's body" | a frame slot by the rule. The exception is R1 (`lendR`, a pin), which keeps the cell in the state (SPEC §29) |
 | B4 | which slots each subterm consumes | the masks `u`, `w` of `Fam` (`Fam.lean:49–54`); `Ctx.SplitP` | erasure | `plan2` copies every index free in both parts (`Convert.lean:199–210`); consumes at unused binders (`:680–682`, `:695–697`, `:802`, `:835`, `:850`); more copies and consumes in `Capture` and `Unwind` (`Capture.lean:199–214`, `:998`; `Unwind.lean:217`, `:226`, `:244–249`, `:294`) | a move where the slot is linear, a copy only of a persistent slot used on both sides, and its cost from its type |
@@ -502,7 +502,7 @@ stop.
 | `Target/Flat/Interp.lean` | **replaced** by the LIR interpreter, keeping its checks (unwritten reads, live frames) | — |
 | `Target/Wasm/*` | **kept**, from LIR; local reuse added | — |
 | `Target/Native/*` | **rewritten** at typed pointers, attributes, `alloca` slots | §3.4 |
-| `Backend/Falsify.lean` | **kept**, with lend kinds from the typed term (B1) | — |
+| `Reference/Falsify.lean` | **kept**, with lend kinds from the typed term (B1) | — |
 | `Backend/Counts.lean` | **kept**; `--sites` reads LIR and adds the postcondition count | — |
 
 ## 4. Rewrite or replace in stages
