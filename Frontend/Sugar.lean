@@ -50,7 +50,7 @@ one is adding its name here. The elaboration brings in `io`, `div` and `prelude`
 (`elaborateS`); `include m` brings in any of them. -/
 def libNames : List String :=
   ["io", "div", "prelude", "lend", "adapters", "slice", "buf", "text", "textio", "iters", "fail",
-   "yield", "rec", "clo", "async", "list", "sys", "wasi", "key", "map", "float", "arith"]
+   "yield", "rec", "clo", "async", "list", "sys", "wasi", "key", "map", "float", "arith", "pipe"]
 
 /-- The directory of the library: `$BCC_LIB` when it is set; otherwise `lib/` of the checkout
 whose `.lake/build/bin/` holds the running `bcc`; otherwise `lib/` of the working directory. -/
@@ -7047,12 +7047,17 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
     [Decl.include Span.none ⟨"io", Span.none⟩] ([], []) else pure ([], []) : Except Error _)
   let ioRef := ioRef.map hyg
   let hide := decls₀.filter (fun d => ioRef.contains d) ++ divDecls ++ wasiDecls
-  let fxr ← (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls : Except Error _)
+  -- Lib's `Stream` (`lib/pipe.bc`), when the program includes it: a stream stage is keyed on this
+  -- declaration (SPEC §75).
+  let streamDecl : Option Decl ← if incl.contains "pipe" then do
+      pure ((← libOf "pipe").find? fun | .effect .. => true | _ => false)
+    else pure none
+  let fxr ← (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls [] streamDecl : Except Error _)
   -- The cancel rows its finalisers require, read off its output; when there are any, the pass
   -- again, its rows carrying them (SPEC §27, `Frontend.Elab.Fins`).  `[spec §18, §27]`
   let fins := Elab.Fins.table fxr.decls
   let fxr ← if fins.isEmpty then pure fxr else
-    (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls fins : Except Error _)
+    (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls fins streamDecl : Except Error _)
   let (decls, fx, perTurn, pcaps) := (fxr.decls, fxr.reports, fxr.perTurn, fxr.platform)
   for k in fxr.keys do
     modify (· ++ [(Span.none, .defKey k)])

@@ -169,6 +169,16 @@ structure RGroup where
   are generic in them, before the capabilities' lifetimes.  `[spec §31]` -/
   lives : List (Ident × Life) := []
 
+/-- What the pass knows of the program for `|>` and `>|`: its handlers' names, each function's
+written type, and its `type` abbreviations (SPEC §61). -/
+structure PipeEnv where
+  handlers : List String
+  sigs : List (String × VTy)
+  abbrevs : Data.Table := {}
+  /-- The program includes lib's `Stream` (`lib/pipe.bc`): an edge into a function may be a
+  stream edge, which is decided on the inferred rows (`streamChain`).  `[spec §75]` -/
+  stream : Bool := false
+
 /-- What the elaboration knows, each declared before the point being elaborated. -/
 structure Env where
   /-- The functions of the libraries included, whose elaboration is not reported. -/
@@ -215,6 +225,12 @@ structure Env where
   `[spec §38]` -/
   owner : String := ""
   ownerTps : List String := []
+  /-- The name of lib's `Stream` (`lib/pipe.bc`), when the program includes it: the effect a stream
+  stage performs, keyed on that declaration and never on the name.  `[spec §75]` -/
+  stream : Option String := none
+  /-- What `|>` and `>|` read of the program, for a chain left to this pass: one whose edges may
+  be stream edges, decided on the inferred rows (`streamChain`).  `[spec §75]` -/
+  pipes : PipeEnv := { handlers := [], sigs := [] }
 
 /-- A capability in scope: the answering effect it serves, the variable holding its `mut 'l S`
 borrow, the lifetime `'l`, and the handler. Or the variable a `for`'s site of an iteration effect
@@ -1806,6 +1822,135 @@ where
     | .pair _ V W => names V ++ names W
     | _ => []
 
+/-! ### `|>`  `[spec §33]` -/
+
+/-- `A` with the abbreviations at its head unfolded, as the checker reads it: `P` of `type P =
+U (pull i32 1 1)` is `U (pull i32 1 1)`.  `[spec §61, §70]` -/
+def PipeEnv.unfold (pe : PipeEnv) : Nat → VTy → VTy
+  | 0, A => A
+  | k + 1, A => match Data.headOf A with
+    | some (h, As, ls) => match pe.abbrevs.abbrev? h with
+      | some a => if As.length == a.tps.length then pe.unfold k (a.at As ls) else A
+      | none => A
+    | none => A
+
+/-- The name a stage `f`, `f[As]` or `f(a, …)` calls.  `[spec §70]` -/
+def stageHead? : Val → Option String
+  | .app _ (.var _ x) _ | .app _ (.defApp _ x _) _ | .var _ x | .defApp _ x _ => some x
+  | _ => none
+
+/-- The function `x`'s first parameter, as its signature writes it, is a stored generator
+`U (pull A K R)`: a source-owning adapter (`lib/adapters.bc`), a stream stage until L2 (#921).
+`[spec §70]` -/
+def PipeEnv.transitional (pe : PipeEnv) (x : String) : Bool :=
+  match (pe.sigs.lookup x).bind paramTyOf with
+  | some (.tensor _ A _) => isPullTy (pe.unfold 16 A)
+  | some A => isPullTy (pe.unfold 16 A)
+  | none => false
+
+/-- A stage `s` may be a stream stage (SPEC §75): it calls a function that is neither a handler nor
+a source-owning adapter. Whether it is one is its inferred row's (`streamChain`).  `[spec §75]` -/
+def PipeEnv.maybeStage (pe : PipeEnv) (s : Val) : Bool := match stageHead? s with
+  | some x => pe.sigs.any (·.1 == x) && !pe.handlers.contains x && !pe.transitional x
+  | none => false
+
+/-- `e |> s` (SPEC §33): a handler stage `h[…](…)` is `with h[…](…) { e }`; a function stage
+`f(a, …)` whose first parameter is a computation parameter takes `e` suspended, `f(!{ () -> e },
+a, …)` (`{ () -> e }` at a parameter that is not `!`); any other function takes `e` first,
+`f(e, a, …)` (decision 50). -/
+def pipeStage (pe : PipeEnv) (sp : Span) (e s : Val) : EM Val := do
+  let (head, args) : Val × Option Val := match s with
+    | .app _ h@(.var ..) P | .app _ h@(.defApp ..) P => (h, some P)
+    | h => (h, none)
+  let (x, As) ← match head with
+    | .var _ x => pure (x, [])
+    | .defApp _ x As => pure (x, As)
+    | _ => throw ⟨s.span, "the right of `|>` is a handler or a function, applied to its other " ++
+        "arguments"⟩
+  if pe.handlers.contains x then
+    let l ← fresh "fx_pipel"
+    let b ← fresh "fx_pipec"
+    let P := args.getD (.unit sp)
+    if P.lends then
+      throw ⟨P.span, s!"the handler `{x}` of this `|>` is given a lent place: write `with {x}(…) \{ … }`, " ++
+        "which hands the place back"⟩
+    return .app sp (.app sp (.sugar s.span (.handle x l As none)) P)
+      (.thunkv sp (.lam sp ⟨b, sp⟩ (holeTy sp) (.ret sp e)))
+  let first : Option VTy := ((pe.sigs.lookup x).bind paramTyOf).map fun
+    | .tensor _ A _ => A
+    | A => A
+  let e' ← match first with
+    | some A@(.rowed ..) | some A@(.bang _ (.rowed ..)) =>
+      match unrowed A with
+      | .bang _ (.lolli _ (.unit _) _) | .lolli _ (.unit _) _ =>
+        let u ← fresh "fx_pipeu"
+        let body : Comp := .lam sp ⟨u, sp⟩ (holeTy sp) (.letUnit sp (.var sp u) (.ret sp e))
+        pure (match A with | .bang .. => Val.bangThunkv sp body | _ => .thunkv sp body)
+      | _ => throw ⟨s.span, s!"the first parameter of `{x}` is a computation parameter that takes " ++
+          "an argument: `|>` passes it a computation of none"⟩
+    | _ => pure e
+  pure (.app sp head (match args with
+    | none | some (.unit _) => e'
+    | some P => .pair sp e' P))
+
+/-- One edge of a chain in normal form, `e ∘ s` (`m` its mode), `e` and `s` elaborated.
+`[spec §33, §70]`
+
+- `|>`: §33's cases, by the stage (`pipeStage`), whatever the stage: a source-owning adapter is
+  case (iii), `f(e, …)`, `e` stored at its stored generator parameter.
+- `>|`: accepted into a stream stage, a source-owning adapter until L2 (#921), and then case
+  (iii) as `|>` is; refused into anything else. -/
+def pipeEdge (pe : PipeEnv) (sp : Span) (m : PipeMode) (e s : Val) : EM Val := do
+  if m == .pull then
+    let some x := stageHead? s
+      | throw ⟨s.span, "the right of `>|` is a stream stage, applied to its other arguments"⟩
+    if pe.handlers.contains x then
+      throw ⟨s.span, s!"`>|` connects stream stages; `{x}` is a handler: write `|>`"⟩
+    unless pe.transitional x do
+      throw ⟨s.span, s!"`>|` connects stream stages; `{x}` is not a stream stage"⟩
+  pipeStage pe sp e s
+
+/-- The result type a function's written type gives it. -/
+def resultTyOf : VTy → Option VTy
+  | .bang _ A | .all _ _ _ A => resultTyOf A
+  | .lolli _ _ B => some B
+  | _ => none
+
+/-- A run of stream edges from the source `src`, `run` its stages in order (SPEC §75): its wires'
+end values, each the result of the stage above it, are unrestricted; a stage that calls `stop()`
+is over an upstream whose residual is `1`; and the connector, which these checks precede, is
+assembled from `lib/pipe.bc`'s pieces. Four of them mention the chain's row and the stage's sites
+in their types, which a library definition does not take as parameters yet, so the chain is
+refused after the checks.  `[spec §75]` -/
+def streamRefuse (env : Env) (src : Val) (run : List (Span × PipeMode × Val)) : EM Unit := do
+  let stopOp : Option String := env.stream.bind fun st =>
+    (env.ops.find? fun o => o.eff == st && o.idx == 1).map (·.decl.name.name)
+  let stages := src :: run.map (·.2.2)
+  for (up, s) in stages.zip (run.map (·.2.2)) do
+    let upName := (stageHead? up).getD "the source"
+    let K? : Option VTy := (stageHead? up).bind fun x => (env.sigs.lookup x).bind resultTyOf
+    if let some K := K? then
+      if let some [T] := env.keyOf [K] then
+        if !T.persistent then
+          throw ⟨up.span, s!"the end value of `{upName}`, of type `{K.pp 0}`, is linear; a stream " ++
+            "wire's end value is unrestricted in this version"⟩
+      let unit := match K with | .unit _ => true | _ => false
+      let callsStop := match stopOp, stageHead? s with
+        | some o, some x => match env.fn? x with
+          | some g => match g.decl with
+            | .def_ _ _ _ _ W _ => (refsV fuel W).contains o
+            | _ => false
+          | none => false
+        | _, _ => false
+      if callsStop && !unit then
+        throw ⟨s.span, "`stop()` answers the upstream's residual `K`, which a stage closed at a " ++
+          "suspension does not hand back (§15 Open)"⟩
+  let sp := (run.getLast?.map (·.1)).getD src.span
+  throw ⟨sp, "a stream chain runs on the pipe connector, whose pieces `pipe_step`, `pipe_stop`, " ++
+    "`pipe_with_stop`, `pipe_forward` and `pipe_finish` (lib/pipe.bc) mention the chain's row and " ++
+    "the stages' sites in their types: they wait for row- and site-generic definitions, which " ++
+    "are not provided yet"⟩
+
 mutual
 /-- `M` with its operations resolved, handing the capabilities `cs` back beside its result: each
 terminal answering `v` answers `(c₁, (…, (cₙ, v)))`. With `wrap := false` (the body of a loop,
@@ -1990,12 +2135,56 @@ def trRet : Nat → Cx → List Cap → Bool → Span → Val → EM Comp
     let T := if plain then Comp.ret sp V' else .ret sp (capsTuple sp cs V')
     chain bs T
 
+/-- A chain left by `resolvePipes` (SPEC §75): its normal form with `|>` stream edges joining
+(`Pipes.chainOf` at the stage predicate), then each edge in order. An edge into a stage, a function
+whose inferred row has lib's `Stream`, is a stream edge when its left side is a source (its inferred
+row has an iteration effect), and a maximal run of stream edges is one chain on the connector.
+Otherwise a `>|` into a source-owning adapter is §70's case (iii), and a `|>` is §33's.
+`[spec §75]` -/
+def streamChain : Nat → Cx → List Cap → Val → EM (List Bind × Val)
+  | 0, _, _, V => throw ⟨V.span, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, cs, V => do
+    let env := cx.env
+    let isStage (s : Val) : Bool := match env.stream, stageHead? s with
+      | some st, some x => (env.fn? x).any (·.row.any (·.eff == st))
+      | _, _ => false
+    let c := Pipes.chainOf isStage V
+    let mut acc := c.src
+    let mut src := c.src
+    let mut run : List (Span × PipeMode × Val) := []
+    for ed in c.edges do
+      let sp : Span := if ed.mode == .pull then ⟨c.src.span.start, ed.stage.span.stop⟩ else ed.sp
+      if isStage ed.stage then
+        if run.isEmpty then
+          -- The head is a source: a chain of stages as a stage waits for L2.
+          if isStage acc then
+            throw ⟨acc.span, "the head of a stream chain is a source; a chain of stages as a stage " ++
+              "is not provided yet (L2, #921)"⟩
+          -- A written row is an upper bound (§18): what the left side performs is its inferred row.
+          if !(rowV env fuel acc).any (env.iterEff ·.eff) then
+            if ed.mode == .pull then
+              throw ⟨acc.span, "`>|` connects stream stages; its left side yields nothing (no " ++
+                "iteration effect in its inferred row)"⟩
+            acc ← pipeStage env.pipes sp acc ed.stage
+            continue
+          src := acc
+        run := run ++ [(sp, ed.mode, ed.stage)]
+      else
+        if !run.isEmpty then
+          streamRefuse env src run
+          run := []
+        acc ← pipeEdge env.pipes sp ed.mode acc ed.stage
+    if !run.isEmpty then streamRefuse env src run
+    trV k cx cs acc
+
 /-- A value with its effectful calls lifted out before it, as bindings (that thread the
 capabilities `cs` when they use them); the value refers to their results. Every plain call
 evaluated before an effectful one is lifted too, so the calls keep their order. -/
 def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
   | 0, _, _, V => throw ⟨V.span, "internal error: a value nested too deeply"⟩
   | n + 1, cx, cs, V => do
+    -- A chain left by `resolvePipes`, read on the inferred rows (SPEC §75).
+    if cx.env.stream.isSome && (Pipes.pipeParts? V).isSome then return ← streamChain n cx cs V
     let row := rowV cx.env fuel V
     let needs := !(cx.need row).isEmpty || !(cx.ctl row).isEmpty
     -- An effect with no handler in scope is reported where it is performed (`goV`).
@@ -3672,95 +3861,6 @@ def defineGroup (env : Env) (ms : List (Span × Ident × List Ident × VTy × Va
                                              group := some (G.name, (parts.map (·.1)).idxOf x) }] }
   pure env
 
-/-! ### `|>`  `[spec §33]` -/
-
-/-- What the pass knows of the program for `|>` and `>|`: its handlers' names, each function's
-written type, and its `type` abbreviations (SPEC §61). -/
-structure PipeEnv where
-  handlers : List String
-  sigs : List (String × VTy)
-  abbrevs : Data.Table := {}
-
-/-- `A` with the abbreviations at its head unfolded, as the checker reads it: `P` of `type P =
-U (pull i32 1 1)` is `U (pull i32 1 1)`.  `[spec §61, §70]` -/
-def PipeEnv.unfold (pe : PipeEnv) : Nat → VTy → VTy
-  | 0, A => A
-  | k + 1, A => match Data.headOf A with
-    | some (h, As, ls) => match pe.abbrevs.abbrev? h with
-      | some a => if As.length == a.tps.length then pe.unfold k (a.at As ls) else A
-      | none => A
-    | none => A
-
-/-- The name a stage `f`, `f[As]` or `f(a, …)` calls.  `[spec §70]` -/
-def stageHead? : Val → Option String
-  | .app _ (.var _ x) _ | .app _ (.defApp _ x _) _ | .var _ x | .defApp _ x _ => some x
-  | _ => none
-
-/-- The function `x`'s first parameter, as its signature writes it, is a stored generator
-`U (pull A K R)`: a source-owning adapter (`lib/adapters.bc`), a stream stage until L2 (#921).
-`[spec §70]` -/
-def PipeEnv.transitional (pe : PipeEnv) (x : String) : Bool :=
-  match (pe.sigs.lookup x).bind paramTyOf with
-  | some (.tensor _ A _) => isPullTy (pe.unfold 16 A)
-  | some A => isPullTy (pe.unfold 16 A)
-  | none => false
-
-/-- `e |> s` (SPEC §33): a handler stage `h[…](…)` is `with h[…](…) { e }`; a function stage
-`f(a, …)` whose first parameter is a computation parameter takes `e` suspended, `f(!{ () -> e },
-a, …)` (`{ () -> e }` at a parameter that is not `!`); any other function takes `e` first,
-`f(e, a, …)` (decision 50). -/
-def pipeStage (pe : PipeEnv) (sp : Span) (e s : Val) : EM Val := do
-  let (head, args) : Val × Option Val := match s with
-    | .app _ h@(.var ..) P | .app _ h@(.defApp ..) P => (h, some P)
-    | h => (h, none)
-  let (x, As) ← match head with
-    | .var _ x => pure (x, [])
-    | .defApp _ x As => pure (x, As)
-    | _ => throw ⟨s.span, "the right of `|>` is a handler or a function, applied to its other " ++
-        "arguments"⟩
-  if pe.handlers.contains x then
-    let l ← fresh "fx_pipel"
-    let b ← fresh "fx_pipec"
-    let P := args.getD (.unit sp)
-    if P.lends then
-      throw ⟨P.span, s!"the handler `{x}` of this `|>` is given a lent place: write `with {x}(…) \{ … }`, " ++
-        "which hands the place back"⟩
-    return .app sp (.app sp (.sugar s.span (.handle x l As none)) P)
-      (.thunkv sp (.lam sp ⟨b, sp⟩ (holeTy sp) (.ret sp e)))
-  let first : Option VTy := ((pe.sigs.lookup x).bind paramTyOf).map fun
-    | .tensor _ A _ => A
-    | A => A
-  let e' ← match first with
-    | some A@(.rowed ..) | some A@(.bang _ (.rowed ..)) =>
-      match unrowed A with
-      | .bang _ (.lolli _ (.unit _) _) | .lolli _ (.unit _) _ =>
-        let u ← fresh "fx_pipeu"
-        let body : Comp := .lam sp ⟨u, sp⟩ (holeTy sp) (.letUnit sp (.var sp u) (.ret sp e))
-        pure (match A with | .bang .. => Val.bangThunkv sp body | _ => .thunkv sp body)
-      | _ => throw ⟨s.span, s!"the first parameter of `{x}` is a computation parameter that takes " ++
-          "an argument: `|>` passes it a computation of none"⟩
-    | _ => pure e
-  pure (.app sp head (match args with
-    | none | some (.unit _) => e'
-    | some P => .pair sp e' P))
-
-/-- One edge of a chain in normal form, `e ∘ s` (`m` its mode), `e` and `s` elaborated.
-`[spec §33, §70]`
-
-- `|>`: §33's cases, by the stage (`pipeStage`), whatever the stage: a source-owning adapter is
-  case (iii), `f(e, …)`, `e` stored at its stored generator parameter.
-- `>|`: accepted into a stream stage, a source-owning adapter until L2 (#921), and then case
-  (iii) as `|>` is; refused into anything else. -/
-def pipeEdge (pe : PipeEnv) (sp : Span) (m : PipeMode) (e s : Val) : EM Val := do
-  if m == .pull then
-    let some x := stageHead? s
-      | throw ⟨s.span, "the right of `>|` is a stream stage, applied to its other arguments"⟩
-    if pe.handlers.contains x then
-      throw ⟨s.span, s!"`>|` connects stream stages; `{x}` is a handler: write `|>`"⟩
-    unless pe.transitional x do
-      throw ⟨s.span, s!"`>|` connects stream stages; `{x}` is not a stream stage"⟩
-  pipeStage pe sp e s
-
 mutual
 /-- `V` with each `e |> s` and `e >| s` in it elaborated, each chain in its normal form
 (`Pipes.chainOf`), the source first and then each edge in order (`pipeEdge`).
@@ -3769,6 +3869,11 @@ def pipesV (pe : PipeEnv) : Nat → Val → EM Val
   | 0, V => pure V
   | k + 1, V => match V with
     | .app _ (.sugar _ (.pipe _)) (.pair _ _ _) => do
+      -- A chain that may have a stream edge (SPEC §75): an edge into a function that is neither a
+      -- handler nor a source-owning adapter, when the program includes lib's `Stream`. It is left
+      -- to the pass, which reads the rows, with its leaves elaborated.  [spec §75]
+      if pe.stream && (Pipes.chainOf (fun _ => true) V).edges.any (pe.maybeStage ·.stage) then
+        return ← pipesLeaves pe k V
       -- Only a `>|` joins a chain before L1 (#920): a `|>` edge is read as written.
       let c := Pipes.chainOf (fun _ => false) V
       let mut acc ← pipesV pe k c.src
@@ -3800,6 +3905,14 @@ def pipesV (pe : PipeEnv) : Nat → Val → EM Val
     | .ascribe sp V A => do pure (.ascribe sp (← pipesV pe k V) A)
     | .shorten sp m s a V => do pure (.shorten sp m s a (← pipesV pe k V))
     | V => pure V
+
+/-- A chain left to the pass: its pipe nodes kept, each leaf (the source and each stage, as
+written) elaborated.  `[spec §75]` -/
+def pipesLeaves (pe : PipeEnv) : Nat → Val → EM Val
+  | 0, V => pure V
+  | k + 1, V => match Pipes.pipeParts? V with
+    | some (sp, m, e, s) => do pure (Pipes.pipeNode sp m (← pipesLeaves pe k e) (← pipesLeaves pe k s))
+    | none => pipesV pe k V
 
 /-- `M` with each `e |> s` in it elaborated. -/
 def pipesC (pe : PipeEnv) : Nat → Comp → EM Comp
@@ -3833,17 +3946,22 @@ def pipesC (pe : PipeEnv) : Nat → Comp → EM Comp
     | M => pure M
 end
 
-/-- The declarations with each `|>` and `>|` in them elaborated (SPEC §33).
-`[spec §33, §70]` -/
-def resolvePipes (ds : List Decl) : EM (List Decl) := do
-  let pe : PipeEnv := ⟨ds.flatMap fun
+/-- What `|>` and `>|` read of the program's declarations.  `[spec §33, §75]` -/
+def pipeEnvOf (ds : List Decl) (stream : Bool) : PipeEnv :=
+  ⟨ds.flatMap fun
       | .handler _ n .. => [n.name]
       | .chandler _ h => [h.name.name]
       | _ => [],
     ds.filterMap fun
       | .def_ _ n _ A _ _ => some (n.name, A)
       | _ => none,
-    { abbrevs := ds.filterMap Data.Abbrev.ofDecl? }⟩
+    { abbrevs := ds.filterMap Data.Abbrev.ofDecl? }, stream⟩
+
+/-- The declarations with each `|>` and `>|` in them elaborated (SPEC §33), but for a chain that
+may have a stream edge, which is left to the pass (`streamChain`, SPEC §75).
+`[spec §33, §70, §75]` -/
+def resolvePipes (ds : List Decl) (stream : Bool := false) : EM (List Decl) := do
+  let pe := pipeEnvOf ds stream
   let cl (c : Clause) : EM Clause := do pure { c with body := ← pipesC pe fuel c.body }
   ds.mapM fun
     | .def_ sp n ps A V mk => do pure (.def_ sp n ps A (← pipesV pe fuel V) mk)
@@ -3991,10 +4109,11 @@ out otherwise.
 `main` when `main` is served by `main_div_error`, whose clause writes on standard error.
 `[spec §18, §19, §39]` -/
 def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := [])
-    (divLib : List Decl := []) (platform : List Decl := []) (fins : Fins.Table := []) :
+    (divLib : List Decl := []) (platform : List Decl := []) (fins : Fins.Table := [])
+    (stream : Option Decl := none) :
     Except Error Result := do
-  -- `|>`, before the rest (SPEC §33).
-  let ds ← match (resolvePipes ds).run {} with
+  -- `|>`, before the rest (SPEC §33); a chain that may have a stream edge is left (SPEC §75).
+  let ds ← match (resolvePipes ds stream.isSome).run {} with
     | .ok (ds, _) => pure ds
     | .error e => throw e
   -- The divisions that can fail, at their operands' width, written to raise (SPEC §39).
@@ -4021,7 +4140,8 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
     let table := match fd with
       | some fd => fd.table
       | none => Instances.table ds
-    let mut env : Env := { lib, table, scope := some (TCx.ofScope ds true), fins }
+    let mut env : Env := { lib, table, scope := some (TCx.ofScope ds true), fins,
+                           pipes := pipeEnvOf ds stream.isSome }
     -- A division whose operands' width the walk could not read is taken to be able to fail.
     for (owner, sp) in (fd.map (·.unknown)).getD [] |>.reverse do
       unless lib.contains ((owner.splitOn "@").headD "") do
@@ -4065,6 +4185,8 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
         if let some o := ops.find? (fun o => o.abortive && o.kind == .ctl .unr) then
           throw ⟨o.name.span, s!"`{o.name.name}` is `multi ctl` and answers `never`: an " ++
             "operation that never resumes is cancellable, `ctl` (decision 63)"⟩
+        -- Lib's `Stream`, keyed on its declaration (SPEC §75).
+        if stream == some d then env := { env with stream := some e.name }
         env := { env with effs := env.effs ++ [sig],
                           ops := env.ops ++ (ops.zipIdx.map fun (o, i) => ⟨e.name, i, o⟩) }
         report sp "effect" (s!"{e.name}: " ++ ", ".intercalate (ops.map fun o =>

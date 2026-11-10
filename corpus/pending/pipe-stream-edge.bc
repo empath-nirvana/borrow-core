@@ -1,26 +1,25 @@
--- pending: #920 (L1: the pipe connector; a stream chain into a stage in (R)'s form runs on it)
--- A stream edge recognised by effects (SPEC §70), once lib declares the item effect `Stream`
--- (L1): the left side is an `if` whose branches call generators, so its inferred row has
--- `Yield[i32]`, and `sum_items` performs `Stream[i32]`, a stage in (R)'s form. A chain of such
--- edges is one n-ary connector, which L1 builds. Here `Stream` is the program's own effect, not
--- lib's declaration, so no stage is a stream stage before L1, and `>|` refuses `sum_items`.
+-- pending: #920 (L1's connector pieces `pipe_step`, `pipe_stop`, `pipe_with_stop`, `pipe_forward` and `pipe_finish` wait for row- and site-generic library definitions)
+-- A stream edge recognised by effects (SPEC §75): the left side is an `if` whose branches call
+-- generators, so its inferred row has `Yield[i32]`, and `sum_items` performs lib's
+-- `Stream[i32, 1]`, so it is a stage. The chain is one connector, assembled from `lib/pipe.bc`'s
+-- pieces, four of which mention the chain's row and the stages' sites in their types.
 --
--- Once it lands: the stage written in L1's form against lib's `Stream`; `i32[3]` (0 + 1 + 2);
--- `live 0`.
+-- Once it lands: `i32[3]` (0 + 1 + 2); `live 0`.
 --
--- now: 25:61: `>|` connects stream stages; `sum_items` is not a stream stage
-include yield
-
-effect Stream[A] { ctl next() -> A }
+-- now: 25:4: a stream chain runs on the pipe connector, whose pieces `pipe_step`, `pipe_stop`, `pipe_with_stop`, `pipe_forward` and `pipe_finish` (lib/pipe.bc) mention the chain's row and the stages' sites in their types: they wait for row- and site-generic definitions, which are not provided yet
+include pipe
 
 fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
   let mut i = lo;
   while i < hi { yield(i); i = i + 1 };
   ()
 
-fn sum_items(n: i32) -> i32 with Stream[i32] = next() + next() + next()
+fn sum_items() -> i32 with Stream[i32, 1] =
+  let a = match next() { inl x -> x | inr u -> 0 };
+  let b = match next() { inl x -> x | inr u -> 0 };
+  let c = match next() { inl x -> x | inr u -> 0 };
+  a + b + c
 
 main -> i32 =
   let flag = true;
-  let s = (if flag { range(0, 3) } else { range(5, 8) }) >| sum_items(3);
-  s
+  (if flag { range(0, 3) } else { range(5, 8) }) >| sum_items

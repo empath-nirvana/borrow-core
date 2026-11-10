@@ -1,0 +1,60 @@
+-- Stream stages and the pipe connector (SPEC §75 Part B). `Stream[A, K]` is the item effect: a
+-- **stage** is a function that performs it, keyed on this declaration and never on the name.
+--
+-- * `next()` answers an item `inl a`, or `inr k`: the upstream has ended, returning `k`;
+-- * `stop()` closes the whole upstream at once, downstream-first, and answers its residual `K`.
+--
+-- A middle stage also performs `Yield[B]` (`lib/yield.bc`); a sink performs no `Yield`. A stage
+-- returns at its stream's end, and a middle stage's result is the `K` of the wire below it.
+-- One-item lookahead is a pushback slot the stage holds, not an operation.
+--
+-- A chain of stream edges (`src >| s₁ >| … `, or `|>` into a stage) is one connector, assembled per
+-- chain from the pieces below, each over one stage's or one wire's types (Assembly(n) §1); the
+-- elaboration writes only the glue: the tuple of stage states and a dispatching loop.
+--
+-- A stage's state, `PipeState[L, KN, KY, K]`: `Ready(L)`, a stage not yet run (its loop);
+-- `AtNext(KN)`, stored at a `next()` (and at a `stop()`, `AtStop`, at the same type); `AtYield(KY)`,
+-- stored at a `yield` (and at a forwarded operation, `AtFwd`, at the same type: SPEC §75
+-- (One-frame)); `Ended(K)`, a stage that returned, keeping its unrestricted result. A component a
+-- stage does not have is `0`.
+
+include yield
+
+effect Stream[A, K] { ctl next() -> A + K; ctl stop() -> K }
+
+type PipeState[L, KN, KY, K] = L + (KN + (KY + K))
+
+-- handoff_i: wire `i`, from stage `i−1` to stage `i`, at an upstream event `Yield(b, κ)` or
+-- `Return(k)` (`B * KY + K`), with stage `i`'s state `S`, which it hands back as it is (stage `i` is
+-- `AtNext`, Assembly(n)'s (I5)). Upstream becomes `AtYield(κ)` or `Ended(k)`, and stage `i`'s input
+-- is `inl b` or `inr k`.  `[spec §75]`
+def pipe_handoff[L, KN, KY, B, K, S] :
+    !((B * KY + K) * S => PipeState[L, KN, KY, K] * ((B + K) * S)) =
+  !thunkv fun (p : (B * KY + K) * S) ->
+    let (e, s) = p;
+    case e {
+      inl yk ->
+        let (b, ky) = yk;
+        return ((inr (inr (inl ky)) : PipeState[L, KN, KY, K]), ((inl b : B + K), s))
+    | inr k -> return ((inr (inr (inr k)) : PipeState[L, KN, KY, K]), ((inr k : B + K), s))
+    }
+
+-- needs row/site-generic defs (#issue to come). The pieces that force a stored rest, install a
+-- stage's sites or perform at the chain's row `Σ` mention the row in their types, and a `def`
+-- takes value-type parameters only. Their signatures, as Assembly(n) §1 states them, with `Σ`
+-- (the chain's outer row, `CR` the stages' cleanup row within it) and the stage's sites (`y` its
+-- `Yield`, `s` its `Stream`, `f` its forwarded operation's fresh name) as parameters:
+--
+--   pipe_step[L, KN, KY, I, EV | Σ; y, s, f]      : !(PipeState[L, KN, KY, K] * I => F_Σ EV)
+--     one observation of the loop `L` under the stage's storing clauses at `y`, `s` and `f`
+--     (innermost `y`), or one resume of the stored rest with its input `I`;
+--   pipe_stop[L, KN, KY, K | Σ]                    : !(PipeState[L, KN, KY, K] => F_CR 1)
+--     cancels the stored rest; closes a loop not yet run; `()` at `Ended`;
+--   pipe_with_stop[L, KN, KY, K, R | Σ; c]         : !(PipeState[L, KN, KY, K] * U (1 -o F_{c, CR} R)
+--                                                       => F_{c, CR} R)
+--     the thunk inside one `unwind` frame whose finaliser is `pipe_stop` (a frame of one of the
+--     three frame lists, each one cancel region at the connector-local site `c`);
+--   pipe_forward[A, B | Σ; n.i]                    : !(A => F_Σ B)
+--     performs the real outer operation `n.i` that a non-last stage performed at its fresh name;
+--   pipe_finish[R, SO | Σ]                         : !(R * SO => F_Σ R)
+--     `run`'s end: the others closed (their frame list), then `r`.

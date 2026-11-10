@@ -1,0 +1,13 @@
+-- expect: 13:15: `>|` connects stream stages; its left side yields nothing (no iteration effect in its inferred row)
+-- SPEC §75, Part B: a stream edge's left side is a source, whose inferred row has an iteration
+-- effect. `3` performs nothing, so `3 >| sum_all` is refused (the refusal §70 left to L1).
+
+include pipe
+
+fn sum_all() -> i32 with Stream[i32, 1] =
+  let mut s = 0;
+  let mut go = true;
+  while go { match next() { inl x -> s = s + x | inr u -> go = false } };
+  s
+
+main -> i32 = 3 >| sum_all

@@ -1,0 +1,19 @@
+-- expect: 19:15: the end value of `src`, of type `array i32 * i32`, is linear; a stream wire's end value is unrestricted in this version
+-- SPEC §75, Part B: every wire's end type is unrestricted in L1, so that a `next()` after the end
+-- answers `inr k` again. `src` returns an owned buffer, so its wire into `count` is refused.
+
+include pipe
+include buf
+
+fn src(n: i32) -> buf i32 with Yield[i32] =
+  let mut i = 0;
+  while i < n { yield(i); i = i + 1 };
+  buf_new[i32](n)
+
+fn count[K]() -> i32 with Stream[i32, K] =
+  let mut c = 0;
+  let mut go = true;
+  while go { match next() { inl x -> c = c + 1 | inr k -> go = false } };
+  c
+
+main -> i32 = src(3) >| count

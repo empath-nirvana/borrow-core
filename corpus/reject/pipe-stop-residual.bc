@@ -1,0 +1,16 @@
+-- expect: 16:25: `stop()` answers the upstream's residual `K`, which a stage closed at a suspension does not hand back (§15 Open)
+-- SPEC §75, Part B: `stop()` answers the upstream's residual `K`, and a stage closed at a
+-- suspension hands back `1`. `src` returns `i32`, so `first`, which calls `stop()`, is refused
+-- over it.
+
+include pipe
+
+fn src(n: i32) -> i32 with Yield[i32] =
+  let mut i = 0;
+  while i < n { yield(i); i = i + 1 };
+  n
+
+fn first[K]() -> i32 with Stream[i32, K] =
+  match next() { inl x -> { let k = stop(); x } | inr k -> 0 }
+
+main -> i32 = src(5) >| first

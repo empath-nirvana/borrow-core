@@ -1,0 +1,19 @@
+-- expect: 19:15: the head of a stream chain is a source; a chain of stages as a stage is not provided yet (L2, #921)
+-- SPEC §75, Part B: the head of a chain is a source. `scale(3)` performs `Stream` (it is a stage),
+-- so `scale(3) >| sum_all` would be a chain of stages used as a stage, an open chain, which waits
+-- for L2.
+
+include pipe
+
+fn scale(m: i32) -> 1 with Stream[i32, 1], Yield[i32] =
+  let mut go = true;
+  while go { match next() { inl x -> yield(x * m) | inr u -> go = false } };
+  ()
+
+fn sum_all() -> i32 with Stream[i32, 1] =
+  let mut s = 0;
+  let mut go = true;
+  while go { match next() { inl x -> s = s + x | inr u -> go = false } };
+  s
+
+main -> i32 = scale(3) >| sum_all
