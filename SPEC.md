@@ -12002,12 +12002,12 @@ lemmas the later units reuse, and no `VTy` former, rule or relation clause (K1�
 
 ### The rules
 
-Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP`, `CDerivesAt` and
-`TDerives*` by `scripts/gen-pin.py`. No new index and no new judgment.
+Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP` and `TDerives*`
+by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No new index and no new judgment.
 
 | Rule | Statement | Unit |
 |---|---|---|
-| `codeI` | `Γ ⊢ λM : U C`, `Γ.CapOK (λM)` and `(Γ.capTy (λM)).Cl 0` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
+| `codeI` | `Γ ⊢ λM : U C` and `Γ.CapOK (λM)` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
 | `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C` | K3 |
 | `codeErase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
 | `codeEraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
@@ -12023,10 +12023,6 @@ Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP
   live slot of `Γ` that `e` does not capture is persistent. With it the uncaptured slots hold `∅`
   (`vCE_empty_of_persistent`), so the closure's resource is its captures'. It is a premise, not
   an inversion of `CDerives`.
-- `(Γ.capTy (λM)).Cl 0`, decidable and tested by the checker beside `CapOK`: no `μ` variable is free
-  in a captured slot's type. A type substitution leaves `Code⟨N; E⟩ C` as it is (§68 *Open*, K1's
-  choices), so the clause reads `E` at no environment, and a capture whose type has a free `μ`
-  variable would read `E` as empty. Where the premise fails, the closure stays at `U C`.
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
 - `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
@@ -12038,8 +12034,9 @@ Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP
   `VarCls` is restated over `forceTy`; `LamCls` is the computation case or `ThunkCls`, the λ read
   at `U`, `!U`, `Code` or `!Code`; `LamAx` reads at the axiom type's views and their code types.
   `lam_bang` and its uses in `Core/Rejections.lean` and `Core/EffCancelTyped.lean` are restated.
-  No inversion is added and no substitution over derivations; every rejection keeps its
-  statement and verdict.
+  `der_swap` reads at `ValClsC`; `hnf_of` and `eq_of_heads` take a no-code-head hypothesis their
+  callers discharge. No inversion is added and no substitution over derivations; every rejection
+  keeps its statement and verdict.
 
 ### Erasure policy
 
@@ -12117,7 +12114,7 @@ proofs; every corpus and kernel program its output. The later units must preserv
 K3 (the four rules and the restated `force`): `fundamentalC`, `adequacyC` and `goal791N :
 HandlerLawN → Goal791N` keep their statements and cover the new rules, the chain's through
 `FundamentalKW835N`. The judgment freeze holds: no new judgment, and the rules join `CDerives`,
-mirrored by `scripts/gen-pin.py`. Every rejection theorem keeps its verdict; one that flips is
+mirrored by `scripts/gen-pin.py` and, into `CDerivesAt`, by hand. Every rejection theorem keeps its verdict; one that flips is
 reported as an intended change.
 
 ### Open
@@ -12138,7 +12135,8 @@ reported as an intended change.
 - **Choices K1 made that the entry does not state:**
   - A type substitution (`VTy.rename`, `VTy.subst`) leaves `Code⟨N; E⟩ C` as it is, as it leaves
     `U C`: no `μ` variable reaches `E`, `Cl k` holds, `Occ` fails. The clause reads `E` at no
-    environment, as `U C` reads `C`. So `codeI` asks `E.Cl 0`.
+    environment, as `U C` reads `C`; a captured slot's type is read the same way in `Γ` and in
+    `E`, so `codeI` needs no closedness premise.
   - `vC_ind` and `vN_ind` keep the code clause in one unfolding (`vF`, `vFN`) with the property at
     every value of `E`, from an outer induction on the type's size: `E` is smaller and no
     substitution enters it.
@@ -12621,6 +12619,8 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 - **1.62** (2026-11-09) — §68 (#855 K3, as built): the rules `erase`/`eraseB` are named
   `codeErase`/`codeEraseB` (`erase` is `TExpr.erase` in the typed term). `Ctx.capTy`, `Ctx.capOK`
   and `VTy.forceTy` are named; the restated `force` reads `T.forceTy = some C`. K3 and `codeI`'s
+  semantic step are built; the inversion's cost is restated as built. The premise `E.Cl 0` of
+  1.57 is dropped: no proof reads it. K7, `cloneCode` (#928), is planned.
   semantic step are built; the inversion's cost is restated as built. K7, `cloneCode` (#928), is
   planned.
 - **1.63** (2026-11-09) — §3 (#906): `scripts/check-type-eq.sh` reads the library `Reference`
