@@ -26,7 +26,7 @@ verifies and never fills in:
   abort, `effLet`'s `hW` (the variable's type holds no owned cell, `VTy.Consume`); at a superseded
   raise payload, `effRaise`'s `hd`, the same; at `⊤`, `topI`'s, which has none. It is the only
   node at which an opaque value is discarded, and `Convert` emits it only at those rules' sites;
-- **evidence is confined** (`evConfined`, SPEC §47 *Evidence*): a function's evidence parameters
+- **evidence is confined** (`evConfined`, SPEC §71): a function's evidence parameters
   (`Fn.evs`) are used only as evidence arguments (of a `call`'s evidence parameters, of an
   `appE`) or read by a `copy` at `dup`, at a persistent type; never in a pair, an injection, a
   closure's environment, a primitive (a cell), a `case`, a consume or a function's value. A value

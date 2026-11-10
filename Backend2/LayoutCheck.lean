@@ -130,7 +130,7 @@ def closOf (w : String) (i : Nat) : CM (CodeKind × Option Nat × List Nat) := d
   | .clos k p r _ => pure (k, p, r)
   | s => throw s!"{w}: node {← rp L i} ({short s}) is not a closure class"
 
-/-- The evidence parameters' nodes of a closure class (SPEC §47, *Evidence*). -/
+/-- The evidence parameters' nodes of a closure class [spec §71]. -/
 def closEvOf (w : String) (i : Nat) : CM (List Nat) := do
   match ← shp L i with
   | .clos _ _ _ e => pure e

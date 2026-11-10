@@ -252,7 +252,7 @@ structure CState where
   stacked : Std.HashMap Nat LTy := {}
   /-- The static word that holds the current stack, once a stack machine or a site uses it. -/
   stackReg : Option Nat := none
-  /-- **The program's evidence** (SPEC §47, *Evidence*; `Backend2/Driver.lean`, `evidenceOf`):
+  /-- **The program's evidence** (SPEC §71; `Backend2/Driver.lean`, `evidenceOf`):
   each static name whose `tail` clause is called directly with the values it captures, with its
   evidence parameters' types. Empty, nothing takes evidence. -/
   fd : EvSet := {}
@@ -369,17 +369,18 @@ def evParams (t : LTy) (arg : Bool) : List (UInt32 × LTy) :=
     | _, _ => []
   | _ => []
 
-/-- The variables in scope that pass the evidence parameters `es`, by name. A name with none in
-scope is refused (`evRefuse`): the driver converts again without it. -/
+/-- The variables in scope that pass the evidence parameters `es`, by name. A code at a row
+holding a name runs only where that name's evidence is in scope (the row's typing, and `evNames`'
+exclusions: no machine, `&`, `ν`, helper or work at its rows): none in scope is an internal error. -/
 def evArgs (es : List (UInt32 × LTy)) : CM (List Var) := do
   let mut out : List Var := []
   for n in (es.map (·.1)).eraseDups do
     let want := (es.filter (·.1 == n)).length
     match (← get).evs[n]? with
     | some vs =>
-      unless vs.length == want do throw (evRefuse n "evidence of another arity in scope")
+      unless vs.length == want do throw (evInternal n "a call, of another arity")
       out := out ++ vs
-    | none => throw (evRefuse n "a call that takes evidence where none is in scope")
+    | none => throw (evInternal n "a call with none in scope")
   return out
 
 /-- Fresh evidence parameters `es`, and the evidence they put in scope, by name. -/
@@ -426,7 +427,7 @@ def Tm.mentions (xs : Std.HashSet Var) : Nat → Tm → Bool
 def noEv (t : LTy) : CM Unit := do
   for arg in [true, false] do
     if let (n, _) :: _ := evParams t arg then
-      throw (evRefuse n "a closure that takes evidence called by a generated helper")
+      throw (evInternal n "a generated helper")
 
 /-- The type of a node's value: a value type's, `F A`'s `A`, and otherwise the closure the
 computation's λ-value is. -/
@@ -588,7 +589,7 @@ def mkClos (name : String) (ctx : Ctx) (k : LCTy) (param : Option LTy) (ret : LT
   let fi ← reserveFn name
   let encl (ps : List Var) := if source then sourceEncl ps else []
   -- The code's evidence parameters, after its argument: the evidence its body has in scope, and
-  -- no other (SPEC §47, *Evidence*).
+  -- no other [spec §71].
   let (evp, evs) ← evParamVars (evParams (.thunk k) param.isSome)
   match param with
   | some pt =>
@@ -838,10 +839,10 @@ operation. The outcome unrolls to its body (checked).  `[spec §49]` -/
 def outInfo? (r : LTy) (S : Row) : CM (Option OutInfo) := do
   let ms ← rowMs S
   if ms.isEmpty then return none
-  -- A machine takes no evidence in the first cut (SPEC §47, *Evidence*).
+  -- A machine takes no evidence in the first cut [spec §71].
   let fd := (← get).fd
   if let some o := S.find? fun o => fd.contains o.n then
-    throw (evRefuse o.n "a machine at a row with evidence")
+    throw (evInternal o.n "a machine's row")
   let pay ← rowPay S
   let ty := outcomeTy r pay ms
   let unrs := (S.filter fun o => o.q == .unr).map fun o => (o.n, o.i)
@@ -2165,11 +2166,11 @@ def genFix (sT : LTy) (p : Var) : CM Tm := do
   let .pair selfOT aT := qT.peel | throw "LIR: bounded_fix's step does not take `(self, a)`"
   let .sum _ selfT := selfOT.peel | throw "LIR: bounded_fix's self-reference is not `1 ⊕ U(A ⊸ C)`"
   let .thunk selfK := selfT.peel | throw "LIR: bounded_fix's self-reference is not a closure"
-  -- The step's evidence (SPEC §47, *Evidence*): the loop and the self-reference take it, as the
+  -- The step's evidence [spec §71]: the loop and the self-reference take it, as the
   -- step's row and the self-reference's are one.
   let es := evParams sT true
   if let (n, _) :: _ := es then
-    unless evParams selfT true == es do throw (evRefuse n "bounded_fix's step and self at other evidence")
+    unless evParams selfT true == es do throw (evInternal n "bounded_fix's step and self, unequal")
   let si ← reserveFn "bounded_fix self"
   let s₁ ← fresh sT; let k₁ ← fresh i32T; let x ← fresh aT
   let (ev₁, _) ← evParamVars es
@@ -2899,7 +2900,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     unless ph.all fun k => (payIdx p k.1).isSome do
       throw s!"LIR: `effPerform` of ({o.n}, {o.i}) at a row that does not hold its clause's aborts is outside the pure fragment"
     let bT ← vty o.B
-    -- A clause that captures values takes them as its name's evidence (SPEC §47, *Evidence*).
+    -- A clause that captures values takes them as its name's evidence [spec §71].
     -- UNPROVED: that the evidence of `o.n` in scope here holds the captured values of the
     -- innermost handler frame of `o.n` in the run's continuation. It should hold because
     -- evidence is bound only at a `handle` node of the name, for its handled computation run in
@@ -3191,7 +3192,7 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
       let some (fi, ph, wm) := (← get).works[(o.n, o.i.toNat)]?
         | throw s!"LIR: `effPerform` of ({o.n}, {o.i}) with no direct call is outside the fragment"
       readFact "effPerform:direct call"
-      if (← get).fd.contains o.n then throw (evRefuse o.n "a perform inside a machine")
+      if (← get).fd.contains o.n then throw (evInternal o.n "a perform inside a machine")
       modify fun st => { st with erased := st.erased.insert "perform" (st.erased.getD "perform" 0 + 1) }
       let bT ← vty o.B
       bindTm (← conv fuel ctx c) (← vty o.A) fun v => match wm with
@@ -3602,20 +3603,20 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)
         throw "LIR: `effHandleV`: a clause tuple not written in place is outside the pure fragment"
       tuple := some t
   let tailCtx := cur
-  -- **The node's evidence** (SPEC §47, *Evidence*): at a name whose `tail` clause captures values,
+  -- **The node's evidence** [spec §71]: at a name whose `tail` clause captures values,
   -- the values of its captured slots, from the clauses' parts of the context. They stay the
   -- node's (consumed with its parts after the handled computation) and are passed to every call
   -- of the handled computation that takes them.
   let fd := (← get).fd
   let evsTe ← if fd.contains n then do
-      if teM.isSome then throw (evRefuse n "a drive of a name with evidence")
+      if teM.isSome then throw (evInternal n "a drive")
       let want := fd.getD n []
       let slots := (← get).fdSlots.getD n []
       let mut vs : List Var := []
       for (i, t) in slots.zip want do
         let some x := parts.toList.findSome? (fun (cc, _) => cc[i]?.join)
-          | throw (evRefuse n "a captured slot not live at the node")
-        unless (← tyOf x).sameRep t do throw (evRefuse n "a captured slot of another type")
+          | throw (evInternal n "a captured slot not live at the node")
+        unless (← tyOf x).sameRep t do throw (evInternal n "a captured slot of another type")
         vs := vs ++ [x]
       readFact "effHandleV:evidence"
       pure ((← get).evs.insert n vs)
@@ -3679,7 +3680,7 @@ def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
     -- At an outer row with machine operations the work is a machine (SPEC §49).
     let wm ← outInfo? bT S
     modify fun st => { st with works := st.works.insert (n, j) (fi, ph, wm) }
-    -- **The captured values** (SPEC §47, *Evidence*): at a name of the program's evidence, the
+    -- **The captured values** [spec §71]: at a name of the program's evidence, the
     -- work takes them as its evidence parameters, and its context's captured slots are copies
     -- of them (persistent: `[handle]`'s `DeadP`). The first cut takes no evidence of the outer
     -- row and builds no machine for such a work.
@@ -3687,8 +3688,8 @@ def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
     let (evp, _) ← evParamVars ((fd.getD n []).map (n, ·))
     if fd.contains n then
       if let some o := S.find? fun o => fd.contains o.n then
-        throw (evRefuse n s!"its clause's outer row holds the evidence name {o.n}")
-      if wm.isSome then throw (evRefuse n "its clause's work is a machine")
+        throw (evInternal n s!"a work whose outer row holds {o.n}")
+      if wm.isSome then throw (evInternal n "a work that is a machine")
     let slots := (← get).fdSlots.getD n []
     let mut copies : List (Var × Var) := []
     for e in evp do copies := copies ++ [(e, ← freshLike e)]
@@ -3908,7 +3909,7 @@ def convUse (fuel : Nat) (ctx : Ctx) (info : TInfo) (j : Jdg) (decl : Nat) (targ
     conv fuel ctx body
   | none =>
     let tm ← conv fuel ctx body
-    -- A body that passes the evidence in scope here is this use's own (SPEC §47, *Evidence*).
+    -- A body that passes the evidence in scope here is this use's own [spec §71].
     let evVars : Std.HashSet Var := (← get).evs.fold (fun s _ vs => vs.foldl (·.insert ·) s) {}
     if !evVars.isEmpty && Tm.mentions evVars (1 <<< 22) tm then return tm
     modify fun s => { s with uses := s.uses.insert key ⟨slots, tm⟩ }

@@ -579,7 +579,7 @@ def callEntry (p : Prog) (t : Tm) : IM (Option (LV ⊕ (Nat × List LV))) := mat
     return some (.inr (← closEntry p vg (some va) 0))
   | .app0 g => do return some (.inr (← closEntry p (← takeV g) none 0))
   | .sel g j => do return some (.inr (← closEntry p (← takeV g) none j))
-  -- Evidence (SPEC §47, *Evidence*) is passed and kept: read, not taken.
+  -- Evidence [spec §71] is passed and kept: read, not taken.
   | .appE g a j ev => do
     let vg ← takeV g
     let va ← a.mapM takeV

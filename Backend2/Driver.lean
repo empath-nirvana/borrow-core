@@ -72,7 +72,7 @@ def hnodes : Nat → TExpr → List HNode
 
 /-- **How a `perform` of an operation reaches its clause** (SPEC §47): called directly, with no
 evidence (`closed`), with the values the clause captures passed as its name's evidence (`env`,
-SPEC §47 *Evidence*), or not called directly (`no`): a machine operation, or abortive. -/
+SPEC §71), or not called directly (`no`): a machine operation, or abortive. -/
 inductive DirectKind where
   | closed | env | no
   deriving BEq, Inhabited, Repr
@@ -130,7 +130,7 @@ with their types. An operation is called directly when every `handle` node of th
   `[α]` (`tyEqC`, `tyEqEnts`, SPEC §3): copies of one site from generic instances at different
   lifetime contexts spell their binders differently,
 so that the clause a `perform` reaches is known. It is `closed` when the clause is closed
-(`closedAt 0`): it needs nothing from its handler's frame. It is `env` (SPEC §47, *Evidence*)
+(`closedAt 0`): it needs nothing from its handler's frame. It is `env` [spec §71]
 when the clause's free variables are slots of the node's context whose types, as the clause's
 typed term records them, are persistent (`[handle]`'s `hd : Ctx.DeadP Γ₁`), agree at every node
 up to `[α]` (`tyEqV`), and hold no row naming a name with an `env` operation: the clause's code
@@ -213,7 +213,7 @@ where
     | _, _ => []
 
 /-- The direct calls a conversion makes (`CState.direct`): `closed` operations, and `env` ones of
-the names not dropped (`dropped`: the names the first cut refuses, `evRefused?`). -/
+the names not dropped (`dropped`: the `env` names `evNames` excludes). -/
 def directOf (kinds : Std.HashMap UInt32 (List DirectKind)) (dropped : List UInt32) :
     Std.HashMap UInt32 (List Bool) :=
   kinds.fold (fun m n ks => m.insert n (ks.map fun k =>
@@ -249,6 +249,107 @@ def stackOps (c : Frontend.Check.Checked) (ms : MachSet := machineOps c) : MachS
         (g.E[j.toNat]?.map (·.1)).any (· != .unr)) then
       out := out.insert (n, j)
   return out
+
+mutual
+/-- The computation types a value type holds, at every depth. -/
+def subCV : VTy → List CTy
+  | .tensor A B | .sum A B => subCV A ++ subCV B
+  | .mu A | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A => subCV A
+  | .thunk C => subCC C
+  | .code _ E C => subCV E ++ subCC C
+  | _ => []
+/-- A computation type and the computation types it holds, at every depth. -/
+def subCC : CTy → List CTy
+  | .ret A => .ret A :: subCV A
+  | .arr A D => .arr A D :: (subCV A ++ subCC D)
+  | .amp D E => .amp D E :: (subCC D ++ subCC E)
+  | .all x b D => .all x b D :: subCC D
+  | .nu D => .nu D :: subCC D
+  | .eff n i q A B fin rc D => .eff n i q A B fin rc D :: (subCV A ++ subCV B ++ subCC fin ++ subCC D)
+  | .top => [.top]
+end
+
+/-- The operations of a row (`CTy.effOf`'s layers): key, qualifier and answer type. -/
+def rowOps : CTy → List ((UInt32 × UInt32) × Qual × VTy)
+  | .eff n i q _ B _ _ C => ((n, i), q, B) :: rowOps C
+  | _ => []
+
+/-- A computation type through its `∀`s. -/
+def stripAllC : CTy → CTy
+  | .all _ _ C => stripAllC C
+  | C => C
+
+/-- A row holds a machine operation of `ms` (`Types.ofC`, `Convert.rowMs`). -/
+def machRow (ms : MachSet) (C : CTy) : Bool :=
+  (rowOps C).any fun (k, q, B) => !abortB q B && ms.contains k
+
+/-- The names of `cur` whose evidence a node's judgment `j` would take where the first cut builds
+none  `[spec §71]`: a row holding the name at a machine operation (`Types.ofC`,
+`Convert.outInfo?`), a `&` or `ν` component at a row holding it (`Types.ofC`), or, at a constant
+whose expansion calls its closure argument from a generated helper (`helper`: `genTab`,
+`genArrFree`, `genCount`, `genCountTry`, the folds, `unfold`), any row of its type holding it. -/
+def evExcludedAt (cur : List UInt32) (ms : MachSet) (j : Jdg) (helper : Bool) : List UInt32 :=
+  let tys := match j with | .val A => subCV A | .comp C => subCC C
+  tys.flatMap fun C =>
+    let here := if helper || machRow ms C then C.effNames.filter cur.contains else []
+    let comp := match C with
+      | .amp D E => ((stripAllC D).effNames ++ (stripAllC E).effNames).filter cur.contains
+      | .nu D => (stripAllC D).effNames.filter cur.contains
+      | _ => []
+    here ++ comp
+
+/-- A `handle` node of `n` at the outer row `S` excludes `n`  `[spec §71]`: its clause's work runs
+at `S`, and the first cut builds it as no machine and with no evidence of `S`. -/
+def evExcludedNode (cur : List UInt32) (ms : MachSet) (n : UInt32) (S : Row) : Bool :=
+  let outer := CTy.effOf S .unit
+  cur.contains n && (machRow ms outer || outer.effNames.any cur.contains)
+
+/-- The judgments of the nodes of a typed term, within the depth `fuel`, each with whether the node
+is a constant whose expansion is a generated helper calling a closure argument (`evExcludedAt`). -/
+def jdgsOf : Nat → TExpr → List (Jdg × Bool)
+  | 0, _ => []
+  | f + 1, t =>
+    let helper := match t with
+      | .arrNew .. | .arrFree .. | .countFold .. | .countTry .. | .foldImm .. | .foldOwn ..
+      | .foldReuse .. | .foldOwnG .. | .unfoldN .. => true
+      | _ => false
+    (t.jdg, helper) :: t.children.flatMap fun (_, c) => jdgsOf f c
+
+/-- **The program's evidence names**  `[spec §71]`: the names with an `env` operation
+(`directFacts`) whose evidence the first cut builds, chosen before conversion so that it runs
+once. A name is excluded, from the checked types, rows and nodes, when its evidence would reach
+- a machine: a computation type of the term at a row holding the name and a machine operation
+  (`evExcludedAt`), or a `handle` node of the name whose outer row holds one (`evExcludedNode`:
+  its clause's work would be a machine);
+- a `&` or `ν` component at a row holding the name (`evExcludedAt`);
+- a generated helper other than `bounded_fix`'s loop (`evExcludedAt`);
+- a work whose outer row holds an evidence name (`evExcludedNode`);
+- a captured value whose type has no LIR type.
+Excluding a name makes its `env` operations machine operations, which may exclude another: the
+exclusions are taken to a fixed point, from all `env` names down. A call site with no evidence in
+scope is not a separate exclusion: a code at a row holding a name runs, by the row's typing,
+only where that row is in effect, and the places the conversion has none in scope (a machine, a
+drive, a `&`'s component, a helper, a work) are the exclusions above; the conversion meeting one
+is an internal error (`evInternal`). -/
+def evNames (c : Frontend.Check.Checked) (kinds : Std.HashMap UInt32 (List DirectKind))
+    (envs : Std.HashMap UInt32 (List (Nat × VTy))) : List UInt32 := Id.run do
+  let all := envs.toList.map (·.1)
+  if all.isEmpty then return []
+  let nodes := hnodes Frontend.Check.copiesFuel c.t
+  let jdgs := jdgsOf Frontend.Check.copiesFuel c.t
+  let mut cur := all
+  for _ in [0:all.length + 1] do
+    let ms := machineOps c (directOf kinds (all.filter (!cur.contains ·)))
+    let mut bad : List UInt32 := jdgs.flatMap fun (j, h) => evExcludedAt cur ms j h
+    for g in nodes do
+      if evExcludedNode cur ms g.n g.S then bad := g.n :: bad
+    for (n, sl) in envs.toList do
+      let tys : Except String (List LTy) := sl.mapM fun (p : Nat × VTy) => ofV ms {} p.2
+      if cur.contains n && tys.toOption.isNone then bad := n :: bad
+    let next := cur.filter (!bad.contains ·)
+    if next.length == cur.length then break
+    cur := next
+  return cur
 
 /-- **The width classes** (SPEC §57): for each type the compiled term `c` allocates a cell at, its
 class (`Checked.classAt`, `Checked.classAt_alloc`), and for the contents of each capability's cell
@@ -383,7 +484,7 @@ layouts of the converted program decide the calls in tail position that close a 
 (`tailPass`) and the machines whose state is a cell (`cellPass`). A machine whose state is a cell
 and whose body takes its continuation is converted again with the level's cell passed on to its
 next point (`threadedOf`, SPEC §50): the conversion's second run, at those machines. -/
-def lirAt (k : Backend.CheckedProg) (census : Bool) (dropped : List UInt32) :
+def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) :
     Except String (Prog × CState) := do
   -- A program with capabilities is compiled as `run_io` (SPEC §11), the term `IORun.every_run`
   -- is about.
@@ -391,17 +492,18 @@ def lirAt (k : Backend.CheckedProg) (census : Bool) (dropped : List UInt32) :
     | none => pure (k.main, [], none, false)
     | some (r, xs) => pure (r.c, ← extsOf xs, some [], r.loops)
   let (kinds, envs) := directFacts c
-  let direct := directOf kinds dropped
-  let ms := machineOps c direct
-  -- The program's evidence (SPEC §47, *Evidence*): each `env` name not dropped, its captured
+  -- The program's evidence [spec §71]: the names `evNames` keeps, each with its captured
   -- slots and their LIR types. A captured type holds no row naming such a name (`directFacts`),
   -- so it is read without evidence.
-  let envL := envs.toList.filter fun (n, _) => !dropped.contains n
+  let keep := evNames c kinds envs
+  let direct := directOf kinds ((envs.toList.map (·.1)).filter (!keep.contains ·))
+  let ms := machineOps c direct
+  let envL := envs.toList.filter fun (n, _) => keep.contains n
   let mut fd : EvSet := {}
   for (n, sl) in envL do
     match sl.mapM (fun (_, A) => ofV ms {} A) with
     | .ok ts => fd := fd.insert n ts
-    | .error e => throw (evRefuse n s!"a captured value's type: {e}")
+    | .error e => throw (evInternal n s!"a captured value's type: {e}")
   let fdSlots : Std.HashMap UInt32 (List Nat) :=
     envL.foldl (fun m (n, sl) => m.insert n (sl.map (·.1))) {}
   let classes ← classesOf c ms fd
@@ -439,30 +541,6 @@ def lirAt (k : Backend.CheckedProg) (census : Bool) (dropped : List UInt32) :
   if th.isEmpty && sk.isEmpty then return (p, st)
   let (p, st, _, _) ← run th sk
   return (p, st)
-
-/-- The names whose clause captures values (`DirectKind.env`), in the order the program's nodes
-first name them. -/
-def envNames (k : Backend.CheckedProg) : List UInt32 :=
-  let c := match k.runIO with
-    | .ok (some (r, _)) => r.c
-    | _ => k.main
-  (directFacts c).2.toList.map (·.1)
-
-/-- The LIR of a checked program (`lirAt`), each name the first cut refuses evidence for
-(`evRefused?`, SPEC §47 *Evidence*) converted again without it: its `env` operations then machine
-operations, as without evidence. Which names are dropped is the conversion's choice of a machine,
-not a fact about the program. -/
-def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
-  let envs := envNames k
-  let mut dropped : List UInt32 := []
-  for _ in [0:envs.length + 1] do
-    match lirAt k census dropped with
-    | .ok r => return r
-    | .error e => match evRefused? e with
-      | some n =>
-        if envs.contains n && !dropped.contains n then dropped := dropped ++ [n] else throw e
-      | none => throw e
-  lirAt k census dropped
 
 /-- The LIR of a checked program (`lirOf₀`), with its frame slots (`slotsOf`). -/
 def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
@@ -771,5 +849,61 @@ def trustedReport (k : Backend.CheckedProg) : List String :=
         s!"with no stack overflow: {ws.length} function{if ws.length == 1 then "" else "s"}"] ++
         ws.map ("  " ++ ·)
     hand ++ encl ++ wr ++ nativeAssumptions
+
+namespace EvNamesTests
+
+/-! ### `evNames`'s tests  `[spec §71]`
+
+The names whose evidence the first cut builds, decided before conversion: a program whose `tail`
+clause captures a persistent value keeps its name; each exclusion, on the types and rows it reads. -/
+
+/-- `F_Σ 1` at the operations `ops` (name, index, machine), each `1 ↠ 1`. -/
+def rowT (ops : List (UInt32 × UInt32)) : CTy :=
+  CTy.effOf (ops.map fun (n, i) => { n, i, q := .lin, A := .unit, B := .unit }) .unit
+
+/-- The machine set holding `(2, 0)`. -/
+def ms2 : MachSet := ({} : MachSet).insert (2, 0)
+
+-- The name 5 at a row with no machine operation: kept.
+#guard evExcludedAt [5] ms2 (.comp (rowT [(5, 0)])) false == []
+#guard evExcludedAt [5] ms2 (.val (.thunk (.arr .unit (rowT [(5, 0), (3, 0)])))) false == []
+-- A machine: the row holds `(2, 0)`, a machine operation, beside 5.
+#guard evExcludedAt [5] ms2 (.comp (rowT [(5, 0), (2, 0)])) false == [5]
+#guard evExcludedAt [5] ms2 (.val (.thunk (.arr .unit (rowT [(2, 0), (5, 0)])))) false == [5]
+-- A `&` component at a row holding 5; a `&` of functions holds none at its top.
+#guard evExcludedAt [5] {} (.val (.thunk (.amp (rowT [(5, 0)]) (.ret .unit)))) false == [5]
+#guard evExcludedAt [5] {} (.val (.thunk (.amp (.arr .unit (rowT [(5, 0)])) .top))) false == []
+-- A `ν`'s observation at a row holding 5.
+#guard evExcludedAt [5] {} (.val (.thunk (.nu (rowT [(5, 0)])))) false == [5]
+-- A constant whose generated helper calls a closure at a row holding 5.
+#guard evExcludedAt [5] {} (.val (.thunk (.arr (.thunk (.arr .unit (rowT [(5, 0)]))) (.ret .unit)))) true == [5]
+#guard evExcludedAt [5] {} (.val (.thunk (.arr (.thunk (.arr .unit (rowT [(5, 0)]))) (.ret .unit)))) false == []
+-- A work whose outer row holds an evidence name, or a machine operation; and one that holds neither.
+#guard evExcludedNode [5, 6] {} 5 [{ n := 6, i := 0, q := .lin, A := .unit, B := .unit }]
+#guard evExcludedNode [5] ms2 5 [{ n := 2, i := 0, q := .lin, A := .unit, B := .unit }]
+#guard !evExcludedNode [5] ms2 5 [{ n := 3, i := 0, q := .lin, A := .unit, B := .unit }]
+
+/-- The evidence names of a program (`evNames` on its checked `main`), and its `env` names. -/
+def evNamesOf (src : String) : Option (List UInt32 × List UInt32) := do
+  let p ← (Frontend.parseProgram src (lib := Frontend.Sugar.libSrc)).toOption
+  let r ← (Frontend.Check.checkProgram p).toOption
+  let c ← r.main
+  let (kinds, envs) := directFacts c
+  pure (evNames c kinds envs, envs.toList.map (·.1))
+
+/-- `yld`'s clause reads `c`, a `!` parameter of its handler: an `env` name, kept. -/
+def directSrc : String := "effect Y { ctl yld() }
+handler pass[A](c: !(1 => i32)): Y, A -> A = { return(a) = a; yld(k) = { let _ = c(()); k(()) } }
+main -> 1 =
+  let c: !(1 => i32) = !{ u -> 7 };
+  with pass[1](c) { yld() }
+"
+
+#guard match evNamesOf directSrc with
+  | some (keep, envs) => keep.length == 1 && keep == envs
+  | none => false
+
+
+end EvNamesTests
 
 end Backend2

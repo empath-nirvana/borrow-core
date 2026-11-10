@@ -74,7 +74,7 @@ inductive LCTy where
   | top
   /-- `νX. C`, binding the type variable `0` (standing for `U (νX. C)`) in `C`'s value types. -/
   | nu (k : LCTy)
-  /-- **An evidence parameter** (SPEC §47, *Evidence*): a closure that takes, after its argument,
+  /-- **An evidence parameter** [spec §71]: a closure that takes, after its argument,
   the evidence `e` of the static name `n`, then is `k`. -/
   | ev (n : UInt32) (e : LTy) (k : LCTy)
   deriving Inhabited, DecidableEq, Hashable, Repr
@@ -266,7 +266,7 @@ def outcomeTy (r : LTy) (aborts : List ((UInt32 × UInt32) × LTy))
       | some p => .sum (p.lift 0) s
     .mu (.sum (r.lift 0) x)
 
-/-- **The program's evidence** (SPEC §47, *Evidence*): each static name whose `tail` clause is
+/-- **The program's evidence** [spec §71]: each static name whose `tail` clause is
 called directly with the values it captures (`Backend2/Driver.lean`, `DirectKind.env`), with the
 LIR types of its evidence parameters, one per captured slot, in the slots' order. Empty, no type
 changes. -/
@@ -291,15 +291,11 @@ def LCTy.stripEv : LCTy → List (UInt32 × LTy) × LCTy
   | .ev n e k => let (es, k') := k.stripEv; ((n, e) :: es, k')
   | k => ([], k)
 
-/-- The refusal of an evidence name the first cut does not build (SPEC §47, *Evidence*): the
-driver converts again without `n` in the program's evidence (`Backend2/Driver.lean`). -/
-def evRefuse (n : UInt32) (why : String) : String := s!"EVREFUSE {n}: {why}"
-
-/-- The name an evidence refusal names (`evRefuse`). -/
-def evRefused? (e : String) : Option UInt32 :=
-  match (e.splitOn "EVREFUSE ").drop 1 with
-  | r :: _ => ((r.splitOn ":").headD "").toNat?.map (·.toUInt32)
-  | [] => none
+/-- **Evidence where the first cut builds none**  `[spec §71]`: an internal error. The program's
+evidence is chosen before conversion (`Backend2/Driver.lean`, `evNames`), which excludes every
+name whose evidence would reach such a place; the conversion never meets one. -/
+def evInternal (n : UInt32) (why : String) : String :=
+  s!"LIR: internal: the evidence of {n} at {why}, which `evNames` excludes"
 
 mutual
 /-- A value type of the LIR: lifetimes, `[@a]` and `∀` erased, `!` kept; `ms` the program's
@@ -336,7 +332,7 @@ def ofU (ms : MachSet) (fd : EvSet) (under : Bool) : CTy → Except String LTy
 
 /-- The LIR type of a computation type. A `∀` is its body (SPEC §44). At a row holding names of
 the program's evidence `fd`, the evidence parameters come first (`evLayers`, SPEC §47
-*Evidence*): `F_Σ R` is `Ev_Σ ⊸ ⟦F_Σ R⟧`. -/
+§71): `F_Σ R` is `Ev_Σ ⊸ ⟦F_Σ R⟧`. -/
 def ofC (ms : MachSet) (fd : EvSet) : CTy → Except String LCTy
   | .ret A => return .ret (← ofV ms fd A)
   | .arr A C => return .arr (← ofV ms fd A) (← ofC ms fd C)
@@ -344,14 +340,14 @@ def ofC (ms : MachSet) (fd : EvSet) : CTy → Except String LCTy
     let c ← ofC ms fd C
     let d ← ofC ms fd D
     if let (n, _) :: _ := c.stripEv.1 ++ d.stripEv.1 then
-      throw (evRefuse n "a `&` component at a row with evidence")
+      throw (evInternal n "a `&` component")
     return .amp c d
   | .top => pure .top
   | .all _ _ C => ofC ms fd C
   | .nu C => do
     let c ← ofC ms fd C
     if let (n, _) :: _ := c.stripEv.1 then
-      throw (evRefuse n "codata observed at a row with evidence")
+      throw (evInternal n "a `ν`'s observation")
     return .nu c
   | C@(.eff n i q A B fin _ C') => do
     -- `F_Σ R`: `R`, `R ⊕ P` with the payload of `Σ`'s abortive operations (SPEC §47), or the
@@ -362,7 +358,7 @@ def ofC (ms : MachSet) (fd : EvSet) : CTy → Except String LCTy
     let es := evLayers fd C.effNames
     let mach := ms.contains (n, i) && !abortB q B
     if let (m, _) :: _ := es then
-      if mach || !qs.isEmpty then throw (evRefuse m "a machine at a row with evidence")
+      if mach || !qs.isEmpty then throw (evInternal m "a machine's row")
     if abortB q B then return evWrap es (.ret (outcomeTy r (((n, i), ← ofV ms fd A) :: ps) qs))
     else if mach then
       return evWrap es (.ret (outcomeTy r ps (((n, i), ← ofV ms fd A, ← ofV ms fd B, ← ofFin ms fd fin) :: qs)))

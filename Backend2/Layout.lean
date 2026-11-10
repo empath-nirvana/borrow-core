@@ -44,7 +44,7 @@ inductive NK where
   /-- A family of leaves: the leaf's node (a pointer's). -/
   | fam (l : Nat)
   /-- A closure class: the codes' kind, their argument, their answers (one, or a `&`'s two), and
-  their evidence parameters (`LCTy.ev`, SPEC §47 *Evidence*). -/
+  their evidence parameters (`LCTy.ev`, SPEC §71). -/
   | clos (k : CodeKind) (param : Option Nat) (res : List Nat) (ev : List Nat)
   deriving Inhabited, BEq, Repr
 
@@ -149,7 +149,7 @@ def buildC (fuel : Nat) (env : List Nat) (k : LCTy) : GM Nat := do
     newNode (.clos .lam (some x) [r] (← es.mapM fun (_, e) => build f env e)) (.thunk k)
   | .amp c d => do newNode (.clos .amp none [← repNode f env c, ← repNode f env d] []) (.thunk k)
   | .ev n e c => do
-    -- A closure of `F_Σ A` taking its evidence (SPEC §47, *Evidence*): a `unit` code with
+    -- A closure of `F_Σ A` taking its evidence [spec §71]: a `unit` code with
     -- evidence parameters.
     let (es, c) := (LCTy.ev n e c).stripEv
     let .ret a := c | throw "layout: evidence before a closure that is not `F A`"

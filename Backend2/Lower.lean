@@ -845,7 +845,7 @@ def lowerTm (fuel : Nat) (t : Tm) (n : Nat) (d : Dest) : LM (List Stmt) := do
     let (pre, fn, args) ← callTarget gn j (← vals g) [] (some g)
     lowerCall pre fn args (← wordsN (res.getD j n)) d
   | .appE g a j ev => do
-    -- The evidence's words follow the argument's (SPEC §47, *Evidence*); they are passed, not
+    -- The evidence's words follow the argument's [spec §71]; they are passed, not
     -- moved: the caller keeps them.
     let gn ← nodeV g
     let (_, _, res) ← classOf gn
@@ -1102,7 +1102,7 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
     let pw₀ ← match k, param with
       | .lam, some p => pure (L.w p)
       | _, _ => pure 0
-    -- The evidence parameters' words follow the argument's (SPEC §47, *Evidence*).
+    -- The evidence parameters' words follow the argument's [spec §71].
     let pw := pw₀ + (evn.map L.w).foldl (· + ·) 0
     let cw := L.w cls
     let rw := L.w rn

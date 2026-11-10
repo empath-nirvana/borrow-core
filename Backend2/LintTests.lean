@@ -311,7 +311,7 @@ def f0Facts (p : Prog) : Except String Nat := do
 #guard f0Facts (borrowProg []) == .ok 0
 #guard f0Facts (borrowProg [false]) == .ok 0
 
-/-! ### `evConfined` (SPEC §47, *Evidence*)
+/-! ### `evConfined` [spec §71]
 
 `f0 (x0 : i32; ev x1 : !(1 ⊸ F 1))`: an evidence parameter is read by a copy, or passed on as
 evidence, and stays the caller's; put anywhere else (a pair, a closure's environment, a consume,
