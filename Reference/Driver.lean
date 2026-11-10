@@ -13,17 +13,33 @@ capabilities (SPEC §11) runs as `run_io` with the model of each extern (`Pipeli
 
 namespace Backend
 
-/-- The source stage's output on a source file, checked (`checkedOf file src`), with `input` as
-standard input and `args` as the arguments' stream (each argument followed by `0`, SPEC §34). -/
-def interpSourceStage (file : String) (k : Except String CheckedProg) (input : List UInt8)
-    (args : List UInt8 := []) : Except String Output := do
-  let k ← k
+/-- The run the source stage makes of a checked program: the closed term the interpreter runs,
+and how its value is read. -/
+inductive SourceRun where
+  /-- `main`'s erasure, run to a value. -/
+  | plain (e : BoCa.Expr)
+  /-- `run_io[γ] inp` (SPEC §11): a loop driven to its end when `loops`; a division's error ends
+  the run with status `1` when `exits` (SPEC §39). -/
+  | io (e : BoCa.Expr) (loops exits : Bool)
+
+/-- The source stage's run of `k` with `input` as standard input and `args` as the arguments'
+stream (each argument followed by `0`, SPEC §34). -/
+def sourceRunOf (file : String) (k : CheckedProg) (input : List UInt8)
+    (args : List UInt8 := []) : Except String SourceRun := do
   match k.io with
-  | none => interpSource runFuel k.main.e
+  | none => pure (.plain k.main.e)
   | some m =>
     let r ← ioRunOf file k m args
-    if r.loops then interpIOLoop runFuel (r.expr input) r.c.exitsOnDivError
-    else interpIO runFuel (r.expr input) r.c.exitsOnDivError
+    pure (.io (r.expr input) r.loops r.c.exitsOnDivError)
+
+/-- The source stage's output on a source file, checked (`checkedOf file src`): its run
+(`sourceRunOf`) in `Support`'s interpreter. -/
+def interpSourceStage (file : String) (k : Except String CheckedProg) (input : List UInt8)
+    (args : List UInt8 := []) : Except String Output := do
+  match ← sourceRunOf file (← k) input args with
+  | .plain e => interpSource runFuel e
+  | .io e loops exits =>
+    if loops then interpIOLoop runFuel e exits else interpIO runFuel e exits
 
 /-! ### The falsifier
 

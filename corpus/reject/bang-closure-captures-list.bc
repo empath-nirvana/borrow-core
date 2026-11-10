@@ -1,0 +1,13 @@
+-- A `!` closure may capture only flat values (SPEC §10, #886): a list of `i32`s is persistent, but
+-- recursive, so a copy of a `!` closure over it would copy every node unseen. `head` captures `xs`
+-- in a `!{…}`, and promotion refuses it; an ordinary closure captures it
+-- (`corpus/closure-captures-list.bc`).
+include list
+
+fn apply3(g: !(i32 => i32), x: i32) -> i32 = g(x) + g(x) + g(x)
+
+fn head(xs: List[i32]) -> i32 =
+  apply3(!{ e -> match unroll xs { inl u -> e | inr (x, rest) -> e + x } }, 0)
+
+main -> i32 = head(cons(4, cons(2, nil())))
+-- expect: 10:10: `!thunk` promotes only over flat types (scalars and tuples of them), but `xs`, of type `mu X. 1 + i32 * X`, which is not flat, is used inside: capture it in an ordinary closure

@@ -335,25 +335,30 @@ def firstBad (p : CVTy → Bool) : List CVTy → List Bool → Option Nat
 theorem persistent_of {L : List Bool} (h : ∀ s ∈ mkCtx T L, s.live = true → isBangB s.ty = true) :
     Ctx.Banged (mkCtx T L) := fun s hs hl => isBangB_sound (h s hs hl)
 
-/-- `!thunk M`: every live slot of the context is at a `!` type. -/
+/-- The context is flat when every live slot's type is (`VTy.flat`).  `[spec §10]` -/
+theorem flatLive_of {L : List Bool}
+    (h : ∀ s ∈ mkCtx T L, s.live = true → BoCa.Fig16.LogRel.Core.VTy.flat s.ty = true) :
+    BoCa.Fig16.LogRel.Core.Ctx.FlatLive (mkCtx T L) := h
+
+/-- `!thunk M`: every live slot of the context is at a flat type.  `[spec §10]` -/
 def rBangThunkF {A : CVTy} (r : Res Δ (.unit :: T) (.comp (.ret A))) :
     Except (Option Nat) (Res Δ T (.val (.bang (.thunk (.ret A))))) := do
   let some F := r.F.popDead | throw none
-  if hs : usedSat isBangB T F.u = true then
+  if hs : usedSat BoCa.Fig16.LogRel.Core.VTy.flat T F.u = true then
     pure ⟨.bangThunkF i (.val (.bang (.thunk (.ret A)))) A r.t, r.sigs, r.pins,
-      (F.restrict isBangB hs).map fun _ ⟨h, hp⟩ => TTied.bangThunkF i (persistent_of hp) h⟩
-  else throw (firstBad isBangB T F.u)
+      (F.restrict BoCa.Fig16.LogRel.Core.VTy.flat hs).map fun _ ⟨h, hp⟩ => TTied.bangThunkF i (flatLive_of hp) h⟩
+  else throw (firstBad BoCa.Fig16.LogRel.Core.VTy.flat T F.u)
 
-/-- `!thunkv N`. -/
+/-- `!thunkv N`: every live slot of the context is at a flat type.  `[spec §10]` -/
 def rBangThunkV {C : CCTy} (hC : C.isRet = false) (r : Res Δ T (.comp C)) :
     Except (Option Nat) (Res Δ T (.val (.bang (.thunk C)))) :=
   if hl : r.t.isLam = true then
-    if hs : usedSat isBangB T r.F.u = true then
+    if hs : usedSat BoCa.Fig16.LogRel.Core.VTy.flat T r.F.u = true then
       pure ⟨.bangThunkV i (.val (.bang (.thunk C))) C r.t, r.sigs, r.pins,
-        (r.F.restrict isBangB hs).map fun _ ⟨h, hp⟩ =>
+        (r.F.restrict BoCa.Fig16.LogRel.Core.VTy.flat hs).map fun _ ⟨h, hp⟩ =>
           have ⟨_, q⟩ := TExpr.isLam_sound _ hl
-          TTied.bangThunkV i (persistent_of hp) hC h q⟩
-    else throw (firstBad isBangB T r.F.u)
+          TTied.bangThunkV i (flatLive_of hp) hC h q⟩
+    else throw (firstBad BoCa.Fig16.LogRel.Core.VTy.flat T r.F.u)
   else throw none
 
 def rBangE {A : CVTy} (r : Res Δ T (.val (.bang A))) : Res Δ T (.val A) :=

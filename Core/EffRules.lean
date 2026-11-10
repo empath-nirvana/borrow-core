@@ -1147,7 +1147,7 @@ theorem gDenC_noOwn {ls : List SRec} {δ : LSub} {Γ : Ctx VTy} {γ : List Val} 
 
 theorem gDenC_persistent {ls : List SRec} {δ : LSub} {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}
     (hp : Ctx.Banged Γ) (h : gDenC ls δ Γ γ ρ) : ρ = PMap.empty :=
-  gSepC_persistent hp (gDenC_iff.mp h).2
+  gSepC_persistent hp.flatLive (gDenC_iff.mp h).2
 
 /-! ### Compatibility of `[let]` and `[then]` -/
 

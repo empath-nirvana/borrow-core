@@ -58,17 +58,21 @@ target, the kernel programs, the static tables, the generated and renamed progra
 Other targets:
 
 ```sh
-make gate-full   # every check, re-checking every golden against the reference interpreter
+make gate-full   # every check
 make gate-fast   # while iterating: only the sanity gate's steps your changes since origin/main reach
-make goldens     # rewrite the corpus goldens (.out) from the reference interpreter
+make goldens     # rewrite the corpus goldens (.out) and their keys from the reference interpreter
+make keys        # record the keys of the goldens the reference interpreter verifies
+make verify-goldens  # re-check every golden against the reference interpreter
 scripts/new-worktree.sh <branch>  # a worktree from origin/main, reusing this checkout's build
 ```
 
 Every corpus program's `.out` and every book block's `-- answer:` is a golden: what the reference
 interpreter (`bcc interp`) prints. The gate checks every compiled stage against the goldens. It
 runs the interpreter itself, which is slow on the largest programs, only on programs and blocks
-that are new or changed; `make gate-full` runs it on all of them, and is required when `Paper/`,
-`Support/` or `Backend/` changed.
+whose recorded key (`<name>.key`, `book/keys/`) is missing or no longer the current one: the key
+covers the elaborated term, the input and the interpreter's source (`scripts/source-stage.sh`).
+Record the keys of goldens it verified with `make keys`; `make verify-goldens` reruns it on
+every program and block.
 
 A corpus program's `main` should have a **falsifier observable**: an answer that plausible wrong
 implementations cannot produce. `a - b` with `a ≠ b` catches swapped operands, and two stores read
