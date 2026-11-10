@@ -1,0 +1,17 @@
+-- SPEC §24 (entry 23): the polymorphic let, `[handle]` at a value form, `[then]` at option A
+BoCa.Fig16.LogRel.Core.psub_fill
+BoCa.Fig16.LogRel.Core.letPoly_compatC
+BoCa.Fig16.LogRel.Core.fill_shift
+BoCa.Fig16.LogRel.Core.CDerives.insert_dead
+BoCa.Fig16.LogRel.Core.CDerivesAt.insert_dead
+BoCa.Fig16.LogRel.Core.subst_unfill
+BoCa.Fig16.LogRel.Core.CDerives.letPoly_of_fill
+BoCa.Fig16.LogRel.Core.CDerives.letPoly_copy
+BoCa.Fig16.LogRel.Core.CDerivesAt.letPoly_of_fill
+BoCa.Fig16.LogRel.Core.CDerivesAt.letPoly_copy
+Frontend.Check.checkProgram_letPoly
+BoCa.Fig16.LogRel.Core.wpTS_val_post
+BoCa.Fig16.LogRel.Core.ewp_handle_vals
+BoCa.Fig16.LogRel.Core.handleV_compatC
+BoCa.Fig16.LogRel.Core.then_compatC
+BoCa.Fig16.LogRel.Core.CDerives.effHandle

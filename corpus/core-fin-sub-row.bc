@@ -1,0 +1,24 @@
+-- SPEC §27 in the core text: the finaliser's row `Σ_D` is what its derivation performs, read under
+-- each `[sub]` from the subterm (`opKeysOf`), not from the sub's source row. The finaliser
+-- `u <- abort[1.0] (); absurd u` binds its raise, so its head is lifted to the site's row
+-- `[2.0, 1.0]` by a `[sub]` whose source row is that whole row. Read from the source row, `Σ_D`
+-- would hold `2.0`, and the cancel row of `2.0`, `[1.0]`, cannot hold `2.0` itself (it would need
+-- `⊤`): the program was refused. Read from the subterm, `Σ_D` is `[1.0]`. Otherwise `e7b`
+-- (`corpus/core-fin-e7b.bc`): `timeout` (handler 2) cancels the body, the finaliser raises `1.0`
+-- during the cancel, and the error is kept and re-raised at the canceller, where handler 1 catches
+-- it.
+--
+-- Answer: inr (), and `live 0`. A wrong implementation that skips the finaliser on a cancel, or
+-- drops the error it raises, answers `inl (inr ())`.
+
+main : F ((1 + 1) + 1) =
+  handle_with[1](
+      ((!thunkv fun (v : 1 + 1) -> return (inl v)) : !U (1 + 1 -o F ((1 + 1) + 1))),
+      (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F ((1 + 1) + 1)) * 1)) (
+    handle_with[2](
+        ((!thunkv fun (v : 1) -> return (inl v)) : !U (1 -o F[1.0 cancel 1 ~> 0] (1 + 1))),
+        (((!thunkv fun (p : 1 * U ((1 -o F[1.0 cancel 1 ~> 0] (1 + 1)) & F[1.0 cancel 1 ~> 0, 1.0 cancel 1 ~> 0] 1)) ->
+          let (u, k) = p; let () = u; c <- (force k).2; let () = c; return (inr ())), ())
+          : !U (1 * U ((1 -o F[1.0 cancel 1 ~> 0] (1 + 1)) & F[1.0 cancel 1 ~> 0, 1.0 cancel 1 ~> 0] 1) -o F[1.0 cancel 1 ~> 0] (1 + 1)) * 1)) (
+      x <- perform[2.0] () unwind (u <- abort[1.0] (); absurd u);
+      return x))

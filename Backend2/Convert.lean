@@ -4059,13 +4059,18 @@ def tailPass (s : CState) (loop : Nat × Var × OutInfo × Nat → Bool) : Excep
 
 /-- **State cells** (SPEC §49): each machine operation whose suspended computation's closure class
 holds itself (`recursive`, the layouts' classes that keep their environment on the heap, §35)
-has its codes made again with its state in a cell, written in place. -/
+has its codes made again with its state in a cell, written in place: the machines `cellSites`
+lists, each with those operations. With no site the state is `s` unchanged. -/
+def cellSites (s : CState) (recursive : Nat → Bool) : List (Mach × List Key) :=
+  s.done.toList.filterMap fun (m, kcs) =>
+    let ops := kcs.filterMap fun (op, kc) => if recursive kc then some op else none
+    if ops.isEmpty || m.cell.isSome || m.stack.isSome then none else some (m, ops)
+
+/-- **State cells** (SPEC §49): `cellSites`' machines made again (`genMach`). -/
 def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CState) := do
   let act : CM Unit := do
-    for (m, kcs) in s.done do
-      let ops := kcs.filterMap fun (op, kc) => if recursive kc then some op else none
-      unless ops.isEmpty || m.cell.isSome || m.stack.isSome do
-        let _ ← genMach m ops
+    for (m, ops) in cellSites s recursive do
+      let _ ← genMach m ops
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
             data := s'.data, statics := s'.statics, lits := s'.lits, consumeFns := s'.consumeFns }, s')

@@ -63,7 +63,8 @@ def CTy.subst (σ : TySubst) : CTy → CTy
 
 def Row.subst (σ : TySubst) : Row → Row
   | .nil => .nil
-  | .cons n i q A B r => .cons n i q (A.subst σ) (B.subst σ) (r.subst σ)
+  | .cons n i q A B f r => .cons n i q (A.subst σ) (B.subst σ) (f.subst σ) (r.subst σ)
+  | .top => .top
 
 def Shape.subst (σ : TySubst) : Shape → Shape
   | .leaf sp A => .leaf sp (A.subst σ)

@@ -1,0 +1,27 @@
+-- SPEC §27 in the core text, the twin of the kernel program `stored-k-fin` (`bcc kernel interp
+-- stored-k-fin`, E9c): `to_result_1 (stash (gen () then x. x unwind raise 1) to g. g (inl ()))`.
+-- Handler 3 stores `κ` in the closure it answers; the closure cancels it after handler 3 has
+-- returned. The region's finaliser raises `1.0` during that cancel; the cancel row of `3.0` holds
+-- `1.0`, so the error is re-raised at the canceller, inside `g`, and caught by handler 1.
+--
+-- Answer: inr (), and `live 0`. A wrong implementation that skips the stored `κ`'s finaliser on
+-- the cancel, or drops its error, answers `inl (inr ())`.
+
+main : F ((1 + 1) + 1) =
+  handle_with[1](
+      ((!thunkv fun (v : 1 + 1) -> return (inl v)) : !U (1 + 1 -o F ((1 + 1) + 1))),
+      (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F ((1 + 1) + 1)) * 1)) (
+    g <- handle_with[3](
+        ((!thunkv fun (v : 1) -> return (thunkv fun (c : 1 + 1) -> return (inl ())))
+          : !U (1 -o F[1.0 cancel 1 ~> 0] (U (1 + 1 -o F[1.0 cancel 1 ~> 0] (1 + 1))))),
+        (((!thunkv fun (p : (1 + 1) * U ((1 -o F[1.0 cancel 1 ~> 0] (U (1 + 1 -o F[1.0 cancel 1 ~> 0] (1 + 1)))) & F[1.0 cancel 1 ~> 0, 1.0 cancel 1 ~> 0] 1)) ->
+          let (x, k) = p;
+          return (thunkv fun (c : 1 + 1) -> case c {
+              inl a -> u <- (force k).2; let () = u; return x
+            | inr b -> w <- return (); g2 <- (force k).1 w; t : 1 + 1 <- return (inr ()); force g2 t })), ())
+          : !U ((1 + 1) * U ((1 -o F[1.0 cancel 1 ~> 0] (U (1 + 1 -o F[1.0 cancel 1 ~> 0] (1 + 1)))) & F[1.0 cancel 1 ~> 0, 1.0 cancel 1 ~> 0] 1)
+              -o F[1.0 cancel 1 ~> 0] (U (1 + 1 -o F[1.0 cancel 1 ~> 0] (1 + 1)))) * 1)) (
+      y <- (a <- perform[3.0] (inr ()); perform[3.0] (inl ())) unwind (abort[1.0] ());
+      return y);
+    f : 1 + 1 <- return (inl ());
+    force g f)

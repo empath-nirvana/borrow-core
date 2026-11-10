@@ -1,0 +1,20 @@
+-- SPEC §19's program 1 with a native `log`, the twin of the kernel program `fail-outside-native`
+-- (Backend/Kernel.lean, `nFailOutside`): `to_result` outside `with_log`. The `log` is resumed by
+-- `with_log`'s clause, and the `raise` after it passes `with_log` to reach `to_result`: it unwinds
+-- the clause's resume, so `with_log`'s answer, and its mark, are lost.
+--
+-- Answer: inr (): the error alone; `live 0`. A raise caught by `with_log`'s frame would answer
+-- `inl (...)` with a mark (`kernel-log-outside-native` is the other order).
+
+include fail
+
+effect Log { ctl log() }
+
+handler with_log[A]: Log, A -> A * bool = {
+  return(x) = (x, false);
+  log(k) = let (x, f) = k(()); let _ = f; (x, true)
+}
+
+fn body() -> 1 with Log, Fail[1] = log(); raise(())
+
+main -> (1 * bool) + 1 = with to_result[1, 1 * bool] { with with_log[1] { body() } }

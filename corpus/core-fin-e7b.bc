@@ -1,0 +1,21 @@
+-- SPEC §27 in the core text, the twin of the kernel program `e7b` (`bcc kernel interp e7b`, E7b):
+-- `timeout` (handler 2) cancels a body suspended at `2.0`, whose finaliser raises `1.0` to
+-- `to_result` (handler 1) outside the `timeout`. The finaliser performs, so the `[then]` is at its own
+-- row `[1.0]`, and the cancel row of `2.0` holds `1.0`: `κ`'s cancel branch is at
+-- `F[1.0 …, 1.0 …] 1` (`cancelTy`, the cancel row ahead of the handler's row). The error raised
+-- during the cancel is kept and re-raised at the canceller, where handler 1 catches it.
+--
+-- Answer: inr (), and `live 0`. A wrong implementation that skips the finaliser on a cancel, or
+-- drops the error it raises, answers `inl (inr ())` (the `timeout`'s own answer).
+
+main : F ((1 + 1) + 1) =
+  handle_with[1](
+      ((!thunkv fun (v : 1 + 1) -> return (inl v)) : !U (1 + 1 -o F ((1 + 1) + 1))),
+      (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F ((1 + 1) + 1)) * 1)) (
+    handle_with[2](
+        ((!thunkv fun (v : 1) -> return (inl v)) : !U (1 -o F[1.0 cancel 1 ~> 0] (1 + 1))),
+        (((!thunkv fun (p : 1 * U ((1 -o F[1.0 cancel 1 ~> 0] (1 + 1)) & F[1.0 cancel 1 ~> 0, 1.0 cancel 1 ~> 0] 1)) ->
+          let (u, k) = p; let () = u; c <- (force k).2; let () = c; return (inr ())), ())
+          : !U (1 * U ((1 -o F[1.0 cancel 1 ~> 0] (1 + 1)) & F[1.0 cancel 1 ~> 0, 1.0 cancel 1 ~> 0] 1) -o F[1.0 cancel 1 ~> 0] (1 + 1)) * 1)) (
+      x <- perform[2.0] () unwind (abort[1.0] ());
+      return x))

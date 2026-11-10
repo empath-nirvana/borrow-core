@@ -1,0 +1,9 @@
+-- SPEC §27 in the core text, checked, not run: `main` returns `()` and does not call `f`. `M`
+-- returns a thunk whose body performs `7.0` at the thunk's own row; `M` itself performs only `1.0`.
+-- `Σ_M` does not read a value's body (`needRowOf`), so `7.0` is not `M`'s.
+
+def f : !U (1 -o F[1.0 unr[4.0 unr 1 ~> 1] 1 ~> 1, 4.0 unr 1 ~> 1, 7.0 unr 1 ~> 1] (U (1 -o F[7.0 unr 1 ~> 1] 1))) =
+  !thunkv fun (u : 1) ->
+    x <- (y <- perform[1.0] u; return ((thunkv fun (z : 1) -> perform[7.0] z) : U (1 -o F[7.0 unr 1 ~> 1] 1))) unwind (perform[4.0] ()); return x
+
+main : F 1 = return ()

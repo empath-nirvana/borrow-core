@@ -2349,7 +2349,16 @@ def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
   let place := if unw.isSome then Val.var sp x.name else .lend sp x m
   match c.tyV (.var sp x.name) with
   | some (.ref _) => pure (.app sp (.app sp (.const sp C) place) cb)
-  | some (.mut ..) | some (.imm ..) =>
+  | some (.mut a _) =>
+    unless m == .mut do
+      throw ⟨x.span, s!"`{x.name}` is a `mut` borrow; lend it as `&mut {x.name}` (an `imm` " ++
+        "reborrow of it is not provided)"⟩
+    -- A `mut` borrow lent `&mut` is reborrowed for the call (`withbor3`, or its unwinding form),
+    -- and handed back after (SPEC §41, R3).  [spec §41]
+    let C₃ := Const.withbor3 (← (c.surfaceL sp a : Except Error Frontend.Life)) li As Bs
+    let C₃ := (unw.map (· C₃)).getD C₃
+    pure (.app sp (.app sp (.const sp C₃) place) cb)
+  | some (.imm ..) =>
     throw ⟨x.span, s!"`{x.name}` is a borrow; lend it by passing it (a reborrow is not provided)"⟩
   | _ =>
     -- A value: a cell scoped to the call.
@@ -3188,12 +3197,20 @@ def cbRowed (r : Option Frontend.Check.CRow) (c : TCx) : TCx :=
   | some S => { c with E := { c.E with row := some S } }
   | none => c
 
-/-- A core row as surface syntax. -/
-def surfRow (c : TCx) (sp : Span) : Frontend.Check.CRow → Except Error Frontend.Row
-  | [] => pure .nil
-  | o :: os => do
+/-- A core row as surface syntax, each entry with its cancel row, nested at most `fuel`
+deep.  `[spec §27]` -/
+def surfRowN (c : TCx) (sp : Span) : Nat → Frontend.Check.CRow → Except Error Frontend.Row
+  | _, [] => pure .nil
+  | 0, _ :: _ => throw ⟨sp, "cancel rows nested too deeply"⟩
+  | fuel + 1, o :: os => do
     let q : Qual := match o.q with | .lin => .lin | .cancel => .cancel | .unr => .unr
-    pure (.cons o.n.toNat o.i.toNat q (← c.surface sp o.A) (← c.surface sp o.B) (← surfRow c sp os))
+    if o.fin.isTop then throw ⟨sp, "a cancel row `⊤` has no surface spelling"⟩
+    pure (.cons o.n.toNat o.i.toNat q (← c.surface sp o.A) (← c.surface sp o.B)
+      (← surfRowN c sp fuel o.fin.rowOf) (← surfRowN c sp fuel os))
+
+/-- A core row as surface syntax. -/
+def surfRow (c : TCx) (sp : Span) (S : Frontend.Check.CRow) : Except Error Frontend.Row :=
+  surfRowN c sp 1024 S
 
 /-- A borrow block's constant in its unwinding form, at the row `r` (SPEC §19). -/
 def Const.unwinding (r : Frontend.Row) : Const → Option Const
@@ -3802,6 +3819,22 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       let rebuilt := if cd.rolls then .ascribe fsp (.roll fsp rebuilt) As else rebuilt
       let R : Val := if cd.rolls then .unroll fsp (.var rsp r) else .var rsp r
       surfV n c exp (.run sp (Data.letTuple fsp R vars (.ret fsp (.pair fsp rebuilt (.unit fsp))) (· ++ "r")))
+    | .app sp (.sugar dsp .deref) (.lend lsp x .mut) => do
+      -- `*&mut x`, `x` a `mut` borrow: the content copied through it by `withswap`, `x` rebound
+      -- by the lend. A variable lent for a control handler's body is read so (SPEC §41, R3).
+      -- [spec §41]
+      match (← refresh c).tyV (.var lsp x.name) with
+      | some (.mut a A) =>
+        unless Class.of A == .unrestricted do
+          throw ⟨lsp, s!"a value can't be moved out of `{x.name}` here: it is lent for the body " ++
+            s!"of a control handler, which may be abandoned, and its type `{ppT A}` is linear"⟩
+        let As ← (c.surface dsp A : Except Error VTy)
+        let r : Ident := ⟨s!"io_dr{dsp.start.line}_{dsp.start.col}", dsp⟩
+        pure (.app sp (.app sp (.const dsp (.withswap (← c.surfaceL dsp a) As As)) (.lend lsp x .mut))
+          (.thunkv sp (.lam sp r As (.ret sp (.pair sp (.var sp r.name) (.var sp r.name))))))
+      | some t => throw ⟨dsp, s!"`*&mut {x.name}` reads through a `mut` borrow, but `{x.name}` has " ++
+          s!"type `{ppT t}`"⟩
+      | none => throw ⟨dsp, s!"`*` reads a borrow, but the type of `{x.name}` is not known here"⟩
     | .app sp (.sugar dsp .deref) V => do
       let V' ← surfV n c none V
       -- `*e`: `withload` at the identity, reading a persistent content (its view is itself).
@@ -3854,6 +3887,41 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
             (.thunkv tsp (.lam lsp b As S''))))
           (.letPair sp ⟨"io_mm", sp⟩ ⟨"io_mr", sp⟩ (.var sp "io_mw")
             (.ret sp (.boxed sp (.var sp l) (.var sp "io_mr"))))
+    | .app sp (.app sp₂ (.sugar ksp (.borrow k l)) (.lend psp px pm)) cb@(.thunkv ..) => do
+      -- `borrow mut &mut x { … }` (`borrow imm &x { … }`): the place `x` lent to the block, the
+      -- borrow chosen by `x`'s type as `&mut x` at a call chooses it: a cell's, a `mut` borrow's
+      -- reborrow, or a cell scoped to the block for a value. The lend rebinds `x` (SPEC §41, R3).
+      -- [spec §41]
+      unless (k == .mut && pm == .mut) || (k == .imm && pm == .imm) do
+        throw ⟨psp, s!"a borrow block lends its place as its kind says: `borrow mut &mut {px.name}`, " ++
+          s!"`borrow imm &{px.name}`"⟩
+      let blk (P : Val) : Val := .app sp (.app sp₂ (.sugar ksp (.borrow k l)) P) cb
+      -- The block's place, `P'`, given back as the lend of `x`.
+      let rec relend (f : Val → Val) : Val → Val
+        | .app asp (.app asp₂ (.const csp C) P') cb' => .app asp (.app asp₂ (.const csp C) (f P')) cb'
+        | .mark msp mk V => .mark msp mk (relend f V)
+        | V => V
+      let lent : Val := .lend psp px pm
+      match c.tyV (.var psp px.name) with
+      | some (.ref _) => pure (relend (fun _ => lent) (← surfV n c none (blk (.var psp px.name))))
+      | some (.mut ..) =>
+        unless k == .mut do
+          throw ⟨psp, s!"`{px.name}` is a `mut` borrow: an `imm` reborrow of it is not provided"⟩
+        pure (relend (fun _ => lent) (← surfV n c none (blk (.var psp px.name))))
+      | some (.imm ..) => throw ⟨psp, s!"`{px.name}` is an `imm` borrow: pass it as it is"⟩
+      | some A => do
+        -- A value: a cell scoped to the block, `alloc`, the borrow, `free`.
+        let V' ← surfV n c none (blk (.app psp (.sugar psp (.call "alloc")) (.var psp px.name)))
+        let V' := relend (fun
+          | .app asp f _ => .app asp f lent
+          | P' => P') V'
+        let As ← (c.surface psp A : Except Error VTy)
+        let sfx := s!"{psp.start.line}_{psp.start.col}"
+        let sc : Ident := ⟨s!"io_bsc{sfx}", sp⟩
+        let sr : Ident := ⟨s!"io_bsr{sfx}", sp⟩
+        pure (.run sp (.letPair sp sc sr V'
+          (.ret sp (.pair sp (.app sp (.const sp (.free As)) (.var sp sc.name)) (.var sp sr.name)))))
+      | none => throw ⟨psp, s!"the type of `{px.name}` is not determined here: ascribe it"⟩
     | .app sp (.app sp₂ (.sugar ksp (.borrow k x)) P) (.thunkv tsp (.lam lsp b _ S)) => do
       -- The callback's row, when this block is an unwinding borrow; blocks inside are not.
       let cbr := (← get).cbRow

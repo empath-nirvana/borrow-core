@@ -1,0 +1,24 @@
+-- SPEC §27 in the core text, the twin of the kernel program `cancel-propagated` (`bcc kernel
+-- interp cancel-propagated`, Core's `progOutT`): `hnd 2o (hnd 1 {perform k => cancel k} (hnd 2i
+-- (perform 1 unwind raise 2)))`. The finaliser raises `2.0`, whose inner instance is dead at the
+-- cancel; the error is kept, re-raised at the canceller, and caught by the live outer handler 2. The
+-- inner handler 2's row holds the outer name only in the cancel row of `1.0`:
+-- `1.0 cancel[2.0 cancel 1 ~> 0] 1 ~> 1`.
+--
+-- Answer: inr (), and `live 0`. A wrong implementation that delivers the error to the dead inner
+-- instance, or drops it, answers `inl ()`.
+
+main : F (1 + 1) =
+  handle_with[2](
+      ((!thunkv fun (v : 1) -> return (inl v)) : !U (1 -o F (1 + 1))),
+      (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F (1 + 1)) * 1)) (
+    handle_with[1](
+        ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[2.0 cancel 1 ~> 0] 1)),
+        (((!thunkv fun (p : 1 * U ((1 -o F[2.0 cancel 1 ~> 0] 1) & F[2.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0] 1)) ->
+          let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+          : !U (1 * U ((1 -o F[2.0 cancel 1 ~> 0] 1) & F[2.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0] 1) -o F[2.0 cancel 1 ~> 0] 1) * 1)) (
+      handle_with[2](
+          ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[1.0 cancel[2.0 cancel 1 ~> 0] 1 ~> 1] 1)),
+          (((!thunkv fun (e : 1) -> return ()), ()) : !U (1 -o F[1.0 cancel[2.0 cancel 1 ~> 0] 1 ~> 1] 1) * 1)) (
+        x <- perform[1.0] () unwind (abort[2.0] ());
+        return x)))

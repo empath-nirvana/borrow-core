@@ -1038,4 +1038,204 @@ theorem Row.unwindB_sound {S : Row} {x : LifeVar} (h : Row.unwindB S x = true) :
   simp only [Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true'] at this
   exact ⟨this.1.1.1, this.1.1.2, not_vfree_of_vfreeB this.1.2, outlivesAllB_sound _ this.2⟩
 
+/-! ### `[then]` at a finaliser's own row  `[spec §27]` -/
+
+/-- `Row.find S o.n o.i` is `o'` with `o.Sig o'`, decided. -/
+def sigInB (S : Row) (o : OpSig) : Bool :=
+  match Row.find S o.n o.i with
+  | some o' => OpSig.sigB o o'
+  | none => false
+
+theorem sigInB_sound {S : Row} {o : OpSig} (h : sigInB S o = true) :
+    ∃ o', Row.find S o.n o.i = some o' ∧ o.Sig o' := by
+  simp only [sigInB] at h
+  split at h
+  · rename_i o' hf; exact ⟨o', hf, OpSig.sigB_sound h⟩
+  · cases h
+
+/-- `PendLe P G G'`'s second part, decided: every abortive operation of `P` is `G'`'s. -/
+def pendAbB (P : Row) (G' : CTy) : Bool := P.all fun o => !o.abort || sigInB G'.rowOf o
+
+/-- The layers of `G` each at what `G'` finds at its key, a capturable one's cancel row `pend P`
+below the one found (`PendLe`, decided the same way). By recursion on `G`'s layers. -/
+def pendLayersB (P : Row) : CTy → CTy → Bool
+  | .eff n i q A B f rc C, G' =>
+      (match Row.find G'.rowOf n i with
+       | some o' => OpSig.sigB ⟨n, i, q, A, B, f, rc⟩ o' &&
+           (!capB q B || o'.fin.isTop || (!f.isTop && pendLayersB P f o'.fin && pendAbB P o'.fin))
+       | none => false) && pendLayersB P C G'
+  | _, _ => true
+
+/-- `PendLe P G G'`, decided. -/
+def pendLeB (P : Row) (G G' : CTy) : Bool :=
+  G'.isTop || (!G.isTop && pendLayersB P G G' && pendAbB P G')
+
+theorem pendAbB_sound {P : Row} {G' : CTy} (h : pendAbB P G' = true) :
+    ∀ n i o, Row.find P n i = some o → o.abort = true →
+      ∃ o', Row.find G'.rowOf n i = some o' ∧ o.Sig o' := by
+  intro n i o hf ha
+  obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
+  have hx := List.all_eq_true.mp h o hm
+  simp only [ha, Bool.not_true, Bool.false_or] at hx
+  exact sigInB_sound hx
+
+theorem pendLayersB_sound (P : Row) : ∀ (G G' : CTy), pendLayersB P G G' = true →
+    ∀ o ∈ G.rowOf, ∃ o', Row.find G'.rowOf o.n o.i = some o' ∧ o.Sig o' ∧
+      (capB o.q o.B = true → PendLe P o.fin o'.fin)
+  | .eff n i q A B f rc C, G', h, o, ho => by
+      simp only [pendLayersB, Bool.and_eq_true] at h
+      simp only [CTy.rowOf, List.mem_cons] at ho
+      rcases ho with rfl | ho
+      · have h₁ := h.1
+        split at h₁
+        · rename_i o' hf'
+          simp only [Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_true'] at h₁
+          refine ⟨o', hf', OpSig.sigB_sound h₁.1, fun hc => ?_⟩
+          rw [PendLe]
+          rcases h₁.2 with (hn | ht) | ⟨⟨hf, hl⟩, ha⟩
+          · rw [hc] at hn; cases hn
+          · exact Or.inl ht
+          · refine Or.inr ⟨hf, fun n' i' o₁ hf₁ => ?_, pendAbB_sound ha⟩
+            obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf₁
+            exact pendLayersB_sound P f o'.fin hl o₁ hm
+        · cases h₁
+      · exact pendLayersB_sound P C G' h.2 o ho
+  | .ret _, _, _, _, ho | .arr _ _, _, _, _, ho | .amp _ _, _, _, _, ho | .top, _, _, _, ho
+  | .all _ _ _, _, _, _, ho | .nu _, _, _, _, ho => by simp [CTy.rowOf] at ho
+
+/-- `pendLeB` decides `PendLe` soundly. -/
+theorem pendLeB_sound {P : Row} {G G' : CTy} (h : pendLeB P G G' = true) : PendLe P G G' := by
+  simp only [pendLeB, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
+  rw [PendLe]
+  rcases h with h | ⟨⟨hG, hl⟩, ha⟩
+  · exact Or.inl h
+  · refine Or.inr ⟨hG, fun n i o hf => ?_, pendAbB_sound ha⟩
+    obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
+    exact pendLayersB_sound P G G' hl o hm
+
+/-- `ThenLe F E T`'s part for the finaliser's row `E`, decided: every operation of `E` is `T`'s, a
+capturable one's cancel row with `F`'s errors pending (`pendLeB`). -/
+def thenRowB (E : Row) (F T : CTy) : Bool :=
+  E.all fun o => match Row.find T.rowOf o.n o.i with
+    | some o' => OpSig.sigB o o' && (!capB o.q o.B || pendLeB F.rowOf o.fin o'.fin)
+    | none => false
+
+/-- The layers of `F` each at what `T` finds at its key, a capturable one's cancel row `⋈ E` below
+the one found (`ThenLe`, decided the same way). By recursion on `F`'s layers. -/
+def thenLayersB (E : Row) : CTy → CTy → Bool
+  | .eff n i q A B f rc C, T =>
+      (match Row.find T.rowOf n i with
+       | some o' => OpSig.sigB ⟨n, i, q, A, B, f, rc⟩ o' &&
+           (!capB q B || o'.fin.isTop ||
+             (!f.isTop && thenLayersB E f o'.fin && thenRowB E f o'.fin))
+       | none => false) && thenLayersB E C T
+  | _, _ => true
+
+/-- `ThenLe F E T` (`F ⋈ E ≤ T`), decided. -/
+def thenLeB (F : CTy) (E : Row) (T : CTy) : Bool :=
+  T.isTop || (!F.isTop && thenLayersB E F T && thenRowB E F T)
+
+theorem thenRowB_sound {E : Row} {F T : CTy} (h : thenRowB E F T = true) :
+    ∀ n i o, Row.find E n i = some o → ∃ o', Row.find T.rowOf n i = some o' ∧ o.Sig o' ∧
+      (capB o.q o.B = true → PendLe F.rowOf o.fin o'.fin) := by
+  intro n i o hf
+  obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
+  have hx := List.all_eq_true.mp h o hm
+  split at hx
+  · rename_i o' hf'
+    simp only [Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_true'] at hx
+    refine ⟨o', hf', OpSig.sigB_sound hx.1, fun hc => ?_⟩
+    rcases hx.2 with hn | hl
+    · rw [hc] at hn; cases hn
+    · exact pendLeB_sound hl
+  · cases hx
+
+theorem thenLayersB_sound (E : Row) : ∀ (F T : CTy), thenLayersB E F T = true →
+    ∀ o ∈ F.rowOf, ∃ o', Row.find T.rowOf o.n o.i = some o' ∧ o.Sig o' ∧
+      (capB o.q o.B = true → ThenLe o.fin E o'.fin)
+  | .eff n i q A B f rc C, T, h, o, ho => by
+      simp only [thenLayersB, Bool.and_eq_true] at h
+      simp only [CTy.rowOf, List.mem_cons] at ho
+      rcases ho with rfl | ho
+      · have h₁ := h.1
+        split at h₁
+        · rename_i o' hf'
+          simp only [Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_true'] at h₁
+          refine ⟨o', hf', OpSig.sigB_sound h₁.1, fun hc => ?_⟩
+          rw [ThenLe]
+          rcases h₁.2 with (hn | ht) | ⟨⟨hf, hl⟩, hr⟩
+          · rw [hc] at hn; cases hn
+          · exact Or.inl ht
+          · refine Or.inr ⟨hf, fun n' i' o₁ hf₁ => ?_, thenRowB_sound hr⟩
+            obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf₁
+            exact thenLayersB_sound E f o'.fin hl o₁ hm
+        · cases h₁
+      · exact thenLayersB_sound E C T h.2 o ho
+  | .ret _, _, _, _, ho | .arr _ _, _, _, _, ho | .amp _ _, _, _, _, ho | .top, _, _, _, ho
+  | .all _ _ _, _, _, _, ho | .nu _, _, _, _, ho => by simp [CTy.rowOf] at ho
+
+/-- `thenLeB` decides `ThenLe` soundly.  `[spec §27]` -/
+theorem thenLeB_sound {F : CTy} {E : Row} {T : CTy} (h : thenLeB F E T = true) : ThenLe F E T := by
+  simp only [thenLeB, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
+  rw [ThenLe]
+  rcases h with h | ⟨⟨hF, hl⟩, hr⟩
+  · exact Or.inl h
+  · refine Or.inr ⟨hF, fun n i o hf => ?_, thenRowB_sound hr⟩
+    obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
+    exact thenLayersB_sound E F T hl o hm
+
+/-- `[then]`'s cancel-row premise, decided: each operation of `M`'s row `SM` whose cancel row is read
+has `F ⋈ Σ_D ≤ F'`, `F` its cancel row and `F'` that of the operation the site's row `S` finds at
+its key.  `[spec §27]` -/
+def thenFinB (SM S SD : Row) : Bool :=
+  SM.all fun o => !o.finRead || match Row.find S o.n o.i with
+    | some o' => thenLeB o.fin SD o'.fin
+    | none => false
+
+/-- `thenFinB` decides `[then]`'s premise `hfin` soundly.  `[spec §27]` -/
+theorem thenFinB_sound {SM S SD : Row} (h : thenFinB SM S SD = true) :
+    ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true →
+      ThenLe o.fin SD o'.fin := by
+  intro n i o o' hf hf' hr
+  obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
+  have hx := List.all_eq_true.mp h o hm
+  simp only [hr, Bool.not_true, Bool.false_or, hf'] at hx
+  exact thenLeB_sound hx
+
+/-- `CTy.FinPers`, decided. -/
+def finPersB : CTy → Bool
+  | .eff _ _ q A B f _ C => (!(B.isZero && q != .lin) || A.persistent) &&
+      (!capB q B || finPersB f) && finPersB C
+  | _ => true
+
+theorem finPersB_sound : ∀ (C : CTy), finPersB C = true → C.FinPers
+  | .eff _ _ q A B f _ C, h => by
+      simp only [finPersB, Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_true'] at h
+      obtain ⟨⟨h₁, h₂⟩, h₃⟩ := h
+      refine ⟨fun ha => ?_, fun hc => ?_, finPersB_sound C h₃⟩
+      · rcases h₁ with hn | hp
+        · rw [ha] at hn; cases hn
+        · exact hp
+      · rcases h₂ with hn | hp
+        · rw [hc] at hn; cases hn
+        · exact finPersB_sound f hp
+  | .ret _, _ | .arr _ _, _ | .amp _ _, _ | .top, _ | .all _ _ _, _ | .nu _, _ => trivial
+
+/-- `Row.PendPers`, decided.  `[spec §27]` -/
+def pendPersB (S : Row) : Bool :=
+  S.all fun o => (!o.abort || o.A.persistent) && (!capB o.q o.B || finPersB o.fin)
+
+/-- `pendPersB` decides `Row.PendPers` soundly.  `[spec §27]` -/
+theorem pendPersB_sound {S : Row} (h : pendPersB S = true) : S.PendPers := by
+  intro o ho
+  have hx := List.all_eq_true.mp h o ho
+  simp only [Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_true'] at hx
+  refine ⟨fun ha => ?_, fun hc => ?_⟩
+  · rcases hx.1 with hn | hp
+    · rw [ha] at hn; cases hn
+    · exact hp
+  · rcases hx.2 with hn | hp
+    · rw [hc] at hn; cases hn
+    · exact finPersB_sound _ hp
+
 end BoCa.Fig16.LogRel.Core.Check

@@ -1,0 +1,18 @@
+-- SPEC §19's program 4 at the surface, the twin of the kernel program `tick-native`
+-- (Backend/Kernel.lean, `tickProg 3`): a loop of observations, each a `log` under its own
+-- `with_log`, whose clause resumes `k` and marks the answer; three turns, then the loop closes.
+-- Each turn's handler, and its resumed continuation, end with the turn.
+--
+-- Answer: (); `live 0`. A turn that kept its continuation past the turn would leave it live; one
+-- that never resumed would not reach the next turn.
+
+effect Log { ctl log() }
+
+handler with_log[A]: Log, A -> A * bool = {
+  return(x) = (x, false);
+  log(k) = let (x, f) = k(()); let _ = f; (x, true)
+}
+
+main -> 1 =
+  for i in 0..3 { let (u, f) = with with_log[1] { log() }; let _ = f; u };
+  ()
