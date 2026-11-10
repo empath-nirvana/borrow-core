@@ -88,6 +88,10 @@ inductive Prim where
   /-- The cancel-mode finaliser frame `cfin s e`: `e` is a finaliser running under a cancel whose
       state is `s`; every `raise` escaping `e` is caught here.  `[spec §19]` -/
   | cfin
+  /-- The in-place cancel: `cancelTo (n, k)` cancels the handled region of the nearest handler
+      named `n`, in cancel mode and without capturing a continuation, then runs `k ()` where the
+      handler stood.  `[spec §51]` -/
+  | cancelTo
   deriving DecidableEq, Repr
 
 /-!

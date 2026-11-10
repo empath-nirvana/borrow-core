@@ -741,6 +741,16 @@ theorem closed_head {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ
         Bool.and_eq_true] at hs
       simp only [raiseE, closedAt, Expr.val, Val.prim, Bool.and_eq_true]
       exact ⟨⟨trivial, hs.2.2⟩, hμ⟩
+  | cancelTo n qs hr hs k K hK =>
+      simp only [hndE, closedAt, Expr.val, Val.prim, Bool.and_eq_true] at ha
+      rw [closedAt_plug_iff] at ha
+      simp only [BoCa.BoLo.cancelToE, BoCa.BoLo.cancelToPayload, closedAt, Expr.val, Val.prim,
+        Val.pair, Val.i32, Bool.and_eq_true] at ha
+      refine ⟨?_, hμ⟩
+      simp only [ccatchE, closedAt, Expr.val, Val.prim, Val.unit, Bool.and_eq_true]
+      rw [closedAt_plug_iff]
+      simp only [raiseE, closedAt, Expr.val, Val.prim, Bool.and_eq_true]
+      exact ⟨⟨trivial, closedAt_dead 0 K ha.2.1, trivial, rfl⟩, ha.2.2.2.2, trivial⟩
 
 /-- A step keeps a closed term closed, and stores only closed values. -/
 theorem closed_step1 {μ μ' : Heap} {e e' : Expr} (h : Step1 (ℍ := ℍ) μ e μ' e')
