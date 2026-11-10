@@ -806,6 +806,16 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_hndJ₁
 #print axioms BoCa.Fig16.LogRel.Core.kappaFinSelf
 #print axioms BoCa.Fig16.LogRel.Core.lastFinOK_nil_of_find
+-- SPEC §51: `[handle-last]`'s erasure laws
+#print axioms BoCa.Fig16.LogRel.Core.StepsOff.upd
+#print axioms BoCa.Fig16.LogRel.Core.work_run_ctx
+#print axioms BoCa.Fig16.LogRel.Core.last_perform_direct
+#print axioms BoCa.Fig16.LogRel.Core.last_resume_direct
+#print axioms BoCa.Fig16.LogRel.Core.last_cancel_direct
+#print axioms BoCa.Fig16.LogRel.Core.last_cancel_exit
+#print axioms BoCa.Fig16.LogRel.Core.answers_in_place
+#print axioms BoCa.Fig16.LogRel.Core.tail_clause_answers
+#print axioms BoCa.Fig16.LogRel.Core.last_clause_answers
 -- `!` on the LIR types (#714): `ofV` keeps it, and what `Lint` reads at a copy and a consume
 #print axioms Backend2.ofV_bang
 #print axioms Backend2.ofV_persistent
