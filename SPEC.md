@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.62 · 2026-11-09
+Version 1.64 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -12616,13 +12616,11 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
-- **1.62** (2026-11-09) — §68 (#855 K3, as built): the rules `erase`/`eraseB` are named
+- **1.64** (2026-11-09) — §68 (#855 K3, as built): the rules `erase`/`eraseB` are named
   `codeErase`/`codeEraseB` (`erase` is `TExpr.erase` in the typed term). `Ctx.capTy`, `Ctx.capOK`
   and `VTy.forceTy` are named; the restated `force` reads `T.forceTy = some C`. K3 and `codeI`'s
   semantic step are built; the inversion's cost is restated as built. The premise `E.Cl 0` of
   1.57 is dropped: no proof reads it. K7, `cloneCode` (#928), is planned.
-  semantic step are built; the inversion's cost is restated as built. K7, `cloneCode` (#928), is
-  planned.
 - **1.63** (2026-11-09) — §3 (#906): `scripts/check-type-eq.sh` reads the library `Reference`
   too, the reference interpreter's run (`Reference/Source.lean`, `Falsify.lean`, `Driver.lean`, …),
   which leaves `Backend` and `Pipeline`. No change to a rule.
