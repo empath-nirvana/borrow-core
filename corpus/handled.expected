@@ -508,6 +508,11 @@ corpus/core-fin-stored-k-fin.bc 11:3: handle 1: inside [3], finaliser; row []; o
 corpus/core-fin-stored-k-fin.bc 14:10: handle 3: inside [], finaliser; row [1]; ops 3.0 resume-or-cancel+state; names 3.0 []; condition 2 holds
 corpus/core-fin-stored-k-fin.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-fin-stored-k-fin.bc 3.0 resume-or-cancel+state: machine; condition 2 holds; -
+corpus/core-fin-stored-k-op.bc flows [0, 3, 4, 4294967295], finaliser; main [3, 4], finaliser
+corpus/core-fin-stored-k-op.bc 15:3: handle 4: inside [3], finaliser; row []; ops 4.0 once; names 4.0 []; condition 2 holds
+corpus/core-fin-stored-k-op.bc 20:10: handle 3: inside [], finaliser; row [4]; ops 3.0 resume-or-cancel+state; names 3.0 []; condition 2 holds
+corpus/core-fin-stored-k-op.bc 4.0 once: error; condition 2 holds; -
+corpus/core-fin-stored-k-op.bc 3.0 resume-or-cancel+state: error; condition 2 holds; -
 corpus/core-fin-sub-row.bc flows [0, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/core-fin-sub-row.bc 15:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-fin-sub-row.bc 18:5: handle 2: inside [], finaliser; row [1]; ops 2.0 resume-or-cancel; names 2.0 []; condition 2 holds
