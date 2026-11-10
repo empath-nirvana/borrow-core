@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.66 · 2026-11-09
+Version 1.67 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8234,11 +8234,14 @@ nested, one lend per place, the first written outermost. In `S`, `x : mut 'l A`:
 - a read of `x` is `*&mut x`, the content copied through the borrow (`withswap`). A read
   rebinds the borrow, so it counts as a write of the borrow (R2) and every frame it is in hands
   the borrow on;
-- every read of a lent `x` and every call that lends it is bound in the order the source
-  evaluates them, left to right, a call's arguments before the call (A-normal form for those
-  terms), so a read after a reborrow in the same expression sees the reborrow's effect:
-  `g(&mut c) * 100 + c` reads `c` after `g` has written it, as Rust does. A `while`'s condition
-  is bound at the start of each turn, `loop { if c { M } else { break } }`;
+- in an expression that reads or lends a lent `x`, every read of `x` and every call (and `run`)
+  in the expression is bound in the order the source evaluates them, left to right, a call's
+  arguments before the call, whatever the call's arguments are, since any call may write `x`
+  (through a reborrow, or a closure it is passed): A-normal form for those terms. So a read after
+  such a call sees its effect: `g(&mut c) * 100 + c` and `apply(!{ u -> c = c + 7; 0 }) * 100 + c`
+  both read `c` after the write, as Rust does. Only call-free subterms (operators on bound values)
+  stay in place. A `while`'s condition is bound at the start of each turn,
+  `loop { if c { M } else { break } }`;
 - a move out of `x` (a read at a linear type) is refused: "a value can't be moved out of `x`
   here: it is lent for the body of a control handler, which may be abandoned, and its type `A` is
   linear";
@@ -8318,6 +8321,7 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/reject/mut-control-move.bc` | a move out of a lent variable | refused, naming `buf` |
 | `corpus/reject/effect-try-lend.bc` | `&mut stdout` passed on in `to_result`'s body | refused, naming `stdout` |
 | `corpus/mut-control-order.bc` | reads and reborrows in source order (`g(&mut c) * 100 + c` = 108) | `(inr i32[108], (i32[101], i32[8]))` |
+| `corpus/mut-control-call-order.bc` | a closure argument's write seen by a later read | `(inr 115, (8, 15))` |
 | `corpus/mut-control-assign-raise.bc` | `c = chk(c + 1)`, an effectful right side, raising midway | `(inr i32[3], i32[2])` |
 | `corpus/reject/mut-control-cap.bc` | a body assigning `c` and passing `stdout`: the refusal names `stdout` only | refused |
 | `corpus/lend-copy.bc` | copies of a borrow block's borrow over a loop: `let b2 = b`, `let mut v = v` (T04's form), a copy after a statement | `(i32[30], (i32[321], i32[6]))` (was refused) |
@@ -12709,6 +12713,10 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.67** (2026-11-09) — §41 (#885): in an expression that reads or lends a variable lent for a
+  control handler's body, every read of it and every call or `run` is bound in source order,
+  whatever the call's arguments, since any call may write it (through a reborrow, or a closure it
+  is passed). New program `corpus/mut-control-call-order.bc`.
 - **1.66** (2026-11-09) — §68 (#886): `codeIB`'s premise is `Flat(Γ)` (§10), as `!`-promotion's,
   in place of `!Γ`. `codeIB_compatC` and `codeIB_compatN` reach `gSepC_persistent` and
   `gN_persistent` through `flat ⇒ persistent`. The rule only widens.
