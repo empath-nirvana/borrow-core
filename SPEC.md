@@ -12610,7 +12610,8 @@ tables and `HandlerLawN` are unchanged.
 
 ### Units
 
-- K1.1: `ExternN`, `ExternsMeetN`, `Goal791N` restated, `goal791N` re-proved.
+- K1.1, built: `ExternN`, `ExternsMeetN`, `gN_of_meetsN`, `Goal791N` restated in place, `goal791N`
+  re-proved.
 - K1.2: the models at `vN` (`stdModel_meetsN`) and Core's `externs_every_runN` family.
 - K1.3: the finaliser at the externs' context, for `Const791.OKAt` and `withbor1U/2U/3U`.
 - K1.4: the kernel instance `progIO` (a lent `stdout` cell, written across a `wait`, resumed and
@@ -12618,7 +12619,7 @@ tables and `HandlerLawN` are unchanged.
 - K1.5: `IORun.every_runN` at the checked wrapper; `corpus/io-effects.bc` concluded by the
   extended `goal791N`; `bcc trusted` names it.
 
-None is built yet; each unit's code PR moves its line to *built*.
+K1.2–K1.5 are not built; each unit's code PR marks its line *built*.
 
 ### Open
 
