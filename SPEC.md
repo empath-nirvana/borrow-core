@@ -3299,7 +3299,9 @@ Six primitives (`ccatch` and `cfin`, below), and no new `Expr` constructor:
     handle_n e with H    ≜  hnd (n, (qs, H)) e              (`.app (.app (.prim .hnd) …) e`)
     M then x. N unwind D ≜  ubind (λx. N, λ_. D) M          (`.app (.app (.prim .ubind) …) M`)
 
-`ubind` is `M to x. N` with a finaliser `D`, which runs instead of `N` when `M` unwinds.
+`ubind` is `M to x. N` with a finaliser `D`, which runs instead of `N` when `M` unwinds. In core
+text, `x <- M unwind (D); N` is checked at `D`'s own row, and a row entry may spell its cancel row
+(§27 *The checker*).
 
 `H = (h_ret, h_op)` is a pair of values, `n` a literal, and `qs` the tags of the operations'
 qualifiers (§25), which `[handle]` writes. Evaluation is argument-first, so `e` runs under the frame
@@ -5430,6 +5432,17 @@ one β-step longer at each use of `κ`:
   effect context declaring `wait` and `exnᵢ` (`dAt_e7c_lift`, `d_e7c_lift`); at a cancellable `exnᵢ`
   that context has no unrestricted abortive operation (`noUnrExn_Ξe7c`).
 
+**A pipe connector's step** (#918) is `[then]`: `M` resumes one stage's stored continuation, and
+`Γ₂` holds the others', which `D` cancels (`corpus/core-pipe-step.bc`). `[then]`'s `!Γ₂` premise
+holds exactly when the step's row has no unrestricted operation at any depth (`¬Row.UnrD`: no
+`unr` operation, and none in a capturable operation's cancel row at any depth); a stage's
+continuation is `U`, not `!`, at `lin` and `cancel`. Several stage cancels share one cancel region
+when they are the finalisers of one captured continuation that the handler cancels
+(`corpus/core-pipe-close.bc`), and `[cfin-raise]` then keeps the first cleanup error; as nested
+ordinary unwind frames, the latest error wins instead. In these programs no cleanup raises. The
+first-error region with raising cleanups is traced on the machine, untyped; a checked instance
+needs the checker to emit `[then]` at a non-empty `Σ_D` (#868).
+
 ### Lowering
 
 The backend lowers a finaliser that raises (`Backend/Clos/Capture.lean`, `Backend/Clos/Unwind.lean`),
@@ -5438,22 +5451,113 @@ call a finaliser directly. `Capture` rejects such a finaliser with a message. Th
 finaliser that performs (`progFinOp`), a cancel nested in a cancel (`progNC₁`), and a kept error
 consumed with an unrestricted continuation or resumed (`progConsume`, `progKeep`), are Lean runs
 (`Core/EffCancel.lean`, `Core/EffCancelTyped.lean`) and interpreter runs, not kernel programs. The
-checker emits no such finaliser: its finalisers are consumes at `F 1`. No kernel program and
-no count changes. Finalisers that raise run at every stage in the kernel programs `e7a`, `e7b`,
+checker emits finalisers that perform (*The checker*, below); one that may suspend is refused by
+the backends as above, so such a program checks and runs at `bcc interp` only (#869). No kernel
+program and no count changes. Finalisers that raise run at every stage in the kernel programs `e7a`, `e7b`,
 `e7d`, `e8b` and `stored-k-fin` (§19 *Programs*).
+
+### The checker (#868)
+
+The checker emits `[then]` with a finaliser at its own row, and the cancel rows `[handle]` gives
+its clauses. No Core change: `CDerives.effThen`, `CDerivesAt.effThen`, `TDerives.effThen` and the
+cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
+
+- **Cancel rows in core text.** A row entry of a cancellable or an unrestricted operation may
+  carry its cancel row, `n.i cancel[R] A ~> B` or `n.i unr[R] A ~> B`, `R` a row written as a
+  function's row is (`1.0 cancel[3.0] 1 ~> 0`). `⊤` is written `cancel[top]` (or `cancel[⊤]`),
+  alone inside the brackets; the printer writes `[top]`. `top` elsewhere in a row is refused: "`top`
+  (`⊤`) is a cancel row only: write it as `n.i cancel[top] A ~> B`". A bare `cancel` or `unr` has the empty cancel row, so text written before reads the
+  same, and `Row.pp` prints the brackets only when the row is not empty, so a printed program reads
+  back. `lin[…]` is refused, and so is a cancel row on an abortive operation. `elabRow` puts `R` in
+  `OpSig.fin`.
+- **`[then]` at the finaliser's row.** `x <- M unwind (D); N` is checked by `[then]`. `D` is
+  checked at the empty row first; a finaliser that performs nothing gets `effThenA` with `M` at the
+  site's row `Σ`, the derivation as before. Otherwise `D` is checked at `Σ`, and `Σ_D` is the
+  operations of `Σ` that `D`'s typed derivation performs (its performs, awaits and raises, what the
+  subterm under each `[sub]` performs and the row of each call, less the operations a handler
+  inside `D` handles; `opKeysOf`); `D` is then checked at that `Σ_D`; if it does not check there,
+  the derivation at `Σ` is kept (the kernel's premises decide `[then]` at whichever row is used).
+- **`Σ_M`, `M`'s own row.** When the finaliser performs and `hfin` fails with `M` at `Σ`, `Σ_M` is
+  the row `M`'s derivation needs,
+  synthesized as `Σ_D` is: a `perform`, `await` or `raise` contributes its operation at the empty
+  cancel row; a call, its callee type's row, cancel rows included; a `[sub]`, its subterm's; a
+  `[then]` inside `M` gives each capturable operation of its head the least cancel row that
+  `ThenLe` and `PendLe` allow over its finaliser's row; inside `handle_n` the operations of `n` drop
+  out; rows join by operation key, `⊤` absorbing. (So `progNC₁T`'s `1.0` is taken at the empty
+  cancel row, and `progConsumeT`'s at `{2.0}`.) It is restricted to `Σ`'s operations, `M` is
+  checked again at it when `hfin` holds there, and otherwise `M` stays at `Σ`; `RowLe Σ_M Σ`
+  holds. `hfin` is decided over `Σ_M` (`thenFinB Σ_M Σ Σ_D`: for each operation of `Σ_M` whose
+  cancel row is read, the cancel row of the operation `Σ` finds at that key holds `F ⋈ Σ_D`), and
+  `PendPers` over `Σ_M` (`Σ_D.UnrD → Σ_M.PendPers`). So a capturable operation the finaliser
+  performs need not be in its own cancel row.
+- **The deciders.** `ThenLe`, `PendPers` and `divB Σ_D = false` are decided by `thenLeB`,
+  `pendLeB`, `thenFinB`, `pendPersB` and `finPersB`, each with its `_sound` lemma (axioms within
+  `propext` and `Quot.sound`); `thenFinB_sound` states the kernel premise over `Σ_M`:
+  `Row.find SM n i = some o → Row.find S n i = some o' → o.finRead → ThenLe o.fin SD o'.fin`. A
+  refusal names an operation `M` performs whose cancel row lacks the finaliser's operation (D3),
+  never the finaliser's own, and where it is cancelled; a nested entry is named as such ("the
+  cancel row of 1.0 … holds 4.0, whose own cancel row … must hold …"). At `Σ_D = []` the checker emits `effThenA`, as before; `effThen` only at a
+  non-empty `Σ_D`.
+- **Handlers read their operations' cancel rows.** `[handle]` passes `fs j`, the cancel row the
+  handled row gives operation `j`, so a clause's `κ` has its cancel branch at
+  `cancelTy Σ (fs j) = F_{F_j ⊕ Σ} 1`. A clause that cancels `κ` then performs, at its own row,
+  what the cancelled region's finalisers perform: D3 is `[sub]` there.
+- **Written, and checked.** A cancel row is written, in handler and ascription types; a row the
+  effects pass infers (`Env.rowOf`) carries the empty cancel row. `[then]`'s `hfin` checks each.
 
 ### Baseline
 
 `Paper/`, `Support/`, the machine and the effectful `wp` are unchanged; no borrow rule and no borrow
-lemma changes. Every existing derivation types at empty cancel rows. The checker emits empty cancel
-rows (`Frontend/Check/Elab.lean`) and reads `[then]`'s premise at some depth (`Row.unrDB`), which at
-its rows is the top-level test, so it accepts and rejects what it did.
+lemma changes. Every existing derivation types at empty cancel rows. A program with no finaliser
+that performs gets `Σ_D = []` and `ThenLe.nil`, and the checker emits `effThenA` there, so its
+derivation, the judgment-freeze golden and every count are as before. `fundamentalC`,
+`adequacyC`, `fundamentalD`, `adequacyD`, `adequacyD_obs` and every compatibility lemma are
+unchanged: the checker emits a rule already proved. The kernel programs `e7b`, `e7d`, `e8b`,
+`stored-k-fin`, `cancel-reraised`, `cancel-reentered` and `cancel-propagated` become checkable
+core text with their kernel answers (`inr ()`, `inr ()`, `inl (inr ())`, `inr ()`, `inr ()`,
+`inr ()`, `inr ()`), each with a corpus twin whose golden is `bcc interp`'s.
+`corpus/core-fin-nested.bc` has nested cancel rows where `D` performs only part of the row
+(`inr ()`), and `corpus/core-fin-sub-row.bc` is `e7b` with the finaliser's raise bound,
+`u <- abort[1.0] (); absurd u`, under a `[sub]` (`inr ()`). `core-fin-cancellable` (core text) is an
+`abort[1.0]` unwinding through a finaliser that performs `4.0 cancel 1 ~> 1`, checked at
+`Σ_M = [1.0]`, `Σ_D = [4.0]`; `bcc interp` answers `(inr (), i32[1])`. It joins the corpus with the
+lowering of a finaliser that may suspend (#869). `corpus/core-fin-top-row.bc` prints a `⊤` cancel
+row and checks it again (`()`, `live 0`). `core-fin-nc` (core text, `progNC₁T`'s shape: a cancel's
+finaliser performs a capturable operation whose own cancel row is empty) checks, `()`, `live 0`; it
+joins the corpus when Backend2 lowers a cancel row holding a machine operation (#869).
+`core-fin-consume` (core text, `progConsumeT`'s shape) answers `inl ()` and `core-fin-keep`
+(`progKeepT`'s) `inr ()`, each with `live 0`; both join the corpus with #869.
+`corpus/core-fin-check-nc.bc`, `-consume.bc`, `-keep.bc`, `-gapdeep.bc` and `-gapcall.bc` are
+checked in the corpus (a `def` checked and not called; `main` returns `()`): the first three are
+`progNC₁T`'s, `progConsumeT`'s and `progKeepT`'s shapes, `gapdeep` two nested finalisers that both
+perform capturable operations, and `gapcall` a call of a function parameter.
 
 ### Open
 
-- **The lowering of a finaliser that suspends** (planned: its
-  cancel arm as a code of its own, each finaliser call a resumption point). Until it lands, a
-  feature without its lowering.
+- **The lowering of a finaliser that suspends** (#869; planned: its cancel arm as a code of its
+  own, each finaliser call a resumption point). Until it lands, a feature without its lowering.
+- **A surface finaliser that performs** (`with h(…) { M } finally { D }`, the surface `unwind`):
+  its own entry, before the surface's code.
+- **`Σ_M` and `Σ_D` are synthesized from the derivations**, not proved least: they can over-count
+  (a thunk built and never forced), which is safe, since the kernel checks `M` and `D` at the rows
+  taken.
+- **`Σ_M` is resynthesized only when `hfin` fails at `Σ`.** A program whose `hfin` holds at `Σ` but
+  whose `PendPers` fails there, and would hold at `Σ_M`, is refused: a gap in completeness, not in
+  soundness.
+- **The deciders check every layer and member of a cancel row**, the kernel the first `Row.find`
+  hit: stricter only when a cancel row repeats an operation key.
+- **Answering effects in a finaliser** (a capability: `Stdout`, `Fs` #769, `Net` #597; a `fn`
+  effect): the capability is a threaded `mut` borrow, and `[then]` splits the context `Γ₁ | Γ₂`,
+  so `M` and `D` cannot both hold it; R1 (§29) needs empty cancel rows (`Row.ResumeO`), and an
+  unwinding lend's finaliser `d : Ref T ⊸ 1` is closed, pure and abortive only. It does not type
+  today by any route, and #940 (a `let mut` both `M` and `D` write) has the same root. The
+  smallest change proposed is a fused `[then]` over a lend (`m : Mut @a T ∈ Γ₂`; `M` gets a
+  reborrow, `D` gets `m` back at `Σ_D`): one rule and its compatibility lemmas. Its raise path is
+  direct; its cancel path is a lend across a suspension, which needs #844 Tier 2 and #821.
+- **An owner's finaliser that performs** (a declared value's drop that closes a socket): not a
+  consume (§42 *Not this*); Backend2's `genLendU` lowers only a constant finaliser.
+- **Task codata** (`lib/async.bc`, `F (A + …) & F 1`): a task whose finalisers perform needs its
+  close at `F_R 1`; it waits on the lowering of a finaliser that suspends.
 - **`[then]`'s two premises on unrestricted operations** restrict `unr` beyond §19's `[then]`
   (decision 63). §19's top-level premise is not enough: the finaliser's frame is live in the
   cancels below it.
@@ -8821,9 +8925,8 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
 
 **Open (#746).**
 - *I/O in a finaliser.* `[then]`'s `D` is at `F_Σ 1` beside `N` in one context: a capability the
-  effects pass threads into `D` would be consumed there and not handed back. Capabilities as
-  borrows held across `[then]` (§29's relaxed lend, `PinLaw`), or a finaliser that hands its
-  capabilities back, would carry it; neither is in this entry.
+  effects pass threads into `D` would be consumed there and not handed back, and `[then]`'s split
+  `Γ₁ | Γ₂` admits no capability both `M` and `D` use (§27 *Open*, with #940's root).
 - *A written finaliser for a lend the abort crosses.* The kernel's unwinding lend takes any closed
   `d : Ref N ⊸ 1` (`d_declAcross`); the checker passes only the source's consume
   (`Frontend/Check/Consts.lean`, `finaliser`), so at a declared type the lend is refused. A
@@ -9413,9 +9516,13 @@ No change: no type, rule, term, typing, elaboration or semantics.
 - **The outcome** (`Backend2/Types.lean`, `outcomeTy`): `F_Σ R` at a row with machine operations
   answers `μY. R ⊕ (P ⊕ S)`, `P` the payload of `Σ`'s abortive operations (§47) and `S` one
   summand per machine operation `A ↠ B` of `Σ`, in the row's order: its argument and the
-  suspended computation `k : U((B ⊸ F Y) & F C)`, `C` what its cancel answers, `1 ⊕` the payload
-  of the operation's cancel row (`fin`, §27; `1` at `⊤`). `k` is the continuation `[op]` captures,
-  as §19's `κ` is: its first component resumes it, its second cancels it.
+  suspended computation `k : U((B ⊸ F Y) & K)`. At a capturable (cancellable) operation (`capB`),
+  `K = F C`, `C` what its cancel answers, `1 ⊕` the payload of the operation's cancel row (`fin`,
+  §27; `1` at `⊤`). At a must-resume operation `K = ⊤`: the kernel never cancels a `lin`
+  continuation (`kTy .lin`, `kappaC_cancel_lin`), so Backend2 builds no cancel entry there, only
+  an `unreachable` trap, which no run reaches; that it is never entered is stated `UNPROVED:` at
+  `genMach`. `k` is the continuation `[op]` captures, as §19's `κ` is: its first component resumes
+  it, its second cancels it.
 - **A machine** (`convK`) is a function whose answer is an outcome, with the joins and steps its
   conversion makes. A computation is converted with its continuation inside the machine (the
   frames to the machine's answer): a `[let]` or `[then]` at an outcome makes its body a join and
@@ -9865,11 +9972,20 @@ corpus or a golden.
 
 ### Open
 
-- **The erasure laws** (T-B1 `last_resume_direct`, T-B1′ `last_cancel_direct`, T-B2): the
-  backend's licence to call a work where it is performed. T-B1/B1′ are `tail_resumes_answer` and
-  `kappa_cancel_steps` with the finaliser frame; T-B2, at a work that performs, is a two-run
-  correspondence. They read the rule's clause form (`lastClause`, `lastN`, `lastD`, `exitK`) and
-  its step lemmas (`lastClause_steps`, `lastN_inl`, `lastN_inr`, `exitK_steps`, `lastD_steps`).
+- **The erasure laws** (`Core/HandleLastErase.lean`, #918) are proved at the direct call
+  `hnd H K[case (w v) {inl y → y | inr z → X}]` (`directK`) of a work whose direct run leaves κ's
+  cell free (`StepsOff`; `StepsOff.upd` runs it beside the cell). T-B1 `last_resume_direct`: both
+  runs reach `K₀[hnd H K[y]]`. T-B1′ `last_cancel_direct`: the perform reaches
+  `K₀[(λ_. nf z)(ccatch K†[raise ⊥])]`, `K`'s cancel then the exit (`last_cancel_exit`), and the
+  direct call reaches its `inr` arm. T-B2 `last_perform_direct`: a work whose performs are answered
+  in place by handlers outside the node (`WorkRun`), of names other than `n` and unhandled in `K`,
+  by the two-run lemma `work_run_ctx`. Outer handlers that answer in place: `answers_in_place`,
+  from `tail_clause_answers` and `last_clause_answers` (nested `[handle-last]`, pipe fusion's
+  normal path). Open: T-B2 when an outer handler stores or cancels the captured κ, or a raise or
+  cancel crosses the active frame (an early stop, `stop()`, a raise across a fused stage), is not
+  derived and not refuted (a whole-run simulation); a Core term for the in-place cancel-mode
+  unwind (Core expresses it only through κ's `ccatch K†`); the laws are stated on machine values,
+  not on typed `lastH`.
 - **The elaboration** of `for` with `break`/`return` and a body that performs, and the adapters
   over a source computation (R-1's frontend): it needs a checker producer for the node
   (`TTied`'s builder, the clause kinds of the node, `Frontend/Check/Kinds.lean`, and its handled
@@ -12109,8 +12225,8 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
 | `codeErase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
 | `codeEraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
 | `force` (restated) | `Ctx.SoloP Γ i T`, `T.forceTy = some C` (`T` is `U C` or `Code⟨N; E⟩ C`) ⟹ `forceE C (.var i) : C` | K3 |
-| `unfoldK` | `unfold : !G ⊸ !Code⟨hCode C; !G ⊗ 1⟩ (S ⊸ Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C))`, `G` either `U(S ⊸ C[S/X])` or a code type of it | K4 |
-| `nuOutK` | `x : Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)` ⟹ `force x : C[Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)/X]` | K4 |
+| `unfoldK` | `unfold : !G ⊸ !Code⟨hCode C; !G ⊗ 1⟩ (S ⊸ F Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C))`, at a consumed context, with `C.NuOk`, `G.forceTy = some (S ⊸ C[S/X])` (`G` is `U(S ⊸ C[S/X])` or a code type of it) and `C.BindsFresh S` | K4 |
+| `nuOutK` | `x : Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)` ⟹ `x : C[Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)/X]` (`force` at a ν is `x`), with `C.NuOk`, `G.forceTy = some (S ⊸ C[S/X])`, `C.BindsFresh S` and `C.BindsFresh G` | K4 |
 
 - `Γ.capTy e` (`Ctx.capTy`, `Core/CodeRules.lean`): the tensor of `Γ`'s slot types at
   `capVars e`, in rank order, ending in `1`.
@@ -12120,6 +12236,9 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
   live slot of `Γ` that `e` does not capture is persistent. With it the uncaptured slots hold `∅`
   (`vCE_empty_of_persistent`), so the closure's resource is its captures'. It is a premise, not
   an inversion of `CDerives`.
+- `C.BindsFresh G` in `nuOutK`: the unrolling under a `∀'x` leaf reads the code type, which
+  contains `G`, at `δ[x↦α]`, and a code-typed `G`'s environment could mention `x`. `codeTy`,
+  `hCode`, `hEnv` and `unfoldKTy` are in `Core/CodeNuOut.lean`.
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
 - `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
@@ -12132,8 +12251,10 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
   at `U`, `!U`, `Code` or `!Code`; `LamAx` reads at the axiom type's views and their code types.
   `lam_bang` and its uses in `Core/Rejections.lean` and `Core/EffCancelTyped.lean` are restated.
   `der_swap` reads at `ValClsC`; `hnf_of` and `eq_of_heads` take a no-code-head hypothesis their
-  callers discharge. No inversion is added and no substitution over derivations; every rejection
-  keeps its statement and verdict.
+  callers discharge. K4: `VarCls` gains a third disjunct, a variable at a code-typed `ν` read at
+  `C[codeTy/X]`, restated in place, with new `JR` lemmas about `instT`, which do not invert
+  `CDerives`. No inversion is added and no substitution over derivations; every rejection keeps its
+  statement and verdict.
 
 ### Erasure policy
 
@@ -12224,10 +12345,17 @@ reported as an intended change.
 - **Built (K3):** `codeI`, `codeIB`, `codeErase`, `codeEraseB` and the restated `force`, with their
   compatibility lemmas at Core's relation and at the chain's, and `codeI`'s semantic step: the
   captured tuple is in `𝒱⟦Γ.capTy (λM)⟧` at the whole resource.
-- **Not built until their units land:** `unfoldK` and `nuOutK` and their compatibility lemmas
-  (K4), the lend-exit lemma (K5), `eraseD` (K6), and `cloneCode` (K7, #928).
-- **No code type in the checker.** No rule of the checker synthesises a code type before S1, so
-  the corpus is unchanged by K3.
+- **Built (K4):** `unfoldK` and `nuOutK`, with their compatibility lemmas at Core's relation and
+  at the chain's. Core's unrolling at a code type is proved (`cB_unrollK`, `nuP_codeCand`, the
+  analogue of `vC_inst_envS`/`cBN_unroll`). The kernel program `Core/Chain/CodeLoop855N.lean`: a
+  unit stream over a cell whose state stays at `Code⟨etaCode C; …⟩(Stream 1)` across three
+  observations and the close, by `nuOutK`, concluded at `adequacyC` (`progK_runs`) and at
+  `goal791N` (`progK_orDiverges`).
+- **Not built until their units land:** the lend-exit lemma (K5), `eraseD` (K6), and `cloneCode`
+  (K7, #928).
+- **No code type in the checker.** No rule of the checker or the elaborator synthesises a code
+  type before S1, and Backend2 does not lower K4's rules (S4, the B-units), so the corpus is
+  unchanged by K3 and K4.
 - **`CapOK`** is a premise of `codeI` until #894 removes it.
 - **Choices K1 made that the entry does not state:**
   - A type substitution (`VTy.rename`, `VTy.subst`) leaves `Code⟨N; E⟩ C` as it is, as it leaves
@@ -12244,13 +12372,161 @@ reported as an intended change.
   - Printing: the checker prints `Code⟨#h; E⟩ C`, `#h` a hash of `N`'s serialisation, not
     `{closure@span}` (a kernel type has no span). Backend2's `useKey` prints a type `ofV` refuses
     exactly (`keyVT`, `N` in full), so two codes are two keys; `ofV` refuses `code` (B1).
-- **`nuOutK`'s compatibility lemma** needs, beyond `nuOutK_step`, that `C[Code⟨…⟩(νX. C)/X]` read
-  at the code clause is `nuF` at `codeCand` (Core's `vC_inst_envS`/`cB_unroll` at a code type); not
-  built. `unfoldK`'s, that `unfold step` is in the clause at `hCode C`, is not built.
+- **The chain's equation at the code candidate** is not derived; obstruction not verified.
+  `nuOutK_compatN` is proved by a direct route instead (`node_okK`: each state mapped into the code
+  clause at the leaf's world by `etaN_codeRelN`). `node_okK` is a near-copy of `node_okN`, to be
+  merged by generalising `cBN` (#947).
 - **The scope's `ρR`.** With a part of the resource the environment does not hold, `nuOutK` is not
   derived; obstruction not verified. This entry drops `ρR` and moves the obligation to `codeI`'s
   premise `Γ.CapOK`. That a well-typed closure always meets `CapOK` (no live non-persistent slot
   goes unused) is not derived; where it fails, the checker keeps `U C`.
+
+---
+
+## 70. Entry 69 — `>|` and stream chains (#919, pipes unit S)
+
+### Motivation
+
+Pipes (#907, `docs/new-core/scope-pipes.md`, decision B′): `|>` is push and keeps §33's cases;
+`>|` is pull, and is new. Under (R) an adapter is a *stage*: a computation that performs the item
+effect `Stream[A, K]` (`next()`, `stop()`, L1 #920) and `Yield[B]`, with no source parameter. A run
+of stages is one n-ary connector (L1), so the user never sees a bracketing. This entry adds the
+surface: the token, the rule that recognises a stream edge by effects, the chain's normal form,
+and the transitional reading of `>|` that lets it be written today, before the connector (L1) and
+the stage-form adapters (L2, #921) exist.
+
+### Language
+
+- **The operator.** `e >| s`, the token `>|`, has the precedence of `|>` (the lowest, below `||`)
+  and associates to the left. Its right operand is a stage as `|>`'s is: a spine `f`, `f[As]`,
+  `f(a, …)`, or a parenthesised chain (below). Printed `(e >| s)`.
+- **A stream stage.** A function stage `f(…)` is a *stream stage* when `f` performs lib's item
+  effect `Stream` — identified by **lib's declaration** of it (L1, #920), never by an effect's
+  name — or, **transitionally until L2**, when `f`'s first parameter, as its signature writes it,
+  is a stored generator `U (pull A K R)` (today's source-owning adapters, `lib/adapters.bc`). A
+  handler is never a stream stage. **Until L1 declares `Stream`, the first kind does not exist:**
+  a user's effect named `Stream` makes nothing a stream stage, and S classifies by the parameter
+  only.
+- **A stream edge** (by effects; **decided in L1**). `e ∘ s` is a stream edge when `s` performs
+  lib's `Stream` and `e`'s **inferred row** has an iteration effect (`Env.iterEff`, §15; `Yield[A]`
+  in lib). A written row is an upper bound (§18), so it is never read as what `e` performs: the
+  decision reads the row the elaboration infers for `e`, where rows are inferred (after
+  `resolvePipes`, at the `Env`), and where inference has none for `e`, the edge is §33's case
+  (iii) with the note `cannot tell whether this is a stream: annotate the block's row`. L1 adds
+  the test with the branch it decides (the connector); in S no edge's elaboration depends on the
+  left side's row — a `|>` is §33's by the stage, and `>|` is accepted by the stage — so S has no
+  stream-edge test and no note.
+- **The normal form.** A maximal chain is a source and a list of edges, each marked with its mode
+  (`|>` push, `>|` pull): left-nested, the source first. `(a ∘₁ b) ∘₂ c` is read as written; a
+  stage that is itself a chain, `a ∘₁ (b ∘₂ c)`, is spliced into the chain when every edge it
+  adds is a *joining* edge. **Until L1, only `>|` joins:** a `|>` edge is always read as written,
+  so a parenthesised chain at a `|>` edge is a stage, as §33 reads it (`range(0, 3) |> (sum(range(0,
+  2)) |> g(5))` is `g(range(0, 3), sum(range(0, 2)), 5)`, `corpus/pipe-push-paren.bc`), and only
+  programs that write `>|` can be rebracketed. L1 may let a `|>` into a stage of lib's `Stream`
+  join. Two bracketings of one chain of joining edges have one normal form (theorem below), so they
+  elaborate to one term. A `>|` edge takes the span from its chain's source to its stage; a `|>`
+  edge keeps its node's.
+- **The mixing rule.** `|>` and `>|` mix freely in one chain; the operator at each edge names that
+  wire's mode. `src >| take(3) |> each(f)` is one chain of three stages with one pull and one push
+  wire (one connector, L1). An edge that is not a stream edge is §33's, whatever chain it is in.
+- **Elaboration, edge by edge** (in order, the source first):
+  - **`|>`**: §33's cases by the stage, exactly as before §70 — (i) a handler, (ii) a computation
+    parameter first, (iii) any other function. A source-owning adapter is case (iii), the left side
+    stored at its parameter (§15).
+  - **`>|`** into a stream stage (until L1, a source-owning adapter): case (iii), as `|>`. So `>|`
+    is usable at once, and every output and count of a `|>` pipeline written with `>|` is the
+    `|>` form's.
+  - **L1** adds: a stream edge into a stage that performs lib's `Stream` runs on the connector.
+
+### Refusals
+
+- `` `>|` connects stream stages; `f` is not a stream stage `` — `>|` into a function that is not
+  a stream stage (or into a handler: `` …; `h` is a handler: write `|>` ``).
+- `` the right of `>|` is a stream stage, applied to its other arguments `` — a stage that is not
+  a spine.
+- **A limit:** a generic first parameter, `app[T](it: T, …)`, is not a stream stage: `>|` refuses
+  `app` (the parameter is no stored generator until it is instantiated, after this pass), and
+  `|>` into it is §33's case (iii), unchanged.
+- **A limit (§15, not §70's):** a generator's call is stored only at a parameter written
+  `U (pull …)`, so at an abbreviation of it both `|>` and `>|` are refused today
+  (`corpus/pending/pipe-alias.bc`, #973).
+- **Not added here:** the refusal of a source-owning function at `|>` (scope §3 item 3). It moves
+  to L2, where lib's adapters become stages; in S it would break `corpus/gen-pipeline-pipe.bc`,
+  `bench/chain-gen` and the book's sites. The `>|` refusal of a `Stream` stage whose left side
+  yields nothing moves to L1 with the stream-edge test.
+
+### The user's example
+
+    watch(kube) |> filter(p) |> each(e -> reconcile(e) |> retry(3) |> timeout(30s))
+
+- The outer chain is a stream chain: `watch` performs `Yield[Event]`, `filter` and `each` perform
+  `Stream[Event]`. One connector, push wires. (Waits for L1/L2: `each`, the (R) `filter`, and a
+  `watch` that performs I/O.)
+- `each`'s per-item body `reconcile(e) |> retry(3) |> timeout(30s)` has no stream edge: neither
+  `retry` nor `timeout` performs `Stream`. It is §33's case (ii), effect layers, run per item.
+- In this order, a timeout that `retry` does not catch escapes `each`'s body, so `each` raises, and
+  **the whole `watch` pipeline is closed** (`docs/new-core/scope-pipes.md` §3), each stage's cleanup running
+  downstream-first. To keep watching after a per-item failure, handle it inside `each`'s body
+  (`… |> timeout(30s) |> log_and_skip`).
+
+### Theorem
+
+`Frontend.Elab.Pipes.chainOf_bracketing` (`Frontend/Elab/Pipes.lean`): for a bracketing (a tree of
+pipe nodes, `PipeTree`) whose leaves are not pipe nodes and whose edges all join, the marks of the
+normal form (`PipeChain.marks`: the source, and each edge's mode and stage) are the tree's in-order
+flattening. So two bracketings with one flattening have one normal form
+(`chainOf_bracketings_eq`; `chainOf_assoc` for `(a ∘₁ b) ∘₂ c` and `a ∘₁ (b ∘₂ c)`). The
+elaboration reads the marks only, each edge at the span from the chain's source to its stage
+(for an unbracketed chain, the parser's own node span), so two bracketings are one core term up to
+where the source and stages sit in the text: `bcc desugar` prints them identically when the
+source starts at one column (checked on `((a >| b) >| c) >| d`, `a >| (b >| (c >| d))` and
+`a >| ((b >| c) >| d)`), and they erase alike in any layout
+(`corpus/sugar/pipe-bracket.lowered.bc`).
+
+### Programs
+
+- `corpus/pipe-pull.bc`: a `>|` chain of three stages over a generator, and the same chain in `|>`
+  (case (iii)): `(i32[20], i32[20])`, counts `3 0 0 3 3 0`, as `gen-pipeline-pipe`.
+- `corpus/pipe-bracket.bc` and `corpus/sugar/pipe-bracket.lowered.bc`: three bracketings of one
+  chain (one with a `|>` wire in its left side), each erasing as the nested calls: `(i32[25], (i32[25], i32[25]))`.
+- `corpus/pipe-mixed.bc`: a mixed `|>`/`>|` chain, a parenthesised `>|` sub-chain spliced at a
+  `>|` edge, and a chain into a sink and then a plain function: `(i32[56], (i32[4], i32[28]))`.
+- `corpus/pipe-left-row.bc`: left sides that are not generator calls, every `|>` §33's as before:
+  an `if` of values and an `if` calling a function without a written row, piped into a function
+  that performs a user's effect named `Stream`; a call of a function performing a one-operation
+  unit effect (`Wait`, the shape of an iteration effect); a call of `three() -> i32 with
+  Yield[i32] = 3` (a written row that over-approximates); a stored generator piped `>|`; a call of
+  a function without a written row piped `>|`:
+  `((i32[13], (i32[14], (i32[11], i32[13]))), (i32[6], i32[5]))`.
+- `corpus/pipe-push-paren.bc`: a `|>` into a parenthesised `|>` chain is §33's, as written:
+  `i32[315]` (the review's probe p6).
+- `corpus/pending/pipe-alias.bc`: `range(0, 4) >| tot`, `tot(it: P)`: accepted as a stream stage
+  (the abbreviation unfolded), then refused where the call would be stored, as `|>` is.
+- `corpus/pending/pipe-stream-edge.bc`: an `if` of generator calls piped `>|` into a function that
+  performs the program's own `Stream`: refused (`` `sum_items` is not a stream stage ``) until L1,
+  where a stage of lib's `Stream` is a stream edge on the connector.
+- `corpus/reject/pipe-pull-plain.bc`: `3 >| double`: `` `>|` connects stream stages; `double`
+  is not a stream stage ``.
+
+### Baseline
+
+No change to `CDerives`, `Core/`, the checker, the machine, the backends or lib. §33's cases
+(i)–(iii) are unchanged: every `|>` edge is elaborated by `pipeStage`, as before. A chain is read
+in its normal form, which differs from the parse only where a parenthesised chain of `>|` edges is
+the stage of a `>|`, and a `>|` edge takes the span from its chain's source to its stage (the
+parser's own span for an unbracketed chain); a `|>` edge is elaborated as before, at its node's
+span. Checked: `bcc
+desugar`, `bcc check` and `bcc print` of every corpus, bench, docs and book program with `|>`
+and of the review's `|>` probes (32 programs, 96 outputs) are identical to main's; the three
+probes that differ write `>|`, which main does not parse.
+
+### Open
+
+- L1 (#920): lib's `Stream`; a stage that performs it is a stream stage, keyed on that
+  declaration; the stream-edge test on the left side's inferred row, after row inference, with the
+  note where none is inferred; the connector.
+- The transitional reading ends at L2: `>|` into a source-owning adapter, and the refusal of one
+  at `|>`, change there.
 
 ---
 
