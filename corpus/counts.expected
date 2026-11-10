@@ -105,6 +105,7 @@ lend-tail-call 1 0 0 10 6 0
 lit-lend-raise 6 0 0 69 30 39 # one array per literal view: the unwinding form is not marked as a literal's view (SPEC §18), so the table is tabulated into the heap
 load-for-linear 1 0 0 155 65 19
 mut-control-assign-raise 0 0 0 6 6 0
+mut-control-call-order 0 0 0 10 10 0
 mut-control-exhausted 13 0 0 105532 105532 75526
 mut-control-lend 1 0 0 23 23 8
 mut-control-nested 0 0 0 10009 10009 0

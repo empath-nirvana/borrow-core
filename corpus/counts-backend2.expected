@@ -100,6 +100,7 @@ lend-tail-call 1 0 0 10 6 0
 lit-lend-raise 6 0 0 69 30 39
 load-for-linear 1 0 0 115 65 3
 mut-control-assign-raise 0 0 0 6 6 0
+mut-control-call-order 0 0 0 10 10 0
 mut-control-exhausted 13 0 0 105532 105532 42762
 mut-control-lend 1 0 0 23 23 4
 mut-control-nested 0 0 0 10009 10009 0

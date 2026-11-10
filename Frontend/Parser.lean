@@ -1326,23 +1326,31 @@ content copied through the borrow, which the read rebinds.  `[spec §41]` -/
 def lentRead (sp : Span) (x : String) : Val :=
   .app sp (.sugar sp .deref) (.lend sp ⟨x, sp⟩ .mut)
 
-/-- `V` lends one of the variables `lent` (`&mut x`), outside nested computations. -/
-def lendsLent (lent : List String) : Val → Bool
+/-- `V` reads or lends one of the variables `lent` outside nested closures (a `run` runs in
+place, so what it reads counts). -/
+def usesLent (lent : List String) : Val → Bool
   | .lend _ x _ => lent.contains x.name
-  | .pair _ V W => lendsLent lent V || lendsLent lent W
-  | .app _ (.sugar _ .deref) _ => false
-  | .app _ V W => lendsLent lent V || lendsLent lent W
+  | .pair _ V W => usesLent lent V || usesLent lent W
+  | .app _ V W => usesLent lent V || usesLent lent W
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => lendsLent lent V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => usesLent lent V
+  | .run _ M => (M.lentNames).any lent.contains
   | _ => false
 
+/-- A call, as against a surface operator or block applied to its operands: what `hoistReadsV`
+binds in its turn. -/
+def isCallHead : Val → Bool
+  | .sugar .. | .app _ (.sugar ..) _ => false
+  | _ => true
+
 mutual
-/-- The reads of lent variables (`lentRead`) and the calls that lend them in `V`, outside nested
-computations, in the order `V` evaluates them (left to right, a call's argument before the call):
-each replaced by a fresh variable, which the computation `V` is in binds first, in that order, so
-`V` is in A-normal form for them. Those inside a nested computation are bound there
-(`hoistReadsC`). -/
-def hoistReadsV (lent : List String) : Nat → Val → StateT (List (String × Val)) P Val
+/-- `V` in A-normal form for the variables `lent` (SPEC §41, R3): each read of one (`lentRead`)
+outside nested closures is replaced by a fresh variable that the computation `V` is in binds
+first; when `V` reads or lends one (`usesLent`, decided at its top, `all`), so is every call and every `run`, in the
+order `V` evaluates them (left to right, a call's argument before the call). Any call may write a
+lent variable (a reborrow, a closure given at a block parameter), so none is moved past a read.
+Reads inside a nested closure are bound there (`hoistReadsC`). -/
+def hoistReadsV (lent : List String) (all : Bool) : Nat → Val → StateT (List (String × Val)) P Val
   | 0, V => pure V
   | k + 1, V => match V with
     | .app sp (.sugar dsp .deref) (.lend lsp x .mut) =>
@@ -1351,35 +1359,41 @@ def hoistReadsV (lent : List String) : Nat → Val → StateT (List (String × V
         modify (· ++ [(r, .app sp (.sugar dsp .deref) (.lend lsp x .mut))])
         pure (.var sp r)
       else pure V
-    | .pair sp V W => return .pair sp (← hoistReadsV lent k V) (← hoistReadsV lent k W)
+    | .pair sp V W => return .pair sp (← hoistReadsV lent all k V) (← hoistReadsV lent all k W)
     | .app sp V W => do
-      let V' ← hoistReadsV lent k V
-      let W' ← hoistReadsV lent k W
-      -- A call that lends a lent variable (a reborrow) is bound in its turn too, so that the
-      -- reads and lends of the variable run in the order the source evaluates them.
-      if lendsLent lent W' && !(V' matches .sugar ..) then
+      let V' ← hoistReadsV lent all k V
+      let W' ← hoistReadsV lent all k W
+      if all && isCallHead V' then
         let r ← (freshName "io_rc" : P String)
         modify (· ++ [(r, .app sp V' W')])
         pure (.var sp r)
       else pure (.app sp V' W')
-    | .inl sp V => return .inl sp (← hoistReadsV lent k V)
-    | .inr sp V => return .inr sp (← hoistReadsV lent k V)
-    | .unbang sp V => return .unbang sp (← hoistReadsV lent k V)
-    | .boxed sp a V => return .boxed sp a (← hoistReadsV lent k V)
-    | .unbox sp V => return .unbox sp (← hoistReadsV lent k V)
-    | .sub sp V a => return .sub sp (← hoistReadsV lent k V) a
-    | .roll sp V => return .roll sp (← hoistReadsV lent k V)
-    | .unroll sp V => return .unroll sp (← hoistReadsV lent k V)
-    | .inst sp V a => return .inst sp (← hoistReadsV lent k V) a
-    | .ascribe sp V A => return .ascribe sp (← hoistReadsV lent k V) A
-    | .shorten sp m σ a V => return .shorten sp m σ a (← hoistReadsV lent k V)
-    | .mark sp m V => return .mark sp m (← hoistReadsV lent k V)
+    | .inl sp V => return .inl sp (← hoistReadsV lent all k V)
+    | .inr sp V => return .inr sp (← hoistReadsV lent all k V)
+    | .unbang sp V => return .unbang sp (← hoistReadsV lent all k V)
+    | .boxed sp a V => return .boxed sp a (← hoistReadsV lent all k V)
+    | .unbox sp V => return .unbox sp (← hoistReadsV lent all k V)
+    | .sub sp V a => return .sub sp (← hoistReadsV lent all k V) a
+    | .roll sp V => return .roll sp (← hoistReadsV lent all k V)
+    | .unroll sp V => return .unroll sp (← hoistReadsV lent all k V)
+    | .inst sp V a => return .inst sp (← hoistReadsV lent all k V) a
+    | .ascribe sp V A => return .ascribe sp (← hoistReadsV lent all k V) A
+    | .shorten sp m σ a V => return .shorten sp m σ a (← hoistReadsV lent all k V)
+    | .mark sp m V => return .mark sp m (← hoistReadsV lent all k V)
     | .thunk sp M => return .thunk sp (← hoistReadsC lent k M)
     | .thunkv sp M => return .thunkv sp (← hoistReadsC lent k M)
     | .bangThunk sp M => return .bangThunk sp (← hoistReadsC lent k M)
     | .bangThunkv sp M => return .bangThunkv sp (← hoistReadsC lent k M)
-    | .run sp M => return .run sp (← hoistReadsC lent k M)
+    | .run sp M => do
+      let M' ← hoistReadsC lent k M
+      let R : Val := .run sp M'
+      if all then
+        let r ← (freshName "io_rc" : P String)
+        modify (· ++ [(r, R)])
+        pure (.var sp r)
+      else pure R
     | V => pure V
+  termination_by k V => (k, 0)
 
 /-- `M` with each read of a lent variable bound just before the computation it is in: a
 binding's head that is a value, before the binding (SPEC §41, R3). The read rebinds the borrow,
@@ -1389,27 +1403,28 @@ def hoistReadsC (lent : List String) : Nat → Comp → P Comp
   | k + 1, M => do
     let (M', rs) ← (node k M).run []
     pure (rs.foldr (fun (r, V) K => .bind V.span ⟨r, V.span⟩ none (.ret V.span V) K) M')
+termination_by k M => (k, 0)
 where
   node (k : Nat) : Comp → StateT (List (String × Val)) P Comp
-    | .ret sp V => return .ret sp (← hoistReadsV lent k V)
+    | .ret sp V => return .ret sp (← hoistReadsV lent (usesLent lent V) k V)
     | .bind sp x A (.ret rsp V) N => do
-      let V' ← hoistReadsV lent k V
+      let V' ← hoistReadsV lent (usesLent lent V) k V
       return .bind sp x A (.ret rsp V') (← hoistReadsC lent k N)
     | .bind sp x A M N => return .bind sp x A (← hoistReadsC lent k M) (← hoistReadsC lent k N)
     | .letUnit sp V M => do
-      let V' ← hoistReadsV lent k V
+      let V' ← hoistReadsV lent (usesLent lent V) k V
       return .letUnit sp V' (← hoistReadsC lent k M)
     | .letPair sp x y V M => do
-      let V' ← hoistReadsV lent k V
+      let V' ← hoistReadsV lent (usesLent lent V) k V
       return .letPair sp x y V' (← hoistReadsC lent k M)
     | .case sp V x M y N => do
-      let V' ← hoistReadsV lent k V
+      let V' ← hoistReadsV lent (usesLent lent V) k V
       return .case sp V' x (← hoistReadsC lent k M) y (← hoistReadsC lent k N)
-    | .absurd sp V => return .absurd sp (← hoistReadsV lent k V)
+    | .absurd sp V => return .absurd sp (← hoistReadsV lent (usesLent lent V) k V)
     | .loop sp l .while_ V M N => do
       -- A `while`'s condition is tested before each turn: the reads in it are bound there,
       -- `loop { if c { M } else { break } }`.
-      let (V', rs) ← ((hoistReadsV lent k V).run [] : P _)
+      let (V', rs) ← ((hoistReadsV lent (usesLent lent V) k V).run [] : P _)
       let M' ← hoistReadsC lent k M
       let N' ← hoistReadsC lent k N
       if rs.isEmpty then return .loop sp l .while_ V M' N'
@@ -1417,10 +1432,10 @@ where
       let body := rs.foldr (fun (r, W) K => .bind W.span ⟨r, W.span⟩ none (.ret W.span W) K) test
       return .loop sp l .forever (.unit sp) body N'
     | .loop sp l src V M N => do
-      let V' ← hoistReadsV lent k V
+      let V' ← hoistReadsV lent (usesLent lent V) k V
       return .loop sp l src V' (← hoistReadsC lent k M) (← hoistReadsC lent k N)
-    | .perform sp n i V => return .perform sp n i (← hoistReadsV lent k V)
-    | .abort sp n i V => return .abort sp n i (← hoistReadsV lent k V)
+    | .perform sp n i V => return .perform sp n i (← hoistReadsV lent (usesLent lent V) k V)
+    | .abort sp n i V => return .abort sp n i (← hoistReadsV lent (usesLent lent V) k V)
     | .lam sp x A M => return .lam sp x A (← hoistReadsC lent k M)
     | .lamL sp x b M => return .lamL sp x b (← hoistReadsC lent k M)
     | .app sp M x => return .app sp (← hoistReadsC lent k M) x
@@ -1433,6 +1448,7 @@ where
     | .unwind sp x A M D N =>
       return .unwind sp x A (← hoistReadsC lent k M) (← hoistReadsC lent k D) (← hoistReadsC lent k N)
     | M => pure M
+  termination_by M => (k, 1)
 end
 
 /-- `M` handing on `xs`, bound before `N` (`j <- M; N`): the pattern `p` of its value, beside
