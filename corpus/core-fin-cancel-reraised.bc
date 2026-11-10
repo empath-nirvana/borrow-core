@@ -1,0 +1,23 @@
+-- SPEC §27 in the core text, the twin of the kernel program `cancel-reraised` (`bcc kernel interp
+-- cancel-reraised`, Core's `cancelKeptT`): `hnd 3 (hnd 1 {perform k => cancel k} (hnd 2 (perform 1
+-- unwind raise 3)))`. Handler 1 cancels `κ`; the finaliser raises `3.0` during the cancel. The cancel
+-- row of `1.0` is `{3.0}`, spelled in handler 2's row `1.0 cancel[3.0 cancel 1 ~> 0] 1 ~> 1`. The
+-- error is kept, re-raised at the canceller (handler 1's clause), and caught by handler 3.
+--
+-- Answer: inr (), and `live 0`. A wrong implementation that drops the error raised during a
+-- cancel answers `inl ()`.
+
+main : F (1 + 1) =
+  handle_with[3](
+      ((!thunkv fun (v : 1) -> return (inl v)) : !U (1 -o F (1 + 1))),
+      (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F (1 + 1)) * 1)) (
+    handle_with[1](
+        ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[3.0 cancel 1 ~> 0] 1)),
+        (((!thunkv fun (p : 1 * U ((1 -o F[3.0 cancel 1 ~> 0] 1) & F[3.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] 1)) ->
+          let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+          : !U (1 * U ((1 -o F[3.0 cancel 1 ~> 0] 1) & F[3.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] 1) -o F[3.0 cancel 1 ~> 0] 1) * 1)) (
+      handle_with[2](
+          ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[1.0 cancel[3.0 cancel 1 ~> 0] 1 ~> 1, 3.0 cancel 1 ~> 0] 1)),
+          (((!thunkv fun (e : 1) -> return ()), ()) : !U (1 -o F[1.0 cancel[3.0 cancel 1 ~> 0] 1 ~> 1, 3.0 cancel 1 ~> 0] 1) * 1)) (
+        x <- perform[1.0] () unwind (abort[3.0] ());
+        return x)))

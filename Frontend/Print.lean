@@ -130,8 +130,17 @@ def CTy.pp (C : CTy) (lvl : Nat := 0) : String :=
 /-- A row's entries, `n.i q A ~> B, …`, without the brackets. -/
 def Row.pp : Row → String
   | .nil => ""
-  | .cons n i q A B .nil => s!"{n}.{i} {q.str} " ++ A.pp ++ " ~> " ++ B.pp
-  | .cons n i q A B r => s!"{n}.{i} {q.str} " ++ A.pp ++ " ~> " ++ B.pp ++ ", " ++ r.pp
+  | .cons n i q A B f r =>
+      -- The cancel row after the qualifier: nothing when it is empty, else `[R]`.  `[spec §27]`
+      let fin := match f with
+        | .nil => ""
+        | .top => "[top]"
+        | f => "[" ++ f.pp ++ "]"
+      let e := s!"{n}.{i} {q.str}" ++ fin ++ " " ++ A.pp ++ " ~> " ++ B.pp
+      match r with
+      | .nil => e
+      | r => e ++ ", " ++ r.pp
+  | .top => "top"
 
 def Shape.pp : Shape → String
   | .leaf _ A => "leaf " ++ A.pp 4

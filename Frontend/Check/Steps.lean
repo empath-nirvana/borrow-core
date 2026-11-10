@@ -557,9 +557,10 @@ def orPad : List Bool → List Bool → List Bool
 it (`Env.cap`), and no row.  `[spec §12]` -/
 def Env.forVal (E : Env) : Env := { E with own := [], cap := orPad E.own E.cap, row := none }
 
+/-- A row as the core text writes it, each entry with its cancel row at every depth (`ppEff`).
+`[spec §19, §27]` -/
 def ppRow (E : Env) (S : CRow) : String :=
-  "[" ++ ", ".intercalate (S.map fun o =>
-    s!"{o.n}.{o.i} {qualStr o.q} {E.ppV o.A} ~> {E.ppV o.B}") ++ "]"
+  "[" ++ ", ".intercalate (ppEff E.lenv (BoCa.Fig16.LogRel.Core.CTy.effOf S .unit)).1 ++ "]"
 
 theorem Row.cancels_of_unr {S : CRow} (h : S.Unr) : S.Cancels := by
   obtain ⟨o, ho, hq⟩ := h
@@ -596,23 +597,153 @@ def clauseCands : CVTy → List (CQual × CVTy × CVTy)
   | .bang (.thunk (.arr A _)) => [(.cancel, A, .zero)]
   | _ => []
 
-/-- The first candidate whose clause type is `c` up to `[α]` (`tyEqV`). -/
+/-- The operations a computation type's calls perform: its row under its arguments and
+lifetime binders, both branches of a `&` (a continuation's resume and cancel).  `[spec §27]` -/
+def retRowOf : CCTy → CRow
+  | .arr _ C => retRowOf C
+  | .all _ _ C => retRowOf C
+  | .amp C D => retRowOf C ++ retRowOf D
+  | .nu C => retRowOf C
+  | C => C.rowOf
+
+/-- The depth to which `needRowOf` and `thenBlame` read a derivation.  `[spec §27]` -/
+def opKeysFuel : Nat := 100000
+
+/-- Two row entries at one key `n.i`.  `[spec §27]` -/
+def keyEq (o o' : COpSig) : Bool := o.n == o'.n && o.i == o'.i
+
+/-- The depth to which the row a derivation needs (`needRowOf`) joins cancel rows.  `[spec §27]` -/
+def joinFuel : Nat := 64
+
+/-- Two rows joined by key: an operation of either, at a key both hold the cancel rows joined (`⊤`
+absorbing).  `[spec §27]` -/
+def rowJoin : Nat → CRow → CRow → CRow
+  | 0, R, _ => R
+  | k + 1, R, R' => R'.foldl (fun acc o' =>
+      if acc.any (keyEq · o') then
+        acc.map fun x => if keyEq x o' then
+          { x with fin := if x.fin.isTop || o'.fin.isTop then .top
+              else BoCa.Fig16.LogRel.Core.CTy.effOf (rowJoin k x.fin.rowOf o'.fin.rowOf) .unit }
+          else x
+      else acc ++ [o']) R
+
+/-- The least cancel row `pend P G`: `G`'s layers, a capturable one's cancel row `pend P` at every
+depth, with `P`'s abortive operations (`PendLe`).  `[spec §27]` -/
+def pendJoin (P : CRow) : Nat → CRow → CRow
+  | 0, G => G
+  | k + 1, G => rowJoin k (G.map fun o =>
+      if BoCa.Fig16.LogRel.Core.capB o.q o.B && !o.fin.isTop then
+        { o with fin := BoCa.Fig16.LogRel.Core.CTy.effOf (pendJoin P k o.fin.rowOf) .unit }
+      else o) (P.filter (·.abort))
+
+/-- The least cancel row `F ⋈ E`: `F`'s layers, a capturable one's cancel row `⋈ E`, and `E`'s
+operations, a capturable one's cancel row with `F`'s errors pending (`ThenLe`).  `[spec §27]` -/
+def thenJoin (E : CRow) : Nat → CRow → CRow
+  | 0, F => F
+  | k + 1, F => rowJoin k (F.map fun o =>
+      if BoCa.Fig16.LogRel.Core.capB o.q o.B && !o.fin.isTop then
+        { o with fin := BoCa.Fig16.LogRel.Core.CTy.effOf (thenJoin E k o.fin.rowOf) .unit }
+      else o) (E.map fun e =>
+      if BoCa.Fig16.LogRel.Core.capB e.q e.B && !e.fin.isTop then
+        { e with fin := BoCa.Fig16.LogRel.Core.CTy.effOf (pendJoin F k e.fin.rowOf) .unit }
+      else e)
+
+/-- The row a checked term's derivation needs, cancel rows included, read from the derivation:
+a `[perform]`, `await` or `[raise]` its operation at the empty cancel row; a call (a leaf whose
+judgment is a computation type) the callee type's row, cancel rows included; under a `[sub]`, the
+subterm's; a `[then]` its head's row with each capturable operation's cancel row `⋈` its
+finaliser's row (`thenJoin`), with its rest's and its finaliser's; inside `handle_n`, no operation
+of the name `n`, and its clauses' bodies, which run at the handler's row; the rest joined
+(`rowJoin`). A value's computation body (a thunk's, a function value's) is not read (`vals`
+false): it runs at its own row, when it is forced or called, which a call leaf counts. `[then]`'s
+`Σ_M` and `Σ_D` are this row of `M` and of `D` (`thenMC`, `finC`); the kernel checks them at it.
+`[spec §27]` -/
+def needRowOf : Nat → Bool → TExpr → CRow
+  | 0, _, _ => []
+  | k + 1, vals, t =>
+    let J := rowJoin joinFuel
+    let inner (n : UInt32) (tc te : TExpr) :=
+      J (needRowOf k true tc) ((needRowOf k vals te).filter (·.n != n))
+    let atThen (tM tN tD : TExpr) :=
+      let rD := needRowOf k vals tD
+      let rM := (needRowOf k vals tM).map fun o =>
+        if BoCa.Fig16.LogRel.Core.capB o.q o.B && !o.fin.isTop then
+          { o with fin := BoCa.Fig16.LogRel.Core.CTy.effOf (thenJoin rD joinFuel o.fin.rowOf) .unit }
+        else o
+      J (J rM (needRowOf k vals tN)) rD
+    match t with
+    | .effPerform _ _ _ o t' => J [{ o with fin := .ret .unit }] (needRowOf k vals t')
+    | .effAwait _ _ _ _ a c => [a, c]
+    | .effRaise _ _ _ o _ t' => J [{ o with fin := .ret .unit }] (needRowOf k vals t')
+    | .effSub _ _ _ _ _ t' => needRowOf k vals t'
+    | .effThen _ _ _ _ _ _ _ _ tM tN tD => atThen tM tN tD
+    | .effThenDiv _ _ _ _ _ _ _ _ tM tN tD => atThen tM tN tD
+    | .effHandleV _ _ _ _ _ _ n _ _ _ _ _ _ tc te => inner n tc te
+    | .effHandleVB _ _ _ _ _ _ n _ _ _ _ _ _ _ tc te => inner n tc te
+    | .effHandleT _ _ _ _ _ _ n _ _ _ _ _ tc te => inner n tc te
+    | .effHandleL _ _ _ _ _ _ _ n _ _ _ _ _ tc te => inner n tc te
+    | t => match t.children with
+      | [] => match t.jdg with
+        | .comp C => retRowOf C
+        | _ => []
+      | cs => cs.foldl (fun acc c =>
+          let isComp := match c.2.jdg with
+            | .comp _ => true
+            | _ => false
+          if vals || isComp then J acc (needRowOf k vals c.2) else acc) []
+
+/-- The cancel row `F` whose `cancelTy S F` is the cancel branch `C` of a `κ`: `C`'s layers ahead
+of `S`'s, counted by `S`'s length (the clause's type, rebuilt at it, is then compared whole).
+`[spec §27]` -/
+def finOfBranch (S : CRow) (C : CCTy) : CCTy :=
+  let R := C.rowOf
+  BoCa.Fig16.LogRel.Core.CTy.effOf (R.take (R.length - S.length)) .unit
+
+/-- The cancel row a `κ`'s type `K` is at, read back from its cancel branch (`finOfBranch`).
+`[spec §27]` -/
+def kFin (S : CRow) : CVTy → CCTy
+  | .thunk (.amp _ C) => finOfBranch S C
+  | .bang (.thunk (.amp _ C)) => finOfBranch S C
+  | _ => .ret .unit
+
+/-- The cancel row a clause's type gives its operation: `κ`'s (`kFin`), read only at a capturable
+operation (`capB`); the empty cancel row at any other.  `[spec §27]` -/
+def clauseFin (S : CRow) (c : CVTy) (e : CQual × CVTy × CVTy) : CCTy :=
+  if BoCa.Fig16.LogRel.Core.capB e.1 e.2.2 then
+    match c with
+    | .bang (.thunk (.arr (.tensor _ K) _)) => kFin S K
+    | _ => .ret .unit
+  else .ret .unit
+
+/-- The first candidate whose clause type, at its cancel row (`clauseFin`), is `c` up to `[α]`
+(`tyEqV`). -/
 def firstClause (S : CRow) (R c : CVTy) :
-    List (CQual × CVTy × CVTy) → Option (CQual × CVTy × CVTy)
+    List (CQual × CVTy × CVTy) → Option ((CQual × CVTy × CVTy) × CCTy)
   | [] => none
-  | e :: es => if tyEqV (BoCa.Fig16.LogRel.Core.clauseTy S R e) c then some e
+  | e :: es =>
+    let F := clauseFin S c e
+    if tyEqV (BoCa.Fig16.LogRel.Core.clauseTy S R e F) c then some (e, F)
       else firstClause S R c es
 
-/-- The operations `E` of a handler read back from the type of its clauses' tuple, with
-`clausesTy S R E` that type up to `[α]`. An abortive operation is read as cancellable: `cancel` and
-`unr` give it the same clause type. -/
-def clausesRead (S : CRow) (R : CVTy) : (Tc : CVTy) → Option (List (CQual × CVTy × CVTy))
+/-- The operations `E` of a handler, each with its cancel row, read back from the type of its
+clauses' tuple, with `clausesTy S R E fs` that type up to `[α]`. An abortive operation is read as
+cancellable: `cancel` and `unr` give it the same clause type.  `[spec §19, §27]` -/
+def clausesReadF (S : CRow) (R : CVTy) : (Tc : CVTy) → Option (List ((CQual × CVTy × CVTy) × CCTy))
   | .unit => some []
   | .tensor c rest => do
     let e ← firstClause S R c (clauseCands c)
-    let E ← clausesRead S R rest
+    let E ← clausesReadF S R rest
     pure (e :: E)
   | _ => none
+
+/-- The operations `E` of a handler read back from the type of its clauses' tuple
+(`clausesReadF`, its cancel rows aside). -/
+def clausesRead (S : CRow) (R : CVTy) (Tc : CVTy) : Option (List (CQual × CVTy × CVTy)) :=
+  (clausesReadF S R Tc).map (·.map Prod.fst)
+
+/-- The cancel rows read with a handler's operations, as `Row.ofEff`'s `fs`: the `j`-th, and the
+empty cancel row past the end.  `[spec §27]` -/
+def finsOf (Fs : List CCTy) : Nat → CCTy := fun j => Fs.getD j (.ret .unit)
 
 /-- The operations a clause's type under BOXED-κ may be the type of (`[spec §28]`): a control
 operation `A ↠^q B` (its argument `A ⊗ [@d] κ`), then an abortive one. -/
@@ -623,16 +754,30 @@ def clauseCandsB : CVTy → List (CQual × CVTy × CVTy)
   | .bang (.thunk (.arr A _)) => [(.cancel, A, .zero)]
   | _ => []
 
-/-- The first candidate whose clause type under BOXED-κ at `@d` is `c` up to `[α]`. -/
+/-- The cancel row a clause's type under BOXED-κ gives its operation, as `clauseFin`.
+`[spec §27, §28]` -/
+def clauseFinB (S : CRow) (c : CVTy) (e : CQual × CVTy × CVTy) : CCTy :=
+  if BoCa.Fig16.LogRel.Core.capB e.1 e.2.2 then
+    match c with
+    | .bang (.thunk (.arr (.tensor _ (.box _ K)) _)) => kFin S K
+    | _ => .ret .unit
+  else .ret .unit
+
+/-- The first candidate whose clause type under BOXED-κ at `@d`, at its cancel row, is `c` up to
+`[α]`. -/
 def firstClauseB (S : CRow) (R : CVTy) (d : CLife) (c : CVTy) :
-    List (CQual × CVTy × CVTy) → Option (CQual × CVTy × CVTy)
+    List (CQual × CVTy × CVTy) → Option ((CQual × CVTy × CVTy) × CCTy)
   | [] => none
-  | e :: es => if tyEqV (BoCa.Fig16.LogRel.Core.clauseTyB S R d e) c then some e
+  | e :: es =>
+    let F := clauseFinB S c e
+    if tyEqV (BoCa.Fig16.LogRel.Core.clauseTyB S R d e F) c then some (e, F)
       else firstClauseB S R d c es
 
-/-- The operations `E` of a handler whose clauses receive `κ` boxed at `@d`, read back from the
-type of its clauses' tuple, with `clausesTyB S R d E` that type up to `[α]`.  `[spec §28]` -/
-def clausesReadB (S : CRow) (R : CVTy) (d : CLife) : (Tc : CVTy) → Option (List (CQual × CVTy × CVTy))
+/-- The operations `E` of a handler whose clauses receive `κ` boxed at `@d`, each with its cancel
+row, read back from the type of its clauses' tuple, with `clausesTyB S R d E fs` that type up to
+`[α]`.  `[spec §27, §28]` -/
+def clausesReadB (S : CRow) (R : CVTy) (d : CLife) : (Tc : CVTy) →
+    Option (List ((CQual × CVTy × CVTy) × CCTy))
   | .unit => some []
   | .tensor c rest => do
     let e ← firstClauseB S R d c (clauseCandsB c)
@@ -648,15 +793,16 @@ def clausesBoxOf : CVTy → Option CLife
   | .tensor _ rest => clausesBoxOf rest
   | _ => none
 
-/-- A reading of a handler's clause tuple: BOXED-κ's at `@d` (SPEC §28), or the plain one. -/
+/-- A reading of a handler's clause tuple: BOXED-κ's at `@d` (SPEC §28), or the plain one, each
+with its operations' cancel rows `Fs` (SPEC §27). -/
 inductive ClausesAt where
-  | boxed (d : CLife) (Es : List (CQual × CVTy × CVTy))
-  | plain (Es : List (CQual × CVTy × CVTy))
+  | boxed (d : CLife) (Es : List (CQual × CVTy × CVTy)) (Fs : List CCTy)
+  | plain (Es : List (CQual × CVTy × CVTy)) (Fs : List CCTy)
 
-/-- The clause tuple's type a reading rebuilds: `clausesTyB S R d E` or `clausesTy S R E`. -/
+/-- The clause tuple's type a reading rebuilds: `clausesTyB S R d E fs` or `clausesTy S R E fs`. -/
 def ClausesAt.ty (S : CRow) (R : CVTy) : ClausesAt → CVTy
-  | .boxed d Es => BoCa.Fig16.LogRel.Core.clausesTyB S R d Es
-  | .plain Es => BoCa.Fig16.LogRel.Core.clausesTy S R Es
+  | .boxed d Es Fs => BoCa.Fig16.LogRel.Core.clausesTyB S R d Es (finsOf Fs)
+  | .plain Es Fs => BoCa.Fig16.LogRel.Core.clausesTy S R Es (finsOf Fs)
 
 /-- A clause tuple's type read back, up to `[α]`: as BOXED-κ's where it reads so, which the checker
 prefers to the plain reading (that would read a clause `!U(A ⊗ [@d] κ ⊸ F_Σ R)` as an abortive
@@ -664,8 +810,8 @@ operation's); else plainly. The handler's clauses are then carried to the type t
 rebuilds (`ClausesAt.ty`, `convVal`).  `[spec §19, §28]` -/
 def clausesReadAt (S : CRow) (R : CVTy) (Tc : CVTy) : Option ClausesAt :=
   match (do let d ← clausesBoxOf Tc; let Es ← clausesReadB S R d Tc; pure (d, Es)) with
-  | some (d, Es) => some (.boxed d Es)
-  | none => (clausesRead S R Tc).map .plain
+  | some (d, Es) => some (.boxed d (Es.map Prod.fst) (Es.map Prod.snd))
+  | none => (clausesReadF S R Tc).map fun Es => .plain (Es.map Prod.fst) (Es.map Prod.snd)
 
 /-- `h_ret`'s type `!U(A -o F_S R)` read back. -/
 def retRead (Tr : CVTy) :
@@ -1105,11 +1251,119 @@ def markIt {j : Jdg} (sp : Span) (k : SchemeMark) (r : Res Δ T j) : Except Erro
   | some r' => pure r'
   | none => err sp s!"internal error: a marked scheme ({repr k}) is not the scheme's term"
 
-/-- `[then]` at the row `S`: `N` (its binder `x` closed) and the finaliser `D` at one context. -/
-def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow} {pN : Pins}
+/-- Where `F ⋈ E ≤ T` fails first, as a phrase about `T` (printed by `pr`): `T` lacks operations of
+`E`; or an entry of `E` it holds lacks an error `F` may keep pending (`PendLe`); or, recursively,
+the cancel row of a capturable entry of `F` (`the entry n.i in it, …`). `none` when none of these is
+found (a signature differs).  `[spec §27]` -/
+def thenBlame (pr : CCTy → String) (E : CRow) : Nat → CCTy → CCTy → Option String
+  | 0, _, _ => none
+  | k + 1, F, T =>
+    let key (d : COpSig) : String := s!"{d.n}.{d.i}"
+    let keys (R : CRow) : String := ", ".intercalate (R.map key)
+    if T.isTop then none else
+    let miss := E.filter fun e => (BoCa.Fig16.LogRel.Core.Row.find T.rowOf e.n e.i).isNone
+    if !miss.isEmpty then some s!"`{pr T}`, must hold {keys miss}" else
+    let pend := E.findSome? fun e =>
+      match BoCa.Fig16.LogRel.Core.Row.find T.rowOf e.n e.i with
+      | some o' =>
+        if BoCa.Fig16.LogRel.Core.capB e.q e.B && !pendLeB F.rowOf e.fin o'.fin then
+          let lacks := F.rowOf.filter fun a => a.abort &&
+            (BoCa.Fig16.LogRel.Core.Row.find o'.fin.rowOf a.n a.i).isNone
+          if lacks.isEmpty then
+            some (s!"`{pr T}`, holds {key e}, whose own cancel row `{pr o'.fin}` must hold the " ++
+              s!"finaliser's cancel row of {key e}, `{pr e.fin}`, with the errors of `{pr F}` " ++
+              "pending at every depth")
+          else some (s!"`{pr T}`, holds {key e}, whose own cancel row `{pr o'.fin}` must hold " ++
+            s!"{keys lacks} (an error that may be pending when {key e} is cancelled)")
+        else none
+      | none => none
+    match pend with
+    | some m => some m
+    | none =>
+      F.rowOf.findSome? fun o =>
+        if BoCa.Fig16.LogRel.Core.capB o.q o.B then
+          match BoCa.Fig16.LogRel.Core.Row.find T.rowOf o.n o.i with
+          | some o' => (thenBlame pr E k o.fin o'.fin).map fun m =>
+              s!"`{pr T}`, holds {key o}, whose own cancel row, " ++ m
+          | none => none
+        else none
+
+/-- `[then]` with `M` at its row `SM` and the finaliser at its row `SD` (non-empty), the cancel-row
+premises decided: `rowLeB` (`Σ_M ≤ Σ`, `Σ_D ≤ Σ`), `thenFinB` (each cancel row of `Σ_M` read holds
+`F ⋈ Σ_D`), `pendPersB` on `Σ_M`, `Div` not in `Σ_D`.  `[spec §27]` -/
+def thenAt (E : Env) (sp spD : Span) (x : String) {S SM SD : CRow} {A B : CVTy} {tN : TExpr}
+    {sN : CRow} {pN : Pins} (hNZ : S.NZ) (hUq : S.Uniq)
+    (rM : Res Δ T (.comp (effOf SM A)))
+    (rD : Res Δ (.unit :: T) (.comp (effOf SD .unit)))
+    (F' : Fam T (fun L => (TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)) ∧
+      TTied rD.pins rD.sigs Δ (mkCtx (.unit :: T) (false :: L)) rD.t (.comp (effOf SD .unit))) ∧
+      (S.UnrD → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T L)))) :
+    Except Error (Res Δ T (.comp (effOf S B))) :=
+  if h : overlapOK T rM.F.u F'.u = true then
+    if hMS : rowLeB SM S = true then
+      if hDS : rowLeB SD S = true then
+        if hfin : thenFinB SM S SD = true then
+          if hSD : BoCa.Fig16.LogRel.Core.Row.divB SD = false then
+            let fin := fun (hP : SD.UnrD → SM.PendPers) =>
+              rEffThenD (atB sp [x]) hNZ hUq (rowLeB_sound hMS) (rowLeB_sound hDS) hfin hP hSD
+                rM F' h
+            if hu : Row.unrDB SD = true then
+              if hp : pendPersB SM = true then pure (fin fun _ => pendPersB_sound hp)
+              else throw ⟨sp, s!"the finaliser may meet an operation that resumes more " ++
+                s!"than once, so the errors pending below it, those of the row " ++
+                s!"`{ppRow E SM}`, must have persistent arguments"⟩
+            else pure (fin fun hU => absurd (Row.unrDB_iff.mpr hU) (by simp [hu]))
+          else throw ⟨sp, "a finaliser may not loop: its row holds `Div`"⟩
+        else
+          -- The first operation of `M` whose cancel row lacks what the finaliser performs: where the
+          -- continuation is captured, and what its cancel row must hold.  `[spec §27]`
+          -- The first operation `M` itself performs (`needRowOf`; `SM` is `S` when `M` stays at
+          -- the site's row) whose cancel row lacks what the finaliser performs: where the
+          -- continuation is captured, the cancel row (or nested entry) that lacks it, and what.
+          -- `[spec §27]`
+          let mine := needRowOf opKeysFuel false rM.t
+          let fails (o : COpSig) (Fo : CCTy) : Bool := o.finRead &&
+            match BoCa.Fig16.LogRel.Core.Row.find S o.n o.i with
+            | some o' => !thenLeB Fo SD o'.fin
+            | none => true
+          -- The operation that fails: first one `M` itself performs, at its own cancel row
+          -- (`needRowOf`); else one of the row `M` was checked at, at that row's cancel row.
+          let culprit : Option (COpSig × CCTy) :=
+            match (S.filterMap fun o => mine.find? (keyEq · o)).find? (fun m => fails m m.fin) with
+            | some m => some (m, m.fin)
+            | none => (SM.find? fun o => fails o o.fin).map fun o => (o, o.fin)
+          let rowStr (F : CCTy) : String :=
+            if F.isTop then "[top]" else s!"[{", ".intercalate (ppEff E.lenv F).1}]"
+          match culprit with
+          | some (o, Fo) =>
+            let F := match BoCa.Fig16.LogRel.Core.Row.find S o.n o.i with
+              | some o' => o'.fin
+              | none => o.fin
+            let keyStr (d : COpSig) : String := s!"{d.n}.{d.i}"
+            let what := ", ".intercalate (SD.map keyStr)
+            let where_ := (thenBlame rowStr SD opKeysFuel Fo F).getD
+              (s!"`{rowStr F}`, does not hold what the finaliser performs, `{ppRow E SD}`, with " ++
+                s!"the cancel rows its own, `{rowStr Fo}`, need below it")
+            throw ⟨spD, s!"this finaliser performs {what}, and it runs when the continuation " ++
+              s!"captured at the operation {keyStr o} below it is cancelled (by the handler " ++
+              s!"of the name {o.n}, which drops it): the cancel row of {keyStr o}, {where_}; " ++
+              s!"write `{keyStr o} {qualStr o.q}[…] A ~> B` (SPEC §27)"⟩
+          | none => throw ⟨spD, "internal error: a finaliser's cancel rows"⟩
+      else throw ⟨sp, s!"the finaliser's row `{ppRow E SD}` is not within `{ppRow E S}`"⟩
+    else throw ⟨sp, s!"the row `{ppRow E SM}` of the computation is not within `{ppRow E S}`"⟩
+  else throw (splitErr E T sp rM.F.u F'.u)
+
+/-- `[then]` at the row `S`: `N` (its binder `x` closed) and the finaliser `D` at one context, `D`
+at its own row `SD`. At `SD = []`, `effThenA`, `M` at `S`; else `[then]` (`thenAt`), `M` at its own
+row `SM` where the checker found one (`rMs`, SPEC §27: a capturable operation the finaliser
+performs is then not one of `M`'s, whose cancel row would have to hold it), else at `S`.
+`[spec §27]` -/
+def thenIt (E : Env) (sp : Span) (x : String) (spD : Span) {S SD : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow}
+    {pN : Pins}
     (rM : Res Δ T (.comp (effOf S A)))
+    (rMs : Option (Σ SM : CRow, Res Δ T (.comp (effOf SM A))))
     (FN : Fam T (fun L => TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B))))
-    (rD : Res Δ (.unit :: T) (.comp (effOf [] .unit))) :
+    (rD : Res Δ (.unit :: T) (.comp (effOf SD .unit))) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
   if hNZ : Row.nzB S = true then
     if hUq : Row.uniqB S = true then
@@ -1119,7 +1373,7 @@ def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExp
           let F := FN.merge FD s₁ s₂
           let F' : Fam T (fun L => (TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)) ∧
               TTied rD.pins rD.sigs Δ (mkCtx (.unit :: T) (false :: L)) rD.t
-                (.comp (effOf [] .unit))) ∧
+                (.comp (effOf SD .unit))) ∧
               (S.UnrD → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T L))) ←
             if hu : Row.unrDB S = true then
               if hs : usedSat isBangB T F.u = true then
@@ -1130,9 +1384,16 @@ def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExp
                     "once: it must be a `!` type"⟩
                 | none => throw ⟨sp, "internal error: an unrestricted row"⟩
             else pure (F.map fun _ h => ⟨h, fun hU => absurd (Row.unrDB_iff.mpr hU) (by simp [hu])⟩)
-          if h : overlapOK T rM.F.u F'.u = true then
-            pure (rEffThen (atB sp [x]) (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM F' h)
-          else throw (splitErr E T sp rM.F.u F'.u)
+          if h0 : SD.isEmpty = true then
+            if h : overlapOK T rM.F.u F'.u = true then
+              pure (rEffThen (atB sp [x]) (List.isEmpty_iff.mp h0) (Row.nzB_sound hNZ)
+                (Row.uniqB_sound hUq) rM F' h)
+            else throw (splitErr E T sp rM.F.u F'.u)
+          else
+            -- The finaliser performs (SPEC §27): `[then]` at its row `SD`, `M` at its own row.
+            match rMs with
+            | some ⟨_, rM'⟩ => thenAt E sp spD x (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM' rD F'
+            | none => thenAt E sp spD x (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM rD F'
         else throw (mergeErr E T sp "the finaliser" "the rest" "after this computation, "
           FD.u FD.w FN.u FN.w)
       else throw (mergeErr E T sp "the rest" "the finaliser" "after this computation, "
@@ -1170,7 +1431,8 @@ def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
       else throw (splitErr E T sp rM.F.u FN'.u)
     else
       let rD ← finalOf E sp S FN.u
-      thenIt E sp x.name rM FN rD
+      -- `M` at the site's row: its finaliser `finalOf` performs nothing.  `[spec §27]`
+      thenIt E sp x.name sp rM none FN rD
   else
     let FN' := FN.map fun _ h =>
       (⟨h, fun hW => absurd (Row.cancelsB_iff.mpr hW) (by simp [hw]),
