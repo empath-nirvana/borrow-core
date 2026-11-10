@@ -121,7 +121,8 @@ theorem goal791N_premises_progK :
 close, is safe, leak-free, or diverges, from `HandlerLawN`.  `[spec §68]` -/
 theorem progK_orDiverges (h : HandlerLawN (ℍ := ℍ)) :
     OrDiverges (ℍ := ℍ) (substAll (vals791 []) (progK 3)) :=
-  goal791N h [] goal791N_premises_progK.1 (progK 3) goal791N_premises_progK.2
+  List.append_nil (vals791 ([] : List Const791)) ▸ goal791N h [] [] [] (progK 3) .unit
+    goal791N_premises_progK.1 .nil ((List.append_nil _).symm ▸ goal791N_premises_progK.2) rfl
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.CodeLoop855N
 
