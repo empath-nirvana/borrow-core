@@ -4,8 +4,9 @@
 # (scripts/compile-native.sh says so and passes).
 #
 #     scripts/ci-local.sh             the sanity gate (`make gate`): run before opening a PR
-#     scripts/ci-local.sh --source    the full gate (`make gate-full`): every step, and the source
-#                                     stage on every program
+#     scripts/ci-local.sh --full      the full gate (`make gate-full`): every step
+#     scripts/ci-local.sh --source    the full gate, and the source stage on every program and
+#                                     book block, re-verifying every golden
 #     scripts/ci-local.sh --changed   for iteration only: the sanity gate's steps the changes since
 #                                     origin/main can affect (below) (`make gate-fast`)
 #
@@ -27,12 +28,14 @@
 # The source stage. A corpus program's `.out` and a book block's `-- answer:` are goldens: the
 # output of `Support`'s interpreter (`bcc interp`), the reference semantics. Every compiled stage
 # a step runs is checked against the golden. The interpreter itself is slow (minutes on the largest
-# programs), so by default it runs only where a golden is unverified: on the corpus programs and
-# book blocks that are new or changed since the merge base (scripts/source-stage.sh). With
-# `--source`, it runs on every program and book block, and every golden is re-verified. The full
-# gate is required when Paper/, Support/ (the interpreter and the machine), Target/, Pipeline/,
-# Reference/ or Backend/ changed since the merge base; the sanity gate says so when they have. `--changed` never runs the
-# interpreter: it lists the unverified programs instead.
+# programs), so by default it runs only where a golden is unverified: where no key is recorded
+# for it, or the recorded key is not the current one, a key covering the elaborated term the
+# interpreter runs, its input and the interpreter's source (scripts/source-stage.sh). The sanity
+# and full gates both follow this rule; with `--source`, it runs on every program and book block,
+# and every golden is re-verified. The full gate is required when Paper/, Support/ (the
+# interpreter and the machine), Target/, Pipeline/, Reference/ or Backend/ changed since the merge
+# base; the sanity gate says so when they have. `--changed` never runs the interpreter: it lists
+# the unverified programs instead.
 #
 # A gate builds everything (`lake build`), then (the full gate) runs the compile-time guard alone
 # (it measures time), then every other step at once, each one's output printed in order as it
@@ -53,12 +56,13 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 changed=0
 full=0
-[ $# -le 1 ] || { echo "usage: scripts/ci-local.sh [--source | --changed]"; exit 2; }
+[ $# -le 1 ] || { echo "usage: scripts/ci-local.sh [--full | --source | --changed]"; exit 2; }
 case "${1:-}" in
   --changed) changed=1; export BCC_SOURCE=0 ;;
+  --full) full=1 ;;
   --source) full=1; export BCC_SOURCE=1 ;;
   "") ;;
-  *) echo "usage: scripts/ci-local.sh [--source | --changed]"; exit 2 ;;
+  *) echo "usage: scripts/ci-local.sh [--full | --source | --changed]"; exit 2 ;;
 esac
 # A change that reaches the reference semantics or the compiler needs the full gate.
 reach=""
@@ -140,7 +144,7 @@ if [ "$changed" = 1 ]; then
         scripts/ci-local.sh|scripts/par.sh) add "${everyStep[@]}" ;;
         scripts/parse-corpus.sh) add "parse corpus" ;;
         scripts/check-corpus.sh) add "check corpus" ;;
-        scripts/compile-corpus.sh|scripts/source-stage.sh) add "corpus (old backend, final)" ;;
+        scripts/compile-corpus.sh|scripts/source-stage.sh|scripts/interp-digest.sh) add "corpus (old backend, final)" ;;
         scripts/compile-backend2.sh) add "corpus (Backend2, final)" ;;
         scripts/check-backend2.sh) add "backend2 fence" ;;
         scripts/check-type-eq.sh|scripts/TypeEq.lean|scripts/type-eq.allow) add "type equality" ;;
@@ -194,9 +198,10 @@ if [ "$all" = 0 ]; then
 fi
 
 echo
-tag="ci-local"; [ "$changed" = 1 ] && tag="ci-local --changed"; [ "$full" = 1 ] && tag="ci-local --source"
+tag="ci-local"; [ "$changed" = 1 ] && tag="ci-local --changed"; [ "$full" = 1 ] && tag="ci-local --full"
+[ "${BCC_SOURCE:-}" = 1 ] && [ "$full" = 1 ] && tag="ci-local --source"
 if [ "$fail" -eq 0 ]; then echo "$tag: ALL PASSED ($((SECONDS - start))s)"; else echo "$tag: FAILURES (see above) ($((SECONDS - start))s)"; fi
 [ "$changed" = 1 ] && echo "(--changed is for iteration only: the sanity gate, scripts/ci-local.sh, runs before a PR)"
-[ "$full" = 0 ] && echo "(the sanity gate: \`make gate-full\` runs every check, and re-verifies every golden)"
+[ "$full" = 0 ] && echo "(the sanity gate: \`make gate-full\` runs every check; \`make verify-goldens\` re-verifies every golden)"
 [ -z "$reach" ] || echo "($reach changed: \`make gate-full\` is required as well)"
 exit "$fail"

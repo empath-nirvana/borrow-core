@@ -18,26 +18,32 @@
 # Failures are reported as `book/src/<file>.md:<line>`, the line of the block's opening fence.
 # The binary is $BCC, or .lake/build/bin/bcc (built by `lake build`).
 #
-#     scripts/book-doctest.sh [--source] [--backend old|new] [book/src/<file>.md[:<line>]…]
+#     scripts/book-doctest.sh [--source] [--write-keys] [--backend old|new] [book/src/<file>.md[:<line>]…]
 #
 # runs every block, or the blocks of the files named (the one whose fence is at <line>).
 #
 # The source stage (scripts/source-stage.sh). A block's `-- answer:` and `-- output:` lines are
-# its golden: a record of what `Support`'s interpreter prints. By default the interpreter runs
-# only on the blocks that are unverified, that is new or changed since the merge base with
-# origin/main (a block is matched by its attributes and text, wherever it moved); with `--source`
-# (or `BCC_SOURCE=1`) on every block; with `BCC_SOURCE=0` on none. Without wasmtime, the
-# interpreter is the only stage, and runs on every block (except with `BCC_SOURCE=0`).
+# its golden: a record of what `Support`'s interpreter prints. A verified block is recorded in
+# book/keys/<chapter path under book/src>.keys as `<block> <key>`: the hash of its attributes and
+# text (which hold its golden and its input), and its source stage's key (`bcc interp --key`). By
+# default the interpreter runs only on the blocks that are unverified, whose line is in no keys
+# file (the block, the term it elaborates to, or the interpreter changed; a block is matched
+# wherever it moved); with `--source` (or `BCC_SOURCE=1`) on every block; with `BCC_SOURCE=0` on
+# none. Without wasmtime, the interpreter is the only stage, and runs on every block (except with
+# `BCC_SOURCE=0`). The blocks it ran on are listed at the end, with their count. `--write-keys`
+# rewrites the keys file of each chapter run: a line for each of its blocks verified now (by the
+# source stage on this run, or by its recorded line), the lines of its blocks not run kept.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 bcc=${BCC:-.lake/build/bin/bcc}
 [ -x "$bcc" ] || { echo "no bcc at $bcc: run \`lake build bcc\`, or set BCC"; exit 1; }
 want=()
 backend=new
-usage() { echo "usage: scripts/book-doctest.sh [--source] [--backend old|new] [book/src/<file>.md[:<line>]…]"; exit 2; }
+usage() { echo "usage: scripts/book-doctest.sh [--source] [--write-keys] [--backend old|new] [book/src/<file>.md[:<line>]…]"; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --source) export BCC_SOURCE=1 ;;
+    --write-keys) export BCC_WRITE_KEYS=1 ;;
     --backend) case "${2:-}" in old|new) backend=$2; shift ;; *) usage ;; esac ;;
     -*) usage ;;
     *) want+=("$1") ;;
@@ -70,22 +76,17 @@ extract() {
   inb { print > file }
 '
 }
-# A block's key: its attributes and its text.
-key() { { printf '%s\n' "$1"; cat "$2"; } | cksum; }
 find book/src -name '*.md' | sort | extract "$tmp"
 [ -f "$tmp/manifest" ] || { echo "no \`bc\` blocks found"; exit 1; }
-# The keys of the merge base's blocks: a block among them is verified.
-: > "$tmp/verified"
-if [ "$BCC_SOURCE" != 1 ] && [ -n "$source_base" ]; then
-  mkdir "$tmp/base"
-  git ls-tree -r --name-only "$source_base" book/src | grep '\.md$' | while read -r p; do
-    mkdir -p "$tmp/base/$(dirname "$p")"; git show "$source_base:$p" > "$tmp/base/$p"
-  done
-  (cd "$tmp/base" && find book/src -name '*.md' | sort | extract "$tmp/base")
-  if [ -f "$tmp/base/manifest" ]; then
-    while IFS=$'\t' read -r n attrs _ _; do key "$attrs" "$tmp/base/$n.bc"; done < "$tmp/base/manifest" > "$tmp/verified"
-  fi
-fi
+cp "$tmp/manifest" "$tmp/manifest.all"
+# The recorded lines (`<block> <key>`) of every chapter: a block whose line is among them is
+# verified.
+keysOf() { echo "book/keys/${1#book/src/}.keys"; }
+find book/keys -name '*.keys' -exec cat {} + 2>/dev/null > "$tmp/verified" || : > "$tmp/verified"
+mkdir "$tmp/ok"
+: > "$tmp/reran"
+: > "$tmp/written"
+: > "$tmp/unverified"
 
 fail() { echo "$1: $2"; shift 2; for l in "$@"; do echo "  $l"; done; }
 # Block $1 of the manifest: exit 0 if it passes (or is ignored), 1 if not. Run in parallel by `par`.
@@ -105,12 +106,22 @@ block() {
       outl=$(sed -n 's/^-- output: \{0,1\}//p' "$f" | while IFS= read -r l; do printf '%s\n' "$l"; done)
       if [ -n "$outl" ]; then expect=$(printf '%s\n%s\nlive 0' "$outl" "$want")
       else expect=$(printf '%s\nlive 0' "$want"); fi
-      # The source stage: on every block, on none, or on an unverified one.
+      # The source stage: on every block, on none, or on an unverified one. `kl` is the block's
+      # line in its chapter's keys file.
+      kl=""; verified=0
+      if [ "$BCC_SOURCE" != 1 ] || [ "$BCC_WRITE_KEYS" = 1 ]; then
+        kl="$(blockHash "$attrs" "$f") $(sourceKey "$f" "$in")"
+        grep -qxF "$kl" "$tmp/verified" && verified=1
+      fi
       case "$BCC_SOURCE" in
         1) src=1 ;;
-        0) src=0; grep -qxF "$(key "$attrs" "$f")" "$tmp/verified" ||
-             echo "$at: unverified: changed since $source_base, not run at the source stage (scripts/book-doctest.sh $at runs it)" ;;
-        *) if [ "$wasm" = 0 ] || ! grep -qxF "$(key "$attrs" "$f")" "$tmp/verified"; then src=1; else src=0; fi ;;
+        0) src=0
+           if [ "$verified" = 0 ]; then
+             echo "$at: unverified, not run at the source stage (scripts/book-doctest.sh $at runs it)"
+             echo "$at" >> "$tmp/unverified"
+           fi ;;
+        *) if [ "$verified" = 0 ]; then src=1; echo "$at" >> "$tmp/reran"
+           elif [ "$wasm" = 0 ]; then src=1; else src=0; fi ;;
       esac
       if [ "$src" = 1 ]; then
         got=$("$bcc" interp "$f" < "$in" 2>&1) || true
@@ -118,6 +129,7 @@ block() {
           fail "$at" "interpreter output differs" "want: $(echo "$expect" | tr '\n' ' ')" "got:  $(echo "$got" | tr '\n' ' ')"; return 1
         fi
       fi
+      if [ -n "$kl" ] && { [ "$src" = 1 ] || [ "$verified" = 1 ]; }; then echo "$kl" > "$tmp/ok/$n"; fi
       if [ "$wasm" = 1 ]; then
         got=$("$bcc" run --backend "$backend" "$f" < "$in" 2>&1) || true
         if [ "$got" != "$expect" ]; then
@@ -139,7 +151,7 @@ block() {
   esac
 }
 export tmp bcc wasm backend
-export -f fail block key
+export -f fail block
 # The blocks named (every block, when none is).
 if [ ${#want[@]} -gt 0 ]; then
   : > "$tmp/selected"
@@ -157,10 +169,35 @@ ignored=$(awk -F'\t' '$2 == "ignore"' "$tmp/manifest" | wc -l | tr -d ' ')
 par block $(cut -f1 "$tmp/manifest")
 bad=$par_failed
 ran=$((total - ignored - bad))
+# --write-keys: each chapter run gets, in its order, the line of each of its `bc` blocks verified
+# on this run; a block not run keeps its recorded line.
+if [ "$BCC_WRITE_KEYS" = 1 ]; then
+  for md in $(cut -f3 "$tmp/manifest" | sort -u); do
+    kf=$(keysOf "$md")
+    while IFS=$'\t' read -r n attrs _ _; do
+      [ "$attrs" = run ] || continue
+      if [ -f "$tmp/ok/$n" ]; then cat "$tmp/ok/$n"
+      elif ! awk -F'\t' -v n="$n" '$1 == n { f = 1 } END { exit !f }' "$tmp/manifest" && [ -f "$kf" ]; then
+        grep -m1 "^$(blockHash "$attrs" "$tmp/$n.bc") " "$kf" || true
+      fi
+    done < <(awk -F'\t' -v m="$md" '$3 == m' "$tmp/manifest.all") > "$tmp/keys.new"
+    if [ -s "$tmp/keys.new" ]; then
+      if cmp -s "$tmp/keys.new" "$kf"; then :
+      elif mkdir -p "$(dirname "$kf")" 2> /dev/null && cp "$tmp/keys.new" "$kf" 2> /dev/null; then echo "$kf" >> "$tmp/written"
+      else echo "$kf: not writable, its keys not written"; fi
+    elif [ -f "$kf" ]; then rm -f "$kf" 2> /dev/null && echo "$kf (removed)" >> "$tmp/written"; fi
+  done
+  if [ -s "$tmp/written" ]; then
+    echo "keys written: $(wc -l < "$tmp/written" | tr -d ' ') chapter file(s) under book/keys/ (commit them with the change)"
+    sed 's/^/  /' "$tmp/written"
+  fi
+fi
 case "$BCC_SOURCE" in
-  1) echo "source stage: every block" ;;
-  0) echo "source stage: not run (BCC_SOURCE=0)" ;;
-  *) echo "source stage: the blocks unverified since ${source_base:-(no merge base)} only (--source runs every block)" ;;
+  1) echo "source stage: every block (--source)" ;;
+  0) echo "source stage: not run (BCC_SOURCE=0); $(wc -l < "$tmp/unverified" | tr -d ' ') unverified block(s)"
+     sed 's/^/  /' "$tmp/unverified" ;;
+  *) echo "source stage: re-ran on $(wc -l < "$tmp/reran" | tr -d ' ') block(s) whose key is missing or changed (--source runs every block)"
+     sed 's/^/  /' "$tmp/reran" ;;
 esac
 echo "$total block(s) ($([ "$backend" = new ] && echo Backend2 || echo "the old backend")): $ran passed, $ignored ignored, $bad failure(s)."
 [ "$bad" -eq 0 ]

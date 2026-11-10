@@ -48,7 +48,7 @@ one.
 `check-type-eq.sh`, `parse-corpus.sh`, `check-corpus.sh`, `alpha-check.py`, and the corpus in WebAssembly on each backend
 (`compile-backend2.sh --final` on Backend2, `compile-corpus.sh --final` on the old backend: no intermediate-IR interpreter and no
 counts, except to name the first differing stage of a program whose WebAssembly run is wrong).
-`scripts/ci-local.sh --source` (`make gate-full`) runs every script, the corpus at every stage
+`scripts/ci-local.sh --full` (`make gate-full`) runs every script, the corpus at every stage
 with its counts, and `mdbook build book` when `mdbook` is installed. `scripts/ci-local.sh
 --changed` (`make gate-fast`) runs only the sanity gate's steps that the changes since origin/main
 reach (none of the Lean steps unless a `.lean` file changed): it is for iteration. There is no hosted CI;
@@ -59,18 +59,23 @@ and `book-doctest.sh` also take the files to check (`book/src/<file>.md:<line>` 
 interp`, the source stage). Every corpus program's `<name>.out` and every book block's
 `-- answer:` and `-- output:` lines record what it prints, and the clos, flat and wasm stages are
 always checked against them. The interpreter takes minutes on the largest programs, so the gate
-runs it only where a golden is unverified (`scripts/source-stage.sh`): on the corpus programs
-whose `.bc`, `.in`, `.out`, `.err` or `.status` (its exit status) differs from the merge base with origin/main, and on the book
-blocks whose text is not among the merge base's blocks. An unchanged program and golden were
-checked against the interpreter by the gate that merged them. `make gate-full`
-(`scripts/ci-local.sh --source`, or `BCC_SOURCE=1` for a single script) runs it on every program
-and block, and re-verifies every golden. It is required when `Paper/`, `Support/` or `Backend/`
-changed, and `make gate` says so then; run it by hand after a `Frontend/` or `lib/`
-change that changes what programs mean, since the goldens of unchanged programs are not rerun.
-`make gate-fast` never runs the interpreter; it lists the unverified programs. `make goldens`
-(`scripts/compile-corpus.sh --write-goldens [file…]`) writes corpus goldens, only ever from the
-interpreter; `corpus/deep-list.bc` (`-- check: no-source`), too large for it, keeps a golden
-written by hand.
+runs it only where a golden is unverified (`scripts/source-stage.sh`). A verified golden is
+recorded with its key, `bcc interp --key` (`Reference/Key.lean`): a sha256 over the elaborated
+term the interpreter runs (every library definition it reaches included), the program's input and
+arguments, the fuel, and the interpreter digest (`scripts/interp-digest.sh`: the source of every
+file in `Reference.Source`'s import closure, `Reference/Driver.lean`, `Reference/Key.lean` and
+`lean-toolchain`). A corpus program's key is `<name>.key`, with the hash of its golden; a book
+chapter's, `book/keys/<chapter>.md.keys`, a line for each verified block. A golden is unverified
+when no key is recorded or the recorded one is not the current one: a change to a library
+function reruns exactly the programs whose term it changes, and a change to the interpreter every
+program. Computing the keys elaborates each program and runs nothing. `make gate` and `make
+gate-full` both follow this rule, and list the programs and blocks they reran; `make
+verify-goldens` (`BCC_SOURCE=1`, or `--source` for a single script) runs the interpreter on every
+program and block and re-verifies every golden. `make keys` (`--write-keys`) records the keys of
+the goldens it verifies. `make gate-fast` never runs the interpreter; it lists the unverified
+programs. `make goldens` (`scripts/compile-corpus.sh --write-goldens [file…]`) writes corpus
+goldens and their keys, only ever from the interpreter; `corpus/deep-list.bc` (`-- check:
+no-source`), too large for it, keeps a golden written by hand, and has no key.
 
 ## Writing a corpus program
 

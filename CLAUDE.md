@@ -97,22 +97,28 @@ compatibility lemma.
 GitHub Actions does not run for this repository (the workflow is manual-only). The gate for every
 PR is `make gate` (`scripts/ci-local.sh`), a sanity check. Run it before opening or merging a PR
 and paste its final summary into the PR body. Never report a PR as passing without it.
-`make gate-full` (`scripts/ci-local.sh --source`) runs every check.
+`make gate-full` (`scripts/ci-local.sh --full`) runs every check.
 
 Goldens are the oracle. Every corpus program has a `<name>.out` and every book `bc` block an
 `-- answer:`: the output of `Support`'s interpreter (`bcc interp`), the reference semantics.
 `make gate` checks the build, hygiene, axioms, the judgment freeze, the Backend2 fence, that every
 type comparison goes through the `[α]` helper, that the corpus parses, checks and elaborates the same
 under a renaming of its binders, and every corpus program in WebAssembly on each backend against its
-golden with `live 0`; it runs the interpreter itself (minutes on the largest programs) only on
-the corpus programs that are new or changed since the merge base with origin/main. `make
-gate-full` adds every other check (the clos, flat, LIR and word-IR stages, counts, native, the
-kernel programs, the static tables, the sugar pairs, `let mut` combinations, the book)
-and runs the interpreter on every program and book block, re-verifying every golden. `make
-gate-full` is required when `Paper/`, `Support/` (the interpreter and the machine), `Backend/`,
-`Target/`, `Pipeline/` or `Reference/` changed, and `make gate` says so then. Run it by hand too after a `Frontend/` or `lib/` change that
-changes what programs mean. `make goldens` (`scripts/compile-corpus.sh --write-goldens [file…]`)
-writes corpus goldens, only ever from the interpreter.
+golden with `live 0`. Both gates run the interpreter itself (minutes on the largest programs)
+only on unverified goldens: those whose recorded key (corpus `<name>.key`, `book/keys/`) is
+missing or not the current one. The key (`bcc interp --key`, `scripts/source-stage.sh`) covers
+the elaborated term the interpreter runs, its input, and the interpreter's source
+(`scripts/interp-digest.sh`), so a `lib/` or `Frontend/` change reruns exactly the programs
+whose term it changes, and an interpreter change reruns every program; the gate lists those it
+reran. When the interpreter reproduces a golden, the gate records its key and lists the key
+files it wrote: commit them with the change (`BCC_WRITE_KEYS=0` writes none; `make keys` records
+them explicitly). `make gate-full` adds every other check (the clos, flat, LIR and word-IR
+stages, counts, native, the kernel programs, the static tables, the sugar pairs, `let mut`
+combinations, the book). `make gate-full` is required when `Paper/`, `Support/` (the interpreter
+and the machine), `Backend/`, `Target/`, `Pipeline/` or `Reference/` changed, and `make gate` says
+so then. `make verify-goldens` reruns the interpreter on every program and book block. `make
+goldens` (`scripts/compile-corpus.sh --write-goldens [file…]`) writes corpus goldens and their
+keys, only ever from the interpreter.
 
 While iterating, `make gate-fast` (`scripts/ci-local.sh --changed`) runs only the sanity gate's
 steps the changes since origin/main reach: a change to no `.lean` file skips the build of the library, the
