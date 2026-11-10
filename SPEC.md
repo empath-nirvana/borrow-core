@@ -12973,13 +12973,16 @@ tables and `HandlerLawN` are unchanged.
   context. Each constant is closed by the extern values (`valAt γx`), and `Goal791N` substitutes
   `cs.map (·.valAt γx) ++ γx` with `c.OKAt ∅ Γx`; today's statement is the instance `Γx = []`.
   `w2_takeOutput_okAt`: a lent `Ref Output` whose finaliser hands the cell back by `take_output`.
-  Part two, the unwinding lends `withbor1U/2U/3U` without `closedAt 0 d`, is K1.3b.
+- K1.3, part two, built (#1034): the unwinding lends `withbor1U/2U/3U` and `sliceBorrowMU/IU`
+  drop `closedAt 0 d`. The finaliser stays typed at the rule's dead context, so it may name its
+  persistent slots. `withborUE` shifts `d` under its binders; a closed `d` gives the same term, so
+  no program changes.
 - K1.4: the kernel instance `progIO` (a lent `stdout` cell, written across a `wait`, resumed and
   cancelled).
 - K1.5: `IORun.every_runN` at the checked wrapper; `corpus/io-effects.bc` concluded by the
   extended `goal791N`; `bcc trusted` names it.
 
-K1.3b, K1.4 and K1.5 are not built; each unit's code PR marks its line *built*.
+K1.4 and K1.5 are not built; each unit's code PR marks its line *built*.
 
 ### Open
 
