@@ -7416,8 +7416,6 @@ read at startup).
   the insertions, so deterministic), not the input's.
 - **Numbers:** an integer literal past `i64`'s range (above 2^63 − 1 or below −2^63) is read as
   `Float`; serde_json keeps positive ones up to 2^64 − 1 exact as `u64`, which needs the `u64` width (#981); a `u64` number in `Json` waits on it. Arbitrary-precision numbers are not provided.
-- **Lookup by literal key** allocates an owned key today (`map_get` takes `K`); #976's borrowed
-  lookup removes it.
 
 **Preserves.** No kernel, checker, elaborator or backend change; every existing program's output and counts are
 unchanged. `corpus/json-parse.bc` becomes `include json` plus its `main`; its golden changes only where an
