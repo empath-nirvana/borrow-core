@@ -231,7 +231,7 @@ theorem d_ofFnStep {Γ : Ctx VTy} {c : Lifetime.Life} {A B : VTy} (hc : Δ.Defin
     (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ (.val ofFnStep)
       (.val (.bang (.thunk (.arr (.bang (.lolli A B)) (cloStepC c A B (.bang (.lolli A B))))))) := by
-  refine .bangThunkV (banged_dead hΓ) rfl (.lam (.withI (.lam ?_) (.ret ?_)))
+  refine .bangThunkV (banged_dead hΓ).flatLive rfl (.lam (.withI (.lam ?_) (.ret ?_)))
   · refine .bind (.left (.dead (.dead (.dup rfl (deadSplit hΓ)))))
       (.ret (.lolliE (.left (.dead (.dead (.right (deadSplit hΓ)))))
         (.var (.here (.cons (.cons (.cons hΓ.toP)))))

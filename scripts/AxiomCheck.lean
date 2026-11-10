@@ -542,6 +542,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Rejections.not_release_kappa
 #print axioms BoCa.Fig16.LogRel.Core.Rejections.not_der_at05
 #print axioms BoCa.Fig16.LogRel.Core.Rejections.not_der_at06
+#print axioms BoCa.Fig16.LogRel.Core.Rejections.vview_ref_not_persistent
 #print axioms BoCa.Fig16.LogRel.Core.Rejections.not_der_at08
 #print axioms BoCa.Fig16.LogRel.Core.Rejections.not_der_at13
 #print axioms BoCa.Fig16.LogRel.Core.Rejections.d_at08Once
@@ -601,6 +602,7 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.JR.top_eq
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.JR.amp_amp
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.lam_bang
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.flatLive_slot
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.lam_arr
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_clause_body
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.RowAlpha.find
@@ -2235,6 +2237,15 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.zeroE_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.bangThunkF_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.bangThunkV_compatN
+#print axioms BoCa.Fig16.LogRel.Core.VTy.persistent_of_flat
+#print axioms BoCa.Fig16.LogRel.Core.Ctx.Banged.flatLive
+#print axioms BoCa.Fig16.LogRel.Core.Ctx.FlatLive.tail
+#print axioms BoCa.Fig16.LogRel.Core.gSepC_persistent
+#print axioms BoCa.Fig16.LogRel.Core.bangThunkF_compatC
+#print axioms BoCa.Fig16.LogRel.Core.bangThunkV_compatC
+#print axioms BoCa.Fig16.LogRel.Core.flatLive_append
+#print axioms BoCa.Fig16.LogRel.Core.Check.flatLive_ins
+#print axioms Frontend.Check.flatLive_of
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.boxI_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.lit_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.hostOp_compatN

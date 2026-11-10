@@ -310,12 +310,12 @@ theorem embed {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {T : Ty} (h : DerivesWf Δ
   | withswapAx hΓd => intro _ _; rw [cbv_axWithswapTy]; exact .withswap (dead_cbvCtx hΓd)
   | bangLamI hΓp hwf _ ih =>
       intro hΔ hΓ
-      exact .bangThunkV (banged_cbv hΓp) rfl
+      exact .bangThunkV (banged_cbv hΓp).flatLive rfl
         (.lam (.ret (ih hΔ (Ctx.ScopedB.cons (fun _ => hwf) hΓ))))
   | bangAllI hΓp hx hb hnb _ ih =>
       intro hΔ hΓ
       have hside := allISide_of_scopedB hΔ hx hb hΓ
-      exact .bangThunkV (banged_cbv hΓp) rfl (.allI hside.1 hside.2.1
+      exact .bangThunkV (banged_cbv hΓp).flatLive rfl (.allI hside.1 hside.2.1
         (not_vFree_cbvCtx hside.2.2) (.ret (ih (hΔ.extend hx hb) (Ctx.ScopedB.allI hnb hΓ))))
   | bangE _ ih => intro hΔ hΓ; exact .bangE (ih hΔ hΓ)
   | copyBangAx hΓd => intro _ _; exact .copyBang (dead_cbvCtx hΓd)

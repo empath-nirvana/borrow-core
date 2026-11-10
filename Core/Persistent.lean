@@ -106,6 +106,49 @@ theorem vP_empty_of_persistent {A : VTy} (hA : A.Persistent) {ls : List SRec} {�
     {v : Val} {ρ : WRes} (h : vP A ls δ v ρ) : ρ = PMap.empty :=
   vCE_empty_of_persistent A (η := none) (fun _ _ _ _ _ h => h.elim) hA h
 
+/-! ### Flat types and flat contexts -/
+
+/-- A value type whose values are words copied as they are: `I32`, `I64`, `U8`, the floats
+(`.int _`), `1`, `0`, `!A`, and `⊗`, `⊕`, `[@a]` over flat types.  A `μ` (and its type variable,
+which stands for recursive data) is not flat: copying it copies every node.  `[spec §10]` -/
+def VTy.flat : VTy → Bool
+  | .int _ => true
+  | .unit => true
+  | .zero => true
+  | .bang _ => true
+  | .tensor A B => A.flat && B.flat
+  | .sum A B => A.flat && B.flat
+  | .box _ A => A.flat
+  | _ => false
+
+/-- A flat type is persistent.  `[spec §10]` -/
+theorem VTy.persistent_of_flat : ∀ {A : VTy}, A.flat = true → A.Persistent
+  | .int _, _ | .unit, _ | .zero, _ | .bang _, _ => rfl
+  | .tensor A B, h | .sum A B, h => by
+      simp only [VTy.flat, Bool.and_eq_true] at h
+      simp only [VTy.Persistent, VTy.persistent, Bool.and_eq_true]
+      exact ⟨persistent_of_flat h.1, persistent_of_flat h.2⟩
+  | .box _ A, h => by
+      simp only [VTy.flat] at h
+      exact (persistent_of_flat (A := A) h : A.persistent = true)
+  | .unk, h | .opq _, h | .tvar _, h | .mu _, h | .thunk _, h | .ref _, h | .imm _ _, h
+  | .mut _ _, h | .fam _, h => by simp [VTy.flat] at h
+
+/-- Every live slot of `Γ` is at a flat type: the premise of `!`-promotion (`bangThunkF`,
+`bangThunkV`).  `[spec §10]` -/
+def Ctx.FlatLive (Γ : Ctx VTy) : Prop := ∀ s ∈ Γ, s.live = true → s.ty.flat = true
+
+/-- `!Γ` is flat: `!A` is.  `[spec §10]` -/
+theorem Ctx.Banged.flatLive {Γ : Ctx VTy} (h : Ctx.Banged Γ) : Ctx.FlatLive Γ := by
+  intro s hs hl
+  obtain ⟨A, hA⟩ := h s hs hl
+  rw [hA]; rfl
+
+/-- The tail of a flat context is flat.  `[spec §10]` -/
+theorem Ctx.FlatLive.tail {s : Slot VTy} {Γ : Ctx VTy} (h : Ctx.FlatLive (s :: Γ)) :
+    Ctx.FlatLive Γ :=
+  fun t ht hl => h t (List.mem_cons_of_mem _ ht) hl
+
 /-! ### The context relations -/
 
 /-- `Γ = Γ₁, Γ₂` with a live slot of persistent type allowed on both sides.  `[spec §10]` -/

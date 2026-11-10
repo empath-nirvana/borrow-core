@@ -137,12 +137,12 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   /-- `M [] : C[@a/'x]`. -/
   | allE {Δ Γ M x b a C} (h : CDerivesAt Ξ Δ Γ M (.comp (.all x b C))) (hlt : Δ.EntailsLt a b) :
       CDerivesAt Ξ Δ Γ (.app M (.val .unit)) (.comp (C.instLife x a))
-  /-- Promotion of `thunk M : U (F A)` over `!Γ`. -/
-  | bangThunkF {Δ Γ M A} (hp : Ctx.Banged Γ)
+  /-- Promotion of `thunk M : U (F A)` over a flat `Γ`.  `[spec §10]` -/
+  | bangThunkF {Δ Γ M A} (hp : Ctx.FlatLive Γ)
       (h : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
       CDerivesAt Ξ Δ Γ (.val (.lam M)) (.val (.bang (.thunk (.ret A))))
-  /-- Promotion of a λ-value `V : C` over `!Γ`. -/
-  | bangThunkV {Δ Γ N C} (hp : Ctx.Banged Γ) (hC : C.isRet = false)
+  /-- Promotion of a λ-value `V : C` over a flat `Γ`.  `[spec §10]` -/
+  | bangThunkV {Δ Γ N C} (hp : Ctx.FlatLive Γ) (hC : C.isRet = false)
       (h : CDerivesAt Ξ Δ Γ (.val (.lam N)) (.comp C)) :
       CDerivesAt Ξ Δ Γ (.val (.lam N)) (.val (.bang (.thunk C)))
   /-- `[code-I]`: a closure `λM : U C` at its code type.  `[spec §68]` -/
@@ -150,8 +150,8 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hok : Ctx.CapOK Γ (.lam M)) :
       CDerivesAt Ξ Δ Γ (.val (.lam M))
         (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))
-  /-- `[code-I]` under `!`, over `!Γ`.  `[spec §68]` -/
-  | codeIB {Δ Γ M C} (hp : Ctx.Banged Γ)
+  /-- `[code-I]` under `!`, over a flat `Γ`.  `[spec §68, §10]` -/
+  | codeIB {Δ Γ M C} (hp : Ctx.FlatLive Γ)
       (h : CDerivesAt Ξ Δ Γ (.val (.lam M)) (.val (.bang (.thunk C))))
       (hok : Ctx.CapOK Γ (.lam M)) :
       CDerivesAt Ξ Δ Γ (.val (.lam M))
