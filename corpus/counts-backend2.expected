@@ -477,3 +477,4 @@ alpha-app-arg 1 0 0 2 1 0
 alpha-generic-arg 0 0 0 0 0 0
 alpha-lam-binder 1 0 0 2 1 0
 alpha-withbor2r 1 0 0 1 1 0
+clause-loop-value 0 0 0 0 0 0
