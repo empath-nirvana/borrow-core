@@ -112,7 +112,10 @@ core-pipe-step 1 0 0 1 1 0
 data-json-map-ser 16 0 0 555 420 133
 effects-load-raise 4 0 0 204 184 15
 fin-block-finaliser 0 0 0 0 0 0
+fin-bound-loop-abort 0 0 0 0 0 0
+fin-bound-loop-finish 0 0 0 0 0 0
 fin-cancel-arm 0 3 0 0 0 0
+fin-cancel-loop 0 0 0 0 0 0
 fin-cancel-order 3 0 0 5 3 0
 fin-cancel-propagated 0 0 0 0 0 0
 fin-cancel-reentered 0 0 0 0 0 0
@@ -125,6 +128,10 @@ fin-e7b 0 0 0 0 0 0
 fin-e7d 0 0 0 0 0 0
 fin-e8b 0 0 0 0 0 0
 fin-generic-call 0 0 0 0 0 0
+fin-handler-head 0 0 0 0 0 0
+fin-handler-head-raise 0 0 0 0 0 0
+fin-loop-break 0 0 0 0 0 0
+fin-loop-continue 0 0 0 0 0 0
 fin-raise-cancel 0 0 0 0 0 0
 fin-raise-unwind 0 0 0 0 0 0
 fin-resume-capturing-row 0 2 0 0 0 0

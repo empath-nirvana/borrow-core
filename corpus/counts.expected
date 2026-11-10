@@ -116,7 +116,11 @@ core-pipe-step 1 0 0 1 1 0
 data-json-map-ser 16 0 0 699 420 205
 effects-load-raise 4 0 0 204 184 15
 fin-block-finaliser 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-bound-loop-abort 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
+fin-bound-loop-finish 0 0 0 0 0 0 # no cell; the loop finishes and the clause resumes
+fin-bound-loop-pure 0 0 0 0 0 0 # no cell; the loop's body performs nothing
 fin-cancel-arm 0 3 0 0 0 0 # the indirect calls are of `tm`'s answer, a function of its state
+fin-cancel-loop 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
 fin-cancel-order 3 2 0 5 3 0 # stdout's cell and the two runs' state; the indirect calls are of `tm`'s answer, a function of its state
 fin-cancel-propagated 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
 fin-cancel-reentered 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
@@ -129,6 +133,10 @@ fin-e7b 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
 fin-e7d 0 0 0 0 0 0 # no cell; two cleanups raise, the first error is kept
 fin-e8b 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the pending one
 fin-generic-call 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
+fin-handler-head 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-handler-head-raise 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-loop-break 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
+fin-loop-continue 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
 fin-raise-cancel 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
 fin-raise-unwind 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the pending one
 fin-resume-capturing-row 0 2 0 0 0 0 # the indirect calls are of `tm`'s answer, a function of its state
