@@ -12535,6 +12535,87 @@ probes that differ write `>|`, which main does not parse.
 
 ---
 
+## 74. Entry 73 — `sliceCopyM`, a bulk copy between array regions (#1014)
+
+### Motivation
+
+A copy between two arrays' regions runs one element at a time today: `grow`, `push_str` and
+`push_lit`, and the string parse and serialise of `lib/json.bc` (#977's `citm` and `twitter`).
+This entry adds one kernel constant for the copy at persistent elements, and lowers it to one
+machine copy.
+
+### The constant
+
+Beside §9's slice constants (`sliceGetM`, `sliceReplaceM`, the splits):
+
+    sliceCopyM : !(ArrayMut @a A ⊗ (I32 ⊗ (ArrayImm @b A ⊗ (I32 ⊗ I32))) ⇒ ArrayMut @a A ⊗ (1 ⊕ 1))     A persistent
+
+- `sliceCopyM (dst, (di, (src, (si, len))))` checks the bounds once: `0 ≤ di`, `0 ≤ si`, `0 ≤ len`,
+  `di + len ≤ len dst` and `si + len ≤ len src`, in `i32` with no overflow, so a negative or
+  wrapping input is out of range. In range it writes `dst[di + k] := src[si + k]` for every
+  `k < len`, in one machine step, and answers `(dst, inr ())`. Out of range it writes nothing and
+  answers `(dst, inl ())`; the kernel has no trap, so the surface raises on `inl`, as with
+  `array_replace`'s sum.
+- **The element type is persistent** (§10): it owns no resource, so a copy is a write of equal
+  values. Owned or linear elements (a move) are not covered.
+- **No overlap, by the types.** `dst` is `Mut @a`, exclusive, and `src` an `Imm @b` view, so the
+  two ranges are disjoint: no run-time aliasing check, and no memmove.
+- An owned `Array A` destination is reached through the existing borrow (`sliceBorrowM`). A text or
+  `str` source that is an `ArrayImm U8` qualifies directly.
+
+**Machine.** One head step on `(dst, (di, (src, (si, len))))`: it reads `len` cells of `src`'s
+range, writes them to `dst`'s range in place, and allocates nothing. Determinism and unique
+decomposition gain the case.
+
+**Typing.** One `CDerives` constant (`Γ` dead), as the other slice constants. Its compatibility
+lemma iterates `sliceReplaceM`'s over `fam`'s `sepRange`, split at `[di, di + len)`, with `src`'s
+cells read in imm mode, as `sliceGet`'s are; the chain's lemma at `erwpK`/`KW` likewise. No new
+index.
+
+### Lowering (Backend2)
+
+A word-IR statement `copy (dst, src, bytes)` after the LIR's bounds test: `memory.copy` in Wasm,
+`llvm.memcpy` natively, the disjointness cited from the constant's types. One copy of
+`len × stride` bytes when `src` and `dst` have the same width class (§57, `Checked.classAt`);
+otherwise an element loop. A copy of `len` elements counts as `len` loads and `len` stores, as the
+loop it replaces.
+
+### The library (§17)
+
+`grow` (`lib/buf.bc`), `push_str` and `push_lit` (`lib/text.bc`) copy by `sliceCopyM` at persistent
+element types; an out-of-range answer raises as `array_replace`'s does. `lib/json.bc`'s string
+parse and serialise copy unescaped runs by it (#1015). An owned `array A` reaches it through the
+existing borrow.
+
+### Baseline
+
+`fundamentalC`, `adequacyC`/`adequacyD` and `fundamentalN_all`/`goal791N`, with their statements
+unchanged; every existing slice constant's compatibility lemma; §13's determinism, with the new
+case. Every corpus and kernel program keeps its output: no existing term changes, and every count
+is unchanged by the counting rule above.
+
+### Programs
+
+A corpus program copying at the bounds (in range, `len = 0`, each bound one past, overlapping
+indices of two different arrays), `live 0`; #977's `citm` and `twitter` for the time.
+
+### Units
+
+- S.1, the machine (Support): the step, determinism and decomposition.
+- S.2, Core: the constant's rule and compatibility lemma.
+- S.3, the chain: the compatibility lemma at `erwpK`/`KW`.
+- The lowering (Backend2) and the library uses.
+
+None is built yet.
+
+### Open
+
+- Owned or linear elements, a bulk move: the source cells must be left filled with a filler, as
+  `grow` does today.
+- A copy within one array (`copy_within`, overlapping): it needs memmove and a single `Mut` view.
+
+---
+
 ## Status
 
 What implements each entry is kept one paragraph per file in `docs/status/`: the paragraphs
