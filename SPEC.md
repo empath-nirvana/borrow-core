@@ -2948,7 +2948,8 @@ first and hands them back first, and its type has the sites' operations as its r
 `A ⇒ F[n.i …] B`. A call of `f` is a call of that copy, a computation of its own:
 `g <- return f; a <- return v; (force g) a`. A function with a row that is never called is not
 elaborated. Resolution is lexical: an operation goes to the innermost handler of its instance around
-it, or to what the enclosing function's copy was given (§38).
+it, or to what the enclosing function's copy was given (§38). A row carries its operations' cancel
+rows, inferred per operation name and never written at the surface (§27 *The surface*).
 
 **A call's binding.** A call lifted out of the value it is in is bound before it: `r <- C`, or,
 when it hands back capabilities, `t <- C; let (c₁, (…, r)) = t`, and the value refers to `r`.
@@ -3301,7 +3302,8 @@ Six primitives (`ccatch` and `cfin`, below), and no new `Expr` constructor:
 
 `ubind` is `M to x. N` with a finaliser `D`, which runs instead of `N` when `M` unwinds. In core
 text, `x <- M unwind (D); N` is checked at `D`'s own row, and a row entry may spell its cancel row
-(§27 *The checker*).
+(§27 *The checker*). The surface `x <- M unwind (D); N` is the same, its `D` performing the control
+operations of the sites around it (§27 *The surface*).
 
 `H = (h_ret, h_op)` is a pair of values, `n` a literal, and `qs` the tags of the operations'
 qualifiers (§25), which `[handle]` writes. Evaluation is argument-first, so `e` runs under the frame
@@ -5505,6 +5507,141 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
 - **Written, and checked.** A cancel row is written, in handler and ascription types; a row the
   effects pass infers (`Env.rowOf`) carries the empty cancel row. `[then]`'s `hfin` checks each.
 
+### The surface (#868, #953)
+
+1. **Surface cleanup.** `with h(…) { M } finally { D }` (≜ `x <- (with h(…) { M }) unwind (D); D; x`)
+   and `x <- M unwind (D); N` elaborate `D` as written, its operations resolved to the sites in
+   scope. The checker types `[then]` at `D`'s own row `Σ_D` (*The checker*, `finC`): no change in the
+   elaborator's output form. A raise in `D` during an unwind supersedes the pending one (§19 law 6,
+   E8b); during a cancel it is kept and re-raised at the canceller (§27, E7b).
+2. **Cancel rows are inferred, per operation name** (`Frontend/Elab/Fins.lean`). At each
+   `x <- M unwind (D); N` of the effects pass's output whose site's row is `Σ` (the row of the
+   function it is in, and the operations of the handler sites around it in that function), `Σ_D`
+   is the entries of `Σ` that `D` performs: its `perform[n.i]`/`abort[n.i]`, and the rows of the
+   functions it calls, less the operations of sites inside `D`. Every entry of `Σ` that captures a
+   continuation (`capB`) has `Σ_D` in its cancel row. An operation's cancel row is the union over
+   the whole program (site names are static, one per site). Each entry of a cancel row carries the
+   empty cancel row.
+3. **The rows carry them.** The effects pass runs once, the table is read off its output, and,
+   when it is not empty, the pass runs again with it: `Env.rowOf` gives every row entry (a copy's
+   row, a block's, a recursive group's, a stateful handler's state function) its cancel row, and a
+   handler site's info carries its operations' (`HInfo.fins`). The typed elaboration builds the
+   site's row `Row.ofEff n ops 0 fs ++ Σ` and its clauses at `clausesTy Σ R ops fs` (`κ`'s cancel
+   branch `cancelTy Σ F`). The kernel checks every one of these (`[then]`'s `ThenLe`, `[handle]`,
+   `[sub]`'s `finLeB` at calls); the elaborator decides nothing the kernel does not re-check.
+4. **A clause that does not use a cancellable `κ` whose cancel performs** (#953; Rust's drop
+   model). The kernel's `κ` is consumable only when its cancel branch is
+   `F 1` (empty row); a consume is effect-free. When its cancel branch `cancelTy Σ F` performs
+   (the inferred cancel row `F` or the handler's outer row `Σ` is not empty), the elaboration
+   cancels `κ`, `u <- (force k).2; let () = u; T` (`[&E₂]`), exactly once on each path of the
+   clause that does not use `k` (`Frontend/Sugar.lean`, `cancelAtEnds`, `cancelDropped`):
+   - **on finishing**, at the end of the path, after all its effects: before a terminal value
+     `return V` (`callFree`), as SPEC §12 places a consume; after a terminal that performs (a call,
+     an operation), which is the path's last effect: `x <- T; cancel k; return x`. `<>` and
+     `absurd` absorb it;
+   - **on an abort or a cancel through the path**: each head `M₁` of `x <- M₁; N` on the path,
+     `k` live and not mentioned by `M₁`, is `x <- M₁ unwind (cancel k); N` (`[then]`, the finaliser
+     at the cancel's row, *The checker*) when the row it is typed at holds an abortive operation of `Σ` or
+     one that captures a continuation. That row is read, not rebuilt from syntax
+     (`Fins.opsOf`, one walk the typed elaboration and the inference share): the operations the
+     head performs, the row of every function it names as the effects pass wrote it in that copy's
+     type (`Fins.fnRows`; a local's by its type), and, for a handler site in the head, the row the
+     kernel types `handle_n` at, the row around it where its clauses run (`Σ`). `UNPROVED:` at the
+     walk (a copy is named only to be called, or passed to a block parameter whose callee's row
+     holds it; an over-counted capturing operation makes the elaboration refuse, below). Any other
+     head is left as it is, so a clause whose heads can neither abort nor be cancelled through and
+     that uses `κ` on every path elaborates exactly as without this entry. A region of the clause's
+     own (`x <- M₁ unwind (D); N`) whose body does not mention `k` is such a head as a whole: its
+     own finaliser runs first, then `k`'s cancel. A loop is such a head when its body can abort or
+     capture (a capture is then refused, below); its `break` and `continue` stay in the clause, and
+     a `return` in a clause is refused before this rule. A loop whose value is bound
+     (`let r = for …; N`) is wrapped with the binding of its value,
+     `r <- (loop …; r <- return forRes; return r) unwind (cancel k); N`, so the wrap is around the
+     loop as the typed elaboration elaborates it (`boundRes?`). A head of `x <- M₁; N` or of
+     `x <- M₁ unwind (D); N` that mentions `k` is entered by the same rule.
+   Exactly once: from its binding `k` is live until the first of a head's abort (its finaliser
+   cancels it; nothing after runs), the end of the path (the cancel before the terminal), or a use
+   the program wrote (nothing is inserted after it). `[then]`'s finaliser and rest are exclusive,
+   and the kernel checks `k`'s linearity on each. In a handler with a state (§21) the clause's code
+   is the state's function, which the path continues into (`HInfo.stateful`), by the same per-path
+   rule (an arm that resumes, an arm that drops). The rule lives in `Frontend/Elab/Fins.lean`
+   (`cancelAtEnds`), used by the typed elaboration and by the inference.
+   **Order.** The clause's effects come first, then `κ`'s cleanup, on both paths:
+   `corpus/fin-cancel-order.bc` writes `A` (finish) and `B` then raises `7` (abort); the cleanup
+   raises `3` both times: `AB`, `(inr i32[3], inr i32[3])`. Cancel-first would write nothing; an
+   abort that left `κ` uncancelled would answer `inr i32[7]`. The kernel program `timeout`
+   (`cancel k; return ff`) agrees: its only effect after the cancel is the terminal. The checker's
+   consume insertion is not reused: it inserts `consume` nodes that carry `Consumable`.
+   **The inference needs no cancel row for the inserted cancels.** A wrapped head performs no
+   capturing operation of `Σ` (that is refused, below), so no cancel row is read under it, and
+   *The checker*'s `[then]` takes `Σ_M`'s cancel rows from `M`'s own finalisers. **Limit:** the cancel
+   performs the cancel branch's row `F ⊕ Σ`; when a wrapped head performs a capturing operation of
+   `Σ`, that operation's cancel row would hold itself (`⊤`), which the kernel refuses (without the
+   wrap it refuses `k` live across it): refused by the elaboration, "this clause's continuation is
+   live across `Ask.ask` (1.0), an operation that captures a continuation, and its cancel performs:
+   if the continuation captured at `Ask.ask` (1.0) is cancelled, this one must be cancelled with
+   it, and `Ask.ask` (1.0)'s cancel row would contain itself" (`corpus/reject/fin-cancel-capturing.bc`).
+   Core text spells `⊤` (`cancel[top]`); the surface does not infer it there (*Open*).
+   **What a terminal performs** is read syntactically (`callFree`): every call counts as an effect,
+   an answering effect's (a capability's, in no row) included, so a cancel is never placed before
+   one; it decides only the order of the cancel and a call that performs nothing.
+
+5. **Capabilities stay refused** (`Frontend/Elab/Effects.lean`, `trC`'s `.unwind`): an answering
+   effect's capability used in `D` is refused, "a cleanup can't yet use `c`, which the body also
+   uses (the kernel's [then] splits them; see #868)" when `M` uses it too, and "a cleanup can't yet
+   use `c`: a capability is threaded through the code around it, and the kernel's [then] gives the
+   cleanup a context of its own (see #868)" when only `D` does. This is the kernel question K-b
+   (Open).
+
+6. **Reading cancel rows back.** The typed elaboration and its inference re-read a `handle_n`'s
+   row from its clauses' types with their cancel rows (`clausesReadF`, `finsOf`), as the checker
+   does (`Frontend/Sugar.lean` `.handle`, `Frontend/Elab/Infer.lean`).
+7. **`Σ_D` from the derivation**: *The checker*'s `opKeysOf` reads what a `[sub]`'s subterm performs, not
+   the sub's source row (`corpus/core-fin-sub-row.bc`); a two-operation
+   cleanup needs it.
+
+8. **A thunk at its own row** (`Fins.walkV`): a block literal's finaliser is inferred at the row the
+   block runs at, the operations it performs (by the handler sites' and functions' entries,
+   `glob`), beside the row around it (`corpus/fin-block-finaliser.bc`).
+9. **A handler with a state, typed at its site's row** (§21). Its clauses answer the
+   function of its state, which the site forces where the `with` is. The typed elaboration types it at the row of the site (`hndCtlC`, `S`), the fact the site's own typing gives. They differ when
+   a site in scope performs nothing below a borrow block that sits between it and the `with` (the
+   block's callback is at the row its body performs): the function's row then held the unused
+   site and the force at the site was refused ("not within the row"). (`corpus/state-row-unused-site.bc`). `corpus/fin-cancel-unused-site.bc` (`e2`): `B`, `inr i32[3]`.
+
+| program | what it shows | answer |
+|---|---|---|
+| `corpus/fin-e7b.bc` | E7b: a cleanup's raise during a cancel, kept, re-raised at the canceller | `inr ()` |
+| `corpus/fin-e7d.bc` | E7d: two cleanups in a function, cancel rows through its row; first error kept | `inr ()` |
+| `corpus/fin-e8b.bc` | E8b: a cleanup's raise during an unwind supersedes | `inl (inr ())` |
+| `corpus/fin-cancel-reraised.bc` | `cancelKeptT` | `inr ()` |
+| `corpus/fin-cancel-reentered.bc` | `progReT` (surface names are per site: the inner handler is another name) | `inr ()` |
+| `corpus/fin-cancel-propagated.bc` | `progOutT` (the cleanup names the outer handler, `o.ex2()`) | `inr ()` |
+| `corpus/fin-raise-unwind.bc` | `finally` raising during an unwind: supersedes | `inr i32[2]` |
+| `corpus/fin-raise-cancel.bc` | `finally` raising during a cancel: kept, re-raised | `inr i32[3]` |
+| `corpus/fin-timeout.bc` | #953, E10 `timeout`: dropped `κ` cancelled at two rows | `(inl (), inr ())` |
+| `corpus/fin-cancel-tail.bc` | a performing terminal before the cancel | `AB`, `inr i32[3]` |
+| `corpus/fin-cancel-arm.bc` | a stateful clause, `k` resumed on one arm, dropped on the other | `(inr i32[3], inl (inl i32[5]))` |
+| `corpus/fin-cancel-region.bc` | an abort out of the clause's own `unwind` region | `inr i32[3]` |
+| `corpus/fin-block-finaliser.bc` | a finaliser in an effectful block | `inr i32[3]` |
+| `corpus/fin-cancel-unused-site.bc` | an unused capturing handler outside a stateful one | `B`, `inr i32[3]` |
+| `corpus/state-row-unused-site.bc` | a state function at its site's row (no cancel) | `B`, `inl i32[5]` |
+| `corpus/fin-resume-capturing-row.bc` | a head that neither aborts nor captures, `κ` resumed, no finaliser: as without this entry | `inl (inl i32[5])` |
+| `corpus/fin-drop-capturing-row.bc` | the same head, `κ` dropped: cancelled at the end | `inr i32[3]` |
+| `corpus/fin-handler-head.bc` | a `with` in a clause as a head, typed at the clause's row (abortive): wrapped | `inr i32[3]` |
+| `corpus/fin-handler-head-raise.bc` | a `with` whose body raises to its own handler, as a head | `inr i32[3]` |
+| `corpus/fin-cancel-loop.bc`, `fin-loop-break.bc`, `fin-loop-continue.bc` | an abort out of a `for` in the clause (with its own `break`/`continue`): `k` cancelled on the way out | `inr i32[3]` |
+| `corpus/fin-bound-loop-abort.bc`, `fin-bound-loop-finish.bc`, `fin-bound-loop-pure.bc` | a bound loop: wrapped with its value's binding when its body raises (`inr i32[3]`); finishes and resumes (`inl (inl i32[5])`); a pure body, unwrapped (`inl (inl i32[5])`) | see left |
+| `corpus/fin-generic-call.bc` | an abort out of a generic function's call, its row read from the copy's type | `inr i32[3]` |
+| `corpus/reject/fin-cancel-capturing.bc` | the `⊤` limit: the clause's row holds a capturing op | message |
+| `corpus/fin-cancel-order.bc` | the inserted cancel after the clause's effects, on finish and on abort (option C) | `AB`, `(inr i32[3], inr i32[3])` |
+| `corpus/reject/fin-capability.bc` | `stdout` in the body and the cleanup: refused | message |
+
+All at every stage of both backends, `live 0`. The kernel program `stored-k-fin` has no surface
+twin: the stashed closure cancels `κ`, so its type is `U(1+1 ⊸ F_{[1.0]} (1+1))`, a function type
+whose row is a handler's name, which a surface handler's answer type cannot write (effectful
+closures, #161).
+
 ### Baseline
 
 `Paper/`, `Support/`, the machine and the effectful `wp` are unchanged; no borrow rule and no borrow
@@ -5533,13 +5670,31 @@ checked in the corpus (a `def` checked and not called; `main` returns `()`): the
 perform capturable operations, and `gapcall` a call of a function parameter;
 `core-fin-check-afinc.bc`, `-same2.bc`, `-d2nested.bc` and `-dthunk.bc` are checked the same way:
 `Σ_D` at its own row, two finalisers performing the same operation, a call whose row nests `4.0`,
-and a closure built in `M`.
+and a closure built in `M`. At the surface, a program none of
+whose finalisers performs a control operation gets an empty cancel-row table: the effects pass
+runs once, and every row and clause is what it was.
 
 ### Open
 
 - **The lowering of a finaliser that suspends** is Backend2's (§69); the old backend refuses it.
-- **A surface finaliser that performs** (`with h(…) { M } finally { D }`, the surface `unwind`):
-  its own entry, before the surface's code.
+- **A dropped continuation cancelled on an abort inside a capturing operation's handler**: `⊤`,
+  the limit of *The surface*.
+- **Drop flags.** A head that uses `k` on some of its paths cancels it at the end of the others,
+  inside the head, not at the end of the enclosing path as Rust's drop flags would.
+- **A cleanup that performs a cancellable operation** needs that operation's cancel row to hold
+  itself at every depth, `⊤`. Core text spells it (`cancel[top]`); the surface's inference does
+  not infer `⊤` yet, so the kernel refuses such a program, and a cleanup's operations are
+  `must_resume` today.
+- **Per-occurrence cancel rows.** The union per name is the least row only when every finaliser in
+  an operation's scope is relevant to it.
+- **An `if` as the head of a written `unwind` that uses `k` on one branch**: the head is a value
+  `run case …`, which the elaboration does not enter (values are not paths); refused.
+- **A handler site inside a block literal in a head** is counted at the clause's row: an
+  over-count, which can refuse a program.
+- **Rows the typed elaboration makes itself** (a `for`'s site, a stored generator's) carry empty
+  cancel rows; a finaliser inside one that performs is refused by the kernel.
+- **The lowering of a finaliser that performs a control operation** (#869): neither backend lowers
+  it, so such a program runs at `bcc interp` only.
 - **`Σ_M` and `Σ_D` are synthesized from the derivations**, not proved least: they can over-count
   (a thunk built and never forced), which is safe, since the kernel checks `M` and `D` at the rows
   taken.
@@ -7781,8 +7936,8 @@ passes capabilities lexically, the implicit form of §18's capability per handle
   (`forData`, `Frontend/Sugar.lean`).
 - **A resuming handler with a state** (§19 *Handler state*): its clauses answer a function of the
   state, which runs where the `with` is, and which resumes or cancels the continuation there. The
-  continuation is at the row of the `with` (`[handle]`), so the function's row is the handler's
-  own row and every other site in scope, not the handler's row alone (#514).
+  continuation is at the row of the `with` (`[handle]`), so the function's row is the row at the
+  `with`, as the site's typing has it (§27 *The surface*).
 
 ### Elaboration
 
@@ -8906,7 +9061,9 @@ placed twice, as the finaliser and on the normal exit, so it runs once on either
 a term the checker types, at its own row (§27). The parser reads `finally` as the sugar `fin`,
 which the effects pass (§18) elaborates beside `with` (`Frontend/Elab/Effects.lean`, `goV`); it
 reads `[then]`'s parts for their rows and elaborates a `with` inside them. The handled computation
-and the finaliser thread no capability, so a finaliser does no I/O yet: see *Open*. It is decision 2's "cleanup goes
+and the finaliser thread no capability, so a finaliser performs no answering operation (see
+*Open*); it performs control operations, resolved to the sites around the form (§27 *The
+surface*). It is decision 2's "cleanup goes
 in a finaliser", made readable, and not a consume: `D` is a call the program wrote. `[then]` gives `M`
 and `D` disjoint contexts, so a value `D` consumes is not used in `M`: "commit in the body, roll
 back on an abort" lends the value to a computation that handles the abort inside the loan and
