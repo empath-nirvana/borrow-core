@@ -121,7 +121,12 @@ core-fin-stored-k-fin 0 1 0 0 0 0
 core-fin-stored-k-op 0 1 0 0 0 0
 core-fin-sub-row 0 0 0 0 0 0
 core-fin-top-row 0 0 0 0 0 0
+core-pipe-cancel-order 4 14 0 4 4 0
 core-pipe-close 2 0 0 2 2 0
+core-pipe-connector 19 59 0 19 19 0
+core-pipe-plain 3 8 0 3 3 0
+core-pipe-pushback 3 10 0 3 3 0
+core-pipe-raise 4 6 0 4 4 0
 core-pipe-step 1 0 0 1 1 0
 core-unsigned 0 0 0 0 0 0
 data-json-map-ser 16 0 0 555 420 133

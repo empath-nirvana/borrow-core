@@ -121,7 +121,12 @@ core-fin-stored-k-fin erased handles 1 performs 0 raises 1 machines 1 suspends 2
 core-fin-stored-k-op erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
 core-fin-sub-row erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
 core-fin-top-row erased handles 0 performs 0 raises 0 left 0 0
+core-pipe-cancel-order erased handles 0 performs 0 raises 0 machines 15 suspends 13 left 0 0
 core-pipe-close erased handles 0 performs 0 raises 0 machines 3 suspends 2 left 0 0
+core-pipe-connector erased handles 2 performs 0 raises 2 machines 13 suspends 11 left 0 0
+core-pipe-plain erased handles 0 performs 0 raises 0 machines 13 suspends 8 left 0 0
+core-pipe-pushback erased handles 0 performs 0 raises 0 machines 13 suspends 6 left 0 0
+core-pipe-raise erased handles 0 performs 0 raises 1 machines 26 suspends 11 left 0 0
 core-pipe-step erased handles 1 performs 0 raises 1 machines 2 suspends 2 left 0 0
 core-unsigned erased handles 0 performs 0 raises 0 left 0 0
 data-json-map-ser erased handles 2 performs 0 raises 2 left 0 0

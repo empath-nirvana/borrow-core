@@ -1,0 +1,310 @@
+-- check: old-backend-refuses
+-- Pipes L1 (#920): P1b Thm X at the forwarded `wait`, 2 stages (the 2-stage `pipe-cancel-order`).
+-- The connector of `core-pipe-connector`, mode 2: the source waits at the fresh name 7, the
+-- connector forwards it as the outer `wait` 8.0 under `close_all`, and the outer handler of 8
+-- cancels it. The cleanups trace their stage's digit with the must-resume operation 6.0, handled
+-- outside: the sink's 2, the source's 1.
+-- Answer: (i32[99], i32[21]), and `live 0`: the sink stopped first (downstream first); 99 is the
+-- outer handler's answer after the cancel. `i32[12]` would be upstream first.
+--
+-- The connector is Assembly(n) rev 2's pieces (theory, `assembly-n.md` §1), each over one stage's
+-- or one wire's types, and the glue: the state tuple, the running stage with its pending input, and
+-- a dispatching loop (one `unfold`).
+--
+-- Stage 0, the source, is a loop value. It performs `yield` (site 1) and, in mode 2, a resumable
+-- `wait` at the fresh connector-local name 7. Stage 1, the sink, is a loop value performing
+-- `Stream`'s `next` (2.0) and `stop` (2.1). The real outer `wait` is 8.0, performed only by the
+-- connector (`forward_0`). Each turn of a stage runs under its storing clauses, inside the per-step
+-- finaliser `close_others_i`. A forwarded `wait` is the `[then]`
+--     a <- forward_0 () unwind (close_all (AtFwd k, s1)); <the source runs next, resumed at a>
+-- whose finaliser is the one-region `close_all`, with the sink's frame innermost.
+--
+-- State_0 = Ready(L) | AtYield(K0) / AtFwd(K0) | Ended                    = U L + (U K0 + 1)
+-- Event_0 = Yield(i32, K0) | Return(1) | Skip(L) | Fwd(K0)                = i32 * U K0 + ((1 + U L) + U K0)
+-- State_1 = Ready(L1) | AtNext(KD) | AtStop(KD)                           = U L1 + (U KD + U KD)
+-- Event_1 = Return(i32) | Skip(L1) | Next(KD) | Stop(KD)                  = (i32 + U L1) + (U KD + U KD)
+-- The stages' rows are the cleanup row CR; the glue's adds the outer `wait` 8.0, whose cancel row
+-- covers `close_all`'s, CR.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+def lt : i32 * i32 => 1 + 1 = unbang host[lt_s32]
+def eq : i32 * i32 => 1 + 1 = unbang host[eq32]
+
+-- ---- Stage 0, the source: items 1..10 --------------------------------------------------------
+
+def src_turn : !U (i32 * i32 -o F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + i32 * i32) & F[6.0 lin i32 ~> 1] 1) =
+  !thunkv fun (s : i32 * i32) ->
+    < let (i, m) = s;
+      c <- return (lt (i32[10], i));
+      case c {
+        inl le ->
+          w <- return (eq (m, i32[2]));
+          v <- case w {
+              inl no -> return ()
+            | inr yes -> (v2 <- perform[7.0] () unwind ((t <- perform[6.0] i32[1]; return ())); return v2)
+            };
+          u <- perform[1.0] i;
+          return (inr (plus (i, i32[1]), m))
+      | inr gt -> return (inl ())
+      },
+      let (i, m) = s; return () >
+
+def src_loop : !U (i32 * i32 -o F (U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1))) =
+  !thunkv fun (a : i32 * i32) ->
+    f <- return (unbang (unfold[nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1, i32 * i32] src_turn));
+    return (thunkv nu_in < (nu_out (force f a)).1, (nu_out (force f a)).2 >)
+
+-- The fresh site 7's storing clause (outer): Fwd(k).
+def f_hr : !U ((i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1))) -o F[6.0 lin i32 ~> 1] (i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) = !thunkv fun (v : (i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) -> return v
+def f_hc : !U (1 * U ((1 -o F[6.0 lin i32 ~> 1] (i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) -o F[6.0 lin i32 ~> 1] (i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) * 1 =
+  (!thunkv fun (p : 1 * U ((1 -o F[6.0 lin i32 ~> 1] (i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)) ->
+     let (u, k) = p; let () = u;
+     return (inr (inr (thunkv nu_in < fun (w : 1) -> (force k).1 w, (force k).2 >))), ())
+-- Site 7 around a stored rest's cancel: a cancel run that waits is not in these programs; the
+-- clause cancels.
+def c7_hr : !U (1 -o F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) = !thunkv fun (v : 1) -> return v
+def c7_hc : !U (1 * U ((1 -o F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) -o F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) * 1 =
+  (!thunkv fun (p : 1 * U ((1 -o F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)) -> let (u, k) = p; let () = u; (force k).2, ())
+
+-- The wire site 1's storing clause (inner): Yield(x, rest), the rest re-entering site 7's handler.
+def pull_hr : !U (1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) -o F[7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) =
+  !thunkv fun (v : 1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) -> return (inr (inl v))
+def pull_hc : !U (i32 * U ((1 -o F[7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) & F[6.0 lin i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] 1) -o F[7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) * 1 =
+  (!thunkv fun (p : i32 * U ((1 -o F[7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) & F[6.0 lin i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] 1)) ->
+     let (x, k) = p;
+     return (inl (x, thunkv nu_in < fun (w : 1) -> handle_with[7](f_hr, f_hc) ((force k).1 w),
+                                    handle_with[7](c7_hr, c7_hc) ((force k).2) >)), ())
+
+-- step_0 : State_0 * Input_0 -o F Event_0
+def step_0 : !U ((U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) * 1 -o F[6.0 lin i32 ~> 1] (i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) =
+  !thunkv fun (p : (U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) * 1) ->
+    let (s, u) = p;
+    case s {
+      inl l -> let () = u; handle_with[7](f_hr, f_hc) (handle_with[1](pull_hr, pull_hc) ((nu_out (force l)).1))
+    | inr r -> case r {
+        inl q -> (nu_out (force q)).1 u
+      | inr e -> let () = u; return (inr (inl (inl e)) : (i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1))))
+      }
+    }
+
+-- stop_0 : State_0 -o F 1
+def stop_0 : !U ((U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) -o F[6.0 lin i32 ~> 1] 1) =
+  !thunkv fun (s : (U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1))) ->
+    case s {
+      inl l -> (nu_out (force l)).2
+    | inr r -> case r {
+        inl q -> (nu_out (force q)).2
+      | inr e -> return e
+      }
+    }
+
+-- withStop_0 : State_0 * U (1 -o F R) -o F R (rev 2.1), at the region's R = 1.
+def withStop_0 : !U ((U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) * U (1 -o F[5.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] 1) -o F[5.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] 1) =
+  !thunkv fun (p : (U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) * U (1 -o F[5.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] 1)) ->
+    let (s, c) = p;
+    w <- return (); a <- force c w unwind (fn1 <- return (unbang stop_0); ar1 <- return (s); force fn1 ar1);
+    u <- (fn2 <- return (unbang stop_0); ar2 <- return (s); force fn2 ar2);
+    return a
+
+-- forward_0 : Op_0 -o F Ans_0: the real outer `wait`.
+def forward_0 : !U (1 -o F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] 1) = !thunkv fun (u : 1) -> perform[8.0] u
+
+-- ---- Stage 1, the sink: it owns a cell across each `next()` ------------------------------------
+
+def cons_turn : !U (i32 * (i32 * i32) -o F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + i32 * (i32 * i32)) & F[6.0 lin i32 ~> 1] 1) =
+  !thunkv fun (s : i32 * (i32 * i32)) ->
+    < let (acc, r1) = s; let (n, m) = r1;
+      cell <- return (alloc[i32] i32[0]);
+      a <- perform[2.0] () unwind (z <- return (free[i32] cell); (t <- perform[6.0] i32[2]; return ()));
+      z <- return (free[i32] cell);
+      case a {
+        inl x ->
+          acc2 <- return (plus (acc, plus (x, z)));
+          n2 <- return (plus (n, i32[1]));
+          b <- return (eq (m, i32[1]));
+          case b {
+            inl no -> return (inr (acc2, (n2, m)))
+          | inr yes -> d <- return (eq (n2, i32[4]));
+              case d { inl no2 -> return (inr (acc2, (n2, m))) | inr yes2 -> return (inl acc2) }
+          }
+      | inr e -> return (inl acc)
+      },
+      let (acc, r1) = s; return () >
+
+def cons_loop : !U (i32 * (i32 * i32) -o F (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1))) =
+  !thunkv fun (a : i32 * (i32 * i32)) ->
+    f <- return (unbang (unfold[nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1, i32 * (i32 * i32)] cons_turn));
+    return (thunkv nu_in < (nu_out (force f a)).1, (nu_out (force f a)).2 >)
+
+def d_hr : !U (i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) =
+  !thunkv fun (v : i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) -> return (inl v)
+def d_hc : !U (1 * U (((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) * !U (1 * U ((1 -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) * 1 =
+  (!thunkv fun (p : 1 * U (((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)) ->
+     let (u, k) = p; let () = u;
+     return (inr (inl (thunkv nu_in < fun (y : i32 + 1) -> (force k).1 y, (force k).2 >))),
+   !thunkv fun (p : 1 * U ((1 -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)) ->
+     let (u, k) = p; let () = u;
+     return (inr (inr (thunkv nu_in < fun (y : i32 + 1) ->
+         case y { inl a -> (w <- return (); (force k).1 w) | inr b -> (force k).1 b }, (force k).2 >))),
+   ())
+
+-- step_1 : State_1 * Input_1 -o F Event_1
+def step_1 : !U ((U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1))) * (i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) =
+  !thunkv fun (p : (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1))) * (i32 + 1)) ->
+    let (s, inp) = p;
+    case s {
+      inl l -> handle_with[2](d_hr, d_hc) ((nu_out (force l)).1)
+    | inr r -> case r {
+        inl kn -> (nu_out (force kn)).1 inp
+      | inr ks -> (nu_out (force ks)).1 inp
+      }
+    }
+
+-- stop_1 : State_1 -o F 1
+def stop_1 : !U ((U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1))) -o F[6.0 lin i32 ~> 1] 1) =
+  !thunkv fun (s : (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) ->
+    case s {
+      inl l -> (nu_out (force l)).2
+    | inr r -> case r {
+        inl kn -> (nu_out (force kn)).2
+      | inr ks -> (nu_out (force ks)).2
+      }
+    }
+
+def withStop_1 : !U ((U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1))) * U (1 -o F[5.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] 1) -o F[5.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] 1) =
+  !thunkv fun (p : (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1))) * U (1 -o F[5.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] 1)) ->
+    let (s, c) = p;
+    w <- return (); a <- force c w unwind (fn3 <- return (unbang stop_1); ar3 <- return (s); force fn3 ar3);
+    u <- (fn4 <- return (unbang stop_1); ar4 <- return (s); force fn4 ar4);
+    return a
+
+-- ---- Wire 1, the regions, the end --------------------------------------------------------------
+
+-- handoff_1 : (Yield | Return)_0 * State_1 -o State_0 * (Input_1 * State_1)
+def handoff_1 : !U ((i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1) * (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1))) -o F ((U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) * ((i32 + 1) * (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))))) =
+  !thunkv fun (p : (i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1) * (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) ->
+    let (e, s) = p;
+    case e {
+      inl xq -> let (x, q) = xq; return ((inr (inl q) : (U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1))), ((inl x : (i32 + 1)), s))
+    | inr k -> return ((inr (inr ()) : (U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1))), ((inr k : (i32 + 1)), s))
+    }
+
+-- One cancel region (site 5): its clause cancels the continuation, so every frame's stop runs.
+def c_hr : !U (1 -o F[6.0 lin i32 ~> 1] 1) = !thunkv fun (v : 1) -> return v
+def c_hc : !U (1 * U ((1 -o F[6.0 lin i32 ~> 1] 1) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) -o F[6.0 lin i32 ~> 1] 1) * 1 =
+  (!thunkv fun (p : 1 * U ((1 -o F[6.0 lin i32 ~> 1] 1) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)) -> let (u, k) = p; let () = u; (force k).2, ())
+
+-- close_others_0: the per-step finaliser of stage 0 (stage 1's frame).
+def close_others_0 : !U ((U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1))) -o F[6.0 lin i32 ~> 1] 1) =
+  !thunkv fun (s1 : (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) ->
+    handle_with[5](c_hr, c_hc) ((fn5 <- return (unbang withStop_1); ar5 <- return (s1, thunkv fun (w5 : 1) -> (perform[5.0] w5 : F[5.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] 1)); force fn5 ar5))
+-- close_others_1: the per-step finaliser of stage 1 (stage 0's frame); for n = 2 it is also
+-- close_up_1, the region of stage 1's `stop()`.
+def close_others_1 : !U ((U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) -o F[6.0 lin i32 ~> 1] 1) =
+  !thunkv fun (s0 : (U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1))) ->
+    handle_with[5](c_hr, c_hc) ((fn6 <- return (unbang withStop_0); ar6 <- return (s0, thunkv fun (w5 : 1) -> (perform[5.0] w5 : F[5.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] 1)); force fn6 ar6))
+-- close_all: every stage, stage 1's frame innermost (downstream first).
+def close_all : !U ((U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) * (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1))) -o F[6.0 lin i32 ~> 1] 1) =
+  !thunkv fun (ss : (U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) * (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) ->
+    let (s0, s1) = ss;
+    handle_with[5](c_hr, c_hc) ((fn7 <- return (unbang withStop_0); ar7 <- return (s0, thunkv fun (w6 : 1) -> (fn8 <- return (unbang withStop_1); ar8 <- return (s1, thunkv fun (w5 : 1) -> (perform[5.0] w5 : F[5.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] 1)); force fn8 ar8)); force fn7 ar7))
+
+-- finish : R * State_0 -o F R
+def finish : !U (i32 * (U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) -o F[6.0 lin i32 ~> 1] i32) =
+  !thunkv fun (p : i32 * (U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1))) ->
+    let (r, s0) = p;
+    u <- (fn9 <- return (unbang close_others_1); ar9 <- return (s0); force fn9 ar9);
+    return r
+
+-- ---- The glue ----------------------------------------------------------------------------------
+
+def conn_step : !U ((((U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) * (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) * (1 + (i32 + 1))) -o F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + (((U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) * (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) * (1 + (i32 + 1)))) & F[6.0 lin i32 ~> 1] 1) =
+  !thunkv fun (st : (((U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) * (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) * (1 + (i32 + 1)))) ->
+    < let (ss, turn) = st; let (s0, s1) = ss;
+      case turn {
+        inl u ->
+          e <- (fn10 <- return (unbang step_0); ar10 <- return (s0, u); force fn10 ar10) unwind (fn11 <- return (unbang close_others_0); ar11 <- return (s1); force fn11 ar11);
+          case e {
+            inl xq ->
+              h <- (fn12 <- return (unbang handoff_1); ar12 <- return ((inl xq : i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1), s1); force fn12 ar12);
+              let (t0, ri) = h; let (inp, t1) = ri;
+              return (inr ((t0, t1), inr inp))
+          | inr rs -> case rs {
+              inl rk -> case rk {
+                inl k ->
+                  h <- (fn13 <- return (unbang handoff_1); ar13 <- return ((inr k : i32 * U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1), s1); force fn13 ar13);
+                  let (t0, ri) = h; let (inp, t1) = ri;
+                  return (inr ((t0, t1), inr inp))
+              | inr l -> return (inr ((inl l, s1), inl ()))
+              }
+            | inr kf ->
+                -- Fwd: store AtFwd, forward under close_all, then the source runs at the answer.
+                sf : (U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) <- return (inr (inl kf));
+                a <- (fn14 <- return (unbang forward_0); ar14 <- return (()); force fn14 ar14) unwind (fn15 <- return (unbang close_all); ar15 <- return (sf, s1); force fn15 ar15);
+                return (inr ((sf, s1), inl a))
+            }
+          }
+      | inr inp ->
+          e <- (fn16 <- return (unbang step_1); ar16 <- return (s1, inp); force fn16 ar16) unwind (fn17 <- return (unbang close_others_1); ar17 <- return (s0); force fn17 ar17);
+          case e {
+            inl rl -> case rl {
+              inl r -> v <- (fn18 <- return (unbang finish); ar18 <- return (r, s0); force fn18 ar18); return (inl v)
+            | inr l -> return (inr ((s0, inl l), inr (inr ())))
+            }
+          | inr kk -> case kk {
+              inl kn -> return (inr ((s0, inr (inl kn)), inl ()))
+            | inr ks ->
+                t1 : (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1))) <- return (inr (inr ks));
+                u <- (fn19 <- return (unbang close_others_1); ar19 <- return (s0); force fn19 ar19) unwind (fn20 <- return (unbang close_others_0); ar20 <- return (t1); force fn20 ar20);
+                return (inr (((inr (inr ()) : (U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1))), t1), inr (inr ())))
+            }
+          }
+      },
+      let (ss, turn) = st;
+      (fn21 <- return (unbang close_all); ar21 <- return (ss); force fn21 ar21) >
+
+-- mk_conn(mode): the chain's connector over a fresh source and sink.
+def mk_conn : !U (i32 -o F (U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1))) =
+  !thunkv fun (m : i32) ->
+    sf <- return (unbang src_loop); a0 <- return (i32[1], m); l0 <- force sf a0;
+    cf <- return (unbang cons_loop); a1 <- return (i32[0], (i32[0], m)); l1 <- force cf a1;
+    st : (((U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) * (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) * (1 + (i32 + 1))) <- return ((inl l0, inl l1), inr (inr ()));
+    f <- return (unbang (unfold[nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1, (((U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu Y. (1 -o F[6.0 lin i32 ~> 1] (i32 * U Y + ((1 + U (nu X. F[1.0 cancel[6.0 lin i32 ~> 1] i32 ~> 1, 7.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (1 + U X) & F[6.0 lin i32 ~> 1] 1)) + U Y))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + 1)) * (U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) + U (nu X. ((i32 + 1) -o F[6.0 lin i32 ~> 1] ((i32 + U (nu X. F[2.0 cancel[6.0 lin i32 ~> 1] 1 ~> i32 + 1, 2.1 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1] (i32 + U X) & F[6.0 lin i32 ~> 1] 1)) + (U X + U X))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)))) * (1 + (i32 + 1)))] conn_step));
+    return (thunkv nu_in < (nu_out (force f st)).1, (nu_out (force f st)).2 >)
+
+def mul : i32 * i32 => i32 = unbang host[mul32]
+
+def h8_hr : !U ((i32 + U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1)) -o F[6.0 lin i32 ~> 1] (i32 + U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1))) = !thunkv fun (v : (i32 + U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1))) -> return v
+def h8_hc : !U (1 * U ((1 -o F[6.0 lin i32 ~> 1] (i32 + U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) -o F[6.0 lin i32 ~> 1] (i32 + U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1))) * 1 =
+  (!thunkv fun (p : 1 * U ((1 -o F[6.0 lin i32 ~> 1] (i32 + U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1))) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)) ->
+     let (u, k) = p; let () = u; z <- (force k).2; return (inl i32[99]), ())
+def t_hr : !U ((i32 + U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1)) -o F ((i32 + U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1)) * (i32 * i32))) = !thunkv fun (v : (i32 + U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1))) -> return (v, (i32[0], i32[1]))
+def t_hc : !U (i32 * U ((1 -o F ((i32 + U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1)) * (i32 * i32))) & top) -o F ((i32 + U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1)) * (i32 * i32))) * 1 =
+  (!thunkv fun (p : i32 * U ((1 -o F ((i32 + U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1)) * (i32 * i32))) & top)) ->
+     let (d, k) = p;
+     u <- return ();
+     r <- (force k).1 u;
+     let (v, tp) = r; let (t, w) = tp;
+     return (v, (plus (mul (d, w), t), mul (w, i32[10]))), ())
+def c6_hr : !U (1 -o F 1) = !thunkv fun (v : 1) -> return v
+def c6_hc : !U (i32 * U ((1 -o F 1) & top) -o F 1) * 1 =
+  (!thunkv fun (p : i32 * U ((1 -o F 1) & top)) -> let (d, k) = p; u <- return (); (force k).1 u, ())
+
+def outer_step : !U (U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1) * i32 -o F ((i32 * i32) + U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1) * i32) & F 1) =
+  !thunkv fun (s : U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1) * i32) ->
+    < let (g, t) = s;
+      o <- handle_with[6](t_hr, t_hc) (handle_with[8](h8_hr, h8_hc) ((nu_out (force g)).1));
+      let (res, tp) = o; let (td, w) = tp;
+      t2 <- return (plus (mul (t, w), td));
+      case res {
+        inl x -> return (inl (x, t2))
+      | inr g2 -> return (inr (g2, t2))
+      },
+      let (g, t) = s;
+      handle_with[6](c6_hr, c6_hc) ((nu_out (force g)).2) >
+
+main : F (U (nu W. F ((i32 * i32) + U W) & F 1)) =
+  g <- (fn22 <- return (unbang mk_conn); ar22 <- return (i32[2]); force fn22 ar22);
+  h <- return (unbang (unfold[nu W. F ((i32 * i32) + U W) & F 1, U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1) * i32] outer_step));
+  s : U (nu Z. F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] (i32 + U Z) & F[6.0 lin i32 ~> 1] 1) * i32 <- return (g, i32[0]);
+  return (thunkv nu_in < (nu_out (force h s)).1, (nu_out (force h s)).2 >)

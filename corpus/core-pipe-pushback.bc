@@ -1,0 +1,249 @@
+-- check: old-backend-refuses
+-- Pipes L1 (#920), first check, program 3: lookahead with a pushback slot held by the consumer
+-- (consumer-local state, not a protocol operation). The source yields 1..5. The consumer reads 1;
+-- reads 2 ahead and puts it back; reads 2 again (from the slot, no `next()`); reads 3; reads 4
+-- ahead and puts it back; then `stop()`, and returns its digits with the slot: (1223, inl 4).
+-- Answer: (i32[1223], inl i32[4]), `live 0`.
+--
+-- The connector is written as Assembly(n)'s pieces (theory, `assembly-n.md` §1), each over one
+-- stage's or one wire's types, plus the glue: the state tuple and a dispatching loop (one
+-- `unfold`). Stage 0 is the source (a loop value performing `yield`, site 1); stage 1 the consumer
+-- (a loop of one turn performing `Stream`'s `next` 2.0 and `stop` 2.1). Each `step_i` runs inside
+-- the per-step finaliser `close_others_i`, one cancel region (`core-pipe-close`'s form, site 5)
+-- with one `withStop_j` frame per other stage, innermost the most downstream.
+--
+-- State_0 = Ready(L) | AtYield(Q) | Ended                     = U L + (U Q + 1)
+-- Event_0 = Yield(i32, Q) | Return(1) | Skip(L)               = i32 * U Q + (1 + U L)
+-- State_1 = Ready(L1) | AtNext(KD) | AtStop(KD)               = U L1 + (U KD + U KD)
+-- Event_1 = Return(R) | Skip(L1) | Next(KD) | Stop(KD)        = (R + U L1) + (U KD + U KD)
+-- Input_1 = i32 + 1. The glue's turn: inl () runs stage 0, inr inp runs stage 1 with inp.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+def lt : i32 * i32 => 1 + 1 = unbang host[lt_s32]
+
+-- ---- Stage 0, the source ----------------------------------------------------------------------
+
+def src_turn : !U (i32 -o F[1.0 cancel i32 ~> 1] (1 + i32) & F[1.0 cancel i32 ~> 1] 1) =
+  !thunkv fun (i : i32) ->
+    < c <- return (lt (i32[5], i));
+      case c {
+        inl le -> u <- perform[1.0] i; return (inr (plus (i, i32[1])))
+      | inr gt -> return (inl ())
+      },
+      return () >
+
+def src_loop : !U (1 -o F (U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) =
+  !thunkv fun (u : 1) ->
+    f <- return (unbang (unfold[nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1, i32] src_turn));
+    s <- return i32[1];
+    return (thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >)
+
+-- The wire site 1's storing clause: the item and the rest (Q).
+def pull_hr : !U (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) -o F (i32 * U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1)))) =
+  !thunkv fun (v : 1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1)) -> return (inr v)
+def pull_hc : !U (i32 * U ((1 -o F (i32 * U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1)))) & F 1) -o F (i32 * U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1)))) * 1 =
+  (!thunkv fun (p : i32 * U ((1 -o F (i32 * U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1)))) & F 1)) ->
+     let (x, k) = p;
+     return (inl (x, thunkv nu_in < u <- return (); (force k).1 u, (force k).2 >)), ())
+def close_hr : !U (1 -o F 1) = !thunkv fun (v : 1) -> return v
+def close_hc : !U (i32 * U ((1 -o F 1) & F 1) -o F 1) * 1 =
+  (!thunkv fun (p : i32 * U ((1 -o F 1) & F 1)) -> let (x, k) = p; u <- return (); (force k).1 u, ())
+
+-- step_0 : State_0 * Input_0 -o F Event_0
+def step_0 : !U ((U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) * 1 -o F (i32 * U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1)))) =
+  !thunkv fun (p : (U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) * 1) ->
+    let (s, u) = p; let () = u;
+    case s {
+      inl l -> handle_with[1](pull_hr, pull_hc) ((nu_out (force l)).1)
+    | inr r -> case r {
+        inl q -> (nu_out (force q)).1
+      | inr e -> return (inr (inl e) : (i32 * U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))))
+      }
+    }
+
+-- stop_0 : State_0 -o F 1
+def stop_0 : !U ((U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) -o F 1) =
+  !thunkv fun (s : (U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1))) ->
+    case s {
+      inl l -> handle_with[1](close_hr, close_hc) ((nu_out (force l)).2)
+    | inr r -> case r {
+        inl q -> (nu_out (force q)).2
+      | inr e -> return e
+      }
+    }
+
+-- withStop_0 : State_0 * U (1 -o F R) -o F R, at R = 1 and the region's row: one frame. (§1 has
+-- U (F_Σ R); core text builds no thunk of an effectful `F_Σ`, so the inner computation is a λ.)
+def withStop_0 : !U ((U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) * U (1 -o F[5.0 cancel 1 ~> 1] 1) -o F[5.0 cancel 1 ~> 1] 1) =
+  !thunkv fun (p : (U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) * U (1 -o F[5.0 cancel 1 ~> 1] 1)) ->
+    let (s, c) = p;
+    w <- return (); a <- force c w unwind (fn1 <- return (unbang stop_0); ar1 <- return (s); force fn1 ar1);
+    u <- (fn2 <- return (unbang stop_0); ar2 <- return (s); force fn2 ar2);
+    return a
+
+-- ---- Stage 1, the consumer ---------------------------------------------------------------------
+def mul : i32 * i32 => i32 = unbang host[mul32]
+
+-- read(slot): the slot's item if it holds one, else `next()` (0 at the end); the slot is emptied.
+def read : !U ((i32 + 1) -o F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] (i32 * (i32 + 1))) =
+  !thunkv fun (s : i32 + 1) ->
+    case s {
+      inl x -> return (x, inr ())
+    | inr u -> a <- perform[2.0] ();
+        case a { inl v -> return (v, inr ()) | inr e -> return (i32[0], inr ()) }
+    }
+
+def cons_body : !U (1 -o F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] (i32 * (i32 + 1))) =
+  !thunkv fun (u : 1) ->
+    s0 : i32 + 1 <- return (inr ());
+    p1 <- (fn3 <- return (unbang read); ar3 <- return (s0); force fn3 ar3);  let (a, s1) = p1;
+    p2 <- (fn4 <- return (unbang read); ar4 <- return (s1); force fn4 ar4);  let (b, s2) = p2;
+    s3 : i32 + 1 <- return (inl b);
+    p3 <- (fn5 <- return (unbang read); ar5 <- return (s3); force fn5 ar5);  let (c, s4) = p3;
+    p4 <- (fn6 <- return (unbang read); ar6 <- return (s4); force fn6 ar6);  let (d, s5) = p4;
+    p5 <- (fn7 <- return (unbang read); ar7 <- return (s5); force fn7 ar7);  let (e, s6) = p5;
+    s7 : i32 + 1 <- return (inl e);
+    st <- perform[2.1] ();
+    n <- return (plus (mul (a, i32[1000]), plus (mul (b, i32[100]), plus (mul (c, i32[10]), d))));
+    return (n, s7)
+
+-- A stage that does not loop is a loop of one turn.
+def cons_loop : !U (1 -o F (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1))) =
+  !thunkv fun (u : 1) ->
+    return (thunkv nu_in < (cf <- return (unbang cons_body); u2 <- return (); r <- force cf u2; return (inl r : (i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1))), return () >)
+
+-- The wire site 2's storing clauses: `next` and `stop` store the continuation. Both are stored at
+-- KD, whose argument is `next`'s answer; `stop`'s continuation takes `inr ()`.
+def d_hr : !U ((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) =
+  !thunkv fun (v : (i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) -> return (inl v)
+def d_hc : !U (1 * U (((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) & F 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) * !U (1 * U ((1 -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) & F 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) * 1 =
+  (!thunkv fun (p : 1 * U (((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) & F 1)) ->
+     let (u, k) = p; let () = u;
+     return (inr (inl (thunkv nu_in < fun (y : i32 + 1) -> (force k).1 y, (force k).2 >))),
+   !thunkv fun (p : 1 * U ((1 -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) & F 1)) ->
+     let (u, k) = p; let () = u;
+     return (inr (inr (thunkv nu_in < fun (y : i32 + 1) ->
+         case y { inl a -> (w <- return (); (force k).1 w) | inr b -> (force k).1 b }, (force k).2 >))),
+   ())
+def close1_hr : !U (1 -o F 1) = !thunkv fun (v : 1) -> return v
+def close1_hc : !U (1 * U (((i32 + 1) -o F 1) & F 1) -o F 1) * !U (1 * U ((1 -o F 1) & F 1) -o F 1) * 1 =
+  (!thunkv fun (p : 1 * U (((i32 + 1) -o F 1) & F 1)) -> let (u, k) = p; (force k).2,
+   !thunkv fun (p : 1 * U ((1 -o F 1) & F 1)) -> let (u, k) = p; (force k).2,
+   ())
+
+-- step_1 : State_1 * Input_1 -o F Event_1
+def step_1 : !U ((U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1))) * (i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) =
+  !thunkv fun (p : (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1))) * (i32 + 1)) ->
+    let (s, inp) = p;
+    case s {
+      inl l -> handle_with[2](d_hr, d_hc) ((nu_out (force l)).1)
+    | inr r -> case r {
+        inl kn -> (nu_out (force kn)).1 inp
+      | inr ks -> (nu_out (force ks)).1 inp
+      }
+    }
+
+-- stop_1 : State_1 -o F 1
+def stop_1 : !U ((U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1))) -o F 1) =
+  !thunkv fun (s : (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) ->
+    case s {
+      inl l -> handle_with[2](close1_hr, close1_hc) ((nu_out (force l)).2)
+    | inr r -> case r {
+        inl kn -> (nu_out (force kn)).2
+      | inr ks -> (nu_out (force ks)).2
+      }
+    }
+
+def withStop_1 : !U ((U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1))) * U (1 -o F[5.0 cancel 1 ~> 1] 1) -o F[5.0 cancel 1 ~> 1] 1) =
+  !thunkv fun (p : (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1))) * U (1 -o F[5.0 cancel 1 ~> 1] 1)) ->
+    let (s, c) = p;
+    w <- return (); a <- force c w unwind (fn8 <- return (unbang stop_1); ar8 <- return (s); force fn8 ar8);
+    u <- (fn9 <- return (unbang stop_1); ar9 <- return (s); force fn9 ar9);
+    return a
+
+-- ---- Wire 1 and the end -----------------------------------------------------------------------
+
+-- handoff_1 : (Yield | Return) of stage 0 * State_1 -o State_0 * (Input_1 * State_1)
+def handoff_1 : !U ((i32 * U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1) * (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1))) -o F ((U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) * ((i32 + 1) * (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))))) =
+  !thunkv fun (p : (i32 * U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1) * (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) ->
+    let (e, s) = p;
+    case e {
+      inl xq -> let (x, q) = xq; return ((inr (inl q) : (U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1))), ((inl x : (i32 + 1)), s))
+    | inr k -> return ((inr (inr ()) : (U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1))), ((inr k : (i32 + 1)), s))
+    }
+
+-- One cancel region (site 5): the clause cancels the continuation, so every frame's stop runs.
+def c_hr : !U (1 -o F 1) = !thunkv fun (v : 1) -> return v
+def c_hc : !U (1 * U ((1 -o F 1) & F 1) -o F 1) * 1 =
+  (!thunkv fun (p : 1 * U ((1 -o F 1) & F 1)) -> let (u, k) = p; let () = u; (force k).2, ())
+
+-- close_others_i: the region over every stage but i (here, one frame).
+def close_others_0 : !U ((U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1))) -o F 1) =
+  !thunkv fun (s1 : (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) ->
+    handle_with[5](c_hr, c_hc) ((fn10 <- return (unbang withStop_1); ar10 <- return (s1, thunkv fun (w5 : 1) -> (perform[5.0] w5 : F[5.0 cancel 1 ~> 1] 1)); force fn10 ar10))
+def close_others_1 : !U ((U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) -o F 1) =
+  !thunkv fun (s0 : (U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1))) ->
+    handle_with[5](c_hr, c_hc) ((fn11 <- return (unbang withStop_0); ar11 <- return (s0, thunkv fun (w5 : 1) -> (perform[5.0] w5 : F[5.0 cancel 1 ~> 1] 1)); force fn11 ar11))
+-- Both, downstream first: stage 1's frame innermost.
+def close_all : !U ((U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) * (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1))) -o F 1) =
+  !thunkv fun (ss : (U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) * (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) ->
+    let (s0, s1) = ss;
+    handle_with[5](c_hr, c_hc) ((fn12 <- return (unbang withStop_0); ar12 <- return (s0, thunkv fun (w6 : 1) -> (fn13 <- return (unbang withStop_1); ar13 <- return (s1, thunkv fun (w5 : 1) -> (perform[5.0] w5 : F[5.0 cancel 1 ~> 1] 1)); force fn13 ar13)); force fn12 ar12))
+
+-- finish : R * (others' states) -o F R
+def finish : !U ((i32 * (i32 + 1)) * (U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) -o F (i32 * (i32 + 1))) =
+  !thunkv fun (p : (i32 * (i32 + 1)) * (U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1))) ->
+    let (r, s0) = p;
+    u <- (fn14 <- return (unbang close_others_1); ar14 <- return (s0); force fn14 ar14);
+    return r
+
+-- ---- The glue: the tuple and the dispatching loop ---------------------------------------------
+
+def conn_step : !U ((((U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) * (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) * (1 + (i32 + 1))) -o F ((i32 * (i32 + 1)) + (((U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) * (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) * (1 + (i32 + 1)))) & F 1) =
+  !thunkv fun (st : (((U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) * (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) * (1 + (i32 + 1)))) ->
+    < let (ss, turn) = st; let (s0, s1) = ss;
+      case turn {
+        inl u ->
+          e <- (fn15 <- return (unbang step_0); ar15 <- return (s0, u); force fn15 ar15) unwind (fn16 <- return (unbang close_others_0); ar16 <- return (s1); force fn16 ar16);
+          case e {
+            inl xq ->
+              h <- (fn17 <- return (unbang handoff_1); ar17 <- return ((inl xq : i32 * U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1), s1); force fn17 ar17);
+              let (t0, ri) = h; let (inp, t1) = ri;
+              return (inr ((t0, t1), inr inp))
+          | inr rs -> case rs {
+              inl k ->
+                h <- (fn18 <- return (unbang handoff_1); ar18 <- return ((inr k : i32 * U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1), s1); force fn18 ar18);
+                let (t0, ri) = h; let (inp, t1) = ri;
+                return (inr ((t0, t1), inr inp))
+            | inr l -> return (inr ((inl l, s1), inl ()))
+            }
+          }
+      | inr inp ->
+          e <- (fn19 <- return (unbang step_1); ar19 <- return (s1, inp); force fn19 ar19) unwind (fn20 <- return (unbang close_others_1); ar20 <- return (s0); force fn20 ar20);
+          case e {
+            inl rl -> case rl {
+              inl r -> v <- (fn21 <- return (unbang finish); ar21 <- return (r, s0); force fn21 ar21); return (inl v)
+            | inr l -> return (inr ((s0, inl l), inr (inr ())))
+            }
+          | inr kk -> case kk {
+              inl kn -> return (inr ((s0, inr (inl kn)), inl ()))
+            | inr ks ->
+                t1 : (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1))) <- return (inr (inr ks));
+                u <- (fn22 <- return (unbang close_others_1); ar22 <- return (s0); force fn22 ar22) unwind (fn23 <- return (unbang close_others_0); ar23 <- return (t1); force fn23 ar23);
+                return (inr (((inr (inr ()) : (U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1))), t1), inr (inr ())))
+            }
+          }
+      },
+      let (ss, turn) = st;
+      (fn24 <- return (unbang close_all); ar24 <- return (ss); force fn24 ar24) >
+
+main : F (U (nu Z. F ((i32 * (i32 + 1)) + U Z) & F 1)) =
+  sl <- return (unbang src_loop);
+  u0 <- return ();
+  l0 <- force sl u0;
+  cl <- return (unbang cons_loop);
+  u1 <- return ();
+  l1 <- force cl u1;
+  st : (((U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) * (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) * (1 + (i32 + 1))) <- return ((inl l0, inl l1), inr (inr ()));
+  f <- return (unbang (unfold[nu Z. F ((i32 * (i32 + 1)) + U Z) & F 1, (((U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + (U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) + 1)) * (U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1) + (U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1) + U (nu X. ((i32 + 1) -o F (((i32 * (i32 + 1)) + U (nu X. F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] ((i32 * (i32 + 1)) + U X) & F[2.0 cancel 1 ~> i32 + 1, 2.1 cancel 1 ~> 1] 1)) + (U X + U X))) & F 1)))) * (1 + (i32 + 1)))] conn_step));
+  return (thunkv nu_in < (nu_out (force f st)).1, (nu_out (force f st)).2 >)
