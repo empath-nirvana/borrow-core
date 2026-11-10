@@ -10464,7 +10464,7 @@ changes.
 determinism, decomposition and `StepsOff`/frame. C.2, Core: the rule and its compatibility lemma,
 from the cancel branch's proof (`erwp_kappaC_cancel`, `ewp_handle_or`'s `hTc` at `lastTc`). C.3,
 the chain: the compatibility lemma at `erwpK`/`KW`. The backend: the in-place cancel-mode unwind in
-the interpreters and Backend2. None is built yet.
+the interpreters and Backend2. C.1 is built; C.2, C.3 and the backend are not.
 
 **Open.** The fused-vs-unfused simulation (P3's whole-run relation), which discharges *a raise or
 cancel crosses the active frame* above; performs re-entered in `K`; a surface or elaborator producer
