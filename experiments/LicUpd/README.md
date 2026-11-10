@@ -34,9 +34,9 @@ Build: `lake build LicUpd`. Nothing in the library imports it.
 | frame at a one-cell frame (a copy of the lent cell) | `k1_frame_copy` | proved |
 | K2: second-level image derivable through the first | `k2_derivable`, `k2_compose` | proved |
 | one absorption at a lifetime's end recovers 6.59 | `lendEnd_absorb` | proved: 6.52, then 6.59, at `β := α`, the lend's own lifetime, with the 6.64 frame's `houtb`/`houtρ′` as 6.52's stratum conditions. It assumes `hbridge` |
-| the bridge: a G1 callback run, with its images moved to its start, meets `↭` | `LicBridge` (`lendEnd_absorb_lic`) | **open**, stated |
+| the bridge: a G1 callback run, with its images moved to its start, meets `↭` | `LicBridge` (`lendEnd_absorb_lic`) | **refuted as stated** (`not_licBridge`). At K1 with `c = ∅`, the statement lets `c` miss the new image. The corrected form `LicBridgeAll` (garbage minus `c|dom(ρ_P|mut,own)` in `Res_α`) is **open** |
 | 6.59 under G1: a bracketed reborrow at `β ⊏ α` while a persistent image at `α` appears | `Six59Lic` | **open**, stated. This is the riskiest step: the walk equality modulo derivable images |
-| 6.48 under G1 in general | `LicFrame` | **open**, stated |
+| 6.48 under G1 in general | `LicFrame` | **refuted** (`not_licFrame`, `licFrame_fails`). The frame `F = 1 ↦ imm({β}, t, ∅)` is a second image of K1's escrow cell. `⦇F ● ρ⦈(1) = imm({β}, t, ∅)` and `⦇F ● π⦈(1) = imm({β} ∪ {α}, t, ∅)`, so G1's start→end clause, which keeps `UpdImm`'s exact cell, fails for the composite while K1 is accepted |
 | K4: G1 does not exempt a `mut` predicate change; a `mut` exemption (G2 as written) does | `k4_refused`, `k4_mutExempt_admits` | proved |
 | K5: `own ● imm` at one location is undefined | `k5_own_image_undefined` | proved |
 | K6: G2 read off the run's start does not compose (G2 conjures, then G1 derives) | `not_g2ThenG1Compose`, `not_g2Compose` | proved |
@@ -55,6 +55,16 @@ end holding a top-level `1 ↦ mut(…)`.
 A `mut` view is exclusive: a getter must move the parent's authority over `1` to the view, not
 derive a copy beside it. No end→start exemption expresses that move. Per the brief, no fallback
 is attempted.
+
+## Verdict on G1 as defined
+
+G1 as defined is **not frame-preserving** (`not_licFrame`).
+- The defect is the start→end direction. A start view whose lifetime set grows, because a
+  derivable image joins it (`imm ● imm` unions the sets), is no longer the same cell.
+- A repaired G1 would read that direction up to growth by derivable images' lifetimes. That
+  repair is not built, and 6.48 at it is not derived.
+- Transitivity, K1, K2 and the end-of-lend absorption (given the bridge) are proved.
+- `Six59Lic` and `LicBridgeAll` stay open.
 
 ## What the open items are
 

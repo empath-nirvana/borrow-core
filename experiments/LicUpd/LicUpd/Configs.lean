@@ -37,7 +37,7 @@ theorem k2_derivable {σ : WRes} {m l₁ l₂ : Loc} {s : LSet} {R w₁ : WRes}
     (h₁ : R.get l₁ = some (CellU.ownOf (Val.loc l₂))) (hle₁ : ResU.Le w₁ R)
     (h₂ : w₁.get l₂ = some (CellU.ownOf u)) :
     Derivable σ l₂ (CellU.immOf (LSet.singleton α) u PMap.empty
-      (ResU.inStratum_empty _ : (PMap.empty : WRes).InStratum _)) := by
+      (inStratum_emptyW _)) := by
   have d₁ : Derivable σ l₁ (CellU.immOf (LSet.singleton α) (Val.loc l₂) w₁ hw₁) :=
     Derivable.proj (Derivable.base e rfl) h₁
       (fun x hx => ⟨x, by rw [show x = α from hx]; exact hαs, le_refl x⟩) hle₁

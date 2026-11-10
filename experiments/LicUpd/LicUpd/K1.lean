@@ -41,7 +41,7 @@ abbrev rhoK1 (α : Life) (t : Val) : WRes := ResU.single 0 (cellK1 α t)
 /-- The image `imm({α}, t, ∅)`. -/
 abbrev imgCell (α : Life) (t : Val) : CellU Loc Val :=
   CellU.immOf (LSet.singleton α) t PMap.empty
-    (ResU.inStratum_empty _ : (PMap.empty : WRes).InStratum _)
+    (inStratum_emptyW _)
 
 /-- The image at `1`. -/
 abbrev imgK1 (α : Life) (t : Val) : WRes := ResU.single 1 (imgCell α t)
@@ -135,7 +135,8 @@ theorem agPi_get0 : (agPi α t).get 0 = some (cellK1 α t) :=
 
 theorem agPi_get1 : (agPi α t).get 1 = some (imgCell α t) := by
   obtain ⟨ψ, e, hc⟩ := comp_get_both (agPi_comp α t) (agK1_get1 α t) (ResU.single_get_self _ _)
-  rw [e, CellU.CompR.functional hc (CellU.CompR.ownImm _ _ _ _)]
+  rw [e]
+  exact congrArg some (CellU.CompR.functional hc (CellU.CompR.ownImm _ _ _ _))
 
 theorem agPi_get_other {l : Loc} (h0 : l ≠ 0) (h1 : l ≠ 1) : (agPi α t).get l = none :=
   comp_get_none (agPi_comp α t) (agK1_get_other α t h0 h1) (ResU.single_get_ne _ h1)
@@ -156,7 +157,7 @@ theorem flatAt_piK1 {l : Loc} {c : CellU Loc Val} (h : (piK1 α t).FlatAt l c) :
 theorem k1_refused : ¬ ResU.UpdImm (rhoK1 α t) (piK1 α t) := by
   intro h
   obtain ⟨σ, hσ, e⟩ := (h 1 (LSet.singleton α) t PMap.empty
-    (ResU.inStratum_empty _ : (PMap.empty : WRes).InStratum _)).mpr
+    (inStratum_emptyW _)).mpr
     ⟨agPi α t, flat_piK1 α t, agPi_get1 α t⟩
   rw [ResU.Flat.functional hσ (flat_rhoK1 α t), agK1_get1] at e
   exact CellU.ownOf_ne_immOf (Option.some.inj e)

@@ -14,7 +14,7 @@ import LicUpd.Configs
     is the existing lemma, at the lend's lifetime.
 - `six59Lic_of_updV`: at a run that meets `↭`, the G1 form of 6.59 holds (conservativity).
 
-**What is open, stated exactly** (not derived; obstruction not verified):
+**What is stated here** (`Refute.lean` refutes `LicBridge` and `LicFrame` as stated):
 - `LicBridge`: a G1 run of the callback, with its new images `c` moved to its start and the
   frame cell factored out of both ends, is a `↭` run. This is `lendEnd_absorb`'s `hbridge`.
 - `Six59Lic`: 6.59 with its update hypothesis weakened to `UpdVLic` and its conclusion to

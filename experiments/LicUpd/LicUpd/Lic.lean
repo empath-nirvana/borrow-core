@@ -174,6 +174,10 @@ theorem comp_get_both {R : CellU Loc Val → CellU Loc Val → Prop}
   rw [e₁, e₂] at hp
   exact hp
 
+/-- `∅ ∈ Res_a`, at `WRes`. -/
+theorem inStratum_emptyW (a : Life) : ResU.InStratum a (PMap.empty : WRes) :=
+  ResU.inStratum_empty a
+
 /-- `⦇∅⦈ = ∅`. -/
 theorem flat_empty_eq {τ : WRes} (hτ : ResU.Flat (PMap.empty : WRes) τ) : τ = PMap.empty := by
   obtain ⟨e, a, he, ha, hc⟩ := hτ
