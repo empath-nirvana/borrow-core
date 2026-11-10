@@ -12551,13 +12551,13 @@ Beside §9's slice constants (`sliceGetM`, `sliceReplaceM`, the splits):
     sliceCopyM : !(ArrayMut @a A ⊗ (I32 ⊗ (ArrayImm @b A ⊗ (I32 ⊗ I32))) ⇒ ArrayMut @a A ⊗ (1 ⊕ 1))     A persistent
 
 - `sliceCopyM (dst, (di, (src, (si, len))))` checks the bounds once: `0 ≤ di`, `0 ≤ si`, `0 ≤ len`,
-  `di + len ≤ len dst` and `si + len ≤ len src`, in `i32` with no overflow, so a negative or
-  wrapping input is out of range. In range it writes `dst[di + k] := src[si + k]` for every
+  `di + len ≤ len dst` and `si + len ≤ len src`, on mathematical integers: a negative input, or
+  `di + len` or `si + len` past 2³¹ − 1, is out of range, never wrapped. In range it writes `dst[di + k] := src[si + k]` for every
   `k < len`, in one machine step, and answers `(dst, inr ())`. Out of range it writes nothing and
   answers `(dst, inl ())`; the kernel has no trap, so the surface raises on `inl`, as with
   `array_replace`'s sum.
-- **The element type is persistent** (§10): it owns no resource, so a copy is a write of equal
-  values. Owned or linear elements (a move) are not covered.
+- **The element type is persistent** (§10: the integer and float scalars, `U8`, `1`, `!` values,
+  which are copied bitwise): it owns no resource, so a copy is a write of equal values. Owned or linear elements (a move) are not covered.
 - **No overlap, by the types.** `dst` is `Mut @a`, exclusive, and `src` an `Imm @b` view, so the
   two ranges are disjoint: no run-time aliasing check, and no memmove.
 - An owned `Array A` destination is reached through the existing borrow (`sliceBorrowM`). A text or
@@ -12574,11 +12574,16 @@ index.
 
 ### Lowering (Backend2)
 
-A word-IR statement `copy (dst, src, bytes)` after the LIR's bounds test: `memory.copy` in Wasm,
-`llvm.memcpy` natively, the disjointness cited from the constant's types. One copy of
-`len × stride` bytes when `src` and `dst` have the same width class (§57, `Checked.classAt`);
-otherwise an element loop. A copy of `len` elements counts as `len` loads and `len` stores, as the
-loop it replaces.
+A word-IR statement `copy (dst, src, bytes)` after the LIR's single range test: `memory.copy` in
+Wasm (bulk memory, which wasmtime, the gate's runner, enables by default), `llvm.memcpy` natively,
+the disjointness cited at the site from the constant's types. The element layouts of `src` and
+`dst` are `A`'s, the same stride, so it is one copy of `len × stride` bytes. The flat IR's
+interpreter runs the statement as a word or byte loop with the same counts.
+
+**Counts.** A copy of `len` elements counts as the loads and stores of the element loop it
+replaces: `len ×` the element's words of each, or `len` `load8`/`store8` for `U8`. The range test
+counts as 2 bounds checks per call (against `len src` and `len dst`), not one per element, so a
+program that switches to `sliceCopyM` has fewer bounds checks.
 
 ### The library (§17)
 
@@ -12591,13 +12596,14 @@ existing borrow.
 
 `fundamentalC`, `adequacyC`/`adequacyD` and `fundamentalN_all`/`goal791N`, with their statements
 unchanged; every existing slice constant's compatibility lemma; §13's determinism, with the new
-case. Every corpus and kernel program keeps its output: no existing term changes, and every count
-is unchanged by the counting rule above.
+case. Every corpus and kernel program keeps its output: no existing term changes. Counts are
+unchanged for a program that does not use `sliceCopyM`; a program the library switches to it keeps
+its loads and stores and has fewer bounds checks.
 
 ### Programs
 
-A corpus program copying at the bounds (in range, `len = 0`, each bound one past, overlapping
-indices of two different arrays), `live 0`; #977's `citm` and `twitter` for the time.
+A corpus program copying at the bounds (in range, `len = 0`, each bound one past, sums past
+2³¹ − 1), `live 0`; #977's `citm` and `twitter` for the time.
 
 ### Units
 
