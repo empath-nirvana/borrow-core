@@ -11,6 +11,11 @@ compatibility lemma at `cN` (`withbor2S_compat`, `withbor3S_compat`, `withborFS_
 property; `constsN_of` gathers them. The instances at the hardest case's row discharge every
 hypothesis of each compatibility lemma, the finalisers read at `SemJN` (`dFree_sem`, `dRelease_sem`,
 `dArrFree_sem`).
+
+A constant's finaliser may name host externs: it is typed at the externs' context `Γx`, and the
+constant's value is closed by the externs' values (`Const791.valAt`). `ExternN`/`ExternsMeetN` are
+the externs' contracts; `semJN_close` reads a finaliser's judgment at `Γx`, closed by values meeting
+them, as a judgment at `[]`, which the compatibility lemmas take.  `[spec §72]`
 -/
 
 noncomputable section
@@ -38,16 +43,144 @@ def ConstN (c : Const791) : Prop :=
   c.OK → ∀ (δ : LSub) (Θ : LocTy) (n : Nat), Θ.OK →
     vN (ℍ := ℍ) (.bang c.ty) δ Θ n c.val PMap.empty
 
-/-- **A #791 constant is a value of `!` its type at the lifetime context `Δ`**: from its
-premises at `Δ`, at every `δ ⊨ Δ`, world and index.  `[spec §62]` -/
-def ConstNAt (Δ : LifeCtx) (c : Const791) : Prop :=
-  c.OKAt Δ → ∀ (δ : LSub), Δ.Models δ → ∀ (Θ : LocTy) (n : Nat), Θ.OK →
-    vN (ℍ := ℍ) (.bang c.ty) δ Θ n c.val PMap.empty
+/-! ### The externs' contracts -/
 
-/-- `ConstN` is `ConstNAt` at the empty context, which every `δ` models. -/
-theorem constN_of_at {c : Const791} (h : ConstNAt (ℍ := ℍ) LifeCtx.empty c) :
+/-- **A host extern's contract at the typed world**: the value is closed, its type persistent,
+and it is a value of its type at every `δ`, world and index, with no resource. `ConstN`'s
+conclusion, for a value that is not a #791 constant.  `[spec §72]` -/
+def ExternN (T : VTy) (v : Val) : Prop :=
+  closedAt 0 v.1 = true ∧ T.Persistent ∧
+    ∀ (δ : LSub) (Θ : LocTy) (n : Nat), Θ.OK → vN (ℍ := ℍ) T δ Θ n v PMap.empty
+
+/-- **The externs' contracts, as a named hypothesis**: each slot of `Γ` is live, and the value
+of `γ` at its index meets `ExternN` at the slot's type.  `[spec §72]` -/
+inductive ExternsMeetN : Ctx VTy → List Val → Prop
+  | nil : ExternsMeetN [] []
+  | cons {T : VTy} {Γ : Ctx VTy} {v : Val} {γ : List Val} (hv : ExternN (ℍ := ℍ) T v)
+      (h : ExternsMeetN Γ γ) : ExternsMeetN (⟨T, true⟩ :: Γ) (v :: γ)
+
+/-- The externs' values close every slot of their context.  `[spec §72]` -/
+theorem liveWithin_of_meetsN {Γx : Ctx VTy} {γx : List Val} (h : ExternsMeetN (ℍ := ℍ) Γx γx) :
+    Ctx.LiveWithin Γx γx := by
+  induction h with
+  | nil => trivial
+  | cons _ _ ih => exact ih
+
+/-- The externs' values are one per slot.  `[spec §72]` -/
+theorem length_of_meetsN {Γx : Ctx VTy} {γx : List Val} (h : ExternsMeetN (ℍ := ℍ) Γx γx) :
+    γx.length = Γx.length := by
+  induction h with
+  | nil => rfl
+  | cons _ _ ih => simp [ih]
+
+/-- The externs' values are closed.  `[spec §72]` -/
+theorem closed_of_meetsN {Γx : Ctx VTy} {γx : List Val} (h : ExternsMeetN (ℍ := ℍ) Γx γx) :
+    ∀ v ∈ γx, closedAt 0 v.1 = true := by
+  induction h with
+  | nil => intro v hv; cases hv
+  | cons hv _ ih =>
+      intro w hw
+      rcases List.mem_cons.mp hw with rfl | hw
+      · exact hv.1
+      · exact ih w hw
+
+/-- **The externs' context is met by their values**, at every world, with no resource.
+`[spec §72]` -/
+theorem gN_of_externsN {Γx : Ctx VTy} {γx : List Val} (hx : ExternsMeetN (ℍ := ℍ) Γx γx)
+    (δ : LSub) {Θ : LocTy} (hΘ : Θ.OK) (n : Nat) : gN (ℍ := ℍ) δ Θ Γx γx n PMap.empty := by
+  induction hx with
+  | nil => rfl
+  | cons hv _ ih =>
+      simp only [gN, if_true]
+      exact ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, hv.2.2 δ Θ n hΘ, ih⟩
+
+/-- **A closing substitution by closed values closes a term closed above it**: at `k` binders,
+a term closed at `k + |γ|` is closed at `k` after `γ`.  `[spec §72]` -/
+theorem closedAt_psub {γ : List Val} (hγ : ∀ v ∈ γ, closedAt 0 v.1 = true) :
+    ∀ (e : Expr) (k : Nat), closedAt (k + γ.length) e = true → closedAt k (Expr.psub k γ e) = true
+  | .var i, k, h => by
+      simp only [closedAt, decide_eq_true_eq] at h
+      simp only [Expr.psub]
+      by_cases hik : i < k
+      · simp [hik, closedAt]
+      · rw [if_neg hik]
+        cases hg : γ[i - k]? with
+        | some v =>
+            have hv := hγ v (List.mem_of_getElem? hg)
+            show closedAt k (v.shift k 0).1 = true
+            rw [Val.val_shift, shift_closedAt v.1 k hv (Nat.zero_le 0)]
+            exact closedAt_mono v.1 hv (Nat.zero_le k)
+        | none =>
+            rw [List.getElem?_eq_none_iff] at hg
+            omega
+  | .unit, _, _ => rfl
+  | .pair e₁ e₂, k, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [Expr.psub, closedAt, Bool.and_eq_true]
+      exact ⟨closedAt_psub hγ e₁ k h.1, closedAt_psub hγ e₂ k h.2⟩
+  | .inj₁ e, k, h => closedAt_psub hγ e k h
+  | .inj₂ e, k, h => closedAt_psub hγ e k h
+  | .lam b, k, h => by
+      simp only [closedAt] at h
+      simp only [Expr.psub, closedAt]
+      exact closedAt_psub hγ b (k + 1) (by rw [show k + 1 + γ.length = k + γ.length + 1 by omega]; exact h)
+  | .loc _, _, _ => rfl
+  | .prim _, _, _ => rfl
+  | .seq e₁ e₂, k, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [Expr.psub, closedAt, Bool.and_eq_true]
+      exact ⟨closedAt_psub hγ e₁ k h.1, closedAt_psub hγ e₂ k h.2⟩
+  | .letpair e₁ e₂, k, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [Expr.psub, closedAt, Bool.and_eq_true]
+      exact ⟨closedAt_psub hγ e₁ k h.1, closedAt_psub hγ e₂ (k + 2)
+        (by rw [show k + 2 + γ.length = k + γ.length + 2 by omega]; exact h.2)⟩
+  | .case e e₁ e₂, k, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [Expr.psub, closedAt, Bool.and_eq_true]
+      exact ⟨⟨closedAt_psub hγ e k h.1.1, closedAt_psub hγ e₁ (k + 1)
+        (by rw [show k + 1 + γ.length = k + γ.length + 1 by omega]; exact h.1.2)⟩,
+        closedAt_psub hγ e₂ (k + 1)
+        (by rw [show k + 1 + γ.length = k + γ.length + 1 by omega]; exact h.2)⟩
+  | .app f a, k, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [Expr.psub, closedAt, Bool.and_eq_true]
+      exact ⟨closedAt_psub hγ f k h.1, closedAt_psub hγ a k h.2⟩
+
+/-- **A term closed above the externs' context is closed by their values.**  `[spec §72]` -/
+theorem substAll_closed_of_meetsN {Γx : Ctx VTy} {γx : List Val}
+    (hx : ExternsMeetN (ℍ := ℍ) Γx γx) {d : Expr} (hdc : closedAt Γx.length d = true) :
+    closedAt 0 (substAll γx d) = true :=
+  closedAt_psub (closed_of_meetsN hx) d 0 (by rw [Nat.zero_add, length_of_meetsN hx]; exact hdc)
+
+/-- **A judgment at the externs' context, closed by their values, is a closed judgment**: the
+bridge from a finaliser typed at `Γx` to the compatibility lemmas, which read it at `[]`. At any
+closing list the term is `d[γx]`, closed; the externs' context is met by `γx` with no
+resource.  `[spec §72]` -/
+theorem semJN_close {Δ : LifeCtx} {Γx : Ctx VTy} {γx : List Val} {d : Expr} {j : Jdg}
+    (hd : SemJN (ℍ := ℍ) Δ Γx d j) (hx : ExternsMeetN (ℍ := ℍ) Γx γx)
+    (hdc : closedAt Γx.length d = true) : SemJN (ℍ := ℍ) Δ [] (substAll γx d) j := by
+  intro δ γ Θ c n ls ρ hδ hΘ hc _ hg
+  obtain rfl : ρ = PMap.empty := hg
+  rw [show substAll γ (substAll γx d) = substAll γx d from
+    psub_closedAt _ γ (substAll_closed_of_meetsN hx hdc) le_rfl]
+  exact hd δ γx Θ c n ls PMap.empty hδ hΘ hc (liveWithin_of_meetsN hx)
+    (gN_of_externsN hx δ hΘ n)
+
+/-! ### The constants' statements at the lifetime context -/
+
+/-- **A #791 constant is a value of `!` its type at the lifetime context `Δ` and the externs'
+context `Γx`**: from its premises at `Δ` and `Γx`, and the externs' values `γx` meeting their
+contracts, its value closed by `γx` is a value of `!` its type at every `δ ⊨ Δ`, world and index.
+`[spec §62, §72]` -/
+def ConstNAt (Δ : LifeCtx) (Γx : Ctx VTy) (γx : List Val) (c : Const791) : Prop :=
+  c.OKAt Δ Γx → ExternsMeetN (ℍ := ℍ) Γx γx → ∀ (δ : LSub), Δ.Models δ → ∀ (Θ : LocTy) (n : Nat),
+    Θ.OK → vN (ℍ := ℍ) (.bang c.ty) δ Θ n (c.valAt γx) PMap.empty
+
+/-- `ConstN` is `ConstNAt` at the empty context and no externs, which every `δ` models. -/
+theorem constN_of_at {c : Const791} (h : ConstNAt (ℍ := ℍ) LifeCtx.empty [] [] c) :
     ConstN (ℍ := ℍ) c :=
-  fun hc δ Θ n hΘ => h hc δ (models_empty_any δ) Θ n hΘ
+  fun hc δ Θ n hΘ => c.valAt_nil ▸ h hc .nil δ (models_empty_any δ) Θ n hΘ
 
 /-- Every #791 constant inside the fragment, at the typed world. -/
 def ConstsN : Prop := ∀ c : Const791, c.InFrag → ConstN (ℍ := ℍ) c
@@ -60,19 +193,22 @@ def FundamentalN : Prop :=
 
 /-! ### A constant under a lifetime binder -/
 
-/-- **A constant's value is closed**, from its premises: a lend constant's term closes over its
-finaliser, closed by the premise; a binder's is `λ_.` over its body's.  `[spec §62]` -/
-theorem _root_.BoCa.Fig16.Tree.Wp.Goal791.Const791.val_closed : ∀ {Δ : LifeCtx}
-    (c : Const791), c.OKAt Δ →
-    closedAt 0 c.val.1 = true
-  | _, .w2 .., ⟨_, _, _, _, _, _, hdc, _⟩ => withborUE_closed hdc
-  | _, .w3 .., ⟨_, _, _, _, _, hdc, _⟩ => withborUE_closed hdc
+/-- **A constant's value is closed by the externs' values**, from its premises: a lend
+constant's term closes over its finaliser, closed above the externs' context, so closed after
+their values; a binder's is `λ_.` over its body's.  `[spec §62, §72]` -/
+theorem _root_.BoCa.Fig16.Tree.Wp.Goal791.Const791.val_closed {Γx : Ctx VTy} {γx : List Val}
+    (hx : ExternsMeetN (ℍ := ℍ) Γx γx) : ∀ {Δ : LifeCtx} (c : Const791), c.OKAt Δ Γx →
+    closedAt 0 (c.valAt γx).1 = true
+  | _, .w2 .., ⟨_, _, _, _, _, _, hdc, _⟩ => withborUE_closed (substAll_closed_of_meetsN hx hdc)
+  | _, .w3 .., ⟨_, _, _, _, _, hdc, _⟩ => withborUE_closed (substAll_closed_of_meetsN hx hdc)
   | _, .wF .., ⟨_, _, _, _, _, hdc, _⟩ => by
-      have h := withborUE_closed hdc
-      simp_all [withborUE, Const791.val, withborFV, withborFE, closedAt, thenE]
+      have h := withborUE_closed (substAll_closed_of_meetsN hx hdc)
+      simp_all [withborUE, Const791.valAt, withborFV, withborFE, closedAt, thenE]
   | _, .wl .., _ => rfl
-  | _, .sm .., ⟨_, _, _, _, _, _, _, hdc, _⟩ => withborUE_closed hdc
-  | _, .poly _ _ c, ⟨_, _, hc⟩ => closedAt_mono c.val.1 (c.val_closed hc) (Nat.zero_le 1)
+  | _, .sm .., ⟨_, _, _, _, _, _, _, hdc, _⟩ =>
+      withborUE_closed (substAll_closed_of_meetsN hx hdc)
+  | _, .poly _ _ c, ⟨_, _, hc⟩ =>
+      closedAt_mono (c.valAt γx).1 (c.val_closed hx hc) (Nat.zero_le 1)
 
 /-- **`δ[y ↦ α]` models `Δ, 'y ⊏ @b`** at `α ⊏ @bδ`, `δ ⊨ Δ`, when neither `@b` nor `Δ`'s bounds
 mention `'y` (`allI`'s side conditions; `allI_compatN`'s argument).  `[spec §62]` -/
@@ -97,19 +233,20 @@ theorem models_extend_of {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) {y : Li
 /-- **`ConstNAt` under a lifetime binder** (`∀I` at a value): at every `α ⊏ @bδ` the body is one
 β step from the body constant's value, closed (`Const791.val_closed`), read at `δ[y ↦ α]`, which
 models `Δ, 'y ⊏ @b` (`models_extend_of`).  `[spec §62]` -/
-theorem constNAt_poly {y : LifeVar} {b : Lifetime.Life} {c : Const791}
-    (hc : ∀ Δ', ConstNAt (ℍ := ℍ) Δ' c) (Δ : LifeCtx) : ConstNAt (ℍ := ℍ) Δ (.poly y b c) := by
-  rintro ⟨hby, hΔy, hok⟩ δ hδ Θ₀ n _
-  have hcl := c.val_closed hok
+theorem constNAt_poly {y : LifeVar} {b : Lifetime.Life} {c : Const791} {Γx : Ctx VTy}
+    {γx : List Val} (hc : ∀ Δ', ConstNAt (ℍ := ℍ) Δ' Γx γx c) (Δ : LifeCtx) :
+    ConstNAt (ℍ := ℍ) Δ Γx γx (.poly y b c) := by
+  rintro ⟨hby, hΔy, hok⟩ hx δ hδ Θ₀ n _
+  have hcl := c.val_closed hx hok
   refine ⟨rfl, fun Θ _ hΘ c₁ _ ls α hα => ?_⟩
   have hδ' := models_extend_of hδ hby hΔy hα
   show cN (ℍ := ℍ) (.ret c.ty) (δ.extend y α) Θ c₁ n ls
-    (Kont.hole.plug (.app (.val (.lam c.val.1)) (.val .unit))) PMap.empty
+    (Kont.hole.plug (.app (.val (.lam (c.valAt γx).1)) (.val .unit))) PMap.empty
   refine cN_head (.ret c.ty) _ Θ hΘ.1 c₁ n ls PMap.empty .hole _ _
-    (fun μ => BoCa.BoLo.Head.beta μ c.val.1 Val.unit) rfl ?_
-  rw [show Kont.hole.plug (Expr.subst 0 Val.unit c.val.1) = c.val.1 by
-    simp [Kont.plug, subst_closedAt c.val.1 (s := Val.unit) hcl le_rfl]]
-  exact cN_ret_of (erwp_val (hc _ hok _ hδ' Θ n hΘ).2)
+    (fun μ => BoCa.BoLo.Head.beta μ (c.valAt γx).1 Val.unit) rfl ?_
+  rw [show Kont.hole.plug (Expr.subst 0 Val.unit (c.valAt γx).1) = (c.valAt γx).1 by
+    simp [Kont.plug, subst_closedAt (c.valAt γx).1 (s := Val.unit) hcl le_rfl]]
+  exact cN_ret_of (erwp_val (hc _ hok hx _ hδ' Θ n hΘ).2)
 
 /-! ### Each constant -/
 
@@ -117,10 +254,11 @@ theorem constNAt_poly {y : LifeVar} {b : Lifetime.Life} {c : Const791}
 finaliser's derivation.  `[spec §62]` -/
 theorem constN_w2 (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {d : Expr} (hfr : (Const791.w2 x bnd A B S d).InFrag) (Δ : LifeCtx) :
-    ConstNAt (ℍ := ℍ) Δ (.w2 x bnd A B S d) := by
-  rintro ⟨hbnd, hO, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
+    ConstNAt (ℍ := ℍ) Δ [] [] (.w2 x bnd A B S d) := by
+  rintro ⟨hbnd, hO, hA, hB, hS, hAns, hdc, hder⟩ - δ hδ Θ n _
   have hL : (VTy.ref A).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, withbor2UTy, withborUTy, VTy.inFrag, CTy.inFrag]
+  rw [Const791.valAt_nil]
   exact withbor2S_compat hbnd hO hA hB hS hAns hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ hδ Θ n
 
 /-- **`ConstNAt` for `withbor (3)` at a suspending row**, from the fundamental property at the
@@ -128,10 +266,11 @@ finaliser's derivation.  `[spec §62]` -/
 theorem constN_w3 (hF : FundamentalN (ℍ := ℍ)) {a : Lifetime.Life} {x : LifeVar}
     {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
     (hfr : (Const791.w3 a x bnd A B S d).InFrag) (Δ : LifeCtx) :
-    ConstNAt (ℍ := ℍ) Δ (.w3 a x bnd A B S d) := by
-  rintro ⟨hbnd, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
+    ConstNAt (ℍ := ℍ) Δ [] [] (.w3 a x bnd A B S d) := by
+  rintro ⟨hbnd, hA, hB, hS, hAns, hdc, hder⟩ - δ hδ Θ n _
   have hL : (VTy.mut a A).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, withbor3UTy, withborUTy, VTy.inFrag, CTy.inFrag]
+  rw [Const791.valAt_nil]
   exact withbor3S_compat hbnd hA hB hS hAns hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ hδ Θ n
 
 /-- **`ConstNAt` for the field reborrow at a suspending row**, from the fundamental property at
@@ -139,27 +278,29 @@ the finaliser's derivation.  `[spec §62]` -/
 theorem constN_wF (hF : FundamentalN (ℍ := ℍ)) {a : Lifetime.Life} {x : LifeVar}
     {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
     (hfr : (Const791.wF a x bnd A B S d).InFrag) (Δ : LifeCtx) :
-    ConstNAt (ℍ := ℍ) Δ (.wF a x bnd A B S d) := by
-  rintro ⟨hbnd, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
+    ConstNAt (ℍ := ℍ) Δ [] [] (.wF a x bnd A B S d) := by
+  rintro ⟨hbnd, hA, hB, hS, hAns, hdc, hder⟩ - δ hδ Θ n _
   have hL : (VTy.mut a (.ref A)).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, withborFSTy, withborUTy, VTy.inFrag, CTy.inFrag]
+  rw [Const791.valAt_nil]
   exact withborFS_compat hbnd hA hB hS hAns hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ hδ Θ n
 
 /-- **`ConstNAt` for `withload` at a suspending row**, from its rule's premises.
 `[spec §62]` -/
 theorem constN_wl {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} (Δ : LifeCtx) : ConstNAt (ℍ := ℍ) Δ (.wl a x bnd A B S) := by
-  rintro ⟨hbnd, hA, hB, hS⟩ δ hδ Θ n _
+    {S : Row} (Δ : LifeCtx) : ConstNAt (ℍ := ℍ) Δ [] [] (.wl a x bnd A B S) := by
+  rintro ⟨hbnd, hA, hB, hS⟩ - δ hδ Θ n _
   exact withloadS_compat hbnd hA hB hS δ hδ Θ n
 
 /-- **`ConstNAt` for `slice_borrow_mut` at a suspending row**, from the fundamental property at
 the finaliser's derivation.  `[spec §62]` -/
 theorem constN_sm (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} {d : Expr} (hfr : (Const791.sm x bnd A B S d).InFrag) (Δ : LifeCtx) :
-    ConstNAt (ℍ := ℍ) Δ (.sm x bnd A B S d) := by
-  rintro ⟨hbnd, hOA, hOB, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
+    ConstNAt (ℍ := ℍ) Δ [] [] (.sm x bnd A B S d) := by
+  rintro ⟨hbnd, hOA, hOB, hA, hB, hS, hAns, hdc, hder⟩ - δ hδ Θ n _
   have hL : (VTy.array A).inFrag = true := by
     simp_all [Const791.InFrag, Const791.ty, sliceBorrowMUTy, withborUTy, VTy.inFrag, CTy.inFrag]
+  rw [Const791.valAt_nil]
   exact sliceBorrowMS_compat hbnd hOA hOB hA hB hS hAns hdc
     (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ hδ Θ n
 
@@ -167,7 +308,7 @@ theorem constN_sm (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime
 constant inside the fragment by its compatibility lemma, a binder by `constNAt_poly`.
 `[spec §62]` -/
 theorem constNAt_of (hF : FundamentalN (ℍ := ℍ)) :
-    ∀ c : Const791, c.InFrag → ∀ Δ, ConstNAt (ℍ := ℍ) Δ c
+    ∀ c : Const791, c.InFrag → ∀ Δ, ConstNAt (ℍ := ℍ) Δ [] [] c
   | .w2 .., hfr => constN_w2 hF hfr
   | .w3 .., hfr => constN_w3 hF hfr
   | .wF .., hfr => constN_wF hF hfr
@@ -302,7 +443,7 @@ theorem constN_wl_inst (a : Lifetime.Life) (x : LifeVar) (δ : LSub) (Θ : LocTy
     (hΘ : Θ.OK) :
     vN (ℍ := ℍ) (.bang (Const791.wl a x LifeCtx.empty.meetOfDom .unit .unit hardestRow).ty) δ Θ n
       (Const791.wl a x LifeCtx.empty.meetOfDom .unit .unit hardestRow).val PMap.empty :=
-  constN_wl LifeCtx.empty (wl_ok a x) δ (models_empty_any δ) Θ n hΘ
+  constN_wl LifeCtx.empty (wl_ok a x) .nil δ (models_empty_any δ) Θ n hΘ
 
 /-- **`slice_borrow_mut` at the hardest case's row, at `vN`**, every hypothesis of
 `sliceBorrowMS_compat` discharged: an `Array 1` lent cell by cell at the bound
