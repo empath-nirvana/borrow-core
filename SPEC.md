@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.56 · 2026-11-09
+Version 1.61 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1028,7 +1028,7 @@ both.
 
 A value type is **flat** when it is persistent and holds no recursive data (`VTy.flat`): `I32`,
 `I64`, `U8`, the floats (`.int _`, §8), `1`, `0`, `!A`, and `⊗`, `⊕` and `[@a]` over flat types.
-`μ` is not flat. `flat A ⇒ persistent A`. A context is flat when every live slot's type is:
+`μ` is not flat. `flat A ⇒ persistent A` (`VTy.persistent_of_flat`). A context is flat when every live slot's type is:
 
     Flat(Γ)  ≜  ∀ s ∈ Γ. s.live ⇒ s.ty flat        (Ctx.FlatLive, Core/Persistent.lean)
 
@@ -1077,6 +1077,10 @@ the judgment freeze is unchanged.
 
 - A persistent closure (`!(A ⇒ B)`) that captures recursive data is copied deep too; its type
   does not say what it captures, so that copy is not checked (`bcc-counts` counts it).
+- **Explicit duplication of a closure whose captures are clonable** (Rust's `Clone` for closures).
+  A closure that is not `!` and captures `μ` data is moved, and cannot be duplicated: `clone`
+  refuses a linear value. Duplicating it needs a kernel copy rule, likely on §68's
+  `Code⟨N; E⟩ C`, which records the environment (#928).
 
 ---
 
@@ -12610,7 +12614,7 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
-- **1.56** (2026-11-09) — §10 (#886, *Promotion over a flat context*): the premise of Core's
+- **1.61** (2026-11-09) — §10 (#886, *Promotion over a flat context*): the premise of Core's
   promotion rules `!thunk` and `!thunkv` (`bangThunkF`, `bangThunkV`) is `Flat(Γ)`, every live slot
   at a flat type (the scalars, and `⊗`, `⊕` and `[@a]` over them, `!A`), in place of `!Γ`.
   `!Γ ⇒ Flat(Γ)`, so the rules only widen. `μ` data is not flat: a closure capturing it stays `U C`,
