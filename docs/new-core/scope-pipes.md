@@ -59,7 +59,7 @@ Claims about the paper model cite P1 or P1b, theory's notes on the paper model, 
 |---|---|
 | The token `\|>`, at the lowest precedence, associating left | [checked: Frontend/Lexer.lean:116, via the locator; Parser.lean:1171–1177, 1343–1350 via the locator] |
 | `pipeStage`'s three cases: (i) a handler gives `with h { e }`; (ii) a function whose first parameter is a computation parameter gives `f(!{()->e}, …)`; (iii) any other function gives `f(e, …)` | [checked: Frontend/Elab/Effects.lean:3616–3640] [checked: SPEC.md:6373–6392] |
-| Decision 50 (N6): "`\|>` pipes first and suspends its left side at a computation parameter", a one-way door. The user's words are the example in §3. "Applies the handler on the right" is marked as the assistant's provisional reading. | [checked: docs/effects-state/04-decisions.md:831–837] |
+| Decision 50 (N6): "`\|>` pipes first and suspends its left side at a computation parameter", a one-way door. The user's words are the example in §3. "Applies the handler on the right" is marked as the assistant's provisional reading. | [checked: docs/archive/effects-state/04-decisions.md:831–837] |
 | §33 law 1 `m \|> h ≡ with h { m }`; law 2: chains of handler stages are associative, but associativity across *function* stages is open (port relabelling) | [checked: SPEC.md:6274–6292, 6474] |
 | `>|` exists nowhere | [checked via the locator: Frontend, SPEC, book, lib; the `git grep` I ran returned no hits] |
 | `Yield[T]` is a library effect, `ctl yield(x: T)` (cancellable) | [checked: lib/yield.bc:13] |

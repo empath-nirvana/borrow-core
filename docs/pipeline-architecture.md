@@ -1,5 +1,7 @@
 # Pipeline architecture: carry what the frontend knows (#552)
 
+*History: #552's design. `compiler.md` (#555) supersedes its route of compiling the erased term, and keeps its S0 (#554) and §3.7's `Div` inference (`compiler.md` §6.2). The text below is kept as the record.*
+
 A design for how the structure the frontend knows reaches the backend. It changes no code. Each
 claim is marked:
 

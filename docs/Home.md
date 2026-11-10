@@ -41,8 +41,9 @@ research notes behind them.
 - The working tables of #835: [qualifier](new-core/scope-835-qualifier.md),
   [tables](new-core/scope-835-tables.md) and [Kripke stops](new-core/scope-835-kripke-stop.md).
 - Open scopes: [borrowed payloads to handlers](new-core/scope-844-borrowed-payloads.md) (#844;
-  Tier 1 is built, Tier 2 is open) and [per-code closure types](new-core/scope-855-per-code-types.md)
-  (#855, decision 76).
+  Tier 1 is built, Tier 2 is open), [per-code closure types](new-core/scope-855-per-code-types.md)
+  (#855, decision 76) and [pipes](new-core/scope-pipes.md): `|>` push and `>|` pull, the connector
+  and the unit split (#907, #918–#925).
 
 ## Designs
 
@@ -55,12 +56,10 @@ research notes behind them.
   corpus (SPEC §21).
 - [Effect polymorphism](effect-polymorphism.md): functions over effectful computations (#161):
   computation parameters, rows and `|>`, built as SPEC §33; stored callbacks are not built.
-- [Effect lowering](effect-lowering.md): how the backend lowers effects (#541): every dispatched
-  call classified, handlers resolved statically, state machines last.
 - [Async with capabilities](async-capabilities.md): tasks that borrow their own data across
   `await` with no `Pin` (#52), built as SPEC §29 with the named assumption `PinLaw`.
-- [The compiler](compiler.md): compiling from what the checker establishes (#555), and the plan
-  for Backend2 ([N1](n1-plan.md)).
+- [The compiler](compiler.md): compiling from what the checker establishes (#555), and
+  [N1's plan](n1-plan.md), which describes Backend2's typed IR as built (N1, SPEC §43).
 - [Ergonomics](ergonomics.md): the surface's verbosity in real programs, and the sugar planned for
   it (#577, #583).
 - [Expressiveness](expressiveness.md): what can't be expressed yet, why, and every way to unblock
@@ -104,6 +103,9 @@ saying what superseded it.
     [strict outlives](outlives-strictness.md), [recursion](scope-recursion.md) and
     [deep freeze](scope-deep-freeze.md) scopes,
     [second-class closures and System C](second-class-and-system-c.md);
+  - the backend's designs before [the compiler](compiler.md): the
+    [pipeline architecture](pipeline-architecture.md) (#552) and
+    [effect lowering](effect-lowering.md) (#541);
   - the [consolidation audit](consolidation-audit.md), the
     [generics inventory](generics-inventory.md),
     [ideas on handlers](ideas-handlers-and-borrows.md),

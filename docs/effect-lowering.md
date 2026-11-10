@@ -1,5 +1,7 @@
 # Effect lowering: handlers resolved statically, state machines last (#541)
 
+*History: #541's design. `compiler.md` §6.2 maps its units into the new backend's. Its inventory (§1.4) and the direct-call conditions (§2.3) are cited from `Core/` and SPEC. The text below is kept as the record.*
+
 A design for the backend's lowering of effects. It changes no code. Each claim is marked:
 
 - **measured**: a run of `bcc`, `bcc-counts` or a script over the backend's own functions, on
