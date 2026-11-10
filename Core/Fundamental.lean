@@ -1,4 +1,5 @@
 import Core.Compat
+import Core.CodeRules
 import Core.Integers
 import Core.Arrays
 import Core.SliceOps
@@ -219,8 +220,9 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | bind {Δ Γ Γ₁ Γ₂ M N A C} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hM : CDerives Δ Γ₁ M (.comp (.ret A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp C)) :
       CDerives Δ Γ (.app (.val (.lam N)) M) (.comp C)
-  /-- `force x`: `x ()` at `F A`, `x` itself at any other computation type. -/
-  | force {Δ Γ i C} (h : Ctx.SoloP Γ i (.thunk C)) :
+  /-- `force x`: `x ()` at `F A`, `x` itself at any other computation type; `x` at `U C` or at
+  `Code⟨N; E⟩ C` (`VTy.forceTy`).  `[spec §68]` -/
+  | force {Δ Γ i T C} (h : Ctx.SoloP Γ i T) (hT : T.forceTy = some C) :
       CDerives Δ Γ (forceE C (.var i)) (.comp C)
   | lam {Δ Γ M A C} (h : CDerives Δ (⟨A, true⟩ :: Γ) M (.comp C)) :
       CDerives Δ Γ (.val (.lam M)) (.comp (.arr A C))
@@ -273,6 +275,24 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | bangThunkV {Δ Γ N C} (hp : Ctx.Banged Γ) (hC : C.isRet = false)
       (h : CDerives Δ Γ (.val (.lam N)) (.comp C)) :
       CDerives Δ Γ (.val (.lam N)) (.val (.bang (.thunk C)))
+  /-- `[code-I]`: a closure `λM : U C` at its code type, `capNorm (λM)` with the environment
+  type `Γ.capTy (λM)`, every captured slot live and every other live slot persistent
+  (`Ctx.CapOK`), the environment type closed.  `[spec §68]` -/
+  | codeI {Δ Γ M C} (h : CDerives Δ Γ (.val (.lam M)) (.val (.thunk C)))
+      (hok : Ctx.CapOK Γ (.lam M)) :
+      CDerives Δ Γ (.val (.lam M))
+        (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))
+  /-- `[code-I]` under `!`, over `!Γ`.  `[spec §68]` -/
+  | codeIB {Δ Γ M C} (hp : Ctx.Banged Γ) (h : CDerives Δ Γ (.val (.lam M)) (.val (.bang (.thunk C))))
+      (hok : Ctx.CapOK Γ (.lam M)) :
+      CDerives Δ Γ (.val (.lam M))
+        (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))
+  /-- `[erase]` (§68's `erase`): a code type read at `U C`, on the same term.  `[spec §68]` -/
+  | codeErase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerives Δ Γ e (.val (.code N E C))) :
+      CDerives Δ Γ e (.val (.thunk C))
+  /-- `[erase]` under `!`.  `[spec §68]` -/
+  | codeEraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerives Δ Γ e (.val (.bang (.code N E C)))) :
+      CDerives Δ Γ e (.val (.bang (.thunk C)))
   /-- Dereliction. -/
   | bangE {Δ Γ e A} (h : CDerives Δ Γ e (.val (.bang A))) : CDerives Δ Γ e (.val A)
   | copyBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
@@ -782,7 +802,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | thunkV hC _ ih => exact thunkV_compatC hC ih
   | ret _ ih => exact ret_compatC ih
   | bind hs _ _ ihM ihN => exact bind_compatC hs ihM ihN
-  | force h => exact force_compatC h
+  | force h hT => exact force_compatC h hT
   | lam _ ih => exact lam_compatC ih
   | lamDead _ ih => exact lamDead_compatC ih
   | app hs _ hx ih => exact app_compatC hs ih hx
@@ -799,6 +819,10 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | allE _ hlt ih => exact allE_compatC ih hlt
   | bangThunkF hp _ ih => exact bangThunkF_compatC hp ih
   | bangThunkV hp hC _ ih => exact bangThunkV_compatC hp hC ih
+  | codeI _ hok ih => exact codeI_compatC ih hok
+  | codeIB hp _ hok ih => exact codeIB_compatC hp ih hok
+  | codeErase _ ih => exact codeErase_compatC ih
+  | codeEraseB _ ih => exact codeEraseB_compatC ih
   | bangE _ ih => exact bangE_compatC ih
   | copyBang hΓ => exact copyBang_compatC hΓ
   | releaseBang hΓ => exact releaseBang_compatC hΓ
@@ -978,7 +1002,7 @@ def exProg : Expr :=
 theorem exProg_derives : CDerives LifeCtx.empty [] exProg (.comp (.ret .unit)) :=
   .bind (Γ₁ := []) (Γ₂ := []) .nil
     (.ret (.thunkV rfl (.withI (.ret (.unitI (.cons (.cons .nil)))) .topI)))
-    (.proj₁ (.force (C := .amp (.ret .unit) .top) (.here .nil)))
+    (.proj₁ (.force (T := .thunk _) (C := .amp (.ret .unit) .top) (.here .nil) rfl))
 
 theorem exProg_runs :
     BoCa.BoLo.Steps Adequacy.emptyMem exProg Adequacy.emptyMem (.val .unit) :=

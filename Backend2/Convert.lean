@@ -2345,6 +2345,8 @@ def transparent? : TExpr → Option TExpr
   | .alpha _ _ _ _ t => some t
   -- The derived nodes over a term the conversion reads as it reads the term (SPEC §57).
   | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => some t
+  -- `[code-I]` and `[erase]` (SPEC §68): the same value at another type; the machine's identity.
+  | .codeI _ _ _ t | .codeIB _ _ _ t | .codeErase _ _ _ _ t | .codeEraseB _ _ _ _ t => some t
   | _ => none
 
 /-- A function position's head through transparent nodes, and through a `use` whose body is a
@@ -2799,7 +2801,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | .effHandleVB _ _ S E fs _ n A R _ u ks site _ tc te =>
     convHandle fuel ctx S E fs n A R u ks site tc te (boxed := true)
   | .bind _ _ A _ u tM tN => convBind fuel ctx A u tM tN
-  | .force _ j i C => do
+  | .force _ j i _ C => do
     match ctx[i]? with
     | some (some x) =>
       match C with

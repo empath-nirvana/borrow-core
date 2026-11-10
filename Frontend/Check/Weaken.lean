@@ -324,9 +324,9 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       rw [ha₁, hl₁] at dM eM; rw [List.length_cons, ha₂, hl₂] at dN eN
       exact ⟨.bind hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [eM]; rfl), hcv.2.ins₂ (by rw [eN])⟩ dM dN, by
         simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, eM, eN]⟩
-  | force hs =>
+  | force hs hT =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      exact ⟨.force (soloP_ins (live_eval_atom hf hp) Γa hs), (forceE_var_shift _ _ _ _).symm⟩
+      exact ⟨.force (soloP_ins (live_eval_atom hf hp) Γa hs) hT, (forceE_var_shift _ _ _ _).symm⟩
   | lam _ ih =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f rfl hf hp
@@ -423,6 +423,16 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
       exact ⟨.bangThunkV (banged_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
+  | codeI => intro _ _ _ _ _ hf _; cases hf
+  | codeIB => intro _ _ _ _ _ hf _; cases hf
+  | codeErase _ ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.codeErase d, e⟩
+  | codeEraseB _ ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.codeEraseB d, e⟩
   | bangE _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
@@ -919,9 +929,9 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       rw [ha₁, hl₁] at dM eM; rw [List.length_cons, ha₂, hl₂] at dN eN
       exact ⟨.bind hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [eM]; rfl), hcv.2.ins₂ (by rw [eN])⟩ dM dN, by
         simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, eM, eN]⟩
-  | force hs =>
+  | force hs hT =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      exact ⟨.force (soloP_ins (live_eval_atom hf hp) Γa hs), (forceE_var_shift _ _ _ _).symm⟩
+      exact ⟨.force (soloP_ins (live_eval_atom hf hp) Γa hs) hT, (forceE_var_shift _ _ _ _).symm⟩
   | lam _ ih =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f rfl hf hp
@@ -1018,6 +1028,16 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
       exact ⟨.bangThunkV (banged_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
+  | codeI => intro _ _ _ _ _ hf _; cases hf
+  | codeIB => intro _ _ _ _ _ hf _; cases hf
+  | codeErase _ ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.codeErase d, e⟩
+  | codeEraseB _ ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.codeEraseB d, e⟩
   | bangE _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp

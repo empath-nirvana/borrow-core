@@ -109,7 +109,7 @@ def rTop : Res Δ T (.comp .top) :=
   ⟨.topI i (.comp .top), [], [], (Fam.top T).map fun _ _ => TTied.topI i⟩
 
 def rForce (k : Nat) (C : CCTy) (h : T[k]? = some (.thunk C)) : Res Δ T (.comp C) :=
-  ⟨.force i (.comp C) k C, [], [], (Fam.var T k _ h).map fun _ hs => TTied.force i hs⟩
+  ⟨.force i (.comp C) k (.thunk C) C, [], [], (Fam.var T k _ h).map fun _ hs => TTied.force i hs⟩
 
 /-! ### A `def` at its use  `[spec §10]`
 

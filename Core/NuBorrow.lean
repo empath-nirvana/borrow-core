@@ -101,7 +101,7 @@ theorem d_fileRead {Δ : LifeCtx} (hlt : Δ.EntailsLt (.var 2) .top) :
       (.comp (.ret (.tensor bufT (.box (.var 0) (fileT 1 (.var 0)))))) := by
   have hf : CDerives Δ [⟨.mut (.var 2) bufT, false⟩, ⟨fileT 1 (.var 0), true⟩] (.var 1)
       (.comp (.nu (fileBody 1 (.var 0)))) :=
-    .force (C := .nu (fileBody 1 (.var 0))) (.there (.here .nil))
+    .force (T := .thunk _) (C := .nu (fileBody 1 (.var 0))) (.there (.here .nil)) rfl
   have hu := CDerives.nuOut fileBody_nuOk₁ hf
   have hp := CDerives.allE (CDerives.proj₁ (CDerives.proj₁ hu)) hlt
   rw [fileRead_inst] at hp
@@ -114,7 +114,7 @@ theorem d_fileWrite {Δ : LifeCtx} (hlt : Δ.EntailsLt (.var 2) .top) :
       (.comp (.ret (.tensor bufT (.box (.var 0) (fileT 1 (.var 0)))))) := by
   have hf : CDerives Δ [⟨.imm (.var 2) bufT, false⟩, ⟨fileT 1 (.var 0), true⟩] (.var 1)
       (.comp (.nu (fileBody 1 (.var 0)))) :=
-    .force (C := .nu (fileBody 1 (.var 0))) (.there (.here .nil))
+    .force (T := .thunk _) (C := .nu (fileBody 1 (.var 0))) (.there (.here .nil)) rfl
   have hu := CDerives.nuOut fileBody_nuOk₁ hf
   have hp := CDerives.allE (CDerives.proj₂ (CDerives.proj₁ hu)) hlt
   rw [fileWrite_inst] at hp

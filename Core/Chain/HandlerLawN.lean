@@ -247,8 +247,8 @@ theorem semJN_resumeCT {Δ : LifeCtx} (S : Row) (R : VTy) (F : CTy) :
     (.left (.right (.dead .nil))) (ret_compatN (bangE_compatN (var_compatN
       (.here (.cons (.cons .nil)))))) ?_
   exact app_compatN (.left (.dead (.right (.dead .nil))))
-    (proj₁_compatN (force_compatN (C := .amp (.arr .unit (CTy.effOf S R)) (cancelTy S F))
-      (.here (.cons (.cons (.cons .nil))))))
+    (proj₁_compatN (force_compatN (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S R))
+      (cancelTy S F)) (.here (.cons (.cons (.cons .nil)))) rfl))
     (.there (.there (.here (.cons .nil))))
 
 /-- The handled computation of the instance: `perform (1, (0, ()))`. -/
@@ -290,8 +290,8 @@ theorem semJN_resumeCTB {Δ : LifeCtx} (S : Row) (R : VTy) (d : Lifetime.Life) (
     (.left (.right (.dead .nil))) (ret_compatN (bangE_compatN (boxE_compatN (var_compatN
       (.here (.cons (.cons .nil))))))) ?_
   exact app_compatN (.left (.dead (.right (.dead .nil))))
-    (proj₁_compatN (force_compatN (C := .amp (.arr .unit (CTy.effOf S R)) (cancelTy S F))
-      (.here (.cons (.cons (.cons .nil))))))
+    (proj₁_compatN (force_compatN (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S R))
+      (cancelTy S F)) (.here (.cons (.cons (.cons .nil)))) rfl))
     (.there (.there (.here (.cons .nil))))
 
 /-- **Every premise of `HandleVBN` holds at the instance**, at the bound `⊓∅` of the empty

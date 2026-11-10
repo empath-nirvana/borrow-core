@@ -472,7 +472,7 @@ theorem release_persistent {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hT : T.Persi
 theorem close_body {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ (⟨.thunk (.amp C (.ret .unit)), true⟩ :: Γ) (.app (.var 0) (.val (.inj₂ .unit)))
       (.comp (.ret .unit)) :=
-  .proj₂ (C := C) (.force (C := .amp C (.ret .unit)) (.here hΓ.toP))
+  .proj₂ (C := C) (.force (T := .thunk _) (C := .amp C (.ret .unit)) (.here hΓ.toP) rfl)
 
 /-- The consume of `A ⊗ B`, from the consumes of `A` and `B`. -/
 theorem consume_tensor_wf {Δ : LifeCtx} {A B : VTy}
@@ -600,7 +600,7 @@ theorem consume_wf {Δ : LifeCtx} {T : VTy} (hT : Consumable T) :
   | @nu C R hC hRc _ ih =>
       intro Γ hΓ
       have hM := CDerives.proj₂ (Δ := Δ)
-        (.nuOut hC (.force (C := .nu (.amp C (.ret R))) (.here hΓ.toP)))
+        (.nuOut hC (.force (T := .thunk _) (C := .nu (.amp C (.ret R))) (.here hΓ.toP) rfl))
       simp only [CTy.instT, VTy.inst, VTy.subst_closed0 hRc] at hM
       exact .thunkV rfl (.lam (.bind (.left (deadSplit hΓ)) hM
         (.ret (.lolliE (.left (.dead (deadSplit hΓ))) (.var (.here (Ctx.Dead.cons hΓ).toP))

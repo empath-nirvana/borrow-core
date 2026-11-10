@@ -48,12 +48,12 @@ theorem d_skip {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
       (.val (.thunk (.arr (.thunk (.delay .unit)) (.delay .unit)))) :=
   .thunkV rfl (.lam (.delayIn (.withI
     (.bind (.dead (.dead (.left (deadSplit hΓ))))
-      (.proj₁ (.delayOut (.force (.there (.there (.here hΓ))))))
+      (.proj₁ (.delayOut (.force (T := .thunk _) (.there (.there (.here hΓ))) rfl)))
       (.sumE (.left (.dead (.dead (.dead (deadSplit hΓ)))))
         (.var (.here (.cons (.cons (.cons hΓ)))))
         (.ret (.sumI₁ (.var (.here (.cons (.cons (.cons (.cons hΓ))))))))
-        (.proj₁ (.delayOut (.force (.here (.cons (.cons (.cons (.cons hΓ))))))))))
-    (.proj₂ (.delayOut (.force (.there (.there (.here hΓ)))))))))
+        (.proj₁ (.delayOut (.force (T := .thunk _) (.here (.cons (.cons (.cons (.cons hΓ))))) rfl)))))
+    (.proj₂ (.delayOut (.force (T := .thunk _) (.there (.there (.here hΓ))) rfl))))))
 
 theorem skip_sem : SemV LifeCtx.empty [] (.val skipV)
     (.thunk (.arr (.thunk (.delay .unit)) (.delay .unit))) :=

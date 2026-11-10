@@ -653,7 +653,7 @@ inductive TExpr where
   | thunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
   | ret (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
   | bind (info : TInfo) (jdg : Jdg) (A : VTy) (C : CTy) (u : Masks) (tM tN : TExpr)
-  | force (info : TInfo) (jdg : Jdg) (i : Nat) (C : CTy)
+  | force (info : TInfo) (jdg : Jdg) (i : Nat) (T : VTy) (C : CTy)
   | lam (info : TInfo) (jdg : Jdg) (A : VTy) (C : CTy) (t : TExpr)
   | lamDead (info : TInfo) (jdg : Jdg) (S : Row) (B : VTy) (t : TExpr)
   | app (info : TInfo) (jdg : Jdg) (i : Nat) (A : VTy) (C : CTy) (u : Masks) (tM : TExpr)
@@ -669,6 +669,10 @@ inductive TExpr where
   | allE (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (a : Lifetime.Life) (C : CTy) (t : TExpr)
   | bangThunkF (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
   | bangThunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
+  | codeI (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
+  | codeIB (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
+  | codeErase (info : TInfo) (jdg : Jdg) (C : CTy) (E : VTy) (t : TExpr)
+  | codeEraseB (info : TInfo) (jdg : Jdg) (C : CTy) (E : VTy) (t : TExpr)
   | bangE (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
   | copyBang (info : TInfo) (jdg : Jdg) (A : VTy)
   | releaseBang (info : TInfo) (jdg : Jdg) (A : VTy)
@@ -813,7 +817,7 @@ def TExpr.erase : TExpr → Expr
   | .thunkV _ _ _ t => t.erase
   | .ret _ _ _ t => t.erase
   | .bind _ _ _ _ _ tM tN => (.app (.val (.lam (tN.erase))) (tM.erase))
-  | .force _ _ i C => (forceE C (.var i))
+  | .force _ _ i _ C => (forceE C (.var i))
   | .lam _ _ _ _ t => (.val (.lam (t.erase)))
   | .lamDead _ _ _ _ t => (.val (.lam (t.erase)))
   | .app _ _ i _ _ _ tM => (.app (tM.erase) (.var i))
@@ -829,6 +833,10 @@ def TExpr.erase : TExpr → Expr
   | .allE _ _ _ _ _ _ t => (.app (t.erase) (.val .unit))
   | .bangThunkF _ _ _ t => (.val (.lam (t.erase)))
   | .bangThunkV _ _ _ t => t.erase
+  | .codeI _ _ _ t => t.erase
+  | .codeIB _ _ _ t => t.erase
+  | .codeErase _ _ _ _ t => t.erase
+  | .codeEraseB _ _ _ _ t => t.erase
   | .bangE _ _ _ t => t.erase
   | .copyBang _ _ _ => BoCa.copy
   | .releaseBang _ _ _ => forget
@@ -932,7 +940,7 @@ def TExpr.info : TExpr → TInfo
   | .thunkV i _ _ _ => i
   | .ret i _ _ _ => i
   | .bind i _ _ _ _ _ _ => i
-  | .force i _ _ _ => i
+  | .force i _ _ _ _ => i
   | .lam i _ _ _ _ => i
   | .lamDead i _ _ _ _ => i
   | .app i _ _ _ _ _ _ => i
@@ -948,6 +956,10 @@ def TExpr.info : TExpr → TInfo
   | .allE i _ _ _ _ _ _ => i
   | .bangThunkF i _ _ _ => i
   | .bangThunkV i _ _ _ => i
+  | .codeI i _ _ _ => i
+  | .codeIB i _ _ _ => i
+  | .codeErase i _ _ _ _ => i
+  | .codeEraseB i _ _ _ _ => i
   | .bangE i _ _ _ => i
   | .copyBang i _ _ => i
   | .releaseBang i _ _ => i
@@ -1047,7 +1059,7 @@ def TExpr.jdg : TExpr → Jdg
   | .thunkV _ j _ _ => j
   | .ret _ j _ _ => j
   | .bind _ j _ _ _ _ _ => j
-  | .force _ j _ _ => j
+  | .force _ j _ _ _ => j
   | .lam _ j _ _ _ => j
   | .lamDead _ j _ _ _ => j
   | .app _ j _ _ _ _ _ => j
@@ -1063,6 +1075,10 @@ def TExpr.jdg : TExpr → Jdg
   | .allE _ j _ _ _ _ _ => j
   | .bangThunkF _ j _ _ => j
   | .bangThunkV _ j _ _ => j
+  | .codeI _ j _ _ => j
+  | .codeIB _ j _ _ => j
+  | .codeErase _ j _ _ _ => j
+  | .codeEraseB _ j _ _ _ => j
   | .bangE _ j _ _ => j
   | .copyBang _ j _ => j
   | .releaseBang _ j _ => j
@@ -1170,7 +1186,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .thunkV _ _ _ t => [(.push 0, t)]
   | .ret _ _ _ t => [(.push 0, t)]
   | .bind _ _ _ _ _ tM tN => [(.push 0, tM), (.push 1, tN)]
-  | .force _ _ _ _ => []
+  | .force _ _ _ _ _ => []
   | .lam _ _ _ _ t => [(.push 1, t)]
   | .lamDead _ _ _ _ t => [(.push 1, t)]
   | .app _ _ _ _ _ _ tM => [(.push 0, tM)]
@@ -1186,6 +1202,10 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .allE _ _ _ _ _ _ t => [(.push 0, t)]
   | .bangThunkF _ _ _ t => [(.push 1, t)]
   | .bangThunkV _ _ _ t => [(.push 0, t)]
+  | .codeI _ _ _ t => [(.push 0, t)]
+  | .codeIB _ _ _ t => [(.push 0, t)]
+  | .codeErase _ _ _ _ t => [(.push 0, t)]
+  | .codeEraseB _ _ _ _ t => [(.push 0, t)]
   | .bangE _ _ _ t => [(.push 0, t)]
   | .copyBang _ _ _ => []
   | .releaseBang _ _ _ => []
@@ -1307,7 +1327,7 @@ def TExpr.isLam : TExpr → Bool
   | .thunkV _ _ _ t => t.isLam
   | .ret _ _ _ t => t.isLam
   | .bind _ _ _ _ _ _ _ => false
-  | .force _ _ i C => (((forceE C (.var i)) : Expr) matches .lam _)
+  | .force _ _ i _ C => (((forceE C (.var i)) : Expr) matches .lam _)
   | .lam _ _ _ _ _ => true
   | .lamDead _ _ _ _ _ => true
   | .app _ _ _ _ _ _ _ => false
@@ -1323,6 +1343,10 @@ def TExpr.isLam : TExpr → Bool
   | .allE _ _ _ _ _ _ _ => false
   | .bangThunkF _ _ _ _ => true
   | .bangThunkV _ _ _ t => t.isLam
+  | .codeI _ _ _ t => t.isLam
+  | .codeIB _ _ _ t => t.isLam
+  | .codeErase _ _ _ _ t => t.isLam
+  | .codeEraseB _ _ _ _ t => t.isLam
   | .bangE _ _ _ t => t.isLam
   | .copyBang _ _ _ => ((BoCa.copy : Expr) matches .lam _)
   | .releaseBang _ _ _ => ((forget : Expr) matches .lam _)
@@ -1426,7 +1450,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .thunkV _ _ _ t => isLam_eq t
   | .ret _ _ _ t => isLam_eq t
   | .bind _ _ _ _ _ _ _ => rfl
-  | .force _ _ _ _ => rfl
+  | .force _ _ _ _ _ => rfl
   | .lam _ _ _ _ _ => rfl
   | .lamDead _ _ _ _ _ => rfl
   | .app _ _ _ _ _ _ _ => rfl
@@ -1442,6 +1466,10 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .allE _ _ _ _ _ _ _ => rfl
   | .bangThunkF _ _ _ _ => rfl
   | .bangThunkV _ _ _ t => isLam_eq t
+  | .codeI _ _ _ t => isLam_eq t
+  | .codeIB _ _ _ t => isLam_eq t
+  | .codeErase _ _ _ _ t => isLam_eq t
+  | .codeEraseB _ _ _ _ t => isLam_eq t
   | .bangE _ _ _ t => isLam_eq t
   | .copyBang _ _ _ => rfl
   | .releaseBang _ _ _ => rfl

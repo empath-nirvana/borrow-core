@@ -57,7 +57,7 @@ theorem unitI (h : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) :
 theorem topI : TiedAt [] Δ Γ (.val BoCa.Val.unit) (.comp .top) := fun _ _ => .topI
 
 theorem force {i : Nat} {C : CCTy} (h : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ i (.thunk C)) :
-    TiedAt [] Δ Γ (BoCa.Fig16.LogRel.Core.forceE C (.var i)) (.comp C) := fun _ _ => .force h
+    TiedAt [] Δ Γ (BoCa.Fig16.LogRel.Core.forceE C (.var i)) (.comp C) := fun _ _ => .force h rfl
 
 theorem tensorI {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {e₁ e₂ : BoCa.Expr} {A B : CVTy}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (h₁ : TiedAt s₁ Δ Γ₁ e₁ (.val A))
@@ -344,7 +344,7 @@ theorem topI : TiedDer [] [] Δ Γ (.val BoCa.Val.unit) (.comp .top) :=
 theorem force {i : Nat} {C : CCTy} (h : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ i (.thunk C)) :
     TiedDer [] [] Δ Γ (BoCa.Fig16.LogRel.Core.forceE C (.var i)) (.comp C) :=
   ⟨fun _ => TiedAt.force h,
-    CDerivesP.force h⟩
+    CDerivesP.force h rfl⟩
 
 theorem tensorI {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {e₁ e₂ : BoCa.Expr} {A B : CVTy}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (h₁ : TiedDer p₁ s₁ Δ Γ₁ e₁ (.val A))

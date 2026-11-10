@@ -74,7 +74,7 @@ def nodeFields : TExpr → String
   | .hostOp _ _ o => reprStr o
   | .use _ _ name decl targs ab _ =>
     s!"{name} decl {decl} [{", ".intercalate (targs.map ppVT)}] ab {ab.isSome}"
-  | .force _ _ i _ => s!"#{i}"
+  | .force _ _ i _ _ => s!"#{i}"
   | .app _ _ i _ _ _ _ => s!"#{i}"
   | .selfCall _ _ j n _ => s!"member {j} of {n}"
   | .litFn _ _ bs _ => s!"{bs.length} bytes"

@@ -269,7 +269,7 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | thunkV hC _ ih => exact .thunkV hC ih
   | ret _ ih => exact .ret ih
   | bind hs _ _ ihM ihN => exact .bind (splitP_append h' hs) ihM ihN
-  | force hs => exact .force (soloP_append h' hs)
+  | force hs hT => exact .force (soloP_append h' hs) hT
   | lam _ ih => exact .lam ih
   | lamDead _ ih => exact .lamDead ih
   | app hs _ hx ih => exact .app (splitP_append h' hs) ih (soloP_append h' hx)
@@ -285,6 +285,14 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | allE _ hlt ih => exact .allE ih hlt
   | bangThunkF hp _ ih => exact .bangThunkF (banged_append h' hp) ih
   | bangThunkV hp hC _ ih => exact .bangThunkV (banged_append h' hp) hC ih
+  | codeI _ hok ih =>
+      obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
+      rw [← hty]; exact .codeI ih hok'
+  | codeIB hp _ hok ih =>
+      obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
+      rw [← hty]; exact .codeIB (banged_append h' hp) ih hok'
+  | codeErase _ ih => exact .codeErase ih
+  | codeEraseB _ ih => exact .codeEraseB ih
   | bangE _ ih => exact .bangE ih
   | copyBang hΓ => exact .copyBang (deadP_append h' hΓ)
   | releaseBang hΓ => exact .releaseBang (deadP_append h' hΓ)
@@ -415,7 +423,7 @@ theorem dAt_callVar {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {T : VTy} 
     (hV : CDerivesAt Ξ Δ (⟨.thunk (.arr T C), false⟩ :: Γ) V (.val T)) :
     CDerivesAt Ξ Δ (⟨.thunk (.arr T C), true⟩ :: Γ) (appE (.var 0) V) (.comp C) :=
   .bind (.right (deadSplit hΓ)) (.ret hV)
-    (.app (.right (.left (deadSplit hΓ))) (.force (C := .arr T C) (.there (.here hΓ.toP)))
+    (.app (.right (.left (deadSplit hΓ))) (.force (T := .thunk _) (C := .arr T C) (.there (.here hΓ.toP)) rfl)
       (.here (.cons hΓ.toP)))
 
 /-- **A callback `λ_. M`** at `U(1 ⊸ F_Σ B)`, `M` typed at the empty context (`[λ-dead]`). -/
@@ -668,12 +676,12 @@ theorem dAt_kResume {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
   cases q with
   | lin =>
       exact .app (.right (.left (deadSplit hΓ)))
-        (.proj₁ (.force (C := .amp (.arr B (CTy.effOf S R)) .top) (.there (.here hΓ.toP))))
+        (.proj₁ (.force (T := .thunk _) (C := .amp (.arr B (CTy.effOf S R)) .top) (.there (.here hΓ.toP)) rfl))
         (.here (.cons hΓ.toP))
   | cancel =>
       exact .app (.right (.left (deadSplit hΓ)))
-        (.proj₁ (.force (C := .amp (.arr B (CTy.effOf S R)) (CTy.effOf S .unit))
-          (.there (.here hΓ.toP))))
+        (.proj₁ (.force (T := .thunk _) (C := .amp (.arr B (CTy.effOf S R)) (CTy.effOf S .unit))
+          (.there (.here hΓ.toP)) rfl))
         (.here (.cons hΓ.toP))
   | unr => exact absurd rfl hq
 
@@ -751,14 +759,14 @@ theorem dAt_logCl {Δ : LifeCtx} (S : Row) (A : VTy) (hU : ¬ S.Unr) :
   · refine .bind (.left (.right (.dead (.dead .nil))))
       (.ret (.unitI (.weaken rfl (.cons (.cons (.cons .nil)))))) ?_
     exact .app (.right (.dead (.left (.dead (.dead .nil)))))
-      (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf S (logR S A))) .top)
-        (.there (.there (.here (.cons (.cons .nil)))))))
+      (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (logR S A))) .top)
+        (.there (.there (.here (.cons (.cons .nil))))) rfl))
       (.here (.cons (.cons (.cons (.cons .nil)))))
   · exact .bind (.right (.dead (.dead (.left (.dead .nil)))))
       (.ret (.var (.there (.there (.there (.here (.cons .nil)))))))
       (.app (.right (.left (.dead (.dead (.dead (.dead .nil))))))
-        (.force (C := .arr boolT (CTy.effOf S (.tensor A boolT)))
-          (.there (.here (.cons (.cons (.cons (.cons .nil)))))))
+        (.force (T := .thunk _) (C := .arr boolT (CTy.effOf S (.tensor A boolT)))
+          (.there (.here (.cons (.cons (.cons (.cons .nil)))))) rfl)
         (.here (.cons (.cons (.cons (.cons (.cons .nil)))))))
 
 /-- **`withLog M` at the row `S`**, `M` at `log`'s row before `S`. -/
@@ -863,8 +871,8 @@ theorem dAt_stashCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
       · exact dead_noLive (P := fun s => s.ty.OwnFree) hΓ s hs hl
     · refine .effSub hFS ?_
       rw [← hct]
-      exact .proj₂ (.force (C := .amp (.arr .unit (CTy.effOf S (stashR S))) (cancelTy S F))
-        (.there (.there (.here (.cons (.cons hΓ.toP))))))
+      exact .proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (stashR S))) (cancelTy S F))
+        (.there (.there (.here (.cons (.cons hΓ.toP))))) rfl)
     · exact .effSub (RowLe.nil S) (.ret (.var (.skip rfl (.skip rfl (.there (.there
         (.here (.cons hΓ.toP))))))))
   · -- `inr _ ⇒ resume k () to g. g (inr ())`
@@ -883,8 +891,8 @@ theorem dAt_stashCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
         (.ret (.unitI (.weaken rfl (.cons (.cons (.weaken rfl (.cons hΓ.toP))))))) ?_
       show CDerivesAt ΞE Δ _ (.app (.app (.var 3) (.inj₁ .unit)) (.var 0)) _
       exact .app (.right (.dead (.dead (.left (.dead (.dead (deadSplit hΓ)))))))
-        (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf S (stashR S))) (cancelTy S F))
-          (.there (.there (.there (.here (.cons (.cons hΓ.toP))))))))
+        (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (stashR S))) (cancelTy S F))
+          (.there (.there (.there (.here (.cons (.cons hΓ.toP)))))) rfl))
         (.here (.cons (.cons (.cons (.cons (.cons hΓ.toP))))))
     · -- `g (inr ())`
       have hΓd : Ctx.Dead ([⟨.unit, false⟩, ⟨boolT, false⟩,
@@ -892,8 +900,8 @@ theorem dAt_stashCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
           ⟨.tensor boolT (kTy S (stashR S) .cancel .unit F), false⟩] ++ Γ) :=
         .cons (.cons (.cons (.cons (.cons hΓ))))
       exact .bind (.right (deadSplit hΓd)) (.ret (.sumI₂ (.unitI (.cons hΓd.toP))))
-        (.app (.right (.left (deadSplit hΓd))) (.force (C := .arr boolT (CTy.effOf S boolT))
-          (.there (.here hΓd.toP))) (.here (.cons hΓd.toP)))
+        (.app (.right (.left (deadSplit hΓd))) (.force (T := .thunk _) (C := .arr boolT (CTy.effOf S boolT))
+          (.there (.here hΓd.toP)) rfl) (.here (.cons hΓd.toP)))
 
 /-- **`stash M` at the row `S`**, `M` at `yield`'s row of cancel row `F` before `S`. -/
 theorem dAt_stash {Δ : LifeCtx} {S : Row} (hS : RowAt ΞE S) (hnS : ∀ o ∈ S, o.n ≠ 3)
@@ -1023,8 +1031,8 @@ theorem dAt_tickingCl {Δ : LifeCtx} :
   refine .bind (.left (.right (.dead (.dead .nil))))
     (.ret (.unitI (.weaken rfl (.cons (.cons (.cons .nil)))))) ?_
   exact .app (.right (.dead (.left (.dead (.dead .nil)))))
-    (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf (tickRow ++ []) .unit))
-      (CTy.effOf (tickRow ++ []) .unit)) (.there (.there (.here (.cons (.cons .nil)))))))
+    (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf (tickRow ++ []) .unit))
+      (CTy.effOf (tickRow ++ []) .unit)) (.there (.there (.here (.cons (.cons .nil))))) rfl))
     (.here (.cons (.cons (.cons (.cons .nil)))))
 
 /-- **`deepGen` at `tick`'s row**: the handler at `tick`'s row, the yields at `yield`'s row before
@@ -1058,16 +1066,16 @@ theorem dAt_countCl {Δ : LifeCtx} :
   · refine .bind (.dead (.right (.left (.dead .nil))))
       (.ret (.unitI (.cons (.cons (.weaken rfl (.cons .nil)))))) ?_
     exact .app (.right (.dead (.left (.dead (.dead .nil)))))
-      (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf [] countR)) .top)
-        (.there (.there (.here (.cons (.cons .nil)))))))
+      (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf [] countR)) .top)
+        (.there (.there (.here (.cons (.cons .nil))))) rfl))
       (.here (.cons (.cons (.cons (.cons .nil)))))
   · -- `g (inj₂ c)`: `g` at `0`, `c` at `1`
     refine .bind (.right (.left (.dead (.dead (.dead .nil)))))
       (.ret (.roll natBody_noMut natN_closed (.sumI₂ (.var (.there (.here (.cons (.cons (.cons
         .nil))))))))) ?_
     exact .app (.right (.left (.dead (.dead (.dead (.dead .nil))))))
-      (.force (C := .arr natN (CTy.effOf [] (.tensor .unit natN)))
-        (.there (.here (.cons (.cons (.cons (.cons .nil)))))))
+      (.force (T := .thunk _) (C := .arr natN (CTy.effOf [] (.tensor .unit natN)))
+        (.there (.here (.cons (.cons (.cons (.cons .nil)))))) rfl)
       (.here (.cons (.cons (.cons (.cons (.cons .nil))))))
 
 /-- **E4 is typed**: `deepGen` at `tick`'s row, under the counting handler of `tick`. -/
@@ -1287,8 +1295,8 @@ theorem dAt_tmCl {Δ : LifeCtx} (S : Row) :
     rcases hs with rfl | rfl | rfl <;> cases hl
   · simp only [List.mem_cons, List.not_mem_nil, or_false] at hs
     rcases hs with rfl | rfl | rfl <;> cases hl
-  · exact .proj₂ (.force (C := .amp (.arr .unit (CTy.effOf S boolT)) (CTy.effOf S .unit))
-      (.here (.weaken rfl (.cons .nil))))
+  · exact .proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S boolT)) (CTy.effOf S .unit))
+      (.here (.weaken rfl (.cons .nil))) rfl)
   · exact .effSub (RowLe.nil S) (.ret (.sumI₁ (.unitI (.weaken rfl (.cons (.cons (.cons .nil)))))))
 
 /-- **`timeout` at the row `r`**, `r` without `wait`: `U(1 ⊸ F_{wait ⊙ r} bool) ⊸ F_r bool`.

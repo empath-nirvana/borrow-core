@@ -247,8 +247,8 @@ theorem d_cancelCT {Δ : LifeCtx} {S : Row} {F : CTy} (hF : F.isTop = false)
       ⟨kTy S .unit .unr .unit F, false⟩, ⟨.unit, true⟩,
       ⟨.tensor .unit (kTy S .unit .unr .unit F), false⟩]
       (.app (.var 0) (.val (Val.inj₂ Val.unit))) (.comp (cancelTy S F)) :=
-    .proj₂ (.force (C := .amp (.arr .unit (CTy.effOf S .unit)) (cancelTy S F))
-      (.here (.cons (.weaken rfl (.cons .nil)))))
+    .proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S .unit)) (cancelTy S F))
+      (.here (.cons (.weaken rfl (.cons .nil)))) rfl)
   have hC : cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit := by simp [cancelTy, hF]
   refine .effSub hle ?_
   rw [← hC]
@@ -264,8 +264,8 @@ theorem d_resumeCT {Δ : LifeCtx} (S : Row) (R : VTy) (F : CTy) :
   refine .bind (A := .thunk (.amp (.arr .unit (CTy.effOf S R)) (cancelTy S F)))
     (.left (.right (.dead .nil))) (.ret (.bangE (.var (.here (.cons (.cons .nil)))))) ?_
   exact .app (.left (.dead (.right (.dead .nil))))
-    (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf S R)) (cancelTy S F))
-      (.here (.cons (.cons (.cons .nil))))))
+    (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S R)) (cancelTy S F))
+      (.here (.cons (.cons (.cons .nil)))) rfl))
     (.there (.there (.here (.cons .nil))))
 
 /-- **The `[then]` of `progT`**: `perform 1 then x. x unwind raise 2` at `{2, 1⟨{2}⟩}`.  The cancel
@@ -382,7 +382,7 @@ theorem cancelCT_jr {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F : C
   have hslotP : (⟨P', true⟩ :: Γ : Ctx VTy)[0]? = some ⟨P', true⟩ := rfl
   rcases varCls_of_le hslotP (splitP_le_left hs) hV with hc | ⟨_, hT, -, -⟩
   swap
-  · subst hT; simp [VTy.alphaB] at hP'
+  · cases P' <;> simp [VTy.forceTy, VTy.alphaB] at hT hP'
   obtain ⟨-, hK⟩ := vview_tensor (hc.of_alpha (VTy.alphaB_symm hP'))
   have hslotK : (⟨B', true⟩ :: ⟨A', true⟩ :: Γ₂ : Ctx VTy)[0]? = some ⟨B', true⟩ := rfl
   obtain ⟨j₁, hb₁, hr₁⟩ := der_app hB₂ _ _ rfl
@@ -391,8 +391,10 @@ theorem cancelCT_jr {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F : C
     cases ob with
     | none => exact .refl
     | some d => exact .single (VS.boxI d _)
-  have hB'u : ∀ C₀, B' ≠ .thunk C₀ := by
-    rintro C₀ rfl; rcases ob with _ | d <;> simp [kBoxO, kTy, VTy.alphaB] at hK
+  have hB'u : ∀ C₀, B'.forceTy ≠ some C₀ := by
+    intro C₀ h
+    cases B' <;> simp only [VTy.forceTy, reduceCtorEq] at h <;>
+      (rcases ob with _ | d <;> simp [kBoxO, kTy, VTy.alphaB] at hK)
   refine Relation.ReflTransGen.trans (Relation.ReflTransGen.trans ?_ hr₁) hr
   rcases hb₁ with ⟨Γ₃, Γ₄, A₀, B₀, hs', hY, hX, rfl⟩ | ⟨Γ₃, Γ₄, i, A₀, C₀, hi, hs', hX, hx, rfl⟩ |
     ⟨N', Γ₃, Γ₄, A₀, S₀, C₀, hXe, hs', hM, hN, rfl⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ |
@@ -1489,7 +1491,7 @@ theorem timeoutCl_finds {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F
   have hslotP : (⟨P', true⟩ :: Γ : Ctx VTy)[0]? = some ⟨P', true⟩ := rfl
   rcases varCls_of_le hslotP (splitP_le_left hs) hV with hc | ⟨_, hT, -, -⟩
   swap
-  · subst hT; simp [VTy.alphaB] at hP'
+  · cases P' <;> simp [VTy.forceTy, VTy.alphaB] at hT hP'
   obtain ⟨-, hK⟩ := vview_tensor (hc.of_alpha (VTy.alphaB_symm hP'))
   have hslotK : (⟨B', true⟩ :: ⟨A', true⟩ :: Γ₂ : Ctx VTy)[0]? = some ⟨B', true⟩ := rfl
   replace hK : VTy.alphaB [] (kBoxO ob (.thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy S F)))) B' =
@@ -1718,8 +1720,8 @@ theorem d_timeoutCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
   · have hct : cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit := by simp [cancelTy, hF]
     refine .effSub hFS ?_
     rw [← hct]
-    exact .proj₂ (.force (C := .amp (.arr .unit (CTy.effOf S (.sum X .unit))) (cancelTy S F))
-      (.here (.weaken rfl (.cons hΓ.toP))))
+    exact .proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (.sum X .unit))) (cancelTy S F))
+      (.here (.weaken rfl (.cons hΓ.toP))) rfl)
   · exact .effSub (RowLe.nil S) (.ret (.sumI₂ (.unitI (.weaken rfl (.cons (.cons (.cons hΓ.toP)))))))
 
 section Tied

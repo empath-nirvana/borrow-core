@@ -111,11 +111,11 @@ theorem d_borrowBody {Γ : Ctx VTy} {A : VTy} {L : Expr} (hΓ : Ctx.Dead Γ)
       (.cons (.cons hΓ)) rfl hA (by simp [VFree, Lifetime.Life.mentions])))
     (.bind (.left (.left (.dead (deadSplit hΓ))))
       (.app (.left (.right (.dead (deadSplit hΓ))))
-        (.force (.here (.cons (.cons hΓ)))) (.there (.here (.cons hΓ))))
+        (.force (T := .thunk _) (.here (.cons (.cons hΓ))) rfl) (.there (.here (.cons hΓ))))
       (.bind (.right (.dead (.dead (.dead (deadSplit hΓ)))))
         (.ret (hL (.cons (.cons (.cons (.cons hΓ))))))
         (.app (.right (.left (.dead (.dead (.dead (deadSplit hΓ))))))
-          (.force (.there (.here (.cons (.cons (.cons hΓ))))))
+          (.force (T := .thunk _) (.there (.here (.cons (.cons (.cons hΓ))))) rfl)
           (.here (.cons (.cons (.cons (.cons hΓ))))))))
 
 theorem d_borrower {Γ : Ctx VTy} {A : VTy} {L : Expr} (hΓ : Ctx.Dead Γ) (hA : ¬ VFree 1 A)
@@ -131,14 +131,14 @@ theorem cImmBorrow_derives : CDerives LifeCtx.empty [] cImmBorrow (.comp (.ret .
   refine .bind (.right .nil) (.ret (.unitI (.cons .nil))) ?_
   -- `a u to r`
   refine .bind (.left (.left .nil))
-    (.app (.right (.left .nil)) (.force (.there (.here .nil))) (.here (.cons .nil))) ?_
+    (.app (.right (.left .nil)) (.force (T := .thunk _) (.there (.here .nil)) rfl) (.here (.cons .nil))) ?_
   -- `return withbor to w`
   refine .bind (.right (.dead (.dead .nil)))
     (.ret (.withbor1 (A := .unit) (B := .unit) 0 (by repeat constructor) rfl
       (fun _ h => by simp [VFree] at h) (by simp [VFree]) (by simp [VFree]))) ?_
   -- `w r to g`
   refine .bind (.left (.left (.dead (.dead .nil))))
-    (.app (.left (.right (.dead (.dead .nil)))) (.force (.here (by repeat constructor)))
+    (.app (.left (.right (.dead (.dead .nil)))) (.force (T := .thunk _) (.here (by repeat constructor)) rfl)
       (.there (.here (by repeat constructor)))) ?_
   -- `return borrower to f`
   refine .bind (.right (.dead (.dead (.dead (.dead .nil)))))
@@ -146,7 +146,7 @@ theorem cImmBorrow_derives : CDerives LifeCtx.empty [] cImmBorrow (.comp (.ret .
   -- `g f to p`
   refine .bind (.left (.left (.dead (.dead (.dead (.dead .nil))))))
     (.app (.right (.left (.dead (.dead (.dead (.dead .nil))))))
-      (.force (.there (.here (by repeat constructor)))) (.here (by repeat constructor))) ?_
+      (.force (T := .thunk _) (.there (.here (by repeat constructor))) rfl) (.here (by repeat constructor))) ?_
   -- `let (r′, t) = p in`
   refine .tensorE (A := .ref .unit) (B := .unit)
     (.left (.dead (.dead (.dead (.dead (.dead (.dead .nil)))))))
@@ -159,7 +159,7 @@ theorem cImmBorrow_derives : CDerives LifeCtx.empty [] cImmBorrow (.comp (.ret .
     (.ret (.free (A := .unit) (by repeat constructor))) ?_
   -- `fr r′`
   exact .app (.left (.dead (.right (.dead (.dead (.dead (.dead (.dead (.dead (.dead .nil))))))))))
-    (.force (.here (by repeat constructor))) (.there (.there (.here (by repeat constructor))))
+    (.force (T := .thunk _) (.here (by repeat constructor)) rfl) (.there (.there (.here (by repeat constructor))))
 
 theorem cImmBorrow_runs :
     BoCa.BoLo.Steps Adequacy.emptyMem cImmBorrow Adequacy.emptyMem (.val .unit) :=
@@ -183,7 +183,7 @@ theorem cBang_derives : CDerives LifeCtx.empty [] cBang (.comp (.ret .unit)) := 
   refine .bind (.dup rfl .nil) (.ret (.bangE (.var (.here .nil)))) ?_
   refine .bind (.right (.right .nil)) (.ret (.unitI (.cons (.cons .nil)))) ?_
   refine .bind (.left (.left (.right .nil)))
-    (.app (.right (.left (.dead .nil))) (.force (.there (.here (.cons .nil))))
+    (.app (.right (.left (.dead .nil))) (.force (T := .thunk _) (.there (.here (.cons .nil))) rfl)
       (.here (.cons (.cons .nil)))) ?_
   refine .unitE (.left (.dead (.dead (.right .nil)))) (.var (.here (.cons (.cons (.cons .nil))))) ?_
   -- `f to g₂`: `f` goes to both sides again.
@@ -193,7 +193,7 @@ theorem cBang_derives : CDerives LifeCtx.empty [] cBang (.comp (.ret .unit)) := 
     (.ret (.unitI (.cons (.cons (.cons (.cons (.cons .nil))))))) ?_
   -- `g₂ ()`: `f` is consumed.
   exact .app (.right (.left (.dead (.dead (.dead (.left .nil))))))
-    (.force (.there (.here (.cons (.cons (.cons (.weaken rfl .nil)))))))
+    (.force (T := .thunk _) (.there (.here (.cons (.cons (.cons (.weaken rfl .nil)))))) rfl)
     (.here (.cons (.cons (.cons (.cons (.cons .nil))))))
 
 theorem cBang_runs : BoCa.BoLo.Steps Adequacy.emptyMem cBang Adequacy.emptyMem (.val .unit) :=
@@ -237,7 +237,7 @@ theorem d_recLoader {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
       (.bind (.right (.dead (deadSplit hΓ))) (.ret (.releaseUnk (.cons (.cons hΓ))))
         (.bind (.left (.left (.dead (deadSplit hΓ))))
           (.app (.left (.right (.dead (deadSplit hΓ))))
-            (.force (.here (.cons (.cons hΓ)))) (.there (.here (.cons hΓ))))
+            (.force (T := .thunk _) (.here (.cons (.cons hΓ))) rfl) (.there (.here (.cons hΓ))))
           (.ret (.boxI
             (.boxI (.var (.here (.cons (.cons (.cons hΓ)))))
               (CtxOutlives.solo (LifeCtx.defines_of_wf rfl) .unit (.cons (.cons (.cons hΓ)))))
@@ -251,14 +251,14 @@ theorem cRecBorrow_derives : CDerives LifeCtx.empty [] cRecBorrow (.comp (.ret .
   refine .bind (.right .nil) (.ret (.alloc (A := methodsTy) (.cons .nil))) ?_
   -- `a m to r`
   refine .bind (.left (.left .nil))
-    (.app (.left (.right .nil)) (.force (.here (.cons .nil))) (.there (.here .nil))) ?_
+    (.app (.left (.right .nil)) (.force (T := .thunk _) (.here (.cons .nil)) rfl) (.there (.here .nil))) ?_
   -- `return withbor to w`
   refine .bind (.right (.dead (.dead .nil)))
     (.ret (.withbor1 (A := methodsTy) (B := .unit) 0 (by repeat constructor) rfl
       (fun y h => absurd h (methodsTy_closed y)) (methodsTy_closed 0) (by simp [VFree]))) ?_
   -- `w r to g`
   refine .bind (.left (.left (.dead (.dead .nil))))
-    (.app (.left (.right (.dead (.dead .nil)))) (.force (.here (by repeat constructor)))
+    (.app (.left (.right (.dead (.dead .nil)))) (.force (T := .thunk _) (.here (by repeat constructor)) rfl)
       (.there (.here (by repeat constructor)))) ?_
   -- `return borrower to f`
   refine .bind (.right (.dead (.dead (.dead (.dead .nil)))))
@@ -266,7 +266,7 @@ theorem cRecBorrow_derives : CDerives LifeCtx.empty [] cRecBorrow (.comp (.ret .
   -- `g f to p`
   refine .bind (.left (.left (.dead (.dead (.dead (.dead .nil))))))
     (.app (.right (.left (.dead (.dead (.dead (.dead .nil))))))
-      (.force (.there (.here (by repeat constructor)))) (.here (by repeat constructor))) ?_
+      (.force (T := .thunk _) (.there (.here (by repeat constructor))) rfl) (.here (by repeat constructor))) ?_
   -- `let (r′, t) = p in`
   refine .tensorE (A := .ref methodsTy) (B := .unit)
     (.left (.dead (.dead (.dead (.dead (.dead (.dead .nil)))))))
@@ -280,10 +280,10 @@ theorem cRecBorrow_derives : CDerives LifeCtx.empty [] cRecBorrow (.comp (.ret .
   -- `fr r′ to m′`
   refine .bind (.left (.dead (.left (.dead (.dead (.dead (.dead (.dead (.dead (.dead .nil))))))))))
     (.app (.left (.dead (.right (.dead (.dead (.dead (.dead (.dead (.dead (.dead .nil))))))))))
-      (.force (.here (by repeat constructor))) (.there (.there (.here (by repeat constructor)))))
+      (.force (T := .thunk _) (.here (by repeat constructor)) rfl) (.there (.there (.here (by repeat constructor)))))
     ?_
   -- `π₁ (force m′)`
-  exact .proj₁ (.force (C := .amp (.ret .unit) (.ret .unit)) (.here (by repeat constructor)))
+  exact .proj₁ (.force (T := .thunk _) (C := .amp (.ret .unit) (.ret .unit)) (.here (by repeat constructor)) rfl)
 
 /-- **Adequacy** at the borrowed record: `cRecBorrow` runs from the empty memory to `()` and
 the empty memory. -/
@@ -320,7 +320,7 @@ theorem cInst_derives : CDerives Δ₁ [] cInst (.comp (.ret .unit)) := by
       (.cons .nil)⟩)) ?_
   -- `(force f) [] u`
   exact .app (.right (.left .nil))
-    (.allE (a := .var 0) (.force (C := polyC) (.there (.here .nil))) (fun _ hδ => hδ 0 _ rfl))
+    (.allE (a := .var 0) (.force (T := .thunk _) (C := polyC) (.there (.here .nil)) rfl) (fun _ hδ => hδ 0 _ rfl))
     (.here (.cons .nil))
 
 theorem cInst_sem : SemC Δ₁ [] cInst (.ret .unit) := fundamentalC cInst_derives

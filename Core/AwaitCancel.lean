@@ -744,11 +744,11 @@ theorem d_clS {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   refine .ret (.thunkV rfl (.lam ?_))
   refine .bind (.dup rfl (.left (.right (.dead (deadSplit hΓ)))))
     (.app (.right (.left (.dead (.dead (deadSplit hΓ)))))
-      (.proj₁ (.force (C := .amp (.arr (.sum .unit .unit) (CTy.effOf [] StR)) .top)
-        (.there (.here (by cdead)))))
+      (.proj₁ (.force (T := .thunk _) (C := .amp (.arr (.sum .unit .unit) (CTy.effOf [] StR)) .top)
+        (.there (.here (by cdead))) rfl))
       (.here (by cdead))) ?_
   exact .app (.left (.right (.dead (.right (.dead (deadSplit hΓ))))))
-    (.force (.here (by cdead))) (.there (.here (.cons (.weaken rfl (.cons hΓ.toP)))))
+    (.force (T := .thunk _) (.here (by cdead)) rfl) (.there (.here (.cons (.weaken rfl (.cons hΓ.toP)))))
 
 /-- **The immediate scheduler is typed**: a closed `CDerives` derivation at `F Flag`, its handler
 at the marked pair (`csSched`). -/
@@ -763,7 +763,7 @@ theorem d_stickyScope : CDerives LifeCtx.empty [] stickyScope (.comp (.ret Flag)
       (by rw [ofEff_sched]
           exact CDerives.append_dead (Γ := []) (Ctx.Dead.cons (Ctx.Dead.cons .nil)) d_swallow)) ?_
   refine .bind (A := Flag) (.right (.dead (.dead .nil))) (.ret (.sumI₂ (.unitI (by cdead)))) ?_
-  exact .app (.right (.left (.dead (.dead .nil)))) (.force (.there (.here (by cdead))))
+  exact .app (.right (.left (.dead (.dead .nil)))) (.force (T := .thunk _) (.there (.here (by cdead))) rfl)
     (.here (by cdead))
 
 /-- Every run of the immediate scheduler around the swallowing example from the cancelled flag
@@ -897,8 +897,8 @@ theorem d_thenDivFuel (k : UInt32) :
   refine .bind (.right .nil)
     (.ret (.bangE (.divFuel [] .unit (fun _ h => absurd h List.not_mem_nil) (.cons .nil)))) ?_
   exact .app (.left (.right .nil))
-    (.force (C := .arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSig :: []) .unit))) (.int .w32))
-      (CTy.effOf [] .unit)) (.here (.cons .nil)))
+    (.force (T := .thunk _) (C := .arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSig :: []) .unit))) (.int .w32))
+      (CTy.effOf [] .unit)) (.here (.cons .nil)) rfl)
     (.there (.here .nil))
 
 /-- Every run of the witness continues to `()` at the empty memory: `effThenDiv` is a rule of

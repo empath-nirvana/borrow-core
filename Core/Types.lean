@@ -148,6 +148,13 @@ theorem VTy.recV {motive : VTy → Prop}
   | .mu A => mu A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int fam opq code A)
   | .code N E C => code N E C (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int fam opq code E)
 
+/-- The computation type a slot of type `A` is forced at: `C` at `U C` and at `Code⟨N; E⟩ C`.
+`[spec §68]` -/
+def VTy.forceTy : VTy → Option CTy
+  | .thunk C => some C
+  | .code _ _ C => some C
+  | _ => none
+
 /-- `A` is `0`. -/
 def VTy.isZero : VTy → Bool
   | .zero => true

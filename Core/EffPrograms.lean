@@ -305,7 +305,7 @@ theorem d_failOutsideBody :
   refine .effLet (A := .tensor (.ref Flag) .zero) (.left (.left (.left (.dead (.dead .nil)))))
     (fun _ => Ctx.Dead.consumes (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))
-    exact .app (.left (.dead (.right (.dead (.dead .nil))))) (.force (.here (by cdead)))
+    exact .app (.left (.dead (.right (.dead (.dead .nil))))) (.force (T := .thunk _) (.here (by cdead)) rfl)
       (.there (.there (.here (by cdead))))
   · refine .tensorE (.left (deadSplit (by cdead))) (.var (.here (by cdead))) ?_
     exact .zeroE (.left (.right (deadSplit (by cdead)))) (.var (.here (by cdead)))
@@ -373,7 +373,7 @@ theorem d_outerCb {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     (.left (.left (.left (.dead (deadSplit hΓ)))))
     (fun _ => Ctx.Dead.consumes (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (deadSplit hΓ))))) ?_ (.there (.here (by cdead)))
-    exact .app (.left (.dead (.right (.dead (deadSplit hΓ))))) (.force (.here (by cdead)))
+    exact .app (.left (.dead (.right (.dead (deadSplit hΓ))))) (.force (T := .thunk _) (.here (by cdead)) rfl)
       (.there (.there (.here (by cdead))))
   · refine .tensorE (.left (deadSplit (by cdead))) (.var (.here (by cdead))) ?_
     exact .zeroE (.left (.right (deadSplit (by cdead)))) (.var (.here (by cdead)))
@@ -392,7 +392,7 @@ theorem d_reborrowRaiseBody :
   refine .effLet (A := .tensor (.ref Flag) .zero) (.left (.left (.left (.dead (.dead .nil)))))
     (fun _ => Ctx.Dead.consumes (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))
-    exact .app (.left (.dead (.right (.dead (.dead .nil))))) (.force (.here (by cdead)))
+    exact .app (.left (.dead (.right (.dead (.dead .nil))))) (.force (T := .thunk _) (.here (by cdead)) rfl)
       (.there (.there (.here (by cdead))))
   · refine .tensorE (.left (deadSplit (by cdead))) (.var (.here (by cdead))) ?_
     exact .zeroE (.left (.right (deadSplit (by cdead)))) (.var (.here (by cdead)))
@@ -462,8 +462,8 @@ theorem d_clL {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hΓ : Ctx.Dead 
   refine .effLet (A := .tensor A Flag) (.left (.left (.dead (deadSplit hΓ))))
     (fun _ => Ctx.Dead.consumes (by cdead)) (fun _ => dead_noLive (by cdead)) ?_ ?_
   · refine .app (.left (.right (.dead (deadSplit hΓ)))) ?_ (.there (.here (by cdead)))
-    exact .proj₁ (.force (C := .amp (.arr .unit (CTy.effOf S (.tensor A Flag))) (CTy.effOf S .unit))
-      (.here (by cdead)))
+    exact .proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (.tensor A Flag))) (CTy.effOf S .unit))
+      (.here (by cdead)) rfl)
   · refine .tensorE (.left (deadSplit (by cdead))) (.var (.here (by cdead))) ?_
     refine .unitE (.left (.right (deadSplit (by cdead))))
       (d_dropB (.var (by csolo)) (by cdead)) ?_
@@ -713,13 +713,13 @@ theorem d_driveLog : ∀ (n : ℕ) {Γ : Ctx VTy}, Ctx.Dead Γ →
   | 0, Γ, hΓ => by
       refine .bind (.left (deadSplit hΓ))
         (d_withLogG (S := []) (A := .unit) (by simp) rfl
-          (.proj₂ (.nuOut tickC_nuOk (.force (.there (.there (.here hΓ.toP))))))) ?_
+          (.proj₂ (.nuOut tickC_nuOk (.force (T := .thunk _) (.there (.there (.here hΓ.toP))) rfl)))) ?_
       refine .tensorE (.left (.dead (deadSplit hΓ))) (.var (.here (by cdead))) ?_
       exact .ret (seqW (.var (by csolo)) (d_dropB (.var (by csolo)) (by cdead)))
   | n + 1, Γ, hΓ => by
       refine .bind (.left (deadSplit hΓ))
         (d_withLogG (S := []) (A := .sum .zero (.thunk (.nu TickC))) (by simp) rfl
-          (.proj₁ (.nuOut tickC_nuOk (.force (.there (.there (.here hΓ.toP))))))) ?_
+          (.proj₁ (.nuOut tickC_nuOk (.force (T := .thunk _) (.there (.there (.here hΓ.toP))) rfl)))) ?_
       refine .tensorE (.left (.dead (deadSplit hΓ))) (.var (.here (by cdead))) ?_
       refine .unitE (.left (.right (.dead (.dead (deadSplit hΓ))))) (d_dropB (.var (by csolo)) (by cdead)) ?_
       exact .sumE (.dead (.left (.dead (.dead (deadSplit hΓ))))) (.var (by csolo))
@@ -737,7 +737,7 @@ theorem d_tickProg (n : ℕ) :
     CDerives LifeCtx.empty [] (tickProg n) (.comp (.ret .unit)) := by
   have d_fs : CDerives LifeCtx.empty (withCtx [⟨.thunk (.arr .unit (.nu TickC)), true⟩, ⟨.unit, true⟩])
       (.app (.var 2) (.var 3)) (.comp (.nu TickC)) :=
-    .app (.dead (.dead (.left (.right .nil)))) (.force (.there (.there (.here (.cons .nil)))))
+    .app (.dead (.dead (.left (.right .nil)))) (.force (T := .thunk _) (.there (.there (.here (.cons .nil)))) rfl)
       (.there (.there (.there (.here .nil))))
   refine .bind .nil (.ret (.unitI .nil)) ?_
   refine .bind (.right .nil)
@@ -850,17 +850,17 @@ theorem d_clT {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   refine .sumE (.left (.right (.right (.dead (deadSplit hΓ)))))
     (.unroll (A := natBody) (.var (.here (by cdead)))) ?_ ?_
   · refine .bind (.right (.dead (.left (.right (.dead (deadSplit hΓ))))))
-      (.proj₂ (.force (C := .amp (.arr .unit (CTy.effOf [] TakeR)) (CTy.effOf [] .unit))
-        (.there (.there (.here (by cdead)))))) ?_
+      (.proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf [] TakeR)) (CTy.effOf [] .unit))
+        (.there (.there (.here (by cdead)))) rfl)) ?_
     exact .ret (.sumI₂ (.unitI (.weaken rfl (.weaken rfl (.cons (.cons (.weaken rfl
       (.cons hΓ.toP))))))))
   · refine .bind (.right (.dead (.left (.left (.dead (deadSplit hΓ))))))
       (.app (.dead (.dead (.left (.right (.dead (deadSplit hΓ))))))
-        (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf [] TakeR)) (CTy.effOf [] .unit))
-          (.there (.there (.here (by cdead))))))
+        (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf [] TakeR)) (CTy.effOf [] .unit))
+          (.there (.there (.here (by cdead)))) rfl))
         (.there (.there (.there (.here (by cdead)))))) ?_
     exact .app (.left (.right (.dead (.dead (.dead (.dead (deadSplit hΓ)))))))
-      (.force (.here (by cdead))) (.there (.here (by cdead)))
+      (.force (T := .thunk _) (.here (by cdead)) rfl) (.there (.here (by cdead)))
 
 theorem d_takeProg (n : ℕ) :
     CDerives LifeCtx.empty [] (takeProg n) (.comp (.ret Flag)) := by
@@ -871,7 +871,7 @@ theorem d_takeProg (n : ℕ) :
       (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
       (by decide) (by simp) (by simp) rfl (d_producer (Ctx.Dead.cons (Ctx.Dead.cons Ctx.Dead.nil)))) ?_
   refine .bind (.right (.dead (.dead .nil))) (.ret (d_num (by cdead) n)) ?_
-  exact .app (.right (.left (.dead (.dead .nil)))) (.force (.there (.here (by cdead))))
+  exact .app (.right (.left (.dead (.dead .nil)))) (.force (T := .thunk _) (.there (.here (by cdead))) rfl)
     (.here (by cdead))
 
 /-- **Program 5 runs**: for every `n`, every run of `take n producer`, under every allocator,
@@ -955,8 +955,8 @@ theorem d_clS {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     (.ret (appW (.var (by csolo)) (.alloc (by cdead)))) ?_
   refine .bind (.left (.dead (.dead (.dead (deadSplit hΓ)))))
     (.ret (appW (.var (by csolo)) (.free (by cdead)))) ?_
-  exact .proj₂ (.force (C := .amp (.arr .unit (CTy.effOf [] .unit)) (CTy.effOf [] .unit))
-    (.here (by cdead)))
+  exact .proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf [] .unit)) (CTy.effOf [] .unit))
+    (.here (by cdead)) rfl)
 
 theorem d_storeCancel : CDerives LifeCtx.empty [] storeCancel (.comp (.ret .unit)) := by
   refine .bind .nil (.ret (.tensorI .nil (d_clS .nil) (.unitI .nil))) ?_
@@ -1026,7 +1026,7 @@ theorem d_tickAnsProg (n : ℕ) :
   have d_fs : CDerives LifeCtx.empty
       (withCtx [⟨.thunk (.arr (.ref Flag) (.loop .zero (.ref Flag))), true⟩, ⟨.ref Flag, true⟩])
       (.app (.var 2) (.var 3)) (.comp (.loop .zero (.ref Flag))) :=
-    .app (.dead (.dead (.left (.right .nil)))) (.force (.there (.there (.here (.cons .nil)))))
+    .app (.dead (.dead (.left (.right .nil)))) (.force (T := .thunk _) (.there (.there (.here (.cons .nil)))) rfl)
       (.there (.there (.there (.here .nil))))
   refine .bind (A := .ref Flag) .nil
     (.ret (appW (.sumI₁ (.unitI (by cdead))) (.alloc (by cdead)))) ?_

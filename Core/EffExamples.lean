@@ -39,7 +39,7 @@ theorem cl₀_derives : CDerives LifeCtx.empty [] cl₀ (.val (clauseTy [] .unit
   refine .bangThunkV (fun _ hs => by simp at hs) rfl (.lam ?_)
   refine .tensorE (.left .nil) (.var (.here .nil)) ?_
   refine .app (.left (.right (.dead .nil)))
-    (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf [] .unit)) .top) (.here (.cons (.cons .nil)))))
+    (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf [] .unit)) .top) (.here (.cons (.cons .nil))) rfl))
     (.there (.here (.cons .nil)))
 
 theorem prog_derives : CDerives LifeCtx.empty [] prog (.comp (.ret .unit)) := by
@@ -71,8 +71,8 @@ theorem clC_derives : CDerives LifeCtx.empty [] clC (.val (clauseTy [] .unit (.c
   refine .bangThunkV (fun _ hs => by simp at hs) rfl (.lam ?_)
   refine .tensorE (.left .nil) (.var (.here .nil)) ?_
   refine .unitE (.right (.left (.dead .nil))) (.var (.there (.here (.cons .nil)))) ?_
-  exact .proj₂ (.force (C := .amp (.arr .unit (CTy.effOf [] .unit)) (CTy.effOf [] .unit))
-    (.here (.cons (.cons .nil))))
+  exact .proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf [] .unit)) (CTy.effOf [] .unit))
+    (.here (.cons (.cons .nil))) rfl)
 
 theorem progC_derives : CDerives LifeCtx.empty [] progC (.comp (.ret .unit)) := by
   refine .bind .nil (.ret (.tensorI .nil clC_derives (.unitI .nil))) ?_

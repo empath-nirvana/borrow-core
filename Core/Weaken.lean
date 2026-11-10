@@ -79,7 +79,7 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | thunkV hC _ ih => exact .thunkV hC ih
   | ret _ ih => exact .ret ih
   | bind hs _ _ ihM ihN => exact .bind (splitP_append h' hs) ihM ihN
-  | force hs => exact .force (soloP_append h' hs)
+  | force hs hT => exact .force (soloP_append h' hs) hT
   | lam _ ih => exact .lam ih
   | lamDead _ ih => exact .lamDead ih
   | app hs _ hx ih => exact .app (splitP_append h' hs) ih (soloP_append h' hx)
@@ -95,6 +95,14 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | allE _ hlt ih => exact .allE ih hlt
   | bangThunkF hp _ ih => exact .bangThunkF (banged_append h' hp) ih
   | bangThunkV hp hC _ ih => exact .bangThunkV (banged_append h' hp) hC ih
+  | codeI _ hok ih =>
+      obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
+      rw [← hty]; exact .codeI ih hok'
+  | codeIB hp _ hok ih =>
+      obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
+      rw [← hty]; exact .codeIB (banged_append h' hp) ih hok'
+  | codeErase _ ih => exact .codeErase ih
+  | codeEraseB _ ih => exact .codeEraseB ih
   | bangE _ ih => exact .bangE ih
   | copyBang hΓ => exact .copyBang (deadP_append h' hΓ)
   | releaseBang hΓ => exact .releaseBang (deadP_append h' hΓ)

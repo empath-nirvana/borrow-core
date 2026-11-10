@@ -140,8 +140,8 @@ theorem dAt_loopB :
           ⟨_, false⟩]) (.cons (.cons (.cons (.cons (.cons .nil))))))
         (.var (.there (.there (.there (.there (.here .nil)))))))) ?_
     exact .app (.right (.left (.left (.dead (.dead (.dead .nil))))))
-      (.force (C := .arr (.tensor (iterStepTy Sg St I St) St) (CTy.effOf Sg (.sum I St)))
-        (.there (.here (.weaken unit_persistent (.cons (.cons (.cons .nil)))))))
+      (.force (T := .thunk _) (C := .arr (.tensor (iterStepTy Sg St I St) St) (CTy.effOf Sg (.sum I St)))
+        (.there (.here (.weaken unit_persistent (.cons (.cons (.cons .nil)))))) rfl)
       (.here (.cons (.cons (.cons (.cons (.cons .nil))))))
   · -- *close*: `inr c`
     exact .effSub (RowLe.nil Sg) (.ret (.sumI₂ (.var (.skip unit_persistent
@@ -158,8 +158,8 @@ theorem dAt_divResidual : CDerivesAt ΞDiv Δ [] divResidual (.comp (.ret I)) :=
       (.cons (.cons .nil))))) ?_
   refine .bind (.left (.left (.dead .nil)))
     (.app (.left (.right (.dead .nil)))
-      (.force (C := .arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSig :: []) Ans))) I)
-        (CTy.effOf [] Ans)) (.here (.cons (.cons .nil))))
+      (.force (T := .thunk _) (C := .arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSig :: []) Ans))) I)
+        (CTy.effOf [] Ans)) (.here (.cons (.cons .nil))) rfl)
       (.there (.here (.cons .nil)))) ?_
   refine .sumE (.left (.dead (.dead (.dead .nil)))) (.var (.here (.cons (.cons (.cons .nil)))))
     (.ret (.var (.here (.cons (.cons (.cons (.cons .nil))))))) ?_
@@ -197,8 +197,8 @@ theorem divFuel_every_run {t : Expr} {A : VTy}
     refine .bind (.right .nil)
       (.ret (.bangE (.divFuel [] A (fun _ h => absurd h List.not_mem_nil) (.cons .nil)))) ?_
     exact .app (.left (.right .nil))
-      (.force (C := .arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSig :: []) A))) I)
-        (CTy.effOf [] A)) (.here (.cons .nil)))
+      (.force (T := .thunk _) (C := .arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSig :: []) A))) I)
+        (CTy.effOf [] A)) (.here (.cons .nil)) rfl)
       (.there (.here .nil))
   exact total_every_run hd hs
 

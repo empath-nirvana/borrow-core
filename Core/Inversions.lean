@@ -10,20 +10,22 @@ premise's term (`JS`, `JR`) and tells every other rule apart by its conclusion's
 
 **The same-term rules.**  The value rules `!E`, `[]I`, `[]E`, `⊑` at `Imm` and `Mut`, `μ`'s `roll`
 and `unroll`; `return`, its reading back (`ofRet`), `[sub]`, `ν`'s two rules and `[α]`; and, at a
-λ-value, the two thunk rules conclude with their premise's term.  `[α]` changes a type only in its
+λ-value, the two thunk rules and `[code-I]` conclude with their premise's term; `[erase]` is a value
+step from a code type to its `U` (`[spec §68]`).  `[α]` changes a type only in its
 binders' names, so what the inversions give about a type is up to α-equivalence (`VTy.alphaB`): a
 head up to it (`Hnf.alpha`), a rigid type at its α-equivalents, a λ-value's binder at an
 α-equivalent of the type read.  So:
 
 * a value read at a type `T` is read at the views of `T` and at rows over them (`ValCls`): `!`,
-  `[]`, `⊑` and `μ` change the type, `ν` and `[sub]` only the row;
+  `[]`, `⊑`, `μ` and `[erase]` change the type, `ν` and `[sub]` only the row;
+* a thunk is read, besides, at the code types `[code-I]` gives it (`ThunkCls`, `ValClsC`);
 * a computation type that is no row's, no `&` and no `ν` (`Rigid`: `⊸`, `∀`, `⊤`) is left by no
   same-term rule (`JR.rigid`), since `ν`'s rules are at `&`-trees only (`CTy.NuOk`); an `&` is
   read at itself and at the `ν`s that unroll to it (`JR.amp`).
 
 **Views keep the head** (`VView.hnf`).  A view of `T` has `T`'s head (`Hnf`: boxes stripped, `μ`
 unrolled), unless that head is `!` (dereliction reaches its content), `Imm` or `Mut` (`⊑` changes
-the lifetime).  Persistence is a property of the head (`Hnf.persistent`).
+the lifetime), or a code type, bare or under `!` (`[erase]` reaches its `U`).  Persistence is a property of the head (`Hnf.persistent`).
 
 **The inversions.**  A variable is read at a view of its live slot's type (`der_var`); a pair at the
 views of a tensor of its parts' types (`der_pair`); `inj₁ a` at the views of a sum, `a` typed in the
@@ -80,6 +82,10 @@ inductive VS : VTy → VTy → Prop
   | roll (A : VTy) : VS (VTy.inst (.mu A) A) (.mu A)
   | unroll (A : VTy) : VS (.mu A) (VTy.inst (.mu A) A)
   | alpha {A B : VTy} : VTy.alphaB [] A B = true → VS A B
+  /-- `[erase]`: a code type read at its `U`.  `[spec §68]` -/
+  | codeErase (N : Expr) (E : VTy) (C : CTy) : VS (.code N E C) (.thunk C)
+  /-- `[erase]` under `!`.  `[spec §68]` -/
+  | codeEraseB (N : Expr) (E : VTy) (C : CTy) : VS (.bang (.code N E C)) (.bang (.thunk C))
 
 /-- The views of a value type. -/
 abbrev VView := Relation.ReflTransGen VS
@@ -138,15 +144,33 @@ theorem Hnf.alpha {T h : VTy} (hh : Hnf T h) :
         exact hm _ rfl
 
 /-- **Views keep the head** up to α-equivalence, unless the head is `!` (whose content is then
-viewed), `Imm` or `Mut`. -/
+viewed), `Imm` or `Mut`, or a code type, bare or under `!` (whose erasure is then viewed,
+`[spec §68]`). -/
 theorem VView.hnf {T T' h : VTy} (hv : VView T T') (hT : Hnf T h) :
     (∃ h', Hnf T' h' ∧ VTy.alphaB [] h h' = true) ∨ (∃ A, h = .bang A ∧ VView A T') ∨
-      (∃ a A, h = .imm a A) ∨ (∃ a A, h = .mut a A) := by
+      (∃ a A, h = .imm a A) ∨ (∃ a A, h = .mut a A) ∨
+      (∃ N E C, h = .code N E C ∧ VView (.thunk C) T') ∨
+      (∃ N E C, h = .bang (.code N E C) ∧ VView (.bang (.thunk C)) T') := by
   induction hv with
   | refl => exact .inl ⟨h, hT, VTy.alphaB_refl h⟩
   | tail _ hs ih =>
-      rcases ih with ⟨h₁, hh₁, hα⟩ | ⟨A, rfl, hA⟩ | hi | hm
+      rcases ih with ⟨h₁, hh₁, hα⟩ | ⟨A, rfl, hA⟩ | hi | hm | ⟨N, E, C, rfl, hc⟩ |
+        ⟨N, E, C, rfl, hc⟩
       · cases hs with
+        | codeErase N E C =>
+            obtain rfl := hh₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
+            cases h <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true,
+              Bool.and_eq_true] at hα
+            exact .inr (.inr (.inr (.inr (.inl ⟨_, _, _, rfl,
+              .single (.alpha (A := .thunk _) (B := .thunk _) hα.2)⟩))))
+        | codeEraseB N E C =>
+            obtain rfl := hh₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
+            cases h <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
+            rename_i X
+            cases X <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true,
+              Bool.and_eq_true] at hα
+            exact .inr (.inr (.inr (.inr (.inr ⟨_, _, _, rfl,
+              .single (.alpha (A := .bang (.thunk _)) (B := .bang (.thunk _)) hα.2)⟩))))
         | bang A =>
             obtain rfl := hh₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
             cases h <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
@@ -162,7 +186,7 @@ theorem VView.hnf {T T' h : VTy} (hv : VView T T') (hT : Hnf T h) :
         | mutS a b A =>
             obtain rfl := hh₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
             cases h <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
-            exact .inr (.inr (.inr ⟨_, _, rfl⟩))
+            exact .inr (.inr (.inr (.inl ⟨_, _, rfl⟩)))
         | roll A => exact .inl ⟨h₁, .mu hh₁, hα⟩
         | unroll A => cases hh₁ with
           | mu hh₁ => exact .inl ⟨_, hh₁, hα⟩
@@ -172,25 +196,32 @@ theorem VView.hnf {T T' h : VTy} (hv : VView T T') (hT : Hnf T h) :
             exact .inl ⟨h₂, hh₂, VTy.alphaB_trans' hα hα₂⟩
       · exact .inr (.inl ⟨A, rfl, hA.tail hs⟩)
       · exact .inr (.inr (.inl hi))
-      · exact .inr (.inr (.inr hm))
+      · exact .inr (.inr (.inr (.inl hm)))
+      · exact .inr (.inr (.inr (.inr (.inl ⟨N, E, C, rfl, hc.tail hs⟩))))
+      · exact .inr (.inr (.inr (.inr (.inr ⟨N, E, C, rfl, hc.tail hs⟩))))
 
-/-- A view of a type whose head is no `!`, `Imm` or `Mut` has that head, up to α-equivalence. -/
+/-- A view of a type whose head is no `!`, `Imm`, `Mut` or code type has that head, up to
+α-equivalence. -/
 theorem VView.hnf_of {T T' h : VTy} (hv : VView T T') (hT : Hnf T h) (hb : ∀ A, h ≠ .bang A)
-    (hi : ∀ a A, h ≠ .imm a A) (hm : ∀ a A, h ≠ .mut a A) :
+    (hi : ∀ a A, h ≠ .imm a A) (hm : ∀ a A, h ≠ .mut a A) (hc : ∀ N E C, h ≠ .code N E C) :
     ∃ h', Hnf T' h' ∧ VTy.alphaB [] h h' = true := by
-  rcases hv.hnf hT with h' | ⟨A, rfl, -⟩ | ⟨a, A, rfl⟩ | ⟨a, A, rfl⟩
+  rcases hv.hnf hT with h' | ⟨A, rfl, -⟩ | ⟨a, A, rfl⟩ | ⟨a, A, rfl⟩ | ⟨N, E, C, rfl, -⟩ |
+    ⟨N, E, C, rfl, -⟩
   · exact h'
   · exact absurd rfl (hb A)
   · exact absurd rfl (hi a A)
   · exact absurd rfl (hm a A)
+  · exact absurd rfl (hc N E C)
+  · exact absurd rfl (hb _)
 
-/-- **Views of a type that is its own head, no `!`, `Imm`, `Mut`, are that type** up to
-α-equivalence, when they are their own heads too. -/
+/-- **Views of a type that is its own head, no `!`, `Imm`, `Mut` or code type, are that type** up
+to α-equivalence, when they are their own heads too. -/
 theorem VView.eq_of_heads {T T' : VTy} (hv : VView T T') (hTb : ∀ a A, T ≠ .box a A)
     (hTm : ∀ A, T ≠ .mu A) (hb : ∀ A, T ≠ .bang A) (hi : ∀ a A, T ≠ .imm a A)
-    (hmu : ∀ a A, T ≠ .mut a A) (hT'b : ∀ a A, T' ≠ .box a A) (hT'm : ∀ A, T' ≠ .mu A) :
+    (hmu : ∀ a A, T ≠ .mut a A) (hc : ∀ N E C, T ≠ .code N E C) (hT'b : ∀ a A, T' ≠ .box a A)
+    (hT'm : ∀ A, T' ≠ .mu A) :
     VTy.alphaB [] T T' = true := by
-  obtain ⟨h', hh', hα⟩ := hv.hnf_of (hnf_self hTb hTm) hb hi hmu
+  obtain ⟨h', hh', hα⟩ := hv.hnf_of (hnf_self hTb hTm) hb hi hmu hc
   rwa [hh'.eq_self hT'b hT'm] at hα
 
 /-! ### Persistence is a property of the head -/
@@ -831,8 +862,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   induction h with
   | var hs =>
       intro k hk; simp only [Expr.HasVar] at hk; subst hk; exact ⟨_, soloP_le hs⟩
-  | force hs =>
-      rename_i i C
+  | @force _ _ i _ C hs _ =>
       intro k hk
       rcases forceE_cases C (.var i) with hf | hf <;> rw [hf] at hk <;>
         simp only [Expr.HasVar, Expr.val, Val.unit, or_false] at hk <;> subst hk <;>
@@ -852,7 +882,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro k hk; obtain ⟨T, hT⟩ := ih (k + 1) hk; exact ⟨T, slot_succ hT⟩
   | thunkV _ _ ih | ret _ ih | bangThunkV _ _ _ ih | bangE _ ih | boxI _ _ ih | boxE _ ih
   | immSub _ _ ih | mutSub _ _ ih | ofRet _ ih | roll _ _ _ ih | unroll _ ih | nuIn _ _ ih
-  | nuOut _ _ ih | effSub _ _ ih => exact ih
+  | nuOut _ _ ih | effSub _ _ ih | codeErase _ ih | codeEraseB _ ih => exact ih
   | proj₁ _ ih | proj₂ _ ih | allE _ _ ih | allEV _ _ ih =>
       intro k hk
       rcases hk with hk | hk
@@ -958,7 +988,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | foldOwnG => intro k hk; exact absurd hk (not_hasVar_closed (FoldP.foldOwnGV_closed _))
   | foldReuse => intro k hk; exact absurd hk (not_hasVar_closed (foldReuseV_closed _))
   | unfoldN => intro k hk; exact absurd hk (not_hasVar_closed (unfoldV_closed _))
-  | alpha _ _ ih => exact ih
+  | alpha _ _ ih | codeI _ _ ih | codeIB _ _ _ ih => exact ih
   | _ => intro k hk; exact absurd hk (not_hasVar_closed (by rfl))
 
 /-! ### Inversions -/
@@ -995,7 +1025,7 @@ def PrimRule : Prim → Prop
 theorem der_prim {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ p, e = .prim p → PrimRule p := by
   induction h <;> intro p he <;> cd_terms <;> (try subst he) <;> (try trivial)
-  case force _ _ i C _ =>
+  case force _ _ i _ C _ _ =>
     rcases forceE_cases C (.var i) with hf | hf <;> rw [hf] at he <;> simp at he
 
 /-- `load` has no rule. -/
@@ -1007,7 +1037,7 @@ theorem not_der_load {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ
 theorem not_der_app_prim {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ p X, e = .app (.prim p) X → ¬ PrimRule p → p ≠ .perform → p ≠ .raise → False := by
   induction h <;> intro p X he hp hpe hpr <;> cd_terms
-  case force _ _ i C _ =>
+  case force _ _ i _ C _ _ =>
     rcases forceE_cases C (.var i) with hf | hf <;> rw [hf] at he <;> simp at he
   all_goals exact hp (der_prim ‹CDerives _ _ (.prim p) _› p rfl)
 
@@ -1017,7 +1047,7 @@ theorem not_der_app_prim {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h :
 them; and, when `T` is `U C` with `C` no returner, `C` and what the same-term rules reach from it
 (`force` at a type that is no `F`). -/
 def VarCls (T : VTy) (j : Jdg) : Prop :=
-  ValCls T j ∨ ∃ C, T = .thunk C ∧ C.isRet = false ∧ JR (.comp C) j
+  ValCls T j ∨ ∃ C, T.forceTy = some C ∧ C.isRet = false ∧ JR (.comp C) j
 
 theorem VarCls.step {T : VTy} {j j' : Jdg} (hs : JS j j') (h : VarCls T j) : VarCls T j' := by
   rcases h with h | ⟨C, hT, hC, hr⟩
@@ -1029,11 +1059,10 @@ theorem der_var {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
     ∀ i, e = .var i → ∃ T, Γ[i]? = some ⟨T, true⟩ ∧ VarCls T j := by
   induction h with
   | var hs => intro i he; cases he; exact ⟨_, soloP_le hs, .inl (ValCls.refl _)⟩
-  | force hs =>
-      rename_i i' C
+  | @force _ _ i' T C hs hT =>
       intro i he
       cases C <;> simp only [forceE] at he <;> (try cases he) <;>
-        exact ⟨_, soloP_le hs, .inr ⟨_, rfl, rfl, .refl⟩⟩
+        exact ⟨_, soloP_le hs, .inr ⟨_, hT, rfl, .refl⟩⟩
   | ret _ ih =>
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.ret _)⟩
   | alpha _ hα ih =>
@@ -1060,6 +1089,10 @@ theorem der_var {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.roll _))⟩
   | unroll _ ih =>
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.unroll _))⟩
+  | codeErase _ ih =>
+      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
+      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.codeEraseB _ _ _))⟩
   | _ => intro i he; cd_terms
 
 /-- **A pair is read at the views of a tensor of its parts' types**, or it is the empty family. -/
@@ -1137,6 +1170,16 @@ theorem der_pair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
       · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.val (VS.unroll _))⟩
       · exact .inr h
+  | codeErase _ ih =>
+      intro a b he
+      rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
+      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.val (VS.codeErase _ _ _))⟩
+      · exact .inr h
+  | codeEraseB _ ih =>
+      intro a b he
+      rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
+      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.val (VS.codeEraseB _ _ _))⟩
+      · exact .inr h
   | force => intro a b he; rcases forceE_var he with h | h <;> cases h
   | _ => intro a b he; cd_terms
 
@@ -1179,6 +1222,12 @@ theorem der_inj₁ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
   | unroll _ ih =>
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
       exact ⟨A, B, ha, hc.step (JS.val (VS.unroll _))⟩
+  | codeErase _ ih =>
+      intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
+      exact ⟨A, B, ha, hc.step (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
+      intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
+      exact ⟨A, B, ha, hc.step (JS.val (VS.codeEraseB _ _ _))⟩
   | force => intro a he; rcases forceE_var he with h | h <;> cases h
   | _ => intro a he; cd_terms
 
@@ -1240,6 +1289,14 @@ theorem der_unit {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
       · exact .inl ⟨hd, hc.step (JS.val (VS.unroll _))⟩
       · exact .inr (hr.tail (JS.val (VS.unroll _)))
+  | codeErase _ ih =>
+      intro he; rcases ih he with ⟨hd, hc⟩ | hr
+      · exact .inl ⟨hd, hc.step (JS.val (VS.codeErase _ _ _))⟩
+      · exact .inr (hr.tail (JS.val (VS.codeErase _ _ _)))
+  | codeEraseB _ ih =>
+      intro he; rcases ih he with ⟨hd, hc⟩ | hr
+      · exact .inl ⟨hd, hc.step (JS.val (VS.codeEraseB _ _ _))⟩
+      · exact .inr (hr.tail (JS.val (VS.codeEraseB _ _ _)))
   | force => intro he; rcases forceE_var he with h | h <;> cases h
   | _ => intro he; cd_terms
 
@@ -1263,6 +1320,8 @@ theorem der_prim_alloc {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : C
       intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.mutS _ _ _))⟩
   | roll _ _ _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.roll _))⟩
   | unroll _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.unroll _))⟩
+  | codeErase _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.codeEraseB _ _ _))⟩
   | force => intro he; rcases forceE_var he with h | h <;> cases h
   | _ => intro he; cd_terms
 
@@ -1389,6 +1448,12 @@ theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | unroll _ ih =>
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
+  | codeErase _ ih =>
+      intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
+      intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
   | _ => intro X Y he; cd_terms
 
 /-! #### `let (x, y)`, `;`, `then`, `handle` -/
@@ -1440,6 +1505,12 @@ theorem der_letpair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDer
   | unroll _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.unroll _))⟩
+  | codeErase _ ih =>
+      intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
+      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
+      intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
+      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
   | force => intro V M he; rcases forceE_var he with h | h <;> cases h
   | _ => intro V M he; cd_terms
 
@@ -1489,6 +1560,12 @@ theorem der_seq {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | unroll _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.unroll _))⟩
+  | codeErase _ ih =>
+      intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
+      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
+      intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
+      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
   | force => intro V M he; rcases forceE_var he with h | h <;> cases h
   | _ => intro V M he; cd_terms
 
@@ -1602,7 +1679,8 @@ theorem der_hnd {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
   | ret _ ih | ofRet _ ih | effSub _ _ ih | nuIn _ _ ih | nuOut _ _ ih | bangE _ ih | boxI _ _ ih
-  | boxE _ ih | immSub _ _ ih | mutSub _ _ ih | roll _ _ _ ih | unroll _ ih | alpha _ _ ih => exact ih
+  | boxE _ ih | immSub _ _ ih | mutSub _ _ ih | roll _ _ _ ih | unroll _ ih | alpha _ _ ih
+  | codeErase _ ih | codeEraseB _ ih => exact ih
   | _ => intro n Q H M he; cd_at he
 
 /-! #### λ-values -/
@@ -1625,10 +1703,24 @@ def OtherLam (e : Expr) : Prop :=
     e = divFuelV.1 ∨ (∃ res, e = (reifyV res).1) ∨ (∃ B, e = (FoldP.foldOwnGV B).1) ∨
     e = mintE ∨ e = burnE
 
-/-- A λ-constant, read at the views of its axiom's type. -/
+/-- The judgements a λ-value of type `T` is read at: the views of `T`, and of the code types of
+the thunks `T` is viewed at (`[code-I]`), bare and under `!`.  `[spec §68]` -/
+def ValClsC (T : VTy) (j : Jdg) : Prop :=
+  ValCls T j ∨ (∃ N E C, VView T (.thunk C) ∧ ValCls (.code N E C) j) ∨
+    (∃ N E C, VView T (.bang (.thunk C)) ∧ ValCls (.bang (.code N E C)) j)
+
+theorem ValClsC.refl (T : VTy) : ValClsC T (.val T) := .inl (ValCls.refl T)
+
+theorem ValClsC.step {T : VTy} {j j' : Jdg} (hs : JS j j') (h : ValClsC T j) : ValClsC T j' := by
+  rcases h with h | ⟨N, E, C, hv, h⟩ | ⟨N, E, C, hv, h⟩
+  · exact .inl (h.step hs)
+  · exact .inr (.inl ⟨N, E, C, hv, h.step hs⟩)
+  · exact .inr (.inr ⟨N, E, C, hv, h.step hs⟩)
+
+/-- A λ-constant, read at the views of its axiom's type and of their code types. -/
 def LamAx (e : Expr) (j : Jdg) : Prop :=
-  (e = forget ∧ ∃ T, ReleaseTy T ∧ ValCls T j) ∨
-    (∃ d, e = withborUE d ∧ ∃ T, WithborUTy T ∧ ValCls T j) ∨ (OtherLam e ∧ ∃ T, ValCls T j)
+  (e = forget ∧ ∃ T, ReleaseTy T ∧ ValClsC T j) ∨
+    (∃ d, e = withborUE d ∧ ∃ T, WithborUTy T ∧ ValClsC T j) ∨ (OtherLam e ∧ ∃ T, ValClsC T j)
 
 theorem LamAx.step {e : Expr} {j j' : Jdg} (hs : JS j j') (h : LamAx e j) : LamAx e j' := by
   rcases h with ⟨he, T, hT, hc⟩ | ⟨d, he, T, hT, hc⟩ | ⟨he, T, hc⟩
@@ -1641,36 +1733,64 @@ theorem ValCls.comp_isRet {T : VTy} {C : CTy} (h : ValCls T (.comp C)) : C.isRet
   obtain ⟨S, Y, rfl, -⟩ := h
   exact effOf_isRet S Y
 
+theorem ValClsC.comp_isRet {T : VTy} {C : CTy} (h : ValClsC T (.comp C)) : C.isRet = true := by
+  rcases h with h₀ | ⟨_, _, _, -, h₀⟩ | ⟨_, _, _, -, h₀⟩
+  · exact h₀.comp_isRet
+  · exact h₀.comp_isRet
+  · exact h₀.comp_isRet
+
 theorem LamAx.not_comp {e : Expr} {C : CTy} (h : LamAx e (.comp C)) : C.isRet = true := by
   rcases h with ⟨-, T, -, hc⟩ | ⟨-, -, T, -, hc⟩ | ⟨-, T, hc⟩ <;> exact hc.comp_isRet
 
-/-- The judgements a λ-value whose body is typed at `D` is read at: `D` itself, the views of its
-thunk, and, over a persistent context, the views of the thunk's `!`. -/
+/-- The judgements a thunk of `D` is read at: the views of `U D` and of its code types
+(`[code-I]`), and, over a persistent context, the views of their `!`s.  `[spec §68]` -/
+def ThunkCls (Γ : Ctx VTy) (D : CTy) (j : Jdg) : Prop :=
+  ValCls (.thunk D) j ∨ (Ctx.Banged Γ ∧ ValCls (.bang (.thunk D)) j) ∨
+    (∃ N E, ValCls (.code N E D) j) ∨ (Ctx.Banged Γ ∧ ∃ N E, ValCls (.bang (.code N E D)) j)
+
+theorem ThunkCls.step {Γ : Ctx VTy} {D : CTy} {j j' : Jdg} (hs : JS j j') (h : ThunkCls Γ D j) :
+    ThunkCls Γ D j' := by
+  rcases h with h | ⟨hp, h⟩ | ⟨N, E, h⟩ | ⟨hp, N, E, h⟩
+  · exact .inl (h.step hs)
+  · exact .inr (.inl ⟨hp, h.step hs⟩)
+  · exact .inr (.inr (.inl ⟨N, E, h.step hs⟩))
+  · exact .inr (.inr (.inr ⟨hp, N, E, h.step hs⟩))
+
+theorem ThunkCls.comp_effOf {Γ : Ctx VTy} {D C : CTy} (h : ThunkCls Γ D (.comp C)) :
+    ∃ S Y, C = CTy.effOf S Y := by
+  rcases h with h₀ | ⟨-, h₀⟩ | ⟨_, _, h₀⟩ | ⟨-, _, _, h₀⟩
+  · obtain ⟨S, Y, he, -⟩ := h₀; exact ⟨S, Y, he⟩
+  · obtain ⟨S, Y, he, -⟩ := h₀; exact ⟨S, Y, he⟩
+  · obtain ⟨S, Y, he, -⟩ := h₀; exact ⟨S, Y, he⟩
+  · obtain ⟨S, Y, he, -⟩ := h₀; exact ⟨S, Y, he⟩
+
+theorem ThunkCls.comp_isRet {Γ : Ctx VTy} {D C : CTy} (h : ThunkCls Γ D (.comp C)) :
+    C.isRet = true := by
+  obtain ⟨S, Y, rfl⟩ := h.comp_effOf; exact effOf_isRet S Y
+
+/-- The judgements a λ-value whose body is typed at `D` is read at: `D` itself, and its thunk's
+readings (`ThunkCls`). -/
 def LamCls (Γ : Ctx VTy) (D : CTy) (j : Jdg) : Prop :=
-  (∃ D', j = .comp D' ∧ CTy.alphaB [] D D' = true) ∨ ValCls (.thunk D) j ∨
-    (Ctx.Banged Γ ∧ ValCls (.bang (.thunk D)) j)
+  (∃ D', j = .comp D' ∧ CTy.alphaB [] D D' = true) ∨ ThunkCls Γ D j
 
 theorem LamCls.step {Γ : Ctx VTy} {D : CTy} {j j' : Jdg} (hs : JS j j') (h : LamCls Γ D j)
     (hD : Rigid D) : LamCls Γ D j' := by
-  rcases h with ⟨D', rfl, hα⟩ | hc | ⟨hp, hc⟩
+  rcases h with ⟨D', rfl, hα⟩ | hc
   · obtain ⟨D'', rfl, hα'⟩ := hs.rigid (hD.alpha hα)
     exact .inl ⟨D'', rfl, CTy.alphaB_trans' hα hα'⟩
-  · exact .inr (.inl (hc.step hs))
-  · exact .inr (.inr ⟨hp, hc.step hs⟩)
+  · exact .inr (hc.step hs)
 
 theorem LamCls.thunkV {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.comp C)) (hC : C.isRet = false) :
     LamCls Γ D (.val (.thunk C)) := by
-  rcases h with ⟨D', h, hα⟩ | hc | ⟨-, hc⟩
+  rcases h with ⟨D', h, hα⟩ | hc
   · cases h; exact .inr (.inl (Relation.ReflTransGen.single (VS.alpha (A := .thunk D) hα)))
-  · rw [hc.comp_isRet] at hC; cases hC
   · rw [hc.comp_isRet] at hC; cases hC
 
 theorem LamCls.bangThunkV {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.comp C))
     (hC : C.isRet = false) (hp : Ctx.Banged Γ) : LamCls Γ D (.val (.bang (.thunk C))) := by
-  rcases h with ⟨D', h, hα⟩ | hc | ⟨-, hc⟩
+  rcases h with ⟨D', h, hα⟩ | hc
   · cases h
-    exact .inr (.inr ⟨hp, Relation.ReflTransGen.single (VS.alpha (A := .bang (.thunk D)) hα)⟩)
-  · rw [hc.comp_isRet] at hC; cases hC
+    exact .inr (.inr (.inl ⟨hp, Relation.ReflTransGen.single (VS.alpha (A := .bang (.thunk D)) hα)⟩))
   · rw [hc.comp_isRet] at hC; cases hC
 
 /-- **How a λ-value is typed**: its body under a live binder (`[⊸I]`), under a dead binder at a
@@ -1681,8 +1801,7 @@ def LamInv (Δ : LifeCtx) (Γ : Ctx VTy) (M : Expr) (j : Jdg) : Prop :=
   (∃ S B, CDerives Δ (⟨.unit, false⟩ :: Γ) M (.comp (CTy.effOf S B)) ∧
     LamCls Γ (.arr .unit (CTy.effOf S B)) j) ∨
   (∃ x b Δ' S C, CDerives Δ' (⟨S, false⟩ :: Γ) M (.comp C) ∧ LamCls Γ (.all x b C) j) ∨
-  (∃ A, CDerives Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) ∧
-    (ValCls (.thunk (.ret A)) j ∨ (Ctx.Banged Γ ∧ ValCls (.bang (.thunk (.ret A))) j))) ∨
+  (∃ A, CDerives Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) ∧ ThunkCls Γ (.ret A) j) ∨
   (∃ M₁ M₂, Expr.lam M = withPair M₁ M₂) ∨
   LamAx (.lam M) j
 
@@ -1692,9 +1811,7 @@ theorem LamInv.step {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {j j' : Jdg} (hs : 
   · exact .inl ⟨A, D, hM, hc.step hs (rigid_arr _ _)⟩
   · exact .inr (.inl ⟨S, B, hM, hc.step hs (rigid_arr _ _)⟩)
   · exact .inr (.inr (.inl ⟨x, b, Δ', S, C, hM, hc.step hs (rigid_all _ _ _)⟩))
-  · rcases hc with hc | ⟨hp, hc⟩
-    · exact .inr (.inr (.inr (.inl ⟨A, hM, .inl (hc.step hs)⟩)))
-    · exact .inr (.inr (.inr (.inl ⟨A, hM, .inr ⟨hp, hc.step hs⟩⟩)))
+  · exact .inr (.inr (.inr (.inl ⟨A, hM, hc.step hs⟩)))
   · exact .inr (.inr (.inr (.inr (.inl hw))))
   · exact .inr (.inr (.inr (.inr (.inr (hx.step hs)))))
 
@@ -1704,7 +1821,7 @@ theorem LamInv.thunkV {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
   · exact .inl ⟨A, D, hM, hc.thunkV hC⟩
   · exact .inr (.inl ⟨S, B, hM, hc.thunkV hC⟩)
   · exact .inr (.inr (.inl ⟨x, b, Δ', S, C', hM, hc.thunkV hC⟩))
-  · rcases hc with hc | ⟨-, hc⟩ <;> (rw [hc.comp_isRet] at hC; cases hC)
+  · rw [hc.comp_isRet] at hC; cases hC
   · exact .inr (.inr (.inr (.inr (.inl hw))))
   · rw [hx.not_comp] at hC; cases hC
 
@@ -1715,7 +1832,7 @@ theorem LamInv.bangThunkV {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
   · exact .inl ⟨A, D, hM, hc.bangThunkV hC hp⟩
   · exact .inr (.inl ⟨S, B, hM, hc.bangThunkV hC hp⟩)
   · exact .inr (.inr (.inl ⟨x, b, Δ', S, C', hM, hc.bangThunkV hC hp⟩))
-  · rcases hc with hc | ⟨-, hc⟩ <;> (rw [hc.comp_isRet] at hC; cases hC)
+  · rw [hc.comp_isRet] at hC; cases hC
   · exact .inr (.inr (.inr (.inr (.inl hw))))
   · rw [hx.not_comp] at hC; cases hC
 
@@ -1728,13 +1845,290 @@ theorem otherLam_mint : OtherLam mintE := by simp [OtherLam]
 theorem otherLam_burn : OtherLam burnE := by simp [OtherLam]
 
 theorem lamAx_other {e : Expr} (h : OtherLam e) (T : VTy) : LamAx e (.val T) :=
-  .inr (.inr ⟨h, T, ValCls.refl T⟩)
+  .inr (.inr ⟨h, T, ValClsC.refl T⟩)
 
 theorem lamAx_release {T : VTy} (h : ReleaseTy T) : LamAx forget (.val T) :=
-  .inl ⟨rfl, T, h, ValCls.refl T⟩
+  .inl ⟨rfl, T, h, ValClsC.refl T⟩
 
 theorem lamAx_withborU (d : Expr) {T : VTy} (h : WithborUTy T) : LamAx (withborUE d) (.val T) :=
-  .inr (.inl ⟨d, rfl, T, h, ValCls.refl T⟩)
+  .inr (.inl ⟨d, rfl, T, h, ValClsC.refl T⟩)
+
+/-! ### Reading the inversions -/
+
+theorem vview_thunk {C₀ C : CTy} (h : VView (.thunk C₀) (.thunk C)) :
+    CTy.alphaB [] C₀ C = true :=
+  h.eq_of_heads (fun _ _ h => by cases h) (fun _ h => by cases h) (fun _ h => by cases h)
+    (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ _ h => by cases h) (fun _ _ h => by cases h)
+    (fun _ h => by cases h)
+
+/-- A view of `κ`'s type, bare or boxed, at a thunk is at its thunk, up to α-equivalence. -/
+theorem vview_kBoxO_thunk {C₀ C : CTy} (ob : Option Lifetime.Life)
+    (h : VView (kBoxO ob (.thunk C₀)) (.thunk C)) : CTy.alphaB [] C₀ C = true := by
+  cases ob with
+  | none => exact vview_thunk h
+  | some d =>
+      obtain ⟨h', hh', hα⟩ := h.hnf_of (.box (hnf_self (fun _ _ h => by cases h)
+        (fun _ h => by cases h))) (fun _ h => by cases h) (fun _ _ h => by cases h)
+        (fun _ _ h => by cases h) (fun _ _ _ h => by cases h)
+      rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+      exact hα
+
+theorem not_vview_thunk_bang {C₀ : CTy} {X : VTy} (h : VView (.thunk C₀) (.bang X)) : False := by
+  obtain ⟨h', hh', hα⟩ := h.hnf_of (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
+    (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ _ h => by cases h)
+  rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+  simp [VTy.alphaB] at hα
+
+theorem vview_bang_thunk {C₀ C : CTy} (h : VView (.bang (.thunk C₀)) (.thunk C)) :
+    CTy.alphaB [] C₀ C = true := by
+  rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
+    ⟨h', hh', hα⟩ | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩ | ⟨_, _, _, h', -⟩ | ⟨_, _, _, h', -⟩
+  · rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+    simp [VTy.alphaB] at hα
+  · cases hA; exact vview_thunk h'
+  · cases h'
+  · cases h'
+  · cases h'
+  · cases h'
+
+theorem vview_bang_bang {C₀ C : CTy} (h : VView (.bang (.thunk C₀)) (.bang (.thunk C))) :
+    CTy.alphaB [] C₀ C = true := by
+  rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
+    ⟨h', hh', hα⟩ | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩ | ⟨_, _, _, h', -⟩ | ⟨_, _, _, h', -⟩
+  · rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+    exact hα
+  · cases hA; exact (not_vview_thunk_bang h').elim
+  · cases h'
+  · cases h'
+  · cases h'
+  · cases h'
+
+/-- A thunk is never viewed at a code type.  `[spec §68]` -/
+theorem not_vview_thunk_code {C₀ : CTy} {N : Expr} {E : VTy} {C : CTy}
+    (h : VView (.thunk C₀) (.code N E C)) : False := by
+  obtain ⟨h', hh', hα⟩ := h.hnf_of (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
+    (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
+    (fun _ _ _ h => by cases h)
+  rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+  simp [VTy.alphaB] at hα
+
+/-- A `!` thunk is never viewed at a code type.  `[spec §68]` -/
+theorem not_vview_bang_thunk_code {C₀ : CTy} {N : Expr} {E : VTy} {C : CTy}
+    (h : VView (.bang (.thunk C₀)) (.code N E C)) : False := by
+  rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
+    ⟨h', hh', hα⟩ | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩ | ⟨_, _, _, h', -⟩ | ⟨_, _, _, h', -⟩
+  · rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+    simp [VTy.alphaB] at hα
+  · cases hA; exact not_vview_thunk_code h'
+  · cases h'
+  · cases h'
+  · cases h'
+  · cases h'
+
+/-- A type forced at `C` is viewed at `U C`.  `[spec §68]` -/
+theorem vview_forceTy {T : VTy} {C : CTy} (h : T.forceTy = some C) : VView T (.thunk C) := by
+  cases T <;> simp only [VTy.forceTy, Option.some.injEq, reduceCtorEq] at h
+  · subst h; exact .refl
+  · subst h; exact .single (VS.codeErase _ _ _)
+
+/-- A slot forced at `C` whose type is no code type is at `U C`.  `[spec §68]` -/
+theorem eq_thunk_of_forceTy {T : VTy} {C : CTy} (h : T.forceTy = some C)
+    (hc : ∀ N E C', T ≠ .code N E C') : T = .thunk C := by
+  cases T <;> simp only [VTy.forceTy, Option.some.injEq, reduceCtorEq] at h
+  · rw [h]
+  · exact (hc _ _ _ rfl).elim
+
+/-- A view of a code type at a thunk is at its erasure, up to α-equivalence.  `[spec §68]` -/
+theorem vview_code_thunk {N : Expr} {E : VTy} {C₀ C : CTy} (h : VView (.code N E C₀) (.thunk C)) :
+    CTy.alphaB [] C₀ C = true := by
+  rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
+    ⟨h', hh', hα⟩ | ⟨A, hA, -⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩ | ⟨_, _, _, hc, h'⟩ | ⟨_, _, _, h', -⟩
+  · rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+    simp [VTy.alphaB] at hα
+  · cases hA
+  · cases h'
+  · cases h'
+  · cases hc; exact vview_thunk h'
+  · cases h'
+
+/-- A code type is never viewed at a `!`.  `[spec §68]` -/
+theorem not_vview_code_bang {N : Expr} {E : VTy} {C₀ : CTy} {X : VTy}
+    (h : VView (.code N E C₀) (.bang X)) : False := by
+  rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
+    ⟨h', hh', hα⟩ | ⟨A, hA, -⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩ | ⟨_, _, _, hc, h'⟩ | ⟨_, _, _, h', -⟩
+  · rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+    simp [VTy.alphaB] at hα
+  · cases hA
+  · cases h'
+  · cases h'
+  · cases hc; exact not_vview_thunk_bang h'
+  · cases h'
+
+/-- A view of a `!` code type at a thunk is at its erasure, up to α-equivalence.  `[spec §68]` -/
+theorem vview_bangCode_thunk {N : Expr} {E : VTy} {C₀ C : CTy}
+    (h : VView (.bang (.code N E C₀)) (.thunk C)) : CTy.alphaB [] C₀ C = true := by
+  rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
+    ⟨h', hh', hα⟩ | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩ | ⟨_, _, _, h', -⟩ | ⟨_, _, _, hc, h'⟩
+  · rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+    simp [VTy.alphaB] at hα
+  · cases hA; exact vview_code_thunk h'
+  · cases h'
+  · cases h'
+  · cases h'
+  · cases hc; exact vview_bang_thunk h'
+
+/-- A view of a `!` code type at a `!` thunk is at its erasure, up to α-equivalence.
+`[spec §68]` -/
+theorem vview_bangCode_bang {N : Expr} {E : VTy} {C₀ C : CTy}
+    (h : VView (.bang (.code N E C₀)) (.bang (.thunk C))) : CTy.alphaB [] C₀ C = true := by
+  rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
+    ⟨h', hh', hα⟩ | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩ | ⟨_, _, _, h', -⟩ | ⟨_, _, _, hc, h'⟩
+  · rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
+    simp [VTy.alphaB] at hα
+  · cases hA; exact (not_vview_code_bang h').elim
+  · cases h'
+  · cases h'
+  · cases h'
+  · cases hc; exact vview_bang_bang h'
+
+theorem vview_tensor {A B A' B' : VTy} (h : VView (.tensor A B) (.tensor A' B')) :
+    VTy.alphaB [] A A' = true ∧ VTy.alphaB [] B B' = true := by
+  have := h.eq_of_heads (fun _ _ h => by cases h) (fun _ h => by cases h) (fun _ h => by cases h)
+    (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ _ h => by cases h) (fun _ _ h => by cases h)
+    (fun _ h => by cases h)
+  simpa only [VTy.alphaB, Bool.and_eq_true] using this
+
+/-- A thunk read at a thunk is at that thunk's computation type, up to α-equivalence. -/
+theorem ThunkCls.val_thunk {Γ : Ctx VTy} {D C : CTy} (h : ThunkCls Γ D (.val (.thunk C))) :
+    CTy.alphaB [] D C = true := by
+  rcases h with h | ⟨-, h⟩ | ⟨_, _, h⟩ | ⟨-, _, _, h⟩
+  · exact vview_thunk h
+  · exact vview_bang_thunk h
+  · exact vview_code_thunk h
+  · exact vview_bangCode_thunk h
+
+/-- A thunk read at a `!` thunk is at that thunk's computation type, up to α-equivalence, over a
+persistent context. -/
+theorem ThunkCls.val_bang {Γ : Ctx VTy} {D C : CTy} (h : ThunkCls Γ D (.val (.bang (.thunk C)))) :
+    CTy.alphaB [] D C = true ∧ Ctx.Banged Γ := by
+  rcases h with h | ⟨hp, h⟩ | ⟨_, _, h⟩ | ⟨hp, _, _, h⟩
+  · exact (not_vview_thunk_bang h).elim
+  · exact ⟨vview_bang_bang h, hp⟩
+  · exact (not_vview_code_bang h).elim
+  · exact ⟨vview_bangCode_bang h, hp⟩
+
+/-- `[code-I]` at a thunk's readings.  `[spec §68]` -/
+theorem ThunkCls.codeI {Γ : Ctx VTy} {D C : CTy} (h : ThunkCls Γ D (.val (.thunk C)))
+    (N : Expr) (E : VTy) : ThunkCls Γ D (.val (.code N E C)) :=
+  .inr (.inr (.inl ⟨N, E, Relation.ReflTransGen.single (VS.alpha (A := .code N E D)
+    (B := .code N E C) (by simp [VTy.alphaB, VTy.alphaB_refl, h.val_thunk]))⟩))
+
+/-- `[code-I]` under `!` at a thunk's readings.  `[spec §68]` -/
+theorem ThunkCls.codeIB {Γ : Ctx VTy} {D C : CTy} (h : ThunkCls Γ D (.val (.bang (.thunk C))))
+    (N : Expr) (E : VTy) : ThunkCls Γ D (.val (.bang (.code N E C))) :=
+  .inr (.inr (.inr ⟨h.val_bang.2, N, E, Relation.ReflTransGen.single
+    (VS.alpha (A := .bang (.code N E D)) (B := .bang (.code N E C))
+      (by simp [VTy.alphaB, VTy.alphaB_refl, h.val_bang.1]))⟩))
+
+/-- A λ-value read at a thunk was typed at that thunk's computation type, up to α-equivalence. -/
+theorem LamCls.val_thunk {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.val (.thunk C))) :
+    CTy.alphaB [] D C = true := by
+  rcases h with ⟨_, h, -⟩ | h
+  · cases h
+  · exact h.val_thunk
+
+/-- A λ-value read at a `!` thunk was typed at that thunk's computation type, up to
+α-equivalence, over a persistent context. -/
+theorem LamCls.val_bang {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.val (.bang (.thunk C)))) :
+    CTy.alphaB [] D C = true ∧ Ctx.Banged Γ := by
+  rcases h with ⟨_, h, -⟩ | h
+  · cases h
+  · exact h.val_bang
+
+/-- A λ-value read at a rigid computation type was typed at it, up to α-equivalence. -/
+theorem LamCls.comp_rigid {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.comp C)) (hC : Rigid C) :
+    CTy.alphaB [] D C = true := by
+  rcases h with ⟨_, h, hα⟩ | h
+  · cases h; exact hα
+  · obtain ⟨S, Y, rfl⟩ := h.comp_effOf; exact (hC.1 S Y rfl).elim
+
+theorem LamCls.codeI {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.val (.thunk C))) (N : Expr)
+    (E : VTy) : LamCls Γ D (.val (.code N E C)) := by
+  rcases h with ⟨_, h, -⟩ | h
+  · cases h
+  · exact .inr (h.codeI N E)
+
+theorem LamCls.codeIB {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.val (.bang (.thunk C))))
+    (N : Expr) (E : VTy) : LamCls Γ D (.val (.bang (.code N E C))) := by
+  rcases h with ⟨_, h, -⟩ | h
+  · cases h
+  · exact .inr (h.codeIB N E)
+
+/-- `[code-I]` at a λ-constant's readings.  `[spec §68]` -/
+theorem ValClsC.codeI {T : VTy} {C : CTy} (h : ValClsC T (.val (.thunk C))) (N : Expr) (E : VTy) :
+    ValClsC T (.val (.code N E C)) := by
+  rcases h with h | ⟨N', E', C', hv, h⟩ | ⟨N', E', C', hv, h⟩
+  · exact .inr (.inl ⟨N, E, C, h, ValCls.refl _⟩)
+  · exact .inr (.inl ⟨N, E, C, hv.tail (.alpha (A := .thunk C') (B := .thunk C)
+      (vview_code_thunk h)), ValCls.refl _⟩)
+  · exact .inr (.inl ⟨N, E, C, (hv.tail (.bang _)).tail (.alpha (A := .thunk C') (B := .thunk C)
+      (vview_bangCode_thunk h)), ValCls.refl _⟩)
+
+/-- `[code-I]` under `!` at a λ-constant's readings.  `[spec §68]` -/
+theorem ValClsC.codeIB {T : VTy} {C : CTy} (h : ValClsC T (.val (.bang (.thunk C)))) (N : Expr)
+    (E : VTy) : ValClsC T (.val (.bang (.code N E C))) := by
+  rcases h with h | ⟨N', E', C', hv, h⟩ | ⟨N', E', C', hv, h⟩
+  · exact .inr (.inr ⟨N, E, C, h, ValCls.refl _⟩)
+  · exact (not_vview_code_bang h).elim
+  · exact .inr (.inr ⟨N, E, C, hv.tail (.alpha (A := .bang (.thunk C')) (B := .bang (.thunk C))
+      (vview_bangCode_bang h)), ValCls.refl _⟩)
+
+/-- A λ-constant's reading at a thunk is a view of its type.  `[spec §68]` -/
+theorem ValClsC.val_thunk {T : VTy} {C : CTy} (h : ValClsC T (.val (.thunk C))) :
+    VView T (.thunk C) := by
+  rcases h with h | ⟨N', E', C', hv, h⟩ | ⟨N', E', C', hv, h⟩
+  · exact h
+  · exact hv.tail (.alpha (A := .thunk C') (B := .thunk C) (vview_code_thunk h))
+  · exact (hv.tail (.bang _)).tail (.alpha (A := .thunk C') (B := .thunk C)
+      (vview_bangCode_thunk h))
+
+theorem LamAx.codeI {e : Expr} {C : CTy} (h : LamAx e (.val (.thunk C))) (N : Expr) (E : VTy) :
+    LamAx e (.val (.code N E C)) := by
+  rcases h with ⟨he, T, hT, hc⟩ | ⟨d, he, T, hT, hc⟩ | ⟨he, T, hc⟩
+  · exact .inl ⟨he, T, hT, hc.codeI N E⟩
+  · exact .inr (.inl ⟨d, he, T, hT, hc.codeI N E⟩)
+  · exact .inr (.inr ⟨he, T, hc.codeI N E⟩)
+
+theorem LamAx.codeIB {e : Expr} {C : CTy} (h : LamAx e (.val (.bang (.thunk C)))) (N : Expr)
+    (E : VTy) : LamAx e (.val (.bang (.code N E C))) := by
+  rcases h with ⟨he, T, hT, hc⟩ | ⟨d, he, T, hT, hc⟩ | ⟨he, T, hc⟩
+  · exact .inl ⟨he, T, hT, hc.codeIB N E⟩
+  · exact .inr (.inl ⟨d, he, T, hT, hc.codeIB N E⟩)
+  · exact .inr (.inr ⟨he, T, hc.codeIB N E⟩)
+
+/-- `[code-I]` at a λ-value's typings.  `[spec §68]` -/
+theorem LamInv.codeI {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
+    (h : LamInv Δ Γ M (.val (.thunk C))) (N : Expr) (E : VTy) :
+    LamInv Δ Γ M (.val (.code N E C)) := by
+  rcases h with ⟨A, D, hM, hc⟩ | ⟨S, B, hM, hc⟩ | ⟨x, b, Δ', S, C', hM, hc⟩ | ⟨A, hM, hc⟩ | hw | hx
+  · exact .inl ⟨A, D, hM, hc.codeI N E⟩
+  · exact .inr (.inl ⟨S, B, hM, hc.codeI N E⟩)
+  · exact .inr (.inr (.inl ⟨x, b, Δ', S, C', hM, hc.codeI N E⟩))
+  · exact .inr (.inr (.inr (.inl ⟨A, hM, hc.codeI N E⟩)))
+  · exact .inr (.inr (.inr (.inr (.inl hw))))
+  · exact .inr (.inr (.inr (.inr (.inr (hx.codeI N E)))))
+
+/-- `[code-I]` under `!` at a λ-value's typings.  `[spec §68]` -/
+theorem LamInv.codeIB {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
+    (h : LamInv Δ Γ M (.val (.bang (.thunk C)))) (N : Expr) (E : VTy) :
+    LamInv Δ Γ M (.val (.bang (.code N E C))) := by
+  rcases h with ⟨A, D, hM, hc⟩ | ⟨S, B, hM, hc⟩ | ⟨x, b, Δ', S, C', hM, hc⟩ | ⟨A, hM, hc⟩ | hw | hx
+  · exact .inl ⟨A, D, hM, hc.codeIB N E⟩
+  · exact .inr (.inl ⟨S, B, hM, hc.codeIB N E⟩)
+  · exact .inr (.inr (.inl ⟨x, b, Δ', S, C', hM, hc.codeIB N E⟩))
+  · exact .inr (.inr (.inr (.inl ⟨A, hM, hc.codeIB N E⟩)))
+  · exact .inr (.inr (.inr (.inr (.inl hw))))
+  · exact .inr (.inr (.inr (.inr (.inr (hx.codeIB N E)))))
 
 /-- **A λ-value is typed through the rule that types its body, or as a λ-constant.** -/
 theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
@@ -1747,9 +2141,14 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       exact .inr (.inr (.inl ⟨_, _, _, _, _, h, .inl ⟨_, rfl, CTy.alphaB_refl _⟩⟩))
   | thunkF h => intro M he; cases he; exact .inr (.inr (.inr (.inl ⟨_, h, .inl (ValCls.refl _)⟩)))
   | bangThunkF hp h =>
-      intro M he; cases he; exact .inr (.inr (.inr (.inl ⟨_, h, .inr ⟨hp, ValCls.refl _⟩⟩)))
+      intro M he; cases he
+      exact .inr (.inr (.inr (.inl ⟨_, h, .inr (.inl ⟨hp, ValCls.refl _⟩)⟩)))
   | thunkV hC _ ih => intro M he; exact (ih M he).thunkV hC
   | bangThunkV hp hC _ ih => intro M he; exact (ih M he).bangThunkV hC hp
+  | codeI _ _ ih => intro M he; exact (ih M he).codeI _ _
+  | codeIB _ _ _ ih => intro M he; exact (ih M he).codeIB _ _
+  | codeErase _ ih => intro M he; exact (ih M he).step (JS.val (VS.codeErase _ _ _))
+  | codeEraseB _ ih => intro M he; exact (ih M he).step (JS.val (VS.codeEraseB _ _ _))
   | withI => intro M he; exact .inr (.inr (.inr (.inr (.inl ⟨_, _, he.symm⟩))))
   | ret _ ih => intro M he; exact (ih M he).step (JS.ret _)
   | alpha _ hα ih => intro M he; exact (ih M he).step (JS.ofAlpha hα)
@@ -1850,84 +2249,6 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | force => intro M he; rcases forceE_var he with h | h <;> cases h
   | _ => intro M he; cd_at he
 
-/-! ### Reading the inversions -/
-
-theorem vview_thunk {C₀ C : CTy} (h : VView (.thunk C₀) (.thunk C)) :
-    CTy.alphaB [] C₀ C = true :=
-  h.eq_of_heads (fun _ _ h => by cases h) (fun _ h => by cases h) (fun _ h => by cases h)
-    (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
-    (fun _ h => by cases h)
-
-/-- A view of `κ`'s type, bare or boxed, at a thunk is at its thunk, up to α-equivalence. -/
-theorem vview_kBoxO_thunk {C₀ C : CTy} (ob : Option Lifetime.Life)
-    (h : VView (kBoxO ob (.thunk C₀)) (.thunk C)) : CTy.alphaB [] C₀ C = true := by
-  cases ob with
-  | none => exact vview_thunk h
-  | some d =>
-      obtain ⟨h', hh', hα⟩ := h.hnf_of (.box (hnf_self (fun _ _ h => by cases h)
-        (fun _ h => by cases h))) (fun _ h => by cases h) (fun _ _ h => by cases h)
-        (fun _ _ h => by cases h)
-      rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
-      exact hα
-
-theorem not_vview_thunk_bang {C₀ : CTy} {X : VTy} (h : VView (.thunk C₀) (.bang X)) : False := by
-  obtain ⟨h', hh', hα⟩ := h.hnf_of (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
-    (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
-  rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
-  simp [VTy.alphaB] at hα
-
-theorem vview_bang_thunk {C₀ C : CTy} (h : VView (.bang (.thunk C₀)) (.thunk C)) :
-    CTy.alphaB [] C₀ C = true := by
-  rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
-    ⟨h', hh', hα⟩ | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩
-  · rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
-    simp [VTy.alphaB] at hα
-  · cases hA; exact vview_thunk h'
-  · cases h'
-  · cases h'
-
-theorem vview_bang_bang {C₀ C : CTy} (h : VView (.bang (.thunk C₀)) (.bang (.thunk C))) :
-    CTy.alphaB [] C₀ C = true := by
-  rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
-    ⟨h', hh', hα⟩ | ⟨A, hA, h'⟩ | ⟨a, A, h'⟩ | ⟨a, A, h'⟩
-  · rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
-    exact hα
-  · cases hA; exact (not_vview_thunk_bang h').elim
-  · cases h'
-  · cases h'
-
-theorem vview_tensor {A B A' B' : VTy} (h : VView (.tensor A B) (.tensor A' B')) :
-    VTy.alphaB [] A A' = true ∧ VTy.alphaB [] B B' = true := by
-  have := h.eq_of_heads (fun _ _ h => by cases h) (fun _ h => by cases h) (fun _ h => by cases h)
-    (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
-    (fun _ h => by cases h)
-  simpa only [VTy.alphaB, Bool.and_eq_true] using this
-
-/-- A λ-value read at a thunk was typed at that thunk's computation type, up to α-equivalence. -/
-theorem LamCls.val_thunk {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.val (.thunk C))) :
-    CTy.alphaB [] D C = true := by
-  rcases h with ⟨_, h, -⟩ | h | ⟨-, h⟩
-  · cases h
-  · exact vview_thunk h
-  · exact vview_bang_thunk h
-
-/-- A λ-value read at a `!` thunk was typed at that thunk's computation type, up to
-α-equivalence, over a persistent context. -/
-theorem LamCls.val_bang {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.val (.bang (.thunk C)))) :
-    CTy.alphaB [] D C = true ∧ Ctx.Banged Γ := by
-  rcases h with ⟨_, h, -⟩ | h | ⟨hp, h⟩
-  · cases h
-  · exact (not_vview_thunk_bang h).elim
-  · exact ⟨vview_bang_bang h, hp⟩
-
-/-- A λ-value read at a rigid computation type was typed at it, up to α-equivalence. -/
-theorem LamCls.comp_rigid {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.comp C)) (hC : Rigid C) :
-    CTy.alphaB [] D C = true := by
-  rcases h with ⟨_, h, hα⟩ | h | ⟨-, h⟩
-  · cases h; exact hα
-  · obtain ⟨S, Y, rfl, -⟩ := h; exact (hC.1 S Y rfl).elim
-  · obtain ⟨S, Y, rfl, -⟩ := h; exact (hC.1 S Y rfl).elim
-
 /-- **A λ-value that is no λ-constant and no `⟨M, N⟩` has its body typed.** -/
 theorem LamInv.body {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {j : Jdg} (h : LamInv Δ Γ M j)
     (hw : ∀ M₁ M₂, Expr.lam M ≠ withPair M₁ M₂) (hx : ¬ LamAx (.lam M) j) :
@@ -1975,9 +2296,7 @@ theorem der_bind_split {Δ : LifeCtx} {Γ : Ctx VTy} {N M : Expr} {j : Jdg}
       cases A <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true, false_and] at hα
       exact ⟨Γ₁, Γ₂, .unit, false, [], _, hs, .ret hM, hN⟩
     · have := hcl.val_thunk; simp [CTy.alphaB] at this
-    · rcases hcl with hcl | ⟨-, hcl⟩
-      · have := vview_thunk hcl; simp [CTy.alphaB] at this
-      · have := vview_bang_thunk hcl; simp [CTy.alphaB] at this
+    · have := hcl.val_thunk; simp [CTy.alphaB] at this
     · exact (hw M₁ M₂ hwp).elim
     · exact (hc.notAx _ hx).elim
   · exact (hMv i hi).elim
@@ -2042,9 +2361,7 @@ theorem der_bindLam {Δ : LifeCtx} {Γ : Ctx VTy} {N b : Expr} {j : Jdg}
       cases A <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true, false_and] at hα
       exact ⟨Γ₁, Γ₂, .unit, false, [], _, splitP_le_left hs, splitP_le_right hs, .ret hM, hN⟩
     · have := hcl.val_thunk; simp [CTy.alphaB] at this
-    · rcases hcl with hcl | ⟨-, hcl⟩
-      · have := vview_thunk hcl; simp [CTy.alphaB] at this
-      · have := vview_bang_thunk hcl; simp [CTy.alphaB] at this
+    · have := hcl.val_thunk; simp [CTy.alphaB] at this
     · exact (hw M₁ M₂ hwp).elim
     · exact (hc.notAx _ hx).elim
   · cases hi
@@ -2119,9 +2436,11 @@ theorem not_der_swapBody₁ {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerive
 /-- **`swap` is read at the views of its axiom's type** `Ref A ⊸ B ⊸ Ref B ⊗ A`: typed through its
 body, it would load its cell. -/
 theorem der_swap {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
-    e = swap → ∃ A B, ValCls (axSwapTy A B) j := by
+    e = swap → ∃ A B, ValClsC (axSwapTy A B) j := by
   induction h with
-  | swap => intro _; exact ⟨_, _, ValCls.refl _⟩
+  | swap => intro _; exact ⟨_, _, ValClsC.refl _⟩
+  | codeI _ _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.codeI _ _⟩
+  | codeIB _ _ _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.codeIB _ _⟩
   | lam h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
   | lamDead h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
   | allI _ _ _ h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
@@ -2151,6 +2470,10 @@ theorem der_swap {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.roll _))⟩
   | unroll _ ih =>
       intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.unroll _))⟩
+  | codeErase _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.codeEraseB _ _ _))⟩
   | force => intro he; rcases forceE_var he with h | h <;> cases h
   | _ => intro he; cd_terms
 
@@ -2165,7 +2488,7 @@ theorem der_swap_var {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {j : Jdg}
     ⟨N, Γ₁, Γ₂, A, S, C, hN, hs, hY, hN', rfl⟩ | ⟨N, b, C, -, hb, -⟩ |
     ⟨-, -, -, -, hu, -⟩ | ⟨-, -, -, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨hu, -⟩ | hX
   · obtain ⟨A', B', hc⟩ := der_swap hf rfl
-    have := vview_thunk hc
+    have := vview_thunk hc.val_thunk
     simp only [CTy.alphaB, Bool.and_eq_true] at this
     exact ⟨Γ₁, A', B', splitP_le_left hs, .alpha hY (VTy.alphaB_symm this.1),
       ValCls.of_alpha this.2 ((ValCls.refl _).reach hr)⟩
@@ -2288,9 +2611,7 @@ theorem lam_bang {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {P : VTy} {D : CTy}
     cases P <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true, false_and] at he
     exact (hP rfl).elim
   · obtain ⟨he, -⟩ := hcl.val_bang; simp [CTy.alphaB] at he
-  · rcases hcl with hcl | ⟨-, hcl⟩
-    · exact (not_vview_thunk_bang hcl).elim
-    · have := vview_bang_bang hcl; simp [CTy.alphaB] at this
+  · have := hcl.val_bang.1; simp [CTy.alphaB] at this
   · exact (hw M₁ M₂ hwp).elim
   · exact (hc.notAx _ hx).elim
 
@@ -2313,6 +2634,28 @@ theorem ValCls.at {T₀ T : VTy} {j : Jdg} (h : ValCls T₀ j)
   · obtain ⟨S', Y, he, hY⟩ := h
     obtain ⟨-, rfl⟩ := effOf_inj he
     exact hY
+
+/-- A thunk's reading, at a value or a row over it, viewed at a thunk: at the thunk's computation
+type, up to α-equivalence.  `[spec §68]` -/
+theorem ThunkCls.at_thunk {Γ : Ctx VTy} {D C : CTy} {T : VTy} {j : Jdg} (h : ThunkCls Γ D j)
+    (hj : j = .val T ∨ ∃ S, j = .comp (CTy.effOf S T)) (hv : VView T (.thunk C)) :
+    CTy.alphaB [] D C = true := by
+  rcases h with h | ⟨-, h⟩ | ⟨_, _, h⟩ | ⟨-, _, _, h⟩
+  · exact vview_thunk ((h.at hj).trans hv)
+  · exact vview_bang_thunk ((h.at hj).trans hv)
+  · exact vview_code_thunk ((h.at hj).trans hv)
+  · exact vview_bangCode_thunk ((h.at hj).trans hv)
+
+/-- A λ-constant's reading, at a value or a row over it, viewed at a thunk: a view of its type.
+`[spec §68]` -/
+theorem ValClsC.at_thunk {T₀ T : VTy} {C : CTy} {j : Jdg} (h : ValClsC T₀ j)
+    (hj : j = .val T ∨ ∃ S, j = .comp (CTy.effOf S T)) (hv : VView T (.thunk C)) :
+    VView T₀ (.thunk C) := by
+  rcases h with h | ⟨_, _, C₁, hT, h⟩ | ⟨_, _, C₁, hT, h⟩
+  · exact (h.at hj).trans hv
+  · exact hT.tail (.alpha (A := .thunk C₁) (B := .thunk C) (vview_code_thunk ((h.at hj).trans hv)))
+  · exact (hT.tail (.bang _)).tail (.alpha (A := .thunk C₁) (B := .thunk C)
+      (vview_bangCode_thunk ((h.at hj).trans hv)))
 
 /-! ### The rows a computation is read at
 
@@ -2546,6 +2889,12 @@ theorem der_hndJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
   | unroll _ ih =>
       intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
+  | codeErase _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
   | _ => intro n Q H M he; cd_at he
 
 /-- **A handler whose clause tuple is neither a tail-resuming handler's nor a `[handle-last]`
@@ -2657,6 +3006,12 @@ theorem der_thenJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeriv
   | unroll _ ih =>
       intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
+  | codeErase _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
   | _ => intro N D M he; cd_terms
 
 /-- `[perform]`'s premises, at its conclusion `j₀`. -/
@@ -2722,6 +3077,12 @@ theorem der_performJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDe
   | unroll _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
+  | codeErase _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
   | _ => intro n i V he; cd_at he
 
 /-- `[raise]`'s premises, at its conclusion `j₀`. -/
@@ -2787,6 +3148,12 @@ theorem der_raiseJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
   | unroll _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
+  | codeErase _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
   | _ => intro n i V he; cd_at he
 
 /-- `bind`'s and `[let]`'s premise on the bound term, at the conclusion `j₀`: the bound term at a
@@ -2913,6 +3280,16 @@ theorem der_letJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
       · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
       · exact .inr h
+  | codeErase _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅ h₆
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+      · exact .inr h
+  | codeEraseB _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅ h₆
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
+      · exact .inr h
   | _ => intro N M he; cd_at he
 
 /-! ### `κ`'s cancel branch, applied -/
@@ -2926,14 +3303,10 @@ theorem lam_arr {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {A : VTy} {D : CTy} {j 
   have hcls : ∀ {D' : CTy} {Γ' : Ctx VTy}, LamCls Γ' D' j → CTy.alphaB [] D' (.arr A D) = true := by
     intro D' Γ' h
     rcases hj with rfl | rfl
-    · rcases h with ⟨_, h, hα⟩ | h | ⟨-, h⟩
+    · rcases h with ⟨_, h, hα⟩ | h
       · cases h; exact hα
-      · obtain ⟨S, Y, he, -⟩ := h; exact absurd he.symm (effOf_ne_arr S Y A D)
-      · obtain ⟨S, Y, he, -⟩ := h; exact absurd he.symm (effOf_ne_arr S Y A D)
-    · rcases h with ⟨_, h, -⟩ | h | ⟨-, h⟩
-      · cases h
-      · exact vview_thunk h
-      · exact vview_bang_thunk h
+      · obtain ⟨S, Y, he⟩ := h.comp_effOf; exact absurd he.symm (effOf_ne_arr S Y A D)
+    · exact h.val_thunk
   rcases der_lam h N rfl with ⟨A', D', hN, hl⟩ | ⟨S, B, -, hl⟩ | ⟨_, _, _, _, _, -, hl⟩ |
     ⟨A', -, hl⟩ | ⟨M₁, M₂, hwp⟩ | hx
   · have hα := hcls hl
@@ -2945,11 +3318,8 @@ theorem lam_arr {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {A : VTy} {D : CTy} {j 
     exact (hA rfl).elim
   · have := hcls hl; simp [CTy.alphaB] at this
   · rcases hj with rfl | rfl
-    · rcases hl with ⟨S, Y, he, -⟩ | ⟨-, S, Y, he, -⟩ <;>
-        exact absurd he.symm (effOf_ne_arr S Y A D)
-    · rcases hl with hl | ⟨-, hl⟩
-      · have := vview_thunk hl; simp [CTy.alphaB] at this
-      · have := vview_bang_thunk hl; simp [CTy.alphaB] at this
+    · obtain ⟨S, Y, he⟩ := hl.comp_effOf; exact absurd he.symm (effOf_ne_arr S Y A D)
+    · have := hl.val_thunk; simp [CTy.alphaB] at this
   · exact (hw M₁ M₂ hwp).elim
   · exact (hc.notAx _ hx).elim
 
@@ -2965,14 +3335,17 @@ theorem varCls_of_le {Δ : LifeCtx} {Γ Γ' : Ctx VTy} {T : VTy} {j : Jdg}
 /-- No view of a `!` thunk is `1`. -/
 theorem vview_bang_thunk_unit {C : CTy} (h : VView (.bang (.thunk C)) .unit) : False := by
   rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
-    ⟨h', hh', hα⟩ | ⟨A', hA, h'⟩ | ⟨a, A', h'⟩ | ⟨a, A', h'⟩
+    ⟨h', hh', hα⟩ | ⟨A', hA, h'⟩ | ⟨a, A', h'⟩ | ⟨a, A', h'⟩ | ⟨_, _, _, h', -⟩ |
+    ⟨_, _, _, h', -⟩
   · rw [hh'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
     simp [VTy.alphaB] at hα
   · cases hA
     have := h'.eq_of_heads (fun _ _ h => by cases h) (fun _ h => by cases h) (fun _ h => by cases h)
-      (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
+      (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ _ h => by cases h) (fun _ _ h => by cases h)
       (fun _ h => by cases h)
     simp [VTy.alphaB] at this
+  · cases h'
+  · cases h'
   · cases h'
   · cases h'
 
@@ -2985,19 +3358,21 @@ theorem kappa_cancel_jr {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy} {T : VTy
   rcases hb with ⟨_, _, _, _, hs, -, hf, rfl⟩ | ⟨_, _, _, _, _, he, -⟩ | ⟨_, _, _, _, _, _, he, -⟩ |
     ⟨_, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, he, -⟩ |
     ⟨D₁, D₂, -, hX, rfl⟩ | ⟨he, -⟩ | he | he | ⟨_, he⟩ | ⟨_, he⟩ | ⟨_, he, -⟩
-  · rcases varCls_of_le hslot (splitP_le_right hs) hf with hc | ⟨C, rfl, -, hr'⟩
+  · rcases varCls_of_le hslot (splitP_le_right hs) hf with hc | ⟨C, hTC, -, hr'⟩
     · have := vview_bang_thunk (hT.trans hc); simp [CTy.alphaB] at this
-    · have hα := vview_bang_thunk hT
+    · obtain rfl := eq_thunk_of_forceTy hTC fun _ _ _ he => not_vview_bang_thunk_code (he ▸ hT)
+      have hα := vview_bang_thunk hT
       obtain ⟨S, A, rfl⟩ := JR.comp_val hr'
       obtain ⟨Sα, Y, he, -, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
       exact absurd he (effOf_ne_amp Sα Y C₁ C₂).symm
   all_goals first
     | (cases he)
     | skip
-  · rcases varCls_of_le hslot (CtxLe.refl Γ) hX with hc | ⟨C, rfl, -, hr'⟩
+  · rcases varCls_of_le hslot (CtxLe.refl Γ) hX with hc | ⟨C, hTC, -, hr'⟩
     · obtain ⟨S, Y, he, -⟩ := hc
       exact absurd he.symm (effOf_ne_amp S Y D₁ D₂)
-    · have hα := vview_bang_thunk hT
+    · obtain rfl := eq_thunk_of_forceTy hTC fun _ _ _ he => not_vview_bang_thunk_code (he ▸ hT)
+      have hα := vview_bang_thunk hT
       cases C <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at hα
       obtain ⟨-, h₂⟩ := JR.amp_amp hr'
       exact Relation.ReflTransGen.head (JS.alpha (CTy.alphaB_trans' hα.2 h₂)) hr
@@ -3010,10 +3385,11 @@ theorem kcancel_jr_cancellable {Δ : LifeCtx} {Γ Γ' : Ctx VTy} {C₁ C₂ : CT
     (h : CDerives Δ Γ' (.app (.var 0) (.val (Val.inj₂ Val.unit))) j) : JR (.comp C₂) j := by
   obtain ⟨j₀, hb, hr⟩ := der_app h (.var 0) (.val (Val.inj₂ Val.unit)) rfl
   -- a slot of `T` read at a thunk's computation type: `T` is `κ`'s bare thunk
-  have hthunk : ∀ {C : CTy}, T = .thunk C → ∃ E₁ E₂, C = .amp E₁ E₂ ∧
+  have hthunk : ∀ {C : CTy}, T.forceTy = some C → ∃ E₁ E₂, C = .amp E₁ E₂ ∧
       CTy.alphaB [] C₂ E₂ = true := by
     intro C hC
-    subst hC
+    obtain rfl := eq_thunk_of_forceTy hC fun _ _ _ he => by
+      subst he; rcases ob with _ | d <;> simp [kBoxO, VTy.alphaB] at hT
     rcases ob with _ | d <;> simp only [kBoxO, VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hT
     cases C <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at hT
     exact ⟨_, _, rfl, hT.2⟩
@@ -3161,7 +3537,7 @@ theorem der_cancel_lin {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {S : Row} {R B : 
     have hα := hi T hT
     rcases hcT with ⟨S', Y, he, -⟩ | ⟨C₀, hC₀, -, hr'⟩
     · exact (effOf_ne_amp _ _ _ _ he.symm).elim
-    · subst hC₀
+    · obtain rfl := eq_thunk_of_forceTy hC₀ fun _ _ _ he => by subst he; simp [kTy, VTy.alphaB] at hα
       simp only [kTy, VTy.alphaB] at hα
       cases C₀ <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at hα
       obtain ⟨-, h₂⟩ := hr'.amp_amp

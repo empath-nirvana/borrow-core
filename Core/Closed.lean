@@ -104,8 +104,7 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ e j) : closedAt Γ.length e = true := by
   induction h with
   | var h => simpa [closedAt] using soloP_lt h
-  | force h =>
-      rename_i C
+  | @force _ _ _ _ C h _ =>
       have := soloP_lt h
       cases C <;> simp [forceE, closedAt, Expr.val, Val.unit, this]
   | tensorI hs _ _ ih₁ ih₂ =>

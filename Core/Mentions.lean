@@ -187,7 +187,7 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
   induction h with
   | var h =>
       intro k hk; simp only [mentions, beq_iff_eq] at hk; subst hk; exact h.live
-  | @force _ _ i C h =>
+  | @force _ _ i _ C h _ =>
       intro k hk
       have : mentions k (Expr.var i) = true := by
         cases C <;> simpa [forceE, mentions, Expr.val, Val.unit] using hk
@@ -205,7 +205,8 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
   | sumI₁ _ ih | sumI₂ _ ih => intro k hk; exact ih k (by simpa [mentions] using hk)
   | thunkV _ _ ih | ret _ ih | bangE _ ih | boxI _ _ ih | boxE _ ih | immSub _ _ ih
   | mutSub _ _ ih | ofRet _ ih | roll _ _ _ ih | unroll _ ih | nuIn _ _ ih | nuOut _ _ ih
-  | effSub _ _ ih | bangThunkV _ _ _ ih | alpha _ _ ih => exact ih
+  | effSub _ _ ih | bangThunkV _ _ _ ih | alpha _ _ ih | codeI _ _ ih | codeIB _ _ _ ih
+  | codeErase _ ih | codeEraseB _ ih => exact ih
   | thunkF _ ih | lamDead _ ih | allI _ _ _ _ ih | bangThunkF _ _ ih =>
       intro k hk
       exact Ctx.liveAt_cons_succ.mp (ih (k + 1) (by simpa [mentions, Expr.val, Val.lam] using hk))
