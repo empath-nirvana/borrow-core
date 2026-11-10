@@ -205,9 +205,33 @@ def strLit (bs : List Nat) : String :=
     else if 32 ≤ b && b < 127 then (Char.ofNat b).toString
     else "\\x" ++ (hex (b / 16 % 16)).toString ++ (hex (b % 16)).toString) ++ "\""
 
+/-- Where a term is printed, as the parser reads it back. In core text (`core`) a statement
+`return V` is the core's. A handler clause's body (`clause`) is read as a surface body, and the
+body of a loop in it (`loop`, not inside a closure or block in the loop) reads a statement
+`return e` as the exit from the clause (`VSugar.retE`, SPEC §16): there the core's `return V`, the
+body's value, is printed as the expression `V`, which the parser reads as it.  `[spec §16]` -/
+inductive PCtx where
+  | core
+  | clause
+  | loop
+  deriving BEq
+
+/-- Inside a closure, block, `fun` or `run`, which the parser reads with its loop context reset
+(`Parser.inClosure`). -/
+def PCtx.closure : PCtx → PCtx
+  | .loop => .clause
+  | c => c
+
+/-- In a loop's body (`Parser.withLoop`). -/
+def PCtx.body : PCtx → PCtx
+  | .core => .core
+  | _ => .loop
+
 mutual
-/-- A value-judged expression at level `lvl`, indented by `k` after each line break. -/
-def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
+/-- A value-judged expression at level `lvl`, indented by `k` after each line break, printed in
+the context `cx`. A value's computations are read in a closure, block or `run`. -/
+def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) (cx : PCtx := .core) : String :=
+  let cx := cx.closure
   paren (V.level < lvl) <| match V with
     | .var _ x => x
     -- `clone(x)` prints as the variable it checks as: the printed core is checked without the
@@ -215,62 +239,62 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .clone _ x => x
     | .defApp _ n As => n ++ "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]"
     | .unit _ => "()"
-    | .pair _ V W => "(" ++ V.pp 0 k ++ ", " ++ W.pp 0 k ++ ")"
-    | .inl _ V => "inl " ++ V.pp 1 k
-    | .inr _ V => "inr " ++ V.pp 1 k
+    | .pair _ V W => "(" ++ V.pp 0 k cx ++ ", " ++ W.pp 0 k cx ++ ")"
+    | .inl _ V => "inl " ++ V.pp 1 k cx
+    | .inr _ V => "inr " ++ V.pp 1 k cx
     | .thunkv _ (.lam _ x A M) =>
-      if isHole A then "{ " ++ x.name ++ " -> " ++ M.pp 0 (k + 2) ++ " }"
-      else "thunkv fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 4) ++ M.pp 0 (k + 4)
+      if isHole A then "{ " ++ x.name ++ " -> " ++ M.pp 0 (k + 2) cx ++ " }"
+      else "thunkv fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 4) ++ M.pp 0 (k + 4) cx
     | .bangThunkv _ (.lam _ x A M) =>
-      if isHole A then "!{ " ++ x.name ++ " -> " ++ M.pp 0 (k + 2) ++ " }"
-      else "!thunkv fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 4) ++ M.pp 0 (k + 4)
-    | .app _ (.sugar _ (.op o)) (.pair _ a b) => "(" ++ a.pp 2 k ++ " " ++ o.str ++ " " ++ b.pp 2 k ++ ")"
-    | .app _ (.sugar _ (.call c)) W => c ++ "(" ++ W.pp 0 k ++ ")"
-    | .app _ (.sugar _ .count) (.pair _ a b) => "(" ++ a.pp 2 k ++ ".." ++ b.pp 2 k ++ ")"
-    | .app _ (.sugar _ .pipe) (.pair _ a s) => "(" ++ a.pp 1 k ++ " |> " ++ s.pp 2 k ++ ")"
-    | .app _ (.sugar _ .deref) V => "*" ++ V.pp 3 k
-    | .app _ (.sugar _ (.field f _)) V => "(" ++ V.pp 0 k ++ ")." ++ f
-    | .app _ (.sugar _ (.update f _)) (.pair _ r e) => "(" ++ r.pp 0 k ++ ").{" ++ f ++ " = " ++ e.pp 0 k ++ "}"
+      if isHole A then "!{ " ++ x.name ++ " -> " ++ M.pp 0 (k + 2) cx ++ " }"
+      else "!thunkv fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 4) ++ M.pp 0 (k + 4) cx
+    | .app _ (.sugar _ (.op o)) (.pair _ a b) => "(" ++ a.pp 2 k cx ++ " " ++ o.str ++ " " ++ b.pp 2 k cx ++ ")"
+    | .app _ (.sugar _ (.call c)) W => c ++ "(" ++ W.pp 0 k cx ++ ")"
+    | .app _ (.sugar _ .count) (.pair _ a b) => "(" ++ a.pp 2 k cx ++ ".." ++ b.pp 2 k cx ++ ")"
+    | .app _ (.sugar _ .pipe) (.pair _ a s) => "(" ++ a.pp 1 k cx ++ " |> " ++ s.pp 2 k cx ++ ")"
+    | .app _ (.sugar _ .deref) V => "*" ++ V.pp 3 k cx
+    | .app _ (.sugar _ (.field f _)) V => "(" ++ V.pp 0 k cx ++ ")." ++ f
+    | .app _ (.sugar _ (.update f _)) (.pair _ r e) => "(" ++ r.pp 0 k cx ++ ").{" ++ f ++ " = " ++ e.pp 0 k cx ++ "}"
     | .app _ (.app _ (.sugar _ (.fold fk d)) V) (.thunkv _ (.lam _ x _ M)) =>
       fk.str ++ " " ++ (match d with
         | some (n, ps) => "io_of(" ++ ", ".intercalate (n :: ps) ++ ") "
-        | none => "") ++ V.pp 3 k ++ " { " ++ x.name ++ " ->" ++ nl (k + 2) ++ M.pp 0 (k + 2) ++ " }"
-    | .app _ (.sugar _ (.cells c n)) V => "io_cells(" ++ c ++ ", " ++ toString n ++ ", " ++ V.pp 0 k ++ ")"
-    | .app _ (.sugar _ (.like o)) V => "io_like(" ++ o ++ ", " ++ V.pp 0 k ++ ")"
-    | .app _ (.sugar _ .retE) V => "return " ++ V.pp 1 k
-    | .app _ (.sugar _ (.writes xs)) V => "writes(" ++ ", ".intercalate xs ++ ") " ++ V.pp 1 k
-    | .app _ (.sugar _ (.forSite i)) V => s!"for_site[{i.n}] " ++ V.pp 1 k
-    | .app _ (.sugar _ (.pullSite i)) V => s!"pull_site[{i.n}] " ++ V.pp 1 k
-    | .app _ (.sugar _ .brace) (.thunk _ M) => "{ " ++ M.pp 0 (k + 2) ++ " }"
-    | .app _ (.sugar _ .brace) (.bangThunk _ M) => "!{ " ++ M.pp 0 (k + 2) ++ " }"
+        | none => "") ++ V.pp 3 k cx ++ " { " ++ x.name ++ " ->" ++ nl (k + 2) ++ M.pp 0 (k + 2) cx ++ " }"
+    | .app _ (.sugar _ (.cells c n)) V => "io_cells(" ++ c ++ ", " ++ toString n ++ ", " ++ V.pp 0 k cx ++ ")"
+    | .app _ (.sugar _ (.like o)) V => "io_like(" ++ o ++ ", " ++ V.pp 0 k cx ++ ")"
+    | .app _ (.sugar _ .retE) V => "return " ++ V.pp 1 k cx
+    | .app _ (.sugar _ (.writes xs)) V => "writes(" ++ ", ".intercalate xs ++ ") " ++ V.pp 1 k cx
+    | .app _ (.sugar _ (.forSite i)) V => s!"for_site[{i.n}] " ++ V.pp 1 k cx
+    | .app _ (.sugar _ (.pullSite i)) V => s!"pull_site[{i.n}] " ++ V.pp 1 k cx
+    | .app _ (.sugar _ .brace) (.thunk _ M) => "{ " ++ M.pp 0 (k + 2) cx ++ " }"
+    | .app _ (.sugar _ .brace) (.bangThunk _ M) => "!{ " ++ M.pp 0 (k + 2) cx ++ " }"
     | .app _ (.app _ (.sugar _ (.borrow bk x)) P) (.thunkv _ (.lam _ b _ M)) =>
       let kw := match bk with
         | .imm => "borrow imm " | .mut | .famMut => "borrow mut " | .modify => "modify "
       let lt := if x == "" then "" else "'" ++ x ++ ", "
-      kw ++ P.pp 3 k ++ " { " ++ lt ++ b.name ++ " ->" ++ nl (k + 2) ++ M.pp 0 (k + 2) ++ " }"
+      kw ++ P.pp 3 k cx ++ " { " ++ lt ++ b.name ++ " ->" ++ nl (k + 2) ++ M.pp 0 (k + 2) cx ++ " }"
     | .app _ (.app _ (.sugar _ (.handle h x As nm)) P) (.thunkv _ (.lam _ b _ M)) =>
       "with " ++ (match nm with | some n => n ++ " = " | none => "") ++ h ++ (if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]") ++
-        "(" ++ P.pp 0 k ++ ") { '" ++ x ++ ", " ++ b.name ++ " ->" ++ nl (k + 2) ++
-        M.pp 0 (k + 2) ++ " }"
+        "(" ++ P.pp 0 k cx ++ ") { '" ++ x ++ ", " ++ b.name ++ " ->" ++ nl (k + 2) ++
+        M.pp 0 (k + 2) cx ++ " }"
     | .app _ (.sugar _ .fin) (.pair _ V (.thunkv _ (.lam _ _ _ D))) =>
-      V.pp 1 k ++ " finally { " ++ D.pp 0 (k + 2) ++ " }"
-    | .thunk _ M => "thunk " ++ M.pp 0 (k + 2)
-    | .thunkv _ M => "thunkv " ++ M.pp 0 (k + 2)
-    | .bangThunk _ M => "!thunk " ++ M.pp 0 (k + 2)
-    | .bangThunkv _ M => "!thunkv " ++ M.pp 0 (k + 2)
-    | .unbang _ V => "unbang " ++ V.pp 1 k
-    | .boxed _ a V => "boxed[" ++ a.pp ++ "] " ++ V.pp 1 k
-    | .unbox _ V => "unbox " ++ V.pp 1 k
-    | .sub _ V a => "(" ++ V.pp 1 k ++ " :> " ++ a.pp ++ ")"
-    | .roll _ V => "roll " ++ V.pp 1 k
-    | .unroll _ V => "unroll " ++ V.pp 1 k
-    | .run _ M => "run " ++ M.pp 1 k
-    | .app _ V W => V.pp 2 k ++ " " ++ W.pp 3 k
-    | .inst _ V a => V.pp 2 k ++ " [" ++ a.pp ++ "]"
-    | .ascribe _ V A => "(" ++ V.pp 1 k ++ " : " ++ A.pp ++ ")"
+      V.pp 1 k cx ++ " finally { " ++ D.pp 0 (k + 2) cx ++ " }"
+    | .thunk _ M => "thunk " ++ M.pp 0 (k + 2) cx
+    | .thunkv _ M => "thunkv " ++ M.pp 0 (k + 2) cx
+    | .bangThunk _ M => "!thunk " ++ M.pp 0 (k + 2) cx
+    | .bangThunkv _ M => "!thunkv " ++ M.pp 0 (k + 2) cx
+    | .unbang _ V => "unbang " ++ V.pp 1 k cx
+    | .boxed _ a V => "boxed[" ++ a.pp ++ "] " ++ V.pp 1 k cx
+    | .unbox _ V => "unbox " ++ V.pp 1 k cx
+    | .sub _ V a => "(" ++ V.pp 1 k cx ++ " :> " ++ a.pp ++ ")"
+    | .roll _ V => "roll " ++ V.pp 1 k cx
+    | .unroll _ V => "unroll " ++ V.pp 1 k cx
+    | .run _ M => "run " ++ M.pp 1 k cx
+    | .app _ V W => V.pp 2 k cx ++ " " ++ W.pp 3 k cx
+    | .inst _ V a => V.pp 2 k cx ++ " [" ++ a.pp ++ "]"
+    | .ascribe _ V A => "(" ++ V.pp 1 k cx ++ " : " ++ A.pp ++ ")"
     | .const _ c => c.pp
     | .shorten _ m σ a V =>
-      "shorten_" ++ m.pp ++ "[" ++ σ.pp ++ ", " ++ a.pp ++ "] " ++ V.pp 1 k
+      "shorten_" ++ m.pp ++ "[" ++ σ.pp ++ ", " ++ a.pp ++ "] " ++ V.pp 1 k cx
     | .lend _ x m => (if m == .mut then "&mut " else "&") ++ x.name
     | .sugar _ (.lit n) => toString n
     | .sugar _ (.flit m e) => s!"{m}e{e}"
@@ -280,62 +304,75 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .sugar _ (.named n op) => n ++ "." ++ op
     | .sugar _ s => s!"<{reprStr s}>"
     -- A marked scheme prints as the value it marks: the mark is the checker's, not the source's.
-    | .mark _ _ V => V.pp 0 k
+    | .mark _ _ V => V.pp 0 k cx
 
-/-- A computation at level `lvl`, indented by `k` after each line break. -/
-def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
+/-- A computation at level `lvl`, indented by `k` after each line break, printed in the context
+`cx`. -/
+def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) (cx : PCtx := .core) : String :=
   paren (M.level < lvl) <| match M with
-    | .ret _ V => "return " ++ V.pp 1 k
-    | .bind _ x none M N => x.name ++ " <- " ++ M.pp 1 (k + 2) ++ ";" ++ nl k ++ N.pp 0 k
+    -- In a clause's loop a statement `return e` is the loop's exit (`[spec §16]`: a printed
+    -- program reads back). At level 1, a binding's head or a prefix's operand, `return` is read as
+    -- the core's, as in core text; elsewhere the exit is printed `return e` and the core's
+    -- `return V`, the body's value, as the expression `V` (parenthesized at a spine's level).
+    | .ret _ (.app _ (.sugar _ .retE) V) =>
+      if cx == .loop && lvl != 1 then "return " ++ V.pp 1 k cx
+      else "return return " ++ V.pp 1 k cx
+    | .ret _ V =>
+      if cx == .loop && lvl != 1 then V.pp 0 k cx
+      else "return " ++ V.pp 1 k cx
+    | .bind _ x none M N => x.name ++ " <- " ++ M.pp 1 (k + 2) cx ++ ";" ++ nl k ++ N.pp 0 k cx
     | .bind _ x (some A) M N =>
-      x.name ++ " : " ++ A.pp ++ " <- " ++ M.pp 1 (k + 2) ++ ";" ++ nl k ++ N.pp 0 k
+      x.name ++ " : " ++ A.pp ++ " <- " ++ M.pp 1 (k + 2) cx ++ ";" ++ nl k ++ N.pp 0 k cx
     | .unwind _ x A M D N =>
-      x.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " <- " ++ M.pp 1 (k + 2) ++
-        " unwind (" ++ D.pp 0 (k + 2) ++ ");" ++ nl k ++ N.pp 0 k
-    | .perform _ n i V => s!"perform[{n}.{i}] " ++ V.pp 1 k
-    | .abort _ n i V => s!"abort[{n}.{i}] " ++ V.pp 1 k
+      x.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " <- " ++ M.pp 1 (k + 2) cx ++
+        " unwind (" ++ D.pp 0 (k + 2) cx ++ ");" ++ nl k ++ N.pp 0 k cx
+    | .perform _ n i V => s!"perform[{n}.{i}] " ++ V.pp 1 k cx
+    | .abort _ n i V => s!"abort[{n}.{i}] " ++ V.pp 1 k cx
     | .handle _ n _ hr hc M =>
-      s!"handle_with[{n}](" ++ hr.pp 0 (k + 2) ++ ", " ++ hc.pp 0 (k + 2) ++ ") " ++ M.pp 1 k
+      s!"handle_with[{n}](" ++ hr.pp 0 (k + 2) cx ++ ", " ++ hc.pp 0 (k + 2) cx ++ ") " ++ M.pp 1 k cx
     | .withbor2r _ x b A B r p m M =>
       let as := (Const.withbor2U x b A B r).toArgs.2
-      "withbor2r[" ++ ", ".intercalate (as.map Arg.pp) ++ s!"]({p.name}, {m.name}) " ++ M.pp 1 k
+      "withbor2r[" ++ ", ".intercalate (as.map Arg.pp) ++ s!"]({p.name}, {m.name}) " ++ M.pp 1 k cx
     | .force _ x => "force " ++ x.name
-    | .lam _ x A M => "fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 2) ++ M.pp 0 (k + 2)
-    | .app _ M x => M.pp 2 k ++ " " ++ x.name
-    | .with_ _ M N => "< " ++ M.pp 0 (k + 2) ++ "," ++ nl (k + 2) ++ N.pp 0 (k + 2) ++ " >"
+    | .lam _ x A M => "fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 2) ++ M.pp 0 (k + 2) cx.closure
+    | .app _ M x => M.pp 2 k cx ++ " " ++ x.name
+    | .with_ _ M N => "< " ++ M.pp 0 (k + 2) cx ++ "," ++ nl (k + 2) ++ N.pp 0 (k + 2) cx ++ " >"
     | .proj _ i M =>
         -- `M.1 .2`, not `M.1.2`: the lexer reads `1.2` as a float.
-        M.pp 2 k ++ (match M with | .proj .. => " " | _ => "") ++ (if i then ".1" else ".2")
+        M.pp 2 k cx ++ (match M with | .proj .. => " " | _ => "") ++ (if i then ".1" else ".2")
     | .top _ => "<>"
-    | .letUnit _ V M => "let () = " ++ V.pp 1 k ++ ";" ++ nl k ++ M.pp 0 k
+    | .letUnit _ V M => "let () = " ++ V.pp 1 k cx ++ ";" ++ nl k ++ M.pp 0 k cx
     | .letPair _ x y V M =>
-      "let (" ++ x.name ++ ", " ++ y.name ++ ") = " ++ V.pp 1 k ++ ";" ++ nl k ++ M.pp 0 k
+      "let (" ++ x.name ++ ", " ++ y.name ++ ") = " ++ V.pp 1 k cx ++ ";" ++ nl k ++ M.pp 0 k cx
     | .case _ V x M y N =>
-      "case " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++ "inl " ++ x.name ++ " -> " ++ M.pp 0 (k + 4) ++
-        nl k ++ "| inr " ++ y.name ++ " -> " ++ N.pp 0 (k + 4) ++ nl k ++ "}"
-    | .absurd _ V => "absurd " ++ V.pp 1 k
-    | .lamL _ x b M => "Fun '" ++ x.name ++ " < " ++ b.pp ++ "." ++ nl (k + 2) ++ M.pp 0 (k + 2)
-    | .inst _ M a => M.pp 2 k ++ " [" ++ a.pp ++ "]"
-    | .nuIn _ M => "nu_in " ++ M.pp 1 k
-    | .nuOut _ M => "nu_out " ++ M.pp 1 k
-    | .ascribe _ M C => "(" ++ M.pp 1 k ++ " : " ++ C.pp ++ ")"
+      "case " ++ V.pp 1 k cx ++ " {" ++ nl (k + 2) ++ "inl " ++ x.name ++ " -> " ++ M.pp 0 (k + 4) cx ++
+        nl k ++ "| inr " ++ y.name ++ " -> " ++ N.pp 0 (k + 4) cx ++ nl k ++ "}"
+    | .absurd _ V => "absurd " ++ V.pp 1 k cx
+    | .lamL _ x b M => "Fun '" ++ x.name ++ " < " ++ b.pp ++ "." ++ nl (k + 2) ++ M.pp 0 (k + 2) cx
+    | .inst _ M a => M.pp 2 k cx ++ " [" ++ a.pp ++ "]"
+    | .nuIn _ M => "nu_in " ++ M.pp 1 k cx
+    | .nuOut _ M => "nu_out " ++ M.pp 1 k cx
+    -- `(M : C)` reads `M` as a statement, not a binding's head: in a clause's loop it prints at
+    -- level 0, so that the core's `return V` is `(V : C)` and not the loop's exit.
+    | .ascribe _ M C =>
+      "(" ++ M.pp (if cx == .loop then 0 else 1) k cx ++ " : " ++ C.pp ++ ")"
     | .loop _ ℓ .forever _ M N =>
-      lbl ℓ ++ "loop {" ++ nl (k + 2) ++ M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
+      lbl ℓ ++ "loop {" ++ nl (k + 2) ++ M.pp 0 (k + 2) cx.body ++ nl k ++ "};" ++ nl k ++ N.pp 0 k cx
     | .loop _ ℓ .while_ c M N =>
-      lbl ℓ ++ "while " ++ c.pp 1 k ++ " {" ++ nl (k + 2) ++
-        M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
+      lbl ℓ ++ "while " ++ c.pp 1 k cx ++ " {" ++ nl (k + 2) ++
+        M.pp 0 (k + 2) cx.body ++ nl k ++ "};" ++ nl k ++ N.pp 0 k cx
     | .loop _ ℓ (.each x) V M (.bind _ r A (.ret _ (.app _ (.sugar _ .forRes) (.thunk _ d))) N) =>
       "let " ++ r.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " = " ++
-        lbl ℓ ++ "for " ++ x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
-        M.pp 0 (k + 2) ++ nl k ++ "} else {" ++ nl (k + 2) ++ d.pp 0 (k + 2) ++ nl k ++ "};" ++
-        nl k ++ N.pp 0 k
+        lbl ℓ ++ "for " ++ x.name ++ " in " ++ V.pp 1 k cx ++ " {" ++ nl (k + 2) ++
+        M.pp 0 (k + 2) cx.body ++ nl k ++ "} else {" ++ nl (k + 2) ++ d.pp 0 (k + 2) cx.closure ++ nl k ++ "};" ++
+        nl k ++ N.pp 0 k cx
     | .loop _ ℓ (.each x) V M (.bind _ r A (.ret _ (.sugar _ .forRes)) N) =>
       "let " ++ r.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " = " ++
-        lbl ℓ ++ "for " ++ x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
-        M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
+        lbl ℓ ++ "for " ++ x.name ++ " in " ++ V.pp 1 k cx ++ " {" ++ nl (k + 2) ++
+        M.pp 0 (k + 2) cx.body ++ nl k ++ "};" ++ nl k ++ N.pp 0 k cx
     | .loop _ ℓ (.each x) V M N =>
-      lbl ℓ ++ "for " ++ x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
-        M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
+      lbl ℓ ++ "for " ++ x.name ++ " in " ++ V.pp 1 k cx ++ " {" ++ nl (k + 2) ++
+        M.pp 0 (k + 2) cx.body ++ nl k ++ "};" ++ nl k ++ N.pp 0 k cx
 end
 
 /-- The printed form of a `poly` declaration (`Decl.poly`): `poly def f[T] : A = V` for a family,
@@ -385,7 +422,7 @@ def Decl.pp : Decl → String
   | .handler _ n st S e cs l =>
     let cl (c : Clause) : String :=
       c.name.name ++ "(" ++ ", ".intercalate (c.params.map (·.name)) ++ ") = {" ++ nl 4 ++
-        c.body.pp 0 4 ++ nl 2 ++ "}"
+        c.body.pp 0 4 .clause ++ nl 2 ++ "}"
     "handler " ++ n.name ++ (if l then "(&mut " else "(mut ") ++ st.name ++ ": " ++ S.pp ++ "): " ++ e.name ++ " = {" ++
       String.join (cs.map fun c => nl 2 ++ cl c ++ ";") ++ nl 0 ++ "}"
   | .poly _ n tps lps H A V => Decl.ppPoly n tps lps H A V
@@ -407,7 +444,7 @@ def Decl.pp : Decl → String
     let tys (As : List VTy) : String :=
       if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]"
     let cl (x : String) (xs : List Ident) (M : Comp) : String :=
-      x ++ "(" ++ ", ".intercalate (xs.map (·.name)) ++ ") = {" ++ nl 4 ++ M.pp 0 4 ++ nl 2 ++ "}"
+      x ++ "(" ++ ", ".intercalate (xs.map (·.name)) ++ ") = {" ++ nl 4 ++ M.pp 0 4 .clause ++ nl 2 ++ "}"
     let (rx, rA, rM) := h.ret
     "handler " ++ h.name.name ++
       (if h.tps.isEmpty then "" else "[" ++ ", ".intercalate (h.tps.map (·.name)) ++ "]") ++

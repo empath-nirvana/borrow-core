@@ -376,6 +376,11 @@ corpus/clause-captures.bc 42:13: handle 1: inside []; row []; ops 1.0 tail+state
 corpus/clause-captures.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/clause-captures.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/clause-captures.bc 1.0 tail+state: machine; condition 2 holds; -
+corpus/clause-loop-value.bc flows [0, 1, 2, 4294967295]; main [1, 2]
+corpus/clause-loop-value.bc 36:22: handle 1: inside []; row []; ops 1.0 tail; names 1.0 row; condition 2 holds
+corpus/clause-loop-value.bc 36:52: handle 2: inside []; row []; ops 2.0 stored; names 2.0 row; condition 2 holds
+corpus/clause-loop-value.bc 1.0 tail: direct; condition 2 holds; agree
+corpus/clause-loop-value.bc 2.0 stored: machine; condition 2 holds; -
 corpus/clo-capture.bc flows [0, 4294967295]; main []
 corpus/clo-coerce.bc flows [0, 4294967295]; main []
 corpus/clo-consume.bc flows [0, 4294967295]; main []

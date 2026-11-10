@@ -508,3 +508,4 @@ utf8-count 4 0 0 341 109 263 # the line buffer, reused; the stdin, stdout and st
 with-lend-head-type 0 0 0 4 4 0
 with-nested-lend 2 0 0 13 13 13
 yield-callback 3 0 0 3 3 0
+clause-loop-value 0 0 0 0 0 0
