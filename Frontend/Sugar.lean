@@ -47,10 +47,10 @@ open Frontend.Check (mentionsV mentionsC tyEqV tyEqC tyEqVo tyEqVs)
 /-- The library modules, by the name `include` gives them (#59). A module `m` is the file
 `lib/m.bc`, read when `bcc` starts (`libSources`), so editing one rebuilds no Lean (#113); adding
 one is adding its name here. The elaboration brings in `io`, `div` and `prelude` by itself
-(`elaborateS`); `include m` brings in any of them. -/
+(`elaborateS`); `include m` brings in any of them. `json` is §36's JSON library `[spec §36]`. -/
 def libNames : List String :=
   ["io", "div", "prelude", "lend", "adapters", "slice", "buf", "text", "textio", "iters", "fail",
-   "yield", "rec", "clo", "async", "list", "sys", "wasi", "key", "map", "float", "arith"]
+   "yield", "rec", "clo", "async", "list", "sys", "wasi", "key", "map", "float", "arith", "json"]
 
 /-- The directory of the library: `$BCC_LIB` when it is set; otherwise `lib/` of the checkout
 whose `.lake/build/bin/` holds the running `bcc`; otherwise `lib/` of the working directory. -/

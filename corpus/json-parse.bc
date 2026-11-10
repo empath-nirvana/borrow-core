@@ -1,311 +1,38 @@
--- J1 (#65): a JSON parser. The document is read whole from standard input, lent once as text
--- at `'t`, and parsed by recursive descent into an owned `Json` (SPEC §42) whose arrays are
--- `Vec[Json]` and whose objects are `Map[string, Json]` (SPEC §36). The grammar is RFC 8259's:
--- strings with every escape, a surrogate pair `\uD83C\uDF70` decoded to one code point and a lone
--- surrogate refused; numbers by JSON's strict grammar, read by `parse_f64`, correctly rounded;
--- the input checked as UTF-8 first. An error raises `Fail[JsonError]` (SPEC §19), unwinding every
--- frame and consuming what each had built; `value`, `elements` and `members` are one recursive
--- group under `bounded` (SPEC §20), so a document nested past the budget performs `Exhausted`.
--- The value is then serialised by borrow: `ser` lends it, matches the view through a load and
--- recurses at the load's shorter lifetime (SPEC §31), walking an array's elements with `elems`
--- and an object's entries with `map_entries` (#887, #890). Compact output, numbers by
--- `push_f64` (an integral value as `3.0`), each object's members in the map's slot order: an
--- order fixed by the keys' hashes and the insertions, so deterministic, but not the input's.
+-- J1 (#65): a JSON document parsed and serialised through the library (`include json`, SPEC §36
+-- *JSON*). The document is read whole from standard input, lent once as text at `'t`, parsed by
+-- `json_parse` into an owned `Json`, and serialised by borrow by `json_ser`: compact, an integer
+-- literal that fits `i64` printed exactly (`Int`, by `push_i64`), any other number by `push_f64`
+-- (an integral float as `3.0`), each object's members in the map's slot order.
 --
--- `main` parses three documents: the input, whose field `name` and whole value are printed; a
+-- `main` parses two documents: the input, whose field `name` and whole value are printed; and a
 -- document missing a `,` three levels down (`broken`), raising from a member of an object in an
--- array in an object, where every enclosing frame owns partial data (a key, a vector, a map);
--- and 12000 `[`, past the recursion budget.
+-- array in an object, where every enclosing frame owns partial data (a key, a vector, a map). A
+-- document nested past the recursion budget is `json-deep.bc`.
 --
 -- Answer: on `json-parse.in`, the line `"Café \"Zoë\" — Montréal 🍰"`, then the whole document
--- in one line (634 bytes), then `(inl (inl i32[634]), (inl (inr (i32[3], i32[29])), inr ()))`
--- and `live 0`. A surrogate pair decoded as two code points, a mishandled escape or a
--- misrounded number changes the second line; a dropped level or member changes its length; a
--- frame whose partial data is not consumed on the error shows in `live`; a recursion that does
--- not perform `Exhausted` at its budget changes the last component.
+-- in one line (648 bytes), then `(inl (inl i32[648]), inl (inr (i32[3], i32[29])))` and
+-- `live 0`. The croissant's `id`, `505874924095815681`, is past 2^53 and prints back exactly; read
+-- as a float it would be rounded. A surrogate pair decoded as two code points, a mishandled
+-- escape or a misrounded number changes the second line; a dropped level or member changes its
+-- length; a frame whose partial data is not consumed on the error shows in `live`.
 
-include rec
-include fail
-include float
-include map
-include iters
+include json
 
--- What was wrong, and the byte where it was found. Codes: 1 no value starts here; 2 not `,` or
--- `]` after an element; 3 not `,` or `}` after a member; 4 not a string where a key belongs;
--- 5 not `:` after a key; 6 a string not closed; 7 a bad escape; 8 a control byte in a string;
--- 9 a malformed number, or one past the range of `f64`; 10 a malformed `true`, `false` or
--- `null`; 11 bytes after the value; 12 the input is not UTF-8; 13 a lone surrogate.
-type JsonError = i32 * i32
-
-data Json = Null | Bool(bool) | Num(f64) | Str(string) | Arr(Vec[Json]) | Obj(Map[string, Json])
-
--- ### Scanning
-
--- The byte at `i`, or 0 past the end.
-fn byte<'a>(t: text 'a, i: i32) -> u8 = at(t, i, 0)
-
--- The view of the bytes `[i, j)` of `t`, clamped to it.
-fn sub<'a>(t: text 'a, i: i32, j: i32) -> text 'a =
-  let left = match split_at(t, j) { inl (l, r) -> array_release['a, u8](r); l | inr t -> t };
-  match split_at(left, i) {
-    inl (l, r) -> array_release['a, u8](l); r
-  | inr l -> array_release['a, u8](l); slice_empty_imm['a, u8]
-  }
-
--- The index of the first byte at or after `i` that is not white space.
-fn skip_ws<'a>(t: text 'a, i: i32) -> i32 =
-  let mut j = i;
-  for _ in i..len(t) { if is_space(byte(t, j)) { j = j + 1 } else { break } };
-  j
-
--- The index of the quote closing a string whose body starts at `i`, or `inr ()` when there is
--- none. A backslash escapes the byte after it.
-fn scan_string<'a>(t: text 'a, i: i32) -> i32 + 1 =
-  let mut r : i32 + 1 = inr ();
-  let mut esc = false;
-  for k in i..len(t) {
-    let c = byte(t, k);
-    if esc { esc = false }
-    else if c == b'\\' { esc = true }
-    else if c == b'"' { r = (inl k : i32 + 1); break }
-    else { () }
-  };
-  r
-
--- The value of a hexadecimal digit, or -1.
-fn hex(c: u8) -> i32 =
-  if b'0' <= c && c <= b'9' { to_i32(c) - 48 }
-  else if b'a' <= c && c <= b'f' { to_i32(c) - 87 }
-  else if b'A' <= c && c <= b'F' { to_i32(c) - 55 }
-  else { 0 - 1 }
-
--- The four hexadecimal digits at `i` as a code unit, or -1 when one is not a digit.
-fn hex4<'a>(t: text 'a, i: i32) -> i32 =
-  let mut v = 0;
-  for k in 0..4 {
-    let d = hex(byte(t, i + k));
-    if d < 0 || v < 0 { v = 0 - 1 } else { v = v * 16 + d }
-  };
-  v
-
--- The escape at `i` (the byte after the backslash) decoded: the code point and the index after
--- it. `\uD8xx\uDCxx`, a surrogate pair, is one code point; a surrogate alone is error 13.
-fn escape<'a>(t: text 'a, i: i32) -> i32 * i32 with Fail[JsonError] =
-  let c = byte(t, i);
-  if c == b'u' {
-    let h = hex4(t, i + 1);
-    if h < 0 { raise((7, i)) }
-    else if 56320 <= h && h < 57344 { raise((13, i)) }
-    else if 55296 <= h && h < 56320 {
-      if byte(t, i + 5) == b'\\' && byte(t, i + 6) == b'u' {
-        let l = hex4(t, i + 7);
-        if l < 0 { raise((7, i + 6)) }
-        else if 56320 <= l && l < 57344 { (65536 + (h - 55296) * 1024 + (l - 56320), i + 11) }
-        else { raise((13, i)) }
-      } else { raise((13, i)) }
-    } else { (h, i + 5) }
-  }
-  else if c == b'"' || c == b'\\' || c == b'/' { (to_i32(c), i + 1) }
-  else if c == b'b' { (8, i + 1) }
-  else if c == b'f' { (12, i + 1) }
-  else if c == b'n' { (10, i + 1) }
-  else if c == b'r' { (13, i + 1) }
-  else if c == b't' { (9, i + 1) }
-  else { raise((7, i)) }
-
--- The string whose body starts at `i` (after its opening quote), decoded into a string of its
--- own, and the index after its closing quote. A byte below 32 is refused; any other byte that is
--- not part of an escape is copied as it is (the input is UTF-8).
-fn string_lit<'a>(t: text 'a, i: i32) -> string * i32 with Fail[JsonError] =
-  match scan_string(t, i) {
-    inr _ -> raise((6, i - 1))
-  | inl e ->
-      let mut s = string_new(e - i);
-      let mut j = i;
-      for _ in i..e {
-        if e <= j { break } else { () };
-        let c = byte(t, j);
-        if c == b'\\' { let (cp, k) = escape(t, j + 1); push_char(&mut s, cp); j = k }
-        else if c < 32 { raise((8, j)) }
-        else { push_byte(&mut s, c); j = j + 1 }
-      };
-      (s, e + 1)
-  }
-
--- The end of the number starting at `i`, by JSON's grammar
--- `-? (0 | [1-9][0-9]*) (. [0-9]+)? ([eE] [+-]? [0-9]+)?`. The states: 0 start, 1 after `-`,
--- 2 after a leading `0`, 3 in the integer digits, 4 after `.`, 5 in the fraction, 6 after `e`,
--- 7 after its sign, 8 in the exponent; 2, 3, 5 and 8 accept.
-fn scan_number<'a>(t: text 'a, i: i32) -> i32 with Fail[JsonError] =
-  let mut st = 0;
-  let mut j = i;
-  for _ in i..len(t) {
-    let c = byte(t, j);
-    let d = b'0' <= c && c <= b'9';
-    let e = c == b'e' || c == b'E';
-    let nx =
-      if st == 0 { if c == b'-' { 1 } else if c == b'0' { 2 } else if d { 3 } else { 0 - 1 } }
-      else if st == 1 { if c == b'0' { 2 } else if d { 3 } else { 0 - 1 } }
-      else if st == 2 { if c == b'.' { 4 } else if e { 6 } else { 0 - 1 } }
-      else if st == 3 { if d { 3 } else if c == b'.' { 4 } else if e { 6 } else { 0 - 1 } }
-      else if st == 4 { if d { 5 } else { 0 - 1 } }
-      else if st == 5 { if d { 5 } else if e { 6 } else { 0 - 1 } }
-      else if st == 6 { if c == b'+' || c == b'-' { 7 } else if d { 8 } else { 0 - 1 } }
-      else { if d { 8 } else { 0 - 1 } };
-    if nx < 0 { break } else { st = nx; j = j + 1 }
-  };
-  if st == 2 || st == 3 || st == 5 || st == 8 { j } else { raise((9, j)) }
-
--- The number at `i` and the index after it: its text read by `parse_f64`, correctly rounded. A
--- number past the range of `f64` (`1e400`) is error 9.
-fn number<'a>(t: text 'a, i: i32) -> Json * i32 with Fail[JsonError] =
-  let j = scan_number(t, i);
-  let x = with map_err(!{ e -> (9, i) }) { parse_f64(sub(t, i, j)) };
-  if is_nan_f64(x - x) { raise((9, i)) } else { (Num(x), j) }
-
--- The word `w` at `i`, and the index after it.
-fn word<'a>(t: text 'a, i: i32, w: lit) -> i32 with Fail[JsonError] =
-  let n = lit_len(w);
-  if eq_lit(sub(t, i, i + n), w) { i + n } else { raise((10, i)) }
-
--- ### Parsing: `value`, `elements` and `members`, one recursive group under `bounded`
-
--- The value at or after `i`, and the index after it.
-fn value<'a>(t: text 'a, i: i32) -> Json * i32 with Fail[JsonError], Exhausted =
-  let i = skip_ws(t, i);
-  let c = byte(t, i);
-  if c == b'{' { members(t, i + 1) }
-  else if c == b'[' { elements(t, i + 1) }
-  else if c == b'"' { let (s, j) = string_lit(t, i + 1); (Str(s), j) }
-  else if c == b'-' || (b'0' <= c && c <= b'9') { number(t, i) }
-  else if c == b't' { (Bool(true), word(t, i, "true")) }
-  else if c == b'f' { (Bool(false), word(t, i, "false")) }
-  else if c == b'n' { (Null, word(t, i, "null")) }
-  else { raise((1, i)) }
-
--- The elements of the array whose `[` is before `i`, and the index after its `]`. Each element
--- takes at least a byte, so the input's length bounds the loop.
-fn elements<'a>(t: text 'a, i: i32) -> Json * i32 with Fail[JsonError], Exhausted =
-  let i = skip_ws(t, i);
-  let mut b = box buf[Json](4);
-  let mut j = i;
-  let mut closed = false;
-  if byte(t, i) == b']' { j = i + 1; closed = true } else {
-    for _ in i..len(t) {
-      let (x, k) = value(t, j);
-      push(&mut b, x);
-      let k = skip_ws(t, k);
-      let c = byte(t, k);
-      if c == b',' { j = k + 1 }
-      else if c == b']' { j = k + 1; closed = true; break }
-      else { raise((2, k)) }
-    }
-  };
-  if closed { (Arr(Vec(b)), j) } else { raise((2, j)) }
-
--- The members of the object whose `{` is before `i`, and the index after its `}`. A key given
--- twice keeps its last value, as `map_insert` displaces the first.
-fn members<'a>(t: text 'a, i: i32) -> Json * i32 with Fail[JsonError], Exhausted =
-  let i = skip_ws(t, i);
-  let mut m = map_new[string, Json](4);
-  let mut j = i;
-  let mut closed = false;
-  if byte(t, i) == b'}' { j = i + 1; closed = true } else {
-    for _ in i..len(t) {
-      let k = skip_ws(t, j);
-      if byte(t, k) != b'"' { raise((4, k)) } else { () };
-      let (key, k) = string_lit(t, k + 1);
-      let k = skip_ws(t, k);
-      if byte(t, k) != b':' { raise((5, k)) } else { () };
-      let (x, k) = value(t, k + 1);
-      map_insert(&mut m, key, x);
-      let k = skip_ws(t, k);
-      let c = byte(t, k);
-      if c == b',' { j = k + 1 }
-      else if c == b'}' { j = k + 1; closed = true; break }
-      else { raise((3, k)) }
-    }
-  };
-  if closed { (Obj(m), j) } else { raise((3, j)) }
-
--- The document: UTF-8, one value, then only white space.
-fn parse<'a>(t: text 'a) -> Json with Fail[JsonError], Exhausted =
-  let t = with map_err(!{ e -> (12, e) }) { str_from_utf8(t) };
-  let (x, k) = value(t, 0);
-  let e = skip_ws(t, k);
-  if e < len(t) { raise((11, e)) } else { x }
-
--- ### Serialising, by borrow
-
--- A hexadecimal digit.
-fn hex_digit(d: i32) -> u8 = if d < 10 { to_u8(48 + d) } else { to_u8(87 + d) }
-
--- `t` appended as a JSON string: quoted, with `"`, `\` and the bytes below 32 escaped, the short
--- escapes where JSON has one and `\u00XX` otherwise. Other bytes are copied: the text is UTF-8.
-fn push_json_str<'a>(s: string, t: text 'a) -> string * 1 =
-  let mut s = s;
-  push_byte(&mut s, b'"');
-  for c in elems(t) {
-    let c = *c;
-    if c == b'"' || c == b'\\' { push_byte(&mut s, b'\\'); push_byte(&mut s, c) }
-    else if c == 10 { push_lit(&mut s, "\\n") }
-    else if c == 9 { push_lit(&mut s, "\\t") }
-    else if c == 13 { push_lit(&mut s, "\\r") }
-    else if c == 8 { push_lit(&mut s, "\\b") }
-    else if c == 12 { push_lit(&mut s, "\\f") }
-    else if c < 32 {
-      push_lit(&mut s, "\\u00");
-      push_byte(&mut s, hex_digit(to_i32(c) / 16));
-      push_byte(&mut s, hex_digit(to_i32(c) % 16))
-    } else { push_byte(&mut s, c) }
-  };
-  push_byte(&mut s, b'"');
-  (s, ())
-
--- The value `j` points at, appended to `out` in compact JSON (no white space). The recursive
--- call is inside the load of `*j`, at its shorter lifetime.
-fn ser<'a>(j: imm 'a Json, out: string) -> string with Exhausted =
-  let mut out = out;
-  borrow imm *j { 'y, v -> match v {
-      Null -> push_lit(&mut out, "null")
-    | Bool(b) -> push_lit(&mut out, if b { "true" } else { "false" })
-    | Num(x) -> push_f64(&mut out, x)
-    | Str(s) -> push_json_str(&mut out, key_prefix(s))
-    | Arr(b) ->
-        push_byte(&mut out, b'[');
-        let mut first = true;
-        for x in elems(key_prefix(b)) {
-          if first { first = false } else { push_byte(&mut out, b',') };
-          out = ser(x, out)
-        };
-        push_byte(&mut out, b']')
-    | Obj(m) ->
-        push_byte(&mut out, b'{');
-        let mut first = true;
-        for e in map_entries(m) {
-          let (k, x) = e;
-          if first { first = false } else { push_byte(&mut out, b',') };
-          borrow imm *k { 'z, w -> push_json_str(&mut out, key_prefix(w)) };
-          push_byte(&mut out, b':');
-          out = ser(x, out)
-        };
-        push_byte(&mut out, b'}')
-    } };
-  out
+-- ### The field `name`
 
 -- The member `k` of the object `j` points at, appended to `out`; `null` when there is none.
 fn ser_field<'a>(j: imm 'a Json, k: lit, out: string) -> string with Exhausted =
   let mut out = out;
   borrow imm *j { 'y, v -> match v {
       Obj(m) -> match map_get(m, string_of_lit(k)) {
-          inl x -> out = ser(x, out)
+          inl x -> out = json_ser(x, out)
         | inr u -> push_lit(&mut out, "null")
         }
     | _ -> push_lit(&mut out, "null")
     } };
   out
 
--- ### The three documents
+-- ### The two documents
 
 -- The document in `s` parsed, its field `name` and its whole serialisation printed, one per line:
 -- the length of the serialisation, the error, or `inr ()` when it is nested past the budget.
@@ -313,11 +40,11 @@ fn document(s: string) -> (i32 + JsonError) + 1 with Stdout =
   borrow imm s { 't, t ->
     with exhausted_to_option {
       with to_result {
-        let mut j = parse(t);
+        let mut j = json_parse(t);
         let mut name = ser_field(&j, "name", string_new(64));
         push_byte(&mut name, b'\n');
         print_string(name);
-        let mut whole = ser(&j, string_new(1024));
+        let mut whole = json_ser(&j, string_new(1024));
         let n = borrow imm whole { v -> len(v) };
         push_byte(&mut whole, b'\n');
         print_string(whole);
@@ -327,14 +54,7 @@ fn document(s: string) -> (i32 + JsonError) + 1 with Stdout =
 -- A document missing a `,` after a member three levels down: error 3 at byte 29.
 def broken : lit = "{\"a\": [1, {\"b\": [true, null] \"c\"}]}"
 
--- `n` copies of `[`.
-fn nested(n: i32) -> string =
-  let mut s = string_new(n);
-  for _ in 0..n { push_byte(&mut s, b'[') };
-  s
-
-main -> ((i32 + JsonError) + 1) * (((i32 + JsonError) + 1) * ((i32 + JsonError) + 1)) =
+main -> ((i32 + JsonError) + 1) * ((i32 + JsonError) + 1) =
   let a = document(read_all(&mut stdin));
   let b = document(string_of_lit(broken));
-  let c = document(nested(12000));
-  (a, (b, c))
+  (a, b)

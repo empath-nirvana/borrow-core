@@ -93,6 +93,25 @@ fn push_dec(s: string, x: i32) -> string * 1 =
     !{ (k, st) -> dec_step(k, st) }, 10, 0, (s, (n, (1000000000, false))));
   (s, ())
 
+-- `x` in decimal, with a `-` when it is negative: the digits `dec64_each` (`lib/io.bc`) gives,
+-- appended. Nineteen steps cover the digits of the magnitude, which is read unsigned so that
+-- `-2^63` has one. Allocates when the string grows (`push`). `[spec §17]`
+fn push_i64(s: string, x: i64) -> string * 1 =
+  let mut s = s;
+  let mut n = x;
+  if x < i64[0] { push_byte(&mut s, b'-'); n = i64[0] - x } else { () };
+  let mut d = i64[1000000000000000000];
+  let mut started = false;
+  for _ in 0..19 {
+    let q = match host[div_u64](n, d) { inl y -> y | inr u -> i64[0] };
+    if started || q != i64[0] || d == i64[1] { push_byte(&mut s, to_u8(host[wrap](q) + 48)); started = true }
+    else { () };
+    n = n - q * d;
+    let d2 = match host[div_u64](d, i64[10]) { inl y -> y | inr u -> i64[1] };
+    d = d2
+  };
+  (s, ())
+
 -- A copy of `t` as a new string of capacity its length. Allocates: the string.
 fn to_string<'a>(t: text 'a) -> string =
   let (t, u) = array_copy['a, u8] t;
@@ -373,7 +392,7 @@ fn mul_checked(a: i32, b: i32) -> i32 with Fail[1] =
   if lo <= s && s <= 2147483647 { host[wrap](s) } else { raise(()) }
 
 -- A parse error: `inl ()` for no digits, `inr (inl b)` for the byte `b` that is not a digit,
--- `inr (inr ())` for a value past `i32`.
+-- `inr (inr ())` for a value past the width (`i32` for `parse_i32`, `i64` for `parse_i64`).
 type ParseError = 1 + (u8 + 1)
 
 -- A decimal integer, with an optional leading `-`; it raises a `ParseError`. The digits are a
@@ -394,6 +413,33 @@ fn parse_i32<'a>(t: text 'a) -> i32 with Fail[ParseError] =
       n = with map_err(!{ u -> inr (inr ()) }) { add_checked(m, to_i32(d) - 48) }
     };
     if neg { 0 - n } else { n }
+  }
+
+-- The same at `i64`: a decimal integer, with an optional leading `-`, from `-2^63` to `2^63 - 1`;
+-- a value past them raises `inr (inr ())`, never wraps. The magnitude is built negative (`n` goes
+-- down from 0), so `-2^63`, whose magnitude `i64` has no positive form for, is read exactly; each
+-- step is checked before it is taken: `n * 10 - d` stays at or above `-2^63` exactly when
+-- `n > m` or `n == m` and `d <= 8`, with `m = -922337203685477580` (`-2^63 / 10`, truncated).
+-- `[spec §17]`
+fn parse_i64<'a>(t: text 'a) -> i64 with Fail[ParseError] =
+  let (t, u) = array_copy['a, u8] t;
+  let neg = at(u, 0, 0) == b'-';
+  let t = if neg { match split_at(t, 1) { inl (h, r) -> array_release['a, u8](h); r | inr t -> t } }
+    else { t };
+  let (t, w) = array_copy['a, u8] t;
+  if len(w) == 0 { array_release['a, u8](t); raise(inl ()) } else {
+    let m = i64[0] - i64[922337203685477580];
+    let mut n = i64[0];
+    for x in t {
+      let b = *x;
+      if b < b'0' || b'9' < b { raise(inr (inl b)) } else { () };
+      let d = host[extend_u](to_i32(b) - 48);
+      if n < m || (n == m && i64[8] < d) { raise(inr (inr ())) } else { () };
+      n = n * i64[10] - d
+    };
+    if neg { n }
+    else if n == m * i64[10] - i64[8] { raise(inr (inr ())) }
+    else { i64[0] - n }
   }
 
 -- The integers written in `t`, in order, folded into a state by `f`: each is a run of decimal

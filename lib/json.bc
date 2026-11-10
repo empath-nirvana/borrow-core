@@ -1,0 +1,305 @@
+-- JSON (SPEC §36 *JSON*): a JSON value, its parser and its serialiser, written in the language
+-- over the map (`lib/map.bc`), buffers and text (`lib/text.bc`) and errors (`lib/fail.bc`).
+-- `include json` puts it in scope, with `rec`, `fail`, `float`, `map` and `iters`.
+--
+-- A document is parsed whole from text lent at `'a`, by recursive descent, into an owned `Json`
+-- whose arrays are `Vec[Json]` and whose objects are `Map[string, Json]`. The grammar is RFC
+-- 8259's: strings with every escape, a surrogate pair `🍰` decoded to one code point and
+-- a lone surrogate refused; numbers by JSON's strict grammar; the input checked as UTF-8 first;
+-- white space is space, tab, CR and LF. A number is chosen at parse time, as serde_json's `Number`
+-- is: an integer literal (no fraction, no exponent) that fits `i64` is `Int`, read exactly by
+-- `parse_i64`; any other number, an integer literal past `i64` included, is `Float`, read by
+-- `parse_f64`, correctly rounded. An error raises `Fail[JsonError]` (SPEC §19), unwinding every
+-- frame and consuming what each had built; `json_value`, `json_elements` and `json_members` are
+-- one recursive group under `bounded` (SPEC §20), so a document nested past the budget performs
+-- `Exhausted`.
+--
+-- The value is serialised by borrow: `json_ser` lends it, matches the view through a load and
+-- recurses at the load's shorter lifetime (SPEC §31), walking an array's elements with `elems`
+-- and an object's entries with `map_entries`. Compact output; `Int` by `push_i64`, exactly as
+-- parsed, `Float` by `push_f64` (an integral value as `3.0`); each object's members in the map's
+-- slot order, an order fixed by the keys' hashes and the insertions, so deterministic, but not the
+-- input's. A key given twice keeps its last value.
+
+include rec
+include fail
+include float
+include map
+include iters
+
+-- What was wrong, and the byte where it was found. Codes: 1 no value starts here; 2 not `,` or
+-- `]` after an element; 3 not `,` or `}` after a member; 4 not a string where a key belongs;
+-- 5 not `:` after a key; 6 a string not closed; 7 a bad escape; 8 a control byte in a string;
+-- 9 a malformed number, or one past the range of `f64`; 10 a malformed `true`, `false` or
+-- `null`; 11 bytes after the value; 12 the input is not UTF-8; 13 a lone surrogate. `[spec §36]`
+type JsonError = i32 * i32
+
+-- A JSON value, owned. `[spec §36]`
+data Json = Null | Bool(bool) | Int(i64) | Float(f64) | Str(string) | Arr(Vec[Json])
+  | Obj(Map[string, Json])
+
+-- ### Scanning
+
+-- The byte at `i`, or 0 past the end.
+fn json_byte<'a>(t: text 'a, i: i32) -> u8 = at(t, i, 0)
+
+-- The view of the bytes `[i, j)` of `t`, clamped to it.
+fn json_sub<'a>(t: text 'a, i: i32, j: i32) -> text 'a =
+  let left = match split_at(t, j) { inl (l, r) -> array_release['a, u8](r); l | inr t -> t };
+  match split_at(left, i) {
+    inl (l, r) -> array_release['a, u8](l); r
+  | inr l -> array_release['a, u8](l); slice_empty_imm['a, u8]
+  }
+
+-- The index of the first byte at or after `i` that is not white space.
+fn json_skip_ws<'a>(t: text 'a, i: i32) -> i32 =
+  let mut j = i;
+  for _ in i..len(t) { if is_space(json_byte(t, j)) { j = j + 1 } else { break } };
+  j
+
+-- The index of the quote closing a string whose body starts at `i`, or `inr ()` when there is
+-- none. A backslash escapes the byte after it.
+fn json_scan_string<'a>(t: text 'a, i: i32) -> i32 + 1 =
+  let mut r : i32 + 1 = inr ();
+  let mut esc = false;
+  for k in i..len(t) {
+    let c = json_byte(t, k);
+    if esc { esc = false }
+    else if c == b'\\' { esc = true }
+    else if c == b'"' { r = (inl k : i32 + 1); break }
+    else { () }
+  };
+  r
+
+-- The value of a hexadecimal digit, or -1.
+fn json_hex(c: u8) -> i32 =
+  if b'0' <= c && c <= b'9' { to_i32(c) - 48 }
+  else if b'a' <= c && c <= b'f' { to_i32(c) - 87 }
+  else if b'A' <= c && c <= b'F' { to_i32(c) - 55 }
+  else { 0 - 1 }
+
+-- The four hexadecimal digits at `i` as a code unit, or -1 when one is not a digit.
+fn json_hex4<'a>(t: text 'a, i: i32) -> i32 =
+  let mut v = 0;
+  for k in 0..4 {
+    let d = json_hex(json_byte(t, i + k));
+    if d < 0 || v < 0 { v = 0 - 1 } else { v = v * 16 + d }
+  };
+  v
+
+-- The escape at `i` (the byte after the backslash) decoded: the code point and the index after
+-- it. `\uD8xx\uDCxx`, a surrogate pair, is one code point; a surrogate alone is error 13.
+fn json_escape<'a>(t: text 'a, i: i32) -> i32 * i32 with Fail[JsonError] =
+  let c = json_byte(t, i);
+  if c == b'u' {
+    let h = json_hex4(t, i + 1);
+    if h < 0 { raise((7, i)) }
+    else if 56320 <= h && h < 57344 { raise((13, i)) }
+    else if 55296 <= h && h < 56320 {
+      if json_byte(t, i + 5) == b'\\' && json_byte(t, i + 6) == b'u' {
+        let l = json_hex4(t, i + 7);
+        if l < 0 { raise((7, i + 6)) }
+        else if 56320 <= l && l < 57344 { (65536 + (h - 55296) * 1024 + (l - 56320), i + 11) }
+        else { raise((13, i)) }
+      } else { raise((13, i)) }
+    } else { (h, i + 5) }
+  }
+  else if c == b'"' || c == b'\\' || c == b'/' { (to_i32(c), i + 1) }
+  else if c == b'b' { (8, i + 1) }
+  else if c == b'f' { (12, i + 1) }
+  else if c == b'n' { (10, i + 1) }
+  else if c == b'r' { (13, i + 1) }
+  else if c == b't' { (9, i + 1) }
+  else { raise((7, i)) }
+
+-- The string whose body starts at `i` (after its opening quote), decoded into a string of its
+-- own, and the index after its closing quote. A byte below 32 is refused; any other byte that is
+-- not part of an escape is copied as it is (the input is UTF-8).
+fn json_string<'a>(t: text 'a, i: i32) -> string * i32 with Fail[JsonError] =
+  match json_scan_string(t, i) {
+    inr _ -> raise((6, i - 1))
+  | inl e ->
+      let mut s = string_new(e - i);
+      let mut j = i;
+      for _ in i..e {
+        if e <= j { break } else { () };
+        let c = json_byte(t, j);
+        if c == b'\\' { let (cp, k) = json_escape(t, j + 1); push_char(&mut s, cp); j = k }
+        else if c < 32 { raise((8, j)) }
+        else { push_byte(&mut s, c); j = j + 1 }
+      };
+      (s, e + 1)
+  }
+
+-- The end of the number starting at `i`, by JSON's grammar
+-- `-? (0 | [1-9][0-9]*) (. [0-9]+)? ([eE] [+-]? [0-9]+)?`, and whether it is an integer literal
+-- (no fraction, no exponent). The states: 0 start, 1 after `-`, 2 after a leading `0`, 3 in the
+-- integer digits, 4 after `.`, 5 in the fraction, 6 after `e`, 7 after its sign, 8 in the
+-- exponent; 2, 3, 5 and 8 accept, and 2 and 3 end an integer literal.
+fn json_scan_number<'a>(t: text 'a, i: i32) -> i32 * bool with Fail[JsonError] =
+  let mut st = 0;
+  let mut j = i;
+  for _ in i..len(t) {
+    let c = json_byte(t, j);
+    let d = b'0' <= c && c <= b'9';
+    let e = c == b'e' || c == b'E';
+    let nx =
+      if st == 0 { if c == b'-' { 1 } else if c == b'0' { 2 } else if d { 3 } else { 0 - 1 } }
+      else if st == 1 { if c == b'0' { 2 } else if d { 3 } else { 0 - 1 } }
+      else if st == 2 { if c == b'.' { 4 } else if e { 6 } else { 0 - 1 } }
+      else if st == 3 { if d { 3 } else if c == b'.' { 4 } else if e { 6 } else { 0 - 1 } }
+      else if st == 4 { if d { 5 } else { 0 - 1 } }
+      else if st == 5 { if d { 5 } else if e { 6 } else { 0 - 1 } }
+      else if st == 6 { if c == b'+' || c == b'-' { 7 } else if d { 8 } else { 0 - 1 } }
+      else { if d { 8 } else { 0 - 1 } };
+    if nx < 0 { break } else { st = nx; j = j + 1 }
+  };
+  if st == 2 || st == 3 || st == 5 || st == 8 { (j, st == 2 || st == 3) } else { raise((9, j)) }
+
+-- The bytes `[i, j)` of `t` read by `parse_f64` as a `Float`, correctly rounded. A number past
+-- the range of `f64` (`1e400`) is error 9 at `i`.
+fn json_float<'a>(t: text 'a, i: i32, j: i32) -> Json with Fail[JsonError] =
+  let x = with map_err(!{ e -> (9, i) }) { parse_f64(json_sub(t, i, j)) };
+  if is_nan_f64(x - x) { raise((9, i)) } else { Float(x) }
+
+-- The number at `i` and the index after it. An integer literal that fits `i64` is an `Int`, read
+-- exactly by `parse_i64`; any other number, an integer literal past `i64` included, a `Float`.
+-- The scan has checked the grammar, so `parse_i64` can only refuse an integer past `i64`.
+fn json_number<'a>(t: text 'a, i: i32) -> Json * i32 with Fail[JsonError] =
+  let (j, int) = json_scan_number(t, i);
+  if int {
+    let r = with to_result { parse_i64(json_sub(t, i, j)) };
+    match r { inl n -> (Int(n), j) | inr e -> (json_float(t, i, j), j) }
+  } else { (json_float(t, i, j), j) }
+
+-- The word `w` at `i`, and the index after it.
+fn json_word<'a>(t: text 'a, i: i32, w: lit) -> i32 with Fail[JsonError] =
+  let n = lit_len(w);
+  if eq_lit(json_sub(t, i, i + n), w) { i + n } else { raise((10, i)) }
+
+-- ### Parsing: `json_value`, `json_elements` and `json_members`, one recursive group under
+-- `bounded`
+
+-- The value at or after `i`, and the index after it.
+fn json_value<'a>(t: text 'a, i: i32) -> Json * i32 with Fail[JsonError], Exhausted =
+  let i = json_skip_ws(t, i);
+  let c = json_byte(t, i);
+  if c == b'{' { json_members(t, i + 1) }
+  else if c == b'[' { json_elements(t, i + 1) }
+  else if c == b'"' { let (s, j) = json_string(t, i + 1); (Str(s), j) }
+  else if c == b'-' || (b'0' <= c && c <= b'9') { json_number(t, i) }
+  else if c == b't' { (Bool(true), json_word(t, i, "true")) }
+  else if c == b'f' { (Bool(false), json_word(t, i, "false")) }
+  else if c == b'n' { (Null, json_word(t, i, "null")) }
+  else { raise((1, i)) }
+
+-- The elements of the array whose `[` is before `i`, and the index after its `]`. Each element
+-- takes at least a byte, so the input's length bounds the loop.
+fn json_elements<'a>(t: text 'a, i: i32) -> Json * i32 with Fail[JsonError], Exhausted =
+  let i = json_skip_ws(t, i);
+  let mut b = box buf[Json](4);
+  let mut j = i;
+  let mut closed = false;
+  if json_byte(t, i) == b']' { j = i + 1; closed = true } else {
+    for _ in i..len(t) {
+      let (x, k) = json_value(t, j);
+      push(&mut b, x);
+      let k = json_skip_ws(t, k);
+      let c = json_byte(t, k);
+      if c == b',' { j = k + 1 }
+      else if c == b']' { j = k + 1; closed = true; break }
+      else { raise((2, k)) }
+    }
+  };
+  if closed { (Arr(Vec(b)), j) } else { raise((2, j)) }
+
+-- The members of the object whose `{` is before `i`, and the index after its `}`. A key given
+-- twice keeps its last value, as `map_insert` displaces the first.
+fn json_members<'a>(t: text 'a, i: i32) -> Json * i32 with Fail[JsonError], Exhausted =
+  let i = json_skip_ws(t, i);
+  let mut m = map_new[string, Json](4);
+  let mut j = i;
+  let mut closed = false;
+  if json_byte(t, i) == b'}' { j = i + 1; closed = true } else {
+    for _ in i..len(t) {
+      let k = json_skip_ws(t, j);
+      if json_byte(t, k) != b'"' { raise((4, k)) } else { () };
+      let (key, k) = json_string(t, k + 1);
+      let k = json_skip_ws(t, k);
+      if json_byte(t, k) != b':' { raise((5, k)) } else { () };
+      let (x, k) = json_value(t, k + 1);
+      map_insert(&mut m, key, x);
+      let k = json_skip_ws(t, k);
+      let c = json_byte(t, k);
+      if c == b',' { j = k + 1 }
+      else if c == b'}' { j = k + 1; closed = true; break }
+      else { raise((3, k)) }
+    }
+  };
+  if closed { (Obj(m), j) } else { raise((3, j)) }
+
+-- The document in `t`: UTF-8, one value, then only white space. `[spec §36]`
+fn json_parse<'a>(t: text 'a) -> Json with Fail[JsonError], Exhausted =
+  let t = with map_err(!{ e -> (12, e) }) { str_from_utf8(t) };
+  let (x, k) = json_value(t, 0);
+  let e = json_skip_ws(t, k);
+  if e < len(t) { raise((11, e)) } else { x }
+
+-- ### Serialising, by borrow
+
+-- A hexadecimal digit.
+fn json_hex_digit(d: i32) -> u8 = if d < 10 { to_u8(48 + d) } else { to_u8(87 + d) }
+
+-- `t` appended as a JSON string: quoted, with `"`, `\` and the bytes below 32 escaped, the short
+-- escapes where JSON has one and `\u00XX` otherwise. Other bytes are copied: the text is UTF-8.
+fn json_push_str<'a>(s: string, t: text 'a) -> string * 1 =
+  let mut s = s;
+  push_byte(&mut s, b'"');
+  for c in elems(t) {
+    let c = *c;
+    if c == b'"' || c == b'\\' { push_byte(&mut s, b'\\'); push_byte(&mut s, c) }
+    else if c == 10 { push_lit(&mut s, "\\n") }
+    else if c == 9 { push_lit(&mut s, "\\t") }
+    else if c == 13 { push_lit(&mut s, "\\r") }
+    else if c == 8 { push_lit(&mut s, "\\b") }
+    else if c == 12 { push_lit(&mut s, "\\f") }
+    else if c < 32 {
+      push_lit(&mut s, "\\u00");
+      push_byte(&mut s, json_hex_digit(to_i32(c) / 16));
+      push_byte(&mut s, json_hex_digit(to_i32(c) % 16))
+    } else { push_byte(&mut s, c) }
+  };
+  push_byte(&mut s, b'"');
+  (s, ())
+
+-- The value `j` points at, appended to `out` in compact JSON (no white space). The recursive
+-- call is inside the load of `*j`, at its shorter lifetime. `[spec §36]`
+fn json_ser<'a>(j: imm 'a Json, out: string) -> string with Exhausted =
+  let mut out = out;
+  borrow imm *j { 'y, v -> match v {
+      Null -> push_lit(&mut out, "null")
+    | Bool(b) -> push_lit(&mut out, if b { "true" } else { "false" })
+    | Int(n) -> push_i64(&mut out, n)
+    | Float(x) -> push_f64(&mut out, x)
+    | Str(s) -> json_push_str(&mut out, key_prefix(s))
+    | Arr(b) ->
+        push_byte(&mut out, b'[');
+        let mut first = true;
+        for x in elems(key_prefix(b)) {
+          if first { first = false } else { push_byte(&mut out, b',') };
+          out = json_ser(x, out)
+        };
+        push_byte(&mut out, b']')
+    | Obj(m) ->
+        push_byte(&mut out, b'{');
+        let mut first = true;
+        for e in map_entries(m) {
+          let (k, x) = e;
+          if first { first = false } else { push_byte(&mut out, b',') };
+          borrow imm *k { 'z, w -> json_push_str(&mut out, key_prefix(w)) };
+          push_byte(&mut out, b':');
+          out = json_ser(x, out)
+        };
+        push_byte(&mut out, b'}')
+    } };
+  out
