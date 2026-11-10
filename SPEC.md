@@ -12743,9 +12743,9 @@ tables and `HandlerLawN` are unchanged.
 
 3. **`Goal791N` restated in place (C5):**
 
-       Goal791N := ∀ cs Γx γx e R, (∀ c ∈ cs, c.OK) → ExternsMeetN Γx γx →
+       Goal791N := ∀ cs Γx γx e R, (∀ c ∈ cs, c.OKAt ∅ Γx) → ExternsMeetN Γx γx →
          CDerives ∅ (ctx791 cs ++ Γx) e (.comp (.ret R)) → R.Persistent →
-         OrDiverges (substAll (vals791 cs ++ γx) e)
+         OrDiverges (substAll (cs.map (·.valAt γx) ++ γx) e)
 
    The old statement is the instance `Γx = []`, `R = 1`.
 
@@ -12789,13 +12789,17 @@ tables and `HandlerLawN` are unchanged.
   `io_every_runN`, `externs_loop_every_runN` and `io_loop_every_runN`, through `goal791N`
   (`Core/Chain/Externs791N.lean`). The program's input is one more extern slot (`Γ ++ [Bytes]`),
   so the I/O theorems are plain instances of `goal791N`.
-- K1.3: the finaliser at the externs' context, for `Const791.OKAt` and `withbor1U/2U/3U`.
+- K1.3, part one, built (#1026): `Const791.OKAt Δ Γx` takes the finaliser at the externs'
+  context. Each constant is closed by the extern values (`valAt γx`), and `Goal791N` substitutes
+  `cs.map (·.valAt γx) ++ γx` with `c.OKAt ∅ Γx`; today's statement is the instance `Γx = []`.
+  `w2_takeOutput_okAt`: a lent `Ref Output` whose finaliser hands the cell back by `take_output`.
+  Part two, the unwinding lends `withbor1U/2U/3U` without `closedAt 0 d`, is K1.3b.
 - K1.4: the kernel instance `progIO` (a lent `stdout` cell, written across a `wait`, resumed and
   cancelled).
 - K1.5: `IORun.every_runN` at the checked wrapper; `corpus/io-effects.bc` concluded by the
   extended `goal791N`; `bcc trusted` names it.
 
-K1.3–K1.5 are not built; each unit's code PR marks its line *built*.
+K1.3b, K1.4 and K1.5 are not built; each unit's code PR marks its line *built*.
 
 ### Open
 
