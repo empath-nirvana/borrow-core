@@ -380,7 +380,9 @@ theorem cancelCT_jr {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F : C
   obtain ⟨-, P', hP', hb⟩ := lam_bang h (fun h => by cases h) (by not_withPair) (by not_const)
   obtain ⟨Γ₁, Γ₂, A', B', C, hs, hV, hB₂, hr⟩ := der_letpair hb _ _ rfl
   have hslotP : (⟨P', true⟩ :: Γ : Ctx VTy)[0]? = some ⟨P', true⟩ := rfl
-  rcases varCls_of_le hslotP (splitP_le_left hs) hV with hc | ⟨_, hT, -, -⟩
+  rcases varCls_of_le hslotP (splitP_le_left hs) hV with hc | ⟨_, hT, -, -⟩ | ⟨_, _, _, -, rfl, -⟩
+  pick_goal 3
+  · simp [VTy.alphaB] at hP'
   swap
   · cases P' <;> simp [VTy.forceTy, VTy.alphaB] at hT hP'
   obtain ⟨-, hK⟩ := vview_tensor (hc.of_alpha (VTy.alphaB_symm hP'))
@@ -401,7 +403,9 @@ theorem cancelCT_jr {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F : C
     ⟨_, _, _, _, he, -⟩ | ⟨_, _, he, -⟩ | ⟨_, _, he, -⟩ | ⟨he, -⟩ | he | he | ⟨_, he⟩ | ⟨_, he⟩ |
     ⟨_, he, -⟩
   · -- `⊸E`: the λ at a `⊸`, its body at `F B₀`
-    rcases varCls_of_le hslotK (splitP_le_left hs') hY with hc | ⟨_, hT, -, -⟩
+    rcases varCls_of_le hslotK (splitP_le_left hs') hY with hc | ⟨_, hT, -, -⟩ | ⟨_, _, _, -, rfl, -⟩
+    pick_goal 3
+    · rcases ob with _ | d <;> simp [kBoxO, kTy, VTy.alphaB] at hK
     swap
     · exact (hB'u _ hT).elim
     have hA₀ : A₀ ≠ .unit := by rintro rfl; exact vview_bang_thunk_unit (hk.trans hc)
@@ -418,7 +422,10 @@ theorem cancelCT_jr {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F : C
     exact kappa_cancel_jr (VView.alpha hk (VTy.alphaB_symm hA₁)) rfl hN
   · -- `[let]`: the argument returned, its type a view of `κ`'s
     cases hXe
-    rcases varCls_of_le hslotK (splitP_le_left hs') hM with ⟨S₁, Y₁, he, hc⟩ | ⟨_, hT, -, -⟩
+    rcases varCls_of_le hslotK (splitP_le_left hs') hM with ⟨S₁, Y₁, he, hc⟩ | ⟨_, hT, -, -⟩ |
+      ⟨_, _, _, -, rfl, -⟩
+    pick_goal 3
+    · rcases ob with _ | d <;> simp [kBoxO, kTy, VTy.alphaB] at hK
     swap
     · exact (hB'u _ hT).elim
     obtain ⟨-, rfl⟩ := effOf_inj he
@@ -1489,7 +1496,9 @@ theorem timeoutCl_finds {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F
   obtain ⟨-, P', hP', hb⟩ := lam_bang h (fun h => by cases h) (by not_withPair) (by not_const)
   obtain ⟨Γ₁, Γ₂, A', B', C, hs, hV, hB₂, hr⟩ := der_letpair hb _ _ rfl
   have hslotP : (⟨P', true⟩ :: Γ : Ctx VTy)[0]? = some ⟨P', true⟩ := rfl
-  rcases varCls_of_le hslotP (splitP_le_left hs) hV with hc | ⟨_, hT, -, -⟩
+  rcases varCls_of_le hslotP (splitP_le_left hs) hV with hc | ⟨_, hT, -, -⟩ | ⟨_, _, _, -, rfl, -⟩
+  pick_goal 3
+  · simp [VTy.alphaB] at hP'
   swap
   · cases P' <;> simp [VTy.forceTy, VTy.alphaB] at hT hP'
   obtain ⟨-, hK⟩ := vview_tensor (hc.of_alpha (VTy.alphaB_symm hP'))

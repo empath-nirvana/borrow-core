@@ -1557,6 +1557,7 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
   | foldOwnG => exact rcE_foldOwnGV _
   | foldReuse => exact rcE_foldReuseV _
   | unfoldN => exact rcE_unfoldV _
+  | unfoldK => exact rcE_unfoldV _
   | lolliE _ _ _ iha ihf => rw [rcE_app ihf]; exact iha
   | @effAwait _ _ S n a c hAt _ _ _ _ hfc _ =>
       have hn := names_of_rowAt hAt hfc

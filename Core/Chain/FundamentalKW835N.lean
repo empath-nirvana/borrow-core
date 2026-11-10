@@ -20,6 +20,7 @@ import Core.Chain.WithloadKW835N
 import Core.Chain.RulesKW835N
 import Core.Fundamental
 import Core.Chain.CodeRulesKW835N
+import Core.Chain.CodeNuOutKW835N
 
 /-!
 # `FundamentalN` assembled by induction on `CDerives`  `[spec §62]`
@@ -194,6 +195,8 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | nuIn hC _ ih => exact nuIn_compatN hC ih
   | nuOut hC _ ih => exact nuOut_compatN hC ih
   | unfoldN C S hC hS hΓ => exact unfoldN_compatN hC S hS hΓ
+  | unfoldK C G S hC hG hS hΓ => exact unfoldK_compatN hC hG hS hΓ
+  | nuOutK hC hG hS hGf h => exact nuOutK_compatN hC hG hS hGf h
   | effSub hle _ ih => exact sub_compatN hle ih
   | effPerform hf hna _ _ ih => exact perform_compatN hf hna ih
   | effAwait hΓ hfa ha haA hfc hc =>

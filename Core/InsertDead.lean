@@ -530,6 +530,13 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (unfoldV_closed C)]
       exact .unfoldN C S hC hS (deadP_insert hd Γa hΓ)
+  | unfoldK C G S hC hG hS hΓ =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (unfoldV_closed C)]
+      exact .unfoldK C G S hC hG hS (deadP_insert hd Γa hΓ)
+  | nuOutK hC hG hS hGf hs =>
+      intro Γa Γb hΓ; subst hΓ
+      rw [var_shift]; exact .nuOutK hC hG hS hGf (soloP_insert hd Γa hs)
   | effSub hle _ ih => intro Γa Γb hΓ; exact .effSub hle (ih Γa Γb hΓ)
   | effPerform hf hna hac _ ih => intro Γa Γb hΓ; exact .effPerform hf hna hac (ih Γa Γb hΓ)
   | effAwait hΓ hfa ha haA hfc hc =>
@@ -933,6 +940,13 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (unfoldV_closed C)]
       exact .unfoldN C S hC hS (deadP_insert hd Γa hΓ)
+  | unfoldK C G S hC hG hS hΓ =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (unfoldV_closed C)]
+      exact .unfoldK C G S hC hG hS (deadP_insert hd Γa hΓ)
+  | nuOutK hC hG hS hGf hs =>
+      intro Γa Γb hΓ; subst hΓ
+      rw [var_shift]; exact .nuOutK hC hG hS hGf (soloP_insert hd Γa hs)
   | effSub hle _ ih => intro Γa Γb hΓ; exact .effSub hle (ih Γa Γb hΓ)
   | effPerform hAt hf hna hac _ ih => intro Γa Γb hΓ; exact .effPerform hAt hf hna hac (ih Γa Γb hΓ)
   | effAwait hAt hΓ hfa ha haA hfc hc =>
