@@ -741,6 +741,8 @@ inductive TExpr where
   | nuIn (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
   | nuOut (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
   | unfoldN (info : TInfo) (jdg : Jdg) (C : CTy) (S : VTy)
+  | unfoldK (info : TInfo) (jdg : Jdg) (C : CTy) (G : VTy) (S : VTy)
+  | nuOutK (info : TInfo) (jdg : Jdg) (i : Nat) (C : CTy) (G : VTy) (S : VTy)
   | effSub (info : TInfo) (jdg : Jdg) (S : Row) (S' : Row) (A : VTy) (t : TExpr)
   | effPerform (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (t : TExpr)
   | effAwait (info : TInfo) (jdg : Jdg) (S : Row) (n : UInt32) (a : OpSig) (c : OpSig)
@@ -905,6 +907,8 @@ def TExpr.erase : TExpr → Expr
   | .nuIn _ _ _ t => t.erase
   | .nuOut _ _ _ t => t.erase
   | .unfoldN _ _ C _ => (.val (unfoldV C))
+  | .unfoldK _ _ C _ _ => (.val (unfoldV C))
+  | .nuOutK _ _ i _ _ _ => (.var i)
   | .effSub _ _ _ _ _ t => t.erase
   | .effPerform _ _ _ o t => (BoCa.BoLo.performE (opArgE o.n o.i (t.erase)))
   | .effAwait _ _ _ n _ _ => (awaitE n)
@@ -1028,6 +1032,8 @@ def TExpr.info : TExpr → TInfo
   | .nuIn i _ _ _ => i
   | .nuOut i _ _ _ => i
   | .unfoldN i _ _ _ => i
+  | .unfoldK i _ _ _ _ => i
+  | .nuOutK i _ _ _ _ _ => i
   | .effSub i _ _ _ _ _ => i
   | .effPerform i _ _ _ _ => i
   | .effAwait i _ _ _ _ _ => i
@@ -1147,6 +1153,8 @@ def TExpr.jdg : TExpr → Jdg
   | .nuIn _ j _ _ => j
   | .nuOut _ j _ _ => j
   | .unfoldN _ j _ _ => j
+  | .unfoldK _ j _ _ _ => j
+  | .nuOutK _ j _ _ _ _ => j
   | .effSub _ j _ _ _ _ => j
   | .effPerform _ j _ _ _ => j
   | .effAwait _ j _ _ _ _ => j
@@ -1274,6 +1282,8 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .nuIn _ _ _ t => [(.push 0, t)]
   | .nuOut _ _ _ t => [(.push 0, t)]
   | .unfoldN _ _ _ _ => []
+  | .unfoldK _ _ _ _ _ => []
+  | .nuOutK _ _ _ _ _ _ => []
   | .effSub _ _ _ _ _ t => [(.push 0, t)]
   | .effPerform _ _ _ _ t => [(.push 0, t)]
   | .effAwait _ _ _ _ _ _ => []
@@ -1415,6 +1425,8 @@ def TExpr.isLam : TExpr → Bool
   | .nuIn _ _ _ t => t.isLam
   | .nuOut _ _ _ t => t.isLam
   | .unfoldN _ _ C _ => (((.val (unfoldV C)) : Expr) matches .lam _)
+  | .unfoldK _ _ C _ _ => (((.val (unfoldV C)) : Expr) matches .lam _)
+  | .nuOutK _ _ _ _ _ _ => false
   | .effSub _ _ _ _ _ t => t.isLam
   | .effPerform _ _ _ o t => (((BoCa.BoLo.performE (opArgE o.n o.i (t.erase))) : Expr) matches .lam _)
   | .effAwait _ _ _ n _ _ => (((awaitE n) : Expr) matches .lam _)
@@ -1538,6 +1550,8 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .nuIn _ _ _ t => isLam_eq t
   | .nuOut _ _ _ t => isLam_eq t
   | .unfoldN _ _ _ _ => rfl
+  | .unfoldK _ _ _ _ _ => rfl
+  | .nuOutK _ _ _ _ _ _ => rfl
   | .effSub _ _ _ _ _ t => isLam_eq t
   | .effPerform _ _ _ _ _ => rfl
   | .effAwait _ _ _ _ _ _ => rfl

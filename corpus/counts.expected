@@ -93,6 +93,7 @@ clo-consume 3 0 0 5 5 0 # three counters' cells, each freed by its `close`
 closure-capture-scalar 0 0 0 0 0 0 # every capture is a word; a closure's copy copies words and allocates nothing
 closure-captures-int 6 0 0 36 36 0 # the input list's 3 nodes and the mapped list's 3; the algebra copies `n` as a word
 closure-captures-list 3 0 0 9 9 0 # the list's 3 nodes, moved into the closure: no copy
+core-pipe-step 1 0 0 1 1 0
 data-json-map-ser 16 0 0 699 420 205
 effects-load-raise 4 0 0 204 184 15
 for-arm-raises-owned 8 0 0 54 54 54
@@ -101,12 +102,39 @@ if-match-argument 0 0 0 0 0 0
 infer-local-from-call 4 0 0 16 16 0
 infer-local-sum-generic 1 0 0 16 16 5
 infer-local-unit 2 0 0 4 4 1
+kernel-cancel-now 0 0 0 0 0 0
+kernel-deep-gen-plain 0 0 0 0 0 0
+kernel-e7a 1 0 0 1 1 0
+kernel-fail-outside-native 0 0 0 0 0 0
+kernel-forward 4 0 0 17 21 0
+kernel-forward-cancel 1 0 0 1 1 0
+kernel-log-in-borrow 2 0 0 4 4 0
+kernel-log-outside-native 0 0 0 0 0 0
+kernel-loop-captured 0 9001 0 0 0 0
+kernel-loop-tail 0 0 0 0 0 0
+kernel-nested-fail-outside 0 1 0 0 0 0
+kernel-nested-log-outside 0 2 0 0 0 0
+kernel-reborrow-raise 1 0 0 2 2 0
+kernel-store-cancel 2 0 0 8 8 0
+kernel-stored-k-cancel 0 1 0 0 0 0
+kernel-stored-k-resume 0 3 0 0 0 0
+kernel-take-all 1 0 0 1 1 0
+kernel-tick-answering 1 0 0 4 4 0
+kernel-tick-native 0 0 0 0 0 0
 leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 4861 # as 0039-combination-sum: the same search, by a loop over the candidates
 lend-call-raise 9 0 0 34 31 4 # the cells of the eight lending runs, those scoped to a call included, and the table
 lend-call-record 1 0 0 6 2 0 # the cell scoped to the call, freed by the unwinding lend's finaliser
 lend-tail-call 1 0 0 10 6 0
 lit-lend-raise 6 0 0 69 30 39 # one array per literal view: the unwinding form is not marked as a literal's view (SPEC §18), so the table is tabulated into the heap
 load-for-linear 1 0 0 155 65 19
+mut-control-assign-raise 0 0 0 6 6 0
+mut-control-call-order 0 0 0 10 10 0
+mut-control-exhausted 13 0 0 105532 105532 75526
+mut-control-lend 1 0 0 23 23 8
+mut-control-nested 0 0 0 10009 10009 0
+mut-control-order 0 0 0 9 9 0
+mut-control-raise 0 0 0 13 13 0
+mut-control-with 0 0 0 2 2 0
 nu-file-read 2 0 0 7 6 0 # the buffer and the file's content cell; the observations are direct calls
 nu-file-twice 2 0 0 11 11 0 # as nu-file-read: three reads, one through a reborrow
 nu-file-consumed 2 0 0 5 5 0 # the buffer and the content cell, freed by the object's consume

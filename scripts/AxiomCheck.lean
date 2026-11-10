@@ -806,6 +806,16 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_hndJ₁
 #print axioms BoCa.Fig16.LogRel.Core.kappaFinSelf
 #print axioms BoCa.Fig16.LogRel.Core.lastFinOK_nil_of_find
+-- SPEC §51: `[handle-last]`'s erasure laws
+#print axioms BoCa.Fig16.LogRel.Core.StepsOff.upd
+#print axioms BoCa.Fig16.LogRel.Core.work_run_ctx
+#print axioms BoCa.Fig16.LogRel.Core.last_perform_direct
+#print axioms BoCa.Fig16.LogRel.Core.last_resume_direct
+#print axioms BoCa.Fig16.LogRel.Core.last_cancel_direct
+#print axioms BoCa.Fig16.LogRel.Core.last_cancel_exit
+#print axioms BoCa.Fig16.LogRel.Core.answers_in_place
+#print axioms BoCa.Fig16.LogRel.Core.tail_clause_answers
+#print axioms BoCa.Fig16.LogRel.Core.last_clause_answers
 -- `!` on the LIR types (#714): `ofV` keeps it, and what `Lint` reads at a copy and a consume
 #print axioms Backend2.ofV_bang
 #print axioms Backend2.ofV_persistent
@@ -2640,5 +2650,22 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.force_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.gN_capTy
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vN_thunk_of_cN
+#print axioms BoCa.Fig16.LogRel.Core.hCode_capNorm
+#print axioms BoCa.Fig16.LogRel.Core.hN_code
+#print axioms BoCa.Fig16.LogRel.Core.unfoldK_compatX
+#print axioms BoCa.Fig16.LogRel.Core.nuP_codeCand
+#print axioms BoCa.Fig16.LogRel.Core.vCE_codeEnv
+#print axioms BoCa.Fig16.LogRel.Core.effRetE_unrollK
+#print axioms BoCa.Fig16.LogRel.Core.cB_unrollK
+#print axioms BoCa.Fig16.LogRel.Core.nuOutK_compatX
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.unfoldK_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_step
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_pureSteps
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.node_okK
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.nuOutK_compatN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.CodeLoop855N.d_progK
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.CodeLoop855N.progK_runs
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.CodeLoop855N.progK_orDiverges
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.JR.codeOut_ampNu
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_lam
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.VView.hnf

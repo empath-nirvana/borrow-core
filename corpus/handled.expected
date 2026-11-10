@@ -1122,6 +1122,77 @@ corpus/join-let-match.bc flows [0, 4294967295]; main []
 corpus/join-let-nested.bc flows [0, 4294967295]; main []
 corpus/join-let-with.bc flows [0, 4294967295]; main []
 corpus/json-tokens.bc flows [0, 4294967295]; main []
+corpus/kernel-cancel-now.bc flows [0, 1, 4294967295]; main [1]
+corpus/kernel-cancel-now.bc 13:13: handle 1: inside []; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/kernel-cancel-now.bc 1.0 stored: machine; condition 2 holds; -
+corpus/kernel-deep-gen-plain.bc flows [0, 1, 2, 4294967295]; main [1, 2]
+corpus/kernel-deep-gen-plain.bc 23:13: handle 1: inside [2]; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/kernel-deep-gen-plain.bc 23:29: handle 2: inside []; row [1]; ops 2.0 tail; names 2.0 [1]; condition 2 fails at 1
+corpus/kernel-deep-gen-plain.bc 1.0 tail: direct; condition 2 holds; agree
+corpus/kernel-deep-gen-plain.bc 2.0 tail: machine; condition 2 fails; -
+corpus/kernel-e7a.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/kernel-e7a.bc 16:20: handle 1: inside [], finaliser; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/kernel-e7a.bc 1.0 stored: machine; condition 2 holds; -
+corpus/kernel-fail-outside-native.bc flows [0, 2, 4294967295]; main [1, 2]
+corpus/kernel-fail-outside-native.bc 20:26: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/kernel-fail-outside-native.bc 20:56: handle 2: inside []; row [1]; ops 2.0 once; names 2.0 []; condition 2 holds
+corpus/kernel-fail-outside-native.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/kernel-fail-outside-native.bc 2.0 once: machine; condition 2 holds; -
+corpus/kernel-forward-cancel.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
+corpus/kernel-forward-cancel.bc 16:13: handle 1: inside [2], finaliser; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/kernel-forward-cancel.bc 16:26: handle 2: inside [], finaliser; row [1]; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/kernel-forward-cancel.bc 1.0 stored: machine; condition 2 holds; -
+corpus/kernel-forward-cancel.bc 2.0 tail: -; condition 2 holds; -
+corpus/kernel-forward.bc flows [0, 1, 2, 4294967295]; main [1, 2]
+corpus/kernel-forward.bc 15:13: handle 1: inside [2]; row []; ops 1.0 once; names 1.0 []; condition 2 holds
+corpus/kernel-forward.bc 15:26: handle 2: inside []; row [1]; ops 2.0 once; names 2.0 []; condition 2 holds
+corpus/kernel-forward.bc 1.0 once: machine; condition 2 holds; -
+corpus/kernel-forward.bc 2.0 once: machine; condition 2 holds; -
+corpus/kernel-log-in-borrow.bc flows [0, 4294967295]; main []
+corpus/kernel-log-outside-native.bc flows [0, 1, 2, 4294967295]; main [1, 2]
+corpus/kernel-log-outside-native.bc 22:26: handle 1: inside [2]; row []; ops 1.0 once; names 1.0 []; condition 2 holds
+corpus/kernel-log-outside-native.bc 22:49: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/kernel-log-outside-native.bc 1.0 once: machine; condition 2 holds; -
+corpus/kernel-log-outside-native.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/kernel-loop-captured.bc flows [0, 2, 4294967295]; main [1, 2]
+corpus/kernel-loop-captured.bc 28:3: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/kernel-loop-captured.bc 28:33: handle 2: inside []; row [1]; ops 2.0 tail+state; names 2.0 []; condition 2 holds
+corpus/kernel-loop-captured.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/kernel-loop-captured.bc 2.0 tail+state: machine; condition 2 holds; -
+corpus/kernel-loop-tail.bc flows [0, 2, 4294967295]; main [1, 2]
+corpus/kernel-loop-tail.bc 24:17: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/kernel-loop-tail.bc 24:47: handle 2: inside []; row [1]; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/kernel-loop-tail.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/kernel-loop-tail.bc 2.0 tail: direct; condition 2 holds; agree
+corpus/kernel-nested-fail-outside.bc flows [0, 2, 4294967295]; main [1, 2]
+corpus/kernel-nested-fail-outside.bc 19:26: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/kernel-nested-fail-outside.bc 19:56: handle 2: inside []; row [1]; ops 2.0 tail+state; names 2.0 []; condition 2 holds
+corpus/kernel-nested-fail-outside.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/kernel-nested-fail-outside.bc 2.0 tail+state: machine; condition 2 holds; -
+corpus/kernel-nested-log-outside.bc flows [0, 1, 2, 4294967295]; main [1, 2]
+corpus/kernel-nested-log-outside.bc 21:26: handle 1: inside [2]; row []; ops 1.0 tail+state; names 1.0 []; condition 2 holds
+corpus/kernel-nested-log-outside.bc 21:56: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/kernel-nested-log-outside.bc 1.0 tail+state: machine; condition 2 holds; -
+corpus/kernel-nested-log-outside.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/kernel-reborrow-raise.bc flows [0, 4294967295], finaliser; main [1], finaliser
+corpus/kernel-reborrow-raise.bc 16:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/kernel-reborrow-raise.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/kernel-store-cancel.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/kernel-store-cancel.bc 18:13: handle 1: inside [], finaliser; row []; ops 1.0 stored; names 1.0 row; condition 2 holds
+corpus/kernel-store-cancel.bc 1.0 stored: machine; condition 2 holds; -
+corpus/kernel-stored-k-cancel.bc flows [0, 1, 4294967295]; main [1]
+corpus/kernel-stored-k-cancel.bc 19:24: handle 1: inside []; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/kernel-stored-k-cancel.bc 1.0 stored: machine; condition 2 holds; -
+corpus/kernel-stored-k-resume.bc flows [0, 1, 4294967295]; main [1]
+corpus/kernel-stored-k-resume.bc 21:24: handle 1: inside []; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/kernel-stored-k-resume.bc 1.0 stored: machine; condition 2 holds; -
+corpus/kernel-take-all.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/kernel-take-all.bc 24:3: handle 1: inside [], finaliser; row []; ops 1.0 resume-or-cancel; names 1.0 []; condition 2 holds
+corpus/kernel-take-all.bc 1.0 resume-or-cancel: machine; condition 2 holds; -
+corpus/kernel-tick-answering.bc flows [0, 4294967295]; main []
+corpus/kernel-tick-native.bc flows [0, 1, 4294967295]; main [1]
+corpus/kernel-tick-native.bc 17:32: handle 1: inside []; row []; ops 1.0 once; names 1.0 []; condition 2 holds
+corpus/kernel-tick-native.bc 1.0 once: machine; condition 2 holds; -
 corpus/key-value.bc flows [0, 1, 4294967295]; main [1]
 corpus/key-value.bc 37:9: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/key-value.bc 1.0 abortive: branch; condition 2 holds; -
@@ -1382,6 +1453,34 @@ corpus/map-views.bc flows [0, 4294967295]; main []
 corpus/mut-bind-arm.bc flows [0, 4294967295]; main []
 corpus/mut-block-nested.bc flows [0, 4294967295]; main []
 corpus/mut-block.bc flows [0, 4294967295]; main []
+corpus/mut-control-assign-raise.bc flows [0, 1, 4294967295]; main [1]
+corpus/mut-control-assign-raise.bc 15:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/mut-control-assign-raise.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/mut-control-call-order.bc flows [0, 1, 4294967295]; main [1]
+corpus/mut-control-call-order.bc 19:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/mut-control-call-order.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/mut-control-exhausted.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/mut-control-exhausted.bc 18:11: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/mut-control-exhausted.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/mut-control-lend.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/mut-control-lend.bc 19:16: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/mut-control-lend.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/mut-control-nested.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
+corpus/mut-control-nested.bc 17:11: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/mut-control-nested.bc 19:13: handle 2: inside [], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/mut-control-nested.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/mut-control-nested.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/mut-control-order.bc flows [0, 1, 4294967295]; main [1]
+corpus/mut-control-order.bc 19:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/mut-control-order.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/mut-control-raise.bc flows [0, 1, 4294967295]; main [1]
+corpus/mut-control-raise.bc 18:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/mut-control-raise.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/mut-control-with.bc flows [0, 1, 2, 4294967295]; main [1, 2]
+corpus/mut-control-with.bc 15:15: handle 1: inside [2]; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/mut-control-with.bc 13:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/mut-control-with.bc 1.0 tail: direct; condition 2 holds; agree
+corpus/mut-control-with.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/mut-lend-arm.bc flows [0, 4294967295]; main []
 corpus/mut-modify.bc flows [0, 4294967295]; main []
 corpus/mut-name-capture.bc flows [0, 4294967295]; main []

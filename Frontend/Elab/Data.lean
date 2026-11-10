@@ -41,12 +41,15 @@ def Abbrev.ofDecl? : Decl → Option Abbrev
   | _ => none
 
 /-- The `data` declarations in scope and the `type` abbreviations in scope, each in the order they
-are declared. A later declaration of a name hides an earlier one of the same kind. -/
+are declared. A later declaration of a name hides an earlier one of the same kind. With them, the
+names of the control handlers in scope, whose `with` lends what its body writes (SPEC §41, R3).
+`[spec §41]` -/
 structure Table where
   decls : List DataDecl := []
   abbrevs : List Abbrev := []
+  ctl : List String := []
 
-instance : Append Table := ⟨fun t u => ⟨t.decls ++ u.decls, t.abbrevs ++ u.abbrevs⟩⟩
+instance : Append Table := ⟨fun t u => ⟨t.decls ++ u.decls, t.abbrevs ++ u.abbrevs, t.ctl ++ u.ctl⟩⟩
 
 /-- The declaration named `n`, the last one. -/
 def Table.decl? (t : Table) (n : String) : Option DataDecl :=

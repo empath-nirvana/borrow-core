@@ -239,6 +239,8 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .nuIn ii jj C t => t.lifeBinders
   | .nuOut ii jj C t => t.lifeBinders
   | .unfoldN ii jj C S => []
+  | .unfoldK ii jj C G S => []
+  | .nuOutK ii jj i C G S => []
   | .effSub ii jj S S' A t => t.lifeBinders
   | .effPerform ii jj S o t => t.lifeBinders
   | .effAwait ii jj S n a c => []
@@ -359,6 +361,8 @@ def TExpr.domFree : TExpr → Bool
   | .nuIn ii jj C t => t.domFree
   | .nuOut ii jj C t => t.domFree
   | .unfoldN ii jj C S => true
+  | .unfoldK ii jj C G S => true
+  | .nuOutK ii jj i C G S => true
   | .effSub ii jj S S' A t => t.domFree
   | .effPerform ii jj S o t => t.domFree
   | .effAwait ii jj S n a c => true
@@ -478,6 +482,8 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .nuIn ii jj C t => .nuIn ii jj C (t.reAb Δr)
   | .nuOut ii jj C t => .nuOut ii jj C (t.reAb Δr)
   | .unfoldN ii jj C S => .unfoldN ii jj C S
+  | .unfoldK ii jj C G S => .unfoldK ii jj C G S
+  | .nuOutK ii jj i C G S => .nuOutK ii jj i C G S
   | .effSub ii jj S S' A t => .effSub ii jj S S' A (t.reAb Δr)
   | .effPerform ii jj S o t => .effPerform ii jj S o (t.reAb Δr)
   | .effAwait ii jj S n a c => .effAwait ii jj S n a c
@@ -888,6 +894,12 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | unfoldN a0 a1 a2 a3 a4 =>
       intro Δ' he hd
       exact TDerivesP.unfoldN a0 a1 a2 a3 a4
+  | unfoldK a0 a1 a2 a3 a4 a5 a6 =>
+      intro Δ' he hd
+      exact TDerivesP.unfoldK a0 a1 a2 a3 a4 a5 a6
+  | nuOutK a0 a1 a2 a3 a4 =>
+      intro Δ' he hd
+      exact TDerivesP.nuOutK a0 a1 a2 a3 a4
   | effSub a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesP.effSub a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
@@ -1231,6 +1243,12 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | unfoldN a0 a1 a2 a3 a4 =>
       intro Δ' he hd
       exact TDerivesAt.unfoldN a0 a1 a2 a3 a4
+  | unfoldK a0 a1 a2 a3 a4 a5 a6 =>
+      intro Δ' he hd
+      exact TDerivesAt.unfoldK a0 a1 a2 a3 a4 a5 a6
+  | nuOutK a0 a1 a2 a3 a4 =>
+      intro Δ' he hd
+      exact TDerivesAt.nuOutK a0 a1 a2 a3 a4
   | effSub a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesAt.effSub a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
