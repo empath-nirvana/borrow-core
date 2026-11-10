@@ -4794,9 +4794,12 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
           | some s => s!"`{s}` ({n}.{i})"
           | none => s!"{n}.{i}"
         -- A function's row as the effects pass wrote it in its type (`Fins.fnRows`, the fact the
-        -- inference reads too); a name in this context, a block parameter's, by its type here.
+        -- inference reads too); a name in this context, a block parameter's, by its type here; a
+        -- handler site (`Fins.siteMark`) the row it is typed at, `S`, its clauses'.  `[spec §27]`
         let fnRows := (← get).fnRows
-        let rowOf (g : String) : List (Nat × Nat) := match fnRows.lookup g with
+        let rowOf (g : String) : List (Nat × Nat) :=
+          if g == Elab.Fins.siteMark then S.map fun o => (o.n.toNat, o.i.toNat)
+          else match fnRows.lookup g with
           | some r => r
           | none => ((cS.tyV (.var .none g)).map fun T =>
               (fnRowOf T).map fun o => (o.n.toNat, o.i.toNat)).getD []

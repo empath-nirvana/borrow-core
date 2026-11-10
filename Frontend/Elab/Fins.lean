@@ -238,6 +238,11 @@ def cancelHeads (k : String) : Nat → Comp → List Comp
     | .ret _ (.thunkv _ N) => cancelHeads k n N
     | _ => []
 
+/-- The name `perfV`/`perfC` give a handler site among the functions a computation names: the
+kernel types `handle_n` at the row around it, where its clauses run (`[handle]`), so the site
+counts as performing that row (`rowOf siteMark`).  `[spec §27]` -/
+def siteMark : String := "⟨site⟩"
+
 mutual
 /-- The names a value performs and the functions it names, less the operations of the sites inside
 it (`inner`): `(names, functions)`.  `[spec §27]` -/
@@ -247,7 +252,8 @@ def perfV : Nat → List Nat → Val → List (Nat × Nat) × List String
     if let some (i, P, R, cls, M) := hndSite? V then
       let a := perfV k inner P; let b := perfV k inner R; let c := perfV k inner cls
       let d := perfC k (i.n :: inner) M
-      (a.1 ++ b.1 ++ c.1 ++ d.1, a.2 ++ b.2 ++ c.2 ++ d.2)
+      -- The site is typed at the row around it, its clauses' (`siteMark`).
+      (a.1 ++ b.1 ++ c.1 ++ d.1, siteMark :: (a.2 ++ b.2 ++ c.2 ++ d.2))
     else match V with
     | .var _ x | .clone _ x | .defApp _ x _ => ([], [x])
     | .pair _ V W | .app _ V W =>
@@ -275,7 +281,7 @@ def perfC : Nat → List Nat → Comp → List (Nat × Nat) × List String
     | .perform _ n i V | .abort _ n i V =>
       two (if inner.contains n then [] else [(n, i)], []) (perfV k inner V)
     | .handle _ n _ hr hc M =>
-      two (two (perfV k inner hr) (perfV k inner hc)) (perfC k (n :: inner) M)
+      two ([], [siteMark]) (two (two (perfV k inner hr) (perfV k inner hc)) (perfC k (n :: inner) M))
     | .unwind _ _ _ M D N => two (perfC k inner M) (two (perfC k inner D) (perfC k inner N))
     | .top _ => ([], [])
 end
@@ -286,18 +292,21 @@ row (`rowOf`) of every function it names. The rows are the facts the effects pas
 copies' types (`fnRows`); the typed elaboration gives a local's (a block parameter's) by its type.
 `[spec §27]`
 
-UNPROVED: a function with a row is named in a computation only to be called there (a copy, the
-effects pass's: `io_fg <- return unbang f; …; force io_fg a`, or `f[A](a)` of a template's copy),
-so naming it performs its row. Why it should hold: the effects pass names a copy only at its call,
-and refuses a function with a row passed as a value. What breaks if it does not: a head that
-performs an operation this walk misses is not wrapped in `unwind (cancel k)`, and the kernel
-refuses `k` live across it (a refusal, never a wrong program); one it counts that the head does not
-perform is wrapped, which the kernel checks too. -/
+UNPROVED: naming a function with a row performs its row, and a handler site performs the row
+around it. Why it should hold: the effects pass names a copy at its call (`io_fg <- return unbang
+f; …; force io_fg a`, or `f[A](a)` of a template's copy), or passes it to a block parameter whose
+callee's row holds the same operations (`apply(check, 7)`); the kernel types `handle_n` at the row
+around it, the row its clauses run at (`siteMark`, read as that row by the typed elaboration). What
+breaks if it does not: a head that performs an operation this walk misses is not wrapped in
+`unwind (cancel k)`, and the kernel refuses `k` live across it (a refusal, never a wrong program).
+One it over-counts is wrapped, which the kernel checks too; but an over-counted operation that
+captures a continuation makes `cancelDropped` refuse the clause itself (the `⊤` limit), an
+elaborator refusal the kernel might not make. -/
 def opsOf (rowOf : String → List (Nat × Nat)) (M : Comp) : List (Nat × Nat) :=
   let (ns, fs) := perfC 100000 [] M
   ns ++ fs.flatMap rowOf
 
-/-- The entries of `S` among the operations `ns`. -/
+/-- The entries of `S` among the operations `ns`.  `[spec §27]` -/
 def entsAt (S : List Ent) (ns : List (Nat × Nat)) : List Ent :=
   addEnts [] (ns.filterMap fun (n, i) => S.find? fun e => e.1 == n && e.2.1 == i)
 
@@ -310,7 +319,7 @@ def fnRows (ds : List Decl) : List (String × List (Nat × Nat)) :=
       if r.isEmpty then none else some (n.name, r.map fun e => (e.1, e.2.1))
     | _ => none
 
-/-- A function's row by its name, as its written type gives it. -/
+/-- A function's row by its name, as its written type gives it.  `[spec §27]` -/
 def rowNames (rows : List (String × List Ent)) (f : String) : List (Nat × Nat) :=
   ((rows.lookup f).getD []).map fun e => (e.1, e.2.1)
 
