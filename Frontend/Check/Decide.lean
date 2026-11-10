@@ -1184,18 +1184,22 @@ theorem thenLeB_sound {F : CTy} {E : Row} {T : CTy} (h : thenLeB F E T = true) :
     obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
     exact thenLayersB_sound E F T hl o hm
 
-/-- `[then]`'s cancel-row premise at `Σ_M = Σ`, decided: each operation of `S` whose cancel row is
-read has `F ⋈ Σ_D ≤ F` at its own cancel row `F`.  `[spec §27]` -/
-def thenFinB (S SD : Row) : Bool := S.all fun o => !o.finRead || thenLeB o.fin SD o.fin
+/-- `[then]`'s cancel-row premise, decided: each operation of `M`'s row `SM` whose cancel row is read
+has `F ⋈ Σ_D ≤ F'`, `F` its cancel row and `F'` that of the operation the site's row `S` finds at
+its key.  `[spec §27]` -/
+def thenFinB (SM S SD : Row) : Bool :=
+  SM.all fun o => !o.finRead || match Row.find S o.n o.i with
+    | some o' => thenLeB o.fin SD o'.fin
+    | none => false
 
-theorem thenFinB_sound {S SD : Row} (h : thenFinB S SD = true) :
-    ∀ n i o o', Row.find S n i = some o → Row.find S n i = some o' → o.finRead = true →
+/-- `thenFinB` decides `[then]`'s premise `hfin` soundly.  `[spec §27]` -/
+theorem thenFinB_sound {SM S SD : Row} (h : thenFinB SM S SD = true) :
+    ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true →
       ThenLe o.fin SD o'.fin := by
   intro n i o o' hf hf' hr
-  rw [hf] at hf'
-  cases hf'
-  have hx := List.all_eq_true.mp h o (Row.find_mem hf).1
-  simp only [hr, Bool.not_true, Bool.false_or] at hx
+  obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
+  have hx := List.all_eq_true.mp h o hm
+  simp only [hr, Bool.not_true, Bool.false_or, hf'] at hx
   exact thenLeB_sound hx
 
 /-- `CTy.FinPers`, decided. -/

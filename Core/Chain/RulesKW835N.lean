@@ -725,17 +725,17 @@ theorem cBN_tyEq (T T' : VTy) (R : CandN) : ∀ (C : CTy) {C' : CTy} {δ δ' : L
   | .ret A, C', _, _, h, hT => by
       cases C' <;> simp only [CTyEq] at h
       have ih := vNE_tyEq A _ _ h (envEqN_nu (P := thunkRN R) (hT _ _))
-      funext Θ c n ls e ρ; simp only [cBN, ih]
+      funext Θ c n ls e ρ; simp only [cBNP, ih]
   | .arr A C, C', _, _, h, hT => by
       cases C' <;> simp only [CTyEq] at h
       have ihA := vNE_tyEq A none none h.1 (envEqN_none _ _)
       have ihC := cBN_tyEq T T' R C h.2 hT
-      funext Θ c n ls e ρ; simp only [cBN, ihA, ihC]
+      funext Θ c n ls e ρ; simp only [cBNP, ihA, ihC]
   | .amp C D, C', _, _, h, hT => by
       cases C' <;> simp only [CTyEq] at h
       have ihC := cBN_tyEq T T' R C h.1 hT
       have ihD := cBN_tyEq T T' R D h.2 hT
-      funext Θ c n ls e ρ; simp only [cBN, ihC, ihD]
+      funext Θ c n ls e ρ; simp only [cBNP, ihC, ihD]
   | .top, C', _, _, h, _ => by cases C' <;> simp only [CTyEq] at h; rfl
   | .nu C, C', _, _, h, _ => by cases C' <;> simp only [CTyEq] at h; rfl
   | .all x b C, C', δ, δ', h, hT => by
@@ -745,7 +745,7 @@ theorem cBN_tyEq (T T' : VTy) (R : CandN) : ∀ (C : CTy) {C' : CTy} {δ δ' : L
         fun α => cBN_tyEq T T' R C (h.2 α) hT
       have hL : ∀ α : Life, LtLife δ b α = LtLife δ' b' α := by
         intro α; unfold LtLife; rw [h.1]
-      funext Θ c n ls e ρ; simp only [cBN, hC, hL]
+      funext Θ c n ls e ρ; simp only [cBNP, hC, hL]
   | .eff n i q A B fin rc C, C', δ, δ', h, hT => by
       cases C' <;> simp only [CTyEq] at h
       obtain ⟨rfl, rfl, rfl, hA, hB, hF, hC⟩ := h
@@ -755,7 +755,7 @@ theorem cBN_tyEq (T T' : VTy) (R : CandN) : ∀ (C : CTy) {C' : CTy} {δ δ' : L
       have hTb := tabN_tyEq C hC
       have hR := retNX_tyEq T T' (thunkRN R) C hC (hT _ _)
       have hz := TyEq.isZero_eq B hB
-      funext Θ c k ls e ρ; simp only [cBN, entNK, ihA, ihB, ihF, hTb, hR, hz]; rw [capB_congr hz]
+      funext Θ c k ls e ρ; simp only [cBNP, entNK, ihA, ihB, ihF, hTb, hR, hz]; rw [capB_congr hz]
   termination_by structural x => x
 /-- The answer of a row's layers with one type variable reads a type only up to `CTyEq`. -/
 theorem retNX_tyEq (T T' : VTy) (P : LocTy → Nat → Val → WRes → Prop) : ∀ (C : CTy) {C' : CTy}

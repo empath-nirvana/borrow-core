@@ -2022,6 +2022,8 @@ theorem host_le (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = some r) 
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, _, -, rfl⟩ := h; exact hi32 _
       · obtain ⟨_, _, -, rfl⟩ := h; exact hi64 _
+      · obtain ⟨_, _, -, rfl⟩ := h; exact hob .u32 _
+      · obtain ⟨_, _, -, rfl⟩ := h; exact hob .u64 _
   | div w o =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, _, -, rfl⟩ := h
@@ -2030,16 +2032,28 @@ theorem host_le (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = some r) 
       · obtain ⟨_, _, -, rfl⟩ := h
         exact hopt _ fun v hv => by
           simp only [Option.map_eq_some_iff] at hv; obtain ⟨_, -, rfl⟩ := hv; exact hi64 _
+      · obtain ⟨_, _, -, rfl⟩ := h
+        exact hopt _ fun v hv => by
+          simp only [Option.map_eq_some_iff] at hv; obtain ⟨_, -, rfl⟩ := hv; exact hob .u32 _
+      · obtain ⟨_, _, -, rfl⟩ := h
+        exact hopt _ fun v hv => by
+          simp only [Option.map_eq_some_iff] at hv; obtain ⟨_, -, rfl⟩ := hv; exact hob .u64 _
   | un w o =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, -, rfl⟩ := h; exact hi32 _
       · obtain ⟨_, -, rfl⟩ := h; exact hi64 _
+      · obtain ⟨_, -, rfl⟩ := h; exact hob .u32 _
+      · obtain ⟨_, -, rfl⟩ := h; exact hob .u64 _
   | eqz w =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, -, rfl⟩ := h; exact hbool _
       · obtain ⟨_, -, rfl⟩ := h; exact hbool _
+      · obtain ⟨_, -, rfl⟩ := h; exact hbool _
+      · obtain ⟨_, -, rfl⟩ := h; exact hbool _
   | rel w o =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
+      · obtain ⟨_, _, -, rfl⟩ := h; exact hbool _
+      · obtain ⟨_, _, -, rfl⟩ := h; exact hbool _
       · obtain ⟨_, _, -, rfl⟩ := h; exact hbool _
       · obtain ⟨_, _, -, rfl⟩ := h; exact hbool _
   | wrap =>
@@ -2080,6 +2094,14 @@ theorem host_le (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = some r) 
       cases f <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
       · exact hob .f32 _
       · exact hob .f64 _
+  | reinterpret_u i =>
+      cases i <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
+      · exact hob .u32 _
+      · exact hob .u64 _
+  | reinterpret_s i =>
+      cases i <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
+      · exact hob .w32 _
+      · exact hob .w64 _
 
 /-! ### Head steps -/
 

@@ -1,0 +1,21 @@
+-- A `let mut` string buffer lent `&mut` to a bounded recursion inside `with on_exhausted { … }`,
+-- where the recursion runs out of its budget of depth (SPEC §41, R3; §20). `buf` is lent around
+-- the handler site, a cell scoped to it, and `fill(&mut buf, 20000)` reborrows that borrow for the
+-- call (`withbor3U`). At depth 10001 `fill` performs `Exhausted`: the clause abandons the body,
+-- the reborrow and the recursion's frames unwind, and the lend around the site ends with the site,
+-- so `buf` keeps every byte pushed before the abort, as in Rust. It is then used after the `with`.
+--
+-- Answer: `(i32[4294967295], i32[10002])`: the recursion exhausted (−1, printed unsigned); the
+-- bytes pushed before the abort and the `!` pushed after it, `10002`; `live 0`.
+include rec
+include text
+
+fn fill<'a>(m: mut 'a string, n: i32) -> i32 =
+  if n == 0 { 0 } else { modify m { s -> let (s, u) = push_byte(s, b'x'); (s, ()) }; 1 + fill(m, n - 1) }
+
+main -> i32 * i32 =
+  let mut buf = string_new(4);
+  let r = with on_exhausted(!{ u -> 0 - 1 }) { fill(&mut buf, 20000) };
+  let (buf, u) = push_byte(buf, b'!');
+  let (a, n) = buf;
+  (r, n)

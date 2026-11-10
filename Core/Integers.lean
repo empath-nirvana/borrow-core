@@ -3,7 +3,7 @@ import Core.Compat
 /-!
 # Core — Integers  `[spec §8]`
 
-`I32` and `I64` (`VTy.int`), the literals and the host operations. The relation holds a literal
+`I32` and `I64` (`VTy.int`), the unsigned `U32` and `U64` (§73), the literals and the host operations. The relation holds a literal
 of the width at `∅` (`vCE`'s `int` clause), so the integer types are persistent, `Imm̲ 'b I = I`,
 and they outlive every lifetime (`Types.lean`, `Persistent.lean`).
 
@@ -43,6 +43,10 @@ abbrev VTy.u8 : VTy := .int .w8
 abbrev VTy.f32 : VTy := .int .f32
 abbrev VTy.f64 : VTy := .int .f64
 
+/-- `U32`, `U64`: the same bits as `I32`, `I64`, read unsigned.  `[spec §73]` -/
+abbrev VTy.u32 : VTy := .int .u32
+abbrev VTy.u64 : VTy := .int .u64
+
 /-- The width of a literal. -/
 def _root_.BoCa.IntLit.width : IntLit → Width
   | .i32 _ => .w32
@@ -50,10 +54,13 @@ def _root_.BoCa.IntLit.width : IntLit → Width
   | .u8 _ => .w8
   | .f32 _ => .f32
   | .f64 _ => .f64
+  | .u32 _ => .u32
+  | .u64 _ => .u64
 
-/-- `A` at an integer width with grouped operations (`w32`, `w64`), else `0`.  `[spec §8]` -/
+/-- `A` at an integer width with grouped operations (`w32`, `w64`, `u32`, `u64`), else `0`.
+    `[spec §8, §73]` -/
 def intOnly : Width → VTy → VTy
-  | .w32, A | .w64, A => A
+  | .w32, A | .w64, A | .u32, A | .u64, A => A
   | _, _ => .zero
 
 /-- The argument type of a host operation. The grouped integer operations at `w8`, `f32` and
@@ -81,6 +88,8 @@ def hostArg : HostOp → VTy
   | .promote => .int .f32
   | .reinterpret_i f => .int f.width
   | .reinterpret_f f => .int f.int.width
+  | .reinterpret_u i => .int i.width
+  | .reinterpret_s i => .int i.uwidth
 
 /-- The result type of a host operation: `I`, `I ⊕ 1` for the partial operations, `1 ⊕ 1` for
 the tests.  `[spec §8]` -/
@@ -106,6 +115,8 @@ def hostRes : HostOp → VTy
   | .promote => .int .f64
   | .reinterpret_i f => .int f.int.width
   | .reinterpret_f f => .int f.width
+  | .reinterpret_u i => .int i.uwidth
+  | .reinterpret_s i => .int i.width
 
 /-- `hostArg op ⊸ hostRes op` at value type: `U (A ⊸ F B)`.  `[spec §8]` -/
 abbrev hostSig (op : HostOp) : VTy := .lolli (hostArg op) (hostRes op)
@@ -123,6 +134,8 @@ theorem vP_lit (c : IntLit) {ls : List SRec} {δ : LSub} :
   | u8 n => exact ⟨rfl, n, rfl⟩
   | f32 n => exact ⟨rfl, n, rfl⟩
   | f64 n => exact ⟨rfl, n, rfl⟩
+  | u32 n => exact ⟨rfl, n, rfl⟩
+  | u64 n => exact ⟨rfl, n, rfl⟩
 
 theorem vP_ofBits (w : Width) (n : w.bits) {ls : List SRec} {δ : LSub} :
     vP (.int w) ls δ (Val.ofBits w n) PMap.empty := ⟨rfl, Val.isInt_iff.mpr ⟨n, rfl⟩⟩
@@ -178,6 +191,8 @@ theorem host_call_sound (H : Host) (op : HostOp) {ls ls' : List SRec} {δ : LSub
         obtain ⟨m, rfl⟩ := hb
       · exact ⟨_, rfl, vP_i32 _⟩
       · exact ⟨_, rfl, vP_i64 _⟩
+      · exact ⟨_, rfl, vP_ofBits .u32 _⟩
+      · exact ⟨_, rfl, vP_ofBits .u64 _⟩
   | div w o =>
       cases w
       case w8 | f32 | f64 => exact h.elim
@@ -192,6 +207,12 @@ theorem host_call_sound (H : Host) (op : HostOp) {ls ls' : List SRec} {δ : LSub
       · refine ⟨_, rfl, vP_opt fun r hr => ?_⟩
         obtain ⟨k, -, rfl⟩ := Option.map_eq_some_iff.mp hr
         exact vP_i64 k
+      · refine ⟨_, rfl, vP_opt fun r hr => ?_⟩
+        obtain ⟨k, -, rfl⟩ := Option.map_eq_some_iff.mp hr
+        exact vP_ofBits .u32 k
+      · refine ⟨_, rfl, vP_opt fun r hr => ?_⟩
+        obtain ⟨k, -, rfl⟩ := Option.map_eq_some_iff.mp hr
+        exact vP_ofBits .u64 k
   | un w o =>
       cases w
       case w8 | f32 | f64 => exact h.elim
@@ -200,6 +221,8 @@ theorem host_call_sound (H : Host) (op : HostOp) {ls ls' : List SRec} {δ : LSub
         refine ⟨rfl, ?_⟩
       · exact ⟨_, rfl, vP_i32 _⟩
       · exact ⟨_, rfl, vP_i64 _⟩
+      · exact ⟨_, rfl, vP_ofBits .u32 _⟩
+      · exact ⟨_, rfl, vP_ofBits .u64 _⟩
   | eqz w =>
       cases w
       case w8 | f32 | f64 => exact h.elim
@@ -282,6 +305,14 @@ theorem host_call_sound (H : Host) (op : HostOp) {ls ls' : List SRec} {δ : LSub
       cases f <;> obtain ⟨rfl, n, rfl⟩ := h
       · exact ⟨rfl, _, rfl, vP_ofBits .f32 _⟩
       · exact ⟨rfl, _, rfl, vP_ofBits .f64 _⟩
+  | reinterpret_u i =>
+      cases i <;> obtain ⟨rfl, n, rfl⟩ := h
+      · exact ⟨rfl, _, rfl, vP_ofBits .u32 _⟩
+      · exact ⟨rfl, _, rfl, vP_ofBits .u64 _⟩
+  | reinterpret_s i =>
+      cases i <;> obtain ⟨rfl, n, rfl⟩ := h
+      · exact ⟨rfl, _, rfl, vP_i32 _⟩
+      · exact ⟨rfl, _, rfl, vP_i64 _⟩
 
 /-! ### Compatibility -/
 

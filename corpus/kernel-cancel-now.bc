@@ -1,0 +1,13 @@
+-- A clause that cancels its continuation, the twin of the kernel program `cancel-now`
+-- (Backend/Kernel.lean, `Core/EffExamples.lean`'s `progC`): a cancellable `stop` whose clause does
+-- not resume `k`, so the continuation is cancelled at once; it holds no frame, so the cancel runs
+-- nothing, and the handler answers `()`.
+--
+-- Answer: (); `live 0`. A clause that resumed would run the body on; a cancel that leaked the
+-- continuation would leave it live.
+
+effect Stop { ctl stop() }
+
+handler halt: Stop, 1 -> 1 = { return(x) = x; stop(k) = () }
+
+main -> 1 = with halt { stop() }

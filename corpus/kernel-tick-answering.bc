@@ -1,0 +1,16 @@
+-- SPEC §19's program 4 (answering) at the surface, the twin of the kernel program
+-- `tick-answering` (Backend/Kernel.lean, `tickAnsProg 3`): a loop whose state is the log's cell.
+-- Each of its three turns logs one observation through a borrow of the cell (`with tally(&mut
+-- s)`), whose lend ends with the turn; the owner then frees the cell.
+--
+-- Answer: inr (): the cell marked by the logs (true); `live 0`. A loop that lost its state, or
+-- logged nowhere, would answer `inl ()`.
+
+effect Log { fn note() }
+
+handler tally(mut n: bool): Log = { note() = { n = true; () } }
+
+main -> bool =
+  let mut s = alloc(false);
+  for i in 0..3 { with tally(&mut s) { note() } };
+  free(s)

@@ -1913,6 +1913,9 @@ structure DivSt where
   /-- Each handler site's operation `n.i` by its surface name, `E.op`, for messages
   (`Fins.opNames`).  `[spec §27]` -/
   opNames : List ((Nat × Nat) × String) := []
+  /-- Each function's row as the effects pass wrote it in its type (`Fins.fnRows`): what a
+  clause's head performs by calling it.  `[spec §27]` -/
+  fnRows : List (String × List (Nat × Nat)) := []
   /-- The `poly` families and their cases, all of the program's, known before any call is
   elaborated.  `[spec §36]` -/
   polys : PolyTab := {}
@@ -2028,6 +2031,8 @@ def litAt (sp : Span) (w : BoCa.Width) (n : Nat) : Val :=
   | .w8 => .const sp (.lit (.u8 (UInt8.ofNat n)))
   | .f32 => flitAt sp .f32 n 0
   | .f64 => flitAt sp .f64 n 0
+  | .u32 => .const sp (.lit (.u32 (UInt32.ofNat n)))
+  | .u64 => .const sp (.lit (.u64 (UInt64.ofNat n)))
 
 /-- An operator at `u8`: the operands widened by `extend8_u`, the operation at `i32`, and an
 arithmetic result narrowed by `wrap8`. A byte has no arithmetic of its own (SPEC §8). -/
@@ -2382,7 +2387,16 @@ def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
   let place := if unw.isSome then Val.var sp x.name else .lend sp x m
   match c.tyV (.var sp x.name) with
   | some (.ref _) => pure (.app sp (.app sp (.const sp C) place) cb)
-  | some (.mut ..) | some (.imm ..) =>
+  | some (.mut a _) =>
+    unless m == .mut do
+      throw ⟨x.span, s!"`{x.name}` is a `mut` borrow; lend it as `&mut {x.name}` (an `imm` " ++
+        "reborrow of it is not provided)"⟩
+    -- A `mut` borrow lent `&mut` is reborrowed for the call (`withbor3`, or its unwinding form),
+    -- and handed back after (SPEC §41, R3).  [spec §41]
+    let C₃ := Const.withbor3 (← (c.surfaceL sp a : Except Error Frontend.Life)) li As Bs
+    let C₃ := (unw.map (· C₃)).getD C₃
+    pure (.app sp (.app sp (.const sp C₃) place) cb)
+  | some (.imm ..) =>
     throw ⟨x.span, s!"`{x.name}` is a borrow; lend it by passing it (a reborrow is not provided)"⟩
   | _ =>
     -- A value: a cell scoped to the call.
@@ -3631,6 +3645,40 @@ def recMachine (scope : List Decl) (d : Decl) : SM Decl := do
     (.tensor sp (.bang sp (.lolli sp A Out)) (.bang sp (.lolli sp (.tensor sp K B) Out)))
     (.pair sp start resume) .none)
 
+/-- `(V : A)`'s type and its written form: its stored generators at the rows of what flows into
+them (`Elab.refineAsc`), else of the type expected of it (`Elab.withRows`).  `[spec §15]` -/
+def ascribeRows (c : TCx) (exp : Option CVTy) (sp : Span) (V : Val) (A : VTy) :
+    DM (Option CVTy × VTy) := do
+  match c.elabV A with
+  | some A₀ =>
+    let A' := match exp with
+      | some X => Elab.withRows (Elab.refineAsc c.tyV V A₀) X
+      | none => Elab.refineAsc c.tyV V A₀
+    let Aw ← if tyEqV A' A₀ then pure A else (c.surface sp A' : Except Error VTy)
+    pure (some A', Aw)
+  | none => pure (none, A)
+
+/-- `x = (V : T)` assigning a variable: `T`'s stored generators at the rows of the variable's
+(`Elab.withRows`).  `[spec §15]` -/
+def assignRows (c : TCx) (x : Ident) (A : Option VTy) (M : Comp) : DM Comp := do
+  match A, M, (c.locals.lookup x.name).join with
+  | none, .ret rsp (.ascribe asp V T), some X => match c.elabV T with
+    | some T₀ =>
+      let T' := Elab.withRows (Elab.refineAsc c.tyV V T₀) X
+      if tyEqV T' T₀ then pure M
+      else pure (.ret rsp (.ascribe asp V (← (c.surface asp T' : Except Error VTy))))
+    | none => pure M
+  | _, _, _ => pure M
+
+/-- The type of a `case`'s arms whose types differ only in the rows of stored generators they
+write: each at the rows of the other (`Elab.withRows`).  `[spec §15]` -/
+def armRows (cx cy : TCx) (M N : Comp) : Option CCTy :=
+  match cx.tyC M, cy.tyC N with
+  | some (.ret A), some (.ret B) =>
+    let J := Elab.withRows A B
+    if !tyEqV A B && tyEqV J (Elab.withRows B A) then some (.ret J) else none
+  | _, _ => none
+
 mutual
 /-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/
 def surfV : Nat → TCx → Option CVTy → Val → DM Val
@@ -3843,6 +3891,22 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       let rebuilt := if cd.rolls then .ascribe fsp (.roll fsp rebuilt) As else rebuilt
       let R : Val := if cd.rolls then .unroll fsp (.var rsp r) else .var rsp r
       surfV n c exp (.run sp (Data.letTuple fsp R vars (.ret fsp (.pair fsp rebuilt (.unit fsp))) (· ++ "r")))
+    | .app sp (.sugar dsp .deref) (.lend lsp x .mut) => do
+      -- `*&mut x`, `x` a `mut` borrow: the content copied through it by `withswap`, `x` rebound
+      -- by the lend. A variable lent for a control handler's body is read so (SPEC §41, R3).
+      -- [spec §41]
+      match (← refresh c).tyV (.var lsp x.name) with
+      | some (.mut a A) =>
+        unless Class.of A == .unrestricted do
+          throw ⟨lsp, s!"a value can't be moved out of `{x.name}` here: it is lent for the body " ++
+            s!"of a control handler, which may be abandoned, and its type `{ppT A}` is linear"⟩
+        let As ← (c.surface dsp A : Except Error VTy)
+        let r : Ident := ⟨s!"io_dr{dsp.start.line}_{dsp.start.col}", dsp⟩
+        pure (.app sp (.app sp (.const dsp (.withswap (← c.surfaceL dsp a) As As)) (.lend lsp x .mut))
+          (.thunkv sp (.lam sp r As (.ret sp (.pair sp (.var sp r.name) (.var sp r.name))))))
+      | some t => throw ⟨dsp, s!"`*&mut {x.name}` reads through a `mut` borrow, but `{x.name}` has " ++
+          s!"type `{ppT t}`"⟩
+      | none => throw ⟨dsp, s!"`*` reads a borrow, but the type of `{x.name}` is not known here"⟩
     | .app sp (.sugar dsp .deref) V => do
       let V' ← surfV n c none V
       -- `*e`: `withload` at the identity, reading a persistent content (its view is itself).
@@ -3895,6 +3959,41 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
             (.thunkv tsp (.lam lsp b As S''))))
           (.letPair sp ⟨"io_mm", sp⟩ ⟨"io_mr", sp⟩ (.var sp "io_mw")
             (.ret sp (.boxed sp (.var sp l) (.var sp "io_mr"))))
+    | .app sp (.app sp₂ (.sugar ksp (.borrow k l)) (.lend psp px pm)) cb@(.thunkv ..) => do
+      -- `borrow mut &mut x { … }` (`borrow imm &x { … }`): the place `x` lent to the block, the
+      -- borrow chosen by `x`'s type as `&mut x` at a call chooses it: a cell's, a `mut` borrow's
+      -- reborrow, or a cell scoped to the block for a value. The lend rebinds `x` (SPEC §41, R3).
+      -- [spec §41]
+      unless (k == .mut && pm == .mut) || (k == .imm && pm == .imm) do
+        throw ⟨psp, s!"a borrow block lends its place as its kind says: `borrow mut &mut {px.name}`, " ++
+          s!"`borrow imm &{px.name}`"⟩
+      let blk (P : Val) : Val := .app sp (.app sp₂ (.sugar ksp (.borrow k l)) P) cb
+      -- The block's place, `P'`, given back as the lend of `x`.
+      let rec relend (f : Val → Val) : Val → Val
+        | .app asp (.app asp₂ (.const csp C) P') cb' => .app asp (.app asp₂ (.const csp C) (f P')) cb'
+        | .mark msp mk V => .mark msp mk (relend f V)
+        | V => V
+      let lent : Val := .lend psp px pm
+      match c.tyV (.var psp px.name) with
+      | some (.ref _) => pure (relend (fun _ => lent) (← surfV n c none (blk (.var psp px.name))))
+      | some (.mut ..) =>
+        unless k == .mut do
+          throw ⟨psp, s!"`{px.name}` is a `mut` borrow: an `imm` reborrow of it is not provided"⟩
+        pure (relend (fun _ => lent) (← surfV n c none (blk (.var psp px.name))))
+      | some (.imm ..) => throw ⟨psp, s!"`{px.name}` is an `imm` borrow: pass it as it is"⟩
+      | some A => do
+        -- A value: a cell scoped to the block, `alloc`, the borrow, `free`.
+        let V' ← surfV n c none (blk (.app psp (.sugar psp (.call "alloc")) (.var psp px.name)))
+        let V' := relend (fun
+          | .app asp f _ => .app asp f lent
+          | P' => P') V'
+        let As ← (c.surface psp A : Except Error VTy)
+        let sfx := s!"{psp.start.line}_{psp.start.col}"
+        let sc : Ident := ⟨s!"io_bsc{sfx}", sp⟩
+        let sr : Ident := ⟨s!"io_bsr{sfx}", sp⟩
+        pure (.run sp (.letPair sp sc sr V'
+          (.ret sp (.pair sp (.app sp (.const sp (.free As)) (.var sp sc.name)) (.var sp sr.name)))))
+      | none => throw ⟨psp, s!"the type of `{px.name}` is not determined here: ascribe it"⟩
     | .app sp (.app sp₂ (.sugar ksp (.borrow k x)) P) (.thunkv tsp (.lam lsp b _ S)) => do
       -- The callback's row, when this block is an unwinding borrow; blocks inside are not.
       let cbr := (← get).cbRow
@@ -4238,15 +4337,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
     | .inl sp V => do pure (.inl sp (← surfV n c (match exp with | some (.sum A _) => some A | _ => none) V))
     | .inr sp V => do pure (.inr sp (← surfV n c (match exp with | some (.sum _ B) => some B | _ => none) V))
     | .ascribe sp V A => do
-      -- Its stored generators at the rows of what flows into them (`refineAsc`, SPEC §15).
-      match c.elabV A with
-      | some A₀ =>
-        let A' := match exp with
-          | some X => Elab.withRows (Elab.refineAsc c.tyV V A₀) X
-          | none => Elab.refineAsc c.tyV V A₀
-        let Aw ← if tyEqV A' A₀ then pure A else (c.surface sp A' : Except Error VTy)
-        pure (.ascribe sp (← surfV n c (some A') V) Aw)
-      | none => pure (.ascribe sp (← surfV n c none V) A)
+      let (A', Aw) ← ascribeRows c exp sp V A
+      pure (.ascribe sp (← surfV n c A' V) Aw)
     | .unbang sp V => do pure (.unbang sp (← surfV n c (exp.map .bang) V))
     | .boxed sp l V => do pure (.boxed sp l (← surfV n c none V))
     | .unbox sp V => do pure (.unbox sp (← surfV n c none V))
@@ -4361,6 +4453,12 @@ def surfOp : Nat → TCx → Option CVTy → Span → Span → Span → SurfOp �
         (widthOf ta).orElse fun _ => widthOf tb).getD dflt
       if o == .rem && w.float?.isSome then
         throw ⟨osp, s!"`%` at `{ppT (.int w)}`: a float has no remainder (SPEC §39)"⟩
+      -- The unsigned widths have no surface operators yet: each operator's choice of the `_u`
+      -- operation (`div_u`, `lt_u`, `shr_u`, …) is not elaborated, so none is admitted rather
+      -- than one read signed.  `[spec §73]`
+      if w == .u32 || w == .u64 then
+        throw ⟨osp, s!"`{o.str}` at `{ppT (.int w)}`: the unsigned widths have no surface " ++
+          "operators yet (SPEC §73); call the core operation, e.g. `unbang host[lt_uu64]`"⟩
       let a' ← surfV n c (some (.int w)) a
       let b' ← surfV n c (some (.int w)) b
       if isDiv && w.float?.isNone then
@@ -4463,16 +4561,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let A ← match A with
         | some T => do pure (some (T.subst (← get).siteRes))
         | none => pure none
-      -- `x = (V : T)` assigning a variable: `T`'s stored generators at the rows of the variable's
-      -- (`Elab.withRows`, SPEC §15).  `[spec §15]`
-      let M ← match A, M, (c.locals.lookup x.name).join with
-        | none, .ret rsp (.ascribe asp V T), some X => match c.elabV T with
-          | some T₀ =>
-            let T' := Elab.withRows (Elab.refineAsc c.tyV V T₀) X
-            if tyEqV T' T₀ then pure M
-            else pure (.ret rsp (.ascribe asp V (← (c.surface asp T' : Except Error VTy))))
-          | none => pure M
-        | _, _, _ => pure M
+      let M ← assignRows c x A M
       -- What follows a loop (`restScope`): outside the loop, so the loop's exit is not its.
       if x.name == restScope then
         let saved := (← get).exits
@@ -4568,13 +4657,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let V' ← surfV n c none V
       let c ← refresh c
       let (Ax, Ay) := sumTys c V'
-      -- Arms whose types differ only in the rows of stored generators they write: each at the
-      -- rows of the other (`Elab.withRows`, SPEC §15).  `[spec §15]`
-      let exp := exp <|> match (c.push x.name Ax).tyC M, (c.push y.name Ay).tyC N with
-        | some (.ret A), some (.ret B) =>
-          let J := Elab.withRows A B
-          if !tyEqV A B && tyEqV J (Elab.withRows B A) then some (.ret J) else none
-        | _, _ => none
+      let exp := exp <|> armRows (c.push x.name Ax) (c.push y.name Ay) M N
       let M' ← surfC n (c.push x.name Ax) exp M
       let N' ← surfC n (c.push y.name Ay) exp N
       pure ((fuseChecked V' x M' y N').getD (.case sp V' x M' y N'))
@@ -4706,45 +4789,43 @@ def siteAtCall (c : TCx) (sp : Span) (g : String) (r : SiteRec) : DM SiteRec := 
       pure (x, ← (c.surface sp t : Except Error VTy))
     pure (r.mapTy (·.subst σ))
 
-/-- A loop of a clause that may be a head of its path (`Fins.cancelAtEnds`): its body has no exit
-of the clause, and its value is not bound. -/
-def loopHead (M N : Comp) : Bool := M.exitAt.isNone && N.forRes?.isNone && N.forElse?.isNone
-
 /-- A clause that does not use its `κ` on some path, at an operation whose cancel branch
 `cancelTy S F` performs (its cancel row `F` or the handler's row `S` is not empty), cancels it
-exactly once on that path (`Fins.cancelAtEnds`): at the end of the path, and, when `S` has an
-abortive operation (an abort can pass through the clause), on the way out of an abort or a cancel.
-The checker consumes an unused `κ` only when its cancel branch performs nothing (a consume is
-effect-free, SPEC §12): a cancel that performs is a computation, which the elaboration writes and
-the kernel types. The clause's body binds `κ` taking its argument `p` apart, `let (a, k) = p; M`.
-A boxed `κ` (BOXED-κ) is left as written.
+exactly once on that path (`Fins.cancelAtEnds`): at the end of the path, and on the way out of an
+abort or a cancel through a head whose row (`Fins.opsOf`, the functions' rows by their types)
+holds an abortive
+operation of `S` or one that captures a continuation. The checker consumes an unused `κ` only when
+its cancel branch performs nothing (a consume is effect-free, SPEC §12): a cancel that performs is a
+computation, which the elaboration writes and the kernel types. The clause's body binds `κ` taking
+its argument `p` apart, `let (a, k) = p; M`. A boxed `κ` (BOXED-κ) is left as written. A clause
+whose heads can neither abort nor capture, and that uses `κ` on every path, is left as it is.
 
-The finaliser of an inserted `unwind (cancel k)` performs the cancel branch's row `F ⊕ S`, which
-the cancel rows of the capturing operations around it then hold (`Fins.table` infers it by the
-same rule). A capturing operation of `S` itself would need its cancel row to hold itself (`⊤`,
-SPEC §27 *Open*): such a clause is refused here, naming it.  `[spec §12, §27]` -/
+The finaliser of an inserted `unwind (cancel k)` performs the cancel branch's row `F ⊕ S`, and runs
+when a continuation the head captures is cancelled: a capturing operation of `S` that the head
+performs would need its cancel row to hold itself (`⊤`, SPEC §27 *Open*), which the kernel
+refuses; such a clause is refused here, naming the operation.  `[spec §12, §27]` -/
 def cancelDropped (S : Frontend.Check.CRow) (F : CCTy) (q : Frontend.Check.CQual) (B : CVTy)
-    (boxK stateful : Bool) (p : String) (opName : Nat → Nat → String) (M : Comp) :
-    Except Error Comp :=
+    (boxK stateful : Bool) (p : String) (rowOf : String → List (Nat × Nat))
+    (opName : Nat → Nat → String) (M : Comp) : Except Error Comp :=
   match M with
   | .letPair sp a k (.var vsp p') N =>
     if boxK || p' != p || !BoCa.Fig16.LogRel.Core.capB q B || F.isTop || (F.rowOf ++ S).isEmpty
     then pure M
     else
-      let N' := Elab.Fins.cancelAtEnds loopHead sp k (S.any (·.abort)) stateful 100000 N
-      -- The cancel performs `cancelTy S F`'s row, `F ⊕ S`: a capturing operation of `S` there
-      -- would need its cancel row to hold itself.
-      let self := (F.rowOf ++ S).find? fun o => BoCa.Fig16.LogRel.Core.capB o.q o.B &&
-        S.any fun o' => o'.n == o.n && o'.i == o.i
-      match self with
+      let headOps (M₁ : Comp) : List Frontend.Check.COpSig :=
+        S.filter fun o => (Elab.Fins.opsOf rowOf M₁).contains (o.n.toNat, o.i.toNat)
+      let wrapHead (M₁ : Comp) : Bool :=
+        (headOps M₁).any fun o => o.abort || BoCa.Fig16.LogRel.Core.capB o.q o.B
+      let N' := Elab.Fins.cancelAtEnds wrapHead sp k stateful 100000 N
+      let captured := (Elab.Fins.cancelHeads k.name 100000 N').findSome? fun M₁ =>
+        (headOps M₁).find? fun o => BoCa.Fig16.LogRel.Core.capB o.q o.B
+      match captured with
       | some o =>
-        if Elab.Fins.cancelUnwinds k.name 100000 N' then
-          let nm := opName o.n.toNat o.i.toNat
-          throw ⟨sp, s!"a dropped continuation whose cancel performs {nm}, an operation " ++
-            "that captures a continuation, can't be cancelled on an abort through this clause, " ++
-            s!"which runs inside the handler of {nm}: its cancel row would contain itself " ++
-            "(SPEC §27, `⊤` cancel rows)"⟩
-        else pure (.letPair sp a k (.var vsp p') N')
+        let nm := opName o.n.toNat o.i.toNat
+        throw ⟨sp, s!"this clause's continuation is live across {nm}, an operation that " ++
+          "captures a continuation, and its cancel performs: if the continuation captured at " ++
+          s!"{nm} is cancelled, this one must be cancelled with it, and {nm}'s cancel row would " ++
+          "contain itself (SPEC §27, `⊤` cancel rows)"⟩
       | none => pure (.letPair sp a k (.var vsp p') N')
   | _ => pure M
 
@@ -4848,8 +4929,18 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
         let opName (n i : Nat) : String := match names.lookup (n, i) with
           | some s => s!"`{s}` ({n}.{i})"
           | none => s!"{n}.{i}"
-        let body ← (cancelDropped S (fs j) q Bi i.boxK i.stateful x.name opName body :
-          Except Error Comp)
+        -- A function's row as the effects pass wrote it in its type (`Fins.fnRows`, the fact the
+        -- inference reads too); a name in this context, a block parameter's, by its type here; a
+        -- handler site (`Fins.siteMark`) the row it is typed at, `S`, its clauses'.  `[spec §27]`
+        let fnRows := (← get).fnRows
+        let rowOf (g : String) : List (Nat × Nat) :=
+          if g == Elab.Fins.siteMark then S.map fun o => (o.n.toNat, o.i.toNat)
+          else match fnRows.lookup g with
+          | some r => r
+          | none => ((cS.tyV (.var .none g)).map fun T =>
+              (fnRowOf T).map fun o => (o.n.toNat, o.i.toNat)).getD []
+        let body ← (cancelDropped S (fs j) q Bi i.boxK i.stateful x.name rowOf opName
+          body : Except Error Comp)
         let body' ← surfC n (cS.push x.name (some T)) (some ans) (body.subst σ)
         hcs := hcs ++ [.bangThunkv csp (.lam lsp x (← (cP.surface lsp T : Except Error VTy)) body')]
       | _ => throw ⟨sp, "internal error: a handler's clause"⟩
@@ -6303,14 +6394,14 @@ end
 /-- The declarations with divergence inferred, in order (copies before their first use), and
 whether any body was elaborated as a loop. -/
 def elabDivs (lib decls : List Decl) (libNames : List String) (perTurn : List Nat := [])
-    (polys : PolyTab := {}) (opNames : List ((Nat × Nat) × String) := []) :
-    SM (List Decl × Bool) := do
+    (polys : PolyTab := {}) (opNames : List ((Nat × Nat) × String) := [])
+    (fnRows : List (String × List (Nat × Nat)) := []) : SM (List Decl × Bool) := do
   -- Every family and case is known before any call is elaborated, so that a case is chosen
   -- among all of them (SPEC §36).
   (polyCheck (TCx.ofScope (lib ++ decls) false) polys : Except Error Unit)
   let names := polys.fams.map (·.1) ++ polys.cases.map (·.name)
   let templates := decls.filter fun | .def_ _ m _ _ _ _ => names.contains m.name | _ => false
-  let st ← decls.foldlM (init := ({ lib, libNames, perTurn, polys, templates, opNames } : DivSt))
+  let st ← decls.foldlM (init := ({ lib, libNames, perTurn, polys, templates, opNames, fnRows } : DivSt))
     (elabDecl divFuel)
   pure (st.out, st.any)
 
@@ -6649,7 +6740,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
     | .effect _ e _ ops => some (e.name, ops.map (·.name.name))
     | _ => none
   let (decls, anyDiv) ← elabDivs typing p.decls libNames perTurn polys
-    (Elab.Fins.opNames effOps fxr.decls)
+    (Elab.Fins.opNames effOps fxr.decls) (Elab.Fins.fnRows fxr.decls)
   let rest := decls.filter fun | .main .. => false | _ => true
   let mc := TCx.ofScope (typing ++ rest ++ capDecls) true
   let mainLoops := match decls.findSome? (fun | .main _ C M => some (C, M) | _ => none) with

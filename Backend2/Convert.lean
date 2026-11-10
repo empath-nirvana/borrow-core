@@ -729,7 +729,7 @@ def rowMs (S : Row) : CM (List (Key × LTy × LTy × Option Pay)) := do
     if o.n == divName then
       throw s!"an operation ({o.n}, {o.i}) in a computation type: outside the pure fragment"
     if !o.abort && ms.contains (o.n, o.i) && !(acc.any (·.1 == (o.n, o.i))) then
-      let cp ← lift (ofFin ms o.fin)
+      let cp ← lift (ofFinAt ms o.q o.B o.fin)
       acc := acc ++ [((o.n, o.i), ← vty o.A, ← vty o.B, cp.map dedupPay)]
   return acc
 
@@ -1248,7 +1248,14 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
         | _, _ => resumeTm F p fs y reuse
     setFn rres { name := s!"resume {op.1}.{op.2}", params := [s₁, y], body := rb, ret := F.ty }
     let s₂ ← fresh envTy
-    -- At a cancel row `⊤` (a must-resume operation) the cancel entry is never run.
+    -- At a cancel row `⊤` (an operation that is not capturable, `ofFinAt`) the cancel entry is a
+    -- trap.
+    -- UNPROVED: the cancel entry of a machine's `k` at an operation that is not capturable is never
+    -- entered. Its callers are a `κ`'s cancel at that operation, which is `⊤` by `kTy .lin` (the
+    -- kernel never cancels a must-resume continuation, `kappaC_cancel_lin`), and the cancel entry
+    -- of another machine at the same operation (`cancelTm`), so by induction on the generated code
+    -- none is live. If it fails, the trap fires at run time: `Op.unreachable` traps, and the LIR
+    -- interpreter runs every gate program.
     let cb ← match cp with
       | none => pure (.prim .unreachable [s₂])
       | some cp => withState s₂ fun c st => do
@@ -1411,8 +1418,10 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
   let base₆ ← fresh aT
   match cp with
   | none =>
-    setFn kcan { name := s!"stack cancel {op.1}.{op.2}", params := [base₆], body := .consume .dead base₆ .unit,
-                 ret := cT }
+    -- At a cancel row `⊤` the cancel entry is a trap, as `genMach`'s (whose `UNPROVED:` note covers
+    -- this entry too).
+    setFn kcan { name := s!"stack cancel {op.1}.{op.2}", params := [base₆],
+                 body := .prim .unreachable [base₆], ret := cT }
     setFn cstep { name := "stack cancel step", params := [], body := ← never cT, ret := cT }
   | some cpP =>
     let errT := resTy .unit cpP
@@ -2138,7 +2147,11 @@ def genConsume (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
   | .thunk C => do
     if let .nu (.amp _ D) := stripAll C then
       if (← outInfoC D).isSome then
-        throw "LIR: the consume of codata whose close may suspend is outside the fragment"
+        -- An internal invariant, not a missing case: the kernel's `Consumable` admits only a pure
+        -- close (`close` at `F 1`, `nu` at `F R`; `Core/Consume.lean`, `Consumable.close`,
+        -- `Consumable.nu`), and the checker's `consumableAtB` (`Frontend/Check/Steps.lean`) is
+        -- the same, so a consume of codata whose close may suspend never reaches here.
+        throw "LIR: a consume at a type the kernel's `Consumable` does not admit (a close at a row)"
     return .sel x 1
   | .fam (.ref A) => do
     let aT ← tyOf x
@@ -3749,7 +3762,9 @@ def convDivLit (fuel : Nat) (ctx : Ctx) (j : Jdg) (op : HostOp) (c : IntLit) (in
     let aT ← vty A
     readFact "divLit:divisor"
     return pre (leaf c₂ none (← bindTm (← conv fuel c₁ tM) aT fun a => do
-      let d ← fresh (match c with | .u8 _ => .int .w8 | .i64 _ => .int .w64 | _ => i32T)
+      let d ← fresh (match c with
+        | .u8 _ => .int .w8 | .i64 _ => .int .w64 | .u32 _ => .int .u32 | .u64 _ => .int .u64
+        | _ => i32T)
       return .letv d (.lit c) (.prim (.divLit op) [a, d])))
   | _ => conv fuel ctx inner
 where
@@ -4059,13 +4074,18 @@ def tailPass (s : CState) (loop : Nat × Var × OutInfo × Nat → Bool) : Excep
 
 /-- **State cells** (SPEC §49): each machine operation whose suspended computation's closure class
 holds itself (`recursive`, the layouts' classes that keep their environment on the heap, §35)
-has its codes made again with its state in a cell, written in place. -/
+has its codes made again with its state in a cell, written in place: the machines `cellSites`
+lists, each with those operations. With no site the state is `s` unchanged. -/
+def cellSites (s : CState) (recursive : Nat → Bool) : List (Mach × List Key) :=
+  s.done.toList.filterMap fun (m, kcs) =>
+    let ops := kcs.filterMap fun (op, kc) => if recursive kc then some op else none
+    if ops.isEmpty || m.cell.isSome || m.stack.isSome then none else some (m, ops)
+
+/-- **State cells** (SPEC §49): `cellSites`' machines made again (`genMach`). -/
 def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CState) := do
   let act : CM Unit := do
-    for (m, kcs) in s.done do
-      let ops := kcs.filterMap fun (op, kc) => if recursive kc then some op else none
-      unless ops.isEmpty || m.cell.isSome || m.stack.isSome do
-        let _ ← genMach m ops
+    for (m, ops) in cellSites s recursive do
+      let _ ← genMach m ops
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
             data := s'.data, statics := s'.statics, lits := s'.lits, consumeFns := s'.consumeFns }, s')

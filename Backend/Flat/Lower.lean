@@ -406,16 +406,16 @@ def divTest (o : HostOp) (ls : List Nat) : LM (Option Exp × Exp) := do
     | .div w d => pure (w, d)
     | _ => throw "flat IR: not a division"
   let raw (l : Nat) : Exp := match w with
-    | .w32 | .w8 | .f32 => wrap (.loc l)
-    | .w64 | .f64 => .loc l
+    | .w32 | .w8 | .f32 | .u32 => wrap (.loc l)
+    | .w64 | .f64 | .u64 => .loc l
   let args := ls.map raw
   let q : Exp := match w with
-    | .w32 | .w8 | .f32 => extendU (.op o args)
-    | .w64 | .f64 => .op o args
+    | .w32 | .w8 | .f32 | .u32 => extendU (.op o args)
+    | .w64 | .f64 | .u64 => .op o args
   let minus1 : UInt64 := match w with
-    | .w32 | .w8 | .f32 => 0xFFFFFFFF | .w64 | .f64 => 0xFFFFFFFFFFFFFFFF
+    | .w32 | .w8 | .f32 | .u32 => 0xFFFFFFFF | .w64 | .f64 | .u64 => 0xFFFFFFFFFFFFFFFF
   let k := ((← get).consts.get? (ls.getD 1 0)).map fun k => match w with
-    | .w32 | .w8 | .f32 => k &&& 0xFFFFFFFF | .w64 | .f64 => k
+    | .w32 | .w8 | .f32 | .u32 => k &&& 0xFFFFFFFF | .w64 | .f64 | .u64 => k
   if let some k := k then
     if k != 0 && (d != .div_s || k != minus1) then return (none, q)
   let a := args.headD (.c64 0)
@@ -424,9 +424,9 @@ def divTest (o : HostOp) (ls : List Nat) : LM (Option Exp × Exp) := do
   let trapC := match d with
     | .div_s =>
       let intMin := match w with
-        | .w32 | .w8 | .f32 => Exp.c32 0x80000000 | .w64 | .f64 => .c64 0x8000000000000000
+        | .w32 | .w8 | .f32 | .u32 => Exp.c32 0x80000000 | .w64 | .f64 | .u64 => .c64 0x8000000000000000
       let m1 := match w with
-        | .w32 | .w8 | .f32 => Exp.c32 0xFFFFFFFF | .w64 | .f64 => .c64 0xFFFFFFFFFFFFFFFF
+        | .w32 | .w8 | .f32 | .u32 => Exp.c32 0xFFFFFFFF | .w64 | .f64 | .u64 => .c64 0xFFFFFFFFFFFFFFFF
       or32 zero (and32 (.op (.rel w .eq) [a, intMin]) (.op (.rel w .eq) [b, m1]))
     | _ => zero
   pure (some trapC, q)
@@ -436,18 +436,22 @@ partial operation's tag and integer. A 32-bit value is held zero-extended. -/
 def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
   -- A byte is held zero-extended, as an `i32` is: `wrap8` keeps the low 8 bits, and
   -- `extend8_u` is the word itself. A float is held as its bits, so `reinterpret` is the word.
+  -- `U32`/`U64` are held as `I32`/`I64` are, so `reinterpret_u`/`_s` is the word, and an
+  -- operation at an unsigned width is its signed sibling's (`machineOp`).  [spec §73]
+  let o := machineOp o
   match o with
   | .wrap8 => return ([], [and64 (.loc (ls.headD 0)) (.c64 0xff)])
-  | .extend8_u | .reinterpret_i _ | .reinterpret_f _ => return ([], [.loc (ls.headD 0)])
+  | .extend8_u | .reinterpret_i _ | .reinterpret_f _ | .reinterpret_u _ | .reinterpret_s _ =>
+    return ([], [.loc (ls.headD 0)])
   | _ => pure ()
   let rawAt (w : Width) (e : Exp) : Exp := match w with
-    | .w32 | .w8 | .f32 => wrap e
-    | .w64 | .f64 => e
+    | .w32 | .w8 | .f32 | .u32 => wrap e
+    | .w64 | .f64 | .u64 => e
   let raw (l : Nat) : Exp := rawAt (hostArgWidth o) (.loc l)
   let args := ls.map raw
   let word (w : Width) (e : Exp) : Exp := match w with
-    | .w32 | .w8 | .f32 => extendU e
-    | .w64 | .f64 => e
+    | .w32 | .w8 | .f32 | .u32 => extendU e
+    | .w64 | .f64 | .u64 => e
   match hostResKind o, o with
   | .int w, _ => pure ([], [word w (.op o args)])
   | .test, _ => pure ([], [extendU (.op o args)])
@@ -691,6 +695,8 @@ def lowerTm : Tm → Dest → LM (List Stmt)
   | .lit (.u8 n), d => emit d [.c64 n.toUInt64]
   | .lit (.f32 n), d => emit d [.c64 n.toUInt64]
   | .lit (.f64 n), d => emit d [.c64 n]
+  | .lit (.u32 n), d => emit d [.c64 n.toUInt64]
+  | .lit (.u64 n), d => emit d [.c64 n]
   | .pair a b, d => do
       let some n := (← T).cons[a]? | throw "flat IR: an untyped pair"
       let (s, vs) ← mkPair n (locs (← vals a)) (locs (← vals b))
@@ -1253,6 +1259,8 @@ def genHelper (h : Helper) : LM Fn := do
       | .int .w8 => pure (outStr "u8[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
       | .int .f32 => pure (outStr "f32[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
       | .int .f64 => pure (outStr "f64[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
+      | .int .u32 => pure (outStr "u32[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
+      | .int .u64 => pure (outStr "u64[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
       | .fn .. => pure (outStr "<fun>")
       | .loc .. => pure (outStr "<loc>")
       | .pair .. => do

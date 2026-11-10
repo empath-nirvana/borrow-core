@@ -1,0 +1,13 @@
+-- SPEC §27 in the core text: the cancel row `⊤`, written `cancel[top]` (`cancel[⊤]` reads the
+-- same; the printer writes `top`). A continuation captured at `2.0` cannot be cancelled, so a
+-- finaliser below it may perform anything: `f`'s finaliser raises `1.0`, which no cancel row lists.
+-- The program checks `f`'s type, prints it as `cancel[top]` and re-reads it (`bcc print`,
+-- scripts/alpha-check.py); `main` does not call it.
+--
+-- Answer: (), and `live 0`. A wrong implementation that cannot spell `⊤`, or prints it as something
+-- the parser does not read, refuses this program or fails its print round trip.
+
+def f : !U (1 -o F[2.0 cancel[⊤] 1 ~> 1, 1.0 cancel 1 ~> 0] 1) =
+  !thunkv fun (u : 1) -> x <- perform[2.0] u unwind (abort[1.0] ()); return x
+
+main : F 1 = return ()

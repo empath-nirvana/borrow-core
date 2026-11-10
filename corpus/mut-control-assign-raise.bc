@@ -1,0 +1,16 @@
+-- An assignment whose right side performs an operation, inside the body of a control handler
+-- (SPEC §41, R3): `c = chk(c + 1)` in `with to_result`. `c` is lent around the handler; the right
+-- side is evaluated first, the read of `c` and the call of `chk` in their turn, and its value
+-- then replaces the borrow's content (`modify c { _ -> (t, ()) }`, a callback that runs nothing).
+-- The third `chk` raises: the body is abandoned before its assignment, and `c` keeps the two
+-- made before.
+--
+-- Answer: `(inr i32[3], i32[2])`: the payload `3`; `c = 2`; `live 0`.
+include fail
+
+fn chk(n: i32) -> i32 with Fail[i32] = if n > 2 { raise(n) } else { n }
+
+main -> (i32 + i32) * i32 =
+  let mut c = 0;
+  let r = with to_result { c = chk(c + 1); c = chk(c + 1); c = chk(c + 1); c };
+  (r, c)

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.66 · 2026-11-09
+Version: the highest entry in `docs/changelog/`, printed by `scripts/changelog.sh --version`.
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -3299,7 +3299,9 @@ Six primitives (`ccatch` and `cfin`, below), and no new `Expr` constructor:
     handle_n e with H    ≜  hnd (n, (qs, H)) e              (`.app (.app (.prim .hnd) …) e`)
     M then x. N unwind D ≜  ubind (λx. N, λ_. D) M          (`.app (.app (.prim .ubind) …) M`)
 
-`ubind` is `M to x. N` with a finaliser `D`, which runs instead of `N` when `M` unwinds.
+`ubind` is `M to x. N` with a finaliser `D`, which runs instead of `N` when `M` unwinds. In core
+text, `x <- M unwind (D); N` is checked at `D`'s own row, and a row entry may spell its cancel row
+(§27 *The checker*).
 
 `H = (h_ret, h_op)` is a pair of values, `n` a literal, and `qs` the tags of the operations'
 qualifiers (§25), which `[handle]` writes. Evaluation is argument-first, so `e` runs under the frame
@@ -5430,6 +5432,17 @@ one β-step longer at each use of `κ`:
   effect context declaring `wait` and `exnᵢ` (`dAt_e7c_lift`, `d_e7c_lift`); at a cancellable `exnᵢ`
   that context has no unrestricted abortive operation (`noUnrExn_Ξe7c`).
 
+**A pipe connector's step** (#918) is `[then]`: `M` resumes one stage's stored continuation, and
+`Γ₂` holds the others', which `D` cancels (`corpus/core-pipe-step.bc`). `[then]`'s `!Γ₂` premise
+holds exactly when the step's row has no unrestricted operation at any depth (`¬Row.UnrD`: no
+`unr` operation, and none in a capturable operation's cancel row at any depth); a stage's
+continuation is `U`, not `!`, at `lin` and `cancel`. Several stage cancels share one cancel region
+when they are the finalisers of one captured continuation that the handler cancels
+(`corpus/core-pipe-close.bc`), and `[cfin-raise]` then keeps the first cleanup error; as nested
+ordinary unwind frames, the latest error wins instead. In these programs no cleanup raises. The
+first-error region with raising cleanups is traced on the machine, untyped; a checked instance
+needs the checker to emit `[then]` at a non-empty `Σ_D` (#868).
+
 ### Lowering
 
 The backend lowers a finaliser that raises (`Backend/Clos/Capture.lean`, `Backend/Clos/Unwind.lean`),
@@ -5438,22 +5451,117 @@ call a finaliser directly. `Capture` rejects such a finaliser with a message. Th
 finaliser that performs (`progFinOp`), a cancel nested in a cancel (`progNC₁`), and a kept error
 consumed with an unrestricted continuation or resumed (`progConsume`, `progKeep`), are Lean runs
 (`Core/EffCancel.lean`, `Core/EffCancelTyped.lean`) and interpreter runs, not kernel programs. The
-checker emits no such finaliser: its finalisers are consumes at `F 1`. No kernel program and
-no count changes. Finalisers that raise run at every stage in the kernel programs `e7a`, `e7b`,
+checker emits finalisers that perform (*The checker*, below); one that may suspend is refused by
+the backends as above, so such a program checks and runs at `bcc interp` only (#869). No kernel
+program and no count changes. Finalisers that raise run at every stage in the kernel programs `e7a`, `e7b`,
 `e7d`, `e8b` and `stored-k-fin` (§19 *Programs*).
+
+### The checker (#868)
+
+The checker emits `[then]` with a finaliser at its own row, and the cancel rows `[handle]` gives
+its clauses. No Core change: `CDerives.effThen`, `CDerivesAt.effThen`, `TDerives.effThen` and the
+cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
+
+- **Cancel rows in core text.** A row entry of a cancellable or an unrestricted operation may
+  carry its cancel row, `n.i cancel[R] A ~> B` or `n.i unr[R] A ~> B`, `R` a row written as a
+  function's row is (`1.0 cancel[3.0] 1 ~> 0`). `⊤` is written `cancel[top]` (or `cancel[⊤]`),
+  alone inside the brackets; the printer writes `[top]`. `top` elsewhere in a row is refused: "`top`
+  (`⊤`) is a cancel row only: write it as `n.i cancel[top] A ~> B`". A bare `cancel` or `unr` has the empty cancel row, so text written before reads the
+  same, and `Row.pp` prints the brackets only when the row is not empty, so a printed program reads
+  back. `lin[…]` is refused, and so is a cancel row on an abortive operation. `elabRow` puts `R` in
+  `OpSig.fin`.
+- **`[then]` at the finaliser's row.** `x <- M unwind (D); N` is checked by `[then]`. `D` is
+  checked at the empty row first; a finaliser that performs nothing gets `effThenA` with `M` at the
+  site's row `Σ`, the derivation as before. Otherwise `D` is checked at `Σ`, and `Σ_D` is the row
+  `D`'s derivation needs, read the same way as `Σ_M`'s (below: each operation `D` performs, at the
+  cancel rows its own derivation needs); `D` is checked again at it, falling back to the site's
+  filter; if it does not check there, the derivation at `Σ` is kept (the kernel's premises decide
+  `[then]` at whichever row is used).
+- **`Σ_M`, `M`'s own row.** When the finaliser performs and `hfin` fails with `M` at `Σ`, `Σ_M` is
+  the row `M`'s derivation needs, synthesized from it: a `perform`, `await` or `raise` contributes
+  its operation at the empty cancel row; a value's body (a thunk or a λ) contributes nothing where
+  it is built, its row counted where it is forced or called; a call, its callee type's row, cancel rows included; a `[sub]`, its subterm's; a
+  `[then]` inside `M` gives each capturable operation of its head the least cancel row that
+  `ThenLe` and `PendLe` allow over its finaliser's row; inside `handle_n` the operations of `n` drop
+  out; rows join by operation key, `⊤` absorbing. (So `progNC₁T`'s `1.0` is taken at the empty
+  cancel row, and `progConsumeT`'s at `{2.0}`.) It is restricted to `Σ`'s operations, `M` is
+  checked again at it when `hfin` holds there, and otherwise `M` stays at `Σ`; `RowLe Σ_M Σ`
+  holds. `hfin` is decided over `Σ_M` (`thenFinB Σ_M Σ Σ_D`: for each operation of `Σ_M` whose
+  cancel row is read, the cancel row of the operation `Σ` finds at that key holds `F ⋈ Σ_D`), and
+  `PendPers` over `Σ_M` (`Σ_D.UnrD → Σ_M.PendPers`). So a capturable operation the finaliser
+  performs need not be in its own cancel row.
+- **The deciders.** `ThenLe`, `PendPers` and `divB Σ_D = false` are decided by `thenLeB`,
+  `pendLeB`, `thenFinB`, `pendPersB` and `finPersB`, each with its `_sound` lemma (axioms within
+  `propext` and `Quot.sound`); `thenFinB_sound` states the kernel premise over `Σ_M`:
+  `Row.find SM n i = some o → Row.find S n i = some o' → o.finRead → ThenLe o.fin SD o'.fin`. A
+  refusal names the operation that fails, at the cancel row it was checked with (D3), and which
+  half of `PendLe` fails; it never says a row lacks what it holds. A nested entry is named as such
+  ("the cancel row of 1.0 … holds 4.0, whose own cancel row … must hold …"). At `Σ_D = []` the checker emits `effThenA`, as before; `effThen` only at a
+  non-empty `Σ_D`.
+- **Handlers read their operations' cancel rows.** `[handle]` passes `fs j`, the cancel row the
+  handled row gives operation `j`, so a clause's `κ` has its cancel branch at
+  `cancelTy Σ (fs j) = F_{F_j ⊕ Σ} 1`. A clause that cancels `κ` then performs, at its own row,
+  what the cancelled region's finalisers perform: D3 is `[sub]` there.
+- **Written, and checked.** A cancel row is written, in handler and ascription types; a row the
+  effects pass infers (`Env.rowOf`) carries the empty cancel row. `[then]`'s `hfin` checks each.
 
 ### Baseline
 
 `Paper/`, `Support/`, the machine and the effectful `wp` are unchanged; no borrow rule and no borrow
-lemma changes. Every existing derivation types at empty cancel rows. The checker emits empty cancel
-rows (`Frontend/Check/Elab.lean`) and reads `[then]`'s premise at some depth (`Row.unrDB`), which at
-its rows is the top-level test, so it accepts and rejects what it did.
+lemma changes. Every existing derivation types at empty cancel rows. A program with no finaliser
+that performs gets `Σ_D = []` and `ThenLe.nil`, and the checker emits `effThenA` there, so its
+derivation, the judgment-freeze golden and every count are as before. `fundamentalC`,
+`adequacyC`, `fundamentalD`, `adequacyD`, `adequacyD_obs` and every compatibility lemma are
+unchanged: the checker emits a rule already proved. The kernel programs `e7b`, `e7d`, `e8b`,
+`stored-k-fin`, `cancel-reraised`, `cancel-reentered` and `cancel-propagated` become checkable
+core text with their kernel answers (`inr ()`, `inr ()`, `inl (inr ())`, `inr ()`, `inr ()`,
+`inr ()`, `inr ()`), each with a corpus twin whose golden is `bcc interp`'s.
+`corpus/core-fin-nested.bc` has nested cancel rows where `D` performs only part of the row
+(`inr ()`), and `corpus/core-fin-sub-row.bc` is `e7b` with the finaliser's raise bound,
+`u <- abort[1.0] (); absurd u`, under a `[sub]` (`inr ()`). `core-fin-cancellable` (core text) is an
+`abort[1.0]` unwinding through a finaliser that performs `4.0 cancel 1 ~> 1`, checked at
+`Σ_M = [1.0]`, `Σ_D = [4.0]`; `bcc interp` answers `(inr (), i32[1])`. It joins the corpus with the
+lowering of a finaliser that may suspend (#869). `corpus/core-fin-top-row.bc` prints a `⊤` cancel
+row and checks it again (`()`, `live 0`). `core-fin-nc` (core text, `progNC₁T`'s shape: a cancel's
+finaliser performs a capturable operation whose own cancel row is empty) checks, `()`, `live 0`; it
+joins the corpus when Backend2 lowers a cancel row holding a machine operation (#869).
+`core-fin-consume` (core text, `progConsumeT`'s shape) answers `inl ()` and `core-fin-keep`
+(`progKeepT`'s) `inr ()`, each with `live 0`; both join the corpus with #869.
+`corpus/core-fin-check-nc.bc`, `-consume.bc`, `-keep.bc`, `-gapdeep.bc` and `-gapcall.bc` are
+checked in the corpus (a `def` checked and not called; `main` returns `()`): the first three are
+`progNC₁T`'s, `progConsumeT`'s and `progKeepT`'s shapes, `gapdeep` two nested finalisers that both
+perform capturable operations, and `gapcall` a call of a function parameter;
+`core-fin-check-afinc.bc`, `-same2.bc`, `-d2nested.bc` and `-dthunk.bc` are checked the same way:
+`Σ_D` at its own row, two finalisers performing the same operation, a call whose row nests `4.0`,
+and a closure built in `M`.
 
 ### Open
 
-- **The lowering of a finaliser that suspends** (planned: its
-  cancel arm as a code of its own, each finaliser call a resumption point). Until it lands, a
-  feature without its lowering.
+- **The lowering of a finaliser that suspends** is Backend2's (§69); the old backend refuses it.
+- **A surface finaliser that performs** (`with h(…) { M } finally { D }`, the surface `unwind`):
+  its own entry, before the surface's code.
+- **`Σ_M` and `Σ_D` are synthesized from the derivations**, not proved least: they can over-count
+  (a thunk built and never forced), which is safe, since the kernel checks `M` and `D` at the rows
+  taken.
+- **`Σ_M` is resynthesized only when `hfin` fails at `Σ`.** A program whose `hfin` holds at `Σ` but
+  whose `PendPers` fails there, and would hold at `Σ_M`, is refused: a gap in completeness, not in
+  soundness.
+- **`await`'s cancel rows** are not read by the synthesis; core text cannot reach them today.
+- **Nested `[then]`s are checked again at each level**, so the work is exponential in their depth.
+- **The deciders check every layer and member of a cancel row**, the kernel the first `Row.find`
+  hit: stricter only when a cancel row repeats an operation key.
+- **Answering effects in a finaliser** (a capability: `Stdout`, `Fs` #769, `Net` #597; a `fn`
+  effect): the capability is a threaded `mut` borrow, and `[then]` splits the context `Γ₁ | Γ₂`,
+  so `M` and `D` cannot both hold it; R1 (§29) needs empty cancel rows (`Row.ResumeO`), and an
+  unwinding lend's finaliser `d : Ref T ⊸ 1` is closed, pure and abortive only. It does not type
+  today by any route, and #940 (a `let mut` both `M` and `D` write) has the same root. The
+  smallest change proposed is a fused `[then]` over a lend (`m : Mut @a T ∈ Γ₂`; `M` gets a
+  reborrow, `D` gets `m` back at `Σ_D`): one rule and its compatibility lemmas. Its raise path is
+  direct; its cancel path is a lend across a suspension, which needs #844 Tier 2 and #821.
+- **An owner's finaliser that performs** (a declared value's drop that closes a socket): not a
+  consume (§42 *Not this*); Backend2's `genLendU` lowers only a constant finaliser.
+- **Task codata** (`lib/async.bc`, `F (A + …) & F 1`): a task whose finalisers perform needs its
+  close at `F_R 1`; it waits on the lowering of a finaliser that suspends.
 - **`[then]`'s two premises on unrestricted operations** restrict `unr` beyond §19's `[then]`
   (decision 63). §19's top-level premise is not enough: the finaliser's frame is live in the
   cancels below it.
@@ -8234,11 +8342,14 @@ nested, one lend per place, the first written outermost. In `S`, `x : mut 'l A`:
 - a read of `x` is `*&mut x`, the content copied through the borrow (`withswap`). A read
   rebinds the borrow, so it counts as a write of the borrow (R2) and every frame it is in hands
   the borrow on;
-- every read of a lent `x` and every call that lends it is bound in the order the source
-  evaluates them, left to right, a call's arguments before the call (A-normal form for those
-  terms), so a read after a reborrow in the same expression sees the reborrow's effect:
-  `g(&mut c) * 100 + c` reads `c` after `g` has written it, as Rust does. A `while`'s condition
-  is bound at the start of each turn, `loop { if c { M } else { break } }`;
+- in an expression that reads or lends a lent `x`, every read of `x` and every call (and `run`)
+  in the expression is bound in the order the source evaluates them, left to right, a call's
+  arguments before the call, whatever the call's arguments are, since any call may write `x`
+  (through a reborrow, or a closure it is passed): A-normal form for those terms. So a read after
+  such a call sees its effect: `g(&mut c) * 100 + c` and `apply(!{ u -> c = c + 7; 0 }) * 100 + c`
+  both read `c` after the write, as Rust does. Only call-free subterms (operators on bound values)
+  stay in place. A `while`'s condition is bound at the start of each turn,
+  `loop { if c { M } else { break } }`;
 - a move out of `x` (a read at a linear type) is refused: "a value can't be moved out of `x`
   here: it is lent for the body of a control handler, which may be abandoned, and its type `A` is
   linear";
@@ -8318,6 +8429,7 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/reject/mut-control-move.bc` | a move out of a lent variable | refused, naming `buf` |
 | `corpus/reject/effect-try-lend.bc` | `&mut stdout` passed on in `to_result`'s body | refused, naming `stdout` |
 | `corpus/mut-control-order.bc` | reads and reborrows in source order (`g(&mut c) * 100 + c` = 108) | `(inr i32[108], (i32[101], i32[8]))` |
+| `corpus/mut-control-call-order.bc` | a closure argument's write seen by a later read | `(inr i32[115], (i32[8], i32[15]))` |
 | `corpus/mut-control-assign-raise.bc` | `c = chk(c + 1)`, an effectful right side, raising midway | `(inr i32[3], i32[2])` |
 | `corpus/reject/mut-control-cap.bc` | a body assigning `c` and passing `stdout`: the refusal names `stdout` only | refused |
 | `corpus/lend-copy.bc` | copies of a borrow block's borrow over a loop: `let b2 = b`, `let mut v = v` (T04's form), a copy after a statement | `(i32[30], (i32[321], i32[6]))` (was refused) |
@@ -8817,9 +8929,8 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
 
 **Open (#746).**
 - *I/O in a finaliser.* `[then]`'s `D` is at `F_Σ 1` beside `N` in one context: a capability the
-  effects pass threads into `D` would be consumed there and not handed back. Capabilities as
-  borrows held across `[then]` (§29's relaxed lend, `PinLaw`), or a finaliser that hands its
-  capabilities back, would carry it; neither is in this entry.
+  effects pass threads into `D` would be consumed there and not handed back, and `[then]`'s split
+  `Γ₁ | Γ₂` admits no capability both `M` and `D` use (§27 *Open*, with #940's root).
 - *A written finaliser for a lend the abort crosses.* The kernel's unwinding lend takes any closed
   `d : Ref N ⊸ 1` (`d_declAcross`); the checker passes only the source's consume
   (`Frontend/Check/Consts.lean`, `finaliser`), so at a declared type the lend is refused. A
@@ -9409,9 +9520,13 @@ No change: no type, rule, term, typing, elaboration or semantics.
 - **The outcome** (`Backend2/Types.lean`, `outcomeTy`): `F_Σ R` at a row with machine operations
   answers `μY. R ⊕ (P ⊕ S)`, `P` the payload of `Σ`'s abortive operations (§47) and `S` one
   summand per machine operation `A ↠ B` of `Σ`, in the row's order: its argument and the
-  suspended computation `k : U((B ⊸ F Y) & F C)`, `C` what its cancel answers, `1 ⊕` the payload
-  of the operation's cancel row (`fin`, §27; `1` at `⊤`). `k` is the continuation `[op]` captures,
-  as §19's `κ` is: its first component resumes it, its second cancels it.
+  suspended computation `k : U((B ⊸ F Y) & K)`. At a capturable (cancellable) operation (`capB`),
+  `K = F C`, `C` what its cancel answers, `1 ⊕` the payload of the operation's cancel row (`fin`,
+  §27; `1` at `⊤`). At a must-resume operation `K = ⊤`: the kernel never cancels a `lin`
+  continuation (`kTy .lin`, `kappaC_cancel_lin`), so Backend2 builds no cancel entry there, only
+  an `unreachable` trap, which no run reaches; that it is never entered is stated `UNPROVED:` at
+  `genMach`. `k` is the continuation `[op]` captures, as §19's `κ` is: its first component resumes
+  it, its second cancels it.
 - **A machine** (`convK`) is a function whose answer is an outcome, with the joins and steps its
   conversion makes. A computation is converted with its continuation inside the machine (the
   frames to the machine's answer): a `[let]` or `[then]` at an outcome makes its body a join and
@@ -9432,8 +9547,8 @@ No change: no type, rule, term, typing, elaboration or semantics.
   at the point (a call point resumes its callee's `k` and steps again; `kappa_resume_steps`), and
   whose cancel entry cancels the callee's `k` first, then runs the point's frames' finalisers
   innermost first, keeping the first error (§19 *Cancels*, `[cfin-raise]`, `cancel_prefix`,
-  `kappa_cancel_steps`). A finaliser that may suspend, or a cancel row with a machine operation,
-  is outside the fragment.
+  `kappa_cancel_steps`). A finaliser that may suspend, and a cancel row with a machine operation,
+  are lowered by §69.
 - **A `handle` node as a drive** (`convDrive`), when its handled computation's row has a machine
   operation (of its own name, or of `Σ`). The handled computation is a machine of its own. The
   drive takes its outcome apart, read from the node: a value to `h_ret` (`[ret]`, `catch_ret`), an
@@ -9861,11 +9976,25 @@ corpus or a golden.
 
 ### Open
 
-- **The erasure laws** (T-B1 `last_resume_direct`, T-B1′ `last_cancel_direct`, T-B2): the
-  backend's licence to call a work where it is performed. T-B1/B1′ are `tail_resumes_answer` and
-  `kappa_cancel_steps` with the finaliser frame; T-B2, at a work that performs, is a two-run
-  correspondence. They read the rule's clause form (`lastClause`, `lastN`, `lastD`, `exitK`) and
-  its step lemmas (`lastClause_steps`, `lastN_inl`, `lastN_inr`, `exitK_steps`, `lastD_steps`).
+- **The erasure laws** (`Core/HandleLastErase.lean`, #918) are proved at the direct call `hnd H
+  K[case (w v) {inl y → y | inr z → X}]` (`directK`) of a work whose direct run leaves κ's cell free
+  (`StepsOff`; `StepsOff.upd` runs it beside the cell). T-B1 `last_resume_direct`: both runs reach
+  `K₀[hnd H K[y]]`. T-B1′ `last_cancel_direct`: the perform reaches `K₀[(λ_. nf z)(ccatch K†[raise
+  ⊥])]`, `K`'s cancel then the exit (`last_cancel_exit`), and the direct call reaches its `inr` arm.
+  T-B2 `last_perform_direct`: a work whose performs are answered in place by handlers outside the
+  node (`WorkRun`), of names other than `n` and unhandled in `K`, by the two-run lemma
+  `work_run_ctx`. Outer handlers that answer in place: `answers_in_place`, from
+  `tail_clause_answers` and `last_clause_answers` (nested `[handle-last]`, pipe fusion's normal
+  path). Each law is a forward correspondence on the machine: given the work's run when called
+  directly, which leaves κ's cell free (`StepsOff`), the handled program and the direct program
+  reach the same configuration at the same memory, in any outer context `K₀` and handler-free `K`.
+  T-B2 matches the two runs segment by segment, under `WorkRun`'s `hans`: the outer handler answers
+  the same whatever continuation it captures. Open: runs the hypothesis does not give (a work that
+  diverges or does not leave κ's cell free); T-B2 when an outer handler stores or cancels the
+  captured κ, or a raise or cancel crosses the active frame (an early stop, `stop()`, a raise across
+  a fused stage), not derived and not refuted (a whole-run simulation); a Core term for the in-place
+  cancel-mode unwind (Core expresses it only through κ's `ccatch K†`); the laws are stated on
+  machine values, not on typed `lastH`.
 - **The elaboration** of `for` with `break`/`return` and a body that performs, and the adapters
   over a source computation (R-1's frontend): it needs a checker producer for the node
   (`TTied`'s builder, the clause kinds of the node, `Frontend/Check/Kinds.lean`, and its handled
@@ -12105,8 +12234,8 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
 | `codeErase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
 | `codeEraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
 | `force` (restated) | `Ctx.SoloP Γ i T`, `T.forceTy = some C` (`T` is `U C` or `Code⟨N; E⟩ C`) ⟹ `forceE C (.var i) : C` | K3 |
-| `unfoldK` | `unfold : !G ⊸ !Code⟨hCode C; !G ⊗ 1⟩ (S ⊸ Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C))`, `G` either `U(S ⊸ C[S/X])` or a code type of it | K4 |
-| `nuOutK` | `x : Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)` ⟹ `force x : C[Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)/X]` | K4 |
+| `unfoldK` | `unfold : !G ⊸ !Code⟨hCode C; !G ⊗ 1⟩ (S ⊸ F Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C))`, at a consumed context, with `C.NuOk`, `G.forceTy = some (S ⊸ C[S/X])` (`G` is `U(S ⊸ C[S/X])` or a code type of it) and `C.BindsFresh S` | K4 |
+| `nuOutK` | `x : Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)` ⟹ `x : C[Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)/X]` (`force` at a ν is `x`), with `C.NuOk`, `G.forceTy = some (S ⊸ C[S/X])`, `C.BindsFresh S` and `C.BindsFresh G` | K4 |
 
 - `Γ.capTy e` (`Ctx.capTy`, `Core/CodeRules.lean`): the tensor of `Γ`'s slot types at
   `capVars e`, in rank order, ending in `1`.
@@ -12116,6 +12245,9 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
   live slot of `Γ` that `e` does not capture is persistent. With it the uncaptured slots hold `∅`
   (`vCE_empty_of_persistent`), so the closure's resource is its captures'. It is a premise, not
   an inversion of `CDerives`.
+- `C.BindsFresh G` in `nuOutK`: the unrolling under a `∀'x` leaf reads the code type, which
+  contains `G`, at `δ[x↦α]`, and a code-typed `G`'s environment could mention `x`. `codeTy`,
+  `hCode`, `hEnv` and `unfoldKTy` are in `Core/CodeNuOut.lean`.
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
 - `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
@@ -12128,8 +12260,10 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
   at `U`, `!U`, `Code` or `!Code`; `LamAx` reads at the axiom type's views and their code types.
   `lam_bang` and its uses in `Core/Rejections.lean` and `Core/EffCancelTyped.lean` are restated.
   `der_swap` reads at `ValClsC`; `hnf_of` and `eq_of_heads` take a no-code-head hypothesis their
-  callers discharge. No inversion is added and no substitution over derivations; every rejection
-  keeps its statement and verdict.
+  callers discharge. K4: `VarCls` gains a third disjunct, a variable at a code-typed `ν` read at
+  `C[codeTy/X]`, restated in place, with new `JR` lemmas about `instT`, which do not invert
+  `CDerives`. No inversion is added and no substitution over derivations; every rejection keeps its
+  statement and verdict.
 
 ### Erasure policy
 
@@ -12220,10 +12354,17 @@ reported as an intended change.
 - **Built (K3):** `codeI`, `codeIB`, `codeErase`, `codeEraseB` and the restated `force`, with their
   compatibility lemmas at Core's relation and at the chain's, and `codeI`'s semantic step: the
   captured tuple is in `𝒱⟦Γ.capTy (λM)⟧` at the whole resource.
-- **Not built until their units land:** `unfoldK` and `nuOutK` and their compatibility lemmas
-  (K4), the lend-exit lemma (K5), `eraseD` (K6), and `cloneCode` (K7, #928).
-- **No code type in the checker.** No rule of the checker synthesises a code type before S1, so
-  the corpus is unchanged by K3.
+- **Built (K4):** `unfoldK` and `nuOutK`, with their compatibility lemmas at Core's relation and
+  at the chain's. Core's unrolling at a code type is proved (`cB_unrollK`, `nuP_codeCand`, the
+  analogue of `vC_inst_envS`/`cBN_unroll`). The kernel program `Core/Chain/CodeLoop855N.lean`: a
+  unit stream over a cell whose state stays at `Code⟨etaCode C; …⟩(Stream 1)` across three
+  observations and the close, by `nuOutK`, concluded at `adequacyC` (`progK_runs`) and at
+  `goal791N` (`progK_orDiverges`).
+- **Not built until their units land:** the lend-exit lemma (K5), `eraseD` (K6), and `cloneCode`
+  (K7, #928).
+- **No code type in the checker.** No rule of the checker or the elaborator synthesises a code
+  type before S1, and Backend2 does not lower K4's rules (S4, the B-units), so the corpus is
+  unchanged by K3 and K4.
 - **`CapOK`** is a premise of `codeI` until #894 removes it.
 - **Choices K1 made that the entry does not state:**
   - A type substitution (`VTy.rename`, `VTy.subst`) leaves `Code⟨N; E⟩ C` as it is, as it leaves
@@ -12240,9 +12381,10 @@ reported as an intended change.
   - Printing: the checker prints `Code⟨#h; E⟩ C`, `#h` a hash of `N`'s serialisation, not
     `{closure@span}` (a kernel type has no span). Backend2's `useKey` prints a type `ofV` refuses
     exactly (`keyVT`, `N` in full), so two codes are two keys; `ofV` refuses `code` (B1).
-- **`nuOutK`'s compatibility lemma** needs, beyond `nuOutK_step`, that `C[Code⟨…⟩(νX. C)/X]` read
-  at the code clause is `nuF` at `codeCand` (Core's `vC_inst_envS`/`cB_unroll` at a code type); not
-  built. `unfoldK`'s, that `unfold step` is in the clause at `hCode C`, is not built.
+- **The chain's equation at the code candidate** is not derived; obstruction not verified.
+  `nuOutK_compatN` is proved by a direct route instead: `node_okP`, the node lemma over a leaf
+  predicate, at the code clause, with `cBNP_unroll` (each state mapped into the code clause at the
+  leaf's world by `etaN_codeRelN`). `cBN S R` is `cBNP S (thunkRN R)` (#947).
 - **The scope's `ρR`.** With a part of the resource the environment does not hold, `nuOutK` is not
   derived; obstruction not verified. This entry drops `ρR` and moves the obligation to `codeI`'s
   premise `Γ.CapOK`. That a well-typed closure always meets `CapOK` (no live non-persistent slot
@@ -12250,1965 +12392,366 @@ reported as an intended change.
 
 ---
 
+## 69. Entry 68 — the new backend: a cancel that suspends (#869)
+
+### Motivation
+
+§27 lets a finaliser perform an operation whose handler is outside every region that can cancel
+it (D2), and records it in cancel rows. Cleanup that awaits (closing a socket during a cancel,
+the pipes connector's per-step finaliser) needs a finaliser that may suspend, and a cancel row
+holding a machine operation, lowered. §49 refused both.
+
+### Language
+
+No change to types, rules, terms, typing, semantics or `Core/`. The surface's finaliser rows are
+§27's (#868).
+
+### The rule
+
+One construct per step of `Paper`'s machine:
+
+- **The cancel component.** A machine operation's suspended computation is `U((B ⊸ F Y) & K)`
+  (§49). At a capturable operation (`capB`), `K = F C`, `C` the outcome of `F_{fin} 1`, the cancel
+  row's own outcome. With no machine operation in `fin`, `C` is `1 ⊕ P_fin`, as before; the
+  nesting of cancel rows is finite (§27), so the type is. At a must-resume operation `K = ⊤`
+  (§49).
+- **A cancel that may suspend is a machine.** The cancel entry of `k`, and `κ`'s cancel at a
+  drive over `k.1`, whose cancel row has a machine operation, is a machine of `C`'s outcome. The
+  callee's cancel and each finaliser in it are call points.
+- **`cfin` as a frame** (`cfinF`). It holds the error kept so far. On the finaliser's answer or
+  raise it keeps the first error and goes on with the cancel (`[cfin-ret]`, `[cfin-raise]`). When
+  the suspended cancel run is itself cancelled, it keeps the earlier error and goes on through the
+  rest of the region (`[cfin-cancel]`). The run's end answers `()` or the kept error (`[cancel]`,
+  `[cancel-raise]`).
+- **`[then]` with a finaliser that may suspend** (`unwindF`). On an ordinary unwind the finaliser
+  is a call point of the machine; its row is in the machine's (`Σ_D ≤ Σ`). The pending raise is
+  held in a frame, dropped when the finaliser raises (`then_fin`) or when the machine is cancelled
+  meanwhile.
+- **Who drives.** The canceller. A suspension of a cancel run returns to the code that observed
+  `.2` and is forwarded to the nearest live handler (§19 *Cancels*); the cancelled region's
+  handlers are dead, the cancelled task's own site among them. The forwarding is transcribed from
+  `Paper`'s `ufin`, `ufinC`, `cfret`, `cferr`, `cfcancel` and `creraise`.
+- **Stack machines** (§52) keep a pure cancel path: a machine with a suspending finaliser, or whose
+  operation's cancel row has a machine operation, is not a stack machine.
+- **Facts read.** Each row entry's qualifier, answer and cancel row; `[then]`'s `Σ_D`; `κ`'s
+  `cancelTy`. `ThenLe` and `Σ_D ≤ Σ` are the typing's. The conversion fails loudly on a
+  suspension outside its machine's row.
+- **`UNPROVED:`** A non-capturable operation's cancel entry is never entered (it traps). A stored
+  site's stack is owned by a suspended cancel run's `k` alone.
+
+### Programs
+
+- `deep-gen-count` (the #866 twin of `deep-gen`): `((), i32[2])`, `live 0`.
+- `core-fin-op`, the `progFinOpT` twin: a finaliser performs, and the outer handler resumes.
+- `core-fin-keep`, the `progKeepT` twin: a kept error across a suspension.
+- `cancel-suspend-unwind`: finalisers suspend on an ordinary raise; one supersedes the pending
+  raise, one frees a cell.
+- `cancel-suspend-nested`: two suspending finalisers, the callee's cancel itself a machine; the
+  first error kept.
+- `core-fin-stored-k-op`: a stored `κ` cancelled after its handler returned, its cleanup suspending
+  in the canceller.
+- `core-fin-cancellable`: an abort unwinds through a finaliser that performs a capturable
+  operation, handled outside the abort: `(inr (), i32[1])`, `live 0` (§27, `Σ_M`).
+- `core-fin-nc`, the `progNC₁T` twin: the outer handler cancels the finaliser's continuation
+  (`[cfin-cancel]`): `()`.
+- `core-fin-op-cap`: `core-fin-op` with a capturable finaliser operation: `inr ()`.
+- `cancel-suspend-cancel`: the suspended cancel run cancelled in turn, the outer finaliser freeing
+  a cell: `()`, `live 0`.
+- `core-fin-consume`, the `progConsumeT` twin: an unrestricted finaliser operation whose own cancel
+  row holds an abortive one: `inl ()`.
+- `core-fin-keep-unr`, the `progKeepT` twin with an unrestricted finaliser operation: `inr ()`.
+
+In `core-fin-op`, `core-fin-keep`, `cancel-suspend-unwind`, `cancel-suspend-nested` and
+`core-fin-stored-k-op` the finalisers' operations are must-resume; `core-fin-cancellable`,
+`core-fin-nc`, `core-fin-op-cap` and `cancel-suspend-cancel` use a capturable one, and
+`core-fin-consume` and `core-fin-keep-unr` an unrestricted one.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `Core/`, `Paper/`, `Support/`, the checker,
+the elaboration, the old backend or a kernel program. Every LIR type of the existing corpus is
+unchanged (`outcomeTy`'s empty case). `corpus/counts-backend2.expected` and
+`corpus/erasure-backend2.expected` are unchanged.
+
+### Open
+
+- A stack machine whose cancel suspends: Backend2 refuses a cancel that may suspend over a task's
+  own stack (§52) until a lowering proved memory-safe (the stack freed exactly once along every
+  suspending cancel run) lands, #970.
+- Cleanup that awaits needs `lib/async.bc`'s `cancel` to have a cancel row (the surface).
+- The old backend keeps refusing a finaliser that suspends (§27 *Lowering*).
+- A finaliser that reaches a capability the body uses (§27 *Open*, a kernel question).
+
+---
+
+## 70. Entry 69 — `>|` and stream chains (#919, pipes unit S)
+
+### Motivation
+
+Pipes (#907, `docs/new-core/scope-pipes.md`, decision B′): `|>` is push and keeps §33's cases;
+`>|` is pull, and is new. Under (R) an adapter is a *stage*: a computation that performs the item
+effect `Stream[A, K]` (`next()`, `stop()`, L1 #920) and `Yield[B]`, with no source parameter. A run
+of stages is one n-ary connector (L1), so the user never sees a bracketing. This entry adds the
+surface: the token, the rule that recognises a stream edge by effects, the chain's normal form,
+and the transitional reading of `>|` that lets it be written today, before the connector (L1) and
+the stage-form adapters (L2, #921) exist.
+
+### Language
+
+- **The operator.** `e >| s`, the token `>|`, has the precedence of `|>` (the lowest, below `||`)
+  and associates to the left. Its right operand is a stage as `|>`'s is: a spine `f`, `f[As]`,
+  `f(a, …)`, or a parenthesised chain (below). Printed `(e >| s)`.
+- **A stream stage.** A function stage `f(…)` is a *stream stage* when `f` performs lib's item
+  effect `Stream` — identified by **lib's declaration** of it (L1, #920), never by an effect's
+  name — or, **transitionally until L2**, when `f`'s first parameter, as its signature writes it,
+  is a stored generator `U (pull A K R)` (today's source-owning adapters, `lib/adapters.bc`). A
+  handler is never a stream stage. **Until L1 declares `Stream`, the first kind does not exist:**
+  a user's effect named `Stream` makes nothing a stream stage, and S classifies by the parameter
+  only.
+- **A stream edge** (by effects; **decided in L1**). `e ∘ s` is a stream edge when `s` performs
+  lib's `Stream` and `e`'s **inferred row** has an iteration effect (`Env.iterEff`, §15; `Yield[A]`
+  in lib). A written row is an upper bound (§18), so it is never read as what `e` performs: the
+  decision reads the row the elaboration infers for `e`, where rows are inferred (after
+  `resolvePipes`, at the `Env`), and where inference has none for `e`, the edge is §33's case
+  (iii) with the note `cannot tell whether this is a stream: annotate the block's row`. L1 adds
+  the test with the branch it decides (the connector); in S no edge's elaboration depends on the
+  left side's row — a `|>` is §33's by the stage, and `>|` is accepted by the stage — so S has no
+  stream-edge test and no note.
+- **The normal form.** A maximal chain is a source and a list of edges, each marked with its mode
+  (`|>` push, `>|` pull): left-nested, the source first. `(a ∘₁ b) ∘₂ c` is read as written; a
+  stage that is itself a chain, `a ∘₁ (b ∘₂ c)`, is spliced into the chain when every edge it
+  adds is a *joining* edge. **Until L1, only `>|` joins:** a `|>` edge is always read as written,
+  so a parenthesised chain at a `|>` edge is a stage, as §33 reads it (`range(0, 3) |> (sum(range(0,
+  2)) |> g(5))` is `g(range(0, 3), sum(range(0, 2)), 5)`, `corpus/pipe-push-paren.bc`), and only
+  programs that write `>|` can be rebracketed. L1 may let a `|>` into a stage of lib's `Stream`
+  join. Two bracketings of one chain of joining edges have one normal form (theorem below), so they
+  elaborate to one term. A `>|` edge takes the span from its chain's source to its stage; a `|>`
+  edge keeps its node's.
+- **The mixing rule.** `|>` and `>|` mix freely in one chain; the operator at each edge names that
+  wire's mode. `src >| take(3) |> each(f)` is one chain of three stages with one pull and one push
+  wire (one connector, L1). An edge that is not a stream edge is §33's, whatever chain it is in.
+- **Elaboration, edge by edge** (in order, the source first):
+  - **`|>`**: §33's cases by the stage, exactly as before §70 — (i) a handler, (ii) a computation
+    parameter first, (iii) any other function. A source-owning adapter is case (iii), the left side
+    stored at its parameter (§15).
+  - **`>|`** into a stream stage (until L1, a source-owning adapter): case (iii), as `|>`. So `>|`
+    is usable at once, and every output and count of a `|>` pipeline written with `>|` is the
+    `|>` form's.
+  - **L1** adds: a stream edge into a stage that performs lib's `Stream` runs on the connector.
+
+### Refusals
+
+- `` `>|` connects stream stages; `f` is not a stream stage `` — `>|` into a function that is not
+  a stream stage (or into a handler: `` …; `h` is a handler: write `|>` ``).
+- `` the right of `>|` is a stream stage, applied to its other arguments `` — a stage that is not
+  a spine.
+- **A limit:** a generic first parameter, `app[T](it: T, …)`, is not a stream stage: `>|` refuses
+  `app` (the parameter is no stored generator until it is instantiated, after this pass), and
+  `|>` into it is §33's case (iii), unchanged.
+- **A limit (§15, not §70's):** a generator's call is stored only at a parameter written
+  `U (pull …)`, so at an abbreviation of it both `|>` and `>|` are refused today
+  (`corpus/pending/pipe-alias.bc`, #973).
+- **Not added here:** the refusal of a source-owning function at `|>` (scope §3 item 3). It moves
+  to L2, where lib's adapters become stages; in S it would break `corpus/gen-pipeline-pipe.bc`,
+  `bench/chain-gen` and the book's sites. The `>|` refusal of a `Stream` stage whose left side
+  yields nothing moves to L1 with the stream-edge test.
+
+### The user's example
+
+    watch(kube) |> filter(p) |> each(e -> reconcile(e) |> retry(3) |> timeout(30s))
+
+- The outer chain is a stream chain: `watch` performs `Yield[Event]`, `filter` and `each` perform
+  `Stream[Event]`. One connector, push wires. (Waits for L1/L2: `each`, the (R) `filter`, and a
+  `watch` that performs I/O.)
+- `each`'s per-item body `reconcile(e) |> retry(3) |> timeout(30s)` has no stream edge: neither
+  `retry` nor `timeout` performs `Stream`. It is §33's case (ii), effect layers, run per item.
+- In this order, a timeout that `retry` does not catch escapes `each`'s body, so `each` raises, and
+  **the whole `watch` pipeline is closed** (`docs/new-core/scope-pipes.md` §3), each stage's cleanup running
+  downstream-first. To keep watching after a per-item failure, handle it inside `each`'s body
+  (`… |> timeout(30s) |> log_and_skip`).
+
+### Theorem
+
+`Frontend.Elab.Pipes.chainOf_bracketing` (`Frontend/Elab/Pipes.lean`): for a bracketing (a tree of
+pipe nodes, `PipeTree`) whose leaves are not pipe nodes and whose edges all join, the marks of the
+normal form (`PipeChain.marks`: the source, and each edge's mode and stage) are the tree's in-order
+flattening. So two bracketings with one flattening have one normal form
+(`chainOf_bracketings_eq`; `chainOf_assoc` for `(a ∘₁ b) ∘₂ c` and `a ∘₁ (b ∘₂ c)`). The
+elaboration reads the marks only, each edge at the span from the chain's source to its stage
+(for an unbracketed chain, the parser's own node span), so two bracketings are one core term up to
+where the source and stages sit in the text: `bcc desugar` prints them identically when the
+source starts at one column (checked on `((a >| b) >| c) >| d`, `a >| (b >| (c >| d))` and
+`a >| ((b >| c) >| d)`), and they erase alike in any layout
+(`corpus/sugar/pipe-bracket.lowered.bc`).
+
+### Programs
+
+- `corpus/pipe-pull.bc`: a `>|` chain of three stages over a generator, and the same chain in `|>`
+  (case (iii)): `(i32[20], i32[20])`, counts `3 0 0 3 3 0`, as `gen-pipeline-pipe`.
+- `corpus/pipe-bracket.bc` and `corpus/sugar/pipe-bracket.lowered.bc`: three bracketings of one
+  chain (one with a `|>` wire in its left side), each erasing as the nested calls: `(i32[25], (i32[25], i32[25]))`.
+- `corpus/pipe-mixed.bc`: a mixed `|>`/`>|` chain, a parenthesised `>|` sub-chain spliced at a
+  `>|` edge, and a chain into a sink and then a plain function: `(i32[56], (i32[4], i32[28]))`.
+- `corpus/pipe-left-row.bc`: left sides that are not generator calls, every `|>` §33's as before:
+  an `if` of values and an `if` calling a function without a written row, piped into a function
+  that performs a user's effect named `Stream`; a call of a function performing a one-operation
+  unit effect (`Wait`, the shape of an iteration effect); a call of `three() -> i32 with
+  Yield[i32] = 3` (a written row that over-approximates); a stored generator piped `>|`; a call of
+  a function without a written row piped `>|`:
+  `((i32[13], (i32[14], (i32[11], i32[13]))), (i32[6], i32[5]))`.
+- `corpus/pipe-push-paren.bc`: a `|>` into a parenthesised `|>` chain is §33's, as written:
+  `i32[315]` (the review's probe p6).
+- `corpus/pending/pipe-alias.bc`: `range(0, 4) >| tot`, `tot(it: P)`: accepted as a stream stage
+  (the abbreviation unfolded), then refused where the call would be stored, as `|>` is.
+- `corpus/pending/pipe-stream-edge.bc`: an `if` of generator calls piped `>|` into a function that
+  performs the program's own `Stream`: refused (`` `sum_items` is not a stream stage ``) until L1,
+  where a stage of lib's `Stream` is a stream edge on the connector.
+- `corpus/reject/pipe-pull-plain.bc`: `3 >| double`: `` `>|` connects stream stages; `double`
+  is not a stream stage ``.
+
+### Baseline
+
+No change to `CDerives`, `Core/`, the checker, the machine, the backends or lib. §33's cases
+(i)–(iii) are unchanged: every `|>` edge is elaborated by `pipeStage`, as before. A chain is read
+in its normal form, which differs from the parse only where a parenthesised chain of `>|` edges is
+the stage of a `>|`, and a `>|` edge takes the span from its chain's source to its stage (the
+parser's own span for an unbracketed chain); a `|>` edge is elaborated as before, at its node's
+span. Checked: `bcc
+desugar`, `bcc check` and `bcc print` of every corpus, bench, docs and book program with `|>`
+and of the review's `|>` probes (32 programs, 96 outputs) are identical to main's; the three
+probes that differ write `>|`, which main does not parse.
+
+### Open
+
+- L1 (#920): lib's `Stream`; a stage that performs it is a stream stage, keyed on that
+  declaration; the stream-edge test on the left side's inferred row, after row inference, with the
+  note where none is inferred; the connector.
+- The transitional reading ends at L2: `>|` into a source-owning adapter, and the refusal of one
+  at `|>`, change there.
+
+---
+
+## 72. Entry 71 — host externs under the chain's adequacy (#963, K1)
+
+### Motivation
+
+`goal791N : HandlerLawN → Goal791N` (§62) covers closed programs with no extern, at `F 1`. A
+program that reads or writes through the host is outside it. The design is
+`docs/new-core/scope-host-externs.md` (#963), choices C1–C5 as recommended.
+
+### What it adds
+
+**Host externs under the chain's adequacy.** `goal791N : HandlerLawN → Goal791N` is extended
+from closed, extern-free programs at `F 1` to programs that call host externs, at any persistent
+answer type. No new type former, `CDerives` index, or relation clause. `erwpK`, `KW`, the
+tables and `HandlerLawN` are unchanged.
+
+1. **The extern contract `ExternN`** (the form of `ConstN`'s conclusion):
+
+       ExternN T v :=  closedAt 0 v = true ∧ T.Persistent ∧
+                       ∀ δ Θ n, Θ.OK → vN T δ Θ n v ∅
+
+   `ExternsMeetN Γx γx` states it slot by slot, each slot live, as Core's `ExternsMeet` does. It is a named
+   hypothesis (a `Prop`, not an axiom), stated once for every extern.
+
+2. **What a host is claimed to meet (C1 (b)).** The theorems take `ExternsMeetN` as their
+   hypothesis. The claim `bcc trusted` prints for a host extern is a claim about behaviour:
+   "on each run, the extern behaves as a typed closed term at its representation". Both
+   memberships, Core's `vC` and the chain's `vN`, follow from that claim by the two
+   fundamental properties. For the standard models it is a theorem (`stdModel_meetsN`, from
+   `HandlerLawN`). For a real host it is assumed, at the same assurance levels as today.
+   *Why a host can meet it* (an argument, not checked in Lean): `OrDiverges` is a property of
+   finite prefixes, and a finite prefix observes finitely many host answers. A model whose cell
+   holds that trace answers the same, and it is a typed closed term. This is the prophecy
+   reading §34 already takes for `Stdin`, extended to the clock and sockets.
+
+3. **`Goal791N` restated in place (C5):**
+
+       Goal791N := ∀ cs Γx γx e R, (∀ c ∈ cs, c.OK) → ExternsMeetN Γx γx →
+         CDerives ∅ (ctx791 cs ++ Γx) e (.comp (.ret R)) → R.Persistent →
+         OrDiverges (substAll (vals791 cs ++ γx) e)
+
+   The old statement is the instance `Γx = []`, `R = 1`.
+
+4. **A host call is a call (C2).** A call into an extern is ordinary steps of the value that
+   closes its slot: neither a machine step nor a stop. Owned buffers move through `⊸`'s
+   resource split. Blocking I/O is covered: a call that never returns is a diverging run, which
+   `OrDiverges` allows. A cancel cannot land inside a host call.
+
+5. **The finaliser at the externs' context (K1.3, widened).** A lend's finaliser may name
+   extern slots, so that a capability cell (`Output`, a file, a socket) lent across a
+   suspension or an unwind can be handed back to the host on cancel (e.g. `λr. take_output r`).
+   This applies in two places:
+   - **The suspending constants:** `Const791.OKAt` takes the finaliser at the externs' context,
+     `CDerives Δ Γx d (U (Ref A ⊸ F 1))`. The constant's value is closed by the extern values,
+     `c.val[γx]`. Today's premise is the case `Γx = []`.
+   - **The checker's unwinding lends** `withbor1U`/`withbor2U`/`withbor3U`: their premise
+     `closedAt 0 d` is dropped. `d` stays typed at the rule's context `Γ` (`Ctx.DeadP`, so it
+     names persistent slots only) at `U (Ref A ⊸ F 1)` (resp. `U (Mut a A ⊸ F 1)`).
+   This removes a premise and adds none. The finaliser stays at `F 1`, effect-free.
+
+### Baseline
+
+- `goal791N` (restated in place; the old statement is an instance), `fundamentalN_all`,
+  `handlerLawN_iff`;
+- Core's `fundamentalC`, `adequacyC`, `externs_every_run`, `externs_loop_every_run`,
+  `io_every_run`: untouched apart from the three `withbor*U` compat lemmas, which are restated
+  without `closedAt 0 d`;
+- `prog791_orDiverges`, `progRes_orDiverges`, `progCan_orDiverges`, #844's nest instances and #855's `progK_orDiverges`,
+  with their statements unchanged;
+- every `Const791.OK` instance (each holds at `Γx = []` unchanged), and the five `*S_compat`
+  statements unchanged;
+- every corpus and kernel program with the same output. The checker's finaliser stays
+  `consumeE src` until a later unit lets it name an extern, so no program's term changes in K1.
+
+### Units
+
+- K1.1, built: `ExternN`, `ExternsMeetN`, `gN_of_meetsN`, `Goal791N` restated in place, `goal791N`
+  re-proved.
+- K1.2, built: the standard models meet `ExternN` (`stdModel_meetsN`, all fifteen, from
+  `HandlerLawN`), and Core's end-to-end theorems at the chain, `externs_every_runN`,
+  `io_every_runN`, `externs_loop_every_runN` and `io_loop_every_runN`, through `goal791N`
+  (`Core/Chain/Externs791N.lean`). The program's input is one more extern slot (`Γ ++ [Bytes]`),
+  so the I/O theorems are plain instances of `goal791N`.
+- K1.3: the finaliser at the externs' context, for `Const791.OKAt` and `withbor1U/2U/3U`.
+- K1.4: the kernel instance `progIO` (a lent `stdout` cell, written across a `wait`, resumed and
+  cancelled).
+- K1.5: `IORun.every_runN` at the checked wrapper; `corpus/io-effects.bc` concluded by the
+  extended `goal791N`; `bcc trusted` names it.
+
+K1.3–K1.5 are not built; each unit's code PR marks its line *built*.
+
+### Open
+
+- **Suspending I/O answered by the platform** (the "stop" reading, scope §4.3): it needs a run
+  relation with world steps and a new adequacy theorem. Out of K1 (C2).
+- **Effectful finalisers** (I/O performed on cancel through an effect, surface A4): that is K-b
+  for the lend form (approved, after K1.3), not K1.
+- **A buffer borrowed across an `await`** (#844 Tier 2, `read(sock, &mut buf).await`): the loans
+  line.
+- **`HandlerLawN` on the models** (C4): `stdModel_meetsN` keeps `HandlerLawN` as a hypothesis. A
+  handler-free fundamental would remove it; that is #840's fragment machinery.
+- **Pins:** the theorems ask for `pins = []`. A program relying on `PinLaw` stays outside.
+- **Descriptors:** the empty final memory covers capability cells, not descriptors (§11). That a
+  freed cell's descriptor is closed is the host's claim.
+- **Not derived:** the representation congruences at `vN` are expected to be `funext` equations
+  under `famL` (risk, measured on `read_byte` first in K1.2). There is no `vC → vN` lemma; both
+  follow from the behavioural claim.
+
+---
+
 ## Status
 
-Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
-`adequacyC` covering every rule; §7's `νX. C` is `Core/NuRel.lean` and `Core/Nu.lean`, and the
-checker reads `nu X. C`, `iter A R R'`, `nu_in`/`nu_out` and `unfold[C, S]`. Entries 7 and 9 (§8, §10) are implemented, except §10's promotion over a flat context (#886); §8 extends `Paper/` and `Support/` with the literal
-and host-step forms. Entry 8 (§9, arrays) is implemented: the former and its lemmas in `Core/Types.lean` and the typed
-world, the constants in `Core/Arrays.lean` (`Core/ArrayWp.lean` for the steps), the three machine
-steps in `Paper/` and `Support/`, the checker (`array`, `array_imm`, syntax-core §8b) and the
-backend. Entry 10 (§11) is implemented: the former `VTy.opq` in `Core/Types.lean` and the
-typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the checker (`input`,
-`output`, the `run_io` wrapper) and the backend (`Backend/Clos`, `Backend/Flat`, WASI imports). Entry 11 (§12) is implemented in
-`Core/Consume.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`. Entry 12
-(§13) is implemented in `Core/Alloc.lean`, `Core/World.lean`, `Core/Demonic.lean` and
-`Core/Stale.lean`. Entry 13 (§14) is implemented in `lib/div.bc`, `lib/lend.bc`, `Frontend/Sugar.lean`,
-`Frontend/Elab/LoopLend.lean` and `Core/Totality.lean`; each div body is one state machine.
-Its effect `Div` is in the kernel (`Core/DivDefs.lean` to `Core/DivRuntime.lean`, the rules
-`iterate`, `divFuel`, `reify`, `effHandleT` and `effHandleL` (§51) of `CDerives`), and the backend replaces `iterate`
-by its fixed point (`Backend/Clos/Convert.lean`); the frontend does not elaborate to it yet. Entry 14 (§15) is implemented in `lib/yield.bc`, `lib/adapters.bc`,
-`Frontend/Elab/Effects.lean` (the sites), `Frontend/Sugar.lean` (`forYield`, `pullView`, the
-machine at a row) and `Frontend/Elab/Subst.lean`, with no change to `CDerives`, and lowered by
-`Backend/Clos/Capture.lean` and `Backend/Clos/Convert.lean`. Entry 15 (§16) is implemented in
-`Paper/` and `Support/` (the step), `Core/CountFold.lean`, the checker (`count_fold`) and the
-backend (`count_loop`). §9's slice borrows are `Core/SliceFrames.lean` and `Core/Slices.lean`,
-the checker (`slice_borrow_*`, `slice_*_mut`, `array_mut`) and the borrow blocks of
-`Frontend/Sugar.lean`; §8's byte is `Width.w8` throughout. §9's splits and writes are
-`Core/SliceOps.lean`, the step `split` in `Paper/` and `Support/`, the checker
-(`slice_split_*`, `slice_empty_*`, `slice_replace_mut`, `slice_swap_mut`), the backend, and the
-library `lib/slice.bc`. Entry 16 (§17) is implemented in `lib/buf.bc`, `lib/text.bc`,
-`lib/textio.bc`, `Frontend/Lexer.lean`, `Frontend/Parser.lean` and `Frontend/Sugar.lean`, and the
-literal lowering in `Backend/Clos/Convert.lean`, `Backend/Flat/Lower.lean` and the Wasm
-runtime, with no change to `CDerives`; §11's `write_all` and `read_into` are `Core/Stdio.lean`. §16's K0′ is the step `countTry` in `Paper/` and `Support/`,
-`Core/CountFold.lean` (`countTry_compatX`), the checker (`count_try`) and the backend
-(`count_try_loop`); its `for` loop over data is `forData` in `Frontend/Sugar.lean`, the parser's
-`a..b`, `continue`, `else`, `loop` and `sized`, and `lib/iters.bc`; its completeness lemma is
-`Support/Dynamics/Completeness.lean`. Entry 17 (§18) is implemented in `Frontend/Parser.lean`
-and `Frontend/Elab/Effects.lean`, its laws in `Core/Handlers.lean`, with no change to `CDerives`.
-Entry 19 (§20) is implemented: the step `boundedFix` in `Paper/` and `Support/`,
-`Core/BoundedFix.lean` (`boundedFix_compatX`), the `CDerives` rule and the checker's
-`bounded_fix`; the groups, the steps and the heap driver's sources in `Frontend/Elab/Effects.lean`;
-the machine in `Frontend/Sugar.lean` (`recMachine`); `lib/rec.bc`; and the lowering in
-`Backend/Clos/Convert.lean` (`fixValue`) and `Backend/Clos/Capture.lean` (`unwindClause?`,
-`wrapRaise`).
-
-Entry 20 (§21) is implemented in `Frontend/Elab/Effects.lean` (`groupCopy`, `selfCall`, `layerCopy`,
-`withCtl`, `resumeCall`) and `Frontend/Sugar.lean` (`hndCtlC`, `HInfo.after`), with no change to
-`CDerives`; `Backend/Clos/Capture.lean` loses `unwindClause?`.
-
-Entry 22 (§23) is implemented: the outlives judgment and its 6.60 in `Core/Types.lean` and
-`Core/RelationFacts.lean`; the side condition at the borrow rules in `Core/Fundamental.lean`,
-`Core/Compatibility.lean`, `Core/Slices.lean` and `Core/EffBorrow.lean`; the checker's decisions
-in `Frontend/Check/Decide.lean` and `Frontend/Check/Consts.lean`; `main`'s lifetime and the
-lifetime bounds in `Frontend/Sugar.lean`, `Frontend/Parser.lean`, `Frontend/Syntax.lean` and
-`Frontend/Print.lean`; `lib/clo.bc`; cells of no words in `Backend/Flat/Lower.lean`. No change to `Paper/`, `Support/` or `CDerives`'s indices.
-
-Entry 21 (§22) is implemented: the positivity in `Core/Types.lean`, `Core/Relation.lean`,
-`Core/RelationFacts.lean`, `Core/NuRel.lean`, `Core/Computation.lean` and `Core/Nu.lean`; the
-closure in `Core/Clo.lean`, `Core/CloRules.lean` and `Core/CloPrograms.lean`; the checker's
-decision in `Frontend/Check/Decide.lean` and parameterised `type` declarations in
-`Frontend/Syntax.lean`, `Frontend/Parser.lean` and `Frontend/Check/Elab.lean`; `lib/clo.bc`; and
-`Backend/Clos/Collapse.lean`. No change to `CDerives`.
-
-Entry 18 (§19) is in progress (#186). Stages 1–3 are implemented:
-- the machine: `perform`, `raise`, `hnd`, `ubind`, `ccatch` and `cfin`, and their steps, in
-  `Paper/`;
-- unique decomposition and determinism: `Core/Steps.lean` and `Core/Demonic.lean`;
-- `F_Σ A` (`CTy.eff`) and its relation: `Core/Types.lean`, `Core/Relation.lean`,
-  `Core/EffDefs.lean`;
-- the effectful `wp` and the frames at `wpG`: `Core/EffWp.lean`;
-- the six rules' compatibility: `Core/EffRules.lean`. `fundamentalC`, `fundamentalD` and
-  `adequacyD` cover the extended `CDerives`;
-- cancels: `Core/EffCancel.lean`;
-- typed handled programs: `Core/EffExamples.lean`.
-
-Stage 4 is implemented:
-- the unwinding forms of the borrows: `Core/EffBorrow.lean`, with `[TR]` 6.150 and the family
-  frames at `wpG` (`Core/Reborrow.lean`, `Core/SliceFrames.lean`);
-- `F_Σ A` as an observation leaf: `Core/Types.lean`, `Core/Relation.lean`, `Core/NuRel.lean`,
-  `Core/Nu.lean`, `Core/Computation.lean`.
-
-Stage 5 is implemented:
-- the six programs, typed and run: `Core/EffPrograms.lean`;
-- §19's steps in `Support`'s interpreter: `Support/Dynamics/Interpreter.lean`;
-- the abortive operations' lowering: `Backend/Clos/Unwind.lean`;
-- the kernel programs at every stage: `Backend/Kernel.lean`, `bcc kernel`,
-  `scripts/compile-kernel.sh`.
-
-The lowering of control operations and cancels is implemented (#205): `Backend/Clos/Capture.lean`,
-with every kernel program at every stage (*Lowering*).
-
-Frame deadness (*Cancels*, decision D1 of 2026-10-08) is implemented: the dead region `Kont.dead`,
-`κ`'s cancel branch, the cancel state of the kept error alone and `[cfin-cancel]` in
-`Paper/S3_Dynamics/Definitions.lean`; the interpreter; unique decomposition and determinism with
-`[cfin-cancel]` in `Core/Steps.lean`; `cancelOwed` at the dead region and the empty error table in
-`Core/EffDefs.lean`, and the cancel lemmas, `ewp_handle` and `then_compatC` in
-`Core/EffRules.lean`; the runs and the refutation of the abortive-row `[then]` in
-`Core/EffCancel.lean`; the lowering keeps the first error with no mask (`Backend/Clos/Capture.lean`,
-`Backend/Clos/Unwind.lean`). The typing of finalisers with effects (decisions D2, D3) is §27.
-
-Entry 24 (§25) is implemented: the machine in `Paper/S3_Dynamics/Definitions.lean` (`hndVal`,
-`capTag`, `kappaAt`, `kappaC`, `kappaCell`, `Head.hop`), the interpreter, `Core/EffRules.lean`
-(`ewp_kappaCell`, `ewp_kappaC_resume`, `ewp_kappaC_cancel`, `ewp_handle`), `Core/Fundamental.lean`,
-the checker (`rEffHandle`) and `Backend/Clos/Convert.lean`.
-
-Entry 25 (§26) is implemented: `Core/Fundamental.lean` (`CDerives.lamDead`, `lamDead_compatC`),
-`Core/Weaken.lean` and the checker (`lamIt`, `rLamDead`, `Frontend/Check/`).
-
-Entry 23 (§24) is implemented: `Core/PolyLet.lean` (`letPoly_compatC`), `Core/EffFin.lean`
-(`handleV_compatC`, `ewp_handle_vals`, `then_compatC`) and `Core/Fundamental.lean`
-(`CDerives.letPoly`, `CDerives.effHandleV`, the theorems `CDerives.effThenA` and
-`CDerives.effHandle`); the checker types a finaliser at `F 1` (`Frontend/Check/Steps.lean`,
-`Frontend/Check/Rules.lean`, `Frontend/Check/Checker.lean`). The copy is the polymorphic let's
-premise term in `Core/InsertDead.lean` and `Core/LetCopy.lean` (`CDerives.letPoly_copy`), read off
-a checked program by `checkProgram_letPoly` (`Frontend/Check/Program.lean`).
-
-Entry 26 (§27) is implemented in the kernel: cancel rows in `Core/Types.lean` (`OpSig.fin`,
-`CTy.eff`'s `fin`, `CTy.rowOf`, `capB`); the entries' cancel obligations in `Core/EffDefs.lean`
-(`OpEnt.fin`, `cancelOK`, `cancelTab`, `cancelObl`) and `Core/Relation.lean` (`finObl`); the order,
-`⋈`, the cancel lemmas and the compatibility of `[sub]`, `[let]`, `[then]` and `[handle]` in
-`Core/EffFin.lean`; the rules in `Core/Fundamental.lean` (`CDerives.effThen`, `effHandleV`); the
-checker's empty cancel rows (`Frontend/Check/`); the typed cancel programs, and the programs the
-typing rejects (`not_der_progT`, `not_der_progNCrecT`, `not_der_e7c`), in
-`Core/EffCancelTyped.lean`, by inversions of `CDerives` that read the rows a computation is read at
-(`der_hndJ`, `der_thenJ`, `der_performJ`, `der_raiseJ`, `der_letJ`, `JR.rowLe` in
-`Core/Inversions.lean`). The backend rejects a finaliser that may suspend
-(`Backend/Clos/Capture.lean`).
-
-The facts a statement about every run of a program reads (§3, §13, §19), with no change to
-`CDerives`, the machine or the relation: a run through an evaluation context splits where the
-inner term stops stepping (`steps_plug_split`, `step1_plug_of_step`), and a context is determined
-by the non-value it holds (`plug_inj_ctx`), in `Core/Steps.lean`; a typed term is closed at its
-context (`closedAt_of_derives`), and a run from a closed term whose stored values are closed keeps
-both closed (`closed_steps`), in `Core/Closed.lean`; `runM` computes a run at a finite memory,
-deciding each step (`look`, `look_sound`), and every run it computes is a run of the machine
-(`runM_sound`, `runM_val`), in `Core/Run.lean`.
-
-The handler laws (§19 *Laws*) are machine lemmas in `Core/EffMachine.lean`, with no change to
-`CDerives`, the machine or the relation: H-ret, H-op at the capture cell (`catch_unr`,
-`catch_cell`, `catchEv_cell`, `kappaC_resume`, `kappaC_cancel`, `kappaC_cancel_lin`,
-`use_frees_cell`), H-fwd (`catch_fwd`, `fwd_resume`, `fwd_abort`), `[unwind]`, `[then]` and
-`[finalise]`, and an abort's absorption of the frames it passes (`abort_absorbs`).
-
-Safety (§19 *Laws*) is stated of the runs of typed closed programs, with no change to
-`CDerives`, the machine or the relation: `effSafe_closed`, `LiveOK` and `liveOK_closed` in
-`Core/EffSafety.lean`, and leak freedom at a persistent answer (`leakFree_closed`) in
-`Core/EffPrograms.lean`.
-
-Decision R (§19 *Typing*) is implemented, with no change to `CDerives`, the machine or the
-relation: `EffCtx`, `RowAt`, `CDerivesAt`, `CDerivesAt.toCDerives`, `CDerivesAt.ofEffFree`,
-`sig_prefix_of_rowAt`, `hndTags_of_rowAt` and `EffCtx.NoUnrExn` in `Core/Tied.lean`; the checker
-builds every derivation tied (`Frontend/Check/Tied.lean`, `Frontend/Check/Rules.lean`), and
-`checkProgram_tied` and `checkProgram_tiedAt` read it off (`Frontend/Check/Program.lean`). The
-restriction to cancellable abortive operations (§18) is the checker's (`elabRow`,
-`Frontend/Check/Elab.lean`; `sigsOkB`) and the elaborator's (`Frontend/Elab/Effects.lean`).
-
-The names a run raises (§19 *Typing*) are stated as a run invariant in `Core/RaiseNames.lean`,
-with no change to `CDerives`, the machine or the relation: `Expr.RaiseOK`, `HeapRaiseOK`,
-`raiseOK_step1` and `raiseOK_steps`; a tied term is at its effect context's names
-(`EffCtx.Names`, decided by `rcE`; `raiseOK_of_derivesAt`), its runs from the empty memory stay at
-them (`raiseOK_reach`), and every cancel they reach keeps errors of those names (`KCfinNamed`,
-`CancelsNamed`, `cancelsNamed_of_derivesAt`).
-
-A continuation's use (§19 *Laws* item 4) and the programs no derivation types (§19 *Programs*) are
-stated by inversion of `CDerives`, with no change to `CDerives`, the machine or the relation: the
-inversions (`fv_live`, `der_var`, `der_app`, `der_lam`, `der_swap`, …) and `refuses_R_clauses` in
-`Core/Inversions.lean`, and `not_der_at05`, `not_der_at06`, `not_der_at08`, `not_der_at13` and the
-typed control `at08Once` (the kernel program `at08-once`) in `Core/Rejections.lean`. Each inversion
-is an induction on `CDerives`, so a rule added to `CDerives` adds a case to each
-(`Core/Inversions.lean`, *Cost*).
-
-The effect properties' programs (§19 *Programs*, *Laws* item 3) are `Core/EffTier1Programs.lean`,
-each with a derivation tied to its effect context and a run computed by `runM`, with no change to
-`CDerives`, the machine or the relation; those the backend compiles are kernel programs
-(`Backend/Kernel.lean`, their counts in `corpus/kernel-counts.expected`).
-
-The unwind and the cancel (§19 *Laws* items 5 and 6) are stated of Core's machine in
-`Core/EffCancelRuns.lean`, with no change to `CDerives`, the machine or the relation. Read
-prefix-closed over paths (`Path`): `unwind_prefix` (`UnwindTr`) and `cancel_prefix` (`CancelTr`),
-at finalisers typed at rows of abortive operations (`FinRow`, `finAlone_of_finRow`,
-`finOK_of_finRow`). On complete runs: `finaliserOrder_at` and `finaliserOrder_A` (`CancelRun`,
-`UnwindRun`, `FinaliserOrder`), given `FinAloneAt`.
-
-Entry 27 (§28) is implemented: the stratified table, the stop lemma and BOXED-κ's compatibility in
-`Core/EffBoxed.lean`; the rule `CDerives.effHandleVB` and `stop_lemma` in `Core/Fundamental.lean`,
-`CDerivesAt.effHandleVB` and `CDerivesAt.effHandleB` in `Core/Tied.lean`, a case in each induction
-over either; the inversions at `clausesTyO` (`Core/Inversions.lean`); the checker
-(`clausesReadBoxed`, `ansOutlivesB`, `rEffHandleB`, `TiedDer.effHandleB`, `Frontend/Check/`).
-
-Entry 28 (§29) is implemented: `Core/PinDerives.lean` and `Core/PinFundamental.lean`, generated by
-`scripts/gen-pin.py` (`CDerivesP`, `fundamentalC_pin`, `adequacyC_pin`, `adequacyD_pin`,
-`adequacyD_pin_safe`, `CDerivesP.ofC`, `PinLaw.stop`, `PinLaw.loop`, `PinLaw.of_stop_loop`,
-`pinLaw_iff`), `Core/PinLaw.lean` (`LendForm`, `LendFrame`, `LoopFrame`, `PinLaw`, `PinStop`,
-`PinLoop`); the
-checker's derivations (`TiedDer`, `Frontend/Check/Tied.lean`), R1 (`Frontend/Check/Pin.lean`,
-`withbor2r` in `Frontend/Check/Checker.lean`), the sugar (`relaxedC?`, `Frontend/Sugar.lean`), the
-core form (`Frontend/Syntax.lean`, `Frontend/Parser.lean`, `Frontend/Print.lean`), and the reports
-(`Pins.assurance`, `Frontend/Check/Program.lean`; `typingReport`, `Pipeline/Driver.lean`). No change to
-`CDerives`, the machine or the relation.
-
-Entry 29 (§30) is implemented in `Frontend/Elab/Effects.lean` (`blockArgs`, `blockCall`,
-`blockParamCall`, `withBlocks`, the copies' blocks, `St.perTurn`, `HInfo.boxK`), `Frontend/Sugar.lean`
-(`forData`'s `rowLoop`, `hndCtlC` at `clausesTyB`, the argument of an effectful call bound at its
-parameter's type), `lib/async.bc` and `Backend/Clos/Unwind.lean` (`rcG`), with no change to
-`CDerives`, `Core/`, `Paper/` or `Support/`.
-
-Entry 30 (§31) is implemented in `Frontend/Elab/Effects.lean` (`RGroup.tps`, `RGroup.lives`,
-`defineGroup`, `groupCopy`, `deepCopy`, `liftCalls`, `Env.clashes`), `Frontend/Sugar.lean`
-(`genericCall`, `matchC`, `pureArrow`, `argOf`, `makeInst`, `elabDecl`) and `lib/list.bc`, with no
-change to `CDerives`, `Core/`, `Paper/`, `Support/` or `Backend/`.
-
-Entry 31 (§32) is implemented in `Frontend/Elab/Effects.lean` (`Blk`, `Cap.blk`, `Cap.canon`,
-`withBlkCaps`, `Blk.inCopy`, `blockArgs`, `blockCall`, `blockParamCall`, `HInfo.lives`),
-`Frontend/Sugar.lean`
-(`hndCtlC` at a handler's lifetimes; a closure argument typed at its parameter's type),
-`Frontend/Elab/RenameLife.lean` (`substLives`), `Frontend/Syntax.lean`, `Frontend/Parser.lean`
-and `Frontend/Print.lean` (`CHandler.lps`), and `lib/async.bc`, with no change to `CDerives`,
-`Core/`, `Paper/`, `Support/`, the checker or `Backend/`.
-
-Entry 32 (§33) is implemented in `Frontend/Syntax.lean` (`VTy.rowed`, `VTy.rowEffs`,
-`VSugar.pipe`), `Frontend/Lexer.lean` and `Frontend/Parser.lean` (`|>` in `opOf` and `opsLoop`,
-a provided row in `rtyAtom`),
-`Frontend/Print.lean`, `Frontend/Elab/Effects.lean` (`Env.comps`, `compParamsOf`, `Blk.prov`,
-`etaArgs`, `blockArgs`, `blockCall`, `blockParamCall`, `copyOf`'s ports, `Cx.portIn`, `withCtl`,
-`resolvePipes`, `pipeStage`) and `Frontend/Sugar.lean` (an annotated binding at the row), with no
-change to `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or `Backend/`.
-
-Entry 33 (§34) is implemented in `lib/sys.bc`, `lib/wasi.bc`, `lib/io.bc` and `lib/textio.bc`;
-`Frontend/Syntax.lean`, `Frontend/Parser.lean` and `Frontend/Print.lean` (`HostKind`,
-`OpDecl.lives`, `Decl.handler`'s lent state); `Frontend/Elab/Effects.lean` (`HSig.lent`,
-`HSig.cell`, `clauseDef`, `opCall` on a cell, `platformEffects`, `platformMain`, `Env.gives`,
-`Cx.givenC`, a borrow block that lends its tasks' capabilities, `withCtl`'s given capabilities,
-`hide`); `Frontend/Sugar.lean` (the I/O library included first, `capNames`, `mainLife`);
-`Frontend/Check/Externs.lean` (the clock's and the arguments' externs and harness);
-`Core/Opaque.lean` and `Core/Stdio.lean` (`Opaque.clock`, `Opaque.args`, their models and
-proofs); `Backend/` (`IOOp.clockNow`, `IOOp.clockSleep`, the arguments' stream at every stage,
-the WASI runtime's clock and arguments, `bcc trusted` at the externs `main` reaches, and #485's
-and #486's fixes in `Backend/Clos/Capture.lean` and `Backend/Driver.lean`), with no change to
-`CDerives`, the relation, the machine, `Paper/` or `Support/`.
-
-Entry 35 (§36) is implemented in `Frontend/Syntax.lean`, `Frontend/Lexer.lean`,
-`Frontend/Parser.lean` and `Frontend/Print.lean` (`Decl.poly`), `Frontend/Sugar.lean` (`polyDecls`,
-`PolyTab`, `polyCheck`, `polySelect`, `polyInst`, `consumePhantoms`, the family's call in
-`genericCall`, an operator's case in `surfV`, `borrow imm *g`, a record lent fieldwise, `lendCall`
-at several lifetime parameters), and `lib/key.bc` and `lib/map.bc`, with no change to `CDerives`,
-`Core/`, `Paper/`, `Support/`, the checker or `Backend/`.
-
-Entry 34 (§35) is implemented in `Backend/` alone: `Backend/Clos/Convert.lean` (`markScoped`,
-`staticWord`), `Backend/Clos/Syntax.lean` (`Op.scopedAlloc`, `Op.scopedFree`, `Op.staticCell`,
-`Prog.suspendedScopes`), `Backend/Clos/Capture.lean` (`crossedScopes`), `Backend/Clos/Types.lean`
-(`sumBoxes`), `Backend/Flat/` (`frameScopes`, `Exp.slot`, `Stmt.unslot`, `Fn.frame`, the
-interpreter's frames) and `Target/Wasm/` (`$sp`, the stack, `lowerFn`), with the library's
-comments in `lib/buf.bc`, `lib/text.bc` and `lib/rec.bc`; no change to `CDerives`, `Core/`,
-`Paper/`, `Support/`, the checker or the elaboration.
-
-Entry 35 (§36) is implemented: `Width.f32`/`f64`, `IntLit.f32`/`f64` and the float `HostOp`s in
-`Support/Syntax/Integers.lean`; the host's float functions and `Host.call` in
-`Support/Dynamics/Host.lean`, `wasmHost`'s in `Support/Dynamics/Floats.lean`; `hostArg`,
-`hostRes` and `host_call_sound` in `Core/Integers.lean` (and the host's answers closed and
-raise-free, `Core/Closed.lean`, `Core/RaiseNames.lean`); the lexer, parser, printer, operator
-dispatch and literal rounding in `Frontend/` (`Frontend/FloatLit.lean`); every stage of
-`Backend/` (`Flat/Lower.lean`'s `hostVals`, `Wasm/Lower.lean` reinterprets); and
-`lib/float.bc`. No change to `CDerives`, the relation, the machine's rules or the checker's rules.
-
-Entry 37 (§38) is implemented in `Frontend/Elab/Instances.lean` (the table of type arguments),
-`Frontend/Elab/Match.lean` (the matching, moved from `Frontend/Sugar.lean`),
-`Frontend/Elab/Effects.lean` (`Inst.name`, `Site.slot`, `Cap.slot`, `Env.addInst`,
-`Env.withoutInst`, `Env.handledArgs`, `Env.callRowAt`, `Cx.serve`, `Cx.capFor`, `Cx.capAt`,
-`slotsOf`, `Env.slotOf`, `Env.checkWritten`, `Env.settle`, a stateful handler's row in `withCtl`),
-`Frontend/Elab/Subst.lean` (`HInfo.subst`), `Frontend/Sugar.lean` (several sites in `forData`),
-and `Frontend/Syntax.lean`, `Frontend/Parser.lean` and `Frontend/Print.lean` (`VSugar.handle`'s
-name, `VSugar.named`, `Mark.row`'s names), with no change to `CDerives`, `Core/`, `Paper/`,
-`Support/`, the checker or `Backend/`.
-
-Entry 38 (§39) is implemented in `lib/arith.bc` (`DivError`, `div_euclid`, `rem_euclid`,
-`main_div_error`); `Frontend/Syntax.lean`, `Frontend/Lexer.lean` and `Frontend/Parser.lean`
-(`SurfOp.rem`, `%`, `(%)`, `VSugar.checked`); `Frontend/Elab/Instances.lean` (`argTy` at
-operators, `divCanFail`, `safeDivisor`, `Found`); `Frontend/Elab/Divisions.lean` (the rewrite);
-`Frontend/Elab/Effects.lean` (`divMain`, `splitDiv`, `divLib`, `platform`, a `with`'s row with its
-clauses' answering effects, a written row's check); `Frontend/Sugar.lean` (`surfOp`, `divCase`,
-`divUnchecked`, `divChecked`, `fuseChecked`, the libraries brought in); and `Backend/`
-(`Output.status` and `reportExit` at every stage, `Clos.Prog.exits`, `Flat.Stmt.status`, the
-runtime's `$exit`, `divTest`, the constant locals and the fused `case` of the flat IR), with the
-harness's `<name>.status`; no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the checker's
-rules.
-
-§8 and §37 as restated in 0.70 are implemented in `Support/Dynamics/Floats.lean` (`NaNs`, every
-float operation at a resolution, `NaNEq` and its lemmas), `Support/Dynamics/Host.lean`
-(`Prim`, `wasmHostAt`, `Host.Conforms`, `wasmHostAt_conforms`, `wasmHost_conforms`),
-`Backend/Clos/Interp.lean` (`closHost`), `Target/Flat/Interp.lean` (`flatHost`) and
-`Backend/Flat/Lower.lean` (`hostVals` without the NaN test); no change to `CDerives`, the relation,
-the machine, `Core/`, `Paper/` or the checker.
-
-§3's typed term is implemented in `Frontend/Check/TExpr.lean` (`TExpr`, `TInfo`, `TExpr.erase`,
-`TExpr.isLam`, `TExpr.children`) and `Frontend/Check/TDerives.lean` (`TDerivesAt`, `TDerivesP`,
-`TDerivesAt.erase`, `TDerivesP.erase`, `TDerivesAt.toP`, `jdg_eq`), both generated by
-`scripts/gen-pin.py` from `Core/Tied.lean` and `Core/PinDerives.lean`; `Frontend/Check/TTied.lean`
-(`TTied`, one builder per rule, `TTied.tied`); `Frontend/Check/TFacts.lean`; the checker's builders
-(`Frontend/Check/Rules.lean`, `Consts.lean`, `Steps.lean`, `Pin.lean`, `Checker.lean`), which build
-each node beside its derivation; `Checked.t` and `Checked.e := t.erase`, with `checkProgram_typed`,
-`checkProgram_typedAt` and every theorem of `Frontend/Check/Program.lean` at `c.t.erase`; and
-§10's check on the typed terms (`Frontend/Check/Copies.lean`, the core form `Val.clone`). No
-change to `CDerives`, `Core/`, the relation, the machine, a rule of the checker, or any program's
-erasure, output, goldens or counts.
-
-§3's split masks and §5's cell classes are implemented in `Frontend/Check/Masks.lean` (`Masks`,
-`SplitMasks`, `SplitMasks.both_iff`, `SplitMasks.both_persistent`, `SplitMasks.ins`), the generated
-typed rules (`scripts/gen-pin.py`: the `u.Rel` premise at a split, `TExpr.masks?`,
-`TDerivesAt.split_masks`, `TDerivesP.split_masks`, `TDerivesP.copies`), `Frontend/Check/Fam.lean`
-(`split_lemma`, `Fam.split`, `Fam.mapB`), the builders at a split (`Rules.lean`, `TTied.lean`,
-`Weaken.lean`'s `splitP_route`), §10's check on the masks (`Frontend/Check/Copies.lean`),
-`Frontend/Check/Cells.lean` (`VTy.eraseLife`, `TExpr.cells`, `cellClasses`, `cellsOkB_sound`),
-`Checked.cells` and `Checked.cells_closed`, `Backend/Cells.lean` (`bcc-counts --cells`) and
-`scripts/check-cells.sh`. No change to `CDerives`, `Core/`, the relation, the machine, or any
-program's erasure, output, goldens or counts.
-
-§3's marked derived nodes, typed `[let-poly]`, `[handle]` at tail clauses and `reify`, the lint,
-the lifetime weakening and the key table are implemented in `scripts/gen-pin.py` (`DERIVED`,
-`lint_texpr`, the `TLife` cases) and its templates (`scripts/pin/TExpr.tmpl.lean`:
-`divLitB`, `safeDivB`, `walkB`, `selfCallB`, `lendCellB`, `Expr.pairL`, `Expr.toVal`,
-`Expr.letBody`; `TDerives.tmpl.lean`; `TLife.tmpl.lean`: `LeΔ`, `ExtΔ`, `TExpr.domFree`,
-`TExpr.reAb`, `weakenΔ`), `Frontend/Check/Derived.lean`, `Frontend/Check/Rules.lean`
-(`rMarked`), `Frontend/Check/Checker.lean` (`DefEntry.lift?`), the elaborator's marks
-(`Frontend/Sugar.lean`: `divUnchecked`, `forData`, `lendBorrow` and the borrow block of a cell;
-`Frontend/Elab/Effects.lean`: `memberCall`) and keys (`DefKey`, `recordKey`, `Origin.defKey`,
-`Elaborated.keys`). No change to `CDerives`, `Core/`, the relation, the machine, or any program's
-erasure, run output, goldens or counts; `bcc check` reports a `def` with type parameters as
-`checked once per instance`.
-
-§3's derived nodes and `use` nodes are implemented in the templates of `scripts/gen-pin.py`
-(`scripts/pin/TExpr.tmpl.lean`, `TDerives.tmpl.lean`: the nodes, `litFnE`, their rules and
-projections), `Frontend/Check/TShift.lean` (`TExpr.shift`, `AbsF`, `TExpr.absF`,
-`TExpr.absF_shift`), `Frontend/Check/Weaken.lean` (`TDerivesP.weaken`, `TDerivesAt.weaken`,
-`TDerivesAt.use_projects`, `TDerivesP.use_projects`), `Frontend/Check/TTied.lean` (`TTied.use`,
-`TTied.weaken`, `TTied.litFn`), `Frontend/Check/Rules.lean` (`rUse`, `rUseAt`, `rLitFn`), the
-checker's cache of checked bodies (`DefEntry`, `CheckM`, `useDef`, `Frontend/Check/Checker.lean`)
-and the core form `Val.mark` (`Frontend/Syntax.lean`, printed as the value it marks). No change to
-`CDerives`, `Core/`, the relation, the machine, or any program's erasure, output, goldens or
-counts.
-
-Entry 39 (§40) is implemented in `Target/Native/Lower.lean` (the LLVM IR), `Target/Native/Runtime.lean`
-(the runtime), `Backend/Native/Tests.lean` (`bcc hostops`, `bcc tailcalls`), `Backend/Driver.lean`
-(`compileLL`), `Pipeline/Driver.lean` (`buildNative`), `Frontend/Main.lean` and `Backend/Counts.lean` (the commands),
-`Op.dataAddr` and `Exp.data` in the closure IR and the flat IR, and `scripts/compile-native.sh`;
-no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the checker.
-
-Entry 40 (§41) is implemented in `Frontend/Parser.lean` (R1: `bindName`, `lookName`,
-`bindOrAssign`, `rebindOf?`, `renamesOf`, `Error.renderIn`; R2: `frame`, `notePlaceWrite`; R3:
-`handOn`, `joinBind`, `handArms`, `bindForm`, `writesOf`, `checkRun`, `Val.handsBack`),
-`Frontend/Elab/Hygiene.lean` (`Decl.renameDecls`), `Frontend/Elab/Effects.lean` (`mutCap`,
-`escapingWriter`), `Frontend/Sugar.lean` (a program's declarations shadow a module's;
-`modifyBody`, `TCx.tyCL`) and `scripts/mut-combos.py`; no change to `CDerives`, `Core/`, `Paper/`,
-`Support/` or the checker. Its binder identity is `Val.copyOf?` (`Frontend/Syntax.lean`),
-`Frontend/Elab/LoopLend.lean` (`Binding.of?`, `spineAliases`, `Env.walk`), `Frontend/Elab/Effects.lean`
-(`Cx.copy`, `rowC`, `unboxesC`, `forOverParam`, `capKey`, `blockKeys`), `Frontend/Sugar.lean`
-(`termParts`), `Frontend/Elab/Hygiene.lean` (a control handler's code), `Frontend/Parser.lean`
-(`generatedName`, `pushBinder`, `resolutionOf`, `unrename`), `Frontend/Main.lean` (`bcc alpha`)
-and `scripts/alpha-check.py`. Entry 42 (§43) is implemented in `Backend2/` (the typed term to the
-LIR, its interpreter and lint, the closure flow, the layouts, the literal views, the frame slots,
-the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Target/Wasm/` and
-`Backend/Native/`, `bcc`'s `--backend new` and `lir` commands, `bcc-counts --backend new`, and
-`scripts/check-backend2.sh` and `scripts/compile-backend2.sh`; no change to `CDerives`, `Core/`,
-`Paper/`, `Support/` or the checker. Entry 43 (§44) is implemented in `Frontend/Check/Derived.lean`
-(`allI_inst`), `Backend2/Types.lean` (`ofU`) and `Backend2/Convert.lean`; no change to `CDerives`,
-`Core/`, `Paper/`, `Support/`, the checker or the old backend. Entry 44 (§45) is implemented in
-`scripts/pin/` (`NuTree`, `nuEtaB`, `nuEtaB_shift`, `TExpr.nuEta` and its typed rules),
-`Frontend/Check/TShift.lean`, `Frontend/Check/Weaken.lean`, `Frontend/Check/TTied.lean`,
-`Frontend/Check/Rules.lean` (`rNuEta`), `Frontend/Check/Derived.lean` (`nuEta_obs`, `nuEta_var`,
-`nuEta_unfold`) and `Backend2/` (`isUnfoldApp`, the `nuEta` case, `litCode`, `Op.litByte`,
-`Op.tabLit`); no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the old backend. Entry 45
-(§46) is implemented in `scripts/pin/` (`walkReadB`, `walkStepB`, `walkTailsB`, `normAt`,
-`walkGetB`, `TExpr.walk`'s `read`, `TExpr.walkGet`), `Frontend/Syntax.lean`
-(`SchemeMark.walkGet`), `Frontend/Sugar.lean` (`forData`'s `view`), `Frontend/Check/` (`rMarked`,
-`walkGets`, `TTied.walkGet`, the shift and weakening cases, `walk_copy_len`, `walk_get_split`) and
-`Backend2/Convert.lean`; no change to `CDerives`, `Core/`, `Paper/` or `Support/`. Entry 46 (§47)
-is implemented in `Backend2/Types.lean` (`ofC`'s rows, `payOf`), `Backend2/Convert.lean` (the
-payloads, `convHandle`, `ensureWork`, `convWork`, `prepWorks`, `genLendU`, the effect cases),
-`Backend2/Driver.lean` (`directFacts`, `erasureLine`), the exit status in `Backend2/Interp.lean` and
-`Backend2/Lower.lean`, `bcc lir --erasure` and `scripts/compile-backend2.sh`; no change to
-`CDerives`, `Core/`, `Paper/`, `Support/`, the checker or the old backend. Entry 47 (§48) is
-implemented in `Backend2/Convert.lean` (`genFix`, the `boundedFix` case), `Op.cntPred` in
-`Backend2/Syntax.lean`, `Interp.lean`, `Lower.lean` and `Print.lean`, `Backend2/Driver.lean`
-(`watTimed`) and `Core/DivDrive.lean`; no change to `CDerives`, `Paper/`, `Support/`, the checker or
-the old backend. Entry 49 (§50) is implemented in `Target/Flat/Syntax.lean` (`Exp.gep`, `PFact`,
-`Fn.ptrs`, `Fn.facts`, `Fn.inline`), `Target/Native/Lower.lean` (the typed mode: `texpr`,
-`tstmt`, `tlowerFn`, `classPtrs`), `Backend2/Lower.lean` (`addrKinds`, `vote`, `paramFacts`),
-`Backend2/Convert.lean` (`Frame.cellF`, `withMachineK`, `threadedOf`, `stepInline`),
-`Backend2/Driver.lean` (`lirOf`'s second conversion, `framesLine`) and
-`scripts/native-facts.sh`; no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or
-the old backend's output. Entry 51 (§52) is implemented in `Backend2/Convert.lean`
-(`genKap`'s region and swap, `convDrive`'s site stack, `Frame.stackF`, `Frame.stackH`,
-`genStackMach`, `stackedOf`), `Backend2/Driver.lean` (`stackOps`, `lirOf`), `Backend2/Syntax.lean`,
-`Interp.lean`, `Layout.lean`, `Lint.lean`, `Lower.lean` and `Print.lean` (the stack operations and
-the stack's push and pop), `Target/Native/Lower.lean` (frame pointers), `Backend/Clos/`
-(`Op.swapSlot`) and `lib/async.bc`; no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the
-checker.
-Entries 52 (§53) and 53 (§54) are retired; their code is removed.
-Entry 54 (§55) is implemented in `Frontend/Check/Masks.lean` (`Covers`), the generated typed rules
-(`scripts/gen-pin.py`, `Frontend/Check/TDerives.lean`, `Frontend/Check/TLife.lean`),
-`Core/Mentions.lean`, `Frontend/Check/TTied.lean`, `Frontend/Check/Rules.lean`
-and `Frontend/Check/Weaken.lean`. No change to `CDerives`, the relation, the checker's output or
-either backend.
-Entry 55 (§56) is retired; its code is removed.
-Entry 56 (§57) is implemented in `Frontend/Check/FactNodes.lean`, the generated typed terms and
-rules (`scripts/pin/`), `Frontend/Check/TShift.lean`, `Weaken.lean`, `TTied.lean`, `Rules.lean`,
-`Checker.lean`, `Steps.lean`, `Program.lean`, `TFacts.lean`, `Kinds.lean`, `KindsSound.lean`,
-`Frontend/Sugar.lean` and `Backend2/Convert.lean`, `Debug.lean`, `Driver.lean`. No
-change to `CDerives`, the relation, any erasure or Backend2's outputs.
-Entry 57 (§58) is implemented in `Backend2/` (`Syntax.lean`, `Convert.lean`, `Driver.lean`,
-`Layout.lean`, `Lower.lean`, `Lint.lean`, `Interp.lean`, `Print.lean`; `Frames.lean` and
-`LitViews.lean` deleted), `Target/Flat/Interp.lean` and `scripts/compile-corpus.sh`.
-Entry 58 (§59) is implemented in `Backend2/` (`Types.lean`, `Syntax.lean`, `Convert.lean`,
-`Layout.lean`, `Flow.lean`, `Lower.lean`, `Interp.lean`, `Lint.lean`, `LintTests.lean`).
-Entry 59 (§60) is implemented in `Frontend/Elab/Data.lean` (`foldComp`, `foldBox`, `FoldCx`,
-`compile`'s `fold?`, `conVal`'s `reuse`), `Frontend/Parser.lean` (`foldBlock`, `reuseArm`),
-`Frontend/Sugar.lean` (the `fold`, `like` and `cells` cases of `surfV`), `Frontend/Syntax.lean` (`FoldKind`,
-`VSugar.fold`, `like`, `cells`) and `Frontend/Print.lean`; no change to `CDerives`, `Core/`, `Paper/`, `Support/`,
-the checker or either backend.
-Entry 60 (§61) is implemented in `Core/FoldClass.lean`, `Core/FoldOwnGTerm.lean` and
-`Core/FoldOwnG.lean` (the class, the term, `foldOwnG_compatX`); the rule `CDerives.foldOwnG` in
-`Core/Fundamental.lean`, `CDerivesAt.foldOwnG` in `Core/Tied.lean` and `CDerivesP.foldOwnG` in
-`Core/PinDerives.lean`, with a case in each induction over them (`Core/Closed.lean`,
-`Inversions.lean`, `Mentions.lean`, `InsertDead.lean`, `Weaken.lean`, `RaiseNames.lean`,
-`PinFundamental.lean`, `EffTier1Programs.lean`); the consume in `Core/Consume.lean`; the kernel
-program in `Core/NestedPrograms.lean` and `Backend/Kernel.lean`; the checker's `consumableAtB` in
-`Frontend/Check/Steps.lean`; the declarations' class check in `Frontend/Elab/Data.lean`
-(`openX`, `pTy`, `notP`, `pClass`); the filler in `Frontend/Sugar.lean` (`fillerOf`); the
-constant `array_empty` (`Core/SliceOps.lean`, `arrEmpty_compatX`, the rule `arrEmpty` in the three
-judgments and their inductions, the typed term by `scripts/gen-pin.py`, `Frontend/Consts.lean`,
-`Frontend/Check/Consts.lean`, `Backend2/Convert.lean`, `Backend/Clos/Interp.lean`'s `drop`); and
-Backend2's `foldOwnG` arity (`Backend2/Convert.lean`). No change to `Paper/`, `Support/`, the
-relation or the machine.
-Entry 61 (§62): `resourceSafety` and `rtSafety` are in `Core/ResourceSafety.lean`. The typed tree
-world (#781) is in `Support/Model/Tree/World/`, and the step-indexed relation over it in `Core/StepsN.lean`, `Core/TreeWp.lean`, `Core/TreeWpEff.lean`,
-`Core/TreeCactus.lean`, `Core/TreeStepKeep.lean` and `Core/TreeHeadlines.lean` (adequacy and R1–R4
-at one branch). No relation the typing rules use reads them yet. The rest of §62 is design.
-Entry 62 (§63) is implemented in `Frontend/Check/Derived.lean` (`allI_inst`,
-`valFormB_subst_dead`, `rowTab_isEmpty`, `lendR_plain`) and `Backend2/Convert.lean` (the `allI`
-case, the `lendR` case of `conv`); no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the
-checker or the old backend.
-
-
-Entry 63 (§64) is implemented in `Backend2/Lower.lean` (`LState.spare`, `getField`'s `keep`,
-`putField`'s `reuse`, the spare boxes freed in `lowerCall`, `emit` and `case`); no change to
-`CDerives`, `Core/`, `Paper/`, `Support/`, the checker, `Convert` or the old backend.
-
-Entry 64 (§65) is implemented in `scripts/pin/TExpr.tmpl.lean` (`NuArg`, `NuTree`, `NuTree.toE`,
-`NuTree.parse`, `nuEtaB`, `NuTree.toE_shift`, `NuTree.mem_parse`, `nuEtaB_shift`),
-`Frontend/Check/Rules.lean` (`nuEtaOf?`) and `Frontend/Check/Derived.lean` (`NuTree.toE_subst`,
-`NuTree.toE_closedAt`, `NuTree.Reach`, `nuEta_reach`, `nuEta_leaf`, `nuEta_obs`, `nuEta_var`,
-`nuEta_unfold`); Backend2's `nuEta` case is unchanged. No change to `CDerives`, `Core/`, `Paper/`,
-`Support/` or the old backend.
-
-Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cutRev`, `plugRev`,
-`genFoldRev`, the `foldOwn`/`foldReuse` case of `conv`); no change to `CDerives`, `Core/`, `Paper/`,
-`Support/`, the checker or the old backend.
+What implements each entry is kept one paragraph per file in `docs/status/`: the paragraphs
+written before the split in `docs/status/legacy/`, in their order, then one file per entry,
+`docs/status/<entry>.md`. `scripts/status.sh` prints them in order. An entry's status is a new
+file, or an edit to that entry's file (`docs/status/README.md`).
 
 ---
 
 ## Changelog
 
-- **1.66** (2026-11-09) — §68 (#886): `codeIB`'s premise is `Flat(Γ)` (§10), as `!`-promotion's,
-  in place of `!Γ`. `codeIB_compatC` and `codeIB_compatN` reach `gSepC_persistent` and
-  `gN_persistent` through `flat ⇒ persistent`. The rule only widens.
-- **1.65** (2026-11-09) — §41, §18, §42 (#885, #940): a control `with` lends what its body writes. Each
-  enclosing `let mut` the body writes, and each outer place it lends, is lent around the handler
-  site (`borrow mut &mut x { 'l, x -> with h(…) { S } }`); inside, `&mut x` is a reborrow, `x = e`
-  evaluates `e` first and is `modify`, reads and lends are bound in source order, a read is a copy
-  through the borrow, and a move out of `x` is refused. After the `with`, `x` keeps the writes made
-  before an abort. Capabilities are not lent, and refused alone. §42: a `finally` clause that
-  assigns an outer `let mut` is refused (#940). New general forms:
-  `borrow mut &mut x { … }`, the reborrow `&mut m` at a call, and `*&mut m`. No kernel change; no
-  golden or count changed.
-- **1.64** (2026-11-09) — §68 (#855 K3, as built): the rules `erase`/`eraseB` are named
-  `codeErase`/`codeEraseB` (`erase` is `TExpr.erase` in the typed term). `Ctx.capTy`, `Ctx.capOK`
-  and `VTy.forceTy` are named; the restated `force` reads `T.forceTy = some C`. K3 and `codeI`'s
-  semantic step are built; the inversion's cost is restated as built. The premise `E.Cl 0` of
-  1.57 is dropped: no proof reads it. K7, `cloneCode` (#928), is planned.
-- **1.63** (2026-11-09) — §3 (#906): `scripts/check-type-eq.sh` reads the library `Reference`
-  too, the reference interpreter's run (`Reference/Source.lean`, `Falsify.lean`, `Driver.lean`, …),
-  which leaves `Backend` and `Pipeline`. No change to a rule.
-- **1.61** (2026-11-09) — §10 (#886, *Promotion over a flat context*): the premise of Core's
-  promotion rules `!thunk` and `!thunkv` (`bangThunkF`, `bangThunkV`) is `Flat(Γ)`, every live slot
-  at a flat type (the scalars, and `⊗`, `⊕` and `[@a]` over them, `!A`), in place of `!Γ`.
-  `!Γ ⇒ Flat(Γ)`, so the rules only widen. `μ` data is not flat: a closure capturing it stays `U C`,
-  and duplicating it is an explicit clone. `gSepC_persistent` and `gN_persistent` are reached from
-  the new premise through `flat ⇒ persistent`; `CDerivesAt`, the generated pins, the checker's
-  promotion test and `lam_bang` follow. The fundamental property, adequacy, every rejection theorem
-  and every golden are unchanged; no `CDerives` index or rule is added. Closes §10's first *Open*
-  item.
-- **1.60** (2026-11-09) — §14, §15, §16, §19, §29, §30, §32, §35, §39: the citations of decision 71,
-  which decision 72 voids, are removed. T1 is stated as the checker's rule until surface A1
-  (#843), which lifts it for §62's suspending constants' shapes, for programs without host
-  externs, under `HandlerLawN`; a callback's own borrow and a borrow handed between paused
-  computations stay refused (#844 Tier 2, #821). §29's title states R1 as the checker's rule, not a freeze. §39's leetcode programs keep their
-  restriction because the surface provides no handler around a div computation (§21 *Open*). No
-  change to a rule or to the code.
-- **1.59** (2026-11-09) — the small-gaps batch (#880–#883, #892, #893). No change to `CDerives`,
-  the kernel or a checker rule; every golden unchanged. Refusal messages no longer cite decision
-  71.
-  - §41 (#882): an `if` or `match` where a value is expected is `run` of it.
-  - §41 (#881): a block hands back only the places declared outside it that it lends, at any depth
-    of nesting (`corpus/with-nested-lend.bc`).
-  - §42 (#883): a source position carries its module; a diagnostic inside an included module is
-    reported as `lib/m.bc:L:C`.
-  - §11 (#892): a call in tail position that lends one place is the head's form,
-    `let r = f(…, &p, …); r`; its refusal names the function as written.
-  - §14 (#880): a load block whose body loops is rewritten per observation only when its content
-    is persistent; a load of a linear content is elaborated in place.
-  - §18 (#893): a control handler's site reads its body's type with the body's lends elaborated.
-- **1.58** (2026-11-09) — §15 *Open* (#910), §21 *Open*, §30: limits of the surface that read as
-  the kernel's. A stored generator over a row is refused by the elaborator; the kernel's ν rules
-  admit effectful observations. A handler around a div computation is not provided by the
-  surface; the kernel handles one per observation, by `effHandleV` inside `unfold` (#917). No
-  change to the code.
-- **1.57** (2026-11-09) — §68 (#855 K3): the rules `codeI`, `codeIB`, `erase` and `eraseB`, and
-  `force` at `U C` or `Code⟨N; E⟩ C`. `codeI` and `codeIB` ask the captured types closed,
-  `(Γ.capTy (λM)).Cl 0`, beside `CapOK`; where either fails the closure stays at `U C`. `LamCls`
-  gains the code disjunct and `lam_bang`'s uses are restated; no inversion is added.
-  `fundamentalC`, `adequacyC` and `goal791N` keep their statements and cover the rules. No checker
-  rule synthesises a code type before S1, so no program changes.
-- **1.55** (2026-11-09) — §68 (#855 K1+K2): the former `Code⟨N; E⟩ C` (`VTy.code`) across
-  `Core/`, with its relation clauses (`vCE`'s and the chain's `vNE` are K0's `codeRelC`/`codeRelN`,
-  by `Iff.rfl`; `vOE` is `True`) and every law at it with no new hypothesis; `TyEq`/`alphaB` compare
-  a code type only with a code type. The checker and Backend2's `ofV` refuse a code type until K3,
-  S1 and B1. No `CDerives` rule produces one, so no program's typing or output changes.
-  `fundamentalC`, `adequacyC` and `goal791N` keep their statements.
-- **1.54** (2026-11-07) — §12 (#891, *Captured variables*): a computation inside a value
-  (`thunk M`, `thunkv N`, `run M`) is owed the owed variables of the computation the value is in
-  that it mentions, as the head of `x <- M; N` is; before, a value started its computations with
-  nothing owed. So a borrow callback (`withbor1U`, `withloadU`, …) that captures a linear value
-  and raises, or recurses (the budget's abortive arm), in one arm consumes the captured value on
-  that arm. New corpus programs `callback-arm-raises.bc`, `callback-rec-arm.bc`,
-  `callback-load-owned.bc`. No change to `CDerives`, the kernel, the theorems or the backends;
-  every other corpus program checks as before.
-- **1.53** (2026-11-07) — §31, §21 (#890, *Generic recursive groups*): a recursive group's lifetime
-  parameters are quantified in each member's field of its fixed-point record, `∀'a⃗ < b⃗. (E ⊗ Pⱼ ⊸
-  F_Σ (E ⊗ Tⱼ))`, nested in declaration order; only the capabilities' lifetimes stay outside the
-  fixed point. A call of a member inside the group instantiates them afresh at the call's
-  lifetimes, so a walk of a borrowed tree recurses on a child's view at a load's shorter lifetime.
-  The typed elaboration fills the lifetimes of an application of a computation of type
-  `∀'a⃗ < b⃗. P ⊸ C`, read off the argument's type, as at a generic call. A group with lifetime
-  parameters under the heap driver is rejected with a message (it failed before, at inference).
-  New programs `rec-life-rounds`, `rec-life-mutual`, `rec-life-cap`. No change to `CDerives`, the
-  kernel, the checker, the theorems or the backends.
-- **1.52** (2026-11-07) — #884: the source interpreter (`bcc interp`, `Support`'s `step`) runs
-  faster; what it computes is unchanged. Compiled code runs `Expr.substFast` in place of
-  `Expr.subst` (a closed value is substituted without shifting it at each binder, and a subterm
-  the substitution leaves unchanged is kept, not copied) and `stepFast` in place of `step` (a
-  value answers itself, not rebuilt), `Expr.shiftFast` in place of `Expr.shift` (an unchanged
-  subterm is kept), and `runFocused` in place of the driver's `runSource` (the evaluation context
-  is kept as a stack of frames and the focus alone is stepped, so a step no longer costs the
-  context's depth; a focus that is stuck or stops at an operation has the whole term step). Each
-  is by `@[csimp]` over a proof that the two are equal (`Expr.subst_eq_substFast`,
-  `step_eq_stepFast`, `Expr.shift_eq_shiftFast`, `runSource_eq_runFocused`). Every statement still
-  reads `Expr.subst`, `Expr.shift`, `step` and `runSource`, and kernel evaluation (`decide`) is
-  unchanged. No spec text describes the
-  interpreter's representation; nothing in `Paper/` or `Core/` changes, and every golden is the
-  same.
-- **1.51** (2026-11-07) — §18, §19 *Borrows*, §36 (#887): a load block (`borrow imm *g { 'y, v -> … }`) whose
-  body performs abortive operations elaborates to `withloadU`, `withload` at the callback's row,
-  as the cell and slice borrows elaborate to their unwinding forms (`Const.unwinding`,
-  `unwindingC?`, `Frontend/Sugar.lean`); it was refused as having no unwinding form. The load
-  consumes only the `imm` borrow, so an unwind hands nothing back, runs no finaliser, and leaves
-  the place as it was. A load's body may now raise or call a recursion
-  (`corpus/effects-load-raise.bc`, `rec-load-walk.bc`, `rec-load-exhausted.bc`, at every stage
-  and on Backend2 at `live 0`). Preserves: `CDerives`, the kernel, the checker, the theorems and
-  the backends are unchanged; every other corpus program checks and runs as before. Open: a
-  recursion on what a load exposes is still refused, because a group's call of itself is at its
-  own lifetime parameters (§20 *Generic recursive groups*) and the load's view is at a shorter
-  `'y`; and an abort inside a borrow callback cannot consume a linear variable the callback
-  captures (§12: a value starts with nothing owed), so a recursion inside a load that passes
-  `g` or another captured linear value is refused at the budget's `case`. Each needs its own
-  entry.
-- **1.50** (2026-11-07) — §36 (#879): a map iterates at any key type. `lib/map.bc`'s table is three arrays,
-  `Map[K, V] = ((array (1 + i32) * array K) * array V) * i32`, the slot hashes, the keys and the
-  values, so that a lent map, `MapRef[K, V]<'h, 'k, 'x>`, lends each entry's key and value as array
-  elements; `K` has a filler as `V` does. New: `map_entries(r)`, every entry in slot order as
-  `imm 'k K * imm 'x V` (a `string` key's text through a load and `key_prefix`); `map_fold(r, f,
-  s)`; `map_drain(m)`, the map consumed, its entries taken out owned, what a `break` leaves
-  consumed with the iterator. `map_iter(r)` keeps its type over the new `MapRef`. The order is
-  stated: slot order, a function of the hash and of the insertions and removals. *Not provided*
-  loses `map_iter` at owned keys and gains the recursive walk under a load (an elaborator gap,
-  `corpus/pending/data-json-map-ser.bc`). `corpus/map-iter-owned.bc`, `corpus/map-drain.bc`;
-  `corpus/map-views.bc` names the three lifetimes. Every map program keeps its output; each
-  allocates one array more per table (at `map_new` and each growth), and its loads, stores and
-  bounds move with the new probe (`counts.expected`, `counts-backend2.expected`). No change to
-  `CDerives`, `Core/`, the relation, the machine, the checker, the elaboration or a backend.
-
-- **1.49** (2026-11-07) — §68 (#855 K0, *Per-code closure types*): the entry for `Code⟨N; E⟩ C`, a
-  value type beside `U C` naming a closure's code, with the explicit erasing coercion `erase` to
-  `U C`, the rules `codeI`, `codeIB`, `erase`, `eraseB`, `unfoldK`, `nuOutK` and the restated
-  `force`, and the erasure policy (C1 specific by default, C2 and C3 erase silently at lend exits and
-  joins). The relation clause holds the environment at the whole resource, so `codeI` carries the
-  premise `Γ.CapOK`. Library code: `capNorm` and `capNorm_shift`, `psub_capNorm`, the code predicate
-  and `nuOutK_step` at Core's relation and the chain's (`Core/CapNorm.lean`, `Core/CodeNu.lean`,
-  `Core/Chain/CodeNuKW835N.lean`); the size measurement `experiments/CodeSize`. No change to
-  `CDerives`, the relation, the checker, the backends or any program's output.
-- **1.48** (2026-11-07) — §67 (#876, B6): Backend2 lowers a `foldOwn` or `foldReuse` node whose
-  shape is `1 ⊕ C`, `C` a product with one recursive position, by pointer reversal: two loops of
-  tail calls whose stack is the structure's own nodes, read from the node's ownership of the
-  structure and its `FShape`. `deep-list` runs natively in 64 KiB; no allocation is added; loads
-  and stores rise on 19 programs. Other shapes keep the recursion. No change to `CDerives`, the
-  relation, the machine, the checker or the old backend.
-- **1.47** (2026-11-07) — §15 (#849, #686, *A local whose type is not known*): inference's slot
-  types are `Option`s, so a local whose binding it does not type is not known to it, rather than
-  `1`, and every reader handles that. An unannotated injection bound and passed to a generic
-  function whose parameter the other arguments determine is accepted, its binding typed from the
-  call after the typed elaboration; a call that leaves the parameter open is refused as not
-  determined; a call of a later-declared function bound to a local reports `unknown variable`;
-  `*x` of such a local says its type is not known (`corpus/infer-local-sum-generic.bc`,
-  `corpus/infer-local-from-call.bc`, `corpus/infer-local-unit.bc`,
-  `corpus/reject/infer-local-undetermined.bc`, `corpus/reject/deref-unknown-local.bc`). No change
-  to `CDerives`, the kernel, the checker, the theorems or the backends; every other corpus program
-  checks as before.
-- **1.46** (2026-11-07) — §66 (#862): at `absurd` (`zeroE`) Backend2 leaves a live slot neither
-  mask holds unconsumed, as it leaves `zeroE`'s absorbed part, on the path that ends at
-  `Tm.absurd`; `Lint` admits it from that node, at every type. Every other rule's weakening at a
-  split stays at a persistent type. `book/src/guide/iteration.md`'s `take(6, fib())` and
-  `corpus/gen-take-print.bc` compile on Backend2. No change to `CDerives`, `Core/`, the checker or
-  the old backend.
-- **1.45** (2026-11-07) — §61 *Declarations*, §42 (#846): `type` abbreviations are opened at their
-  type and lifetime arguments wherever a non-recursive `data` declaration is (`openX`, the block
-  classification `bareIn`), so `data Json = … | Obj(Map[string, Json])` is accepted, `Obj` not a
-  block. The group is read through the bodies of the abbreviations a field names, and one that
-  names a member is opened at the field (`openMembers`), so `type JMap = Map[string, Json]` with
-  `Obj(JMap)` is accepted; such a `type` declaration written before the `data` one is placed after
-  its group. The data table (`Data.Table`) carries the abbreviations in scope; the parser's and the
-  typed elaboration's are built by one function (`Parser.tableOf`), a later one of a name hiding an
-  earlier one; the I/O library brought in for an ambient `main` is in neither, and the prelude's
-  abbreviations are not read, so a program with `data` declarations that includes no module
-  cross-checks in the kernel (`declTxn_checks`). `pTy`'s
-  `UNPROVED:` assumption narrows to type parameters. A recursive abbreviation around the root is refused with
-  U3's message before it is opened; `box C(…)` of a constructor that is not a block, where its value
-  is expected, is refused with a message saying so. New programs `data-json-map`, `data-set-rec`,
-  `data-abbr-nested`, `data-abbr-block`, `data-abbr-root`; rejects `data-rec-abbr-list`, `data-rec-abbr-mu`,
-  `data-rec-abbr-nested`, `data-box-not-block`. No change to the kernel, the checker, the backends
-  or any existing program's output.
-- **1.44** (2026-11-07) — §65 (#842): codata's η-thunk at any depth. §45's `nuEta` node's scheme
-  is an η-tree (`NuTree`): `&`s of the projections, `λ`s and `Λ`s, every leaf the observation of
-  `f s` along its path, read by `nuEtaB` (`NuTree.parse`, `NuTree.mem_parse`, `NuTree.toE_shift`).
-  `nuEta_reach`, `nuEta_obs`, `nuEta_var` and `nuEta_unfold` state §45's fact over every tree.
-  Backend2 reads the node as before, so a protocol object built from `unfold` is `unfold`'s code
-  alone and its observations are direct calls. No change to `CDerives`, the relation, the machine,
-  the elaboration or the old backend.
-- **1.43** (2026-11-07) — §64 (#651): Backend2's lowering keeps a boxed field's object taken apart
-  by a `letpair` or a `case` as a spare box, reused by the next box of its words built before a
-  call, a return or the arm's end, and freed there otherwise: the token put back by
-  `rec-parser`, `parse-recover` and `parse-recover-gen` allocates nothing. The other #651 rises
-  are one box a node, as in Rust (recorded under kill criterion 6). No change to `CDerives`, the relation, the
-  machine, the checker or the old backend.
-- **1.42** (2026-11-07) — §62 (#844 Tier 1, *Lifetime-polymorphic suspending constants*): the
-  suspending lend constants under lifetime binders (`Const791.poly`, typed at `VTy.all`), their
-  premises at the constant's own context (`Const791.OKAt`), `Row.Suspend`/`CTy.SuspendC` at a
-  context, and the laws that read the callback bound at `δ ⊨ Δ`. The answer's move between views
-  is a named premise (`AnsNoMut`), discharged by answers outliving a closed bound (`Row.AnsC`).
-  `goal791N` keeps its statement. A closed instance (T1.4): an outer `imm` lend's borrow yielded
-  across an inner suspending lend to a handler between them, resumed and cancelled, at `goal791N`.
-  No change to `CDerives`, the checker, the backends or the corpus.
-- **1.41** (2026-11-07) — §62 (*The answer's view across a lend*, #844 T1.3): `NoMutAt`,
-  `consistentX_setLife_iff`; `consistentX_of_outlivesN`, `consistentX_of_top` and
-  `consistentX_setLife` become corollaries; the callback's table steps move the lender's view to
-  the lend's. No change to `CDerives`, `fundamentalN_all`, `goal791N`, the checker, the backends or
-  the corpus.
-- **1.40** (2026-11-07) — §12 (#848, #492): a handler site is not terminal for the insertion
-  policy (*Handled bodies*): the handled body is owed the owed variables it mentions, as the head
-  of `x <- M; N` is, so an abortive arm inside a `with`, a `for` body or a recursion releases an
-  owned variable bound outside the site by its consume. Programs with a `raise`, or a recursive
-  call, in one arm and an outer owned value used in the other are accepted
-  (`corpus/handle-arm-releases.bc`, `corpus/for-arm-raises-owned.bc`,
-  `corpus/rec-for-owned-state.bc`; the pending `rec-in-for-linear.bc` and
-  `lc-0039-combination-sum.bc` run, as `corpus/rec-in-for-linear.bc` and
-  `corpus/leetcode/dp/0039-combination-sum-loop.bc`). No change to `CDerives`,
-  the kernel, the theorems or the backends; every other corpus program checks as before.
-
-- **1.39** (2026-11-07) — §63 (#847): `allI_inst` generalised from a body that erases to a
-  λ-value to one that erases to a value form not naming the binder's dead slot (`valFormB`);
-  `lendR_plain`: `[lend-R]` at the empty row is the plain lend, the finaliser never run. Backend2
-  reads both and compiles every corpus program. No change to `CDerives`, the relation, the
-  machine, the checker or the old backend.
-- **1.38** (2026-11-04) — §62 (*Semantic types read at the tree*): `F A` is a bare `cerwpT` run
-  (`SCmp.ret`), Core's `cC (.ret A)`; the Kripke quantifier over later worlds and lists sits at
-  `U` only. Thunks are introduced as Core's `thunkF_compatC` does, from the computation at every
-  world and list with the environment carried by its monotonicity (`TEnv.Mono`; `STy.thunk_intro_env`,
-  `STy.thunkRet_intro_env`, `STy.thunkRet_lam_env`, and their corollaries at a value type). `SCmp.ret_kripke`, `SCmp.ret_run`, `SCmp.ret_of_run`,
-  `CSem.Kripke`, `SCmp.amp_kripke` and `SCmp.nu_kripke_of` are retired; `SCmp.ret_reread` is
-  `F A`'s Kripke property along the whole-list re-reading. `SCmp.ret_val` takes the resource's
-  coverage. `STy.kont_of_share`, `STy.kontBox_resume_after` and the instances keep their
-  statements. No change to `twp`, `EndT`, `cerwpT`, `CDerives`, `fundamentalC`, `adequacyC`,
-  `adequacyD`, the checker, the backends or the corpus.
-- **1.37** (2026-11-04) — §62 (#795): the scheduler interface over the running task and a stack
-  pool (`PoolTJ`, `PoolAns`): tasks above a joiner hold views of what it shares, hand them back at
-  their end (`PoolTJ.deposit`), and the joiner is resumed with them; `poolSchedAdequacyT` at the new
-  interface. A lend ended at its copies composed (`twp_lendEnd_imm`, through `twp_lendEnd`
-  unchanged). `HS` with `par` (a joiner and an unstarted child, `κU`) and indexed tables, so
-  children spawn and join at every depth; `progJoin_safe` at every depth. `twp_frame_keep_sh` and
-  `twp_holdsIn` read `EndT` at `UpdA` and `InvKeptA` (1.36). The early join refused
-  (`twp_refuses_join_early`). No change to `twp`'s rules, `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the backends or the
-  corpus.
-- **1.36** (2026-11-04) — §62 (#806): `EndT` reads row 5.27's `↭` along the walks (`UpdA`), with
-  row 5.27's `mut` clause read by `InvKeptA`: an `imm` cell may be given up to the end world while
-  another part holds a copy, and a `mut` cell is read through the `imm` cell it sits beneath
-  (`[TR]` 6.48's ancestor technique; `UpdA.frame`, `UpdA.trans`, `recMaskClosed`). Every `twp` rule
-  keeps its statement. A run gives up a copy of a view another part holds
-  (`twp_consume_view_framed`, at a frame holding a copy, `HoldsCopy`; through a callee,
-  `twp_frame_callee_consume`; with a spawned task, `twp_child_consume`); a lend does not end while
-  another part holds a live copy (`twp_refuses_lendEnd_live_copy`) and ends by `twp_lendEnd` once
-  every copy is back (`twp_lendEnd_after_framed_consume`). `endT_inv`, `StepKeepsFdEsc` and
-  `copy_run_keeps_fdEsc` read `UpdA`. `UpdX.frame`, `xopt_comp`, `xcell_compR` and
-  `not_xoptWFrameAt` are retired with #793's refusals (`docs/new-core/scope-806.md`, *Retired
-  results*). Open, #789: the consume at a frame holding the copy only inside another view's
-  witness (`HoldsView`). No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the
-  checker, the backends or the corpus.
-- **1.35** (2026-11-04) — §62 (#782): the relation's types at the tree (*Semantic types read at
-  the tree*): value types (`STy`) read the record list, downward closed and monotone along
-  extension and `KeepRel` for every former (`Mut` at a store code); computation types (`SCmp`)
-  downward closed, `F A` Kripke along `KeepRel` (`SCmp.ret_kripke`; a bare `cerwpT` run owning
-  no records is not, `Obs.cerwpT_not_keepKripkeNil`); continuation and task types as thunks and
-  boxed thunks, a captured `κ` a value of its type (`STy.kont_of_share`,
-  `STy.kontBox_resume_after`), with instances at a proper extension of the tree. In *The safety
-  relation*, `contShareT_resume`'s list condition reads "the re-readings of the stop list's
-  records the share reads", with `contShareT_resume_ext` for the whole-list condition. No change to
-  `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, `twp`, `cerwpT`, the checker, the backends
-  or the corpus.
-- **1.34** (2026-11-04) — §62 (#781, slice (d)): the per-branch share (`KeepRel`) in
-  `contShareT_resume`'s list condition; a lend's open and end at `twp` (`twp_lendOpen`,
-  `twp_lendEnd`); `[handle]` for a scheduler at the program's top (`cerwpT_schedHandle`) and
-  adequacy over several branches (`multiBranchAdequacyT`), through `cerwpT_adequacy` at one branch
-  with the stored continuations in pool form (`KapSchedT`, `PoolT`, `poolT_park`, `poolT_resume`,
-  `poolT_cancel`; decision 74); `PoolSchedAdequacyT` at one state
-  representation; a cancel as a resume into the cancel branch (D15). Cross-task borrows are
-  excluded by the pool invariant. Borrow edges to ancestors are properties of `CactusInvT`
-  configurations, with no scheduler instance. No change to `CDerives`, `fundamentalC`,
-  `adequacyC`, `adequacyD`, the checker, the backends or the corpus.
-- **1.33** (2026-11-05) — §18, §39 (#810–#814): surface fixes, each an elaboration into existing
-  kernel forms; no `CDerives`, judgment or theorem changes. A borrow block's body boxes no terminal
-  that never returns (#810). The consume glue's finaliser consumes in §12's reverse binding order
-  (#811). A buffer's and a literal's borrow crossed by an abort, and a place lent in a call that
-  may raise, are lent by the unwinding forms (#812–#814); §18 *Not provided* loses those items.
-  The unwinding form of a literal's view is not marked (§57). `aoc/2022-12`, `2023-03` and
-  `2022-21` use `/` and `%`.
-
-- **1.32** (2026-11-04) — §3, §22 (#808): conversion up to the names of lifetime binders. `CDerives`
-  gains `[α]` (`CDerives.alpha`, premise `Jdg.alphaB j j' = true`), and so do its copies
-  (`CDerivesAt`, `CDerivesP`, `TDerivesAt`, `TDerivesP`) and the typed term (`TExpr.alpha`). The
-  rule's compatibility lemma is `alpha_compatJ`, from `cC_tyEq` through `CTy.alphaB_sound`. The
-  checker's `convV`/`convC` compare types up to `≡α`. `check-judgments` is unchanged: a rule, no
-  judgment. `fundamentalC`, `adequacyC`, `adequacyD` and `resourceSafety` keep their statements.
-  Changed statements, at the inversions (`Core/Inversions.lean`): `VView.hnf`, `VView.hnf_of`,
-  `VView.eq_of_heads`, `vview_thunk`, `vview_kBoxO_thunk`, `vview_bang_thunk`, `vview_bang_bang`,
-  `vview_tensor`, `LamCls` and `LamCls.val_thunk`/`val_bang`/`comp_rigid`, `JR.rigid`, `AmpCls`,
-  `JR.amp_amp`, `lam_bang`, `lam_arr`, `der_clause_body`, `der_cancel_lin`,
-  `kcancel_jr_cancellable` (each up to `≡α`), `JR.rowLe` and `cancelTy_rowLe` (`RowReach`, the
-  rows `[sub]`'s order and `[α]` reach, for `RowLe`), and `RowCls`; in `Core/Rejections.lean`
-  `kview`, `kviewO`, `vview_ref`, `not_release_kappa`, `wb_view`, `at05_M`. `[α]` reaches an
-  effect row's operations (`OpSig.AlphaEq`, `RowAlpha`); a row is tied to the effect context up
-  to α (`RowAt`, `OpAt`, `OpSig.AtEntry`), `sig_prefix_of_rowAt` is a prefix up to α, and the
-  checker's `sigsOkB` compares signatures up to α. Every refusal keeps its statement
-  (`not_der_progT`, `not_der_progNCrecT`, `not_der_e7c`, `not_der_perform_await`,
-  `not_der_raise_cancelled` among them). The
-  1.31 naming of a computation type's binders by its body (`CTy.canonBinder`) is withdrawn:
-  binders keep the context's numbering. Programs `alpha-all-u`, `nu-file-contexts`,
-  `alpha-effect-row`.
-- **1.31** (2026-11-04) — §7, §19, §22 (#808): observations quantified over a lifetime. An
-  observation tree may be `∀'x ⊏ @b. D` (`CTy.NuLeaf`), so a codata observation takes a borrow
-  lent for one call (`∀'x. Mut 'x A ⊸ …`, `∀'x. Imm 'x A ⊸ …`). `NuOk` is `NuShape` plus binder
-  freshness; `cC`'s `ν` guard is `NuShape`; `unfold` gains the premise `BindsFresh`; `cB` gains
-  `cC`'s `∀` clause, with `cB_mono`, `cB_unroll`, `cB_congr`, `cB_tyEq`, `cB_iff_stacks`,
-  `cB_step`, `cB_bind` and `node_ok` extended. §7 corrects the earlier reading of `X ∉ A`: it
-  keeps `X` out of a negative position and was never a restriction on lifetimes; the missing
-  piece was the `∀` case. `fundamentalC`, `adequacyC`, `adequacyD` and `resourceSafety` keep their
-  statements. `Core/NuBorrow.lean` derives `read`/`write` calls on lent buffers. Programs
-  `nu-file-read`, `nu-file-twice`, `nu-file-consumed`.
-- **1.30** (2026-11-04) — §62, §12 (#771): the frame form of 1.27 is removed with its programs
-  and its file handle; Core has no file-specific definition. `resourceSafety` and `rtSafety` keep
-  their statements, in `Core/ResourceSafety.lean`. `kappa_lin_strict` (a must-resume `κ` is
-  strictly linear) went with `Core/LetDtorSuspend.lean`; its citations in §62 and the design docs
-  now cite `kTy_lin` (`Core/Classes.lean`), which states the same of `κ` at `lin`. §12 records the
-  vocabulary (*Vocabulary*): a linear value is consumed, by a rule or by its type's consume
-  (`Consumable`, `consumeE`, `consume_wf`, `consumeSlotE`, the checker's `consume` node); a
-  borrow's consume releases it (`release_imm`, `release_mut`, `release_unk`, `release_bang`,
-  `array_release`, `Releasable`); free is only the primitives `[free]` and `array_free`; an
-  unrestricted slot is weakened (`Ctx.DeadP.weaken`); closing a host resource is its effect's API
-  in the library, not a kernel rule. These are renames: no change to `CDerives`'s rules,
-  `fundamentalC`, `adequacyC`, `adequacyD`, the relation, the checker's judgments, or any
-  program's results.
-- **1.29** (2026-11-03) — §62 (#781, slice (c)): R4 at the tree world (`r4_extExtFT`,
-  `ext_extFT`), with `RelT`, `KeepsT`, `CellInT`, `ExtLT` and the examples of what `ExtLT` admits
-  and refuses. No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the checker, the
-  backends or the corpus.
-- **1.28** (2026-11-03) — §62 (#781, slice (b)): the step-indexed relation over the tree world.
-  `twp` and its rules (`twp_frame_w` beside `twp_frame`), `cerwpT` with `contShareT` and
-  `opTableT`, `CactusInvT` with step, growth, move, spawn and join, `cerwpT_adequacy`,
-  `fdEsc_at_join`, `stepKeepsFdEsc`; headlines at one branch: `topAdequacyT`, R1
-  (`r1_stepKeepsFdEsc`, with `not_stepKeepsFdEscNoUpd`), R2 (`r2_endBlockedByHolder`), R3
-  (`r3_joinEndNeedsFdEsc`), from `fdEsc_of_end_valid`. A subsection "Closing a branch";
-  `kappa_lin_strict`. No change to `CDerives`, `fundamentalC`, `adequacyC`, `adequacyD`, the
-  checker, the backends or the corpus.
-- **1.27** (2026-11-02) — §62 (#775): effectful destructors built. `[let-dtor]`
-  (`CDerives.effLetD`) is derived from `[then]` at the finaliser `drop_ctx`, with destructors by
-  type (`dropOf`, `DropOk`: `⊗`/`⊕` componentwise, declared at opaque types, `π₂` at `U(C & D)`,
-  derived drops elsewhere), `M` at `Σ_M ≤ Σ`, and the premises `hSDc`, `hSDd`, `hfin`;
-  `effLetDDiv` drops `hSDd` where nothing is captured. Per-exit run theorems of a frame
-  (`letDE_raise_run`, `letDE_cancel_run`, `letDE_return_run`, `letDE_raise_exit`,
-  `letDE_cancel_exit`); `[let]` against
-  `[let-dtor]` (`Core/LetDtorLet.lean`); the file handle `File = Tok` with `open`/`close`; a lend
-  with its error type a parameter. A destructor that can fail is *Open*. No change to `CDerives`,
-  the relation, the checker, the backends or the corpus.
-  *(What this entry added was removed in 1.30.)*
-- **1.26** (2026-11-02) — §62 (decision 72, #771–#775): the new Core, as a design not yet built.
-  Lifetimes ordered as a tree, the tree-stratified carrier, canonical images, effectful
-  destructors, a step-indexed safety relation with capture as its own operation and a cactus
-  invariant, semantic types read at the tree, and scoped spawn; the target theorem is that every
-  reachable state steps or is final with an empty heap. Decision 72 voids decision 71: §14, §15,
-  §16, §19, §29, §30, §32 and §34 note that their T1, R1 and `PinLaw` rules stay the checker's
-  until §62's PRs land. No change to the kernel, the checker or the corpus.
-- **1.25** (2026-10-31) — §19, §29, §14, §15, §16, §30, §32, §34 (decision 71): T1 is the
-  permanent rule, "owned across suspensions, borrowed within", stated in §19; R1 and `PinLaw` are
-  frozen (§29: no field, case or premise is added; R2 stays unemitted); LoopLend is kept as the
-  design (§14). Every *Open* item that proposed lifting T1 or widening `PinLaw` (§19's T1, §29's L0,
-  U6, U8 and OQ-1 to OQ-5, §30's L0, §32's `imm` relaxed lend) is closed by decision 71,
-  tombstoned in `docs/tombstones/lends-across-suspensions.md`; where async and generators go now
-  is `docs/roadmap.md`. The refusals of the rule (T1 in a borrow block and in a `for` over a lend,
-  R1's limits, LoopLend's refused shapes) name their fix; only their text changes. Six pending
-  programs are rewritten in the rule's idioms and run: `corpus/async-bank.bc`,
-  `async-borrow.bc`, `async-worker-pool.bc`, `parse-recover-gen.bc`, `print-borrowed-list.bc`,
-  `state-machine-audit.bc`; `corpus/pending/gen-list-thread.bc` records an elaboration error
-  one rewrite goes around (a list threaded through a `for` over a generator). No change to the kernel, `PinLaw`, the checker's acceptance or
-  LoopLend's behaviour.
-- **1.24** (2026-10-31) — §50, §14 (#760 phase 2): `willreturn` and `mustprogress` on the
-  willreturn class: functions whose body is at the empty row (`Fn.emptyRow`, set from the checked
-  type where the function is made) and that reach no runtime call but `bc_free`, citing
-  `total_open` (new in `Core/Totality.lean` with `total_call` and `total_subrun`;
-  `total_open_pin` in `Core/PinFundamental.lean`), the lowering's faithfulness, the named
-  assumption `CallRelated` (proved at a closed program's plain context, `total_subrun`) and the
-  host assumption `HostStack`. `nounwind` cited (`NoUnwind`). `bcc trusted` lists `CallRelated`, `HostStack`,
-  `NoUnwind`, `WidthClass` and the native runtime and `clang`. The borrow facts' cite names
-  `CellU.CompS.compat`, `adequacyD_pin`, `externs_every_run`/`io_every_run` and `WidthClass`. The informational
-  attributes are "informational, relied on for now, improvement candidate", with the candidates
-  listed. New program `corpus/native-willreturn.bc`. No change to the language, the checker or a
-  program's output.
-- **1.23** (2026-10-31) — §50 (#760): no borrow fact at a function the machine conversion makes.
-  The cancel step of `corpus/async-r1-cancel-finaliser-writes.bc` took its `mut` borrow as
-  `ptr noalias nonnull dereferenceable(4)` beside a `ptr` to its owner, one cell; it wrote through
-  the borrow and then freed the cell through the owner, which is `noalias` undefined behaviour
-  under LangRef, with the cell freed while `dereferenceable`. Other machine-made functions take a
-  borrow beside its owner too (`corpus/async-r1-step-lend.bc`'s call point step), and escaped the
-  facts only because `classPtrs` typed those words as `i64`. The kernel's facts were not in
-  question; the step from "the lend is live" to "for the whole of this function" was stated
-  nowhere. Now each LIR function has a lend bit per parameter (`Fn.lendEncl`), set only where a
-  source `λ`, thunk or `&` is made; `paramFacts` emits a borrow's facts only at a set bit; the step
-  is the named assumption `Backend2.LendEnclosesFn`, which the LIR interpreter checks at every call
-  and `bcc trusted` lists at each function with a fact; `scripts/native-facts.sh` reads `Fn.facts`
-  per function. The helpers' facts are cleared too (*Open*). No change to the language, the
-  kernel, the checker or a program's output.
-- **1.22** (2026-10-31) — §35 *Open* (#763): records decision 70, allocation as an effect, as decided
-  and not built, and where a buffer's growth in `push` stands under it. No change to the language.
-- **1.21** (2026-10-31) — §29a new, §29, §19, §27 (#750, unit A): cancellable waits. The marker
-  `OpSig.rc` (in `CTy.eff`, compared by `OpSig.Sig`, read by neither the relation nor the machine,
-  `semC_effOf_rc`); `[await-c]` (`CDerives.effAwait`, proved by `await_compatC`), with `[perform]`
-  and `[raise]` refusing a marked operation; cancel rows read at `finRead`; the handler rules'
-  markers `cs`. R1's premise is `Row.ResumeOC`, which widens `LendFrame`'s asserted domain for the
-  cancel path (OQ-1(a), OQ-5). `CDerives.effThenDiv` (a finaliser that may loop) is proved
-  (`then_compatC_div`); `PinLaw` keeps its two schemas. Level-triggered cancellation needs
-  no rule: law 5c (`await_cancelled`) is the task handler's; laws 5 and 6's first-error-kept stay for
-  κ.2 cancels. `Row.CancelTotal` and `Row.CancelEnds` are decided typing-only predicates.
-  `fundamentalC`, `adequacyC`, `adequacyD` keep their statements.
-- **1.20** (2026-10-31) — §42 (#746): a declared value lent across a computation that may
-  abort, stated as the kernel decides it (`Core/DeclLend.lean`). The loan holds no owned cell
-  (`decl_loan_ownFree`), so an abort handled inside the loan is admitted at the pure `withbor`
-  (`d_declInside`; `corpus/decl-lend.bc`). An abort that crosses the loan needs the unwinding
-  lend's finaliser `Ref N ⊸ 1`: the kernel admits a closed one that consumes the value
-  (`d_declFinOf`, `d_declAcross`), the checker passes only the derived destructor, which a declared type has none
-  of (`decl_ref_no_dtor`; `corpus/reject/decl-lend-abort.bc`), and a written finaliser for a lend
-  is *Open*. No rule, relation or machine changes; `fundamentalC`, `adequacyC`, `adequacyD` keep
-  their statements.
-- **1.19** (2026-10-31) — §12, §52, §59 (#746, step 4, F3): a stack machine's drop of a level's
-  `k` is a hand-over. The node's body binds the `k` that takes over, `clos kc [base]`, and `Lint`
-  reads the premise from the node (`Lint.handsOver`); the relation the node cannot show is one
-  named assertion over the LIR interpreter's configurations, `Backend2.StackKHandOver`, which the
-  interpreter checks at every run and `bcc trusted` lists at each site. `Prog.stackKs` and
-  `Backend2.StackKSound` are removed. No change to the language, the kernel, the checker, or a
-  program's acceptance or output.
-- **1.18** (2026-10-31) — §12, §42 (#746): the derived copy at `imm`. A use of an `imm` borrow
-  or an `array_imm` view beyond its first is its derived copy, which the checker inserts at a split
-  whose two parts both mention it, as the `copy` or `array_copy` constant in `copy_derives`'s shape
-  (`Frontend/Check/DerivedCopy.lean`; `TDerivesP.copy_at`, `arrCopy_at`). The split, `overlapOK` and
-  `VTy.persistent` are unchanged: `mut` borrows and owned values are refused on a second use as
-  before. `bcc copies` and `corpus/copies/` pin the inserted copies.
-  `corpus/reject/double-use-in-callee.bc` uses an `array_mut` view (its `array_imm` program now
-  checks, `corpus/imm-copy-view.bc`). §42: a declared value is carried across an abort by a
-  handler's state only when that handler handles the abort; SPEC said any handler's state, and
-  the kernel's `[let]` refuses that (`corpus/reject/decl-handler-state-abort.bc`). No kernel
-  change; `fundamentalC`, `adequacyC` and `adequacyD` keep their statements; every program accepted
-  before is accepted with the same output.
-
-- **1.17** (2026-10-31) — §29 (#743, B1): `PinLaw` as two schemas, `LendFrame` over `LendForm`
-  (one form, `ref`, which is R1) and `LoopFrame` (R2). `PinStop` and `PinLoop` are derived
-  (`PinLaw.stop`, `PinLaw.loop`), and `pinLaw_iff : PinLaw ↔ PinStop ∧ PinLoop`. `bcc trusted`
-  names the schema at each site. No change to `CDerivesP`, the relation, the machine, the
-  checker's acceptance, the statements of `fundamentalC_pin` and adequacy, the `bcc check` line,
-  or a program's output or count.
-- **1.16** (2026-10-30) — §12, §19, §59 (#746, step 3): every site that inserts a drop, a copy or
-  an abandonment cites its kernel rule, checked by `scripts/check-pins.sh`. Backend2's `drop` and
-  `copy` carry their rule (`DropRule`, `CopyRule`) and `Lint` checks each premise: an `imm` copy
-  only at the constants or `copy_derives`, a `[Mut A]` drop only in a destructor function
-  (`HasDtor.arrayMut`, `Prog.dtorFns`, which a destructor calls to drop each leaf), a live slot no mask
-  holds at the rule `unused` at a persistent type only (that no checked program absorbs one of
-  another type is `UNPROVED:`, `Check.SplitMasks.NeitherAbsorbed`); a superseded raise payload is
-  abandoned (`Abandon.superseded`, `effRaise`'s `hd`); no `⊤` component is observed, and a
-  must-resume `κ`'s cancel is unreachable; `[nil-dead]` is at a context with no live slot. The old
-  backend's `copy` and `drop` carry a licence, each `UNPROVED:` with its statement
-  (`Clos.LicenceSound`). The
-  elaboration reads abortive operations by the kernel's `isAbortive`. The qualifier `linear ctl` is
-  spelled `must_resume ctl`, and `linear` is no longer a keyword. `corpus/reject/linear-*`: a
-  declared type at each construct that inserts an operation, each refused by a kernel fact.
-  `fundamentalC`, `adequacyC`, `adequacyD` keep their statements; no program's acceptance or output
-  changes.
-
-- **1.15** (2026-10-30) — §11, §12, §42 (#746, step 2): declared types with no derived drop, L-D
-  over L-T. The opaque kind `Tok` (`VTy.opq .tok`, not a host type) is a location owning a unit
-  cell, its relation `Ref 1`'s; `VTy.OwnFree` holds at the host kinds only. Two constants,
-  `mint : 1 ⊸ Tok` and `burn : Tok ⊸ 1` (`CDerives.tokMint`, `tokBurn`, λs over `alloc` and
-  `free`, sound by `[TR]` 6.141 and 6.142). A data field marked `must_close` holds `A * tok`: a
-  constructor mints, a written `match` burns, and nothing else does. Every refusal is a kernel
-  fact: no derived drop (`decl_linear`, `TDerivesP.dtor_hasDtor`), not `OwnFree` across an abort
-  (`decl_not_ownFree`). The entry of a program without externs discards a result that is not
-  unrestricted by its derived drop (`entry_derives`, `entry_runs`), so a declared result is refused
-  and an owned one freed. `tok`, `tok_mint` and `tok_burn` are not surface syntax. A binder's
-  slot of a view that cannot stay live is dropped at the head of its scope (`dropStuck`). The
-  surface adds `with … { M } finally { D }` over `[then]` (the sugar `fin`, elaborated by the
-  effects pass), and messages that name the field and its consumer. `fundamentalC`, `adequacyC`, `adequacyD` keep their statements; no other
-  program's acceptance or output changes.
-
-- **1.14** (2026-10-30) — §11, §34, §35 (#746, 1b): a backend compiles `IORun.expr r []`, the
-  checked `run_io` in its compiled form (`Bytes ⊸ F A`, the outputs weakened in the term) applied
-  to its argument, the empty byte list, a value of the term; an extern the term does not use is not
-  made. No backend makes, takes, copies or drops a value around it. The wrapper is checked as it
-  is, not elaborated again, with the first elaboration's keys. Backend2's lint checks each
-  `abandon` against its rule's premise (`hW` at a `[let]`'s abort, none at `⊤`); a cancel abandons
-  a `[let]` frame's arguments at its rule.
-
-- **1.13** (2026-10-30) — §11, §34, §35 (#746, F2): both backends compile `run_io`, the checked
-  wrapper `IORun.every_run` is about, in place of `main` with a capability prologue and epilogue of
-  their own. The harness externs (`mk_input`, `mk_output`, `take_input`, `take_output`, the
-  clock's and the arguments') are host functions, assumed (1), each claimed to meet its contract
-  with no condition: a make allocates a fresh heap cell at every call and a take frees it, so the
-  capability cells are heap cells again (§35; their removal is #747). `bcc trusted` lists those
-  `run_io` calls. A program may not declare a harness extern, `io_inp` or `io_main_body`, nor a
-  capability other than as an extern. `main`'s body enters the wrapper as its elaborated term, and
-  the wrapper's check carries the elaboration's keys of the `def`s it copied. §11 states what is
-  proved and what is trusted at the I/O boundary. Backend2's LIR has an `abandon` node, carrying
-  the rule it is at (a `[let]`'s abort arm, `hW`, its rule on the frame; `⊤`), and the lint admits
-  an opaque value at no other discard.
-
-- **1.12** (2026-10-30) — §12, §19 and their users (#746, step 1): two kernel classes. A value
-  type is unrestricted (persistent) or linear (`Core/Classes.lean`); a derived drop
-  (`DerivedDrop`) and a derived copy are properties of a linear type, not further classes. The
-  vocabulary follows: `Forgettable`/`forgetT` (the types whose derived drop does nothing),
-  `Qual.cancel` and the core-row token `cancel` (prose "cancellable"; `lin` is "must resume"),
-  the closure `Clo` (`Core/Clo.lean`, `lib/clo.bc`, `clo_*`, `corpus/clo-*.bc`), `Ctx.Banged`
-  for the context whose live slots are `!`, `Row.Cancels`/`Row.cancelsB`, and
-  `VTy.OwnFree`/`Ctx.OwnFree` for what an abort abandons, which is not a drop. §12's groups and
-  §19's qualifier table are restated by class and one use. The binder `linear x <- M` is removed:
-  a slot is owed exactly when its type has a derived drop (`Env.pushOwn_own`), so
-  `corpus/reject/linear-unused.bc` is accepted, its cell dropped by `drop_derives`, and is
-  deleted. Messages, `corpus/kinds.expected` and the corpus reports reworded. No rule added or
-  changed; every other program's acceptance and output unchanged.
-
-- **1.11** (2026-10-29) — §61 (#722, U1 of #595): the owned fold and the destructor at the class
-  `P`. The class (`Ref` and arrays of any member, `μ` nested in `μ`), the constant `foldOwnG` with
-  one algebra per key passed at run time, its compatibility lemma and `CDerives` rule (and
-  `CDerivesAt`'s, `CDerivesP`'s); `HasDtor.mu` and `dtorAt` at `P`, `FShape` bodies keeping
-  `foldOwn`; the checker's `dtorB`; declarations' recursion accepted exactly at `P`, decided by
-  the kernel's `PB` (§42), so an array is a recursive position with no `box`; Backend2's existing
-  type-directed destructor documented, with `foldOwnG`'s arity; the constant `array_empty` and the
-  filler computed structurally at `μ`. AWFY Storage, a
-  B-tree and a trie whose nodes own arrays run in natural form at Rust's allocation counts
-  (`corpus/storage-array.bc`, `btree-boxed.bc`, `leetcode/trees/0208-implement-trie-boxed.bc`,
-  moved from the probes and `pending/`); a value nested three deep (the kernel program
-  `nested-fold`); #32's rose tree and evaluator; the trie as Rust's struct
-  (`0208-implement-trie-vec.bc`), a rose tree over `Vec` (`data-rose-vec.bc`). Every existing
-  golden and count unchanged.
-
-- **1.10** (2026-10-28) — §60 (#718, `docs/data-declarations.md` §11.1 A2): the `fold` block.
-  `fold_imm e { … }`, `fold_own`, `fold_reuse` with constructor patterns whose recursive fields
-  arrive folded (F1), and a block reassembled from its cells in a `fold_reuse` arm (F2), as sugar
-  into §6's constants; a variable binding a constructor's whole value in the arms; refusals for
-  arms of another declaration, arms using non-`!` values, a lent place, and a reassembly from
-  values that are not cells. `corpus/pending/data-fold-block.bc` moves to the corpus. No change to the
-  kernel, the checker or either backend; every other program elaborates as before.
-
-- **1.09** (2026-10-28) — §53, §54 and §56 retired (#698): lowering by simulation in `SemC` was
-  dropped. `Lowering/`, `scripts/LoweringCheck.lean`, `scripts/check-lowering.sh`,
-  `corpus/lowering.expected`, the gate step `lowering` and Backend2's operations on the source's
-  memory (`Op.cellNew` … `Op.famSplit`) are removed. §55's coverage premise stays. No change to the
-  language, the kernel, the checker or either backend's outputs.
-- **1.08** (2026-10-28) — §59 (#714): `!` on the LIR types. `LTy.bang`, kept by `ofV`; the
-  representation read through it (`peel`, `sameRep`); `Lint` checks every copy is of a persistent
-  type or an `imm` borrow and every drop of a persistent type, one with no owned cell or a family
-  of borrows, but for a stack machine's levels (`Prog.stackKs`). No change to the language, the
-  checker, any golden or count.
-- **1.07** (2026-10-28) — §58 (#712, part C): Backend2 reads the facts. Frame slots from
-  `lendScope`'s `rel` and the allocating function; widths from the allocation's class
-  (`Checked.classAt`) and the contents' own type; literal views from `litView`; lend kinds on
-  `Op.lend`; `unfold step` from `unfoldStep`. `Frames` and `LitViews` deleted; the LIR linted on
-  the compile path; five regressions in the corpus. No change to the language, the checker or any
-  golden.
-- **1.06** (2026-10-28) — §57 (#712, part B): the facts Backend2 rebuilt, as derived nodes. A
-  `lendCell` node's kind is its constant's (`lendKindB`); a lent cell's scope is a `lendScope` node
-  whose `rel` is its release on every path (`relT`); a literal's view is a `litView` node; `unfold
-  step` is an `unfoldStep` node; an allocation's width class is `Checked.classAt`. Each fixed by
-  its rule, kept by weakening. No change to `CDerives`, the relation, any erasure or Backend2's
-  outputs.
-- **1.05** (2026-10-27) — §56 (#701, U2 of #698): the print to the LIR, simulated with the
-  source's memory. Closure conversion, named form and dispatched calls; the source's memory kept,
-  one object a cell, at the LIR's allocator (`bumpAlloc`, under which a term in the relation runs,
-  `arun_of_sem`); the machine's primitives and the kernel's constants printed, none as
-  `unreachable`. Forward simulation with the memories' correspondence (`HRel`), so
-  `own_lir_every_run`: every checked closed `main : F 1` with no pin in the pure fragment runs every
-  time at the LIR. Backend2's LIR gains operations on the source's memory, which its own lowering
-  does not write. No change to the language, the kernel, the checker or Backend2's outputs.
-- **1.04** (2026-10-27) — §55 (#701, U2 of #698): a split's masks cover its parts. Every typed
-  split rule has the premise `Covers` (each part's term mentions only slots its mask holds); a
-  typed term mentions only live slots (`CDerivesP.mentions_live`); the checker meets the premise
-  (`Res.covers`), weakening keeps it, and `own_lowersInto` holds without `agreeAt`
-  (`agreeAt_of_typed`). No change to `CDerives`, the relation, the checker's output or either
-  backend.
-- **1.03** (2026-10-27) — §54 (#700, U1 of #698): `own`, explicit ownership. Copies read off a
-  split's masks, drops where a live slot is not passed on, each proved pure steps; `LowerSemRel
-  own`; `own`'s output low on the pure fragment under the masks' agreement with the leaves
-  (`agreeAt`, a hypothesis: the typed rules do not imply it); §53's `absurd` written `absurdL`,
-  read from `[0E]`; the decision `lowB`; the gate step `lowering`. No change to the language, the
-  kernel, the checker or either backend.
-- **1.02** (2026-10-27) — §53 (#699, U0 of #698): lowering under the semantic relation, the
-  statements. The low subset of `Expr` (explicit ownership, effect primitives only at
-  stored-continuation sites, the site predicate a parameter so K1 and K2 stay open); the
-  obligations `LowerSem`, `LowerSemRel` and `LowersInto` with `lowered_every_run` and its `PinLaw`
-  form; the LIR's runs read off its interpreter, the print's simulation `PrintSim` (stated), and the
-  transfer to every-run safety, termination and no live object at the LIR (proved). No change to
-  the language, the kernel, the checker or either backend.
-- **1.01** (2026-10-22) — §52 (#664, option B): a task owns a stack. At a BOXED-κ site with a
-  stack `κ`'s environment is the stack's region, written in place; a recursion whose levels call only themselves and
-  suspend only at boxed stored sites keeps its levels' states as first-order frames on its task's
-  stack, and a resume runs from the top frame down instead of entering every level; the scheduler
-  resumes its slots in an array in place. `async-tree` runs at 2.30× Rust (13.6× before),
-  `async-tree-iter` at 1.42× (6.65×), `async-tree-boxed` at 0.13× (0.80×), with no allocation per
-  `await`; the six `run_until_empty` programs' counts rise (`bounds`, and loads and stores). The native typed mode keeps frame pointers. The old backend's `array_replace` moves the
-  old element (`Op.swapSlot`). No output, golden or status changes.
-- **1.00** (2026-10-22) — §51 (#564, R-1): `[handle-last]`, the kernel rule `effHandleL` for a
-  clause that works on the argument, then resumes `κ` in tail position or cancels it and runs an
-  exit, with `κ`'s cancel its unwind finaliser while it works; the handled row may hold `Div`. Its
-  clauses are written by the rule from works and exits, and `κ`'s cancel is given its own cancel
-  row's table. `cwpF_frame_then` (`[then]` at `cwp`, one segment, at a parameter candidate),
-  `handleL_compatC`, and `fundamentalC`/`adequacyC` with one more case; `kappaFinSelf`. No change
-  to the relation, the checker's output, the elaboration or a backend.
-- **0.99** (2026-10-22) — §50 (#661, N5): the new backend's native target has typed pointers
-  (a `ptr` where a layout places an address, `getelementptr` from bases), the parameters' facts
-  as cited `noalias`/`readonly`/`nonnull`/`dereferenceable`, `alwaysinline` on a call point's
-  step (checked after `-O2`) and one exit block per function that returns by value; a
-  recursion's level keeps its state cell across its own suspensions. `rec-emit` allocates 6
-  objects (16 before), `async-map` 27 and `async-mapreduce` 54. No output, golden or status
-  changes, with the facts or without; the old backend's output is unchanged.
-- **0.98** (2026-10-21) — §18, §20 (#659): a call of the recursive group's self-reference, and a
-  layer's `call`, is a call's binding like every other call, so a terminal that is its answer is
-  the call in tail position (`t <- C; let (E, r) = t; return (E, r)` is `C`, the right unit and
-  `⊗`'s η), and `x <- return r` binds `x` as the call's binding. The walk of a recursive
-  generator ends in a tail call: gen-tree runs at 0.98× Rust on the new backend (1.56× before)
-  and 1.03× on the old (1.31×). Counts fall at 0230 on both backends (allocs 105 → 89 old, 94 → 89
-  new); on the old backend its suspended walk's resumes become 29 indirect calls, the convention of
-  §14's tail calls. No output, golden or status changes.
-- **0.97** (2026-10-21) — §49 (#657, N3): the new backend compiles the stored-continuation sites
-  as state machines: the machine operations from the nodes' kinds, the outcome of a row with one
-  (its value, an abort or a suspension with its continuation), a machine's state per point with
-  its frames flat, `handle` nodes as drives whose clauses run on the argument and `κ`, frame access
-  by the handler's values carried with `κ`, state cells for recursive machines, and one code per
-  task body by `use` keys. 64 programs join the new backend's fragment (380 in all); `indirect`
-  falls to 0 in the async and generator programs but the handler-state and class-(a) ones. No
-  change to the language or to the old backend's output.
-
-- **0.96** (2026-10-21) — §48 (#652, N4's loop part): the new backend compiles `bounded_fix` as
-  its machine step. It is one function per node whose self-reference is a closure of its own code,
-  and the budget is counted down (`Op.cntPred`). 44 programs join the new backend's fragment (316
-  in all), each with `indirect 0`. `Core/DivDrive.lean` proves the runtime's drive of a reified
-  loop, which no rule reads yet. No change to the language or to the old backend's output.
-
-- **0.95** (2026-10-21) — §47 (#647, N2): the new backend erases effects by handler law: rows in
-  the LIR's types as the payload of their abortive operations; `raise` a branch to its handler's
-  join, `[let]` at a row a branch per call, `[then]`'s finaliser and the unwinding borrows on the
-  abort path; a tail-resumptive clause whose direct call the facts license (its kind, condition 2
-  at `Checked.flows`, one closed clause at its nodes) a direct call of its work; `main`'s exit
-  status under `Fail[DivError]`. The postcondition, no `handle` or `perform` left, pinned per
-  program. 50 effectful programs join the new backend's fragment (272 in all). No change to the
-  language or to the old backend's output.
-
-- **0.94** (2026-10-20) — §46 (#636, N1 part 2, L-3): a counted walk's read in range is a typed
-  fact: `walk`'s `read` (`walkReadB`) and the marked read `walkGet`; the new backend drops the
-  read's test. A shared view's copy and length are taken inside the walk's value. The generated
-  counted loops test and step their index as words (`cntLt`, `cntSucc`).
-
-- **0.93** (2026-10-20) — §45 (#636, N1 part 2): codata's η-thunk is the derived node `nuEta`,
-  built by the checker; at `f = unfold step` the new backend computes `f s` where the thunk is
-  built (`nuEta_unfold`); one code for every literal table. Every program's `indirect` at most
-  the old backend's.
-
-- **0.92** (2026-10-20) — §44 (#636, N1 part 2): the new backend erases `Λ`: an `allI` whose body
-  is a λ-value is that body (`allI_inst`, one β at every memory), an instantiation its operand,
-  `∀'x. C` is `C` in the LIR's types.
-
-- **0.91** (2026-10-20) — §43 (#636, unit N1 of `docs/compiler.md`): the new backend's pure
-  fragment, `Backend2/`: the typed term to a typed LIR (copies and drops from the split masks,
-  constants and derived nodes read from their nodes, a slot swap for `array_replace`, `use` bodies
-  once per key), an LIR interpreter and lint, layouts from types with 4-byte `i32` slots, a 0-CFA
-  run once, and the shared word IR's Wasm and LLVM; every effect-free corpus program at its golden
-  on both targets. The word IR gains `load32`/`store32`. No change to the language or to the old
-  backend's output.
-- **0.90** (2026-10-20) — §42 (#593, unit U1 of `docs/data-declarations.md`): `data`
-  declarations, records and variants, monomorphic and generic, transparent; recursion under a
-  written `box` (blocks); the single-root rule; constructors, record literals, fields and field
-  update through `modify`; `match` compiled to decision trees with exhaustiveness and
-  redundancy reports; `Option` and `Vec` in the prelude; a fold's positions are unordered (A1).
-  No change to `CDerives`, the relation, the machine or the checker.
-- **0.89** (2026-10-20) — §19, *The clause's names in the continuation* (#610): condition 2 of the
-  direct call of a tail-resumptive clause is over the names the clause's own code performs or
-  raises (`Expr.own`, `handlerNames`), not over its row; over its row where it may run code it
-  does not hold. `Fo`, the first-order invariant, closed under substitution and every step from
-  any memory; `tail_work_names`: a tail-resumptive clause's work performs and raises only its
-  names. `UnhandledNames`, `Checked.unhandledNames`; a bound per node stated
-  (`Checked.FramesPerNode`). `bcc handled` prints each clause's names; `corpus/handled.expected`:
-  `answers-two-types` 2.0 and `tree-map` 4.0 and 5.0 agree, every direct call of the corpus.
-  No change to `CDerives`, the relation, the machine, a checker rule's acceptance, or any
-  program's erasure, run output, goldens or counts.
-- **0.88** (2026-10-20) — #618: each construct's rule emits the target's shape. §16: a step with
-  no exit is `count_fold`'s, and a count from a literal in `[0, 2³¹)` is counted from it, the
-  counter the element (`walkB` takes `count_fold`; `walk_fold_index_lt`, `countFold_runs`). §14:
-  a point no move calls is its arm of the step, a move from the code before the first point is
-  the machine at that state (no `io_mk`), and a value terminal finishes as `inl V`. §18: a call's
-  binding is structured, so that a value that is one call's answer is the call, in tail position
-  or bound to the binding's own name; a lone parameter is its function's binder. The backend's
-  search for the fields that close a cycle enters it at a sum, so a list's box is at its
-  recursive position whatever the node order. Six `let mut` target pairs are met and join
-  `corpus/sugar/`, five targets corrected; clauses whose resume is in tail position are
-  classified `tail` (`corpus/kinds.expected`); 13 programs' counts fall; no result changes.
-- **0.87** (2026-10-20) — §41 (#617): binder identity. What the elaboration recognises by a binder
-  (a borrow block's borrow over a loop, a block parameter, a port, a continuation, a layer's
-  `call`, a div function's residual) it follows through copies (`Val.copyOf?`); a control
-  handler's code has fresh names (#493's last program lands); a source binder spelt as a generated
-  name is renamed; capability variables are one per effect and slot; a block's `let mut`
-  capabilities key its copy by position. The renaming check (`bcc alpha`,
-  `scripts/alpha-check.py`) is a gate step. T04 back to its original form; `lend-escape`'s witness
-  changes; five new corpus programs. No kernel, `CDerives` or checker change.
-
-- **0.86** (2026-10-19) — §41 (#613): a join's terminal value is handed on as it is, a loop turn's
-  `()` is not bound, and `modify` of a `let mut` value runs its body in place rather than through a
-  scoped cell. The elaborated core of the corpus changes shape (no result changes; three
-  programs' loads and stores fall); `corpus/sugar/`'s core forms lose the bindings, and #611's
-  `mut-heads` and `mut-modify` pairs join them, `mut-modify`'s target corrected to the in-place
-  form.
-
-- **0.85** (2026-10-19) — §41 (#613): R3, the boundary rule, and the rule table. A part that
-  runs in another frame hands back what it writes (`handOn`): an arm, a binding's head, a borrow
-  block, `modify` (whose body's writes were dropped), an answering handler's body and `run`
-  (whose writes were dropped). A block that writes, given at a block parameter, takes the
-  variables first and hands them back first at each call of the callee's copy, as §32's
-  capabilities do (#586; the write was dropped). A closure that writes and is stored or
-  returned, a `run` that writes inside an expression, a control handler's body that writes and a
-  `for`'s `else` value that writes are refused by name. A lend or a borrow of a `let mut` place
-  writes it (its write in an arm was dropped). Each declaration's `let mut`s are its own. The
-  parser's joins are instances of one hand-on (`headOf`, `armOf`, `armIf`, `blockBody`,
-  `joinArms`, `joinHead` and `bindHead` deleted). No kernel, `CDerives` or checker change.
-
-- **0.84** (2026-10-19) — §41 (new, #613): `let mut`'s names resolved to their binders (R1) and
-  its writes (R2). In a surface body a binder of a name in scope is a new variable with a fresh
-  name, so threading never takes a shadowing `let` for the variable it shadows (#504 and its
-  broader form, #493); `x <- M` on a `let mut` assigns it; `let (x, q) = f(…, x, …)` rebinds the
-  place `x`; a program's declaration shadows an included module's (#590). Messages name binders
-  as written. No kernel, `CDerives` or checker change; the programs whose answers change are
-  listed in §41.
-
-- **0.83** (2026-10-19) — §19, *The clause's names in the continuation* (#575): condition 2 of the
-  direct call of a tail-resumptive clause is a checked fact. Each `handle` node records the frames
-  its handled computation holds (`inside`), pinned by its typed rule; the program's flow record
-  (`Checked.flows`) holds what may flow in a run of `main`. Run invariant: every handler frame a
-  run reaches is of a handle node of the program (`Checked.frame_of_node`). Theorem: a row none
-  of whose names the flow record may catch is unhandled in every continuation between a handler
-  and an operation it catches (`Checked.unhandledIn`). `bcc handled`; `corpus/handled.expected`
-  (`scripts/check-handled.sh`, a gate step). No change to `CDerives`, the relation, the machine, a
-  checker rule's acceptance, or any program's erasure, run output, goldens or counts.
-- **0.82** (2026-10-19) — §18, *Control effects*, and §19, *Clause kinds* (#574): the
-  elaboration writes a handler site's clauses inline in its `handle` node,
-  `handle_with[n]((V_r : T_r), (V_c : T_c)) M`, in place of binding them to variables first, so
-  each handler's erasure is `hnd (n, (qs, (V_r, V_c))) e` where it was
-  `(λhr. (λhc. hnd (n, (qs, (hr, hc))) e) V_c) V_r`. `handle_with` takes values; the checker
-  types the pair as `[handle]`'s value form over persistent slots (`rEffHandle`, `valFormB`). The
-  clause kinds read the node's own pair, through a `def`'s `use` node: `Env.vals` and the chase
-  through it are gone; `classify_sound` keeps its statement, and `classifyHandler_sound` gives
-  each kind's premise at the node's clause. The core programs that bound their clauses write them
-  inline. §19, *Handler sites*: the record travels with the site's sugar to its node, with its types
-  in the frame of the node's code (a generic stored generator's at the call's type arguments), the
-  checker elaborates it to core types and checks its operations against the node's `E`
-  (`siteOf_ops`); a counted loop's handler of a site's abortive operations has no record. No change
-  to `CDerives`, the relation, the machine, a checker rule, or any program's run output, goldens or
-  counts.
-- **0.81** (2026-10-19) — The joins at `match`/`if` (0.16; typed elaboration §5.2) at the head of
-  a binding (#581): in `let p = M; N`, `x <- M; N`, `x : A <- M; N` and `linear x <- M; N`, each
-  terminal of `M` hands on the enclosing `let mut` variables `M` assigns beside its value, and
-  they are rebound before `N`; a core `case` joins as a `match` does. Before, an assignment in an
-  arm of a head was lost after the binding. No kernel, rule or checker change; no existing
-  program's output, golden or count changes.
-
-- **0.80** (2026-10-19) — §3 (#570): four marked derived nodes, `divLit` (§39), `walk` (§16),
-  `selfCall` (§20) and `lendCell` (§35), each over its scheme's typed term, the first two with
-  their facts about the run; no node holds an untyped term (`[let-poly]`, tail-clause `[handle]`
-  and `reify` read them off their children), checked by `gen-pin.py --check`; a `def`'s body
-  checked at one lifetime context is placed at a larger one by `weakenΔ` when it has no borrow and
-  its type no binder; a `use` node records the elaborator's key of its `def`. `bcc check` reports
-  a `def` with type parameters as `checked once per instance` (was `checked at each use`). No
-  change to `CDerives`, `Core/`, the relation, the machine, or any program's erasure, run output,
-  goldens or counts.
-- **0.79** (2026-10-19) — §3, *What the checker returns* (#570): a node at a split carries both
-  parts' use masks, and its typed rule relates them to the parts' contexts (`SplitMasks`), so the
-  copy set of a split is its masks' (`TDerivesP.copies`), which §10's check reads; a binding's
-  node records the names it binds. §5, *Cell classes* (new): the checker carries each allocation
-  type's class, the types a cell of it may hold over its lifetime, closed under the typed term's
-  swaps; `scripts/check-cells.sh` compares them with the layout types' cell widths. No change to
-  `CDerives`, `Core/`, the relation, the machine, or any program's erasure, output, goldens or
-  counts.
-- **0.78** (2026-10-19) — §18, *Laws*: `TailResumes` has the right unit `(λx. R₀) X`, `R₀`
-  answering `x`, and the `β`-step of a `let` of a closed value; `tail_resumes` reaches the resume
-  under right-unit frames (`RetFrames`), which hand its answer on (`tail_resumes_answer`). §19,
-  *Clause kinds* (#571): `TailResumesAt` and `TailLeaf` have the right unit, and `OnPaths` and
-  `TailResumesAt` the alias `let k' = κ`; the classifier reads both (`tailLeafB`, `isVarB`), and
-  `classify_sound` keeps its statement; a clause is read through `use` nodes at any depth. Reclassified: a named handler's `k(v)` in tail position
-  (`once` → `tail`; `resume-or-cancel` where a path cancels, as `deadline`), and the BOXED-κ `log`
-  of `lib/async.bc` (`stored` → `tail`). New: *The clause's names in the continuation*
-  (`UnhandledIn`; the rows do not decide it, `unhandled_not_decided`). New: *Handler sites*: the
-  elaboration's record of each site on its `handle` node (`HSite`), checked against the node;
-  `bcc sites`. §39: the exit status is read from the site of `main_div_error`'s `handle` node, and
-  `Checked.exits` is gone. No change to `CDerives`, the relation, the machine, a checker rule, or
-  any program's erasure, compiled code, run output, goldens or counts; `bcc check`'s report of a
-  handler site changes where its kinds do.
-- **0.77** (2026-10-19) — §3, *Derived nodes* and *A `def` at its uses* (#560): a `def` is checked
-  once per key and placed at each use by a `use` node, its derivation there by weakening with the
-  live slots its absorption takes (`TDerivesAt.weaken`, `TDerivesP.weaken`); fixed schemes typed
-  by a `Core/` lemma are derived nodes, replacing `scheme`; the elaborator marks a string
-  literal's table (`Val.mark`), and the checker builds its derived node (§17). §11: a `def` that
-  names an extern is checked once per key. No change to `CDerives`, `Core/`, the relation, the
-  machine, or any program's erasure, `bcc check` output, goldens or counts.
-- **0.76** (2026-10-18) — §19, *Clause kinds* (#561): at `[handle]` the checker classifies each
-  operation's clause (abortive, tail-resumptive, tail-resumptive with state, resume or cancel,
-  resume once, stored) from the typed term of the clauses' binding, and records the kinds with
-  the qualifiers on the `handle` node; each kind gives its law's premise at the clause's erasure
-  (`classify_sound`, `Core/ClauseKinds.lean`). §18, *Laws*: `TailResumes` runs through the body
-  of `let x = e` too. §18, *Reports*: a handler site's operations are rendered from the checked
-  kinds; the report channel among the elaboration's origins is typed (`Origin`), not tagged text.
-  §3: the kinds are a field of the node the derivation does not constrain. The gate compares the
-  kinds with the backend's lowering (`scripts/check-kinds.sh`, `corpus/kinds.expected`). §14:
-  `effHandleT`'s clauses are an instance of the `tail` kind (`tailClause_premise`). No change
-  to `CDerives`, the relation, the machine, a checker rule, or any program's erasure, output,
-  goldens or counts.
-- **0.75** (2026-10-18) — §14, *The effect `Div` in the kernel* (new, #563): `Div`, the reserved
-  name `divEff` with `tick : 1 ↠^lin Next`, and the constants `iterate` (one machine step),
-  `div_fuel` and `reify_res`, each a rule of `CDerives`. The relation at a row that holds `Div` is
-  `cwp`, the greatest fixed point over segments with `Closing` (`effWp`). `ewp_frame_plain`,
-  `ewp_frame_then` and `ewp_handle` are stated once at `opTable T ∨ Π`. `[handle]` around a
-  computation that ticks is `effHandleT`, at clauses that resume `κ` in tail position (decision
-  68); `effHandleV` and `effHandleVB` ask their rows not to hold `Div`. Finalisers are total
-  (decision 69): `[then]`'s finaliser row does not hold `Div`, and the theorem is open.
-  `fundamentalC`, `adequacyC` and `total_every_run` keep their statements; `divFuel_every_run`,
-  `runtime_every_run`, and the kernel program `div-residual` (`3`, `live 0` at every stage). §19,
-  *Divergence*: the greatest fixed point at a row that holds `Div` replaces "there is no second
-  fixed point". The typed term (§3) has a generated node per new rule, `iterate`, `divFuel`, `reify`
-  and `effHandleT`, each with its `TTied` builder. The backend replaces `iterate` by its fixed
-  point (`expandIter`). The frontend
-  writes no `Div`; every corpus output, golden and count is unchanged.
-- **0.74** (2026-10-18) — §3, *What the checker returns: the typed term* (#559): the checker
-  returns a typed term with one node per rule application and a generated typed derivation that
-  projects to `CDerivesAt`/`CDerivesP`; the checked term is its erasure. §10: `clone(x)` is a core
-  form, recorded on its node, and the check of implicit copies reads the typed terms; the typed
-  IR inferred on core after the sugar, and `bcc tir`, are removed. §39: `main`'s exit status is on
-  the checked `main` (`Checked.exits`). No change to `CDerives`, the relation, the machine, a
-  checker rule, or any program's erasure, output, goldens or counts.
-- **0.73** (2026-10-18) — §39, *The exit status* (#558): the elaboration's record that `main` is
-  served `Fail[DivError]` is a field of the elaborated program (`Elaborated.exits`), not an
-  origin string, and the checker's `Report` carries the elaborated program it checked
-  (`Report.el`). The backend reads `main`'s program and `exits` from it and does not elaborate
-  the program a second time. No change to `CDerives`, the relation, the checker's rules, a kernel
-  program, or any program's output, goldens or counts.
-- **0.72** (2026-10-18) — §19, *Lowering* (#544): a clause is tail-resumptive when every path
-  through it ends in one resume of `κ` in tail position, each arm of a `case` with its own, not
-  only when its last call is the resume. §18, *Laws*: the resume commutes out of the arms
-  (`tail_resumes`, `Core/Handlers.lean`). `corpus/for-yield-branch.bc`.
-- **0.71** (2026-10-17) — §40 (new, #529): the native target. `bcc compile --target native`
-  prints LLVM IR from the flat IR, `bcc run --native` builds it with `clang` beside a C runtime
-  (the allocator with the Wasm runtime's semantics, the POSIX platform of §11 and §34) and runs
-  it. Tail calls are `musttail` between functions of one prototype per tail-call class; several results a struct by value, through a
-  pointer when wider than the target's result registers; words are real pointers and the data a
-  global (`Op.dataAddr`, `Exp.data`). No host operation is undefined or poison where SPEC gives
-  an answer. `scripts/compile-native.sh` joins the gate: the corpus, the kernel programs and
-  every host operation native against the flat IR, counts agreeing, tail-call loops in 64 KiB of
-  stack. No change to `CDerives`, the relation, a kernel program, or any program's output, WAT
-  or counts.
-
-- **0.70** (2026-10-17) — §8 and §37 restated (#528, decision 66): the integer and float
-  operations are the language's own, defined on bit-vectors as `wasmHost` computes them; Wasm and
-  native code implement them. A shift or rotation masks its amount (the behaviour already; the
-  wording is new). The sign and payload of a NaN an arithmetic float operation answers are
-  unspecified (Rust RFC 3514), amending 0.67's canonicalisation: `Host.Conforms` is the set of
-  allowed hosts, `wasmHostAt r` conforms at every resolution `r` and `wasmHost` (canonical) is
-  one; every theorem holds at each, unchanged; noninterference and engines whose choice is not a
-  function of the operands are §37 *Open*. The compiled code no longer tests each float result
-  for a NaN; the closure-IR and flat-IR interpreters run at two other resolutions, so a program
-  whose output depends on the choice fails the harness. `corpus/float-compare.bc` takes its NaN by
-  its bits (its output unchanged). The flat IR's documentation is target-neutral: its operations
-  are SPEC's, and the data's address (`16384` in Wasm) is the target's. No change to `CDerives`,
-  the relation, the machine, a kernel program, or any program's output, goldens or counts.
-
-- **0.69** (2026-10-17) — §39 (new, #513): integer `/` and `%` at `i32`, `i64` and `u8`, and
-  `div_euclid`, `rem_euclid`, `checked_div`, `checked_rem`. A division with no answer (a zero
-  divisor, `MIN / -1`) raises `Fail[DivError]` (`lib/arith.bc`), an instance of `Fail` beside a
-  program's own (§38), handled by `to_result`, `default` and `map_err`. The effects pass decides a
-  division's row at its operands' width, in the walk that reads the instances, and writes one that
-  can fail as the checked division and a `raise` before rows are inferred (a width it cannot read
-  is taken to be able to fail). A nonzero literal divisor (not `-1` for `/`) performs nothing and
-  is the bare instruction; a variable divisor costs one test. A `Fail[DivError]` that reaches
-  `main` is served by `main_div_error`: the unwind runs the finalisers, the error is written on
-  standard error, and the program exits with status 1 at every stage (`<name>.status` in the
-  harness). `int-slash` moves from `corpus/reject/` to the corpus; new programs `div-recover`,
-  `div-unhandled`, `div-innermost`, `div-own-fail`, `div-abstraction`, `div-overflow`,
-  `div-euclid`, `div-infer`, `div-recursive`, `div-literal`, `sugar/div-literal`, and the reject
-  `div-row-unlisted`; six programs rewritten with `/` and `%` at their outputs and counts. §8
-  *Open*, §37 *Surface* and §38 *Open* updated. No change to `CDerives`, the relation, the
-  machine, a kernel program, or any existing program's output, core or counts.
-
-- **0.68** (2026-10-17) — §38 (new, #519, #155, #516): instances of an effect. An instance is an
-  effect at its type arguments; a row holds an entry per instance, with names
-  (`with src: Kube, dst: Kube`); an operation's type arguments are read off its argument's type,
-  a template call's off its arguments', at the declaration's own types, by the typed elaboration's
-  inference before effects are resolved. An operation goes to the innermost handler of its
-  instance; `with n = h(…)` names a handler and `n.op(v)` performs at it, a named entry is served
-  by the handler of its name; an operation two instances in scope could serve is an error that
-  asks for an ascription or a name. Abstraction safety: a row's entries are slots resolved at the
-  template's types, never merged by instantiation (a handler site's types are now instantiated
-  with a template, `HInfo.subst`). Several sites in one counted loop's body; a stateful handler's
-  function of its state at the row of its `with` (#514). §18 *Not provided* loses a second
-  instance in a row and two sites in a counted loop's body; §18 *Open*, §19 *Names* and §34 point
-  to §38. New corpus programs `effects-instances`, `effects-abstraction`, `effects-named`,
-  `effects-fail-list`, `effects-cancel-two-sites`, `effects-row-inferred`, and four rejects;
-  `corpus/reject/effect-error-type.bc` raises a literal, its old form now inferred. No change to
-  `CDerives`, the relation, the checker's rules, a kernel program, or any existing program's core,
-  output, counts or reports.
-
-- **0.67** (2026-10-17) — §37 (new, #499): floats. `f32` and `f64` are two more widths of
-  `VTy.int`, with literals given by their bits and Wasm's float instructions as host operations
-  (arithmetic, `min`/`max`/`copysign`, `abs`/`neg`/`sqrt`/`ceil`/`floor`/`trunc`/`nearest`, the
-  IEEE comparisons, the conversions); float-to-integer `trunc` answers a sum where Wasm traps,
-  `trunc_sat` is total. Every engine makes an arithmetic NaN result the canonical NaN (Wasm's
-  deterministic profile), so all agree bit for bit. The surface reads decimal float literals,
-  correctly rounded, and dispatches `+ - * /` and the comparisons at the float widths; `/` is
-  only at floats. A float has no equality, hash or order provider: `total_cmp_*` and the
-  `OrderedFloat` key `ord_*` give IEEE `totalOrder`. `lib/float.bc`: the operations by name,
-  conversions, shortest round-trip printing (Burger–Dybvig, exact) and correctly rounded parsing.
-  §8 *Open* updated. New corpus programs `float-arith`, `float-compare`, `float-convert`,
-  `float-ordered`, `float-roundtrip`, `leetcode/heaps/0295-find-median-from-data-stream-f64`.
-  No change to `CDerives`, the relation, the checker's rules, a kernel program, or any existing
-  program's output or counts.
-- **0.66** (2026-10-17) — §36 (new, #508, from #489): `poly` families, a family of functions with
-  one case per type, chosen as the most specific case whose head the type argument matches; a
-  second case at a type, or two overlapping cases neither more specific, is an error at the
-  declaration. Operators are families: their cases at the integer widths are the host's
-  instructions, as before, and a program's case at another type makes the operator work there.
-  `lib/key.bc`: `equal`, `hash` and `order` over views, at the integers, `1`, pairs, sums, arrays,
-  views and buffers. `lib/map.bc`: the hash map and set, a plain value (a trial), `map_get` a view
-  through the map lent fieldwise. Elaboration: `borrow imm *g { … }`, a record of arrays lent
-  fieldwise, a lend to a function with several lifetime parameters, a type read off a place lent
-  at a parameter of its own type. New programs `poly-operators`, `poly-providers`, `map-views`;
-  eight pending programs accepted (`aoc/2024-01`, `2024-11`, `2022-21`, and LeetCode 1, 49, 128,
-  217, 347); four rejects. No change to `CDerives`, the relation, the machine, the checker, the
-  backend, a kernel program, or any existing program's output or counts.
-- **0.65** (2026-10-16) — §35 (new, #500): the backend's implicit allocations. A cell the
-  elaboration scopes to one borrow (a lend of a value, `modify` of a value, a handler's state
-  given as a value) is a slot of its code's frame when no suspension crosses its scope, on a Wasm
-  shadow stack (`$sp`); the capability cells are words of the program's data; a recursive type
-  boxes a sum's payload in place of its payload's recursive fields when that boxes fewer (a tree
-  is one object a node, an empty child none); the arguments' memory counts in `$allocs`. The
-  allocations that remain are said in the library's comments and §35. New corpus program
-  `async-lend-slots`; `bcc-counts --sites` reports the scoped cells. Counts fall (`rec-tree` 254 →
-  127, `tree-map` 58 → 29, `rec-deep` 60040 → 30040, every I/O program's capability cells), but
-  `io-args`'s (7 → 6, its reservation counted). §11's and §34's *Lowering* updated. No change to
-  `CDerives`, the relation, the machine, the elaboration, a kernel program, or any program's
-  output.
-- **0.64** (2026-10-16) — Library only (#198, #201, #203, the LeetCode corpus in
-  `corpus/leetcode/`): §17's `lib/buf.bc` gains `heap_peek`, the least element of a heap read
-  without taking it out. Ordinary library code over existing constants. No kernel, checker,
-  elaboration or backend change; every existing program keeps its output and counts.
-- **0.63** (2026-10-16) — Library only (#490, the Advent of Code ports in `corpus/aoc/`): §17's
-  `lib/buf.bc` gains `array_set` and a binary min-heap over a buffer (`heap_push`, `heap_pop`),
-  and `lib/text.bc` the integers of a view folded into a state (`fold_i32s`, `fold_i64s`); §34's
-  `lib/io.bc` gains `dec64_each` and `print_dec64`. Each is ordinary library code over existing
-  constants, every loop counted. No kernel, checker, elaboration or backend change; every
-  existing program keeps its output and counts.
-- **0.62** (2026-10-16) — §34 (new, #156): the standard streams, the clock and the arguments as
-  answering effects (`lib/sys.bc`), the clock's time `i64` nanoseconds, monotonic, saturating at
-  `2^63 − 1` (the user's decision), whose outermost handler is the WASI preview 1 platform
-  (`lib/wasi.bc`), its handlers' state lent to their clauses (`handler h(&mut s: S)`), each clause
-  a direct call of an extern; `main` alone is given them ambiently, holding the cells and lending
-  one to each operation, and every other function by its row; answering operations with lifetime
-  parameters; a task of `spawn_in` given the capabilities its body uses, lent for the borrow block
-  around its spawn (PROPOSED); the laws of each effect. New opaque kinds `clock` and `args` with
-  their externs' models and proofs (`clockNow_meets`, `clockSleep_meets`, `readArg_meets`, and the
-  harness's). `lib/io.bc` and `lib/textio.bc` rebuilt on the platform's handlers, with
-  `print_dec`, `eprint_dec`, `print_lit`, `print_str`, `print_string`, `eprint_lit`, `eprint_str`,
-  `read_input`, `next_arg`, `ns_of_ms`. `bcc trusted` lists the externs `main` reaches; `corpus/trusted/` pins
-  six. Program arguments: `bcc interp … -- arg…`, `bcc run <file> arg…`, `<name>.args`. Backend
-  fixes: a code that suspends at operations of different answer types (#485), and a resume code's
-  cancel arm injecting one binder at two types (#486). New corpus programs `io-effects`,
-  `io-upper-effects`, `io-args`, `io-task`, `reconcile-clock`, `io-laws`, `answers-two-types`,
-  `loop-row-answer`; `needs-stdout` moved from `pending/`; reject `io-unlisted`; pending
-  `io-two-tasks`; reports `io-effects`, `io-task`, `needs-stdout`. **`reconcile-chain` changes its
-  output on purpose**: without its simplifications around #485 and #486 it has a service with a
-  state and a clock whose `sleep` answers, and answers the service's count too, at `28 3 0` (from
-  `25 0 0`). `corpus/reject/include-unknown.bc` and `corpus/pending/effects-generic-store.bc`'s
-  messages, and `corpus/pending/async-progress.bc`'s position, re-recorded. §11, §18 and §33
-  updated. No change to `CDerives`, the relation, the machine, `PinLaw`, a kernel program, or
-  another program's output or count.
-
-- **0.61** (2026-10-16) — §33 (new, #161 part A): computation parameters, a parameter whose type
-  has a provided row, `!(A => B with E…)` (PROPOSED spelling), whose provided control effects the
-  callee serves at its ports (decision 57) and whose other effects tunnel to where the argument is
-  written; a function named at a parameter of function type is the block that calls it, so
-  `f(g)` and `f({ x -> g(x) })` are one argument; `|>` (decision 50): a handler stage is `with`,
-  a computation parameter first takes the piped value suspended, any other function takes it
-  first. The laws `m |> h ≡ with h { m }`, associativity, pass-through and lexical blocks, with
-  what each rests on (associativity across function stages is *Open*). An annotated binding whose
-  head performs operations of the row is elaborated at the row (a `with` in a counted loop at a
-  resuming row). New corpus programs `comp-param`, `pipe-handlers`, `gen-pipeline-pipe`,
-  `reconcile-chain`; `effects-sum-gen` moved from `pending/`; reject `block-raise-lexical`; pending
-  `comp-param-two-sites`, `comp-param-capability` (#487), `comp-param-for`, which record what is
-  not provided yet (the port rule is provisional until relabelling); reports `comp-param`,
-  `effects-sum-gen`. **`retry-block` changes its output on purpose**: its `retry` takes a
-  computation parameter and retries, `((inl i32[200], i32[30]), (inr i32[503], i32[10]))` where
-  it answered `((inr i32[503], i32[0]), (inr i32[503], i32[0]))`; its counts are unchanged. Stored
-  callbacks with a row (part B) stay *Open*, with the options written in §33 *Open*. §11, §14,
-  §15, §18, §24, §30 and §32 updated. No change to `CDerives`, the relation, the machine,
-  `PinLaw`, the checker, the backend, a kernel program, or another program's output, count or
-  report.
-
-- **0.60** (2026-10-16) — §32 (new): `Async`'s `log`, `spawn_logged`, `lpush` and `run_logged`
-  (A5); A6 on the library; blocks that use capabilities (an answering handler's state, a `for`'s
-  threaded variables), passed with the block at each call; a handler's lifetime parameters, at
-  the meet of the lifetimes in scope, and `spawn_in`, `queue_in`, `push_in`, `run_in` (tasks over
-  an outer borrow). A function with a row passed as a value stays refused, deferred to #161
-  (§32 *Open*). New corpus programs `async-logged`, `async-cancel`, `async-scoped`,
-  `block-yield-inner`, `block-capability-inner`, `list-capability`, `async-workers-scoped`; moved
-  into the corpus: `yield-callback` (from `pending/`), `block-capability` (from `reject/`); reject
-  `spawn-in-unscoped`. `experiments/AsyncCap/bc/a5-effects.bc` and
-  `a6-cancel.bc` removed (in the corpus). The reports of `async-scheduler` and `async-map` name
-  `log`. §28 *Open*, §30 *Not provided* and *Open* updated. No change to `CDerives`, the relation,
-  the machine, `PinLaw`, the checker, the backend, a kernel program, or an existing program's
-  output or count.
-
-- **0.59** (2026-10-15) — Elaboration hygiene (#481): a control handler's parameters are bound
-  at each `with` under fresh names, and a local named as a declaration of the program or of a
-  library the elaboration brings in is renamed in its scope (`Frontend/Elab/Hygiene.lean`), so a
-  handler's parameter no longer captures the body's or the continuation's variable of its name,
-  and a handler clause, an effect's resolution or generated code no longer resolves a
-  declaration's name to a user's local. New corpus programs `hygiene-*` (thirteen). No change to
-  `CDerives`, the relation, the machine, a kernel program, or an existing program's output or
-  count.
-
-- **0.58** (2026-10-15) — §31 (new): generic recursive groups (type and lifetime parameters,
-  layers, the heap driver), blocks with a row given to generic functions, and three inference
-  fixes (a nested template call typed at its parameter; a pair as the last argument, #135; a core
-  `def[A]` calling a template, #136). `lib/list.bc`; `lib/async.bc` includes it. New corpus
-  programs `list-generic`, `list-blocks`, `rec-generic-mutual`, `rec-generic-layer`,
-  `rec-generic-deep`, `rec-lifetimes`, `generic-pair-arg`, `generic-in-def`,
-  `text-lend-lifetime`; rejects `rec-generic-params`, `rec-name-clash`, `double-use-in-callee`.
-  `async-map` (A4) uses the generic `map`, with its output and counts unchanged; `quicksort` loses
-  its three ascriptions. §9, §17 *Open*: the stale inference lines removed; §20, §21, §30 *Not
-  provided* and *Open* updated. No change to `CDerives`, the relation, the machine, a kernel
-  program, or an existing program's output or count.
-
-- **0.57** (2026-10-15) — §30 (new): effectful blocks at the surface (#161, called-only: a
-  closure passed at a parameter of function type performs at the sites where it is written, and
-  the callee is copied at the block's row; its type names no effect), a counted loop whose body
-  resumes at a `with`'s site as a loop at the row (`bounded_fix` over the count; §16 *Effectful
-  bodies* narrowed, generators unchanged), BOXED-κ from a surface handler whose clause unboxes `k`,
-  and `lib/async.bc` (`Async`, `spawn`, `resume`, `cancel`, `queue`, `push`, `run_until_empty`).
-  The lowering of abortive operations reads a `sel` code's raised keys per projection. New corpus
-  programs `async-scheduler` (A1, `24 6 0`), `async-map` (A4, `29 4 0`), `effects-hof-two-rows` and
-  `effects-tunnel` (E1 and E6 from source, moved from `pending/`, `0 0 0`), `capture-await-raise`,
-  `capture-store-raise`, `rec-await-exhausted`; rejects `block-stored`, `block-capability`. §15,
-  §16, §18 and §28 *Open* updated. No change to `CDerives`, the relation, the machine, a kernel
-  program, or an existing program's output or count.
-
-- **0.56** (2026-10-15) — §29 (new): a borrow held across a suspension. R1 (`lendR`), with R2
-  (`lendLoopR`) and `nilDead`, in the extended judgment `CDerivesP`, generated from `CDerives`;
-  `PinLaw`, the named hypothesis of `fundamentalC_pin`, `adequacyC_pin`, `adequacyD_pin` and
-  `adequacyD_pin_safe`. The checker emits R1 for a `mut` borrow block of an owned cell whose body
-  performs a resuming operation (`withbor2r`), returns a `CDerivesP` derivation, and a `CDerives`
-  one when no relaxed rule is used; `bcc check` prints the program's assurance and `bcc trusted`
-  lists it. No change to `CDerives`, the machine, the relation or the statement of `fundamentalC`,
-  `adequacyC` or `adequacyD`; the checker's soundness theorems take `pins = []`.
-
-- **0.55** (2026-10-14) — §28 (new): BOXED-κ, `[handle]` whose capturing clauses receive their
-  continuation boxed at `@d`, given that the handled computation's context and every non-abortive
-  answer type of its row outlive `@d`. `CDerives` and `CDerivesAt` gain `effHandleVB`, its case in
-  `fundamentalC` `handleV_compatCB`, by the stop lemma (`stop_lemma`), with no new invariant. The
-  inversions read a clause tuple bare or boxed (`clausesTyO`), and every refutation of §19 and §27
-  stays proved. The checker emits the rule at `handle_with` when the clauses' type boxes `κ`. New
-  corpus programs `sched-a`, `sched-a-div`, `sched-b` (counts `63 18 0`, `31 5 0`, `64 18 0`) and
-  rejects `sched-b-div`, `sched-c-equal`, `sched-c-outside`, `boxed-kappa-context`,
-  `boxed-kappa-answer`. No change to the machine, the relation, an existing program's output or
-  count, or the statement of any theorem.
-
-- **0.54** (2026-10-13) — §26 *Baseline*: the checker emits `[λ-dead]` for `fun (x : 1) -> M` at
-  `1 -o F_Σ B` whose body does not use `x`, and `[λ]` otherwise; every program erases as before,
-  and a callback whose answer is a `!` promotion, which `[λ]` does not type, is accepted
-  (`corpus/core-callback-dead.bc`, counts `0 0 0`). §24 *Theorems*: a term holding a closed
-  λ-value is `[let-poly]`'s premise term for the let that binds it once, by weakening by consumed
-  slots inside a context (`CDerives.insert_dead`, `CDerivesAt.insert_dead`); the let's body is
-  computed (`Expr.unfill`, `subst_unfill`), and a derivation of the term gives the let's
-  (`CDerives.letPoly_copy`, `CDerivesAt.letPoly_copy`); E1's, E2d's and E10's copies unfill to
-  their lets' bodies (`threeUses_unfill`, `sumGenUses_unfill`, `timeoutUses_unfill`). §18 *Rows*
-  and *Baseline*, §24
-  *Baseline*: the checker's copies, a `def`'s body at each use, are that premise term, and a
-  checked program's derivation gives the let's (`checkProgram_letPoly`); the checker does not emit
-  `[let-poly]`. §18 *Open* and §24 *Open*: the effect properties E1, E2d and E6 from source wait for
-  effectful callbacks (#161), recorded as pending programs (`corpus/pending/effects-hof-two-rows.bc`,
-  `effects-sum-gen.bc`, `effects-tunnel.bc`). `DecidableEq` on `Expr` is derived in
-  `Core/LetCopy.lean`, where the checker reads it. No change to the machine, the relation,
-  `CDerives` or the statement of any theorem.
-
-- **0.53** (2026-10-13) — §24 *Lowering*: a `[let-poly]` let whose uses are at different rows is
-  lowered per use, as its β-reduct. The backend finds the rows by converting every such let as its
-  β-reduct, its uses marked, and comparing what the lowering's analysis finds of each use; a let
-  used at one row converts as before, and every corpus program and every earlier kernel program
-  compiles to the same WebAssembly (`Backend/Clos/Poly.lean`). §24 *Open*'s lowering gap is
-  closed: `hofTwoRows`, `sumGen` and `timeoutProg` are the kernel programs `hof-two-rows`,
-  `sum-gen` and `timeout`. §19 *Programs*: E4 under a handler of `tick` that resumes,
-  `deepGenPlain`, typed and run (`dAt_deepGenPlain`, `deepGenPlain_run`), is the kernel program
-  `deep-gen-plain`; the shape `poly-id` is a let whose uses differ in row only through what it
-  answers. Their counts are measured, each zero (new rows of `corpus/kernel-counts.expected`; no
-  existing row changes). §24 *Open*: a let used at different value types, and one used at one row
-  with different closures. No change to the machine, the relation, `CDerives` or the statement of
-  any theorem.
-
-- **0.52** (2026-10-13) — §19 *Programs*: the effect properties as Core programs. E1, E2d, E4,
-  E5 in both orders, E6, E7a/b/d, E8b, E9a/b/c and E10, each a closed term with a derivation tied
-  to the effect context `ΞE`, which has no unrestricted abortive operation, and a run computed by
-  `runM` to its answer at the empty memory (`Core/EffTier1Programs.lean`); a tied derivation
-  weakens by consumed slots (`CDerivesAt.append_dead`). §19 *Laws* item 3: static per-site names,
-  `tunnel`. §24 *Theorems*: `[let-poly]` types E1, E2d and E10's let-bound functions; §24 *Open*:
-  their let forms are not lowered when the uses are under different handlers. §26: the programs'
-  callbacks are `[λ-dead]`'s. §27 *Typing*: E5 and E9 are Core programs at an affine `exn`. New
-  kernel programs `deep-gen`, `nested-log-outside`, `nested-fail-outside`, `tunnel`, `e7a`, `e7b`,
-  `e7d`, `e8b`, `stored-k-resume`, `stored-k-cancel`, `stored-k-fin`, their counts measured (new
-  rows of `corpus/kernel-counts.expected`; no existing row changes). No change to the machine, the
-  relation, `CDerives` or the statement of any theorem.
-
-- **0.51** (2026-10-13) — §19 *Laws* item 6 and §27 *Programs*: the rejections of decision D3 are
-  Core theorems, each by inversion of `CDerives`. `progT` has no derivation at a row without `2`,
-  `progNCrecT` none at all, and E7c (`e7c`) none at a row without its inner `exnᵢ`; at the row of
-  `exnᵢ`, E7c is typed by a tied derivation (`Core/EffCancelTyped.lean`). The inversions read the
-  rows a computation is read at: `[handle]`, `[then]`, `[perform]`, `[raise]`, `[let]` and `bind` at
-  their conclusions, and the rules that conclude with their premise's term only grow rows
-  (`Core/Inversions.lean`). §19 *Laws* item 5: `cancel_prefix`'s hypotheses are met by a program
-  whose effect context has no unrestricted abortive operation, `progOutT` at an affine raise of `2`
-  (`progOutTA`, `Core/EffCancelRuns.lean`). No change to the machine, the relation, `CDerives` or
-  the statement of any theorem.
-
-- **0.50** (2026-10-13) — §19 *Laws* item 4: a continuation is used as its qualifier allows. At a
-  resuming linear or affine operation a clause that drops `κ`, resumes it twice, or cancels and
-  then resumes it has no derivation, and at a linear one neither has a clause that cancels it;
-  `forget κ` has none at `1`. §19 *Programs*: four programs no derivation types (`at05`, `at06`,
-  `at08`, `at13`), each by inversion of `CDerives` (`Core/Inversions.lean`,
-  `Core/Rejections.lean`), and `at08`'s typed control, the kernel program `at08-once`. §24 *Open*
-  keeps OQ-7 alone: S5 at every instance of its parameter is in *Theorems*, the use of a continuation
-  is §25's, and Core's row polymorphism by `[let-poly]` is in *Typing*. No change to the machine,
-  the relation, `CDerives` or the statement of any theorem.
-
-- **0.49** (2026-10-13) — §19 *Laws* items 5 and 6: a cancel is not interceptable and the cancelled
-  region's frames are dead, and the finally law, read on every run. From a raise pending under
-  finaliser frames, and from the start of a continuation's cancel run, every path is a prefix of
-  the trace that fires the frames' finalisers innermost first, each running alone; a finaliser's
-  raise supersedes an unwind's, a cancel keeps the first error and passes a running finaliser's
-  `cfin`, and the canceller gets `()` or the kept error (`Core/EffCancelRuns.lean`). The hypothesis
-  is a typing of each fired finaliser at a row of abortive operations; a finaliser that performs is
-  *Open* (§27). §24 *Open* no longer lists other instances of S5's parameter. No change to the
-  machine, the relation, `CDerives` or the statement of any theorem.
-
-- **0.48** (2026-10-13) — §19 *Typing*: the names a run raises. A tied term is at its effect
-  context's names, no step leaves them, and every cancel its runs reach keeps errors of those names
-  (`Core/RaiseNames.lean`). No change to the machine, the relation, `CDerives` or the statement of
-  any theorem.
-
-- **0.47** (2026-10-13) — §19 *Typing* (decision R): a program gives each operation one
-  signature. `CDerivesAt Ξ` is `CDerives` with `[perform]`, `[raise]` and `[handle]` reading rows
-  tied to the effect context `Ξ`, and a tied derivation is a `CDerives` derivation. The checker
-  builds every derivation tied to its program's effect context, and rejects a program whose rows
-  give one operation two signatures. §18 (decision 63's restriction, 2026-10-12): an abortive
-  operation is affine, so `multi ctl op(…) -> never` and an unrestricted operation answering `0` in
-  a core row are rejected; §27 records E5 and E9 at an unrestricted `exn` as restricted out and no
-  longer *Open*. §19 *Laws* item 9 states that a typed closed program's raises are caught. No
-  change to the machine, the relation, `CDerives` or the statement of any theorem; every corpus
-  program checks as before.
-
-- **0.46** (2026-10-12) — §19 *Laws*: the equations and semantic choices the effect system is
-  decided to satisfy, each with the Core theorem that states it: the deep handler laws at the
-  capture cell and algebraicity at an abortive operation (`Core/EffMachine.lean`), and the safety
-  of a typed closed program's runs (`Core/EffSafety.lean`, `Core/EffPrograms.lean`), over the run
-  facts of `Core/Steps.lean`, `Core/Closed.lean` and `Core/Run.lean`. No change to the machine,
-  `CDerives`, or any statement.
-
-- **0.45** (2026-10-09) — §27 (decisions D2 and D3 of 2026-10-08): finalisers with effects. Each
-  operation whose continuation may be cancelled carries a cancel row, what that cancel may do;
-  `[sub]` lets cancel rows only grow, `κ`'s cancel branch is at `F_{F_i ⊕ Σ} 1`, and `[sub]` where
-  the cancel is invoked asks a finaliser's raises and operations to have a live instance there.
-  `[then]` types its finaliser at its own row, each cancel row of its computation above the cancel
-  row combined with the finaliser's (`⋈`); its unrestricted premise is read at some depth, and the
-  errors pending at the finaliser are persistent when the finaliser's row has an unrestricted
-  operation. §24's `[then]` is a derived rule. §19's *Typing* and *Finalisers that perform
-  operations* point to §27. No change to the machine, `wpTS`, `wpG`, `ewpTS`, `[let]`, the
-  statements of `fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD` or any borrow rule, and
-  every existing derivation types at empty cancel rows.
-
-- **0.44** (2026-10-09) — §19 (decision D1 of 2026-10-08): deadness by frame. `κ`'s cancel branch
-  runs the cancelled region with its handler frames and cancel delimiters removed (`Kont.dead`),
-  so a dead frame catches nothing, and a finaliser's raises and operations reach the nearest live
-  instance of their name. The cancel state is the kept error alone, the first winning (`N` and the
-  by-name suppression removed). A cancel that reaches a running finaliser's `cfin` keeps that
-  finaliser's cancel's error, the earlier one (`[cfin-cancel]`). `prog` now ends at a raise no
-  handler catches, and leaves the compiled kernel programs; `cancel-reentered` and
-  `cancel-propagated` join them. The lowering keeps the first error (the mask is removed).
-  `then_compatC` takes its finaliser at the pure row (§24's rule); the abortive-row rule fails
-  under dead regions (`not_thenAbort_compatC`). No change to the statements of `fundamentalC`,
-  `adequacyC`, `fundamentalD`, `adequacyD` or any borrow rule, and every typed program runs as
-  before.
-
-- **0.43** (2026-10-08) — §26 (decision E): `[λ-dead]`, a λ whose binder is dead at `1 ⊸ F_Σ B`,
-  so a closed callback body at any row is passed as `λ_. M`. No change to the machine, the relation
-  or any borrow rule.
-
-- **0.42** (2026-10-08) — §25 (decision S6): the capture cell. At a linear or affine operation
-  `[op]`'s `κ` owns a unit cell, allocated by the ordinary allocator and freed when `κ` is used; a
-  linear `κ`'s cancel branch has no step. The handler value carries its operations' qualifier tags,
-  which `[handle]` writes. §19's *Terms and machine* and *Typing* revised, §24's *Open* revised. No
-  change to the relation, the effectful `wp` or any borrow rule. §25's *Open*: S4's catch law fails
-  as written at tier 1's typing; S6 there is reduced to two ownership properties of the cell.
-
-- **0.41** (2026-10-07) — §24 (decisions D3, D5): the polymorphic let `[let-poly]` (a closed
-  λ-value bound by substitution, so one function is used at several rows), the general `[handle]`
-  (§19's printed rule: the handler a value form over a persistent context; the two-variable form is
-  its instance), and `[then]`'s finaliser at the pure row (option A). §19's `[then]`, *As built*
-  and *Finalisers that perform operations* revised. No change to the machine or the relation.
-
-- **0.40** (2026-10-02) — §23 (#243, from #241): non-strict outlives. The box rule of the outlives
-  judgment and the side condition of the borrows that lend a payload `mut` take `⊑`, extensions
-  read against the paper's model (`Paper/` unchanged). `main` runs under a lifetime of its own,
-  `'main`, and an undetermined lifetime argument is `dom`; a cell of no words allocates nothing; a generic function's lifetime parameter may be
-  bounded by a type parameter, `where S: 'c`. §22's *Bounds* and *Open* revised. Decision 61.
-
-- **0.39** (2026-10-02) — §22 (#239, from #236): the affine closure. §7's positivity admits an
-  observation that takes a closed argument (`A ⊸ D`) and a boxed rest (`[@a] U X`), and the
-  affine closure `Aff^c A B ≜ νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`, with observations `call` and
-  `close`, is an instance: a library declaration (`lib/aff.bc`) with derived introduction, call,
-  call through `Mut`, close and coercion rules. A `type` declaration may take type and lifetime
-  parameters. §2's closure row is the new type; §7 and §12 name it. No new former, rule or index.
-  Decision 60.
-
-- **0.38** (2026-10-01) — §21 (#229, #216): closure conversion at the seams. A recursive group is
-  the bounded fixed point of its generator, taken at the record of its members and called
-  directly: the `rec` operation and its site are removed. A recursion may use an answering
-  capability (its environment, passed with the argument), perform an operation that resumes, and
-  have members with different result types. Layers are transformers of the generator, `with L
-  { … }`. A handler whose operations are all abortive runs its clauses after it, so they use its
-  arguments and the capabilities in scope (`default` takes an owned value); a handler whose
-  operations resume has a state, its parameters that are not `!` and the capabilities its clauses
-  use, and `k(v)` resumes. §20 revised; decision 24 revised; decision 59.
-
-- **0.37** (2026-10-01) — §20 (#188, stage 3; #158): recursion as an effect. A function that
-  calls itself, or functions that call one another, is a recursive group; its calls of itself are
-  its `rec` operation, and a driver chosen at the call site runs it. `bounded`, the default, is
-  the kernel's new constant `bounded_fix` (one `CDerives` rule and one machine step, sound by
-  induction on the budget at every row): a native recursion with a budget of depth whose end
-  performs `Exhausted` (`lib/rec.bc`), an abortive effect that unwinds. `deep`, the heap driver,
-  keeps first-order frames in one growable buffer and is div. §16: a `for` over data whose body
-  performs an operation that resumes is a div loop over the source's cursor. §19: a closed clause
-  that resumes with an answer computed under a finaliser that cancels the continuation is a
-  direct call; abortive payloads are variants. Decision 24 revised; decision 58.
-
-- **0.36** (2026-10-01) — §15 rewritten (#188, stage 2): generators on the iteration effect.
-  `Yield[T]` (`lib/yield.bc`, `ctl yield(x: T)`) is an ordinary library effect; a generator is a
-  function that performs it. A `for` over a call of one is a handler site whose operation threads
-  the loop's variables and whose clause is the loop's body, `break` and `return` cancelling the
-  continuation; total when the generator does not loop. A call where `U (pull A B R)` is expected
-  is the stored generator, codata whose handler keeps the continuation. A body at a row that loops
-  is one state machine of `Loop_Σ` that runs nothing until observed; `while` and `loop` are loops
-  of any div body, and a loop's body may loop except a counted loop's or a clause. The `gen`
-  former, `gen fn`, `gen { }`, `yield from`, callbacks that yield, the generator machine and its
-  fallback to nested binds, and `lib/gen.bc` are removed; delegation is a call. The adapters
-  are generic generators over stored generators. Capture finds suspension per projection and
-  keeps one code per suspension; a finaliser frame's clauses are one code. A generator that holds
-  a capability across a `yield` is pending (affine continuations have no residual).
-
-- **0.35** (2026-10-01) — §18 (#188, stage 1): control effects at the surface are §19's. An
-  effect's operations are answering (`fn`) or control (`ctl`, `linear ctl`, `multi ctl`); a
-  control handler names its body's type and its answer, and each `with` of one is a `handle` with
-  a static name of its own, resolved lexically; a function with a row is copied per assignment of
-  its effects to the handlers and sites in scope, with the sites' operations as its row. Errors
-  are the library effect `Fail[E]` (`lib/fail.bc`) with `to_result`, `default` and `map_err`;
-  the built-in `Fail`, `try`, `catch` and `map_err` forms and the sum schema are removed. An
-  abortive operation in a counted loop's body is handled at the step and performed again after
-  the loop; in a borrow block's body, the block is the unwinding borrow. The textual core reads
-  `F[…] A`, `perform[n.i]`, `abort[n.i]`, `handle_with[n]`, `unwind` and the unwinding borrows,
-  and the certifying checker builds §19's derivations, inserting the drop glue.
-
-- **0.34** (2026-09-30) — §19, *Lowering* (#205): a tail-resumptive operation, whose handlers
-  all have one closed clause that resumes in tail position and neither suspends nor raises, is a
-  direct call of the clause. A tail call shares its caller's convention only when it closes a
-  loop of tail calls or the caller has no resumption point of its own; any other tail call is a
-  resumption point, so a call reaches one resume code and does not dispatch.
-
-- **0.33** (2026-09-30) — §19, *Lowering* (#205): control operations are lowered to state
-  machines. A code that may suspend answers its outcome; its state is a flat `n`-ary sum per
-  resumption point, a caller's holding its callee's suspended computation; a handler drives its
-  body; `κ` resumes or cancels, and a cancel runs the state's finalisers innermost first, keeping
-  the first finaliser error of a name outside the region (decision C). Recursion through a
-  resumption point allocates one frame object per level, a call of several suspending codes
-  dispatches, and an unrestricted `κ` is copied. Every acceptance program compiles at every
-  stage; the lowering adds no allocation or dispatched call to its hand-written equivalent's.
-
-- **0.32** (2026-09-30) — §19, stage 5 (#186): the six acceptance programs, typed, run by
-  `adequacyD` and observed by `Support`'s interpreter (which gains §19's steps). The backend
-  lowers the abortive operations to branch-per-call propagation (`Unwind`). `bcc kernel` compiles
-  `Core`'s kernel programs at every stage. The lowering of control operations is *Open*.
-- **0.31** (2026-09-30) — §19, stage 4 (#186): the unwinding forms of `withbor` 1–3, `withload`
-  and the slice borrows, at a callback row of abortive operations with closed argument types
-  (`Row.Unwind`); the finaliser is a closed term at `src ⊸ F 1`, the source's destructor at the
-  elaborator; `withswap` has none. `F_Σ A` is an observation leaf of `ν` codata, and
-  `Loop_Σ A B` is positive.
-- **0.30** (2026-09-30) — §19, *Cancels* (#186): a cancel is not interceptable. The region's
-  handlers are dying and catch nothing. A finaliser's error during a cancel is re-raised at the
-  canceller (the first, of a name outside the region; the rest are suppressed). Machine:
-  `cfin`, `[finalise-cancel]`, `[cfin-ret]`, `[cfin-raise]`, `[cancel-raise]`. `[then]`'s
-  finaliser is at `F_{Σ^abort} 1`. The case that motivates it is `Core/EffCancel.lean`.
-- **0.29** (2026-09-30) — Entry 18 (§19, #186): native capture.
-  - **Operations** are answering (a call on a capability, §18) or control (captured).
-  - **Control operations are named per handler site**: static names, rows of names, and the
-    nearest enclosing handler of the name; forwarding and named instances follow.
-  - **Kernel additions:** the primitives `perform` and `hnd`; the machine steps `[ret]` and
-    `[op]` (deep, over a context free of the name); the returner `F_Σ A`; the rules `[sub]`,
-    `[perform]`, `[let]` (control-flow linearity at the unrestricted qualifier) and `[handle]`.
-  - **Semantics:** the effectful `wp` `ewpTS` over protocol tables, with `wpTS = ewpTS` at the
-    empty table.
-  - **Continuations** carry a structural qualifier: linear, affine, or unrestricted (relevant is
-    Open). Weakening is a continuation's destructor, unwinding. Abortive operations (answer `0`,
-    weakening), used for errors (#168), unwind eagerly. Unwinding uses `ubind` finalisers and
-    elaborator-inserted drop glue, and unwinding forms of
-    the borrow constants (an unwind crosses a borrow, LIFO, without T1). Every held continuation
-    has a `cancel` entry, and a finaliser that raises supersedes the pending unwind (K3 otherwise
-    Open).
-  - **Divergent effectful programs** are `ν` codata with effectful observations.
-  - **Acceptance:** `Log` + `Fail` in both orders, logging and raising inside a borrow, an
-    infinite logging loop, `take(n)` early exit, and cancelling a stored continuation.
-  - Stated here; the library follows stage by stage.
-
-- **0.28** (2026-09-30) — Effects S1c (§18, #154): the laws `handle_fold` (a handler is the
-  state-passing fold of its clauses over the operations performed) and `loop_abort`; the
-  acceptance of #18 restated as the laws, the counts and the reports. `bcc check`'s effects
-  reports in four kinds (`effect`, `row`, `lowering`, `call`), the lowering shape in Koka's cost
-  vocabulary, pinned by `corpus/reports/`. Generic functions with a row; a lend in a `Fail`
-  handler's body rejected with a message.
-
-- **0.27** (2026-09-30) — Effects S1b (§18, #153): `Fail`, the error effect: `raise`, `try`,
-  `catch`, `map_err`, and written rows `with …, Fail[X]`. A function that raises answers a sum,
-  a call of it is a branch, and an abort in a loop's body is the loop's exit (`count_try`). The
-  abort law (`abort_passes`, `return_resumes`). Destructors run on abort paths; a value with no
-  destructor cannot be abandoned. The library raises (`parse_i32`, `add_checked`, `mul_checked`,
-  `str_from_utf8`, `from_utf8`); a fallible fold has the counts of its sum version. K4 recorded as
-  open. No kernel, rule or checker change.
-
-- **0.26** (2026-09-30) — Effects S1a (§18, #152): `effect` and `handler` declarations and
-  `with h(e) { M }`, defined by elaboration: a clause is `!` code over a `mut` borrow of the
-  handler's state run by `withswap`, a `with` is a `withbor` of the state's cell, an operation a
-  call of its clause on the capability; rows inferred, a function with a row elaborated once per
-  handler. The tail-resumptive law on the elaborated terms (`Core/Handlers.lean`). Borrow blocks
-  of a cell or an owned array take `⊓Δ` as their bound, and hand back a cell lent to a nested
-  `with`. No kernel, rule or checker change.
-
-- **0.25** (2026-09-30) — Strings S4, revised: the `for` loop (§16). K0′, `count_try`, the
-  counted loop with an exit, is a machine step beside `count_fold` (`countTry_compatX`), in the
-  checker and the backend. `for x in y { M }` is Rust's pull desugaring, the source turned into an
-  iterator by its type: over data (a count `a..b`, a view, `&a`/`&mut a`, an owned array, a sized
-  iterator `sized D S A`) it is `count_try` over the length of the data, computed when the loop
-  starts, and total; any other source is a drain, div. `break`, `continue` and `return` are the
-  step's exits; `for … else { d }` gives the loop's value when the source ends; a generator that
-  finishes with `0` never ends, and a loop over it has `break`'s value alone. The completeness
-  lemma: the bound equals the number of elements (`Support/Dynamics/Completeness.lean`). Sized
-  iterators and their adapters (`lib/iters.bc`); adapters of one name chosen by type; generic
-  `&a`/`&mut a` at a view parameter (§9). `bcc check` reports
-  each loop: total and its bound, or div. `absurd V` erases to `case V {inj₁ x. x | inj₂ y. y}`.
-  §14 and §15 Open: the stale lines on generic and div functions corrected.
-
-- **0.24** (2026-09-30) — Strings S5 (`docs/strings-slices-design.md`). §11: bytes are `U8`
-  (`read_byte`, `write_byte`, the byte list `μX. 1 ⊕ (U8 ⊗ X)`), and two bulk externs,
-  `write_all` and `read_into`, whose models are counted loops of the byte operations'
-  (`writeAll_meets`, `readInto_meets`); their host implementations are one `fd_write` or
-  `fd_read` per view. Entry 16 (§17): buffers (`lib/buf.bc`, stage A, a filler by type), text
-  (`lib/text.bc`, `lib/textio.bc`), string and character literals, `box buf/string/array`,
-  borrow blocks on buffers and literals, borrow blocks that hand back what they assign, lend and
-  the capabilities they use, and template instances at types with lifetimes; literals are
-  lowered to read-only data and literal views to pointers into it. No kernel, rule or checker
-  change.
-
-- **0.23** (2026-09-29) — §15, *Generic functions*: `fn f[A, …]` with a surface body is a
-  template instantiated at each use, as generic generators are; `fn f<'a, 'b, …>` declares
-  lifetime parameters; at a call, type arguments are inferred by first-order matching against
-  the arguments and the expected result, each lifetime parameter from its own argument (the meet
-  when two disagree), and `unbang` is inserted. `lib/slice.bc` is written in the surface, and
-  its calls write neither types nor lifetimes. No kernel, rule or checker change.
-
-- **0.22** (2026-09-29) — Strings S3 (`docs/strings-slices-design.md`). §9: a borrowed family
-  is split at a run-time index into two families at its lifetime (`slice_split_imm`,
-  `slice_split_mut`, the machine step `split`, K3), the empty family `slice_empty_imm`/`_mut`,
-  and a `mut` family is written at an index keeping the rest (`slice_replace_mut`,
-  `slice_swap_mut`, by Mut Anti-Frame, K5). §12: `ArrayMut @a A` has a destructor, derived from
-  `slice_get_mut` and `forget`. The slice library `lib/slice.bc` (`include slice`), generic in
-  the element type, with `sort`, `binary_search`, searches, comparisons and the iterators
-  `iter_imm`/`iter_mut`. The backend lowers `split` to a compare and pointer and length
-  arithmetic.
-
-- **0.21** (2026-09-29) — Strings S1–S2 (`docs/strings-slices-design.md`). §9: the family
-  relation carries the length bound `c < 2³¹`; slice borrows `slice_borrow_mut` and
-  `slice_borrow_imm` lend an owned array as a family of leaf borrows with no cell (K2, from
-  `experiments/PositiveArrays`), and `slice_get_mut`/`slice_len_mut` act on a `mut` family (K4);
-  a borrow block on an array lends it so. §8: the byte `U8` (`Width.w8`), its literal and its
-  conversions `wrap8`/`extend8_u`; the grouped operations take `0` at `w8`. Entry 15 (§16): the
-  counted loop `count_fold`, a machine step (`count`) so that it is total at every host;
-  `div_fuel` counts with it. The backend lays out byte slots, and an empty array allocates
-  nothing.
-
-- **0.20** (2026-09-29) — §14, §15: one state machine per body (#109 item 8). Every generator
-  body and every div body is one `unfold` whose state has a summand per resumption point, and
-  whose step is one code with a `case` on the state; `gen_bind`, `gen_bind_loop` and `div_bind`
-  remain the library's binds, and the elaboration's for the shapes the machine does not cover.
-  No generator or div body of the corpus dispatches a call. No kernel, rule or checker change.
-
-- **0.19** (2026-09-29) — Entry 14 (§15): generators, replacing §14's spike subsection (#109).
-  `return` and `break` anywhere in a generator's body, a `for` that keeps its finishing value,
-  direct-style div calls, `yield from`, `gen { }` blocks and callbacks that yield; generic
-  generators, instantiated per call, and the adapter library (`include adapters`); a generator's
-  residual is what it holds, `K`; a borrow block that yields is a delegation, rejected by the
-  borrow typing (a self-reference). No kernel, rule or checker change.
-
-- **0.18** (2026-09-29) — §14: borrow scopes over loops, per observation (O1, step 1). A
-  borrow block whose body loops, `let r = &x` over a loop, and a div function over a borrow are
-  elaborated so that each observation borrows the owner again; `lib/lend.bc` has the combinators;
-  a call of a function with a lifetime parameter takes the lifetime from its argument. No kernel,
-  rule or checker change.
-
-- **0.17** (2026-09-29) — §10: a use that copies recursive data is written `clone(x)`, and an
-  unwritten one is an error at that use (#108, decision 39); a generator's loop hands on, at a
-  `break`, only the variables what follows it reads. `bcc-counts` reports the deep copies a run
-  makes. No kernel, rule or checker change.
-
-- **0.16** (2026-09-28) — The surface's places and conditions (#54, stages 6–7 of
-  `docs/typed-elaboration.md`): `&mut x` and `&x` lend a place, by type a move handed back, a
-  borrow of a cell, or a cell scoped to the call for a value (`&c` retired for the exclusive
-  lend); `*e`; `modify &mut x`; `let mut` with assignment, joins at `match`/`if` and threading
-  through `for`; `bool` (`1 + 1`, `inr ()` true), `if`/`else`, `&&`, `||`; the prelude
-  (`lib/prelude.bc`: `true`, `false`, `not`), and `include` of the embedded `lib/` modules
-  (#59). No kernel, rule or checker change.
-
-- **0.15** (2026-09-28) — Draft 0's expression layer (#54, stage 5 of
-  `docs/typed-elaboration.md`): `fn` and `main ->` declarations, `let` with patterns, `match`,
-  statements, forces `t!` and `f!(e)`, blocks and closures `{ … }`, borrow blocks and `modify`
-  with lifetime and unit elision, integer literals and operators at their operands' width, calls
-  of persistent functions without `unbang`, and n-ary tuples, in one grammar with the core,
-  elaborated into core. §14's `div_defer`: a block whose body loops runs nothing until it is
-  first observed. No kernel, rule or checker change.
-
-- **0.14** (2026-09-28) — §11, §14: a `main` with no externs may return a loop, which the runtime
-  drives with no capabilities (`run_io`'s loop wrapper at `Caps = 1`, `ioMainOf`), so a `main`
-  that loops but uses no capability is no longer given `stdout` (#54, stage 4). The theorems
-  (`IORun.loop_every_run`, `externs_loop_every_run`) are stated at the checked `run_io` and cover
-  it unchanged; no kernel, rule or checker change.
-
-- **0.13** (2026-09-28) — §14's specialization reads the callback's type from inference
-  (#54, stage 3): any callback whose type is known, including locals, returned callbacks and
-  closures, which are elaborated as div bodies when they loop. No kernel, rule or checker change.
-
-- **0.12** (2026-09-28) — §14's elaboration on types (#54, stage 2 of
-  `docs/typed-elaboration.md`). The residual is the components of the result with no destructor,
-  read off the type; a call of a div function in direct style is any application whose type is a
-  loop where that loop is not expected, at any depth, nested calls lifted in evaluation order;
-  the variables a `for` threads, and bindings of injections, have inferred types. No kernel,
-  rule or checker change.
-
-- **0.11** (2026-09-27) — Entry 13 (§14): divergence as an effect. A div function returns a
-  loop, `A ⇒ U(Loop B R)`, with the residual handing capabilities back; the delay bind
-  `div_bind` and the fuel handler `div_fuel` as library code over `unfold`; divergence inferred
-  in declaration order, `total def` and `div def` markers, `main` div when its body loops;
-  direct-style calls, `for` in any function, and specialization of higher-order functions at
-  a div callback's type, all elaborated before checking; the totality theorem
-  (`total_every_alloc`, `total_run_prefix`, `total_every_run`, `total_no_infinite_run`). §11's
-  restriction of `for` to the end of an ambient `main` is withdrawn.
-
-- **0.10** (2026-09-27) — Entry 10 (§11): externs and standard I/O. The opaque host types
-  `Input`/`Output` (`VTy.opq`), with a model and `Imm̲ = Unk`; the capabilities `stdin`,
-  `stdout`, `stderr` as cells, `read_byte`/`write_byte` on `Mut` borrows of them; the model
-  harness `mk_input`, `mk_output`, `take_input`, `take_output`; `run_io`; the model meets the
-  contracts, `externs_every_run`/`io_every_run` in `adequacyD`'s form, `externs_main_safe`, and
-  `wpTSD_frame_own` (no capability, no effect); a `def` may use the persistent externs declared
-  before it; assurance levels and `bcc trusted`. `Loop A B` (§7; `D A = Loop A 1`) with the
-  driver typed at every loop (`d_driveL`); programs that run until their input ends
-  (`externs_loop_every_run`, `io_loop_every_run`); the I/O library; the sugar: ambient
-  capabilities in `main`, `&c`, and `for` at the end of `main`, each elaborated before checking.
-
-- **0.9** (2026-09-27) — Entry 12 (§13): every run is safe. `wpTS`'s run is an allocator run at
-  every allocator; `wpTSD` (every run continues to a value in the postcondition), `fundamentalD`
-  and `adequacyD`. The angelic run is `wpTSAngelic`, a corollary.
-
-- **0.8** (2026-09-27) — Entry 8 revised (§9): arrays. `[L]` (`VTy.fam`) is the run-time family
-  `⊛_{i<n} L` of leaf places, with `Array A = [Ref A]` and the borrowed family `[Imm @a A]`; the
-  machine steps `tab`, `idx` and `drop`; `array_new`, `array_free`, `array_size`,
-  `array_replace`, and on families `array_len`, `array_get` (a leaf view at the family's
-  lifetime), `array_copy` and `array_forget`. An array is borrowed in a cell, by `withbor`; the
-  family comes from `withload`, mutation through `Mut` from `withswap`. Buffers and strings as
-  extern types are withdrawn; `Vec` and `Str` are library code over arrays. §11 and §12 no longer
-  mention them.
-
-- **0.7** (2026-09-27) — Entry 6 revised (§7): one codata former `νX. C` with positivity
-  (`X` only as `U X`, under `⊗`/`⊕` of observation results), `nuIn`/`nuOut` and coiteration
-  `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)`. `D A` and `Stream A` become abbreviations and their
-  fixed formers and six rules are deleted (`fixD`, `unfoldS` are `unfold` at their bodies). The
-  finite iterator `Iter A R R'` is the first new instance. §12: `U(νX. C & F R)` has a destructor
-  that closes and then drops the residual `R`.
-
-- **0.6** (2026-09-27) — Entry 11: implicit destructors (§12). Types stay linear. The checker
-  inserts a derived destructor (`dtorE`, `Core/Dtor.lean`) where an owned value goes unused: at the
-  end of each path, in reverse binding order. `linear` opts a binder out. No `CDerives` change.
-
-- **0.5** (2026-09-25) — §8 as implemented: integer literals and host operations are term
-  constants, one host step in the baseline machine, every theorem parametric in the host; §1 notes
-  the host step.
-
-- **0.4** (2026-09-25) — Entries 7–10: integers as opaque types with Wasm's operations and
-  signature-parametric theorems (§8), buffers and strings as opaque linear types (§9), persistent
-  variables used freely (§10), externs as hypotheses of the theorems and stdio as capabilities
-  (§11). The stream former is renamed `Stream`.
-
-- **0.3.1** (2026-09-25) — Status: entries 2–6 are implemented in the library, `Core/`.
-- **0.3** (2026-09-25) — Entries 2–6: the call-by-push-value core with the baseline restated
-  through the embedding (§3), non-strict frame lifetimes (§4), blocks, family borrows and records
-  (§5), recursive types and the three folds (§6), delay and stream codata with `fixD` (§7).
-- **0.2** (2026-09-24) — §2 restated as the exponential `!T`, replacing closed code
-  `fn T₁ T₂` (which is `!(T₁ ⊸ T₂)`): adds `!I-Λ`, `Δ ⊢ !T ⊐ @a` and promotion over `!Γ`; the
-  `ownedFn` and `mutClosure` programs. From the experiment `experiments/Bang`, originally developed in `borrow_lang`.
-- **0.1.1** (2026-09-24) — §2: capture and `FnMut` examples; the `Open` list records what
-  mutable borrows of closures and owned captures still need.
-- **0.1** (2026-09-24) — Baseline (§1). Entry 1, closed code (§2), from the experiments
-  `experiments/CBPVSplit`, `ModesLabels`, `Shifts` and `BorrowedClosures`, originally developed
-  in `borrow_lang`.
+The changelog is kept one entry per file in `docs/changelog/`, named by the entry's version.
+`scripts/changelog.sh` prints the list, newest first, and `scripts/changelog.sh --version` the
+current version. A new entry is a new file, numbered by docs-foreman
+(`docs/changelog/README.md`).

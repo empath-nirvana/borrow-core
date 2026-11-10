@@ -150,13 +150,13 @@ def codeDigest (N : BoCa.Expr) : String :=
   let h := hash (reprStr N)
   "#" ++ String.ofList (Nat.toDigits 16 (h.toNat % 2 ^ 32))
 
--- The case split of `ppC`'s nested `ν` patterns over every value-type former exceeds the default.
 /-- An entry's cancel row after its qualifier, as the core text writes it (`n.i cancel[R] A ~> B`),
-from its entries `es` (printed at every depth by `ppEff`): nothing when it is empty, `[top]` at `⊤`.
-`[spec §27]` -/
+from its entries `es` (printed at every depth by `ppEff`): nothing when it is empty, `[top]` at `⊤`
+(the parser reads `top` and `⊤` there).  `[spec §27]` -/
 def finBrackets (top : Bool) (es : List String) : String :=
   if top then "[top]" else if es.isEmpty then "" else "[" ++ ", ".intercalate es ++ "]"
 
+-- The case split of `ppC`'s nested `ν` patterns over every value-type former exceeds the default.
 set_option maxHeartbeats 800000 in
 mutual
 /-- A value type in the surface syntax, at precedence `p` (syntax-core §4: `0` binders, `1`
@@ -182,6 +182,8 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .int .w8 => "u8"
   | .int .f32 => "f32"
   | .int .f64 => "f64"
+  | .int .u32 => "u32"
+  | .int .u64 => "u64"
   | .opq .input => "input"
   | .opq .output => "output"
   | .opq .clock => "clock"
@@ -219,7 +221,7 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
       let (es, r) := ppEff nm C
       parenIf (p > 5)
         s!"F[{", ".intercalate (s!"{n}.{i} {qualStr q}{finBrackets fin.isTop (ppEff nm fin).1} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es)}] {r}"
-/-- The entries of a row's layers `F_Σ`, each with its cancel row (`ppFinC`), and what is under
+/-- The entries of a row's layers `F_Σ`, each with its cancel row (`finBrackets`), and what is under
 them. -/
 def ppEff (nm : List (String × LifeVar)) : CCTy → List String × String
   | .eff n i q A B fin _ C =>
@@ -424,11 +426,16 @@ def elabRow : Nat → TyEnv → Span → Row → Except Error CRow
   | 0, _, sp, _ => err sp "type abbreviations nested too deeply"
   | n + 1, E, sp, r => match r with
     | .nil => pure []
+    -- The parser reads `top` only as a whole cancel row (`rowEntries`); a `Row.top` built
+    -- elsewhere is refused here with the parser's message.
+    | .top => err sp "`top` (`⊤`) is a cancel row only: write it as `n.i cancel[top] A ~> B`"
     | .cons k i q A B f r => do
         if k < 2 ^ 32 ∧ i < 2 ^ 32 then
           -- The entry's cancel row (SPEC §27): `F_R 1`, `R` its written row; `F 1` when none is
           -- written.  `[spec §27]`
-          let fin := BoCa.Fig16.LogRel.Core.CTy.effOf (← elabRow n E sp f) .unit
+          let fin ← match f with
+            | .top => pure .top
+            | f => pure (BoCa.Fig16.LogRel.Core.CTy.effOf (← elabRow n E sp f) .unit)
           let o : COpSig :=
             ⟨UInt32.ofNat k, UInt32.ofNat i, q.toCore, ← elabV n E A, ← elabV n E B, fin, false⟩
           if o.B.isZero && (match f with | .nil => false | _ => true) then
