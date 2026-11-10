@@ -5696,8 +5696,8 @@ runs once, and every row and clause is what it was.
   over-count, which can refuse a program.
 - **Rows the typed elaboration makes itself** (a `for`'s site, a stored generator's) carry empty
   cancel rows; a finaliser inside one that performs is refused by the kernel.
-- **The lowering of a finaliser that performs a control operation** (#869): neither backend lowers
-  it, so such a program runs at `bcc interp` only.
+- **The lowering of a finaliser that performs a control operation**: the old backend does not lower
+  it; Backend2 does (§69), except a cancel that may suspend over a task's own stack (#970).
 - **`Σ_M` and `Σ_D` are synthesized from the derivations**, not proved least: they can over-count
   (a thunk built and never forced), which is safe, since the kernel checks `M` and `D` at the rows
   taken.
@@ -12669,8 +12669,8 @@ One construct per step of `Paper`'s machine:
 - **Facts read.** Each row entry's qualifier, answer and cancel row; `[then]`'s `Σ_D`; `κ`'s
   `cancelTy`. `ThenLe` and `Σ_D ≤ Σ` are the typing's. The conversion fails loudly on a
   suspension outside its machine's row.
-- **`UNPROVED:`** A non-capturable operation's cancel entry is never entered (it traps). A stored
-  site's stack is owned by a suspended cancel run's `k` alone.
+- **`UNPROVED:`** A non-capturable operation's cancel entry is never entered (it traps). A cancel
+  that may suspend over a task's own stack is refused, outside the fragment (#970).
 
 ### Programs
 
