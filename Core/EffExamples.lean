@@ -51,6 +51,7 @@ theorem prog_derives : CDerives LifeCtx.empty [] prog (.comp (.ret .unit)) := by
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
     (by decide) (by simp) (by simp) rfl
     (.effPerform (o := ⟨1, 0, .lin, .unit, .unit, .ret .unit, false⟩) (by rfl) rfl rfl (.unitI (.cons (.cons .nil))))
+    (by decide)
 
 /-- **Every run of the handled program reaches `()` at the empty memory.** -/
 theorem prog_runs {μ₁ : Heap} {e₁ : Expr} (hs : Steps Adequacy.emptyMem prog μ₁ e₁) :
@@ -83,6 +84,7 @@ theorem progC_derives : CDerives LifeCtx.empty [] progC (.comp (.ret .unit)) := 
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
     (by decide) (by simp) (by simp) rfl
     (.effPerform (o := ⟨1, 0, .cancel, .unit, .unit, .ret .unit, false⟩) (by rfl) rfl rfl (.unitI (.cons (.cons .nil))))
+    (by decide)
 
 /-- **Every run of the cancelling program reaches `()` at the empty memory.** -/
 theorem progC_runs {μ₁ : Heap} {e₁ : Expr} (hs : Steps Adequacy.emptyMem progC μ₁ e₁) :

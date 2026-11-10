@@ -689,7 +689,8 @@ def _root_.BoCa.Fig16.LogRel.Core.Check.Fam.withUse {P : List Bool → Prop} (F 
 /-- **`[handle]`**: `handle_n e with H`, the handler's pair `H` checked (`rH`), its erasure a
 value form over the slots it uses (`hv`), each of which is persistent (`hp`). It reads the handled
 row, its operations at their cancel rows `fs`. The node records the clause kinds `ks` and the site
-`site`.  `[spec §19, §27]` -/
+`site`. R3 (`SiteFree`): `n` is in neither `R`'s rows (`hR`) nor a used slot's type (`hns`), and no
+slot whose type holds it is absorbed.  `[spec §19, §27, §77]` -/
 def rEffHandle {S : CRow} {E : List (CQual × CVTy × CVTy)} {fs : Nat → CCTy} {n : UInt32}
     {A R Tr Tc : CVTy}
     (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind) (site : Option HSite)
@@ -699,21 +700,27 @@ def rEffHandle {S : CRow} {E : List (CQual × CVTy × CVTy)} {fs : Nat → CCTy}
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) = false)
     (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) A)))
-    (h : overlapOK T rH.F.u rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
+    (h : overlapOK T rH.F.u rM.F.u = true)
+    (hR : BoCa.Fig16.LogRel.Core.noSiteB n R = true)
+    (hns : usedSat (BoCa.Fig16.LogRel.Core.noSiteB n) T (orL rH.F.u rM.F.u) = true) :
+    Res Δ T (.comp (effOf S R)) :=
   have hlu : rH.F.u.length = rM.F.u.length := rH.F.hu.trans rM.F.hu.symm
   ⟨.effHandleV i (.comp (effOf S R)) S E fs BoCa.Fig16.LogRel.Core.rcsNil n A R (Masks.of rH.F.u rM.F.u) ks site
       rM.t.erase.hin rH.t rM.t,
     (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) ∪ᵣ (rH.sigs ∪ᵣ rM.sigs), rH.pins ++ rM.pins,
-    ((rH.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hp).withUse.split rM.F h).map
-      fun _ ⟨_, _, hs, hm, ⟨⟨hH, hl⟩, hsub, hlen'⟩, he⟩ => by
+    (((rH.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hp).withUse.split rM.F h).restrict
+      (BoCa.Fig16.LogRel.Core.noSiteB n) hns).map
+      fun _ ⟨⟨_, _, hs, hm, ⟨⟨hH, hl⟩, hsub, hlen'⟩, he⟩, hsf⟩ => by
         subst hr hc
         exact TTied.effHandle i _ ks site hs hm.rel_of ⟨rH.covers.of₁ hlu, rM.covers.of₂ hlu⟩ (deadP_of_live hl)
-          (valFormB_sound rH.F.hu hlen' hsub hv) hH hn0 hnS hlen hdv he⟩
+          (valFormB_sound rH.F.hu hlen' hsub hv) hH hn0 hnS hlen hdv he
+          ⟨BoCa.Fig16.LogRel.Core.noSiteB_iff.mp hR,
+            fun s hs hl => BoCa.Fig16.LogRel.Core.noSiteB_iff.mp (hsf s hs hl)⟩⟩
 
 /-- BOXED-κ: `[handle]` at the clauses `clausesTyB S R d E`, each capturing clause's `κ` boxed at
 `@d`; `@d` defined, every live slot `e` uses outliving it, and every non-abortive answer type of
 the handled row outliving it. It reads the handled row, its operations at their cancel rows `fs`.
-`[spec §27, §28]` -/
+R3 as `rEffHandle`.  `[spec §27, §28, §77]` -/
 def rEffHandleB {S : CRow} {E : List (CQual × CVTy × CVTy)} {fs : Nat → CCTy} {n : UInt32}
     {A R Tr Tc : CVTy}
     {d : CLife} (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind) (site : Option HSite)
@@ -726,18 +733,24 @@ def rEffHandleB {S : CRow} {E : List (CQual × CVTy × CVTy)} {fs : Nat → CCTy
     (hSd : ansOutlivesB Δ d (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) = true)
     (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) A)))
     (hso : usedSat (outlivesB Δ d) T rM.F.u = true)
-    (h : overlapOK T rH.F.u rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
+    (h : overlapOK T rH.F.u rM.F.u = true)
+    (hR : BoCa.Fig16.LogRel.Core.noSiteB n R = true)
+    (hns : usedSat (BoCa.Fig16.LogRel.Core.noSiteB n) T (orL rH.F.u rM.F.u) = true) :
+    Res Δ T (.comp (effOf S R)) :=
   have hlu : rH.F.u.length = rM.F.u.length := rH.F.hu.trans rM.F.hu.symm
   ⟨.effHandleVB i (.comp (effOf S R)) S E fs BoCa.Fig16.LogRel.Core.rcsNil n A R d (Masks.of rH.F.u rM.F.u) ks site
       rM.t.erase.hin rH.t rM.t,
     (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) ∪ᵣ (rH.sigs ∪ᵣ rM.sigs), rH.pins ++ rM.pins,
-    ((rH.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hp).withUse.split (rM.F.restrict (outlivesB Δ d) hso) h).map
-      fun _ ⟨_, _, hs, hm, ⟨⟨hH, hl⟩, hsub, hlen'⟩, he, ho⟩ => by
+    (((rH.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hp).withUse.split
+      (rM.F.restrict (outlivesB Δ d) hso) h).restrict (BoCa.Fig16.LogRel.Core.noSiteB n) hns).map
+      fun _ ⟨⟨_, _, hs, hm, ⟨⟨hH, hl⟩, hsub, hlen'⟩, he, ho⟩, hsf⟩ => by
         subst hr hc
         exact TTied.effHandleB i _ ks site hs hm.rel_of ⟨rH.covers.of₁ hlu, rM.covers.of₂ hlu⟩ (deadP_of_live hl)
           (valFormB_sound rH.F.hu hlen' hsub hv) hH hn0 hnS hlen hdv he
           ⟨defines_of_wf hwf, fun s hsm hl => outlivesB_sound Δ d s.ty (ho s hsm hl)⟩
-          (ansOutlivesB_sound hSd)⟩
+          (ansOutlivesB_sound hSd)
+          ⟨BoCa.Fig16.LogRel.Core.noSiteB_iff.mp hR,
+            fun s hs hl => BoCa.Fig16.LogRel.Core.noSiteB_iff.mp (hsf s hs hl)⟩⟩
 
 end
 

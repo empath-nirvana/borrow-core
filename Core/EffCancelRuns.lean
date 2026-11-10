@@ -2016,7 +2016,7 @@ theorem dAt_inner₂ {Δ : LifeCtx} :
     (rowAt_two _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
       (.tensorI .nil (d_constC_raise _ (.unitI (.cons .nil))) (.unitI .nil))) rfl)
-    (by decide) (by simp [pSig]) (by simp) rfl dAt_then₂
+    (by decide) (by simp [pSig]) (by simp) rfl dAt_then₂ (by decide)
 
 /-- **`progT` is typed by a tied derivation** at `Ξ₁₂`, at the row holding `2` (`d_progT`). -/
 theorem dAt_progT {Δ : LifeCtx} : CDerivesAt Ξ₁₂ Δ [] progT (.comp (CTy.effOf [rSig 2] .unit)) := by
@@ -2026,7 +2026,7 @@ theorem dAt_progT {Δ : LifeCtx} : CDerivesAt Ξ₁₂ Δ [] progT (.comp (CTy.e
     (rowAt_two' _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
       (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil))) rfl)
-    (by decide) (by simp [rSig]) (by simp) rfl ?_
+    (by decide) (by simp [rSig]) (by simp) rfl ?_ (by decide)
   · refine RowLe.of_mem fun o ho => ?_
     rw [show (finR 2).rowOf ++ [rSig 2] = [rSig 2, rSig 2] from rfl] at ho
     simp only [List.mem_cons, List.not_mem_nil, or_false, or_self] at ho
@@ -2047,7 +2047,7 @@ theorem dAt_progOutT {Δ : LifeCtx} :
     rowAt_r2 .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_injlV _ .unit .unit)
       (.tensorI .nil (d_constC_raise _ (.sumI₂ (.unitI (.cons .nil)))) (.unitI .nil))) rfl)
-    (by decide) (by simp) (by simp) rfl dAt_progT
+    (by decide) (by simp) (by simp) rfl dAt_progT (by decide)
 
 /-- The canceller's context in `progOutT`: the live handler of `2`. -/
 abbrev K₂ₒ : Kont := hF (hU 2 injlV (constC (Val.inj₂ Val.unit))) .hole
@@ -2184,7 +2184,7 @@ theorem dAt_inner₂A {Δ : LifeCtx} :
     (rowAt_twoA _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
       (.tensorI .nil (d_constC_raise _ (.unitI (.cons .nil))) (.unitI .nil))) rfl)
-    (by decide) (by simp [pSig]) (by simp) rfl dAt_then₂A
+    (by decide) (by simp [pSig]) (by simp) rfl dAt_then₂A (by decide)
 
 /-- **`progTA` is typed by a tied derivation** at `Ξ₁₂A`, at the row holding the cancellable `2`. -/
 theorem dAt_progTA {Δ : LifeCtx} :
@@ -2195,7 +2195,7 @@ theorem dAt_progTA {Δ : LifeCtx} :
     (rowAt_twoA' _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
       (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil))) rfl)
-    (by decide) (by simp [rSigA]) (by simp) rfl ?_
+    (by decide) (by simp [rSigA]) (by simp) rfl ?_ (by decide)
   · refine RowLe.of_mem fun o ho => ?_
     rw [show (finRA 2).rowOf ++ [rSigA 2] = [rSigA 2, rSigA 2] from rfl] at ho
     simp only [List.mem_cons, List.not_mem_nil, or_false, or_self] at ho
@@ -2216,7 +2216,7 @@ theorem dAt_progOutTA {Δ : LifeCtx} :
     rowAt_r2A .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_injlV _ .unit .unit)
       (.tensorI .nil (d_constC_raise _ (.sumI₂ (.unitI (.cons .nil)))) (.unitI .nil))) rfl)
-    (by decide) (by simp) (by simp) rfl dAt_progTA
+    (by decide) (by simp) (by simp) rfl dAt_progTA (by decide)
 
 /-- The canceller's context in `progOutTA`: the live cancellable handler of `2`. -/
 abbrev K₂ₒA : Kont := hF (hQ 2 .cancel injlV (constC (Val.inj₂ Val.unit))) .hole

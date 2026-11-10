@@ -215,6 +215,41 @@ abbrev VTy.lolli (A B : VTy) : VTy := .thunk (.arr A (.ret B))
 /-- `∀'x ⊏ @b. A` at value type: `U (∀'x ⊏ @b. F A)`, BoLo's `∀` read call-by-value. -/
 abbrev VTy.all (x : LifeVar) (b : Lifetime.Life) (A : VTy) : VTy := .thunk (.all x b (.ret A))
 
+/-! ### The sites of a type -/
+
+mutual
+/-- The operation names in every row nested in `A`: through `U C`, code types, `!`, `⊗`, `⊕`,
+references, borrows, boxes, families and `μ` bodies.  `[spec §77]` -/
+def VTy.sites : VTy → List UInt32
+  | .unit => []
+  | .zero => []
+  | .unk => []
+  | .int _ => []
+  | .opq _ => []
+  | .tvar _ => []
+  | .tensor A B => A.sites ++ B.sites
+  | .sum A B => A.sites ++ B.sites
+  | .thunk C => C.sites
+  | .code _ E C => E.sites ++ C.sites
+  | .ref A => A.sites
+  | .bang A => A.sites
+  | .fam A => A.sites
+  | .imm _ A => A.sites
+  | .mut _ A => A.sites
+  | .box _ A => A.sites
+  | .mu A => A.sites
+/-- The operation names in every row nested in `C`: each layer's name, and those in its operation's
+types and cancel row, through `⊸`, `&`, `∀` and `ν` bodies.  `[spec §77]` -/
+def CTy.sites : CTy → List UInt32
+  | .ret A => A.sites
+  | .arr A C => A.sites ++ C.sites
+  | .amp C D => C.sites ++ D.sites
+  | .top => []
+  | .all _ _ C => C.sites
+  | .nu C => C.sites
+  | .eff n _ _ A B fin _ C => n :: (A.sites ++ B.sites ++ fin.sites ++ C.sites)
+end
+
 /-! ### Free lifetime variables -/
 
 mutual

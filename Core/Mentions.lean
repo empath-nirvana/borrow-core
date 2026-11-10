@@ -294,14 +294,14 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
       · exact hs.liveAt_right (Ctx.liveAt_cons_succ.mp (ihN _ hk))
       · exact hs.liveAt_right (Ctx.liveAt_cons_succ.mp (ihD _ hk))
       · exact hs.liveAt_left (ihM k hk)
-  | effHandleV hs _ _ _ _ _ _ _ _ ihc ihe | effHandleVB hs _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleV hs _ _ _ _ _ _ _ _ _ ihc ihe | effHandleVB hs _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       intro k hk
       simp only [hndExpr, mentions, Expr.val, Val.prim, Val.i32, Bool.false_or,
         Bool.or_eq_true, mentions_of_closed (closedAt_qualsVal 0 _)] at hk
       rcases hk with hk | hk
       · exact hs.liveAt_left (ihc k hk)
       · exact hs.liveAt_right (ihe k hk)
-  | effHandleT hs _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleT hs _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       intro k hk
       simp only [hndExpr, mentions, Expr.val, Val.prim, Val.i32, Bool.false_or,
         Bool.or_eq_true, mentions_of_closed (closedAt_qualsVal 0 _)] at hk
@@ -309,7 +309,7 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
       · exact hs.liveAt_left (ihc k (by simp [mentions, hk]))
       · exact hs.liveAt_left (ihc k (by simp [mentions, mentions_tailTuple _ _ hk]))
       · exact hs.liveAt_right (ihe k hk)
-  | effHandleL hs _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleL hs _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       intro k hk
       simp only [hndExpr, mentions, Expr.val, Val.prim, Val.i32, Bool.false_or,
         Bool.or_eq_true, mentions_of_closed (closedAt_qualsVal 0 _)] at hk

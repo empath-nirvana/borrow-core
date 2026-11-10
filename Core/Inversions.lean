@@ -988,14 +988,14 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       · obtain ⟨T, hT⟩ := ihN (k + 1) hk; exact ⟨T, splitP_le_right hs k T (slot_succ hT)⟩
       · obtain ⟨T, hT⟩ := ihD (k + 1) hk; exact ⟨T, splitP_le_right hs k T (slot_succ hT)⟩
       · obtain ⟨T, hT⟩ := ihM k hk; exact ⟨T, splitP_le_left hs k T hT⟩
-  | effHandleV hs _ _ _ _ _ _ _ _ ihc ihe | effHandleVB hs _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleV hs _ _ _ _ _ _ _ _ _ ihc ihe | effHandleVB hs _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       intro k hk
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.HasVar, false_or] at hk
       rcases hk with (hk | hk) | hk
       · exact absurd hk (qualsVal_noVar _)
       · obtain ⟨T, hT⟩ := ihc k hk; exact ⟨T, splitP_le_left hs k T hT⟩
       · obtain ⟨T, hT⟩ := ihe k hk; exact ⟨T, splitP_le_right hs k T hT⟩
-  | effHandleT hs _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleT hs _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       intro k hk
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.HasVar, false_or] at hk
       rcases hk with (hk | hk | hk) | hk
@@ -1004,7 +1004,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       · obtain ⟨T, hT⟩ := ihc k (Or.inr (hasVar_tailTuple _ 0 k hk))
         exact ⟨T, splitP_le_left hs k T hT⟩
       · obtain ⟨T, hT⟩ := ihe k hk; exact ⟨T, splitP_le_right hs k T hT⟩
-  | effHandleL hs _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleL hs _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       intro k hk
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.HasVar, false_or] at hk
       rcases hk with (hk | hk | hk) | hk

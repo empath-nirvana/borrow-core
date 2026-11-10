@@ -89,6 +89,8 @@ inductive Atom where
   | ownFree
   /-- The lifetime variable is not free in it (`∀I`'s premise). -/
   | nfree (x : LifeVar)
+  /-- The site `n` is not in its rows (`VTy.sites`: a handle rule's R3).  `[spec §77]` -/
+  | nosite (n : UInt32)
   /-- It outlives `@a` under `Δ`, as `outlivesB` decides it (`CtxOutlives`). -/
   | outl (Δ : LifeCtx) (a : Lifetime.Life)
   deriving DecidableEq, Inhabited

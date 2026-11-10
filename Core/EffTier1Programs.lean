@@ -382,18 +382,18 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
       exact .effThenDiv (splitP_append h' hs) hNZ hUq (fun hu => banged_append h' (hU hu))
         hMS hDS hfin hP hSD ihM ihN ihD
-  | effHandleV hAt hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
+  | effHandleV hAt hs hd hH _ hn0 hnS hlen hdv _ hR3 ihc ihe =>
       exact .effHandleV hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
-        hdv ihe
-  | effHandleVB hAt hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+        hdv ihe ⟨hR3.1, live_append h' hR3.2⟩
+  | effHandleVB hAt hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd hR3 ihc ihe =>
       exact .effHandleVB hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
-        hdv ihe (ctxOutlives_append h' hΓd) hSd
-  | effHandleT hAt hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+        hdv ihe (ctxOutlives_append h' hΓd) hSd ⟨hR3.1, live_append h' hR3.2⟩
+  | effHandleT hAt hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ hR3 ihc ihe =>
       exact .effHandleT hAt (splitP_append h' hs) (deadP_append h' hd) hHr.append hHc.append ihc
-        hn0 hnd hnS hlen hSN hLin ihe
-  | effHandleL hAt hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
+        hn0 hnd hnS hlen hSN hLin ihe ⟨hR3.1, live_append h' hR3.2⟩
+  | effHandleL hAt hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ hR3 ihc ihe =>
       exact .effHandleL hAt (splitP_append h' hs) (deadP_append h' hd) hHr.append hHw.append
-        hHn.append ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
+        hHn.append ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe ⟨hR3.1, live_append h' hR3.2⟩
   | iterate S St B R hAt hS hΓ => exact .iterate S St B R hAt hS (deadP_append h' hΓ)
   | divFuel S A hAt hS hΓ => exact .divFuel S A hAt hS (deadP_append h' hΓ)
   | reify S B R res hAt hS hcl hres hΓ _ => exact .reify S B R res hAt hS hcl hres (deadP_append h' hΓ)
@@ -444,14 +444,14 @@ theorem dAt_hQ {Δ : LifeCtx} {Γ Γ₁ : Ctx VTy} (hs : Ctx.SplitP Γ Γ₁ Γ)
     (hc : CDerivesAt Ξ Δ [] (.val c) (.val (clauseTy S R (q, A, B) F)))
     (hM : CDerivesAt Ξ Δ Γ M
       (.comp (CTy.effOf (Row.ofEff n [(q, A, B)] 0 (fun _ => F) ++ S) X)))
-    (hΞ : Ξ divEff = [] := by first | rfl | decide) :
+    (hΞ : Ξ divEff = [] := by first | rfl | decide) (hR3 : SiteFree n Γ R := by decide) :
     CDerivesAt Ξ Δ Γ (hndE (hQ n q hr c) M) (.comp (CTy.effOf S R)) := by
   show CDerivesAt Ξ Δ Γ (hndExpr n [q] (.pair (.val hr) (.pair (.val c) (.val Val.unit))) M) _
   have hAt := rowAt_ofEff_fs (fs' := fun _ => F) (rowAt_ofEff_append hn hn0 (by simp) hS)
   exact .effHandleV (cs := rcsNil) (E := [(q, A, B)]) (fs := fun _ => F) hAt hs hΓ₁.toP
     (.pair (.val _) (.pair (.val _) (.val _)))
     ((CDerivesAt.tensorI .nil hhr (.tensorI .nil hc (.unitI .nil))).append_dead hΓ₁)
-    hn0 hnS (by simp) (Row.divB_of_rowAt hAt hΞ) hM
+    hn0 hnS (by simp) (Row.divB_of_rowAt hAt hΞ) hM hR3
 
 end Kernel
 

@@ -138,22 +138,26 @@ theorem d_clsR {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hΓ : Ctx.Dead
 theorem d_toResultG {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} {e : Expr}
     (hS : ∀ o ∈ S, o.n ≠ 1) (hSd : Row.divB S = false)
     (he : CDerives Δ (⟨retTy S A (.sum A .unit), false⟩ :: ⟨clausesTy S (.sum A .unit) Ef, false⟩ :: Γ)
-      e (.comp (CTy.effOf (Row.ofEff 1 Ef 0 ++ S) A))) :
+      e (.comp (CTy.effOf (Row.ofEff 1 Ef 0 ++ S) A)))
+    (hR3 : SiteFree 1 (⟨retTy S A (.sum A .unit), true⟩ :: ⟨clausesTy S (.sum A .unit) Ef, true⟩ :: Γ)
+      (.sum A .unit) := by site_free) :
     CDerives Δ Γ (toResult e) (.comp (CTy.effOf S (.sum A .unit))) := by
   refine .bind (split_kill Γ).toP (.ret (d_clsR (S := S) (A := A) (kill_dead Γ))) ?_
   refine .bind (.right (split_kill Γ).toP) (.ret (d_hrR (S := S) (A := A) (.cons (kill_dead Γ)))) ?_
   exact .effHandle (E := Ef) (.left (.left (split_kill Γ).toP))
     (.left (.right (deadSplit (kill_dead Γ)))) (.here (.cons (kill_dead Γ).toP))
     (.there (.here (kill_dead Γ).toP)) (by decide) hS (by simp)
-    (by rw [Row.divB_ofEff_eq (by decide)]; exact hSd) he
+    (by rw [Row.divB_ofEff_eq (by decide)]; exact hSd) he hR3
 
 /-- `to_result` at a closed computation. -/
 theorem d_toResult {Δ : LifeCtx} {S : Row} {A : VTy} {e : Expr} (hS : ∀ o ∈ S, o.n ≠ 1)
     (hSd : Row.divB S = false)
     (he : CDerives Δ [⟨retTy S A (.sum A .unit), false⟩, ⟨clausesTy S (.sum A .unit) Ef, false⟩] e
-      (.comp (CTy.effOf (Row.ofEff 1 Ef 0 ++ S) A))) :
+      (.comp (CTy.effOf (Row.ofEff 1 Ef 0 ++ S) A)))
+    (hR3 : SiteFree 1 [⟨retTy S A (.sum A .unit), true⟩, ⟨clausesTy S (.sum A .unit) Ef, true⟩]
+      (.sum A .unit) := by decide) :
     CDerives Δ [] (toResult e) (.comp (CTy.effOf S (.sum A .unit))) :=
-  d_toResultG (Γ := []) hS hSd he
+  d_toResultG (Γ := []) hS hSd he hR3
 
 /-! ### Callbacks of the unwinding borrows -/
 
@@ -474,7 +478,9 @@ theorem d_withLogG {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} {e : Expr}
     (hS : ∀ o ∈ S, o.n ≠ 2) (hSd : Row.divB S = false)
     (he : CDerives Δ (⟨retTy S A (.tensor A Flag), false⟩ ::
       ⟨clausesTy S (.tensor A Flag) El, false⟩ :: Γ) e
-      (.comp (CTy.effOf (Row.ofEff 2 El 0 ++ S) A))) :
+      (.comp (CTy.effOf (Row.ofEff 2 El 0 ++ S) A)))
+    (hR3 : SiteFree 2 (⟨retTy S A (.tensor A Flag), true⟩ ::
+      ⟨clausesTy S (.tensor A Flag) El, true⟩ :: Γ) (.tensor A Flag) := by site_free) :
     CDerives Δ Γ (withLog e) (.comp (CTy.effOf S (.tensor A Flag))) := by
   refine .bind (split_kill Γ).toP
     (.ret (.tensorI (deadSplit (kill_dead Γ)) (d_clL (S := S) (A := A) (kill_dead Γ))
@@ -483,7 +489,7 @@ theorem d_withLogG {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} {e : Expr}
   exact .effHandle (E := El) (.left (.left (split_kill Γ).toP))
     (.left (.right (deadSplit (kill_dead Γ)))) (.here (.cons (kill_dead Γ).toP))
     (.there (.here (kill_dead Γ).toP)) (by decide) hS (by simp)
-    (by rw [Row.divB_ofEff_eq (by decide)]; exact hSd) he
+    (by rw [Row.divB_ofEff_eq (by decide)]; exact hSd) he hR3
 
 /-- `log (); raise ()`. -/
 def logThenRaise : Expr := .app (.val (.lam raiseU)) (performE (opArgE 2 0 (.val .unit)))
@@ -869,7 +875,8 @@ theorem d_takeProg (n : ℕ) :
   refine .bind (.left (.left .nil))
     (.effHandle (S := []) (E := Ey) (n := 3) (A := .unit) (R := TakeR)
       (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
-      (by decide) (by simp) (by simp) rfl (d_producer (Ctx.Dead.cons (Ctx.Dead.cons Ctx.Dead.nil)))) ?_
+      (by decide) (by simp) (by simp) rfl (d_producer (Ctx.Dead.cons (Ctx.Dead.cons Ctx.Dead.nil)))
+      (by decide)) ?_
   refine .bind (.right (.dead (.dead .nil))) (.ret (d_num (by cdead) n)) ?_
   exact .app (.right (.left (.dead (.dead .nil)))) (.force (T := .thunk _) (.there (.here (by cdead))) rfl)
     (.here (by cdead))
@@ -964,6 +971,7 @@ theorem d_storeCancel : CDerives LifeCtx.empty [] storeCancel (.comp (.ret .unit
   exact .effHandle (S := []) (E := Es) (n := 4) (A := .unit) (R := .unit)
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
     (by decide) (by simp) (by simp) rfl (d_performer (Ctx.Dead.cons (Ctx.Dead.cons Ctx.Dead.nil)))
+    (by decide)
 
 /-- **Program 6 runs**: every run, under every allocator, ends at `()` with the empty memory:
 the cancelled continuation's finaliser freed the cell it captured. -/

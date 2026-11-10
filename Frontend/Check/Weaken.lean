@@ -249,6 +249,11 @@ theorem fresh_ins {x : LifeVar} {Γa Γb : Ctx VTy} (hp : LiveP (Atom.nfree x).e
     ∀ s ∈ Γa ++ Γp ++ Γb, s.live = true → ¬ VFree x s.ty :=
   live_ins (fun s hs hl => not_vfree_of_vfreeB (by simpa [Atom.eval] using hp s hs hl)) h
 
+/-- R3 (`SiteFree`), past inserted slots whose types do not hold the site.  `[spec §77]` -/
+theorem siteFree_ins {n : UInt32} {R : VTy} {Γa Γb : Ctx VTy} (hp : LiveP (Atom.nosite n).eval Γp)
+    (h : SiteFree n (Γa ++ Γb) R) : SiteFree n (Γa ++ Γp ++ Γb) R :=
+  ⟨h.1, live_ins (fun s hs hl => noSiteB_iff.mp (by simpa [Atom.eval] using hp s hs hl)) h.2⟩
+
 theorem cancels_of_unr {S : Row} (h : S.Unr) : S.Cancels := by
   obtain ⟨o, ho, hq⟩ := h
   exact ⟨o, ho, by rw [hq]; decide⟩
@@ -758,9 +763,10 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
           hMS hDS hfin hP hcap dM dN dD, by
         simp only [TExpr.shift, TExpr.erase, thenE, Expr.shift, Expr.val, Val.lam, Val.prim, eM,
           eN, eD]⟩
-  | effHandleV hs hm hcv hdd hH _ hn0 hnS hlen hdv _ hins ihc ihe =>
+  | effHandleV hs hm hcv hdd hH _ hn0 hnS hlen hdv _ hR3 hins ihc ihe =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
+      obtain ⟨f₀, hf₀, hns, hp₀⟩ := live_withO hf hp
+      obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf₀ hp₀
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, Γp₁, Γp₂, rfl, rfl, ha₁, ha₂, hl₁, hl₂, q₁, q₂, hs', pm⟩ :=
         splitP_route hp' Γa hs
       obtain ⟨f', hf', hpe, q₁'⟩ := live_withO hf₁ q₁
@@ -770,11 +776,12 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       rw [← ec] at hH'
       rw [ha₁, hl₁] at dc ec hH'; rw [ha₂, hl₂] at de ee
       exact ⟨.effHandleV hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [ec]; rfl), hcv.2.ins₂ (by rw [ee]; rfl)⟩ (deadP_ins (live_atom hpe) Γa₁ hdd) hH' dc hn0 hnS hlen hdv de
-        (by rw [ee, ClauseKinds.hin_shift]; exact hins), by
+        (siteFree_ins (live_atom hns) hR3) (by rw [ee, ClauseKinds.hin_shift]; exact hins), by
         rw [TExpr.shift, TExpr.erase, TExpr.erase, shift_hndExpr, ec, ee]⟩
-  | effHandleVB hs hm hcv hdd hH _ hn0 hnS hlen hdv _ hΓd hSd hins ihc ihe =>
+  | effHandleVB hs hm hcv hdd hH _ hn0 hnS hlen hdv _ hΓd hSd hR3 hins ihc ihe =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
+      obtain ⟨f₀, hf₀, hns, hp₀⟩ := live_withO hf hp
+      obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf₀ hp₀
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, Γp₁, Γp₂, rfl, rfl, ha₁, ha₂, hl₁, hl₂, q₁, q₂, hs', pm⟩ :=
         splitP_route hp' Γa hs
       obtain ⟨f', hf', hpe, q₁'⟩ := live_withO hf₁ q₁
@@ -785,7 +792,8 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       rw [← ec] at hH'
       rw [ha₁, hl₁] at dc ec hH'; rw [ha₂, hl₂] at de ee
       exact ⟨.effHandleVB hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [ec]; rfl), hcv.2.ins₂ (by rw [ee]; rfl)⟩ (deadP_ins (live_atom hpe) Γa₁ hdd) hH' dc hn0 hnS hlen hdv de
-        (ctxOutlives_ins (live_atom ho) hΓd) hSd (by rw [ee, ClauseKinds.hin_shift]; exact hins), by
+        (ctxOutlives_ins (live_atom ho) hΓd) hSd (siteFree_ins (live_atom hns) hR3)
+        (by rw [ee, ClauseKinds.hin_shift]; exact hins), by
         rw [TExpr.shift, TExpr.erase, TExpr.erase, shift_hndExpr, ec, ee]⟩
   | iterate S St B R hS hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
@@ -1362,9 +1370,10 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
           hMS hDS hfin hP hcap dM dN dD, by
         simp only [TExpr.shift, TExpr.erase, thenE, Expr.shift, Expr.val, Val.lam, Val.prim, eM,
           eN, eD]⟩
-  | effHandleV hAt hs hm hcv hdd hH _ hn0 hnS hlen hdv _ hins ihc ihe =>
+  | effHandleV hAt hs hm hcv hdd hH _ hn0 hnS hlen hdv _ hR3 hins ihc ihe =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
+      obtain ⟨f₀, hf₀, hns, hp₀⟩ := live_withO hf hp
+      obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf₀ hp₀
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, Γp₁, Γp₂, rfl, rfl, ha₁, ha₂, hl₁, hl₂, q₁, q₂, hs', pm⟩ :=
         splitP_route hp' Γa hs
       obtain ⟨f', hf', hpe, q₁'⟩ := live_withO hf₁ q₁
@@ -1374,11 +1383,12 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       rw [← ec] at hH'
       rw [ha₁, hl₁] at dc ec hH'; rw [ha₂, hl₂] at de ee
       exact ⟨.effHandleV hAt hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [ec]; rfl), hcv.2.ins₂ (by rw [ee]; rfl)⟩ (deadP_ins (live_atom hpe) Γa₁ hdd) hH' dc hn0 hnS hlen hdv de
-        (by rw [ee, ClauseKinds.hin_shift]; exact hins), by
+        (siteFree_ins (live_atom hns) hR3) (by rw [ee, ClauseKinds.hin_shift]; exact hins), by
         rw [TExpr.shift, TExpr.erase, TExpr.erase, shift_hndExpr, ec, ee]⟩
-  | effHandleVB hAt hs hm hcv hdd hH _ hn0 hnS hlen hdv _ hΓd hSd hins ihc ihe =>
+  | effHandleVB hAt hs hm hcv hdd hH _ hn0 hnS hlen hdv _ hΓd hSd hR3 hins ihc ihe =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
+      obtain ⟨f₀, hf₀, hns, hp₀⟩ := live_withO hf hp
+      obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf₀ hp₀
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, Γp₁, Γp₂, rfl, rfl, ha₁, ha₂, hl₁, hl₂, q₁, q₂, hs', pm⟩ :=
         splitP_route hp' Γa hs
       obtain ⟨f', hf', hpe, q₁'⟩ := live_withO hf₁ q₁
@@ -1389,7 +1399,8 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       rw [← ec] at hH'
       rw [ha₁, hl₁] at dc ec hH'; rw [ha₂, hl₂] at de ee
       exact ⟨.effHandleVB hAt hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [ec]; rfl), hcv.2.ins₂ (by rw [ee]; rfl)⟩ (deadP_ins (live_atom hpe) Γa₁ hdd) hH' dc hn0 hnS hlen hdv de
-        (ctxOutlives_ins (live_atom ho) hΓd) hSd (by rw [ee, ClauseKinds.hin_shift]; exact hins), by
+        (ctxOutlives_ins (live_atom ho) hΓd) hSd (siteFree_ins (live_atom hns) hR3)
+        (by rw [ee, ClauseKinds.hin_shift]; exact hins), by
         rw [TExpr.shift, TExpr.erase, TExpr.erase, shift_hndExpr, ec, ee]⟩
   | iterate S St B R hAt hS hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'

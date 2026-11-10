@@ -196,18 +196,18 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
       exact .effThenDiv (splitP_append h' hs) hNZ hUq (fun hu => banged_append h' (hU hu))
         hMS hDS hfin hP hSD ihM ihN ihD
-  | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
+  | effHandleV hs hd hH _ hn0 hnS hlen hdv _ hR3 ihc ihe =>
       exact .effHandleV (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen hdv
-        ihe
-  | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+        ihe ⟨hR3.1, live_append h' hR3.2⟩
+  | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd hR3 ihc ihe =>
       exact .effHandleVB (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen hdv
-        ihe (ctxOutlives_append h' hΓd) hSd
-  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+        ihe (ctxOutlives_append h' hΓd) hSd ⟨hR3.1, live_append h' hR3.2⟩
+  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ hR3 ihc ihe =>
       exact .effHandleT (splitP_append h' hs) (deadP_append h' hd) hHr.append hHc.append ihc hn0
-        hnd hnS hlen hSN hLin ihe
-  | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
+        hnd hnS hlen hSN hLin ihe ⟨hR3.1, live_append h' hR3.2⟩
+  | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ hR3 ihc ihe =>
       exact .effHandleL (splitP_append h' hs) (deadP_append h' hd) hHr.append hHw.append
-        hHn.append ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
+        hHn.append ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe ⟨hR3.1, live_append h' hR3.2⟩
   | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
   | alpha _ hα ih => exact .alpha ih hα
 

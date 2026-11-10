@@ -225,7 +225,7 @@ theorem d_prog791 :
     CDerives LifeCtx.empty (ctx791 [lendC]) prog791 (.comp (.ret .unit)) := by
   refine .effHandleT (S := []) (SN := []) (A := .unit) (R := .unit) (fs := finsNil)
     (.right .nil) (.cons .nil) (.val _) (.pair (.val _) (.val _)) ?_ (by decide) (by decide)
-    (by simp) (by simp) (RowLe.nil []) (by simp) d_bodyE
+    (by simp) (by simp) (RowLe.nil []) (by simp) d_bodyE (by decide)
   exact .tensorI (.dead .nil) (CancelIntercept.d_idVΓ (.cons .nil) [] .unit)
     (.tensorI (.dead .nil) (CancelIntercept.d_idVΓ (.cons .nil) [] .unit) (.unitI (.cons .nil)))
 

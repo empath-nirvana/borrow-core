@@ -506,7 +506,7 @@ theorem d_swallowInner {Δ : LifeCtx} :
     (fs := finsNil) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_idV _ .unit) (.tensorI .nil (d_constC_raise _ (.unitI (.cons .nil)))
       (.unitI .nil)))
-    (by decide) (by simp [awaitF, cancelled]) (by simp) rfl d_swallowThen
+    (by decide) (by simp [awaitF, cancelled]) (by simp) rfl d_swallowThen (by decide)
 
 /-- **The swallowing example is typed** at the task's row: a cancel at the first `await` runs the
 finaliser, whose raise of `3` supersedes `cancelled` and is caught inside the task, which then
@@ -761,7 +761,8 @@ theorem d_stickyScope : CDerives LifeCtx.empty [] stickyScope (.comp (.ret Flag)
       (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
       (by decide) (by simp) (by simp) rfl
       (by rw [ofEff_sched]
-          exact CDerives.append_dead (Γ := []) (Ctx.Dead.cons (Ctx.Dead.cons .nil)) d_swallow)) ?_
+          exact CDerives.append_dead (Γ := []) (Ctx.Dead.cons (Ctx.Dead.cons .nil)) d_swallow)
+      (by decide)) ?_
   refine .bind (A := Flag) (.right (.dead (.dead .nil))) (.ret (.sumI₂ (.unitI (by cdead)))) ?_
   exact .app (.right (.left (.dead (.dead .nil)))) (.force (T := .thunk _) (.there (.here (by cdead))) rfl)
     (.here (by cdead))

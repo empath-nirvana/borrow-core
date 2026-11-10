@@ -564,7 +564,7 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       have eD := ihD (_ :: Γa₂) Γb₂ rfl
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN eD
       exact .effThenDiv hs' hNZ hUq (fun hu => live_insert hd (hU hu)) hMS hDS hfin hP hSD eM eN eD
-  | effHandleV hs hdd hH _ hn0 hnS hlen hdv _ ihc ihe =>
+  | effHandleV hs hdd hH _ hn0 hnS hlen hdv _ hR3 ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -572,8 +572,8 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       have hH' := valFormIn_insert (Γd := Γd) Γa₁ hH
       rw [h₁] at ec hH'; rw [h₂] at ee
       rw [shift_hndExpr]
-      exact .effHandleV hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee
-  | effHandleVB hs hdd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+      exact .effHandleV hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee ⟨hR3.1, live_insert hd hR3.2⟩
+  | effHandleVB hs hdd hH _ hn0 hnS hlen hdv _ hΓd hSd hR3 ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -582,8 +582,8 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       rw [h₁] at ec hH'; rw [h₂] at ee
       rw [shift_hndExpr]
       exact .effHandleVB hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee
-        ⟨hΓd.1, live_insert hd hΓd.2⟩ hSd
-  | effHandleT hs hdd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+        ⟨hΓd.1, live_insert hd hΓd.2⟩ hSd ⟨hR3.1, live_insert hd hR3.2⟩
+  | effHandleT hs hdd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ hR3 ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -593,8 +593,8 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       rw [h₁] at ec hHr' hHc'; rw [h₂] at ee
       rw [shift_hndExpr]
       simp only [Expr.shift, tailTuple_shift]
-      exact .effHandleT hs' (deadP_insert hd Γa₁ hdd) hHr' hHc' ec hn0 hnd hnS hlen hSN hLin ee
-  | effHandleL hs hdd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
+      exact .effHandleT hs' (deadP_insert hd Γa₁ hdd) hHr' hHc' ec hn0 hnd hnS hlen hSN hLin ee ⟨hR3.1, live_insert hd hR3.2⟩
+  | effHandleL hs hdd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ hR3 ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -606,7 +606,7 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       rw [shift_hndExpr]
       simp only [Expr.shift, lastTuple_shift]
       exact .effHandleL hs' (deadP_insert hd Γa₁ hdd) hHr' hHw' hHn' ec hn0 hnd hnS hlen hNZ hCancel
-        hSW hSu hFin ee
+        hSW hSu hFin ee ⟨hR3.1, live_insert hd hR3.2⟩
   | @letPoly _ _ N _ _ b hcl hV _ _ ihN =>
       intro Γa Γb hΓ; subst hΓ
       have eN := ihN (⟨.unit, false⟩ :: Γa) Γb rfl
@@ -969,7 +969,7 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       have eD := ihD (_ :: Γa₂) Γb₂ rfl
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN eD
       exact .effThenDiv hs' hNZ hUq (fun hu => live_insert hd (hU hu)) hMS hDS hfin hP hSD eM eN eD
-  | effHandleV hAt hs hdd hH _ hn0 hnS hlen hdv _ ihc ihe =>
+  | effHandleV hAt hs hdd hH _ hn0 hnS hlen hdv _ hR3 ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -977,8 +977,8 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       have hH' := valFormIn_insert (Γd := Γd) Γa₁ hH
       rw [h₁] at ec hH'; rw [h₂] at ee
       rw [shift_hndExpr]
-      exact .effHandleV hAt hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee
-  | effHandleVB hAt hs hdd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+      exact .effHandleV hAt hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee ⟨hR3.1, live_insert hd hR3.2⟩
+  | effHandleVB hAt hs hdd hH _ hn0 hnS hlen hdv _ hΓd hSd hR3 ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -987,8 +987,8 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       rw [h₁] at ec hH'; rw [h₂] at ee
       rw [shift_hndExpr]
       exact .effHandleVB hAt hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee
-        ⟨hΓd.1, live_insert hd hΓd.2⟩ hSd
-  | effHandleT hAt hs hdd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+        ⟨hΓd.1, live_insert hd hΓd.2⟩ hSd ⟨hR3.1, live_insert hd hR3.2⟩
+  | effHandleT hAt hs hdd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ hR3 ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -999,8 +999,8 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       rw [shift_hndExpr]
       simp only [Expr.shift, tailTuple_shift]
       exact .effHandleT hAt hs' (deadP_insert hd Γa₁ hdd) hHr' hHc' ec hn0 hnd hnS hlen hSN hLin
-        ee
-  | effHandleL hAt hs hdd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
+        ee ⟨hR3.1, live_insert hd hR3.2⟩
+  | effHandleL hAt hs hdd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ hR3 ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -1012,7 +1012,7 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       rw [shift_hndExpr]
       simp only [Expr.shift, lastTuple_shift]
       exact .effHandleL hAt hs' (deadP_insert hd Γa₁ hdd) hHr' hHw' hHn' ec hn0 hnd hnS hlen hNZ
-        hCancel hSW hSu hFin ee
+        hCancel hSW hSu hFin ee ⟨hR3.1, live_insert hd hR3.2⟩
   | @letPoly _ _ N _ _ b hcl hV _ _ ihN =>
       intro Γa Γb hΓ; subst hΓ
       have eN := ihN (⟨.unit, false⟩ :: Γa) Γb rfl

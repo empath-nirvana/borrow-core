@@ -43,6 +43,7 @@ def Atom.eval : Atom → VTy → Bool
   | .flat, A => A.flat
   | .ownFree, A => ownFreeB A
   | .nfree x, A => !vfreeB x A
+  | .nosite n, A => noSiteB n A
   | .outl Δ a, A => outlivesB Δ a A
 
 /-- The formula at a type. -/
@@ -331,10 +332,12 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .effThen _ _ _ _ S _ _ _ tM tN tD | .effThenDiv _ _ _ _ S _ _ _ tM tN tD =>
       AbsF.orO (tM.absF Δ) (AbsF.withO (if Row.unrDB S then .atom .bang else .tt)
         (AbsF.andO (tN.absF Δ) (tD.absF Δ)))
-  | .effHandleV _ _ _ _ _ _ _ _ _ _ _ _ _ tc te =>
-      AbsF.orO (AbsF.withO (.atom .pers) (tc.absF Δ)) (te.absF Δ)
-  | .effHandleVB _ _ _ _ _ _ _ _ _ d _ _ _ _ tc te =>
-      AbsF.orO (AbsF.withO (.atom .pers) (tc.absF Δ)) (AbsF.withO (.atom (.outl Δ d)) (te.absF Δ))
+  | .effHandleV _ _ _ _ _ _ n _ _ _ _ _ _ tc te =>
+      AbsF.withO (.atom (.nosite n))
+        (AbsF.orO (AbsF.withO (.atom .pers) (tc.absF Δ)) (te.absF Δ))
+  | .effHandleVB _ _ _ _ _ _ n _ _ d _ _ _ _ tc te =>
+      AbsF.withO (.atom (.nosite n))
+        (AbsF.orO (AbsF.withO (.atom .pers) (tc.absF Δ)) (AbsF.withO (.atom (.outl Δ d)) (te.absF Δ)))
   | .lendR .. | .lendLoopR .. | .nilDead .. | .effAwait .. => none
   -- Not placed at a wider context: rules the checker does not apply (the tail-resumptive
   -- `[handle]` and `[handle-last]` of `Div`'s rows, and `[let-poly]`, whose copies are `use`

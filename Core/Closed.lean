@@ -162,15 +162,15 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       rw [(splitP_length hs).1] at ihM
       rw [List.length_cons, (splitP_length hs).2] at ihN ihD
       simp [thenE, closedAt, Expr.val, Val.prim, Val.lam, ihM, ihN, ihD]
-  | effHandleV hs _ _ _ _ _ _ _ _ ihc ihe | effHandleVB hs _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleV hs _ _ _ _ _ _ _ _ _ ihc ihe | effHandleVB hs _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       rw [(splitP_length hs).1] at ihc; rw [(splitP_length hs).2] at ihe
       simp [hndExpr, closedAt, Expr.val, Val.prim, Val.i32, closedAt_qualsVal, ihc, ihe]
-  | effHandleT hs _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleT hs _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       rw [(splitP_length hs).1] at ihc; rw [(splitP_length hs).2] at ihe
       simp only [closedAt, Bool.and_eq_true] at ihc
       simp [hndExpr, closedAt, Expr.val, Val.prim, Val.i32, closedAt_qualsVal, ihc.1, ihe,
         closedAt_tailTuple ihc.2]
-  | effHandleL hs _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleL hs _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       rw [(splitP_length hs).1] at ihc; rw [(splitP_length hs).2] at ihe
       simp only [closedAt, Bool.and_eq_true] at ihc
       simp [hndExpr, closedAt, Expr.val, Val.prim, Val.i32, closedAt_qualsVal, ihc.1, ihe,

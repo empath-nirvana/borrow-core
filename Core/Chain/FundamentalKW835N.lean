@@ -215,16 +215,16 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
       · exact then_compatN hs hNZ hU hMS hDS
           (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc)) hP ihM ihN ihD
       · exact thenDiv_compatN hs hNZ hU hMS hDS hP hcap ihM ihN ihD
-  | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
+  | effHandleV hs hd hH _ hn0 hnS hlen hdv _ _ ihc ihe =>
       exact hHV hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
         (semJN_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe)
-  | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+  | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd _ ihc ihe =>
       exact hHVB hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
         (semJN_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe) hΓd
         (Row.ansOutlives_ofEff_rc hSd)
-  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ _ ihc ihe =>
       exact handleT_compatN hs hd hHr hHc ihc hnS hlen hSN hLin ihe
-  | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
+  | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ _ ihc ihe =>
       exact handleL_compatN hs hd hHr hHw hHn ihc hnS hlen hNZ hCancel hSW hSu hFin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatN (Val.lam b) hcl ihN
   | alpha _ hα ih => exact alpha_compatN hα ih

@@ -185,6 +185,61 @@ theorem await_compatC {Δ : LifeCtx} {S : Row} {n : UInt32} {a c : OpSig}
     (fun _ s hs => absurd hs List.not_mem_nil) hP
     (sumE_compatC (.left .nil) (var_compatC (.here .nil)) h₁ h₂)
 
+/-- R3, a premise of every handle rule: the handled site `n` occurs neither in the answer type `R`'s
+rows nor in the type of a live slot of `Γ` (`VTy.sites`).  `[spec §77]` -/
+def SiteFree (n : UInt32) (Γ : Ctx VTy) (R : VTy) : Prop :=
+  n ∉ R.sites ∧ ∀ s ∈ Γ, s.live = true → n ∉ s.ty.sites
+
+/-- The site `n` is not in `A`'s rows.  `[spec §77]` -/
+def noSiteB (n : UInt32) (A : VTy) : Bool := !A.sites.contains n
+
+theorem noSiteB_iff {n : UInt32} {A : VTy} : noSiteB n A = true ↔ n ∉ A.sites := by
+  simp [noSiteB]
+
+/-- The decision of `SiteFree`.  `[spec §77]` -/
+def siteFreeB (n : UInt32) (Γ : Ctx VTy) (R : VTy) : Bool :=
+  noSiteB n R && Γ.all fun s => !s.live || noSiteB n s.ty
+
+theorem siteFreeB_iff {n : UInt32} {Γ : Ctx VTy} {R : VTy} :
+    siteFreeB n Γ R = true ↔ SiteFree n Γ R := by
+  simp only [siteFreeB, SiteFree, Bool.and_eq_true, noSiteB_iff, List.all_eq_true]
+  refine and_congr Iff.rfl (forall_congr' fun s => forall_congr' fun _ => ?_)
+  cases s.live <;> simp [noSiteB_iff]
+
+instance (n : UInt32) (Γ : Ctx VTy) (R : VTy) : Decidable (SiteFree n Γ R) :=
+  decidable_of_iff _ siteFreeB_iff
+
+/-- `SiteFree` at a slot over a context.  `[spec §77]` -/
+theorem SiteFree.cons {n : UInt32} {s : Slot VTy} {Γ : Ctx VTy} {R : VTy}
+    (hs : s.live = true → n ∉ s.ty.sites) (h : SiteFree n Γ R) : SiteFree n (s :: Γ) R :=
+  ⟨h.1, fun s' hs' hl => by
+    rcases List.mem_cons.mp hs' with rfl | hs'
+    · exact hs hl
+    · exact h.2 s' hs' hl⟩
+
+/-- `SiteFree` at a dead context.  `[spec §77]` -/
+theorem SiteFree.dead {n : UInt32} {Γ : Ctx VTy} {R : VTy} (hR : n ∉ R.sites) (hΓ : Ctx.Dead Γ) :
+    SiteFree n Γ R := by
+  refine ⟨hR, fun s hs hl => ?_⟩
+  induction hΓ with
+  | nil => cases hs
+  | cons _ ih =>
+      rcases List.mem_cons.mp hs with rfl | hs
+      · cases hl
+      · exact ih hs
+
+/-- Discharges `SiteFree` at concrete slots over a dead context in the local context.
+`[spec §77]` -/
+macro "site_free" : tactic => `(tactic| first
+  | decide
+  | ((repeat (first | refine SiteFree.dead ?_ (by assumption) | refine SiteFree.cons ?_ ?_)) <;>
+      decide))
+
+/-- `SiteFree` at a context whose live slots are live slots of `Γ`.  `[spec §77]` -/
+theorem SiteFree.mono {n : UInt32} {Γ Γ' : Ctx VTy} {R : VTy} (h : SiteFree n Γ R)
+    (hl : ∀ s ∈ Γ', s.live = true → s ∈ Γ) : SiteFree n Γ' R :=
+  ⟨h.1, fun s hs hv => h.2 s (hl s hs hv) hv⟩
+
 /-- A judgment form: a value at `A`, or a computation at `C`.  `[spec §3]` -/
 inductive Jdg where
   | val (A : VTy)
@@ -613,19 +668,22 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   handled row does not hold `Div`: a handler of `Div`, or of another name around a computation
   that ticks, is `effHandleT` (decision 68).  The `j`-th operation's marker is `cs j`
   (`OpSig.rc`), which only the typing reads.  At two variables, empty cancel rows and no markers it is
-  `hndTerm` (`CDerives.effHandle`).  `[spec §14, §19, §24, §27, §29a]` -/
+  `hndTerm` (`CDerives.effHandle`).  Every handle rule asks R3 (`SiteFree`): `n` occurs neither
+  in `R`'s rows nor in a live slot's type, a premise no proof reads.
+  `[spec §14, §19, §24, §27, §29a, §77]` -/
   | effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
       {cs : Nat → Bool}
       {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
       (hc : CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))))
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
-      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
+      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)))
+      (hR3 : SiteFree n Γ R) :
       CDerives Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
   /-- BOXED-κ: `[handle]` whose capturing clauses receive their continuation boxed, `κ : [@d] K`
   (the clauses at `clausesTyB Σ R d E fs`). The handled computation's context outlives `@d`, and
   so does the answer type of every non-abortive operation of its row, handled or forwarded.
-  `[spec §28]` -/
+  `[spec §28, §77]` -/
   | effHandleVB {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
       {cs : Nat → Bool}
       {n : UInt32} {A R : VTy} {d : Lifetime.Life} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
@@ -634,19 +692,21 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
       (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)))
-      (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs cs ++ S)) :
+      (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs cs ++ S))
+      (hR3 : SiteFree n Γ R) :
       CDerives Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
   /-- `[handle]` at clauses that resume `κ` in tail position: `handle_n e with (h_ret, gs)`, the
   clauses written out from a tuple `gs` of answering functions (`tailTuple`), each at a row `Σ_N`
   of must-resume operations below `Σ`; an abortive operation's clause is its function itself.  The
-  handled row may hold `Div` (decision 68).  `[spec §14, §19]` -/
+  handled row may hold `Div` (decision 68).  `[spec §14, §19, §77]` -/
   | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
       {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
       (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
       (hc : CDerives Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
       (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
-      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
+      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)))
+      (hR3 : SiteFree n Γ R) :
       CDerives Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e)
         (.comp (CTy.effOf S R))
   /-- `[handle-last]`: `handle_n e with (h_ret, ws, nfs)`, the clauses written out from a tuple
@@ -655,7 +715,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   its exit `nf : !U(X ⊸ F_Σ R)` at `inr`, with `κ`'s cancel its unwind finaliser while the work
   runs; an abortive operation's clause is its work.  The operations are cancellable or abortive,
   `Σ_W ≤ Σ`, `Σ` has no unrestricted operation at any depth, and each cancel row is as `LastFinOK`
-  says. The handled row may hold `Div`.  `[spec §14, §19, §27, §51]` -/
+  says. The handled row may hold `Div`.  `[spec §14, §19, §27, §51, §77]` -/
   | effHandleL {Δ Γ Γ₁ Γ₂} {Hr Hw Hn e : Expr} {S SW : Row} {E : List (Qual × VTy × VTy)}
       {fs : Nat → CTy} {Xs : Nat → VTy} {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHw : Hw.ValFormIn Γ₁) (hHn : Hn.ValFormIn Γ₁)
@@ -665,7 +725,8 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hNZ : S.NZ) (hCancel : ∀ o ∈ E, o.1 = .cancel ∨ (o.2.2.isZero && o.1 != .lin) = true)
       (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
       (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
-      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
+      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)))
+      (hR3 : SiteFree n Γ R) :
       CDerives Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (lastTuple E 0 Hw Hn)) e)
         (.comp (CTy.effOf S R))
   /-- `[let-poly]`: `let x = λy. b in N` for a closed λ-value, from `N` with the λ-value for `x`,
@@ -701,7 +762,8 @@ theorem CDerives.effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qu
     (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (hdv : Row.divB (Row.ofEff n E 0 ++ S) = false)
-    (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
+    (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A)))
+    (hR3 : SiteFree n Γ R) :
     CDerives Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) := by
   obtain ⟨sr, hsr, hlr⟩ := hr.live
   obtain ⟨sc, hsc, hlc⟩ := hc.live
@@ -709,7 +771,7 @@ theorem CDerives.effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qu
   obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
   exact .effHandleV (cs := rcsNil) hs
     (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E finsNil)))
-    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
+    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he hR3
 
 /-- `[handle]` at two variables with cancel rows `fs` and markers `cs`.  `[spec §19, §27, §29a]` -/
 theorem CDerives.effHandleCs {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)}
@@ -718,7 +780,8 @@ theorem CDerives.effHandleCs {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (
     (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E fs))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
-    (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
+    (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)))
+    (hR3 : SiteFree n Γ R) :
     CDerives Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) := by
   obtain ⟨sr, hsr, hlr⟩ := hr.live
   obtain ⟨sc, hsc, hlc⟩ := hc.live
@@ -726,7 +789,7 @@ theorem CDerives.effHandleCs {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (
   obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
   exact .effHandleV (cs := cs) hs
     (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E fs)))
-    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
+    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he hR3
 
 /-! ### The delay, stream and finite iterator instances  `[spec §7]`
 
@@ -921,16 +984,16 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       · exact then_compatC hs hNZ hU hMS hDS
           (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc)) hP hSD ihM ihN ihD
       · exact then_compatC_div hs hNZ hU hMS hDS hP hcap hSD ihM ihN ihD
-  | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
+  | effHandleV hs hd hH _ hn0 hnS hlen hdv _ _ ihc ihe =>
       exact handleV_compatC hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
         (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe)
-  | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+  | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd _ ihc ihe =>
       exact handleV_compatCB hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
         (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe) hΓd
         (Row.ansOutlives_ofEff_rc hSd)
-  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ _ ihc ihe =>
       exact handleT_compatC hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
-  | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
+  | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ _ ihc ihe =>
       exact handleL_compatC hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN
   | alpha _ hα ih => exact alpha_compatJ hα ih

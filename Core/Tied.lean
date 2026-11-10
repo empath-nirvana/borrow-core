@@ -463,7 +463,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   part of the context whose live slots are persistent, `n` not in `Σ`, the handled row tied to
   `Ξ`.  The `j`-th operation's cancel row is `fs j`, and its clause's `κ` has its cancel branch at
   `cancelTy Σ (fs j)`.  At two variables and empty cancel rows it is `hndTerm`
-  (`CDerivesAt.effHandle`).  `[spec §19, §24, §27]` -/
+  (`CDerivesAt.effHandle`).  R3 as `CDerives.effHandleV`.  `[spec §19, §24, §27, §77]` -/
   | effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
       {cs : Nat → Bool}
       {n : UInt32} {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 fs cs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
@@ -471,9 +471,10 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hc : CDerivesAt Ξ Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))))
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
-      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
+      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)))
+      (hR3 : SiteFree n Γ R) :
       CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
-  /-- BOXED-κ, the handled row tied to `Ξ`.  `[spec §28]` -/
+  /-- BOXED-κ, the handled row tied to `Ξ`.  `[spec §28, §77]` -/
   | effHandleVB {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
       {cs : Nat → Bool}
       {n : UInt32} {A R : VTy} {d : Lifetime.Life} (hAt : RowAt Ξ (Row.ofEff n E 0 fs cs ++ S))
@@ -482,20 +483,22 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
       (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)))
-      (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs cs ++ S)) :
+      (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs cs ++ S))
+      (hR3 : SiteFree n Γ R) :
       CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
   /-- `[handle]` at clauses that resume `κ` in tail position, the handled row tied to `Ξ`.
-  `[spec §14, §19]` -/
+  `[spec §14, §19, §77]` -/
   | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
       {n : UInt32} {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
       (hc : CDerivesAt Ξ Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
       (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
-      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
+      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)))
+      (hR3 : SiteFree n Γ R) :
       CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e)
         (.comp (CTy.effOf S R))
-  /-- `[handle-last]`, the handled row tied to `Ξ`.  `[spec §14, §19, §27, §51]` -/
+  /-- `[handle-last]`, the handled row tied to `Ξ`.  `[spec §14, §19, §27, §51, §77]` -/
   | effHandleL {Δ Γ Γ₁ Γ₂} {Hr Hw Hn e : Expr} {S SW : Row} {E : List (Qual × VTy × VTy)}
       {fs : Nat → CTy} {Xs : Nat → VTy} {n : UInt32} {A R : VTy}
       (hAt : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
@@ -506,7 +509,8 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hNZ : S.NZ) (hCancel : ∀ o ∈ E, o.1 = .cancel ∨ (o.2.2.isZero && o.1 != .lin) = true)
       (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
       (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
-      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
+      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)))
+      (hR3 : SiteFree n Γ R) :
       CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (lastTuple E 0 Hw Hn)) e)
         (.comp (CTy.effOf S R))
   /-- `[let-poly]`: `let x = λy. b in N` for a closed λ-value, from `N` with the λ-value for `x`,
@@ -634,14 +638,14 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
       exact .effThen hs hNZ hUq hU hMS hDS hfin hP hSD ih1 ih2 ih3
   | effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
       exact .effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD ih1 ih2 ih3
-  | effHandleV _ hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
-      exact .effHandleV hs hd hH ihc hn0 hnS hlen hdv ihe
-  | effHandleVB _ hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
-      exact .effHandleVB hs hd hH ihc hn0 hnS hlen hdv ihe hΓd hSd
-  | effHandleT _ hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
-      exact .effHandleT hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
-  | effHandleL _ hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
-      exact .effHandleL hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
+  | effHandleV _ hs hd hH _ hn0 hnS hlen hdv _ hR3 ihc ihe =>
+      exact .effHandleV hs hd hH ihc hn0 hnS hlen hdv ihe hR3
+  | effHandleVB _ hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd hR3 ihc ihe =>
+      exact .effHandleVB hs hd hH ihc hn0 hnS hlen hdv ihe hΓd hSd hR3
+  | effHandleT _ hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ hR3 ihc ihe =>
+      exact .effHandleT hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe hR3
+  | effHandleL _ hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ hR3 ihc ihe =>
+      exact .effHandleL hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe hR3
   | iterate S St B R _ hS hΓ => exact .iterate S St B R hS hΓ
   | divFuel S A _ hS hΓ => exact .divFuel S A hS hΓ
   | reify S B R res _ hS hcl _ hΓ ih => exact .reify S B R res hS hcl ih hΓ
@@ -668,7 +672,8 @@ theorem CDerivesAt.effHandle {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Ro
     (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (hdv : Row.divB (Row.ofEff n E 0 ++ S) = false)
-    (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
+    (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A)))
+    (hR3 : SiteFree n Γ R) :
     CDerivesAt Ξ Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) := by
   obtain ⟨sr, hsr, hlr⟩ := hr.live
   obtain ⟨sc, hsc, hlc⟩ := hc.live
@@ -676,7 +681,7 @@ theorem CDerivesAt.effHandle {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Ro
   obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
   exact .effHandleV hAt hs
     (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E finsNil)))
-    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
+    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he hR3
 
 /-- BOXED-κ at two variables, tied: `CDerivesAt.effHandle` with the clauses at `clausesTyB`.
 `[spec §28]` -/
@@ -687,7 +692,8 @@ theorem CDerivesAt.effHandleB {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : R
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (hdv : Row.divB (Row.ofEff n E 0 ++ S) = false)
     (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A)))
-    (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 ++ S)) :
+    (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 ++ S))
+    (hR3 : SiteFree n Γ R) :
     CDerivesAt Ξ Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) := by
   obtain ⟨sr, hsr, hlr⟩ := hr.live
   obtain ⟨sc, hsc, hlc⟩ := hc.live
@@ -697,7 +703,7 @@ theorem CDerivesAt.effHandleB {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : R
     (hs₁.deadP (hr.deadP (retTy_persistent S A R))
       (hc.deadP (clausesTyB_persistent S R d E finsNil)))
     (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
-    hΓd hSd
+    hΓd hSd hR3
 
 /-! ### Tied rows -/
 

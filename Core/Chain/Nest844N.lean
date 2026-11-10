@@ -365,7 +365,7 @@ theorem d_hnd {cl : Val} (hcl : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives ΔM
     (split_kill ΓH).toP (kill_dead _).toP (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI (deadSplit (kill_dead _)) (CancelIntercept.d_idVΓ (kill_dead _) [] .unit)
       (.tensorI (deadSplit (kill_dead _)) (hcl (kill_dead _)) (.unitI (kill_dead _).toP)))
-    (by decide) (by simp) (by simp) rfl d_hBody
+    (by decide) (by simp) (by simp) rfl d_hBody (by decide)
 
 /-- The scratch lend's callback type: `∀'4 ⊏ '3 ⊓ ⊤. Mut '4 1 ⊸ F(['4] 1)`. -/
 abbrev cbMTy : VTy := cbUTy 4 ΔO.meetOfDom (.mut (.var 4) .unit) .unit []

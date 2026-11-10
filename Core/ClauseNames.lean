@@ -105,7 +105,7 @@ theorem d_hRes {Δ : LifeCtx} {e : Expr}
     CDerives Δ [] (hndE hRes e) (.comp (CTy.effOf [rSig 2] .unit)) :=
   .effHandleV (cs := rcsNil) (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finR 2)
     .nil .nil (.pair (.val _) (.pair (.val _) (.val _))) d_hRes_clauses
-    (by decide) (by simp [rSig]) (by simp) rfl he
+    (by decide) (by simp [rSig]) (by simp) rfl he (by decide)
 
 /-- **The rows do not decide that the clause's names are unhandled in `K`.** One `[handle]` node,
 the same tail-resumptive clause (`resumeCT_tail`) at the same row `Σ = {2}`, over two handled

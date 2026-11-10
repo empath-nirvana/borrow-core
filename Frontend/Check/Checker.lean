@@ -28,6 +28,20 @@ def divHandleMsg : String :=
   "a handler around a computation that may tick (`Div`) is typed only when its clauses " ++
     "resume `κ` in tail"
 
+/-- R3 at a handler of the name `k`: its answer type `R` holds the name.  `[spec §77]` -/
+def siteAnsErr (E : Env) (sp : Span) (k : Nat) (R : CVTy) : Error :=
+  ⟨sp, s!"the handler's name {k} escapes it: its answer type `{E.ppV R}` holds an operation of " ++
+    s!"{k} (R3, SPEC §77)"⟩
+
+/-- R3 at a handler of the name `nm`: a slot the handler or its computation uses has a type that
+holds the name.  `[spec §77]` -/
+def siteSlotErr (E : Env) (T : List CVTy) (sp : Span) (k : Nat) (nm : UInt32) (u : List Bool) :
+    Error :=
+  match firstBad (BoCa.Fig16.LogRel.Core.noSiteB nm) T u with
+  | some i => ⟨sp, s!"the handler's name {k} escapes it: {E.slotName i}, of type " ++
+      s!"`{E.slotTy T i}`, is used inside and holds an operation of {k} (R3, SPEC §77)"⟩
+  | none => ⟨sp, "internal error: a handler's site"⟩
+
 /-! ### `def`s, checked once per key  `[spec §10]`
 
 A `def` is checked once per key: the declaration, its type arguments, the lifetime context, and the
@@ -509,9 +523,14 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                             let rM ← chkC n EM Δ T M (effOf Sh A)
                             if hso : usedSat (outlivesB Δ d) T rM.F.u = true then
                               if h₂ : overlapOK T rH.F.u rM.F.u = true then
-                                pure ⟨_, ← consumeOwedR E sp (rEffHandleB (at_ sp)
-                                  (classifyHandler Es rH.t) site hr' hc' rH hp hv hn0 hnS hlen
-                                  hdv hwf hSd rM hso h₂)⟩
+                                if hR : BoCa.Fig16.LogRel.Core.noSiteB nm R = true then
+                                  if hns : usedSat (BoCa.Fig16.LogRel.Core.noSiteB nm) T
+                                      (orL rH.F.u rM.F.u) = true then
+                                    pure ⟨_, ← consumeOwedR E sp (rEffHandleB (at_ sp)
+                                      (classifyHandler Es rH.t) site hr' hc' rH hp hv hn0 hnS hlen
+                                      hdv hwf hSd rM hso h₂ hR hns)⟩
+                                  else throw (siteSlotErr E T sp k nm (orL rH.F.u rM.F.u))
+                                else throw (siteAnsErr E sp k R)
                               else throw (splitErr E T sp rH.F.u rM.F.u)
                             else match firstBad (outlivesB Δ d) T rM.F.u with
                               | some i => err sp (s!"the clauses box `κ` at `{E.ppL d}`, so the " ++
@@ -546,8 +565,14 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                         let rM ← chkC n EM Δ T M
                           (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 (finsOf Fs) ++ S) A)
                         if h₂ : overlapOK T rH.F.u rM.F.u = true then
-                          pure ⟨_, ← consumeOwedR E sp (rEffHandle (at_ sp)
-                            (classifyHandler Es rH.t) site hr' hc' rH hp hv hn0 hnS hlen hdv rM h₂)⟩
+                          if hR : BoCa.Fig16.LogRel.Core.noSiteB nm R = true then
+                            if hns : usedSat (BoCa.Fig16.LogRel.Core.noSiteB nm) T
+                                (orL rH.F.u rM.F.u) = true then
+                              pure ⟨_, ← consumeOwedR E sp (rEffHandle (at_ sp)
+                                (classifyHandler Es rH.t) site hr' hc' rH hp hv hn0 hnS hlen hdv rM h₂
+                                hR hns)⟩
+                            else throw (siteSlotErr E T sp k nm (orL rH.F.u rM.F.u))
+                          else throw (siteAnsErr E sp k R)
                         else throw (splitErr E T sp rH.F.u rM.F.u)
                        else err sp divHandleMsg
                       else err sp "a handler has at most 2^32 operations"

@@ -180,8 +180,8 @@ theorem TDerivesAt.kinds_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : T
     (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs cs n A R u ks site ins tc te) J) :
     TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs cs n A R u ks' site ins tc te) J := by
   cases h with
-  | effHandleV hAt hs hm hcv hd hH hc hn0 hnS hlen hdv he hins =>
-      exact .effHandleV hAt hs hm hcv hd hH hc hn0 hnS hlen hdv he hins
+  | effHandleV hAt hs hm hcv hd hH hc hn0 hnS hlen hdv he hR3 hins =>
+      exact .effHandleV hAt hs hm hcv hd hH hc hn0 hnS hlen hdv he hR3 hins
 
 /-- **The site is the elaboration's, not the derivation's**: a typed derivation of a `handle`
 node is one at any site record. -/
@@ -192,8 +192,8 @@ theorem TDerivesAt.site_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TI
     (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs cs n A R u ks site ins tc te) J) :
     TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs cs n A R u ks site' ins tc te) J := by
   cases h with
-  | effHandleV hAt hs hm hcv hd hH hc hn0 hnS hlen hdv he hins =>
-      exact .effHandleV hAt hs hm hcv hd hH hc hn0 hnS hlen hdv he hins
+  | effHandleV hAt hs hm hcv hd hH hc hn0 hnS hlen hdv he hR3 hins =>
+      exact .effHandleV hAt hs hm hcv hd hH hc hn0 hnS hlen hdv he hR3 hins
 
 
 /-! ### The derived nodes' facts are the derivation's  `[spec §57]` -/

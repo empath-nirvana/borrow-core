@@ -540,6 +540,7 @@ theorem d_at08Once : CDerives LifeCtx.empty [] at08Once (.comp (.ret .unit)) := 
   exact .effHandle (S := []) (E := [(.lin, .unit, .unit)]) (n := 5) (A := .unit) (R := .unit)
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
     (by decide) (by simp) (by simp) rfl (.effPerform (o := fooSig) rfl rfl rfl (.unitI (by cdead)))
+    (by decide)
 
 /-- **AT08 with the copy used once runs**: every run, under every allocator, ends at `()` with the
 empty memory. -/
