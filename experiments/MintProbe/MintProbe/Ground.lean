@@ -59,7 +59,7 @@ theorem g2_shape {α : Life} {l : Loc} {v : Val} {a : Lifetime.Life} {S : Ty} {�
 
 /-- In G2 at `S = 1` the value returned is `()`. -/
 theorem g2_value {α : Life} {δ : LSub} {u : Val} {ρ : WRes}
-    (h : shrV α .unit δ u ρ) : u = .unit := h.1
+    (h : shrV α .unit δ u ρ) : u = .unit := h.2
 
 /-- **G2 below the target.**  A box holding a `Mut @a (Ref S)`: the shared borrow minted at `α`
 reaches past the `mut` target into the cell the target owns, so `deref (load ℓ)` is `Shr α S`

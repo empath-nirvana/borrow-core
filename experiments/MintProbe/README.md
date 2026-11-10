@@ -54,4 +54,4 @@ paper level: `Paper/`'s `wp`, `↭` and `Ty`/`vDen`. The typed world and Core co
 - **P2 proper:** the typed world, deep `vC`, `wpTS_I_frameX` at a mint, and `load`'s compat
   lemma.
 
-Axioms: `[propext, Classical.choice, Quot.sound]` for every P1 result. P2a is not yet built.
+Axioms: `[propext, Classical.choice, Quot.sound]` for every result.

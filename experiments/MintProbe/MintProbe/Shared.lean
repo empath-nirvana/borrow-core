@@ -135,7 +135,7 @@ theorem le {O P Q : WRes} (h : Reach O P) (hQP : ResU.Le Q P) : Reach O Q := by
     fun _ _ ψ hc => ⟨ψ, hc⟩
   obtain ⟨r, hr⟩ := hQP
   obtain ⟨eP₀, heP₀⟩ := h.exDef
-  obtain ⟨eQ₀, -, heQ₀, -, hc₀, -⟩ := ex_split_cells hr heP₀
+  obtain ⟨eQ₀, _, heQ₀, _, hc₀, -⟩ := ex_split_cells hr heP₀
   refine ⟨fun eQ heQ eO heO m c e => ?_, ⟨eQ₀, heQ₀⟩, ?_⟩
   · rw [ExS.functional heQ heQ₀] at e
     exact h.ex eP₀ heP₀ eO heO m c (hc₀ m c e).1
