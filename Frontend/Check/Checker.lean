@@ -412,7 +412,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
   | n + 1, E, Δ, T, m =>
     if m.terminal && E.own.any id then do
       let ⟨C, r⟩ ← synC n E.clearOwn Δ T m
-      pure ⟨C, ← consumeOwedR E m.span r⟩
+      pure ⟨C, ← consumeOwedR E m.span r (m matches .ret ..)⟩
     else match m with
     | .ret sp V => do
       let ⟨_, r⟩ ← synV n E Δ T V
@@ -833,7 +833,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       dropsBefore E m.span ks r
     else if m.terminal && E.own.any id then do
       let r ← chkC n E.clearOwn Δ T m C
-      consumeOwedR E m.span r
+      consumeOwedR E m.span r (m matches .ret ..)
     else match m with
     | .ret sp V =>
       match C with

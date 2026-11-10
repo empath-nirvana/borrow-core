@@ -2012,7 +2012,12 @@ def trBind : Nat → Cx → List Cap → Bool → Span → Ident → Option VTy 
     -- `x : pull A B R <- return g(W)`: the stored generator of the call.
     if let (some A', .ret rsp V) := (A, M) then
       if let (true, some (g, gs, i, f, W)) := (isPullTy A', cx.env.iterCall? V) then
-        let (bs, V', _) ← pullSite n cx cs rsp g gs i f W
+        let (bs, V', rest) ← pullSite n cx cs rsp g gs i f W
+        -- Over a row (SPEC §15): the binding at that row, and `x` a stored generator over it.
+        -- `[spec §15]`
+        let (A, cx) := if rest.isEmpty then (A, cx) else
+          ((pulledTy (cx.env.rowOf rest) A').orElse fun _ => A,
+           { cx with pulls := (x.name, rest) :: cx.pulls })
         return ← chain bs (.bind sp x A (.ret rsp V') (← trC n cx cs wrap N))
     let csM := cx.needC M
     let N' ← trC n cx cs wrap N

@@ -144,10 +144,13 @@ gen-raise-annot 25 0 0 75 75 0
 gen-raise-become 8 4 0 24 24 0
 gen-raise-close-two 24 0 0 72 72 0
 gen-raise-fold 0 0 0 0 0 0
+gen-raise-local-bind 9009 9005 0 27027 27027 0
 gen-raise-local-pure 10 0 0 30 30 0
+gen-raise-op-terminal 16 8 0 48 48 0
 gen-raise-pass 12 0 0 36 36 0
 gen-raise-take 17 0 0 51 51 0
 gen-raise-unused 24 0 0 72 72 0
+gen-raise-with 8 8 0 24 24 0
 gen-raise-zip 21 0 0 63 63 0
 handle-arm-releases 2 0 0 13 13 5
 if-match-argument 0 0 0 0 0 0

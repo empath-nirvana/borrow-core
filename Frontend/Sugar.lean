@@ -3670,14 +3670,31 @@ def assignRows (c : TCx) (x : Ident) (A : Option VTy) (M : Comp) : DM Comp := do
     | none => pure M
   | _, _, _ => pure M
 
+/-- A type with each stored generator over a row written pure (`pull`).  `[spec §15]` -/
+def stripRows : CVTy → CVTy
+  | .tensor A B => .tensor (stripRows A) (stripRows B)
+  | .sum A B => .sum (stripRows A) (stripRows B)
+  | A => match Elab.pullRowOf A with
+    | some (_, a, b, r) => .thunk (Frontend.Check.pullTy a b r)
+    | none => A
+
 /-- The type of a `case`'s arms whose types differ only in the rows of stored generators they
 write: each at the rows of the other (`Elab.withRows`).  `[spec §15]` -/
-def armRows (cx cy : TCx) (M N : Comp) : Option CCTy :=
+def armRows (cx cy : TCx) (sp : Span) (M N : Comp) : Except Error (Option CCTy) :=
   match cx.tyC M, cy.tyC N with
   | some (.ret A), some (.ret B) =>
-    let J := Elab.withRows A B
-    if !tyEqV A B && tyEqV J (Elab.withRows B A) then some (.ret J) else none
-  | _, _ => none
+    let JA := Elab.withRows A B
+    let JB := Elab.withRows B A
+    if tyEqV A B || !tyEqV (stripRows A) (stripRows B) then pure none
+    -- Each arm gives a stored generator over a row where the other's is pure: no one type.
+    else if !tyEqV JA A && !tyEqV JB B then
+      throw ⟨sp, "the arms of this `case` give stored generators over different rows at one " ++
+        "place (one over a row where the other gives a pure one, and the other way round at " ++
+        "another): a stored generator's type has one row, so the arms must agree at each place"⟩
+    -- One arm's places are rowed where the other's are not known to be: the rowed one's type.
+    else if tyEqV JA JB then pure (some (.ret JA))
+    else pure none
+  | _, _ => pure none
 
 mutual
 /-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/
@@ -4657,7 +4674,9 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let V' ← surfV n c none V
       let c ← refresh c
       let (Ax, Ay) := sumTys c V'
-      let exp := exp <|> armRows (c.push x.name Ax) (c.push y.name Ay) M N
+      let exp ← match exp with
+        | some e => pure (some e)
+        | none => (armRows (c.push x.name Ax) (c.push y.name Ay) sp M N : Except Error _)
       let M' ← surfC n (c.push x.name Ax) exp M
       let N' ← surfC n (c.push y.name Ay) exp N
       pure ((fuseChecked V' x M' y N').getD (.case sp V' x M' y N'))

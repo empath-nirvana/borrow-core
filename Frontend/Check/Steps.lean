@@ -1587,8 +1587,8 @@ def closeBefore (E : Env) (sp : Span) (k : Nat) {T' : List CVTy} {S : CRow} {B :
 bound variable) first (SPEC §12); each owed value dropped at a row (`dropRow?`) is dropped before
 the terminal at the terminal's row, its stored generators closed by `closeBefore` (SPEC §15).
 `[spec §12, §15]` -/
-def consumeOwedR {C : CCTy} (E : Env) (sp : Span) (r : Res Δ T (.comp C)) :
-    Except Error (Res Δ T (.comp C)) := do
+def consumeOwedR {C : CCTy} (E : Env) (sp : Span) (r : Res Δ T (.comp C))
+    (valueTerm : Bool := true) : Except Error (Res Δ T (.comp C)) := do
   let owed := owedLeft E.own r.F.u r.F.w 0
   let drops := owed.filter fun i => match T[i]? with
     | some A => !consumableB A && (dropRow? A).isSome
@@ -1596,10 +1596,21 @@ def consumeOwedR {C : CCTy} (E : Env) (sp : Span) (r : Res Δ T (.comp C)) :
   let r ← (owed.filter (!drops.contains ·)).foldr (fun i acc => do consumeOne sp i (← acc)) (pure r)
   if drops.isEmpty then return r
   match effRowOf? C with
-  | some ⟨_ :: _, _, hC⟩ =>
-    let r' ← drops.foldlM (init := hC ▸ r) fun r i =>
-      dropOne E sp (fun T' k r => closeBefore E sp k r) (((T[i]?).map dropDepth).getD 0 + 1) T i r
-    pure (hC ▸ r')
+  | some ⟨_ :: _, B, hC⟩ =>
+    if valueTerm then
+      -- A value: the drops just before it, after the path's last effect.
+      let r' ← drops.foldlM (init := hC ▸ r) fun r i =>
+        dropOne E sp (fun T' k r => closeBefore E sp k r) (((T[i]?).map dropDepth).getD 0 + 1) T i r
+      pure (hC ▸ r')
+    else
+      -- A terminal that performs: it runs first, then the drops, then its answer is returned,
+      -- `x <- T; drops; return x`, scope end (SPEC §12, §15).
+      let ret0 ← liftRow (S' := []) E sp _
+        (rRet (at_ sp) (rVar (at_ sp) 0 B rfl) : Res Δ (B :: T) (.comp (effOf [] B)))
+      let rN ← drops.foldlM (init := ret0) fun r i =>
+        dropOne E sp (fun T' k r => closeBefore E sp k r) (((T[i]?).map dropDepth).getD 0 + 1)
+          (B :: T) (i + 1) r
+      pure (hC ▸ (← effBind E sp ⟨"io_term", sp⟩ (hC ▸ r) rN))
   | _ => throw ⟨sp, s!"{E.slotName (drops.headD 0)} holds a stored generator over a row, not " ++
       s!"closed here, where the computation's type `{E.ppC C}` performs no operation: its " ++
       "close performs, so close it, or use it, where the computation performs its row"⟩
@@ -1634,6 +1645,17 @@ before the argument bindings, which perform nothing, so the order is the same, a
 bindings bind (the function value, the arguments) is live across a close that may raise. On any
 other path the drop is at the terminal, at scope end (`consumeOwedR`).  `[spec §12, §15]` -/
 def becomeDrops (E : Env) (T : List CVTy) (m : Comp) : List Nat :=
+  -- Each value the call takes that is bound before the run, and so live across the drop, must be
+  -- one a raise there can drop (`dropRow?`); else the drops are at scope end, after the call,
+  -- and that call is not a tail call (Rust's ordinary drop order).
+  let live := (List.range T.length).filter fun i =>
+    (match E.vars[i]? with
+      | some (some x) => mentionsC x m
+      | _ => false) &&
+    (match T[i]? with
+      | some A => !A.persistent && (dropRow? A).isNone
+      | none => false)
+  if !live.isEmpty then [] else
   (List.range T.length).filter fun i =>
     E.own.getD i false &&
     (match T[i]? with

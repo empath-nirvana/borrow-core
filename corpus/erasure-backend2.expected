@@ -144,10 +144,13 @@ gen-raise-annot erased handles 5 performs 0 raises 11 machines 8 suspends 4 left
 gen-raise-become erased handles 0 performs 0 raises 7 machines 6 suspends 5 left 0 0
 gen-raise-close-two erased handles 2 performs 0 raises 4 machines 8 suspends 7 left 0 0
 gen-raise-fold erased handles 4 performs 0 raises 6 machines 4 suspends 2 left 0 0
+gen-raise-local-bind erased handles 2 performs 0 raises 6 machines 6 suspends 3 left 0 0
 gen-raise-local-pure erased handles 2 performs 0 raises 5 machines 4 suspends 2 left 0 0
+gen-raise-op-terminal erased handles 0 performs 0 raises 12 machines 12 suspends 8 left 0 0
 gen-raise-pass erased handles 4 performs 0 raises 6 machines 4 suspends 2 left 0 0
 gen-raise-take erased handles 2 performs 0 raises 3 machines 8 suspends 5 left 0 0
 gen-raise-unused erased handles 4 performs 0 raises 8 machines 8 suspends 4 left 0 0
+gen-raise-with erased handles 0 performs 0 raises 4 machines 7 suspends 5 left 0 0
 gen-raise-zip erased handles 2 performs 0 raises 4 machines 8 suspends 4 left 0 0
 handle-arm-releases erased handles 2 performs 0 raises 2 left 0 0
 if-match-argument erased handles 0 performs 0 raises 0 left 0 0

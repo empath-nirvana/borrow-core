@@ -490,10 +490,25 @@ corpus/gen-raise-fold.bc 3.0 cancellable stored,tail: machine: the handlers of t
 corpus/gen-raise-fold.bc 4.0 cancellable abortive: branch; agree
 corpus/gen-raise-fold.bc 5.0 cancellable abortive: branch; agree
 corpus/gen-raise-fold.bc 6.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-raise-local-bind.bc 5.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-local-bind.bc 1.0 cancellable abortive: branch; agree
+corpus/gen-raise-local-bind.bc 2.0 cancellable abortive: branch; agree
+corpus/gen-raise-local-bind.bc 3.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-local-bind.bc 4.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-raise-local-pure.bc 4.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-raise-local-pure.bc 1.0 cancellable abortive: branch; agree
 corpus/gen-raise-local-pure.bc 2.0 cancellable abortive: branch; agree
 corpus/gen-raise-local-pure.bc 3.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-op-terminal.bc 1.0 must-resume tail+state: error: unwind: an operation no handler catches; disagree
+corpus/gen-raise-op-terminal.bc 2.0 cancellable abortive: error: unwind: an operation no handler catches; disagree
+corpus/gen-raise-op-terminal.bc 3.0 cancellable abortive: error: unwind: an operation no handler catches; disagree
+corpus/gen-raise-op-terminal.bc 4.0 cancellable stored,tail: error: unwind: an operation no handler catches; disagree
+corpus/gen-raise-op-terminal.bc 5.0 cancellable stored: error: unwind: an operation no handler catches; disagree
+corpus/gen-raise-op-terminal.bc 6.0 must-resume tail+state: error: unwind: an operation no handler catches; disagree
+corpus/gen-raise-op-terminal.bc 7.0 cancellable abortive: error: unwind: an operation no handler catches; disagree
+corpus/gen-raise-op-terminal.bc 8.0 cancellable abortive: error: unwind: an operation no handler catches; disagree
+corpus/gen-raise-op-terminal.bc 9.0 cancellable stored,tail: error: unwind: an operation no handler catches; disagree
+corpus/gen-raise-op-terminal.bc 10.0 cancellable stored: error: unwind: an operation no handler catches; disagree
 corpus/gen-raise-pass.bc 1.0 cancellable abortive: branch; agree
 corpus/gen-raise-pass.bc 2.0 cancellable abortive: branch; agree
 corpus/gen-raise-pass.bc 3.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
@@ -514,6 +529,12 @@ corpus/gen-raise-unused.bc 5.0 cancellable abortive: branch; agree
 corpus/gen-raise-unused.bc 6.0 cancellable abortive: branch; agree
 corpus/gen-raise-unused.bc 7.0 cancellable stored,tail: machine: the handlers of the name have 4 clauses for it; agree
 corpus/gen-raise-unused.bc 8.0 cancellable stored,tail: machine: the handlers of the name have 4 clauses for it; agree
+corpus/gen-raise-with.bc 6.0 must-resume tail+state: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-with.bc 1.0 must-resume tail+state: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-with.bc 2.0 cancellable abortive: branch; agree
+corpus/gen-raise-with.bc 3.0 cancellable abortive: branch; agree
+corpus/gen-raise-with.bc 4.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-with.bc 5.0 cancellable stored: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-raise-zip.bc 1.0 cancellable abortive: branch; agree
 corpus/gen-raise-zip.bc 2.0 cancellable abortive: branch; agree
 corpus/gen-raise-zip.bc 5.0 cancellable stored,tail: machine: the handlers of the name have 3 clauses for it; agree

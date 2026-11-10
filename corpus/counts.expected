@@ -148,10 +148,12 @@ gen-raise-annot 25 0 0 75 75 0 # the list cells of the inputs
 gen-raise-become 4 8 0 12 12 0 # the count handler's state cell and the lists; its clause's resumption and the sources' continuations are called indirectly
 gen-raise-close-two 0 16 0 0 0 0 # the old backend keeps the lists as plain values: no code walks `Bytes` in a loop here (`bcc-counts --sites`: recursive-types 0), so it allocates no cell, where Backend2 allocates the 24; its 16 indirect calls are dispatched ones Backend2 makes directly
 gen-raise-fold 0 0 0 0 0 0 # no cell; the step function is known
+gen-raise-local-bind 9009 9005 0 27027 27027 0 # a list cell and a stored generator per level; each level's previous generator is closed through its continuation
 gen-raise-local-pure 10 0 0 30 30 0 # the list cells of the inputs
 gen-raise-pass 12 0 0 36 36 0 # the 3 list cells of each of the four inputs
 gen-raise-take 17 0 0 51 51 0 # the 17 list cells of the two inputs; each closed path frees what is left
 gen-raise-unused 24 0 0 72 72 0 # the list cells of the inputs
+gen-raise-with 4 12 0 12 12 0 # the handlers' state cells and the lists; their resumptions and the suspended source's continuation are called indirectly
 gen-raise-zip 21 0 0 63 63 0 # the 7 list cells of each of the three inputs
 handle-arm-releases 2 0 0 13 13 13
 if-match-argument 0 0 0 0 0 0
