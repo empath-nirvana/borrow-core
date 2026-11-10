@@ -568,6 +568,18 @@ corpus/parse-recover-gen.bc 2.0 cancellable abortive: branch; agree
 corpus/parse-recover-gen.bc 3.0 cancellable abortive: branch; agree
 corpus/parse-recover.bc 1.0 cancellable abortive: branch; agree
 corpus/parse-recover.bc 2.0 cancellable abortive: branch; agree
+corpus/pipe-bracket.bc 4.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-bracket.bc 3.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-bracket.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-bracket.bc 1.0 cancellable tail: direct; agree
+corpus/pipe-bracket.bc 8.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-bracket.bc 7.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-bracket.bc 6.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-bracket.bc 5.0 cancellable tail: direct; agree
+corpus/pipe-bracket.bc 12.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-bracket.bc 11.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-bracket.bc 10.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-bracket.bc 9.0 cancellable tail: direct; agree
 corpus/pipe-handlers.bc 6.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-handlers.bc 5.0 cancellable abortive: branch; agree
 corpus/pipe-handlers.bc 9.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
@@ -578,6 +590,35 @@ corpus/pipe-handlers.bc 3.0 cancellable abortive: -; agree
 corpus/pipe-handlers.bc 4.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-handlers.bc 1.0 cancellable abortive: branch; agree
 corpus/pipe-handlers.bc 2.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-left-row.bc 3.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-left-row.bc 5.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-left-row.bc 4.0 cancellable tail: direct; agree
+corpus/pipe-left-row.bc 6.0 cancellable tail: direct; agree
+corpus/pipe-left-row.bc 7.0 cancellable tail: direct; agree
+corpus/pipe-left-row.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-left-row.bc 1.0 cancellable tail: direct; agree
+corpus/pipe-mixed.bc 9.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-mixed.bc 8.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-mixed.bc 7.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-mixed.bc 6.0 cancellable tail: direct; agree
+corpus/pipe-mixed.bc 12.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-mixed.bc 11.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-mixed.bc 10.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-mixed.bc 5.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-mixed.bc 4.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-mixed.bc 3.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-mixed.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-mixed.bc 1.0 cancellable tail: direct; agree
+corpus/pipe-pull.bc 8.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-pull.bc 7.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-pull.bc 6.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-pull.bc 5.0 cancellable tail: direct; agree
+corpus/pipe-pull.bc 4.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-pull.bc 3.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-pull.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-pull.bc 1.0 cancellable tail: direct; agree
+corpus/pipe-push-paren.bc 1.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-push-paren.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/raise-in-borrow-branch.bc 1.0 cancellable abortive: branch; agree
 corpus/raise-in-borrow-branch.bc 2.0 cancellable abortive: branch; agree
 corpus/rec-await-exhausted.bc 1.0 cancellable tail: direct; agree
@@ -678,6 +719,18 @@ corpus/sugar/gen-yields.bc 1.0 cancellable tail: direct; agree
 corpus/sugar/gen-yields.core.bc 1.0 cancellable tail: direct; agree
 corpus/sugar/mut-await.bc 1.0 cancellable tail: direct; agree
 corpus/sugar/mut-await.core.bc 1.0 cancellable tail: direct; agree
+corpus/sugar/pipe-bracket.lowered.bc 4.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/sugar/pipe-bracket.lowered.bc 3.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/sugar/pipe-bracket.lowered.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/sugar/pipe-bracket.lowered.bc 1.0 cancellable tail: direct; agree
+corpus/sugar/pipe-bracket.lowered.bc 8.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/sugar/pipe-bracket.lowered.bc 7.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/sugar/pipe-bracket.lowered.bc 6.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/sugar/pipe-bracket.lowered.bc 5.0 cancellable tail: direct; agree
+corpus/sugar/pipe-bracket.lowered.bc 12.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/sugar/pipe-bracket.lowered.bc 11.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/sugar/pipe-bracket.lowered.bc 10.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/sugar/pipe-bracket.lowered.bc 9.0 cancellable tail: direct; agree
 corpus/text-wordfreq.bc 1.0 cancellable abortive: branch; agree
 corpus/text-wordfreq.bc 2.0 cancellable abortive: branch; agree
 corpus/tree-map.bc 4.0 cancellable tail: direct; agree

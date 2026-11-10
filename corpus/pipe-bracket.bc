@@ -1,0 +1,37 @@
+-- Two bracketings of one chain are one term (SPEC §70, the normal form): `|>` and `>|`
+-- associate to the left, and a stage that is itself a chain of `>|` edges is spliced into the
+-- chain it is piped from by `>|`, so `(a >| b) >| c` and `a >| (b >| c)` both read `a >| b >| c`
+-- (`Frontend.Elab.Pipes.chainOf_bracketing`). A `|>` is read as written (§33). `left`, `right`
+-- and `mixed` bracket one chain three ways, `mixed` with a `|>` wire in its left side;
+-- `corpus/sugar/pipe-bracket.lowered.bc` writes each as the nested calls of §33's case (iii), and
+-- the two erase alike.
+--
+-- Answer: `(i32[25], (i32[25], i32[25]))`: the squares of 0 … 9 above 5 are 9, 16, …; the first
+-- two, 9 + 16, three times.
+
+include adapters
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn sq(x: i32) -> i32 = x * x
+fn big(x: i32) -> bool = x > 5
+
+fn left() -> i32 =
+  let mut a = 0;
+  for y in ((range(0, 10) >| map(sq)) >| filter(big)) >| take(2) { a = a + y };
+  a
+
+fn right() -> i32 =
+  let mut a = 0;
+  for y in range(0, 10) >| (map(sq) >| (filter(big) >| take(2))) { a = a + y };
+  a
+
+fn mixed() -> i32 =
+  let mut a = 0;
+  for y in (range(0, 10) |> map(sq)) >| (filter(big) >| take(2)) { a = a + y };
+  a
+
+main -> i32 * (i32 * i32) = (left(), (right(), mixed()))

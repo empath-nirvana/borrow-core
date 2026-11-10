@@ -121,8 +121,10 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
     is a function type with a provided row (`VTy.rowed`, its row the effect instances applied to
     the empty name); the printer always parenthesizes it. `|>` is the operator of the lowest precedence, below `||`,
     associating to the left; its right operand, the stage, is a prefix expression (a spine). `e |>
-    s` is the node `VSugar.pipe` applied to the pair of `e` and `s`, printed in parentheses, and
-    `Frontend/Elab/Effects.lean` elaborates it by the stage.
+    s` is the node `VSugar.pipe .push` applied to the pair of `e` and `s`, printed in parentheses,
+    and `Frontend/Elab/Effects.lean` elaborates it by the stage. `e >| s` (SPEC §70) is the
+    same node with `.pull`, at the same precedence; a chain is read in its normal form first
+    (`Frontend/Elab/Pipes.lean`).
 20. **`poly` (SPEC §36).** `poly f[T]<'a, …>(x: A, …) -> B` with no `=` declares a family;
     `poly f[P, …]<'h, …> at H = S` a case, its body a statement sequence as a `fn`'s; `poly (+) at
     H = S` a case of an operator's family (`(+)` read as `op_add`, …). `at` is a word here, not a
@@ -184,6 +186,7 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Elab/Data.lean` | `data` declarations (SPEC §42): the table the parser holds; declarations to `type` and `shape` declarations (blocks, the single-root rule); constructors and record literals; the declarations a field may be of; the match compiler, its exhaustiveness and redundancy reports |
 | `Elab/Instances.lean` | the type arguments of each operation's instance and of each template call, typed at the declaration's own types before effects are resolved (SPEC §38); the integer divisions that can fail, at their operands' width (SPEC §39) |
 | `Elab/Divisions.lean` | each division that can fail written as the checked division and a `raise` of `Fail[DivError]`, before rows are inferred (SPEC §39) |
+| `Elab/Pipes.lean` | a pipe chain's normal form (SPEC §70): `chainOf`, and that two bracketings of one chain have one (`chainOf_bracketing`) |
 | `Elab/Effects.lean` | effects and handlers (SPEC §18–§21, §30–§34, §38): every operation resolved to the handler of its instance, rows, copies, handler sites |
 | `Elab/Tir.lean` | the sugar's inference nodes: one node per node of a term, with its type, binders (identity, type, class) and effect (`docs/typed-elaboration.md` §1.1) |
 | `Elab/Infer.lean` | the sugar's inference (`TCx.tyV`): a term's type, bidirectionally, in the environment the checker uses; the checker's synthesis answers for the core's substitutions |

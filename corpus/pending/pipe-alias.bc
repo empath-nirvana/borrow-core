@@ -1,0 +1,25 @@
+-- pending: storing a generator's call at a parameter whose type is an abbreviation of a stored generator's
+-- `>|` reads a stage's first parameter as the checker does, its abbreviations unfolded (SPEC
+-- §70): `tot` takes a `P`, `type P = U (pull i32 1 1)`, so it is a stream stage and `range(0, 4)
+-- >| tot` is §33's case (iii), `tot(range(0, 4))`, as `range(0, 4) |> tot` is. The call is
+-- stored at a parameter only when the parameter is written `U (pull …)` (SPEC §15), so both are
+-- refused alike today; `tot(it: U (pull i32 1 1))` runs.
+--
+-- Once it lands: `i32[6]` (0 + 1 + 2 + 3); `live 0`.
+--
+-- now: 25:15: `range` performs `Yield`, but no handler of `Yield` is in scope here
+include adapters
+
+type P = U (pull i32 1 1)
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn tot(it: P) -> i32 =
+  let mut s = 0;
+  for x in it { s = s + x };
+  s
+
+main -> i32 = range(0, 4) >| tot
