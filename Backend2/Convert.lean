@@ -2900,6 +2900,15 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       throw s!"LIR: `effPerform` of ({o.n}, {o.i}) at a row that does not hold its clause's aborts is outside the pure fragment"
     let bT ← vty o.B
     -- A clause that captures values takes them as its name's evidence (SPEC §47, *Evidence*).
+    -- UNPROVED: that the evidence of `o.n` in scope here holds the captured values of the
+    -- innermost handler frame of `o.n` in the run's continuation. It should hold because
+    -- evidence is bound only at a `handle` node of the name, for its handled computation run in
+    -- place, and passed at every call of a code whose row holds the name (`withEv`, `LCTy.ev`);
+    -- a code at such a row runs only under a frame of the name, by the row's typing; and no
+    -- machine, whose resumption could run under another frame, takes evidence (`outInfo?`).
+    -- `evConfined` keeps evidence out of every value, so none outlives its node. If it fails, the
+    -- right clause runs on another activation's captures: a wrong answer, never a type error or a
+    -- freed value. Look for a call that does not pass evidence, or a node that binds another's.
     let fd := (← get).fd
     let evIn ← if fd.contains o.n then evArgs ((fd.getD o.n []).map (o.n, ·)) else pure []
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => do

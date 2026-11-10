@@ -382,6 +382,7 @@ list-blocks 13 0 0 55 43 0
 list-capability 6 0 0 31 22 0
 list-generic 32 0 0 158 105 0
 literal-array-written 2 0 0 22 11 12
+loop-captured-bang 0 0 0 0 0 0 # `yld` called directly, `c` passed as its evidence: no machine, no indirect call
 loop-handler-binder 1 0 0 15 4 14
 loop-labels 3 0 0 3 3 0
 loop-row-answer 0 0 0 0 0 0

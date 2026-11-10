@@ -454,7 +454,7 @@ operations, as without evidence. Which names are dropped is the conversion's cho
 not a fact about the program. -/
 def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
   let envs := envNames k
-  let mut dropped : List UInt32 := envs
+  let mut dropped : List UInt32 := []
   for _ in [0:envs.length + 1] do
     match lirAt k census dropped with
     | .ok r => return r
