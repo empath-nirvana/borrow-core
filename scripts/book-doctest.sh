@@ -3,7 +3,8 @@
 # a program, run by its attributes as rustdoc runs Rust blocks:
 #
 #   ```bc          must check, and `main` must print the value on its `-- answer:` line and then
-#                  `live 0`, compiled (`bcc run`), and at the source stage (`bcc interp`) when it
+#                  `live 0`, compiled (`bcc run`: Backend2, the default backend, or the old
+#                  backend with `--backend old`), and at the source stage (`bcc interp`) when it
 #                  runs (below). A program with standard I/O (SPEC §11) reads its
 #                  `-- stdin:` lines, each followed by a newline, as standard input, and must
 #                  write its `-- output:` lines, each followed by a newline, before the value.
@@ -17,7 +18,7 @@
 # Failures are reported as `book/src/<file>.md:<line>`, the line of the block's opening fence.
 # The binary is $BCC, or .lake/build/bin/bcc (built by `lake build`).
 #
-#     scripts/book-doctest.sh [--source] [book/src/<file>.md[:<line>]…]
+#     scripts/book-doctest.sh [--source] [--backend old|new] [book/src/<file>.md[:<line>]…]
 #
 # runs every block, or the blocks of the files named (the one whose fence is at <line>).
 #
@@ -32,10 +33,13 @@ cd "$(dirname "$0")/.."
 bcc=${BCC:-.lake/build/bin/bcc}
 [ -x "$bcc" ] || { echo "no bcc at $bcc: run \`lake build bcc\`, or set BCC"; exit 1; }
 want=()
+backend=new
+usage() { echo "usage: scripts/book-doctest.sh [--source] [--backend old|new] [book/src/<file>.md[:<line>]…]"; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --source) export BCC_SOURCE=1 ;;
-    -*) echo "usage: scripts/book-doctest.sh [--source] [book/src/<file>.md[:<line>]…]"; exit 2 ;;
+    --backend) case "${2:-}" in old|new) backend=$2; shift ;; *) usage ;; esac ;;
+    -*) usage ;;
     *) want+=("$1") ;;
   esac
   shift
@@ -115,7 +119,7 @@ block() {
         fi
       fi
       if [ "$wasm" = 1 ]; then
-        got=$("$bcc" run "$f" < "$in" 2>&1) || true
+        got=$("$bcc" run --backend "$backend" "$f" < "$in" 2>&1) || true
         if [ "$got" != "$expect" ]; then
           fail "$at" "compiled output differs" "want: $(echo "$expect" | tr '\n' ' ')" "got:  $(echo "$got" | tr '\n' ' ')"; return 1
         fi
@@ -134,7 +138,7 @@ block() {
     *) fail "$at" "unknown attributes \`bc,$attrs\` (use bc, bc,check, bc,reject or bc,ignore)"; return 1 ;;
   esac
 }
-export tmp bcc wasm
+export tmp bcc wasm backend
 export -f fail block key
 # The blocks named (every block, when none is).
 if [ ${#want[@]} -gt 0 ]; then
@@ -158,5 +162,5 @@ case "$BCC_SOURCE" in
   0) echo "source stage: not run (BCC_SOURCE=0)" ;;
   *) echo "source stage: the blocks unverified since ${source_base:-(no merge base)} only (--source runs every block)" ;;
 esac
-echo "$total block(s): $ran passed, $ignored ignored, $bad failure(s)."
+echo "$total block(s) ($([ "$backend" = new ] && echo Backend2 || echo "the old backend")): $ran passed, $ignored ignored, $bad failure(s)."
 [ "$bad" -eq 0 ]

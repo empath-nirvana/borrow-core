@@ -8842,8 +8842,8 @@ the one it was, and its output.
 
 ### Lowering
 
-`Backend2/`, selected by `bcc compile|run --backend new` (and `bcc interp --stage lir|lflat`,
-`bcc-counts --backend new`). The fragment is the programs whose typed term has no effect node
+`Backend2/`, the default of `bcc compile|run`, `bcc interp --stage lir|flat` and `bcc-counts`
+(`--backend old` selects the old backend until it is deleted). The fragment is the programs whose typed term has no effect node
 (`effPerform`, `effRaise`, `effHandle*`, `effThen`, `effLet` at a nonempty row, `effSub`,
 `lendR`, `lendLoopR`, `nilDead`, the `…U` borrows, `iterate`, `divFuel`, `reify`,
 `bounded_fix`): 222 corpus programs, I/O programs and codata among them. A program outside it is

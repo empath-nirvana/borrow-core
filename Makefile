@@ -22,13 +22,15 @@ bcc: $(CACHE_STAMP) | tools
 	lake build bcc
 	@echo "built $(BCC)"
 
-# Compile a program to WebAssembly and run it under wasmtime.
+# Compile a program to WebAssembly by Backend2, the default backend, and run it under wasmtime
+# (`make run -- --backend old <file.bc>` for the old backend).
 run: bcc
 	$(BCC) run $(RUN_ARGS)
 
 # The sanity gate (scripts/ci-local.sh): the build, hygiene and axioms, the judgment freeze and
 # the Backend2 fence, the type-equality census, the corpus parsed, checked and renamed, and every corpus program run in WebAssembly by
-# each backend against its golden with `live 0`; the source stage only on unverified goldens.
+# each backend against its golden with `live 0` (Backend2, the default, and the old backend until
+# N7); the source stage only on unverified goldens.
 gate: | tools
 	scripts/ci-local.sh
 
@@ -44,7 +46,8 @@ gate-full: | tools
 gate-fast: | tools
 	scripts/ci-local.sh --changed
 
-# The benchmarks against Rust and C (bench/README.md): build each, time it, write the table to
+# The benchmarks against Rust and C (bench/README.md): build each (ours by Backend2, or with
+# `BENCH_ARGS="--backend old"` by the old backend), time it, write the table to
 # bench/out/results.md. Not part of the gate. `make bench BENCH_ARGS="--only sum --runs 5"`.
 bench: bcc
 	python3 bench/bench.py $(BENCH_ARGS)
