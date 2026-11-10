@@ -154,6 +154,18 @@ fin-raise-unwind 0 0 0 0 0 0
 fin-resume-capturing-row 0 2 0 0 0 0
 fin-timeout 0 0 0 0 0 0
 for-arm-raises-owned 8 0 0 54 54 18
+gen-raise-annot 25 0 0 75 75 0
+gen-raise-become 8 4 0 24 24 0
+gen-raise-close-two 24 0 0 72 72 0
+gen-raise-fold 0 0 0 0 0 0
+gen-raise-local-bind 9009 9005 0 27027 27027 0
+gen-raise-local-pure 10 0 0 30 30 0
+gen-raise-op-terminal 16 8 0 48 48 0
+gen-raise-pass 12 0 0 36 36 0
+gen-raise-take 17 0 0 51 51 0
+gen-raise-unused 24 0 0 72 72 0
+gen-raise-with 8 8 0 24 24 0
+gen-raise-zip 21 0 0 63 63 0
 handle-arm-releases 2 0 0 13 13 5
 if-match-argument 0 0 0 0 0 0
 infer-local-from-call 4 0 0 16 16 0
@@ -564,6 +576,7 @@ surface/io-upper 3 0 0 136 3 0
 surface/io-wc 3 0 0 62 3 0
 surface/map-reuse 6 0 0 42 42 0
 swap-cell-width 1 0 0 1 1 0
+take-failing 0 0 0 0 0 0
 text-lend-lifetime 4 0 0 83 73 13
 text-wordfreq 969 0 192 5452 3360 0
 tree-map 29 0 2 209 161 0

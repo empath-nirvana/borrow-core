@@ -144,6 +144,17 @@ fin-raise-unwind 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the pendi
 fin-resume-capturing-row 0 2 0 0 0 0 # the indirect calls are of `tm`'s answer, a function of its state
 fin-timeout 0 0 0 0 0 0 # no cell; the dropped continuation is cancelled at two rows
 for-arm-raises-owned 8 0 0 54 54 54
+gen-raise-annot 25 0 0 75 75 0 # the list cells of the inputs
+gen-raise-become 4 8 0 12 12 0 # the count handler's state cell and the lists; its clause's resumption and the sources' continuations are called indirectly
+gen-raise-close-two 0 16 0 0 0 0 # the old backend keeps the lists as plain values: no code walks `Bytes` in a loop here (`bcc-counts --sites`: recursive-types 0), so it allocates no cell, where Backend2 allocates the 24; its 16 indirect calls are dispatched ones Backend2 makes directly
+gen-raise-fold 0 0 0 0 0 0 # no cell; the step function is known
+gen-raise-local-bind 9009 9005 0 27027 27027 0 # a list cell and a stored generator per level; each level's previous generator is closed through its continuation
+gen-raise-local-pure 10 0 0 30 30 0 # the list cells of the inputs
+gen-raise-pass 12 0 0 36 36 0 # the 3 list cells of each of the four inputs
+gen-raise-take 17 0 0 51 51 0 # the 17 list cells of the two inputs; each closed path frees what is left
+gen-raise-unused 24 0 0 72 72 0 # the list cells of the inputs
+gen-raise-with 4 12 0 12 12 0 # the handlers' state cells and the lists; their resumptions and the suspended source's continuation are called indirectly
+gen-raise-zip 21 0 0 63 63 0 # the 7 list cells of each of the three inputs
 handle-arm-releases 2 0 0 13 13 13
 if-match-argument 0 0 0 0 0 0
 infer-local-from-call 4 0 0 16 16 0
@@ -555,6 +566,7 @@ surface/io-upper 3 0 0 136 3 0
 surface/io-wc 3 0 0 62 3 0
 surface/map-reuse 6 0 0 42 42 0
 swap-cell-width 1 0 0 1 1 0
+take-failing 0 0 0 0 0 0 # the raising source and take are stored generators whose states are stack values
 text-lend-lifetime 4 0 0 83 73 77
 text-wordfreq 969 0 192 5452 3360 65 # the words' and counts' list nodes; the copies are the written `clone`s of words in comparisons and lookups
 tree-map 29 0 2 209 161 0 # the trees' nodes, one object per node; the copies are the written `clone(m)`s

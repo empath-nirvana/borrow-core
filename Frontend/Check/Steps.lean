@@ -953,22 +953,55 @@ def lookupVar (x : String) : List (Option String) → Option Nat
   | [] => none
   | y :: ys => if y == some x then some 0 else (lookupVar x ys).map (· + 1)
 
+/-- A stored generator over a row (SPEC §15): a slot of type `U (νX. C & F_Σc R)`, `Σc`
+non-empty and `R` closed and consumable. Its consume is its `close` at `Σc`, then `R`'s: the
+row and `R`.  `[spec §15]` -/
+def closeAt? (A : CVTy) : Option (CRow × CVTy) :=
+  match A with
+  | .thunk (.nu (.amp _ D)) =>
+    match effRow? D with
+    | some (Sc, R) =>
+      if !Sc.isEmpty && VTy.clB 0 R && consumableB R then some (Sc, R) else none
+    | none => none
+  | _ => none
+
+/-- The row at which a value of `A` is dropped (SPEC §12, §15): the empty row when `A` is
+consumable; else, when `A` is built by `⊗` and `⊕` from consumable types and stored generators over
+rows (`closeAt?`), the union of their rows; else none.  `[spec §15]` -/
+def dropRow? (A : CVTy) : Option CRow :=
+  if consumableB A then some [] else
+  match A with
+  | .tensor B C => do pure (rowJoin joinFuel (← dropRow? B) (← dropRow? C))
+  | .sum B C => do pure (rowJoin joinFuel (← dropRow? B) (← dropRow? C))
+  | A => (closeAt? A).map (·.1)
+
+/-- The nesting of `⊗` and `⊕` in a type: how deep `dropOne` takes a value of it apart.
+`[spec §15]` -/
+def dropDepth : CVTy → Nat
+  | .tensor A B | .sum A B => 1 + max (dropDepth A) (dropDepth B)
+  | _ => 0
+
 /-- A slot that is not owed: a dead binder. -/
 def Env.push (E : Env) (x : Option String) : Env :=
   { E with vars := x :: E.vars, own := false :: E.own, cap := false :: E.cap }
 
 /-- A binder's live slot `x : A`, owed to its scope when `A` is linear and is consumable
-(SPEC §12). -/
+(SPEC §12), or is dropped at a row (`dropRow?`, SPEC §15). -/
 def Env.pushOwn (E : Env) (x : String) (A : CVTy) : Env :=
-  { E with vars := some x :: E.vars, own := (!A.persistent && consumableB A) :: E.own,
+  { E with vars := some x :: E.vars,
+           own := (!A.persistent && (consumableB A || (dropRow? A).isSome)) :: E.own,
            cap := false :: E.cap }
 
-/-- A binder owes exactly the slot that is consumable.  `[spec §12]` -/
+/-- A binder owes exactly the slot that is consumable, or dropped at a row.
+`[spec §12, §15]` -/
 theorem Env.pushOwn_own (E : Env) (x : String) (A : CVTy) :
-    (E.pushOwn x A).own.head? = some (decide (LinearConsumable A)) := by
-  simp only [Env.pushOwn, List.head?_cons, Option.some.injEq]
-  rw [Bool.eq_iff_iff]
-  simp [LinearConsumable, Linear, consumableB_iff]
+    (E.pushOwn x A).own.head? =
+      some (decide (LinearConsumable A) || (!A.persistent && (dropRow? A).isSome)) := by
+  have h : (!A.persistent && consumableB A) = decide (LinearConsumable A) := by
+    rw [Bool.eq_iff_iff]
+    simp [LinearConsumable, Linear, consumableB_iff]
+  simp only [Env.pushOwn, List.head?_cons, Option.some.injEq, ← h]
+  cases A.persistent <;> cases consumableB A <;> simp
 
 /-- Nothing owed: a terminal computation, checked before what it leaves owed is consumed. What it
 was owed is held for the values in it (`Env.cap`).  `[spec §12]` -/
@@ -1096,12 +1129,6 @@ def consumeStuck {C : CCTy} (sp : Span) (k : Nat) (r : Res Δ T (.comp C)) :
       consumeOne sp i r
     else pure r
 
-/-- Consume what the terminal computation `r` leaves owed, the lowest index (the most recently
-bound variable) first. -/
-def consumeOwed {C : CCTy} (E : Env) (sp : Span) (r : Res Δ T (.comp C)) :
-    Except Error (Res Δ T (.comp C)) :=
-  (owedLeft E.own r.F.u r.F.w 0).foldr (fun i acc => do consumeOne sp i (← acc)) (pure r)
-
 end
 
 /-- `boxed[@a] V`. -/
@@ -1216,34 +1243,6 @@ def atRow (E : Env) (sp : Span) (S : CRow) :
     | some ⟨_, B, hC⟩ => do pure ⟨B, ← liftRow E sp S (hC ▸ r)⟩
     | none => throw ⟨sp, s!"after a computation that performs operations, this must have a " ++
         s!"type `F[…] B`, but it has type `{E.ppC C}`"⟩
-
-/-- The finaliser of an effectful binding: the consumes of the non-persistent slots `u` (the
-slots the rest of the computation uses), under the binder's dead slot, at the pure row (SPEC §24:
-a finaliser lets no raise escape). It runs when an abortive operation of the bound computation
-stops the rest. SPEC §19's consume glue: `[then]`'s `D`, inserted as SPEC §12 inserts consumes. -/
-def finalOf (E : Env) (sp : Span) (S : CRow) (u : List Bool) :
-    Except Error (Res Δ (.unit :: T) (.comp (effOf [] .unit))) := do
-  -- The row has an operation that resumes and may be cancelled (`capB`): the finaliser runs at
-  -- its cancel. Otherwise only an abort stops the rest.
-  let cancels := S.any fun o => BoCa.Fig16.LogRel.Core.capB o.q o.B
-  let idx := (List.range T.length).filter fun i =>
-    u.getD i false && !((T[i]?.map (·.persistent)).getD true)
-  let r0 : Res Δ (.unit :: T) (.comp (.ret .unit)) := rRet (at_ sp) (rUnit (at_ sp))
-  for i in idx do
-    match T[i]? with
-    | some A =>
-      unless consumableB A do
-        if cancels then
-          throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across an operation that " ++
-            "may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its " ++
-            "consume, and its type is linear and not consumable" ++ E.closeHint A true⟩
-        else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
-          "that may abort, and its type is linear and not consumable, and an abort abandons " ++
-          "only a value that holds no owned cell" ++ E.closeHint A true⟩
-    | none => throw ⟨sp, "internal error: a slot is out of range"⟩
-  -- In reverse binding order, as at the end of a path (SPEC §12, `consumeOwed`): the lowest index,
-  -- the most recently bound slot, is consumed first, so it is wrapped last, outermost.
-  idx.reverse.foldlM (init := r0) fun r i => consumeOne sp (i + 1) r
 
 /-- A marked scheme's derived node, over its checked term (SPEC §3). -/
 def markIt {j : Jdg} (sp : Span) (k : SchemeMark) (r : Res Δ T j) : Except Error (Res Δ T j) :=
@@ -1401,6 +1400,137 @@ def thenIt (E : Env) (sp : Span) (x : String) (spD : Span) {S SD : CRow} {A B : 
     else throw ⟨sp, s!"the row `{ppRow E S}` has an operation twice"⟩
   else throw ⟨sp, s!"the row `{ppRow E S}` has an operation of the reserved name 0"⟩
 
+/-- `r` under one more slot of type `A`, dead: it does not use it (`TTied.weaken` at a dead
+slot, `TExpr.shift 1 0`). `none` when `r`'s derivation cannot be placed at a wider context
+(`TExpr.absF`).  `[spec §15]` -/
+def rWeakDead (A : CVTy) {j : Jdg} (r : Res Δ T j) : Option (Res Δ (A :: T) j) :=
+  match hf : r.t.absF Δ with
+  | none => none
+  | some f => some ⟨r.t.shift 1 0, r.sigs, r.pins,
+    ⟨false :: r.F.u, false :: r.F.w, by simp [r.F.hu], by simp [r.F.hw], fun L hb => by
+      cases hb with
+      | cons h₁ h₂ h =>
+        rename_i l ls
+        have hl : l = false := by cases l <;> simp_all
+        subst hl
+        have hw := TTied.weaken (Γa := []) (Γb := mkCtx T ls) (Γp := [⟨A, false⟩])
+          (by simpa using r.F.d ls h) hf (fun s hs hlv => by simp at hs; subst hs; simp at hlv)
+        simpa [mkCtx] using hw⟩⟩
+
+/-- The close of the stored generator over a row at slot `k` (`closeAt?`), at the row `S`:
+`(nu_out (force xₖ)).2`, of type `F_S R`.  `[spec §15]` -/
+def closeOf (E : Env) (sp : Span) (S : CRow) (T' : List CVTy) (k : Nat) :
+    Except Error (Σ R : CVTy, Res Δ T' (.comp (effOf S R))) := do
+  match hk : T'[k]? with
+  | some (.thunk (.nu B)) =>
+    let some (Sc, R) := closeAt? (.thunk (.nu B))
+      | throw ⟨sp, "internal error: a stored generator's close"⟩
+    if hB : CTy.nuOkB B = true then
+      let rO := rNuOut (at_ sp) (CTy.nuOkB_sound B hB) (rForce (at_ sp) k (.nu B) hk)
+      let ⟨D, rD⟩ ← (match hu : B.unroll with
+        | .amp _ D => pure (⟨D, rProj₂ (at_ sp) (hu ▸ rO)⟩ : Σ D : CCTy, Res Δ T' (.comp D))
+        | _ => throw ⟨sp, "internal error: a stored generator's close"⟩ : Except Error _)
+      let rC ← match convComp (at_ sp) (effOf Sc R) ⟨D, rD⟩ with
+        | .ok r => pure r
+        | .error _ => throw ⟨sp, s!"internal error: a stored generator's close at `{E.ppC D}`"⟩
+      pure ⟨R, ← liftRow E sp S rC⟩
+    else throw ⟨sp, "internal error: a stored generator's type"⟩
+  | _ => throw ⟨sp, "internal error: a closed slot is not a stored generator"⟩
+
+/-- `r` under one more dead slot, or the refusal.  `[spec §15]` -/
+def weakDead (E : Env) (sp : Span) (k : Nat) (A : CVTy) {j : Jdg} (r : Res Δ T j) :
+    Except Error (Res Δ (A :: T) j) :=
+  match rWeakDead A r with
+  | some r => pure r
+  | none => throw ⟨sp, s!"{E.slotName k} is dropped here before the rest, which cannot be " ++
+      "placed under its drop"⟩
+
+/-- A leaf of a drop: the close of slot `k` before `r`, at `r`'s type (`closeThen`, or
+`closeBefore` at a terminal).  `[spec §15]` -/
+abbrev Leaf (Δ : LifeCtx) (S : CRow) (B : CVTy) :=
+  (T' : List CVTy) → Nat → Res Δ T' (.comp (effOf S B)) → Except Error (Res Δ T' (.comp (effOf S B)))
+
+/-- The value at slot `k`, which `r` does not use, dropped before `r` (SPEC §12, §15): consumed
+when its type is consumable; closed by `leaf` when it is a stored generator over a row; taken
+apart, `let (x, y) = xₖ` or `case xₖ`, and each part dropped, when it is built by `⊗` or `⊕` of
+such types (`dropRow?`).  `[spec §15]` -/
+def dropOne (E : Env) (sp : Span) {S : CRow} {B : CVTy} (leaf : Leaf Δ S B) :
+    Nat → (T' : List CVTy) → Nat → Res Δ T' (.comp (effOf S B)) →
+    Except Error (Res Δ T' (.comp (effOf S B)))
+  | 0, _, _, _ => throw ⟨sp, "internal error: a dropped value nested too deeply"⟩
+  | n + 1, T', k, r => do
+    match hk : T'[k]? with
+    | some A =>
+      if consumableB A then consumeOne sp k r else
+      match A, hk with
+      | .tensor A₁ A₂, hk =>
+        let rW ← weakDead E sp k A₂ (← weakDead E sp k A₁ r)
+        let r₁ ← dropOne E sp leaf n (A₂ :: A₁ :: T') 0 rW
+        let r₂ ← dropOne E sp leaf n (A₂ :: A₁ :: T') 1 r₁
+        let F₁ ← popL E sp "io_drop_y" r₂.F
+        let F₂ ← popL E sp "io_drop_x" F₁
+        let rV := rVar (at_ sp) k (.tensor A₁ A₂) hk
+        if h : overlapOK T' rV.F.u F₂.u = true then
+          pure (rScope (at_ sp) (rTensorE (atB sp ["io_drop_x", "io_drop_y"]) rV F₂ h))
+        else throw (splitErr E T' sp rV.F.u F₂.u)
+      | .sum A₁ A₂, hk =>
+        let r₁ ← dropOne E sp leaf n (A₁ :: T') 0 (← weakDead E sp k A₁ r)
+        let r₂ ← dropOne E sp leaf n (A₂ :: T') 0 (← weakDead E sp k A₂ r)
+        caseIt E T' sp ⟨"io_drop_l", sp⟩ ⟨"io_drop_r", sp⟩ (rVar (at_ sp) k (.sum A₁ A₂) hk) r₁ r₂
+      | _, _ => leaf T' k r
+    | none => throw ⟨sp, "internal error: a dropped slot is out of range"⟩
+
+/-- The close of slot `k` before `r`, in a finaliser at the row `SD`: `[then]` with
+`y <- close; consumeE R y; r`, whose own finaliser is `r`, so that a raise from the close still
+drops what `r` drops, and each stored generator is closed once.  `[spec §15]` -/
+def closeThen (E : Env) (sp : Span) (SD : CRow) : Leaf Δ SD .unit := fun T' k r => do
+  let ⟨R, rC⟩ ← closeOf E sp SD T' k
+  let rN ← consumeOne sp 0 (← weakDead E sp k R r)
+  let FN ← popL E sp "io_close" rN.F
+  thenIt E sp "io_close" sp rC none FN (← weakDead E sp k .unit r)
+
+/-- The finaliser of an effectful binding: the consumes of the non-persistent slots `u` (the
+slots the rest of the computation uses), under the binder's dead slot. It runs when an abortive
+operation of the bound computation stops the rest, or a continuation captured in it is cancelled.
+SPEC §19's consume glue: `[then]`'s `D`, inserted as SPEC §12 inserts consumes, at the pure row,
+except that a value dropped at a row (`dropRow?`), holding stored generators over rows, is dropped
+there: the finaliser's row is the union of theirs (SPEC §15).  `[spec §15]` -/
+def finalOf (E : Env) (sp : Span) (S : CRow) (u : List Bool) :
+    Except Error (Σ SD : CRow, Res Δ (.unit :: T) (.comp (effOf SD .unit))) := do
+  -- The row has an operation that resumes and may be cancelled (`capB`): the finaliser runs at
+  -- its cancel. Otherwise only an abort stops the rest.
+  let cancels := S.any fun o => BoCa.Fig16.LogRel.Core.capB o.q o.B
+  let idx := (List.range T.length).filter fun i =>
+    u.getD i false && !((T[i]?.map (·.persistent)).getD true)
+  let mut drops : List Nat := []
+  let mut SD : CRow := []
+  for i in idx do
+    match T[i]? with
+    | some A =>
+      if !consumableB A then
+        match dropRow? A with
+        | some Sc =>
+          drops := drops ++ [i]
+          SD := rowJoin joinFuel SD Sc
+        | none =>
+          if cancels then
+            throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across an operation that " ++
+              "may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its " ++
+              "consume, and its type is linear and not consumable" ++ E.closeHint A true⟩
+          else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
+            "that may abort, and its type is linear and not consumable, and an abort abandons " ++
+            "only a value that holds no owned cell" ++ E.closeHint A true⟩
+    | none => throw ⟨sp, "internal error: a slot is out of range"⟩
+  -- The drops last, the lowest index first; before them, in reverse binding order as at the end
+  -- of a path (SPEC §12, `consumeOwedR`), the consumes: the lowest index first.
+  let r0 ← liftRow (S' := []) E sp SD
+    (rRet (at_ sp) (rUnit (at_ sp)) : Res Δ (.unit :: T) (.comp (effOf [] .unit)))
+  let r0 ← drops.reverse.foldlM (init := r0) fun r i =>
+    dropOne E sp (closeThen E sp SD) (((T[i]?).map dropDepth).getD 0 + 1) (.unit :: T) (i + 1) r
+  let r ← (idx.filter (!drops.contains ·)).reverse.foldlM (init := r0) fun r i =>
+    consumeOne sp (i + 1) r
+  pure ⟨SD, r⟩
+
 /-- `x <- M; N` whose head `M` performs operations, at the row `S` (SPEC §19). At a row with no
 cancellable or unrestricted operation, or when every slot `N` uses holds no owned cell (and is `!`
 at an unrestricted row), `[let]`; otherwise `[then]`, with the finaliser `finalOf`: the
@@ -1430,8 +1560,8 @@ def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
       if h : overlapOK T rM.F.u FN'.u = true then pure (rScope (at_ sp) (rEffLet (atB sp [x.name]) rM FN' h))
       else throw (splitErr E T sp rM.F.u FN'.u)
     else
-      let rD ← finalOf E sp S FN.u
-      -- `M` at the site's row: its finaliser `finalOf` performs nothing.  `[spec §27]`
+      let ⟨_, rD⟩ ← finalOf E sp S FN.u
+      -- `M` at the site's row; its finaliser `finalOf` performs what it closes (SPEC §15, §27).
       thenIt E sp x.name sp rM none FN rD
   else
     let FN' := FN.map fun _ h =>
@@ -1442,6 +1572,110 @@ def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
           (S.Unr → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T _)))
     if h : overlapOK T rM.F.u FN'.u = true then pure (rScope (at_ sp) (rEffLet (atB sp [x.name]) rM FN' h))
     else throw (splitErr E T sp rM.F.u FN'.u)
+
+
+/-- A stored generator over a row at slot `k` (`closeAt?`) closed before `r`, at `r`'s row:
+`y <- (nu_out (force xₖ)).2; consumeE R y; r` (SPEC §15). The binding is `effBind`'s, so
+what `r` uses besides is consumed if the close raises.  `[spec §15]` -/
+def closeBefore (E : Env) (sp : Span) (k : Nat) {T' : List CVTy} {S : CRow} {B : CVTy}
+    (r : Res Δ T' (.comp (effOf S B))) : Except Error (Res Δ T' (.comp (effOf S B))) := do
+  let ⟨R, rC⟩ ← closeOf E sp S T' k
+  let rN ← consumeOne sp 0 (← weakDead E sp k R r)
+  effBind E sp ⟨"io_close", sp⟩ rC rN
+
+/-- Consume what the terminal computation `r` leaves owed, the lowest index (the most recently
+bound variable) first (SPEC §12); each owed value dropped at a row (`dropRow?`) is dropped before
+the terminal at the terminal's row, its stored generators closed by `closeBefore` (SPEC §15).
+`[spec §12, §15]` -/
+def consumeOwedR {C : CCTy} (E : Env) (sp : Span) (r : Res Δ T (.comp C))
+    (valueTerm : Bool := true) : Except Error (Res Δ T (.comp C)) := do
+  let owed := owedLeft E.own r.F.u r.F.w 0
+  let drops := owed.filter fun i => match T[i]? with
+    | some A => !consumableB A && (dropRow? A).isSome
+    | none => false
+  let r ← (owed.filter (!drops.contains ·)).foldr (fun i acc => do consumeOne sp i (← acc)) (pure r)
+  if drops.isEmpty then return r
+  match effRowOf? C with
+  | some ⟨_ :: _, B, hC⟩ =>
+    if valueTerm then
+      -- A value: the drops just before it, after the path's last effect.
+      let r' ← drops.foldlM (init := hC ▸ r) fun r i =>
+        dropOne E sp (fun T' k r => closeBefore E sp k r) (((T[i]?).map dropDepth).getD 0 + 1) T i r
+      pure (hC ▸ r')
+    else
+      -- A terminal that performs: it runs first, then the drops, then its answer is returned,
+      -- `x <- T; drops; return x`, scope end (SPEC §12, §15).
+      let ret0 ← liftRow (S' := []) E sp _
+        (rRet (at_ sp) (rVar (at_ sp) 0 B rfl) : Res Δ (B :: T) (.comp (effOf [] B)))
+      let rN ← drops.foldlM (init := ret0) fun r i =>
+        dropOne E sp (fun T' k r => closeBefore E sp k r) (((T[i]?).map dropDepth).getD 0 + 1)
+          (B :: T) (i + 1) r
+      pure (hC ▸ (← effBind E sp ⟨"io_term", sp⟩ (hC ▸ r) rN))
+  | _ => throw ⟨sp, s!"{E.slotName (drops.headD 0)} holds a stored generator over a row, not " ++
+      s!"closed here, where the computation's type `{E.ppC C}` performs no operation: its " ++
+      "close performs, so close it, or use it, where the computation performs its row"⟩
+
+
+/-- A value whose making performs nothing: no computation run in it (`run`).  `[spec §15]` -/
+def _root_.Frontend.Val.runFree : Frontend.Val → Bool
+  | .run .. | .sugar .. => false
+  | .pair _ V W | .app _ V W => V.runFree && W.runFree
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.runFree
+  | _ => true
+
+/-- The head of a call: `force f`, applied.  `[spec §15]` -/
+def _root_.Frontend.Comp.callHead : Frontend.Comp → Bool
+  | .force .. => true
+  | .app _ M _ | .inst _ M _ => M.callHead
+  | _ => false
+
+/-- A tail call and the bindings of its arguments before it: `x <- return V; …` with each `V`
+performing nothing (`Val.runFree`), ending in a call (`Comp.callHead`). The A-normal form of a
+call `f(W)` in tail position, its calls in `W` already earlier `let`s.  `[spec §15]` -/
+def _root_.Frontend.Comp.becomeRun : Frontend.Comp → Bool
+  | .bind _ _ _ (.ret _ V) N => V.runFree && N.becomeRun
+  | .letPair _ _ _ V N | .letUnit _ V N => V.runFree && N.becomeRun
+  | M => M.callHead
+
+/-- The owed slots dropped at a row and not consumable (`dropRow?`) that a tail call and its
+argument bindings `m` (`Comp.becomeRun`) do not mention: dropped just before the call, as Rust's
+`become` drops its locals after evaluating the call's arguments (RFC 3407). The drop is placed
+before the argument bindings, which perform nothing, so the order is the same, and nothing the
+bindings bind (the function value, the arguments) is live across a close that may raise. On any
+other path the drop is at the terminal, at scope end (`consumeOwedR`).  `[spec §12, §15]` -/
+def becomeDrops (E : Env) (T : List CVTy) (m : Comp) : List Nat :=
+  -- Each value the call takes that is bound before the run, and so live across the drop, must be
+  -- one a raise there can drop (`dropRow?`); else the drops are at scope end, after the call,
+  -- and that call is not a tail call (Rust's ordinary drop order).
+  let live := (List.range T.length).filter fun i =>
+    (match E.vars[i]? with
+      | some (some x) => mentionsC x m
+      | _ => false) &&
+    (match T[i]? with
+      | some A => !A.persistent && (dropRow? A).isNone
+      | none => false)
+  if !live.isEmpty then [] else
+  (List.range T.length).filter fun i =>
+    E.own.getD i false &&
+    (match T[i]? with
+      | some A => !consumableB A && (dropRow? A).isSome
+      | none => false) &&
+    (match E.vars[i]? with
+      | some (some x) => !mentionsC x m
+      | _ => false)
+
+/-- The slots `ks` dropped before `r`, at `r`'s row (`dropOne`, `closeBefore`).  `[spec §15]` -/
+def dropsBefore {C : CCTy} (E : Env) (sp : Span) (ks : List Nat) (r : Res Δ T (.comp C)) :
+    Except Error (Res Δ T (.comp C)) := do
+  match effRowOf? C with
+  | some ⟨_ :: _, _, hC⟩ =>
+    let r' ← ks.foldlM (init := hC ▸ r) fun r i =>
+      dropOne E sp (fun T' k r => closeBefore E sp k r) (((T[i]?).map dropDepth).getD 0 + 1) T i r
+    pure (hC ▸ r')
+  | _ => throw ⟨sp, s!"{E.slotName (ks.headD 0)} holds a stored generator over a row, not " ++
+      s!"closed here, where the computation's type `{E.ppC C}` performs no operation: its " ++
+      "close performs, so close it, or use it, where the computation performs its row"⟩
 
 end
 

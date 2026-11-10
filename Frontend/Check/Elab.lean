@@ -50,12 +50,16 @@ def qualStr : CQual → String
   | .cancel => "cancel"
   | .unr => "unr"
 
-/-- `pull A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R`: a stored generator (SPEC §15). It is an
-abbreviation of the frontend over `ν` (SPEC §7: a new codata shape is a new abbreviation), with no
-counterpart in `Core/`. -/
-def pullTy (A B R : CVTy) : CCTy :=
-  .nu (.amp (.ret (.sum (.tensor (A.rename Nat.succ) (.tvar 0)) (.sum (B.rename Nat.succ) (.tvar 0))))
-    (.ret (R.rename Nat.succ)))
+/-- `pull_Σ A B R = νX. F_Σ((A ⊗ U X) ⊕ (B ⊕ U X)) & F_Σ R`: a stored generator whose
+observations and `close` perform `Σ` (SPEC §15).  `[spec §15]` -/
+def pullRowTy (S : CRow) (A B R : CVTy) : CCTy :=
+  .nu (.amp (effOf S (.sum (.tensor (A.rename Nat.succ) (.tvar 0)) (.sum (B.rename Nat.succ) (.tvar 0))))
+    (effOf S (R.rename Nat.succ)))
+
+/-- `pull A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R`: a stored generator (SPEC §15), `pull_[]`.
+It is an abbreviation of the frontend over `ν` (SPEC §7: a new codata shape is a new
+abbreviation), with no counterpart in `Core/`. -/
+def pullTy (A B R : CVTy) : CCTy := pullRowTy [] A B R
 
 /-- The declarations visible at a point: those before index `upto`. -/
 structure Scope where
