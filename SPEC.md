@@ -13242,6 +13242,10 @@ stage's or one wire's types** (Assembly(n) §1):
 | `forward_i : Op_i ⊸ F_Σ Ans_i` | performs the real outer operation that stage `i` performed at its fresh name |
 | `finish : R ⊸ … ⊸ F_Σ R` | `run`'s end: closes the others, then answers `r` |
 
+The pieces whose types mention the chain's row `Σ` or the connector's sites (`pipe_step`,
+`pipe_stop`, `pipe_with_stop`, `pipe_forward` and `pipe_finish`) are row- and site-generic
+definitions (§76). `pipe_handoff` is value-level.
+
 **The states and events:**
 
     State_i = Ready(Loop_i) | AtNext(κ) | AtYield(κ) | AtFwd(κ, op) | AtStop(κ) | Ended(k)
@@ -13373,8 +13377,7 @@ P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain under them.
   end answers `inr k` again, with no protocol error at run time:
   `` the end value of `src`, of type `K`, is linear; a stream wire's end value is unrestricted in this version ``.
 - **Items into a stage are droppable.** The input that fits a stage depends on its state, which a
-  type cannot express.
-  So `step_i`'s input is the sum `1 + (A_i + K_i)`, and the cases where the input does not fit the
+  type cannot express. So `step_i`'s input is the sum `1 + (A_i + K_i)`, and the cases where the input does not fit the
   state drop it. An item type that is not droppable is refused by the checker (A0).
 - **Open chains** wait for L2 (above).
 - **`stop()`** is provided at `K = 1` only (above).
