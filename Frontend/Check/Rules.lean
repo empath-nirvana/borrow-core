@@ -579,7 +579,7 @@ def rEffLet {S : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow} {pN : Pins}
       ⟨rM.covers.of₁ hl, (FN.covers fun _ h => h.1.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl⟩ hW hU h₁ h₂⟩
 
 /-- `[then]`: `M then x. N unwind D`, `N` and the finaliser `D` at one context, `D` at the empty
-row (`effThenA`). -/
+row (`effThenA`).  `[spec §27]` -/
 def rEffThen {S SD : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN pD : Pins}
     (h0 : SD = []) (hNZ : S.NZ)
     (hUq : S.Uniq) (rM : Res Δ T (.comp (effOf S A)))
@@ -688,7 +688,8 @@ def _root_.BoCa.Fig16.LogRel.Core.Check.Fam.withUse {P : List Bool → Prop} (F 
 
 /-- **`[handle]`**: `handle_n e with H`, the handler's pair `H` checked (`rH`), its erasure a
 value form over the slots it uses (`hv`), each of which is persistent (`hp`). It reads the handled
-row. The node records the clause kinds `ks` and the site `site`. -/
+row, its operations at their cancel rows `fs`. The node records the clause kinds `ks` and the site
+`site`.  `[spec §19, §27]` -/
 def rEffHandle {S : CRow} {E : List (CQual × CVTy × CVTy)} {fs : Nat → CCTy} {n : UInt32}
     {A R Tr Tc : CVTy}
     (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind) (site : Option HSite)
@@ -711,7 +712,8 @@ def rEffHandle {S : CRow} {E : List (CQual × CVTy × CVTy)} {fs : Nat → CCTy}
 
 /-- BOXED-κ: `[handle]` at the clauses `clausesTyB S R d E`, each capturing clause's `κ` boxed at
 `@d`; `@d` defined, every live slot `e` uses outliving it, and every non-abortive answer type of
-the handled row outliving it. It reads the handled row.  `[spec §28]` -/
+the handled row outliving it. It reads the handled row, its operations at their cancel rows `fs`.
+`[spec §27, §28]` -/
 def rEffHandleB {S : CRow} {E : List (CQual × CVTy × CVTy)} {fs : Nat → CCTy} {n : UInt32}
     {A R Tr Tc : CVTy}
     {d : CLife} (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind) (site : Option HSite)

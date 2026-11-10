@@ -54,7 +54,7 @@ abbrev DefCache := List DefEntry
 /-- The checker's monad: an error, or a result with the cache. -/
 abbrev CheckM := StateT DefCache (Except Error)
 
-/-- The depth to which `opKeysOf` reads a finaliser's derivation. -/
+/-- The depth to which `opKeysOf` reads a finaliser's derivation.  `[spec §27]` -/
 def opKeysFuel : Nat := 100000
 
 /-- Run `x`; on an error, the cache as it was before. -/
@@ -451,7 +451,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let rMs ← thenMC n (E₁.ownIn (mentionsC · M)) Δ T M A S SD rM.t
       let rN ← consumeStuck x.span 1 rN
       let FN ← popL E x.span x.name rN.F
-      pure ⟨_, ← thenIt E sp x.name rM' rMs FN rD⟩
+      pure ⟨_, ← thenIt E sp x.name D.span rM' rMs FN rD⟩
     | .perform sp k i V => do
       let ⟨_, o, hf⟩ ← findOp E sp "perform" k i
       if hna : o.abort = false then
@@ -867,7 +867,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           let rMs ← thenMC n (E₁.ownIn (mentionsC · M)) Δ T M A S SD rM.t
           let rN ← consumeStuck x.span 1 rN
           let FN ← popL E x.span x.name rN.F
-          pure (hC ▸ (← thenIt E sp x.name rM' rMs FN rD))
+          pure (hC ▸ (← thenIt E sp x.name D.span rM' rMs FN rD))
       | none => err sp s!"`x <- M unwind (D); N` is checked against `{E.ppC C}`, which is not `F[…] B`"
     | .abort sp k i V =>
       match effRow? C with

@@ -189,11 +189,12 @@ inductive CTy where
   | eff (sp : Span) (row : Row) (A : VTy)
 
 /-- An effect row (SPEC §19): each entry the operation `i` of the handler name `n`, `A ↠^q B`,
-with its cancel row `fin` (SPEC §27; `.nil`, the empty cancel row, when none is written).
-`[spec §19, §27]` -/
+with its cancel row `fin` (SPEC §27; `.nil`, the empty cancel row, when none is written). `top` is
+the cancel row `⊤` (`cancel[top]`), a cancel row only.  `[spec §19, §27]` -/
 inductive Row where
   | nil
   | cons (n i : Nat) (q : Qual) (A B : VTy) (fin : Row) (rest : Row)
+  | top
 
 /-- Shapes `σ ::= leaf A | node σ σ | Name` (syntax-core §5). -/
 inductive Shape where
@@ -921,6 +922,7 @@ def CTy.strip : CTy → CTy
 def Row.strip : Row → Row
   | .nil => .nil
   | .cons n i q A B f r => .cons n i q A.strip B.strip f.strip r.strip
+  | .top => .top
 
 def Shape.strip : Shape → Shape
   | .leaf _ A => .leaf .none A.strip

@@ -97,6 +97,7 @@ core-fin-e8b 0 0 0 0 0 0
 core-fin-nested 0 0 0 0 0 0
 core-fin-stored-k-fin 0 1 0 0 0 0
 core-fin-sub-row 0 0 0 0 0 0
+core-fin-top-row 0 0 0 0 0 0
 data-json-map-ser 16 0 0 555 420 133
 effects-load-raise 4 0 0 204 184 15
 for-arm-raises-owned 8 0 0 54 54 18
