@@ -109,8 +109,7 @@ inductive Frame where
   (`Mach.stack`): its arguments are the frame's cell, reserved when the level starts, and the
   stack's depth there. The level's answer, abort or cancel pops it. -/
   | stackF
-  /-- A stored site's stack (SPEC §52), held by a forwarding point or a `κ`'s cancel run: freed
-  when it is cancelled or the run ends. -/
+  /-- A stored site's stack (SPEC §52), held by a forwarding point: freed when it is cancelled. -/
   | stackH
   /-- **The kernel's `cfin`** (`ufinC`, `[finalise-cancel]`), in a cancel that is a machine: the
   finaliser (or the callee's cancel) runs before it, the frames after it are the cancelled region's.
@@ -731,7 +730,10 @@ cancel entry unwinds the point's frames innermost first.
   pending raise held by `Frame.unwindF` (`ufin`, `then_fin`; R3);
 - `κ`'s cancel at a drive is a machine of `cancelTy`'s outcome over `k`'s cancel (`genKap`, R4).
 The cancel's suspensions go back to the code that observed `.2`, and on to the nearest live
-handler: the cancelled region's handlers are dead (`Kont.dead`). -/
+handler: the cancelled region's handlers are dead (the kernel's `Kont.dead`,
+`Paper/S3_Dynamics/Definitions.lean`). Here a cancel's suspension leaves its machine through
+`outSusp`, as the outcome the observer of `.2` receives; it never reaches the clauses of a drive
+inside the cancelled region, whose frames the cancel only walks (`cancelKN`). -/
 
 namespace OutInfo
 /-- The suspended computation at an operation answering `b`, cancelled at the cancel row `cp`. -/
@@ -1035,8 +1037,7 @@ def applyKN : Nat → OutInfo → Kont → List Var → Var → CM Tm
     | .cellF :: _, _ => throw "LIR: a level's cell above the bottom of its continuation"
     | [.stackF], [f, d] => do popThen f d (← outValue F x)
     | .stackF :: _, _ => throw "LIR: a level's frame above the bottom of its continuation"
-    | .stackH :: rest, h :: more => do freeStackThen h (← applyKN n F rest more x)
-    | .stackH :: _, _ => throw "LIR: a site's stack frame without its stack"
+    | .stackH :: _, _ => throw "LIR: a value at a site's stack"
     | .letF fn _ _ :: _, args => pure (.call fn (args ++ [x]))
     | .thenF fn _ _ _ _ :: _, args => pure (.call fn (args ++ [x]))
     | .consumeF _ :: _, _ => throw "LIR: a value at a frame that only consumes"
@@ -1346,9 +1347,8 @@ def cancelTm (cr : CancelRow) (tgt : Option OutInfo) (p : MPoint) (fs : List Var
         | throw "LIR: a callee's cancel that may suspend in a cancel whose cancel row holds no machine operation"
       -- A point holding a site's stack: refused (`stackedCancelRefusal`).
       if p.swapAt.isSome || p.kont.any (· matches .stackH) then throw stackedCancelRefusal
-      errStart cp fun err₀ =>
-        aroundRun p args (fun t => .letv c (.sel k 1) t) fun args =>
-          pointK (.cfinF cp :: p.kont) (err₀ :: args) (.var c) Mk (swapAt := p.swapAt.map (· + 1))
+      errStart cp fun err₀ => do
+        return .letv c (.sel k 1) (← pointK (.cfinF cp :: p.kont) (err₀ :: args) (.var c) Mk)
     | none =>
       let err ← fresh (resTy .unit cp)
       let coerced ← coerceRes .unit ((p.cPay.map (·.pay)).getD []) cp c
@@ -2781,7 +2781,8 @@ def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driv
         -- its cancel row `F_i`, so `κ`'s cancel is a machine of `cancelTy`'s outcome `O`
         -- (`F_{F_i ⊕ Σ} 1`), a call point at `k`'s cancel. Its suspensions are at operations
         -- of `F_i`, which go to the canceller: the region's handlers, this one's too, are dead
-        -- (`Kont.dead`). The handler's values are consumed (the cancel does not read them). At a
+        -- (the kernel's `Kont.dead`); here they leave `κ`'s cancel through `outSusp`, to the
+        -- observer of `.2`, never through this drive's clauses. The handler's values are consumed (the cancel does not read them). At a
         -- site with a stack the run would hold it across a suspension: refused
         -- (`stackedCancelRefusal`).
         if swap then throw stackedCancelRefusal
@@ -4354,11 +4355,10 @@ def stackedOf (s : CState) (recursive : Nat → Bool) (stackOps : MachSet)
     let [(op, kc)] := kcs | continue
     unless stackOps.contains op do continue
     -- A stack machine's cancel is a plain loop over its frames (`stack cancel step`): no frame of
-    -- it calls a finaliser that may suspend, and its operation's cancel row holds no machine
-    -- operation (SPEC §52; a cancel that suspends is not lowered on the task stack).
-    let pureCancel := m.points.all (fun p => p.kont.all fun f => match f with
-        | .thenF _ _ _ _ (some _) => false
-        | _ => true) &&
+    -- it may make a call point (`Frame.mayPoint`: a finaliser that may suspend, or a finaliser's
+    -- run, `cfinF`, `unwindF`), and its operation's cancel row holds no machine operation
+    -- (SPEC §52; a cancel that suspends is not lowered on the task stack).
+    let pureCancel := m.points.all (fun p => !(p.kont.any Frame.mayPoint)) &&
       (m.info.ms.find? (·.1 == op)).all fun (_, _, _, cp) => cp.all (·.ms.isEmpty)
     unless pureCancel do continue
     let self := m.points.all fun p => match p.kTy, p.outVar, p.callee with
