@@ -13,9 +13,9 @@ are typed by `CDerives`'s handler rules, so no scheduler or contract is quantifi
 * `constN_all`: every constant is a value of `!` its type at `vN`, its finaliser's judgment read
   by `fundamentalN_all`. No fragment premise.
 * `gN_ctx791`: the constants' context is met by their values, with no resource.
-* `ExternN`, `ExternsMeetN`: a host extern's contract, `ConstN`'s conclusion for a closed value at
-  a persistent type, slot by slot; `gN_of_meetsN`: the constants' and externs' context is met by
-  their values, with no resource.  `[spec §72]`
+* `gN_of_meetsN`: the constants' and externs' context is met by their values, each constant's
+  value closed by the externs' (`Const791.valAt`), with no resource. The externs' contract
+  `ExternN`/`ExternsMeetN` and the bridge `semJN_close` are in `ConstKW835N`.  `[spec §72]`
 * `goal791N`: `Goal791N` from `HandlerLawN`, its only hypothesis. `fundamentalN_all` at the
   program's derivation, at the empty world; `F R` at `KW` is `erwp` at the empty table
   (`cN_ret_iff`); `erwp_adequacy` there, the post at `∅` by `vN_empty_of_persistent`.
@@ -44,28 +44,31 @@ open BoCa.Fig16.LogRel.Core.CancelIntercept (idV)
 /-- **Every #791 constant is a value of `!` its type at every lifetime context**, from
 `MissingN`: each lend constant's compatibility lemma at `cN`, its finaliser's judgment read by
 `fundamentalN_all`; a binder by `constNAt_poly`.  `[spec §62]` -/
-theorem constNAt_all (hm : MissingN (ℍ := ℍ)) : ∀ (c : Const791) (Δ : LifeCtx),
-    ConstNAt (ℍ := ℍ) Δ c
-  | .w2 .., _ => by
-      rintro ⟨hbnd, hO, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
-      exact withbor2S_compat hbnd hO hA hB hS hAns hdc (fundamentalN_all hm hder) δ hδ Θ n
-  | .w3 .., _ => by
-      rintro ⟨hbnd, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
-      exact withbor3S_compat hbnd hA hB hS hAns hdc (fundamentalN_all hm hder) δ hδ Θ n
-  | .wF .., _ => by
-      rintro ⟨hbnd, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
-      exact withborFS_compat hbnd hA hB hS hAns hdc (fundamentalN_all hm hder) δ hδ Θ n
-  | .wl .., Δ => constN_wl Δ
-  | .sm .., _ => by
-      rintro ⟨hbnd, hOA, hOB, hA, hB, hS, hAns, hdc, hder⟩ δ hδ Θ n _
-      exact sliceBorrowMS_compat hbnd hOA hOB hA hB hS hAns hdc (fundamentalN_all hm hder) δ hδ
-        Θ n
-  | .poly _ _ c, Δ => constNAt_poly (constNAt_all hm c) Δ
+theorem constNAt_all (hm : MissingN (ℍ := ℍ)) : ∀ (c : Const791) (Δ : LifeCtx) (Γx : Ctx VTy)
+    (γx : List Val), ConstNAt (ℍ := ℍ) Δ Γx γx c
+  | .w2 .., _, _, _ => by
+      rintro ⟨hbnd, hO, hA, hB, hS, hAns, hdc, hder⟩ hx δ hδ Θ n _
+      exact withbor2S_compat hbnd hO hA hB hS hAns (substAll_closed_of_meetsN hx hdc)
+        (semJN_close (fundamentalN_all hm hder) hx hdc) δ hδ Θ n
+  | .w3 .., _, _, _ => by
+      rintro ⟨hbnd, hA, hB, hS, hAns, hdc, hder⟩ hx δ hδ Θ n _
+      exact withbor3S_compat hbnd hA hB hS hAns (substAll_closed_of_meetsN hx hdc)
+        (semJN_close (fundamentalN_all hm hder) hx hdc) δ hδ Θ n
+  | .wF .., _, _, _ => by
+      rintro ⟨hbnd, hA, hB, hS, hAns, hdc, hder⟩ hx δ hδ Θ n _
+      exact withborFS_compat hbnd hA hB hS hAns (substAll_closed_of_meetsN hx hdc)
+        (semJN_close (fundamentalN_all hm hder) hx hdc) δ hδ Θ n
+  | .wl .., Δ, _, _ => fun h _ => constN_wl Δ h .nil
+  | .sm .., _, _, _ => by
+      rintro ⟨hbnd, hOA, hOB, hA, hB, hS, hAns, hdc, hder⟩ hx δ hδ Θ n _
+      exact sliceBorrowMS_compat hbnd hOA hOB hA hB hS hAns (substAll_closed_of_meetsN hx hdc)
+        (semJN_close (fundamentalN_all hm hder) hx hdc) δ hδ Θ n
+  | .poly _ _ c, Δ, Γx, γx => constNAt_poly (fun Δ' => constNAt_all hm c Δ' Γx γx) Δ
 
 /-- **Every #791 constant is a value of `!` its type**, from `MissingN`: `constNAt_all` at the
 empty context. -/
 theorem constN_all (hm : MissingN (ℍ := ℍ)) : ∀ c : Const791, ConstN (ℍ := ℍ) c :=
-  fun c => constN_of_at (constNAt_all hm c LifeCtx.empty)
+  fun c => constN_of_at (constNAt_all hm c LifeCtx.empty [] [])
 
 /-- **The constants' context is met by their values**, at every world, with no resource. -/
 theorem gN_ctx791 (hC : ∀ c : Const791, ConstN (ℍ := ℍ) c) (δ : LSub) {Θ : LocTy} (hΘ : Θ.OK)
@@ -78,62 +81,38 @@ theorem gN_ctx791 (hC : ∀ c : Const791, ConstN (ℍ := ℍ) c) (δ : LSub) {Θ
         hC c (hcs c (by simp)) δ Θ n hΘ,
         gN_ctx791 hC δ hΘ n cs (fun c' h => hcs c' (by simp [h]))⟩
 
-/-- **A host extern's contract at the typed world**: the value is closed, its type persistent,
-and it is a value of its type at every `δ`, world and index, with no resource. `ConstN`'s
-conclusion, for a value that is not a #791 constant.  `[spec §72]` -/
-def ExternN (T : VTy) (v : Val) : Prop :=
-  closedAt 0 v.1 = true ∧ T.Persistent ∧
-    ∀ (δ : LSub) (Θ : LocTy) (n : Nat), Θ.OK → vN (ℍ := ℍ) T δ Θ n v PMap.empty
-
-/-- **The externs' contracts, as a named hypothesis**: each slot of `Γ` is live, and the value
-of `γ` at its index meets `ExternN` at the slot's type.  `[spec §72]` -/
-inductive ExternsMeetN : Ctx VTy → List Val → Prop
-  | nil : ExternsMeetN [] []
-  | cons {T : VTy} {Γ : Ctx VTy} {v : Val} {γ : List Val} (hv : ExternN (ℍ := ℍ) T v)
-      (h : ExternsMeetN Γ γ) : ExternsMeetN (⟨T, true⟩ :: Γ) (v :: γ)
-
-/-- The externs' values close every slot of their context.  `[spec §72]` -/
-theorem liveWithin_of_meetsN {Γx : Ctx VTy} {γx : List Val} (h : ExternsMeetN (ℍ := ℍ) Γx γx) :
-    Ctx.LiveWithin Γx γx := by
-  induction h with
-  | nil => trivial
-  | cons _ _ ih => exact ih
-
 /-- The constants' and the externs' values close every slot of their context.  `[spec §72]` -/
 theorem liveWithin_ctx791_append {Γx : Ctx VTy} {γx : List Val} (h : Ctx.LiveWithin Γx γx) :
-    ∀ cs : List Const791, Ctx.LiveWithin (ctx791 cs ++ Γx) (vals791 cs ++ γx)
+    ∀ cs : List Const791, Ctx.LiveWithin (ctx791 cs ++ Γx) (cs.map (fun c => c.valAt γx) ++ γx)
   | [] => h
   | _ :: cs => liveWithin_ctx791_append h cs
 
 /-- **The constants' and the externs' context is met by their values**, at every world, with no
-resource: each constant by `ConstN`, each extern by `ExternN`.  `[spec §72]` -/
-theorem gN_of_meetsN (hC : ∀ c : Const791, ConstN (ℍ := ℍ) c) (δ : LSub) {Θ : LocTy}
-    (hΘ : Θ.OK) (n : Nat) {Γx : Ctx VTy} {γx : List Val} (hx : ExternsMeetN (ℍ := ℍ) Γx γx) :
-    ∀ cs : List Const791, (∀ c ∈ cs, c.OK) →
-      gN (ℍ := ℍ) δ Θ (ctx791 cs ++ Γx) (vals791 cs ++ γx) n PMap.empty
-  | [], _ => by
-      show gN (ℍ := ℍ) δ Θ Γx γx n PMap.empty
-      induction hx with
-      | nil => rfl
-      | cons hv _ ih =>
-          simp only [gN, if_true]
-          exact ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, hv.2.2 δ Θ n hΘ, ih⟩
+resource: each constant, closed by the externs' values, by `ConstNAt`, each extern by `ExternN`.
+`[spec §72]` -/
+theorem gN_of_meetsN {Γx : Ctx VTy} {γx : List Val}
+    (hC : ∀ c : Const791, ConstNAt (ℍ := ℍ) LifeCtx.empty Γx γx c) (δ : LSub) {Θ : LocTy}
+    (hΘ : Θ.OK) (n : Nat) (hx : ExternsMeetN (ℍ := ℍ) Γx γx) :
+    ∀ cs : List Const791, (∀ c ∈ cs, c.OKAt LifeCtx.empty Γx) →
+      gN (ℍ := ℍ) δ Θ (ctx791 cs ++ Γx) (cs.map (fun c => c.valAt γx) ++ γx) n PMap.empty
+  | [], _ => gN_of_externsN hx δ hΘ n
   | c :: cs, hcs => by
-      simp only [ctx791, vals791, List.map_cons, List.cons_append, gN, if_true]
+      simp only [ctx791, List.map_cons, List.cons_append, gN, if_true]
       exact ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _,
-        hC c (hcs c (by simp)) δ Θ n hΘ,
+        hC c (hcs c (by simp)) hx δ (models_empty_any δ) Θ n hΘ,
         gN_of_meetsN hC δ hΘ n hx cs (fun c' h => hcs c' (by simp [h]))⟩
 
 /-- **#791's end goal, over host externs.** Every program typed at `F R`, `R` persistent, from
-the constants `cs`, each meeting its rule's premises, and the externs `Γx`, closed by values `γx`
-meeting their contracts, with every handler it uses inside it, steps or is final with the empty
-heap, or runs forever. The closed, extern-free program at `F 1` is the instance `Γx = []`,
-`R = 1`.  `[spec §72]` -/
+the constants `cs`, each meeting its rule's premises at the externs' context (its finaliser may
+name the externs), and the externs `Γx`, closed by values `γx` meeting their contracts, with every
+handler it uses inside it, steps or is final with the empty heap, or runs forever. Each
+constant's value is closed by the externs' values (`Const791.valAt`). The closed, extern-free
+program at `F 1` is the instance `Γx = []`, `R = 1` (`Const791.map_valAt_nil`).  `[spec §72]` -/
 def _root_.BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N : Prop :=
   ∀ (cs : List Const791) (Γx : Ctx VTy) (γx : List Val) (e₀ : Expr) (R : VTy),
-    (∀ c ∈ cs, c.OK) → ExternsMeetN (ℍ := ℍ) Γx γx →
+    (∀ c ∈ cs, c.OKAt LifeCtx.empty Γx) → ExternsMeetN (ℍ := ℍ) Γx γx →
       CDerives LifeCtx.empty (ctx791 cs ++ Γx) e₀ (.comp (.ret R)) → R.Persistent →
-        OrDiverges (ℍ := ℍ) (substAll (vals791 cs ++ γx) e₀)
+        OrDiverges (ℍ := ℍ) (substAll (cs.map (fun c => c.valAt γx) ++ γx) e₀)
 
 /-- **`Goal791N` from `HandlerLawN`**: the fundamental property at the program's derivation, at
 the empty world and view, every constant and extern a value of its type; `F R` at the typed world
@@ -145,11 +124,13 @@ theorem goal791N (h : HandlerLawN (ℍ := ℍ)) : Goal791N (ℍ := ℍ) := by
   have hm := handlerLawN_iff.mp h
   have hall : ∀ n, erwp (ℍ := ℍ) LocFam.empty (opTableN OpTabN.empty)
       (fun k _ v ρ => vN (ℍ := ℍ) R LSub.empty LocTy.empty k v ρ) n []
-      (substAll (vals791 cs ++ γx) e₀) PMap.empty := fun n => by
-    have hr := fundamentalN_all hm hder LSub.empty (vals791 cs ++ γx) LocTy.empty (fun _ => none)
+      (substAll (cs.map (fun c => c.valAt γx) ++ γx) e₀) PMap.empty := fun n => by
+    have hr := fundamentalN_all hm hder LSub.empty (cs.map (fun c => c.valAt γx) ++ γx) LocTy.empty
+      (fun _ => none)
       n [] PMap.empty (models_empty_any _) LocTy.empty_ok (consistentX_empty _)
       (liveWithin_ctx791_append (liveWithin_of_meetsN hx) cs)
-      (gN_of_meetsN (constN_all hm) LSub.empty LocTy.empty_ok n hx cs hcs)
+      (gN_of_meetsN (fun c => constNAt_all hm c LifeCtx.empty Γx γx) LSub.empty LocTy.empty_ok n hx
+        cs hcs)
     have hr' := (cN_ret_iff R LSub.empty LocTy.empty (fun _ => none) n [] _ _).mp hr
     rwa [LocTy.view_empty] at hr'
   intro μ e hs
@@ -268,9 +249,12 @@ theorem goal791N_premises_inst :
 /-- **`Goal791N` at `prog791`**: the run of the program holding a borrow across `wait` is safe,
 leak-free, or diverges, from `HandlerLawN`. -/
 theorem prog791_orDiverges (h : HandlerLawN (ℍ := ℍ)) :
-    OrDiverges (ℍ := ℍ) (substAll (vals791 [lendC]) prog791) :=
-  List.append_nil (vals791 [lendC]) ▸ goal791N h [lendC] [] [] prog791 .unit
+    OrDiverges (ℍ := ℍ) (substAll (vals791 [lendC]) prog791) := by
+  have hg : OrDiverges (ℍ := ℍ)
+      (substAll (([lendC] : List Const791).map (fun c => c.valAt []) ++ []) prog791) :=
+    goal791N h [lendC] [] [] prog791 .unit
     goal791N_premises_inst.1 .nil ((List.append_nil _).symm ▸ goal791N_premises_inst.2) rfl
+  rwa [Const791.map_valAt_nil, List.append_nil] at hg
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
