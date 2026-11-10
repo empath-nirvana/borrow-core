@@ -96,11 +96,15 @@ closure-captures-list 3 0 0 9 9 0 # the list's 3 nodes, moved into the closure: 
 core-fin-cancel-propagated 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
 core-fin-cancel-reentered 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
 core-fin-cancel-reraised 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
+core-fin-check-afinc 0 0 0 0 0 0 # main returns (); the checked definition is not called
 core-fin-check-consume 0 0 0 0 0 0 # main returns (); the checked definition is not called
+core-fin-check-d2nested 0 0 0 0 0 0 # main returns (); the checked definition is not called
+core-fin-check-dthunk 0 0 0 0 0 0 # main returns (); the checked definition is not called
 core-fin-check-gapcall 0 0 0 0 0 0 # main returns (); the checked definition is not called
 core-fin-check-gapdeep 0 0 0 0 0 0 # main returns (); the checked definition is not called
 core-fin-check-keep 0 0 0 0 0 0 # main returns (); the checked definition is not called
 core-fin-check-nc 0 0 0 0 0 0 # main returns (); the checked definition is not called
+core-fin-check-same2 0 0 0 0 0 0 # main returns (); the checked definition is not called
 core-fin-e7b 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
 core-fin-e7d 0 0 0 0 0 0 # no cell; two finalisers raise, the first error is kept
 core-fin-e8b 0 0 0 0 0 0 # no cell; the finaliser's raise supersedes the pending one

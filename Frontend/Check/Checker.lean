@@ -759,9 +759,10 @@ def bindHead : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → O
 
 /-- The finaliser `D` of `x <- M unwind (D); N` at the site's row `S`, at the row `SD` it
 performs: the empty row when `D` checks there (`effThenA`, as a finaliser that performs nothing
-always was); else `D` is checked at `S` and `SD` is the operations of `S` its derivation performs
-(`opKeysOf`), at which `D` is checked again, `[then]`'s premises then decided at `SD`
-(`thenIt`). Where `D` does not check at that `SD`, the derivation at `S` is kept.  `[spec §27]` -/
+always was); else `D` is checked at `S` and `SD` is the row its derivation needs, cancel rows
+included (`needRowOf`, as `Σ_M` is), on `S`'s operations, at which `D` is checked again, `[then]`'s
+premises then decided at `SD` (`thenIt`). Where `D` does not check at that `SD`, the derivation at
+`S` is kept.  `[spec §27]` -/
 def finC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → CRow →
     CheckM (Σ SD : CRow, Res Δ (.unit :: T) (.comp (effOf SD .unit)))
   | 0, _, _, _, D, _ => err D.span "expression nested too deeply"
@@ -771,9 +772,9 @@ def finC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → CRow 
     | .error e₀ =>
       if S.isEmpty then throw e₀
       let rS ← chkC n E Δ (.unit :: T) D (effOf S .unit)
-      let ks := opKeysOf opKeysFuel rS.t
-      let SD := S.filter fun o => ks.contains (o.n, o.i)
-      if SD.isEmpty || SD.length == S.length then pure ⟨S, rS⟩
+      let need := needRowOf opKeysFuel false rS.t
+      let SD := S.filterMap fun o => need.find? (keyEq · o)
+      if SD.isEmpty then pure ⟨S, rS⟩
       else match ← attempt (chkC n E Δ (.unit :: T) D (effOf SD .unit)) with
         | .ok r => pure ⟨SD, r⟩
         | .error _ => pure ⟨S, rS⟩
@@ -792,7 +793,7 @@ def thenMC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (A 
   | n + 1, E, Δ, T, M, A, S, SD, tM => do
     if SD.isEmpty || thenFinB S S SD then pure none
     else
-      let need := needRowOf opKeysFuel tM
+      let need := needRowOf opKeysFuel false tM
       let SM := S.filterMap fun o => need.find? (keyEq · o)
       if thenFinB SM S SD then
         match ← attempt (chkC n E Δ T M (effOf SM A)) with

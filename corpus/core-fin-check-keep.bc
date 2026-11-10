@@ -1,6 +1,7 @@
--- SPEC §27 in the core text, checked, not run: `main` returns `()` and does not call `prog` (#869
--- lowers it): the twin of Core's `progKeepT`: `progConsumeT` with handler 4 resuming its `κ`, so
--- the kept `2.0` is re-raised at the canceller and caught by handler 2. Interpreted: `inr ()`.
+-- SPEC §27 in the core text, checked, not run: `main` returns `()` and does not call `prog`, a
+-- program whose finaliser suspends under a cancel (neither backend lowers that yet): the twin of
+-- Core's `progKeepT`: `progConsumeT` with handler 4 resuming its `κ`, so the kept `2.0` is
+-- re-raised at the canceller and caught by handler 2. Interpreted: `inr ()`.
 
 def prog : !U (1 -o F (1 + 1)) =
   !thunkv fun (w : 1) ->

@@ -453,11 +453,15 @@ corpus/core-fin-cancel-reraised.bc 19:7: handle 2: inside [], finaliser; row [1,
 corpus/core-fin-cancel-reraised.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/core-fin-cancel-reraised.bc 1.0 resume-or-cancel: machine; condition 2 holds; -
 corpus/core-fin-cancel-reraised.bc 2.0 abortive: -; condition 2 holds; -
+corpus/core-fin-check-afinc.bc flows [0, 4294967295]; main []
 corpus/core-fin-check-consume.bc flows [0, 4294967295]; main []
+corpus/core-fin-check-d2nested.bc flows [0, 4294967295]; main []
+corpus/core-fin-check-dthunk.bc flows [0, 4294967295]; main []
 corpus/core-fin-check-gapcall.bc flows [0, 4294967295]; main []
 corpus/core-fin-check-gapdeep.bc flows [0, 4294967295]; main []
 corpus/core-fin-check-keep.bc flows [0, 4294967295]; main []
 corpus/core-fin-check-nc.bc flows [0, 4294967295]; main []
+corpus/core-fin-check-same2.bc flows [0, 4294967295]; main []
 corpus/core-fin-e7b.bc flows [0, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/core-fin-e7b.bc 12:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-fin-e7b.bc 15:5: handle 2: inside [], finaliser; row [1]; ops 2.0 resume-or-cancel; names 2.0 []; condition 2 holds
