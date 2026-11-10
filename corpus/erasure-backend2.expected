@@ -101,6 +101,8 @@ kernel-forward erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0
 kernel-forward-cancel erased handles 0 performs 0 raises 0 machines 2 suspends 1 left 0 0
 kernel-log-in-borrow erased handles 0 performs 0 raises 0 left 0 0
 kernel-log-outside-native erased handles 0 performs 0 raises 1 machines 2 suspends 1 left 0 0
+kernel-loop-captured erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
+kernel-loop-tail erased handles 2 performs 1 raises 1 left 0 0
 kernel-nested-fail-outside erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
 kernel-nested-log-outside erased handles 0 performs 0 raises 1 machines 2 suspends 1 left 0 0
 kernel-reborrow-raise erased handles 1 performs 0 raises 1 left 0 0

@@ -101,6 +101,8 @@ kernel-forward 3 0 0 9 9 0
 kernel-forward-cancel 1 0 0 1 1 0
 kernel-log-in-borrow 2 0 0 4 4 0
 kernel-log-outside-native 0 0 0 0 0 0
+kernel-loop-captured 0 9001 0 0 0 0
+kernel-loop-tail 0 0 0 0 0 0
 kernel-nested-fail-outside 0 1 0 0 0 0
 kernel-nested-log-outside 0 2 0 0 0 0
 kernel-reborrow-raise 1 0 0 2 2 0
