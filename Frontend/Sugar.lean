@@ -4591,9 +4591,11 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let c ← refresh c
       let e : Option CCTy := do
         let ⟨S, A, R, _⟩ ← Frontend.Check.retRead (← c.tyV hr')
-        let Es ← Frontend.Check.clausesRead S R (← c.tyV hc')
+        -- Each operation with its cancel row, read from its clause's `κ` (SPEC §27).
+        let EFs ← Frontend.Check.clausesReadF S R (← c.tyV hc')
         pure (Frontend.Check.effOf
-          (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A)
+          (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) (EFs.map (·.1)) 0
+            (Frontend.Check.finsOf (EFs.map (·.2))) ++ S) A)
       pure (.handle sp k st hr' hc' (← surfC n c e M))
     | .unwind sp x A M D N => do
       let M' ← surfC n c ((A.bind c.elabV).map (Frontend.Check.effOf (c.E.row.getD []))) M
@@ -4645,6 +4647,24 @@ def siteAtCall (c : TCx) (sp : Span) (g : String) (r : SiteRec) : DM SiteRec := 
       pure (x, ← (c.surface sp t : Except Error VTy))
     pure (r.mapTy (·.subst σ))
 
+/-- A clause that drops its `κ` at an operation whose cancel branch `cancelTy S F` performs
+(its cancel row `F` or the handler's row `S` is not empty) cancels it first: `κ` is consumable only
+when its cancel branch performs nothing (SPEC §12, §27), and its cancel performs `F ⊕ S` at the
+clause's row `S`. The clause's body takes its argument `p` apart,
+`let (a, k) = p; M`, and `M` does not mention `k`: `let (a, k) = p; u <- (force k).2; let () = u;
+M`, the kernel's `[&E₂]` of `κ` (the kernel program `timeout`'s `cancel k`). A clause that names `k`
+is left as written.  `[spec §27]` -/
+def cancelDropped (S : Frontend.Check.CRow) (F : CCTy) (q : Frontend.Check.CQual) (B : CVTy)
+    (boxK : Bool) (p : String) : Comp → Comp
+  | M@(.letPair sp a k (.var vsp p') N) =>
+    if boxK || p' != p || !BoCa.Fig16.LogRel.Core.capB q B || F.isTop || (F.rowOf ++ S).isEmpty ||
+        Frontend.Check.mentionsC k.name N then M
+    else
+      let u : Ident := ⟨s!"fx_cancel_{k.name}", sp⟩
+      .letPair sp a k (.var vsp p')
+        (.bind sp u none (.proj sp false (.force sp k)) (.letUnit sp (.var sp u.name) N))
+  | M => M
+
 /-- A handler site of a control effect (SPEC §19): its arguments bound, its body elaborated
 with the site's operations innermost in the row, the handler's type parameters matched against
 its arguments' types and the body's, and its clauses as `!` closures at the types `[handle]`
@@ -4673,7 +4693,14 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let ops ← i.ents.mapM fun (q, A, B) => do
       pure (coreQual q, ← need sp "an operation's type" (c.elabV A),
         ← need sp "an operation's type" (c.elabV B))
-    let rowB := BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat i.n) ops 0 ++ S
+    -- Each operation's cancel row, as inferred (`HInfo.fins`, SPEC §27): the row its `κ`'s cancel
+    -- branch performs ahead of `S` (`cancelTy`).  `[spec §27]`
+    let finsC ← i.fins.mapM fun r => do
+      match c.elabV (.thunk sp (.eff sp r (.unit sp))) with
+      | some (.thunk C) => pure C
+      | _ => throw (⟨sp, s!"the handler `{i₀.name}`: an operation's cancel row is not a row"⟩ : Error)
+    let fs := Frontend.Check.finsOf finsC
+    let rowB := BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat i.n) ops 0 fs ++ S
     let cB : TCx := { c with E := { c.E with row := some rowB } }
     let M' ← surfC n cB none M
     -- The body's type once its lends are elaborated (`TCx.tyCL`): a lending call's head answers
@@ -4718,19 +4745,20 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
       | _ => throw ⟨sp, "internal error: a handler's return clause"⟩
     -- The operation clauses, each at its type.
     let mut hcs : List Val := []
-    for (cl, (q, Ai, Bi)) in (clauseList cls).zip ops do
+    for ((cl, (q, Ai, Bi)), j) in ((clauseList cls).zip ops).zipIdx do
       match cl with
       | .thunkv csp (.lam lsp x _ body) =>
-        let K := BoCa.Fig16.LogRel.Core.kTy S Rc q Bi
+        let K := BoCa.Fig16.LogRel.Core.kTy S Rc q Bi (fs j)
         let T : CVTy := if BoCa.Fig16.LogRel.Core.ClauseKinds.isAbortive (q, Ai, Bi) then Ai
           else .tensor Ai (if i.boxK then .box kBound K else K)
+        let body := cancelDropped S (fs j) q Bi i.boxK x.name body
         let body' ← surfC n (cS.push x.name (some T)) (some ans) (body.subst σ)
         hcs := hcs ++ [.bangThunkv csp (.lam lsp x (← (cP.surface lsp T : Except Error VTy)) body')]
       | _ => throw ⟨sp, "internal error: a handler's clause"⟩
     let hcV := hcs.foldr (fun v t => Val.pair sp v t) (.unit sp)
     let hrTy ← (cP.surface sp (BoCa.Fig16.LogRel.Core.retTy S A Rc) : Except Error VTy)
-    let hcTy ← (cP.surface sp (if i.boxK then BoCa.Fig16.LogRel.Core.clausesTyB S Rc kBound ops
-      else BoCa.Fig16.LogRel.Core.clausesTy S Rc ops) : Except Error VTy)
+    let hcTy ← (cP.surface sp (if i.boxK then BoCa.Fig16.LogRel.Core.clausesTyB S Rc kBound ops fs
+      else BoCa.Fig16.LogRel.Core.clausesTy S Rc ops fs) : Except Error VTy)
     -- The node holds its clauses, each at its type, and the site's record, at the handler's
     -- lifetimes and type arguments here.
     let site := i₀.site.mapTy fun A => (lv A).subst σ
@@ -6458,6 +6486,11 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let ioRef := ioRef.map hyg
   let hide := decls₀.filter (fun d => ioRef.contains d) ++ divDecls ++ wasiDecls
   let fxr ← (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls : Except Error _)
+  -- The cancel rows its finalisers require, read off its output; when there are any, the pass
+  -- again, its rows carrying them (SPEC §27, `Frontend.Elab.Fins`).  `[spec §18, §27]`
+  let fins := Elab.Fins.table fxr.decls
+  let fxr ← if fins.isEmpty then pure fxr else
+    (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls fins : Except Error _)
   let (decls, fx, perTurn, pcaps) := (fxr.decls, fxr.reports, fxr.perTurn, fxr.platform)
   for k in fxr.keys do
     modify (· ++ [(Span.none, .defKey k)])

@@ -350,12 +350,14 @@ def inferC : Nat → Env → LifeCtx → Slots → Option CCTy → Comp → IM T
     | .handle _ k _ hr hc M => do
       let ar ← inferV n E Δ T none hr
       let ac ← inferV n E Δ T none hc
-      let sig : Option (CRow × CVTy × CVTy × List (CQual × CVTy × CVTy)) := do
+      -- Each operation with its cancel row, read from its clause's `κ` (SPEC §27).
+      let sig : Option (CRow × CVTy × CVTy × List ((CQual × CVTy × CVTy) × CCTy)) := do
         let ⟨S, A, R, _⟩ ← retRead (← ar.ty.v?)
-        let Es ← clausesRead S R (← ac.ty.v?)
-        pure (S, A, R, Es)
-      let e := sig.map fun (S, A, _, Es) =>
-        effOf (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A
+        let EFs ← clausesReadF S R (← ac.ty.v?)
+        pure (S, A, R, EFs)
+      let e := sig.map fun (S, A, _, EFs) =>
+        effOf (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) (EFs.map (·.1)) 0
+          (finsOf (EFs.map (·.2))) ++ S) A
       let a ← inferC n E Δ T e M
       pure (node (sig.map fun (S, _, R, _) => effOf S R) [ar, ac, a])
     | .unwind _ x oA M D N => do

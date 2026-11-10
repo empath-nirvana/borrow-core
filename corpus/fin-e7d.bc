@@ -1,0 +1,23 @@
+-- SPEC §27 at the surface, the twin of the kernel program `e7d` (`bcc kernel interp e7d`, E7d; its
+-- core text is `corpus/core-fin-e7d.bc`): `timeout` cancels a body suspended at `wait` below two
+-- cleanups, the inner raising `ex1`, the outer `ex6`. Both `[then]`s are in `body`, whose inferred
+-- row gives `wait` the cancel row `[ex1, ex6]` (§18: cancel rows are inferred through function rows).
+-- The cleanups fire innermost first, and the first error, `ex1`, is kept and re-raised at the
+-- canceller; it passes `catch6` and is caught by `catch1`.
+--
+-- Answer: inr (), and `live 0`. A wrong implementation that lets the second error (`ex6`)
+-- supersede the first, or skips the cleanups, answers `inl (inr ())`.
+
+effect Ex1 { ctl ex1() -> never }
+effect Ex6 { ctl ex6() -> never }
+effect Wait { ctl wait() }
+
+handler catch1: Ex1, 1 + 1 -> (1 + 1) + 1 = { return(v) = inl v; ex1() = inr () }
+handler catch6: Ex6, 1 + 1 -> 1 + 1 = { return(v) = v; ex6() = inr () }
+handler timeout: Wait, 1 -> 1 + 1 = { return(v) = inl v; wait(k) = inr () }
+
+fn body() -> 1 with Wait, Ex1, Ex6 =
+  y <- (x <- wait() unwind (ex1()); x) unwind (ex6());
+  y
+
+main -> (1 + 1) + 1 = with catch1 { with catch6 { with timeout { body() } } }
