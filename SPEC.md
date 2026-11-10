@@ -169,7 +169,7 @@ data is materialized, and gives codata (`&`, and the formers of §7) a home.
 
 `CDerives Δ Γ e j`, with `j` either `val A` or `comp C`, over BoLo expressions in A-normal form:
 the CBPV formers (`thunk`, `force`, `return`, `to`, `λ`, application, `⟨·,·⟩`, projections),
-the lifetime `∀` (elimination at every `C`), the `!` rules of §2 (promotion over a persistent
+the lifetime `∀` (elimination at every `C`), the `!` rules of §2 (promotion over a flat
 context, §10), `[]I` at every value type,
 `⊑Imm`/`⊑Mut`, one constant per borrow axiom of `[TR]` p. 3 at arbitrary value-type payloads,
 three call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), and conversion up to the names of
@@ -1047,9 +1047,9 @@ is flat. The premise of Core's two promotion rules, which §3 takes from §2's `
 So a `!` closure may capture a live variable of any flat type: the scalars, `1 + 1`, `1`, `0`,
 `!A`, and `⊗`, `⊕` and `[@a]` over flat types. `U C`, `Ref`, `Imm`, `Mut` and the opaque host types
 (§11) are not persistent, and `μ` data (a list) is not flat, so a closure capturing one is not
-promoted. It is an ordinary closure `U C`, moved with no copy at capture, and duplicating it is an
-explicit clone: Rust's split between `Copy` (implicit duplication, flat captures only) and `Clone`
-(explicit).
+promoted. It is an ordinary closure `U C`, moved with no copy at capture. Rust splits implicit
+duplication (`Copy`, flat captures only) from explicit (`Clone`); the explicit half for closures is
+*Open* (#928).
 
 - **Soundness.** The compatibility lemmas (`bangThunkF_compatC`, `bangThunkV_compatC`, and the
   chain's `bangThunkF_compatN`, `bangThunkV_compatN`) need only that the context relation holds at
@@ -5266,7 +5266,7 @@ and no borrow lemma changes. The checker emits the rule for `fun (x : 1) -> M` a
 whose body does not use `x`: the body is checked under the binder's slot as before, and the slot is
 closed dead (`lamIt`, `rLamDead`, `TiedDer.lamDead`, `Frontend/Check/`); otherwise `[λ]`. The term
 is the λ either way, so every program erases as before. The promotion (§10) takes a live slot of
-`1`, since `1` is persistent; `[let]` and `[then]` at a row with an unrestricted operation (§19)
+`1`, since `1` is flat; `[let]` and `[then]` at a row with an unrestricted operation (§19)
 keep `!Γ` and do not, so `[λ]` with a dead binder is what binds a unit argument in a body that
 contains them. The checker gives every unused `1` binder the dead form
 (`corpus/core-callback-dead.bc`, counts `0 0 0`).
