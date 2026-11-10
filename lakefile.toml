@@ -105,6 +105,12 @@ name = "FrameEnd"
 srcDir = "experiments/FrameEnd"
 roots = ["FrameEnd"]
 
+# #219 probe: Mint (eager same-lifetime views) in borrow-core.
+[[lean_lib]]
+name = "MintProbe"
+srcDir = "experiments/MintProbe"
+roots = ["MintProbe"]
+
 [[lean_lib]]
 name = "Places"
 srcDir = "experiments/Places"
