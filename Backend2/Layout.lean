@@ -20,7 +20,9 @@ both:
   nodes. A class is the lambda set of the closures at its places.
 - **One box a node** (SPEC §35): a recursive type boxes the fields that close its cycles, the back
   edges of one search over the pair and sum fields, or a sum's payload where that boxes fewer
-  (`sumBoxes`). A closure class that holds itself among its codes' captured values keeps its
+  (`sumBoxes`). The searches run in the representatives' canonical order (`canonicalOrder`), so
+  which field of a cycle is boxed follows from the program and the types, not from how the nodes
+  are numbered. A closure class that holds itself among its codes' captured values keeps its
   environment on the heap.
 - **Cells.** A value in a cell takes the bytes of its type: a byte at `u8`, 4 bytes at `i32` and
   `f32` (L-6), its words otherwise. An allocation is as wide as the widest type of its width
@@ -306,6 +308,19 @@ def join (a b : Nat) : GM Unit := do
         | k, k' =>
           if k == k' then pure [] else
           throw s!"layout: a {reprStr k |>.take 40} joined with a {reprStr k' |>.take 40}"
+      -- The class's former, whichever node led it: an opaque value over an integer, an owned
+      -- cell over a unique borrow over a shared one.
+      let rank : NK → Nat
+        | .opq | .ref _ => 2
+        | .mut _ => 1
+        | _ => 0
+      if rank ky > rank kx then
+        let k : NK := match ky, kx with
+          | .opq, _ => .opq
+          | .ref _, .ref a | .ref _, .imm a | .ref _, .mut a => .ref a
+          | .mut _, .imm a => .mut a
+          | _, k => k
+        modify fun s => { s with nodes := s.nodes.set! rx k }
       modify fun s => { s with todo := more ++ s.todo }
 
 /-- Join the contents `c` of a cell with a value read from it through `Imm̲` (`load`): where the
@@ -523,6 +538,9 @@ def places (p : Prog) : Except String (GState × Nat) := do
 structure Layouts where
   rep : Array Nat
   shape : Array NK
+  /-- **The representatives in their canonical order** (`canonicalOrder`): fixed by the program's
+  variables and the types' structure, not by the nodes' numbers. -/
+  order : Array Nat := #[]
   /-- Each closure class's codes, in code order: a code's tag is its index there. -/
   union : Std.HashMap Nat (Array Nat)
   /-- The closure classes that keep their environment on the heap. -/
@@ -684,15 +702,16 @@ def reaches (n : Nat) (fs : Nat → Array Nat) (skip : Std.HashSet (Nat × Nat))
 /-- SPEC §35's rule: in a component of the field graph where one search boxes two fields or more,
 a sum's payload is boxed in place of its payload's recursive fields when that boxes fewer: a
 tree is one object a node, its children inline. -/
-def sumBoxes (n : Nat) (fs : Nat → Array Nat) (shape : Nat → NK) (comp : Array Nat)
+def sumBoxes (order : List Nat) (fs : Nat → Array Nat) (shape : Nat → NK) (comp : Array Nat)
     (back : Std.HashSet (Nat × Nat)) : Std.HashSet (Nat × Nat) := Id.run do
+  let n := comp.size
   let mut byComp : Std.HashMap Nat (List (Nat × Nat)) := {}
   for (v, i) in back.toList do
     byComp := byComp.insert comp[v]! ((v, i) :: byComp.getD comp[v]! [])
   let mut out := back
   for (C, es) in byComp.toList do
     if es.length < 2 then continue
-    let nodes := (List.range n).filter (comp[·]! == C)
+    let nodes := order.filter (comp[·]! == C)
     let mut leave : Std.HashSet (Nat × Nat) := {}
     let mut sums : List (Nat × Nat) := []
     for v in nodes do
@@ -733,6 +752,40 @@ def reps (parent : Array Nat) : Array Nat := Id.run do
     for k in path do rep := rep.set! k (r + 1)
   return rep.map (· - 1)
 
+/-- **The canonical order of the representatives**: depth first, each before its children, from
+each variable's node by the variables' order, each function's answer by the functions', `main`'s
+node and each site's `κ` region by the sites'; a node's children in its fields' order (a pair's or
+a sum's two, a cell's or a family's contents, a closure class's argument then its answers). It
+depends on the program and the types' structure, not on how the nodes are numbered. -/
+def canonicalOrder (n : Nat) (rep : Array Nat) (shape : Array NK) (s : GState) (mainNode : Nat) :
+    Array Nat :=
+  Id.run do
+  let sorted (m : Std.HashMap Nat Nat) : List Nat :=
+    (m.toList.mergeSort (·.1 ≤ ·.1)).map (rep[·.2]!)
+  let roots := sorted s.varNode ++ sorted s.fnRet ++ [rep[mainNode]!] ++ sorted s.regions
+  let mut seen : Array Bool := Array.replicate n false
+  let mut out : Array Nat := #[]
+  for root in roots do
+    let mut stack : List Nat := [root]
+    for _ in [0:4 * n + 4] do
+      match stack with
+      | [] => break
+      | v :: rest =>
+        stack := rest
+        if seen[v]! then continue
+        seen := seen.set! v true
+        out := out.push v
+        let kids : List Nat := match shape[v]! with
+          | .pair a b | .sum a b => [a, b]
+          | .ref c | .imm c | .mut c | .fam c => [c]
+          | .clos _ pa rs => pa.toList ++ rs
+          | _ => []
+        stack := kids.filter (!seen[·]!) ++ stack
+  -- A representative no root reaches (none: every node is made from a root's type) follows.
+  for v in [0:n] do
+    if rep[v]! == v && !seen[v]! then out := out.push v
+  return out
+
 /-- Resolve the joined places: each class's codes, the heap classes, the boxed fields, every
 node's width and triviality, and each cell's width, by the checker's cell classes `cells` (each
 the types one cell may hold). -/
@@ -751,6 +804,7 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
   -- A node's shape is its representative's, one value shared.
   let repShape := (Array.range n).map fun i => if rep[i]! == i then norm s.nodes[i]! else .unit
   let shape := (Array.range n).map fun i => repShape[rep[i]!]!
+  let order := canonicalOrder n rep repShape s mainNode
   let mut union : Std.HashMap Nat (Array Nat) := {}
   let mut codeClass : Std.HashMap Nat Nat := {}
   for (k, cs) in s.codes.toList do
@@ -789,12 +843,14 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
   let fieldsA : Array (Array Nat) := (Array.range n).map fun v =>
     if recCls.contains v then #[] else succ[v]!.toArray
   let fieldsOf (v : Nat) : Array Nat := fieldsA[v]!
-  let reps := (List.range n).filter fun v => rep[v]! == v
+  -- The searches that choose the boxes run in the canonical order: the boxes follow from the
+  -- types and the program, not from the nodes' numbers.
+  let reps := order.toList
   let isSum (v : Nat) : Bool := match shape[v]! with | .sum .. => true | _ => false
   let roots := reps.filter isSum ++ reps.filter (!isSum ·)
   let back := backEdges n fieldsOf roots {}
   let comp := (sccs n ((Array.range n).map fun v => (fieldsOf v).toList)).2
-  let mut boxed : Std.HashSet (Nat × Nat) := sumBoxes n fieldsOf (shape[·]!) comp back
+  let mut boxed : Std.HashSet (Nat × Nat) := sumBoxes reps fieldsOf (shape[·]!) comp back
   let mut color : Array Nat := Array.replicate n 0
   let mut width : Array Nat := Array.replicate n 0
   let mut trivial : Array Bool := Array.replicate n true
@@ -871,7 +927,7 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
     if isOrigin[o]! then tyBytes := tyBytes.insert vtys[o]! most[o]!
   let varNode := s.varNode.fold (fun m x i => m.insert x rep[i]!) {}
   let fnRet := s.fnRet.fold (fun m f i => m.insert f rep[i]!) {}
-  return { rep, shape, union, recCls, boxed, width, trivial, bytes, tyBytes, varNode,
+  return { rep, shape, order, union, recCls, boxed, width, trivial, bytes, tyBytes, varNode,
            fnRet, mainNode := rep[mainNode]!, codeClass, codeEnv,
            regions := s.regions.fold (fun m k i => m.insert k rep[i]!) {},
            staticBytes := p.statics.map fun cls =>
