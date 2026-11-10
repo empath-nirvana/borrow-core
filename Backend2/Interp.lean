@@ -156,6 +156,16 @@ def hostWords : HostOp → List UInt64 → Except String (Option UInt64)
   | .eqz .w64, [a] => .ok (toBit (lirHost.eqz64 a))
   | .rel .w32 o, [a, b] => .ok (toBit (lirHost.rel32 o a.toUInt32 b.toUInt32))
   | .rel .w64 o, [a, b] => .ok (toBit (lirHost.rel64 o a b))
+  | .bin .u32 o, [a, b] => .ok (lirHost.bin32 o a.toUInt32 b.toUInt32).toUInt64
+  | .bin .u64 o, [a, b] => .ok (lirHost.bin64 o a b)
+  | .div .u32 o, [a, b] => .ok ((lirHost.div32 o a.toUInt32 b.toUInt32).map (·.toUInt64))
+  | .div .u64 o, [a, b] => .ok (lirHost.div64 o a b)
+  | .un .u32 o, [a] => .ok (lirHost.un32 o a.toUInt32).toUInt64
+  | .un .u64 o, [a] => .ok (lirHost.un64 o a)
+  | .eqz .u32, [a] => .ok (toBit (lirHost.eqz32 a.toUInt32))
+  | .eqz .u64, [a] => .ok (toBit (lirHost.eqz64 a))
+  | .rel .u32 o, [a, b] => .ok (toBit (lirHost.rel32 o a.toUInt32 b.toUInt32))
+  | .rel .u64 o, [a, b] => .ok (toBit (lirHost.rel64 o a b))
   | .wrap, [a] => .ok (lirHost.wrap a).toUInt64
   | .extend_s, [a] => .ok (lirHost.extendS a.toUInt32)
   | .extend_u, [a] => .ok (lirHost.extendU a.toUInt32)
@@ -171,6 +181,7 @@ def hostWords : HostOp → List UInt64 → Except String (Option UInt64)
   | .demote, [a] => .ok (lirHost.demote a).toUInt64
   | .promote, [a] => .ok (lirHost.promote a.toUInt32)
   | .reinterpret_i _, [a] | .reinterpret_f _, [a] => .ok a
+  | .reinterpret_u _, [a] | .reinterpret_s _, [a] => .ok a
   | _, _ => .error "LIR interpreter: a host operation's arity"
 
 def liftE (x : Except String α) : IM α := match x with
@@ -237,6 +248,8 @@ def pvOf : Nat → LTy → LV → Except String Backend.PV
     | .int .w8, .int n => .ok (.u8 n.toUInt8)
     | .int .f32, .int n => .ok (.f32 n.toUInt32)
     | .int .f64, .int n => .ok (.f64 n)
+    | .int .u32, .int n => .ok (.u32 n.toUInt32)
+    | .int .u64, .int n => .ok (.u64 n)
     | .pair a b, .pair x y => return .pair (← pvOf f a x) (← pvOf f b y)
     | .sum a _, .inj false x => return .inj false (← pvOf f a x)
     | .sum _ b, .inj true x => return .inj true (← pvOf f b x)
@@ -473,6 +486,8 @@ def litV : IntLit → LV
   | .u8 n => .int n.toUInt64
   | .f32 n => .int n.toUInt64
   | .f64 n => .int n
+  | .u32 n => .int n.toUInt64
+  | .u64 n => .int n
 
 def tyIn (p : Prog) (x : Var) : IM LTy := do
   match p.ty[x]? with

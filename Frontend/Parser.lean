@@ -702,6 +702,8 @@ def rtyAtom : Nat → P RTy
     | .kw "u8" => discard bump; pure (.int t.span .w8)
     | .kw "f32" => discard bump; pure (.int t.span .f32)
     | .kw "f64" => discard bump; pure (.int t.span .f64)
+    | .kw "u32" => discard bump; pure (.int t.span .u32)
+    | .kw "u64" => discard bump; pure (.int t.span .u64)
     | .kw "input" => discard bump; pure (.handle t.span .input)
     | .kw "output" => discard bump; pure (.handle t.span .output)
     -- `clock` and `args`, the clock's and the arguments' resources (SPEC §34): names, so that
@@ -1259,13 +1261,14 @@ inductive BinTok where
   | op (o : SurfOp)
   | and
   | or
-  /-- `a |> s` (SPEC §33): `VSugar.pipe` applied to the pair. -/
-  | pipe
+  /-- `a |> s` (SPEC §33) or `a >| s` (`[spec §70]`): `VSugar.pipe` applied to the pair. -/
+  | pipe (m : PipeMode)
 
-/-- The operator of a token, with its precedence: `|>` 0, `||` 1, `&&` 2, comparisons 3, `+`/`-`
+/-- The operator of a token, with its precedence: `|>` and `>|` 0, `||` 1, `&&` 2, comparisons 3, `+`/`-`
 4, `*`, `/` and `%` 5. -/
 def opOf (angle : Bool) : Tok → Option (BinTok × Nat)
-  | .sym "|>" => some (.pipe, 0)
+  | .sym "|>" => some (.pipe .push, 0)
+  | .sym ">|" => some (.pipe .pull, 0)
   | .sym "||" => some (.or, 1) | .sym "&&" => some (.and, 2)
   | .sym "==" => some (.op .eq, 3) | .sym "!=" => some (.op .ne, 3) | .sym "<" => some (.op .lt, 3)
   | .sym "<=" => some (.op .le, 3) | .sym ">=" => some (.op .ge, 3)
@@ -1561,14 +1564,14 @@ def opsLoop : Nat → Nat → Pos → Val → P Val
       if l != lvl then return a
       let osp := t.span
       discard bump
-      -- A stage of `|>` is a spine.
-      let b ← if lvl ≥ 5 || o matches .pipe then valPrefix m else valOps m (lvl + 1)
+      -- A stage of `|>` or `>|` is a spine.
+      let b ← if lvl ≥ 5 || o matches .pipe _ then valPrefix m else valOps m (lvl + 1)
       let sp ← spanFrom st
       let v := match o with
         | .op o => Val.app sp (.sugar osp (.op o)) (.pair sp a b)
         | .and => shortCircuit sp true a b
         | .or => shortCircuit sp false a b
-        | .pipe => Val.app sp (.sugar osp .pipe) (.pair sp a b)
+        | .pipe pm => Val.app sp (.sugar osp (.pipe pm)) (.pair sp a b)
       -- Comparisons do not associate.
       if lvl == 3 then return v else opsLoop m lvl st v
     | none => return a

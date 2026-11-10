@@ -380,15 +380,21 @@ def framesLine (k : Backend.CheckedProg) : Except String String := do
   pure s!"framed {n} allocated {all.length - n}"
 
 /-- The closure classes of a program's layouts, one a line: its codes, its width, whether its
-environment is on the heap (`bcc lir --layout`). -/
+environment is on the heap; then the boxed fields (`bcc lir --layout`). A node is numbered by its
+place in the canonical order (`Layouts.order`), and the lines are sorted by those numbers: the
+report depends on the program and its types, not on how the analysis numbered its nodes. -/
 def layoutReport (k : Backend.CheckedProg) : Except String (List String) := do
   let (p, _, L) ← lirLayOf k
   let L ← layoutsAt p L
-  let cls := (L.union.toList.filter (!·.2.isEmpty)).map fun (r, cs) =>
-    s!"class {r}: codes {cs.toList} width {L.w r}{if L.isRec r then " heap" else ""} : " ++
-      (p.codes[cs[0]!]?.map (fun c => (c.ty.pp.take 100).toString)).getD ""
-  let boxes := L.boxed.toList.map fun (v, i) => s!"boxed {v}.{i}"
-  pure (cls ++ boxes)
+  let idx : Std.HashMap Nat Nat := L.order.toList.zipIdx.foldl (fun m (v, i) => m.insert v i) {}
+  let num (v : Nat) : Nat := idx.getD (L.r v) 0
+  let cls := ((L.union.toList.filter (!·.2.isEmpty)).mergeSort fun a b => num a.1 ≤ num b.1).map
+    fun (r, cs) =>
+      s!"class {num r}: codes {cs.toList} width {L.w r}{if L.isRec r then " heap" else ""} : " ++
+        (p.codes[cs[0]!]?.map (fun c => (c.ty.pp.take 100).toString)).getD ""
+  let boxes := (L.boxed.toList.map fun (v, i) => (num v, i)).mergeSort fun a b =>
+    a.1 < b.1 || (a.1 == b.1 && a.2 ≤ b.2)
+  pure (cls ++ boxes.map fun (v, i) => s!"boxed {v}.{i}")
 
 /-- **The checks refuse wrong layouts** (`bcc lir --layout-reject`, the reject tests): the
 program's layouts and closure flow as computed, accepted; then each perturbation of them

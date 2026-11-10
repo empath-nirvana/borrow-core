@@ -113,6 +113,7 @@ core-fin-stored-k-fin 0 1 0 0 0 0 # the stashed closure's call is unknown
 core-fin-sub-row 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
 core-fin-top-row 0 0 0 0 0 0 # main returns (); f is not called
 core-pipe-step 1 0 0 1 1 0
+core-unsigned 0 0 0 0 0 0 # every value is a word: the unsigned integers are held as the signed ones are
 data-json-map-ser 16 0 0 699 420 205
 deep-gen-count 0 3 0 0 0 0
 effects-load-raise 4 0 0 204 184 15
@@ -467,7 +468,12 @@ operator-rounds 166 0 24 1551 823 0 # the cluster's and the desired state's list
 parse-int 4 0 0 240 80 137 # the line buffer, reused; literal views read-only data
 parse-recover 246 0 31 1808 984 28 # the token list's nodes and the lists rebuilt per statement; the copies are the written `clone(rest)` per statement
 parse-recover-gen 227 0 31 1943 1147 108
+pipe-bracket 3 0 0 3 3 0 # each bracketing is the nested calls
 pipe-handlers 0 0 0 0 0 0
+pipe-left-row 3 0 0 3 3 0
+pipe-mixed 3 0 0 3 3 0
+pipe-pull 3 0 0 3 3 0 # as gen-pipeline-pipe: `>|` into an adapter is the nested calls (until L2)
+pipe-push-paren 3 0 0 3 3 0
 poly-operators 0 0 0 0 0 0 # a case of an operator is a direct call; nothing is allocated
 poly-providers 2 0 0 90 48 69 # the two strings; the comparisons read views and allocate nothing
 print-borrowed-array 4 0 0 19 6 3
