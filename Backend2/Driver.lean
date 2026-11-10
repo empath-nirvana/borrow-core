@@ -57,14 +57,16 @@ structure HNode where
   H : Expr
   /-- The node is `effHandleVB`: its clauses receive `κ` boxed (BOXED-κ, SPEC §28). -/
   boxed : Bool := false
+  /-- Each operation's cancel row, as its clause's `κ` reads it (`cancelTy`). -/
+  fs : Nat → CTy := fun _ => .ret .unit
 
 /-- The `handle` nodes of a typed term, within the depth `fuel`. -/
 def hnodes : Nat → TExpr → List HNode
   | 0, _ => []
   | f + 1, t =>
     let here : List HNode := match t with
-      | .effHandleV _ _ S E _ _ n _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, false⟩]
-      | .effHandleVB _ _ S E _ _ n _ _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, true⟩]
+      | .effHandleV _ _ S E fs _ n _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, false, fs⟩]
+      | .effHandleVB _ _ S E fs _ n _ _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, true, fs⟩]
       | _ => []
     here ++ t.children.flatMap fun (_, c) => hnodes f c
 
@@ -119,8 +121,9 @@ def machineOps (c : Frontend.Check.Checked) : MachSet := Id.run do
 /-- **The operations whose every `handle` node keeps `κ` boxed** (SPEC §52): each machine operation
 `(n, j)` whose clause at every node of `n` is `stored`, every node of `n` is `effHandleVB` (BOXED-κ,
 SPEC §28) and no operation of any node of `n` is `unr` (a site with a stack has no `κ` that may be
-copied). A stack machine's frames have one owner there:
-the stored site whose `κ` holds them, which keeps a stack. -/
+copied), and whose cancel row at every node holds no machine operation (a stack machine's cancel
+is a plain loop: a cancel that may suspend is not lowered on the task stack). A stack machine's
+frames have one owner there: the stored site whose `κ` holds them, which keeps a stack. -/
 def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t
   let ms := machineOps c
@@ -129,7 +132,10 @@ def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
     let same := nodes.filter (·.n == n)
     if !same.isEmpty && same.all (fun g => g.boxed && g.E.all (·.1 != .unr) &&
         (g.ks[j.toNat]?.map (·.kind)) == some .stored &&
-        (g.E[j.toNat]?.map (·.1)).any (· != .unr)) then
+        (g.E[j.toNat]?.map (·.1)).any (· != .unr) &&
+        (g.E[j.toNat]?).all fun (q, _, B) => match ofFinAt ms q B (g.fs j.toNat) with
+          | .ok cp => cp.all (·.ms.isEmpty)
+          | .error _ => false) then
       out := out.insert (n, j)
   return out
 
