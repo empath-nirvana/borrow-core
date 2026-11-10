@@ -7433,7 +7433,7 @@ integer literal now prints exactly (`3`, not `3.0`), so the serialised line's le
 - Pretty printing.
 - **Lookup by view.** `json_get<'a>(j: imm 'a Json, k: lit) -> imm 'a Json + 1`, a member as a
   view at `j`'s lifetime, cannot be written: a view projected inside a load (§36) cannot leave it
-  at the outer lifetime. It needs a kernel rule for shared loads.
+  at the outer lifetime. It needs a kernel rule for shared loads (#999).
 
 ### Programs
 
