@@ -483,7 +483,13 @@ def clsBytes (L : Layouts) (c : Nat) (cls : List LTy) : Nat :=
 end Layouts
 
 /-- Strongly connected components (Tarjan, iterative): whether each node is on a cycle, and each
-node's component. -/
+node's component.
+
+A root with no successor is its own component, on no cycle, numbered as the search would number
+it: the search from it would push it, find no edge and pop it alone. In `resolve`'s graphs every
+node that is not a representative is such a root (it has no edge, and no edge reaches it), so the
+search proper runs over the representatives only, and the components are those it would find
+over all nodes, numbered alike. -/
 def sccs (n : Nat) (succ : Array (List Nat)) : Array Bool × Array Nat := Id.run do
   let mut comp : Array Nat := Array.replicate n 0
   let mut ncomp := 0
@@ -496,6 +502,10 @@ def sccs (n : Nat) (succ : Array (List Nat)) : Array Bool × Array Nat := Id.run
   let bound := 4 * n + 4 + succ.foldl (· + ·.length) 0
   for root in [0:n] do
     if index[root]!.isSome then continue
+    if succ[root]!.isEmpty then
+      index := index.set! root (some idx); idx := idx + 1
+      comp := comp.set! root ncomp; ncomp := ncomp + 1
+      continue
     let mut work : List (Nat × List Nat) := [(root, succ[root]!)]
     index := index.set! root (some idx); low := low.set! root idx; idx := idx + 1
     stack := root :: stack; onStack := onStack.set! root true
