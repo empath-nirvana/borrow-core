@@ -114,6 +114,7 @@ effects-load-raise 4 0 0 204 184 15
 fin-block-finaliser 0 0 0 0 0 0
 fin-bound-loop-abort 0 0 0 0 0 0
 fin-bound-loop-finish 0 0 0 0 0 0
+fin-bound-loop-pure 0 0 0 0 0 0
 fin-cancel-arm 0 3 0 0 0 0
 fin-cancel-loop 0 0 0 0 0 0
 fin-cancel-order 3 0 0 5 3 0

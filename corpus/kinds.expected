@@ -311,7 +311,7 @@ corpus/fin-bound-loop-abort.bc 1.0 cancellable abortive: branch; agree
 corpus/fin-bound-loop-abort.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/fin-bound-loop-finish.bc 1.0 cancellable abortive: branch; agree
 corpus/fin-bound-loop-finish.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/fin-bound-loop-pure.bc 1.0 cancellable abortive: -; agree
+corpus/fin-bound-loop-pure.bc 1.0 cancellable abortive: branch; agree
 corpus/fin-bound-loop-pure.bc 2.0 cancellable tail: direct; agree
 corpus/fin-cancel-arm.bc 1.0 cancellable abortive: branch; agree
 corpus/fin-cancel-arm.bc 2.0 cancellable resume-or-cancel+state: machine: the handlers of the name have 2 clauses for it; agree

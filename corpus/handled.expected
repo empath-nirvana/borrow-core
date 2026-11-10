@@ -816,9 +816,9 @@ corpus/fin-bound-loop-finish.bc 19:58: handle 2: inside [], finaliser; row [1]; 
 corpus/fin-bound-loop-finish.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/fin-bound-loop-finish.bc 2.0 stored: machine; condition 2 fails; -
 corpus/fin-bound-loop-pure.bc flows [0, 2, 4294967295]; main [1, 2]
-corpus/fin-bound-loop-pure.bc 20:27: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
-corpus/fin-bound-loop-pure.bc 20:58: handle 2: inside []; row [1]; ops 2.0 tail; names 2.0 row; condition 2 holds
-corpus/fin-bound-loop-pure.bc 1.0 abortive: -; condition 2 holds; -
+corpus/fin-bound-loop-pure.bc 21:27: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/fin-bound-loop-pure.bc 21:58: handle 2: inside []; row [1]; ops 2.0 tail; names 2.0 row; condition 2 holds
+corpus/fin-bound-loop-pure.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/fin-bound-loop-pure.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/fin-cancel-arm.bc flows [0, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/fin-cancel-arm.bc 20:40: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
