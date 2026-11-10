@@ -10398,7 +10398,9 @@ unchanged. The elaborator marks one more scheme (`SchemeMark.litView`).
 - **An allocation's width class** (`Checked.classAt`, `Frontend/Check/Program.lean`): the cell
   class rooted at the type an `alloc` node allocates at; `Checked.classAt_alloc`: it exists, holds
   the type and is closed under every `swap` of the term. Backend2's `Driver.cellsRooted` keeps the
-  roots that `cellsOf` consumed.
+  roots that `cellsOf` consumed. A cell's width class takes a fixed former where its types' layouts
+  mix them: an opaque value over an integer, a `ref` over a `mut` over an `imm`. The width depends on the types alone, not
+  on the order Backend2's layout joins them.
 
 Each rule's premise is of the node's own typed term and is kept by the moves to a wider context
 (`relT_shift`, `lendRelT_shift`, `lendScopeT_shift`, `lendKindB_shift`, `litViewT_shift`,
