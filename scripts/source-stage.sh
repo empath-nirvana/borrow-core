@@ -3,36 +3,63 @@
 # `<name>.out`, a book block's `-- answer:` and `-- output:` lines) is a cached record of what it
 # prints; the clos, flat and wasm stages are always checked against the golden.
 #
-#   BCC_SOURCE=1   the source stage runs on every program too, and must match its golden
-#                  (`--source`, `make gate-full`)
-#   BCC_SOURCE=0   it never runs (`ci-local.sh --changed`); a program whose golden is unverified
-#                  is reported, not run
-#   unset          it runs on exactly the programs whose golden is unverified (the default)
+# The key. `bcc interp --key` (Reference/Key.lean) is a sha256 over what decides the source
+# stage's output on a program: the interpreter digest (scripts/interp-digest.sh: the source of
+# the interpreter and of the machine it steps), the fuel, the input and arguments, and the
+# elaborated term the interpreter runs, every library definition it reaches included. It
+# elaborates the program and runs nothing.
 #
-# Unverified: the program or its golden differs from the merge base with origin/main (or from the
-# commit `CI_LOCAL_BASE` names), or is new. Committed, staged, unstaged and untracked changes
-# all count. An unchanged program and golden were checked at the source stage by the gate that
-# merged them (`make gate-full`, which runs the source stage on every program, is required whenever
-# the interpreter or the compiler changes: `ci-local.sh`), so they agree with the reference semantics. Without a merge base,
-# every golden is unverified.
+# A verified golden is recorded with its key:
+#   corpus  `<name>.key` beside `<name>.out`: one line, `<key> <golden>`, `<golden>` the sha256
+#           of the program's `.out`, `.err` and `.status` (`goldenHash`);
+#   book    book/keys/<chapter path under book/src>.keys: one line per verified `bc` block, in
+#           the chapter's order, `<block> <key>`, `<block>` the sha256 of the block's attributes
+#           and text, which hold its golden (`-- answer:`, `-- output:`) and its input.
+#
+# Unverified: no key is recorded for the golden, or the recorded line is not the current one
+# (the program's term, its input, the interpreter or the golden changed). The source stage runs
+# exactly on the unverified goldens; each script lists them, with their count.
+#
+#   BCC_SOURCE=1      the source stage runs on every program, and must match its golden: an
+#                     explicit re-verify (`--source`, `make verify-goldens`)
+#   BCC_SOURCE=0      it never runs (`ci-local.sh --changed`); an unverified golden is reported,
+#                     not run
+#   unset             it runs on exactly the unverified goldens (the default)
+#   BCC_WRITE_KEYS=1  record the key of every golden the source stage verified on this run
+#                     (`--write-keys`, `make keys`; `--write-goldens` records the keys of the
+#                     goldens it writes). Nothing else writes a key.
 BCC_SOURCE=${BCC_SOURCE:-}
-source_base=""
-source_changed=""
-if [ "$BCC_SOURCE" != 1 ]; then
-  if source_base=${CI_LOCAL_BASE:-$(git merge-base origin/main HEAD 2>/dev/null)}; then
-    source_changed=$({ git diff --name-only "$source_base"; git ls-files --others --exclude-standard; } | sort -u)
-    source_base=$(git rev-parse --short "$source_base")
-  else
-    source_base=""
-    echo "no merge base with origin/main: every golden is unverified"
-  fi
-fi
-export BCC_SOURCE source_base source_changed
-# unverified PATH...: whether any PATH differs from the merge base (all do, without one).
-unverified() {
-  [ -n "$source_base" ] || return 0
-  local p
-  for p in "$@"; do printf '%s\n' "$source_changed" | grep -qxF "$p" && return 0; done
-  return 1
+BCC_WRITE_KEYS=${BCC_WRITE_KEYS:-0}
+source_digest=$(scripts/interp-digest.sh)
+export BCC_SOURCE BCC_WRITE_KEYS source_digest
+
+# sourceKey FILE INPUT [ARG…]: the source stage's key on FILE with standard input INPUT.
+sourceKey() {
+  local f=$1 in=$2; shift 2
+  "${bcc:-.lake/build/bin/bcc}" interp --key --digest "$source_digest" "$f" -- "$@" < "$in"
 }
-export -f unverified
+# goldenHash BASE: the sha256 of corpus program BASE's golden, `.out`, `.err` and `.status`
+# (each named, with its length; an absent file is empty).
+goldenHash() {
+  local x
+  for x in out err status; do
+    if [ -f "$1.$x" ]; then printf '%s %s\n' "$x" "$(wc -c < "$1.$x" | tr -d ' ')"; cat "$1.$x"
+    else printf '%s 0\n' "$x"; fi
+  done | shasum -a 256 | cut -d' ' -f1
+}
+# corpusKeyLine FILE: the line FILE's `.key` holds when its golden is verified now.
+corpusKeyLine() {
+  local f=$1 base=${1%.bc} in=/dev/null line args=()
+  [ -f "$base.in" ] && in="$base.in"
+  if [ -f "$base.args" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do args+=("$line"); done < "$base.args"
+  fi
+  printf '%s %s\n' "$(sourceKey "$f" "$in" "${args[@]+"${args[@]}"}")" "$(goldenHash "$base")"
+}
+# corpusVerified FILE LINE: whether FILE's recorded key is LINE (`corpusKeyLine`).
+corpusVerified() {
+  [ -f "${1%.bc}.key" ] && [ "$(cat "${1%.bc}.key")" = "$2" ]
+}
+# blockHash ATTRS FILE: a book block's hash, over its attributes and its text.
+blockHash() { { printf '%s\n' "$1"; cat "$2"; } | shasum -a 256 | cut -d' ' -f1; }
+export -f sourceKey goldenHash corpusKeyLine corpusVerified blockHash
