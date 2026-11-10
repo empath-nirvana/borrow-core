@@ -1243,6 +1243,12 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | unfoldN a0 a1 a2 a3 a4 =>
       intro Δ' he hd
       exact TDerivesAt.unfoldN a0 a1 a2 a3 a4
+  | unfoldK a0 a1 a2 a3 a4 a5 a6 =>
+      intro Δ' he hd
+      exact TDerivesAt.unfoldK a0 a1 a2 a3 a4 a5 a6
+  | nuOutK a0 a1 a2 a3 a4 =>
+      intro Δ' he hd
+      exact TDerivesAt.nuOutK a0 a1 a2 a3 a4
   | effSub a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesAt.effSub a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
