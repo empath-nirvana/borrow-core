@@ -470,6 +470,13 @@ corpus/core-fin-e8b.bc 12:3: handle 1: inside [2], finaliser; row []; ops 1.0 ab
 corpus/core-fin-e8b.bc 15:5: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/core-fin-e8b.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-fin-e8b.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/core-fin-nested.bc flows [0, 3, 5, 4294967295], finaliser; main [2, 3, 5], finaliser
+corpus/core-fin-nested.bc 14:3: handle 2: inside [3, 5], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/core-fin-nested.bc 17:5: handle 3: inside [5], finaliser; row [2]; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/core-fin-nested.bc 22:7: handle 5: inside [], finaliser; row [3, 2]; ops 5.0 resume-or-cancel; names 5.0 []; condition 2 holds
+corpus/core-fin-nested.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/core-fin-nested.bc 3.0 tail: -; condition 2 holds; -
+corpus/core-fin-nested.bc 5.0 resume-or-cancel: machine; condition 2 holds; -
 corpus/core-fin-stored-k-fin.bc flows [0, 3, 4294967295], finaliser; main [1, 3], finaliser
 corpus/core-fin-stored-k-fin.bc 11:3: handle 1: inside [3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-fin-stored-k-fin.bc 14:10: handle 3: inside [], finaliser; row [1]; ops 3.0 resume-or-cancel+state; names 3.0 []; condition 2 holds

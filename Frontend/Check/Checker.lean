@@ -54,6 +54,9 @@ abbrev DefCache := List DefEntry
 /-- The checker's monad: an error, or a result with the cache. -/
 abbrev CheckM := StateT DefCache (Except Error)
 
+/-- The depth to which `opKeysOf` reads a finaliser's derivation. -/
+def opKeysFuel : Nat := 100000
+
 /-- Run `x`; on an error, the cache as it was before. -/
 def attempt {α : Type} (x : CheckM α) : CheckM (Except Error α) := fun c =>
   match x c with
@@ -756,11 +759,11 @@ def bindHead : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → O
     | some ⟨S, A, h⟩ => pure ⟨A, S, h ▸ r⟩
     | none => err M.span s!"a bound computation must have a type `F A`, but this has type `{E.ppC C}`"
 
-/-- The finaliser `D` of `x <- M unwind (D); N` at the site's row `S`, at its own row `SD`: the
-empty row when `D` performs nothing (`effThenA`); else the operations of `S` that the cancel row of
-each operation of `S` it is read at holds (`finRowOf`), which `[then]`'s premises then decide
-(`thenIt`). A finaliser that checks only at `S` performs an operation some cancel row lacks.
-`[spec §27]` -/
+/-- The finaliser `D` of `x <- M unwind (D); N` at the site's row `S`, at the row `SD` it
+performs: the empty row when `D` checks there (`effThenA`, as a finaliser that performs nothing
+always was); else `D` is checked at `S` and `SD` is the operations of `S` its derivation performs
+(`opKeysOf`), at which `D` is checked again, `[then]`'s premises then decided at `SD`
+(`thenIt`). Where `D` does not check at that `SD`, the derivation at `S` is kept.  `[spec §27]` -/
 def finC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → CRow →
     CheckM (Σ SD : CRow, Res Δ (.unit :: T) (.comp (effOf SD .unit)))
   | 0, _, _, _, D, _ => err D.span "expression nested too deeply"
@@ -768,24 +771,14 @@ def finC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → CRow 
     match ← attempt (chkC n E Δ (.unit :: T) D (effOf [] .unit)) with
     | .ok r => pure ⟨[], r⟩
     | .error e₀ =>
-      let SD := finRowOf S
-      let atSD ← if SD.isEmpty then pure (.error e₀)
-        else attempt (chkC n E Δ (.unit :: T) D (effOf SD .unit))
-      match atSD with
-      | .ok r => pure ⟨SD, r⟩
-      | .error _ =>
-        if S.isEmpty then throw e₀
-        else match ← attempt (chkC n E Δ (.unit :: T) D (effOf S .unit)) with
-        | .ok _ =>
-          let bad := S.filter fun o => o.finRead && !o.fin.isTop && !S.all fun o' =>
-            (BoCa.Fig16.LogRel.Core.Row.find o.fin.rowOf o'.n o'.i).isSome
-          err D.span (s!"the finaliser performs operations of the row `{ppRow E S}` that the " ++
-            "cancel row of " ++ ", ".intercalate (bad.map fun o =>
-              s!"{o.n}.{o.i}, `[{(ppFin E o.fin).drop 1 |>.dropRight 1}]`,") ++
-            " does not hold: a finaliser runs when a continuation captured below it is " ++
-            "cancelled, so the cancel row of the operation it is captured at must hold what " ++
-            "the finaliser performs (`n.i cancel[…] A ~> B`, SPEC §27)")
-        | .error e => throw e
+      if S.isEmpty then throw e₀
+      let rS ← chkC n E Δ (.unit :: T) D (effOf S .unit)
+      let ks := opKeysOf opKeysFuel rS.t
+      let SD := S.filter fun o => ks.contains (o.n, o.i)
+      if SD.isEmpty || SD.length == S.length then pure ⟨S, rS⟩
+      else match ← attempt (chkC n E Δ (.unit :: T) D (effOf SD .unit)) with
+        | .ok r => pure ⟨SD, r⟩
+        | .error _ => pure ⟨S, rS⟩
 
 /-- `abort[k.i] V` at the answer `B`: an abortive operation of the current row (SPEC §19's abortive rule). -/
 def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Nat → Nat → Val → (B : CVTy) →

@@ -147,6 +147,12 @@ def codeDigest (N : BoCa.Expr) : String :=
   "#" ++ String.ofList (Nat.toDigits 16 (h.toNat % 2 ^ 32))
 
 -- The case split of `ppC`'s nested `ν` patterns over every value-type former exceeds the default.
+/-- An entry's cancel row after its qualifier, as the core text writes it (`n.i cancel[R] A ~> B`),
+from its entries `es` (printed at every depth by `ppEff`): nothing when it is empty, `[top]` at `⊤`.
+`[spec §27]` -/
+def finBrackets (top : Bool) (es : List String) : String :=
+  if top then "[top]" else if es.isEmpty then "" else "[" ++ ", ".intercalate es ++ "]"
+
 set_option maxHeartbeats 800000 in
 mutual
 /-- A value type in the surface syntax, at precedence `p` (syntax-core §4: `0` binders, `1`
@@ -208,12 +214,13 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
   | .eff n i q A B fin _ C =>
       let (es, r) := ppEff nm C
       parenIf (p > 5)
-        s!"F[{", ".intercalate (s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es)}] {r}"
-/-- The entries of a row's layers `F_Σ`, and what is under them. -/
+        s!"F[{", ".intercalate (s!"{n}.{i} {qualStr q}{finBrackets fin.isTop (ppEff nm fin).1} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es)}] {r}"
+/-- The entries of a row's layers `F_Σ`, each with its cancel row (`ppFinC`), and what is under
+them. -/
 def ppEff (nm : List (String × LifeVar)) : CCTy → List String × String
   | .eff n i q A B fin _ C =>
       let (es, r) := ppEff nm C
-      (s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es, r)
+      (s!"{n}.{i} {qualStr q}{finBrackets fin.isTop (ppEff nm fin).1} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es, r)
   | .ret A => ([], ppV nm 0 6 A)
   | C => ([], ppC nm 6 C)
 end

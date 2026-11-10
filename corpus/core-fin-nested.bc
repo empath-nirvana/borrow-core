@@ -1,0 +1,28 @@
+-- SPEC §27 in the core text: a finaliser's row is the row it performs, below cancel rows nested two
+-- deep (the shape of the #868 review's `guess.bc`). Handler 5 (`timeout`) cancels a body suspended
+-- at `5.0`, whose finaliser raises `2.0`. The site's row is `[5.0⟨F⟩, 3.0⟨F⟩, 2.0]`, both cancel
+-- rows `F = [2.0, 3.0⟨[2.0]⟩]`: `3.0`'s own cancel row holds only `2.0`. The finaliser performs
+-- only `2.0`, so `[then]` is at `Σ_D = [2.0]`; a larger guess, `[3.0, 2.0]` (every operation the
+-- cancel rows hold at the top), fails `F ⋈ Σ_D ≤ F` one layer down. The error raised during the
+-- cancel is kept, re-raised at the canceller, passes handler 3 and is caught by handler 2.
+-- No kernel program twins it; it is the same mechanism as `e7b`.
+--
+-- Answer: inr (), and `live 0`. A checker that guesses the finaliser's row refuses it; a wrong
+-- implementation that drops the error raised during a cancel answers `inl ()`.
+
+main : F (1 + 1) =
+  handle_with[2](
+      ((!thunkv fun (v : 1) -> return (inl v)) : !U (1 -o F (1 + 1))),
+      (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F (1 + 1)) * 1)) (
+    handle_with[3](
+        ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[2.0 cancel 1 ~> 0] 1)),
+        (((!thunkv fun (p : 1 * U ((1 -o F[2.0 cancel 1 ~> 0] 1) & F[2.0 cancel 1 ~> 0, 3.0 cancel[2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0] 1)) ->
+          let (u, k) = p; (force k).1 u), ())
+          : !U (1 * U ((1 -o F[2.0 cancel 1 ~> 0] 1) & F[2.0 cancel 1 ~> 0, 3.0 cancel[2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0] 1) -o F[2.0 cancel 1 ~> 0] 1) * 1)) (
+      handle_with[5](
+          ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[3.0 cancel[2.0 cancel 1 ~> 0, 3.0 cancel[2.0 cancel 1 ~> 0] 1 ~> 1] 1 ~> 1, 2.0 cancel 1 ~> 0] 1)),
+          (((!thunkv fun (p : 1 * U ((1 -o F[3.0 cancel[2.0 cancel 1 ~> 0, 3.0 cancel[2.0 cancel 1 ~> 0] 1 ~> 1] 1 ~> 1, 2.0 cancel 1 ~> 0] 1) & F[2.0 cancel 1 ~> 0, 3.0 cancel[2.0 cancel 1 ~> 0] 1 ~> 1, 3.0 cancel[2.0 cancel 1 ~> 0, 3.0 cancel[2.0 cancel 1 ~> 0] 1 ~> 1] 1 ~> 1, 2.0 cancel 1 ~> 0] 1)) ->
+            let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+            : !U (1 * U ((1 -o F[3.0 cancel[2.0 cancel 1 ~> 0, 3.0 cancel[2.0 cancel 1 ~> 0] 1 ~> 1] 1 ~> 1, 2.0 cancel 1 ~> 0] 1) & F[2.0 cancel 1 ~> 0, 3.0 cancel[2.0 cancel 1 ~> 0] 1 ~> 1, 3.0 cancel[2.0 cancel 1 ~> 0, 3.0 cancel[2.0 cancel 1 ~> 0] 1 ~> 1] 1 ~> 1, 2.0 cancel 1 ~> 0] 1) -o F[3.0 cancel[2.0 cancel 1 ~> 0, 3.0 cancel[2.0 cancel 1 ~> 0] 1 ~> 1] 1 ~> 1, 2.0 cancel 1 ~> 0] 1) * 1)) (
+        x <- perform[5.0] () unwind (abort[2.0] ());
+        return x)))

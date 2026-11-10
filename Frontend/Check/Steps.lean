@@ -553,22 +553,14 @@ def orPad : List Bool → List Bool → List Bool
   | [], bs => bs
   | as, [] => as
 
-/-- An entry's cancel row after its qualifier, as the core text writes it: nothing when empty,
-`[top]` at `⊤`, else `[…]` (its entries without their own cancel rows).  `[spec §27]` -/
-def ppFin (E : Env) (F : CCTy) : String :=
-  if F.isTop then "[top]"
-  else match F.rowOf with
-    | [] => ""
-    | R => "[" ++ ", ".intercalate (R.map fun o =>
-        s!"{o.n}.{o.i} {qualStr o.q} {E.ppV o.A} ~> {E.ppV o.B}") ++ "]"
-
 /-- A value: nothing owed, what the computation it is in is owed held for the computations inside
 it (`Env.cap`), and no row.  `[spec §12]` -/
 def Env.forVal (E : Env) : Env := { E with own := [], cap := orPad E.own E.cap, row := none }
 
+/-- A row as the core text writes it, each entry with its cancel row at every depth (`ppEff`).
+`[spec §19, §27]` -/
 def ppRow (E : Env) (S : CRow) : String :=
-  "[" ++ ", ".intercalate (S.map fun o =>
-    s!"{o.n}.{o.i} {qualStr o.q}{ppFin E o.fin} {E.ppV o.A} ~> {E.ppV o.B}") ++ "]"
+  "[" ++ ", ".intercalate (ppEff E.lenv (BoCa.Fig16.LogRel.Core.CTy.effOf S .unit)).1 ++ "]"
 
 theorem Row.cancels_of_unr {S : CRow} (h : S.Unr) : S.Cancels := by
   obtain ⟨o, ho, hq⟩ := h
@@ -605,12 +597,40 @@ def clauseCands : CVTy → List (CQual × CVTy × CVTy)
   | .bang (.thunk (.arr A _)) => [(.cancel, A, .zero)]
   | _ => []
 
-/-- The largest row a finaliser at the row `S` may perform: the operations of `S` that the cancel
-row of every operation of `S` whose cancel row is read holds (`[then]`'s `F ⋈ Σ_D ≤ F` at the top
-layer; `thenFinB` decides it whole).  `[spec §27]` -/
-def finRowOf (S : CRow) : CRow :=
-  S.filter fun o => S.all fun o' => !o'.finRead || o'.fin.isTop ||
-    (BoCa.Fig16.LogRel.Core.Row.find o'.fin.rowOf o.n o.i).isSome
+/-- The operations a computation type's calls perform: its row under its arguments and
+lifetime binders, both branches of a `&` (a continuation's resume and cancel). -/
+def retRowOf : CCTy → CRow
+  | .arr _ C => retRowOf C
+  | .all _ _ C => retRowOf C
+  | .amp C D => retRowOf C ++ retRowOf D
+  | .nu C => retRowOf C
+  | C => C.rowOf
+
+/-- The operations (`n.i`) a checked term performs, read from its derivation: its `[perform]`,
+`await` and `[raise]` nodes, the source row of each `[sub]`, the row of each call (a leaf whose
+judgment is a computation type), and inside `handle_n` none of the name `n`. The finaliser's row
+`Σ_D` of `[then]` is the site's operations among these (`finC`); the kernel checks `D` at it.
+`[spec §27]` -/
+def opKeysOf : Nat → TExpr → List (UInt32 × UInt32)
+  | 0, _ => []
+  | k + 1, t =>
+    let keys (S : CRow) := S.map fun o => (o.n, o.i)
+    let inner (n : UInt32) (tc te : TExpr) :=
+      opKeysOf k tc ++ (opKeysOf k te).filter (·.1 != n)
+    match t with
+    | .effPerform _ _ _ o t' => (o.n, o.i) :: opKeysOf k t'
+    | .effAwait _ _ _ _ a c => [(a.n, a.i), (c.n, c.i)]
+    | .effRaise _ _ _ o _ t' => (o.n, o.i) :: opKeysOf k t'
+    | .effSub _ _ S _ _ _ => keys S
+    | .effHandleV _ _ _ _ _ _ n _ _ _ _ _ _ tc te => inner n tc te
+    | .effHandleVB _ _ _ _ _ _ n _ _ _ _ _ _ _ tc te => inner n tc te
+    | .effHandleT _ _ _ _ _ _ n _ _ _ _ _ tc te => inner n tc te
+    | .effHandleL _ _ _ _ _ _ _ n _ _ _ _ _ tc te => inner n tc te
+    | t => match t.children with
+      | [] => match t.jdg with
+        | .comp C => keys (retRowOf C)
+        | _ => []
+      | cs => cs.flatMap fun c => opKeysOf k c.2
 
 /-- The cancel row `F` whose `cancelTy S F` is the cancel branch `C` of a `κ`: `C`'s layers ahead
 of `S`'s, counted by `S`'s length (the clause's type, rebuilt at it, is then compared whole).

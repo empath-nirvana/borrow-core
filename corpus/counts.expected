@@ -99,6 +99,7 @@ core-fin-cancel-reraised 0 0 0 0 0 0 # no cell; the finaliser's raise is kept ac
 core-fin-e7b 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
 core-fin-e7d 0 0 0 0 0 0 # no cell; two finalisers raise, the first error is kept
 core-fin-e8b 0 0 0 0 0 0 # no cell; the finaliser's raise supersedes the pending one
+core-fin-nested 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
 core-fin-stored-k-fin 0 1 0 0 0 0 # the stashed closure's call is unknown
 data-json-map-ser 16 0 0 699 420 205
 effects-load-raise 4 0 0 204 184 15
