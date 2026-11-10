@@ -138,7 +138,15 @@ def _root_.Frontend.Comp.elab (lend : Bool) : Comp → Except Error Comp
       let r : Ident := ⟨"io_lend", c.span⟩
       return .bind sp r none (← M.elab true) (.letPair sp c x (.var c.span r.name) (← N.elab false))
     | _ => throw ⟨sp, "a call lends at most one capability with `&`"⟩
-  | .ret sp V => return .ret sp (← V.elab lend)
+  | .ret sp V => do
+    -- A tail that lends a place is `r <- M; return r` (#892): the head's form, the place
+    -- rebound and the call's answer returned.  [spec §11, §18]
+    if let (false, [c]) := (lend, V.takeLends.2) then
+      let r : Ident := ⟨s!"io_lt{sp.start.line}_{sp.start.col}", sp⟩
+      let l : Ident := ⟨"io_lend", c.span⟩
+      return .bind sp l none (.ret sp (← V.elab true))
+        (.letPair sp c r (.var c.span l.name) (.ret sp (.var sp r.name)))
+    return .ret sp (← V.elab lend)
   | .absurd sp V => return .absurd sp (← V.elab lend)
   | .force sp x => pure (.force sp x)
   | .lam sp x A M => return .lam sp x A (← M.elab false)
@@ -3664,7 +3672,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       -- A block whose body loops: the loop that runs it at its first observation.
       let B ← match exp.bind loopOf with
         | some (B, _) => pure B
-        | none => need sp "the block's result" ((resultOfC ((← refresh c).tyC M')).map Frontend.Elab.direct)
+        | none => need sp "the block's result" ((resultOfC ((← refresh c).tyCL M')).map Frontend.Elab.direct)
       let cx ← (loopCxOf sp B M' : Except Error LoopCx)
       let M'' ← (divBody cx c M' : SM Comp)
       let abort ← (template sp "a block that loops (`div_defer`)" s!"return {cx.rSrc}" : SM Comp)
@@ -4346,7 +4354,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
                       s!"which resumes, and the abortive operation {a.n}.{a.i}: an abortive " ++
                       "operation does not cross a borrow held across a resumption (R1, SPEC §29). " ++
                       "Handle it inside the block, or end the borrow before the operation that " ++
-                      "resumes (decision 71)"⟩
+                      "resumes"⟩
                   let saved := (← get).cbRow
                   modify fun st => { st with cbRow := some r }
                   let V' ← surfV n c none V
@@ -4364,13 +4372,14 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
                         "across a resumption sees only its view (R1, SPEC §29). End the borrow " ++
                         "before the operation that resumes, with a borrow block around each " ++
                         s!"stretch between suspensions, or move what it reads of `{y}` into the " ++
-                        "lent cell (decision 71)"⟩
+                        "lent cell"⟩
                     return M'
                   | none => pure ()
               throw ⟨V.span, s!"this borrow block's body performs the operation {o.n}.{o.i}, which " ++
-                "resumes: only an abortive operation crosses a borrow's scope (a continuation " ++
-                "held across a lend is T1, decision 71). End the borrow before the operation, " ++
-                "or move the value into the code that suspends and have it handed back"⟩
+                "resumes: only an abortive operation crosses a borrow's scope (a borrow held " ++
+                "across a suspension is not supported yet; planned: surface A1). End the borrow " ++
+                "before the operation, or move the value into the code that suspends and have " ++
+                "it handed back"⟩
             let saved := (← get).cbRow
             modify fun st => { st with cbRow := some r }
             let V' ← surfV n c none V
@@ -4379,6 +4388,13 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
             | some M' => return M'
             | none => throw ⟨V.span, "this borrow block's body performs an abortive operation, and " ++
                 "its place has no unwinding form here: not provided"⟩
+      -- A call in tail position that lends a place and performs operations of the row is
+      -- `let r = f(…, &p, …); r` (#892): the binding's lending call, whose borrow is the
+      -- unwinding form (`lendEffCall`).  [spec §18]
+      if let (.app fsp _ W, some S@(_ :: _)) := (V, c.E.row) then
+        if W.lends && (opsC c divFuel (.ret sp V)).any (fun (k, _) => S.any (·.n.toNat == k)) then
+          let r : Ident := ⟨s!"io_lt{fsp.start.line}_{fsp.start.col}", sp⟩
+          return ← surfC n c exp (.bind sp r none (.ret sp V) (.ret sp (.var sp r.name)))
       let V' ← surfV n c (match exp.bind rowRes? with | some (_, A) => some A | _ => none) V
       let c' ← refresh c
       match effCall? c' V' with
@@ -4652,7 +4668,9 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let rowB := BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat i.n) ops 0 ++ S
     let cB : TCx := { c with E := { c.E with row := some rowB } }
     let M' ← surfC n cB none M
-    let CM ← need M.span s!"the type of the body `{i.name}` handles" ((← refresh cB).tyC M')
+    -- The body's type once its lends are elaborated (`TCx.tyCL`): a lending call's head answers
+    -- the place beside its value, which the binding takes apart (#893).  [spec §18]
+    let CM ← need M.span s!"the type of the body `{i.name}` handles" ((← refresh cB).tyCL M')
     let (_, A) ← need M.span s!"the type of the body `{i.name}` handles" (rowRes? CM)
     let As ← (c.surface sp A : Except Error VTy)
     match Elab.Effects.matchTyBy (sameTy c) i.tps σ i.retA As with
@@ -4744,12 +4762,14 @@ def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val →
       match src with
       | .lend a m _ => throw ⟨sp, s!"the body of this `for` performs an operation that resumes, " ++
           s!"and its source `&{if m then "mut " else ""}{a.name}` lends `{a.name}` around the whole " ++
-          "loop: an operation that resumes cannot cross a borrow (T1, decision 71). Iterate by " ++
-          "index over a view the function is given, or copy the elements out before the loop"⟩
+          "loop: an operation that resumes cannot cross a borrow (a borrow held across a " ++
+          "suspension is not supported yet; planned: surface A1). Iterate by index over a view " ++
+          "the function is given, or copy the elements out before the loop"⟩
       | .owned _ => throw ⟨sp, "the body of this `for` performs an operation that resumes, and a " ++
           "`for` over an owned array lends it around the whole loop: an operation that resumes " ++
-          "cannot cross a borrow (T1, decision 71). Iterate by index over a view the function " ++
-          "is given, or read each element by index inside the step (`for i in 0..n`)"⟩
+          "cannot cross a borrow (a borrow held across a suspension is not supported yet; " ++
+          "planned: surface A1). Iterate by index over a view the function is given, or read " ++
+          "each element by index inside the step (`for i in 0..n`)"⟩
       | _ => pure ()
     -- The loop's value: `let r = for …` with or without `else { d }`, or `for … else { d }`.
     let (keep, els, N) : Option (Ident × Option VTy) × Option Comp × Comp :=
@@ -5115,7 +5135,7 @@ continuation of such an operation, so the loop is a `while` over the source's cu
 the body's machine (SPEC §14, §15), one turn per element: a count's index, a view's index or rest,
 an owned array's index (each element copied out under a borrow of one turn), a sized iterator's
 data and state. `&a` and `&mut a` lend `a` around the whole loop, and an operation that resumes
-cannot cross a borrow (T1, decision 71): they are rejected. The loop has no value (`else`, `break e`). -/
+cannot cross a borrow (T1): they are rejected. The loop has no value (`else`, `break e`). -/
 def forDataDiv : Nat → TCx → Option CCTy → Span → Ident → Val → DataSrc → Comp → Comp → Nat → Nat →
     DM Comp
   | 0, _, _, sp, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: a loop nested too deeply"⟩
@@ -5196,8 +5216,9 @@ force io_hole_rest"
       | .lend a m _ => throw ⟨sp, s!"the body of this `for` performs an operation that resumes " ++
           s!"(the operation {k}.{i}), and its source `&{if m then "mut " else ""}{a.name}` lends " ++
           s!"`{a.name}` around the whole loop: an operation that resumes cannot cross a borrow " ++
-          "(T1, decision 71). Iterate an owned array, or a view the function is given, or read " ++
-          "each element by index inside the step (`for i in 0..n`)"⟩
+          "(a borrow held across a suspension is not supported yet; planned: surface A1). " ++
+          "Iterate an owned array, or a view the function is given, or read each element by " ++
+          "index inside the step (`for i in 0..n`)"⟩
     let (lo, hi) := match V with
       | .app _ (.sugar _ .count) (.pair _ a b) => (some a, some b)
       | _ => (none, none)
@@ -5941,7 +5962,10 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
           sig.binders.map fun (v, _) => m.life.lookup v
         match ← lendCall c sp base (argOf W argsL) (some apps) with
         | some V => return some V
-        | none => throw ⟨sp, s!"the lend in this call of `{fname}` is not at a borrow parameter"⟩
+        | none =>
+          -- A copy made for the handlers of its effects is named for the function it copies.
+          throw ⟨sp, s!"the lend in this call of `{(fname.splitOn "__").headD fname}` is not at " ++
+            "a borrow parameter"⟩
     let mut g := if sig.bang then Val.unbang f.span base else base
     -- An instance at types with lifetimes takes the call's lifetimes first (`makeInst`).
     for v in extras do g := .inst sp g (← c.surfaceL sp (.var v))
@@ -6178,9 +6202,10 @@ def expandIncludes : Nat → List Decl → List Decl × List String →
       match library m.name with
       | some (.error e) => throw ⟨sp, e⟩
       | some (.ok src) => do
-        let l ← match parseProgram src (lib := libSrc) with
+        -- The module's positions name it (#883).  [spec §42]
+        let l ← match parseProgram src (lib := libSrc) (file := m.name) with
           | .ok l => pure l.decls
-          | .error e => throw ⟨e.span, s!"lib/{m.name}.bc: {e.msg}"⟩
+          | .error e => throw e
         match fuel with
         | 0 => throw ⟨sp, s!"the modules include each other: `{m.name}`"⟩
         | fuel + 1 => expandIncludes fuel l (acc, m.name :: inc)
@@ -6225,14 +6250,14 @@ def dataDecls (ds : List Decl) (abbrevs : List Data.Abbrev) : Except Error (List
     !own.any (·.name.name == n) && ds.any (·.mentionsTy n)
   let prelude : List DataDecl ← if wanted.isEmpty then pure [] else
     match libSrc "prelude" with
-    | some src => match parseProgram src with
+    | some src => match parseProgram src (file := "prelude") with
       | .ok p =>
         let pd := p.decls.filterMap fun | .data _ d => some d | _ => none
         if let some d := pd.find? (!preludeData.contains ·.name.name) then
           throw ⟨d.name.span, s!"internal error: lib/prelude.bc declares `{d.name.name}`, which " ++
             "`Sugar.preludeData` does not list"⟩
         pure pd
-      | .error e => throw ⟨e.span, s!"lib/prelude.bc: {e.msg}"⟩
+      | .error e => throw e
     | none => pure []
   let named := prelude.filter (wanted.contains ·.name.name)
   let tab : Data.Table := { decls := named ++ own, abbrevs }
@@ -6329,10 +6354,10 @@ recording the origins of generated code.  `[spec §11, §14]` -/
 def elaborateS (p : Program) : SM (Program × Nat) := do
   let libRaw (m : String) : Except Error (List Decl) :=
     match library m with
-    | some (.ok src) => match parseProgram src (lib := libSrc) with
+    | some (.ok src) => match parseProgram src (lib := libSrc) (file := m) with
       -- A module's `data` declarations are the program's (`dataDecls`).
       | .ok l => pure (l.decls.filter fun | .data .. => false | _ => true)
-      | .error e => throw ⟨e.span, s!"lib/{m}.bc: {e.msg}"⟩
+      | .error e => throw e
     | some (.error e) => throw ⟨Span.none, e⟩
     | none => throw ⟨Span.none, s!"no library module `{m}`"⟩
   -- The libraries are in scope for typing when the program may use them: the I/O library when

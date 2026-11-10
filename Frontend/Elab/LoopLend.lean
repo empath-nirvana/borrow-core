@@ -284,7 +284,7 @@ where
     ⟨sp, s!"this call of a div function takes the borrow of `{E.B.b.name}` other than as an " ++
       "argument of its own: a borrow block over a loop lends its place again at each step, and " ++
       s!"the call's loop can take the place only as a lend, `&{E.placeNames.headD "x"}` " ++
-      "(SPEC §14, borrow scopes over loops; decision 71). Pass it so, or copy what the call " ++
+      "(SPEC §14, borrow scopes over loops). Pass it so, or copy what the call " ++
       "needs out of the borrow before the call"⟩
 
 /-- The error for a borrow block whose result has the block's lifetime `'x` in its type `T`. -/
@@ -292,7 +292,7 @@ def escapeError (sp : Span) (x T : String) : Error :=
   ⟨sp, s!"this borrow block's result has type `{T}`, which has the block's lifetime `'{x}`: " ++
     s!"nothing borrowed at `'{x}` outlives the block. When the body loops, each step borrows the " ++
     "place again, so the loop cannot keep what is borrowed before it (SPEC §14, borrow scopes " ++
-    "over loops; decision 71). Copy the value out of the borrow before the loop, or end the " ++
+    "over loops). Copy the value out of the borrow before the loop, or end the " ++
     "borrow inside each step; when the borrow is a handler's capability, use a counted `for`, " ++
     "or keep the state in the loop's variables"⟩
 
@@ -308,7 +308,7 @@ def iterError (E : Env) (src : LoopSrc) (sp : Span) : Error :=
   | _ =>
     ⟨sp, s!"the condition of this {src.what} uses the borrow of `{E.B.b.name}`: a borrow block " ++
       "over a loop lends its place again at each step, to the loop's body only, not to its " ++
-      "condition (SPEC §14, borrow scopes over loops; decision 71). Copy what the condition " ++
+      "condition (SPEC §14, borrow scopes over loops). Copy what the condition " ++
       "reads out of the borrow into a variable the loop carries, or use a counted `for`"⟩
 
 mutual
@@ -394,6 +394,13 @@ the binding.  `[spec §14]` -/
 def lendBind (c : TCx) (divCall : Val → Bool) (fin' : TCx → Finite) (sp : Span) (x : Ident)
     (A : Option VTy) (V : Val) (N : Comp) : Except Error (Option Comp) := do
   let some B := Block.of? V | return none
+  -- A load `borrow imm *g { … }` has no place to lend again: the rewrite binds its content
+  -- first, a copy, so it applies only to a persistent content. A load of a linear content is
+  -- elaborated as a load, its loops in place (#880).  [spec §14, §36]
+  if let .app _ (.sugar _ .deref) G := B.P then
+    match c.tyV G with
+    | some (.imm _ A) => if Class.of A != .unrestricted then return none
+    | _ => pure ()
   -- A `for` in the block's body is read in the body's context, where the block's borrow is bound:
   -- on an owned array it is a view, and a `for` over it a counted loop (SPEC §16).
   let cB : TCx := match c.tyV B.P, c.elabL (.dom B.lsp) with

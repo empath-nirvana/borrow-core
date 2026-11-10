@@ -15,10 +15,13 @@ namespace Frontend
 
 open BoCa (Width IntLit HostOp)
 
-/-- A source position: line and column, both from 1. -/
+/-- A source position: line and column, both from 1, and the library module it is in (`""` for
+the program, `m` for `lib/m.bc`), so that a diagnostic inside an included module names that
+module (#883).  `[spec §42]` -/
 structure Pos where
   line : Nat
   col : Nat
+  file : String := ""
   deriving DecidableEq, Repr, Inhabited
 
 /-- The source text a node was parsed from: its first character and one past its last. -/
@@ -28,7 +31,7 @@ structure Span where
   deriving DecidableEq, Repr, Inhabited
 
 /-- The span of a node that was not parsed from source. -/
-def Span.none : Span := ⟨⟨0, 0⟩, ⟨0, 0⟩⟩
+def Span.none : Span := ⟨⟨0, 0, ""⟩, ⟨0, 0, ""⟩⟩
 
 /-- The span from the start of `a` to the end of `b`. -/
 def Span.join (a b : Span) : Span := ⟨a.start, b.stop⟩

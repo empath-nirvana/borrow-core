@@ -89,13 +89,16 @@ data-json-map-ser 16 0 0 555 420 133
 effects-load-raise 4 0 0 204 184 15
 for-arm-raises-owned 8 0 0 54 54 18
 handle-arm-releases 2 0 0 13 13 5
+if-match-argument 0 0 0 0 0 0
 infer-local-from-call 4 0 0 16 16 0
 infer-local-sum-generic 1 0 0 16 16 5
 infer-local-unit 2 0 0 4 4 1
 leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 695
 lend-call-raise 9 0 0 34 31 4
 lend-call-record 1 0 0 6 2 0
+lend-tail-call 1 0 0 10 6 0
 lit-lend-raise 6 0 0 69 30 39
+load-for-linear 1 0 0 115 65 3
 nu-file-read 2 0 0 7 6 0
 nu-file-twice 2 0 0 11 11 0
 nu-file-consumed 2 0 0 5 5 0
@@ -464,6 +467,8 @@ tree-map 29 0 2 209 161 0
 tree-view-tasks 1205 600 0 48087 27039 8727
 trim-replace 8 0 0 4640 4179 569
 utf8-count 4 0 0 341 109 199
+with-lend-head-type 0 0 0 4 4 0
+with-nested-lend 2 0 0 13 13 5
 yield-callback 3 0 0 3 3 0
 alpha-app-arg 1 0 0 2 1 0
 alpha-generic-arg 0 0 0 0 0 0

@@ -1,0 +1,21 @@
+-- A lending call in a binding's head inside a control handler's body (#893): `let x = f(&t)`
+-- answers the place beside `f`'s value, and the binding takes the pair apart, so `x` is `f`'s
+-- `i32`. The handler's site types its body once its lends are elaborated (SPEC §19, as a borrow
+-- block's result is), so the body's answer is `i32 * i32`, the clause's `(0 - 2, 0 - 2)` too. `f`
+-- handles its own `Exhausted`; `main`'s body performs it through `tri`.
+--
+-- Answer: `(i32[6], i32[6])`: `f` gives `tri(3)`, and the tree's root is 3. Typing the body before
+-- its lends are elaborated, as before, takes `x` for the pair `Tree * i32` and refuses the clause
+-- ("expected `(mu X. …) * i32`, but this has type `i32`"); `(i32[4294967294], i32[4294967294])`
+-- would mean the budget ran out.
+include rec
+data Tree = Tree(i32, Vec[Tree])
+fn tip(n: i32) -> Tree = Tree(n, Vec(box buf[Tree](0)))
+fn tri(n: i32) -> i32 = if n == 0 { 0 } else { n + tri(n - 1) }
+fn f<'a>(g: imm 'a Tree) -> i32 = with on_exhausted(!{ u -> 0 - 1 }) { tri(3) }
+fn root(t: Tree) -> i32 = match t { Tree(n, _) -> n }
+main -> i32 * i32 = with on_exhausted(!{ e -> (0 - 2, 0 - 2) }) {
+  let mut t = tip(3);
+  let x = f(&t);
+  (x, tri(root(t)))
+}

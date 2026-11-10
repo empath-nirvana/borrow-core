@@ -194,14 +194,18 @@ structure PState where
   scope : List (String × String × Nat) := []
   /-- The number of the next binder. -/
   nextBinder : Nat := 0
+  /-- The names bound in scope, innermost first, in core text too (where `scope` is not kept):
+  what a block's body may lend that is declared outside it (`Comp.lentOuter`).  [spec §41] -/
+  declared : List String := []
   /-- The names a renamed binder may not take: every name the source writes, and the binders
   renamed so far. -/
   taken : List String := []
   /-- Each renamed binder, and the name the source writes it with. -/
   renamed : List (String × String) := []
   /-- A `run` just read that hands back what it writes (`blockThreads`): its binding must take
-  them apart (SPEC §41, rule R3). -/
-  pendingRun : Option Span := none
+  them apart (SPEC §41, rule R3). With it, the construct as written: `run`, or the `if` or
+  `match` read as `run` of it inside an expression. -/
+  pendingRun : Option (Span × String) := none
   /-- In an arm of a `fold_reuse` block, where a block written without `box` is reassembled from
   its cells (SPEC §60, F2). -/
   reuseArm : Bool := false
@@ -236,7 +240,8 @@ def noteOcc (sp : Span) (x y : String) (b : Nat) : P Unit := do
 the source of its own (`occs`). -/
 def pushBinder (x : Ident) (y : String) : P Unit := do
   let b := (← get).nextBinder
-  modify fun s => { s with scope := (x.name, y, b) :: s.scope, nextBinder := b + 1 }
+  modify fun s => { s with scope := (x.name, y, b) :: s.scope, nextBinder := b + 1,
+                           declared := y :: s.declared }
   noteOcc x.span x.name y b
 
 /-- The binder an occurrence of the name `x` (written at `sp`) resolves to: the innermost in
@@ -273,7 +278,9 @@ generated code's (SPEC §41, rule R1). -/
 def bindName (x : Ident) : P Ident := do
   let s ← get
   -- Core text has no assignment: a binding of a name in scope is how it passes a variable on.
-  if !s.resolve || !s.surf || x.name == "_" then return x
+  if !s.resolve || !s.surf || x.name == "_" then
+    if x.name != "_" then modify fun s => { s with declared := x.name :: s.declared }
+    return x
   -- A capability is a place named by the platform: a binder of its name rebinds it (SPEC §11).
   if capabilityNames.contains x.name then
     pushBinder x x.name
@@ -287,8 +294,9 @@ def bindName (x : Ident) : P Ident := do
 /-- Run `p` with the scope as it is now restored after it: the binders `p` makes are local to it. -/
 def withScope {α} (p : P α) : P α := do
   let sc := (← get).scope
+  let dc := (← get).declared
   let r ← p
-  modify fun s => { s with scope := sc }
+  modify fun s => { s with scope := sc, declared := dc }
   pure r
 
 /-- The `let mut` variable a name written `x` resolves to, if it resolves to one. -/
@@ -1028,6 +1036,46 @@ def Comp.lentNames (vars : Bool := false) : Comp → List String
 end
 
 mutual
+/-- The names bound in a value whose computations run in place: a borrow block's or a `with`'s
+body, its parameter, and a `run`, outside nested closures (as `Val.lentNames` reads them). -/
+def Val.declNames : Val → List String
+  | .app _ (.app _ (.sugar _ (.borrow _ _)) P) (.thunkv _ (.lam _ b _ M))
+  | .app _ (.app _ (.sugar _ (.handle _ _ _ _)) P) (.thunkv _ (.lam _ b _ M)) =>
+    P.declNames ++ b.name :: M.declNames
+  | .pair _ V W | .app _ V W => V.declNames ++ W.declNames
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.declNames
+  | .run _ M => M.declNames
+  | _ => []
+
+/-- The names a computation binds, outside nested closures, with those bound in the borrow
+blocks, `with` bodies and `run`s it runs in place (`Val.declNames`). -/
+def Comp.declNames : Comp → List String
+  | .ret _ V | .absurd _ V => V.declNames
+  | .bind _ x _ M N => x.name :: (M.declNames ++ N.declNames)
+  | .letUnit _ V M => V.declNames ++ M.declNames
+  | .letPair _ x y V M => x.name :: y.name :: (V.declNames ++ M.declNames)
+  | .case _ V x M y N => x.name :: y.name :: (V.declNames ++ M.declNames ++ N.declNames)
+  | .loop _ _ src V M N => src.bound ++ (V.declNames ++ M.declNames ++ N.declNames)
+  | .lam _ x _ M => x.name :: M.declNames
+  | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.declNames
+  | .perform _ _ _ V | .abort _ _ _ V => V.declNames
+  | .handle _ _ _ hr hc M => hr.declNames ++ hc.declNames ++ M.declNames
+  | .unwind _ x _ M D N => x.name :: (M.declNames ++ D.declNames ++ N.declNames)
+  | _ => []
+end
+
+/-- The places a block's body `M` lends that are declared outside the block, for the block to
+hand back: those `M` lends that it does not bind itself (`bound`), and that are not declared in a
+block `M` runs in place, a name of which is not bound where the block begins (`outer`): a `let mut`
+declared in an inner `with` and lent there is the inner body's (#881). A binder of a name bound
+outside (a capability rebound, a variable core text passes on) is no declaration; in a program's
+source every other binder is renamed (SPEC §41, R1), so it shadows nothing outside.  [spec §41] -/
+def Comp.lentOuter (M : Comp) (bound : List String) (outer : List String) : List String :=
+  let inner := M.declNames.filter fun y => !outer.contains y && !capabilityNames.contains y
+  M.lentNames.filter fun x => !bound.contains x && !inner.contains x
+
+mutual
 /-- The cells lent to a `with h(&mut c)` in a value, outside nested closures, that are not bound
 in `local`: an enclosing block hands them back (SPEC §18). -/
 def Val.withPlaces (loc : List String) : Val → List String
@@ -1109,10 +1157,11 @@ def Val.handsBack : Val → Bool
 /-- A `run` that writes, read in the value `V` of a statement or binding, is `V` itself: inside an
 expression what it writes could not be handed back (SPEC §41, rule R3). -/
 def checkRun (V : Val) : P Unit := do
-  if let some sp := (← get).pendingRun then
+  if let some (sp, what) := (← get).pendingRun then
     unless V matches .run .. do
-      failAt sp ("this `run` assigns an enclosing `let mut` variable inside an expression, where " ++
-        "what it writes cannot be handed back: bind it first, `let r = run …;` (SPEC §41, rule R3)")
+      failAt sp (s!"this `{what}` assigns an enclosing `let mut` variable inside an expression, " ++
+        s!"where what it writes cannot be handed back: bind it first, `let r = {what} …;` " ++
+        "(SPEC §41, rule R3)")
 
 /-- `p = V; M` for a value `V`: a borrow block or `modify` on a place rebinds the place, which the
 block hands back first; a value with a lent capability is bound first; the core forms
@@ -1423,14 +1472,16 @@ def valPrefix : Nat → P Val
       expectSym "]"
       let V ← valPrefix n
       pure (.boxed (← spanFrom st) a V)
-    | .kw "run" =>
+    | .kw "run" | .kw "if" | .kw "match" =>
       -- `run M` hands back what `M` writes beside its value, which its binding takes apart
-      -- (SPEC §41, rule R3).
-      discard bump
+      -- (SPEC §41, rule R3). An `if` or a `match` where a value is expected is `run` of it
+      -- [spec §41]: the same value form, which the kernel checks as it checks a written `run`.
+      let what := match t.tok with | .kw "if" => "if" | .kw "match" => "match" | _ => "run"
+      if what == "run" then discard bump
       let (M, w) ← inClosure (frame (compPrefix n))
       let sp ← spanFrom st
       if w.isEmpty then return .run sp M
-      modify fun s => { s with blockThreads := w, joined := [], pendingRun := some sp }
+      modify fun s => { s with blockThreads := w, joined := [], pendingRun := some (sp, what) }
       pure (.run sp (handOn { t := "io_bt" } w M))
     | .kw "writes" =>
       -- `writes(x, …) V`, as `bcc print` writes a closure that assigns (SPEC §41, rule R3); in a
@@ -1749,6 +1800,7 @@ def borrowBlock : Nat → P Val
       else if k == .modify then pure "" else freshName "io_l"
     let p ← pat n
     expectSym "->"
+    let outer := (← get).declared
     let ((p, M), w) ← frame (withScope do
       let p ← bindPatNames p
       pure (p, ← comp n))
@@ -1760,7 +1812,7 @@ def borrowBlock : Nat → P Val
     -- standard capabilities it uses.
     let bound := M.boundNames ++ (match p with | .var b => [b.name] | _ => [])
     let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
-    let thr := (w ++ (M.lentNames.filter (fun x => !bound.contains x)) ++
+    let thr := (w ++ M.lentOuter bound outer ++
       M.withPlaces (match p with | .var b => [b.name] | _ => []) ++ caps).eraseDups
     -- A body already handing its variables back (a printed program read again) is kept. A
     -- `modify` hands back only the variables it writes: its body's value is the place's new
@@ -1823,6 +1875,7 @@ def withBlock : Nat → P Val
         expectSym "->"
         pure (x.name, b)
       else pure (← freshName "fx_l", (⟨← freshName "fx_c", t.span⟩ : Ident))
+    let outer := (← get).declared
     let ((b, M), w) ← frame (withScope do
       let b ← bindName b
       pure (b, ← comp n))
@@ -1830,7 +1883,7 @@ def withBlock : Nat → P Val
     let sp ← spanFrom st
     let bound := b.name :: M.boundNames
     let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
-    let thr := (w ++ (M.lentNames.filter (fun x => !bound.contains x)) ++ M.withPlaces [b.name] ++
+    let thr := (w ++ M.lentOuter bound outer ++ M.withPlaces [b.name] ++
       caps).eraseDups
     let thr := if bound.contains "io_bt" then [] else thr
     let M := if thr.isEmpty then M else handOn { t := "io_bt" } thr M
@@ -3238,9 +3291,9 @@ def decls (n : Nat) : Nat → List Decl → P (List Decl)
 each name is resolved to its binder (SPEC §41, rule R1), and no fresh binder is named as a name
 of the source. -/
 def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data : Data.Table := {})
-    (internal : Bool := false) :
+    (internal : Bool := false) (file : String := "") :
     Except Error (α × PState) := do
-  let toks ← lex src
+  let toks ← lex src file
   let fuel := fuelPerToken * (toks.size + 1)
   let go : P α := do
     let a ← p fuel
@@ -3249,7 +3302,7 @@ def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data
   let taken := if resolve then toks.toList.filterMap (fun t => match t.tok with
     | .ident s => some s
     | _ => none) |>.eraseDups else []
-  go.run { toks, pos := 0, lastStop := ⟨1, 1⟩, resolve, taken, data, internal }
+  go.run { toks, pos := 0, lastStop := ⟨1, 1, file⟩, resolve, taken, data, internal }
 
 /-- The table of the tokens `toks`: the `data` declarations (SPEC §42) and the `type`
 abbreviations (SPEC §61) written in them, each read where it is: a declaration is in scope in its
@@ -3257,15 +3310,16 @@ whole module. A declaration that does not read is left to the parse proper, whic
 `[spec §42, §61]` -/
 def dataIn (toks : Array Token) : Data.Table := Id.run do
   let fuel := fuelPerToken * (toks.size + 1)
+  let start : Pos := ⟨1, 1, (toks[0]?.map (·.span.start.file)).getD ""⟩
   let mut out : Data.Table := {}
   for i in [0:toks.size] do
     let named := match toks[i + 1]?.map Token.tok with | some (Tok.uident _) => true | _ => false
     if named && toks[i]!.tok == .ident "data" then
-      match (dataDecl fuel).run { toks, pos := i, lastStop := ⟨1, 1⟩ } with
+      match (dataDecl fuel).run { toks, pos := i, lastStop := start } with
       | .ok (d, _) => out := { out with decls := out.decls ++ [d] }
       | .error _ => pure ()
     else if named && toks[i]!.tok == .kw "type" then
-      match (decl fuel).run { toks, pos := i, lastStop := ⟨1, 1⟩ } with
+      match (decl fuel).run { toks, pos := i, lastStop := start } with
       | .ok (d, _) => out := { out with abbrevs := out.abbrevs ++ (Data.Abbrev.ofDecl? d).toList }
       | .error _ => pure ()
   out
@@ -3286,7 +3340,7 @@ def dataOfModules (lib : String → Option String) : Nat → List String → Lis
   | _ + 1, [], seen => ({}, seen)
   | k + 1, m :: ms, seen =>
     if seen.contains m then dataOfModules lib k ms seen else
-    match (lib m).map lex with
+    match (lib m).map (lex · m) with
     | some (.ok toks) =>
       let (inner, seen) := dataOfModules lib k (includesIn toks) (m :: seen)
       let (rest, seen) := dataOfModules lib k ms seen
@@ -3314,19 +3368,20 @@ def tableOf (lib : String → Option String) (incs : List String) (own : Data.Ta
 
 /-- The `data` declarations and the `type` abbreviations in scope in the source `src` (SPEC §42,
 §61), `lib` giving a module's source (`tableOf`). -/
-def dataOf (lib : String → Option String) (src : String) : Data.Table :=
-  match lex src with
+def dataOf (lib : String → Option String) (src : String) (file : String := "") : Data.Table :=
+  match lex src file with
   | .ok toks => tableOf lib (includesIn toks) (dataIn toks)
   | .error _ => {}
 
 /-- The declarations of a source file. At most one `main` is accepted. Its names are resolved
 (`resolve`) unless it is code the elaborator generated. -/
 def parseProgram (src : String) (resolve : Bool := true)
-    (lib : String → Option String := fun _ => none) (internal : Bool := false) :
-    Except Error Program := do
+    (lib : String → Option String := fun _ => none) (internal : Bool := false)
+    (file : String := "") : Except Error Program := do
   -- The `data` declarations in scope (SPEC §42): the prelude's, the included modules', the
-  -- program's own.
-  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src) internal
+  -- program's own. `file` is the library module `src` is (`""` for the program), which its
+  -- positions carry (#883).
+  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src file) internal file
   let mains := ds.filter fun | .main .. => true | _ => false
   match mains with
   | _ :: .main sp _ _ :: _ => .error ⟨sp, "a program has at most one `main`"⟩
@@ -3382,18 +3437,24 @@ def srcText (src : String) (sp : Span) : String :=
 
 /-- A marker a message holds for the source text of a span (`Error.renderIn` writes it out). -/
 def spanMark (sp : Span) : String :=
-  s!"⟦{sp.start.line}:{sp.start.col}:{sp.stop.line}:{sp.stop.col}⟧"
+  let m := if sp.start.file == "" then "" else s!"{sp.start.file}@"
+  s!"⟦{m}{sp.start.line}:{sp.start.col}:{sp.stop.line}:{sp.stop.col}⟧"
 
-/-- Each span marker of `msg` replaced by the span's source text. -/
-def unmark (src : String) (msg : String) : String :=
+/-- Each span marker of `msg` replaced by the span's source text: the program's `src`, or the
+library module's that the marker names (`lib`).  `[spec §42]` -/
+def unmark (src : String) (msg : String) (lib : String → Option String := fun _ => none) :
+    String :=
   match msg.splitOn "⟦" with
   | [] => msg
   | first :: rest => rest.foldl (fun acc piece =>
       match piece.splitOn "⟧" with
       | m :: after =>
+        let (text, m) := match m.splitOn "@" with
+          | [f, m] => ((lib f).getD "", m)
+          | _ => (src, m)
         match (m.splitOn ":").map String.toNat? with
         | [some a, some b, some c, some d] =>
-          acc ++ srcText src ⟨⟨a, b⟩, ⟨c, d⟩⟩ ++ "⟧".intercalate after
+          acc ++ srcText text ⟨⟨a, b, ""⟩, ⟨c, d, ""⟩⟩ ++ "⟧".intercalate after
         | _ => acc ++ "⟦" ++ piece
       | [] => acc ++ "⟦" ++ piece) first
 
@@ -3401,6 +3462,20 @@ def unmark (src : String) (msg : String) : String :=
 it (`unrename`), and each span marker as its source text (`unmark`). -/
 def Error.renderIn (src : String) (e : Error) (lib : String → Option String := fun _ => none) :
     String :=
-  { e with msg := unmark src (unrename (renamesOf src lib) e.msg) }.render
+  let renames := renamesOf src lib ++ (match lib e.span.start.file with
+    | some msrc => if e.span.start.file == "" then [] else renamesOf msrc lib
+    | none => [])
+  { e with msg := unmark src (unrename renames e.msg) lib }.render
+
+/-- The file a position is in: the program's path `file`, or `lib/m.bc` for a position in the
+library module `m` (#883).  `[spec §42]` -/
+def Pos.fileIn (file : String) (p : Pos) : String :=
+  if p.file == "" then file else s!"lib/{p.file}.bc"
+
+/-- An error about the program `file`, whose source is `src`, rendered as `path:line:col: message`,
+the path the file the error's position is in (`Pos.fileIn`).  `[spec §42]` -/
+def Error.renderAt (file src : String) (e : Error) (lib : String → Option String := fun _ => none) :
+    String :=
+  s!"{e.span.start.fileIn file}:{e.renderIn src lib}"
 
 end Frontend

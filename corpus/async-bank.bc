@@ -3,7 +3,7 @@
 -- `Fail[i32]`, handled inside the borrow, and the teller counts it. The tellers run under
 -- `lib/async.bc`'s scheduler, interleaved.
 --
--- Idiom: owned across suspensions, borrowed within (decision 71). The teller owns the account
+-- Idiom: owned across suspensions, borrowed within. The teller owns the account
 -- across its `await`s and lends it `mut` for one transaction at a time: the borrow block is inside
 -- the loop's body and ends before the `await`. A borrow block held across the `await`s, reading
 -- the teller's other variables, is refused (no borrow is held across a suspension; R1, SPEC §29,

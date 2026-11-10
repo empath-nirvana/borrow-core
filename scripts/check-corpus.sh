@@ -3,7 +3,8 @@
 # `corpus/axes/*.bc`, `corpus/aoc/*.bc` and `corpus/leetcode/*/*.bc` must check, except a file marked `-- check: parse-only`
 # (it is for the parser); every `corpus/reject/*.bc` must parse and be rejected by the checker
 # with the message on its `-- expect:` line (`line:col: message`), continued by any `-- expect| `
-# lines for a message of several lines.
+# lines for a message of several lines. A message at a position inside an included library module
+# names the module's file instead (`lib/m.bc:line:col: message`, #883).
 #
 # Reports. For every corpus/reports/<name>.txt, the effects lines `bcc check corpus/<name>.bc` prints
 # (`effect`, `row`, `lowering`, `call`: SPEC §18) must be exactly that file: the rows, the lowering
@@ -20,8 +21,9 @@
 # Pending programs. Every `corpus/pending/*.bc` is a program we cannot write yet, named by its
 # `-- pending: <issue or limit>` line. It is an expected failure: `bcc check` (which parses first)
 # must reject it with the message on its `-- now:` line, continued by `-- now| ` lines, so the
-# failure it documents is the current one. When a pending program checks, the feature it waits
-# for has landed: the gate fails and says to move it into the corpus with its golden output.
+# failure it documents is the current one (a position in a library module naming its file, as for
+# a reject). When a pending program checks, the feature it waits for has landed: the gate fails
+# and says to move it into the corpus with its golden output.
 #
 #     scripts/check-corpus.sh [file…]
 #
@@ -52,7 +54,7 @@ rejects() {
     echo "$f: does not parse, so it does not test the checker"; return 1
   elif out=$("$bcc" check "$f" 2>&1); then
     echo "$f: accepted, but must be rejected"; return 1
-  elif [ "$out" != "$f:$want" ]; then
+  elif [ "$out" != "$f:$want" ] && { [ "${want#lib/}" = "$want" ] || [ "$out" != "$want" ]; }; then
     echo "$f: wrong error"; echo "  want: $want"; echo "  got:  ${out#"$f:"}"; return 1
   else
     echo "$f: rejected as expected"
@@ -88,7 +90,7 @@ pending() {
     echo "$f: needs a \`-- pending:\` line and a \`-- now:\` line"; return 1
   elif out=$("$bcc" check "$f" 2>&1); then
     echo "$f: checks now ($issue): move it into the corpus with its golden output"; return 1
-  elif [ "$out" != "$f:$want" ]; then
+  elif [ "$out" != "$f:$want" ] && { [ "${want#lib/}" = "$want" ] || [ "$out" != "$want" ]; }; then
     echo "$f: pending, but fails differently"; echo "  now:  $want"; echo "  got:  ${out#"$f:"}"
     return 1
   else
