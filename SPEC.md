@@ -5537,8 +5537,7 @@ and a closure built in `M`.
 
 ### Open
 
-- **The lowering of a finaliser that suspends** (#869; planned: its cancel arm as a code of its
-  own, each finaliser call a resumption point). Until it lands, a feature without its lowering.
+- **The lowering of a finaliser that suspends** is Backend2's (§69); the old backend refuses it.
 - **A surface finaliser that performs** (`with h(…) { M } finally { D }`, the surface `unwind`):
   its own entry, before the surface's code.
 - **`Σ_M` and `Σ_D` are synthesized from the derivations**, not proved least: they can over-count
@@ -9548,8 +9547,8 @@ No change: no type, rule, term, typing, elaboration or semantics.
   at the point (a call point resumes its callee's `k` and steps again; `kappa_resume_steps`), and
   whose cancel entry cancels the callee's `k` first, then runs the point's frames' finalisers
   innermost first, keeping the first error (§19 *Cancels*, `[cfin-raise]`, `cancel_prefix`,
-  `kappa_cancel_steps`). A finaliser that may suspend, or a cancel row with a machine operation,
-  is outside the fragment.
+  `kappa_cancel_steps`). A finaliser that may suspend, and a cancel row with a machine operation,
+  are lowered by §69.
 - **A `handle` node as a drive** (`convDrive`), when its handled computation's row has a machine
   operation (of its own name, or of `Σ`). The handled computation is a machine of its own. The
   drive takes its outcome apart, read from the node: a value to `h_ret` (`[ret]`, `catch_ret`), an
@@ -12385,6 +12384,98 @@ reported as an intended change.
   derived; obstruction not verified. This entry drops `ρR` and moves the obligation to `codeI`'s
   premise `Γ.CapOK`. That a well-typed closure always meets `CapOK` (no live non-persistent slot
   goes unused) is not derived; where it fails, the checker keeps `U C`.
+
+---
+
+## 69. Entry 68 — the new backend: a cancel that suspends (#869)
+
+### Motivation
+
+§27 lets a finaliser perform an operation whose handler is outside every region that can cancel
+it (D2), and records it in cancel rows. Cleanup that awaits (closing a socket during a cancel,
+the pipes connector's per-step finaliser) needs a finaliser that may suspend, and a cancel row
+holding a machine operation, lowered. §49 refused both.
+
+### Language
+
+No change to types, rules, terms, typing, semantics or `Core/`. The surface's finaliser rows are
+§27's (#868).
+
+### The rule
+
+One construct per step of `Paper`'s machine:
+
+- **The cancel component.** A machine operation's suspended computation is `U((B ⊸ F Y) & K)`
+  (§49). At a capturable operation (`capB`), `K = F C`, `C` the outcome of `F_{fin} 1`, the cancel
+  row's own outcome. With no machine operation in `fin`, `C` is `1 ⊕ P_fin`, as before; the
+  nesting of cancel rows is finite (§27), so the type is. At a must-resume operation `K = ⊤`
+  (§49).
+- **A cancel that may suspend is a machine.** The cancel entry of `k`, and `κ`'s cancel at a
+  drive over `k.1`, whose cancel row has a machine operation, is a machine of `C`'s outcome. The
+  callee's cancel and each finaliser in it are call points.
+- **`cfin` as a frame** (`cfinF`). It holds the error kept so far. On the finaliser's answer or
+  raise it keeps the first error and goes on with the cancel (`[cfin-ret]`, `[cfin-raise]`). When
+  the suspended cancel run is itself cancelled, it keeps the earlier error and goes on through the
+  rest of the region (`[cfin-cancel]`). The run's end answers `()` or the kept error (`[cancel]`,
+  `[cancel-raise]`).
+- **`[then]` with a finaliser that may suspend** (`unwindF`). On an ordinary unwind the finaliser
+  is a call point of the machine; its row is in the machine's (`Σ_D ≤ Σ`). The pending raise is
+  held in a frame, dropped when the finaliser raises (`then_fin`) or when the machine is cancelled
+  meanwhile.
+- **Who drives.** The canceller. A suspension of a cancel run returns to the code that observed
+  `.2` and is forwarded to the nearest live handler (§19 *Cancels*); the cancelled region's
+  handlers are dead, the cancelled task's own site among them. The forwarding is transcribed from
+  `Paper`'s `ufin`, `ufinC`, `cfret`, `cferr`, `cfcancel` and `creraise`.
+- **Stack machines** (§52) keep a pure cancel path: a machine with a suspending finaliser, or whose
+  operation's cancel row has a machine operation, is not a stack machine.
+- **Facts read.** Each row entry's qualifier, answer and cancel row; `[then]`'s `Σ_D`; `κ`'s
+  `cancelTy`. `ThenLe` and `Σ_D ≤ Σ` are the typing's. The conversion fails loudly on a
+  suspension outside its machine's row.
+- **`UNPROVED:`** A non-capturable operation's cancel entry is never entered (it traps). A stored
+  site's stack is owned by a suspended cancel run's `k` alone.
+
+### Programs
+
+- `deep-gen-count` (the #866 twin of `deep-gen`): `((), i32[2])`, `live 0`.
+- `core-fin-op`, the `progFinOpT` twin: a finaliser performs, and the outer handler resumes.
+- `core-fin-keep`, the `progKeepT` twin: a kept error across a suspension.
+- `cancel-suspend-unwind`: finalisers suspend on an ordinary raise; one supersedes the pending
+  raise, one frees a cell.
+- `cancel-suspend-nested`: two suspending finalisers, the callee's cancel itself a machine; the
+  first error kept.
+- `core-fin-stored-k-op`: a stored `κ` cancelled after its handler returned, its cleanup suspending
+  in the canceller.
+- `core-fin-cancellable`: an abort unwinds through a finaliser that performs a capturable
+  operation, handled outside the abort: `(inr (), i32[1])`, `live 0` (§27, `Σ_M`).
+- `core-fin-nc`, the `progNC₁T` twin: the outer handler cancels the finaliser's continuation
+  (`[cfin-cancel]`): `()`.
+- `core-fin-op-cap`: `core-fin-op` with a capturable finaliser operation: `inr ()`.
+- `cancel-suspend-cancel`: the suspended cancel run cancelled in turn, the outer finaliser freeing
+  a cell: `()`, `live 0`.
+- `core-fin-consume`, the `progConsumeT` twin: an unrestricted finaliser operation whose own cancel
+  row holds an abortive one: `inl ()`.
+- `core-fin-keep-unr`, the `progKeepT` twin with an unrestricted finaliser operation: `inr ()`.
+
+In `core-fin-op`, `core-fin-keep`, `cancel-suspend-unwind`, `cancel-suspend-nested` and
+`core-fin-stored-k-op` the finalisers' operations are must-resume; `core-fin-cancellable`,
+`core-fin-nc`, `core-fin-op-cap` and `cancel-suspend-cancel` use a capturable one, and
+`core-fin-consume` and `core-fin-keep-unr` an unrestricted one.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `Core/`, `Paper/`, `Support/`, the checker,
+the elaboration, the old backend or a kernel program. Every LIR type of the existing corpus is
+unchanged (`outcomeTy`'s empty case). `corpus/counts-backend2.expected` and
+`corpus/erasure-backend2.expected` are unchanged.
+
+### Open
+
+- A stack machine whose cancel suspends: Backend2 refuses a cancel that may suspend over a task's
+  own stack (§52) until a lowering proved memory-safe (the stack freed exactly once along every
+  suspending cancel run) lands, #970.
+- Cleanup that awaits needs `lib/async.bc`'s `cancel` to have a cancel row (the surface).
+- The old backend keeps refusing a finaliser that suspends (§27 *Lowering*).
+- A finaliser that reaches a capability the body uses (§27 *Open*, a kernel question).
 
 ---
 
