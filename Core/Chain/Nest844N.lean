@@ -461,13 +461,15 @@ theorem goal791N_premises_can :
 and resumes is safe, leak-free, or diverges, from `HandlerLawN`.  `[spec §62]` -/
 theorem progRes_orDiverges (h : HandlerLawN (ℍ := ℍ)) :
     OrDiverges (ℍ := ℍ) (substAll (vals791 [nestC]) progRes) :=
-  goal791N h [nestC] goal791N_premises_res.1 progRes goal791N_premises_res.2
+  List.append_nil (vals791 [nestC]) ▸ goal791N h [nestC] [] [] progRes .unit
+    goal791N_premises_res.1 .nil ((List.append_nil _).symm ▸ goal791N_premises_res.2) rfl
 
 /-- **`Goal791N` at `progCan`**: the run that yields the outer borrow across the suspending lend
 and cancels is safe, leak-free, or diverges, from `HandlerLawN`.  `[spec §62]` -/
 theorem progCan_orDiverges (h : HandlerLawN (ℍ := ℍ)) :
     OrDiverges (ℍ := ℍ) (substAll (vals791 [nestC]) progCan) :=
-  goal791N h [nestC] goal791N_premises_can.1 progCan goal791N_premises_can.2
+  List.append_nil (vals791 [nestC]) ▸ goal791N h [nestC] [] [] progCan .unit
+    goal791N_premises_can.1 .nil ((List.append_nil _).symm ▸ goal791N_premises_can.2) rfl
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Nest844N
 
