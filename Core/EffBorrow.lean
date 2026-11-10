@@ -202,23 +202,53 @@ def withbor3UTy (a : Lifetime.Life) (x : LifeVar) (bnd : Lifetime.Life) (A B : V
   withborUTy (.mut a A) (cbUTy x bnd (.mut (.var x) A) B S) S (.tensor (.mut a A) B)
 
 /-- **The unwinding form of `withbor`**, finalising the source with `d`:
-`λr. λf. (f [] r) then b. (r, b) unwind d r`.  `[spec §19]` -/
+`λr. λf. (f [] r) then b. (r, b) unwind d r`. `d` sits under the three binders `r`, `f` and the
+unwind arm's, so it is shifted past them: it may name slots of the rule's context.
+`[spec §19, §72]` -/
 def withborUE (d : Expr) : Expr :=
-  .val (.lam (.val (.lam (thenE (.pair (.var 2) (.var 0)) (.app d (.var 2))
+  .val (.lam (.val (.lam (thenE (.pair (.var 2) (.var 0)) (.app (d.shift 3 0) (.var 2))
     (.app (.app (.var 0) (.val .unit)) (.var 1))))))
 
-theorem withborUE_closed {d : Expr} (hd : closedAt 0 d = true) : closedAt 0 (withborUE d) = true := by
-  simp [withborUE, thenE, closedAt, Expr.val, Val.lam, Val.unit, Val.prim,
-    closedAt_mono d hd (Nat.zero_le 3)]
+/-- At a closed finaliser the shift is the identity: the term is the one with `d` in place, so
+no closed program's term changes.  `[spec §72]` -/
+theorem withborUE_eq_of_closed {d : Expr} (hd : closedAt 0 d = true) :
+    withborUE d = .val (.lam (.val (.lam (thenE (.pair (.var 2) (.var 0)) (.app d (.var 2))
+      (.app (.app (.var 0) (.val .unit)) (.var 1)))))) := by
+  simp only [withborUE, shift_closedAt d 3 hd (Nat.zero_le 0)]
+
+/-- `withborUE d` is closed wherever `d` is.  `[spec §72]` -/
+theorem withborUE_closedAt {k : Nat} {d : Expr} (hd : closedAt k d = true) :
+    closedAt k (withborUE d) = true := by
+  have h := closedAt_shift_add 3 d k 0 hd
+  simp [withborUE, thenE, closedAt, Expr.val, Val.lam, Val.unit, Val.prim, h]
+
+theorem withborUE_closed {d : Expr} (hd : closedAt 0 d = true) : closedAt 0 (withborUE d) = true :=
+  withborUE_closedAt hd
+
+/-- A shift commutes with the unwinding form.  `[spec §72]` -/
+theorem withborUE_shift (n c : Nat) (d : Expr) :
+    (withborUE d).shift n c = withborUE (d.shift n c) := by
+  have h := Expr.shift_shift_comm 3 n c d 0
+  simp only [Nat.zero_add] at h
+  simp [withborUE, thenE, Expr.shift, Expr.val, Val.lam, Val.unit, Val.prim, h]
+
+/-- A closing substitution commutes with the unwinding form.  `[spec §72]` -/
+theorem withborUE_psub (γ : List Val) (d : Expr) :
+    substAll γ (withborUE d) = withborUE (substAll γ d) := by
+  have h := Expr.psub_shift 3 γ d 0
+  simp only [Nat.zero_add] at h
+  simp [substAll, withborUE, thenE, Expr.psub, Expr.val, Val.lam, Val.unit, Val.prim, h]
 
 /-- The unwinding form as a value. -/
 def withborUV (d : Expr) : Val := ⟨withborUE d, .lam⟩
 
-/-- `withborU d u f` steps to the callback under the finaliser frame, `u` a closed source. -/
-theorem withborUE_beta {Tb : Table} (hTb : Tb.Mono) {d : Expr} (hd : closedAt 0 d = true)
+/-- `withborU d u f` steps to the callback under the finaliser frame, `u` a closed source; the
+finaliser in the frame is `d` under the frame's binder.  `[spec §72]` -/
+theorem withborUE_beta {Tb : Table} (hTb : Tb.Mono) {d : Expr}
     (u : Val) (hu : closedAt 0 u.1 = true) (vf : Val) {ls : List SRec}
     {Q : List SRec → Val → WProp} {ρ : WRes}
-    (h : ewpTS ls ((ubindK (Val.lam (.pair (.val u) (.var 0))) (Val.lam (.app d (.val u)))).plug
+    (h : ewpTS ls ((ubindK (Val.lam (.pair (.val u) (.var 0)))
+        (Val.lam (.app (d.shift 1 0) (.val u)))).plug
         (.app (.app (.val vf) (.val .unit)) (.val u))) Tb Q ρ) :
     ewpTS ls (.app (.app (.val (withborUV d)) (.val u)) (.val vf)) Tb Q ρ := by
   refine ewp_step hTb (fun μ => (Step1N.head (Head.beta μ _ _) rfl).plug (Kont.appL .hole vf))
@@ -226,8 +256,18 @@ theorem withborUE_beta {Tb : Table} (hTb : Tb.Mono) {d : Expr} (hd : closedAt 0 
   refine ewp_step hTb (fun μ => Step1N.head (Head.beta μ _ vf) rfl) ls Q ρ ?_
   convert h using 1
   simp [thenE, Kont.plug, Expr.subst, Expr.val, Val.lam, Val.pair, Val.unit, Val.prim,
-    Val.shift, closed_shift hu, closed_subst hu,
-    subst_closedAt d (s := _) (closedAt_mono d hd (Nat.zero_le _)) (le_refl _)]
+    Val.shift, closed_shift hu, closed_subst hu, withborUE,
+    subst_shift_succ (j := 2) (d := 2) _ d (le_refl _),
+    subst_shift_succ (j := 1) (d := 1) _ d (le_refl _)]
+
+/-- `withborUE_beta` at a closed finaliser: the frame holds `d` itself.  `[spec §72]` -/
+theorem withborUE_beta_closed {Tb : Table} (hTb : Tb.Mono) {d : Expr} (hd : closedAt 0 d = true)
+    (u : Val) (hu : closedAt 0 u.1 = true) (vf : Val) {ls : List SRec}
+    {Q : List SRec → Val → WProp} {ρ : WRes}
+    (h : ewpTS ls ((ubindK (Val.lam (.pair (.val u) (.var 0))) (Val.lam (.app d (.val u)))).plug
+        (.app (.app (.val vf) (.val .unit)) (.val u))) Tb Q ρ) :
+    ewpTS ls (.app (.app (.val (withborUV d)) (.val u)) (.val vf)) Tb Q ρ :=
+  withborUE_beta hTb u hu vf (by rwa [shift_closedAt d 1 hd (Nat.zero_le 0)])
 
 /-! ### The pieces every unwinding form shares -/
 
@@ -239,24 +279,32 @@ theorem semV_dead_closed {Δ : LifeCtx} {Γ : Ctx VTy} {d : Expr} {T : VTy}
   have h := hd δ γ ls' PMap.empty hδ (gDenC_local (ext_empty' ls ls') hg)
   rwa [show substAll γ d = d from psub_closedAt d γ hdc (Nat.zero_le 0)] at h
 
-/-- The finaliser `λ_. d u` on the returned source: `d`'s relation at the source's type.
-`[spec §19]` -/
-theorem fin_run {d : Expr} (hdc : closedAt 0 d = true) {src : VTy} {δ : LSub} {u : Val}
+/-- A term's semantic judgment at a dead context, closed by `γ`, at every list.  `[spec §72]` -/
+theorem semV_dead {Δ : LifeCtx} {Γ : Ctx VTy} {d : Expr} {T : VTy}
+    (hd : SemV Δ Γ d T) {δ : LSub} {γ : List Val} {ls : List SRec}
+    (hδ : Δ.Models δ) (hg : gDenC ls δ Γ γ PMap.empty) (ls' : List SRec) :
+    wpTS ls' (substAll γ d) (fun ls'' => vP T ls'' δ) PMap.empty :=
+  hd δ γ ls' PMap.empty hδ (gDenC_local (ext_empty' ls ls') hg)
+
+/-- The finaliser `λ_. d u` on the returned source, `d` under the frame's binder: `d`'s relation
+at the source's type.  `[spec §19, §72]` -/
+theorem fin_run {d : Expr} {src : VTy} {δ : LSub} {u : Val}
     (hu : closedAt 0 u.1 = true)
     (hd : ∀ ls, wpTS ls d (fun ls'' => vP (.lolli src .unit) ls'' δ) PMap.empty)
     (ls : List SRec) :
     Entails (vP src ls δ u)
-      (wpTS ls (.app (.val (Val.lam (.app d (.val u)))) (.val .unit))
+      (wpTS ls (.app (.val (Val.lam (.app (d.shift 1 0) (.val u)))) (.val .unit))
         (fun ls v => vP .unit ls δ v)) := by
   intro ρ hu'
   refine wpTS_lolli _ _ _ _ _ ?_
-  rw [show Expr.subst 0 Val.unit (.app d (.val u)) = .app d (.val u) by
-    simp [Expr.subst, subst_closedAt d (s := _) hdc (Nat.zero_le _), Expr.val, closed_subst hu]]
+  rw [show Expr.subst 0 Val.unit (.app (d.shift 1 0) (.val u)) = .app d (.val u) by
+    simp [Expr.subst, subst_shift_succ (j := 0) (d := 0) _ d (le_refl _), Expr.shift_zero,
+      Expr.val, closed_subst hu]]
   refine wpTS_bind_frame (.appL .hole u) d ls (fun ls => vP (.lolli src .unit) ls δ)
     (fun ls => vP src ls δ u) _ (fun _ hs _ h => vP_same hs h) ?_ ρ
     ⟨PMap.empty, ρ, compS_empty_left ρ, hd ls, hu'⟩
-  rintro ls' - g σ ⟨σ₁, σ₂, hc, hg, hu''⟩
-  exact (hg ls' (Ext.refl _ _)) u σ₂ σ hu'' hc
+  rintro ls' - g σ ⟨σ₁, σ₂, hcσ, hg, hu''⟩
+  exact (hg ls' (Ext.refl _ _)) u σ₂ σ hu'' hcσ
 
 /-- At a return the unwinding form pairs the source with the answer. -/
 theorem ewp_ret_pair {Tb : Table} (hTb : Tb.Mono) (u : Val) (hu : closedAt 0 u.1 = true)
@@ -281,15 +329,14 @@ read at `↓@bδ`.  `[spec §19, §23]` -/
 theorem withbor2U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-    (hdc : closedAt 0 d = true) (hd : SemV Δ Γ d (.lolli (.ref A) .unit)) :
+    (hd : SemV Δ Γ d (.lolli (.ref A) .unit)) :
     SemV Δ Γ (withborUE d) (withbor2UTy x Δ.meetOfDom A B S) := by
   intro δ γ ls ρ hδ hg
   have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
-  have hdg := semV_dead_closed hdc hd hδ hg
+  have hdg := semV_dead hd hδ hg
   show wpTS ls (substAll γ (withborUE d)) _ _
-  rw [show substAll γ (withborUE d) = .val (withborUV d) from
-    psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
+  rw [show substAll γ (withborUE d) = .val (withborUV (substAll γ d)) from withborUE_psub γ d]
   refine wpTS_val _ _ _ _ ?_
   intro ls₁ _ v₁ ρ₁ τ₀ hv₁ hcomp
   obtain rfl := eq_of_compS_empty_left hcomp
@@ -298,13 +345,13 @@ theorem withbor2U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
   intro vf ρ₂ τ hvf hc₂
   let T := Row.tab S δ
   have hA : T.AbortOnly := hS.abort δ
-  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr (withborUE_beta (opTable_mono _) hdc (.loc ℓ) rfl vf ?_)
+  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr (withborUE_beta (opTable_mono _) (.loc ℓ) rfl vf ?_)
   -- the source handed back at every end of the callback
   let Fr : List SRec → WProp := fun ls => vP (.ref A) ls δ (.loc ℓ)
   let Q₁ : List SRec → Val → WProp := fun ls v => vP B ls δ v
   refine ewp_unwind T hA (Row.tab_local S δ) (Row.tab_zero hS.nz δ) _ _ Fr
     (Qd := fun ls v => vP .unit ls δ v) (fun _ _ _ h => by obtain ⟨rfl, rfl⟩ := h; exact ⟨rfl, noOwn_empty⟩)
-    (fun ls => fin_run hdc rfl hdg ls) Q₁ _ ?_ ?_
+    (fun ls => fin_run rfl hdg ls) Q₁ _ ?_ ?_
   · -- a return: `(ℓ, v)`
     rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hFr⟩
     refine ewp_ret_pair (opTable_mono _) (.loc ℓ) rfl _ v ?_
@@ -362,15 +409,14 @@ the borrow in hand.  `[spec §19]` -/
 theorem withbor3U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy} {S : Row}
     {d : Expr} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-    (hdc : closedAt 0 d = true) (hd : SemV Δ Γ d (.lolli (.mut a A) .unit)) :
+    (hd : SemV Δ Γ d (.lolli (.mut a A) .unit)) :
     SemV Δ Γ (withborUE d) (withbor3UTy a x Δ.meetOfDom A B S) := by
   intro δ γ ls ρ hδ hg
   have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
-  have hdg := semV_dead_closed hdc hd hδ hg
+  have hdg := semV_dead hd hδ hg
   show wpTS ls (substAll γ (withborUE d)) _ _
-  rw [show substAll γ (withborUE d) = .val (withborUV d) from
-    psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
+  rw [show substAll γ (withborUE d) = .val (withborUV (substAll γ d)) from withborUE_psub γ d]
   refine wpTS_val _ _ _ _ ?_
   intro ls₁ _ v₁ ρ₁ τ₀ hv₁ hcomp
   obtain rfl := eq_of_compS_empty_left hcomp
@@ -380,14 +426,14 @@ theorem withbor3U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
   intro vf ρ₂ τ hvf hc₂
   let T := Row.tab S δ
   have hA : T.AbortOnly := hS.abort δ
-  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr (withborUE_beta (opTable_mono _) hdc (.loc ℓ) rfl vf ?_)
+  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr (withborUE_beta (opTable_mono _) (.loc ℓ) rfl vf ?_)
   -- the borrow handed back at every end of the callback
   let Fr : List SRec → WProp := fun ls => vP (.mut a A) ls δ (.loc ℓ)
   let Q₁ : List SRec → Val → WProp := fun ls v => vP B ls δ v
   refine ewp_unwind T hA (Row.tab_local S δ) (Row.tab_zero hS.nz δ) _ _ Fr
     (Qd := fun ls v => vP .unit ls δ v)
     (fun _ _ _ h => by obtain ⟨rfl, rfl⟩ := h; exact ⟨rfl, noOwn_empty⟩)
-    (fun ls => fin_run hdc rfl hdg ls) Q₁ _ ?_ ?_
+    (fun ls => fin_run rfl hdg ls) Q₁ _ ?_ ?_
   · rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hFr⟩
     refine ewp_ret_pair (opTable_mono _) (.loc ℓ) rfl _ v ?_
     exact ⟨.loc ℓ, v, pure_sep_mk rfl ⟨σ₂, σ₁, ResU.CompS.comm hcσ, hFr, hv⟩⟩
@@ -452,15 +498,14 @@ returned source beside each stop.  `[spec §19]` -/
 theorem withbor1U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc₁ : VScoped Δ A)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-    (hdc : closedAt 0 d = true) (hd : SemV Δ Γ d (.lolli (.ref A) .unit)) :
+    (hd : SemV Δ Γ d (.lolli (.ref A) .unit)) :
     SemV Δ Γ (withborUE d) (withbor1UTy x Δ.meetOfDom A B S) := by
   intro δ γ ls ρ hδ hg
   have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
-  have hdg := semV_dead_closed hdc hd hδ hg
+  have hdg := semV_dead hd hδ hg
   show wpTS ls (substAll γ (withborUE d)) _ _
-  rw [show substAll γ (withborUE d) = .val (withborUV d) from
-    psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
+  rw [show substAll γ (withborUE d) = .val (withborUV (substAll γ d)) from withborUE_psub γ d]
   refine wpTS_val _ _ _ _ ?_
   intro ls₁ _ v₁ ρ₁ τ₀ hv₁ hcomp
   obtain rfl := eq_of_compS_empty_left hcomp
@@ -470,13 +515,13 @@ theorem withbor1U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
   let T := Row.tab S δ
   have hA : T.AbortOnly := hS.abort δ
   have hL : T.Local := Row.tab_local S δ
-  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr (withborUE_beta (opTable_mono _) hdc (.loc ℓ) rfl vf ?_)
+  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr (withborUE_beta (opTable_mono _) (.loc ℓ) rfl vf ?_)
   let Fr : List SRec → WProp := fun ls => vP (.ref A) ls δ (.loc ℓ)
   let Q₁ : List SRec → Val → WProp := fun ls v => vP B ls δ v
   refine ewp_unwind T hA hL (Row.tab_zero hS.nz δ) _ _ Fr
     (Qd := fun ls v => vP .unit ls δ v)
     (fun _ _ _ h => by obtain ⟨rfl, rfl⟩ := h; exact ⟨rfl, noOwn_empty⟩)
-    (fun ls => fin_run hdc rfl hdg ls) Q₁ _ ?_ ?_
+    (fun ls => fin_run rfl hdg ls) Q₁ _ ?_ ?_
   · rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hFr⟩
     refine ewp_ret_pair (opTable_mono _) (.loc ℓ) rfl _ v ?_
     exact ⟨.loc ℓ, v, pure_sep_mk rfl ⟨σ₂, σ₁, ResU.CompS.comm hcσ, hFr, hv⟩⟩
@@ -652,15 +697,14 @@ theorem sliceBorrowMU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-    (hdc : closedAt 0 d = true) (hd : SemV Δ Γ d (.lolli (.array A) .unit)) :
+    (hd : SemV Δ Γ d (.lolli (.array A) .unit)) :
     SemV Δ Γ (withborUE d) (sliceBorrowMUTy x Δ.meetOfDom A B S) := by
   intro δ γ ls ρ hδ hg
   have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
-  have hdg := semV_dead_closed hdc hd hδ hg
+  have hdg := semV_dead hd hδ hg
   show wpTS ls (substAll γ (withborUE d)) _ _
-  rw [show substAll γ (withborUE d) = .val (withborUV d) from
-    psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
+  rw [show substAll γ (withborUE d) = .val (withborUV (substAll γ d)) from withborUE_psub γ d]
   refine wpTS_val _ _ _ _ ?_
   intro ls₁ _ v₁ ρ₁ τ₀ hv₁ hcomp
   obtain rfl := eq_of_compS_empty_left hcomp
@@ -669,13 +713,13 @@ theorem sliceBorrowMU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
   let T := Row.tab S δ
   have hA : T.AbortOnly := hS.abort δ
   refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr
-    (withborUE_beta (opTable_mono _) hdc (Val.arr ℓ n) (arr_closed ℓ n) vf ?_)
+    (withborUE_beta (opTable_mono _) (Val.arr ℓ n) (arr_closed ℓ n) vf ?_)
   let Fr : List SRec → WProp := fun ls => vP (.array A) ls δ (Val.arr ℓ n)
   let Q₁ : List SRec → Val → WProp := fun ls v => vP B ls δ v
   refine ewp_unwind T hA (Row.tab_local S δ) (Row.tab_zero hS.nz δ) _ _ Fr
     (Qd := fun ls v => vP .unit ls δ v)
     (fun _ _ _ h => by obtain ⟨rfl, rfl⟩ := h; exact ⟨rfl, noOwn_empty⟩)
-    (fun ls => fin_run hdc (arr_closed ℓ n) hdg ls) Q₁ _ ?_ ?_
+    (fun ls => fin_run (arr_closed ℓ n) hdg ls) Q₁ _ ?_ ?_
   · rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hFr⟩
     refine ewp_ret_pair (opTable_mono _) (Val.arr ℓ n) (arr_closed ℓ n) _ v ?_
     exact ⟨Val.arr ℓ n, v, pure_sep_mk rfl ⟨σ₂, σ₁, ResU.CompS.comm hcσ, hFr, hv⟩⟩
@@ -734,15 +778,14 @@ theorem sliceBorrowIU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
     (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-    (hdc : closedAt 0 d = true) (hd : SemV Δ Γ d (.lolli (.array A) .unit)) :
+    (hd : SemV Δ Γ d (.lolli (.array A) .unit)) :
     SemV Δ Γ (withborUE d) (sliceBorrowIUTy x Δ.meetOfDom A B S) := by
   intro δ γ ls ρ hδ hg
   have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
-  have hdg := semV_dead_closed hdc hd hδ hg
+  have hdg := semV_dead hd hδ hg
   show wpTS ls (substAll γ (withborUE d)) _ _
-  rw [show substAll γ (withborUE d) = .val (withborUV d) from
-    psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
+  rw [show substAll γ (withborUE d) = .val (withborUV (substAll γ d)) from withborUE_psub γ d]
   refine wpTS_val _ _ _ _ ?_
   intro ls₁ _ v₁ ρ₁ τ₀ hv₁ hcomp
   obtain rfl := eq_of_compS_empty_left hcomp
@@ -752,13 +795,13 @@ theorem sliceBorrowIU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
   have hA : T.AbortOnly := hS.abort δ
   have hL : T.Local := Row.tab_local S δ
   refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr
-    (withborUE_beta (opTable_mono _) hdc (Val.arr ℓ n) (arr_closed ℓ n) vf ?_)
+    (withborUE_beta (opTable_mono _) (Val.arr ℓ n) (arr_closed ℓ n) vf ?_)
   let Fr : List SRec → WProp := fun ls => vP (.array A) ls δ (Val.arr ℓ n)
   let Q₁ : List SRec → Val → WProp := fun ls v => vP B ls δ v
   refine ewp_unwind T hA hL (Row.tab_zero hS.nz δ) _ _ Fr
     (Qd := fun ls v => vP .unit ls δ v)
     (fun _ _ _ h => by obtain ⟨rfl, rfl⟩ := h; exact ⟨rfl, noOwn_empty⟩)
-    (fun ls => fin_run hdc (arr_closed ℓ n) hdg ls) Q₁ _ ?_ ?_
+    (fun ls => fin_run (arr_closed ℓ n) hdg ls) Q₁ _ ?_ ?_
   · rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hFr⟩
     refine ewp_ret_pair (opTable_mono _) (Val.arr ℓ n) (arr_closed ℓ n) _ v ?_
     exact ⟨Val.arr ℓ n, v, pure_sep_mk rfl ⟨σ₂, σ₁, ResU.CompS.comm hcσ, hFr, hv⟩⟩

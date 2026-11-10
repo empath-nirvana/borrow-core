@@ -1,0 +1,19 @@
+-- #975 K1.3b: the unwinding lends' finaliser at the rule's context (closedAt premise dropped)  [spec §72]
+BoCa.Fig16.LogRel.Core.withborUE_eq_of_closed
+BoCa.Fig16.LogRel.Core.withborUE_closedAt
+BoCa.Fig16.LogRel.Core.withborUE_shift
+BoCa.Fig16.LogRel.Core.withborUE_psub
+BoCa.Fig16.LogRel.Core.withborUE_beta
+BoCa.Fig16.LogRel.Core.withborUE_beta_closed
+BoCa.Fig16.LogRel.Core.semV_dead
+BoCa.Fig16.LogRel.Core.fin_run
+BoCa.Fig16.LogRel.Core.withbor1U_compatX
+BoCa.Fig16.LogRel.Core.withbor2U_compatX
+BoCa.Fig16.LogRel.Core.withbor3U_compatX
+BoCa.Fig16.LogRel.Core.sliceBorrowMU_compatX
+BoCa.Fig16.LogRel.Core.sliceBorrowIU_compatX
+BoCa.Fig16.LogRel.Core.mentions_withborUE
+BoCa.Fig16.LogRel.Core.Inversions.hasVar_withborUE
+BoCa.Fig16.LogRel.Core.Expr.psub_shift
+BoCa.Fig16.LogRel.Core.Expr.shift_shift_comm
+BoCa.Fig16.LogRel.Core.closedAt_shift_add

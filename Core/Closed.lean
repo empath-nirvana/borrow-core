@@ -138,10 +138,10 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | zeroE hs _ ihV =>
       rw [(splitP_length hs).1] at ihV
       simp [absurdE, closedAt, ihV]
-  | withbor1U _ _ _ _ _ _ _ hdc _ _ | withbor2U _ _ _ _ _ _ _ hdc _ _
-  | withbor3U _ _ _ _ _ _ hdc _ _ | sliceBorrowMU _ _ _ _ _ _ _ hdc _ _
-  | sliceBorrowIU _ _ _ _ _ _ _ _ hdc _ _ =>
-      exact closedAt_of_zero (withborUE_closed hdc) _
+  | withbor1U _ _ _ _ _ _ _ _ ih | withbor2U _ _ _ _ _ _ _ _ ih
+  | withbor3U _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
+  | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih =>
+      exact withborUE_closedAt ih
   | foldImm => exact closedAt_of_zero (foldImmV_closed _) _
   | foldOwn => exact closedAt_of_zero (foldOwnV_closed _) _
   | foldOwnG => exact closedAt_of_zero (FoldP.foldOwnGV_closed _) _
