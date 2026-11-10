@@ -12,7 +12,8 @@
 #
 # The sanity gate (`gateSteps` below) checks that the library builds; hygiene (no forbidden
 # keyword, every declaration's axioms within propext, Classical.choice and Quot.sound) and the
-# axioms of the theorems SPEC.md names; the typing-judgment freeze and the new backend's import
+# axioms of the theorems SPEC.md names (listed in `scripts/axioms/*.names`, read by
+# `scripts/AxiomCheck.lean`); the typing-judgment freeze and the new backend's import
 # fence; that every type comparison goes through the one `[α]` helper (`type equality`); that the
 # corpus parses and checks, and elaborates the same under a renaming of its binders (`renaming`);
 # and that every corpus program, compiled to WebAssembly
@@ -83,6 +84,7 @@ step() {
 # The full gate's steps after the build, in the order they are reported: name, then command.
 steps=(
   "hygiene + axioms" "scripts/check-hygiene.sh"
+  "spec files"       "scripts/check-spec-files.sh"
   "judgment freeze"  "scripts/check-judgments.sh"
   "type equality"    "scripts/check-type-eq.sh"
   "axiom report"     "lake env lean scripts/AxiomCheck.lean"
@@ -109,7 +111,7 @@ steps=(
 )
 # The sanity gate's steps (`make gate`, `--changed`). The corpus runs named `final` are its own:
 # the full gate runs the corpus at every stage instead.
-gateSteps=("hygiene + axioms" "judgment freeze" "axiom report" "type equality" "parse corpus"
+gateSteps=("hygiene + axioms" "spec files" "judgment freeze" "axiom report" "type equality" "parse corpus"
   "check corpus" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)" "backend2 fence")
 if [ "$full" = 1 ]; then
   everyStep=("compile scaling")
@@ -132,7 +134,7 @@ if [ "$changed" = 1 ]; then
   for f in $files; do
     case "$f" in
       experiments/*) ;;
-      *.lean|lakefile.toml|lake-manifest.json|lean-toolchain) lean=1 ;;
+      *.lean|scripts/axioms/*.names|lakefile.toml|lake-manifest.json|lean-toolchain) lean=1 ;;
     esac
   done
   if [ "$lean" = 0 ]; then
@@ -149,6 +151,7 @@ if [ "$changed" = 1 ]; then
         scripts/check-backend2.sh) add "backend2 fence" ;;
         scripts/check-type-eq.sh|scripts/TypeEq.lean|scripts/type-eq.allow) add "type equality" ;;
         scripts/alpha-check.py) add "renaming" ;;
+        SPEC.md|docs/changelog/*|docs/status/*|scripts/changelog.sh|scripts/status.sh|scripts/check-spec-files.sh) add "spec files" ;;
       esac
     done
   fi
