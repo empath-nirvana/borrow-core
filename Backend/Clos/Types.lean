@@ -156,6 +156,8 @@ def describe (k : Nat) (n : Nat) : TM String := do
     | .int .w8 => pure "u8"
     | .int .f32 => pure "f32"
     | .int .f64 => pure "f64"
+    | .int .u32 => pure "u32"
+    | .int .u64 => pure "u64"
     | .pair a b => pure s!"({← describe k a} * {← describe k b})"
     | .sum a b => pure s!"({← describe k a} + {← describe k b})"
     | .sumN fs => pure s!"+[{", ".intercalate (← fs.mapM (describe k))}]"
@@ -326,6 +328,8 @@ def infer (codeTy : Array Nat) (codes : Array Code) : Tm → TM Nat
   | .lit (.u8 _) => newNode (.int .w8)
   | .lit (.f32 _) => newNode (.int .f32)
   | .lit (.f64 _) => newNode (.int .f64)
+  | .lit (.u32 _) => newNode (.int .u32)
+  | .lit (.u64 _) => newNode (.int .u64)
   | .pair a b => do
       let n ← newNode (.pair (← tyVar a) (← tyVar b))
       modify fun s => { s with cons := s.cons.insert a n }

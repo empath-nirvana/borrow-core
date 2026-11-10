@@ -702,6 +702,8 @@ def rtyAtom : Nat → P RTy
     | .kw "u8" => discard bump; pure (.int t.span .w8)
     | .kw "f32" => discard bump; pure (.int t.span .f32)
     | .kw "f64" => discard bump; pure (.int t.span .f64)
+    | .kw "u32" => discard bump; pure (.int t.span .u32)
+    | .kw "u64" => discard bump; pure (.int t.span .u64)
     | .kw "input" => discard bump; pure (.handle t.span .input)
     | .kw "output" => discard bump; pure (.handle t.span .output)
     -- `clock` and `args`, the clock's and the arguments' resources (SPEC §34): names, so that

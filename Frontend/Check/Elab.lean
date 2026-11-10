@@ -178,6 +178,8 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .int .w8 => "u8"
   | .int .f32 => "f32"
   | .int .f64 => "f64"
+  | .int .u32 => "u32"
+  | .int .u64 => "u64"
   | .opq .input => "input"
   | .opq .output => "output"
   | .opq .clock => "clock"

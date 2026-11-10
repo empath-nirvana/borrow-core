@@ -19,6 +19,8 @@ def widthName : Width → String
   | .w8 => "i32"
   | .f32 => "f32"
   | .f64 => "f64"
+  | .u32 => "i32"
+  | .u64 => "i64"
 
 def binName : BinOp → String
   | .add => "add" | .sub => "sub" | .mul => "mul" | .and => "and" | .or => "or"
@@ -79,6 +81,9 @@ def opName : HostOp → String
   | .promote => "f64.promote_f32"
   | .reinterpret_i f => iwName f.int ++ ".reinterpret_" ++ fwName f
   | .reinterpret_f f => fwName f ++ ".reinterpret_" ++ iwName f.int
+  -- The changes of reading between signed and unsigned are moves (`Flat/Lower.lean`,
+  -- `hostVals`), never emitted.  [spec §73]
+  | .reinterpret_u _ | .reinterpret_s _ => "unreachable"
 
 /-- `(param i64 …) (result i64 …)`. -/
 def sigText (params results : Nat) : String :=

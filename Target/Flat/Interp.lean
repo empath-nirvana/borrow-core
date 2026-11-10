@@ -101,6 +101,16 @@ def evalOp : HostOp → List UInt64 → Except String UInt64
   | .eqz .w64, [a] => .ok (toBit (flatHost.eqz64 a))
   | .rel .w32 o, [a, b] => .ok (toBit (flatHost.rel32 o a.toUInt32 b.toUInt32))
   | .rel .w64 o, [a, b] => .ok (toBit (flatHost.rel64 o a b))
+  | .bin .u32 o, [a, b] => .ok (flatHost.bin32 o a.toUInt32 b.toUInt32).toUInt64
+  | .bin .u64 o, [a, b] => .ok (flatHost.bin64 o a b)
+  | .div .u32 o, [a, b] => trapIf ((flatHost.div32 o a.toUInt32 b.toUInt32).map (·.toUInt64))
+  | .div .u64 o, [a, b] => trapIf (flatHost.div64 o a b)
+  | .un .u32 o, [a] => .ok (flatHost.un32 o a.toUInt32).toUInt64
+  | .un .u64 o, [a] => .ok (flatHost.un64 o a)
+  | .eqz .u32, [a] => .ok (toBit (flatHost.eqz32 a.toUInt32))
+  | .eqz .u64, [a] => .ok (toBit (flatHost.eqz64 a))
+  | .rel .u32 o, [a, b] => .ok (toBit (flatHost.rel32 o a.toUInt32 b.toUInt32))
+  | .rel .u64 o, [a, b] => .ok (toBit (flatHost.rel64 o a b))
   | .wrap, [a] => .ok (flatHost.wrap a).toUInt64
   | .extend_s, [a] => .ok (flatHost.extendS a.toUInt32)
   | .extend_u, [a] => .ok (flatHost.extendU a.toUInt32)
@@ -116,6 +126,7 @@ def evalOp : HostOp → List UInt64 → Except String UInt64
   | .demote, [a] => .ok (flatHost.demote a).toUInt64
   | .promote, [a] => .ok (flatHost.promote a.toUInt32)
   | .reinterpret_i _, [a] | .reinterpret_f _, [a] => .ok a
+  | .reinterpret_u _, [a] | .reinterpret_s _, [a] => .ok a
   | _, _ => .error "flat IR: operation arity"
 
 def liftE {α} (x : Except String α) : FM α := match x with
