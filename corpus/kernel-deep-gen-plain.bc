@@ -1,0 +1,23 @@
+-- E4, a deep handler, the twin of the kernel program `deep-gen-plain` (Backend/Kernel.lean,
+-- `deepGenPlain`; SPEC §19 Programs): `ticking` handles a generator's `yield`s, and its clause
+-- performs a must-resume `tick` before it resumes; `plain`, outside it, resumes each `tick`. The
+-- clause's `tick` reaches the handler outside `ticking`'s own frame, and the generator's two
+-- `yield`s each run the clause once.
+--
+-- Answer: (); `live 0`. A `tick` that reached no handler would be refused; one that lost its
+-- resume would stop the generator.
+
+include yield
+
+effect Tick { must_resume ctl tick() }
+
+handler ticking: Yield[bool], 1 -> 1 with Tick = {
+  return(u) = ();
+  yield(x, k) = { tick(); k(()) }
+}
+
+handler plain[A]: Tick, A -> A = { return(a) = a; tick(k) = k(()) }
+
+fn gen() -> 1 with Yield[bool] = yield(true); yield(false)
+
+main -> 1 = with plain[1] { with ticking { gen() } }

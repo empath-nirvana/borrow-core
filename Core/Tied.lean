@@ -396,6 +396,15 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   positive `C`.  `[spec §7]` -/
   | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
       CDerivesAt Ξ Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S))
+  /-- `[unfold-K]`: coiteration at the step's code.  `[spec §68]` -/
+  | unfoldK {Δ Γ} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S)))
+      (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
+      CDerivesAt Ξ Δ Γ (.val (unfoldV C)) (.val (unfoldKTy C G S))
+  /-- `[ν-out-K]`: a codata of `unfold`'s code read at its unrolling, every rest at the same code
+  type.  `[spec §68]` -/
+  | nuOutK {Δ Γ i} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S)))
+      (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
+      CDerivesAt Ξ Δ Γ (.var i) (.comp (C.instT (codeTy C G S)))
   /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
   | effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S')
       (h : CDerivesAt Ξ Δ Γ e (.comp (CTy.effOf S A))) : CDerivesAt Ξ Δ Γ e (.comp (CTy.effOf S' A))
@@ -614,6 +623,8 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | nuIn hC _ ih1 => exact .nuIn hC ih1
   | nuOut hC _ ih1 => exact .nuOut hC ih1
   | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS hΓ
+  | unfoldK C G S hC hG hS hΓ => exact .unfoldK C G S hC hG hS hΓ
+  | nuOutK hC hG hS hGf h => exact .nuOutK hC hG hS hGf h
   | effSub hle _ ih1 => exact .effSub hle ih1
   | effPerform _ hf hna hac _ ih1 => exact .effPerform hf hna hac ih1
   | effAwait _ hΓ hfa ha haA hfc hc => exact .effAwait hΓ hfa ha haA hfc hc
@@ -1014,6 +1025,8 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | nuIn hC _ ih1 => exact .nuIn hC (ih1 he)
   | nuOut hC _ ih1 => exact .nuOut hC (ih1 he)
   | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS hΓ
+  | unfoldK C G S hC hG hS hΓ => exact .unfoldK C G S hC hG hS hΓ
+  | nuOutK hC hG hS hGf h => exact .nuOutK hC hG hS hGf h
   | effSub hle _ ih1 => exact .effSub hle (ih1 he)
   | effPerform => simp [BoCa.BoLo.performE, Expr.effFree, Expr.val, Val.prim] at he
   | effAwait => simp [awaitE, BoCa.BoLo.performE, BoCa.BoLo.raiseE, Expr.effFree, Expr.val,

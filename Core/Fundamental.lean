@@ -1,5 +1,6 @@
 import Core.Compat
 import Core.CodeRules
+import Core.CodeNuOut
 import Core.Integers
 import Core.Arrays
 import Core.SliceOps
@@ -529,6 +530,18 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   positive `C`.  `[spec §7]` -/
   | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S))
+  /-- `[unfold-K]`: coiteration at the step's code, a constant: `unfold : !G ⊸ !Code⟨hCode C;
+  !G ⊗ 1⟩ (S ⊸ F Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C))`, `G` forced at `S ⊸ C[S/X]`
+  (`U(S ⊸ C[S/X])` or a code type of it).  `[spec §68]` -/
+  | unfoldK {Δ Γ} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S)))
+      (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val (unfoldV C)) (.val (unfoldKTy C G S))
+  /-- `[ν-out-K]`: `force x : C[Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)/X]` for
+  `x : Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)`, every rest at the same code type; `force x` at `νX. C`
+  is `x` (`forceE`).  `[spec §68]` -/
+  | nuOutK {Δ Γ i} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S)))
+      (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
+      CDerives Δ Γ (.var i) (.comp (C.instT (codeTy C G S)))
   /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
   | effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S')
       (h : CDerives Δ Γ e (.comp (CTy.effOf S A))) : CDerives Δ Γ e (.comp (CTy.effOf S' A))
@@ -892,6 +905,8 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | nuIn hC _ ih => exact nuIn_compatX hC ih
   | nuOut hC _ ih => exact nuOut_compatX hC ih
   | unfoldN C S hC hS hΓ => exact unfold_compatX hC S hS hΓ
+  | unfoldK C G S hC hG hS hΓ => exact unfoldK_compatX hC hG hS hΓ
+  | nuOutK hC hG hS hGf h => exact nuOutK_compatX hC hG hS hGf h
   | effSub hle _ ih => exact sub_compatC hle ih
   | effPerform hf hna _ _ ih => exact perform_compatC hf hna ih
   | effAwait hΓ hfa ha haA hfc hc => exact semC_dead .nil hΓ (await_compatC hfa ha haA hfc hc)

@@ -1,0 +1,12 @@
+-- SPEC §7 (entry 22): the closure, an instance of `ν` with an argument and a boxed rest
+BoCa.Fig16.LogRel.Core.cC_clo_iff
+BoCa.Fig16.LogRel.Core.clo_coind
+BoCa.Fig16.LogRel.Core.cloEffBody_nuOk
+BoCa.Fig16.LogRel.Core.obs_transfer_cloBox
+BoCa.Fig16.LogRel.Core.d_mkBox
+BoCa.Fig16.LogRel.Core.d_callMut
+BoCa.Fig16.LogRel.Core.d_ofFn
+BoCa.Fig16.LogRel.Core.d_once
+BoCa.Fig16.LogRel.Core.Clo.counterProg_runs
+BoCa.Fig16.LogRel.Core.Clo.passProg_runs
+BoCa.Fig16.LogRel.Core.Clo.logProg_runs

@@ -421,7 +421,11 @@ def fieldT (v j c : Nat) : CM Bool := do
   | none => throw s!"node {c} has no triviality"
 
 /-- Each node's strongly connected component of the graph `succ` (Tarjan's, iterative, in time
-linear in the nodes and edges): two nodes on one cycle have one component. -/
+linear in the nodes and edges): two nodes on one cycle have one component.
+
+A root with no successor is its own component, numbered as the search would number it: the
+search from it would push it, find no edge and pop it alone. In `fieldGraph` every node that is
+not a representative is such a root, so the search proper runs over the representatives only. -/
 def sccIds (n : Nat) (succ : Array (Array Nat)) : Array Nat := Id.run do
   let mut index : Array Nat := Array.replicate n 0
   let mut low : Array Nat := Array.replicate n 0
@@ -433,6 +437,10 @@ def sccIds (n : Nat) (succ : Array (Array Nat)) : Array Nat := Id.run do
   let bound := 2 * (n + succ.foldl (· + ·.size) 0) + 2
   for root in [0:n] do
     if index[root]! != 0 then continue
+    if (succ[root]!).isEmpty then
+      index := index.set! root counter; counter := counter + 1
+      comp := comp.set! root ncomp; ncomp := ncomp + 1
+      continue
     index := index.set! root counter
     low := low.set! root counter
     counter := counter + 1

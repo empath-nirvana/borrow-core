@@ -1,0 +1,22 @@
+-- SPEC §11: externs and standard I/O
+BoCa.Fig16.LogRel.Core.vC_bytes
+BoCa.Fig16.LogRel.Core.vC_outRep
+BoCa.Fig16.LogRel.Core.readByte_meets
+BoCa.Fig16.LogRel.Core.writeByte_meets
+BoCa.Fig16.LogRel.Core.writeAll_meets
+BoCa.Fig16.LogRel.Core.readInto_meets
+BoCa.Fig16.LogRel.Core.mkInput_meets
+BoCa.Fig16.LogRel.Core.mkOutput_meets
+BoCa.Fig16.LogRel.Core.takeInput_meets
+BoCa.Fig16.LogRel.Core.takeOutput_meets
+BoCa.Fig16.LogRel.Core.externs_every_run
+BoCa.Fig16.LogRel.Core.externs_safe
+BoCa.Fig16.LogRel.Core.io_every_run
+BoCa.Fig16.LogRel.Core.externs_main_safe
+BoCa.Fig16.LogRel.Core.wpTSD_frame_own
+BoCa.Fig16.LogRel.Core.d_driveL
+BoCa.Fig16.LogRel.Core.d_ioLoop
+BoCa.Fig16.LogRel.Core.externs_loop_every_run
+BoCa.Fig16.LogRel.Core.io_loop_every_run
+Frontend.Check.IORun.every_run
+Frontend.Check.IORun.loop_every_run

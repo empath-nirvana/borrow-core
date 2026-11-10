@@ -1,0 +1,18 @@
+-- SPEC §19's program 6 at the surface, the twin of the kernel program `store-cancel`
+-- (Backend/Kernel.lean, `storeCancel`): the clause of a cancellable `susp` stores its continuation
+-- `k` in a cell, takes it back out, and does not resume it, so it is cancelled. The cancel unwinds
+-- the performer, whose cell is freed by its finaliser; the `free(r)` after `susp` never runs.
+--
+-- Answer: (); `live 0`. A continuation lost in the cell, or a cancel that skipped the performer's
+-- finaliser, would leave a cell live.
+
+effect Susp { ctl susp() }
+
+handler stash: Susp, 1 -> 1 = {
+  return(x) = x;
+  susp(k) = { let c = alloc(k); let k2 = free(c); () }
+}
+
+fn performer() -> 1 with Susp = let r: ref bool = alloc(false); susp(); let _ = free(r); ()
+
+main -> 1 = with stash { performer() }

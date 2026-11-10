@@ -1,0 +1,19 @@
+-- SPEC §19's program 2 at the surface, the twin of the kernel program `log-in-borrow`
+-- (Backend/Kernel.lean, `logInBorrow`): an answering `Log` (a handler whose state is a borrow of
+-- the cell `s`) outside a `borrow mut b`, and a `note` inside the borrow, beside a write through
+-- it. The handler's borrow of `s` and the body's borrow of `b` are live together; each lend ends
+-- where its scope does, and both cells are freed by their owner.
+--
+-- Answer: (inr (), inr ()): the log cell marked by the `note` (true) and the buffer written
+-- through the borrow (true); `live 0`. A note lost on the way through the borrow leaves the first
+-- `inl ()`; a write lost, the second.
+
+effect Log { fn note() }
+
+handler tally(mut n: bool): Log = { note() = { n = true; () } }
+
+main -> bool * bool =
+  let mut s = alloc(false);
+  let mut b = alloc(false);
+  with tally(&mut s) { borrow mut b { m -> note(); modify m { x -> true } } };
+  (free(s), free(b))
