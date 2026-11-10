@@ -2481,6 +2481,11 @@ corpus/with-loop-abort.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/with-loop-abort.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/with-loop-abort.bc 5.0 tail: direct; condition 2 holds; agree
 corpus/with-loop-abort.bc 4.0 abortive: branch; condition 2 holds; -
+corpus/with-loop-finally.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
+corpus/with-loop-finally.bc 23:3: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/with-loop-finally.bc 30:37: handle 1: inside []; row []; ops 1.0 tail+state; names 1.0 row; condition 2 holds
+corpus/with-loop-finally.bc 2.0 abortive: error; condition 2 holds; -
+corpus/with-loop-finally.bc 1.0 tail+state: error; condition 2 holds; -
 corpus/with-loop-resume.bc flows [0, 1, 2, 4294967295]; main [1, 2]
 corpus/with-loop-resume.bc 27:12: handle 1: inside []; row []; ops 1.0 tail+state; names 1.0 row; condition 2 holds
 corpus/with-loop-resume.bc 20:11: handle 2: inside []; row []; ops 2.0 tail+state; names 2.0 row; condition 2 holds

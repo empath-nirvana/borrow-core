@@ -1,0 +1,30 @@
+-- check: old-backend-refuses
+-- SPEC §75, Part A: `with h { M } finally { D }` around a computation that loops. `finally` is
+-- `[then]` around the site, `D` also run on the normal exit; the site's body loops, so the site
+-- and the cleanup are each installed per observation. `go(3)` raises at the loop's third turn,
+-- which `to_result` catches; `go(10)` does not raise. The cleanup runs once at the end of each
+-- (`7`), through `show`, a handler around the whole program.
+--
+-- Answer: `77(inr i32[3], inl i32[3])`.
+
+include io
+include fail
+
+effect Trace { must_resume ctl note(d: i32) }
+
+handler show[A]: Trace, A -> A = {
+  return(x) = x;
+  note(d, k) = { print_dec(d); k(()) }
+}
+
+fn chk(i: i32, bad: i32) -> i32 with Fail[i32] = if i == bad { raise(i) } else { i }
+
+fn go(bad: i32) -> i32 + i32 with Trace =
+  with to_result[i32, i32] {
+    let mut i = 0;
+    let mut t = 0;
+    while i < 3 { i = i + 1; t = chk(i, bad) };
+    t
+  } finally { note(7) }
+
+main -> (i32 + i32) * (i32 + i32) = with show[(i32 + i32) * (i32 + i32)] { (go(3), go(10)) }

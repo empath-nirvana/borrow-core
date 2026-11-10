@@ -3671,6 +3671,12 @@ def hasFrameCall : Comp → Bool
   | .bind _ _ _ _ N | .letPair _ _ _ _ N | .letUnit _ _ N => hasFrameCall N
   | _ => false
 
+/-- `run R` whose code `R` holds a frame per observation (`with … finally`'s, `Effects.goV`):
+`R`, to be brought onto the spine. -/
+def runFrameV? : Val → Option Comp
+  | .run _ R => if hasFrameCall R then some R else none
+  | _ => none
+
 /-- A resume of a clause's `κ`, `(force k).1 a`, `k` among `ks` (`κ` and its copies). -/
 def isResumeOf (ks : List String) : Comp → Bool
   | .app _ (.proj _ true (.force _ k)) _ => ks.contains k.name
@@ -4693,7 +4699,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
           | some P => do pure (some (← (c'.surface sp P : Except Error VTy)))
           | none => pure none
         pure (effCallC sp f W P)
-      | none => pure (.ret sp V')
+      | none => pure ((runFrameV? V').getD (.ret sp V'))
     | .absurd sp V => do pure (.absurd sp (← surfV n c (some .zero) V))
     | .bind sp x A M N => do
       -- The answer type of a handler site whose clauses run after it, by its name.
@@ -4765,6 +4771,9 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let c ← refresh c
       -- A head that is a chain with a frame per observation in it: its bindings brought out, so
       -- that the frame's call is on the spine.  [spec §75]
+      let M' := match M' with
+        | .ret _ V => (runFrameV? V).getD M'
+        | M' => M'
       if hasFrameCall M' then
         let N' ← surfC n (c.push x.name ((A.bind c.elabV) <|> spineResTy c divFuel M')) exp N
         return assocFree sp x A M' N'
@@ -4807,10 +4816,25 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         | _ => (none, none)
       pure (.with_ sp (← surfC n c.pushDead.pushDead a M) (← surfC n c.pushDead.pushDead b N))
     | .proj sp i M => do pure (.proj sp i (← surfC n c none M))
-    | .letUnit sp V M => do pure (.letUnit sp (← surfV n c (some .unit) V) (← surfC n c exp M))
+    | .letUnit sp V M => do
+      let V' ← surfV n c (some .unit) V
+      -- A frame per observation in the value, brought onto the spine.  [spec §75]
+      if let some R := runFrameV? V' then
+        let t : Ident := ⟨s!"io_rt{sp.start.line}_{sp.start.col}", sp⟩
+        let c ← refresh c
+        return assocFree sp t none R (.letUnit sp (.var sp t.name) (← surfC n (c.push t.name (some .unit)) exp M))
+      pure (.letUnit sp V' (← surfC n c exp M))
     | .letPair sp x y V M => do
       let V' ← surfV n c none V
       let c ← refresh c
+      if let some R := runFrameV? V' then
+        let t : Ident := ⟨s!"io_rt{sp.start.line}_{sp.start.col}", sp⟩
+        let T := spineResTy c divFuel R
+        let (Ax, Ay) := match T with
+          | some (.tensor A B) => (some A, some B)
+          | _ => (none, none)
+        let M' ← surfC n (((c.push t.name T).push x.name Ax).push y.name Ay) exp M
+        return assocFree sp t none R (.letPair sp x y (.var sp t.name) M')
       let (Ax, Ay) := pairTys c V'
       pure (.letPair sp x y V' (← surfC n ((c.push x.name Ax).push y.name Ay) exp M))
     | .case sp V x M y N => do
