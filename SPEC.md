@@ -12109,8 +12109,8 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
 | `codeErase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
 | `codeEraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
 | `force` (restated) | `Ctx.SoloP Γ i T`, `T.forceTy = some C` (`T` is `U C` or `Code⟨N; E⟩ C`) ⟹ `forceE C (.var i) : C` | K3 |
-| `unfoldK` | `unfold : !G ⊸ !Code⟨hCode C; !G ⊗ 1⟩ (S ⊸ Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C))`, `G` either `U(S ⊸ C[S/X])` or a code type of it | K4 |
-| `nuOutK` | `x : Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)` ⟹ `force x : C[Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)/X]` | K4 |
+| `unfoldK` | `unfold : !G ⊸ !Code⟨hCode C; !G ⊗ 1⟩ (S ⊸ F Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C))`, at a consumed context, with `C.NuOk`, `G.forceTy = some (S ⊸ C[S/X])` (`G` is `U(S ⊸ C[S/X])` or a code type of it) and `C.BindsFresh S` | K4 |
+| `nuOutK` | `x : Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)` ⟹ `x : C[Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)/X]` (`force` at a ν is `x`), with `C.NuOk`, `G.forceTy = some (S ⊸ C[S/X])`, `C.BindsFresh S` and `C.BindsFresh G` | K4 |
 
 - `Γ.capTy e` (`Ctx.capTy`, `Core/CodeRules.lean`): the tensor of `Γ`'s slot types at
   `capVars e`, in rank order, ending in `1`.
@@ -12120,6 +12120,9 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
   live slot of `Γ` that `e` does not capture is persistent. With it the uncaptured slots hold `∅`
   (`vCE_empty_of_persistent`), so the closure's resource is its captures'. It is a premise, not
   an inversion of `CDerives`.
+- `C.BindsFresh G` in `nuOutK`: the unrolling under a `∀'x` leaf reads the code type, which
+  contains `G`, at `δ[x↦α]`, and a code-typed `G`'s environment could mention `x`. `codeTy`,
+  `hCode`, `hEnv` and `unfoldKTy` are in `Core/CodeNuOut.lean`.
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
 - `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
@@ -12132,8 +12135,10 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
   at `U`, `!U`, `Code` or `!Code`; `LamAx` reads at the axiom type's views and their code types.
   `lam_bang` and its uses in `Core/Rejections.lean` and `Core/EffCancelTyped.lean` are restated.
   `der_swap` reads at `ValClsC`; `hnf_of` and `eq_of_heads` take a no-code-head hypothesis their
-  callers discharge. No inversion is added and no substitution over derivations; every rejection
-  keeps its statement and verdict.
+  callers discharge. K4: `VarCls` gains a third disjunct, a variable at a code-typed `ν` read at
+  `C[codeTy/X]`, restated in place, with new `JR` lemmas about `instT`, which do not invert
+  `CDerives`. No inversion is added and no substitution over derivations; every rejection keeps its
+  statement and verdict.
 
 ### Erasure policy
 
@@ -12224,10 +12229,17 @@ reported as an intended change.
 - **Built (K3):** `codeI`, `codeIB`, `codeErase`, `codeEraseB` and the restated `force`, with their
   compatibility lemmas at Core's relation and at the chain's, and `codeI`'s semantic step: the
   captured tuple is in `𝒱⟦Γ.capTy (λM)⟧` at the whole resource.
-- **Not built until their units land:** `unfoldK` and `nuOutK` and their compatibility lemmas
-  (K4), the lend-exit lemma (K5), `eraseD` (K6), and `cloneCode` (K7, #928).
-- **No code type in the checker.** No rule of the checker synthesises a code type before S1, so
-  the corpus is unchanged by K3.
+- **Built (K4):** `unfoldK` and `nuOutK`, with their compatibility lemmas at Core's relation and
+  at the chain's. Core's unrolling at a code type is proved (`cB_unrollK`, `nuP_codeCand`, the
+  analogue of `vC_inst_envS`/`cBN_unroll`). The kernel program `Core/Chain/CodeLoop855N.lean`: a
+  unit stream over a cell whose state stays at `Code⟨etaCode C; …⟩(Stream 1)` across three
+  observations and the close, by `nuOutK`, concluded at `adequacyC` (`progK_runs`) and at
+  `goal791N` (`progK_orDiverges`).
+- **Not built until their units land:** the lend-exit lemma (K5), `eraseD` (K6), and `cloneCode`
+  (K7, #928).
+- **No code type in the checker.** No rule of the checker or the elaborator synthesises a code
+  type before S1, and Backend2 does not lower K4's rules (S4, the B-units), so the corpus is
+  unchanged by K3 and K4.
 - **`CapOK`** is a premise of `codeI` until #894 removes it.
 - **Choices K1 made that the entry does not state:**
   - A type substitution (`VTy.rename`, `VTy.subst`) leaves `Code⟨N; E⟩ C` as it is, as it leaves
@@ -12244,9 +12256,10 @@ reported as an intended change.
   - Printing: the checker prints `Code⟨#h; E⟩ C`, `#h` a hash of `N`'s serialisation, not
     `{closure@span}` (a kernel type has no span). Backend2's `useKey` prints a type `ofV` refuses
     exactly (`keyVT`, `N` in full), so two codes are two keys; `ofV` refuses `code` (B1).
-- **`nuOutK`'s compatibility lemma** needs, beyond `nuOutK_step`, that `C[Code⟨…⟩(νX. C)/X]` read
-  at the code clause is `nuF` at `codeCand` (Core's `vC_inst_envS`/`cB_unroll` at a code type); not
-  built. `unfoldK`'s, that `unfold step` is in the clause at `hCode C`, is not built.
+- **The chain's equation at the code candidate** is not derived; obstruction not verified.
+  `nuOutK_compatN` is proved by a direct route instead (`node_okK`: each state mapped into the code
+  clause at the leaf's world by `etaN_codeRelN`). `node_okK` is a near-copy of `node_okN`, to be
+  merged by generalising `cBN` (#947).
 - **The scope's `ρR`.** With a part of the resource the environment does not hold, `nuOutK` is not
   derived; obstruction not verified. This entry drops `ρR` and moves the obligation to `codeI`'s
   premise `Γ.CapOK`. That a well-typed closure always meets `CapOK` (no live non-persistent slot
