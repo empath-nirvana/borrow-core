@@ -13205,9 +13205,10 @@ residual.
 
 #### Demand and the operators
 
-In the unfused connector, a stream chain runs demand-driven from its last stage. The operator
-(`|>`/`>|`) is operational: it guides F. It is observable only through effects a stage performs
-before its first `next()`, and such a prefix runs when the stage is first demanded.
+In the unfused connector, a stream chain runs demand-driven from its last stage, and both
+operators give the pull form's trace. In P1's model they differ only for effects a stage performs
+before its first `next()` (P1 Lemma M), and such a prefix runs when the stage is first demanded.
+The operator is recorded for F (#923), which must keep that trace when it fuses push wires.
 
 Unit C may lint pre-`next` effects under `|>` (amber).
 
@@ -13264,8 +13265,10 @@ continuation.
 - Nesting binary connectors would give Thm R's order wrongly.
 
 **Assembly(n).** The connector is generated per chain from `lib/pipe.bc`'s pieces (`step_i`,
-`stop_i`, `withStop_i`, `handoff_i`, `forward_i`, `finish`). By Assembly(n) (theory's paper proof), for every `n` it is weakly bisimilar to P1's flat chain, observing effects, cleanup order
-and the reported error. So P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain.
+`stop_i`, `withStop_i`, `handoff_i`, `forward_i`, `finish`). By Assembly(n) (theory's paper proof, `docs/new-core/assembly-n.md`), for every `n` it is weakly
+bisimilar to P1's flat chain, observing effects, cleanup order and the reported error, under P1b's
+premises (NP-cooperative, NP-masked-cleanup, NP-no-wire-cleanup, A0) and L1's restrictions. So
+P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain under them.
 - The proof is on paper: a direct simulation by the running stage's position and event, one lemma
   per piece, and the chain-wide invariants (I2) and (I5), which are P1's own.
 - It is not mechanised.
@@ -13323,8 +13326,9 @@ and the reported error. So P1 Thm S, P1b Thm R and Thm X, and (ii), hold for eve
   - A stage closed at a suspension hands back `1`, as a stored generator's rest does (§15). So
     `stop()` is provided where `K_i` is `1`, today's `take` contract. Elsewhere it is refused:
     `` `stop()` answers the upstream's residual `K`, which a stage closed at a suspension does not hand back (§15 Open) ``.
-  - A cleanup error is the first one, raised at the call of `stop()`. The order is: the upstream's
-    stops, then `s_i`'s unwinding, then the stages downstream of `s_i`.
+  - A cleanup error is the first one, raised at the call of `stop()`. If an error is kept, the order
+    is: the upstream's stops, then `s_i`'s unwinding, then the stages downstream of `s_i`; without
+    one, `s_i` resumes.
 - **The end.** When `s_{n−1}` returns `r`, `finish` stops the others, downstream-first and in one
   region, then answers `r`, or raises the first cleanup error. So `r` is live across a close that
   may raise, and the kernel asks that it be consumable there (A0).
@@ -13477,7 +13481,8 @@ does not support; they carry `-- check: old-backend-refuses`.
 - **Forwarding §29a marked waits** (`[await-c]`): `forwardWait_i`, `FwdWait` and L-forward-wait, in
   the later unit that makes the checker emit `effAwait` (§29a *Not built*; *Open*, `EffCtx` carrying
   `rc`).
-  - the shape types: `[then]` with M = the connector's
+  - kernel-foreman's reading, on paper against `effThen` and not built: the shape types: `[then]`
+    with M = the connector's
     `[await-c]` on the outer wait, N = resume the stage with `inl a`, and D = `close_all` in K2's
     form.
   - Its four conditions:
