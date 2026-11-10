@@ -105,6 +105,12 @@ name = "FrameEnd"
 srcDir = "experiments/FrameEnd"
 roots = ["FrameEnd"]
 
+# G1 (#1007): `↭` with derivable `imm` views exempted.
+[[lean_lib]]
+name = "LicUpd"
+srcDir = "experiments/LicUpd"
+roots = ["LicUpd"]
+
 [[lean_lib]]
 name = "Places"
 srcDir = "experiments/Places"
