@@ -1379,9 +1379,6 @@ theorem rcE_withPair {M N : Expr} (hM : rcE q M = true) (hN : rcE q N = true) :
     rcE q (withPair M N) = true := by
   simp [withPair, rcE, hM, hN]
 
-theorem rcE_withborUE {d : Expr} (hd : rcE q d = true) : rcE q (withborUE d) = true := by
-  simp [withborUE, thenE, rcE, rcE_app, hd]
-
 /-- Filling a variable with a closed λ-value makes no primitive. -/
 theorem fill_prim_inv {b : Expr} (hc : closedAt 0 (Val.lam b).1 = true) {j : Nat} {p : Prim} :
     ∀ {x : Expr}, (x.subst j (Val.lam b)).shift 1 j = .prim p → x = .prim p
@@ -1499,6 +1496,9 @@ theorem rcE_shift (d : Nat) : ∀ (N : Expr) (c : Nat), rcE q (N.shift d c) = rc
         rw [rcE.eq_9 q _ _ hq, rcE.eq_9 q a b (fun m r h₁ h₂ => hp ⟨m, r, h₁, h₂⟩),
           rcE_shift d a c, rcE_shift d b c]
 
+theorem rcE_withborUE {d : Expr} (hd : rcE q d = true) : rcE q (withborUE d) = true := by
+  simp [withborUE, thenE, rcE, rcE_shift, hd]
+
 theorem rcE_pickE : ∀ (j : Nat) {t : Expr}, rcE q t = true → rcE q (pickE j t) = true
   | 0, t, h => by simp [pickE, rcE, h]
   | j + 1, t, h => by simp only [pickE, rcE, h, Bool.true_and]; exact rcE_pickE j rfl
@@ -1569,11 +1569,11 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
   induction h with
   | force => exact rcE_forceE_var _ _
   | withI _ _ ihM ihN => exact rcE_withPair ihM ihN
-  | withbor1U _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
-  | withbor2U _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
-  | withbor3U _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
-  | sliceBorrowMU _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
-  | sliceBorrowIU _ _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | withbor1U _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | withbor2U _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | withbor3U _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | sliceBorrowMU _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
   | foldImm => exact rcE_foldImmV _
   | foldOwn => exact rcE_foldOwnV _
   | foldOwnG => exact rcE_foldOwnGV _

@@ -234,19 +234,19 @@ theorem cN_unwind_iff {S : Row} {x : LifeVar} (hS : S.Unwind x) {R : VTy} {δ : 
 /-- **The finaliser `λ_. d ℓ` consumes an `imm` lend's claim**: the cell owned again with the
 content it was lent with, `d`'s judgment at `Ref A ⊸ 1` read at the world and an index below the
 content's. -/
-theorem fin_claimI {A : VTy} {d : Expr} (hdc : closedAt 0 d = true) {δ : LSub} {Θ : LocTy}
+theorem fin_claimI {A : VTy} {d : Expr} {δ : LSub} {Θ : LocTy}
     (hΘ : Θ.OK) {c : Loc → Option Life} {N : Nat}
     (hd : ∀ k, k ≤ N → ∀ ls, cN (ℍ := ℍ) (.ret (.lolli (.ref A) .unit)) δ Θ c k ls d PMap.empty)
     {l : Loc} {w : Val} {σ : WRes} (hw : vN (ℍ := ℍ) A δ Θ N w σ) {k : Nat} (hk : k ≤ N)
     {ls : List SRec} {ρ : WRes} (h : claimI l w σ k ρ) (hc : ConsistentX c ρ) :
     rwp (ℍ := ℍ) (Θ.view c) (fun _ _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) k ls
-      (.app (.val (DFv d l)) (.val .unit)) ρ := by
+      (.app (.val (DFv (d.shift 1 0) l)) (.val .unit)) ρ := by
   have hΦ := LocTy.view_down hΘ.1 c
   refine Hardest791.rwp_det'' (Q := fun _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) hΦ
     (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
-  have e : Kont.hole.plug (Expr.subst 0 Val.unit (.app d (.val (Val.loc l)))) =
+  have e : Kont.hole.plug (Expr.subst 0 Val.unit (.app (d.shift 1 0) (.val (Val.loc l)))) =
       (Kont.appL .hole (Val.loc l)).plug d := by
-    simp [Kont.plug, Expr.subst, subst_closedAt d (s := _) hdc (Nat.zero_le _), Val.loc]
+    simp [Kont.plug, Expr.subst, subst_shift_succ (j := 0) (d := 0) _ d (le_refl _), Expr.shift_zero, Val.loc]
   rw [e]
   refine rwp_bind hΦ _ ?_
   have hd0 := hd k hk ls
@@ -280,11 +280,11 @@ theorem fin_claimI {A : VTy} {d : Expr} (hdc : closedAt 0 d = true) {δ : LSub} 
 8. the finaliser frame: at a return `(ℓ, b)`, at a raise `d ℓ` consumes the claim
    (`erwp_ubindRaise`, `fin_claimI`).
 
-Premises: `hδ`, `hadm` (Core's `admWf_of_vScoped hsc₁ hδ`), `hfree₁`, `hfree₂`, `hS`, `hdc` are
+Premises: `hδ`, `hadm` (Core's `admWf_of_vScoped hsc₁ hδ`), `hfree₁`, `hfree₂`, `hS` are
 the rule's; `hd` is the finaliser's judgment at the run's world and every lower index. -/
 theorem withbor1U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Expr} {δ : LSub}
     (hδ : Δ.Models δ) (hadm : AdmWf A δ) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
-    (hS : S.Unwind x) (hdc : closedAt 0 d = true) (Θ₀ : LocTy) (n : Nat)
+    (hS : S.Unwind x) (Θ₀ : LocTy) (n : Nat)
     (hd : ∀ (Θ : LocTy), Θ.OK → ∀ c k, k ≤ n → ∀ ls,
       cN (ℍ := ℍ) (.ret (.lolli (.ref A) .unit)) δ Θ c k ls d PMap.empty) :
     vN (ℍ := ℍ) (withbor1UTy x Δ.meetOfDom A B S) δ Θ₀ n (withborUV d) PMap.empty := by
@@ -306,11 +306,12 @@ theorem withbor1U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Ex
     (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl (.appL .hole f)) ?_
   refine erwp_det hΦ (opTableN_down hTd) hQo (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
   have e₃ : Kont.hole.plug (Expr.subst 0 f (Expr.subst (0 + 1) (Val.shift 1 0 (Val.loc l))
-        (thenE ((Expr.var 2).pair (Expr.var 0)) (d.app (Expr.var 2))
+        (thenE ((Expr.var 2).pair (Expr.var 0)) ((d.shift 3 0).app (Expr.var 2))
           (((Expr.var 0).app (Expr.val Val.unit)).app (Expr.var 1))))) =
-      ubindE (.pair (NFv l) (DFv d l)) (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) := by
+      ubindE (.pair (NFv l) (DFv (d.shift 1 0) l)) (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) := by
     simp [Kont.plug, Expr.subst, Expr.shift, thenE, ubindE, NFv, DFv, Val.shift, Val.pair,
-      Val.loc, Val.lam, Expr.val, Val.prim, subst_closedAt d (s := _) hdc (Nat.zero_le _)]
+      Val.loc, Val.lam, Expr.val, Val.prim, subst_shift_succ (j := 2) (d := 2) _ d (le_refl _),
+      subst_shift_succ (j := 1) (d := 1) _ d (le_refl _)]
   rw [e₃]
   -- the parts of the start are consistent with the view
   have hvu : ResU.Valid ρu := (ResU.Valid.split hc' hv'').1
@@ -361,11 +362,11 @@ theorem withbor1U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Ex
       (fun m i en h k ls ls' v ρ _ hp => by
         obtain ⟨o, ho, -, rfl⟩ := tabUN_some h
         exact hp)
-      (NFv l) (DFv d l) (fun j ls' ρ hR => ?_) hQo (fun j ls' b ρ hq => ?_) k' ls _ ρ'' hI'
+      (NFv l) (DFv (d.shift 1 0) l) (fun j ls' ρ hR => ?_) hQo (fun j ls' b ρ hq => ?_) k' ls _ ρ'' hI'
     · obtain ⟨hcl', hj⟩ := hR
       have hcρ : ConsistentX c ρ :=
         consistentX_compS hcl' (consistentX_of_top (ResU.inStratum_single_own _ l w₀) c) hcσ
-      exact fin_claimI hdc hΘ (fun j hj ls => hd Θ hΘ c j (hj.trans (hk'.trans hk)) ls) hw₀ hj
+      exact fin_claimI hΘ (fun j hj ls => hd Θ hΘ c j (hj.trans (hk'.trans hk)) ls) hw₀ hj
         hcl' hcρ
     · refine erwp_det hΦ (opTableN_down hTd) hQo
         (fun μ => step1Only_plug (Head.beta μ _ b) rfl .hole) ?_
@@ -418,20 +419,19 @@ is the value `withborU d`, a value of its type at every `δ ⊨ Δ` (`withbor1U_
 judgment read at the run's world and every lower index (`gN_dead_any`). -/
 theorem withbor1U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A)
-    (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hdc : closedAt 0 d = true)
+    (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
     (hd : SemJN (ℍ := ℍ) Δ Γ d (.val (.lolli (.ref A) .unit))) :
     SemJN (ℍ := ℍ) Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   obtain rfl := gN_deadP hΓ hg
   refine cN_ret_of ?_
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
-  rw [show substAll γ (withborUE d) = withborUE d from
-    psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
-  refine erwp_val (v := withborUV d) (withbor1U_sem hδ (admWf_of_vScoped hsc₁ hδ) hfree₁ hfree₂
-    hS hdc Θ n (fun Θ' hΘ' c' k hk ls' => ?_))
+  rw [withborUE_psub γ d]
+  refine erwp_val (v := withborUV (substAll γ d)) (withbor1U_sem hδ (admWf_of_vScoped hsc₁ hδ) hfree₁ hfree₂
+    hS Θ n (fun Θ' hΘ' c' k hk ls' => ?_))
   have h := hd δ γ Θ' c' k ls' PMap.empty hδ hΘ' (consistentX_empty c') hlw
     (gN_dead_any hΓ hg Θ' k hk)
-  rwa [show substAll γ d = d from psub_closedAt d γ hdc (Nat.zero_le 0)] at h
+  exact h
 
 /-! ### `withbor (2)` at an unwinding row -/
 
@@ -445,7 +445,7 @@ Core's `ewpTS_M_frameU`); the claim consistent with the view (`erwp_claimX_abort
 frame at a raise (`erwp_ubindRaise`, `fin_claimI` at the claim's content). -/
 theorem withbor2U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Expr} {δ : LSub}
     (hδ : Δ.Models δ) (hO : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hA : ¬ VFree x A)
-    (hB : ¬ VFree x B) (hS : S.Unwind x) (hdc : closedAt 0 d = true) (Θ₀ : LocTy) (n : Nat)
+    (hB : ¬ VFree x B) (hS : S.Unwind x) (Θ₀ : LocTy) (n : Nat)
     (hd : ∀ (Θ : LocTy), Θ.OK → ∀ c k, k ≤ n → ∀ ls,
       cN (ℍ := ℍ) (.ret (.lolli (.ref A) .unit)) δ Θ c k ls d PMap.empty) :
     vN (ℍ := ℍ) (withbor2UTy x Δ.meetOfDom A B S) δ Θ₀ n (withborUV d) PMap.empty := by
@@ -465,11 +465,12 @@ theorem withbor2U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Ex
     (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl (.appL .hole f)) ?_
   refine erwp_det hΦ (opTableN_down hTd) hQo (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
   have e₃ : Kont.hole.plug (Expr.subst 0 f (Expr.subst (0 + 1) (Val.shift 1 0 (Val.loc l))
-        (thenE ((Expr.var 2).pair (Expr.var 0)) (d.app (Expr.var 2))
+        (thenE ((Expr.var 2).pair (Expr.var 0)) ((d.shift 3 0).app (Expr.var 2))
           (((Expr.var 0).app (Expr.val Val.unit)).app (Expr.var 1))))) =
-      ubindE (.pair (NFv l) (DFv d l)) (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) := by
+      ubindE (.pair (NFv l) (DFv (d.shift 1 0) l)) (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) := by
     simp [Kont.plug, Expr.subst, Expr.shift, thenE, ubindE, NFv, DFv, Val.shift, Val.pair,
-      Val.loc, Val.lam, Expr.val, Val.prim, subst_closedAt d (s := _) hdc (Nat.zero_le _)]
+      Val.loc, Val.lam, Expr.val, Val.prim, subst_shift_succ (j := 2) (d := 2) _ d (le_refl _),
+      subst_shift_succ (j := 1) (d := 1) _ d (le_refl _)]
   rw [e₃]
   have hvu : ResU.Valid ρu := (ResU.Valid.split hc' hv'').1
   have hcf : ConsistentX c ρf := consistentX_right hc' hcon hv''
@@ -534,10 +535,10 @@ theorem withbor2U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Ex
       (fun m i en h k ls ls' v ρ _ hp => by
         obtain ⟨o, ho, -, rfl⟩ := tabUN_some h
         exact hp)
-      (NFv l) (DFv d l) (fun j ls' ρ hR => ?_) hQo (fun j ls' b ρ hq => ?_) k' ls _ ρ'' hM''
+      (NFv l) (DFv (d.shift 1 0) l) (fun j ls' ρ hR => ?_) hQo (fun j ls' b ρ hq => ?_) k' ls _ ρ'' hM''
     · obtain ⟨⟨⟨w, σ, hσ, hF, hclm⟩, hcR⟩, hj⟩ := hR
       have hwσ : vN (ℍ := ℍ) A δ Θ j w σ := by rw [← hAδ]; exact (vN_above A δ' Θ hσ).mp hF
-      exact fin_claimI hdc hΘ (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hj.trans (hk'.trans hk))) ls)
+      exact fin_claimI hΘ (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hj.trans (hk'.trans hk))) ls)
         hwσ le_rfl hclm hcR
     · refine erwp_det hΦ (opTableN_down hTd) hQo
         (fun μ => step1Only_plug (Head.beta μ _ b) rfl .hole) ?_
@@ -570,20 +571,19 @@ theorem withbor2U_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Ex
 /-- **`withbor2U` at `SemJN`** (Core's `withbor2U_compatX`), at an unwinding row and any `Δ`. -/
 theorem withbor2U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hdc : closedAt 0 d = true)
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
     (hd : SemJN (ℍ := ℍ) Δ Γ d (.val (.lolli (.ref A) .unit))) :
     SemJN (ℍ := ℍ) Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   obtain rfl := gN_deadP hΓ hg
   refine cN_ret_of ?_
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
-  rw [show substAll γ (withborUE d) = withborUE d from
-    psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
-  refine erwp_val (v := withborUV d) (withbor2U_sem hδ hside hfree₁ hfree₂ hS hdc Θ n
+  rw [withborUE_psub γ d]
+  refine erwp_val (v := withborUV (substAll γ d)) (withbor2U_sem hδ hside hfree₁ hfree₂ hS Θ n
     (fun Θ' hΘ' c' k hk ls' => ?_))
   have h := hd δ γ Θ' c' k ls' PMap.empty hδ hΘ' (consistentX_empty c') hlw
     (gN_dead_any hΓ hg Θ' k hk)
-  rwa [show substAll γ d = d from psub_closedAt d γ hdc (Nat.zero_le 0)] at h
+  exact h
 
 /-! ### An unwinding row's table under a reborrow -/
 
@@ -623,20 +623,20 @@ theorem tabUN_extend {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (Θ :
 /-- **The finaliser `λ_. d ℓ` consumes a `Mut @a A` source**, `d`'s judgment at `Mut @a A ⊸ 1`
 read at the world and an index at or below `N` (`fin_claimM` with the judgment at the run's
 world). -/
-theorem fin_claimMN {a : Lifetime.Life} {A : VTy} {d : Expr} (hdc : closedAt 0 d = true)
+theorem fin_claimMN {a : Lifetime.Life} {A : VTy} {d : Expr}
     {δ : LSub} {Θ : LocTy} (hΘ : Θ.OK) {c : Loc → Option Life} {N : Nat}
     (hd : ∀ k, k ≤ N → ∀ ls,
       cN (ℍ := ℍ) (.ret (.lolli (.mut a A) .unit)) δ Θ c k ls d PMap.empty)
     {l : Loc} {k : Nat} (hk : k ≤ N) {ls : List SRec} {ρ : WRes}
     (h : vN (ℍ := ℍ) (.mut a A) δ Θ k (Val.loc l) ρ) (hc : ConsistentX c ρ) :
     rwp (ℍ := ℍ) (Θ.view c) (fun _ _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) k ls
-      (.app (.val (DFv d l)) (.val .unit)) ρ := by
+      (.app (.val (DFv (d.shift 1 0) l)) (.val .unit)) ρ := by
   have hΦ := LocTy.view_down hΘ.1 c
   refine Hardest791.rwp_det'' (Q := fun _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) hΦ
     (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
-  have e : Kont.hole.plug (Expr.subst 0 Val.unit (.app d (.val (Val.loc l)))) =
+  have e : Kont.hole.plug (Expr.subst 0 Val.unit (.app (d.shift 1 0) (.val (Val.loc l)))) =
       (Kont.appL .hole (Val.loc l)).plug d := by
-    simp [Kont.plug, Expr.subst, subst_closedAt d (s := _) hdc (Nat.zero_le _), Val.loc]
+    simp [Kont.plug, Expr.subst, subst_shift_succ (j := 0) (d := 0) _ d (le_refl _), Expr.shift_zero, Val.loc]
   rw [e]
   refine rwp_bind hΦ _ ?_
   have hd0 := hd k hk ls
@@ -668,11 +668,11 @@ row. Core's `withbor3U_compatX`, step by step, as `withbor3S_compat`:
 8. the claim consistent with the view (`erwp_claimX_abort`) and the finaliser frame consuming it
    with `d` (`erwp_ubindRaise`, `fin_claimMN`).
 
-Premises: `hδ`, `hA`, `hB`, `hS`, `hdc` are the rule's; `hd` is the finaliser's judgment at the
+Premises: `hδ`, `hA`, `hB`, `hS` are the rule's; `hd` is the finaliser's judgment at the
 run's world and every lower index. -/
 theorem withbor3U_sem {Δ : LifeCtx} {a : Lifetime.Life} {x : LifeVar} {A B : VTy} {S : Row}
     {d : Expr} {δ : LSub} (hδ : Δ.Models δ) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
-    (hS : S.Unwind x) (hdc : closedAt 0 d = true) (Θ₀ : LocTy) (n : Nat)
+    (hS : S.Unwind x) (Θ₀ : LocTy) (n : Nat)
     (hd : ∀ (Θ : LocTy), Θ.OK → ∀ c k, k ≤ n → ∀ ls,
       cN (ℍ := ℍ) (.ret (.lolli (.mut a A) .unit)) δ Θ c k ls d PMap.empty) :
     vN (ℍ := ℍ) (withbor3UTy a x Δ.meetOfDom A B S) δ Θ₀ n (withborUV d) PMap.empty := by
@@ -699,11 +699,12 @@ theorem withbor3U_sem {Δ : LifeCtx} {a : Lifetime.Life} {x : LifeVar} {A B : VT
     (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl (.appL .hole f)) ?_
   refine erwp_det hΦ (opTableN_down hTd) hQo (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
   have e₃ : Kont.hole.plug (Expr.subst 0 f (Expr.subst (0 + 1) (Val.shift 1 0 (Val.loc l))
-        (thenE ((Expr.var 2).pair (Expr.var 0)) (d.app (Expr.var 2))
+        (thenE ((Expr.var 2).pair (Expr.var 0)) ((d.shift 3 0).app (Expr.var 2))
           (((Expr.var 0).app (Expr.val Val.unit)).app (Expr.var 1))))) =
-      ubindE (.pair (NFv l) (DFv d l)) (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) := by
+      ubindE (.pair (NFv l) (DFv (d.shift 1 0) l)) (.app (.app (.val f) (.val .unit)) (.val (Val.loc l))) := by
     simp [Kont.plug, Expr.subst, Expr.shift, thenE, ubindE, NFv, DFv, Val.shift, Val.pair,
-      Val.loc, Val.lam, Expr.val, Val.prim, subst_closedAt d (s := _) hdc (Nat.zero_le _)]
+      Val.loc, Val.lam, Expr.val, Val.prim, subst_shift_succ (j := 2) (d := 2) _ d (le_refl _),
+      subst_shift_succ (j := 1) (d := 1) _ d (le_refl _)]
   rw [e₃]
   -- the source's cell
   set cellβ := ResU.single l (CellU.mutOf β w₀ σ₀ hσ₀ (famL β P Θ j₀) hw₀) with hcellβ
@@ -789,9 +790,9 @@ theorem withbor3U_sem {Δ : LifeCtx} {a : Lifetime.Life} {x : LifeVar} {A B : VT
       (fun m i en h k ls ls' v ρ _ hp => by
         obtain ⟨o, ho, -, rfl⟩ := tabUN_some h
         exact hp)
-      (NFv l) (DFv d l) (fun j ls' ρ hR => ?_) hQo (fun j ls' b ρ hq => ?_) k' ls _ ρ'' hM''
+      (NFv l) (DFv (d.shift 1 0) l) (fun j ls' ρ hR => ?_) hQo (fun j ls' b ρ hq => ?_) k' ls _ ρ'' hM''
     · obtain ⟨⟨hRj, hcR⟩, hj⟩ := hR
-      exact fin_claimMN hdc hΘ
+      exact fin_claimMN hΘ
         (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hj.trans (hk'.trans hk))) ls) le_rfl hRj hcR
     · refine erwp_det hΦ (opTableN_down hTd) hQo
         (fun μ => step1Only_plug (Head.beta μ _ b) rfl .hole) ?_
@@ -831,20 +832,19 @@ theorem withbor3U_sem {Δ : LifeCtx} {a : Lifetime.Life} {x : LifeVar} {A B : VT
 /-- **`withbor3U` at `SemJN`** (Core's `withbor3U_compatX`), at an unwinding row and any `Δ`. -/
 theorem withbor3U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy} {S : Row}
     {d : Expr} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
-    (hS : S.Unwind x) (hdc : closedAt 0 d = true)
+    (hS : S.Unwind x)
     (hd : SemJN (ℍ := ℍ) Δ Γ d (.val (.lolli (.mut a A) .unit))) :
     SemJN (ℍ := ℍ) Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   obtain rfl := gN_deadP hΓ hg
   refine cN_ret_of ?_
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
-  rw [show substAll γ (withborUE d) = withborUE d from
-    psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
-  refine erwp_val (v := withborUV d) (withbor3U_sem hδ hfree₁ hfree₂ hS hdc Θ n
+  rw [withborUE_psub γ d]
+  refine erwp_val (v := withborUV (substAll γ d)) (withbor3U_sem hδ hfree₁ hfree₂ hS Θ n
     (fun Θ' hΘ' c' k hk ls' => ?_))
   have h := hd δ γ Θ' c' k ls' PMap.empty hδ hΘ' (consistentX_empty c') hlw
     (gN_dead_any hΓ hg Θ' k hk)
-  rwa [show substAll γ d = d from psub_closedAt d γ hdc (Nat.zero_le 0)] at h
+  exact h
 
 /-! ### `withload` at an unwinding row -/
 
@@ -1097,20 +1097,20 @@ theorem erwp_M_frameListRN {A : VTy} {δ : LSub} {β β' : Life}
 
 /-- **The finaliser consumes the source array, its judgment read at the index** (`fin_claimI`
 at `Array A`). -/
-theorem fin_claimArrI {A : VTy} {d : Expr} (hdc : closedAt 0 d = true) {δ : LSub} {Θ : LocTy}
+theorem fin_claimArrI {A : VTy} {d : Expr} {δ : LSub} {Θ : LocTy}
     (hΘ : Θ.OK) {c : Loc → Option Life} {N : Nat}
     (hd : ∀ k, k ≤ N → ∀ ls, cN (ℍ := ℍ) (.ret (.lolli (.array A) .unit)) δ Θ c k ls d PMap.empty)
     {a : Val} {k : Nat} (hk : k ≤ N) {ls : List SRec} {ρ : WRes}
     (h : vN (ℍ := ℍ) (.array A) δ Θ k a ρ) (hc : ConsistentX c ρ) :
     rwp (ℍ := ℍ) (Θ.view c) (fun _ _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) k ls
-      (.app (.val (DFa d a)) (.val .unit)) ρ := by
+      (.app (.val (DFa (d.shift 1 0) a)) (.val .unit)) ρ := by
   have hΦ := LocTy.view_down hΘ.1 c
   obtain ⟨l, cn, rfl, -, -⟩ := id h
   refine Hardest791.rwp_det'' (Q := fun _ v ρ' => v = Val.unit ∧ ρ' = PMap.empty) hΦ
     (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl .hole) ?_
-  have e : Kont.hole.plug (Expr.subst 0 Val.unit (.app d (.val (Val.arr l cn)))) =
+  have e : Kont.hole.plug (Expr.subst 0 Val.unit (.app (d.shift 1 0) (.val (Val.arr l cn)))) =
       (Kont.appL .hole (Val.arr l cn)).plug d := by
-    simp [Kont.plug, Expr.subst, subst_closedAt d (s := _) hdc (Nat.zero_le _), subst_arr]
+    simp [Kont.plug, Expr.subst, subst_shift_succ (j := 0) (d := 0) _ d (le_refl _), Expr.shift_zero, subst_arr]
   rw [e]
   refine rwp_bind hΦ _ ?_
   have hd0 := hd k hk ls
@@ -1134,7 +1134,7 @@ consumed by the finaliser at a raise (`erwp_ubindRaise`, `fin_claimArrI`). -/
 theorem sliceBorrowMU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d : Expr}
     {δ : LSub} (hδ : Δ.Models δ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
-    (hS : S.Unwind x) (hdc : closedAt 0 d = true) (Θ₀ : LocTy) (n : Nat)
+    (hS : S.Unwind x) (Θ₀ : LocTy) (n : Nat)
     (hd : ∀ (Θ : LocTy), Θ.OK → ∀ c k, k ≤ n → ∀ ls,
       cN (ℍ := ℍ) (.ret (.lolli (.array A) .unit)) δ Θ c k ls d PMap.empty) :
     vN (ℍ := ℍ) (sliceBorrowMUTy x Δ.meetOfDom A B S) δ Θ₀ n (withborUV d) PMap.empty := by
@@ -1154,13 +1154,14 @@ theorem sliceBorrowMU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
     (fun μ => step1Only_plug (Head.beta μ _ (Val.arr l cn)) rfl (.appL .hole f)) ?_
   refine erwp_det hΦ (opTableN_down hTd) hQo (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
   have e₃ : Kont.hole.plug (Expr.subst 0 f (Expr.subst (0 + 1) (Val.shift 1 0 (Val.arr l cn))
-        (thenE ((Expr.var 2).pair (Expr.var 0)) (d.app (Expr.var 2))
+        (thenE ((Expr.var 2).pair (Expr.var 0)) ((d.shift 3 0).app (Expr.var 2))
           (((Expr.var 0).app (Expr.val Val.unit)).app (Expr.var 1))))) =
-      ubindE (.pair (NFa (Val.arr l cn)) (DFa d (Val.arr l cn)))
+      ubindE (.pair (NFa (Val.arr l cn)) (DFa (d.shift 1 0) (Val.arr l cn)))
         (.app (.app (.val f) (.val .unit)) (.val (Val.arr l cn))) := by
     simp [Kont.plug, Expr.subst, thenE, ubindE, NFa, DFa, Val.pair,
       Val.lam, Expr.val, Val.prim, shift_arr, subst_arr,
-      subst_closedAt d (s := _) hdc (Nat.zero_le _)]
+      subst_shift_succ (j := 2) (d := 2) _ d (le_refl _),
+      subst_shift_succ (j := 1) (d := 1) _ d (le_refl _)]
   rw [e₃]
   obtain ⟨a, hdefa, hOa⟩ := hsideA
   obtain ⟨βP, hβP⟩ := hdefa δ hδ
@@ -1201,10 +1202,10 @@ theorem sliceBorrowMU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
       (fun m i en h k ls ls' v ρ _ hp => by
         obtain ⟨o, ho, -, rfl⟩ := tabUN_some h
         exact hp)
-      (NFa (Val.arr l cn)) (DFa d (Val.arr l cn)) (fun j ls' ρ hR => ?_) hQo
+      (NFa (Val.arr l cn)) (DFa (d.shift 1 0) (Val.arr l cn)) (fun j ls' ρ hR => ?_) hQo
       (fun j ls' b ρ hq => ?_) k' ls _ ρ'' hM''
     · obtain ⟨⟨hR, hcR⟩, hj⟩ := hR
-      exact fin_claimArrI hdc hΘ (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hk'.trans hk)) ls)
+      exact fin_claimArrI hΘ (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hk'.trans hk)) ls)
         (hj.trans le_rfl) ⟨l, cn, rfl, hn, by rw [sepRange_eq_sepList]; exact hR⟩ hcR
     · obtain ⟨ρ₁, ρ₂, hc12, ho, hb⟩ := hq
       refine erwp_det hΦ (opTableN_down hTd) hQo
@@ -1238,20 +1239,19 @@ theorem sliceBorrowMU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
 theorem sliceBorrowMU_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A)
-    (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hdc : closedAt 0 d = true)
+    (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
     (hd : SemJN (ℍ := ℍ) Δ Γ d (.val (.lolli (.array A) .unit))) :
     SemJN (ℍ := ℍ) Δ Γ (withborUE d) (.val (sliceBorrowMUTy x Δ.meetOfDom A B S)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   obtain rfl := gN_deadP hΓ hg
   refine cN_ret_of ?_
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
-  rw [show substAll γ (withborUE d) = withborUE d from
-    psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
-  refine erwp_val (v := withborUV d) (sliceBorrowMU_sem hδ hsideA hsideB hfree₁ hfree₂ hS hdc Θ n
+  rw [withborUE_psub γ d]
+  refine erwp_val (v := withborUV (substAll γ d)) (sliceBorrowMU_sem hδ hsideA hsideB hfree₁ hfree₂ hS Θ n
     (fun Θ' hΘ' c' k hk ls' => ?_))
   have h := hd δ γ Θ' c' k ls' PMap.empty hδ hΘ' (consistentX_empty c') hlw
     (gN_dead_any hΓ hg Θ' k hk)
-  rwa [show substAll γ d = d from psub_closedAt d γ hdc (Nat.zero_le 0)] at h
+  exact h
 
 /-- **`slice_borrow` at an unwinding row is a value of its type** (Core's
 `sliceBorrowIU_compatX`): `withborU d` at
@@ -1267,7 +1267,7 @@ theorem sliceBorrowIU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
     {δ : LSub} (hδ : Δ.Models δ) (hadm : AdmWf A δ)
     (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hA : ¬ VFree x A) (hB : ¬ VFree x B)
-    (hS : S.Unwind x) (hdc : closedAt 0 d = true) (Θ₀ : LocTy) (n : Nat)
+    (hS : S.Unwind x) (Θ₀ : LocTy) (n : Nat)
     (hd : ∀ (Θ : LocTy), Θ.OK → ∀ c k, k ≤ n → ∀ ls,
       cN (ℍ := ℍ) (.ret (.lolli (.array A) .unit)) δ Θ c k ls d PMap.empty) :
     vN (ℍ := ℍ) (sliceBorrowIUTy x Δ.meetOfDom A B S) δ Θ₀ n (withborUV d) PMap.empty := by
@@ -1287,13 +1287,14 @@ theorem sliceBorrowIU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
     (fun μ => step1Only_plug (Head.beta μ _ (Val.arr l cn)) rfl (.appL .hole f)) ?_
   refine erwp_det hΦ (opTableN_down hTd) hQo (fun μ => step1Only_plug (Head.beta μ _ f) rfl .hole) ?_
   have e₃ : Kont.hole.plug (Expr.subst 0 f (Expr.subst (0 + 1) (Val.shift 1 0 (Val.arr l cn))
-        (thenE ((Expr.var 2).pair (Expr.var 0)) (d.app (Expr.var 2))
+        (thenE ((Expr.var 2).pair (Expr.var 0)) ((d.shift 3 0).app (Expr.var 2))
           (((Expr.var 0).app (Expr.val Val.unit)).app (Expr.var 1))))) =
-      ubindE (.pair (NFa (Val.arr l cn)) (DFa d (Val.arr l cn)))
+      ubindE (.pair (NFa (Val.arr l cn)) (DFa (d.shift 1 0) (Val.arr l cn)))
         (.app (.app (.val f) (.val .unit)) (.val (Val.arr l cn))) := by
     simp [Kont.plug, Expr.subst, thenE, ubindE, NFa, DFa, Val.pair,
       Val.lam, Expr.val, Val.prim, shift_arr, subst_arr,
-      subst_closedAt d (s := _) hdc (Nat.zero_le _)]
+      subst_shift_succ (j := 2) (d := 2) _ d (le_refl _),
+      subst_shift_succ (j := 1) (d := 1) _ d (le_refl _)]
   rw [e₃]
   have hcf : ConsistentX c ρf := consistentX_right hc' hcon hv''
   obtain ⟨a, hdefa, hOa⟩ := hsideA
@@ -1336,10 +1337,10 @@ theorem sliceBorrowIU_sem {Δ : LifeCtx} {x : LifeVar} {A B : VTy} {S : Row} {d 
       (fun m i en h k ls ls' v ρ _ hp => by
         obtain ⟨o, ho, -, rfl⟩ := tabUN_some h
         exact hp)
-      (NFa (Val.arr l cn)) (DFa d (Val.arr l cn)) (fun j ls' ρ hR => ?_) hQo
+      (NFa (Val.arr l cn)) (DFa (d.shift 1 0) (Val.arr l cn)) (fun j ls' ρ hR => ?_) hQo
       (fun j ls' b ρ hq => ?_) k' ls _ ρ'' hM''
     · obtain ⟨⟨hR, hcR⟩, hj⟩ := hR
-      exact fin_claimArrI hdc hΘ (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hk'.trans hk)) ls)
+      exact fin_claimArrI hΘ (fun j' hj' ls => hd Θ hΘ c j' (hj'.trans (hk'.trans hk)) ls)
         (hj.trans le_rfl) (vN_le hj ⟨l, cn, rfl, hn, by rw [sepRange_eq_sepList]; exact hR⟩) hcR
     · obtain ⟨ρ₁, ρ₂, hc12, ho, hb⟩ := hq
       refine erwp_det hΦ (opTableN_down hTd) hQo
@@ -1376,20 +1377,19 @@ theorem sliceBorrowIU_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A)
     (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A)
-    (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hdc : closedAt 0 d = true)
+    (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
     (hd : SemJN (ℍ := ℍ) Δ Γ d (.val (.lolli (.array A) .unit))) :
     SemJN (ℍ := ℍ) Δ Γ (withborUE d) (.val (sliceBorrowIUTy x Δ.meetOfDom A B S)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
   obtain rfl := gN_deadP hΓ hg
   refine cN_ret_of ?_
   show erwp (ℍ := ℍ) (Θ.view c) (opTableN OpTabN.empty) _ n ls (substAll γ (withborUE d)) _
-  rw [show substAll γ (withborUE d) = withborUE d from
-    psub_closedAt _ γ (withborUE_closed hdc) (Nat.zero_le 0)]
-  refine erwp_val (v := withborUV d) (sliceBorrowIU_sem hδ (admWf_of_vScoped hsc hδ) hsideA hsideB
-    hfree₁ hfree₂ hS hdc Θ n (fun Θ' hΘ' c' k hk ls' => ?_))
+  rw [withborUE_psub γ d]
+  refine erwp_val (v := withborUV (substAll γ d)) (sliceBorrowIU_sem hδ (admWf_of_vScoped hsc hδ) hsideA hsideB
+    hfree₁ hfree₂ hS Θ n (fun Θ' hΘ' c' k hk ls' => ?_))
   have h := hd δ γ Θ' c' k ls' PMap.empty hδ hΘ' (consistentX_empty c') hlw
     (gN_dead_any hΓ hg Θ' k hk)
-  rwa [show substAll γ d = d from psub_closedAt d γ hdc (Nat.zero_le 0)] at h
+  exact h
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 
