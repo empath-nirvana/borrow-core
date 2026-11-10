@@ -1,4 +1,4 @@
-# MintProbe: eager same-lifetime views ("mint at the freeze", #219), stage P1
+# MintProbe: eager same-lifetime views ("mint at the freeze", #219), stages P1 and P2a
 
 **Question.** Can borrow-core's model carry RustBelt-style sharing, with views minted at
 the frame, including through a frozen `Mut`? This is option (c) of
@@ -22,17 +22,23 @@ paper level: `Paper/`'s `wp`, `↭` and `Ty`/`vDen`. The typed world and Core co
 - **`Frame.lean`:** `wp_mint_frame`, 6.64 at a mint. `wp` and `↭` are unchanged.
 - **`Shared.lean`:**
   - `shrV` at `1`/`⊗`/`⊕`/`Ref`/`[@a]`, plus **`Mut`**: a view of the `mut` target at the
-    outer `α`. `α ⊑ β` holds strictly, from the share being in `Res_α`.
-  - `mint_views` by induction on the type, with the `Mut` case going through `Mint.addMut`;
-    `mint_shr` and `wp_S_frame`.
-  - `wp_load_S`, `deref_sem`, and **`deref_mut_sem`** (load through a frozen `Mut` at the
-    outer lifetime).
+    outer `α`, with the target's own views (`Mut β S` at `α` is read as `Ref S`,
+    `shrV_mut_eq`). `α ⊑ β` holds strictly, from the share being in `Res_α`.
+  - **`Reach O P`** (stage P2a): where a mint over `O` may put views. Every cell of `ex(P)` is
+    one of `ex(O)`, and `⦇P⦈_○` is a `○`-factor of `⦇O⦈`. `Reach.of_le` covers a `●`-factor,
+    `Reach.le` is closure under `≤`, and `Reach.mutWit` passes to a `mut` cell's witness.
+  - `mint_views` by induction on the type over `Reach`. The `Mut` case goes through
+    `Mint.addMut`, then recurses into the target's witness. `mint_shr` and `wp_S_frame` use it.
+  - `wp_load_S`, `deref_shr`, `deref_sem`, and **`deref_mut_sem`** (load through a frozen
+    `Mut` at the outer lifetime, returning the target with its views).
   - `shrV_noOwn`, `shrV_mono`, `wp_S_forget`.
 - **`Uses.lean`:** `shrV_copy`, `derefN_sem` (n derefs at one `α`), `minted_projection`.
 - **`Pointee.lean`:** the first pass's refutations (no run creates the view).
 - **`Ground.lean`:**
   - `g1_shape`: two `deref`s through an owned `Ref (Ref S)` at one `α`.
-  - `g2_shape`, `g2_value`: `&&mut T → &T`, returning `()`.
+  - `g2_shape`, `g2_value`: `&&mut T → &T`, returning the target with its views (`()` at `1`).
+  - `g2_deep`: through `Mut @a (Ref S)`, a further `deref` reads the cell the target owns, at
+    the outer `α`.
   - `frozen_mut_under_imm`: the deciding check stated at a `mut` cell.
 
 ## Stop rule: no stop
@@ -43,14 +49,9 @@ paper level: `Paper/`'s `wp`, `↭` and `Ty`/`vDen`. The typed world and Core co
 - **`wp` and `↭` are unchanged.** No headline is involved.
 - **No view owns anything** (`shrV_noOwn`).
 
-## Not done in P1
+## Not done
 
-- **The owned reach below a `Mut` target is not minted.**
-  - `shrV`'s `Mut` clause is one level: the target's view, with its denotation as a fact.
-  - Minting further needs `mint_views` over a witness that is not `≤ O` (the `mut` cell's
-    witness). That requires generalising `Le P O` to a reach predicate, with the witness-walk
-    factor (`mutWit_flatR_factor` is its first step).
-  - No obstruction was found.
-- **P2:** the typed world, deep `vC`, `wpTS_I_frameX` at a mint, and `load`'s compat lemma.
+- **P2 proper:** the typed world, deep `vC`, `wpTS_I_frameX` at a mint, and `load`'s compat
+  lemma.
 
-Axioms: `[propext, Classical.choice, Quot.sound]` for every result.
+Axioms: `[propext, Classical.choice, Quot.sound]` for every P1 result. P2a is not yet built.

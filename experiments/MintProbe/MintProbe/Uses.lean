@@ -108,11 +108,16 @@ theorem shrV_imm (α : Life) (δ : LSub) :
       · rw [f] at e; cases Option.some.inj e; exact ih u V hV m _ f₂
       · rw [f] at e; cases Option.some.inj e; exact CellU.CompS.kind hC
   | imm _ _ _ => rintro v ρ ⟨rfl, -⟩ m ψ e; cases e
-  | «mut» _ S _ =>
-      rintro v ρ ⟨ℓ, u, p₀, Q, hp₀, ⟨rfl, -⟩, ⟨s, w, σ, hs, hQ, -, -⟩⟩ m ψ e
+  | «mut» _ S ih =>
+      rintro v ρ ⟨ℓ, u, p₀, Q, hp₀, ⟨rfl, -⟩, H, V, hHV, ⟨s, w, σ, hs, rfl, -, -⟩, hV⟩ m ψ e
       obtain rfl : Q = ρ := ResU.eq_of_comp_empty_left hp₀
-      rw [hQ] at e
-      obtain ⟨-, rfl⟩ := ResU.single_get_eq_some e; rfl
+      rcases ResU.Comp.get hHV m with ⟨-, -, f⟩ | ⟨χ, f₁, -, f⟩ | ⟨χ, -, f₂, f⟩ |
+          ⟨χ₁, χ₂, χ, f₁, -, f, hC⟩
+      · rw [f] at e; cases e
+      · rw [f] at e; cases Option.some.inj e
+        obtain ⟨-, rfl⟩ := ResU.single_get_eq_some f₁; rfl
+      · rw [f] at e; cases Option.some.inj e; exact ih u V hV m _ f₂
+      · rw [f] at e; cases Option.some.inj e; exact CellU.CompS.kind hC
   | box _ S ih => exact ih
   | bang _ _ => rintro v ρ ⟨rfl, -⟩ m ψ e; cases e
   | all _ _ _ _ => rintro v ρ ⟨rfl, -⟩ m ψ e; cases e
@@ -173,7 +178,7 @@ theorem minted_projection {a : Lifetime.Life} {δ : LSub} {α : Life} (ha : a.in
     mint_shr_of (α := α) (ResU.CompS.comm hW) (vDen_ref_unit δ l₁)
       (single_own_inStratum _ _ _) hvW
   refine ⟨V, Y, hY, shrV_noOwn α δ _ _ V hV, fun m ψ e => ?_, ?_⟩
-  · obtain ⟨c, hc, -⟩ := hdom m ψ e
+  · obtain ⟨c, hc⟩ := hdom (pointee l₁) (ExW.single_own l₁ Val.unit) m ψ e
     exact (ResU.single_get_eq_some hc).1
   · refine wp_mono (fun w ρ h => ?_) _ Y (deref_sem α .unit δ (Val.loc l) Y hYS)
     obtain ⟨ℓ, u, p₀, Q, hp₀, ⟨rfl, hw⟩, H, Vu, hHV, ⟨s, u', σ, hs, rfl, ⟨-, hσ⟩, hle⟩,
