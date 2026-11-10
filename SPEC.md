@@ -3299,7 +3299,9 @@ Six primitives (`ccatch` and `cfin`, below), and no new `Expr` constructor:
     handle_n e with H    ≜  hnd (n, (qs, H)) e              (`.app (.app (.prim .hnd) …) e`)
     M then x. N unwind D ≜  ubind (λx. N, λ_. D) M          (`.app (.app (.prim .ubind) …) M`)
 
-`ubind` is `M to x. N` with a finaliser `D`, which runs instead of `N` when `M` unwinds.
+`ubind` is `M to x. N` with a finaliser `D`, which runs instead of `N` when `M` unwinds. In core
+text, `x <- M unwind (D); N` is checked at `D`'s own row, and a row entry may spell its cancel row
+(§27 *The checker*).
 
 `H = (h_ret, h_op)` is a pair of values, `n` a literal, and `qs` the tags of the operations'
 qualifiers (§25), which `[handle]` writes. Evaluation is argument-first, so `e` runs under the frame
@@ -5438,22 +5440,113 @@ call a finaliser directly. `Capture` rejects such a finaliser with a message. Th
 finaliser that performs (`progFinOp`), a cancel nested in a cancel (`progNC₁`), and a kept error
 consumed with an unrestricted continuation or resumed (`progConsume`, `progKeep`), are Lean runs
 (`Core/EffCancel.lean`, `Core/EffCancelTyped.lean`) and interpreter runs, not kernel programs. The
-checker emits no such finaliser: its finalisers are consumes at `F 1`. No kernel program and
-no count changes. Finalisers that raise run at every stage in the kernel programs `e7a`, `e7b`,
+checker emits finalisers that perform (*The checker*, below); one that may suspend is refused by
+the backends as above, so such a program checks and runs at `bcc interp` only (#869). No kernel
+program and no count changes. Finalisers that raise run at every stage in the kernel programs `e7a`, `e7b`,
 `e7d`, `e8b` and `stored-k-fin` (§19 *Programs*).
+
+### The checker (#868)
+
+The checker emits `[then]` with a finaliser at its own row, and the cancel rows `[handle]` gives
+its clauses. No Core change: `CDerives.effThen`, `CDerivesAt.effThen`, `TDerives.effThen` and the
+cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
+
+- **Cancel rows in core text.** A row entry of a cancellable or an unrestricted operation may
+  carry its cancel row, `n.i cancel[R] A ~> B` or `n.i unr[R] A ~> B`, `R` a row written as a
+  function's row is (`1.0 cancel[3.0] 1 ~> 0`). `⊤` is written `cancel[top]` (or `cancel[⊤]`),
+  alone inside the brackets; the printer writes `[top]`. `top` elsewhere in a row is refused: "`top`
+  (`⊤`) is a cancel row only: write it as `n.i cancel[top] A ~> B`". A bare `cancel` or `unr` has the empty cancel row, so text written before reads the
+  same, and `Row.pp` prints the brackets only when the row is not empty, so a printed program reads
+  back. `lin[…]` is refused, and so is a cancel row on an abortive operation. `elabRow` puts `R` in
+  `OpSig.fin`.
+- **`[then]` at the finaliser's row.** `x <- M unwind (D); N` is checked by `[then]`. `D` is
+  checked at the empty row first; a finaliser that performs nothing gets `effThenA` with `M` at the
+  site's row `Σ`, the derivation as before. Otherwise `D` is checked at `Σ`, and `Σ_D` is the
+  operations of `Σ` that `D`'s typed derivation performs (its performs, awaits and raises, what the
+  subterm under each `[sub]` performs and the row of each call, less the operations a handler
+  inside `D` handles; `opKeysOf`); `D` is then checked at that `Σ_D`; if it does not check there,
+  the derivation at `Σ` is kept (the kernel's premises decide `[then]` at whichever row is used).
+- **`Σ_M`, `M`'s own row.** When the finaliser performs and `hfin` fails with `M` at `Σ`, `Σ_M` is
+  the row `M`'s derivation needs,
+  synthesized as `Σ_D` is: a `perform`, `await` or `raise` contributes its operation at the empty
+  cancel row; a call, its callee type's row, cancel rows included; a `[sub]`, its subterm's; a
+  `[then]` inside `M` gives each capturable operation of its head the least cancel row that
+  `ThenLe` and `PendLe` allow over its finaliser's row; inside `handle_n` the operations of `n` drop
+  out; rows join by operation key, `⊤` absorbing. (So `progNC₁T`'s `1.0` is taken at the empty
+  cancel row, and `progConsumeT`'s at `{2.0}`.) It is restricted to `Σ`'s operations, `M` is
+  checked again at it when `hfin` holds there, and otherwise `M` stays at `Σ`; `RowLe Σ_M Σ`
+  holds. `hfin` is decided over `Σ_M` (`thenFinB Σ_M Σ Σ_D`: for each operation of `Σ_M` whose
+  cancel row is read, the cancel row of the operation `Σ` finds at that key holds `F ⋈ Σ_D`), and
+  `PendPers` over `Σ_M` (`Σ_D.UnrD → Σ_M.PendPers`). So a capturable operation the finaliser
+  performs need not be in its own cancel row.
+- **The deciders.** `ThenLe`, `PendPers` and `divB Σ_D = false` are decided by `thenLeB`,
+  `pendLeB`, `thenFinB`, `pendPersB` and `finPersB`, each with its `_sound` lemma (axioms within
+  `propext` and `Quot.sound`); `thenFinB_sound` states the kernel premise over `Σ_M`:
+  `Row.find SM n i = some o → Row.find S n i = some o' → o.finRead → ThenLe o.fin SD o'.fin`. A
+  refusal names an operation `M` performs whose cancel row lacks the finaliser's operation (D3),
+  never the finaliser's own, and where it is cancelled; a nested entry is named as such ("the
+  cancel row of 1.0 … holds 4.0, whose own cancel row … must hold …"). At `Σ_D = []` the checker emits `effThenA`, as before; `effThen` only at a
+  non-empty `Σ_D`.
+- **Handlers read their operations' cancel rows.** `[handle]` passes `fs j`, the cancel row the
+  handled row gives operation `j`, so a clause's `κ` has its cancel branch at
+  `cancelTy Σ (fs j) = F_{F_j ⊕ Σ} 1`. A clause that cancels `κ` then performs, at its own row,
+  what the cancelled region's finalisers perform: D3 is `[sub]` there.
+- **Written, and checked.** A cancel row is written, in handler and ascription types; a row the
+  effects pass infers (`Env.rowOf`) carries the empty cancel row. `[then]`'s `hfin` checks each.
 
 ### Baseline
 
 `Paper/`, `Support/`, the machine and the effectful `wp` are unchanged; no borrow rule and no borrow
-lemma changes. Every existing derivation types at empty cancel rows. The checker emits empty cancel
-rows (`Frontend/Check/Elab.lean`) and reads `[then]`'s premise at some depth (`Row.unrDB`), which at
-its rows is the top-level test, so it accepts and rejects what it did.
+lemma changes. Every existing derivation types at empty cancel rows. A program with no finaliser
+that performs gets `Σ_D = []` and `ThenLe.nil`, and the checker emits `effThenA` there, so its
+derivation, the judgment-freeze golden and every count are as before. `fundamentalC`,
+`adequacyC`, `fundamentalD`, `adequacyD`, `adequacyD_obs` and every compatibility lemma are
+unchanged: the checker emits a rule already proved. The kernel programs `e7b`, `e7d`, `e8b`,
+`stored-k-fin`, `cancel-reraised`, `cancel-reentered` and `cancel-propagated` become checkable
+core text with their kernel answers (`inr ()`, `inr ()`, `inl (inr ())`, `inr ()`, `inr ()`,
+`inr ()`, `inr ()`), each with a corpus twin whose golden is `bcc interp`'s.
+`corpus/core-fin-nested.bc` has nested cancel rows where `D` performs only part of the row
+(`inr ()`), and `corpus/core-fin-sub-row.bc` is `e7b` with the finaliser's raise bound,
+`u <- abort[1.0] (); absurd u`, under a `[sub]` (`inr ()`). `core-fin-cancellable` (core text) is an
+`abort[1.0]` unwinding through a finaliser that performs `4.0 cancel 1 ~> 1`, checked at
+`Σ_M = [1.0]`, `Σ_D = [4.0]`; `bcc interp` answers `(inr (), i32[1])`. It joins the corpus with the
+lowering of a finaliser that may suspend (#869). `corpus/core-fin-top-row.bc` prints a `⊤` cancel
+row and checks it again (`()`, `live 0`). `core-fin-nc` (core text, `progNC₁T`'s shape: a cancel's
+finaliser performs a capturable operation whose own cancel row is empty) checks, `()`, `live 0`; it
+joins the corpus when Backend2 lowers a cancel row holding a machine operation (#869).
+`core-fin-consume` (core text, `progConsumeT`'s shape) answers `inl ()` and `core-fin-keep`
+(`progKeepT`'s) `inr ()`, each with `live 0`; both join the corpus with #869.
+`corpus/core-fin-check-nc.bc`, `-consume.bc`, `-keep.bc`, `-gapdeep.bc` and `-gapcall.bc` are
+checked in the corpus (a `def` checked and not called; `main` returns `()`): the first three are
+`progNC₁T`'s, `progConsumeT`'s and `progKeepT`'s shapes, `gapdeep` two nested finalisers that both
+perform capturable operations, and `gapcall` a call of a function parameter.
 
 ### Open
 
-- **The lowering of a finaliser that suspends** (planned: its
-  cancel arm as a code of its own, each finaliser call a resumption point). Until it lands, a
-  feature without its lowering.
+- **The lowering of a finaliser that suspends** (#869; planned: its cancel arm as a code of its
+  own, each finaliser call a resumption point). Until it lands, a feature without its lowering.
+- **A surface finaliser that performs** (`with h(…) { M } finally { D }`, the surface `unwind`):
+  its own entry, before the surface's code.
+- **`Σ_M` and `Σ_D` are synthesized from the derivations**, not proved least: they can over-count
+  (a thunk built and never forced), which is safe, since the kernel checks `M` and `D` at the rows
+  taken.
+- **`Σ_M` is resynthesized only when `hfin` fails at `Σ`.** A program whose `hfin` holds at `Σ` but
+  whose `PendPers` fails there, and would hold at `Σ_M`, is refused: a gap in completeness, not in
+  soundness.
+- **The deciders check every layer and member of a cancel row**, the kernel the first `Row.find`
+  hit: stricter only when a cancel row repeats an operation key.
+- **Answering effects in a finaliser** (a capability: `Stdout`, `Fs` #769, `Net` #597; a `fn`
+  effect): the capability is a threaded `mut` borrow, and `[then]` splits the context `Γ₁ | Γ₂`,
+  so `M` and `D` cannot both hold it; R1 (§29) needs empty cancel rows (`Row.ResumeO`), and an
+  unwinding lend's finaliser `d : Ref T ⊸ 1` is closed, pure and abortive only. It does not type
+  today by any route, and #940 (a `let mut` both `M` and `D` write) has the same root. The
+  smallest change proposed is a fused `[then]` over a lend (`m : Mut @a T ∈ Γ₂`; `M` gets a
+  reborrow, `D` gets `m` back at `Σ_D`): one rule and its compatibility lemmas. Its raise path is
+  direct; its cancel path is a lend across a suspension, which needs #844 Tier 2 and #821.
+- **An owner's finaliser that performs** (a declared value's drop that closes a socket): not a
+  consume (§42 *Not this*); Backend2's `genLendU` lowers only a constant finaliser.
+- **Task codata** (`lib/async.bc`, `F (A + …) & F 1`): a task whose finalisers perform needs its
+  close at `F_R 1`; it waits on the lowering of a finaliser that suspends.
 - **`[then]`'s two premises on unrestricted operations** restrict `unr` beyond §19's `[then]`
   (decision 63). §19's top-level premise is not enough: the finaliser's frame is live in the
   cancels below it.
@@ -8821,9 +8914,8 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
 
 **Open (#746).**
 - *I/O in a finaliser.* `[then]`'s `D` is at `F_Σ 1` beside `N` in one context: a capability the
-  effects pass threads into `D` would be consumed there and not handed back. Capabilities as
-  borrows held across `[then]` (§29's relaxed lend, `PinLaw`), or a finaliser that hands its
-  capabilities back, would carry it; neither is in this entry.
+  effects pass threads into `D` would be consumed there and not handed back, and `[then]`'s split
+  `Γ₁ | Γ₂` admits no capability both `M` and `D` use (§27 *Open*, with #940's root).
 - *A written finaliser for a lend the abort crosses.* The kernel's unwinding lend takes any closed
   `d : Ref N ⊸ 1` (`d_declAcross`); the checker passes only the source's consume
   (`Frontend/Check/Consts.lean`, `finaliser`), so at a declared type the lend is refused. A
