@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.63 · 2026-11-09
+Version 1.64 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -12002,39 +12002,41 @@ lemmas the later units reuse, and no `VTy` former, rule or relation clause (K1�
 
 ### The rules
 
-Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP`, `CDerivesAt` and
-`TDerives*` by `scripts/gen-pin.py`. No new index and no new judgment.
+Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP` and `TDerives*`
+by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No new index and no new judgment.
 
 | Rule | Statement | Unit |
 |---|---|---|
-| `codeI` | `Γ ⊢ λM : U C`, `Γ.CapOK (λM)` and `(Γ.capTy (λM)).Cl 0` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
+| `codeI` | `Γ ⊢ λM : U C` and `Γ.CapOK (λM)` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
 | `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C` | K3 |
-| `erase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
-| `eraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
-| `force` (restated) | `Ctx.SoloP Γ i T`, `T` is `U C` or `Code⟨N; E⟩ C` ⟹ `forceE C (.var i) : C` | K3 |
+| `codeErase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
+| `codeEraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
+| `force` (restated) | `Ctx.SoloP Γ i T`, `T.forceTy = some C` (`T` is `U C` or `Code⟨N; E⟩ C`) ⟹ `forceE C (.var i) : C` | K3 |
 | `unfoldK` | `unfold : !G ⊸ !Code⟨hCode C; !G ⊗ 1⟩ (S ⊸ Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C))`, `G` either `U(S ⊸ C[S/X])` or a code type of it | K4 |
 | `nuOutK` | `x : Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)` ⟹ `force x : C[Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)/X]` | K4 |
 
-- `Γ.capTy e`: the tensor of `Γ`'s slot types at `capVars e`, in rank order, ending in `1`.
-- `Γ.CapOK e`, a decidable side condition the checker tests: every captured slot is live, and every
+- `Γ.capTy e` (`Ctx.capTy`, `Core/CodeRules.lean`): the tensor of `Γ`'s slot types at
+  `capVars e`, in rank order, ending in `1`.
+- `VTy.forceTy` (`Core/Types.lean`): `some C` at `U C` and at `Code⟨N; E⟩ C`, `none` elsewhere.
+- `Γ.CapOK e` (`Ctx.capOK Γ e = true`, a `Bool` test, `Core/CodeRules.lean`), a side condition the
+  checker tests: every captured slot is live, and every
   live slot of `Γ` that `e` does not capture is persistent. With it the uncaptured slots hold `∅`
   (`vCE_empty_of_persistent`), so the closure's resource is its captures'. It is a premise, not
   an inversion of `CDerives`.
-- `(Γ.capTy (λM)).Cl 0`, decidable and tested by the checker beside `CapOK`: no `μ` variable is free
-  in a captured slot's type. A type substitution leaves `Code⟨N; E⟩ C` as it is (§68 *Open*, K1's
-  choices), so the clause reads `E` at no environment, and a capture whose type has a free `μ`
-  variable would read `E` as empty. Where the premise fails, the closure stays at `U C`.
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
-- `erase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
+- `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
   which Backend2 reads (B4). In the machine it is the identity.
 - `eraseD` (covariant erasure inside `C`, K6) is not in this entry.
 - **The inversion's cost** (CLAUDE.md, *Do not invert `CDerives` casually*). `codeI` types the
-  term `λM` at a new type, so the λ-value inversion `LamCls` (`Core/Inversions.lean`) gains a
-  disjunct: the λ read at `Code⟨capNorm (λM); E⟩ D` and at `!Code⟨…⟩ D`. `erase` and `eraseB` add a
-  view step from a code type to `U`. The proofs restated are `LamCls`'s cases (`step`, `thunkV`,
-  `bangThunkV`, `val_*`), `lam_bang`, and `lam_bang`'s uses in `Core/Rejections.lean` and
-  `Core/EffCancelTyped.lean`. No inversion is added and no substitution over derivations.
+  term `λM` at a new type, and `codeErase`/`codeEraseB` add a view step from a code type to `U`.
+  In `Core/Inversions.lean`: `VS` gains the two erase steps, and `VView.hnf` the code heads;
+  `VarCls` is restated over `forceTy`; `LamCls` is the computation case or `ThunkCls`, the λ read
+  at `U`, `!U`, `Code` or `!Code`; `LamAx` reads at the axiom type's views and their code types.
+  `lam_bang` and its uses in `Core/Rejections.lean` and `Core/EffCancelTyped.lean` are restated.
+  `der_swap` reads at `ValClsC`; `hnf_of` and `eq_of_heads` take a no-code-head hypothesis their
+  callers discharge. No inversion is added and no substitution over derivations; every rejection
+  keeps its statement and verdict.
 
 ### Erasure policy
 
@@ -12042,12 +12044,12 @@ Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP
   is an `impl`: the parameter becomes a template parameter, instantiated at the argument's code
   type. `dyn` is written to opt in, and means `U C`.
 - **C2, silently at a lend's exit.** Where a code type captures `'x` and the rule asks `¬ VFree x B`
-  (`withbor1` and the lend rules), the elaborator inserts `erase` to `U C`, which is today's
+  (`withbor1` and the lend rules), the elaborator inserts `codeErase` to `U C`, which is today's
   typing.
 - **C3, silently at a join.** Two different codes joined (`if`/`match` arms) with no expected type
   are erased to `U C`; S1's census counts these sites.
 - Wherever the expected type is `U C` (parameters written `dyn`, data fields, arrays, `Ref`
-  contents, handler arguments and state), `convVal` inserts the `erase` node.
+  contents, handler arguments and state), `convVal` inserts the `codeErase` node.
 - **The growing-instantiation guard.** A template whose instantiation reaches itself at a type
   argument containing the previous one is instantiated at the argument's erasure, with a note
   (scope §4.4). It is load-bearing: without it nested `Code⟨…⟩` inside `E` grows without bound.
@@ -12112,7 +12114,7 @@ proofs; every corpus and kernel program its output. The later units must preserv
 K3 (the four rules and the restated `force`): `fundamentalC`, `adequacyC` and `goal791N :
 HandlerLawN → Goal791N` keep their statements and cover the new rules, the chain's through
 `FundamentalKW835N`. The judgment freeze holds: no new judgment, and the rules join `CDerives`,
-mirrored by `scripts/gen-pin.py`. Every rejection theorem keeps its verdict; one that flips is
+mirrored by `scripts/gen-pin.py` and, into `CDerivesAt`, by hand. Every rejection theorem keeps its verdict; one that flips is
 reported as an intended change.
 
 ### Open
@@ -12122,16 +12124,19 @@ reported as an intended change.
   (`vCE_code`: the clause is `codeRelC`), `vNE` (`vNE_code`: `codeRelN`) and `vOE` (`True`); every
   law of the relation at `code`, with no new hypothesis. `fundamentalC`, `adequacyC` and `goal791N`
   keep their statements.
-- **Not built until their units land:** the rules and their compatibility lemmas (K3: `codeI`,
-  `codeIB`, `erase`, `eraseB`, `force`; K4: `unfoldK`, `nuOutK`), the lend-exit lemma (K5), `eraseD`
-  (K6).
+- **Built (K3):** `codeI`, `codeIB`, `codeErase`, `codeEraseB` and the restated `force`, with their
+  compatibility lemmas at Core's relation and at the chain's, and `codeI`'s semantic step: the
+  captured tuple is in `𝒱⟦Γ.capTy (λM)⟧` at the whole resource.
+- **Not built until their units land:** `unfoldK` and `nuOutK` and their compatibility lemmas
+  (K4), the lend-exit lemma (K5), `eraseD` (K6), and `cloneCode` (K7, #928).
 - **No code type in the checker.** No rule of the checker synthesises a code type before S1, so
   the corpus is unchanged by K3.
 - **`CapOK`** is a premise of `codeI` until #894 removes it.
 - **Choices K1 made that the entry does not state:**
   - A type substitution (`VTy.rename`, `VTy.subst`) leaves `Code⟨N; E⟩ C` as it is, as it leaves
     `U C`: no `μ` variable reaches `E`, `Cl k` holds, `Occ` fails. The clause reads `E` at no
-    environment, as `U C` reads `C`. So `codeI` asks `E.Cl 0`.
+    environment, as `U C` reads `C`; a captured slot's type is read the same way in `Γ` and in
+    `E`, so `codeI` needs no closedness premise.
   - `vC_ind` and `vN_ind` keep the code clause in one unfolding (`vF`, `vFN`) with the property at
     every value of `E`, from an outer induction on the type's size: `E` is smaller and no
     substitution enters it.
@@ -12142,9 +12147,6 @@ reported as an intended change.
   - Printing: the checker prints `Code⟨#h; E⟩ C`, `#h` a hash of `N`'s serialisation, not
     `{closure@span}` (a kernel type has no span). Backend2's `useKey` prints a type `ofV` refuses
     exactly (`keyVT`, `N` in full), so two codes are two keys; `ofV` refuses `code` (B1).
-- **`codeI`'s semantic step** is not checked: from `gDenC` and `Γ.CapOK`, that the captured slots'
-  resources compose to `𝒱⟦Γ.capTy (λM)⟧ (tupleV (capEnv (λM) γ))` at the whole `ρ`. Its syntactic
-  half is `lam_psub_capNorm` and `occs_lt_of_closedAt`.
 - **`nuOutK`'s compatibility lemma** needs, beyond `nuOutK_step`, that `C[Code⟨…⟩(νX. C)/X]` read
   at the code clause is `nuF` at `codeCand` (Core's `vC_inst_envS`/`cB_unroll` at a code type); not
   built. `unfoldK`'s, that `unfold step` is in the clause at `hCode C`, is not built.
@@ -12614,6 +12616,11 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.64** (2026-11-09) — §68 (#855 K3, as built): the rules `erase`/`eraseB` are named
+  `codeErase`/`codeEraseB` (`erase` is `TExpr.erase` in the typed term). `Ctx.capTy`, `Ctx.capOK`
+  and `VTy.forceTy` are named; the restated `force` reads `T.forceTy = some C`. K3 and `codeI`'s
+  semantic step are built; the inversion's cost is restated as built. The premise `E.Cl 0` of
+  1.57 is dropped: no proof reads it. K7, `cloneCode` (#928), is planned.
 - **1.63** (2026-11-09) — §3 (#906): `scripts/check-type-eq.sh` reads the library `Reference`
   too, the reference interpreter's run (`Reference/Source.lean`, `Falsify.lean`, `Driver.lean`, …),
   which leaves `Backend` and `Pipeline`. No change to a rule.
