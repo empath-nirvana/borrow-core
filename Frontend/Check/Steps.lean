@@ -633,18 +633,84 @@ def opKeysOf : Nat → TExpr → List (UInt32 × UInt32)
         | _ => []
       | cs => cs.flatMap fun c => opKeysOf k c.2
 
-/-- The operations (`n.i`) the finalisers of the `[then]`s inside a checked term perform: each
-`[then]` node's `Σ_D`. A cancel row of the term's own row need hold no more at its top layer
-(`thenMC`).  `[spec §27]` -/
-def finKeysOf : Nat → TExpr → List (UInt32 × UInt32)
+/-- The depth to which `opKeysOf` and `needRowOf` read a derivation.  `[spec §27]` -/
+def opKeysFuel : Nat := 100000
+
+/-- Two row entries at one key `n.i`. -/
+def keyEq (o o' : COpSig) : Bool := o.n == o'.n && o.i == o'.i
+
+/-- The depth to which the row a derivation needs (`needRowOf`) joins cancel rows. -/
+def joinFuel : Nat := 64
+
+/-- Two rows joined by key: an operation of either, at a key both hold the cancel rows joined (`⊤`
+absorbing).  `[spec §27]` -/
+def rowJoin : Nat → CRow → CRow → CRow
+  | 0, R, _ => R
+  | k + 1, R, R' => R'.foldl (fun acc o' =>
+      if acc.any (keyEq · o') then
+        acc.map fun x => if keyEq x o' then
+          { x with fin := if x.fin.isTop || o'.fin.isTop then .top
+              else BoCa.Fig16.LogRel.Core.CTy.effOf (rowJoin k x.fin.rowOf o'.fin.rowOf) .unit }
+          else x
+      else acc ++ [o']) R
+
+/-- The least cancel row `pend P G`: `G`'s layers, a capturable one's cancel row `pend P` at every
+depth, with `P`'s abortive operations (`PendLe`).  `[spec §27]` -/
+def pendJoin (P : CRow) : Nat → CRow → CRow
+  | 0, G => G
+  | k + 1, G => rowJoin k (G.map fun o =>
+      if BoCa.Fig16.LogRel.Core.capB o.q o.B && !o.fin.isTop then
+        { o with fin := BoCa.Fig16.LogRel.Core.CTy.effOf (pendJoin P k o.fin.rowOf) .unit }
+      else o) (P.filter (·.abort))
+
+/-- The least cancel row `F ⋈ E`: `F`'s layers, a capturable one's cancel row `⋈ E`, and `E`'s
+operations, a capturable one's cancel row with `F`'s errors pending (`ThenLe`).  `[spec §27]` -/
+def thenJoin (E : CRow) : Nat → CRow → CRow
+  | 0, F => F
+  | k + 1, F => rowJoin k (F.map fun o =>
+      if BoCa.Fig16.LogRel.Core.capB o.q o.B && !o.fin.isTop then
+        { o with fin := BoCa.Fig16.LogRel.Core.CTy.effOf (thenJoin E k o.fin.rowOf) .unit }
+      else o) (E.map fun e =>
+      if BoCa.Fig16.LogRel.Core.capB e.q e.B && !e.fin.isTop then
+        { e with fin := BoCa.Fig16.LogRel.Core.CTy.effOf (pendJoin F k e.fin.rowOf) .unit }
+      else e)
+
+/-- The row a checked term's derivation needs, cancel rows included, read from the derivation:
+a `[perform]`, `await` or `[raise]` its operation at the empty cancel row; a call (a leaf whose
+judgment is a computation type) the callee type's row, cancel rows included; under a `[sub]`, the
+subterm's; a `[then]` its head's row with each capturable operation's cancel row `⋈` its
+finaliser's row (`thenJoin`), with its rest's and its finaliser's; inside `handle_n`, no operation
+of the name `n`; the rest joined (`rowJoin`). `[then]`'s `Σ_M` is this row of `M` (`thenMC`); the
+kernel checks `M` at it.  `[spec §27]` -/
+def needRowOf : Nat → TExpr → CRow
   | 0, _ => []
   | k + 1, t =>
-    let keys (S : CRow) := S.map fun o => (o.n, o.i)
-    let here := match t with
-      | .effThen _ _ _ _ _ _ SD _ _ _ _ => keys SD
-      | .effThenDiv _ _ _ _ _ _ SD _ _ _ _ => keys SD
-      | _ => []
-    here ++ t.children.flatMap fun c => finKeysOf k c.2
+    let J := rowJoin joinFuel
+    let inner (n : UInt32) (tc te : TExpr) :=
+      J (needRowOf k tc) ((needRowOf k te).filter (·.n != n))
+    let atThen (tM tN tD : TExpr) :=
+      let rD := needRowOf k tD
+      let rM := (needRowOf k tM).map fun o =>
+        if BoCa.Fig16.LogRel.Core.capB o.q o.B && !o.fin.isTop then
+          { o with fin := BoCa.Fig16.LogRel.Core.CTy.effOf (thenJoin rD joinFuel o.fin.rowOf) .unit }
+        else o
+      J (J rM (needRowOf k tN)) rD
+    match t with
+    | .effPerform _ _ _ o t' => J [{ o with fin := .ret .unit }] (needRowOf k t')
+    | .effAwait _ _ _ _ a c => [a, c]
+    | .effRaise _ _ _ o _ t' => J [{ o with fin := .ret .unit }] (needRowOf k t')
+    | .effSub _ _ _ _ _ t' => needRowOf k t'
+    | .effThen _ _ _ _ _ _ _ _ tM tN tD => atThen tM tN tD
+    | .effThenDiv _ _ _ _ _ _ _ _ tM tN tD => atThen tM tN tD
+    | .effHandleV _ _ _ _ _ _ n _ _ _ _ _ _ tc te => inner n tc te
+    | .effHandleVB _ _ _ _ _ _ n _ _ _ _ _ _ _ tc te => inner n tc te
+    | .effHandleT _ _ _ _ _ _ n _ _ _ _ _ tc te => inner n tc te
+    | .effHandleL _ _ _ _ _ _ _ n _ _ _ _ _ tc te => inner n tc te
+    | t => match t.children with
+      | [] => match t.jdg with
+        | .comp C => retRowOf C
+        | _ => []
+      | cs => cs.foldl (fun acc c => J acc (needRowOf k c.2)) []
 
 /-- The cancel row `F` whose `cancelTy S F` is the cancel branch `C` of a `κ`: `C`'s layers ahead
 of `S`'s, counted by `S`'s length (the clause's type, rebuilt at it, is then compared whole).
@@ -1205,6 +1271,40 @@ def markIt {j : Jdg} (sp : Span) (k : SchemeMark) (r : Res Δ T j) : Except Erro
   | some r' => pure r'
   | none => err sp s!"internal error: a marked scheme ({repr k}) is not the scheme's term"
 
+/-- Where `F ⋈ E ≤ T` fails first, as a phrase about `T` (printed by `pr`): `T` lacks operations of
+`E`; or an entry of `E` it holds lacks an error `F` may keep pending (`PendLe`); or, recursively,
+the cancel row of a capturable entry of `F` (`the entry n.i in it, …`). `none` when none of these is
+found (a signature differs).  `[spec §27]` -/
+def thenBlame (pr : CCTy → String) (E : CRow) : Nat → CCTy → CCTy → Option String
+  | 0, _, _ => none
+  | k + 1, F, T =>
+    let key (d : COpSig) : String := s!"{d.n}.{d.i}"
+    let keys (R : CRow) : String := ", ".intercalate (R.map key)
+    if T.isTop then none else
+    let miss := E.filter fun e => (BoCa.Fig16.LogRel.Core.Row.find T.rowOf e.n e.i).isNone
+    if !miss.isEmpty then some s!"`{pr T}`, must hold {keys miss}" else
+    let pend := E.findSome? fun e =>
+      match BoCa.Fig16.LogRel.Core.Row.find T.rowOf e.n e.i with
+      | some o' =>
+        if BoCa.Fig16.LogRel.Core.capB e.q e.B && !pendLeB F.rowOf e.fin o'.fin then
+          let lacks := F.rowOf.filter fun a => a.abort &&
+            (BoCa.Fig16.LogRel.Core.Row.find o'.fin.rowOf a.n a.i).isNone
+          if lacks.isEmpty then none
+          else some (s!"`{pr T}`, holds {key e}, whose own cancel row `{pr o'.fin}` must hold " ++
+            s!"{keys lacks} (an error that may be pending when {key e} is cancelled)")
+        else none
+      | none => none
+    match pend with
+    | some m => some m
+    | none =>
+      F.rowOf.findSome? fun o =>
+        if BoCa.Fig16.LogRel.Core.capB o.q o.B then
+          match BoCa.Fig16.LogRel.Core.Row.find T.rowOf o.n o.i with
+          | some o' => (thenBlame pr E k o.fin o'.fin).map fun m =>
+              s!"`{pr T}`, holds {key o}, whose own cancel row, " ++ m
+          | none => none
+        else none
+
 /-- `[then]` with `M` at its row `SM` and the finaliser at its row `SD` (non-empty), the cancel-row
 premises decided: `rowLeB` (`Σ_M ≤ Σ`, `Σ_D ≤ Σ`), `thenFinB` (each cancel row of `Σ_M` read holds
 `F ⋈ Σ_D`), `pendPersB` on `Σ_M`, `Div` not in `Σ_D`.  `[spec §27]` -/
@@ -1234,23 +1334,38 @@ def thenAt (E : Env) (sp spD : Span) (x : String) {S SM SD : CRow} {A B : CVTy} 
         else
           -- The first operation of `M` whose cancel row lacks what the finaliser performs: where the
           -- continuation is captured, and what its cancel row must hold.  `[spec §27]`
-          let bad := SM.filter fun o => o.finRead && match BoCa.Fig16.LogRel.Core.Row.find S o.n o.i with
+          -- The first operation `M` itself performs (`needRowOf`; `SM` is `S` when `M` stays at
+          -- the site's row) whose cancel row lacks what the finaliser performs: where the
+          -- continuation is captured, the cancel row (or nested entry) that lacks it, and what.
+          -- `[spec §27]`
+          let mine := needRowOf opKeysFuel rM.t
+          let bad := SM.filter fun o => o.finRead && mine.any (keyEq · o) &&
+            match BoCa.Fig16.LogRel.Core.Row.find S o.n o.i with
             | some o' => !thenLeB o.fin SD o'.fin
             | none => true
+          let bad := if bad.isEmpty then SM.filter fun o => o.finRead &&
+              match BoCa.Fig16.LogRel.Core.Row.find S o.n o.i with
+              | some o' => !thenLeB o.fin SD o'.fin
+              | none => true
+            else bad
+          let rowStr (F : CCTy) : String :=
+            if F.isTop then "[top]" else s!"[{", ".intercalate (ppEff E.lenv F).1}]"
           match bad with
           | o :: _ =>
             let F := match BoCa.Fig16.LogRel.Core.Row.find S o.n o.i with
               | some o' => o'.fin
               | none => o.fin
-            let lacks := SD.filter fun d =>
-              (BoCa.Fig16.LogRel.Core.Row.find F.rowOf d.n d.i).isNone
-            let what := if lacks.isEmpty then s!"`{ppRow E SD}` (at a nested cancel row)"
-              else ", ".intercalate (lacks.map fun d => s!"{d.n}.{d.i}")
-            let row := if F.isTop then "[top]" else s!"[{", ".intercalate (ppEff E.lenv F).1}]"
+            let Fm := match mine.find? (keyEq · o) with
+              | some m => m.fin
+              | none => o.fin
+            let keyStr (d : COpSig) : String := s!"{d.n}.{d.i}"
+            let what := ", ".intercalate (SD.map keyStr)
+            let where_ := (thenBlame rowStr SD opKeysFuel Fm F).getD
+              s!"`{rowStr F}`, must hold {what}"
             throw ⟨spD, s!"this finaliser performs {what}, and it runs when the continuation " ++
-              s!"captured at the operation {o.n}.{o.i} below it is cancelled (by the handler " ++
-              s!"of the name {o.n}, which drops it): the cancel row of {o.n}.{o.i}, `{row}`, " ++
-              s!"must hold {what}; write `{o.n}.{o.i} {qualStr o.q}[…] A ~> B` (SPEC §27)"⟩
+              s!"captured at the operation {keyStr o} below it is cancelled (by the handler " ++
+              s!"of the name {o.n}, which drops it): the cancel row of {keyStr o}, {where_}; " ++
+              s!"write `{keyStr o} {qualStr o.q}[…] A ~> B` (SPEC §27)"⟩
           | [] => throw ⟨spD, "internal error: a finaliser's cancel rows"⟩
       else throw ⟨sp, s!"the finaliser's row `{ppRow E SD}` is not within `{ppRow E S}`"⟩
     else throw ⟨sp, s!"the row `{ppRow E SM}` of the computation is not within `{ppRow E S}`"⟩

@@ -178,6 +178,14 @@ corpus/core-fin-cancel-reentered.bc 1.0 cancellable resume-or-cancel: machine: a
 corpus/core-fin-cancel-reraised.bc 3.0 cancellable abortive: branch; agree
 corpus/core-fin-cancel-reraised.bc 1.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-fin-cancel-reraised.bc 2.0 cancellable abortive: -; agree
+corpus/core-fin-check-consume.bc 2.0 cancellable abortive: -; agree
+corpus/core-fin-check-consume.bc 4.0 unrestricted stored: -; agree
+corpus/core-fin-check-consume.bc 1.0 cancellable resume-or-cancel: -; agree
+corpus/core-fin-check-keep.bc 2.0 cancellable abortive: -; agree
+corpus/core-fin-check-keep.bc 4.0 unrestricted once: -; agree
+corpus/core-fin-check-keep.bc 1.0 cancellable resume-or-cancel: -; agree
+corpus/core-fin-check-nc.bc 4.0 cancellable resume-or-cancel: -; agree
+corpus/core-fin-check-nc.bc 1.0 cancellable resume-or-cancel: -; agree
 corpus/core-fin-e7b.bc 1.0 cancellable abortive: branch; agree
 corpus/core-fin-e7b.bc 2.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-fin-e7d.bc 1.0 cancellable abortive: branch; agree

@@ -783,6 +783,9 @@ def rowEntries : Nat → P Row
   | 0 => outOfFuel
   | n + 1 => do
     if ← isSym "]" then return .nil
+    let tt ← peek
+    if tt.tok == .kw "top" then
+      failAt tt.span "`top` (`⊤`) is a cancel row only: write it as `n.i cancel[top] A ~> B`"
     let (k, i) ← opNameNI "an operation `n.i` of a row"
     let tq ← peek
     let q ← match tq.tok with
