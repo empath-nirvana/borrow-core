@@ -1,0 +1,46 @@
+-- `zip` over two sources that raise (SPEC §15). `zip`'s copy is at its sources' row: its
+-- parameters, and every place its body writes their types (its state's annotations), are stored
+-- generators over the row of `Fail`. Its state holds both sources across its `yield`, so the
+-- glue that drops the state when `take` or a raise stops `zip` takes it apart and closes each
+-- source at that row. A raise from either source propagates out of `zip`, `map` and `drain`.
+--
+-- Answer: `(inl i32[66], (inr i32[3], inr i32[20]))`: (1 + 10) + (2 + 20) + (3 + 30); the first
+-- source's error at 3; the second's at 20. `live 0`: every list is freed, so each source was
+-- closed on each path. A `zip` that lost a source's raise gives `inl 66` in its place.
+
+
+include adapters
+include fail
+include rec
+
+type Bytes = mu X. 1 + (i32 * X)
+
+def nil : Bytes = roll inl ()
+fn cons(b: i32, t: Bytes) -> Bytes = roll inr (b, t)
+
+fn drain(it: U (pull i32 1 1), acc: i32) -> i32 with Exhausted =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> drain(it, acc + x)
+  | inr d -> match d { inl u -> acc | inr it -> drain(it, acc) }
+  }
+
+-- `own_src(l, bad)` owns a list and yields its elements, raising `bad` when it reaches it.
+fn own_src(l: Bytes, bad: i32) -> 1 with Yield[i32], Fail[i32] =
+  let mut l = l;
+  while true {
+    match unroll l {
+      inl u -> break
+    | inr (b, t) -> l = t; if b == bad { raise(b) } else { () }; yield(b)
+    }
+  };
+  ()
+
+fn z(bad1: i32, bad2: i32) -> i32 + i32 =
+  let l1 = cons(1, cons(2, cons(3, cons(4, nil))));
+  let l2 = cons(10, cons(20, cons(30, nil)));
+  with on_exhausted(!{ u -> inr 0 }) {
+    with to_result { drain(map(zip(own_src(l1, bad1), own_src(l2, bad2)), !{ (a, b) -> a + b }), 0) }
+  }
+
+main -> (i32 + i32) * ((i32 + i32) * (i32 + i32)) = (z(0, 0), (z(3, 0), z(0, 20)))

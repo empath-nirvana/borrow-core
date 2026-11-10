@@ -1075,9 +1075,19 @@ structure MCx where
   /-- In a div body's code before its first point, run when it is called. -/
   pre : Bool := false
 
+/-- The `F_Σ` layers of a computation type, its cancel rows' at every depth included. -/
+def effLayers : BoCa.Fig16.LogRel.Core.CTy → Nat
+  | .eff _ _ _ _ _ fin _ C => 1 + effLayers fin + effLayers C
+  | _ => 0
+
+/-- A bound on the depth of an entry's cancel rows: each level is a layer of the one above it.
+`[spec §15, §27]` -/
+def finDepth (o : BoCa.Fig16.LogRel.Core.OpSig) : Nat := 1 + effLayers o.fin
+
 /-- A row entry written, `n.i q[fin] A ~> B`, its cancel row (SPEC §27) written at every depth: a
 type the machine or a site writes at a row is that row as the elaboration inferred it, cancel rows
-included (SPEC §15, #910).  `[spec §15, §27]` -/
+included (SPEC §15). `k` bounds the depth of cancel rows written (`finDepth`).
+`[spec §15, §27]` -/
 def opSrcM {m : Type → Type} [Monad m] (pp : CVTy → m String) (k : Nat)
     (o : BoCa.Fig16.LogRel.Core.OpSig) : m String := do
   let fin ← match k with
@@ -1091,7 +1101,7 @@ def opSrcM {m : Type → Type} [Monad m] (pp : CVTy → m String) (k : Nat)
 termination_by k
 
 /-- `opSrcM` at a pure printer. -/
-def opSrc (pp : CVTy → String) (o : BoCa.Fig16.LogRel.Core.OpSig) : String := Id.run (opSrcM (m := Id) (fun A => pure (pp A)) 8 o)
+def opSrc (pp : CVTy → String) (o : BoCa.Fig16.LogRel.Core.OpSig) : String := Id.run (opSrcM (m := Id) (fun A => pure (pp A)) (finDepth o) o)
 
 /-- `F_Σ A` at the machine's row, written: `F[n.i q A ~> B, …] A`, or `F A`. -/
 def MCx.fSrc (m : MCx) (A : String) : String :=
@@ -5053,7 +5063,7 @@ case io_so{sfx} \{
         let rowAt ← ks.zipIdx.mapM fun (_, h) => do
           let outer := (ks.drop (h + 1)).flatMap fun k' => S.filter (·.n.toNat == k')
           let es ← outer.mapM fun o => do
-            opSrcM pp 8 o
+            opSrcM pp (finDepth o) o
           pure (", ".intercalate es)
         let arrow (A : String) (h : Nat) : String :=
           match rowAt[h]? with
@@ -5097,7 +5107,7 @@ case io_so{sfx} \{
     -- with the self-reference, or leaves by an exit.
     let FR ← do
       let es ← S.mapM fun o => do
-        opSrcM pp 8 o
+        opSrcM pp (finDepth o) o
       pure s!"F[{", ".intercalate es}] (({St}) + ({stepT}))"
     let At := s!"i32 * ({St})"
     let rowCore := s!"{pre}io_nb{sfx} <- if {bound} < 0 \{ 0 } else \{ {bound} };
@@ -5351,7 +5361,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let F (A : String) : DM String := do
       if S.isEmpty then return s!"F ({A})"
       let es ← S.mapM fun o => do
-        opSrcM pp 8 o
+        opSrcM pp (finDepth o) o
       pure s!"F[{", ".intercalate es}] ({A})"
     -- The loop's value: `let r = for …`. A generator's loop ends when the generator returns.
     let (keep, N) := match N.forElse?, N.forRes? with
@@ -5563,7 +5573,7 @@ def pullView : Nat → TCx → Span → ItInfo → Val → DM Comp
     let some yo := row.find? (·.n.toNat == i.n)
       | throw ⟨sp, s!"the type of what `{i.callee}` yields is not determined here"⟩
     let Tc := yo.A
-    -- What its observations perform besides what it yields (SPEC §15, #910): the stored
+    -- What its observations perform besides what it yields (SPEC §15): the stored
     -- generator is `pull_Σ`, its clauses answer at `F_Σ`, and its `close`, the cancel of the
     -- continuation, is at `cancelTy Σ fin`.  `[spec §15]`
     let rest := row.filter (·.n.toNat != i.n)
@@ -6560,7 +6570,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- again, its rows carrying them (SPEC §27, `Frontend.Elab.Fins`).  `[spec §18, §27]`
   let fins := Elab.Fins.table fxr.decls
   -- A function given a stored generator over a row holds it across its operations, which the
-  -- checker's glue closes on a cancel (SPEC §15, #910).  `[spec §15]`
+  -- checker's glue closes on a cancel (SPEC §15).  `[spec §15]`
   let fins := Elab.FinsHeld.add fins fxr.decls
   let fxr ← if fins.isEmpty then pure fxr else
     (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls fins : Except Error _)

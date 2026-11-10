@@ -51,7 +51,7 @@ def qualStr : CQual → String
   | .unr => "unr"
 
 /-- `pull_Σ A B R = νX. F_Σ((A ⊗ U X) ⊕ (B ⊕ U X)) & F_Σ R`: a stored generator whose
-observations and `close` perform `Σ` (SPEC §15, #910).  `[spec §15]` -/
+observations and `close` perform `Σ` (SPEC §15).  `[spec §15]` -/
 def pullRowTy (S : CRow) (A B R : CVTy) : CCTy :=
   .nu (.amp (effOf S (.sum (.tensor (A.rename Nat.succ) (.tvar 0)) (.sum (B.rename Nat.succ) (.tvar 0))))
     (effOf S (R.rename Nat.succ)))

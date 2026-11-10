@@ -3,7 +3,7 @@ import Frontend.Elab.Fins
 /-!
 # Frontend — Elab — cancel rows of a held stored generator  `[spec §15, §27]`
 
-A function given a stored generator over a row, `U (pull_Σc A B R)` (SPEC §15, #910), holds it
+A function given a stored generator over a row, `U (pull_Σc A B R)` (SPEC §15), holds it
 across its own operations. The checker's consume glue closes it when one of them is cancelled
 (`Frontend.Check.finalOf`): a `[then]` whose finaliser performs `Σc`, which every capturable
 operation of the function's row must then hold in its cancel row (SPEC §27, `thenFinB`). This adds

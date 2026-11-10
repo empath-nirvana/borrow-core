@@ -11,7 +11,7 @@ is a `Res`: the erasure with its `CDerives` derivations. Names are resolved on t
 variable to its de Bruijn slot (§6.3), a lifetime name to its `LifeVar` (§3), a `def` to its
 key's checked body, placed at the use (`useDef`, SPEC §3). Variables owed to the computation being checked (`Env.own`,
 SPEC §12) are passed to its tail positions and consumed before each terminal computation that
-leaves them unused (`consumeOwed`).
+leaves them unused (`consumeOwedR`).
 
 The recursion is structural on a fuel argument that bounds the depth of the call tree;
 running out is an error, not an assumption.
@@ -465,7 +465,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       pure ⟨_, r⟩
     | .handle sp k st hr hc M => do
       -- The handled body is owed the owed variables it mentions, as the head of `x <- M; N` is;
-      -- the others are consumed before the site (`consumeOwed`).  `[spec §12]`
+      -- the others are consumed before the site (`consumeOwedR`).  `[spec §12]`
       let EM := E.ownIn (mentionsC · M)
       -- The handler's pair: the answer clause and the clauses, values checked here, whose
       -- slots are persistent (`[handle]`'s `Γ₁`).

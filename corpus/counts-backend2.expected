@@ -115,8 +115,11 @@ fin-raise-cancel 0 0 0 0 0 0
 fin-raise-unwind 0 0 0 0 0 0
 fin-timeout 0 0 0 0 0 0
 for-arm-raises-owned 8 0 0 54 54 18
+gen-raise-close-two 24 0 0 72 72 0
 gen-raise-fold 0 0 0 0 0 0
+gen-raise-pass 12 0 0 36 36 0
 gen-raise-take 17 0 0 51 51 0
+gen-raise-zip 21 0 0 63 63 0
 handle-arm-releases 2 0 0 13 13 5
 if-match-argument 0 0 0 0 0 0
 infer-local-from-call 4 0 0 16 16 0

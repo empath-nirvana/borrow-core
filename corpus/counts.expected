@@ -120,8 +120,11 @@ fin-raise-cancel 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the c
 fin-raise-unwind 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the pending one
 fin-timeout 0 0 0 0 0 0 # no cell; the dropped continuation is cancelled at two rows
 for-arm-raises-owned 8 0 0 54 54 54
+gen-raise-close-two 0 16 0 0 0 0 # the old backend allocates no cell here and calls the suspended sources indirectly; Backend2 allocates the 24 list cells and calls nothing indirectly
 gen-raise-fold 0 0 0 0 0 0 # no cell; the step function is known
+gen-raise-pass 12 0 0 36 36 0 # the 3 list cells of each of the four inputs
 gen-raise-take 17 0 0 51 51 0 # the 17 list cells of the two inputs; each closed path frees what is left
+gen-raise-zip 21 0 0 63 63 0 # the 7 list cells of each of the three inputs
 handle-arm-releases 2 0 0 13 13 13
 if-match-argument 0 0 0 0 0 0
 infer-local-from-call 4 0 0 16 16 0

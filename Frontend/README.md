@@ -271,7 +271,7 @@ owes nothing itself; a computation inside one (`thunk M`, `thunkv N`, `run M`) i
 variables of the computation the value is in that it mentions (`Env.capture`), which `Env.clearOwn`
 and `Env.forVal` hold for it in `Env.cap`. At a terminal computation (`Comp.terminal`), the checker checks it with
 nothing owed, then wraps the result in `consumeE A xᵢ; …` for each owed slot `i` it neither used nor
-absorbed, the lowest index outermost (`consumeOwed`). Each wrap is `rConsume`, which applies
+absorbed, the lowest index outermost (`consumeOwedR`). Each wrap is `rConsume`, which applies
 `consumeSlot_derives` (`Core/Consume.lean`: `unitE` over `lolliE` of the variable and `consume_wf`) to a split
 of the variable leaf and the computation, so the result is still a `Res`, and
 `checkProgram_sound` is unchanged. The erasure contains the calls, and the backend compiles them

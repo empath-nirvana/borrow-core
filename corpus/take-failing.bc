@@ -1,4 +1,4 @@
--- `take` over a source that raises (SPEC §15, #910). `upto(lo, hi, bad)` yields `lo`, `lo + 1`, …
+-- `take` over a source that raises (SPEC §15). `upto(lo, hi, bad)` yields `lo`, `lo + 1`, …
 -- and raises `bad` when it reaches it: it is a stored generator over the row of `Fail`, and `take`'s
 -- copy for it is at that row too. Taking 2 stops before the raise and closes the source, as for a
 -- pure one; taking 6 meets the raise, which propagates out of `take` and `drain` to `to_result`.
@@ -6,9 +6,7 @@
 -- (SPEC §21 *Open*).
 --
 -- Answer: `(inl i32[1], inr i32[4])`: 0 + 1, and the error 4; `live 0`. A `take` that ran one past
--- its count gives 3 in the first place, and one that lost the raise gives `inl 15`. (Formerly a
--- rejection: the source carried its error as a value, `i32 + 1`, which it could not hand back
--- closed.)
+-- its count gives 3 in the first place, and one that lost the raise gives `inl 15`.
 
 include adapters
 include fail

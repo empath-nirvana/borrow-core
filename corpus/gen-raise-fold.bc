@@ -1,4 +1,4 @@
--- A raising `try_fold` is a plain `fold` with an error handler attached (SPEC §15, #910). `fold`
+-- A raising `try_fold` is a plain `fold` with an error handler attached (SPEC §15). `fold`
 -- folds a stored generator with a step function and knows nothing of errors. `try_sum` passes it a
 -- step that raises when the running sum passes a limit, and attaches `to_result`: the raise leaves
 -- the fold, closing the source, and the handler gives the error. `try_sum_bad` folds a source that

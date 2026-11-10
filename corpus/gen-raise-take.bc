@@ -1,4 +1,4 @@
--- A tokenizer stage that raises, under `take 3` (SPEC §15, #910). `chunk` is the source: it owns a
+-- A tokenizer stage that raises, under `take 3` (SPEC §15). `chunk` is the source: it owns a
 -- list of bytes and yields each. `tokens` reads it, yields each comma-separated number, and raises
 -- `ParseError` (the position) at a byte that is neither a digit nor a comma. `map` doubles each
 -- token and `take` keeps three; `drain` sums them, under `to_result`. `tokens` is a stored
