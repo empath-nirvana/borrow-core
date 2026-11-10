@@ -2753,8 +2753,9 @@ Every function is safe on any bytes: indexing is checked, and a byte that does n
 sequence decodes to U+FFFD. `lib/text.bc` (`include text`, which includes `buf` and `slice`)
 has appends, UTF-8 validation and decoding, character iteration (`chars`, codata over the rest
 of the view), lines as sub-views (`next_line`, `lines`, `fold_lines`: no allocation per line),
-`split_once`, `trim`, `find_str`, `eq_lit`, checked parsing (`parse_i32`, which raises its error,
-§18), the integers written in a view folded into a state (`fold_i32s`, `fold_i64s`: each run of
+`split_once`, `trim`, `find_str`, `eq_lit`, checked parsing (`parse_i32` and `parse_i64`, which
+raise their error, §18; an overflow is an error, not a wrap), `push_i64` (the decimal form of an
+`i64`, appended; §36 *JSON*), the integers written in a view folded into a state (`fold_i32s`, `fold_i64s`: each run of
 digits, negative after a `-`, every other byte a separator; #490), and buffers of views
 (`view_at`, `sort_views`). Every loop is a
 `count_fold` bounded by a length, so the library is total. `lib/textio.bc` (`include textio`)
@@ -7375,6 +7376,64 @@ consumed, so `K` is consumable or is persistent.
 
 **Generic `data`.** `Map`, `MapRef` and `Set` are generic `type` abbreviations, transparent: there
 are no `data` declarations (§31 *Open*), so the representation is not hidden outside the module.
+
+### JSON: `lib/json.bc`
+
+`include json` gives a JSON value, its parser and its serialiser, written in the language over
+§36's map, §17's buffers and text, and §19's errors. The module is ordinary source: no kernel,
+checker or backend change.
+
+- **The value.** `data Json = Null | Bool(bool) | Int(i64) | Float(f64) | Str(string) |
+  Arr(Vec[Json]) | Obj(Map[string, Json])`: owned, an array's elements in a `Vec`, an object's
+  members in a `Map` keyed by an owned `string` (§42 data, §36 map). A number is chosen at parse
+  time, as serde_json's `Number` is: a literal with no fraction or exponent that fits `i64` is
+  `Int`, exact; any other number is `Float`.
+- **Parsing.** `json_parse<'a>(t: text 'a) -> Json with Fail[JsonError], Exhausted` parses a
+  whole document from text lent at `'a`, by recursive descent, RFC 8259's grammar:
+  - every string escape; a surrogate pair decoded to one code point, a lone surrogate refused;
+  - numbers by JSON's strict grammar: an integer literal that fits `i64` by `parse_i64`, exact;
+    any other by `parse_f64`, correctly rounded; a number past `f64`'s range is an error;
+  - the input checked as UTF-8 first; whitespace is space, tab, CR, LF only;
+  - bytes after the value are an error.
+- **Errors are effects.** A malformed document raises `Fail[JsonError]`, with `type JsonError =
+  i32 * i32`: a code and the byte offset where it was found. Codes: 1 no value starts here; 2 not
+  `,` or `]` after an element; 3 not `,` or `}` after a member; 4 not a string where a key
+  belongs; 5 not `:` after a key; 6 a string not closed; 7 a bad escape; 8 a control byte in a
+  string; 9 a malformed number, or one past `f64`'s range; 10 a malformed `true`, `false` or
+  `null`; 11 bytes after the value; 12 the input is not UTF-8; 13 a lone surrogate. The raise
+  unwinds every frame, consuming what each had built.
+- **Depth.** The parser's recursion is one group under `bounded` (§20): a document nested past
+  the budget performs `Exhausted`.
+- **Serialising.** `json_ser<'a>(j: imm 'a Json, out: string) -> string with Exhausted` appends
+  the compact form of `j` to `out`, by borrow: it lends the value and walks arrays with `elems`
+  and objects with `map_entries` (§31 loads). `Int` by `push_i64`, exactly as parsed; `Float` by `push_f64` (an integral float as `3.0`);
+  strings re-escaped (`"`, `\`, control bytes as `\u00XX` or their short escapes).
+- **Lookup.** `json_get<'a>(j: imm 'a Json, k: lit) -> imm 'a Json + 1`: an object's member by
+  key, as a view; `inr ()` if `j` is not an object or has no such member.
+
+**Stated limits.**
+- **Duplicate keys:** the last value wins; the earlier one is dropped.
+- **Member order:** an object serialises in its map's slot order (fixed by the keys' hashes and
+  the insertions, so deterministic), not the input's.
+- **Numbers:** an integer literal past `i64`'s range (above 2^63 − 1 or below −2^63) is read as
+  `Float`; serde_json keeps positive ones up to 2^64 − 1 exact as `u64`, which needs the `u64` width (#981); a `u64` number in `Json` waits on it. Arbitrary-precision numbers are not provided.
+- **Lookup by literal key** allocates an owned key today (`map_get` takes `K`); #976's borrowed
+  lookup removes it.
+
+**Preserves.** No kernel, checker, elaborator or backend change; every existing program's output and counts are
+unchanged. `corpus/json-parse.bc` becomes `include json` plus its `main`; its golden changes only where an
+integer literal now prints exactly (`3`, not `3.0`), so the serialised line's length changes.
+
+**Programs.**
+- `corpus/json-parse.bc`: as in J1, through the library; integers print exactly. Its input gains
+  an id past 2^53 (as in twitter.json, `505874924095815681`), printed back exactly.
+- `corpus/json-deep.bc`: the document nested past the recursion budget performs `Exhausted`
+  (moved out of `json-parse.bc`, so the main program's interpreter time is the document's own).
+
+**Open.**
+- Streaming parse (from a reader, not a whole text) and a pull-based tokenizer (pipes).
+- Number formats other than `f64`.
+- Pretty printing.
 
 ### Programs
 
