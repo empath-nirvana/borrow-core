@@ -5461,15 +5461,15 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
   `OpSig.fin`.
 - **`[then]` at the finaliser's row.** `x <- M unwind (D); N` is checked by `[then]`. `D` is
   checked at the empty row first; a finaliser that performs nothing gets `effThenA` with `M` at the
-  site's row `Σ`, the derivation as before. Otherwise `D` is checked at `Σ`, and `Σ_D` is the
-  operations of `Σ` that `D`'s typed derivation performs (its performs, awaits and raises, what the
-  subterm under each `[sub]` performs and the row of each call, less the operations a handler
-  inside `D` handles; `opKeysOf`); `D` is then checked at that `Σ_D`; if it does not check there,
-  the derivation at `Σ` is kept (the kernel's premises decide `[then]` at whichever row is used).
+  site's row `Σ`, the derivation as before. Otherwise `D` is checked at `Σ`, and `Σ_D` is the row
+  `D`'s derivation needs, read the same way as `Σ_M`'s (below: each operation `D` performs, at the
+  cancel rows its own derivation needs); `D` is checked again at it, falling back to the site's
+  filter; if it does not check there, the derivation at `Σ` is kept (the kernel's premises decide
+  `[then]` at whichever row is used).
 - **`Σ_M`, `M`'s own row.** When the finaliser performs and `hfin` fails with `M` at `Σ`, `Σ_M` is
-  the row `M`'s derivation needs,
-  synthesized as `Σ_D` is: a `perform`, `await` or `raise` contributes its operation at the empty
-  cancel row; a call, its callee type's row, cancel rows included; a `[sub]`, its subterm's; a
+  the row `M`'s derivation needs, synthesized from it: a `perform`, `await` or `raise` contributes
+  its operation at the empty cancel row; a value's body (a thunk or a λ) contributes nothing where
+  it is built, its row counted where it is forced or called; a call, its callee type's row, cancel rows included; a `[sub]`, its subterm's; a
   `[then]` inside `M` gives each capturable operation of its head the least cancel row that
   `ThenLe` and `PendLe` allow over its finaliser's row; inside `handle_n` the operations of `n` drop
   out; rows join by operation key, `⊤` absorbing. (So `progNC₁T`'s `1.0` is taken at the empty
@@ -5483,9 +5483,9 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
   `pendLeB`, `thenFinB`, `pendPersB` and `finPersB`, each with its `_sound` lemma (axioms within
   `propext` and `Quot.sound`); `thenFinB_sound` states the kernel premise over `Σ_M`:
   `Row.find SM n i = some o → Row.find S n i = some o' → o.finRead → ThenLe o.fin SD o'.fin`. A
-  refusal names an operation `M` performs whose cancel row lacks the finaliser's operation (D3),
-  never the finaliser's own, and where it is cancelled; a nested entry is named as such ("the
-  cancel row of 1.0 … holds 4.0, whose own cancel row … must hold …"). At `Σ_D = []` the checker emits `effThenA`, as before; `effThen` only at a
+  refusal names the operation that fails, at the cancel row it was checked with (D3), and which
+  half of `PendLe` fails; it never says a row lacks what it holds. A nested entry is named as such
+  ("the cancel row of 1.0 … holds 4.0, whose own cancel row … must hold …"). At `Σ_D = []` the checker emits `effThenA`, as before; `effThen` only at a
   non-empty `Σ_D`.
 - **Handlers read their operations' cancel rows.** `[handle]` passes `fs j`, the cancel row the
   handled row gives operation `j`, so a clause's `κ` has its cancel branch at
@@ -5519,7 +5519,10 @@ joins the corpus when Backend2 lowers a cancel row holding a machine operation (
 `corpus/core-fin-check-nc.bc`, `-consume.bc`, `-keep.bc`, `-gapdeep.bc` and `-gapcall.bc` are
 checked in the corpus (a `def` checked and not called; `main` returns `()`): the first three are
 `progNC₁T`'s, `progConsumeT`'s and `progKeepT`'s shapes, `gapdeep` two nested finalisers that both
-perform capturable operations, and `gapcall` a call of a function parameter.
+perform capturable operations, and `gapcall` a call of a function parameter;
+`core-fin-check-afinc.bc`, `-same2.bc`, `-d2nested.bc` and `-dthunk.bc` are checked the same way:
+`Σ_D` at its own row, two finalisers performing the same operation, a call whose row nests `4.0`,
+and a closure built in `M`.
 
 ### Open
 
@@ -5533,6 +5536,8 @@ perform capturable operations, and `gapcall` a call of a function parameter.
 - **`Σ_M` is resynthesized only when `hfin` fails at `Σ`.** A program whose `hfin` holds at `Σ` but
   whose `PendPers` fails there, and would hold at `Σ_M`, is refused: a gap in completeness, not in
   soundness.
+- **`await`'s cancel rows** are not read by the synthesis; core text cannot reach them today.
+- **Nested `[then]`s are checked again at each level**, so the work is exponential in their depth.
 - **The deciders check every layer and member of a cancel row**, the kernel the first `Row.find`
   hit: stricter only when a cancel row repeats an operation key.
 - **Answering effects in a finaliser** (a capability: `Stdout`, `Fs` #769, `Net` #597; a `fn`
