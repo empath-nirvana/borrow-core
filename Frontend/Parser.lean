@@ -777,8 +777,8 @@ def opNameNI (what : String) : P (Nat × Nat) := do
 
 /-- The entries of a row up to its `]`: `n.i q A ~> B`, separated by `,`; `q` is `lin`, `cancel` or
 `unr`, read as a name here and nowhere else. A capturable entry may write its cancel row after its
-qualifier, `n.i cancel[R] A ~> B` (or `unr[R]`), `R` a row's entries; none written is the empty
-cancel row.  `[spec §19, §27]` -/
+qualifier, `n.i cancel[R] A ~> B` (or `unr[R]`), `R` a row's entries or `top` (`⊤`); none written
+is the empty cancel row. A `lin` entry has none.  `[spec §19, §27]` -/
 def rowEntries : Nat → P Row
   | 0 => outOfFuel
   | n + 1 => do
@@ -790,11 +790,20 @@ def rowEntries : Nat → P Row
       | .ident "cancel" => discard bump; pure Qual.cancel
       | .ident "unr" => discard bump; pure Qual.unr
       | _ => expected "a qualifier `lin`, `cancel` or `unr`"
+    let tf ← peek
+    if q == .lin && tf.tok == .sym "[" then
+      failAt tf.span s!"the operation {k}.{i} is `lin` (must resume): it is never cancelled, so it has no cancel row"
     let fin ← if q != .lin && (← isSym "[") then do
         discard bump
-        let f ← rowEntries n
-        expectSym "]"
-        pure f
+        -- `⊤` (`top`): the cancel row of a continuation that cannot be cancelled.  `[spec §27]`
+        if ← isKw "top" then
+          discard bump
+          expectSym "]"
+          pure .top
+        else
+          let f ← rowEntries n
+          expectSym "]"
+          pure f
       else pure .nil
     let A ← rvty n
     expectSym "~>"

@@ -103,6 +103,7 @@ core-fin-op 0 0 0 0 0 0
 core-fin-stored-k-fin 0 1 0 0 0 0
 core-fin-stored-k-op 0 1 0 0 0 0
 core-fin-sub-row 0 0 0 0 0 0
+core-fin-top-row 0 0 0 0 0 0
 data-json-map-ser 16 0 0 555 420 133
 deep-gen-count 0 3 0 0 0 0
 effects-load-raise 4 0 0 204 184 15

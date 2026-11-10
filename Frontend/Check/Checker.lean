@@ -54,7 +54,7 @@ abbrev DefCache := List DefEntry
 /-- The checker's monad: an error, or a result with the cache. -/
 abbrev CheckM := StateT DefCache (Except Error)
 
-/-- The depth to which `opKeysOf` reads a finaliser's derivation. -/
+/-- The depth to which `opKeysOf` reads a finaliser's derivation.  `[spec §27]` -/
 def opKeysFuel : Nat := 100000
 
 /-- Run `x`; on an error, the cache as it was before. -/
@@ -451,7 +451,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let rMs ← thenMC n (E₁.ownIn (mentionsC · M)) Δ T M A S SD rM.t
       let rN ← consumeStuck x.span 1 rN
       let FN ← popL E x.span x.name rN.F
-      pure ⟨_, ← thenIt E sp x.name rM' rMs FN rD⟩
+      pure ⟨_, ← thenIt E sp x.name D.span rM' rMs FN rD⟩
     | .perform sp k i V => do
       let ⟨_, o, hf⟩ ← findOp E sp "perform" k i
       if hna : o.abort = false then
@@ -782,10 +782,14 @@ def finC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → CRow 
         | .error _ => pure ⟨S, rS⟩
 
 /-- `M` of `x <- M unwind (D); N` at its own row `SM` (SPEC §27's `Σ_M`), when the finaliser
-performs (`SD` non-empty) and `[then]`'s cancel-row premise fails with `M` at the site's row `S`:
-`SM` is the operations of `S` that `M`'s derivation `tM` performs (`opKeysOf`), at which `M` is
-checked again. A capturable operation the finaliser performs is then not one of `M`'s, whose
-cancel row would have to hold it. `none`: `M` stays at `S`.  `[spec §27]` -/
+performs (`SD` non-empty) and `[then]`'s cancel-row premise fails with `M` at the site's row `S`.
+`SM`'s operations are those of `S` that `M`'s derivation `tM` performs (`opKeysOf`); its cancel
+rows are `M`'s own: first the empty ones (`M` runs no finaliser that performs, as when `M` is the
+operation the cancel captures: `progNC₁T`, `[cfin-cancel]`), else `S`'s. `[sub]` raises them to
+`S`'s; the kernel's `ThenLe` reads `Σ_M`'s cancel rows below the finaliser's row, `S`'s above it, so
+a capturable operation the finaliser performs need not be in its own cancel row. Each candidate is
+taken only where `[then]`'s premise holds at it, and `M` is checked again there. `none`: `M` stays
+at `S`.  `[spec §27]` -/
 def thenMC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (A : CVTy) → CRow → CRow →
     TExpr → CheckM (Option (Σ SM : CRow, Res Δ T (.comp (effOf SM A))))
   | 0, _, _, _, _, _, _, _, _ => pure none
@@ -794,10 +798,19 @@ def thenMC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (A 
     else
       let ks := opKeysOf opKeysFuel tM
       let SM := S.filter fun o => ks.contains (o.n, o.i)
-      if SM.length == S.length then pure none
-      else match ← attempt (chkC n E Δ T M (effOf SM A)) with
-        | .ok r => pure (some ⟨SM, r⟩)
-        | .error _ => pure none
+      let SM₀ := SM.map fun o => { o with fin := .ret .unit }
+      -- `S` itself fails `thenFinB` here, so a candidate that passes is not `S`.
+      let ok (R : CRow) : Bool := thenFinB R S SD
+      let r₀ ← if ok SM₀ then attempt (chkC n E Δ T M (effOf SM₀ A))
+        else pure (.error ⟨M.span, ""⟩)
+      match r₀ with
+      | .ok r => pure (some ⟨SM₀, r⟩)
+      | .error _ =>
+        if ok SM then
+          match ← attempt (chkC n E Δ T M (effOf SM A)) with
+          | .ok r => pure (some ⟨SM, r⟩)
+          | .error _ => pure none
+        else pure none
 
 /-- `abort[k.i] V` at the answer `B`: an abortive operation of the current row (SPEC §19's abortive rule). -/
 def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Nat → Nat → Val → (B : CVTy) →
@@ -867,7 +880,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           let rMs ← thenMC n (E₁.ownIn (mentionsC · M)) Δ T M A S SD rM.t
           let rN ← consumeStuck x.span 1 rN
           let FN ← popL E x.span x.name rN.F
-          pure (hC ▸ (← thenIt E sp x.name rM' rMs FN rD))
+          pure (hC ▸ (← thenIt E sp x.name D.span rM' rMs FN rD))
       | none => err sp s!"`x <- M unwind (D); N` is checked against `{E.ppC C}`, which is not `F[…] B`"
     | .abort sp k i V =>
       match effRow? C with

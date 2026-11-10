@@ -355,7 +355,8 @@ theorem effThen (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ�
       hDS hfin hP hSD hM.2 hN.2 hD.2⟩
 
 /-- `[handle]` reads its handled row, as `CDerivesAt.effHandleV`: the handler's pair `tc` a value
-form over a part `Γ₁` of the context whose live slots are persistent.  `[spec §19]` -/
+form over a part `Γ₁` of the context whose live slots are persistent, the handled operations at
+their cancel rows `fs`.  `[spec §19, §27]` -/
 theorem effHandle (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
     (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tc te : TExpr}
     {S : CRow} {E : List (CQual × CVTy × CVTy)} {fs : Nat → CCTy} {n : UInt32} {A R : CVTy}
@@ -376,7 +377,8 @@ theorem effHandle (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKin
       (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) rfl,
     .effHandleV hs hm hcv hd hH hc.2 hn0 hnS hlen hdv he.2 rfl⟩
 
-/-- BOXED-κ reads its handled row, as `CDerivesAt.effHandleB`.  `[spec §28]` -/
+/-- BOXED-κ reads its handled row, as `CDerivesAt.effHandleB`, the handled operations at their
+cancel rows `fs`.  `[spec §27, §28]` -/
 theorem effHandleB (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
     (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tc te : TExpr}
     {S : CRow} {E : List (CQual × CVTy × CVTy)} {fs : Nat → CCTy} {n : UInt32} {A R : CVTy}

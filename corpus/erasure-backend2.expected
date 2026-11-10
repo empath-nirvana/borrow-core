@@ -103,6 +103,7 @@ core-fin-op erased handles 0 performs 0 raises 0 machines 2 suspends 2 left 0 0
 core-fin-stored-k-fin erased handles 1 performs 0 raises 1 machines 1 suspends 2 left 0 0
 core-fin-stored-k-op erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
 core-fin-sub-row erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
+core-fin-top-row erased handles 0 performs 0 raises 0 left 0 0
 data-json-map-ser erased handles 2 performs 0 raises 2 left 0 0
 deep-gen-count erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
 effects-load-raise erased handles 3 performs 0 raises 6 left 0 0
