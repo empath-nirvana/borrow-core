@@ -802,9 +802,10 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
   | 0, _, _, _, m, _ => err m.span "expression nested too deeply"
   | n + 1, E, Δ, T, m, C =>
     let E := E.atC C
-    -- Owed stored generators over rows that `m` does not mention: dropped before it (SPEC §15).
+    -- A tail call: owed stored generators over rows it does not take, dropped just before it,
+    -- after the rest of the path (`becomeDrops`, SPEC §15).
     let ks := match effRowOf? C with
-      | some ⟨_ :: _, _, _⟩ => if m.dropsEarly then earlyDrops E T m else []
+      | some ⟨_ :: _, _, _⟩ => if m.becomeRun then becomeDrops E T m else []
       | _ => []
     if !ks.isEmpty then do
       let r ← chkC n (E.minus ((List.range T.length).map (ks.contains ·))) Δ T m C

@@ -1,8 +1,10 @@
--- Stored generators over a row that a function does not use (SPEC §12, §15). `h` never reads `b`:
--- it is closed before `let z = …`, the first form that does not mention it, so the call of
--- `drain` stays in tail position with nothing live across the close. `k` holds `b` in a sum, or
--- closes it in the other arm, and never reads the sum after: the sum is dropped (taken apart, its
--- generator closed) before the raising `drain` of `a`.
+-- Stored generators over a row that a function does not use (SPEC §12, §15). `h` never reads `b`
+-- and ends in a tail call: `b` is closed just before the call, as `become` drops (its argument
+-- bindings perform nothing, so the close is placed before them), and the call of `drain` stays in
+-- tail position with nothing live across the close. `k` holds `b` in a sum, or closes it in the
+-- other arm, and never reads the sum after: its path does not end in a tail call, so the sum is
+-- dropped (taken apart, its generator closed) at scope end, after the raising `drain` of `a`, or
+-- by the glue when that `drain` raises.
 --
 -- Answer: `((inl i32[4], inl i32[46]), (inl i32[103], (inr i32[2], (inl i32[103], inr i32[2]))))`:
 -- 1 + 2 + 0 + 1, and + 42; 1 + 2 + 100 and `a`'s error 2, with `b` in the sum and with it closed.

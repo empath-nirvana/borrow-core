@@ -1462,10 +1462,35 @@ def consumeOwedR {C : CCTy} (E : Env) (sp : Span) (r : Res Δ T (.comp C)) :
       "close performs, so close it, or use it, where the computation performs its row"⟩
 
 
-/-- The owed slots that are dropped at a row and are not consumable (`dropRow?`) and that `m`
-does not mention by name: dropped before `m` (`dropsBefore`), not at its terminals, so that a
-call in tail position stays one and nothing `m` binds is live across the drop.  `[spec §15]` -/
-def earlyDrops (E : Env) (T : List CVTy) (m : Comp) : List Nat :=
+/-- A value whose making performs nothing: no computation run in it (`run`).  `[spec §15]` -/
+def _root_.Frontend.Val.runFree : Frontend.Val → Bool
+  | .run .. | .sugar .. => false
+  | .pair _ V W | .app _ V W => V.runFree && W.runFree
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.runFree
+  | _ => true
+
+/-- The head of a call: `force f`, applied.  `[spec §15]` -/
+def _root_.Frontend.Comp.callHead : Frontend.Comp → Bool
+  | .force .. => true
+  | .app _ M _ | .inst _ M _ => M.callHead
+  | _ => false
+
+/-- A tail call and the bindings of its arguments before it: `x <- return V; …` with each `V`
+performing nothing (`Val.runFree`), ending in a call (`Comp.callHead`). The A-normal form of a
+call `f(W)` in tail position, its calls in `W` already earlier `let`s.  `[spec §15]` -/
+def _root_.Frontend.Comp.becomeRun : Frontend.Comp → Bool
+  | .bind _ _ _ (.ret _ V) N => V.runFree && N.becomeRun
+  | .letPair _ _ _ V N | .letUnit _ V N => V.runFree && N.becomeRun
+  | M => M.callHead
+
+/-- The owed slots dropped at a row and not consumable (`dropRow?`) that a tail call and its
+argument bindings `m` (`Comp.becomeRun`) do not mention: dropped just before the call, as Rust's
+`become` drops its locals after evaluating the call's arguments (RFC 3407). The drop is placed
+before the argument bindings, which perform nothing, so the order is the same, and nothing the
+bindings bind (the function value, the arguments) is live across a close that may raise. On any
+other path the drop is at the terminal, at scope end (`consumeOwedR`).  `[spec §12, §15]` -/
+def becomeDrops (E : Env) (T : List CVTy) (m : Comp) : List Nat :=
   (List.range T.length).filter fun i =>
     E.own.getD i false &&
     (match T[i]? with
@@ -1474,11 +1499,6 @@ def earlyDrops (E : Env) (T : List CVTy) (m : Comp) : List Nat :=
     (match E.vars[i]? with
       | some (some x) => !mentionsC x m
       | _ => false)
-
-/-- The forms before which a slot they do not mention is dropped (`earlyDrops`). -/
-def _root_.Frontend.Comp.dropsEarly : Comp → Bool
-  | .bind .. | .letUnit .. | .letPair .. | .case .. => true
-  | _ => false
 
 /-- The slots `ks` dropped before `r`, at `r`'s row (`dropOne`, `closeBefore`).  `[spec §15]` -/
 def dropsBefore {C : CCTy} (E : Env) (sp : Span) (ks : List Nat) (r : Res Δ T (.comp C)) :
