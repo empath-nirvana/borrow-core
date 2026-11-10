@@ -13396,9 +13396,11 @@ Rejects:
   - **checking a definition once for all rows,** as separate compilation would.
 - Inferring rows by unification rather than per argument (#766 Phase A). This entry's instance key
   is #766 Phase B's.
-- **R3 is not a kernel premise.** As decision 57 states it, a site's handler answering a value that
-  performs at that site conflicts with per-observation handling (§75; `Core/EffPrograms.lean`'s
-  `driveLog`), so the kernel does not check it (#1052).
+- **R3 is not a kernel premise (#1052).** As a premise on the handle rules (`n ∉ sites R`,
+  `n ∉ sites Γ|live`), it refuses per-observation handling, where a stream's rest performs at site
+  `n` and is handled again by a fresh handler of `n` at each observation (`Core/EffPrograms.lean`'s
+  `tickProg`/`driveLog`, `core-yield-pull`, §75's frames). R3 is not needed for soundness. Any R3,
+  kernel or surface, must exempt such codata rests.
   - The surface rule above is checked on a user-written `with`, so §75's generated frames are not
     refused by it. But it would refuse a user-written handler whose answer is a codata rest
     performing at its own site, the same pattern.
