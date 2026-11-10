@@ -94,6 +94,7 @@ closure-capture-scalar 0 0 0 0 0 0 # every capture is a word; a closure's copy c
 closure-captures-int 6 0 0 36 36 0 # the input list's 3 nodes and the mapped list's 3; the algebra copies `n` as a word
 closure-captures-list 3 0 0 9 9 0 # the list's 3 nodes, moved into the closure: no copy
 data-json-map-ser 16 0 0 699 420 205
+deep-gen-count 0 3 0 0 0 0
 effects-load-raise 4 0 0 204 184 15
 for-arm-raises-owned 8 0 0 54 54 54
 handle-arm-releases 2 0 0 13 13 13
