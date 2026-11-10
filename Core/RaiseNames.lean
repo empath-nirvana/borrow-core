@@ -1026,6 +1026,13 @@ theorem raiseOK_head (hP0 : ¬ P 0) {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ
       by_cases hm0 : m = 0
       · subst hm0; exact absurd hPm hP0
       · exact (raiseOK_raise_payload hm0).2 ⟨hPm, hw⟩
+  | cancelTo n qs hr hs k K hK =>
+      obtain ⟨-, hb⟩ := raiseOK_hndE.1 ha
+      obtain ⟨hKr, hp⟩ := plug_raiseOK_inv K (a := BoCa.BoLo.cancelToE _) trivial hb
+      have hkp := (raiseOK_primApp (P := P) (p := .cancelTo) (by decide) (by decide) _).1 hp
+      have hk : k.1.RaiseOK P := hkp.2
+      exact ⟨⟨raiseOK_ccatchE.2 (plug_raiseOK _ (kraiseOK_dead hKr) raiseOK_raise_cancel_none),
+        raiseOK_app_val hk trivial⟩, hμ⟩
 
 /-- **No step leaves the names `P`**, nor stores a value that does, when `0` is not one of them.
 `[spec §19]` -/
