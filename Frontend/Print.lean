@@ -209,7 +209,7 @@ def strLit (bs : List Nat) : String :=
 `return V` is the core's. A handler clause's body (`clause`) is read as a surface body, and the
 body of a loop in it (`loop`, not inside a closure or block in the loop) reads a statement
 `return e` as the exit from the clause (`VSugar.retE`, SPEC §16): there the core's `return V`, the
-body's value, is printed as the expression `V`, which the parser reads as it.  `[spec §41]` -/
+body's value, is printed as the expression `V`, which the parser reads as it.  `[spec §16]` -/
 inductive PCtx where
   | core
   | clause
@@ -310,7 +310,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) (cx : PCtx := .core) : Stri
 `cx`. -/
 def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) (cx : PCtx := .core) : String :=
   paren (M.level < lvl) <| match M with
-    -- In a clause's loop a statement `return e` is the loop's exit (`[spec §41]`: a printed
+    -- In a clause's loop a statement `return e` is the loop's exit (`[spec §16]`: a printed
     -- program reads back). At level 1, a binding's head or a prefix's operand, `return` is read as
     -- the core's, as in core text; elsewhere the exit is printed `return e` and the core's
     -- `return V`, the body's value, as the expression `V` (parenthesized at a spine's level).
@@ -352,7 +352,10 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) (cx : PCtx := .core) : St
     | .inst _ M a => M.pp 2 k cx ++ " [" ++ a.pp ++ "]"
     | .nuIn _ M => "nu_in " ++ M.pp 1 k cx
     | .nuOut _ M => "nu_out " ++ M.pp 1 k cx
-    | .ascribe _ M C => "(" ++ M.pp 1 k cx ++ " : " ++ C.pp ++ ")"
+    -- `(M : C)` reads `M` as a statement, not a binding's head: in a clause's loop it prints at
+    -- level 0, so that the core's `return V` is `(V : C)` and not the loop's exit.
+    | .ascribe _ M C =>
+      "(" ++ M.pp (if cx == .loop then 0 else 1) k cx ++ " : " ++ C.pp ++ ")"
     | .loop _ ℓ .forever _ M N =>
       lbl ℓ ++ "loop {" ++ nl (k + 2) ++ M.pp 0 (k + 2) cx.body ++ nl k ++ "};" ++ nl k ++ N.pp 0 k cx
     | .loop _ ℓ .while_ c M N =>

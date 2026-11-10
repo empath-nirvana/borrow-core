@@ -1,12 +1,12 @@
--- Loops in a handler's clauses (#971). A `for` body's last expression is the body's value, and
+-- Loops in a handler's clauses. A `for` body's last expression is the body's value, and
 -- printed back it must still read as that value, not as the loop's `return`, the exit from the
 -- clause: the printed program reads back (`bcc parse`, SPEC §41). The `wait` clause sums
--- `0..4` in a `for` and counts `2 * 5` steps in two nested ones; the `ask` clause leaves its `for`
--- by `return` at `i == 2`, which exits the clause with `10 * i`.
+-- `0..4` in a `for` and counts `2 * 5` steps in two nested ones, the outer body ending in an
+-- ascribed `(() : F 1)`; the `ask` clause leaves its `for` by `return` at `i == 2`, which exits
+-- the clause with `10 * i`.
 --
 -- Answer: `(i32[16], i32[20])`: `wait` resumes with `6 + 10` (`0 + 1 + 2 + 3`, then the nested
--- loops' count) and `ask` answers `20` from its first exit. Before #971 the printed program did not
--- read back: a `for` body's last `()` printed as `return ()`, which reads as the exit.
+-- loops' count) and `ask` answers `20` from its first exit.
 
 effect Wait { ctl wait() -> i32 }
 effect Ask { ctl ask() -> i32 }
@@ -17,7 +17,7 @@ handler sum_up[A]: Wait, A -> A = {
     let mut s = 0;
     for i in 0..4 { s = s + i };
     let mut t = 0;
-    for j in 0..2 { for m in 0..5 { t = t + 1 } };
+    for j in 0..2 { for m in 0..5 { t = t + 1 }; (() : F 1) };
     k(s + t)
   }
 }
