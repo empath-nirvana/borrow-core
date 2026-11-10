@@ -328,13 +328,12 @@ def walkC (rows : List (String × List Ent)) (glob : List Ent) : Nat → List En
 end
 
 mutual
-/-- The entries of the handler sites in a value. -/
-def sitesV : Nat → Val → List Ent
+/-- The handler sites in a value. -/
+def sitesV : Nat → Val → List HInfo
   | 0, _ => []
   | k + 1, V =>
     if let some (i, P, R, cls, M) := hndSite? V then
-      (i.ents.zipIdx.map fun ((q, A, B), j) => ((i.n, j, q, A, B) : Ent)) ++
-        sitesV k P ++ sitesV k R ++ sitesV k cls ++ sitesC k M
+      i :: (sitesV k P ++ sitesV k R ++ sitesV k cls ++ sitesC k M)
     else match V with
     | .pair _ V W | .app _ V W => sitesV k V ++ sitesV k W
     | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
@@ -343,7 +342,7 @@ def sitesV : Nat → Val → List Ent
     | _ => []
 
 /-- `sitesV` of a computation. -/
-def sitesC : Nat → Comp → List Ent
+def sitesC : Nat → Comp → List HInfo
   | 0, _ => []
   | k + 1, M => match M with
     | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => sitesV k V
@@ -357,16 +356,34 @@ def sitesC : Nat → Comp → List Ent
     | .force .. | .top _ => []
 end
 
+/-- The handler sites of the effects pass's output. -/
+def sitesOf (ds : List Decl) : List HInfo :=
+  ds.flatMap fun
+    | .def_ _ _ _ _ V _ => sitesV 100000 V
+    | .main _ _ M => sitesC 100000 M
+    | _ => []
+
+/-- A site's entries. -/
+def HInfo.entries (i : HInfo) : List Ent :=
+  i.ents.zipIdx.map fun ((q, A, B), j) => ((i.n, j, q, A, B) : Ent)
+
+/-- Each operation `n.i` of a handler site by its surface name, `E.op`, the effects `effs` declare:
+for messages.  `[spec §27]` -/
+def opNames (effs : List (String × List String)) (ds : List Decl) : List ((Nat × Nat) × String) :=
+  (sitesOf ds).flatMap fun i =>
+    let ops := (effs.lookup i.site.eff).getD []
+    (List.range i.ents.length).map fun j =>
+      ((i.n, j), s!"{i.site.eff}.{ops.getD j s!"{j}"}")
+
 /-- The cancel rows the finalisers of the effects pass's output `ds` require.  `[spec §27]` -/
 def table (ds : List Decl) : Table :=
   let rows : List (String × List Ent) := ds.filterMap fun
     | .def_ _ n _ A _ _ => let r := rowOfTy A; if r.isEmpty then none else some (n.name, r)
     | _ => none
   -- Every entry by its name: the handler sites' and the functions' rows.
-  let glob : List Ent := addEnts [] (ds.flatMap fun
-    | .def_ _ _ _ A V _ => rowOfTy A ++ sitesV 100000 V
-    | .main _ _ M => sitesC 100000 M
-    | _ => [])
+  let glob : List Ent := addEnts [] ((ds.flatMap fun
+    | .def_ _ _ _ A _ _ => rowOfTy A
+    | _ => []) ++ (sitesOf ds).flatMap HInfo.entries)
   ds.foldl (fun t d => match d with
     | .def_ _ n _ _ V _ => walkV rows glob 100000 ((rows.lookup n.name).getD []) t V
     | .main _ _ M => walkC rows glob 100000 [] t M
