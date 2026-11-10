@@ -8228,12 +8228,17 @@ nested, one lend per place, the first written outermost. In `S`, `x : mut 'l A`:
 
 - `&mut x` at a call is a reborrow of the borrow (`withbor3`, or `withbor3U` where the call
   performs abortive operations);
-- `x = e` is `modify x { x -> (e, ()) }`: the content replaced; in `e`, `x` is the old content;
+- `x = e` evaluates `e` first, its reads and lends in order as below, to a value `t`; then
+  `modify x { _ -> (t, ()) }`. `e` may perform the handler's operations;
 - `modify x { … }`, `modify &mut x { … }` and `borrow mut x { … }` take the borrow itself;
-- a read of `x` is `*&mut x`, the content copied through the borrow (`withswap`), bound just
-  before the computation it occurs in (a `while`'s condition at the start of each turn). A read
+- a read of `x` is `*&mut x`, the content copied through the borrow (`withswap`). A read
   rebinds the borrow, so it counts as a write of the borrow (R2) and every frame it is in hands
   the borrow on;
+- every read of a lent `x` and every call that lends it is bound in the order the source
+  evaluates them, left to right, a call's arguments before the call (A-normal form for those
+  terms), so a read after a reborrow in the same expression sees the reborrow's effect:
+  `g(&mut c) * 100 + c` reads `c` after `g` has written it, as Rust does. A `while`'s condition
+  is bound at the start of each turn, `loop { if c { M } else { break } }`;
 - a move out of `x` (a read at a linear type) is refused: "a value can't be moved out of `x`
   here: it is lent for the body of a control handler, which may be abandoned, and its type `A` is
   linear";
@@ -8248,7 +8253,8 @@ for a `let mut` value, `withbor2` of a cell, `withbor3` of a borrow (a nested co
 
 - **Capabilities are not lent.** A body that passes on `stdin`, `stdout` or `stderr` (a cell a
   function takes and hands back, §11) is not given a borrow, which such a function cannot take.
-  It is refused, the message naming the capability: "the body of `with to_result` takes `stdout`
+  It is refused for the capability alone; its plain `let mut` variables are still lent. The
+  message names only the capabilities, one or several: "the body of `with to_result` takes `stdout`
   and would hand it back, but a control handler's body may be abandoned: pass a capability
   outside the handler, or perform its effect inside (SPEC §41, R3)".
 - **Which handlers.** The parser knows the control handlers in scope as it knows the `data` table
@@ -8311,6 +8317,9 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/mut-control-nested.bc` | nested control handlers writing one variable (a `withbor3` reborrow of the outer lend) | `(inr i32[110012], i32[110012])` |
 | `corpus/reject/mut-control-move.bc` | a move out of a lent variable | refused, naming `buf` |
 | `corpus/reject/effect-try-lend.bc` | `&mut stdout` passed on in `to_result`'s body | refused, naming `stdout` |
+| `corpus/mut-control-order.bc` | reads and reborrows in source order (`g(&mut c) * 100 + c` = 108) | `(inr i32[108], (i32[101], i32[8]))` |
+| `corpus/mut-control-assign-raise.bc` | `c = chk(c + 1)`, an effectful right side, raising midway | `(inr i32[3], i32[2])` |
+| `corpus/reject/mut-control-cap.bc` | a body assigning `c` and passing `stdout`: the refusal names `stdout` only | refused |
 | `corpus/lend-copy.bc` | copies of a borrow block's borrow over a loop: `let b2 = b`, `let mut v = v` (T04's form), a copy after a statement | `(i32[30], (i32[321], i32[6]))` (was refused) |
 | `corpus/binder-copies.bc` | a copy of a block parameter, of a clause's continuation, and a copy of a copy | `(i32[4294967291], (i32[103], i32[22]))` (was refused) |
 | `corpus/div-residual-copy.bc` | a div function's residual handed back by a copy, `let j = i`, and by `let i = i` | `i32[4]` on `abc` (was refused; `let i = i` ran before R1) |
@@ -8441,7 +8450,8 @@ whose meaning depended on two names coinciding.
 - **A read of a lent variable inside a closure** in the body lends from the closure, refused as
   any lend there; an `imm` lend `&x` of a lent variable (an `imm` reborrow of a `mut` borrow) is
   not provided.
-- **`with … finally { D }` whose body is lent**: `D` runs inside the lend and sees the outer name.
+- **#940: a finaliser's writes to an outer variable** are not handed back after the `with`, with
+  or without the lend around the site; §42's refusal of them stands until they are.
 - **Capabilities in a control body** (`corpus/pending/async-progress.bc`): §34 *Open*.
 - **The target pairs** that are not met (`docs/research/let-mut-state/README.md`): what separates
   each is the counted loop (§16), the state machine of a div body (§14), §32's calling convention,
@@ -8790,6 +8800,11 @@ and `D` disjoint contexts, so a value `D` consumes is not used in `M`: "commit i
 back on an abort" lends the value to a computation that handles the abort inside the loan and
 then commits or rolls back on its answer (`corpus/decl-lend.bc`), or holds it as the state of a
 handler that handles the abort and rolls back in that clause.
+
+**A `finally` clause that assigns or lends a `let mut` declared outside the handler is refused**
+(`corpus/fail/finally-assign.bc`): "a `finally` clause can't yet assign `d`, a variable declared
+outside the handler: its write would be lost (#940)". A `let mut` declared inside the clause is not
+affected.
 
 **Errors name the consumer.** A value whose type holds a marked field, unused at the end of its
 scope or live across an abort, is refused with one message that names the value and its type
@@ -12694,11 +12709,13 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
-- **1.65** (2026-11-09) — §41, §18 (#885): a control `with` lends what its body writes. Each
+- **1.65** (2026-11-09) — §41, §18, §42 (#885, #940): a control `with` lends what its body writes. Each
   enclosing `let mut` the body writes, and each outer place it lends, is lent around the handler
   site (`borrow mut &mut x { 'l, x -> with h(…) { S } }`); inside, `&mut x` is a reborrow, `x = e`
-  is `modify`, a read is a copy through the borrow, and a move out of `x` is refused. After the
-  `with`, `x` keeps the writes made before an abort. Capabilities are not lent. New general forms:
+  evaluates `e` first and is `modify`, reads and lends are bound in source order, a read is a copy
+  through the borrow, and a move out of `x` is refused. After the `with`, `x` keeps the writes made
+  before an abort. Capabilities are not lent, and refused alone. §42: a `finally` clause that
+  assigns an outer `let mut` is refused (#940). New general forms:
   `borrow mut &mut x { … }`, the reborrow `&mut m` at a call, and `*&mut m`. No kernel change; no
   golden or count changed.
 - **1.64** (2026-11-09) — §68 (#855 K3, as built): the rules `erase`/`eraseB` are named
