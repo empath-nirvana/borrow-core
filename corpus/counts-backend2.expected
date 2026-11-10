@@ -101,7 +101,6 @@ data-json-map-ser 16 0 0 555 420 133
 effects-load-raise 4 0 0 204 184 15
 fin-block-finaliser 0 0 0 0 0 0
 fin-cancel-arm 0 3 0 0 0 0
-fin-cancel-loop 0 0 0 0 0 0
 fin-cancel-order 3 0 0 5 3 0
 fin-cancel-propagated 0 0 0 0 0 0
 fin-cancel-reentered 0 0 0 0 0 0

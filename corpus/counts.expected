@@ -106,7 +106,6 @@ data-json-map-ser 16 0 0 699 420 205
 effects-load-raise 4 0 0 204 184 15
 fin-block-finaliser 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
 fin-cancel-arm 0 3 0 0 0 0 # the indirect calls are of `tm`'s answer, a function of its state
-fin-cancel-loop 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
 fin-cancel-order 3 2 0 5 3 0 # stdout's cell and the two runs' state; the indirect calls are of `tm`'s answer, a function of its state
 fin-cancel-propagated 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
 fin-cancel-reentered 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
