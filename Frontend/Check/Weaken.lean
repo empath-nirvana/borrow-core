@@ -692,6 +692,13 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.unfoldN C S hC hS (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (unfoldV_closed C) _ _).symm⟩
+  | unfoldK C G S hC hG hS hΓ =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.unfoldK C G S hC hG hS (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+        (shift_closed0 (unfoldV_closed C) _ _).symm⟩
+  | nuOutK hC hG hS hGf hs =>
+      intro Γa Γb Γp f hΓ hf hp; subst hΓ
+      exact ⟨.nuOutK hC hG hS hGf (soloP_ins (live_eval_atom hf hp) Γa hs), (var_shift _ _ _).symm⟩
   | effSub hle _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
@@ -1297,6 +1304,13 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.unfoldN C S hC hS (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (unfoldV_closed C) _ _).symm⟩
+  | unfoldK C G S hC hG hS hΓ =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.unfoldK C G S hC hG hS (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+        (shift_closed0 (unfoldV_closed C) _ _).symm⟩
+  | nuOutK hC hG hS hGf hs =>
+      intro Γa Γb Γp f hΓ hf hp; subst hΓ
+      exact ⟨.nuOutK hC hG hS hGf (soloP_ins (live_eval_atom hf hp) Γa hs), (var_shift _ _ _).symm⟩
   | effSub hle _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp

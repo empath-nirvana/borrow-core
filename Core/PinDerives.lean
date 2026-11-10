@@ -452,6 +452,18 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   positive `C`.  `[spec §7]` -/
   | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
       CDerivesP Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S))
+  /-- `[unfold-K]`: coiteration at the step's code, a constant: `unfold : !G ⊸ !Code⟨hCode C;
+  !G ⊗ 1⟩ (S ⊸ F Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C))`, `G` forced at `S ⊸ C[S/X]`
+  (`U(S ⊸ C[S/X])` or a code type of it).  `[spec §68]` -/
+  | unfoldK {Δ Γ} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S)))
+      (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
+      CDerivesP Δ Γ (.val (unfoldV C)) (.val (unfoldKTy C G S))
+  /-- `[ν-out-K]`: `force x : C[Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)/X]` for
+  `x : Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)`, every rest at the same code type; `force x` at `νX. C`
+  is `x` (`forceE`).  `[spec §68]` -/
+  | nuOutK {Δ Γ i} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S)))
+      (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
+      CDerivesP Δ Γ (.var i) (.comp (C.instT (codeTy C G S)))
   /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
   | effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S')
       (h : CDerivesP Δ Γ e (.comp (CTy.effOf S A))) : CDerivesP Δ Γ e (.comp (CTy.effOf S' A))

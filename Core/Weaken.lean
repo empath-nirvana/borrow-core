@@ -176,6 +176,8 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | nuIn hC _ ih => exact .nuIn hC ih
   | nuOut hC _ ih => exact .nuOut hC ih
   | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS (deadP_append h' hΓ)
+  | unfoldK C G S hC hG hS hΓ => exact .unfoldK C G S hC hG hS (deadP_append h' hΓ)
+  | nuOutK hC hG hS hGf hs => exact .nuOutK hC hG hS hGf (soloP_append h' hs)
   | effSub hle _ ih => exact .effSub hle ih
   | effPerform hf hna hac _ ih => exact .effPerform hf hna hac ih
   | effAwait hΓ hfa ha haA hfc hc => exact .effAwait (dead_append_dead hΓ h') hfa ha haA hfc hc

@@ -540,6 +540,10 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       TDerivesP Δ Γ (TExpr.nuOut (info := info) (jdg := (.comp C.unroll)) (C := C) (t := t)) (.comp C.unroll)
   | unfoldN {Δ Γ} {info : TInfo} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.unfoldN (info := info) (jdg := (.val (unfoldTy C S))) (C := C) (S := S)) (.val (unfoldTy C S))
+  | unfoldK {Δ Γ} {info : TInfo} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
+      TDerivesP Δ Γ (TExpr.unfoldK (info := info) (jdg := (.val (unfoldKTy C G S))) (C := C) (G := G) (S := S)) (.val (unfoldKTy C G S))
+  | nuOutK {Δ Γ i} {info : TInfo} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
+      TDerivesP Δ Γ (TExpr.nuOutK (info := info) (jdg := (.comp (C.instT (codeTy C G S)))) (i := i) (C := C) (G := G) (S := S)) (.comp (C.instT (codeTy C G S)))
   | effSub {Δ Γ} {info : TInfo} {t : TExpr} {S S' : Row} {A : VTy} (hle : RowLe S S') (h : TDerivesP Δ Γ t (.comp (CTy.effOf S A))) :
       TDerivesP Δ Γ (TExpr.effSub (info := info) (jdg := (.comp (CTy.effOf S' A))) (S := S) (S' := S') (A := A) (t := t)) (.comp (CTy.effOf S' A))
   | effPerform {Δ Γ} {info : TInfo} {t : TExpr} {S : Row} {o : OpSig} (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (hac : o.rc = false) (h : TDerivesP Δ Γ t (.val o.A)) :
@@ -1319,6 +1323,12 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | unfoldN a0 a1 a2 a3 a4 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.unfoldN a0 a1 a2 a3 a4
+  | unfoldK a0 a1 a2 a3 a4 a5 a6 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesP.unfoldK a0 a1 a2 a3 a4 a5 a6
+  | nuOutK a0 a1 a2 a3 a4 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesP.nuOutK a0 a1 a2 a3 a4
   | effSub a0 a1 ih0 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.effSub a0 ih0

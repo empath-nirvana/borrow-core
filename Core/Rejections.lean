@@ -186,7 +186,9 @@ theorem not_release_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
     have hTα := hΓ T (splitP_le_left hs _ _ hT)
     rcases der_unit hU rfl with ⟨hd, -⟩ | hr'
     · have hAp := deadP_slot hd (k := 0) rfl
-      rcases hcT with ⟨S'', Y, he, hv⟩ | ⟨C', hC', -, hr''⟩
+      rcases hcT with ⟨S'', Y, he, hv⟩ | ⟨C', hC', -, hr''⟩ | ⟨_, _, _, -, rfl, -⟩
+      rotate_left 2
+      · rcases ob with _ | d <;> simp [kBoxO, VTy.alphaB] at hTα
       · obtain ⟨-, rfl⟩ := effOf_inj he
         have := (kviewO ob (hv.of_alpha hTα)).1
         simp [VTy.Persistent, this] at hAp
@@ -677,7 +679,9 @@ theorem at05_M {Δ : LifeCtx} {Γ : Ctx VTy} {W F : Expr} {j : Jdg}
     have hAp := vview_ref_np hv
     rcases hc.w with rfl | rfl
     · obtain ⟨T_w, hTw, hcw⟩ := der_var hf 0 rfl
-      rcases hcw with ⟨S', Y, he, -⟩ | ⟨C_w, hTwC, hCw, hr'⟩
+      rcases hcw with ⟨S', Y, he, -⟩ | ⟨C_w, hTwC, hCw, hr'⟩ | ⟨_, _, _, hC₃, -, hr₃⟩
+      rotate_left 2
+      · exact (hr₃.codeOut_rigid hC₃ (rigid_arr _ _)).elim
       · exact (effOf_ne_arr _ _ _ _ he.symm).elim
       · have hCwα : CTy.alphaB [] C_w (.arr A C) = true := by
           rcases rigid_or_ampNu hCw with hR | hN
@@ -717,7 +721,9 @@ theorem at05_M {Δ : LifeCtx} {Γ : Ctx VTy} {W F : Expr} {j : Jdg}
       subst hN
       obtain ⟨T, hT, hcT⟩ := der_var hY 2 rfl
       obtain ⟨A₀, hv⟩ := hc.c T (splitP_le_left hs _ _ hT)
-      rcases hcT with ⟨S'', Y, he, hY'⟩ | ⟨C', hC', -, -⟩
+      rcases hcT with ⟨S'', Y, he, hY'⟩ | ⟨C', hC', -, -⟩ | ⟨_, _, _, hC₃, -, hr₃⟩
+      rotate_left 2
+      · exact (hr₃.codeOut_effOf hC₃).elim
       · obtain ⟨-, rfl⟩ := effOf_inj he
         have hAp := vview_ref_np (hv.trans hY')
         have := wb_generic (d := dFlag) hU

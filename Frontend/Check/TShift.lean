@@ -163,6 +163,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .ret i j A t => .ret i j A (t.shift d c)
   | .bind i j A C u tM tN => .bind i j A C (u.ins d c) (tM.shift d c) (tN.shift d (c + 1))
   | .force i j k T C => .force i j (sIdx d c k) T C
+  | .nuOutK i j k C G S => .nuOutK i j (sIdx d c k) C G S
   | .lam i j A C t => .lam i j A C (t.shift d (c + 1))
   | .lamDead i j S B t => .lamDead i j S B (t.shift d (c + 1))
   | .app i j k A C u tM => .app i j (sIdx d c k) A C (u.ins d c) (tM.shift d c)
@@ -281,6 +282,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | t@(.foldOwnG ..) => t
   | t@(.foldReuse ..) => t
   | t@(.unfoldN ..) => t
+  | t@(.unfoldK ..) => t
   | t@(.lendR ..) => t
   | t@(.iterate ..) => t
   | t@(.divFuel ..) => t
@@ -343,7 +345,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .consume .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => some .ff
   | .use _ _ _ _ _ ab _ => ab
-  | .var .. | .force .. | .unitI .. | .copyBang .. | .releaseBang .. | .alloc .. | .free ..
+  | .var .. | .force .. | .nuOutK .. | .unitI .. | .copyBang .. | .releaseBang .. | .alloc .. | .free ..
   | .swap .. | .copy .. | .releaseImm .. | .releaseMut .. | .releaseUnk .. | .tokMint .. | .tokBurn .. | .lit ..
   | .hostOp ..
   | .arrNew .. | .arrFree .. | .arrSize .. | .arrReplace .. | .arrLen .. | .arrGet ..
@@ -351,7 +353,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .sliceBorrowM .. | .sliceBorrowI .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
   | .sliceSplitM .. | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. | .sliceReplaceM .. | .sliceSwapM ..
   | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .withloadU ..
-  | .foldImm .. | .foldOwn .. | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .iterate .. | .divFuel ..
+  | .foldImm .. | .foldOwn .. | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .unfoldK .. | .iterate .. | .divFuel ..
   | .reify .. =>
       some (.atom .pers)
 where
