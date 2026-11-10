@@ -467,6 +467,11 @@ corpus/core-fin-cancel-reraised.bc 19:7: handle 2: inside [], finaliser; row [1,
 corpus/core-fin-cancel-reraised.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/core-fin-cancel-reraised.bc 1.0 resume-or-cancel: machine; condition 2 holds; -
 corpus/core-fin-cancel-reraised.bc 2.0 abortive: -; condition 2 holds; -
+corpus/core-fin-cancellable.bc flows [0, 1, 4, 4294967295], finaliser; main [1, 4], finaliser
+corpus/core-fin-cancellable.bc 15:3: handle 4: inside [1], finaliser; row []; ops 4.0 once; names 4.0 []; condition 2 holds
+corpus/core-fin-cancellable.bc 20:5: handle 1: inside [], finaliser; row [4]; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/core-fin-cancellable.bc 4.0 once: error; condition 2 holds; -
+corpus/core-fin-cancellable.bc 1.0 abortive: error; condition 2 holds; -
 corpus/core-fin-e7b.bc flows [0, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/core-fin-e7b.bc 12:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-fin-e7b.bc 15:5: handle 2: inside [], finaliser; row [1]; ops 2.0 resume-or-cancel; names 2.0 []; condition 2 holds

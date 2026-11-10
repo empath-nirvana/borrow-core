@@ -93,6 +93,7 @@ closure-captures-list 3 0 0 9 9 0
 core-fin-cancel-propagated 0 0 0 0 0 0
 core-fin-cancel-reentered 0 0 0 0 0 0
 core-fin-cancel-reraised 0 0 0 0 0 0
+core-fin-cancellable 0 0 0 0 0 0
 core-fin-e7b 0 0 0 0 0 0
 core-fin-e7d 0 0 0 0 0 0
 core-fin-e8b 0 0 0 0 0 0
