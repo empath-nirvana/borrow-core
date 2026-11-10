@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.64 · 2026-11-09
+Version 1.65 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -3007,8 +3007,9 @@ raises, K4 below); a lend `&mut x` in the arguments of an operation, of a block'
 a recursive group's own call (§20); an operation of an answering effect inside a clause of an answering handler;
 a function with a row whose written result is a computation (a loop); type parameters on an
 answering effect; an effect with both kinds of operation; an unrestricted operation that answers
-`never` (`multi ctl`, above); a `let mut` declared outside a control `with` and assigned in it, or
-a place lent in it. Several instances of one effect are §38's, with what it does not provide.
+`never` (`multi ctl`, above); a move out of a variable lent for a control handler's body, and a
+capability passed on in a control handler's body (§41 *A control `with` lends what its body
+writes*). Several instances of one effect are §38's, with what it does not provide.
 
 ### Reports
 
@@ -3107,8 +3108,6 @@ program's derivation gives it (`checkProgram_letPoly`).
 - **K4: an early exit from a kernel fold.** A `raise` in the algebra of `fold_own`/`fold_imm` needs
   the fold to stop (`corpus/pending/raise-in-fold.bc`).
 - An error that holds an owned value: §19's `[raise]` asks its argument to consume.
-- A control `with` that hands back the `let mut` variables its body assigns or the places it
-  lends.
 - A capability threaded through a `for` over `&a` of an owned array: the lend around the loop
   takes `top` as its bound, so the loop's state cannot hold a borrow (`corpus/effects-map.bc`
   passes a view instead).
@@ -8173,8 +8172,8 @@ a callback, a block, a loop's turn), passes that part's writes `W` in and back o
   rebinding `x` as the lend does; a cell is `modify`'d through `withswap`.
 - **Refused,** each by a message that names the rule: a closure that writes and is not given at a
   block parameter of a call, stored or returned (`Effects.escapingWriter`); a `run` that writes
-  inside an expression (`checkRun`); a control handler's body that writes (it may be abandoned,
-  §18 *Not provided*); a `for`'s `else` value that writes. Koka's precedent is the escape
+  inside an expression (`checkRun`); a `for`'s `else` value that writes. A control handler's body,
+  which may be abandoned, hands nothing back: what it writes is lent around it (below). Koka's precedent is the escape
   refusal: its `var` in a closure that escapes is a type error.
 
 ### The rule table
@@ -8196,7 +8195,9 @@ what its parts write and has no boundary of its own.
 | `borrow k P { b -> S }` | `{P} ∪ W(S)` | the callback hands back `(result, W)` beside the places declared outside it that it lends; the binding rebinds `P` and `W` |
 | `modify P { v -> S }` | `{P} ∪ W(S)` | the callback hands back `(c, (r, W))`, the new content `c` and the result `r` (`()` when there is none; `Sugar.modifyBody`); of a `let mut` value, the body runs in place |
 | `with h(e) { S }`, answering | `W(S)` | as a borrow block of the state's cell (§18) |
-| `with h(…) { S }`, control | — | refused when `W(S)` is not empty |
+| `with h(…) { S }`, control | `W(S)`, and the places `S` lends | each lent around the site, `borrow mut &mut x { 'l, x -> … }`; in `S` the name is the borrow; the binding rebinds `x` (refused for a capability) |
+| `borrow k &mut x { b -> S }` | `{x} ∪ W(S)` | the lend rebinds `x`, as `modify &mut x`; `b` is a borrow of `x`'s content |
+| a read of a lent `x` | `{x}` (the borrow) | bound before the computation it is in |
 | `run M` | `W(M)` | `M` hands back `(value, W)` where it is bound; inside an expression, refused |
 | `if …`, `match …` inside an expression | `W(M)` | read as `run M` (a call argument, an operand, a pair component, the right side of `x = …`, a field initialiser): `f(if b { 1 } else { 2 })` is `f(run if b { 1 } else { 2 })`; where it is bound it hands back `(value, W)`; inside an expression, refused when `W` is not empty, the refusal naming the construct as written |
 | a closure: `{ p -> S }`, `!{ … }`, `{ S }`, `thunk`, `thunkv` and their `!` forms | `W(S)` | marked `writes(W) V` (`VSugar.writes`); at a block parameter of a call, the copy passes `W` in and out at each call; elsewhere refused |
@@ -8204,8 +8205,8 @@ what its parts write and has no boundary of its own.
 | a handler's clause | its `mut` parameters only | the state is threaded by §18 |
 | a declaration (`fn`, `main`, `def`, a `poly` case) | its own `let mut`s | no `let mut` reaches another declaration |
 
-**Places declared inside a block.** The places a borrow block or a `with` body hands back, or at a
-control `with` is refused for, are the places it lends that are declared outside it. A lent name
+**Places declared inside a block.** The places a borrow block or a `with` body hands back, or a
+control `with` lends around its site, are the places it lends that are declared outside it. A lent name
 is declared inside the block when a binder in the body declares it, at any depth of the borrow
 blocks, `with` bodies and `run`s the body runs in place, and the name is not bound where the block
 begins: a `let mut x` declared in an inner `with`'s body and lent there is the inner body's. A
@@ -8213,6 +8214,67 @@ binder of a name already bound outside (a capability rebound, `let (stdout, …)
 declaration, and that place stays the outer block's. R1 renames every other shadowing binder in a
 program's source, so a name declared inside never stands for an outer place; core text is read by
 the same rule (`bcc print` round-trips; `corpus/with-nested-lend.bc`).
+
+### A control `with` lends what its body writes
+
+A control handler's body (`with h(…) { S }`, `h` declared `handler h…: E, A -> R`) may be
+abandoned, so it hands nothing back. Each enclosing `let mut` variable `x` that `S` writes (R2),
+and each place declared outside `S` that `S` lends, is lent around the handler site, and inside
+`S` the name `x` is that borrow:
+
+    let r = with h(…) { S }     ⇒     let r = borrow mut &mut x { 'l, x -> with h(…) { S } }
+
+nested, one lend per place, the first written outermost. In `S`, `x : mut 'l A`:
+
+- `&mut x` at a call is a reborrow of the borrow (`withbor3`, or `withbor3U` where the call
+  performs abortive operations);
+- `x = e` is `modify x { x -> (e, ()) }`: the content replaced; in `e`, `x` is the old content;
+- `modify x { … }`, `modify &mut x { … }` and `borrow mut x { … }` take the borrow itself;
+- a read of `x` is `*&mut x`, the content copied through the borrow (`withswap`), bound just
+  before the computation it occurs in (a `while`'s condition at the start of each turn). A read
+  rebinds the borrow, so it counts as a write of the borrow (R2) and every frame it is in hands
+  the borrow on;
+- a move out of `x` (a read at a linear type) is refused: "a value can't be moved out of `x`
+  here: it is lent for the body of a control handler, which may be abandoned, and its type `A` is
+  linear";
+- `x <- M` of a lent `x` is refused, naming `x = …`.
+
+After the `with`, `x` holds the writes made before an abort, as in Rust: the lend ends when the
+handler site answers, whether the body finished or a clause abandoned it. The lends hand the
+places back where the `with` is bound, as `run` hands back what it writes; inside an expression
+the `with` is refused by `run`'s rule (`checkRun`), naming it. The elaborator inserts existing
+core forms, which the kernel checks: `alloc`, `withbor2` and `free` (a cell scoped to the site)
+for a `let mut` value, `withbor2` of a cell, `withbor3` of a borrow (a nested control handler's).
+
+- **Capabilities are not lent.** A body that passes on `stdin`, `stdout` or `stderr` (a cell a
+  function takes and hands back, §11) is not given a borrow, which such a function cannot take.
+  It is refused, the message naming the capability: "the body of `with to_result` takes `stdout`
+  and would hand it back, but a control handler's body may be abandoned: pass a capability
+  outside the handler, or perform its effect inside (SPEC §41, R3)".
+- **Which handlers.** The parser knows the control handlers in scope as it knows the `data` table
+  (`Parser.dataIn`, `tableOf`: the prelude's, the included modules' and the program's own
+  `handler … : E, A -> R` declarations). In core text (`def`, `main : C`, a printed program) a
+  control handler's body hands nothing back: the lends are written around it, so `bcc print`
+  reads back. What a control handler's body lends is not counted among what an enclosing block
+  lends (`Val.lentNames … ctl`).
+- **The general forms**, each usable on its own:
+  1. `borrow mut &mut x { 'l, b -> S }` (`borrow imm &x { … }`): the place `x` lent to the block,
+     the borrow chosen by `x`'s type as `&mut x` at a call chooses it: `x : ref A` gives
+     `withbor2` (`withbor1`) of the cell; `x : mut 'a A` the reborrow `withbor3` (`mut` only);
+     `x : A` a value a cell scoped to the block (`alloc`, the borrow, `free`, the cell's lend
+     marked `lendCell`). The lend rebinds `x` (`Comp.elab`), as `modify &mut x` does.
+  2. `&mut m` at a call, `m : mut 'a A`: the reborrow `withbor3` (`withbor3U` at an abortive row),
+     handing `m` back.
+  3. `*&mut m`, `m : mut 'a A`, `A` not linear: the content, read by `withswap` (a copy), `m`
+     rebound.
+
+  Instance inference (`Elab.Instances`) gives a lent block's binder the borrow of what `x`
+  holds, and `*&mut x` the content, so `raise(x)` in a lent body infers `Fail`'s argument as it
+  would outside.
+- **Baselines.** No change to `Core/`, `Support/` or `Backend2/`: the fundamental property,
+  adequacy and every borrow guarantee are as before, and the inserted lend is a core form the
+  kernel checks. Every corpus program keeps its output and counts. Answering `with` bodies, and
+  control bodies that write nothing outside, are elaborated as before.
 
 **`if` and `match` as expressions.** The parser inserts `run M` for an `if` or `match` where a
 value is expected; the kernel checks it as a written `run`. At a statement or a `let` head an
@@ -8242,7 +8304,13 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/mut-modify.bc` | `modify` whose body writes, on a scoped cell and on a `mut` borrow | `((i32[6], i32[7]), i32[120])` (was `((6, 0), 110)`) |
 | `corpus/mut-lend-arm.bc` | `&mut x` in an arm (R2) | `i32[12]` (was `2`, the lend's write lost) |
 | `corpus/for-in-if-lend.bc` | #502, from `corpus/pending/` | `i32[3]` |
-| `corpus/reject/mut-control-with.bc` | a control handler's body that writes | refused (§18 *Not provided*) |
+| `corpus/mut-control-with.bc` | a resuming handler's body that assigns | `i32[5]` |
+| `corpus/mut-control-raise.bc` | `let mut`s assigned in `with to_result`, raised midway; reads through the borrow | `(inr i32[11], i32[11012])` |
+| `corpus/mut-control-lend.bc` | a string buffer lent `&mut` to a bounded recursion in `on_exhausted`, its length read with `modify`, used after | `(i32[3], (i32[3], i32[4]))` |
+| `corpus/mut-control-exhausted.bc` | the same where the recursion exhausts its budget: the buffer keeps the partial state | `(i32[4294967295], i32[10002])` |
+| `corpus/mut-control-nested.bc` | nested control handlers writing one variable (a `withbor3` reborrow of the outer lend) | `(inr i32[110012], i32[110012])` |
+| `corpus/reject/mut-control-move.bc` | a move out of a lent variable | refused, naming `buf` |
+| `corpus/reject/effect-try-lend.bc` | `&mut stdout` passed on in `to_result`'s body | refused, naming `stdout` |
 | `corpus/lend-copy.bc` | copies of a borrow block's borrow over a loop: `let b2 = b`, `let mut v = v` (T04's form), a copy after a statement | `(i32[30], (i32[321], i32[6]))` (was refused) |
 | `corpus/binder-copies.bc` | a copy of a block parameter, of a clause's continuation, and a copy of a copy | `(i32[4294967291], (i32[103], i32[22]))` (was refused) |
 | `corpus/div-residual-copy.bc` | a div function's residual handed back by a copy, `let j = i`, and by `let i = i` | `i32[4]` on `abc` (was refused; `let i = i` ran before R1) |
@@ -8362,9 +8430,19 @@ whose meaning depended on two names coinciding.
 
 ### Open
 
-- **A control handler's body that writes or lends an outer place** (#885), and a `run` that
-  writes inside an expression, are refused. The first needs the handler's clauses to hand the variables back when the body is
-  abandoned; the second, the expression's calls lifted in order around it.
+- **A `run` that writes inside an expression** is refused: it needs the expression's calls lifted
+  in order around it.
+- **Loops in a control handler's body** (`while`, `loop`, `for`): the body's type is not
+  determined there ("the type of the body `h` handles is not determined here"), so the rule for a
+  `while`'s condition is not exercised by a program.
+- **A task's body** (`with spawn { … }`) that writes an outer `let mut`: lent around the site, the
+  task outlives it, and the kernel refuses (BOXED-κ at `top`: "`c`, of type `mut 'l i32`, is used
+  inside, and it cannot be shown to outlive `top`").
+- **A read of a lent variable inside a closure** in the body lends from the closure, refused as
+  any lend there; an `imm` lend `&x` of a lent variable (an `imm` reborrow of a `mut` borrow) is
+  not provided.
+- **`with … finally { D }` whose body is lent**: `D` runs inside the lend and sees the outer name.
+- **Capabilities in a control body** (`corpus/pending/async-progress.bc`): §34 *Open*.
 - **The target pairs** that are not met (`docs/research/let-mut-state/README.md`): what separates
   each is the counted loop (§16), the state machine of a div body (§14), §32's calling convention,
   a function's parameters and effects' elaboration (§18, §19), none of it this entry's.
@@ -12616,6 +12694,13 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.65** (2026-11-09) — §41, §18 (#885): a control `with` lends what its body writes. Each
+  enclosing `let mut` the body writes, and each outer place it lends, is lent around the handler
+  site (`borrow mut &mut x { 'l, x -> with h(…) { S } }`); inside, `&mut x` is a reborrow, `x = e`
+  is `modify`, a read is a copy through the borrow, and a move out of `x` is refused. After the
+  `with`, `x` keeps the writes made before an abort. Capabilities are not lent. New general forms:
+  `borrow mut &mut x { … }`, the reborrow `&mut m` at a call, and `*&mut m`. No kernel change; no
+  golden or count changed.
 - **1.64** (2026-11-09) — §68 (#855 K3, as built): the rules `erase`/`eraseB` are named
   `codeErase`/`codeEraseB` (`erase` is `TExpr.erase` in the typed term). `Ctx.capTy`, `Ctx.capOK`
   and `VTy.forceTy` are named; the restated `force` reads `T.forceTy = some C`. K3 and `codeI`'s
