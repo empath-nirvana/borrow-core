@@ -25,6 +25,7 @@ import Core.DivHandleLast
 import Core.DivPrograms
 import Core.DivRuntime
 import Core.DivDrive
+import Core.HandleLastErase
 import Core.EffCancel
 import Core.EffCancelTyped
 import Core.Persistent
