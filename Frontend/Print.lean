@@ -227,7 +227,8 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .app _ (.sugar _ (.op o)) (.pair _ a b) => "(" ++ a.pp 2 k ++ " " ++ o.str ++ " " ++ b.pp 2 k ++ ")"
     | .app _ (.sugar _ (.call c)) W => c ++ "(" ++ W.pp 0 k ++ ")"
     | .app _ (.sugar _ .count) (.pair _ a b) => "(" ++ a.pp 2 k ++ ".." ++ b.pp 2 k ++ ")"
-    | .app _ (.sugar _ .pipe) (.pair _ a s) => "(" ++ a.pp 1 k ++ " |> " ++ s.pp 2 k ++ ")"
+    | .app _ (.sugar _ (.pipe m)) (.pair _ a s) =>
+      "(" ++ a.pp 1 k ++ (if m == .pull then " >| " else " |> ") ++ s.pp 2 k ++ ")"
     | .app _ (.sugar _ .deref) V => "*" ++ V.pp 3 k
     | .app _ (.sugar _ (.field f _)) V => "(" ++ V.pp 0 k ++ ")." ++ f
     | .app _ (.sugar _ (.update f _)) (.pair _ r e) => "(" ++ r.pp 0 k ++ ").{" ++ f ++ " = " ++ e.pp 0 k ++ "}"

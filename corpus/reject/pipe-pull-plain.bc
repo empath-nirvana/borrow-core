@@ -1,0 +1,8 @@
+-- `>|` connects stream stages (SPEC §pipes-S): its stage performs `Stream`, or (until L2, #921)
+-- takes a stored generator first. `double` is neither, so `3 >| double` is refused; `3 |> double`
+-- is §33's case (iii), `double(3)`.
+-- expect: 7:16: `>|` connects stream stages; `double` performs no `Stream[A]`
+fn double(x: i32) -> i32 = 2 * x
+main -> i32 =
+  let x = 3 >| double;
+  x

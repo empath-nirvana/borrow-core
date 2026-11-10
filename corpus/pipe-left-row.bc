@@ -1,0 +1,59 @@
+-- The left side's row (SPEC §pipes-S): an edge is a stream edge when its stage is a stream stage
+-- and its left side performs an iteration effect, read from the left side as written, before rows
+-- are inferred. A call reads its function's written row; a value performs nothing; a block, `if`
+-- or `match` performs what its parts do, when each part is known. When the left side's row cannot
+-- be read, the edge is §33's case (iii), and `bcc check` notes `cannot tell whether this is a
+-- stream` (`corpus/reports/pipe-left-row.txt`).
+--
+-- `Stream` here is a stand-in for lib's item effect (L1, #920): a stage whose written row performs
+-- `Stream` is a stage in (R)'s form. `plus_next` is one, with a plain first parameter, and
+-- `with tens { … }` serves its `next()`.
+--
+-- * `a`: the left side is an `if` of two values: it performs nothing, so the edge is not a stream
+--   edge and is case (iii), `plus_next(if … { 3 } else { 4 })`: 3 + 10.
+-- * `b`: the `if` calls `pick`, which writes no row: case (iii) with the note `annotate the block's
+--   row`; 4 + 10.
+-- * `c`: a stored generator, a value, piped `>|` into a source-owning adapter (transitional until
+--   L2, #921): its row is read (nothing), and the edge is case (iii), `filter(it, even)`. `evens`
+--   over 0 … 6 yields 0, 2, 4.
+-- * `d`: a call of `count`, which writes no row (it is inferred later: `range`'s), piped into an
+--   adapter: case (iii), noted `annotate `count`'s row`; 0 + 1 + 4.
+--
+-- Answer: `((i32[13], i32[14]), (i32[6], i32[5]))`.
+
+include adapters
+
+effect Stream[A] { ctl next() -> A }
+
+handler tens[A]: Stream[i32], A -> A = { return(a) = a; next(k) = k(10) }
+
+fn plus_next(x: i32) -> i32 with Stream[i32] = x + next()
+
+fn pick(c: bool) -> i32 = if c { 3 } else { 4 }
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn count(n: i32) -> 1 = range(0, n)
+
+fn even(x: i32) -> bool = host[and32] (x, 1) == 0
+fn sq(x: i32) -> i32 = x * x
+
+fn evens(it: U (pull i32 1 1)) -> 1 with Yield[i32] =
+  for x in it >| filter(even) { yield(x) };
+  ()
+
+main -> (i32 * i32) * (i32 * i32) =
+  let flag = false;
+  let ab = with tens[i32 * i32] {
+    let a = (if flag { 4 } else { 3 }) |> plus_next;
+    let b = (if flag { 3 } else { pick(false) }) |> plus_next;
+    (a, b)
+  };
+  let mut c = 0;
+  for y in evens(range(0, 6)) { c = c + y };
+  let mut d = 0;
+  for y in count(3) >| map(sq) { d = d + y };
+  (ab, (c, d))

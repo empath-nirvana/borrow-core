@@ -484,6 +484,12 @@ structure FieldCand where
   rolls : Bool
   deriving DecidableEq, Repr, Inhabited
 
+/-- The mode of a pipe's wire: `|>` push, `>|` pull (decision B′).  `[spec §33, §pipes-S]` -/
+inductive PipeMode where
+  | push
+  | pull
+  deriving DecidableEq, Repr, Inhabited
+
 /-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied
 to its operands as values, and elaborated to core by the typed pass of `Frontend/Sugar.lean`. -/
 inductive VSugar where
@@ -550,11 +556,13 @@ inductive VSugar where
   /-- The stored generator of a call of a function that performs an iteration effect (SPEC §15),
   applied to the call of its copy for the site. -/
   | pullSite (info : ItInfo)
-  /-- `e |> s`, applied to the pair of `e` and the stage `s` (SPEC §33): a handler `h(…)` is
-  `with h(…) { e }`; a function whose first parameter is a computation parameter takes `e`
-  suspended, `f({ () -> e }, …)`; any other function takes `e` first, `f(e, …)`. Elaborated away
-  by `Frontend.Elab.Effects`.  `[spec §33]` -/
-  | pipe
+  /-- `e |> s` (`m` push) or `e >| s` (`m` pull), applied to the pair of `e` and the stage `s`
+  (SPEC §33): a handler `h(…)` is `with h(…) { e }`; a function whose first parameter is a
+  computation parameter takes `e` suspended, `f({ () -> e }, …)`; any other function takes `e`
+  first, `f(e, …)`. A chain of stream stages is read in its normal form first
+  (`Frontend.Elab.Pipes.chainOf`). Elaborated away by `Frontend.Elab.Effects`.
+  `[spec §33, §pipes-S]` -/
+  | pipe (m : PipeMode)
   /-- `writes(x, …) V`: the closure `V` assigns the enclosing body's `let mut` variables `x, …`
   (SPEC §41, rule R3). It is given at a block parameter of a call, which passes them in and back
   out at each call of it; anywhere else it is refused. Elaborated away by `Frontend.Elab.Effects`.

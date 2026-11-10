@@ -1,0 +1,25 @@
+-- `>|` (SPEC §pipes-S): a pull wire between stream stages. Until the stage-form adapters (L2,
+-- #921), a stage whose first parameter is a stored generator (`lib/adapters.bc`) is a stream stage
+-- transitionally, and `e >| f(a, …)` into one is §33's case (iii), `f(e, a, …)`, the left side
+-- stored at the parameter (SPEC §15), as `|>` is. So `range(0, 10) >| map(…) >| filter(even) >|
+-- take(3)` is `take(filter(map(range(0, 10), …), even), 3)`, the `|>` chain's term, with its
+-- output and count.
+--
+-- Answer: `(i32[20], i32[20])`: the first three even squares of 0 … 9, 0 + 4 + 16, by `>|` and by
+-- `|>`.
+
+include adapters
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn even(x: i32) -> bool = host[and32] (x, 1) == 0
+
+main -> i32 * i32 =
+  let mut a = 0;
+  for y in range(0, 10) >| map(!{ x -> x * x }) >| filter(even) >| take(3) { a = a + y };
+  let mut b = 0;
+  for y in range(0, 10) |> map(!{ x -> x * x }) |> filter(even) |> take(3) { b = b + y };
+  (a, b)

@@ -7,8 +7,9 @@
 # names the module's file instead (`lib/m.bc:line:col: message`, #883).
 #
 # Reports. For every corpus/reports/<name>.txt, the effects lines `bcc check corpus/<name>.bc` prints
-# (`effect`, `row`, `lowering`, `call`: SPEC §18) must be exactly that file: the rows, the lowering
-# shape of each handler and each call site's elaboration are pinned.
+# (`effect`, `row`, `lowering`, `call`: SPEC §18; `note`: SPEC §pipes-S) must be exactly that file:
+# the rows, the lowering shape of each handler, each call site's elaboration and each note are
+# pinned.
 #
 # The trusted base. For every corpus/trusted/<name>.txt, what `bcc trusted corpus/<name>.bc` prints
 # (the externs `main` reaches, with their contracts and host implementations: SPEC §11, §34) must
@@ -63,7 +64,7 @@ rejects() {
 reports() {
   local g=$1 f
   f=corpus/$(basename "${g%.txt}").bc
-  if ! diff -u "$g" <("$bcc" check "$f" 2>&1 | grep -E '^(effect|row|lowering|call) '); then
+  if ! diff -u "$g" <("$bcc" check "$f" 2>&1 | grep -E '^(effect|row|lowering|call|note) '); then
     echo "$g: the reports differ"; return 1
   else echo "$g: reports match"; fi
 }
