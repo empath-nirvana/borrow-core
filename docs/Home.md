@@ -58,6 +58,8 @@ research notes behind them.
   computation parameters, rows and `|>`, built as SPEC §33; stored callbacks are not built.
 - [Async with capabilities](async-capabilities.md): tasks that borrow their own data across
   `await` with no `Pin` (#52), built as SPEC §29 with the named assumption `PinLaw`.
+- [Effect lowering](effect-lowering.md) (#541): the direct-call conditions for tail-resumptive
+  clauses, which the checker and Backend2 read; its lowering sections describe the old backend.
 - [The compiler](compiler.md): compiling from what the checker establishes (#555), and
   [N1's plan](n1-plan.md), which describes Backend2's typed IR as built (N1, SPEC §43).
 - [Ergonomics](ergonomics.md): the surface's verbosity in real programs, and the sugar planned for
@@ -103,9 +105,8 @@ saying what superseded it.
     [strict outlives](outlives-strictness.md), [recursion](scope-recursion.md) and
     [deep freeze](scope-deep-freeze.md) scopes,
     [second-class closures and System C](second-class-and-system-c.md);
-  - the backend's designs before [the compiler](compiler.md): the
-    [pipeline architecture](pipeline-architecture.md) (#552) and
-    [effect lowering](effect-lowering.md) (#541);
+  - the backend's design before [the compiler](compiler.md), the
+    [pipeline architecture](pipeline-architecture.md) (#552);
   - the [consolidation audit](consolidation-audit.md), the
     [generics inventory](generics-inventory.md),
     [ideas on handlers](ideas-handlers-and-borrows.md),

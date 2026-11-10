@@ -1,6 +1,6 @@
 # Effect lowering: handlers resolved statically, state machines last (#541)
 
-*History: #541's design. `compiler.md` §6.2 maps its units into the new backend's. Its inventory (§1.4) and the direct-call conditions (§2.3) are cited from `Core/` and SPEC. The text below is kept as the record.*
+*Status: the direct-call conditions for tail-resumptive clauses (§2.3) are current: the checker (`Frontend/Check/Handled.lean`) and Backend2's `directFacts` (SPEC §47) read them. The lowering sections describe the old backend, and `compiler.md` §6.2 maps this design's units into the new backend's.*
 
 A design for the backend's lowering of effects. It changes no code. Each claim is marked:
 
