@@ -1631,11 +1631,13 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_opTableR_le
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.erwp_opTableN_R
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_nu_iff
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cBNP_unroll
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cBN_unroll
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabN_instT
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cBN_step
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cBN_pureSteps
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cBNP_step
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cBNP_pureSteps
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.map_okN
+#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.node_okP
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.node_okN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.candNN_post
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.nuIn_compatN
@@ -2651,7 +2653,6 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.unfoldK_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_step
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.cN_pureSteps
-#print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.node_okK
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.nuOutK_compatN
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.CodeLoop855N.d_progK
 #print axioms BoCa.Fig16.LogRel.Core.Chain.SI.CodeLoop855N.progK_runs
