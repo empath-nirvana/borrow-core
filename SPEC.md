@@ -12551,15 +12551,16 @@ Beside §9's slice constants (`sliceGetM`, `sliceReplaceM`, the splits):
     sliceCopyM : !(ArrayMut @a A ⊗ (I32 ⊗ (ArrayImm @b A ⊗ (I32 ⊗ I32))) ⇒ ArrayMut @a A ⊗ (1 ⊕ 1))     A persistent
 
 - `sliceCopyM (dst, (di, (src, (si, len))))` checks the bounds once: `0 ≤ di`, `0 ≤ si`, `0 ≤ len`,
-  `di + len ≤ len dst` and `si + len ≤ len src`, on mathematical integers: a negative input, or
-  `di + len` or `si + len` past 2³¹ − 1, is out of range, never wrapped. In range it writes `dst[di + k] := src[si + k]` for every
-  `k < len`, in one machine step, and answers `(dst, inr ())`. Out of range it writes nothing and
-  answers `(dst, inl ())`; the kernel has no trap, so the surface raises on `inl`, as with
-  `array_replace`'s sum.
+  `di + len ≤ len dst` and `si + len ≤ len src`, on mathematical integers: a negative input, or `di
+  + len` or `si + len` past 2³¹ − 1, is out of range, never wrapped. In range it writes `dst[di + k]
+  := src[si + k]` for every `k < len`, in one machine step, and answers `(dst, inr ())`. Out of
+  range it writes nothing and answers `(dst, inl ())`; the kernel has no trap, so the surface raises
+  on `inl`, as with `array_replace`'s sum.
 - **The element type is persistent** (§10: the integer and float scalars, `U8`, `1`, `!` values,
-  which are copied bitwise): it owns no resource, so a copy is a write of equal values. Owned or linear elements (a move) are not covered.
-- **No overlap, by the types.** `dst` is `Mut @a`, exclusive, and `src` an `Imm @b` view, so the
-  two ranges are disjoint: no run-time aliasing check, and no memmove.
+  which are copied bitwise): it owns no resource, so a copy is a write of equal values. Owned or
+  linear elements (a move) are not covered.
+- **No overlap, by the types.** `dst` is `Mut @a`, exclusive, and `src` an `Imm @b` view, so the two
+  ranges are disjoint: no run-time aliasing check, and no memmove.
 - An owned `Array A` destination is reached through the existing borrow (`sliceBorrowM`). A text or
   `str` source that is an `ArrayImm U8` qualifies directly.
 
