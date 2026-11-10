@@ -12669,8 +12669,8 @@ One construct per step of `Paper`'s machine:
 - **Facts read.** Each row entry's qualifier, answer and cancel row; `[then]`'s `Σ_D`; `κ`'s
   `cancelTy`. `ThenLe` and `Σ_D ≤ Σ` are the typing's. The conversion fails loudly on a
   suspension outside its machine's row.
-- **`UNPROVED:`** A non-capturable operation's cancel entry is never entered (it traps). A cancel
-  that may suspend over a task's own stack is refused, outside the fragment (#970).
+- **`UNPROVED:`** A non-capturable operation's cancel entry is never entered (it traps).
+- **Refused:** a cancel that may suspend over a task's own stack is outside the fragment (#970).
 
 ### Programs
 
