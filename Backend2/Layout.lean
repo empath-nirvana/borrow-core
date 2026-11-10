@@ -47,11 +47,81 @@ inductive NK where
   | clos (k : CodeKind) (param : Option Nat) (res : List Nat)
   deriving Inhabited, BEq, Repr
 
+/-- **An interned type's former**, its children by their ids (`TyTab`): one key per value type or
+computation type with every `!` erased. `!A` has no key of its own: it is `A`'s. -/
+inductive TKey where
+  | unit | zero | unk
+  | opq (k : BoCa.Fig16.LogRel.Core.Opaque)
+  | int (w : Width)
+  | pair (a b : Nat)
+  | sum (a b : Nat)
+  | mu (a : Nat)
+  | tvar (n : Nat)
+  | ref (a : Nat)
+  | imm (a : Nat)
+  | mut (a : Nat)
+  | fam (l : Nat)
+  | thunk (k : Nat)
+  | ret (a : Nat)
+  | arr (a k : Nat)
+  | amp (k₁ k₂ : Nat)
+  | top
+  | nu (k : Nat)
+  deriving Inhabited, BEq, Hashable
+
+/-- **The interned types**: each key's id, and each id's key. A key's children are interned before
+it, so a child's id is below its parent's. Two types have one id exactly when they are equal with
+every `!` erased (`LTy.unbang`): an id is its former and its children's ids. -/
+structure TyTab where
+  ids : Std.HashMap TKey Nat := {}
+  keys : Array TKey := #[]
+
+/-- The id of the type of key `k`, interned. -/
+def TyTab.intern (T : TyTab) (k : TKey) : TyTab × Nat :=
+  match T.ids[k]? with
+  | some i => (T, i)
+  | none => ({ ids := T.ids.insert k T.keys.size, keys := T.keys.push k }, T.keys.size)
+
+/-- The type of each id, its `!`s erased: a value type's at a value type's id, a computation
+type's at a computation type's. -/
+def TyTab.types (T : TyTab) : Array LTy × Array LCTy := Id.run do
+  let mut vs : Array LTy := Array.mkEmpty T.keys.size
+  let mut cs : Array LCTy := Array.mkEmpty T.keys.size
+  for k in T.keys do
+    let v (i : Nat) : LTy := vs[i]!
+    let c (i : Nat) : LCTy := cs[i]!
+    let (t, k) : LTy × LCTy := match k with
+      | .unit => (.unit, default)
+      | .zero => (.zero, default)
+      | .unk => (.unk, default)
+      | .opq o => (.opq o, default)
+      | .int w => (.int w, default)
+      | .pair a b => (.pair (v a) (v b), default)
+      | .sum a b => (.sum (v a) (v b), default)
+      | .mu a => (.mu (v a), default)
+      | .tvar n => (.tvar n, default)
+      | .ref a => (.ref (v a), default)
+      | .imm a => (.imm (v a), default)
+      | .mut a => (.mut (v a), default)
+      | .fam l => (.fam (v l), default)
+      | .thunk k => (.thunk (c k), default)
+      | .ret a => (default, .ret (v a))
+      | .arr a k => (default, .arr (v a) (c k))
+      | .amp k₁ k₂ => (default, .amp (c k₁) (c k₂))
+      | .top => (default, .top)
+      | .nu k => (default, .nu (c k))
+    vs := vs.push t
+    cs := cs.push k
+  return (vs, cs)
+
 structure GState where
   nodes : Array NK := #[]
   parent : Array Nat := #[]
-  /-- Each node's type, for the cell classes' widths. -/
+  /-- Each node's type, for the messages. -/
   origin : Array LTy := #[]
+  /-- Each node's type's id (`TyTab`), for the cell classes' widths. -/
+  originId : Array Nat := #[]
+  tys : TyTab := {}
   /-- Each closure class's codes (at its representative). -/
   codes : Std.HashMap Nat (List Nat) := {}
   varNode : Std.HashMap Var Nat := {}
@@ -82,76 +152,105 @@ def find (i : Nat) : GM Nat := do
     j := p
   return r
 
-def newNode (k : NK) (o : LTy) : GM Nat := modifyGet fun s =>
+def newNode (k : NK) (o : LTy) (oi : Nat) : GM Nat := modifyGet fun s =>
   (s.nodes.size, { s with nodes := s.nodes.push k, parent := s.parent.push s.nodes.size,
-                          origin := s.origin.push o })
+                          origin := s.origin.push o, originId := s.originId.push oi })
 
 def setNode (i : Nat) (k : NK) : GM Unit := modify fun s => { s with nodes := s.nodes.set! i k }
 
+/-- The id of the type of key `k` (`TyTab`). -/
+def tyId (k : TKey) : GM Nat := modifyGet fun s =>
+  let (T, i) := s.tys.intern k
+  (i, { s with tys := T })
+
 mutual
-/-- The nodes of a value type; `env` gives the nodes of the type variables bound around it. -/
-def build (fuel : Nat) (env : List Nat) (t : LTy) : GM Nat := do
+/-- The nodes of a value type, and the type's id (`TyTab`); `env` gives the nodes of the type
+variables bound around it. -/
+def build (fuel : Nat) (env : List Nat) (t : LTy) : GM (Nat × Nat) := do
   match fuel with
   | 0 => throw "layout: a type too deep"
   | f + 1 =>
+  let leaf (k : NK) (key : TKey) : GM (Nat × Nat) := do
+    let i ← tyId key
+    pure (← newNode k t i, i)
   match t with
-  | .unit => newNode .unit t
-  | .zero => newNode .zero t
-  | .unk => newNode .unk t
-  | .opq _ => newNode .opq t
-  | .int w => newNode (.int w) t
+  | .unit => leaf .unit .unit
+  | .zero => leaf .zero .zero
+  | .unk => leaf .unk .unk
+  | .opq o => leaf .opq (.opq o)
+  | .int w => leaf (.int w) (.int w)
   | .pair a b => do
-    let x ← build f env a
-    let y ← build f env b
-    newNode (.pair x y) t
+    let (x, ia) ← build f env a
+    let (y, ib) ← build f env b
+    leaf (.pair x y) (.pair ia ib)
   | .sum a b => do
-    let x ← build f env a
-    let y ← build f env b
-    newNode (.sum x y) t
-  | .ref a => do newNode (.ref (← build f env a)) t
-  | .imm a => do newNode (.imm (← build f env a)) t
-  | .mut a => do newNode (.mut (← build f env a)) t
-  | .fam l => do newNode (.fam (← build f env l)) t
+    let (x, ia) ← build f env a
+    let (y, ib) ← build f env b
+    leaf (.sum x y) (.sum ia ib)
+  | .ref a => do let (x, ia) ← build f env a; leaf (.ref x) (.ref ia)
+  | .imm a => do let (x, ia) ← build f env a; leaf (.imm x) (.imm ia)
+  | .mut a => do let (x, ia) ← build f env a; leaf (.mut x) (.mut ia)
+  | .fam l => do let (x, il) ← build f env l; leaf (.fam x) (.fam il)
   | .tvar n =>
     match env[n]? with
-    | some i => pure i
+    | some i => pure (i, ← tyId (.tvar n))
     | none => throw s!"layout: a free type variable {n}"
   | .mu a => do
     -- `μX. A` is the node `A` builds with `X` that node itself.
-    let p ← newNode .unit t
-    let i ← build f (p :: env) a
+    let p ← newNode .unit t 0
+    let (i, ia) ← build f (p :: env) a
     let k := (← get).nodes[i]!
     setNode p k
-    modify fun s => { s with parent := s.parent.set! i p }
-    pure p
-  | .thunk k => buildC f env k
+    let it ← tyId (.mu ia)
+    modify fun s => { s with parent := s.parent.set! i p, originId := s.originId.set! p it }
+    pure (p, it)
+  | .thunk k => do
+    let (x, ik) ← buildC f env k
+    pure (x, ← tyId (.thunk ik))
   -- `!A` is represented as `A`.
   | .bang a => build f env a
-/-- The class node of a closure of `k`. -/
-def buildC (fuel : Nat) (env : List Nat) (k : LCTy) : GM Nat := do
+/-- The class node of a closure of `k`, and `k`'s id. -/
+def buildC (fuel : Nat) (env : List Nat) (k : LCTy) : GM (Nat × Nat) := do
   match fuel with
   | 0 => throw "layout: a type too deep"
   | f + 1 =>
+  let node (n : NK) (key : TKey) : GM (Nat × Nat) := do
+    let ik ← tyId key
+    pure (← newNode n (.thunk k) (← tyId (.thunk ik)), ik)
   match k with
   | .nu c => do
     -- `U(νX. C)` is the closure node `C` builds with `U X` that node itself.
-    let p ← newNode .unit (.thunk k)
-    let i ← buildC f (p :: env) c
+    let p ← newNode .unit (.thunk k) 0
+    let (i, ic) ← buildC f (p :: env) c
     setNode p (← get).nodes[i]!
-    modify fun s => { s with parent := s.parent.set! i p }
-    pure p
-  | .ret a => do newNode (.clos .unit none [← build f env a]) (.thunk k)
-  | .arr a c => do newNode (.clos .lam (some (← build f env a)) [← repNode f env c]) (.thunk k)
-  | .amp c d => do newNode (.clos .amp none [← repNode f env c, ← repNode f env d]) (.thunk k)
-  | .top => newNode .unit (.thunk k)
-/-- The node of what running a closure of `k` answers. -/
-def repNode (fuel : Nat) (env : List Nat) (k : LCTy) : GM Nat := do
+    let ik ← tyId (.nu ic)
+    let it ← tyId (.thunk ik)
+    modify fun s => { s with parent := s.parent.set! i p, originId := s.originId.set! p it }
+    pure (p, ik)
+  | .ret a => do
+    let (x, ia) ← build f env a
+    node (.clos .unit none [x]) (.ret ia)
+  | .arr a c => do
+    let (x, ia) ← build f env a
+    let (y, ic) ← repNode f env c
+    node (.clos .lam (some x) [y]) (.arr ia ic)
+  | .amp c d => do
+    let (x, ic) ← repNode f env c
+    let (y, id) ← repNode f env d
+    node (.clos .amp none [x, y]) (.amp ic id)
+  | .top => node .unit .top
+/-- The node of what running a closure of `k` answers, and `k`'s id. -/
+def repNode (fuel : Nat) (env : List Nat) (k : LCTy) : GM (Nat × Nat) := do
   match fuel with
   | 0 => throw "layout: a type too deep"
   | f + 1 =>
   match k with
-  | .ret a => build f env a
-  | .top => newNode .unit (.thunk k)
+  | .ret a => do
+    let (x, ia) ← build f env a
+    pure (x, ← tyId (.ret ia))
+  | .top => do
+    let ik ← tyId .top
+    pure (← newNode .unit (.thunk k) (← tyId (.thunk ik)), ik)
   | k => buildC f env k
 end
 
@@ -163,7 +262,7 @@ def nodeOfVar (ty : Var → Except String LTy) (x : Var) : GM Nat := do
     let t ← match ty x with
       | .ok t => pure t
       | .error e => throw e
-    let i ← build 4096 [] t
+    let (i, _) ← build 4096 [] t
     modify fun s => { s with varNode := s.varNode.insert x i }
     pure i
 
@@ -263,7 +362,7 @@ def fnRetNode (p : Prog) (fn : Nat) : GM Nat := do
   | some i => pure i
   | none =>
     let some f := p.fns[fn]? | throw s!"layout: no function f{fn}"
-    let i ← build 4096 [] f.ret
+    let (i, _) ← build 4096 [] f.ret
     modify fun s => { s with fnRet := s.fnRet.insert fn i }
     pure i
 
@@ -411,7 +510,7 @@ def places (p : Prog) : Except String (GState × Nat) := do
     for (fd, i) in p.fns.toList.zipIdx do
       for x in fd.params do let _ ← nodeOfVar (tyOfL p) x
       cc ← walk p (1 <<< 22) cc fd.body (← fnRetNode p i)
-    let m ← build 4096 [] p.mainTy
+    let (m, _) ← build 4096 [] p.mainTy
     let _ ← walk p (1 <<< 22) cc p.main m
     pure m
   let (m, s) ← act.run {}
@@ -614,12 +713,32 @@ def sumBoxes (n : Nat) (fs : Nat → Array Nat) (shape : Nat → NK) (comp : Arr
       out := boxes.fold (·.insert ·) out
   return out
 
+/-- Each node's representative: the root of its tree in `parent`, a forest. -/
+def reps (parent : Array Nat) : Array Nat := Id.run do
+  let n := parent.size
+  -- `0` not yet known; else the representative plus one.
+  let mut rep : Array Nat := Array.replicate n 0
+  for i in [0:n] do
+    if rep[i]! != 0 then continue
+    -- Up to the root or a node already known, then the path below it.
+    let mut path : Array Nat := #[]
+    let mut j := i
+    let mut r := i
+    for _ in [0:n + 1] do
+      if rep[j]! != 0 then r := rep[j]! - 1; break
+      let q := parent[j]!
+      if q == j then r := j; rep := rep.set! j (j + 1); break
+      path := path.push j
+      j := q
+    for k in path do rep := rep.set! k (r + 1)
+  return rep.map (· - 1)
+
 /-- Resolve the joined places: each class's codes, the heap classes, the boxed fields, every
 node's width and triviality, and each cell's width, by the checker's cell classes `cells` (each
 the types one cell may hold). -/
 def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
   let n := s.nodes.size
-  let rep := (Array.range n).map (findIn s.parent n)
+  let rep := reps s.parent
   let norm (k : NK) : NK := match k with
     | .pair a b => .pair rep[a]! rep[b]!
     | .sum a b => .sum rep[a]! rep[b]!
@@ -629,7 +748,9 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
     | .fam l => .fam rep[l]!
     | .clos k p r => .clos k (p.map (rep[·]!)) (r.map (rep[·]!))
     | k => k
-  let shape := (Array.range n).map fun i => norm s.nodes[rep[i]!]!
+  -- A node's shape is its representative's, one value shared.
+  let repShape := (Array.range n).map fun i => if rep[i]! == i then norm s.nodes[i]! else .unit
+  let shape := (Array.range n).map fun i => repShape[rep[i]!]!
   let mut union : Std.HashMap Nat (Array Nat) := {}
   let mut codeClass : Std.HashMap Nat Nat := {}
   for (k, cs) in s.codes.toList do
@@ -735,10 +856,19 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
     | .int .w32 | .int .f32 => 4
     | _ => 8 * width[v]!
   let bytes := (Array.range n).map fun i => bytesOf rep[i]!
-  let mut tyBytes : Std.HashMap LTy Nat := {}
+  -- Each type's most bytes, by its id: a node's type's id is its type's with every `!` erased
+  -- (`TyTab`), so the types keyed are the nodes' types, `!`s erased.
+  let nty := s.tys.keys.size
+  let mut most : Array Nat := Array.replicate nty 0
+  let mut isOrigin : Array Bool := Array.replicate nty false
   for i in [0:n] do
-    let o := s.origin[i]!.unbang
-    tyBytes := tyBytes.insert o (max (tyBytes.getD o 0) bytes[i]!)
+    let o := s.originId[i]!
+    most := most.set! o (max most[o]! bytes[i]!)
+    isOrigin := isOrigin.set! o true
+  let (vtys, _) := s.tys.types
+  let mut tyBytes : Std.HashMap LTy Nat := {}
+  for o in [0:nty] do
+    if isOrigin[o]! then tyBytes := tyBytes.insert vtys[o]! most[o]!
   let varNode := s.varNode.fold (fun m x i => m.insert x rep[i]!) {}
   let fnRet := s.fnRet.fold (fun m f i => m.insert f rep[i]!) {}
   return { rep, shape, union, recCls, boxed, width, trivial, bytes, tyBytes, varNode,
