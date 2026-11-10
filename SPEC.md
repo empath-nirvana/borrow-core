@@ -13109,7 +13109,13 @@ spine has a loop that is not counted, or a direct-style call of a div function.
      - `obs = handle_with[n](H′_st) ((nu_out s).1)`.
      - `H′`'s return clause applies `h`'s return clause to an end `inl b`.
      - `H′` passes a turn's end `inr s′` on as a skip, with the state the turn's clauses left.
-     - `cls` closes `s` under `h`'s close handler, as `io_hwf` does (§15).
+     - `cls` closes `s` under `h`'s close handler:
+       - a `must_resume` clause resumes: it is the user's own clause, at the close's answer type;
+       - any other κ (cancellable or multi) is cancelled;
+       - an abortive operation answers `()`, so a looping body whose residual is not `1` is refused
+         by the checker;
+       - a handler state holding capabilities is handed back beside the residual, and a state
+         without them is dropped.
    - **For a finaliser `D`:**
      - `obs = r <- (nu_out s).1 unwind (D); case r {…}`;
      - `cls = x <- (nu_out s).2 unwind (D); D; x`.
@@ -13130,8 +13136,13 @@ spine has a loop that is not counted, or a direct-style call of a div function.
    - **Refused:**
      - a clause that works after `k(…)`:
        `` the clause of `op` works after resuming `k`, which would span turns of the loop: around a loop, a clause resumes last or does not resume ``;
-     - a clause that resumes `k` more than once (`multi ctl`).
-4. **Not changed:**
+     - a clause that resumes `k` more than once:
+       `` the clause of `op` resumes `k` more than once: around a loop, `k` is the rest of one turn, which a clause resumes at most once, last ``.
+4. **The `while` condition (§14).** A `while` condition that performs is tested before each turn,
+   as §14 states: `while c { M }` elaborates as `while true { calls; if c' { M } else break }`, where
+   `calls` are the condition's performs and `c'` is the condition over their results.
+   `state-across-while` needs this.
+5. **Not changed:**
    - a frame whose body does not loop;
    - a `for` over a generator (its site, `io_hwf`, the pull view);
    - every program that elaborated before. The form applies only where the elaboration refused
@@ -13436,17 +13447,19 @@ checked and run, and their answers below are the observed ones.
 | `corpus/core-pipe-raise.bc` (`pipe2-raise`) | the consumer owns a cell, reads `1, 2`, and raises `10`; the cleanups trace `2`, then `1` | `(inr i32[10], i32[21])`, `live 0` | interpreter and Backend2 (a cancel row holding a machine operation is lowered, §69). Old backend: a finaliser that performs, refused (§27) |
 | `corpus/core-pipe-pushback.bc` (`pipe3-pushback`) | lookahead with a pushback slot held by the consumer. It reads `1`, reads `2` ahead and puts it back, reads `2` from the slot, reads `3`, reads `4` ahead and puts it back, then `stop()` and returns `(1223, inl 4)` | `(i32[1223], inl i32[4])`, `live 0` | interpreter, the old closure interpreter, Backend2; the old backend's run fails the same layout check |
 
-**Part A** (surface; answers worked by hand, to be confirmed by `bcc interp`, the only source of
-goldens):
+**Part A** (surface; observed, `bcc interp`, `live 0`, and Backend2 the same).
+`with-loop-unwind` and `with-loop-finally` are `old-backend-refuses`.
 
 | Program | What | Answer |
 |---|---|---|
 | `corpus/with-loop-abort.bc` | #910's `t1`, `t2` and `t3` under `with to_result` | `((inl i32[45], inl i32[45]), (inr i32[4], inl i32[45]))` |
 | `corpus/with-loop-resume.bc` | a clause (a) that prints, then resumes, around a `while` that assigns an outer `let mut`; then its unrolled twin | `1234.1234((i32[5], i32[10]), i32[10])` |
 | `corpus/with-loop-unwind.bc` | an `unwind (note(9))` frame around a loop that raises at its 3rd turn; then the same loop, not raising | `9(inr i32[3], inl i32[3])` |
-| `corpus/state-across-while.bc` (from `reject/`) | two `State` instances across a `while` | `(i32[5], true)` (the printer's form of `bool` to be confirmed) |
+| `corpus/with-loop-finally.bc` | a `finally` frame around a loop (description to come from surface) | `77(inr i32[3], inl i32[3])` |
+| `corpus/state-across-while.bc` (from `reject/`) | two `State` instances across a `while` | `(i32[5], inr ())` |
 | `corpus/state-across-generator.bc` (from `reject/`) | `State` instances across a generator's `while`, summed by a `for` | `i32[12]` |
 | `corpus/reject/with-loop-after-resume.bc` | a clause that works after `k(…)` around a `while` | the message in Part A, item 3 |
+| `corpus/reject/with-loop-resume-twice.bc` | the clause of `ask` resumes `k` twice around a loop | the message in Part A, item 3 |
 
 **Part B, the surface programs and the seven traces** (answers worked by hand).
 
@@ -13507,8 +13520,13 @@ does not support; they carry `-- check: old-backend-refuses`.
   question (`cancelTy` answers `F_{fin ⊕ Σ} 1`).
 - **A stage's cleanup performing the forwarded operation** waits on §27 *Open*'s "`⊤` cancel rows".
 - **A chain of stages as a stage** (an open chain). It needs the head's `next`/`stop` forwarded. L2.
-- **A user handler's storing clause around a loop** (`spawn` over a looping task) is #917's. `deep`
-  at `Loop_Σ` is #955's. A recursion whose body loops under `on_exhausted` is #955/#916's.
+- **A user handler's storing clause around a loop** (`spawn` over a looping task) is #917's.
+  `pending/async-channel.bc`, `async-fanout.bc` and `operator-reconcile.bc` are refused with its
+  message: a `spawn` body that loops meets the storing `await` clause. `deep` at `Loop_Σ` is
+  #955's. A recursion whose body loops under `on_exhausted` is #955/#916's.
+- **An outer `let mut` assigned inside a looping `with` body,** declared outside the `with`: not
+  provided. It needs a per-observation lend of the site's lends, as `LoopLend` gives. An L1
+  follow-up.
 - **Fusion** (F, #923). The connector stores each stage's rest. The counts of the new programs are
   recorded unfused, and no existing count changes.
 - **Mechanising Assembly(n),** and proving that per-observation handling is the deep handler: not
