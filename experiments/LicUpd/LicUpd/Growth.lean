@@ -294,7 +294,7 @@ theorem updImmG_frame {F ρ π X Z : WRes} (h : UpdImmG ρ π) (hX : ResU.CompS 
     (ResU.Flat.split hX).mp hσX
   obtain ⟨e₁', e₃, e', a₁', a₃, a', he₁', he₃, hec', ha₁', ha₃, hac', hc'⟩ :=
     (ResU.Flat.split hZ).mp hσZ
-  obtain rfl : a₁' = a₁ := AgW.functional ha₁' ha₁
+  rw [AgW.functional ha₁' ha₁] at hac'
   have haX : AgW X a := (AgW.split hX).mpr ⟨a₁, a₂, ha₁, ha₂, hac⟩
   have haZ : AgW Z a' := (AgW.split hZ).mpr ⟨a₁, a₃, ha₁, ha₃, hac'⟩
   -- a lifetime of a `ρ` cell at `(l, v, χ)` is in an `X` cell there

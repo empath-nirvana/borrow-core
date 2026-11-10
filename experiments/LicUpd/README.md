@@ -93,4 +93,6 @@ lifetime is a start lifetime at the same (location, value, witness), or is deriv
 | 6.48's `imm` half under growth | `updImmG_frame` | written |
 | `licFrame_fails`'s configuration accepted | `k7_accepted` | written |
 | **K8: 6.48's `mut` half fails under growth** | `updMutFrameG_fails`, `not_updMutFrameG` | written. A frame's frozen `mut` cell is masked by the new image (`mut ○ imm = imm`). Typed worlds exclude this (`NoMut`), so the repair is a premise on 6.48. **Stop point**, reported |
-| the 6.59 family restated | — | not started (stopped at K8) |
+| 6.48's `mut` half under growth, with the typed-world premise `NoNewImmUnderMut` (from `NoMut` + `Coverage`) | `updMutG_frame`, `updVG_frame` | written. The `mut` clause is read pointwise and lets value and witness change, so check 1's walk lemma is not needed; the one cell fact is `compR_mut_pair` |
+| the 6.59 family under growth | `RebFrameAgLeG`, `RebFrameSurplusG`, `Six52G`, `Six59G` (`Six59G.lean`) | **stated**; proofs to be done in the build loop |
+| the lend's end under growth (replaces the bridge) | `lendEndG` | written, from `Six52G` and `Six59G` at `β := α` |
