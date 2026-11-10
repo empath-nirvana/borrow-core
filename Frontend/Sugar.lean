@@ -4381,6 +4381,12 @@ def surfOp : Nat → TCx → Option CVTy → Span → Span → Span → SurfOp �
         (widthOf ta).orElse fun _ => widthOf tb).getD dflt
       if o == .rem && w.float?.isSome then
         throw ⟨osp, s!"`%` at `{ppT (.int w)}`: a float has no remainder (SPEC §39)"⟩
+      -- The unsigned widths have no surface operators yet: each operator's choice of the `_u`
+      -- operation (`div_u`, `lt_u`, `shr_u`, …) is not elaborated, so none is admitted rather
+      -- than one read signed.  `[spec §73]`
+      if w == .u32 || w == .u64 then
+        throw ⟨osp, s!"`{o.str}` at `{ppT (.int w)}`: the unsigned widths have no surface " ++
+          "operators yet (SPEC §73); call the core operation, e.g. `unbang host[lt_uu64]`"⟩
       let a' ← surfV n c (some (.int w)) a
       let b' ← surfV n c (some (.int w)) b
       if isDiv && w.float?.isNone then
