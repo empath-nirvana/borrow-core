@@ -8,19 +8,22 @@
   source `runtimeC` in `Target/Native/Runtime.lean`) and the program's LLVM IR compiled together
   by the C compiler and flags `bcc` builds with: `bcc cc --flags` when this `bcc` has it, else
   `bcc cc` and the flags of `clangArgs` in `Pipeline/Driver.lean`;
-- serde: `cargo build --release --offline --locked` in `serde/`.
+- serde, twice, in `serde/`: `exact`, the primary baseline, with serde_json's `float_roundtrip`
+  (floats read correctly rounded, as ours are), `cargo build --release --offline --locked
+  --features exact --target-dir target-exact`; and `default`, a reference with serde_json's
+  default features (a faster float reader, not correctly rounded), into `target`.
 `$BCC` names the `bcc` (default: this checkout's `.lake/build/bin/bcc`); it must know the library
 module `json`.
 
 `time`, for each document of data/ and each of parse and roundtrip:
 - **CPU time**: user + sys of the process, from `wait4`'s rusage, in µs. One warm-up run per
-  binary, then rounds that interleave ours and serde (the order alternating by round), until each
-  has `--runs` (default 7) kept runs; the median is reported, and MB/s is the document's bytes
+  binary, then rounds that interleave ours, serde exact and serde default (the order rotating by
+  round), until each has `--runs` (default 7) kept runs; the median is reported, and MB/s is the document's bytes
   (10^6 to the MB) over it.
 - **A run is discarded** when the 1-minute load (`os.getloadavg`) is 2 or more before or after
   it, or when a lake, lean, clang or bcc process is running before or after it. Each run records
   `uptime` and those processes before and after, in out/results.json.
-- **Allocations**: serde's from its counting allocator (`JSON_BENCH_ALLOCS`, the count of
+- **Allocations**: each serde build's from its counting allocator (`JSON_BENCH_ALLOCS`, the count of
   `alloc`, `alloc_zeroed` and `realloc` calls); ours from `bcc-counts --native` (`$BCC_COUNTS`,
   default next to `bcc`), the count of `bc_alloc` calls of a counting build. `bcc-counts` also runs
   the flat IR's interpreter on the document to compare its counts, which can take long:
@@ -28,7 +31,8 @@ module `json`.
   fill is `—`.
 - **Peak RSS**: `/usr/bin/time -l`'s maximum resident set size, one run each.
 - **Stripped size**: a copy of each executable after `strip`.
-The table, ours over Rust for each column, goes to standard output and out/results.md.
+The table goes to standard output and out/results.md: ours over serde exact as the main columns,
+ours over serde default as the secondary, labelled ones.
 """
 
 import argparse
@@ -49,7 +53,11 @@ DOCS = ["canada", "citm_catalog", "twitter"]
 MODES = ["parse", "roundtrip"]
 BCC = os.environ.get("BCC", os.path.join(ROOT, ".lake", "build", "bin", "bcc"))
 BCC_COUNTS = os.environ.get("BCC_COUNTS", os.path.join(os.path.dirname(BCC), "bcc-counts"))
-SERDE = os.path.join(HERE, "serde", "target", "release", "json-bench")
+# The serde builds: `exact` (`float_roundtrip`), the primary baseline; `default`, the reference.
+SERDE = {"exact": os.path.join(HERE, "serde", "target-exact", "release", "json-bench"),
+         "default": os.path.join(HERE, "serde", "target", "release", "json-bench")}
+SIDES = ["ours", "exact", "default"]
+SERDE_BUILDS = {"exact": ["--features", "exact", "--target-dir", "target-exact"], "default": []}
 # The processes whose presence before or after a run discards it.
 BUSY = {"lake", "lean", "leanc", "clang", "clang++", "bcc", "bcc-counts"}
 MAX_LOAD = 2.0
@@ -60,7 +68,7 @@ def ours_exe(mode):
 
 
 def command(side, mode):
-    return [ours_exe(mode)] if side == "ours" else [SERDE, mode]
+    return [ours_exe(mode)] if side == "ours" else [SERDE[side], mode]
 
 
 def must(r, what):
@@ -95,8 +103,10 @@ def build():
     os.makedirs(OUT, exist_ok=True)
     if not os.access(BCC, os.X_OK):
         sys.exit(f"measure.py: no bcc at {BCC} (set $BCC)")
-    must(subprocess.run(["cargo", "build", "--release", "--offline", "--locked"],
-                        cwd=os.path.join(HERE, "serde"), capture_output=True), "cargo build")
+    for b, extra in SERDE_BUILDS.items():
+        must(subprocess.run(["cargo", "build", "--release", "--offline", "--locked"] + extra,
+                            cwd=os.path.join(HERE, "serde"), capture_output=True),
+             f"cargo build ({b})")
     rt = os.path.join(OUT, "runtime.c")
     open(rt, "w").write(runtime_c())
     cc = native_cc()
@@ -114,7 +124,8 @@ def build():
         info[mode] = {"bcc_s": t1 - t0, "cc_s": t2 - t1}
         print(f"built out/{mode}: bcc {t1 - t0:.2f} s, cc {t2 - t1:.2f} s")
     json.dump(info, open(os.path.join(OUT, "build.json"), "w"), indent=1)
-    print(f"built {SERDE}")
+    for b, exe in SERDE.items():
+        print(f"built serde {b}: {exe}")
 
 
 # ### The machine's state
@@ -152,19 +163,20 @@ def run_once(cmd, doc, stdout=subprocess.DEVNULL):
 
 
 def timed_runs(doc, mode, runs, log):
-    """Interleaved kept runs of both sides: {side: [µs]}."""
-    kept = {"ours": [], "serde": []}
-    for side in ("ours", "serde"):  # warm-up
+    """Interleaved kept runs of every side: {side: [µs]}."""
+    kept = {side: [] for side in SIDES}
+    for side in SIDES:  # warm-up
         run_once(command(side, mode), doc)
     rnd = 0
     attempts = 0
     while min(len(v) for v in kept.values()) < runs:
-        order = ("ours", "serde") if rnd % 2 == 0 else ("serde", "ours")
+        k = rnd % len(SIDES)
+        order = SIDES[k:] + SIDES[:k]
         for side in order:
             if len(kept[side]) >= runs:
                 continue
             attempts += 1
-            if attempts > 6 * runs:
+            if attempts > 6 * len(SIDES) * runs:
                 sys.exit(f"measure.py: {mode} {doc}: too many discarded runs; the machine is "
                          "not quiet (see out/results.json)")
             before = machine()
@@ -194,9 +206,9 @@ def peak_rss(cmd, doc):
     return int(m.group(1)) if m else None
 
 
-def serde_allocs(mode, doc):
+def serde_allocs(side, mode, doc):
     with open(doc, "rb") as f:
-        r = subprocess.run([SERDE, mode], stdin=f, stdout=subprocess.DEVNULL,
+        r = subprocess.run([SERDE[side], mode], stdin=f, stdout=subprocess.DEVNULL,
                            stderr=subprocess.PIPE, text=True,
                            env=dict(os.environ, JSON_BENCH_ALLOCS="1"))
     m = re.search(r"^allocs (\d+)$", r.stderr, re.M)
@@ -217,8 +229,8 @@ def ours_allocs(mode, doc, timeout):
     return int(m.group(1)) if m and r.returncode == 0 else None
 
 
-def stripped_size(exe):
-    s = os.path.join(OUT, os.path.basename(exe) + ".stripped")
+def stripped_size(exe, name=None):
+    s = os.path.join(OUT, (name or os.path.basename(exe)) + ".stripped")
     shutil.copyfile(exe, s)
     subprocess.run(["strip", s], capture_output=True)
     return os.path.getsize(s)
@@ -235,22 +247,28 @@ def ratio(a, b):
 
 
 def table(results):
-    rows = ["| document | mode | ours MB/s | Rust MB/s | time ours/Rust | allocs ours / Rust (ratio) "
-            "| peak RSS MB ours / Rust (ratio) |",
-            "|---|---|---|---|---|---|---|"]
+    """Main columns: ours over serde exact. Secondary, labelled: ours over serde default."""
+    mb = lambda b: None if b is None else b / 1e6
+    rows = ["| document | mode | ours MB/s | serde exact MB/s | **time ours/exact** "
+            "| allocs ours / exact (ratio) | peak RSS MB ours / exact (ratio) "
+            "| *ref: serde default MB/s* | *ref: time ours/default* | *ref: allocs default (ours/default)* "
+            "| *ref: peak RSS MB default (ours/default)* |",
+            "|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in results:
-        o, s = r["ours"], r["serde"]
-        mb = lambda b: None if b is None else b / 1e6
+        o, e, d = r["ours"], r["exact"], r["default"]
         rows.append(
-            f"| {r['doc']} | {r['mode']} | {o['mbs']:.1f} | {s['mbs']:.1f} "
-            f"| **{ratio(o['median_us'], s['median_us'])}** "
-            f"| {fmt(o['allocs'])} / {fmt(s['allocs'])} ({ratio(o['allocs'], s['allocs'])}) "
-            f"| {fmt(mb(o['rss']))} / {fmt(mb(s['rss']))} ({ratio(o['rss'], s['rss'])}) |")
+            f"| {r['doc']} | {r['mode']} | {o['mbs']:.1f} | {e['mbs']:.1f} "
+            f"| **{ratio(o['median_us'], e['median_us'])}** "
+            f"| {fmt(o['allocs'])} / {fmt(e['allocs'])} ({ratio(o['allocs'], e['allocs'])}) "
+            f"| {fmt(mb(o['rss']))} / {fmt(mb(e['rss']))} ({ratio(o['rss'], e['rss'])}) "
+            f"| {d['mbs']:.1f} | {ratio(o['median_us'], d['median_us'])} "
+            f"| {fmt(d['allocs'])} ({ratio(o['allocs'], d['allocs'])}) "
+            f"| {fmt(mb(d['rss']))} ({ratio(o['rss'], d['rss'])}) |")
     return "\n".join(rows)
 
 
 def time_all(args):
-    for exe in [ours_exe(m) for m in MODES] + [SERDE]:
+    for exe in [ours_exe(m) for m in MODES] + list(SERDE.values()):
         if not os.access(exe, os.X_OK):
             sys.exit(f"measure.py: {exe} not built (measure.py build)")
     log = []
@@ -263,24 +281,28 @@ def time_all(args):
         for mode in MODES:
             kept = timed_runs(doc, mode, args.runs, log)
             res = {"doc": d, "mode": mode, "bytes": size}
-            for side in ("ours", "serde"):
+            for side in SIDES:
                 med = statistics.median(kept[side])
                 res[side] = {
                     "runs_us": kept[side], "median_us": med, "mbs": size / med,
                     "rss": peak_rss(command(side, mode), doc),
-                    "allocs": serde_allocs(mode, doc) if side == "serde"
+                    "allocs": serde_allocs(side, mode, doc) if side != "ours"
                     else None if args.no_allocs else ours_allocs(mode, doc, args.allocs_timeout),
                 }
             results.append(res)
-            print(f"{d} {mode}: ours {res['ours']['median_us']} µs, "
-                  f"serde {res['serde']['median_us']} µs")
+            print(f"{d} {mode}: " + ", ".join(f"{side} {res[side]['median_us']} µs"
+                                               for side in SIDES))
     end = machine()
     sizes = {"ours": {m: stripped_size(ours_exe(m)) for m in MODES},
-             "serde": stripped_size(SERDE)}
+             **{b: stripped_size(exe, f"serde-{b}") for b, exe in SERDE.items()}}
     md = [table(results), "",
           "Stripped size: " + ", ".join(
-              f"ours {m} {sizes['ours'][m]:,} B ({ratio(sizes['ours'][m], sizes['serde'])})"
-              for m in MODES) + f"; Rust (both modes) {sizes['serde']:,} B.",
+              f"ours {m} {sizes['ours'][m]:,} B (ours/exact {ratio(sizes['ours'][m], sizes['exact'])}, "
+              f"ours/default {ratio(sizes['ours'][m], sizes['default'])})" for m in MODES)
+          + f"; serde exact {sizes['exact']:,} B, serde default {sizes['default']:,} B "
+          "(one binary for both modes).",
+          "", "Main columns: serde_json with `float_roundtrip` (exact). Columns marked *ref*: "
+          "serde_json's default features, whose float reader is not correctly rounded.",
           "", f"CPU time (user + sys), median of {args.runs} kept runs, interleaved; MB = 10^6 bytes.",
           f"Machine before: `{start['uptime']}`; after: `{end['uptime']}`."]
     text = "\n".join(md)
@@ -309,7 +331,8 @@ def main():
     else:
         print(f"bcc: {BCC} ({'present' if os.access(BCC, os.X_OK) else 'missing'})")
         print(f"bcc-counts: {BCC_COUNTS} ({'present' if os.access(BCC_COUNTS, os.X_OK) else 'missing'})")
-        print(f"serde: {SERDE} ({'present' if os.access(SERDE, os.X_OK) else 'missing'})")
+        for b, exe in SERDE.items():
+            print(f"serde {b}: {exe} ({'present' if os.access(exe, os.X_OK) else 'missing'})")
         for m in MODES:
             print(f"ours {m}: {'present' if os.access(ours_exe(m), os.X_OK) else 'missing'}")
         for d in DOCS:

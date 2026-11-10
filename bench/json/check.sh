@@ -4,10 +4,12 @@
 # every float correctly and reads every integer exactly; and our parse checksum line against
 # serde's.
 #
-# Three comparisons per document: ours against the input, serde against the input, ours against
-# serde. The check fails when ours differs from the input, when the checksums differ, or when ours
-# differs from serde where serde equals the input. serde differing from the input is reported but
-# does not fail: serde_json's default float reader is not correctly rounded (`canada.json`).
+# serde is built twice (`measure.py`): `exact`, the primary baseline, with `float_roundtrip`, and
+# `default`, the reference, with serde_json's default features. Per document: ours, serde exact
+# and serde default each against the input, and ours against serde exact. The check fails when
+# ours or serde exact differs from the input, when ours differs from serde exact, or when the
+# checksums differ. serde default differing from the input is reported but does not fail: its
+# float reader is not correctly rounded (`canada.json`).
 #
 # Ours is `out/parse` and `out/roundtrip`, built by `measure.py build`; when they are not built, only
 # serde is checked. `OURS_PARSE` and `OURS_ROUNDTRIP` replace them with any command reading
@@ -17,13 +19,15 @@ set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 out="$here/out/check"
 mkdir -p "$out"
-serde="$here/serde/target/release/json-bench"
+exact="$here/serde/target-exact/release/json-bench"
+default="$here/serde/target/release/json-bench"
 ours_p="${OURS_PARSE:-}"; ours_r="${OURS_ROUNDTRIP:-}"
 [ -z "$ours_p" ] && [ -x "$here/out/parse" ] && ours_p="$here/out/parse"
 [ -z "$ours_r" ] && [ -x "$here/out/roundtrip" ] && ours_r="$here/out/roundtrip"
-if [ ! -x "$serde" ]; then
-  (cd "$here/serde" && cargo build --release --offline --locked -q) || { echo "check.sh: serde does not build" >&2; exit 1; }
-fi
+build() { (cd "$here/serde" && cargo build --release --offline --locked -q "$@") \
+  || { echo "check.sh: serde does not build" >&2; exit 1; }; }
+[ -x "$exact" ] || build --features exact --target-dir target-exact
+[ -x "$default" ] || build
 [ -z "$ours_r" ] && echo "check.sh: ours not built (measure.py build); checking serde only"
 
 if [ $# -gt 0 ]; then files=("$@"); else files=("$here"/data/*.json); fi
@@ -47,16 +51,19 @@ fail=0
 for f in "${files[@]}"; do
   n=$(basename "$f" .json)
   echo "== $n ($(wc -c < "$f" | tr -d ' ') bytes)"
-  "$serde" roundtrip < "$f" > "$out/$n.serde.json"; s_status=$?
-  "$serde" parse < "$f" > "$out/$n.serde.parse"
-  if [ $s_status -ne 0 ]; then echo "  serde: refuses the input ($(cat "$out/$n.serde.json"))"; fi
-  serde_ok=0
-  if [ $s_status -eq 0 ]; then
-    if cmp_json "$f" "$out/$n.serde.json" 2> "$out/$n.serde.diff"; then
-      echo "  serde = input"; serde_ok=1
-    else
-      echo "  serde ≠ input (reported, not a failure):"; sed 's/^/    /' "$out/$n.serde.diff"
-    fi
+  "$exact" roundtrip < "$f" > "$out/$n.exact.json"; e_status=$?
+  "$exact" parse < "$f" > "$out/$n.exact.parse"
+  "$default" roundtrip < "$f" > "$out/$n.default.json"; d_status=$?
+  if [ $e_status -ne 0 ]; then
+    echo "  serde exact: refuses the input"
+    [ $d_status -eq 0 ] && { echo "  serde default: MISMATCH: accepts it"; fail=1; }
+  else
+    if cmp_json "$f" "$out/$n.exact.json" 2> "$out/$n.exact.diff"; then echo "  serde exact = input"; else
+      echo "  serde exact ≠ input: MISMATCH"; sed 's/^/    /' "$out/$n.exact.diff"; fail=1; fi
+    if [ $d_status -ne 0 ]; then echo "  serde default: MISMATCH: refuses it"; fail=1
+    elif cmp_json "$f" "$out/$n.default.json" 2> "$out/$n.default.diff"; then echo "  serde default = input"
+    else echo "  serde default ≠ input (reference build, reported, not a failure):"
+      sed 's/^/    /' "$out/$n.default.diff"; fi
   fi
   [ -z "$ours_r" ] && continue
   $ours_r < "$f" > "$out/$n.ours.raw"
@@ -66,23 +73,20 @@ for f in "${files[@]}"; do
   $ours_p < "$f" > "$out/$n.ours.parse.raw"
   strip_ours "$out/$n.ours.parse.raw" "$out/$n.ours.parse" 2> "$out/$n.ours.parse.err" \
     || { echo "  ours parse: MISMATCH: $(cat "$out/$n.ours.parse.err")"; fail=1; }
-  if cmp -s "$out/$n.ours.parse" "$out/$n.serde.parse"; then
-    echo "  parse checksum: $(cat "$out/$n.ours.parse") (both)"
+  if cmp -s "$out/$n.ours.parse" "$out/$n.exact.parse"; then
+    echo "  parse checksum: $(cat "$out/$n.ours.parse") (ours and serde exact)"
   else
-    echo "  parse checksum MISMATCH: ours $(cat "$out/$n.ours.parse"), serde $(cat "$out/$n.serde.parse")"; fail=1
+    echo "  parse checksum MISMATCH: ours $(cat "$out/$n.ours.parse"), serde exact $(cat "$out/$n.exact.parse")"; fail=1
   fi
-  if [ $s_status -ne 0 ]; then
+  if [ $e_status -ne 0 ]; then
     if grep -qx error "$out/$n.ours.json"; then echo "  ours: refuses it too"; else
       echo "  ours: MISMATCH: accepts what serde refuses"; fail=1; fi
     continue
   fi
   if cmp_json "$f" "$out/$n.ours.json" 2> "$out/$n.ours.diff"; then echo "  ours = input"; else
     echo "  ours ≠ input: MISMATCH"; sed 's/^/    /' "$out/$n.ours.diff"; fail=1; fi
-  if cmp_json "$out/$n.serde.json" "$out/$n.ours.json" 2> "$out/$n.both.diff"; then echo "  ours = serde"; else
-    if [ $serde_ok = 1 ]; then echo "  ours ≠ serde: MISMATCH"; fail=1
-    else echo "  ours ≠ serde (serde ≠ input, so not a failure):"; fi
-    sed 's/^/    /' "$out/$n.both.diff"
-  fi
+  if cmp_json "$out/$n.exact.json" "$out/$n.ours.json" 2> "$out/$n.both.diff"; then echo "  ours = serde exact"; else
+    echo "  ours ≠ serde exact: MISMATCH"; sed 's/^/    /' "$out/$n.both.diff"; fail=1; fi
 done
 [ $fail = 0 ] && echo "check.sh: ok" || echo "check.sh: FAILED"
 exit $fail
