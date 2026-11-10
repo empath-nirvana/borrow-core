@@ -1,0 +1,19 @@
+-- SPEC §75, Part A, clause class (a): a clause that binds the resume's answer and answers it as
+-- it is, `let r = k(n); r`, resumes last, so it is provided around a loop as `k(n)` is.
+--
+-- Answer: `i32[10]` (1 + 2 + 3 + 4).
+
+effect Tick { ctl tick(n: i32) -> i32 }
+
+handler after[A]: Tick, A -> A = {
+  return(x) = x;
+  tick(n, k) = { let r = k(n); r }
+}
+
+main -> i32 =
+  with after[i32] {
+    let mut t = 0;
+    let mut i = 0;
+    while i < 4 { i = i + 1; t = t + tick(i) };
+    t
+  }

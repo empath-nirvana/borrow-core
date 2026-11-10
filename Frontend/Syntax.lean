@@ -33,6 +33,11 @@ structure Span where
 /-- The span of a node that was not parsed from source. -/
 def Span.none : Span := ⟨⟨0, 0, ""⟩, ⟨0, 0, ""⟩⟩
 
+/-- The span `sp`, told apart as the `k`-th part of generated code at it: it starts where `sp` does,
+so a message is placed as one at `sp` is, and an error in the part is attributed to that part's
+code (`Elab.renderError` finds the code by the span).  `[spec §75]` -/
+def Span.part (sp : Span) (k : Nat) : Span := { sp with stop := { sp.stop with file := s!"{sp.stop.file}#{k}" } }
+
 /-- The span from the start of `a` to the end of `b`. -/
 def Span.join (a b : Span) : Span := ⟨a.start, b.stop⟩
 
@@ -656,6 +661,10 @@ inductive SchemeMark where
   /-- A literal's view (SPEC §57): the literal's table tabulated into an array, the array lent as
   an `imm` family, and destroyed when the lend hands it back. -/
   | litView
+  /-- The direct-style call of a frame per observation (SPEC §75): its head, marked where the
+  frame is made (`Sugar.obsFrame`) so that the elaboration finds the call by the mark, not by a
+  name. The checker reads the term under it as it is (`rMarked`). -/
+  | frameObs
   deriving DecidableEq, Repr, Inhabited
 
 mutual

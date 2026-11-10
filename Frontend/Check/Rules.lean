@@ -236,6 +236,7 @@ def rMarked {j : Jdg} (k : Frontend.SchemeMark) (r : Res Δ T j) : Option (Res �
         some ⟨.lendCell i j m r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.lendCell i m hb hm h⟩
       else none
     else none
+  | .frameObs => some r
   | .litView =>
     if hb : litViewT r.t = true then
       some ⟨.litView i j r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.litView i hb h⟩

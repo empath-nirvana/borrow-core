@@ -3663,13 +3663,28 @@ def assocFree (sp : Span) (x : Ident) (A : Option VTy) (M N : Comp) : Comp :=
     | _ => []
   if (binders M).any (mentionsC · N) then .bind sp x A M N else assocBind sp x A M N
 
-/-- A chain that holds, on its spine, the call of a frame per observation (`obsFrame`'s
-`io_hwf…`). -/
+/-- A chain that holds, on its spine, the call of a frame per observation: a head marked
+`frameObs`, which `obsFrame` sets.
+
+UNPROVED: that a frame's call found here is the one the chain's caller must bring onto its own
+spine. It assumes the mark is set only by `obsFrame` and read only on the spine; a frame whose call
+is not on the spine of the chain it is in (inside a thunk) is not found here, and its direct-style
+call is then typed where no machine reads it, which the kernel refuses (`U (delay A)` where `A` is
+expected). -/
 def hasFrameCall : Comp → Bool
-  | .bind _ _ _ (.ret _ (.app _ (.unbang _ (.var _ f)) _)) N =>
-    f.startsWith "io_hwfo" || f.startsWith "io_hwfu" || hasFrameCall N
+  | .bind _ _ _ (.ret _ (.app _ (.mark _ .frameObs _) _)) _ => true
   | .bind _ _ _ _ N | .letPair _ _ _ _ N | .letUnit _ _ N => hasFrameCall N
   | _ => false
+
+/-- The frame's call in `L`, made by `obsFrame` from its template: its head marked `frameObs`. -/
+def markFrameCall (f : String) : Comp → Comp
+  | .bind sp x A (.ret rsp (.app asp h@(.unbang _ (.var _ g)) W)) N =>
+    if g == f then .bind sp x A (.ret rsp (.app asp (.mark asp .frameObs h) W)) N
+    else .bind sp x A (.ret rsp (.app asp h W)) (markFrameCall f N)
+  | .bind sp x A M N => .bind sp x A M (markFrameCall f N)
+  | .letPair sp x y V M => .letPair sp x y V (markFrameCall f M)
+  | .letUnit sp V M => .letUnit sp V (markFrameCall f M)
+  | M => M
 
 /-- `run R` whose code `R` holds a frame per observation (`with … finally`'s, `Effects.goV`):
 `R`, to be brought onto the spine. -/
@@ -3728,9 +3743,24 @@ def resumesOn (ks : List String) : Nat → Comp → Nat
   | k + 1, .ret _ (.thunkv _ (.lam _ _ _ M)) => resumesOn ks k M
   | _ + 1, T => if isResumeOf ks T then 1 else 0
 
+/-- The computation answers the variable `x` as it is, through copies of it. -/
+def answersVar (x : String) : Nat → Comp → Bool
+  | 0, _ => false
+  | _ + 1, .ret _ (.var _ y) => y == x
+  | k + 1, .bind _ z _ (.ret _ (.var _ y)) N => y == x && answersVar z.name k N
+  | _, _ => false
+
 /-- The terminals of a clause's code around a loop: a resume of `κ` (in a handler with a state,
 the resume's answer applied to the state) stays, its answer the turn's; any other terminal is
-`wrap`ped, an answer that finishes the loop. `none` when the clause works after resuming. -/
+`wrap`ped, an answer that finishes the loop. `none` when the clause works after resuming.
+
+UNPROVED: that the clause the result writes resumes `κ` last on every path, or not at all, is read
+off its syntax: a resume is `(force k).1 a` of `κ` or a copy bound by `x <- return k` (`isResumeOf`,
+`resumesOn`), and work after it is any binding that follows one. It assumes that the clause's code
+reaches `κ` only so, which holds of the code the effects pass writes for a clause; a resume reached
+another way (passed to a function, or under a binder this walk does not enter) would be taken for
+no resume, and the clause's answer for one that finishes the loop, which the kernel would then
+type at the turn's answer and refuse, or run as a clause that does not resume. -/
 def obsTail (ks : List String) (stateful : Bool) (wrap : Comp → Comp) :
     Nat → List String → Comp → Option Comp
   | 0, _, M => some M
@@ -3738,7 +3768,11 @@ def obsTail (ks : List String) (stateful : Bool) (wrap : Comp → Comp) :
     if let .ret _ (.var _ y) := M then
       if ks.contains y then return .bind sp x A M (← obsTail (x.name :: ks) stateful wrap k gs N)
     if isResumeOf ks M then
-      if !stateful || !gs.isEmpty then none
+      -- A resume whose answer is bound and then answered as it is, `let r = k(a); r`, resumes
+      -- last.
+      if !stateful then
+        if answersVar x.name divFuel N then return .bind sp x A M N else none
+      if !gs.isEmpty then none
       return .bind sp x A M (← obsTail ks stateful wrap k [x.name] N)
     if isStResume gs M || resumesOn ks divFuel M > 0 then none
     return .bind sp x A M (← obsTail ks stateful wrap k gs N)
@@ -3800,7 +3834,7 @@ def liftLoop (c : TCx) (sp : Span) (row : Frontend.Check.CRow) (A : CVTy) (M : C
   let cL₀ := exts.foldl (fun c (y, T) => c.push y (some T)) c
   let cL := { cL₀ with E := { cL₀.E with row := some row } }
   let (closes, _) := closeGiven cx (ws.map fun (y, T) => (y, some T))
-  let ab ← template sp "the close of a loop a frame observes, before it starts"
+  let ab ← template (sp.part 1) "the close of a loop a frame observes, before it starts"
     s!"{closes}return {cx.rSrc}"
   pure (← divMachine cx row cL ws ab M, cx)
 
@@ -3820,7 +3854,8 @@ def obsFrame (sp : Span) (sfx : String) (Lg Q Lw Rans : String) (st0 : Option (S
   return (thunkv nu_in < (nu_out (force io_hf{sfx} io_hl{sfx})).1, (nu_out (force io_hf{sfx} io_hl{sfx})).2 >));
 io_j{sfx} : {Rans} <- return ((unbang io_hwf{sfx}) {arg});
 return io_j{sfx}"
-  let L ← template sp "a frame around a computation that loops, installed per observation" src
+  let L ← template (sp.part 2) "a frame around a computation that loops, installed per observation" src
+  let L := markFrameCall s!"io_hwf{sfx}" L
   pure (L.fill (fun v => if v == "io_hole_st0" then st0.map (·.2) else none)
     (fun v => if v == "io_hole_lift" then some lift else if v == "io_hole_obs" then some obs
       else if v == "io_hole_cls" then some cls else none))
@@ -4753,6 +4788,10 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
           let run? := if i.stateful then stRun? x.name N else none
           let (M', took, T?) ← hndCtlC n c rsp i P R cls B (run?.map (·.1))
           let c ← refresh c
+          -- UNPROVED: `assocBind` moves the frame's own bindings (`io_l…`, `io_st…`, `io_hwf…`, `io_j…`, suffixed
+          -- by the frame's span) over `N` unchecked: it assumes no name they bind occurs free in `N`,
+          -- which holds while the generated names are unique per span; were two frames at one span,
+          -- `N`'s use of a name would be captured by the frame's binding of it.
           match T?, run? with
           | none, _ =>
             let N' ← surfC n (c.push x.name (bindTy c A M')) exp N
@@ -4760,6 +4799,10 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
           | some T, some (_, rest) =>
             if took then
               let some (t, tA, N₁) := rest | return M'
+              -- UNPROVED: `assocBind` moves the frame's own bindings (`io_l…`, `io_st…`, `io_hwf…`, `io_j…`, suffixed
+              -- by the frame's span) over `N` unchecked: it assumes no name they bind occurs free in `N`,
+              -- which holds while the generated names are unique per span; were two frames at one span,
+              -- `N`'s use of a name would be captured by the frame's binding of it.
               let N' ← surfC n (c.push t.name (some T)) exp N₁
               return assocBind sp t tA M' N'
             let N' ← surfC n (c.push x.name (some T)) exp N
@@ -4941,9 +4984,9 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         let pp (T : CVTy) : String := Frontend.Check.ppV c.E.lenv 0 0 T
         let Lg := pp (.thunk Lc)
         let sfx := s!"u{sp.start.line}_{sp.start.col}"
-        let obsC ← template sp "a turn of a loop, guarded by its cleanup"
+        let obsC ← template (sp.part 3) "a turn of a loop, guarded by its cleanup"
           s!"io_uo{sfx} <- (nu_out (force io_hs{sfx})).1 unwind (force io_hole_d); return io_uo{sfx}"
-        let clsC ← template sp "the close of a loop, guarded by its cleanup"
+        let clsC ← template (sp.part 4) "the close of a loop, guarded by its cleanup"
           (s!"io_uc{sfx} <- (nu_out (force io_hs{sfx})).2 unwind (force io_hole_d);\n" ++
             s!"io_ud{sfx} <- force io_hole_d;\nreturn io_uc{sfx}")
         let fillD (L : Comp) : Comp := L.fill (fun _ => none) fun v => if v == "io_hole_d" then some D' else none
@@ -4951,6 +4994,10 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
           (fillD obsC) (fillD clsC)
         if !(← get).quiet then
           report sp "the cleanup is installed per observation: the computation it guards loops"
+        -- UNPROVED: `assocBind` moves the frame's own bindings (`io_l…`, `io_st…`, `io_hwf…`, `io_j…`, suffixed
+        -- by the frame's span) over `N` unchecked: it assumes no name they bind occurs free in `N`,
+        -- which holds while the generated names are unique per span; were two frames at one span,
+        -- `N`'s use of a name would be captured by the frame's binding of it.
         let N' ← surfC n (c.push x.name (some A')) exp N
         return assocBind sp x A frame N'
       let N' ← surfC n (c.push x.name ((A.bind c.elabV) <|> hd.map (·.2))) exp N
@@ -5310,8 +5357,8 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
               s!"let (io_hl{k}{sfx}, io_hs{k}{sfx}) = io_hs{sfx};\nio_hg{k}{sfx} <- " ++
               hdl h s!"io_hl{k}{sfx}" k ++ s!";\nforce io_hg{k}{sfx} io_hs{k}{sfx}"
             pure (s!"({pp Lg}) * ({Sts})", some (Sts, v), un 1 "o", un 2 "c")
-        let obsC ← template sp "a turn of a frame around a loop, handled" obsS
-        let clsC ← template sp "the close of a frame around a loop, handled" clsS
+        let obsC ← template (sp.part 3) "a turn of a frame around a loop, handled" obsS
+        let clsC ← template (sp.part 4) "the close of a frame around a loop, handled" clsS
         let frame ← obsFrame sp sfx (pp Lg) Q Lws (pp Rans) st0' lift (obsC.fill hv (fun _ => none))
           (clsC.fill hv (fun _ => none))
         if !(← get).quiet then
@@ -5321,6 +5368,10 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     -- A site whose clauses run after it answers its arguments beside its own answer.
     let core ← if i.after.isNone then pure hd else do
       let r : Ident := ⟨s!"io_ar{i.n}", sp⟩
+      -- UNPROVED: `assocBind` moves the frame's own bindings (`io_l…`, `io_st…`, `io_hwf…`, `io_j…`, suffixed
+      -- by the frame's span) over `N` unchecked: it assumes no name they bind occurs free in `N`,
+      -- which holds while the generated names are unique per span; were two frames at one span,
+      -- `N`'s use of a name would be captured by the frame's binding of it.
       pure (assocBind sp r none hd (.ret sp (binds.foldr (fun (x, _, _) t => Val.pair sp (.var sp x.name) t)
         (.var sp r.name))))
     let ansTy ← match ansTy, i.after with

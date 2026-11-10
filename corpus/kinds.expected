@@ -865,6 +865,7 @@ corpus/with-loop-abort.bc 6.0 cancellable abortive: branch; agree
 corpus/with-loop-abort.bc 4.0 cancellable abortive: branch; agree
 corpus/with-loop-finally.bc 2.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/with-loop-finally.bc 1.0 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/with-loop-resume-let.bc 1.0 cancellable tail,stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/with-loop-resume.bc 1.0 cancellable tail+state: machine: the clause captures values; agree
 corpus/with-loop-resume.bc 2.0 cancellable tail+state,stored: machine: the clause captures values; agree
 corpus/with-loop-unwind.bc 2.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree

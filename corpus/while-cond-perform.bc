@@ -1,0 +1,29 @@
+-- A `while` whose condition performs (SPEC §14): the condition is tested before each turn, so its
+-- operations run again at every test, as `while true { calls; if c' { M } else break }`. `t(i)`
+-- prints `i` and answers `i < n`. `three` tests at 0, 1, 2 and 3, and stops at 3; `skip2` is the
+-- same with a `continue` at `i == 2`, which goes to the next test, so it prints 0 … 5 and sums
+-- 1 + 3 + 4 + 5.  [spec §14]
+--
+-- Answer: `0123012345(i32[3], i32[13])`.
+
+include io
+
+fn t(i: i32, n: i32) -> bool =
+  print_dec(i);
+  i < n
+
+fn three() -> i32 =
+  let mut i = 0;
+  while t(i, 3) { i = i + 1 };
+  i
+
+fn skip2() -> i32 =
+  let mut i = 0;
+  let mut s = 0;
+  while t(i, 5) { i = i + 1; if i == 2 { continue } else { () }; s = s + i };
+  s
+
+main -> i32 * i32 =
+  let a = three();
+  let b = skip2();
+  (a, b)
