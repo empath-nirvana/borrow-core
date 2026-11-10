@@ -776,7 +776,9 @@ def opNameNI (what : String) : P (Nat × Nat) := do
   | _ => expected what
 
 /-- The entries of a row up to its `]`: `n.i q A ~> B`, separated by `,`; `q` is `lin`, `cancel` or
-`unr`, read as a name here and nowhere else. -/
+`unr`, read as a name here and nowhere else. A capturable entry may write its cancel row after its
+qualifier, `n.i cancel[R] A ~> B` (or `unr[R]`), `R` a row's entries; none written is the empty
+cancel row.  `[spec §19, §27]` -/
 def rowEntries : Nat → P Row
   | 0 => outOfFuel
   | n + 1 => do
@@ -788,13 +790,19 @@ def rowEntries : Nat → P Row
       | .ident "cancel" => discard bump; pure Qual.cancel
       | .ident "unr" => discard bump; pure Qual.unr
       | _ => expected "a qualifier `lin`, `cancel` or `unr`"
+    let fin ← if q != .lin && (← isSym "[") then do
+        discard bump
+        let f ← rowEntries n
+        expectSym "]"
+        pure f
+      else pure .nil
     let A ← rvty n
     expectSym "~>"
     let B ← rvty n
     if ← isSym "," then
       discard bump
-      return .cons k i q A B (← rowEntries n)
-    pure (.cons k i q A B .nil)
+      return .cons k i q A B fin (← rowEntries n)
+    pure (.cons k i q A B fin .nil)
 
 /-- A shape: `leaf A`, `node σ τ`, or a shape atom. -/
 def shape : Nat → P Shape

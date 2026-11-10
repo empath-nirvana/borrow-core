@@ -509,7 +509,7 @@ row may be served by one site, SPEC §38). -/
 def Env.rowOf (env : Env) (ss : List Site) : Row :=
   let ss := ss.foldl (fun acc s => if acc.any (·.n == s.n) then acc else acc ++ [s]) []
   ss.foldr (fun s r =>
-    ((env.siteOps s).zipIdx).foldr (fun ((q, A, B), i) r => .cons s.n i q A B r) r) .nil
+    ((env.siteOps s).zipIdx).foldr (fun ((q, A, B), i) r => .cons s.n i q A B .nil r) r) .nil
 
 /-! ### Type arguments -/
 

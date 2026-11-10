@@ -413,11 +413,17 @@ def elabRow : Nat → TyEnv → Span → Row → Except Error CRow
   | 0, _, sp, _ => err sp "type abbreviations nested too deeply"
   | n + 1, E, sp, r => match r with
     | .nil => pure []
-    | .cons k i q A B r => do
+    | .cons k i q A B f r => do
         if k < 2 ^ 32 ∧ i < 2 ^ 32 then
+          -- The entry's cancel row (SPEC §27): `F_R 1`, `R` its written row; `F 1` when none is
+          -- written.  `[spec §27]`
+          let fin := BoCa.Fig16.LogRel.Core.CTy.effOf (← elabRow n E sp f) .unit
           let o : COpSig :=
-            ⟨UInt32.ofNat k, UInt32.ofNat i, q.toCore, ← elabV n E A, ← elabV n E B, .ret .unit, false⟩
-          if o.q == .unr && o.B.isZero then
+            ⟨UInt32.ofNat k, UInt32.ofNat i, q.toCore, ← elabV n E A, ← elabV n E B, fin, false⟩
+          if o.B.isZero && (match f with | .nil => false | _ => true) then
+            err sp (s!"the operation {k}.{i} is abortive: it captures no continuation, so it " ++
+              "has no cancel row")
+          else if o.q == .unr && o.B.isZero then
             err sp (s!"the operation {k}.{i} is unrestricted and answers `0`: an abortive " ++
               s!"operation is cancellable, `{k}.{i} cancel … ~> 0` (decision 63)")
           else pure (o :: (← elabRow n E sp r))

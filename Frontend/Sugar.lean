@@ -3188,12 +3188,20 @@ def cbRowed (r : Option Frontend.Check.CRow) (c : TCx) : TCx :=
   | some S => { c with E := { c.E with row := some S } }
   | none => c
 
-/-- A core row as surface syntax. -/
-def surfRow (c : TCx) (sp : Span) : Frontend.Check.CRow → Except Error Frontend.Row
-  | [] => pure .nil
-  | o :: os => do
+/-- A core row as surface syntax, each entry with its cancel row, nested at most `fuel`
+deep.  `[spec §27]` -/
+def surfRowN (c : TCx) (sp : Span) : Nat → Frontend.Check.CRow → Except Error Frontend.Row
+  | _, [] => pure .nil
+  | 0, _ :: _ => throw ⟨sp, "cancel rows nested too deeply"⟩
+  | fuel + 1, o :: os => do
     let q : Qual := match o.q with | .lin => .lin | .cancel => .cancel | .unr => .unr
-    pure (.cons o.n.toNat o.i.toNat q (← c.surface sp o.A) (← c.surface sp o.B) (← surfRow c sp os))
+    if o.fin.isTop then throw ⟨sp, "a cancel row `⊤` has no surface spelling"⟩
+    pure (.cons o.n.toNat o.i.toNat q (← c.surface sp o.A) (← c.surface sp o.B)
+      (← surfRowN c sp fuel o.fin.rowOf) (← surfRowN c sp fuel os))
+
+/-- A core row as surface syntax. -/
+def surfRow (c : TCx) (sp : Span) (S : Frontend.Check.CRow) : Except Error Frontend.Row :=
+  surfRowN c sp 1024 S
 
 /-- A borrow block's constant in its unwinding form, at the row `r` (SPEC §19). -/
 def Const.unwinding (r : Frontend.Row) : Const → Option Const

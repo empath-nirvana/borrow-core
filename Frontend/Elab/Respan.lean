@@ -73,7 +73,7 @@ def CTy.respan (sp : Span) : CTy → CTy
 
 def Row.respan (sp : Span) : Row → Row
   | .nil => .nil
-  | .cons n i q A B r => .cons n i q (A.respan sp) (B.respan sp) (r.respan sp)
+  | .cons n i q A B f r => .cons n i q (A.respan sp) (B.respan sp) (f.respan sp) (r.respan sp)
 
 def Shape.respan (sp : Span) : Shape → Shape
   | .leaf _ A => .leaf sp (A.respan sp)

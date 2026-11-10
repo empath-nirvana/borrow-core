@@ -591,6 +591,11 @@ import Backend2.Interp
 #print axioms BoCa.Fig16.LogRel.Core.CTy.alphaB_effOf_congr
 #print axioms BoCa.Fig16.LogRel.Core.Check.rowLeB_sound
 #print axioms BoCa.Fig16.LogRel.Core.Check.finLeB_sound
+#print axioms BoCa.Fig16.LogRel.Core.Check.thenLeB_sound
+#print axioms BoCa.Fig16.LogRel.Core.Check.pendLeB_sound
+#print axioms BoCa.Fig16.LogRel.Core.Check.thenFinB_sound
+#print axioms BoCa.Fig16.LogRel.Core.Check.finPersB_sound
+#print axioms BoCa.Fig16.LogRel.Core.Check.pendPersB_sound
 #print axioms BoCa.Fig16.LogRel.Core.Check.layersLeB_sound
 #print axioms Frontend.Check.alignRow_grow_renamed
 #print axioms Frontend.Check.effOf_of_effRow?

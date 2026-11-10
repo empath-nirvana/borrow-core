@@ -80,7 +80,7 @@ def CTy.canon (ρ τ : List (String × String)) (d : Nat) : CTy → CTy
 /-- A row with each binder renamed by its depth. -/
 def Row.canon (ρ τ : List (String × String)) (d : Nat) : Row → Row
   | .nil => .nil
-  | .cons n i q A B r => .cons n i q (A.canon ρ τ d) (B.canon ρ τ d) (r.canon ρ τ d)
+  | .cons n i q A B f r => .cons n i q (A.canon ρ τ d) (B.canon ρ τ d) (f.canon ρ τ d) (r.canon ρ τ d)
 
 /-- A shape with each binder renamed by its depth. -/
 def Shape.canon (ρ τ : List (String × String)) (d : Nat) : Shape → Shape

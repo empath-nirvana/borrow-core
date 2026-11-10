@@ -71,7 +71,7 @@ def CTy.renameLife (f : Span → String → Life) : CTy → CTy
 
 def Row.renameLife (f : Span → String → Life) : Row → Row
   | .nil => .nil
-  | .cons n i q A B r => .cons n i q (A.renameLife f) (B.renameLife f) (r.renameLife f)
+  | .cons n i q A B g r => .cons n i q (A.renameLife f) (B.renameLife f) (g.renameLife f) (r.renameLife f)
 
 def Shape.renameLife (f : Span → String → Life) : Shape → Shape
   | .leaf s A => .leaf s (A.renameLife f)

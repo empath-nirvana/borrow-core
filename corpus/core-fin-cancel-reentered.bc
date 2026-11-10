@@ -1,0 +1,24 @@
+-- SPEC §27 in the core text, the twin of the kernel program `cancel-reentered` (`bcc kernel interp
+-- cancel-reentered`, Core's `progReT`): `hnd 3o (hnd 1 {perform k => cancel k} ((hnd 3i (perform 1))
+-- unwind raise 3))`. The region re-enters the site of the name `3`; its inner instance is dead at
+-- the cancel, so the finaliser's raise of `3.0` is kept, re-raised at the canceller, and caught by
+-- the live outer handler 3. The inner handler 3's row holds the outer name only in the cancel row of
+-- `1.0`: `1.0 cancel[3.0 cancel 1 ~> 0] 1 ~> 1`.
+--
+-- Answer: inr (), and `live 0`. A wrong implementation that delivers the error to the dead inner
+-- instance, or drops it, answers `inl ()`.
+
+main : F (1 + 1) =
+  handle_with[3](
+      ((!thunkv fun (v : 1) -> return (inl v)) : !U (1 -o F (1 + 1))),
+      (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F (1 + 1)) * 1)) (
+    handle_with[1](
+        ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[3.0 cancel 1 ~> 0] 1)),
+        (((!thunkv fun (p : 1 * U ((1 -o F[3.0 cancel 1 ~> 0] 1) & F[3.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] 1)) ->
+          let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+          : !U (1 * U ((1 -o F[3.0 cancel 1 ~> 0] 1) & F[3.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] 1) -o F[3.0 cancel 1 ~> 0] 1) * 1)) (
+      x <- (handle_with[3](
+              ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[1.0 cancel[3.0 cancel 1 ~> 0] 1 ~> 1] 1)),
+              (((!thunkv fun (e : 1) -> return ()), ()) : !U (1 -o F[1.0 cancel[3.0 cancel 1 ~> 0] 1 ~> 1] 1) * 1)) (
+            perform[1.0] ())) unwind (abort[3.0] ());
+      return x))

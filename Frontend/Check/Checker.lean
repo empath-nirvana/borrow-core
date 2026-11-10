@@ -444,8 +444,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let rM' ← liftRow E M.span S rM
       let ⟨_, rN⟩ ← atRow E N.span S
         (← synC n { (E.minus rM.F.u).pushOwn x.name A with row := some S } Δ (A :: T) N)
-      let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
-        (effOf [] .unit)
+      let ⟨_, rD⟩ ← finC n ((E.minus rM.F.u).push none) Δ T D S
       let rN ← consumeStuck x.span 1 rN
       let FN ← popL E x.span x.name rN.F
       pure ⟨_, ← thenIt E sp x.name rM' FN rD⟩
@@ -490,8 +489,10 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
           if hp : usedSat BoCa.Fig16.LogRel.Core.VTy.persistent T rH.F.u = true then
             if hv : valFormB rH.F.u rH.t.erase = true then
               match hrd : rd with
-              | .boxed d Es =>
-                let hc' : BoCa.Fig16.LogRel.Core.clausesTyB S R d Es = rd.ty S R := by rw [hrd]; rfl
+              | .boxed d Es Fs =>
+                -- The operations' cancel rows, read from their clauses' `κ` (SPEC §27).
+                let hc' : BoCa.Fig16.LogRel.Core.clausesTyB S R d Es (finsOf Fs) = rd.ty S R := by
+                  rw [hrd]; rfl
                 -- BOXED-κ (SPEC §28): the clauses receive `κ` boxed at `@d`.
                 if k < 2 ^ 32 ∧ k ≠ 0 then
                   let nm := UInt32.ofNat k
@@ -499,9 +500,9 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                     if hnS : ∀ o ∈ S, o.n ≠ nm then
                       if hlen : Es.length ≤ 2 ^ 32 then
                        if hdv : BoCa.Fig16.LogRel.Core.Row.divB
-                           (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) = false then
+                           (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 (finsOf Fs) ++ S) = false then
                         if hwf : d.wf Δ = true then
-                          let Sh := BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S
+                          let Sh := BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 (finsOf Fs) ++ S
                           if hSd : ansOutlivesB Δ d Sh = true then
                             let site ← siteOf E Δ sp k st Es
                             let rM ← chkC n EM Δ T M (effOf Sh A)
@@ -529,18 +530,20 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                     else err sp s!"the name {k} is already in the row `{ppRow E S}` of the handler's answer"
                   else err sp "a handler's name is not 0"
                 else err sp s!"a handler's name is between 1 and 2^32 - 1, not {k}"
-              | .plain Es =>
-                let hc' : BoCa.Fig16.LogRel.Core.clausesTy S R Es = rd.ty S R := by rw [hrd]; rfl
+              | .plain Es Fs =>
+                -- The operations' cancel rows, read from their clauses' `κ` (SPEC §27).
+                let hc' : BoCa.Fig16.LogRel.Core.clausesTy S R Es (finsOf Fs) = rd.ty S R := by
+                  rw [hrd]; rfl
                 if k < 2 ^ 32 ∧ k ≠ 0 then
                   let nm := UInt32.ofNat k
                   if hn0 : nm ≠ 0 then
                     if hnS : ∀ o ∈ S, o.n ≠ nm then
                       if hlen : Es.length ≤ 2 ^ 32 then
                        if hdv : BoCa.Fig16.LogRel.Core.Row.divB
-                           (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) = false then
+                           (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 (finsOf Fs) ++ S) = false then
                         let site ← siteOf E Δ sp k st Es
                         let rM ← chkC n EM Δ T M
-                          (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) A)
+                          (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 (finsOf Fs) ++ S) A)
                         if h₂ : overlapOK T rH.F.u rM.F.u = true then
                           pure ⟨_, ← consumeOwed E sp (rEffHandle (at_ sp)
                             (classifyHandler Es rH.t) site hr' hc' rH hp hv hn0 hnS hlen hdv rM h₂)⟩
@@ -753,6 +756,37 @@ def bindHead : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → O
     | some ⟨S, A, h⟩ => pure ⟨A, S, h ▸ r⟩
     | none => err M.span s!"a bound computation must have a type `F A`, but this has type `{E.ppC C}`"
 
+/-- The finaliser `D` of `x <- M unwind (D); N` at the site's row `S`, at its own row `SD`: the
+empty row when `D` performs nothing (`effThenA`); else the operations of `S` that the cancel row of
+each operation of `S` it is read at holds (`finRowOf`), which `[then]`'s premises then decide
+(`thenIt`). A finaliser that checks only at `S` performs an operation some cancel row lacks.
+`[spec §27]` -/
+def finC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → CRow →
+    CheckM (Σ SD : CRow, Res Δ (.unit :: T) (.comp (effOf SD .unit)))
+  | 0, _, _, _, D, _ => err D.span "expression nested too deeply"
+  | n + 1, E, Δ, T, D, S => do
+    match ← attempt (chkC n E Δ (.unit :: T) D (effOf [] .unit)) with
+    | .ok r => pure ⟨[], r⟩
+    | .error e₀ =>
+      let SD := finRowOf S
+      let atSD ← if SD.isEmpty then pure (.error e₀)
+        else attempt (chkC n E Δ (.unit :: T) D (effOf SD .unit))
+      match atSD with
+      | .ok r => pure ⟨SD, r⟩
+      | .error _ =>
+        if S.isEmpty then throw e₀
+        else match ← attempt (chkC n E Δ (.unit :: T) D (effOf S .unit)) with
+        | .ok _ =>
+          let bad := S.filter fun o => o.finRead && !o.fin.isTop && !S.all fun o' =>
+            (BoCa.Fig16.LogRel.Core.Row.find o.fin.rowOf o'.n o'.i).isSome
+          err D.span (s!"the finaliser performs operations of the row `{ppRow E S}` that the " ++
+            "cancel row of " ++ ", ".intercalate (bad.map fun o =>
+              s!"{o.n}.{o.i}, `[{(ppFin E o.fin).drop 1 |>.dropRight 1}]`,") ++
+            " does not hold: a finaliser runs when a continuation captured below it is " ++
+            "cancelled, so the cancel row of the operation it is captured at must hold what " ++
+            "the finaliser performs (`n.i cancel[…] A ~> B`, SPEC §27)")
+        | .error e => throw e
+
 /-- `abort[k.i] V` at the answer `B`: an abortive operation of the current row (SPEC §19's abortive rule). -/
 def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Nat → Nat → Val → (B : CVTy) →
     CheckM (Σ S : CRow, Res Δ T (.comp (effOf S B)))
@@ -817,8 +851,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           let ⟨A, _, rM⟩ ← bindHead n (E₁.ownIn (mentionsC · M)) Δ T sp oA M
           let rM' ← liftRow E M.span S rM
           let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N (effOf S B)
-          let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
-            (effOf [] .unit)
+          let ⟨_, rD⟩ ← finC n ((E.minus rM.F.u).push none) Δ T D S
           let rN ← consumeStuck x.span 1 rN
           let FN ← popL E x.span x.name rN.F
           pure (hC ▸ (← thenIt E sp x.name rM' FN rD))
