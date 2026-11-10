@@ -1,0 +1,45 @@
+-- Two stored generators whose closes raise, closed by one finaliser (SPEC §15, §27). `rsrc(l, fb)`
+-- owns a list, yields its first element under a cleanup that raises `fb` (when positive) if the
+-- rest is cancelled, then its second. `take(…, 1)` stops `zip` after one pair, with both sources
+-- suspended at their first `yield`: the glue that drops `zip`'s state closes the first, and the
+-- close of the second is that close's finaliser, so it runs whether or not the first close raises.
+-- The second raise, during the first's unwind, is the one `to_result` receives.
+--
+-- Answer: `(inl i32[11], (inr i32[7], (inr i32[9], inr i32[9])))`: 1 + 10; the first cleanup's
+-- error; the second's; and, when both raise, the second's: the second close ran after the first
+-- raised. `live 0`. A finaliser that skipped the second close after the first raise answers
+-- `inr 7` in the fourth case.
+
+include adapters
+include fail
+include rec
+
+type Bytes = mu X. 1 + (i32 * X)
+
+def nil : Bytes = roll inl ()
+fn cons(b: i32, t: Bytes) -> Bytes = roll inr (b, t)
+
+fn drain(it: U (pull i32 1 1), acc: i32) -> i32 with Exhausted =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> drain(it, acc + x)
+  | inr d -> match d { inl u -> acc | inr it -> drain(it, acc) }
+  }
+
+fn rsrc(l: Bytes, fb: i32) -> 1 with Yield[i32], Fail[i32] =
+  match unroll l {
+    inl u -> ()
+  | inr (b, t) ->
+      u <- yield(b) unwind (if fb > 0 { let r = raise(fb); () } else { () });
+      match unroll t { inl u -> () | inr (c, t2) -> yield(c) }
+  }
+
+fn c(fa: i32, fb: i32) -> i32 + i32 =
+  let l1 = cons(1, cons(2, cons(3, nil)));
+  let l2 = cons(10, cons(20, cons(30, nil)));
+  with on_exhausted(!{ u -> inr 0 }) {
+    with to_result { drain(map(take(zip(rsrc(l1, fa), rsrc(l2, fb)), 1), !{ (a, b) -> a + b }), 0) }
+  }
+
+main -> (i32 + i32) * ((i32 + i32) * ((i32 + i32) * (i32 + i32))) =
+  (c(0, 0), (c(7, 0), (c(0, 9), c(7, 9))))

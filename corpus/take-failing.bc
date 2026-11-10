@@ -1,0 +1,29 @@
+-- `take` over a source that raises (SPEC §15). `upto(lo, hi, bad)` yields `lo`, `lo + 1`, …
+-- and raises `bad` when it reaches it: it is a stored generator over the row of `Fail`, and `take`'s
+-- copy for it is at that row too. Taking 2 stops before the raise and closes the source, as for a
+-- pure one; taking 6 meets the raise, which propagates out of `take` and `drain` to `to_result`.
+-- The consumer is a recursion (`drain`), not a `for`: a handler around a loop is not provided
+-- (SPEC §21 *Open*).
+--
+-- Answer: `(inl i32[1], inr i32[4])`: 0 + 1, and the error 4; `live 0`. A `take` that ran one past
+-- its count gives 3 in the first place, and one that lost the raise gives `inl 15`.
+
+include adapters
+include fail
+include rec
+
+fn upto(lo: i32, hi: i32, bad: i32) -> 1 with Yield[i32], Fail[i32] =
+  let mut i = lo;
+  while i < hi { if i == bad { raise(i) } else { () }; yield(i); i = i + 1 }
+
+fn drain(it: U (pull i32 1 1), acc: i32) -> i32 with Exhausted =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> drain(it, acc + x)
+  | inr d -> match d { inl u -> acc | inr it -> drain(it, acc) }
+  }
+
+fn sum_take(n: i32, bad: i32) -> i32 + i32 =
+  with on_exhausted(!{ u -> inr 0 }) { with to_result { drain(take(upto(0, 10, bad), n), 0) } }
+
+main -> (i32 + i32) * (i32 + i32) = (sum_take(2, 4), sum_take(6, 4))

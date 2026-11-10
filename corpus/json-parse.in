@@ -15,11 +15,11 @@
     "street": "123 Rue Sainte-Catherine",
     "city": "Montréal",
     "postal": "H3B 1A7",
-    "floors": [0, 1, -1]
+    "floors": [0, 1, -1, -0, -0.0]
   },
   "menu": [
     {"item": "espresso", "price": 3.0, "sizes": ["single", "double"]},
-    {"item": "croissant", "price": 2.5e0, "allergens": {"gluten": true, "nuts": false}},
+    {"item": "croissant", "price": 2.5e0, "id": 505874924095815681, "allergens": {"gluten": true, "nuts": false}},
     {"item": "tea", "price": 0, "sizes": [], "notes": {}}
   ],
   "empty": [],

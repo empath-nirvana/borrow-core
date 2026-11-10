@@ -1,0 +1,66 @@
+-- `json_get_with` (SPEC §36 *JSON*): an object's member given to a callback as a view at a
+-- lifetime of the callback's own, `'x`; the callback answers a value that names no `'x`. Here the
+-- callback copies a string member out (`string + 1`, `inr ()` when the member is missing or is not
+-- a string). It is called on an object for a present string member, a present member that is a
+-- number, a missing member, and on a value that is not an object (the array under `list`, got by
+-- a lookup whose callback looks up again).
+--
+-- The callback is a core-text `def`, `!thunkv Fun 'x < top. …`, because the surface cannot write
+-- it yet: there is no surface block generic in a lifetime (a block checked against
+-- `!(all 'x < top. … => B)` should elaborate as `Fun 'x`), and a callback that is not a surface
+-- block performs nothing (no surface block generic in a lifetime, #1003; a core-text block cannot perform, #161).
+--
+-- Answer: the lines `"Montréal"`, `none`, `none`, `none`, then `i32[1]`, the number of members
+-- found as strings, and `live 0`. A lookup that answers the wrong member changes the first line; a
+-- member that is not a string read as one, or a non-object read as an object, changes a `none`;
+-- a key or a view not released shows in `live`.
+
+include json
+
+-- A string member copied out: `inl` its text as a string of its own, `inr ()` when there is no
+-- member or it is not a string.
+fn str_member<'x>(x: imm 'x Json + 1) -> string + 1 =
+  match x {
+    inl v ->
+      borrow imm *v { 'y, w -> match w {
+          Str(s) -> (inl to_string(key_prefix(s)) : string + 1)
+        | _ -> (inr () : string + 1)
+        } }
+  | inr u -> inr ()
+  }
+
+-- `str_member` as a callback generic in the view's lifetime.
+def copy_str : !(all 'x < top. imm 'x Json + 1 => string + 1) =
+  !thunkv Fun 'x < top. return (thunkv fun (x : imm 'x Json + 1) -> str_member(x))
+
+-- The string member `city` of the member given, looked up again through `json_get_with`; given the
+-- array under `list`, `inr ()`, as an array is not an object.
+fn str_in_list<'x>(x: imm 'x Json + 1) -> string + 1 =
+  match x { inl v -> json_get_with(v, "city", copy_str) | inr u -> inr () }
+
+-- `str_in_list` as a callback.
+def in_list : !(all 'x < top. imm 'x Json + 1 => string + 1) =
+  !thunkv Fun 'x < top. return (thunkv fun (x : imm 'x Json + 1) -> str_in_list(x))
+
+-- The line for a lookup: the string quoted, or `none`; 1 when found.
+fn show(r: string + 1) -> i32 =
+  match r {
+    inl s -> print_byte(b'"'); print_string(s); print_lit("\"\n"); 1
+  | inr u -> print_lit("none\n"); 0
+  }
+
+def doc : lit = "{\"city\": \"Montréal\", \"floor\": 3, \"list\": [1, 2]}"
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let r = borrow imm doc { 't, t -> with to_result { json_parse(t) } };
+  match r {
+    inl j ->
+      let mut j = j;
+      let a = show(json_get_with(&j, "city", copy_str));
+      let b = show(json_get_with(&j, "floor", copy_str));
+      let c = show(json_get_with(&j, "street", copy_str));
+      let d = show(json_get_with(&j, "list", in_list));
+      a + b + c + d
+  | inr e -> let (c, o) = e; c
+  }
+}

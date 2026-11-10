@@ -1,33 +1,33 @@
 # The new backend's counts per run (scripts/compile-backend2.sh, bcc-counts --backend new): name allocs indirect copies loads stores bounds.
 13-2-sum-prog 37 9 3 153 111 0
 answers-two-types 0 2 0 0 0 0
-aoc/2020-08 9 0 0 8035 5488 3481
+aoc/2020-08 9 0 0 10217 7452 3481
 aoc/2021-06 7 0 0 6410 4780 2264
 aoc/2021-10 8 0 0 13183 8141 7013
 aoc/2021-15 11 0 0 411123 385610 216892
 aoc/2022-01 7 0 0 8450 6901 4560
 aoc/2022-12 9 0 0 31568 14905 18111
-aoc/2022-21 18 0 0 29353 15377 13823
+aoc/2022-21 18 0 0 31686 17014 13823
 aoc/2023-01 4 0 0 26414 4099 26825
 aoc/2023-03 10 0 0 11999 8594 4543
 aoc/2023-07 10 0 0 114732 108143 75182
-aoc/2024-01 9 0 0 138482 133125 124750
+aoc/2024-01 9 0 0 141240 135262 124750
 aoc/2024-02 5 0 0 8383 4900 4415
-aoc/2024-11 276 0 0 1888512 805097 1234302
+aoc/2024-11 276 0 0 1945890 844135 1234302
 array-empty 0 0 0 0 0 1
 array-get 2 0 0 10 7 2
 array-refs 5 0 0 8 8 1
 array-replace 2 0 0 12 12 5
 array-sum 1 0 0 3000 3000 2024
 ascii-upper 4 0 0 4286 4179 192
-async-bank 14 0 0 381 373 16
-async-bank-inbox 14 0 0 395 387 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
+async-bank 14 0 0 439 431 16
+async-bank-inbox 14 0 0 453 445 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
 async-borrow 10 5 0 402 399 3
-async-cancel 8 0 0 133 130 6 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
-async-lend-slots 10 0 0 279 267 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
-async-logged 15 0 0 177 159 0
-async-map 21 0 0 243 220 10 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
-async-mapreduce 25 0 1 459 405 30 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value; the recursion's frames on its task's stack, κ in the stack's region
+async-cancel 8 0 0 140 137 6 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
+async-lend-slots 10 0 0 337 325 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
+async-logged 15 0 0 209 191 0
+async-map 21 0 0 254 231 10 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
+async-mapreduce 25 0 1 492 438 30 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value; the recursion's frames on its task's stack, κ in the stack's region
 async-r1-cancel 4 0 0 5 5 0
 async-r1-cancel-finaliser-writes 1 0 0 2 2 0
 async-r1-drain 4 0 0 7 7 0
@@ -37,16 +37,16 @@ async-r1-local-borrows 2 0 0 7 7 0
 async-r1-nested 2 0 0 4 4 0
 async-r1-step-lend 1 0 0 3 3 0
 async-race 3 0 0 3 3 0
-async-scheduler 8 0 0 379 373 20 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
-async-scoped 9 0 0 223 213 0
+async-scheduler 8 0 0 449 443 20 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
+async-scoped 9 0 0 263 253 0
 async-stack-cancel 406 0 0 4917 2495 0 # SPEC §52 stress: each level's cell, freed by the cancel
-async-stack-deep 1366 4750 0 216761 178706 14412 # SPEC §52 stress: each level's cell; a resume dispatches between the two task bodies' codes
-async-stack-nested 16 0 0 1075 911 40 # SPEC §52 stress: the inner tasks' stacks
-async-timers 40 5 0 369 354 0
+async-stack-deep 1367 4750 0 268158 230105 14412 # SPEC §52 stress: each level's cell; a resume dispatches between the two task bodies' codes
+async-stack-nested 16 0 0 1254 1090 40 # SPEC §52 stress: the inner tasks' stacks
+async-timers 40 5 0 398 380 0
 async-try-join 28 0 0 378 372 0
-async-unr-site 7 0 0 379 299 18 # SPEC §52: an unr site does not switch stacks
-async-worker-pool 11 0 1 419 405 20
-async-workers-scoped 14 0 1 684 668 0
+async-unr-site 7 0 0 411 331 18 # SPEC §52: an unr site does not switch stacks
+async-worker-pool 11 0 1 489 475 20
+async-workers-scoped 14 0 1 756 740 0
 axes/borrow-across-loop 5 0 0 32 15 4
 axes/codata-coeffects 2 0 0 27 10 16
 axes/codata-effects 3 0 0 13 3 0
@@ -124,7 +124,7 @@ core-fin-top-row 0 0 0 0 0 0
 core-pipe-close 2 0 0 2 2 0
 core-pipe-step 1 0 0 1 1 0
 core-unsigned 0 0 0 0 0 0
-data-json-map-ser 16 0 0 489 379 133
+data-json-map-ser 16 0 0 555 420 133
 deep-gen-count 0 3 0 0 0 0
 effects-load-raise 4 0 0 204 184 15
 fin-block-finaliser 0 0 0 0 0 0
@@ -154,12 +154,27 @@ fin-raise-unwind 0 0 0 0 0 0
 fin-resume-capturing-row 0 2 0 0 0 0
 fin-timeout 0 0 0 0 0 0
 for-arm-raises-owned 8 0 0 54 54 18
+gen-raise-annot 25 0 0 75 75 0
+gen-raise-become 8 4 0 24 24 0
+gen-raise-close-two 24 0 0 72 72 0
+gen-raise-fold 0 0 0 0 0 0
+gen-raise-local-bind 9009 9005 0 27027 27027 0
+gen-raise-local-pure 10 0 0 30 30 0
+gen-raise-op-terminal 16 8 0 48 48 0
+gen-raise-pass 12 0 0 36 36 0
+gen-raise-take 17 0 0 51 51 0
+gen-raise-unused 24 0 0 72 72 0
+gen-raise-with 8 8 0 24 24 0
+gen-raise-zip 21 0 0 63 63 0
 handle-arm-releases 2 0 0 13 13 5
 if-match-argument 0 0 0 0 0 0
-infer-local-from-call 4 0 0 12 12 0
-infer-local-sum-generic 1 0 0 8 8 5
+infer-local-from-call 4 0 0 16 16 0
+infer-local-sum-generic 1 0 0 16 16 5
 infer-local-unit 2 0 0 4 4 1
-json-parse 5942 0 0 276550 198082 93444
+json-parse 673 0 0 25922 15143 13197
+json-deep 5004 0 0 352010 284003 80003
+json-get 17 0 0 1097 501 483
+parse-i64 12 0 0 687 313 270
 kernel-cancel-now 0 0 0 0 0 0
 kernel-deep-gen-plain 0 0 0 0 0 0
 kernel-e7a 1 0 0 1 1 0
@@ -182,9 +197,9 @@ kernel-tick-native 0 0 0 0 0 0
 leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 695
 lend-call-raise 9 0 0 34 31 4
 lend-call-record 1 0 0 6 2 0
-lend-tail-call 1 0 0 5 3 0
+lend-tail-call 1 0 0 10 6 0
 lit-lend-raise 6 0 0 69 30 39
-load-for-linear 1 0 0 92 52 3
+load-for-linear 1 0 0 115 65 3
 mut-control-assign-raise 0 0 0 6 6 0
 mut-control-call-order 0 0 0 10 10 0
 mut-control-exhausted 13 0 0 105532 105532 42762
@@ -222,29 +237,29 @@ count-down-exact 3 0 0 18 12 0
 count-fold 0 0 0 0 0 0
 count-try 0 0 0 0 0 0
 data-abbr-block 6 0 0 24 24 0
-data-abbr-nested 6 0 0 354 345 14
-data-abbr-root 46 0 0 1283 1097 195
+data-abbr-nested 6 0 0 377 364 14
+data-abbr-root 46 0 0 1474 1259 195
 data-array-tree 4 0 0 80 80 8
 data-box-tree 9 0 0 27 27 0
 data-config 5 0 0 163 27 202
-data-eval 10 0 0 38 38 0
+data-eval 10 0 0 56 56 0
 data-fold-bang 4 0 0 14 14 0
 data-fold-block 9 0 0 62 31 0
 data-fold-forest 8 0 0 104 68 0
 data-fold-generic 4 0 0 26 17 0
-data-fold-group 5 0 0 42 21 0
+data-fold-group 5 0 0 52 26 0
 data-fold-list 6 0 0 60 45 0
 data-fold-tree 9 0 0 89 58 0
 data-fold-whole 11 0 0 107 65 0
-data-group 5 0 0 17 17 0
-data-json-map 46 0 0 1283 1097 195
+data-group 5 0 0 21 21 0
+data-json-map 46 0 0 1474 1259 195
 data-json-vec 6 0 0 188 188 23
 data-option 5 0 0 16 16 4
-data-option-block 12 0 0 24 24 0
+data-option-block 12 0 0 30 30 0
 data-particles 4 0 0 669 653 150
 data-rose 14 0 0 56 56 0
 data-rose-vec 5 0 0 220 220 15
-data-set-rec 20 0 0 1011 947 104
+data-set-rec 20 0 0 1127 1034 104
 data-turnstile 4 0 0 53 21 18
 decl-guard 0 0 0 0 0 0
 decl-handler-state 0 4 0 0 0 0
@@ -379,7 +394,7 @@ join-let-with 0 0 0 2 2 0
 json-tokens 4 0 0 5276 4099 992
 key-value 5 0 0 4548 4163 431
 labels-json 5 0 0 361 161 253
-leetcode/arrays/0001-two-sum 28 0 0 4777 4459 355
+leetcode/arrays/0001-two-sum 28 0 0 4880 4529 355
 leetcode/arrays/0011-container-with-most-water 10 0 0 4407 4225 223
 leetcode/arrays/0015-3sum 16 0 0 5091 4592 633
 leetcode/arrays/0033-search-in-rotated-sorted-array 11 0 0 4519 4239 335
@@ -387,7 +402,7 @@ leetcode/arrays/0053-maximum-subarray 10 0 0 4385 4221 181
 leetcode/arrays/0121-best-time-to-buy-and-sell-stock 11 0 0 4419 4244 198
 leetcode/arrays/0152-maximum-product-subarray 11 0 0 4384 4234 170
 leetcode/arrays/0153-find-minimum-in-rotated-sorted-array 11 0 0 4406 4240 210
-leetcode/arrays/0217-contains-duplicate 22 0 0 4848 4649 225
+leetcode/arrays/0217-contains-duplicate 22 0 0 5071 4855 225
 leetcode/arrays/0238-product-of-array-except-self 14 0 0 4391 4239 187
 leetcode/binary/0190-reverse-bits 4 0 0 4233 4099 113
 leetcode/binary/0191-number-of-1-bits 4 0 0 4192 4099 105
@@ -405,7 +420,7 @@ leetcode/dp/0213-house-robber-ii 10 0 0 4332 4215 138
 leetcode/dp/0300-longest-increasing-subsequence 16 0 0 4604 4363 333
 leetcode/dp/0322-coin-change 18 0 0 66314 16865 55812
 leetcode/dp/1143-longest-common-subsequence 10 0 0 5618 4597 1017
-leetcode/graphs/0128-longest-consecutive-sequence 24 0 0 5047 4580 483
+leetcode/graphs/0128-longest-consecutive-sequence 24 0 0 5265 4695 483
 leetcode/graphs/0133-clone-graph 41 0 0 5238 4564 813
 leetcode/graphs/0200-number-of-islands 28 0 0 5268 4634 868
 leetcode/graphs/0207-course-schedule 42 0 0 4937 4527 617
@@ -413,9 +428,9 @@ leetcode/graphs/0261-graph-valid-tree 22 0 0 4675 4406 401
 leetcode/graphs/0269-alien-dictionary 40 0 0 11117 9742 1521
 leetcode/graphs/0323-number-of-connected-components 25 0 0 4712 4409 430
 leetcode/graphs/0417-pacific-atlantic-water-flow 34 0 0 5593 4707 1065
-leetcode/heaps/0295-find-median-from-data-stream 31 0 0 6736 6161 2471
+leetcode/heaps/0295-find-median-from-data-stream 31 0 0 6856 6257 2471
 leetcode/heaps/0295-find-median-from-data-stream-f64 284 0 0 11043 8859 4870
-leetcode/heaps/0347-top-k-frequent-elements 40 0 0 6734 5817 1356
+leetcode/heaps/0347-top-k-frequent-elements 40 0 0 7134 5975 1356
 leetcode/intervals/0056-merge-intervals 23 0 0 5062 4633 478
 leetcode/intervals/0057-insert-interval 24 0 0 4860 4411 344
 leetcode/intervals/0252-meeting-rooms 14 0 0 4752 4447 346
@@ -434,29 +449,29 @@ leetcode/matrix/0079-word-search 18 0 0 5127 4385 855
 leetcode/strings/0003-longest-substring-without-repeating-characters 5 0 0 7846 7522 3395
 leetcode/strings/0005-longest-palindromic-substring 4 0 0 4553 4099 475
 leetcode/strings/0020-valid-parentheses 5 0 0 4373 4170 150
-leetcode/strings/0049-group-anagrams 79 0 0 7820 7007 1645
+leetcode/strings/0049-group-anagrams 79 0 0 8057 7210 1645
 leetcode/strings/0076-minimum-window-substring 5 0 0 7724 7088 3387
 leetcode/strings/0125-valid-palindrome 4 0 0 4416 4099 267
 leetcode/strings/0242-valid-anagram 5 0 0 9284 6991 4830
 leetcode/strings/0271-encode-and-decode-strings 25 0 0 5437 5068 606
 leetcode/strings/0424-longest-repeating-character-replacement 5 0 0 4804 4472 699
 leetcode/strings/0647-palindromic-substrings 4 0 0 4534 4099 431
-leetcode/trees/0098-validate-binary-search-tree 62 0 0 5135 4562 284
-leetcode/trees/0100-same-tree 62 0 0 4902 4581 308
-leetcode/trees/0102-binary-tree-level-order-traversal 61 0 0 5143 4842 279
-leetcode/trees/0104-maximum-depth-of-binary-tree 51 0 0 4916 4485 215
-leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal 42 0 0 4681 4398 189
-leetcode/trees/0124-binary-tree-maximum-path-sum 68 0 0 5222 4629 318
+leetcode/trees/0098-validate-binary-search-tree 62 0 0 5361 4731 284
+leetcode/trees/0100-same-tree 62 0 0 5186 4803 308
+leetcode/trees/0102-binary-tree-level-order-traversal 61 0 0 5457 5111 279
+leetcode/trees/0104-maximum-depth-of-binary-tree 51 0 0 5104 4627 215
+leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal 42 0 0 4848 4515 189
+leetcode/trees/0124-binary-tree-maximum-path-sum 68 0 0 5506 4851 318
 leetcode/trees/0208-implement-trie 28 0 0 8068 7611 2373
 leetcode/trees/0208-implement-trie-boxed 61 0 0 8012 7602 572
 leetcode/trees/0208-implement-trie-vec 61 0 0 8697 8287 572
 leetcode/trees/0211-design-add-and-search-words-data-structure 49 0 0 10901 9039 4453
 leetcode/trees/0212-word-search-ii 105 0 0 21673 17226 12863
-leetcode/trees/0226-invert-binary-tree 42 0 0 4921 4654 174
-leetcode/trees/0230-kth-smallest-element-in-a-bst 92 0 0 5174 4808 307
-leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree 77 0 0 5277 4839 489
-leetcode/trees/0297-serialize-and-deserialize-binary-tree 83 0 0 5892 5471 570
-leetcode/trees/0572-subtree-of-another-tree 73 0 0 6138 5767 380
+leetcode/trees/0226-invert-binary-tree 42 0 0 5075 4771 174
+leetcode/trees/0230-kth-smallest-element-in-a-bst 92 0 0 5435 5001 307
+leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree 77 0 0 5789 5271 489
+leetcode/trees/0297-serialize-and-deserialize-binary-tree 83 0 0 6184 5697 570
+leetcode/trees/0572-subtree-of-another-tree 73 0 0 6506 6063 380
 lend-config 4 0 0 26 6 0
 lend-copy 6 0 0 41 20 12
 lend-div 5 0 0 39 15 8
@@ -480,10 +495,10 @@ loop-shadow-linear 1 0 0 6 3 3
 loop-shadow-owner 4 0 0 13 9 7
 loop-shadow-persistent 0 0 0 0 0 0
 main-lifetime 0 0 0 0 0 0
-map-drain 23 0 0 555 525 187
-map-iter-owned 16 0 0 491 272 219
+map-drain 23 0 0 684 635 187
+map-iter-owned 16 0 0 594 314 219
 map-reuse 7 0 0 48 48 0
-map-views 32 0 0 8163 6274 3795
+map-views 32 0 0 11053 8337 3795
 mut-bind-arm 0 0 0 0 0 0
 mut-block 0 0 0 0 0 0
 mut-block-nested 0 0 0 0 0 0
@@ -513,12 +528,12 @@ print-borrowed-list 19 4 0 76 51 0
 quicksort 5 0 0 92301 84255 94774
 raise-in-borrow-branch 4 0 0 7 4 0
 rec-await-exhausted 2 0 0 9 6 0
-rec-deep 30043 0 0 1536299 1536299 436560
-rec-emit 6 0 0 216 216 0
+rec-deep 30043 0 0 2169443 2169443 436560
+rec-emit 6 0 0 252 252 0
 rec-even-odd 0 0 0 0 0 0
 rec-fib 0 0 0 0 0 0
 rec-for-owned-state 9 0 0 346 346 199
-rec-generic-deep 120057 0 0 1124211 1124211 502080
+rec-generic-deep 120057 0 0 1888403 1888403 502080
 rec-generic-layer 6 0 0 23 20 0
 rec-generic-mutual 11 0 0 45 33 0
 rec-in-for-linear 1 0 0 1 1 0
@@ -535,8 +550,8 @@ rec-overflow 10101 0 0 10101 10101 0
 rec-parser 17 0 0 66 66 0
 rec-tree 127 0 0 635 635 0
 rec-yield 0 0 0 0 0 0
-reconcile-chain 16 3 0 373 355 0
-reconcile-clock 25 8 0 272 236 0
+reconcile-chain 16 3 0 398 380 0
+reconcile-clock 25 8 0 282 246 0
 retry-block 2 0 0 5 5 0
 reverse-bytes 4 0 0 133 92 39
 sched-a 40 18 0 477 473 0
@@ -561,10 +576,11 @@ surface/io-upper 3 0 0 136 3 0
 surface/io-wc 3 0 0 62 3 0
 surface/map-reuse 6 0 0 42 42 0
 swap-cell-width 1 0 0 1 1 0
+take-failing 0 0 0 0 0 0
 text-lend-lifetime 4 0 0 83 73 13
 text-wordfreq 969 0 192 5452 3360 0
 tree-map 29 0 2 209 161 0
-tree-view-tasks 1205 600 0 46878 25830 8727
+tree-view-tasks 1205 600 0 48087 27039 8727
 trim-replace 8 0 0 4640 4179 569
 utf8-count 4 0 0 341 109 199
 with-lend-head-type 0 0 0 4 4 0
@@ -575,4 +591,3 @@ alpha-generic-arg 0 0 0 0 0 0
 alpha-lam-binder 1 0 0 2 1 0
 alpha-withbor2r 1 0 0 1 1 0
 clause-loop-value 0 0 0 0 0 0
-sum-read-unk 0 0 0 18 9 0

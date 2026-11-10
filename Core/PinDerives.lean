@@ -365,22 +365,23 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | withswap {Δ Γ a A B} (hΓ : Ctx.DeadP Γ) :
       CDerivesP Δ Γ withswap (.val (axWithswapTy a A B))
   /-- The unwinding form of `withbor` (1): `Ref A` lent as `Imm 'x A` to a callback at a row of
-  abortive operations; when it unwinds, the finaliser `d` runs on the source.  `[spec §19]` -/
+  abortive operations; when it unwinds, the finaliser `d` runs on the source. `d` is typed at the
+  rule's context, whose live slots are persistent, so it may name them.  `[spec §19, §72]` -/
   | withbor1U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerivesP Δ Γ d (.val (.lolli (.ref A) .unit))) :
+      (hd : CDerivesP Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerivesP Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S))
   /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition
   non-strict.  `[spec §19, §23]` -/
   | withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerivesP Δ Γ d (.val (.lolli (.ref A) .unit))) :
+      (hd : CDerivesP Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerivesP Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S))
   /-- The unwinding form of `withbor` (3): `Mut @a A` reborrowed as `Mut 'x A`.  `[spec §19]` -/
   | withbor3U {Δ Γ a A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerivesP Δ Γ d (.val (.lolli (.mut a A) .unit))) :
+      (hd : CDerivesP Δ Γ d (.val (.lolli (.mut a A) .unit))) :
       CDerivesP Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S))
   /-- The unwinding form of `withload`: its own term, the source consumed by the load.
   `[spec §19]` -/
@@ -392,14 +393,14 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | sliceBorrowMU {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
       (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerivesP Δ Γ d (.val (.lolli (.array A) .unit))) :
+      (hd : CDerivesP Δ Γ d (.val (.lolli (.array A) .unit))) :
       CDerivesP Δ Γ (withborUE d) (.val (sliceBorrowMUTy x Δ.meetOfDom A B S))
   /-- The unwinding form of `slice_borrow_imm`: an owned array lent as a family of `imm` leaves.
   `[spec §19]` -/
   | sliceBorrowIU {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A)
       (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerivesP Δ Γ d (.val (.lolli (.array A) .unit))) :
+      (hd : CDerivesP Δ Γ d (.val (.lolli (.array A) .unit))) :
       CDerivesP Δ Γ (withborUE d) (.val (sliceBorrowIUTy x Δ.meetOfDom A B S))
   -- Call-by-value derived forms: BoLo's application and `∀E` on arbitrary subterms, and the
   -- reading of a computation of `F A` as a value-judged expression at `A`.

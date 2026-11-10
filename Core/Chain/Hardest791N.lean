@@ -699,11 +699,12 @@ theorem taskA_ok {Φ : LocFam} (hΦ : Φ.Down) (A : Life) (n : Nat) (ls : List S
       (.appL .hole cbRec)) ?_
     refine erwp_det hΦ hTD hQR (fun μ => step1Only_plug (Head.beta μ _ cbRec) rfl .hole) ?_
     have e₃ : Kont.hole.plug (Expr.subst 0 cbRec (Expr.subst (0 + 1) (Val.shift 1 0 (Val.loc c))
-        (thenE ((Expr.var 2).pair (Expr.var 0)) ((Expr.val dRec).app (Expr.var 2))
+        (thenE ((Expr.var 2).pair (Expr.var 0)) ((Expr.shift 3 0 (Expr.val dRec)).app (Expr.var 2))
           (((Expr.var 0).app (Expr.val Val.unit)).app (Expr.var 1))))) =
         ubindE (.pair (NF c) (DR c)) (cbBody c) := by
       simp [Kont.plug, Expr.subst, Expr.shift, thenE, ubindE, NF, DR, cbBody, Val.shift,
         Val.pair, Val.loc, Val.lam, Expr.val, Val.prim, Expr.loc,
+        shift_closedAt _ 3 dRec_closed (Nat.zero_le 0),
         subst_closedAt _ _ dRec_closed (Nat.zero_le _), subst_closedAt _ _ cbRec_closed
           (Nat.zero_le _)]
     rw [e₃]
@@ -824,11 +825,12 @@ theorem lendB_ok (hΦ : Φ.Down) (hPS : ∀ k ls v ρ, PS (k + 1) ls v ρ → PS
     (.appL .hole cbB)) ?_
   refine erwp_det hΦ hTD hQB (fun μ => step1Only_plug (Head.beta μ _ cbB) rfl .hole) ?_
   have e₃ : Kont.hole.plug (Expr.subst 0 cbB (Expr.subst (0 + 1) (Val.shift 1 0 (Val.loc a))
-      (thenE ((Expr.var 2).pair (Expr.var 0)) ((Expr.val dB).app (Expr.var 2))
+      (thenE ((Expr.var 2).pair (Expr.var 0)) ((Expr.shift 3 0 (Expr.val dB)).app (Expr.var 2))
         (((Expr.var 0).app (Expr.val Val.unit)).app (Expr.var 1))))) =
       ubindE (.pair (NF a) (DB a)) (cbBBody a) := by
     simp [Kont.plug, Expr.subst, Expr.shift, thenE, ubindE, NF, DB, cbBBody, Val.shift,
       Val.pair, Val.loc, Val.lam, Expr.val, Val.prim, Expr.loc,
+      shift_closedAt _ 3 dB_closed (Nat.zero_le 0),
       subst_closedAt _ _ dB_closed (Nat.zero_le _), subst_closedAt _ _ cbB_closed (Nat.zero_le _)]
   rw [e₃]
   set Φ₁ := Φ.set a A (famF A)
@@ -884,7 +886,7 @@ theorem bodyB_closed {tail : Expr} (ht : closedAt 0 tail = true) :
   have h6 := closedAt_mono tail ht (show 0 ≤ 6 by omega)
   simp [bodyB, letE, allocE, freeE, closedAt, h6, BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.parkE,
     performE, opPayload, Val.pair, Val.i32, Val.unit, Expr.val, Val.prim, withborUV, withborUE,
-    thenE, dB, cbB, storeE, vB, forget, unit', Val.lam, ubindE]
+    thenE, dB, cbB, storeE, vB, forget, unit', Val.lam, Expr.shift]
 
 theorem bodyB_subst {tail : Expr} (ht : closedAt 0 tail = true) (v : Val) :
     (bodyB tail).subst 0 v = bodyB tail :=
