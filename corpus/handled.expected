@@ -818,6 +818,13 @@ corpus/fin-cancel-tail.bc 21:27: handle 1: inside [2], finaliser; row []; ops 1.
 corpus/fin-cancel-tail.bc 21:58: handle 2: inside [], finaliser; row [1]; ops 2.0 stored; names 2.0 row; condition 2 fails at 1
 corpus/fin-cancel-tail.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/fin-cancel-tail.bc 2.0 stored: machine; condition 2 fails; -
+corpus/fin-cancel-unused-site.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
+corpus/fin-cancel-unused-site.bc 28:3: handle 1: inside [2, 3], finaliser; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/fin-cancel-unused-site.bc 28:33: handle 2: inside [3], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/fin-cancel-unused-site.bc 28:64: handle 3: inside [], finaliser; row [2]; ops 3.0 stored; names 3.0 row; condition 2 fails at 2
+corpus/fin-cancel-unused-site.bc 1.0 tail: -; condition 2 holds; -
+corpus/fin-cancel-unused-site.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/fin-cancel-unused-site.bc 3.0 stored: machine; condition 2 fails; -
 corpus/fin-e7b.bc flows [0, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/fin-e7b.bc 17:23: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/fin-e7b.bc 17:50: handle 2: inside [], finaliser; row [1]; ops 2.0 resume-or-cancel; names 2.0 []; condition 2 holds
@@ -1817,6 +1824,13 @@ corpus/state-machine.bc 65:13: handle 2: inside []; row []; ops 2.0 abortive; na
 corpus/state-machine.bc 62:3: handle 1: inside []; row []; ops 1.0 resume-or-cancel; names 1.0 row; condition 2 holds
 corpus/state-machine.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/state-machine.bc 1.0 resume-or-cancel: machine; condition 2 holds; -
+corpus/state-row-unused-site.bc flows [0, 1, 2, 3, 4294967295]; main [1, 2, 3]
+corpus/state-row-unused-site.bc 21:19: handle 1: inside [2, 3]; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/state-row-unused-site.bc 21:41: handle 2: inside [3]; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/state-row-unused-site.bc 21:64: handle 3: inside []; row [2]; ops 3.0 tail+state; names 3.0 row; condition 2 fails at 2
+corpus/state-row-unused-site.bc 1.0 tail: -; condition 2 holds; -
+corpus/state-row-unused-site.bc 2.0 tail: direct; condition 2 holds; agree
+corpus/state-row-unused-site.bc 3.0 tail+state: machine; condition 2 fails; -
 corpus/storage-array.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
 corpus/storage-array.bc 36:15: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/storage-array.bc 26:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds

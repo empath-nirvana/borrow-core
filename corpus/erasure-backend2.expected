@@ -107,6 +107,7 @@ fin-cancel-reentered erased handles 1 performs 0 raises 1 machines 2 suspends 1 
 fin-cancel-region erased handles 1 performs 0 raises 2 machines 1 suspends 1 left 0 0
 fin-cancel-reraised erased handles 1 performs 0 raises 1 machines 2 suspends 1 left 0 0
 fin-cancel-tail erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
+fin-cancel-unused-site erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0
 fin-e7b erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
 fin-e7d erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0
 fin-e8b erased handles 2 performs 0 raises 2 left 0 0
@@ -480,6 +481,7 @@ sort-numbers erased handles 0 performs 0 raises 0 left 0 0
 split-at-mut erased handles 0 performs 0 raises 0 left 0 0
 state-machine erased handles 1 performs 0 raises 4 machines 1 suspends 12 left 0 0
 state-machine-audit erased handles 1 performs 0 raises 4 left 0 0
+state-row-unused-site erased handles 2 performs 1 raises 0 machines 1 suspends 1 left 0 0
 storage-array erased handles 2 performs 0 raises 2 left 0 0
 sum-i32 erased handles 0 performs 0 raises 0 left 0 0
 sum-prog-exact erased handles 0 performs 0 raises 0 left 0 0

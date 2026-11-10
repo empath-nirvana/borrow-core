@@ -310,6 +310,9 @@ corpus/fin-cancel-reraised.bc 2.0 cancellable resume-or-cancel: machine: a path 
 corpus/fin-cancel-reraised.bc 3.0 cancellable abortive: -; agree
 corpus/fin-cancel-tail.bc 1.0 cancellable abortive: branch; agree
 corpus/fin-cancel-tail.bc 2.0 cancellable stored: machine: the clause captures values; agree
+corpus/fin-cancel-unused-site.bc 1.0 cancellable tail: -; agree
+corpus/fin-cancel-unused-site.bc 2.0 cancellable abortive: branch; agree
+corpus/fin-cancel-unused-site.bc 3.0 cancellable stored: machine: the clause captures values; agree
 corpus/fin-e7b.bc 1.0 cancellable abortive: branch; agree
 corpus/fin-e7b.bc 2.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/fin-e7d.bc 1.0 cancellable abortive: branch; agree
@@ -618,6 +621,9 @@ corpus/sort-lines.bc 1.0 cancellable abortive: branch; agree
 corpus/state-machine-audit.bc 1.0 cancellable abortive: branch; agree
 corpus/state-machine.bc 2.0 cancellable abortive: branch; agree
 corpus/state-machine.bc 1.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/state-row-unused-site.bc 1.0 cancellable tail: -; agree
+corpus/state-row-unused-site.bc 2.0 cancellable tail: direct; agree
+corpus/state-row-unused-site.bc 3.0 cancellable tail+state: machine: the clause captures values; agree
 corpus/storage-array.bc 1.0 cancellable abortive: branch; agree
 corpus/sugar/data-box-tree.lowered.bc 1.0 cancellable abortive: branch; agree
 corpus/sugar/data-config.lowered.bc 1.0 cancellable abortive: branch; agree

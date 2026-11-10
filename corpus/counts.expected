@@ -112,6 +112,7 @@ fin-cancel-reentered 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across t
 fin-cancel-region 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
 fin-cancel-reraised 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
 fin-cancel-tail 3 1 0 5 3 0 # stdout's cell; the indirect call is of `tm`'s answer, a function of its state
+fin-cancel-unused-site 3 1 0 4 3 0 # stdout's cell; the indirect call is of `tm`'s answer, a function of its state
 fin-e7b 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
 fin-e7d 0 0 0 0 0 0 # no cell; two cleanups raise, the first error is kept
 fin-e8b 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the pending one
@@ -486,6 +487,7 @@ sort-numbers 4 0 0 167 133 137
 split-at-mut 4 0 0 133 93 51
 state-machine 0 0 0 0 0 0 # the generator's yields are direct calls of the loop's body
 state-machine-audit 1 0 0 15 15 0
+state-row-unused-site 3 2 0 4 3 0 # stdout's cell; the indirect calls are of `tm`'s answer, a function of its state
 storage-array 5461 0 0 71560 55180 10920 # one array per node of the tree of arrays (Rust's count, storage.rs)
 sum-i32 7 0 0 39 24 0
 sum-prog-exact 37 9 0 153 111 0
