@@ -175,7 +175,7 @@ The order in the raise row: `close_others_i` nests the most downstream innermost
 - **Signature changes from rev 1:** `AtStop` and `Ended(k)` in `State_i`; `FwdWait` and `Stop` in `Event_i`; `forwardWait_i`; and three generated frame lists (`close_others_i`, `close_all`, `close_up_i`) where rev 1 had one. **`forward_i` now runs under `close_all`, not the per-step finaliser** (E2): under `close_others_i` a cancel at the forwarded op would never stop `κ_i`.
 - **Restrictions in §75:** (Row), the forwarded op's cancel row covers every stage's cleanup row, and the ⊤ limit on a cleanup performing the forwarded op. (R-wait) is in §75 *Open*, with marked waits.
 - The proof uses only: each piece's one-stage or one-wire type; the glue being a tuple plus dispatch; the three lists nested most-downstream-innermost; site discipline for the fresh sites.
-- **Suggested SPEC sentence:** "The connector is generated per chain from `lib/pipe.bc`'s pieces (`step_i`, `stop_i`, `withStop_i`, `handoff_i`, `forward_i`, `forwardWait_i`, `finish`). By Assembly(n) (theory, `docs/new-core/assembly-n.md`), for every n it is weakly bisimilar to P1's flat chain, observing effects, cleanup order and the reported error, so P1 Thm S, P1b Thm R and Thm X, and (ii) hold for every chain."
+- **Suggested SPEC sentence:** "The connector is generated per chain from `lib/pipe.bc`'s pieces (`step_i`, `stop_i`, `withStop_i`, `handoff_i`, `forward_i`, `finish`). By Assembly(n) (theory, `docs/new-core/assembly-n.md`), for every n it is weakly bisimilar to P1's flat chain, observing effects, cleanup order and the reported error, so P1 Thm S, P1b Thm R and Thm X, and (ii) hold for every chain."
 
 ---
 
