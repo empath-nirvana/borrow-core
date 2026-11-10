@@ -12809,7 +12809,7 @@ widths are new.
 
 ### Units
 
-- Kernel/Support (this unit): `Width.u32/.u64`, `IntLit.u32/.u64`, `hostArg`/`hostRes` and
+- Kernel/Support, built (#1018): `Width.u32/.u64`, `IntLit.u32/.u64`, `hostArg`/`hostRes` and
   `ℍ.call` at the new widths, `reinterpret_u`/`reinterpret_s`; the interpreter's arms; every
   exhaustive match elsewhere (Frontend, backends) given the arm of its 32/64-bit sibling, so the
   build stays green. A backend lowers `U32`/`U64` to the machine's `i32`/`i64` (signless), and
@@ -12818,7 +12818,8 @@ widths are new.
   choice for `<` `<=` `>` `>=` `/` `%` `>>`, `as` conversions, `checked` ops, printing and
   parsing in `lib`.
 
-Neither is built yet.
+The surface part is not built: until it lands, the surface refuses the operators at `u32` and
+`u64`.
 
 ### Open
 
