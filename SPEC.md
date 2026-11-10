@@ -7232,7 +7232,8 @@ is the one it was, and every program's output. Only the backend changes, below t
   children inline, so one object a node and none for an empty child, as Rust's
   `Option<Box<Node>>`. A linear shape (a list) boxes one field either way and keeps it at its
   recursive position, which pointer reversal reads (Backend README, *Stack*). Sum boxing keeps
-  the tag word, where Rust uses the null pointer.
+  the tag word, where Rust uses the null pointer; a sum's tag is shared with a child sum's, or
+  packed with a narrow payload, as §43 *Sum encoding* states.
 - **The arguments' memory is counted.** The runtime's one reservation of the arguments' memory at
   their first read (§34 *Lowering*) counts as one allocation in `$allocs`, at the flat IR and in
   Wasm alike; it is still no range and never freed.
@@ -9311,6 +9312,26 @@ refused by the new backend ("outside the pure fragment") and compiled by the old
   class holds itself (§35); §35's one box a node; a cell is as wide as the widest type of its
   class (`Checked.cells`); an array of cells whose class holds only `i32` (or `f32`) has 4-byte
   slots, of `u8` 1-byte ones.
+- **Sum encoding** (#1016). A sum is a tag and its arms' payloads, laid out from the checked
+  type's formers and boxes only:
+  - **Shared tag.** Of each sum node at most one arm is merged: the right arm if its field is
+    unboxed and its child is a sum, else the left arm under the same test. The merged arm keeps
+    the child's own tags `[0, T)`, so on that arm the parent's words are the child's standalone
+    words (padded); the other arm takes tag `T`.
+  - **Packed.** A sum whose arms are narrow (width 0, or `u8`, `i32`, `u32` or `f32`, unboxed),
+    at least one of width 1, is one word, `tag << 32 | (payload & 0xffffffff)`. A packed child
+    merges only into a packed parent.
+  - **LayoutCheck** checks the invariants from the children directly: the merged arm is 0 or 1,
+    unboxed, its child a sum; the child's packing is the parent's; the tags are the child's plus
+    one, else 2; a packed sum has inline leaves of width 0, or of width 1 at `u8`, `i32`, `u32` or
+    `f32` (or a packed merged child), at most 2³² tags, and width 1; an unpacked sum's width is 1
+    plus the wider arm's payload (a merged arm counting the child's width less 1, a boxed arm 1).
+    Separately, it checks that the stored choice follows the rule (the right arm first, else the
+    left; a packed child not merged into an unpacked parent). A reject family ("sum encoding")
+    perturbs each.
+  - **Copies.** A value is copied bit for bit between two layouts only when their encodings agree
+    all the way down (width, boxes, merged arms, tags, packing); otherwise it is converted arm by
+    arm.
 - **Literal views** (`Backend2/LitViews.lean`): an array tabulated from a literal's table and only
   read (lent shared, then destroyed) is the literal's bytes in the data when its length is within
   the literal's.
@@ -9347,6 +9368,8 @@ output or a kernel program. `corpus/counts.expected` and `kernel-counts.expected
 
 ### Open
 
+- **Json's node.** Json's `Map` holds three tables; merging them in `lib/json.bc`, a library
+  change with no layout rule, would bring Json's node to about 4 words (§43 *Sum encoding*).
 - **Codata observations dispatch**: resolved by §45.
 - **Bounds checks in a counted walk** (L-3): resolved by §46.
 - **A block as one object** (§42 *Open*, A7): a block's cells are freed one by one by its type's
