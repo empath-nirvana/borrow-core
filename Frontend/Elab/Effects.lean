@@ -2704,7 +2704,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       let info : HInfo := ⟨ch.name.name, n, ents, rest, σ,
         ch.params.map (fun (x, A) => (x.name, A.subst σr)), rA.subst σr, .sum sp (rA.subst σr) pay,
         some (ch.res.subst σr), false, ch.lps.map (·.1.name),
-        { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents }, []⟩
+        { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents }, [], false⟩
       let clsV := injCls.foldr (fun c t => Val.pair sp c t) (.unit sp)
       let (bsP, P') ← goV k cx cs P
       let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl (cx.env.finned info))) P')
@@ -2811,7 +2811,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       let info : HInfo := ⟨ch.name.name, n, ents, rest, σ, [], rA.subst σr, ansT, none, false,
         ch.lps.map (·.1.name),
         { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents,
-          state := ch.params.map fun (x, A) => (x.name, A.subst σr) }, []⟩
+          state := ch.params.map fun (x, A) => (x.name, A.subst σr) }, [], true⟩
       let (bsP, P') ← goV k cx cs P
       let pv ← fresh "fx_hp"
       let args : Bind := .one sp pv none (.ret sp P') false
@@ -2853,7 +2853,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       cls := cls ++ [.thunkv csp (.lam csp ⟨p, csp⟩ (holeTy csp) body)]
     let info₀ : HInfo := ⟨ch.name.name, n, ents, rest, σ,
       ch.params.map fun (x, A) => (x.name, A.subst σr), rA.subst σr, ch.res.subst σr, none, false, [],
-      { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents }, []⟩
+      { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents }, [], false⟩
     let info : HInfo := { info₀ with boxK := boxK, lives := ch.lps.map (·.1.name) }
     let (bsP, P') ← goV k cx cs P
     let clsV := cls.foldr (fun c t => Val.pair sp c t) (.unit sp)

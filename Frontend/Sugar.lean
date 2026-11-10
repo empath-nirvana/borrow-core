@@ -4647,55 +4647,87 @@ def siteAtCall (c : TCx) (sp : Span) (g : String) (r : SiteRec) : DM SiteRec := 
       pure (x, ← (c.surface sp t : Except Error VTy))
     pure (r.mapTy (·.subst σ))
 
-/-- `M` with the continuation `k` cancelled at the end of each of its paths that does not use it,
-by SPEC §12's insertion policy for an owed variable: immediately before the path's terminal
-computation, after every effect of the path (*At the end of the path*, *Not moved across
-effects*). A head `M₁` of `x <- M₁; N` that mentions `k` is owed it (*Tail positions*); a `case`
-arm or a `<M, N>` component that does not use it cancels it; `<>` and `absurd V` absorb it. A
-handler site in the path is terminal: one whose body mentions `k` uses it there (*Handled
-bodies*). The cancel is `u <- (force k).2; let () = u; T`, the kernel's `[&E₂]`, which the kernel
-types at the row of the path.  `[spec §12, §27]` -/
-def cancelAtEnds (sp : Span) (k : Ident) : Nat → Comp → Comp
+/-- A value that only names variables: a binding of it performs nothing and cannot abort. -/
+def namesOnly : Val → Bool
+  | .var .. | .unit _ => true
+  | .pair _ V W => namesOnly V && namesOnly W
+  | _ => false
+
+/-- `M`, which runs while the continuation `k` is live and not yet used, with `k` cancelled exactly
+once on each of its paths that does not use it, as Rust drops a value: at the end of the path,
+and on the way out of an abort or a cancel that passes through it.
+
+* **The end of the path** (SPEC §12's insertion policy for an owed variable): immediately before
+  the path's terminal computation, after every effect of the path (*At the end of the path*, *Not
+  moved across effects*). A head `M₁` of `x <- M₁; N` that mentions `k` is owed it (*Tail
+  positions*); a `case` arm or a `<M, N>` component that does not use it cancels it; `<>` and
+  `absurd V` absorb it (their path does not finish). A handler site in the path is terminal: one
+  whose body mentions `k` uses it there (*Handled bodies*).
+* **An abort or a cancel through the path** (`abort`): with `abort`, each head `M₁` of
+  `x <- M₁; N` that does not mention `k` is `x <- M₁ unwind (cancel k); N`, `[then]` with the
+  finaliser at the cancel's row (§27): when `M₁` aborts, or its continuation is cancelled, the
+  finaliser cancels `k` and `N` does not run; when `M₁` answers, `N` runs with `k` still live. A
+  head that only names variables performs nothing and is not wrapped.
+
+Exactly once: `k` is live from its binding until the first of a head's abort (its finaliser
+cancels it, and nothing after runs), the end of the path (the cancel before the terminal), or a
+use the program wrote (no cancel is inserted on that path after it). The finaliser and the rest
+`N` are exclusive branches of `[then]`, and the kernel checks `k`'s linearity on each.
+
+The cancel is `u <- (force k).2; let () = u; T`, the kernel's `[&E₂]`. With `inState`, the
+path's terminal `return (thunkv M)` is the state's function of a handler with a state (§21), whose
+body is the clause's own code: the path continues in it.  `[spec §12, §21, §27]` -/
+def cancelAtEnds (sp : Span) (k : Ident) (abort inState : Bool) : Nat → Comp → Comp
   | 0, M => M
   | n + 1, M =>
+    let go := cancelAtEnds sp k abort inState n
     let uses := Frontend.Check.mentionsC k.name
     let usesV := Frontend.Check.mentionsV k.name
+    let cancelK : Comp := .proj sp false (.force sp k)
     let cancel (T : Comp) : Comp :=
       let u : Ident := ⟨s!"fx_cancel_{k.name}", sp⟩
-      .bind sp u none (.proj sp false (.force sp k)) (.letUnit sp (.var sp u.name) T)
+      .bind sp u none cancelK (.letUnit sp (.var sp u.name) T)
     match M with
     | .bind bsp x A M₁ N =>
-      if uses M₁ then .bind bsp x A (cancelAtEnds sp k n M₁) N
-      else .bind bsp x A M₁ (cancelAtEnds sp k n N)
-    | .letUnit lsp V N => if usesV V then M else .letUnit lsp V (cancelAtEnds sp k n N)
-    | .letPair lsp x y V N => if usesV V then M else .letPair lsp x y V (cancelAtEnds sp k n N)
+      if uses M₁ then .bind bsp x A (go M₁) N
+      else match M₁ with
+        | .ret _ V => if !abort || namesOnly V then .bind bsp x A M₁ (go N)
+            else .unwind bsp x A M₁ cancelK (go N)
+        | _ => if abort then .unwind bsp x A M₁ cancelK (go N) else .bind bsp x A M₁ (go N)
+    | .letUnit lsp V N => if usesV V then M else .letUnit lsp V (go N)
+    | .letPair lsp x y V N => if usesV V then M else .letPair lsp x y V (go N)
     | .case csp V x M₁ y N =>
-      if usesV V then M else .case csp V x (cancelAtEnds sp k n M₁) y (cancelAtEnds sp k n N)
-    | .with_ wsp M₁ N => .with_ wsp (cancelAtEnds sp k n M₁) (cancelAtEnds sp k n N)
-    | .lam lsp x A N => .lam lsp x A (cancelAtEnds sp k n N)
-    | .lamL lsp x b N => .lamL lsp x b (cancelAtEnds sp k n N)
-    | .nuIn nsp N => .nuIn nsp (cancelAtEnds sp k n N)
-    | .ascribe asp N C => .ascribe asp (cancelAtEnds sp k n N) C
+      if usesV V then M else .case csp V x (go M₁) y (go N)
+    | .with_ wsp M₁ N => .with_ wsp (go M₁) (go N)
+    | .lam lsp x A N => .lam lsp x A (go N)
+    | .lamL lsp x b N => .lamL lsp x b (go N)
+    | .nuIn nsp N => .nuIn nsp (go N)
+    | .ascribe asp N C => .ascribe asp (go N) C
     | .unwind usp x A M₁ D N =>
-      if uses M₁ || uses D then M else .unwind usp x A M₁ D (cancelAtEnds sp k n N)
+      if uses M₁ || uses D then M else .unwind usp x A M₁ D (go N)
     | .loop lsp ℓ src V M₁ N =>
-      if usesV V || uses M₁ then M else .loop lsp ℓ src V M₁ (cancelAtEnds sp k n N)
+      if usesV V || uses M₁ then M else .loop lsp ℓ src V M₁ (go N)
+    | .ret rsp (.thunkv tsp N) =>
+      if inState && !uses N then .ret rsp (.thunkv tsp (cancelAtEnds sp k abort false n N))
+      else if uses M then M else cancel M
     | .top _ | .absurd .. => M
     | T => if uses T then T else cancel T
 
 /-- A clause that does not use its `κ` on some path, at an operation whose cancel branch
-`cancelTy S F` performs (its cancel row `F` or the handler's row `S` is not empty), cancels it at
-the end of that path (`cancelAtEnds`). The checker consumes an unused `κ` only when its cancel
-branch performs nothing (a consume is effect-free, SPEC §12): a cancel that performs is a
-computation, which the elaboration writes where §12 puts a consume and the kernel types. The
-clause's body binds `κ` taking its argument `p` apart, `let (a, k) = p; M`. A boxed `κ` (BOXED-κ)
-is left as written.  `[spec §12, §27]` -/
+`cancelTy S F` performs (its cancel row `F` or the handler's row `S` is not empty), cancels it
+exactly once on that path (`cancelAtEnds`): at the end of the path, and, when `S` has an abortive
+operation (an abort can pass through the clause), on the way out of an abort or a cancel. The
+checker consumes an unused `κ` only when its cancel branch performs nothing (a consume is
+effect-free, SPEC §12): a cancel that performs is a computation, which the elaboration writes and
+the kernel types. The clause's body binds `κ` taking its argument `p` apart, `let (a, k) = p; M`.
+A boxed `κ` (BOXED-κ) is left as written.  `[spec §12, §27]` -/
 def cancelDropped (S : Frontend.Check.CRow) (F : CCTy) (q : Frontend.Check.CQual) (B : CVTy)
-    (boxK : Bool) (p : String) : Comp → Comp
+    (boxK stateful : Bool) (p : String) : Comp → Comp
   | M@(.letPair sp a k (.var vsp p') N) =>
     if boxK || p' != p || !BoCa.Fig16.LogRel.Core.capB q B || F.isTop || (F.rowOf ++ S).isEmpty
     then M
-    else .letPair sp a k (.var vsp p') (cancelAtEnds sp k 100000 N)
+    else .letPair sp a k (.var vsp p')
+      (cancelAtEnds sp k (S.any (·.abort)) stateful 100000 N)
   | M => M
 
 /-- A handler site of a control effect (SPEC §19): its arguments bound, its body elaborated
@@ -4784,7 +4816,7 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
         let K := BoCa.Fig16.LogRel.Core.kTy S Rc q Bi (fs j)
         let T : CVTy := if BoCa.Fig16.LogRel.Core.ClauseKinds.isAbortive (q, Ai, Bi) then Ai
           else .tensor Ai (if i.boxK then .box kBound K else K)
-        let body := cancelDropped S (fs j) q Bi i.boxK x.name body
+        let body := cancelDropped S (fs j) q Bi i.boxK i.stateful x.name body
         let body' ← surfC n (cS.push x.name (some T)) (some ans) (body.subst σ)
         hcs := hcs ++ [.bangThunkv csp (.lam lsp x (← (cP.surface lsp T : Except Error VTy)) body')]
       | _ => throw ⟨sp, "internal error: a handler's clause"⟩

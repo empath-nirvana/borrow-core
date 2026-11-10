@@ -1,0 +1,39 @@
+-- Where an inserted cancel goes (SPEC §12, §27; #953). A clause that does not use its continuation
+-- `k`, whose cancel performs (the body's `finally` raises `3`), cancels it as Rust drops a value:
+-- at the end of the clause's path, after its effects (§12's insertion policy), and, when an abort
+-- passes through the clause, on the way out (each head the abort can leave through is
+-- `… unwind (cancel k)`). Either way exactly once, after the clause's own effects.
+--
+-- In `go(0)`, `tm`'s clause writes `A` and answers `inr ()`: it finishes, so `k` is cancelled at
+-- the end; the cleanup's error is kept and re-raised there, and `to_result` catches `3`. In
+-- `go(1)`, the clause writes `B` and calls `check`, which raises `7`: the abort leaves through the
+-- head (the `if`), whose finaliser cancels `k`; the cleanup's raise during that unwind supersedes
+-- `7`, and `to_result` catches `3`. The handler has a state (its parameter and the capability
+-- `stdout` its clause uses), so the clause's code is its state's function, where the cancel goes.
+--
+-- Answer: `AB` and `(inr i32[3], inr i32[3])`, `live 0`. A cancel inserted first, before the
+-- clause's effects, writes nothing; an abort that left `k` uncancelled would answer `inr i32[7]`.
+
+include io
+include fail
+
+effect Wait { ctl wait() }
+
+fn check(e: i32) -> i32 with Fail[i32] = raise(e)
+
+handler tm[A](fails: i32): Wait, A -> A + 1 with Fail[i32] = {
+  return(x) = inl x;
+  wait(k) = {
+    if fails == 1 { print_byte(to_u8(66)); let r = check(7); () } else { print_byte(to_u8(65)) };
+    inr ()
+  }
+}
+
+fn work() -> i32 with Wait = wait(); 5
+
+fn go(fails: i32) -> (i32 + 1) + i32 =
+  with to_result[i32, i32 + 1] {
+    with tm[i32](fails) { with default[u8, i32](0) { work() } finally { let r = raise((3 : i32)); () } }
+  }
+
+main -> ((i32 + 1) + i32) * ((i32 + 1) + i32) = let a = go(0); let b = go(1); (a, b)
