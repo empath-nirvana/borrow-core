@@ -39,22 +39,39 @@ def pipe_handoff[L, KN, KY, B, K, S] :
     | inr k -> return ((inr (inr (inr k)) : PipeState[L, KN, KY, K]), ((inr k : B + K), s))
     }
 
--- needs row/site-generic defs (#issue to come). The pieces that force a stored rest, install a
--- stage's sites or perform at the chain's row `Σ` mention the row in their types, and a `def`
--- takes value-type parameters only. Their signatures, as Assembly(n) §1 states them, with `Σ`
--- (the chain's outer row, `CR` the stages' cleanup row within it) and the stage's sites (`y` its
--- `Yield`, `s` its `Stream`, `f` its forwarded operation's fresh name) as parameters:
+-- needs row/site-generic defs (#1051). The pieces below force a stored rest, install a stage's
+-- sites, or perform at the chain's row, so their types mention the row; a `def` takes value-type
+-- parameters only. Their signatures, as Assembly(n) §1 states them, written with the row and site
+-- parameters a row-generic definition would take (after `|`: rows; after `;`: sites):
 --
---   pipe_step[L, KN, KY, I, EV | Σ; y, s, f]      : !(PipeState[L, KN, KY, K] * I => F_Σ EV)
---     one observation of the loop `L` under the stage's storing clauses at `y`, `s` and `f`
---     (innermost `y`), or one resume of the stored rest with its input `I`;
---   pipe_stop[L, KN, KY, K | Σ]                    : !(PipeState[L, KN, KY, K] => F_CR 1)
---     cancels the stored rest; closes a loop not yet run; `()` at `Ended`;
---   pipe_with_stop[L, KN, KY, K, R | Σ; c]         : !(PipeState[L, KN, KY, K] * U (1 -o F_{c, CR} R)
---                                                       => F_{c, CR} R)
---     the thunk inside one `unwind` frame whose finaliser is `pipe_stop` (a frame of one of the
---     three frame lists, each one cancel region at the connector-local site `c`);
---   pipe_forward[A, B | Σ; n.i]                    : !(A => F_Σ B)
---     performs the real outer operation `n.i` that a non-last stage performed at its fresh name;
---   pipe_finish[R, SO | Σ]                         : !(R * SO => F_Σ R)
---     `run`'s end: the others closed (their frame list), then `r`.
+--   Rows: `Σ` the chain's outer row, and `CR` the stages' cleanup row within it (each stage
+--   operation's cancel row). Sites, connector-local and fresh: `y` the stage's `Yield[B]`, `s` its
+--   `Stream[A, K]`, `f` the fresh name of its forwarded operation (`OA ~> OB`), `c` a frame list's
+--   cancel region. A stage's own row, inner site first:
+--     ROW_i = y.0 cancel[CR] B ~> 1, s.0 cancel[CR] 1 ~> A + K, s.1 cancel[CR] 1 ~> K,
+--             f.0 cancel[CR] OA ~> OB, Σ
+--   (a source has no `s`, a sink no `y`, a last stage no `f`). Its types:
+--     L    = U (nu X. F[ROW_i] (R + U X) & F[CR] 1)                  -- the stage's loop
+--     KN   = U (nu XN. (A + K -o F[Σ] EV(XN, KY(XN))) & F[CR, CR] 1)   -- a rest at `next`/`stop`
+--     KY   = U (nu XY. (1 -o F[Σ] EV(KN, XY)) & F[CR, CR] 1)           -- at `yield`/forwarded op
+--     EV   = (B * KY + (R + L)) + ((KN + KN) + KY)
+--            -- Yield(b, κ) | Return(r) | Skip(l) | Next(κ) | Stop(κ) | Fwd(κ)
+--     ST   = PipeState[L, KN, KY, R]                                   -- `Ended(r)` at `R`
+--     I    = 1 + (A + K)                                               -- the input of a turn
+--   (`KN` and `KY` are mutually recursive, written as nested `nu`s; a component a stage lacks
+--   is `0`. `OB` is `1` in L1: the rests at `yield` and at a forwarded operation are one type,
+--   SPEC §75 (One-frame).)
+--
+--   def pipe_step[A, K, B, R, OA | Σ, CR; y, s, f] : !(ST * I => EV with Σ)
+--     one observation of `L` under the storing clauses at `y`, `s` and `f` (`y` innermost, each
+--     rest re-entering the outer sites' clauses), or one resume of the stored rest with `I`;
+--   def pipe_stop[A, K, B, R, OA | Σ, CR; y, s, f] : !(ST => 1 with CR)
+--     cancels the stored rest; closes `L` when not yet run; `()` at `Ended`;
+--   def pipe_with_stop[A, K, B, R, OA, Q | Σ, CR; y, s, f, c] :
+--       !(ST * U (1 -o F[c.0 cancel[CR] 1 ~> 1, Σ] Q) => Q with c.0 cancel[CR] 1 ~> 1, Σ)
+--     the thunk inside one `unwind` frame whose finaliser is `pipe_stop`: a frame of one of the
+--     three frame lists (`close_others_i`, `close_all`, `close_up_i`), each one region at `c`;
+--   def pipe_forward[OA, OB | Σ, CR; n.i] : !(OA => OB with n.i cancel[CR] OA ~> OB, Σ)
+--     performs the real outer operation `n.i` a non-last stage performed at its fresh name `f`;
+--   def pipe_finish[R | Σ] : !(R * U (1 -o F[Σ] 1) => R with Σ)
+--     `run`'s end: the others closed by their frame list (the thunk), then `r`.
