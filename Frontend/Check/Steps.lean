@@ -633,6 +633,19 @@ def opKeysOf : Nat → TExpr → List (UInt32 × UInt32)
         | _ => []
       | cs => cs.flatMap fun c => opKeysOf k c.2
 
+/-- The operations (`n.i`) the finalisers of the `[then]`s inside a checked term perform: each
+`[then]` node's `Σ_D`. A cancel row of the term's own row need hold no more at its top layer
+(`thenMC`).  `[spec §27]` -/
+def finKeysOf : Nat → TExpr → List (UInt32 × UInt32)
+  | 0, _ => []
+  | k + 1, t =>
+    let keys (S : CRow) := S.map fun o => (o.n, o.i)
+    let here := match t with
+      | .effThen _ _ _ _ _ _ SD _ _ _ _ => keys SD
+      | .effThenDiv _ _ _ _ _ _ SD _ _ _ _ => keys SD
+      | _ => []
+    here ++ t.children.flatMap fun c => finKeysOf k c.2
+
 /-- The cancel row `F` whose `cancelTy S F` is the cancel branch `C` of a `κ`: `C`'s layers ahead
 of `S`'s, counted by `S`'s length (the clause's type, rebuilt at it, is then compared whole).
 `[spec §27]` -/
