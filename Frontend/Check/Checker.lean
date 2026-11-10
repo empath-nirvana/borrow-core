@@ -447,10 +447,11 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let rM' ← liftRow E M.span S rM
       let ⟨_, rN⟩ ← atRow E N.span S
         (← synC n { (E.minus rM.F.u).pushOwn x.name A with row := some S } Δ (A :: T) N)
-      let ⟨_, rD⟩ ← finC n ((E.minus rM.F.u).push none) Δ T D S
+      let ⟨SD, rD⟩ ← finC n ((E.minus rM.F.u).push none) Δ T D S
+      let rMs ← thenMC n (E₁.ownIn (mentionsC · M)) Δ T M A S SD rM.t
       let rN ← consumeStuck x.span 1 rN
       let FN ← popL E x.span x.name rN.F
-      pure ⟨_, ← thenIt E sp x.name rM' FN rD⟩
+      pure ⟨_, ← thenIt E sp x.name rM' rMs FN rD⟩
     | .perform sp k i V => do
       let ⟨_, o, hf⟩ ← findOp E sp "perform" k i
       if hna : o.abort = false then
@@ -780,6 +781,24 @@ def finC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → CRow 
         | .ok r => pure ⟨SD, r⟩
         | .error _ => pure ⟨S, rS⟩
 
+/-- `M` of `x <- M unwind (D); N` at its own row `SM` (SPEC §27's `Σ_M`), when the finaliser
+performs (`SD` non-empty) and `[then]`'s cancel-row premise fails with `M` at the site's row `S`:
+`SM` is the operations of `S` that `M`'s derivation `tM` performs (`opKeysOf`), at which `M` is
+checked again. A capturable operation the finaliser performs is then not one of `M`'s, whose
+cancel row would have to hold it. `none`: `M` stays at `S`.  `[spec §27]` -/
+def thenMC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (A : CVTy) → CRow → CRow →
+    TExpr → CheckM (Option (Σ SM : CRow, Res Δ T (.comp (effOf SM A))))
+  | 0, _, _, _, _, _, _, _, _ => pure none
+  | n + 1, E, Δ, T, M, A, S, SD, tM => do
+    if SD.isEmpty || thenFinB S S SD then pure none
+    else
+      let ks := opKeysOf opKeysFuel tM
+      let SM := S.filter fun o => ks.contains (o.n, o.i)
+      if SM.length == S.length then pure none
+      else match ← attempt (chkC n E Δ T M (effOf SM A)) with
+        | .ok r => pure (some ⟨SM, r⟩)
+        | .error _ => pure none
+
 /-- `abort[k.i] V` at the answer `B`: an abortive operation of the current row (SPEC §19's abortive rule). -/
 def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Nat → Nat → Val → (B : CVTy) →
     CheckM (Σ S : CRow, Res Δ T (.comp (effOf S B)))
@@ -844,10 +863,11 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           let ⟨A, _, rM⟩ ← bindHead n (E₁.ownIn (mentionsC · M)) Δ T sp oA M
           let rM' ← liftRow E M.span S rM
           let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N (effOf S B)
-          let ⟨_, rD⟩ ← finC n ((E.minus rM.F.u).push none) Δ T D S
+          let ⟨SD, rD⟩ ← finC n ((E.minus rM.F.u).push none) Δ T D S
+          let rMs ← thenMC n (E₁.ownIn (mentionsC · M)) Δ T M A S SD rM.t
           let rN ← consumeStuck x.span 1 rN
           let FN ← popL E x.span x.name rN.F
-          pure (hC ▸ (← thenIt E sp x.name rM' FN rD))
+          pure (hC ▸ (← thenIt E sp x.name rM' rMs FN rD))
       | none => err sp s!"`x <- M unwind (D); N` is checked against `{E.ppC C}`, which is not `F[…] B`"
     | .abort sp k i V =>
       match effRow? C with
