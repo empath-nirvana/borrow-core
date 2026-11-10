@@ -1,35 +1,38 @@
--- The left side's row (SPEC §70): an edge is a stream edge when its stage is a stream stage
--- and its left side performs an iteration effect, read from the left side as written, before rows
--- are inferred. A call reads its function's written row; a value performs nothing; a block, `if`
--- or `match` performs what its parts do, when each part is known. When the left side's row cannot
--- be read, the edge is §33's case (iii), and `bcc check` notes `cannot tell whether this is a
--- stream` (`corpus/reports/pipe-left-row.txt`).
+-- Left sides of `|>` and `>|` that are not calls of generators (SPEC §70). Until lib declares the
+-- item effect `Stream` (L1, #920), a stream stage is a source-owning adapter (its first parameter a
+-- stored generator, until L2, #921), read from its signature; no row, and no effect's name, makes a
+-- stage a stream stage. So every `|>` here is §33's, by the stage, as before §70.
 --
--- `Stream` here is a stand-in for lib's item effect (L1, #920): a stage whose written row performs
--- `Stream` is a stage in (R)'s form. `plus_next` is one, with a plain first parameter, and
--- `with tens { … }` serves its `next()`.
+-- `Stream` here is a user's effect that shares lib's future name: `plus_next` performs it and is
+-- an ordinary function, and `with tens { … }` serves its `next()`. `Wait` has one operation that
+-- answers `()`, the shape of an iteration effect.
 --
--- * `a`: the left side is an `if` of two values: it performs nothing, so the edge is not a stream
---   edge and is case (iii), `plus_next(if … { 3 } else { 4 })`: 3 + 10.
--- * `b`: the `if` calls `pick`, which writes no row: case (iii) with the note `annotate the block's
---   row`; 4 + 10.
--- * `c`: a stored generator, a value, piped `>|` into a source-owning adapter (transitional until
---   L2, #921): its row is read (nothing), and the edge is case (iii), `filter(it, even)`. `evens`
---   over 0 … 6 yields 0, 2, 4.
--- * `d`: a call of `count`, which writes no row (it is inferred later: `range`'s), piped into an
---   adapter: case (iii), noted `annotate `count`'s row`; 0 + 1 + 4.
+-- * `a`: an `if` of values piped into `plus_next`: case (iii), `plus_next(if … { 3 } else { 4 })`;
+--   3 + 10.
+-- * `b`: an `if` that calls `pick`, which writes no row: case (iii); 4 + 10.
+-- * `c`: a call of `w`, which performs `Wait`, piped into `plus_next`: case (iii); 1 + 10.
+-- * `d`: a call of `three`, whose written row lists `Yield` (an upper bound: it yields nothing),
+--   piped into `plus_next`: case (iii); 3 + 10.
+-- * `e`: a stored generator, a value, piped `>|` into a source-owning adapter: case (iii),
+--   `filter(it, even)`. `evens` over 0 … 6 yields 0, 2, 4.
+-- * `f`: a call of `count`, which writes no row (it is inferred: `range`'s), piped `>|` into an
+--   adapter: case (iii); 0 + 1 + 4.
 --
--- Answer: `((i32[13], i32[14]), (i32[6], i32[5]))`.
+-- Answer: `((i32[13], (i32[14], (i32[11], i32[13]))), (i32[6], i32[5]))`.
 
 include adapters
 
 effect Stream[A] { ctl next() -> A }
+effect Wait { ctl wait() }
 
 handler tens[A]: Stream[i32], A -> A = { return(a) = a; next(k) = k(10) }
+handler resumer[A]: Wait, A -> A = { return(x) = x; wait(k) = k(()) }
 
 fn plus_next(x: i32) -> i32 with Stream[i32] = x + next()
 
 fn pick(c: bool) -> i32 = if c { 3 } else { 4 }
+fn w() -> i32 with Wait = wait(); 1
+fn three() -> i32 with Yield[i32] = 3
 
 fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
   let mut i = lo;
@@ -45,15 +48,19 @@ fn evens(it: U (pull i32 1 1)) -> 1 with Yield[i32] =
   for x in it >| filter(even) { yield(x) };
   ()
 
-main -> (i32 * i32) * (i32 * i32) =
+main -> (i32 * (i32 * (i32 * i32))) * (i32 * i32) =
   let flag = false;
-  let ab = with tens[i32 * i32] {
-    let a = (if flag { 4 } else { 3 }) |> plus_next;
-    let b = (if flag { 3 } else { pick(false) }) |> plus_next;
-    (a, b)
+  let ab = with resumer[i32 * (i32 * (i32 * i32))] {
+    with tens[i32 * (i32 * (i32 * i32))] {
+      let a = (if flag { 4 } else { 3 }) |> plus_next;
+      let b = (if flag { 3 } else { pick(false) }) |> plus_next;
+      let c = w() |> plus_next;
+      let d = three() |> plus_next;
+      (a, (b, (c, d)))
+    }
   };
-  let mut c = 0;
-  for y in evens(range(0, 6)) { c = c + y };
-  let mut d = 0;
-  for y in count(3) >| map(sq) { d = d + y };
-  (ab, (c, d))
+  let mut e = 0;
+  for y in evens(range(0, 6)) { e = e + y };
+  let mut f = 0;
+  for y in count(3) >| map(sq) { f = f + y };
+  (ab, (e, f))

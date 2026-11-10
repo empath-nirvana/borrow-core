@@ -1477,19 +1477,21 @@ corpus/pipe-handlers.bc 3.0 abortive: -; condition 2 holds; -
 corpus/pipe-handlers.bc 4.0 once: machine; condition 2 holds; -
 corpus/pipe-handlers.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/pipe-handlers.bc 2.0 once: machine; condition 2 holds; -
-corpus/pipe-left-row.bc flows [0, 1, 2, 3, 4, 5, 6, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6], finaliser
-corpus/pipe-left-row.bc 58:12: handle 5: inside []; row []; ops 5.0 stored; names 5.0 []; condition 2 holds
-corpus/pipe-left-row.bc 58:12: handle 5: inside []; row []; ops 5.0 tail; names 5.0 []; condition 2 holds
-corpus/pipe-left-row.bc 58:3: handle 4: inside []; row []; ops 4.0 tail; names 4.0 []; condition 2 holds
-corpus/pipe-left-row.bc 50:12: handle 6: inside []; row []; ops 6.0 tail; names 6.0 []; condition 2 holds
-corpus/pipe-left-row.bc 56:18: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
-corpus/pipe-left-row.bc 56:18: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
-corpus/pipe-left-row.bc 45:3: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
-corpus/pipe-left-row.bc 45:3: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
-corpus/pipe-left-row.bc 56:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/pipe-left-row.bc flows [0, 1, 2, 3, 4, 5, 6, 7, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6, 7], finaliser
+corpus/pipe-left-row.bc 65:12: handle 5: inside []; row []; ops 5.0 stored; names 5.0 []; condition 2 holds
+corpus/pipe-left-row.bc 65:12: handle 5: inside []; row []; ops 5.0 tail; names 5.0 []; condition 2 holds
+corpus/pipe-left-row.bc 65:3: handle 4: inside []; row []; ops 4.0 tail; names 4.0 []; condition 2 holds
+corpus/pipe-left-row.bc 53:12: handle 6: inside [7]; row []; ops 6.0 tail; names 6.0 []; condition 2 holds
+corpus/pipe-left-row.bc 54:5: handle 7: inside []; row [6]; ops 7.0 tail; names 7.0 []; condition 2 holds
+corpus/pipe-left-row.bc 63:18: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
+corpus/pipe-left-row.bc 63:18: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/pipe-left-row.bc 48:3: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/pipe-left-row.bc 48:3: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/pipe-left-row.bc 63:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/pipe-left-row.bc 5.0 stored,tail: machine; condition 2 holds; -
 corpus/pipe-left-row.bc 4.0 tail: direct; condition 2 holds; agree
 corpus/pipe-left-row.bc 6.0 tail: direct; condition 2 holds; agree
+corpus/pipe-left-row.bc 7.0 tail: direct; condition 2 holds; agree
 corpus/pipe-left-row.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/pipe-left-row.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/pipe-left-row.bc 1.0 tail: direct; condition 2 holds; agree

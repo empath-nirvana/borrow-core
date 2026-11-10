@@ -3616,116 +3616,33 @@ def defineGroup (env : Env) (ms : List (Span × Ident × List Ident × VTy × Va
 
 /-! ### `|>`  `[spec §33]` -/
 
-/-- What the pass knows of the program for `|>` and `>|`: its handlers' names, each function's
-written type, each function's written row (its effects' names, `none` when it writes none), each
-operation's effect, and the iteration effects (SPEC §15). -/
+/-- What the pass knows of the program for `|>` and `>|`: its handlers' names, and each
+function's written type. -/
 structure PipeEnv where
   handlers : List String
   sigs : List (String × VTy)
-  rows : List (String × Option (List String)) := []
-  ops : List (String × String) := []
-  iters : List String := []
-
-/-- The effects a definition's mark writes, when it writes a row.  `[spec §70]` -/
-def writtenEffs : Mark → Option (List String)
-  | .row es _ _ => some (es.map (·.1.name))
-  | .template m _ => writtenEffs m
-  | _ => none
 
 /-- The name a stage `f`, `f[As]` or `f(a, …)` calls.  `[spec §70]` -/
 def stageHead? : Val → Option String
   | .app _ (.var _ x) _ | .app _ (.defApp _ x _) _ | .var _ x | .defApp _ x _ => some x
   | _ => none
 
-/-- The function `x`'s written row performs `Stream`, lib's item effect (L1, #920): it is a stage
-in (R)'s form. Recognised by the effect's name.  `[spec §70]` -/
-def PipeEnv.streamR (pe : PipeEnv) (x : String) : Bool :=
-  ((pe.rows.lookup x).join.getD []).contains "Stream"
-
-/-- The function `x`'s first parameter is a stored generator `U (pull A K R)`: a source-owning
-adapter (`lib/adapters.bc`), a stream stage until L2 (#921).  `[spec §70]` -/
+/-- The function `x`'s first parameter, as its signature writes it, is a stored generator
+`U (pull A K R)`: a source-owning adapter (`lib/adapters.bc`), a stream stage until L2 (#921).
+`[spec §70]` -/
 def PipeEnv.transitional (pe : PipeEnv) (x : String) : Bool :=
   match (pe.sigs.lookup x).bind paramTyOf with
   | some (.tensor _ A _) => isPullTy A
   | some A => isPullTy A
   | none => false
 
-/-- A stream stage: a function stage in (R)'s form, or a source-owning adapter (transitional).
-A handler is not one.  `[spec §70]` -/
+/-- A stream stage. Until lib declares the item effect `Stream` (L1, #920), the stages in (R)'s
+form, which perform it, do not exist, and a stream stage is a source-owning adapter
+(transitional, until L2). A handler is not one.  `[spec §70]` -/
 def PipeEnv.streamStage (pe : PipeEnv) (s : Val) : Bool :=
   match stageHead? s with
-  | some x => !pe.handlers.contains x && (pe.streamR x || pe.transitional x)
+  | some x => !pe.handlers.contains x && pe.transitional x
   | none => false
-
-/-- Whether a call of `x` performs an iteration effect, read from its written row; `none` when it
-writes none (rows are inferred after this pass).  `[spec §70]` -/
-def PipeEnv.callYields (pe : PipeEnv) (x : String) : Option Bool :=
-  match pe.rows.lookup x with
-  | some (some es) => some (es.any pe.iters.contains)
-  | _ => none
-
-/-- Some part performs an iteration effect; or every part is known to perform none; or unknown. -/
-def anyYield (xs : List (Option Bool)) : Option Bool :=
-  if xs.any (· == some true) then some true
-  else if xs.all (· == some false) then some false
-  else none
-
-mutual
-/-- Whether `V`, a pipe's left side as written, performs an iteration effect, where that can be
-read before rows are inferred: a call of a function with a written row, a chain (its last
-stage's), a value (nothing), an operation (its effect), a block, `if` or `match` (each of its
-parts); `none` otherwise.  `[spec §70]` -/
-def yieldsV (pe : PipeEnv) : Nat → Val → Option Bool
-  | 0, _ => none
-  | k + 1, V => match Pipes.pipeParts? V with
-    | some (_, _, _, s) => stageYields pe s
-    | none => match V with
-      | .var .. | .clone .. | .unit _ | .const .. | .lend .. | .thunk .. | .thunkv ..
-      | .bangThunk .. | .bangThunkv .. | .sugar _ (.lit _) => some false
-      | .defApp .. => some false
-      | .pair _ V W => anyYield [yieldsV pe k V, yieldsV pe k W]
-      | .inl _ V | .inr _ V | .roll _ V | .unroll _ V | .unbang _ V | .unbox _ V | .boxed _ _ V
-      | .sub _ V _ | .ascribe _ V _ | .mark _ _ V | .inst _ V _ | .shorten _ _ _ _ V =>
-        yieldsV pe k V
-      | .run _ M => yieldsC pe k M
-      | .app _ f W => match f with
-        | .var _ x | .defApp _ x _ =>
-          if (pe.rows.lookup x).isSome then anyYield [pe.callYields x, yieldsV pe k W]
-          else match pe.ops.lookup x with
-            | some e => anyYield [some (pe.iters.contains e), yieldsV pe k W]
-            | none => none
-        | .sugar _ (.op _) => yieldsV pe k W
-        | _ => none
-      | _ => none
-
-/-- `yieldsV` of a computation: the parts of a block, `if` or `match`. -/
-def yieldsC (pe : PipeEnv) : Nat → Comp → Option Bool
-  | 0, _ => none
-  | k + 1, M => match M with
-    | .ret _ V => yieldsV pe k V
-    | .bind _ _ _ M N => anyYield [yieldsC pe k M, yieldsC pe k N]
-    | .letUnit _ V M | .letPair _ _ _ V M => anyYield [yieldsV pe k V, yieldsC pe k M]
-    | .case _ V _ M _ N => anyYield [yieldsV pe k V, yieldsC pe k M, yieldsC pe k N]
-    | _ => none
-
-/-- Whether a chain whose last stage is `s` performs an iteration effect: the stage's written
-row. A handler stage's is not read. -/
-def stageYields (pe : PipeEnv) (s : Val) : Option Bool :=
-  match stageHead? s with
-  | some x => if pe.handlers.contains x then none else pe.callYields x
-  | none => none
-end
-
-/-- What a pipe's left side is called in a note: the function a call or a chain calls, or "the
-block". -/
-def leftName (V : Val) : String :=
-  match Pipes.pipeParts? V with
-  | some (_, _, _, s) => match stageHead? s with
-    | some x => s!"`{x}`'s"
-    | none => "the block's"
-  | none => match V with
-    | .app _ (.var _ x) _ | .app _ (.defApp _ x _) _ => s!"`{x}`'s"
-    | _ => "the block's"
 
 /-- `e |> s` (SPEC §33): a handler stage `h[…](…)` is `with h[…](…) { e }`; a function stage
 `f(a, …)` whose first parameter is a computation parameter takes `e` suspended, `f(!{ () -> e },
@@ -3766,44 +3683,22 @@ def pipeStage (pe : PipeEnv) (sp : Span) (e s : Val) : EM Val := do
     | none | some (.unit _) => e'
     | some P => .pair sp e' P))
 
-/-- One edge of a chain in normal form, `e ∘ s` (`m` its mode), `e` and `s` elaborated, `left`
-the left side as written (the source, or the previous edge's stage), its iteration effect read
-by `yieldsV`.  `[spec §33, §70]`
+/-- One edge of a chain in normal form, `e ∘ s` (`m` its mode), `e` and `s` elaborated.
+`[spec §33, §70]`
 
-- A handler: §33 (i) under `|>`; refused under `>|`.
-- A function that is not a stream stage: §33 (ii) or (iii) under `|>`; refused under `>|`.
-- A stream stage whose left side's row is unknown: §33 (iii), with a note.
-- A stream edge (the left side performs an iteration effect) into an (R) stage: refused, as the
-  connector (L1, #920) is not provided yet.
-- Into a source-owning adapter (transitional, until L2): §33 (iii), `f(e, …)`, `e` stored at its
-  stored generator parameter, under `|>` or `>|`. -/
-def pipeEdge (pe : PipeEnv) (sp : Span) (m : PipeMode) (left : Val) (e s : Val) : EM Val := do
-  let some x := stageHead? s
-    | if m == .pull then
-        throw ⟨s.span, "the right of `>|` is a stream stage, applied to its other arguments"⟩
-      else pipeStage pe sp e s
-  if pe.handlers.contains x then
-    if m == .pull then
+- `|>`: §33's cases, by the stage (`pipeStage`), whatever the stage: a source-owning adapter is
+  case (iii), `f(e, …)`, `e` stored at its stored generator parameter.
+- `>|`: accepted into a stream stage, a source-owning adapter until L2 (#921), and then case
+  (iii) as `|>` is; refused into anything else. -/
+def pipeEdge (pe : PipeEnv) (sp : Span) (m : PipeMode) (e s : Val) : EM Val := do
+  if m == .pull then
+    let some x := stageHead? s
+      | throw ⟨s.span, "the right of `>|` is a stream stage, applied to its other arguments"⟩
+    if pe.handlers.contains x then
       throw ⟨s.span, s!"`>|` connects stream stages; `{x}` is a handler: write `|>`"⟩
-    return ← pipeStage pe sp e s
-  let streamR := pe.streamR x
-  unless streamR || pe.transitional x do
-    if m == .pull then
-      throw ⟨s.span, s!"`>|` connects stream stages; `{x}` performs no `Stream[A]`"⟩
-    return ← pipeStage pe sp e s
-  match yieldsV pe fuel left with
-  | none =>
-    report sp "note" s!"cannot tell whether this is a stream: annotate {leftName left} row"
-    pipeStage pe sp e s
-  | some true =>
-    if streamR then
-      throw ⟨s.span, s!"`{x}` is a stream stage (it performs `Stream`): a stream chain runs on " ++
-        "the pipe connector, which is not provided yet (#920)"⟩
-    pipeStage pe sp e s
-  | some false =>
-    if streamR && m == .pull then
-      throw ⟨sp, "`>|` connects stream stages; the left of this `>|` yields nothing"⟩
-    pipeStage pe sp e s
+    unless pe.transitional x do
+      throw ⟨s.span, s!"`>|` connects stream stages; `{x}` is not a stream stage"⟩
+  pipeStage pe sp e s
 
 mutual
 /-- `V` with each `e |> s` and `e >| s` in it elaborated, each chain in its normal form
@@ -3815,13 +3710,13 @@ def pipesV (pe : PipeEnv) : Nat → Val → EM Val
     | .app _ (.sugar _ (.pipe _)) (.pair _ _ _) => do
       let c := Pipes.chainOf pe.streamStage V
       let mut acc ← pipesV pe k c.src
-      let mut left := c.src
       for ed in c.edges do
-        -- The edge's span runs from the chain's source to its stage, as the parser's node of an
-        -- unbracketed chain does: so it is one span however the chain is bracketed.
-        let sp : Span := ⟨c.src.span.start, ed.stage.span.stop⟩
-        acc ← pipeEdge pe sp ed.mode left acc (← pipesV pe k ed.stage)
-        left := ed.stage
+        -- A joining edge's span runs from the chain's source to its stage, as the parser's node
+        -- of an unbracketed chain does: one span however the chain is bracketed. Any other edge
+        -- keeps its node's span.
+        let sp : Span := if Pipes.joins pe.streamStage ed.mode ed.stage
+          then ⟨c.src.span.start, ed.stage.span.stop⟩ else ed.sp
+        acc ← pipeEdge pe sp ed.mode acc (← pipesV pe k ed.stage)
       pure acc
     | .pair sp V W => do pure (.pair sp (← pipesV pe k V) (← pipesV pe k W))
     | .inl sp V => do pure (.inl sp (← pipesV pe k V))
@@ -3879,25 +3774,13 @@ end
 /-- The declarations with each `|>` and `>|` in them elaborated (SPEC §33).
 `[spec §33, §70]` -/
 def resolvePipes (ds : List Decl) : EM (List Decl) := do
-  let pe : PipeEnv := {
-    handlers := ds.flatMap fun
+  let pe : PipeEnv := ⟨ds.flatMap fun
       | .handler _ n .. => [n.name]
       | .chandler _ h => [h.name.name]
-      | _ => []
-    sigs := ds.filterMap fun
+      | _ => [],
+    ds.filterMap fun
       | .def_ _ n _ A _ _ => some (n.name, A)
-      | _ => none
-    rows := ds.filterMap fun
-      | .def_ _ n _ _ _ mk => some (n.name, writtenEffs mk)
-      | _ => none
-    ops := ds.flatMap fun
-      | .effect _ n _ os => os.map (·.name.name, n.name)
-      | _ => []
-    iters := ds.filterMap fun
-      | .effect _ n _ [o] =>
-        if o.kind != .fn && (match o.res with | .unit _ => true | _ => false) then some n.name
-        else none
-      | _ => none }
+      | _ => none⟩
   let cl (c : Clause) : EM Clause := do pure { c with body := ← pipesC pe fuel c.body }
   ds.mapM fun
     | .def_ sp n ps A V mk => do pure (.def_ sp n ps A (← pipesV pe fuel V) mk)
@@ -4047,8 +3930,8 @@ out otherwise.
 def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := [])
     (divLib : List Decl := []) (platform : List Decl := []) : Except Error Result := do
   -- `|>`, before the rest (SPEC §33).
-  let (ds, pipeReports) ← match (resolvePipes ds).run {} with
-    | .ok (ds, st) => pure (ds, st.reports)
+  let ds ← match (resolvePipes ds).run {} with
+    | .ok (ds, _) => pure ds
     | .error e => throw e
   -- The divisions that can fail, at their operands' width, written to raise (SPEC §39).
   let fd := if ds.any Divisions.Decl.hasCandidate then some (Instances.found ds) else none
@@ -4254,7 +4137,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
         out := out.push (.main sp C M')
       | d => out := out.push d
     pure (out.toList, spliced)
-  match go.run { reports := pipeReports } with
+  match go.run {} with
   | .ok ((ds, spliced), st) =>
     pure { decls := ds, reports := st.reports.toList, perTurn := st.perTurn, platform := st.platform,
            exits := st.exits, withDivLib, withPlatform := spliced,

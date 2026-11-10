@@ -489,6 +489,7 @@ corpus/pipe-left-row.bc 3.0 cancellable stored,tail: machine: a path of the clau
 corpus/pipe-left-row.bc 5.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-left-row.bc 4.0 cancellable tail: direct; agree
 corpus/pipe-left-row.bc 6.0 cancellable tail: direct; agree
+corpus/pipe-left-row.bc 7.0 cancellable tail: direct; agree
 corpus/pipe-left-row.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-left-row.bc 1.0 cancellable tail: direct; agree
 corpus/pipe-mixed.bc 9.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree

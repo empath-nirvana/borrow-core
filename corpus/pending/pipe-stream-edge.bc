@@ -1,13 +1,14 @@
 -- pending: #920 (L1: the pipe connector; a stream chain into a stage in (R)'s form runs on it)
--- A stream edge recognised by effects (SPEC §70): the left side is an `if` whose branches
--- call generators, so it performs `Yield[i32]` (its row is read from its parts), and `sum_items`
--- performs `Stream[i32]`, a stage in (R)'s form (`Stream` a stand-in for lib's item effect). A
--- chain of such edges is one n-ary connector, which L1 builds; until then the edge is refused.
+-- A stream edge recognised by effects (SPEC §70), once lib declares the item effect `Stream`
+-- (L1): the left side is an `if` whose branches call generators, so its inferred row has
+-- `Yield[i32]`, and `sum_items` performs `Stream[i32]`, a stage in (R)'s form. A chain of such
+-- edges is one n-ary connector, which L1 builds. Here `Stream` is the program's own effect, not
+-- lib's declaration, so no stage is a stream stage before L1, and `>|` refuses `sum_items`.
 --
 -- Once it lands: the stage written in L1's form against lib's `Stream`; `i32[3]` (0 + 1 + 2);
 -- `live 0`.
 --
--- now: 24:61: `sum_items` is a stream stage (it performs `Stream`): a stream chain runs on the pipe connector, which is not provided yet (#920)
+-- now: 25:61: `>|` connects stream stages; `sum_items` is not a stream stage
 include yield
 
 effect Stream[A] { ctl next() -> A }

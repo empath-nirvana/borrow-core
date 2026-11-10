@@ -1,7 +1,7 @@
--- `>|` connects stream stages (SPEC §70): its stage performs `Stream`, or (until L2, #921)
--- takes a stored generator first. `double` is neither, so `3 >| double` is refused; `3 |> double`
--- is §33's case (iii), `double(3)`.
--- expect: 7:16: `>|` connects stream stages; `double` performs no `Stream[A]`
+-- `>|` connects stream stages (SPEC §70): until lib's `Stream` (L1, #920), a stage whose first
+-- parameter is a stored generator (a source-owning adapter, until L2, #921). `double` is not one,
+-- so `3 >| double` is refused; `3 |> double` is §33's case (iii), `double(3)`.
+-- expect: 7:16: `>|` connects stream stages; `double` is not a stream stage
 fn double(x: i32) -> i32 = 2 * x
 main -> i32 =
   let x = 3 >| double;
