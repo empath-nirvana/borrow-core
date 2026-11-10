@@ -1015,6 +1015,11 @@ step): each call passes a frame or enters a call point's step, so it bounds the 
 continuation and the finalisers that may suspend in it. -/
 def kFuel : Nat := 1 <<< 16
 
+/-- The refusal of a cancel that may suspend while it holds a stored site's stack (SPEC §52): the
+stack's one owner across the suspension is not established, so it is not lowered. -/
+def stackedCancelRefusal : String :=
+  "LIR: outside the fragment: a cancel that may suspend over a task's own stack (§52), #970"
+
 mutual
 /-- The value `x` handed to the continuation `K` over its arguments: the innermost frame's join,
 or the machine's answer (its cell released, or its frame popped, first). At a finaliser's frame
@@ -1056,6 +1061,7 @@ def abortKN : Nat → OutInfo → Kont → List Var → Var → CM Tm
     let more := args.drop f.own
     match f with
     | .thenF _ fnD _ _ (some MD) =>
+      if rest.any (· matches .stackH) then throw stackedCancelRefusal
       readFact "effThen:finaliser call point"
       pointKN n (.unwindF :: rest) (e :: more) (.call fnD own) MD none
     | .thenF _ fnD _ pd none =>
@@ -1111,6 +1117,7 @@ def cancelKN : Nat → Pay → Option OutInfo → Kont → List Var → Var → 
       let some T := tgt
         | throw "LIR: a finaliser that may suspend in a cancel whose cancel row holds no machine operation"
       unless cp.map (·.1) == T.pay.map (·.1) do throw "LIR: a cancel's error outside its outcome"
+      if rest.any (· matches .stackH) then throw stackedCancelRefusal
       readFact "effThen:finaliser call point"
       pointKN n (.cfinF cp :: rest) (err :: more) (.call fnD own) MD none
     | .thenF _ fnD _ pd none =>
@@ -1337,6 +1344,8 @@ def cancelTm (cr : CancelRow) (tgt : Option OutInfo) (p : MPoint) (fs : List Var
     | some Mk =>
       let some _ := tgt
         | throw "LIR: a callee's cancel that may suspend in a cancel whose cancel row holds no machine operation"
+      -- A point holding a site's stack: refused (`stackedCancelRefusal`).
+      if p.swapAt.isSome || p.kont.any (· matches .stackH) then throw stackedCancelRefusal
       errStart cp fun err₀ =>
         aroundRun p args (fun t => .letv c (.sel k 1) t) fun args =>
           pointK (.cfinF cp :: p.kont) (err₀ :: args) (.var c) Mk (swapAt := p.swapAt.map (· + 1))
@@ -2772,17 +2781,13 @@ def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driv
         -- its cancel row `F_i`, so `κ`'s cancel is a machine of `cancelTy`'s outcome `O`
         -- (`F_{F_i ⊕ Σ} 1`), a call point at `k`'s cancel. Its suspensions are at operations
         -- of `F_i`, which go to the canceller: the region's handlers, this one's too, are dead
-        -- (`Kont.dead`). The handler's values are consumed (the cancel does not read them); the
-        -- site's stack is held by the run, a `stackH` frame freed where it ends.
-        -- UNPROVED: after `κ`'s cancel entry suspends, the stack is owned by the cancel run's
-        -- `k` alone, made current around its resume and cancel (`MPoint.swapAt`), and freed once
-        -- at its `stackH` frame. It should hold because that `k` is cancellable or must-resume
-        -- by `kTy` (never `unr` at a site with a stack, SPEC §52 *No `unr` site*), so it is used
-        -- at most once. If it fails, the stack is freed twice or leaked.
+        -- (`Kont.dead`). The handler's values are consumed (the cancel does not read them). At a
+        -- site with a stack the run would hold it across a suspension: refused
+        -- (`stackedCancelRefusal`).
+        if swap then throw stackedCancelRefusal
         readFact "effHandleV:kappa cancel machine"
-        withMachine O (aroundK hv (fun t => .letv cv (.sel k 1) t) fun hv sh => do
-          let K : Kont := sh.toList.map fun _ => .stackH
-          return consumes .dead hv (← pointK K sh.toList (.var cv) Mk (swapAt := sh.map fun _ => 0)))
+        withMachine O (do
+          return .letv cv (.sel k 1) (consumes .dead hv (← pointK [] [] (.var cv) Mk)))
       | some _, none => throw "LIR: κ's cancel may suspend where its cancel row holds no machine operation"
       | none, _ =>
         let body ← toResult .unit ((cpIn.map (·.pay)).getD []) cM cPay cv
