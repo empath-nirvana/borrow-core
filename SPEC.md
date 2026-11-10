@@ -12612,14 +12612,18 @@ tables and `HandlerLawN` are unchanged.
 
 - K1.1, built: `ExternN`, `ExternsMeetN`, `gN_of_meetsN`, `Goal791N` restated in place, `goal791N`
   re-proved.
-- K1.2: the models at `vN` (`stdModel_meetsN`) and Core's `externs_every_runN` family.
+- K1.2, built: the standard models meet `ExternN` (`stdModel_meetsN`, all fifteen, from
+  `HandlerLawN`), and Core's end-to-end theorems at the chain, `externs_every_runN`,
+  `io_every_runN`, `externs_loop_every_runN` and `io_loop_every_runN`, through `goal791N`
+  (`Core/Chain/Externs791N.lean`). The program's input is one more extern slot (`Γ ++ [Bytes]`),
+  so the I/O theorems are plain instances of `goal791N`.
 - K1.3: the finaliser at the externs' context, for `Const791.OKAt` and `withbor1U/2U/3U`.
 - K1.4: the kernel instance `progIO` (a lent `stdout` cell, written across a `wait`, resumed and
   cancelled).
 - K1.5: `IORun.every_runN` at the checked wrapper; `corpus/io-effects.bc` concluded by the
   extended `goal791N`; `bcc trusted` names it.
 
-K1.2–K1.5 are not built; each unit's code PR marks its line *built*.
+K1.3–K1.5 are not built; each unit's code PR marks its line *built*.
 
 ### Open
 
