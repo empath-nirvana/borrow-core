@@ -799,7 +799,8 @@ def thenMC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (A 
       let ks := opKeysOf opKeysFuel tM
       let SM := S.filter fun o => ks.contains (o.n, o.i)
       let SM₀ := SM.map fun o => { o with fin := .ret .unit }
-      let ok (R : CRow) : Bool := R != S && thenFinB R S SD
+      -- `S` itself fails `thenFinB` here, so a candidate that passes is not `S`.
+      let ok (R : CRow) : Bool := thenFinB R S SD
       let r₀ ← if ok SM₀ then attempt (chkC n E Δ T M (effOf SM₀ A))
         else pure (.error ⟨M.span, ""⟩)
       match r₀ with
