@@ -95,10 +95,12 @@ core-fin-cancel-propagated 0 0 0 0 0 0
 core-fin-cancel-reentered 0 0 0 0 0 0
 core-fin-cancel-reraised 0 0 0 0 0 0
 core-fin-cancellable 0 0 0 0 0 0
+core-fin-consume 0 0 0 0 0 0
 core-fin-e7b 0 0 0 0 0 0
 core-fin-e7d 0 0 0 0 0 0
 core-fin-e8b 0 0 0 0 0 0
 core-fin-keep 0 0 0 0 0 0
+core-fin-keep-unr 0 0 0 0 0 0
 core-fin-nc 0 0 0 0 0 0
 core-fin-nested 0 0 0 0 0 0
 core-fin-op 0 0 0 0 0 0

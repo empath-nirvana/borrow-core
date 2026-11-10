@@ -1,0 +1,27 @@
+-- check: old-backend-refuses
+-- SPEC §27 in the core text, the twin of Core's `progKeepT` (`EffCancelTyped.lean`) with the
+-- kernel's unrestricted `4.0` (`4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1`): handler 1 cancels `κ`; the
+-- inner finaliser raises `2.0`, which is kept; the outer finaliser performs `4.0` with the error
+-- pending. Handler 4 resumes its continuation (out of its `!` box) outside tail position: the
+-- cancel goes on and re-raises the kept `2.0` at the canceller, which passes handler 4 and is
+-- caught by handler 2. `core-fin-keep` is the must-resume form.
+--
+-- Answer: inr (), and `live 0`. A wrong implementation that loses the kept error across the
+-- suspension answers `inl ()`.
+
+main : F (1 + 1) =
+  handle_with[2](
+      ((!thunkv fun (v : 1 + 1) -> return v) : !U (1 + 1 -o F (1 + 1))),
+      (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F (1 + 1)) * 1)) (
+    handle_with[4](
+        ((!thunkv fun (v : 1) -> return (inl v)) : !U (1 -o F[2.0 cancel 1 ~> 0] (1 + 1))),
+        (((!thunkv fun (p : 1 * !U ((1 -o F[2.0 cancel 1 ~> 0] (1 + 1)) & F[2.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0] 1)) ->
+            let (u, kb) = p; k <- return (unbang kb); r <- (force k).1 u; case r { inl a -> return (inl a) | inr b -> return (inr b) }), ())
+          : !U (1 * !U ((1 -o F[2.0 cancel 1 ~> 0] (1 + 1)) & F[2.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0] 1) -o F[2.0 cancel 1 ~> 0] (1 + 1)) * 1)) (
+      handle_with[1](
+          ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0] 1)),
+          (((!thunkv fun (p : 1 * U ((1 -o F[4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0] 1) & F[2.0 cancel 1 ~> 0, 4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0] 1)) ->
+            let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+            : !U (1 * U ((1 -o F[4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0] 1) & F[2.0 cancel 1 ~> 0, 4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0] 1) -o F[4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0] 1) * 1)) (
+        y <- (x <- perform[1.0] () unwind (abort[2.0] ()); return x) unwind (perform[4.0] ());
+        return y)))

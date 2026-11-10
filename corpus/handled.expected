@@ -477,6 +477,13 @@ corpus/core-fin-cancellable.bc 15:3: handle 4: inside [1], finaliser; row []; op
 corpus/core-fin-cancellable.bc 20:5: handle 1: inside [], finaliser; row [4]; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-fin-cancellable.bc 4.0 once: error; condition 2 holds; -
 corpus/core-fin-cancellable.bc 1.0 abortive: error; condition 2 holds; -
+corpus/core-fin-consume.bc flows [0, 1, 4, 4294967295], finaliser; main [1, 2, 4], finaliser
+corpus/core-fin-consume.bc 13:3: handle 2: inside [1, 4], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/core-fin-consume.bc 16:5: handle 4: inside [1], finaliser; row [2]; ops 4.0 stored; names 4.0 []; condition 2 holds
+corpus/core-fin-consume.bc 21:7: handle 1: inside [], finaliser; row [4, 2]; ops 1.0 resume-or-cancel; names 1.0 []; condition 2 holds
+corpus/core-fin-consume.bc 2.0 abortive: error; condition 2 holds; -
+corpus/core-fin-consume.bc 4.0 stored: error; condition 2 holds; -
+corpus/core-fin-consume.bc 1.0 resume-or-cancel: error; condition 2 holds; -
 corpus/core-fin-e7b.bc flows [0, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/core-fin-e7b.bc 12:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-fin-e7b.bc 15:5: handle 2: inside [], finaliser; row [1]; ops 2.0 resume-or-cancel; names 2.0 []; condition 2 holds
@@ -494,6 +501,13 @@ corpus/core-fin-e8b.bc 12:3: handle 1: inside [2], finaliser; row []; ops 1.0 ab
 corpus/core-fin-e8b.bc 15:5: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/core-fin-e8b.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-fin-e8b.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/core-fin-keep-unr.bc flows [0, 1, 4, 4294967295], finaliser; main [1, 2, 4], finaliser
+corpus/core-fin-keep-unr.bc 13:3: handle 2: inside [1, 4], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/core-fin-keep-unr.bc 16:5: handle 4: inside [1], finaliser; row [2]; ops 4.0 once; names 4.0 []; condition 2 holds
+corpus/core-fin-keep-unr.bc 21:7: handle 1: inside [], finaliser; row [4, 2]; ops 1.0 resume-or-cancel; names 1.0 []; condition 2 holds
+corpus/core-fin-keep-unr.bc 2.0 abortive: error; condition 2 holds; -
+corpus/core-fin-keep-unr.bc 4.0 once: error; condition 2 holds; -
+corpus/core-fin-keep-unr.bc 1.0 resume-or-cancel: error; condition 2 holds; -
 corpus/core-fin-keep.bc flows [0, 1, 4, 4294967295], finaliser; main [1, 2, 4], finaliser
 corpus/core-fin-keep.bc 16:3: handle 2: inside [1, 4], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/core-fin-keep.bc 19:5: handle 4: inside [1], finaliser; row [2]; ops 4.0 once; names 4.0 []; condition 2 holds
