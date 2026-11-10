@@ -1,5 +1,5 @@
 -- pending: #920 (L1: the pipe connector; a stream chain into a stage in (R)'s form runs on it)
--- A stream edge recognised by effects (SPEC §pipes-S): the left side is an `if` whose branches
+-- A stream edge recognised by effects (SPEC §70): the left side is an `if` whose branches
 -- call generators, so it performs `Yield[i32]` (its row is read from its parts), and `sum_items`
 -- performs `Stream[i32]`, a stage in (R)'s form (`Stream` a stand-in for lib's item effect). A
 -- chain of such edges is one n-ary connector, which L1 builds; until then the edge is refused.

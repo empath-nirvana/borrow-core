@@ -1,4 +1,4 @@
--- `|>` and `>|` in one chain (SPEC §pipes-S, the mixing rule): the operator at each edge names
+-- `|>` and `>|` in one chain (SPEC §70, the mixing rule): the operator at each edge names
 -- that wire's mode, push or pull, and the chain is one chain whatever its operators. Until L2
 -- (#921) each edge into a source-owning adapter is §33's case (iii). An edge that is not a stream
 -- edge is §33's, whatever chain it is in: `|> double` after the chain is a plain function's call.

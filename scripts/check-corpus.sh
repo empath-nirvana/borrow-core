@@ -7,7 +7,7 @@
 # names the module's file instead (`lib/m.bc:line:col: message`, #883).
 #
 # Reports. For every corpus/reports/<name>.txt, the effects lines `bcc check corpus/<name>.bc` prints
-# (`effect`, `row`, `lowering`, `call`: SPEC §18; `note`: SPEC §pipes-S) must be exactly that file:
+# (`effect`, `row`, `lowering`, `call`: SPEC §18; `note`: SPEC §70) must be exactly that file:
 # the rows, the lowering shape of each handler, each call site's elaboration and each note are
 # pinned.
 #

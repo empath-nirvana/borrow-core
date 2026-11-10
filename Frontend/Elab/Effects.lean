@@ -3626,24 +3626,24 @@ structure PipeEnv where
   ops : List (String × String) := []
   iters : List String := []
 
-/-- The effects a definition's mark writes, when it writes a row.  `[spec §pipes-S]` -/
+/-- The effects a definition's mark writes, when it writes a row.  `[spec §70]` -/
 def writtenEffs : Mark → Option (List String)
   | .row es _ _ => some (es.map (·.1.name))
   | .template m _ => writtenEffs m
   | _ => none
 
-/-- The name a stage `f`, `f[As]` or `f(a, …)` calls.  `[spec §pipes-S]` -/
+/-- The name a stage `f`, `f[As]` or `f(a, …)` calls.  `[spec §70]` -/
 def stageHead? : Val → Option String
   | .app _ (.var _ x) _ | .app _ (.defApp _ x _) _ | .var _ x | .defApp _ x _ => some x
   | _ => none
 
 /-- The function `x`'s written row performs `Stream`, lib's item effect (L1, #920): it is a stage
-in (R)'s form. Recognised by the effect's name.  `[spec §pipes-S]` -/
+in (R)'s form. Recognised by the effect's name.  `[spec §70]` -/
 def PipeEnv.streamR (pe : PipeEnv) (x : String) : Bool :=
   ((pe.rows.lookup x).join.getD []).contains "Stream"
 
 /-- The function `x`'s first parameter is a stored generator `U (pull A K R)`: a source-owning
-adapter (`lib/adapters.bc`), a stream stage until L2 (#921).  `[spec §pipes-S]` -/
+adapter (`lib/adapters.bc`), a stream stage until L2 (#921).  `[spec §70]` -/
 def PipeEnv.transitional (pe : PipeEnv) (x : String) : Bool :=
   match (pe.sigs.lookup x).bind paramTyOf with
   | some (.tensor _ A _) => isPullTy A
@@ -3651,14 +3651,14 @@ def PipeEnv.transitional (pe : PipeEnv) (x : String) : Bool :=
   | none => false
 
 /-- A stream stage: a function stage in (R)'s form, or a source-owning adapter (transitional).
-A handler is not one.  `[spec §pipes-S]` -/
+A handler is not one.  `[spec §70]` -/
 def PipeEnv.streamStage (pe : PipeEnv) (s : Val) : Bool :=
   match stageHead? s with
   | some x => !pe.handlers.contains x && (pe.streamR x || pe.transitional x)
   | none => false
 
 /-- Whether a call of `x` performs an iteration effect, read from its written row; `none` when it
-writes none (rows are inferred after this pass).  `[spec §pipes-S]` -/
+writes none (rows are inferred after this pass).  `[spec §70]` -/
 def PipeEnv.callYields (pe : PipeEnv) (x : String) : Option Bool :=
   match pe.rows.lookup x with
   | some (some es) => some (es.any pe.iters.contains)
@@ -3674,7 +3674,7 @@ mutual
 /-- Whether `V`, a pipe's left side as written, performs an iteration effect, where that can be
 read before rows are inferred: a call of a function with a written row, a chain (its last
 stage's), a value (nothing), an operation (its effect), a block, `if` or `match` (each of its
-parts); `none` otherwise.  `[spec §pipes-S]` -/
+parts); `none` otherwise.  `[spec §70]` -/
 def yieldsV (pe : PipeEnv) : Nat → Val → Option Bool
   | 0, _ => none
   | k + 1, V => match Pipes.pipeParts? V with
@@ -3768,7 +3768,7 @@ def pipeStage (pe : PipeEnv) (sp : Span) (e s : Val) : EM Val := do
 
 /-- One edge of a chain in normal form, `e ∘ s` (`m` its mode), `e` and `s` elaborated, `left`
 the left side as written (the source, or the previous edge's stage), its iteration effect read
-by `yieldsV`.  `[spec §33, §pipes-S]`
+by `yieldsV`.  `[spec §33, §70]`
 
 - A handler: §33 (i) under `|>`; refused under `>|`.
 - A function that is not a stream stage: §33 (ii) or (iii) under `|>`; refused under `>|`.
@@ -3808,7 +3808,7 @@ def pipeEdge (pe : PipeEnv) (sp : Span) (m : PipeMode) (left : Val) (e s : Val) 
 mutual
 /-- `V` with each `e |> s` and `e >| s` in it elaborated, each chain in its normal form
 (`Pipes.chainOf`), the source first and then each edge in order (`pipeEdge`).
-`[spec §33, §pipes-S]` -/
+`[spec §33, §70]` -/
 def pipesV (pe : PipeEnv) : Nat → Val → EM Val
   | 0, V => pure V
   | k + 1, V => match V with
@@ -3877,7 +3877,7 @@ def pipesC (pe : PipeEnv) : Nat → Comp → EM Comp
 end
 
 /-- The declarations with each `|>` and `>|` in them elaborated (SPEC §33).
-`[spec §33, §pipes-S]` -/
+`[spec §33, §70]` -/
 def resolvePipes (ds : List Decl) : EM (List Decl) := do
   let pe : PipeEnv := {
     handlers := ds.flatMap fun

@@ -1,4 +1,4 @@
--- The left side's row (SPEC §pipes-S): an edge is a stream edge when its stage is a stream stage
+-- The left side's row (SPEC §70): an edge is a stream edge when its stage is a stream stage
 -- and its left side performs an iteration effect, read from the left side as written, before rows
 -- are inferred. A call reads its function's written row; a value performs nothing; a block, `if`
 -- or `match` performs what its parts do, when each part is known. When the left side's row cannot

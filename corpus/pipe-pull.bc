@@ -1,4 +1,4 @@
--- `>|` (SPEC §pipes-S): a pull wire between stream stages. Until the stage-form adapters (L2,
+-- `>|` (SPEC §70): a pull wire between stream stages. Until the stage-form adapters (L2,
 -- #921), a stage whose first parameter is a stored generator (`lib/adapters.bc`) is a stream stage
 -- transitionally, and `e >| f(a, …)` into one is §33's case (iii), `f(e, a, …)`, the left side
 -- stored at the parameter (SPEC §15), as `|>` is. So `range(0, 10) >| map(…) >| filter(even) >|

@@ -484,7 +484,7 @@ structure FieldCand where
   rolls : Bool
   deriving DecidableEq, Repr, Inhabited
 
-/-- The mode of a pipe's wire: `|>` push, `>|` pull (decision B′).  `[spec §33, §pipes-S]` -/
+/-- The mode of a pipe's wire: `|>` push, `>|` pull (decision B′).  `[spec §33, §70]` -/
 inductive PipeMode where
   | push
   | pull
@@ -561,7 +561,7 @@ inductive VSugar where
   computation parameter takes `e` suspended, `f({ () -> e }, …)`; any other function takes `e`
   first, `f(e, …)`. A chain of stream stages is read in its normal form first
   (`Frontend.Elab.Pipes.chainOf`). Elaborated away by `Frontend.Elab.Effects`.
-  `[spec §33, §pipes-S]` -/
+  `[spec §33, §70]` -/
   | pipe (m : PipeMode)
   /-- `writes(x, …) V`: the closure `V` assigns the enclosing body's `let mut` variables `x, …`
   (SPEC §41, rule R3). It is given at a block parameter of a call, which passes them in and back

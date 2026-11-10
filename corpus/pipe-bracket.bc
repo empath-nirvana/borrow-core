@@ -1,4 +1,4 @@
--- Two bracketings of one chain are one term (SPEC §pipes-S, the normal form): `|>` and `>|`
+-- Two bracketings of one chain are one term (SPEC §70, the normal form): `|>` and `>|`
 -- associate to the left, and a stage that is itself a chain of stream edges is spliced into the
 -- chain it is piped from, so `(a >| b) >| c` and `a >| (b >| c)` both read `a >| b >| c`
 -- (`Frontend.Elab.Pipes.chainOf_bracketing`). `left`, `right` and `mixed` bracket one chain three

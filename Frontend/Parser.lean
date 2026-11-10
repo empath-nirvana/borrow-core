@@ -1217,7 +1217,7 @@ inductive BinTok where
   | op (o : SurfOp)
   | and
   | or
-  /-- `a |> s` (SPEC §33) or `a >| s` (`[spec §pipes-S]`): `VSugar.pipe` applied to the pair. -/
+  /-- `a |> s` (SPEC §33) or `a >| s` (`[spec §70]`): `VSugar.pipe` applied to the pair. -/
   | pipe (m : PipeMode)
 
 /-- The operator of a token, with its precedence: `|>` and `>|` 0, `||` 1, `&&` 2, comparisons 3, `+`/`-`

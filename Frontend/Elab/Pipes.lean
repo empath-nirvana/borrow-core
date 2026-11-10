@@ -1,7 +1,7 @@
 import Frontend.Syntax
 
 /-!
-# Frontend — Elab — a pipe chain's normal form  `[spec §pipes-S]`
+# Frontend — Elab — a pipe chain's normal form  `[spec §70]`
 
 A chain `a ∘₁ s₁ ∘₂ s₂ …` of `|>` (push) and `>|` (pull) edges is read as a source and a list of
 edges, each marked with its mode, left-nested, the source first (`PipeChain`). `|>` and `>|`

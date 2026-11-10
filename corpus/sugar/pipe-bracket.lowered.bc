@@ -1,6 +1,6 @@
 -- lowers: corpus/pipe-bracket.bc
 -- `corpus/pipe-bracket.bc` with each chain written as §33's case (iii) writes it, the nested calls
--- (SPEC §pipes-S): the three bracketings of `range(0, 10) >| map(sq) >| filter(big) >| take(2)`
+-- (SPEC §70): the three bracketings of `range(0, 10) >| map(sq) >| filter(big) >| take(2)`
 -- are each `take(filter(map(range(0, 10), sq), big), 2)`.
 
 include adapters
