@@ -546,6 +546,7 @@ state-row-unused-site 3 2 0 4 3 0 # stdout's cell; the indirect calls are of `tm
 storage-array 5461 0 0 71560 55180 10920 # one array per node of the tree of arrays (Rust's count, storage.rs)
 sum-i32 7 0 0 39 24 0
 sum-prog-exact 37 9 0 153 111 0
+sum-read-unk 0 0 0 24 12 0
 surface/array-sum 1 0 0 3000 3000 2024
 surface/family-swap 2 0 0 4 4 0
 surface/io-upper 3 0 0 136 3 0

@@ -607,6 +607,37 @@ def layoutOk (L : Layouts) : CM Unit := do
           throw s!"sum {v} has {L.tags.getD v 0} tags, its arms give {t}"
         unless L.packed.getD v false == pk do
           throw s!"sum {v} is {if pk then "not " else ""}packed, its arms give {pk}"
+        -- The encoding's invariants, from the children directly (not through `sumEnc`): a merged
+        -- arm is a sum held inline, encoded as the sum is, its tags the sum's but one; a packed
+        -- sum's leaves each hold one word or none, of at most 32 bits, inline; the width.
+        let bx (j : Nat) : Bool := L.boxed.contains (v, j)
+        let isSumN (c : Nat) : Bool := match L.shape[c]! with | .sum .. => true | _ => false
+        let pv := L.packed.getD v false
+        let tv := L.tags.getD v 0
+        let mv := L.mergeArm.getD v none
+        match mv with
+        | some j =>
+          let c := ch j
+          unless j < 2 && !bx j && isSumN c do
+            throw s!"sum {v}'s merged arm {j} is not a sum held inline"
+          unless L.packed.getD c false == pv do
+            throw s!"sum {v}'s merged arm {j} is encoded otherwise than the sum"
+          unless tv == L.tags.getD c 0 + 1 do
+            throw s!"sum {v} has {tv} tags, not its merged arm's and one"
+        | none => unless tv == 2 do throw s!"sum {v} merges no arm and has {tv} tags, not 2"
+        let leafOk (j : Nat) : Bool :=
+          let c := ch j
+          !bx j && (if mv == some j then L.packed.getD c false else
+            L.width[c]! == 0 || (L.width[c]! == 1 && match L.shape[c]! with
+              | .int .w8 | .int .w32 | .int .u32 | .int .f32 => true
+              | _ => false))
+        let pay (j : Nat) : Nat :=
+          if mv == some j then L.width[ch j]! - 1 else if bx j then 1 else L.width[ch j]!
+        if pv then
+          unless leafOk 0 && leafOk 1 && tv ≤ 0x100000000 && w == 1 do
+            throw s!"sum {v} is packed, but a leaf is wider than 32 bits, boxed, or its tags do not fit"
+        else unless w == 1 + max (pay 0) (pay 1) do
+          throw s!"sum {v}'s width is not a tag word and its widest arm's payload"
         pure (w, (← fieldT L v 0 a) && (← fieldT L v 1 b))
       | .clos .. =>
         if L.recCls.contains v then pure (1, false) else do

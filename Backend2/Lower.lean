@@ -372,6 +372,28 @@ def payload (n : Nat) (r : Bool) (ls : List Nat) (consume : Bool) (keep : Bool :
     return ([.set t (low32 (.loc (ls.headD 0)))], [t])
   getField n k (← fieldLocals n k ls) consume keep
 
+/-- **The words of a value at `c` are those of one at `n`** (SPEC §43): one node, or the same width
+and, at every pair and sum along the fields not boxed, the same boxes and, at a sum, the same
+merged arm, tags and packing. A read through `Imm̲` relates nodes of different leaves (`joinRe`:
+a closure, an opaque value or a cell read as `Unk`, a cell as a borrow), and a leaf of one word
+against `Unk`'s none can change a sum's packing or merged arm at the same total width; a leaf's
+own words agree when the widths do. Within `fuel` formers deep; `false` past it. -/
+def sameEnc (L : Layouts) : Nat → Nat → Nat → Bool
+  | 0, _, _ => false
+  | f + 1, c, n =>
+    L.r c == L.r n || (L.w c == L.w n &&
+      match L.sh c, L.sh n with
+      | .pair a b, .pair a' b' | .sum a b, .sum a' b' =>
+        let enc := match L.sh c with
+          | .sum .. => L.merged c == L.merged n && L.tagsOf c == L.tagsOf n &&
+              L.isPacked c == L.isPacked n
+          | _ => true
+        let fld (k x y : Nat) : Bool :=
+          L.isBoxed c k == L.isBoxed n k && (L.isBoxed c k || sameEnc L f x y)
+        enc && fld 0 a a' && fld 1 b b'
+      | .pair .., _ | .sum .., _ | _, .pair .. | _, .sum .. => false
+      | _, _ => true)
+
 /-! ### Cells -/
 
 /-- The contents' node of a pointer node. -/
@@ -643,7 +665,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let c ← contents pn
     let (s, vs) ← loadCell pn (.loc ((← arg 0).headD 0)) (← wordsN c)
     let L ← L
-    if L.r c == L.r n || (L.triv c && L.w c == L.w n) then return s ++ (← emit d (locs vs))
+    if L.r c == L.r n || (L.triv c && sameEnc L 256 c n) then return s ++ (← emit d (locs vs))
     let ts ← fresh (← wordsN n)
     let tick := if (← read).counts && !L.triv c then [Stmt.tickCopy] else []
     return s ++ tick ++ [.call ts (← helper (.reCopy (L.r c) (L.r n))) (locs vs)] ++ (← emit d (locs ts))
@@ -732,12 +754,14 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     match ← arg 0, ← arg 1 with
     | [b, k], [i] =>
       let addr := Exp.gep (.loc b) (mul64 (.loc i) (.c64 st.toUInt64))
-      if !check then return ← emit d [.c64 0, addr]
-      let t₀ ← fresh1
-      let t₁ ← fresh1
-      return (← boundTick) ++ [.ite (ltu64 (.loc i) (.loc k))
-          [.set t₀ (.c64 0), .set t₁ addr] [.set t₀ (.c64 1), .set t₁ (.c64 0)]] ++
-        (← emit d [.loc t₀, .loc t₁])
+      -- `inl` the slot's address, `inr ()` past the end: the sum's words at `n`.
+      let (_, vl) ← mkInj n false [addr]
+      if !check then return ← emit d vl
+      let (_, vr) ← mkInj n true []
+      let ts ← fresh vl.length
+      let sets (vs : List Exp) : List Stmt := (ts.zip vs).map fun (t, e) => .set t e
+      return (← boundTick) ++ [.ite (ltu64 (.loc i) (.loc k)) (sets vl) (sets vr)] ++
+        (← emit d (locs ts))
     | _, _ => throw "word IR: idx of a non-family"
   | .split _ => do
     let leaf ← leafOf (← argN 0)
@@ -1225,7 +1249,7 @@ where
       -- `Tok`'s cell (`Ref 1`) read as `Unk`: discarded.
       | .ref _, .unk => return ([], [])
       | _, _ =>
-        if L.triv c' && L.w c' == L.w n' then return ([], locs vs)
+        if L.triv c' && sameEnc L 256 c' n' then return ([], locs vs)
         let ts ← fresh (L.w n')
         return ([.call ts (← helper (.reCopy (L.r c') (L.r n'))) (locs vs)], locs ts)
     match L.sh c, L.sh n with
