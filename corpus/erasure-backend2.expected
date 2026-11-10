@@ -459,7 +459,12 @@ operator-rounds erased handles 5 performs 0 raises 5 left 0 0
 parse-int erased handles 4 performs 0 raises 7 left 0 0
 parse-recover erased handles 3 performs 0 raises 20 left 0 0
 parse-recover-gen erased handles 3 performs 0 raises 19 machines 2 suspends 4 left 0 0
+pipe-bracket erased handles 0 performs 0 raises 0 machines 24 suspends 12 left 0 0
 pipe-handlers erased handles 2 performs 0 raises 4 machines 8 suspends 9 left 0 0
+pipe-left-row erased handles 2 performs 2 raises 0 machines 10 suspends 5 left 0 0
+pipe-mixed erased handles 0 performs 0 raises 0 machines 24 suspends 12 left 0 0
+pipe-pull erased handles 0 performs 0 raises 0 machines 16 suspends 8 left 0 0
+pipe-push-paren erased handles 0 performs 0 raises 0 machines 4 suspends 2 left 0 0
 poly-operators erased handles 0 performs 0 raises 0 left 0 0
 poly-providers erased handles 0 performs 0 raises 0 left 0 0
 print-borrowed-array erased handles 0 performs 0 raises 0 left 0 0
