@@ -1,5 +1,5 @@
 -- pending: capabilities in tasks (a task given main's stdout; decision 57's ports, SPEC §30 Open)
--- now: 41:19: the body of `with spawn` assigns a `let mut` variable declared outside it, or lends a place declared outside it: a control handler's body may be abandoned, and does not hand them back; bind what the block answers instead
+-- now: 41:19: the body of `with spawn` takes `stdout` and would hand it back, but a control handler's body may be abandoned: pass a capability outside the handler, or perform its effect inside (SPEC §41, R3)
 -- Decision 71 permits this shape: each task owns the stream across its `await`s and hands it back.
 -- What blocks it is two tasks given one capability (SPEC §34 *Open*), not the rule.
 -- Tasks that print their progress. Each download task is given the output stream, writes a line
@@ -10,8 +10,8 @@
 -- interleaved tasks; `spawn` and `run_until_empty`.
 --
 -- Blocked by: a capability in a task. `stdout` is `main`'s, and a `with spawn { … }` whose body
--- lends it is rejected: "the body of `with spawn` … lends a place declared outside it: a control
--- handler's body may be abandoned, and does not hand them back". A capability is not consumable,
+-- passes it on is rejected: "the body of `with spawn` takes `stdout` and would hand it back, but a
+-- control handler's body may be abandoned". A capability is not consumable,
 -- so a task that holds one cannot be cancelled (`lib/yield.bc`'s note: a generator cannot hold
 -- one across a `yield`), and two tasks cannot both be given it. A task that writes through
 -- `Stdout` (SPEC §34) is given a borrow of the stream instead, which it can consume when cancelled

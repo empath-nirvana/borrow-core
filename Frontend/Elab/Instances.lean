@@ -203,6 +203,12 @@ def bindTy (c : TCx) (A : Option VTy) (M : Comp) : Option CVTy :=
   match A with
   | some A => c.elabV A
   | none =>
+    -- A read through a lent variable's borrow, `*&mut x` (SPEC §41, R3), answers the content.
+    if let .ret _ (.app _ (.sugar _ .deref) (.lend _ x _)) := M then
+      match c.tyV (.var x.span x.name) with
+      | some (.mut _ A) | some (.imm _ A) => some A
+      | _ => none
+    else
     if !M.takeLends.2.isEmpty then none else
     match M with
     | .ret _ V => argTy c V
@@ -266,6 +272,14 @@ def walkV (d : Decls) (owner : String) (names : List String) : Nat → TCx → V
       atDiv owner c sp o a b
       walkV d owner names n c a
       walkV d owner names n c b
+    | .app _ (.app _ (.sugar _ (.borrow _ _)) (.lend _ x _)) (.thunkv _ (.lam _ b _ M)) =>
+      -- `borrow mut &mut x { 'l, b -> M }`: `b` a borrow of what `x` holds (SPEC §41, R3), at a
+      -- lifetime the walk does not need.  [spec §41]
+      let A := match c.tyV (.var x.span x.name) with
+        | some (.ref A) | some (.mut _ A) => some A
+        | some (.imm ..) => none
+        | t => t
+      walkC d owner names n (c.push b.name (A.map (.mut .top ·))) M
     | .app sp f W => do
       atCall d owner names c sp f W
       walkV d owner names n c f
