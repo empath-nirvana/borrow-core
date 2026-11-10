@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.61 · 2026-11-09
+Version 1.63 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -379,7 +379,7 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
 
   `scripts/check-type-eq.sh` (a gate step) reads the elaborated declarations of every compiled
   module (`bcc`'s import closure outside `Core`, `Support` and `Paper`: `Frontend`, `Target`,
-  `Pipeline`, `Backend`, `Backend2`) and refuses any other equality of `VTy`, `CTy`, `OpSig` or a row decided at run
+  `Pipeline`, `Reference`, `Backend`, `Backend2`) and refuses any other equality of `VTy`, `CTy`, `OpSig` or a row decided at run
   time, directly or through a kernel declaration that decides one (`scripts/TypeEq.lean`).
 
   Surface types name their binders, so α does arise there. The elaborator compares them up to the
@@ -12614,6 +12614,9 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.63** (2026-11-09) — §3 (#906): `scripts/check-type-eq.sh` reads the library `Reference`
+  too, the reference interpreter's run (`Reference/Source.lean`, `Falsify.lean`, `Driver.lean`, …),
+  which leaves `Backend` and `Pipeline`. No change to a rule.
 - **1.61** (2026-11-09) — §10 (#886, *Promotion over a flat context*): the premise of Core's
   promotion rules `!thunk` and `!thunkv` (`bangThunkF`, `bangThunkV`) is `Flat(Γ)`, every live slot
   at a flat type (the scalars, and `⊗`, `⊕` and `[@a]` over them, `!A`), in place of `!Γ`.
