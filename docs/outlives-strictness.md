@@ -1,5 +1,7 @@
 # Strict outlives: where `⊏` costs, and where `⊑` is admissible
 
+*History: the spike behind SPEC §23, which is built. The text below is kept as the record.*
+
 Issue #241, a spike. Its recommendation landed as SPEC §23 (#243): K1, E1, B1 and K2 as §6
 orders them, with K2 at every rule §2.6 lists. What follows describes the kernel before it. In the
 spike the kernel is unchanged: `Core/`, `Paper/`, `Support/`, `Frontend/` and

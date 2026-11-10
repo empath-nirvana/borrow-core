@@ -1,5 +1,7 @@
 # Scope: semantic types read at the lifetime tree (#782)
 
+*History: a unit of the tree track (#771). #839 landed on the chain relation instead (decision 74's status, decision 75); the current design is `chain-interpretation.md` and SPEC §62. The text below is kept as the record.*
+
 Part of #771, row 5. SPEC §62 ("Semantic types read at the tree"); `structure.md` §4, §7.1.
 Depends on row 4 (#781): the tree world `TWd`, re-reading `RR`, the codes `KTy`, and the
 relation `twp`/`cerwpT` are in the library.

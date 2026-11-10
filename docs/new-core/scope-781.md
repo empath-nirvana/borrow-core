@@ -1,5 +1,7 @@
 # Scope: the step-indexed relation over the tree world (#781)
 
+*History: a unit of the tree track (#771). #839 landed on the chain relation instead (decision 74's status, decision 75); the current design is `chain-interpretation.md` and SPEC §62. The text below is kept as the record.*
+
 Part of #771, row 4. SPEC §62; `structure.md` §3, §5. This doc covers layout, what is ported,
 the headline statements, the open items, the slices, and what not to do. No code lands until it
 is reviewed.
@@ -284,7 +286,7 @@ alone). The stored continuations are values the scheduler's clauses hold, each r
 `KapSchedT` (and, held as a pool, by `PoolT`/`KapAtT`; since #795 by the stack `PoolTJ`), and `cerwpT_schedHandle`'s induction on
 the index carries them. The invariant over them has two parts: each stored share resumes at the
 per-branch share condition `KeepRel` (D13), and every two are apart at each other's record masks
-(`fdMask`, `recMask`; pairwise `FdEsc` in location form, D12), with no branch points. Since #795 the pool is a stack (`PoolTJ`, `scope-795.md`): each entry is apart from the entries below it at their record masks except at the lent locations its nearest joiner shares, so tasks above a joiner hold views of what it shares. The
+(`fdMask`, `recMask`; pairwise `FdEsc` in location form, D12), with no branch points. Since #795 the pool is a stack (`PoolTJ`, `../archive/new-core/scope-795.md`): each entry is apart from the entries below it at their record masks except at the lent locations its nearest joiner shares, so tasks above a joiner hold views of what it shares. The
 pool form is the invariant because branch points are not kept along tree extension
 (`not_joinPtKeptT`), while the location form is (`fdMask_mono`), and a share holding views at
 incomparable lifetimes has no point (#781 issuecomment-6612202867). The

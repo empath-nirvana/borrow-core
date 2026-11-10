@@ -1,5 +1,7 @@
 # Second-class closures, System C, and capability-indexed prompts
 
+*History: a theory spike; `experiments/SecondClass` is its record, and [`theory-index.md`](theory-index.md) tracks its status. The text below is kept as the record.*
+
 A theory spike for #229, #216 and #161. Experiment: `experiments/SecondClass/` (non-default
 library `SecondClass`, imported by nothing). It changes nothing in `Core/`, `Frontend/` or
 `Backend/`.

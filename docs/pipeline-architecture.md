@@ -1,5 +1,7 @@
 # Pipeline architecture: carry what the frontend knows (#552)
 
+*History: #552's design. `compiler.md` (#555) supersedes its route of compiling the erased term, and keeps its S0 (#554) and §3.7's `Div` inference (`compiler.md` §6.2); `compiler.md` §7.2 cites its §9.2 defects. The text below is kept as the record.*
+
 A design for how the structure the frontend knows reaches the backend. It changes no code. Each
 claim is marked:
 
@@ -17,7 +19,7 @@ real choices as options, with a recommendation; no syntax decisions.
 effect." The user's earlier words are "Div should be an effect" (2026-09-28), with the runtime
 driving `main` as the outermost handler. The reading that divergence is only codata and is never
 handled was a recorder's sentence. This PR corrects the records that carried it
-(`docs/effects-state/05a-open-questions-1-34.md` OQ-15, `docs/effects-state/04-decisions.md`
+(`docs/archive/effects-state/05a-open-questions-1-34.md` OQ-15, `docs/archive/effects-state/04-decisions.md`
 item 10 and D1, `docs/decisions.md` 67). This design takes that plan as its base.
 
 ## 0. Summary

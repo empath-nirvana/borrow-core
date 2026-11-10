@@ -898,7 +898,7 @@ Each entry: the decision, and why. Newest last.
     - Decision 35's "a div function returns a loop, `A ⇒ U(Loop B R)`" describes the encoding as
       built. It is not read as excluding handling: the records that did so ("Div is not an
       algebraic effect … nobody should pretend it is handled"; OQ-15 "DECIDED (a)") were a
-      recorder's wording, and are corrected (`docs/effects-state/04-decisions.md` item 10 and D1,
+      recorder's wording, and are corrected (`docs/archive/effects-state/04-decisions.md` item 10 and D1,
       `05a-open-questions-1-34.md` OQ-15).
     - Loops perform the effect's operation. The runtime's driver, `div_fuel` and the reification of
       a loop value are its handlers. The model and the lowering are `docs/pipeline-architecture.md`

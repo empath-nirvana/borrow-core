@@ -1,6 +1,6 @@
 # Decided constraints
 
-These bound the design space. Each is quoted at the strength the user gave it. The full register is `docs/decisions.md` and [`docs/effects-state/04-decisions.md`](../../../docs/effects-state/04-decisions.md).
+These bound the design space. Each is quoted at the strength the user gave it. The full register is `docs/decisions.md` and [`docs/archive/effects-state/04-decisions.md`](../../../docs/archive/effects-state/04-decisions.md).
 
 - **Nothing breaks the borrow calculus** (2026-10-03). "NOTHING CAN BREAK THE BORROW CALCULUS." This concerns the guarantees, not BoLo's text: "You can't add an effect system without changing it. They interact."
 - **Multi-shot is ignored as a design goal** (decision 63, 2026-10-04). "TOTALLY IGNORE MULTISHOT AS A DESIGN GOAL. If it works it works, if it doesn't, it doesn't." It never blocks or shapes anything. On friction, the `unr` qualifier is restricted or removed.

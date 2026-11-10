@@ -2527,6 +2527,9 @@ become acceptance rows on the units in §19.
 
 ## 19. Build units, revised for the zero-cost target
 
+*Status (2026-11-09): the order of these units is superseded by the catch-up plan (#843) and the
+track queues; the blocker inventory above is current.*
+
 This list supersedes §9 and §15, and ends the document. Each unit's "done when" is that named
 programs **reach zero cost**: natural form, and counts at most Rust's, measured by the scripts in
 `docs/expressiveness-probes/zero-cost/`. A unit whose programs still carry a lowering-only excess

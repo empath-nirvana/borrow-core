@@ -1,5 +1,7 @@
 # Theory index
 
+*Not yet covered: #844 Tier 1 (#861, SPEC 1.42) and §68, per-code closure types (#855 K0).*
+
 One entry per experiment (`experiments/*/README.md`) and per idea, scope, survey and design
 document that asks a theoretical question. Each entry gives the question, the source's own
 answer (quoted), its status, the Lean names that carry it, and what it feeds. The last two
@@ -488,7 +490,7 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
 - **Status:** open; the family-borrow probe (`borrowAll`) is not built.
 - **Feeds:** [T5](#t5-l2-borrowing-a-dynamic-length-structure-at-one-lifetime),
   [T4](#t4-same-lifetime-views-through-a-pointer), [#119], [#57].
-- **Links:** [`docs/ideas-pointers-and-lifetimes.md`](ideas-pointers-and-lifetimes.md).
+- **Links:** [`docs/archive/ideas-pointers-and-lifetimes.md`](archive/ideas-pointers-and-lifetimes.md).
 
 ### scope-deep-freeze
 
@@ -528,7 +530,7 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
 - **Feeds:** F3 → [T7](#t7-conservative-extension-and-agreement-of-the-worlds); P2 →
   [T4](#t4-same-lifetime-views-through-a-pointer); C1 and P4 →
   [T16](#t16-read-footprint-and-two-run-laws); P6 → [#19]; C7 → [#14].
-- **Links:** [`docs/dream-properties.md`](dream-properties.md).
+- **Links:** [`docs/archive/dream-properties.md`](archive/dream-properties.md).
 
 ### consolidation-audit
 
@@ -764,7 +766,7 @@ obstruction exist unless a Lean name is given.
 - **Statement.** `AllAtOnceGoal E`: a closed value of type `L_E ⊸ (∀'c ⊏ ⊓Δ. (μX. 1 ⊕ (Mut 'c E
   ⊗ X)) ⊸ ['c] T) ⊸ L_E ⊗ T`; more generally the family borrow of every cell a recursive
   structure reaches (`borrowAll`).
-- **Origin.** `experiments/Optics` (Traversal.lean); `docs/ideas-pointers-and-lifetimes.md`
+- **Origin.** `experiments/Optics` (Traversal.lean); `docs/archive/ideas-pointers-and-lifetimes.md`
   (*Family borrows*); `docs/prior-art-borrow-splitting.md` §5.4; consolidation audit §5 ("nothing
   has been built for them").
 - **Known partial results.** Static shapes: `withborS`, `withborF2`. Arrays at a run-time length:

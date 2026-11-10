@@ -1,5 +1,7 @@
 # Scope: a run may give up an `imm` view copy held outside it (#806), along the walks
 
+*History: a unit of the tree track (#771). #839 landed on the chain relation instead (decision 74's status, decision 75); the current design is `chain-interpretation.md` and SPEC §62. The text below is kept as the record.*
+
 Part of #771; needed before #789's compatibility step. Branch `tree-806`, on `tree-core` (built
 on `updx-806`). This is revision 2. The user chose option C (compare walks, `[TR]` 6.48's ancestor
 technique) after the flattening-pointwise relation `UpdXW` failed its frame step.

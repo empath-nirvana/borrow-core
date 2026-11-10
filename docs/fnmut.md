@@ -1,5 +1,7 @@
 # The closure `Clo`, Rust's `FnMut`
 
+*History: the experiment behind SPEC §22, which is built. The text below is kept as the record.*
+
 Issue #236, the experiment; #239 lifted it into the kernel as SPEC §22. The kernel change of §8
 is made: the positivity relaxation is in `Core/`, the closure's lemmas and derived rules in
 `Core/Clo.lean` and `Core/CloRules.lean`, the programs in `Core/CloPrograms.lean`, and the

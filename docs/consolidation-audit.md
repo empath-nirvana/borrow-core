@@ -1,5 +1,7 @@
 # Consolidation audit: one world from the experiments
 
+*History: the audit before the experiments were consolidated into `Core/`, which is done. The text below is kept as the record.*
+
 Prepares step (A) of the plan: consolidate the experiments into one world, before (B) a
 low-level syntax, (C) a parser and (D) a compiler. Read-only audit of `main` at `180ff21`. No
 build was run for this audit. Every claim below comes from reading the source, and the file:line
@@ -124,7 +126,7 @@ and no `N`. Moreover:
   `Blocks.lean` already did this for `wpTS_allocS`.
 - **The derived rules the consolidated world needs are at `VTy` payloads.** Examples are records
   with list fields, a family borrow over `μX. 1 ⊕ (Ref A ⊗ X)`
-  (`docs/ideas-pointers-and-lifetimes.md`, *Family borrows*), and blocks whose leaves are lists
+  (`docs/archive/ideas-pointers-and-lifetimes.md`, *Family borrows*), and blocks whose leaves are lists
   (`CommonList.lean`). These must be re-derived in `CDerives`, by the same induction as the
   `DerivesWf` versions.
 
@@ -250,7 +252,7 @@ adequacy through `embed` (`adequacy_of_derivesWf`), and FP only as `fundamentalC
   A borrowed fold at `Ref S` with `X` inside a compound `S` is not derived.
 - **Variants in place.** `Ref` does not distribute over `⊕`, because the leaf layout depends on
   the tag (`CBPVMu/README.md`, *The common list shape*; `LeafPlaces/README.md` §4). Borrowing a
-  payload place while the tag is fixed is open (`docs/dream-properties.md` P6).
+  payload place while the tag is fixed is open (`docs/archive/dream-properties.md` P6).
 - **`Releasable` at `μ` and `U`.** `Releasable` (`Records/Encoding.lean:228-235`) has no `μ` or
   `U` case. `releasable_immReborrow` holds at BoLo's `Ty`, but `Imm̲ 'b N = μY. 1 ⊕ Y` needs a
   recursive consume (a `foldOwn`). So "project one field of an `Imm` record" at μ-typed fields needs a
@@ -263,7 +265,7 @@ adequacy through `embed` (`adequacy_of_derivesWf`), and FP only as `fundamentalC
 - **Same-lifetime projection (P2).** Still refuted, by `Projection`, `Relaxed` (6.38) and
   `FrameEnd` (`imm_view_rejected`, `mut_view_rejected`). External iterators over a borrowed
   boxed structure wait on it (`docs/scope-recursion.md` §7). Family borrows are the proposed way
-  around it (`docs/ideas-pointers-and-lifetimes.md`), and nothing has been built for them.
+  around it (`docs/archive/ideas-pointers-and-lifetimes.md`), and nothing has been built for them.
 - **The delay type.**
   - The cancellable `bind` needs continuations that are `!` or finalizable
     (`docs/scope-recursion.md` §4).

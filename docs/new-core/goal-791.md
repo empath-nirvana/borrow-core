@@ -1,5 +1,7 @@
 # #791's end goal: the statements, planned backwards
 
+*History: the tree track's plan for #791. #839 landed on the chain relation instead, with `goal791N : HandlerLawN → Goal791N` (decision 75); the current design is `chain-interpretation.md` and SPEC §62. The text below is kept as the record.*
+
 Part of #771, the tree track. Branch `goal-791`, from `tree-core` (35fc7c0e). The Lean is
 `Core/TreeGoal791.lean`. Every `def … : Prop` there elaborates, and every theorem there is
 proved, with axioms within `[propext, Classical.choice, Quot.sound]`. Nothing here is a build of
