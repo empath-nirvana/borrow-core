@@ -9368,6 +9368,8 @@ output or a kernel program. `corpus/counts.expected` and `kernel-counts.expected
 
 ### Open
 
+- **Json's node.** Json's `Map` holds three tables; merging them in `lib/json.bc`, a library
+  change with no layout rule, would bring Json's node to about 4 words (§43 *Sum encoding*).
 - **Codata observations dispatch**: resolved by §45.
 - **Bounds checks in a counted walk** (L-3): resolved by §46.
 - **A block as one object** (§42 *Open*, A7): a block's cells are freed one by one by its type's
