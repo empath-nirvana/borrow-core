@@ -78,3 +78,19 @@ G1 as defined is **not frame-preserving** (`not_licFrame`).
 - **`LicFrame`.** 6.48 at `UpdVLic`.
 
 Not derived; obstructions not verified.
+
+## The growth clause (`Growth.lean`, `MutMask.lean`)
+
+This follows theory's `imm-getter-growth.md`. Derivability is read per lifetime (`DerLt`). In
+`UpdImmG`, start `imm` cells persist with their lifetime sets only growing, and every end
+lifetime is a start lifetime at the same (location, value, witness), or is derivable.
+
+| Item | Lean | Status |
+|---|---|---|
+| bridge from G1, conservativity | `Derivable.derLt`, `UpdVG.of_lic`, `UpdVG.of_updV` | written |
+| transitivity | `UpdImmG.trans`, `UpdVG.trans` | written |
+| (C2), (M) | `compR_get_grow_left`, `compR_get_imm_source`, `compR_get_imm_cover`, `DerLt.mono` | written |
+| 6.48's `imm` half under growth | `updImmG_frame` | written |
+| `licFrame_fails`'s configuration accepted | `k7_accepted` | written |
+| **K8: 6.48's `mut` half fails under growth** | `updMutFrameG_fails`, `not_updMutFrameG` | written. A frame's frozen `mut` cell is masked by the new image (`mut ○ imm = imm`). Typed worlds exclude this (`NoMut`), so the repair is a premise on 6.48. **Stop point**, reported |
+| the 6.59 family restated | — | not started (stopped at K8) |
