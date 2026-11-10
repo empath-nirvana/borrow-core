@@ -1957,7 +1957,7 @@ A `while` or a `loop` is a loop of any div body.
 A borrow block's body is the callback of `withbor`, one computation that returns before the block
 ends; a loop is codata, observed one step at a time. So no borrow stays open while a loop runs:
 `↭` brackets every borrow cell inside one run (`experiments/LoopBorrow`), and a lend that spans
-observations is refused (T1, §19: the checker's rule until surface A1, #843). The
+observations is refused (T1, §19: the checker's rule until surface A1, #843, for §62's shapes). The
 design is to **lend again at each observation**, with no new rule: the owner lives in the loop's state, and each step borrows it by an
 ordinary `withbor` inside that step, so the state between steps holds the owner, never a borrow.
 
@@ -2004,7 +2004,7 @@ function with more than one borrow at its lifetime; a name the block binds again
 after it (the rewrite puts the block's bindings in the enclosing body).
 
 **Not covered** (each would hold a borrow across a loop's tick, which T1 rules out
-(T1, §19: the checker's rule until surface A1, #843), or needs a construct not built): a pipeline whose source holds the borrow, `for x in map(filter(iter(xs), p), f)` inside `borrow imm v { xs -> … }`. The
+(T1, §19: the checker's rule until surface A1, #843, for §62's shapes), or needs a construct not built): a pipeline whose source holds the borrow, `for x in map(filter(iter(xs), p), f)` inside `borrow imm v { xs -> … }`. The
 source could be rewritten to hold the owner, but the owner would come back only through the
 pipeline's finishing value and residual: each adapter would pass them on, the `for` would bind
 the finishing value, and the residual would have to hand back an owner that is consumable. A
@@ -2017,7 +2017,7 @@ Programs: `corpus/axes/borrow-across-loop.bc`, `corpus/lend-mut.bc`, `lend-confi
 `lend-server.bc`, `lend-div.bc`, and the library's `lend-lib-loop.bc`, `lend-lib-gen.bc`,
 `lend-lib-each.bc`; pairs `corpus/sugar/lend-block.bc`, `lend-let.bc`, `lend-div.bc`; rejects
 `corpus/reject/lend-*.bc`. Every elaborated program is checked core, so `fundamentalC` and
-`adequacyC` cover it. The per-observation lend is kept until surface A1 (#843): its output is core the kernel checks. Each refusal above names its fix: iterate
+`adequacyC` cover it. The per-observation lend is kept until surface A1 (#843, §19): its output is core the kernel checks. Each refusal above names its fix: iterate
 by index or with a counted `for`, copy the value out, or end the borrow before the loop.
 
 ### The totality theorem
@@ -2289,7 +2289,7 @@ allocates nothing and dispatches no call (`corpus/gen-pipeline-adapters.bc`: 0, 
 
 A generator may not hold a borrow of its own local across a `yield` (Rust's generators forbid
 it, and its `async` needs `Pin` for it). A borrow block's body may perform only abortive
-operations (§19: a non-abortive operation crossing a borrow is T1, the checker's rule until surface A1, #843), so a `yield` inside a borrow block is rejected (`corpus/reject/gen-self-borrow.bc`).
+operations (§19: a non-abortive operation crossing a borrow is T1, the checker's rule until surface A1, #843, for §62's shapes), so a `yield` inside a borrow block is rejected (`corpus/reject/gen-self-borrow.bc`).
 A generator owns its data, or iterates by index, and borrows within one step. A stored generator that holds a
 borrow of outside data cannot leave that borrow's scope, by the outlives rule of the boxed result
 (`corpus/reject/gen-escape.bc`). What is allowed is to own the cell in the generator's state and
@@ -2610,7 +2610,7 @@ count, which a handler wraps (§30, *Counted loops at a resuming row*, proposed)
 | a view `array_mut @a A` | the rest of the view, split at `1` each turn |
 | an owned array `array A`, `A` persistent | the index, the element copied out under a borrow of one turn |
 | a sized iterator | its data and state, one step each turn |
-| `&a`, `&mut a` | rejected: the lend spans the loop, and an operation that resumes cannot cross a borrow (T1, the checker's rule until surface A1, #843); iterate by index, or copy the elements out |
+| `&a`, `&mut a` | rejected: the lend spans the loop, and an operation that resumes cannot cross a borrow (T1, the checker's rule until surface A1, #843, for §62's shapes); iterate by index, or copy the elements out |
 
 The loop has no value there (`break e`, `else`). `corpus/for-data-div.bc` runs each source that
 a program can reach; `corpus/reject/for-lend-resumes.bc` is the lend. A `mut` view reaches such a
@@ -2644,7 +2644,7 @@ the backend's layout inference no type of their own.
 
 - `for` over `μ` data (lists): an owned list's rest is a cursor but its drain to the end has no
   count. A borrowed list in order is copied out first (`corpus/print-borrowed-list.bc`): an
-  iterator holding the borrow across its steps is refused by T1 (the checker's rule until surface A1, #843).
+  iterator holding the borrow across its steps is refused by T1 (the checker's rule until surface A1, #843, for §62's shapes).
 - A `for` over data whose body performs a resuming operation (a `yield`) or loops (a drain, a div
   call, or a `for` over a generator that loops) is rejected: the step of `count_try` is total
   (`corpus/reject/for-data-gen-loop.bc`). A generator over a view pulls it with
@@ -3180,7 +3180,10 @@ of three continuation types:
   A must-resume `κ` has no `cancel`, for must-complete computations.
 
 *T1 below is the checker's rule until surface A1 (#843), which emits §62's suspending constants
-and lifts T1 for the constants' shapes.*
+and lifts T1 for their shapes, for programs without host externs (the kernel's host-externs unit is
+pending), under `HandlerLawN`. A callback's own borrow held across a suspension, and a borrow
+handed between paused computations, stay refused after A1 (#844 Tier 2, with #821's loan-out stop
+clause).*
 
 **T1: owned across suspensions, borrowed within.** No lend
 stays open across a suspension whose handler is outside the lend: a resuming operation, `await`,
@@ -3653,7 +3656,7 @@ Richer policies are K3 (#162), and *Open*:
      compatibility is `[unwind]`'s, and `cfin`'s is `[finalise]`'s, with the finaliser at the pure
      row (`then_cancel`, `cfin_run`). So cancelling a stored continuation needs nothing beyond what
      storing it needed. A continuation stored while it captures borrows is what T1 rules out
-     (T1, §19: the checker's rule until surface A1, #843). Non-abortive control operations cannot cross a borrow, so no stored `κ`
+     (T1, §19: the checker's rule until surface A1, #843, for §62's shapes). Non-abortive control operations cannot cross a borrow, so no stored `κ`
      captures a lend, and `cancel` needs only the unwinding forms of the borrows *inside* `κ`.
    - **`ubind`**: `then_compatC`, from `ewp_ubind`. The finaliser's context is framed off while
      `M` runs, and consumed by `D` at an unwind.
@@ -4189,8 +4192,8 @@ own: its handler answers one of two closures. The lowering adds neither.
   scope (T2, #173).
 - A tail-resumptive clause that captures values, compiled as a direct call with its captures
   passed to the operation as evidence (*Lowering*); it is a state machine now.
-- A non-abortive control operation crossing a borrow's scope (T1, #172). T1 is the checker's rule until surface A1 (#843), which emits §62's suspending constants
-  (*Which operations cross a borrow's scope*); A1 lifts it for the constants' shapes.
+- A non-abortive control operation crossing a borrow's scope (T1, #172). T1 is the checker's rule until surface A1 (#843), for §62's shapes (*Which operations
+  cross a borrow's scope*, and this section's head).
 - Finaliser policies beyond "a new unwind supersedes" and "a cancel keeps the first error"
   (K3, #162): richer reporting of finaliser errors that lose to the first.
 - The typing of finalisers that raise to live handlers and perform operations (decisions D2, D3
@@ -5570,12 +5573,13 @@ The chain interpretation of §62 has a second named hypothesis of the same form,
 `[handle]` and `reify`, from which `FundamentalN` and plain adequacy `Goal791N` are proved (§62,
 *The named assertion*).
 
-*R1 and `PinLaw` stay as stated here until surface A1 (#843).*
+*R1 and `PinLaw` stay as stated here until surface A1 (#843, §19).*
 
-**Frozen for now (the user's "Freeze r1 for now").** R1, with §29a's cancel-path
+**R1 as on main** (the checker's rule; decision 71's freeze is void by decision 72, and §62
+replaces it as design). R1, with §29a's cancel-path
 widening, stays exactly as this entry states it, and `PinLaw` (`Core/PinLaw.lean`: `lendFrame`, `loopFrame`) gets no new field, case or premise.
-R2 is in the judgment and is not emitted, and that is frozen too. T1 is §19's rule until surface A1
-(#843).
+R2 is in the judgment and is not emitted, and that is frozen too. T1 is §19's rule until surface
+A1 (#843), for §62's shapes.
 
 ### Typing
 
@@ -5607,7 +5611,7 @@ R2 is in the judgment and is not emitted, and that is frozen too. T1 is §19's r
 - R2 (`lendLoopR`, the `imm` lend over a loop whose state holds the borrow,
   `docs/async-capabilities.md` §3.3) is in the judgment as well, an instance of `LoopFrame`;
   `PinLaw.loop` derives its compatibility lemma. The checker does not emit it, and that is frozen
-  (T1, §19: the checker's rule until surface A1, #843).
+  (T1, §19: the checker's rule until surface A1, #843, for §62's shapes).
 
 **The extended judgment.** `CDerivesP` (`Core/PinDerives.lean`) is `CDerives` with every premise
 in `CDerivesP`, plus `lendR`, `lendLoopR` and `nilDead`. It is generated from
@@ -5662,7 +5666,7 @@ operation and an abortive one, the abortive one's handler outside the block, is 
 rejected as before (§15 *Self-reference*; OQ-2). R1 is chosen only where no ordinary rule
 applies: a block whose body performs only abortive operations is §19's unwinding borrow, and a
 borrow block over a loop is §14's per-observation lend. Segmenting a block at a suspension when
-only the borrow crosses it (L0, U3) is refused (T1, §19: the checker's rule until surface A1, #843): the program ends the borrow
+only the borrow crosses it (L0, U3) is refused (T1, §19: the checker's rule until surface A1, #843, for §62's shapes): the program ends the borrow
 before the `await` itself. Each refusal names that fix, or moving the value in and out.
 
 The checker types `withbor2r` by `[lend-R]` at the slot of `p`: it checks `M` at `Δ, 'x ⊏ @b` and the
@@ -5742,8 +5746,8 @@ another), `async-r1-generator.bc` and `async-r1-drain.bc` (§15's self-referenti
   built.
 - What `LendFrame` ranges over (above): kind R of `docs/unsafe.md`.
 - *Not built; §62 is the design that replaces them:* L0 (U3), R2 at the
-  checker (U6), shrinking `PinLaw` (U8), and `docs/async-capabilities.md` OQ-1 to OQ-5 as routes
-  to wider relaxed lends. BOXED-κ (U1,
+  checker (U6), shrinking `PinLaw` (U8; its live analogue is #838, shrinking `HandlerLawN`), and
+  `docs/async-capabilities.md` OQ-1 to OQ-5 as routes to wider relaxed lends. BOXED-κ (U1,
   §28) and `lib/async.bc` (U2, §30) are built.
 
 ---
@@ -5832,7 +5836,7 @@ state; its `await` clause reads it.
 
 The surface `await` and `complete`, `lib/async.bc`'s `cancelled` clause and a suspending scheduler's
 typing, `run_in`, the checker emitting `effAwait` or `effThenDiv`, the nursery over owned or copied request data
-(over borrowed data it needs surface A1, #843), cancel scopes inside a task, and the lowering of a
+(over borrowed data it stays refused after A1: #821 / #844 Tier 2), cancel scopes inside a task, and the lowering of a
 suspending finaliser.
 
 ### Open
@@ -6024,7 +6028,7 @@ fails at its block).
   them apart.
 - **Tasks that hold a borrow across `await`** under `lib/async.bc`'s scheduler: a task of `spawn`
   holding a relaxed lend, `cancel` of one (A6) and a scheduler that logs (A5) are §32's; L0 (U3)
-  is refused (T1, §19: the checker's rule until surface A1, #843): a task ends its borrow before each `await`, or is lent
+  is refused (T1, §19: the checker's rule until surface A1, #843, for §62's shapes): a task ends its borrow before each `await`, or is lent
   the place from outside its scheduler (`spawn_in`, §32).
 
 ## 31. Entry 30 — generic recursion, blocks to generic callees, and the inference gaps
@@ -6893,7 +6897,7 @@ is the one it was, and every program's output. Only the backend changes, below t
   its own (§19 *Lowering*); a slot open at the point would be held in the state past its frame.
   Such a scope keeps a heap cell (`Clos.Prog.suspendedScopes`). No program has one: the typing
   refuses a resuming operation across a borrow block's body (a continuation held across a lend is
-  T1, the checker's rule until surface A1, #843), and a lend in the arguments of a function that threads
+  T1, the checker's rule until surface A1, #843, for §62's shapes), and a lend in the arguments of a function that threads
   a capability. A scope between
   two suspensions is framed in each code that runs it: `corpus/async-lend-slots.bc`.
 - **Capability cells are heap cells.** `stdin`, `stdout`, `stderr`, `args` and `clock` (§11,
@@ -12558,7 +12562,9 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 - **1.60** (2026-11-09) — §14, §15, §16, §19, §29, §30, §32, §35, §39: the citations of decision 71,
   which decision 72 voids, are removed. T1 is stated as the checker's rule until surface A1
-  (#843), which emits §62's suspending constants and lifts T1 for their shapes. §39's leetcode programs keep their
+  (#843), which lifts it for §62's suspending constants' shapes, for programs without host
+  externs, under `HandlerLawN`; a callback's own borrow and a borrow handed between paused
+  computations stay refused (#844 Tier 2, #821). §29's title states R1 as the checker's rule, not a freeze. §39's leetcode programs keep their
   restriction because the surface provides no handler around a div computation (§21 *Open*). No
   change to a rule or to the code.
 - **1.59** (2026-11-09) — the small-gaps batch (#880–#883, #892, #893). No change to `CDerives`,
