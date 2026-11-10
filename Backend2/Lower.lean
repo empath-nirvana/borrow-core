@@ -10,7 +10,8 @@ Each LIR variable is the words of its layout node (`Backend2/Layout.lean`), held
 LIR function a word-IR function of its parameters' words, answering its result's words. The
 word IR (`Backend/Flat/Syntax.lean`) is target-neutral: the Wasm and LLVM emitters take it.
 
-- **Pairs** are their fields' words; a **sum** a tag word and its payload's, padded. A field the
+- **Pairs** are their fields' words; a **sum** a tag word and its payload's, padded, its merged
+  arm's words its own and a packed sum one word `tag << 32 | payload` (`Layout.lean`, SPEC §43). A field the
   layout boxes is a pointer to an object holding its words: built by allocating it, taken apart
   by loading and freeing it. A box a `letpair` or a `case` takes apart is a spare box until the
   path's next call, return or arm's end, and the next box of its words built before then is
@@ -132,8 +133,12 @@ def addrKinds (L : Layouts) :
         let (y, e₂) ← if L.isBoxed n 1 then pure ([some true], true) else addrKinds L f b
         pure (x ++ y, e₁ && e₂)
       | .sum a b => do
+        if L.isPacked n then pure ([some false], true) else do
         let (x, e₁) ← if L.isBoxed n 0 then pure ([some true], true) else addrKinds L f a
         let (y, e₂) ← if L.isBoxed n 1 then pure ([some true], true) else addrKinds L f b
+        -- A merged arm's words are the arm's own, its tag word the sum's.
+        let x := if L.merged n == some 0 then x.drop 1 else x
+        let y := if L.merged n == some 1 then y.drop 1 else y
         let pw := L.w n - 1
         pure (some false :: List.zipWith agree (pad pw x) (pad pw y), e₁ && e₂)
       | .clos .. =>
@@ -308,11 +313,45 @@ def mkPair (n : Nat) (a b : List Exp) (reuse : Bool := false) : LM (List Stmt ×
   let (s₂, v₂) ← putField n 1 b reuse
   pure (s₁ ++ s₂, v₁ ++ v₂)
 
+/-- The low half of a word, a packed sum's payload. -/
+def low32 (e : Exp) : Exp := and64 e (.c64 0xFFFFFFFF)
+
+/-- The tag of arm `k` of the sum at `n` that is not merged: `k`, or after the merged arm's tags. -/
+def armTag (L : Layouts) (n k : Nat) : Nat :=
+  match L.merged n with
+  | some _ => L.tagsOf n - 1
+  | none => k
+
+/-- **A sum's words** at `n` of arm `r` holding `a` (SPEC §43): on a merged arm `a` itself, padded;
+else the arm's tag and its field's words, padded, or packed into one word.  `[spec §43]` -/
 def mkInj (n : Nat) (r : Bool) (a : List Exp) (reuse : Bool := false) :
     LM (List Stmt × List Exp) := do
-  let (s, v) ← putField n (if r then 1 else 0) a reuse
-  let pw := (← wordsN n) - 1
-  pure (s, [.c64 (if r then 1 else 0)] ++ v ++ zeros (pw - v.length))
+  let L ← L
+  let k := if r then 1 else 0
+  let w := L.w n
+  if L.merged n == some k then return ([], a.take w ++ zeros (w - a.length))
+  let t := armTag L n k
+  let (s, v) ← putField n k a reuse
+  if L.isPacked n then
+    let tw : Exp := .c64 (t.toUInt64 <<< 32)
+    return (s, [match v.head?, t with
+      | none, _ => tw
+      | some p, 0 => low32 p
+      | some p, _ => .op (.bin .w64 .or) [tw, low32 p]])
+  pure (s, [.c64 t.toUInt64] ++ v ++ zeros (w - 1 - v.length))
+
+/-- **The test that a sum's words `ls` at `n` are its left arm**: the tag below the left arm's
+tags' end. With no arm merged and not packed, the tag word is `0`.  `[spec §43]` -/
+def sumLeft (n : Nat) (ls : List Nat) : LM Exp := do
+  let L ← L
+  let w := Exp.loc (ls.headD 0)
+  let pk := L.isPacked n
+  let tw (t : Nat) : Exp := .c64 (if pk then t.toUInt64 <<< 32 else t.toUInt64)
+  match L.merged n with
+  | none => pure (if pk then ltu64 w (tw 1) else eqz64 w)
+  -- The right arm merged: its tags first, the left arm the last tag.
+  | some 1 => pure (.op (.rel .w64 .ge_u) [w, tw (L.tagsOf n - 1)])
+  | some _ => pure (ltu64 w (tw (L.tagsOf n - 1)))
 
 def splitPair (n : Nat) (ls : List Nat) (consume : Bool) (keep : Bool := false) :
     LM (List Stmt × List Nat × List Nat) := do
@@ -320,9 +359,17 @@ def splitPair (n : Nat) (ls : List Nat) (consume : Bool) (keep : Bool := false) 
   let (s₂, b) ← getField n 1 (← fieldLocals n 1 ls) consume keep
   pure (s₁ ++ s₂, a, b)
 
+/-- **Arm `r`'s words** of the sum's words `ls` at `n`: on a merged arm the sum's own, the arm's
+encoding; at a packed sum the low half; else the field's.  `[spec §43]` -/
 def payload (n : Nat) (r : Bool) (ls : List Nat) (consume : Bool) (keep : Bool := false) :
     LM (List Stmt × List Nat) := do
+  let L ← L
   let k := if r then 1 else 0
+  if L.merged n == some k then return ([], ls.take (L.w (← child n k)))
+  if L.isPacked n then
+    if L.fieldW n k == 0 then return ([], [])
+    let t ← fresh1
+    return ([.set t (low32 (.loc (ls.headD 0)))], [t])
   getField n k (← fieldLocals n k ls) consume keep
 
 /-! ### Cells -/
@@ -429,8 +476,8 @@ def callTarget (n j : Nat) (ls : List Nat) (args : List Exp) (g : Option Var := 
 
 /-! ### Host operations -/
 
-/-- A host operation on its operand's words (§8, §37): its answer's words. -/
-def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
+/-- A host operation on its operand's words (§8, §37): its answer's words, at node `n`. -/
+def hostVals (o : HostOp) (n : Nat) (ls : List Nat) : LM (List Stmt × List Exp) := do
   -- `U32`/`U64` are held as `I32`/`I64` are, so `reinterpret_u`/`_s` is the word, and an
   -- operation at an unsigned width is its signed sibling's (`machineOp`).  [spec §73]
   let o := machineOp o
@@ -463,16 +510,23 @@ def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
           | .w32 | .w8 | .f32 | .u32 => Exp.c32 0xFFFFFFFF | .w64 | .f64 | .u64 => .c64 0xFFFFFFFFFFFFFFFF
         or32 zero (and32 (.op (.rel w' .eq) [a, intMin]) (.op (.rel w' .eq) [b, m1]))
       | _ => zero
-    pure ([.ite trapC [.set t₀ (.c64 1), .set t₁ (.c64 0)] [.set t₀ (.c64 0), .set t₁ (word w (.op o args))]],
-      [.loc t₀, .loc t₁])
+    -- `inl` the quotient, `inr ()` where the division has no answer: the sum's words at `n`.
+    let (_, vr) ← mkInj n true []
+    let (_, vl) ← mkInj n false [word w (.op o args)]
+    let ts := [t₀, t₁].take vl.length
+    let sets (vs : List Exp) : List Stmt := (ts.zip vs).map fun (t, e) => .set t e
+    pure ([.ite trapC (sets vr) (sets vl)], locs ts)
   | .trapping w, .trunc i f sx =>
     let t₀ ← fresh1
     let t₁ ← fresh1
     let x := args.headD (.c64 0)
     let (loOp, lo, hi) := truncRange i f sx
     let ok := and32 (.op (.frel f loOp) [x, lo]) (.op (.frel f .lt) [x, hi])
-    pure ([.ite ok [.set t₀ (.c64 0), .set t₁ (word w (.op (.trunc_sat i f sx) [x]))]
-            [.set t₀ (.c64 1), .set t₁ (.c64 0)]], [.loc t₀, .loc t₁])
+    let (_, vl) ← mkInj n false [word w (.op (.trunc_sat i f sx) [x])]
+    let (_, vr) ← mkInj n true []
+    let ts := [t₀, t₁].take vl.length
+    let sets (vs : List Exp) : List Stmt := (ts.zip vs).map fun (t, e) => .set t e
+    pure ([.ite ok (sets vl) (sets vr)], locs ts)
   | .trapping _, _ => throw "word IR: an operation with no answer somewhere that is neither a division nor a trunc"
 
 /-- A division whose divisor is a literal at which it cannot fail (`TExpr.divLit`): the operation
@@ -522,7 +576,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
   -- no `μ` and no closure, cannot close; that rule is checked on every compile
   -- (`LayoutCheck.boxesOnCycles`). If it fails, a pointer is read as a value.
   | .host o => do
-    let (s, vs) ← hostVals o (← arg 0)
+    let (s, vs) ← hostVals o n (← arg 0)
     return s ++ (← emit d vs)
   | .divLit o => do
     let byte := (← L).sh (← argN 0) == .int .w8
@@ -800,10 +854,15 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
   | .io .readByte => do
     let m := (← arg 0).headD 0
     let b ← fresh1; let t₀ ← fresh1; let t₁ ← fresh1
+    -- `inl` the byte, `inr ()` at the input's end: the sum's words at the answer's second field.
+    let sn ← child n 1
+    let (_, vl) ← mkInj sn false [.loc b]
+    let (_, vr) ← mkInj sn true []
+    let ts := [t₀, t₁].take vl.length
+    let sets (vs : List Exp) : List Stmt := (ts.zip vs).map fun (t, e) => .set t e
     return [.set b (.getc (.load (.loc m) 0)),
-      .ite (eq64 (.loc b) (.c64 0xFFFFFFFFFFFFFFFF))
-        [.set t₀ (.c64 1), .set t₁ (.c64 0)] [.set t₀ (.c64 0), .set t₁ (.loc b)]] ++
-      (← emit d [.loc m, .loc t₀, .loc t₁])
+      .ite (eq64 (.loc b) (.c64 0xFFFFFFFFFFFFFFFF)) (sets vr) (sets vl)] ++
+      (← emit d ([.loc m] ++ locs ts))
   | .io .writeByte => do
     match ← arg 0 with
     | [m, b] => return [.putc (.load (.loc m) 0) (.loc b)] ++ (← emit d [.loc m])
@@ -906,7 +965,7 @@ def lowerTm (fuel : Nat) (t : Tm) (n : Nat) (d : Dest) : LM (List Stmt) := do
     let t₂ ← lowerTm f b₂ n d
     let e₂ ← dropSpares
     let tail (e : List Stmt) : List Stmt := match d with | .ret _ => [] | _ => e
-    return [.ite (eqz64 (.loc (ls.headD 0))) (s₁ ++ t₁ ++ tail e₁) (s₂ ++ t₂ ++ tail e₂)]
+    return [.ite (← sumLeft sn ls) (s₁ ++ t₁ ++ tail e₁) (s₂ ++ t₂ ++ tail e₂)]
   | .absurd _ => return [.trap]
   | .copy _ x x' b => do
     let (s, ls) ← copyVals (← nodeV x) (← vals x) (tick := true)
@@ -948,6 +1007,27 @@ def onCode (n : Nat) (ls : List Nat) (act : Nat → LM (List Stmt)) : LM (List S
   let heap ← u.toList.mapM fun c => if L.envWords c == 0 then pure [.trap] else act c
   return [.ite (wrap (and64 f (.c64 1)))
     [.switch (shr64 f (.c64 1)) imm [.trap]] [.switch (.load f 0) heap [.trap]]]
+
+/-- A copy of arm `k` of the sum's words `ls` at `n`, as the sum's words. -/
+def copyArm (n k : Nat) (ls : List Nat) : LM (List Stmt × List Exp) := do
+  let c ← child n k
+  let (s₁, vs) ← payload n (k == 1) ls false
+  let (s₂, vs) ← copyVals c vs
+  let (s₃, out) ← mkInj n (k == 1) (locs vs)
+  pure (s₁ ++ s₂ ++ s₃, out)
+
+def consumeArm (n k : Nat) (ls : List Nat) : LM (List Stmt) := do
+  let c ← child n k
+  let (s₁, vs) ← payload n (k == 1) ls true
+  pure (s₁ ++ (← consumeVals c vs))
+
+def printArm (n k : Nat) (ls : List Nat) : LM (List Stmt) := do
+  let c ← child n k
+  let (s, vs) ← payload n (k == 1) ls false
+  let call := [Stmt.call [] (← helper (.print ((← L).r c))) (locs vs)]
+  match (← L).sh c with
+  | .sum .. => pure (s ++ outStr "(" ++ call ++ outStr ")")
+  | _ => pure (s ++ call)
 
 def copyField (n k : Nat) (ls : List Nat) : LM (List Stmt × List Exp) := do
   let c ← child n k
@@ -1009,11 +1089,9 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
         let (s₂, b) ← copyField n 1 (← fieldLocals n 1 ps)
         pure (s₁ ++ s₂ ++ [.ret (a ++ b)])
       | .sum .. => do
-        let (s₁, a) ← copyField n 0 (← fieldLocals n 0 ps)
-        let (s₂, b) ← copyField n 1 (← fieldLocals n 1 ps)
-        pure [.ite (eqz64 (.loc 0))
-          (s₁ ++ [.ret ([.c64 0] ++ a ++ zeros (w - 1 - a.length))])
-          (s₂ ++ [.ret ([.c64 1] ++ b ++ zeros (w - 1 - b.length))])]
+        let (s₁, a) ← copyArm n 0 ps
+        let (s₂, b) ← copyArm n 1 ps
+        pure [.ite (← sumLeft n ps) (s₁ ++ [.ret a]) (s₂ ++ [.ret b])]
       | _ => pure [.ret (locs ps)]
     pure { name := "copy", params := w, results := w, locals := nloc, body := body ++ [.trap], ptrs }
   | .consume n =>
@@ -1041,8 +1119,7 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
         pure (s ++ [.ret []])
       | .pair .. => pure ((← consumeField n 0 (← fieldLocals n 0 ps)) ++
           (← consumeField n 1 (← fieldLocals n 1 ps)) ++ [.ret []])
-      | .sum .. => pure [.ite (eqz64 (.loc 0)) (← consumeField n 0 (← fieldLocals n 0 ps))
-          (← consumeField n 1 (← fieldLocals n 1 ps)), .ret []]
+      | .sum .. => pure [.ite (← sumLeft n ps) (← consumeArm n 0 ps) (← consumeArm n 1 ps), .ret []]
       | _ => pure [.ret []]
     pure { name := "consume", params := w, results := 0, locals := nloc, body, ptrs }
   | .print n =>
@@ -1064,8 +1141,8 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
       | .fam _ => pure (outStr "(<loc>, i32[" ++ [.call [] fPrintDec [.loc 1]] ++ outStr "])")
       | .pair .. => pure (outStr "(" ++ (← printField n 0 (← fieldLocals n 0 ps) false) ++ outStr ", " ++
           (← printField n 1 (← fieldLocals n 1 ps) false) ++ outStr ")")
-      | .sum .. => pure [.ite (eqz64 (.loc 0)) (outStr "inl " ++ (← printField n 0 (← fieldLocals n 0 ps) true))
-          (outStr "inr " ++ (← printField n 1 (← fieldLocals n 1 ps) true))]
+      | .sum .. => pure [.ite (← sumLeft n ps) (outStr "inl " ++ (← printArm n 0 ps))
+          (outStr "inr " ++ (← printArm n 1 ps))]
     pure { name := "print", params := w, results := 0, locals := nloc, body := body ++ [.ret []], ptrs }
   | .reCopy c n =>
     -- The contents at `c` read through `Imm̲` at `n`: a closure or an opaque value is `Unk` (no
@@ -1170,7 +1247,7 @@ where
       let (s₄, vr) ← mkInj n true vb
       let ts ← fresh (L.w n)
       let sets (vs : List Exp) : List Stmt := (ts.zip vs).map fun (t, e) => .set t e
-      return ([.ite (eqz64 (.loc (ls.headD 0))) (sa ++ s₁ ++ s₃ ++ sets vl) (sb ++ s₂ ++ s₄ ++ sets vr)],
+      return ([.ite (← sumLeft c ls) (sa ++ s₁ ++ s₃ ++ sets vl) (sb ++ s₂ ++ s₄ ++ sets vr)],
         locs ts)
     | _, _ =>
       let (s, ts) ← copyVals c ls
@@ -1292,9 +1369,9 @@ def entryFn (fMain : Nat) (exits : Bool) : LM Backend.Flat.Fn := do
     let (pr, status) ← if exits then do
         let .sum a _ := L.sh n | throw "word IR: `main`'s value is not `inl v` or `inr ()`"
         let (s, vs) ← payload n false m false
-        let tag := Exp.loc (m.headD 0)
-        pure ([Stmt.ite (eqz64 tag) (s ++ [.call [] (← helper (.print (L.r a))) (locs vs)] ++ outStr "\n") []],
-          [Stmt.ite (eqz64 tag) [] [.status (.c64 1)]])
+        let left ← sumLeft n m
+        pure ([Stmt.ite left (s ++ [.call [] (← helper (.print (L.r a))) (locs vs)] ++ outStr "\n") []],
+          [Stmt.ite left [] [.status (.c64 1)]])
       else pure ([Stmt.call [] (← helper (.print (L.r n))) (locs m)] ++ outStr "\n", [])
     let dr ← consumeVals n m
     pure ([Stmt.call m fMain []] ++ pr ++ dr ++ outStr "live " ++ [.call [] fPrintDec [.live]] ++

@@ -591,7 +591,23 @@ def layoutOk (L : Layouts) : CM Unit := do
       | .int _ | .opq | .ref _ | .imm _ | .mut _ => pure (1, true)
       | .fam _ => pure (2, true)
       | .pair a b => pure ((← fieldW L v 0 a) + (← fieldW L v 1 b), (← fieldT L v 0 a) && (← fieldT L v 1 b))
-      | .sum a b => pure (1 + max (← fieldW L v 0 a) (← fieldW L v 1 b), (← fieldT L v 0 a) && (← fieldT L v 1 b))
+      | .sum a b => do
+        -- A sum's encoding (SPEC §43): its merged arm, tags and packing are `sumEnc` over its
+        -- arms' checked shapes, boxes, widths, packing and tags, so a merged arm's words are the
+        -- arm's own (its tags the arm's, the other arm's the one tag after them), and a packed
+        -- sum's leaves are each empty or a scalar of at most 32 bits.
+        let ra ← rp L a
+        let rb ← rp L b
+        let ch (j : Nat) : Nat := if j == 0 then ra else rb
+        let (m, t, pk, w) := sumEnc (fun j => L.boxed.contains (v, j)) (L.shape[ch ·]!) (L.width[ch ·]!)
+          (fun j => L.packed.getD (ch j) false) (fun j => L.tags.getD (ch j) 2)
+        unless L.mergeArm.getD v none == m do
+          throw s!"sum {v} merges arm {L.mergeArm.getD v none}, its arms give {m}: a merged arm's words are not its own"
+        unless L.tags.getD v 0 == t do
+          throw s!"sum {v} has {L.tags.getD v 0} tags, its arms give {t}"
+        unless L.packed.getD v false == pk do
+          throw s!"sum {v} is {if pk then "not " else ""}packed, its arms give {pk}"
+        pure (w, (← fieldT L v 0 a) && (← fieldT L v 1 b))
       | .clos .. =>
         if L.recCls.contains v then pure (1, false) else do
           let mut m := 0
@@ -1069,7 +1085,20 @@ def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
     | .prim .load _ => (freshPtrCopy 8 L (L.node x)).map fun (L', m) =>
       { L' with varNode := L'.varNode.insert x m }
     | _ => none
+  -- A sum's encoding (SPEC §43): its merged arm moved to the other arm, its tags one more, its
+  -- packing flipped.
+  let mergedSum := L.order.find? fun v => (L.mergeArm.getD v none).isSome
+  let packedSum := L.order.find? fun v => L.packed.getD v false
+  let moveMerge := mergedSum.map fun v =>
+    { L with mergeArm := L.mergeArm.set! v ((L.mergeArm.getD v none).map (1 - ·)) }
+  let dropMerge := mergedSum.map fun v => { L with mergeArm := L.mergeArm.set! v none }
+  let moreTags := mergedSum.map fun v => { L with tags := L.tags.set! v (L.tags[v]! + 1) }
+  let unpack := packedSum.map fun v => { L with packed := L.packed.set! v false }
   [("remove a code from its class", removeCode),
+   ("move a sum's merged arm", moveMerge),
+   ("drop a sum's merged arm", dropMerge),
+   ("give a sum another tag", moreTags),
+   ("unpack a packed sum", unpack),
    ("remove a code's class", removeClassOf),
    ("merge two classes of one shape and different widths", merge),
    ("change a class's width", width),
