@@ -12631,6 +12631,115 @@ probes that differ write `>|`, which main does not parse.
 
 ---
 
+## 72. Entry 71 — host externs under the chain's adequacy (#963, K1)
+
+### Motivation
+
+`goal791N : HandlerLawN → Goal791N` (§62) covers closed programs with no extern, at `F 1`. A
+program that reads or writes through the host is outside it. The design is
+`docs/new-core/scope-host-externs.md` (#963), choices C1–C5 as recommended.
+
+### What it adds
+
+**Host externs under the chain's adequacy.** `goal791N : HandlerLawN → Goal791N` is extended
+from closed, extern-free programs at `F 1` to programs that call host externs, at any persistent
+answer type. No new type former, `CDerives` index, or relation clause. `erwpK`, `KW`, the
+tables and `HandlerLawN` are unchanged.
+
+1. **The extern contract `ExternN`** (the form of `ConstN`'s conclusion):
+
+       ExternN T v :=  closedAt 0 v = true ∧ T.Persistent ∧
+                       ∀ δ Θ n, Θ.OK → vN T δ Θ n v ∅
+
+   `ExternsMeetN Γx γx` states it slot by slot, each slot live, as Core's `ExternsMeet` does. It is a named
+   hypothesis (a `Prop`, not an axiom), stated once for every extern.
+
+2. **What a host is claimed to meet (C1 (b)).** The theorems take `ExternsMeetN` as their
+   hypothesis. The claim `bcc trusted` prints for a host extern is a claim about behaviour:
+   "on each run, the extern behaves as a typed closed term at its representation". Both
+   memberships, Core's `vC` and the chain's `vN`, follow from that claim by the two
+   fundamental properties. For the standard models it is a theorem (`stdModel_meetsN`, from
+   `HandlerLawN`). For a real host it is assumed, at the same assurance levels as today.
+   *Why a host can meet it* (an argument, not checked in Lean): `OrDiverges` is a property of
+   finite prefixes, and a finite prefix observes finitely many host answers. A model whose cell
+   holds that trace answers the same, and it is a typed closed term. This is the prophecy
+   reading §34 already takes for `Stdin`, extended to the clock and sockets.
+
+3. **`Goal791N` restated in place (C5):**
+
+       Goal791N := ∀ cs Γx γx e R, (∀ c ∈ cs, c.OK) → ExternsMeetN Γx γx →
+         CDerives ∅ (ctx791 cs ++ Γx) e (.comp (.ret R)) → R.Persistent →
+         OrDiverges (substAll (vals791 cs ++ γx) e)
+
+   The old statement is the instance `Γx = []`, `R = 1`.
+
+4. **A host call is a call (C2).** A call into an extern is ordinary steps of the value that
+   closes its slot: neither a machine step nor a stop. Owned buffers move through `⊸`'s
+   resource split. Blocking I/O is covered: a call that never returns is a diverging run, which
+   `OrDiverges` allows. A cancel cannot land inside a host call.
+
+5. **The finaliser at the externs' context (K1.3, widened).** A lend's finaliser may name
+   extern slots, so that a capability cell (`Output`, a file, a socket) lent across a
+   suspension or an unwind can be handed back to the host on cancel (e.g. `λr. take_output r`).
+   This applies in two places:
+   - **The suspending constants:** `Const791.OKAt` takes the finaliser at the externs' context,
+     `CDerives Δ Γx d (U (Ref A ⊸ F 1))`. The constant's value is closed by the extern values,
+     `c.val[γx]`. Today's premise is the case `Γx = []`.
+   - **The checker's unwinding lends** `withbor1U`/`withbor2U`/`withbor3U`: their premise
+     `closedAt 0 d` is dropped. `d` stays typed at the rule's context `Γ` (`Ctx.DeadP`, so it
+     names persistent slots only) at `U (Ref A ⊸ F 1)` (resp. `U (Mut a A ⊸ F 1)`).
+   This removes a premise and adds none. The finaliser stays at `F 1`, effect-free.
+
+### Baseline
+
+- `goal791N` (restated in place; the old statement is an instance), `fundamentalN_all`,
+  `handlerLawN_iff`;
+- Core's `fundamentalC`, `adequacyC`, `externs_every_run`, `externs_loop_every_run`,
+  `io_every_run`: untouched apart from the three `withbor*U` compat lemmas, which are restated
+  without `closedAt 0 d`;
+- `prog791_orDiverges`, `progRes_orDiverges`, `progCan_orDiverges`, #844's nest instances and #855's `progK_orDiverges`,
+  with their statements unchanged;
+- every `Const791.OK` instance (each holds at `Γx = []` unchanged), and the five `*S_compat`
+  statements unchanged;
+- every corpus and kernel program with the same output. The checker's finaliser stays
+  `consumeE src` until a later unit lets it name an extern, so no program's term changes in K1.
+
+### Units
+
+- K1.1, built: `ExternN`, `ExternsMeetN`, `gN_of_meetsN`, `Goal791N` restated in place, `goal791N`
+  re-proved.
+- K1.2, built: the standard models meet `ExternN` (`stdModel_meetsN`, all fifteen, from
+  `HandlerLawN`), and Core's end-to-end theorems at the chain, `externs_every_runN`,
+  `io_every_runN`, `externs_loop_every_runN` and `io_loop_every_runN`, through `goal791N`
+  (`Core/Chain/Externs791N.lean`). The program's input is one more extern slot (`Γ ++ [Bytes]`),
+  so the I/O theorems are plain instances of `goal791N`.
+- K1.3: the finaliser at the externs' context, for `Const791.OKAt` and `withbor1U/2U/3U`.
+- K1.4: the kernel instance `progIO` (a lent `stdout` cell, written across a `wait`, resumed and
+  cancelled).
+- K1.5: `IORun.every_runN` at the checked wrapper; `corpus/io-effects.bc` concluded by the
+  extended `goal791N`; `bcc trusted` names it.
+
+K1.3–K1.5 are not built; each unit's code PR marks its line *built*.
+
+### Open
+
+- **Suspending I/O answered by the platform** (the "stop" reading, scope §4.3): it needs a run
+  relation with world steps and a new adequacy theorem. Out of K1 (C2).
+- **Effectful finalisers** (I/O performed on cancel through an effect, surface A4): that is K-b
+  for the lend form (approved, after K1.3), not K1.
+- **A buffer borrowed across an `await`** (#844 Tier 2, `read(sock, &mut buf).await`): the loans
+  line.
+- **`HandlerLawN` on the models** (C4): `stdModel_meetsN` keeps `HandlerLawN` as a hypothesis. A
+  handler-free fundamental would remove it; that is #840's fragment machinery.
+- **Pins:** the theorems ask for `pins = []`. A program relying on `PinLaw` stays outside.
+- **Descriptors:** the empty final memory covers capability cells, not descriptors (§11). That a
+  freed cell's descriptor is closed is the host's claim.
+- **Not derived:** the representation congruences at `vN` are expected to be `funext` equations
+  under `famL` (risk, measured on `read_byte` first in K1.2). There is no `vC → vN` lemma; both
+  follow from the behavioural claim.
+
+---
+
 ## Status
 
 What implements each entry is kept one paragraph per file in `docs/status/`: the paragraphs
