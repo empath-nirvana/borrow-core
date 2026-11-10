@@ -1,0 +1,28 @@
+-- A dropped continuation cancelled on an abort through a clause of a handler with a state, with a
+-- handler of a capturing effect (`asker`) in scope but unused (SPEC §21, §27; #953, the review's
+-- `e2`). `tm`'s clause writes `B` and calls `check`, which raises `7`; the abort cancels `k` on the
+-- way out (`… unwind (cancel k)`), and the cleanup's raise `3` supersedes `7`. `tm`'s state
+-- function runs at the row of its `with`: `asker`'s site is in scope there but performs nothing in
+-- the borrow block around the `with`, so it is not in that row, and the function is typed at it.
+--
+-- Answer: `B` and `inr i32[3]`, `live 0`.
+
+include io
+include fail
+
+effect Wait { ctl wait() }
+effect Ask { ctl ask() }
+
+fn check(e: i32) -> i32 with Fail[i32] = raise(e)
+
+handler asker[A]: Ask, A -> A = { return(x) = x; ask(k) = k(()) }
+
+handler tm[A]: Wait, A -> A + 1 with Fail[i32] = {
+  return(x) = inl x;
+  wait(k) = { print_byte(to_u8(66)); let y = check(7); inr () }
+}
+
+fn work() -> i32 with Wait, Fail[i32] = x <- wait() unwind (let r = raise((3 : i32)); ()); 5
+
+main -> (i32 + 1) + i32 =
+  with asker[(i32 + 1) + i32] { with to_result[i32, i32 + 1] { with tm[i32] { work() } } }

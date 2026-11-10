@@ -5,6 +5,7 @@ import Frontend.Elab.Subst
 import Frontend.Elab.Instances
 import Frontend.Elab.Divisions
 import Frontend.Check.Elab
+import Frontend.Elab.Fins
 import Frontend.Elab.Pipes
 
 /-!
@@ -172,6 +173,9 @@ structure RGroup where
 structure Env where
   /-- The functions of the libraries included, whose elaboration is not reported. -/
   lib : List String := []
+  /-- The cancel rows inferred from a first run of the pass (`Frontend.Elab.Fins`), which the rows
+  it writes carry (`Env.rowOf`, `Env.finned`).  `[spec §27]` -/
+  fins : Fins.Table := []
   effs : List EffSig := []
   ops : List OpSig := []
   handlers : List HSig := []
@@ -506,11 +510,18 @@ def Env.siteOps (env : Env) (s : Site) : List (Qual × VTy × VTy) :=
       | none => (o.qual, A, o.res.subst σ)
 
 /-- The row entries of the sites `ss`, in order: `n.i q A ~> B`, each site once (two slots of a
-row may be served by one site, SPEC §38). -/
+row may be served by one site, SPEC §38), each with its inferred cancel row (`Fins`, SPEC §27).
+`[spec §18, §27]` -/
 def Env.rowOf (env : Env) (ss : List Site) : Row :=
   let ss := ss.foldl (fun acc s => if acc.any (·.n == s.n) then acc else acc ++ [s]) []
   ss.foldr (fun s r =>
-    ((env.siteOps s).zipIdx).foldr (fun ((q, A, B), i) r => .cons s.n i q A B .nil r) r) .nil
+    ((env.siteOps s).zipIdx).foldr (fun ((q, A, B), i) r =>
+      .cons s.n i q A B (env.fins.finOf s.n i) r) r) .nil
+
+/-- A handler site's info with its operations' inferred cancel rows (`Fins`).  `[spec §27]` -/
+def Env.finned (env : Env) (i : HInfo) : HInfo :=
+  if env.fins.isEmpty then i else
+  { i with fins := (List.range i.ents.length).map fun j => env.fins.finOf i.n j }
 
 /-! ### Type arguments -/
 
@@ -1869,9 +1880,21 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
           "thread its capability"⟩
       pure (.with_ sp (← trC n cx [] false M) (← trC n cx [] false N))
     -- `[then]` (`finally`, SPEC §42): the handled computation and the finaliser thread no
-    -- capability; the rest is in tail position.
+    -- capability; the rest is in tail position. The finaliser performs control operations, at its
+    -- own row (SPEC §27); a capability, an answering effect's threaded cell, it cannot use: the
+    -- kernel's `[then]` gives the body and the finaliser disjoint contexts (K-b, #868).
     | .unwind sp x A M D N =>
-      if let some c := (cx.needC M ++ cx.needC D).head? then
+      if let some c := (cx.needC D).head? then
+        -- The platform's capability by its name (`stdout`), any other by its effect's.
+        let nm := if c.h.cell then c.var else c.eff
+        if (cx.needC M).any (·.var == c.var) then
+          throw ⟨D.span, s!"a cleanup can't yet use `{nm}`, which the body also uses (the " ++
+            "kernel's [then] splits them; see #868)"⟩
+        else
+          throw ⟨D.span, s!"a cleanup can't yet use `{nm}`: a capability is threaded through " ++
+            "the code around it, and the kernel's [then] gives the cleanup a context of its own " ++
+            "(see #868)"⟩
+      if let some c := (cx.needC M).head? then
         throw ⟨sp, s!"an operation of `{c.eff}` is performed here, in a form that does not " ++
           "thread its capability"⟩
       pure (.unwind sp x A (← trC n cx [] false M) (← trC n cx [] false D)
@@ -2706,10 +2729,10 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       let info : HInfo := ⟨ch.name.name, n, ents, rest, σ,
         ch.params.map (fun (x, A) => (x.name, A.subst σr)), rA.subst σr, .sum sp (rA.subst σr) pay,
         some (ch.res.subst σr), false, ch.lps.map (·.1.name),
-        { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents }⟩
+        { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents }, [], false⟩
       let clsV := injCls.foldr (fun c t => Val.pair sp c t) (.unit sp)
       let (bsP, P') ← goV k cx cs P
-      let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) P')
+      let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl (cx.env.finned info))) P')
         (.thunkv sp (.lam sp ⟨xr, sp⟩ rA (.ret sp (.inl sp (.var sp xr)))))) clsV) (.thunk sp M')
       let (bsH, hv) ← reborrowed k sp ksp hnd csM
       let rn ← fresh "fx_ar"
@@ -2774,8 +2797,9 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       let Rv := ch.res.subst σr
       let St : VTy := capsTy sp csCl Pt
       -- The function of the state runs where the `with` is, and resumes or cancels the
-      -- continuation there, whose row is the row at the `with` (`[handle]`, SPEC §19): its row is
-      -- the handler's own row and every other site in scope (#514).
+      -- continuation there, whose row is the row at the `with` (`[handle]`, SPEC §19). Written here
+      -- as the handler's own row and the other sites in scope, a bound for the clauses'
+      -- elaboration; the typed elaboration types it at the site's row (`hndCtlC`, SPEC §21, §38).
       let others := (cx.sites.foldl (fun acc s => if acc.any (·.n == s.n) then acc else acc ++ [s]) []).filter
         fun s => !outer.any (·.n == s.n)
       let rowO := cx.env.rowOf (outer ++ others)
@@ -2813,12 +2837,12 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       let info : HInfo := ⟨ch.name.name, n, ents, rest, σ, [], rA.subst σr, ansT, none, false,
         ch.lps.map (·.1.name),
         { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents,
-          state := ch.params.map fun (x, A) => (x.name, A.subst σr) }⟩
+          state := ch.params.map fun (x, A) => (x.name, A.subst σr) }, [], true⟩
       let (bsP, P') ← goV k cx cs P
       let pv ← fresh "fx_hp"
       let args : Bind := .one sp pv none (.ret sp P') false
       let clsV := cls.foldr (fun c t => Val.pair sp c t) (.unit sp)
-      let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) (.unit sp))
+      let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl (cx.env.finned info))) (.unit sp))
         hr) clsV) (.thunk sp M')
       let (bsH, gv) ← reborrowed k sp ksp hnd csM
       -- The site's answer applied to the initial state; the capabilities bound again after.
@@ -2855,11 +2879,11 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       cls := cls ++ [.thunkv csp (.lam csp ⟨p, csp⟩ (holeTy csp) body)]
     let info₀ : HInfo := ⟨ch.name.name, n, ents, rest, σ,
       ch.params.map fun (x, A) => (x.name, A.subst σr), rA.subst σr, ch.res.subst σr, none, false, [],
-      { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents }⟩
+      { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents }, [], false⟩
     let info : HInfo := { info₀ with boxK := boxK, lives := ch.lps.map (·.1.name) }
     let (bsP, P') ← goV k cx cs P
     let clsV := cls.foldr (fun c t => Val.pair sp c t) (.unit sp)
-    let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) P')
+    let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl (cx.env.finned info))) P')
       (.thunkv sp (.lam sp rx rA rM'))) clsV) (.thunk sp M')
     let (bsH, rv) ← reborrowed k sp ksp hnd csM
     pure (bsP ++ bsH, rv)
@@ -3957,7 +3981,8 @@ out otherwise.
 `main` when `main` is served by `main_div_error`, whose clause writes on standard error.
 `[spec §18, §19, §39]` -/
 def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := [])
-    (divLib : List Decl := []) (platform : List Decl := []) : Except Error Result := do
+    (divLib : List Decl := []) (platform : List Decl := []) (fins : Fins.Table := []) :
+    Except Error Result := do
   -- `|>`, before the rest (SPEC §33).
   let ds ← match (resolvePipes ds).run {} with
     | .ok (ds, _) => pure ds
@@ -3986,7 +4011,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
     let table := match fd with
       | some fd => fd.table
       | none => Instances.table ds
-    let mut env : Env := { lib, table, scope := some (TCx.ofScope ds true) }
+    let mut env : Env := { lib, table, scope := some (TCx.ofScope ds true), fins }
     -- A division whose operands' width the walk could not read is taken to be able to fail.
     for (owner, sp) in (fd.map (·.unknown)).getD [] |>.reverse do
       unless lib.contains ((owner.splitOn "@").headD "") do

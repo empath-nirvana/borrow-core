@@ -1,0 +1,21 @@
+-- A dropped continuation cancelled on an abort out of a loop of the clause whose body uses its own
+-- `break` (SPEC §27; #953 re-review M1). A `break` stays in the clause, so the loop is still a head
+-- of the clause's path as a whole; only a `return` leaves the clause. The body raises `7` while
+-- `k` is live; the abort cancels `k` on the way out, and the cleanup's raise `3` supersedes `7`.
+--
+-- Answer: inr i32[3], and `live 0`. A continuation left uncancelled would answer `inr i32[7]`.
+
+include fail
+
+effect Wait { ctl wait() }
+
+fn check(e: i32) -> i32 with Fail[i32] = raise(e)
+
+handler tm[A]: Wait, A -> A + 1 with Fail[i32] = {
+  return(x) = inl x;
+  wait(k) = { for i in 0..3 { if i == 1 { break }; let y = check(7); () }; inr () }
+}
+
+fn work() -> i32 with Wait, Fail[i32] = x <- wait() unwind (let r = raise((3 : i32)); ()); 5
+
+main -> (i32 + 1) + i32 = with to_result[i32, i32 + 1] { with tm[i32] { work() } }

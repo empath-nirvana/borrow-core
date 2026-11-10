@@ -1,0 +1,21 @@
+-- A handler with a state (§21) runs the function of its state where its `with` is, at the row
+-- there. Here a handler of `Ask` is in scope but nothing performs `Ask`, and a borrow block (the
+-- capability `stdout`, lent around `ticker`'s `with`) is between them, at the row its body
+-- performs, without `Ask`. `tm`'s state function is typed at its site's row, so it is within it.
+-- (Before, it was typed at every site in scope, `Ask`'s included, and refused.)
+--
+-- Answer: `B` and `inl i32[5]`, `live 0`.
+
+include io
+
+effect Wait { ctl wait() }
+effect Ask { ctl ask() }
+effect Tick { ctl tick() }
+
+handler asker[A]: Ask, A -> A = { return(x) = x; ask(k) = k(()) }
+handler ticker[A]: Tick, A -> A = { return(x) = x; tick(k) = k(()) }
+handler tm[A]: Wait, A -> A + 1 = { return(x) = inl x; wait(k) = { print_byte(to_u8(66)); k(()) } }
+
+fn work() -> i32 with Wait, Tick = tick(); wait(); 5
+
+main -> i32 + 1 = with asker[i32 + 1] { with ticker[i32 + 1] { with tm[i32] { work() } } }

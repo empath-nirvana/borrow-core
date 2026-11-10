@@ -307,6 +307,70 @@ corpus/effects-tunnel.bc 1.0 cancellable abortive: -; agree
 corpus/effects-tunnel.bc 3.0 cancellable abortive: -; agree
 corpus/effects-tunnel.bc 2.0 cancellable abortive: branch; agree
 corpus/filler-mu.bc 1.0 cancellable abortive: -; agree
+corpus/fin-block-finaliser.bc 2.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-block-finaliser.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-bound-loop-abort.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-bound-loop-abort.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-bound-loop-finish.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-bound-loop-finish.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-bound-loop-pure.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-bound-loop-pure.bc 2.0 cancellable tail: direct; agree
+corpus/fin-cancel-arm.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-cancel-arm.bc 2.0 cancellable resume-or-cancel+state: machine: the handlers of the name have 2 clauses for it; agree
+corpus/fin-cancel-loop.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-cancel-loop.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-cancel-order.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-cancel-order.bc 2.0 cancellable stored: machine: the handlers of the name have 2 clauses for it; agree
+corpus/fin-cancel-order.bc 3.0 cancellable abortive: -; agree
+corpus/fin-cancel-propagated.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-cancel-propagated.bc 2.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-cancel-propagated.bc 3.0 cancellable abortive: -; agree
+corpus/fin-cancel-reentered.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-cancel-reentered.bc 2.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-cancel-reentered.bc 3.0 cancellable abortive: -; agree
+corpus/fin-cancel-region.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-cancel-region.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-cancel-reraised.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-cancel-reraised.bc 2.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-cancel-reraised.bc 3.0 cancellable abortive: -; agree
+corpus/fin-cancel-tail.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-cancel-tail.bc 2.0 cancellable resume-or-cancel+state: machine: the clause captures values; agree
+corpus/fin-cancel-unused-site.bc 1.0 cancellable tail: -; agree
+corpus/fin-cancel-unused-site.bc 2.0 cancellable abortive: branch; agree
+corpus/fin-cancel-unused-site.bc 3.0 cancellable stored: machine: the clause captures values; agree
+corpus/fin-drop-capturing-row.bc 1.0 cancellable tail: -; agree
+corpus/fin-drop-capturing-row.bc 2.0 cancellable abortive: branch; agree
+corpus/fin-drop-capturing-row.bc 3.0 cancellable resume-or-cancel+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-e7b.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-e7b.bc 2.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-e7d.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-e7d.bc 2.0 cancellable abortive: branch; agree
+corpus/fin-e7d.bc 3.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-e8b.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-e8b.bc 2.0 cancellable abortive: branch; agree
+corpus/fin-generic-call.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-generic-call.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-handler-head-raise.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-handler-head-raise.bc 3.0 cancellable abortive: branch; agree
+corpus/fin-handler-head-raise.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-handler-head.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-handler-head.bc 3.0 cancellable abortive: -; agree
+corpus/fin-handler-head.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-loop-break.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-loop-break.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-loop-continue.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-loop-continue.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-raise-cancel.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-raise-cancel.bc 2.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-raise-cancel.bc 3.0 cancellable abortive: -; agree
+corpus/fin-raise-unwind.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-raise-unwind.bc 2.0 cancellable abortive: -; agree
+corpus/fin-resume-capturing-row.bc 1.0 cancellable tail: -; agree
+corpus/fin-resume-capturing-row.bc 2.0 cancellable abortive: -; agree
+corpus/fin-resume-capturing-row.bc 3.0 cancellable tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-timeout.bc 2.0 cancellable resume-or-cancel: -; agree
+corpus/fin-timeout.bc 3.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/fin-timeout.bc 1.0 cancellable abortive: branch; agree
 corpus/float-roundtrip.bc 1.0 cancellable abortive: branch; agree
 corpus/float-roundtrip.bc 2.0 cancellable abortive: branch; agree
 corpus/for-arm-raises-owned.bc 1.0 cancellable abortive: branch; agree
@@ -669,6 +733,9 @@ corpus/sort-lines.bc 1.0 cancellable abortive: branch; agree
 corpus/state-machine-audit.bc 1.0 cancellable abortive: branch; agree
 corpus/state-machine.bc 2.0 cancellable abortive: branch; agree
 corpus/state-machine.bc 1.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/state-row-unused-site.bc 1.0 cancellable tail: -; agree
+corpus/state-row-unused-site.bc 2.0 cancellable tail: direct; agree
+corpus/state-row-unused-site.bc 3.0 cancellable tail+state: machine: the clause captures values; agree
 corpus/storage-array.bc 1.0 cancellable abortive: branch; agree
 corpus/sugar/data-box-tree.lowered.bc 1.0 cancellable abortive: branch; agree
 corpus/sugar/data-config.lowered.bc 1.0 cancellable abortive: branch; agree

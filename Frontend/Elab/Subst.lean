@@ -140,7 +140,7 @@ def HInfo.subst (σ : TySubst) (i : HInfo) : HInfo :=
            known := i.known.map fun (x, A) => (x, A.subst σ),
            params := i.params.map fun (x, A) => (x, A.subst σ),
            retA := i.retA.subst σ, res := i.res.subst σ, after := i.after.map (·.subst σ),
-           site := i.site.mapTy (·.subst σ) }
+           site := i.site.mapTy (·.subst σ), fins := i.fins.map (·.subst σ) }
 
 mutual
 def Val.subst (σ : TySubst) : Val → Val

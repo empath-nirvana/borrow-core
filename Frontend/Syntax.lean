@@ -440,6 +440,12 @@ structure HInfo where
   /-- The elaboration's record of the site, its types in the frame of the site's code, over the
   type parameters still to be determined (`tps`) and the lifetime parameters (`lives`). -/
   site : SiteRec
+  /-- Each operation's cancel row, as inferred (`Frontend.Elab.Fins`); none past the end is the
+  empty cancel row.  `[spec §27]` -/
+  fins : List Row := []
+  /-- The handler has a state (§21): each clause answers a function of the state, run where the
+  `with` is, and the clause's own code is that function's body.  `[spec §21, §27]` -/
+  stateful : Bool := false
   deriving DecidableEq, Repr
 
 /-- **The elaborator's key of a `def` it generates** (SPEC §3): the template, function or group it

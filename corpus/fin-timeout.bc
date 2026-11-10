@@ -1,0 +1,22 @@
+-- #953: the twin of the kernel program `timeout` (E10, `timeoutProg`, `bcc kernel interp timeout`):
+-- `timeout` runs its block under `tm`, whose clause drops its continuation at the cancellable `wait`
+-- and answers `false`. It is given a block that waits, and, under `to_result`, one that raises. At
+-- the second use `tm` is inside `to_result`, so `κ`'s cancel branch performs at that row and `κ` is
+-- not consumable: the elaboration cancels it, `(force k).2` (the kernel's `cancel k; return ff`),
+-- where the clause drops it.
+--
+-- Answer: (inl (), inr ()): `false`, the timeout, and the error; `live 0`. A `wait` that was
+-- resumed would answer `true` (`inr ()`) first; a raise caught by `tm` would not reach `to_result`.
+
+include fail
+
+effect Wait { ctl wait() }
+
+handler tm: Wait, bool -> bool = { return(x) = x; wait(k) = false }
+
+fn timeout(b: !(1 => bool with Wait)) -> bool = with tm { b(()) }
+
+main -> bool * (bool + 1) =
+  let a = timeout(!{ u -> wait(); true });
+  let b = with to_result[1, bool] { timeout(!{ u -> raise(()) }) };
+  (a, b)
