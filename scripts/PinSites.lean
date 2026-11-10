@@ -108,6 +108,7 @@ def sites : List (Name × List Name) := [
   (``Backend2.genCountTry, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.genConsume, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.genFix, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
+  (``Backend2.genFoldRev, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.genKap, [``Backend2.ConsumeRule.dead]),
   (``Backend2.genLendU, [``Backend2.ConsumeRule.dead]),
   (``Backend2.genMach, [``Backend2.ConsumeRule.dead]),
