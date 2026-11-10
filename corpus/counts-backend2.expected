@@ -74,8 +74,10 @@ callback-arm-raises 4 0 0 18 15 5
 callback-load-owned 4 0 0 17 15 5
 callback-rec-arm 10058 0 0 30441 10339 165
 cancel-suspend-cancel 1 0 0 1 1 0
+cancel-suspend-keep-earlier 0 0 0 0 0 0
 cancel-suspend-nested 1 0 0 1 1 0
 cancel-suspend-unwind 1 0 0 1 1 0
+cancel-suspend-unwind-cancel 0 0 0 0 0 0
 capability-bang-width 3 0 0 10 8 0
 capability-swap-width 3 0 0 8 6 0
 capture-await-raise 0 0 0 0 0 0
@@ -93,6 +95,7 @@ closure-captures-int 6 0 0 36 36 0
 closure-captures-list 3 0 0 9 9 0
 core-fin-cancel-propagated 0 0 0 0 0 0
 core-fin-cancel-reentered 0 0 0 0 0 0
+core-fin-cancel-reentered-op 0 0 0 0 0 0
 core-fin-cancel-reraised 0 0 0 0 0 0
 core-fin-cancellable 0 0 0 0 0 0
 core-fin-check-afinc 0 0 0 0 0 0
