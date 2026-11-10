@@ -1,0 +1,29 @@
+-- check: old-backend-refuses
+-- SPEC §27 in the core text, the twin of the kernel program `progFinOpT` (Core's
+-- `EffCancelTyped.lean`): `hnd 4o (hnd 1 {perform k => cancel k} ((perform 1) then x. x unwind
+-- perform 4))`. Handler 1 cancels `κ`; the cancel runs the finaliser, which performs `4.0` under
+-- the running cancel. The cancel row of `1.0` holds `4.0`: `1.0 cancel[4.0 lin 1 ~> 1] 1 ~> 1`, read
+-- from handler 1's `κ` (`F[4.0 …, 4.0 …] 1`, the cancel row ahead of the handler's row). The
+-- finaliser's operation goes to the live outer handler 4, in the canceller (handler 1's clause),
+-- which resumes it. `4.0` is must-resume (`lin`), so its own cancel row is not read: a capturable
+-- one would need itself in its own cancel row while the checker reads `[then]`'s `Σ_M` as the
+-- site's row. Handler 4's clause resumes outside tail position, so `4.0` is a machine operation:
+-- the cancel suspends, as a machine of the cancel row's outcome (Backend2's R1, R4), and the
+-- finaliser is a machine of its own (R3).
+--
+-- Answer: inr (), and `live 0`: handler 4's clause turns the resumed `inl ()` into `inr ()`. A
+-- wrong implementation that skips the finaliser on the cancel answers `inl ()`.
+
+main : F (1 + 1) =
+  handle_with[4](
+      ((!thunkv fun (v : 1) -> return (inl v)) : !U (1 -o F (1 + 1))),
+      (((!thunkv fun (p : 1 * U ((1 -o F (1 + 1)) & top)) ->
+          let (u, k) = p; r <- (force k).1 u; case r { inl a -> return (inr a) | inr b -> return (inl b) }), ())
+        : !U (1 * U ((1 -o F (1 + 1)) & top) -o F (1 + 1)) * 1)) (
+    handle_with[1](
+        ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[4.0 lin 1 ~> 1] 1)),
+        (((!thunkv fun (p : 1 * U ((1 -o F[4.0 lin 1 ~> 1] 1) & F[4.0 lin 1 ~> 1, 4.0 lin 1 ~> 1] 1)) ->
+          let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+          : !U (1 * U ((1 -o F[4.0 lin 1 ~> 1] 1) & F[4.0 lin 1 ~> 1, 4.0 lin 1 ~> 1] 1) -o F[4.0 lin 1 ~> 1] 1) * 1)) (
+      x <- perform[1.0] () unwind (perform[4.0] ());
+      return x))

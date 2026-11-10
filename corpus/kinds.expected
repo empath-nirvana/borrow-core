@@ -145,6 +145,12 @@ corpus/buf-lend-raise.bc 2.0 cancellable abortive: branch; agree
 corpus/callback-arm-raises.bc 1.0 cancellable abortive: branch; agree
 corpus/callback-rec-arm.bc 2.0 cancellable abortive: branch; agree
 corpus/callback-rec-arm.bc 1.0 cancellable abortive: branch; agree
+corpus/cancel-suspend-nested.bc 4.0 must-resume once: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/cancel-suspend-nested.bc 3.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/cancel-suspend-nested.bc 2.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/cancel-suspend-nested.bc 1.0 cancellable resume-or-cancel: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/cancel-suspend-unwind.bc 1.0 must-resume once: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/cancel-suspend-unwind.bc 2.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/capture-await-raise.bc 1.0 cancellable tail: direct; agree
 corpus/capture-await-raise.bc 2.0 cancellable abortive: branch; agree
 corpus/capture-store-raise.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
@@ -185,9 +191,14 @@ corpus/core-fin-e7d.bc 6.0 cancellable abortive: branch; agree
 corpus/core-fin-e7d.bc 2.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-fin-e8b.bc 1.0 cancellable abortive: branch; agree
 corpus/core-fin-e8b.bc 2.0 cancellable abortive: branch; agree
+corpus/core-fin-keep.bc 2.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/core-fin-keep.bc 4.0 must-resume once: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/core-fin-keep.bc 1.0 cancellable resume-or-cancel: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/core-fin-nested.bc 2.0 cancellable abortive: branch; agree
 corpus/core-fin-nested.bc 3.0 cancellable tail: -; agree
 corpus/core-fin-nested.bc 5.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/core-fin-op.bc 4.0 must-resume once: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/core-fin-op.bc 1.0 cancellable resume-or-cancel: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/core-fin-stored-k-fin.bc 1.0 cancellable abortive: branch; agree
 corpus/core-fin-stored-k-fin.bc 3.0 cancellable resume-or-cancel+state: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-fin-sub-row.bc 1.0 cancellable abortive: branch; agree

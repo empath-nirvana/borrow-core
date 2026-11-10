@@ -73,6 +73,8 @@ bytes-upper 1 0 0 80 52 54
 callback-arm-raises 4 0 0 18 15 5
 callback-load-owned 4 0 0 17 15 5
 callback-rec-arm 10058 0 0 30441 10339 165
+cancel-suspend-nested 1 0 0 1 1 0
+cancel-suspend-unwind 1 0 0 1 1 0
 capability-bang-width 3 0 0 10 8 0
 capability-swap-width 3 0 0 8 6 0
 capture-await-raise 0 0 0 0 0 0
@@ -94,7 +96,9 @@ core-fin-cancel-reraised 0 0 0 0 0 0
 core-fin-e7b 0 0 0 0 0 0
 core-fin-e7d 0 0 0 0 0 0
 core-fin-e8b 0 0 0 0 0 0
+core-fin-keep 0 0 0 0 0 0
 core-fin-nested 0 0 0 0 0 0
+core-fin-op 0 0 0 0 0 0
 core-fin-stored-k-fin 0 1 0 0 0 0
 core-fin-sub-row 0 0 0 0 0 0
 data-json-map-ser 16 0 0 555 420 133

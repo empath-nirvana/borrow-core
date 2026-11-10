@@ -3218,16 +3218,24 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
   | .effThen _ _ A _ _ _ SD u tM tN tD => do
     readFact "effThen:machine join"
     let (pre, c₁, c₂) ← splitCtx ctx u "effThen"
-    unless (← rowMs SD).isEmpty do
-      throw "LIR: a finaliser that may suspend is outside the fragment"
     let fn ← joinFn fuel c₂ A tN K args
     let pd ← rowPay SD
     let (_, inner, cD) ← envOf c₂
     let fnD ← reserveFn "finaliser"
-    let dTm ← conv fuel (none :: cD) tD
-    setFn fnD { name := "finaliser", params := inner, body := dTm, ret := resTy .unit pd }
+    -- A finaliser whose row `Σ_D` has machine operations may suspend: it is a machine of its own,
+    -- of the outcome of `F_{Σ_D} 1` (read from the node's `Σ_D`), called at a call point where
+    -- the frame is walked (R3: `abortKN`; a cancel, `cancelKN`).
+    let dOut ← outInfo? .unit SD
+    match dOut with
+    | none =>
+      let dTm ← conv fuel (none :: cD) tD
+      setFn fnD { name := "finaliser", params := inner, body := dTm, ret := resTy .unit pd }
+    | some MD =>
+      readFact "effThen:finaliser machine"
+      let dTm ← withMachineK MD (convK fuel (none :: cD) tD)
+      setFn fnD { name := "finaliser", params := inner, body := dTm, ret := MD.ty }
     let own := live c₂
-    return pre (← convK fuel c₁ tM (.thenF fn fnD own.length pd none :: K) (own ++ args))
+    return pre (← convK fuel c₁ tM (.thenF fn fnD own.length pd dOut :: K) (own ++ args))
   | .bind _ _ A _ u tM tN => do
     let (pre, c₁, c₂) ← splitCtx ctx u "bind"
     let unf := tM matches .unfoldStep ..

@@ -73,6 +73,8 @@ bytes-upper erased handles 0 performs 0 raises 0 left 0 0
 callback-arm-raises erased handles 1 performs 0 raises 1 left 0 0
 callback-load-owned erased handles 0 performs 0 raises 0 left 0 0
 callback-rec-arm erased handles 2 performs 0 raises 2 left 0 0
+cancel-suspend-nested erased handles 0 performs 0 raises 2 machines 4 suspends 3 left 0 0
+cancel-suspend-unwind erased handles 0 performs 0 raises 2 machines 2 suspends 3 left 0 0
 capability-bang-width erased handles 0 performs 0 raises 0 left 0 0
 capability-swap-width erased handles 0 performs 0 raises 0 left 0 0
 capture-await-raise erased handles 2 performs 1 raises 1 left 0 0
@@ -94,7 +96,9 @@ core-fin-cancel-reraised erased handles 1 performs 0 raises 1 machines 2 suspend
 core-fin-e7b erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
 core-fin-e7d erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0
 core-fin-e8b erased handles 2 performs 0 raises 2 left 0 0
+core-fin-keep erased handles 1 performs 0 raises 1 machines 2 suspends 2 left 0 0
 core-fin-nested erased handles 2 performs 0 raises 1 machines 1 suspends 1 left 0 0
+core-fin-op erased handles 0 performs 0 raises 0 machines 2 suspends 2 left 0 0
 core-fin-stored-k-fin erased handles 1 performs 0 raises 1 machines 1 suspends 2 left 0 0
 core-fin-sub-row erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
 data-json-map-ser erased handles 2 performs 0 raises 2 left 0 0
