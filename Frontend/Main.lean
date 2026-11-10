@@ -38,6 +38,11 @@ import Backend2.Driver
                                 a never-reuse allocator (`fresh`), with lend tags (`tags`), or
                                 with the least-free allocator (`least`); a failed check is an
                                 error; `--stats` writes the run's counts to standard error
+    lake exe bcc interp --key [--digest D] <file> [-- arg…]
+                                the source stage's key (`Reference/Key.lean`): a sha256 over
+                                the interpreter digest `D` (scripts/interp-digest.sh), the fuel,
+                                the input and arguments, and the term the interpreter would
+                                run; nothing is run (scripts/source-stage.sh)
     lake exe bcc desugar <file> print the program with its I/O sugar elaborated (SPEC §11)
     lake exe bcc erase <file>   print the erasure of the checked `main`
     lake exe bcc alpha [--map] <file>
@@ -111,6 +116,16 @@ def interp (old : Bool) (stage file : String) (args : List String) : IO UInt32 :
     return o.status
   | .error e => IO.eprintln e; return 1
 
+/-- Print the key of the source stage on `file` (`Backend.Key.key`) with the interpreter digest
+`digest`, read standard input and the arguments as `interp` does, and run nothing. -/
+def interpKey (digest file : String) (args : List String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  let k := Backend.checkedOf file src
+  let input ← if Backend.readsInput k then readAll (← IO.getStdin) (1 <<< 16) .empty
+    else pure .empty
+  IO.println (Backend.Key.key digest file k input.toList (Backend.argsBytes args))
+  return 0
+
 /-- Write the falsifier's output on `file` (`Backend.interpChecked`): as `interp`, and its
 statistics with `stats`. A check that fails is an error. -/
 def interpChecked (mode file : String) (stats : Bool) (args : List String) : IO UInt32 := do
@@ -145,6 +160,10 @@ structure InterpArgs where
   target : String := ""
   /-- The program's arguments, the words after `--`. -/
   args : List String := []
+  /-- `--key`: print the source stage's key instead of running it. -/
+  key : Bool := false
+  /-- `--digest D`: the interpreter digest the key covers. -/
+  digest : String := ""
 
 def parseInterpArgs : List String → InterpArgs → Option InterpArgs
   | ["--stats"], _ => none
@@ -154,6 +173,8 @@ def parseInterpArgs : List String → InterpArgs → Option InterpArgs
   | "--check" :: m :: rest, a => parseInterpArgs rest { a with check := some m }
   | "--alloc" :: m :: rest, a => parseInterpArgs rest { a with check := some m }
   | "--stats" :: rest, a => parseInterpArgs rest { a with stats := true }
+  | "--key" :: rest, a => parseInterpArgs rest { a with key := true }
+  | "--digest" :: d :: rest, a => parseInterpArgs rest { a with digest := d }
   | [t], a => if t.startsWith "--" then none else some { a with target := t }
   | t :: "--" :: rest, a => if t.startsWith "--" then none else some { a with target := t, args := rest }
   | _, _ => none
@@ -631,6 +652,11 @@ def main (argv : List String) : IO UInt32 := do
   | "run" :: rest => let (old, rest) := backendOf rest; runCmd old rest
   | "interp" :: rest =>
     match parseInterpArgs rest {} with
+    | some { key := true, old := false, stage := "source", check := none, digest, target, args, .. } =>
+      interpKey digest target args
+    | some { key := true, .. } =>
+      IO.eprintln "bcc interp: `--key` is the source stage's, without a check"
+      return 2
     | some { old, stage, check := none, target, args, .. } => interp old stage target args
     | some { stage, check := some m, stats, target, args, .. } =>
       if stage != "source" then
@@ -638,7 +664,7 @@ def main (argv : List String) : IO UInt32 := do
         return 2
       interpChecked m target stats args
     | _ =>
-      IO.eprintln "usage: bcc interp [--backend old|new] [--stage S | --check fresh|tags | --alloc least] [--stats] <file>"
+      IO.eprintln "usage: bcc interp [--backend old|new] [--stage S | --check fresh|tags | --alloc least | --key [--digest D]] [--stats] <file>"
       return 2
   | ["hostops", stage] => hostops stage
   | ["cc"] => match ← Backend.nativeCC with

@@ -32,7 +32,7 @@ def tab10V : Val := .lam (hop (.bin .w32 .add) (.pair (.var 0) (i32E 10)))
 
 theorem d_tab10 {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val tab10V) (.val (.bang (.lolli .i32 .i32))) :=
-  .bangThunkV (banged_dead hΓ) rfl (.lam (.ret (.lolliE (.left (deadSplit hΓ))
+  .bangThunkV (banged_dead hΓ).flatLive rfl (.lam (.ret (.lolliE (.left (deadSplit hΓ))
     (.tensorI (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) (d_i32 10 (Ctx.Dead.cons hΓ).toP))
     (.bangE (.hostOp _ (Ctx.Dead.cons hΓ).toP)))))
 
@@ -41,7 +41,7 @@ def consumeI32V : Val := .lam (.val .unit)
 
 theorem d_consumeI32 {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val consumeI32V) (.val (.bang (.lolli .i32 .unit))) :=
-  .bangThunkV (banged_dead hΓ) rfl (.lam (.ret (.unitI (.weaken rfl hΓ.toP))))
+  .bangThunkV (banged_dead hΓ).flatLive rfl (.lam (.ret (.unitI (.weaken rfl hΓ.toP))))
 
 /-- The program. -/
 def arrProg : Expr :=

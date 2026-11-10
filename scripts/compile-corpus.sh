@@ -19,21 +19,24 @@
 #     scripts/compile-corpus.sh --final [file.bc…]      the final target only (`make gate`)
 #     scripts/compile-corpus.sh --write-goldens [file.bc…]
 #     scripts/compile-corpus.sh --write-counts [file.bc…]
+#     scripts/compile-corpus.sh [--source] --write-keys [file.bc…]
 #
 # The source stage (scripts/source-stage.sh). By default it runs only on the programs whose golden
-# is unverified, those whose `.bc`, `.in`, `.out` or `.err` differs from the merge base with
-# origin/main: an edited program is checked against the reference semantics even when its golden
-# did not change. With `--source` (or `BCC_SOURCE=1`) it runs on every program, and must print
-# the golden: `make gate-full` re-verifies every golden this way. With `BCC_SOURCE=0` it never
-# runs (`ci-local.sh --changed`), and the unverified programs are listed.
+# is unverified: no `<name>.key` beside it, or one that is not the program's current key (its
+# elaborated term, input, arguments or golden, or the interpreter, changed). With `--source` (or
+# `BCC_SOURCE=1`) it runs on every program, and must print the golden: `make verify-goldens`
+# re-verifies every golden this way. With `BCC_SOURCE=0` it never runs (`ci-local.sh --changed`),
+# and the unverified programs are listed. The programs it ran on are listed at the end, with their
+# count. `--write-keys` (`make keys`) writes the key of every program whose golden the source
+# stage verified on this run; `--write-goldens` writes the key with the golden.
 #
 # `--final` (`make gate`) runs WebAssembly only (and the source stage where it runs, as above),
 # and no counts: the output, standard error, exit status and `live 0` of every program at the
 # final target. A program whose WebAssembly run differs is then run at the clos and flat stages,
 # and the first stage that differs is named.
 #
-# `--write-goldens` (`make goldens`) writes `<name>.out`, `<name>.err` (removed when empty) and
-# `<name>.status` (removed when `0`) from the source stage, and only from it: a golden is never a
+# `--write-goldens` (`make goldens`) writes `<name>.out`, `<name>.err` (removed when empty),
+# `<name>.status` (removed when `0`) and `<name>.key` from the source stage, and only from it: a golden is never a
 # compiled stage's output. It refuses a program that fails or leaves cells live; a nonzero exit
 # status is the program's only when the stage wrote its report (`live N`).
 #
@@ -44,7 +47,7 @@
 #
 # A program marked `-- check: no-source` is too large or too slow for the source interpreter
 # (`corpus/deep-list.bc`; `corpus/async-stack-deep.bc`, which takes minutes there): its golden is
-# written by hand, and it is run at every other stage. The mark may give its reason after a colon
+# written by hand, it has no key, and it is run at every other stage. The mark may give its reason after a colon
 # (`-- check: no-source: <reason>`), and every run prints the program as not run at the source
 # stage, with the reason, so none is skipped silently. A program found to take minutes at the
 # source stage is marked the same way.
@@ -68,7 +71,7 @@
 # entry ends with (`# …`) and the file's header.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-usage() { echo "usage: scripts/compile-corpus.sh [--source] [--final] [--write-goldens | --write-counts] [file.bc…]"; exit 2; }
+usage() { echo "usage: scripts/compile-corpus.sh [--source] [--final] [--write-goldens | --write-counts | --write-keys] [file.bc…]"; exit 2; }
 export write=0
 export final=0
 goldens=0
@@ -78,6 +81,7 @@ while [ $# -gt 0 ]; do
     --write-counts) write=1 ;;
     --write-goldens) goldens=1 ;;
     --source) export BCC_SOURCE=1 ;;
+    --write-keys) export BCC_WRITE_KEYS=1 ;;
     --final) final=1 ;;
     -*) usage ;;
     *) files+=("$1") ;;
@@ -85,6 +89,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ "$write" = 0 ] || [ "$goldens" = 0 ] || usage
+[ "${BCC_WRITE_KEYS:-0}" = 0 ] || { [ "$write" = 0 ] && [ "$goldens" = 0 ]; } || usage
 [ "$final" = 0 ] || [ "$write" = 0 ] || usage
 named=1
 [ ${#files[@]} -gt 0 ] || { named=0; files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc); }
@@ -97,6 +102,7 @@ export bccCounts=.lake/build/bin/bcc-counts
 export expected=corpus/counts.expected
 export tmp; tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+. scripts/source-stage.sh
 
 # The arguments of program $1, from `<name>.args` (one per line), into the array `args`.
 argsOf() {
@@ -136,7 +142,8 @@ golden() {
   cp "$w/out" "$base.out"
   if [ -s "$w/err" ]; then cp "$w/err" "$base.err"; else rm -f "$base.err"; fi
   if [ "$rc" != 0 ]; then echo "$rc" > "$base.status"; else rm -f "$base.status"; fi
-  echo "$f: wrote $base.out$([ -s "$w/err" ] && echo " and $base.err")$([ "$rc" != 0 ] && echo " and $base.status ($rc)")"
+  corpusKeyLine "$f" > "$base.key"
+  echo "$f: wrote $base.out$([ -s "$w/err" ] && echo ", $base.err")$([ "$rc" != 0 ] && echo ", $base.status ($rc)") and $base.key"
 }
 if [ "$goldens" = 1 ]; then
   export -f runnable golden argsOf statusOf
@@ -146,8 +153,10 @@ if [ "$goldens" = 1 ]; then
   exit
 fi
 
-. scripts/source-stage.sh
 bad=0
+: > "$tmp/reran"
+: > "$tmp/written"
+: > "$tmp/unverified"
 : > "$tmp/counts"
 # The counts of file $1 on input $2, checked against the expected ones; appended to the table.
 counts() {
@@ -188,18 +197,27 @@ runStage() {
   else "$bcc" interp --backend old --stage "$1" "$2" -- "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err" || rc=$?; fi
   [ "$rc" = "$(statusOf "$2")" ]
 }
-# Whether the source stage runs on program $1 (scripts/source-stage.sh); reports an unverified
-# golden it does not run on.
+# Whether the source stage runs on program $1 (scripts/source-stage.sh): with `BCC_SOURCE=1`, or
+# when its golden is unverified. Writes its current key line (`corpusKeyLine`) to $2 when it is
+# computed, and why it runs to $3; reports an unverified golden it does not run on, and records
+# the program in $tmp/reran or $tmp/unverified.
 withSource() {
-  local f=$1 base=${1%.bc}
-  case "$BCC_SOURCE" in
-    1) return 0 ;;
-    0) if unverified "$f" "$base.in" "$base.out" "$base.err" "$base.status"; then
-         echo "$f: unverified: changed since $source_base, not run at the source stage (scripts/compile-corpus.sh $f runs it)"
-       fi
-       return 1 ;;
-    *) unverified "$f" "$base.in" "$base.out" "$base.err" "$base.status" ;;
-  esac
+  local f=$1 kl why
+  : > "$2"; : > "$3"
+  if [ "$BCC_SOURCE" = 1 ]; then
+    [ "$BCC_WRITE_KEYS" = 1 ] && corpusKeyLine "$f" > "$2"
+    return 0
+  fi
+  kl=$(corpusKeyLine "$f"); printf '%s\n' "$kl" > "$2"
+  corpusVerified "$f" "$kl" && return 1
+  if [ -f "${f%.bc}.key" ]; then why="its key changed"; else why="no key"; fi
+  if [ "$BCC_SOURCE" = 0 ]; then
+    echo "$f: unverified ($why), not run at the source stage (scripts/compile-corpus.sh $f runs it)"
+    echo "$f ($why)" >> "$tmp/unverified"
+    return 1
+  fi
+  echo "$f ($why)" >> "$tmp/reran"
+  echo "$why" > "$3"
 }
 # --final: after program $1's WebAssembly run differs (on input $2, standard error golden $3),
 # the first of the clos and flat stages that differs from the golden, if either does.
@@ -238,9 +256,9 @@ program() {
     local why
     why=$(sed -n 's/^-- check: no-source: *//p' "$f" | head -1)
     note=" (no-source: not run at the source stage: ${why:-too large for the source interpreter})"
-  elif withSource "$f"; then
+  elif withSource "$f" "$w/key" "$w/why"; then
     stages="source $stages"
-    [ "$BCC_SOURCE" = 1 ] || note=" (unverified since $source_base, so at the source stage too)"
+    [ "$BCC_SOURCE" = 1 ] || note=" (unverified: $(cat "$w/why"), so at the source stage too)"
   fi
   for st in $stages; do
     if ! runStage "$st" "$f" "$in"; then
@@ -263,6 +281,13 @@ program() {
   if [ "$ok" = 1 ] && [ "$(tail -1 "$base.out")" != "live 0" ]; then
     echo "$f: agrees, but leaves objects live"; ok=0
   fi
+  if [ "$ok" = 1 ] && [ "$BCC_WRITE_KEYS" = 1 ]; then
+    case " $stages " in
+      *" source "*)
+        if cp "$w/key" "$base.key" 2> /dev/null; then note="$note (key written)"; echo "$base.key" >> "$tmp/written"
+        else note="$note (key not written: $base.key is not writable)"; fi ;;
+    esac
+  fi
   if [ "$old" = 0 ]; then cnt="the old backend refuses it"
   elif [ "$final" = 1 ]; then cnt="not counted (--final)"
   elif [ "$ok" = 1 ] && ! counts "$f" "$in"; then ok=0; fi
@@ -278,7 +303,10 @@ bigcat() {
   awk 'BEGIN { for (i = 0; i < 90; i++) printf "line %02d of a long input, copied byte for byte by cat.\n", i }' \
     > "$w/big.in"
   printf '()\nlive 0\n' | cat "$w/big.in" - > "$w/big.out"
-  withSource corpus/io-cat.bc > /dev/null && stages="source $stages"
+  if [ "$BCC_SOURCE" = 1 ] ||
+     { [ "$BCC_SOURCE" != 0 ] && ! corpusVerified corpus/io-cat.bc "$(corpusKeyLine corpus/io-cat.bc)"; }; then
+    stages="source $stages"
+  fi
   for st in $stages; do
     runStage "$st" corpus/io-cat.bc "$w/big.in" || true
     if ! cmp -s "$w/out" "$w/big.out"; then echo "corpus/io-cat.bc: stage $st differs on a $(wc -c < "$w/big.in" | tr -d ' ')-byte input"; ok=0; fi
@@ -301,9 +329,16 @@ if [ "$write" = 1 ]; then
   echo "wrote $expected"
 fi
 case "$BCC_SOURCE" in
-  1) echo "source stage: every program" ;;
-  0) echo "source stage: not run (BCC_SOURCE=0)" ;;
-  *) echo "source stage: the programs unverified since ${source_base:-(no merge base)} only (--source runs every program)" ;;
+  1) echo "source stage: every program (--source)" ;;
+  0) echo "source stage: not run (BCC_SOURCE=0); $(wc -l < "$tmp/unverified" | tr -d ' ') unverified golden(s)"
+     sed 's/^/  /' "$tmp/unverified" ;;
+  *) echo "source stage: re-ran on $(wc -l < "$tmp/reran" | tr -d ' ') program(s) whose key is missing or changed (--source runs every program)"
+     sed 's/^/  /' "$tmp/reran" ;;
+esac
+case "$(wc -l < "$tmp/written" | tr -d ' ')" in
+  0) ;;
+  *) echo "keys written: $(wc -l < "$tmp/written" | tr -d ' ') (commit them with the change)"
+     sed 's/^/  /' "$tmp/written" ;;
 esac
 echo "$bad failure(s)."
 [ "$bad" -eq 0 ]

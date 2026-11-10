@@ -160,7 +160,7 @@ theorem d_fileWriteObs :
 theorem d_fileStep :
     CDerives LifeCtx.empty [⟨fileS, false⟩] (.val fileStep)
       (.val (.bang (.thunk (.arr fileS (fileTopC.instT fileS))))) := by
-  refine .bangThunkV (banged_dead (.cons .nil)) rfl
+  refine .bangThunkV (banged_dead (.cons .nil)).flatLive rfl
     (.lam (.withI (.withI d_fileReadObs d_fileWriteObs) ?_))
   exact .ret (appW (.var (by csolo)) (.free (Ctx.Dead.toP (by cdead))))
 

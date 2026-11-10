@@ -655,6 +655,11 @@ theorem banged_slot {Γ : Ctx VTy} (hp : Ctx.Banged Γ) {k : Nat} {T : VTy}
   obtain ⟨A, hA⟩ := hp _ (List.mem_of_getElem? h) rfl
   exact ⟨A, hA⟩
 
+/-- A flat context's live slots are flat.  `[spec §10]` -/
+theorem flatLive_slot {Γ : Ctx VTy} (hp : Ctx.FlatLive Γ) {k : Nat} {T : VTy}
+    (h : Γ[k]? = some ⟨T, true⟩) : T.flat = true :=
+  hp _ (List.mem_of_getElem? h) rfl
+
 /-- A consumed context's live slots are persistent. -/
 theorem deadP_slot {Γ : Ctx VTy} (hd : Ctx.DeadP Γ) :
     ∀ {k : Nat} {T : VTy}, Γ[k]? = some ⟨T, true⟩ → T.Persistent := by
@@ -1745,8 +1750,8 @@ theorem LamAx.not_comp {e : Expr} {C : CTy} (h : LamAx e (.comp C)) : C.isRet = 
 /-- The judgements a thunk of `D` is read at: the views of `U D` and of its code types
 (`[code-I]`), and, over a persistent context, the views of their `!`s.  `[spec §68]` -/
 def ThunkCls (Γ : Ctx VTy) (D : CTy) (j : Jdg) : Prop :=
-  ValCls (.thunk D) j ∨ (Ctx.Banged Γ ∧ ValCls (.bang (.thunk D)) j) ∨
-    (∃ N E, ValCls (.code N E D) j) ∨ (Ctx.Banged Γ ∧ ∃ N E, ValCls (.bang (.code N E D)) j)
+  ValCls (.thunk D) j ∨ (Ctx.FlatLive Γ ∧ ValCls (.bang (.thunk D)) j) ∨
+    (∃ N E, ValCls (.code N E D) j) ∨ (Ctx.FlatLive Γ ∧ ∃ N E, ValCls (.bang (.code N E D)) j)
 
 theorem ThunkCls.step {Γ : Ctx VTy} {D : CTy} {j j' : Jdg} (hs : JS j j') (h : ThunkCls Γ D j) :
     ThunkCls Γ D j' := by
@@ -1787,7 +1792,7 @@ theorem LamCls.thunkV {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.comp C)) (hC
   · rw [hc.comp_isRet] at hC; cases hC
 
 theorem LamCls.bangThunkV {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.comp C))
-    (hC : C.isRet = false) (hp : Ctx.Banged Γ) : LamCls Γ D (.val (.bang (.thunk C))) := by
+    (hC : C.isRet = false) (hp : Ctx.FlatLive Γ) : LamCls Γ D (.val (.bang (.thunk C))) := by
   rcases h with ⟨D', h, hα⟩ | hc
   · cases h
     exact .inr (.inr (.inl ⟨hp, Relation.ReflTransGen.single (VS.alpha (A := .bang (.thunk D)) hα)⟩))
@@ -1826,7 +1831,7 @@ theorem LamInv.thunkV {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
   · rw [hx.not_comp] at hC; cases hC
 
 theorem LamInv.bangThunkV {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
-    (h : LamInv Δ Γ M (.comp C)) (hC : C.isRet = false) (hp : Ctx.Banged Γ) :
+    (h : LamInv Δ Γ M (.comp C)) (hC : C.isRet = false) (hp : Ctx.FlatLive Γ) :
     LamInv Δ Γ M (.val (.bang (.thunk C))) := by
   rcases h with ⟨A, D, hM, hc⟩ | ⟨S, B, hM, hc⟩ | ⟨x, b, Δ', S, C', hM, hc⟩ | ⟨A, hM, hc⟩ | hw | hx
   · exact .inl ⟨A, D, hM, hc.bangThunkV hC hp⟩
@@ -2010,7 +2015,7 @@ theorem ThunkCls.val_thunk {Γ : Ctx VTy} {D C : CTy} (h : ThunkCls Γ D (.val (
 /-- A thunk read at a `!` thunk is at that thunk's computation type, up to α-equivalence, over a
 persistent context. -/
 theorem ThunkCls.val_bang {Γ : Ctx VTy} {D C : CTy} (h : ThunkCls Γ D (.val (.bang (.thunk C)))) :
-    CTy.alphaB [] D C = true ∧ Ctx.Banged Γ := by
+    CTy.alphaB [] D C = true ∧ Ctx.FlatLive Γ := by
   rcases h with h | ⟨hp, h⟩ | ⟨_, _, h⟩ | ⟨hp, _, _, h⟩
   · exact (not_vview_thunk_bang h).elim
   · exact ⟨vview_bang_bang h, hp⟩
@@ -2040,7 +2045,7 @@ theorem LamCls.val_thunk {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.val (.thu
 /-- A λ-value read at a `!` thunk was typed at that thunk's computation type, up to
 α-equivalence, over a persistent context. -/
 theorem LamCls.val_bang {Γ : Ctx VTy} {D C : CTy} (h : LamCls Γ D (.val (.bang (.thunk C)))) :
-    CTy.alphaB [] D C = true ∧ Ctx.Banged Γ := by
+    CTy.alphaB [] D C = true ∧ Ctx.FlatLive Γ := by
   rcases h with ⟨_, h, -⟩ | h
   · cases h
   · exact h.val_bang
@@ -2599,7 +2604,7 @@ body is typed under a live `P`. -/
 theorem lam_bang {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {P : VTy} {D : CTy}
     (h : CDerives Δ Γ (.lam M) (.val (.bang (.thunk (.arr P D))))) (hP : P ≠ .unit)
     (hw : ∀ M₁ M₂, Expr.lam M ≠ withPair M₁ M₂) (hc : NotConst (.lam M)) :
-    Ctx.Banged Γ ∧ ∃ P', VTy.alphaB [] P' P = true ∧
+    Ctx.FlatLive Γ ∧ ∃ P', VTy.alphaB [] P' P = true ∧
       CDerives Δ (⟨P', true⟩ :: Γ) M (.comp D) := by
   rcases der_lam h M rfl with ⟨A, D', hM, hcl⟩ | ⟨S, B, hM, hcl⟩ | ⟨x, b, Δ', S, C, hM, hcl⟩ |
     ⟨A, hM, hcl⟩ | ⟨M₁, M₂, hwp⟩ | hx

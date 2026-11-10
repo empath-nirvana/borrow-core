@@ -230,20 +230,20 @@ theorem gN_soloP {δ : LSub} {Θ : LocTy} {n : Nat} :
             ih (γ := γ') (by simpa using hlen) (gN_cons_persistent hS hg).2
           exact ⟨w, by simpa using hw, hv⟩
 
-/-- **`!Γ` holds no resource** (Core's `gSepC_persistent`, `gDenC_persistent`). -/
+/-- **A flat context holds no resource** (Core's `gSepC_persistent`, `gDenC_persistent`):
+each live slot's value is at `∅` (`vN_empty_of_persistent`).  `[spec §10]` -/
 theorem gN_persistent {δ : LSub} {Θ : LocTy} {n : Nat} :
-    ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}, Ctx.Banged Γ →
+    ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}, Ctx.FlatLive Γ →
       gN (ℍ := ℍ) δ Θ Γ γ n ρ → ρ = PMap.empty
   | [], _, _, _, h => h
   | _ :: _, [], _, _, h => h
   | s :: Γ, v :: γ, ρ, hp, h => by
-      have hp' : Ctx.Banged Γ := fun t ht hl => hp t (List.mem_cons_of_mem _ ht) hl
+      have hp' : Ctx.FlatLive Γ := hp.tail
       unfold gN at h
       split at h
       · rename_i hl
-        obtain ⟨T, hT⟩ := hp s List.mem_cons_self hl
         obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
-        have e₁ : ρ₁ = PMap.empty := by rw [hT] at h₁; exact h₁.1
+        have e₁ : ρ₁ = PMap.empty := vN_empty_of_persistent _ (VTy.persistent_of_flat (hp s List.mem_cons_self hl)) h₁
         have e₂ := gN_persistent hp' h₂
         subst e₁; subst e₂
         exact eq_of_compS_empty_left hc
@@ -1166,9 +1166,9 @@ theorem zeroE_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {V : Expr} {C : 
 
 /-! ### `!` and `[@a]` -/
 
-/-- **Promotion of `thunk M : U (F A)` over `!Γ` at `SemJN`** (Core's `bangThunkF_compatC`):
-`!Γ` holds nothing (`gN_persistent`). -/
-theorem bangThunkF_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} (hp : Ctx.Banged Γ)
+/-- **Promotion of `thunk M : U (F A)` over a flat `Γ` at `SemJN`** (Core's
+`bangThunkF_compatC`): a flat `Γ` holds nothing (`gN_persistent`).  `[spec §10]` -/
+theorem bangThunkF_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} (hp : Ctx.FlatLive Γ)
     (h : SemJN (ℍ := ℍ) Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
     SemJN (ℍ := ℍ) Δ Γ (.val (.lam M)) (.val (.bang (.thunk (.ret A)))) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
@@ -1176,8 +1176,9 @@ theorem bangThunkF_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} (h
   show erwp (ℍ := ℍ) _ _ _ n ls (.val (.lam (Expr.psub 1 γ M))) ρ
   exact erwp_val (v := Val.lam (Expr.psub 1 γ M)) ⟨gN_persistent hp hg, thunkF_sem h hδ hlw hg⟩
 
-/-- **Promotion of a λ-value `V : C` over `!Γ` at `SemJN`** (Core's `bangThunkV_compatC`). -/
-theorem bangThunkV_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hp : Ctx.Banged Γ)
+/-- **Promotion of a λ-value `V : C` over a flat `Γ` at `SemJN`** (Core's
+`bangThunkV_compatC`).  `[spec §10]` -/
+theorem bangThunkV_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hp : Ctx.FlatLive Γ)
     (hC : C.isRet = false) (h : SemJN (ℍ := ℍ) Δ Γ (.val (.lam N)) (.comp C)) :
     SemJN (ℍ := ℍ) Δ Γ (.val (.lam N)) (.val (.bang (.thunk C))) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg

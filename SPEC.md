@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.65 · 2026-11-09
+Version 1.66 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -12101,7 +12101,7 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
 | Rule | Statement | Unit |
 |---|---|---|
 | `codeI` | `Γ ⊢ λM : U C` and `Γ.CapOK (λM)` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
-| `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C` | K3 |
+| `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C`; its premise on the context is `Flat(Γ)` (`Ctx.FlatLive`, §10), as promotion's | K3 |
 | `codeErase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
 | `codeEraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
 | `force` (restated) | `Ctx.SoloP Γ i T`, `T.forceTy = some C` (`T` is `U C` or `Code⟨N; E⟩ C`) ⟹ `forceE C (.var i) : C` | K3 |
@@ -12709,6 +12709,9 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.66** (2026-11-09) — §68 (#886): `codeIB`'s premise is `Flat(Γ)` (§10), as `!`-promotion's,
+  in place of `!Γ`. `codeIB_compatC` and `codeIB_compatN` reach `gSepC_persistent` and
+  `gN_persistent` through `flat ⇒ persistent`. The rule only widens.
 - **1.65** (2026-11-09) — §41, §18, §42 (#885, #940): a control `with` lends what its body writes. Each
   enclosing `let mut` the body writes, and each outer place it lends, is lent around the handler
   site (`borrow mut &mut x { 'l, x -> with h(…) { S } }`); inside, `&mut x` is a reborrow, `x = e`
