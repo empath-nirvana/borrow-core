@@ -4651,10 +4651,8 @@ def siteAtCall (c : TCx) (sp : Span) (g : String) (r : SiteRec) : DM SiteRec := 
     pure (r.mapTy (·.subst σ))
 
 /-- A loop of a clause that may be a head of its path (`Fins.cancelAtEnds`): its body has no exit
-of the clause (a `return e`; its own `break` and `continue` stay in the clause), and its value is
-not bound.  `[spec §27]` -/
-def loopHead (M N : Comp) : Bool :=
-  !M.anySugar (· matches .retE) && N.forRes?.isNone && N.forElse?.isNone
+of the clause (a `return e`; its own `break` and `continue` stay in the clause).  `[spec §27]` -/
+def loopHead (M _N : Comp) : Bool := !M.anySugar (· matches .retE)
 
 /-- A clause that does not use its `κ` on some path, at an operation whose cancel branch
 `cancelTy S F` performs (its cancel row `F` or the handler's row `S` is not empty), cancels it

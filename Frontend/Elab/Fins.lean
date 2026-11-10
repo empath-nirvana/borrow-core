@@ -124,6 +124,13 @@ def callFree : Val → Bool
   | .thunk .. | .thunkv .. | .bangThunk .. | .bangThunkv .. => true
   | _ => false
 
+/-- What follows a loop whose value is bound, `r <- return forRes; N₀` (`let r = for …`, with or
+without `else`): its span, `r`, `r`'s written type, the value and `N₀`.  `[spec §27]` -/
+def boundRes? : Comp → Option (Span × Ident × Option VTy × Val × Comp)
+  | .bind bsp r A (.ret _ R@(.sugar _ .forRes)) N => some (bsp, r, A, R, N)
+  | .bind bsp r A (.ret _ R@(.app _ (.sugar _ .forRes) _)) N => some (bsp, r, A, R, N)
+  | _ => none
+
 /-- `M`, which runs while the continuation `k` is live and not yet used, with `k` cancelled exactly
 once on each of its paths that does not use it, as Rust drops a value: at the end of the path,
 and on the way out of an abort or a cancel that passes through it.
@@ -143,8 +150,8 @@ and on the way out of an abort or a cancel that passes through it.
   `M₁` answers, `N` runs with `k` still live. Any other head is left as it is. A region of the
   clause's own, `x <- M₁ unwind (D); N`, whose body does not mention `k` is such a head as a whole,
   so its own finaliser `D` runs first, then `k`'s cancel (inner regions unwind first); so is a loop
-  whose value is not bound and whose body has no exit of the clause (`loopHead`). A loop whose
-  value is bound is not wrapped (its value is elaborated with the binding).
+  whose body has no exit of the clause (`loopHead`); a loop whose value is bound is wrapped with
+  the binding of its value (`boundRes?`), so the head is the loop as elaborated.
 
 Exactly once: `k` is live from its binding until the first of a head's abort (its finaliser
 cancels it, and nothing after runs), the end of the path (the cancel after its last effect), or a
@@ -200,9 +207,17 @@ def cancelAtEnds (wrapHead : Comp → Bool) (loopHead : Comp → Comp → Bool) 
     | .loop lsp ℓ src V M₁ N =>
       if usesV V || uses M₁ then M
       else if wrapHead M₁ && loopHead M₁ N then
-        -- The loop as a head: an abort out of its body cancels `k` on the way out.
-        let r : Ident := ⟨s!"fx_loop_{k.name}", lsp⟩
-        .unwind lsp r none (.loop lsp ℓ src V M₁ (.ret lsp (.unit lsp))) cancelK (go N)
+        -- The loop as a head: an abort out of its body cancels `k` on the way out. A loop whose
+        -- value is bound (`let r = for …; N₀`) keeps the binding of its value with it, so that the
+        -- head is the loop and its value as the typed elaboration elaborates them, and the rest
+        -- `N₀` binds `r` to the head's answer.
+        match boundRes? N with
+        | some (bsp, r, A, R, N₀) =>
+          let L : Comp := .loop lsp ℓ src V M₁ (.bind bsp r A (.ret bsp R) (.ret bsp (.var bsp r.name)))
+          .unwind lsp r A L cancelK (go N₀)
+        | none =>
+          let r : Ident := ⟨s!"fx_loop_{k.name}", lsp⟩
+          .unwind lsp r none (.loop lsp ℓ src V M₁ (.ret lsp (.unit lsp))) cancelK (go N)
       else .loop lsp ℓ src V M₁ (go N)
     | .ret rsp (.thunkv tsp N) =>
       if inState then .ret rsp (.thunkv tsp (cancelAtEnds wrapHead loopHead sp k false n N))
