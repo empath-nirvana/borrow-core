@@ -7,7 +7,9 @@ A chain `a ∘₁ s₁ ∘₂ s₂ …` of `|>` (push) and `>|` (pull) edges is 
 edges, each marked with its mode, left-nested, the source first (`PipeChain`). `|>` and `>|`
 associate to the left, so `(a ∘₁ b) ∘₂ c` is read as written. A stage that is itself a chain,
 `a ∘₁ (b ∘₂ c)`, is spliced into the chain when every edge it adds *joins*: a `>|`, or a `|>`
-into a stream stage (`joins`). Otherwise the parenthesised chain is a stage, as §33 reads it.
+the predicate `stream` admits (`joins`). The elaboration admits none before L1 (#920), so only
+`>|` edges join and every `|>` is read as written. Otherwise the parenthesised chain is a stage,
+as §33 reads it.
 
 The elaboration (`Frontend.Elab.Effects.pipesV`) reads the chain's marks only, each edge at the
 span from the source to its stage (not its node's, which a bracketing moves), so two bracketings
@@ -67,8 +69,8 @@ theorem pipeParts?_lt_right {V : Val} {sp : Span} {m : PipeMode} {e s : Val}
   simp only [Val.app.sizeOf_spec, Val.pair.sizeOf_spec]
   omega
 
-/-- An edge of mode `m` into the stage `s` joins a chain: it is a `>|`, or `s` is a stream stage
-(`stream`, the environment's test, `Frontend.Elab.Effects.PipeEnv.streamStage`). -/
+/-- An edge of mode `m` into the stage `s` joins a chain: it is a `>|`, or `stream` admits `s`
+(the elaboration's `stream` admits no stage before L1, #920). -/
 def joins (stream : Val → Bool) (m : PipeMode) (s : Val) : Bool :=
   m == .pull || stream s
 

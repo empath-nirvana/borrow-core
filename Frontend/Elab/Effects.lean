@@ -3616,11 +3616,22 @@ def defineGroup (env : Env) (ms : List (Span × Ident × List Ident × VTy × Va
 
 /-! ### `|>`  `[spec §33]` -/
 
-/-- What the pass knows of the program for `|>` and `>|`: its handlers' names, and each
-function's written type. -/
+/-- What the pass knows of the program for `|>` and `>|`: its handlers' names, each function's
+written type, and its `type` abbreviations (SPEC §61). -/
 structure PipeEnv where
   handlers : List String
   sigs : List (String × VTy)
+  abbrevs : Data.Table := {}
+
+/-- `A` with the abbreviations at its head unfolded, as the checker reads it: `P` of `type P =
+U (pull i32 1 1)` is `U (pull i32 1 1)`.  `[spec §61, §70]` -/
+def PipeEnv.unfold (pe : PipeEnv) : Nat → VTy → VTy
+  | 0, A => A
+  | k + 1, A => match Data.headOf A with
+    | some (h, As, ls) => match pe.abbrevs.abbrev? h with
+      | some a => if As.length == a.tps.length then pe.unfold k (a.at As ls) else A
+      | none => A
+    | none => A
 
 /-- The name a stage `f`, `f[As]` or `f(a, …)` calls.  `[spec §70]` -/
 def stageHead? : Val → Option String
@@ -3632,16 +3643,8 @@ def stageHead? : Val → Option String
 `[spec §70]` -/
 def PipeEnv.transitional (pe : PipeEnv) (x : String) : Bool :=
   match (pe.sigs.lookup x).bind paramTyOf with
-  | some (.tensor _ A _) => isPullTy A
-  | some A => isPullTy A
-  | none => false
-
-/-- A stream stage. Until lib declares the item effect `Stream` (L1, #920), the stages in (R)'s
-form, which perform it, do not exist, and a stream stage is a source-owning adapter
-(transitional, until L2). A handler is not one.  `[spec §70]` -/
-def PipeEnv.streamStage (pe : PipeEnv) (s : Val) : Bool :=
-  match stageHead? s with
-  | some x => !pe.handlers.contains x && pe.transitional x
+  | some (.tensor _ A _) => isPullTy (pe.unfold 16 A)
+  | some A => isPullTy (pe.unfold 16 A)
   | none => false
 
 /-- `e |> s` (SPEC §33): a handler stage `h[…](…)` is `with h[…](…) { e }`; a function stage
@@ -3708,13 +3711,14 @@ def pipesV (pe : PipeEnv) : Nat → Val → EM Val
   | 0, V => pure V
   | k + 1, V => match V with
     | .app _ (.sugar _ (.pipe _)) (.pair _ _ _) => do
-      let c := Pipes.chainOf pe.streamStage V
+      -- Only a `>|` joins a chain before L1 (#920): a `|>` edge is read as written.
+      let c := Pipes.chainOf (fun _ => false) V
       let mut acc ← pipesV pe k c.src
       for ed in c.edges do
-        -- A joining edge's span runs from the chain's source to its stage, as the parser's node
-        -- of an unbracketed chain does: one span however the chain is bracketed. Any other edge
-        -- keeps its node's span.
-        let sp : Span := if Pipes.joins pe.streamStage ed.mode ed.stage
+        -- A `>|` edge's span runs from the chain's source to its stage, as the parser's node of
+        -- an unbracketed chain does: one span however the chain is bracketed. A `|>` edge keeps
+        -- its node's span.
+        let sp : Span := if ed.mode == .pull
           then ⟨c.src.span.start, ed.stage.span.stop⟩ else ed.sp
         acc ← pipeEdge pe sp ed.mode acc (← pipesV pe k ed.stage)
       pure acc
@@ -3780,7 +3784,8 @@ def resolvePipes (ds : List Decl) : EM (List Decl) := do
       | _ => [],
     ds.filterMap fun
       | .def_ _ n _ A _ _ => some (n.name, A)
-      | _ => none⟩
+      | _ => none,
+    { abbrevs := ds.filterMap Data.Abbrev.ofDecl? }⟩
   let cl (c : Clause) : EM Clause := do pure { c with body := ← pipesC pe fuel c.body }
   ds.mapM fun
     | .def_ sp n ps A V mk => do pure (.def_ sp n ps A (← pipesV pe fuel V) mk)

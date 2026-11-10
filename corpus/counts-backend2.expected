@@ -414,6 +414,7 @@ pipe-handlers 0 0 0 0 0 0
 pipe-left-row 3 0 0 3 3 0
 pipe-mixed 3 0 0 3 3 0
 pipe-pull 3 0 0 3 3 0
+pipe-push-paren 3 0 0 3 3 0
 poly-operators 0 0 0 0 0 0
 poly-providers 2 0 0 90 48 22
 print-borrowed-array 4 0 0 19 6 0

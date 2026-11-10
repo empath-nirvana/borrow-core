@@ -512,6 +512,8 @@ corpus/pipe-pull.bc 4.0 cancellable stored,tail: machine: a path of the clause d
 corpus/pipe-pull.bc 3.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-pull.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-pull.bc 1.0 cancellable tail: direct; agree
+corpus/pipe-push-paren.bc 1.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-push-paren.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/raise-in-borrow-branch.bc 1.0 cancellable abortive: branch; agree
 corpus/raise-in-borrow-branch.bc 2.0 cancellable abortive: branch; agree
 corpus/rec-await-exhausted.bc 1.0 cancellable tail: direct; agree

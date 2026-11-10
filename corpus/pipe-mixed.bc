@@ -5,8 +5,9 @@
 --
 -- * `a`: `range(0, 20) >| map(sq) |> filter(even) >| skip(1) |> take(3)`, two pull wires and
 --   two push wires: the even squares 0, 4, 16, 36, 64, …, skipping 0, the next three, 4 + 16 + 36.
--- * `b`: a parenthesised sub-chain at a `|>` edge, spliced in (its edges join): `range(0, 20) |>
---   (map(sq) >| filter(even)) >| take(2)`, 0 + 4.
+-- * `b`: a parenthesised sub-chain at a `>|` edge, spliced in (its edges are `>|`):
+--   `range(0, 20) >| (map(sq) >| filter(even)) >| take(2)`, 0 + 4. (At a `|>` edge it would be a
+--   stage, as §33 reads it: `corpus/pipe-push-paren.bc`.)
 -- * `c`: a chain into a sink and a plain function: `sum_all` takes the chain stored (case (iii)),
 --   and `double` its sum, `2 * (1 + 4 + 9)`.
 --
@@ -32,6 +33,6 @@ main -> i32 * (i32 * i32) =
   let mut a = 0;
   for y in range(0, 20) >| map(sq) |> filter(even) >| skip(1) |> take(3) { a = a + y };
   let mut b = 0;
-  for y in range(0, 20) |> (map(sq) >| filter(even)) >| take(2) { b = b + y };
+  for y in range(0, 20) >| (map(sq) >| filter(even)) >| take(2) { b = b + y };
   let c = range(1, 10) >| map(sq) >| take(3) |> sum_all |> double;
   (a, (b, c))
