@@ -1,0 +1,19 @@
+-- A deep handler of `yield` whose clause performs a must-resume operation, `tick`, counted by a
+-- handler outside it. The kernel program `deep-gen`'s twin. Each `yield` suspends `gen` inside
+-- `ticking`'s clause at `tick()`, with the yield's continuation `k` live across it; `count_ticks`
+-- counts the tick and resumes. `tick` is `must_resume`, so its continuation's cancel component is
+-- `⊤` (`kTy`'s `.lin` case) and the cancel entry of the machine's `k` at `tick` is a trap, never
+-- entered (`kappaC_cancel_lin`).
+--
+-- Answer: `((), i32[2])`, one tick per `yield`, and `live 0`. A count of 1 or 3 means a tick was
+-- lost or repeated.
+
+include yield
+effect Tick { must_resume ctl tick() }
+handler ticking: Yield[bool], 1 -> 1 with Tick = { return(u) = (); yield(x, k) = { tick(); k(()) } }
+handler count_ticks[A](mut n: i32): Tick, A -> A * i32 = { return(a) = (a, n); tick(k) = { n = n + 1; k(()) } }
+handler plain[A]: Tick, A -> A = { return(a) = a; tick(k) = k(()) }
+fn gen() -> 1 with Yield[bool] = yield(true); yield(false)
+main -> 1 * i32 =
+  let a = with count_ticks[1](0) { with ticking { gen() } };
+  a
