@@ -12378,9 +12378,9 @@ reported as an intended change.
     `{closure@span}` (a kernel type has no span). Backend2's `useKey` prints a type `ofV` refuses
     exactly (`keyVT`, `N` in full), so two codes are two keys; `ofV` refuses `code` (B1).
 - **The chain's equation at the code candidate** is not derived; obstruction not verified.
-  `nuOutK_compatN` is proved by a direct route instead (`node_okK`: each state mapped into the code
-  clause at the leaf's world by `etaN_codeRelN`). `node_okK` is a near-copy of `node_okN`, to be
-  merged by generalising `cBN` (#947).
+  `nuOutK_compatN` is proved by a direct route instead: `node_okP`, the node lemma over a leaf
+  predicate, at the code clause, with `cBNP_unroll` (each state mapped into the code clause at the
+  leaf's world by `etaN_codeRelN`). `cBN S R` is `cBNP S (thunkRN R)` (#947).
 - **The scope's `ρR`.** With a part of the resource the environment does not hold, `nuOutK` is not
   derived; obstruction not verified. This entry drops `ρR` and moves the obligation to `codeI`'s
   premise `Γ.CapOK`. That a well-typed closure always meets `CapOK` (no live non-persistent slot
