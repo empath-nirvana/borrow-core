@@ -105,7 +105,7 @@ def c₀V : Val := .lam (.val (.lam (.seq (.app forget (.var 0)) (.inj₁ (.val 
 
 theorem d_c₀ {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val c₀V) (.val countTy) :=
-  .bangThunkV (banged_dead hΓ) rfl
+  .bangThunkV (banged_dead hΓ).flatLive rfl
     (.allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy)
       (dead_noLive hΓ)
       (.ret (.thunkV rfl (.lam
@@ -177,7 +177,7 @@ def stepV : Val := .lam (.val (.lam (.app (.app withload (.var 0)) cbE)))
 
 theorem d_step {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty (⟨countTy, true⟩ :: Γ) (.val stepV) (.val countTy) := by
-  refine .bangThunkV (banged_cons hΓ) rfl
+  refine .bangThunkV (banged_cons hΓ).flatLive rfl
     (.allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy) ?_
       (.ret (.thunkV rfl (.lam (.ret ?_)))))
   · intro s hs hl

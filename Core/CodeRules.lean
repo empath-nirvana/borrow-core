@@ -18,7 +18,7 @@ The compatibility lemmas at `SemC`:
   context's whole resource, the uncaptured live slots being persistent and so at `∅`); the `U C`
   conjunct is the premise's value at the same resource (`vC_thunk_of_wpTS`: forcing it is a bind
   at the value's own run, `cC_bind`).
-* `codeIB_compatC`: the same over `!Γ`, at `∅`.
+* `codeIB_compatC`: the same over a flat `Γ`, at `∅`.
 * `codeErase_compatC`, `codeEraseB_compatC`: the `U C` conjunct (`wpTS_mono`).
 -/
 
@@ -371,9 +371,9 @@ theorem codeI_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
   · exact Expr.lam_psub_capNorm M γ (hok.occs_lt hw)
   · exact vC_thunk_of_wpTS (fun _ _ _ h => h) fun ls' hext => h δ γ ls' ρ hδ (gDenC_local hext hg)
 
-/-- **`codeIB`'s compatibility**: `codeI` under `!`, over `!Γ` (`gSepC_persistent`: at `∅`).
-`[spec §68]` -/
-theorem codeIB_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} (hp : Ctx.Banged Γ)
+/-- **`codeIB`'s compatibility**: `codeI` under `!`, over a flat `Γ` (`gSepC_persistent`: at `∅`).
+`[spec §68, §10]` -/
+theorem codeIB_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} (hp : Ctx.FlatLive Γ)
     (h : SemV Δ Γ (.val (.lam M)) (.bang (.thunk C))) (hok : Ctx.CapOK Γ (.lam M)) :
     SemV Δ Γ (.val (.lam M)) (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)) := by
   intro δ γ ls ρ hδ hg

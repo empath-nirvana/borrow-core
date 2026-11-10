@@ -54,7 +54,7 @@ theorem d_counterStep {Δ : LifeCtx} {Γ : Ctx VTy} {c : Lifetime.Life} (hc : Δ
     (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ (.val counterStep)
       (.val (.bang (.thunk (.arr (.ref .i32) (cloStepC c .i32 .i32 (.ref .i32)))))) := by
-  refine .bangThunkV (banged_dead hΓ) rfl (.lam (.withI (.lam (.ret ?_)) (.ret ?_)))
+  refine .bangThunkV (banged_dead hΓ).flatLive rfl (.lam (.withI (.lam (.ret ?_)) (.ret ?_)))
   · -- `let (s₁, n) = swap s 0`
     refine .letpairV (.right (.dead (.dead (.left (deadSplit hΓ)))))
       (.lolliE (split_kill _).toP (d_i32 0 (kill_dead _).toP)
@@ -364,7 +364,7 @@ def incV : Val := .lam (addE (.var 0) (i32E 10))
 
 theorem d_inc {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val incV) (.val (.bang (.lolli .i32 .i32))) :=
-  .bangThunkV (banged_dead hΓ) rfl (.lam (.ret
+  .bangThunkV (banged_dead hΓ).flatLive rfl (.lam (.ret
     (.lolliE (split_kill' _).toP
       (.tensorI (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) (d_i32 10 (.cons hΓ.toP)))
       (.bangE (.hostOp (.bin .w32 .add) (kill_dead _).toP)))))
@@ -485,7 +485,7 @@ theorem d_nestBody : CDerives Δ₁ ΓS nestBody (.comp (.ret (.box (.var 0) .i3
     (appP (d_i32 0 (by cdeadP)) (.alloc (by cdeadP))) (d_counterStep hT (kill_dead _)) ?_
   refine mkBoxC trivial hX (.box (entailsLe_of_entailsLt (BoCa.Programs.entailsLt_top rfl))) (.var (by csoloP)) ?_ ?_
   · -- the outer step
-    refine .bangThunkV (banged_dead (kill_dead _)) rfl (.lam (.withI (.lam ?_) ?_))
+    refine .bangThunkV (banged_dead (kill_dead _)).flatLive rfl (.lam (.withI (.lam ?_) ?_))
     · refine bindC (unboxC (by csoloP)
         (callC (A := .i32) (B := .i32) (c := .top) trivial (by csoloP) (by csoloP))) ?_
       refine letC (.var (by csoloP)) ?_
@@ -578,7 +578,7 @@ def twiceV : Val :=
     (elet (i32E 2) (.letpair (callMutE 2 0) (.pair (.var 1) (addE (.var 3) (.var 0)))))))
 
 theorem d_twice : CDerives Δ₂ [] (.val twiceV) (.val passTy) := by
-  refine .bangThunkV (banged_dead .nil) rfl (.lam (.ret ?_))
+  refine .bangThunkV (banged_dead .nil).flatLive rfl (.lam (.ret ?_))
   refine bindP (d_i32 1 (by cdeadP)) ?_
   refine letP (callMutW (A := .i32) (B := .i32) (c := .top) trivial (by csoloP) (by csolo)) ?_
   refine bindP (d_i32 2 (by cdeadP)) ?_
@@ -606,7 +606,7 @@ theorem d_reCb : CDerives Δ₂ [] reCb
 def reV : Val := .lam (.app (.app withbor (.var 0)) reCb)
 
 theorem d_re : CDerives Δ₂ [] (.val reV) (.val passTy) := by
-  refine .bangThunkV (banged_dead .nil) rfl (.lam (.ret ?_))
+  refine .bangThunkV (banged_dead .nil).flatLive rfl (.lam (.ret ?_))
   exact appW (weak0 d_reCb (by cdead)) (appW (.var (by csolo))
     (.withbor3 (a := .var 1) (A := PC) (B := .i32) 2 (by cdeadP) rfl (vfree_PC 2)
       (by simp [VFree])))
@@ -621,7 +621,7 @@ def passF : ℕ → Val
   | n + 1 => .lam (.app (.val (passF n)) (.var 0))
 
 theorem d_pass0 : CDerives Δ₂ [] (.val (passF 0)) (.val passTy) := by
-  refine .bangThunkV (banged_dead .nil) rfl (.lam (.ret ?_))
+  refine .bangThunkV (banged_dead .nil).flatLive rfl (.lam (.ret ?_))
   refine letP (.lolliE (split_kill' _).toP (.var (by csoloP)) (.bangE (weak0 d_re (kill_dead _)))) ?_
   refine letP (.lolliE (split_kill' _).toP (.var (by csoloP))
     (.bangE (weak0 d_twice (kill_dead _)))) ?_
@@ -630,7 +630,7 @@ theorem d_pass0 : CDerives Δ₂ [] (.val (passF 0)) (.val passTy) := by
 /-- **At every depth.**  `passF n` is typed for every `n`. -/
 theorem d_passF : ∀ (n : ℕ) {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ₂ Γ (.val (passF n)) (.val passTy)
   | 0, _, hΓ => weak0 d_pass0 hΓ
-  | n + 1, _, hΓ => .bangThunkV (banged_dead hΓ) rfl (.lam (.ret
+  | n + 1, _, hΓ => .bangThunkV (banged_dead hΓ).flatLive rfl (.lam (.ret
       (.lolliE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) (.bangE (d_passF n (.cons hΓ))))))
 
 /-! ### The program -/
@@ -705,7 +705,7 @@ def mkCounterV : Val :=
 
 theorem d_mkCounter : CDerives LifeCtx.empty [] (.val mkCounterV) (.val (.bang (.lolli .i32 FC))) := by
   have hT : LifeCtx.empty.Defines .top := LifeCtx.defines_of_wf rfl
-  refine .bangThunkV (banged_dead .nil) rfl (.lam ?_)
+  refine .bangThunkV (banged_dead .nil).flatLive rfl (.lam ?_)
   exact mkBoxC trivial hT (.ref .int) (appP (.var (by csoloP)) (.alloc (by cdeadP)))
     (d_counterStep hT (kill_dead _)) (.ret (.var (by csoloP)))
 
@@ -797,7 +797,7 @@ theorem d_logInner :
   refine seqC (appP (.var (by csoloP)) (.releaseImm (by cdeadP))) ?_
   refine mkBoxC trivial (LifeCtx.defines_of_wf rfl) (.mut lt_w_x) (.var (by csoloP)) ?_ ?_
   · -- the logger's step
-    refine .bangThunkV (banged_dead (kill_dead _)) rfl (.lam (.withI (.lam ?_) ?_))
+    refine .bangThunkV (banged_dead (kill_dead _)).flatLive rfl (.lam (.withI (.lam ?_) ?_))
     · refine letC (appP (.thunkV rfl (.lam (A := .i32) (C := .ret (.tensor .i32 .i32)) (.ret (bindP (A := .i32) (d_add (pairP (.var (by csoloP))
           (.var (by csoloP))) (by cdeadP)) (pairP (.var (by csoloP)) (.var (by csoloP)))))))
         (appP (.var (by csoloP)) (.withswap (by cdeadP)))) ?_

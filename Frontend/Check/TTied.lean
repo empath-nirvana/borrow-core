@@ -197,14 +197,14 @@ theorem allE {p : Pins} {s : CRow} {t : TExpr} {x : LifeVar} {b a : CLife} {C : 
     TTied p s Δ Γ (.allE i (.comp (C.instLife x a)) x b a C t) (.comp (C.instLife x a)) :=
   ⟨fun hn Ξ hΞ => .allE (h.1 hn Ξ hΞ) hlt, .allE h.2 hlt⟩
 
-theorem bangThunkF {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (hp : Ctx.Banged Γ)
+theorem bangThunkF {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (hp : BoCa.Fig16.LogRel.Core.Ctx.FlatLive Γ)
     (h : TTied p s Δ (⟨.unit, false⟩ :: Γ) t (.comp (.ret A))) :
     TTied p s Δ Γ (.bangThunkF i (.val (.bang (.thunk (.ret A)))) A t)
       (.val (.bang (.thunk (.ret A)))) :=
   ⟨fun hn Ξ hΞ => .bangThunkF hp (h.1 hn Ξ hΞ), .bangThunkF hp h.2⟩
 
 theorem bangThunkV {p : Pins} {s : CRow} {t : TExpr} {N : BoCa.Expr} {C : CCTy}
-    (hp : Ctx.Banged Γ) (hC : C.isRet = false) (h : TTied p s Δ Γ t (.comp C))
+    (hp : BoCa.Fig16.LogRel.Core.Ctx.FlatLive Γ) (hC : C.isRet = false) (h : TTied p s Δ Γ t (.comp C))
     (q : t.erase = .val (BoCa.Val.lam N)) :
     TTied p s Δ Γ (.bangThunkV i (.val (.bang (.thunk C))) C t) (.val (.bang (.thunk C))) :=
   ⟨fun hn Ξ hΞ => .bangThunkV hp hC (h.1 hn Ξ hΞ) q, .bangThunkV hp hC h.2 q⟩

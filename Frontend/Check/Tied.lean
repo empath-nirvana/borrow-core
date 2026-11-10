@@ -152,12 +152,12 @@ theorem allE {s : CRow} {M : BoCa.Expr} {x : LifeVar} {b a : CLife} {C : CCTy}
     TiedAt s Δ Γ (.app M (.val BoCa.Val.unit)) (.comp (C.instLife x a)) :=
   fun Ξ hΞ => .allE (h Ξ hΞ) hlt
 
-theorem bangThunkF {s : CRow} {M : BoCa.Expr} {A : CVTy} (hp : Ctx.Banged Γ)
+theorem bangThunkF {s : CRow} {M : BoCa.Expr} {A : CVTy} (hp : BoCa.Fig16.LogRel.Core.Ctx.FlatLive Γ)
     (h : TiedAt s Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
     TiedAt s Δ Γ (.val (BoCa.Val.lam M)) (.val (.bang (.thunk (.ret A)))) :=
   fun Ξ hΞ => .bangThunkF hp (h Ξ hΞ)
 
-theorem bangThunkV {s : CRow} {N : BoCa.Expr} {C : CCTy} (hp : Ctx.Banged Γ)
+theorem bangThunkV {s : CRow} {N : BoCa.Expr} {C : CCTy} (hp : BoCa.Fig16.LogRel.Core.Ctx.FlatLive Γ)
     (hC : C.isRet = false) (h : TiedAt s Δ Γ (.val (BoCa.Val.lam N)) (.comp C)) :
     TiedAt s Δ Γ (.val (BoCa.Val.lam N)) (.val (.bang (.thunk C))) :=
   fun Ξ hΞ => .bangThunkV hp hC (h Ξ hΞ)
@@ -463,13 +463,13 @@ theorem allE {p : Pins} {s : CRow} {M : BoCa.Expr} {x : LifeVar} {b a : CLife} {
   ⟨fun hn => TiedAt.allE (h.1 hn) hlt,
     CDerivesP.allE h.2 hlt⟩
 
-theorem bangThunkF {p : Pins} {s : CRow} {M : BoCa.Expr} {A : CVTy} (hp : Ctx.Banged Γ)
+theorem bangThunkF {p : Pins} {s : CRow} {M : BoCa.Expr} {A : CVTy} (hp : BoCa.Fig16.LogRel.Core.Ctx.FlatLive Γ)
     (h : TiedDer p s Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
     TiedDer p s Δ Γ (.val (BoCa.Val.lam M)) (.val (.bang (.thunk (.ret A)))) :=
   ⟨fun hn => TiedAt.bangThunkF hp (h.1 hn),
     CDerivesP.bangThunkF hp h.2⟩
 
-theorem bangThunkV {p : Pins} {s : CRow} {N : BoCa.Expr} {C : CCTy} (hp : Ctx.Banged Γ)
+theorem bangThunkV {p : Pins} {s : CRow} {N : BoCa.Expr} {C : CCTy} (hp : BoCa.Fig16.LogRel.Core.Ctx.FlatLive Γ)
     (hC : C.isRet = false) (h : TiedDer p s Δ Γ (.val (BoCa.Val.lam N)) (.comp C)) :
     TiedDer p s Δ Γ (.val (BoCa.Val.lam N)) (.val (.bang (.thunk C))) :=
   ⟨fun hn => TiedAt.bangThunkV hp hC (h.1 hn),

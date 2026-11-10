@@ -728,18 +728,18 @@ theorem flag_persistent : Flag.Persistent := rfl
 
 theorem d_hrS {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ hrS (.val (retTy [] .unit StR)) :=
-  .bangThunkV (banged_dead hΓ) rfl (.lam (.ret (.thunkV rfl (.lam (.ret (.sumI₁
+  .bangThunkV (banged_dead hΓ).flatLive rfl (.lam (.ret (.thunkV rfl (.lam (.ret (.sumI₁
     (.var (.skip flag_persistent (.here hΓ.toP)))))))))
 
 theorem d_ccS {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ ccS (.val (clauseTy [] StR (.cancel, .unit, .zero))) :=
-  .bangThunkV (banged_dead hΓ) rfl (.lam (.ret (.thunkV rfl (.lam (.ret (.sumI₂
+  .bangThunkV (banged_dead hΓ).flatLive rfl (.lam (.ret (.thunkV rfl (.lam (.ret (.sumI₂
     (.unitI (.weaken rfl (.weaken rfl hΓ.toP)))))))))
 
 theorem d_clS {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ clS
       (.val (clauseTy [] StR (.lin, .unit, .sum .unit .unit) (finR 3))) := by
-  refine .bangThunkV (banged_dead hΓ) rfl (.lam ?_)
+  refine .bangThunkV (banged_dead hΓ).flatLive rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
   refine .ret (.thunkV rfl (.lam ?_))
   refine .bind (.dup rfl (.left (.right (.dead (deadSplit hΓ)))))

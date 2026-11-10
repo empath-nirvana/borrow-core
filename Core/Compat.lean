@@ -385,8 +385,8 @@ theorem allI_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.L
 
 /-! ### `!` -/
 
-/-- Promotion of `thunk M : U (F A)` over `!Γ`. -/
-theorem bangThunkF_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} (hp : Ctx.Banged Γ)
+/-- Promotion of `thunk M : U (F A)` over a flat `Γ`.  `[spec §10]` -/
+theorem bangThunkF_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} (hp : Ctx.FlatLive Γ)
     (h : SemC Δ (⟨.unit, false⟩ :: Γ) M (.ret A)) :
     SemV Δ Γ (.val (.lam M)) (.bang (.thunk (.ret A))) := by
   intro δ γ ls ρ hδ hg
@@ -398,9 +398,9 @@ theorem bangThunkF_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} (h
   rw [← substAll_cons]
   exact h δ (Val.unit :: γ) ls' ρ hδ (gDenC_dead_cons _ _ (gDenC_local hext hg))
 
-/-- Promotion of a λ-value `V : C` (`C` not an `F`) over `!Γ`: `bangLamI_compatX` at
-`C = A ⊸ F B`, `bangAllI_compatX` at `C = ∀'x ⊏ @b. F B`. -/
-theorem bangThunkV_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hp : Ctx.Banged Γ)
+/-- Promotion of a λ-value `V : C` (`C` not an `F`) over a flat `Γ`: `bangLamI_compatX` at
+`C = A ⊸ F B`, `bangAllI_compatX` at `C = ∀'x ⊏ @b. F B`.  `[spec §10]` -/
+theorem bangThunkV_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hp : Ctx.FlatLive Γ)
     (hC : C.isRet = false) (h : SemC Δ Γ (.val (.lam N)) C) :
     SemV Δ Γ (.val (.lam N)) (.bang (.thunk C)) := by
   intro δ γ ls ρ hδ hg

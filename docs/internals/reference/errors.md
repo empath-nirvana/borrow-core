@@ -62,14 +62,14 @@ main : F i32 =
 ```
 
 **Promotion.** `!thunk` and `!thunkv` build a value that holds no resource, so their body may use
-only `!`-typed variables.
+only variables of flat type (SPEC §10: scalars, `!` types, and products and sums of them; not `μ` data).
 
 ```bc,reject
 main : F i32 =
   r <- return (alloc[i32] i32[1]);
   g <- return (!thunk (return (free[i32] r)));
   return i32[0]
--- expect: 3:16: `!thunk` promotes only over `!` types, but `r`, of type `ref i32`, is used inside
+-- expect: 3:16: `!thunk` promotes only over flat types (scalars and tuples of them), but `r`, of type `ref i32`, which is not flat, is used inside: capture it in an ordinary closure
 ```
 
 **Externs.** `main` must consume every extern whose type is not persistent.

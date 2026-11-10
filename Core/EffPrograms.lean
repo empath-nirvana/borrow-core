@@ -684,7 +684,7 @@ def tickStep : Val :=
 theorem d_tickStep {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val tickStep) (.val (.bang (.thunk (.arr .unit (TickC.instT .unit))))) := by
   rw [CTy.loopEffBody_instT]
-  refine .bangThunkV (banged_dead hΓ) rfl (.lam (.withI ?_ ?_))
+  refine .bangThunkV (banged_dead hΓ).flatLive rfl (.lam (.withI ?_ ?_))
   · refine .effLet (A := .unit) (.dead (.dead (.right (deadSplit hΓ))))
       (fun _ s hs hl => ?_) (fun h => by
         obtain ⟨o, ho, h⟩ := h; simp at ho; subst ho; cases h)
@@ -839,12 +839,12 @@ theorem natN_persistent : natN.Persistent := rfl
 
 theorem d_hrT {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ hrT (.val (retTy [] .unit TakeR)) :=
-  .bangThunkV (banged_dead hΓ) rfl (.lam (.ret (.thunkV rfl (.lam (.ret (.sumI₁
+  .bangThunkV (banged_dead hΓ).flatLive rfl (.lam (.ret (.thunkV rfl (.lam (.ret (.sumI₁
     (.var (.skip natN_persistent (.here hΓ.toP)))))))))
 
 theorem d_clT {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ clT (.val (clauseTy [] TakeR (.cancel, .unit, .unit))) := by
-  refine .bangThunkV (banged_dead hΓ) rfl (.lam ?_)
+  refine .bangThunkV (banged_dead hΓ).flatLive rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
   refine .ret (.thunkV rfl (.lam ?_))
   refine .sumE (.left (.right (.right (.dead (deadSplit hΓ)))))
@@ -944,11 +944,11 @@ theorem d_performer {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
 
 theorem d_hrS {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ hrS (.val (retTy [] .unit .unit)) :=
-  .bangThunkV (banged_dead hΓ) rfl (.lam (.ret (.var (.here hΓ.toP))))
+  .bangThunkV (banged_dead hΓ).flatLive rfl (.lam (.ret (.var (.here hΓ.toP))))
 
 theorem d_clS {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ clS (.val (clauseTy [] .unit (.cancel, .unit, .unit))) := by
-  refine .bangThunkV (banged_dead hΓ) rfl (.lam ?_)
+  refine .bangThunkV (banged_dead hΓ).flatLive rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
   refine .unitE (.right (.left (.dead (deadSplit hΓ)))) (.var (by csolo)) ?_
   refine .bind (.left (.dead (.dead (deadSplit hΓ))))
@@ -1004,7 +1004,7 @@ theorem d_tickAnsStep {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ (.val tickAnsStep)
       (.val (.bang (.thunk (.arr (.ref Flag) (.amp (.ret (.sum .zero (.ref Flag)))
         (.ret (.ref Flag))))))) := by
-  refine .bangThunkV (banged_dead hΓ) rfl (.lam (.withI ?_ ?_))
+  refine .bangThunkV (banged_dead hΓ).flatLive rfl (.lam (.withI ?_ ?_))
   · refine .ret (letW (appW (d_logCb (by cdead)) (appW (.var (by csolo))
       (.withbor2 (A := Flag) (B := .unit) 0 (by cdead) rfl
         ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree])

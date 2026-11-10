@@ -153,6 +153,11 @@ corpus/capture-take-hand.bc 1.0 cancellable resume-or-cancel: machine: a path of
 corpus/clause-captures.bc 3.0 cancellable abortive: branch; agree
 corpus/clause-captures.bc 2.0 cancellable abortive: branch; agree
 corpus/clause-captures.bc 1.0 cancellable tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/closure-capture-scalar.bc 2.0 cancellable abortive: branch; agree
+corpus/closure-capture-scalar.bc 4.0 cancellable abortive: branch; agree
+corpus/closure-capture-scalar.bc 3.0 cancellable abortive: branch; agree
+corpus/closure-capture-scalar.bc 1.0 cancellable abortive: branch; agree
+corpus/closure-captures-list.bc 1.0 cancellable abortive: branch; agree
 corpus/comp-param.bc 1.0 cancellable abortive: -; agree
 corpus/comp-param.bc 3.0 cancellable abortive: -; agree
 corpus/comp-param.bc 5.0 cancellable abortive: -; agree
