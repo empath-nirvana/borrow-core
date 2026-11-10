@@ -6,7 +6,7 @@
 -- Answer: `(((inl i32[113], i32[1]), (inl (), i32[1])), ((inr i32[9], i32[1]), (inr i32[9], i32[1])))`.
 -- `live 0`. A close before the operation gives `i32[0]` in `h2`'s case with `fb = 9`.
 --
--- check: old-backend-refuses
+-- check: old-backend-refuses (#1033)
 
 include adapters
 include fail
