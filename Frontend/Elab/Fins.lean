@@ -43,7 +43,8 @@ def Row.ents : Row → List Ent
   | .nil | .top => []
   | .cons n i q A B _ r => (n, i, q, A, B) :: Row.ents r
 
-/-- The row of a function's or a block's type: the first `F[…]` on the spine of its result. -/
+/-- The row of a function's or a block's type: the first `F[…]` on the spine of its result.
+`[spec §27]` -/
 def rowOfTy : VTy → List Ent
   | .bang _ A | .all _ _ _ A => rowOfTy A
   | .lolli _ _ B => rowOfTy B
@@ -56,7 +57,8 @@ where
     | _ => []
 
 /-- The answer `B` is `0` at the kernel's types (an abortive operation's, with a qualifier that
-weakens). -/
+weakens). It is the checker's elaboration of the declared answer and Core's `isZero`, as
+`OpDecl.abortive` reads it.  `[spec §27]` -/
 def zeroTy (B : VTy) : Bool :=
   match Frontend.Check.elabV Frontend.Check.tyFuel
       ⟨⟨#[], 0, [], []⟩, .empty, .empty, [], [], [], [], []⟩ B with
@@ -65,15 +67,15 @@ def zeroTy (B : VTy) : Bool :=
     | .zero _ => true
     | _ => false
 
-/-- The entry captures a continuation (`capB`): its cancel row is read. -/
+/-- The entry captures a continuation (`capB`): its cancel row is read.  `[spec §27]` -/
 def Ent.captures (e : Ent) : Bool := e.2.2.1 != .lin && !zeroTy e.2.2.2.2
 
-/-- Add the entries `es` to a list of entries, each name once. -/
+/-- Add the entries `es` to a list of entries, each name once.  `[spec §27]` -/
 def addEnts (acc es : List Ent) : List Ent :=
   es.foldl (fun acc e => if acc.any fun f => f.1 == e.1 && f.2.1 == e.2.1 then acc else acc ++ [e])
     acc
 
-/-- The table with `es` added to the cancel row of `n.i`. -/
+/-- The table with `es` added to the cancel row of `n.i`.  `[spec §27]` -/
 def Table.add (t : Table) (n i : Nat) (es : List Ent) : Table :=
   if es.isEmpty then t else
   match t.find? (·.1 == (n, i)) with
@@ -96,27 +98,22 @@ def clauseBodies : Val → List (String × Comp)
   | .pair _ _ rest => ("", .top .none) :: clauseBodies rest
   | _ => []
 
-/-- The cancel row of `n.i` in the table, as a written row (each entry's own cancel row empty). -/
+/-- The cancel row of `n.i` in the table, as a written row (each entry's own cancel row empty).
+`[spec §27]` -/
 def Table.finOf (t : Table) (n i : Nat) : Row :=
   match t.find? (·.1 == (n, i)) with
   | some (_, es) => es.foldr (fun (n, i, q, A, B) r => .cons n i q A B .nil r) .nil
   | none => .nil
 
 /-- A handler site of the effects pass's output, `hndCtl i P R cls (thunk M)`: the site's info
-and the computation it handles. -/
+and the computation it handles.  `[spec §27]` -/
 def hndSite? : Val → Option (HInfo × Val × Val × Val × Comp)
   | .app _ (.app _ (.app _ (.app _ (.sugar _ (.hndCtl i)) P) R) cls) (.thunk _ M) => some (i, P, R, cls, M)
   | _ => none
 
-/-- A value that only names variables: a binding of it performs nothing and cannot abort.
-`[spec §27]` -/
-def namesOnly : Val → Bool
-  | .var .. | .unit _ => true
-  | .pair _ V W => namesOnly V && namesOnly W
-  | _ => false
-
-/-- A value that makes no call: it performs nothing (a closure it builds runs later).
-`[spec §27]` -/
+/-- A value that makes no call: the end of a path that returns it has no effect after the cancel
+(a closure it builds runs later). Every call counts as an effect, an answering effect's (a
+capability's, not in any row) included, so a cancel is never placed before one.  `[spec §27]` -/
 def callFree : Val → Bool
   | .var .. | .unit _ | .clone .. | .sugar _ (.lit _) | .sugar _ (.flit ..) => true
   | .pair _ V W => callFree V && callFree W
@@ -150,8 +147,9 @@ and on the way out of an abort or a cancel that passes through it.
   `M₁` answers, `N` runs with `k` still live. Any other head is left as it is. A region of the
   clause's own, `x <- M₁ unwind (D); N`, whose body does not mention `k` is such a head as a whole,
   so its own finaliser `D` runs first, then `k`'s cancel (inner regions unwind first); so is a loop
-  whose body has no exit of the clause (`loopHead`); a loop whose value is bound is wrapped with
-  the binding of its value (`boundRes?`), so the head is the loop as elaborated.
+  whose body can abort; a loop whose value is bound is wrapped with the binding of its value
+  (`boundRes?`), so the head is the loop as elaborated. (A loop's `break` and `continue` stay in
+  the clause; a `return` in a clause is refused before.)
 
 Exactly once: `k` is live from its binding until the first of a head's abort (its finaliser
 cancels it, and nothing after runs), the end of the path (the cancel after its last effect), or a
@@ -161,11 +159,11 @@ use the program wrote (no cancel is inserted on that path after it). The finalis
 The cancel is `u <- (force k).2; let () = u; T`, the kernel's `[&E₂]`. With `inState`, the
 path's terminal `return (thunkv M)` is the state's function of a handler with a state (§21), whose
 body is the clause's own code: the path continues in it, by the same rule.  `[spec §12, §21, §27]` -/
-def cancelAtEnds (wrapHead : Comp → Bool) (loopHead : Comp → Comp → Bool) (sp : Span) (k : Ident)
+def cancelAtEnds (wrapHead : Comp → Bool) (sp : Span) (k : Ident)
     (inState : Bool) : Nat → Comp → Comp
   | 0, M => M
   | n + 1, M =>
-    let go := cancelAtEnds wrapHead loopHead sp k inState n
+    let go := cancelAtEnds wrapHead sp k inState n
     let uses := Frontend.Check.mentionsC k.name
     let usesV := Frontend.Check.mentionsV k.name
     let cancelK : Comp := .proj sp false (.force sp k)
@@ -175,7 +173,6 @@ def cancelAtEnds (wrapHead : Comp → Bool) (loopHead : Comp → Comp → Bool) 
     -- `x <- M₁; N` with `M₁` a head that does not mention `k`.
     let head (bsp : Span) (x : Ident) (A : Option VTy) (M₁ N : Comp) : Comp :=
       let wrap := wrapHead M₁ && match M₁ with
-        | .ret _ V => !namesOnly V
         | .loop .. => false
         | _ => true
       if wrap then .unwind bsp x A M₁ cancelK (go N) else .bind bsp x A M₁ (go N)
@@ -206,7 +203,7 @@ def cancelAtEnds (wrapHead : Comp → Bool) (loopHead : Comp → Comp → Bool) 
       else .unwind usp x A M₁ D (go N)
     | .loop lsp ℓ src V M₁ N =>
       if usesV V || uses M₁ then M
-      else if wrapHead M₁ && loopHead M₁ N then
+      else if wrapHead M₁ then
         -- The loop as a head: an abort out of its body cancels `k` on the way out. A loop whose
         -- value is bound (`let r = for …; N₀`) keeps the binding of its value with it, so that the
         -- head is the loop and its value as the typed elaboration elaborates them, and the rest
@@ -220,7 +217,7 @@ def cancelAtEnds (wrapHead : Comp → Bool) (loopHead : Comp → Comp → Bool) 
           .unwind lsp r none (.loop lsp ℓ src V M₁ (.ret lsp (.unit lsp))) cancelK (go N)
       else .loop lsp ℓ src V M₁ (go N)
     | .ret rsp (.thunkv tsp N) =>
-      if inState then .ret rsp (.thunkv tsp (cancelAtEnds wrapHead loopHead sp k false n N))
+      if inState then .ret rsp (.thunkv tsp (cancelAtEnds wrapHead sp k false n N))
       else if uses M then M else cancel M
     | .ret _ V => if usesV V then M else if callFree V then cancel M else last M
     | .top _ | .absurd .. => M
@@ -243,7 +240,7 @@ def cancelHeads (k : String) : Nat → Comp → List Comp
 
 mutual
 /-- The names a value performs and the functions it names, less the operations of the sites inside
-it (`inner`): `(names, functions)`. -/
+it (`inner`): `(names, functions)`.  `[spec §27]` -/
 def perfV : Nat → List Nat → Val → List (Nat × Nat) × List String
   | 0, _, _ => ([], [])
   | k + 1, inner, V =>
@@ -252,7 +249,7 @@ def perfV : Nat → List Nat → Val → List (Nat × Nat) × List String
       let d := perfC k (i.n :: inner) M
       (a.1 ++ b.1 ++ c.1 ++ d.1, a.2 ++ b.2 ++ c.2 ++ d.2)
     else match V with
-    | .var _ x => ([], [x])
+    | .var _ x | .clone _ x | .defApp _ x _ => ([], [x])
     | .pair _ V W | .app _ V W =>
       let a := perfV k inner V; let b := perfV k inner W; (a.1 ++ b.1, a.2 ++ b.2)
     | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
@@ -260,7 +257,7 @@ def perfV : Nat → List Nat → Val → List (Nat × Nat) × List String
     | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => perfC k inner M
     | _ => ([], [])
 
-/-- `perfV` of a computation. -/
+/-- `perfV` of a computation.  `[spec §27]` -/
 def perfC : Nat → List Nat → Comp → List (Nat × Nat) × List String
   | 0, _, _ => ([], [])
   | k + 1, inner, M =>
@@ -283,24 +280,48 @@ def perfC : Nat → List Nat → Comp → List (Nat × Nat) × List String
     | .top _ => ([], [])
 end
 
-/-- The finaliser's row `Σ_D` at the site's row `S`: the entries of `S` it performs, and those of
-the rows of the functions it calls (`rows`) that are in `S`. -/
-def finRow (rows : List (String × List Ent)) (S : List Ent) (D : Comp) : List Ent :=
-  let (ns, fs) := perfC 100000 [] D
-  let called := fs.flatMap fun f => (rows.lookup f).getD []
-  let at_ (n i : Nat) : Option Ent := S.find? fun e => e.1 == n && e.2.1 == i
-  addEnts [] ((ns.filterMap fun (n, i) => at_ n i) ++ (called.filterMap fun e => at_ e.1 e.2.1))
+/-- The operations `n.i` a computation performs, by the one walk both the inference and the
+typed elaboration use: its `perform`s and `abort`s, less those of the sites inside it, and the
+row (`rowOf`) of every function it names. The rows are the facts the effects pass wrote in its
+copies' types (`fnRows`); the typed elaboration gives a local's (a block parameter's) by its type.
+`[spec §27]`
 
-/-- The entries of the row `S` that a computation performs: its `perform`s and `abort`s, and the
-rows of the functions it calls, less the sites inside it.  `[spec §27]` -/
-def headEnts (rows : List (String × List Ent)) (S : List Ent) (M : Comp) : List Ent :=
+UNPROVED: a function with a row is named in a computation only to be called there (a copy, the
+effects pass's: `io_fg <- return unbang f; …; force io_fg a`, or `f[A](a)` of a template's copy),
+so naming it performs its row. Why it should hold: the effects pass names a copy only at its call,
+and refuses a function with a row passed as a value. What breaks if it does not: a head that
+performs an operation this walk misses is not wrapped in `unwind (cancel k)`, and the kernel
+refuses `k` live across it (a refusal, never a wrong program); one it counts that the head does not
+perform is wrapped, which the kernel checks too. -/
+def opsOf (rowOf : String → List (Nat × Nat)) (M : Comp) : List (Nat × Nat) :=
   let (ns, fs) := perfC 100000 [] M
-  let called := fs.flatMap fun f => (rows.lookup f).getD []
-  let at_ (n i : Nat) : Option Ent := S.find? fun e => e.1 == n && e.2.1 == i
-  addEnts [] ((ns.filterMap fun (n, i) => at_ n i) ++ (called.filterMap fun e => at_ e.1 e.2.1))
+  ns ++ fs.flatMap rowOf
+
+/-- The entries of `S` among the operations `ns`. -/
+def entsAt (S : List Ent) (ns : List (Nat × Nat)) : List Ent :=
+  addEnts [] (ns.filterMap fun (n, i) => S.find? fun e => e.1 == n && e.2.1 == i)
+
+/-- Each function of the effects pass's output with a row, as the effects pass wrote it in its
+type: the fact both the inference and the typed elaboration read for a call.  `[spec §27]` -/
+def fnRows (ds : List Decl) : List (String × List (Nat × Nat)) :=
+  ds.filterMap fun
+    | .def_ _ n _ A _ _ =>
+      let r := rowOfTy A
+      if r.isEmpty then none else some (n.name, r.map fun e => (e.1, e.2.1))
+    | _ => none
+
+/-- A function's row by its name, as its written type gives it. -/
+def rowNames (rows : List (String × List Ent)) (f : String) : List (Nat × Nat) :=
+  ((rows.lookup f).getD []).map fun e => (e.1, e.2.1)
+
+/-- The finaliser's row `Σ_D` at the site's row `S`: the entries of `S` it performs (`opsOf`).
+`[spec §27]` -/
+def finRow (rows : List (String × List Ent)) (S : List Ent) (D : Comp) : List Ent :=
+  entsAt S (opsOf (rowNames rows) D)
 
 mutual
-/-- The cancel rows that the finalisers of a value require, at the row `S` around it. -/
+/-- The cancel rows that the finalisers of a value require, at the row `S` around it.
+`[spec §27]` -/
 def walkV (rows : List (String × List Ent)) (glob : List Ent) : Nat → List Ent → Table → Val → Table
   | 0, _, t, _ => t
   | k + 1, S, t, V =>
@@ -308,23 +329,6 @@ def walkV (rows : List (String × List Ent)) (glob : List Ent) : Nat → List En
       let t := walkV rows glob k S (walkV rows glob k S t P) R
       let Si := (i.ents.zipIdx.map fun ((q, A, B), j) => ((i.n, j, q, A, B) : Ent)) ++ S
       let t := walkC rows glob k Si t M
-      -- A clause that drops its `κ` cancels it on an abort or a cancel through it
-      -- (`cancelAtEnds`, the typed elaboration's `cancelDropped`, by the same rule): each such
-      -- `unwind (cancel k)` is a finaliser whose cancel runs the cancelled region's finalisers,
-      -- `κ`'s cancel row `F`, under a head whose capturing operations' cancel rows then hold `F`.
-      let t := (clauseBodies cls).zipIdx.foldl (fun t (cl, j) =>
-        match cl, i.ents[j]? with
-        | (p, .letPair sp _ kv (.var _ p') N), some (q, A, B) =>
-          let F := t.ents i.n j
-          if i.boxK || p != p' || !Ent.captures (i.n, j, q, A, B) || (F.isEmpty && S.isEmpty) then t
-          else
-            let headOps (M : Comp) : List Ent := headEnts rows S M
-            let wrapHead (M : Comp) : Bool := (headOps M).any fun e => e.aborts || e.captures
-            let N' := cancelAtEnds wrapHead (fun M _ => !M.anySugar (· matches .retE)) sp kv
-              i.stateful 100000 N
-            (cancelHeads kv.name 100000 N').foldl (fun t M =>
-              (headOps M).foldl (fun t e => if e.captures then t.add e.1 e.2.1 F else t) t) t
-        | _, _ => t) t
       walkV rows glob k S t cls
     else match V with
     | .pair _ V W | .app _ V W => walkV rows glob k S (walkV rows glob k S t V) W
@@ -334,13 +338,10 @@ def walkV (rows : List (String × List Ent)) (glob : List Ent) : Nat → List En
     -- A thunk runs at its own row: the operations it performs (an effectful block's, at the sites
     -- where it is called), beside the row around it.
     | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M =>
-      let (ns, fs) := perfC 100000 [] M
-      let at_ (n i : Nat) : Option Ent := glob.find? fun e => e.1 == n && e.2.1 == i
-      let own := (ns.filterMap fun (n, i) => at_ n i) ++ fs.flatMap fun f => (rows.lookup f).getD []
-      walkC rows glob k (addEnts S own) t M
+      walkC rows glob k (addEnts S (entsAt glob (opsOf (rowNames rows) M))) t M
     | _ => t
 
-/-- `walkV` of a computation. -/
+/-- `walkV` of a computation.  `[spec §27]` -/
 def walkC (rows : List (String × List Ent)) (glob : List Ent) : Nat → List Ent → Table → Comp → Table
   | 0, _, t, _ => t
   | k + 1, S, t, M => match M with

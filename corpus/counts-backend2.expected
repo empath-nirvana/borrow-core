@@ -113,6 +113,7 @@ fin-drop-capturing-row 0 1 0 0 0 0
 fin-e7b 0 0 0 0 0 0
 fin-e7d 0 0 0 0 0 0
 fin-e8b 0 0 0 0 0 0
+fin-generic-call 0 0 0 0 0 0
 fin-raise-cancel 0 0 0 0 0 0
 fin-raise-unwind 0 0 0 0 0 0
 fin-resume-capturing-row 0 2 0 0 0 0

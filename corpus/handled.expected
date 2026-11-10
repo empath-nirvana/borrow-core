@@ -850,6 +850,11 @@ corpus/fin-e8b.bc 15:27: handle 1: inside [2], finaliser; row []; ops 1.0 aborti
 corpus/fin-e8b.bc 15:41: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/fin-e8b.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/fin-e8b.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/fin-generic-call.bc flows [0, 2, 4294967295], finaliser; main [1, 2], finaliser
+corpus/fin-generic-call.bc 22:27: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/fin-generic-call.bc 22:58: handle 2: inside [], finaliser; row [1]; ops 2.0 stored; names 2.0 row; condition 2 fails at 1
+corpus/fin-generic-call.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/fin-generic-call.bc 2.0 stored: machine; condition 2 fails; -
 corpus/fin-raise-cancel.bc flows [0, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
 corpus/fin-raise-cancel.bc 18:3: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/fin-raise-cancel.bc 19:5: handle 2: inside [3], finaliser; row [1]; ops 2.0 resume-or-cancel; names 2.0 []; condition 2 holds

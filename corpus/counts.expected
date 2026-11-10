@@ -118,6 +118,7 @@ fin-drop-capturing-row 0 1 0 0 0 0 # the indirect call is of `tm`'s answer, a fu
 fin-e7b 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
 fin-e7d 0 0 0 0 0 0 # no cell; two cleanups raise, the first error is kept
 fin-e8b 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the pending one
+fin-generic-call 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
 fin-raise-cancel 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
 fin-raise-unwind 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the pending one
 fin-resume-capturing-row 0 2 0 0 0 0 # the indirect calls are of `tm`'s answer, a function of its state

@@ -1883,6 +1883,9 @@ structure DivSt where
   /-- Each handler site's operation `n.i` by its surface name, `E.op`, for messages
   (`Fins.opNames`).  `[spec §27]` -/
   opNames : List ((Nat × Nat) × String) := []
+  /-- Each function's row as the effects pass wrote it in its type (`Fins.fnRows`): what a
+  clause's head performs by calling it.  `[spec §27]` -/
+  fnRows : List (String × List (Nat × Nat)) := []
   /-- The `poly` families and their cases, all of the program's, known before any call is
   elaborated.  `[spec §36]` -/
   polys : PolyTab := {}
@@ -4650,14 +4653,11 @@ def siteAtCall (c : TCx) (sp : Span) (g : String) (r : SiteRec) : DM SiteRec := 
       pure (x, ← (c.surface sp t : Except Error VTy))
     pure (r.mapTy (·.subst σ))
 
-/-- A loop of a clause that may be a head of its path (`Fins.cancelAtEnds`): its body has no exit
-of the clause (a `return e`; its own `break` and `continue` stay in the clause).  `[spec §27]` -/
-def loopHead (M _N : Comp) : Bool := !M.anySugar (· matches .retE)
-
 /-- A clause that does not use its `κ` on some path, at an operation whose cancel branch
 `cancelTy S F` performs (its cancel row `F` or the handler's row `S` is not empty), cancels it
 exactly once on that path (`Fins.cancelAtEnds`): at the end of the path, and on the way out of an
-abort or a cancel through a head whose row (`ops`, what the typing gives it) holds an abortive
+abort or a cancel through a head whose row (`Fins.opsOf`, the functions' rows by their types)
+holds an abortive
 operation of `S` or one that captures a continuation. The checker consumes an unused `κ` only when
 its cancel branch performs nothing (a consume is effect-free, SPEC §12): a cancel that performs is a
 computation, which the elaboration writes and the kernel types. The clause's body binds `κ` taking
@@ -4669,7 +4669,7 @@ when a continuation the head captures is cancelled: a capturing operation of `S`
 performs would need its cancel row to hold itself (`⊤`, SPEC §27 *Open*), which the kernel
 refuses; such a clause is refused here, naming the operation.  `[spec §12, §27]` -/
 def cancelDropped (S : Frontend.Check.CRow) (F : CCTy) (q : Frontend.Check.CQual) (B : CVTy)
-    (boxK stateful : Bool) (p : String) (ops : Comp → List (Nat × Nat))
+    (boxK stateful : Bool) (p : String) (rowOf : String → List (Nat × Nat))
     (opName : Nat → Nat → String) (M : Comp) : Except Error Comp :=
   match M with
   | .letPair sp a k (.var vsp p') N =>
@@ -4677,10 +4677,10 @@ def cancelDropped (S : Frontend.Check.CRow) (F : CCTy) (q : Frontend.Check.CQual
     then pure M
     else
       let headOps (M₁ : Comp) : List Frontend.Check.COpSig :=
-        S.filter fun o => (ops M₁).contains (o.n.toNat, o.i.toNat)
+        S.filter fun o => (Elab.Fins.opsOf rowOf M₁).contains (o.n.toNat, o.i.toNat)
       let wrapHead (M₁ : Comp) : Bool :=
         (headOps M₁).any fun o => o.abort || BoCa.Fig16.LogRel.Core.capB o.q o.B
-      let N' := Elab.Fins.cancelAtEnds wrapHead loopHead sp k stateful 100000 N
+      let N' := Elab.Fins.cancelAtEnds wrapHead sp k stateful 100000 N
       let captured := (Elab.Fins.cancelHeads k.name 100000 N').findSome? fun M₁ =>
         (headOps M₁).find? fun o => BoCa.Fig16.LogRel.Core.capB o.q o.B
       match captured with
@@ -4793,7 +4793,14 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
         let opName (n i : Nat) : String := match names.lookup (n, i) with
           | some s => s!"`{s}` ({n}.{i})"
           | none => s!"{n}.{i}"
-        let body ← (cancelDropped S (fs j) q Bi i.boxK i.stateful x.name (opsC cS divFuel) opName
+        -- A function's row as the effects pass wrote it in its type (`Fins.fnRows`, the fact the
+        -- inference reads too); a name in this context, a block parameter's, by its type here.
+        let fnRows := (← get).fnRows
+        let rowOf (g : String) : List (Nat × Nat) := match fnRows.lookup g with
+          | some r => r
+          | none => ((cS.tyV (.var .none g)).map fun T =>
+              (fnRowOf T).map fun o => (o.n.toNat, o.i.toNat)).getD []
+        let body ← (cancelDropped S (fs j) q Bi i.boxK i.stateful x.name rowOf opName
           body : Except Error Comp)
         let body' ← surfC n (cS.push x.name (some T)) (some ans) (body.subst σ)
         hcs := hcs ++ [.bangThunkv csp (.lam lsp x (← (cP.surface lsp T : Except Error VTy)) body')]
@@ -6240,14 +6247,14 @@ end
 /-- The declarations with divergence inferred, in order (copies before their first use), and
 whether any body was elaborated as a loop. -/
 def elabDivs (lib decls : List Decl) (libNames : List String) (perTurn : List Nat := [])
-    (polys : PolyTab := {}) (opNames : List ((Nat × Nat) × String) := []) :
-    SM (List Decl × Bool) := do
+    (polys : PolyTab := {}) (opNames : List ((Nat × Nat) × String) := [])
+    (fnRows : List (String × List (Nat × Nat)) := []) : SM (List Decl × Bool) := do
   -- Every family and case is known before any call is elaborated, so that a case is chosen
   -- among all of them (SPEC §36).
   (polyCheck (TCx.ofScope (lib ++ decls) false) polys : Except Error Unit)
   let names := polys.fams.map (·.1) ++ polys.cases.map (·.name)
   let templates := decls.filter fun | .def_ _ m _ _ _ _ => names.contains m.name | _ => false
-  let st ← decls.foldlM (init := ({ lib, libNames, perTurn, polys, templates, opNames } : DivSt))
+  let st ← decls.foldlM (init := ({ lib, libNames, perTurn, polys, templates, opNames, fnRows } : DivSt))
     (elabDecl divFuel)
   pure (st.out, st.any)
 
@@ -6583,7 +6590,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
     | .effect _ e _ ops => some (e.name, ops.map (·.name.name))
     | _ => none
   let (decls, anyDiv) ← elabDivs typing p.decls libNames perTurn polys
-    (Elab.Fins.opNames effOps fxr.decls)
+    (Elab.Fins.opNames effOps fxr.decls) (Elab.Fins.fnRows fxr.decls)
   let rest := decls.filter fun | .main .. => false | _ => true
   let mc := TCx.ofScope (typing ++ rest ++ capDecls) true
   let mainLoops := match decls.findSome? (fun | .main _ C M => some (C, M) | _ => none) with

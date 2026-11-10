@@ -323,6 +323,8 @@ corpus/fin-e7d.bc 2.0 cancellable abortive: branch; agree
 corpus/fin-e7d.bc 3.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/fin-e8b.bc 1.0 cancellable abortive: branch; agree
 corpus/fin-e8b.bc 2.0 cancellable abortive: branch; agree
+corpus/fin-generic-call.bc 1.0 cancellable abortive: branch; agree
+corpus/fin-generic-call.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/fin-raise-cancel.bc 1.0 cancellable abortive: branch; agree
 corpus/fin-raise-cancel.bc 2.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/fin-raise-cancel.bc 3.0 cancellable abortive: -; agree
