@@ -9976,20 +9976,25 @@ corpus or a golden.
 
 ### Open
 
-- **The erasure laws** (`Core/HandleLastErase.lean`, #918) are proved at the direct call
-  `hnd H K[case (w v) {inl y → y | inr z → X}]` (`directK`) of a work whose direct run leaves κ's
-  cell free (`StepsOff`; `StepsOff.upd` runs it beside the cell). T-B1 `last_resume_direct`: both
-  runs reach `K₀[hnd H K[y]]`. T-B1′ `last_cancel_direct`: the perform reaches
-  `K₀[(λ_. nf z)(ccatch K†[raise ⊥])]`, `K`'s cancel then the exit (`last_cancel_exit`), and the
-  direct call reaches its `inr` arm. T-B2 `last_perform_direct`: a work whose performs are answered
-  in place by handlers outside the node (`WorkRun`), of names other than `n` and unhandled in `K`,
-  by the two-run lemma `work_run_ctx`. Outer handlers that answer in place: `answers_in_place`,
-  from `tail_clause_answers` and `last_clause_answers` (nested `[handle-last]`, pipe fusion's
-  normal path). Open: T-B2 when an outer handler stores or cancels the captured κ, or a raise or
-  cancel crosses the active frame (an early stop, `stop()`, a raise across a fused stage), is not
-  derived and not refuted (a whole-run simulation); a Core term for the in-place cancel-mode
-  unwind (Core expresses it only through κ's `ccatch K†`); the laws are stated on machine values,
-  not on typed `lastH`.
+- **The erasure laws** (`Core/HandleLastErase.lean`, #918) are proved at the direct call `hnd H
+  K[case (w v) {inl y → y | inr z → X}]` (`directK`) of a work whose direct run leaves κ's cell free
+  (`StepsOff`; `StepsOff.upd` runs it beside the cell). T-B1 `last_resume_direct`: both runs reach
+  `K₀[hnd H K[y]]`. T-B1′ `last_cancel_direct`: the perform reaches `K₀[(λ_. nf z)(ccatch K†[raise
+  ⊥])]`, `K`'s cancel then the exit (`last_cancel_exit`), and the direct call reaches its `inr` arm.
+  T-B2 `last_perform_direct`: a work whose performs are answered in place by handlers outside the
+  node (`WorkRun`), of names other than `n` and unhandled in `K`, by the two-run lemma
+  `work_run_ctx`. Outer handlers that answer in place: `answers_in_place`, from
+  `tail_clause_answers` and `last_clause_answers` (nested `[handle-last]`, pipe fusion's normal
+  path). Each law is a forward correspondence on the machine: given the work's run when called
+  directly, which leaves κ's cell free (`StepsOff`), the handled program and the direct program
+  reach the same configuration at the same memory, in any outer context `K₀` and handler-free `K`.
+  T-B2 matches the two runs segment by segment, under `WorkRun`'s `hans`: the outer handler answers
+  the same whatever continuation it captures. Open: runs the hypothesis does not give (a work that
+  diverges or does not leave κ's cell free); T-B2 when an outer handler stores or cancels the
+  captured κ, or a raise or cancel crosses the active frame (an early stop, `stop()`, a raise across
+  a fused stage), not derived and not refuted (a whole-run simulation); a Core term for the in-place
+  cancel-mode unwind (Core expresses it only through κ's `ccatch K†`); the laws are stated on
+  machine values, not on typed `lastH`.
 - **The elaboration** of `for` with `break`/`return` and a body that performs, and the adapters
   over a source computation (R-1's frontend): it needs a checker producer for the node
   (`TTied`'s builder, the clause kinds of the node, `Frontend/Check/Kinds.lean`, and its handled
