@@ -188,6 +188,14 @@ corpus/core-fin-cancel-reraised.bc 1.0 cancellable resume-or-cancel: machine: a 
 corpus/core-fin-cancel-reraised.bc 2.0 cancellable abortive: -; agree
 corpus/core-fin-cancellable.bc 4.0 cancellable once: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/core-fin-cancellable.bc 1.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/core-fin-check-consume.bc 2.0 cancellable abortive: -; agree
+corpus/core-fin-check-consume.bc 4.0 unrestricted stored: -; agree
+corpus/core-fin-check-consume.bc 1.0 cancellable resume-or-cancel: -; agree
+corpus/core-fin-check-keep.bc 2.0 cancellable abortive: -; agree
+corpus/core-fin-check-keep.bc 4.0 unrestricted once: -; agree
+corpus/core-fin-check-keep.bc 1.0 cancellable resume-or-cancel: -; agree
+corpus/core-fin-check-nc.bc 4.0 cancellable resume-or-cancel: -; agree
+corpus/core-fin-check-nc.bc 1.0 cancellable resume-or-cancel: -; agree
 corpus/core-fin-consume.bc 2.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/core-fin-consume.bc 4.0 unrestricted stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/core-fin-consume.bc 1.0 cancellable resume-or-cancel: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree

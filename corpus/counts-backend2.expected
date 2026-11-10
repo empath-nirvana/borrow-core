@@ -95,6 +95,11 @@ core-fin-cancel-propagated 0 0 0 0 0 0
 core-fin-cancel-reentered 0 0 0 0 0 0
 core-fin-cancel-reraised 0 0 0 0 0 0
 core-fin-cancellable 0 0 0 0 0 0
+core-fin-check-consume 0 0 0 0 0 0
+core-fin-check-gapcall 0 0 0 0 0 0
+core-fin-check-gapdeep 0 0 0 0 0 0
+core-fin-check-keep 0 0 0 0 0 0
+core-fin-check-nc 0 0 0 0 0 0
 core-fin-consume 0 0 0 0 0 0
 core-fin-e7b 0 0 0 0 0 0
 core-fin-e7d 0 0 0 0 0 0
