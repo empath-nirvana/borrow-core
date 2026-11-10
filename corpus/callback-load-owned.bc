@@ -1,0 +1,25 @@
+-- SPEC §12 *Captured variables* (#891): a load callback (`borrow imm *g { 'y, x -> … }`, SPEC §36)
+-- that captures an owned string `s`, uses it in one arm and not in the other. The callback is a
+-- thunk owed `s`, so the arm that does not use it consumes it at its end, and the arms merge.
+-- Before, the callback started with nothing owed and the `case` was refused. At a row with an
+-- abortive operation the same block is `withloadU` (#887), and its aborting arm consumes `s` the
+-- same way.
+--
+-- `go(1, 123)` loads 1 and answers the string's length, 3; `go(7, 45)` loads 7 and answers −7, its
+-- string freed in the callback. Answer: `(i32[3], i32[4294967289])` and `live 0`: a fix that
+-- dropped `s` on the arm that does not use it would leave its string behind (`live 1`).
+
+include text
+
+fn h<'a>(g: imm 'a i32, s: string) -> i32 =
+  let r = borrow imm *g { 'y, x -> if x > 3 { 0 - x } else { let (s, n) = len_of[u8](s); n } };
+  r
+
+fn go(k: i32, n: i32) -> i32 =
+  let (s, _) = push_dec(string_new(4), n);
+  let mut c = alloc(k);
+  let r = h(&c, s);
+  let z = free(c);
+  r
+
+main -> i32 * i32 = (go(1, 123), go(7, 45))

@@ -265,8 +265,10 @@ type is linear and consumable (`consumableB`, which decides `Consumable`: `consu
 owed slot is exactly `LinearConsumable A`, `Env.pushOwn_own`). What is owed flows into tail positions:
 the body of `<-` and `let` (less what the head or `V` used), both `case` arms, both `<,>`
 components, `fun`/`Fun` bodies, `nu_in` and ascriptions. The head `M` of `x <- M; N`, and the
-handled body of a handler site, are owed the owed variables they mention by name (`mentionsC`). A value, and so every computation inside one,
-starts with nothing owed. At a terminal computation (`Comp.terminal`), the checker checks it with
+handled body of a handler site, are owed the owed variables they mention by name (`mentionsC`). A value
+owes nothing itself; a computation inside one (`thunk M`, `thunkv N`, `run M`) is owed the owed
+variables of the computation the value is in that it mentions (`Env.capture`), which `Env.clearOwn`
+and `Env.forVal` hold for it in `Env.cap`. At a terminal computation (`Comp.terminal`), the checker checks it with
 nothing owed, then wraps the result in `consumeE A xᵢ; …` for each owed slot `i` it neither used nor
 absorbed, the lowest index outermost (`consumeOwed`). Each wrap is `rConsume`, which applies
 `consumeSlot_derives` (`Core/Consume.lean`: `unitE` over `lolliE` of the variable and `consume_wf`) to a split

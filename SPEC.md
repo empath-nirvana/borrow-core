@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.55 · 2026-11-09
+Version 1.59 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1349,6 +1349,14 @@ elaborate to the same term.
   `c : A` (`alloc`, the borrow, `free`); the borrow's result `(c, x)` rebinds `c` the same way
   (`docs/typed-elaboration.md` §5.1). The earlier spelling `&c` for an exclusive lend is
   retired: `&c` is the shared lend.
+- **A lending call in tail position** (the last expression of a function, a `with` body, a block
+  or an arm) that lends one place is `let r = f(…, &p, …); r`, the head's form: the place is
+  rebound from what the call hands back and the call's answer returned. At a row whose
+  operations the call performs, the typed pass reads it as that binding, so the borrow is the
+  unwinding form at those operations (§18); elsewhere the last step of the lend sugar
+  (`Comp.elab`) does, as for a head. A refusal of such a call names the function as written, not
+  the copy the elaborator makes for its handlers (`get_or_fail`, not `get_or_fail__n1`). A tail
+  call lending two places is refused, as in a head.
 - **`for x in bytes c { M }; N`**: the form of draft 0 of the surface syntax
   (`docs/surface-cbpv.md`). It loops without bound, so it is a div construct: it may appear in
   any function, which is then div, and in `main` anywhere on its spine (§14, which withdraws the
@@ -1497,11 +1505,29 @@ does not, the checker consumes it by its consume:
   by `M` on every path already, so the outlives premise of a boxed `κ` (§28) asks nothing new. The
   consumes are `consumeOne`'s nodes, and `[handle]` and `[sub]` are unchanged. The variables `M`
   does not mention stay consumed before the site, where they were. (#848, #492)
+- **Captured variables.** A computation inside a value (`thunk M`, `thunkv N`, `run M`: a borrow
+  block's callback, a closure, a handler's clause) is owed the owed variables of the computation
+  the value is in that it mentions, as the head of `x <- M; N` is; the others stay with that
+  computation. "Owed to the computation the value is in" is what its terminal computation was
+  owed before its own consumes (`Env.clearOwn`), or, for a value of a `let`, `case` or `<-` head,
+  what that form is owed (`Env.forVal`); both are held in `Env.cap` and handed to the inner
+  computation by `Env.capture`. So a path of the callback that ends in an abortive operation (a
+  `raise`, a recursion's budget `exhausted`) consumes before the abort the captured variables it
+  has not used, and a `case` in the callback whose one arm aborts and whose other uses a captured
+  variable merges. Sound against the kernel: `thunkF` and `thunkV` type the body in the thunk's
+  own context, whose slots are exactly what it captures, and the body must use each linear one
+  on every path, which an owed slot gets by `consumeOne`'s nodes; a variable the body mentions is
+  used by the body already on the paths that mention it, so the thunk's context, and the split of
+  the value it is in, are unchanged. A captured variable is consumed later than before, at the end
+  of the callback's path instead of before the terminal computation of the enclosing path, which
+  §12's *Not moved across effects* allows: it is never earlier than the path's terminal
+  computation. A `!` thunk uses only persistent slots, and an owed slot is never persistent, so it
+  captures nothing. `[thunkF]`, `[thunkV]`, `[ofRet]` and `CDerives` are unchanged. (#891)
 - **Not moved across effects.** A consume is never placed earlier than the path's terminal
   computation. Codata `close` runs code, so moving it would reorder effects.
 - `<>` and `absurd V` absorb any context (§11 of `docs/syntax-core.md`), so no consume is inserted
-  before them. A value (`thunk M`, `run M`, …) starts its computations with nothing owed: a thunk
-  that captures a variable consumes it.
+  before them. A value owes nothing itself: a computation inside it is owed only the variables it
+  captures (*Captured variables*), and a thunk that captures a variable consumes it.
 
 **A value that must not be consumed.** A value whose silent destruction is a bug, such as a
 transaction that must be committed or aborted, needs a type in group 3, which the program must
@@ -1952,6 +1978,12 @@ form, before the other sugar, with no kernel or checker change:
   block of its own, per step; stretches that do not use it are left outside any block. The `for`
   is then on the enclosing spine and threads the place, which each step rebinds. This is
   `loop_lend_*` written inline, so each step is known code.
+- **A load block whose body loops** (`borrow imm *g { 'y, v -> S }`, §36) is rewritten per
+  observation only when the loaded content is persistent: the content is bound first,
+  `let t = *g`, a copy, and `t` is lent at each step. A load of a linear content is not
+  rewritten: it is elaborated as a load (§36), its body, loops included, in place, where the
+  types of the loop's sources are known. A `for` over data there is the counted loop (§16), and a
+  loop that ticks (an operation that resumes) is refused as any borrow across a suspension is.
 - **`let r = &x; S`** (or `&mut x`) is `borrow imm x { r -> S }` over the rest of the body; `x` is
   not used in `S`. A loop-invariant borrow is thus lent per observation.
 - **A div function over a borrow**: a `def f : !(all 'a < b. P => Q)` whose body loops, with one
@@ -2128,6 +2160,9 @@ obligation for a looping `main` is §11's.
   functions*), and its instance is specialized as any function is, so a div function may be
   generic (a `fn f[A](g: U (pull A 1 1)) -> …` that drains `g`).
 - **`div_fuel` is `driveE`** by construction, not by a proved equation.
+- **A loop source bound inside the body is not typed by LoopLend** (one bound in a `match` arm,
+  say), so a load of persistent content whose body loops over such a source is rewritten per step
+  with the source's type not known there.
 - **`[handle]` of another name at a clause given `κ`** around a computation that ticks
   (`handle_general`, #564), beyond `effHandleT`'s and `effHandleL`'s (§51) classes.
 - **Finalisers are total, as a theorem** (decision 69): every run of a finaliser whose row is
@@ -2369,8 +2404,11 @@ and §19 is preserved: every construct of this entry is elaborated into core bef
 - **A total consumer of a generator that loops.** A `for` over one is div: its turns are
   unbounded. A finite source written as data, or a sized iterator (§16), is total, and so is a
   generator whose body does not loop.
-- **Stored generators over a row.** A stored generator's observations are pure: a generator that
-  performs another effect besides its iteration effect (a `Fail`) is not stored.
+- **Stored generators over a row.** A generator that performs another effect besides its iteration
+  effect (a `Fail`) is not stored: the surface does not provide it yet, and the elaborator refuses
+  it (`pullView` in `Frontend/Sugar.lean`, `pullSite` in `Frontend/Elab/Effects.lean`). The kernel
+  admits effectful observations (§7's ν rules, whose leaves may be `F_Σ` by §19's `EffLeaf`;
+  `CTy.NuOk`). #910.
 - **The source interpreter** (`bcc interp`, `Support`'s substitution machine) substitutes into
   the whole step at each observation, so its time per observation grows with the size of the
   body's machine.
@@ -2843,7 +2881,9 @@ static name `n` of its own, and an operation is resolved lexically to the innerm
 instance (§38): `perform[n.i](v)`, or `abort[n.i](v)` for an abortive operation. The site is
 `handle_with[n]((V_r : T_r), (V_c : T_c)) M`: the return clause `V_r` and the tuple `V_c` of the
 operation clauses, `!` closures at the types `[handle]` gives them (`T_r`, `T_c`), the handler's type
-parameters matched against the body's type and its arguments' types. The node holds its clauses:
+parameters matched against the body's type and its arguments' types. The body's type is read
+with the body's lends elaborated (`TCx.tyCL`, §11 *Sugar*), as a borrow block's result is, and so
+is the result of a block `{ … }` whose body loops. The node holds its clauses:
 its erasure is `hnd (n, (qs, (V_r, V_c))) e`, and the clauses are the `handle` node's own
 (§19 *Clause kinds*). The clauses run outside the site: their operations go to the sites around the
 `with`.
@@ -3021,6 +3061,8 @@ program's derivation gives it (`checkProgram_letPoly`).
 - A capability threaded through a `for` over `&a` of an owned array: the lend around the loop
   takes `top` as its bound, so the loop's state cannot hold a borrow (`corpus/effects-map.bc`
   passes a view instead).
+- Sites other than a handler site and a looping block's result may read a computation's type
+  before its lends are elaborated (`tyC` where `tyCL` is meant).
 
 ---
 
@@ -4469,9 +4511,13 @@ is typed by the existing rules (`bounded_fix`, `[handle]`, `[let]`); `fundamenta
 
 - **A recursion whose body loops.** Its members are div (§14), so the fixed point is taken at
   loops, which `bounded_fix` types at every computation type (the spike's P3). But the budget runs
-  out inside a loop's observation, where `Exhausted` has no handler: a handler around a div
-  computation is not provided for any effect (`with to_result { f(x) }`, `f` looping and raising,
-  is rejected the same way). Rejected with that reason (`corpus/reject/rec-loop.bc`).
+  out inside a loop's observation, where `Exhausted` has no handler: the surface provides no
+  handler around a div computation, for any effect (`with to_result { f(x) }`, `f` looping and
+  raising, is rejected the same way). Rejected with that reason (`corpus/reject/rec-loop.bc`). The
+  kernel handles a div computation per observation: one observation `(nu_out l).1`, at a
+  `Div`-free row, is handled by `effHandleV` inside `unfold`, and the continuation is stored as the
+  rest of the codata for the next observation (`corpus/core-yield-pull.bc`; the surface's
+  generators use it, `corpus/gen-div.bc`). Looping tasks under `spawn` by this route are #917.
 - A native handler parameter (§19 *Open*).
 - **`memo`**, a layer, needs a map (#211) and a layer of its own state: an answering effect with
   type parameters (§18 *Open*).
@@ -5815,8 +5861,8 @@ Three pieces of the surface were missing (unit U2 of `docs/async-capabilities.md
    passed as a value (§18 *Not provided*), so a higher-order function could not be given an
    awaiting callback.
 2. **A counted loop at a resuming row.** A `for` over data whose body performs an operation that
-   resumes was always a div loop (§16 *Effectful bodies*), and no handler wraps a div computation
-   (§21 *Open*), so a task with a counted loop that awaits could not be spawned.
+   resumes was always a div loop (§16 *Effectful bodies*), and the surface wraps no handler around
+   a div computation (§21 *Open*), so a task with a counted loop that awaits could not be spawned.
 3. **BOXED-κ from a surface handler.** Only core-text `handle_with` emitted §28's rule, so a
    library scheduler could not store a task's continuation in a queue.
 
@@ -8090,15 +8136,31 @@ what its parts write and has no boundary of its own.
 | `if`, `match`, `case` (a statement) | `W(arm₁) ∪ W(arm₂)` | each arm hands on `W` (`handArms`); the statement rebinds it |
 | `let p = if/match …`, `x <- M` (a head) | `W(M)` | each terminal hands on `(value, W)`; the binding takes it apart (`bindForm`) |
 | `for x in V { M }`, `while`, `loop`, `for` over a generator | `W(M)` | a turn: the loop's state is `W` and the variables it reads (§14, §15, §16); each turn hands it on |
-| `borrow k P { b -> S }` | `{P} ∪ W(S)` | the callback hands back `(result, W)` beside the places it lends; the binding rebinds `P` and `W` |
+| `borrow k P { b -> S }` | `{P} ∪ W(S)` | the callback hands back `(result, W)` beside the places declared outside it that it lends; the binding rebinds `P` and `W` |
 | `modify P { v -> S }` | `{P} ∪ W(S)` | the callback hands back `(c, (r, W))`, the new content `c` and the result `r` (`()` when there is none; `Sugar.modifyBody`); of a `let mut` value, the body runs in place |
 | `with h(e) { S }`, answering | `W(S)` | as a borrow block of the state's cell (§18) |
 | `with h(…) { S }`, control | — | refused when `W(S)` is not empty |
 | `run M` | `W(M)` | `M` hands back `(value, W)` where it is bound; inside an expression, refused |
+| `if …`, `match …` inside an expression | `W(M)` | read as `run M` (a call argument, an operand, a pair component, the right side of `x = …`, a field initialiser): `f(if b { 1 } else { 2 })` is `f(run if b { 1 } else { 2 })`; where it is bound it hands back `(value, W)`; inside an expression, refused when `W` is not empty, the refusal naming the construct as written |
 | a closure: `{ p -> S }`, `!{ … }`, `{ S }`, `thunk`, `thunkv` and their `!` forms | `W(S)` | marked `writes(W) V` (`VSugar.writes`); at a block parameter of a call, the copy passes `W` in and out at each call; elsewhere refused |
 | a `for`'s `else { d }` | — | refused when `W(d)` is not empty |
 | a handler's clause | its `mut` parameters only | the state is threaded by §18 |
 | a declaration (`fn`, `main`, `def`, a `poly` case) | its own `let mut`s | no `let mut` reaches another declaration |
+
+**Places declared inside a block.** The places a borrow block or a `with` body hands back, or at a
+control `with` is refused for, are the places it lends that are declared outside it. A lent name
+is declared inside the block when a binder in the body declares it, at any depth of the borrow
+blocks, `with` bodies and `run`s the body runs in place, and the name is not bound where the block
+begins: a `let mut x` declared in an inner `with`'s body and lent there is the inner body's. A
+binder of a name already bound outside (a capability rebound, `let (stdout, …) = …`) is not a
+declaration, and that place stays the outer block's. R1 renames every other shadowing binder in a
+program's source, so a name declared inside never stands for an outer place; core text is read by
+the same rule (`bcc print` round-trips; `corpus/with-nested-lend.bc`).
+
+**`if` and `match` as expressions.** The parser inserts `run M` for an `if` or `match` where a
+value is expected; the kernel checks it as a written `run`. At a statement or a `let` head an
+`if`/`match` is read by the computation grammar as before (`startsComp`), and juxtaposition
+(`V W`) does not start at one (`startsValAtom`).
 
 `writes(x, …) V` is printed by `bcc print` for a closure that writes; in a surface body it is not
 written (the parser finds it), and in core text it is read as printed.
@@ -8243,8 +8305,8 @@ whose meaning depended on two names coinciding.
 
 ### Open
 
-- **A control handler's body that writes**, and a `run` that writes inside an expression, are
-  refused. The first needs the handler's clauses to hand the variables back when the body is
+- **A control handler's body that writes or lends an outer place** (#885), and a `run` that
+  writes inside an expression, are refused. The first needs the handler's clauses to hand the variables back when the body is
   abandoned; the second, the expression's calls lifted in order around it.
 - **The target pairs** that are not met (`docs/research/let-mut-state/README.md`): what separates
   each is the counted loop (§16), the state machine of a div body (§14), §32's calling convention,
@@ -8259,6 +8321,8 @@ whose meaning depended on two names coinciding.
 - **A block that writes, passed through a closure** in its callee (`{ x -> f(x) }` given to
   another block parameter), is refused with a message about `!thunk` promotion: the copy's row
   for a block parameter (`cbRows`) does not carry its `let mut` capabilities.
+- **`case V { … }` and `for` as expressions** are not read as `run`: `case` is printed core, and
+  `for` as a value needs its loop result bound (`let r = for …`).
 
 ---
 
@@ -8303,6 +8367,11 @@ The declaration elaborates to a `type` declaration of the same name and paramete
 The name, its constructors and its fields live in the elaborator's table (`Data.Table`), which the
 parser holds, read before the module is parsed: a declaration is in scope in the whole module that
 declares it and in every program that includes that module, and the prelude's in every program.
+Every source position carries the module it was read from: the program, written as the program's
+path, or a library module `m`, written `lib/m.bc`. A diagnostic at a position inside an included
+module, a parse error among them, is reported as `lib/m.bc:L:C: …`, and a span it quotes is that
+module's text. Line and column numbering is unchanged, and names generated from positions use
+the line and column only, so the elaborated term is unchanged.
 The table holds the `type` abbreviations in scope too, read in the same pass, which the block
 classification and the class `P` open (§61). Its `type` declaration is placed where the group's first member is, so a type declared later is
 named only after it.
@@ -8692,6 +8761,9 @@ programs get rows.
   `mut` borrow is a `withswap` of the whole record: loads and stores where Rust touches one field
   (the ports of `docs/expressiveness-probes/zero-cost/data/`, L-1: N2). The allocations are the
   probes'.
+- **A position quoted inside a message's text** (a family's case, a loop note) renders as `L:C`
+  without its module, and Backend2's driver (`Backend2/Driver.lean`) prints a front-end error
+  under the program's path.
 
 ---
 
@@ -11878,7 +11950,7 @@ Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP
 
 | Rule | Statement | Unit |
 |---|---|---|
-| `codeI` | `Γ ⊢ λM : U C` and `Γ.CapOK (λM)` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
+| `codeI` | `Γ ⊢ λM : U C`, `Γ.CapOK (λM)` and `(Γ.capTy (λM)).Cl 0` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
 | `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C` | K3 |
 | `erase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
 | `eraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
@@ -11891,11 +11963,21 @@ Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP
   live slot of `Γ` that `e` does not capture is persistent. With it the uncaptured slots hold `∅`
   (`vCE_empty_of_persistent`), so the closure's resource is its captures'. It is a premise, not
   an inversion of `CDerives`.
+- `(Γ.capTy (λM)).Cl 0`, decidable and tested by the checker beside `CapOK`: no `μ` variable is free
+  in a captured slot's type. A type substitution leaves `Code⟨N; E⟩ C` as it is (§68 *Open*, K1's
+  choices), so the clause reads `E` at no environment, and a capture whose type has a free `μ`
+  variable would read `E` as empty. Where the premise fails, the closure stays at `U C`.
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
 - `erase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
   which Backend2 reads (B4). In the machine it is the identity.
 - `eraseD` (covariant erasure inside `C`, K6) is not in this entry.
+- **The inversion's cost** (CLAUDE.md, *Do not invert `CDerives` casually*). `codeI` types the
+  term `λM` at a new type, so the λ-value inversion `LamCls` (`Core/Inversions.lean`) gains a
+  disjunct: the λ read at `Code⟨capNorm (λM); E⟩ D` and at `!Code⟨…⟩ D`. `erase` and `eraseB` add a
+  view step from a code type to `U`. The proofs restated are `LamCls`'s cases (`step`, `thunkV`,
+  `bangThunkV`, `val_*`), `lam_bang`, and `lam_bang`'s uses in `Core/Rejections.lean` and
+  `Core/EffCancelTyped.lean`. No inversion is added and no substitution over derivations.
 
 ### Erasure policy
 
@@ -11970,6 +12052,12 @@ No change to `CDerives`, the relation, the machine, the checker, the elaborator 
 `fundamentalC`, `adequacyC` and `goal791N : HandlerLawN → Goal791N` keep their statements and
 proofs; every corpus and kernel program its output. The later units must preserve the same three.
 
+K3 (the four rules and the restated `force`): `fundamentalC`, `adequacyC` and `goal791N :
+HandlerLawN → Goal791N` keep their statements and cover the new rules, the chain's through
+`FundamentalKW835N`. The judgment freeze holds: no new judgment, and the rules join `CDerives`,
+mirrored by `scripts/gen-pin.py`. Every rejection theorem keeps its verdict; one that flips is
+reported as an intended change.
+
 ### Open
 
 - **Built (K1, K2):** `VTy.code` (`Core/Types.lean`) and its arm at every match in `Core/`,
@@ -11977,20 +12065,23 @@ proofs; every corpus and kernel program its output. The later units must preserv
   (`vCE_code`: the clause is `codeRelC`), `vNE` (`vNE_code`: `codeRelN`) and `vOE` (`True`); every
   law of the relation at `code`, with no new hypothesis. `fundamentalC`, `adequacyC` and `goal791N`
   keep their statements.
-- **Not built:** the rules and their compatibility lemmas (K3, K4), the lend-exit lemma (K5),
-  `eraseD` (K6).
+- **Not built until their units land:** the rules and their compatibility lemmas (K3: `codeI`,
+  `codeIB`, `erase`, `eraseB`, `force`; K4: `unfoldK`, `nuOutK`), the lend-exit lemma (K5), `eraseD`
+  (K6).
+- **No code type in the checker.** No rule of the checker synthesises a code type before S1, so
+  the corpus is unchanged by K3.
+- **`CapOK`** is a premise of `codeI` until #894 removes it.
 - **Choices K1 made that the entry does not state:**
   - A type substitution (`VTy.rename`, `VTy.subst`) leaves `Code⟨N; E⟩ C` as it is, as it leaves
     `U C`: no `μ` variable reaches `E`, `Cl k` holds, `Occ` fails. The clause reads `E` at no
-    environment, as `U C` reads `C`. So K3's `codeI` must give a closed `E` (`E.Cl 0`, no `μ`
-    variable free in a capture's type), as a premise or from the context's types.
+    environment, as `U C` reads `C`. So `codeI` asks `E.Cl 0`.
   - `vC_ind` and `vN_ind` keep the code clause in one unfolding (`vF`, `vFN`) with the property at
     every value of `E`, from an outer induction on the type's size: `E` is smaller and no
     substitution enters it.
   - `TyEq` at `code`: equal `N`, `TyEq` at `E` and `C`. `VTy.inFrag` at `code`: `E` and `C`.
     `NoThunkT` at `code` is `False`, as at `U`. `VTy.persistent`, `VOutlives`: as `U`.
   - The step-indexed model (`Core/Chain/SI/Sem.lean`) and the tree model (`Core/TreeGoal791.lean`)
-    read `code` as empty, as they read `μ`.
+    read `code` as empty, as they read `μ` (#840).
   - Printing: the checker prints `Code⟨#h; E⟩ C`, `#h` a hash of `N`'s serialisation, not
     `{closure@span}` (a kernel type has no span). Backend2's `useKey` prints a type `ofV` refuses
     exactly (`keyVT`, `N` in full), so two codes are two keys; `ofV` refuses `code` (B1).
@@ -12466,12 +12557,44 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.59** (2026-11-09) — the small-gaps batch (#880–#883, #892, #893). No change to `CDerives`,
+  the kernel or a checker rule; every golden unchanged. Refusal messages no longer cite decision
+  71.
+  - §41 (#882): an `if` or `match` where a value is expected is `run` of it.
+  - §41 (#881): a block hands back only the places declared outside it that it lends, at any depth
+    of nesting (`corpus/with-nested-lend.bc`).
+  - §42 (#883): a source position carries its module; a diagnostic inside an included module is
+    reported as `lib/m.bc:L:C`.
+  - §11 (#892): a call in tail position that lends one place is the head's form,
+    `let r = f(…, &p, …); r`; its refusal names the function as written.
+  - §14 (#880): a load block whose body loops is rewritten per observation only when its content
+    is persistent; a load of a linear content is elaborated in place.
+  - §18 (#893): a control handler's site reads its body's type with the body's lends elaborated.
+- **1.58** (2026-11-09) — §15 *Open* (#910), §21 *Open*, §30: limits of the surface that read as
+  the kernel's. A stored generator over a row is refused by the elaborator; the kernel's ν rules
+  admit effectful observations. A handler around a div computation is not provided by the
+  surface; the kernel handles one per observation, by `effHandleV` inside `unfold` (#917). No
+  change to the code.
+- **1.57** (2026-11-09) — §68 (#855 K3): the rules `codeI`, `codeIB`, `erase` and `eraseB`, and
+  `force` at `U C` or `Code⟨N; E⟩ C`. `codeI` and `codeIB` ask the captured types closed,
+  `(Γ.capTy (λM)).Cl 0`, beside `CapOK`; where either fails the closure stays at `U C`. `LamCls`
+  gains the code disjunct and `lam_bang`'s uses are restated; no inversion is added.
+  `fundamentalC`, `adequacyC` and `goal791N` keep their statements and cover the rules. No checker
+  rule synthesises a code type before S1, so no program changes.
 - **1.55** (2026-11-09) — §68 (#855 K1+K2): the former `Code⟨N; E⟩ C` (`VTy.code`) across
   `Core/`, with its relation clauses (`vCE`'s and the chain's `vNE` are K0's `codeRelC`/`codeRelN`,
   by `Iff.rfl`; `vOE` is `True`) and every law at it with no new hypothesis; `TyEq`/`alphaB` compare
   a code type only with a code type. The checker and Backend2's `ofV` refuse a code type until K3,
   S1 and B1. No `CDerives` rule produces one, so no program's typing or output changes.
   `fundamentalC`, `adequacyC` and `goal791N` keep their statements.
+- **1.54** (2026-11-07) — §12 (#891, *Captured variables*): a computation inside a value
+  (`thunk M`, `thunkv N`, `run M`) is owed the owed variables of the computation the value is in
+  that it mentions, as the head of `x <- M; N` is; before, a value started its computations with
+  nothing owed. So a borrow callback (`withbor1U`, `withloadU`, …) that captures a linear value
+  and raises, or recurses (the budget's abortive arm), in one arm consumes the captured value on
+  that arm. New corpus programs `callback-arm-raises.bc`, `callback-rec-arm.bc`,
+  `callback-load-owned.bc`. No change to `CDerives`, the kernel, the theorems or the backends;
+  every other corpus program checks as before.
 - **1.53** (2026-11-07) — §31, §21 (#890, *Generic recursive groups*): a recursive group's lifetime
   parameters are quantified in each member's field of its fixed-point record, `∀'a⃗ < b⃗. (E ⊗ Pⱼ ⊸
   F_Σ (E ⊗ Tⱼ))`, nested in declaration order; only the capabilities' lifetimes stay outside the
