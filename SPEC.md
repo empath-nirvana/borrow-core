@@ -13138,15 +13138,17 @@ spine has a loop that is not counted, or a direct-style call of a div function.
        `` the clause of `op` works after resuming `k`, which would span turns of the loop: around a loop, a clause resumes last or does not resume ``;
      - a clause that resumes `k` more than once:
        `` the clause of `op` resumes `k` more than once: around a loop, `k` is the rest of one turn, which a clause resumes at most once, last ``.
-4. **The `while` condition (§14).** A `while` condition that performs is tested before each turn,
-   as §14 states: `while c { M }` elaborates as `while true { calls; if c' { M } else break }`, where
-   `calls` are the condition's performs and `c'` is the condition over their results.
+4. **The `while` condition (§14), a fix.** A `while` condition that performs is tested before each
+   turn, as §14 states, and not once: `while c { M }` elaborates as
+   `while true { calls; if c' { M } else break }`, where `calls` are the condition's performs and
+   `c'` is the condition over their results.
    `state-across-while` needs this.
 5. **Not changed:**
    - a frame whose body does not loop;
    - a `for` over a generator (its site, `io_hwf`, the pull view);
-   - every program that elaborated before. The form applies only where the elaboration refused
-     before.
+   - the meaning of every program the kernel accepts without the form. A program the kernel
+     refuses may be refused by the elaboration instead, with a clearer message: the three
+     `pending/` async programs in *Open* meet #917's.
 
 #### Law
 
@@ -13453,7 +13455,7 @@ checked and run, and their answers below are the observed ones.
 | Program | What | Answer |
 |---|---|---|
 | `corpus/with-loop-abort.bc` | #910's `t1`, `t2` and `t3` under `with to_result` | `((inl i32[45], inl i32[45]), (inr i32[4], inl i32[45]))` |
-| `corpus/with-loop-resume.bc` | a clause (a) that prints, then resumes, around a `while` that assigns an outer `let mut`; then its unrolled twin | `1234.1234((i32[5], i32[10]), i32[10])` |
+| `corpus/with-loop-resume.bc` | a clause (a) that prints, then resumes, around a `while` that assigns a `let mut` declared inside the `with`; then its unrolled twin | `1234.1234((i32[5], i32[10]), i32[10])` |
 | `corpus/with-loop-unwind.bc` | an `unwind (note(9))` frame around a loop that raises at its 3rd turn; then the same loop, not raising | `9(inr i32[3], inl i32[3])` |
 | `corpus/with-loop-finally.bc` | a `with … finally` around a computation that loops: the cleanup runs once at the end, whether a turn raises (`go(3)`, caught by `to_result`) or the loop finishes (`go(10)`) | `77(inr i32[3], inl i32[3])` |
 | `corpus/state-across-while.bc` (from `reject/`) | two `State` instances across a `while` | `(i32[5], inr ())` |
