@@ -1134,6 +1134,29 @@ corpus/gen-pipeline.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-produce.bc flows [0, 1, 4294967295]; main [1]
 corpus/gen-produce.bc 21:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-produce.bc 1.0 tail: direct; condition 2 holds; agree
+corpus/gen-raise-annot.bc flows [0, 2, 3, 4, 6, 7, 8, 9, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6, 7, 8, 9], finaliser
+corpus/gen-raise-annot.bc 75:3: handle 1: inside [2, 3, 4], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/gen-raise-annot.bc 75:40: handle 2: inside [3, 4], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/gen-raise-annot.bc 75:61: handle 3: inside []; row [2]; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/gen-raise-annot.bc 75:61: handle 3: inside []; row [2]; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/gen-raise-annot.bc 75:79: handle 4: inside []; row []; ops 4.0 stored; names 4.0 []; condition 2 holds
+corpus/gen-raise-annot.bc 75:79: handle 4: inside []; row []; ops 4.0 tail; names 4.0 []; condition 2 holds
+corpus/gen-raise-annot.bc 80:3: handle 5: inside [6, 7, 8, 9], finaliser; row []; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/gen-raise-annot.bc 81:5: handle 6: inside [7, 8, 9], finaliser; row [5]; ops 6.0 abortive; names 6.0 []; condition 2 holds
+corpus/gen-raise-annot.bc 81:42: handle 7: inside [8, 9], finaliser; row [6, 5]; ops 7.0 abortive; names 7.0 []; condition 2 holds
+corpus/gen-raise-annot.bc 81:63: handle 8: inside []; row [7]; ops 8.0 stored; names 8.0 []; condition 2 holds
+corpus/gen-raise-annot.bc 81:63: handle 8: inside []; row [7]; ops 8.0 tail; names 8.0 []; condition 2 holds
+corpus/gen-raise-annot.bc 81:80: handle 9: inside []; row [5]; ops 9.0 stored; names 9.0 []; condition 2 holds
+corpus/gen-raise-annot.bc 81:80: handle 9: inside []; row [5]; ops 9.0 tail; names 9.0 []; condition 2 holds
+corpus/gen-raise-annot.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/gen-raise-annot.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/gen-raise-annot.bc 3.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-raise-annot.bc 4.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-raise-annot.bc 5.0 abortive: branch; condition 2 holds; -
+corpus/gen-raise-annot.bc 6.0 abortive: branch; condition 2 holds; -
+corpus/gen-raise-annot.bc 7.0 abortive: branch; condition 2 holds; -
+corpus/gen-raise-annot.bc 8.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-raise-annot.bc 9.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-raise-close-two.bc flows [0, 2, 3, 4, 5, 6, 7, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6, 7], finaliser
 corpus/gen-raise-close-two.bc 40:3: handle 1: inside [2, 3, 4, 5, 6, 7], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/gen-raise-close-two.bc 41:5: handle 2: inside [3, 4, 5, 6, 7], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
@@ -1167,6 +1190,17 @@ corpus/gen-raise-fold.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-raise-fold.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/gen-raise-fold.bc 5.0 abortive: branch; condition 2 holds; -
 corpus/gen-raise-fold.bc 6.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-raise-local-pure.bc flows [0, 2, 3, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser
+corpus/gen-raise-local-pure.bc 54:3: handle 1: inside [2, 3, 4], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/gen-raise-local-pure.bc 54:40: handle 2: inside [3, 4], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/gen-raise-local-pure.bc 54:61: handle 3: inside []; row [2]; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/gen-raise-local-pure.bc 54:61: handle 3: inside []; row [2]; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/gen-raise-local-pure.bc 48:3: handle 4: inside []; row []; ops 4.0 stored; names 4.0 []; condition 2 holds
+corpus/gen-raise-local-pure.bc 48:3: handle 4: inside []; row []; ops 4.0 tail; names 4.0 []; condition 2 holds
+corpus/gen-raise-local-pure.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/gen-raise-local-pure.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/gen-raise-local-pure.bc 3.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-raise-local-pure.bc 4.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-raise-pass.bc flows [0, 2, 3, 5, 6, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6], finaliser
 corpus/gen-raise-pass.bc 44:3: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/gen-raise-pass.bc 44:40: handle 2: inside [3], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
@@ -1199,6 +1233,27 @@ corpus/gen-raise-take.bc 6.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-raise-take.bc 5.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-raise-take.bc 4.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-raise-take.bc 3.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-raise-unused.bc flows [0, 2, 3, 4, 6, 7, 8, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6, 7, 8], finaliser
+corpus/gen-raise-unused.bc 45:3: handle 1: inside [2, 3, 4], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/gen-raise-unused.bc 45:40: handle 2: inside [3, 4], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/gen-raise-unused.bc 45:59: handle 3: inside []; row [2]; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/gen-raise-unused.bc 45:59: handle 3: inside []; row [2]; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/gen-raise-unused.bc 45:75: handle 4: inside []; row [2]; ops 4.0 stored; names 4.0 []; condition 2 holds
+corpus/gen-raise-unused.bc 45:75: handle 4: inside []; row [2]; ops 4.0 tail; names 4.0 []; condition 2 holds
+corpus/gen-raise-unused.bc 56:3: handle 5: inside [6, 7, 8], finaliser; row []; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/gen-raise-unused.bc 56:40: handle 6: inside [7, 8], finaliser; row [5]; ops 6.0 abortive; names 6.0 []; condition 2 holds
+corpus/gen-raise-unused.bc 56:59: handle 7: inside []; row [6]; ops 7.0 stored; names 7.0 []; condition 2 holds
+corpus/gen-raise-unused.bc 56:59: handle 7: inside []; row [6]; ops 7.0 tail; names 7.0 []; condition 2 holds
+corpus/gen-raise-unused.bc 56:76: handle 8: inside []; row [6]; ops 8.0 stored; names 8.0 []; condition 2 holds
+corpus/gen-raise-unused.bc 56:76: handle 8: inside []; row [6]; ops 8.0 tail; names 8.0 []; condition 2 holds
+corpus/gen-raise-unused.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/gen-raise-unused.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/gen-raise-unused.bc 3.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-raise-unused.bc 4.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-raise-unused.bc 5.0 abortive: branch; condition 2 holds; -
+corpus/gen-raise-unused.bc 6.0 abortive: branch; condition 2 holds; -
+corpus/gen-raise-unused.bc 7.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-raise-unused.bc 8.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-raise-zip.bc flows [0, 2, 3, 4, 5, 6, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6], finaliser
 corpus/gen-raise-zip.bc 42:3: handle 1: inside [2, 3, 4, 5, 6], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/gen-raise-zip.bc 43:5: handle 2: inside [3, 4, 5, 6], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds

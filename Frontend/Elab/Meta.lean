@@ -99,18 +99,6 @@ def iterOf (V : CVTy) : Option (CVTy × CVTy × CVTy) :=
     if tyEqV V (.thunk (BoCa.Fig16.LogRel.Core.CTy.iter A R R')) then some (A, R, R') else none
   | _ => none
 
-/-- `U (pull_Σ A B R)`, at any row: `Σ`, `A`, `B` and `R` (SPEC §15).  `[spec §15]` -/
-def pullRowOf (V : CVTy) : Option (CRow × CVTy × CVTy × CVTy) :=
-  match V with
-  | .thunk (.nu (.amp C D)) => do
-    let (S, O) ← effRow? C
-    let (_, R) ← effRow? D
-    match O with
-    | .sum (.tensor A (.tvar 0)) (.sum B (.tvar 0)) =>
-      if tyEqV V (.thunk (Frontend.Check.pullRowTy S A B R)) then some (S, A, B, R) else none
-    | _ => none
-  | _ => none
-
 /-- `U (pull_Σ A B R)`, at any row: its `A`, `B` and `R`.  `[spec §15]` -/
 def pullOf (V : CVTy) : Option (CVTy × CVTy × CVTy) := (pullRowOf V).map (·.2)
 
@@ -312,7 +300,10 @@ def synM : Nat → MCx → Val → MM MTy
     | .inl _ V => do pure (.sum (← synM n c V) (← freshM))
     | .inr _ V => do pure (.sum (← freshM) (← synM n c V))
     | .ascribe _ V A => match c.tc.elabV A with
-      | some A' => do chkM n c V (.known A'); pure (.known A')
+      | some A' =>
+        -- The stored generators it writes at the rows of what flows into them (SPEC §15).
+        let A' := refineAsc c.tc.tyV V A'
+        do chkM n c V (.known A'); pure (.known A')
       | none => synM n c V
     | .app _ f W => do
       let tf ← synM n c f

@@ -1103,6 +1103,12 @@ structure ResumeK where
   params : List String
   stateful : Bool
 
+/-- Where a value holds stored generators over rows (`Cx.pulls`): a leaf, the sites of its row
+when it is one, or a pair.  `[spec §15]` -/
+inductive PShape where
+  | leaf (ss : Option (List Site))
+  | pair (a b : PShape)
+
 /-- The context of an elaboration: what is declared, the capabilities and handler sites in scope,
 and, in a function's copy, the capabilities its `return e` from inside a loop hands back. -/
 structure Cx where
@@ -1133,6 +1139,33 @@ structure Cx where
   row, and the sites of that row, which a call passing it on is a copy at (`pullArgsV`).
   `[spec §15]` -/
   pulls : List (String × List Site) := []
+  /-- Values holding such parameters, by their pairs: what `let (x, y) = v` binds of them.
+  `[spec §15]` -/
+  shapes : List (String × PShape) := []
+
+/-- What a value holds of the stored generators over rows in `cx` (`PShape`), through its pairs and
+ascriptions.  `[spec §15]` -/
+def Cx.shapeOf (cx : Cx) : Val → Option PShape
+  | .var _ x => match cx.pulls.lookup x with
+    | some ss => some (.leaf (some ss))
+    | none => cx.shapes.lookup x
+  | .pair _ V W => match cx.shapeOf V, cx.shapeOf W with
+    | none, none => none
+    | a, b => some (.pair (a.getD (.leaf none)) (b.getD (.leaf none)))
+  | .ascribe _ V _ => cx.shapeOf V
+  | _ => none
+
+/-- `x` bound to a value of shape `sh`. -/
+def Cx.bindShape (cx : Cx) (x : String) : PShape → Cx
+  | .leaf (some ss) => { cx with pulls := (x, ss) :: cx.pulls }
+  | .leaf none => cx
+  | sh => { cx with shapes := (x, sh) :: cx.shapes }
+
+/-- `let (x, y) = V`: what each binds of `V`'s shape. -/
+def Cx.bindPair (cx : Cx) (x y : String) (V : Val) : Cx :=
+  match cx.shapeOf V with
+  | some (.pair a b) => (cx.bindShape x a).bindShape y b
+  | _ => cx
 
 /-- A stored generator's parameter of `x` given a call of a generator, or a parameter of this
 copy that is a stored generator over a row (`pulls`): the call is elaborated by `pullArgsV`.
@@ -1567,18 +1600,16 @@ def withBlocks (env : Env) (sp : Span) (name : String) (f : FnParts) (ss : List 
   let n := names.length
   let mut reps : List (Nat × VTy) := []
   let mut named : List (String × List Site × List Cap) := []
-  let mut body := f.body
   for b in blks do
     let some x := names[b.j]? | throw ⟨sp, s!"internal error: the parameter {b.j} of `{name}`"⟩
     let some A := compAt n f.P b.j | throw ⟨sp, s!"internal error: the parameter `{x}` of `{name}`"⟩
-    -- A stored generator over a row (SPEC §15): the parameter at that row, and its type so
-    -- wherever the body writes it, so that the copy is the body at that row.  `[spec §15]`
+    -- A stored generator over a row (SPEC §15): the parameter at that row. What the body writes
+    -- of its type gets the row by inference, where the parameter flows (`Elab.refineAsc`).
+    -- `[spec §15]`
     if b.pull then
       let some A' := pulledTy (env.rowOf b.ss) A
         | throw ⟨sp, s!"internal error: the stored generator parameter `{x}` of `{name}`"⟩
       reps := reps ++ [(b.j, A')]
-      let A₀ := A.strip
-      body := body.subst [] fun T => if T.strip == A₀ then some A' else none
       continue
     let cs := b.caps.map (·.canon sp)
     -- At a computation parameter, the block performs what is provided at its ports (SPEC §33),
@@ -1592,7 +1623,7 @@ def withBlocks (env : Env) (sp : Span) (name : String) (f : FnParts) (ss : List 
     reps := reps ++ [(b.j, A')]
     named := named ++ [(x, bss, cs)]
   let all := blks.foldl (fun acc b => addSites acc b.ss) ss
-  pure ({ f with P := setComps n f.P 0 reps, body }, named, all)
+  pure ({ f with P := setComps n f.P 0 reps }, named, all)
 
 /-- The environment of a copy's body with its block parameters' rows (`rowV`): the sites' effects,
 and the answering effects whose capabilities the blocks use. -/
@@ -1882,7 +1913,7 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
       chain bs (.letUnit sp V' (← trC n cx cs wrap M))
     | .letPair sp x y V M =>
       let (bs, V') ← trV n cx cs V
-      chain bs (.letPair sp x y V' (← trC n cx cs wrap M))
+      chain bs (.letPair sp x y V' (← trC n (cx.bindPair x.name y.name V) cs wrap M))
     | .case sp V x M y N =>
       let (bs, V') ← trV n cx cs V
       chain bs (.case sp V' x (← trC n cx cs wrap M) y (← trC n cx cs wrap N))
@@ -1957,6 +1988,12 @@ def trBind : Nat → Cx → List Cap → Bool → Span → Ident → Option VTy 
     if let some y := (match M with | .ret _ V => V.copyOf? | _ => none) then
       if let some cx' := cx.copy x.name y then
         return .bind sp x A M (← trC n cx' cs wrap N)
+    -- `x <- return V`, `V` holding stored generators over rows: what `x` holds of them.
+    let cx := match M with
+      | .ret _ V => match cx.shapeOf V with
+        | some sh => cx.bindShape x.name sh
+        | none => cx
+      | _ => cx
     -- `x : pull A B R <- return g(W)`: the stored generator of the call.
     if let (some A', .ret rsp V) := (A, M) then
       if let (true, some (g, gs, i, f, W)) := (isPullTy A', cx.env.iterCall? V) then

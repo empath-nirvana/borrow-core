@@ -420,6 +420,15 @@ corpus/gen-pipeline.bc 3.0 cancellable stored,tail: machine: a path of the claus
 corpus/gen-pipeline.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-pipeline.bc 1.0 cancellable tail: direct; agree
 corpus/gen-produce.bc 1.0 cancellable tail: direct; agree
+corpus/gen-raise-annot.bc 1.0 cancellable abortive: branch; agree
+corpus/gen-raise-annot.bc 2.0 cancellable abortive: branch; agree
+corpus/gen-raise-annot.bc 3.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-annot.bc 4.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-annot.bc 5.0 cancellable abortive: branch; agree
+corpus/gen-raise-annot.bc 6.0 cancellable abortive: branch; agree
+corpus/gen-raise-annot.bc 7.0 cancellable abortive: branch; agree
+corpus/gen-raise-annot.bc 8.0 cancellable stored,tail: machine: the handlers of the name have 3 clauses for it; agree
+corpus/gen-raise-annot.bc 9.0 cancellable stored,tail: machine: the handlers of the name have 3 clauses for it; agree
 corpus/gen-raise-close-two.bc 1.0 cancellable abortive: branch; agree
 corpus/gen-raise-close-two.bc 2.0 cancellable abortive: branch; agree
 corpus/gen-raise-close-two.bc 6.0 cancellable stored: machine: the handlers of the name have 4 clauses for it; agree
@@ -433,6 +442,10 @@ corpus/gen-raise-fold.bc 3.0 cancellable stored,tail: machine: the handlers of t
 corpus/gen-raise-fold.bc 4.0 cancellable abortive: branch; agree
 corpus/gen-raise-fold.bc 5.0 cancellable abortive: branch; agree
 corpus/gen-raise-fold.bc 6.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-raise-local-pure.bc 4.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-local-pure.bc 1.0 cancellable abortive: branch; agree
+corpus/gen-raise-local-pure.bc 2.0 cancellable abortive: branch; agree
+corpus/gen-raise-local-pure.bc 3.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-raise-pass.bc 1.0 cancellable abortive: branch; agree
 corpus/gen-raise-pass.bc 2.0 cancellable abortive: branch; agree
 corpus/gen-raise-pass.bc 3.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
@@ -445,6 +458,14 @@ corpus/gen-raise-take.bc 6.0 cancellable stored,tail: machine: the handlers of t
 corpus/gen-raise-take.bc 5.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-raise-take.bc 4.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-raise-take.bc 3.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-unused.bc 1.0 cancellable abortive: branch; agree
+corpus/gen-raise-unused.bc 2.0 cancellable abortive: branch; agree
+corpus/gen-raise-unused.bc 3.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-unused.bc 4.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-unused.bc 5.0 cancellable abortive: branch; agree
+corpus/gen-raise-unused.bc 6.0 cancellable abortive: branch; agree
+corpus/gen-raise-unused.bc 7.0 cancellable stored,tail: machine: the handlers of the name have 4 clauses for it; agree
+corpus/gen-raise-unused.bc 8.0 cancellable stored,tail: machine: the handlers of the name have 4 clauses for it; agree
 corpus/gen-raise-zip.bc 1.0 cancellable abortive: branch; agree
 corpus/gen-raise-zip.bc 2.0 cancellable abortive: branch; agree
 corpus/gen-raise-zip.bc 5.0 cancellable stored,tail: machine: the handlers of the name have 3 clauses for it; agree

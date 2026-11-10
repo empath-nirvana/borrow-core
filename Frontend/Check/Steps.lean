@@ -921,7 +921,8 @@ def dropRow? (A : CVTy) : Option CRow :=
   | .sum B C => do pure (rowJoin (← dropRow? B) (← dropRow? C))
   | A => (closeAt? A).map (·.1)
 
-/-- The nesting of `⊗` and `⊕` in a type: how deep `dropOne` takes a value of it apart. -/
+/-- The nesting of `⊗` and `⊕` in a type: how deep `dropOne` takes a value of it apart.
+`[spec §15]` -/
 def dropDepth : CVTy → Nat
   | .tensor A B | .sum A B => 1 + max (dropDepth A) (dropDepth B)
   | _ => 0
@@ -1294,7 +1295,7 @@ def closeOf (E : Env) (sp : Span) (S : CRow) (T' : List CVTy) (k : Nat) :
     else throw ⟨sp, "internal error: a stored generator's type"⟩
   | _ => throw ⟨sp, "internal error: a closed slot is not a stored generator"⟩
 
-/-- `r` under one more dead slot, or the refusal. -/
+/-- `r` under one more dead slot, or the refusal.  `[spec §15]` -/
 def weakDead (E : Env) (sp : Span) (k : Nat) (A : CVTy) {j : Jdg} (r : Res Δ T j) :
     Except Error (Res Δ (A :: T) j) :=
   match rWeakDead A r with
@@ -1303,7 +1304,7 @@ def weakDead (E : Env) (sp : Span) (k : Nat) (A : CVTy) {j : Jdg} (r : Res Δ T 
       "placed under its drop"⟩
 
 /-- A leaf of a drop: the close of slot `k` before `r`, at `r`'s type (`closeThen`, or
-`closeBefore` at a terminal). -/
+`closeBefore` at a terminal).  `[spec §15]` -/
 abbrev Leaf (Δ : LifeCtx) (S : CRow) (B : CVTy) :=
   (T' : List CVTy) → Nat → Res Δ T' (.comp (effOf S B)) → Except Error (Res Δ T' (.comp (effOf S B)))
 
@@ -1452,12 +1453,44 @@ def consumeOwedR {C : CCTy} (E : Env) (sp : Span) (r : Res Δ T (.comp C)) :
   let r ← (owed.filter (!drops.contains ·)).foldr (fun i acc => do consumeOne sp i (← acc)) (pure r)
   if drops.isEmpty then return r
   match effRowOf? C with
-  | some ⟨_, _, hC⟩ =>
+  | some ⟨_ :: _, _, hC⟩ =>
     let r' ← drops.foldlM (init := hC ▸ r) fun r i =>
       dropOne E sp (fun T' k r => closeBefore E sp k r) (((T[i]?).map dropDepth).getD 0 + 1) T i r
     pure (hC ▸ r')
-  | none => throw ⟨sp, s!"{E.slotName (drops.headD 0)} holds a stored generator over a row, not " ++
-      s!"closed here, where the computation's type `{E.ppC C}` performs no operation"⟩
+  | _ => throw ⟨sp, s!"{E.slotName (drops.headD 0)} holds a stored generator over a row, not " ++
+      s!"closed here, where the computation's type `{E.ppC C}` performs no operation: its " ++
+      "close performs, so close it, or use it, where the computation performs its row"⟩
+
+
+/-- The owed slots that are dropped at a row and are not consumable (`dropRow?`) and that `m`
+does not mention by name: dropped before `m` (`dropsBefore`), not at its terminals, so that a
+call in tail position stays one and nothing `m` binds is live across the drop.  `[spec §15]` -/
+def earlyDrops (E : Env) (T : List CVTy) (m : Comp) : List Nat :=
+  (List.range T.length).filter fun i =>
+    E.own.getD i false &&
+    (match T[i]? with
+      | some A => !consumableB A && (dropRow? A).isSome
+      | none => false) &&
+    (match E.vars[i]? with
+      | some (some x) => !mentionsC x m
+      | _ => false)
+
+/-- The forms before which a slot they do not mention is dropped (`earlyDrops`). -/
+def _root_.Frontend.Comp.dropsEarly : Comp → Bool
+  | .bind .. | .letUnit .. | .letPair .. | .case .. => true
+  | _ => false
+
+/-- The slots `ks` dropped before `r`, at `r`'s row (`dropOne`, `closeBefore`).  `[spec §15]` -/
+def dropsBefore {C : CCTy} (E : Env) (sp : Span) (ks : List Nat) (r : Res Δ T (.comp C)) :
+    Except Error (Res Δ T (.comp C)) := do
+  match effRowOf? C with
+  | some ⟨_ :: _, _, hC⟩ =>
+    let r' ← ks.foldlM (init := hC ▸ r) fun r i =>
+      dropOne E sp (fun T' k r => closeBefore E sp k r) (((T[i]?).map dropDepth).getD 0 + 1) T i r
+    pure (hC ▸ r')
+  | _ => throw ⟨sp, s!"{E.slotName (ks.headD 0)} holds a stored generator over a row, not " ++
+      s!"closed here, where the computation's type `{E.ppC C}` performs no operation: its " ++
+      "close performs, so close it, or use it, where the computation performs its row"⟩
 
 end
 

@@ -1075,7 +1075,8 @@ structure MCx where
   /-- In a div body's code before its first point, run when it is called. -/
   pre : Bool := false
 
-/-- The `F_Σ` layers of a computation type, its cancel rows' at every depth included. -/
+/-- The `F_Σ` layers of a computation type, its cancel rows' at every depth included.
+`[spec §15, §27]` -/
 def effLayers : BoCa.Fig16.LogRel.Core.CTy → Nat
   | .eff _ _ _ _ _ fin _ C => 1 + effLayers fin + effLayers C
   | _ => 0
@@ -4236,7 +4237,16 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       pure (.pair sp (← surfV n c a V) (← surfV n c b W))
     | .inl sp V => do pure (.inl sp (← surfV n c (match exp with | some (.sum A _) => some A | _ => none) V))
     | .inr sp V => do pure (.inr sp (← surfV n c (match exp with | some (.sum _ B) => some B | _ => none) V))
-    | .ascribe sp V A => do pure (.ascribe sp (← surfV n c (c.elabV A) V) A)
+    | .ascribe sp V A => do
+      -- Its stored generators at the rows of what flows into them (`refineAsc`, SPEC §15).
+      match c.elabV A with
+      | some A₀ =>
+        let A' := match exp with
+          | some X => Elab.withRows (Elab.refineAsc c.tyV V A₀) X
+          | none => Elab.refineAsc c.tyV V A₀
+        let Aw ← if tyEqV A' A₀ then pure A else (c.surface sp A' : Except Error VTy)
+        pure (.ascribe sp (← surfV n c (some A') V) Aw)
+      | none => pure (.ascribe sp (← surfV n c none V) A)
     | .unbang sp V => do pure (.unbang sp (← surfV n c (exp.map .bang) V))
     | .boxed sp l V => do pure (.boxed sp l (← surfV n c none V))
     | .unbox sp V => do pure (.unbox sp (← surfV n c none V))
@@ -4453,6 +4463,16 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let A ← match A with
         | some T => do pure (some (T.subst (← get).siteRes))
         | none => pure none
+      -- `x = (V : T)` assigning a variable: `T`'s stored generators at the rows of the variable's
+      -- (`Elab.withRows`, SPEC §15).  `[spec §15]`
+      let M ← match A, M, (c.locals.lookup x.name).join with
+        | none, .ret rsp (.ascribe asp V T), some X => match c.elabV T with
+          | some T₀ =>
+            let T' := Elab.withRows (Elab.refineAsc c.tyV V T₀) X
+            if tyEqV T' T₀ then pure M
+            else pure (.ret rsp (.ascribe asp V (← (c.surface asp T' : Except Error VTy))))
+          | none => pure M
+        | _, _, _ => pure M
       -- What follows a loop (`restScope`): outside the loop, so the loop's exit is not its.
       if x.name == restScope then
         let saved := (← get).exits
@@ -4548,6 +4568,13 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let V' ← surfV n c none V
       let c ← refresh c
       let (Ax, Ay) := sumTys c V'
+      -- Arms whose types differ only in the rows of stored generators they write: each at the
+      -- rows of the other (`Elab.withRows`, SPEC §15).  `[spec §15]`
+      let exp := exp <|> match (c.push x.name Ax).tyC M, (c.push y.name Ay).tyC N with
+        | some (.ret A), some (.ret B) =>
+          let J := Elab.withRows A B
+          if !tyEqV A B && tyEqV J (Elab.withRows B A) then some (.ret J) else none
+        | _, _ => none
       let M' ← surfC n (c.push x.name Ax) exp M
       let N' ← surfC n (c.push y.name Ay) exp N
       pure ((fuseChecked V' x M' y N').getD (.case sp V' x M' y N'))
