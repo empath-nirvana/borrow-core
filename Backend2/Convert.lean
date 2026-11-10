@@ -1248,7 +1248,7 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
         | _, _ => resumeTm F p fs y reuse
     setFn rres { name := s!"resume {op.1}.{op.2}", params := [s₁, y], body := rb, ret := F.ty }
     let s₂ ← fresh envTy
-    -- At a cancel row `⊤` (an operation that is not capturable, `finAt`) the cancel entry is a
+    -- At a cancel row `⊤` (an operation that is not capturable, `ofFinAt`) the cancel entry is a
     -- trap.
     -- UNPROVED: the cancel entry of a machine's `k` at an operation that is not capturable is never
     -- entered. Its callers are a `κ`'s cancel at that operation, which is `⊤` by `kTy .lin` (the
