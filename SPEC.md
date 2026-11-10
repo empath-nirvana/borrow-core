@@ -7381,7 +7381,8 @@ are no `data` declarations (§31 *Open*), so the representation is not hidden ou
 
 `include json` gives a JSON value, its parser and its serialiser, written in the language over
 §36's map, §17's buffers and text, and §19's errors. The module is ordinary source: no kernel,
-checker or backend change.
+checker or backend change. `include json` names the module (`json` among the library modules
+read at startup).
 
 - **The value.** `data Json = Null | Bool(bool) | Int(i64) | Float(f64) | Str(string) |
   Arr(Vec[Json]) | Obj(Map[string, Json])`: owned, an array's elements in a `Vec`, an object's
@@ -7408,8 +7409,6 @@ checker or backend change.
   the compact form of `j` to `out`, by borrow: it lends the value and walks arrays with `elems`
   and objects with `map_entries` (§31 loads). `Int` by `push_i64`, exactly as parsed; `Float` by `push_f64` (an integral float as `3.0`);
   strings re-escaped (`"`, `\`, control bytes as `\u00XX` or their short escapes).
-- **Lookup.** `json_get<'a>(j: imm 'a Json, k: lit) -> imm 'a Json + 1`: an object's member by
-  key, as a view; `inr ()` if `j` is not an object or has no such member.
 
 **Stated limits.**
 - **Duplicate keys:** the last value wins; the earlier one is dropped.
@@ -7434,6 +7433,9 @@ integer literal now prints exactly (`3`, not `3.0`), so the serialised line's le
 - Streaming parse (from a reader, not a whole text) and a pull-based tokenizer (pipes).
 - Number formats other than `f64`.
 - Pretty printing.
+- **Lookup by view.** `json_get<'a>(j: imm 'a Json, k: lit) -> imm 'a Json + 1`, a member as a
+  view at `j`'s lifetime, cannot be written: a view projected inside a load (§36) cannot leave it
+  at the outer lifetime. It needs a kernel rule for shared loads.
 
 ### Programs
 
