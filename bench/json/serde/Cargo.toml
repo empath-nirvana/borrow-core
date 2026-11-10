@@ -1,0 +1,20 @@
+# The Rust baseline of #977: serde_json's `from_slice::<Value>` (mode `parse`) and
+# `from_slice` + `to_vec` (mode `roundtrip`), with serde_json's default features. Versions are
+# pinned by `Cargo.lock`; build with `cargo build --release --offline --locked`.
+[package]
+name = "json-bench"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "json-bench"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "=1.0.151"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"

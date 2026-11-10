@@ -1,0 +1,4 @@
+data/*.json
+out/
+serde/target/
+__pycache__/

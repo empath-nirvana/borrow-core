@@ -1,0 +1,37 @@
+-- #977, parse to DOM: standard input read whole (`read_input`), lent once as text and parsed by
+-- `json_parse` (`lib/json.bc`) into an owned `Json`, which is then consumed. The serde side is
+-- `serde/src/main.rs` in mode `parse`: `from_slice::<Value>`, then `black_box`.
+--
+-- The one line printed is a checksum both sides compute in O(1) from the parsed value: the
+-- top-level kind (0 null, 1 bool, 2 number, 3 string, 4 array, 5 object) and, for an array or an
+-- object, its number of elements or members, else 0. A malformed input prints `error`, a document
+-- nested past the budget `exhausted`. Nothing else is done: no tuning, no work serde does not do.
+
+include json
+
+-- The checksum of the value `j` points at.
+fn checksum<'a>(j: imm 'a Json) -> i32 * i32 =
+  borrow imm *j { 'y, v -> match v {
+      Null -> (0, 0)
+    | Bool(b) -> (1, 0)
+    | Int(n) -> (2, 0)
+    | Float(x) -> (2, 0)
+    | Str(s) -> (3, 0)
+    | Arr(b) -> (4, len(key_prefix(b)))
+    | Obj(m) -> (5, map_size(m))
+    } }
+
+main -> i32 =
+  let s = read_input();
+  let r = borrow imm s { 't, t ->
+    with exhausted_to_option {
+      with to_result {
+        let j = json_parse(t);
+        let c = checksum(&j);
+        c
+      } } };
+  match r {
+    inl (inl (k, n)) -> print_dec(k); print_byte(b' '); print_dec(n); print_byte(b'\n'); 0
+  | inl (inr e) -> print_lit("error\n"); 1
+  | inr u -> print_lit("exhausted\n"); 2
+  }

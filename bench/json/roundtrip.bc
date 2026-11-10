@@ -1,0 +1,28 @@
+-- #977, parse plus serialise: standard input read whole (`read_input`), lent once as text,
+-- parsed by `json_parse` (`lib/json.bc`) into an owned `Json`, serialised by `json_ser` into a
+-- string and written to standard output, then a newline. The serde side is `serde/src/main.rs` in
+-- mode `roundtrip`: `from_slice::<Value>`, `to_vec`, written to standard output, then a newline.
+-- Both start the output at 128 bytes, `to_vec`'s initial capacity. A malformed input prints
+-- `error`, a document nested past the budget `exhausted`. Nothing else is done: no tuning, no
+-- work serde does not do.
+
+include json
+
+main -> i32 =
+  let s = read_input();
+  let r = borrow imm s { 't, t ->
+    with exhausted_to_option {
+      with to_result {
+        let j = json_parse(t);
+        let out = json_ser(&j, string_new(128));
+        out
+      } } };
+  match r {
+    inl (inl out) ->
+      let mut out = out;
+      push_byte(&mut out, b'\n');
+      print_string(out);
+      0
+  | inl (inr e) -> print_lit("error\n"); 1
+  | inr u -> print_lit("exhausted\n"); 2
+  }
