@@ -1326,10 +1326,22 @@ content copied through the borrow, which the read rebinds.  `[spec §41]` -/
 def lentRead (sp : Span) (x : String) : Val :=
   .app sp (.sugar sp .deref) (.lend sp ⟨x, sp⟩ .mut)
 
+/-- `V` lends one of the variables `lent` (`&mut x`), outside nested computations. -/
+def lendsLent (lent : List String) : Val → Bool
+  | .lend _ x _ => lent.contains x.name
+  | .pair _ V W => lendsLent lent V || lendsLent lent W
+  | .app _ (.sugar _ .deref) _ => false
+  | .app _ V W => lendsLent lent V || lendsLent lent W
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => lendsLent lent V
+  | _ => false
+
 mutual
-/-- The reads of lent variables (`lentRead`) in `V` outside nested computations, each replaced by a
-fresh variable, which the computation `V` is in binds first; those inside a nested computation are
-bound there (`hoistReadsC`). -/
+/-- The reads of lent variables (`lentRead`) and the calls that lend them in `V`, outside nested
+computations, in the order `V` evaluates them (left to right, a call's argument before the call):
+each replaced by a fresh variable, which the computation `V` is in binds first, in that order, so
+`V` is in A-normal form for them. Those inside a nested computation are bound there
+(`hoistReadsC`). -/
 def hoistReadsV (lent : List String) : Nat → Val → StateT (List (String × Val)) P Val
   | 0, V => pure V
   | k + 1, V => match V with
@@ -1340,7 +1352,16 @@ def hoistReadsV (lent : List String) : Nat → Val → StateT (List (String × V
         pure (.var sp r)
       else pure V
     | .pair sp V W => return .pair sp (← hoistReadsV lent k V) (← hoistReadsV lent k W)
-    | .app sp V W => return .app sp (← hoistReadsV lent k V) (← hoistReadsV lent k W)
+    | .app sp V W => do
+      let V' ← hoistReadsV lent k V
+      let W' ← hoistReadsV lent k W
+      -- A call that lends a lent variable (a reborrow) is bound in its turn too, so that the
+      -- reads and lends of the variable run in the order the source evaluates them.
+      if lendsLent lent W' && !(V' matches .sugar ..) then
+        let r ← (freshName "io_rc" : P String)
+        modify (· ++ [(r, .app sp V' W')])
+        pure (.var sp r)
+      else pure (.app sp V' W')
     | .inl sp V => return .inl sp (← hoistReadsV lent k V)
     | .inr sp V => return .inr sp (← hoistReadsV lent k V)
     | .unbang sp V => return .unbang sp (← hoistReadsV lent k V)
@@ -2025,11 +2046,11 @@ def withBlock : Nat → P Val
     let s₁ ← get
     -- A capability (`stdout`, …) is a cell a function takes and hands back, not a place lent to
     -- it: a body that passes one on is left to hand it back, which `with` refuses.
-    let ctl := s₁.resolve && s₁.surf && s₁.data.ctl.contains h.name && !thr.isEmpty &&
-      !thr.any capabilityNames.contains
+    let lendable := thr.filter (!capabilityNames.contains ·)
+    let ctl := s₁.resolve && s₁.surf && s₁.data.ctl.contains h.name && !lendable.isEmpty
     let (x, b, M, thr, ys) ← if !ctl then pure (x, b, M, thr, []) else do
       set s₀
-      let ys ← thr.mapM fun x => do
+      let ys ← lendable.mapM fun x => do
         -- The name the source writes the place with, which the borrow's binder shadows.
         let y ← match s₀.scope.find? (·.2.1 == x) with
           | some (written, _, b) => shadowAs written b
@@ -2043,8 +2064,9 @@ def withBlock : Nat → P Val
       -- The lends write the places, as `&mut x` does (SPEC §41, R2).
       for (x, _) in ys do notePlaceWrite x
       pure (x, b, M, thr, ys)
-    if !thr.isEmpty && !ys.isEmpty then
-      failAt h.span s!"internal error: the body of `with {h.name}` hands back {thr} beside its lends"
+    -- What is left to hand back is the capabilities, which `with` refuses (`Effects.withCtl`):
+    -- the site is not lent around then.
+    let ys := if thr.isEmpty then ys else []
     let sp ← spanFrom st
     let M := if thr.isEmpty then M else handOn { t := "io_bt" } thr M
     modify fun s => { s with blockThreads := thr, joined := [] }
@@ -2054,9 +2076,15 @@ def withBlock : Nat → P Val
     -- elaborates to `[then]` (`Frontend.Elab.Effects`).
     let V ← if (← peek).tok == .ident "finally" then do
         discard bump
+        let dsp ← startPos
         expectSym "{"
-        let D ← comp n
+        let (D, wD) ← frame (comp n)
         expectSym "}"
+        -- A write of an outer `let mut` in the finaliser is not handed back (#940): refused,
+        -- not lost.  [spec §42]
+        if let some y := wD.head? then
+          failAt (← spanFrom dsp) (s!"a `finally` clause can't yet assign `{y}`, a variable " ++
+            "declared outside the handler: its write would be lost (#940)")
         let fsp ← spanFrom st
         -- `D`'s binder is `()`'s, which `D` does not name and the printed form does not write, so
         -- it is one fixed name: the printed program reads back to the same term.
@@ -2312,29 +2340,27 @@ def compG : Nat → Bool → P Comp
       discard bump; discard bump
       let x ← lookName x₀ t.span
       if (← get).lent.contains x then
-        -- `x = e` of a variable lent for a control handler's body: `modify x { x -> (e, ()) }`,
-        -- the borrow's content replaced, `x` in `e` its old content (SPEC §41, R3).  [spec §41]
+        -- `x = e` of a variable lent for a control handler's body: `e` evaluated first, its
+        -- reads and lends of lent variables in order, to `t`; then `modify x { _ -> (t, ()) }`,
+        -- the borrow's content replaced by a callback that runs nothing (SPEC §41, R3).
+        -- [spec §41]
         notePlaceWrite x
-        let ((y, V), w) ← frame (withScope do
-          let y : Ident := ⟨← match (← get).scope.lookup x₀ with
-            | some (_, b) => shadowAs x₀ b
-            | none => pure (← bindName ⟨x₀, Span.none⟩).name, t.span⟩
-          modify fun s => { s with blockThreads := [], pendingRun := none }
-          let V ← val n
-          checkRun V
-          pure (y, V))
+        modify fun s => { s with blockThreads := [], pendingRun := none }
+        let V ← val n
+        let thr := (← get).blockThreads
+        checkRun V
+        let tv ← freshName "io_lv"
+        let o ← freshName "io_lo"
         let msp ← spanFrom st
-        let B : Comp := .ret msp (.pair msp V (.unit msp))
-        let B := if w.isEmpty then B else handOn { t := "io_bt" } w B
         let MV : Val := .app msp (.app msp (.sugar t.span (.borrow .modify "")) (.var t.span x))
-          (.thunkv msp (.lam msp y (holeTy msp) B))
-        modify fun s => { s with blockThreads := w, joined := [] }
-        if !head && (← isSym ";") then
-          discard bump
-          let N ← comp n
-          return ← letVal (← spanFrom st) n (.wild t.span) none MV N w
+          (.thunkv msp (.lam msp ⟨o, msp⟩ (holeTy msp)
+            (.ret msp (.pair msp (.var msp tv) (.unit msp)))))
+        let N ← if !head && (← isSym ";") then do discard bump; comp n
+          else pure (.ret msp (.unit msp))
         let sp ← spanFrom st
-        return ← letVal sp n (.wild t.span) none MV (.ret sp (.unit sp)) w
+        modify fun s => { s with blockThreads := [], joined := [] }
+        let K ← letVal sp n (.wild t.span) none MV N []
+        return ← letVal sp n (.var ⟨tv, t.span⟩) none V K thr
       unless (← get).muts.contains x do
         failAt t.span s!"`{x₀}` is assigned, but it is not declared `let mut`"
       modify fun s => { s with assigned := x :: s.assigned, blockThreads := [], pendingRun := none }

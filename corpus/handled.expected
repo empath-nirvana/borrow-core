@@ -1364,6 +1364,9 @@ corpus/map-views.bc flows [0, 4294967295]; main []
 corpus/mut-bind-arm.bc flows [0, 4294967295]; main []
 corpus/mut-block-nested.bc flows [0, 4294967295]; main []
 corpus/mut-block.bc flows [0, 4294967295]; main []
+corpus/mut-control-assign-raise.bc flows [0, 1, 4294967295]; main [1]
+corpus/mut-control-assign-raise.bc 15:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/mut-control-assign-raise.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/mut-control-exhausted.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
 corpus/mut-control-exhausted.bc 18:11: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/mut-control-exhausted.bc 1.0 abortive: branch; condition 2 holds; -
@@ -1375,6 +1378,9 @@ corpus/mut-control-nested.bc 17:11: handle 1: inside [2], finaliser; row []; ops
 corpus/mut-control-nested.bc 19:13: handle 2: inside [], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/mut-control-nested.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/mut-control-nested.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/mut-control-order.bc flows [0, 1, 4294967295]; main [1]
+corpus/mut-control-order.bc 19:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/mut-control-order.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/mut-control-raise.bc flows [0, 1, 4294967295]; main [1]
 corpus/mut-control-raise.bc 18:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/mut-control-raise.bc 1.0 abortive: branch; condition 2 holds; -

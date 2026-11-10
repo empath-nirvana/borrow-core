@@ -2565,9 +2565,15 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     -- the places outside it around the site (SPEC §41, R3). Core text that hands them back is
     -- refused.  [spec §41]
     if M.boundNames.contains "io_bt" then
-      let shown := ", ".intercalate ((handedBack fuel M).map (s!"`{·}`"))
-      throw ⟨ksp, s!"the body of `with {ch.name.name}` takes {shown} and would hand it back, but a " ++
-        "control handler's body may be abandoned: pass a capability outside the handler, or " ++
+      let caps := (handedBack fuel M).filter (["stdin", "stdout", "stderr", "clock", "args"].contains ·)
+      let names := caps.map (s!"`{·}`")
+      let shown := match names.reverse with
+        | [] => "a place declared outside it"
+        | [a] => a
+        | a :: rest => ", ".intercalate rest.reverse ++ " and " ++ a
+      let it := if names.length > 1 then "them" else "it"
+      throw ⟨ksp, s!"the body of `with {ch.name.name}` takes {shown} and would hand {it} back, but " ++
+        "a control handler's body may be abandoned: pass a capability outside the handler, or " ++
         "perform its effect inside (SPEC §41, R3)"⟩
     let some eff := cx.env.eff? e | throw ⟨ksp, s!"internal error: the effect `{e}`"⟩
     -- A clause that takes its continuation out of a box receives it boxed (BOXED-κ, SPEC §28):
