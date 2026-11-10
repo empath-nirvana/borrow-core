@@ -110,6 +110,7 @@ core-fin-top-row 0 0 0 0 0 0
 core-pipe-close 2 0 0 2 2 0
 core-pipe-step 1 0 0 1 1 0
 data-json-map-ser 16 0 0 555 420 133
+deep-gen-count 0 3 0 0 0 0
 effects-load-raise 4 0 0 204 184 15
 for-arm-raises-owned 8 0 0 54 54 18
 handle-arm-releases 2 0 0 13 13 5
