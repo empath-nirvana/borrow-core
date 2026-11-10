@@ -390,6 +390,32 @@ corpus/io-task.bc 3.1 cancellable tail: -; agree
 corpus/io-task.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/io-task.bc 2.1 cancellable tail: -; agree
 corpus/io-task.bc 1.0 cancellable abortive: branch; agree
+corpus/kernel-cancel-now.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-deep-gen-plain.bc 1.0 must-resume tail: direct; agree
+corpus/kernel-deep-gen-plain.bc 2.0 cancellable tail: machine: the clause suspends; disagree
+corpus/kernel-e7a.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-fail-outside-native.bc 1.0 cancellable abortive: branch; agree
+corpus/kernel-fail-outside-native.bc 2.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-forward-cancel.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-forward-cancel.bc 2.0 must-resume tail: -; agree
+corpus/kernel-forward.bc 1.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-forward.bc 2.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-log-outside-native.bc 1.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-log-outside-native.bc 2.0 cancellable abortive: branch; agree
+corpus/kernel-loop-captured.bc 1.0 cancellable abortive: branch; agree
+corpus/kernel-loop-captured.bc 2.0 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-loop-tail.bc 1.0 cancellable abortive: branch; agree
+corpus/kernel-loop-tail.bc 2.0 must-resume tail: direct; agree
+corpus/kernel-nested-fail-outside.bc 1.0 cancellable abortive: branch; agree
+corpus/kernel-nested-fail-outside.bc 2.0 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-nested-log-outside.bc 1.0 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-nested-log-outside.bc 2.0 cancellable abortive: branch; agree
+corpus/kernel-reborrow-raise.bc 1.0 cancellable abortive: branch; agree
+corpus/kernel-store-cancel.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-stored-k-cancel.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-stored-k-resume.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-take-all.bc 1.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-tick-native.bc 1.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/key-value.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/dp/0039-combination-sum-loop.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/dp/0039-combination-sum.bc 1.0 cancellable abortive: branch; agree
