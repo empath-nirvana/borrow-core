@@ -5430,6 +5430,17 @@ one β-step longer at each use of `κ`:
   effect context declaring `wait` and `exnᵢ` (`dAt_e7c_lift`, `d_e7c_lift`); at a cancellable `exnᵢ`
   that context has no unrestricted abortive operation (`noUnrExn_Ξe7c`).
 
+**A pipe connector's step** (#918) is `[then]`: `M` resumes one stage's stored continuation, and
+`Γ₂` holds the others', which `D` cancels (`corpus/core-pipe-step.bc`). `[then]`'s `!Γ₂` premise
+holds exactly when the step's row has no unrestricted operation at any depth (`¬Row.UnrD`: no
+`unr` operation, and none in a capturable operation's cancel row at any depth); a stage's
+continuation is `U`, not `!`, at `lin` and `cancel`. Several stage cancels share one cancel region
+when they are the finalisers of one captured continuation that the handler cancels
+(`corpus/core-pipe-close.bc`), and `[cfin-raise]` then keeps the first cleanup error; as nested
+ordinary unwind frames, the latest error wins instead. In these programs no cleanup raises. The
+first-error region with raising cleanups is traced on the machine, untyped; a checked instance
+needs the checker to emit `[then]` at a non-empty `Σ_D` (#868).
+
 ### Lowering
 
 The backend lowers a finaliser that raises (`Backend/Clos/Capture.lean`, `Backend/Clos/Unwind.lean`),
@@ -9865,11 +9876,20 @@ corpus or a golden.
 
 ### Open
 
-- **The erasure laws** (T-B1 `last_resume_direct`, T-B1′ `last_cancel_direct`, T-B2): the
-  backend's licence to call a work where it is performed. T-B1/B1′ are `tail_resumes_answer` and
-  `kappa_cancel_steps` with the finaliser frame; T-B2, at a work that performs, is a two-run
-  correspondence. They read the rule's clause form (`lastClause`, `lastN`, `lastD`, `exitK`) and
-  its step lemmas (`lastClause_steps`, `lastN_inl`, `lastN_inr`, `exitK_steps`, `lastD_steps`).
+- **The erasure laws** (`Core/HandleLastErase.lean`, #918) are proved at the direct call
+  `hnd H K[case (w v) {inl y → y | inr z → X}]` (`directK`) of a work whose direct run leaves κ's
+  cell free (`StepsOff`; `StepsOff.upd` runs it beside the cell). T-B1 `last_resume_direct`: both
+  runs reach `K₀[hnd H K[y]]`. T-B1′ `last_cancel_direct`: the perform reaches
+  `K₀[(λ_. nf z)(ccatch K†[raise ⊥])]`, `K`'s cancel then the exit (`last_cancel_exit`), and the
+  direct call reaches its `inr` arm. T-B2 `last_perform_direct`: a work whose performs are answered
+  in place by handlers outside the node (`WorkRun`), of names other than `n` and unhandled in `K`,
+  by the two-run lemma `work_run_ctx`. Outer handlers that answer in place: `answers_in_place`,
+  from `tail_clause_answers` and `last_clause_answers` (nested `[handle-last]`, pipe fusion's
+  normal path). Open: T-B2 when an outer handler stores or cancels the captured κ, or a raise or
+  cancel crosses the active frame (an early stop, `stop()`, a raise across a fused stage), is not
+  derived and not refuted (a whole-run simulation); a Core term for the in-place cancel-mode
+  unwind (Core expresses it only through κ's `ccatch K†`); the laws are stated on machine values,
+  not on typed `lastH`.
 - **The elaboration** of `for` with `break`/`return` and a body that performs, and the adapters
   over a source computation (R-1's frontend): it needs a checker producer for the node
   (`TTied`'s builder, the clause kinds of the node, `Frontend/Check/Kinds.lean`, and its handled
