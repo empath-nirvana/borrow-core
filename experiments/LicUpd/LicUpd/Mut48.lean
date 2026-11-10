@@ -211,7 +211,7 @@ theorem updMutG_frame {F ρ π X Z : WRes} (hm : ResU.UpdMut ρ π) (hg : UpdImm
                   ⟨σπ, hσπ, hπ3⟩ (CellU.kind_immOf _ _ _ _)
                 rw [ResU.Flat.functional hσ' hσρ, hρn] at e''
                 cases e''
-              · obtain ⟨-, -, -, -, e''⟩ := mπρ n b₃ P₃ ⟨u, ρ₃, h₃, hw₃, hπ3⟩
+              · obtain ⟨_, _, _, _, e''⟩ := mπρ n b₃ P₃ ⟨u, ρ₃, h₃, hw₃, hπ3⟩
                 rw [hρn] at e''
                 cases e''
         exact ⟨v, χ, hχ, hw, flat_of_ag heZ hc' ha'⟩
@@ -246,7 +246,7 @@ theorem updMutG_frame {F ρ π X Z : WRes} (hm : ResU.UpdMut ρ π) (hg : UpdImm
                   rw [ResU.Flat.functional hσ' hσρ, hρn] at e''
                   cases Option.some.inj e''
                   simp at kc'
-                · obtain ⟨-, -, -, -, e''⟩ := mπρ n b₃ P₃ ⟨u', ρ₃, h₃, hw₃, hπ3⟩
+                · obtain ⟨_, _, _, _, e''⟩ := mπρ n b₃ P₃ ⟨u', ρ₃, h₃, hw₃, hπ3⟩
                   rw [hρn] at e''
                   exact absurd (Option.some.inj e'') CellU.ownOf_ne_mutOf
           exact ⟨v, χ, hχ, hw, flat_of_ag heZ hc' ha'⟩
