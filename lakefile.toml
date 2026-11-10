@@ -1,5 +1,5 @@
 name = "borrow_core"
-defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Target", "Pipeline", "Backend", "Backend2", "bcc", "bcc-counts"]
+defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Target", "Pipeline", "Reference", "Backend", "Backend2", "bcc", "bcc-counts"]
 
 [[require]]
 name = "mathlib"
@@ -26,9 +26,14 @@ name = "Frontend"
 [[lean_lib]]
 name = "Target"
 
-# The checked program, the source run, and the run and compile plumbing every backend shares.
+# The checked program, and the run and compile plumbing every backend shares.
 [[lean_lib]]
 name = "Pipeline"
+
+# The reference run: the source stage (`Support`'s interpreter, which writes and checks the
+# goldens) and the falsifier's run of it. Imports no module of `Backend`.
+[[lean_lib]]
+name = "Reference"
 
 [[lean_lib]]
 name = "Backend"

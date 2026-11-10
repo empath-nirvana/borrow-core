@@ -3,6 +3,7 @@ import Std.Data.TreeMap
 import Paper.S1_Syntax.Definitions
 import Support.Dynamics.Iterate
 import Backend.Clos.Syntax
+import Reference.ExprBEq
 
 /-!
 # Backend — closure conversion
@@ -291,8 +292,6 @@ def swapValue : CM Tm := do
   let c₂ ← register ⟨[l'], v, .prim .swap [l', v]⟩
   let c₁ ← register ⟨[], l, .clos c₂ [l]⟩
   pure (.clos c₁ [])
-
-deriving instance BEq for BoCa.Expr
 
 /-- `X = λx. F (λv. x x v)` for `F = λself. λx. B` (`Core/Fix.lean`, `zX`). -/
 def zXE (B : Expr) : Expr :=

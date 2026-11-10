@@ -7,7 +7,5 @@ import Backend.Clos.Poly
 import Backend.Clos.Interp
 import Backend.Driver
 import Backend.Cells
-import Backend.Falsify
-import Backend.FalsifyTests
 import Backend.Flat.Lower
 import Backend.Native.Tests

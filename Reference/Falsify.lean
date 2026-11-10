@@ -1,10 +1,10 @@
 import Paper.S2_Statics.Definitions
 import Support.Dynamics.Interpreter
-import Pipeline.Source
-import Backend.Clos.Convert
+import Reference.Source
+import Reference.ExprBEq
 
 /-!
-# Backend — the falsifier: allocators and lend tags  (docs/async-capabilities.md §6.1)
+# Reference — the falsifier: allocators and lend tags  (docs/async-capabilities.md §6.1)
 
 A dynamic check of a run, in `bcc interp`, outside the semantics. It runs the erased term on a
 machine of its own: `Support`'s step function (`BoCa.step`) with the memory replaced, the

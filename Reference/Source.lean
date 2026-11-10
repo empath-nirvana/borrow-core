@@ -2,7 +2,7 @@ import Support.Dynamics.Interpreter
 import Target.Value
 
 /-!
-# Backend — the source run
+# Reference — the source run
 
 `Support`'s interpreter (`BoCa.step` at `wasmHost`) run to a value, with the number of cells
 left in memory: the reference every stage is compared with. A program with capabilities

@@ -3,7 +3,7 @@ import Frontend.Print
 import Frontend.Check.Program
 import Frontend.Check.Handled
 import Backend.Driver
-import Backend.FalsifyTests
+import Reference
 import Backend.Native.Tests
 import Backend2.Driver
 /-!
@@ -34,7 +34,7 @@ import Backend2.Driver
                                 input first; the words after `--` are the program's arguments
                                 (SPEC §34)
     lake exe bcc interp (--check fresh|tags | --alloc least) [--stats] <file>
-                                the falsifier (`Backend/Falsify.lean`): the source stage with
+                                the falsifier (`Reference/Falsify.lean`): the source stage with
                                 a never-reuse allocator (`fresh`), with lend tags (`tags`), or
                                 with the least-free allocator (`least`); a failed check is an
                                 error; `--stats` writes the run's counts to standard error

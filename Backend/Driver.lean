@@ -1,9 +1,9 @@
 import Frontend.Parser
 import Frontend.Check.Program
 import Frontend.Check.Externs
-import Pipeline.Source
+import Reference.Source
 import Pipeline.Driver
-import Backend.Falsify
+import Reference.Falsify
 import Backend.Clos.Convert
 import Backend.Clos.Collapse
 import Backend.Clos.Unwind
@@ -224,7 +224,7 @@ def flatMemCounts (k : CheckedProg) (input : List UInt8) (args : List UInt8 := [
 
 /-! ### The falsifier
 
-`bcc interp --check fresh|tags` and `--alloc least` (`Backend/Falsify.lean`,
+`bcc interp --check fresh|tags` and `--alloc least` (`Reference/Falsify.lean`,
 docs/async-capabilities.md §6.1): the source stage on the falsifier's machine. The run's output,
 and its statistics. -/
 
