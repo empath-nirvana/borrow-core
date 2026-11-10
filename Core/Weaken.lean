@@ -95,12 +95,12 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | allE _ hlt ih => exact .allE ih hlt
   | bangThunkF hp _ ih => exact .bangThunkF (banged_append h' hp) ih
   | bangThunkV hp hC _ ih => exact .bangThunkV (banged_append h' hp) hC ih
-  | codeI _ hok hE ih =>
+  | codeI _ hok ih =>
       obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
-      rw [← hty] at hE ⊢; exact .codeI ih hok' hE
-  | codeIB hp _ hok hE ih =>
+      rw [← hty]; exact .codeI ih hok'
+  | codeIB hp _ hok ih =>
       obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
-      rw [← hty] at hE ⊢; exact .codeIB (banged_append h' hp) ih hok' hE
+      rw [← hty]; exact .codeIB (banged_append h' hp) ih hok'
   | codeErase _ ih => exact .codeErase ih
   | codeEraseB _ ih => exact .codeEraseB ih
   | bangE _ ih => exact .bangE ih

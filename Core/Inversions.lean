@@ -988,7 +988,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | foldOwnG => intro k hk; exact absurd hk (not_hasVar_closed (FoldP.foldOwnGV_closed _))
   | foldReuse => intro k hk; exact absurd hk (not_hasVar_closed (foldReuseV_closed _))
   | unfoldN => intro k hk; exact absurd hk (not_hasVar_closed (unfoldV_closed _))
-  | alpha _ _ ih | codeI _ _ _ ih | codeIB _ _ _ _ ih => exact ih
+  | alpha _ _ ih | codeI _ _ ih | codeIB _ _ _ ih => exact ih
   | _ => intro k hk; exact absurd hk (not_hasVar_closed (by rfl))
 
 /-! ### Inversions -/
@@ -2145,8 +2145,8 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       exact .inr (.inr (.inr (.inl ⟨_, h, .inr (.inl ⟨hp, ValCls.refl _⟩)⟩)))
   | thunkV hC _ ih => intro M he; exact (ih M he).thunkV hC
   | bangThunkV hp hC _ ih => intro M he; exact (ih M he).bangThunkV hC hp
-  | codeI _ _ _ ih => intro M he; exact (ih M he).codeI _ _
-  | codeIB _ _ _ _ ih => intro M he; exact (ih M he).codeIB _ _
+  | codeI _ _ ih => intro M he; exact (ih M he).codeI _ _
+  | codeIB _ _ _ ih => intro M he; exact (ih M he).codeIB _ _
   | codeErase _ ih => intro M he; exact (ih M he).step (JS.val (VS.codeErase _ _ _))
   | codeEraseB _ ih => intro M he; exact (ih M he).step (JS.val (VS.codeEraseB _ _ _))
   | withI => intro M he; exact .inr (.inr (.inr (.inr (.inl ⟨_, _, he.symm⟩))))
@@ -2439,8 +2439,8 @@ theorem der_swap {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
     e = swap → ∃ A B, ValClsC (axSwapTy A B) j := by
   induction h with
   | swap => intro _; exact ⟨_, _, ValClsC.refl _⟩
-  | codeI _ _ _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.codeI _ _⟩
-  | codeIB _ _ _ _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.codeIB _ _⟩
+  | codeI _ _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.codeI _ _⟩
+  | codeIB _ _ _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.codeIB _ _⟩
   | lam h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
   | lamDead h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
   | allI _ _ _ h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim

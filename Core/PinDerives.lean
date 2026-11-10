@@ -202,12 +202,12 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   type `Γ.capTy (λM)`, every captured slot live and every other live slot persistent
   (`Ctx.CapOK`), the environment type closed.  `[spec §68]` -/
   | codeI {Δ Γ M C} (h : CDerivesP Δ Γ (.val (.lam M)) (.val (.thunk C)))
-      (hok : Ctx.CapOK Γ (.lam M)) (hE : (Ctx.capTy Γ (.lam M)).Cl 0) :
+      (hok : Ctx.CapOK Γ (.lam M)) :
       CDerivesP Δ Γ (.val (.lam M))
         (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))
   /-- `[code-I]` under `!`, over `!Γ`.  `[spec §68]` -/
   | codeIB {Δ Γ M C} (hp : Ctx.Banged Γ) (h : CDerivesP Δ Γ (.val (.lam M)) (.val (.bang (.thunk C))))
-      (hok : Ctx.CapOK Γ (.lam M)) (hE : (Ctx.capTy Γ (.lam M)).Cl 0) :
+      (hok : Ctx.CapOK Γ (.lam M)) :
       CDerivesP Δ Γ (.val (.lam M))
         (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))
   /-- `[erase]` (§68's `erase`): a code type read at `U C`, on the same term.  `[spec §68]` -/

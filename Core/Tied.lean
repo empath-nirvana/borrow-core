@@ -147,13 +147,13 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       CDerivesAt Ξ Δ Γ (.val (.lam N)) (.val (.bang (.thunk C)))
   /-- `[code-I]`: a closure `λM : U C` at its code type.  `[spec §68]` -/
   | codeI {Δ Γ M C} (h : CDerivesAt Ξ Δ Γ (.val (.lam M)) (.val (.thunk C)))
-      (hok : Ctx.CapOK Γ (.lam M)) (hE : (Ctx.capTy Γ (.lam M)).Cl 0) :
+      (hok : Ctx.CapOK Γ (.lam M)) :
       CDerivesAt Ξ Δ Γ (.val (.lam M))
         (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))
   /-- `[code-I]` under `!`, over `!Γ`.  `[spec §68]` -/
   | codeIB {Δ Γ M C} (hp : Ctx.Banged Γ)
       (h : CDerivesAt Ξ Δ Γ (.val (.lam M)) (.val (.bang (.thunk C))))
-      (hok : Ctx.CapOK Γ (.lam M)) (hE : (Ctx.capTy Γ (.lam M)).Cl 0) :
+      (hok : Ctx.CapOK Γ (.lam M)) :
       CDerivesAt Ξ Δ Γ (.val (.lam M))
         (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))
   /-- `[erase]`.  `[spec §68]` -/
@@ -540,8 +540,8 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | allE _ hlt ih1 => exact .allE ih1 hlt
   | bangThunkF hp _ ih1 => exact .bangThunkF hp ih1
   | bangThunkV hp hC _ ih1 => exact .bangThunkV hp hC ih1
-  | codeI _ hok hE ih1 => exact .codeI ih1 hok hE
-  | codeIB hp _ hok hE ih1 => exact .codeIB hp ih1 hok hE
+  | codeI _ hok ih1 => exact .codeI ih1 hok
+  | codeIB hp _ hok ih1 => exact .codeIB hp ih1 hok
   | codeErase _ ih1 => exact .codeErase ih1
   | codeEraseB _ ih1 => exact .codeEraseB ih1
   | bangE _ ih1 => exact .bangE ih1
@@ -940,8 +940,8 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | allE _ hlt ih1 => exact .allE (ih1 (by eff_free)) hlt
   | bangThunkF hp _ ih1 => exact .bangThunkF hp (ih1 (by eff_free))
   | bangThunkV hp hC _ ih1 => exact .bangThunkV hp hC (ih1 he)
-  | codeI _ hok hE ih1 => exact .codeI (ih1 he) hok hE
-  | codeIB hp _ hok hE ih1 => exact .codeIB hp (ih1 he) hok hE
+  | codeI _ hok ih1 => exact .codeI (ih1 he) hok
+  | codeIB hp _ hok ih1 => exact .codeIB hp (ih1 he) hok
   | codeErase _ ih1 => exact .codeErase (ih1 he)
   | codeEraseB _ ih1 => exact .codeEraseB (ih1 he)
   | bangE _ ih1 => exact .bangE (ih1 he)

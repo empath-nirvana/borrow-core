@@ -279,12 +279,12 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   type `Γ.capTy (λM)`, every captured slot live and every other live slot persistent
   (`Ctx.CapOK`), the environment type closed.  `[spec §68]` -/
   | codeI {Δ Γ M C} (h : CDerives Δ Γ (.val (.lam M)) (.val (.thunk C)))
-      (hok : Ctx.CapOK Γ (.lam M)) (hE : (Ctx.capTy Γ (.lam M)).Cl 0) :
+      (hok : Ctx.CapOK Γ (.lam M)) :
       CDerives Δ Γ (.val (.lam M))
         (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))
   /-- `[code-I]` under `!`, over `!Γ`.  `[spec §68]` -/
   | codeIB {Δ Γ M C} (hp : Ctx.Banged Γ) (h : CDerives Δ Γ (.val (.lam M)) (.val (.bang (.thunk C))))
-      (hok : Ctx.CapOK Γ (.lam M)) (hE : (Ctx.capTy Γ (.lam M)).Cl 0) :
+      (hok : Ctx.CapOK Γ (.lam M)) :
       CDerives Δ Γ (.val (.lam M))
         (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))
   /-- `[erase]` (§68's `erase`): a code type read at `U C`, on the same term.  `[spec §68]` -/
@@ -819,8 +819,8 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | allE _ hlt ih => exact allE_compatC ih hlt
   | bangThunkF hp _ ih => exact bangThunkF_compatC hp ih
   | bangThunkV hp hC _ ih => exact bangThunkV_compatC hp hC ih
-  | codeI _ hok _ ih => exact codeI_compatC ih hok
-  | codeIB hp _ hok _ ih => exact codeIB_compatC hp ih hok
+  | codeI _ hok ih => exact codeI_compatC ih hok
+  | codeIB hp _ hok ih => exact codeIB_compatC hp ih hok
   | codeErase _ ih => exact codeErase_compatC ih
   | codeEraseB _ ih => exact codeEraseB_compatC ih
   | bangE _ ih => exact bangE_compatC ih
