@@ -1695,6 +1695,9 @@ term (§3), with its `CDerives` derivation (`checkProgram_sound`). The consume i
 not affect soundness: any placement of a consume call is a `CDerives` derivation. The policy
 fixes when the effect of a consume happens.
 
+
+A stored generator over a row is not consumable; it is dropped at its row, by a close, at scope end
+or just before a tail call (§15 *Stored generators over a row*).
 ### Open
 
 - **Host resources are not consumed.** A host resource (§11), such as a file handle, is group 3.
@@ -2334,10 +2337,171 @@ adapters (`lib/adapters.bc`) are generic generators over stored generators: `map
 `take`, `skip`, `enumerate`, `chain`, `flat_map`, `take_until`, `scan`, `zip`, `chunks`, `lines`,
 `batch`. Each runs its source to the end and returns the source's `K`. `take`, `take_until` and
 `zip` close their source, so they take one that hands back, closed, what it returns,
-`U (pull A K K)`; a failing source returns an error it cannot hand back closed, and is rejected
-there (`corpus/reject/take-failing.bc`). A pipeline of adapters whose functions are known
+`U (pull A K K)`; a source that fails raises, and is closed as a pure one is (*Stored generators
+over a row*, below). A pipeline of adapters whose functions are known
 allocates nothing and dispatches no call (`corpus/gen-pipeline-adapters.bc`: 0, 0, 0;
 `gen-adapters.bc`, `gen-adapters-fail.bc` at their previous counts).
+
+### Stored generators over a row (#910)
+
+- A call of a generator `g` at a stored generator's place is stored whatever else `g` performs.
+  Let `Σ` be `g`'s row at the call, less its iteration effect's site. The stored generator is
+  `U (pull_Σ A B R)`:
+
+      pull_Σ A B R ≜ νX. F_Σ((A ⊗ U X) ⊕ (B ⊕ U X)) & F_Σ R
+
+  `pull A B R` is `pull_[] A B R`.
+- An observation performs `Σ`: a `raise` inside `g` propagates out of the `next` that ran it, to
+  the handler around the consumer. `close` is the cancel of `g`'s continuation, and the kernel
+  types that at `F_{fin ⊕ Σ} 1` (`cancelTy`, §27), so it is at `Σ` too. The pull view's clauses
+  answer at `F_Σ`.
+- `pullView` (`Frontend/Sugar.lean`) carries `F_Σ` through the view. `pullSite`
+  (`Frontend/Elab/Effects.lean`) stores it. The kernel's ν rules admit effectful leaves
+  (`CTy.NuOk`), so nothing changes in Core.
+
+**§12/§19 consume glue (the checker's `finalOf`).** A slot live across an operation that may be
+cancelled or abort is consumed by `[then]`'s finaliser. Another case is a value that
+is *dropped at a row* (`dropRow?`): a stored generator over a row `U (νX. C & F_{Σc} R)` (`Σc`
+non-empty, `R` consumable), or a value built by `⊗` and `⊕` from such generators and consumable
+types (`zip`'s state). Such a value is not `Consumable`, because `consumeE` is at `F 1`. It is
+dropped at its row instead (`dropOne`):
+
+- a generator is closed: `y <- (nu_out (force x)).2; consumeE R y`, at `Σc`;
+- a pair is taken apart, `let (x, y) = v`, and a sum is split, `case v`, and each part is dropped;
+- a consumable part is consumed.
+
+The finaliser's row `Σ_D` is the union of the `Σc`. `[then]` (§27, `rEffThenD`) decides its
+premises: `Σ_D ≤ Σ`, and every capturable operation's cancel row holds `Σ_D` (`thenFinB`).
+Each close is a `[then]` whose own finaliser is the rest of the drop (`closeThen`). So a raise
+from one close still closes the others, and each generator is closed exactly once.
+
+**§12 where a dropped-at-a-row value is dropped.** Drops happen at scope end, as in Rust,
+except that at a tail call they happen just before the call, as Rust's `become` does (RFC 3407).
+
+- A value dropped at a row is owed to its scope like a consumable slot (`Env.pushOwn`).
+- On a path that ends without using it, it is dropped at scope end, as #868's rule has it
+  (`consumeOwedR`, `dropOne`): before a terminal that is a value, after the path's last effect;
+  after a terminal that performs (an operation, a call that is not a tail call, a handler site),
+  `x <- T; drops; return x`, as Rust drops after the block's last expression.
+  Its generators are closed by `y <- close; consumeE R y; T` (`closeBefore`, the terminal placed
+  under one more dead slot by `TTied.weaken`). A terminal whose type performs nothing cannot close
+  it, and is refused there with that reason.
+- On a path that ends in a tail call, it is dropped just before the call: after the rest of the
+  path, in `become`'s order (the call's arguments, then the drops, then the jump). The bindings
+  that perform nothing just before the call, `x <- return V` with `V` performing nothing
+  (`Comp.becomeRun`: the call's A-normal argument bindings, and any `let` of a value before them),
+  are placed after the drop rather than before it (`becomeDrops`, `dropsBefore`): they perform
+  nothing, so the order is observably `become`'s, and the function value and the arguments they
+  bind are not live across a close that may raise. Every binding that performs something stays
+  before the drop. The call stays in tail position. The checker
+  reads `V`'s effect-freedom off the term (`Val.runFree`: no `run` in it).
+- That holds only when every value the call takes is bound by those bindings, or is one a raise
+  can drop (`dropRow?`). When the call takes a linear value bound by a binding that performs (a
+  stateful handler's result handed back by the call after a `with`), the drops are at scope end,
+  after the call, and that call is not a tail call: Rust's ordinary drop order
+  (`corpus/gen-raise-with.bc`).
+
+**§27 cancel rows (Phase 2's `Fins`).** A function that holds a stored generator over a row
+across its own operations is a finaliser site of the checker's glue. A function whose parameter
+is `U (pull_Σc …)` runs that close when one of its capturable operations is cancelled. So each
+capturable operation of its row gets `Σc`'s entries in its cancel row: its `yield`, at the `for`
+site that consumes it, becomes `cancel[Fail]`. The table is unioned per name, and the
+kernel checks every row.
+
+**§15 adapters (`lib/adapters.bc`).** These are generic over the source's row with no change to
+their code. A call whose stored-generator argument is over a row `Σ` is a copy of the adapter at
+`Σ`, as a call with an effectful block is a copy at the block's row (§30):
+
+- the parameter's type is `U (pull_Σ A K R)`;
+- every place the body writes a stored generator's type (`zip`'s state annotations) gets its row
+  by inference, each occurrence its own (`Elab.withRows`, `Elab.refineAsc`): from what flows into
+  it (the value ascribed, through its pairs and injections), else from what it flows to (the type
+  expected of it, the variable an assignment rebinds, the other arm of a `case`). An occurrence
+  that nothing with a row reaches keeps its written row. So a pure stored generator a copy
+  binds itself stays pure, and two parameters at different rows keep theirs. The checker
+  re-checks every annotation;
+- the copy's row is its own row (its `Yield` at the consumer's site) and `Σ`'s sites;
+- the copy is keyed by `Σ`'s sites (`b{j}n{n}…`, as a block's).
+
+A copy at `Σ` passes its parameter on: a call in the copy whose argument at a stored generator's
+parameter is that parameter is a copy at `Σ` too (`pullArgsV`), in tail position as elsewhere.
+The parameter is followed through `let x = y`, through pairs built of it and taken apart again
+(`Cx.shapes`), and through copies (`Cx.pulls`).
+
+Which stored-generator parameter a call has is read off the callee's own declaration
+(`Env.pullArgs`), not the first template of its name: `take` of `lib/buf.bc` does not hide
+`take` of `lib/adapters.bc` when both are included (`include rec` brings `buf`).
+
+Every row the elaboration writes (the machine's `F[…]`, a site's clause rows, a counted loop's
+row) is written with each entry's cancel row (`opSrcM`).
+
+Types, at a source's row `Σ`:
+
+    map[A, B, K, R](it: U (pull_Σ A K R), f: !(A => B)) -> K with Yield[B], Σ
+    take[A, K](it: U (pull_Σ A K K), n: i32) -> K with Yield[A], Σ
+    … (filter, skip, enumerate, chain, flat_map, take_until, scan, zip, chunks, lines, batch alike)
+
+A source that fails raises. `take`, `take_until` and `zip` close a raising source as they close a pure one, and the
+close runs at `Σ`. `corpus/take-failing.bc` takes a raising `upto`.
+
+**Baselines.**
+
+- No `CDerives` rule, relation, machine or Core change. `fundamentalC`, `adequacyC`,
+  `fundamentalD` and `adequacyD` keep their statements. The new glue is `[then]` at `Σ_D`
+  (`rEffThenD`, #868 Phase 1).
+- Every corpus and kernel program keeps its output and its counts. A program with no stored
+  generator over a row is checked and erased byte for byte as without this entry: `pull_[]` is `pull`, the
+  copy keys are unchanged, and no cancel row grows. Its desugared text writes out, wherever it
+  stores a generator, the pull view's clause types as `!U (A -o F B)` and its `iter` as `nu Y. …`. Their keys (which hash the term the interpreter runs)
+  are unchanged.
+- Every borrow guarantee. A stored generator over a row is linear like any other: it is closed by
+  the glue, never dropped.
+
+**Programs.**
+
+- `corpus/gen-raise-take.bc`: a tokenizer stage that raises `ParseError` on malformed input,
+  under `map` and `take 3`, raised to an outer `to_result`. Its source, which owns a list, is
+  closed by cleanup exactly once on both paths: linear (at most once) and `live 0` (at least once).
+  Answer `(inl i32[98], inr i32[5])`.
+- `corpus/gen-raise-fold.bc`: a raising `try_fold` that is a plain `fold` with `to_result` attached;
+  the step raises, or the source does. Answer `(inl i32[10], (inr i32[21], inr i32[1004]))`.
+- `corpus/take-failing.bc`, its source raising. Answer
+  `(inl i32[1], inr i32[4])`.
+- `corpus/gen-raise-zip.bc`: `zip` over two raising sources. `(inl i32[66], (inr i32[3], inr i32[20]))`.
+- `corpus/gen-raise-close-two.bc`: two sources whose closes raise, closed by one drop; the second
+  close is the first's finaliser. `(inl i32[11], (inr i32[7], (inr i32[9], inr i32[9])))`.
+- `corpus/gen-raise-pass.bc`: a stored generator over a row passed on from a copy, and dropped in
+  one arm. `(inl i32[106], (inr i32[2], (inl i32[7], inr i32[2])))`.
+- `corpus/gen-raise-annot.bc`: an ascription of two parameters at different rows (a raising and a
+  pure one; `Fail`'s and `Oops`'s). `((inl i32[1036], inr i32[2]), (inl (inl i32[1036]), (inl (inr i32[2]), inr i32[20])))`.
+- `corpus/gen-raise-local-pure.bc`: a pure stored generator bound in a copy at a row.
+  `(inl i32[1017], inr i32[2])`.
+- `corpus/gen-raise-unused.bc`: an unused stored generator before a tail call, and a sum holding
+  one dropped at scope end. `((inl i32[4], inl i32[46]), (inl i32[103], (inr i32[2], (inl i32[103], inr i32[2]))))`.
+- `corpus/gen-raise-become.bc`: a close that raises, at a tail call after work (a counted `tick`):
+  the work happens first. `((inl i32[113], i32[1]), (inr i32[9], i32[1]))`.
+- `corpus/gen-raise-op-terminal.bc`: paths ending in a value and in an operation, the close after
+  the operation. `(((inl i32[113], i32[1]), (inl (), i32[1])), ((inr i32[9], i32[1]), (inr i32[9], i32[1])))`.
+  Marked `old-backend-refuses` (below).
+- `corpus/gen-raise-with.bc`: a tail call taking a stateful `with`'s result: drops at scope end.
+  `((inl (i32[13], i32[1]), i32[1]), (inr i32[9], i32[1]))`.
+- `corpus/gen-raise-local-bind.bc`: a local bound with a written type, passed on in a 9000-deep
+  recursion. `(inl i32[3], inl i32[3])`.
+
+Arms of a `case` that give stored generators over different rows at one place, each where the
+other's is pure, are refused at the surface with that reason ("the arms of this `case` give
+stored generators over different rows at one place"), not as a type mismatch in generated core.
+
+**The old backend.** Two uses of a function holding a raising stored generator across a stateful
+handler's operation, at two sites, are refused by the old backend's unwind lowering ("unwind: an
+operation no handler catches", `Backend/Clos/Unwind.lean`'s `catch`): its flow analysis merges the
+two copies' codes and their raise names. One use alone runs; the same shape without a stored
+generator runs; the source stage and Backend2 run both. Such programs are marked
+`old-backend-refuses` (N7 retires the old backend).
+
+A cleanup that raises around a source's `yield` is provided (`u <- yield(x) unwind (D)`,
+`corpus/gen-raise-close-two.bc`). A `with h { g() } finally { … }` whose body loops is refused
+before any of this, as a handler around a loop (§21 *Open*, L1).
 
 ### Self-reference
 
@@ -2457,11 +2621,23 @@ and §19 is preserved: every construct of this entry is elaborated into core bef
 - **A total consumer of a generator that loops.** A `for` over one is div: its turns are
   unbounded. A finite source written as data, or a sized iterator (§16), is total, and so is a
   generator whose body does not loop.
-- **Stored generators over a row.** A generator that performs another effect besides its iteration
-  effect (a `Fail`) is not stored: the surface does not provide it yet, and the elaborator refuses
-  it (`pullView` in `Frontend/Sugar.lean`, `pullSite` in `Frontend/Elab/Effects.lean`). The kernel
-  admits effectful observations (§7's ν rules, whose leaves may be `F_Σ` by §19's `EffLeaf`;
-  `CTy.NuOk`). #910.
+- A stored generator over a row bound to a local, `let g : U (pull …) = g(…)`, is at the row of
+  the generator (its binding's type is rewritten, `pulledTy`) and is passed on from there
+  (`Cx.pulls`); but the cancel-row rule (`FinsHeld`) reads parameters, so such a local held
+  across a capturable operation of the same function is not given the cancel row it needs.
+- A stored generator over a row bound from an observation (`inl (x, it) -> f(it)`), or read out
+  of a sum, and passed on to a function other than the recursion's own: `Cx.pulls` follows
+  parameters, their copies and pairs, not injections.
+- A written stored generator's type that nothing with a row reaches keeps its written row (an
+  annotation on a function's result; a type alias of `pull` at a stored generator's binding,
+  which `isPullTy` does not see through).
+- A `for` over a LOOPING generator inside a control handler's body: the per-observation form (L1).
+- Closing a stored generator over a row whose close performs a capturable operation (not only
+  abortive ones): `thenFinB` decides it, and no program has one.
+- A `for` over a stored generator over a row, or over a raising generator, inside a handler's
+  body: a handler around a loop is not provided (§21 *Open*). The grounding programs consume by
+  recursion (`drain`, `fold`) under `to_result` and `on_exhausted`.
+- Pipes L2 (#921) rewrites the adapters as stages.
 - **The source interpreter** (`bcc interp`, `Support`'s substitution machine) substitutes into
   the whole step at each observation, so its time per observation grows with the size of the
   body's machine.
@@ -5644,6 +5820,10 @@ All at every stage of both backends, `live 0`. The kernel program `stored-k-fin`
 twin: the stashed closure cancels `κ`, so its type is `U(1+1 ⊸ F_{[1.0]} (1+1))`, a function type
 whose row is a handler's name, which a surface handler's answer type cannot write (effectful
 closures, #161).
+
+- **A function that holds a stored generator over a row** across its own operations is a
+  finaliser site: each capturable operation of its row gets the close's row in its cancel row
+  (§15 *Stored generators over a row*).
 
 ### Baseline
 
