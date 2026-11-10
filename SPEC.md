@@ -13270,6 +13270,135 @@ The surface part is not built: until it lands, the surface refuses the operators
 
 ---
 
+## 76. Entry 75 — row and site parameters for library definitions (#1051)
+
+The spelling throughout (`[A, row r, site s]`, `..r`, `f[T, row (…), site k]`) is provisional,
+until the syntax bake-off.
+
+### Motivation
+
+Library code is generic over value types (§15, §31), but not over what its values perform. Each of
+these needs one definition used at several rows:
+- a closure returned or kept in data (§30 *Open*, #870, #161 B);
+- a stored generator kept in a record (#783);
+- a task at its body's row (`lib/async.bc`);
+- the pieces of §75's pipe connector, whose types mention the chain's row and a stage's private sites
+  (`docs/new-core/assembly-n.md` §1).
+
+The kernel has no row variable (§24, §30). So, as for types, each use is an instance at closed rows.
+Per-use instances are what generic `fn`s already are (§15's `f__gN`). #766 is the inferred half: its
+instance keys are this entry's.
+
+### Adds
+
+**Declaring.** A definition's brackets take row and site parameters beside its type parameters:
+
+    def name[A, row r, site s] : T = V
+    fn  name[A, row r](x: P, …) -> B with E, ..r = S
+    type N[A, row r, site s] = T
+    data N[A, row r] = …                                (slice 2)
+    handler h[A, row r]: E, A -> R with ..r = { … }     (slice 3)
+
+- `row r` names a row. In a type it is written `..r` inside a row: `F[s.0 cancel A ~> B, ..r] R`,
+  `with Fail[E], ..r`, a cancel row `cancel[..r]`, `pull[..r] A B R` (the surface `pull_Σ`), and
+  `(A => B with ..r)`.
+  - `..r` is *carried*: it is what an argument performs, resolved where the argument was written,
+    as a block's operations are (§30). The callee does not serve it.
+  - An effect name in the same position keeps §33's meaning: *provided*.
+- `site s` names a static name. It is written where a literal site is: `handle_with[s]`,
+  `perform[s.i]`, `abort[s.i]`, and `s.i …` in a row. It is core text only: a surface `fn`'s sites
+  are §18's, by effect name.
+
+**Instantiating.** A use writes `f[T, row (ROW), site k]` in core text, with `ROW` written as
+entries (`4.0 cancel i32 ~> 0, …`). At the surface it writes `f[T, row {Fail[i32], …}]`: effect
+instances, resolved to what serves them at the call, as §38 resolves a row entry.
+- An argument that is not written is read off the call:
+  - by matching parameter types against argument types, with `..r` a tail placeholder (§15's
+    first-order matching, extended at `CTy.eff`);
+  - at the surface, from what the elaboration knows of an argument: a block's sites (§30), a stored
+    generator's row (§15), a copy's own parameter at `r` passed on, or a variable bound to the
+    result of an instance at `r`.
+- A row nothing determines is `[]`. The pure use is the definition as written: no copy, and its name
+  is unchanged.
+- A **private** site is a site parameter that the definition's type does not mention. It is never
+  written. Each instance takes a fresh static name for it, once per instance and shared by its uses,
+  above every literal site of the program. A **public** site is written or matched.
+
+**An instance** is the template with the arguments substituted (`Frontend/Elab/Subst.lean`).
+- It is a `def` of its own, named `f__r{k}`, keyed by:
+  - its type arguments;
+  - the *servers* of each row entry (§38: sites and capabilities);
+  - its public sites.
+- It is made once, and checked by the unchanged checker.
+- Two templates' instances never share a slot: a private site is fresh, and a written entry equal to
+  one of `..r`'s is one entry (§38). One that differs is refused:
+  `` the row argument of `f` gives `n.i` a second signature ``.
+
+**Errors at the use site.** A wrong row argument is reported where the template is used, and names
+the template:
+`` `f` used at row R, but `f`'s body performs E outside R ``.
+Where it can be, this is checked before the template is instantiated, so that it is not only a
+kernel error deep inside an instance.
+
+**R3, a site does not escape its handler.** A `with`'s answer type mentions none of the sites the
+`with` installs (decision 57). Refused:
+`` this value performs at the site of the `with` it leaves ``.
+
+**Not provided**, each refused with its own message:
+- polymorphic recursion over rows (below, *Open*);
+- one parameter at two rows that share no instance (rank 2; *Open*);
+- a row argument whose entries name lifetimes not in scope at the template. Slice 1 refuses it;
+  slice 2 makes them lifetime parameters of the instance, as §15 does for types.
+
+### Baseline
+
+- No `CDerives` rule, relation clause, machine step, `CTy` or `VTy` former, or `TExpr` node is
+  added. `fundamentalC`, `adequacyC`, `fundamentalD` and `adequacyD` keep their statements, and
+  every instance is checked under them.
+- Every borrow guarantee holds: an instance is ordinary code, and a closure or stored generator at
+  `r` is linear or `!` as its type says.
+- Every corpus and kernel program keeps its output and counts. A program that writes no row or site
+  parameter elaborates to the same core, byte for byte (`bcc desugar`): its copy keys, site numbers
+  and cancel rows are unchanged.
+- §38's abstraction safety: instantiation never merges slots.
+
+### Programs
+
+Answers are worked by hand, to be confirmed by `bcc interp`.
+
+| Program | What | Answer |
+|---|---|---|
+| `corpus/core-row-generic.bc` | a core-text piece `stopk[A, row r]` over one stage's types, used at `F[4.0 cancel i32 ~> 0]` and at `F[]`; `handle_with[4]` around the use puts `main` at `F 1` | `()` |
+| `corpus/core-site-generic.bc` | a `def` with a private `site s` (`handle_with[s]` inside), used twice, nested; the inner activation's performs go to the inner handler | to come with slice 1 |
+| `corpus/row-compose.bc` | `compose[A, B, C, row r]` returns a closure, and `apply_all[row r]` folds a `List` of closures, at the caller's row: at `[]`, and under `with to_result` with a raising callback | `(i32[10], (inl i32[22], inr i32[120]))` |
+| `corpus/row-lexer.bc` | `data Lexer[row r]` keeps a stored generator `U (pull[..r] u8 1 1)` in a field; a lexer counts numbers over a pure source and over one that raises `4` part-way; the source is closed once on both paths | `(i32[3], inr i32[4])`, `live 0` |
+| `corpus/async-raise.bc` | `Task[A, row r]` and `spawn[A, row r]`: a task body that raises, resumed past its `await()`, reaches `to_result` | `inr i32[5]` |
+
+Rejects:
+- `corpus/reject/row-arg-mismatch.bc`: a wrong row argument, reported at the use site. Its message
+  comes from slice 1's code.
+- `corpus/reject/row-escape.bc`: R3.
+- `corpus/reject/row-poly-rec.bc`: polymorphic recursion over rows.
+- `corpus/reject/row-two-sigs.bc`: a row argument that gives an entry a second signature.
+- `corpus/reject/row-rank2.bc`: rank 2.
+
+### Open
+
+- **Refused until the kernel has a row binder.** Each of these needs decision 62's row variables in
+  the kernel, a later kernel unit, or decision 57's renaming lemma. Each is refused with a message
+  that names the missing kernel row binder:
+  - **polymorphic recursion over rows:** a group member calling itself at another row argument, or
+    through a site its callback tunnels;
+  - **rank 2:** one parameter called at two rows that share no instance (§30 *Open*);
+  - **checking a definition once for all rows,** as separate compilation would.
+- Inferring rows by unification rather than per argument (#766 Phase A). This entry's instance key
+  is #766 Phase B's.
+- R3 as a kernel premise.
+- Row aliases (`row Io = Fail[IoError], Async`), deferred as in #766.
+- The spelling of everything above.
+
+---
+
 ## Status
 
 What implements each entry is kept one paragraph per file in `docs/status/`: the paragraphs
