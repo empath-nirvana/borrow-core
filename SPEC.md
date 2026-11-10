@@ -12623,15 +12623,6 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
   promotion test and `lam_bang` follow. The fundamental property, adequacy, every rejection theorem
   and every golden are unchanged; no `CDerives` index or rule is added. Closes §10's first *Open*
   item.
-- **1.56** (2026-11-09) — §10 (#886, *Promotion over a persistent context*): the premise of Core's
-  promotion rules `!thunk` and `!thunkv` (`bangThunkF`, `bangThunkV`) is `Persistent(Γ)`, every
-  live slot at a persistent type, in place of `!Γ`. `!Γ ⇒ Persistent(Γ)`, so the rules only widen:
-  a `!` closure may capture integers, floats, `bool`, and data over them, a `μ`-list of `I32`
-  among them. `gSepC_persistent` and `gN_persistent` are re-proved from the new premise through
-  `vCE_empty_of_persistent` and `vN_empty_of_persistent`; `CDerivesAt`, the generated pins, the
-  checker's promotion test and `lam_bang` follow. The fundamental property, adequacy, every
-  rejection theorem and every golden are unchanged; no `CDerives` index or rule is added. Closes
-  §10's first *Open* item.
 - **1.60** (2026-11-09) — §14, §15, §16, §19, §29, §30, §32, §35, §39: the citations of decision 71,
   which decision 72 voids, are removed. T1 is stated as the checker's rule until surface A1
   (#843), which lifts it for §62's suspending constants' shapes, for programs without host
