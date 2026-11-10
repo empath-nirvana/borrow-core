@@ -99,10 +99,12 @@ lend-call-record 1 0 0 6 2 0
 lend-tail-call 1 0 0 10 6 0
 lit-lend-raise 6 0 0 69 30 39
 load-for-linear 1 0 0 115 65 3
+mut-control-assign-raise 0 0 0 6 6 0
 mut-control-exhausted 13 0 0 105532 105532 42762
 mut-control-lend 1 0 0 23 23 4
-mut-control-nested 0 0 0 10006 10006 0
-mut-control-raise 0 0 0 9 9 0
+mut-control-nested 0 0 0 10009 10009 0
+mut-control-order 0 0 0 9 9 0
+mut-control-raise 0 0 0 13 13 0
 mut-control-with 0 0 0 2 2 0
 nu-file-read 2 0 0 7 6 0
 nu-file-twice 2 0 0 11 11 0

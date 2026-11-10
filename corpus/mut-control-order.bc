@@ -1,0 +1,25 @@
+-- Reads and lends of a variable lent for a control handler's body run in the order the source
+-- evaluates them (SPEC §41, R3). In the body, `c` is the borrow lent around `with to_result`: a
+-- read of it copies the content (`*&mut c`), and `g(&mut c)` reborrows it for the call. Each read
+-- and each call that lends `c` is bound in its turn, left to right, so the expression is in
+-- A-normal form for them: in `g(&mut c) * 100 + c` the read follows the call, which has added 7;
+-- in `c * 100 + g(&mut c)` it precedes it.
+--
+-- Answer: `(inr i32[108], (i32[101], i32[8]))`: `1 * 100 + 8` raised (a read before the call
+-- would give `101` and no raise); `d = 1 * 100 + 1`, the read before the call; `c = 1 + 7 - 7 + 7`,
+-- the writes before the raise; `live 0`.
+include fail
+
+fn g<'a>(m: mut 'a i32) -> i32 = modify m { x -> (x + 7, x) }
+fn chk(n: i32) -> i32 with Fail[i32] = if n > 105 { raise(n) } else { n }
+
+main -> (i32 + i32) * (i32 * i32) =
+  let mut c = 1;
+  let mut d = 0;
+  let r = with to_result {
+    d = c * 100 + g(&mut c);
+    c = c - 7;
+    let v = chk(g(&mut c) * 100 + c);
+    v
+  };
+  (r, (d, c))
