@@ -85,6 +85,7 @@ keysOf() { echo "book/keys/${1#book/src/}.keys"; }
 find book/keys -name '*.keys' -exec cat {} + 2>/dev/null > "$tmp/verified" || : > "$tmp/verified"
 mkdir "$tmp/ok"
 : > "$tmp/reran"
+: > "$tmp/written"
 : > "$tmp/unverified"
 
 fail() { echo "$1: $2"; shift 2; for l in "$@"; do echo "  $l"; done; }
@@ -180,9 +181,16 @@ if [ "$BCC_WRITE_KEYS" = 1 ]; then
         grep -m1 "^$(blockHash "$attrs" "$tmp/$n.bc") " "$kf" || true
       fi
     done < <(awk -F'\t' -v m="$md" '$3 == m' "$tmp/manifest.all") > "$tmp/keys.new"
-    if [ -s "$tmp/keys.new" ]; then mkdir -p "$(dirname "$kf")"; mv "$tmp/keys.new" "$kf"; else rm -f "$kf"; fi
+    if [ -s "$tmp/keys.new" ]; then
+      if cmp -s "$tmp/keys.new" "$kf"; then :
+      elif mkdir -p "$(dirname "$kf")" 2> /dev/null && cp "$tmp/keys.new" "$kf" 2> /dev/null; then echo "$kf" >> "$tmp/written"
+      else echo "$kf: not writable, its keys not written"; fi
+    elif [ -f "$kf" ]; then rm -f "$kf" 2> /dev/null && echo "$kf (removed)" >> "$tmp/written"; fi
   done
-  echo "wrote the keys of $(cut -f3 "$tmp/manifest" | sort -u | wc -l | tr -d ' ') chapter(s) under book/keys/"
+  if [ -s "$tmp/written" ]; then
+    echo "keys written: $(wc -l < "$tmp/written" | tr -d ' ') chapter file(s) under book/keys/ (commit them with the change)"
+    sed 's/^/  /' "$tmp/written"
+  fi
 fi
 case "$BCC_SOURCE" in
   1) echo "source stage: every block (--source)" ;;

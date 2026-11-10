@@ -155,6 +155,7 @@ fi
 
 bad=0
 : > "$tmp/reran"
+: > "$tmp/written"
 : > "$tmp/unverified"
 : > "$tmp/counts"
 # The counts of file $1 on input $2, checked against the expected ones; appended to the table.
@@ -282,7 +283,9 @@ program() {
   fi
   if [ "$ok" = 1 ] && [ "$BCC_WRITE_KEYS" = 1 ]; then
     case " $stages " in
-      *" source "*) cp "$w/key" "$base.key"; note="$note (key written)" ;;
+      *" source "*)
+        if cp "$w/key" "$base.key" 2> /dev/null; then note="$note (key written)"; echo "$base.key" >> "$tmp/written"
+        else note="$note (key not written: $base.key is not writable)"; fi ;;
     esac
   fi
   if [ "$old" = 0 ]; then cnt="the old backend refuses it"
@@ -331,6 +334,11 @@ case "$BCC_SOURCE" in
      sed 's/^/  /' "$tmp/unverified" ;;
   *) echo "source stage: re-ran on $(wc -l < "$tmp/reran" | tr -d ' ') program(s) whose key is missing or changed (--source runs every program)"
      sed 's/^/  /' "$tmp/reran" ;;
+esac
+case "$(wc -l < "$tmp/written" | tr -d ' ')" in
+  0) ;;
+  *) echo "keys written: $(wc -l < "$tmp/written" | tr -d ' ') (commit them with the change)"
+     sed 's/^/  /' "$tmp/written" ;;
 esac
 echo "$bad failure(s)."
 [ "$bad" -eq 0 ]

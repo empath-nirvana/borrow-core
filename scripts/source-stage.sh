@@ -25,11 +25,16 @@
 #   BCC_SOURCE=0      it never runs (`ci-local.sh --changed`); an unverified golden is reported,
 #                     not run
 #   unset             it runs on exactly the unverified goldens (the default)
-#   BCC_WRITE_KEYS=1  record the key of every golden the source stage verified on this run
-#                     (`--write-keys`, `make keys`; `--write-goldens` records the keys of the
-#                     goldens it writes). Nothing else writes a key.
+#   BCC_WRITE_KEYS=1  record the key of every golden the source stage verified on this run. The
+#                     default when the source stage runs by the key rule (BCC_SOURCE unset): a
+#                     golden the interpreter has just reproduced gets its current key, so a key is
+#                     never stale for long. A key that cannot be written (a read-only tree) is
+#                     reported and skipped; the run's result does not depend on it, since a key
+#                     only decides whether the source stage runs. `--write-keys` (`make keys`) asks
+#                     for it under `--source` too; `--write-goldens` records the keys of the
+#                     goldens it writes. BCC_WRITE_KEYS=0 writes none.
 BCC_SOURCE=${BCC_SOURCE:-}
-BCC_WRITE_KEYS=${BCC_WRITE_KEYS:-0}
+if [ -z "$BCC_SOURCE" ]; then BCC_WRITE_KEYS=${BCC_WRITE_KEYS:-1}; else BCC_WRITE_KEYS=${BCC_WRITE_KEYS:-0}; fi
 source_digest=$(scripts/interp-digest.sh)
 export BCC_SOURCE BCC_WRITE_KEYS source_digest
 
