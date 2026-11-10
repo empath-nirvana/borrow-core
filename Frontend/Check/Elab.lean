@@ -420,6 +420,8 @@ def elabRow : Nat → TyEnv → Span → Row → Except Error CRow
   | 0, _, sp, _ => err sp "type abbreviations nested too deeply"
   | n + 1, E, sp, r => match r with
     | .nil => pure []
+    -- The parser reads `top` only as a whole cancel row (`rowEntries`); a `Row.top` built
+    -- elsewhere is refused here with the parser's message.
     | .top => err sp "`top` (`⊤`) is a cancel row only: write it as `n.i cancel[top] A ~> B`"
     | .cons k i q A B f r => do
         if k < 2 ^ 32 ∧ i < 2 ^ 32 then

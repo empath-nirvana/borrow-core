@@ -1,0 +1,22 @@
+-- SPEC §19's program 1 with a native `log`, the twin of the kernel program `log-outside-native`
+-- (Backend/Kernel.lean, `nLogOutside`): `log` is a cancellable control operation, and `with_log`'s
+-- clause resumes `k`, then marks the answer it gets back. `with_log` is outside `to_result`, so
+-- the `raise` after the `log` is caught inside it: the resumed body answers the error, and the
+-- mark is kept beside it.
+--
+-- Answer: (inr (), inr ()): the error, and the mark (true); `live 0`. A clause that lost its
+-- resume, or a raise that escaped `with_log`, would change the pair (`kernel-fail-outside-native`
+-- is the other order, where the mark is lost).
+
+include fail
+
+effect Log { ctl log() }
+
+handler with_log[A]: Log, A -> A * bool = {
+  return(x) = (x, false);
+  log(k) = let (x, f) = k(()); let _ = f; (x, true)
+}
+
+fn body() -> 1 with Log, Fail[1] = log(); raise(())
+
+main -> (1 + 1) * bool = with with_log[1 + 1] { with to_result[1, 1] { body() } }

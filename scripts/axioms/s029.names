@@ -1,0 +1,19 @@
+-- SPEC §29: the relaxed lend R1 under PinLaw
+BoCa.Fig16.LogRel.Core.CDerivesP.ofC
+BoCa.Fig16.LogRel.Core.fundamentalC_pin
+BoCa.Fig16.LogRel.Core.adequacyC_pin
+BoCa.Fig16.LogRel.Core.adequacyD_pin
+BoCa.Fig16.LogRel.Core.adequacyD_pin_safe
+BoCa.Fig16.LogRel.Core.total_open_pin
+BoCa.Fig16.LogRel.Core.PinLaw.stop
+BoCa.Fig16.LogRel.Core.PinLaw.loop
+BoCa.Fig16.LogRel.Core.PinLaw.of_stop_loop
+BoCa.Fig16.LogRel.Core.pinLaw_iff
+BoCa.Fig16.LogRel.Core.resumeO_await_yield
+BoCa.Fig16.LogRel.Core.not_resumeO_raise
+BoCa.Fig16.LogRel.Core.Check.Row.resumeOB_sound
+BoCa.Fig16.LogRel.Core.Check.noThunkB_sound
+BoCa.Fig16.LogRel.Core.Check.Row.resumeOCB_sound
+BoCa.Fig16.LogRel.Core.then_compatC_div
+BoCa.Fig16.LogRel.Core.cwp_then_div
+BoCa.Fig16.LogRel.Core.cwp_bind_le

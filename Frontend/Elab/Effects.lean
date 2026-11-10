@@ -1791,6 +1791,20 @@ def bindValue (sp : Span) (x : Ident) (A : Option VTy) (rsp : Span) (bs : List B
   | _, _ => pure ()
   chain bs (.bind sp x A (.ret rsp V') N)
 
+/-- The variables a body hands back beside its value at its terminals (`Parser.handOn`). -/
+def handedBack : Nat → Comp → List String
+  | 0, _ => []
+  | k + 1, M => match M with
+    | .bind _ ⟨"io_bt", _⟩ _ _ (.ret _ (.pair _ (.var _ "io_bt") W)) => names W
+    | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N => handedBack k N
+    | .case _ _ _ M _ N => (handedBack k M ++ handedBack k N).eraseDups
+    | _ => []
+where
+  names : Val → List String
+    | .var _ x => [x]
+    | .pair _ V W => names V ++ names W
+    | _ => []
+
 mutual
 /-- `M` with its operations resolved, handing the capabilities `cs` back beside its result: each
 terminal answering `v` answers `(c₁, (…, (cₙ, v)))`. With `wrap := false` (the body of a loop,
@@ -2570,10 +2584,20 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     -- The handler's clauses are elaborated in its own frame (SPEC §38).
     let envH : Env := { cx.env with owner := Instances.ownerKey ch.name.name ch.name.span,
                                     ownerTps := tps }
+    -- A control handler's body hands back nothing: the parser lends what it writes or lends of
+    -- the places outside it around the site (SPEC §41, R3). Core text that hands them back is
+    -- refused.  [spec §41]
     if M.boundNames.contains "io_bt" then
-      throw ⟨ksp, s!"the body of `with {ch.name.name}` assigns a `let mut` variable declared " ++
-        "outside it, or lends a place declared outside it: a control handler's body may be " ++
-        "abandoned, and does not hand them back; bind what the block answers instead"⟩
+      let caps := (handedBack fuel M).filter (["stdin", "stdout", "stderr", "clock", "args"].contains ·)
+      let names := caps.map (s!"`{·}`")
+      let shown := match names.reverse with
+        | [] => "a place declared outside it"
+        | [a] => a
+        | a :: rest => ", ".intercalate rest.reverse ++ " and " ++ a
+      let it := if names.length > 1 then "them" else "it"
+      throw ⟨ksp, s!"the body of `with {ch.name.name}` takes {shown} and would hand {it} back, but " ++
+        "a control handler's body may be abandoned: pass a capability outside the handler, or " ++
+        "perform its effect inside (SPEC §41, R3)"⟩
     let some eff := cx.env.eff? e | throw ⟨ksp, s!"internal error: the effect `{e}`"⟩
     -- A clause that takes its continuation out of a box receives it boxed (BOXED-κ, SPEC §28):
     -- it keeps the continuation in what it answers, a stored task.

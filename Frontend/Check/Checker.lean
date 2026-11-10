@@ -54,9 +54,6 @@ abbrev DefCache := List DefEntry
 /-- The checker's monad: an error, or a result with the cache. -/
 abbrev CheckM := StateT DefCache (Except Error)
 
-/-- The depth to which `opKeysOf` reads a finaliser's derivation.  `[spec §27]` -/
-def opKeysFuel : Nat := 100000
-
 /-- Run `x`; on an error, the cache as it was before. -/
 def attempt {α : Type} (x : CheckM α) : CheckM (Except Error α) := fun c =>
   match x c with
@@ -762,9 +759,10 @@ def bindHead : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → O
 
 /-- The finaliser `D` of `x <- M unwind (D); N` at the site's row `S`, at the row `SD` it
 performs: the empty row when `D` checks there (`effThenA`, as a finaliser that performs nothing
-always was); else `D` is checked at `S` and `SD` is the operations of `S` its derivation performs
-(`opKeysOf`), at which `D` is checked again, `[then]`'s premises then decided at `SD`
-(`thenIt`). Where `D` does not check at that `SD`, the derivation at `S` is kept.  `[spec §27]` -/
+always was); else `D` is checked at `S` and `SD` is the row its derivation needs, cancel rows
+included (`needRowOf`, as `Σ_M` is), on `S`'s operations, at which `D` is checked again, `[then]`'s
+premises then decided at `SD` (`thenIt`). Where `D` does not check at that `SD`, the derivation at
+`S` is kept.  `[spec §27]` -/
 def finC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → CRow →
     CheckM (Σ SD : CRow, Res Δ (.unit :: T) (.comp (effOf SD .unit)))
   | 0, _, _, _, D, _ => err D.span "expression nested too deeply"
@@ -774,50 +772,34 @@ def finC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → CRow 
     | .error e₀ =>
       if S.isEmpty then throw e₀
       let rS ← chkC n E Δ (.unit :: T) D (effOf S .unit)
-      let ks := opKeysOf opKeysFuel rS.t
-      let SD := S.filter fun o => ks.contains (o.n, o.i)
-      if SD.isEmpty || SD.length == S.length then pure ⟨S, rS⟩
+      let need := needRowOf opKeysFuel false rS.t
+      let SD := S.filterMap fun o => need.find? (keyEq · o)
+      if SD.isEmpty then pure ⟨S, rS⟩
       else match ← attempt (chkC n E Δ (.unit :: T) D (effOf SD .unit)) with
         | .ok r => pure ⟨SD, r⟩
         | .error _ => pure ⟨S, rS⟩
 
 /-- `M` of `x <- M unwind (D); N` at its own row `SM` (SPEC §27's `Σ_M`), when the finaliser
 performs (`SD` non-empty) and `[then]`'s cancel-row premise fails with `M` at the site's row `S`.
-`SM`'s operations are those of `S` that `M`'s derivation `tM` performs (`opKeysOf`); its cancel
-rows are `M`'s own: first `S`'s cut at their top layer to what the finalisers inside `M` perform
-(`finKeysOf`: empty when `M` runs none, as when `M` is the operation the cancel captures,
-`progNC₁T`, `[cfin-cancel]`; the inner finaliser's raise in `progConsumeT`), else `S`'s. `[sub]` raises them to
-`S`'s; the kernel's `ThenLe` reads `Σ_M`'s cancel rows below the finaliser's row, `S`'s above it, so
-a capturable operation the finaliser performs need not be in its own cancel row. Each candidate is
-taken only where `[then]`'s premise holds at it, and `M` is checked again there. `none`: `M` stays
-at `S`.  `[spec §27]` -/
+`SM` is the row `M`'s derivation `tM` needs, cancel rows included (`needRowOf`), on `S`'s
+operations: a performed operation's cancel row is what the finalisers inside `M` around it perform,
+a call's is the callee type's. `[sub]` raises them to `S`'s; the kernel's `ThenLe` reads `Σ_M`'s
+cancel rows below the finaliser's row, `S`'s above it, so a capturable operation the finaliser
+performs need not be in its own cancel row. `M` is checked again at `SM` where `[then]`'s premise
+holds there; `none`: `M` stays at `S`.  `[spec §27]` -/
 def thenMC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (A : CVTy) → CRow → CRow →
     TExpr → CheckM (Option (Σ SM : CRow, Res Δ T (.comp (effOf SM A))))
   | 0, _, _, _, _, _, _, _, _ => pure none
   | n + 1, E, Δ, T, M, A, S, SD, tM => do
     if SD.isEmpty || thenFinB S S SD then pure none
     else
-      let ks := opKeysOf opKeysFuel tM
-      let SM := S.filter fun o => ks.contains (o.n, o.i)
-      -- `M`'s own cancel rows: each operation's cancel row at `S`, its top layer cut to what the
-      -- finalisers inside `M` perform (`finKeysOf`; empty when `M` has none).
-      let fk := finKeysOf opKeysFuel tM
-      let cut (o : COpSig) : COpSig :=
-        let F := BoCa.Fig16.LogRel.Core.CTy.effOf (o.fin.rowOf.filter fun f => fk.contains (f.n, f.i)) .unit
-        if o.fin.isTop then o else { o with fin := F }
-      let SM₀ := SM.map cut
-      -- `S` itself fails `thenFinB` here, so a candidate that passes is not `S`.
-      let ok (R : CRow) : Bool := thenFinB R S SD
-      let r₀ ← if ok SM₀ then attempt (chkC n E Δ T M (effOf SM₀ A))
-        else pure (.error ⟨M.span, ""⟩)
-      match r₀ with
-      | .ok r => pure (some ⟨SM₀, r⟩)
-      | .error _ =>
-        if ok SM then
-          match ← attempt (chkC n E Δ T M (effOf SM A)) with
-          | .ok r => pure (some ⟨SM, r⟩)
-          | .error _ => pure none
-        else pure none
+      let need := needRowOf opKeysFuel false tM
+      let SM := S.filterMap fun o => need.find? (keyEq · o)
+      if thenFinB SM S SD then
+        match ← attempt (chkC n E Δ T M (effOf SM A)) with
+        | .ok r => pure (some ⟨SM, r⟩)
+        | .error _ => pure none
+      else pure none
 
 /-- `abort[k.i] V` at the answer `B`: an abortive operation of the current row (SPEC §19's abortive rule). -/
 def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Nat → Nat → Val → (B : CVTy) →

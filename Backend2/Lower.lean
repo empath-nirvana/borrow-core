@@ -70,7 +70,7 @@ structure LState where
   variable's layout places another word in: a local is a pointer when it is only the first. -/
   ptrVote : Std.HashSet Nat := {}
   intVote : Std.HashSet Nat := {}
-  /-- `addrKinds` per node, as computed. -/
+  /-- `addrKinds` per representative node, as computed with fuel enough. -/
   kinds : Std.HashMap Nat (List (Option Bool)) := {}
   /-- The spare boxes on the path being lowered (SPEC §64): each a boxed field's object whose
   words a `letpair` or a `case` has loaded and whose free is deferred, as the local holding its
@@ -106,35 +106,58 @@ def agree : Option Bool → Option Bool → Option Bool
 a borrow's word, a family's base, a boxed field's pointer (`some true`); a sum's payload word
 where the arms agree, padding (`none`) agreeing with either; a closure's captured word where its
 class's codes agree. A heap class's word is `2t + 1` or an address, so it is not one. Read off the
-layout node, which is the variable's type (`Backend2/Layout.lean`). -/
-def addrKinds (L : Layouts) : Nat → Nat → List (Option Bool)
-  | 0, n => List.replicate (L.w n) (some false)
-  | f + 1, n =>
-    let field (k c : Nat) : List (Option Bool) := if L.isBoxed n k then [some true] else addrKinds L f c
-    let pad (k : Nat) (xs : List (Option Bool)) : List (Option Bool) := xs ++ List.replicate (k - xs.length) none
-    match L.sh n with
-    | .ref _ | .imm _ | .mut _ => [some true]
-    | .fam _ => [some true, some false]
-    | .pair a b => field 0 a ++ field 1 b
-    | .sum a b =>
-      let pw := L.w n - 1
-      some false :: List.zipWith agree (pad pw (field 0 a)) (pad pw (field 1 b))
-    | .clos .. =>
-      if L.isRec n then [some false] else
-      let pw := L.w n - 1
-      some false :: (L.unionOf n).toList.foldl (fun acc c =>
-        List.zipWith agree acc (pad pw ((L.codeEnv.getD c []).flatMap (addrKinds L f ·))))
-        (List.replicate pw none)
-    | _ => List.replicate (L.w n) (some false)
+layout node, which is the variable's type (`Backend2/Layout.lean`).
+
+It recurses through the node's inline children (`LayCheck.inlineKids`: the fields not boxed, a
+class's codes' environments when the class is not on the heap), a graph with no cycle
+(`LayCheck.layoutOk`, checked of every program's layouts), so a fuel at least the node's depth
+there reaches every leaf. The answer depends on the node's representative alone, and is kept in
+`memo` under it; the flag says no fuel ran out below, and only such answers are kept, so a kept
+answer is the one any fuel at least the depth gives. Where the fuel runs out, the words are read
+as not addresses. -/
+def addrKinds (L : Layouts) :
+    Nat → Nat → StateM (Std.HashMap Nat (List (Option Bool))) (List (Option Bool) × Bool)
+  | 0, n => do
+    if let some ks := (← get)[L.r n]? then return (ks, true)
+    pure (List.replicate (L.w n) (some false), false)
+  | f + 1, n => do
+    if let some ks := (← get)[L.r n]? then return (ks, true)
+    let pad (k : Nat) (xs : List (Option Bool)) : List (Option Bool) :=
+      xs ++ List.replicate (k - xs.length) none
+    let (ks, exact) ← match L.sh n with
+      | .ref _ | .imm _ | .mut _ => pure ([some true], true)
+      | .fam _ => pure ([some true, some false], true)
+      | .pair a b => do
+        let (x, e₁) ← if L.isBoxed n 0 then pure ([some true], true) else addrKinds L f a
+        let (y, e₂) ← if L.isBoxed n 1 then pure ([some true], true) else addrKinds L f b
+        pure (x ++ y, e₁ && e₂)
+      | .sum a b => do
+        let (x, e₁) ← if L.isBoxed n 0 then pure ([some true], true) else addrKinds L f a
+        let (y, e₂) ← if L.isBoxed n 1 then pure ([some true], true) else addrKinds L f b
+        let pw := L.w n - 1
+        pure (some false :: List.zipWith agree (pad pw x) (pad pw y), e₁ && e₂)
+      | .clos .. =>
+        if L.isRec n then pure ([some false], true) else do
+        let pw := L.w n - 1
+        let mut acc : List (Option Bool) := List.replicate pw none
+        let mut ex := true
+        for c in (L.unionOf n).toList do
+          let mut ws : List (Option Bool) := []
+          for e in L.codeEnv.getD c [] do
+            let (k, x) ← addrKinds L f e
+            ws := ws ++ k
+            ex := ex && x
+          acc := List.zipWith agree acc (pad pw ws)
+        pure (some false :: acc, ex)
+      | _ => pure (List.replicate (L.w n) (some false), true)
+    if exact then modify (·.insert (L.r n) ks)
+    pure (ks, exact)
 
 /-- The locals `ls`, the words of a value at node `n`: each voted a pointer or not by the node. -/
 def vote (n : Nat) (ls : List Nat) : LM Unit := do
-  let ks ← match (← get).kinds[n]? with
-    | some ks => pure ks
-    | none => do
-      let ks := addrKinds (← read).L 256 n
-      modify fun s => { s with kinds := s.kinds.insert n ks }
-      pure ks
+  let memo ← modifyGet fun s => (s.kinds, { s with kinds := {} })
+  let ((ks, _), kinds) := (addrKinds (← read).L 256 n).run memo
+  modify fun s => { s with kinds }
   if ks.length != ls.length then return
   for (l, k) in ls.zip ks do
     match k with

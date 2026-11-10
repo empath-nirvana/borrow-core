@@ -1,0 +1,26 @@
+-- SPEC §27 in the core text, checked, not run: `main` returns `()` and does not call `prog`, a
+-- program whose finaliser suspends under a cancel (neither backend lowers that yet): the twin of
+-- Core's `progConsumeT`. The inner finaliser raises `2.0` during handler 1's cancel; the outer one
+-- performs the unrestricted `4.0` with `2.0` pending, and handler 4 consumes its `κ`. The outer
+-- `[then]`'s `Σ_M` gives `1.0` the cancel row `{2}`, what the inner finaliser raises, not the
+-- site's `{2, 4⟨{2}⟩}`. Interpreted: `inl ()`.
+
+def prog : !U (1 -o F (1 + 1)) =
+  !thunkv fun (w : 1) ->
+  handle_with[2](
+      ((!thunkv fun (v : 1 + 1) -> return v) : !U (1 + 1 -o F (1 + 1))),
+      (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F (1 + 1)) * 1)) (
+    handle_with[4](
+        ((!thunkv fun (v : 1) -> return (inl v)) : !U (1 -o F[2.0 cancel 1 ~> 0] (1 + 1))),
+        (((!thunkv fun (p : 1 * !U ((1 -o F[2.0 cancel 1 ~> 0] (1 + 1)) & F[2.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0] 1)) ->
+            let (u, k) = p; let () = u; return (inl ())), ())
+          : !U (1 * !U ((1 -o F[2.0 cancel 1 ~> 0] (1 + 1)) & F[2.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0] 1) -o F[2.0 cancel 1 ~> 0] (1 + 1)) * 1)) (
+      handle_with[1](
+          ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0] 1)),
+          (((!thunkv fun (p : 1 * U ((1 -o F[4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0] 1) & F[2.0 cancel 1 ~> 0, 4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0] 1)) ->
+            let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+            : !U (1 * U ((1 -o F[4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0] 1) & F[2.0 cancel 1 ~> 0, 4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0] 1) -o F[4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0] 1) * 1)) (
+        y <- (x <- perform[1.0] () unwind (abort[2.0] ()); return x) unwind (perform[4.0] ());
+        return y)))
+
+main : F 1 = return ()

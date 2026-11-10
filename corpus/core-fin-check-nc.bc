@@ -1,0 +1,23 @@
+-- SPEC §27 in the core text, checked, not run: `main` returns `()` and does not call `prog`, a
+-- program whose finaliser suspends under a cancel (neither backend lowers that yet): the twin of
+-- Core's `progNC₁T` (`EffCancelTyped.lean`, `[cfin-cancel]`). Handler 1 cancels `κ`; the cancel
+-- runs the finaliser, which performs the capturable `4.0`, and the live outer handler 4 cancels the
+-- finaliser's continuation. `[then]` is at `Σ_M = [1.0]` with `1.0` at its own empty cancel row
+-- (`needRowOf`), so `4.0` need not be in its own cancel row. Interpreted: `()`.
+
+def prog : !U (1 -o F 1) =
+  !thunkv fun (w : 1) ->
+  handle_with[4](
+      ((!thunkv fun (v : 1) -> return v) : !U (1 -o F 1)),
+      (((!thunkv fun (p : 1 * U ((1 -o F 1) & F 1)) ->
+          let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+        : !U (1 * U ((1 -o F 1) & F 1) -o F 1) * 1)) (
+    handle_with[1](
+        ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[4.0 cancel 1 ~> 1] 1)),
+        (((!thunkv fun (p : 1 * U ((1 -o F[4.0 cancel 1 ~> 1] 1) & F[4.0 cancel 1 ~> 1, 4.0 cancel 1 ~> 1] 1)) ->
+          let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+          : !U (1 * U ((1 -o F[4.0 cancel 1 ~> 1] 1) & F[4.0 cancel 1 ~> 1, 4.0 cancel 1 ~> 1] 1) -o F[4.0 cancel 1 ~> 1] 1) * 1)) (
+      x <- perform[1.0] () unwind (perform[4.0] ());
+      return x))
+
+main : F 1 = return ()

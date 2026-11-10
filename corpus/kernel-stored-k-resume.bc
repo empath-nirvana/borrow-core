@@ -1,0 +1,21 @@
+-- E9a, a stored continuation, the twin of the kernel program `stored-k-resume`
+-- (Backend/Kernel.lean, `storedKResume`; SPEC §19 Programs): `stash`'s clause answers a one-shot
+-- closure that holds the cancellable continuation `k`, and `main` calls it after `stash` has
+-- returned. Called with `true`, the closure resumes `k`: the generator runs to its second `yield`,
+-- whose closure is called with `true` in turn, and then to its end, whose closure answers `false`.
+-- Called with `false`, a closure would not resume `k`, cancelling it, and answer the element
+-- (`kernel-stored-k-cancel`).
+--
+-- Answer: inl () (false), the generator run to its end; `live 0`. A closure that cancelled instead
+-- would answer the first element, `inr ()`.
+
+effect Y { ctl yld(x: bool) }
+
+handler stash: Y, 1 -> (bool => bool) = {
+  return(u) = ({ c -> false } : bool => bool);
+  yld(x, k) = ({ c -> if c { let g = k(()); g(true) } else { x } } : bool => bool)
+}
+
+fn gen() -> 1 with Y = yld(true); yld(false)
+
+main -> bool = let g = with stash { gen() }; g(true)
