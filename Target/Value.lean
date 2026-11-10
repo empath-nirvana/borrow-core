@@ -20,6 +20,8 @@ inductive PV where
   | u8 (n : UInt8)
   | f32 (n : UInt32)
   | f64 (n : UInt64)
+  | u32 (n : UInt32)
+  | u64 (n : UInt64)
   | pair (a b : PV)
   | inj (right : Bool) (a : PV)
   | fn
@@ -42,6 +44,8 @@ def PV.render : PV → String
   | .u8 n => s!"u8[{n.toNat}]"
   | .f32 n => s!"f32[{n.toNat}]"
   | .f64 n => s!"f64[{n.toNat}]"
+  | .u32 n => s!"u32[{n.toNat}]"
+  | .u64 n => s!"u64[{n.toNat}]"
   | .pair a b => "(" ++ PV.render a ++ ", " ++ PV.render b ++ ")"
   | .inj r a => PV.renderInj r a
   | .fn => "<fun>"

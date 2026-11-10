@@ -3987,7 +3987,9 @@ def convDivLit (fuel : Nat) (ctx : Ctx) (j : Jdg) (op : HostOp) (c : IntLit) (in
     let aT ← vty A
     readFact "divLit:divisor"
     return pre (leaf c₂ none (← bindTm (← conv fuel c₁ tM) aT fun a => do
-      let d ← fresh (match c with | .u8 _ => .int .w8 | .i64 _ => .int .w64 | _ => i32T)
+      let d ← fresh (match c with
+        | .u8 _ => .int .w8 | .i64 _ => .int .w64 | .u32 _ => .int .u32 | .u64 _ => .int .u64
+        | _ => i32T)
       return .letv d (.lit c) (.prim (.divLit op) [a, d])))
   | _ => conv fuel ctx inner
 where

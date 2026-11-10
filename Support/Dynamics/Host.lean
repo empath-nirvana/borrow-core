@@ -79,22 +79,32 @@ def f32 (n : UInt32) : Val := ⟨.prim (.lit (.f32 n)), .prim⟩
 /-- `f64[n]` as a value: the float of bits `n`.  `[spec §37]` -/
 def f64 (n : UInt64) : Val := ⟨.prim (.lit (.f64 n)), .prim⟩
 
-/-- The literal of width `w` of bits `n`.  `[spec §8, §37]` -/
+/-- `u32[n]` as a value: the unsigned 32-bit integer of bits `n`.  `[spec §73]` -/
+def u32 (n : UInt32) : Val := ⟨.prim (.lit (.u32 n)), .prim⟩
+
+/-- `u64[n]` as a value: the unsigned 64-bit integer of bits `n`.  `[spec §73]` -/
+def u64 (n : UInt64) : Val := ⟨.prim (.lit (.u64 n)), .prim⟩
+
+/-- The literal of width `w` of bits `n`.  `[spec §8, §37, §73]` -/
 def ofBits : (w : Width) → w.bits → Val
   | .w32, n => .i32 n
   | .w64, n => .i64 n
   | .w8, n => .u8 n
   | .f32, n => .f32 n
   | .f64, n => .f64 n
+  | .u32, n => .u32 n
+  | .u64, n => .u64 n
 
-/-- `v` is a literal of width `w`: the values of `I32`, `I64`, `U8`, `F32` and `F64`.
-    `[spec §8, §37]` -/
+/-- `v` is a literal of width `w`: the values of `I32`, `I64`, `U8`, `F32`, `F64`, `U32` and
+    `U64`.  `[spec §8, §37, §73]` -/
 def IsInt : Width → Val → Prop
   | .w32, v => ∃ n, v = .i32 n
   | .w64, v => ∃ n, v = .i64 n
   | .w8, v => ∃ n, v = .u8 n
   | .f32, v => ∃ n, v = .f32 n
   | .f64, v => ∃ n, v = .f64 n
+  | .u32, v => ∃ n, v = .u32 n
+  | .u64, v => ∃ n, v = .u64 n
 
 theorem IsInt.val {w : Width} {v : Val} (h : v.IsInt w) : ∃ c, v.1 = .prim (.lit c) := by
   cases w <;> obtain ⟨n, rfl⟩ := h <;> exact ⟨_, rfl⟩
@@ -134,7 +144,7 @@ def Expr.arg8? (e : Expr) : Option UInt8 :=
   | some (.u8 n) => some n
   | _ => none
 
-/-- The operand of an operation at width `w`, by its bits.  `[spec §8, §37]` -/
+/-- The operand of an operation at width `w`, by its bits.  `[spec §8, §37, §73]` -/
 def Expr.argAt? : (w : Width) → Expr → Option w.bits
   | .w32, e => e.arg32?
   | .w64, e => e.arg64?
@@ -144,6 +154,12 @@ def Expr.argAt? : (w : Width) → Expr → Option w.bits
     | _ => none
   | .f64, e => match e.lit? with
     | some (.f64 n) => some n
+    | _ => none
+  | .u32, e => match e.lit? with
+    | some (.u32 n) => some n
+    | _ => none
+  | .u64, e => match e.lit? with
+    | some (.u64 n) => some n
     | _ => none
 
 /-- The operands of a binary operation at width `w`.  `[spec §37]` -/
@@ -166,7 +182,9 @@ def Expr.args64? : Expr → Option (UInt64 × UInt64)
 /-- Apply a host operation to an argument value. `none` when the argument is not of the
     operation's shape; a typed program never reaches that case. The grouped integer operations
     at `w8`, `f32` and `f64` have no argument shape: a byte has no arithmetic, and a float has
-    its own operations. `reinterpret` keeps the bits.  `[spec §8, §37]` -/
+    its own operations. At `u32` and `u64` the grouped operations are the host's 32- and 64-bit
+    families on the same bits (§73). `reinterpret`, `reinterpret_u` and `reinterpret_s` keep the
+    bits.  `[spec §8, §37, §73]` -/
 def Host.call (H : Host) : HostOp → Val → Option Val
   | .bin .w32 o, v => v.1.args32?.map fun (a, b) => .i32 (H.bin32 o a b)
   | .bin .w64 o, v => v.1.args64?.map fun (a, b) => .i64 (H.bin64 o a b)
@@ -178,6 +196,16 @@ def Host.call (H : Host) : HostOp → Val → Option Val
   | .eqz .w64,   v => v.1.arg64?.map fun a => .bool (H.eqz64 a)
   | .rel .w32 o, v => v.1.args32?.map fun (a, b) => .bool (H.rel32 o a b)
   | .rel .w64 o, v => v.1.args64?.map fun (a, b) => .bool (H.rel64 o a b)
+  | .bin .u32 o, v => (v.1.argsAt? .u32).map fun (a, b) => .u32 (H.bin32 o a b)
+  | .bin .u64 o, v => (v.1.argsAt? .u64).map fun (a, b) => .u64 (H.bin64 o a b)
+  | .div .u32 o, v => (v.1.argsAt? .u32).map fun (a, b) => .opt ((H.div32 o a b).map .u32)
+  | .div .u64 o, v => (v.1.argsAt? .u64).map fun (a, b) => .opt ((H.div64 o a b).map .u64)
+  | .un .u32 o,  v => (v.1.argAt? .u32).map fun a => .u32 (H.un32 o a)
+  | .un .u64 o,  v => (v.1.argAt? .u64).map fun a => .u64 (H.un64 o a)
+  | .eqz .u32,   v => (v.1.argAt? .u32).map fun a => .bool (H.eqz32 a)
+  | .eqz .u64,   v => (v.1.argAt? .u64).map fun a => .bool (H.eqz64 a)
+  | .rel .u32 o, v => (v.1.argsAt? .u32).map fun (a, b) => .bool (H.rel32 o a b)
+  | .rel .u64 o, v => (v.1.argsAt? .u64).map fun (a, b) => .bool (H.rel64 o a b)
   | .wrap,       v => v.1.arg64?.map fun a => .i32 (H.wrap a)
   | .extend_s,   v => v.1.arg32?.map fun a => .i64 (H.extendS a)
   | .extend_u,   v => v.1.arg32?.map fun a => .i64 (H.extendU a)
@@ -198,6 +226,10 @@ def Host.call (H : Host) : HostOp → Val → Option Val
   | .reinterpret_i .f64, v => v.1.argAt? .f64 |>.map .i64
   | .reinterpret_f .f32, v => v.1.arg32? |>.map .f32
   | .reinterpret_f .f64, v => v.1.arg64? |>.map .f64
+  | .reinterpret_u .i32, v => v.1.arg32? |>.map .u32
+  | .reinterpret_u .i64, v => v.1.arg64? |>.map .u64
+  | .reinterpret_s .i32, v => v.1.argAt? .u32 |>.map .i32
+  | .reinterpret_s .i64, v => v.1.argAt? .u64 |>.map .i64
   | .bin .w8 _, _ | .div .w8 _, _ | .un .w8 _, _ | .eqz .w8, _ | .rel .w8 _, _ => none
   | .bin .f32 _, _ | .div .f32 _, _ | .un .f32 _, _ | .eqz .f32, _ | .rel .f32 _, _ => none
   | .bin .f64 _, _ | .div .f64 _, _ | .un .f64 _, _ | .eqz .f64, _ | .rel .f64 _, _ => none

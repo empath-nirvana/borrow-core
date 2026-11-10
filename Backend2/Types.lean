@@ -485,6 +485,7 @@ def ofJ (ms : MachSet := {}) : Jdg → Except String (Sum LTy LCTy)
 
 def widthName : Width → String
   | .w32 => "i32" | .w64 => "i64" | .w8 => "u8" | .f32 => "f32" | .f64 => "f64"
+  | .u32 => "u32" | .u64 => "u64"
 
 mutual
 def LTy.pp : LTy → String

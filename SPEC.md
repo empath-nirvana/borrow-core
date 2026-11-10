@@ -5537,8 +5537,7 @@ and a closure built in `M`.
 
 ### Open
 
-- **The lowering of a finaliser that suspends** (#869; planned: its cancel arm as a code of its
-  own, each finaliser call a resumption point). Until it lands, a feature without its lowering.
+- **The lowering of a finaliser that suspends** is Backend2's (§69); the old backend refuses it.
 - **A surface finaliser that performs** (`with h(…) { M } finally { D }`, the surface `unwind`):
   its own entry, before the surface's code.
 - **`Σ_M` and `Σ_D` are synthesized from the derivations**, not proved least: they can over-count
@@ -9548,8 +9547,8 @@ No change: no type, rule, term, typing, elaboration or semantics.
   at the point (a call point resumes its callee's `k` and steps again; `kappa_resume_steps`), and
   whose cancel entry cancels the callee's `k` first, then runs the point's frames' finalisers
   innermost first, keeping the first error (§19 *Cancels*, `[cfin-raise]`, `cancel_prefix`,
-  `kappa_cancel_steps`). A finaliser that may suspend, or a cancel row with a machine operation,
-  is outside the fragment.
+  `kappa_cancel_steps`). A finaliser that may suspend, and a cancel row with a machine operation,
+  are lowered by §69.
 - **A `handle` node as a drive** (`convDrive`), when its handled computation's row has a machine
   operation (of its own name, or of `Σ`). The handled computation is a machine of its own. The
   drive takes its outcome apart, read from the node: a value to `h_ret` (`[ret]`, `catch_ret`), an
@@ -9977,20 +9976,25 @@ corpus or a golden.
 
 ### Open
 
-- **The erasure laws** (`Core/HandleLastErase.lean`, #918) are proved at the direct call
-  `hnd H K[case (w v) {inl y → y | inr z → X}]` (`directK`) of a work whose direct run leaves κ's
-  cell free (`StepsOff`; `StepsOff.upd` runs it beside the cell). T-B1 `last_resume_direct`: both
-  runs reach `K₀[hnd H K[y]]`. T-B1′ `last_cancel_direct`: the perform reaches
-  `K₀[(λ_. nf z)(ccatch K†[raise ⊥])]`, `K`'s cancel then the exit (`last_cancel_exit`), and the
-  direct call reaches its `inr` arm. T-B2 `last_perform_direct`: a work whose performs are answered
-  in place by handlers outside the node (`WorkRun`), of names other than `n` and unhandled in `K`,
-  by the two-run lemma `work_run_ctx`. Outer handlers that answer in place: `answers_in_place`,
-  from `tail_clause_answers` and `last_clause_answers` (nested `[handle-last]`, pipe fusion's
-  normal path). Open: T-B2 when an outer handler stores or cancels the captured κ, or a raise or
-  cancel crosses the active frame (an early stop, `stop()`, a raise across a fused stage), is not
-  derived and not refuted (a whole-run simulation); a Core term for the in-place cancel-mode
-  unwind (Core expresses it only through κ's `ccatch K†`); the laws are stated on machine values,
-  not on typed `lastH`.
+- **The erasure laws** (`Core/HandleLastErase.lean`, #918) are proved at the direct call `hnd H
+  K[case (w v) {inl y → y | inr z → X}]` (`directK`) of a work whose direct run leaves κ's cell free
+  (`StepsOff`; `StepsOff.upd` runs it beside the cell). T-B1 `last_resume_direct`: both runs reach
+  `K₀[hnd H K[y]]`. T-B1′ `last_cancel_direct`: the perform reaches `K₀[(λ_. nf z)(ccatch K†[raise
+  ⊥])]`, `K`'s cancel then the exit (`last_cancel_exit`), and the direct call reaches its `inr` arm.
+  T-B2 `last_perform_direct`: a work whose performs are answered in place by handlers outside the
+  node (`WorkRun`), of names other than `n` and unhandled in `K`, by the two-run lemma
+  `work_run_ctx`. Outer handlers that answer in place: `answers_in_place`, from
+  `tail_clause_answers` and `last_clause_answers` (nested `[handle-last]`, pipe fusion's normal
+  path). Each law is a forward correspondence on the machine: given the work's run when called
+  directly, which leaves κ's cell free (`StepsOff`), the handled program and the direct program
+  reach the same configuration at the same memory, in any outer context `K₀` and handler-free `K`.
+  T-B2 matches the two runs segment by segment, under `WorkRun`'s `hans`: the outer handler answers
+  the same whatever continuation it captures. Open: runs the hypothesis does not give (a work that
+  diverges or does not leave κ's cell free); T-B2 when an outer handler stores or cancels the
+  captured κ, or a raise or cancel crosses the active frame (an early stop, `stop()`, a raise across
+  a fused stage), not derived and not refuted (a whole-run simulation); a Core term for the in-place
+  cancel-mode unwind (Core expresses it only through κ's `ccatch K†`); the laws are stated on
+  machine values, not on typed `lastH`.
 - **The elaboration** of `for` with `break`/`return` and a body that performs, and the adapters
   over a source computation (R-1's frontend): it needs a checker producer for the node
   (`TTied`'s builder, the clause kinds of the node, `Frontend/Check/Kinds.lean`, and its handled
@@ -12378,13 +12382,105 @@ reported as an intended change.
     `{closure@span}` (a kernel type has no span). Backend2's `useKey` prints a type `ofV` refuses
     exactly (`keyVT`, `N` in full), so two codes are two keys; `ofV` refuses `code` (B1).
 - **The chain's equation at the code candidate** is not derived; obstruction not verified.
-  `nuOutK_compatN` is proved by a direct route instead (`node_okK`: each state mapped into the code
-  clause at the leaf's world by `etaN_codeRelN`). `node_okK` is a near-copy of `node_okN`, to be
-  merged by generalising `cBN` (#947).
+  `nuOutK_compatN` is proved by a direct route instead: `node_okP`, the node lemma over a leaf
+  predicate, at the code clause, with `cBNP_unroll` (each state mapped into the code clause at the
+  leaf's world by `etaN_codeRelN`). `cBN S R` is `cBNP S (thunkRN R)` (#947).
 - **The scope's `ρR`.** With a part of the resource the environment does not hold, `nuOutK` is not
   derived; obstruction not verified. This entry drops `ρR` and moves the obligation to `codeI`'s
   premise `Γ.CapOK`. That a well-typed closure always meets `CapOK` (no live non-persistent slot
   goes unused) is not derived; where it fails, the checker keeps `U C`.
+
+---
+
+## 69. Entry 68 — the new backend: a cancel that suspends (#869)
+
+### Motivation
+
+§27 lets a finaliser perform an operation whose handler is outside every region that can cancel
+it (D2), and records it in cancel rows. Cleanup that awaits (closing a socket during a cancel,
+the pipes connector's per-step finaliser) needs a finaliser that may suspend, and a cancel row
+holding a machine operation, lowered. §49 refused both.
+
+### Language
+
+No change to types, rules, terms, typing, semantics or `Core/`. The surface's finaliser rows are
+§27's (#868).
+
+### The rule
+
+One construct per step of `Paper`'s machine:
+
+- **The cancel component.** A machine operation's suspended computation is `U((B ⊸ F Y) & K)`
+  (§49). At a capturable operation (`capB`), `K = F C`, `C` the outcome of `F_{fin} 1`, the cancel
+  row's own outcome. With no machine operation in `fin`, `C` is `1 ⊕ P_fin`, as before; the
+  nesting of cancel rows is finite (§27), so the type is. At a must-resume operation `K = ⊤`
+  (§49).
+- **A cancel that may suspend is a machine.** The cancel entry of `k`, and `κ`'s cancel at a
+  drive over `k.1`, whose cancel row has a machine operation, is a machine of `C`'s outcome. The
+  callee's cancel and each finaliser in it are call points.
+- **`cfin` as a frame** (`cfinF`). It holds the error kept so far. On the finaliser's answer or
+  raise it keeps the first error and goes on with the cancel (`[cfin-ret]`, `[cfin-raise]`). When
+  the suspended cancel run is itself cancelled, it keeps the earlier error and goes on through the
+  rest of the region (`[cfin-cancel]`). The run's end answers `()` or the kept error (`[cancel]`,
+  `[cancel-raise]`).
+- **`[then]` with a finaliser that may suspend** (`unwindF`). On an ordinary unwind the finaliser
+  is a call point of the machine; its row is in the machine's (`Σ_D ≤ Σ`). The pending raise is
+  held in a frame, dropped when the finaliser raises (`then_fin`) or when the machine is cancelled
+  meanwhile.
+- **Who drives.** The canceller. A suspension of a cancel run returns to the code that observed
+  `.2` and is forwarded to the nearest live handler (§19 *Cancels*); the cancelled region's
+  handlers are dead, the cancelled task's own site among them. The forwarding is transcribed from
+  `Paper`'s `ufin`, `ufinC`, `cfret`, `cferr`, `cfcancel` and `creraise`.
+- **Stack machines** (§52) keep a pure cancel path: a machine with a suspending finaliser, or whose
+  operation's cancel row has a machine operation, is not a stack machine.
+- **Facts read.** Each row entry's qualifier, answer and cancel row; `[then]`'s `Σ_D`; `κ`'s
+  `cancelTy`. `ThenLe` and `Σ_D ≤ Σ` are the typing's. The conversion fails loudly on a
+  suspension outside its machine's row.
+- **`UNPROVED:`** A non-capturable operation's cancel entry is never entered (it traps). A stored
+  site's stack is owned by a suspended cancel run's `k` alone.
+
+### Programs
+
+- `deep-gen-count` (the #866 twin of `deep-gen`): `((), i32[2])`, `live 0`.
+- `core-fin-op`, the `progFinOpT` twin: a finaliser performs, and the outer handler resumes.
+- `core-fin-keep`, the `progKeepT` twin: a kept error across a suspension.
+- `cancel-suspend-unwind`: finalisers suspend on an ordinary raise; one supersedes the pending
+  raise, one frees a cell.
+- `cancel-suspend-nested`: two suspending finalisers, the callee's cancel itself a machine; the
+  first error kept.
+- `core-fin-stored-k-op`: a stored `κ` cancelled after its handler returned, its cleanup suspending
+  in the canceller.
+- `core-fin-cancellable`: an abort unwinds through a finaliser that performs a capturable
+  operation, handled outside the abort: `(inr (), i32[1])`, `live 0` (§27, `Σ_M`).
+- `core-fin-nc`, the `progNC₁T` twin: the outer handler cancels the finaliser's continuation
+  (`[cfin-cancel]`): `()`.
+- `core-fin-op-cap`: `core-fin-op` with a capturable finaliser operation: `inr ()`.
+- `cancel-suspend-cancel`: the suspended cancel run cancelled in turn, the outer finaliser freeing
+  a cell: `()`, `live 0`.
+- `core-fin-consume`, the `progConsumeT` twin: an unrestricted finaliser operation whose own cancel
+  row holds an abortive one: `inl ()`.
+- `core-fin-keep-unr`, the `progKeepT` twin with an unrestricted finaliser operation: `inr ()`.
+
+In `core-fin-op`, `core-fin-keep`, `cancel-suspend-unwind`, `cancel-suspend-nested` and
+`core-fin-stored-k-op` the finalisers' operations are must-resume; `core-fin-cancellable`,
+`core-fin-nc`, `core-fin-op-cap` and `cancel-suspend-cancel` use a capturable one, and
+`core-fin-consume` and `core-fin-keep-unr` an unrestricted one.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `Core/`, `Paper/`, `Support/`, the checker,
+the elaboration, the old backend or a kernel program. Every LIR type of the existing corpus is
+unchanged (`outcomeTy`'s empty case). `corpus/counts-backend2.expected` and
+`corpus/erasure-backend2.expected` are unchanged.
+
+### Open
+
+- A stack machine whose cancel suspends: Backend2 refuses a cancel that may suspend over a task's
+  own stack (§52) until a lowering proved memory-safe (the stack freed exactly once along every
+  suspending cancel run) lands, #970.
+- Cleanup that awaits needs `lib/async.bc`'s `cancel` to have a cancel row (the surface).
+- The old backend keeps refusing a finaliser that suspends (§27 *Lowering*).
+- A finaliser that reaches a capability the body uses (§27 *Open*, a kernel question).
 
 ---
 
@@ -12532,6 +12628,115 @@ probes that differ write `>|`, which main does not parse.
   note where none is inferred; the connector.
 - The transitional reading ends at L2: `>|` into a source-owning adapter, and the refusal of one
   at `|>`, change there.
+
+---
+
+## 72. Entry 71 — host externs under the chain's adequacy (#963, K1)
+
+### Motivation
+
+`goal791N : HandlerLawN → Goal791N` (§62) covers closed programs with no extern, at `F 1`. A
+program that reads or writes through the host is outside it. The design is
+`docs/new-core/scope-host-externs.md` (#963), choices C1–C5 as recommended.
+
+### What it adds
+
+**Host externs under the chain's adequacy.** `goal791N : HandlerLawN → Goal791N` is extended
+from closed, extern-free programs at `F 1` to programs that call host externs, at any persistent
+answer type. No new type former, `CDerives` index, or relation clause. `erwpK`, `KW`, the
+tables and `HandlerLawN` are unchanged.
+
+1. **The extern contract `ExternN`** (the form of `ConstN`'s conclusion):
+
+       ExternN T v :=  closedAt 0 v = true ∧ T.Persistent ∧
+                       ∀ δ Θ n, Θ.OK → vN T δ Θ n v ∅
+
+   `ExternsMeetN Γx γx` states it slot by slot, each slot live, as Core's `ExternsMeet` does. It is a named
+   hypothesis (a `Prop`, not an axiom), stated once for every extern.
+
+2. **What a host is claimed to meet (C1 (b)).** The theorems take `ExternsMeetN` as their
+   hypothesis. The claim `bcc trusted` prints for a host extern is a claim about behaviour:
+   "on each run, the extern behaves as a typed closed term at its representation". Both
+   memberships, Core's `vC` and the chain's `vN`, follow from that claim by the two
+   fundamental properties. For the standard models it is a theorem (`stdModel_meetsN`, from
+   `HandlerLawN`). For a real host it is assumed, at the same assurance levels as today.
+   *Why a host can meet it* (an argument, not checked in Lean): `OrDiverges` is a property of
+   finite prefixes, and a finite prefix observes finitely many host answers. A model whose cell
+   holds that trace answers the same, and it is a typed closed term. This is the prophecy
+   reading §34 already takes for `Stdin`, extended to the clock and sockets.
+
+3. **`Goal791N` restated in place (C5):**
+
+       Goal791N := ∀ cs Γx γx e R, (∀ c ∈ cs, c.OK) → ExternsMeetN Γx γx →
+         CDerives ∅ (ctx791 cs ++ Γx) e (.comp (.ret R)) → R.Persistent →
+         OrDiverges (substAll (vals791 cs ++ γx) e)
+
+   The old statement is the instance `Γx = []`, `R = 1`.
+
+4. **A host call is a call (C2).** A call into an extern is ordinary steps of the value that
+   closes its slot: neither a machine step nor a stop. Owned buffers move through `⊸`'s
+   resource split. Blocking I/O is covered: a call that never returns is a diverging run, which
+   `OrDiverges` allows. A cancel cannot land inside a host call.
+
+5. **The finaliser at the externs' context (K1.3, widened).** A lend's finaliser may name
+   extern slots, so that a capability cell (`Output`, a file, a socket) lent across a
+   suspension or an unwind can be handed back to the host on cancel (e.g. `λr. take_output r`).
+   This applies in two places:
+   - **The suspending constants:** `Const791.OKAt` takes the finaliser at the externs' context,
+     `CDerives Δ Γx d (U (Ref A ⊸ F 1))`. The constant's value is closed by the extern values,
+     `c.val[γx]`. Today's premise is the case `Γx = []`.
+   - **The checker's unwinding lends** `withbor1U`/`withbor2U`/`withbor3U`: their premise
+     `closedAt 0 d` is dropped. `d` stays typed at the rule's context `Γ` (`Ctx.DeadP`, so it
+     names persistent slots only) at `U (Ref A ⊸ F 1)` (resp. `U (Mut a A ⊸ F 1)`).
+   This removes a premise and adds none. The finaliser stays at `F 1`, effect-free.
+
+### Baseline
+
+- `goal791N` (restated in place; the old statement is an instance), `fundamentalN_all`,
+  `handlerLawN_iff`;
+- Core's `fundamentalC`, `adequacyC`, `externs_every_run`, `externs_loop_every_run`,
+  `io_every_run`: untouched apart from the three `withbor*U` compat lemmas, which are restated
+  without `closedAt 0 d`;
+- `prog791_orDiverges`, `progRes_orDiverges`, `progCan_orDiverges`, #844's nest instances and #855's `progK_orDiverges`,
+  with their statements unchanged;
+- every `Const791.OK` instance (each holds at `Γx = []` unchanged), and the five `*S_compat`
+  statements unchanged;
+- every corpus and kernel program with the same output. The checker's finaliser stays
+  `consumeE src` until a later unit lets it name an extern, so no program's term changes in K1.
+
+### Units
+
+- K1.1, built: `ExternN`, `ExternsMeetN`, `gN_of_meetsN`, `Goal791N` restated in place, `goal791N`
+  re-proved.
+- K1.2, built: the standard models meet `ExternN` (`stdModel_meetsN`, all fifteen, from
+  `HandlerLawN`), and Core's end-to-end theorems at the chain, `externs_every_runN`,
+  `io_every_runN`, `externs_loop_every_runN` and `io_loop_every_runN`, through `goal791N`
+  (`Core/Chain/Externs791N.lean`). The program's input is one more extern slot (`Γ ++ [Bytes]`),
+  so the I/O theorems are plain instances of `goal791N`.
+- K1.3: the finaliser at the externs' context, for `Const791.OKAt` and `withbor1U/2U/3U`.
+- K1.4: the kernel instance `progIO` (a lent `stdout` cell, written across a `wait`, resumed and
+  cancelled).
+- K1.5: `IORun.every_runN` at the checked wrapper; `corpus/io-effects.bc` concluded by the
+  extended `goal791N`; `bcc trusted` names it.
+
+K1.3–K1.5 are not built; each unit's code PR marks its line *built*.
+
+### Open
+
+- **Suspending I/O answered by the platform** (the "stop" reading, scope §4.3): it needs a run
+  relation with world steps and a new adequacy theorem. Out of K1 (C2).
+- **Effectful finalisers** (I/O performed on cancel through an effect, surface A4): that is K-b
+  for the lend form (approved, after K1.3), not K1.
+- **A buffer borrowed across an `await`** (#844 Tier 2, `read(sock, &mut buf).await`): the loans
+  line.
+- **`HandlerLawN` on the models** (C4): `stdModel_meetsN` keeps `HandlerLawN` as a hypothesis. A
+  handler-free fundamental would remove it; that is #840's fragment machinery.
+- **Pins:** the theorems ask for `pins = []`. A program relying on `PinLaw` stays outside.
+- **Descriptors:** the empty final memory covers capability cells, not descriptors (§11). That a
+  freed cell's descriptor is closed is the host's claim.
+- **Not derived:** the representation congruences at `vN` are expected to be `funext` equations
+  under `famL` (risk, measured on `read_byte` first in K1.2). There is no `vC → vN` lemma; both
+  follow from the behavioural claim.
 
 ---
 

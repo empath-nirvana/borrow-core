@@ -341,13 +341,13 @@ bytes at `i32` and `f32`, else `k` words (`Layouts.repB`). -/
 def loadCell (n : Nat) (a : Exp) (k : Nat) : LM (List Stmt × List Nat) := do
   match (← L).sh (← contents n) with
   | .int .w8 => do let t ← fresh1; return ([.set t (.load8 a)], [t])
-  | .int .w32 | .int .f32 => do let t ← fresh1; return ([.set t (.load32 a)], [t])
+  | .int .w32 | .int .f32 | .int .u32 => do let t ← fresh1; return ([.set t (.load32 a)], [t])
   | _ => loadAt a 0 k
 
 def storeCell (n : Nat) (a : Exp) (vs : List Exp) : LM (List Stmt) := do
   match (← L).sh (← contents n) with
   | .int .w8 => return [.store8 a (vs.headD (.c64 0))]
-  | .int .w32 | .int .f32 => return [.store32 a (vs.headD (.c64 0))]
+  | .int .w32 | .int .f32 | .int .u32 => return [.store32 a (vs.headD (.c64 0))]
   | _ => return storeAt a 0 vs
 
 /-- The leaf node of a family node. -/
@@ -431,17 +431,21 @@ def callTarget (n j : Nat) (ls : List Nat) (args : List Exp) (g : Option Var := 
 
 /-- A host operation on its operand's words (§8, §37): its answer's words. -/
 def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
+  -- `U32`/`U64` are held as `I32`/`I64` are, so `reinterpret_u`/`_s` is the word, and an
+  -- operation at an unsigned width is its signed sibling's (`machineOp`).  [spec §73]
+  let o := machineOp o
   match o with
   | .wrap8 => return ([], [and64 (.loc (ls.headD 0)) (.c64 0xff)])
-  | .extend8_u | .reinterpret_i _ | .reinterpret_f _ => return ([], [.loc (ls.headD 0)])
+  | .extend8_u | .reinterpret_i _ | .reinterpret_f _ | .reinterpret_u _ | .reinterpret_s _ =>
+    return ([], [.loc (ls.headD 0)])
   | _ => pure ()
   let rawAt (w : Width) (e : Exp) : Exp := match w with
-    | .w32 | .w8 | .f32 => wrap e
-    | .w64 | .f64 => e
+    | .w32 | .w8 | .f32 | .u32 => wrap e
+    | .w64 | .f64 | .u64 => e
   let args := ls.map fun l => rawAt (hostArgWidth o) (.loc l)
   let word (w : Width) (e : Exp) : Exp := match w with
-    | .w32 | .w8 | .f32 => extendU e
-    | .w64 | .f64 => e
+    | .w32 | .w8 | .f32 | .u32 => extendU e
+    | .w64 | .f64 | .u64 => e
   match hostResKind o, o with
   | .int w, _ => pure ([], [word w (.op o args)])
   | .test, _ => pure ([], [extendU (.op o args)])
@@ -454,9 +458,9 @@ def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
     let trapC := match d with
       | .div_s =>
         let intMin := match w' with
-          | .w32 | .w8 | .f32 => Exp.c32 0x80000000 | .w64 | .f64 => .c64 0x8000000000000000
+          | .w32 | .w8 | .f32 | .u32 => Exp.c32 0x80000000 | .w64 | .f64 | .u64 => .c64 0x8000000000000000
         let m1 := match w' with
-          | .w32 | .w8 | .f32 => Exp.c32 0xFFFFFFFF | .w64 | .f64 => .c64 0xFFFFFFFFFFFFFFFF
+          | .w32 | .w8 | .f32 | .u32 => Exp.c32 0xFFFFFFFF | .w64 | .f64 | .u64 => .c64 0xFFFFFFFFFFFFFFFF
         or32 zero (and32 (.op (.rel w' .eq) [a, intMin]) (.op (.rel w' .eq) [b, m1]))
       | _ => zero
     pure ([.ite trapC [.set t₀ (.c64 1), .set t₁ (.c64 0)] [.set t₀ (.c64 0), .set t₁ (word w (.op o args))]],
@@ -478,11 +482,11 @@ def divLitVals (o : HostOp) (byte : Bool) (ls : List Nat) : LM (List Exp) := do
     | .div w d => pure (w, d)
     | _ => throw "word IR: divLit of a non-division"
   let args := ls.map fun l => match w with
-    | .w32 | .w8 | .f32 => wrap (.loc l)
-    | .w64 | .f64 => Exp.loc l
+    | .w32 | .w8 | .f32 | .u32 => wrap (.loc l)
+    | .w64 | .f64 | .u64 => Exp.loc l
   let q : Exp := match w with
-    | .w32 | .w8 | .f32 => extendU (.op o args)
-    | .w64 | .f64 => .op o args
+    | .w32 | .w8 | .f32 | .u32 => extendU (.op o args)
+    | .w64 | .f64 | .u64 => .op o args
   return [if byte then and64 q (.c64 0xff) else q]
 
 
@@ -841,7 +845,8 @@ def lowerTm (fuel : Nat) (t : Tm) (n : Nat) (d : Dest) : LM (List Stmt) := do
   | .var x => emit d (locs (← vals x))
   | .unit => emit d []
   | .lit c => emit d [.c64 (match c with
-      | .i32 k => k.toUInt64 | .i64 k => k | .u8 k => k.toUInt64 | .f32 k => k.toUInt64 | .f64 k => k)]
+      | .i32 k => k.toUInt64 | .i64 k => k | .u8 k => k.toUInt64 | .f32 k => k.toUInt64 | .f64 k => k
+      | .u32 k => k.toUInt64 | .u64 k => k)]
   | .pair a b => do
     let (s, vs) ← mkPair n (locs (← vals a)) (locs (← vals b)) (reuse := true)
     return s ++ (← emit d vs)
@@ -1052,6 +1057,8 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
       | .int .w8 => pure (outStr "u8[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
       | .int .f32 => pure (outStr "f32[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
       | .int .f64 => pure (outStr "f64[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
+      | .int .u32 => pure (outStr "u32[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
+      | .int .u64 => pure (outStr "u64[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
       | .clos .. | .unk => pure (outStr "<fun>")
       | .ref _ | .imm _ | .mut _ | .opq => pure (outStr "<loc>")
       | .fam _ => pure (outStr "(<loc>, i32[" ++ [.call [] fPrintDec [.loc 1]] ++ outStr "])")

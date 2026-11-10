@@ -63,7 +63,7 @@ def keywords : List String :=
     "nu_in", "nu_out", "delay_in", "delay_out", "stream_in", "stream_out",
     "perform", "abort", "handle_with", "unwind", "withbor2r", "writes",
     -- types, lifetimes, shapes
-    "ref", "imm", "mut", "box", "unk", "i32", "i64", "u8", "f32", "f64", "input", "output", "mu", "all", "forall", "top", "dom",
+    "ref", "imm", "mut", "box", "unk", "i32", "i64", "u8", "f32", "f64", "u32", "u64", "input", "output", "mu", "all", "forall", "top", "dom",
     "block", "val", "fam", "view", "nu", "delay", "loop", "stream", "str", "iter", "leaf", "sized",
     "for", "in",
     "node", "array", "array_imm", "array_mut",
