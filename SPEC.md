@@ -3645,7 +3645,7 @@ Six rules, over `CDerives` with its context premises (§10):
 
     Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ H : !U(A ⊸ F_Σ R) ⊗ ⊗_i !U(A_i ⊗ K_i ⊸ F_Σ R)    Δ; Γ₂ ⊢ e : F_{Σ, n : E} A
     ──────────────────────────────────────────────────────────────────────── [handle]
-    Δ; Γ ⊢ hnd (n, H) e : F_Σ R          (n ∉ Σ,  n ∉ sites R,  n ∉ sites Γ: §77)
+    Δ; Γ ⊢ hnd (n, H) e : F_Σ R          (n ∉ Σ,  n ∉ sites R,  n ∉ sites Γ|live: §77)
 
     K_i = U((B_i ⊸ F_Σ R) & ⊤) (lin),   U((B_i ⊸ F_Σ R) & F_Σ 1) (cancel),   !U((B_i ⊸ F_Σ R) & F_Σ 1) (unr)
     an abortive operation's clause is !U(A_i ⊸ F_Σ R): the machine has cancelled κ
@@ -3666,7 +3666,7 @@ Six rules, over `CDerives` with its context premises (§10):
     in tail position; `effHandleV` and `effHandleVB` ask the handled row not to hold `Div`, and
     `[then]` asks it of the finaliser's row (decisions 68 and 69).
   - every handle rule asks the handled site to be absent from the answer type's rows and the
-    context's slot types, `n ∉ sites R` and `n ∉ sites Γ` (R3, §77).
+    context's live slot types, `n ∉ sites R` and `n ∉ sites Γ|live` (R3, §77).
 - **The must-resume `κ`** is the same `&` pair as the others, its cancel branch at `⊤`, so the
   clause can only resume it. The machine builds `κ` by the operation's qualifier (§25): at `lin`
   and `cancel` it owns a cell, and a must-resume `κ`'s cancel branch has no step.
@@ -13288,9 +13288,9 @@ inside `K`") and the backend's handler lowering need that fact.
 
 **Handler sites are lexical, by a premise on the handle rules.** At `hnd (n, H) e : F_Σ R`, the
 handled site `n` occurs neither in the answer type `R`'s rows nor in the types of the context's
-live slots:
+live slots (a dead slot carries no value):
 
-    n ∉ sites R        n ∉ sites Γ
+    n ∉ sites R        n ∉ sites Γ|live
 
 - `sites A` is the set of operation names in every row nested in `A`: in `U C`, code types, `!`,
   `⊗`, `⊕`, boxes and borrows.
