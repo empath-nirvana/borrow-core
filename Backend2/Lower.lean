@@ -353,7 +353,7 @@ def consumeVals (n : Nat) (ls : List Nat) : LM (List Stmt) := do
 /-- The class of a closure node. -/
 def classOf (n : Nat) : LM (CodeKind × Option Nat × List Nat) := do
   match (← L).sh n with
-  | .clos k p r => pure (k, p, r)
+  | .clos k p r _ => pure (k, p, r)
   | s => throw s!"word IR: not a closure: {reprStr s |>.take 40}"
 
 /-- The words of a closure of code `c` (at class node `n`) whose captured values are `env`. -/
@@ -844,6 +844,17 @@ def lowerTm (fuel : Nat) (t : Tm) (n : Nat) (d : Dest) : LM (List Stmt) := do
     let (_, _, res) ← classOf gn
     let (pre, fn, args) ← callTarget gn j (← vals g) [] (some g)
     lowerCall pre fn args (← wordsN (res.getD j n)) d
+  | .appE g a j ev => do
+    -- The evidence's words follow the argument's (SPEC §47, *Evidence*); they are passed, not
+    -- moved: the caller keeps them.
+    let gn ← nodeV g
+    let (_, _, res) ← classOf gn
+    let aw ← match a with
+      | some a => pure (locs (← vals a))
+      | none => pure []
+    let ew ← ev.mapM vals
+    let (pre, fn, args) ← callTarget gn j (← vals g) (aw ++ locs ew.flatten) (some g)
+    lowerCall pre fn args (← wordsN (res.getD j n)) d
   | .call fn as => do
     let ws ← as.mapM vals
     let some rn := (← L).fnRet[fn]? | throw s!"word IR: no node of f{fn}'s answer"
@@ -1085,17 +1096,24 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
        .ret []]
     pure { name := "stack pop", params := 2, results := 0, locals := 2, body }
   | .apply cls j =>
-    let some rn := ((match L.sh cls with | .clos _ _ r => r | _ => [])[j]?) | throw "word IR: an apply's class"
+    let some rn := ((match L.sh cls with | .clos _ _ r _ => r | _ => [])[j]?) | throw "word IR: an apply's class"
     let (k, param, _) ← classOf cls
-    let pw ← match k, param with
+    let evn := match L.sh cls with | .clos _ _ _ e => e | _ => []
+    let pw₀ ← match k, param with
       | .lam, some p => pure (L.w p)
       | _, _ => pure 0
+    -- The evidence parameters' words follow the argument's (SPEC §47, *Evidence*).
+    let pw := pw₀ + (evn.map L.w).foldl (· + ·) 0
     let cw := L.w cls
     let rw := L.w rn
     let (body, nloc, ptrs) ← inFn (cw + pw) do
       let ps := List.range cw
       vote cls ps
-      if let some p := param then vote p (List.range' cw pw)
+      if let some p := param then vote p (List.range' cw pw₀)
+      let mut off := cw + pw₀
+      for e in evn do
+        vote e (List.range' off (L.w e))
+        off := off + L.w e
       let arg := locs (List.range' cw pw)
       onCode cls ps fun c => do
         let (s, env) ← envOf cls c ps

@@ -311,4 +311,54 @@ def f0Facts (p : Prog) : Except String Nat := do
 #guard f0Facts (borrowProg []) == .ok 0
 #guard f0Facts (borrowProg [false]) == .ok 0
 
+/-! ### `evConfined` (SPEC §47, *Evidence*)
+
+`f0 (x0 : i32; ev x1 : !(1 ⊸ F 1))`: an evidence parameter is read by a copy, or passed on as
+evidence, and stays the caller's; put anywhere else (a pair, a closure's environment, a consume,
+the function's value) it is refused, as is a closure call that drops the evidence its type takes. -/
+
+/-- The type of the evidence under test: a persistent closure. -/
+def evT : LTy := .bang closT
+
+/-- `f0 (x0 : i32; ev x1 : evT) = body`, answering `ret`; `f1 (y0 : i32; ev y1 : evT) = y0` for a
+call that passes evidence, `c0` a closure of `F 1` taking evidence for a closure call. -/
+def evProg (body : Tm) (ret : LTy) (more : List (Var × LTy) := []) : Prog where
+  fns := #[{ name := "user", params := [0, 1], evs := 1, ret, body },
+           { name := "callee", params := [10, 11], evs := 1, ret := i32T, body := .var 10 },
+           { name := "thunk", params := [20], evs := 1, ret := .unit, body := .unit },
+           { name := "env", params := [30], ret := .unit, body := .consume .dead 30 .unit }]
+  codes := #[{ kind := .unit, fns := [2], ty := .ev 7 evT (.ret .unit) },
+             { kind := .unit, fns := [3], ty := .ret .unit }]
+  main := .unit
+  mainTy := .unit
+  ty := ([(0, i32T), (1, evT), (10, i32T), (11, evT), (20, evT), (30, evT)] ++ more).foldl
+    (fun m (x, t) => m.insert x t) {}
+
+-- Read by a copy, the copy consumed: accepted, the parameter left unconsumed.
+#guard accepts (evProg (.copy .dup 1 2 (.consume .dead 2 (.var 0))) i32T [(2, evT)])
+-- Passed on as evidence to a call's evidence parameter: accepted.
+#guard accepts (evProg (.call 1 [0, 1]) i32T)
+-- Passed as the evidence of a closure call whose type takes it: accepted.
+#guard accepts (evProg (.consume .dead 0 (.letv 3 (.clos 0 []) (.appE 3 none 0 [1])))
+  .unit [(3, .thunk (.ev 7 evT (.ret .unit)))])
+-- In a pair: refused.
+#guard refuses (evProg (.pair 0 1) (.pair i32T evT)) "evConfined: the evidence x1 used other than as evidence"
+-- In a closure's environment: refused.
+#guard refuses (evProg (.consume .dead 0 (.clos 1 [1])) (.thunk (.ret .unit)))
+  "evConfined: the evidence x1 used other than as evidence"
+-- Consumed: refused.
+#guard refuses (evProg (.consume .dead 1 (.var 0)) i32T) "evConfined: the evidence x1 used other than as evidence"
+-- As the function's value: refused.
+#guard refuses (evProg (.consume .dead 0 (.var 1)) evT) "evConfined: the evidence x1 used other than as evidence"
+-- Copied at a rule other than `dup`: refused.
+#guard refuses (evProg (.copy .const 1 2 (.consume .dead 2 (.var 0))) i32T [(2, evT)])
+  "evConfined: the evidence x1 copied at the rule const"
+-- A closure whose type takes evidence, run without it: refused.
+#guard refuses (evProg (.consume .dead 0 (.letv 3 (.clos 0 []) (.app0 3))) .unit
+  [(3, .thunk (.ev 7 evT (.ret .unit)))]) "evConfined: x3 run with no evidence where its type takes some"
+-- A value passed as evidence that is not persistent: refused.
+#guard refuses (evProg (.letv 4 (.prim (.alloc [i32T]) [0])
+    (.letv 5 (.call 1 [0, 4]) (.letv 6 (.prim .free [4]) (.consume .dead 6 (.var 5))))) i32T
+  [(4, .ref i32T), (5, i32T), (6, i32T)]) "evConfined: x4 passed as evidence at ref i32, which is not persistent"
+
 end Backend2.LintTests

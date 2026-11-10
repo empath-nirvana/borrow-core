@@ -47,6 +47,11 @@ def Tm.pp (ty : Var → String) : Nat → Tm → List String
   | d, .app f a => [ind d ++ s!"{v f} {v a}"]
   | d, .app0 f => [ind d ++ s!"{v f} ()"]
   | d, .sel f j => [ind d ++ s!"{v f}.{j}"]
+  | d, .appE f a j ev =>
+    let callee := match a with
+      | some a => s!"{v f} {v a}"
+      | none => if j == 0 then s!"{v f} ()" else s!"{v f}.{j}"
+    [ind d ++ s!"{callee} ev[{vs ev}]"]
   | d, .call fn as => [ind d ++ s!"f{fn}({vs as})"]
   | d, .prim op as => [ind d ++ s!"{ppOp op}({vs as})"]
   | d, .letv x e b => (ind d ++ s!"let {v x} : {ty x} =") :: Tm.pp ty (d + 1) e ++ Tm.pp ty d b
@@ -62,7 +67,8 @@ def Tm.pp (ty : Var → String) : Nat → Tm → List String
 def Prog.pp (p : Prog) : List String :=
   let ty := fun x => (p.ty[x]?.map LTy.pp).getD "?"
   let fns := p.fns.toList.zipIdx.flatMap fun (f, i) =>
-    s!"f{i} {f.name}({", ".intercalate (f.params.map fun x => s!"{v x} : {ty x}")}) : {f.ret} =" ::
+    let evs := if f.evs == 0 then "" else s!" ev {f.evs}"
+    s!"f{i} {f.name}({", ".intercalate (f.params.map fun x => s!"{v x} : {ty x}")}){evs} : {f.ret} =" ::
       Tm.pp ty 1 f.body
   let codes := p.codes.toList.zipIdx.map fun (c, i) =>
     s!"c{i} {reprStr c.kind} [{", ".intercalate (c.fns.map (s!"f{·}"))}] : {c.ty}"

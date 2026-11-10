@@ -43,8 +43,9 @@ inductive NK where
   | mut (c : Nat)
   /-- A family of leaves: the leaf's node (a pointer's). -/
   | fam (l : Nat)
-  /-- A closure class: the codes' kind, their argument and their answers (one, or a `&`'s two). -/
-  | clos (k : CodeKind) (param : Option Nat) (res : List Nat)
+  /-- A closure class: the codes' kind, their argument, their answers (one, or a `&`'s two), and
+  their evidence parameters (`LCTy.ev`, SPEC §47 *Evidence*). -/
+  | clos (k : CodeKind) (param : Option Nat) (res : List Nat) (ev : List Nat)
   deriving Inhabited, BEq, Repr
 
 structure GState where
@@ -140,9 +141,20 @@ def buildC (fuel : Nat) (env : List Nat) (k : LCTy) : GM Nat := do
     setNode p (← get).nodes[i]!
     modify fun s => { s with parent := s.parent.set! i p }
     pure p
-  | .ret a => do newNode (.clos .unit none [← build f env a]) (.thunk k)
-  | .arr a c => do newNode (.clos .lam (some (← build f env a)) [← repNode f env c]) (.thunk k)
-  | .amp c d => do newNode (.clos .amp none [← repNode f env c, ← repNode f env d]) (.thunk k)
+  | .ret a => do newNode (.clos .unit none [← build f env a] []) (.thunk k)
+  | .arr a c => do
+    let x ← build f env a
+    let (es, c) := c.stripEv
+    let r ← repNode f env c
+    newNode (.clos .lam (some x) [r] (← es.mapM fun (_, e) => build f env e)) (.thunk k)
+  | .amp c d => do newNode (.clos .amp none [← repNode f env c, ← repNode f env d] []) (.thunk k)
+  | .ev n e c => do
+    -- A closure of `F_Σ A` taking its evidence (SPEC §47, *Evidence*): a `unit` code with
+    -- evidence parameters.
+    let (es, c) := (LCTy.ev n e c).stripEv
+    let .ret a := c | throw "layout: evidence before a closure that is not `F A`"
+    let r ← build f env a
+    newNode (.clos .unit none [r] (← es.mapM fun (_, e) => build f env e)) (.thunk k)
   | .top => newNode .unit (.thunk k)
 /-- The node of what running a closure of `k` answers. -/
 def repNode (fuel : Nat) (env : List Nat) (k : LCTy) : GM Nat := do
@@ -195,13 +207,13 @@ def join (a b : Nat) : GM Unit := do
         | .ref a, .ref c | .imm a, .imm c | .mut a, .mut c | .fam a, .fam c => pure [(a, c)]
         | .ref a, .imm c | .ref a, .mut c | .imm a, .ref c | .mut a, .ref c
         | .imm a, .mut c | .mut a, .imm c => pure [(a, c)]
-        | .clos k p r, .clos k' p' r' =>
-          if k != k' || r.length != r'.length then
+        | .clos k p r e, .clos k' p' r' e' =>
+          if k != k' || r.length != r'.length || e.length != e'.length then
             throw s!"layout: closures of different kinds joined ({reprStr k} {ox} codes {cs}, {reprStr k'} {oy})"
           let ps := match p, p' with
             | some a, some c => [(a, c)]
             | _, _ => []
-          pure (ps ++ r.zip r')
+          pure (ps ++ r.zip r' ++ e.zip e')
         -- A capability's contents, an opaque host value, is held as the word the extern stores.
         | .opq, .int _ | .int _, .opq => pure []
         | k, k' =>
@@ -239,7 +251,13 @@ def joinRe (c v : Nat) : GM Unit := do
 /-- The class of a closure node: its children. -/
 def closOf (i : Nat) : GM (CodeKind × Option Nat × List Nat) := do
   match (← get).nodes[← find i]! with
-  | .clos k p r => pure (k, p, r)
+  | .clos k p r _ => pure (k, p, r)
+  | k => throw s!"layout: a call of a non-closure node {reprStr k |>.take 40}"
+
+/-- The evidence parameters' nodes of a closure class. -/
+def closEvOf (i : Nat) : GM (List Nat) := do
+  match (← get).nodes[← find i]! with
+  | .clos _ _ _ e => pure e
   | k => throw s!"layout: a call of a non-closure node {reprStr k |>.take 40}"
 
 def childrenOf (i : Nat) : GM NK := return (← get).nodes[← find i]!
@@ -287,6 +305,10 @@ def addCode (p : Prog) (cc : Std.HashMap Nat Nat) (cls : Nat) (c : Nat) (env : L
     match res[j]? with
     | some rn => join rn (← fnRetNode p fn)
     | none => throw "layout: a code's component past its class's"
+    let evn ← closEvOf cls
+    let evPs := f.params.drop (f.params.length - f.evs)
+    if evPs.length != evn.length then throw "layout: a code's evidence parameters are not its class's"
+    for (x, en) in evPs.zip evn do join (← nv x) en
   match cc[c]? with
   | some other => join cls other; pure cc
   | none => pure (cc.insert c cls)
@@ -317,6 +339,11 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
     join dst (res.headD dst); pure cc
   | .sel g j => do
     let (_, _, res) ← closOf (← nv g)
+    join dst (res.getD j dst); pure cc
+  | .appE g a j ev => do
+    let (_, param, res) ← closOf (← nv g)
+    if let (some pn, some a) := (param, a) then join pn (← nv a)
+    for (x, en) in ev.zip (← closEvOf (← nv g)) do join (← nv x) en
     join dst (res.getD j dst); pure cc
   | .call fn as => do
     let some fd := p.fns[fn]? | throw s!"layout: no function f{fn}"
@@ -617,7 +644,7 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
     | .imm c => .imm rep[c]!
     | .mut c => .mut rep[c]!
     | .fam l => .fam rep[l]!
-    | .clos k p r => .clos k (p.map (rep[·]!)) (r.map (rep[·]!))
+    | .clos k p r e => .clos k (p.map (rep[·]!)) (r.map (rep[·]!)) (e.map (rep[·]!))
     | k => k
   let shape := (Array.range n).map fun i => norm s.nodes[rep[i]!]!
   let mut union : Std.HashMap Nat (Array Nat) := {}
@@ -633,7 +660,7 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
   for (code, c) in p.codes.toList.zipIdx do
     let some fn := code.fns.head? | continue
     let some f := p.fns[fn]? | continue
-    let k := if code.kind == .lam then f.params.length - 1 else f.params.length
+    let k := f.params.length - f.evs - (if code.kind == .lam then 1 else 0)
     codeEnv := codeEnv.insert c ((f.params.take k).map fun x => rep[s.varNode.getD x 0]!)
   let envOf (v : Nat) : List Nat := (union.getD v #[]).toList.flatMap (codeEnv.getD · [])
   let succ := (Array.range n).map fun v =>

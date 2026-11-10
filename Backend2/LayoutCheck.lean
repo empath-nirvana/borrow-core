@@ -127,7 +127,13 @@ def sumOf (w : String) (i : Nat) : CM (Nat × Nat) := do
 
 def closOf (w : String) (i : Nat) : CM (CodeKind × Option Nat × List Nat) := do
   match ← shp L i with
-  | .clos k p r => pure (k, p, r)
+  | .clos k p r _ => pure (k, p, r)
+  | s => throw s!"{w}: node {← rp L i} ({short s}) is not a closure class"
+
+/-- The evidence parameters' nodes of a closure class (SPEC §47, *Evidence*). -/
+def closEvOf (w : String) (i : Nat) : CM (List Nat) := do
+  match ← shp L i with
+  | .clos _ _ _ e => pure e
   | s => throw s!"{w}: node {← rp L i} ({short s}) is not a closure class"
 
 /-! ### Every node is its type's -/
@@ -170,11 +176,20 @@ def confC (w : String) : Nat → List Nat → LCTy → Nat → CM Unit
       throw s!"{w}: node {← rp L n} ({short k}) is not the class of a closure of {c}"
     match c, k with
     | .nu d, _ => confC w f (n :: env) d n
-    | .ret a, .clos .unit none [r] => conf w f env a r
-    | .arr a d, .clos .lam (some x) [r] => do
+    | .ret a, .clos .unit none [r] [] => conf w f env a r
+    | .arr a d, .clos .lam (some x) [r] e => do
       conf w f env a x
+      let (es, d) := d.stripEv
+      unless es.length == e.length do bad
+      for ((_, t), m) in es.zip e do conf w f env t m
       confR w f env d r
-    | .amp d e, .clos .amp none [r, s] => do
+    | .ev m t d, .clos .unit none [r] e => do
+      let (es, d) := (LCTy.ev m t d).stripEv
+      let .ret a := d | bad
+      unless es.length == e.length do bad
+      for ((_, t), m) in es.zip e do conf w f env t m
+      conf w f env a r
+    | .amp d e, .clos .amp none [r, s] [] => do
       confR w f env d r
       confR w f env e s
     | .top, .unit => pure ()
@@ -277,6 +292,21 @@ def walk (p : Prog) (w : String) : Nat → Tm → Nat → CM Unit
         let some rn := rs[j]? | throw s!"{w}: component {j} of x{g}, whose class has {rs.length}"
         eq s!"component {j} of x{g}" dst rn
       | _ => throw s!"{w}: a component of x{g} is observed, and its class is not a `&`'s"
+    | .appE g a j ev => do
+      let gn ← nv g
+      match ← closOf L w gn, a with
+      | (.lam, some pn, [rn]), some a =>
+        eq s!"the argument of x{g}" pn (← nv a)
+        eq s!"the answer of x{g}" dst rn
+      | (.unit, _, [rn]), none => eq s!"the answer of x{g}" dst rn
+      | (.amp, _, rs), none =>
+        let some rn := rs[j]? | throw s!"{w}: component {j} of x{g}, whose class has {rs.length}"
+        eq s!"component {j} of x{g}" dst rn
+      | _, _ => throw s!"{w}: x{g} is called with evidence, and its class is not called so"
+      let en ← closEvOf L w gn
+      unless en.length == ev.length do
+        throw s!"{w}: x{g} is passed {ev.length} evidence values, its class takes {en.length}"
+      for (x, e) in ev.zip en do eq s!"the evidence x{x} of x{g}" e (← nv x)
     | .call fn as => do
       let some fd := p.fns[fn]? | throw s!"{w}: no function f{fn}"
       unless as.length == fd.params.length do
@@ -392,7 +422,7 @@ def codeOk (p : Prog) (R c : Nat) : CM Unit := do
   let some ce := L.codeEnv[c]? | throw s!"{w}: no environment nodes"
   for (fn, j) in code.fns.zipIdx do
     let some fd := p.fns[fn]? | throw s!"{w}: no function f{fn}"
-    let k' := if k == .lam then fd.params.length - 1 else fd.params.length
+    let k' := fd.params.length - fd.evs - (if k == .lam then 1 else 0)
     unless k' == ce.length do
       throw s!"{w}: f{fn} captures {k'} values, the code's environment nodes are {ce.length}"
     for (y, e) in (fd.params.take k').zip ce do
@@ -404,6 +434,11 @@ def codeOk (p : Prog) (R c : Nat) : CM Unit := do
     match res[j]? with
     | some rn => same L w s!"f{fn}'s answer" rn (← retOf L fn)
     | none => throw s!"{w}: component {j} past the class's"
+    let en ← closEvOf L w R
+    let evPs := fd.params.drop (fd.params.length - fd.evs)
+    unless en.length == evPs.length do
+      throw s!"{w}: f{fn} takes {evPs.length} evidence values, the class {en.length}"
+    for (y, e) in evPs.zip en do same L w s!"f{fn}'s evidence parameter x{y}" e (← nodeOf L y)
 
 /-! ### The widths, the boxes and the heap classes -/
 
@@ -727,15 +762,17 @@ def coarse (w : String) (x : Var) : Except String Unit := do
 
 /-- A call of `g` at component `j`: every code in `g`'s set moves the argument to its parameter
 and its answer to the call's. -/
-def site (w : String) (dst : Option Var) (g : Var) (arg : Option Var) (j : Nat) :
-    Except String Unit := do
+def site (w : String) (dst : Option Var) (g : Var) (arg : Option Var) (j : Nat)
+    (ev : List Var := []) : Except String Unit := do
   for c in F.setOf g do
     let some code := F.p.codes[c]? | throw s!"{w}: no code c{c}"
     let some fn := code.fns[j]? | throw s!"{w}: code c{c} has no component {j}"
     let some fd := F.p.fns[fn]? | throw s!"{w}: no function f{fn}"
+    let k := fd.params.length - fd.evs
     if let some a := arg then
-      let some prm := fd.params.getLast? | throw s!"{w}: f{fn} has no argument"
+      let some prm := fd.params[k - 1]? | throw s!"{w}: f{fn} has no argument"
       F.sub s!"{w}: x{g}'s code c{c}'s argument" a prm
+    for (e, prm) in ev.zip (fd.params.drop k) do F.sub s!"{w}: x{g}'s code c{c}'s evidence" e prm
     if let some d := dst then F.sub s!"{w}: x{g}'s code c{c}'s answer" (F.base + fn) d
 
 /-- The flow constraints of a term whose value goes to `dst` (`Flow.gen`). -/
@@ -755,6 +792,7 @@ def go (w : String) : Nat → Tm → Option Var → Except String Unit
     | .app g a => F.site w dst g (some a) 0
     | .app0 g => F.site w dst g none 0
     | .sel g j => F.site w dst g none j
+    | .appE g a j ev => F.site w dst g a j ev
     | .call fn as => do
       let some fd := F.p.fns[fn]? | throw s!"{w}: no function f{fn}"
       for (x, y) in as.zip fd.params do F.sub s!"{w}: f{fn}'s argument" x y
@@ -901,9 +939,9 @@ def mergeClasses (L : Layouts) (a b : Nat) : Option Layouts := Id.run do
       let kids : Option (List (Nat × Nat)) := match L.shape[rx]!, L.shape[ry]! with
         | .pair u v, .pair u' v' | .sum u v, .sum u' v' => some [(u, u'), (v, v')]
         | .ref u, .ref u' | .imm u, .imm u' | .mut u, .mut u' | .fam u, .fam u' => some [(u, u')]
-        | .clos k pa ra, .clos k' pa' ra' =>
-          if k == k' && ra.length == ra'.length && pa.isSome == pa'.isSome then
-            some ((match pa, pa' with | some u, some u' => [(u, u')] | _, _ => []) ++ ra.zip ra')
+        | .clos k pa ra ea, .clos k' pa' ra' ea' =>
+          if k == k' && ra.length == ra'.length && pa.isSome == pa'.isSome && ea.length == ea'.length then
+            some ((match pa, pa' with | some u, some u' => [(u, u')] | _, _ => []) ++ ra.zip ra' ++ ea.zip ea')
           else none
         | kx, ky => if kx == ky then some [] else none
       let some ks := kids | return none
@@ -958,9 +996,9 @@ def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
     let (L', n) := freshOf L e
     pure { L' with codeEnv := L'.codeEnv.insert c (n :: (L.codeEnv.getD c []).drop 1) }
   let argC := cls.findSome? fun R => do
-    let .clos .lam _ _ := L.shape[R]! | none
+    let .clos .lam _ _ _ := L.shape[R]! | none
     let (_, _, fd) ← codeOf R
-    let y ← fd.params.getLast?
+    let y ← fd.params[fd.params.length - fd.evs - 1]?
     pure (splitNode L y)
   let ansC := cls.findSome? fun R => do
     let (_, fn, _) ← codeOf R
@@ -1082,7 +1120,7 @@ def perturbFlow (p : Prog) (sets : Std.HashMap Var (Std.HashSet Nat)) (known : S
   let answer := (progBinds p).findSome? fun (d, e) => do
     let (g, j) ← match e with
       | .app g _ | .app0 g => some (g, 0)
-      | .sel g j => some (g, j)
+      | .sel g j | .appE g _ j _ => some (g, j)
       | _ => none
     if !isClosV d then none
     let sd := sets.getD d {}

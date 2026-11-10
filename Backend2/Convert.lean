@@ -252,6 +252,16 @@ structure CState where
   stacked : Std.HashMap Nat LTy := {}
   /-- The static word that holds the current stack, once a stack machine or a site uses it. -/
   stackReg : Option Nat := none
+  /-- **The program's evidence** (SPEC §47, *Evidence*; `Backend2/Driver.lean`, `evidenceOf`):
+  each static name whose `tail` clause is called directly with the values it captures, with its
+  evidence parameters' types. Empty, nothing takes evidence. -/
+  fd : EvSet := {}
+  /-- Each such name's captured slots at its `handle` nodes (indices into the node's context), in
+  order: what a node binds as the name's evidence. -/
+  fdSlots : Std.HashMap UInt32 (List Nat) := {}
+  /-- **The evidence in scope** in the function being converted, by name: its evidence parameters,
+  or the captured values a `handle` node of the name binds for its handled computation. -/
+  evs : Std.HashMap UInt32 (List Var) := {}
 
 abbrev CM := StateT CState (Except String)
 
@@ -330,8 +340,93 @@ def readFormers (fs : List String) : CM Unit := do
   if (← get).census then
     for f in fs.eraseDups do readFact s!"{f}:layout"
 
-def vty (A : VTy) : CM LTy := do readFormers (formersV [] A); lift (ofV (← get).mach A)
-def cty (C : CTy) : CM LCTy := do readFormers (formersC [] C); lift (ofC (← get).mach C)
+def vty (A : VTy) : CM LTy := do readFormers (formersV [] A); lift (ofV (← get).mach (← get).fd A)
+def cty (C : CTy) : CM LCTy := do readFormers (formersC [] C); lift (ofC (← get).mach (← get).fd C)
+
+/-! ### Evidence  `[spec §47]`
+
+A code whose row holds a name of the program's evidence (`CState.fd`) takes that name's evidence
+after its argument (`LCTy.ev`, `Types.ofC`). The evidence in scope (`CState.evs`) is a function's
+evidence parameters, or the values a `handle` node binds; a call passes the evidence its callee's
+type takes, from what is in scope, and keeps it (`Tm.appE`). -/
+
+/-- `act` with the evidence `evs` in scope, the evidence around it restored after. -/
+def withEvs (evs : Std.HashMap UInt32 (List Var)) (act : CM α) : CM α := do
+  let old := (← get).evs
+  modify fun st => { st with evs }
+  let r ← act
+  modify fun st => { st with evs := old }
+  return r
+
+/-- The evidence parameters a closure of type `t` takes: after its argument (`arg`), or as a
+thunk. A `&` takes none (`Types.ofC` refuses evidence in its components). -/
+def evParams (t : LTy) (arg : Bool) : List (UInt32 × LTy) :=
+  match t.peel with
+  | .thunk k => match k.whnf 8, arg with
+    | .arr _ c, true => c.stripEv.1
+    | .amp .., _ => []
+    | k, false => k.stripEv.1
+    | _, _ => []
+  | _ => []
+
+/-- The variables in scope that pass the evidence parameters `es`, by name. A name with none in
+scope is refused (`evRefuse`): the driver converts again without it. -/
+def evArgs (es : List (UInt32 × LTy)) : CM (List Var) := do
+  let mut out : List Var := []
+  for n in (es.map (·.1)).eraseDups do
+    let want := (es.filter (·.1 == n)).length
+    match (← get).evs[n]? with
+    | some vs =>
+      unless vs.length == want do throw (evRefuse n "evidence of another arity in scope")
+      out := out ++ vs
+    | none => throw (evRefuse n "a call that takes evidence where none is in scope")
+  return out
+
+/-- Fresh evidence parameters `es`, and the evidence they put in scope, by name. -/
+def evParamVars (es : List (UInt32 × LTy)) : CM (List Var × Std.HashMap UInt32 (List Var)) := do
+  let mut vs : List Var := []
+  let mut m : Std.HashMap UInt32 (List Var) := {}
+  for (n, t) in es do
+    let v ← fresh t
+    vs := vs ++ [v]
+    m := m.insert n (m.getD n [] ++ [v])
+  return (vs, m)
+
+/-- **A closure call**, with the evidence its closure's type takes (`Tm.appE`): `t` is the call
+without (`app`, `app0`, `sel`). -/
+def withEv (t : Tm) : CM Tm := do
+  let (f, a, j) ← match t with
+    | .app f a => pure (f, some a, 0)
+    | .app0 f => pure (f, none, 0)
+    | .sel f j => pure (f, none, j)
+    | t => return t
+  let es := evParams (← tyOf f) a.isSome
+  if es.isEmpty then return t
+  readFact "evidence:call"
+  return .appE f a j (← evArgs es)
+
+/-- A term names one of the variables `xs`. -/
+def Tm.mentions (xs : Std.HashSet Var) : Nat → Tm → Bool
+  | 0, _ => true
+  | f + 1, t => match t with
+    | .var x | .absurd x => xs.contains x
+    | .unit | .lit _ => false
+    | .pair a b => xs.contains a || xs.contains b
+    | .inj _ a => xs.contains a
+    | .clos _ env | .call _ env | .prim _ env => env.any xs.contains
+    | .app g a => xs.contains g || xs.contains a
+    | .app0 g | .sel g _ => xs.contains g
+    | .appE g a _ ev => xs.contains g || a.any xs.contains || ev.any xs.contains
+    | .letv _ e b => Tm.mentions xs f e || Tm.mentions xs f b
+    | .letpair _ _ q b => xs.contains q || Tm.mentions xs f b
+    | .case s _ b₁ _ b₂ => xs.contains s || Tm.mentions xs f b₁ || Tm.mentions xs f b₂
+    | .copy _ x _ b | .consume _ x b | .abandon _ x b => xs.contains x || Tm.mentions xs f b
+
+/-- A closure type a generated helper calls without evidence: refused when it takes some. -/
+def noEv (t : LTy) : CM Unit := do
+  for arg in [true, false] do
+    if let (n, _) :: _ := evParams t arg then
+      throw (evRefuse n "a closure that takes evidence called by a generated helper")
 
 /-- The type of a node's value: a value type's, `F A`'s `A`, and otherwise the closure the
 computation's λ-value is. -/
@@ -340,8 +435,8 @@ def repJ (j : Jdg) : CM LTy := do
   | .val A => vty A
   | .comp (.ret A) => vty A
   | .comp C@(.eff ..) => do
-    -- `F_Σ R`'s value: `R`, or `R ⊕ P` (SPEC §47).
-    match ← cty C with
+    -- `F_Σ R`'s value: `R`, or `R ⊕ P` (SPEC §47); its evidence is the code's, not the value's.
+    match (← cty C).stripEv.2 with
     | .ret a => pure a
     | k => throw s!"LIR: a row's computation type at {k}"
   | .comp .top => pure .unit
@@ -492,19 +587,23 @@ def mkClos (name : String) (ctx : Ctx) (k : LCTy) (param : Option LTy) (ret : LT
   let (outer, inner, ctx') ← envOf ctx
   let fi ← reserveFn name
   let encl (ps : List Var) := if source then sourceEncl ps else []
+  -- The code's evidence parameters, after its argument: the evidence its body has in scope, and
+  -- no other (SPEC §47, *Evidence*).
+  let (evp, evs) ← evParamVars (evParams (.thunk k) param.isSome)
   match param with
   | some pt =>
     let p ← fresh pt
-    let (b, sites) ← outsideSite (body (some p :: ctx'))
-    let params := inner ++ [p]
+    let (b, sites) ← withEvs evs (outsideSite (body (some p :: ctx')))
+    let params := inner ++ [p] ++ evp
     setFn fi { name, params, body := b, ret, lendEncl := encl params,
-               emptyRow := source && emptyRow }
+               emptyRow := source && emptyRow, evs := evp.length }
     let c ← addCode { kind := .lam, fns := [fi], ty := k }
     closOf c k outer sites
   | none =>
-    let (b, sites) ← outsideSite (body ctx')
-    setFn fi { name, params := inner, body := b, ret, lendEncl := encl inner,
-               emptyRow := source && emptyRow }
+    let (b, sites) ← withEvs evs (outsideSite (body ctx'))
+    let params := inner ++ evp
+    setFn fi { name, params, body := b, ret, lendEncl := encl params,
+               emptyRow := source && emptyRow, evs := evp.length }
     let c ← addCode { kind := .unit, fns := [fi], ty := k }
     closOf c k outer sites
 
@@ -519,7 +618,7 @@ def mkAmp (name : String) (ctx : Ctx) (k : LCTy) (rets : List LTy)
   for ((b, r), j) in (bodies.zip rets).zipIdx do
     let (_, inner, ctx') ← envOf ctx
     let fi ← reserveFn name
-    let (t, ss) ← outsideSite (b ctx')
+    let (t, ss) ← withEvs {} (outsideSite (b ctx'))
     sites := sites ++ ss
     setFn fi { name, params := inner, body := t, ret := r,
                lendEncl := if source then sourceEncl inner else [],
@@ -540,9 +639,10 @@ def answerOf (t : LTy) : CM (Option LTy × LTy) :=
   match t.peel with
   | .thunk k => do
     match k.whnf 8 with
-    | .arr a c => return (some a, ← repC c)
-    | .ret a => return (none, a)
-    | k => throw s!"LIR: a closure of {k} is not called"
+    | .arr a c => return (some a, ← repC c.stripEv.2)
+    | k => match k.stripEv.2 with
+      | .ret a => return (none, a)
+      | k => throw s!"LIR: a closure of {k} is not called"
   | _ => throw s!"LIR: a call of a non-closure: {t}"
 where
   repC : LCTy → CM LTy
@@ -553,10 +653,10 @@ where
 /-- Apply the closure `f` to `args` in turn, each call a closure call of the type it has. -/
 def applyAll (f : Var) : List Var → CM Tm
   | [] => pure (.var f)
-  | [a] => return .app f a
+  | [a] => withEv (.app f a)
   | a :: as => do
     let (_, r) ← answerOf (← tyOf f)
-    bindTm (.app f a) r fun g => applyAll g as
+    bindTm (← withEv (.app f a)) r fun g => applyAll g as
 
 /-! ### Small terms -/
 
@@ -729,7 +829,7 @@ def rowMs (S : Row) : CM (List (Key × LTy × LTy × Option Pay)) := do
     if o.n == divName then
       throw s!"an operation ({o.n}, {o.i}) in a computation type: outside the pure fragment"
     if !o.abort && ms.contains (o.n, o.i) && !(acc.any (·.1 == (o.n, o.i))) then
-      let cp ← lift (ofFin ms o.fin)
+      let cp ← lift (ofFin ms (← get).fd o.fin)
       acc := acc ++ [((o.n, o.i), ← vty o.A, ← vty o.B, cp.map dedupPay)]
   return acc
 
@@ -738,6 +838,10 @@ operation. The outcome unrolls to its body (checked).  `[spec §49]` -/
 def outInfo? (r : LTy) (S : Row) : CM (Option OutInfo) := do
   let ms ← rowMs S
   if ms.isEmpty then return none
+  -- A machine takes no evidence in the first cut (SPEC §47, *Evidence*).
+  let fd := (← get).fd
+  if let some o := S.find? fun o => fd.contains o.n then
+    throw (evRefuse o.n "a machine at a row with evidence")
   let pay ← rowPay S
   let ty := outcomeTy r pay ms
   let unrs := (S.filter fun o => o.q == .unr).map fun o => (o.n, o.i)
@@ -1495,7 +1599,8 @@ def finishMachine (F : OutInfo) (t : Tm) : CM Tm := do
 def withMachine (F : OutInfo) (act : CM Tm) : CM Tm := do
   let start := (← get).begun
   modify fun s => { s with begun := s.begun + 1, machs := { info := F, start } :: s.machs }
-  finishMachine F (← act)
+  -- A machine's row holds no evidence name (`outInfo?`): no evidence is in scope in it.
+  finishMachine F (← withEvs {} act)
 
 /-- **A machine whose body takes its continuation** (SPEC §49, §50): `act K args` converts the body,
 its value handed to `K`. Where a first conversion found the machine's state a cell
@@ -1509,6 +1614,8 @@ def withMachineK (F : OutInfo) (act : Kont → List Var → CM Tm) : CM Tm := do
   let cell := if stack.isSome then none else th
   modify fun s => { s with begun := s.begun + 1,
                            machs := { info := F, start, threadable := true, cell, stack } :: s.machs }
+  -- A machine's row holds no evidence name (`outInfo?`): no evidence is in scope in it.
+  withEvs {} do
   let t ← match stack, cell with
     | some S, _ => do
       -- The level's frame reserved on the task stack (SPEC §52), and its address.
@@ -1526,6 +1633,7 @@ def withMachineK (F : OutInfo) (act : Kont → List Var → CM Tm) : CM Tm := do
 
 /-- `tab (c, f)` (`array_new`, SPEC §9): an array of `len(c)` slots, slot `i` holding `f i`. -/
 def genTab (aT fT : LTy) (p : Var) : CM Tm := do
+  noEv fT
   let fi ← reserveFn "tab"
   let f ← fresh fT; let a ← fresh aT; let i ← fresh i32T; let n ← fresh i32T
   let body ← dup .dup i fun i i₁ => dup .dup n fun n n₁ =>
@@ -1546,6 +1654,7 @@ def genTab (aT fT : LTy) (p : Var) : CM Tm := do
 
 /-- `drop (f, a)` (`array_free`): each slot's contents to `f`, in order, then the array freed. -/
 def genArrFree (fT aT : LTy) (p : Var) : CM Tm := do
+  noEv fT
   let fi ← reserveFn "array_free"
   let f ← fresh fT; let a ← fresh aT; let i ← fresh i32T; let n ← fresh i32T
   let (some eT, _) ← answerOf fT | throw "LIR: array_free's consumer takes no argument"
@@ -1566,6 +1675,7 @@ def genArrFree (fT aT : LTy) (p : Var) : CM Tm := do
 
 /-- `count_fold (f, (n, (i, s)))` (SPEC §16): `f` at `i, …, len(n) − 1`, threading `s`. -/
 def genCount (fT sT : LTy) (p : Var) : CM Tm := do
+  noEv fT
   let fi ← reserveFn "count_fold"
   let f ← fresh fT; let n ← fresh i32T; let i ← fresh i32T; let st ← fresh sT
   let body ← dup .dup i fun i i₁ => dup .dup n fun n n₁ =>
@@ -1584,6 +1694,7 @@ def genCount (fT sT : LTy) (p : Var) : CM Tm := do
 /-- `count_try (f, (n, (i, s)))` (SPEC §16): `f` at `i, …, len(n) − 1` while it answers `inl` of
 the next state; its first `inr` is the answer, else `inl` of the last state. -/
 def genCountTry (fT sT eT : LTy) (p : Var) : CM Tm := do
+  noEv fT
   let fi ← reserveFn "count_try"
   let f ← fresh fT; let n ← fresh i32T; let i ← fresh i32T; let st ← fresh sT
   let rT : LTy := .sum sT eT
@@ -1614,7 +1725,7 @@ def genLend (op : Op) (src : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm := 
   return .letv pr (.prim op [src]) (.letpair o b pr (.letv r (← call b) (.pair o r)))
 
 /-- The call of a borrow's callback `cb` on `b`: `cb [] b`, its instantiation erased (SPEC §44). -/
-def callCb (cb : Var) (b : Var) : CM Tm := pure (.app cb b)
+def callCb (cb : Var) (b : Var) : CM Tm := withEv (.app cb b)
 
 /-- `withload x f` (SPEC §1): `f () (load x)`, the contents read at the callback's argument type. -/
 def genWithload (x : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm := do
@@ -1784,6 +1895,7 @@ rather than the descent. The algebra never sees a reversed link: it is applied o
 and to nodes whose recursive position holds a result. A mismatch shows as a disagreement with
 the source stage or with `live 0`. -/
 def genFoldRev (k : FoldKind) (C : FShape) (baseR : Bool) (muT gT : LTy) : CM Nat := do
+  noEv gT
   let entry ← reserveFn "fold"
   let down ← reserveFn "fold_down"
   let up ← reserveFn "fold_up"
@@ -1830,6 +1942,7 @@ def genFoldRev (k : FoldKind) (C : FShape) (baseR : Bool) (muT gT : LTy) : CM Na
 at `fold_imm` on a borrow of one (`recL`, whose cell's contents it reads as `Imm̲`). `muT` is the
 type of the values `recV` folds, `gT` the algebra's. -/
 def genFoldFns (k : FoldKind) (F : FShape) (muT cellT gT : LTy) : CM (Nat × Nat) := do
+  noEv gT
   let recV ← reserveFn "fold"
   let recL ← if k == .imm then reserveFn "fold_imm" else pure recV
   let .mu body := muT.peel | throw s!"LIR: a fold over a non-μ type: {muT}"
@@ -2021,6 +2134,7 @@ end
 /-- The code of `unfold g s` at the body `C` (a `&` of observation trees, `CTy.NuOk`), its step
 of type `gT` and state of type `sT`. -/
 def genUnfold (C : LCTy) (Cv : CTy) (gT sT : LTy) : CM Nat := do
+  noEv gT
   let .amp C₁ C₂ := C | throw s!"LIR: unfold at a body that is not a `&`: {C}"
   let .amp Cv₁ Cv₂ := stripAll Cv | throw "LIR: unfold at a body that is not a `&`"
   let obs ← addCode { kind := .amp, fns := [], ty := .nu C }
@@ -2051,12 +2165,19 @@ def genFix (sT : LTy) (p : Var) : CM Tm := do
   let .pair selfOT aT := qT.peel | throw "LIR: bounded_fix's step does not take `(self, a)`"
   let .sum _ selfT := selfOT.peel | throw "LIR: bounded_fix's self-reference is not `1 ⊕ U(A ⊸ C)`"
   let .thunk selfK := selfT.peel | throw "LIR: bounded_fix's self-reference is not a closure"
+  -- The step's evidence (SPEC §47, *Evidence*): the loop and the self-reference take it, as the
+  -- step's row and the self-reference's are one.
+  let es := evParams sT true
+  if let (n, _) :: _ := es then
+    unless evParams selfT true == es do throw (evRefuse n "bounded_fix's step and self at other evidence")
   let si ← reserveFn "bounded_fix self"
   let s₁ ← fresh sT; let k₁ ← fresh i32T; let x ← fresh aT
-  setFn si { name := "bounded_fix self", params := [s₁, k₁, x], body := .call fi [s₁, k₁, x],
-             ret := rT }
+  let (ev₁, _) ← evParamVars es
+  setFn si { name := "bounded_fix self", params := [s₁, k₁, x] ++ ev₁,
+             body := .call fi ([s₁, k₁, x] ++ ev₁), ret := rT, evs := ev₁.length }
   let c ← addCode { kind := .lam, fns := [si], ty := selfK }
   let s ← fresh sT; let k ← fresh i32T; let a ← fresh aT
+  let (ev, _) ← evParamVars es
   let body ← dup .dup s fun s s' => dup .dup k fun k k' => lit32 0 fun z => do
     let self ← fresh selfOT
     let k₂ ← fresh i32T; let cl ← fresh selfT
@@ -2065,9 +2186,11 @@ def genFix (sT : LTy) (p : Var) : CM Tm := do
     let no : Tm := .consume .dead s' (.consume .dead k (.letv u .unit (.inj false u)))
     let test ← ifLt z k' (pure yes) (pure no)
     let q ← fresh qT
-    return .letv self test (.letv q (.pair self a) (.app s q))
-  setFn fi { name := "bounded_fix", params := [s, k, a], body, ret := rT }
-  letpairM p fun s r => letpairM r fun k a => pure (.call fi [s, k, a])
+    let call : Tm := if es.isEmpty then .app s q else .appE s (some q) 0 ev
+    return .letv self test (.letv q (.pair self a) call)
+  setFn fi { name := "bounded_fix", params := [s, k, a] ++ ev, body, ret := rT, evs := ev.length }
+  let evIn ← evArgs es
+  letpairM p fun s r => letpairM r fun k a => pure (.call fi ([s, k, a] ++ evIn))
 
 /-! ### Consumes (SPEC §12)
 
@@ -2298,6 +2421,7 @@ def takeClosOf (s : CapStream) (t : LTy) : CM Tm := do
 def repK : LCTy → CM LTy
   | .ret a => pure a
   | .arr _ k => repK k
+  | .ev _ _ k => repK k
   | .top => pure .unit
   | k => pure (.thunk k)
 
@@ -2425,14 +2549,16 @@ def takesClosK : Nat → LCTy → Bool
   | f + 1, k => match k with
     | .arr a k => holdsClos f a || takesClosK f k
     | .nu k => takesClosK f k
+    | .ev _ _ k => takesClosK f k
     | .amp k₁ k₂ => takesClosK f k₁ || takesClosK f k₂
     | .ret a => takesClos f a
     | .top => false
 end
 
 /-- The key of a `use`: the declaration, its type arguments and the elaborator's key. -/
-def useKey (decl : Nat) (targs : List VTy) (info : TInfo) (j : Jdg) (ms : MachSet) : String :=
-  s!"{decl}|{", ".intercalate (targs.map (keyVT · ms))}|{reprStr info.key}|{ppJ j ms}"
+def useKey (decl : Nat) (targs : List VTy) (info : TInfo) (j : Jdg) (ms : MachSet)
+    (fd : EvSet := {}) : String :=
+  s!"{decl}|{", ".intercalate (targs.map (keyVT · ms fd))}|{reprStr info.key}|{ppJ j ms fd}"
 
 /-- A scope of a `use` template in the copy being made (`renameTm`): a scope of its own. -/
 def copyScope (s : Nat) : CM Nat := do
@@ -2455,6 +2581,7 @@ def renameTm (m : Std.HashMap Var Var) : Tm → CM Tm
   | .app f a => return .app (m.getD f f) (m.getD a a)
   | .app0 f => return .app0 (m.getD f f)
   | .sel f j => return .sel (m.getD f f) j
+  | .appE f a j ev => return .appE (m.getD f f) (a.map fun x => m.getD x x) j (ev.map fun x => m.getD x x)
   | .call fn as => return .call fn (as.map fun x => m.getD x x)
   | .prim op as => do
     let op ← match op with
@@ -2632,7 +2759,7 @@ def joinWith (c₂ : Ctx) (A : VTy) (args : List Var) (body : Ctx → List Var �
   let args' ← args.mapM freshMarked
   let x ← fresh (← vty A)
   let fn ← reserveFn "join"
-  let b ← body (some x :: c₂') args'
+  let b ← withEvs {} (body (some x :: c₂') args')
   setFn fn { name := "join", params := inner ++ args' ++ [x], body := b, ret := F.ty }
   return fn
 
@@ -2772,9 +2899,12 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     unless ph.all fun k => (payIdx p k.1).isSome do
       throw s!"LIR: `effPerform` of ({o.n}, {o.i}) at a row that does not hold its clause's aborts is outside the pure fragment"
     let bT ← vty o.B
+    -- A clause that captures values takes them as its name's evidence (SPEC §47, *Evidence*).
+    let fd := (← get).fd
+    let evIn ← if fd.contains o.n then evArgs ((fd.getD o.n []).map (o.n, ·)) else pure []
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => do
       let r ← fresh (resTy bT ph)
-      return .letv r (.call fi [v]) (← coerceRes bT ph p r)
+      return .letv r (.call fi (v :: evIn)) (← coerceRes bT ph p r)
   | .effThen _ _ A _ S SM SD u tM tN tD => do
     -- `M then x. N unwind D`: `N` on a value; on an abort the finaliser `D`, then the abort, or
     -- the finaliser's own, handed on (`then_ret`, `then_fin`, `unwind_prefix`).  [spec §47]
@@ -2805,7 +2935,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     match ctx[i]? with
     | some (some x) =>
       match C with
-      | .ret _ | .eff .. => return leaf ctx (some i) (.app0 x)
+      | .ret _ | .eff .. => return leaf ctx (some i) (← withEv (.app0 x))
       | _ => return leaf ctx (some i) (.var x)
     | _ => throw s!"LIR: forced variable {i} is not live"
   | .app _ j i _ _ u tM => do
@@ -2816,11 +2946,11 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     | .lam _ _ _ _ body => return pre (rest (← conv fuel (some x :: c₁) body))
     | _ => do
       let f ← fresh (← repJ tM.jdg)
-      return pre (rest (.letv f (← conv fuel c₁ tM) (.app f x)))
+      return pre (rest (.letv f (← conv fuel c₁ tM) (← withEv (.app f x))))
   | .proj₁ _ _ _ _ c | .proj₂ _ _ _ _ c => do
     let j := match t with | .proj₂ .. => 1 | _ => 0
     let fT ← repJ c.jdg
-    bindTm (← conv fuel ctx c) fT fun f => pure (.sel f j)
+    bindTm (← conv fuel ctx c) fT fun f => withEv (.sel f j)
   | .unitE _ _ _ u tV tM => do
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
     return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .consume .dead v (← conv fuel c₂ tM))
@@ -2901,7 +3031,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
         if (← get).unfolds.contains fv then
           readFact "nuEta:unfold call"
           let others := (ctx.zipIdx.filter fun (_, k) => k != f && k != si).filterMap (·.1)
-          return consumes .dead others (.app fv sv)
+          return consumes .dead others (← withEv (.app fv sv))
         else conv fuel ctx c
       | _ => conv fuel ctx c
     | _, _ => conv fuel ctx c
@@ -3052,6 +3182,7 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
       let some (fi, ph, wm) := (← get).works[(o.n, o.i.toNat)]?
         | throw s!"LIR: `effPerform` of ({o.n}, {o.i}) with no direct call is outside the fragment"
       readFact "effPerform:direct call"
+      if (← get).fd.contains o.n then throw (evRefuse o.n "a perform inside a machine")
       modify fun st => { st with erased := st.erased.insert "perform" (st.erased.getD "perform" 0 + 1) }
       let bT ← vty o.B
       bindTm (← conv fuel ctx c) (← vty o.A) fun v => match wm with
@@ -3186,7 +3317,7 @@ machine of its own.  `[spec §49]` -/
 def subMachine (fuel : Nat) (ctx : Ctx) (t : TExpr) (M : OutInfo) : CM Tm := do
   let (outer, inner, ctx') ← envOf ctx
   let fn ← reserveFn "machine"
-  let body ← withMachineK M (convK fuel ctx' t)
+  let body ← withEvs {} (withMachineK M (convK fuel ctx' t))
   setFn fn { name := "machine", params := inner, body, ret := M.ty }
   readFact "machine:body"
   return .call fn outer
@@ -3411,7 +3542,7 @@ def applyTo (fuel : Nat) (ctx : Ctx) (tF : TExpr) (a : Var) : CM Tm := do
   | some (k, .lam _ _ _ _ body) => conv fuel (some a :: (List.replicate k none ++ ctx)) body
   | _ => do
     let f ← fresh (← repJ tF.jdg)
-    return .letv f (← conv fuel ctx tF) (.app f a)
+    return .letv f (← conv fuel ctx tF) (← withEv (.app f a))
 
 /-- **`handle_n e with (h_ret, hs)`, erased**  `[spec §47]`. Read from the node: its name `n`, its
 operations `E`, its clauses' kinds `ks`, its outer row `Σ` and the masks. Every clause must be
@@ -3462,6 +3593,24 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)
         throw "LIR: `effHandleV`: a clause tuple not written in place is outside the pure fragment"
       tuple := some t
   let tailCtx := cur
+  -- **The node's evidence** (SPEC §47, *Evidence*): at a name whose `tail` clause captures values,
+  -- the values of its captured slots, from the clauses' parts of the context. They stay the
+  -- node's (consumed with its parts after the handled computation) and are passed to every call
+  -- of the handled computation that takes them.
+  let fd := (← get).fd
+  let evsTe ← if fd.contains n then do
+      if teM.isSome then throw (evRefuse n "a drive of a name with evidence")
+      let want := fd.getD n []
+      let slots := (← get).fdSlots.getD n []
+      let mut vs : List Var := []
+      for (i, t) in slots.zip want do
+        let some x := parts.toList.findSome? (fun (cc, _) => cc[i]?.join)
+          | throw (evRefuse n "a captured slot not live at the node")
+        unless (← tyOf x).sameRep t do throw (evRefuse n "a captured slot of another type")
+        vs := vs ++ [x]
+      readFact "effHandleV:evidence"
+      pure ((← get).evs.insert n vs)
+    else pure (← get).evs
   -- The direct calls' functions, made at the first node of the name.
   for (k, j) in ks.zipIdx do
     if k.kind == .tail && direct[j]? == some true then
@@ -3470,13 +3619,14 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)
       ensureWork fuel n j cc.length S o c
   let wrap (b : Tm) : Tm := pre (preH (preCs.foldr (fun f t => f t) b))
   if let some T := teM then
+    -- A drive's row holds no evidence name (`outInfo?`): no evidence is in scope in it.
     match tuple with
-    | none => return wrap (← convDrive fuel S E fs n R ks site c₂ te T cR tR parts tailCtx none boxed)
+    | none => return wrap (← withEvs {} (convDrive fuel S E fs n R ks site c₂ te T cR tR parts tailCtx none boxed))
     | some tt =>
       readFact "effHandleV:clause tuple"
       let tv ← fresh (← repJ tt.jdg)
       return wrap (.letv tv (← conv fuel tailCtx tt)
-        (← convDrive fuel S E fs n R ks site c₂ te T cR tR parts [some tv] (some parts.size) boxed))
+        (← withEvs {} (convDrive fuel S E fs n R ks site c₂ te T cR tR parts [some tv] (some parts.size) boxed)))
   let ctxs : List Ctx := cR :: parts.toList.map (·.1) ++ [tailCtx]
   let consumeAll (keep : Option Nat) (b : Tm) : Tm :=
     consumes .dead ((ctxs.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
@@ -3486,7 +3636,7 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)
   modify fun st => { st with erased := st.erased.insert "handle" (st.erased.getD "handle" 0 + 1) }
   let retArm (a : Var) : CM Tm := do return consumeAll (some 0) (← applyTo fuel cR tR a)
   match payTy pt with
-  | none => return wrap (← bindTm (← conv fuel c₂ te) aT retArm)
+  | none => return wrap (← bindTm (← withEvs evsTe (conv fuel c₂ te)) aT retArm)
   | some ptT =>
     readFact "effHandleV:join"
     let b ← fresh (.sum aT ptT); let a ← fresh aT; let e ← fresh ptT
@@ -3499,7 +3649,7 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)
       else
         let some j' := payIdx ps key | throw s!"LIR: an abort of {key} outside the handler's row"
         return consumeAll none (← injectPay ps j' v fun w => pure (.inj true w))
-    return wrap (.letv b (← conv fuel c₂ te) (.case b a (← retArm a) e arms))
+    return wrap (.letv b (← withEvs evsTe (conv fuel c₂ te)) (.case b a (← retArm a) e arms))
 
 /-- **A tail-resumptive clause's work**, the function a `perform` of its operation calls
 (`[spec §47]`, `tail_resumes`): the clause `λp. let (x, κ) = p; M` with each resume of `κ`
@@ -3520,12 +3670,28 @@ def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
     -- At an outer row with machine operations the work is a machine (SPEC §49).
     let wm ← outInfo? bT S
     modify fun st => { st with works := st.works.insert (n, j) (fi, ph, wm) }
-    let ctx₀ : Ctx := some kv :: some x :: none :: List.replicate depth none
-    let (body, ret) ← match wm with
+    -- **The captured values** (SPEC §47, *Evidence*): at a name of the program's evidence, the
+    -- work takes them as its evidence parameters, and its context's captured slots are copies
+    -- of them (persistent: `[handle]`'s `DeadP`). The first cut takes no evidence of the outer
+    -- row and builds no machine for such a work.
+    let fd := (← get).fd
+    let (evp, _) ← evParamVars ((fd.getD n []).map (n, ·))
+    if fd.contains n then
+      if let some o := S.find? fun o => fd.contains o.n then
+        throw (evRefuse n s!"its clause's outer row holds the evidence name {o.n}")
+      if wm.isSome then throw (evRefuse n "its clause's work is a machine")
+    let slots := (← get).fdSlots.getD n []
+    let mut copies : List (Var × Var) := []
+    for e in evp do copies := copies ++ [(e, ← freshLike e)]
+    let env : Ctx := (List.range depth).map fun i => (slots.idxOf? i).bind fun k => (copies[k]?).map (·.2)
+    let ctx₀ : Ctx := some kv :: some x :: none :: env
+    let (body, ret) ← withEvs {} do match wm with
       | none => pure (← convWork fuel 0 ph ctx₀ tM, resTy bT ph)
       | some W => pure (← withMachineK W (convWorkK fuel 0 ctx₀ tM), W.ty)
+    let body := copies.foldr (fun (e, e') b => .copy .dup e e' b) body
     -- `κ`'s slot holds a unit: every resume of it is its answer, and it is consumed there.
-    setFn fi { name := s!"clause {n}.{j}", params := [x], body := .letv kv .unit body, ret }
+    setFn fi { name := s!"clause {n}.{j}", params := [x] ++ evp, body := .letv kv .unit body, ret,
+               evs := evp.length }
   | _ => throw s!"LIR: the clause {n}.{j} is not `λp. let (x, κ) = p; M`"
 
 /-- The variable a term answers through the nodes that keep their premise's value (`ret`,
@@ -3701,7 +3867,7 @@ def convLendCell (fuel : Nat) (ctx : Ctx) (t inner : TExpr) : CM Tm := do
 /-- A `use` of a `def`: its body's term made once per key, instantiated at each later use. -/
 def convUse (fuel : Nat) (ctx : Ctx) (info : TInfo) (j : Jdg) (decl : Nat) (targs : List VTy)
     (body : TExpr) : CM Tm := do
-  let key := useKey decl targs info j (← get).mach
+  let key := useKey decl targs info j (← get).mach (← get).fd
   let slots : List (Nat × Var) := ctx.zipIdx.filterMap fun (s, i) => s.map (i, ·)
   -- A body that takes a closure is specialised to each use, as it is to each set of argument codes
   -- (docs/compiler.md §3.1): its codes would join the closures of every use otherwise.
@@ -3733,6 +3899,9 @@ def convUse (fuel : Nat) (ctx : Ctx) (info : TInfo) (j : Jdg) (decl : Nat) (targ
     conv fuel ctx body
   | none =>
     let tm ← conv fuel ctx body
+    -- A body that passes the evidence in scope here is this use's own (SPEC §47, *Evidence*).
+    let evVars : Std.HashSet Var := (← get).evs.fold (fun s _ vs => vs.foldl (·.insert ·) s) {}
+    if !evVars.isEmpty && Tm.mentions evVars (1 <<< 22) tm then return tm
     modify fun s => { s with uses := s.uses.insert key ⟨slots, tm⟩ }
     readFact "use:key"
     return tm
@@ -3873,7 +4042,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
   | .withbor2 .., [x, cb] | .sliceBorrowM .., [x, cb] => genLend (.lend true) x (← tyOf cb) (callCb cb)
   | .withbor3 .., [m, cb] => genLend .relend m (← tyOf cb) (callCb cb)
   | .withload .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
-  | .withswap .., [m, f] => genWithswap m (← tyOf f) fun old => pure (.app f old)
+  | .withswap .., [m, f] => genWithswap m (← tyOf f) fun old => withEv (.app f old)
   | .allocS _ _ σ, [v] => allocTree v resT σ
   | .freeS _ j _, [v] => do
     let (_, vT) ← arrowOf (← repJ j)
@@ -4126,10 +4295,11 @@ def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CT
     (arg : Option (List UInt8))
     (loops : Bool) (census : Bool := false) (direct : Std.HashMap UInt32 (List Bool) := {})
     (mach : MachSet := {}) (threaded : Std.HashMap Nat LTy := {})
-    (stacked : Std.HashMap Nat LTy := {}) (classes : List (VTy × List LTy) := []) :
+    (stacked : Std.HashMap Nat LTy := {}) (classes : List (VTy × List LTy) := [])
+    (fd : EvSet := {}) (fdSlots : Std.HashMap UInt32 (List Nat) := {}) :
     Except String (Prog × CState) := do
   let ((m, mT), s) ← (convMain exts ctx t C arg loops).run
-    { census, direct, mach, threaded, stacked, classes }
+    { census, direct, mach, threaded, stacked, classes, fd, fdSlots }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
             statics := s.statics, lits := s.lits, consumeFns := s.consumeFns }, s)
 
