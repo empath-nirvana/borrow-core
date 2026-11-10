@@ -1,0 +1,23 @@
+-- check: old-backend-refuses
+-- SPEC §27 in the core text: `core-fin-op` with a capturable operation in the finaliser, as Core's
+-- `progFinOpT` has (`hnd 4o (hnd 1 {perform k => cancel k} ((perform 1) then x. x unwind
+-- perform 4))`). Handler 1 cancels `κ`; the cancel runs the finaliser, which performs `4.0`
+-- (`cancel 1 ~> 1`); the live outer handler 4 resumes it outside tail position, in the canceller.
+-- `[then]`'s `Σ_M` is `[1.0]` at its own empty cancel row, so `4.0` need not hold itself.
+--
+-- Answer: inr (), and `live 0`: handler 4's clause turns the resumed `inl ()` into `inr ()`. A
+-- wrong implementation that skips the finaliser on the cancel answers `inl ()`.
+
+main : F (1 + 1) =
+  handle_with[4](
+      ((!thunkv fun (v : 1) -> return (inl v)) : !U (1 -o F (1 + 1))),
+      (((!thunkv fun (p : 1 * U ((1 -o F (1 + 1)) & F 1)) ->
+          let (u, k) = p; r <- (force k).1 u; case r { inl a -> return (inr a) | inr b -> return (inl b) }), ())
+        : !U (1 * U ((1 -o F (1 + 1)) & F 1) -o F (1 + 1)) * 1)) (
+    handle_with[1](
+        ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[4.0 cancel 1 ~> 1] 1)),
+        (((!thunkv fun (p : 1 * U ((1 -o F[4.0 cancel 1 ~> 1] 1) & F[4.0 cancel 1 ~> 1, 4.0 cancel 1 ~> 1] 1)) ->
+          let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+          : !U (1 * U ((1 -o F[4.0 cancel 1 ~> 1] 1) & F[4.0 cancel 1 ~> 1, 4.0 cancel 1 ~> 1] 1) -o F[4.0 cancel 1 ~> 1] 1) * 1)) (
+      x <- perform[1.0] () unwind (perform[4.0] ());
+      return x))

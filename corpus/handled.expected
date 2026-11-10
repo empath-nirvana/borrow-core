@@ -351,6 +351,11 @@ corpus/callback-rec-arm.bc 25:11: handle 2: inside [], finaliser; row []; ops 2.
 corpus/callback-rec-arm.bc 26:11: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/callback-rec-arm.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/callback-rec-arm.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/cancel-suspend-cancel.bc flows [0, 1, 4, 4294967295], finaliser; main [1, 4], finaliser
+corpus/cancel-suspend-cancel.bc 12:3: handle 4: inside [1], finaliser; row []; ops 4.0 resume-or-cancel; names 4.0 []; condition 2 holds
+corpus/cancel-suspend-cancel.bc 17:5: handle 1: inside [], finaliser; row [4]; ops 1.0 resume-or-cancel; names 1.0 []; condition 2 holds
+corpus/cancel-suspend-cancel.bc 4.0 resume-or-cancel: error; condition 2 holds; -
+corpus/cancel-suspend-cancel.bc 1.0 resume-or-cancel: error; condition 2 holds; -
 corpus/cancel-suspend-nested.bc flows [0, 1, 2, 3, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser
 corpus/cancel-suspend-nested.bc 23:3: handle 4: inside [1, 2, 3], finaliser; row []; ops 4.0 once; names 4.0 []; condition 2 holds
 corpus/cancel-suspend-nested.bc 28:5: handle 3: inside [1, 2], finaliser; row [4]; ops 3.0 abortive; names 3.0 []; condition 2 holds
@@ -496,6 +501,11 @@ corpus/core-fin-keep.bc 24:7: handle 1: inside [], finaliser; row [4, 2]; ops 1.
 corpus/core-fin-keep.bc 2.0 abortive: error; condition 2 holds; -
 corpus/core-fin-keep.bc 4.0 once: error; condition 2 holds; -
 corpus/core-fin-keep.bc 1.0 resume-or-cancel: error; condition 2 holds; -
+corpus/core-fin-nc.bc flows [0, 1, 4, 4294967295], finaliser; main [1, 4], finaliser
+corpus/core-fin-nc.bc 15:3: handle 4: inside [1], finaliser; row []; ops 4.0 resume-or-cancel; names 4.0 []; condition 2 holds
+corpus/core-fin-nc.bc 20:5: handle 1: inside [], finaliser; row [4]; ops 1.0 resume-or-cancel; names 1.0 []; condition 2 holds
+corpus/core-fin-nc.bc 4.0 resume-or-cancel: error; condition 2 holds; -
+corpus/core-fin-nc.bc 1.0 resume-or-cancel: error; condition 2 holds; -
 corpus/core-fin-nested.bc flows [0, 3, 5, 4294967295], finaliser; main [2, 3, 5], finaliser
 corpus/core-fin-nested.bc 14:3: handle 2: inside [3, 5], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/core-fin-nested.bc 17:5: handle 3: inside [5], finaliser; row [2]; ops 3.0 tail; names 3.0 []; condition 2 holds
@@ -503,6 +513,11 @@ corpus/core-fin-nested.bc 22:7: handle 5: inside [], finaliser; row [3, 2]; ops 
 corpus/core-fin-nested.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/core-fin-nested.bc 3.0 tail: -; condition 2 holds; -
 corpus/core-fin-nested.bc 5.0 resume-or-cancel: machine; condition 2 holds; -
+corpus/core-fin-op-cap.bc flows [0, 1, 4, 4294967295], finaliser; main [1, 4], finaliser
+corpus/core-fin-op-cap.bc 12:3: handle 4: inside [1], finaliser; row []; ops 4.0 once; names 4.0 []; condition 2 holds
+corpus/core-fin-op-cap.bc 17:5: handle 1: inside [], finaliser; row [4]; ops 1.0 resume-or-cancel; names 1.0 []; condition 2 holds
+corpus/core-fin-op-cap.bc 4.0 once: error; condition 2 holds; -
+corpus/core-fin-op-cap.bc 1.0 resume-or-cancel: error; condition 2 holds; -
 corpus/core-fin-op.bc flows [0, 1, 4, 4294967295], finaliser; main [1, 4], finaliser
 corpus/core-fin-op.bc 18:3: handle 4: inside [1], finaliser; row []; ops 4.0 once; names 4.0 []; condition 2 holds
 corpus/core-fin-op.bc 23:5: handle 1: inside [], finaliser; row [4]; ops 1.0 resume-or-cancel; names 1.0 []; condition 2 holds
