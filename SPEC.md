@@ -2845,8 +2845,8 @@ end-to-end I/O theorems keep their statements.
   view's iterator, and `*e` of a copyable view are S4's; `data` values and `data` with lifetime
   parameters are S6's; the typed text types (T2) and zero-cost growth (a `buf` former, F) are
   later stages.
-- `write_lossy`, `char_indices`, `split_at_str`, `sub_str`, `push_hex` and `parse_i64` of the
-  design's list are not provided.
+- `write_lossy`, `char_indices`, `split_at_str`, `sub_str` and `push_hex` of the design's list are
+  not provided.
 - P14 (`args`) waits for the `Args` capability (§11, designed, not built).
 - The literal lowering's claim is tested, not proved.
 
@@ -7416,6 +7416,7 @@ read at startup).
   if `j` is not an object or has no such member, and returns a result free of that lifetime. Its
   callback is written in core text, pure: the surface has no block generic in a lifetime (#1003),
   and a core-text block cannot perform (#161).
+
 **Stated limits.**
 - **Duplicate keys:** the last value wins; the earlier one is dropped.
 - **Member order:** an object serialises in its map's slot order (fixed by the keys' hashes and
@@ -7423,9 +7424,11 @@ read at startup).
 - **Numbers:** an integer literal past `i64`'s range (above 2^63 − 1 or below −2^63) is read as
   `Float`; serde_json keeps positive ones up to 2^64 − 1 exact as `u64`, which needs the `u64` width (#981); a `u64` number in `Json` waits on it. Arbitrary-precision numbers are not provided.
 
-**Preserves.** No kernel, checker, elaborator or backend change; every existing program's output and counts are
-unchanged. `corpus/json-parse.bc` becomes `include json` plus its `main`; its golden changes only where an
-integer literal now prints exactly (`3`, not `3.0`), so the serialised line's length changes.
+**Preserves.** No kernel, checker, elaborator or backend change. No existing program's output or
+counts change but `corpus/json-parse.bc`'s: it becomes `include json` plus its `main`, its input
+gains an id past 2^53 and `-0`/`-0.0`, its integers print exactly, and the deep case moves to
+`corpus/json-deep.bc`, so its answer is `(inl (inl i32[658]), inl (inr (i32[3], i32[29])))` and its
+allocations fall from 5942 to 673.
 
 **Programs.**
 - `corpus/json-parse.bc`: `include json` and its `main`; its input has `"id":
