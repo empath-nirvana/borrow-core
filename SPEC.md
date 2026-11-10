@@ -6887,8 +6887,8 @@ built (*Open*).
 The kernel checks each port as any site: `[handle]` asks the port to be absent from the site's
 outer row, which a fresh name is. The argument's type names the port where the argument is
 written, outside the port's site; a value has no row, so nothing is performed there, and decision
-57's site freshness (R3) reads a provided port as bound. R3's interaction with per-observation
-handling: §76 *Open* (#1052).
+57's site freshness (R3) reads a provided port as bound. R3 (lexical sites) is not adopted:
+effects are dynamically scoped (§76 *Open*, #1052).
 
 ### The argument
 
@@ -13341,12 +13341,6 @@ the template:
 Where it can be, this is checked before the template is instantiated, so that it is not only a
 kernel error deep inside an instance.
 
-**R3, a site does not escape its handler.** A `with`'s answer type mentions none of the sites the
-`with` installs (decision 57). Refused:
-`` this value performs at the site of the `with` it leaves ``.
-R3 is pending a narrowing for per-observation rests (decision 57; #1052, *Open*). Slice 1 does not
-build it.
-
 **Not provided**, each refused with its own message:
 - polymorphic recursion over rows (below, *Open*);
 - one parameter at two rows that share no instance (rank 2; *Open*);
@@ -13380,7 +13374,6 @@ Answers are worked by hand, to be confirmed by `bcc interp`.
 Rejects:
 - `corpus/reject/row-arg-mismatch.bc`: a wrong row argument, reported at the use site. Its message
   comes from slice 1's code.
-- `corpus/reject/row-escape.bc`: R3.
 - `corpus/reject/row-poly-rec.bc`: polymorphic recursion over rows.
 - `corpus/reject/row-two-sigs.bc`: a row argument that gives an entry a second signature.
 - `corpus/reject/row-rank2.bc`: rank 2.
@@ -13396,18 +13389,9 @@ Rejects:
   - **checking a definition once for all rows,** as separate compilation would.
 - Inferring rows by unification rather than per argument (#766 Phase A). This entry's instance key
   is #766 Phase B's.
-- **R3 is not a kernel premise (#1052).** As a premise on the handle rules (`n ∉ sites R`,
-  `n ∉ sites Γ|live`), it refuses per-observation handling, where a stream's rest performs at site
-  `n` and is handled again by a fresh handler of `n` at each observation (`Core/EffPrograms.lean`'s
-  `tickProg`/`driveLog`, `core-yield-pull`, §75's frames). R3 is not needed for soundness. Any R3,
-  kernel or surface, must exempt such codata rests.
-  - The surface rule above is checked on a user-written `with`, so §75's generated frames are not
-    refused by it. But it would refuse a user-written handler whose answer is a codata rest
-    performing at its own site, the same pattern.
-  - The proposed narrowing: R3 applies to closures (function or thunk values that perform at the
-    site and are returned past the handler), and not to a codata rest whose every observation is
-    handled under an instance of the same site. This is a change to decision 57, for theory and
-    the user, before slice 2 builds R3.
+- **Effects are dynamically scoped:** a value that performs at a handler's site may leave it and
+  run under another instance (decision 57's lexical R3 is not adopted; #1052). A narrowed lexical
+  rule is an option recorded under the `State`-effect study.
 - Row aliases (`row Io = Fail[IoError], Async`), deferred as in #766.
 - The spelling of everything above.
 
