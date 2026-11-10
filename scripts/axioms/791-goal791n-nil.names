@@ -1,0 +1,4 @@
+-- #791: Goal791N at cs = [] without HandlerLawN, from Core's adequacy  [spec §62]
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.orDiverges_of_runs
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.goal791N_nil
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.goal791N_nil_externs
