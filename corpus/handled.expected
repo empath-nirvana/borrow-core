@@ -1136,12 +1136,6 @@ corpus/kernel-log-outside-native.bc 22:26: handle 1: inside [2]; row []; ops 1.0
 corpus/kernel-log-outside-native.bc 22:49: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/kernel-log-outside-native.bc 1.0 once: machine; condition 2 holds; -
 corpus/kernel-log-outside-native.bc 2.0 abortive: branch; condition 2 holds; -
-corpus/kernel-loop-captured.bc flows [0, 1, 4294967295]; main [1]
-corpus/kernel-loop-captured.bc 15:24: handle 1: inside []; row []; ops 1.0 tail+state; names 1.0 []; condition 2 holds
-corpus/kernel-loop-captured.bc 1.0 tail+state: machine; condition 2 holds; -
-corpus/kernel-loop-tail.bc flows [0, 1, 4294967295]; main [1]
-corpus/kernel-loop-tail.bc 14:13: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
-corpus/kernel-loop-tail.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/kernel-nested-fail-outside.bc flows [0, 2, 4294967295]; main [1, 2]
 corpus/kernel-nested-fail-outside.bc 19:26: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/kernel-nested-fail-outside.bc 19:56: handle 2: inside []; row [1]; ops 2.0 tail+state; names 2.0 []; condition 2 holds
