@@ -4,8 +4,9 @@
 # (scripts/compile-native.sh says so and passes).
 #
 #     scripts/ci-local.sh             the sanity gate (`make gate`): run before opening a PR
-#     scripts/ci-local.sh --source    the full gate (`make gate-full`): every step, and the source
-#                                     stage on every program
+#     scripts/ci-local.sh --full      the full gate (`make gate-full`): every step
+#     scripts/ci-local.sh --source    the full gate, and the source stage on every program and
+#                                     book block, re-verifying every golden
 #     scripts/ci-local.sh --changed   for iteration only: the sanity gate's steps the changes since
 #                                     origin/main can affect (below) (`make gate-fast`)
 #
@@ -15,21 +16,26 @@
 # fence; that every type comparison goes through the one `[α]` helper (`type equality`); that the
 # corpus parses and checks, and elaborates the same under a renaming of its binders (`renaming`);
 # and that every corpus program, compiled to WebAssembly
-# by each backend, prints its golden output with `live 0` (`compile-corpus.sh --final`,
-# `compile-backend2.sh --final`: no intermediate-IR interpreter runs and no counts, except to name
-# the first differing stage of a program whose WebAssembly run is wrong). The full gate runs every
-# step in `steps`, the two corpus runs at every stage with their counts, and the compile-time
-# guard (`compile scaling`).
+# by each backend, prints its golden output with `live 0`: by Backend2, the default
+# (`corpus (Backend2, final)`, `compile-backend2.sh --final`), and by the old backend, checked until
+# it is retired in N7 (`corpus (old backend, final)`, `compile-corpus.sh --final`); no
+# intermediate-IR interpreter runs and no counts, except to name the first differing stage of a
+# program whose WebAssembly run is wrong. The full gate runs every
+# step in `steps`, the two corpus runs at every stage with their counts (each against its own
+# table: `corpus/counts-backend2.expected`, `corpus/counts.expected`), the kernel programs on the
+# old backend, and the compile-time guard on Backend2 (`compile scaling`).
 #
 # The source stage. A corpus program's `.out` and a book block's `-- answer:` are goldens: the
 # output of `Support`'s interpreter (`bcc interp`), the reference semantics. Every compiled stage
 # a step runs is checked against the golden. The interpreter itself is slow (minutes on the largest
-# programs), so by default it runs only where a golden is unverified: on the corpus programs and
-# book blocks that are new or changed since the merge base (scripts/source-stage.sh). With
-# `--source`, it runs on every program and book block, and every golden is re-verified. The full
-# gate is required when Paper/, Support/ (the interpreter and the machine), Target/, Pipeline/ or
-# Backend/ changed since the merge base; the sanity gate says so when they have. `--changed` never runs the
-# interpreter: it lists the unverified programs instead.
+# programs), so by default it runs only where a golden is unverified: where no key is recorded
+# for it, or the recorded key is not the current one, a key covering the elaborated term the
+# interpreter runs, its input and the interpreter's source (scripts/source-stage.sh). The sanity
+# and full gates both follow this rule; with `--source`, it runs on every program and book block,
+# and every golden is re-verified. The full gate is required when Paper/, Support/ (the
+# interpreter and the machine), Target/, Pipeline/, Reference/ or Backend/ changed since the merge
+# base; the sanity gate says so when they have. `--changed` never runs the interpreter: it lists
+# the unverified programs instead.
 #
 # A gate builds everything (`lake build`), then (the full gate) runs the compile-time guard alone
 # (it measures time), then every other step at once, each one's output printed in order as it
@@ -50,18 +56,19 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 changed=0
 full=0
-[ $# -le 1 ] || { echo "usage: scripts/ci-local.sh [--source | --changed]"; exit 2; }
+[ $# -le 1 ] || { echo "usage: scripts/ci-local.sh [--full | --source | --changed]"; exit 2; }
 case "${1:-}" in
   --changed) changed=1; export BCC_SOURCE=0 ;;
+  --full) full=1 ;;
   --source) full=1; export BCC_SOURCE=1 ;;
   "") ;;
-  *) echo "usage: scripts/ci-local.sh [--source | --changed]"; exit 2 ;;
+  *) echo "usage: scripts/ci-local.sh [--full | --source | --changed]"; exit 2 ;;
 esac
 # A change that reaches the reference semantics or the compiler needs the full gate.
 reach=""
 if [ "$full" = 0 ] && base=${CI_LOCAL_BASE:-$(git merge-base origin/main HEAD 2>/dev/null)}; then
-  reach=$({ git diff --name-only "$base"; git ls-files --others --exclude-standard; } | grep -E '^(Paper|Support|Target|Pipeline|Backend)/' | head -1 || true)
-  [ -z "$reach" ] || echo "ci-local: $reach (and perhaps more of Paper/, Support/, Target/, Pipeline/, Backend/) changed since $(git rev-parse --short "$base"): \`make gate-full\` is required as well"
+  reach=$({ git diff --name-only "$base"; git ls-files --others --exclude-standard; } | grep -E '^(Paper|Support|Target|Pipeline|Reference|Backend)/' | head -1 || true)
+  [ -z "$reach" ] || echo "ci-local: $reach (and perhaps more of Paper/, Support/, Target/, Pipeline/, Reference/, Backend/) changed since $(git rev-parse --short "$base"): \`make gate-full\` is required as well"
 fi
 start=$SECONDS
 out=$(mktemp -d)
@@ -85,12 +92,12 @@ steps=(
   "clause kinds"     "scripts/check-kinds.sh"
   "handled names"    "scripts/check-handled.sh"
   "cell classes"     "scripts/check-cells.sh"
-  "compile corpus"   "scripts/compile-corpus.sh"
-  "compile corpus (final)"  "scripts/compile-corpus.sh --final"
-  "compile kernel"   "scripts/compile-kernel.sh"
+  "corpus (Backend2)"        "scripts/compile-backend2.sh"
+  "corpus (Backend2, final)" "scripts/compile-backend2.sh --final"
+  "corpus (old backend)"     "scripts/compile-corpus.sh"
+  "corpus (old backend, final)"  "scripts/compile-corpus.sh --final"
+  "kernel (old backend)"     "scripts/compile-kernel.sh"
   "backend2 fence"   "scripts/check-backend2.sh"
-  "backend2 corpus"  "scripts/compile-backend2.sh"
-  "backend2 corpus (final)" "scripts/compile-backend2.sh --final"
   "layout rejects"   "scripts/check-layout-reject.sh"
   "native facts"     "scripts/native-facts.sh"
   "native"           "scripts/compile-native.sh"
@@ -100,14 +107,14 @@ steps=(
   "book doc-tests"   "scripts/book-doctest.sh"
   "book build"       "mdbook build book"
 )
-# The sanity gate's steps (`make gate`, `--changed`). The `(final)` corpus runs are its own: the
-# full gate runs the corpus at every stage instead.
+# The sanity gate's steps (`make gate`, `--changed`). The corpus runs named `final` are its own:
+# the full gate runs the corpus at every stage instead.
 gateSteps=("hygiene + axioms" "judgment freeze" "axiom report" "type equality" "parse corpus"
-  "check corpus" "renaming" "compile corpus (final)" "backend2 fence" "backend2 corpus (final)")
+  "check corpus" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)" "backend2 fence")
 if [ "$full" = 1 ]; then
   everyStep=("compile scaling")
   for ((i = 0; i < ${#steps[@]}; i += 2)); do
-    case "${steps[i]}" in *"(final)") ;; *) everyStep+=("${steps[i]}") ;; esac
+    case "${steps[i]}" in *"final)") ;; *) everyStep+=("${steps[i]}") ;; esac
   done
 else
   everyStep=("${gateSteps[@]}")
@@ -130,15 +137,15 @@ if [ "$changed" = 1 ]; then
   done
   if [ "$lean" = 0 ]; then
     all=0
-    corpus=("parse corpus" "check corpus" "renaming" "compile corpus (final)" "backend2 corpus (final)")
+    corpus=("parse corpus" "check corpus" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)")
     for f in $files; do
       case "$f" in
         corpus/*|lib/*) add "${corpus[@]}" ;;
         scripts/ci-local.sh|scripts/par.sh) add "${everyStep[@]}" ;;
         scripts/parse-corpus.sh) add "parse corpus" ;;
         scripts/check-corpus.sh) add "check corpus" ;;
-        scripts/compile-corpus.sh|scripts/source-stage.sh) add "compile corpus (final)" ;;
-        scripts/compile-backend2.sh) add "backend2 corpus (final)" ;;
+        scripts/compile-corpus.sh|scripts/source-stage.sh|scripts/interp-digest.sh) add "corpus (old backend, final)" ;;
+        scripts/compile-backend2.sh) add "corpus (Backend2, final)" ;;
         scripts/check-backend2.sh) add "backend2 fence" ;;
         scripts/check-type-eq.sh|scripts/TypeEq.lean|scripts/type-eq.allow) add "type equality" ;;
         scripts/alpha-check.py) add "renaming" ;;
@@ -191,9 +198,10 @@ if [ "$all" = 0 ]; then
 fi
 
 echo
-tag="ci-local"; [ "$changed" = 1 ] && tag="ci-local --changed"; [ "$full" = 1 ] && tag="ci-local --source"
+tag="ci-local"; [ "$changed" = 1 ] && tag="ci-local --changed"; [ "$full" = 1 ] && tag="ci-local --full"
+[ "${BCC_SOURCE:-}" = 1 ] && [ "$full" = 1 ] && tag="ci-local --source"
 if [ "$fail" -eq 0 ]; then echo "$tag: ALL PASSED ($((SECONDS - start))s)"; else echo "$tag: FAILURES (see above) ($((SECONDS - start))s)"; fi
 [ "$changed" = 1 ] && echo "(--changed is for iteration only: the sanity gate, scripts/ci-local.sh, runs before a PR)"
-[ "$full" = 0 ] && echo "(the sanity gate: \`make gate-full\` runs every check, and re-verifies every golden)"
+[ "$full" = 0 ] && echo "(the sanity gate: \`make gate-full\` runs every check; \`make verify-goldens\` re-verifies every golden)"
 [ -z "$reach" ] || echo "($reach changed: \`make gate-full\` is required as well)"
 exit "$fail"

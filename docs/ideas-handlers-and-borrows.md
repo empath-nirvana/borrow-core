@@ -1,5 +1,7 @@
 # Ideas: handlers, classified by what they do with the continuation
 
+*History: a brainstorm of 2026-09-29. The text below is kept as the record.*
+
 Brainstorm, not design. Nothing here is decided or proved. A tentative slogan, recorded
 2026-09-29.
 

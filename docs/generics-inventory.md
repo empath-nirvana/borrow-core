@@ -1,5 +1,7 @@
 # Generics: inventory (#477)
 
+*History: an inventory as of 2026-10-15; the open generics work is #489. The text below is kept as the record.*
+
 Every refusal, *Not provided* line of `SPEC.md`, pending corpus program and open issue that
 involves generic code, each with a minimal program and its root cause in the code, grouped by
 root cause. Generic functions are monomorphised templates (SPEC §15, decision 45): each fix below

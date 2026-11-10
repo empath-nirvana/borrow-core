@@ -126,7 +126,7 @@ private def unicodeToks : List (Char × Tok) :=
    ('⊏', .sym "<"), ('⊓', .sym "/\\"), ('⊔', .sym "\\/"), ('μ', .kw "mu"), ('λ', .kw "fun"),
    ('Λ', .kw "Fun")]
 
-private def advance (p : Pos) (n : Nat) : Pos := ⟨p.line, p.col + n⟩
+private def advance (p : Pos) (n : Nat) : Pos := { p with col := p.col + n }
 
 private def natOfDigits (base : Nat) (ds : List Char) : Nat :=
   ds.foldl (fun acc c => acc * base + hexVal c) 0
@@ -172,7 +172,7 @@ def lexGo : Nat → List Char → Pos → Bool → Array Token → Except Error 
       lexGo fuel rest stop false (acc.push ⟨t, ⟨pos, stop⟩, spaced⟩)
     match cs with
     | [] => .ok (acc.push ⟨.eof, ⟨pos, pos⟩, spaced⟩)
-    | '\n' :: r => lexGo fuel r ⟨pos.line + 1, 1⟩ true acc
+    | '\n' :: r => lexGo fuel r ⟨pos.line + 1, 1, pos.file⟩ true acc
     | '-' :: '-' :: r =>
       let (skipped, rest) := spanChars (· ≠ '\n') r
       lexGo fuel rest (advance pos (skipped.length + 2)) true acc
@@ -268,9 +268,10 @@ def lexGo : Nat → List Char → Pos → Bool → Array Token → Except Error 
           push (.flt (String.ofList txt)) txt.length r'''
       else .error ⟨⟨pos, advance pos 1⟩, s!"unexpected character `{c}`"⟩
 
-/-- The tokens of a source text, ending with `eof`. -/
-def lex (src : String) : Except Error (Array Token) :=
+/-- The tokens of a source text, ending with `eof`; `file` the library module it is (`""` for the
+program), which each position carries.  `[spec §42]` -/
+def lex (src : String) (file : String := "") : Except Error (Array Token) :=
   let cs := src.toList
-  lexGo (cs.length + 1) cs ⟨1, 1⟩ true #[]
+  lexGo (cs.length + 1) cs ⟨1, 1, file⟩ true #[]
 
 end Frontend

@@ -1,0 +1,18 @@
+-- expect: lib/map.bc:276:23: this borrow block's result has type `array_imm 'y u8 * i32`, which has the block's lifetime `'y`: nothing borrowed at `'y` outlives the block. When the body loops, each step borrows the place again, so the loop cannot keep what is borrowed before it (SPEC §14, borrow scopes over loops). Copy the value out of the borrow before the loop, or end the borrow inside each step; when the borrow is a handler's capability, use a counted `for`, or keep the state in the loop's variables
+-- A type error inside an included library module is reported at the module's file (#883): here
+-- `map_iter` at a `string` key, which `lib/map.bc` does not provide (SPEC §36: its iterator
+-- copies each key out, and a `string` key is not persistent), refused inside `lib/map.bc`. The
+-- position is the module's line and column, so it names `lib/map.bc`; reporting it under this
+-- file's path, as before, points at a line of this file that has nothing to do with it.
+include map
+
+main -> i32 =
+  let mut m = map_new[string, i32](4);
+  let o = map_insert(&mut m, string_of_lit("a"), 1);
+  borrow imm m { 'x, r ->
+    let mut s = 0;
+    for e in map_iter(r) {
+      let (k, v) = e;
+      s = s + *v
+    };
+    s }

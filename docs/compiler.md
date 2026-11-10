@@ -178,7 +178,7 @@ substitute. "From the typed term" is what compiling from it gives. All by inspec
 
 | # | fact | proved at | lost at | rebuilt by | from the typed term |
 |---|---|---|---|---|---|
-| B1 | a value is an `imm` or `mut` borrow, at a lifetime | `withbor1`/`2`/`3`, `withload`, `withswap`, slices (`Consts.lean:253–282`, `:146–203`, `:332–430`); `immSub`/`mutSub` | erasure: a borrow is a location word | never consulted. The falsifier cannot tell `withbor1` from `withbor2` (`Backend/Falsify.lean:36–38`). LLVM gets `inttoptr` at every access and no attribute (`Native/Lower.lean:98–101`; no `noalias`, `readonly`, `nonnull`, `dereferenceable` anywhere) | `noalias`/`readonly`/`dereferenceable`/`nonnull` (#531); typed pointers with `getelementptr` (#537 fix 5); lend kinds in the falsifier |
+| B1 | a value is an `imm` or `mut` borrow, at a lifetime | `withbor1`/`2`/`3`, `withload`, `withswap`, slices (`Consts.lean:253–282`, `:146–203`, `:332–430`); `immSub`/`mutSub` | erasure: a borrow is a location word | never consulted. The falsifier cannot tell `withbor1` from `withbor2` (`Reference/Falsify.lean:35–37`). LLVM gets `inttoptr` at every access and no attribute (`Native/Lower.lean:98–101`; no `noalias`, `readonly`, `nonnull`, `dereferenceable` anywhere) | `noalias`/`readonly`/`dereferenceable`/`nonnull` (#531); typed pointers with `getelementptr` (#537 fix 5); lend kinds in the falsifier |
 | B2 | an array is only read | the `imm` family's type | erasure | `litView?` guesses `imm` from the callback's `λx.(x, x)` shape (`Convert.lean:401–417`), then a run-time test on tag and length (`Flat/Lower.lean:574–595`) | the type |
 | B3 | a lend's lifetime ends inside its block, and no resumption point crosses it | `withbor*U`: a fresh `x` (`hx : Δ.find? x = none`) and the callback at an unwind-only row (`Row.Unwind`, T1) | erasure | `markScoped`, a syntactic match of `let (c, r) = withbor (alloc v) cb; b` with one `free` (`Convert.lean:528–563`); `crossedScopes`, an interval walk over `pollAt` (`Capture.lean:1042–1061`); `frameScopes` (`Flat/Lower.lean:1577–1580`). SPEC §35 says of the crossing case: "No program has one: the typing refuses a resuming operation across a borrow block's body" | a frame slot by the rule. The exception is R1 (`lendR`, a pin), which keeps the cell in the state (SPEC §29) |
 | B4 | which slots each subterm consumes | the masks `u`, `w` of `Fam` (`Fam.lean:49–54`); `Ctx.SplitP` | erasure | `plan2` copies every index free in both parts (`Convert.lean:199–210`); consumes at unused binders (`:680–682`, `:695–697`, `:802`, `:835`, `:850`); more copies and consumes in `Capture` and `Unwind` (`Capture.lean:199–214`, `:998`; `Unwind.lean:217`, `:226`, `:244–249`, `:294`) | a move where the slot is linear, a copy only of a persistent slot used on both sides, and its cost from its type |
@@ -502,7 +502,7 @@ stop.
 | `Target/Flat/Interp.lean` | **replaced** by the LIR interpreter, keeping its checks (unwritten reads, live frames) | — |
 | `Target/Wasm/*` | **kept**, from LIR; local reuse added | — |
 | `Target/Native/*` | **rewritten** at typed pointers, attributes, `alloca` slots | §3.4 |
-| `Backend/Falsify.lean` | **kept**, with lend kinds from the typed term (B1) | — |
+| `Reference/Falsify.lean` | **kept**, with lend kinds from the typed term (B1) | — |
 | `Backend/Counts.lean` | **kept**; `--sites` reads LIR and adds the postcondition count | — |
 
 ## 4. Rewrite or replace in stages
@@ -554,8 +554,7 @@ erases what the old stage cannot hold. The order runs front to back: types into 
   The list may only grow, and every frontend change must keep it. A feature that lands in the
   frontend while the new backend is in progress either passes there, or is added to the new
   backend's list of known failures with its unit named. The list must be empty at the switch.
-- `bcc compile --backend old|new` (spelling provisional) selects the backend. The gate runs both
-  until the switch.
+- `--backend old|new` selects the backend (§5.5). The gate runs both until N7.
 
 ## 5. The test before building
 
@@ -637,6 +636,22 @@ N2 and N3. (a) and (d) are unchanged.
    after N1. Re-examine R against S at that point.
 6. **Performance**: at the switch, a #537 row is slower than the old backend's by more than 10%,
    or a count of `counts.expected` rises.
+
+### 5.5 Selecting the backend
+
+Backend2 is the default backend (N6, #859). `bcc compile`, `bcc run` (`--native` too), `bcc interp
+--stage`, `bcc-counts`, `scripts/book-doctest.sh`, `scripts/compile-scaling.sh`,
+`scripts/compile-native.sh` and `bench/bench.py` use it. `--backend old` selects the old backend
+until N7 retires it: right after `bcc compile`, `bcc run` and `bcc interp`, first for `bcc-counts`,
+and as an option of each script. `bcc interp`'s stages are `source` on either backend; Backend2's
+`lir` and `flat` (`lflat` is the same stage); with `--backend old`, the old backend's `clos` and
+`flat`. The kernel programs (`bcc kernel`, `bcc-counts --kernel`, `scripts/compile-kernel.sh`)
+stay on the old backend until N7.
+
+The gate checks every corpus program on both: `corpus (Backend2)` (`scripts/compile-backend2.sh`,
+by the default spellings, its counts against `corpus/counts-backend2.expected`) and `corpus (old
+backend)` (`scripts/compile-corpus.sh`, by `--backend old`, its counts against
+`corpus/counts.expected`), each with its `final` run in `make gate`.
 
 ## 6. Build plan
 

@@ -8,20 +8,25 @@ text and run under `wasmtime`; a native target through LLVM is #529. The input i
 unconditional`, `checkProgram_sound`). The closure IR recovers layout types
 from it (`Clos/Types.lean`), and every stage from the flat IR on lays values out by type.
 
-    lake exe bcc compile <file> -o <out.wat>   compile to WAT
-    lake exe bcc run <file>                    compile, run under `wasmtime -W tail-call=y`
-    lake exe bcc compile --target native <file> -o <out.ll>
+Backend2 (`Backend2/`) is `bcc`'s default backend; this one is selected by `--backend old` until
+N7 retires it, and runs the kernel programs (`bcc kernel`).
+
+    lake exe bcc compile --backend old <file> -o <out.wat>   compile to WAT
+    lake exe bcc run --backend old <file>      compile, run under `wasmtime -W tail-call=y`
+    lake exe bcc compile --backend old --target native <file> -o <out.ll>
                                                compile to LLVM IR for the host (Native)
-    lake exe bcc run --native <file>           compile to LLVM IR, build with clang, run
-    lake exe bcc interp [--stage S] <file>     interpret stage S: source (default), clos, flat
+    lake exe bcc run --backend old --native <file>
+                                               compile to LLVM IR, build with clang, run
+    lake exe bcc interp --backend old [--stage S] <file>
+                                               interpret stage S: source (default), clos, flat
     lake exe bcc trusted <file>                the program's externs: contracts, host code, levels
-    lake exe bcc-counts <file>                 allocations, indirect calls, deep copies, loads, stores, bounds checks of a run
+    lake exe bcc-counts --backend old <file>   allocations, indirect calls, deep copies, loads, stores, bounds checks of a run
     lake exe bcc-counts --sites <file>         the closure calls: direct, dispatched; recursive types
     scripts/compile-corpus.sh                  the corpus, compiled against the interpreter
-    scripts/compile-native.sh                  the corpus, built natively, against the flat IR
-    lake exe bcc compile --timings <file> -o <out.wat>
+    scripts/compile-native.sh --backend old    the corpus, built natively, against the flat IR
+    lake exe bcc compile --backend old --timings <file> -o <out.wat>
                                                each stage's time and output size, on stderr
-    scripts/compile-scaling.sh                 compile time against program size, per stage
+    scripts/compile-scaling.sh --backend old   compile time against program size, per stage
 
 Every stage prints the same report: `main`'s value, then `live N`, the number of objects live
 after the value has been consumed (`Backend.report`, `Target/Value.lean`). Values print in
@@ -38,7 +43,7 @@ runtime's `$exit`).
 
 | stage | file | what it is | interpreter |
 |---|---|---|---|
-| source | `Pipeline/Source.lean` | `main`'s erasure | `Support`'s `step` at `wasmHost` (the reference; the canonical NaN) |
+| source | `Reference/Source.lean` | `main`'s erasure | `Support`'s `step` at `wasmHost` (the reference; the canonical NaN) |
 | closure IR | `Clos/Syntax.lean`, `Clos/Convert.lean`, `Clos/Poly.lean`, `Clos/Capture.lean`, `Clos/Unwind.lean`, `Clos/Collapse.lean` | named A-normal form, explicit environments and ownership; a let used at different rows per use; §19's handlers, operations and cancels lowered | `Clos/Interp.lean` (at `wasmHostAt .negative`) |
 | layout types | `Clos/Types.lean` | a layout type for every closure-IR variable, code and constructor; each type's layout; each closure type's union of codes | — |
 | closure flow | `Clos/Flow.lean` | a 0-CFA: the codes each call may call | — |
@@ -51,11 +56,13 @@ All passes are structural recursion (the interpreters take fuel); `Driver.lean` 
 The word IR (the flat IR's syntax, its host operations and its interpreter), the Wasm and native
 emitters with their runtimes, and the observable values every stage prints (`Target/Value.lean`)
 are in `Target/`, shared with the new backend (`Backend2/`); the checked program every stage
-starts from (`CheckedProg`, `checkedOf`), the source run and the `wasmtime` and `clang`
-invocations are in `Pipeline/` (`Pipeline/Driver.lean`, `Pipeline/Source.lean`). The paths in
-this file are relative to `Backend/` unless they start with `Target/` or `Pipeline/`.
+starts from (`CheckedProg`, `checkedOf`) and the `wasmtime` and `clang` invocations are in
+`Pipeline/` (`Pipeline/Driver.lean`); the reference run, the source stage and the falsifier, is in
+`Reference/` (`Reference/Source.lean`, `Reference/Driver.lean`), which imports no module of
+`Backend/`. The paths in this file are relative to `Backend/` unless they start with `Target/`,
+`Pipeline/` or `Reference/`.
 
-**The falsifier** (`Falsify.lean`, `FalsifyTests.lean`; docs/async-capabilities.md §6.1) is a
+**The falsifier** (`Reference/Falsify.lean`, `Reference/FalsifyTests.lean`; docs/async-capabilities.md §6.1) is a
 dynamic check at the source stage, outside the semantics: `bcc interp --alloc least` runs the
 erasure under the least-free allocator (a freed location is reused at once), `--check fresh` under
 a never-reuse allocator that reports a use after free, and `--check tags` also tags every lend

@@ -1,6 +1,6 @@
 # The BoLo machinery
 
-The full table is [`docs/effects-state/06-bolo-machinery.md`](../../../../docs/effects-state/06-bolo-machinery.md).
+The full table is [`docs/archive/effects-state/06-bolo-machinery.md`](../../../../docs/archive/effects-state/06-bolo-machinery.md).
 
 - **The resource algebra:** `Life = ℕᵒᵈ` and ⦇ρ⦈.
 - **↭:** 6.48 (framing) and 6.49 (transitivity).

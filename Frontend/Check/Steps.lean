@@ -865,8 +865,9 @@ def thunkvLam : String :=
   "eta-expand it"
 
 def notBang (E : Env) (T : List CVTy) (sp : Span) : Option Nat → Error
-  | some i => ⟨sp, s!"`!thunk` promotes only over `!` types, but {E.slotName i}, of type " ++
-      s!"`{E.slotTy T i}`, is used inside"⟩
+  | some i => ⟨sp, s!"`!thunk` promotes only over flat types (scalars and tuples of them), but " ++
+      s!"{E.slotName i}, of type `{E.slotTy T i}`, which is not flat, is used inside: capture it " ++
+      "in an ordinary closure"⟩
   | none => ⟨sp, thunkvLam⟩
 
 section

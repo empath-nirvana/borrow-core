@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.59 · 2026-11-09
+Version 1.66 · 2026-11-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -169,7 +169,8 @@ data is materialized, and gives codata (`&`, and the formers of §7) a home.
 
 `CDerives Δ Γ e j`, with `j` either `val A` or `comp C`, over BoLo expressions in A-normal form:
 the CBPV formers (`thunk`, `force`, `return`, `to`, `λ`, application, `⟨·,·⟩`, projections),
-the lifetime `∀` (elimination at every `C`), the `!` rules of §2, `[]I` at every value type,
+the lifetime `∀` (elimination at every `C`), the `!` rules of §2 (promotion over a flat
+context, §10), `[]I` at every value type,
 `⊑Imm`/`⊑Mut`, one constant per borrow axiom of `[TR]` p. 3 at arbitrary value-type payloads,
 three call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), and conversion up to the names of
 lifetime binders (`[α]`, *Lifetime binders and `[α]`* below). No new machine rules.
@@ -378,7 +379,7 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
 
   `scripts/check-type-eq.sh` (a gate step) reads the elaborated declarations of every compiled
   module (`bcc`'s import closure outside `Core`, `Support` and `Paper`: `Frontend`, `Target`,
-  `Pipeline`, `Backend`, `Backend2`) and refuses any other equality of `VTy`, `CTy`, `OpSig` or a row decided at run
+  `Pipeline`, `Reference`, `Backend`, `Backend2`) and refuses any other equality of `VTy`, `CTy`, `OpSig` or a row decided at run
   time, directly or through a kernel declaration that decides one (`scripts/TypeEq.lean`).
 
   Surface types name their binders, so α does arise there. The elaborator compares them up to the
@@ -1023,12 +1024,63 @@ more programs: `checkProgram_sound` and every theorem are unchanged. Which varia
 copies is read off its node's masks (§3): the slots both parts use, which the derivation gives to
 both.
 
+### Promotion over a flat context
+
+A value type is **flat** when it is persistent and holds no recursive data (`VTy.flat`): `I32`,
+`I64`, `U8`, the floats (`.int _`, §8), `1`, `0`, `!A`, and `⊗`, `⊕` and `[@a]` over flat types.
+`μ` is not flat. `flat A ⇒ persistent A` (`VTy.persistent_of_flat`). A context is flat when every live slot's type is:
+
+    Flat(Γ)  ≜  ∀ s ∈ Γ. s.live ⇒ s.ty flat        (Ctx.FlatLive, Core/Persistent.lean)
+
+`!Γ` (`Ctx.Banged`, every live slot at a type `!A`) implies it (`Ctx.Banged.flatLive`), since `!A`
+is flat. The premise of Core's two promotion rules, which §3 takes from §2's `!I-λ` and `!I-Λ`, is
+`Flat(Γ)`:
+
+    Flat(Γ)    Δ; _ : 1 (dead), Γ ⊢ M : F A
+    ───────────────────────────────────────  !thunk     (bangThunkF)
+    Δ; Γ ⊢ λ_. M : !U (F A)
+
+    Flat(Γ)    C ≠ F _    Δ; Γ ⊢ λN : C
+    ───────────────────────────────────  !thunkv    (bangThunkV)
+    Δ; Γ ⊢ λN : !U C
+
+So a `!` closure may capture a live variable of any flat type: the scalars, `1 + 1`, `1`, `0`,
+`!A`, and `⊗`, `⊕` and `[@a]` over flat types. `U C`, `Ref`, `Imm`, `Mut` and the opaque host types
+(§11) are not persistent, and `μ` data (a list) is not flat, so a closure capturing one is not
+promoted. It is an ordinary closure `U C`, moved with no copy at capture. Rust splits implicit
+duplication (`Copy`, flat captures only) from explicit (`Clone`); the explicit half for closures is
+*Open* (#928).
+
+- **Soundness.** The compatibility lemmas (`bangThunkF_compatC`, `bangThunkV_compatC`, and the
+  chain's `bangThunkF_compatN`, `bangThunkV_compatN`) need only that the context relation holds at
+  `∅`. `gSepC_persistent` (the chain's `gN_persistent`) gives it from `Flat(Γ)` through
+  `flat ⇒ persistent`, slot by slot, by `vCE_empty_of_persistent` (`vN_empty_of_persistent`).
+- **Mirrors.** `CDerivesAt` (`Core/Tied.lean`) and the generated `CDerivesP`, `TDerivesAt` and
+  `TDerivesP` (`scripts/gen-pin.py`) take the same premise. The checker's promotion test
+  (`Frontend/Check/Rules.lean`) asks `VTy.flat` of each live slot. The inversion of a λ read at a
+  `!` thunk (`LamCls`, `lam_bang`) gives a flat context, and AT06's rejection reads that the
+  captured cell's type, a view of `Ref`, is not flat.
+- **Where `!Γ` stays.** `[let]` and `[then]` at a row with an unrestricted operation (§19), and
+  `Count`, `Inversions` (`banged_slot`), `Weaken` and `Embedding`, keep `!Γ`.
+- **Backend.** A captured flat value is copied into a `!` closure's environment as a `!` value is,
+  as a scalar or a flat tuple: Backend2 copies the environments of `!` closures, and
+  `LTy.persistent` agrees with `VTy.persistent` (`ofV_persistent`).
+
+Baselines: every existing derivation still holds, since `!Γ ⇒ Flat(Γ)` and the rules only widen;
+program derivations in `Core/` pass `(…).flatLive` or a proof generic in the predicate. The
+fundamental property (`fundamentalC`, the pinned and the chain versions) and adequacy are
+unchanged in statement. Every rejection theorem (AT06 among them) holds, restated over the wider
+inversion. Every corpus program and golden is unchanged. No `CDerives` index or rule is added, and
+the judgment freeze is unchanged.
+
 ### Open
 
-- The promotion premise `!Γ` (every live slot at `!A`) is not widened to "every live slot
-  persistent".
 - A persistent closure (`!(A ⇒ B)`) that captures recursive data is copied deep too; its type
   does not say what it captures, so that copy is not checked (`bcc-counts` counts it).
+- **Explicit duplication of a closure whose captures are clonable** (Rust's `Clone` for closures).
+  A closure that is not `!` and captures `μ` data is moved, and cannot be duplicated: `clone`
+  refuses a linear value. Duplicating it needs a kernel copy rule, likely on §68's
+  `Code⟨N; E⟩ C`, which records the environment (#928).
 
 ---
 
@@ -1562,8 +1614,8 @@ twice here, and its type `…` is linear").
   the parts are checked, so each is checked once (`Frontend/Check/DerivedCopy.lean`).
 - **Not here.** A merge (`case` arms, `<M, N>`, `[then]`'s continuation and finaliser) uses a
   variable once per side. A handler's clauses use only unrestricted slots (`[handle]`'s `Γ₁`),
-  `!thunk` only `!` slots, and a relaxed lend's body only its view: an `imm` there is refused with
-  those rules' messages. Inside a thunk, a clause's body, a loop's or a fold's generated function
+  `!thunk` only flat slots (§10), and a relaxed lend's body only its view: an `imm` there is
+  refused with those rules' messages. Inside a thunk, a clause's body, a loop's or a fold's generated function
   or a `def`, the rule applies at the splits there.
 - **The kernel rule.** `copyIt` builds the term from `rVar`, the constant's node, `rLolliE`,
   `rRet`, `rTensorE` and `rBind`; its erasure has `copyE`'s shape with the kernel's `copyC A`
@@ -1957,7 +2009,7 @@ A `while` or a `loop` is a loop of any div body.
 A borrow block's body is the callback of `withbor`, one computation that returns before the block
 ends; a loop is codata, observed one step at a time. So no borrow stays open while a loop runs:
 `↭` brackets every borrow cell inside one run (`experiments/LoopBorrow`), and a lend that spans
-observations is refused (decision 71, void by decision 72; the checker's rule until §62's PRs land). The
+observations is refused (T1, §19: the checker's rule until surface A1, #843, for §62's shapes). The
 design is to **lend again at each observation**, with no new rule: the owner lives in the loop's state, and each step borrows it by an
 ordinary `withbor` inside that step, so the state between steps holds the owner, never a borrow.
 
@@ -2004,7 +2056,7 @@ function with more than one borrow at its lifetime; a name the block binds again
 after it (the rewrite puts the block's bindings in the enclosing body).
 
 **Not covered** (each would hold a borrow across a loop's tick, which T1 rules out
-(decision 71, void by decision 72; the checker's rule until §62's PRs land), or needs a construct not built): a pipeline whose source holds the borrow, `for x in map(filter(iter(xs), p), f)` inside `borrow imm v { xs -> … }`. The
+(T1, §19: the checker's rule until surface A1, #843, for §62's shapes), or needs a construct not built): a pipeline whose source holds the borrow, `for x in map(filter(iter(xs), p), f)` inside `borrow imm v { xs -> … }`. The
 source could be rewritten to hold the owner, but the owner would come back only through the
 pipeline's finishing value and residual: each adapter would pass them on, the `for` would bind
 the finishing value, and the residual would have to hand back an owner that is consumable. A
@@ -2017,8 +2069,7 @@ Programs: `corpus/axes/borrow-across-loop.bc`, `corpus/lend-mut.bc`, `lend-confi
 `lend-server.bc`, `lend-div.bc`, and the library's `lend-lib-loop.bc`, `lend-lib-gen.bc`,
 `lend-lib-each.bc`; pairs `corpus/sugar/lend-block.bc`, `lend-let.bc`, `lend-div.bc`; rejects
 `corpus/reject/lend-*.bc`. Every elaborated program is checked core, so `fundamentalC` and
-`adequacyC` cover it. The per-observation lend is kept (decision 71, void by decision 72; it stays until §62's PRs
-land): its output is core the kernel checks. Each refusal above names its fix: iterate
+`adequacyC` cover it. The per-observation lend is kept until surface A1 (#843, §19): its output is core the kernel checks. Each refusal above names its fix: iterate
 by index or with a counted `for`, copy the value out, or end the borrow before the loop.
 
 ### The totality theorem
@@ -2290,7 +2341,7 @@ allocates nothing and dispatches no call (`corpus/gen-pipeline-adapters.bc`: 0, 
 
 A generator may not hold a borrow of its own local across a `yield` (Rust's generators forbid
 it, and its `async` needs `Pin` for it). A borrow block's body may perform only abortive
-operations (§19: a non-abortive operation crossing a borrow is T1 (decision 71, void by decision 72; the checker's rule until §62's PRs land)), so a `yield` inside a borrow block is rejected (`corpus/reject/gen-self-borrow.bc`).
+operations (§19: a non-abortive operation crossing a borrow is T1, the checker's rule until surface A1, #843, for §62's shapes), so a `yield` inside a borrow block is rejected (`corpus/reject/gen-self-borrow.bc`).
 A generator owns its data, or iterates by index, and borrows within one step. A stored generator that holds a
 borrow of outside data cannot leave that borrow's scope, by the outlives rule of the boxed result
 (`corpus/reject/gen-escape.bc`). What is allowed is to own the cell in the generator's state and
@@ -2611,7 +2662,7 @@ count, which a handler wraps (§30, *Counted loops at a resuming row*, proposed)
 | a view `array_mut @a A` | the rest of the view, split at `1` each turn |
 | an owned array `array A`, `A` persistent | the index, the element copied out under a borrow of one turn |
 | a sized iterator | its data and state, one step each turn |
-| `&a`, `&mut a` | rejected: the lend spans the loop, and an operation that resumes cannot cross a borrow (T1; decision 71, void by decision 72; the checker's rule until §62's PRs land); iterate by index, or copy the elements out |
+| `&a`, `&mut a` | rejected: the lend spans the loop, and an operation that resumes cannot cross a borrow (T1, the checker's rule until surface A1, #843, for §62's shapes); iterate by index, or copy the elements out |
 
 The loop has no value there (`break e`, `else`). `corpus/for-data-div.bc` runs each source that
 a program can reach; `corpus/reject/for-lend-resumes.bc` is the lend. A `mut` view reaches such a
@@ -2645,7 +2696,7 @@ the backend's layout inference no type of their own.
 
 - `for` over `μ` data (lists): an owned list's rest is a cursor but its drain to the end has no
   count. A borrowed list in order is copied out first (`corpus/print-borrowed-list.bc`): an
-  iterator holding the borrow across its steps is refused by T1 (decision 71, void by decision 72; the checker's rule until §62's PRs land).
+  iterator holding the borrow across its steps is refused by T1 (the checker's rule until surface A1, #843, for §62's shapes).
 - A `for` over data whose body performs a resuming operation (a `yield`) or loops (a drain, a div
   call, or a `for` over a generator that loops) is rejected: the step of `count_try` is total
   (`corpus/reject/for-data-gen-loop.bc`). A generator over a view pulls it with
@@ -2956,8 +3007,9 @@ raises, K4 below); a lend `&mut x` in the arguments of an operation, of a block'
 a recursive group's own call (§20); an operation of an answering effect inside a clause of an answering handler;
 a function with a row whose written result is a computation (a loop); type parameters on an
 answering effect; an effect with both kinds of operation; an unrestricted operation that answers
-`never` (`multi ctl`, above); a `let mut` declared outside a control `with` and assigned in it, or
-a place lent in it. Several instances of one effect are §38's, with what it does not provide.
+`never` (`multi ctl`, above); a move out of a variable lent for a control handler's body, and a
+capability passed on in a control handler's body (§41 *A control `with` lends what its body
+writes*). Several instances of one effect are §38's, with what it does not provide.
 
 ### Reports
 
@@ -3056,8 +3108,6 @@ program's derivation gives it (`checkProgram_letPoly`).
 - **K4: an early exit from a kernel fold.** A `raise` in the algebra of `fold_own`/`fold_imm` needs
   the fold to stop (`corpus/pending/raise-in-fold.bc`).
 - An error that holds an owned value: §19's `[raise]` asks its argument to consume.
-- A control `with` that hands back the `let mut` variables its body assigns or the places it
-  lends.
 - A capability threaded through a `for` over `&a` of an owned array: the lend around the loop
   takes `top` as its bound, so the loop's state cannot hold a borrow (`corpus/effects-map.bc`
   passes a view instead).
@@ -3180,9 +3230,13 @@ of three continuation types:
   in Core, `forget κ` has no derivation at `1` (`not_release_kappa`, *Laws* item 4).
   A must-resume `κ` has no `cancel`, for must-complete computations.
 
-*Decision 71 is void (decision 72). T1 below is the checker's rule today, until §62's PRs land.*
+*T1 below is the checker's rule until surface A1 (#843), which emits §62's suspending constants
+and lifts T1 for their shapes, for programs without host externs (the kernel's host-externs unit is
+pending), under `HandlerLawN`. A callback's own borrow held across a suspension, and a borrow
+handed between paused computations, stay refused after A1 (#844 Tier 2, with #821's loan-out stop
+clause).*
 
-**T1: owned across suspensions, borrowed within** (decision 71). No lend
+**T1: owned across suspensions, borrowed within.** No lend
 stays open across a suspension whose handler is outside the lend: a resuming operation, `await`,
 `yield`, or a loop's tick (`Div` is a handled effect, §14, so each step of a loop that is not
 counted resumes). Data that crosses such a suspension is owned, moved into the suspended code and
@@ -3653,7 +3707,7 @@ Richer policies are K3 (#162), and *Open*:
      compatibility is `[unwind]`'s, and `cfin`'s is `[finalise]`'s, with the finaliser at the pure
      row (`then_cancel`, `cfin_run`). So cancelling a stored continuation needs nothing beyond what
      storing it needed. A continuation stored while it captures borrows is what T1 rules out
-     (decision 71, void by decision 72; the checker's rule until §62's PRs land). Non-abortive control operations cannot cross a borrow, so no stored `κ`
+     (T1, §19: the checker's rule until surface A1, #843, for §62's shapes). Non-abortive control operations cannot cross a borrow, so no stored `κ`
      captures a lend, and `cancel` needs only the unwinding forms of the borrows *inside* `κ`.
    - **`ubind`**: `then_compatC`, from `ewp_ubind`. The finaliser's context is framed off while
      `M` runs, and consumed by `D` at an unwind.
@@ -4189,9 +4243,8 @@ own: its handler answers one of two closures. The lowering adds neither.
   scope (T2, #173).
 - A tail-resumptive clause that captures values, compiled as a direct call with its captures
   passed to the operation as evidence (*Lowering*); it is a state machine now.
-- A non-abortive control operation crossing a borrow's scope (T1, #172): closed by decision 71,
-  which decision 72 voids. T1 is the checker's rule until §62's PRs land (*Which operations
-  cross a borrow's scope*); §62 is the design that lifts it.
+- A non-abortive control operation crossing a borrow's scope (T1, #172). T1 is the checker's rule until surface A1 (#843), for §62's shapes (*Which operations
+  cross a borrow's scope*, and this section's head).
 - Finaliser policies beyond "a new unwind supersedes" and "a cancel keeps the first error"
   (K3, #162): richer reporting of finaliser errors that lose to the first.
 - The typing of finalisers that raise to live handlers and perform operations (decisions D2, D3
@@ -5174,9 +5227,9 @@ Decision E (2026-10-08). Tier 1's expressiveness properties state their schemas 
 callback body: a closed computation `M` at `F_Σ B` is passed
 as the callback `λ_. M`, which the higher-order function calls at `()`. As built, Core types
 `λx. M` at `1 ⊸ F_Σ B` only by `[λ]`, with `x`'s slot live. `M` does not use `x`, so a leaf of
-`M`'s derivation must consume the slot, and the rules with a `!Γ` premise (`!`-promotion of a thunk;
-`[let]` and `[then]` at a row with an unrestricted operation) take a context whose live slots are
-all `!`: a live slot of `1` is not one. `thunk M : U (F A)` takes `M` under a dead binder, at the
+`M`'s derivation must consume the slot, and the rules with a `!Γ` premise (`[let]` and `[then]` at
+a row with an unrestricted operation) take a context whose live slots are all `!`: a live slot of
+`1` is not one. `thunk M : U (F A)` takes `M` under a dead binder, at the
 pure returner only.
 
 ### Typing
@@ -5211,9 +5264,11 @@ statements, over the extended judgment. `CDerives` gains `lamDead`. The callback
 and no borrow lemma changes. The checker emits the rule for `fun (x : 1) -> M` at `1 -o F_Σ B`
 whose body does not use `x`: the body is checked under the binder's slot as before, and the slot is
 closed dead (`lamIt`, `rLamDead`, `TiedDer.lamDead`, `Frontend/Check/`); otherwise `[λ]`. The term
-is the λ either way, so every program erases as before. A callback whose answer is a `!` promotion
-is accepted where it was rejected: under `[λ]` the binder is live, and the promotion's `!Γ` premise
-does not take a live slot of `1` (`corpus/core-callback-dead.bc`, counts `0 0 0`).
+is the λ either way, so every program erases as before. The promotion (§10) takes a live slot of
+`1`, since `1` is flat; `[let]` and `[then]` at a row with an unrestricted operation (§19)
+keep `!Γ` and do not, so `[λ]` with a dead binder is what binds a unit argument in a body that
+contains them. The checker gives every unused `1` binder the dead form
+(`corpus/core-callback-dead.bc`, counts `0 0 0`).
 
 ### Open
 
@@ -5571,12 +5626,13 @@ The chain interpretation of §62 has a second named hypothesis of the same form,
 `[handle]` and `reify`, from which `FundamentalN` and plain adequacy `Goal791N` are proved (§62,
 *The named assertion*).
 
-*Decision 71 is void (decision 72); R1 and `PinLaw` stay as stated here until §62's PRs land.*
+*R1 and `PinLaw` stay as stated here until surface A1 (#843, §19).*
 
-**Frozen for now (decision 71, the user's "Freeze r1 for now").** R1, with §29a's cancel-path
+**R1 as on main** (the checker's rule; decision 71's freeze is void by decision 72, and §62
+replaces it as design). R1, with §29a's cancel-path
 widening, stays exactly as this entry states it, and `PinLaw` (`Core/PinLaw.lean`: `lendFrame`, `loopFrame`) gets no new field, case or premise.
-R2 is in the judgment and is not emitted, and that is frozen too. T1 is §19's rule until §62's
-PRs land.
+R2 is in the judgment and is not emitted, and that is frozen too. T1 is §19's rule until surface
+A1 (#843), for §62's shapes.
 
 ### Typing
 
@@ -5608,7 +5664,7 @@ PRs land.
 - R2 (`lendLoopR`, the `imm` lend over a loop whose state holds the borrow,
   `docs/async-capabilities.md` §3.3) is in the judgment as well, an instance of `LoopFrame`;
   `PinLaw.loop` derives its compatibility lemma. The checker does not emit it, and that is frozen
-  (decision 71, void by decision 72; the checker's rule until §62's PRs land).
+  (T1, §19: the checker's rule until surface A1, #843, for §62's shapes).
 
 **The extended judgment.** `CDerivesP` (`Core/PinDerives.lean`) is `CDerives` with every premise
 in `CDerivesP`, plus `lendR`, `lendLoopR` and `nilDead`. It is generated from
@@ -5663,7 +5719,7 @@ operation and an abortive one, the abortive one's handler outside the block, is 
 rejected as before (§15 *Self-reference*; OQ-2). R1 is chosen only where no ordinary rule
 applies: a block whose body performs only abortive operations is §19's unwinding borrow, and a
 borrow block over a loop is §14's per-observation lend. Segmenting a block at a suspension when
-only the borrow crosses it (L0, U3) is refused (decision 71, void by decision 72; the checker's rule until §62's PRs land): the program ends the borrow
+only the borrow crosses it (L0, U3) is refused (T1, §19: the checker's rule until surface A1, #843, for §62's shapes): the program ends the borrow
 before the `await` itself. Each refusal names that fix, or moving the value in and out.
 
 The checker types `withbor2r` by `[lend-R]` at the slot of `p`: it checks `M` at `Δ, 'x ⊏ @b` and the
@@ -5742,9 +5798,9 @@ another), `async-r1-generator.bc` and `async-r1-drain.bc` (§15's self-referenti
 - A derivation that uses a relaxed rule is not claimed tied (decision R): a tied `CDerivesP` is not
   built.
 - What `LendFrame` ranges over (above): kind R of `docs/unsafe.md`.
-- *Closed by decision 71, which decision 72 voids (§62 is the new design):* L0 (U3), R2 at the
-  checker (U6), shrinking `PinLaw` (U8), and `docs/async-capabilities.md` OQ-1 to OQ-5 as routes
-  to wider relaxed lends. BOXED-κ (U1,
+- *Not built; §62 is the design that replaces them:* L0 (U3), R2 at the
+  checker (U6), shrinking `PinLaw` (U8; its live analogue is #838, shrinking `HandlerLawN`), and
+  `docs/async-capabilities.md` OQ-1 to OQ-5 as routes to wider relaxed lends. BOXED-κ (U1,
   §28) and `lib/async.bc` (U2, §30) are built.
 
 ---
@@ -5833,7 +5889,7 @@ state; its `await` clause reads it.
 
 The surface `await` and `complete`, `lib/async.bc`'s `cancelled` clause and a suspending scheduler's
 typing, `run_in`, the checker emitting `effAwait` or `effThenDiv`, the nursery over owned or copied request data
-(over borrowed data it needed #743, closed by decision 71, which decision 72 voids; §62), cancel scopes inside a task, and the lowering of a
+(over borrowed data it stays refused after A1: #821 / #844 Tier 2), cancel scopes inside a task, and the lowering of a
 suspending finaliser.
 
 ### Open
@@ -6025,7 +6081,7 @@ fails at its block).
   them apart.
 - **Tasks that hold a borrow across `await`** under `lib/async.bc`'s scheduler: a task of `spawn`
   holding a relaxed lend, `cancel` of one (A6) and a scheduler that logs (A5) are §32's; L0 (U3)
-  is refused (decision 71, void by decision 72; the checker's rule until §62's PRs land): a task ends its borrow before each `await`, or is lent
+  is refused (T1, §19: the checker's rule until surface A1, #843, for §62's shapes): a task ends its borrow before each `await`, or is lent
   the place from outside its scheduler (`spawn_in`, §32).
 
 ## 31. Entry 30 — generic recursion, blocks to generic callees, and the inference gaps
@@ -6282,7 +6338,7 @@ existing corpus and kernel program keeps its output and counts; the reports of
 - **`div` callbacks in data and in a fold's algebra** (`corpus/pending/callbacks-in-data.bc`,
   `map-div-fold.bc`): a fold whose algebra is div (the children's loops sequenced, then the
   algebra run as a div body), and a data type at the join of its elements' effects; unchanged.
-- *Closed by decision 71, which decision 72 voids (§62 is the new design):* **an `imm` relaxed
+- *Not built; §62 is the design that replaces them:* **an `imm` relaxed
   lend** (OQ-2), a fold whose algebra
   suspends under its borrow. `corpus/async-borrow.bc` is that program rewritten: the list is an
   array lent from outside the scheduler to tasks of `spawn_in`, read by index.
@@ -6512,7 +6568,7 @@ and runs as before, with the same output, counts and reports, except `retry-bloc
   - *its tunneled row*: none (a stored callback performs only what its type provides, and its
     creator's handlers are out of reach once it is stored, which R3's site freshness asks), or
     fixed at the binding and checked at each call to be in scope there;
-  - *its captures*: `!` values only (§2's promotion, #9 to widen), or a box at a lifetime
+  - *its captures*: flat values only (§10's promotion), or a box at a lifetime
     (`[@c] !U(…)`, §28), with the answering capabilities passed in by each caller (R6);
   - *the join of rows* across the elements of one data value: written, or the union inferred.
   Each is a decision about what a stored value means, not an elaboration detail: §32 *Open*
@@ -6894,7 +6950,7 @@ is the one it was, and every program's output. Only the backend changes, below t
   its own (§19 *Lowering*); a slot open at the point would be held in the state past its frame.
   Such a scope keeps a heap cell (`Clos.Prog.suspendedScopes`). No program has one: the typing
   refuses a resuming operation across a borrow block's body (a continuation held across a lend is
-  T1, by decision 71, void by decision 72; the checker's rule until §62's PRs land), and a lend in the arguments of a function that threads
+  T1, the checker's rule until surface A1, #843, for §62's shapes), and a lend in the arguments of a function that threads
   a capability. A scope between
   two suspensions is framed in each code that runs it: `corpus/async-lend-slots.bc`.
 - **Capability cells are heap cells.** `stdin`, `stdout`, `stderr`, `args` and `clock` (§11,
@@ -7871,7 +7927,7 @@ form, each for a limit that applies to any abortive operation (#517), checked ag
   `aoc/2023-03` and `aoc/2022-21`, kept here for a borrow of a buffer that an abort would cross,
   use `/` and `%` since that borrow is provided (§18), with their output and counts unchanged;
 - `leetcode/matrix/0054`, `0073`, `0079`: the division is inside `cases`, a loop over the input
-  with no bound, and a handler around a div computation is not provided (§20); the refusal is
+  with no bound, and the surface provides no handler around a div computation (§21 *Open*); the refusal is
   reported as a type mismatch against the loop's type, as it is for a `raise` there (#522);
 - `float-roundtrip`: `div_u64` of a float's bits, which `/` (signed) would change;
 - `int-arith`, `int-ops` and the core forms of `corpus/sugar/`: the host operations' own tests.
@@ -8116,8 +8172,8 @@ a callback, a block, a loop's turn), passes that part's writes `W` in and back o
   rebinding `x` as the lend does; a cell is `modify`'d through `withswap`.
 - **Refused,** each by a message that names the rule: a closure that writes and is not given at a
   block parameter of a call, stored or returned (`Effects.escapingWriter`); a `run` that writes
-  inside an expression (`checkRun`); a control handler's body that writes (it may be abandoned,
-  §18 *Not provided*); a `for`'s `else` value that writes. Koka's precedent is the escape
+  inside an expression (`checkRun`); a `for`'s `else` value that writes. A control handler's body,
+  which may be abandoned, hands nothing back: what it writes is lent around it (below). Koka's precedent is the escape
   refusal: its `var` in a closure that escapes is a type error.
 
 ### The rule table
@@ -8139,7 +8195,9 @@ what its parts write and has no boundary of its own.
 | `borrow k P { b -> S }` | `{P} ∪ W(S)` | the callback hands back `(result, W)` beside the places declared outside it that it lends; the binding rebinds `P` and `W` |
 | `modify P { v -> S }` | `{P} ∪ W(S)` | the callback hands back `(c, (r, W))`, the new content `c` and the result `r` (`()` when there is none; `Sugar.modifyBody`); of a `let mut` value, the body runs in place |
 | `with h(e) { S }`, answering | `W(S)` | as a borrow block of the state's cell (§18) |
-| `with h(…) { S }`, control | — | refused when `W(S)` is not empty |
+| `with h(…) { S }`, control | `W(S)`, and the places `S` lends | each lent around the site, `borrow mut &mut x { 'l, x -> … }`; in `S` the name is the borrow; the binding rebinds `x` (refused for a capability) |
+| `borrow k &mut x { b -> S }` | `{x} ∪ W(S)` | the lend rebinds `x`, as `modify &mut x`; `b` is a borrow of `x`'s content |
+| a read of a lent `x` | `{x}` (the borrow) | bound before the computation it is in |
 | `run M` | `W(M)` | `M` hands back `(value, W)` where it is bound; inside an expression, refused |
 | `if …`, `match …` inside an expression | `W(M)` | read as `run M` (a call argument, an operand, a pair component, the right side of `x = …`, a field initialiser): `f(if b { 1 } else { 2 })` is `f(run if b { 1 } else { 2 })`; where it is bound it hands back `(value, W)`; inside an expression, refused when `W` is not empty, the refusal naming the construct as written |
 | a closure: `{ p -> S }`, `!{ … }`, `{ S }`, `thunk`, `thunkv` and their `!` forms | `W(S)` | marked `writes(W) V` (`VSugar.writes`); at a block parameter of a call, the copy passes `W` in and out at each call; elsewhere refused |
@@ -8147,8 +8205,8 @@ what its parts write and has no boundary of its own.
 | a handler's clause | its `mut` parameters only | the state is threaded by §18 |
 | a declaration (`fn`, `main`, `def`, a `poly` case) | its own `let mut`s | no `let mut` reaches another declaration |
 
-**Places declared inside a block.** The places a borrow block or a `with` body hands back, or at a
-control `with` is refused for, are the places it lends that are declared outside it. A lent name
+**Places declared inside a block.** The places a borrow block or a `with` body hands back, or a
+control `with` lends around its site, are the places it lends that are declared outside it. A lent name
 is declared inside the block when a binder in the body declares it, at any depth of the borrow
 blocks, `with` bodies and `run`s the body runs in place, and the name is not bound where the block
 begins: a `let mut x` declared in an inner `with`'s body and lent there is the inner body's. A
@@ -8156,6 +8214,73 @@ binder of a name already bound outside (a capability rebound, `let (stdout, …)
 declaration, and that place stays the outer block's. R1 renames every other shadowing binder in a
 program's source, so a name declared inside never stands for an outer place; core text is read by
 the same rule (`bcc print` round-trips; `corpus/with-nested-lend.bc`).
+
+### A control `with` lends what its body writes
+
+A control handler's body (`with h(…) { S }`, `h` declared `handler h…: E, A -> R`) may be
+abandoned, so it hands nothing back. Each enclosing `let mut` variable `x` that `S` writes (R2),
+and each place declared outside `S` that `S` lends, is lent around the handler site, and inside
+`S` the name `x` is that borrow:
+
+    let r = with h(…) { S }     ⇒     let r = borrow mut &mut x { 'l, x -> with h(…) { S } }
+
+nested, one lend per place, the first written outermost. In `S`, `x : mut 'l A`:
+
+- `&mut x` at a call is a reborrow of the borrow (`withbor3`, or `withbor3U` where the call
+  performs abortive operations);
+- `x = e` evaluates `e` first, its reads and lends in order as below, to a value `t`; then
+  `modify x { _ -> (t, ()) }`. `e` may perform the handler's operations;
+- `modify x { … }`, `modify &mut x { … }` and `borrow mut x { … }` take the borrow itself;
+- a read of `x` is `*&mut x`, the content copied through the borrow (`withswap`). A read
+  rebinds the borrow, so it counts as a write of the borrow (R2) and every frame it is in hands
+  the borrow on;
+- every read of a lent `x` and every call that lends it is bound in the order the source
+  evaluates them, left to right, a call's arguments before the call (A-normal form for those
+  terms), so a read after a reborrow in the same expression sees the reborrow's effect:
+  `g(&mut c) * 100 + c` reads `c` after `g` has written it, as Rust does. A `while`'s condition
+  is bound at the start of each turn, `loop { if c { M } else { break } }`;
+- a move out of `x` (a read at a linear type) is refused: "a value can't be moved out of `x`
+  here: it is lent for the body of a control handler, which may be abandoned, and its type `A` is
+  linear";
+- `x <- M` of a lent `x` is refused, naming `x = …`.
+
+After the `with`, `x` holds the writes made before an abort, as in Rust: the lend ends when the
+handler site answers, whether the body finished or a clause abandoned it. The lends hand the
+places back where the `with` is bound, as `run` hands back what it writes; inside an expression
+the `with` is refused by `run`'s rule (`checkRun`), naming it. The elaborator inserts existing
+core forms, which the kernel checks: `alloc`, `withbor2` and `free` (a cell scoped to the site)
+for a `let mut` value, `withbor2` of a cell, `withbor3` of a borrow (a nested control handler's).
+
+- **Capabilities are not lent.** A body that passes on `stdin`, `stdout` or `stderr` (a cell a
+  function takes and hands back, §11) is not given a borrow, which such a function cannot take.
+  It is refused for the capability alone; its plain `let mut` variables are still lent. The
+  message names only the capabilities, one or several: "the body of `with to_result` takes `stdout`
+  and would hand it back, but a control handler's body may be abandoned: pass a capability
+  outside the handler, or perform its effect inside (SPEC §41, R3)".
+- **Which handlers.** The parser knows the control handlers in scope as it knows the `data` table
+  (`Parser.dataIn`, `tableOf`: the prelude's, the included modules' and the program's own
+  `handler … : E, A -> R` declarations). In core text (`def`, `main : C`, a printed program) a
+  control handler's body hands nothing back: the lends are written around it, so `bcc print`
+  reads back. What a control handler's body lends is not counted among what an enclosing block
+  lends (`Val.lentNames … ctl`).
+- **The general forms**, each usable on its own:
+  1. `borrow mut &mut x { 'l, b -> S }` (`borrow imm &x { … }`): the place `x` lent to the block,
+     the borrow chosen by `x`'s type as `&mut x` at a call chooses it: `x : ref A` gives
+     `withbor2` (`withbor1`) of the cell; `x : mut 'a A` the reborrow `withbor3` (`mut` only);
+     `x : A` a value a cell scoped to the block (`alloc`, the borrow, `free`, the cell's lend
+     marked `lendCell`). The lend rebinds `x` (`Comp.elab`), as `modify &mut x` does.
+  2. `&mut m` at a call, `m : mut 'a A`: the reborrow `withbor3` (`withbor3U` at an abortive row),
+     handing `m` back.
+  3. `*&mut m`, `m : mut 'a A`, `A` not linear: the content, read by `withswap` (a copy), `m`
+     rebound.
+
+  Instance inference (`Elab.Instances`) gives a lent block's binder the borrow of what `x`
+  holds, and `*&mut x` the content, so `raise(x)` in a lent body infers `Fail`'s argument as it
+  would outside.
+- **Baselines.** No change to `Core/`, `Support/` or `Backend2/`: the fundamental property,
+  adequacy and every borrow guarantee are as before, and the inserted lend is a core form the
+  kernel checks. Every corpus program keeps its output and counts. Answering `with` bodies, and
+  control bodies that write nothing outside, are elaborated as before.
 
 **`if` and `match` as expressions.** The parser inserts `run M` for an `if` or `match` where a
 value is expected; the kernel checks it as a written `run`. At a statement or a `let` head an
@@ -8185,7 +8310,16 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/mut-modify.bc` | `modify` whose body writes, on a scoped cell and on a `mut` borrow | `((i32[6], i32[7]), i32[120])` (was `((6, 0), 110)`) |
 | `corpus/mut-lend-arm.bc` | `&mut x` in an arm (R2) | `i32[12]` (was `2`, the lend's write lost) |
 | `corpus/for-in-if-lend.bc` | #502, from `corpus/pending/` | `i32[3]` |
-| `corpus/reject/mut-control-with.bc` | a control handler's body that writes | refused (§18 *Not provided*) |
+| `corpus/mut-control-with.bc` | a resuming handler's body that assigns | `i32[5]` |
+| `corpus/mut-control-raise.bc` | `let mut`s assigned in `with to_result`, raised midway; reads through the borrow | `(inr i32[11], i32[11012])` |
+| `corpus/mut-control-lend.bc` | a string buffer lent `&mut` to a bounded recursion in `on_exhausted`, its length read with `modify`, used after | `(i32[3], (i32[3], i32[4]))` |
+| `corpus/mut-control-exhausted.bc` | the same where the recursion exhausts its budget: the buffer keeps the partial state | `(i32[4294967295], i32[10002])` |
+| `corpus/mut-control-nested.bc` | nested control handlers writing one variable (a `withbor3` reborrow of the outer lend) | `(inr i32[110012], i32[110012])` |
+| `corpus/reject/mut-control-move.bc` | a move out of a lent variable | refused, naming `buf` |
+| `corpus/reject/effect-try-lend.bc` | `&mut stdout` passed on in `to_result`'s body | refused, naming `stdout` |
+| `corpus/mut-control-order.bc` | reads and reborrows in source order (`g(&mut c) * 100 + c` = 108) | `(inr i32[108], (i32[101], i32[8]))` |
+| `corpus/mut-control-assign-raise.bc` | `c = chk(c + 1)`, an effectful right side, raising midway | `(inr i32[3], i32[2])` |
+| `corpus/reject/mut-control-cap.bc` | a body assigning `c` and passing `stdout`: the refusal names `stdout` only | refused |
 | `corpus/lend-copy.bc` | copies of a borrow block's borrow over a loop: `let b2 = b`, `let mut v = v` (T04's form), a copy after a statement | `(i32[30], (i32[321], i32[6]))` (was refused) |
 | `corpus/binder-copies.bc` | a copy of a block parameter, of a clause's continuation, and a copy of a copy | `(i32[4294967291], (i32[103], i32[22]))` (was refused) |
 | `corpus/div-residual-copy.bc` | a div function's residual handed back by a copy, `let j = i`, and by `let i = i` | `i32[4]` on `abc` (was refused; `let i = i` ran before R1) |
@@ -8305,9 +8439,20 @@ whose meaning depended on two names coinciding.
 
 ### Open
 
-- **A control handler's body that writes or lends an outer place** (#885), and a `run` that
-  writes inside an expression, are refused. The first needs the handler's clauses to hand the variables back when the body is
-  abandoned; the second, the expression's calls lifted in order around it.
+- **A `run` that writes inside an expression** is refused: it needs the expression's calls lifted
+  in order around it.
+- **Loops in a control handler's body** (`while`, `loop`, `for`): the body's type is not
+  determined there ("the type of the body `h` handles is not determined here"), so the rule for a
+  `while`'s condition is not exercised by a program.
+- **A task's body** (`with spawn { … }`) that writes an outer `let mut`: lent around the site, the
+  task outlives it, and the kernel refuses (BOXED-κ at `top`: "`c`, of type `mut 'l i32`, is used
+  inside, and it cannot be shown to outlive `top`").
+- **A read of a lent variable inside a closure** in the body lends from the closure, refused as
+  any lend there; an `imm` lend `&x` of a lent variable (an `imm` reborrow of a `mut` borrow) is
+  not provided.
+- **#940: a finaliser's writes to an outer variable** are not handed back after the `with`, with
+  or without the lend around the site; §42's refusal of them stands until they are.
+- **Capabilities in a control body** (`corpus/pending/async-progress.bc`): §34 *Open*.
 - **The target pairs** that are not met (`docs/research/let-mut-state/README.md`): what separates
   each is the counted loop (§16), the state machine of a div body (§14), §32's calling convention,
   a function's parameters and effects' elaboration (§18, §19), none of it this entry's.
@@ -8656,6 +8801,11 @@ back on an abort" lends the value to a computation that handles the abort inside
 then commits or rolls back on its answer (`corpus/decl-lend.bc`), or holds it as the state of a
 handler that handles the abort and rolls back in that clause.
 
+**A `finally` clause that assigns or lends a `let mut` declared outside the handler is refused**
+(`corpus/fail/finally-assign.bc`): "a `finally` clause can't yet assign `d`, a variable declared
+outside the handler: its write would be lost (#940)". A `let mut` declared inside the clause is not
+affected.
+
 **Errors name the consumer.** A value whose type holds a marked field, unused at the end of its
 scope or live across an abort, is refused with one message that names the value and its type
 (the declaration's name), the field that carries the obligation, and the fix: "pass it to `f`
@@ -8785,8 +8935,8 @@ the one it was, and its output.
 
 ### Lowering
 
-`Backend2/`, selected by `bcc compile|run --backend new` (and `bcc interp --stage lir|lflat`,
-`bcc-counts --backend new`). The fragment is the programs whose typed term has no effect node
+`Backend2/`, the default of `bcc compile|run`, `bcc interp --stage lir|flat` and `bcc-counts`
+(`--backend old` selects the old backend until it is deleted). The fragment is the programs whose typed term has no effect node
 (`effPerform`, `effRaise`, `effHandle*`, `effThen`, `effLet` at a nonempty row, `effSub`,
 `lendR`, `lendLoopR`, `nilDead`, the `…U` borrows, `iterate`, `divFuel`, `reify`,
 `bounded_fix`): 222 corpus programs, I/O programs and codata among them. A program outside it is
@@ -11945,39 +12095,41 @@ lemmas the later units reuse, and no `VTy` former, rule or relation clause (K1�
 
 ### The rules
 
-Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP`, `CDerivesAt` and
-`TDerives*` by `scripts/gen-pin.py`. No new index and no new judgment.
+Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP` and `TDerives*`
+by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No new index and no new judgment.
 
 | Rule | Statement | Unit |
 |---|---|---|
-| `codeI` | `Γ ⊢ λM : U C`, `Γ.CapOK (λM)` and `(Γ.capTy (λM)).Cl 0` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
-| `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C` | K3 |
-| `erase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
-| `eraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
-| `force` (restated) | `Ctx.SoloP Γ i T`, `T` is `U C` or `Code⟨N; E⟩ C` ⟹ `forceE C (.var i) : C` | K3 |
+| `codeI` | `Γ ⊢ λM : U C` and `Γ.CapOK (λM)` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
+| `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C`; its premise on the context is `Flat(Γ)` (`Ctx.FlatLive`, §10), as promotion's | K3 |
+| `codeErase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
+| `codeEraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
+| `force` (restated) | `Ctx.SoloP Γ i T`, `T.forceTy = some C` (`T` is `U C` or `Code⟨N; E⟩ C`) ⟹ `forceE C (.var i) : C` | K3 |
 | `unfoldK` | `unfold : !G ⊸ !Code⟨hCode C; !G ⊗ 1⟩ (S ⊸ Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C))`, `G` either `U(S ⊸ C[S/X])` or a code type of it | K4 |
 | `nuOutK` | `x : Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)` ⟹ `force x : C[Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)/X]` | K4 |
 
-- `Γ.capTy e`: the tensor of `Γ`'s slot types at `capVars e`, in rank order, ending in `1`.
-- `Γ.CapOK e`, a decidable side condition the checker tests: every captured slot is live, and every
+- `Γ.capTy e` (`Ctx.capTy`, `Core/CodeRules.lean`): the tensor of `Γ`'s slot types at
+  `capVars e`, in rank order, ending in `1`.
+- `VTy.forceTy` (`Core/Types.lean`): `some C` at `U C` and at `Code⟨N; E⟩ C`, `none` elsewhere.
+- `Γ.CapOK e` (`Ctx.capOK Γ e = true`, a `Bool` test, `Core/CodeRules.lean`), a side condition the
+  checker tests: every captured slot is live, and every
   live slot of `Γ` that `e` does not capture is persistent. With it the uncaptured slots hold `∅`
   (`vCE_empty_of_persistent`), so the closure's resource is its captures'. It is a premise, not
   an inversion of `CDerives`.
-- `(Γ.capTy (λM)).Cl 0`, decidable and tested by the checker beside `CapOK`: no `μ` variable is free
-  in a captured slot's type. A type substitution leaves `Code⟨N; E⟩ C` as it is (§68 *Open*, K1's
-  choices), so the clause reads `E` at no environment, and a capture whose type has a free `μ`
-  variable would read `E` as empty. Where the premise fails, the closure stays at `U C`.
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
-- `erase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
+- `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
   which Backend2 reads (B4). In the machine it is the identity.
 - `eraseD` (covariant erasure inside `C`, K6) is not in this entry.
 - **The inversion's cost** (CLAUDE.md, *Do not invert `CDerives` casually*). `codeI` types the
-  term `λM` at a new type, so the λ-value inversion `LamCls` (`Core/Inversions.lean`) gains a
-  disjunct: the λ read at `Code⟨capNorm (λM); E⟩ D` and at `!Code⟨…⟩ D`. `erase` and `eraseB` add a
-  view step from a code type to `U`. The proofs restated are `LamCls`'s cases (`step`, `thunkV`,
-  `bangThunkV`, `val_*`), `lam_bang`, and `lam_bang`'s uses in `Core/Rejections.lean` and
-  `Core/EffCancelTyped.lean`. No inversion is added and no substitution over derivations.
+  term `λM` at a new type, and `codeErase`/`codeEraseB` add a view step from a code type to `U`.
+  In `Core/Inversions.lean`: `VS` gains the two erase steps, and `VView.hnf` the code heads;
+  `VarCls` is restated over `forceTy`; `LamCls` is the computation case or `ThunkCls`, the λ read
+  at `U`, `!U`, `Code` or `!Code`; `LamAx` reads at the axiom type's views and their code types.
+  `lam_bang` and its uses in `Core/Rejections.lean` and `Core/EffCancelTyped.lean` are restated.
+  `der_swap` reads at `ValClsC`; `hnf_of` and `eq_of_heads` take a no-code-head hypothesis their
+  callers discharge. No inversion is added and no substitution over derivations; every rejection
+  keeps its statement and verdict.
 
 ### Erasure policy
 
@@ -11985,12 +12137,12 @@ Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP
   is an `impl`: the parameter becomes a template parameter, instantiated at the argument's code
   type. `dyn` is written to opt in, and means `U C`.
 - **C2, silently at a lend's exit.** Where a code type captures `'x` and the rule asks `¬ VFree x B`
-  (`withbor1` and the lend rules), the elaborator inserts `erase` to `U C`, which is today's
+  (`withbor1` and the lend rules), the elaborator inserts `codeErase` to `U C`, which is today's
   typing.
 - **C3, silently at a join.** Two different codes joined (`if`/`match` arms) with no expected type
   are erased to `U C`; S1's census counts these sites.
 - Wherever the expected type is `U C` (parameters written `dyn`, data fields, arrays, `Ref`
-  contents, handler arguments and state), `convVal` inserts the `erase` node.
+  contents, handler arguments and state), `convVal` inserts the `codeErase` node.
 - **The growing-instantiation guard.** A template whose instantiation reaches itself at a type
   argument containing the previous one is instantiated at the argument's erasure, with a note
   (scope §4.4). It is load-bearing: without it nested `Code⟨…⟩` inside `E` grows without bound.
@@ -12055,7 +12207,7 @@ proofs; every corpus and kernel program its output. The later units must preserv
 K3 (the four rules and the restated `force`): `fundamentalC`, `adequacyC` and `goal791N :
 HandlerLawN → Goal791N` keep their statements and cover the new rules, the chain's through
 `FundamentalKW835N`. The judgment freeze holds: no new judgment, and the rules join `CDerives`,
-mirrored by `scripts/gen-pin.py`. Every rejection theorem keeps its verdict; one that flips is
+mirrored by `scripts/gen-pin.py` and, into `CDerivesAt`, by hand. Every rejection theorem keeps its verdict; one that flips is
 reported as an intended change.
 
 ### Open
@@ -12065,16 +12217,19 @@ reported as an intended change.
   (`vCE_code`: the clause is `codeRelC`), `vNE` (`vNE_code`: `codeRelN`) and `vOE` (`True`); every
   law of the relation at `code`, with no new hypothesis. `fundamentalC`, `adequacyC` and `goal791N`
   keep their statements.
-- **Not built until their units land:** the rules and their compatibility lemmas (K3: `codeI`,
-  `codeIB`, `erase`, `eraseB`, `force`; K4: `unfoldK`, `nuOutK`), the lend-exit lemma (K5), `eraseD`
-  (K6).
+- **Built (K3):** `codeI`, `codeIB`, `codeErase`, `codeEraseB` and the restated `force`, with their
+  compatibility lemmas at Core's relation and at the chain's, and `codeI`'s semantic step: the
+  captured tuple is in `𝒱⟦Γ.capTy (λM)⟧` at the whole resource.
+- **Not built until their units land:** `unfoldK` and `nuOutK` and their compatibility lemmas
+  (K4), the lend-exit lemma (K5), `eraseD` (K6), and `cloneCode` (K7, #928).
 - **No code type in the checker.** No rule of the checker synthesises a code type before S1, so
   the corpus is unchanged by K3.
 - **`CapOK`** is a premise of `codeI` until #894 removes it.
 - **Choices K1 made that the entry does not state:**
   - A type substitution (`VTy.rename`, `VTy.subst`) leaves `Code⟨N; E⟩ C` as it is, as it leaves
     `U C`: no `μ` variable reaches `E`, `Cl k` holds, `Occ` fails. The clause reads `E` at no
-    environment, as `U C` reads `C`. So `codeI` asks `E.Cl 0`.
+    environment, as `U C` reads `C`; a captured slot's type is read the same way in `Γ` and in
+    `E`, so `codeI` needs no closedness premise.
   - `vC_ind` and `vN_ind` keep the code clause in one unfolding (`vF`, `vFN`) with the property at
     every value of `E`, from an outer induction on the type's size: `E` is smaller and no
     substitution enters it.
@@ -12085,9 +12240,6 @@ reported as an intended change.
   - Printing: the checker prints `Code⟨#h; E⟩ C`, `#h` a hash of `N`'s serialisation, not
     `{closure@span}` (a kernel type has no span). Backend2's `useKey` prints a type `ofV` refuses
     exactly (`keyVT`, `N` in full), so two codes are two keys; `ofV` refuses `code` (B1).
-- **`codeI`'s semantic step** is not checked: from `gDenC` and `Γ.CapOK`, that the captured slots'
-  resources compose to `𝒱⟦Γ.capTy (λM)⟧ (tupleV (capEnv (λM) γ))` at the whole `ρ`. Its syntactic
-  half is `lam_psub_capNorm` and `occs_lt_of_closedAt`.
 - **`nuOutK`'s compatibility lemma** needs, beyond `nuOutK_step`, that `C[Code⟨…⟩(νX. C)/X]` read
   at the code clause is `nuF` at `codeCand` (Core's `vC_inst_envS`/`cB_unroll` at a code type); not
   built. `unfoldK`'s, that `unfold step` is in the clause at `hCode C`, is not built.
@@ -12102,7 +12254,7 @@ reported as an intended change.
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
 `adequacyC` covering every rule; §7's `νX. C` is `Core/NuRel.lean` and `Core/Nu.lean`, and the
-checker reads `nu X. C`, `iter A R R'`, `nu_in`/`nu_out` and `unfold[C, S]`. Entries 7 and 9 (§8, §10) are implemented; §8 extends `Paper/` and `Support/` with the literal
+checker reads `nu X. C`, `iter A R R'`, `nu_in`/`nu_out` and `unfold[C, S]`. Entries 7 and 9 (§8, §10) are implemented, except §10's promotion over a flat context (#886); §8 extends `Paper/` and `Support/` with the literal
 and host-step forms. Entry 8 (§9, arrays) is implemented: the former and its lemmas in `Core/Types.lean` and the typed
 world, the constants in `Core/Arrays.lean` (`Core/ArrayWp.lean` for the steps), the three machine
 steps in `Paper/` and `Support/`, the checker (`array`, `array_imm`, syntax-core §8b) and the
@@ -12557,6 +12709,42 @@ Entry 66 (§67) is implemented in `Backend2/Convert.lean` (`shapeReversal?`, `cu
 
 ## Changelog
 
+- **1.66** (2026-11-09) — §68 (#886): `codeIB`'s premise is `Flat(Γ)` (§10), as `!`-promotion's,
+  in place of `!Γ`. `codeIB_compatC` and `codeIB_compatN` reach `gSepC_persistent` and
+  `gN_persistent` through `flat ⇒ persistent`. The rule only widens.
+- **1.65** (2026-11-09) — §41, §18, §42 (#885, #940): a control `with` lends what its body writes. Each
+  enclosing `let mut` the body writes, and each outer place it lends, is lent around the handler
+  site (`borrow mut &mut x { 'l, x -> with h(…) { S } }`); inside, `&mut x` is a reborrow, `x = e`
+  evaluates `e` first and is `modify`, reads and lends are bound in source order, a read is a copy
+  through the borrow, and a move out of `x` is refused. After the `with`, `x` keeps the writes made
+  before an abort. Capabilities are not lent, and refused alone. §42: a `finally` clause that
+  assigns an outer `let mut` is refused (#940). New general forms:
+  `borrow mut &mut x { … }`, the reborrow `&mut m` at a call, and `*&mut m`. No kernel change; no
+  golden or count changed.
+- **1.64** (2026-11-09) — §68 (#855 K3, as built): the rules `erase`/`eraseB` are named
+  `codeErase`/`codeEraseB` (`erase` is `TExpr.erase` in the typed term). `Ctx.capTy`, `Ctx.capOK`
+  and `VTy.forceTy` are named; the restated `force` reads `T.forceTy = some C`. K3 and `codeI`'s
+  semantic step are built; the inversion's cost is restated as built. The premise `E.Cl 0` of
+  1.57 is dropped: no proof reads it. K7, `cloneCode` (#928), is planned.
+- **1.63** (2026-11-09) — §3 (#906): `scripts/check-type-eq.sh` reads the library `Reference`
+  too, the reference interpreter's run (`Reference/Source.lean`, `Falsify.lean`, `Driver.lean`, …),
+  which leaves `Backend` and `Pipeline`. No change to a rule.
+- **1.61** (2026-11-09) — §10 (#886, *Promotion over a flat context*): the premise of Core's
+  promotion rules `!thunk` and `!thunkv` (`bangThunkF`, `bangThunkV`) is `Flat(Γ)`, every live slot
+  at a flat type (the scalars, and `⊗`, `⊕` and `[@a]` over them, `!A`), in place of `!Γ`.
+  `!Γ ⇒ Flat(Γ)`, so the rules only widen. `μ` data is not flat: a closure capturing it stays `U C`,
+  and duplicating it is an explicit clone. `gSepC_persistent` and `gN_persistent` are reached from
+  the new premise through `flat ⇒ persistent`; `CDerivesAt`, the generated pins, the checker's
+  promotion test and `lam_bang` follow. The fundamental property, adequacy, every rejection theorem
+  and every golden are unchanged; no `CDerives` index or rule is added. Closes §10's first *Open*
+  item.
+- **1.60** (2026-11-09) — §14, §15, §16, §19, §29, §30, §32, §35, §39: the citations of decision 71,
+  which decision 72 voids, are removed. T1 is stated as the checker's rule until surface A1
+  (#843), which lifts it for §62's suspending constants' shapes, for programs without host
+  externs, under `HandlerLawN`; a callback's own borrow and a borrow handed between paused
+  computations stay refused (#844 Tier 2, #821). §29's title states R1 as the checker's rule, not a freeze. §39's leetcode programs keep their
+  restriction because the surface provides no handler around a div computation (§21 *Open*). No
+  change to a rule or to the code.
 - **1.59** (2026-11-09) — the small-gaps batch (#880–#883, #892, #893). No change to `CDerives`,
   the kernel or a checker rule; every golden unchanged. Refusal messages no longer cite decision
   71.

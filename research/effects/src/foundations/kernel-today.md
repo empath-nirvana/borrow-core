@@ -1,6 +1,6 @@
 # What works today
 
-borrow-core has a working, proved effect kernel at Core σ=[], meaning the kernel relation at the empty lend stack. The full inventory is [`docs/effects-state/01-kernel.md`](../../../../docs/effects-state/01-kernel.md).
+borrow-core has a working, proved effect kernel at Core σ=[], meaning the kernel relation at the empty lend stack. The full inventory is [`docs/archive/effects-state/01-kernel.md`](../../../../docs/archive/effects-state/01-kernel.md).
 
 **The kernel**
 - **Machine:** six primitives (`perform`, `raise`, `hnd`, `ubind`, `ccatch`, `cfin`) plus `boundedFix`. Handlers are deep, and determinism holds with effects.

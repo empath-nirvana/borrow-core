@@ -144,9 +144,9 @@ theorem codeI_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
       vN_thunk_of_cN (fun _ _ _ _ h => h) fun Θ' hE hΘ' c' hc' ls' => ?_⟩
   exact h δ γ Θ' c' n ls' ρ hδ hΘ' hc' hlw (gN_extR hE hg)
 
-/-- **`codeIB` at `SemJN`** (Core's `codeIB_compatC`): over `!Γ`, at `∅` (`gN_persistent`).
-`[spec §68]` -/
-theorem codeIB_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} (hp : Ctx.Banged Γ)
+/-- **`codeIB` at `SemJN`** (Core's `codeIB_compatC`): over a flat `Γ`, at `∅` (`gN_persistent`).
+`[spec §68, §10]` -/
+theorem codeIB_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} (hp : Ctx.FlatLive Γ)
     (h : SemJN (ℍ := ℍ) Δ Γ (.val (.lam M)) (.val (.bang (.thunk C))))
     (hok : Ctx.CapOK Γ (.lam M)) :
     SemJN (ℍ := ℍ) Δ Γ (.val (.lam M))

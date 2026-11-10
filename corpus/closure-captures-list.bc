@@ -1,0 +1,18 @@
+-- An ordinary closure that captures recursive data (SPEC §10, #886): `sum_with` makes a closure
+-- `{ e -> e + sum(xs) }` over a list of `i32`s and calls it once. The closure is not `!`, so it may
+-- capture the list, which is not flat: the list is moved into the closure, not copied, and the
+-- closure is consumed by its one call. A `!` closure over the list is refused
+-- (`corpus/reject/bang-closure-captures-list.bc`).
+--
+-- Answer: i32[107], and `live 0`: 100 plus the list's elements 4, 2 and 1. No copy is made (the
+-- new backend's `copies` is 0); the list's 3 nodes are its only allocations.
+include list
+
+fn sum(xs: List[i32]) -> i32 =
+  match unroll xs { inl u -> 0 | inr (x, rest) -> x + sum(rest) }
+
+fn call(g: i32 => i32, x: i32) -> i32 = g(x)
+
+fn sum_with(xs: List[i32], z: i32) -> i32 = call({ e -> e + sum(xs) }, z)
+
+main -> i32 = with on_exhausted(!{ u -> 0 }) { sum_with(cons(4, cons(2, cons(1, nil()))), 100) }

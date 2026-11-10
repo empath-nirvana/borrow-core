@@ -1,5 +1,7 @@
 # Scope — #804: resource safety for every source program with exceptions
 
+*History: a spike for #804 on the chain world. The current design is `chain-interpretation.md` and SPEC §62. The text below is kept as the record.*
+
 Spike on the chain world (main). Question, yes or no: does every program of a small typed source
 fragment with exceptions, in which owned values may be in scope at a raise, translate to a
 `CDerives` derivation, so that `resourceSafety` (`Core/ResourceSafety.lean`) holds of every such

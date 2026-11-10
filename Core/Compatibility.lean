@@ -792,19 +792,20 @@ theorem allI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.L
 
 /-! ### Lemma 6.163 ([]I-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 
-/-- `!Γ` holds no resource. -/
+/-- A flat context holds no resource: each live slot is persistent, so its value is at `∅`
+(`vP_empty_of_persistent`).  `[spec §10]` -/
 theorem gSepC_persistent {ls : List SRec} {δ : LSub} :
-    ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}, Ctx.Banged Γ → gSepC ls δ Γ γ ρ → ρ = PMap.empty
+    ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}, Ctx.FlatLive Γ → gSepC ls δ Γ γ ρ →
+      ρ = PMap.empty
   | [], _, _, _, h => h.1
   | _ :: _, [], _, _, h => h.1
   | s :: Γ, v :: γ, ρ, hp, h => by
-      have hp' : Ctx.Banged Γ := fun t ht hl => hp t (List.mem_cons_of_mem _ ht) hl
+      have hp' : Ctx.FlatLive Γ := hp.tail
       unfold gSepC at h
       split at h
       · rename_i hl
-        obtain ⟨T, hT⟩ := hp s List.mem_cons_self hl
         obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
-        have e₁ : ρ₁ = PMap.empty := by rw [hT] at h₁; exact h₁.1
+        have e₁ : ρ₁ = PMap.empty := vP_empty_of_persistent (VTy.persistent_of_flat (hp s List.mem_cons_self hl)) h₁
         have e₂ := gSepC_persistent hp' h₂
         subst e₁; subst e₂
         first | exact eq_of_compS_empty_left hc | exact (eq_of_compS_empty_left hc).symm
@@ -816,7 +817,7 @@ theorem bangLamI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {body : Expr} {T₁ T₂ 
   intro δ γ ls ρ hδ hg
   obtain ⟨hlen, hgs⟩ := gDenC_iff.mp hg
   show wpTS ls (.val (.lam (Expr.psub 1 γ body))) _ ρ
-  refine wpTS_val _ _ _ _ ⟨gSepC_persistent hΓp hgs, ?_⟩
+  refine wpTS_val _ _ _ _ ⟨gSepC_persistent hΓp.flatLive hgs, ?_⟩
   intro ls' hext v' ρ₁ ρ₂ hv' hcomp
   have hsub : substAll (v' :: γ) body = Expr.subst 0 v' (Expr.psub 1 γ body) := by
     show Expr.psub 0 (v' :: γ) body = _
@@ -838,7 +839,7 @@ theorem bangAllI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifeti
   intro δ γ ls ρ hδ hg
   obtain ⟨hlen, hgs⟩ := gDenC_iff.mp hg
   show wpTS ls (.val (.lam (Expr.psub 1 γ e))) _ ρ
-  refine wpTS_val _ _ _ _ ⟨gSepC_persistent hΓp hgs, ?_⟩
+  refine wpTS_val _ _ _ _ ⟨gSepC_persistent hΓp.flatLive hgs, ?_⟩
   intro ls' hext α ρ₁ ρ₂ hpure hcomp
   obtain ⟨rfl, β, hβ, hlt⟩ := hpure
   have hρ₂ : ρ₂ = ρ := eq_of_compS_empty_left (ResU.CompS.comm hcomp)

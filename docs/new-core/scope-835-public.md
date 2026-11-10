@@ -1,5 +1,7 @@
 # #835: E10 read through public and private world transitions
 
+*History: a unit of #835, merged with #839. The code (`Core/Chain/`) is now its reference, `chain-interpretation.md` the design, and `assert-boundary.md` the analysis of the handler assumption. The text below is kept as the record.*
+
 This is the mapping the brief asks for first. It covers E10 (a handler clause's `κ` read at `vN`),
 `effHandleV`, `effHandleVB` and `reify`. The Lean results named here are in
 `Core/Chain/Public835N.lean` and `Core/Chain/Kappa835N.lean`. §8 has the verdict.

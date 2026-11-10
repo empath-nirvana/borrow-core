@@ -1,5 +1,7 @@
 # An executable model of effects as algebras, capabilities as comodels
 
+*History: phases A and B of #235, superseded by the new Core (SPEC §62); [`theory-index.md`](theory-index.md) tracks its status. The text below is kept as the record.*
+
 Phase A of #235. Experiment: `experiments/EffModel/` (non-default library `EffModel`, imported by
 nothing, no Mathlib). It changes nothing in `Core/`, `Frontend/` or `Backend/`. Phase B (the
 relation, the theorems, resource safety and the lift plan) is §8, over

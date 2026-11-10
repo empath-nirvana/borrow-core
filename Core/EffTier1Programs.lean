@@ -283,14 +283,14 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | zeroE hs _ ihV => exact .zeroE (splitP_append h' hs) ihV
   | allI hbx hΔx hΓx _ ih => exact .allI hbx hΔx (live_append h' hΓx) ih
   | allE _ hlt ih => exact .allE ih hlt
-  | bangThunkF hp _ ih => exact .bangThunkF (banged_append h' hp) ih
-  | bangThunkV hp hC _ ih => exact .bangThunkV (banged_append h' hp) hC ih
+  | bangThunkF hp _ ih => exact .bangThunkF (flatLive_append h' hp) ih
+  | bangThunkV hp hC _ ih => exact .bangThunkV (flatLive_append h' hp) hC ih
   | codeI _ hok ih =>
       obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
       rw [← hty]; exact .codeI ih hok'
   | codeIB hp _ hok ih =>
       obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
-      rw [← hty]; exact .codeIB (banged_append h' hp) ih hok'
+      rw [← hty]; exact .codeIB (flatLive_append h' hp) ih hok'
   | codeErase _ ih => exact .codeErase ih
   | codeEraseB _ ih => exact .codeEraseB ih
   | bangE _ ih => exact .bangE ih

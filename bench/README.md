@@ -10,6 +10,9 @@ below to `bench/out/results.md`. It is not part of the gate. The work is issue #
 
 - **Ours**: `bcc compile --target native`, then `clang -O2 -w -pthread` with the native
   runtime (`Target/Native/Runtime.lean`). This is what `bcc run --native` does (SPEC §40).
+  `bcc` compiles by Backend2, the default backend; `python3 bench/bench.py --backend old`
+  (`make bench BENCH_ARGS="--backend old"`) builds ours by the old backend until N7 retires it.
+  The table below was measured on the old backend unless a row says "the new backend".
 - **Rust**: idiomatic safe Rust, std only, no `unsafe`. Iterators are used where a Rust
   programmer would use them. It is built with the flags `cargo build --release` passes to rustc
   1.97.1: `--edition=2024 -C opt-level=3 -C embed-bitcode=no -C strip=debuginfo`. That is the

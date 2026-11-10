@@ -83,6 +83,8 @@ inductive Atom where
   | pers
   /-- A `!` type (`Ctx.Banged`). -/
   | bang
+  /-- A flat type (`VTy.flat`, `Ctx.FlatLive`: `!`-promotion's premise).  `[spec §10]` -/
+  | flat
   /-- `VTy.OwnFree`, as `ownFreeB` decides it (`Ctx.OwnFree`). -/
   | ownFree
   /-- The lifetime variable is not free in it (`∀I`'s premise). -/

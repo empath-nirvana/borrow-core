@@ -707,8 +707,8 @@ rows 76 and 77 are updated here.
 ## 10. Built in #835 (unit L4)
 
 Branches `rule-791-l4b`, `rule-791-view` and `rule-791-tail`. The paper mapping is
-`scope-835-handlers.md`. Part 1 (`rule-791-l4`) built E3, E5–E8, W9, E12, E14 and ported `effSub`,
-`effPerform`, `effRaise` (`scope-835-handlers.md` §4). Parts 2–4 are this section.
+`../archive/new-core/scope-835-handlers.md`. Part 1 (`rule-791-l4`) built E3, E5–E8, W9, E12, E14 and ported `effSub`,
+`effPerform`, `effRaise` (`../archive/new-core/scope-835-handlers.md` §4). Parts 2–4 are this section.
 
 ### 10.1 E10: the clauses read at `vN`
 

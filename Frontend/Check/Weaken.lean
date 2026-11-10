@@ -235,6 +235,10 @@ theorem banged_ins {Γa Γb : Ctx VTy} (hp : LiveP Atom.bang.eval Γp)
     (h : Ctx.Banged (Γa ++ Γb)) : Ctx.Banged (Γa ++ Γp ++ Γb) :=
   live_ins (fun s hs hl => isBangB_sound (hp s hs hl)) h
 
+theorem flatLive_ins {Γa Γb : Ctx VTy} (hp : LiveP Atom.flat.eval Γp)
+    (h : Ctx.FlatLive (Γa ++ Γb)) : Ctx.FlatLive (Γa ++ Γp ++ Γb) :=
+  live_ins hp h
+
 theorem ctxOutlives_ins {Δ : LifeCtx} {a : Lifetime.Life} {Γa Γb : Ctx VTy}
     (hp : LiveP (Atom.outl Δ a).eval Γp) (h : CtxOutlives Δ (Γa ++ Γb) a) :
     CtxOutlives Δ (Γa ++ Γp ++ Γb) a :=
@@ -416,13 +420,13 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f' rfl hf' hp'
       rw [List.length_cons] at d e
-      exact ⟨.bangThunkF (banged_ins (live_atom hb) hpΓ) d, by
+      exact ⟨.bangThunkF (flatLive_ins (live_atom hb) hpΓ) d, by
         simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, e]⟩
   | bangThunkV hpΓ hC _ q ih =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
-      exact ⟨.bangThunkV (banged_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
+      exact ⟨.bangThunkV (flatLive_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
   | codeI => intro _ _ _ _ _ hf _; cases hf
   | codeIB => intro _ _ _ _ _ hf _; cases hf
   | codeErase _ ih =>
@@ -1028,13 +1032,13 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f' rfl hf' hp'
       rw [List.length_cons] at d e
-      exact ⟨.bangThunkF (banged_ins (live_atom hb) hpΓ) d, by
+      exact ⟨.bangThunkF (flatLive_ins (live_atom hb) hpΓ) d, by
         simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, e]⟩
   | bangThunkV hpΓ hC _ q ih =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
-      exact ⟨.bangThunkV (banged_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
+      exact ⟨.bangThunkV (flatLive_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
   | codeI => intro _ _ _ _ _ hf _; cases hf
   | codeIB => intro _ _ _ _ _ hf _; cases hf
   | codeErase _ ih =>

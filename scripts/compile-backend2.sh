@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# The new backend (`Backend2/`, docs/n1-plan.md) on the corpus. Every corpus program with a golden
+# Backend2 (`Backend2/`, docs/n1-plan.md), the default backend, on the corpus, by `bcc`'s and
+# `bcc-counts`' default spellings (no `--backend`), so that the default is what is checked. Every corpus program with a golden
 # (as scripts/compile-corpus.sh runs them) is converted to the LIR and linted (`bcc lir --lint`). A
 # program outside the new backend's fragment (it has an effect node: N2 and later) is listed and
 # skipped. Every other is run at the LIR interpreter (`--stage lir`), the word IR's interpreter
-# (`--stage lflat`) and in Wasm (`bcc run --backend new`), and natively when there is a C compiler
-# (`bcc run --backend new --native`); each must print the golden standard output and error and end
-# with the golden status. Its counts (`bcc-counts --backend new`) must be at most its entry in
+# (`--stage flat`) and in Wasm (`bcc run`), and natively when there is a C compiler
+# (`bcc run --native`); each must print the golden standard output and error and end
+# with the golden status. Its counts (`bcc-counts`) must be at most its entry in
 # `corpus/counts-backend2.expected` (`name allocs indirect copies loads stores bounds`), the new
-# backend's own table; they are also printed beside the old backend's (`corpus/counts.expected`),
-# which they are compared with at the switch (docs/compiler.md §5.4, criterion 6). The effect
+# backend's own table; they are also printed beside the old backend's (`corpus/counts.expected`,
+# checked by scripts/compile-corpus.sh). The effect
 # erasure's postcondition (SPEC §47, §49, `bcc lir --erasure`): the program has no `handle` or
 # `perform` left, and the `handle`, `perform` and `raise` nodes erased, and those compiled as state
 # machines, are its line of `corpus/erasure-backend2.expected`.
@@ -19,7 +20,7 @@
 #
 # `--final` (`make gate`) lints each program and runs it in Wasm only: no LIR or word-IR
 # interpreter, no native run, no erasure check and no counts. A program whose Wasm run differs
-# from the golden is then run at the `lir` and `lflat` stages, and the first that differs is named.
+# from the golden is then run at the `lir` and `flat` stages, and the first that differs is named.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export write=0
@@ -60,17 +61,17 @@ statusOf() {
 }
 
 # --final: after program $1's Wasm run differs (input $2, standard error golden $3, base $4),
-# the first of the lir and lflat stages that differs from the golden, if either does.
+# the first of the lir and flat stages that differs from the golden, if either does.
 localise() {
   local st rc
-  for st in lir lflat; do
+  for st in lir flat; do
     rc=0
     "$bcc" interp --stage "$st" "$1" -- "${args[@]+"${args[@]}"}" < "$2" > "$w/out" 2> "$w/err" || rc=$?
     if [ "$rc" != "$(statusOf "$1")" ] || ! cmp -s "$w/out" "$4.out" || ! cmp -s "$w/err" "$3"; then
       echo "  localised: the $st stage differs already"; return 0
     fi
   done
-  echo "  localised: the lir and lflat stages agree with the golden; Wasm alone differs"
+  echo "  localised: the lir and flat stages agree with the golden; Wasm alone differs"
 }
 # One program: linted, run at every stage, counted.
 program() {
@@ -86,17 +87,17 @@ program() {
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
   err=/dev/null; [ -f "$base.err" ] && err="$base.err"
   argsOf "$f"
-  local stages="lir lflat wasm $([ "$native" = 1 ] && echo native)"
+  local stages="lir flat wasm $([ "$native" = 1 ] && echo native)"
   [ "$final" = 0 ] || stages="wasm"
   for st in $stages; do
     rc=0
     case "$st" in
-      wasm) "$bcc" run --backend new "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$? ;;
-      native) "$bcc" run --backend new --native "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$? ;;
+      wasm) "$bcc" run "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$? ;;
+      native) "$bcc" run --native "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$? ;;
       *) "$bcc" interp --stage "$st" "$f" -- "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$? ;;
     esac
     if [ "$rc" != "$(statusOf "$f")" ] || ! cmp -s "$w/out" "$base.out" || ! cmp -s "$w/err" "$err"; then
-      echo "$f: the new backend's $st stage differs from the golden (status $rc): $(head -c 300 "$w/err" | head -3)"
+      echo "$f: Backend2's $st stage differs from the golden (status $rc): $(head -c 300 "$w/err" | head -3)"
       [ "$final" = 1 ] && localise "$f" "$in" "$err" "$base"
       return 1
     fi
@@ -114,7 +115,7 @@ program() {
     wer=$(awk -v n="$name" '$1 == n { $1 = ""; sub(/^ /, ""); print }' "$erasure" 2>/dev/null || true)
     if [ "$wer" != "$er" ]; then echo "$f: erasure \"$er\", pinned \"$wer\" ($erasure)"; return 1; fi
   fi
-  if ! got=$("$bccCounts" --backend new "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>&1); then
+  if ! got=$("$bccCounts" "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>&1); then
     echo "$f: counts: $got"; return 1
   fi
   read -r _ a _ i _ c _ l _ s _ b <<< "$got"
@@ -143,5 +144,5 @@ if [ "$write" = 1 ]; then
   { echo "# The effect erasure per program the new backend compiles (scripts/compile-backend2.sh, bcc lir --erasure; SPEC §47, §49): name, the handle, perform and raise nodes erased, the handle nodes compiled as drives and the performs as suspensions of state machines (machines, suspends), and the handle nodes left (stored-continuation sites, other)."; cat "$tmp/newe"; } > "$erasure"
   echo "wrote $erasure"
 fi
-echo "the new backend: $(cat "$tmp"/counts.* 2>/dev/null | wc -l | tr -d ' ') program(s) at their goldens, $(ls "$tmp"/out.* 2>/dev/null | wc -l | tr -d ' ') outside its fragment; $par_failed failure(s)."
+echo "Backend2: $(cat "$tmp"/counts.* 2>/dev/null | wc -l | tr -d ' ') program(s) at their goldens, $(ls "$tmp"/out.* 2>/dev/null | wc -l | tr -d ' ') outside its fragment; $par_failed failure(s)."
 [ "$par_failed" -eq 0 ]

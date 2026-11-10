@@ -1,5 +1,7 @@
 # Effect lowering: handlers resolved statically, state machines last (#541)
 
+*Status: the direct-call conditions for tail-resumptive clauses (§2.3) are current: the checker (`Frontend/Check/Handled.lean`) and Backend2's `directFacts` (SPEC §47) read them. The lowering sections describe the old backend, and `compiler.md` §6.2 maps this design's units into the new backend's.*
+
 A design for the backend's lowering of effects. It changes no code. Each claim is marked:
 
 - **measured**: a run of `bcc`, `bcc-counts` or a script over the backend's own functions, on

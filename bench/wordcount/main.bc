@@ -7,8 +7,8 @@ include map
 -- The `k` bytes of `t` from `i` on.
 fn slice<'t>(t: text 't, i: i32, k: i32) -> text 't =
   match split_at(t, i) {
-    inl (h, r) -> array_forget['t, u8](h);
-      match split_at(r, k) { inl (w, rest) -> array_forget['t, u8](rest); w | inr r -> r }
+    inl (h, r) ->
+      match split_at(r, k) { inl (w, rest) -> w | inr r -> r }
   | inr t -> t
   }
 
@@ -47,7 +47,6 @@ fn count_words<'t>(t: text 't) -> Map[text 't, i32] * (i32 * i32) =
       start = i + 1
     } else { () }
   };
-  array_forget['t, u8](t);
   (m, (words, most))
 
 main -> i32 =

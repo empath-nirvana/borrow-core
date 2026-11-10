@@ -32,7 +32,8 @@ def resultHead (t : Expr) : MetaM Name :=
   for (n, ci) in env.constants.toList do
     let some m := modOf n | continue
     let fe := (`Frontend).isPrefixOf m
-    let be := (`Backend).isPrefixOf m || (`Target).isPrefixOf m || (`Pipeline).isPrefixOf m
+    let be := (`Backend).isPrefixOf m || (`Target).isPrefixOf m || (`Pipeline).isPrefixOf m ||
+      (`Reference).isPrefixOf m
     if !(fe || be) then continue
     let used := ci.getUsedConstantsAsSet
     for u in used do

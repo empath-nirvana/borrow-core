@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# The native target (SPEC §40, Target/Native/), checked against the flat IR. Needs a C compiler
+# The native target (SPEC §40, Target/Native/), checked against the flat IR: the corpus on
+# Backend2, the default backend (`bcc run --native`, `bcc-counts --native`), or with
+# `--backend old` on the old backend; the kernel programs on the old backend (`bcc kernel`, which
+# stays there until N7). Needs a C compiler
 # that builds LLVM IR (`bcc cc`); without one the script says so and passes, as the gate does for
 # mdbook.
 #
@@ -14,9 +17,11 @@
 #   * Every host operation, on a table of operands, must answer at native what the flat-IR
 #     interpreter's host (`flatHost`) answers (`bcc hostops`, Backend/Native/Tests.lean).
 #   * Loops of tail calls run in constant stack: in a stack of 64 KiB, a generated loop of 10^8
-#     turns, the kernel program loop-tail and corpus/deep-list.bc.
+#     turns, the kernel program loop-tail and corpus/deep-list.bc (owned folds by pointer
+#     reversal, SPEC §67).
 #
-#     scripts/compile-native.sh [file.bc…]   every check, or the corpus programs named only
+#     scripts/compile-native.sh [--backend old|new] [file.bc…]
+#                                            every check, or the corpus programs named only
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
@@ -27,6 +32,10 @@ echo "C compiler: $cc"
 . scripts/par.sh
 export bcc=.lake/build/bin/bcc
 export bccCounts=.lake/build/bin/bcc-counts
+export backend=new
+if [ "${1:-}" = --backend ]; then
+  case "${2:-}" in old|new) backend=$2; shift 2 ;; *) echo "usage: scripts/compile-native.sh [--backend old|new] [file.bc…]"; exit 2 ;; esac
+fi
 named=1
 files=("$@")
 [ ${#files[@]} -gt 0 ] || { named=0; files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc); }
@@ -46,14 +55,13 @@ statusOf() {
 program() {
   local f=$1 w=$PAR_TMP base in err rc=0 got
   if grep -q '^-- check: parse-only' "$f" || ! grep -q '^main' "$f"; then return 0; fi
-  # The old backend refuses it (scripts/compile-corpus.sh); the new backend runs it natively
-  # (scripts/compile-backend2.sh).
-  if grep -q '^-- check: old-backend-refuses' "$f"; then return 0; fi
+  # The old backend refuses it at compile time (scripts/compile-corpus.sh).
+  if [ "$backend" = old ] && grep -q '^-- check: old-backend-refuses' "$f"; then return 0; fi
   base=${f%.bc}
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
   err=/dev/null; [ -f "$base.err" ] && err="$base.err"
   argsOf "$f"
-  "$bcc" run --native "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$?
+  "$bcc" run --backend "$backend" --native "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$?
   if [ "$rc" != "$(statusOf "$f")" ]; then
     echo "$f: native exits with $rc, not $(statusOf "$f"): $(head -3 "$w/err")"; return 1
   fi
@@ -63,7 +71,7 @@ program() {
     diff "$w/err" "$err" | head -4 | sed 's/^/  /' || true
     return 1
   fi
-  if ! got=$("$bccCounts" --native "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>&1); then
+  if ! got=$("$bccCounts" --backend "$backend" --native "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>&1); then
     echo "$f: counts: $got"; return 1
   fi
   echo "$f: native as $base.out | $got"
@@ -95,7 +103,7 @@ if [ "$named" = 0 ]; then
   # Under `lake env` (as `lake exe bcc run --native` runs), PATH starts with the Lean toolchain's
   # bin, whose clang has no C headers: the build must not take it.
   rc=0
-  lake env "$bcc" run --native corpus/div-unhandled.bc > "$tmp/out" 2> "$tmp/err" || rc=$?
+  lake env "$bcc" run --backend "$backend" --native corpus/div-unhandled.bc > "$tmp/out" 2> "$tmp/err" || rc=$?
   if [ "$rc" = 1 ] && cmp -s "$tmp/out" corpus/div-unhandled.out; then
     echo "corpus/div-unhandled.bc: native under lake env's PATH"
   else
@@ -105,15 +113,16 @@ if [ "$named" = 0 ]; then
   # Constant stack: loops of tail calls on a stack of 64 KiB (`BC_STACK`), where a frame per call
   # would last a few thousand calls: a generated loop of 10^8 turns (`bcc tailcalls`), the kernel
   # program loop-tail (10^5 operations, each a turn of a loop of tail calls through a handler),
-  # and corpus/deep-list.bc (lists of 50000 built and summed by loops, folded by pointer reversal).
+  # and corpus/deep-list.bc (lists of 50000 built and summed by loops, folded by pointer reversal,
+  # SPEC §67 on Backend2), on the backend `--backend` selects.
   "$bcc" tailcalls 100000000 || bad=$((bad + 1))
   want=$("$bcc" kernel interp --stage flat loop-tail 2>&1) || true
   out=$(BC_STACK=65536 "$bcc" kernel run --native loop-tail 2>&1) || true
   if [ "$out" = "$want" ]; then echo "kernel loop-tail: native in a stack of 64 KiB"
   else echo "kernel loop-tail: native in a stack of 64 KiB fails: $out"; bad=$((bad + 1)); fi
-  if BC_STACK=65536 "$bcc" run --native corpus/deep-list.bc < /dev/null > "$tmp/out" 2> "$tmp/err" &&
+  if BC_STACK=65536 "$bcc" run --backend "$backend" --native corpus/deep-list.bc < /dev/null > "$tmp/out" 2> "$tmp/err" &&
       cmp -s "$tmp/out" corpus/deep-list.out; then
-    echo "corpus/deep-list.bc: native in a stack of 64 KiB"
+    echo "corpus/deep-list.bc: native in a stack of 64 KiB ($backend)"
   else
     echo "corpus/deep-list.bc: native in a stack of 64 KiB fails: $(head -3 "$tmp/err")"; bad=$((bad + 1))
   fi

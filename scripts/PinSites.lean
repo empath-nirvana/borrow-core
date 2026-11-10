@@ -108,6 +108,7 @@ def sites : List (Name × List Name) := [
   (``Backend2.genCountTry, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.genConsume, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.genFix, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
+  (``Backend2.genFoldRev, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.genKap, [``Backend2.ConsumeRule.dead]),
   (``Backend2.genLendU, [``Backend2.ConsumeRule.dead]),
   (``Backend2.genMach, [``Backend2.ConsumeRule.dead]),
@@ -265,7 +266,8 @@ def sameSet (a b : List Name) : Bool := a.all b.contains && b.all a.contains
     if (`PinSites).isPrefixOf n then continue
     let mod := (env.getModuleIdxFor? n).map (env.header.moduleNames[·.toNat]!)
     unless mod.all (fun m => (`Backend2).isPrefixOf m || (`Backend).isPrefixOf m ||
-      (`Target).isPrefixOf m || (`Pipeline).isPrefixOf m || (`Frontend).isPrefixOf m) do continue
+      (`Target).isPrefixOf m || (`Pipeline).isPrefixOf m || (`Reference).isPrefixOf m ||
+      (`Frontend).isPrefixOf m) do continue
     if mod == some `Backend2.Syntax || mod == some `Backend.Clos.Syntax then continue
     unless ci matches .defnInfo _ do continue
     if generated env n ci then continue
@@ -275,7 +277,8 @@ def sameSet (a b : List Name) : Bool := a.all b.contains && b.all a.contains
     | _ => pure ()
   -- Every site in the table, with exactly the rules it uses.
   let found := usersOf env (fun m => (`Backend2).isPrefixOf m && m != `Backend2.LintTests ||
-    (`Backend).isPrefixOf m || (`Target).isPrefixOf m || (`Pipeline).isPrefixOf m) tags
+    (`Backend).isPrefixOf m || (`Target).isPrefixOf m || (`Pipeline).isPrefixOf m ||
+    (`Reference).isPrefixOf m) tags
   for (n, used) in found.toList do
     match sites.find? (·.1 == n) with
     | none => bad := bad.push s!"{n}: builds nodes at {used}, and has no entry"

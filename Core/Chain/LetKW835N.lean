@@ -120,7 +120,7 @@ theorem let_compatN {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B 
     exact ha.2
   · rintro x m i en hT hq ls' σ ⟨h, -, -⟩
     obtain ⟨o, hf, rfl⟩ := tabF_effOf_some_find hT
-    exact gN_persistent (hU ⟨o, (Row.find_mem hf).1, hq⟩) h
+    exact gN_persistent (hU ⟨o, (Row.find_mem hf).1, hq⟩).flatLive h
   · rintro x m i en hT ha hq y k ls' K₁ ρ' σ ρ'' hcan ⟨hσ, -, hyOK⟩ hc'
     obtain ⟨o, hf, rfl⟩ := tabF_effOf_some_find hT
     exact entF_plain (rdN_ok δ) _ hK (hC 0) (gN_noOwn (hW ⟨o, (Row.find_mem hf).1, hq⟩) hσ) o
@@ -177,7 +177,7 @@ theorem let_compatN_persist {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Exp
     exact ha.2
   · rintro x m i en hT hq ls' σ ⟨h, -, -⟩
     obtain ⟨o, hf, rfl⟩ := tabF_effOf_some_find hT
-    exact gN_persistent (hU ⟨o, (Row.find_mem hf).1, hq⟩) h
+    exact gN_persistent (hU ⟨o, (Row.find_mem hf).1, hq⟩).flatLive h
   · rintro x m i en hT ha hq y k ls' K₁ ρ' σ ρ'' hcan ⟨hσ, -, hyOK⟩ hc'
     obtain ⟨o, hf, rfl⟩ := tabF_effOf_some_find hT
     exact entF_plain (rdN_ok δ) _ hK (hC 0) (gN_noOwn (hW ⟨o, (Row.find_mem hf).1, hq⟩) hσ) o

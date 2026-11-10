@@ -153,6 +153,11 @@ corpus/capture-take-hand.bc 1.0 cancellable resume-or-cancel: machine: a path of
 corpus/clause-captures.bc 3.0 cancellable abortive: branch; agree
 corpus/clause-captures.bc 2.0 cancellable abortive: branch; agree
 corpus/clause-captures.bc 1.0 cancellable tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/closure-capture-scalar.bc 2.0 cancellable abortive: branch; agree
+corpus/closure-capture-scalar.bc 4.0 cancellable abortive: branch; agree
+corpus/closure-capture-scalar.bc 3.0 cancellable abortive: branch; agree
+corpus/closure-capture-scalar.bc 1.0 cancellable abortive: branch; agree
+corpus/closure-captures-list.bc 1.0 cancellable abortive: branch; agree
 corpus/comp-param.bc 1.0 cancellable abortive: -; agree
 corpus/comp-param.bc 3.0 cancellable abortive: -; agree
 corpus/comp-param.bc 5.0 cancellable abortive: -; agree
@@ -434,6 +439,7 @@ corpus/lend-div.bc 1.0 cancellable tail: machine: the handlers of the name have 
 corpus/lend-pipeline.bc 3.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/lend-pipeline.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/lend-pipeline.bc 1.0 cancellable tail: direct; agree
+corpus/lend-tail-call.bc 1.0 cancellable abortive: branch; agree
 corpus/list-blocks.bc 1.0 cancellable abortive: branch; agree
 corpus/list-blocks.bc 2.0 cancellable abortive: branch; agree
 corpus/list-blocks.bc 3.0 cancellable abortive: branch; agree
@@ -576,5 +582,12 @@ corpus/tree-map.bc 3.0 cancellable abortive: branch; agree
 corpus/tree-map.bc 2.0 cancellable abortive: branch; agree
 corpus/trim-replace.bc 1.0 cancellable abortive: branch; agree
 corpus/utf8-count.bc 1.0 cancellable abortive: branch; agree
+corpus/with-lend-head-type.bc 1.0 cancellable abortive: branch; agree
+corpus/with-lend-head-type.bc 2.0 cancellable abortive: branch; agree
+corpus/with-nested-lend.bc 1.0 cancellable abortive: -; agree
+corpus/with-nested-lend.bc 2.0 cancellable abortive: -; agree
+corpus/with-nested-lend.bc 3.0 cancellable abortive: -; agree
+corpus/with-nested-lend.bc 4.0 cancellable abortive: -; agree
+corpus/with-nested-lend.bc 5.0 cancellable abortive: -; agree
 corpus/yield-callback.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/yield-callback.bc 1.0 cancellable tail: direct; agree

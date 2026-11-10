@@ -1,6 +1,6 @@
 import Lean
 /-!
-`#print axioms` for every declaration of `Paper.*`, `Support.*`, `Examples.*`, `Core.*`, `Frontend.*`, `Target.*`, `Pipeline.*` and `Backend.*` at once: for
+`#print axioms` for every declaration of `Paper.*`, `Support.*`, `Examples.*`, `Core.*`, `Frontend.*`, `Target.*`, `Pipeline.*`, `Reference.*` and `Backend.*` at once: for
 each, the axioms its type and value reach, transitively.  Fails unless every
 one is among `propext`, `Classical.choice` and `Quot.sound`.
 
@@ -26,7 +26,7 @@ def uses (ci : ConstantInfo) : Array Name :=
 unsafe def main : IO UInt32 := do
   initSearchPath (← findSysroot)
   enableInitializersExecution
-  let env ← importModules #[{ module := `Paper }, { module := `Support }, { module := `Examples }, { module := `Core }, { module := `Frontend }, { module := `Target }, { module := `Pipeline }, { module := `Backend }] {} 0 (loadExts := true)
+  let env ← importModules #[{ module := `Paper }, { module := `Support }, { module := `Examples }, { module := `Core }, { module := `Frontend }, { module := `Target }, { module := `Pipeline }, { module := `Reference }, { module := `Backend }] {} 0 (loadExts := true)
   let ok : NameSet := NameSet.empty |>.insert ``propext |>.insert ``Classical.choice |>.insert ``Quot.sound
   -- The project's declarations, module by module (a module may list a name twice).
   let mut decls : Array Name := #[]
@@ -34,7 +34,7 @@ unsafe def main : IO UInt32 := do
   for mod in env.header.moduleNames, data in env.header.moduleData do
     unless (`Paper).isPrefixOf mod || (`Support).isPrefixOf mod || (`Examples).isPrefixOf mod ||
         (`Core).isPrefixOf mod || (`Frontend).isPrefixOf mod || (`Target).isPrefixOf mod ||
-        (`Pipeline).isPrefixOf mod || (`Backend).isPrefixOf mod do continue
+        (`Pipeline).isPrefixOf mod || (`Reference).isPrefixOf mod || (`Backend).isPrefixOf mod do continue
     for n in data.constNames do
       unless listed.contains n do
         listed := listed.insert n

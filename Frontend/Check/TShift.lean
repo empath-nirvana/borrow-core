@@ -40,6 +40,7 @@ open BoCa.Lifetime (LifeCtx LifeVar)
 def Atom.eval : Atom → VTy → Bool
   | .pers, A => A.persistent
   | .bang, A => isBangB A
+  | .flat, A => A.flat
   | .ownFree, A => ownFreeB A
   | .nfree x, A => !vfreeB x A
   | .outl Δ a, A => outlivesB Δ a A
@@ -320,7 +321,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .zeroE _ _ _ _ tV => AbsF.orO (tV.absF Δ) (some .tt)
   | .topI _ _ => some .tt
   | .allI _ _ x b _ _ t => AbsF.withO (.atom (.nfree x)) (t.absF (Δ.extend x b))
-  | .bangThunkF _ _ _ t | .bangThunkV _ _ _ t => AbsF.withO (.atom .bang) (t.absF Δ)
+  | .bangThunkF _ _ _ t | .bangThunkV _ _ _ t => AbsF.withO (.atom .flat) (t.absF Δ)
   | .boxI _ _ a _ t => AbsF.withO (.atom (.outl Δ a)) (t.absF Δ)
   | .withbor1U _ _ _ _ _ _ td | .withbor2U _ _ _ _ _ _ td | .withbor3U _ _ _ _ _ _ _ td
   | .sliceBorrowMU _ _ _ _ _ _ td | .sliceBorrowIU _ _ _ _ _ _ td =>

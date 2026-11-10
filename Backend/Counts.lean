@@ -6,12 +6,13 @@ import Pipeline.Counts
 /-!
 # Backend — `bcc-counts`
 
-    lake exe bcc-counts <file> [-- arg…]
+    lake exe bcc-counts [--backend old|new] <file> [-- arg…]
+    lake exe bcc-counts [--backend old|new] --native <file> [-- arg…]
+    lake exe bcc-counts [--backend old|new] --frames <file> [-- arg…]
     lake exe bcc-counts --sites <file>
+    lake exe bcc-counts --lowering <file>
     lake exe bcc-counts --kernel [--sites] <name>
-    lake exe bcc-counts --native <file> [-- arg…]
     lake exe bcc-counts --cells <file>
-    lake exe bcc-counts [--backend new] --frames <file> [-- arg…]
 
 Run the program at the flat IR (`Target/Flat/Interp.lean`) and under `wasmtime`, each built to
 count, and print `allocs N indirect M copies K loads L stores S bounds B`: the objects the run
@@ -22,8 +23,9 @@ bounds checks (each test of an index against an array's length that an access ma
 `split` or a literal's byte, marked by `tickBound` in the counting build; the tests that end a
 loop are not among them). A program that declares `stdin` reads all of standard input
 first and gives it to both, and the words after `--` are the program's arguments at both
-(SPEC §34). `scripts/compile-corpus.sh` compares the counts with
-`corpus/counts.expected`. An indirect call is a dispatched one: a closure call whose code a
+(SPEC §34). `scripts/compile-backend2.sh` compares Backend2's counts with
+`corpus/counts-backend2.expected`, and `scripts/compile-corpus.sh` the old backend's
+(`--backend old`) with `corpus/counts.expected`. An indirect call is a dispatched one: a closure call whose code a
 `switch` on the closure's tag chooses at run time. A copy is one that the ownership discipline
 inserts where a variable is used by two sequential parts (`Backend/README.md`, Memory discipline)
 at a type whose copy is not the words themselves: each is a deep copy that allocates.
@@ -51,10 +53,12 @@ With `--kernel`, the program is the kernel program `name` (`Backend/Kernel.lean`
 
 With `--frames`, print only `slots N`: the frame slots the run starts at the flat IR (`Exp.slot`),
 the cells placed in a frame slot rather than allocated, per run. `scripts/native-facts.sh`
-compares the new backend's with the old backend's (SPEC §50).
+compares Backend2's with the old backend's (SPEC §50).
 
-With `--backend new` first, the program is compiled by the new backend (`Backend2/`, the pure
-fragment): its word IR and its Wasm or native build, counted the same way.
+The program is compiled by Backend2 (`Backend2/`), the default: its word IR and its Wasm or
+native build. With `--backend old` first, it is compiled by the old backend (`Backend/`), counted
+the same way. `--sites`, `--lowering`, `--kernel` and `--cells` report on the old backend's
+closure IR and layout types whichever the backend.
 -/
 
 /-- The call-site report of `--sites`. -/
@@ -164,7 +168,7 @@ def main (argv₀ : List String) : IO UInt32 := do
   let (new, argv) := match argv₀ with
     | "--backend" :: "new" :: rest => (true, rest)
     | "--backend" :: "old" :: rest => (false, rest)
-    | _ => (false, argv₀)
+    | _ => (true, argv₀)
   if let "--native" :: file :: rest := argv then
     match rest with
     | [] => return ← nativeMain new file []

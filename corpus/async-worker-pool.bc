@@ -2,7 +2,7 @@
 -- (a scale and an offset); each worker processes its jobs with it, awaiting between jobs. The
 -- tasks run under `lib/async.bc`'s scheduler, interleaved, and the configuration is freed after.
 --
--- Idiom: copy the value out (decision 71). The configuration is plain data, so `main` reads it
+-- Idiom: copy the value out. The configuration is plain data, so `main` reads it
 -- out of its cell once, inside one borrow that ends before any task runs, and gives each task of
 -- `spawn` its own copy: no borrow is held across an `await`. A task of `spawn` cannot hold an
 -- outer borrow (its continuation is boxed at `top`, SPEC §30). `corpus/async-workers-scoped.bc`

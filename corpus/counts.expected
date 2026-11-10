@@ -90,17 +90,23 @@ clo-coerce 1 0 0 3 3 0 # the counter's cell; `main`'s lifetime is a cell of no w
 clo-counter 2 0 0 29 29 0 # the cell the closure is stored in, and the counter's cell; the calls through `mut` are direct
 clo-depth 2 0 0 49 49 0 # as clo-counter: four calls through three functions and a reborrow, all direct
 clo-consume 3 0 0 5 5 0 # three counters' cells, each freed by its `close`
+closure-capture-scalar 0 0 0 0 0 0 # every capture is a word; a closure's copy copies words and allocates nothing
+closure-captures-int 6 0 0 36 36 0 # the input list's 3 nodes and the mapped list's 3; the algebra copies `n` as a word
+closure-captures-list 3 0 0 9 9 0 # the list's 3 nodes, moved into the closure: no copy
 data-json-map-ser 16 0 0 699 420 205
 effects-load-raise 4 0 0 204 184 15
 for-arm-raises-owned 8 0 0 54 54 54
 handle-arm-releases 2 0 0 13 13 13
+if-match-argument 0 0 0 0 0 0
 infer-local-from-call 4 0 0 16 16 0
 infer-local-sum-generic 1 0 0 16 16 5
 infer-local-unit 2 0 0 4 4 1
 leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 4861 # as 0039-combination-sum: the same search, by a loop over the candidates
 lend-call-raise 9 0 0 34 31 4 # the cells of the eight lending runs, those scoped to a call included, and the table
 lend-call-record 1 0 0 6 2 0 # the cell scoped to the call, freed by the unwinding lend's finaliser
+lend-tail-call 1 0 0 10 6 0
 lit-lend-raise 6 0 0 69 30 39 # one array per literal view: the unwinding form is not marked as a literal's view (SPEC §18), so the table is tabulated into the heap
+load-for-linear 1 0 0 155 65 19
 nu-file-read 2 0 0 7 6 0 # the buffer and the file's content cell; the observations are direct calls
 nu-file-twice 2 0 0 11 11 0 # as nu-file-read: three reads, one through a reborrow
 nu-file-consumed 2 0 0 5 5 0 # the buffer and the content cell, freed by the object's consume
@@ -470,4 +476,6 @@ tree-map 29 0 2 209 161 0 # the trees' nodes, one object per node; the copies ar
 tree-view-tasks 1205 0 0 50505 29457 8727
 trim-replace 8 0 0 4640 4179 4707 # the input string, and one replaced string per line (four)
 utf8-count 4 0 0 341 109 263 # the line buffer, reused; the stdin, stdout and stderr cells are words of the program's data
+with-lend-head-type 0 0 0 4 4 0
+with-nested-lend 2 0 0 13 13 13
 yield-callback 3 0 0 3 3 0

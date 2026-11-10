@@ -1,5 +1,7 @@
 # #746: the checker inserts the derived copy at `imm`
 
+*History: the scope of #746's derived copy at `imm`; it landed as SPEC §12 and §42 (1.18). The text below is kept as the record.*
+
 Scope for the unit after #746 steps 1–5. Written before any code; reviewed (section 7) before the
 build. Read at `origin/main` 32aae3e4. Facts marked *(run)* were checked with a prototype of section 1
 built in this worktree before the review; the review may change it.

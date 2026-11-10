@@ -30,8 +30,8 @@ allow=$(grep -vE '^(#|$)' scripts/type-eq.allow | awk '{print $1}' | sort -u)
 check() {
   lake env lean "$1" > "$tmp/census" 2>&1 || { echo "check-type-eq: the census failed:"; cat "$tmp/census"; return 2; }
   scanned=$(awk -F'\t' '$1 == "#scanned" {print $2}' "$tmp/census")
-  if [ "$scanned" != "Backend Backend2 Frontend Pipeline Target" ]; then
-    echo "check-type-eq: the census read the modules under \"$scanned\", not Backend Backend2 Frontend Pipeline Target"
+  if [ "$scanned" != "Backend Backend2 Frontend Pipeline Reference Target" ]; then
+    echo "check-type-eq: the census read the modules under \"$scanned\", not Backend Backend2 Frontend Pipeline Reference Target"
     echo "(a new library in bcc's import closure: add it here and to SPEC §3)"; return 2
   fi
   awk -F'\t' '$1 != "#scanned" {print $1 "\t" $2}' "$tmp/census" > "$tmp/hits"
@@ -87,4 +87,4 @@ for want in Frontend.Check.negBeq Frontend.Check.negDecide Frontend.Check.negFin
     echo "check-type-eq: the negative tests' output lacks $want"; cat "$tmp/negout"; exit 1
   fi
 done
-echo "check-type-eq: $n declarations under Backend, Backend2, Frontend, Pipeline and Target decide a type equality, each the helper or allowlisted; the negative tests are refused"
+echo "check-type-eq: $n declarations under Backend, Backend2, Frontend, Pipeline, Reference and Target decide a type equality, each the helper or allowlisted; the negative tests are refused"

@@ -4,7 +4,7 @@
 -- elaborated (`corpus/pending/gen-list-thread.bc`), so the list is built from the
 -- buffer after the loop.
 --
--- Idiom: a generator over data it owns, read by index (decision 71). A generator that holds a
+-- Idiom: a generator over data it owns, read by index. A generator that holds a
 -- borrowed view of the source across its `yield`s, driven by a `for` inside that borrow's block,
 -- would hold the borrow across the loop's ticks, which no rule allows (SPEC §14, §19). Here the
 -- generator is given the literal itself: a literal is persistent (its length and a `!` function

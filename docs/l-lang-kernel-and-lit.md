@@ -1,6 +1,6 @@
 # l_lang salvage: kernel techniques, proof burden, and literature
 
-*For borrow-core; companion to [Salvage from l_lang](l-lang-salvage.md). This report merges three read-only readers of `/Users/johnthompson/repos/l_lang` (the μ/ν kernel reader, the proof-burden reader and the bibliography readers) and checks them against borrow-core. Nothing was built, edited or run in either repo. The borrow-core checkout is on `experiment/optics` at `a572f16`, and I checked coverage against that working tree.*
+*For borrow-core; companion to [Salvage from l_lang](archive/l-lang-salvage.md). This report merges three read-only readers of `/Users/johnthompson/repos/l_lang` (the μ/ν kernel reader, the proof-burden reader and the bibliography readers) and checks them against borrow-core. Nothing was built, edited or run in either repo. The borrow-core checkout is on `experiment/optics` at `a572f16`, and I checked coverage against that working tree.*
 
 **Before reading, note two things:**
 - **How to read the tags.** A claim marked **[unverified]** comes from a reader or from an l_lang doc, and I did not re-check it. Line numbers into l_lang are the readers'. I checked borrow-core line references myself where I cite them.

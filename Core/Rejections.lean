@@ -343,6 +343,14 @@ theorem vview_ref_bang {A X : VTy} (h : VView (.ref A) (.bang X)) : False := by
   rw [hh.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)] at hα
   simp [VTy.alphaB] at hα
 
+/-- A view of a `Ref` is not persistent: its head is a `Ref`.  `[spec §10]` -/
+theorem vview_ref_not_persistent {A T : VTy} (h : VView (.ref A) T) (hT : T.Persistent) : False := by
+  obtain ⟨h', hh, hα⟩ := h.hnf_of (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
+    (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ _ h => by cases h)
+  have hp := hh.persistent
+  rw [show T.persistent = true from hT] at hp
+  cases h' <;> simp [VTy.alphaB, VTy.persistent] at hα hp
+
 /-- AT06's clause: `λ(a, κ). consume (free c); κ.resume ()`, `c` the cell bound outside. -/
 abbrev at06Cl : Expr :=
   .lam (.letpair (.var 0) (.seq (dropB (.app free' (.var 3)))
@@ -372,11 +380,11 @@ theorem not_der_at06 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ
   obtain ⟨T, hT⟩ := fv_live hB 1 (by simp [Expr.HasVar, dropB, free', Expr.val, Val.prim, Val.inj₁,
     Val.unit])
   have hT' : Γ_cl[0]? = some ⟨T, true⟩ := by simpa using hT
-  obtain ⟨X, rfl⟩ := banged_slot hp hT'
+  have hpT := flatLive_slot hp hT'
   have := hle_p 0 _ (hle_cl 0 _ hT')
   simp only [List.getElem?_cons_zero, Option.some.injEq, Slot.mk.injEq] at this
   obtain ⟨rfl, -⟩ := this
-  exact vview_ref_bang hvc
+  exact vview_ref_not_persistent hvc (VTy.persistent_of_flat hpT)
 
 /-! ### AT08: a continuation read twice out of a cell -/
 
@@ -504,7 +512,7 @@ def at08Once : Expr := handleWith 5 .lin at08OnceCl fooE
 resumed once. -/
 theorem d_at08OnceCl {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ at08OnceCl (.val (clauseTy [] .unit (.lin, .unit, .unit))) := by
-  refine .bangThunkV (banged_dead hΓ) rfl (.lam ?_)
+  refine .bangThunkV (banged_dead hΓ).flatLive rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
   refine .bind (A := .ref (kTy [] .unit .lin .unit)) (.left (.right (.dead (deadSplit hΓ))))
     (.ret (appW (.var (by csolo)) (.alloc (by cdead)))) ?_

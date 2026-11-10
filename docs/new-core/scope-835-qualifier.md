@@ -24,7 +24,7 @@ handler that meets the contract.
 
 It builds on `scope-835-restriction.md` (the restriction it replaces), `scope-835-lendexit.md`
 (the two orders `KW.Owed`/`KW.OwedR`), `scope-835-tables.md` §1, §9 and §10 (the tables at `KW`,
-the modes, the relation at `KW`), `scope-835-handlers.md` §1–§2 (our conditions against the
+the modes, the relation at `KW`), `../archive/new-core/scope-835-handlers.md` §1–§2 (our conditions against the
 paper), and the independent review `scratch-archive/rule791/review-cnw.md` (F1, F2).
 
 The paper is Tang, Hillerström, Lindley & Morris, *Soundly Handling Linearity*, PACMPL 8 (POPL
@@ -111,7 +111,7 @@ not *how many times*.
 | `Y ∈ {◦, •}` counts resumptions | `ub` bounds the worlds of resumption (`ExtP` at a floor versus `ExtR`) | **differs**: orthogonal to `Y`. A `ub` operation on a lend's row is never `unr` (`Row.Suspend`), so in [SHL] terms `ub` refines `◦` |
 
 **Why not a fourth value of `Qual`.** `Qual` (`lin`/`cancel`/`unr`) is [SHL]'s `Y` plus our third
-point (`scope-835-handlers.md` §2.1). `ub` is independent of it: a suspending wait may be `lin` or
+point (`../archive/new-core/scope-835-handlers.md` §2.1). `ub` is independent of it: a suspending wait may be `lin` or
 `cancel`. Folding it into `Qual` would double `kTy`, `capTag`, `capB` and every match on `Qual`,
 and mix two questions.
 
