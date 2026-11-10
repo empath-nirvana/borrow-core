@@ -417,6 +417,18 @@ corpus/gen-pipeline.bc 3.0 cancellable stored,tail: machine: a path of the claus
 corpus/gen-pipeline.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-pipeline.bc 1.0 cancellable tail: direct; agree
 corpus/gen-produce.bc 1.0 cancellable tail: direct; agree
+corpus/gen-raise-fold.bc 1.0 cancellable abortive: branch; agree
+corpus/gen-raise-fold.bc 2.0 cancellable abortive: branch; agree
+corpus/gen-raise-fold.bc 3.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-fold.bc 4.0 cancellable abortive: branch; agree
+corpus/gen-raise-fold.bc 5.0 cancellable abortive: branch; agree
+corpus/gen-raise-fold.bc 6.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-raise-take.bc 1.0 cancellable abortive: branch; agree
+corpus/gen-raise-take.bc 2.0 cancellable abortive: branch; agree
+corpus/gen-raise-take.bc 6.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-take.bc 5.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-take.bc 4.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-raise-take.bc 3.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-return.bc 2.0 cancellable tail: machine: the clause captures values; disagree
 corpus/gen-return.bc 3.0 cancellable tail: machine: the clause captures values; disagree
 corpus/gen-return.bc 1.0 cancellable tail: direct; agree
@@ -629,6 +641,10 @@ corpus/sugar/gen-yields.bc 1.0 cancellable tail: direct; agree
 corpus/sugar/gen-yields.core.bc 1.0 cancellable tail: direct; agree
 corpus/sugar/mut-await.bc 1.0 cancellable tail: direct; agree
 corpus/sugar/mut-await.core.bc 1.0 cancellable tail: direct; agree
+corpus/take-failing.bc 1.0 cancellable abortive: branch; agree
+corpus/take-failing.bc 2.0 cancellable abortive: branch; agree
+corpus/take-failing.bc 4.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/take-failing.bc 3.0 cancellable stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/text-wordfreq.bc 1.0 cancellable abortive: branch; agree
 corpus/text-wordfreq.bc 2.0 cancellable abortive: branch; agree
 corpus/tree-map.bc 4.0 cancellable tail: direct; agree

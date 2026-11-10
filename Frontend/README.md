@@ -262,7 +262,8 @@ chosen by the enclosing rule instead of threaded.
 **Implicit consumes** (SPEC §12). `Env.own` marks the slots **owed** to the computation
 being checked: variables bound by `x <- M; N`, `let (x, y) = V; M`, a `case` arm or `fun` whose
 type is linear and consumable (`consumableB`, which decides `Consumable`: `consumableB_iff`; the
-owed slot is exactly `LinearConsumable A`, `Env.pushOwn_own`). What is owed flows into tail positions:
+owed slot is exactly `LinearConsumable A`, or a stored generator over a row, closed at its row by
+`consumeOwedR`, SPEC §15, `Env.pushOwn_own`). What is owed flows into tail positions:
 the body of `<-` and `let` (less what the head or `V` used), both `case` arms, both `<,>`
 components, `fun`/`Fun` bodies, `nu_in` and ascriptions. The head `M` of `x <- M; N`, and the
 handled body of a handler site, are owed the owed variables they mention by name (`mentionsC`). A value

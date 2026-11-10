@@ -1,0 +1,66 @@
+-- A tokenizer stage that raises, under `take 3` (SPEC §15, #910). `chunk` is the source: it owns a
+-- list of bytes and yields each. `tokens` reads it, yields each comma-separated number, and raises
+-- `ParseError` (the position) at a byte that is neither a digit nor a comma. `map` doubles each
+-- token and `take` keeps three; `drain` sums them, under `to_result`. `tokens` is a stored
+-- generator over the row of `Fail`, and so are `map` and `take` over it: each adapter's copy is at
+-- its source's row, and the raise propagates out of all of them to the outer handler.
+--
+-- The source is closed by cleanup exactly once on both paths. When `take` stops after three tokens
+-- it closes `map`, whose glue closes `tokens`, whose glue closes `chunk`; when `tokens` raises, its
+-- glue closes `chunk` as the raise unwinds. A stored generator is linear, so no path closes it
+-- twice, and closing `chunk` frees the rest of its list, so `live 0` says each path closed it.
+--
+-- Answer: `(inl i32[98], inr i32[5])`: 2 * (12 + 7 + 30), the `x` after them never read; and the
+-- `x` at position 5 of `12,7,x,9`, raised. `live 0`. A `take` that read one token further raises
+-- in the first place; a source left open on either path leaves its list live.
+
+include adapters
+include fail
+include rec
+
+type Bytes = mu X. 1 + (u8 * X)
+type ParseError = i32
+
+def nil : Bytes = roll inl ()
+fn cons(b: u8, t: Bytes) -> Bytes = roll inr (b, t)
+
+fn chunk(l: Bytes) -> 1 with Yield[u8] =
+  let mut l = l;
+  while true {
+    match unroll l {
+      inl u -> break
+    | inr (b, t) -> l = t; yield(b)
+    }
+  };
+  ()
+
+fn tokens(src: U (pull u8 1 1)) -> 1 with Yield[i32], Fail[ParseError] =
+  let mut num = 0;
+  let mut any = false;
+  let mut pos = 0;
+  for b in src {
+    if b == b',' { if any { yield(num) } else { () }; num = 0; any = false }
+    else { if 48 <= b && b <= 57 { num = num * 10 + to_i32(b) - 48; any = true } else { raise(pos) } };
+    pos = pos + 1
+  };
+  if any { yield(num) } else { () };
+  ()
+
+fn drain(it: U (pull i32 1 1), acc: i32) -> i32 with Exhausted =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> drain(it, acc + x)
+  | inr d -> match d { inl u -> acc | inr it -> drain(it, acc) }
+  }
+
+fn first3(l: Bytes) -> i32 + ParseError =
+  with on_exhausted(!{ u -> inr 0 }) {
+    with to_result { drain(take(map(tokens(chunk(l)), !{ x -> x * 2 }), 3), 0) }
+  }
+
+main -> (i32 + ParseError) * (i32 + ParseError) =
+  let good = cons(b'1', cons(b'2', cons(b',', cons(b'7', cons(b',', cons(b'3', cons(b'0',
+    cons(b',', cons(b'x', nil)))))))));
+  let bad = cons(b'1', cons(b'2', cons(b',', cons(b'7', cons(b',', cons(b'x', cons(b',',
+    cons(b'9', nil))))))));
+  (first3(good), first3(bad))

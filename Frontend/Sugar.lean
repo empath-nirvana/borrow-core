@@ -8,6 +8,7 @@ import Frontend.Elab.Subst
 import Frontend.Elab.Meta
 import Frontend.Elab.LoopLend
 import Frontend.Elab.Effects
+import Frontend.Elab.FinsHeld
 import Frontend.Elab.Match
 import Frontend.Elab.Hygiene
 
@@ -1074,11 +1075,29 @@ structure MCx where
   /-- In a div body's code before its first point, run when it is called. -/
   pre : Bool := false
 
+/-- A row entry written, `n.i q[fin] A ~> B`, its cancel row (SPEC §27) written at every depth: a
+type the machine or a site writes at a row is that row as the elaboration inferred it, cancel rows
+included (SPEC §15, #910).  `[spec §15, §27]` -/
+def opSrcM {m : Type → Type} [Monad m] (pp : CVTy → m String) (k : Nat)
+    (o : BoCa.Fig16.LogRel.Core.OpSig) : m String := do
+  let fin ← match k with
+    | 0 => pure ""
+    | k + 1 =>
+      let fs := o.fin.rowOf
+      if fs.isEmpty then pure "" else do
+        let es ← fs.attach.mapM fun ⟨f, _⟩ => opSrcM pp k f
+        pure ("[" ++ ", ".intercalate es ++ "]")
+  pure s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q}{fin} {← pp o.A} ~> {← pp o.B}"
+termination_by k
+
+/-- `opSrcM` at a pure printer. -/
+def opSrc (pp : CVTy → String) (o : BoCa.Fig16.LogRel.Core.OpSig) : String := Id.run (opSrcM (m := Id) (fun A => pure (pp A)) 8 o)
+
 /-- `F_Σ A` at the machine's row, written: `F[n.i q A ~> B, …] A`, or `F A`. -/
 def MCx.fSrc (m : MCx) (A : String) : String :=
   if m.row.isEmpty then s!"F ({A})" else
   "F[" ++ ", ".intercalate (m.row.map fun o =>
-    s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {m.pp o.A} ~> {m.pp o.B}") ++ s!"] ({A})"
+    opSrc m.pp o) ++ s!"] ({A})"
 
 structure MSt where
   pts : Array MPoint := #[]
@@ -5014,7 +5033,7 @@ case io_so{sfx} \{
         let rowAt ← ks.zipIdx.mapM fun (_, h) => do
           let outer := (ks.drop (h + 1)).flatMap fun k' => S.filter (·.n.toNat == k')
           let es ← outer.mapM fun o => do
-            pure s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {← pp o.A} ~> {← pp o.B}"
+            opSrcM pp 8 o
           pure (", ".intercalate es)
         let arrow (A : String) (h : Nat) : String :=
           match rowAt[h]? with
@@ -5058,7 +5077,7 @@ case io_so{sfx} \{
     -- with the self-reference, or leaves by an exit.
     let FR ← do
       let es ← S.mapM fun o => do
-        pure s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {← pp o.A} ~> {← pp o.B}"
+        opSrcM pp 8 o
       pure s!"F[{", ".intercalate es}] (({St}) + ({stepT}))"
     let At := s!"i32 * ({St})"
     let rowCore := s!"{pre}io_nb{sfx} <- if {bound} < 0 \{ 0 } else \{ {bound} };
@@ -5312,7 +5331,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let F (A : String) : DM String := do
       if S.isEmpty then return s!"F ({A})"
       let es ← S.mapM fun o => do
-        pure s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {← pp o.A} ~> {← pp o.B}"
+        opSrcM pp 8 o
       pure s!"F[{", ".intercalate es}] ({A})"
     -- The loop's value: `let r = for …`. A generator's loop ends when the generator returns.
     let (keep, N) := match N.forElse?, N.forRes? with
@@ -5521,25 +5540,37 @@ def pullView : Nat → TCx → Span → ItInfo → Val → DM Comp
     let (looping, Bg, row) := match loopRowOf Res with
       | some (S, B, _) => (true, B, S)
       | none => (false, Res, S0)
-    if row.any (·.n.toNat != i.n) then
-      throw ⟨sp, s!"`{i.callee}` performs operations besides what it yields: its stored generator " ++
-        "is not provided"⟩
-    let some Tc := (row.find? (·.n.toNat == i.n)).map (·.A)
+    let some yo := row.find? (·.n.toNat == i.n)
       | throw ⟨sp, s!"the type of what `{i.callee}` yields is not determined here"⟩
+    let Tc := yo.A
+    -- What its observations perform besides what it yields (SPEC §15, #910): the stored
+    -- generator is `pull_Σ`, its clauses answer at `F_Σ`, and its `close`, the cancel of the
+    -- continuation, is at `cancelTy Σ fin`.  `[spec §15]`
+    let rest := row.filter (·.n.toNat != i.n)
+    let ppC (C : CCTy) : DM String := do
+      match ← (c.surface sp (.thunk C) : Except Error VTy) with
+      | .thunk _ C' => pure s!"({C'.pp 0})"
+      | V => throw ⟨sp, s!"internal error: a stored generator's type `{V.pp}`"⟩
+    let rowS ← match ← (c.surface sp (.thunk (Frontend.Check.effOf rest .unit)) : Except Error VTy) with
+      | .thunk _ (.eff _ r _) => pure r.pp
+      | _ => pure ""
+    let Fr (A : String) : String := if rest.isEmpty then s!"F ({A})" else s!"F[{rowS}] ({A})"
+    let Kc ← ppC (BoCa.Fig16.LogRel.Core.cancelTy rest yo.fin)
+    let Pt ← ppC (Frontend.Check.pullRowTy rest Tc Bg .unit)
     let Tt ← pp Tc
     let Bt ← pp Bg
     let src ← if !looping then do
-      let Q := s!"iter ({Tt}) ({Bt}) 1"
+      let Q := s!"nu Y. {Fr s!"(({Tt}) * U Y) + ({Bt})"} & {Fr "1"}"
       let R := s!"(({Tt}) * U ({Q})) + ({Bt})"
-      let K := s!"U ((1 -o F ({R})) & F 1)"
+      let K := s!"U ((1 -o {Fr R}) & {Kc})"
       pure s!"io_pq{sfx} : U ({Q}) <- return (thunkv nu_in <
-    handle_with[{i.n}](((!thunkv fun (io_pv{sfx} : {Bt}) -> return (inr io_pv{sfx})) : !({Bt} => {R})),
+    handle_with[{i.n}](((!thunkv fun (io_pv{sfx} : {Bt}) -> return (inr io_pv{sfx})) : !U ({Bt} -o {Fr R})),
       (((!thunkv fun (io_pp{sfx} : ({Tt}) * {K}) ->
         let (io_px{sfx}, io_pk{sfx}) = io_pp{sfx};
         return (inl (io_px{sfx}, thunkv nu_in < io_pu{sfx} <- return (); (force io_pk{sfx}).1 io_pu{sfx}, (force io_pk{sfx}).2 >))), ()) :
-        (!(({Tt}) * {K} => {R})) * 1)) (force io_hole_call),
+        (!U ((({Tt}) * {K}) -o {Fr R})) * 1)) (force io_hole_call),
     return () >);
-io_pf{sfx} <- return (unbang (unfold[pull ({Tt}) ({Bt}) 1, U ({Q})] (!thunkv fun (io_pa{sfx} : U ({Q})) ->
+io_pf{sfx} <- return (unbang (unfold[{Pt}, U ({Q})] (!thunkv fun (io_pa{sfx} : U ({Q})) ->
   < io_po{sfx} <- (nu_out (force io_pa{sfx})).1;
     case io_po{sfx} \{ inl io_pe{sfx} -> return (inl io_pe{sfx}) | inr io_pb{sfx} -> return (inr (inl io_pb{sfx})) },
     (nu_out (force io_pa{sfx})).2 >)));
@@ -5548,27 +5579,23 @@ return (thunkv nu_in < (nu_out (force io_pf{sfx} io_pq{sfx})).1, (nu_out (force 
       let some (_, _, Rg) := loopRowOf Res | throw ⟨sp, "internal error: a generator's loop"⟩
       let Lg ← pp Res
       let Rgs ← pp Rg
-      let Fn (A : String) : String :=
-        let es := row.map fun o => s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {Tt} ~> 1"
-        s!"F[{", ".intercalate es}] ({A})"
-      let Q := s!"nu Y. F (({Tt}) * U Y + (({Bt}) + {Lg})) & F 1"
+      let Q := s!"nu Y. {Fr s!"({Tt}) * U Y + (({Bt}) + {Lg})"} & {Fr "1"}"
       let R := s!"(({Tt}) * U ({Q})) + (({Bt}) + {Lg})"
-      let K := s!"U ((1 -o F ({R})) & F 1)"
-      let Kc := s!"U ((1 -o F ({Rgs})) & F 1)"
+      let K := s!"U ((1 -o {Fr R}) & {Kc})"
+      let Kcl := s!"U ((1 -o {Fr Rgs}) & {Kc})"
       let St := s!"{Lg} + U ({Q})"
-      let _ := Fn
       pure s!"io_pl{sfx} <- force io_hole_call;
 io_ps{sfx} : {St} <- return (inl io_pl{sfx});
-io_pf{sfx} <- return (unbang (unfold[pull ({Tt}) ({Bt}) 1, {St}] (!thunkv fun (io_pa{sfx} : {St}) ->
+io_pf{sfx} <- return (unbang (unfold[{Pt}, {St}] (!thunkv fun (io_pa{sfx} : {St}) ->
   < -- One turn of the generator's loop, handled: one handler site, so that the continuation it
     -- keeps is of one code.
-    io_pob{sfx} : !({Lg} => {R}) <- return (!thunkv fun (io_pl{sfx} : {Lg}) ->
+    io_pob{sfx} : !U ({Lg} -o {Fr R}) <- return (!thunkv fun (io_pl{sfx} : {Lg}) ->
       handle_with[{i.n}](((!thunkv fun (io_pv{sfx} : ({Bt}) + {Lg}) -> return (inr io_pv{sfx})) :
-          !(({Bt}) + {Lg} => {R})),
+          !U ((({Bt}) + {Lg}) -o {Fr R})),
         (((!thunkv fun (io_pp{sfx} : ({Tt}) * {K}) ->
           let (io_px{sfx}, io_pk{sfx}) = io_pp{sfx};
           return (inl (io_px{sfx}, thunkv nu_in < io_pu{sfx} <- return (); (force io_pk{sfx}).1 io_pu{sfx}, (force io_pk{sfx}).2 >))), ()) :
-          (!(({Tt}) * {K} => {R})) * 1)) ((nu_out (force io_pl{sfx})).1));
+          (!U ((({Tt}) * {K}) -o {Fr R})) * 1)) ((nu_out (force io_pl{sfx})).1));
     io_po{sfx} : {R} <- case io_pa{sfx} \{
         inl io_pg{sfx} -> return ((unbang io_pob{sfx}) io_pg{sfx})
       | inr io_pq{sfx} ->
@@ -5593,11 +5620,11 @@ io_pf{sfx} <- return (unbang (unfold[pull ({Tt}) ({Bt}) 1, {St}] (!thunkv fun (i
     case io_pa{sfx} \{
       inl io_pg{sfx} ->
         io_cz{sfx} <- handle_with[{i.n}](((!thunkv fun (io_cv{sfx} : {Rgs}) -> return io_cv{sfx}) :
-            !({Rgs} => {Rgs})),
-          (((!thunkv fun (io_cp{sfx} : ({Tt}) * {Kc}) ->
+            !U ({Rgs} -o {Fr Rgs})),
+          (((!thunkv fun (io_cp{sfx} : ({Tt}) * {Kcl}) ->
             let (io_cx{sfx}, io_ck{sfx}) = io_cp{sfx};
             io_cu{sfx} <- return ();
-            (force io_ck{sfx}).1 io_cu{sfx}), ()) : (!(({Tt}) * {Kc} => {Rgs})) * 1))
+            (force io_ck{sfx}).1 io_cu{sfx}), ()) : (!U ((({Tt}) * {Kcl}) -o {Fr Rgs})) * 1))
           ((nu_out (force io_pg{sfx})).2);
         return ()
     | inr io_pq{sfx} -> (nu_out (force io_pq{sfx})).2
@@ -6511,6 +6538,9 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- The cancel rows its finalisers require, read off its output; when there are any, the pass
   -- again, its rows carrying them (SPEC §27, `Frontend.Elab.Fins`).  `[spec §18, §27]`
   let fins := Elab.Fins.table fxr.decls
+  -- A function given a stored generator over a row holds it across its operations, which the
+  -- checker's glue closes on a cancel (SPEC §15, #910).  `[spec §15]`
+  let fins := Elab.FinsHeld.add fins fxr.decls
   let fxr ← if fins.isEmpty then pure fxr else
     (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls fins : Except Error _)
   let (decls, fx, perTurn, pcaps) := (fxr.decls, fxr.reports, fxr.perTurn, fxr.platform)

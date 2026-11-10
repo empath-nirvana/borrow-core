@@ -99,12 +99,20 @@ def iterOf (V : CVTy) : Option (CVTy × CVTy × CVTy) :=
     if tyEqV V (.thunk (BoCa.Fig16.LogRel.Core.CTy.iter A R R')) then some (A, R, R') else none
   | _ => none
 
-/-- `U (pull A B R)`: its `A`, `B` and `R`. -/
-def pullOf (V : CVTy) : Option (CVTy × CVTy × CVTy) :=
+/-- `U (pull_Σ A B R)`, at any row: `Σ`, `A`, `B` and `R` (SPEC §15, #910).  `[spec §15]` -/
+def pullRowOf (V : CVTy) : Option (CRow × CVTy × CVTy × CVTy) :=
   match V with
-  | .thunk (.nu (.amp (.ret (.sum (.tensor A (.tvar 0)) (.sum B (.tvar 0)))) (.ret R))) =>
-    if tyEqV V (.thunk (Frontend.Check.pullTy A B R)) then some (A, B, R) else none
+  | .thunk (.nu (.amp C D)) => do
+    let (S, O) ← effRow? C
+    let (_, R) ← effRow? D
+    match O with
+    | .sum (.tensor A (.tvar 0)) (.sum B (.tvar 0)) =>
+      if tyEqV V (.thunk (Frontend.Check.pullRowTy S A B R)) then some (S, A, B, R) else none
+    | _ => none
   | _ => none
+
+/-- `U (pull_Σ A B R)`, at any row: its `A`, `B` and `R`. -/
+def pullOf (V : CVTy) : Option (CVTy × CVTy × CVTy) := (pullRowOf V).map (·.2)
 
 /-- The element type of an iterator or a generator. -/
 def elemOf (V : CVTy) : Option CVTy :=

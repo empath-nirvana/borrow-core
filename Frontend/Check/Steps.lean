@@ -894,22 +894,39 @@ def lookupVar (x : String) : List (Option String) → Option Nat
   | [] => none
   | y :: ys => if y == some x then some 0 else (lookupVar x ys).map (· + 1)
 
+/-- A stored generator over a row (SPEC §15, #910): a slot of type `U (νX. C & F_Σc R)`, `Σc`
+non-empty and `R` closed and consumable. Its consume is its `close` at `Σc`, then `R`'s: the
+row and `R`.  `[spec §15]` -/
+def closeAt? (A : CVTy) : Option (CRow × CVTy) :=
+  match A with
+  | .thunk (.nu (.amp _ D)) =>
+    match effRow? D with
+    | some (Sc, R) =>
+      if !Sc.isEmpty && VTy.clB 0 R && consumableB R then some (Sc, R) else none
+    | none => none
+  | _ => none
+
 /-- A slot that is not owed: a dead binder. -/
 def Env.push (E : Env) (x : Option String) : Env :=
   { E with vars := x :: E.vars, own := false :: E.own, cap := false :: E.cap }
 
 /-- A binder's live slot `x : A`, owed to its scope when `A` is linear and is consumable
-(SPEC §12). -/
+(SPEC §12), or is a stored generator over a row, closed at its row (`closeAt?`, SPEC §15). -/
 def Env.pushOwn (E : Env) (x : String) (A : CVTy) : Env :=
-  { E with vars := some x :: E.vars, own := (!A.persistent && consumableB A) :: E.own,
+  { E with vars := some x :: E.vars,
+           own := (!A.persistent && (consumableB A || (closeAt? A).isSome)) :: E.own,
            cap := false :: E.cap }
 
-/-- A binder owes exactly the slot that is consumable.  `[spec §12]` -/
+/-- A binder owes exactly the slot that is consumable, or a stored generator over a row.
+`[spec §12, §15]` -/
 theorem Env.pushOwn_own (E : Env) (x : String) (A : CVTy) :
-    (E.pushOwn x A).own.head? = some (decide (LinearConsumable A)) := by
-  simp only [Env.pushOwn, List.head?_cons, Option.some.injEq]
-  rw [Bool.eq_iff_iff]
-  simp [LinearConsumable, Linear, consumableB_iff]
+    (E.pushOwn x A).own.head? =
+      some (decide (LinearConsumable A) || (!A.persistent && (closeAt? A).isSome)) := by
+  have h : (!A.persistent && consumableB A) = decide (LinearConsumable A) := by
+    rw [Bool.eq_iff_iff]
+    simp [LinearConsumable, Linear, consumableB_iff]
+  simp only [Env.pushOwn, List.head?_cons, Option.some.injEq, ← h]
+  cases A.persistent <;> cases consumableB A <;> simp
 
 /-- Nothing owed: a terminal computation, checked before what it leaves owed is consumed. What it
 was owed is held for the values in it (`Env.cap`).  `[spec §12]` -/
@@ -1158,34 +1175,6 @@ def atRow (E : Env) (sp : Span) (S : CRow) :
     | none => throw ⟨sp, s!"after a computation that performs operations, this must have a " ++
         s!"type `F[…] B`, but it has type `{E.ppC C}`"⟩
 
-/-- The finaliser of an effectful binding: the consumes of the non-persistent slots `u` (the
-slots the rest of the computation uses), under the binder's dead slot, at the pure row (SPEC §24:
-a finaliser lets no raise escape). It runs when an abortive operation of the bound computation
-stops the rest. SPEC §19's consume glue: `[then]`'s `D`, inserted as SPEC §12 inserts consumes. -/
-def finalOf (E : Env) (sp : Span) (S : CRow) (u : List Bool) :
-    Except Error (Res Δ (.unit :: T) (.comp (effOf [] .unit))) := do
-  -- The row has an operation that resumes and may be cancelled (`capB`): the finaliser runs at
-  -- its cancel. Otherwise only an abort stops the rest.
-  let cancels := S.any fun o => BoCa.Fig16.LogRel.Core.capB o.q o.B
-  let idx := (List.range T.length).filter fun i =>
-    u.getD i false && !((T[i]?.map (·.persistent)).getD true)
-  let r0 : Res Δ (.unit :: T) (.comp (.ret .unit)) := rRet (at_ sp) (rUnit (at_ sp))
-  for i in idx do
-    match T[i]? with
-    | some A =>
-      unless consumableB A do
-        if cancels then
-          throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across an operation that " ++
-            "may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its " ++
-            "consume, and its type is linear and not consumable" ++ E.closeHint A true⟩
-        else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
-          "that may abort, and its type is linear and not consumable, and an abort abandons " ++
-          "only a value that holds no owned cell" ++ E.closeHint A true⟩
-    | none => throw ⟨sp, "internal error: a slot is out of range"⟩
-  -- In reverse binding order, as at the end of a path (SPEC §12, `consumeOwed`): the lowest index,
-  -- the most recently bound slot, is consumed first, so it is wrapped last, outermost.
-  idx.reverse.foldlM (init := r0) fun r i => consumeOne sp (i + 1) r
-
 /-- A marked scheme's derived node, over its checked term (SPEC §3). -/
 def markIt {j : Jdg} (sp : Span) (k : SchemeMark) (r : Res Δ T j) : Except Error (Res Δ T j) :=
   match rMarked (at_ sp) k r with
@@ -1254,6 +1243,103 @@ def thenIt (E : Env) (sp : Span) (x : String) {S SD : CRow} {A B : CVTy} {tN : T
     else throw ⟨sp, s!"the row `{ppRow E S}` has an operation twice"⟩
   else throw ⟨sp, s!"the row `{ppRow E S}` has an operation of the reserved name 0"⟩
 
+/-- `r` under one more slot of type `A`, dead: it does not use it (`TTied.weaken` at a dead
+slot, `TExpr.shift 1 0`). `none` when `r`'s derivation cannot be placed at a wider context
+(`TExpr.absF`).  `[spec §15]` -/
+def rWeakDead (A : CVTy) {j : Jdg} (r : Res Δ T j) : Option (Res Δ (A :: T) j) :=
+  match hf : r.t.absF Δ with
+  | none => none
+  | some f => some ⟨r.t.shift 1 0, r.sigs, r.pins,
+    ⟨false :: r.F.u, false :: r.F.w, by simp [r.F.hu], by simp [r.F.hw], fun L hb => by
+      cases hb with
+      | cons h₁ h₂ h =>
+        rename_i l ls
+        have hl : l = false := by cases l <;> simp_all
+        subst hl
+        have hw := TTied.weaken (Γa := []) (Γb := mkCtx T ls) (Γp := [⟨A, false⟩])
+          (by simpa using r.F.d ls h) hf (fun s hs hlv => by simp at hs; subst hs; simp at hlv)
+        simpa [mkCtx] using hw⟩⟩
+
+/-- The rows `S` and `S'` together, each name once (`S`'s entry first). -/
+def rowJoin (S S' : CRow) : CRow :=
+  S ++ S'.filter fun o => !S.any fun p => p.n == o.n && p.i == o.i
+
+/-- The closes of the stored generators over a row at the slots `ks`, the lowest index first, at
+the row `SD` (SPEC §15, #910): `y <- (nu_out (force xₖ)).2; consumeE R y; …`. Each close is a
+`[then]` whose finaliser closes the rest, so that a raise from one close still closes the others,
+and each is closed once.  `[spec §15]` -/
+def closeChain (E : Env) (sp : Span) (SD : CRow) (T' : List CVTy) (ks₀ : List Nat) :
+    Except Error (Res Δ T' (.comp (effOf SD .unit))) :=
+  match ks₀ with
+  | [] => liftRow (S' := []) E sp SD (rRet (at_ sp) (rUnit (at_ sp)) : Res Δ T' (.comp (effOf [] .unit)))
+  | k :: ks => do
+    match hk : T'[k]? with
+    | some (.thunk (.nu B)) =>
+      let some (Sc, R₀) := closeAt? (.thunk (.nu B))
+        | throw ⟨sp, "internal error: a stored generator's close"⟩
+      let R := R₀
+      if hB : CTy.nuOkB B = true then
+        let rO := rNuOut (at_ sp) (CTy.nuOkB_sound B hB) (rForce (at_ sp) k (.nu B) hk)
+        let ⟨D, rD⟩ ← (match hu : B.unroll with
+          | .amp _ D => pure (⟨D, rProj₂ (at_ sp) (hu ▸ rO)⟩ : Σ D : CCTy, Res Δ T' (.comp D))
+          | _ => throw ⟨sp, "internal error: a stored generator's close"⟩ : Except Error _)
+        let rC ← match convComp (at_ sp) (effOf Sc R) ⟨D, rD⟩ with
+          | .ok r => pure r
+          | .error _ => throw ⟨sp, s!"internal error: a stored generator's close at `{E.ppC D}`"⟩
+        let rC ← liftRow E sp SD rC
+        let rest := ks.map (· + 1)
+        let rN ← closeChain E sp SD (R :: T') rest
+        let rN ← consumeOne sp 0 rN
+        let FN ← popL E sp "io_close" rN.F
+        if ks.isEmpty then
+          let rD0 : Res Δ (.unit :: T') (.comp (effOf [] .unit)) := rRet (at_ sp) (rUnit (at_ sp))
+          thenIt E sp "io_close" rC FN rD0
+        else
+          let rD ← closeChain E sp SD (.unit :: T') rest
+          thenIt E sp "io_close" rC FN rD
+      else throw ⟨sp, "internal error: a stored generator's type"⟩
+    | _ => throw ⟨sp, "internal error: a closed slot is not a stored generator"⟩
+termination_by ks₀.length
+
+/-- The finaliser of an effectful binding: the consumes of the non-persistent slots `u` (the
+slots the rest of the computation uses), under the binder's dead slot. It runs when an abortive
+operation of the bound computation stops the rest, or a continuation captured in it is cancelled.
+SPEC §19's consume glue: `[then]`'s `D`, inserted as SPEC §12 inserts consumes, at the pure row,
+except that a stored generator over a row (`closeAt?`) is closed at its row: the finaliser's row
+is the union of theirs (SPEC §15, #910).  `[spec §15]` -/
+def finalOf (E : Env) (sp : Span) (S : CRow) (u : List Bool) :
+    Except Error (Σ SD : CRow, Res Δ (.unit :: T) (.comp (effOf SD .unit))) := do
+  -- The row has an operation that resumes and may be cancelled (`capB`): the finaliser runs at
+  -- its cancel. Otherwise only an abort stops the rest.
+  let cancels := S.any fun o => BoCa.Fig16.LogRel.Core.capB o.q o.B
+  let idx := (List.range T.length).filter fun i =>
+    u.getD i false && !((T[i]?.map (·.persistent)).getD true)
+  let mut closes : List Nat := []
+  let mut SD : CRow := []
+  for i in idx do
+    match T[i]? with
+    | some A =>
+      if !consumableB A then
+        match closeAt? A with
+        | some (Sc, _) =>
+          closes := closes ++ [i]
+          SD := rowJoin SD Sc
+        | none =>
+          if cancels then
+            throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across an operation that " ++
+              "may be cancelled: the cancel runs a finaliser (`[then]`) that consumes it by its " ++
+              "consume, and its type is linear and not consumable" ++ E.closeHint A true⟩
+          else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
+            "that may abort, and its type is linear and not consumable, and an abort abandons " ++
+            "only a value that holds no owned cell" ++ E.closeHint A true⟩
+    | none => throw ⟨sp, "internal error: a slot is out of range"⟩
+  -- The closes last; before them, in reverse binding order as at the end of a path (SPEC §12,
+  -- `consumeOwed`), the consumes: the lowest index, the most recently bound slot, first.
+  let r0 ← closeChain E sp SD (.unit :: T) (closes.map (· + 1))
+  let r ← (idx.filter (!closes.contains ·)).reverse.foldlM (init := r0) fun r i =>
+    consumeOne sp (i + 1) r
+  pure ⟨SD, r⟩
+
 /-- `x <- M; N` whose head `M` performs operations, at the row `S` (SPEC §19). At a row with no
 cancellable or unrestricted operation, or when every slot `N` uses holds no owned cell (and is `!`
 at an unrestricted row), `[let]`; otherwise `[then]`, with the finaliser `finalOf`: the
@@ -1283,7 +1369,7 @@ def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
       if h : overlapOK T rM.F.u FN'.u = true then pure (rScope (at_ sp) (rEffLet (atB sp [x.name]) rM FN' h))
       else throw (splitErr E T sp rM.F.u FN'.u)
     else
-      let rD ← finalOf E sp S FN.u
+      let ⟨_, rD⟩ ← finalOf E sp S FN.u
       thenIt E sp x.name rM FN rD
   else
     let FN' := FN.map fun _ h =>
@@ -1294,6 +1380,50 @@ def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
           (S.Unr → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T _)))
     if h : overlapOK T rM.F.u FN'.u = true then pure (rScope (at_ sp) (rEffLet (atB sp [x.name]) rM FN' h))
     else throw (splitErr E T sp rM.F.u FN'.u)
+
+
+/-- A stored generator over a row at slot `k` (`closeAt?`) closed before `r`, at `r`'s row:
+`y <- (nu_out (force xₖ)).2; consumeE R y; r` (SPEC §15, #910). The binding is `effBind`'s, so
+what `r` uses besides is consumed if the close raises.  `[spec §15]` -/
+def closeBefore (E : Env) (sp : Span) (k : Nat) {S : CRow} {B : CVTy}
+    (r : Res Δ T (.comp (effOf S B))) : Except Error (Res Δ T (.comp (effOf S B))) := do
+  match hk : T[k]? with
+  | some (.thunk (.nu C)) =>
+    let some (Sc, R) := closeAt? (.thunk (.nu C))
+      | throw ⟨sp, "internal error: a stored generator's close"⟩
+    if hC : CTy.nuOkB C = true then
+      let rO := rNuOut (at_ sp) (CTy.nuOkB_sound C hC) (rForce (at_ sp) k (.nu C) hk)
+      let ⟨D, rD⟩ ← (match hu : C.unroll with
+        | .amp _ D => pure (⟨D, rProj₂ (at_ sp) (hu ▸ rO)⟩ : Σ D : CCTy, Res Δ T (.comp D))
+        | _ => throw ⟨sp, "internal error: a stored generator's close"⟩ : Except Error _)
+      let rC ← match convComp (at_ sp) (effOf Sc R) ⟨D, rD⟩ with
+        | .ok r => pure r
+        | .error _ => throw ⟨sp, s!"internal error: a stored generator's close at `{E.ppC D}`"⟩
+      let rC ← liftRow E sp S rC
+      let some rW := rWeakDead R r
+        | throw ⟨sp, s!"{E.slotName k} is a stored generator over a row, closed here before the " ++
+            "rest, which cannot be placed under its close"⟩
+      let rN ← consumeOne sp 0 rW
+      effBind E sp ⟨"io_close", sp⟩ rC rN
+    else throw ⟨sp, "internal error: a stored generator's type"⟩
+  | _ => throw ⟨sp, "internal error: a closed slot is not a stored generator"⟩
+
+/-- `consumeOwed`, and each owed stored generator over a row closed at its row before the
+terminal (`closeBefore`, SPEC §15, #910).  `[spec §15]` -/
+def consumeOwedR {C : CCTy} (E : Env) (sp : Span) (r : Res Δ T (.comp C)) :
+    Except Error (Res Δ T (.comp C)) := do
+  let owed := owedLeft E.own r.F.u r.F.w 0
+  let closes := owed.filter fun i => match T[i]? with
+    | some A => !consumableB A && (closeAt? A).isSome
+    | none => false
+  let r ← (owed.filter (!closes.contains ·)).foldr (fun i acc => do consumeOne sp i (← acc)) (pure r)
+  if closes.isEmpty then return r
+  match effRowOf? C with
+  | some ⟨_, _, hC⟩ =>
+    let r' ← closes.foldlM (init := hC ▸ r) fun r i => closeBefore E sp i r
+    pure (hC ▸ r')
+  | none => throw ⟨sp, s!"{E.slotName (closes.headD 0)} is a stored generator over a row, not " ++
+      s!"closed here, where the computation's type `{E.ppC C}` performs no operation"⟩
 
 end
 

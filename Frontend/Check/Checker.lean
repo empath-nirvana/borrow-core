@@ -415,7 +415,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
   | n + 1, E, Δ, T, m =>
     if m.terminal && E.own.any id then do
       let ⟨C, r⟩ ← synC n E.clearOwn Δ T m
-      pure ⟨C, ← consumeOwed E m.span r⟩
+      pure ⟨C, ← consumeOwedR E m.span r⟩
     else match m with
     | .ret sp V => do
       let ⟨_, r⟩ ← synV n E Δ T V
@@ -511,7 +511,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                             let rM ← chkC n EM Δ T M (effOf Sh A)
                             if hso : usedSat (outlivesB Δ d) T rM.F.u = true then
                               if h₂ : overlapOK T rH.F.u rM.F.u = true then
-                                pure ⟨_, ← consumeOwed E sp (rEffHandleB (at_ sp)
+                                pure ⟨_, ← consumeOwedR E sp (rEffHandleB (at_ sp)
                                   (classifyHandler Es rH.t) site hr' hc' rH hp hv hn0 hnS hlen
                                   hdv hwf hSd rM hso h₂)⟩
                               else throw (splitErr E T sp rH.F.u rM.F.u)
@@ -548,7 +548,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                         let rM ← chkC n EM Δ T M
                           (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 (finsOf Fs) ++ S) A)
                         if h₂ : overlapOK T rH.F.u rM.F.u = true then
-                          pure ⟨_, ← consumeOwed E sp (rEffHandle (at_ sp)
+                          pure ⟨_, ← consumeOwedR E sp (rEffHandle (at_ sp)
                             (classifyHandler Es rH.t) site hr' hc' rH hp hv hn0 hnS hlen hdv rM h₂)⟩
                         else throw (splitErr E T sp rH.F.u rM.F.u)
                        else err sp divHandleMsg
@@ -804,7 +804,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
     let E := E.atC C
     if m.terminal && E.own.any id then do
       let r ← chkC n E.clearOwn Δ T m C
-      consumeOwed E m.span r
+      consumeOwedR E m.span r
     else match m with
     | .ret sp V =>
       match C with

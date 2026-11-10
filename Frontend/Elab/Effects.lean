@@ -481,7 +481,13 @@ def paramTyOf : VTy → Option VTy
 /-- The components of a call's argument tuple, each with whether its parameter's written type is
 a stored generator's (`U (pull A B R)`). -/
 def Env.pullArgs (env : Env) (f : String) (W : Val) : List (Val × Bool) :=
-  match (env.sigs.lookup f).bind paramTyOf with
+  -- A function with a row is the one the call performs (`Env.fn?`): its declaration's type, before
+  -- a template of the same name from another module that `sigs` may list first (`take` of
+  -- `lib/adapters.bc` and of `lib/buf.bc`).
+  let declTy : Option VTy := (env.fn? f).bind fun g => match g.decl with
+    | .def_ _ _ _ A _ _ => some A
+    | _ => none
+  match (declTy.bind (paramTyOf ∘ unrowed)).orElse fun _ => (env.sigs.lookup f).bind paramTyOf with
   | some P => go fuel P W
   | none => [(W, false)]
 where
@@ -1430,6 +1436,10 @@ structure Blk where
   its parameter's row lists their sites in this order, as the block's synthesized type does.
   `[spec §33]` -/
   order : List String := []
+  /-- A stored generator over a row given at a parameter `U (pull A B R)` (SPEC §15, #910): `ss`
+  are the sites of what its observations perform besides what it yields; the parameter is at
+  that row (`pulledTy`), and the copy's row holds the sites.  `[spec §15]` -/
+  pull : Bool := false
 
 /-- A capability as a copy takes it: an answering handler's at the copy's own names, a `for`'s
 threaded variable as it is.  `[spec §32]` -/
@@ -1517,6 +1527,16 @@ def blockText (ss : List Site) (cs : List Cap) : String :=
     "with the capabilities of " ++ ", ".intercalate (ans.map fun c => s!"`{c.eff}`")
   ", ".intercalate ([atS, wc].filter (!·.isEmpty))
 
+/-- A stored generator's parameter type `U (pull A B R)` at the row `row` (SPEC §15, #910):
+`U (νX. F[row]((A ⊗ U X) ⊕ (B ⊕ U X)) & F[row] R)`, `pull_Σ` written out.  `[spec §15]` -/
+def pulledTy (row : Row) : VTy → Option VTy
+  | .thunk sp (.pull psp A B R) =>
+    let X : CTy := .name psp "X"
+    some (.thunk sp (.nu psp ⟨"X", psp⟩ (.amp psp
+      (.eff psp row (.sum psp (.tensor psp A (.thunk psp X)) (.sum psp B (.thunk psp X))))
+      (.eff psp row R))))
+  | _ => none
+
 /-- A copy's function with its block parameters `blks` (by index) at their blocks' rows: the
 parameters' types `!U(A -o F[row] B)`, the parameters by name with their sites, and the sites of
 every block, beside the copy's own (`ss`). -/
@@ -1531,6 +1551,11 @@ def withBlocks (env : Env) (sp : Span) (name : String) (f : FnParts) (ss : List 
   for b in blks do
     let some x := names[b.j]? | throw ⟨sp, s!"internal error: the parameter {b.j} of `{name}`"⟩
     let some A := compAt n f.P b.j | throw ⟨sp, s!"internal error: the parameter `{x}` of `{name}`"⟩
+    if b.pull then
+      let some A' := pulledTy (env.rowOf b.ss) A
+        | throw ⟨sp, s!"internal error: the stored generator parameter `{x}` of `{name}`"⟩
+      reps := reps ++ [(b.j, A')]
+      continue
     let cs := b.caps.map (·.canon sp)
     -- At a computation parameter, the block performs what is provided at its ports (SPEC §33),
     -- its sites in the order of its row.
@@ -1601,7 +1626,7 @@ def blockArgs (cx : Cx) (x : String) (W : Val) : Except Error (List Blk) := do
     for i in ctl do
       let s ← cx.serve V.span "this block" i
       ss := addSites ss [s]
-    out := out ++ [⟨j, ss, cs, prov, (cx.ctl row₀).map (·.eff)⟩]
+    out := out ++ [⟨j, ss, cs, prov, (cx.ctl row₀).map (·.eff), false⟩]
   pure out
 
 /-- The arguments of a call of `x` with each function named at a parameter of function type a
@@ -1845,7 +1870,7 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
           -- A body that performs a control operation would hold the continuation across it,
           -- which is not consumable (its cancel performs at the site's row), and one that loops
           -- cannot be a clause, which is total: the `for` drains the stored generator instead.
-          let (bs, V') ← pullSite n cx cs sp g gs i f W
+          let (bs, V', _) ← pullSite n cx cs sp g gs i f W
           report sp "lowering" (s!"for over {g}: its body performs a control operation or " ++
             "loops, so it drains the stored generator")
           chain bs (.loop sp ℓ src V' (← trC n cx [] false M) (← trC n cx cs wrap N))
@@ -1910,7 +1935,7 @@ def trBind : Nat → Cx → List Cap → Bool → Span → Ident → Option VTy 
     -- `x : pull A B R <- return g(W)`: the stored generator of the call.
     if let (some A', .ret rsp V) := (A, M) then
       if let (true, some (g, gs, i, f, W)) := (isPullTy A', cx.env.iterCall? V) then
-        let (bs, V') ← pullSite n cx cs rsp g gs i f W
+        let (bs, V', _) ← pullSite n cx cs rsp g gs i f W
         return ← chain bs (.bind sp x A (.ret rsp V') (← trC n cx cs wrap N))
     let csM := cx.needC M
     let N' ← trC n cx cs wrap N
@@ -2078,12 +2103,13 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
         if let some (ss, bcs) := cx.cbs.lookup x then
           return ← blockParamCall k cx cs sp f x ss bcs W
         -- An argument at a stored generator's parameter: the stored generator of the call.
-        let (bP, W) ← pullArgsV k cx cs x W
+        let (bP, W, pblks) ← pullArgsV k cx cs x W
         -- Effectful blocks passed: a call of the callee's copy at their rows (SPEC §30); a
-        -- function named at a block's parameter is the block that calls it (SPEC §33).
+        -- function named at a block's parameter is the block that calls it (SPEC §33). A stored
+        -- generator over a row is such a block (SPEC §15).
         if (cx.env.op? x).isNone then
           let W ← etaArgs cx x W
-          let blks ← (blockArgs cx x W : Except Error _)
+          let blks := pblks ++ (← (blockArgs cx x W : Except Error _))
           if !blks.isEmpty then
             let g? : Option FSig := match cx.env.fn? x with
               | some g => some g
@@ -2916,10 +2942,10 @@ def forSite : Nat → Cx → List Cap → Bool → Span → Option Ident → Ide
     let tcap := threadCap sp i.eff w Wn
     let cxF : Cx := { cx with sites := site :: cx.sites.filter (·.eff != i.eff),
                               caps := tcap :: cx.caps.filter (fun c => c.blk || c.eff != i.eff) }
-    let (bP, W) ← pullArgsV k cx cs gname W
+    let (bP, W, pblks) ← pullArgsV k cx cs gname W
     let (bs, W') ← trV k cx cs W
     let bs := bP ++ bs
-    let name ← copyFor k cxF sp gname g (cx.rowOf g) []
+    let name ← copyFor k cxF sp gname g (cx.rowOf g) pblks
     let f' : Val := match f with
       | .defApp fsp _ Ts => .defApp fsp name Ts
       | _ => .var f.span name
@@ -2942,7 +2968,7 @@ def forSite : Nat → Cx → List Cap → Bool → Span → Option Ident → Ide
 site of its own for `i`, assembled where the types are known (`VSugar.pullSite`), whose clause
 keeps the continuation as the rest of the stored generator. -/
 def pullSite : Nat → Cx → List Cap → Span → String → FSig → Inst → Val → Val →
-    EM (List Bind × Val)
+    EM (List Bind × Val × List Site)
   | 0, _, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, sp, gname, g, i, f, W => do
     let some As := i.args
@@ -2956,10 +2982,16 @@ def pullSite : Nat → Cx → List Cap → Span → String → FSig → Inst →
     let site : Site := { eff := i.eff, n, args := As, sp, what := "the stored generator" }
     let cxP : Cx := { cx with sites := site :: cx.sites.filter (·.eff != i.eff),
                               caps := cx.caps.filter (fun c => c.blk || c.eff != i.eff) }
-    let (bP, W) ← pullArgsV k cx cs gname W
+    let (bP, W, pblks) ← pullArgsV k cx cs gname W
     let (bs, W') ← goV k cx cs W
     let bs := bP ++ bs
-    let name ← copyFor k cxP sp gname g (cx.rowOf g) []
+    let name ← copyFor k cxP sp gname g (cx.rowOf g) pblks
+    -- What its observations perform besides what it yields, at the sites around the call: the
+    -- stored generator's row (SPEC §15, #910).  `[spec §15]`
+    let mut rest₀ : List Site := []
+    for j in cx.ctl (without (cx.rowOf g) i.eff) do
+      rest₀ := addSites rest₀ [← (cx.serve sp s!"`{gname}`" j : Except Error Site)]
+    let rest := addSites rest₀ (pblks.flatMap (·.ss))
     let f' : Val := match f with
       | .defApp fsp _ Ts => .defApp fsp name Ts
       | _ => .var f.span name
@@ -2977,29 +3009,32 @@ def pullSite : Nat → Cx → List Cap → Span → String → FSig → Inst →
     let v ← fresh "fx_g"
     let pv : Val := .app sp (.sugar sp (.pullSite ⟨n, T, "", gname, siteR⟩)) (.app sp f' W')
     let bind : Bind := .one sp v none (.ret sp pv) false
-    pure (bs ++ [bind], .var sp v)
+    pure (bs ++ [bind], .var sp v, rest)
 
 /-- The arguments of a call of `x` with each call at a stored generator's parameter that performs
-an iteration effect replaced by its stored generator (`pullSite`). -/
-def pullArgsV : Nat → Cx → List Cap → String → Val → EM (List Bind × Val)
-  | 0, _, _, _, W => pure ([], W)
+an iteration effect replaced by its stored generator (`pullSite`), and a block (`Blk.pull`) for
+each that is over a row: the copy of `x` is at that row (SPEC §15, #910). -/
+def pullArgsV : Nat → Cx → List Cap → String → Val → EM (List Bind × Val × List Blk)
+  | 0, _, _, _, W => pure ([], W, [])
   | k + 1, cx, cs, x, W => do
     let comps := cx.env.pullArgs x W
-    if !comps.any (fun (V, p) => p && (cx.env.iterCall? V).isSome) then return ([], W)
+    if !comps.any (fun (V, p) => p && (cx.env.iterCall? V).isSome) then return ([], W, [])
     let mut bs : List Bind := []
     let mut vs : List Val := []
-    for (V, p) in comps do
+    let mut blks : List Blk := []
+    for ((V, p), j) in comps.zipIdx do
       match p, cx.env.iterCall? V with
       | true, some (g, gs, i, f, W₁) =>
-        let (b, V') ← pullSite k cx cs V.span g gs i f W₁
+        let (b, V', ss) ← pullSite k cx cs V.span g gs i f W₁
         bs := bs ++ b
         vs := vs ++ [V']
+        if !ss.isEmpty then blks := blks ++ [{ j, ss, pull := true }]
       | _, _ => vs := vs ++ [V]
     let rec tuple : List Val → Val
       | [] => W
       | [V] => V
       | V :: Vs => .pair V.span V (tuple Vs)
-    pure (bs, tuple vs)
+    pure (bs, tuple vs, blks)
 
 /-- The copy of `g` for what serves its effects at a call in `cx`, made once. -/
 def copyFor : Nat → Cx → Span → String → FSig → List Inst → List Blk → EM String
