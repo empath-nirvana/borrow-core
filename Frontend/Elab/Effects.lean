@@ -2772,8 +2772,9 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       let Rv := ch.res.subst σr
       let St : VTy := capsTy sp csCl Pt
       -- The function of the state runs where the `with` is, and resumes or cancels the
-      -- continuation there, whose row is the row at the `with` (`[handle]`, SPEC §19): its row is
-      -- the handler's own row and every other site in scope (#514).
+      -- continuation there, whose row is the row at the `with` (`[handle]`, SPEC §19). Written here
+      -- as the handler's own row and the other sites in scope, a bound for the clauses'
+      -- elaboration; the typed elaboration types it at the site's row (`hndCtlC`, SPEC §21, §38).
       let others := (cx.sites.foldl (fun acc s => if acc.any (·.n == s.n) then acc else acc ++ [s]) []).filter
         fun s => !outer.any (·.n == s.n)
       let rowO := cx.env.rowOf (outer ++ others)

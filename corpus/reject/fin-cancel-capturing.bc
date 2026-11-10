@@ -16,4 +16,4 @@ handler tm[A]: Wait, A -> A + 1 with Fail[i32], Ask = { return(x) = inl x; wait(
 fn work() -> i32 with Wait, Fail[i32] = x <- wait() unwind (let r = raise((3 : i32)); ()); 5
 
 main -> (i32 + 1) + i32 = with asker[(i32 + 1) + i32] { with to_result[i32, i32 + 1] { with tm[i32] { work() } } }
--- expect: 14:76: a dropped continuation whose cancel performs `Ask.ask` (1.0), an operation that captures a continuation, can't be cancelled on an abort through this clause, which runs inside the handler of `Ask.ask` (1.0): its cancel row would contain itself (SPEC §27, `⊤` cancel rows)
+-- expect: 14:76: this clause's continuation is live across `Ask.ask` (1.0), an operation that captures a continuation, and its cancel performs: if the continuation captured at `Ask.ask` (1.0) is cancelled, this one must be cancelled with it, and `Ask.ask` (1.0)'s cancel row would contain itself (SPEC §27, `⊤` cancel rows)

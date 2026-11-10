@@ -4651,44 +4651,47 @@ def siteAtCall (c : TCx) (sp : Span) (g : String) (r : SiteRec) : DM SiteRec := 
     pure (r.mapTy (·.subst σ))
 
 /-- A loop of a clause that may be a head of its path (`Fins.cancelAtEnds`): its body has no exit
-of the clause, and its value is not bound. -/
-def loopHead (M N : Comp) : Bool := M.exitAt.isNone && N.forRes?.isNone && N.forElse?.isNone
+of the clause (a `return e`; its own `break` and `continue` stay in the clause), and its value is
+not bound.  `[spec §27]` -/
+def loopHead (M N : Comp) : Bool :=
+  !M.anySugar (· matches .retE) && N.forRes?.isNone && N.forElse?.isNone
 
 /-- A clause that does not use its `κ` on some path, at an operation whose cancel branch
 `cancelTy S F` performs (its cancel row `F` or the handler's row `S` is not empty), cancels it
-exactly once on that path (`Fins.cancelAtEnds`): at the end of the path, and, when `S` has an
-abortive operation (an abort can pass through the clause), on the way out of an abort or a cancel.
-The checker consumes an unused `κ` only when its cancel branch performs nothing (a consume is
-effect-free, SPEC §12): a cancel that performs is a computation, which the elaboration writes and
-the kernel types. The clause's body binds `κ` taking its argument `p` apart, `let (a, k) = p; M`.
-A boxed `κ` (BOXED-κ) is left as written.
+exactly once on that path (`Fins.cancelAtEnds`): at the end of the path, and on the way out of an
+abort or a cancel through a head whose row (`ops`, what the typing gives it) holds an abortive
+operation of `S` or one that captures a continuation. The checker consumes an unused `κ` only when
+its cancel branch performs nothing (a consume is effect-free, SPEC §12): a cancel that performs is a
+computation, which the elaboration writes and the kernel types. The clause's body binds `κ` taking
+its argument `p` apart, `let (a, k) = p; M`. A boxed `κ` (BOXED-κ) is left as written. A clause
+whose heads can neither abort nor capture, and that uses `κ` on every path, is left as it is.
 
-The finaliser of an inserted `unwind (cancel k)` performs the cancel branch's row `F ⊕ S`, which
-the cancel rows of the capturing operations around it then hold (`Fins.table` infers it by the
-same rule). A capturing operation of `S` itself would need its cancel row to hold itself (`⊤`,
-SPEC §27 *Open*): such a clause is refused here, naming it.  `[spec §12, §27]` -/
+The finaliser of an inserted `unwind (cancel k)` performs the cancel branch's row `F ⊕ S`, and runs
+when a continuation the head captures is cancelled: a capturing operation of `S` that the head
+performs would need its cancel row to hold itself (`⊤`, SPEC §27 *Open*), which the kernel
+refuses; such a clause is refused here, naming the operation.  `[spec §12, §27]` -/
 def cancelDropped (S : Frontend.Check.CRow) (F : CCTy) (q : Frontend.Check.CQual) (B : CVTy)
-    (boxK stateful : Bool) (p : String) (opName : Nat → Nat → String) (M : Comp) :
-    Except Error Comp :=
+    (boxK stateful : Bool) (p : String) (ops : Comp → List (Nat × Nat))
+    (opName : Nat → Nat → String) (M : Comp) : Except Error Comp :=
   match M with
   | .letPair sp a k (.var vsp p') N =>
     if boxK || p' != p || !BoCa.Fig16.LogRel.Core.capB q B || F.isTop || (F.rowOf ++ S).isEmpty
     then pure M
     else
-      let N' := Elab.Fins.cancelAtEnds loopHead sp k (S.any (·.abort)) stateful 100000 N
-      -- The cancel performs `cancelTy S F`'s row, `F ⊕ S`: a capturing operation of `S` there
-      -- would need its cancel row to hold itself.
-      let self := (F.rowOf ++ S).find? fun o => BoCa.Fig16.LogRel.Core.capB o.q o.B &&
-        S.any fun o' => o'.n == o.n && o'.i == o.i
-      match self with
+      let headOps (M₁ : Comp) : List Frontend.Check.COpSig :=
+        S.filter fun o => (ops M₁).contains (o.n.toNat, o.i.toNat)
+      let wrapHead (M₁ : Comp) : Bool :=
+        (headOps M₁).any fun o => o.abort || BoCa.Fig16.LogRel.Core.capB o.q o.B
+      let N' := Elab.Fins.cancelAtEnds wrapHead loopHead sp k stateful 100000 N
+      let captured := (Elab.Fins.cancelHeads k.name 100000 N').findSome? fun M₁ =>
+        (headOps M₁).find? fun o => BoCa.Fig16.LogRel.Core.capB o.q o.B
+      match captured with
       | some o =>
-        if Elab.Fins.cancelUnwinds k.name 100000 N' then
-          let nm := opName o.n.toNat o.i.toNat
-          throw ⟨sp, s!"a dropped continuation whose cancel performs {nm}, an operation " ++
-            "that captures a continuation, can't be cancelled on an abort through this clause, " ++
-            s!"which runs inside the handler of {nm}: its cancel row would contain itself " ++
-            "(SPEC §27, `⊤` cancel rows)"⟩
-        else pure (.letPair sp a k (.var vsp p') N')
+        let nm := opName o.n.toNat o.i.toNat
+        throw ⟨sp, s!"this clause's continuation is live across {nm}, an operation that " ++
+          "captures a continuation, and its cancel performs: if the continuation captured at " ++
+          s!"{nm} is cancelled, this one must be cancelled with it, and {nm}'s cancel row would " ++
+          "contain itself (SPEC §27, `⊤` cancel rows)"⟩
       | none => pure (.letPair sp a k (.var vsp p') N')
   | _ => pure M
 
@@ -4792,8 +4795,8 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
         let opName (n i : Nat) : String := match names.lookup (n, i) with
           | some s => s!"`{s}` ({n}.{i})"
           | none => s!"{n}.{i}"
-        let body ← (cancelDropped S (fs j) q Bi i.boxK i.stateful x.name opName body :
-          Except Error Comp)
+        let body ← (cancelDropped S (fs j) q Bi i.boxK i.stateful x.name (opsC cS divFuel) opName
+          body : Except Error Comp)
         let body' ← surfC n (cS.push x.name (some T)) (some ans) (body.subst σ)
         hcs := hcs ++ [.bangThunkv csp (.lam lsp x (← (cP.surface lsp T : Except Error VTy)) body')]
       | _ => throw ⟨sp, "internal error: a handler's clause"⟩

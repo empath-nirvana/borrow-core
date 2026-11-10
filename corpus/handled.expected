@@ -816,9 +816,9 @@ corpus/fin-cancel-reraised.bc 2.0 resume-or-cancel: machine; condition 2 holds; 
 corpus/fin-cancel-reraised.bc 3.0 abortive: -; condition 2 holds; -
 corpus/fin-cancel-tail.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/fin-cancel-tail.bc 21:27: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
-corpus/fin-cancel-tail.bc 21:58: handle 2: inside [], finaliser; row [1]; ops 2.0 stored; names 2.0 row; condition 2 fails at 1
+corpus/fin-cancel-tail.bc 21:58: handle 2: inside [], finaliser; row [1]; ops 2.0 resume-or-cancel+state; names 2.0 row; condition 2 fails at 1
 corpus/fin-cancel-tail.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/fin-cancel-tail.bc 2.0 stored: machine; condition 2 fails; -
+corpus/fin-cancel-tail.bc 2.0 resume-or-cancel+state: machine; condition 2 fails; -
 corpus/fin-cancel-unused-site.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
 corpus/fin-cancel-unused-site.bc 28:3: handle 1: inside [2, 3], finaliser; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/fin-cancel-unused-site.bc 28:33: handle 2: inside [3], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
@@ -826,6 +826,13 @@ corpus/fin-cancel-unused-site.bc 28:64: handle 3: inside [], finaliser; row [2];
 corpus/fin-cancel-unused-site.bc 1.0 tail: -; condition 2 holds; -
 corpus/fin-cancel-unused-site.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/fin-cancel-unused-site.bc 3.0 stored: machine; condition 2 fails; -
+corpus/fin-drop-capturing-row.bc flows [0, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
+corpus/fin-drop-capturing-row.bc 24:3: handle 1: inside [2, 3], finaliser; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/fin-drop-capturing-row.bc 24:33: handle 2: inside [3], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/fin-drop-capturing-row.bc 24:64: handle 3: inside [], finaliser; row [2, 1]; ops 3.0 resume-or-cancel+state; names 3.0 []; condition 2 holds
+corpus/fin-drop-capturing-row.bc 1.0 tail: -; condition 2 holds; -
+corpus/fin-drop-capturing-row.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/fin-drop-capturing-row.bc 3.0 resume-or-cancel+state: machine; condition 2 holds; -
 corpus/fin-e7b.bc flows [0, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/fin-e7b.bc 17:23: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/fin-e7b.bc 17:50: handle 2: inside [], finaliser; row [1]; ops 2.0 resume-or-cancel; names 2.0 []; condition 2 holds
@@ -855,6 +862,13 @@ corpus/fin-raise-unwind.bc 13:3: handle 1: inside [2], finaliser; row []; ops 1.
 corpus/fin-raise-unwind.bc 13:30: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/fin-raise-unwind.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/fin-raise-unwind.bc 2.0 abortive: -; condition 2 holds; -
+corpus/fin-resume-capturing-row.bc flows [0, 2, 3, 4294967295]; main [1, 2, 3]
+corpus/fin-resume-capturing-row.bc 24:3: handle 1: inside [2, 3]; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/fin-resume-capturing-row.bc 24:33: handle 2: inside [3]; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/fin-resume-capturing-row.bc 24:64: handle 3: inside []; row [2, 1]; ops 3.0 tail+state; names 3.0 []; condition 2 holds
+corpus/fin-resume-capturing-row.bc 1.0 tail: -; condition 2 holds; -
+corpus/fin-resume-capturing-row.bc 2.0 abortive: -; condition 2 holds; -
+corpus/fin-resume-capturing-row.bc 3.0 tail+state: machine; condition 2 holds; -
 corpus/fin-timeout.bc flows [0, 2, 3, 4294967295]; main [1, 2, 3]
 corpus/fin-timeout.bc 17:49: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
 corpus/fin-timeout.bc 21:11: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds

@@ -309,10 +309,13 @@ corpus/fin-cancel-reraised.bc 1.0 cancellable abortive: branch; agree
 corpus/fin-cancel-reraised.bc 2.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/fin-cancel-reraised.bc 3.0 cancellable abortive: -; agree
 corpus/fin-cancel-tail.bc 1.0 cancellable abortive: branch; agree
-corpus/fin-cancel-tail.bc 2.0 cancellable stored: machine: the clause captures values; agree
+corpus/fin-cancel-tail.bc 2.0 cancellable resume-or-cancel+state: machine: the clause captures values; agree
 corpus/fin-cancel-unused-site.bc 1.0 cancellable tail: -; agree
 corpus/fin-cancel-unused-site.bc 2.0 cancellable abortive: branch; agree
 corpus/fin-cancel-unused-site.bc 3.0 cancellable stored: machine: the clause captures values; agree
+corpus/fin-drop-capturing-row.bc 1.0 cancellable tail: -; agree
+corpus/fin-drop-capturing-row.bc 2.0 cancellable abortive: branch; agree
+corpus/fin-drop-capturing-row.bc 3.0 cancellable resume-or-cancel+state: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/fin-e7b.bc 1.0 cancellable abortive: branch; agree
 corpus/fin-e7b.bc 2.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/fin-e7d.bc 1.0 cancellable abortive: branch; agree
@@ -325,6 +328,9 @@ corpus/fin-raise-cancel.bc 2.0 cancellable resume-or-cancel: machine: a path of 
 corpus/fin-raise-cancel.bc 3.0 cancellable abortive: -; agree
 corpus/fin-raise-unwind.bc 1.0 cancellable abortive: branch; agree
 corpus/fin-raise-unwind.bc 2.0 cancellable abortive: -; agree
+corpus/fin-resume-capturing-row.bc 1.0 cancellable tail: -; agree
+corpus/fin-resume-capturing-row.bc 2.0 cancellable abortive: -; agree
+corpus/fin-resume-capturing-row.bc 3.0 cancellable tail+state: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/fin-timeout.bc 2.0 cancellable resume-or-cancel: -; agree
 corpus/fin-timeout.bc 3.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/fin-timeout.bc 1.0 cancellable abortive: branch; agree

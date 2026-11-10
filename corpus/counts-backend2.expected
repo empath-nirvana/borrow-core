@@ -107,13 +107,15 @@ fin-cancel-propagated 0 0 0 0 0 0
 fin-cancel-reentered 0 0 0 0 0 0
 fin-cancel-region 0 0 0 0 0 0
 fin-cancel-reraised 0 0 0 0 0 0
-fin-cancel-tail 3 0 0 5 3 0
+fin-cancel-tail 3 1 0 5 3 0
 fin-cancel-unused-site 3 0 0 4 3 0
+fin-drop-capturing-row 0 1 0 0 0 0
 fin-e7b 0 0 0 0 0 0
 fin-e7d 0 0 0 0 0 0
 fin-e8b 0 0 0 0 0 0
 fin-raise-cancel 0 0 0 0 0 0
 fin-raise-unwind 0 0 0 0 0 0
+fin-resume-capturing-row 0 2 0 0 0 0
 fin-timeout 0 0 0 0 0 0
 for-arm-raises-owned 8 0 0 54 54 18
 handle-arm-releases 2 0 0 13 13 5
