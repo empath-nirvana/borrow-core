@@ -1,0 +1,14 @@
+-- A loop of 100000 operations under a clause that resumes in tail position, the twin of the kernel
+-- program `loop-tail` (Backend/Kernel.lean, `Shapes.loopTail 100000`): each `yld` is a direct call
+-- of `pass`'s clause, so no continuation is built and the loop runs in constant stack. The kernel
+-- writes the loop as a self-recursive function whose call is in tail position; the surface writes
+-- it as a counted `for`.
+--
+-- Answer: (); `live 0`. A lowering that built a continuation per turn without freeing it would
+-- leave objects live; one that grew the stack per turn would overflow.
+
+effect Y { must_resume ctl yld() }
+
+handler pass[A]: Y, A -> A = { return(a) = a; yld(k) = k(()) }
+
+main -> 1 = with pass[1] { for i in 0..100000 { yld() } }

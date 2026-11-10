@@ -1,0 +1,15 @@
+-- A loop of 100000 operations whose clause captures a value bound outside the handler, the twin
+-- of the kernel program `loop-captured` (Backend/Kernel.lean, `Shapes.loopCaptured 100000`): the
+-- clause resumes in tail position but reads `c`, the handler's state, so each `yld` suspends and is
+-- resumed by a state machine; the driver, the clause and the resume tail-call one another, in
+-- constant stack. The kernel writes the loop as a self-recursive function; the surface writes it
+-- as a counted `for`.
+--
+-- Answer: (); `live 0`. A resume that grew the stack per turn would overflow; a suspension that was
+-- not freed would leave objects live.
+
+effect Y { must_resume ctl yld() }
+
+handler pass[A](c: i32): Y, A -> A = { return(a) = a; yld(k) = { let _ = c; k(()) } }
+
+main -> 1 = let c = 7; with pass[1](c) { for i in 0..100000 { yld() } }
