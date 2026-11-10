@@ -4,7 +4,7 @@
 --
 -- A document is parsed whole from text lent at `'a`, by recursive descent, into an owned `Json`
 -- whose arrays are `Vec[Json]` and whose objects are `Map[string, Json]`. The grammar is RFC
--- 8259's: strings with every escape, a surrogate pair `🍰` decoded to one code point and
+-- 8259's: strings with every escape, a surrogate pair `\uD83C\uDF70` decoded to one code point and
 -- a lone surrogate refused; numbers by JSON's strict grammar; the input checked as UTF-8 first;
 -- white space is space, tab, CR and LF. A number is chosen at parse time, as serde_json's `Number`
 -- is: an integer literal (no fraction, no exponent) that fits `i64` is `Int`, read exactly by

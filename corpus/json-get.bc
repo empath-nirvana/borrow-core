@@ -8,7 +8,7 @@
 -- The callback is a core-text `def`, `!thunkv Fun 'x < top. …`, because the surface cannot write
 -- it yet: there is no surface block generic in a lifetime (a block checked against
 -- `!(all 'x < top. … => B)` should elaborate as `Fun 'x`), and a callback that is not a surface
--- block performs nothing (an effectful callback for a library block parameter, #161's family).
+-- block performs nothing (no surface block generic in a lifetime, #1003; a core-text block cannot perform, #161).
 --
 -- Answer: the lines `"Montréal"`, `none`, `none`, `none`, then `i32[1]`, the number of members
 -- found as strings, and `live 0`. A lookup that answers the wrong member changes the first line; a

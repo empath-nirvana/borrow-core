@@ -93,7 +93,7 @@ fn push_dec(s: string, x: i32) -> string * 1 =
     !{ (k, st) -> dec_step(k, st) }, 10, 0, (s, (n, (1000000000, false))));
   (s, ())
 
--- `x` in decimal, with a `-` when it is negative: the digits `dec64_each` (`lib/io.bc`) gives,
+-- `x` in decimal, with a `-` when it is negative: the same digits as `dec64_each` (`lib/io.bc`),
 -- appended. Nineteen steps cover the digits of the magnitude, which is read unsigned so that
 -- `-2^63` has one. Allocates when the string grows (`push`). `[spec §17]`
 fn push_i64(s: string, x: i64) -> string * 1 =
