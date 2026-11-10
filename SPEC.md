@@ -6887,8 +6887,8 @@ built (*Open*).
 The kernel checks each port as any site: `[handle]` asks the port to be absent from the site's
 outer row, which a fresh name is. The argument's type names the port where the argument is
 written, outside the port's site; a value has no row, so nothing is performed there, and decision
-57's site freshness (R3) reads a provided port as bound. R3 (lexical sites) is not adopted:
-effects are dynamically scoped (§76 *Open*, #1052).
+57's site freshness (R3) reads a provided port as bound. R3 as a
+rule that sites are lexical is not adopted: effects are dynamically scoped (§76 *Open*, #1052).
 
 ### The argument
 
