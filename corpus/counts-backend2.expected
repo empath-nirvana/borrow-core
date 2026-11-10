@@ -159,7 +159,10 @@ if-match-argument 0 0 0 0 0 0
 infer-local-from-call 4 0 0 16 16 0
 infer-local-sum-generic 1 0 0 16 16 5
 infer-local-unit 2 0 0 4 4 1
-json-parse 5942 0 0 358046 279239 93444
+json-parse 673 0 0 25922 15143 13197
+json-deep 5004 0 0 352010 284003 80003
+json-get 17 0 0 1097 501 483
+parse-i64 12 0 0 687 313 270
 kernel-cancel-now 0 0 0 0 0 0
 kernel-deep-gen-plain 0 0 0 0 0 0
 kernel-e7a 1 0 0 1 1 0

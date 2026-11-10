@@ -159,7 +159,10 @@ if-match-argument erased handles 0 performs 0 raises 0 left 0 0
 infer-local-from-call erased handles 1 performs 0 raises 1 left 0 0
 infer-local-sum-generic erased handles 0 performs 0 raises 0 left 0 0
 infer-local-unit erased handles 1 performs 0 raises 1 left 0 0
-json-parse erased handles 16 performs 0 raises 41 left 0 0
+json-parse erased handles 16 performs 0 raises 46 left 0 0
+json-deep erased handles 12 performs 0 raises 42 left 0 0
+json-get erased handles 12 performs 0 raises 42 left 0 0
+parse-i64 erased handles 16 performs 0 raises 5 left 0 0
 kernel-cancel-now erased handles 0 performs 0 raises 0 machines 1 suspends 1 left 0 0
 kernel-deep-gen-plain erased handles 1 performs 1 raises 0 machines 1 suspends 2 left 0 0
 kernel-e7a erased handles 0 performs 0 raises 0 machines 1 suspends 1 left 0 0

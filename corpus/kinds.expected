@@ -527,10 +527,21 @@ corpus/io-task.bc 3.1 cancellable tail: -; agree
 corpus/io-task.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/io-task.bc 2.1 cancellable tail: -; agree
 corpus/io-task.bc 1.0 cancellable abortive: branch; agree
+corpus/json-deep.bc 3.0 cancellable abortive: branch; agree
+corpus/json-deep.bc 4.0 cancellable abortive: branch; agree
+corpus/json-deep.bc 2.0 cancellable abortive: branch; agree
+corpus/json-deep.bc 1.0 cancellable abortive: branch; agree
+corpus/json-deep.bc 5.0 cancellable abortive: branch; agree
+corpus/json-get.bc 3.0 cancellable abortive: branch; agree
+corpus/json-get.bc 4.0 cancellable abortive: branch; agree
+corpus/json-get.bc 2.0 cancellable abortive: branch; agree
+corpus/json-get.bc 1.0 cancellable abortive: branch; agree
+corpus/json-get.bc 5.0 cancellable abortive: branch; agree
 corpus/json-parse.bc 1.0 cancellable abortive: branch; agree
 corpus/json-parse.bc 3.0 cancellable abortive: branch; agree
-corpus/json-parse.bc 2.0 cancellable abortive: branch; agree
 corpus/json-parse.bc 4.0 cancellable abortive: branch; agree
+corpus/json-parse.bc 2.0 cancellable abortive: branch; agree
+corpus/json-parse.bc 5.0 cancellable abortive: branch; agree
 corpus/kernel-cancel-now.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/kernel-deep-gen-plain.bc 1.0 must-resume tail: direct; agree
 corpus/kernel-deep-gen-plain.bc 2.0 cancellable tail: machine: the clause suspends; disagree
@@ -632,6 +643,7 @@ corpus/operator-rounds.bc 1.0 cancellable abortive: branch; agree
 corpus/operator-rounds.bc 2.0 cancellable abortive: branch; agree
 corpus/operator-rounds.bc 4.0 cancellable abortive: branch; agree
 corpus/operator-rounds.bc 3.0 cancellable abortive: branch; agree
+corpus/parse-i64.bc 1.0 cancellable abortive: branch; agree
 corpus/parse-int.bc 1.0 cancellable abortive: branch; agree
 corpus/parse-int.bc 3.0 cancellable abortive: branch; agree
 corpus/parse-int.bc 2.0 cancellable abortive: branch; agree
