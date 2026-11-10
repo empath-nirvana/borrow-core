@@ -536,7 +536,7 @@ wrong answer. Aliasing that happens to compute the expected answer is invisible.
 3. **Differential runs**: each program under the leastFree allocator, the never-reuse allocator
    and the tagged interpreter must give the same answer with `live 0`.
 
-**Built (U4).** `Backend/Falsify.lean`, `bcc interp --alloc least | --check fresh | --check tags`
+**Built (U4).** `Reference/Falsify.lean`, `bcc interp --alloc least | --check fresh | --check tags`
 (and `bcc kernel interp`), `scripts/falsify.sh`. Determined while building it: `bcc interp`'s
 default (`Support`'s `Mem.alloc`) already never reuses a location (its `next` only grows), so the
 reusing run is the new `--alloc least` (`Alloc.leastFree`, as `runM`).
@@ -571,7 +571,7 @@ reusing run is the new `--alloc least` (`Alloc.leastFree`, as `runM`).
 - *Results.* Every corpus program the source stage runs (149; five `no-source` programs are too
   large for it), `bc/lend-loop-term.bc` and the 41 kernel programs pass all four modes with one
   output and `live 0`; no resuming operation crossed a lend in any of them (none can before
-  R1/R2). Eight untyped negative tests (`Backend/FalsifyTests.lean`, `bcc kernel negatives`) trip
+  R1/R2). Eight untyped negative tests (`Reference/FalsifyTests.lean`, `bcc kernel negatives`) trip
   each check; with `--alloc least` the use after free answers silently.
 
 ### 6.2 The adversarial list

@@ -3,7 +3,7 @@ import Frontend.Print
 import Frontend.Check.Program
 import Frontend.Check.Handled
 import Backend.Driver
-import Backend.FalsifyTests
+import Reference
 import Backend.Native.Tests
 import Backend2.Driver
 /-!
@@ -34,7 +34,7 @@ import Backend2.Driver
                                 input first; the words after `--` are the program's arguments
                                 (SPEC §34)
     lake exe bcc interp (--check fresh|tags | --alloc least) [--stats] <file>
-                                the falsifier (`Backend/Falsify.lean`): the source stage with
+                                the falsifier (`Reference/Falsify.lean`): the source stage with
                                 a never-reuse allocator (`fresh`), with lend tags (`tags`), or
                                 with the least-free allocator (`least`); a failed check is an
                                 error; `--stats` writes the run's counts to standard error
@@ -78,13 +78,14 @@ def readAll (h : IO.FS.Stream) : Nat → ByteArray → IO ByteArray
     if b.isEmpty then return acc else readAll h n (acc ++ b)
 
 /-- The stage `stage` of `bcc interp` on a checked program. `source` is `Support`'s interpreter,
-whichever the backend. Backend2's (the default): `lir`, the LIR interpreter; `flat` (or `lflat`),
-the word IR's interpreter at Backend2's lowering; `flat-counts` (or `lflat-counts`), its counting
-build. The old backend's (`old`, `--backend old`): `clos`, the closure IR's interpreter; `flat`
+whichever the backend (`Reference/Driver.lean`). Backend2's (the default): `lir`, the LIR
+interpreter; `flat` (or `lflat`), the word IR's interpreter at Backend2's lowering;
+`flat-counts` (or `lflat-counts`), its counting build. The old backend's (`old`, `--backend old`): `clos`, the closure IR's interpreter; `flat`
 and `flat-counts`, the word IR's at the old backend's lowering. -/
 def interpAt (old : Bool) (stage file : String) (k : Except String Backend.CheckedProg)
     (input args : List UInt8) : Except String Backend.Output :=
-  if stage == "source" || old then Backend.interpStage stage file k input args
+  if stage == "source" then Backend.interpSourceStage file k input args
+  else if old then Backend.interpStage stage file k input args
   else match stage with
     | "flat" | "lflat" => Backend2.interpStage "lflat" k input args
     | "flat-counts" | "lflat-counts" => Backend2.interpStage "lflat-counts" k input args
@@ -476,8 +477,10 @@ def kernel (args : List String) : IO UInt32 := do
   | "interp" :: rest =>
     match parseInterpArgs rest {} with
     | some { stage, check := none, target, .. } =>
-      if Backend.FalsifyTests.loopNegatives.contains target && stage == "source" then
-        withProg target (kernelReport ∘ Backend.interpLoop Backend.runFuel)
+      if stage == "source" then
+        if Backend.FalsifyTests.loopNegatives.contains target then
+          withProg target (kernelReport ∘ Backend.interpLoop Backend.runFuel)
+        else withProg target (kernelReport ∘ Backend.interpSource Backend.runFuel)
       else withProg target (kernelReport ∘ Backend.interpStageExpr stage)
     | some { stage, check := some m, stats, target, .. } =>
       if stage != "source" then

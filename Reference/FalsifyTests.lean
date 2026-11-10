@@ -1,11 +1,11 @@
 import Paper.S2_Statics.Definitions
-import Backend.Falsify
+import Reference.Falsify
 
 /-!
-# Backend — the falsifier's negative tests
+# Reference — the falsifier's negative tests
 
 Untyped closed terms, each of which breaks one rule the falsifier checks
-(`Backend/Falsify.lean`, docs/async-capabilities.md §6.1). No typed program builds any of them:
+(`Reference/Falsify.lean`, docs/async-capabilities.md §6.1). No typed program builds any of them:
 each is the shape of a bug the type system rules out. Each names the mode that must report it
 and a part of the report; `scripts/falsify.sh` runs them (`bcc kernel negatives`), and checks
 that the mode fails with that report and that `Support`'s interpreter gives the answer listed

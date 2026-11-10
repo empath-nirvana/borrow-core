@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The falsifier's differential runs (docs/async-capabilities.md §6.1, `Backend/Falsify.lean`).
+# The falsifier's differential runs (docs/async-capabilities.md §6.1, `Reference/Falsify.lean`).
 # Every accepted program is run four ways at the source stage:
 #
 #   default   `bcc interp`: Support's interpreter (its allocator never reuses a location)
@@ -24,7 +24,7 @@
 # accepts today (the others are pending, and listed; bc/reject is never run); each reads `<name>.in` as standard input and `<name>.args` as its arguments when there is one. The
 # kernel programs are `bcc kernel list`.
 #
-# The negative tests (`bcc kernel negatives`, `Backend/FalsifyTests.lean`) are untyped terms,
+# The negative tests (`bcc kernel negatives`, `Reference/FalsifyTests.lean`) are untyped terms,
 # each breaking one rule: the mode named must fail with the report named, and the default run
 # must give the answer named (the fault is invisible to it, or it is stuck).
 set -euo pipefail

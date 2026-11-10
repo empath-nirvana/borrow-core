@@ -110,7 +110,7 @@ gate-full` adds every other check (the clos, flat, LIR and word-IR stages, count
 kernel programs, the static tables, the sugar pairs, `let mut` combinations, the book)
 and runs the interpreter on every program and book block, re-verifying every golden. `make
 gate-full` is required when `Paper/`, `Support/` (the interpreter and the machine), `Backend/`,
-`Target/` or `Pipeline/` changed, and `make gate` says so then. Run it by hand too after a `Frontend/` or `lib/` change that
+`Target/`, `Pipeline/` or `Reference/` changed, and `make gate` says so then. Run it by hand too after a `Frontend/` or `lib/` change that
 changes what programs mean. `make goldens` (`scripts/compile-corpus.sh --write-goldens [file…]`)
 writes corpus goldens, only ever from the interpreter.
 
