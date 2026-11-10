@@ -97,10 +97,10 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       TDerivesAt Ξ Δ Γ (TExpr.codeI (info := info) (jdg := (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))) (C := C) (t := t)) (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))
   | codeIB {Δ Γ M C} {info : TInfo} {t : TExpr} (hp : Ctx.Banged Γ) (h : TDerivesAt Ξ Δ Γ t (.val (.bang (.thunk C)))) (q : t.erase = ((.val (.lam M)) : Expr)) (hok : Ctx.CapOK Γ (.lam M)) (hE : (Ctx.capTy Γ (.lam M)).Cl 0) :
       TDerivesAt Ξ Δ Γ (TExpr.codeIB (info := info) (jdg := (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))) (C := C) (t := t)) (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))
-  | erase {Δ Γ C} {info : TInfo} {t : TExpr} {N : Expr} {E : VTy} (h : TDerivesAt Ξ Δ Γ t (.val (.code N E C))) :
-      TDerivesAt Ξ Δ Γ (TExpr.erase (info := info) (jdg := (.val (.thunk C))) (C := C) (E := E) (t := t)) (.val (.thunk C))
-  | eraseB {Δ Γ C} {info : TInfo} {t : TExpr} {N : Expr} {E : VTy} (h : TDerivesAt Ξ Δ Γ t (.val (.bang (.code N E C)))) :
-      TDerivesAt Ξ Δ Γ (TExpr.eraseB (info := info) (jdg := (.val (.bang (.thunk C)))) (C := C) (E := E) (t := t)) (.val (.bang (.thunk C)))
+  | codeErase {Δ Γ C} {info : TInfo} {t : TExpr} {N : Expr} {E : VTy} (h : TDerivesAt Ξ Δ Γ t (.val (.code N E C))) :
+      TDerivesAt Ξ Δ Γ (TExpr.codeErase (info := info) (jdg := (.val (.thunk C))) (C := C) (E := E) (t := t)) (.val (.thunk C))
+  | codeEraseB {Δ Γ C} {info : TInfo} {t : TExpr} {N : Expr} {E : VTy} (h : TDerivesAt Ξ Δ Γ t (.val (.bang (.code N E C)))) :
+      TDerivesAt Ξ Δ Γ (TExpr.codeEraseB (info := info) (jdg := (.val (.bang (.thunk C)))) (C := C) (E := E) (t := t)) (.val (.bang (.thunk C)))
   | bangE {Δ Γ A} {info : TInfo} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t (.val (.bang A))) :
       TDerivesAt Ξ Δ Γ (TExpr.bangE (info := info) (jdg := (.val A)) (A := A) (t := t)) (.val A)
   | copyBang {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
@@ -404,10 +404,10 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       TDerivesP Δ Γ (TExpr.codeI (info := info) (jdg := (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))) (C := C) (t := t)) (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))
   | codeIB {Δ Γ M C} {info : TInfo} {t : TExpr} (hp : Ctx.Banged Γ) (h : TDerivesP Δ Γ t (.val (.bang (.thunk C)))) (q : t.erase = ((.val (.lam M)) : Expr)) (hok : Ctx.CapOK Γ (.lam M)) (hE : (Ctx.capTy Γ (.lam M)).Cl 0) :
       TDerivesP Δ Γ (TExpr.codeIB (info := info) (jdg := (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))) (C := C) (t := t)) (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))
-  | erase {Δ Γ C} {info : TInfo} {t : TExpr} {N : Expr} {E : VTy} (h : TDerivesP Δ Γ t (.val (.code N E C))) :
-      TDerivesP Δ Γ (TExpr.erase (info := info) (jdg := (.val (.thunk C))) (C := C) (E := E) (t := t)) (.val (.thunk C))
-  | eraseB {Δ Γ C} {info : TInfo} {t : TExpr} {N : Expr} {E : VTy} (h : TDerivesP Δ Γ t (.val (.bang (.code N E C)))) :
-      TDerivesP Δ Γ (TExpr.eraseB (info := info) (jdg := (.val (.bang (.thunk C)))) (C := C) (E := E) (t := t)) (.val (.bang (.thunk C)))
+  | codeErase {Δ Γ C} {info : TInfo} {t : TExpr} {N : Expr} {E : VTy} (h : TDerivesP Δ Γ t (.val (.code N E C))) :
+      TDerivesP Δ Γ (TExpr.codeErase (info := info) (jdg := (.val (.thunk C))) (C := C) (E := E) (t := t)) (.val (.thunk C))
+  | codeEraseB {Δ Γ C} {info : TInfo} {t : TExpr} {N : Expr} {E : VTy} (h : TDerivesP Δ Γ t (.val (.bang (.code N E C)))) :
+      TDerivesP Δ Γ (TExpr.codeEraseB (info := info) (jdg := (.val (.bang (.thunk C)))) (C := C) (E := E) (t := t)) (.val (.bang (.thunk C)))
   | bangE {Δ Γ A} {info : TInfo} {t : TExpr} (h : TDerivesP Δ Γ t (.val (.bang A))) :
       TDerivesP Δ Γ (TExpr.bangE (info := info) (jdg := (.val A)) (A := A) (t := t)) (.val A)
   | copyBang {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
@@ -753,12 +753,12 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
       rw [a2] at ih0
       rw [a2]
       exact CDerivesAt.codeIB a0 ih0 a3 a4
-  | erase a0 ih0 =>
+  | codeErase a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesAt.erase ih0
-  | eraseB a0 ih0 =>
+      exact CDerivesAt.codeErase ih0
+  | codeEraseB a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesAt.eraseB ih0
+      exact CDerivesAt.codeEraseB ih0
   | bangE a0 ih0 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.bangE ih0
@@ -1112,12 +1112,12 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       rw [a2] at ih0
       rw [a2]
       exact CDerivesP.codeIB a0 ih0 a3 a4
-  | erase a0 ih0 =>
+  | codeErase a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.erase ih0
-  | eraseB a0 ih0 =>
+      exact CDerivesP.codeErase ih0
+  | codeEraseB a0 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesP.eraseB ih0
+      exact CDerivesP.codeEraseB ih0
   | bangE a0 ih0 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.bangE ih0
@@ -1417,8 +1417,8 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | bangThunkV a0 a1 a2 a3 ih0 => exact TDerivesP.bangThunkV a0 a1 ih0 a3
   | codeI a0 a1 a2 a3 ih0 => exact TDerivesP.codeI ih0 a1 a2 a3
   | codeIB a0 a1 a2 a3 a4 ih0 => exact TDerivesP.codeIB a0 ih0 a2 a3 a4
-  | erase a0 ih0 => exact TDerivesP.erase ih0
-  | eraseB a0 ih0 => exact TDerivesP.eraseB ih0
+  | codeErase a0 ih0 => exact TDerivesP.codeErase ih0
+  | codeEraseB a0 ih0 => exact TDerivesP.codeEraseB ih0
   | bangE a0 ih0 => exact TDerivesP.bangE ih0
   | copyBang a0 => exact TDerivesP.copyBang a0
   | releaseBang a0 => exact TDerivesP.releaseBang a0

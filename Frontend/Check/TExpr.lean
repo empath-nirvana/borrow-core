@@ -671,8 +671,8 @@ inductive TExpr where
   | bangThunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
   | codeI (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
   | codeIB (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
-  | erase (info : TInfo) (jdg : Jdg) (C : CTy) (E : VTy) (t : TExpr)
-  | eraseB (info : TInfo) (jdg : Jdg) (C : CTy) (E : VTy) (t : TExpr)
+  | codeErase (info : TInfo) (jdg : Jdg) (C : CTy) (E : VTy) (t : TExpr)
+  | codeEraseB (info : TInfo) (jdg : Jdg) (C : CTy) (E : VTy) (t : TExpr)
   | bangE (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
   | copyBang (info : TInfo) (jdg : Jdg) (A : VTy)
   | releaseBang (info : TInfo) (jdg : Jdg) (A : VTy)
@@ -835,8 +835,8 @@ def TExpr.erase : TExpr → Expr
   | .bangThunkV _ _ _ t => t.erase
   | .codeI _ _ _ t => t.erase
   | .codeIB _ _ _ t => t.erase
-  | .erase _ _ _ _ t => t.erase
-  | .eraseB _ _ _ _ t => t.erase
+  | .codeErase _ _ _ _ t => t.erase
+  | .codeEraseB _ _ _ _ t => t.erase
   | .bangE _ _ _ t => t.erase
   | .copyBang _ _ _ => BoCa.copy
   | .releaseBang _ _ _ => forget
@@ -958,8 +958,8 @@ def TExpr.info : TExpr → TInfo
   | .bangThunkV i _ _ _ => i
   | .codeI i _ _ _ => i
   | .codeIB i _ _ _ => i
-  | .erase i _ _ _ _ => i
-  | .eraseB i _ _ _ _ => i
+  | .codeErase i _ _ _ _ => i
+  | .codeEraseB i _ _ _ _ => i
   | .bangE i _ _ _ => i
   | .copyBang i _ _ => i
   | .releaseBang i _ _ => i
@@ -1077,8 +1077,8 @@ def TExpr.jdg : TExpr → Jdg
   | .bangThunkV _ j _ _ => j
   | .codeI _ j _ _ => j
   | .codeIB _ j _ _ => j
-  | .erase _ j _ _ _ => j
-  | .eraseB _ j _ _ _ => j
+  | .codeErase _ j _ _ _ => j
+  | .codeEraseB _ j _ _ _ => j
   | .bangE _ j _ _ => j
   | .copyBang _ j _ => j
   | .releaseBang _ j _ => j
@@ -1204,8 +1204,8 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .bangThunkV _ _ _ t => [(.push 0, t)]
   | .codeI _ _ _ t => [(.push 0, t)]
   | .codeIB _ _ _ t => [(.push 0, t)]
-  | .erase _ _ _ _ t => [(.push 0, t)]
-  | .eraseB _ _ _ _ t => [(.push 0, t)]
+  | .codeErase _ _ _ _ t => [(.push 0, t)]
+  | .codeEraseB _ _ _ _ t => [(.push 0, t)]
   | .bangE _ _ _ t => [(.push 0, t)]
   | .copyBang _ _ _ => []
   | .releaseBang _ _ _ => []
@@ -1345,8 +1345,8 @@ def TExpr.isLam : TExpr → Bool
   | .bangThunkV _ _ _ t => t.isLam
   | .codeI _ _ _ t => t.isLam
   | .codeIB _ _ _ t => t.isLam
-  | .erase _ _ _ _ t => t.isLam
-  | .eraseB _ _ _ _ t => t.isLam
+  | .codeErase _ _ _ _ t => t.isLam
+  | .codeEraseB _ _ _ _ t => t.isLam
   | .bangE _ _ _ t => t.isLam
   | .copyBang _ _ _ => ((BoCa.copy : Expr) matches .lam _)
   | .releaseBang _ _ _ => ((forget : Expr) matches .lam _)
@@ -1468,8 +1468,8 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .bangThunkV _ _ _ t => isLam_eq t
   | .codeI _ _ _ t => isLam_eq t
   | .codeIB _ _ _ t => isLam_eq t
-  | .erase _ _ _ _ t => isLam_eq t
-  | .eraseB _ _ _ _ t => isLam_eq t
+  | .codeErase _ _ _ _ t => isLam_eq t
+  | .codeEraseB _ _ _ _ t => isLam_eq t
   | .bangE _ _ _ t => isLam_eq t
   | .copyBang _ _ _ => rfl
   | .releaseBang _ _ _ => rfl

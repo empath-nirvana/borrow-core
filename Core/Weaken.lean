@@ -101,8 +101,8 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | codeIB hp _ hok hE ih =>
       obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
       rw [← hty] at hE ⊢; exact .codeIB (banged_append h' hp) ih hok' hE
-  | erase _ ih => exact .erase ih
-  | eraseB _ ih => exact .eraseB ih
+  | codeErase _ ih => exact .codeErase ih
+  | codeEraseB _ ih => exact .codeEraseB ih
   | bangE _ ih => exact .bangE ih
   | copyBang hΓ => exact .copyBang (deadP_append h' hΓ)
   | releaseBang hΓ => exact .releaseBang (deadP_append h' hΓ)

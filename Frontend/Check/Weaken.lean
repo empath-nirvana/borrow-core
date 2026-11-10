@@ -425,14 +425,14 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       exact ⟨.bangThunkV (banged_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
   | codeI => intro _ _ _ _ _ hf _; cases hf
   | codeIB => intro _ _ _ _ _ hf _; cases hf
-  | erase _ ih =>
+  | codeErase _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.erase d, e⟩
-  | eraseB _ ih =>
+      exact ⟨.codeErase d, e⟩
+  | codeEraseB _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.eraseB d, e⟩
+      exact ⟨.codeEraseB d, e⟩
   | bangE _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
@@ -1030,14 +1030,14 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       exact ⟨.bangThunkV (banged_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
   | codeI => intro _ _ _ _ _ hf _; cases hf
   | codeIB => intro _ _ _ _ _ hf _; cases hf
-  | erase _ ih =>
+  | codeErase _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.erase d, e⟩
-  | eraseB _ ih =>
+      exact ⟨.codeErase d, e⟩
+  | codeEraseB _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.eraseB d, e⟩
+      exact ⟨.codeEraseB d, e⟩
   | bangE _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp

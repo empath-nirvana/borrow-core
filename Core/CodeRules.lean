@@ -5,7 +5,7 @@ import Core.Compat
 # Core — the code rules' side conditions and compatibility lemmas  `[spec §68]`
 
 `codeI` types a closure `λM : U C` at its code type `Code⟨capNorm (λM); Γ.capTy (λM)⟩ C`;
-`codeIB` the same under `!`; `erase` and `eraseB` forget the code. Their side conditions:
+`codeIB` the same under `!`; `codeErase` and `codeEraseB` (§68's `erase`, `eraseB`) forget the code. Their side conditions:
 
 * `Ctx.capTy Γ e`: the tensor of `Γ`'s slot types at `capVars e`, in rank order, ending in `1`;
 * `Ctx.CapOK Γ e`: every captured slot is live, and every live slot `e` does not capture is
@@ -19,7 +19,7 @@ The compatibility lemmas at `SemC`:
   conjunct is the premise's value at the same resource (`vC_thunk_of_wpTS`: forcing it is a bind
   at the value's own run, `cC_bind`).
 * `codeIB_compatC`: the same over `!Γ`, at `∅`.
-* `erase_compatC`, `eraseB_compatC`: the `U C` conjunct (`wpTS_mono`).
+* `codeErase_compatC`, `codeEraseB_compatC`: the `U C` conjunct (`wpTS_mono`).
 -/
 
 noncomputable section
@@ -385,13 +385,13 @@ theorem codeIB_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} (hp : 
   · exact vC_thunk_of_wpTS (fun _ _ _ h => h.2) fun ls' hext =>
       h δ γ ls' ρ hδ (gDenC_local hext hg)
 
-/-- **`erase`'s compatibility**: the `U C` conjunct.  `[spec §68]` -/
-theorem erase_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {N : Expr} {E : VTy} {C : CTy}
+/-- **`codeErase`'s compatibility** (§68's `erase`): the `U C` conjunct.  `[spec §68]` -/
+theorem codeErase_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {N : Expr} {E : VTy} {C : CTy}
     (h : SemV Δ Γ e (.code N E C)) : SemV Δ Γ e (.thunk C) := fun δ γ ls ρ hδ hg =>
   wpTS_mono (fun _ _ _ hv => hv.2) ρ (h δ γ ls ρ hδ hg)
 
-/-- **`eraseB`'s compatibility**: the `U C` conjunct under `!`.  `[spec §68]` -/
-theorem eraseB_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {N : Expr} {E : VTy} {C : CTy}
+/-- **`codeEraseB`'s compatibility** (§68's `eraseB`): the `U C` conjunct under `!`.  `[spec §68]` -/
+theorem codeEraseB_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {N : Expr} {E : VTy} {C : CTy}
     (h : SemV Δ Γ e (.bang (.code N E C))) : SemV Δ Γ e (.bang (.thunk C)) :=
   fun δ γ ls ρ hδ hg => wpTS_mono (fun _ _ _ hv => ⟨hv.1, hv.2.2⟩) ρ (h δ γ ls ρ hδ hg)
 

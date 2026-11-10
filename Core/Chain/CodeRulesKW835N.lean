@@ -12,7 +12,7 @@ Core's `Core/CodeRules.lean` at `SemJN`, the relation `goal791N` reads.
   (`vN_empty_of_persistent`, through `gN_cons_persistent`).
 * `vN_thunk_of_cN`: a value whose `F (U C)` reading holds at every extension of the world is in
   `𝒱⟦U C⟧`: forcing it is a bind at its own run (`cN_bind`).
-* `codeI_compatN`, `codeIB_compatN`, `erase_compatN`, `eraseB_compatN`: the four rules' lemmas.
+* `codeI_compatN`, `codeIB_compatN`, `codeErase_compatN`, `codeEraseB_compatN`: the four rules' lemmas.
 -/
 
 noncomputable section
@@ -160,8 +160,8 @@ theorem codeIB_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} (hp : 
         fun Θ' hE hΘ' c' hc' ls' => ?_⟩
   exact h δ γ Θ' c' n ls' ρ hδ hΘ' hc' hlw (gN_extR hE hg)
 
-/-- **`erase` at `SemJN`** (Core's `erase_compatC`): the `U C` conjunct.  `[spec §68]` -/
-theorem erase_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {N : Expr} {E : VTy} {C : CTy}
+/-- **`codeErase` at `SemJN`** (Core's `codeErase_compatC`): the `U C` conjunct.  `[spec §68]` -/
+theorem codeErase_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {N : Expr} {E : VTy} {C : CTy}
     (h : SemJN (ℍ := ℍ) Δ Γ e (.val (.code N E C))) :
     SemJN (ℍ := ℍ) Δ Γ e (.val (.thunk C)) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg
@@ -169,8 +169,8 @@ theorem erase_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {N : Expr} {E : V
   exact erwp_mono (fun _ _ _ _ hv => hv.2) (opTableN_local _) n ls _ ρ
     (erwp_of_cN_ret (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg))
 
-/-- **`eraseB` at `SemJN`** (Core's `eraseB_compatC`).  `[spec §68]` -/
-theorem eraseB_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {N : Expr} {E : VTy} {C : CTy}
+/-- **`codeEraseB` at `SemJN`** (Core's `codeEraseB_compatC`).  `[spec §68]` -/
+theorem codeEraseB_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {N : Expr} {E : VTy} {C : CTy}
     (h : SemJN (ℍ := ℍ) Δ Γ e (.val (.bang (.code N E C)))) :
     SemJN (ℍ := ℍ) Δ Γ e (.val (.bang (.thunk C))) := by
   intro δ γ Θ c n ls ρ hδ hΘ hc hlw hg

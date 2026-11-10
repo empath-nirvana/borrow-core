@@ -10,20 +10,22 @@ premise's term (`JS`, `JR`) and tells every other rule apart by its conclusion's
 
 **The same-term rules.**  The value rules `!E`, `[]I`, `[]E`, `⊑` at `Imm` and `Mut`, `μ`'s `roll`
 and `unroll`; `return`, its reading back (`ofRet`), `[sub]`, `ν`'s two rules and `[α]`; and, at a
-λ-value, the two thunk rules conclude with their premise's term.  `[α]` changes a type only in its
+λ-value, the two thunk rules and `[code-I]` conclude with their premise's term; `[erase]` is a value
+step from a code type to its `U` (`[spec §68]`).  `[α]` changes a type only in its
 binders' names, so what the inversions give about a type is up to α-equivalence (`VTy.alphaB`): a
 head up to it (`Hnf.alpha`), a rigid type at its α-equivalents, a λ-value's binder at an
 α-equivalent of the type read.  So:
 
 * a value read at a type `T` is read at the views of `T` and at rows over them (`ValCls`): `!`,
-  `[]`, `⊑` and `μ` change the type, `ν` and `[sub]` only the row;
+  `[]`, `⊑`, `μ` and `[erase]` change the type, `ν` and `[sub]` only the row;
+* a thunk is read, besides, at the code types `[code-I]` gives it (`ThunkCls`, `ValClsC`);
 * a computation type that is no row's, no `&` and no `ν` (`Rigid`: `⊸`, `∀`, `⊤`) is left by no
   same-term rule (`JR.rigid`), since `ν`'s rules are at `&`-trees only (`CTy.NuOk`); an `&` is
   read at itself and at the `ν`s that unroll to it (`JR.amp`).
 
 **Views keep the head** (`VView.hnf`).  A view of `T` has `T`'s head (`Hnf`: boxes stripped, `μ`
 unrolled), unless that head is `!` (dereliction reaches its content), `Imm` or `Mut` (`⊑` changes
-the lifetime).  Persistence is a property of the head (`Hnf.persistent`).
+the lifetime), or a code type, bare or under `!` (`[erase]` reaches its `U`).  Persistence is a property of the head (`Hnf.persistent`).
 
 **The inversions.**  A variable is read at a view of its live slot's type (`der_var`); a pair at the
 views of a tensor of its parts' types (`der_pair`); `inj₁ a` at the views of a sum, `a` typed in the
@@ -81,9 +83,9 @@ inductive VS : VTy → VTy → Prop
   | unroll (A : VTy) : VS (.mu A) (VTy.inst (.mu A) A)
   | alpha {A B : VTy} : VTy.alphaB [] A B = true → VS A B
   /-- `[erase]`: a code type read at its `U`.  `[spec §68]` -/
-  | erase (N : Expr) (E : VTy) (C : CTy) : VS (.code N E C) (.thunk C)
+  | codeErase (N : Expr) (E : VTy) (C : CTy) : VS (.code N E C) (.thunk C)
   /-- `[erase]` under `!`.  `[spec §68]` -/
-  | eraseB (N : Expr) (E : VTy) (C : CTy) : VS (.bang (.code N E C)) (.bang (.thunk C))
+  | codeEraseB (N : Expr) (E : VTy) (C : CTy) : VS (.bang (.code N E C)) (.bang (.thunk C))
 
 /-- The views of a value type. -/
 abbrev VView := Relation.ReflTransGen VS
@@ -155,13 +157,13 @@ theorem VView.hnf {T T' h : VTy} (hv : VView T T') (hT : Hnf T h) :
       rcases ih with ⟨h₁, hh₁, hα⟩ | ⟨A, rfl, hA⟩ | hi | hm | ⟨N, E, C, rfl, hc⟩ |
         ⟨N, E, C, rfl, hc⟩
       · cases hs with
-        | erase N E C =>
+        | codeErase N E C =>
             obtain rfl := hh₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
             cases h <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true,
               Bool.and_eq_true] at hα
             exact .inr (.inr (.inr (.inr (.inl ⟨_, _, _, rfl,
               .single (.alpha (A := .thunk _) (B := .thunk _) hα.2)⟩))))
-        | eraseB N E C =>
+        | codeEraseB N E C =>
             obtain rfl := hh₁.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h)
             cases h <;> simp only [VTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
             rename_i X
@@ -880,7 +882,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro k hk; obtain ⟨T, hT⟩ := ih (k + 1) hk; exact ⟨T, slot_succ hT⟩
   | thunkV _ _ ih | ret _ ih | bangThunkV _ _ _ ih | bangE _ ih | boxI _ _ ih | boxE _ ih
   | immSub _ _ ih | mutSub _ _ ih | ofRet _ ih | roll _ _ _ ih | unroll _ ih | nuIn _ _ ih
-  | nuOut _ _ ih | effSub _ _ ih | erase _ ih | eraseB _ ih => exact ih
+  | nuOut _ _ ih | effSub _ _ ih | codeErase _ ih | codeEraseB _ ih => exact ih
   | proj₁ _ ih | proj₂ _ ih | allE _ _ ih | allEV _ _ ih =>
       intro k hk
       rcases hk with hk | hk
@@ -1087,10 +1089,10 @@ theorem der_var {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.roll _))⟩
   | unroll _ ih =>
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.unroll _))⟩
-  | erase _ ih =>
-      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.erase _ _ _))⟩
-  | eraseB _ ih =>
-      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.eraseB _ _ _))⟩
+  | codeErase _ ih =>
+      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
+      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.codeEraseB _ _ _))⟩
   | _ => intro i he; cd_terms
 
 /-- **A pair is read at the views of a tensor of its parts' types**, or it is the empty family. -/
@@ -1168,15 +1170,15 @@ theorem der_pair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
       · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.val (VS.unroll _))⟩
       · exact .inr h
-  | erase _ ih =>
+  | codeErase _ ih =>
       intro a b he
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
-      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.val (VS.erase _ _ _))⟩
+      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.val (VS.codeErase _ _ _))⟩
       · exact .inr h
-  | eraseB _ ih =>
+  | codeEraseB _ ih =>
       intro a b he
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
-      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.val (VS.eraseB _ _ _))⟩
+      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.val (VS.codeEraseB _ _ _))⟩
       · exact .inr h
   | force => intro a b he; rcases forceE_var he with h | h <;> cases h
   | _ => intro a b he; cd_terms
@@ -1220,12 +1222,12 @@ theorem der_inj₁ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
   | unroll _ ih =>
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
       exact ⟨A, B, ha, hc.step (JS.val (VS.unroll _))⟩
-  | erase _ ih =>
+  | codeErase _ ih =>
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
-      exact ⟨A, B, ha, hc.step (JS.val (VS.erase _ _ _))⟩
-  | eraseB _ ih =>
+      exact ⟨A, B, ha, hc.step (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
-      exact ⟨A, B, ha, hc.step (JS.val (VS.eraseB _ _ _))⟩
+      exact ⟨A, B, ha, hc.step (JS.val (VS.codeEraseB _ _ _))⟩
   | force => intro a he; rcases forceE_var he with h | h <;> cases h
   | _ => intro a he; cd_terms
 
@@ -1287,14 +1289,14 @@ theorem der_unit {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
       · exact .inl ⟨hd, hc.step (JS.val (VS.unroll _))⟩
       · exact .inr (hr.tail (JS.val (VS.unroll _)))
-  | erase _ ih =>
+  | codeErase _ ih =>
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
-      · exact .inl ⟨hd, hc.step (JS.val (VS.erase _ _ _))⟩
-      · exact .inr (hr.tail (JS.val (VS.erase _ _ _)))
-  | eraseB _ ih =>
+      · exact .inl ⟨hd, hc.step (JS.val (VS.codeErase _ _ _))⟩
+      · exact .inr (hr.tail (JS.val (VS.codeErase _ _ _)))
+  | codeEraseB _ ih =>
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
-      · exact .inl ⟨hd, hc.step (JS.val (VS.eraseB _ _ _))⟩
-      · exact .inr (hr.tail (JS.val (VS.eraseB _ _ _)))
+      · exact .inl ⟨hd, hc.step (JS.val (VS.codeEraseB _ _ _))⟩
+      · exact .inr (hr.tail (JS.val (VS.codeEraseB _ _ _)))
   | force => intro he; rcases forceE_var he with h | h <;> cases h
   | _ => intro he; cd_terms
 
@@ -1318,8 +1320,8 @@ theorem der_prim_alloc {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : C
       intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.mutS _ _ _))⟩
   | roll _ _ _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.roll _))⟩
   | unroll _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.unroll _))⟩
-  | erase _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.erase _ _ _))⟩
-  | eraseB _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.eraseB _ _ _))⟩
+  | codeErase _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.codeEraseB _ _ _))⟩
   | force => intro he; rcases forceE_var he with h | h <;> cases h
   | _ => intro he; cd_terms
 
@@ -1446,12 +1448,12 @@ theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | unroll _ ih =>
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
-  | erase _ ih =>
+  | codeErase _ ih =>
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he
-      exact ⟨j₀, hb, hr.tail (JS.val (VS.erase _ _ _))⟩
-  | eraseB _ ih =>
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he
-      exact ⟨j₀, hb, hr.tail (JS.val (VS.eraseB _ _ _))⟩
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
   | _ => intro X Y he; cd_terms
 
 /-! #### `let (x, y)`, `;`, `then`, `handle` -/
@@ -1503,12 +1505,12 @@ theorem der_letpair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDer
   | unroll _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.unroll _))⟩
-  | erase _ ih =>
+  | codeErase _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
-      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.erase _ _ _))⟩
-  | eraseB _ ih =>
+      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
-      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.eraseB _ _ _))⟩
+      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
   | force => intro V M he; rcases forceE_var he with h | h <;> cases h
   | _ => intro V M he; cd_terms
 
@@ -1558,12 +1560,12 @@ theorem der_seq {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | unroll _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.unroll _))⟩
-  | erase _ ih =>
+  | codeErase _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
-      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.erase _ _ _))⟩
-  | eraseB _ ih =>
+      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
-      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.eraseB _ _ _))⟩
+      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
   | force => intro V M he; rcases forceE_var he with h | h <;> cases h
   | _ => intro V M he; cd_terms
 
@@ -1677,7 +1679,8 @@ theorem der_hnd {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
   | ret _ ih | ofRet _ ih | effSub _ _ ih | nuIn _ _ ih | nuOut _ _ ih | bangE _ ih | boxI _ _ ih
-  | boxE _ ih | immSub _ _ ih | mutSub _ _ ih | roll _ _ _ ih | unroll _ ih | alpha _ _ ih | erase _ ih | eraseB _ ih => exact ih
+  | boxE _ ih | immSub _ _ ih | mutSub _ _ ih | roll _ _ _ ih | unroll _ ih | alpha _ _ ih
+  | codeErase _ ih | codeEraseB _ ih => exact ih
   | _ => intro n Q H M he; cd_at he
 
 /-! #### λ-values -/
@@ -1926,7 +1929,7 @@ theorem not_vview_bang_thunk_code {C₀ : CTy} {N : Expr} {E : VTy} {C : CTy}
 theorem vview_forceTy {T : VTy} {C : CTy} (h : T.forceTy = some C) : VView T (.thunk C) := by
   cases T <;> simp only [VTy.forceTy, Option.some.injEq, reduceCtorEq] at h
   · subst h; exact .refl
-  · subst h; exact .single (VS.erase _ _ _)
+  · subst h; exact .single (VS.codeErase _ _ _)
 
 /-- A slot forced at `C` whose type is no code type is at `U C`.  `[spec §68]` -/
 theorem eq_thunk_of_forceTy {T : VTy} {C : CTy} (h : T.forceTy = some C)
@@ -2144,8 +2147,8 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | bangThunkV hp hC _ ih => intro M he; exact (ih M he).bangThunkV hC hp
   | codeI _ _ _ ih => intro M he; exact (ih M he).codeI _ _
   | codeIB _ _ _ _ ih => intro M he; exact (ih M he).codeIB _ _
-  | erase _ ih => intro M he; exact (ih M he).step (JS.val (VS.erase _ _ _))
-  | eraseB _ ih => intro M he; exact (ih M he).step (JS.val (VS.eraseB _ _ _))
+  | codeErase _ ih => intro M he; exact (ih M he).step (JS.val (VS.codeErase _ _ _))
+  | codeEraseB _ ih => intro M he; exact (ih M he).step (JS.val (VS.codeEraseB _ _ _))
   | withI => intro M he; exact .inr (.inr (.inr (.inr (.inl ⟨_, _, he.symm⟩))))
   | ret _ ih => intro M he; exact (ih M he).step (JS.ret _)
   | alpha _ hα ih => intro M he; exact (ih M he).step (JS.ofAlpha hα)
@@ -2467,10 +2470,10 @@ theorem der_swap {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.roll _))⟩
   | unroll _ ih =>
       intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.unroll _))⟩
-  | erase _ ih =>
-      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.erase _ _ _))⟩
-  | eraseB _ ih =>
-      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.eraseB _ _ _))⟩
+  | codeErase _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.codeEraseB _ _ _))⟩
   | force => intro he; rcases forceE_var he with h | h <;> cases h
   | _ => intro he; cd_terms
 
@@ -2886,12 +2889,12 @@ theorem der_hndJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
   | unroll _ ih =>
       intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
-  | erase _ ih =>
+  | codeErase _ ih =>
       intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
-      exact ⟨j₀, hb, hr.tail (JS.val (VS.erase _ _ _))⟩
-  | eraseB _ ih =>
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
       intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
-      exact ⟨j₀, hb, hr.tail (JS.val (VS.eraseB _ _ _))⟩
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
   | _ => intro n Q H M he; cd_at he
 
 /-- **A handler whose clause tuple is neither a tail-resuming handler's nor a `[handle-last]`
@@ -3003,12 +3006,12 @@ theorem der_thenJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeriv
   | unroll _ ih =>
       intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
-  | erase _ ih =>
+  | codeErase _ ih =>
       intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
-      exact ⟨j₀, hb, hr.tail (JS.val (VS.erase _ _ _))⟩
-  | eraseB _ ih =>
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
       intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
-      exact ⟨j₀, hb, hr.tail (JS.val (VS.eraseB _ _ _))⟩
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
   | _ => intro N D M he; cd_terms
 
 /-- `[perform]`'s premises, at its conclusion `j₀`. -/
@@ -3074,12 +3077,12 @@ theorem der_performJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDe
   | unroll _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
-  | erase _ ih =>
+  | codeErase _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
-      exact ⟨j₀, hb, hr.tail (JS.val (VS.erase _ _ _))⟩
-  | eraseB _ ih =>
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
-      exact ⟨j₀, hb, hr.tail (JS.val (VS.eraseB _ _ _))⟩
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
   | _ => intro n i V he; cd_at he
 
 /-- `[raise]`'s premises, at its conclusion `j₀`. -/
@@ -3145,12 +3148,12 @@ theorem der_raiseJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
   | unroll _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
-  | erase _ ih =>
+  | codeErase _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
-      exact ⟨j₀, hb, hr.tail (JS.val (VS.erase _ _ _))⟩
-  | eraseB _ ih =>
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeErase _ _ _))⟩
+  | codeEraseB _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
-      exact ⟨j₀, hb, hr.tail (JS.val (VS.eraseB _ _ _))⟩
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
   | _ => intro n i V he; cd_at he
 
 /-- `bind`'s and `[let]`'s premise on the bound term, at the conclusion `j₀`: the bound term at a
@@ -3277,15 +3280,15 @@ theorem der_letJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
       · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
       · exact .inr h
-  | erase _ ih =>
+  | codeErase _ ih =>
       intro N M he h₁ h₂ h₃ h₄ h₅ h₆
       rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
-      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.erase _ _ _))⟩
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.codeErase _ _ _))⟩
       · exact .inr h
-  | eraseB _ ih =>
+  | codeEraseB _ ih =>
       intro N M he h₁ h₂ h₃ h₄ h₅ h₆
       rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
-      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.eraseB _ _ _))⟩
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.codeEraseB _ _ _))⟩
       · exact .inr h
   | _ => intro N M he; cd_at he
 

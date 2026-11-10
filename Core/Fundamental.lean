@@ -287,11 +287,11 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hok : Ctx.CapOK Γ (.lam M)) (hE : (Ctx.capTy Γ (.lam M)).Cl 0) :
       CDerives Δ Γ (.val (.lam M))
         (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))
-  /-- `[erase]`: a code type read at `U C`, on the same term.  `[spec §68]` -/
-  | erase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerives Δ Γ e (.val (.code N E C))) :
+  /-- `[erase]` (§68's `erase`): a code type read at `U C`, on the same term.  `[spec §68]` -/
+  | codeErase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerives Δ Γ e (.val (.code N E C))) :
       CDerives Δ Γ e (.val (.thunk C))
   /-- `[erase]` under `!`.  `[spec §68]` -/
-  | eraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerives Δ Γ e (.val (.bang (.code N E C)))) :
+  | codeEraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerives Δ Γ e (.val (.bang (.code N E C)))) :
       CDerives Δ Γ e (.val (.bang (.thunk C)))
   /-- Dereliction. -/
   | bangE {Δ Γ e A} (h : CDerives Δ Γ e (.val (.bang A))) : CDerives Δ Γ e (.val A)
@@ -821,8 +821,8 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | bangThunkV hp hC _ ih => exact bangThunkV_compatC hp hC ih
   | codeI _ hok _ ih => exact codeI_compatC ih hok
   | codeIB hp _ hok _ ih => exact codeIB_compatC hp ih hok
-  | erase _ ih => exact erase_compatC ih
-  | eraseB _ ih => exact eraseB_compatC ih
+  | codeErase _ ih => exact codeErase_compatC ih
+  | codeEraseB _ ih => exact codeEraseB_compatC ih
   | bangE _ ih => exact bangE_compatC ih
   | copyBang hΓ => exact copyBang_compatC hΓ
   | releaseBang hΓ => exact releaseBang_compatC hΓ

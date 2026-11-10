@@ -210,11 +210,11 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hok : Ctx.CapOK Γ (.lam M)) (hE : (Ctx.capTy Γ (.lam M)).Cl 0) :
       CDerivesP Δ Γ (.val (.lam M))
         (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))
-  /-- `[erase]`: a code type read at `U C`, on the same term.  `[spec §68]` -/
-  | erase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesP Δ Γ e (.val (.code N E C))) :
+  /-- `[erase]` (§68's `erase`): a code type read at `U C`, on the same term.  `[spec §68]` -/
+  | codeErase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesP Δ Γ e (.val (.code N E C))) :
       CDerivesP Δ Γ e (.val (.thunk C))
   /-- `[erase]` under `!`.  `[spec §68]` -/
-  | eraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesP Δ Γ e (.val (.bang (.code N E C)))) :
+  | codeEraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesP Δ Γ e (.val (.bang (.code N E C)))) :
       CDerivesP Δ Γ e (.val (.bang (.thunk C)))
   /-- Dereliction. -/
   | bangE {Δ Γ e A} (h : CDerivesP Δ Γ e (.val (.bang A))) : CDerivesP Δ Γ e (.val A)

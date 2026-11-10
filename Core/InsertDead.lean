@@ -341,8 +341,8 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
         (ih Γa Γb rfl) hok' (by rw [hty']; exact hE)
       rw [hcn, hty'] at h'
       exact h'
-  | erase _ ih => intro Γa Γb hΓ; exact .erase (ih Γa Γb hΓ)
-  | eraseB _ ih => intro Γa Γb hΓ; exact .eraseB (ih Γa Γb hΓ)
+  | codeErase _ ih => intro Γa Γb hΓ; exact .codeErase (ih Γa Γb hΓ)
+  | codeEraseB _ ih => intro Γa Γb hΓ; exact .codeEraseB (ih Γa Γb hΓ)
   | bangE _ ih => intro Γa Γb hΓ; exact .bangE (ih Γa Γb hΓ)
   | copyBang hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
@@ -745,8 +745,8 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
         (ih Γa Γb rfl) hok' (by rw [hty']; exact hE)
       rw [hcn, hty'] at h'
       exact h'
-  | erase _ ih => intro Γa Γb hΓ; exact .erase (ih Γa Γb hΓ)
-  | eraseB _ ih => intro Γa Γb hΓ; exact .eraseB (ih Γa Γb hΓ)
+  | codeErase _ ih => intro Γa Γb hΓ; exact .codeErase (ih Γa Γb hΓ)
+  | codeEraseB _ ih => intro Γa Γb hΓ; exact .codeEraseB (ih Γa Γb hΓ)
   | bangE _ ih => intro Γa Γb hΓ; exact .bangE (ih Γa Γb hΓ)
   | copyBang hΓ =>
       intro Γa Γb hΓ'; subst hΓ'

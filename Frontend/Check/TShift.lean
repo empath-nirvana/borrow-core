@@ -181,8 +181,8 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .bangThunkV i j C t => .bangThunkV i j C (t.shift d c)
   | .codeI i j C t => .codeI i j C (t.shift d c)
   | .codeIB i j C t => .codeIB i j C (t.shift d c)
-  | .erase i j C E t => .erase i j C E (t.shift d c)
-  | .eraseB i j C E t => .eraseB i j C E (t.shift d c)
+  | .codeErase i j C E t => .codeErase i j C E (t.shift d c)
+  | .codeEraseB i j C E t => .codeEraseB i j C E (t.shift d c)
   | .bangE i j A t => .bangE i j A (t.shift d c)
   | .boxI i j a A t => .boxI i j a A (t.shift d c)
   | .boxE i j a A t => .boxE i j a A (t.shift d c)
@@ -308,8 +308,8 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .unroll _ _ _ t | .nuIn _ _ _ t | .nuOut _ _ _ t | .effSub _ _ _ _ _ t | .alpha _ _ _ _ t
   | .effPerform _ _ _ _ t | .effRaise _ _ _ _ _ t | .litFn _ _ _ t | .divLit _ _ _ _ t
   | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t
-  | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t | .erase _ _ _ _ t
-  | .eraseB _ _ _ _ t => t.absF Δ
+  | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t | .codeErase _ _ _ _ t
+  | .codeEraseB _ _ _ _ t => t.absF Δ
   | .bind _ _ _ _ _ t₁ t₂ | .unitE _ _ _ _ t₁ t₂ | .tensorE _ _ _ _ _ _ t₁ t₂
   | .lolliE _ _ _ _ _ t₁ t₂ => AbsF.orO (t₁.absF Δ) (t₂.absF Δ)
   | .app _ _ _ _ _ _ tM => AbsF.orO (tM.absF Δ) (some (.atom .pers))

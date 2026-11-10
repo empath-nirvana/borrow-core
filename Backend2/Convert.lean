@@ -2346,7 +2346,7 @@ def transparent? : TExpr → Option TExpr
   -- The derived nodes over a term the conversion reads as it reads the term (SPEC §57).
   | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => some t
   -- `[code-I]` and `[erase]` (SPEC §68): the same value at another type; the machine's identity.
-  | .codeI _ _ _ t | .codeIB _ _ _ t | .erase _ _ _ _ t | .eraseB _ _ _ _ t => some t
+  | .codeI _ _ _ t | .codeIB _ _ _ t | .codeErase _ _ _ _ t | .codeEraseB _ _ _ _ t => some t
   | _ => none
 
 /-- A function position's head through transparent nodes, and through a `use` whose body is a

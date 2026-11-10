@@ -157,10 +157,10 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       CDerivesAt Ξ Δ Γ (.val (.lam M))
         (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))
   /-- `[erase]`.  `[spec §68]` -/
-  | erase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.code N E C))) :
+  | codeErase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.code N E C))) :
       CDerivesAt Ξ Δ Γ e (.val (.thunk C))
   /-- `[erase]` under `!`.  `[spec §68]` -/
-  | eraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.bang (.code N E C)))) :
+  | codeEraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.bang (.code N E C)))) :
       CDerivesAt Ξ Δ Γ e (.val (.bang (.thunk C)))
   /-- Dereliction. -/
   | bangE {Δ Γ e A} (h : CDerivesAt Ξ Δ Γ e (.val (.bang A))) : CDerivesAt Ξ Δ Γ e (.val A)
@@ -542,8 +542,8 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | bangThunkV hp hC _ ih1 => exact .bangThunkV hp hC ih1
   | codeI _ hok hE ih1 => exact .codeI ih1 hok hE
   | codeIB hp _ hok hE ih1 => exact .codeIB hp ih1 hok hE
-  | erase _ ih1 => exact .erase ih1
-  | eraseB _ ih1 => exact .eraseB ih1
+  | codeErase _ ih1 => exact .codeErase ih1
+  | codeEraseB _ ih1 => exact .codeEraseB ih1
   | bangE _ ih1 => exact .bangE ih1
   | copyBang hΓ => exact .copyBang hΓ
   | releaseBang hΓ => exact .releaseBang hΓ
@@ -942,8 +942,8 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | bangThunkV hp hC _ ih1 => exact .bangThunkV hp hC (ih1 he)
   | codeI _ hok hE ih1 => exact .codeI (ih1 he) hok hE
   | codeIB hp _ hok hE ih1 => exact .codeIB hp (ih1 he) hok hE
-  | erase _ ih1 => exact .erase (ih1 he)
-  | eraseB _ ih1 => exact .eraseB (ih1 he)
+  | codeErase _ ih1 => exact .codeErase (ih1 he)
+  | codeEraseB _ ih1 => exact .codeEraseB (ih1 he)
   | bangE _ ih1 => exact .bangE (ih1 he)
   | copyBang hΓ => exact .copyBang hΓ
   | releaseBang hΓ => exact .releaseBang hΓ
