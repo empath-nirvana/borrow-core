@@ -4647,22 +4647,55 @@ def siteAtCall (c : TCx) (sp : Span) (g : String) (r : SiteRec) : DM SiteRec := 
       pure (x, ← (c.surface sp t : Except Error VTy))
     pure (r.mapTy (·.subst σ))
 
-/-- A clause that drops its `κ` at an operation whose cancel branch `cancelTy S F` performs
-(its cancel row `F` or the handler's row `S` is not empty) cancels it first: `κ` is consumable only
-when its cancel branch performs nothing (SPEC §12, §27), and its cancel performs `F ⊕ S` at the
-clause's row `S`. The clause's body takes its argument `p` apart,
-`let (a, k) = p; M`, and `M` does not mention `k`: `let (a, k) = p; u <- (force k).2; let () = u;
-M`, the kernel's `[&E₂]` of `κ` (the kernel program `timeout`'s `cancel k`). A clause that names `k`
-is left as written.  `[spec §27]` -/
+/-- `M` with the continuation `k` cancelled at the end of each of its paths that does not use it,
+by SPEC §12's insertion policy for an owed variable: immediately before the path's terminal
+computation, after every effect of the path (*At the end of the path*, *Not moved across
+effects*). A head `M₁` of `x <- M₁; N` that mentions `k` is owed it (*Tail positions*); a `case`
+arm or a `<M, N>` component that does not use it cancels it; `<>` and `absurd V` absorb it. A
+handler site in the path is terminal: one whose body mentions `k` uses it there (*Handled
+bodies*). The cancel is `u <- (force k).2; let () = u; T`, the kernel's `[&E₂]`, which the kernel
+types at the row of the path.  `[spec §12, §27]` -/
+def cancelAtEnds (sp : Span) (k : Ident) : Nat → Comp → Comp
+  | 0, M => M
+  | n + 1, M =>
+    let uses := Frontend.Check.mentionsC k.name
+    let usesV := Frontend.Check.mentionsV k.name
+    let cancel (T : Comp) : Comp :=
+      let u : Ident := ⟨s!"fx_cancel_{k.name}", sp⟩
+      .bind sp u none (.proj sp false (.force sp k)) (.letUnit sp (.var sp u.name) T)
+    match M with
+    | .bind bsp x A M₁ N =>
+      if uses M₁ then .bind bsp x A (cancelAtEnds sp k n M₁) N
+      else .bind bsp x A M₁ (cancelAtEnds sp k n N)
+    | .letUnit lsp V N => if usesV V then M else .letUnit lsp V (cancelAtEnds sp k n N)
+    | .letPair lsp x y V N => if usesV V then M else .letPair lsp x y V (cancelAtEnds sp k n N)
+    | .case csp V x M₁ y N =>
+      if usesV V then M else .case csp V x (cancelAtEnds sp k n M₁) y (cancelAtEnds sp k n N)
+    | .with_ wsp M₁ N => .with_ wsp (cancelAtEnds sp k n M₁) (cancelAtEnds sp k n N)
+    | .lam lsp x A N => .lam lsp x A (cancelAtEnds sp k n N)
+    | .lamL lsp x b N => .lamL lsp x b (cancelAtEnds sp k n N)
+    | .nuIn nsp N => .nuIn nsp (cancelAtEnds sp k n N)
+    | .ascribe asp N C => .ascribe asp (cancelAtEnds sp k n N) C
+    | .unwind usp x A M₁ D N =>
+      if uses M₁ || uses D then M else .unwind usp x A M₁ D (cancelAtEnds sp k n N)
+    | .loop lsp ℓ src V M₁ N =>
+      if usesV V || uses M₁ then M else .loop lsp ℓ src V M₁ (cancelAtEnds sp k n N)
+    | .top _ | .absurd .. => M
+    | T => if uses T then T else cancel T
+
+/-- A clause that does not use its `κ` on some path, at an operation whose cancel branch
+`cancelTy S F` performs (its cancel row `F` or the handler's row `S` is not empty), cancels it at
+the end of that path (`cancelAtEnds`). The checker consumes an unused `κ` only when its cancel
+branch performs nothing (a consume is effect-free, SPEC §12): a cancel that performs is a
+computation, which the elaboration writes where §12 puts a consume and the kernel types. The
+clause's body binds `κ` taking its argument `p` apart, `let (a, k) = p; M`. A boxed `κ` (BOXED-κ)
+is left as written.  `[spec §12, §27]` -/
 def cancelDropped (S : Frontend.Check.CRow) (F : CCTy) (q : Frontend.Check.CQual) (B : CVTy)
     (boxK : Bool) (p : String) : Comp → Comp
   | M@(.letPair sp a k (.var vsp p') N) =>
-    if boxK || p' != p || !BoCa.Fig16.LogRel.Core.capB q B || F.isTop || (F.rowOf ++ S).isEmpty ||
-        Frontend.Check.mentionsC k.name N then M
-    else
-      let u : Ident := ⟨s!"fx_cancel_{k.name}", sp⟩
-      .letPair sp a k (.var vsp p')
-        (.bind sp u none (.proj sp false (.force sp k)) (.letUnit sp (.var sp u.name) N))
+    if boxK || p' != p || !BoCa.Fig16.LogRel.Core.capB q B || F.isTop || (F.rowOf ++ S).isEmpty
+    then M
+    else .letPair sp a k (.var vsp p') (cancelAtEnds sp k 100000 N)
   | M => M
 
 /-- A handler site of a control effect (SPEC §19): its arguments bound, its body elaborated
