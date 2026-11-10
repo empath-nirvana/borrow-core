@@ -12254,6 +12254,153 @@ reported as an intended change.
 
 ---
 
+## 70. Entry 69 — `>|` and stream chains (#919, pipes unit S)
+
+### Motivation
+
+Pipes (#907, `docs/new-core/scope-pipes.md`, decision B′): `|>` is push and keeps §33's cases;
+`>|` is pull, and is new. Under (R) an adapter is a *stage*: a computation that performs the item
+effect `Stream[A, K]` (`next()`, `stop()`, L1 #920) and `Yield[B]`, with no source parameter. A run
+of stages is one n-ary connector (L1), so the user never sees a bracketing. This entry adds the
+surface: the token, the rule that recognises a stream edge by effects, the chain's normal form,
+and the transitional reading of `>|` that lets it be written today, before the connector (L1) and
+the stage-form adapters (L2, #921) exist.
+
+### Language
+
+- **The operator.** `e >| s`, the token `>|`, has the precedence of `|>` (the lowest, below `||`)
+  and associates to the left. Its right operand is a stage as `|>`'s is: a spine `f`, `f[As]`,
+  `f(a, …)`, or a parenthesised chain (below). Printed `(e >| s)`.
+- **A stream stage.** A function stage `f(…)` is a *stream stage* when `f` performs lib's item
+  effect `Stream` — identified by **lib's declaration** of it (L1, #920), never by an effect's
+  name — or, **transitionally until L2**, when `f`'s first parameter, as its signature writes it,
+  is a stored generator `U (pull A K R)` (today's source-owning adapters, `lib/adapters.bc`). A
+  handler is never a stream stage. **Until L1 declares `Stream`, the first kind does not exist:**
+  a user's effect named `Stream` makes nothing a stream stage, and S classifies by the parameter
+  only.
+- **A stream edge** (by effects; **decided in L1**). `e ∘ s` is a stream edge when `s` performs
+  lib's `Stream` and `e`'s **inferred row** has an iteration effect (`Env.iterEff`, §15; `Yield[A]`
+  in lib). A written row is an upper bound (§18), so it is never read as what `e` performs: the
+  decision reads the row the elaboration infers for `e`, where rows are inferred (after
+  `resolvePipes`, at the `Env`), and where inference has none for `e`, the edge is §33's case
+  (iii) with the note `cannot tell whether this is a stream: annotate the block's row`. L1 adds
+  the test with the branch it decides (the connector); in S no edge's elaboration depends on the
+  left side's row — a `|>` is §33's by the stage, and `>|` is accepted by the stage — so S has no
+  stream-edge test and no note.
+- **The normal form.** A maximal chain is a source and a list of edges, each marked with its mode
+  (`|>` push, `>|` pull): left-nested, the source first. `(a ∘₁ b) ∘₂ c` is read as written; a
+  stage that is itself a chain, `a ∘₁ (b ∘₂ c)`, is spliced into the chain when every edge it
+  adds is a *joining* edge. **Until L1, only `>|` joins:** a `|>` edge is always read as written,
+  so a parenthesised chain at a `|>` edge is a stage, as §33 reads it (`range(0, 3) |> (sum(range(0,
+  2)) |> g(5))` is `g(range(0, 3), sum(range(0, 2)), 5)`, `corpus/pipe-push-paren.bc`), and only
+  programs that write `>|` can be rebracketed. L1 may let a `|>` into a stage of lib's `Stream`
+  join. Two bracketings of one chain of joining edges have one normal form (theorem below), so they
+  elaborate to one term. A `>|` edge takes the span from its chain's source to its stage; a `|>`
+  edge keeps its node's.
+- **The mixing rule.** `|>` and `>|` mix freely in one chain; the operator at each edge names that
+  wire's mode. `src >| take(3) |> each(f)` is one chain of three stages with one pull and one push
+  wire (one connector, L1). An edge that is not a stream edge is §33's, whatever chain it is in.
+- **Elaboration, edge by edge** (in order, the source first):
+  - **`|>`**: §33's cases by the stage, exactly as before §70 — (i) a handler, (ii) a computation
+    parameter first, (iii) any other function. A source-owning adapter is case (iii), the left side
+    stored at its parameter (§15).
+  - **`>|`** into a stream stage (until L1, a source-owning adapter): case (iii), as `|>`. So `>|`
+    is usable at once, and every output and count of a `|>` pipeline written with `>|` is the
+    `|>` form's.
+  - **L1** adds: a stream edge into a stage that performs lib's `Stream` runs on the connector.
+
+### Refusals
+
+- `` `>|` connects stream stages; `f` is not a stream stage `` — `>|` into a function that is not
+  a stream stage (or into a handler: `` …; `h` is a handler: write `|>` ``).
+- `` the right of `>|` is a stream stage, applied to its other arguments `` — a stage that is not
+  a spine.
+- **A limit:** a generic first parameter, `app[T](it: T, …)`, is not a stream stage: `>|` refuses
+  `app` (the parameter is no stored generator until it is instantiated, after this pass), and
+  `|>` into it is §33's case (iii), unchanged.
+- **A limit (§15, not §70's):** a generator's call is stored only at a parameter written
+  `U (pull …)`, so at an abbreviation of it both `|>` and `>|` are refused today
+  (`corpus/pending/pipe-alias.bc`, #973).
+- **Not added here:** the refusal of a source-owning function at `|>` (scope §3 item 3). It moves
+  to L2, where lib's adapters become stages; in S it would break `corpus/gen-pipeline-pipe.bc`,
+  `bench/chain-gen` and the book's sites. The `>|` refusal of a `Stream` stage whose left side
+  yields nothing moves to L1 with the stream-edge test.
+
+### The user's example
+
+    watch(kube) |> filter(p) |> each(e -> reconcile(e) |> retry(3) |> timeout(30s))
+
+- The outer chain is a stream chain: `watch` performs `Yield[Event]`, `filter` and `each` perform
+  `Stream[Event]`. One connector, push wires. (Waits for L1/L2: `each`, the (R) `filter`, and a
+  `watch` that performs I/O.)
+- `each`'s per-item body `reconcile(e) |> retry(3) |> timeout(30s)` has no stream edge: neither
+  `retry` nor `timeout` performs `Stream`. It is §33's case (ii), effect layers, run per item.
+- In this order, a timeout that `retry` does not catch escapes `each`'s body, so `each` raises, and
+  **the whole `watch` pipeline is closed** (`docs/new-core/scope-pipes.md` §3), each stage's cleanup running
+  downstream-first. To keep watching after a per-item failure, handle it inside `each`'s body
+  (`… |> timeout(30s) |> log_and_skip`).
+
+### Theorem
+
+`Frontend.Elab.Pipes.chainOf_bracketing` (`Frontend/Elab/Pipes.lean`): for a bracketing (a tree of
+pipe nodes, `PipeTree`) whose leaves are not pipe nodes and whose edges all join, the marks of the
+normal form (`PipeChain.marks`: the source, and each edge's mode and stage) are the tree's in-order
+flattening. So two bracketings with one flattening have one normal form
+(`chainOf_bracketings_eq`; `chainOf_assoc` for `(a ∘₁ b) ∘₂ c` and `a ∘₁ (b ∘₂ c)`). The
+elaboration reads the marks only, each edge at the span from the chain's source to its stage
+(for an unbracketed chain, the parser's own node span), so two bracketings are one core term up to
+where the source and stages sit in the text: `bcc desugar` prints them identically when the
+source starts at one column (checked on `((a >| b) >| c) >| d`, `a >| (b >| (c >| d))` and
+`a >| ((b >| c) >| d)`), and they erase alike in any layout
+(`corpus/sugar/pipe-bracket.lowered.bc`).
+
+### Programs
+
+- `corpus/pipe-pull.bc`: a `>|` chain of three stages over a generator, and the same chain in `|>`
+  (case (iii)): `(i32[20], i32[20])`, counts `3 0 0 3 3 0`, as `gen-pipeline-pipe`.
+- `corpus/pipe-bracket.bc` and `corpus/sugar/pipe-bracket.lowered.bc`: three bracketings of one
+  chain (one with a `|>` wire in its left side), each erasing as the nested calls: `(i32[25], (i32[25], i32[25]))`.
+- `corpus/pipe-mixed.bc`: a mixed `|>`/`>|` chain, a parenthesised `>|` sub-chain spliced at a
+  `>|` edge, and a chain into a sink and then a plain function: `(i32[56], (i32[4], i32[28]))`.
+- `corpus/pipe-left-row.bc`: left sides that are not generator calls, every `|>` §33's as before:
+  an `if` of values and an `if` calling a function without a written row, piped into a function
+  that performs a user's effect named `Stream`; a call of a function performing a one-operation
+  unit effect (`Wait`, the shape of an iteration effect); a call of `three() -> i32 with
+  Yield[i32] = 3` (a written row that over-approximates); a stored generator piped `>|`; a call of
+  a function without a written row piped `>|`:
+  `((i32[13], (i32[14], (i32[11], i32[13]))), (i32[6], i32[5]))`.
+- `corpus/pipe-push-paren.bc`: a `|>` into a parenthesised `|>` chain is §33's, as written:
+  `i32[315]` (the review's probe p6).
+- `corpus/pending/pipe-alias.bc`: `range(0, 4) >| tot`, `tot(it: P)`: accepted as a stream stage
+  (the abbreviation unfolded), then refused where the call would be stored, as `|>` is.
+- `corpus/pending/pipe-stream-edge.bc`: an `if` of generator calls piped `>|` into a function that
+  performs the program's own `Stream`: refused (`` `sum_items` is not a stream stage ``) until L1,
+  where a stage of lib's `Stream` is a stream edge on the connector.
+- `corpus/reject/pipe-pull-plain.bc`: `3 >| double`: `` `>|` connects stream stages; `double`
+  is not a stream stage ``.
+
+### Baseline
+
+No change to `CDerives`, `Core/`, the checker, the machine, the backends or lib. §33's cases
+(i)–(iii) are unchanged: every `|>` edge is elaborated by `pipeStage`, as before. A chain is read
+in its normal form, which differs from the parse only where a parenthesised chain of `>|` edges is
+the stage of a `>|`, and a `>|` edge takes the span from its chain's source to its stage (the
+parser's own span for an unbracketed chain); a `|>` edge is elaborated as before, at its node's
+span. Checked: `bcc
+desugar`, `bcc check` and `bcc print` of every corpus, bench, docs and book program with `|>`
+and of the review's `|>` probes (32 programs, 96 outputs) are identical to main's; the three
+probes that differ write `>|`, which main does not parse.
+
+### Open
+
+- L1 (#920): lib's `Stream`; a stage that performs it is a stream stage, keyed on that
+  declaration; the stream-edge test on the left side's inferred row, after row inference, with the
+  note where none is inferred; the connector.
+- The transitional reading ends at L2: `>|` into a source-owning adapter, and the refusal of one
+  at `|>`, change there.
+
+---
+
 ## Status
 
 What implements each entry is kept one paragraph per file in `docs/status/`: the paragraphs
