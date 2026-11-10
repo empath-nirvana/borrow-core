@@ -340,6 +340,13 @@ def mkInj (n : Nat) (r : Bool) (a : List Exp) (reuse : Bool := false) :
       | some p, _ => .op (.bin .w64 .or) [tw, low32 p]])
   pure (s, [.c64 t.toUInt64] ++ v ++ zeros (w - 1 - v.length))
 
+/-- `mkInj` where it builds no box: its words, an internal error if it would allocate (a host
+operation's or a primitive's sum, laid out flat).  [spec §43] -/
+def mkInjFlat (n : Nat) (r : Bool) (a : List Exp) : LM (List Exp) := do
+  let (s, v) ← mkInj n r a
+  unless s.isEmpty do throw "word IR: a primitive's sum with a boxed arm"
+  pure v
+
 /-- **The test that a sum's words `ls` at `n` are its left arm**: the tag below the left arm's
 tags' end. With no arm merged and not packed, the tag word is `0`.  `[spec §43]` -/
 def sumLeft (n : Nat) (ls : List Nat) : LM Exp := do
@@ -373,8 +380,10 @@ def payload (n : Nat) (r : Bool) (ls : List Nat) (consume : Bool) (keep : Bool :
   getField n k (← fieldLocals n k ls) consume keep
 
 /-- **The words of a value at `c` are those of one at `n`** (SPEC §43): one node, or the same width
-and, at every pair and sum along the fields not boxed, the same boxes and, at a sum, the same
-merged arm, tags and packing. A read through `Imm̲` relates nodes of different leaves (`joinRe`:
+and, at every pair and sum along their fields, no field boxed and, at a sum, the same merged arm,
+tags and packing. A boxed field answers `false`: its pointer's words agree, but what it points at
+is not compared, so this holds of values that box nothing, which every trivial value is (both
+callers ask it of a trivial node, `Layouts.triv`). A read through `Imm̲` relates nodes of different leaves (`joinRe`:
 a closure, an opaque value or a cell read as `Unk`, a cell as a borrow), and a leaf of one word
 against `Unk`'s none can change a sum's packing or merged arm at the same total width; a leaf's
 own words agree when the widths do. Within `fuel` formers deep; `false` past it. -/
@@ -388,8 +397,7 @@ def sameEnc (L : Layouts) : Nat → Nat → Nat → Bool
           | .sum .. => L.merged c == L.merged n && L.tagsOf c == L.tagsOf n &&
               L.isPacked c == L.isPacked n
           | _ => true
-        let fld (k x y : Nat) : Bool :=
-          L.isBoxed c k == L.isBoxed n k && (L.isBoxed c k || sameEnc L f x y)
+        let fld (k x y : Nat) : Bool := !L.isBoxed c k && !L.isBoxed n k && sameEnc L f x y
         enc && fld 0 a a' && fld 1 b b'
       | .pair .., _ | .sum .., _ | _, .pair .. | _, .sum .. => false
       | _, _ => true)
@@ -533,8 +541,8 @@ def hostVals (o : HostOp) (n : Nat) (ls : List Nat) : LM (List Stmt × List Exp)
         or32 zero (and32 (.op (.rel w' .eq) [a, intMin]) (.op (.rel w' .eq) [b, m1]))
       | _ => zero
     -- `inl` the quotient, `inr ()` where the division has no answer: the sum's words at `n`.
-    let (_, vr) ← mkInj n true []
-    let (_, vl) ← mkInj n false [word w (.op o args)]
+    let vr ← mkInjFlat n true []
+    let vl ← mkInjFlat n false [word w (.op o args)]
     let ts := [t₀, t₁].take vl.length
     let sets (vs : List Exp) : List Stmt := (ts.zip vs).map fun (t, e) => .set t e
     pure ([.ite trapC (sets vr) (sets vl)], locs ts)
@@ -544,8 +552,8 @@ def hostVals (o : HostOp) (n : Nat) (ls : List Nat) : LM (List Stmt × List Exp)
     let x := args.headD (.c64 0)
     let (loOp, lo, hi) := truncRange i f sx
     let ok := and32 (.op (.frel f loOp) [x, lo]) (.op (.frel f .lt) [x, hi])
-    let (_, vl) ← mkInj n false [word w (.op (.trunc_sat i f sx) [x])]
-    let (_, vr) ← mkInj n true []
+    let vl ← mkInjFlat n false [word w (.op (.trunc_sat i f sx) [x])]
+    let vr ← mkInjFlat n true []
     let ts := [t₀, t₁].take vl.length
     let sets (vs : List Exp) : List Stmt := (ts.zip vs).map fun (t, e) => .set t e
     pure ([.ite ok (sets vl) (sets vr)], locs ts)
@@ -755,9 +763,9 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     | [b, k], [i] =>
       let addr := Exp.gep (.loc b) (mul64 (.loc i) (.c64 st.toUInt64))
       -- `inl` the slot's address, `inr ()` past the end: the sum's words at `n`.
-      let (_, vl) ← mkInj n false [addr]
+      let vl ← mkInjFlat n false [addr]
       if !check then return ← emit d vl
-      let (_, vr) ← mkInj n true []
+      let vr ← mkInjFlat n true []
       let ts ← fresh vl.length
       let sets (vs : List Exp) : List Stmt := (ts.zip vs).map fun (t, e) => .set t e
       return (← boundTick) ++ [.ite (ltu64 (.loc i) (.loc k)) (sets vl) (sets vr)] ++
@@ -880,8 +888,8 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let b ← fresh1; let t₀ ← fresh1; let t₁ ← fresh1
     -- `inl` the byte, `inr ()` at the input's end: the sum's words at the answer's second field.
     let sn ← child n 1
-    let (_, vl) ← mkInj sn false [.loc b]
-    let (_, vr) ← mkInj sn true []
+    let vl ← mkInjFlat sn false [.loc b]
+    let vr ← mkInjFlat sn true []
     let ts := [t₀, t₁].take vl.length
     let sets (vs : List Exp) : List Stmt := (ts.zip vs).map fun (t, e) => .set t e
     return [.set b (.getc (.load (.loc m) 0)),
