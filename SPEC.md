@@ -3497,6 +3497,7 @@ below and the cancel steps (*Cancels*) do not allocate:
     (μ, hnd (n, H) K[raise (n, v)])    ↦  (μ, h_op v)          K free of n, unwind-clear   [unwind]
     (μ, ubind (N, D) v)                ↦  (μ, N v)                                         [then]
     (μ, ubind (N, D) K[raise (m, v)])  ↦  (μ, D (); raise (m, v))   K unwind-clear, m ≠ ⊥  [finalise]
+    (μ, hnd (n, H) K[cancelTo_n k])    ↦  (μ, ccatch (K†[raise (⊥, none)]) ; k ())   K free of n   [cancel-to]
 
 - **The continuation.** The `[op]` step's `κ` is the pair of its entries:
 
@@ -10408,6 +10409,67 @@ the checker emits no such node, and its absorption places none at a wider contex
 `effHandleT`'s. No change to the checker's output, the elaboration, `Backend/`, `Backend2/`, the
 corpus or a golden.
 
+
+### `cancelTo_n`: the in-place cancel-mode unwind (#1002)
+
+A seventh effect primitive, `cancelTo_n k`, cancels the handled region of the nearest `hnd(n, H)`
+in place, in cancel mode, without capturing a continuation, and then runs `k` outside the node
+(§19's step `[cancel-to]`):
+
+    (μ, hnd (n, H) K[cancelTo_n k])  ↦  (μ, ccatch (K†[raise (⊥, none)]) ; k ())     K free of n   [cancel-to]
+
+- `K†` is the cancelled region of §19 *Cancels*: its handler and `ccatch` frames are removed, so
+  they are dead. The unwind runs `K`'s finalisers and the unwinding forms of its borrows,
+  innermost first, under `cfin`. The first error is kept (`[cfin-raise]`) and re-raised at the
+  `ccatch` (`[cancel-raise]`), and then `k ()` does not run.
+- The handler frame `hnd(n, H)` is consumed: `k` runs where the node stood.
+- It is the configuration the `[op]` step followed by the clause's `κ.2 ()` reaches (T-B1′,
+  `last_cancel_direct`: `K₀[(λ_. nf z)(ccatch K†[raise ⊥])]`), in one step with no `κ` cell. No
+  other machine step changes.
+- Determinism and unique decomposition gain the case: `K[cancelTo_n k]` is final until the
+  enclosing `hnd(n, _)` reduces it, as `K[perform (n, v)]` is.
+
+**Typing, inside a `[handle-last]` node's region.**
+
+    Γ ⊢ k : U(1 ⊸ F_Σ R)        (Σ, R the node's outer row and answer)
+    ──────────────────────────────────────────────────  [cancel-to]
+    Γ ⊢ cancelTo_n k : F_{n:E[fs] ⊕ Σ′} B        (any B)
+
+- It is admitted where the region's row carries the node's name `n`, as an operation of `E` that
+  is cancellable or abortive with cancel row `fs j`.
+- Its cancel obligation, `K`'s finalisers, is covered by that cancel row under `LastFinOK`'s
+  conditions: below `Σ` (D3), not `⊤`, no `Div`.
+- Whatever `k` closes over is held across the cancel: `[let]`'s `hW` at `Row.Cancels`, as for an
+  exit's `z`.
+- No new index: one `CDerives` rule with its compatibility lemma.
+
+**The fused form it gives pipe fusion** (P3, #1001):
+
+    hnd(n,H) K[ (hnd(m₁..m_k, X)(w v)) then r. case r {inl y → y | inr z → cancelTo_n (λ_. nf z)} ]
+    X at each escaping abortive site mᵢ:  λe. cancelTo_n (λ_. raise (mᵢ, e))
+
+It is exact against the unfused node (`lastClause` plus the `[op]` capture) on a raise from the
+work to an outer site (the order of cleanup errors, first kept, and which handler catches: `K`'s
+handlers are dead), on the `inr` exit, and on an outer cancel of a continuation captured outside
+the node. It is not exact for a perform by the work of a name that has a live handler inside `K`;
+that case keeps T-B2's condition, `Σ_W`'s names unhandled in `K`.
+
+**Baseline.** `fundamentalC`, `adequacyC`, `adequacyD`, `fundamentalN_all` and `goal791N`, with
+their statements unchanged; every existing compatibility lemma; §13's determinism (`head_det`, with
+the new case); the laws `last_resume_direct`, `last_cancel_direct` (and `_exit`) and
+`last_perform_direct`, unchanged. Every corpus and kernel program keeps its output: no existing term
+changes.
+
+**Units.** C.1, the machine (Support): the `Expr` former, `[cancel-to]`, and the cases in
+determinism, decomposition and `StepsOff`/frame. C.2, Core: the rule and its compatibility lemma,
+from the cancel branch's proof (`erwp_kappaC_cancel`, `ewp_handle_or`'s `hTc` at `lastTc`). C.3,
+the chain: the compatibility lemma at `erwpK`/`KW`. The backend: the in-place cancel-mode unwind in
+the interpreters and Backend2. None is built yet.
+
+**Open.** The fused-vs-unfused simulation (P3's whole-run relation), which discharges *a raise or
+cancel crosses the active frame* above; performs re-entered in `K`; a surface or elaborator producer
+for the fused form.
+
 ### Open
 
 - **The erasure laws** (`Core/HandleLastErase.lean`, #918) are proved at the direct call `hnd H
@@ -10426,9 +10488,9 @@ corpus or a golden.
   the same whatever continuation it captures. Open: runs the hypothesis does not give (a work that
   diverges or does not leave κ's cell free); T-B2 when an outer handler stores or cancels the
   captured κ, or a raise or cancel crosses the active frame (an early stop, `stop()`, a raise across
-  a fused stage), not derived and not refuted (a whole-run simulation); a Core term for the in-place
-  cancel-mode unwind (Core expresses it only through κ's `ccatch K†`); the laws are stated on
-  machine values, not on typed `lastH`.
+  a fused stage), not derived and not refuted (a whole-run simulation); the laws are stated on
+  machine values, not on typed `lastH`. The in-place cancel-mode unwind is `cancelTo_n`
+  (*`cancelTo_n`*, below).
 - **The elaboration** of `for` with `break`/`return` and a body that performs, and the adapters
   over a source computation (R-1's frontend): it needs a checker producer for the node
   (`TTied`'s builder, the clause kinds of the node, `Frontend/Check/Kinds.lean`, and its handled
