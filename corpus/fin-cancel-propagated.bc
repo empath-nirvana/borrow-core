@@ -1,0 +1,19 @@
+-- SPEC §27 at the surface, the twin of the kernel program `cancel-propagated` (`bcc kernel interp
+-- cancel-propagated`, Core's `progOutT`; its core text is `corpus/core-fin-cancel-propagated.bc`):
+-- `canc` cancels a region whose cleanup raises `Ex2` under a second handler of it, `h2`, inside
+-- the region. The kernel program raises at the name both instances share and the dead inner one
+-- passes it out; at the surface the innermost `ex2()` would resolve to `h2`, dead at the cancel, and
+-- the cancel could not perform it at `canc`'s row (D3, a type error). The cleanup names the outer
+-- handler, `o.ex2()` (SPEC §38): the error is kept, re-raised at the canceller, and caught by `o`.
+--
+-- Answer: inr (), and `live 0`. A wrong implementation that delivers the error to the dead inner
+-- instance, or drops it, answers `inl ()`.
+
+effect Ex2 { ctl ex2() -> never }
+effect Op1 { ctl op1() }
+
+handler catch2: Ex2, 1 -> 1 + 1 = { return(v) = inl v; ex2() = inr () }
+handler canc: Op1, 1 -> 1 = { return(v) = v; op1(k) = () }
+handler h2: Ex2, 1 -> 1 = { return(v) = v; ex2() = () }
+
+main -> 1 + 1 = with o = catch2 { with canc { with h2 { x <- op1() unwind (o.ex2()); x } } }

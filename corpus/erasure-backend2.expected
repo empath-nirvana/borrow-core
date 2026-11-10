@@ -98,6 +98,15 @@ core-fin-nested erased handles 2 performs 0 raises 1 machines 1 suspends 1 left 
 core-fin-stored-k-fin erased handles 1 performs 0 raises 1 machines 1 suspends 2 left 0 0
 data-json-map-ser erased handles 2 performs 0 raises 2 left 0 0
 effects-load-raise erased handles 3 performs 0 raises 6 left 0 0
+fin-cancel-propagated erased handles 1 performs 0 raises 1 machines 2 suspends 1 left 0 0
+fin-cancel-reentered erased handles 1 performs 0 raises 1 machines 2 suspends 1 left 0 0
+fin-cancel-reraised erased handles 1 performs 0 raises 1 machines 2 suspends 1 left 0 0
+fin-e7b erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
+fin-e7d erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0
+fin-e8b erased handles 2 performs 0 raises 2 left 0 0
+fin-raise-cancel erased handles 1 performs 0 raises 2 machines 2 suspends 1 left 0 0
+fin-raise-unwind erased handles 2 performs 0 raises 3 left 0 0
+fin-timeout erased handles 1 performs 0 raises 1 machines 2 suspends 1 left 0 0
 for-arm-raises-owned erased handles 8 performs 0 raises 8 left 0 0
 handle-arm-releases erased handles 2 performs 0 raises 2 left 0 0
 if-match-argument erased handles 0 performs 0 raises 0 left 0 0

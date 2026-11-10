@@ -607,7 +607,8 @@ def retRowOf : CCTy → CRow
   | C => C.rowOf
 
 /-- The operations (`n.i`) a checked term performs, read from its derivation: its `[perform]`,
-`await` and `[raise]` nodes, the source row of each `[sub]`, the row of each call (a leaf whose
+`await` and `[raise]` nodes, under each `[sub]` what its subterm performs (its source row is the
+row the subterm is checked at, which may hold more), the row of each call (a leaf whose
 judgment is a computation type), and inside `handle_n` none of the name `n`. The finaliser's row
 `Σ_D` of `[then]` is the site's operations among these (`finC`); the kernel checks `D` at it.
 `[spec §27]` -/
@@ -621,7 +622,7 @@ def opKeysOf : Nat → TExpr → List (UInt32 × UInt32)
     | .effPerform _ _ _ o t' => (o.n, o.i) :: opKeysOf k t'
     | .effAwait _ _ _ _ a c => [(a.n, a.i), (c.n, c.i)]
     | .effRaise _ _ _ o _ t' => (o.n, o.i) :: opKeysOf k t'
-    | .effSub _ _ S _ _ _ => keys S
+    | .effSub _ _ _ _ _ t' => opKeysOf k t'
     | .effHandleV _ _ _ _ _ _ n _ _ _ _ _ _ tc te => inner n tc te
     | .effHandleVB _ _ _ _ _ _ n _ _ _ _ _ _ _ tc te => inner n tc te
     | .effHandleT _ _ _ _ _ _ n _ _ _ _ _ tc te => inner n tc te

@@ -103,6 +103,15 @@ core-fin-nested 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the 
 core-fin-stored-k-fin 0 1 0 0 0 0 # the stashed closure's call is unknown
 data-json-map-ser 16 0 0 699 420 205
 effects-load-raise 4 0 0 204 184 15
+fin-cancel-propagated 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-cancel-reentered 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-cancel-reraised 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-e7b 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-e7d 0 0 0 0 0 0 # no cell; two cleanups raise, the first error is kept
+fin-e8b 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the pending one
+fin-raise-cancel 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-raise-unwind 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the pending one
+fin-timeout 0 0 0 0 0 0 # no cell; the dropped continuation is cancelled at two rows
 for-arm-raises-owned 8 0 0 54 54 54
 handle-arm-releases 2 0 0 13 13 13
 if-match-argument 0 0 0 0 0 0
