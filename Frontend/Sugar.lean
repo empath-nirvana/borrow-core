@@ -4669,7 +4669,7 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let cB : TCx := { c with E := { c.E with row := some rowB } }
     let M' ← surfC n cB none M
     -- The body's type once its lends are elaborated (`TCx.tyCL`): a lending call's head answers
-    -- the place beside its value, which the binding takes apart (#893).  [spec §19]
+    -- the place beside its value, which the binding takes apart (#893).  [spec §18]
     let CM ← need M.span s!"the type of the body `{i.name}` handles" ((← refresh cB).tyCL M')
     let (_, A) ← need M.span s!"the type of the body `{i.name}` handles" (rowRes? CM)
     let As ← (c.surface sp A : Except Error VTy)
