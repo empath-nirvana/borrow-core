@@ -598,7 +598,7 @@ def clauseCands : CVTy → List (CQual × CVTy × CVTy)
   | _ => []
 
 /-- The operations a computation type's calls perform: its row under its arguments and
-lifetime binders, both branches of a `&` (a continuation's resume and cancel). -/
+lifetime binders, both branches of a `&` (a continuation's resume and cancel).  `[spec §27]` -/
 def retRowOf : CCTy → CRow
   | .arr _ C => retRowOf C
   | .all _ _ C => retRowOf C
@@ -1192,12 +1192,66 @@ def markIt {j : Jdg} (sp : Span) (k : SchemeMark) (r : Res Δ T j) : Except Erro
   | some r' => pure r'
   | none => err sp s!"internal error: a marked scheme ({repr k}) is not the scheme's term"
 
+/-- `[then]` with `M` at its row `SM` and the finaliser at its row `SD` (non-empty), the cancel-row
+premises decided: `rowLeB` (`Σ_M ≤ Σ`, `Σ_D ≤ Σ`), `thenFinB` (each cancel row of `Σ_M` read holds
+`F ⋈ Σ_D`), `pendPersB` on `Σ_M`, `Div` not in `Σ_D`.  `[spec §27]` -/
+def thenAt (E : Env) (sp spD : Span) (x : String) {S SM SD : CRow} {A B : CVTy} {tN : TExpr}
+    {sN : CRow} {pN : Pins} (hNZ : S.NZ) (hUq : S.Uniq)
+    (rM : Res Δ T (.comp (effOf SM A)))
+    (rD : Res Δ (.unit :: T) (.comp (effOf SD .unit)))
+    (F' : Fam T (fun L => (TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)) ∧
+      TTied rD.pins rD.sigs Δ (mkCtx (.unit :: T) (false :: L)) rD.t (.comp (effOf SD .unit))) ∧
+      (S.UnrD → BoCa.Fig16.LogRel.Core.Ctx.Banged (mkCtx T L)))) :
+    Except Error (Res Δ T (.comp (effOf S B))) :=
+  if h : overlapOK T rM.F.u F'.u = true then
+    if hMS : rowLeB SM S = true then
+      if hDS : rowLeB SD S = true then
+        if hfin : thenFinB SM S SD = true then
+          if hSD : BoCa.Fig16.LogRel.Core.Row.divB SD = false then
+            let fin := fun (hP : SD.UnrD → SM.PendPers) =>
+              rEffThenD (atB sp [x]) hNZ hUq (rowLeB_sound hMS) (rowLeB_sound hDS) hfin hP hSD
+                rM F' h
+            if hu : Row.unrDB SD = true then
+              if hp : pendPersB SM = true then pure (fin fun _ => pendPersB_sound hp)
+              else throw ⟨sp, s!"the finaliser may meet an operation that resumes more " ++
+                s!"than once, so the errors pending below it, those of the row " ++
+                s!"`{ppRow E SM}`, must have persistent arguments"⟩
+            else pure (fin fun hU => absurd (Row.unrDB_iff.mpr hU) (by simp [hu]))
+          else throw ⟨sp, "a finaliser may not loop: its row holds `Div`"⟩
+        else
+          -- The first operation of `M` whose cancel row lacks what the finaliser performs: where the
+          -- continuation is captured, and what its cancel row must hold.  `[spec §27]`
+          let bad := SM.filter fun o => o.finRead && match BoCa.Fig16.LogRel.Core.Row.find S o.n o.i with
+            | some o' => !thenLeB o.fin SD o'.fin
+            | none => true
+          match bad with
+          | o :: _ =>
+            let F := match BoCa.Fig16.LogRel.Core.Row.find S o.n o.i with
+              | some o' => o'.fin
+              | none => o.fin
+            let lacks := SD.filter fun d =>
+              (BoCa.Fig16.LogRel.Core.Row.find F.rowOf d.n d.i).isNone
+            let what := if lacks.isEmpty then s!"`{ppRow E SD}` (at a nested cancel row)"
+              else ", ".intercalate (lacks.map fun d => s!"{d.n}.{d.i}")
+            let row := if F.isTop then "[top]" else s!"[{", ".intercalate (ppEff E.lenv F).1}]"
+            throw ⟨spD, s!"this finaliser performs {what}, and it runs when the continuation " ++
+              s!"captured at the operation {o.n}.{o.i} below it is cancelled (by the handler " ++
+              s!"of the name {o.n}, which drops it): the cancel row of {o.n}.{o.i}, `{row}`, " ++
+              s!"must hold {what}; write `{o.n}.{o.i} {qualStr o.q}[…] A ~> B` (SPEC §27)"⟩
+          | [] => throw ⟨spD, "internal error: a finaliser's cancel rows"⟩
+      else throw ⟨sp, s!"the finaliser's row `{ppRow E SD}` is not within `{ppRow E S}`"⟩
+    else throw ⟨sp, s!"the row `{ppRow E SM}` of the computation is not within `{ppRow E S}`"⟩
+  else throw (splitErr E T sp rM.F.u F'.u)
+
 /-- `[then]` at the row `S`: `N` (its binder `x` closed) and the finaliser `D` at one context, `D`
-at its own row `SD`. At `SD = []`, `effThenA`; else `[then]` with its cancel-row premises decided
-(`thenFinB`, `pendPersB`).  `[spec §27]` -/
-def thenIt (E : Env) (sp : Span) (x : String) {S SD : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow}
+at its own row `SD`. At `SD = []`, `effThenA`, `M` at `S`; else `[then]` (`thenAt`), `M` at its own
+row `SM` where the checker found one (`rMs`, SPEC §27: a capturable operation the finaliser
+performs is then not one of `M`'s, whose cancel row would have to hold it), else at `S`.
+`[spec §27]` -/
+def thenIt (E : Env) (sp : Span) (x : String) (spD : Span) {S SD : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow}
     {pN : Pins}
     (rM : Res Δ T (.comp (effOf S A)))
+    (rMs : Option (Σ SM : CRow, Res Δ T (.comp (effOf SM A))))
     (FN : Fam T (fun L => TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B))))
     (rD : Res Δ (.unit :: T) (.comp (effOf SD .unit))) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
@@ -1220,33 +1274,16 @@ def thenIt (E : Env) (sp : Span) (x : String) {S SD : CRow} {A B : CVTy} {tN : T
                     "once: it must be a `!` type"⟩
                 | none => throw ⟨sp, "internal error: an unrestricted row"⟩
             else pure (F.map fun _ h => ⟨h, fun hU => absurd (Row.unrDB_iff.mpr hU) (by simp [hu])⟩)
-          if h : overlapOK T rM.F.u F'.u = true then
-            if h0 : SD.isEmpty = true then
+          if h0 : SD.isEmpty = true then
+            if h : overlapOK T rM.F.u F'.u = true then
               pure (rEffThen (atB sp [x]) (List.isEmpty_iff.mp h0) (Row.nzB_sound hNZ)
                 (Row.uniqB_sound hUq) rM F' h)
-            else
-              -- The finaliser performs (SPEC §27): `[then]` at its row `SD`.
-              if hDS : rowLeB SD S = true then
-                if hfin : thenFinB S SD = true then
-                  if hSD : BoCa.Fig16.LogRel.Core.Row.divB SD = false then
-                    let fin := fun (hP : SD.UnrD → S.PendPers) =>
-                      rEffThenD (atB sp [x]) (Row.nzB_sound hNZ) (Row.uniqB_sound hUq)
-                        (rowLeB_sound hDS) hfin hP hSD rM F' h
-                    if hu : Row.unrDB SD = true then
-                      if hp : pendPersB S = true then pure (fin fun _ => pendPersB_sound hp)
-                      else throw ⟨sp, s!"the finaliser may meet an operation that resumes more " ++
-                        s!"than once, so the errors pending below it, those of the row " ++
-                        s!"`{ppRow E S}`, must have persistent arguments"⟩
-                    else pure (fin fun hU => absurd (Row.unrDB_iff.mpr hU) (by simp [hu]))
-                  else throw ⟨sp, "a finaliser may not loop: its row holds `Div`"⟩
-                else
-                  let bad := S.filter fun o => o.finRead && !thenLeB o.fin SD o.fin
-                  throw ⟨sp, s!"the finaliser performs `{ppRow E SD}`, which runs when a " ++
-                    s!"continuation captured below it is cancelled: the cancel row of " ++
-                    ", ".intercalate (bad.map fun o => s!"{o.n}.{o.i}") ++
-                    s!" must hold what the finaliser performs (SPEC §27)"⟩
-              else throw ⟨sp, s!"the finaliser's row `{ppRow E SD}` is not within `{ppRow E S}`"⟩
-          else throw (splitErr E T sp rM.F.u F'.u)
+            else throw (splitErr E T sp rM.F.u F'.u)
+          else
+            -- The finaliser performs (SPEC §27): `[then]` at its row `SD`, `M` at its own row.
+            match rMs with
+            | some ⟨_, rM'⟩ => thenAt E sp spD x (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM' rD F'
+            | none => thenAt E sp spD x (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM rD F'
         else throw (mergeErr E T sp "the finaliser" "the rest" "after this computation, "
           FD.u FD.w FN.u FN.w)
       else throw (mergeErr E T sp "the rest" "the finaliser" "after this computation, "
@@ -1284,7 +1321,8 @@ def effBind (E : Env) (sp : Span) (x : Ident) {S : CRow} {A B : CVTy}
       else throw (splitErr E T sp rM.F.u FN'.u)
     else
       let rD ← finalOf E sp S FN.u
-      thenIt E sp x.name rM FN rD
+      -- `M` at the site's row: its finaliser `finalOf` performs nothing.  `[spec §27]`
+      thenIt E sp x.name sp rM none FN rD
   else
     let FN' := FN.map fun _ h =>
       (⟨h, fun hW => absurd (Row.cancelsB_iff.mpr hW) (by simp [hw]),

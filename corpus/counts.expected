@@ -102,6 +102,7 @@ core-fin-e8b 0 0 0 0 0 0 # no cell; the finaliser's raise supersedes the pending
 core-fin-nested 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
 core-fin-stored-k-fin 0 1 0 0 0 0 # the stashed closure's call is unknown
 core-fin-sub-row 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
+core-fin-top-row 0 0 0 0 0 0 # main returns (); f is not called
 data-json-map-ser 16 0 0 699 420 205
 effects-load-raise 4 0 0 204 184 15
 fin-block-finaliser 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
