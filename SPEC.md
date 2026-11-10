@@ -8321,7 +8321,7 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/reject/mut-control-move.bc` | a move out of a lent variable | refused, naming `buf` |
 | `corpus/reject/effect-try-lend.bc` | `&mut stdout` passed on in `to_result`'s body | refused, naming `stdout` |
 | `corpus/mut-control-order.bc` | reads and reborrows in source order (`g(&mut c) * 100 + c` = 108) | `(inr i32[108], (i32[101], i32[8]))` |
-| `corpus/mut-control-call-order.bc` | a closure argument's write seen by a later read | `(inr 115, (8, 15))` |
+| `corpus/mut-control-call-order.bc` | a closure argument's write seen by a later read | `(inr i32[115], (i32[8], i32[15]))` |
 | `corpus/mut-control-assign-raise.bc` | `c = chk(c + 1)`, an effectful right side, raising midway | `(inr i32[3], i32[2])` |
 | `corpus/reject/mut-control-cap.bc` | a body assigning `c` and passing `stdout`: the refusal names `stdout` only | refused |
 | `corpus/lend-copy.bc` | copies of a borrow block's borrow over a loop: `let b2 = b`, `let mut v = v` (T04's form), a copy after a statement | `(i32[30], (i32[321], i32[6]))` (was refused) |
