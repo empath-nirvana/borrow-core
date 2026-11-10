@@ -7388,7 +7388,8 @@ read at startup).
   Arr(Vec[Json]) | Obj(Map[string, Json])`: owned, an array's elements in a `Vec`, an object's
   members in a `Map` keyed by an owned `string` (§42 data, §36 map). A number is chosen at parse
   time, as serde_json's `Number` is: a literal with no fraction or exponent that fits `i64` is
-  `Int`, exact; any other number is `Float`.
+  `Int`, exact, except `-0`, which is `Float(-0.0)` (as serde_json reads it; an `i64` has no
+  negative zero); any other number is `Float`.
 - **Parsing.** `json_parse<'a>(t: text 'a) -> Json with Fail[JsonError], Exhausted` parses a
   whole document from text lent at `'a`, by recursive descent, RFC 8259's grammar:
   - every string escape; a surrogate pair decoded to one code point, a lone surrogate refused;
@@ -7410,6 +7411,11 @@ read at startup).
   and objects with `map_entries` (§31 loads). `Int` by `push_i64`, exactly as parsed; `Float` by `push_f64` (an integral float as `3.0`);
   strings re-escaped (`"`, `\`, control bytes as `\u00XX` or their short escapes).
 
+- **Lookup.** `json_get_with[B]<'a>(j: imm 'a Json, k: lit, f: !(all 'x < top. imm 'x Json + 1 => B))
+  -> B`: `f` receives an object's member at key `k` as a view at its own block lifetime, `inr ()`
+  if `j` is not an object or has no such member, and returns a result free of that lifetime. Its
+  callback is written in core text, pure: the surface has no block generic in a lifetime (#1003),
+  and a core-text block cannot perform (#161).
 **Stated limits.**
 - **Duplicate keys:** the last value wins; the earlier one is dropped.
 - **Member order:** an object serialises in its map's slot order (fixed by the keys' hashes and
@@ -7422,10 +7428,12 @@ unchanged. `corpus/json-parse.bc` becomes `include json` plus its `main`; its go
 integer literal now prints exactly (`3`, not `3.0`), so the serialised line's length changes.
 
 **Programs.**
-- `corpus/json-parse.bc`: as in J1, through the library; integers print exactly. Its input gains
-  an id past 2^53 (as in twitter.json, `505874924095815681`), printed back exactly.
-- `corpus/json-deep.bc`: the document nested past the recursion budget performs `Exhausted`
-  (moved out of `json-parse.bc`, so the main program's interpreter time is the document's own).
+- `corpus/json-parse.bc`: `include json` and its `main`; its input has `"id":
+  505874924095815681`, printed back exactly, and `-0` and `-0.0`, printed as `-0.0`.
+- `corpus/json-deep.bc`: twelve thousand nested arrays perform `Exhausted`.
+- `corpus/parse-i64.bc`: `parse_i64` at `i64`'s minimum and maximum, an overflow, and `-0`.
+- `corpus/json-get.bc`: `json_get_with` finding a member, and three misses.
+- `corpus/reject/include-unknown.bc`: its list of modules ends in `json`.
 
 **Open.**
 - Streaming parse (from a reader, not a whole text) and a pull-based tokenizer (pipes).
@@ -7435,6 +7443,7 @@ integer literal now prints exactly (`3`, not `3.0`), so the serialised line's le
   view at `j`'s lifetime, cannot be written: a view projected inside a load (§36) cannot leave it
   at the outer lifetime, and no view can be boxed out of a borrow block (`Imm 'x _ ⊐ 'x` is
   refused). It needs a persistent reborrow in the kernel, a model extension (#999).
+  `json_get_with` is today's form.
 
 ### Programs
 
