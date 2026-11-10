@@ -600,7 +600,7 @@ def layoutOk (L : Layouts) : CM Unit := do
 bytes at `i32` and `f32`, else its words'. -/
 def bytesOf : NK → Nat → Nat
   | .int .w8, _ => 1
-  | .int .w32, _ | .int .f32, _ => 4
+  | .int .w32, _ | .int .f32, _ | .int .u32, _ => 4
   | _, w => 8 * w
 
 /-- Every representative's bytes are `bytesOf` its shape and width, and each of `roots` (a
@@ -987,7 +987,7 @@ def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
   let shrink := (contents.find? (L.bytes[·]! > 0)).map fun c =>
     { L with bytes := L.bytes.set! c (L.bytes[c]! - 1) }
   let slot := (contents.find? fun c => match L.shape[c]! with
-      | .int .w8 | .int .w32 | .int .f32 => true
+      | .int .w8 | .int .w32 | .int .f32 | .int .u32 => true
       | _ => false).map fun c =>
     { L with bytes := L.bytes.set! c (if L.bytes[c]! == 1 then 4 else 1) }
   -- A type's bytes one fewer than a variable's of that type.

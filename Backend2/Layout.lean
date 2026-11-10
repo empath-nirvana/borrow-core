@@ -853,7 +853,7 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
   -- §57), each read through the most bytes a value of that type takes (`tyBytes`).
   let bytesOf (v : Nat) : Nat := match shape[v]! with
     | .int .w8 => 1
-    | .int .w32 | .int .f32 => 4
+    | .int .w32 | .int .f32 | .int .u32 => 4
     | _ => 8 * width[v]!
   let bytes := (Array.range n).map fun i => bytesOf rep[i]!
   -- Each type's most bytes, by its id: a node's type's id is its type's with every `!` erased

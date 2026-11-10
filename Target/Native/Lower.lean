@@ -193,7 +193,8 @@ def sxIns : Sx → String
 
 /-- Host operation `o` on its operands' words (SPEC §8, §37): its result's word. -/
 def hostOp (o : HostOp) (vs : List String) : EM String := do
-  match o, vs with
+  -- An operation at `u32`/`u64` is its signed sibling's on the same bits.  [spec §73]
+  match machineOp o, vs with
   | .bin w b, [a, c] => do
     let t ← ity w
     let bits := if w == .w32 then 31 else 63
@@ -301,7 +302,8 @@ def hostOp (o : HostOp) (vs : List String) : EM String := do
     iwRes i (← val s!"call {iwTy i} @llvm.fpto{sxIns sx}i.sat.{iwTy i}.{fsuf f}({fty f} {x})")
   | .demote, [a] => do fout .f32 (← val s!"fptrunc double {← fin .f64 a} to float")
   | .promote, [a] => do fout .f64 (← val s!"fpext float {← fin .f32 a} to double")
-  | .reinterpret_i _, [a] | .reinterpret_f _, [a] => pure a
+  | .reinterpret_i _, [a] | .reinterpret_f _, [a] | .reinterpret_u _, [a] | .reinterpret_s _, [a] =>
+    pure a
   | _, _ => throw "native: a host operation's arity"
 
 /-- The intrinsics the host operations call. -/

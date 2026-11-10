@@ -53,6 +53,8 @@ def widthName : BoCa.Width → String
   | .w8 => "u8"
   | .f32 => "f32"
   | .f64 => "f64"
+  | .u32 => "u32"
+  | .u64 => "u64"
 
 /-- A printed shape as a shape atom: a name as it is, anything else parenthesized. -/
 def ppShapeAtom (σ : Shape) (printed : String) : String :=
