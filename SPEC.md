@@ -9516,9 +9516,13 @@ No change: no type, rule, term, typing, elaboration or semantics.
 - **The outcome** (`Backend2/Types.lean`, `outcomeTy`): `F_Σ R` at a row with machine operations
   answers `μY. R ⊕ (P ⊕ S)`, `P` the payload of `Σ`'s abortive operations (§47) and `S` one
   summand per machine operation `A ↠ B` of `Σ`, in the row's order: its argument and the
-  suspended computation `k : U((B ⊸ F Y) & F C)`, `C` what its cancel answers, `1 ⊕` the payload
-  of the operation's cancel row (`fin`, §27; `1` at `⊤`). `k` is the continuation `[op]` captures,
-  as §19's `κ` is: its first component resumes it, its second cancels it.
+  suspended computation `k : U((B ⊸ F Y) & K)`. At a capturable (cancellable) operation (`capB`),
+  `K = F C`, `C` what its cancel answers, `1 ⊕` the payload of the operation's cancel row (`fin`,
+  §27; `1` at `⊤`). At a must-resume operation `K = ⊤`: the kernel never cancels a `lin`
+  continuation (`kTy .lin`, `kappaC_cancel_lin`), so Backend2 builds no cancel entry there, only
+  an `unreachable` trap, which no run reaches; that it is never entered is stated `UNPROVED:` at
+  `genMach`. `k` is the continuation `[op]` captures, as §19's `κ` is: its first component resumes
+  it, its second cancels it.
 - **A machine** (`convK`) is a function whose answer is an outcome, with the joins and steps its
   conversion makes. A computation is converted with its continuation inside the machine (the
   frames to the machine's answer): a `[let]` or `[then]` at an outcome makes its body a join and
