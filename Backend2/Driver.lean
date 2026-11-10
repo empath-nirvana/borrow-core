@@ -386,7 +386,8 @@ def framesLine (k : Backend.CheckedProg) : Except String String := do
   pure s!"framed {n} allocated {all.length - n}"
 
 /-- The closure classes of a program's layouts, one a line: its codes, its width, whether its
-environment is on the heap; then the boxed fields (`bcc lir --layout`). A node is numbered by its
+environment is on the heap; then the boxed fields; then each sum with a merged arm or packed
+(SPEC §43), its tags, its width and the width a tag word and its payload would take (`bcc lir --layout`). A node is numbered by its
 place in the canonical order (`Layouts.order`), and the lines are sorted by those numbers: the
 report depends on the program and its types, not on how the analysis numbered its nodes. -/
 def layoutReport (k : Backend.CheckedProg) : Except String (List String) := do
@@ -400,7 +401,20 @@ def layoutReport (k : Backend.CheckedProg) : Except String (List String) := do
         (p.codes[cs[0]!]?.map (fun c => (c.ty.pp.take 100).toString)).getD ""
   let boxes := (L.boxed.toList.map fun (v, i) => (num v, i)).mergeSort fun a b =>
     a.1 < b.1 || (a.1 == b.1 && a.2 ≤ b.2)
-  pure (cls ++ boxes.map fun (v, i) => s!"boxed {v}.{i}")
+  -- The sums a merged arm or packing lays out otherwise than a tag word and a payload (SPEC §43),
+  -- each with the words it would take as that (`was`).
+  let rec plainW (fuel v : Nat) : Nat := match fuel with
+    | 0 => L.w v
+    | f + 1 =>
+      let fw (j c : Nat) : Nat := if L.isBoxed v j then 1 else plainW f c
+      match L.sh v with
+      | .pair a b => fw 0 a + fw 1 b
+      | .sum a b => 1 + max (fw 0 a) (fw 1 b)
+      | _ => L.w v
+  let sums := (L.order.toList.filter fun v => (L.merged v).isSome || L.isPacked v).map fun v =>
+    s!"sum {num v}: merges {(L.merged v).map toString |>.getD "-"} tags {L.tagsOf v}" ++
+      s!"{if L.isPacked v then " packed" else ""} width {L.w v} was {plainW 64 v}"
+  pure (cls ++ boxes.map (fun (v, i) => s!"boxed {v}.{i}") ++ sums)
 
 /-- **The checks refuse wrong layouts** (`bcc lir --layout-reject`, the reject tests): the
 program's layouts and closure flow as computed, accepted; then each perturbation of them
