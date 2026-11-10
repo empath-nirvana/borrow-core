@@ -599,24 +599,25 @@ def rEffThen {S SD : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN pD : 
       subst h0
       exact TTied.effThenA i _ hs hm.rel_of hcv hNZ hUq hU h₁ hN hD⟩
 
-/-- `[then]` with the finaliser `D` at its own row `Σ_D ≤ Σ`, at `Σ_M = Σ`, its premises decided:
-`thenFinB` (each cancel row read holds `F ⋈ Σ_D`), `pendPersB` where `Σ_D` may meet an
-unrestricted operation, `Div` not in `Σ_D`.  `[spec §27]` -/
-def rEffThenD {S SD : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN pD : Pins} (hNZ : S.NZ)
-    (hUq : S.Uniq) (hDS : BoCa.Fig16.LogRel.Core.RowLe SD S) (hfin : thenFinB S SD = true)
-    (hP : SD.UnrD → S.PendPers) (hSD : BoCa.Fig16.LogRel.Core.Row.divB SD = false)
-    (rM : Res Δ T (.comp (effOf S A)))
+/-- `[then]` with `M` at its own row `Σ_M ≤ Σ` and the finaliser `D` at its own row `Σ_D ≤ Σ`, its
+premises decided: `thenFinB` (each cancel row of `Σ_M` read holds `F ⋈ Σ_D`), `pendPersB` on `Σ_M`
+where `Σ_D` may meet an unrestricted operation, `Div` not in `Σ_D`.  `[spec §27]` -/
+def rEffThenD {S SM SD : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN pD : Pins} (hNZ : S.NZ)
+    (hUq : S.Uniq) (hMS : BoCa.Fig16.LogRel.Core.RowLe SM S)
+    (hDS : BoCa.Fig16.LogRel.Core.RowLe SD S) (hfin : thenFinB SM S SD = true)
+    (hP : SD.UnrD → SM.PendPers) (hSD : BoCa.Fig16.LogRel.Core.Row.divB SD = false)
+    (rM : Res Δ T (.comp (effOf SM A)))
     (F : Fam T (fun L => (TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)) ∧
       TTied pD sD Δ (mkCtx (.unit :: T) (false :: L)) tD
         (.comp (effOf SD .unit))) ∧
       (S.UnrD → Ctx.Banged (mkCtx T L))))
     (h : overlapOK T rM.F.u F.u = true) : Res Δ T (.comp (effOf S B)) :=
   have hl : rM.F.u.length = F.u.length := rM.F.hu.trans F.hu.symm
-  ⟨.effThen i (.comp (effOf S B)) A B S S SD (Masks.of rM.F.u F.u) rM.t tN tD, rM.sigs ∪ᵣ (sN ∪ᵣ sD),
+  ⟨.effThen i (.comp (effOf S B)) A B S SM SD (Masks.of rM.F.u F.u) rM.t tN tD, rM.sigs ∪ᵣ (sN ∪ᵣ sD),
     rM.pins ++ (pN ++ pD), (rM.F.split F h).map
     fun _ ⟨_, _, hs, hm, h₁, ⟨hN, hD⟩, hU⟩ => TTied.effThen i _ hs hm.rel_of
       ⟨rM.covers.of₁ hl, (F.covers fun _ h => h.1.1.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl,
-        (F.covers fun _ h => h.1.2.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl⟩ hNZ hUq hU hDS
+        (F.covers fun _ h => h.1.2.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl⟩ hNZ hUq hU hMS hDS
       (thenFinB_sound hfin) hP hSD h₁ hN hD⟩
 
 /-! ### `[handle]`  `[spec §19]` -/

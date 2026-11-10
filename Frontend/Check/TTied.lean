@@ -330,27 +330,28 @@ theorem effThenA (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ
     .effThen hs hm hcv hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
       (BoCa.Fig16.LogRel.Core.RowLe.nil S) hfin hP rfl hM.2 hN.2 hD.2⟩
 
-/-- `[then]` with its finaliser at its own row `Σ_D ≤ Σ`, at `Σ_M = Σ`: each operation's cancel row
-`F` read holds `F ⋈ Σ_D` (`ThenLe`), and a finaliser that may meet an unrestricted operation finds
-`Σ`'s pending errors persistent.  `[spec §27]` -/
+/-- `[then]` with `M` at its own row `Σ_M ≤ Σ` and the finaliser at its own row `Σ_D ≤ Σ`: each
+cancel row `F` of `Σ_M` read holds `F ⋈ Σ_D` (`ThenLe`), and a finaliser that may meet an
+unrestricted operation finds `Σ_M`'s pending errors persistent.  `[spec §27]` -/
 theorem effThen (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tM tN tD : TExpr}
-    {A B : CVTy} {S SD : CRow} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    {A B : CVTy} {S SM SD : CRow} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
     (hcv : Covers u.u₁ 0 tM.erase ∧ Covers u.u₂ 1 tN.erase ∧ Covers u.u₂ 1 tD.erase) (hNZ : S.NZ)
-    (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hDS : BoCa.Fig16.LogRel.Core.RowLe SD S)
-    (hfin : ∀ n k o o', BoCa.Fig16.LogRel.Core.Row.find S n k = some o →
+    (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : BoCa.Fig16.LogRel.Core.RowLe SM S)
+    (hDS : BoCa.Fig16.LogRel.Core.RowLe SD S)
+    (hfin : ∀ n k o o', BoCa.Fig16.LogRel.Core.Row.find SM n k = some o →
       BoCa.Fig16.LogRel.Core.Row.find S n k = some o' → o.finRead = true →
       BoCa.Fig16.LogRel.Core.ThenLe o.fin SD o'.fin)
-    (hP : SD.UnrD → S.PendPers) (hSD : BoCa.Fig16.LogRel.Core.Row.divB SD = false)
-    (hM : TTied p₁ s₁ Δ Γ₁ tM (.comp (effOf S A)))
+    (hP : SD.UnrD → SM.PendPers) (hSD : BoCa.Fig16.LogRel.Core.Row.divB SD = false)
+    (hM : TTied p₁ s₁ Δ Γ₁ tM (.comp (effOf SM A)))
     (hN : TTied p₂ s₂ Δ (⟨A, true⟩ :: Γ₂) tN (.comp (effOf S B)))
     (hD : TTied p₃ s₃ Δ (⟨.unit, false⟩ :: Γ₂) tD (.comp (effOf SD .unit))) :
     TTied (p₁ ++ (p₂ ++ p₃)) (s₁ ∪ (s₂ ∪ s₃)) Δ Γ
-      (.effThen i (.comp (effOf S B)) A B S S SD u tM tN tD) (.comp (effOf S B)) :=
-  ⟨fun hn Ξ h => .effThen hs hm hcv hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
+      (.effThen i (.comp (effOf S B)) A B S SM SD u tM tN tD) (.comp (effOf S B)) :=
+  ⟨fun hn Ξ h => .effThen hs hm hcv hNZ hUq hU hMS
       hDS hfin hP hSD (hM.1 (nilL hn) Ξ (sigsAt_union_left h))
       (hN.1 (nilL (nilR hn)) Ξ (sigsAt_union_left (sigsAt_union_right h)))
       (hD.1 (nilR (nilR hn)) Ξ (sigsAt_union_right (sigsAt_union_right h))),
-    .effThen hs hm hcv hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
+    .effThen hs hm hcv hNZ hUq hU hMS
       hDS hfin hP hSD hM.2 hN.2 hD.2⟩
 
 /-- `[handle]` reads its handled row, as `CDerivesAt.effHandleV`: the handler's pair `tc` a value
