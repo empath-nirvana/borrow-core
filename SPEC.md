@@ -12727,6 +12727,11 @@ the stage-form adapters (L2, #921) exist.
 
 ### Language
 
+§75 (L1, #920) builds what this entry leaves to L1: lib's `Stream`, a stream stage keyed on its
+declaration, the stream-edge test on the left side's inferred row, `|>` stream edges that join a
+chain, and the refusal of a left side that yields nothing. Where this entry says "until L1", §75's
+rule holds, and this entry's transitional parameter test is replaced by it.
+
 - **The operator.** `e >| s`, the token `>|`, has the precedence of `|>` (the lowest, below `||`)
   and associates to the left. Its right operand is a stage as `|>`'s is: a spine `f`, `f[As]`,
   `f(a, …)`, or a parenthesised chain (below). Printed `(e >| s)`.
@@ -12852,9 +12857,8 @@ probes that differ write `>|`, which main does not parse.
 
 ### Open
 
-- L1 (#920): lib's `Stream`; a stage that performs it is a stream stage, keyed on that
-  declaration; the stream-edge test on the left side's inferred row, after row inference, with the
-  note where none is inferred; the connector.
+- L1's items (lib's `Stream`, the stream-edge test, joining `|>` edges, the left-side refusal,
+  the connector) are built in §75.
 - The transitional reading ends at L2: `>|` into a source-owning adapter, and the refusal of one
   at `|>`, change there.
 
