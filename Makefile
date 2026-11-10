@@ -15,7 +15,7 @@ ifeq (run,$(firstword $(MAKECMDGOALS)))
   $(eval $(RUN_ARGS):;@:)
 endif
 
-.PHONY: bcc run tools gate gate-full gate-fast goldens bench
+.PHONY: bcc run tools gate gate-full gate-fast goldens keys verify-goldens bench
 
 # Build the `bcc` compiler.
 bcc: $(CACHE_STAMP) | tools
@@ -30,16 +30,23 @@ run: bcc
 # The sanity gate (scripts/ci-local.sh): the build, hygiene and axioms, the judgment freeze and
 # the Backend2 fence, the type-equality census, the corpus parsed, checked and renamed, and every corpus program run in WebAssembly by
 # each backend against its golden with `live 0` (Backend2, the default, and the old backend until
-# N7); the source stage only on unverified goldens.
+# N7); the source stage only on unverified goldens (scripts/source-stage.sh: no recorded key, or
+# not the current one).
 gate: | tools
 	scripts/ci-local.sh
 
 # The full gate: every check (every compiled stage, counts, native, the static tables, the
-# generated and renamed programs, the book), and the source stage on every program, re-verifying
-# every golden against `Support`'s interpreter. Required when Paper/, Support/, Target/, Pipeline/,
-# Reference/ or Backend/ changed.
+# generated and renamed programs, the book), the source stage on the unverified goldens of the
+# corpus and the book. Required when Paper/, Support/, Target/, Pipeline/, Reference/ or Backend/
+# changed.
 gate-full: | tools
-	scripts/ci-local.sh --source
+	scripts/ci-local.sh --full
+
+# Re-verify every golden: the source stage on every corpus program and book block (with each
+# compiled to WebAssembly), whatever its key. Writes no key.
+verify-goldens: | tools
+	scripts/compile-corpus.sh --source --final
+	scripts/book-doctest.sh --source
 
 # While iterating: the sanity gate's steps the changes since origin/main reach, never the source
 # stage.
@@ -52,9 +59,16 @@ gate-fast: | tools
 bench: bcc
 	python3 bench/bench.py $(BENCH_ARGS)
 
-# Rewrite every corpus golden (`.out`, `.err`, `.status`) from `Support`'s interpreter.
+# Rewrite every corpus golden (`.out`, `.err`, `.status`) from `Support`'s interpreter, with its
+# key (`.key`).
 goldens: | tools
 	scripts/compile-corpus.sh --write-goldens
+
+# Record the key of every unverified golden the source stage verifies (corpus `<name>.key`,
+# book/keys/), running it on exactly those (scripts/source-stage.sh).
+keys: | tools
+	scripts/compile-corpus.sh --final --write-keys
+	scripts/book-doctest.sh --write-keys
 
 # The required tools are on PATH.
 tools:
