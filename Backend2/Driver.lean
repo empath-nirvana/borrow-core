@@ -266,12 +266,18 @@ def suspCodes (L : Lay.Layouts) (o : Var) (M : OutInfo) : List Nat := Id.run do
     | .pair _ kn => (L.unionOf kn).toList
     | _ => []
 
-/-- The LIR of a checked program, and what the conversion read. With state machines (SPEC §49), the
+/-- The LIR of a checked program, what the conversion read, and the program's layouts
+(`checkedLayouts`) when the conversion computed them. With state machines (SPEC §49), the
 layouts of the converted program decide the calls in tail position that close a loop
 (`tailPass`) and the machines whose state is a cell (`cellPass`). A machine whose state is a cell
 and whose body takes its continuation is converted again with the level's cell passed on to its
-next point (`threadedOf`, SPEC §50): the conversion's second run, at those machines. -/
-def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
+next point (`threadedOf`, SPEC §50): the conversion's second run, at those machines.
+
+The layouts are computed once per distinct program: `L₁`'s program is the one `cellPass` reads
+when `tailPass` changes nothing, and with no `cellSites` the program answered is the one the
+layouts are of. -/
+def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) :
+    Except String (Prog × CState × Option Lay.Layouts) := do
   -- A program with capabilities is compiled as `run_io` (SPEC §11), the term `IORun.every_run`
   -- is about.
   let (c, exts, arg, loops) ← match ← k.runIO with
@@ -280,11 +286,12 @@ def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String 
   let classes ← classesOf c
   let ctx := c.ctx.map fun s => (s.ty, s.live)
   let run (threaded stacked : Std.HashMap Nat LTy) :
-      Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy) := do
+      Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy ×
+        Option Lay.Layouts) := do
     let (p, st) ← convertProg exts ctx c.t c.C arg loops census (directFacts c) (machineOps c)
       threaded stacked classes
     let p := { p with exits := c.exitsOnDivError }
-    if st.done.isEmpty then return (p, st, {}, {})
+    if st.done.isEmpty then return (p, st, {}, {}, none)
     -- A call in tail position whose callee's suspended computations may be the machine's own
     -- closes a loop of tail calls, and passes its outcome on (SPEC §49, `tailPass`).
     let L₁ ← checkedLayouts p
@@ -292,31 +299,50 @@ def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String 
       let (_, o, M, i) := site
       let own := (st.done[i]?.map fun (_, kcs) => kcs.map (·.2)).getD []
       (suspCodes L₁ o M).any own.contains
-    let (p, st) ← if st.tailSites.any loop then do
-        let (p₁, st₁) ← tailPass st loop
-        pure ({ p with fns := p₁.fns, codes := p₁.codes, ty := p₁.ty }, st₁)
-      else pure (p, st)
     -- The machines whose suspended computation's class holds itself keep their state in a cell
-    -- (SPEC §49, `cellPass`), read off the layouts' recursive classes.
-    let L ← checkedLayouts p
+    -- (SPEC §49, `cellPass`), read off the layouts' recursive classes: `L₁` when no call closes a
+    -- loop, the program then unchanged.
+    let (p, st, L) ← if st.tailSites.any loop then do
+        let (p₁, st₁) ← tailPass st loop
+        let p := { p with fns := p₁.fns, codes := p₁.codes, ty := p₁.ty }
+        pure (p, st₁, ← checkedLayouts p)
+      else pure (p, st, L₁)
     let recursive (kc : Nat) : Bool := match L.codeClass[kc]? with
       | some cls => L.isRec cls
       | none => false
-    let (p₂, st₂) ← cellPass st recursive
     -- The stack machines (SPEC §52), read off these layouts: each call point's callee's suspended
     -- computations' classes.
     let sk := stackedOf st recursive (stackOps c) (suspCodes L)
     let th := (threadedOf st recursive).filter fun i _ => !sk.contains i
-    return ({ p with fns := p₂.fns, codes := p₂.codes, ty := p₂.ty, statics := p₂.statics }, st₂, th, sk)
-  let (p, st, th, sk) ← run {} {}
-  if th.isEmpty && sk.isEmpty then return (p, st)
-  let (p, st, _, _) ← run th sk
-  return (p, st)
+    -- With no machine to make again, `cellPass` leaves the state as it is, and `p`'s functions,
+    -- codes, types and statics are the state's (`convertProg` answers them, `tailPass` sets the
+    -- first three and makes no static): the program is `p`, whose layouts are `L`.
+    if (cellSites st recursive).isEmpty then return (p, st, th, sk, some L)
+    let (p₂, st₂) ← cellPass st recursive
+    return ({ p with fns := p₂.fns, codes := p₂.codes, ty := p₂.ty, statics := p₂.statics }, st₂,
+      th, sk, none)
+  let (p, st, th, sk, L) ← run {} {}
+  if th.isEmpty && sk.isEmpty then return (p, st, L)
+  let (p, st, _, _, L) ← run th sk
+  return (p, st, L)
 
-/-- The LIR of a checked program (`lirOf₀`), with its frame slots (`slotsOf`). -/
+/-- The LIR of a checked program (`lirOf₀`), with its frame slots (`slotsOf`), and its layouts
+when the conversion computed them. The layouts do not read the frame slots. -/
+def lirLayOf (k : Backend.CheckedProg) (census : Bool := false) :
+    Except String (Prog × CState × Option Lay.Layouts) := do
+  let (p, st, L) ← lirOf₀ k census
+  pure ({ p with slots := slotsOf p st.owners }, st, L)
+
+/-- The LIR of a checked program (`lirLayOf`). -/
 def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
-  let (p, st) ← lirOf₀ k census
-  pure ({ p with slots := slotsOf p st.owners }, st)
+  let (p, st, _) ← lirLayOf k census
+  pure (p, st)
+
+/-- The layouts of a program's LIR, checked: `L` when the conversion computed them
+(`lirLayOf`), else `checkedLayouts`. -/
+def layoutsAt (p : Prog) : Option Lay.Layouts → Except String Lay.Layouts
+  | some L => pure L
+  | none => checkedLayouts p
 
 /-- **The effect erasure's postcondition**, for a program (`bcc lir --erasure`, SPEC §47, §49): the
 LIR has no `handle` and no `perform`, so a program the new backend compiles has none left. The
@@ -359,15 +385,11 @@ def framesLine (k : Backend.CheckedProg) : Except String String := do
   let n := (all.filter slots.contains).length
   pure s!"framed {n} allocated {all.length - n}"
 
-/-- The layouts of a program's LIR, checked (`checkedLayouts`). -/
-def layoutsOf (_k : Backend.CheckedProg) (p : Prog) : Except String Lay.Layouts :=
-  checkedLayouts p
-
 /-- The closure classes of a program's layouts, one a line: its codes, its width, whether its
 environment is on the heap (`bcc lir --layout`). -/
 def layoutReport (k : Backend.CheckedProg) : Except String (List String) := do
-  let (p, _) ← lirOf k
-  let L ← layoutsOf k p
+  let (p, _, L) ← lirLayOf k
+  let L ← layoutsAt p L
   let cls := (L.union.toList.filter (!·.2.isEmpty)).map fun (r, cs) =>
     s!"class {r}: codes {cs.toList} width {L.w r}{if L.isRec r then " heap" else ""} : " ++
       (p.codes[cs[0]!]?.map (fun c => (c.ty.pp.take 100).toString)).getD ""
@@ -379,10 +401,11 @@ program's layouts and closure flow as computed, accepted; then each perturbation
 (`LayCheck.perturbLayouts`, `LayCheck.perturbFlow`), refused, with the refusal. A line
 `ACCEPTED` is a perturbation the checks let through. -/
 def rejectReport (k : Backend.CheckedProg) : Except String (List String) := do
-  let (p, _) ← lirOf k
+  let (p, _, L) ← lirLayOf k
   Lint.lint p
-  let (g, m) ← Lay.places p
-  let L := Lay.resolve p g m
+  let L ← match L with
+    | some L => pure L
+    | none => do let (g, m) ← Lay.places p; pure (Lay.resolve p g m)
   let fs := Flow.solution p L
   let kn := Flow.known p L fs
   let base := match LayCheck.check p L, LayCheck.checkFlow p L fs.sets kn with
@@ -400,11 +423,11 @@ def rejectReport (k : Backend.CheckedProg) : Except String (List String) := do
 
 /-- The word IR of a checked program by the new backend; with `counts`, the counting build. -/
 def flatOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String Backend.Flat.Prog := do
-  let (p, _) ← lirOf k
+  let (p, _, L) ← lirLayOf k
   -- The LIR is linted on the way: each variable consumed once on every path, which `slotsOf`
   -- reads.
   Lint.lint p
-  let L ← layoutsOf k p
+  let L ← layoutsAt p L
   let (fs, kn) ← checkedFlow p L
   Low.lowerProg p L kn fs.sets counts
 
@@ -442,12 +465,16 @@ def watTimed (file src : String) : IO (Except String String) := do
       match Frontend.Check.ioMainOf r.el.prog c with
         | .ok io => pure (⟨r.el.prog, c, io, r.el.keys⟩ : Backend.CheckedProg)
         | .error e => throw s!"{file}: {e}"
-    let (p, _) ← ExceptT.mk <| stage "lir" (fun (q : Prog × CState) =>
-        s!"{q.1.fns.size} functions, {q.1.codes.size} codes") fun _ => lirOf k
-    let L ← ExceptT.mk <| stage "layout" (fun _ => "") fun _ => do
-      let (g, m) ← Lay.places p
-      pure (Lay.resolve p g m)
-    ExceptT.mk <| stage "layout check" (fun _ => "") fun _ => checkLayouts p L
+    let (p, _, L₀) ← ExceptT.mk <| stage "lir" (fun (q : Prog × CState × Option Lay.Layouts) =>
+        s!"{q.1.fns.size} functions, {q.1.codes.size} codes") fun _ => lirLayOf k
+    -- The layouts the conversion computed and checked are reused: their stages then take no time.
+    let L ← ExceptT.mk <| stage "layout" (fun _ => "") fun _ => match L₀ with
+      | some L => pure L
+      | none => do
+        let (g, m) ← Lay.places p
+        pure (Lay.resolve p g m)
+    ExceptT.mk <| stage "layout check" (fun _ => "") fun _ =>
+      if L₀.isSome then pure () else checkLayouts p L
     let fs ← ExceptT.mk <| stage "flow" (fun _ => "") fun _ => pure (Flow.solution p L)
     let kn ← ExceptT.mk <| stage "flow check" (fun _ => "") fun _ => checkFlow p L fs
     let flat ← ExceptT.mk <| stage "lower" (fun (q : Backend.Flat.Prog) => s!"{q.fns.size} functions")

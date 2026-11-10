@@ -233,6 +233,10 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       TDerivesAt Ξ Δ Γ (TExpr.nuOut (info := info) (jdg := (.comp C.unroll)) (C := C) (t := t)) (.comp C.unroll)
   | unfoldN {Δ Γ} {info : TInfo} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.unfoldN (info := info) (jdg := (.val (unfoldTy C S))) (C := C) (S := S)) (.val (unfoldTy C S))
+  | unfoldK {Δ Γ} {info : TInfo} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.unfoldK (info := info) (jdg := (.val (unfoldKTy C G S))) (C := C) (G := G) (S := S)) (.val (unfoldKTy C G S))
+  | nuOutK {Δ Γ i} {info : TInfo} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
+      TDerivesAt Ξ Δ Γ (TExpr.nuOutK (info := info) (jdg := (.comp (C.instT (codeTy C G S)))) (i := i) (C := C) (G := G) (S := S)) (.comp (C.instT (codeTy C G S)))
   | effSub {Δ Γ} {info : TInfo} {t : TExpr} {S S' : Row} {A : VTy} (hle : RowLe S S') (h : TDerivesAt Ξ Δ Γ t (.comp (CTy.effOf S A))) :
       TDerivesAt Ξ Δ Γ (TExpr.effSub (info := info) (jdg := (.comp (CTy.effOf S' A))) (S := S) (S' := S') (A := A) (t := t)) (.comp (CTy.effOf S' A))
   | effPerform {Δ Γ} {info : TInfo} {t : TExpr} {S : Row} {o : OpSig} (hAt : RowAt Ξ S) (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (hac : o.rc = false) (h : TDerivesAt Ξ Δ Γ t (.val o.A)) :
@@ -540,6 +544,10 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       TDerivesP Δ Γ (TExpr.nuOut (info := info) (jdg := (.comp C.unroll)) (C := C) (t := t)) (.comp C.unroll)
   | unfoldN {Δ Γ} {info : TInfo} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.unfoldN (info := info) (jdg := (.val (unfoldTy C S))) (C := C) (S := S)) (.val (unfoldTy C S))
+  | unfoldK {Δ Γ} {info : TInfo} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
+      TDerivesP Δ Γ (TExpr.unfoldK (info := info) (jdg := (.val (unfoldKTy C G S))) (C := C) (G := G) (S := S)) (.val (unfoldKTy C G S))
+  | nuOutK {Δ Γ i} {info : TInfo} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
+      TDerivesP Δ Γ (TExpr.nuOutK (info := info) (jdg := (.comp (C.instT (codeTy C G S)))) (i := i) (C := C) (G := G) (S := S)) (.comp (C.instT (codeTy C G S)))
   | effSub {Δ Γ} {info : TInfo} {t : TExpr} {S S' : Row} {A : VTy} (hle : RowLe S S') (h : TDerivesP Δ Γ t (.comp (CTy.effOf S A))) :
       TDerivesP Δ Γ (TExpr.effSub (info := info) (jdg := (.comp (CTy.effOf S' A))) (S := S) (S' := S') (A := A) (t := t)) (.comp (CTy.effOf S' A))
   | effPerform {Δ Γ} {info : TInfo} {t : TExpr} {S : Row} {o : OpSig} (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (hac : o.rc = false) (h : TDerivesP Δ Γ t (.val o.A)) :
@@ -960,6 +968,12 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
   | unfoldN a0 a1 a2 a3 a4 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.unfoldN a0 a1 a2 a3 a4
+  | unfoldK a0 a1 a2 a3 a4 a5 a6 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesAt.unfoldK a0 a1 a2 a3 a4 a5 a6
+  | nuOutK a0 a1 a2 a3 a4 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesAt.nuOutK a0 a1 a2 a3 a4
   | effSub a0 a1 ih0 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.effSub a0 ih0
@@ -1319,6 +1333,12 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | unfoldN a0 a1 a2 a3 a4 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.unfoldN a0 a1 a2 a3 a4
+  | unfoldK a0 a1 a2 a3 a4 a5 a6 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesP.unfoldK a0 a1 a2 a3 a4 a5 a6
+  | nuOutK a0 a1 a2 a3 a4 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesP.nuOutK a0 a1 a2 a3 a4
   | effSub a0 a1 ih0 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.effSub a0 ih0
@@ -1485,6 +1505,8 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | nuIn a0 a1 ih0 => exact TDerivesP.nuIn a0 ih0
   | nuOut a0 a1 ih0 => exact TDerivesP.nuOut a0 ih0
   | unfoldN a0 a1 a2 a3 a4 => exact TDerivesP.unfoldN a0 a1 a2 a3 a4
+  | unfoldK a0 a1 a2 a3 a4 a5 a6 => exact TDerivesP.unfoldK a0 a1 a2 a3 a4 a5 a6
+  | nuOutK a0 a1 a2 a3 a4 => exact TDerivesP.nuOutK a0 a1 a2 a3 a4
   | effSub a0 a1 ih0 => exact TDerivesP.effSub a0 ih0
   | effPerform a0 a1 a2 a3 a4 ih0 => exact TDerivesP.effPerform a1 a2 a3 ih0
   | effAwait a0 a1 a2 a3 a4 a5 a6 => exact TDerivesP.effAwait a1 a2 a3 a4 a5 a6

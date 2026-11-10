@@ -522,6 +522,33 @@ theorem JR.ampNu {D : CTy} {j : Jdg} (hr : JR (.comp D) j) (hD : AmpNu D) :
           · exact .inl ⟨_, _, rfl⟩
           · exact .inr ⟨_, rfl⟩
 
+/-- An `&`-tree instantiated is an `&`. -/
+theorem instT_amp_of_nuOk {C : CTy} (hC : C.NuOk) (T : VTy) :
+    ∃ C₁ C₂, C.instT T = .amp C₁ C₂ := by
+  obtain ⟨hS, -⟩ := hC
+  cases C <;> simp [CTy.NuShape] at hS
+  exact ⟨_, _, rfl⟩
+
+/-- **`nuOutK`'s reading reaches no row's type and no rigid type**: `C[T/X]` is an `&`, read at
+`&`s and `ν`s alone.  `[spec §68]` -/
+theorem JR.codeOut_ampNu {C : CTy} (hC : C.NuOk) {T : VTy} {D : CTy}
+    (hr : JR (.comp (C.instT T)) (.comp D)) : AmpNu D := by
+  obtain ⟨C₁, C₂, he⟩ := instT_amp_of_nuOk hC T
+  obtain ⟨D', h', hD'⟩ := hr.ampNu (.inl ⟨C₁, C₂, he⟩)
+  cases h'; exact hD'
+
+theorem JR.codeOut_effOf {C : CTy} (hC : C.NuOk) {T : VTy} {S : Row} {Y : VTy}
+    (hr : JR (.comp (C.instT T)) (.comp (CTy.effOf S Y))) : False := by
+  rcases hr.codeOut_ampNu hC with ⟨_, _, h⟩ | ⟨_, h⟩
+  · exact effOf_ne_amp _ _ _ _ h
+  · exact effOf_ne_nu _ _ _ h
+
+theorem JR.codeOut_rigid {C : CTy} (hC : C.NuOk) {T : VTy} {D : CTy} (hD : Rigid D)
+    (hr : JR (.comp (C.instT T)) (.comp D)) : False := by
+  rcases hr.codeOut_ampNu hC with ⟨_, _, h⟩ | ⟨_, h⟩
+  · exact hD.2.1 _ _ h
+  · exact hD.2.2 _ h
+
 /-- The judgements an `&` is read at: itself, and the `ν`s that unroll to it, up to
 α-equivalence.  A `ν` is kept with the positive body it was formed at, `C₀`: an α-equivalent
 body need not be positive, and two positive bodies unroll alike (`CTy.alphaB_unroll`). -/
@@ -993,6 +1020,9 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | foldOwnG => intro k hk; exact absurd hk (not_hasVar_closed (FoldP.foldOwnGV_closed _))
   | foldReuse => intro k hk; exact absurd hk (not_hasVar_closed (foldReuseV_closed _))
   | unfoldN => intro k hk; exact absurd hk (not_hasVar_closed (unfoldV_closed _))
+  | unfoldK => intro k hk; exact absurd hk (not_hasVar_closed (unfoldV_closed _))
+  | nuOutK _ _ _ _ hs =>
+      intro k hk; simp only [Expr.HasVar] at hk; subst hk; exact ⟨_, soloP_le hs⟩
   | alpha _ _ ih | codeI _ _ ih | codeIB _ _ _ ih => exact ih
   | _ => intro k hk; exact absurd hk (not_hasVar_closed (by rfl))
 
@@ -1049,15 +1079,19 @@ theorem not_der_app_prim {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h :
 /-! #### Variables, pairs, `()`, `alloc` -/
 
 /-- The judgements a variable whose slot has type `T` is read at: the views of `T` and rows over
-them; and, when `T` is `U C` with `C` no returner, `C` and what the same-term rules reach from it
-(`force` at a type that is no `F`). -/
+them; when `T` is `U C` with `C` no returner, `C` and what the same-term rules reach from it
+(`force` at a type that is no `F`); and, when `T` is `unfold`'s code type
+`Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)`, `C[T/X]` and what the same-term rules reach from it
+(`nuOutK`, `[spec §68]`). -/
 def VarCls (T : VTy) (j : Jdg) : Prop :=
-  ValCls T j ∨ ∃ C, T.forceTy = some C ∧ C.isRet = false ∧ JR (.comp C) j
+  ValCls T j ∨ (∃ C, T.forceTy = some C ∧ C.isRet = false ∧ JR (.comp C) j) ∨
+    ∃ C G S, C.NuOk ∧ T = codeTy C G S ∧ JR (.comp (C.instT (codeTy C G S))) j
 
 theorem VarCls.step {T : VTy} {j j' : Jdg} (hs : JS j j') (h : VarCls T j) : VarCls T j' := by
-  rcases h with h | ⟨C, hT, hC, hr⟩
+  rcases h with h | ⟨C, hT, hC, hr⟩ | ⟨C, G, S, hC, hT, hr⟩
   · exact .inl (h.step hs)
-  · exact .inr ⟨C, hT, hC, hr.tail hs⟩
+  · exact .inr (.inl ⟨C, hT, hC, hr.tail hs⟩)
+  · exact .inr (.inr ⟨C, G, S, hC, hT, hr.tail hs⟩)
 
 /-- **A variable is read at a view of its live slot's type.** -/
 theorem der_var {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
@@ -1067,7 +1101,9 @@ theorem der_var {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | @force _ _ i' T C hs hT =>
       intro i he
       cases C <;> simp only [forceE] at he <;> (try cases he) <;>
-        exact ⟨_, soloP_le hs, .inr ⟨_, hT, rfl, .refl⟩⟩
+        exact ⟨_, soloP_le hs, .inr (.inl ⟨_, hT, rfl, .refl⟩)⟩
+  | nuOutK hC _ _ _ hs =>
+      intro i he; cases he; exact ⟨_, soloP_le hs, .inr (.inr ⟨_, _, _, hC, rfl, .refl⟩)⟩
   | ret _ ih =>
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.ret _)⟩
   | alpha _ hα ih =>
@@ -2210,6 +2246,11 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       exact LamInv.ofAx (he ▸ lamAx_other
         (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
           (.inr (.inl ⟨_, rfl⟩))))))))))))) _)
+  | unfoldK =>
+      intro M he
+      exact LamInv.ofAx (he ▸ lamAx_other
+        (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
+          (.inr (.inl ⟨_, rfl⟩))))))))))))) _)
   | divFuel =>
       intro M he
       exact LamInv.ofAx (he ▸ lamAx_other
@@ -2549,10 +2590,16 @@ theorem der_swap_app {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {Y : Expr} {j : Jdg
 
 /-- A variable read at a value type: a view of its slot's type. -/
 theorem VarCls.val {T Y : VTy} (h : VarCls T (.val Y)) : VView T Y := by
-  rcases h with h | ⟨C, -, hC, hr⟩
+  rcases h with h | ⟨C, -, hC, hr⟩ | ⟨C, G, S, hC, -, hr⟩
   · exact h
   · obtain ⟨S, A, rfl⟩ := hr.comp_val
     rw [effOf_isRet] at hC; cases hC
+  · obtain ⟨S', A, he⟩ := hr.comp_val
+    obtain ⟨C₁, C₂, rfl⟩ : ∃ C₁ C₂, C = .amp C₁ C₂ := by
+      obtain ⟨hS, -⟩ := hC
+      cases C <;> simp [CTy.NuShape] at hS
+      exact ⟨_, _, rfl⟩
+    exact absurd he.symm (effOf_ne_amp _ _ _ _)
 
 /-- A list of qualifiers is told apart by its tags. -/
 theorem qualsVal_inj : ∀ {qs qs' : List Qual}, (qualsVal qs).1 = (qualsVal qs').1 → qs = qs'
@@ -3363,17 +3410,18 @@ theorem kappa_cancel_jr {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy} {T : VTy
   rcases hb with ⟨_, _, _, _, hs, -, hf, rfl⟩ | ⟨_, _, _, _, _, he, -⟩ | ⟨_, _, _, _, _, _, he, -⟩ |
     ⟨_, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, he, -⟩ |
     ⟨D₁, D₂, -, hX, rfl⟩ | ⟨he, -⟩ | he | he | ⟨_, he⟩ | ⟨_, he⟩ | ⟨_, he, -⟩
-  · rcases varCls_of_le hslot (splitP_le_right hs) hf with hc | ⟨C, hTC, -, hr'⟩
+  · rcases varCls_of_le hslot (splitP_le_right hs) hf with hc | ⟨C, hTC, -, hr'⟩ | ⟨_, _, _, -, rfl, -⟩
     · have := vview_bang_thunk (hT.trans hc); simp [CTy.alphaB] at this
     · obtain rfl := eq_thunk_of_forceTy hTC fun _ _ _ he => not_vview_bang_thunk_code (he ▸ hT)
       have hα := vview_bang_thunk hT
       obtain ⟨S, A, rfl⟩ := JR.comp_val hr'
       obtain ⟨Sα, Y, he, -, -⟩ := CTy.alphaB_effOf S (CTy.alphaB_symm hα)
       exact absurd he (effOf_ne_amp Sα Y C₁ C₂).symm
+    · exact (not_vview_bang_thunk_code hT).elim
   all_goals first
     | (cases he)
     | skip
-  · rcases varCls_of_le hslot (CtxLe.refl Γ) hX with hc | ⟨C, hTC, -, hr'⟩
+  · rcases varCls_of_le hslot (CtxLe.refl Γ) hX with hc | ⟨C, hTC, -, hr'⟩ | ⟨_, _, _, -, rfl, -⟩
     · obtain ⟨S, Y, he, -⟩ := hc
       exact absurd he.symm (effOf_ne_amp S Y D₁ D₂)
     · obtain rfl := eq_thunk_of_forceTy hTC fun _ _ _ he => not_vview_bang_thunk_code (he ▸ hT)
@@ -3381,6 +3429,7 @@ theorem kappa_cancel_jr {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy} {T : VTy
       cases C <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at hα
       obtain ⟨-, h₂⟩ := JR.amp_amp hr'
       exact Relation.ReflTransGen.head (JS.alpha (CTy.alphaB_trans' hα.2 h₂)) hr
+    · exact (not_vview_bang_thunk_code hT).elim
 
 /-- **A cancellable `κ`'s cancel branch, applied**: at a slot of `U(C₁ & C₂)`, bare or boxed,
 `x (inj₂ ())` is read at what the same-term rules reach from `C₂`. -/
@@ -3401,20 +3450,23 @@ theorem kcancel_jr_cancellable {Δ : LifeCtx} {Γ Γ' : Ctx VTy} {C₁ C₂ : CT
   rcases hb with ⟨_, _, _, _, hs, -, hf, rfl⟩ | ⟨_, _, _, _, _, he, -⟩ | ⟨_, _, _, _, _, _, he, -⟩ |
     ⟨_, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, he, -⟩ |
     ⟨D₁, D₂, -, hX, rfl⟩ | ⟨he, -⟩ | he | he | ⟨_, he⟩ | ⟨_, he⟩ | ⟨_, he, -⟩
-  · rcases varCls_of_le hslot (CtxLe.trans (splitP_le_right hs) hle) hf with hc | ⟨C, hT', -, hr'⟩
+  · rcases varCls_of_le hslot (CtxLe.trans (splitP_le_right hs) hle) hf with hc | ⟨C, hT', -, hr'⟩ |
+        ⟨_, _, _, -, rfl, -⟩
     · have := vview_kBoxO_thunk ob (hc.of_alpha hT); simp [CTy.alphaB] at this
     · obtain ⟨E₁, E₂, rfl, -⟩ := hthunk hT'
       obtain ⟨S, A, he⟩ := JR.comp_val hr'
       exact absurd he (effOf_ne_amp S A E₁ E₂).symm
+    · rcases ob with _ | d <;> simp [kBoxO, VTy.alphaB] at hT
   all_goals first
     | (cases he)
     | skip
-  · rcases varCls_of_le hslot hle hX with hc | ⟨C, hT', -, hr'⟩
+  · rcases varCls_of_le hslot hle hX with hc | ⟨C, hT', -, hr'⟩ | ⟨_, _, _, -, rfl, -⟩
     · obtain ⟨S, Y, he, -⟩ := hc
       exact absurd he.symm (effOf_ne_amp S Y D₁ D₂)
     · obtain ⟨E₁, E₂, rfl, hE⟩ := hthunk hT'
       obtain ⟨-, h₂⟩ := JR.amp_amp hr'
       exact Relation.ReflTransGen.head (JS.alpha (CTy.alphaB_trans' hE h₂)) hr
+    · rcases ob with _ | d <;> simp [kBoxO, VTy.alphaB] at hT
 
 /-- **`κ`'s cancel read at a row**: the cancel row is no `⊤`, and its operations, ahead of the row,
 are below the row. -/
@@ -3540,7 +3592,7 @@ theorem der_cancel_lin {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {S : Row} {R B : 
   · -- the second projection: `κ` read at `C & D`, so `D` is `⊤`
     obtain ⟨T, hT, hcT⟩ := der_var hX i rfl
     have hα := hi T hT
-    rcases hcT with ⟨S', Y, he, -⟩ | ⟨C₀, hC₀, -, hr'⟩
+    rcases hcT with ⟨S', Y, he, -⟩ | ⟨C₀, hC₀, -, hr'⟩ | ⟨_, _, _, -, rfl, -⟩
     · exact (effOf_ne_amp _ _ _ _ he.symm).elim
     · obtain rfl := eq_thunk_of_forceTy hC₀ fun _ _ _ he => by subst he; simp [kTy, VTy.alphaB] at hα
       simp only [kTy, VTy.alphaB] at hα
@@ -3549,6 +3601,7 @@ theorem der_cancel_lin {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {S : Row} {R B : 
       have hD := CTy.alphaB_trans' hα.2 h₂
       cases D <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hD
       exact hr
+    · simp [kTy, VTy.alphaB] at hα
   · cases hu
   · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ | ⟨_, hX₁, hX₂, -⟩ <;>
       first | cases hX | (cases hX₂; done) | (cases hX₁; done)

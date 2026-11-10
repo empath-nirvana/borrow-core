@@ -1,0 +1,4 @@
+"Café \"Zoë\" — Montréal 🍰"
+{"menu":[{"sizes":["single","double"],"item":"espresso","price":3.0},{"allergens":{"gluten":true,"nuts":false},"item":"croissant","price":2.5},{"sizes":[],"notes":{},"item":"tea","price":0.0}],"open":true,"name":"Café \"Zoë\" — Montréal 🍰","tags":["coffee","pastry","wi-fi","naïve"],"rating":4.75,"manager":null,"escapes":"tab\there\nline\\back/slash éA 🍰 \"q\" \u0001","address":{"street":"123 Rue Sainte-Catherine","city":"Montréal","floors":[0.0,1.0,-1.0],"postal":"H3B 1A7"},"avogadro":6.022e23,"coords":[45.5017,-73.5673],"id":1042.0,"planck":6.62607015e-34,"closed":false,"nothing":{},"balance":-1250.5,"empty":[]}
+(inl (inl i32[634]), (inl (inr (i32[3], i32[29])), inr ()))
+live 0

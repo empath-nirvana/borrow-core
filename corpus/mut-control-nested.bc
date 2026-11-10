@@ -1,0 +1,23 @@
+-- Nested control handlers that write one `let mut` variable (SPEC §41, R3): `c` is lent around
+-- `with to_result`, and inside its body, where `c` is that borrow, the inner `with on_exhausted`
+-- lends it again around its own site, a reborrow (`borrow mut &mut c` of a `mut` borrow is
+-- `withbor3`). The inner body writes `c`, then lends it to `bump`, which runs out of its budget
+-- of depth; the inner handler answers `-1` and `c` keeps the increments made before the abort. The
+-- outer body writes `c` again and raises with it, abandoning its body: `c` keeps those writes too.
+--
+-- Answer: `(inr i32[110012], i32[110012])`: `1 + 10 + 10001 + 100000`, raised and kept; `live 0`.
+include fail
+include rec
+
+fn bump<'a>(m: mut 'a i32, n: i32) -> i32 =
+  if n == 0 { 0 } else { modify m { x -> (x + 1, ()) }; bump(m, n - 1) }
+
+main -> (i32 + i32) * i32 =
+  let mut c = 0;
+  let r = with to_result[i32, i32] {
+    c = c + 1;
+    let s = with on_exhausted(!{ u -> 0 - 1 }) { c = c + 10; bump(&mut c, 20000) };
+    c = c + 100000;
+    if s < 0 { raise(c) } else { s }
+  };
+  (r, c)

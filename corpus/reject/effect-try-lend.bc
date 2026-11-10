@@ -1,7 +1,9 @@
--- A place lent inside the body of a control handler (SPEC §19): the body may be abandoned (an
--- abort unwinds it), and it does not hand back `stdout` when it lends it, so the lend is
--- rejected; the program lends it outside the block instead.
--- expect: 8:21: the body of `with to_result` assigns a `let mut` variable declared outside it, or lends a place declared outside it: a control handler's body may be abandoned, and does not hand them back; bind what the block answers instead
+-- A capability passed on inside the body of a control handler (SPEC §41, R3; §11): `putb` takes
+-- the cell `stdout` and hands it back, so it is not a place a borrow can stand for, and the body
+-- may be abandoned (an abort unwinds it) before handing it back. A `let mut` variable or a place
+-- the body lends is lent around the handler instead (`corpus/mut-control-*.bc`); a capability is
+-- not, and the program is rejected: it passes `stdout` outside the block, or performs `print`.
+-- expect: 10:21: the body of `with to_result` takes `stdout` and would hand it back, but a control handler's body may be abandoned: pass a capability outside the handler, or perform its effect inside (SPEC §41, R3)
 include fail
 fn half(n: i32) -> i32 with Fail[i32] = if n < 0 { raise(n) } else { n }
 
