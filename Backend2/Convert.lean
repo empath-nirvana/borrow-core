@@ -79,9 +79,8 @@ structure OutInfo where
   ty : LTy
   r : LTy
   pay : Pay
-  /-- Each machine operation's key, argument, answer, and its cancel row's payload (`none` at
-  `⊤`). -/
-  ms : List (Key × LTy × LTy × Option Pay)
+  /-- Each machine operation's key, argument, answer, and its cancel row (`none` at `⊤`). -/
+  ms : List (Key × LTy × LTy × Option CancelRow)
   /-- The machine operations at the qualifier `unr`, whose continuation may be copied. -/
   unrs : List Key := []
   deriving Inhabited
@@ -121,14 +120,14 @@ def Frame.own : Frame → Nat
 abbrev Kont := List Frame
 
 /-- **A resumption point** of a machine (SPEC §49): the operation it suspends at; at a call
-point the callee's suspended computation's type `kTy`, the callee's abortive payload `cPay` and the
+point the callee's suspended computation's type `kTy`, the callee's cancel row `cPay` and the
 step function (`step`, on the arguments and the callee's outcome); the arguments' types; the
 continuation; the function `mk` that builds the machine's suspended computation from the callee's
 and the arguments. -/
 structure MPoint where
   op : Key
   kTy : Option LTy
-  cPay : Option Pay
+  cPay : Option CancelRow
   argTys : List LTy
   step : Option Nat
   kont : Kont
@@ -704,8 +703,8 @@ operation (`genMach`): its resume entry switches on the state and continues at t
 cancel entry unwinds the point's frames innermost first. -/
 
 namespace OutInfo
-/-- The suspended computation at an operation answering `b`, cancelled at the payload `cp`. -/
-def kTy (o : OutInfo) (b : LTy) (cp : Option Pay) : LTy :=
+/-- The suspended computation at an operation answering `b`, cancelled at the cancel row `cp`. -/
+def kTy (o : OutInfo) (b : LTy) (cp : Option CancelRow) : LTy :=
   .thunk (.amp (.arr b (.ret o.ty)) (.ret (cancelResTy cp)))
 /-- The suspensions' summands: each machine operation's argument and `k`. -/
 def sPay (o : OutInfo) : Pay := o.ms.map fun (k, a, b, cp) => (k, .pair a (o.kTy b cp))
@@ -721,16 +720,16 @@ end OutInfo
 
 /-- The machine operations of a row, each key once with its argument and answer types, in the
 row's order.  `[spec §49]` -/
-def rowMs (S : Row) : CM (List (Key × LTy × LTy × Option Pay)) := do
+def rowMs (S : Row) : CM (List (Key × LTy × LTy × Option CancelRow)) := do
   let ms := (← get).mach
   if ms.isEmpty then return []
-  let mut acc : List (Key × LTy × LTy × Option Pay) := []
+  let mut acc : List (Key × LTy × LTy × Option CancelRow) := []
   for o in S do
     if o.n == divName then
       throw s!"an operation ({o.n}, {o.i}) in a computation type: outside the pure fragment"
     if !o.abort && ms.contains (o.n, o.i) && !(acc.any (·.1 == (o.n, o.i))) then
       let cp ← lift (ofFinAt ms o.q o.B o.fin)
-      acc := acc ++ [((o.n, o.i), ← vty o.A, ← vty o.B, cp.map dedupPay)]
+      acc := acc ++ [((o.n, o.i), ← vty o.A, ← vty o.B, cp)]
   return acc
 
 /-- The outcome of a computation answering `r` at the row `S`; `none` when `S` has no machine
@@ -958,7 +957,7 @@ def curMach : CM OutInfo := do
   | [] => throw "LIR: a machine's computation outside a machine"
 
 /-- Register a resumption point of the current machine; its `mk` function, set by `genMach`. -/
-def newPoint (op : Key) (kTy : Option LTy) (cPay : Option Pay) (argTys : List LTy) (step : Option Nat)
+def newPoint (op : Key) (kTy : Option LTy) (cPay : Option CancelRow) (argTys : List LTy) (step : Option Nat)
     (K : Kont) (callee : Option OutInfo := none) (inline : Bool := false)
     (outVar : Option Var := none) (swapAt : Option Nat := none) : CM Nat := do
   let mk ← reserveFn s!"suspend {op.1}.{op.2}"
@@ -971,8 +970,8 @@ def newPoint (op : Key) (kTy : Option LTy) (cPay : Option Pay) (argTys : List LT
   | [] => throw "LIR: a suspension outside a machine"
   return mk
 
-/-- The answer `b` and cancel row's payload of the machine operation `op` at a machine. -/
-def opAnswer (F : OutInfo) (op : Key) : CM (LTy × Option Pay) := do
+/-- The answer `b` and cancel row of the machine operation `op` at a machine. -/
+def opAnswer (F : OutInfo) (op : Key) : CM (LTy × Option CancelRow) := do
   match F.ms.find? (·.1 == op) with
   | some (_, _, b, cp) => pure (b, cp)
   | none => throw s!"LIR: a suspension at {op} where the machine's row does not hold it"
@@ -1164,7 +1163,9 @@ def cancelTm (cp : Pay) (p : MPoint) (fs : List Var) : CM Tm := do
   | some kT, k :: args => do
     let cT ← selTy kT 1
     let c ← fresh cT; let err ← fresh (resTy .unit cp)
-    let coerced ← coerceRes .unit (p.cPay.getD []) cp c
+    if p.cPay.any (!·.ms.isEmpty) then
+      throw "LIR: a callee's cancel that may suspend is outside the fragment"
+    let coerced ← coerceRes .unit ((p.cPay.map (·.pay)).getD []) cp c
     aroundRun p args (fun t => .letv c (.sel k 1) t) fun args => do
       return .letv err coerced (← cancelK cp p.kont args err)
   | none, args => do
@@ -1261,7 +1262,7 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
       | some cp => withState s₂ fun c st => do
         let arms ← casePay stPay st fun i fv => do
           let some p := ps[i]? | throw "LIR: a machine's point"
-          untuple fv (fieldsOf p) fun fs => cancelTm cp p fs
+          untuple fv (fieldsOf p) fun fs => cancelTm cp.pay p fs
         match c with
         | some c => releaseThen c arms
         | none => pure arms
@@ -1424,18 +1425,18 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
                  body := .prim .unreachable [base₆], ret := cT }
     setFn cstep { name := "stack cancel step", params := [], body := ← never cT, ret := cT }
   | some cpP =>
-    let errT := resTy .unit cpP
+    let errT := resTy .unit cpP.pay
     let base₇ ← fresh aT; let base₇' ← fresh aT; let err₇ ← fresh errT
     let bC ← top fun f a => do
       let err' ← fresh errT; let a' ← fresh aT
       let arms ← atFrame f fun p f' args =>
-        cancelK cpP (p.kont ++ [.stackF]) (args ++ [f', a']) err₇
+        cancelK cpP.pay (p.kont ++ [.stackF]) (args ++ [f', a']) err₇
       return .copy .dup a a' (.letv err' arms
         (← ifBase a base₇' (do return .consume .dead base₇ (.var err')) (pure (.call cstep [base₇, err']))))
     setFn cstep { name := "stack cancel step", params := [base₇, err₇], body := .copy .dup base₇ base₇' bC,
                   ret := errT }
     let u ← fresh .unit; let err₀ ← fresh errT
-    let start : Tm := match payTy cpP with
+    let start : Tm := match payTy cpP.pay with
       | none => .var u
       | some _ => .inj false u
     setFn kcan { name := s!"stack cancel {op.1}.{op.2}", params := [base₆],
@@ -2572,8 +2573,10 @@ def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driv
       | none => resTy .unit cPay
     unless cT'.sameRep want do throw s!"LIR: κ's cancel answers {cT'}, its row {want}"
     let (ps₂, b₂) ← envOf fun k hv => do
+      if cpIn.any (!·.ms.isEmpty) then
+        throw "LIR: a κ whose computation's cancel may suspend is outside the fragment"
       let cv ← fresh (cancelResTy cpIn)
-      let body ← toResult .unit (cpIn.getD []) cM cPay cv
+      let body ← toResult .unit ((cpIn.map (·.pay)).getD []) cM cPay cv
       aroundK hv (fun t => .letv cv (.sel k 1) t) fun hv sh => do
         freeSh sh (consumes .dead hv body)
     setFn kcan { name := s!"kappa {n}.{idx} cancel", params := ps₂, body := b₂, ret := cT' }
