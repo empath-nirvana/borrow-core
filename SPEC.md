@@ -2755,8 +2755,9 @@ Every function is safe on any bytes: indexing is checked, and a byte that does n
 sequence decodes to U+FFFD. `lib/text.bc` (`include text`, which includes `buf` and `slice`)
 has appends, UTF-8 validation and decoding, character iteration (`chars`, codata over the rest
 of the view), lines as sub-views (`next_line`, `lines`, `fold_lines`: no allocation per line),
-`split_once`, `trim`, `find_str`, `eq_lit`, checked parsing (`parse_i32`, which raises its error,
-§18), the integers written in a view folded into a state (`fold_i32s`, `fold_i64s`: each run of
+`split_once`, `trim`, `find_str`, `eq_lit`, checked parsing (`parse_i32` and `parse_i64`, which
+raise their error, §18; an overflow is an error, not a wrap), `push_i64` (the decimal form of an
+`i64`, appended; §36 *JSON*), the integers written in a view folded into a state (`fold_i32s`, `fold_i64s`: each run of
 digits, negative after a `-`, every other byte a separator; #490), and buffers of views
 (`view_at`, `sort_views`). Every loop is a
 `count_fold` bounded by a length, so the library is total. `lib/textio.bc` (`include textio`)
@@ -2846,8 +2847,8 @@ end-to-end I/O theorems keep their statements.
   view's iterator, and `*e` of a copyable view are S4's; `data` values and `data` with lifetime
   parameters are S6's; the typed text types (T2) and zero-cost growth (a `buf` former, F) are
   later stages.
-- `write_lossy`, `char_indices`, `split_at_str`, `sub_str`, `push_hex` and `parse_i64` of the
-  design's list are not provided.
+- `write_lossy`, `char_indices`, `split_at_str`, `sub_str` and `push_hex` of the design's list are
+  not provided.
 - P14 (`args`) waits for the `Args` capability (§11, designed, not built).
 - The literal lowering's claim is tested, not proved.
 
@@ -7377,6 +7378,77 @@ consumed, so `K` is consumable or is persistent.
 
 **Generic `data`.** `Map`, `MapRef` and `Set` are generic `type` abbreviations, transparent: there
 are no `data` declarations (§31 *Open*), so the representation is not hidden outside the module.
+
+### JSON: `lib/json.bc`
+
+`include json` gives a JSON value, its parser and its serialiser, written in the language over
+§36's map, §17's buffers and text, and §19's errors. The module is ordinary source: no kernel,
+checker or backend change. `include json` names the module (`json` among the library modules
+read at startup).
+
+- **The value.** `data Json = Null | Bool(bool) | Int(i64) | Float(f64) | Str(string) |
+  Arr(Vec[Json]) | Obj(Map[string, Json])`: owned, an array's elements in a `Vec`, an object's
+  members in a `Map` keyed by an owned `string` (§42 data, §36 map). A number is chosen at parse
+  time, as serde_json's `Number` is: a literal with no fraction or exponent that fits `i64` is
+  `Int`, exact, except `-0`, which is `Float(-0.0)` (as serde_json reads it; an `i64` has no
+  negative zero); any other number is `Float`.
+- **Parsing.** `json_parse<'a>(t: text 'a) -> Json with Fail[JsonError], Exhausted` parses a
+  whole document from text lent at `'a`, by recursive descent, RFC 8259's grammar:
+  - every string escape; a surrogate pair decoded to one code point, a lone surrogate refused;
+  - numbers by JSON's strict grammar: an integer literal that fits `i64` by `parse_i64`, exact;
+    any other by `parse_f64`, correctly rounded; a number past `f64`'s range is an error;
+  - the input checked as UTF-8 first; whitespace is space, tab, CR, LF only;
+  - bytes after the value are an error.
+- **Errors are effects.** A malformed document raises `Fail[JsonError]`, with `type JsonError =
+  i32 * i32`: a code and the byte offset where it was found. Codes: 1 no value starts here; 2 not
+  `,` or `]` after an element; 3 not `,` or `}` after a member; 4 not a string where a key
+  belongs; 5 not `:` after a key; 6 a string not closed; 7 a bad escape; 8 a control byte in a
+  string; 9 a malformed number, or one past `f64`'s range; 10 a malformed `true`, `false` or
+  `null`; 11 bytes after the value; 12 the input is not UTF-8; 13 a lone surrogate. The raise
+  unwinds every frame, consuming what each had built.
+- **Depth.** The parser's recursion is one group under `bounded` (§20): a document nested past
+  the budget performs `Exhausted`.
+- **Serialising.** `json_ser<'a>(j: imm 'a Json, out: string) -> string with Exhausted` appends
+  the compact form of `j` to `out`, by borrow: it lends the value and walks arrays with `elems`
+  and objects with `map_entries` (§31 loads). `Int` by `push_i64`, exactly as parsed; `Float` by `push_f64` (an integral float as `3.0`);
+  strings re-escaped (`"`, `\`, control bytes as `\u00XX` or their short escapes).
+
+- **Lookup.** `json_get_with[B]<'a>(j: imm 'a Json, k: lit, f: !(all 'x < top. imm 'x Json + 1 => B))
+  -> B`: `f` receives an object's member at key `k` as a view at its own block lifetime, `inr ()`
+  if `j` is not an object or has no such member, and returns a result free of that lifetime. Its
+  callback is written in core text, pure: the surface has no block generic in a lifetime (#1003),
+  and a core-text block cannot perform (#161).
+
+**Stated limits.**
+- **Duplicate keys:** the last value wins; the earlier one is dropped.
+- **Member order:** an object serialises in its map's slot order (fixed by the keys' hashes and
+  the insertions, so deterministic), not the input's.
+- **Numbers:** an integer literal past `i64`'s range (above 2^63 − 1 or below −2^63) is read as
+  `Float`; serde_json keeps positive ones up to 2^64 − 1 exact as `u64`, which needs the `u64` width (#981); a `u64` number in `Json` waits on it. Arbitrary-precision numbers are not provided.
+
+**Preserves.** No kernel, checker, elaborator or backend change. No existing program's output or
+counts change but `corpus/json-parse.bc`'s: it becomes `include json` plus its `main`, its input
+gains an id past 2^53 and `-0`/`-0.0`, its integers print exactly, and the deep case moves to
+`corpus/json-deep.bc`, so its answer is `(inl (inl i32[658]), inl (inr (i32[3], i32[29])))` and its
+allocations fall from 5942 to 673.
+
+**Programs.**
+- `corpus/json-parse.bc`: `include json` and its `main`; its input has `"id":
+  505874924095815681`, printed back exactly, and `-0` and `-0.0`, printed as `-0.0`.
+- `corpus/json-deep.bc`: twelve thousand nested arrays perform `Exhausted`.
+- `corpus/parse-i64.bc`: `parse_i64` at `i64`'s minimum and maximum, an overflow, and `-0`.
+- `corpus/json-get.bc`: `json_get_with` finding a member, and three misses.
+- `corpus/reject/include-unknown.bc`: its list of modules ends in `json`.
+
+**Open.**
+- Streaming parse (from a reader, not a whole text) and a pull-based tokenizer (pipes).
+- Number formats other than `f64`.
+- Pretty printing.
+- **Lookup by view.** `json_get<'a>(j: imm 'a Json, k: lit) -> imm 'a Json + 1`, a member as a
+  view at `j`'s lifetime, cannot be written: a view projected inside a load (§36) cannot leave it
+  at the outer lifetime, and no view can be boxed out of a borrow block (`Imm 'x _ ⊐ 'x` is
+  refused). It needs a persistent reborrow in the kernel, a model extension (#999).
+  `json_get_with` is today's form.
 
 ### Programs
 
