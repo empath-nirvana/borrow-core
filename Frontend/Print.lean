@@ -53,6 +53,8 @@ def widthName : BoCa.Width → String
   | .w8 => "u8"
   | .f32 => "f32"
   | .f64 => "f64"
+  | .u32 => "u32"
+  | .u64 => "u64"
 
 /-- A printed shape as a shape atom: a name as it is, anything else parenthesized. -/
 def ppShapeAtom (σ : Shape) (printed : String) : String :=
@@ -260,7 +262,8 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) (cx : PCtx := .core) : Stri
     | .app _ (.sugar _ (.op o)) (.pair _ a b) => "(" ++ a.pp 2 k cx ++ " " ++ o.str ++ " " ++ b.pp 2 k cx ++ ")"
     | .app _ (.sugar _ (.call c)) W => c ++ "(" ++ W.pp 0 k cx ++ ")"
     | .app _ (.sugar _ .count) (.pair _ a b) => "(" ++ a.pp 2 k cx ++ ".." ++ b.pp 2 k cx ++ ")"
-    | .app _ (.sugar _ .pipe) (.pair _ a s) => "(" ++ a.pp 1 k cx ++ " |> " ++ s.pp 2 k cx ++ ")"
+    | .app _ (.sugar _ (.pipe m)) (.pair _ a s) =>
+      "(" ++ a.pp 1 k cx ++ (if m == .pull then " >| " else " |> ") ++ s.pp 2 k cx ++ ")"
     | .app _ (.sugar _ .deref) V => "*" ++ V.pp 3 k cx
     | .app _ (.sugar _ (.field f _)) V => "(" ++ V.pp 0 k cx ++ ")." ++ f
     | .app _ (.sugar _ (.update f _)) (.pair _ r e) => "(" ++ r.pp 0 k cx ++ ").{" ++ f ++ " = " ++ e.pp 0 k cx ++ "}"

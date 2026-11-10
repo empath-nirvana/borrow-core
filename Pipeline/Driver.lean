@@ -86,8 +86,15 @@ def nativeTriple : String := System.Platform.target
 The host's target, and `clang` building LLVM IR beside the native runtime
 (`Target/Native/Runtime.lean`). -/
 
-/-- The flags `clang` builds a native program with. -/
-def clangArgs : Array String := #["-O2", "-w", "-pthread"]
+/-- The oldest macOS the native target supports: this machine's (macOS 26.6). `clang` is pinned to it
+(`-mmacosx-version-min`), so an API newer than it is an error at build time; unpinned, `clang`
+weak-imports such an API from a newer SDK, and the import is null at run time on this OS. -/
+def macosMinVersion : String := "26.6"
+
+/-- The flags `clang` builds a native program with; on macOS, pinned to `macosMinVersion`. -/
+def clangArgs : Array String :=
+  #["-O2", "-w", "-pthread"] ++
+    (if System.Platform.isOSX then #[s!"-mmacosx-version-min={macosMinVersion}"] else #[])
 
 /-- A `clang` on `PATH` outside a Lean toolchain: `lake exe` and `lake env` put the toolchain's
 `bin` first, and its bundled `clang` has no C library headers. -/

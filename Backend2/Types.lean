@@ -309,7 +309,9 @@ def ofC (ms : MachSet) : CTy → Except String LCTy
     let (ps, qs, r) ← ofEff ms C
     if abortB q B then return .ret (outcomeTy r (((n, i), ← ofV ms A) :: ps) qs)
     else if ms.contains (n, i) then
-      return .ret (outcomeTy r ps (((n, i), ← ofV ms A, ← ofV ms B, ← ofFin ms fin) :: qs))
+      -- The cancel row read at a capturable operation only (`ofFinAt`).
+      let cp ← if capB q B then ofFin ms fin else pure none
+      return .ret (outcomeTy r ps (((n, i), ← ofV ms A, ← ofV ms B, cp) :: qs))
     else return .ret (outcomeTy r ps qs)
 
 /-- The layers of `F_Σ R` (`CTy.effOf`): each abortive operation's key and argument type, each
@@ -324,7 +326,10 @@ def ofEff (ms : MachSet) : CTy →
       throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
     let (ps, qs, r) ← ofEff ms C
     if abortB q B then return (((n, i), ← ofV ms A) :: ps, qs, r)
-    else if ms.contains (n, i) then return (ps, ((n, i), ← ofV ms A, ← ofV ms B, ← ofFin ms fin) :: qs, r)
+    else if ms.contains (n, i) then
+      -- The cancel row read at a capturable operation only (`ofFinAt`).
+      let cp ← if capB q B then ofFin ms fin else pure none
+      return (ps, ((n, i), ← ofV ms A, ← ofV ms B, cp) :: qs, r)
     else return (ps, qs, r)
   | _ => throw "a row's layers over a type that is not `F R`"
 
@@ -341,6 +346,15 @@ def ofFin (ms : MachSet) : CTy → Except String (Option (List ((UInt32 × UInt3
     else return rest
   | _ => throw "a cancel row that is not a row"
 end
+
+/-- The cancel row of an operation `A ↠^q B` as its `k` reads it: `ofFin` of its cancel row `fin`
+at a capturable operation (`capB`, as the kernel's `OpSig.ent` reads it), and `none` (`⊤`) at a
+must-resume one, whose `κ` has the cancel component `⊤` (`kTy`'s `.lin` case) and is never
+cancelled (`kappaC_cancel_lin`). `ofC` and `ofEff` read it the same way, inline.
+[spec §27, §49] -/
+def ofFinAt (ms : MachSet) (q : Qual) (B : VTy) (fin : CTy) :
+    Except String (Option (List ((UInt32 × UInt32) × LTy))) :=
+  if capB q B then ofFin ms fin else pure none
 
 /-- `ofV` keeps `!`: the LIR type of `!A` is `!` of `A`'s. -/
 theorem ofV_bang (ms : MachSet) (A : VTy) : ofV ms (.bang A) = (ofV ms A).map .bang := by
@@ -433,6 +447,7 @@ def ofJ (ms : MachSet := {}) : Jdg → Except String (Sum LTy LCTy)
 
 def widthName : Width → String
   | .w32 => "i32" | .w64 => "i64" | .w8 => "u8" | .f32 => "f32" | .f64 => "f64"
+  | .u32 => "u32" | .u64 => "u64"
 
 mutual
 def LTy.pp : LTy → String

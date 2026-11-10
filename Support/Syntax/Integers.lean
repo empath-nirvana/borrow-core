@@ -2,7 +2,7 @@
 # Support — Syntax — Integers  `[spec §8]`
 
 The numeric literals and the names of the host operations: the language's integer operations at
-`i32` and `i64` (§8) and its float operations at `f32` and `f64` (§37), each named as the Wasm
+`i32` and `i64` (§8) and at the unsigned widths `u32` and `u64` (§73), and its float operations at `f32` and `f64` (§37), each named as the Wasm
 instruction that computes it. Both are constants of the term language (`Prim.lit`, `Prim.host`), so they
 are values, and shifting and substitution leave them fixed.
 
@@ -12,30 +12,35 @@ What an operation computes is not fixed here. The machine applies a host operati
 
 namespace BoCa
 
-/-- A numeric literal: `i32[n]`, `i64[n]`, the byte `u8[n]`, or a float `f32[n]`/`f64[n]`
-    given by its IEEE 754 bit pattern `n`.  `[spec §8, §37]` -/
+/-- A numeric literal: `i32[n]`, `i64[n]`, the byte `u8[n]`, the unsigned `u32[n]`/`u64[n]`,
+    or a float `f32[n]`/`f64[n]` given by its IEEE 754 bit pattern `n`.  `[spec §8, §37, §73]` -/
 inductive IntLit where
   | i32 (n : UInt32)
   | i64 (n : UInt64)
   | u8 (n : UInt8)
   | f32 (n : UInt32)
   | f64 (n : UInt64)
+  | u32 (n : UInt32)
+  | u64 (n : UInt64)
   deriving DecidableEq, Repr
 
-/-- The width of a numeric type. The grouped integer operations are at `w32` and `w64`;
+/-- The width of a numeric type. The grouped integer operations are at `w32` and `w64` and at
+    the unsigned `u32` and `u64` (§73), which hold the same bits and are read unsigned;
     `w8` is the byte, which has only its conversions (`wrap8`, `extend8_u`); `f32` and `f64` are
-    the floats, which have the float operations (§37).  `[spec §8, §37]` -/
+    the floats, which have the float operations (§37).  `[spec §8, §37, §73]` -/
 inductive Width where
-  | w32 | w64 | w8 | f32 | f64
+  | w32 | w64 | w8 | f32 | f64 | u32 | u64
   deriving DecidableEq, Repr
 
-/-- The bits that hold a value of a width.  `[spec §8, §37]` -/
+/-- The bits that hold a value of a width.  `[spec §8, §37, §73]` -/
 abbrev Width.bits : Width → Type
   | .w32 => UInt32
   | .w64 => UInt64
   | .w8 => UInt8
   | .f32 => UInt32
   | .f64 => UInt64
+  | .u32 => UInt32
+  | .u64 => UInt64
 
 /-- A float width.  `[spec §37]` -/
 inductive FWidth where
@@ -54,6 +59,12 @@ def FWidth.width : FWidth → Width
 def IWidth.width : IWidth → Width
   | .i32 => .w32
   | .i64 => .w64
+
+/-- The unsigned width of an integer width's size: `reinterpret_u`'s target, `reinterpret_s`'s
+    source.  `[spec §73]` -/
+def IWidth.uwidth : IWidth → Width
+  | .i32 => .u32
+  | .i64 => .u64
 
 /-- The float width of a width, if it is one.  `[spec §37]` -/
 def Width.float? : Width → Option FWidth
@@ -110,7 +121,7 @@ inductive FRelOp where
   deriving DecidableEq, Repr
 
 /-- The host operations of §8 and §37, each named as the Wasm instruction that computes it.
-    `[spec §8, §37]`
+    `[spec §8, §37, §73]`
 
     - `bin w o`, `div w o`, `un w o`, `eqz w`, `rel w o`: the grouped operations at width `w`;
     - `wrap` (`i32.wrap_i64`), `extend_s`/`extend_u` (`i64.extend_i32_s`/`_u`) and
@@ -122,7 +133,9 @@ inductive FRelOp where
       `trunc i f sx` (`i.trunc_f_sx`), partial, `inr ()` where there is no answer; `trunc_sat i f sx`
       (`i.trunc_sat_f_sx`), total; `demote` (`f32.demote_f64`), `promote` (`f64.promote_f32`);
       `reinterpret_i f` (a float's bits as the integer of its size) and `reinterpret_f f` (the
-      converse). -/
+      converse);
+    - `reinterpret_u i` (`I32 ⇒ U32`, `I64 ⇒ U64`) and `reinterpret_s i` (`U32 ⇒ I32`,
+      `U64 ⇒ I64`): the same bits read at the other integer width of the size (§73). -/
 inductive HostOp where
   | bin (w : Width) (o : BinOp)
   | div (w : Width) (o : DivOp)
@@ -145,6 +158,8 @@ inductive HostOp where
   | promote
   | reinterpret_i (f : FWidth)
   | reinterpret_f (f : FWidth)
+  | reinterpret_u (i : IWidth)
+  | reinterpret_s (i : IWidth)
   deriving DecidableEq, Repr
 
 end BoCa

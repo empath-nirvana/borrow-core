@@ -14,6 +14,24 @@ open BoCa
 
 /-! ### Host operations  `[spec §8]` -/
 
+/-- The machine width of a width: `u32` and `u64` are the machine's `i32` and `i64`, which are
+signless, so an operation at an unsigned width is the one at its signed sibling on the same bits.
+Every other width is its own.  `[spec §73]` -/
+def machineWidth : Width → Width
+  | .u32 => .w32
+  | .u64 => .w64
+  | w => w
+
+/-- A host operation at machine widths: the grouped operations at `u32`/`u64` are those at
+`w32`/`w64` (`ℍ.call` computes them with the same functions).  `[spec §73]` -/
+def machineOp : HostOp → HostOp
+  | .bin w o => .bin (machineWidth w) o
+  | .div w o => .div (machineWidth w) o
+  | .un w o => .un (machineWidth w) o
+  | .eqz w => .eqz (machineWidth w)
+  | .rel w o => .rel (machineWidth w) o
+  | o => o
+
 /-- The width of a host operation's operands. -/
 def hostArgWidth : HostOp → Width
   | .bin w _ | .div w _ | .un w _ | .eqz w | .rel w _ => w
@@ -27,6 +45,8 @@ def hostArgWidth : HostOp → Width
   | .demote => .f64
   | .promote => .f32
   | .reinterpret_f f => f.int.width
+  | .reinterpret_u i => i.width
+  | .reinterpret_s i => i.uwidth
 
 /-- The operation takes a pair. -/
 def hostBinary : HostOp → Bool
@@ -55,6 +75,8 @@ def hostResKind : HostOp → ResKind
   | .demote => .int .f32
   | .promote => .int .f64
   | .reinterpret_i f => .int f.int.width
+  | .reinterpret_u i => .int i.uwidth
+  | .reinterpret_s i => .int i.width
 
 /-- A float constant, given by its bits, at a float operation's operand: an `f32` is 32 bits. -/
 def fconst (f : FWidth) (b32 : UInt32) (b64 : UInt64) : Exp :=
