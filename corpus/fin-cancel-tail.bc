@@ -1,0 +1,21 @@
+-- A dropped continuation cancelled after a performing terminal (SPEC §12, §27; #953): `tm`'s
+-- clause writes `A` and ends in a call of `fin`, which writes `B`. A terminal that performs is the
+-- path's last effect, so the cancel of `k` comes after it: `x <- fin(); cancel k; return x`. The
+-- cancel runs the body's cleanup, which raises `3`; the error is kept, re-raised at the canceller,
+-- and `to_result` catches it.
+--
+-- Answer: `AB` and `inr i32[3]`, `live 0`. A cancel before the terminal call would raise first and
+-- write `A` alone.
+
+include io
+include fail
+
+effect Wait { ctl wait() }
+
+fn fin() -> i32 + 1 with Stdout = print_byte(to_u8(66)); inr ()
+
+handler tm[A]: Wait, A -> A + 1 = { return(x) = inl x; wait(k) = { print_byte(to_u8(65)); fin() } }
+
+fn work() -> i32 with Wait, Fail[i32] = x <- wait() unwind (let r = raise((3 : i32)); ()); 5
+
+main -> (i32 + 1) + i32 = with to_result[i32, i32 + 1] { with tm[i32] { work() } }

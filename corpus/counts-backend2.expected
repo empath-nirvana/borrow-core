@@ -99,10 +99,15 @@ core-fin-stored-k-fin 0 1 0 0 0 0
 core-fin-sub-row 0 0 0 0 0 0
 data-json-map-ser 16 0 0 555 420 133
 effects-load-raise 4 0 0 204 184 15
+fin-block-finaliser 0 0 0 0 0 0
+fin-cancel-arm 0 3 0 0 0 0
+fin-cancel-loop 0 0 0 0 0 0
 fin-cancel-order 3 0 0 5 3 0
 fin-cancel-propagated 0 0 0 0 0 0
 fin-cancel-reentered 0 0 0 0 0 0
+fin-cancel-region 0 0 0 0 0 0
 fin-cancel-reraised 0 0 0 0 0 0
+fin-cancel-tail 3 0 0 5 3 0
 fin-e7b 0 0 0 0 0 0
 fin-e7d 0 0 0 0 0 0
 fin-e8b 0 0 0 0 0 0
