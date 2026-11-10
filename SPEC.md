@@ -3645,7 +3645,7 @@ Six rules, over `CDerives` with its context premises (§10):
 
     Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ H : !U(A ⊸ F_Σ R) ⊗ ⊗_i !U(A_i ⊗ K_i ⊸ F_Σ R)    Δ; Γ₂ ⊢ e : F_{Σ, n : E} A
     ──────────────────────────────────────────────────────────────────────── [handle]
-    Δ; Γ ⊢ hnd (n, H) e : F_Σ R          (n ∉ Σ)
+    Δ; Γ ⊢ hnd (n, H) e : F_Σ R          (n ∉ Σ,  n ∉ sites R,  n ∉ sites Γ: §77)
 
     K_i = U((B_i ⊸ F_Σ R) & ⊤) (lin),   U((B_i ⊸ F_Σ R) & F_Σ 1) (cancel),   !U((B_i ⊸ F_Σ R) & F_Σ 1) (unr)
     an abortive operation's clause is !U(A_i ⊸ F_Σ R): the machine has cancelled κ
@@ -3665,6 +3665,8 @@ Six rules, over `CDerives` with its context premises (§10):
   - at a handled row that holds `Div` (§14), `[handle]` is `effHandleT`, whose clauses resume `κ`
     in tail position; `effHandleV` and `effHandleVB` ask the handled row not to hold `Div`, and
     `[then]` asks it of the finaliser's row (decisions 68 and 69).
+  - every handle rule asks the handled site to be absent from the answer type's rows and the
+    context's slot types, `n ∉ sites R` and `n ∉ sites Γ` (R3, §77).
 - **The must-resume `κ`** is the same `&` pair as the others, its cancel branch at `⊤`, so the
   clause can only resume it. The machine builds `κ` by the operation's qualifier (§25): at `lin`
   and `cancel` it owns a cell, and a must-resume `κ`'s cancel branch has no step.
@@ -13267,6 +13269,57 @@ The surface part is not built: until it lands, the surface refuses the operators
 - Narrower unsigned widths (`U16`) and `I8`/`I16`: not asked for.
 - Whether `U8` gains arithmetic now that the grouped operations are admitted per width: not in
   this entry (`U8` keeps §8's "no arithmetic of its own").
+
+---
+
+## 77. Entry 76 — R3 in the kernel: handler sites are lexical (#1052)
+
+This entry amends §19's `[handle]` and the rules that share its shape: §28's BOXED-κ rule
+(`effHandleVB`), the tail handler (`effHandleT`, §14) and `[handle-last]` (`effHandleL`, §51).
+
+### Motivation
+
+Decision 57's R3 says a site does not escape its handler. The elaborator checks it (§30, §76), but
+the kernel did not. So later stages could not rely on a site's performs happening inside that
+site's node. The handle-last direct call and fusion (§51, T-B2's "no handler of the work's names
+inside `K`") and the backend's handler lowering need that fact.
+
+### What it adds
+
+**Handler sites are lexical, by a premise on the handle rules.** At `hnd (n, H) e : F_Σ R`, the
+handled site `n` occurs neither in the answer type `R`'s rows nor in the types of the context's
+live slots:
+
+    n ∉ sites R        n ∉ sites Γ
+
+- `sites A` is the set of operation names in every row nested in `A`: in `U C`, code types, `!`,
+  `⊗`, `⊕`, boxes and borrows.
+- So no closure that performs at `n` can leave the handler: not through the answer, and not through
+  a cell the outer context already holds, since its type would have to mention `n`.
+- The premise is on every handle rule: `effHandleV`, `effHandleVB`, `effHandleT` and `effHandleL`.
+  It is also on their mirrors: `CDerivesP`, `CDerivesAt`, `TDerives` and the checker.
+- **No proof reads it.** The fundamental property and adequacy hold without it, and the
+  compatibility lemmas ignore the premise. It gives later stages a checked fact: a site's performs
+  happen inside that site's node.
+- The elaborator's R3 check (decision 57) stays as the source of the message. The kernel checks the
+  same condition.
+
+### Baseline
+
+- `fundamentalC`, `adequacyC`, `adequacyD`, `fundamentalN_all` and `goal791N` keep their statements.
+- Every handle rule's compatibility lemma keeps its statement, apart from the extra premise, which it
+  does not use.
+- Every corpus and kernel program types as before. The elaborator's R3 already excludes the programs
+  the premise would refuse; any it refuses is reported.
+
+### Units
+
+R3.1: `VTy.sites` and `CTy.sites`, with a decision procedure; the premise on the four handle rules
+and their mirrors; the checker supplies it. Not built.
+
+### Open
+
+- Whether any lowering relies on lexical sites today (the backend's audit). Recorded when known.
 
 ---
 
