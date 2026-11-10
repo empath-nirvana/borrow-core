@@ -36,8 +36,8 @@ gate: | tools
 
 # The full gate: every check (every compiled stage, counts, native, the static tables, the
 # generated and renamed programs, the book), and the source stage on every program, re-verifying
-# every golden against `Support`'s interpreter. Required when Paper/, Support/, Target/, Pipeline/
-# or Backend/ changed.
+# every golden against `Support`'s interpreter. Required when Paper/, Support/, Target/, Pipeline/,
+# Reference/ or Backend/ changed.
 gate-full: | tools
 	scripts/ci-local.sh --source
 
