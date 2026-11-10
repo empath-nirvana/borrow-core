@@ -13372,6 +13372,10 @@ P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain under them.
 - **Linear `K` is refused.** Every wire's end type is unrestricted, so a repeated `next()` after the
   end answers `inr k` again, with no protocol error at run time:
   `` the end value of `src`, of type `K`, is linear; a stream wire's end value is unrestricted in this version ``.
+- **Items into a stage are droppable.** The input that fits a stage depends on its state, which a
+  type cannot express.
+  So `step_i`'s input is the sum `1 + (A_i + K_i)`, and the cases where the input does not fit the
+  state drop it. An item type that is not droppable is refused by the checker (A0).
 - **Open chains** wait for L2 (above).
 - **`stop()`** is provided at `K = 1` only (above).
 - **No `unr` operation** may be forwarded, and none may be in the connector's row at any depth
