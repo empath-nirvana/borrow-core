@@ -670,6 +670,8 @@ From `experiments/Recursion`, `CBPVMu`; general `ν` per `docs/scope-recursion.m
 
     A ::= … | I32 | I64 | U8                              (VTy.int w)
 
+§37 adds the floats and §73 the unsigned widths `U32` and `U64`.
+
 `I32`/`I64`/`U8` hold no resource. They are persistent (§10), `Imm̲ 'b I32 = I32`, and they outlive
 every lifetime. `U8` (`Width.w8`) is the byte: its reason is layout (an array of bytes is one byte
 per element, `Backend/README.md`), and it has no arithmetic of its own.
@@ -12737,6 +12739,92 @@ K1.3–K1.5 are not built; each unit's code PR marks its line *built*.
 - **Not derived:** the representation congruences at `vN` are expected to be `funext` equations
   under `famL` (risk, measured on `read_byte` first in K1.2). There is no `vC → vN` lemma; both
   follow from the behavioural claim.
+
+---
+
+## 73. Entry 72 — unsigned integers: `U32` and `U64` (#981)
+
+This entry amends §8, as §37 does for floats.
+
+### Motivation
+
+`lib/json` cannot round-trip integers in 2⁶³..2⁶⁴ exactly: there is no unsigned 64-bit type, and
+serde keeps them. The host operations are already signless: each is named as the Wasm instruction
+that computes it on bit-vectors, and the signed and unsigned readings are separate operations
+(`div_s`/`div_u`, `lt_s`/`lt_u`, `shr_s`/`shr_u`, `convert … s/u`). What is missing is a type
+that says a value is read unsigned, so that the surface picks the `_u` operations and printing
+reads the type.
+
+### What it adds
+
+**Types.**
+
+    A ::= … | U32 | U64                                   (VTy.int w)
+
+`Width` gains `u32` and `u64`, with bits `UInt32` and `UInt64` (`Width.bits`), the same bits as
+`w32` and `w64`. Like the other integers, they hold no resource: they are persistent (§10),
+`Imm̲ 'b U32 = U32`, and they outlive every lifetime. The relation's `int` clause is "a literal of
+the width", so it covers them with no new clause.
+
+**Literals.** `IntLit` gains `u32 n` (`UInt32`) and `u64 n` (`UInt64`), at widths `u32`/`u64`.
+
+**Operations at the new widths.** The grouped integer operations (binary, partial, unary,
+`eqz`, tests) apply at `U32` and `U64` with the types they have at `I32` and `I64`, and compute
+the same function on the same bits: `ℍ.call` at `u32` is the `…32` family of the host, at `u64`
+the `…64` family. **The host structure gains no field.** All the operations are admitted at
+the unsigned widths, the `_s` ones included, because they are total functions on bits. Choosing
+`div_u`, `lt_u`, `shr_u`, … for an unsigned operand is the surface's job (the follow-up surface
+unit), and printing reads the type.
+
+**Conversions.** One new operation family, the bit-preserving change of reading between same-size
+integers:
+
+| operation | type |
+|---|---|
+| `reinterpret_u i` | `I32 ⇒ U32` (`i = i32`), `I64 ⇒ U64` (`i = i64`) |
+| `reinterpret_s i` | `U32 ⇒ I32`, `U64 ⇒ I64` |
+
+Each is the identity on bits: one machine step, answering the literal of the other width with the
+same bits. Every other conversion composes through them and the existing operations, which are
+unchanged. For example, `u32 → u64` is `reinterpret_s`, `extend_u`, `reinterpret_u`;
+`u64 → f64` is `reinterpret_s .i64`, `f64.convert_i64_u`; `f64 → u64` is `i64.trunc_f64_u`
+(partial), `reinterpret_u .i64`; `u8 → u32` is `extend8_u`, `reinterpret_u .i32`. `convert`,
+`trunc` and `trunc_sat` keep their `IWidth` (`i32`/`i64`), whose `Sx` argument already gives the
+unsigned reading.
+
+**Overflow.** The kernel's arithmetic wraps, as at `I32`/`I64` (§8). Raising on overflow is the
+surface's `checked` sugar, which at the unsigned widths uses the unsigned tests (`add`: the result
+`lt_u` an operand; `sub`: `lt_u` of the operands; `mul`: a `div_u` check).
+
+**No** new `VTy`/`CTy` former, `CDerives` rule or index, or relation clause. The `int` former gains
+two widths, as for `f32`/`f64` (§37).
+
+### Baseline
+
+`fundamentalC`, `adequacyC`, `hostOp_compatX` (restated at the new arms of `hostArg`/`hostRes`,
+same proof: `ℍ.call` answers a literal of the stated type), `fundamentalN_all`, `goal791N`, the
+`Persistent`/outlives lemmas for `int`, every `Host` instance (`wasmHost` and the models) with no
+new field. Every corpus and kernel program has the same output: no existing term changes, and the
+widths are new.
+
+### Units
+
+- Kernel/Support (this unit): `Width.u32/.u64`, `IntLit.u32/.u64`, `hostArg`/`hostRes` and
+  `ℍ.call` at the new widths, `reinterpret_u`/`reinterpret_s`; the interpreter's arms; every
+  exhaustive match elsewhere (Frontend, backends) given the arm of its 32/64-bit sibling, so the
+  build stays green. A backend lowers `U32`/`U64` to the machine's `i32`/`i64` (signless), and
+  `reinterpret_*` to nothing.
+- Surface (follow-up): the type names `u32`/`u64`, literals with a range check, `_u` operation
+  choice for `<` `<=` `>` `>=` `/` `%` `>>`, `as` conversions, `checked` ops, printing and
+  parsing in `lib`.
+
+Neither is built yet.
+
+### Open
+
+- Narrower unsigned widths (`U16`) and `I8`/`I16`: not asked for.
+- Whether `U8` gains arithmetic now that the grouped operations are admitted per width: not in
+  this entry (`U8` keeps §8's "no arithmetic of its own").
 
 ---
 
