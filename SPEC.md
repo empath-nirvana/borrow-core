@@ -9885,9 +9885,14 @@ corpus or a golden.
   in place by handlers outside the node (`WorkRun`), of names other than `n` and unhandled in `K`,
   by the two-run lemma `work_run_ctx`. Outer handlers that answer in place: `answers_in_place`,
   from `tail_clause_answers` and `last_clause_answers` (nested `[handle-last]`, pipe fusion's
-  normal path). Open: T-B2 when an outer handler stores or cancels the captured κ, or a raise or
-  cancel crosses the active frame (an early stop, `stop()`, a raise across a fused stage), is not
-  derived and not refuted (a whole-run simulation); a Core term for the in-place cancel-mode
+  normal path). Each law is a forward correspondence on the machine: given the work's run when
+  called directly, which leaves κ's cell free (`StepsOff`), the handled program and the direct
+  program reach the same configuration at the same memory, in any outer context `K₀` and
+  handler-free `K`. T-B2 matches the two runs segment by segment, under `WorkRun`'s `hans`: the
+  outer handler answers the same whatever continuation it captures. Open: runs the hypothesis does
+  not give (a work that diverges or does not leave κ's cell free); T-B2 when an outer handler
+  stores or cancels the captured κ, or a raise or cancel crosses the active frame (an early stop,
+  `stop()`, a raise across a fused stage), not derived and not refuted (a whole-run simulation); a Core term for the in-place cancel-mode
   unwind (Core expresses it only through κ's `ccatch K†`); the laws are stated on machine values,
   not on typed `lastH`.
 - **The elaboration** of `for` with `break`/`return` and a body that performs, and the adapters
