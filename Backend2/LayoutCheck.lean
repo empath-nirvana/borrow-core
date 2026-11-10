@@ -17,9 +17,10 @@ finished `Layouts` and verifies, each in time near-linear in the program and the
 variable's type is walked once):
 
 - **Every node is its type's** (`conf`): each variable's node, each function's answer node and
-  `main`'s node have, constructor for constructor, the shape `nodeOf`/`build` makes of its `LTy`
-  (`Layout.lean` `build`, `nodeOfVar`, `fnRetNode`, `places`), the pairs of formers `join` admits
-  sharing a node (a cell with its borrows, an opaque value with an integer).
+  `main`'s node have, constructor for constructor, the shape `mkV` makes of its `LTy`
+  (`Layout.lean` `mkV`, `expandV`, `nodeOfVar`, `fnRetNode`, `places`), the pairs of formers
+  `join` admits sharing a node (a cell with its borrows, an opaque value with an integer). A node
+  checked a layout of a type is not checked again at it.
 - **Every move joins its two places** (`walk`): at every site of every function and of `main`,
   each pair of places the analysis's `walk` joins (`Layout.lean` `walk`, every constructor and
   every primitive) has one representative; a read through a shared borrow relates the contents
@@ -41,9 +42,9 @@ variable's type is walked once):
   one word); a boxed field is a pair's or a sum's.
 - **A value's bytes in a cell are its node's** (`cellsOk`): every node's `bytes` is `resolve`'s
   equation over its shape and width (a byte at `u8`, 4 at `i32` and `f32`, else its words'), and
-  the bytes of each type (`tyBytes`, which an allocation's width class is read through) are at
-  least those of every variable's, answer's and `main`'s node of that type (`!` erased); each
-  static cell's bytes (`staticBytes`) are its width class's most (`staticsOk`).
+  the bytes of each type of a width class (`tyBytes`, which an allocation's width class is read
+  through) are at least those of every variable's, answer's and `main`'s node of that type (`!`
+  erased); each static cell's bytes (`staticBytes`) are its width class's most (`staticsOk`).
 
 `checkFlow` checks the closure flow (`Backend2/Flow.lean`) the same way: its sets are a solution of
 its inclusion constraints, and every direct call it licenses (`known`) is of a variable whose set is
@@ -67,6 +68,9 @@ structure CSt where
   regions : Std.HashMap Nat Nat := {}
   /-- The variables of the program, each with the function it was met in. -/
   vars : Std.HashMap Var String := {}
+  /-- The value types each representative is checked a layout of (`conf`), each with the
+  representatives of its type variables' nodes. -/
+  confd : Std.HashMap Nat (List (LTy × List Nat)) := {}
 
 abbrev CM := StateT CSt (Except String)
 
@@ -133,35 +137,44 @@ def closOf (w : String) (i : Nat) : CM (CodeKind × Option Nat × List Nat) := d
 /-! ### Every node is its type's -/
 
 mutual
-/-- Node `n` is a layout of the value type `t` (`build`), `env` the nodes of the type variables
-bound around it. -/
+/-- Node `n` is a layout of the value type `t` (`mkV`, `expandV`), `env` the nodes of the type
+variables bound around it. -/
 def conf (w : String) : Nat → List Nat → LTy → Nat → CM Unit
   | 0, _, _, _ => throw s!"{w}: a type too deep"
   | f + 1, env, t, n => do
+    -- A node already checked a layout of this type, under these type variables' nodes, is one.
+    let r ← rp L n
+    let er ← env.mapM (rp L)
+    let done := (← get).confd.getD r []
+    if done.any fun (t', e') => e' == er && eqUB 4096 t t' then return
     let k ← shp L n
     let bad : CM Unit := do
       throw s!"{w}: node {← rp L n} ({short k}) is not a layout of the type {t}"
-    match t, k with
-    | .unit, .unit | .zero, .zero | .unk, .unk => pure ()
-    | .opq _, .opq | .opq _, .int _ | .int _, .opq => pure ()
-    | .int a, .int b => if a == b then pure () else bad
-    | .pair a b, .pair x y | .sum a b, .sum x y => do
-      conf w f env a x
-      conf w f env b y
-    | .ref a, .ref c | .ref a, .imm c | .ref a, .mut c
-    | .imm a, .ref c | .imm a, .imm c | .imm a, .mut c
-    | .mut a, .ref c | .mut a, .imm c | .mut a, .mut c
-    | .fam a, .fam c => conf w f env a c
-    | .tvar i, _ =>
-      match env[i]? with
-      | some m => if (← rp L m) == (← rp L n) then pure () else bad
-      | none => throw s!"{w}: a free type variable {i}"
-    | .mu a, _ => conf w f (n :: env) a n
-    | .thunk c, _ => confC w f env c n
-    -- `!A` is represented as `A`.
-    | .bang a, _ => conf w f env a n
-    | _, _ => bad
-/-- Node `n` is the class of a closure of `c` (`buildC`). -/
+    let check : CM Unit := do
+      match t, k with
+      | .unit, .unit | .zero, .zero | .unk, .unk => pure ()
+      | .opq _, .opq | .opq _, .int _ | .int _, .opq => pure ()
+      | .int a, .int b => if a == b then pure () else bad
+      | .pair a b, .pair x y | .sum a b, .sum x y => do
+        conf w f env a x
+        conf w f env b y
+      | .ref a, .ref c | .ref a, .imm c | .ref a, .mut c
+      | .imm a, .ref c | .imm a, .imm c | .imm a, .mut c
+      | .mut a, .ref c | .mut a, .imm c | .mut a, .mut c
+      | .fam a, .fam c => conf w f env a c
+      | .tvar i, _ =>
+        match env[i]? with
+        | some m => if (← rp L m) == (← rp L n) then pure () else bad
+        | none => throw s!"{w}: a free type variable {i}"
+      | .mu a, _ => conf w f (n :: env) a n
+      | .thunk c, _ => confC w f env c n
+      -- `!A` is represented as `A`.
+      | .bang a, _ => conf w f env a n
+      | _, _ => bad
+    -- Recorded before its parts are checked: a part that fails ends the whole check.
+    modify fun s => { s with confd := s.confd.insert r ((t, er) :: done) }
+    check
+/-- Node `n` is the class of a closure of `c` (`expandC`). -/
 def confC (w : String) : Nat → List Nat → LCTy → Nat → CM Unit
   | 0, _, _, _ => throw s!"{w}: a type too deep"
   | f + 1, env, c, n => do
@@ -179,7 +192,7 @@ def confC (w : String) : Nat → List Nat → LCTy → Nat → CM Unit
       confR w f env e s
     | .top, .unit => pure ()
     | _, _ => bad
-/-- Node `n` is what running a closure of `c` answers (`repNode`). -/
+/-- Node `n` is what running a closure of `c` answers (`mkR`). -/
 def confR (w : String) : Nat → List Nat → LCTy → Nat → CM Unit
   | 0, _, _, _ => throw s!"{w}: a type too deep"
   | f + 1, env, c, n => do
@@ -604,21 +617,26 @@ def bytesOf : NK → Nat → Nat
   | _, w => 8 * w
 
 /-- Every representative's bytes are `bytesOf` its shape and width, and each of `roots` (a
-variable's, an answer's, `main`'s node, at its type) takes at most its type's bytes (`tyBytes`, `!`
-erased), through which an allocation's width class is read (`Layouts.clsBytes`). -/
-def cellsOk (L : Layouts) (roots : List (String × LTy × Nat)) : CM Unit := do
+variable's, an answer's, `main`'s node, at its type) whose type is one of `clsTys` (the types of
+the program's width classes, through which an allocation's width class is read,
+`Layouts.clsBytes`) takes at most its type's bytes (`tyBytes`, `!` erased). -/
+def cellsOk (L : Layouts) (clsTys : Array LTy) (roots : List (String × LTy × Nat)) : CM Unit := do
   unless L.bytes.size == L.rep.size do throw s!"the layouts' bytes differ in size from their nodes"
   for v in [0:L.rep.size] do
     if L.rep[v]! != v then continue
     let be := bytesOf L.shape[v]! L.width[v]!
     unless L.bytes[v]! == be do
       throw s!"node {v} ({short L.shape[v]!}) takes {L.bytes[v]!} bytes in a cell, its shape and width give {be}"
+  let fps := clsTys.map (hashTop 4)
   for (w, t, i) in roots do
-    let r ← rp L i
-    let b := L.bytes[r]!
-    let tb := L.tyBytes.getD t.unbang 0
-    unless b ≤ tb do
-      throw s!"{w}: a value at node {r} takes {b} bytes in a cell, more than its type's most ({tb}, `tyBytes`)"
+    let h := hashTop 4 t
+    for j in [0:clsTys.size] do
+      unless fps[j]! == h && eqUB 4096 t clsTys[j]! do continue
+      let r ← rp L i
+      let b := L.bytes[r]!
+      let tb := L.tyBytes.getD clsTys[j]!.unbang 0
+      unless b ≤ tb do
+        throw s!"{w}: a value at node {r} takes {b} bytes in a cell, more than its type's most ({tb}, `tyBytes`)"
 
 /-- Each static cell's bytes (`staticBytes`) are the most of its width class's types' (`tyBytes`,
 `!` erased). -/
@@ -691,7 +709,7 @@ def check (p : Prog) (L : Layouts) : Except String Unit := do
         throw s!"code c{c}'s class is {R}, whose codes do not hold it"
     layoutOk L
     staticsOk p L
-    cellsOk L roots
+    cellsOk L (clsTysOf p).toArray roots
   let _ ← act.run {}
 
 /-! ### The closure flow -/
@@ -990,11 +1008,12 @@ def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
       | .int .w8 | .int .w32 | .int .f32 => true
       | _ => false).map fun c =>
     { L with bytes := L.bytes.set! c (if L.bytes[c]! == 1 then 4 else 1) }
-  -- A type's bytes one fewer than a variable's of that type.
+  -- A width class type's bytes one fewer than a variable's of that type.
+  let clsTys := clsTysOf p
   let narrow := (sortedKeys L.varNode).findSome? fun x => do
     let t ← p.ty[x]?
     let b := L.bytes[L.node x]!
-    if b == 0 then none
+    if b == 0 || !clsTys.any (eqUB 4096 t) then none
     pure { L with tyBytes := L.tyBytes.insert t.unbang (b - 1) }
   -- A field on no cycle boxed; a class on no cycle kept on the heap (the literal tables' first).
   let reps := (List.range L.rep.size).filter fun v => L.rep[v]! == v
