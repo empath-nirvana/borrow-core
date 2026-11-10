@@ -8,8 +8,8 @@
 -- a lone surrogate refused; numbers by JSON's strict grammar; the input checked as UTF-8 first;
 -- white space is space, tab, CR and LF. A number is chosen at parse time, as serde_json's `Number`
 -- is: an integer literal (no fraction, no exponent) that fits `i64` is `Int`, read exactly by
--- `parse_i64`; any other number, an integer literal past `i64` included, is `Float`, read by
--- `parse_f64`, correctly rounded. An error raises `Fail[JsonError]` (SPEC §19), unwinding every
+-- `parse_i64`, except `-0`, which is `Float(-0.0)`; any other number, an integer literal past
+-- `i64` included, is `Float`, read by `parse_f64`, correctly rounded. An error raises `Fail[JsonError]` (SPEC §19), unwinding every
 -- frame and consuming what each had built; `json_value`, `json_elements` and `json_members` are
 -- one recursive group under `bounded` (SPEC §20), so a document nested past the budget performs
 -- `Exhausted`.
@@ -164,10 +164,13 @@ fn json_float<'a>(t: text 'a, i: i32, j: i32) -> Json with Fail[JsonError] =
 
 -- The number at `i` and the index after it. An integer literal that fits `i64` is an `Int`, read
 -- exactly by `parse_i64`; any other number, an integer literal past `i64` included, a `Float`.
--- The scan has checked the grammar, so `parse_i64` can only refuse an integer past `i64`.
+-- `-0` is the one integer literal that is a `Float`, `-0.0`, as serde_json reads it: `i64` has no
+-- negative zero, so as an `Int` its sign would be lost. The scan has checked the grammar, so
+-- `parse_i64` can only refuse an integer past `i64`.
 fn json_number<'a>(t: text 'a, i: i32) -> Json * i32 with Fail[JsonError] =
   let (j, int) = json_scan_number(t, i);
-  if int {
+  let negzero = j == i + 2 && json_byte(t, i) == b'-' && json_byte(t, i + 1) == b'0';
+  if int && not(negzero) {
     let r = with to_result { parse_i64(json_sub(t, i, j)) };
     match r { inl n -> (Int(n), j) | inr e -> (json_float(t, i, j), j) }
   } else { (json_float(t, i, j), j) }
@@ -303,3 +306,17 @@ fn json_ser<'a>(j: imm 'a Json, out: string) -> string with Exhausted =
         push_byte(&mut out, b'}')
     } };
   out
+
+-- ### Lookup
+
+-- `f` given the member `k` of the object `j` points at, as a view at a lifetime of its own (`'x`,
+-- the load's), or `inr ()` when `j` is not an object or has no such member; `f`'s answer, which
+-- names no `'x`. A lookup that finds nothing is not a failure, so nothing is raised. The view
+-- cannot be returned at `'a` (a view projected out of a load outlives the load only with a
+-- reborrow the kernel does not have, #999), so the member is given to `f`. The key is allocated as
+-- an owned string (`map_get` takes `K`). `[spec §36]`
+fn json_get_with[B]<'a>(j: imm 'a Json, k: lit, f: !(all 'x < top. imm 'x Json + 1 => B)) -> B =
+  borrow imm *j { 'y, v -> match v {
+      Obj(m) -> f(map_get(m, string_of_lit(k)))
+    | _ -> f((inr () : imm 'y Json + 1))
+    } }

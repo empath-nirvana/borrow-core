@@ -10,9 +10,10 @@
 -- document nested past the recursion budget is `json-deep.bc`.
 --
 -- Answer: on `json-parse.in`, the line `"Café \"Zoë\" — Montréal 🍰"`, then the whole document
--- in one line (648 bytes), then `(inl (inl i32[648]), inl (inr (i32[3], i32[29])))` and
+-- in one line (658 bytes), then `(inl (inl i32[658]), inl (inr (i32[3], i32[29])))` and
 -- `live 0`. The croissant's `id`, `505874924095815681`, is past 2^53 and prints back exactly; read
--- as a float it would be rounded. A surrogate pair decoded as two code points, a mishandled
+-- as a float it would be rounded. The floors `-0` and `-0.0` both print `-0.0`: `-0` is a `Float`,
+-- as `i64` has no negative zero. A surrogate pair decoded as two code points, a mishandled
 -- escape or a misrounded number changes the second line; a dropped level or member changes its
 -- length; a frame whose partial data is not consumed on the error shows in `live`.
 

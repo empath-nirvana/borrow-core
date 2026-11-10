@@ -15,7 +15,7 @@
     "street": "123 Rue Sainte-Catherine",
     "city": "Montréal",
     "postal": "H3B 1A7",
-    "floors": [0, 1, -1]
+    "floors": [0, 1, -1, -0, -0.0]
   },
   "menu": [
     {"item": "espresso", "price": 3.0, "sizes": ["single", "double"]},
