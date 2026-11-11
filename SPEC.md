@@ -8826,6 +8826,8 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/name-clash.bc` | #590 (1): a program's `fn take` beside `include buf`'s | `i32[2]` (was refused) |
 | `corpus/mut-name-capture.bc` | #590 (2): a callee's `let mut tbl` beside its caller's | prints `1`, `i32[0]` (was refused) |
 | `corpus/mut-block.bc` | #586: a block that writes, at a block parameter called once, twice, and in a loop | `(i32[52], (i32[4036], i32[323]))` (was `(12, …)`) |
+| `corpus/mut-block-clause.bc` | #1068: a block writing a handler clause's `let mut`, in a resuming clause and in one that drops `k` | `(-5999, 4606)` |
+| `corpus/mut-block-decl-name.bc` | #1068: a block writing a `let mut` named like a declaration | `1202` |
 | `corpus/mut-block-nested.bc` | a block inside a block, both writing | `(i32[13], i32[3])` |
 | `corpus/mut-run.bc` | #586: `run` that writes, bound | `(i32[52], i32[5102])` (was `12`) |
 | `corpus/fail/mut-run-nested.bc` | #586: `g(run if … { x = 5; … })`, a `run` that writes inside an argument | refused, R3 |
@@ -8919,7 +8921,7 @@ of its own:
 | a clause's continuation (§19), a layer's `call` (§20) | `ResumeK.k`, `LCall.name` | is it (`Cx.copy`; `unboxesC` for BOXED-κ) |
 | a div function's residual (§14, *The residual by name*) | the names the terminal hands back | a copy made after the last loop is the binder it copies (`termParts`) |
 
-Two more rules keep generated code and the user's apart, so that no analysis that compares names
+Three more rules keep generated code and the user's apart, so that no analysis that compares names
 can take one for the other:
 
 - **A control handler's code has names of its own.** Its clauses run in the scope of a `with`,
@@ -8931,6 +8933,11 @@ can take one for the other:
   these binders as written (`Hygiene.written`, in `unrename`).
 - **A capability variable is one per effect and slot** (`capVar`, `capLife`): `Log` and `LOG`,
   or `Log_a` and the slot `a` of `Log`, shared one variable.
+- **Every name a sugar mark carries is a reference, renamed with its binder.** A closure's
+  `writes(…)` mark (R3) names the `let mut` variables it writes. Hygiene renames those names with
+  their binders, in a handler clause, where every binder is renamed, and in a `fn`, where a
+  `let mut` is named like a declaration (#1068). Messages strip Hygiene's prefix before looking a
+  name up, so a refusal names `buf`, not `buf__q51`.
 
 A block's `let mut` capabilities key its copy by position (`m0`, `m1`, `blockKeys`), not by the
 caller's names: callers whose blocks write variables of other names share the copy
@@ -8940,8 +8947,9 @@ caller's names: callers whose blocks write variables of other names share the co
 α-equivalently, with `bcc alpha`: each binder of a surface body gets a name of its own (`{x}q{k}`,
 from the parser's record of what each name resolved to, `resolutionOf`), so no binder shadows
 another and no two variables share a name. `bcc check` must print the same up to the renaming and
-`bcc erase` the same erasure, and the same with every module of `lib/` renamed (`BCC_LIB`). On the
-corpus it finds 0 differences. Run on the build before R1 (`--bcc`, renaming with this one's
+`bcc erase` the same erasure, and the same with every module of `lib/` renamed (`BCC_LIB`). Every local goes through Hygiene under
+the renaming, so the check reaches the names sugar marks carry. On the corpus it finds 0
+differences. Run on the build before R1 (`--bcc`, renaming with this one's
 `--alpha`), it finds 19: each program of #504, #493 and #590, `T04`, `config-parse` and others
 whose meaning depended on two names coinciding.
 
