@@ -1,0 +1,32 @@
+-- check: old-backend-refuses
+-- SPEC §75, Part B: `range(0, 10)`, `scale(3)` and `sum_all` on one connector, written with `>|`
+-- throughout, with `|>` throughout, mixed, bracketed `a >| (b >| c)`, and a `for` over
+-- `range(0, 10) >| scale(3)`. Every form is one chain in normal form, and gives 135.
+-- Answer: `((i32[135], i32[135]), (i32[135], (i32[135], i32[135])))`, `live 0`.
+
+include pipe
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn scale(c: i32) -> 1 with Stream[i32, 1], Yield[i32] =
+  let mut go = true;
+  while go { match next() { inl x -> yield(x * c) | inr u -> go = false } };
+  ()
+
+fn sum_all() -> i32 with Stream[i32, 1] =
+  let mut s = 0;
+  let mut go = true;
+  while go { match next() { inl x -> s = s + x | inr u -> go = false } };
+  s
+
+main -> (i32 * i32) * (i32 * (i32 * i32)) =
+  let a = range(0, 10) >| scale(3) >| sum_all;
+  let b = range(0, 10) |> scale(3) |> sum_all;
+  let c = range(0, 10) >| scale(3) |> sum_all;
+  let d = range(0, 10) >| (scale(3) >| sum_all);
+  let mut t = 0;
+  for x in range(0, 10) >| scale(3) { t = t + x };
+  ((a, b), (c, (d, t)))

@@ -526,6 +526,7 @@ pipe-bracket 3 0 0 3 3 0 # each bracketing is the nested calls
 pipe-handlers 0 0 0 0 0 0
 pipe-left-row 3 0 0 3 3 0
 pipe-mixed 3 0 0 3 3 0
+pipe-pieces-step 0 2 0 0 0 0
 pipe-pull 3 0 0 3 3 0 # as gen-pipeline-pipe: `>|` into an adapter is the nested calls (until L2)
 pipe-push-paren 3 0 0 3 3 0
 poly-operators 0 0 0 0 0 0 # a case of an operator is a direct call; nothing is allocated

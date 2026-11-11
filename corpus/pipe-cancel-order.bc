@@ -1,0 +1,87 @@
+-- check: old-backend-refuses
+-- SPEC §75, Part B, law 6 (P1b Thm X) on the pipe connector. `tm` cancels at a `wait()`; the
+-- connector forwards every stage's `wait` and performs it under `close_all`, so the cancel stops
+-- every stage downstream-first:
+--   * at the source's `wait`, while the source, not the last stage, is suspended at it: `321`;
+--   * at the sink's `wait`: `321`.
+-- Answer: `321.321(inr (), inr ())`, `live 0`.
+
+include io
+include pipe
+
+effect Trace { must_resume ctl note(d: i32); must_resume ctl dot() }
+effect Wait { ctl wait() }
+
+handler show[A]: Trace, A -> A = {
+  return(x) = x;
+  note(d, k) = { print_dec(d); k(()) };
+  dot(k) = { print_byte(b'.'); k(()) }
+}
+
+-- `tm` cancels the computation at its `wait()`: its clause does not resume.
+handler tm[A]: Wait, A -> A + 1 = {
+  return(x) = inl x;
+  wait(k) = inr ()
+}
+
+-- The source waits before its second item when `w` is 1 (it is not the last stage: its `wait` is
+-- forwarded); the sink waits after its first item when `w` is 3 (the last stage's passes through).
+fn pause(v: i32, at: i32, w: i32, me: i32) -> i32 with Wait =
+  if v == at && w == me { wait(); v } else { v }
+
+fn src(n: i32, w: i32) -> 1 with Yield[i32], Trace, Wait =
+  x <- (
+    let mut i = 1;
+    while i <= n { yield(pause(i, 2, w, 1)); i = i + 1 };
+    ()) unwind (note(1));
+  note(1);
+  x
+
+fn src0(n: i32) -> 1 with Yield[i32], Trace =
+  x <- (
+    let mut i = 1;
+    while i <= n { yield(i); i = i + 1 };
+    ()) unwind (note(1));
+  note(1);
+  x
+
+fn mid() -> 1 with Stream[i32, 1], Yield[i32], Trace =
+  x <- (
+    let mut go = true;
+    while go { match next() { inl v -> yield(v * 10) | inr u -> go = false } };
+    ()) unwind (note(2));
+  note(2);
+  x
+
+fn sink(w: i32) -> i32 with Stream[i32, 1], Trace, Wait =
+  x <- (
+    let mut s = 0;
+    let mut go = true;
+    while go { match next() { inl v -> s = s + pause(v, 10, w, 3) | inr u -> go = false } };
+    s) unwind (note(3));
+  note(3);
+  x
+
+fn sink0() -> i32 with Stream[i32, 1], Trace =
+  x <- (
+    let mut s = 0;
+    let mut go = true;
+    while go { match next() { inl v -> s = s + v | inr u -> go = false } };
+    s) unwind (note(3));
+  note(3);
+  x
+
+-- The source's `wait` (a non-last stage, so forwarded): the cancel lands while the source is
+-- suspended at it, and every stage stops downstream-first.
+fn go1() -> i32 + 1 with Trace = with tm[i32] { src(5, 1) >| mid >| sink0 }
+
+-- The sink's `wait` (the last stage's, which passes straight through).
+fn go3() -> i32 + 1 with Trace = with tm[i32] { src0(5) >| mid >| sink(3) }
+
+main -> (i32 + 1) * (i32 + 1) =
+  with show[(i32 + 1) * (i32 + 1)] {
+    let a = go1();
+    dot();
+    let b = go3();
+    (a, b)
+  }

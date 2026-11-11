@@ -1,0 +1,82 @@
+-- check: old-backend-refuses
+-- SPEC §75, Part B, laws 1 and 2 on the pipe connector, and a `for` over a chain with `break`. Each
+-- stage's loop runs under a cleanup that notes its digit (source 1, middle 2, sink 3), which `show`
+-- prints.
+--   * Thm S: the sink returns after two items, and the others are stopped downstream-first: `321`.
+--   * `stop()`: the middle takes two items and stops its upstream at once, which closes the source;
+--     then the middle and the sink end: `123`.
+--   * A `for` over `src(5) >| scale(10)` breaks at its second item: both stages are stopped,
+--     downstream-first: `21`.
+-- Answer: `321.123.21(i32[30], (i32[30], i32[30]))`, `live 0`.
+
+include io
+include pipe
+
+effect Trace { must_resume ctl note(d: i32); must_resume ctl dot() }
+
+handler show[A]: Trace, A -> A = {
+  return(x) = x;
+  note(d, k) = { print_dec(d); k(()) };
+  dot(k) = { print_byte(b'.'); k(()) }
+}
+
+fn src(n: i32) -> 1 with Yield[i32], Trace =
+  x <- (
+    let mut i = 1;
+    while i <= n { yield(i); i = i + 1 };
+    ()) unwind (note(1));
+  note(1);
+  x
+
+-- The middle takes two items, then stops its upstream and ends.
+fn take2(c: i32) -> 1 with Stream[i32, 1], Yield[i32], Trace =
+  x <- (
+    let a = match next() { inl v -> v | inr u -> 0 };
+    yield(a * c);
+    let b = match next() { inl v -> v | inr u -> 0 };
+    yield(b * c);
+    stop();
+    ()) unwind (note(2));
+  note(2);
+  x
+
+fn scale(c: i32) -> 1 with Stream[i32, 1], Yield[i32], Trace =
+  x <- (
+    let mut go = true;
+    while go { match next() { inl v -> yield(v * c) | inr u -> go = false } };
+    ()) unwind (note(2));
+  note(2);
+  x
+
+-- The sink takes two items and returns: the others are stopped, downstream-first.
+fn first2() -> i32 with Stream[i32, 1], Trace =
+  x <- (
+    let a = match next() { inl v -> v | inr u -> 0 };
+    let b = match next() { inl v -> v | inr u -> 0 };
+    a + b) unwind (note(3));
+  note(3);
+  x
+
+fn sum_all() -> i32 with Stream[i32, 1], Trace =
+  x <- (
+    let mut s = 0;
+    let mut go = true;
+    while go { match next() { inl v -> s = s + v | inr u -> go = false } };
+    s) unwind (note(3));
+  note(3);
+  x
+
+fn brk() -> i32 with Trace =
+  let mut s = 0;
+  let mut k = 0;
+  for x in src(5) >| scale(10) { s = s + x; k = k + 1; if k == 2 { break } else { () } };
+  s
+
+main -> i32 * (i32 * i32) = with show[i32 * (i32 * i32)] {
+  let a = src(5) >| scale(10) >| first2;
+  dot();
+  let b = src(5) >| take2(10) >| sum_all;
+  dot();
+  let c = brk();
+  (a, (b, c))
+}

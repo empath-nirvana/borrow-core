@@ -1,0 +1,59 @@
+-- check: old-backend-refuses
+-- SPEC §75, Part B, law 3–5 (P1b Thm R) on the pipe connector: a raise at the source, at the middle
+-- and at the sink, each at its second item. The raiser's own cleanup runs first, then the others,
+-- downstream-first: `132`, `231`, `321`; the raise is reported, since no cleanup raises.
+-- Answer: `132.231.321(inr i32[10], (inr i32[20], inr i32[30]))`, `live 0`.
+
+include io
+include pipe
+include fail
+
+effect Trace { must_resume ctl note(d: i32); must_resume ctl dot() }
+
+handler show[A]: Trace, A -> A = {
+  return(x) = x;
+  note(d, k) = { print_dec(d); k(()) };
+  dot(k) = { print_byte(b'.'); k(()) }
+}
+
+-- Each stage raises its code at item 2 when `bad` is its digit.
+fn chk(v: i32, at: i32, bad: i32, me: i32, code: i32) -> i32 with Fail[i32] =
+  if v == at && bad == me { raise(code) } else { v }
+
+fn src(n: i32, bad: i32) -> 1 with Yield[i32], Trace, Fail[i32] =
+  x <- (
+    let mut i = 1;
+    while i <= n { yield(chk(i, 2, bad, 1, 10)); i = i + 1 };
+    ()) unwind (note(1));
+  note(1);
+  x
+
+fn mid(bad: i32) -> 1 with Stream[i32, 1], Yield[i32], Trace, Fail[i32] =
+  x <- (
+    let mut go = true;
+    while go { match next() { inl v -> yield(chk(v, 2, bad, 2, 20) * 10) | inr u -> go = false } };
+    ()) unwind (note(2));
+  note(2);
+  x
+
+fn sink(bad: i32) -> i32 with Stream[i32, 1], Trace, Fail[i32] =
+  x <- (
+    let mut s = 0;
+    let mut go = true;
+    while go { match next() { inl v -> s = s + chk(v, 20, bad, 3, 30) | inr u -> go = false } };
+    s) unwind (note(3));
+  note(3);
+  x
+
+fn go(bad: i32) -> i32 + i32 with Trace =
+  with to_result[i32, i32] { src(5, bad) >| mid(bad) >| sink(bad) }
+
+main -> (i32 + i32) * ((i32 + i32) * (i32 + i32)) =
+  with show[(i32 + i32) * ((i32 + i32) * (i32 + i32))] {
+    let a = go(1);
+    dot();
+    let b = go(2);
+    dot();
+    let c = go(3);
+    (a, (b, c))
+  }

@@ -64,6 +64,11 @@ structure Conn where
   glue performs the site's operation with each item of the last stage, `(b, w)`, answering the next
   `w`, which it keeps between turns and never across that operation.  `[spec §75]` -/
   out : Option (Nat × String × String) := none
+  /-- `connect(CHAIN)`: the chain answers its last stage's result with its rest, the stages above
+  the last as a stored generator of the wire into it (`pull`).  `[spec §75]` -/
+  rest : Bool := false
+  /-- The glue of a chain's rest: a stored generator of its last stage's items.  `[spec §75]` -/
+  pull : Bool := false
 
 /-- `F[r] A`, or `F A` at the empty row. -/
 def fAt (r A : String) : String := if r.isEmpty then s!"F ({A})" else s!"F[{r}] ({A})"
@@ -137,7 +142,8 @@ states capture (of type `Q`), answering the last stage's result. The caller mark
 frame's (`Sugar.markFrameCall`), so that the body around it runs it as the loop it is. With `tail`,
 what follows the maker's binding instead: a `for` over the chain, whose generator the maker's call
 is.  `[spec §75]` -/
-def glue (cn : Conn) (fvs : List (String × String)) (tail : Option String := none) : String := Id.run do
+def build (cn : Conn) (fvs : List (String × String)) (tail : Option String)
+    (sub : Option (String × String × String)) : String × String × String := Id.run do
   let ss := cn.stages.toArray
   let n := ss.size
   let sfx := cn.sfx
@@ -156,7 +162,15 @@ def glue (cn : Conn) (fvs : List (String × String)) (tail : Option String := no
     | some (_, _, W) => [W]
     | none => [])
   let GS := s!"({prod Sts}) * ({sum (cn.stages.map (·.inTy))})"
-  let Lw := s!"nu Z. {fAt G s!"({Rlast}) + U Z"} & {fAt G "1"}"
+  -- `connect`: the result beside the rest, the maker of whose glue is `sub`'s.
+  let Rlast := match sub with
+    | some (_, LwS, _) => s!"({Rlast}) * (U ({LwS}))"
+    | none => Rlast
+  let lastSt := ss[n - 1]!
+  let Obs := if cn.pull then s!"(({lastSt.B}) * ({GS})) + (({lastSt.R}) + ({GS}))"
+    else s!"({Rlast}) + ({GS})"
+  let Lw := if cn.pull then s!"nu Z. {fAt G s!"(({lastSt.B}) * U Z) + (({lastSt.R}) + U Z)"} & {fAt G "1"}"
+    else s!"nu Z. {fAt G s!"({Rlast}) + U Z"} & {fAt G "1"}"
   let sv (i : Nat) : String := s!"io_s{i}_{sfx}"
   -- A frame list over the stages `js` (outermost first), one region.
   let wsArgs (st : Stage) : String :=
@@ -168,6 +182,8 @@ def glue (cn : Conn) (fvs : List (String × String)) (tail : Option String := no
         s!"{sv j}, thunkv fun (io_w{k + 1}_{sfx} : 1) -> {frames rest (k + 1)}" s!"w{j}_{k}_{sfx}"
   let listDef (name : String) (js : List Nat) : String :=
     let ty := prod (js.map fun j => ss[j]!.stTy)
+    -- An empty frame list stops nothing.
+    if js.isEmpty then s!"{name} : !U (1 -o {fAt cc "1"}) <- return (!thunkv fun (io_pl_{sfx} : 1) -> return io_pl_{sfx});\n" else
     s!"{name} : !U ({ty} -o {fAt cc "1"}) <- return (!thunkv fun (io_pl_{sfx} : {ty}) ->
     {destr (js.map sv) s!"io_pl_{sfx}" s!"io_plt_{sfx}_"}
     handle_with[{cn.c}](io_chr_{sfx}, io_chc_{sfx}) ({frames js 0}));\n"
@@ -187,7 +203,9 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
   -- The states as a tuple with stage `i`'s replaced by `t`.
   let states (i : Nat) (t : String) : String :=
     tup (((List.range n).map fun j => if j == i then t else sv j) ++ wv)
-  let next (stTup turn : String) : String := s!"return (inr ({stTup}, {turn}) : ({Rlast}) + ({GS}))"
+  let next (stTup turn : String) : String :=
+    if cn.pull then s!"return (inr (inr ({stTup}, {turn})) : {Obs})"
+    else s!"return (inr ({stTup}, {turn}) : {Obs})"
   let turnTo (j : Nat) (v : String) : String :=
     s!"({inj j n v} : {sum (cn.stages.map (·.inTy))})"
   let othersTup (i : Nat) : String := tup ((others i).map sv)
@@ -217,15 +235,28 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
                 io_wo{i}_{sfx} : ({st.B}) * ({W}) <- return (io_b{i}_{sfx}, io_ow_{sfx});
                 io_w2{i}_{sfx} <- (perform[{nf}.0] io_wo{i}_{sfx}) unwind {ca};
                 {next (tup (((List.range n).map fun j => if j == i then sy else sv j) ++ [s!"io_w2{i}_{sfx}"])) (turnTo i "inl ()")}"
-        | none =>
+        | none => if cn.pull then
+          -- A chain's rest: the last stage's item is the stored generator's.
+          s!"let (io_b{i}_{sfx}, io_ky{i}_{sfx}) = io_yk{i}_{sfx};
+                return (inl (io_b{i}_{sfx}, ({states i s!"(inr (inr (inl io_ky{i}_{sfx})) : {st.stTy})"}, {turnTo i "inl ()"})) : {Obs})"
+          else
           s!"let (io_b{i}_{sfx}, io_ky{i}_{sfx}) = io_yk{i}_{sfx}; let _ = io_b{i}_{sfx};
                 {next (states i s!"(inr (inr (inl io_ky{i}_{sfx})) : {st.stTy})") (turnTo i "inl ()")}"
       else handoff s!"inl io_yk{i}_{sfx}"
-    let returnArm := if last then
+    let returnArm := if last && cn.pull then
+        s!"io_v{i}_{sfx} <- {call s!"io_co{i}_{sfx}" (othersTup i) s!"pco{i}_{sfx}"}; let () = io_v{i}_{sfx};
+                return (inr (inl io_r{i}_{sfx}) : {Obs})"
+      else if last && sub.isSome then
+        -- `connect`: the stages above the last are its rest, which goes on where they are.
+        let ups := (List.range (n - 1)).map sv
+        let subTurn := s!"({inj (n - 2) (n - 1) "inl ()"} : {sum ((cn.stages.take (n - 1)).map (·.inTy))})"
+        s!"io_rs{i}_{sfx} <- return ((unbang io_rw_{sfx}r) ({tup ups}, {subTurn}));
+                return (inl (io_r{i}_{sfx}, io_rs{i}_{sfx}) : {Obs})"
+      else if last then
         let fin := call s!"pipe_finish[{st.R}, row ({G})]"
           s!"io_r{i}_{sfx}, (thunkv fun (io_fw_{sfx} : 1) -> {call s!"io_co{i}_{sfx}" (othersTup i) s!"fco{i}_{sfx}"} : U (1 -o {fAt G "1"}))" s!"fin{i}_{sfx}"
         let res := if wv.isEmpty then s!"io_v{i}_{sfx}" else s!"(io_ow_{sfx}, io_v{i}_{sfx})"
-        s!"io_v{i}_{sfx} <- {fin}; return (inl {res} : ({Rlast}) + ({GS}))"
+        s!"io_v{i}_{sfx} <- {fin}; return (inl {res} : {Obs})"
       else handoff s!"inr io_r{i}_{sfx}"
     let skipArm := next (states i s!"(inl io_bl{i}_{sfx} : {st.stTy})") (turnTo i "inl ()")
     -- Next(κ): stored; the stage upstream runs, or, when it has ended, the end again.
@@ -309,7 +340,7 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
         inl io_in{i}_{sfx} -> {a}
       | inr io_tr{i}_{sfx} -> {dispatch s!"io_tr{i}_{sfx}" (i + 1) rest}
       }"
-  let turnFn := s!"io_turn_{sfx} : !U ({GS} -o {fAt G s!"({Rlast}) + ({GS})"} & {fAt G "1"}) <- return (!thunkv fun (io_g_{sfx} : {GS}) ->
+  let turnFn := s!"io_turn_{sfx} : !U ({GS} -o {fAt G Obs} & {fAt G "1"}) <- return (!thunkv fun (io_g_{sfx} : {GS}) ->
     < let (io_ss_{sfx}, io_tn_{sfx}) = io_g_{sfx}; {destr ((List.range n).map sv ++ wv) s!"io_ss_{sfx}" s!"io_sst_{sfx}_"}
       {dispatch s!"io_tn_{sfx}" 0 arms},
       let (io_ss_{sfx}, io_tn_{sfx}) = io_g_{sfx}; let _ = io_tn_{sfx};
@@ -321,14 +352,32 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
     | none => []))
   let Q := prod (fvs.map (·.2))
   let q := tup (fvs.map (·.1))
+  if cn.pull then
+    -- The maker of a chain's rest: it takes the states and the turn as they are.
+    let mk := s!"io_rw_{sfx} : !({GS} => U ({Lw})) <- return (!thunkv fun (io_st_{sfx} : {GS}) ->
+  {defs}{turnFn}io_f_{sfx} <- return (unbang (unfold[{Lw}, {GS}] io_turn_{sfx}));
+  return (thunkv nu_in < (nu_out (force io_f_{sfx} io_st_{sfx})).1, (nu_out (force io_f_{sfx} io_st_{sfx})).2 >));\n"
+    return (mk, Lw, GS)
+  let subDef := match sub with
+    | some (d, _, _) => d
+    | none => ""
   let body := s!"io_cw_{sfx} : !({Q} => U ({Lw})) <- return (!thunkv fun (io_q_{sfx} : {Q}) ->
   {destr (fvs.map (·.1)) s!"io_q_{sfx}" s!"io_qt_{sfx}_"}
-  {defs}{turnFn}io_st_{sfx} : {GS} <- return ({ready}, {turnTo (n - 1) "inl ()"});
+  {subDef}{defs}{turnFn}io_st_{sfx} : {GS} <- return ({ready}, {turnTo (n - 1) "inl ()"});
   io_f_{sfx} <- return (unbang (unfold[{Lw}, {GS}] io_turn_{sfx}));
   return (thunkv nu_in < (nu_out (force io_f_{sfx} io_st_{sfx})).1, (nu_out (force io_f_{sfx} io_st_{sfx})).2 >));
 {tail.getD s!"io_pipe_j_{sfx} : {Rlast} <- return ((unbang io_cw_{sfx}) {q});
 return io_pipe_j_{sfx}"}"
-  pure body
+  pure (body, Lw, GS)
+
+/-- The glue of the chain (`build`); for `connect`, with the glue of its rest, the stages above the
+last, a stored generator of the wire into it.  `[spec §75]` -/
+def glue (cn : Conn) (fvs : List (String × String)) (tail : Option String := none) : String :=
+  let sub := if cn.rest && cn.stages.length ≥ 2 then
+      some (build { cn with stages := cn.stages.dropLast, sfx := cn.sfx ++ "r", rest := false,
+                            pull := true, out := none } [] none none)
+    else none
+  (build cn fvs tail sub).1
 
 /-- The argument the connector's maker takes: the tuple of what the stages' states capture. -/
 def makerArg (fvs : List (String × String)) : String := tup (fvs.map (·.1))

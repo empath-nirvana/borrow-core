@@ -6673,7 +6673,8 @@ def connParts : Nat → TCx → Span → (Nat × List ConnStage) → Val →
         pure (some (nf, w, W), Elab.Connector.rowCat [G, ent],
           if fvs.any (·.1 == w) then fvs else fvs ++ [(w, W)])
       | _, _ => pure (none, G, fvs)
-    pure ({ stages, c := cs, cc := ← ppR ccRow, G, sfx, out }, fvs₂, holes)
+    pure ({ stages, c := cs, cc := ← ppR ccRow, G, sfx, out,
+            rest := (ss.getLast?.map (·.rest)).getD false }, fvs₂, holes)
 
 /-- A stream chain on the pipe connector, run where it is (SPEC §75 Part B): the glue
 (`connParts`, `Frontend.Elab.Connector.glue`) and its maker's call in direct style, a frame's call

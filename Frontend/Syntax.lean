@@ -559,6 +559,9 @@ structure ConnStage where
   /-- The last stage of a `for`'s generator: the `for`'s site, the variable it threads, and the
   cancel row of its operation.  `[spec §75]` -/
   out : Option (Nat × String × Row) := none
+  /-- The last stage of `connect(CHAIN)`: the chain answers its result with the rest, a stored
+  generator of the wire into it.  `[spec §75]` -/
+  rest : Bool := false
   deriving DecidableEq, Repr
 
 /-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied

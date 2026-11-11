@@ -1,0 +1,36 @@
+-- check: old-backend-refuses
+-- SPEC §75, Part B, a chain's rest: `connect(src(5) >| take_two)` runs the chain until `take_two`
+-- returns `3` (1 + 2), and answers it with the rest, a stored generator of the wire into
+-- `take_two`, which holds the source where it stopped. `rest >| sum_all` takes it as its source:
+-- 3 + 4 + 5 = 12. `closing` takes a rest and closes it (`close(rest)`), which stops the source.
+-- Answer: `((i32[3], i32[12]), i32[3])`, `live 0`.
+
+include pipe
+
+fn src(n: i32) -> 1 with Yield[i32] =
+  let mut i = 1;
+  while i <= n { yield(i); i = i + 1 };
+  ()
+
+fn take_two() -> i32 with Stream[i32, 1] =
+  let a = match next() { inl x -> x | inr u -> 0 };
+  let b = match next() { inl x -> x | inr u -> 0 };
+  a + b
+
+fn sum_all() -> i32 with Stream[i32, 1] =
+  let mut s = 0;
+  let mut go = true;
+  while go { match next() { inl v -> s = s + v | inr u -> go = false } };
+  s
+
+fn closing() -> i32 =
+  let p = connect(src(5) >| take_two);
+  let (r, rest) = p;
+  close(rest);
+  r
+
+main -> (i32 * i32) * i32 =
+  let p = connect(src(5) >| take_two);
+  let (r, rest) = p;
+  let t = rest >| sum_all;
+  ((r, t), closing())

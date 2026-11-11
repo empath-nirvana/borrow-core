@@ -1,0 +1,48 @@
+-- check: old-backend-refuses
+-- SPEC §75, Part B, lookahead: one item read ahead is held in the stage's own pushback slot, not a
+-- protocol operation. `runs` turns each run of equal items into `10 * x + count`: over
+-- 1, 1, 2, 2, 2, 3 that is 12, 23, 31, summed by the sink.
+-- Answer: `i32[66]`, `live 0`.
+
+include pipe
+
+fn items(n: i32) -> 1 with Yield[i32] =
+  yield(1); yield(1); yield(2); yield(2); yield(2); yield(3);
+  ()
+
+-- Runs: each run of equal items as `10 * x + count`. One item of lookahead, held in the stage's
+-- own pushback slot, not a protocol operation.
+fn run_of(x: i32) -> i32 * (i32 + 1) with Stream[i32, 1] =
+  let mut c = 1;
+  let mut more = true;
+  let mut held : i32 + 1 = inr ();
+  while more {
+    match next() {
+      inl y -> if y == x { c = c + 1 } else { held = (inl y : i32 + 1); more = false }
+    | inr u -> more = false
+    }
+  };
+  (c, held)
+
+fn emit(x: i32) -> i32 + 1 with Stream[i32, 1], Yield[i32] =
+  let p = run_of(x);
+  let (c, h) = p;
+  yield(10 * x + c);
+  h
+
+fn runs() -> 1 with Stream[i32, 1], Yield[i32] =
+  let mut slot : i32 + 1 = inr ();
+  let mut go = true;
+  while go {
+    let first : i32 + 1 = match slot { inl v -> (inl v : i32 + 1) | inr u -> next() };
+    match first { inl x -> slot = emit(x) | inr u -> go = false }
+  };
+  ()
+
+fn sum_all() -> i32 with Stream[i32, 1] =
+  let mut s = 0;
+  let mut go = true;
+  while go { match next() { inl v -> s = s + v | inr u -> go = false } };
+  s
+
+main -> i32 = items(0) >| runs >| sum_all

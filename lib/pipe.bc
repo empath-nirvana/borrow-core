@@ -252,3 +252,22 @@ def pipe_handoff[L, KN, KY, B, K, S] :
         return ((inr (inr (inl ky)) : L + (KN + (KY + K))), ((inr (inl b) : 1 + (B + K)), s))
     | inr k -> return ((inr (inr (inr k)) : L + (KN + (KY + K))), ((inr (inr k) : 1 + (B + K)), s))
     }
+
+-- ---- A chain's rest (provisional spellings, SPEC §75)  `[spec §75]` ---------------------------
+--
+-- `connect(CHAIN)` runs the chain until its last stage returns `r`, and answers `(r, rest)`:
+-- `rest`, a stored generator of the wire into the last stage, holds the stages above it, which a
+-- later chain may take as its source (`rest >| …`), and `close(rest)` stops, downstream-first.
+-- `connect` is the elaboration's; written here, it is the identity on what is not a chain.
+
+fn connect[A](x: A) -> A = x
+
+-- Stops a stored generator early and hands back what it returns when closed.
+fn close[A, K, R](it: U (pull A K R)) -> R =
+  k <- (nu_out (force it)).2;
+  k
+
+-- A stored generator as a chain's source: its items, then its end.
+fn pipe_source[A, K, R](it: U (pull A K R)) -> K with Yield[A] =
+  let k = for x in it { yield(x) };
+  k

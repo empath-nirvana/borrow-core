@@ -1,12 +1,11 @@
--- pending: #920 (L1's connector pieces `pipe_step`, `pipe_stop`, `pipe_with_stop`, `pipe_forward` and `pipe_finish` wait for row- and site-generic library definitions)
+-- check: old-backend-refuses
 -- A stream edge recognised by effects (SPEC §75): the left side is an `if` whose branches call
 -- generators, so its inferred row has `Yield[i32]`, and `sum_items` performs lib's
 -- `Stream[i32, 1]`, so it is a stage. The chain is one connector, assembled from `lib/pipe.bc`'s
--- pieces, four of which mention the chain's row and the stages' sites in their types.
+-- pieces.
 --
--- Once it lands: `i32[3]` (0 + 1 + 2); `live 0`.
---
--- now: 25:4: a stream chain runs on the pipe connector, whose pieces `pipe_step`, `pipe_stop`, `pipe_with_stop`, `pipe_forward` and `pipe_finish` (lib/pipe.bc) mention the chain's row and the stages' sites in their types: they wait for row- and site-generic definitions, which are not provided yet
+-- Answer: `i32[3]` (0 + 1 + 2), `live 0`.
+
 include pipe
 
 fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =

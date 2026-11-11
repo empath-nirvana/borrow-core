@@ -2263,9 +2263,9 @@ whose inferred row has lib's `Stream`, is a stream edge when its left side is a 
 row has an iteration effect), and a maximal run of stream edges is one chain on the connector.
 Otherwise a `>|` into a source-owning adapter is §70's case (iii), and a `|>` is §33's.
 `[spec §75]` -/
-def streamChain : Nat → Cx → List Cap → Val → EM (List Bind × Val)
-  | 0, _, _, V => throw ⟨V.span, "internal error: a value nested too deeply"⟩
-  | k + 1, cx, cs, V => do
+def streamChain : Nat → Cx → List Cap → Val → Bool → EM (List Bind × Val)
+  | 0, _, _, V, _ => throw ⟨V.span, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, cs, V, rest => do
     let env := cx.env
     let isStage (s : Val) : Bool := match env.stream, stageHead? s with
       | some st, some x => (env.fn? x).any (·.row.any (·.eff == st))
@@ -2283,6 +2283,11 @@ def streamChain : Nat → Cx → List Cap → Val → EM (List Bind × Val)
           if isStage acc then
             throw ⟨acc.span, "the head of a stream chain is a source; a chain of stages as a stage " ++
               "is not provided yet (L2, #921)"⟩
+          -- A stored generator as the source (`rest >| …`, SPEC §75): its items, by lib's
+          -- `pipe_source`. A variable that is not one is refused where its type is known.
+          if let .var vsp _ := acc then
+            if !(rowV env fuel acc).any (env.iterEff ·.eff) && env.lib.contains "pipe_source" then
+              acc := .app vsp (.var vsp "pipe_source") acc
           -- A written row is an upper bound (§18): what the left side performs is its inferred row.
           if !(rowV env fuel acc).any (env.iterEff ·.eff) then
             if ed.mode == .pull then
@@ -2294,14 +2299,16 @@ def streamChain : Nat → Cx → List Cap → Val → EM (List Bind × Val)
         run := run ++ [(sp, ed.mode, ed.stage)]
       else
         if !run.isEmpty then
-          let (cV, _) ← connectorV k cx cs src run none
+          if rest then
+            throw ⟨sp, "`connect` takes a stream chain, whose every edge is a stream edge (SPEC §75)"⟩
+          let (cV, _) ← connectorV k cx cs src run none false
           let v ← fresh "fx_conn"
           pre := pre ++ [.one cV.span v none (.ret cV.span cV) false]
           acc := .var cV.span v
           run := []
         acc ← pipeEdge env.pipes sp ed.mode acc ed.stage
     if !run.isEmpty then
-      let (cV, _) ← connectorV k cx cs src run none
+      let (cV, _) ← connectorV k cx cs src run none rest
       let v ← fresh "fx_conn"
       pre := pre ++ [.one cV.span v none (.ret cV.span cV) false]
       acc := .var cV.span v
@@ -2320,9 +2327,9 @@ are checked by the kernel. `forOut` is the `for`'s site and threaded variable wh
 the connector performs the `for`'s operation with each item. Answers the node and the last stage's
 row.  `[spec §75]` -/
 def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × Val) → Option (Site × String) →
-    EM (Val × List Inst)
-  | 0, _, _, src, _, _ => throw ⟨src.span, "internal error: a value nested too deeply"⟩
-  | k + 1, cx, _, src, run, forOut => do
+    Bool → EM (Val × List Inst)
+  | 0, _, _, src, _, _, _ => throw ⟨src.span, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, _, src, run, forOut, rest => do
 
     let env := cx.env
     streamChecks env src run
@@ -2353,9 +2360,17 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
         | some As => pure As
         | none => throw ⟨s.span, s!"the type arguments of `{j.eff}` this stage performs are not " ++
             "determined here: write them"⟩
+      -- The items of a generic source (`pipe_source`) are those the next stage reads.
+      let nextA : Option VTy := (stages.getD (i + 1) src) |> fun s' =>
+        let call' : Val := match s' with
+          | .var vsp _ | .defApp vsp _ _ => .app vsp s' (.unit vsp)
+          | s' => s'
+        ((rowV env fuel call').find? (·.eff == st)).bind (·.args) |>.bind (·.head?)
       let (B, ys) ← match yi with
         | some j => do
-          let As ← argsOf j
+          let As ← match j.args, nextA with
+            | none, some A => pure [A]
+            | _, _ => argsOf j
           pure (As.headD (.zero sp), some (j.eff, As))
         | none => pure (VTy.zero sp, none)
       let (A, K, ss) ← match si with
@@ -2409,7 +2424,7 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
       let M ← trC k cxS [] true (.ret s.span call)
       let outF : Option (Nat × String × Row) := if !last then none else forOut.map fun (site, w) =>
         (site.n, w, env.fins.finOf site.n 0)
-      out := out ++ [{ y, s := sn, f, A, K, B, fwd, out := outF }]
+      out := out ++ [{ y, s := sn, f, A, K, B, fwd, out := outF, rest := rest && last }]
       fwdOf := fwdOf ++ [fsite.head?.map (·.eff)]
       ths := ths ++ [.thunk s.span M]
     -- No stage performs a forwarded operation unforwarded: its cancel row holds what every stage
@@ -2469,7 +2484,7 @@ def forChain : Nat → Cx → List Cap → Bool → Span → Option Ident → Id
     let w := s!"fx_w{n}"
     let Wn := s!"fx_W{n}"
     let site : Site := { eff := i.eff, n, args := As, sp, what := "the `for`", thr := some (w, Wn) }
-    let (connV, _) ← connectorV k cx [] c.src run (some (site, w))
+    let (connV, _) ← connectorV k cx [] c.src run (some (site, w)) false
     let T := match (env.siteOps { site with thr := none }).head? with
       | some (_, A, _) => A
       | none => .unit sp
@@ -2489,7 +2504,13 @@ def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
   | 0, _, _, V => throw ⟨V.span, "internal error: a value nested too deeply"⟩
   | n + 1, cx, cs, V => do
     -- A chain left by `resolvePipes`, read on the inferred rows (SPEC §75).
-    if cx.env.stream.isSome && (Pipes.pipeParts? V).isSome then return ← streamChain n cx cs V
+    if cx.env.stream.isSome && (Pipes.pipeParts? V).isSome then return ← streamChain n cx cs V false
+    -- `connect(CHAIN)`: the chain, answering its result with its rest (SPEC §75).
+    if cx.env.stream.isSome && cx.env.lib.contains "connect" then
+      if let .app _ f W := V then
+        if (match f with | .var _ "connect" | .defApp _ "connect" _ => true | _ => false) &&
+            (Pipes.pipeParts? W).isSome then
+          return ← streamChain n cx cs W true
     let row := rowV cx.env fuel V
     let needs := !(cx.need row).isEmpty || !(cx.ctl row).isEmpty
     -- An effect with no handler in scope is reported where it is performed (`goV`).
@@ -4635,10 +4656,20 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
         else
           env := { env with plain := (n.name, d₀) :: env.plain }
           let before := (← get).made.size
-          let (bs, V') ← trV fuel { env, caps := [] } [] V
-          unless bs.isEmpty do throw ⟨V.span, "internal error: a definition's value was taken apart"⟩
-          out := out ++ ((← get).made.extract before).map (·.2)
-          out := out.push (.def_ sp n ps A V' mk)
+          -- A function whose body holds a stream chain performs nothing outside it, and its body is
+          -- elaborated here, where the chain's connector is assembled (SPEC §75).
+          let chain := env.stream.isSome && V.anySugar (· matches .pipe _)
+          if chain then
+            let f ← (fnParts sp n.name A V : Except Error FnParts)
+            let body ← trC fuel { env, caps := [] } [] true f.body
+            let (A', V') := { f with body }.build sp
+            out := out ++ ((← get).made.extract before).map (·.2)
+            out := out.push (.def_ sp n ps A' V' mk)
+          else
+            let (bs, V') ← trV fuel { env, caps := [] } [] V
+            unless bs.isEmpty do throw ⟨V.span, "internal error: a definition's value was taken apart"⟩
+            out := out ++ ((← get).made.extract before).map (·.2)
+            out := out.push (.def_ sp n ps A V' mk)
       | .main sp C M =>
         env := { env with owner := Instances.ownerKey "main" sp, ownerTps := [] }
         modify fun s => { s with quiet := false }

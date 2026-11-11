@@ -253,6 +253,17 @@ corpus/core-pipe-connector.bc 2.1 cancellable stored: error: in code 50: capture
 corpus/core-pipe-connector.bc 5.0 cancellable once: error: in code 50: capture: a call of a code that may suspend (code [40, 26]), outside every handler of its operations; disagree
 corpus/core-pipe-connector.bc 4.0 cancellable abortive: error: in code 50: capture: a call of a code that may suspend (code [40, 26]), outside every handler of its operations; disagree
 corpus/core-pipe-connector.bc 8.0 cancellable resume-or-cancel: error: in code 50: capture: a call of a code that may suspend (code [40, 26]), outside every handler of its operations; disagree
+corpus/core-pipe-pieces.bc 13.0 cancellable once,stored: error: in code 1731: capture: a call of a code that may suspend (code [573, 1152, 1727, 1713, 1138, 559]), outside every handler of its operations; disagree
+corpus/core-pipe-pieces.bc 2.0 cancellable once,stored: error: in code 1731: capture: a call of a code that may suspend (code [573, 1152, 1727, 1713, 1138, 559]), outside every handler of its operations; disagree
+corpus/core-pipe-pieces.bc 2.1 cancellable once,stored: error: in code 1731: capture: a call of a code that may suspend (code [573, 1152, 1727, 1713, 1138, 559]), outside every handler of its operations; disagree
+corpus/core-pipe-pieces.bc 12.0 cancellable once,stored: error: in code 1731: capture: a call of a code that may suspend (code [573, 1152, 1727, 1713, 1138, 559]), outside every handler of its operations; disagree
+corpus/core-pipe-pieces.bc 5.0 cancellable once: error: in code 1731: capture: a call of a code that may suspend (code [573, 1152, 1727, 1713, 1138, 559]), outside every handler of its operations; disagree
+corpus/core-pipe-pieces.bc 7.0 cancellable once,stored: error: in code 1731: capture: a call of a code that may suspend (code [573, 1152, 1727, 1713, 1138, 559]), outside every handler of its operations; disagree
+corpus/core-pipe-pieces.bc 11.0 cancellable once,stored: error: in code 1731: capture: a call of a code that may suspend (code [573, 1152, 1727, 1713, 1138, 559]), outside every handler of its operations; disagree
+corpus/core-pipe-pieces.bc 11.1 cancellable once,stored: error: in code 1731: capture: a call of a code that may suspend (code [573, 1152, 1727, 1713, 1138, 559]), outside every handler of its operations; disagree
+corpus/core-pipe-pieces.bc 1.0 cancellable once,stored: error: in code 1731: capture: a call of a code that may suspend (code [573, 1152, 1727, 1713, 1138, 559]), outside every handler of its operations; disagree
+corpus/core-pipe-pieces.bc 4.0 cancellable abortive: error: in code 1731: capture: a call of a code that may suspend (code [573, 1152, 1727, 1713, 1138, 559]), outside every handler of its operations; disagree
+corpus/core-pipe-pieces.bc 8.0 cancellable resume-or-cancel: error: in code 1731: capture: a call of a code that may suspend (code [573, 1152, 1727, 1713, 1138, 559]), outside every handler of its operations; disagree
 corpus/core-pipe-plain.bc 1.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-pipe-plain.bc 2.0 cancellable stored,once: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-pipe-plain.bc 2.1 cancellable stored,once: machine: a path of the clause does not end in one resume in tail position; agree
@@ -786,6 +797,152 @@ corpus/pipe-bracket.bc 12.0 cancellable stored,tail: machine: a path of the clau
 corpus/pipe-bracket.bc 11.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-bracket.bc 10.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-bracket.bc 9.0 cancellable tail: direct; agree
+corpus/pipe-cancel-order.bc 5.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 4.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 4.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 3.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 8.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 7.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 7.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 6.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 11.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 10.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 10.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 9.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 12.0 cancellable stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 2.0 cancellable resume-or-cancel: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 16.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 15.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 15.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 14.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 19.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 18.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 18.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 17.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 22.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 21.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 21.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 20.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 23.0 cancellable stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 13.0 cancellable resume-or-cancel: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 1.0 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-cancel-order.bc 1.1 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 5.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 4.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 4.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 3.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 8.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 7.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 7.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 6.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 9.0 cancellable stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 2.0 cancellable resume-or-cancel,tail: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 12.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 11.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 11.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 10.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 15.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 14.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 14.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 13.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 18.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 17.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 17.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 16.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 22.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 21.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 21.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 20.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 25.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 24.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 24.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 23.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 28.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 27.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 27.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 26.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 19.0 cancellable stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 29.0 cancellable stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 1.0 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-close-order.bc 1.1 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-connector.bc 31.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 30.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 30.1 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 29.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 34.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 33.0 cancellable once,stored: machine: the handlers of the name have 2 clauses for it; agree
+corpus/pipe-connector.bc 33.1 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 32.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 37.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 36.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 36.1 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 35.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 21.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 20.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 20.1 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 19.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 24.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 23.0 cancellable once,stored: machine: the handlers of the name have 2 clauses for it; agree
+corpus/pipe-connector.bc 23.1 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 22.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 27.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 26.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 26.1 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 25.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 11.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 10.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 10.1 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 9.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 14.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 13.0 cancellable once,stored: machine: the handlers of the name have 2 clauses for it; agree
+corpus/pipe-connector.bc 13.1 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 12.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 17.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 16.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 16.1 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 15.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 4.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 3.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 3.1 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 2.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 7.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 6.0 cancellable once,stored: machine: the handlers of the name have 2 clauses for it; agree
+corpus/pipe-connector.bc 6.1 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 5.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 41.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 40.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 40.1 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 39.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 44.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 43.0 cancellable once,stored: machine: the handlers of the name have 2 clauses for it; agree
+corpus/pipe-connector.bc 43.1 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 42.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 47.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 46.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 46.1 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 45.0 cancellable once,stored: -; agree
+corpus/pipe-connector.bc 38.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 28.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 18.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 8.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-connector.bc 1.0 cancellable tail: direct; agree
+corpus/pipe-connector.bc 48.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-first-error.bc 5.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 4.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 4.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 3.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 8.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 7.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 7.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 6.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 11.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 10.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 10.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 9.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 12.0 cancellable stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 2.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 1.0 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-first-error.bc 1.1 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/pipe-handlers.bc 6.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-handlers.bc 5.0 cancellable abortive: branch; agree
 corpus/pipe-handlers.bc 9.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
@@ -815,6 +972,10 @@ corpus/pipe-mixed.bc 4.0 cancellable stored,tail: machine: a path of the clause 
 corpus/pipe-mixed.bc 3.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-mixed.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-mixed.bc 1.0 cancellable tail: direct; agree
+corpus/pipe-pieces-step.bc 3.0 cancellable once,stored: -; agree
+corpus/pipe-pieces-step.bc 2.0 cancellable stored,once: -; agree
+corpus/pipe-pieces-step.bc 2.1 cancellable stored,once: -; agree
+corpus/pipe-pieces-step.bc 1.0 cancellable stored,once: machine: the handlers of the name have 4 clauses for it; agree
 corpus/pipe-pull.bc 8.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-pull.bc 7.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-pull.bc 6.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
@@ -825,6 +986,44 @@ corpus/pipe-pull.bc 2.0 cancellable stored,tail: machine: a path of the clause d
 corpus/pipe-pull.bc 1.0 cancellable tail: direct; agree
 corpus/pipe-push-paren.bc 1.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/pipe-push-paren.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-pushback.bc 3.0 cancellable once,stored: -; agree
+corpus/pipe-pushback.bc 2.0 cancellable once,stored: -; agree
+corpus/pipe-pushback.bc 2.1 cancellable once,stored: -; agree
+corpus/pipe-pushback.bc 1.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-pushback.bc 6.0 cancellable once,stored: -; agree
+corpus/pipe-pushback.bc 5.0 cancellable once,stored: machine: the handlers of the name have 2 clauses for it; agree
+corpus/pipe-pushback.bc 5.1 cancellable once,stored: -; agree
+corpus/pipe-pushback.bc 4.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-pushback.bc 9.0 cancellable once,stored: -; agree
+corpus/pipe-pushback.bc 8.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-pushback.bc 8.1 cancellable once,stored: -; agree
+corpus/pipe-pushback.bc 7.0 cancellable once,stored: -; agree
+corpus/pipe-pushback.bc 10.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-raise-order.bc 5.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 4.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 4.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 3.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 8.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 7.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 7.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 6.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 11.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 10.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 10.1 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 9.0 cancellable once,stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 12.0 cancellable stored: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 2.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 1.0 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-raise-order.bc 1.1 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-stream-edge.bc 3.0 cancellable once,stored: -; agree
+corpus/pipe-stream-edge.bc 2.0 cancellable once,stored: -; agree
+corpus/pipe-stream-edge.bc 2.1 cancellable once,stored: -; agree
+corpus/pipe-stream-edge.bc 1.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-stream-edge.bc 6.0 cancellable once,stored: -; agree
+corpus/pipe-stream-edge.bc 5.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-stream-edge.bc 5.1 cancellable once,stored: -; agree
+corpus/pipe-stream-edge.bc 4.0 cancellable once,stored: -; agree
+corpus/pipe-stream-edge.bc 7.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/raise-in-borrow-branch.bc 1.0 cancellable abortive: branch; agree
 corpus/raise-in-borrow-branch.bc 2.0 cancellable abortive: branch; agree
 corpus/rec-await-exhausted.bc 1.0 cancellable tail: direct; agree

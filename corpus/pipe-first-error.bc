@@ -1,0 +1,50 @@
+-- check: old-backend-refuses
+-- SPEC §75, Part B, law 7 ((a′)(ii)) on the pipe connector: the sink raises `30` at its second item,
+-- and the middle's and the source's cleanups raise `20` and `10`. The others are stopped
+-- downstream-first in one region, which keeps the first cleanup error: the middle's.
+-- Answer: `321inr i32[20]`, `live 0`.
+
+include io
+include pipe
+include fail
+
+effect Trace { must_resume ctl note(d: i32); must_resume ctl dot() }
+
+handler show[A]: Trace, A -> A = {
+  return(x) = x;
+  note(d, k) = { print_dec(d); k(()) };
+  dot(k) = { print_byte(b'.'); k(()) }
+}
+
+fn bye(d: i32, e: i32) -> 1 with Trace, Fail[i32] =
+  note(d);
+  raise(e)
+
+fn chk(v: i32, at: i32, code: i32) -> i32 with Fail[i32] = if v == at { raise(code) } else { v }
+
+fn src(n: i32) -> 1 with Yield[i32], Trace, Fail[i32] =
+  x <- (
+    let mut i = 1;
+    while i <= n { yield(i); i = i + 1 };
+    ()) unwind (bye(1, 10));
+  note(1);
+  x
+
+fn mid() -> 1 with Stream[i32, 1], Yield[i32], Trace, Fail[i32] =
+  x <- (
+    let mut go = true;
+    while go { match next() { inl v -> yield(v * 10) | inr u -> go = false } };
+    ()) unwind (bye(2, 20));
+  note(2);
+  x
+
+fn sink() -> i32 with Stream[i32, 1], Trace, Fail[i32] =
+  x <- (
+    let mut s = 0;
+    let mut go = true;
+    while go { match next() { inl v -> s = s + chk(v, 20, 30) | inr u -> go = false } };
+    s) unwind (note(3));
+  note(3);
+  x
+
+main -> i32 + i32 = with show[i32 + i32] { with to_result[i32, i32] { src(5) >| mid >| sink } }
