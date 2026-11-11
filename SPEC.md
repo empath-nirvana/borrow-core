@@ -13377,6 +13377,11 @@ instance keys are this entry's.
 - `row r` names a row. In a type it is written `..r` inside a row: `F[s.0 cancel A ~> B, ..r] R`,
   `with Fail[E], ..r`, a cancel row `cancel[..r]`, `pull[..r] A B R` (the surface `pull_Σ`), and
   `(A => B with ..r)`.
+  - A row may **splice several row parameters, anywhere among its entries**: `F[..cr, ..sg] 1`,
+    `F[..cr, s.0 cancel[..cr] 1 ~> A, ..sg] B`, `cancel[..r1, ..r2]`.
+  - The row is the **concatenation in written order** of its written entries and each splice's
+    argument.
+  - This is core text only. At the surface, `with E, ..r` has one tail.
   - `..r` is *carried*: it is what an argument performs, resolved where the argument was written,
     as a block's operations are (§30). The callee does not serve it.
   - An effect name in the same position keeps §33's meaning: *provided*.
@@ -13414,9 +13419,22 @@ instances, resolved to what serves them at the call, as §38 resolves a row entr
   through its instances. An error inside an instance is reported with
   `` in the instance `f__rk` of `f`, used at L:C ``, and one in a pure use with
   `` in `f`, used at L:C ``.
-- Two templates' instances never share a slot: a private site is fresh, and a written entry equal to
-  one of `..r`'s is one entry (§38). One that differs is refused:
+- Two templates' instances never share a slot. A private site is fresh, and a written entry equal
+  to an entry of a splice is one entry (§38): the first in written order is kept, and the later one
+  is dropped.
+- **Repeats are otherwise kept.** These are never merged:
+  - entries of two different splices;
+  - entries within one row argument;
+  - two written entries.
+
+  A row is a list, and its repeats are significant, as a duplicate label is in Koka's scoped labels
+  (Leijen, "Extensible records with scoped labels", TFP 2005). A continuation's cancel branch is
+  `fin ++ Σ`, which the checker reads back by length (`finOfBranch`, §27). So `F[..cr, ..sg]`, with
+  an operation in both `cr` and `sg`, keeps it twice.
+- **A second signature is refused wherever one row would give `n.i` two signatures:** between a
+  written entry and a spliced one, between two splices, and within one row argument:
   `` the row argument of `f` gives `n.i` a second signature ``.
+  Repeats with the same signature are kept, as above.
 
 **Errors at the use site.** A wrong row argument is reported where the template is used, and names
 the template:
@@ -13443,6 +13461,10 @@ kernel error deep inside an instance.
   parameter elaborates to the same core, byte for byte (`bcc desugar`): its copy keys, site numbers
   and cancel rows are unchanged.
 - §38's abstraction safety: instantiation never merges slots.
+- A row with one splice at its tail and no repeated entry elaborates to the same core, byte for
+  byte. Every §76 program and reject keeps its output, its desugar, its counts and its message.
+  Splicing is in the frontend only (`Frontend/Syntax.lean`'s `Row`, the parser,
+  `Frontend/Elab/RowInst.lean`), with no kernel or checker change.
 
 ### Programs
 
@@ -13454,6 +13476,7 @@ kernel error deep inside an instance.
 | `corpus/core-site-generic.bc` | a `def` with a private `site s` (`handle_with[s]` inside), used twice, nested; the inner activation's performs go to the inner handler | `i32[2321]`, `live 0` |
 | `corpus/core-row-pipe-stop.bc` | §75's `pipe_stop` at two rows | `i32[42]`, `live 0` |
 | `corpus/core-row-key-tparam.bc` | a use whose arguments mention the caller's type parameter: the instance takes it as its own (`app__r2[T]`) | `(i32[3], inl ())`, `live 0` |
+| `corpus/core-row-splice.bc` | a plain definition with two row parameters spliced into one row, `cancel[..r1, ..r2]`, and a clause whose continuation's cancel branch is `F[..r1, ..r2]` (`fin ++ Σ`), used where both rows give the same operation; the handler reads the cancel row as `r1`, so the cleanup's raise reaches the outer handler | to come with the code, `live 0` |
 | `corpus/core-row-capture-global.bc` | a template body naming a global type, used from a generic function with a same-named type parameter: the instance's own parameters take fresh names, so the global is not captured | `(inr (), i32[7])`, `live 0` |
 | `corpus/core-site-fresh-const.bc` | a private site's fresh name lies above a site written only in a constant's type (`unfold[…]`) and above the effects pass's sites | `i32[4]`, `live 0` |
 | `corpus/row-site-fresh-handler.bc` | a private site's fresh name beside a surface handler's site | `i32[4]`, `live 0` |
