@@ -98,7 +98,7 @@ fn put_signed(o: Out, x: i32) -> Out =
   o
 
 main -> i32 =
-  let mut a = array_new[i32] (2000, data);
+  let a = array_new[i32] (2000, data);
   let s0 = borrow imm a { 'x, v -> survey(v) };
   let (before, _) = s0;
   borrow mut a { 'x, v -> let v = quicksort(v); () };

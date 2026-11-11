@@ -23,7 +23,7 @@ fn digit_at(i: i32, s: array i32 * i32) -> array i32 * i32 =
   (a, acc)
 
 main -> i32 * (i32 * (i32 * (i32 * i32))) =
-  let mut a = array_new[i32] (5, tab);
+  let a = array_new[i32] (5, tab);
   borrow mut a { 'x, v ->
     match slice_split_mut['x, i32] (v, 2) {
       inl (l, r) ->

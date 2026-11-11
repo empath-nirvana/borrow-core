@@ -35,7 +35,7 @@ fn inc(f: Forest) -> Forest =
 fn count(f: Forest) -> i32 = fold_own f { FNil -> 0 | FCons(Rose(_, k), rest) -> 1 + k + rest }
 
 main -> i32 =
-  let mut f = cons(rose(1, cons(rose(2, FNil), cons(rose(3, FNil), FNil))), cons(rose(4, FNil), FNil));
+  let f = cons(rose(1, cons(rose(2, FNil), cons(rose(3, FNil), FNil))), cons(rose(4, FNil), FNil));
   modify &mut f { k -> inc(k) };
   let s = sum(&f);
   s * 10 + count(f)

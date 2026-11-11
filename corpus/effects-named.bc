@@ -117,14 +117,14 @@ main -> (i32 * i32) * (i32 * (i32 * (i32 * i32))) =
   array_free[i32](!{ x -> () }, s);
   array_free[i32](!{ x -> () }, q);
   -- Two maps.
-  let mut b0 = box buf[i32 * i32](4);
+  let b0 = box buf[i32 * i32](4);
   push(&mut b0, (3, 2));
   let counts = alloc(b0);
   let (a, b) = with src = table(array_new[i32] (8, tens)) { with dst = assoc(&mut counts) { merged() } };
   let (ca, _) = free(counts);
   array_free[i32 * i32](!{ x -> () }, ca);
   -- Two caches, nested: `size()`, performed without a name, is the innermost's.
-  let mut b1 = box buf[i32 * i32](4);
+  let b1 = box buf[i32 * i32](4);
   push(&mut b1, (4, 2));
   let cold = alloc(b1);
   let (v, n) = with cold = cache(&mut cold) {

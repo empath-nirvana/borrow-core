@@ -67,7 +67,7 @@ fn numbers(g: Grid) -> Grid * (array i32 * buf i32) =
 fn survey(g: Grid, owner: array i32, parts: buf i32) -> i32 * i32 =
   let (a, (w, h)) = g;
   let (ps, m) = parts;
-  let mut ps = ps;
+  let ps = ps;
   let mut once = array_new[i32] (m, !{ i -> 0 });
   for k in 0..m { let x = at(&ps, k, 0); once = array_set(once, k, x) };
   let mut adjacent = 0;

@@ -32,7 +32,7 @@ fn emit(i: i32, s: Out * array i32) -> Out * array i32 =
   (put_signed(o, x), a)
 
 main -> i32 * i32 =
-  let mut a = array_new[i32] (8, data);
+  let a = array_new[i32] (8, data);
   borrow mut a { 'x, v -> let v = sort(v, cmp_i32, 0); () };
   let (stdout, a) = count_fold[Out * array i32] (emit, 8, 0, (stdout, a));
   putb(&mut stdout, 10);

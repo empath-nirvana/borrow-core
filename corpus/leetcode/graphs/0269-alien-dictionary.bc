@@ -66,9 +66,9 @@ fn mark<'a>(l: text 'a, s: i32, e: i32, used: array bool) -> text 'a * array boo
 -- The letters in order, smallest available first, or `-`.
 fn take_order(g: Graph) -> string =
   let (edge, (into, (used, bad))) = g;
-  let mut edge = edge;
+  let edge = edge;
   let mut into = into;
-  let mut used = used;
+  let used = used;
   let mut taken = array_new[bool] (26, !{ i -> false });
   let mut out = string_new(26);
   let mut left = 0;

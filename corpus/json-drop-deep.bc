@@ -23,7 +23,7 @@ fn nest(n: i32) -> Json =
     let cur = j;
     if arr {
       arr = false;
-      let mut b = box buf[Json](1);
+      let b = box buf[Json](1);
       push(&mut b, cur);
       j = Arr(Vec(b))
     } else {

@@ -41,7 +41,7 @@ fn rem64(a: i64, b: i64) -> i64 = match host[rem_u64](a, b) { inl r -> r | inr u
 -- The index of `n`: its own if it has been seen, or the next one, and `n` queued in `todo` to be
 -- worked out at the next blink.
 fn index_of(seen: Map[i64, i32], todo: buf i64, n: i64) -> (Map[i64, i32] * buf i64) * i32 =
-  let mut seen = seen;
+  let seen = seen;
   let o = map_lookup(&seen, n);
   match o {
     inl i -> ((seen, todo), i)

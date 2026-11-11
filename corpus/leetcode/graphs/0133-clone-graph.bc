@@ -39,7 +39,7 @@ fn cases<'t>(t: text 't) -> buf (buf i32) =
 -- numbered from 1), as `start` and `targets`, numbered from 0.
 fn graph(a: array i32, n: i32) -> array i32 * (array i32 * array i32) =
   let (a, k) = array_size[i32](a);
-  let mut a = a;
+  let a = a;
   let mut start = array_new[i32] (n + 1, !{ i -> 0 });
   let mut p = 1;
   for u in 0..n {
@@ -62,8 +62,8 @@ fn graph(a: array i32, n: i32) -> array i32 * (array i32 * array i32) =
 -- The copy of the graph reachable from node 0: its `start` and `targets` in its own numbering,
 -- the order in which a breadth-first search from node 0 meets the nodes.
 fn copy_graph(start: array i32, targets: array i32, n: i32) -> array i32 * array i32 =
-  let mut start = start;
-  let mut targets = targets;
+  let start = start;
+  let targets = targets;
   let mut fresh = array_set(array_new[i32] (n, !{ i -> 0 - 1 }), 0, 0);
   let mut queue = array_new[i32] (n, !{ i -> 0 });
   let mut tail = 1;

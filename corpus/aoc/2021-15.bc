@@ -57,7 +57,7 @@ fn step(p: i32, d: i32, side: i32) -> i32 =
 -- heap holds at most one entry per improvement, four per square, so `4n + 1` pops drain it.
 fn lowest_risk(cave: array u8, side: i32) -> array u8 * i32 =
   let n = side * side;
-  let mut cave = cave;
+  let cave = cave;
   let mut cost = array_set(array_new[i32] (n, !{ i -> 2147483647 }), 0, 0);
   let mut todo = heap_push(box buf[i32 * i32](64), 0, 0);
   let mut answer = 0;

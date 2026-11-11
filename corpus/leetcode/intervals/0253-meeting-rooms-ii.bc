@@ -35,7 +35,7 @@ fn by_start(x: i32 * i32, y: i32 * i32) -> i32 =
 
 -- The fewest rooms that hold the meetings.
 fn rooms(ivs: buf (i32 * i32)) -> i32 =
-  let mut ivs = ivs;
+  let ivs = ivs;
   borrow mut ivs { v -> let v = sort(v, by_start, (0, 0)); () };
   let (a, n) = ivs;
   let mut ends = box buf[i32 * 1](n);

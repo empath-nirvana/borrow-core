@@ -19,7 +19,7 @@ fn get<'a>(m: imm 'a i32) -> i32 = *m
 fn add<'a>(m: mut 'a i32, k: i32) -> i32 = modify m { x -> (x + k, x) }
 
 fn task(n: i32) -> i32 with Async =
-  let mut x = n;
+  let x = n;
   let a = get(&x);
   let old = add(&mut x, 1);
   await();

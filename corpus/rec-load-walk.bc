@@ -61,7 +61,7 @@ fn sum(t: Tree) -> i32 =
   }
 
 main -> i32 * (i32 * i32) = with on_exhausted(!{ u -> (0 - 1, (0 - 1, 0 - 1)) }) {
-  let mut t = adopt(adopt(adopt(tip(10), tip(1)), adopt(tip(2), tip(3))), tip(4));
+  let t = adopt(adopt(adopt(tip(10), tip(1)), adopt(tip(2), tip(3))), tip(4));
   let x = weigh(&t);
   let y = weigh(&t);
   (x, (y, sum(t)))

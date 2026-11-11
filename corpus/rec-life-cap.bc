@@ -29,7 +29,7 @@ fn even(i: i32) -> i32 = 2 * i + 2
 main -> i32 * i32 =
   let c = alloc(0);
   let r = with tally(&mut c) { with on_exhausted(!{ u -> 0 - 1 }) {
-    let mut a = array_new[i32] (4, odd);
+    let a = array_new[i32] (4, odd);
     let mut b = array_new[i32] (3, even);
     borrow imm a { 'x, v -> borrow imm b { 'y, w -> weave(v, w, 1) } } } };
   (r, free(c))

@@ -32,14 +32,14 @@ main -> i32 * i32 =
   let s = read_input();
   let lists = borrow imm s { 't, t -> columns(t) };
   let (left, right) = lists;
-  let mut left = left;
-  let mut right = right;
+  let left = left;
+  let right = right;
   borrow mut left { 'x, v -> let v = sort(v, cmp_i32, 0); () };
   borrow mut right { 'x, v -> let v = sort(v, cmp_i32, 0); () };
   let (l, n) = left;
   let (r, _) = right;
   let mut distance = 0;
-  let mut freq : Map[i32, i32] = map_new[i32, i32](1000);
+  let freq : Map[i32, i32] = map_new[i32, i32](1000);
   for i in 0..n {
     let x = at(&l, i, 0);
     let y = at(&r, i, 0);

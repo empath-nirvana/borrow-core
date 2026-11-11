@@ -29,7 +29,7 @@ fn map_inc(l: List) -> List =
 fn digits(l: List) -> i32 = fold_own l { Nil -> 0 | Cons(c, t) -> free(c) + t * 10 }
 
 main -> i32 =
-  let mut l = box Cons(1, box Cons(3, box Cons(5, Nil)));
+  let l = box Cons(1, box Cons(3, box Cons(5, Nil)));
   let s = sum(&l);
   modify &mut l { k -> map_inc(k) };
   digits(l) * 100 + s

@@ -30,7 +30,7 @@ fn add_at(i: i32, s: array i32 * i32) -> array i32 * i32 =
   (a, acc)
 
 main -> i32 =
-  let mut a = array_new[i32] (4, tab);
+  let a = array_new[i32] (4, tab);
   borrow mut a { 'x, v ->
     let (v, n) = len_mut(v);
     let r = count_fold[U (iter (mut 'x i32) 1 1) + 1] ((unbang times10) ['x], n + 1, 0, inl iter_mut(v));

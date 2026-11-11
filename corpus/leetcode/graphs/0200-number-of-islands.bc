@@ -37,7 +37,7 @@ fn step(p: i32, d: i32, w: i32, h: i32) -> i32 =
 -- The number of islands of a grid of `h` rows and `w` columns, `grid[b + i]` the square `i`.
 fn islands(grid: array i32, b: i32, h: i32, w: i32) -> array i32 * i32 =
   let n = h * w;
-  let mut grid = grid;
+  let grid = grid;
   let mut seen = array_new[bool] (n, !{ i -> false });
   let mut queue = array_new[i32] (n, !{ i -> 0 });
   let mut count = 0;

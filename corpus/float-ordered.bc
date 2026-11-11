@@ -38,7 +38,7 @@ fn put(b: Items, x: f64, last: bool) -> Items =
   b
 
 main -> i32 =
-  let mut a = array_new[f64] (9, data);
+  let a = array_new[f64] (9, data);
   borrow mut a { 'x, v -> let v = sort(v, total_cmp_f64, 0.0); () };
   let mut items = box buf[f64 * u8](24);
   for i in 0..9 { let x = at(&a, i, 0.0); items = put(items, x, i == 8) };

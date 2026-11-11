@@ -13,7 +13,7 @@ effect Log { fn note() }
 handler tally(mut n: bool): Log = { note() = { n = true; () } }
 
 main -> bool * bool =
-  let mut s = alloc(false);
+  let s = alloc(false);
   let mut b = alloc(false);
   with tally(&mut s) { borrow mut b { m -> note(); modify m { x -> true } } };
   (free(s), free(b))

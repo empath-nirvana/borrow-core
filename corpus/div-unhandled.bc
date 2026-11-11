@@ -17,7 +17,7 @@ include textio
 -- `amount` split into `parts`: the buffer holds the amount, then each part's share. The buffer is
 -- live across the division.
 fn split(amount: i32, parts: i32) -> i32 =
-  let mut b = box buf[i32](2);
+  let b = box buf[i32](2);
   push(&mut b, amount);
   let s = amount / parts;
   push(&mut b, s);

@@ -27,7 +27,7 @@ fn cases<'t>(t: text 't) -> buf (buf i32) =
 
 -- The length of the longest run of consecutive values of `a[0..n]`.
 fn longest(a: array i32, n: i32) -> i32 =
-  let mut seen : Set[i32] = set_new[i32](n);
+  let seen : Set[i32] = set_new[i32](n);
   for i in 0..n { let x = at(&a, i, 0); let _ = set_insert(&mut seen, x); () };
   let mut best = 0;
   for i in 0..n {

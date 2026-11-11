@@ -40,7 +40,7 @@ fn cell(k: i32) -> i32 + i32 = with to_result {
 }
 
 fn value(k: i32) -> i32 + i32 = with to_result {
-  let mut v = 5;
+  let v = 5;
   let r = bump(&mut v, k);
   r + v
 }

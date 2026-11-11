@@ -38,12 +38,12 @@ fn same<'p, 'q>(a: imm 'p string, c: imm 'q string) -> i32 =
 
 -- Each string lent to `same`, a cell of the caller's frame.
 fn with_second<'p>(a: imm 'p string, c: string) -> i32 =
-  let mut c = c;
+  let c = c;
   let r = same(a, &c);
   r
 
 fn compare(a: string, c: string) -> i32 =
-  let mut a = a;
+  let a = a;
   let r = with_second(&a, c);
   r
 

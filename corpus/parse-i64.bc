@@ -17,7 +17,7 @@ fn show(l: lit) -> i32 =
   let r = borrow imm l { 'a, t -> with to_result { parse_i64(t) } };
   match r {
     inl n ->
-      let mut s = string_new(24);
+      let s = string_new(24);
       push_i64(&mut s, n);
       push_byte(&mut s, b'\n');
       print_string(s);

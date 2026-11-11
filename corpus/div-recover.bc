@@ -19,7 +19,7 @@ fn mean(sum: i32, n: i32) -> i32 = sum / n
 
 -- The means of rows given as (sum, count) pairs, into a buffer.
 fn means<'a>(rows: array_imm 'a (i32 * i32)) -> buf i32 =
-  let mut b = box buf[i32](2);
+  let b = box buf[i32](2);
   for p in rows {
     let (s, n) = *p;
     push(&mut b, mean(s, n))

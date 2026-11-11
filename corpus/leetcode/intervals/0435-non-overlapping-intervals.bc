@@ -31,7 +31,7 @@ fn by_end(x: i32 * i32, y: i32 * i32) -> i32 =
 
 -- The fewest intervals to remove.
 fn removals(ivs: buf (i32 * i32)) -> i32 =
-  let mut ivs = ivs;
+  let ivs = ivs;
   borrow mut ivs { v -> let v = sort(v, by_end, (0, 0)); () };
   let (a, n) = ivs;
   let mut removed = 0;

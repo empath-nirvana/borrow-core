@@ -31,7 +31,7 @@ fn halve<'a>(v: array_imm 'a i32, add: bool) -> array i32 =
 
 fn sums<'a>(v: array_imm 'a i32) -> i32 =
   if len(v) <= 1 { at(v, 0, 0) } else {
-    let mut w = halve(v, true);
+    let w = halve(v, true);
     let r = borrow imm w { 'x, u -> maxes(u) };
     r
   }
@@ -40,7 +40,7 @@ fn maxes<'a>(v: array_imm 'a i32) -> i32 =
   if len(v) <= 1 { at(v, 0, 0) } else {
     match split_first(v) {
       inl (h, t) -> if *h > 50 { sums(t) } else {
-          let mut w = halve(v, false);
+          let w = halve(v, false);
           let r = borrow imm w { 'x, u -> sums(u) };
           r
         }
@@ -51,6 +51,6 @@ fn maxes<'a>(v: array_imm 'a i32) -> i32 =
 fn data(i: i32) -> i32 = (i * 37) % 101
 
 main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
-  let mut a = array_new[i32] (16, data);
+  let a = array_new[i32] (16, data);
   borrow imm a { 'x, v -> sums(v) }
 }

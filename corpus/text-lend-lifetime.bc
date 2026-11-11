@@ -7,7 +7,7 @@
 include textio
 
 fn greet<'a>(name: text 'a) -> string =
-  let mut r = box string(64);
+  let r = box string(64);
   push_lit(&mut r, "hi ");
   push_str(&mut r, name);
   r

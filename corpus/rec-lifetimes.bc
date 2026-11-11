@@ -28,8 +28,8 @@ fn data(i: i32) -> i32 = i + 1
 fn flag(i: i32) -> bool = i > 0
 
 main -> i32 * (i32 * i32) =
-  let mut a = array_new[i32] (4, data);
-  let mut b = array_new[bool] (2, flag);
+  let a = array_new[i32] (4, data);
+  let b = array_new[bool] (2, flag);
   let s = borrow imm a { 'x, v -> with on_exhausted(!{ u -> 0 }) { vsum(v) } };
   let x = borrow imm a { 'x, v -> with on_exhausted(!{ u -> 0 }) { count_if(v, !{ g -> *g > 2 }) } };
   let y = borrow imm b { 'x, v -> with on_exhausted(!{ u -> 0 }) { count_if(v, !{ g -> *g }) } };

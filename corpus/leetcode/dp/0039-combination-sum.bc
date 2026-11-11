@@ -116,7 +116,7 @@ fn case_at<'t>(t: text 't, pos: i32) -> ((buf i32 * i32) * i32) + 1 =
 
 -- Each line of the input a case. The number of cases.
 fn cases(s: string) -> string * i32 =
-  let mut s = s;
+  let s = s;
   let mut pos = 0;
   let mut count = 0;
   loop {

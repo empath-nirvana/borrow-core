@@ -15,7 +15,7 @@ fn tri(n: i32) -> i32 = if n == 0 { 0 } else { n + tri(n - 1) }
 fn f<'a>(g: imm 'a Tree) -> i32 = with on_exhausted(!{ u -> 0 - 1 }) { tri(3) }
 fn root(t: Tree) -> i32 = match t { Tree(n, _) -> n }
 main -> i32 * i32 = with on_exhausted(!{ e -> (0 - 2, 0 - 2) }) {
-  let mut t = tip(3);
+  let t = tip(3);
   let x = f(&t);
   (x, tri(root(t)))
 }

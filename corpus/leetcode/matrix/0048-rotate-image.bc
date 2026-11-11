@@ -76,14 +76,14 @@ fn case_at<'t>(t: text 't, pos: i32) -> ((buf i32 * i32) * i32) + 1 =
 
 -- Each line of the input a case. The number of cases.
 fn cases(s: string) -> string * i32 =
-  let mut s = s;
+  let s = s;
   let mut pos = 0;
   let mut count = 0;
   loop {
     let c = borrow imm s { 't, t -> case_at(t, pos) };
     match c {
       inl (((a, n), w), next) ->
-        let mut a = a;
+        let a = a;
         borrow mut a { 'x, v -> discard_mut(rotate(v, w)) };
         let a = print_matrix(a, n, w);
         print_byte(b'\n');

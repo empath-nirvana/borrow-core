@@ -43,7 +43,7 @@ fn summed_or<'a>(xs: array_imm 'a i32) -> i32 = with default(0 - 1) { checked_su
 
 -- The elements doubled, into a new buffer; a negative element raises its index.
 fn doubled<'a>(xs: array_imm 'a i32) -> buf i32 with Fail[Bad] =
-  let mut b = box buf[i32](2);
+  let b = box buf[i32](2);
   let mut i = 0;
   for p in xs {
     let x = *p;

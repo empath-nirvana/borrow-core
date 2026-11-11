@@ -33,7 +33,7 @@ handler sq(mut n: i32): Ask = {
 fn asked(x: i32) -> i32 with Ask = ask(x) + ask(1)
 
 main -> i32 * (i32 * (i32 * (i32 * i32))) =
-  let mut k = 21;
+  let k = 21;
   let a = twice(&k);
   let b = captured(&k);
   let c = looped(&k);

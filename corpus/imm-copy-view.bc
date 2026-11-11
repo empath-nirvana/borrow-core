@@ -12,6 +12,6 @@ fn survey<'a>(v: array_imm 'a i32) -> i32 =
 fn data(i: i32) -> i32 = i
 
 main -> i32 =
-  let mut a = array_new[i32] (3, data);
+  let a = array_new[i32] (3, data);
   let s0 = borrow imm a { 'x, v -> survey(v) };
   s0

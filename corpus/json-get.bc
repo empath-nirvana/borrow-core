@@ -55,7 +55,7 @@ main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
   let r = borrow imm doc { 't, t -> with to_result { json_parse(t) } };
   match r {
     inl j ->
-      let mut j = j;
+      let j = j;
       let a = show(json_get_with(&j, "city", copy_str));
       let b = show(json_get_with(&j, "floor", copy_str));
       let c = show(json_get_with(&j, "street", copy_str));

@@ -25,7 +25,7 @@ fn step<'a>(ps: array_mut 'a P) -> i32 =
   b
 
 main -> i32 =
-  let mut world = array_new[P](3, w0);
+  let world = array_new[P](3, w0);
   let mut bounces = 0;
   for _ in 0..50 { let k = step(&mut world); bounces = bounces + k };
   for p in &world { print_dec(p.x); print_byte(b' ') };

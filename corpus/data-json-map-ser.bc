@@ -46,7 +46,7 @@ fn obj2(ka: lit, a: Json, kb: lit, b: Json) -> Json =
   Obj(m)
 
 main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
-  let mut j = obj2("n", Num(3), "o", obj2("a", Num(1), "b", Null));
+  let j = obj2("n", Num(3), "o", obj2("a", Num(1), "b", Null));
   let s = ser(&j, string_new(16));
   let s = print_string(s);
   print_byte(b'\n');

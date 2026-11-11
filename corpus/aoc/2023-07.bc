@@ -28,7 +28,7 @@ fn desc(x: i32, y: i32) -> i32 = cmp_i32(y, x)
 
 -- Every count 0.
 fn fill_zero(a: array i32) -> array i32 =
-  let mut a = a;
+  let a = a;
   borrow mut a { 'x, v -> let v = fill(v, 0); () };
   a
 
@@ -70,7 +70,7 @@ fn winnings<'t>(t: text 't, j: i32) -> i64 =
         ((hs, freq), j)
     | inr l -> ((hs, freq), j)
     } }, ((box buf[i64 * i32](64), array_new[i32] (15, !{ i -> 0 })), j));
-  let mut hands = hands;
+  let hands = hands;
   borrow mut hands { 'x, v -> let v = sort(v, cmp_hand, (i64[0], 0)); () };
   let (a, n) = hands;
   let mut sum = i64[0];

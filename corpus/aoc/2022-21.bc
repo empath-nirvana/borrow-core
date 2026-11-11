@@ -41,7 +41,7 @@ fn number_names<'t>(t: text 't) -> Map[text 't, i32] * (i32 * i32) =
     let n = name_at(l, 0);
     let (n, m) = array_copy['t, u8] n;
     let (n, k) = array_copy['t, u8] n;
-    let mut names = names;
+    let names = names;
     map_insert(&mut names, n, i);
     let root = if eq_lit(m, "root") { i } else { root };
     let humn = if eq_lit(k, "humn") { i } else { humn };
@@ -53,7 +53,7 @@ fn number_names<'t>(t: text 't) -> Map[text 't, i32] * (i32 * i32) =
 fn parse_monkey<'t>(names: Map[text 't, i32], l: text 't) -> Map[text 't, i32] * Monkey =
   let (l, u) = array_copy['t, u8] l;
   let (l, w) = array_copy['t, u8] l;
-  let mut names = names;
+  let names = names;
   if len(u) < 17 { (names, inl fold_i64s(l, !{ (x, n) -> x }, i64[0])) } else {
     let (l, v) = array_copy['t, u8] l;
     let left = map_lookup(&names, name_at(l, 6));

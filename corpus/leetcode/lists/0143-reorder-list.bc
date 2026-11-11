@@ -42,7 +42,7 @@ fn cons(x: i32, t: List) -> List = roll inr (x, alloc(t))
 
 -- The list of `a[b..b + k]`, one cell per node.
 fn list_of(a: array i32, b: i32, k: i32) -> array i32 * List =
-  let mut a = a;
+  let a = a;
   let mut l = nil();
   for i in 0..k { let x = at(&a, b + k - 1 - i, 0); l = cons(x, l) };
   (a, l)
@@ -98,7 +98,7 @@ fn weave(a: List, b: List) -> List =
   }
 
 fn reorder(l: List) -> List =
-  let mut l = l;
+  let l = l;
   let n = length(&l);
   if n < 3 { l } else {
     let (front, back) = split(l, n - host[shr_u32](n, 1));

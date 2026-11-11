@@ -23,7 +23,7 @@ fn weigh<'h, 'k, 'x>(r: MapRef[string, i32]<'h, 'k, 'x>) -> i32 =
     s + n * *v }, 0)
 
 main -> i32 =
-  let mut m = map_new[string, i32](2);
+  let m = map_new[string, i32](2);
   let o = map_insert(&mut m, string_of_lit("a"), 1);
   let o = map_insert(&mut m, string_of_lit("bee"), 2);
   let o = map_insert(&mut m, string_of_lit("apple"), 3);

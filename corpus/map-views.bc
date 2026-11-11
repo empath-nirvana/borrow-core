@@ -49,7 +49,7 @@ fn each<'h, 'k, 'x>(r: MapRef[i32, buf i32]<'h, 'k, 'x>) -> i32 =
 -- Keys `64 i` for `i < 200`, valued `i`; every third removed; the keys left and the sum of their
 -- values, each looked up.
 fn runs(u: i32) -> i32 * i32 =
-  let mut m = map_new[i32, i32](8);
+  let m = map_new[i32, i32](8);
   for i in 0..200 { let o = map_insert(&mut m, 64 * i, i); () };
   for i in 0..200 { if i % 3 == 0 { let o = map_remove(&mut m, 64 * i); () } else { () } };
   let mut sum = 0;
@@ -61,7 +61,7 @@ fn runs(u: i32) -> i32 * i32 =
   (n, sum)
 
 main -> i32 * (i32 * (i32 * i32)) =
-  let mut m = map_new[i32, buf i32](4);
+  let m = map_new[i32, buf i32](4);
   for i in 0..8 { let o = map_insert(&mut m, i, adj(i)); () };
   let x = borrow imm m { 'x, r -> two(r) };
   let y = borrow imm m { 'x, r -> each(r) };

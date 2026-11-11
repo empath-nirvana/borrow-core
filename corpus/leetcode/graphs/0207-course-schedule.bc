@@ -41,7 +41,7 @@ fn quot2(a: i32) -> i32 = host[shr_u32](a, 1)
 -- The graph on `n` nodes whose `m` edges are `es[1 + 2e + 1] → es[1 + 2e]`, as `start` (of length
 -- `n + 1`) and `targets`.
 fn graph(es: array i32, n: i32, m: i32) -> array i32 * (array i32 * array i32) =
-  let mut es = es;
+  let es = es;
   let mut start = array_new[i32] (n + 1, !{ i -> 0 });
   for e in 0..m {
     let u = at(&es, 2 + 2 * e, 0);

@@ -11,7 +11,7 @@ data List[T] = Nil | Cons(head: T, tail: List[T])
 data Pair[A, B] = { fst: A, snd: B }
 
 fn sum_all(v: Vec[i32]) -> i32 =
-  let mut v = v;
+  let v = v;
   let mut s = 0;
   for _ in 0..10 {
     match pop(&mut v) {
@@ -29,7 +29,7 @@ fn sum(l: List[i32]) -> i32 = match l { Nil -> 0 | box Cons(h, t) -> h + sum(t) 
 fn cons(x: i32, l: List[i32]) -> List[i32] = box Cons(x, l)
 
 main -> i32 =
-  let mut v : Vec[i32] = buf_new[i32](4);
+  let v : Vec[i32] = buf_new[i32](4);
   push(&mut v, 3);
   push(&mut v, 4);
   let (o, v) = doubled(v, 5);

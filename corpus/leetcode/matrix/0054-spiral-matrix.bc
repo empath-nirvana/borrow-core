@@ -23,7 +23,7 @@ include textio
 
 fn spiral_order(a: array i32, n: i32, w: i32) -> array i32 * buf i32 =
   let h = if w == 0 { 0 } else { match host[div_u32](n, w) { inl q -> q | inr u -> 0 } };
-  let mut a = a;
+  let a = a;
   let mut out = box buf[i32](n);
   let mut r0 = 0;
   let mut r1 = h - 1;
@@ -88,7 +88,7 @@ fn case_at<'t>(t: text 't, pos: i32) -> ((buf i32 * i32) * i32) + 1 =
 
 -- Each line of the input a case. The number of cases.
 fn cases(s: string) -> string * i32 =
-  let mut s = s;
+  let s = s;
   let mut pos = 0;
   let mut count = 0;
   loop {

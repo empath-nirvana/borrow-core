@@ -20,7 +20,7 @@ fn bytes(n: i32) -> string =
   s
 
 fn full(n: i32) -> Map[i32, string] =
-  let mut m = map_new[i32, string](2);
+  let m = map_new[i32, string](2);
   for i in 1..n + 1 { let o = map_insert(&mut m, i, bytes(i)); () };
   m
 

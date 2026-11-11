@@ -11,7 +11,7 @@ include fail
 include text
 
 fn bump(s: string, k: i32) -> string with Fail[i32] =
-  let mut s = s;
+  let s = s;
   borrow mut s { m -> if k < 0 { raise(k) } else { () }; () };
   s
 

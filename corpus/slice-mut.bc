@@ -19,7 +19,7 @@ fn read_at(a: array i32, i: i32) -> array i32 * i32 =
   }
 
 main -> i32 * i32 =
-  let mut a = array_new[i32] (5, tab);
+  let a = array_new[i32] (5, tab);
   borrow mut a { 'x, v ->
     match slice_get_mut['x, i32] (v, 2) {
       inl m -> modify m { c -> c * 10 }

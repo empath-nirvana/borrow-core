@@ -66,9 +66,9 @@ fn sum(t: Tree) -> i32 =
   }
 
 main -> (i32 + i32) * ((i32 + i32) * i32) =
-  let mut t = adopt(adopt(tip(10), tip(1)), adopt(tip(2), tip(3)));
+  let t = adopt(adopt(tip(10), tip(1)), adopt(tip(2), tip(3)));
   let x = try_grandchild(&t);
-  let mut w = adopt(tip(20), adopt(adopt(tip(4), tip(5)), tip(6)));
+  let w = adopt(tip(20), adopt(adopt(tip(4), tip(5)), tip(6)));
   let y = try_grandchild(&w);
   let s = with on_exhausted(!{ e -> 0 - 1 }) { sum(t) + sum(w) };
   (x, (y, s))

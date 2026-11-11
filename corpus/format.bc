@@ -13,7 +13,7 @@
 include textio
 
 fn point(x: i32, y: i32) -> string =
-  let mut s = box string(16);
+  let s = box string(16);
   push_lit(&mut s, "x="); push_dec(&mut s, x);
   push_lit(&mut s, ", y="); push_dec(&mut s, y);
   push_char(&mut s, ' '); push_char(&mut s, 'é');

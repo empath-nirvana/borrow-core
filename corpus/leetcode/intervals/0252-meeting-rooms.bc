@@ -32,7 +32,7 @@ fn by_start(x: i32 * i32, y: i32 * i32) -> i32 =
 
 -- Whether no two meetings overlap.
 fn can_attend(ivs: buf (i32 * i32)) -> bool =
-  let mut ivs = ivs;
+  let ivs = ivs;
   borrow mut ivs { v -> let v = sort(v, by_start, (0, 0)); () };
   let (a, n) = ivs;
   let mut ok = true;

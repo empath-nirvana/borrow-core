@@ -81,7 +81,7 @@ main -> i64 * i64 =
   let r = borrow imm s { 't, t ->
     fold_lines(t, !{ (l, st) -> line(st, l) }, ((box buf[u8](16), box buf[i64](16)), i64[0])) };
   let ((_, done), p1) = r;
-  let mut done = done;
+  let done = done;
   borrow mut done { 'x, v -> let v = sort(v, cmp_i64, i64[0]); () };
   let (done, n) = len_of(done);
   let (a, _) = done;

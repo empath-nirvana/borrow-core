@@ -11,7 +11,7 @@
 fn tab(i: i32) -> i32 = if i == 0 { 100 } else { if i == 1 { 20 } else { 3 } }
 
 total fn print_sum(o: Out, a: array i32) -> Out * (array i32 * i32) =
-  let mut o = o;
+  let o = o;
   let mut acc = 0;
   for x in &a {
     let e = *x;

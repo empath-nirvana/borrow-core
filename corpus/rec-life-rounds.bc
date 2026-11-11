@@ -33,7 +33,7 @@ fn round<'a>(v: array_imm 'a i32) -> array i32 =
 -- The winner and the number of rounds played.
 fn champion<'a>(v: array_imm 'a i32) -> i32 * i32 =
   if len(v) <= 1 { (at(v, 0, 0), 0) } else {
-    let mut w = round(v);
+    let w = round(v);
     let r = borrow imm w { 'x, u -> champion(u) };
     let (c, d) = r;
     (c, d + 1)
@@ -49,7 +49,7 @@ fn last<'a>(v: array_imm 'a i32) -> imm 'a i32 + 1 =
 fn data(i: i32) -> i32 = (i * 37) % 101
 
 main -> i32 * (i32 * i32) = with on_exhausted(!{ u -> (0 - 1, (0 - 1, 0 - 1)) }) {
-  let mut a = array_new[i32] (11, data);
+  let a = array_new[i32] (11, data);
   let w = borrow imm a { 'x, v -> champion(v) };
   let l = borrow imm a { 'x, v -> match last(v) { inl g -> *g | inr u -> 0 - 2 } };
   let (c, d) = w;

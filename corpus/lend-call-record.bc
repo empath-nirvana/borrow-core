@@ -12,7 +12,7 @@ fn chk<'a>(t: imm 'a P) -> i32 with Fail[i32] = if t.id > 3 { raise(t.id) } else
 
 main -> i32 + i32 =
   with to_result[i32, i32] {
-    let mut t = P { id: 7, log: 5 };
+    let t = P { id: 7, log: 5 };
     let r = chk(&t);
     r
   }

@@ -47,7 +47,7 @@ fn on_edge(p: i32, o: i32, w: i32, h: i32) -> bool =
 -- has height `hs[b + i]`.
 fn reach(hs: array i32, b: i32, h: i32, w: i32, o: i32) -> array i32 * array bool =
   let n = h * w;
-  let mut hs = hs;
+  let hs = hs;
   let mut seen = array_new[bool] (n, !{ i -> false });
   let mut queue = array_new[i32] (n, !{ i -> 0 });
   let mut tail = 0;

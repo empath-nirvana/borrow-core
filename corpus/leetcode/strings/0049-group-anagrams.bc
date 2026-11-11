@@ -59,7 +59,7 @@ fn words<'t>(l: text 't) -> buf (text 't) =
 
 -- A word's key: its bytes, sorted, in a string of its own.
 fn key<'t>(w: text 't) -> string =
-  let mut k = to_string(w);
+  let k = to_string(w);
   borrow mut k { v -> let v = sort(v, cmp_u8, 0); () };
   k
 
@@ -79,7 +79,7 @@ fn add_to<'t>(groups: buf (buf (text 't)), g: i32, w: text 't) -> buf (buf (text
 fn group<'t>(words: buf (text 't)) -> buf (buf (text 't)) =
   let (words, n) = len_of(words);
   let mut words = words;
-  let mut index : Map[string, i32] = map_new[string, i32](16);
+  let index : Map[string, i32] = map_new[string, i32](16);
   let mut groups = box buf[buf (text 't)](8);
   for i in 0..n {
     let (b, w) = view_at(words, i);

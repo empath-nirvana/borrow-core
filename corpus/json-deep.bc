@@ -12,7 +12,7 @@ include json
 
 -- `n` copies of `[`.
 fn nested(n: i32) -> string =
-  let mut s = string_new(n);
+  let s = string_new(n);
   for _ in 0..n { push_byte(&mut s, b'[') };
   s
 

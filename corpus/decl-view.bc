@@ -14,6 +14,6 @@ fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
 fn peek<'a>(t: imm 'a Txn) -> i32 = t.id
 
 main -> i32 =
-  let mut t = Txn { id: 7, log: 5 };
+  let t = Txn { id: 7, log: 5 };
   let k = peek(&t);
   k + commit(t)

@@ -37,7 +37,7 @@ fn numbers<'t>(l: text 't) -> buf i32 =
 fn top_k(nums: buf i32) -> buf i32 =
   let (a, n) = nums;
   let k = at(&a, 0, 0);
-  let mut freq : Map[i32, i32] = map_new[i32, i32](n);
+  let freq : Map[i32, i32] = map_new[i32, i32](n);
   for i in 1..n {
     let x = at(&a, i, 0);
     let o = map_lookup(&freq, x);

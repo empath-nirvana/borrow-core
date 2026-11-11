@@ -72,7 +72,7 @@ fn try_pick<'a>(g: imm 'a Tree) -> i32 = with on_exhausted(!{ u -> 0 - 1 }) { pi
 fn try_sum(t: Tree) -> i32 = with on_exhausted(!{ u -> 0 - 1 }) { sum(t) }
 
 main -> i32 * (i32 * i32) =
-  let mut t = adopt(adopt(tip(10), tip(10001)), tip(4));
+  let t = adopt(adopt(tip(10), tip(10001)), tip(4));
   let x = try_weigh(&t);
   let y = try_pick(&t);
   (x, (y, try_sum(t)))

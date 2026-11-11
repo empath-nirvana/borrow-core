@@ -27,6 +27,6 @@ fn digits_alg(r: 1 + ref i32 * i32) -> i32 = match r { inl _ -> 0 | inr (c, t) -
 def digits : !(List => i32) = fold_own[1 + ref i32 * ref X, i32] digits_alg
 
 main -> i32 =
-  let mut l = cons(1, cons(3, cons(5, nil)));
+  let l = cons(1, cons(3, cons(5, nil)));
   modify &mut l { k -> map_inc(k) };
   digits(l)

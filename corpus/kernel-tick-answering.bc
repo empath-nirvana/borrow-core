@@ -11,6 +11,6 @@ effect Log { fn note() }
 handler tally(mut n: bool): Log = { note() = { n = true; () } }
 
 main -> bool =
-  let mut s = alloc(false);
+  let s = alloc(false);
   for i in 0..3 { with tally(&mut s) { note() } };
   free(s)

@@ -31,7 +31,7 @@ fn map_inc(t: Tree) -> Tree =
 fn digits(t: Tree) -> i32 = fold_own t { Leaf -> 0 | box Node(l, v, r) -> l + v * 10 + r * 100 }
 
 main -> i32 =
-  let mut t = branch(branch(Leaf, 1, Leaf), 2, branch(Leaf, 3, Leaf));
+  let t = branch(branch(Leaf, 1, Leaf), 2, branch(Leaf, 3, Leaf));
   let s = sum(&t);
   modify &mut t { k -> map_inc(k) };
   digits(t) * 10 + s

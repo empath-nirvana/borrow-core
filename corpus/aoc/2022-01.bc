@@ -27,7 +27,7 @@ main -> i32 * i32 =
     let (sums, cur) = fold_lines(t, !{ (l, st) -> add_line(l, st) }, (box buf[i32](16), 0));
     let (sums, _) = push(sums, cur);
     sums };
-  let mut sums = sums;
+  let sums = sums;
   borrow mut sums { 'x, v -> let v = sort(v, cmp_i32, 0); () };
   let (sums, n) = len_of(sums);
   let r = borrow imm sums { 'x, v ->

@@ -18,7 +18,7 @@ fn peek<'a>(t: imm 'a R) -> i32 = t.id
 fn inc(x: i32) -> i32 = x + 1
 
 fn look(r: R) -> i32 =
-  let mut t = r;
+  let t = r;
   let k = peek(&t);
   match t { R { v, id } -> match v { inl a -> k | inr q -> match q { inl f -> k + 10 * f(id) | inr j -> k + 10 * j } } }
 
