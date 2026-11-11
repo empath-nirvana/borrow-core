@@ -551,7 +551,8 @@ over it; a new codata shape is a new abbreviation, and a library of iterator ada
     C ::= … | νX. C          (computation types)
 
 `X` is a computation-type variable bound in `C`; it occurs only as the value type `U X`, "the
-rest of the codata". Every observation of a `νX. C` returns, possibly among other values, a
+rest of the codata". §79 generalises the former to finite systems of equations; `νX. C` is
+`ν₀(X₀). C`. Every observation of a `νX. C` returns, possibly among other values, a
 thunk of the rest.
 
 **Positivity** (`CTy.NuOk`). `C` is a `&` of two observation trees (`CTy.NuShape`), and an
@@ -1517,7 +1518,7 @@ value types fall in three groups.
    | `μX. T`, `T` in `FShape` (§6) | `foldOwn`, whose algebra is the consume of `T[1/X]` |
    | `μX. T`, `T` in `P` (§6, §61), not in `FShape` | `foldOwnG`, whose algebra at each key is the consume of the key's body (an array key's element type) at results `1` |
    | `U(C & F 1)` | `close`: force, then the second projection |
-   | `U(νX. C & F R)`, `R` closed and consumable (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the consume of `R` |
+   | `U(νX. C & F R)`, `R` closed and consumable (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the consume of `R`; at a system, per projection (§79) |
    These are linear. A value of one of these types that goes unused is consumed by its
    consume, which the checker inserts. Because the consume deallocates memory and, at codata,
    runs the object's `close` code, where it is inserted can be observed.
@@ -12759,6 +12760,7 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
 - `C.BindsFresh G` in `nuOutK`: the unrolling under a `∀'x` leaf reads the code type, which
   contains `G`, at `δ[x↦α]`, and a code-typed `G`'s environment could mention `x`. `codeTy`,
   `hCode`, `hEnv` and `unfoldKTy` are in `Core/CodeNuOut.lean`.
+- §79 generalises `unfoldK` and `nuOutK` to finite systems of ν equations, per equation.
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
 - `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
@@ -13696,8 +13698,10 @@ five ν rules are generalised in place.
 
 ### Units
 
-- K-M.1: the former `nuSys` and the abbreviation `CTy.nu`; `SysOk` and its parts, `substL`,
-  `instTL`, `unrollS`, `SysFresh`; every match updated, with the rules still at `m = 0`. Not built.
+- K-M.1, built (#1090): the former `CTy.nuSys m i Cs`, with `νX. C` the match-pattern
+  abbreviation `nuSys 0 0 C`; every match carries the system case. No rule reaches a system yet,
+  and the backends refuse one. Until K-M.2 the relation reads a system at `m > 0` as its spine's
+  single body, which is inert.
 - K-M.2: the relation at systems in Core and the chain; `nuIn i`, `nuOut i`; consume per
   projection; the checker's tests `sysOkB` and `sysFreshB`. Not built.
 - K-M.3: `unfoldᵢ` at systems in both developments. The kernel instance `lexProg`, the lexer modes
