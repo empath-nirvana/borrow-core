@@ -182,6 +182,7 @@ json-parse erased handles 16 performs 0 raises 46 left 0 0
 json-deep erased handles 12 performs 0 raises 42 left 0 0
 json-get erased handles 12 performs 0 raises 42 left 0 0
 kernel-at08-once erased handles 0 performs 0 raises 0 machines 1 suspends 1 left 0 0
+kernel-div-residual erased handles 0 performs 0 raises 0 left 0 0
 kernel-poly-id erased handles 1 performs 0 raises 1 left 0 0
 kernel-recursive-yield erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
 kernel-two-callees erased handles 0 performs 0 raises 0 machines 1 suspends 3 left 0 0

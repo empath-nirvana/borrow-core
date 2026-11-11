@@ -171,6 +171,7 @@ json-parse 673 0 0 27534 15143 19164
 json-deep 5004 0 0 352010 284003 92003
 json-get 17 0 0 1253 501 590
 kernel-at08-once 1 0 0 10 10 0
+kernel-div-residual 1 0 0 7 7 0
 kernel-poly-id 0 0 0 0 0 0
 kernel-recursive-yield 20 0 0 420 630 0
 kernel-two-callees 0 3 0 0 0 0

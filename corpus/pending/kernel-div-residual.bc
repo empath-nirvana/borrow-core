@@ -2,9 +2,11 @@
 -- The kernel program `div-residual` (Backend/Kernel.lean, `Core/DivPrograms.lean`'s `divResidual`;
 -- SPEC §14): a loop that never finishes on its own, whose state is a cell it adds one to at each
 -- turn, run under fuel for 3 turns; the fuel closes it and hands the cell back, and the cell is
--- read and freed. Answer: i32[3]. The kernel spells it with `iterate` and the kernel's
--- `div_fuel`, which neither the surface nor the core text can write (the frontend elaborates loops
--- to its own machine, not to `Div`, until B2, #644), and Backend2 has no lowering for them yet.
+-- read and freed. Answer: i32[3]. The kernel program spells the loop with the kernel's `Div`
+-- effect: its `tick`, `iterate` and the handler `div_fuel` (`divFuelV`), which neither the surface
+-- nor the core text can write: the frontend elaborates loops to the library's codata `loop` and
+-- its `div_fuel` until B2 (#644), and Backend2 has no lowering of `iterate` or the handler yet.
+-- `corpus/kernel-div-residual.bc` is the same program in the core text over the library's loop.
 -- Its surface form is #745's `with fuel(n) { … }`; the spelling below is a sketch of it.
 -- Today `fuel` is no handler, and `with fuel(3) { … }` is read as a call given a closure.
 
@@ -14,4 +16,4 @@ fn spin(c: ref i32) -> ref i32 =
   c
 
 main -> i32 = let c = with fuel(3) { spin(alloc(0)) }; free(c)
--- now: 16:23: the type of the closure's parameter `fx_c1` is not determined here: pass it where a function type is expected, or write `thunkv fun`
+-- now: 18:23: the type of the closure's parameter `fx_c1` is not determined here: pass it where a function type is expected, or write `thunkv fun`
