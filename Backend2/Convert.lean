@@ -2287,6 +2287,76 @@ unrolls to (memoized by the type, so a binder nested in another, which names the
 its own function calling the outer's), and an array of recursive data one loop function that
 destroys each element and then frees the buffer once (`freeArr`), as Rust consumes a `Vec`. -/
 
+/-! #### A consume by an in-place worklist (SPEC §74)
+
+At a `μX. T` whose recursive positions include arrays of `X` (Json's `Vec[X]` and
+`Map[string, X]`), the consume is two functions of tail calls, `consume_up p` (free `p`) and
+`consume_down c p` (free `c`, then `p`), and `consume x` is `consume_up x`. The pending work `p`
+is a value of the type itself: a node whose array holds, in slot 0, the work pending before it,
+and in its other slots the children not yet freed. `down` at an array of `n ≥ 2` takes slot 0,
+puts `p` there and goes on with the child and the node; `up` at one pops the last slot
+(`slotPop`, the family's length the cursor) and goes on with it and the node; an array of one
+slot or none, an `X` or a `Ref X` frees the node and goes on with its child. Nothing is
+allocated: the work pending is stored in slots of the arrays being freed, which have the type's
+own slot type.
+
+**The class** (`consumeW?`) is read off the consume node's checked type alone: the `μ` body's
+`toFShape` (`Core/Consume.lean`), whose leaves are each either closed (`FoldP.clB 0`) and inert
+(`inertB`: no `U`, so its consume runs no code and only frees) or exactly `[Ref X]`, the array key
+`FoldP.Bnd.arr` at the binder's own variable (`FoldP.keysIn`'s `fam (ref S)` case at `S = X`);
+with at most one recursive position on any path through its `⊕`s (`maxRecW`), and at least one
+array of `X`. No term is recognised. Every other `μ` keeps `consumeShape`. -/
+
+/-- A leaf that is an array of the binder's own variable: `FoldP.keysIn`'s array key at `X`. -/
+def isArrX : VTy → Bool
+  | .fam (.ref (.tvar 0)) => true
+  | _ => false
+
+/-- A type whose consume runs no code: no thunk inside (`Consumable.close`, `Consumable.nu` run
+`close`), so its consume only frees and releases. -/
+def inertB : VTy → Bool
+  | .tensor A B | .sum A B => inertB A && inertB B
+  | .ref A | .box _ A | .fam A | .mu A => inertB A
+  | .thunk _ | .code .. | .opq _ => false
+  | _ => true
+
+/-- The recursive positions on the path through the `⊕`s with the most: `X`, `Ref X` and an
+array of `X` one each. -/
+def maxRecW : FShape → Nat
+  | .leaf A => if isArrX A then 1 else 0
+  | .refX | .varX => 1
+  | .tensor F G => maxRecW F + maxRecW G
+  | .sum F G => max (maxRecW F) (maxRecW G)
+
+/-- Every leaf an array of `X`, or closed and inert. -/
+def leavesW : FShape → Bool
+  | .leaf A => isArrX A || (FoldP.clB 0 A && inertB A)
+  | .refX | .varX => true
+  | .tensor F G | .sum F G => leavesW F && leavesW G
+
+def hasArrX : FShape → Bool
+  | .leaf A => isArrX A
+  | .refX | .varX => false
+  | .tensor F G | .sum F G => hasArrX F || hasArrX G
+
+/-- **The in-place consume's class** (SPEC §74), on the `μ` body `T` the consume node's type
+carries.  `[spec §74]` -/
+def consumeW? (T : VTy) : Bool :=
+  let F := toFShape T
+  leavesW F && maxRecW F ≤ 1 && hasArrX F
+
+/-- What a path through the node reaches: no recursive position, an `X` (at `Ref X`, its cell),
+or an array of `X`. -/
+inductive WPos where
+  | none
+  | x (cell : Bool) (v : Var)
+  | arr (v : Var)
+
+/-- Which of the two functions a walk builds the body of: `down` with the work pending `p`. -/
+inductive WMode where
+  | up
+  | down (p : Var)
+
 /-- **A leaf of a consume** (`consumeAt`'s `forget`, `consumeSlot_derives`) on `x`: a call of a function
 that consumes it, one per LIR type, registered in `Prog.consumeFns`, the only functions where `Lint`
 admits a consume at the rule `consume`. -/
@@ -2301,6 +2371,55 @@ def leafConsume (x : Var) : CM Tm := do
     let u ← fresh xT
     setFn fi { name := "consume leaf", params := [u], ret := .unit, body := .consume .consume u .unit }
     return .call fi [x]
+
+/-- The step at a path's recursive position (the table of SPEC §74). Every call is in tail
+position. -/
+def stepW (T : VTy) (up down : Nat) (mode : WMode) (pos : WPos)
+    (rest : CM Tm → CM Tm) (rb : Var → (Var → CM Tm) → CM Tm) : CM Tm := do
+  -- Done with this node: go on with the work pending (`down`), or return (`up`).
+  let next : CM Tm := match mode with
+    | .down p => pure (.call up [p])
+    | .up => pure .unit
+  -- Go on with a child, the work pending unchanged.
+  let onChild (v : Var) : CM Tm := match mode with
+    | .down p => pure (.call down [v, p])
+    | .up => pure (.call up [v])
+  let freeArr (a : Var) (k : CM Tm) : CM Tm := do
+    let u ← fresh .unit
+    return .letv u (.prim .freeArr [a]) (.consume .dead u (← k))
+  match pos with
+  | .none => rest next
+  | .x false v => rest (onChild v)
+  | .x true v => do
+    let c ← fresh (← vty (.mu T))
+    return .letv c (.prim .free [v]) (← rest (onChild c))
+  | .arr v => do
+    let aT ← tyOf v
+    let .fam (.ref eT) := aT.peel | throw "LIR: an array of `X` that is not an owned array"
+    let pr ← fresh (.pair aT i32T)
+    let a ← fresh aT; let n ← fresh i32T
+    -- Slot 0 moved out of `a`: `k a' v`.
+    let take0 (a : Var) (k : Var → Var → CM Tm) : CM Tm := lit32 0 fun z => do
+      let q ← fresh (.pair aT eT)
+      let a' ← fresh aT; let v ← fresh eT
+      return .letv q (.prim .slotTake [a, z]) (.letpair a' v q (← k a' v))
+    let many : CM Tm := match mode with
+      | .down p => take0 a fun a' v => lit32 0 fun z => do
+          -- The work pending stored in the slot the child left.
+          let a'' ← fresh aT
+          return .letv a'' (.prim .slotPut [a', z, p]) (← rb a'' fun nd => pure (.call down [v, nd]))
+      | .up => do
+          let q ← fresh (.pair aT eT)
+          let a' ← fresh aT; let v ← fresh eT
+          return .letv q (.prim .slotPop [a]) (.letpair a' v q
+            (← rb a' fun nd => pure (.call down [v, nd])))
+    let oneT : CM Tm := take0 a fun a' v => freeArr a' (rest (onChild v))
+    let noneT : CM Tm := freeArr a (rest next)
+    let body ← dup .dup n fun n n₁ => lit32 1 fun o =>
+      ifLt o n₁
+        (do return .consume .dead n (← many))
+        (lit32 0 fun z => ifLt z n oneT noneT)
+    return .letv pr (.prim .size [v]) (.letpair a n pr body)
 
 mutual
 /-- The consume of `A` on `x`: a term of type `1`. -/
@@ -2329,15 +2448,23 @@ def genConsume (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
     let key := ppVT (.mu T) (← get).mach
     let fi ← match (← get).consumeFnOf[key]? with
       | some fi => pure fi
-      | none => do
-        let fi ← reserveFn "consume"
-        modify fun s => { s with consumeFnOf := s.consumeFnOf.insert key fi }
-        let u ← fresh (← vty (.mu T))
-        let w ← fresh (← vty (VTy.inst (.mu T) T))
-        let body ← consumeShape f fi (toFShape T) T w
-        setFn fi { name := "consume", params := [u], ret := .unit,
-                   body := .letv w (.prim .unroll [u]) body }
-        pure fi
+      | none =>
+        if consumeW? T then do
+          -- The class is read off `T`, the consume node's checked type (`consume:type`) alone.
+          let up ← reserveFn "consume_up"
+          let down ← reserveFn "consume_down"
+          modify fun s => { s with consumeFnOf := s.consumeFnOf.insert key up }
+          genConsumeW f T up down
+          pure up
+        else do
+          let fi ← reserveFn "consume"
+          modify fun s => { s with consumeFnOf := s.consumeFnOf.insert key fi }
+          let u ← fresh (← vty (.mu T))
+          let w ← fresh (← vty (VTy.inst (.mu T) T))
+          let body ← consumeShape f fi (toFShape T) T w
+          setFn fi { name := "consume", params := [u], ret := .unit,
+                     body := .letv w (.prim .unroll [u]) body }
+          pure fi
     return .call fi [x]
   | .thunk (.nu (.amp _ (.ret R))) => do
     let rT ← selTy (← tyOf x) 1
@@ -2371,6 +2498,74 @@ def genConsume (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
     let a' ← fresh aT; let n' ← fresh i32T
     return .letv pr (.prim .size [x]) (.letpair a' n' pr (← lit32 0 fun z => pure (.call fi [a', z, n'])))
   | _ => leafConsume x
+
+/-- The two functions of the in-place consume of `μX. T` (SPEC §74), `up` on `p` and `down` on
+`(c, p)`, each an unroll and a walk of the node (`walkW`).
+
+UNPROVED: that `consume_up x` frees exactly the cells and arrays the kernel's consume
+`consumeE (.mu T)` frees (`foldOwnG` at results `1`: Json's body is in `P`, not in `FShape`), in
+another order, and observes nothing else. It should hold because both functions free exactly
+their arguments: each step moves owned values between owned places of the same type (a slot
+holds the work pending, at the slot's own type) and frees a node only when nothing is left in it,
+which `Lint` checks of the LIR (each variable consumed once) and the LIR interpreter checks of
+every run (no array freed with a written slot, `live 0`); and the order is unobservable because
+every leaf is closed and inert (`consumeW?`): its consume runs no code. A mismatch shows as a leak
+or a double free in `live`, or a disagreement with the source stage.  `[spec §74]` -/
+def genConsumeW (fuel : Nat) (T : VTy) (up down : Nat) : CM Unit := do
+  match fuel with
+  | 0 => throw "LIR: a consume's type too deep"
+  | f + 1 =>
+  let muT ← vty (.mu T)
+  let wT ← vty (VTy.inst (.mu T) T)
+  let F := toFShape T
+  let roll (v : Var) (k : Var → CM Tm) : CM Tm := do
+    let n ← fresh muT; return .letv n (.prim .roll [v]) (← k n)
+  let c ← fresh muT; let p ← fresh muT; let w ← fresh wT
+  let bodyD ← walkW f T up down (.down p) F w (fun c => c) roll
+  setFn down { name := "consume_down", params := [c, p], ret := .unit,
+               body := .letv w (.prim .unroll [c]) bodyD }
+  let p ← fresh muT; let w ← fresh wT
+  let bodyU ← walkW f T up down .up F w (fun c => c) roll
+  setFn up { name := "consume_up", params := [p], ret := .unit,
+             body := .letv w (.prim .unroll [p]) bodyU }
+
+/-- The node part `w` (at the shape `F`) taken apart to the recursive position on each path, then
+the step of `mode` there (`stepW`). `rest` consumes what the path left beside the position; `rb`
+builds the node again around a new value at this part and rolls it. -/
+def walkW (fuel : Nat) (T : VTy) (up down : Nat) (mode : WMode) (F : FShape) (w : Var)
+    (rest : CM Tm → CM Tm) (rb : Var → (Var → CM Tm) → CM Tm) : CM Tm := do
+  match fuel with
+  | 0 => throw "LIR: a consume's shape too deep"
+  | f + 1 =>
+  -- A part with no recursive position, consumed whole.
+  let whole (G : FShape) (y : Var) (c : CM Tm) : CM Tm := do
+    let u ← fresh .unit
+    return .letv u (← genConsume f (VTy.inst (.mu T) G.ty) y) (.consume .dead u (← c))
+  if maxRecW F == 0 then
+    return ← stepW T up down mode .none (fun c => rest (whole F w c)) rb
+  match F with
+  | .leaf _ => stepW T up down mode (.arr w) rest rb
+  | .varX => stepW T up down mode (.x false w) rest rb
+  | .refX => stepW T up down mode (.x true w) rest rb
+  | .tensor F₁ F₂ => letpairM w fun a b => do
+    -- `maxRecW F ≤ 1`: one side holds the positions; the other is consumed or rebuilt whole.
+    if maxRecW F₁ != 0 then
+      walkW f T up down mode F₁ a (fun c => rest (whole F₂ b c)) (fun v k => do
+        let q ← fresh (.pair (← tyOf v) (← tyOf b))
+        return .letv q (.pair v b) (← rb q k))
+    else
+      walkW f T up down mode F₂ b (fun c => rest (whole F₁ a c)) (fun v k => do
+        let q ← fresh (.pair (← tyOf a) (← tyOf v))
+        return .letv q (.pair a v) (← rb q k))
+  | .sum F₁ F₂ => do
+    let wT ← tyOf w
+    let .sum aT bT := wT.peel | throw "LIR: a consume's sum"
+    let a ← fresh aT; let b ← fresh bT
+    let arm (right : Bool) (G : FShape) (y : Var) : CM Tm :=
+      walkW f T up down mode G y rest (fun v k => do
+        let s ← fresh wT
+        return .letv s (.inj right v) (← rb s k))
+    return .case w a (← arm false F₁ a) b (← arm true F₂ b)
 
 /-- The consume at a `μ` body's shape, recursive positions by the type's own consume `fi`. -/
 def consumeShape (fuel : Nat) (fi : Nat) (F : FShape) (T : VTy) (w : Var) : CM Tm := do

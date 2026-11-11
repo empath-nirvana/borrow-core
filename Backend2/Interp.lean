@@ -16,7 +16,8 @@ scripted standard input, the arguments' stream, and collected standard output an
   borrow: copies and consumes are of persistent values and borrows only;
 - a cell or slot is read only when written, and written by `put` and `slotPut` only when
   unwritten (the moves of `take`, `replace` and `withswap`), and an array is freed only when
-  every slot is unwritten;
+  every slot of its object is unwritten, the object freed whole (a family `slotPop` shortened
+  included);
 - every heap access is to a live object;
 - every `stackK` consume is a stack machine's hand-over (`handOverB`, `HandOver`);
 - at every call, a borrow a parameter whose lend bit is set (`Fn.lendEncl`) holds is not beside
@@ -374,11 +375,21 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     let v ← readAt (b + i.toNat)
     if b < dataAt || b ≥ staticAt then writeAt (b + i.toNat) none
     pure (.pair (.fam b n) v)
-  | .freeArr, [.fam b n] => do
-    if n == 0 || (b ≥ dataAt && b < staticAt) then return .unit
-    for i in [0:n.toNat] do
+  | .slotPop, [.fam b n] => do
+    if n == 0 then bad "a slotPop of an empty family"
+    let i := (n - 1).toNat
+    let v ← readAt (b + i)
+    if b < dataAt || b ≥ staticAt then writeAt (b + i) none
+    pure (.pair (.fam b (n - 1)) v)
+  -- The object at the base is freed whole, at the size it was allocated with, and every one of its
+  -- slots must be unwritten: a family shortened by `slotPop` frees the object it came from.
+  -- `[spec §74]`
+  | .freeArr, [.fam b _] => do
+    if b == 0 || (b ≥ dataAt && b < staticAt) then return .unit
+    let some k := (← get).objs[b]? | bad s!"a freeArr of {b}, which is not a live object"
+    for i in [0:k] do
       if ← isWritten (b + i) then bad "an array freed with a written slot"
-    freeObj b n.toNat
+    freeObj b k
     pure .unit
   | .size, [.fam b n] => pure (.pair (.fam b n) (i32v n))
   | .len, [.fam _ n] => pure (i32v n)

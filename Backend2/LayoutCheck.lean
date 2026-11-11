@@ -324,7 +324,7 @@ def walk (p : Prog) (w : String) : Nat → Tm → Nat → CM Unit
       | .slotPut => do
         eq "a slot's contents" (← kd (← kd (← a 0) 0) 0) (← a 2)
         eq "a slot put's array" dst (← a 0)
-      | .slotTake => do
+      | .slotTake | .slotPop => do
         eq "a slot take's array" (← kd dst 0) (← a 0)
         eq "a slot's contents" (← kd dst 1) (← kd (← kd (← a 0) 0) 0)
       | .size => eq "a family's size" (← kd dst 0) (← a 0)

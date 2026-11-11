@@ -82,6 +82,10 @@ inductive Op where
   | slotPut
   /-- `slotTake a i`: slot `i`'s contents moved out, the slot left unwritten: `(a, contents)`. -/
   | slotTake
+  /-- `slotPop a` (`n ≥ 1`): slot `n − 1`'s contents moved out, and `a` as the family of its first
+  `n − 1` slots: `(a′, contents)`. The object is unchanged; `freeArr a′` frees all of it. The
+  in-place consume's cursor (`genConsumeW`).  `[spec §74]` -/
+  | slotPop
   /-- The array's base freed, every slot unwritten. -/
   | freeArr
   /-- `size v`: `(v, n)`, the family and its length. -/

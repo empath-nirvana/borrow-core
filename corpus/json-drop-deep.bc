@@ -1,0 +1,42 @@
+-- Freeing a deeply nested `Json` (SPEC §74): a value as deep as the first argument (`.args`: 2000),
+-- built by a loop, its levels an array of one element and an object of one member in turn,
+-- dropped at the end of `main`. The consume is two functions of tail calls, the work pending
+-- kept in the arrays being freed, so it takes no native frame a level: at 2000 levels the
+-- recursion it replaces overflows a native stack of 16 KiB (about 75 bytes a level).
+-- `scripts/compile-native.sh` runs it natively on Backend2 at 10^6 levels in a stack of 16 KiB.
+--
+-- Answer: `built`, then the depth, `i32[2000]`, and `live 0`: every array and map of the value freed. A consume
+-- that leaves an array, or frees one twice, shows in `live` or fails.
+include json
+include textio
+
+-- The first argument as a number, 0 when there is none or it is not one.
+fn depth() -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  if got { borrow imm s { 't, t -> with default(0) { parse_i32(t) } } } else { 0 }
+
+-- A value `n` deep.
+fn nest(n: i32) -> Json =
+  let mut j = Null;
+  let mut arr = true;
+  for _ in 0..n {
+    let cur = j;
+    if arr {
+      arr = false;
+      let mut b = box buf[Json](1);
+      push(&mut b, cur);
+      j = Arr(Vec(b))
+    } else {
+      arr = true;
+      let m = map_new[string, Json](1);
+      let (m, old) = map_insert(m, string_of_lit("k"), cur);
+      j = Obj(m)
+    }
+  };
+  j
+
+main -> i32 =
+  let n = depth();
+  let j = nest(n);
+  print_lit("built\n");
+  n
