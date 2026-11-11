@@ -610,6 +610,9 @@ corpus/json-deep.bc 4.0 cancellable abortive: branch; agree
 corpus/json-deep.bc 2.0 cancellable abortive: branch; agree
 corpus/json-deep.bc 1.0 cancellable abortive: branch; agree
 corpus/json-deep.bc 5.0 cancellable abortive: branch; agree
+corpus/json-drop-deep.bc 1.0 cancellable abortive: branch; agree
+corpus/json-drop-deep.bc 3.0 cancellable abortive: branch; agree
+corpus/json-drop-deep.bc 2.0 cancellable abortive: branch; agree
 corpus/json-get.bc 3.0 cancellable abortive: branch; agree
 corpus/json-get.bc 4.0 cancellable abortive: branch; agree
 corpus/json-get.bc 2.0 cancellable abortive: branch; agree
