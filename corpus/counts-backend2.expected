@@ -123,6 +123,9 @@ core-fin-sub-row 0 0 0 0 0 0
 core-fin-top-row 0 0 0 0 0 0
 core-pipe-close 2 0 0 2 2 0
 core-pipe-step 1 0 0 1 1 0
+core-row-generic 0 0 0 0 0 0
+core-row-pipe-stop 0 0 0 0 0 0
+core-site-generic 0 0 0 0 0 0
 core-unsigned 0 0 0 0 0 0
 data-json-map-ser 16 0 0 489 379 133
 deep-gen-count 0 3 0 0 0 0
