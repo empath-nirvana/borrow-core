@@ -221,9 +221,9 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .withbor3 ii jj a A B x => []
   | .withload ii jj a A B x => []
   | .withswap ii jj a A B => []
-  | .withbor1U ii jj A B S x td => td.lifeBinders
-  | .withbor2U ii jj A B S x td => td.lifeBinders
-  | .withbor3U ii jj a A B S x td => td.lifeBinders
+  | .withbor1UD ii jj A B SM SD S x td => td.lifeBinders
+  | .withbor2UD ii jj A B SM SD S x td => td.lifeBinders
+  | .withbor3UD ii jj a A B SM SD S x td => td.lifeBinders
   | .withloadU ii jj a A B S x => []
   | .sliceBorrowMU ii jj A B S x td => td.lifeBinders
   | .sliceBorrowIU ii jj A B S x td => td.lifeBinders
@@ -343,9 +343,9 @@ def TExpr.domFree : TExpr → Bool
   | .withbor3 ii jj a A B x => false
   | .withload ii jj a A B x => false
   | .withswap ii jj a A B => true
-  | .withbor1U ii jj A B S x td => false
-  | .withbor2U ii jj A B S x td => false
-  | .withbor3U ii jj a A B S x td => false
+  | .withbor1UD ii jj A B SM SD S x td => false
+  | .withbor2UD ii jj A B SM SD S x td => false
+  | .withbor3UD ii jj a A B SM SD S x td => false
   | .withloadU ii jj a A B S x => false
   | .sliceBorrowMU ii jj A B S x td => false
   | .sliceBorrowIU ii jj A B S x td => false
@@ -464,9 +464,9 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .withbor3 ii jj a A B x => .withbor3 ii jj a A B x
   | .withload ii jj a A B x => .withload ii jj a A B x
   | .withswap ii jj a A B => .withswap ii jj a A B
-  | .withbor1U ii jj A B S x td => .withbor1U ii jj A B S x (td.reAb Δr)
-  | .withbor2U ii jj A B S x td => .withbor2U ii jj A B S x (td.reAb Δr)
-  | .withbor3U ii jj a A B S x td => .withbor3U ii jj a A B S x (td.reAb Δr)
+  | .withbor1UD ii jj A B SM SD S x td => .withbor1UD ii jj A B SM SD S x (td.reAb Δr)
+  | .withbor2UD ii jj A B SM SD S x td => .withbor2UD ii jj A B SM SD S x (td.reAb Δr)
+  | .withbor3UD ii jj a A B SM SD S x td => .withbor3UD ii jj a A B SM SD S x (td.reAb Δr)
   | .withloadU ii jj a A B S x => .withloadU ii jj a A B S x
   | .sliceBorrowMU ii jj A B S x td => .sliceBorrowMU ii jj A B S x (td.reAb Δr)
   | .sliceBorrowIU ii jj A B S x td => .sliceBorrowIU ii jj A B S x (td.reAb Δr)
@@ -852,9 +852,9 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | withswap a0 =>
       intro Δ' he hd
       exact TDerivesP.withswap a0
-  | withbor1U => intro _ _ hd; simp [TExpr.domFree] at hd
-  | withbor2U => intro _ _ hd; simp [TExpr.domFree] at hd
-  | withbor3U => intro _ _ hd; simp [TExpr.domFree] at hd
+  | withbor1UD => intro _ _ hd; simp [TExpr.domFree] at hd
+  | withbor2UD => intro _ _ hd; simp [TExpr.domFree] at hd
+  | withbor3UD => intro _ _ hd; simp [TExpr.domFree] at hd
   | withloadU => intro _ _ hd; simp [TExpr.domFree] at hd
   | sliceBorrowMU => intro _ _ hd; simp [TExpr.domFree] at hd
   | sliceBorrowIU => intro _ _ hd; simp [TExpr.domFree] at hd
@@ -1201,9 +1201,9 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | withswap a0 =>
       intro Δ' he hd
       exact TDerivesAt.withswap a0
-  | withbor1U => intro _ _ hd; simp [TExpr.domFree] at hd
-  | withbor2U => intro _ _ hd; simp [TExpr.domFree] at hd
-  | withbor3U => intro _ _ hd; simp [TExpr.domFree] at hd
+  | withbor1UD => intro _ _ hd; simp [TExpr.domFree] at hd
+  | withbor2UD => intro _ _ hd; simp [TExpr.domFree] at hd
+  | withbor3UD => intro _ _ hd; simp [TExpr.domFree] at hd
   | withloadU => intro _ _ hd; simp [TExpr.domFree] at hd
   | sliceBorrowMU => intro _ _ hd; simp [TExpr.domFree] at hd
   | sliceBorrowIU => intro _ _ hd; simp [TExpr.domFree] at hd
