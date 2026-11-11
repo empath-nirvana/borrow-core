@@ -10421,9 +10421,9 @@ corpus or a golden.
 
 ### `cancelTo_n`: the in-place cancel-mode unwind (#1002)
 
-A seventh effect primitive, `cancelTo_n k`, cancels the handled region of the nearest `hnd(n, H)`
-in place, in cancel mode, without capturing a continuation, and then runs `k` outside the node
-(§19's step `[cancel-to]`):
+A seventh effect primitive, `cancelTo_n k`, a machine primitive with no typing rule (below), cancels
+the handled region of the nearest `hnd(n, H)` in place, in cancel mode, without capturing a
+continuation, and then runs `k` outside the node (§19's step `[cancel-to]`):
 
     (μ, hnd (n, H) K[cancelTo_n k])  ↦  (μ, ccatch (K†[raise (⊥, none)]) ; k ())     K free of n   [cancel-to]
 
@@ -10438,19 +10438,21 @@ in place, in cancel mode, without capturing a continuation, and then runs `k` ou
 - Determinism and unique decomposition gain the case: `K[cancelTo_n k]` is final until the
   enclosing `hnd(n, _)` reduces it, as `K[perform (n, v)]` is.
 
-**Typing, inside a `[handle-last]` node's region.**
+**No typing rule.** `cancelTo_n` is a machine primitive that no program the checker types
+contains: only the fusion lowering produces it, in a fused `[handle-last]` node. It is justified by
+correspondence, as the erasure laws are, not by `CDerives`:
+- `cancelTo_last_cancel` (`Core/HandleLastErase.lean`, #1043) proves that its step reaches the
+  configuration the `[op]` step plus the clause's `κ.2 ()` reaches. The `[cancel-to]` step builds a
+  `seq` frame where the `[op]` route has an application frame, and both reach `K₀[(λ_. nf z) ()]`
+  at the same memory.
+- The fused form as a whole is justified by P3's whole-run simulation (#1001), which is not yet
+  mechanised.
+- Until it is, the fusion lowering marks its use of `cancelTo` `UNPROVED:`. The mark states the
+  assumption (fused and unfused runs correspond) and what breaks if it fails (cleanup order and the
+  reported error).
 
-    Γ ⊢ k : U(1 ⊸ F_Σ R)        (Σ, R the node's outer row and answer)
-    ──────────────────────────────────────────────────  [cancel-to]
-    Γ ⊢ cancelTo_n k : F_{n:E[fs] ⊕ Σ′} B        (any B)
-
-- It is admitted where the region's row carries the node's name `n`, as an operation of `E` that
-  is cancellable or abortive with cancel row `fs j`.
-- Its cancel obligation, `K`'s finalisers, is covered by that cancel row under `LastFinOK`'s
-  conditions: below `Σ` (D3), not `⊤`, no `Div`.
-- Whatever `k` closes over is held across the cancel: `[let]`'s `hW` at `Row.Cancels`, as for an
-  exit's `z`.
-- No new index: one `CDerives` rule with its compatibility lemma.
+The relation has no stop for `K[cancelTo_n k]`, and the row does not record a node's answer. So a
+typing rule would need a new stop kind and a new row coordinate (#1002's C.2 analysis). Not built.
 
 **The fused form it gives pipe fusion** (P3, #1001):
 
@@ -10463,21 +10465,22 @@ handlers are dead), on the `inr` exit, and on an outer cancel of a continuation 
 the node. It is not exact for a perform by the work of a name that has a live handler inside `K`;
 that case keeps T-B2's condition, `Σ_W`'s names unhandled in `K`.
 
-**Baseline.** `fundamentalC`, `adequacyC`, `adequacyD`, `fundamentalN_all` and `goal791N`, with
-their statements unchanged; every existing compatibility lemma; §13's determinism (`head_det`, with
-the new case); the laws `last_resume_direct`, `last_cancel_direct` (and `_exit`) and
-`last_perform_direct`, unchanged. Every corpus and kernel program keeps its output: no existing term
-changes.
+**Baseline.** No `CDerives` rule and no relation change: `fundamentalC`, `adequacyC`/`adequacyD` and
+`fundamentalN_all`/`goal791N` are untouched, and no checked program contains `cancelTo`. Every
+existing compatibility lemma; §13's determinism (`head_det`, with the new case); the laws
+`last_resume_direct`, `last_cancel_direct` (and `_exit`) and `last_perform_direct`, unchanged. Every
+corpus and kernel program keeps its output: no existing term changes.
 
 **Units.** C.1, the machine (Support): the `Expr` former, `[cancel-to]`, and the cases in
-determinism, decomposition and `StepsOff`/frame. C.2, Core: the rule and its compatibility lemma,
-from the cancel branch's proof (`erwp_kappaC_cancel`, `ewp_handle_or`'s `hTc` at `lastTc`). C.3,
-the chain: the compatibility lemma at `erwpK`/`KW`. The backend: the in-place cancel-mode unwind in
-the interpreters and Backend2. C.1 is built; C.2, C.3 and the backend are not.
+determinism, decomposition and `StepsOff`/frame; built (#1043). C.2 and C.3 are dropped: there is no
+typing rule (#1002). The lowering is backend-foreman's: the in-place cancel-mode unwind in the
+interpreters and Backend2, marked `UNPROVED:` at the fusion site until P3's simulation is
+mechanised.
 
-**Open.** The fused-vs-unfused simulation (P3's whole-run relation), which discharges *a raise or
-cancel crosses the active frame* above; performs re-entered in `K`; a surface or elaborator producer
-for the fused form.
+**Open.** P3's whole-run simulation (#1001), which justifies `cancelTo`'s use in the fused form
+and discharges the fusion site's `UNPROVED:` mark (*Units*), and *a raise or cancel crosses the
+active frame* above; performs re-entered in `K`; a surface or elaborator producer for the fused
+form.
 
 ### Open
 
