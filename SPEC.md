@@ -13932,7 +13932,7 @@ handed back).
   | Program | What | Answer |
   |---|---|---|
   | `corpus/fin-capability.bc` (from `reject/`) | a `finally` using a capability the body also uses, at an empty body row: a plain `withbor3` | `AB`, `inl i32[1]` |
-  | `corpus/fin-capability-unwind.bc` | the body raises `500` past a `default` handler; the cleanup ticks a `Count` capability on the abort, and the tick lands in its cell (`i32[2]` would mean it was lost) | `(inr i32[500], i32[3])` |
+  | `corpus/fin-capability-unwind.bc` | the body ticks a `Count` capability (a handler's `mut` cell) and raises `500` past a `default` handler; the `with` is a reborrow of the capability whose cleanup ticks it again as the abort passes, and the tick lands in the handler's cell (`i32[2]` would mean it was lost) | `(inr i32[500], i32[3])` |
   | `corpus/core-withbor3u-fin.bc` | core text: a cell `1`, lent; the reborrow writes `5` and aborts `42`; `d` writes `99` | `(i32[99], inr i32[42])` |
   | `corpus/reject/core-withbor3u-fin-performs.bc` | `d` aborts | the second refusal above |
   | `corpus/reject/finally-two-caps.bc` | a cleanup using `stdout` and a `Count` capability | the first refusal above |
