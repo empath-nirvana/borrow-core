@@ -736,16 +736,16 @@ theorem img_ls {W₁ a₁ w₀ c d ad : WRes} {le : Loc} {s : LSet} {v : Val}
       exact Or.inr ⟨hy₁, ⟨ξ, ed⟩, hz⟩
   · exact Or.inl ((hbi m ξ e₁).ls ht₁ hy₁)
 
-/-- Nested views are shorter than their parents.  At a chain position `ℓ` with parent
-`ℓ₀`, every lifetime of the view at `ℓ` in `ag(W)` is shorter than some lifetime of the view
-at `ℓ₀`.  This is `[TR]` 6.150's H11 choice (`β ⊏ γᵢ ⊓ γ_b`, taken below every lifetime of the
-world) read at the view a `withload` inside a `withload` makes: the inner `β′` is shorter than
-the outer view's.  `[about ours: an invariant of the typed world]` -/
+/-- Nested views are no longer than their parents.  At a chain position `ℓ` with parent
+`ℓ₀`, every lifetime of the view at `ℓ` in `ag(W)` is `⊑` some lifetime of the view at `ℓ₀`.
+`[TR]` 6.150's H11 choice (`β ⊏ γᵢ ⊓ γ_b`) makes a `withload` inside a `withload` strictly
+shorter; a shared borrow's views of what it reaches through owned pointers are minted at the
+borrow's own lifetime, so the nesting is `⊑`.  `[about ours: an invariant of the typed world]` -/
 def NestLife (W : WRes) (r : FrameRec) : Prop :=
   ∀ l₀ l S u, Chain r.R r.T r.v (some l₀) l S u → ∀ a, AgW W a → ∀ (ψ : CellU Loc Val) s,
     a.get l = some ψ → ψ.lsOf = some s → ∀ x, s.mem x →
     ∃ (ζ : CellU Loc Val) (t : LSet) (y : Life), a.get l₀ = some ζ ∧ ζ.lsOf = some t ∧
-      t.mem y ∧ x ⊏ y
+      t.mem y ∧ x ⊑ y
 
 /-- `NestLife` along a map that sends lifetimes of `ag(W′)`'s child views to `ag(W)` (or
 finds the parent directly), and lifetimes of `ag(W)`'s parent views to `ag(W′)`. -/
@@ -755,7 +755,7 @@ theorem nestLife_of_maps {W W' aW : WRes} {r : FrameRec} (hN : NestLife W r)
       ∀ (ψ : CellU Loc Val) s x, a'.get m = some ψ → ψ.lsOf = some s → s.mem x →
       (∃ (ζ : CellU Loc Val) (t : LSet), aW.get m = some ζ ∧ ζ.lsOf = some t ∧ t.mem x) ∨
       (∃ (ζ : CellU Loc Val) (t : LSet) (y : Life), a'.get l₀ = some ζ ∧ ζ.lsOf = some t ∧
-        t.mem y ∧ x ⊏ y))
+        t.mem y ∧ x ⊑ y))
     (fwd : ∀ a', AgW W' a' → ∀ l₀ m S u, Chain r.R r.T r.v (some l₀) m S u →
       ∀ (ζ : CellU Loc Val) t y, aW.get l₀ = some ζ → ζ.lsOf = some t → t.mem y →
       ∃ (ζ' : CellU Loc Val) (t' : LSet), a'.get l₀ = some ζ' ∧ ζ'.lsOf = some t' ∧ t'.mem y) :
@@ -2243,7 +2243,7 @@ theorem nm_reb_like {W W' c w₀ : WRes} {ps rs : List FrameRec} {le : Loc} {s :
       Chain r.R r.T r.v (some l₀) m S u → ∀ u', w₀.get m = some (CellU.ownOf u') →
       (∃ φ, c.get m = some φ) →
       ∃ (ζ : CellU Loc Val) (t : LSet) (y : Life), a'.get l₀ = some ζ ∧ ζ.lsOf = some t ∧
-        t.mem y ∧ β ⊏ y) :
+        t.mem y ∧ β ⊑ y) :
     (∀ r ∈ rs, NestLife W' r) ∧ NoMut W' ps rs := by
   obtain ⟨aW, haW⟩ := agW_of_valid hvW
   have tm : ∀ x, MutAt W' x → MutAt W x := by
@@ -2373,7 +2373,7 @@ theorem ti_rebDeep {W W' c : WRes} {ps rs : List FrameRec} {r₀ : FrameRec} {p�
       obtain ⟨ξ, t, eξ, ht, hy⟩ :=
         (icp_trans (icpAt_agW haW l₀ _ hcell) (icpAt_left hcomp l₀)).ls
           (CellU.lsOf_immOf _ _ _ _) s.meet_mem
-      exact ⟨ξ, t, s.meet, eξ, ht, hy, hβ l₀ _ hcell⟩)
+      exact ⟨ξ, t, s.meet, eξ, ht, hy, (hβ l₀ _ hcell : β ⊏ s.meet).le⟩)
   refine ⟨chainInv_rebDeep hvW hr₀ hch₀ hcell hx hreb hden hW hv h3, hl', hid, hio, hN', hM', hmem,
     ?_⟩
   refine cov_reb_like hvW hcell hreb hW hC (leInvW_of hl' hmem) (fun m u eζ ⟨ψ, ec⟩ => ?_)
@@ -2624,7 +2624,7 @@ theorem ti_endReb {W W' c w₀ : WRes} {ps rs : List FrameRec} {le : Loc} {s : L
     · exact ⟨ζ', t', y, e', ht', hy', hxy⟩
     · exfalso
       have hin : y < s'.meet := (Life.sqsupset_iff _ _).mp (CellU.sqsupset_of_lsOf hs' (R5 m ψ e))
-      exact lt_asymm (lt_of_lt_of_le hin (s'.meet_least x hx)) hxy
+      exact lt_irrefl y (lt_of_lt_of_le hin (le_trans (s'.meet_least x hx) hxy))
   have parent : ∀ r ∈ rs, ∀ l₀ m S u, Chain r.R r.T r.v (some l₀) m S u →
       ∀ ψ : CellU Loc Val, a'.get m = some ψ → ψ.kind ≠ Kind.own →
       ∃ ζ : CellU Loc Val, a'.get l₀ = some ζ ∧ ζ.kind ≠ Kind.own := by

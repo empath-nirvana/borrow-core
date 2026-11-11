@@ -146,7 +146,7 @@ theorem rwpG_rebDeepGV {Φ : LocFam} (r : FrameRec) {p₀ : Option Loc} {l₀ : 
     obtain ⟨a1, a2, h1, -, hcomp⟩ := (AgW.split hWcell).mp ha
     obtain ⟨ξ, t, eξ, ht, hy⟩ := (icp_trans (icpAt_agW h1 l₀ _ (ResU.single_get_self _ _))
       (icpAt_left hcomp l₀)).ls (CellU.lsOf_immOf _ _ _ _) (LSet.meet_mem _)
-    exact ⟨ξ, t, _, eξ, ht, hy, CellU.sqsupset_of_lsOf (CellU.lsOf_immOf _ _ _ _) hβc⟩
+    exact ⟨ξ, t, _, eξ, ht, hy, le_of_lt (CellU.sqsupset_of_lsOf (CellU.lsOf_immOf _ _ _ _) hβc)⟩
   have hTin : TWNC Win ps (rsOf ls) :=
     TWNC.rebDeep r x hT hr hch₀ hle hx hreb hshape hcellLe hrebLe rfl hfχ hvWin
   have htgin : Tagged Win ps ls := tagged_rebDeepN hT.toN hr hch₀ hle hreb hrebLe hfχ htg

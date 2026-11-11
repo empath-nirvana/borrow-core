@@ -9,8 +9,8 @@ replaced, and every other constructor copied unchanged:
 * `reb`'s `StratumLe W β` becomes `RebRecLe W ps r.R β`: every record proper whose lineage meets
   an exclusive location of the reborrowed escrow has its frame no shorter than `β`;
 * `rebEnd`'s `W′.InStratum β` becomes `RebEndRec W′ rs r.R β`: at every chain position of a record
-  whose parent is an exclusive location of the reborrowed escrow, a view of `ag(W′)` shorter than
-  `β` has a longer view at the parent.
+  whose parent is an exclusive location of the reborrowed escrow, a view of `ag(W′)` no longer than
+  `β` has a view no shorter at the parent.
 
 ## Soundness argument
 
@@ -18,8 +18,8 @@ replaced, and every other constructor copied unchanged:
 `frameLife_reb_like` as `β ⊑ α` at a record proper whose lineage meets an exclusive location of
 the escrow (`frameLife_reb_rec` takes it there only); `W′.InStratum β` is read in `ti_endReb`
 for `NestLife`, at a chain position whose parent lost the lifetime `β`, and that parent is an
-exclusive location of the escrow; there it rules out a child view shorter than `β` whose only
-longer parent view was at `β`, and `RebEndRec` asks exactly that (`ti_endRebN`). So `TWN` keeps `TI` (`TWN.inv`) and `LinLife`
+exclusive location of the escrow; there it rules out a child view no longer than `β` whose only
+parent view no shorter was at `β`, and `RebEndRec` asks exactly that (`ti_endRebN`). So `TWN` keeps `TI` (`TWN.inv`) and `LinLife`
 (`TWN.linLife`), the facts the development reads of a typed world.
 
 `twN_of_tw` is the conservativity: every `TW` world is a `TWN` world (`rebRecLe_of_stratumLe`,
@@ -47,29 +47,29 @@ def RebRecLe (W : WRes) (ps : List FrameRec) (w₀ : WRes) (β : Life) : Prop :=
     (∃ m, LinLoc p m ∧ ∃ ζ : CellU Loc Val, w₀.get m = some ζ ∧ ζ.kind ≠ Kind.imm) → β ⊑ α
 
 /-- **The chain-positions premise of `rebEnd`.** At a chain position of a record whose parent is
-an exclusive location of the reborrowed escrow `w₀`, every view of `ag(W′)` shorter than `β` has a
-longer view at the parent: the nesting of chain views survives the loss of `β` at the parent. -/
+an exclusive location of the reborrowed escrow `w₀`, every view of `ag(W′)` no longer than `β` has a
+view no shorter at the parent: the nesting of chain views survives the loss of `β` at the parent. -/
 def RebEndRec (W' : WRes) (rs : List FrameRec) (w₀ : WRes) (β : Life) : Prop :=
   ∀ r ∈ rs, ∀ l₀ m S u, Chain r.R r.T r.v (some l₀) m S u →
     (∃ ζ : CellU Loc Val, w₀.get l₀ = some ζ ∧ ζ.kind ≠ Kind.imm) →
     ∀ a', AgW W' a' → ∀ (ψ : CellU Loc Val) s, a'.get m = some ψ → ψ.lsOf = some s →
-      ∀ x, s.mem x → x ⊏ β →
+      ∀ x, s.mem x → x ⊑ β →
       ∃ (ζ : CellU Loc Val) (t : LSet) (y : Life), a'.get l₀ = some ζ ∧ ζ.lsOf = some t ∧
-        t.mem y ∧ x ⊏ y
+        t.mem y ∧ x ⊑ y
 
 /-- **The view premise of `rebDeep`.** The view of `ag(W)` at the reborrowed chain view has a
-lifetime longer than `β`: the new views below it are nested in it. -/
+lifetime no shorter than `β`: the new views below it are nested in it. -/
 def RebCellLe (W : WRes) (l₀ : Loc) (β : Life) : Prop :=
   ∀ a, AgW W a → ∃ (ψ : CellU Loc Val) (t : LSet) (y : Life), a.get l₀ = some ψ ∧
-    ψ.lsOf = some t ∧ t.mem y ∧ β ⊏ y
+    ψ.lsOf = some t ∧ t.mem y ∧ β ⊑ y
 
-/-- `W′ ∈ Res_β` gives the chain-positions premise: no view of `ag(W′)` is shorter than `β`. -/
+/-- `W′ ∈ Res_β` gives the chain-positions premise: every view of `ag(W′)` is longer than `β`. -/
 theorem rebEndRec_of_inStratum {W' : WRes} {rs : List FrameRec} {w₀ : WRes} {β : Life}
     (h : W'.InStratum β) : RebEndRec W' rs w₀ β := by
   intro _ _ _ m _ _ _ _ a' ha' ψ s e hs x hx hxβ
   have hin : β < s.meet := (Life.sqsupset_iff _ _).mp
     (CellU.sqsupset_of_lsOf hs (BoCa.Fig16.BoLo.AgW.inStratum ha' β h m ψ e))
-  exact (lt_asymm (lt_of_lt_of_le hin (s.meet_least x hx)) hxβ).elim
+  exact (lt_irrefl β (lt_of_lt_of_le hin (le_trans (s.meet_least x hx) hxβ))).elim
 
 /-- The typed world with records-only reborrow premises: `TW` with `reb`'s `StratumLe W β`
 replaced by `RebRecLe W ps r.R β` and `rebEnd`'s `W′.InStratum β` by `RebEndRec W′ rs r.R β`.
@@ -645,7 +645,8 @@ theorem twN_of_tw {W : WRes} {ps rs : List FrameRec} (h : TW W ps rs) : TWN W ps
       obtain ⟨ξ, t, eξ, ht, hy⟩ :=
         (icpAt_agW ha _ _ hcell).ls (CellU.lsOf_immOf _ _ _ _) (LSet.meet_mem _)
       exact ⟨ξ, t, _, eξ, ht, hy,
-        CellU.sqsupset_of_lsOf (CellU.lsOf_immOf _ _ _ _) (hβ _ _ hcell)⟩
+        ((Life.sqsupset_iff _ _).mp
+          (CellU.sqsupset_of_lsOf (CellU.lsOf_immOf _ _ _ _) (hβ _ _ hcell))).le⟩
   | mutFold _ hX hW hW' hv ih => exact .mutFold ih hX hW hW' hv
   | mutUnfold _ hW hX hW' hv ih => exact .mutUnfold ih hW hX hW' hv
   | free _ hW hv ih => exact .free ih hW hv
