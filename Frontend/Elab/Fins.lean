@@ -41,6 +41,7 @@ abbrev Table := List ((Nat × Nat) × List Ent)
 /-- The entries of a written row. -/
 def Row.ents : Row → List Ent
   | .nil | .top | .var _ => []
+  | .splice _ r => Row.ents r
   | .cons n i q A B _ r => (n, i, q, A, B) :: Row.ents r
 
 /-- The row of a function's or a block's type: the first `F[…]` on the spine of its result.

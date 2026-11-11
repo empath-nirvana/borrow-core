@@ -76,6 +76,7 @@ def Row.renameLife (f : Span → String → Life) : Row → Row
   | .cons n i q A B g r => .cons n i q (A.renameLife f) (B.renameLife f) (g.renameLife f) (r.renameLife f)
   | .top => .top
   | .var x => .var x
+  | .splice x r => .splice x (r.renameLife f)
 
 def Shape.renameLife (f : Span → String → Life) : Shape → Shape
   | .leaf s A => .leaf s (A.renameLife f)
