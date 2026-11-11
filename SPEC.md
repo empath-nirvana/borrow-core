@@ -5776,9 +5776,9 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
    effect's capability used in `D` is refused, "a cleanup can't yet use `c`, which the body also
    uses (the kernel's [then] splits them; see #868)" when `M` uses it too, and "a cleanup can't yet
    use `c`: a capability is threaded through the code around it, and the kernel's [then] gives the
-   cleanup a context of its own (see #868)" when only `D` does. The kernel's answer is K-b (§78):
-   finalisers that only write (`Σ_D = ∅`) are typed by the §19 forms and lifted by the surface's
-   #940 unit; finalisers that perform, after K-b.
+   cleanup a context of its own (see #868)" when only `D` does. These messages remain for a
+   core-level `[then]` only: a `finally` whose cleanup uses a capability the body also uses is §78's
+   reborrow (#940). Finalisers that perform wait on K-b's checker and lowering (§78).
 
 6. **Reading cancel rows back.** The typed elaboration and its inference re-read a `handle_n`'s
    row from its clauses' types with their cancel rows (`clausesReadF`, `finsOf`), as the checker
@@ -9372,9 +9372,8 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
 `finally`. That would be a consume that is not derived.
 
 **Open (#746).**
-- *I/O in a finaliser.* `[then]`'s `D` is at `F_Σ 1` beside `N` in one context: a capability the
-  effects pass threads into `D` would be consumed there and not handed back, and `[then]`'s split
-  `Γ₁ | Γ₂` admits no capability both `M` and `D` use (§27 *Open*, with #940's root).
+- *I/O in a finaliser.* A cleanup can use a capability the body also uses: §78's reborrow (#940).
+  A cleanup that performs an operation waits on K-b (§78).
 - *A written finaliser for a lend the abort crosses.* The kernel's unwinding lend takes any closed
   `d : Ref N ⊸ 1` (`d_declAcross`); the checker passes only the source's consume
   (`Frontend/Check/Consts.lean`, `finaliser`), so at a declared type the lend is refused. A
@@ -13892,20 +13891,51 @@ handed back).
    gets it back, is not provided (*Open*), and the checker refuses it with a message that says so.
 
 **The checker.**
-- **Core text:** `withbor2u['x, b, A, B, R] unwind (d)`. Without `unwind (d)`, the finaliser is the
-  source's consume, so all core text without it reads the same.
+- **Core text:** `withbor{1,2,3}u[…] unwind (d)`. Without `unwind (d)`, the finaliser is the
+  source's consume, so all core text without it reads the same. At `Σ_D = ∅`, `d` is checked at
+  `U(src ⊸ F_∅ 1)` at the rule's context, whose live slots are persistent, and the emitted rule is
+  §19's, at `(Σ_M, Σ_D, Σ) = (S, [], S)`.
+- **Binding:** `unwind (d)` right after the brackets is the constant's. A `[then]` around such a
+  constant parenthesizes it, `x <- (return withbor3u[…]) unwind (D); N`, and the printer writes it
+  so.
 - **The finaliser's row:** `d` is checked at the dead context at `U(src ⊸ F_{Σ_D} 1)`, with `Σ_D`
   read from `d`'s derivation as `[then]`'s finaliser row is (§27 *The checker*), and `Σ = R ∪ Σ_D`.
+  The synthesis of a non-empty `Σ_D` is K-b.3's.
 - **Deciders:** the `RowLe`s, `divB` and `pendPersB` are §27's.
 - **The emitted rule:** at `Σ_D = ∅` the checker emits the rule of §19.
 - **Refused:** a callback row that is not unwind-only, with a written finaliser. The message names
   the operation it may suspend at.
 
-**The surface** (surface-foreman's units, after the kernel):
-- §27 *The surface*, item 5, is lifted for an unwind-only body. A cleanup that uses a capability or
-  a `let mut` the body also uses is the unwinding lend of that place across the region. The cleanup
-  is its finaliser, and on the normal path it runs on the source the lend pairs back.
-- #940's parse-time refusal is replaced the same way.
+**The surface** (#940, at `Σ_D = ∅`):
+- **A cleanup that uses one capability.** `with h(…) { M } finally { D }`, whose cleanup `D` uses
+  one capability `c` (a threaded `mut` cell, §18), elaborates to a reborrow of `c` across the
+  `with`, with `D` as its finaliser:
+
+      (c, x) <- withbor3u[@l, 'l, S, B, [r]] unwind (fun c -> D) c (Λ'l. fun c -> with h(…) { M });
+      D; x
+
+  - `r` is the row of the operations `M` performs. At `r = []` the reborrow is `withbor3` with no
+    finaliser, since it cannot unwind.
+  - On an unwind, `D` writes through the source and releases it, and the write lands in the
+    capability's cell.
+  - On the normal path `D` runs on the capability the reborrow hands back.
+  - The source is always the capability's `mut` cell: a reborrow, never `withbor2U` of an owner.
+- **Refused:**
+  - a cleanup that uses two capabilities:
+    `` a `finally` using two lent places (`Count`, `stdout`) has no kernel form yet (#1102, #1046) ``;
+  - a cleanup that performs an operation while using a capability, by the checker:
+    `` this finaliser performs `[1.0 cancel i32 ~> 0]`; a finaliser of a lent place that performs is not provided yet (#1046) ``.
+- **A `let mut` in a `finally`** is not this entry's: `let mut` leaves the surface (#1104), and §42's
+  parse-time refusal of a `finally` that assigns a `let mut` stays.
+- **Programs** (observed, `bcc interp`, `live 0`):
+
+  | Program | What | Answer |
+  |---|---|---|
+  | `corpus/fin-capability.bc` (from `reject/`) | a `finally` using a capability the body also uses, at an empty body row: a plain `withbor3` | `AB`, `inl i32[1]` |
+  | `corpus/fin-capability-unwind.bc` | the body raises `500` past a `default` handler; the cleanup ticks a `Count` capability on the abort, and the tick lands in its cell (`i32[2]` would mean it was lost) | `(inr i32[500], i32[3])` |
+  | `corpus/core-withbor3u-fin.bc` | core text: a cell `1`, lent; the reborrow writes `5` and aborts `42`; `d` writes `99` | `(i32[99], inr i32[42])` |
+  | `corpus/reject/core-withbor3u-fin-performs.bc` | `d` aborts | the second refusal above |
+  | `corpus/reject/finally-two-caps.bc` | a cleanup using `stdout` and a `Count` capability | the first refusal above |
 
 ### Baseline
 
