@@ -11,6 +11,7 @@ import Frontend.Elab.Effects
 import Frontend.Elab.FinsHeld
 import Frontend.Elab.Match
 import Frontend.Elab.Hygiene
+import Frontend.Elab.RowInst
 
 /-!
 # Frontend — the sugar  `[spec §11, §14]`
@@ -624,6 +625,9 @@ inductive Origin where
   /-- The binder `x` the elaboration made stands for `what` in the source: a message that names
   `x` names `what` instead. -/
   | shown (x what : String)
+  /-- The `def` `x` is the instance of the template `f` made for its use at the span recorded
+  (SPEC §76): a message from its body names both.  `[spec §76]` -/
+  | rowInst (x f : String)
   deriving BEq, Inhabited
 
 /-- Where generated code came from, and what the elaboration reports: per span, its origins. -/
@@ -6441,8 +6445,9 @@ def plainMain (c : TCx) (sp : Span) (C : CTy) (M : Comp) : SM (CTy × Comp) := d
 
 /-- A program uses the library function `n` without defining it. -/
 def usesName (n : String) (p : Program) : Bool :=
-  p.decls.any (fun | .def_ _ _ _ _ V _ => V.names n | .main _ _ M => M.names n | _ => false) &&
-    !(p.decls.any fun | .def_ _ m _ _ _ _ => m.name == n | _ => false)
+  p.decls.any (fun | .def_ _ _ _ _ V _ | .gen _ _ _ (.def_ _ _ _ _ V _) => V.names n
+                   | .main _ _ M => M.names n | _ => false) &&
+    !(p.decls.any fun | .def_ _ m _ _ _ _ | .gen _ _ _ (.def_ _ m _ _ _ _) => m.name == n | _ => false)
 
 /-- The declarations `ds` with each `include m` replaced by the module's declarations, at most
 once each, a module's own `include`s first; `inc` the modules included so far. -/
@@ -6725,6 +6730,11 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
     | .def_ _ n _ _ _ _ => platNames.any fun h => n.name.startsWith (h ++ "__")
     | _ => false
   let decls := if fxr.withPlatform then decls.filter isPlat ++ decls.filter (!isPlat ·) else decls
+  -- Definitions and types generic over rows and sites: each use's instance, made by substitution
+  -- (SPEC §76). Its fresh sites are above every site the effects pass gave.  `[spec §76]`
+  let (decls, made) ← (Elab.RowInst.run decls fxr.sites : Except Error _)
+  for (x, f, sp) in made do
+    modify (· ++ [(sp, .rowInst x f)])
   -- Effects, then rows, lowering shapes and calls, each in source order.
   let kindOf : Elab.Effects.Report → Nat
     | .line "effect" _ => 0 | .line "row" _ => 1 | .line "lowering" _ => 2 | .site .. => 2
@@ -6748,7 +6758,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let p := Elab.fillProgram typing capDecls p
   -- Divergence of the user's definitions, before the libraries (which do not loop) come in.
   let libNames := (decls₀.filter fun d => !p₀.decls.contains d).filterMap fun
-    | .def_ _ m _ _ _ _ => some m.name
+    | .def_ _ m _ _ _ _ | .gen _ _ _ (.def_ _ m _ _ _ _) => some m.name
     | _ => none
   -- A library function's copies (SPEC §18, `f__…`) and its handlers' clauses are the library's too.
   let libNames := libNames ++ (p.decls.filterMap fun
@@ -6790,7 +6800,8 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- the program's first.
   let own (d : Decl) : Bool := match d with
     | .def_ _ n _ _ _ _ => p₀.decls.any fun
-        | .def_ _ m _ _ _ _ | .handler _ m _ _ _ _ _ => n.name == m.name || n.name.startsWith (m.name ++ "__")
+        | .def_ _ m _ _ _ _ | .handler _ m _ _ _ _ _ | .gen _ _ _ (.def_ _ m _ _ _ _) =>
+          n.name == m.name || n.name.startsWith (m.name ++ "__")
         | .chandler _ h => n.name.startsWith (h.name.name ++ "__")
         | _ => false
     | d => p₀.decls.contains d

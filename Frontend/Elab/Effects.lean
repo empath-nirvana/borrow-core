@@ -4080,6 +4080,8 @@ structure Result where
   withDivLib : Bool := false
   withPlatform : Bool := false
   keys : List DefKey := []
+  /-- The next site the pass would give: every site it gave is below it.  `[spec §76]` -/
+  sites : Nat := 1
 
 /-- The program with its effects elaborated, and the reports for `bcc check`: the effect and
 handler declarations are removed, each answering handler's clauses become functions, each
@@ -4307,7 +4309,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
   | .ok ((ds, spliced), st) =>
     pure { decls := ds, reports := st.reports.toList, perTurn := st.perTurn, platform := st.platform,
            exits := st.exits, withDivLib, withPlatform := spliced,
-           keys := st.keys.toList }
+           keys := st.keys.toList, sites := st.site }
   | .error e => throw e
 
 end Frontend.Elab.Effects
