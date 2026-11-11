@@ -13650,7 +13650,9 @@ P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain under them.
     which only `⊤` allows.
 - **Everything else passes straight to the outer handler:**
   - **answering (`fn`) operations.** For example, a `fn` `Log` in a middle stage's cleanup is fine:
-    it only adds `Log` to `close_all`'s row and to the forwarded operation's cancel row;
+    it only adds `Log` to `close_all`'s row and to the forwarded operation's cancel row. This is a
+    row fact. A stage that holds `Log`'s capability between its turns is the *Open* item on lends
+    and capabilities below;
   - **`must_resume` operations,** since no cancel lands at them;
   - **abortive operations** (answer `never`, `Fail.raise`). The raiser's frames run first, then the
     per-step finaliser: P1b Thm R's order.
@@ -13739,7 +13741,6 @@ P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain under them.
     generator of the wire into the last stage. Its close stops the remaining stages downstream-first
     (P1 Thm S, P1 `by_ref`), and it is a source of a later chain.
   - `close(rest)` closes it.
-  - At an effectful upstream, `rest` is #910's stored generator over a row.
 
 #### Errors (decided (a′)(ii))
 
@@ -13946,6 +13947,12 @@ does not support; they carry `-- check: old-backend-refuses`.
   same §15 *Open* item that blocks a stage holding a capability across `yield` (J2), and a kernel
   question (`cancelTy` answers `F_{fin ⊕ Σ} 1`).
 - **A stage's cleanup performing the forwarded operation** waits on §27 *Open*'s "`⊤` cancel rows".
+- **`connect`/`rest` at an effectful upstream:** `rest` would be #910's stored generator over a row;
+  it waits on #910 (surface). L1 provides `connect` at an effect-free upstream.
+- **A stage's stored rest holding a lend or a capability between turns.** The model (P1/P1b,
+  Assembly(n)) has no lends, so whether a chain may hold one is a kernel/checker question; the
+  elaborator does not decide it. Today a chain inside a `borrow` block whose stages don't hold the
+  lend between turns is an ordinary computation.
 - **A chain of stages as a stage** (an open chain). It needs the head's `next`/`stop` forwarded. L2.
 - **A chain held across a per-observation lend** (a stage whose loop is in progress when the lend
   ends) is refused (#1082). The general fix is either a `Code`-type outlives rule in the kernel (a
