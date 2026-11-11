@@ -1683,6 +1683,14 @@ corpus/json-deep.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/json-deep.bc 5.0 abortive: branch; condition 2 holds; -
 corpus/json-deep.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/json-deep.bc 4.0 abortive: branch; condition 2 holds; -
+corpus/json-drop-deep.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
+corpus/json-drop-deep.bc 16:36: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/json-drop-deep.bc 409:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/json-drop-deep.bc 412:15: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/json-drop-deep.bc 413:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/json-drop-deep.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/json-drop-deep.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/json-drop-deep.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/json-get.bc flows [0, 1, 2, 3, 4, 5, 4294967295], finaliser; main [1, 2, 3, 4, 5], finaliser
 corpus/json-get.bc 54:15: handle 1: inside [1, 2, 3, 4, 5], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/json-get.bc 55:37: handle 2: inside [1, 2, 3, 4, 5], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
@@ -2050,9 +2058,30 @@ corpus/map-drain.bc flows [0, 4294967295]; main []
 corpus/map-iter-owned.bc flows [0, 4294967295]; main []
 corpus/map-reuse.bc flows [0, 4294967295]; main []
 corpus/map-views.bc flows [0, 4294967295]; main []
+corpus/mut-after-unwind-counter-in-n.bc flows [0, 4294967295], finaliser; main [], finaliser
+corpus/mut-after-unwind-generator.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/mut-after-unwind-generator.bc 16:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/mut-after-unwind-generator.bc 1.0 tail: direct; condition 2 holds; agree
+corpus/mut-after-unwind-if-arm.bc flows [0, 4294967295]; main [], finaliser
+corpus/mut-after-unwind-if-in-while.bc flows [0, 4294967295], finaliser; main [], finaliser
+corpus/mut-after-unwind-let-head.bc flows [0, 4294967295]; main [], finaliser
+corpus/mut-after-unwind-nested.bc flows [0, 4294967295], finaliser; main [], finaliser
+corpus/mut-after-unwind-while.bc flows [0, 4294967295], finaliser; main [], finaliser
 corpus/mut-bind-arm.bc flows [0, 4294967295]; main []
 corpus/mut-block-nested.bc flows [0, 4294967295]; main []
 corpus/mut-block.bc flows [0, 4294967295]; main []
+corpus/mut-cancel-loop-for-value.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
+corpus/mut-cancel-loop-for-value.bc 17:29: handle 1: inside [1, 2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/mut-cancel-loop-for-value.bc 12:5: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/mut-cancel-loop-for-value.bc 17:62: handle 2: inside []; row [1]; ops 2.0 stored; names 2.0 row; condition 2 fails at 1
+corpus/mut-cancel-loop-for-value.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/mut-cancel-loop-for-value.bc 2.0 stored: machine; condition 2 fails; -
+corpus/mut-cancel-loop-for.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
+corpus/mut-cancel-loop-for.bc 18:29: handle 1: inside [1, 2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/mut-cancel-loop-for.bc 13:5: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/mut-cancel-loop-for.bc 18:62: handle 2: inside []; row [1]; ops 2.0 stored; names 2.0 row; condition 2 fails at 1
+corpus/mut-cancel-loop-for.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/mut-cancel-loop-for.bc 2.0 stored: machine; condition 2 fails; -
 corpus/mut-control-assign-raise.bc flows [0, 1, 4294967295]; main [1]
 corpus/mut-control-assign-raise.bc 15:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/mut-control-assign-raise.bc 1.0 abortive: branch; condition 2 holds; -
@@ -2677,6 +2706,7 @@ corpus/sugar/surface-ops.bc flows [0, 4294967295]; main []
 corpus/sugar/surface-ops.core.bc flows [0, 4294967295]; main []
 corpus/sum-i32.bc flows [0, 4294967295]; main []
 corpus/sum-prog-exact.bc flows [0, 4294967295]; main []
+corpus/sum-read-unk.bc flows [0, 4294967295]; main []
 corpus/surface/array-sum.bc flows [0, 4294967295]; main []
 corpus/surface/family-swap.bc flows [0, 4294967295]; main []
 corpus/surface/io-upper.bc flows [0, 4294967295]; main []

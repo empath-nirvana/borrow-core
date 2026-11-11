@@ -748,6 +748,21 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let addr := Exp.gep (.loc (a.headD 0)) (mul64 i (.c64 st.toUInt64))
     let (s, vs) ← loadCell leaf addr (← wordsN (← contents leaf))
     return s ++ (← emit d (locs a ++ locs vs))
+  | .slotPop => do
+    -- The array's last slot moved out; the family's length is one less, its base the object's.
+    -- UNPROVED: that the family is not empty. At `n = 0` the length wraps and the load is of a
+    -- wild address. It should hold because the one emitter, `stepW` (`Convert.lean`), pops only
+    -- under its test `1 < n` (`ifLt o n₁`) on the same family; the LIR interpreter refuses a pop
+    -- of an empty family on every corpus run. If another emitter pops unguarded, native code reads
+    -- past the array.
+    let leaf ← leafOf (← argN 0)
+    let st ← slotStride leaf
+    let a ← arg 0
+    let k ← fresh1
+    let addr := Exp.gep (.loc (a.headD 0)) (mul64 (.loc k) (.c64 st.toUInt64))
+    let (s, vs) ← loadCell leaf addr (← wordsN (← contents leaf))
+    return [.set k (.op (.bin .w64 .sub) [.loc (a.getD 1 0), .c64 1])] ++ s ++
+      (← emit d ([.loc (a.headD 0), .loc k] ++ locs vs))
   | .freeArr => do
     let b := Exp.loc ((← arg 0).headD 0)
     return [.ite (eqz64 b) [] [.free b]] ++ (← emit d [])
