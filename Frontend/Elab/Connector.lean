@@ -13,7 +13,11 @@ This module writes only the **glue**, as core text:
 * the frame lists, each nested `pipe_with_stop`s, the most downstream innermost, in one cancel
   region at the site `c` (`core-pipe-close`'s form): `close_others_i` around `pipe_step` of `i`,
   `close_all` around `pipe_forward`, and `close_up_i`, the region of `stop()` by `i`, under the
-  frame list of `i` and the stages downstream of it;
+  frame list of `i` and the stages downstream of it. The frames are shared: one function per stage
+  and direction installs that stage's frame around the rest of the chain (`io_dn{j}`, `io_up{i}`),
+  and each list is one region around one such chain, so the frames are linear in the stages;
+* per-stage getters and setters (`io_get{i}`, `io_set{i}`), between turns only, so that a turn
+  touches the states of the stages it changes and no others;
 * one `unfold` whose turn calls the running stage's `pipe_step` and dispatches on its event,
   as Assembly(n) §1's glue does, and whose close is `close_all`.
 
@@ -155,13 +159,33 @@ def build (cn : Conn) (fvs : List (String × String)) (tail : Option String)
   let Rlast := match cn.out with
     | some (_, _, W) => s!"({W}) * ({ss[n - 1]!.R})"
     | none => ss[n - 1]!.R
-  let wv : List String := match cn.out with
-    | some _ => [s!"io_ow_{sfx}"]
-    | none => []
-  let Sts := cn.stages.map (·.stTy) ++ (match cn.out with
-    | some (_, _, W) => [W]
-    | none => [])
-  let GS := s!"({prod Sts}) * ({sum (cn.stages.map (·.inTy))})"
+  let hasW := cn.out.isSome
+  let W := match cn.out with
+    | some (_, _, W) => W
+    | none => "1"
+  -- The stage states: `suf j`, the right-nested tuple of the states of `j … n−1`, and `pre i`, the
+  -- left-nested tuple of those of `0 … i−1`. The hole of stage `i`, `hole i`, is `pre i` beside
+  -- `suf (i+1)`: the states of every stage but `i`, which is `close_others_i`'s argument.
+  let stT (j : Nat) : String := ss[j]!.stTy
+  let sufTy (j : Nat) : String := prod ((List.range (n - j)).map fun k => stT (j + k))
+  let preTy (i : Nat) : String :=
+    ((List.range i).map stT).foldl (fun acc t => if acc.isEmpty then t else s!"({acc}) * ({t})") ""
+  let pairTy (a b : Option String) : String := match a, b with
+    | none, none => "1"
+    | some a, none => a
+    | none, some b => b
+    | some a, some b => s!"({a}) * ({b})"
+  let pairV (a b : Option String) : String := match a, b with
+    | none, none => "()"
+    | some a, none => a
+    | none, some b => b
+    | some a, some b => s!"({a}, {b})"
+  let optPre (i : Nat) : Option String := if i == 0 then none else some (preTy i)
+  let optSuf (j : Nat) : Option String := if j ≥ n then none else some (sufTy j)
+  let holeTy (i : Nat) : String := pairTy (optPre i) (optSuf (i + 1))
+  let Sx := sufTy 0
+  let SW := if hasW then s!"({Sx}) * ({W})" else Sx
+  let GS := s!"({SW}) * ({sum (cn.stages.map (·.inTy))})"
   -- `connect`: the result beside the rest, the maker of whose glue is `sub`'s.
   let Rlast := match sub with
     | some (_, LwS, _) => s!"({Rlast}) * (U ({LwS}))"
@@ -172,149 +196,240 @@ def build (cn : Conn) (fvs : List (String × String)) (tail : Option String)
   let Lw := if cn.pull then s!"nu Z. {fAt G s!"(({lastSt.B}) * U Z) + (({lastSt.R}) + U Z)"} & {fAt G "1"}"
     else s!"nu Z. {fAt G s!"({Rlast}) + U Z"} & {fAt G "1"}"
   let sv (i : Nat) : String := s!"io_s{i}_{sfx}"
-  -- A frame list over the stages `js` (outermost first), one region.
+  let Kty := s!"U (1 -o {fAt regRow "1"})"
+  let kStop (x : String) : String :=
+    s!"thunkv fun (io_pz{x}_{sfx} : 1) -> (perform[{cn.c}.0] io_pz{x}_{sfx} : {fAt regRow "1"})"
   let wsArgs (st : Stage) : String :=
     s!"{st.A}, {st.K}, {st.B}, {st.R}, {st.OA}, 1, {st.rows}, row ({cc}), row ({cc}), site {st.y}, site {st.s}, site {st.f}, site {cn.c}"
-  let rec frames (js : List Nat) (k : Nat) : String := match js with
-    | [] => s!"(perform[{cn.c}.0] io_w{k}_{sfx} : {fAt regRow "1"})"
-    | j :: rest =>
-      call s!"pipe_with_stop[{wsArgs ss[j]!}]"
-        s!"{sv j}, thunkv fun (io_w{k + 1}_{sfx} : 1) -> {frames rest (k + 1)}" s!"w{j}_{k}_{sfx}"
-  let listDef (name : String) (js : List Nat) : String :=
-    let ty := prod (js.map fun j => ss[j]!.stTy)
-    -- An empty frame list stops nothing.
-    if js.isEmpty then s!"{name} : !U (1 -o {fAt cc "1"}) <- return (!thunkv fun (io_pl_{sfx} : 1) -> return io_pl_{sfx});\n" else
-    s!"{name} : !U ({ty} -o {fAt cc "1"}) <- return (!thunkv fun (io_pl_{sfx} : {ty}) ->
-    {destr (js.map sv) s!"io_pl_{sfx}" s!"io_plt_{sfx}_"}
-    handle_with[{cn.c}](io_chr_{sfx}, io_chc_{sfx}) ({frames js 0}));\n"
-  let others (i : Nat) : List Nat := (List.range n).filter (· != i)
-  let down (i : Nat) : List Nat := (List.range n).filter (· ≥ i)
-  let up (i : Nat) : List Nat := (List.range i)
+  let ws (j : Nat) : String := s!"pipe_with_stop[{wsArgs ss[j]!}]"
   let mut defs := s!"io_chr_{sfx} : !U (1 -o {fAt cc "1"}) <- return (!thunkv fun (io_cv_{sfx} : 1) -> return io_cv_{sfx});
 io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o {fAt cc "1"}) * 1 <- return
   ((!thunkv fun (io_cp_{sfx} : 1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"})) ->
      let (io_cu_{sfx}, io_ck_{sfx}) = io_cp_{sfx}; let () = io_cu_{sfx}; (force io_ck_{sfx}).2), ());\n"
-  defs := defs ++ listDef s!"io_call_{sfx}" (List.range n)
+  -- The shared frames. Each installs one stage's `withStop` (`pipe_with_stop`, one `unwind` frame)
+  -- and runs its continuation inside it, and does nothing else; none is a region. `io_dn{j}` is
+  -- the frames of `j … n−1` around the region's operation, the most downstream innermost: stage
+  -- `j`'s frame around `io_dn{j+1}`. `io_up{i}` is the frames of `0 … i−1` around a continuation:
+  -- `io_up{i−1}` around stage `i−1`'s frame. Each state is captured where its frame is installed.
+  for j' in List.range n do
+    let j := n - 1 - j'
+    let inner := if j + 1 == n then kStop s!"d{j}"
+      else s!"thunkv fun (io_dw{j}_{sfx} : 1) -> let () = io_dw{j}_{sfx}; {call s!"io_dn{j + 1}_{sfx}" s!"io_dr{j}_{sfx}" s!"dn{j}_{sfx}"}"
+    let bind := if j + 1 == n then s!"io_ds{j}_{sfx} <- return io_dx{j}_{sfx};"
+      else s!"let (io_ds{j}_{sfx}, io_dr{j}_{sfx}) = io_dx{j}_{sfx};"
+    defs := defs ++ s!"io_dn{j}_{sfx} : !U ({sufTy j} -o {fAt regRow "1"}) <- return (!thunkv fun (io_dx{j}_{sfx} : {sufTy j}) ->
+    {bind} {call (ws j) s!"io_ds{j}_{sfx}, {inner}" s!"wd{j}_{sfx}"});\n"
+  for i in (List.range n).drop 1 do
+    let body := if i == 1 then call (ws 0) s!"io_ua{i}_{sfx}, io_uk{i}_{sfx}" s!"wu{i}_{sfx}"
+      else s!"let (io_uq{i}_{sfx}, io_us{i}_{sfx}) = io_ua{i}_{sfx};
+      {call s!"io_up{i - 1}_{sfx}" s!"io_uq{i}_{sfx}, thunkv fun (io_uw{i}_{sfx} : 1) -> let () = io_uw{i}_{sfx}; {call (ws (i - 1)) s!"io_us{i}_{sfx}, io_uk{i}_{sfx}" s!"wu{i}_{sfx}"}" s!"up{i}_{sfx}"}"
+    defs := defs ++ s!"io_up{i}_{sfx} : !U (({preTy i}) * ({Kty}) -o {fAt regRow "1"}) <- return (!thunkv fun (io_ux{i}_{sfx} : ({preTy i}) * ({Kty})) ->
+    let (io_ua{i}_{sfx}, io_uk{i}_{sfx}) = io_ux{i}_{sfx}; {body});\n"
+  -- The frame lists, each one region at `c` around one chain of the shared frames.
+  let listDef (name ty body : String) : String :=
+    s!"{name} : !U ({ty} -o {fAt cc "1"}) <- return (!thunkv fun (io_pl_{sfx} : {ty}) ->
+    handle_with[{cn.c}](io_chr_{sfx}, io_chc_{sfx}) ({body}));\n"
+  -- An empty frame list stops nothing.
+  let noneDef (name : String) : String :=
+    s!"{name} : !U (1 -o {fAt cc "1"}) <- return (!thunkv fun (io_pl_{sfx} : 1) -> return io_pl_{sfx});\n"
+  defs := defs ++ listDef s!"io_call_{sfx}" Sx (call s!"io_dn0_{sfx}" s!"io_pl_{sfx}" s!"la_{sfx}")
   for i in List.range n do
-    defs := defs ++ listDef s!"io_co{i}_{sfx}" (others i)
+    let co := s!"io_co{i}_{sfx}"
+    defs := defs ++ (if n == 1 then noneDef co
+      else if i == 0 then listDef co (holeTy i) (call s!"io_dn1_{sfx}" s!"io_pl_{sfx}" s!"lo{i}_{sfx}")
+      else if i + 1 == n then listDef co (holeTy i) (call s!"io_up{i}_{sfx}" s!"io_pl_{sfx}, {kStop s!"o{i}"}" s!"lo{i}_{sfx}")
+      else listDef co (holeTy i) s!"let (io_pa_{sfx}, io_pb_{sfx}) = io_pl_{sfx};
+      {call s!"io_up{i}_{sfx}" s!"io_pa_{sfx}, thunkv fun (io_pw_{sfx} : 1) -> let () = io_pw_{sfx}; {call s!"io_dn{i + 1}_{sfx}" s!"io_pb_{sfx}" s!"ld{i}_{sfx}"}" s!"lo{i}_{sfx}"}")
     if i > 0 then
-      defs := defs ++ listDef s!"io_cu{i}_{sfx}" (up i)
-      defs := defs ++ listDef s!"io_cd{i}_{sfx}" (down i)
-  -- The states as a tuple with stage `i`'s replaced by `t`.
-  let states (i : Nat) (t : String) : String :=
-    tup (((List.range n).map fun j => if j == i then t else sv j) ++ wv)
-  let next (stTup turn : String) : String :=
-    if cn.pull then s!"return (inr (inr ({stTup}, {turn})) : {Obs})"
-    else s!"return (inr ({stTup}, {turn}) : {Obs})"
+      defs := defs ++ listDef s!"io_cu{i}_{sfx}" (preTy i) (call s!"io_up{i}_{sfx}" s!"io_pl_{sfx}, {kStop s!"u{i}"}" s!"lu{i}_{sfx}")
+      defs := defs ++ listDef s!"io_cd{i}_{sfx}" (sufTy i) (call s!"io_dn{i}_{sfx}" s!"io_pl_{sfx}" s!"lc{i}_{sfx}")
+  -- The per-stage getters and setters, used between turns only: `io_get{i}` takes the states
+  -- apart into stage `i`'s and its hole, `io_set{i}` puts a state into the hole of stage `i`.
+  -- Each goes through the one of the stage above, so each is constant-size.
+  for i in (List.range n).drop 1 do
+    let a := s!"io_ga{i}_{sfx}"
+    let h := s!"io_gh{i}_{sfx}"
+    let first := if i == 1 then s!"let ({a}, {h}) = io_gx{i}_{sfx};"
+      else s!"io_gy{i}_{sfx} <- {call s!"io_get{i - 1}_{sfx}" s!"io_gx{i}_{sfx}" s!"gg{i}_{sfx}"}; let ({a}, {h}) = io_gy{i}_{sfx};"
+    -- `h` is `pre (i−1)` beside `suf i`; `suf i` is stage `i`'s state beside `suf (i+1)`.
+    let (hp, r) := if i == 1 then ("", h) else (s!"io_gp{i}_{sfx}", s!"io_gr{i}_{sfx}")
+    let splitH := if i == 1 then "" else s!"let ({hp}, {r}) = {h};"
+    let (b, r2, splitR) := if i + 1 == n then (r, none, "")
+      else (s!"io_gb{i}_{sfx}", some s!"io_gs{i}_{sfx}", s!"let (io_gb{i}_{sfx}, io_gs{i}_{sfx}) = {r};")
+    let newPre := if i == 1 then a else s!"({hp}, {a})"
+    defs := defs ++ s!"io_get{i}_{sfx} : !U ({Sx} -o F (({stT i}) * ({holeTy i}))) <- return (!thunkv fun (io_gx{i}_{sfx} : {Sx}) ->
+    {first} {splitH} {splitR} return ({b}, {pairV (some newPre) r2}));\n"
+    -- `set i (h, x)`: `h` is `pre i` (`pre (i−1)` beside stage `i−1`'s state `s`) beside `suf (i+1)`;
+    -- it is `set (i−1)` of `(pre (i−1), (x, suf (i+1)))` and `s`.
+    let sp := s!"io_sp{i}_{sfx}"
+    let (pv, rv, splitS) := if i + 1 == n then (sp, none, "")
+      else (s!"io_sq{i}_{sfx}", some s!"io_sr{i}_{sfx}", s!"let (io_sq{i}_{sfx}, io_sr{i}_{sfx}) = {sp};")
+    let sufI := pairV (some s!"io_sx{i}_{sfx}") rv
+    let setBody := if i == 1 then s!"return ({pv}, {sufI})"
+      else s!"let (io_sa{i}_{sfx}, io_sb{i}_{sfx}) = {pv}; {call s!"io_set{i - 1}_{sfx}" s!"(io_sa{i}_{sfx}, {sufI}), io_sb{i}_{sfx}" s!"ss{i}_{sfx}"}"
+    defs := defs ++ s!"io_set{i}_{sfx} : !U ((({holeTy i}) * ({stT i})) -o F ({Sx})) <- return (!thunkv fun (io_sv{i}_{sfx} : ({holeTy i}) * ({stT i})) ->
+    let ({sp}, io_sx{i}_{sfx}) = io_sv{i}_{sfx}; {splitS} {setBody});\n"
+  -- The states with stage `i`'s put into its hole `h`, a computation.
+  let setE (i : Nat) (h x k : String) : String :=
+    if i == 0 then s!"return {pairV (some x) (if n == 1 then none else some h)}"
+    else call s!"io_set{i}_{sfx}" s!"{h}, {x}" k
+  -- The stage upstream stopped by `stop()` ends; one above it is never run again, and is left a
+  -- loop that runs nothing (`pipe_idle`). `io_id{i}` is `pre i` of such loops.
+  let idle (j : Nat) : String :=
+    let sj := ss[j]!
+    let body := s!"nu X. {fAt sj.lr s!"({sj.R}) + U X"} & {fAt sj.lc "1"}"
+    let mk := s!"io_ig{j}_{sfx} <- return (unbang (unfold[{body}, 1] pipe_idle[{sj.R}, row ({sj.lr}), row ({sj.lc})])); io_iz{j}_{sfx} <- return ()"
+    s!"(inl (thunkv nu_in < {mk}; (nu_out (force io_ig{j}_{sfx} io_iz{j}_{sfx})).1, {mk}; (nu_out (force io_ig{j}_{sfx} io_iz{j}_{sfx})).2 >) : {sj.stTy})"
+  for i in (List.range (n - 1)).drop 1 do
+    let body := if i == 1 then s!"return {idle 0}"
+      else s!"io_iy{i}_{sfx} <- {call s!"io_id{i - 1}_{sfx}" "()" s!"ii{i}_{sfx}"}; return (io_iy{i}_{sfx}, {idle (i - 1)})"
+    defs := defs ++ s!"io_id{i}_{sfx} : !U (1 -o F ({preTy i})) <- return (!thunkv fun (io_ia{i}_{sfx} : 1) ->
+    let () = io_ia{i}_{sfx}; {body});\n"
+  let withW (sx w : String) : String := if hasW then s!"({sx}, {w})" else sx
+  let next (sx turn : String) : String :=
+    if cn.pull then s!"return (inr (inr ({withW sx s!"io_ow_{sfx}"}, {turn})) : {Obs})"
+    else s!"return (inr ({withW sx s!"io_ow_{sfx}"}, {turn}) : {Obs})"
+  -- The next turn after the states `comp` computes.
+  let nextC (comp turn k : String) : String := s!"io_nx{k}_{sfx} <- {comp}; {next s!"io_nx{k}_{sfx}" turn}"
   let turnTo (j : Nat) (v : String) : String :=
     s!"({inj j n v} : {sum (cn.stages.map (·.inTy))})"
-  let othersTup (i : Nat) : String := tup ((others i).map sv)
+  -- A left-nested tuple of the states of `0 … k−1` taken apart into their names.
+  let rec lsplit (k : Nat) (v : String) : String := match k with
+    | 0 => ""
+    | 1 => s!"{sv 0} <- return {v};"
+    | k + 1 => s!"let (io_lq{k}_{sfx}, {sv k}) = {v}; " ++ lsplit k s!"io_lq{k}_{sfx}"
   let mut arms : List String := []
   for i in List.range n do
     let st := ss[i]!
     let last := i + 1 == n
     let ev := s!"io_e{i}_{sfx}"
+    let h := s!"io_h{i}_{sfx}"
+    let hp := s!"io_hp{i}_{sfx}"
+    let hs := s!"io_hs{i}_{sfx}"
+    let preV : Option String := if i == 0 then none else some hp
+    let sufV : Option String := if last then none else some hs
+    -- The hole taken apart, in an arm that needs its parts.
+    let splitHole : String := match preV, sufV with
+      | some p, some s => s!"let ({p}, {s}) = {h};"
+      | some p, none => s!"{p} <- return {h};"
+      | none, some s => s!"{s} <- return {h};"
+      | none, none => s!"let () = {h};"
+    let getS := if i == 0 then
+        (if n == 1 then s!"{sv 0} <- return io_sx_{sfx};" else s!"let ({sv 0}, {h}) = io_sx_{sfx};")
+      else s!"io_gt{i}_{sfx} <- {call s!"io_get{i}_{sfx}" s!"io_sx_{sfx}" s!"gt{i}_{sfx}"}; let ({sv i}, {h}) = io_gt{i}_{sfx};"
     let stepCall := call s!"pipe_step[{st.args}]" s!"{sv i}, io_in{i}_{sfx}" s!"st{i}_{sfx}"
-    let coCall := call s!"io_co{i}_{sfx}" (othersTup i) s!"co{i}_{sfx}"
-    -- Yield(b, κ) and Return(k): to the stage downstream (`pipe_handoff`), or the end.
+    let coCall := call s!"io_co{i}_{sfx}" (if n == 1 then "()" else h) s!"co{i}_{sfx}"
+    let callAll (x k : String) : String := s!"(io_ca{k}_{sfx} <- {setE i h x s!"cs{k}_{sfx}"}; {call s!"io_call_{sfx}" s!"io_ca{k}_{sfx}" s!"ca{k}_{sfx}"})"
+    -- Yield(b, κ) and Return(k): to the stage downstream (`pipe_handoff`), or the end. Stage `i`
+    -- and the one downstream change: the states are `set (i+1)` of `(pre i, t)` and `suf (i+2)`.
     let handoff (v : String) : String :=
       let dn := ss[i + 1]!
-      let h := call s!"pipe_handoff[{st.loopTy}, {st.restTy}, {st.restTy}, {st.B}, {st.R}, {dn.stTy}]"
-        s!"({v} : {st.B} * {st.restTy} + {st.R}), {sv (i + 1)}" s!"h{i}_{sfx}"
-      s!"io_h{i}_{sfx} <- {h};
-                let (io_t{i}_{sfx}, io_ri{i}_{sfx}) = io_h{i}_{sfx}; let (io_ip{i}_{sfx}, io_tn{i}_{sfx}) = io_ri{i}_{sfx};
-                {next (tup (((List.range n).map fun j => if j == i then s!"io_t{i}_{sfx}" else if j == i + 1 then s!"io_tn{i}_{sfx}" else sv j) ++ wv)) (turnTo (i + 1) s!"io_ip{i}_{sfx}")}"
+      let (s1, rest, splitN) := if i + 2 == n then (hs, none, "")
+        else (s!"io_hn{i}_{sfx}", some s!"io_hr{i}_{sfx}", s!"let (io_hn{i}_{sfx}, io_hr{i}_{sfx}) = {hs};")
+      let hc := call s!"pipe_handoff[{st.loopTy}, {st.restTy}, {st.restTy}, {st.B}, {st.R}, {dn.stTy}]"
+        s!"({v} : {st.B} * {st.restTy} + {st.R}), {s1}" s!"h{i}_{sfx}"
+      let pre1 := pairV preV (some s!"io_t{i}_{sfx}")
+      s!"{splitHole} {splitN}
+                io_hd{i}_{sfx} <- {hc};
+                let (io_t{i}_{sfx}, io_ri{i}_{sfx}) = io_hd{i}_{sfx}; let (io_ip{i}_{sfx}, io_tn{i}_{sfx}) = io_ri{i}_{sfx};
+                {nextC (call s!"io_set{i + 1}_{sfx}" s!"{pairV (some pre1) rest}, io_tn{i}_{sfx}" s!"hs{i}_{sfx}") (turnTo (i + 1) s!"io_ip{i}_{sfx}") s!"h{i}"}"
     let yieldArm := if last then match cn.out with
         | some (nf, _, W) =>
           -- A `for`'s generator: the item goes out with the threaded value, which comes back in
           -- the site's answer; `close_all` stops every stage if the `for` drops the continuation.
           let sy := s!"io_sy{i}_{sfx}"
-          let ca := call s!"io_call_{sfx}" (tup ((List.range n).map fun j => if j == i then sy else sv j)) s!"fy{i}_{sfx}"
           s!"let (io_b{i}_{sfx}, io_ky{i}_{sfx}) = io_yk{i}_{sfx};
                 {sy} : {st.stTy} <- return (inr (inr (inl io_ky{i}_{sfx})));
                 io_wo{i}_{sfx} : ({st.B}) * ({W}) <- return (io_b{i}_{sfx}, io_ow_{sfx});
-                io_w2{i}_{sfx} <- (perform[{nf}.0] io_wo{i}_{sfx}) unwind {ca};
-                {next (tup (((List.range n).map fun j => if j == i then sy else sv j) ++ [s!"io_w2{i}_{sfx}"])) (turnTo i "inl ()")}"
+                io_w2{i}_{sfx} <- (perform[{nf}.0] io_wo{i}_{sfx}) unwind {callAll sy s!"y{i}"};
+                io_ny{i}_{sfx} <- {setE i h sy s!"ny{i}_{sfx}"};
+                return (inr (({s!"io_ny{i}_{sfx}"}, io_w2{i}_{sfx}), {turnTo i "inl ()"}) : {Obs})"
         | none => if cn.pull then
           -- A chain's rest: the last stage's item is the stored generator's.
           s!"let (io_b{i}_{sfx}, io_ky{i}_{sfx}) = io_yk{i}_{sfx};
-                return (inl (io_b{i}_{sfx}, ({states i s!"(inr (inr (inl io_ky{i}_{sfx})) : {st.stTy})"}, {turnTo i "inl ()"})) : {Obs})"
+                io_ny{i}_{sfx} <- {setE i h s!"(inr (inr (inl io_ky{i}_{sfx})) : {st.stTy})" s!"ny{i}_{sfx}"};
+                return (inl (io_b{i}_{sfx}, ({withW s!"io_ny{i}_{sfx}" s!"io_ow_{sfx}"}, {turnTo i "inl ()"})) : {Obs})"
           else
           s!"let (io_b{i}_{sfx}, io_ky{i}_{sfx}) = io_yk{i}_{sfx}; let _ = io_b{i}_{sfx};
-                {next (states i s!"(inr (inr (inl io_ky{i}_{sfx})) : {st.stTy})") (turnTo i "inl ()")}"
+                {nextC (setE i h s!"(inr (inr (inl io_ky{i}_{sfx})) : {st.stTy})" s!"ny{i}_{sfx}") (turnTo i "inl ()") s!"y{i}"}"
       else handoff s!"inl io_yk{i}_{sfx}"
     let returnArm := if last && cn.pull then
-        s!"io_v{i}_{sfx} <- {call s!"io_co{i}_{sfx}" (othersTup i) s!"pco{i}_{sfx}"}; let () = io_v{i}_{sfx};
+        s!"io_v{i}_{sfx} <- {coCall}; let () = io_v{i}_{sfx};
                 return (inr (inl io_r{i}_{sfx}) : {Obs})"
       else if last && sub.isSome then
-        -- `connect`: the stages above the last are its rest, which goes on where they are.
-        let ups := (List.range (n - 1)).map sv
+        -- `connect`: the stages above the last are its rest, which goes on where they are. Its
+        -- glue takes their states right-nested; the hole has them left-nested.
+        let m := n - 1
+        let ups := (List.range m).map sv
         let subTurn := s!"({inj (n - 2) (n - 1) "inl ()"} : {sum ((cn.stages.take (n - 1)).map (·.inTy))})"
-        s!"io_rs{i}_{sfx} <- return ((unbang io_rw_{sfx}r) ({tup ups}, {subTurn}));
+        s!"{lsplit m h}
+                io_rs{i}_{sfx} <- return ((unbang io_rw_{sfx}r) ({tup ups}, {subTurn}));
                 return (inl (io_r{i}_{sfx}, io_rs{i}_{sfx}) : {Obs})"
       else if last then
         let fin := call s!"pipe_finish[{st.R}, row ({G})]"
-          s!"io_r{i}_{sfx}, (thunkv fun (io_fw_{sfx} : 1) -> {call s!"io_co{i}_{sfx}" (othersTup i) s!"fco{i}_{sfx}"} : U (1 -o {fAt G "1"}))" s!"fin{i}_{sfx}"
-        let res := if wv.isEmpty then s!"io_v{i}_{sfx}" else s!"(io_ow_{sfx}, io_v{i}_{sfx})"
+          s!"io_r{i}_{sfx}, (thunkv fun (io_fw_{sfx} : 1) -> {call s!"io_co{i}_{sfx}" (if n == 1 then "()" else h) s!"fco{i}_{sfx}"} : U (1 -o {fAt G "1"}))" s!"fin{i}_{sfx}"
+        let res := if hasW then s!"(io_ow_{sfx}, io_v{i}_{sfx})" else s!"io_v{i}_{sfx}"
         s!"io_v{i}_{sfx} <- {fin}; return (inl {res} : {Obs})"
       else handoff s!"inr io_r{i}_{sfx}"
-    let skipArm := next (states i s!"(inl io_bl{i}_{sfx} : {st.stTy})") (turnTo i "inl ()")
-    -- Next(κ): stored; the stage upstream runs, or, when it has ended, the end again.
+    let skipArm := nextC (setE i h s!"(inl io_bl{i}_{sfx} : {st.stTy})" s!"nb{i}_{sfx}") (turnTo i "inl ()") s!"b{i}"
+    -- Next(κ): stored; the stage upstream runs, or, when it has ended, the end again. Stage `i`
+    -- and the one upstream change: the states are `set (i−1)` of `(pre (i−1), (t, suf (i+1)))`.
     let nextArm := if i == 0 then
-        next (states i s!"(inr (inl io_kn{i}_{sfx}) : {st.stTy})") (turnTo i "inr (inr ())")
+        nextC (setE i h s!"(inr (inl io_kn{i}_{sfx}) : {st.stTy})" s!"nn{i}_{sfx}") (turnTo i "inr (inr ())") s!"n{i}"
       else
         let upSt := ss[i - 1]!
         let t := s!"(inr (inl io_kn{i}_{sfx}) : {st.stTy})"
-        let keep (ctor : String) : String :=
-          next (tup (((List.range n).map fun j => if j == i then t else if j == i - 1 then s!"({ctor} : {upSt.stTy})" else sv j) ++ wv))
-            (turnTo (i - 1) "inl ()")
-        s!"case {sv (i - 1)} \{
-                    inl io_ua{i}_{sfx} -> {keep s!"inl io_ua{i}_{sfx}"}
+        let su := sv (i - 1)
+        let (pq, splitP) := if i == 1 then (none, s!"{su} <- return {hp};")
+          else (some s!"io_hq{i}_{sfx}", s!"let (io_hq{i}_{sfx}, {su}) = {hp};")
+        let hUp := pairV pq (some (pairV (some t) sufV))
+        let put (x turn k : String) : String :=
+          nextC (setE (i - 1) hUp s!"({x} : {upSt.stTy})" s!"nu{k}{i}_{sfx}") turn s!"u{k}{i}"
+        let keep (ctor k : String) : String := put ctor (turnTo (i - 1) "inl ()") k
+        s!"{splitHole} {splitP}
+                  case {su} \{
+                    inl io_ua{i}_{sfx} -> {keep s!"inl io_ua{i}_{sfx}" "a"}
                   | inr io_ub{i}_{sfx} -> case io_ub{i}_{sfx} \{
-                      inl io_uc{i}_{sfx} -> {keep s!"inr (inl io_uc{i}_{sfx})"}
+                      inl io_uc{i}_{sfx} -> {keep s!"inr (inl io_uc{i}_{sfx})" "c"}
                     | inr io_ud{i}_{sfx} -> case io_ud{i}_{sfx} \{
-                        inl io_ue{i}_{sfx} -> {keep s!"inr (inr (inl io_ue{i}_{sfx}))"}
-                      | inr io_uk{i}_{sfx} -> {next (tup (((List.range n).map fun j => if j == i then t else if j == i - 1 then s!"(inr (inr (inr io_uk{i}_{sfx})) : {upSt.stTy})" else sv j) ++ wv)) (turnTo i s!"inr (inr io_uk{i}_{sfx})")}
+                        inl io_ue{i}_{sfx} -> {keep s!"inr (inr (inl io_ue{i}_{sfx}))" "e"}
+                      | inr io_uk{i}_{sfx} -> {put s!"inr (inr (inr io_uk{i}_{sfx}))" (turnTo i s!"inr (inr io_uk{i}_{sfx})") "k"}
                       }
                     }
                   }"
     -- Stop(κ): the stages upstream stopped in one region (`close_up_i`), under the frame list of
     -- the stage and those downstream of it; then the stage resumes with `()`.
     let stopArm := if i == 0 then
-        next (states i s!"(inr (inr (inl io_ks{i}_{sfx})) : {st.stTy})") (turnTo i "inl ()")
+        nextC (setE i h s!"(inr (inr (inl io_ks{i}_{sfx})) : {st.stTy})" s!"ns{i}_{sfx}") (turnTo i "inl ()") s!"s{i}"
       else
         let t := s!"io_ts{i}_{sfx}"
-        let upCall := call s!"io_cu{i}_{sfx}" (tup ((up i).map sv)) s!"cu{i}_{sfx}"
-        let dnCall := call s!"io_cd{i}_{sfx}" (tup ((down i).map fun j => if j == i then t else sv j)) s!"cd{i}_{sfx}"
-        -- The stage upstream ends with `()`, its residual (`stop()` is at `K = 1`); a stage above it
-        -- is never run again, and is left a loop that runs nothing (`pipe_idle`).
-        let idle (j : Nat) : String :=
-          let sj := ss[j]!
-          let body := s!"nu X. {fAt sj.lr s!"({sj.R}) + U X"} & {fAt sj.lc "1"}"
-          let mk := s!"io_ig{j}_{sfx} <- return (unbang (unfold[{body}, 1] pipe_idle[{sj.R}, row ({sj.lr}), row ({sj.lc})])); io_iz{j}_{sfx} <- return ()"
-          s!"(inl (thunkv nu_in < {mk}; (nu_out (force io_ig{j}_{sfx} io_iz{j}_{sfx})).1, {mk}; (nu_out (force io_ig{j}_{sfx} io_iz{j}_{sfx})).2 >) : {sj.stTy})"
-        let ended := (List.range n).map fun j =>
-          if j + 1 < i then idle j else if j + 1 == i then s!"(inr (inr (inr ())) : {ss[j]!.stTy})"
-          else if j == i then t else sv j
-        s!"{t} : {st.stTy} <- return (inr (inr (inl io_ks{i}_{sfx})));
+        let sufI := pairV (some t) sufV
+        let upCall := call s!"io_cu{i}_{sfx}" hp s!"cu{i}_{sfx}"
+        let dnCall := call s!"io_cd{i}_{sfx}" sufI s!"cd{i}_{sfx}"
+        let (idleV, idleMk) := if i == 1 then (none, "")
+          else (some s!"io_il{i}_{sfx}", s!"io_il{i}_{sfx} <- {call s!"io_id{i - 1}_{sfx}" "()" s!"il{i}_{sfx}"};")
+        let ended := s!"(inr (inr (inr ())) : {ss[i - 1]!.stTy})"
+        s!"{splitHole}
+                    {t} : {st.stTy} <- return (inr (inr (inl io_ks{i}_{sfx})));
                     io_su{i}_{sfx} <- {upCall} unwind {dnCall};
                     let () = io_su{i}_{sfx};
-                    {next (tup (ended ++ wv)) (turnTo i "inr (inr ())")}"
+                    {idleMk}
+                    {nextC (setE (i - 1) (pairV idleV (some sufI)) ended s!"ns{i}_{sfx}") (turnTo i "inr (inr ())") s!"s{i}"}"
     -- Fwd(a, κ): stored (`AtFwd`); the connector performs the outer operation under `close_all`,
     -- so that a cancel there stops every stage downstream-first; the stage resumes the next turn.
     let fwdArm := match st.fwd with
       | some (nOut, co) =>
         let sf := s!"io_sf{i}_{sfx}"
         let fw := call s!"pipe_forward[{st.OA}, row ({co}), row ({G}), site {nOut}]" s!"io_fa{i}_{sfx}" s!"fw{i}_{sfx}"
-        let ca := call s!"io_call_{sfx}" (states i sf) s!"fa{i}_{sfx}"
         s!"let (io_fa{i}_{sfx}, io_fk{i}_{sfx}) = io_fy{i}_{sfx};
               {sf} : {st.stTy} <- return (inr (inr (inl io_fk{i}_{sfx})));
-              io_fr{i}_{sfx} <- {fw} unwind {ca};
+              io_fr{i}_{sfx} <- {fw} unwind {callAll sf s!"f{i}"};
               let () = io_fr{i}_{sfx};
-              {next (states i sf) (turnTo i "inl ()")}"
+              {nextC (setE i h sf s!"nf{i}_{sfx}") (turnTo i "inl ()") s!"f{i}"}"
       | none => s!"let (io_fa{i}_{sfx}, io_fk{i}_{sfx}) = io_fy{i}_{sfx}; let _ = io_fa{i}_{sfx};
-              {next (states i s!"(inr (inr (inl io_fk{i}_{sfx})) : {st.stTy})") (turnTo i "inl ()")}"
-    let arm := s!"{ev} <- {stepCall} unwind {coCall};
+              {nextC (setE i h s!"(inr (inr (inl io_fk{i}_{sfx})) : {st.stTy})" s!"nf{i}_{sfx}") (turnTo i "inl ()") s!"f{i}"}"
+    let arm := s!"{getS}
+          {ev} <- {stepCall} unwind {coCall};
           case {ev} \{
             inl io_ea{i}_{sfx} -> case io_ea{i}_{sfx} \{
                 inl io_yk{i}_{sfx} -> {yieldArm}
@@ -340,16 +455,15 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
         inl io_in{i}_{sfx} -> {a}
       | inr io_tr{i}_{sfx} -> {dispatch s!"io_tr{i}_{sfx}" (i + 1) rest}
       }"
+  let bindSW := if hasW then s!"let (io_sx_{sfx}, io_ow_{sfx}) = io_ss_{sfx};" else s!"io_sx_{sfx} <- return io_ss_{sfx};"
   let turnFn := s!"io_turn_{sfx} : !U ({GS} -o {fAt G Obs} & {fAt G "1"}) <- return (!thunkv fun (io_g_{sfx} : {GS}) ->
-    < let (io_ss_{sfx}, io_tn_{sfx}) = io_g_{sfx}; {destr ((List.range n).map sv ++ wv) s!"io_ss_{sfx}" s!"io_sst_{sfx}_"}
+    < let (io_ss_{sfx}, io_tn_{sfx}) = io_g_{sfx}; {bindSW}
       {dispatch s!"io_tn_{sfx}" 0 arms},
-      let (io_ss_{sfx}, io_tn_{sfx}) = io_g_{sfx}; let _ = io_tn_{sfx};
-      {if wv.isEmpty then call s!"io_call_{sfx}" s!"io_ss_{sfx}" s!"cl_{sfx}" else
-        s!"{destr ((List.range n).map sv ++ wv) s!"io_ss_{sfx}" s!"io_scl_{sfx}_"} let _ = io_ow_{sfx}; " ++
-        call s!"io_call_{sfx}" (tup ((List.range n).map sv)) s!"cl_{sfx}"} >);\n"
-  let ready := tup (cn.stages.map (·.ready) ++ (match cn.out with
-    | some (_, w, _) => [w]
-    | none => []))
+      let (io_ss_{sfx}, io_tn_{sfx}) = io_g_{sfx}; let _ = io_tn_{sfx}; {bindSW} {if hasW then s!"let _ = io_ow_{sfx};" else ""}
+      {call s!"io_call_{sfx}" s!"io_sx_{sfx}" s!"cl_{sfx}"} >);\n"
+  let ready := withW (tup (cn.stages.map (·.ready))) (match cn.out with
+    | some (_, w, _) => w
+    | none => "()")
   let Q := prod (fvs.map (·.2))
   let q := tup (fvs.map (·.1))
   if cn.pull then

@@ -60,6 +60,7 @@ deriving instance ToExpr for Frontend.HInfo
 deriving instance ToExpr for Frontend.ItInfo
 deriving instance ToExpr for Frontend.FieldCand
 deriving instance ToExpr for Frontend.PipeMode
+deriving instance ToExpr for Frontend.ConnStage
 deriving instance ToExpr for Frontend.VSugar
 deriving instance ToExpr for Frontend.LoopSrc
 deriving instance ToExpr for Frontend.SchemeMark
