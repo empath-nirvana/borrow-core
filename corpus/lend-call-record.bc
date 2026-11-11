@@ -1,4 +1,4 @@
--- A `let mut` record lent by `&` in the arguments of a call that may raise (SPEC §18): `chk` may
+-- A record lent by `&` in the arguments of a call that may raise (SPEC §18): `chk` may
 -- raise `Fail`, and `&t` lends `t` to the call through a cell scoped to it, by the unwinding form
 -- `withbor1U`. The raise leaves the lend: the lend ends, and its finaliser consumes the cell and
 -- the record in it (consumable, SPEC §42).

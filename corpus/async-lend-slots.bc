@@ -1,4 +1,4 @@
--- Scoped cells in a task that suspends (SPEC §35): `task` lends its `let mut x` to calls (`&x`,
+-- Scoped cells in a task that suspends (SPEC §35): `task` lends its `x` to calls (`&x`,
 -- `&mut x`), `modify`s it, and gives a handler its state as a value, between two `await`s. Each
 -- of those cells is scoped to its borrow, and no `await` lies inside a borrow (typing refuses a
 -- resuming operation across a lend: a continuation held across a lend is T1, #172), so each cell

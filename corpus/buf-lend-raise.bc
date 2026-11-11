@@ -1,6 +1,6 @@
 -- A buffer lent by a borrow block whose body may raise, the handler outside the lend (SPEC §18,
 -- *Where an abortive operation may stand*): the buffer's array is lent by the unwinding form,
--- `slice_borrow_mut_u` for `borrow mut` of a `let mut` string and `slice_borrow_imm_u` for
+-- `slice_borrow_mut_u` for `borrow mut` of a string and `slice_borrow_imm_u` for
 -- `borrow imm`. When the body raises, the lend ends, the array goes back to the lender, and the
 -- lender's finaliser consumes it with the rest of the abandoned scope.
 --
