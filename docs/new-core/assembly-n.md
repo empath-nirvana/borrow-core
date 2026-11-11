@@ -56,6 +56,8 @@ Stage `i` (0 ≤ i < n) reads wire `i` (type `A_i`, end `K_i`) and writes wire `
 - **The alternative is refuted:** running `close_up_i` inside s_i's frames would let s_i's handlers intercept the upstream's non-error operations, which breaks ≈.
 - **L1 limit:** only effects whose operations are all abortive are reified; a mixed effect in `cu_i` is refused.
 - **The case** (source cleanup raises 10, s_i's raises 20): `123`, `inr 20` (sel_ii), pending the user's reading of (ii).
+- **Addendum (as built):** `close_down_i` stays only as the stop arm's cancel-path finaliser (`REIFY(close_up_i) unwind close_down_i`), a typing obligation of `[then]`. The kernel absorbs a cancel during a cleanup region (SPEC §19 *Cancels*, `[cfin-cancel]`), so the path is reachable when an upstream cleanup performs a capturable op. Thm X gains a clause: such a cancel is absorbed, the region completes with its first error kept, and the remaining stages (n−1…i) then stop downstream-first. That is the specified behaviour; no `UNPROVED:` is needed.
+- **Built:** `pipe-first-error` gives `123`/`inr 20`, and the catch case gives `123`/`inl 40`.
 
 **Rev 2.5 (L1 code size, 2026-11-11):** the generator uses one shared frame function per stage, and each list becomes a chain of calls to them. **This is covered as written:** L-region concerns the *dynamic* nest of `withStop` frames, and a call adds no handler or finaliser. Three conditions:
 1. each shared frame function installs exactly one `withStop_j` and does nothing else effectful;
@@ -123,7 +125,7 @@ The glue makes no other decisions. Abortive ops, `must_resume` ops and answering
   Bracketing independence survives: `d ;; p` is one Lemma G′ composite, `head` commutes with reassociating `++`, and `u` is fixed at the raiser;
 - an external point's stop branch is `…;; Ke.stop ;; …`, every stage downstream-first (c3′)/(c8′): where Thm X's cancel lands.
 
-**Hypotheses** (P1b's premises, now listed; review G6): NP-cooperative, NP-masked-cleanup (a stage's unwinding and every stop run masked, so an op a cleanup performs is not a cancel point, and no `Fwd` is dispatched while a frame list is unwinding), NP-no-wire-cleanup, A0; and L1's restrictions (D1–D9, closed chains, an unrestricted `K` on every wire, `stop()` at `K = 1`, no marked wait forwarded (§75 *Restrictions in L1*)).
+**Hypotheses** (P1b's premises, now listed; review G6): NP-cooperative, NP-absorbed-cleanup (rev 2.6: a cancel at a cleanup's capturable op cuts that cleanup from the op on, keeps the first error, and the region's remaining cleanups run in order; formerly NP-masked-cleanup), NP-no-wire-cleanup, A0; and L1's restrictions (D1–D9, closed chains, an unrestricted `K` on every wire, `stop()` at `K = 1`, no marked wait forwarded (§75 *Restrictions in L1*)).
 
 **R_n** relates Cₙ's tuple, the running stage (or "at `AtFwd`"), and the active frame list to a model configuration:
 - **(I1)** componentwise: `Ready(l)` ~ not started; `AtNext(κ)` ~ awaiting; `AtYield(κ)` ~ a rest at a yield; `Ended(k)` ~ ended (with `k` delivered again on a later `next` when unrestricted); `AtFwd(κ, op)` ~ suspended at the chain's external point; `AtStop(κ)` ~ the model's `stop()` in progress.
