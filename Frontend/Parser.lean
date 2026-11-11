@@ -816,11 +816,17 @@ def siteParam (t : Token) (s : String) : P Nat := do
   if s.length > 32 then failAt t.span s!"a site parameter's name is at most 32 characters"
   pure (siteOfName s)
 
+/-- A literal site, below `2^32`: the numbers above are site parameters' (`siteOfName`), so a
+literal never names one.  `[spec §19, §76]` -/
+def litSite (t : Token) (k : Nat) : P Nat := do
+  unless k < 2 ^ 32 do failAt t.span s!"the site {k}: a site is below 2^32"
+  pure k
+
 /-- A site: a literal `n`, or a site parameter's name.  `[spec §19, §76]` -/
 def siteRef (what : String) : P Nat := do
   let t ← peek
   match t.tok with
-  | .int k => discard bump; pure k
+  | .int k => discard bump; litSite t k
   | .ident s => discard bump; siteParam t s
   | _ => expected what
 
@@ -830,7 +836,7 @@ def opNameNI (what : String) : P (Nat × Nat) := do
   match t.tok with
   | .flt s =>
     match nDotI? s with
-    | some ki => discard bump; pure ki
+    | some (k, i) => discard bump; return (← litSite t k, i)
     | none => expected what
   | .ident s =>
     if (← peekAt 1).tok == .sym "." then

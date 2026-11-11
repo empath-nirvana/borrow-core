@@ -15,18 +15,20 @@ the use's. The checker sees only instances, each a plain `def`, and the kernel n
 * **The pure use**, every row argument `()` and no site parameter, is the definition as written:
   named `f`, its type parameters kept for the checker.
 * **A private site**, a site parameter the template's type does not mention, is never written:
-  each instance takes a fresh site, above every site of the program.
-* **A `type`** with row or site parameters is expanded at each use.
+  each instance takes a fresh site: at or above the effects pass's next site, which it reads from
+  that pass's result, and above every literal site of the program.
+* **A `type`** with row or site parameters is expanded at each use, in a `shape` too.
+* **A template's body is core text:** a surface form in it is refused.
 
 Refused, at the use, naming the template: a row argument under which the template's body performs
 an operation its instance's type does not have; a row argument that gives an operation a second
-signature; a row argument naming a lifetime. Refused, each needing a row binder in the kernel
-(decision 62's row variables), which Core does not have: polymorphic recursion over rows, and a
-template used as a value at every row (rank 2). A definition checked once for all rows is refused
-by the parser (`..r` with no row parameter `r`).
+signature; a row argument naming a lifetime; a row argument not written (inferring it is slice
+2). Refused, needing a row binder in the kernel (decision 62's row variables), which Core does not
+have: polymorphic recursion over rows. A definition checked once for all rows is refused by the
+parser (`..r` with no row parameter `r`). An error the checker finds inside an instance names the
+instance, its template and its use (`Origin.rowInst`).
 
-The pass runs after `Frontend.Elab.Effects`, whose sites are then literal. It is the identity on a
-program with no template.
+The pass runs after `Frontend.Elab.Effects`. It is the identity on a program with no template.
 -/
 
 namespace Frontend.Elab.RowInst
@@ -98,6 +100,15 @@ def _root_.Frontend.Shape.ents : Shape → List (Nat × Nat)
   | .name _ _ => []
 end
 
+/-- The operations a constant's bracket arguments write. -/
+def constEnts (k : Const) : List (Nat × Nat) :=
+  k.toArgs.2.flatMap fun
+    | .ty A => A.ents
+    | .cty C => C.ents
+    | .shape σ => σ.ents
+    | .row r => r.ents
+    | _ => []
+
 mutual
 /-- The sites a term names: each `(true, n, i)` an operation it performs at a site `n` no handler
 of the term installs, each `(false, n, i)` any other (a handler's site, an annotation's row). -/
@@ -107,6 +118,7 @@ def _root_.Frontend.Val.sitesIn (h : List Nat) : Val → List (Bool × Nat × Na
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
   | .unroll _ V | .inst _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.sitesIn h
   | .ascribe _ V A => V.sitesIn h ++ A.ents.map ((false, ·))
+  | .const _ k => (constEnts k).map ((false, ·))
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.sitesIn h
   | _ => []
 
@@ -135,8 +147,34 @@ def _root_.Frontend.Decl.maxSite (d : Decl) : Nat :=
     | .def_ _ _ _ A V _ => A.ents.map (·.1) ++ (V.sitesIn []).map (·.2.1)
     | .main _ C M => C.ents.map (·.1) ++ (M.sitesIn []).map (·.2.1)
     | .extern _ _ A | .type _ _ _ _ A => A.ents.map (·.1)
+    | .shape _ _ σ => σ.ents.map (·.1)
     | _ => []
   (ns.filter (· < 2 ^ 32)).foldl max 0
+
+mutual
+/-- The span of a surface form in a term, elaborated by the passes before the instances are made
+(`Val.sugar`, `&x`, loops): none in core text.  `[spec §76]` -/
+def _root_.Frontend.Val.surface? : Val → Option Span
+  | .sugar sp _ | .lend sp _ _ => some sp
+  | .pair _ V W | .app _ V W => V.surface? <|> W.surface?
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .shorten _ _ _ _ V | .mark _ _ V | .ascribe _ V _ => V.surface?
+  | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.surface?
+  | _ => none
+
+def _root_.Frontend.Comp.surface? : Comp → Option Span
+  | .loop sp .. => some sp
+  | .ret _ V | .absurd _ V => V.surface?
+  | .bind _ _ _ M N | .with_ _ M N => M.surface? <|> N.surface?
+  | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
+  | .nuOut _ M | .ascribe _ M _ | .withbor2r _ _ _ _ _ _ _ _ M => M.surface?
+  | .letUnit _ V M | .letPair _ _ _ V M => V.surface? <|> M.surface?
+  | .case _ V _ M _ N => V.surface? <|> M.surface? <|> N.surface?
+  | .perform _ _ _ V | .abort _ _ _ V => V.surface?
+  | .handle _ _ _ hr hc M => hr.surface? <|> hc.surface? <|> M.surface?
+  | .unwind _ _ _ M D N => M.surface? <|> D.surface? <|> N.surface?
+  | _ => none
+end
 
 /-! ### Substitution -/
 
@@ -155,6 +193,8 @@ structure St where
   site : Nat
   /-- The instances made since the last declaration was emitted, each after those it uses. -/
   out : Array Decl := #[]
+  /-- Each instance made: its name, its template's, and the use it was made for. -/
+  made : Array (String × String × Span) := #[]
 
 abbrev M := StateT St (Except Error)
 
@@ -333,7 +373,7 @@ def substVal : Nat → Cx → Val → M Val
       match c.tmpl? x false with
       | some t => use n c sp t [] true
       | none => pure (.var sp x)
-    | .clone sp x => pure (.clone sp x)
+    | .clone sp x => return .clone sp (← ident n c ⟨x, sp⟩).name
     | .defApp sp x As => do
       let As' ← As.mapM (substV n c)
       match c.tmpl? x false with
@@ -359,7 +399,7 @@ def substVal : Nat → Cx → Val → M Val
     | .ascribe sp V A => return .ascribe sp (← substVal n c V) (← substV n c A)
     | .const sp k => return .const sp (← substConst n c sp k)
     | .shorten sp m σ a V => return .shorten sp m (← substS n c σ) a (← substVal n c V)
-    | .lend sp x m => pure (.lend sp x m)
+    | .lend sp x m => return .lend sp (← ident n c x) m
     -- A form the effects pass left for the sugar: its types substituted.
     | .sugar sp s => pure ((Val.sugar sp s).subst c.tys)
     | .mark sp k V => return .mark sp k (← substVal n c V)
@@ -428,9 +468,13 @@ def use : Nat → Cx → Span → Tmpl → List VTy → Bool → M Val
     let pub := t.sites.filter mentions
     let priv := t.sites.filter (!mentions ·)
     if bare && !(t.tps.isEmpty && t.rows.isEmpty && pub.isEmpty) then
-      throw ⟨sp, s!"`{t.name}` is used without its arguments, as a value at every row: a " ++
-        s!"definition used at every row (rank 2) is not provided; {needsBinder}. Write the " ++
-        s!"rows it is used at, `{t.name}[…, row (…)]`"⟩
+      throw ⟨sp, s!"`{t.name}` is used without its arguments: its row and site arguments are " ++
+        s!"written at each use, `{t.name}[…, row (…)]`; reading them off the call is not built " ++
+        "in slice 1 (SPEC §76)"⟩
+    if Rs.length < t.rows.length then
+      throw ⟨sp, s!"`{t.name}` takes {t.rows.length} row argument(s) `row (…)`, and this use " ++
+        s!"writes {Rs.length}: reading a row argument off the call is not built in slice 1 " ++
+        "(SPEC §76)"⟩
     unless Ts.length == t.tps.length && Rs.length == t.rows.length && Ss.length == pub.length do
       throw ⟨sp, s!"`{t.name}` takes {t.tps.length} type argument(s), {t.rows.length} row " ++
         s!"argument(s) `row (…)` and {pub.length} site argument(s) `site k`" ++
@@ -442,7 +486,12 @@ def use : Nat → Cx → Span → Tmpl → List VTy → Bool → M Val
         throw ⟨sp, s!"a row argument of `{t.name}` names a lifetime: not provided (SPEC §76, " ++
           "slice 1)"⟩
     let isPure := Rs.all (· == .nil) && t.sites.isEmpty
-    let key : String × List VTy := (t.name, if isPure then [] else As.map VTy.strip)
+    -- The type parameters of the code it is used in that its arguments mention: the instance's
+    -- own, and part of its key, so that a parameter `T` and a global type `T` are two keys.
+    let tps := if isPure then t.tps else
+      c.tps.filter fun x => As.any fun A => A.subst [(x, .zero .none)] != A
+    let key : String × List VTy :=
+      (t.name, if isPure then [] else As.map VTy.strip ++ tps.map (VTy.name .none))
     let ref (i : Inst) : Val :=
       let args := if isPure then Ts else i.tps.map (VTy.name sp)
       if args.isEmpty then .var sp i.name else .defApp sp i.name args
@@ -456,9 +505,6 @@ def use : Nat → Cx → Span → Tmpl → List VTy → Bool → M Val
     if c.stack.length ≥ maxDepth then
       throw ⟨sp, s!"`{t.name}`'s instances are made inside each other without end: polymorphic " ++
         s!"recursion over rows is not provided; {needsBinder}"⟩
-    -- The type parameters of the code it is used in that its arguments mention.
-    let tps := if isPure then t.tps else
-      c.tps.filter fun x => As.any fun A => A.subst [(x, .zero .none)] != A
     let k := ((← get).count.lookup t.name).getD 0 + 1
     let name := if isPure then t.name else s!"{t.name}__r{k}"
     let inst : Inst := ⟨name, tps⟩
@@ -483,18 +529,27 @@ def use : Nat → Cx → Span → Tmpl → List VTy → Bool → M Val
           s!"`{sitePp k}.{i}` outside it"⟩
     let V ← substVal n c' t.val
     let d : Decl := .def_ t.sp ⟨name, t.sp⟩ (tps.map fun x => ⟨x, t.sp⟩) A V t.mark
-    modify fun s => { s with out := s.out.push d }
+    modify fun s => { s with out := s.out.push d, made := s.made.push (name, t.name, sp) }
     return ref inst
 end
 
 /-- The program with each template's uses made instances, each instance just before the first
-declaration that uses it, and the templates removed. A program with no template is unchanged.
+declaration that uses it, and the templates removed; and each instance made, with its template
+and the use it was made for. A program with no template is unchanged. `floor` is the next site
+the effects pass would give: a fresh site is at or above it, and above every literal site.
 `[spec §76]` -/
-def run (ds : List Decl) : Except Error (List Decl) := do
+def run (ds : List Decl) (floor : Nat) :
+    Except Error (List Decl × List (String × String × Span)) := do
   let tmpls := templates ds
-  if tmpls.isEmpty then return ds
+  if tmpls.isEmpty then return (ds, [])
+  -- A template's body is core text: the passes that elaborate surface forms ran before it is
+  -- instantiated.
+  for t in tmpls do
+    if let some sp := t.val.surface? then
+      throw ⟨sp, s!"the body of `{t.name}`, which has row or site parameters, is core text in " ++
+        "slice 1: this surface form is not elaborated in it (SPEC §76)"⟩
   let c : Cx := { tmpls }
-  let site0 := ds.foldl (fun m d => max m d.maxSite) 0 + 1
+  let site0 := max floor (ds.foldl (fun m d => max m d.maxSite) 0 + 1)
   let go : M (Array Decl) := do
     let mut acc : Array Decl := #[]
     for d in ds do
@@ -507,12 +562,13 @@ def run (ds : List Decl) : Except Error (List Decl) := do
         | .extern sp n A => do pure (some (Decl.extern sp n (← substV fuel c A)))
         | .type sp n ps ls A => do
           pure (some (Decl.type sp n ps ls (← substV fuel { c with tps := ps.map (·.name) } A)))
+        | .shape sp n σ => do pure (some (Decl.shape sp n (← substS fuel c σ)))
         | d => pure (some d)
       acc := acc ++ (← get).out
       modify fun s => { s with out := #[] }
       if let some d' := d' then acc := acc.push d'
     pure acc
-  let (acc, _) ← go.run { site := site0 }
-  pure acc.toList
+  let (acc, st) ← go.run { site := site0 }
+  pure (acc.toList, st.made.toList)
 
 end Frontend.Elab.RowInst

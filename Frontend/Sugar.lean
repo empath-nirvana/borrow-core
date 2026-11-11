@@ -625,6 +625,9 @@ inductive Origin where
   /-- The binder `x` the elaboration made stands for `what` in the source: a message that names
   `x` names `what` instead. -/
   | shown (x what : String)
+  /-- The `def` `x` is the instance of the template `f` made for its use at the span recorded
+  (SPEC §76): a message from its body names both.  `[spec §76]` -/
+  | rowInst (x f : String)
   deriving BEq, Inhabited
 
 /-- Where generated code came from, and what the elaboration reports: per span, its origins. -/
@@ -6729,7 +6732,9 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let decls := if fxr.withPlatform then decls.filter isPlat ++ decls.filter (!isPlat ·) else decls
   -- Definitions and types generic over rows and sites: each use's instance, made by substitution
   -- (SPEC §76). Its fresh sites are above every site the effects pass gave.  `[spec §76]`
-  let decls ← (Elab.RowInst.run decls : Except Error _)
+  let (decls, made) ← (Elab.RowInst.run decls fxr.sites : Except Error _)
+  for (x, f, sp) in made do
+    modify (· ++ [(sp, .rowInst x f)])
   -- Effects, then rows, lowering shapes and calls, each in source order.
   let kindOf : Elab.Effects.Report → Nat
     | .line "effect" _ => 0 | .line "row" _ => 1 | .line "lowering" _ => 2 | .site .. => 2
