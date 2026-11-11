@@ -188,6 +188,21 @@ def upd (μ : Heap) (ℓ : Loc) (v : Val) : Heap := fun k => if k = ℓ then som
 def fill (μ : Heap) (ℓ : Loc) (n : Nat) (v : Val) : Heap :=
   fun k => if ℓ ≤ k ∧ k < ℓ + n then some v else μ k
 
+/-- `μ[d+k ↦ μ(s+k) | k < n]`, every cell read from `μ`: the write of the copy step.
+    `[spec §74]` -/
+def copy (μ : Heap) (d s n : Nat) : Heap :=
+  fun k => if d ≤ k ∧ k < d + n then μ (s + (k - d)) else μ k
+
+/-- The cells `ℓ, …, ℓ + n − 1` are all in `μ`.  `[spec §74]` -/
+def HasRange (μ : Heap) (ℓ n : Nat) : Prop := ∀ i, i < n → μ (ℓ + i) ≠ none
+
+theorem HasRange.upd {μ : Heap} {ℓ n : Nat} (h : μ.HasRange ℓ n) (k : Loc) (v : Val) :
+    (μ.upd k v).HasRange ℓ n := by
+  intro i hi
+  by_cases hk : ℓ + i = k
+  · simp [Heap.upd, hk]
+  · simp only [Heap.upd, hk, if_false]; exact h i hi
+
 end BoCa.BoLo.Heap
 
 namespace BoCa.TR3
@@ -296,6 +311,14 @@ locations.
 answers `idxAns`; `split` answers `splitAns`; `drop` continues as `dropFill`
 (`Support/Dynamics/Arrays.lean`).
 
+### — no printed counterpart — the bulk copy · `[spec §74]`
+
+`sliceCopy (dst, (di, (src, (si, len))))` checks its bounds once (`copyOk`, on mathematical
+integers). In range it writes `dst[di + k] := src[si + k]` for every `k < len` in one step
+(`Heap.copy`, every cell read from the memory before the step) and answers `(dst, inj₂ ())`; out
+of range it writes nothing and answers `(dst, inj₁ ())`. In range the step needs every cell of
+both ranges in the memory, as `store` needs its cell.
+
 ### — no printed counterpart — the counted loop · `[spec §16]`
 
 `count (f, (n, (i, s)))` continues as `countNext`: `f (i, s)` and `count` from `i + 1` while
@@ -365,6 +388,23 @@ def performE (p : Expr) : Expr := .app (.val (.prim .perform)) p
 
 /-- `raise p`.  `[spec §19]` -/
 def raiseE (p : Expr) : Expr := .app (.val (.prim .raise)) p
+
+/-- The memory after `sliceCopy (dst, (di, (src, (si, len))))`, `dst` at `ℓd` of length `nd` and
+`src` at `ℓs` of length `ns`: the range copied in range (`copyOk`), else `μ` unchanged.
+`[spec §74]` -/
+def copyHeap (μ : Heap) (ℓd : Loc) (nd di : UInt32) (ℓs : Loc) (ns si len : UInt32) : Heap :=
+  if copyOk nd di ns si len then μ.copy (ℓd + di.toNat) (ℓs + si.toNat) len.toNat else μ
+
+/-- Every cell after the copy step holds a value some cell held before it.  `[spec §74]` -/
+theorem copyHeap_some {μ : Heap} {ℓd : Loc} {nd di : UInt32} {ℓs : Loc} {ns si len : UInt32}
+    {k : Loc} {v : Val} (h : copyHeap μ ℓd nd di ℓs ns si len k = some v) : ∃ k', μ k' = some v := by
+  unfold copyHeap at h
+  split at h
+  · simp only [Heap.copy] at h
+    split at h
+    · exact ⟨_, h⟩
+    · exact ⟨k, h⟩
+  · exact ⟨k, h⟩
 
 /-- `cancelTo p`, `p` the pair `(n, k)`.  `[spec §51]` -/
 def cancelToE (p : Expr) : Expr := .app (.val (.prim .cancelTo)) p
@@ -556,6 +596,15 @@ inductive Head {ℍ : Host} [HostIs ℍ] : Heap → Expr → Heap → Expr → P
   | split (μ : Heap) (ℓ : Loc) (n i : UInt32) :
       Head μ (.app (.val (.prim .split)) (.val (.pair (.arr ℓ n) (.i32 i)))) μ
         (.val (splitAns ℓ n i))
+  /-- `(μ, sliceCopy (dst, (di, (src, (si, len))))) ↦ (copyHeap μ …, copyAns …)`: in range
+      (`copyOk`) every cell of both ranges is in `μ`, the step writes `dst[di + k] := src[si + k]`
+      for every `k < len` and answers `(dst, inj₂ ())`; out of range it writes nothing and answers
+      `(dst, inj₁ ())`.  It allocates nothing.  `[spec §74]` -/
+  | sliceCopy (μ : Heap) (ℓd : Loc) (nd di : UInt32) (ℓs : Loc) (ns si len : UInt32)
+      (h : copyOk nd di ns si len = true →
+        μ.HasRange (ℓd + di.toNat) len.toNat ∧ μ.HasRange (ℓs + si.toNat) len.toNat) :
+      Head μ (.app (.val (.prim .sliceCopy)) (.val (copyArg ℓd nd di ℓs ns si len)))
+        (copyHeap μ ℓd nd di ℓs ns si len) (.val (copyAns ℓd nd di ns si len))
   /-- `(μ, drop (f, (ℓ, n))) ↦ (μ, dropFill f ℓ 0 n)`.  `[spec §9]` -/
   | drop (μ : Heap) (f : Val) (ℓ : Loc) (n : UInt32) :
       Head μ (.app (.val (.prim .drop)) (.val (.pair f (.arr ℓ n)))) μ (dropFill f ℓ 0 n.toNat)

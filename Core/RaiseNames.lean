@@ -583,6 +583,14 @@ theorem heapRaiseOK_upd {μ : Heap} (hμ : HeapRaiseOK P μ) (ℓ : Loc) {v : Va
   · subst hk; simp at h; subst h; exact hv
   · rw [Heap.upd_other hk] at h; exact hμ k w h
 
+/-- The copy step's write keeps the memory's values within the names `P`.  `[spec §74]` -/
+theorem heapRaiseOK_copyHeap {μ : Heap} (hμ : HeapRaiseOK P μ) (ℓd : Loc) (nd di : UInt32)
+    (ℓs : Loc) (ns si len : UInt32) :
+    HeapRaiseOK P (BoCa.BoLo.copyHeap μ ℓd nd di ℓs ns si len) := by
+  intro k w h
+  obtain ⟨k', h'⟩ := BoCa.BoLo.copyHeap_some h
+  exact hμ k' w h'
+
 theorem heapRaiseOK_del {μ : Heap} (hμ : HeapRaiseOK P μ) (ℓ : Loc) : HeapRaiseOK P (μ.del ℓ) := by
   intro k w h
   by_cases hk : k = ℓ
@@ -933,6 +941,11 @@ theorem raiseOK_head (hP0 : ¬ P 0) {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ
       simp only [splitAns]; split
       · exact ⟨raiseOK_arr _ _, raiseOK_arr _ _⟩
       · exact raiseOK_arr _ _
+  | sliceCopy ℓd nd di ℓs ns si len _ =>
+      refine ⟨?_, heapRaiseOK_copyHeap hμ ℓd nd di ℓs ns si len⟩
+      simp only [copyAns]; split
+      · exact ⟨raiseOK_arr _ _, trivial⟩
+      · exact ⟨raiseOK_arr _ _, trivial⟩
   | drop f ℓ n =>
       have h1 := (raiseOK_primApp (by decide) (by decide) _).1 ha
       exact ⟨raiseOK_dropFill h1.1 ℓ _ _, hμ⟩

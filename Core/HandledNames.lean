@@ -2000,6 +2000,11 @@ theorem splitAns_le (ℓ : Loc) (n i : UInt32) :
     (splitAns ℓ n i).1.hin = {} ∧ (splitAns ℓ n i).1.pn = {} := by
   simp only [splitAns]; split <;> exact ⟨rfl, rfl⟩
 
+/-- `sliceCopy`'s answer holds no code.  `[spec §74]` -/
+theorem copyAns_le (ℓ : Loc) (nd di ns si len : UInt32) :
+    (copyAns ℓ nd di ns si len).1.hin = {} ∧ (copyAns ℓ nd di ns si len).1.pn = {} := by
+  simp only [copyAns]; split <;> exact ⟨rfl, rfl⟩
+
 /-- **A host's answer holds no code.** -/
 theorem host_le (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = some r) :
     r.1.hin = {} ∧ r.1.pn = {} := by
@@ -2233,6 +2238,7 @@ theorem head_hin {V : HIn} (h0 : HIn.one 0 ≤ V) {μ μ' : Heap} {a a' : Expr}
       exact (tabFill_le (W := HIn.top) hf.2 (le_of_any rfl) ℓ _ _ _).1
   | idx ℓ n i => exact le_of_eq_empty (idxAns_le ℓ n i).1
   | split ℓ n i => exact le_of_eq_empty (splitAns_le ℓ n i).1
+  | sliceCopy ℓd nd di ℓs ns si len _ => exact le_of_eq_empty (copyAns_le ℓd nd di ns si len).1
   | drop f ℓ n =>
       have hf := prim_app_hin (by decide) ha
       simp only [Expr.val, Val.pair, Expr.hin, append_le_iff] at hf
@@ -2369,6 +2375,7 @@ theorem head_pn {W : HIn} (hdiv : HIn.one divEff ≤ W) {μ μ' : Heap} {a a' : 
       exact (tabFill_le (V := HIn.top) (le_of_any rfl) hf.2 ℓ _ _ _).2
   | idx ℓ n i => exact le_of_eq_empty (idxAns_le ℓ n i).2
   | split ℓ n i => exact le_of_eq_empty (splitAns_le ℓ n i).2
+  | sliceCopy ℓd nd di ℓs ns si len _ => exact le_of_eq_empty (copyAns_le ℓd nd di ns si len).2
   | drop f ℓ n =>
       have hf := prim_app_pn (by decide) ha
       simp only [Expr.val, Val.pair, Expr.pn, append_le_iff] at hf
@@ -2471,9 +2478,9 @@ theorem head_pn {W : HIn} (hdiv : HIn.one divEff ≤ W) {μ μ' : Heap} {a a' : 
       exact append_le (by rw [pn_ccatchE]; exact append_le (empty_le _) (cancelTo_dead_pn ha.2))
         (pn_app_of (cancelTo_pn ha.2) (empty_le _))
 
-/-- **A head step stores only what its redex holds.** -/
+/-- **A head step stores only what its redex or its memory holds.** -/
 theorem head_heap {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ' a') :
-    ∀ ℓ v, μ' ℓ = some v → μ ℓ = some v ∨ (v.1.hin ≤ a.fl ∧ v.1.pn ≤ a.pn) := by
+    ∀ ℓ v, μ' ℓ = some v → (∃ ℓ', μ ℓ' = some v) ∨ (v.1.hin ≤ a.fl ∧ v.1.pn ≤ a.pn) := by
   intro k w hk
   cases h with
   | alloc v ℓ _ =>
@@ -2483,11 +2490,11 @@ theorem head_heap {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ' 
         show v.1.hin ≤ (Expr.app (.prim .alloc) v.1).fl ∧ v.1.pn ≤ (Expr.app (.prim .alloc) v.1).pn
         rw [fl_prim_app _ _ (by decide) (by decide), pn_app_eq rfl]
         exact ⟨le_trans v.2.hin_le_fl (le_append_right _ _), le_append_right _ _⟩
-      · rw [Heap.upd_other e] at hk; exact .inl hk
+      · rw [Heap.upd_other e] at hk; exact .inl ⟨_, hk⟩
   | free ℓ v _ =>
       by_cases e : k = ℓ
       · subst e; simp at hk
-      · rw [Heap.del_other e] at hk; exact .inl hk
+      · rw [Heap.del_other e] at hk; exact .inl ⟨_, hk⟩
   | store ℓ v x _ =>
       by_cases e : k = ℓ
       · subst e; simp only [Heap.upd_same, Option.some.injEq] at hk; subst hk
@@ -2496,13 +2503,14 @@ theorem head_heap {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ' 
           v.1.pn ≤ (Expr.app (.app (.prim .store) (.loc k)) v.1).pn
         rw [pn_app_eq rfl]
         exact ⟨le_trans v.2.hin_le_fl (app_fl_ge _ rfl).2, le_append_right _ _⟩
-      · rw [Heap.upd_other e] at hk; exact .inl hk
+      · rw [Heap.upd_other e] at hk; exact .inl ⟨_, hk⟩
   | tab c f ℓ _ =>
       simp only [Heap.fill] at hk
       split at hk
       · cases hk; right; exact ⟨empty_le _, empty_le _⟩
-      · exact .inl hk
-  | _ => exact .inl hk
+      · exact .inl ⟨_, hk⟩
+  | sliceCopy => exact .inl (BoCa.BoLo.copyHeap_some hk)
+  | _ => exact .inl ⟨_, hk⟩
 
 theorem val_hin_of_fl {V : HIn} {v : Val} (h : v.1.fl ≤ V) : v.1.hin ≤ V :=
   le_trans v.2.hin_le_fl h
@@ -2553,6 +2561,8 @@ theorem head_fl {V W : HIn} (hW : W ≤ V) (h0 : HIn.one 0 ≤ V) {μ μ' : Heap
       exact le_trans (fl_le_hin _) (tabFill_le (W := HIn.top) hf.2 (le_of_any rfl) ℓ _ _ _).1
   | idx ℓ n i => exact le_trans (fl_le_hin _) (le_of_eq_empty (idxAns_le ℓ n i).1)
   | split ℓ n i => exact le_trans (fl_le_hin _) (le_of_eq_empty (splitAns_le ℓ n i).1)
+  | sliceCopy ℓd nd di ℓs ns si len _ =>
+      exact le_trans (fl_le_hin _) (le_of_eq_empty (copyAns_le ℓd nd di ns si len).1)
   | drop f ℓ n =>
       have hf := val_hin_of_fl (v := Val.pair f (Val.arr ℓ n)) (prim_app_fl (by decide) (by decide) ha)
       simp only [Val.pair, Expr.hin, append_le_iff] at hf
@@ -2706,8 +2716,8 @@ theorem step1_flowInv {V W : HIn} (hW : W ≤ V) (h0 : HIn.one 0 ≤ V) (hdiv : 
       (fun h₁ => head_hin h0 (fun ℓ v hv => (hμ ℓ v hv).1) hh h₁) K).1 hfl,
     plug_pn_le ha (fun h₁ => head_pn hdiv (fun ℓ v hv => (hμ ℓ v hv).2) hh h₁) K hpn,
     fun ℓ v hv => ?_⟩
-  rcases head_heap hh ℓ v hv with h | h
-  · exact hμ ℓ v h
+  rcases head_heap hh ℓ v hv with ⟨ℓ', h⟩ | h
+  · exact hμ ℓ' v h
   · exact ⟨le_trans h.1 hafl, le_trans h.2 hapn⟩
 
 /-- **A run keeps the flow invariant.**  `[spec §19]` -/
@@ -2764,8 +2774,8 @@ theorem steps_hin {e₀ : Expr} {μ₀ μ : Heap} {e : Expr} (h : Steps (ℍ := 
     have hahin := le_trans (plug_hin_ge (PlainB.nonLit ha) K) hi.1
     refine ⟨plug_hin_le (PlainB.hole ha) (fun h₁ => head_hin h0 hi.2 hh h₁) K hi.1,
       fun ℓ v hv => ?_⟩
-    rcases head_heap hh ℓ v hv with h | h
-    · exact hi.2 ℓ v h
+    rcases head_heap hh ℓ v hv with ⟨ℓ', h⟩ | h
+    · exact hi.2 ℓ' v h
     · exact le_trans h.1 (le_trans (fl_le_hin _) hahin)
   have base : e₀.hin ≤ e₀.hin ++ HIn.one 0 ∧
       ∀ ℓ v, μ₀ ℓ = some v → v.1.hin ≤ e₀.hin ++ HIn.one 0 :=
