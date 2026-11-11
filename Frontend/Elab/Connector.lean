@@ -198,7 +198,7 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
       else handoff s!"inl io_yk{i}_{sfx}"
     let returnArm := if last then
         let fin := call s!"pipe_finish[{st.R}, row ({G})]"
-          s!"io_r{i}_{sfx}, thunkv fun (io_fw_{sfx} : 1) -> {call s!"io_co{i}_{sfx}" (othersTup i) s!"fco{i}_{sfx}"}" s!"fin{i}_{sfx}"
+          s!"io_r{i}_{sfx}, (thunkv fun (io_fw_{sfx} : 1) -> {call s!"io_co{i}_{sfx}" (othersTup i) s!"fco{i}_{sfx}"} : U (1 -o {fAt G "1"}))" s!"fin{i}_{sfx}"
         s!"io_v{i}_{sfx} <- {fin}; return (inl io_v{i}_{sfx} : ({Rlast}) + ({GS}))"
       else handoff s!"inr io_r{i}_{sfx}"
     let skipArm := next (states i s!"(inl io_bl{i}_{sfx} : {st.stTy})") (turnTo i "inl ()")
