@@ -3825,12 +3825,16 @@ def shorthandsOf (src : String) (lib : String → Option String := fun _ => none
 
 /-- `s` with each word that is a renamed binder of `rs`, or a binder Hygiene renamed
 (`Hygiene.written`), replaced by the name the source writes it with. A fresh name is no name of
-the source, so a word spelt as one is that binder. -/
+the source, so a word spelt as one is that binder. Hygiene renames after the parser, so a name it
+gave is `hy{n}_{y}`, `y` the parser's name, itself renamed when `rs` says so. -/
 def unrename (rs : List (String × String)) (s : String) : String :=
   let isW (c : Char) : Bool := c.isAlphanum || c == '_' || c == '\''
   let flush (w out : List Char) : List Char :=
     let ws := String.ofList w.reverse
-    ((Hygiene.written ((rs.lookup ws).getD ws)).toList.reverse) ++ out
+    let src := match rs.lookup ws with
+      | some y => y
+      | none => let y := Hygiene.written ws; (rs.lookup y).getD y
+    src.toList.reverse ++ out
   let (w, out) := s.toList.foldl (fun (w, out) c =>
     if isW c then (c :: w, out) else ([], c :: flush w out)) ([], [])
   String.ofList (flush w out).reverse

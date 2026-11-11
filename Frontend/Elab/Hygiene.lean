@@ -104,6 +104,13 @@ def _root_.Frontend.Val.hygD (defs : Ren) (glob : String → Bool) (ρ : Ren) : 
   | .lend sp x m => pure (.lend sp (lookI ρ x) m)
   | .sugar sp (.forSite i) => pure (.sugar sp (.forSite { i with w := look ρ i.w }))
   | .sugar sp (.pullSite i) => pure (.sugar sp (.pullSite { i with w := look ρ i.w }))
+  -- The `let mut` variables a closure assigns (SPEC §41, rule R3) are occurrences: the mark
+  -- names them as the binders in scope are now named.  `[spec §41]`
+  | .sugar sp (.writes xs) => pure (.sugar sp (.writes (xs.map (look ρ))))
+  -- `io_like(o, V)`: `o` is an occurrence of a variable.  `[spec §60]`
+  | .sugar sp (.like o) => pure (.sugar sp (.like (look ρ o)))
+  -- Every other sugar names no variable: lifetimes (`borrow`, `handle`), a handler's name
+  -- (`handle`, `named`), constants, fields, declarations and constructors are not locals.
   | .sugar sp s => pure (.sugar sp s)
   | .mark sp k V => do pure (.mark sp k (← V.hygD defs glob ρ))
 

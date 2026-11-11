@@ -11,7 +11,8 @@ difference.
 
 Two passes:
 
-* `program`: each program renamed, the library as it is. The check's positions and names are
+* `program`: each program renamed, the library as it is. Its binders are named `{x}__q{k}`, which
+  Hygiene renames again (`hygName`), so the renamed program's locals all take Hygiene's path. The check's positions and names are
   mapped back through the renaming: a column on a renamed line, a name `{x}q{k}` to `x`, and a
   generated name that carries a position (`io_lb12_5_0`).
 * `library`: every module of `lib/` renamed (`BCC_LIB`), each program as it is. A message from a
@@ -48,6 +49,23 @@ def renaming(bcc, f):
 
 
 WORD = re.compile(r"[A-Za-z0-9_']+")
+# A name Hygiene gave a local, `hy{n}_{x}` (`hy{n}c{h}_{x}` in a control handler's code): `x`. Its
+# number counts the renamings of the declaration, which differ between the two programs.
+HY = re.compile(r"\bhy\d+(?:c[A-Za-z0-9]+)?_")
+
+
+def hygName(x, x2):
+    """The program pass's name for a binder `bcc alpha` names `{x}q{k}`: `{x}__q{k}`. A local whose
+    name has `__` is renamed by Hygiene (`Frontend/Elab/Hygiene.lean`, `isGlobal`), so every binder
+    of the renamed program goes through Hygiene's renaming, which the original's mostly do not: a
+    name the elaboration carries that Hygiene leaves stale (a closure's `writes(…)`, #1068) shows
+    up as a difference."""
+    return x2 if x2 == x else x + "__" + x2[len(x):]
+
+
+def unhyg(x, x2):
+    """`bcc alpha`'s name for the binder `hygName` names `x2`."""
+    return x + x2[len(x) + 2:]
 POS = re.compile(r"(?<![\w.])(\d+):(\d+)")
 GEN = re.compile(r"\b(io_[a-z]+)(\d+)_(\d+)")
 
@@ -85,6 +103,7 @@ class Back:
         elif not self.cols:
             s = POS.sub(lambda m: f"{m.group(1)}:_", s)
             s = GEN.sub(lambda m: f"{m.group(1)}{m.group(2)}__", s)
+        s = HY.sub("", s)
         return WORD.sub(lambda m: self.names.get(m.group(0), m.group(0)), s)
 
 
@@ -177,9 +196,14 @@ def main():
         diffs = []
         edits = renaming(ab, f)
         if edits is not None:
+            edits = [(l, c, x, hygName(x, x2), v) for (l, c, x, x2, v) in edits]
             g = os.path.join(tmp, f"p{i}", os.path.basename(f))
             os.makedirs(os.path.dirname(g))
-            open(g, "w").write(run(ab, ["alpha", f])[1])
+            out = run(ab, ["alpha", f])[1]
+            for (x, x2) in {(x, x2) for (_, _, x, x2, _) in edits}:
+                if x2 != x:
+                    out = re.sub(r"(?<![\w'])" + re.escape(unhyg(x, x2)) + r"(?![\w'])", x2, out)
+            open(g, "w").write(out)
             diffs += ["program pass: " + d for d in compare(a.bcc, f, g, Back(edits))]
         # The library pass: the original's messages from module code name renamed binders as the
         # module writes them (`x1`), the renamed library's as `{x}q{k}`: both to `x`.
