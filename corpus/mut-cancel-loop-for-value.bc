@@ -1,0 +1,17 @@
+-- As corpus/mut-cancel-loop-for.bc, with the loop's value bound (`let r = for … else { 0 }`) and the
+-- `let mut` total read after it: `t + r` is 3 + 0. Probe k4 of #1053.
+--
+-- KNOWN WRONG ANSWER (#1053): this prints inl (inr i32[0]); the correct answer is inl (inr i32[3]). Do not update this golden to "fix" it; fix #1053, then set the golden to the correct answer.
+include fail
+effect Wait { ctl wait() }
+fn chk(x: i32) -> i32 with Fail[i32] = if x == 30 { raise(x) } else { x }
+handler tm[A]: Wait, A -> A + i32 with Fail[i32] = {
+  return(x) = inl x;
+  wait(k) = {
+    let mut t = 0;
+    let r = for i in 0..3 { let v = chk(i); t = t + v } else { 0 };
+    let s = t + r; inr s
+  }
+}
+fn work() -> i32 with Wait = wait(); 5
+main -> (i32 + i32) + i32 = with to_result[i32, i32 + i32] { with tm[i32] { work() } }

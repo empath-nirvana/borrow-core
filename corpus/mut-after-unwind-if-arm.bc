@@ -1,0 +1,9 @@
+-- A `let mut` write in the continuation of an `unwind` in an `if` arm used as a statement, with
+-- no loop: the arm adds 5 to `t`. Probe u2 of #1053.
+--
+-- KNOWN WRONG ANSWER (#1053): this prints i32[10]; the correct answer is i32[15]. Do not update this golden to "fix" it; fix #1053, then set the golden to the correct answer.
+fn go(b: bool) -> i32 =
+  let mut t = 0;
+  if b { x <- (5 + 0) unwind (()); t = t + x } else { t = 1 };
+  t + 10
+main -> i32 = go(true)
