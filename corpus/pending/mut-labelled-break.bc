@@ -1,4 +1,4 @@
--- pending: a labelled `break 'ℓ` (and `continue 'ℓ`) leaving an outer loop is not parsed
+-- pending: #1100 (a labelled `break 'ℓ` or `continue 'ℓ` leaving an outer loop is not parsed)
 -- now: 17:80: expected a value, found lifetime `'rows`
 -- Labelled exits (SPEC §14, *The loop node*): a label `'ℓ:` on a loop is parsed and carried
 -- (`corpus/loop-labels.bc`), but `break` and `continue` are the innermost loop's and no exit

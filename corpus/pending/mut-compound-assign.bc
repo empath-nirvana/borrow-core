@@ -1,4 +1,4 @@
--- pending: compound assignment (`x += e`, `-=`, `*=`, …) on a `let mut` variable is not parsed
+-- pending: #1099 (compound assignment, `x += e`, `-=`, `*=`, …, on a `let mut` variable is not parsed)
 -- now: 15:38: expected a value, found `=`
 -- Compound assignment on `let mut` variables (SPEC §41): `x += e` for `x = x + e`, and `-=`,
 -- `*=`, `/=`, `%=` likewise, in a loop, in a branch and on a record field through a `mut`
