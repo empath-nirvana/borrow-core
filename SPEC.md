@@ -5738,7 +5738,11 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
      (`let r = for …; N`) is wrapped with the binding of its value,
      `r <- (loop …; r <- return forRes; return r) unwind (cancel k); N`, so the wrap is around the
      loop as the typed elaboration elaborates it (`boundRes?`). A head of `x <- M₁; N` or of
-     `x <- M₁ unwind (D); N` that mentions `k` is entered by the same rule.
+     `x <- M₁ unwind (D); N` that mentions `k` is entered by the same rule. A head that runs a
+     `[then]` in place (an `unwind` region in the head) is itself wrapped,
+     `… unwind (cancel k)`, in a clause that drops `k`, and every `unwind` region in such a clause
+     is a head. The wrap is a finaliser that never fires when the head can neither abort nor
+     capture.
    Exactly once: from its binding `k` is live until the first of a head's abort (its finaliser
    cancels it; nothing after runs), the end of the path (the cancel before the terminal), or a use
    the program wrote (nothing is inserted after it). `[then]`'s finaliser and rest are exclusive,
@@ -8713,6 +8717,7 @@ what its parts write and has no boundary of its own.
 | `x <- M` on a `let mut` | `{x} ∪ W(M)` | — |
 | `let (x, q) = f(…, x, …)` | `{x}` | — |
 | `let p = e; N`, `x <- M; N`, `S; N` | `W(e) ∪ W(N)` | — |
+| `x <- M unwind (D); N` | `W(M) ∪ W(D) ∪ W(N)` | — : the continuation `N` is a tail position (an `unwind` writes what its parts write) |
 | `&mut x`, `&x` | `{x}` | the lend rebinds `x` (typed elaboration §5.1) |
 | `if`, `match`, `case` (a statement) | `W(arm₁) ∪ W(arm₂)` | each arm hands on `W` (`handArms`); the statement rebinds it |
 | `let p = if/match …`, `x <- M` (a head) | `W(M)` | each terminal hands on `(value, W)`; the binding takes it apart (`bindForm`) |
