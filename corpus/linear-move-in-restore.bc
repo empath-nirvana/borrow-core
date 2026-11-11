@@ -1,0 +1,30 @@
+-- Linear state moved into a control handler's body and restored after it (must not regress;
+-- `theory/linear-state` probe p04). A `let mut` string `b` is moved into `fill`, the body of a
+-- `to_result` handler, each turn of a counted `for`: the body hands the string back with its
+-- length, and the `inl` arm writes it back into `b`. When `fill` raises, the string it was given is
+-- consumed by the unwind (SPEC §19), and the `inr` arm refills `b` with a fresh one. Nothing leaves
+-- `b` empty at an exit: it is written on both arms before the next turn.
+--
+-- Answer: `(i32[303], i32[4294967196])`. `go(5)` fills three times (`n` 3, length 3: 303);
+-- `go(1)` fills twice, the third turn raises and refills `b` empty (`n` −1, length 0: −100).
+-- A string the unwind did not consume would leave `live 1`.
+
+include fail
+include text
+
+fn fill(s: string, k: i32) -> string * i32 with Fail[i32] =
+  if k < 0 { raise(k) } else { let (s, u) = push_byte(s, b'x'); len_of(s) }
+
+fn go(k: i32) -> i32 =
+  let mut b = string_new(4);
+  let mut n = 0;
+  for i in 0..3 {
+    match with to_result[i32, string * i32] { fill(b, k - i) } {
+      inl p -> let (b2, m) = p; b = b2; n = m
+    | inr e -> b = string_new(4); n = 0 - 1
+    }
+  };
+  let (b, m) = len_of(b);
+  n * 100 + m
+
+main -> i32 * i32 = (go(5), go(1))
