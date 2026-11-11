@@ -199,12 +199,13 @@ def pipe_stop[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, ro
     }
 
 -- withStop_i: the thunk inside one `unwind` frame whose finaliser is `pipe_stop`; a frame of one of
--- the three frame lists, each one cancel region at the site `c`. The ambient row `g` holds what
+-- the three frame lists, each one cancel region at the site `c`, whose operation's cancel row `cc`
+-- holds what every stage of the list performs when stopped. The ambient row `g` holds what
 -- `pipe_stop` performs, since the stage is stopped on the normal path too.
-def pipe_with_stop[A, K, B, R, OA, Q, row sg, row cy, row cn, row cp, row cf, row lr, row lc, row g, site y, site s, site f, site c] :
-    !U (PipeSt[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] * U (1 -o F[c.0 cancel[..cy, ..cn, ..cp, ..cf, ..sg] 1 ~> 1, ..g] Q)
-        -o F[c.0 cancel[..cy, ..cn, ..cp, ..cf, ..sg] 1 ~> 1, ..g] Q) =
-  !thunkv fun (p : PipeSt[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] * U (1 -o F[c.0 cancel[..cy, ..cn, ..cp, ..cf, ..sg] 1 ~> 1, ..g] Q)) ->
+def pipe_with_stop[A, K, B, R, OA, Q, row sg, row cy, row cn, row cp, row cf, row lr, row lc, row cc, row g, site y, site s, site f, site c] :
+    !U (PipeSt[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] * U (1 -o F[c.0 cancel[..cc] 1 ~> 1, ..g] Q)
+        -o F[c.0 cancel[..cc] 1 ~> 1, ..g] Q) =
+  !thunkv fun (p : PipeSt[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] * U (1 -o F[c.0 cancel[..cc] 1 ~> 1, ..g] Q)) ->
     let (st, t) = p;
     w <- return ();
     a <- force t w unwind (fn1 <- return (unbang pipe_stop[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]); force fn1 st);
