@@ -13601,7 +13601,7 @@ Three stages: source 1, middle 2, sink 3; digits are the cleanups.
 
 | # | Case | Trace | Reported error |
 |---|---|---|---|
-| 1 | the sink returns early | `321` | — |
+| 1 | the sink returns early (its own cleanup, then `run` closes the rest) | `321` | the latest |
 | 2 | the middle calls `stop()` | `123` | — |
 | 3 | a raise at the source | `123` | the latest |
 | 4 | a raise at the middle | `213` | the latest |
