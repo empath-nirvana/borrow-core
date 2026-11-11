@@ -13514,7 +13514,8 @@ residual.
     `` the head of a stream chain is a source; a chain of stages as a stage is not provided yet (L2, #921) ``.
 - **A chain's value:**
   - When `s_{n−1}` yields, its `Yield` is no wire's, so the chain is a **generator** performing
-    `Yield[A_n]`. `for x in src >| map(f) { … }` is then §15's `for`, unchanged.
+    `Yield[A_n]`. `for x in src >| map(f) { … }` has the chain as its generator (*A `for` over a
+    chain*, below).
   - When `s_{n−1}` is a sink, the chain's value is `run`'s (below).
 
 #### Demand and the operators
@@ -13547,9 +13548,42 @@ The pieces whose types mention the chain's row `Σ` or the connector's sites (`p
 `pipe_stop`, `pipe_with_stop`, `pipe_forward` and `pipe_finish`) are row- and site-generic
 definitions (§76). `pipe_handoff` is value-level.
 
+**The pieces' types.**
+1. **One rest type.**
+   - Every stored rest of a stage, at a `next()`, a `yield`, a `stop()` or a forwarded operation,
+     has one type, resumed with the turn's input `1 + (A + K)`.
+   - The rests cannot be two mutually recursive types: a `nu` type's variable may not occur under an
+     inner `U` (§7), and the checker refuses the nested form with
+     `` the `nu` variable `XN` occurs under an inner `U` ``.
+   - So the states are `Ready`, `AtNext`, `AtYield` (which also holds a rest at a `stop()` or a
+     forwarded operation) and `Ended`.
+2. **`stop()` answers `1` in the connector's row.** The stage's `Stream` site gives `stop` the entry
+   `1 ~> 1`, since `stop()` is provided at `K = 1` only (*Restrictions in L1*).
+3. **The connector stores stages unboxed.** The storing clauses take `κ` plainly, a stage's loop has
+   `U X` leaves, and `Ready` is the loop itself. Nothing the connector keeps needs to outlive `top`.
+4. **Rows, read off each stage as elaborated.** Each piece takes the stage's rows as arguments, as the
+   elaboration finds them:
+   - `sg`: what the stage performs besides its sites;
+   - `cy`, `cn`, `cp`, `cf`: the cancel rows of its four operations, inferred per operation (§27);
+   - `lr`, `lc`: its loop's turn row and close row.
+
+   `pipe_with_stop` also takes the cancel row of the region's operation, `cc`. `cc` holds what every
+   stage of the frame list performs when stopped, each operation once.
+5. **A second instantiation pass.** The glue is written after §76's instances are made, so RowInst
+   runs a second time over it (`runMore`). The second run shares the first run's instances and
+   counts.
+6. **A rest given an input that does not fit it (I1′, Assembly(n) rev 2.3).** A rest at a `next()`
+   cannot be typed so that a no-item input is impossible, since every rest has one type. So that case
+   is a visible stall, not a cleanup:
+   - the stage's turn ends with its rest kept, uncancelled, in a loop that only skips
+     (`pipe_stall`), so no cleanup runs out of order and the chain hangs instead;
+   - the site, and `pipe_step`'s re-emitted `Next`, carry `UNPROVED:` notes that state I1′.
+
+   Core has no trap that the pieces could raise instead.
+
 **The states and events:**
 
-    State_i = Ready(Loop_i) | AtNext(κ) | AtYield(κ) | AtFwd(κ, op) | AtStop(κ) | Ended(k)
+    State_i = Ready(Loop_i) | AtNext(κ) | AtYield(κ) | Ended(k)
     Event_i = Next(κ) | Yield(b, κ) | Return(k) | Skip(Loop_i) | Fwd(op, κ) | Stop(κ)
 
 `Ended(k)` keeps `k`. Every wire's `K` is unrestricted in L1 (below).
@@ -13570,9 +13604,9 @@ continuation.
     upstream runs.
   - `Yield` or `Return` from `i < n−1`: `handoff_{i+1}`, and `i+1` runs.
   - `Return(r)` from `n−1`: `finish`.
-  - `Fwd`: store `AtFwd`; run `forward_i` under `close_all`; set the pending input to the answer.
+  - `Fwd`: store `AtYield`; run `forward_i` under `close_all`; set the pending input to the answer.
     The stage resumes on the next turn, under `close_others_i`.
-  - `Stop`: store `AtStop`; run `close_up_i`; resume with `K_i`. If the region kept an error, it is
+  - `Stop`: store `AtYield`; run `close_up_i`; resume with `()`. If the region kept an error, it is
     raised at the call of `stop()`.
   - `Skip`: loop.
 - A hand-off or a forward is split across two turns, with no operation between them. Theory counts
@@ -13595,18 +13629,20 @@ P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain under them.
 #### Forwarding a resumable outer operation
 
 - **Which operations.** Only **capturable, cancellable, resumable** operations are forwarded
-  (`ctl … -> B`, where `B` is not `never`). They are forwarded when performed by a **non-last**
-  stage and belonging to no wire, since an outside cancel can land there.
+  (`ctl … -> B`, where `B` is not `never`). They are forwarded from **every stage**, the last
+  included, when they belong to no wire (Assembly(n) rev 2.4).
+  - The last stage's is the same instance, re-performed just inside the outer handler with no
+    handler between, so Thm S is unchanged.
+  - Then no stage's row holds a capturable operation. The kernel types cancelling a suspended stage
+    (`cancelTy`) as performing its whole row, so a capturable operation left in a stage's row would
+    be in the cancel row of every frame list that stops the stage, and so in its own cancel row,
+    which only `⊤` allows.
 - **Everything else passes straight to the outer handler:**
   - **answering (`fn`) operations.** For example, a `fn` `Log` in a middle stage's cleanup is fine:
     it only adds `Log` to `close_all`'s row and to the forwarded operation's cancel row;
   - **`must_resume` operations,** since no cancel lands at them;
   - **abortive operations** (answer `never`, `Fail.raise`). The raiser's frames run first, then the
-    per-step finaliser: P1b Thm R's order;
-  - **the last stage's operations,** its outward `yield` among them. Its frames are the most
-    downstream, so `close_others_{n−1}` around it already gives Thm X's order. Forwarding would be
-    the same instance re-performed from just inside the outer handler, with no handler between, so
-    Thm S is unchanged.
+    per-step finaliser: P1b Thm R's order.
 - **How.**
   - The elaboration renames the stage's perform to a **fresh, connector-local name** with the same
     signature (A, B, qualifier). The renaming is sugar: resolution to a fresh binder.
@@ -13626,15 +13662,32 @@ P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain under them.
     refused by the checker, and the elaboration adds the note:
     `` `op` resumes any number of times (`multi ctl`), so a non-last stage of a stream chain cannot perform it ``.
   - **(One-frame)** The forward site's handler sits **outside** the stage's yield site's handler.
-    The rests stored at either site have **one type**, so `AtYield` and `AtFwd` hold interchangeable
-    rests that `step_i` resumes the same way.
-  - **(Row)** The outer operation's cancel row covers `close_all`'s row, which is the union of the
-    stages' cleanup rows (§27's `hfin`). It is inferred (#868) when the row is open, and refused by
-    the checker when a fixed row is too small. **The stages' rows, and so their cleanup rows, exclude
-    the forwarded operation:** a stage performs it only at its fresh name, and only the glue's row
-    adds it.
+    The rests stored at either site have **one type**, so `AtYield` holds either, and `step_i`
+    resumes it the same way.
+  - **(Row)** The forwarded operation's cancel row is inferred (`Fins`) from the connector's node as
+    the effects pass built it. It is the union of what the stages perform besides their sites and
+    the cancel rows of the stages' operations, which is `close_all`'s row (§27's `hfin`). The kernel
+    checks the connector's `[then]`, so a row that is too small is refused, never run. **The stages'
+    rows exclude the forwarded operation:** a stage performs it only at its fresh name, and only the
+    glue's row adds it.
+  - **(One)** A stage forwards at most one effect. That effect has one operation, which answers `1`.
+    `pipe_forward` performs it as `n.0` at the site argument `n`, since a site parameter names an
+    effect's static name, not an operation's index (§76).
 - **No marked wait in L1.** No stage can perform a §29a marked wait, because the checker does not
   emit `effAwait`. So L1 forwards only cancellable operations. Forwarding marked waits is in *Open*.
+
+#### A `for` over a chain
+
+- `for x in s₀ ∘ … ∘ s_{n−1} { M }`, whose last stage yields, has the chain as its generator.
+- The last stage yields at a wire site of its own, as any stage does.
+- The connector performs the `for`'s operation with each item and the `for`'s threaded value,
+  `(b, w)`, under `close_all`, and the site's answer is the next `w`.
+- The connector keeps `w` from one turn to the next as a generator's machine does, but never across
+  that operation: at the operation `w` is in its argument, not in the state that `close_all` stops.
+  So a `break`, which drops the continuation, stops every stage downstream-first and loses nothing.
+- The chain answers `(w, r)` at its end.
+- The `for`'s continuation is cancelled at the operation's cancel row, which is inferred from the
+  connector as a forwarded operation's is.
 
 #### `stop()`, the end, return-the-rest
 
@@ -13687,15 +13740,13 @@ P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain under them.
   (`¬Row.UnrD`). This is the checker's refusal; the elaboration adds a note and does not refuse the
   chain itself. Unit C (#922) turns it into an amber check.
 - **(Row)** (above): the checker's.
-- **A stage's cleanup cannot perform the operation the chain forwards.** This is the kernel's
-  existing `⊤` limit, not a pipes rule.
-  - A capturable operation whose cancelled region has a finaliser performing the same operation
-    needs a cancel row that contains itself, and only `⊤` does (§27 *Open*, "`⊤` cancel rows").
-  - The checker already refuses this outside pipes: #868's `[then]` refusal, and
-    `corpus/reject/fin-cancel-capturing.bc`.
-  - In a chain, the forwarded operation is in `close_all`'s row only if a stage's cleanup performs
-    it. Answering, `must_resume` and abortive operations in cleanup are not affected: they only widen
-    the forwarded operation's cancel row.
+- **One forwarded effect per stage.** A stage that performs two capturable, resumable outer effects
+  is refused:
+  `` this stage of a stream chain performs `E₁` and `E₂`, two effects the connector forwards; it forwards one per stage in this version (SPEC §75) ``.
+  A forwarded effect has one operation, and that operation answers `()`.
+- **No stage performs a forwarded operation unforwarded.** Every stage forwards its own, so this does
+  not arise. The elaboration keeps it as a guard, with the message
+  `` this stage of a stream chain performs `E` unforwarded, and the connector forwards `E` from another of its stages: no stage of a chain performs a forwarded operation unforwarded, since its cancel row would hold itself (SPEC §75, §27 *Open*) ``.
 - **A0:** a linear value live where a stage may raise or be closed is consumed on that path, or the
   checker refuses the program (§27's `[let]`; unit C adds the messages).
 
@@ -13802,6 +13853,10 @@ cleanup is `r <- (loop {…}) unwind (note(d)); note(d); r`. All are `old-backen
 | `corpus/reject/pipe-stop-residual.bc` | `stop()` over a source that returns `i32` | the residual message |
 | `corpus/reject/pipe-multi-op.bc` | a non-last stage performs a `multi ctl` operation | the checker's `[then]`/`¬UnrD` refusal, with the note |
 | `corpus/reject/pipe-fin-forwarded.bc` | a middle stage's cleanup performs the `wait` the chain forwards | the checker's `⊤` refusal, as `fin-cancel-capturing` |
+| `corpus/core-pipe-pieces.bc` | (to come) | (to come) |
+| `corpus/pipe-pieces-step.bc` | (to come) | (to come) |
+| `corpus/reject/pipe-fwd-two.bc` | a stage that performs two effects the connector forwards | the one-forwarded-effect message |
+| `corpus/reject/pipe-lend-observation.bc` | a chain held across a per-observation lend | Part A's refusal, with the #1082 clause |
 
 Every core program above runs on Backend2 at its answer (a cancel row holding a machine operation
 is lowered, §69). The old backend refuses those whose finalisers perform (§27) or whose layout it
@@ -13838,6 +13893,13 @@ does not support; they carry `-- check: old-backend-refuses`.
   question (`cancelTy` answers `F_{fin ⊕ Σ} 1`).
 - **A stage's cleanup performing the forwarded operation** waits on §27 *Open*'s "`⊤` cancel rows".
 - **A chain of stages as a stage** (an open chain). It needs the head's `next`/`stop` forwarded. L2.
+- **A chain held across a per-observation lend** (a stage whose loop is in progress when the lend
+  ends) is refused (#1082). The general fix is either a `Code`-type outlives rule in the kernel (a
+  suspended div call outlives `@a` when its captures do) or boxing nested loops at `top` in the
+  machine. The refusal is Part A's, with the clause
+  `` a stream chain is not kept across a lend per observation, SPEC §75 *Open*, #1082 ``.
+- **Forwarding more per stage:** a second effect, an operation with another index, or one with
+  another answer type.
 - **A user handler's storing clause around a loop** (`spawn` over a looping task) is #917's.
   `pending/async-channel.bc`, `async-fanout.bc` and `operator-reconcile.bc` are refused with its
   message: a `spawn` body that loops meets the storing `await` clause. `deep` at `Loop_Σ` is
