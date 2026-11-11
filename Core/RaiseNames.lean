@@ -1372,20 +1372,23 @@ theorem rcE_foldOwnGV (B₀ : VTy) : rcE q (FoldP.foldOwnGV B₀).1 = true := by
   have hB : rcE q (FoldP.fBG (FoldP.keys B₀)) = true := by simp [FoldP.fBG, rcE, rcE_dsp]
   simp [FoldP.foldOwnGV, FoldP.selfG, rcE, rcE_app, rcE_selfV hB, FoldP.tagE]
 
-theorem rcE_mapV : ∀ A : VTy, rcE q (mapV A).1 = true
-  | .tvar 0 => rfl
-  | .tensor A B => by simp [mapV, rcE, rcE_app, rcE_mapV A, rcE_mapV B]
-  | .sum A B => by simp [mapV, rcE, rcE_app, rcE_mapV A, rcE_mapV B]
+theorem rcE_mapV {n : Nat} : ∀ A : VTy, rcE q (mapVS n A).1 = true
+  | .tvar k => by
+      unfold mapVS; split
+      · simp [rcE, rcE_projE n k (e := .var 1) rfl]
+      · rfl
+  | .tensor A B => by simp [mapVS, rcE, rcE_app, rcE_mapV A, rcE_mapV B]
+  | .sum A B => by simp [mapVS, rcE, rcE_app, rcE_mapV A, rcE_mapV B]
   | .box _ A => rcE_mapV A
-  | .tvar (_ + 1) | .unit | .zero | .thunk _ | .code _ _ _ | .ref _ | .imm _ _ | .mut _ _
+  | .unit | .zero | .thunk _ | .code _ _ _ | .ref _ | .imm _ _ | .mut _ _
   | .bang _ | .unk | .mu _ | .int _ | .opq _ | .fam _ => rfl
 
-theorem rcE_nodeV : ∀ C : CTy, rcE q (nodeV C).1 = true
-  | .ret A => by simp [nodeV, bindE, rcE, rcE_app, rcE_mapV]
-  | .amp C D => by simp [nodeV, rcE, rcE_app, rcE_nodeV C, rcE_nodeV D]
-  | .eff _ _ _ _ _ _ _ C => by simp [nodeV, bindE, rcE, rcE_app, rcE_mapV]
-  | .arr _ D => by simp [nodeV, rcE, rcE_app, rcE_nodeV D]
-  | .all _ _ D => by simp [nodeV, rcE, rcE_app, rcE_nodeV D]
+theorem rcE_nodeV {n : Nat} : ∀ C : CTy, rcE q (nodeVS n C).1 = true
+  | .ret A => by simp [nodeVS, bindE, rcE, rcE_app, rcE_mapV]
+  | .amp C D => by simp [nodeVS, rcE, rcE_app, rcE_nodeV C, rcE_nodeV D]
+  | .eff _ _ _ _ _ _ _ C => by simp [nodeVS, bindE, rcE, rcE_app, rcE_mapV]
+  | .arr _ D => by simp [nodeVS, rcE, rcE_app, rcE_nodeV D]
+  | .all _ _ D => by simp [nodeVS, rcE, rcE_app, rcE_nodeV D]
   | .top | .nuSys _ _ _ => rfl
 
 theorem rcE_unfoldV (C : CTy) : rcE q (unfoldV C).1 = true := by
