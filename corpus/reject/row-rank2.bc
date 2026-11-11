@@ -1,0 +1,10 @@
+-- SPEC §76: a row template used as a value without its row arguments, at every row (rank 2).
+-- expect: 10:29: `idk` is used without its arguments, as a value at every row: a definition used at every row (rank 2) is not provided; it needs a row binder in the kernel (decision 62's row variables), which Core does not have (SPEC §76 *Open*). Write the rows it is used at, `idk[…, row (…)]`
+
+def idk[row r] : !U (U (F[..r] 1) -o F[..r] 1) =
+  !thunkv fun (k : U (F[..r] 1)) -> force k
+
+def apply : !U (!U (U (F 1) -o F 1) -o F 1) =
+  !thunkv fun (f : !U (U (F 1) -o F 1)) -> k <- return (thunk (return ())); (unbang f) k
+
+main : F 1 = (unbang apply) idk

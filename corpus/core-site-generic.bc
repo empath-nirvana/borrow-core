@@ -1,0 +1,30 @@
+-- SPEC §76: a `def` with a private site, `scoped[site s]`: it runs `k`, then performs `s.0` on
+-- `k`'s answer plus `n` under its own handler at `s`, which resumes with the argument plus 1000.
+-- Its type does not mention `s`, so no use writes it: the instance `scoped__r1` takes a fresh
+-- site, above every site of the program, and both uses share it. The uses are nested: the outer
+-- activation's `k` is the inner use, which runs inside the outer handler, so the inner
+-- activation's perform goes to the inner handler (`1 + 20 + 1000 = 1021`), and the outer's to
+-- the outer (`1021 + 300 + 1000 = 2321`).
+--
+-- Answer: i32[2321].
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def scoped[site s] : !U (i32 * U (F i32) -o F i32) =
+  !thunkv fun (p : i32 * U (F i32)) ->
+    let (n, k) = p;
+    handle_with[s](
+        ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+        (((!thunkv fun (q : i32 * U ((i32 -o F i32) & F 1)) ->
+            let (x, kk) = q;
+            y <- return (plus (x, i32[1000]));
+            (force kk).1 y), ())
+          : !U (i32 * U ((i32 -o F i32) & F 1) -o F i32) * 1)) (
+      a <- force k;
+      b <- return (plus (a, n));
+      perform[s.0] b)
+
+main : F i32 =
+  inner <- return (thunk (q <- return (i32[20], thunk (return i32[1])); (unbang scoped) q));
+  p <- return (i32[300], inner);
+  (unbang scoped) p
