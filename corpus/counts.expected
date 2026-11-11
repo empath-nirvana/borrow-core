@@ -114,7 +114,9 @@ core-fin-sub-row 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the
 core-fin-top-row 0 0 0 0 0 0 # main returns (); f is not called
 core-pipe-step 1 0 0 1 1 0
 core-row-generic 0 0 0 0 0 0
+core-row-key-tparam 0 0 0 0 0 0
 core-row-pipe-stop 0 0 0 0 0 0
+core-site-fresh-const 0 0 0 0 0 0
 core-site-generic 0 0 0 0 0 0
 core-unsigned 0 0 0 0 0 0 # every value is a word: the unsigned integers are held as the signed ones are
 data-json-map-ser 16 0 0 699 420 205
@@ -547,6 +549,7 @@ reconcile-chain 19 3 0 457 458 0 # the journals' list nodes, and the continuatio
 reconcile-clock 29 8 0 400 380 0 # the fake clock's cells, the journals' list nodes, and the continuations the clauses that resume before they answer capture; the platform's clock cell is a word of the program's data; the indirect calls are of `on_clock`'s answer, a function of its state (the clock capability) built by its return clause or by its `pause` clause (SPEC §19, *Handler state*)
 retry-block 2 0 0 5 5 0 # the clock cells
 reverse-bytes 4 0 0 133 92 41
+row-site-fresh-handler 0 0 0 0 0 0
 sched-a 63 18 0 1558 897 0
 sched-a-div 34 5 0 1465 804 0
 sched-b 64 18 0 1561 898 0
