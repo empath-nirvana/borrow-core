@@ -5904,7 +5904,9 @@ runs once, and every row and clause is what it was.
   gets the place back at `Σ_D`. The checker's producer for it is K-b.3. The cancel path is a lend
   across a suspension, which needs #844 Tier 2 and #821 (§78 *Open*).
 - **An owner's finaliser that performs** (a declared value's drop that closes a socket): not a
-  consume (§42 *Not this*); Backend2's `genLendU` lowers only a constant finaliser.
+  consume (§42 *Not this*). Backend2's `genLendU` lowers a closure finaliser at `Σ_D = ∅` (#1089),
+  reading `Σ_M` and `Σ_D` from the node, and refuses a finaliser that performs, or a callback row
+  other than the borrow's, until K-b's lowering (#1046).
 - **Task codata** (`lib/async.bc`, `F (A + …) & F 1`): a task whose finalisers perform needs its
   close at `F_R 1`; it waits on the lowering of a finaliser that suspends.
 - **`[then]`'s two premises on unrestricted operations** restrict `unr` beyond §19's `[then]`
