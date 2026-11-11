@@ -13,6 +13,8 @@ verifies and never fills in:
   variables, and a function ends with all of them consumed (a path that ends at `absurd` is
   unreachable);
 - every call has its callee's number of arguments, and every closure its code's environment;
+- every value has the shape its type says, and every term the type it is expected at (the shapes
+  of the values, below): eliminators, builders, literals, calls, closures, primitives, copies;
 - every `lend` answers a borrow of its kind: `mut` or `imm` (`Op.lend`, SPEC §57);
 - every `slotPop` is of an owned array and answers that family and its slot's contents
   (`slotPopBad`, SPEC §77);
@@ -40,6 +42,10 @@ abbrev Left := Option (Std.HashSet Var)
 
 structure St where
   bound : Std.HashSet Var := {}
+  /-- Each machine's frame contents, at its first `framePush`/`frameTop` (`primAt`). -/
+  frames : Std.HashMap Nat LTy := {}
+  /-- Each site's `κ` region contents, at its first `kappaPut`/`kappaTake` (`primAt`). -/
+  regions : Std.HashMap Nat LTy := {}
 
 abbrev LM := StateT St (Except String)
 
@@ -193,10 +199,11 @@ Types are compared as representations (`sameTy`: up to `!`, and a `ν` read as i
 A variable with no type is refused where it is bound (`bindNew`); the expected type of a `letv`'s
 value is then `none` only on a program that is refused there.
 
-Not yet checked on the types (#1087's follow-up): a call's arguments (`call`, `app`) against its
-parameter types; the operand shapes and the results of `app`, `app0` and `sel`; a `clos` against
-the closure type it is expected at; a literal's width; the operands and results of a `prim`
-(beyond `lend` and `slotPop`); a `copy`'s binder at its source's type. -/
+The calls, the closures, the literals, the primitives and the copies are checked on the types
+too (below: `callBad`, `codeBad`, `litTy`, `primBad`, `primAt`; a copy's binder at its source's
+type in `lintTm`). Not checked: an `alloc`'s width class (`Op.alloc`'s `cls`, a layout fact, not a
+type), a `divLit`'s operation against its operands' width (a byte's division is at `w32`), and
+the parameters of a `tab`'s loop past the function and the array it fills. -/
 
 /-- `x` and its type, for a message. -/
 def tyStr (p : Prog) (x : Var) : String :=
@@ -233,6 +240,16 @@ def hasRep (p : Prog) (x : Var) (t : LTy) : Bool :=
   match p.ty[x]? with
   | some u => sameTy 64 u t
   | none => false
+
+/-- The type of a literal. -/
+def litTy : BoCa.IntLit → LTy
+  | .i32 _ => .int .w32
+  | .i64 _ => .int .w64
+  | .u8 _ => .int .w8
+  | .f32 _ => .int .f32
+  | .f64 _ => .int .f64
+  | .u32 _ => .int .u32
+  | .u64 _ => .int .u64
 
 /-- An eliminator's premise: what it takes apart is of the shape it eliminates, and the
 variables it binds are at the component types. -/
@@ -277,11 +294,297 @@ def introBad (p : Prog) (t : LTy) : Tm → Option String
     | _ => some s!"an {if r then "inr" else "inl"} of x{a} at {t}, which is not a sum type"
   | .unit => if t.peel == .unit then none else some s!"a () at {t}"
   | .var x => if hasRep p x t then none else some s!"{tyStr p x} answered at {t}"
+  | .lit c => if sameTy 64 (litTy c) t then none else some s!"a literal of {litTy c} at {t}"
   | .call fn _ =>
     match p.fns[fn]? with
     | some d => if sameTy 64 d.ret t then none else some s!"f{fn} ({d.name}), answering {d.ret}, called at {t}"
     | none => none
   | _ => none
+
+/-! ### The calls, the closures and the primitives, read on the LIR types -/
+
+/-- What running a computation of type `c` answers (`Convert.answerOf`): `B` at `F B`, `1` at `⊤`,
+else a closure of the rest. -/
+def answerTy (c : LCTy) : LTy :=
+  match c.whnf 8 with
+  | .ret a => a
+  | .top => .unit
+  | k => .thunk k
+
+/-- A closure's computation type, `ν`s unrolled: `none` when `t` is not a closure type. -/
+def closTy? (t : LTy) : Option LCTy :=
+  match t.peel with
+  | .thunk k => some (k.whnf 8)
+  | _ => none
+
+/-- The arguments `as` at the parameters `ps`, each of its parameter's type. -/
+def argsBad (p : Prog) (what : String) (as ps : List Var) : Option String :=
+  (as.zip ps).findSome? fun (a, x) =>
+    match p.ty[x]? with
+    | some t => if hasRep p a t then none else some s!"{what}: {tyStr p a} for the parameter x{x} : {t}"
+    | none => some s!"{what}: the parameter x{x} has no type"
+
+/-- **A call's or a closure's premise** (`none` when it holds), the term's answer at `r`:
+- `call fn as`: each argument at its parameter's type (the answer is `introBad`'s);
+- `app g a`: `g` a closure of `A ⊸ C`, `a` an `A`, the answer `C`'s (`answerTy`);
+- `app0 g`: `g` a closure of `F B`, the answer `B`;
+- `sel g j`: `g` a closure of `C₀ & C₁`, the answer `Cⱼ`'s;
+- `clos c xs`: at `U K` for `K` the code's type, each captured value at its function's
+  environment parameter's type. -/
+def callBad (p : Prog) (r : Option LTy) : Tm → Option String
+  | .call fn as =>
+    match p.fns[fn]? with
+    | some d => argsBad p s!"f{fn} ({d.name}) called" as d.params
+    | none => none
+  | .app g a =>
+    match closTy? (p.ty[g]?.getD .unit) with
+    | some (.arr aT c) =>
+      if !hasRep p a aT then some s!"x{g} applied to {tyStr p a}, for an argument of {aT}"
+      else ansBad s!"x{g} applied" (answerTy c)
+    | _ => some s!"{tyStr p g} applied to x{a}: not a closure of a function type"
+  | .app0 g =>
+    match closTy? (p.ty[g]?.getD .unit) with
+    | some (.ret b) => ansBad s!"x{g} run" b
+    | _ => some s!"{tyStr p g} run: not a closure of a returner type"
+  | .sel g j =>
+    match closTy? (p.ty[g]?.getD .unit) with
+    | some (.amp k₀ k₁) => ansBad s!"x{g} observed at {j}" (answerTy (if j == 0 then k₀ else k₁))
+    | _ => some s!"{tyStr p g} observed at {j}: not a closure of a `&` type"
+  | .clos c xs =>
+    match p.codes[c]? with
+    | some code =>
+      let envBad := code.fns.findSome? fun fn =>
+        match p.fns[fn]? with
+        | some d => argsBad p s!"c{c}'s closure captures" xs (d.params.take xs.length)
+        | none => none
+      match envBad with
+      | some e => some e
+      | none =>
+        match r with
+        | some t =>
+          if sameTy 64 t (.thunk code.ty) then none
+          else some s!"a closure of c{c}, of {LTy.thunk code.ty}, at {t}"
+        | none => none
+    | none => none
+  | _ => none
+where
+  ansBad (what : String) (b : LTy) : Option String :=
+    match r with
+    | some t => if sameTy 64 b t then none else some s!"{what} answers {b}, at {t}"
+    | none => none
+
+/-- **A code's functions at its closure type** (`none` when they are): a `lam` code of `A ⊸ C`,
+its function's last parameter an `A` and its answer `C`'s (`answerTy`); a `unit` code of `F B`,
+answering `B`; a `&` code of `C₀ & C₁`, its two functions answering `C₀`'s and `C₁`'s. A `clos`
+of the code is then a closure of the code's type (`callBad`). -/
+def codeBad (p : Prog) (c : Nat) (code : Code) : Option String :=
+  let fnAt (fn : Nat) : Option Fn := p.fns[fn]?
+  let ans (fn : Nat) (b : LTy) : Option String :=
+    match fnAt fn with
+    | some d => if sameTy 64 d.ret b then none else some s!"c{c}: f{fn} ({d.name}) answers {d.ret}, for {b}"
+    | none => some s!"c{c}: no function f{fn}"
+  match code.kind, code.ty.whnf 8, code.fns with
+  | .lam, .arr a k, [fn] =>
+    match fnAt fn with
+    | some d =>
+      match d.params.getLast? >>= (p.ty[·]?) with
+      | some t => if sameTy 64 t a then ans fn (answerTy k) else some s!"c{c}: f{fn} ({d.name}) takes {t}, for {a}"
+      | none => some s!"c{c}: f{fn} ({d.name}) takes no typed argument"
+    | none => some s!"c{c}: no function f{fn}"
+  | .unit, .ret b, [fn] => ans fn b
+  | .amp, .amp k₀ k₁, [f₀, f₁] => (ans f₀ (answerTy k₀)).orElse fun _ => ans f₁ (answerTy k₁)
+  | _, k, fns => some s!"c{c}: a {reprStr code.kind} code of {fns.length} functions at {LTy.thunk k}"
+
+/-- `d` is the contents `c` read through `Imm̲` (`load`; `Layout.joinRe`): of `c`'s former with its
+parts read (a `μ` also through its unrolling, where a recursive pointer reads as a shared borrow of
+the `μ` itself), a pointer read as a shared borrow of the same contents, a closure, an opaque
+value or a cell of `Tok` (`Imm̲ 'b Tok = Unk`) read as `Unk`; a word, `1`, `0`, `Unk` or a type
+variable as itself. -/
+def readAs : Nat → LTy → LTy → Bool
+  | 0, c, d => sameTy 64 c d
+  | f + 1, c, d => match c.peel, d.peel with
+    | .pair a b, .pair a' b' | .sum a b, .sum a' b' => readAs f a a' && readAs f b b'
+    | .mu a, .mu a' => readAs f a a' || readAs f a.unrollMu a'.unrollMu
+    | .fam a, .fam a' => readAs f a a'
+    | .ref a, .imm a' | .mut a, .imm a' | .imm a, .imm a' => sameTy 64 a a'
+    | .thunk _, .unk | .opq _, .unk | .ref _, .unk => true
+    | .pair .., _ | .sum .., _ | .mu _, _ | .fam _, _ | .ref _, _ | .mut _, _ | .imm _, _ => false
+    | _, _ => sameTy 64 c d
+
+/-- A cell of contents `c` holds a value of type `v`: `c` itself, or, at an opaque type, the
+host's word for it, which only the harness externs read or write (`Convert.mkClosOf`,
+`takeClosOf`): a stream's descriptor (`i32`), a clock's time (`i64`). -/
+def holds (c v : LTy) : Bool :=
+  sameTy 64 c v || match c.peel, v.peel with
+    | .opq .input, .int .w32 | .opq .output, .int .w32 | .opq .args, .int .w32 => true
+    | .opq .clock, .int .w64 => true
+    | _, _ => false
+
+/-- `t` is an integer type (a word: an index, a length, a handle). -/
+def isInt (t : LTy) : Bool := match t.peel with | .int _ => true | _ => false
+
+/-- A cell type's contents: `ref C`, `imm C` or `mut C`. -/
+def cellC? (t : LTy) : Option LTy :=
+  match t.peel with
+  | .ref c | .imm c | .mut c => some c
+  | _ => none
+
+/-- A family's slot contents: `[ref C]`, `[imm C]` or `[mut C]`. -/
+def famC? (t : LTy) : Option LTy :=
+  match t.peel with
+  | .fam l => cellC? l
+  | _ => none
+
+/-- **A primitive's premise, read on the LIR types**: its operands' types `ts` (in order) and its
+answer's `r`, as the LIR interpreter (`Interp.evalOp`) and the layout (`Layout.walk`) read them.
+`none` when it holds. A frame's and a `κ` region's contents are not in the program: each machine's
+frames and each site's region are checked at one type, the first met (`St.frames`, `St.regions`). -/
+def primBad (p : Prog) (op : Op) (ts : List LTy) (r : LTy) : Option String :=
+  let eq := sameTy 64
+  let wrong (what : String) : Option String :=
+    some s!"{reprStr op |>.replace "\n" " "} on {ts} answering {r}: {what}"
+  let need (b : Bool) (what : String) : Option String := if b then none else wrong what
+  match op, ts with
+  | .host o, [a] =>
+    match ofV {} (hostArg o), ofV {} (hostRes o) with
+    | .ok aT, .ok rT => need (eq a aT && eq r rT) s!"the host operation is {aT} -o {rT}"
+    | _, _ => wrong "a host operation of no LIR type"
+  | .divLit _, [a, d] => need (isInt a && eq a d && eq r a) "a division of two integers of one type"
+  | .alloc _, [v] | .allocLent _ _, [v] =>
+    need (match r.peel with | .ref c => holds c v | _ => false) "a cell of the argument"
+  | .free, [x] => need (match x.peel with | .ref c => holds c r | _ => false) "an owned cell's contents"
+  | .release, [x] => need ((match x.peel with | .ref _ => true | _ => false) && r.peel == .unit)
+      "an owned cell released, answering ()"
+  | .swap, [x, v] =>
+    need (match x.peel, r.peel with
+      | .ref c, .pair (.ref v') c' => eq v v' && eq c c' | _, _ => false)
+      "an owned cell and its new contents, answering the cell, now of the new contents' type, and the old contents"
+  | .lend m, [x] =>
+    let b (c : LTy) : LTy := if m then .mut c else .imm c
+    need (match x.peel, r.peel with
+      | .ref c, .pair x' bT => eq x x' && eq bT (b c)
+      | .fam (.ref c), .pair x' bT => eq x x' && eq bT (.fam (b c))
+      | _, _ => false) "an owned cell or array, answering it and its borrow"
+  | .relend, [x] =>
+    need (match x.peel, r.peel with
+      | .mut c, .pair x' bT => eq x x' && (eq bT (.mut c) || eq bT (.imm c))
+      | .fam (.mut c), .pair x' bT => eq x x' && (eq bT (.fam (.mut c)) || eq bT (.fam (.imm c)))
+      | _, _ => false) "a `mut` borrow, answering it and a borrow of its contents"
+  | .load, [b] => need (match cellC? b with | some c => readAs 64 c r | none => false)
+      "a borrow's contents read through Imm"
+  | .take, [b] =>
+    need (match b.peel, r.peel with
+      | .mut c, .pair b' c' | .ref c, .pair b' c' => eq b b' && eq c c' | _, _ => false)
+      "a `mut` borrow or an owned cell, answering it and its contents"
+  | .put, [b, v] =>
+    need (match b.peel with | .mut c | .ref c => eq c v && eq r b | _ => false)
+      "a `mut` borrow or an owned cell and its contents, answering it"
+  | .newArr, [n] => need (isInt n && (match r.peel with | .fam (.ref _) => true | _ => false))
+      "a length, answering an owned array"
+  | .tab fi, [f, n] | .tabLit fi, [f, n] =>
+    match p.fns[fi]? with
+    | some d =>
+      match d.params.map (p.ty[·]?) with
+      | [some pf, some pa, _, _] =>
+        need (isInt n && eq f pf && eq r pa && eq d.ret r)
+          s!"its loop f{fi} ({d.name}) takes {pf} and fills {pa}"
+      | _ => wrong s!"its loop f{fi} does not take four typed parameters"
+    | none => wrong s!"no function f{fi}"
+  | .slotPut, [a, i, v] =>
+    need (isInt i && eq r a && (match famC? a with | some c => eq c v | none => false))
+      "an array, an index and a slot's contents, answering the array"
+  | .slotTake, [a, i] =>
+    need (isInt i && (match famC? a, r.peel with
+      | some c, .pair a' c' => eq a a' && eq c c' | _, _ => false))
+      "an array and an index, answering the array and the slot's contents"
+  | .slotPop, [_] => none
+  | .freeArr, [a] => need ((match a.peel with | .fam (.ref _) => true | _ => false) && r.peel == .unit)
+      "an owned array, answering ()"
+  | .size, [v] =>
+    need (match v.peel, r.peel with
+      | .fam _, .pair v' n => eq v v' && isInt n | _, _ => false) "a family, answering it and its length"
+  | .len, [v] => need ((match v.peel with | .fam _ => true | _ => false) && isInt r)
+      "a family, answering its length"
+  | .idx _, [v, i] =>
+    need (isInt i && (match v.peel, r.peel with
+      | .fam l, .sum l' u => eq l l' && u.peel == .unit | _, _ => false))
+      "a family and an index, answering a leaf or ()"
+  | .split _, [v, i] =>
+    need (isInt i && (match v.peel, r.peel with
+      | .fam _, .sum (.pair a b) c => eq v a && eq v b && eq v c | _, _ => false))
+      "a family and an index, answering its two parts or itself"
+  | .emptyFam, [] => need (match r.peel with | .fam _ => true | _ => false) "answering a family"
+  | .replace, [v, i, x] =>
+    need (isInt i && (match famC? v, r.peel with
+      | some c, .pair v' (.sum o x') => eq c x && eq v v' && eq o c && eq x' c | _, _ => false))
+      "an array, an index and a slot's contents, answering the array and the old contents or the new"
+  | .swapSlots, [v, i, j] =>
+    need (isInt i && isInt j && eq r v && (match v.peel with | .fam _ => true | _ => false))
+      "a family and two indices, answering the family"
+  | .roll, [v] => need (match r.peel with | .mu a => eq v a.unrollMu | _ => false)
+      "a value of the unrolling, answering the μ"
+  | .unroll, [v] => need (match v.peel with | .mu a => eq r a.unrollMu | _ => false)
+      "a μ, answering its unrolling"
+  | .litByte, [o, n, i] => need (isInt o && isInt n && isInt i && eq r (.int .w8))
+      "an offset, a length and an index, answering a byte"
+  | .clampLen, [c] => need (isInt c && eq r (.int .w32)) "a length, answering an i32"
+  | .cntLt, [i, n] => need (isInt i && eq i n && eq r (.sum .unit .unit))
+      "an index and its bound, answering a test"
+  | .cntSucc, [i] | .cntPred, [i] => need (isInt i && eq r i) "a count, answering a count"
+  | .stackSwap _, [h] => need (eq h LTy.addr && eq r LTy.addr) "a stack, answering a stack"
+  | .stackFree, [h] => need (eq h LTy.addr && r.peel == .unit) "a stack, answering ()"
+  | .stackNew _, [] => need (eq r LTy.addr) "answering a stack"
+  | .kappaPut _, [h, _] => need (eq h LTy.addr && r.peel == .unit) "a stack and a value, answering ()"
+  | .kappaTake _, [h] => need (eq h LTy.addr && (match r.peel with
+      | .pair h' _ => eq h h' | _ => false)) "a stack, answering it and its region's contents"
+  | .framePush _ _, [] | .frameTop _ _, [] =>
+    need (match r.peel with | .pair (.ref _) a => eq a LTy.addr | _ => false)
+      "answering a frame's cell and its address"
+  | .framePut, [f, v] => need ((match f.peel with | .ref c => eq c v | _ => false) && r.peel == .unit)
+      "a frame's cell and its contents, answering ()"
+  | .framePop _, [f] => need ((match f.peel with | .ref _ => true | _ => false) && r.peel == .unit)
+      "a frame's cell, answering ()"
+  | .io k, [a] => (ioBad k a r).bind wrong
+  | .unreachable, _ => none
+  | .litView _, _ => wrong "a literal's view, which no conversion makes"
+  | _, _ => wrong s!"{ts.length} operands"
+where
+  /-- An I/O operation's argument and answer: `m` a borrow of the stream's or the clock's cell. -/
+  ioBad (k : IOKind) (a r : LTy) : Option String :=
+    let eq := sameTy 64
+    let ok : Bool := match k, a.peel, r.peel with
+      | .readByte, m, .pair m' (.sum b u) => (cellC? m).isSome && eq m m' && eq b (.int .w8) && u.peel == .unit
+      | .writeByte, .pair m b, m' => (cellC? m).isSome && eq m m' && eq b (.int .w8)
+      | .writeAll, .pair m v, m' => (cellC? m).isSome && eq m m' && (famC? v).isSome
+      | .readInto, .pair m v, .pair m' (.pair v' n) =>
+        (cellC? m).isSome && eq m m' && (famC? v).isSome && eq v v' && isInt n
+      | .clockNow, m, .pair m' t => (cellC? m).isSome && eq m m' && isInt t
+      | .clockSleep, .pair m n, m' => (cellC? m).isSome && eq m m' && isInt n
+      | _, _, _ => false
+    if ok then none else some "an I/O operation's argument or answer"
+
+/-- A primitive's premise (`primBad`), and its frame's or `κ` region's contents at the one type
+of its machine's frames or its site's region. -/
+def primAt (w : String) (p : Prog) (op : Op) (as : List Var) (r : LTy) : LM Unit := do
+  let mut ts : List LTy := []
+  for a in as do
+    let some t := p.ty[a]? | bad w s!"x{a}, an operand, has no type"
+    ts := ts ++ [t]
+  if let some e := primBad p op ts r then bad w e
+  let one (what : String) (m : Option LTy) (c : LTy) : LM (Option LTy) := do
+    match m with
+    | some c₀ =>
+      if !sameTy 64 c₀ c then bad w s!"{what} of {c}, where another holds {c₀}"
+      return none
+    | none => return some c
+  match op, ts, r.peel with
+  | .framePush m _, _, .pair (.ref c) _ | .frameTop m _, _, .pair (.ref c) _ =>
+    if let some c := ← one s!"a frame of machine {m}" (← get).frames[m]? c then
+      modify fun s => { s with frames := s.frames.insert m c }
+  | .kappaPut s, [_, c], _ | .kappaTake s, _, .pair _ c =>
+    if let some c := ← one s!"the κ region of site {s}" (← get).regions[s]? c then
+      modify fun st => { st with regions := st.regions.insert s c }
+  | _, _, _ => pure ()
 
 /-- The variables left after `t`, its value consumed by its context. -/
 def lintTm (w : String) (p : Prog) (inConsumeFn : Bool) :
@@ -291,6 +594,9 @@ def lintTm (w : String) (p : Prog) (inConsumeFn : Bool) :
     if let some e := elimBad p t then bad w e
     if let some aT := ans then
       if let some e := introBad p aT t then bad w e
+    if let some e := callBad p ans t then bad w e
+    if let .prim op as := t then
+      if let some r := ans then primAt w p op as r
     match t with
     | .var x => return some (← use w env x)
     | .unit | .lit _ => return some env
@@ -353,6 +659,8 @@ def lintTm (w : String) (p : Prog) (inConsumeFn : Bool) :
       | some t =>
         if !copiesAt r t then bad w s!"x{x} copied at {t} ({r.name}), where the rule's premise does not hold"
       | none => bad w s!"x{x} has no type"
+      if let (some t, some t') := (p.ty[x]?, p.ty[x']?) then
+        if !sameTy 64 t t' then bad w s!"{tyStr p x'} a copy of {tyStr p x}"
       lintTm w p inConsumeFn f ans (← bindNew w p env x') b
     | .consume r x b => do
       match p.ty[x]? with
@@ -388,6 +696,8 @@ def lint (p : Prog) : Except String Unit := do
     match ← lintTm "main" p false (1 <<< 22) (some p.mainTy) {} p.main with
     | some rest => if !rest.isEmpty then bad "main" s!"ends with {rest.toList.map (s!"x{·}")} unconsumed"
     | none => pure ()
+    for (code, c) in p.codes.toList.zipIdx do
+      if let some e := codeBad p c code then bad "codes" e
   let _ ← act.run {}
 
 end Backend2.Lint

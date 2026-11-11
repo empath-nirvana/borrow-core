@@ -192,19 +192,23 @@ def addrT : LTy := .addr
 def kT : LTy := .thunk (.amp (.arr .unit (.ret .unit)) (.ret .unit))
 
 /-- **A hand-over's shape**: `c0`, a code of kind `kind` whose functions `f1`, `f2` take one
-address each (`x10`, `x11` at `entryT`), at the closure type `kT`; `f0 (x0 : t, x1 : baseT) =
+address each (`x10`, `x11` at `entryT`), at the closure type `kT` (`f1` answers a closure of `c1`,
+`1 ⊸ F 1`); `f0 (x0 : t, x1 : baseT) =
 body`, answering `kT`; `main` makes `x0 = clos c0 [5]` and calls `f0 x0 7`, no task stack. -/
 def handProg (body : Tm) (t : LTy := kT) (baseT : LTy := addrT) (kind : CodeKind := .amp)
     (entryT : LTy := addrT) : Prog where
   fns := #[{ name := "hands over", params := [0, 1], ret := kT, body },
-           { name := "resume entry", params := [10], ret := .unit, body := .consume .dead 10 .unit },
-           { name := "cancel entry", params := [11], ret := .unit, body := .consume .dead 11 .unit }]
-  codes := #[{ kind, fns := [1, 2], ty := .amp (.arr .unit (.ret .unit)) (.ret .unit) }]
+           { name := "resume entry", params := [10], ret := .thunk (.arr .unit (.ret .unit)),
+             body := .consume .dead 10 (.clos 1 []) },
+           { name := "cancel entry", params := [11], ret := .unit, body := .consume .dead 11 .unit },
+           { name := "resumed", params := [13], ret := .unit, body := .var 13 }]
+  codes := #[{ kind, fns := [1, 2], ty := .amp (.arr .unit (.ret .unit)) (.ret .unit) },
+             { kind := .lam, fns := [3], ty := .arr .unit (.ret .unit) }]
   main := .letv 3 (.lit (.i64 5)) (.letv 4 (.clos 0 [3]) (.letv 5 (.lit (.i64 7))
     (.call 0 [4, 5])))
   mainTy := kT
   ty := [(0, t), (1, baseT), (2, kT), (3, addrT), (4, kT), (5, addrT), (10, entryT),
-    (11, entryT), (12, .unit)].foldl (fun m (x, t) => m.insert x t) {}
+    (11, entryT), (12, .unit), (13, .unit)].foldl (fun m (x, t) => m.insert x t) {}
 
 /-- `consume x0 (stack k); let x2 = clos c0 [x1]; x2`: `x0` handed over to `clos c0 [x1]`. -/
 def handsOverTo : Tm := .consume .stackK 0 (.letv 2 (.clos 0 [1]) (.var 2))
@@ -440,5 +444,124 @@ def letvProg (t : LTy) : Prog :=
 #guard accepts (fnProg [0, 1] i32T (.abandon .letAbort 0 (.var 1)) [(0, .opq .output), (1, i32T)])
 #guard refuses (fnProg [0, 1] i64T (.abandon .letAbort 0 (.var 1)) [(0, .opq .output), (1, i32T)])
   "x1 : i32 answered at i64"
+
+/-! ### Calls, closures, literals, primitives and copies, on the LIR types  (#1094) -/
+
+/-- `f0 (ps) : r = body` beside `f1 (x90 : i32) : i32 = x90`, its variables' types `ty`. -/
+def twoFns (ps : List Var) (r : LTy) (body : Tm) (ty : List (Var × LTy)) : Prog :=
+  { fnProg ps r body ((90, i32T) :: ty) with
+    fns := #[{ name := "f", params := ps, ret := r, body := body },
+             { name := "id", params := [90], ret := i32T, body := .var 90 }] }
+
+-- A call's argument at its parameter's type.
+#guard accepts (twoFns [0] i32T (.call 1 [0]) [(0, i32T)])
+#guard refuses (twoFns [0] i32T (.call 1 [0]) [(0, i64T)]) "f1 (id) called: x0 : i64 for the parameter x90 : i32"
+
+/-- A closure of `i32 ⊸ F i32`, of `F i32`, and of `F i32 & F 1`. -/
+def arrT : LTy := .thunk (.arr i32T (.ret i32T))
+def retT : LTy := .thunk (.ret i32T)
+def ampT : LTy := .thunk (.amp (.ret i32T) (.ret .unit))
+-- `app`: the argument at the closure's, the answer the closure's; not of a non-closure.
+#guard accepts (fnProg [0, 1] i32T (.app 0 1) [(0, arrT), (1, i32T)])
+#guard refuses (fnProg [0, 1] i32T (.app 0 1) [(0, arrT), (1, i64T)]) "x0 applied to x1 : i64, for an argument of i32"
+#guard refuses (fnProg [0, 1] i64T (.app 0 1) [(0, arrT), (1, i32T)]) "x0 applied answers i32, at i64"
+#guard refuses (fnProg [0, 1] i32T (.app 0 1) [(0, retT), (1, i32T)]) "not a closure of a function type"
+-- `app0`: a closure of `F B`, answering `B`.
+#guard accepts (fnProg [0] i32T (.app0 0) [(0, retT)])
+#guard refuses (fnProg [0] i64T (.app0 0) [(0, retT)]) "x0 run answers i32, at i64"
+#guard refuses (fnProg [0] i32T (.app0 0) [(0, arrT)]) "not a closure of a returner type"
+-- `sel`: a closure of `C₀ & C₁`, answering the component's.
+#guard accepts (fnProg [0] i32T (.sel 0 0) [(0, ampT)])
+#guard accepts (fnProg [0] .unit (.sel 0 1) [(0, ampT)])
+#guard refuses (fnProg [0] .unit (.sel 0 0) [(0, ampT)]) "x0 observed at 0 answers i32, at 1"
+#guard refuses (fnProg [0] i32T (.sel 0 0) [(0, retT)]) "not a closure of a `&` type"
+
+/-- `main = clos c0 [x0]` at `t`, where `x0 = 5 : e` and `c0`, a `unit` code of `F i32`, is `f0`,
+whose environment parameter `x90` is an `i32`. -/
+def closProg (t e : LTy) : Prog where
+  fns := #[{ name := "thunk", params := [90], ret := i32T, body := .var 90 }]
+  codes := #[{ kind := .unit, fns := [0], ty := .ret i32T }]
+  main := .letv 0 (.lit (.i32 5)) (.clos 0 [0])
+  mainTy := t
+  ty := (({} : Std.HashMap Var LTy).insert 0 e).insert 90 i32T
+#guard accepts (closProg retT i32T)
+#guard refuses (closProg arrT i32T) "a closure of c0, of U F i32, at U (i32 -o F i32)"
+-- (the literal `5 : i32` bound at `i64` is refused first, as a literal's width)
+#guard refuses (closProg retT i64T) "a literal of i32 at i64"
+#guard refuses ({ closProg retT i64T with main := .letv 0 (.lit (.i64 5)) (.clos 0 [0]) })
+  "c0's closure captures: x0 : i64 for the parameter x90 : i32"
+-- A code's functions at its closure type: a `unit` code of `F i64` whose function answers `i32`.
+#guard refuses ({ closProg (.thunk (.ret i64T)) i32T with codes := #[{ kind := .unit, fns := [0], ty := .ret i64T }] })
+  "c0: f0 (thunk) answers i32, for i64"
+
+-- A literal at its own width.
+#guard accepts (fnProg [] i64T (.lit (.i64 1)) [])
+#guard refuses (fnProg [] i64T (.lit (.i32 1)) []) "a literal of i32 at i64"
+#guard refuses (fnProg [] (.int .w8) (.lit (.i32 1)) []) "a literal of i32 at"
+
+-- A copy's binder at its source's type.
+#guard refuses ({ copyProg i32T with ty := (({} : Std.HashMap Var LTy).insert 0 i32T).insert 1 i64T })
+  "x1 : i64 a copy of x0 : i32"
+
+/-- `f0 (x0 : a, x1 : b) : r = op [args]`. -/
+def primProg (op : Op) (args : List Var) (ts : List LTy) (r : LTy) : Prog :=
+  fnProg (List.range ts.length) r (.prim op args) (ts.zipIdx.map fun (t, i) => (i, t))
+
+-- The primitives, each at its operands' and answer's types (`primBad`).
+#guard accepts (primProg .free [0] [.ref i32T] i32T)
+#guard refuses (primProg .free [0] [.ref i32T] i64T) "an owned cell's contents"
+#guard refuses (primProg .free [0] [.imm i32T] i32T) "an owned cell's contents"
+-- A stream's cell holds its descriptor, a clock's its time; not another word.
+#guard accepts (primProg .free [0] [.ref (.opq .output)] i32T)
+#guard accepts (primProg .free [0] [.ref (.opq .clock)] i64T)
+#guard refuses (primProg .free [0] [.ref (.opq .clock)] i32T) "an owned cell's contents"
+#guard accepts (primProg (.alloc []) [0] [i32T] (.ref i32T))
+#guard refuses (primProg (.alloc []) [0] [i32T] (.ref i64T)) "a cell of the argument"
+-- `swap` answers the cell at its new contents' type and the old contents.
+#guard accepts (primProg .swap [0, 1] [.ref i32T, .unit] (.pair (.ref .unit) i32T))
+#guard refuses (primProg .swap [0, 1] [.ref i32T, .unit] (.pair (.ref i32T) i32T)) "the old contents"
+-- `take` and `put` at a `mut` borrow or an owned cell, not a shared borrow.
+#guard accepts (primProg .take [0] [.mut i32T] (.pair (.mut i32T) i32T))
+#guard refuses (primProg .take [0] [.imm i32T] (.pair (.imm i32T) i32T)) "answering it and its contents"
+#guard refuses (primProg .put [0, 1] [.mut i32T, i64T] (.mut i32T)) "and its contents, answering it"
+-- `load` reads the contents through `Imm̲`: a pointer as a shared borrow, a closure as `Unk`.
+#guard accepts (primProg .load [0] [.imm (.pair i32T (.ref i64T))] (.pair i32T (.imm i64T)))
+#guard accepts (primProg .load [0] [.imm closT] .unk)
+#guard refuses (primProg .load [0] [.imm (.pair i32T (.ref i64T))] (.pair i32T (.ref i64T))) "read through Imm"
+-- …and a `μ`'s recursive pointers as shared borrows of the `μ` itself.
+#guard accepts (primProg .load [0] [.imm (.mu (.sum .unit (.ref (.tvar 0))))]
+  (.mu (.sum .unit (.imm (.mu (.sum .unit (.ref (.tvar 0))))))))
+-- `lend` answers the owner and a borrow of its kind; `idx` a leaf or `()`.
+#guard refuses (primProg (.lend true) [0] [.ref i32T] (.pair (.ref i32T) (.mut i64T))) "its borrow"
+#guard accepts (primProg (.idx true) [0, 1] [.fam (.imm i32T), i32T] (.sum (.imm i32T) .unit))
+#guard refuses (primProg (.idx true) [0, 1] [.fam (.imm i32T), i32T] (.sum (.imm i64T) .unit)) "a leaf or ()"
+-- `roll` at the `μ` of its operand's unrolling.
+#guard accepts (primProg .roll [0] [muA.unrollMu] (.mu muA))
+#guard refuses (primProg .roll [0] [muA] (.mu muA)) "a value of the unrolling"
+-- A host operation at its signature (`hostArg`, `hostRes`).
+#guard accepts (primProg (.host (.bin .w32 .add)) [0] [.pair i32T i32T] i32T)
+#guard refuses (primProg (.host (.bin .w32 .add)) [0] [.pair i32T i64T] i32T) "the host operation is"
+-- An operand count no primitive takes.
+#guard refuses (primProg .free [0, 1] [.ref i32T, i32T] i32T) "2 operands"
+
+-- A machine's frames are of one type, as a site's `κ` region.
+/-- A frame of machine 7 pushed at `c₁`, then its top read at `c₂`, and each popped. -/
+def framesProg (c₁ c₂ : LTy) : Prog :=
+  let pop (fa f a u : Var) (k : Tm) : Tm :=
+    .letpair f a fa (.letv u (.prim (.framePop 0) [f]) (.consume .dead u (.consume .dead a k)))
+  fnProg [] .unit
+    (.letv 0 (.prim (.framePush 7 0) []) (pop 0 2 3 4
+      (.letv 1 (.prim (.frameTop 7 0) []) (pop 1 5 6 7 .unit))))
+    [(0, .pair (.ref c₁) LTy.addr), (1, .pair (.ref c₂) LTy.addr), (2, .ref c₁), (3, LTy.addr),
+     (4, .unit), (5, .ref c₂), (6, LTy.addr), (7, .unit)]
+#guard accepts (framesProg i32T i32T)
+#guard refuses (framesProg i32T i64T) "a frame of machine 7 of i64, where another holds i32"
+/-- `x1 : c₁` put in site 4's region of the stack `x0`, then the region of `x2` taken at `c₂`. -/
+def regionProg (c₁ c₂ : LTy) : Prog :=
+  fnProg [0, 1, 2] .unit (.letv 3 (.prim (.kappaPut 4) [0, 1]) (.consume .dead 3
+      (.letv 5 (.prim (.kappaTake 4) [2]) (.letpair 6 7 5 (.consume .dead 6 (.consume .dead 7 .unit))))))
+    [(0, LTy.addr), (1, c₁), (2, LTy.addr), (3, .unit), (5, .pair LTy.addr c₂), (6, LTy.addr), (7, c₂)]
+#guard accepts (regionProg i32T i32T)
+#guard refuses (regionProg i32T i64T) "the κ region of site 4 of i64, where another holds i32"
 
 end Backend2.LintTests
