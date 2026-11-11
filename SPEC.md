@@ -13313,24 +13313,25 @@ instance keys are this entry's.
 **Instantiating.** A use writes `f[T, row (ROW), site k]` in core text, with `ROW` written as
 entries (`4.0 cancel i32 ~> 0, …`). At the surface it writes `f[T, row {Fail[i32], …}]`: effect
 instances, resolved to what serves them at the call, as §38 resolves a row entry.
-- An argument that is not written is read off the call:
+- **Slice 1:** every row argument is written. A use of a row template without its row arguments is
+  refused.
+- **Slice 2:** an argument that is not written is read off the call:
   - by matching parameter types against argument types, with `..r` a tail placeholder (§15's
     first-order matching, extended at `CTy.eff`);
   - at the surface, from what the elaboration knows of an argument: a block's sites (§30), a stored
     generator's row (§15), a copy's own parameter at `r` passed on, or a variable bound to the
     result of an instance at `r`.
-- A row nothing determines is `[]`. The pure use is the definition as written: no copy, and its name
+- **Slice 2:** a row nothing determines is `[]`. The pure use is the definition as written: no copy, and its name
   is unchanged.
 - A **private** site is a site parameter that the definition's type does not mention. It is never
   written. Each instance takes a fresh static name for it, once per instance and shared by its uses,
   above every literal site of the program. A **public** site is written or matched.
 
-**An instance** is the template with the arguments substituted (`Frontend/Elab/Subst.lean`).
-- It is a `def` of its own, named `f__r{k}`, keyed by:
-  - its type arguments;
-  - the *servers* of each row entry (§38: sites and capabilities);
-  - its public sites.
-- It is made once, and checked by the unchanged checker.
+**An instance** is the template with the arguments substituted (`Frontend/Elab/RowInst.lean`).
+- It is a `def` of its own, named `f__r{k}`, keyed by the template and its stripped arguments
+  (types, rows, public sites).
+- It is made once, and checked by the unchanged checker. A template is checked only when used,
+  through its instances.
 - Two templates' instances never share a slot: a private site is fresh, and a written entry equal to
   one of `..r`'s is one entry (§38). One that differs is refused:
   `` the row argument of `f` gives `n.i` a second signature ``.
@@ -13343,7 +13344,7 @@ kernel error deep inside an instance.
 
 **Not provided**, each refused with its own message:
 - polymorphic recursion over rows (below, *Open*);
-- one parameter at two rows that share no instance (rank 2; *Open*);
+- one parameter at two rows that share no instance (rank 2; *Open*), once slice 2 infers rows;
 - a row argument whose entries name lifetimes not in scope at the template. Slice 1 refuses it;
   slice 2 makes them lifetime parameters of the instance, as §15 does for types.
 
@@ -13361,12 +13362,18 @@ kernel error deep inside an instance.
 
 ### Programs
 
-Answers are worked by hand, to be confirmed by `bcc interp`.
+**Slice 1** (core text; observed, `bcc interp`):
 
 | Program | What | Answer |
 |---|---|---|
-| `corpus/core-row-generic.bc` | a core-text piece `stopk[A, row r]` over one stage's types, used at `F[4.0 cancel i32 ~> 0]` and at `F[]`; `handle_with[4]` around the use puts `main` at `F 1` | `()` |
-| `corpus/core-site-generic.bc` | a `def` with a private `site s` (`handle_with[s]` inside), used twice, nested; the inner activation's performs go to the inner handler | to come with slice 1 |
+| `corpus/core-row-generic.bc` | a core-text piece `stopk[A, row r]` over one stage's types, used at `F[4.0 cancel i32 ~> 0]` and at `F[]`; `handle_with[4]` around the use puts `main` at `F 1` | `()`, `live 0` |
+| `corpus/core-site-generic.bc` | a `def` with a private `site s` (`handle_with[s]` inside), used twice, nested; the inner activation's performs go to the inner handler | `i32[2321]`, `live 0` |
+| `corpus/core-row-pipe-stop.bc` | §75's `pipe_stop` at two rows | `i32[42]`, `live 0` |
+
+**Slices 2 and 3** (surface; answers worked by hand, to be confirmed by `bcc interp` when built):
+
+| Program | What | Answer |
+|---|---|---|
 | `corpus/row-compose.bc` | `compose[A, B, C, row r]` returns a closure, and `apply_all[row r]` folds a `List` of closures, at the caller's row: at `[]`, and under `with to_result` with a raising callback | `(i32[10], (inl i32[22], inr i32[120]))` |
 | `corpus/row-lexer.bc` | `data Lexer[row r]` keeps a stored generator `U (pull[..r] u8 1 1)` in a field; a lexer counts numbers over a pure source and over one that raises `4` part-way; the source is closed once on both paths | `(i32[3], inr i32[4])`, `live 0` |
 | `corpus/async-raise.bc` | `Task[A, row r]` and `spawn[A, row r]`: a task body that raises, resumed past its `await()`, reaches `to_result` | `inr i32[5]` |
@@ -13376,7 +13383,7 @@ Rejects:
   comes from slice 1's code.
 - `corpus/reject/row-poly-rec.bc`: polymorphic recursion over rows.
 - `corpus/reject/row-two-sigs.bc`: a row argument that gives an entry a second signature.
-- `corpus/reject/row-rank2.bc`: rank 2.
+- `corpus/reject/row-rank2.bc`: unwritten row arguments, refused in slice 1 (inference is slice 2).
 
 ### Open
 
