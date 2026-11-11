@@ -126,6 +126,16 @@ if [ "$named" = 0 ]; then
   else
     echo "corpus/deep-list.bc: native in a stack of 64 KiB fails: $(head -3 "$tmp/err")"; bad=$((bad + 1))
   fi
+  # A Json 10^6 levels deep freed by the in-place consume (SPEC §77) in a stack of 16 KiB: its
+  # answer is the depth, and `live 0`.
+  if [ "$backend" = new ]; then
+    if BC_STACK=16384 "$bcc" run --backend new --native corpus/json-drop-deep.bc 1000000 < /dev/null > "$tmp/out" 2> "$tmp/err" &&
+        [ "$(cat "$tmp/out")" = "$(printf 'built\ni32[1000000]\nlive 0')" ]; then
+      echo "corpus/json-drop-deep.bc: 10^6 levels native in a stack of 16 KiB"
+    else
+      echo "corpus/json-drop-deep.bc: 10^6 levels native in a stack of 16 KiB fails: $(head -3 "$tmp/out") $(head -3 "$tmp/err")"; bad=$((bad + 1))
+    fi
+  fi
 fi
 # No weak imports (macOS): a native program is built pinned to the oldest supported OS
 # (`Pipeline/Driver.lean`, `macosMinVersion`), so an API that OS lacks is a build error. A weak
