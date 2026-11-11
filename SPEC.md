@@ -13378,7 +13378,7 @@ kernel error deep inside an instance.
 | `corpus/core-site-generic.bc` | a `def` with a private `site s` (`handle_with[s]` inside), used twice, nested; the inner activation's performs go to the inner handler | `i32[2321]`, `live 0` |
 | `corpus/core-row-pipe-stop.bc` | §75's `pipe_stop` at two rows | `i32[42]`, `live 0` |
 | `corpus/core-row-key-tparam.bc` | a use whose arguments mention the caller's type parameter: the instance takes it as its own (`app__r2[T]`) | `(i32[3], inl ())`, `live 0` |
-| `corpus/core-site-fresh-const.bc` | a private site's fresh name lies above every literal site and the effects pass's sites | `i32[4]`, `live 0` |
+| `corpus/core-site-fresh-const.bc` | a private site's fresh name lies above a site written only in a constant's type (`unfold[…]`) and above the effects pass's sites | `i32[4]`, `live 0` |
 | `corpus/row-site-fresh-handler.bc` | a private site's fresh name beside a surface handler's site | `i32[4]`, `live 0` |
 
 **Slices 2 and 3** (surface; the answers come with each slice):
@@ -13393,7 +13393,7 @@ Rejects:
 - `corpus/reject/row-arg-mismatch.bc`: a wrong row argument, reported at the use site:
   `` `tick` used at row (), but `tick`'s body performs `4.0` outside it ``.
 - `corpus/reject/row-args-unwritten.bc`: unwritten row arguments, refused in slice 1:
-  `` …its row and site arguments are written at each use…; reading them off the call is not built in slice 1 ``.
+  `` `idk` is used without its arguments: its row and site arguments are written at each use, `idk[…, row (…)]`; reading them off the call is not built in slice 1 (SPEC §76) ``.
 - `corpus/reject/row-poly-rec.bc`: polymorphic recursion over rows, with a message naming the
   missing kernel row binder.
 - `corpus/reject/row-two-sigs.bc`: a row argument that gives an entry a second signature.
