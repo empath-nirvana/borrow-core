@@ -166,10 +166,18 @@ def ioRunOf (file : String) (k : CheckedProg) (m : Frontend.Check.IOMain)
   | .error e => throw s!"{file}: {e}"
 
 /-- What the typing of `main` rests on (SPEC §29): nothing beyond Core's theorems, or `PinLaw` at
-each relaxed rule the derivation uses. -/
-def typingReport (c : Frontend.Check.Checked) : String :=
+each relaxed rule the derivation uses. A program run through `run_io` (`loops` its `IORun`'s
+`loops`, given when the wrapper's derivation uses no relaxed rule) names the end-to-end theorems
+at its checked wrapper: Core's `IORun.every_run` and the chain's `IORun.every_runN` (`goal791N`
+from `HandlerLawN`), or their loop forms.  `[spec §72]` -/
+def typingReport (c : Frontend.Check.Checked) (loops : Option Bool := none) : String :=
   match c.pins with
-  | [] => "typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)"
+  | [] => "typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)" ++
+    match loops with
+    | some false => "; run_io: IORun.every_run, the chain's IORun.every_runN (goal791N from HandlerLawN)"
+    | some true =>
+      "; run_io: IORun.loop_every_run, the chain's IORun.loop_every_runN (goal791N from HandlerLawN)"
+    | none => ""
   | ps =>
     let ps := ps.eraseDups
     let field (r : String) : String :=
@@ -186,7 +194,17 @@ def trusted (file src : String) : Except String String := do
   let r ← match Frontend.Check.checkProgram p with
     | .ok r => pure r
     | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
-  let typing := (r.main.map typingReport).toList
+  -- The end-to-end theorems are named only where their hypotheses hold: the wrapper checked,
+  -- every extern given its model (`IORun`), and no relaxed rule in its derivation.
+  let loops : Option Bool := match r.main with
+    | some c => match Frontend.Check.ioMainOf r.el.prog c with
+      | .ok (some m) =>
+        match Frontend.Check.ioWrapper r.el.prog m [] >>= (Frontend.Check.ioRunOf · r.el.keys) with
+        | .ok io => if io.c.pins.isEmpty then some io.loops else none
+        | .error _ => none
+      | _ => none
+    | none => none
+  let typing := (r.main.map (typingReport · loops)).toList
   let xs ← match Frontend.Check.externs r.el.prog.decls.toArray with
     | .ok xs => pure xs
     | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)

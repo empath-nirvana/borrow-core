@@ -25,7 +25,7 @@ extern mk_clock : !(1 => ref clock)
 extern take_clock : !(ref clock => i64)
   contract: model proved (7), takeClock_meets
   host: the cell freed, answering its contents; assumed (1)
-typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)
+typing: unconditional: a CDerives derivation (fundamentalC, adequacyD); run_io: IORun.every_run, the chain's IORun.every_runN (goal791N from HandlerLawN)
 unproved boundaries: 9 (clock_now, clock_sleep, clock, mk_input, mk_output, take_input, take_output, mk_clock, take_clock)
 always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime
 backend: LendEnclosesFn (Backend2/Driver.lean), the native borrow facts' lends enclose their functions: 11 functions

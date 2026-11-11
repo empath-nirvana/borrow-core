@@ -31,7 +31,7 @@ extern mk_args : !((mu X. 1 + u8 * X) => ref args)
 extern take_args : !(ref args => (mu X. 1 + u8 * X))
   contract: model proved (7), takeArgs_meets
   host: the cell freed, answering the empty list; assumed (1)
-typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)
+typing: unconditional: a CDerives derivation (fundamentalC, adequacyD); run_io: IORun.loop_every_run, the chain's IORun.loop_every_runN (goal791N from HandlerLawN)
 unproved boundaries: 11 (write_byte, write_all, read_arg, stdout, args, mk_input, mk_output, take_input, take_output, mk_args, take_args)
 always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime
 backend: LendEnclosesFn (Backend2/Driver.lean), the native borrow facts' lends enclose their functions: 7 functions
