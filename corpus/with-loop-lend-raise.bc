@@ -1,0 +1,22 @@
+-- SPEC §75, a lend per observation, and a raise: as `with-loop-lend-result`, but `chk` raises at
+-- the third turn. The raise is caught by the frame's handler inside the turn's lend; the lend ends
+-- as a turn's does, and the cell, which the frame holds outside the turn, survives: `t` holds the
+-- writes of the turns before the raise. The clause's answer finishes the loop, and the frame
+-- hands the cell back beside it, as at an end.
+--
+-- Answer: `(inr i32[3], i32[3])`: the raise at `3`, `t` the sum of `1..2`.
+
+include fail
+
+fn chk(x: i32) -> i32 with Fail[i32] = if x == 3 { raise(x) } else { x }
+
+fn go() -> (i32 + i32) * i32 =
+  let mut t = 0;
+  let r = with to_result[i32, i32] {
+    let mut i = 0;
+    while i < 4 { i = i + 1; t = t + chk(i) };
+    i
+  };
+  (r, t)
+
+main -> (i32 + i32) * i32 = go()

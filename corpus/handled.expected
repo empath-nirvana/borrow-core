@@ -2578,6 +2578,26 @@ corpus/with-loop-finally.bc 30:37: handle 1: inside []; row []; ops 1.0 tail+sta
 corpus/with-loop-finally.bc 30:37: handle 1: inside []; row []; ops 1.0 tail+state; names 1.0 row; condition 2 holds
 corpus/with-loop-finally.bc 2.0 abortive: error; condition 2 holds; -
 corpus/with-loop-finally.bc 1.0 tail+state: error; condition 2 holds; -
+corpus/with-loop-lend-cap-after.bc flows [0, 1, 4294967295]; main [1]
+corpus/with-loop-lend-cap-after.bc 13:3: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/with-loop-lend-cap-after.bc 13:3: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/with-loop-lend-cap-after.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/with-loop-lend-cap.bc flows [0, 1, 4294967295]; main [1]
+corpus/with-loop-lend-cap.bc 15:3: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/with-loop-lend-cap.bc 15:3: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/with-loop-lend-cap.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/with-loop-lend-mut.bc flows [0, 1, 4294967295]; main [1]
+corpus/with-loop-lend-mut.bc 19:11: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/with-loop-lend-mut.bc 19:11: handle 1: inside []; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/with-loop-lend-mut.bc 1.0 tail,stored: direct; condition 2 holds; agree
+corpus/with-loop-lend-raise.bc flows [0, 1, 4294967295]; main [1]
+corpus/with-loop-lend-raise.bc 15:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/with-loop-lend-raise.bc 15:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/with-loop-lend-raise.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/with-loop-lend-result.bc flows [0, 1, 4294967295]; main [1]
+corpus/with-loop-lend-result.bc 14:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/with-loop-lend-result.bc 14:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/with-loop-lend-result.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/with-loop-resume-let.bc flows [0, 1, 4294967295]; main [1]
 corpus/with-loop-resume-let.bc 14:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/with-loop-resume-let.bc 14:3: handle 1: inside []; row []; ops 1.0 stored; names 1.0 []; condition 2 holds

@@ -1043,6 +1043,24 @@ structure MPoint where
   what : String
   code : Comp := .top Span.none
   close : Comp := .top Span.none
+  /-- Its code takes the borrow lent per turn (`MTurn`): the borrow was among its variables. -/
+  turnArg : Bool := false
+
+/-- A borrow lent to the machine per turn (SPEC §75, a frame per observation around a lend): each
+turn takes it as a parameter, `∀'l < b. mut 'l A ⊸ …`, under the name its code was elaborated at,
+so that no state holds it, and every move to a next state is boxed at `⊤`. A component of a state
+that is not shown to outlive `⊤` is refused by `bad`.  `[spec §75]` -/
+structure MTurn where
+  /-- The borrow's variable. -/
+  v : String
+  /-- Its lifetime's name, and its bound, as written. -/
+  life : String
+  dom : String
+  /-- The borrow's type, `mut 'l A`, as written. -/
+  ty : String
+  /-- Why a state's component of this type cannot be boxed at `⊤`, by its name and what the point
+  is; `none` when it can. -/
+  bad : String → String → CVTy → Option String
 
 /-- What a state holds that must be closed: a loop's iterator, a delegate, or a call's loop, by
 its variable, with the code that closes it and binds the capabilities it hands back. -/
@@ -1073,12 +1091,18 @@ structure MCx where
   cur : Option Nat := none
   /-- In a div body's code before its first point, run when it is called. -/
   pre : Bool := false
+  /-- The borrow lent per turn, when the machine takes one.  `[spec §75]` -/
+  turn : Option MTurn := none
 
 /-- `F_Σ A` at the machine's row, written: `F[n.i q A ~> B, …] A`, or `F A`. -/
 def MCx.fSrc (m : MCx) (A : String) : String :=
   if m.row.isEmpty then s!"F ({A})" else
   "F[" ++ ", ".intercalate (m.row.map fun o =>
     s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {m.pp o.A} ~> {m.pp o.B}") ++ s!"] ({A})"
+
+/-- The machine's observations perform operations, or take a borrow per turn: a move forward runs
+in the same observation, and a point's function is a computation.  `[spec §19, §75]` -/
+def MCx.atRow (m : MCx) : Bool := !m.row.isEmpty || m.turn.isSome
 
 structure MSt where
   pts : Array MPoint := #[]
@@ -1094,6 +1118,17 @@ def mNew (sp : Span) (what : String) (summand fn : Bool) (vars : List (String ×
   set { st with pts := st.pts.push { id, pos := st.pos, summand, fn, vars, sp, what },
                 pos := st.pos + 1 }
   pure id
+
+/-- `mNew` in the machine `m`: a borrow lent per turn is not among the point's variables, and the
+point records whether its code takes it.  `[spec §75]` -/
+def mNewIn (m : MCx) (sp : Span) (what : String) (summand fn : Bool) (vars : List (String × CVTy)) :
+    MM Nat := do
+  match m.turn with
+  | none => mNew sp what summand fn vars
+  | some t =>
+    let id ← mNew sp what summand fn (vars.filter (·.1 != t.v))
+    modify fun st => { st with pts := st.pts.modify id fun p => { p with turnArg := vars.any (·.1 == t.v) } }
+    pure id
 
 def mSet (id : Nat) (code close : Comp) : MM Unit :=
   modify fun st => { st with pts := st.pts.modify id fun p => { p with code, close } }
@@ -1158,8 +1193,10 @@ def mVars (m : MCx) (c : TCx) (own : List MHeld) (rest : Comp) (excl : List Stri
 def mInj (sp : Span) (id : Nat) (vars : List (String × CVTy)) : Val :=
   .app sp (.var sp s!"io_inj_{id}") (tupleVal sp (vars.map (·.1)))
 
-/-- A skip to the state `s`. -/
-def MCx.skip (_ : MCx) (sp : Span) (s : Val) : Val := .inr sp s
+/-- A skip to the state `s`; with a borrow lent per turn, the state boxed at `⊤` (`boxI`), which the
+kernel admits when no component holds the borrow.  `[spec §75]` -/
+def MCx.skip (m : MCx) (sp : Span) (s : Val) : Val :=
+  if m.turn.isSome then .inr sp (.boxed sp (.top sp) s) else .inr sp s
 
 /-- A move to point `q`, from the code of `m`. -/
 def mGoto (m : MCx) (sp : Span) (q : Nat) : MM Comp := do
@@ -1172,12 +1209,16 @@ def mGoto (m : MCx) (sp : Span) (q : Nat) : MM Comp := do
   let later := match m.cur with
     | none => true
     | some k => k < p.pos
-  let call := p.fn && (!p.summand || (!m.row.isEmpty && later))
+  let call := p.fn && (!p.summand || (m.atRow && later))
   if call then
     modify fun st => { st with called := if st.called.contains q then st.called else q :: st.called }
     let f : Val := .unbang sp (.var sp s!"io_run_{q}")
     let a := tupleVal sp (p.vars.map (·.1))
-    if m.row.isEmpty then return .ret sp (.app sp f a)
+    -- A point whose code takes the borrow lent per turn is given the turn's.  [spec §75]
+    let a := match m.turn with
+      | some t => if p.turnArg then .pair sp (.var sp t.v) a else a
+      | none => a
+    if !m.atRow then return .ret sp (.app sp f a)
     -- At a row, the join's code is a computation that performs the row's operations.
     let fv : Ident := ⟨s!"io_rf{q}", sp⟩
     let av : Ident := ⟨s!"io_ra{q}", sp⟩
@@ -1356,7 +1397,8 @@ def mCall (m : MCx) : Nat → TCx → TCx → Span → Ident → Option VTy → 
     let excl := x.name :: lend.toList.map (·.name)
     let vars ← mVars m c [h] N excl
     let what := "a call of a div function"
-    let d ← mNew sp what true true vars
+    let d ← mNewIn m sp what true true vars
+    let vars := (← mPt d).vars
     let bindX := match lend, A with
       | some l, _ => match Bf with
         | .tensor .. => s!"let ({l.name}, {x.name}) = io_b;\n"
@@ -1402,11 +1444,12 @@ def mLoop (m : MCx) : Nat → TCx → Span → LoopSrc → Val → Comp → Comp
       | none => (throw ⟨sp, s!"the loop threads `{y}`, whose type is not determined: ascribe it"⟩ : MM _)
     let vars := held.reverse.map (fun h => (h.v, h.T)) ++ m.L.caps.filter (!hcaps.contains ·.1) ++ needVars
     let what := src.what
-    let h ← mNew sp what true true vars
+    let h ← mNewIn m sp what true true vars
     let ph ← mPt h
+    let vars := ph.vars
     let join ← if M.spineBreaks.isEmpty then pure none else do
       let jv ← mVars m cr [] N []
-      pure (some (← mNew sp what false true jv))
+      pure (some (← mNewIn m sp what false true jv))
     let ml : MLoop := { head := h, held := own, needs, keep := P.keep, join }
     let mb : MCx := { m with loops := ml :: m.loops, held := held, cur := some ph.pos, pre := false }
     let cb := match P.it, src with
@@ -1529,19 +1572,39 @@ def mAssemble (m : MCx) (sp : Span) (st : MSt) (s0 : Option Val) (pre : Option C
   if sums.isEmpty then throw ⟨sp, "internal error: a div body's machine has no state"⟩
   let tyOf (p : MPoint) : String := tupleTySrc (p.vars.map (m.pp ·.2))
   let S := sumTySrc (sums.map tyOf)
-  let Obs := s!"({m.pp m.L.B}) + ({S})"
+  -- With a borrow lent per turn, a next state is boxed at `⊤`: no component of a state that a move
+  -- reaches holds the borrow, or anything else not shown to outlive `⊤` (the first state is not
+  -- boxed).  [spec §75]
+  if let some t := m.turn then
+    for p in sums do
+      if p.id == 0 && s0.isSome then continue
+      for (y, T) in p.vars do
+        if let some why := t.bad p.what y T then throw ⟨p.sp, why⟩
+  let Obs := match m.turn with
+    | some _ => s!"({m.pp m.L.B}) + (box top ({S}))"
+    | none => s!"({m.pp m.L.B}) + ({S})"
   let Fs := m.fSrc
-  let Cod := if m.row.isEmpty then s!"loop ({m.pp m.L.B}) ({m.pp m.L.R})"
-    else s!"nu X. {Fs s!"({m.pp m.L.B}) + U X"} & {Fs (m.pp m.L.R)}"
+  -- A turn that takes the borrow lent per turn: `∀'l < b. mut 'l A ⊸ C`.
+  let turnTy (C : String) : String := match m.turn with
+    | some t => s!"(forall '{t.life} < {t.dom}. {t.ty} -o {C})"
+    | none => C
+  let Cod := match m.turn with
+    | some _ => s!"nu X. {turnTy (Fs s!"({m.pp m.L.B}) + box top U X")} & {Fs (m.pp m.L.R)}"
+    | none => if m.row.isEmpty then s!"loop ({m.pp m.L.B}) ({m.pp m.L.R})"
+      else s!"nu X. {Fs s!"({m.pp m.L.B}) + U X"} & {Fs (m.pp m.L.R)}"
   -- A point a move calls has a function of its own; any other point's code is its arm of the
-  -- step.
+  -- step. A point whose code takes the borrow lent per turn takes it beside its tuple.
+  let takes (p : MPoint) : Option MTurn := m.turn.filter fun _ => p.turnArg
   let fns := (pts.filter (st.called.contains ·.id)).toArray.qsort (fun a b => a.pos > b.pos) |>.toList
-  let defs := String.join (fns.map fun p =>
-    s!"io_run_{p.id} : !U (({tyOf p}) -o {Fs Obs}) <-\n  return (!thunkv fun (io_a : {tyOf p}) -> force io_hole_c{p.id});\n")
+  let defs := String.join (fns.map fun p => match takes p with
+    | some t => s!"io_run_{p.id} : !U ((({t.ty}) * ({tyOf p})) -o {Fs Obs}) <-\n  return (!thunkv fun (io_ap : ({t.ty}) * ({tyOf p})) -> let ({t.v}, io_a) = io_ap; force io_hole_c{p.id});\n"
+    | none => s!"io_run_{p.id} : !U (({tyOf p}) -o {Fs Obs}) <-\n  return (!thunkv fun (io_a : {tyOf p}) -> force io_hole_c{p.id});\n")
   let arm (p : MPoint) : String :=
     if !st.called.contains p.id then s!"force io_hole_c{p.id}"
-    else if m.row.isEmpty then s!"return ((unbang io_run_{p.id}) io_a)"
-    else s!"io_rf <- return (unbang io_run_{p.id}); force io_rf io_a"
+    else if !m.atRow then s!"return ((unbang io_run_{p.id}) io_a)"
+    else match takes p with
+      | some t => s!"io_rf <- return (unbang io_run_{p.id}); io_rp <- return ({t.v}, io_a); force io_rf io_rp"
+      | none => s!"io_rf <- return (unbang io_run_{p.id}); force io_rf io_a"
   let carm (p : MPoint) : String := s!"force io_hole_k{p.id}"
   let obs := s!"(nu_out (force io_f io_s0)).1, (nu_out (force io_f io_s0)).2"
   -- The machine at a state: the codata of the step from it.
@@ -1551,8 +1614,16 @@ return (thunkv nu_in < {obs} >)"
   let tail := match s0 with
     | some _ => atState "io_hole_s0"
     | none => "force io_hole_pre"
-  let src := defs ++ s!"io_step : !U ({S} -o {Fs Obs} & {Fs (m.pp m.L.R)}) <-
-  return (!thunkv fun ({if sums.length == 1 then "io_a" else "io_s"} : {S}) -> < {mTree arm "io_s" sums}, {mTree carm "io_s" sums} >);
+  let sv := if sums.length == 1 then "io_a" else "io_s"
+  let src := match m.turn with
+    | some t =>
+      -- The functions are made in the turn, where the borrow's lifetime is bound.
+      s!"io_step : !U ({S} -o {turnTy (Fs Obs)} & {Fs (m.pp m.L.R)}) <-
+  return (!thunkv fun ({sv} : {S}) -> < Fun '{t.life} < {t.dom}. fun ({t.v} : {t.ty}) ->
+{defs}{mTree arm "io_s" sums}, {mTree carm "io_s" sums} >);
+" ++ tail
+    | none => defs ++ s!"io_step : !U ({S} -o {Fs Obs} & {Fs (m.pp m.L.R)}) <-
+  return (!thunkv fun ({sv} : {S}) -> < {mTree arm "io_s" sums}, {mTree carm "io_s" sums} >);
 " ++ tail
   let L ← template sp "a div body's state machine" src
   -- Each point's code and `close`, from its tuple in `io_a`, at the sugar it comes from.
@@ -1578,20 +1649,21 @@ return (thunkv nu_in < {obs} >)"
 there. At a row: the machine, whose first state holds `start` (the parameter), where its first
 observation runs the body `M` from the top; `close0` is the `close` there.  `[spec §14, §19]` -/
 def divMachine (cx : LoopCx) (row : Frontend.Check.CRow) (c : TCx) (start : List (String × CVTy))
-    (close0 : Comp) (M : Comp) : SM Comp := do
+    (close0 : Comp) (M : Comp) (turn : Option MTurn := none) : SM Comp := do
   -- Types are printed with the context's lifetimes by their names.
   let pp : CVTy → String := fun T => Frontend.Check.ppV c.E.lenv 0 0 T
-  if row.isEmpty then
+  if row.isEmpty && turn.isNone then
     let m : MCx := { L := cx, pp, pre := true }
     let (pre, st) ← (mWalk m divFuel c M).run {}
     mAssemble m M.span st none (some pre)
   else
-    let m : MCx := { L := cx, row, pp }
+    let m : MCx := { L := cx, row, pp, turn }
     let go : MM Unit := do
-      let s ← mNew M.span "a div body" true false start
+      let s ← mNewIn m M.span "a div body" true false start
       let code ← mWalk m divFuel c M
       mSet s code close0
     let ((), st) ← go.run {}
+    let start := ((st.pts[0]?).map (·.vars)).getD start
     mAssemble m M.span st (some (mInj M.span 0 start)) none
 
 /-- A div body at the empty row: its machine.  `[spec §14]` -/
@@ -1844,6 +1916,30 @@ def PolyTab.isFam (t : PolyTab) (f : String) : Bool := t.fams.any (·.1 == f)
 
 def PolyTab.casesOf (t : PolyTab) (f : String) : List PolyCase := t.cases.filter (·.fam == f)
 
+/-- A place lent by a borrow block around a frame per observation (SPEC §75): the block's binder
+`b : mut 'l A` and the place's owner. A frame per observation on the block's spine whose
+computation uses `b` takes the lend (`taken`, the name it binds the owner to after the frame):
+the owner goes into the frame's state, outside the handler, and is lent around each observation
+(`turnFrame`); the loop takes the borrow per turn (`MTurn`). The block then answers the owner beside
+its result, as the borrow would have.
+
+This is a lend of the place, not a threading of its value: the owner is moved into the frame, lent
+per turn, and handed back.  `[spec §75]` -/
+structure TurnLend where
+  /-- The borrow's binder in the block, and the place's name as written, for messages. -/
+  b : String
+  shown : String
+  /-- The block's lifetime: its name and its variable. -/
+  life : String
+  v : BoCa.Lifetime.LifeVar
+  /-- The place's content type: the owner is a `ref A`. -/
+  A : CVTy
+  /-- The owner is a cell allocated for the lend (a value's): closed between turns, the frame frees
+  it; otherwise it hands it back beside the loop's residual. -/
+  cell : Bool
+  /-- Set by the frame that took the lend: the name the owner is bound to after it. -/
+  taken : Option String := none
+
 /-- The elaboration so far: the libraries (in scope for typing); the source declarations in
 scope, newest first; the elaborated ones, in order; whether any body became a loop; and the
 copies made, by function and parameter type. -/
@@ -1889,6 +1985,9 @@ structure DivSt where
   /-- The `poly` families and their cases, all of the program's, known before any call is
   elaborated.  `[spec §36]` -/
   polys : PolyTab := {}
+  /-- The places lent by the borrow blocks being elaborated, innermost first, which a frame per
+  observation on a block's spine may take (`TurnLend`).  `[spec §75]` -/
+  turnLends : List TurnLend := []
 
 /-- Elaboration with the state of the declarations. -/
 abbrev DM := StateT DivSt SM
@@ -3821,14 +3920,16 @@ def obsFinish (A : VTy) (T : Comp) : Comp := match T with
 
 /-- The context of a frame's computation lifted into a loop value at the row `row`: the variables
 it uses that are not bound in it, its externs among them taken as locals.  `[spec §75]` -/
-def liftLoop (c : TCx) (sp : Span) (row : Frontend.Check.CRow) (A : CVTy) (M : Comp) :
-    SM (Comp × LoopCx) := do
+def liftLoop (c : TCx) (sp : Span) (row : Frontend.Check.CRow) (A : CVTy) (M : Comp)
+    (turn : Option TurnLend := none) : SM (Comp × LoopCx) := do
+  -- A borrow lent per turn is the turns' parameter, not the loop's: it is not given.  [spec §75]
+  let lent (y : String) : Bool := turn.any (·.b == y)
   let locals ← (latest c.locals).filterMapM fun (y, T) =>
-    if !(mentionsC y M || M.rebinds y) then pure none else match T with
+    if lent y || !(mentionsC y M || M.rebinds y) then pure none else match T with
       | some T => pure (some (y, T))
       | none => throw ⟨sp, s!"the loop threads `{y}`, whose type is not determined: ascribe it"⟩
   let exts := (mExterns c).filter fun (y, T) =>
-    !T.persistent && mentionsC y M && !c.locals.any (·.1 == y)
+    !lent y && !T.persistent && mentionsC y M && !c.locals.any (·.1 == y)
   let ws := exts ++ locals
   let cx ← (loopCxOf sp A M (bare := !row.isEmpty) : Except Error LoopCx)
   let cL₀ := exts.foldl (fun c (y, T) => c.push y (some T)) c
@@ -3836,29 +3937,134 @@ def liftLoop (c : TCx) (sp : Span) (row : Frontend.Check.CRow) (A : CVTy) (M : C
   let (closes, _) := closeGiven cx (ws.map fun (y, T) => (y, some T))
   let ab ← template (sp.part 1) "the close of a loop a frame observes, before it starts"
     s!"{closes}return {cx.rSrc}"
-  pure (← divMachine cx row cL ws ab M, cx)
+  let pp (T : CVTy) : String := Frontend.Check.ppV cL.E.lenv 0 0 T
+  let mt : Option MTurn := turn.map fun t =>
+    { v := t.b, life := t.life, dom := "top",
+      ty := s!"mut '{t.life} {Frontend.Check.ppV cL.E.lenv 0 5 t.A}"
+      bad := fun what y T =>
+        -- A component the elaboration made is named by the point it serves.
+        let y := if y.startsWith "io_" then what else s!"`{Hygiene.written y}`"
+        if BoCa.Fig16.LogRel.Core.Check.vfreeB t.v T then
+          some (s!"the loop's state would hold the per-turn lend of `{t.shown}`: {y}, of type " ++
+            s!"`{pp T}`, is kept from one turn to the next, and a turn's next state is boxed at " ++
+            "`top`, which the lend does not outlive")
+        else if !BoCa.Fig16.LogRel.Core.Check.outlivesB cL.Δ .top T then
+          some (s!"the loop's state would hold {y}, of type `{pp T}`, across the per-turn lend " ++
+            s!"of `{t.shown}`: a turn's next state is boxed at `top`, which a thunk or a borrow " ++
+            "does not outlive (not provided)")
+        else none }
+  pure (← divMachine cx row cL ws ab M mt, cx)
 
 /-- The frame per observation (SPEC §75, item 2): the loop `io_l` lifted from the computation, then
 the direct-style call of the `unfold` over the state `Q` (the loop, or the loop and the frame's
 state `st0`) whose step is `obs` and `cls`, written over the state `io_hs{sfx}`. `Lw` is the
 frame's loop, `Rans` its answer.  `[spec §75]` -/
 def obsFrame (sp : Span) (sfx : String) (Lg Q Lw Rans : String) (st0 : Option (String × Val))
-    (lift obs cls : Comp) : SM Comp := do
+    (lift obs cls : Comp) (own : Option String := none) : SM Comp := do
   let (bindSt, arg) := match st0 with
     | some (St, _) => (s!"io_st{sfx} : {St} <- return io_hole_st0;\n", s!"(io_l{sfx}, io_st{sfx})")
     | none => ("", s!"io_l{sfx}")
+  -- A frame that took a lend (`TurnLend`) holds the owner, `io_hole_turnown` until the lend's block
+  -- fills it, first in its state, and answers it beside its answer.  [spec §75]
+  let (bindOwn, call) := match own with
+    | some Tow => (s!"io_ow0{sfx} : {Tow} <- return io_hole_turnown;\n",
+        s!"io_jp{sfx} : ({Tow}) * ({Rans}) <- return ((unbang io_hwf{sfx}) (io_ow0{sfx}, {arg}));
+let (io_own{sfx}, io_j{sfx}) = io_jp{sfx};
+return io_j{sfx}")
+    | none => ("", s!"io_j{sfx} : {Rans} <- return ((unbang io_hwf{sfx}) {arg});\nreturn io_j{sfx}")
   let src := s!"io_l{sfx} : {Lg} <- force io_hole_lift;
-{bindSt}io_hwf{sfx} : !({Q} => U ({Lw})) <- return (!thunkv fun (io_hl{sfx} : {Q}) ->
+{bindSt}{bindOwn}io_hwf{sfx} : !({Q} => U ({Lw})) <- return (!thunkv fun (io_hl{sfx} : {Q}) ->
   io_hf{sfx} <- return (unbang (unfold[{Lw}, {Q}] (!thunkv fun (io_hs{sfx} : {Q}) ->
     < force io_hole_obs, force io_hole_cls >)));
   return (thunkv nu_in < (nu_out (force io_hf{sfx} io_hl{sfx})).1, (nu_out (force io_hf{sfx} io_hl{sfx})).2 >));
-io_j{sfx} : {Rans} <- return ((unbang io_hwf{sfx}) {arg});
-return io_j{sfx}"
+{call}"
   let L ← template (sp.part 2) "a frame around a computation that loops, installed per observation" src
   let L := markFrameCall s!"io_hwf{sfx}" L
   pure (L.fill (fun v => if v == "io_hole_st0" then st0.map (·.2) else none)
     (fun v => if v == "io_hole_lift" then some lift else if v == "io_hole_obs" then some obs
       else if v == "io_hole_cls" then some cls else none))
+
+/-! #### A lend per observation  `[spec §75]`
+
+A frame per observation whose computation uses a place lent around it by a borrow block (an outer
+`let mut` the parser lends around a control handler site, SPEC §41 R3; a capability the effects
+pass lends around one, SPEC §34) takes the lend (`TurnLend`): the owner is the frame's, outside the
+handler, and each observation is
+
+    withbor2['l, dom, A, Ans] owner (Λ'l. λ(m : mut 'l A). o <- handle(H′) (((nu_out l).1) ['l] m); boxed['l] o)
+
+over the loop `νX. (∀'l < dom. mut 'l A ⊸ F_Σ (B ⊕ [@⊤] U X)) & F_Σ R`, whose machine takes the
+borrow per turn (`MTurn`). The frame hands the owner back beside its answer, beside the residual
+when it is closed (a cell allocated for the lend is freed then), and on an abortive clause, whose
+answer finishes the loop as an end does. -/
+
+/-- The loop of a computation lifted with a borrow lent per turn: `νX. (∀'l < ⊤. mut 'l A ⊸
+F_Σ (B ⊕ [@⊤] U X)) & F_Σ R`. The bound is `⊤`, which names no lifetime of the context (`'main`'s
+among them): any lend's lifetime instantiates it.  `[spec §75]` -/
+def turnLoopTy (t : TurnLend) (row : Frontend.Check.CRow) (B R : CVTy) : CVTy :=
+  .thunk (.nu (.amp
+    (.all t.v .top (.arr (.mut (.var t.v) (t.A.rename Nat.succ))
+      (BoCa.Fig16.LogRel.Core.CTy.effOf row (.sum (B.rename Nat.succ) (.box .top (.tvar 0))))))
+    (BoCa.Fig16.LogRel.Core.CTy.effOf row (R.rename Nat.succ))))
+
+/-- The lend a frame per observation around `M` takes: the innermost block's, when `M` uses its
+borrow. A frame that uses the borrow of a block further out, or of two, is refused.  `[spec §75]` -/
+def takeTurnLend (sp : Span) (what : String) (M : Comp) : DM (Option TurnLend) := do
+  let ls := (← get).turnLends
+  let used := ls.filter fun t => t.taken.isNone && mentionsC t.b M
+  match ls, used with
+  | _, [] => pure none
+  | t :: _, [u] => if t.b == u.b && t.life == u.life then pure (some t) else
+      throw ⟨sp, s!"{what} uses `{u.shown}`, lent around it outside another lend: a lend per " ++
+        "observation of a place lent further out is not provided"⟩
+  | _, us => throw ⟨sp, s!"{what} uses {", ".intercalate (us.map (s!"`{·.shown}`"))}, each lent around " ++
+      "it: a lend per observation of more than one place is not provided"⟩
+
+/-- The turn and the close of a frame that took the lend `t`: the owner is the first component of
+its state `io_hs{sfx}`, lent around each observation `turn` (the handled observation of the loop
+`io_hl{sfx}` at the borrow `t.b`, answering `io_wo{sfx}` of type `Bw`); `close` closes the loop,
+answering `io_wc{sfx}`. A turn's end `inr` unboxes the loop's rest outside the lend. With the
+frame's own state, the loop and the state are a pair, `io_hq{sfx}`.  `[spec §75]` -/
+def turnFrameSrc (t : TurnLend) (sfx life A Bw : String) (stateful : Bool) (turn close : String) :
+    String × String :=
+  let un := if stateful then s!"let (io_hl{sfx}, io_hq{sfx}) = io_hq0{sfx};\n" else ""
+  let st := if stateful then s!"io_hq0{sfx}" else s!"io_hl{sfx}"
+  let rest := if stateful then
+      s!"let (io_wl{sfx}, io_ws{sfx}) = io_wb{sfx}; return (inr (io_ow{sfx}, (unbox io_wl{sfx}, io_ws{sfx})))"
+    else s!"return (inr (io_ow{sfx}, unbox io_wb{sfx}))"
+  let obs := s!"let (io_ow{sfx}, {st}) = io_hs{sfx};
+{un}io_wr{sfx} <- return withbor2['{life}, dom, {A}, {Bw}] io_ow{sfx} (thunkv Fun '{life} < dom.
+  return (thunkv fun ({t.b} : mut '{life} {A}) -> {turn}
+    return boxed['{life}] io_wo{sfx}));
+let (io_ow{sfx}, io_wv{sfx}) = io_wr{sfx};
+case io_wv{sfx} \{ inl io_wa{sfx} -> return (inl (io_ow{sfx}, io_wa{sfx})) | inr io_wb{sfx} -> {rest} }"
+  let back := if t.cell then s!"io_wf{sfx} <- return (free[{A}] io_ow{sfx});\nreturn io_wc{sfx}"
+    else s!"return (io_ow{sfx}, io_wc{sfx})"
+  let cls := s!"let (io_ow{sfx}, {st}) = io_hs{sfx};\n{un}{close}\n{back}"
+  (obs, cls)
+
+/-- A borrow block whose lend a frame per observation on its body's spine took (`TurnLend`): the
+body `S'` run as it is, the owner `P'` filled into the frame's state, and the owner, bound to `own`
+after the frame, answered beside the body's answer, as the borrow would have.  `[spec §75]` -/
+def turnLendBlock (sp : Span) (shown b own : String) (P' : Val) (S' : Comp) : DM Val := do
+  -- The frame that took the lend is the one whose call is on the block's spine: it binds the owner
+  -- `io_own{sfx}` from its answer `io_jp{sfx}` there.
+  let jp := "io_jp" ++ (own.drop 6).toString
+  let rec onSpine : Comp → Bool
+    | .bind _ x _ (.ret _ (.app _ (.mark _ .frameObs _) _)) N => x.name == jp || onSpine N
+    | .bind _ _ _ _ N | .letPair _ _ _ _ N | .letUnit _ _ N => onSpine N
+    | _ => false
+  unless onSpine S' do
+    throw ⟨sp, s!"a frame per observation that uses `{shown}`, lent around it, is inside another frame or " ++
+      "a value (a `finally`, a cleanup, a closure): a lend per observation there is not provided"⟩
+  if mentionsC b S' then
+    throw ⟨sp, s!"`{shown}` is lent to each observation of a frame per observation in this block, and " ++
+      "the block uses it besides: not provided"⟩
+  let S'' := wrapTail (fun
+    | .ret tsp V => .ret tsp (.pair tsp (.var tsp own) V)
+    | T => .bind T.span ⟨"io_tlr", T.span⟩ none T
+        (.ret T.span (.pair T.span (.var T.span own) (.var T.span "io_tlr")))) S'
+  pure (.run sp (S''.fill (fun v => if v == "io_hole_turnown" then some P' else none) (fun _ => none)))
 
 set_option maxHeartbeats 400000 in
 mutual
@@ -4173,8 +4379,13 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let sfx := s!"{psp.start.line}_{psp.start.col}"
         let sc : Ident := ⟨s!"io_bsc{sfx}", sp⟩
         let sr : Ident := ⟨s!"io_bsr{sfx}", sp⟩
-        pure (.run sp (.letPair sp sc sr V'
-          (.ret sp (.pair sp (.app sp (.const sp (.free As)) (.var sp sc.name)) (.var sp sr.name)))))
+        let free : Comp :=
+          .ret sp (.pair sp (.app sp (.const sp (.free As)) (.var sp sc.name)) (.var sp sr.name))
+        -- The cell lent per observation by a frame (`TurnLend`): the frame on the spine.  [spec §75]
+        if let some R := runFrameV? V' then
+          let bp : Ident := ⟨s!"io_bsp{sfx}", sp⟩
+          return .run sp (assocBind sp bp none R (.letPair sp sc sr (.var sp bp.name) free))
+        pure (.run sp (.letPair sp sc sr V' free))
       | none => throw ⟨psp, s!"the type of `{px.name}` is not determined here: ascribe it"⟩
     | .app sp (.app sp₂ (.sugar ksp (.borrow k x)) P) (.thunkv tsp (.lam lsp b _ S)) => do
       -- The callback's row, when this block is an unwinding borrow; blocks inside are not.
@@ -4221,7 +4432,23 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let c₁ := c.pushLife x dom
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := if k == .imm then .imm (.var v) A else .mut (.var v) A
+        -- A `mut` lend may be taken by a frame per observation on the body's spine (`TurnLend`).
+        -- [spec §75]
+        let cell := match P with
+          | .app _ (.sugar _ (.call "alloc")) _ => true
+          | _ => false
+        let shown := Hygiene.written (match P with
+          | .app _ (.sugar _ (.call "alloc")) (.var _ y) | .var _ y => y
+          | _ => b.name)
+        let saved := (← get).turnLends
+        if k == .mut then
+          modify fun st => { st with turnLends := { b := b.name, shown, life := x, v, A, cell } :: saved }
         let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
+        let after := (← get).turnLends
+        let taken := if k == .mut then (after.head?.bind (·.taken)) else none
+        modify fun st => { st with turnLends := saved }
+        if let some own := taken then
+          return ← turnLendBlock sp shown b.name own P' S'
         let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
@@ -4818,6 +5045,22 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         | .ret _ V => (runFrameV? V).getD M'
         | M' => M'
       if hasFrameCall M' then
+        -- A borrow block of `&mut p` whose lend a frame per observation took (`TurnLend`): it
+        -- answers the place beside its result, as the lend's borrow does, and the place is rebound
+        -- from it here, where `Comp.elab` would have rebound it from the borrow.  [spec §75]
+        -- UNPROVED: that the lend of `p` was taken is read off the head: it lent a place as
+        -- written (`M`) and lends none once elaborated (`M'`), with a frame's call on its spine.
+        -- It assumes a frame's taking of a lend is the only elaboration that drops a head's
+        -- `&mut p`; another would have its answer taken apart as a pair here, which the kernel
+        -- would then refuse at the pair's type, or the place would be rebound wrongly.
+        if let ([p], []) := (M.takeLends.2, M'.takeLends.2) then
+          let r : Ident := ⟨s!"io_tlp{sp.start.line}_{sp.start.col}", sp⟩
+          let T := spineResTy c divFuel M'
+          let (Tp, Tx) := match T with
+            | some (.tensor P X) => (some P, some X)
+            | _ => (none, none)
+          let N' ← surfC n (((c.push r.name T).push p.name Tp).push x.name ((A.bind c.elabV) <|> Tx)) exp N
+          return assocBind sp r none M' (.letPair sp p x (.var sp r.name) N')
         let N' ← surfC n (c.push x.name ((A.bind c.elabV) <|> spineResTy c divFuel M')) exp N
         return assocFree sp x A M' N'
       let N' ← surfC n (c.push x.name (bindTy c A M')) exp N
@@ -4979,19 +5222,52 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         let S₀ := S.getD []
         let A' ← need M.span "the computation the cleanup guards"
           ((A.bind c.elabV) <|> spineResTy c divFuel M')
-        let (lift, cx) ← (liftLoop c sp S₀ A' M' : SM (Comp × LoopCx))
+        -- A computation that uses a place lent around the finaliser takes the lend.  [spec §75]
+        let tl? ← takeTurnLend sp "a cleanup around a computation that loops" M'
+        if let some t := tl? then
+          unless S₀.isEmpty do
+            throw ⟨sp, s!"a cleanup around a computation that loops uses `{t.shown}`, lent around it, " ++
+              "at a row that performs operations: a lend per observation there is not provided"⟩
+          if mentionsC t.b D' then
+            throw ⟨sp, s!"the cleanup around a computation that loops uses `{t.shown}`, which is lent " ++
+              "to each observation of the computation: not provided"⟩
+        let (lift, cx) ← (liftLoop c sp S₀ A' M' tl? : SM (Comp × LoopCx))
         let Lc := BoCa.Fig16.LogRel.Core.CTy.loopEff S₀ A' cx.R
         let pp (T : CVTy) : String := Frontend.Check.ppV c.E.lenv 0 0 T
         let Lg := pp (.thunk Lc)
         let sfx := s!"u{sp.start.line}_{sp.start.col}"
-        let obsC ← template (sp.part 3) "a turn of a loop, guarded by its cleanup"
-          s!"io_uo{sfx} <- (nu_out (force io_hs{sfx})).1 unwind (force io_hole_d); return io_uo{sfx}"
-        let clsC ← template (sp.part 4) "the close of a loop, guarded by its cleanup"
-          (s!"io_uc{sfx} <- (nu_out (force io_hs{sfx})).2 unwind (force io_hole_d);\n" ++
-            s!"io_ud{sfx} <- force io_hole_d;\nreturn io_uc{sfx}")
         let fillD (L : Comp) : Comp := L.fill (fun _ => none) fun v => if v == "io_hole_d" then some D' else none
-        let frame ← obsFrame sp sfx Lg Lg (Frontend.Check.ppC c.E.lenv 0 Lc) (pp A') none lift
-          (fillD obsC) (fillD clsC)
+        let frame ← match tl? with
+          | none => do
+            let obsC ← template (sp.part 3) "a turn of a loop, guarded by its cleanup"
+              s!"io_uo{sfx} <- (nu_out (force io_hs{sfx})).1 unwind (force io_hole_d); return io_uo{sfx}"
+            let clsC ← template (sp.part 4) "the close of a loop, guarded by its cleanup"
+              (s!"io_uc{sfx} <- (nu_out (force io_hs{sfx})).2 unwind (force io_hole_d);\n" ++
+                s!"io_ud{sfx} <- force io_hole_d;\nreturn io_uc{sfx}")
+            obsFrame sp sfx Lg Lg (Frontend.Check.ppC c.E.lenv 0 Lc) (pp A') none lift
+              (fillD obsC) (fillD clsC)
+          | some t => do
+            -- The owner first in the frame's state, lent around each guarded turn.  [spec §75]
+            if t.cell && Class.of t.A != .unrestricted then
+              throw ⟨sp, s!"`{t.shown}`, lent to each observation of a computation that loops, holds a " ++
+                s!"linear `{pp t.A}`, which the frame would drop when it is closed between turns: not provided"⟩
+            let Ll := turnLoopTy t S₀ A' cx.R
+            let Tow : CVTy := .ref t.A
+            let RrW : CVTy := if t.cell then cx.R else .tensor Tow cx.R
+            let Lw := BoCa.Fig16.LogRel.Core.CTy.loopEff S₀ (.tensor Tow A') RrW
+            let x := t.life
+            let turn := s!"io_wo{sfx} <- ((nu_out (force io_hl{sfx})).1) ['{x}] {t.b} unwind (force io_hole_d);"
+            let close := s!"io_wc{sfx} <- (nu_out (force io_hl{sfx})).2 unwind (force io_hole_d);\n" ++
+              s!"io_ud{sfx} <- force io_hole_d;"
+            let (o, cl) := turnFrameSrc t sfx x (pp t.A) (pp (.sum A' (.box .top Ll))) false turn close
+            let obsC ← template (sp.part 3) "a turn of a loop, guarded by its cleanup" o
+            let clsC ← template (sp.part 4) "the close of a loop, guarded by its cleanup" cl
+            modify fun st => { st with turnLends := st.turnLends.map fun u =>
+              if u.b == t.b && u.life == t.life then { u with taken := some s!"io_own{sfx}" } else u }
+            if !(← get).quiet then
+              report sp s!"`{t.shown}` is lent to each observation of the computation the cleanup guards: its loop takes the borrow per turn"
+            obsFrame sp sfx (pp Ll) s!"({pp Tow}) * ({pp Ll})" (Frontend.Check.ppC c.E.lenv 0 Lw) (pp A') none
+              lift (fillD obsC) (fillD clsC) (some (pp Tow))
         if !(← get).quiet then
           report sp "the cleanup is installed per observation: the computation it guards loops"
         -- UNPROVED: `assocBind` moves the frame's own bindings (`io_l…`, `io_st…`, `io_hwf…`, `io_j…`, suffixed
@@ -5126,6 +5402,12 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let cB' ← refresh cB
     -- A body that loops (SPEC §14) is handled per observation: its type is its spine's.  [spec §75]
     let perObs := (loopsAt cB' none M').isSome
+    -- A body that loops and uses a place lent around the site takes the lend.  [spec §75]
+    let tl? ← if perObs then takeTurnLend sp s!"`with {i.name}`, whose body loops," M' else pure none
+    if let some t := tl? then
+      unless S.isEmpty do
+        throw ⟨sp, s!"`with {i.name}`, whose body loops, uses `{t.shown}`, lent around it, at a row " ++
+          "that performs operations: a lend per observation there is not provided"⟩
     let A ← if perObs then need M.span s!"the body `{i.name}` handles" (spineResTy cB' divFuel M')
       else do
         -- The body's type once its lends are elaborated (`TCx.tyCL`): a lending call's head
@@ -5178,9 +5460,22 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     -- handler with a state answers a function of its state, and a turn hands the state on beside
     -- the rest. The close of the loop is handled by `Hc`, at the answer `RcC`, handing back the
     -- loop's residual and the state's capabilities.  [spec §75]
+    -- A refusal of the lift with the lend is reported after the clauses' own checks, which come
+    -- first as they do without a lend.  [spec §75]
+    let mut deferred : Option Error := none
+    let mut lifted : Option (Comp × LoopCx) := none
+    if perObs && tl?.isSome then
+      try lifted := some (← (liftLoop cB' sp rowB A M' tl? : SM (Comp × LoopCx)))
+      catch e => deferred := some e
+    let tl? := if deferred.isSome then none else tl?
     let obsP? : Option (Comp × LoopCx × CVTy × CVTy × Option CVTy) ← if !perObs then pure none else do
-      let (lift, cx) ← (liftLoop cB' sp rowB A M' : SM (Comp × LoopCx))
-      let Lg : CVTy := .thunk (BoCa.Fig16.LogRel.Core.CTy.loopEff rowB A cx.R)
+      let (lift, cx) ← match lifted with
+        | some l => pure l
+        | none => (liftLoop cB' sp rowB A M' : SM (Comp × LoopCx))
+      -- With a lend per observation, a turn's rest is the loop boxed at `⊤`.  [spec §75]
+      let Lg : CVTy := match tl? with
+        | some t => .box .top (turnLoopTy t rowB A cx.R)
+        | none => .thunk (BoCa.Fig16.LogRel.Core.CTy.loopEff rowB A cx.R)
       if !i.stateful then pure (some (lift, cx, Lg, .sum Rc Lg, none)) else
       match Rc with
       | .thunk (.arr St C) => match Frontend.Check.effRow? C with
@@ -5285,6 +5580,7 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
           | none => throw after
         hcs := hcs ++ [.bangThunkv csp (.lam lsp x (← (cP.surface lsp T : Except Error VTy)) body')]
       | _ => throw ⟨sp, "internal error: a handler's clause"⟩
+    if let some e := deferred then throw e
     let hcV := hcs.foldr (fun v t => Val.pair sp v t) (.unit sp)
     let hrTy ← (cP.surface sp (BoCa.Fig16.LogRel.Core.retTy S A Rc) : Except Error VTy)
     let hcTy ← (cP.surface sp (if i.boxK then BoCa.Fig16.LogRel.Core.clausesTyB S RcO kBound ops fs
@@ -5294,7 +5590,7 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let site := i₀.site.mapTy fun A => (lv A).subst σ
     let (hd, ansTy) : Comp × Option CVTy ← match obsP? with
       | none => pure (.handle sp i.n (some site) (.ascribe sp hr hrTy) (.ascribe sp hcV hcTy) M', none)
-      | some (lift, cx, Lg, _, St?) => do
+      | some (lift, cx, Lg, RcO, St?) => do
         let pp (T : CVTy) : String := Frontend.Check.ppV c.E.lenv 0 0 T
         let ppS (T : CVTy) : DM String := do pure (← (cP.surface sp T : Except Error VTy)).pp
         let Rr := cx.R
@@ -5357,10 +5653,51 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
               s!"let (io_hl{k}{sfx}, io_hs{k}{sfx}) = io_hs{sfx};\nio_hg{k}{sfx} <- " ++
               hdl h s!"io_hl{k}{sfx}" k ++ s!";\nforce io_hg{k}{sfx} io_hs{k}{sfx}"
             pure (s!"({pp Lg}) * ({Sts})", some (Sts, v), un 1 "o", un 2 "c")
+        -- A frame that took a lend: the owner first in its state, lent around each observation,
+        -- and answered beside the frame's answer and, unless it is a cell allocated for the lend,
+        -- beside the residual.  [spec §75]
+        let (Q, Lws, obsS, clsS, own) ← match tl? with
+          | none => pure (Q, Lws, obsS, clsS, none)
+          | some t => do
+            if [hrO, hcV, hrC, hcC].any (mentionsV t.b) || binds.any (fun (_, _, a) => mentionsV t.b a) then
+              throw ⟨sp, s!"`with {i.name}` around a loop: its handler uses `{t.shown}`, which is lent to " ++
+                "each observation of its body: not provided"⟩
+            if t.cell && Class.of t.A != .unrestricted then
+              throw ⟨sp, s!"`{t.shown}`, lent to each observation of `with {i.name}`, holds a linear " ++
+                s!"`{pp t.A}`, which the frame would drop when it is closed between turns: not provided"⟩
+            let Ll := turnLoopTy t rowB A cx.R
+            let Tow : CVTy := .ref t.A
+            let Q' := match St? with
+              | some St => s!"({pp Tow}) * (({pp Ll}) * ({pp St}))"
+              | none => s!"({pp Tow}) * ({pp Ll})"
+            let RrW : CVTy := if t.cell then RrO else .tensor Tow RrO
+            let Lw' := BoCa.Fig16.LogRel.Core.CTy.loopEff S (.tensor Tow Rans) RrW
+            let Bw : CVTy := match St? with
+              | some St => .sum Rans (.tensor Lg St)
+              | none => RcO
+            let x := t.life
+            let (turn, close) := match St? with
+              | some _ =>
+                (s!"io_hg{sfx} <- handle_with[{i.n}](io_hole_hro, io_hole_hco) (((nu_out (force io_hl{sfx})).1) ['{x}] {t.b});\n" ++
+                  s!"io_wo{sfx} <- force io_hg{sfx} io_hq{sfx};",
+                 s!"io_hg{sfx} <- handle_with[{i.n}](io_hole_hrc, io_hole_hcc) ((nu_out (force io_hl{sfx})).2);\n" ++
+                  s!"io_wc{sfx} <- force io_hg{sfx} io_hq{sfx};")
+              | none =>
+                (s!"io_wo{sfx} <- handle_with[{i.n}](io_hole_hro, io_hole_hco) (((nu_out (force io_hl{sfx})).1) ['{x}] {t.b});",
+                 s!"io_wc{sfx} <- handle_with[{i.n}](io_hole_hrc, io_hole_hcc) ((nu_out (force io_hl{sfx})).2);")
+            let (o, cl) := turnFrameSrc t sfx x (pp t.A) (pp Bw) St?.isSome turn close
+            modify fun st => { st with turnLends := st.turnLends.map fun u =>
+              if u.b == t.b && u.life == t.life then { u with taken := some s!"io_own{sfx}" } else u }
+            if !(← get).quiet then
+              report sp s!"`{t.shown}` is lent to each observation of `with {i.name}`: its loop takes the borrow per turn"
+            pure (Q', Frontend.Check.ppC c.E.lenv 0 Lw', o, cl, some (pp Tow))
+        let Lg := match tl? with
+          | some t => turnLoopTy t rowB A cx.R
+          | none => Lg
         let obsC ← template (sp.part 3) "a turn of a frame around a loop, handled" obsS
         let clsC ← template (sp.part 4) "the close of a frame around a loop, handled" clsS
         let frame ← obsFrame sp sfx (pp Lg) Q Lws (pp Rans) st0' lift (obsC.fill hv (fun _ => none))
-          (clsC.fill hv (fun _ => none))
+          (clsC.fill hv (fun _ => none)) own
         if !(← get).quiet then
           report sp s!"`with {i.name}` is installed per observation: its body loops"
         pure (frame.fillS (fun _ => none) (fun _ => none) fun k => if k == i.n then some site else none,

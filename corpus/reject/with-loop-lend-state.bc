@@ -1,0 +1,29 @@
+-- expect: 24:13: the loop's state would hold a call of a div function, of type `U (delay i32)`, across the per-turn lend of `t`: a turn's next state is boxed at `top`, which a thunk or a borrow does not outlive (not provided)
+-- SPEC §75, a lend per observation: the frame takes the lend of `t`, and the loop takes the borrow
+-- per turn, its next state boxed at `top`. Here the turn calls `sum`, a div function, and the call
+-- in progress, a thunk, is in the state between turns: a thunk does not outlive `top`, so the
+-- state cannot be boxed, and the frame is refused.
+
+include yield
+include fail
+
+fn upto(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 }
+
+fn sum() -> i32 =
+  let mut s = 0;
+  for y in upto(0, 10) { s = s + y };
+  s
+
+fn chk(x: i32) -> i32 with Fail[i32] = if x > 100 { raise(x) } else { x }
+
+fn go() -> (i32 + i32) * i32 =
+  let mut t = 0;
+  let r = with to_result[i32, i32] {
+    t = chk(sum());
+    t
+  };
+  (r, t)
+
+main -> (i32 + i32) * i32 = go()

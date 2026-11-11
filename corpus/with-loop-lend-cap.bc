@@ -1,0 +1,20 @@
+-- SPEC §75, a lend per observation of a capability: `with to_result` around a loop that prints with
+-- `print_dec`, inside `main`, which holds `stdout`. The effects pass lends `stdout` around the
+-- site (SPEC §34); the frame takes the lend, holds `stdout` outside the handler and lends it to
+-- each observation, and hands it back beside its answer. `chk` raises at `3`: the turns before
+-- it printed, the raise finishes the loop, and `stdout` comes back.
+--
+-- Answer: `0123inr i32[30]`.
+
+include io
+include fail
+
+fn chk(x: i32) -> i32 with Fail[i32] = if x == 3 { raise(x * 10) } else { x }
+
+main -> i32 + i32 =
+  with to_result[i32, i32] {
+    let mut t = 0;
+    let mut i = 0;
+    while i < 10 { print_dec(i); t = t + chk(i); i = i + 1 };
+    t
+  }

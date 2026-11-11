@@ -1,0 +1,24 @@
+-- SPEC §75, a lend per observation: a handler around a loop whose body assigns `t`, a `let mut`
+-- declared outside the handler. The parser lends `t` around the site (SPEC §41, R3); the body loops,
+-- so the frame is installed per observation and takes the lend: the cell holding `t` is the
+-- frame's, outside the handler, lent to each observation, and the loop takes the borrow per turn,
+-- its next state boxed at `top`. The frame hands the cell back beside its answer, and `t` is read
+-- after the `with`.
+--
+-- Answer: `(i32[4], i32[10])`: four turns, `t` the sum of `1..4`.
+
+effect Tick { ctl tick(n: i32) -> i32 }
+
+handler idh[A]: Tick, A -> A = {
+  return(x) = x;
+  tick(n, k) = k(n)
+}
+
+main -> i32 * i32 =
+  let mut t = 0;
+  let r = with idh[i32] {
+    let mut i = 0;
+    while i < 4 { i = i + 1; t = t + tick(i) };
+    i
+  };
+  (r, t)

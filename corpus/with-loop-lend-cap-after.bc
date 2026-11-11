@@ -1,0 +1,19 @@
+-- SPEC §75, a lend per observation of a capability used after the loop: as `with-loop-lend-cap`,
+-- with `print_dec(t)` after the loop, inside the handler. The raise at `3` finishes the loop
+-- before it, so nothing is printed, and `stdout` comes back beside the answer.
+--
+-- Answer: `inr i32[30]`.
+
+include io
+include fail
+
+fn chk(x: i32) -> i32 with Fail[i32] = if x == 3 { raise(x * 10) } else { x }
+
+main -> i32 + i32 =
+  with to_result[i32, i32] {
+    let mut t = 0;
+    let mut i = 0;
+    while i < 10 { t = t + chk(i); i = i + 1 };
+    print_dec(t);
+    t
+  }

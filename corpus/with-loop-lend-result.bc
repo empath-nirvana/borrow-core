@@ -1,0 +1,21 @@
+-- SPEC §75, a lend per observation: `with to_result` around a loop, inside a function, whose body
+-- assigns `t`, a `let mut` of the function declared outside the handler. The frame takes the
+-- lend of `t`'s cell and lends it to each observation; nothing raises, so the loop ends and the
+-- frame answers `inl` beside the cell.
+--
+-- Answer: `(inl i32[4], i32[10])`.
+
+include fail
+
+fn chk(x: i32) -> i32 with Fail[i32] = if x > 100 { raise(x) } else { x }
+
+fn go() -> (i32 + i32) * i32 =
+  let mut t = 0;
+  let r = with to_result[i32, i32] {
+    let mut i = 0;
+    while i < 4 { i = i + 1; t = t + chk(i) };
+    i
+  };
+  (r, t)
+
+main -> (i32 + i32) * i32 = go()
