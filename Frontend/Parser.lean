@@ -210,6 +210,9 @@ structure PState where
   them apart (SPEC §41, rule R3). With it, the construct as written: `run`, or the `if` or
   `match` read as `run` of it inside an expression. -/
   pendingRun : Option (Span × String) := none
+  /-- `writes(x, …)` read before a loop, as `bcc print` writes the variables a loop's body writes
+  (`LoopInfo.writes`): the next loop's, in place of what its body is found to write.  `[spec §41]` -/
+  loopW : Option (List Ident) := none
   /-- In an arm of a `fold_reuse` block, where a block written without `box` is reassembled from
   its cells (SPEC §60, F2). -/
   reuseArm : Bool := false
@@ -386,11 +389,13 @@ writes too; unlike `frame`, nothing else of the state is the body's own, since a
 no frame of its own here.  `[spec §41]` -/
 def loopWrites (sp : Span) (p : P α) : P (α × List Ident) := do
   let s₀ ← get
-  set { s₀ with assigned := [] }
+  set { s₀ with assigned := [], loopW := none }
   let M ← p
   let a := (← get).assigned
   modify fun s => { s with assigned := s₀.assigned ++ a }
-  pure (M, (s₀.muts.filter a.contains).reverse.map (⟨·, sp⟩))
+  match s₀.loopW with
+  | some ws => pure (M, ws)
+  | none => pure (M, (s₀.muts.filter a.contains).reverse.map (⟨·, sp⟩))
 
 /-- Parse a loop's body: in a function's body, a statement `return e` in it returns from the
 function (`VSugar.retE`). -/
@@ -446,6 +451,35 @@ def ident (what : String := "a name") : P Ident := do
   match t.tok with
   | .ident s => discard bump; pure ⟨s, t.span⟩
   | _ => expected what
+
+/-- `writes(x, …)` before a loop (or its label), as `bcc print` writes the variables a loop's body
+writes (`LoopInfo.writes`, SPEC §41): read into `loopW`, for the loop that follows. Anything else
+is left unread. In a surface body the parser finds what a loop writes itself.  `[spec §41]` -/
+def loopWritesPre : P Unit := do
+  unless (← peek).tok == .kw "writes" && (← peekAt 1).tok == .sym "(" do return
+  let mut k := 2
+  for _ in [0:256] do
+    match (← peekAt k).tok with
+    | .ident _ | .sym "," => k := k + 1
+    | _ => break
+  unless (← peekAt k).tok == .sym ")" do return
+  let next := (← peekAt (k + 1)).tok
+  let isLoop := match next with
+    | .kw "for" | .kw "while" | .kw "loop" | .life _ => true
+    | _ => false
+  unless isLoop do return
+  let t ← peek
+  if (← get).resolve && (← get).surf then
+    failAt t.span "`writes(…)` is the printed form of what a loop writes; in a surface body it is not written"
+  discard bump
+  expectSym "("
+  let mut xs : Array Ident := #[]
+  for _ in [0:256] do
+    if ← isSym ")" then break
+    xs := xs.push (← ident "a variable")
+    if ← isSym "," then discard bump
+  expectSym ")"
+  modify fun s => { s with loopW := some xs.toList }
 
 def uident (what : String := "an upper-case name") : P Ident := do
   let t ← peek
@@ -2350,6 +2384,7 @@ def compG : Nat → Bool → P Comp
   | 0, _ => outOfFuel
   | n + 1, head => do
     let st ← startPos
+    loopWritesPre
     let t ← peek
     let t1 ← peekAt 1
     match t.tok, t1.tok with
@@ -2472,6 +2507,7 @@ def compG : Nat → Bool → P Comp
       withScope do
       let A ← if ← isSym ":" then do discard bump; pure (some (← vty n)) else pure none
       expectSym "="
+      loopWritesPre
       -- `let r = 'ℓ: for …`: the label, before the `for`.
       let ℓ ← match (← peek).tok, (← peekAt 1).tok, (← peekAt 2).tok with
         | .life l, .sym ":", .kw "for" => do
