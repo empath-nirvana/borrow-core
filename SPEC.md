@@ -13350,7 +13350,8 @@ recursive position. Where the position is an array of `X` (`Json`'s `Vec[X]` and
 `Map[string, X]`, `lib/json.bc`), the call sits inside the array's loop, not in tail position: one
 native frame and a loop frame a level, about 75 bytes. A `Json` 1000 deep, built by a loop,
 overflows a 64 KiB stack when dropped by that recursion (#1013), and freeing must not be what
-crashes a server on deep valid data. §67's pointer reversal covers a fold with one recursive position and a base `1`.
+crashes a server on deep valid data. §67's pointer reversal covers a fold with one recursive
+position and a base `1`.
 
 ### Language
 
@@ -13408,7 +13409,18 @@ Counts: no `allocs`, `indirect`, `copies` or `bounds` change. `loads` and `store
 by one slot's words per array of ≥ 2 elements freed by `down` (the stash and its read-back):
 the table below.
 
-(The table comes with the code.)
+| Program | `loads` / `stores` before | after | stashes × slot words |
+|---|---|---|---|
+| `json-parse` | 24025 / 13650 | 24137 / 13762 | 14 × 8 |
+| `json-get` | 937 / 385 | 945 / 393 | 1 × 8 |
+| `data-json-map` | 1283 / 1097 | 1291 / 1105 | 1 × 8 |
+| `data-abbr-root` | 1283 / 1097 | 1291 / 1105 | 1 × 8 |
+| `data-json-map-ser` | 489 / 379 | 497 / 387 | 1 × 8 |
+| `data-json-vec` | 188 / 188 | 192 / 192 | 1 × 4 |
+| `data-rose-vec` | 220 / 220 | 224 / 224 | 1 × 4 |
+| `storage-array` | 55180 / 55180 | 59257 / 59257 | 1359 × 3 |
+
+`storage-array` frees 1365 nodes of 4 children; the 6 on the root's slot-0 path never stash.
 
 ### Baseline
 
