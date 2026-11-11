@@ -9818,7 +9818,13 @@ No change: no type, rule, term, typing, elaboration or semantics.
     handler catches them (`Checked.unhandledNames`, `tail_clause_names`);
   - holds one closed clause for it (`closedAt 0` of the node's clause), at one outer row and one
     signature, so the clause a `perform` reaches is the same code at every node and needs nothing
-    from its handler's frame.
+    from its handler's frame;
+  - at every `perform` of the operation, the `perform`'s row holds the abortive entries of its
+    handler's outer row, so the clause's possible raise has a summand to travel in (#1110);
+  - writes its clause tuple in place, a typed `tensorI` chain (#1110).
+
+  Both of the last two conditions are read from the checked term. Otherwise the operation is a
+  machine operation (§49), whose drive runs the clause and sends its raise to the handler's join.
 
   The clause's work `M'` (`M` with each resume `κ.1 y` replaced by `y`, read along the paths of
   `TailResumesAt` through `[⊕E]`, `[⊗E]`, `[1E]`, `[let]` and `[sub]`, the right unit and the
@@ -9826,7 +9832,7 @@ No change: no type, rule, term, typing, elaboration or semantics.
   function made before its handler). A `perform` of the operation calls it on the argument
   (`tail_resumes`: the clause runs as its work followed by one resume, which `kappa_resume_steps`
   takes back into `K`); its aborts, at the outer row's payload, are re-injected at the `perform`'s
-  row, and a `perform` at a row that does not hold them is outside the fragment.
+  row, which holds them by the conditions above.
 - **`main`'s exit status** (§39): when `main` is served `Fail[DivError]` by the platform's handler
   (`Checked.exitsOnDivError`), its value `inl v` reports `v` and `inr ()` ends the run with the
   status `1`, at the LIR interpreter, the word IR and both targets.
