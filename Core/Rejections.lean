@@ -591,8 +591,8 @@ a borrow. -/
 theorem wb_view {Δ : LifeCtx} {Γ : Ctx VTy} {d : Expr} {j : Jdg} {T : VTy} {A : VTy} {C : CTy}
     (h : CDerives Δ Γ (withborUE d) j) (hj : j = .val T ∨ ∃ S, j = .comp (CTy.effOf S T))
     (hv : VView T (.thunk (.arr A C))) :
-    A.Persistent ∨ ∃ x bnd L B S R,
-      CTy.alphaB [] (.arr (cbUTy x bnd L B S) (CTy.effOf S R)) C = true ∧ L.persistent = false := by
+    A.Persistent ∨ ∃ x bnd L B SM S R,
+      CTy.alphaB [] (.arr (cbUTy x bnd L B SM) (CTy.effOf S R)) C = true ∧ L.persistent = false := by
   have hcls : ∀ D', Rigid D' → LamCls Γ D' j → CTy.alphaB [] D' (.arr A C) = true := by
     intro D' hD hcl
     rcases hcl with ⟨D'', rfl, hα⟩ | hc
@@ -616,11 +616,11 @@ theorem wb_view {Δ : LifeCtx} {Γ : Ctx VTy} {d : Expr} {j : Jdg} {T : VTy} {A 
   · have := hcls _ (rigid_all _ _ _) hcl; simp [CTy.alphaB] at this
   · have := hcl.at_thunk hj hv; simp [CTy.alphaB] at this
   · simp [withPair, Expr.val, Val.lam] at hw
-  · rcases hx with ⟨he, -⟩ | ⟨d', -, T₀, ⟨src, x, bnd, L, B, S, R, rfl, hL⟩, hc⟩ | ⟨ho, -⟩
+  · rcases hx with ⟨he, -⟩ | ⟨d', -, T₀, ⟨src, x, bnd, L, B, SM, S, R, rfl, hL⟩, hc⟩ | ⟨ho, -⟩
     · simp [forget, Expr.val, Val.lam, unit'] at he
     · have hα := vview_thunk (hc.at_thunk hj hv)
       simp only [withborUTy, CTy.alphaB, Bool.and_eq_true] at hα
-      exact .inr ⟨x, bnd, L, B, S, R, hα.2, hL⟩
+      exact .inr ⟨x, bnd, L, B, SM, S, R, hα.2, hL⟩
     · not_other ho
 
 /-- AT05's callback `Λ. λm. (m, m)`. -/
@@ -662,8 +662,8 @@ theorem vview_ref_thunk {A : VTy} {C : CTy} (h : VView (.ref A) (.thunk C)) : Fa
 takes a persistent source and the cell is a `Ref`. -/
 theorem at05_M {Δ : LifeCtx} {Γ : Ctx VTy} {W F : Expr} {j : Jdg}
     (h : CDerives Δ Γ (.app W (.var 2)) j) (hc : At05Ctx Γ W F) :
-    ∃ x bnd L B S R, L.persistent = false ∧ ∃ D, j = .comp D ∧
-      CTy.alphaB [] (.arr (cbUTy x bnd L B S) (CTy.effOf S R)) D = true := by
+    ∃ x bnd L B SM S R, L.persistent = false ∧ ∃ D, j = .comp D ∧
+      CTy.alphaB [] (.arr (cbUTy x bnd L B SM) (CTy.effOf S R)) D = true := by
   obtain ⟨j₀, hb, hr⟩ := der_app h _ _ rfl
   rcases hb with ⟨Γ₁, Γ₂, A, B, hs, hY, hf, rfl⟩ | ⟨Γ₁, Γ₂, i, A, C, hi, hs, hf, hx, rfl⟩ |
     ⟨N, Γ₁, Γ₂, A, S, C, hN, hs, hY, hU, rfl⟩ | ⟨N, b, C, -, hb, -⟩ |
@@ -675,10 +675,10 @@ theorem at05_M {Δ : LifeCtx} {Γ : Ctx VTy} {W F : Expr} {j : Jdg}
     rcases hc.w with rfl | rfl
     · obtain ⟨T_w, hTw, hcw⟩ := der_var hf 0 rfl
       obtain ⟨Δ', Γ', S', hW⟩ := hc.wt rfl T_w (splitP_le_right hs _ _ hTw)
-      rcases wb_view hW (.inr ⟨S', rfl⟩) hcw.val with hp | ⟨_, _, _, _, _, _, he, _⟩
+      rcases wb_view hW (.inr ⟨S', rfl⟩) hcw.val with hp | ⟨_, _, _, _, _, _, _, he, _⟩
       · simp [VTy.Persistent, hAp] at hp
       · simp [CTy.alphaB] at he
-    · rcases wb_view hf (.inl rfl) .refl with hp | ⟨_, _, _, _, _, _, he, _⟩
+    · rcases wb_view hf (.inl rfl) .refl with hp | ⟨_, _, _, _, _, _, _, he, _⟩
       · simp [VTy.Persistent, hAp] at hp
       · simp [CTy.alphaB] at he
   · -- `[app]`: the source at the cell's slot's type
@@ -699,14 +699,14 @@ theorem at05_M {Δ : LifeCtx} {Γ : Ctx VTy} {W F : Expr} {j : Jdg}
             rcases hD' with ⟨_, _, h'⟩ | ⟨_, h'⟩ <;> cases h'
         obtain ⟨Δ', Γ', S', hW⟩ := hc.wt rfl _ (splitP_le_left hs _ _ hTw)
         rcases wb_view hW (.inr ⟨S', rfl⟩) ((vview_forceTy hTwC).tail (VS.alpha (A := .thunk C_w) hCwα)) with
-          hp | ⟨x, bnd, L, B, S'', R, hα, hL⟩
+          hp | ⟨x, bnd, L, B, SM'', S'', R, hα, hL⟩
         · simp [VTy.Persistent, hAp] at hp
         · have hC : Rigid C := by
             cases C <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true]
               at hα
             exact rigid_arr _ _
           obtain ⟨D', rfl, hα'⟩ := hr.rigid hC
-          exact ⟨x, bnd, L, B, S'', R, hL, D', rfl, CTy.alphaB_trans' hα hα'⟩
+          exact ⟨x, bnd, L, B, SM'', S'', R, hL, D', rfl, CTy.alphaB_trans' hα hα'⟩
     · rcases der_lam hf _ rfl with ⟨A', D, hM, hcl⟩ | ⟨S', B', hM, hcl⟩ |
         ⟨x, b, Δ', S', C', hM, hcl⟩ | ⟨A', hM, hcl⟩ | ⟨M₁, M₂, hw⟩ | hx'
       · have hα := hcl.comp_rigid (rigid_arr _ _)
@@ -828,9 +828,9 @@ theorem at05_core {Δ : LifeCtx} {Γ : Ctx VTy} {W F : Expr} {j : Jdg}
   rcases hb with ⟨Γ₁, Γ₂, A, B, hs, -, hM, -⟩ | ⟨Γ₁, Γ₂, i, A, C, hi, hs, hM, hx, -⟩ |
     ⟨N, -, -, -, -, -, hN, -⟩ | ⟨N, b, C, hN, -⟩ |
     ⟨-, -, -, -, hu, -⟩ | ⟨-, -, -, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨hu, -⟩ | hX
-  · obtain ⟨_, _, _, _, _, _, _, _, he, -⟩ := at05_M hM (hc.le (splitP_le_right hs))
+  · obtain ⟨_, _, _, _, _, _, _, _, _, he, -⟩ := at05_M hM (hc.le (splitP_le_right hs))
     cases he
-  · obtain ⟨x, bnd, L, B, S, R, hL, D, he, hα⟩ := at05_M hM (hc.le (splitP_le_left hs))
+  · obtain ⟨x, bnd, L, B, SM, S, R, hL, D, he, hα⟩ := at05_M hM (hc.le (splitP_le_left hs))
     simp only [Jdg.comp.injEq] at he
     subst he
     simp only [CTy.alphaB, Bool.and_eq_true] at hα

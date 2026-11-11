@@ -601,23 +601,23 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
   | withswap hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.withswap (deadP_ins (live_eval_atom hf hp) Γa hΓ), (shift_closed0 (by rfl) _ _).symm⟩
-  | withbor1U x hΓ hx hsc hf₁ hf₂ hS _ ihd =>
+  | withbor1UD x hΓ hx hsc hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      exact ⟨.withbor1U x (deadP_ins (live_atom hpe) Γa hΓ) hx hsc hf₁ hf₂ hS
+      exact ⟨.withbor1UD x (deadP_ins (live_atom hpe) Γa hΓ) hx hsc hf₁ hf₂ hS hMS hDS hSv hP
         d, by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
-  | withbor2U x hΓ hx hside hf₁ hf₂ hS _ ihd =>
+  | withbor2UD x hΓ hx hside hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      exact ⟨.withbor2U x (deadP_ins (live_atom hpe) Γa hΓ) hx hside hf₁ hf₂ hS d,
+      exact ⟨.withbor2UD x (deadP_ins (live_atom hpe) Γa hΓ) hx hside hf₁ hf₂ hS hMS hDS hSv hP d,
         by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
-  | withbor3U x hΓ hx hf₁ hf₂ hS _ ihd =>
+  | withbor3UD x hΓ hx hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      exact ⟨.withbor3U x (deadP_ins (live_atom hpe) Γa hΓ) hx hf₁ hf₂ hS d,
+      exact ⟨.withbor3UD x (deadP_ins (live_atom hpe) Γa hΓ) hx hf₁ hf₂ hS hMS hDS hSv hP d,
         by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
   | withloadU x hΓ hx hf₁ hf₂ hS =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
@@ -1205,23 +1205,23 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
   | withswap hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.withswap (deadP_ins (live_eval_atom hf hp) Γa hΓ), (shift_closed0 (by rfl) _ _).symm⟩
-  | withbor1U x hΓ hx hsc hf₁ hf₂ hS _ ihd =>
+  | withbor1UD x hΓ hx hsc hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      exact ⟨.withbor1U x (deadP_ins (live_atom hpe) Γa hΓ) hx hsc hf₁ hf₂ hS
+      exact ⟨.withbor1UD x (deadP_ins (live_atom hpe) Γa hΓ) hx hsc hf₁ hf₂ hS hMS hDS hSv hP
         d, by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
-  | withbor2U x hΓ hx hside hf₁ hf₂ hS _ ihd =>
+  | withbor2UD x hΓ hx hside hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      exact ⟨.withbor2U x (deadP_ins (live_atom hpe) Γa hΓ) hx hside hf₁ hf₂ hS d,
+      exact ⟨.withbor2UD x (deadP_ins (live_atom hpe) Γa hΓ) hx hside hf₁ hf₂ hS hMS hDS hSv hP d,
         by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
-  | withbor3U x hΓ hx hf₁ hf₂ hS _ ihd =>
+  | withbor3UD x hΓ hx hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      exact ⟨.withbor3U x (deadP_ins (live_atom hpe) Γa hΓ) hx hf₁ hf₂ hS d,
+      exact ⟨.withbor3UD x (deadP_ins (live_atom hpe) Γa hΓ) hx hf₁ hf₂ hS hMS hDS hSv hP d,
         by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
   | withloadU x hΓ hx hf₁ hf₂ hS =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'

@@ -2739,7 +2739,7 @@ def constArity : TExpr → Option Nat
   | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .boundedFix .. => some 1
   | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
-  | .withborF2I .. | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU ..
+  | .withborF2I .. | .withbor1UD .. | .withbor2UD .. | .withbor3UD .. | .withloadU ..
   | .sliceBorrowMU .. | .sliceBorrowIU .. => some 2
   | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. => some 0
   | _ => none
@@ -4069,7 +4069,7 @@ where
   cbConst : TExpr → Bool
     | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .sliceBorrowM ..
     | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I ..
-    | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU .. | .sliceBorrowMU ..
+    | .withbor1UD .. | .withbor2UD .. | .withbor3UD .. | .withloadU .. | .sliceBorrowMU ..
     | .sliceBorrowIU .. => true
     | _ => false
   go (fuel : Nat) (ctx : Ctx) : List (Masks × TExpr) → List Var → TExpr → LTy → CM Tm
@@ -4250,9 +4250,9 @@ def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM 
   | .withswap .. => genWithswap x cbT call
   | .withborSM .. | .withborF2M .. => genLendTree true x cbT call
   | .withborSI .. | .withborF2I .. => genLendTree false x cbT call
-  | .withbor1U _ _ _ _ _ _ td | .sliceBorrowIU _ _ _ _ _ _ td => genLendU _fuel (.lend false) x cbT call td
-  | .withbor2U _ _ _ _ _ _ td | .sliceBorrowMU _ _ _ _ _ _ td => genLendU _fuel (.lend true) x cbT call td
-  | .withbor3U _ _ _ _ _ _ _ td => genLendU _fuel .relend x cbT call td
+  | .withbor1UD _ _ _ _ _ _ _ _ td | .sliceBorrowIU _ _ _ _ _ _ td => genLendU _fuel (.lend false) x cbT call td
+  | .withbor2UD _ _ _ _ _ _ _ _ td | .sliceBorrowMU _ _ _ _ _ _ td => genLendU _fuel (.lend true) x cbT call td
+  | .withbor3UD _ _ _ _ _ _ _ _ _ td => genLendU _fuel .relend x cbT call td
   | .withloadU .. => genWithload x cbT call
   | c => throw s!"LIR: `{ruleName c}` is not a borrow (answer {resT})"
 
@@ -4318,11 +4318,11 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     freeTree v vT
   | .withborSM .., [x, cb] | .withborF2M .., [x, cb] => genLendTree true x (← tyOf cb) (callCb cb)
   | .withborSI .., [x, cb] | .withborF2I .., [x, cb] => genLendTree false x (← tyOf cb) (callCb cb)
-  | .withbor1U _ _ _ _ _ _ td, [x, cb] | .sliceBorrowIU _ _ _ _ _ _ td, [x, cb] =>
+  | .withbor1UD _ _ _ _ _ _ _ _ td, [x, cb] | .sliceBorrowIU _ _ _ _ _ _ td, [x, cb] =>
     genLendU fuel (.lend false) x (← tyOf cb) (callCb cb) td
-  | .withbor2U _ _ _ _ _ _ td, [x, cb] | .sliceBorrowMU _ _ _ _ _ _ td, [x, cb] =>
+  | .withbor2UD _ _ _ _ _ _ _ _ td, [x, cb] | .sliceBorrowMU _ _ _ _ _ _ td, [x, cb] =>
     genLendU fuel (.lend true) x (← tyOf cb) (callCb cb) td
-  | .withbor3U _ _ _ _ _ _ _ td, [m, cb] => genLendU fuel .relend m (← tyOf cb) (callCb cb) td
+  | .withbor3UD _ _ _ _ _ _ _ _ _ td, [m, cb] => genLendU fuel .relend m (← tyOf cb) (callCb cb) td
   | .withloadU .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .foldOwn _ _ F _, [g] | .foldReuse _ _ F _, [g] => do
     let k : FoldKind := match c with | .foldReuse .. => .reuse | _ => .own

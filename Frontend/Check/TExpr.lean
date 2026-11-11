@@ -723,9 +723,9 @@ inductive TExpr where
   | withbor3 (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy) (x : LifeVar)
   | withload (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy) (x : LifeVar)
   | withswap (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy)
-  | withbor1U (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (x : LifeVar) (td : TExpr)
-  | withbor2U (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (x : LifeVar) (td : TExpr)
-  | withbor3U (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy) (S : Row) (x : LifeVar) (td : TExpr)
+  | withbor1UD (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (SM : Row) (SD : Row) (S : Row) (x : LifeVar) (td : TExpr)
+  | withbor2UD (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (SM : Row) (SD : Row) (S : Row) (x : LifeVar) (td : TExpr)
+  | withbor3UD (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy) (SM : Row) (SD : Row) (S : Row) (x : LifeVar) (td : TExpr)
   | withloadU (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy) (S : Row) (x : LifeVar)
   | sliceBorrowMU (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (x : LifeVar) (td : TExpr)
   | sliceBorrowIU (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (x : LifeVar) (td : TExpr)
@@ -889,9 +889,9 @@ def TExpr.erase : TExpr → Expr
   | .withbor3 _ _ _ _ _ _ => withbor
   | .withload _ _ _ _ _ _ => BoCa.withload
   | .withswap _ _ _ _ _ => BoCa.withswap
-  | .withbor1U _ _ _ _ _ _ td => (withborUE (td.erase))
-  | .withbor2U _ _ _ _ _ _ td => (withborUE (td.erase))
-  | .withbor3U _ _ _ _ _ _ _ td => (withborUE (td.erase))
+  | .withbor1UD _ _ _ _ _ _ _ _ td => (withborUE (td.erase))
+  | .withbor2UD _ _ _ _ _ _ _ _ td => (withborUE (td.erase))
+  | .withbor3UD _ _ _ _ _ _ _ _ _ td => (withborUE (td.erase))
   | .withloadU _ _ _ _ _ _ _ => BoCa.withload
   | .sliceBorrowMU _ _ _ _ _ _ td => (withborUE (td.erase))
   | .sliceBorrowIU _ _ _ _ _ _ td => (withborUE (td.erase))
@@ -1014,9 +1014,9 @@ def TExpr.info : TExpr → TInfo
   | .withbor3 i _ _ _ _ _ => i
   | .withload i _ _ _ _ _ => i
   | .withswap i _ _ _ _ => i
-  | .withbor1U i _ _ _ _ _ _ => i
-  | .withbor2U i _ _ _ _ _ _ => i
-  | .withbor3U i _ _ _ _ _ _ _ => i
+  | .withbor1UD i _ _ _ _ _ _ _ _ => i
+  | .withbor2UD i _ _ _ _ _ _ _ _ => i
+  | .withbor3UD i _ _ _ _ _ _ _ _ _ => i
   | .withloadU i _ _ _ _ _ _ => i
   | .sliceBorrowMU i _ _ _ _ _ _ => i
   | .sliceBorrowIU i _ _ _ _ _ _ => i
@@ -1135,9 +1135,9 @@ def TExpr.jdg : TExpr → Jdg
   | .withbor3 _ j _ _ _ _ => j
   | .withload _ j _ _ _ _ => j
   | .withswap _ j _ _ _ => j
-  | .withbor1U _ j _ _ _ _ _ => j
-  | .withbor2U _ j _ _ _ _ _ => j
-  | .withbor3U _ j _ _ _ _ _ _ => j
+  | .withbor1UD _ j _ _ _ _ _ _ _ => j
+  | .withbor2UD _ j _ _ _ _ _ _ _ => j
+  | .withbor3UD _ j _ _ _ _ _ _ _ _ => j
   | .withloadU _ j _ _ _ _ _ => j
   | .sliceBorrowMU _ j _ _ _ _ _ => j
   | .sliceBorrowIU _ j _ _ _ _ _ => j
@@ -1264,9 +1264,9 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .withbor3 _ _ _ _ _ _ => []
   | .withload _ _ _ _ _ _ => []
   | .withswap _ _ _ _ _ => []
-  | .withbor1U _ _ _ _ _ _ td => [(.push 0, td)]
-  | .withbor2U _ _ _ _ _ _ td => [(.push 0, td)]
-  | .withbor3U _ _ _ _ _ _ _ td => [(.push 0, td)]
+  | .withbor1UD _ _ _ _ _ _ _ _ td => [(.push 0, td)]
+  | .withbor2UD _ _ _ _ _ _ _ _ td => [(.push 0, td)]
+  | .withbor3UD _ _ _ _ _ _ _ _ _ td => [(.push 0, td)]
   | .withloadU _ _ _ _ _ _ _ => []
   | .sliceBorrowMU _ _ _ _ _ _ td => [(.push 0, td)]
   | .sliceBorrowIU _ _ _ _ _ _ td => [(.push 0, td)]
@@ -1407,9 +1407,9 @@ def TExpr.isLam : TExpr → Bool
   | .withbor3 _ _ _ _ _ _ => ((withbor : Expr) matches .lam _)
   | .withload _ _ _ _ _ _ => ((BoCa.withload : Expr) matches .lam _)
   | .withswap _ _ _ _ _ => ((BoCa.withswap : Expr) matches .lam _)
-  | .withbor1U _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
-  | .withbor2U _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
-  | .withbor3U _ _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
+  | .withbor1UD _ _ _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
+  | .withbor2UD _ _ _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
+  | .withbor3UD _ _ _ _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
   | .withloadU _ _ _ _ _ _ _ => ((BoCa.withload : Expr) matches .lam _)
   | .sliceBorrowMU _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
   | .sliceBorrowIU _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
@@ -1532,9 +1532,9 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .withbor3 _ _ _ _ _ _ => rfl
   | .withload _ _ _ _ _ _ => rfl
   | .withswap _ _ _ _ _ => rfl
-  | .withbor1U _ _ _ _ _ _ _ => rfl
-  | .withbor2U _ _ _ _ _ _ _ => rfl
-  | .withbor3U _ _ _ _ _ _ _ _ => rfl
+  | .withbor1UD _ _ _ _ _ _ _ _ _ => rfl
+  | .withbor2UD _ _ _ _ _ _ _ _ _ => rfl
+  | .withbor3UD _ _ _ _ _ _ _ _ _ _ => rfl
   | .withloadU _ _ _ _ _ _ _ => rfl
   | .sliceBorrowMU _ _ _ _ _ _ _ => rfl
   | .sliceBorrowIU _ _ _ _ _ _ _ => rfl

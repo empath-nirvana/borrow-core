@@ -1576,9 +1576,9 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
   induction h with
   | force => exact rcE_forceE_var _ _
   | withI _ _ ihM ihN => exact rcE_withPair ihM ihN
-  | withbor1U _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
-  | withbor2U _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
-  | withbor3U _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | withbor1UD _ _ _ _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | withbor2UD _ _ _ _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | withbor3UD _ _ _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
   | sliceBorrowMU _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
   | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
   | foldImm => exact rcE_foldImmV _
