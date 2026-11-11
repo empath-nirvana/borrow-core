@@ -49,6 +49,32 @@ Stage `i` (0 ≤ i < n) reads wire `i` (type `A_i`, end `K_i`) and writes wire `
 
 `Ended(k)` keeps `k` when `K_{i+1}` is unrestricted, and is `Ended(·)` otherwise (review G3). The last stage has no `Ended`: `finish` consumes its `R`.
 
+**Rev 2.5 (L1 code size, 2026-11-11):** the generator uses one shared frame function per stage, and each list becomes a chain of calls to them. **This is covered as written:** L-region concerns the *dynamic* nest of `withStop` frames, and a call adds no handler or finaliser. Three conditions:
+1. each shared frame function installs exactly one `withStop_j` and does nothing else effectful;
+2. **one cancel region per list instance, wrapping the whole call chain.** One region per function would break (ii), because the latest error would win across regions;
+3. frames capture `State_j` at installation, and setters update states only between turns, never while a list over that stage is open.
+
+**Rev 2.4 (L1 build, 2026-11-11). The kernel fact:** `cancelTy` types a stage's cancel as performing its whole outer row, so an unforwarded capturable operation would need a ⊤ cancel row.
+- **(a) Capturable resumable outer operations are forwarded from every stage, the last included.**
+  - For i = n−1, `close_all`'s order (n−1 innermost, then n−2…0) equals the pass-through stop order, which is (c3′). Error selection (ii) is unchanged: one region, first error kept.
+  - §4's row "an outer op of i = n−1 passes through" becomes the `Fwd` row for every i.
+  - I2 and I4 cover it, and I5 is vacuous at AtFwd.
+- **(b) A `for` over a chain:** the last stage's outward yield is an external point, like AtFwd. The glue stores `AtYield κ_{n−1}` and performs the `for`'s site operation `(b, w)` under `close_all`.
+  - `break` drops the site's continuation, which cancels `close_all`: every stage stops downstream-first (Thm S, the `for`/`break` case).
+  - **Condition:** the `for`'s threaded state `w` goes out with `(b, w)` and comes back in the site's answer. It is never held in the glue across the outward yield.
+  - I1′ holds: the next turn resumes AtYield on its arm.
+
+**Rev 2.3 (L1 build, 2026-11-11):**
+- **Plain κ replaces BOXED-κ at `top`.** The cost is the #1082 refusal (a chain kept across a per-observation lend; §75 *Open*).
+- **AtYield, AtStop and AtFwd share one rest type,** with input `1 + (A + K)`, because the kernel refuses a `nu` variable under an inner `U`.
+- **New invariant (I1′), componentwise: the injection fed to a rest matches its state tag.**
+  - AtYield and AtStop are resumed on their arms (AtStop with `K = 1`).
+  - AtNext gets the item-or-end arm.
+  - AtFwd gets the answer's arm.
+
+  Every dispatch case preserves I1′.
+- **Unreachable branches.** `step_i`'s re-emitted `Next` on a no-item input at a next-rest, and the next-rest's cancel-and-drain branch, are unreachable under I1′, so they add no simulation case. They must stay unreachable: a cancel there would be an out-of-order stop. **As built:** typing them out isn't possible (one rest type is forced), so on an I1′ violation the next-rest *stalls* in a skip-only loop, with κ kept uncancelled. That is a Div the relation admits. A later close cancels κ in its normal position, so Thm S/X order holds even in the failure case. Both sites are marked `UNPROVED:`, citing I1′.
+
 **Rev 2.2 (surface's forwarding check, the core text now `corpus/core-pipe-connector.bc`: it gives `(i32[55], (i32[10], inr i32[3]))`, `live 0`, interp and Backend2; `core-pipe-cancel-order` traces `21`):** L1 forwards cancellable ops only, with no `FwdWait`/`forwardWait_i` (§3); N stores `AtFwd` and the stage resumes on the next turn; stage rows exclude the forwarded op ((Row)); the forward site's handler is outside the yield site's ((One-frame)); a source's `Ended` keeps `()` at `K = 1`; at n = 2, `close_up_1 = close_others_1` (stage 1 is last, so nothing is downstream of it).
 
 **Rev 2.1 (surface's first check, two-stage core text, all three programs check, `live 0`):**
@@ -110,7 +136,7 @@ The glue makes no other decisions. The last stage's ops, abortive ops and `must_
 - **L-handoff (`handoff_i`).** (Rev 2.1: the model's atomic handoff is split across two Cₙ turns, `handoff_{i+1}` then the next turn's `step_{i+1}` with the pending input. Between them the glue performs no op, so no cancel or effect can land there; the split is one model step plus a stutter, and R_n relates the pending input to the value in flight.) At `State_i = AtNext(κ')` (I5): `Yield(b, κ)` gives `AtYield(κ)` at `i−1` and `κ'` resumed with `inl b`, the model's atomic handoff (P1 (c4′)/(c10)); `Return(k)` gives `Ended(k)` plus `inr k`, the end delivery. A later `Next` at `Ended(k)` answers `inr k` again (G3).
 - **L-stop (`stop_i`).** Runs exactly σ_i's current model stop, once: a κ cancel for a suspended stage (its finalisers, cancel mode); for a not-started stage, its loop's close, the model's stop of a `Ready` stream (P1 §2's `stop` on an unstarted producer; N2); `()` at `Ended`.
 - **L-region (`withStop_i`).** A nest `withStop_{j₁}(… withStop_{j_m}(M))` runs M, then on unwind or cancel runs `stop_{j_m}, …, stop_{j₁}` (innermost first) in **one cancel region**, keeping the first error (`[cfin-raise]`; K2's `core-pipe-close`). The region's kept error is re-raised when it ends and, on an ordinary unwind, supersedes the pending one (§27). So each generated list gives its stages downstream-first with `head` of their errors: exactly `d ;; p` with `sel_ii`'s `head O_dp` for `close_others_i`, Thm X's list with `sel_cancel` for `close_all`, and P2's `stop()` region for `close_up_i`.
-- **L-forward (`forward_i`, a non-§29a resumable op, `i < n−1`).** Premises:
+- **L-forward (`forward_i`, a non-§29a resumable op, any `i`; rev 2.4).** Premises:
   - **(Fresh-site)** "the site is fresh per copy": no handler sits between the stage's fresh site and the connector's clause (site discipline, §18), with D7's conditions (the name is connector-local, absent from the outer row; the op is not `unr`).
   - **(Same-sig)** the fresh name's signature equals the outer op's (A, B, q, marker), so `Input_i` at `AtFwd` is the outer answer (G5a).
   - **(One-frame)** the storing clauses for stage `i`'s wire and fresh sites capture `κ_i` up to the same connector frame (G5c). Rev 2.2, as built: the forward site's handler sits **outside** the wire (yield) site's, two nested handlers per turn, and the rest stored at either site has **one type**, so `AtYield` and `AtFwd` hold interchangeable rests that `step_i` resumes the same way.
@@ -145,9 +171,9 @@ The glue makes no other decisions. The last stage's ops, abortive ops and `must_
 | `Next` at `i = 0` | — | impossible: the head is a source (D1), which never awaits | — |
 | `Yield`/`Return(k)`, `i < n−1` | L-handoff | atomic handoff on wire `i+1` | (I5): `i+1` leaves the suffix and runs |
 | `Return(r)`, `i = n−1` | L-finish | `run`'s end, Thm S's order | final |
-| `Fwd`, `i < n−1` | L-forward | the chain's external point (c3′)/(c8′) | (I2)/(I4): `AtFwd`, `close_all` |
+| `Fwd` (any `i`) | L-forward | the chain's external point (c3′)/(c8′) | (I2)/(I4): `AtFwd`, `close_all` |
+| the last stage's outward `yield` (a `for` over the chain) | L-forward (at the last wire) | the chain's external point; `break` cancels `close_all`, downstream-first (Thm S) | (I2)/(I4) as at `AtFwd`; `w` goes out with `(b, w)` |
 | `FwdWait`, `i < n−1` (not in L1) | L-forward-wait | as above; on cancel Thm X then `cancelled` | as above |
-| an outer op of `i = n−1` | — (passes through) | the last stage's own `Eff`; its stop branch is (c3′) with `i` most downstream, i.e. `close_others_{n−1}` around it, every stage downstream-first | unchanged |
 | `Stop`, any `i > 0` | L-region on `close_up_i` | P2's `stop()`: the upstream downstream-first, then resume with `K_i`; a kept error is a raise at `i` (next row) | `j < i` all `Ended` |
 | a raise from `i` | L-region on `close_others_i` | Thm R: `u_i` (`i`'s own frames, masked), then `d` = `n−1 … i+1`, then `p` = `i−1 … 0`, reported by `sel_ii` | final (propagates) |
 
