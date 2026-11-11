@@ -2,8 +2,6 @@
 -- #1053 (pipes L1 review), which never ends on main because `i` is only incremented after the
 -- `unwind`; here a separate counter `n`, incremented before it, bounds the loop to 3 iterations, so
 -- the program ends and shows both lost writes: `t * 100 + i` is 3 * 100 + 3.
---
--- KNOWN WRONG ANSWER (#1053): this prints i32[0]; the correct answer is i32[303]. Do not update this golden to "fix" it; fix #1053, then set the golden to the correct answer.
 fn go() -> i32 =
   let mut n = 0;
   let mut i = 0;

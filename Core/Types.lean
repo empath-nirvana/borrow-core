@@ -290,6 +290,10 @@ def scons {α : Type} (x : α) (f : Nat → α) : Nat → α
 
 def upS (σ : Nat → VTy) : Nat → VTy := scons (.tvar 0) (fun n => rename Nat.succ (σ n))
 
+/-- The simultaneous substitution of a list: variable `k` to the `k`-th, the variables above the
+list down by its length.  `[spec §79]` -/
+def substL (Ss : List VTy) (k : Nat) : VTy := Ss.getD k (.tvar (k - Ss.length))
+
 def subst (σ : Nat → VTy) : VTy → VTy
   | .unit => .unit
   | .tensor A B => .tensor (subst σ A) (subst σ B)
@@ -1423,6 +1427,126 @@ theorem CTy.stream_unroll (A : VTy) : (CTy.streamBody A).unroll = streamUnroll A
 
 theorem CTy.iter_unroll (A R R' : VTy) : (CTy.iterBody A R R').unroll = iterUnroll A R R' :=
   CTy.iterBody_instT A R R' _
+
+/-! ### Systems of codata equations  `[spec §79]`
+
+`νᵢ(X₀…Xₘ). C₀; …; Cₘ` is `CTy.nuSys m i Cs`, the bodies the `&`-spine `Cs`; in a body `U Xₖ`
+is the type variable `k` (`k ≤ m`).  Today's `νX. C` is `nuSys 0 0 C`, and every definition below
+is today's at `m = 0` (`SysOk 0 = NuOk`, `unrollS 0 _ = unroll`). -/
+
+/-- Every `Xₖ`, `k < n`, occurs in `A` only under `⊗`, `⊕` and `[@a]`. -/
+def VTy.PolyN (n : Nat) : VTy → Prop
+  | .tensor A B => A.PolyN n ∧ B.PolyN n
+  | .sum A B => A.PolyN n ∧ B.PolyN n
+  | .box _ A => A.PolyN n
+  | .tvar _ => True
+  | A => ∀ k, k < n → ¬ A.Occ k
+
+theorem VTy.noMut_of_polyN {n : Nat} : ∀ {A : VTy}, A.PolyN n → ∀ k, k < n → A.NoMut k
+  | .tensor _ _, h, k, hk => ⟨noMut_of_polyN h.1 k hk, noMut_of_polyN h.2 k hk⟩
+  | .sum _ _, h, k, hk => ⟨noMut_of_polyN h.1 k hk, noMut_of_polyN h.2 k hk⟩
+  | .box _ A, h, k, hk => noMut_of_polyN (A := A) h k hk
+  | .tvar _, _, _, _ => trivial
+  | .unit, _, _, _ | .zero, _, _, _ | .thunk _, _, _, _ | .code _ _ _, _, _, _ | .unk, _, _, _
+  | .int _, _, _, _ | .opq _, _, _, _ => trivial
+  | .ref _, h, k, hk | .imm _ _, h, k, hk | .mut _ _, h, k, hk | .bang _, h, k, hk
+  | .fam _, h, k, hk | .mu _, h, k, hk => VTy.noMut_of_not_occ _ (h k hk)
+
+namespace CTy
+
+/-- An effectful observation over `n` variables (`EffLeaf` at `PolyN n`). -/
+def EffLeafS (n : Nat) : CTy → Prop
+  | .ret A => A.PolyN n
+  | .eff _ _ _ A B _ _ C => A.Cl 0 ∧ B.Cl 0 ∧ EffLeafS n C
+  | _ => False
+
+/-- An observation tree over `n` variables (`NuLeaf` at `PolyN n`). -/
+def NuLeafS (n : Nat) : CTy → Prop
+  | .ret A => A.PolyN n
+  | .amp C D => NuLeafS n C ∧ NuLeafS n D
+  | .eff n' i q A B fin rc C => EffLeafS n (.eff n' i q A B fin rc C)
+  | .arr A D => A.Cl 0 ∧ NuLeafS n D
+  | .all _ _ D => NuLeafS n D
+  | _ => False
+
+/-- A body over `n` variables: a `&` of two observation trees. -/
+def NuShapeS (n : Nat) : CTy → Prop
+  | .amp C D => NuLeafS n C ∧ NuLeafS n D
+  | _ => False
+
+/-- The spine of `k + 1` bodies over `n` variables. -/
+def SysShapeAt (n : Nat) : Nat → CTy → Prop
+  | 0, C => NuShapeS n C
+  | k + 1, .amp C D => NuShapeS n C ∧ SysShapeAt n k D
+  | _ + 1, _ => False
+
+/-- The shape of a system of `m + 1` equations. -/
+abbrev SysShape (m : Nat) (Cs : CTy) : Prop := SysShapeAt (m + 1) m Cs
+
+/-- `'x` is bound by a `∀` of an observation tree of some body of the spine of `k + 1`. -/
+def SysLeafBinds (x : LifeVar) : Nat → CTy → Prop
+  | 0, C => LeafBinds x C
+  | k + 1, .amp C D => LeafBinds x C ∨ SysLeafBinds x k D
+  | _ + 1, _ => False
+
+/-- **Positivity of a system**: today's `NuOk` at one equation; at `m + 1` the system's shape
+and **system-wide binder freshness**, no lifetime bound by a `∀` leaf of any body free in any
+body.  `[spec §79]` -/
+def SysOk : Nat → CTy → Prop
+  | 0, C => C.NuOk
+  | m + 1, Cs => SysShape (m + 1) Cs ∧ ∀ x, SysLeafBinds x (m + 1) Cs → ¬ CFree x Cs
+
+/-- The `j`-th body of the spine of `m + 1` bodies. -/
+def body : Nat → Nat → CTy → CTy
+  | 0, _, C => C
+  | _ + 1, 0, .amp C _ => C
+  | m + 1, j + 1, .amp _ D => body m j D
+  | _ + 1, _, _ => .top
+
+/-- `U Xₖ` for each equation `k ≤ m`: `[U ν₀, …, U νₘ]`. -/
+def sysThunks (m : Nat) (Cs : CTy) : List VTy :=
+  (List.range (m + 1)).map fun j => .thunk (.nuSys m j Cs)
+
+/-- `C[S₀/X₀, …, Sₘ/Xₘ]` at the observations of a tree: one simultaneous substitution, the
+variables above the list shifted down by its length. -/
+def instTL (Ss : List VTy) : CTy → CTy
+  | .ret A => .ret (A.subst (VTy.substL Ss))
+  | .amp C D => .amp (instTL Ss C) (instTL Ss D)
+  | .eff n i q A B fin rc C => .eff n i q A B fin rc (instTL Ss C)
+  | .arr A C => .arr A (instTL Ss C)
+  | .all x b C => .all x b (instTL Ss C)
+  | C => C
+
+/-- The unrolling of `νᵢ`: today's at one equation, `Cᵢ[U ν₀/X₀, …, U νₘ/Xₘ]` at `m + 1`. -/
+def unrollS : Nat → Nat → CTy → CTy
+  | 0, _, C => C.unroll
+  | m + 1, i, Cs => instTL (sysThunks (m + 1) Cs) (body (m + 1) i Cs)
+
+/-- The type variable `k` occurs in a leaf type of the tree `D`. -/
+def Mentions (k : Nat) : CTy → Prop
+  | .ret A => A.Occ k
+  | .amp C D => Mentions k C ∨ Mentions k D
+  | .eff _ _ _ _ _ _ _ C => Mentions k C
+  | .arr _ C | .all _ _ C => Mentions k C
+  | _ => False
+
+/-- `unfoldᵢ`'s freshness, per pair: wherever `Xₖ` occurs in `Cⱼ`, no lifetime bound by a `∀`
+leaf of `Cⱼ` is free in `Sₖ`. -/
+def SysFresh (m : Nat) (Cs : CTy) (Ss : List VTy) : Prop :=
+  ∀ j k, j ≤ m → k ≤ m → (body m j Cs).Mentions k → (body m j Cs).BindsFresh (Ss.getD k .unit)
+
+/-- The premise of `νᵢ`'s rules: today's `NuOk` at the one equation `ν₀`, and at a system of
+`m + 2` equations an index in range and the system's positivity.  `[spec §79]` -/
+def SysOkAt : Nat → Nat → CTy → Prop
+  | 0, 0, C => C.NuOk
+  | 0, _ + 1, _ => False
+  | m + 1, i, Cs => i ≤ m + 1 ∧ SysOk (m + 1) Cs
+
+theorem sysOk_zero {C : CTy} : SysOk 0 C ↔ C.NuOk := Iff.rfl
+
+theorem unrollS_zero (i : Nat) (C : CTy) : unrollS 0 i C = C.unroll := rfl
+
+end CTy
 
 /-! ### Free lifetime variables under type substitution -/
 

@@ -118,8 +118,8 @@ theorem CTy.alphaB_sound : ∀ {ρ : List (LifeVar × LifeVar)} {δ δ' : LSub} 
       cases C' <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq] at hα
       exact ⟨CTy.alphaB_sound C _ h hα.1, CTy.alphaB_sound D _ h hα.2⟩
   | _, _, _, .nuSys _ _ C, C', h, hα => by
-      cases C' <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq] at hα
-      exact CTy.alphaB_sound C _ h hα.2
+      cases C' <;> simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, reduceCtorEq] at hα
+      exact ⟨hα.1.1, hα.1.2, CTy.alphaB_sound C _ h hα.2⟩
   | _, _, _, .all x b C, C', h, hα => by
       cases C' with
       | all x' b' C' =>

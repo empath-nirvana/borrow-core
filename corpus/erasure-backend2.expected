@@ -188,6 +188,10 @@ kernel-poly-id erased handles 1 performs 0 raises 1 left 0 0
 kernel-recursive-yield erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
 kernel-two-callees erased handles 0 performs 0 raises 0 machines 1 suspends 3 left 0 0
 kernel-two-callees-tail erased handles 1 performs 3 raises 0 left 0 0
+mut-after-unwind-exits erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-for-gen erased handles 0 performs 0 raises 0 machines 2 suspends 1 left 0 0
+mut-after-unwind-loop-in-n erased handles 0 performs 0 raises 0 left 0 0
+mut-cancel-unwind-region erased handles 1 performs 0 raises 0 machines 1 suspends 1 left 0 0
 parse-i64 erased handles 16 performs 0 raises 5 left 0 0
 kernel-cancel-now erased handles 0 performs 0 raises 0 machines 1 suspends 1 left 0 0
 kernel-deep-gen-plain erased handles 1 performs 1 raises 0 machines 1 suspends 2 left 0 0

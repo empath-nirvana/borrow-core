@@ -129,6 +129,20 @@ def boundRes? : Comp → Option (Span × Ident × Option VTy × Val × Comp)
   | .bind bsp r A (.ret _ R@(.app _ (.sugar _ .forRes) _)) N => some (bsp, r, A, R, N)
   | _ => none
 
+/-- The right-nested tuple of the variables `xs`. -/
+def tupleOf (sp : Span) : List String → Val
+  | [] => .unit sp
+  | [x] => .var sp x
+  | x :: xs => .pair sp (.var sp x) (tupleOf sp xs)
+
+/-- The variables `xs` bound again from `v`, their tuple (`tupleOf`), then `M`. -/
+def untuple (sp : Span) (v : String) : List String → Comp → Comp
+  | [], M => .letUnit sp (.var sp v) M
+  | [x], M => .bind sp ⟨x, sp⟩ none (.ret sp (.var sp v)) M
+  | x :: xs, M =>
+    let r := v ++ "r"
+    .letPair sp ⟨x, sp⟩ ⟨r, sp⟩ (.var sp v) (untuple sp r xs M)
+
 /-- `M`, which runs while the continuation `k` is live and not yet used, with `k` cancelled exactly
 once on each of its paths that does not use it, as Rust drops a value: at the end of the path,
 and on the way out of an abort or a cancel that passes through it.
@@ -147,9 +161,11 @@ and on the way out of an abort or a cancel that passes through it.
   aborts, or its continuation is cancelled, the finaliser cancels `k` and `N` does not run; when
   `M₁` answers, `N` runs with `k` still live. Any other head is left as it is. A region of the
   clause's own, `x <- M₁ unwind (D); N`, whose body does not mention `k` is such a head as a whole,
-  so its own finaliser `D` runs first, then `k`'s cancel (inner regions unwind first); so is a loop
-  whose body can abort; a loop whose value is bound is wrapped with the binding of its value
-  (`boundRes?`), so the head is the loop as elaborated. (A loop's `break` and `continue` stay in
+  whether or not `M₁` can abort (`[then]`'s finaliser and rest share one context, so both must
+  account for `k`), so its own finaliser `D` runs first, then `k`'s cancel (inner regions unwind
+  first); so is a loop whose body can abort, handing on what it writes (the parser's
+  `LoopInfo.writes`, SPEC §41 R3), which the rest binds again; a loop whose value is bound is
+  wrapped with the binding of its value (`boundRes?`), so the head is the loop as elaborated. (A loop's `break` and `continue` stay in
   the clause; a `return` in a clause is refused before.)
 
 Exactly once: `k` is live from its binding until the first of a head's abort (its finaliser
@@ -196,12 +212,14 @@ def cancelAtEnds (wrapHead : Comp → Bool) (sp : Span) (k : Ident)
     | .unwind usp x A M₁ D N =>
       if uses D then M
       else if uses M₁ then .unwind usp x A (go M₁) D N
-      else if wrapHead M₁ then
-        -- The region as a head: its finaliser `D` first, then `k`'s cancel.
+      else
+        -- The region as a head: its finaliser `D` first, then `k`'s cancel. Whether or not `M₁`
+        -- can abort: `[then]` gives the rest `N` and the finaliser one context, so a finaliser
+        -- that does not cancel `k` while `N` uses it is refused; the region's own `D` alone never
+        -- cancels `k`.  `[spec §27]`
         let x' : Ident := ⟨s!"fx_reg_{k.name}", usp⟩
         let R : Comp := .unwind usp x' A M₁ D (.ret usp (.var usp x'.name))
         .unwind usp x A R cancelK (go N)
-      else .unwind usp x A M₁ D (go N)
     | .loop lsp ℓ src V M₁ N =>
       if usesV V || uses M₁ then M
       else if wrapHead M₁ then
@@ -209,13 +227,28 @@ def cancelAtEnds (wrapHead : Comp → Bool) (sp : Span) (k : Ident)
         -- value is bound (`let r = for …; N₀`) keeps the binding of its value with it, so that the
         -- head is the loop and its value as the typed elaboration elaborates them, and the rest
         -- `N₀` binds `r` to the head's answer.
+        -- The head hands on what the loop writes (`ℓ.writes`, the parser's, SPEC §41 R3) beside
+        -- its value, and the rest binds them again: the loop's writes are after it, in the rest.
+        let ws := ℓ.writes.map (·.name)
+        let p : Ident := ⟨s!"fx_lw_{k.name}", lsp⟩
         match boundRes? N with
         | some (bsp, r, A, R, N₀) =>
-          let L : Comp := .loop lsp ℓ src V M₁ (.bind bsp r A (.ret bsp R) (.ret bsp (.var bsp r.name)))
-          .unwind lsp r A L cancelK (go N₀)
+          if ws.isEmpty then
+            let L : Comp := .loop lsp ℓ src V M₁ (.bind bsp r A (.ret bsp R) (.ret bsp (.var bsp r.name)))
+            .unwind lsp r A L cancelK (go N₀)
+          else
+            let L : Comp := .loop lsp ℓ src V M₁ (.bind bsp r A (.ret bsp R)
+              (.ret bsp (.pair bsp (.var bsp r.name) (tupleOf bsp ws))))
+            let q : Ident := ⟨s!"fx_lr_{k.name}", lsp⟩
+            .unwind lsp p none L cancelK
+              (.letPair lsp r q (.var lsp p.name) (untuple lsp q.name ws (go N₀)))
         | none =>
           let r : Ident := ⟨s!"fx_loop_{k.name}", lsp⟩
-          .unwind lsp r none (.loop lsp ℓ src V M₁ (.ret lsp (.unit lsp))) cancelK (go N)
+          if ws.isEmpty then
+            .unwind lsp r none (.loop lsp ℓ src V M₁ (.ret lsp (.unit lsp))) cancelK (go N)
+          else
+            .unwind lsp p none (.loop lsp ℓ src V M₁ (.ret lsp (tupleOf lsp ws))) cancelK
+              (untuple lsp p.name ws (go N))
       else .loop lsp ℓ src V M₁ (go N)
     | .ret rsp (.thunkv tsp N) =>
       if inState then .ret rsp (.thunkv tsp (cancelAtEnds wrapHead sp k false n N))
@@ -285,6 +318,43 @@ def perfC : Nat → List Nat → Comp → List (Nat × Nat) × List String
       two ([], [siteMark]) (two (two (perfV k inner hr) (perfV k inner hc)) (perfC k (n :: inner) M))
     | .unwind _ _ _ M D N => two (perfC k inner M) (two (perfC k inner D) (perfC k inner N))
     | .top _ => ([], [])
+end
+
+mutual
+/-- A value runs an `x <- M unwind (D); N` in place: in a `run`.  `[spec §27]` -/
+def thenInV : Nat → Val → Bool
+  | 0, _ => false
+  | k + 1, V => match V with
+    | .run _ M => thenInC k M
+    | .pair _ V W | .app _ V W => thenInV k V || thenInV k W
+    | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => thenInV k V
+    | _ => false
+
+/-- A computation runs an `x <- M unwind (D); N` (`[then]`) in place, outside the closures it
+builds. A head of a clause's path that runs one is wrapped as a head that can abort is
+(`Sugar.cancelDropped`): `x <- M₁ unwind (cancel k); N`, so that `κ` is not live across the
+`[then]` inside it. When `M₁` can neither abort nor capture, the inserted finaliser never runs.
+`[spec §27]`
+
+UNPROVED: the wrap is an over-approximation. A `[then]` in a head whose row has an abortive
+operation is where the kernel asks the finaliser to account for `κ` (a clause's `κ` live across it
+is refused, the mut-combos `splits` row's case); one in a head that can neither abort nor capture
+the kernel accepts with `κ` live across it. Why it is safe: an over-count adds a finaliser that
+never fires, which the kernel checks as any `[then]`; an under-count (a `[then]` this walk misses,
+inside a closure the head forces) leaves `κ` live across it, which the kernel refuses (a refusal,
+never a wrong program). -/
+def thenInC : Nat → Comp → Bool
+  | 0, _ => false
+  | k + 1, M => match M with
+    | .unwind .. => true
+    | .ret _ V | .absurd _ V => thenInV k V
+    | .bind _ _ _ M N | .with_ _ M N => thenInC k M || thenInC k N
+    | .letUnit _ V M | .letPair _ _ _ V M => thenInV k V || thenInC k M
+    | .case _ V _ M _ N | .loop _ _ _ V M N => thenInV k V || thenInC k M || thenInC k N
+    | .proj _ _ M | .inst _ M _ | .nuIn _ M | .nuOut _ M | .ascribe _ M _ | .app _ M _
+    | .handle _ _ _ _ _ M | .withbor2r _ _ _ _ _ _ _ _ M => thenInC k M
+    | _ => false
 end
 
 /-- The operations `n.i` a computation performs, by the one walk both the inference and the

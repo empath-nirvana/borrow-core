@@ -730,11 +730,14 @@ corpus/loop-handler-binder.bc 1.0 cancellable abortive: branch; agree
 corpus/loop-handler-binder.bc 3.0 cancellable abortive: branch; agree
 corpus/loop-handler-binder.bc 2.0 cancellable abortive: branch; agree
 corpus/loop-row-answer.bc 1.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/mut-after-unwind-for-gen.bc 1.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/mut-after-unwind-generator.bc 1.0 cancellable tail: direct; agree
 corpus/mut-cancel-loop-for-value.bc 1.0 cancellable abortive: branch; agree
 corpus/mut-cancel-loop-for-value.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/mut-cancel-loop-for.bc 1.0 cancellable abortive: branch; agree
 corpus/mut-cancel-loop-for.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/mut-cancel-unwind-region.bc 1.0 cancellable abortive: -; agree
+corpus/mut-cancel-unwind-region.bc 2.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/mut-control-assign-raise.bc 1.0 cancellable abortive: branch; agree
 corpus/mut-control-call-order.bc 1.0 cancellable abortive: branch; agree
 corpus/mut-control-exhausted.bc 1.0 cancellable abortive: branch; agree

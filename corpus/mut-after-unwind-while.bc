@@ -1,7 +1,5 @@
 -- `let mut` writes in the continuation of `x <- M unwind (N)` inside a `while` body: the loop
 -- adds each `x` (1, 2, 3) to `t`. Probe u1 of #1053 (c10h of the pipes L1 review).
---
--- KNOWN WRONG ANSWER (#1053): this prints i32[0]; the correct answer is i32[6]. Do not update this golden to "fix" it; fix #1053, then set the golden to the correct answer.
 fn go() -> i32 =
   let mut i = 0;
   let mut t = 0;

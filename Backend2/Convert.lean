@@ -2750,8 +2750,8 @@ def constArity : TExpr → Option Nat
 box and the lifetime coercions, `ν`'s two coercions. -/
 def transparent? : TExpr → Option TExpr
   | .bangE _ _ _ t | .boxI _ _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t | .mutSub _ _ _ _ _ t
-  | .ofRet _ _ _ t | .ret _ _ _ t | .thunkV _ _ _ t | .bangThunkV _ _ _ t | .nuIn _ _ _ t
-  | .nuOut _ _ _ t => some t
+  | .ofRet _ _ _ t | .ret _ _ _ t | .thunkV _ _ _ t | .bangThunkV _ _ _ t | .nuIn _ _ _ _ _ t
+  | .nuOut _ _ _ _ _ t => some t
   -- `[α]`: a type renamed up to its lifetime binders' names, which no lowered type reads.
   | .alpha _ _ _ _ t => some t
   -- The derived nodes over a term the conversion reads as it reads the term (SPEC §57).

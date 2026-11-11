@@ -261,12 +261,12 @@ theorem unroll {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (h : TTied p s Δ Γ
   ⟨fun hn Ξ hΞ => .unroll (h.1 hn Ξ hΞ), .unroll h.2⟩
 
 theorem nuIn {p : Pins} {s : CRow} {t : TExpr} {C : CCTy} (hC : C.NuOk)
-    (h : TTied p s Δ Γ t (.comp C.unroll)) : TTied p s Δ Γ (.nuIn i (.comp (.nu C)) C t) (.comp (.nu C)) :=
-  ⟨fun hn Ξ hΞ => .nuIn hC (h.1 hn Ξ hΞ), .nuIn hC h.2⟩
+    (h : TTied p s Δ Γ t (.comp C.unroll)) : TTied p s Δ Γ (.nuIn i (.comp (.nu C)) 0 0 C t) (.comp (.nu C)) :=
+  ⟨fun hn Ξ hΞ => .nuIn (m := 0) (i := 0) hC (h.1 hn Ξ hΞ), .nuIn (m := 0) (i := 0) hC h.2⟩
 
 theorem nuOut {p : Pins} {s : CRow} {t : TExpr} {C : CCTy} (hC : C.NuOk)
-    (h : TTied p s Δ Γ t (.comp (.nu C))) : TTied p s Δ Γ (.nuOut i (.comp C.unroll) C t) (.comp C.unroll) :=
-  ⟨fun hn Ξ hΞ => .nuOut hC (h.1 hn Ξ hΞ), .nuOut hC h.2⟩
+    (h : TTied p s Δ Γ t (.comp (.nu C))) : TTied p s Δ Γ (.nuOut i (.comp C.unroll) 0 0 C t) (.comp C.unroll) :=
+  ⟨fun hn Ξ hΞ => .nuOut (m := 0) (i := 0) hC (h.1 hn Ξ hΞ), .nuOut (m := 0) (i := 0) hC h.2⟩
 
 /-- `[α]`: the judgment up to the names of its types' lifetime binders.  `[spec §3]` -/
 theorem alpha {p : Pins} {s : CRow} {t : TExpr} {j j' : Jdg} (hα : j.alphaB j' = true)

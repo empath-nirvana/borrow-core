@@ -334,19 +334,19 @@ theorem gN_noOwn {δ : LSub} {Θ : LocTy} {n : Nat} :
 /-! ### G12 at a conclusion that is not `F`/`F_Σ` -/
 
 /-- **One unfolding may assume its resource valid**: `cN_of_valid`'s induction on the tree. -/
-theorem cBN_of_valid (S : VTy) (Rc : CandN) : ∀ (D : CTy) (δ : LSub) (Θ : LocTy)
+theorem cBN_of_valid (η : Option (Nat → TEntN)) : ∀ (D : CTy) (δ : LSub) (Θ : LocTy)
     (c : Loc → Option Life) (n : Nat) (ls : List SRec) (e : Expr) (ρ : WRes),
-    (ResU.Valid ρ → cBN (ℍ := ℍ) S Rc D δ Θ c n ls e ρ) → cBN (ℍ := ℍ) S Rc D δ Θ c n ls e ρ
+    (ResU.Valid ρ → cBNP (ℍ := ℍ) η D δ Θ c n ls e ρ) → cBNP (ℍ := ℍ) η D δ Θ c n ls e ρ
   | .ret _, _, _, _, _, _, _, _, h => fun lo => erwpK_of_valid fun hv => h hv lo
   | .arr _ D, δ, Θ, _, _, ls, _, _, h => fun c' k hk v ρv ρ' hcomp hv hcon =>
-      cBN_of_valid S Rc D δ Θ c' k ls _ ρ'
+      cBN_of_valid η D δ Θ c' k ls _ ρ'
         (fun hv' => h (ResU.Valid.split hcomp hv').1 c' k hk v ρv ρ' hcomp hv hcon)
   | .amp C D, δ, Θ, c, n, ls, _, ρ, h =>
-      ⟨cBN_of_valid S Rc C δ Θ c n ls _ ρ (fun hv => (h hv).1),
-        cBN_of_valid S Rc D δ Θ c n ls _ ρ (fun hv => (h hv).2)⟩
+      ⟨cBN_of_valid η C δ Θ c n ls _ ρ (fun hv => (h hv).1),
+        cBN_of_valid η D δ Θ c n ls _ ρ (fun hv => (h hv).2)⟩
   | .top, _, _, _, _, _, _, _, _ => trivial
   | .all x _ D, δ, Θ, c, n, ls, _, ρ, h => fun α hα =>
-      cBN_of_valid S Rc D (δ.extend x α) Θ c n ls _ ρ (fun hv => h hv α hα)
+      cBN_of_valid η D (δ.extend x α) Θ c n ls _ ρ (fun hv => h hv α hα)
   | .nuSys _ _ _, _, _, _, _, _, _, _, _ => trivial
   | .eff _ _ _ _ _ _ _ _, _, _, _, _, _, _, _, h => fun lo => erwpK_of_valid fun hv => h hv lo
 
@@ -369,10 +369,13 @@ theorem cN_of_valid : ∀ (C : CTy) (δ : LSub) (Θ : LocTy)
   | .top, _, _, _, _, _, _, _, _ => trivial
   | .all x _ C, δ, Θ, c, n, ls, _, ρ, h => fun α hα =>
       cN_of_valid C (δ.extend x α) Θ c n ls _ ρ (fun hv => h hv α hα)
-  | .nuSys _ _ C, δ, Θ, c, n, ls, e, ρ, h => fun hS => by
+  | .nuSys (m + 1) i Cs, δ, Θ, c, n, ls, e, ρ, h => fun hi hS =>
+      (cN_nuS_unfold hS hi δ Θ c n ls e ρ).mpr (cBN_of_valid _ _ δ Θ c n ls e ρ fun hv =>
+        (cN_nuS_unfold hS hi δ Θ c n ls e ρ).mp (h hv)) hi hS
+  | .nuSys 0 _ C, δ, Θ, c, n, ls, e, ρ, h => fun hS => by
       refine ⟨fun Θ c n ls e ρ => ResU.Valid ρ → nuCand (ℍ := ℍ) C δ Θ c n ls e ρ, ?_, h⟩
       intro Θ' c' k ls' e' ρ' hR
-      refine cBN_of_valid _ _ C δ Θ' c' k ls' e' ρ' fun hv => ?_
+      refine cBN_of_valid _ C δ Θ' c' k ls' e' ρ' fun hv => ?_
       exact cBN_mono (R' := fun Θ c n ls e ρ => ResU.Valid ρ → nuCand (ℍ := ℍ) C δ Θ c n ls e ρ)
         (fun _ _ _ _ _ _ _ h'' _ => h'') hS.nuLeaf δ Θ' c' k ls' e' ρ'
         (cN_nu_out hS δ Θ' c' k ls' e' ρ' (hR hv))
@@ -402,15 +405,15 @@ theorem erwpK_bind_frame {ι : Type} {V : ι → ι → Prop} {Φ : ι → LocFa
 /-! ### C2: bind at every computation type -/
 
 /-- **Bind at one unfolding of an observation tree** (Core's `cB_bind`): `cN_bind`'s induction. -/
-theorem cBN_bind (S : VTy) (Rc : CandN) : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down →
+theorem cBN_bind (η : Option (Nat → TEntN)) : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down →
     ∀ (K : Kont) (M : Expr) (P : PostN), P.Down → ∀ (R : Nat → WRes → Prop),
     (∀ k k' ρ, k' ≤ k → R k ρ → R k' ρ) →
     (∀ (c : Loc → Option Life) k ls' (v : Val) (σ₁ σ₂ σ : WRes), ResU.CompS σ₁ σ₂ σ →
-      P k ls' v σ₁ → R k σ₂ → ConsistentX c σ → cBN (ℍ := ℍ) S Rc C δ Θ c k ls' (K.plug v.1) σ) →
+      P k ls' v σ₁ → R k σ₂ → ConsistentX c σ → cBNP (ℍ := ℍ) η C δ Θ c k ls' (K.plug v.1) σ) →
     ∀ (c : Loc → Option Life) (n : Nat) (ls : List SRec) (ρ₁ ρ₂ ρ : WRes),
       ResU.CompS ρ₁ ρ₂ ρ →
       (∀ c', ConsistentX c' ρ₁ → erwp (ℍ := ℍ) (Θ.view c') (opTableN OpTabN.empty) P n ls M ρ₁) →
-      R n ρ₂ → ConsistentX c ρ → cBN (ℍ := ℍ) S Rc C δ Θ c n ls (K.plug M) ρ
+      R n ρ₂ → ConsistentX c ρ → cBNP (ℍ := ℍ) η C δ Θ c n ls (K.plug M) ρ
   | .ret _, _, Θ, hΘ, K, _, _, _, R, hR, h, c, n, _, _, _, _, hcρ, hM, hR₂, hc =>
       fun lo => erwpK_of_valid fun hv => erwpK_bind_frame (Φ := fun z : KW => z.Θ.view z.c)
         (x := (⟨Θ, c, lo⟩ : KW)) (fun _ => opTableK_local _ _)
@@ -426,7 +429,7 @@ theorem cBN_bind (S : VTy) (Rc : CandN) : ∀ (C : CTy) (δ : LSub) (Θ : LocTy)
   | .arr A C, δ, Θ, hΘ, K, M, P, hP, R, hR, h, _, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, _ =>
       fun c' k hk v ρv ρ' hcomp hv hcon => by
         obtain ⟨y, hy, hyx⟩ := compS_reassoc hcρ hcomp
-        refine cBN_bind S Rc C δ Θ hΘ (.appL K v) M P hP
+        refine cBN_bind η C δ Θ hΘ (.appL K v) M P hP
           (fun j σ => ∃ a b, ResU.CompS a b σ ∧ R j a ∧ vN (ℍ := ℍ) A δ Θ j v b)
           (fun j j' σ hj ⟨a, b, hab, hRa, hvb⟩ => ⟨a, b, hab, hR j j' a hj hRa, vN_le hj hvb⟩)
           (fun c'' j ls' w σ₁ σ₂ σ' hcσ hPw ⟨a, b, hab, hRa, hvb⟩ hcon' => ?_)
@@ -435,19 +438,19 @@ theorem cBN_bind (S : VTy) (Rc : CandN) : ∀ (C : CTy) (δ : LSub) (Θ : LocTy)
             (opTableN_down OpTabN.empty_down) hP hk (hM c'' hc''))
           ⟨ρ₂, ρv, hy, hR n k ρ₂ hk hR₂, hv⟩ hcon
         obtain ⟨z, hz, hzσ⟩ := compS_reassoc' hab hcσ
-        refine cBN_of_valid S Rc C δ Θ c'' j ls' _ σ' fun hv' => ?_
+        refine cBN_of_valid η C δ Θ c'' j ls' _ σ' fun hv' => ?_
         exact h c'' j ls' w σ₁ a z hz hPw hRa (consistentX_left hzσ hcon' hv') c'' j le_rfl v b σ'
           hzσ hvb hcon'
   | .amp C D, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc =>
-      ⟨cBN_bind S Rc C δ Θ hΘ (.appL K _) M P hP R hR
+      ⟨cBN_bind η C δ Θ hΘ (.appL K _) M P hP R hR
           (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' => (h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ').1)
           c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc,
-        cBN_bind S Rc D δ Θ hΘ (.appL K _) M P hP R hR
+        cBN_bind η D δ Θ hΘ (.appL K _) M P hP R hR
           (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' => (h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ').2)
           c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc⟩
   | .top, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => trivial
   | .all x _ C, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc =>
-      fun α hα => cBN_bind S Rc C (δ.extend x α) Θ hΘ (.appL K .unit) M P hP R hR
+      fun α hα => cBN_bind η C (δ.extend x α) Θ hΘ (.appL K .unit) M P hP R hR
         (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' => h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' α hα)
         c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc
   | .nuSys _ _ _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => trivial
@@ -509,8 +512,13 @@ theorem cN_bind : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down →
       fun α hα => cN_bind C (δ.extend x α) Θ hΘ (.appL K .unit) M P hP R hR
         (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' => h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' α hα)
         c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc
-  | .nuSys _ _ C, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc => fun hS =>
-      (cN_nu_unfold hS δ Θ c n ls _ ρ).mpr (cBN_bind _ _ C δ Θ hΘ K M P hP R hR
+  | .nuSys (m + 1) i Cs, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc =>
+      fun hi hS => (cN_nuS_unfold hS hi δ Θ c n ls _ ρ).mpr (cBN_bind _ _ δ Θ hΘ K M P hP R hR
+        (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' =>
+          (cN_nuS_unfold hS hi δ Θ c' k ls' _ σ).mp (h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ'))
+        c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc) hi hS
+  | .nuSys 0 _ C, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc => fun hS =>
+      (cN_nu_unfold hS δ Θ c n ls _ ρ).mpr (cBN_bind _ C δ Θ hΘ K M P hP R hR
         (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' =>
           (cN_nu_unfold hS δ Θ c' k ls' _ σ).mp (h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ'))
         c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc) hS
@@ -569,6 +577,11 @@ theorem host_call_sound (op : HostOp) {δ : LSub} {Θ Θ' : LocTy} {n n' : Nat} 
   obtain ⟨hρ, r, hr, hres⟩ := BoCa.Fig16.LogRel.Core.host_call_sound ℍ op (ls := []) (ls' := [])
     ((vN_iff_vP (hostArg_isFO op)).mp h)
   exact ⟨hρ, r, hr, (vN_iff_vP (hostRes_isFO op)).mpr hres⟩
+
+/-- A system's environment is related to itself at every pair of substitutions.  `[spec §79]` -/
+theorem envEqN_nuS (m : Nat) (Rs : Nat → CandN) (δ δ' : LSub) :
+    EnvEqN (nuEnvNS m Rs) (nuEnvNS m Rs) δ δ' := fun n => by
+  by_cases hn : n ≤ m <;> simp [tEnvN, nuEntS, hn, TyEq]
 
 mutual
 /-- **`𝒱⟦A⟧` reads a type only up to `TyEq`** (Core's `vC_tyEq`, `vCE_tyEq`). -/
@@ -719,30 +732,30 @@ theorem vOE_tyEq : ∀ (S : VTy) {S' : VTy} {δ δ' : LSub} (η η' : Option (Na
   termination_by structural x => x
 /-- **One unfolding reads a type only up to `CTyEq`** (Core's `cB_tyEq`), at closed types for
 `X` related at every pair of substitutions. -/
-theorem cBN_tyEq (T T' : VTy) (R : CandN) : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub},
-    CTyEq C δ C' δ' → (∀ δ₁ δ₂, TyEq T δ₁ T' δ₂) →
-    cBN (ℍ := ℍ) T R C δ = cBN (ℍ := ℍ) T' R C' δ'
+theorem cBN_tyEq (η η' : Option (Nat → TEntN)) : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub},
+    CTyEq C δ C' δ' → (∀ δ₁ δ₂, EnvEqN η η' δ₁ δ₂) →
+    cBNP (ℍ := ℍ) η C δ = cBNP (ℍ := ℍ) η' C' δ'
   | .ret A, C', _, _, h, hT => by
       cases C' <;> simp only [CTyEq] at h
-      have ih := vNE_tyEq A _ _ h (envEqN_nu (P := thunkRN R) (hT _ _))
+      have ih := vNE_tyEq A _ _ h (hT _ _)
       funext Θ c n ls e ρ; simp only [cBNP, ih]
   | .arr A C, C', _, _, h, hT => by
       cases C' <;> simp only [CTyEq] at h
       have ihA := vNE_tyEq A none none h.1 (envEqN_none _ _)
-      have ihC := cBN_tyEq T T' R C h.2 hT
+      have ihC := cBN_tyEq η η' C h.2 hT
       funext Θ c n ls e ρ; simp only [cBNP, ihA, ihC]
   | .amp C D, C', _, _, h, hT => by
       cases C' <;> simp only [CTyEq] at h
-      have ihC := cBN_tyEq T T' R C h.1 hT
-      have ihD := cBN_tyEq T T' R D h.2 hT
+      have ihC := cBN_tyEq η η' C h.1 hT
+      have ihD := cBN_tyEq η η' D h.2 hT
       funext Θ c n ls e ρ; simp only [cBNP, ihC, ihD]
   | .top, C', _, _, h, _ => by cases C' <;> simp only [CTyEq] at h; rfl
   | .nuSys _ _ C, C', _, _, h, _ => by cases C' <;> simp only [CTyEq] at h; rfl
   | .all x b C, C', δ, δ', h, hT => by
       cases C' <;> simp only [CTyEq] at h
       rename_i x' b' C'
-      have hC : ∀ α : Life, cBN (ℍ := ℍ) T R C (δ.extend x α) = cBN (ℍ := ℍ) T' R C' (δ'.extend x' α) :=
-        fun α => cBN_tyEq T T' R C (h.2 α) hT
+      have hC : ∀ α : Life, cBNP (ℍ := ℍ) η C (δ.extend x α) = cBNP (ℍ := ℍ) η' C' (δ'.extend x' α) :=
+        fun α => cBN_tyEq η η' C (h.2 α) hT
       have hL : ∀ α : Life, LtLife δ b α = LtLife δ' b' α := by
         intro α; unfold LtLife; rw [h.1]
       funext Θ c n ls e ρ; simp only [cBNP, hC, hL]
@@ -753,26 +766,56 @@ theorem cBN_tyEq (T T' : VTy) (R : CandN) : ∀ (C : CTy) {C' : CTy} {δ δ' : L
       have ihB := vNE_tyEq B none none hB (envEqN_none _ _)
       have ihF := finN_tyEq fin hF
       have hTb := tabN_tyEq C hC
-      have hR := retNX_tyEq T T' (thunkRN R) C hC (hT _ _)
+      have hR := retNX_tyEq η η' C hC (hT _ _)
       have hz := TyEq.isZero_eq B hB
       funext Θ c k ls e ρ; simp only [cBNP, entNK, ihA, ihB, ihF, hTb, hR, hz]; rw [capB_congr hz]
   termination_by structural x => x
 /-- The answer of a row's layers with one type variable reads a type only up to `CTyEq`. -/
-theorem retNX_tyEq (T T' : VTy) (P : LocTy → Nat → Val → WRes → Prop) : ∀ (C : CTy) {C' : CTy}
-    {δ δ' : LSub}, CTyEq C δ C' δ' → TyEq T δ T' δ' →
-    retNX (ℍ := ℍ) T P C δ = retNX (ℍ := ℍ) T' P C' δ'
+theorem retNX_tyEq (η η' : Option (Nat → TEntN)) : ∀ (C : CTy) {C' : CTy}
+    {δ δ' : LSub}, CTyEq C δ C' δ' → EnvEqN η η' δ δ' →
+    retNX (ℍ := ℍ) η C δ = retNX (ℍ := ℍ) η' C' δ'
   | .ret A, C', δ, δ', h, hT => by
       cases C' <;> simp only [CTyEq] at h
-      have ihA := vNE_tyEq A _ _ h (envEqN_nu (P := P) hT)
+      have ihA := vNE_tyEq A _ _ h hT
       funext Θ n v ρ; simp only [retNX, ihA]
   | .eff _ _ _ _ _ _ _ C, C', δ, δ', h, hT => by
       cases C' <;> simp only [CTyEq] at h
-      have ih := retNX_tyEq T T' P C h.2.2.2.2.2.2 hT
+      have ih := retNX_tyEq η η' C h.2.2.2.2.2.2 hT
       funext Θ n v ρ; simp only [retNX, ih]
   | .arr _ _, C', _, _, h, _ | .amp _ _, C', _, _, h, _ | .top, C', _, _, h, _
   | .all _ _ _, C', _, _, h, _ | .nuSys _ _ _, C', _, _, h, _ => by
       cases C' <;> simp only [CTyEq] at h; rfl
   termination_by structural x => x
+/-- The tuple's post-fixedness reads the spine only up to `CTyEq` (Core's `cBSys_tyEq`).
+`[spec §79]` -/
+theorem cBNSys_tyEq (η η' : Option (Nat → TEntN)) : ∀ (k : Nat) (Cs : CTy) {Cs' : CTy}
+    {δ δ' : LSub}, CTyEq Cs δ Cs' δ' → (∀ δ₁ δ₂, EnvEqN η η' δ₁ δ₂) → ∀ (Rs : Nat → CandN)
+    (j : Nat), cBNSys (ℍ := ℍ) η k Cs Rs j δ = cBNSys (ℍ := ℍ) η' k Cs' Rs j δ'
+  | 0, .amp L R, Cs', _, _, h, hη, Rs, j => by
+      cases Cs' <;> simp only [CTyEq] at h
+      simp only [cBNSys, cBN_tyEq η η' L h.1 hη, cBN_tyEq η η' R h.2 hη]
+  | k + 1, .amp (.amp L R) D, Cs', _, _, h, hη, Rs, j => by
+      cases Cs' <;> simp only [CTyEq] at h
+      rename_i B D'
+      cases B <;> simp only [CTyEq, false_and] at h
+      simp only [cBNSys, cBN_tyEq η η' L h.1.1 hη, cBN_tyEq η η' R h.1.2 hη,
+        cBNSys_tyEq η η' k D h.2 hη Rs (j + 1)]
+  | 0, .ret _, Cs', _, _, h, _, _, _ | 0, .arr _ _, Cs', _, _, h, _, _, _
+  | 0, .top, Cs', _, _, h, _, _, _ | 0, .all _ _ _, Cs', _, _, h, _, _, _
+  | 0, .nuSys _ _ _, Cs', _, _, h, _, _, _ | 0, .eff _ _ _ _ _ _ _ _, Cs', _, _, h, _, _, _
+  | _ + 1, .ret _, Cs', _, _, h, _, _, _ | _ + 1, .arr _ _, Cs', _, _, h, _, _, _
+  | _ + 1, .top, Cs', _, _, h, _, _, _ | _ + 1, .all _ _ _, Cs', _, _, h, _, _, _
+  | _ + 1, .nuSys _ _ _, Cs', _, _, h, _, _, _
+  | _ + 1, .eff _ _ _ _ _ _ _ _, Cs', _, _, h, _, _, _ => by
+      cases Cs' <;> simp only [CTyEq] at h <;> rfl
+  | _ + 1, .amp (.ret _) _, Cs', _, _, h, _, _, _ | _ + 1, .amp (.arr _ _) _, Cs', _, _, h, _, _, _
+  | _ + 1, .amp .top _, Cs', _, _, h, _, _, _ | _ + 1, .amp (.all _ _ _) _, Cs', _, _, h, _, _, _
+  | _ + 1, .amp (.nuSys _ _ _) _, Cs', _, _, h, _, _, _
+  | _ + 1, .amp (.eff _ _ _ _ _ _ _ _) _, Cs', _, _, h, _, _, _ => by
+      cases Cs' <;> simp only [CTyEq] at h
+      rename_i B _
+      cases B <;> simp only [CTyEq, false_and] at h <;> rfl
+  termination_by structural _ x => x
 /-- **`𝒞⟦C⟧` reads a type only up to `CTyEq`** (Core's `cC_tyEq`, `cC_tyEq_aux`). -/
 theorem cN_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' →
     cN (ℍ := ℍ) C δ = cN (ℍ := ℍ) C' δ'
@@ -791,14 +834,24 @@ theorem cN_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' �
       have ihD := cN_tyEq D h.2
       funext Θ c n ls e ρ; simp only [cN, ihC, ihD]
   | .top, C', _, _, h => by cases C' <;> simp only [CTyEq] at h; rfl
-  | .nuSys _ _ C, C', δ, δ', h => by
+  | .nuSys (m + 1) i Cs, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
-      rename_i C'
+      rename_i m' i' Cs'
+      obtain ⟨rfl, rfl, h⟩ := h
+      have hO := CTyEq.sysShapeAt_iff (m + 1 + 1) (m + 1) h
+      have hB : ∀ Rs : Nat → CandN, cBNSys (ℍ := ℍ) (nuEnvNS (m + 1) Rs) (m + 1) Cs Rs 0 δ =
+          cBNSys (ℍ := ℍ) (nuEnvNS (m + 1) Rs) (m + 1) Cs' Rs 0 δ' :=
+        fun Rs => cBNSys_tyEq _ _ (m + 1) Cs h (fun _ _ => envEqN_nuS _ _ _ _) Rs 0
+      funext Θ c n ls e ρ; simp only [cN, hB, hO]
+  | .nuSys 0 _ C, C', δ, δ', h => by
+      cases C' <;> simp only [CTyEq] at h
+      rename_i m' i' C'
+      obtain ⟨rfl, rfl, h⟩ := h
       have hO : C.NuShape ↔ C'.NuShape := CTyEq.nuShape_iff h
       have hB : C.NuShape → ∀ R : CandN, cBN (ℍ := ℍ) (.thunk (.nu C)) R C δ =
           cBN (ℍ := ℍ) (.thunk (.nu C')) R C' δ' := fun hC R => by
         rw [cBN_poly_ty _ .unit R hC.nuLeaf, cBN_poly_ty _ .unit R (hO.mp hC).nuLeaf]
-        exact cBN_tyEq .unit .unit R C h (fun _ _ => trivial)
+        exact cBN_tyEq _ _ C h (fun _ _ => envEqN_nu (P := thunkRN R) trivial)
       funext Θ c n ls e ρ
       simp only [cN]
       exact propext ⟨fun k hC' => by

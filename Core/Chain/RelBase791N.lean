@@ -127,6 +127,15 @@ the closed type `S` and is read at `nuPN P`; every other variable is empty. -/
 def nuEnvN (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) : Option (Nat → TEntN) :=
   some (VTy.scons ⟨S, nuPN P⟩ (tEnvN none))
 
+/-- **The entries of one unfolding of a system** (Core's `nuEnvS`): `Xₖ` (`k ≤ m`) read at `U X`
+at the candidate `Rs k` (`thunkRN`), its type `1`, never read at a polynomial leaf; the variables
+above are empty.  `[spec §79]` -/
+def nuEntS (m : Nat) (Rs : Nat → CandN) : Nat → TEntN := fun k =>
+  if k ≤ m then ⟨.unit, nuPN (thunkRN (Rs k))⟩ else tEnvN none (k - (m + 1))
+
+/-- The environment of one unfolding of a system.  `[spec §79]` -/
+abbrev nuEnvNS (m : Nat) (Rs : Nat → CandN) : Option (Nat → TEntN) := some (nuEntS m Rs)
+
 /-! ### The environment (Core's `RelMu`)
 
 `vNE η` reads a type variable at its entry in `η` and `μX. A` at the least fixed point, the
@@ -220,6 +229,17 @@ theorem thunkRN_down {R : CandN} (h : R.Down) :
     ∀ Θ n v ρ, thunkRN R Θ (n + 1) v ρ → thunkRN R Θ n v ρ :=
   fun _ _ _ _ hv Θ' hE hOK c hc ls => h Θ' hOK c _ ls _ _ (hv Θ' hE hOK c hc ls)
 
+/-- A system's environment is downward closed at downward closed candidates.  `[spec §79]` -/
+theorem envDownN_nuS {m : Nat} {Rs : Nat → CandN} (h : ∀ k, (Rs k).Down) :
+    EnvDownN (nuEnvNS m Rs) := by
+  intro n b Θ k v ρ hv
+  by_cases hn : n ≤ m
+  · simp only [tEnvN, nuEntS, hn, if_true] at hv ⊢
+    cases b
+    · trivial
+    · exact thunkRN_down (h n) Θ k v ρ hv
+  · simp [tEnvN, nuEntS, hn] at hv
+
 /-- `ν`'s one-entry environment is downward closed at a downward closed candidate. -/
 theorem envDownN_nu {S : VTy} {P : LocTy → Nat → Val → WRes → Prop}
     (hP : ∀ Θ n v ρ, P Θ (n + 1) v ρ → P Θ n v ρ) : EnvDownN (nuEnvN S P) := by
@@ -262,6 +282,11 @@ theorem envAgreeN_tClose {η : Option (Nat → TEntN)} {δ₁ δ₂ : LSub} (hη
   rcases vFree_subst A _ hy with hy | ⟨n, hn⟩
   · exact h y hy
   · exact hη n y hn
+
+/-- A system's environment gives every variable a closed type.  `[spec §79]` -/
+theorem envAgreeN_nuS (m : Nat) (Rs : Nat → CandN) (δ₁ δ₂ : LSub) :
+    EnvAgreeN (nuEnvNS m Rs) δ₁ δ₂ := fun n y hy => by
+  by_cases hn : n ≤ m <;> simp [tEnvN, nuEntS, hn, VFree] at hy
 
 /-- `ν`'s one-entry environment agrees at `δ₁`, `δ₂` where `S` does. -/
 theorem envAgreeN_nu {S : VTy} {P : LocTy → Nat → Val → WRes → Prop} {δ₁ δ₂ : LSub}
