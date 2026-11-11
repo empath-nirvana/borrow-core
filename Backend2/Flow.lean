@@ -30,6 +30,8 @@ structure Site where
   arg : Option Var
   dst : Option Var
   j : Nat
+  /-- The evidence passed (`Tm.appE`), to the code's evidence parameters. -/
+  ev : List Var := []
 
 structure St where
   sets : Std.HashMap Var (Std.HashSet Nat) := {}
@@ -77,9 +79,10 @@ def gen (p : Prog) (L : Layouts) (base : Nat) : Nat → Tm → Option Var → FM
         for fn in code.fns do
           if let some fd := p.fns[fn]? then
             for (x, y) in env.zip fd.params do edge p x y
-    | .app g a => site ⟨g, some a, dst, 0⟩
-    | .app0 g => site ⟨g, none, dst, 0⟩
-    | .sel g j => site ⟨g, none, dst, j⟩
+    | .app g a => site ⟨g, some a, dst, 0, []⟩
+    | .app0 g => site ⟨g, none, dst, 0, []⟩
+    | .sel g j => site ⟨g, none, dst, j, []⟩
+    | .appE g a j ev => site ⟨g, a, dst, j, ev⟩
     | .call fn as => do
       if let some fd := p.fns[fn]? then
         for (x, y) in as.zip fd.params do edge p x y
@@ -109,8 +112,11 @@ def link (p : Prog) (base : Nat) (s : Site) (c : Nat) : FM Unit := do
   let some code := p.codes[c]? | return
   let some fn := code.fns[s.j]? | return
   let some fd := p.fns[fn]? | return
+  -- The argument is the parameter before the evidence parameters (`Fn.evs`).
+  let k := fd.params.length - fd.evs
   if let some a := s.arg then
-    if let some prm := fd.params.getLast? then edge p a prm
+    if let some prm := fd.params[k - 1]? then edge p a prm
+  for (e, prm) in s.ev.zip (fd.params.drop k) do edge p e prm
   if let some d := s.dst then
     let r := retVar base fn
     modify fun st => { st with out := st.out.insert r ((st.out.getD r #[]).push d) }

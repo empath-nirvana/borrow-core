@@ -1,0 +1,31 @@
+-- SPEC §71 in the core text: two `handle` nodes of one name, the second written inside the
+-- first's handled computation in the same function, each clause resuming `k` in tail position
+-- with `w`, the variable bound just before its node (one clause erasure at both nodes, the
+-- captured slot at one index). Each `perform` reaches the innermost node's `w` (the kernel's
+-- dynamic rebinding): the clause is called directly with that node's `w` as the name's evidence.
+--
+-- Answer: i32[2100]: the outer `perform` answers the outer `w`, 2; the inner one, under the
+-- nested node, its `w`, 100: 2 * 1000 + 100. The outer `w` reached from inside would give 2002.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def mul : i32 * i32 => i32 = unbang host[mul32]
+
+main : F i32 =
+  w <- return i32[2];
+  handle_with[2](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (q : 1 * U ((i32 -o F i32) & top)) ->
+        let (u2, k) = q;
+        let () = u2;
+        (force k).1 w), ()) : !U (1 * U ((i32 -o F i32) & top) -o F i32) * 1))
+    (x <- perform[2.0] ();
+     w <- return i32[100];
+     y <- handle_with[2](
+         ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+         (((!thunkv fun (q : 1 * U ((i32 -o F i32) & top)) ->
+           let (u2, k) = q;
+           let () = u2;
+           (force k).1 w), ()) : !U (1 * U ((i32 -o F i32) & top) -o F i32) * 1))
+       (perform[2.0] ());
+     return (plus (mul (x, i32[1000]), y)))

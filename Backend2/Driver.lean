@@ -48,7 +48,7 @@ where
     | .args => .args
 
 /-- A `handle` node of the typed term, as the direct-call facts read it: its name, operations,
-outer row, clauses' kinds and its handler pair's erasure. -/
+outer row, clauses' kinds, its handler pair's erasure and its typed term. -/
 structure HNode where
   n : UInt32
   E : List (Qual × VTy × VTy)
@@ -59,58 +59,176 @@ structure HNode where
   boxed : Bool := false
   /-- Each operation's cancel row, as its clause's `κ` reads it (`cancelTy`). -/
   fs : Nat → CTy := fun _ => .ret .unit
+  /-- The handler pair's typed term. -/
+  tc : Option TExpr := none
 
 /-- The `handle` nodes of a typed term, within the depth `fuel`. -/
 def hnodes : Nat → TExpr → List HNode
   | 0, _ => []
   | f + 1, t =>
     let here : List HNode := match t with
-      | .effHandleV _ _ S E fs _ n _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, false, fs⟩]
-      | .effHandleVB _ _ S E fs _ n _ _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, true, fs⟩]
+      | .effHandleV _ _ S E fs _ n _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, false, fs, some tc⟩]
+      | .effHandleVB _ _ S E fs _ n _ _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, true, fs, some tc⟩]
       | _ => []
     here ++ t.children.flatMap fun (_, c) => hnodes f c
 
-/-- **The direct calls the checked facts license**  `[spec §47]`: for each static name, for each of
-its operations, whether every `handle` node of the name
+/-- **How a `perform` of an operation reaches its clause** (SPEC §47): called directly, with no
+evidence (`closed`), with the values the clause captures passed as its name's evidence (`env`,
+SPEC §71), or not called directly (`no`): a machine operation, or abortive. -/
+inductive DirectKind where
+  | closed | env | no
+  deriving BEq, Inhabited, Repr
+
+/-- The free variables of an erased term, at or above `k`, as indices into the context outside
+it (`closedAt`'s complement). -/
+def freeAt : Nat → Expr → List Nat
+  | k, .var i => if i < k then [] else [i - k]
+  | _, .unit | _, .loc _ | _, .prim _ => []
+  | k, .pair e₁ e₂ | k, .seq e₁ e₂ | k, .app e₁ e₂ => freeAt k e₁ ++ freeAt k e₂
+  | k, .inj₁ e | k, .inj₂ e => freeAt k e
+  | k, .lam b => freeAt (k + 1) b
+  | k, .letpair e₁ e₂ => freeAt k e₁ ++ freeAt (k + 2) e₂
+  | k, .case e e₁ e₂ => freeAt k e ++ freeAt (k + 1) e₁ ++ freeAt (k + 1) e₂
+
+/-- The types the typed term gives the slots of the context outside `t` that it reads, at `d`
+binders below that context: each variable, forced variable and argument slot's type, as its node
+records it. A child at a fresh context reads none of them. -/
+def slotTypes : Nat → Nat → TExpr → List (Nat × VTy)
+  | 0, _, _ => []
+  | f + 1, d, t =>
+    let here : List (Nat × VTy) := match t with
+      | .var _ _ i A | .force _ _ i A _ | .app _ _ i A _ _ _ => if i < d then [] else [(i - d, A)]
+      | _ => []
+    here ++ t.children.flatMap fun (sc, c) => match sc with
+      | .push k => slotTypes f (d + k) c
+      | .fresh _ => []
+
+mutual
+/-- The names of the rows a value type holds. -/
+def vNames : VTy → List UInt32
+  | .tensor A B | .sum A B => vNames A ++ vNames B
+  | .mu A | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A => vNames A
+  | .thunk C => cNames C
+  | .code _ E C => vNames E ++ cNames C
+  | _ => []
+/-- The names of the rows a computation type holds. -/
+def cNames : CTy → List UInt32
+  | .ret A => vNames A
+  | .arr A C => vNames A ++ cNames C
+  | .amp C D => cNames C ++ cNames D
+  | .all _ _ C | .nu C => cNames C
+  | .eff n _ _ A B fin _ C => n :: (vNames A ++ vNames B ++ cNames fin ++ cNames C)
+  | .top => []
+end
+
+/-- **The direct calls the checked facts license**  `[spec §47]`: for each static name, the kind
+of each of its operations' direct call, and at a name with an `env` operation its captured slots
+with their types. An operation is called directly when every `handle` node of the name
 - classifies the operation's clause `tail` (`ks`, `classifyHandler_sound`),
 - holds names of the clause's own code (`handlerNames`; its row's names where it has none) that
   `main`'s flow record cannot catch (`cond2B` at `Checked.flows`, which gives
   `Checked.unhandledNames`: no frame between a `perform` and its handler catches them), and
-- holds one clause for it, closed (`closedAt 0`), at one outer row and one signature, both up to
+- holds one clause for it (its erasure, de Bruijn), at one outer row and one signature, both up to
   `[α]` (`tyEqC`, `tyEqEnts`, SPEC §3): copies of one site from generic instances at different
   lifetime contexts spell their binders differently,
-so that the clause a `perform` reaches is known and needs nothing from its handler's frame. -/
-def directFacts (c : Frontend.Check.Checked) : Std.HashMap UInt32 (List Bool) := Id.run do
+so that the clause a `perform` reaches is known. It is `closed` when the clause is closed
+(`closedAt 0`): it needs nothing from its handler's frame. It is `env` [spec §71]
+when the clause's free variables are slots of the node's context whose types, as the clause's
+typed term records them, are persistent (`[handle]`'s `hd : Ctx.DeadP Γ₁`), agree at every node
+up to `[α]` (`tyEqV`), and hold no row naming a name with an `env` operation: the clause's code
+is the one static clause, and its captures are passed to it by value as its name's evidence. One
+erasure at every node captures the same slots relative to the node. -/
+def directFacts (c : Frontend.Check.Checked) :
+    Std.HashMap UInt32 (List DirectKind) × Std.HashMap UInt32 (List (Nat × VTy)) := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t
   let flows := c.flows
-  let mut out : Std.HashMap UInt32 (List Bool) := {}
+  let mut out : Std.HashMap UInt32 (List DirectKind) := {}
+  let mut envs : Std.HashMap UInt32 (List (Nat × VTy)) := {}
   for h in nodes do
     if out.contains h.n then continue
     let same := nodes.filter (·.n == h.n)
     let hs := match h.H with | .pair _ hs => some hs | _ => none
-    let ok := h.E.zipIdx.map fun (_, j) =>
-      same.all fun g =>
-        let gs := match g.H with | .pair _ hs => some hs | _ => none
-        let names := Check.handlerNames g.E g.H
-        let row := (g.S.map (·.n)).eraseDups
-        let cl := gs.bind fun hs => Check.clauseExpr hs j
-        (g.ks[j]?.map (·.kind)) == some .tail &&
-          Frontend.Check.cond2B flows (Frontend.Check.cond2Names row ((names[j]?).getD none)) &&
-          (match cl with | some e => closedAt 0 e | none => false) &&
-          cl == hs.bind (fun hs => Check.clauseExpr hs j) &&
-          Frontend.Check.tyEqC (CTy.effOf g.S .unit) (CTy.effOf h.S .unit) &&
-          Frontend.Check.tyEqEnts g.E h.E
-    out := out.insert h.n ok
-  return out
+    -- The clauses' typed terms at a node, written in place (`clausesOf`'s shape).
+    let clauseT (g : HNode) (j : Nat) : Option TExpr := match g.tc with
+      | some (.tensorI _ _ _ _ _ _ tCs) => (clauses g.E.length tCs)[j]?
+      | _ => none
+    let base (j : Nat) : Bool := same.all fun g =>
+      let gs := match g.H with | .pair _ hs => some hs | _ => none
+      let names := Check.handlerNames g.E g.H
+      let row := (g.S.map (·.n)).eraseDups
+      let cl := gs.bind fun hs => Check.clauseExpr hs j
+      (g.ks[j]?.map (·.kind)) == some .tail &&
+        Frontend.Check.cond2B flows (Frontend.Check.cond2Names row ((names[j]?).getD none)) &&
+        cl.isSome && cl == hs.bind (fun hs => Check.clauseExpr hs j) &&
+        Frontend.Check.tyEqC (CTy.effOf g.S .unit) (CTy.effOf h.S .unit) &&
+        Frontend.Check.tyEqEnts g.E h.E
+    -- Each captured slot's type at each node: one type, persistent.
+    let slotsAt (j : Nat) : Option (List (Nat × VTy)) := do
+      let cl ← hs.bind fun hs => Check.clauseExpr hs j
+      let fv := (freeAt 0 cl).eraseDups.mergeSort (· ≤ ·)
+      let mut first : List (Nat × VTy) := []
+      for g in same do
+        let tys := slotTypes 4096 0 (← clauseT g j)
+        let mut here : List (Nat × VTy) := []
+        for i in fv do
+          let ts := (tys.filter (·.1 == i)).map (·.2)
+          let A ← ts.head?
+          unless ts.all (Frontend.Check.tyEqV A ·) && A.persistent do none
+          here := here ++ [(i, A)]
+        if first.isEmpty then first := here
+        else unless (first.zip here).all fun ((_, A), (_, B)) => Frontend.Check.tyEqV A B do none
+      pure first
+    let mut ks : List DirectKind := []
+    let mut slots : List (Nat × VTy) := []
+    for (_, j) in h.E.zipIdx do
+      if !base j then ks := ks ++ [.no]; continue
+      let cl := hs.bind fun hs => Check.clauseExpr hs j
+      if (cl.map (closedAt 0)) == some true then ks := ks ++ [.closed]; continue
+      match slotsAt j with
+      | some sl =>
+        -- The name's evidence: the captured slots of all its `env` clauses, one type a slot.
+        let clash := sl.any fun (i, A) => slots.any fun (i', B) => i == i' && !Frontend.Check.tyEqV A B
+        if clash then ks := ks ++ [.no]
+        else
+          slots := (slots ++ sl.filter fun (i, _) => !slots.any (·.1 == i)).mergeSort (·.1 ≤ ·.1)
+          ks := ks ++ [.env]
+      | none => ks := ks ++ [.no]
+    out := out.insert h.n ks
+    if ks.contains .env then envs := envs.insert h.n slots
+  -- A capture whose type holds a row naming a name with evidence is not passed (its LIR type would
+  -- take evidence itself): those names' `env` operations are not called directly.
+  let mut drop : List UInt32 := []
+  for _ in [0:envs.size + 1] do
+    let live := envs.toList.filter fun (n, _) => !drop.contains n
+    let bad := live.filter fun (_, sl) => sl.any fun (_, A) =>
+      (vNames A).any fun m => envs.contains m && !drop.contains m
+    if bad.isEmpty then break
+    drop := drop ++ bad.map (·.1)
+  for n in drop do
+    out := out.insert n ((out.getD n []).map fun k => if k == .env then .no else k)
+    envs := envs.erase n
+  return (out, envs)
+where
+  clauses : Nat → TExpr → List TExpr
+    | 0, _ => []
+    | n + 1, .tensorI _ _ _ _ _ c rest => c :: clauses n rest
+    | _, _ => []
+
+/-- The direct calls a conversion makes (`CState.direct`): `closed` operations, and `env` ones of
+the names not dropped (`dropped`: the `env` names `evNames` excludes). -/
+def directOf (kinds : Std.HashMap UInt32 (List DirectKind)) (dropped : List UInt32) :
+    Std.HashMap UInt32 (List Bool) :=
+  kinds.fold (fun m n ks => m.insert n (ks.map fun k =>
+    k == .closed || (k == .env && !dropped.contains n))) {}
 
 /-- **The program's machine operations**  `[spec §49]`: each control operation `(n, j)` whose
 clause at some `handle` node of `n` is neither abortive nor called where it is performed
 (`directFacts`): its `perform` suspends the computation, and the node's drive runs the clause on
 the argument and `κ`. Read off the nodes' kinds (`ks`, `classifyHandler_sound`) and the direct
 calls' facts. -/
-def machineOps (c : Frontend.Check.Checked) : MachSet := Id.run do
+def machineOps (c : Frontend.Check.Checked)
+    (direct : Std.HashMap UInt32 (List Bool) := directOf (directFacts c).1 []) : MachSet := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t
-  let direct := directFacts c
   let mut out : MachSet := {}
   for h in nodes do
     for (k, j) in h.ks.zipIdx do
@@ -124,29 +242,139 @@ SPEC §28) and no operation of any node of `n` is `unr` (a site with a stack has
 copied), and whose cancel row at every node holds no machine operation (a stack machine's cancel
 is a plain loop: a cancel that may suspend is not lowered on the task stack). A stack machine's
 frames have one owner there: the stored site whose `κ` holds them, which keeps a stack. -/
-def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
+def stackOps (c : Frontend.Check.Checked) (ms : MachSet := machineOps c) : MachSet := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t
-  let ms := machineOps c
   let mut out : MachSet := {}
   for (n, j) in ms.toList do
     let same := nodes.filter (·.n == n)
     if !same.isEmpty && same.all (fun g => g.boxed && g.E.all (·.1 != .unr) &&
         (g.ks[j.toNat]?.map (·.kind)) == some .stored &&
         (g.E[j.toNat]?.map (·.1)).any (· != .unr) &&
-        (g.E[j.toNat]?).all fun (q, _, B) => match ofFinAt ms q B (g.fs j.toNat) with
+        (g.E[j.toNat]?).all fun (q, _, B) => match ofFinAt ms {} q B (g.fs j.toNat) with
           | .ok cp => cp.all (·.ms.isEmpty)
           | .error _ => false) then
       out := out.insert (n, j)
   return out
+
+mutual
+/-- The computation types a value type holds, at every depth. -/
+def subCV : VTy → List CTy
+  | .tensor A B | .sum A B => subCV A ++ subCV B
+  | .mu A | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A => subCV A
+  | .thunk C => subCC C
+  | .code _ E C => subCV E ++ subCC C
+  | _ => []
+/-- A computation type and the computation types it holds, at every depth. -/
+def subCC : CTy → List CTy
+  | .ret A => .ret A :: subCV A
+  | .arr A D => .arr A D :: (subCV A ++ subCC D)
+  | .amp D E => .amp D E :: (subCC D ++ subCC E)
+  | .all x b D => .all x b D :: subCC D
+  | .nu D => .nu D :: subCC D
+  | .eff n i q A B fin rc D => .eff n i q A B fin rc D :: (subCV A ++ subCV B ++ subCC fin ++ subCC D)
+  | .top => [.top]
+end
+
+/-- The operations of a row (`CTy.effOf`'s layers): key, qualifier and answer type. -/
+def rowOps : CTy → List ((UInt32 × UInt32) × Qual × VTy)
+  | .eff n i q _ B _ _ C => ((n, i), q, B) :: rowOps C
+  | _ => []
+
+/-- A computation type through its `∀`s. -/
+def stripAllC : CTy → CTy
+  | .all _ _ C => stripAllC C
+  | C => C
+
+/-- A row holds a machine operation of `ms` (`Types.ofC`, `Convert.rowMs`). -/
+def machRow (ms : MachSet) (C : CTy) : Bool :=
+  (rowOps C).any fun (k, q, B) => !abortB q B && ms.contains k
+
+/-- The names of `cur` whose evidence a node's judgment `j` would take where the first cut builds
+none  `[spec §71]`: a row holding the name at a machine operation (`Types.ofC`,
+`Convert.outInfo?`), a `&` or `ν` component at a row holding it (`Types.ofC`), or, at a constant
+whose expansion calls its closure argument from a generated helper (`helper`: `genTab`,
+`genArrFree`, `genCount`, `genCountTry`, the folds, `unfold`), any row of its type holding it. -/
+def evExcludedAt (cur : List UInt32) (ms : MachSet) (j : Jdg) (helper : Bool) : List UInt32 :=
+  let tys := match j with | .val A => subCV A | .comp C => subCC C
+  tys.flatMap fun C =>
+    let here := if helper || machRow ms C then C.effNames.filter cur.contains else []
+    let comp := match C with
+      | .amp D E => ((stripAllC D).effNames ++ (stripAllC E).effNames).filter cur.contains
+      | .nu D => (stripAllC D).effNames.filter cur.contains
+      | _ => []
+    here ++ comp
+
+/-- The names a `handle` node of `n` at the outer row `S` excludes  `[spec §71]`: `n`, when its
+clause's work, which runs at `S`, would be a machine or need evidence of `S` (the first cut builds
+neither); and, when any of the node's clauses is called directly (`direct`, `closed` or `env`),
+the evidence names `S` holds, since every direct work runs at `S` with no evidence in scope. -/
+def evExcludedNode (cur : List UInt32) (ms : MachSet) (n : UInt32) (S : Row) (direct : Bool) :
+    List UInt32 :=
+  let outer := CTy.effOf S .unit
+  let own := if cur.contains n && (machRow ms outer || outer.effNames.any cur.contains)
+    then [n] else []
+  -- Any direct work runs at `S` with no evidence in scope: `S`'s evidence names are excluded.
+  let outerNames := if direct then outer.effNames.filter cur.contains else []
+  own ++ outerNames
+
+/-- The judgments of the nodes of a typed term, within the depth `fuel`, each with whether the node
+is a constant whose expansion is a generated helper calling a closure argument (`evExcludedAt`). -/
+def jdgsOf : Nat → TExpr → List (Jdg × Bool)
+  | 0, _ => []
+  | f + 1, t =>
+    let helper := match t with
+      | .arrNew .. | .arrFree .. | .countFold .. | .countTry .. | .foldImm .. | .foldOwn ..
+      | .foldReuse .. | .foldOwnG .. | .unfoldN .. => true
+      | _ => false
+    (t.jdg, helper) :: t.children.flatMap fun (_, c) => jdgsOf f c
+
+/-- **The program's evidence names**  `[spec §71]`: the names with an `env` operation
+(`directFacts`) whose evidence the first cut builds, chosen before conversion so that it runs
+once. A name is excluded, from the checked types, rows and nodes, when its evidence would reach
+- a machine: a computation type of the term at a row holding the name and a machine operation
+  (`evExcludedAt`), or a `handle` node of the name whose outer row holds one (`evExcludedNode`:
+  its clause's work would be a machine);
+- a `&` or `ν` component at a row holding the name (`evExcludedAt`);
+- a generated helper other than `bounded_fix`'s loop (`evExcludedAt`);
+- a work, of any name, whose outer row holds an evidence name (`evExcludedNode`): the outer
+  row's evidence names are excluded;
+- a captured value whose type has no LIR type.
+Excluding a name makes its `env` operations machine operations, which may exclude another: the
+exclusions are taken to a fixed point, from all `env` names down. A call site with no evidence in
+scope is not a separate exclusion: a code at a row holding a name runs, by the row's typing,
+only where that row is in effect, and the places the conversion has none in scope (a machine, a
+drive, a `&`'s component, a helper, a work) are the exclusions above; the conversion meeting one
+is an internal error (`evInternal`). -/
+def evNames (c : Frontend.Check.Checked) (kinds : Std.HashMap UInt32 (List DirectKind))
+    (envs : Std.HashMap UInt32 (List (Nat × VTy))) : List UInt32 := Id.run do
+  let all := envs.toList.map (·.1)
+  if all.isEmpty then return []
+  let nodes := hnodes Frontend.Check.copiesFuel c.t
+  let jdgs := jdgsOf Frontend.Check.copiesFuel c.t
+  let mut cur := all
+  for _ in [0:all.length + 1] do
+    let dir := directOf kinds (all.filter (!cur.contains ·))
+    let ms := machineOps c dir
+    let mut bad : List UInt32 := jdgs.flatMap fun (j, h) => evExcludedAt cur ms j h
+    for g in nodes do
+      let direct := (dir.getD g.n []).any id
+      bad := evExcludedNode cur ms g.n g.S direct ++ bad
+    for (n, sl) in envs.toList do
+      let tys : Except String (List LTy) := sl.mapM fun (p : Nat × VTy) => ofV ms {} p.2
+      if cur.contains n && tys.toOption.isNone then bad := n :: bad
+    let next := cur.filter (!bad.contains ·)
+    if next.length == cur.length then break
+    cur := next
+  return cur
 
 /-- **The width classes** (SPEC §57): for each type the compiled term `c` allocates a cell at, its
 class (`Checked.classAt`, `Checked.classAt_alloc`), and for the contents of each capability's cell
 (a harness make's result, which no `alloc` node of the term allocates) the class the checker's
 construction gives it (`cellClasses`), checked closed under the term's `swap`s (`cellsOkB`,
 `cellsOkB_sound`): each type's LIR types. -/
-def classesOf (c : Frontend.Check.Checked) : Except String (List (VTy × List LTy)) := do
-  let ms := machineOps c
-  let lir (tys : List VTy) : List LTy := tys.filterMap fun t => (ofV ms t).toOption
+def classesOf (c : Frontend.Check.Checked) (ms : MachSet := machineOps c) (fd : EvSet := {}) :
+    Except String (List (VTy × List LTy)) := do
+  let lir (tys : List VTy) : List LTy := tys.filterMap fun t => (ofV ms fd t).toOption
   let mut out : List (VTy × List LTy) := c.cells.map fun cl => (cl.root, lir cl.tys)
   let es := c.t.cells.2
   for s in c.ctx do
@@ -169,6 +397,7 @@ def freeUses : Nat → Tm → List (Var × Bool)
     | .clos _ env => env.map (·, false)
     | .app g a => [(g, false), (a, false)]
     | .app0 g | .sel g _ => [(g, false)]
+    | .appE g a _ ev => (g, false) :: (a.toList ++ ev).map (·, false)
     | .call _ as => as.map (·, false)
     | .prim op as => as.map (·, op == .free)
     | .letv _ e b => freeUses f e ++ freeUses f b
@@ -283,13 +512,28 @@ def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) :
   let (c, exts, arg, loops) ← match ← k.runIO with
     | none => pure (k.main, [], none, false)
     | some (r, xs) => pure (r.c, ← extsOf xs, some [], r.loops)
-  let classes ← classesOf c
+  let (kinds, envs) := directFacts c
+  -- The program's evidence [spec §71]: the names `evNames` keeps, each with its captured
+  -- slots and their LIR types. A captured type holds no row naming such a name (`directFacts`),
+  -- so it is read without evidence.
+  let keep := evNames c kinds envs
+  let direct := directOf kinds ((envs.toList.map (·.1)).filter (!keep.contains ·))
+  let ms := machineOps c direct
+  let envL := envs.toList.filter fun (n, _) => keep.contains n
+  let mut fd : EvSet := {}
+  for (n, sl) in envL do
+    match sl.mapM (fun (_, A) => ofV ms {} A) with
+    | .ok ts => fd := fd.insert n ts
+    | .error e => throw (evInternal n s!"a captured value's type: {e}")
+  let fdSlots : Std.HashMap UInt32 (List Nat) :=
+    envL.foldl (fun m (n, sl) => m.insert n (sl.map (·.1))) {}
+  let classes ← classesOf c ms fd
   let ctx := c.ctx.map fun s => (s.ty, s.live)
   let run (threaded stacked : Std.HashMap Nat LTy) :
       Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy ×
         Option Lay.Layouts) := do
-    let (p, st) ← convertProg exts ctx c.t c.C arg loops census (directFacts c) (machineOps c)
-      threaded stacked classes
+    let (p, st) ← convertProg exts ctx c.t c.C arg loops census direct ms
+      threaded stacked classes fd fdSlots
     let p := { p with exits := c.exitsOnDivError }
     if st.done.isEmpty then return (p, st, {}, {}, none)
     -- A call in tail position whose callee's suspended computations may be the machine's own
@@ -312,7 +556,7 @@ def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) :
       | none => false
     -- The stack machines (SPEC §52), read off these layouts: each call point's callee's suspended
     -- computations' classes.
-    let sk := stackedOf st recursive (stackOps c) (suspCodes L)
+    let sk := stackedOf st recursive (stackOps c ms) (suspCodes L)
     let th := (threadedOf st recursive).filter fun i _ => !sk.contains i
     -- With no machine to make again, `cellPass` leaves the state as it is, and `p`'s functions,
     -- codes, types and statics are the state's (`convertProg` answers them, `tailPass` sets the
@@ -354,7 +598,7 @@ stored-continuation sites) and the others no rule takes. -/
 def erasureLine (k : Backend.CheckedProg) : String := Id.run do
   let c := k.main
   let nodes := hnodes Frontend.Check.copiesFuel c.t
-  let direct := directFacts c
+  let direct := directOf (directFacts c).1 []
   let erasable (g : HNode) : Bool := g.ks.zipIdx.all fun (h, j) =>
     h.kind == .abortive || (h.kind == .tail && (direct.getD g.n [])[j]? == some true)
   let storedB (g : HNode) : Bool := g.ks.any fun h => match h.kind with
@@ -667,5 +911,65 @@ def trustedReport (k : Backend.CheckedProg) : List String :=
         s!"with no stack overflow: {ws.length} function{if ws.length == 1 then "" else "s"}"] ++
         ws.map ("  " ++ ·)
     hand ++ encl ++ wr ++ nativeAssumptions
+
+namespace EvNamesTests
+
+/-! ### `evNames`'s tests  `[spec §71]`
+
+The names whose evidence the first cut builds, decided before conversion: a program whose `tail`
+clause captures a persistent value keeps its name; each exclusion, on the types and rows it reads. -/
+
+/-- `F_Σ 1` at the operations `ops` (name, index, machine), each `1 ↠ 1`. -/
+def rowT (ops : List (UInt32 × UInt32)) : CTy :=
+  CTy.effOf (ops.map fun (n, i) => { n, i, q := .lin, A := .unit, B := .unit }) .unit
+
+/-- The machine set holding `(2, 0)`. -/
+def ms2 : MachSet := ({} : MachSet).insert (2, 0)
+
+-- The name 5 at a row with no machine operation: kept.
+#guard evExcludedAt [5] ms2 (.comp (rowT [(5, 0)])) false == []
+#guard evExcludedAt [5] ms2 (.val (.thunk (.arr .unit (rowT [(5, 0), (3, 0)])))) false == []
+-- A machine: the row holds `(2, 0)`, a machine operation, beside 5.
+#guard evExcludedAt [5] ms2 (.comp (rowT [(5, 0), (2, 0)])) false == [5]
+#guard evExcludedAt [5] ms2 (.val (.thunk (.arr .unit (rowT [(2, 0), (5, 0)])))) false == [5]
+-- A `&` component at a row holding 5; a `&` of functions holds none at its top.
+#guard evExcludedAt [5] {} (.val (.thunk (.amp (rowT [(5, 0)]) (.ret .unit)))) false == [5]
+#guard evExcludedAt [5] {} (.val (.thunk (.amp (.arr .unit (rowT [(5, 0)])) .top))) false == []
+-- A `ν`'s observation at a row holding 5.
+#guard evExcludedAt [5] {} (.val (.thunk (.nu (rowT [(5, 0)])))) false == [5]
+-- A constant whose generated helper calls a closure at a row holding 5.
+#guard evExcludedAt [5] {} (.val (.thunk (.arr (.thunk (.arr .unit (rowT [(5, 0)]))) (.ret .unit)))) true == [5]
+#guard evExcludedAt [5] {} (.val (.thunk (.arr (.thunk (.arr .unit (rowT [(5, 0)]))) (.ret .unit)))) false == []
+-- A work whose outer row holds an evidence name, or a machine operation; and one that holds neither.
+#guard (evExcludedNode [5, 6] {} 5 [{ n := 6, i := 0, q := .lin, A := .unit, B := .unit }] true).contains 5
+#guard evExcludedNode [5] ms2 5 [{ n := 2, i := 0, q := .lin, A := .unit, B := .unit }] false == [5]
+#guard evExcludedNode [5] ms2 5 [{ n := 3, i := 0, q := .lin, A := .unit, B := .unit }] true == []
+-- A direct work of another name, 7, at an outer row holding the evidence name 5: 5 is excluded;
+-- with no direct clause at the node, it is not.
+#guard evExcludedNode [5] {} 7 [{ n := 5, i := 0, q := .lin, A := .unit, B := .unit }] true == [5]
+#guard evExcludedNode [5] {} 7 [{ n := 5, i := 0, q := .lin, A := .unit, B := .unit }] false == []
+
+/-- The evidence names of a program (`evNames` on its checked `main`), and its `env` names. -/
+def evNamesOf (src : String) : Option (List UInt32 × List UInt32) := do
+  let p ← (Frontend.parseProgram src (lib := Frontend.Sugar.libSrc)).toOption
+  let r ← (Frontend.Check.checkProgram p).toOption
+  let c ← r.main
+  let (kinds, envs) := directFacts c
+  pure (evNames c kinds envs, envs.toList.map (·.1))
+
+/-- `yld`'s clause reads `c`, a `!` parameter of its handler: an `env` name, kept. -/
+def directSrc : String := "effect Y { ctl yld() }
+handler pass[A](c: !(1 => i32)): Y, A -> A = { return(a) = a; yld(k) = { let _ = c(()); k(()) } }
+main -> 1 =
+  let c: !(1 => i32) = !{ u -> 7 };
+  with pass[1](c) { yld() }
+"
+
+#guard match evNamesOf directSrc with
+  | some (keep, envs) => keep.length == 1 && keep == envs
+  | none => false
+
+
+end EvNamesTests
 
 end Backend2

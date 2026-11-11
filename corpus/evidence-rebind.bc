@@ -1,0 +1,29 @@
+-- One function that performs a handler's operation, run under three instances of one handler
+-- site with different captured values, at most two live at once, one nested inside the other:
+-- each `perform` reaches the innermost frame of its name when it runs (the kernel's dynamic
+-- rebinding). `const`'s `ask` resumes in tail position and reads `v`, a `!` parameter: a direct
+-- call with `v` passed as the name's evidence (SPEC §71). `with_v` handles the `ask` of `f`
+-- with `v`. `get` asks; `nest` asks, then runs `get` under a nested `with_v`, so two instances of
+-- the site are live at its `ask`.
+--
+-- Answer: (i32[1], i32[2100]): `get` under `with_v(1)` is 1; `nest` under `with_v(2)` asks 2,
+-- then `get` under the nested `with_v(100)` is 100: 2 * 1000 + 100. An `ask` that reached the
+-- outer instance's `v` from inside the nested one would give 2002.
+
+effect Ask { ctl ask() -> i32 }
+
+handler const[A](v: !(1 => i32)): Ask, A -> A = { return(a) = a; ask(k) = k(v(())) }
+
+fn with_v(v: !(1 => i32), f: !(1 => i32 with Ask)) -> i32 = with const[i32](v) { f(()) }
+
+fn get(u: 1) -> i32 with Ask = ask()
+
+fn nest(u: 1) -> i32 with Ask =
+  let w: !(1 => i32) = !{ u -> 100 };
+  let x = ask();
+  x * 1000 + with_v(w, get)
+
+main -> i32 * i32 =
+  let one: !(1 => i32) = !{ u -> 1 };
+  let two: !(1 => i32) = !{ u -> 2 };
+  (with_v(one, get), with_v(two, nest))

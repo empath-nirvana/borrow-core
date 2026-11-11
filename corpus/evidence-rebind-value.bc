@@ -1,0 +1,47 @@
+-- SPEC §71 in the core text: one function that performs a control operation `2.0 lin 1 ~> i32`
+-- (an `ask`), run under three instances of one handler site, each capturing a different `i32`,
+-- at most two live at once: one nested inside the other. The clause resumes `k` in tail position with `w`, a persistent
+-- value of the handler's context (`[handle]`'s `DeadP`) and not a closure: a direct call with `w`
+-- passed as the name's evidence, and each `perform` reaches the innermost instance's `w` (the
+-- kernel's dynamic rebinding). `with_v` handles `f`'s `ask` with `w`; `get` asks; `nest` asks,
+-- then runs `get` under a nested `with_v`.
+--
+-- Answer: (i32[1], i32[2100]): `get` under `with_v(1)` is 1; `nest` under `with_v(2)` asks 2,
+-- then `get` under the nested `with_v(100)` is 100: 2 * 1000 + 100. An `ask` that reached the
+-- outer instance's `w` from inside the nested one would give 2002.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def mul : i32 * i32 => i32 = unbang host[mul32]
+
+def get : !U (1 -o F[2.0 lin 1 ~> i32] i32) =
+  !thunkv fun (u : 1) -> perform[2.0] u
+
+def with_v : !U ((i32 * !U (1 -o F[2.0 lin 1 ~> i32] i32)) -o F i32) =
+  !thunkv fun (p : i32 * !U (1 -o F[2.0 lin 1 ~> i32] i32)) ->
+    let (w, f) = p;
+    g <- return (unbang f);
+    u <- return ();
+    handle_with[2](
+        ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+        (((!thunkv fun (q : 1 * U ((i32 -o F i32) & top)) ->
+          let (u2, k) = q;
+          let () = u2;
+          (force k).1 w), ()) : !U (1 * U ((i32 -o F i32) & top) -o F i32) * 1)) (force g u)
+
+def nest : !U (1 -o F[2.0 lin 1 ~> i32] i32) =
+  !thunkv fun (u : 1) ->
+    x <- perform[2.0] u;
+    h <- return (unbang with_v);
+    pa <- return (i32[100], get);
+    y <- force h pa;
+    return (plus (mul (x, i32[1000]), y))
+
+main : F (i32 * i32) =
+  h <- return (unbang with_v);
+  pa <- return (i32[1], get);
+  a <- force h pa;
+  h2 <- return (unbang with_v);
+  pb <- return (i32[2], nest);
+  b <- force h2 pb;
+  return (a, b)

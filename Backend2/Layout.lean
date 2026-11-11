@@ -56,7 +56,7 @@ inductive NK where
   /-- A family of leaves: the leaf's node (a pointer's). -/
   | fam (l : Nat)
   /-- A closure class: the codes' kind, their argument and their answers (one, or a `&`'s two). -/
-  | clos (k : CodeKind) (param : Option Nat) (res : List Nat)
+  | clos (k : CodeKind) (param : Option Nat) (res : List Nat) (ev : List Nat)
   deriving Inhabited, BEq, Repr
 
 /-- **What a layout node lays out**: a value type, or the closure class of a computation type, each
@@ -101,6 +101,7 @@ def eqUBC : Nat → LCTy → LCTy → Bool
     | .amp c d, .amp c' d' => eqUBC f c c' && eqUBC f d d'
     | .top, .top => true
     | .nu c, .nu d => eqUBC f c d
+    | .ev n a c, .ev m b d => n == m && eqUB f a b && eqUBC f c d
     | _, _ => false
 end
 
@@ -129,6 +130,7 @@ def hashUBC : LCTy → UInt64
   | .amp k k' => mixHash 17 (mixHash (hashUBC k) (hashUBC k'))
   | .top => 18
   | .nu k => mixHash 19 (hashUBC k)
+  | .ev n e k => mixHash 20 (mixHash (hash n) (mixHash (hashUB e) (hashUBC k)))
 end
 
 /-- A hash of a value type's formers down to `depth`, every `!` erased: equal types have one. -/
@@ -253,9 +255,21 @@ def expandC (i : Nat) : Nat → List Nat → LCTy → GM NK
   | f + 1, env, k =>
     match k with
     | .nu c => expandC i f (i :: env) c
-    | .ret a => do return .clos .unit none [← mkV env a]
-    | .arr a c => do return .clos .lam (some (← mkV env a)) [← mkR env c]
-    | .amp c d => do return .clos .amp none [← mkR env c, ← mkR env d]
+    | .ret a => do return .clos .unit none [← mkV env a] []
+    | .arr a c => do
+      let x ← mkV env a
+      -- The evidence parameters after the argument [spec §71].
+      let (es, c) := c.stripEv
+      let r ← mkR env c
+      return .clos .lam (some x) [r] (← es.mapM fun (_, e) => mkV env e)
+    | .amp c d => do return .clos .amp none [← mkR env c, ← mkR env d] []
+    | .ev n e c => do
+      -- A closure of `F_Σ A` taking its evidence [spec §71]: a `unit` code with evidence
+      -- parameters.
+      let (es, c) := (LCTy.ev n e c).stripEv
+      let .ret a := c | throw "layout: evidence before a closure that is not `F A`"
+      let r ← mkV env a
+      return .clos .unit none [r] (← es.mapM fun (_, e) => mkV env e)
     | .top => pure .unit
 end
 
@@ -332,13 +346,13 @@ def join (a b : Nat) : GM Unit := do
         | .ref a, .ref c | .imm a, .imm c | .mut a, .mut c | .fam a, .fam c => pure [(a, c)]
         | .ref a, .imm c | .ref a, .mut c | .imm a, .ref c | .mut a, .ref c
         | .imm a, .mut c | .mut a, .imm c => pure [(a, c)]
-        | .clos k p r, .clos k' p' r' =>
-          if k != k' || r.length != r'.length then
+        | .clos k p r e, .clos k' p' r' e' =>
+          if k != k' || r.length != r'.length || e.length != e'.length then
             throw s!"layout: closures of different kinds joined ({reprStr k} {ox} codes {cs}, {reprStr k'} {oy})"
           let ps := match p, p' with
             | some a, some c => [(a, c)]
             | _, _ => []
-          pure (ps ++ r.zip r')
+          pure (ps ++ r.zip r' ++ e.zip e')
         -- A capability's contents, an opaque host value, is held as the word the extern stores.
         | .opq, .int _ | .int _, .opq => pure []
         | k, k' =>
@@ -389,7 +403,13 @@ def joinRe (c v : Nat) : GM Unit := do
 /-- The class of a closure node: its children. -/
 def closOf (i : Nat) : GM (CodeKind × Option Nat × List Nat) := do
   match ← shapeOf i with
-  | .clos k p r => pure (k, p, r)
+  | .clos k p r _ => pure (k, p, r)
+  | k => throw s!"layout: a call of a non-closure node {reprStr k |>.take 40}"
+
+/-- The evidence parameters' nodes of a closure class [spec §71]. -/
+def closEvOf (i : Nat) : GM (List Nat) := do
+  match ← shapeOf i with
+  | .clos _ _ _ e => pure e
   | k => throw s!"layout: a call of a non-closure node {reprStr k |>.take 40}"
 
 def childrenOf (i : Nat) : GM NK := shapeOf i
@@ -437,6 +457,10 @@ def addCode (p : Prog) (cc : Std.HashMap Nat Nat) (cls : Nat) (c : Nat) (env : L
     match res[j]? with
     | some rn => join rn (← fnRetNode p fn)
     | none => throw "layout: a code's component past its class's"
+    let evn ← closEvOf cls
+    let evPs := f.params.drop (f.params.length - f.evs)
+    if evPs.length != evn.length then throw "layout: a code's evidence parameters are not its class's"
+    for (x, en) in evPs.zip evn do join (← nv x) en
   match cc[c]? with
   | some other => join cls other; pure cc
   | none => pure (cc.insert c cls)
@@ -467,6 +491,11 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
     join dst (res.headD dst); pure cc
   | .sel g j => do
     let (_, _, res) ← closOf (← nv g)
+    join dst (res.getD j dst); pure cc
+  | .appE g a j ev => do
+    let (_, param, res) ← closOf (← nv g)
+    if let (some pn, some a) := (param, a) then join pn (← nv a)
+    for (x, en) in ev.zip (← closEvOf (← nv g)) do join (← nv x) en
     join dst (res.getD j dst); pure cc
   | .call fn as => do
     let some fd := p.fns[fn]? | throw s!"layout: no function f{fn}"
@@ -580,7 +609,7 @@ def places (p : Prog) : Except String (GState × Nat) := do
         todo := match ← shapeOf r with
           | .pair a b | .sum a b => a :: b :: todo
           | .ref c | .imm c | .mut c | .fam c => c :: todo
-          | .clos _ pa rs => pa.toList ++ rs ++ todo
+          | .clos _ pa rs es => pa.toList ++ rs ++ es ++ todo
           | _ => todo
     pure m
   let (m, s) ← act.run {}
@@ -913,7 +942,7 @@ def canonicalOrder (n : Nat) (rep : Array Nat) (shape : Array NK) (s : GState) (
         let kids : List Nat := match shape[v]! with
           | .pair a b | .sum a b => [a, b]
           | .ref c | .imm c | .mut c | .fam c => [c]
-          | .clos _ pa rs => pa.toList ++ rs
+          | .clos _ pa rs es => pa.toList ++ rs ++ es
           | _ => []
         stack := kids.filter (!seen[·]!) ++ stack
   -- A representative no root reaches (none: every node is made from a root's type) follows.
@@ -934,7 +963,7 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
     | .imm c => .imm rep[c]!
     | .mut c => .mut rep[c]!
     | .fam l => .fam rep[l]!
-    | .clos k p r => .clos k (p.map (rep[·]!)) (r.map (rep[·]!))
+    | .clos k p r e => .clos k (p.map (rep[·]!)) (r.map (rep[·]!)) (e.map (rep[·]!))
     | k => k
   -- A node's shape is its representative's, one value shared.
   let repShape := (Array.range n).map fun i => if rep[i]! == i then norm s.nodes[i]! else .unit
@@ -953,7 +982,7 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
   for (code, c) in p.codes.toList.zipIdx do
     let some fn := code.fns.head? | continue
     let some f := p.fns[fn]? | continue
-    let k := if code.kind == .lam then f.params.length - 1 else f.params.length
+    let k := f.params.length - f.evs - (if code.kind == .lam then 1 else 0)
     codeEnv := codeEnv.insert c ((f.params.take k).map fun x => rep[s.varNode.getD x 0]!)
   let envOf (v : Nat) : List Nat := (union.getD v #[]).toList.flatMap (codeEnv.getD · [])
   let succ := (Array.range n).map fun v =>

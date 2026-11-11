@@ -76,6 +76,9 @@ inductive LCTy where
   | top
   /-- `νX. C`, binding the type variable `0` (standing for `U (νX. C)`) in `C`'s value types. -/
   | nu (k : LCTy)
+  /-- **An evidence parameter** [spec §71]: a closure that takes, after its argument,
+  the evidence `e` of the static name `n`, then is `k`. -/
+  | ev (n : UInt32) (e : LTy) (k : LCTy)
   deriving Inhabited, DecidableEq, Hashable, Repr
 end
 
@@ -104,6 +107,7 @@ def LCTy.lift (c : Nat) : LCTy → LCTy
   | .amp k₁ k₂ => .amp (k₁.lift c) (k₂.lift c)
   | .top => .top
   | .nu k => .nu (k.lift (c + 1))
+  | .ev n e k => .ev n (e.lift c) (k.lift c)
 end
 
 mutual
@@ -126,6 +130,7 @@ def LCTy.subst (n : Nat) (S : LTy) : LCTy → LCTy
   | .amp k₁ k₂ => .amp (LCTy.subst n S k₁) (LCTy.subst n S k₂)
   | .top => .top
   | .nu k => .nu (LCTy.subst (n + 1) (S.lift 0) k)
+  | .ev m e k => .ev m (LTy.subst n S e) (LCTy.subst n S k)
 end
 
 /-- `A[μX. A/X]`. -/
@@ -169,6 +174,7 @@ def LCTy.unbang : LCTy → LCTy
   | .amp k₁ k₂ => .amp k₁.unbang k₂.unbang
   | .top => .top
   | .nu k => .nu k.unbang
+  | .ev n e k => .ev n e.unbang k.unbang
 end
 
 /-- Two types of one representation: equal with every `!` erased. -/
@@ -284,86 +290,130 @@ def outcomeTy (r : LTy) (aborts : List ((UInt32 × UInt32) × LTy))
       | some p => .sum (p.lift 0) s
     .mu (.sum (r.lift 0) x)
 
+/-- **The program's evidence** [spec §71]: each static name whose `tail` clause is
+called directly with the values it captures (`Backend2/Driver.lean`, `DirectKind.env`), with the
+LIR types of its evidence parameters, one per captured slot, in the slots' order. Empty, no type
+changes. -/
+abbrev EvSet := Std.HashMap UInt32 (List LTy)
+
+/-- The names of a row, in its order (`CTy.effOf`'s layers). -/
+def _root_.BoCa.Fig16.LogRel.Core.CTy.effNames : CTy → List UInt32
+  | .eff n _ _ _ _ _ _ C => n :: C.effNames
+  | _ => []
+
+/-- The evidence parameters a code at a row whose names are `names` takes: each name of `fd`
+once, in the row's order, each with its parameters' types. -/
+def evLayers (fd : EvSet) (names : List UInt32) : List (UInt32 × LTy) :=
+  (names.eraseDups.filter fd.contains).flatMap fun n => (fd.getD n []).map (n, ·)
+
+/-- `k` taking the evidence parameters `es` first. -/
+def evWrap (es : List (UInt32 × LTy)) (k : LCTy) : LCTy :=
+  es.foldr (fun (n, e) k => .ev n e k) k
+
+/-- A closure type's leading evidence parameters, and what it is after them. -/
+def LCTy.stripEv : LCTy → List (UInt32 × LTy) × LCTy
+  | .ev n e k => let (es, k') := k.stripEv; ((n, e) :: es, k')
+  | k => ([], k)
+
+/-- **Evidence where the first cut builds none**  `[spec §71]`: an internal error. The program's
+evidence is chosen before conversion (`Backend2/Driver.lean`, `evNames`), which excludes every
+name whose evidence would reach such a place; the conversion never meets one. -/
+def evInternal (n : UInt32) (why : String) : String :=
+  s!"LIR: internal: the evidence of {n} at {why}, which `evNames` excludes"
+
 mutual
 /-- A value type of the LIR: lifetimes, `[@a]` and `∀` erased, `!` kept; `ms` the program's
 machine operations. -/
-def ofV (ms : MachSet) : VTy → Except String LTy
+def ofV (ms : MachSet) (fd : EvSet) : VTy → Except String LTy
   | .unit => pure .unit
   | .zero => pure .zero
   | .int w => pure (.int w)
-  | .tensor A B => return .pair (← ofV ms A) (← ofV ms B)
-  | .sum A B => return .sum (← ofV ms A) (← ofV ms B)
-  | .mu A => return .mu (← ofV ms A)
+  | .tensor A B => return .pair (← ofV ms fd A) (← ofV ms fd B)
+  | .sum A B => return .sum (← ofV ms fd A) (← ofV ms fd B)
+  | .mu A => return .mu (← ofV ms fd A)
   | .tvar n => pure (.tvar n)
-  | .ref A => return .ref (← ofV ms A)
-  | .imm _ A => return .imm (← ofV ms A)
-  | .mut _ A => return .mut (← ofV ms A)
-  | .box _ A => ofV ms A
-  | .bang A => return .bang (← ofV ms A)
-  | .fam L => return .fam (← ofV ms L)
+  | .ref A => return .ref (← ofV ms fd A)
+  | .imm _ A => return .imm (← ofV ms fd A)
+  | .mut _ A => return .mut (← ofV ms fd A)
+  | .box _ A => ofV ms fd A
+  | .bang A => return .bang (← ofV ms fd A)
+  | .fam L => return .fam (← ofV ms fd L)
   -- `Tok` is a location owning a unit cell, `Ref 1`'s relation (`vCE_tok_eq_ref`), made by
   -- `alloc` and released by `free` (`tokMint`, `tokBurn`); its view is `Unk` (`Imm̲ 'b Tok`), a
   -- pointer read as discarded (`Layout.joinRe`, `Lower.reVals`).
   | .opq .tok => pure (.ref .unit)
   | .opq k => pure (.opq k)
   | .unk => pure .unk
-  | .thunk C => ofU ms false C
+  | .thunk C => ofU ms fd false C
   -- [spec §68] A per-code closure type has no LIR type yet; nothing past `ofV` sees one.
   | .code _ _ _ => throw "LIR: a per-code closure type is not lowered yet (#855 B1, SPEC §68)"
 
 /-- The LIR type of `U C`, under `∀`s when `under`: `U (∀'x. F A)` is `A`. -/
-def ofU (ms : MachSet) (under : Bool) : CTy → Except String LTy
-  | .all _ _ C => ofU ms true C
-  | .ret A => if under then ofV ms A else return .thunk (.ret (← ofV ms A))
-  | C => return .thunk (← ofC ms C)
+def ofU (ms : MachSet) (fd : EvSet) (under : Bool) : CTy → Except String LTy
+  | .all _ _ C => ofU ms fd true C
+  | .ret A => if under then ofV ms fd A else return .thunk (.ret (← ofV ms fd A))
+  | C => return .thunk (← ofC ms fd C)
 
 /-- The LIR type of a computation type. A `∀` is its body (SPEC §44). -/
-def ofC (ms : MachSet) : CTy → Except String LCTy
-  | .ret A => return .ret (← ofV ms A)
-  | .arr A C => return .arr (← ofV ms A) (← ofC ms C)
-  | .amp C D => return .amp (← ofC ms C) (← ofC ms D)
+def ofC (ms : MachSet) (fd : EvSet) : CTy → Except String LCTy
+  | .ret A => return .ret (← ofV ms fd A)
+  | .arr A C => return .arr (← ofV ms fd A) (← ofC ms fd C)
+  | .amp C D => do
+    let c ← ofC ms fd C
+    let d ← ofC ms fd D
+    if let (n, _) :: _ := c.stripEv.1 ++ d.stripEv.1 then
+      throw (evInternal n "a `&` component")
+    return .amp c d
   | .top => pure .top
-  | .all _ _ C => ofC ms C
-  | .nu C => return .nu (← ofC ms C)
-  | .eff n i q A B fin _ C => do
+  | .all _ _ C => ofC ms fd C
+  | .nu C => do
+    let c ← ofC ms fd C
+    if let (n, _) :: _ := c.stripEv.1 then
+      throw (evInternal n "a `ν`'s observation")
+    return .nu c
+  | C@(.eff n i q A B fin _ C') => do
     -- `F_Σ R`: `R`, `R ⊕ P` with the payload of `Σ`'s abortive operations (SPEC §47), or the
-    -- outcome at its machine operations (SPEC §49).
+    -- outcome at its machine operations (SPEC §49); its evidence first [spec §71].
     if n == divName then
       throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
-    let (ps, qs, r) ← ofEff ms C
-    if abortB q B then return .ret (outcomeTy r (((n, i), ← ofV ms A) :: ps) qs)
+    let (ps, qs, r) ← ofEff ms fd C'
+    let es := evLayers fd C.effNames
+    let mach := ms.contains (n, i) && !abortB q B
+    if let (m, _) :: _ := es then
+      if mach || !qs.isEmpty then throw (evInternal m "a machine's row")
+    if abortB q B then return evWrap es (.ret (outcomeTy r (((n, i), ← ofV ms fd A) :: ps) qs))
     else if ms.contains (n, i) then
       -- The cancel row read at a capturable operation only (`ofFinAt`).
-      let cp ← if capB q B then ofFin ms fin else pure none
-      return .ret (outcomeTy r ps (((n, i), ← ofV ms A, ← ofV ms B, cp) :: qs))
-    else return .ret (outcomeTy r ps qs)
+      let cp ← if capB q B then ofFin ms fd fin else pure none
+      return evWrap es (.ret (outcomeTy r ps (((n, i), ← ofV ms fd A, ← ofV ms fd B, cp) :: qs)))
+    else return evWrap es (.ret (outcomeTy r ps qs))
 
 /-- The layers of `F_Σ R` (`CTy.effOf`): each abortive operation's key and argument type, each
 machine operation's key, argument type, answer type and cancel row, in the row's order, and `R`.
 `Div`'s operations are outside the fragment (N4).  [spec §47, §49] -/
-def ofEff (ms : MachSet) : CTy →
+def ofEff (ms : MachSet) (fd : EvSet) : CTy →
     Except String (List ((UInt32 × UInt32) × LTy) ×
       List ((UInt32 × UInt32) × LTy × LTy × Option CancelRow) × LTy)
-  | .ret R => return ([], [], ← ofV ms R)
+  | .ret R => return ([], [], ← ofV ms fd R)
   | .eff n i q A B fin _ C => do
     if n == divName then
       throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
-    let (ps, qs, r) ← ofEff ms C
-    if abortB q B then return (((n, i), ← ofV ms A) :: ps, qs, r)
+    let (ps, qs, r) ← ofEff ms fd C
+    if abortB q B then return (((n, i), ← ofV ms fd A) :: ps, qs, r)
     else if ms.contains (n, i) then
       -- The cancel row read at a capturable operation only (`ofFinAt`).
-      let cp ← if capB q B then ofFin ms fin else pure none
-      return (ps, ((n, i), ← ofV ms A, ← ofV ms B, cp) :: qs, r)
+      let cp ← if capB q B then ofFin ms fd fin else pure none
+      return (ps, ((n, i), ← ofV ms fd A, ← ofV ms fd B, cp) :: qs, r)
     else return (ps, qs, r)
   | _ => throw "a row's layers over a type that is not `F R`"
 
 /-- A cancel row (`CTy.rowOf`) as its `k` reads it (`CancelRow`): `none` at `⊤`. A machine
 operation there (a finaliser that may suspend) is a suspension of the cancel, with its own cancel
 row, read at a capturable operation only.  [spec §27, §49] -/
-def ofFin (ms : MachSet) : CTy → Except String (Option CancelRow)
+def ofFin (ms : MachSet) (fd : EvSet) : CTy → Except String (Option CancelRow)
   | .top => pure none
   | C => do
-    let (ps, qs, us) ← ofFinParts ms C
+    let (ps, qs, us) ← ofFinParts ms fd C
     let ps := dedupPay ps
     let qs := qs.foldl (fun acc p => if acc.any (·.1 == p.1) then acc else acc ++ [p]) []
     return some (.mk ps qs us (outcomeTy .unit ps qs))
@@ -371,17 +421,17 @@ def ofFin (ms : MachSet) : CTy → Except String (Option CancelRow)
 /-- The layers of a cancel row: its abortive operations' keys and argument types, its machine
 operations' keys, argument and answer types and cancel rows (`ofFin`, at a capturable operation),
 and its operations at `unr`, in the row's order. -/
-def ofFinParts (ms : MachSet) : CTy →
+def ofFinParts (ms : MachSet) (fd : EvSet) : CTy →
     Except String (List ((UInt32 × UInt32) × LTy) ×
       List ((UInt32 × UInt32) × LTy × LTy × Option CancelRow) × List (UInt32 × UInt32))
   | .ret _ => pure ([], [], [])
   | .eff n i q A B fin _ C => do
-    let (ps, qs, us) ← ofFinParts ms C
+    let (ps, qs, us) ← ofFinParts ms fd C
     let us := if q == .unr then (n, i) :: us else us
-    if abortB q B then return (((n, i), ← ofV ms A) :: ps, qs, us)
+    if abortB q B then return (((n, i), ← ofV ms fd A) :: ps, qs, us)
     else if ms.contains (n, i) then
-      let cp ← if capB q B then ofFin ms fin else pure none
-      return (ps, ((n, i), ← ofV ms A, ← ofV ms B, cp) :: qs, us)
+      let cp ← if capB q B then ofFin ms fd fin else pure none
+      return (ps, ((n, i), ← ofV ms fd A, ← ofV ms fd B, cp) :: qs, us)
     else return (ps, qs, us)
   | _ => throw "a cancel row that is not a row"
 end
@@ -391,13 +441,13 @@ at a capturable operation (`capB`, as the kernel's `OpSig.ent` reads it), and `n
 must-resume one, whose `κ` has the cancel component `⊤` (`kTy`'s `.lin` case) and is never
 cancelled (`kappaC_cancel_lin`). `ofC` and `ofEff` read it the same way, inline.
 [spec §27, §49] -/
-def ofFinAt (ms : MachSet) (q : Qual) (B : VTy) (fin : CTy) : Except String (Option CancelRow) :=
-  if capB q B then ofFin ms fin else pure none
+def ofFinAt (ms : MachSet) (fd : EvSet) (q : Qual) (B : VTy) (fin : CTy) : Except String (Option CancelRow) :=
+  if capB q B then ofFin ms fd fin else pure none
 
 /-- `ofV` keeps `!`: the LIR type of `!A` is `!` of `A`'s. -/
-theorem ofV_bang (ms : MachSet) (A : VTy) : ofV ms (.bang A) = (ofV ms A).map .bang := by
+theorem ofV_bang (ms : MachSet) (fd : EvSet) (A : VTy) : ofV ms fd (.bang A) = (ofV ms fd A).map .bang := by
   simp only [ofV]
-  cases ofV ms A <;> rfl
+  cases ofV ms fd A <;> rfl
 
 /-! ### What `Lint` reads at a copy and a consume
 
@@ -428,35 +478,35 @@ def LTy.consumes : LTy → Bool
   | .mu _ | .tvar _ | .ref _ | .fam _ | .thunk _ => false
 
 /-- The LIR type of a persistent type is persistent. -/
-theorem ofV_persistent {ms : MachSet} : ∀ {A : VTy} {t : LTy}, A.persistent = true →
-    ofV ms A = .ok t → t.persistent = true
+theorem ofV_persistent {ms : MachSet} {fd : EvSet} : ∀ {A : VTy} {t : LTy}, A.persistent = true →
+    ofV ms fd A = .ok t → t.persistent = true
   | .unit, t, _, h | .zero, t, _, h | .unk, t, _, h | .int _, t, _, h | .tvar _, t, _, h => by
       simp only [ofV] at h; cases h; rfl
   | .bang A, t, _, h => by
       rw [ofV_bang] at h
-      cases hA : ofV ms A <;> rw [hA] at h <;> cases h; rfl
+      cases hA : ofV ms fd A <;> rw [hA] at h <;> cases h; rfl
   | .box _ A, t, hp, h => by
       simp only [ofV] at h
       exact ofV_persistent (by simpa [VTy.persistent] using hp) h
   | .mu A, t, hp, h => by
       simp only [ofV] at h
-      cases hA : ofV ms A <;> rw [hA] at h <;> cases h
+      cases hA : ofV ms fd A <;> rw [hA] at h <;> cases h
       exact by simpa [LTy.persistent] using ofV_persistent (by simpa [VTy.persistent] using hp) hA
   | .tensor A B, t, hp, h => by
       simp only [VTy.persistent, Bool.and_eq_true] at hp
       simp only [ofV] at h
-      cases hA : ofV ms A <;> cases hB : ofV ms B <;> rw [hA, hB] at h <;> cases h
+      cases hA : ofV ms fd A <;> cases hB : ofV ms fd B <;> rw [hA, hB] at h <;> cases h
       simp [LTy.persistent, ofV_persistent hp.1 hA, ofV_persistent hp.2 hB]
   | .sum A B, t, hp, h => by
       simp only [VTy.persistent, Bool.and_eq_true] at hp
       simp only [ofV] at h
-      cases hA : ofV ms A <;> cases hB : ofV ms B <;> rw [hA, hB] at h <;> cases h
+      cases hA : ofV ms fd A <;> cases hB : ofV ms fd B <;> rw [hA, hB] at h <;> cases h
       simp [LTy.persistent, ofV_persistent hp.1 hA, ofV_persistent hp.2 hB]
   | .opq _, _, hp, _ | .thunk _, _, hp, _ | .ref _, _, hp, _ | .imm _ _, _, hp, _
   | .mut _ _, _, hp, _ | .fam _, _, hp, _ | .code _ _ _, _, hp, _ => by simp [VTy.persistent] at hp
 
 /-- The LIR type of a `VTy.Consume` type consumes. -/
-theorem ofV_consumes {ms : MachSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, ofV ms A = .ok t →
+theorem ofV_consumes {ms : MachSet} {fd : EvSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, ofV ms fd A = .ok t →
     t.consumes = true := by
   induction hA with
   | opq k hk =>
@@ -466,20 +516,20 @@ theorem ofV_consumes {ms : MachSet} {A : VTy} (hA : A.OwnFree) : ∀ {t : LTy}, 
       intro t h; simp only [ofV] at h
       first
         | (cases h; rfl)
-        | (rename_i A; cases hA : ofV ms A <;> rw [hA] at h <;> cases h; rfl)
+        | (rename_i A; cases hA : ofV ms fd A <;> rw [hA] at h <;> cases h; rfl)
   | bang A =>
       intro t h; rw [ofV_bang] at h
-      cases hA : ofV ms A <;> rw [hA] at h <;> cases h; rfl
+      cases hA : ofV ms fd A <;> rw [hA] at h <;> cases h; rfl
   | @tensor A B _ _ ihA ihB | @sum A B _ _ ihA ihB =>
       intro t h; simp only [ofV] at h
-      cases hA : ofV ms A <;> cases hB : ofV ms B <;> rw [hA, hB] at h <;> cases h
+      cases hA : ofV ms fd A <;> cases hB : ofV ms fd B <;> rw [hA, hB] at h <;> cases h
       simp [LTy.consumes, ihA hA, ihB hB]
 
 /-- The LIR type of a judgment: a value type, or the closure type a computation's value has
 (`rep`). -/
-def ofJ (ms : MachSet := {}) : Jdg → Except String (Sum LTy LCTy)
-  | .val A => return .inl (← ofV ms A)
-  | .comp C => return .inr (← ofC ms C)
+def ofJ (ms : MachSet := {}) (fd : EvSet := {}) : Jdg → Except String (Sum LTy LCTy)
+  | .val A => return .inl (← ofV ms fd A)
+  | .comp C => return .inr (← ofC ms fd C)
 
 /-! ### Printing -/
 
@@ -511,6 +561,7 @@ def LCTy.pp : LCTy → String
   | .amp k₁ k₂ => s!"({k₁.pp} & {k₂.pp})"
   | .top => "T"
   | .nu k => s!"nu. {k.pp}"
+  | .ev n e k => s!"(ev {n} {e.pp} -o {k.pp})"
 end
 
 instance : ToString LTy := ⟨LTy.pp⟩

@@ -110,6 +110,8 @@ def sites : List (Name × List Name) := [
   (``Backend2.genCount, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.genCountTry, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.genConsume, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
+  -- A work's captured slots: `dup` copies of its evidence, persistent (`[handle]`'s `DeadP`). [spec §71]
+  (``Backend2.ensureWork, [``Backend2.CopyRule.dup]),
   (``Backend2.genFix, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.genFoldRev, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.genKap, [``Backend2.ConsumeRule.dead]),
@@ -134,7 +136,8 @@ def sites : List (Name × List Name) := [
   (``Backend2.untuple, [``Backend2.ConsumeRule.dead]),
   (``Backend2.walkW, [``Backend2.ConsumeRule.dead]),
   -- Readers of a rule, which build no node: the lint, and the statements of the `UNPROVED:` ones.
-  (``Backend2.Lint.lintTm, [``Backend2.ConsumeRule.consume, ``Backend2.ConsumeRule.stackK]),
+  (``Backend2.Lint.lintTm, [``Backend2.ConsumeRule.consume, ``Backend2.ConsumeRule.stackK,
+    ``Backend2.CopyRule.dup]),
   (``Backend2.enter, [``Backend2.ConsumeRule.stackK]),
   (``Backend2.Tm.hasHandOver, [``Backend2.ConsumeRule.stackK]),
   (``Backend2.StackKHandOver, [``Backend2.ConsumeRule.stackK]),

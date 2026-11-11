@@ -27,7 +27,13 @@ verifies and never fills in:
 - every `abandon` meets the premise of the rule the node carries (`abandonable`): at a `[let]`'s
   abort, `effLet`'s `hW` (the variable's type holds no owned cell, `VTy.Consume`); at a superseded
   raise payload, `effRaise`'s `hd`, the same; at `⊤`, `topI`'s, which has none. It is the only
-  node at which an opaque value is discarded, and `Convert` emits it only at those rules' sites.
+  node at which an opaque value is discarded, and `Convert` emits it only at those rules' sites;
+- **evidence is confined** (`evConfined`, SPEC §71): a function's evidence parameters
+  (`Fn.evs`) are used only as evidence arguments (of a `call`'s evidence parameters, of an
+  `appE`) or read by a `copy` at `dup`, at a persistent type; never in a pair, an injection, a
+  closure's environment, a primitive (a cell), a `case`, a consume or a function's value. A value
+  passed as evidence is not consumed: it stays owned where it is. A closure call passes exactly the
+  evidence its closure type takes (`LCTy.ev`).
 -/
 
 namespace Backend2.Lint
@@ -40,6 +46,8 @@ abbrev Left := Option (Std.HashSet Var)
 
 structure St where
   bound : Std.HashSet Var := {}
+  /-- The evidence parameters of the function being linted (`Fn.evs`). -/
+  ev : Std.HashSet Var := {}
 
 abbrev LM := StateT St (Except String)
 
@@ -52,8 +60,31 @@ def bindNew (w : String) (p : Prog) (env : Std.HashSet Var) (x : Var) : LM (Std.
   return env.insert x
 
 def use (w : String) (env : Std.HashSet Var) (x : Var) : LM (Std.HashSet Var) := do
+  if (← get).ev.contains x then
+    bad w s!"evConfined: the evidence x{x} used other than as evidence or by a copy"
   if !env.contains x then bad w s!"x{x} used when it is not owned (consumed, or out of scope)"
   return env.erase x
+
+/-- **An evidence argument** (`evConfined`): an evidence parameter of the function, or a value it
+owns, which stays owned; at a persistent type (E1 passes persistent values, by value). -/
+def evArg (w : String) (p : Prog) (env : Std.HashSet Var) (x : Var) : LM Unit := do
+  unless (← get).ev.contains x || env.contains x do
+    bad w s!"evConfined: x{x} passed as evidence when it is neither evidence nor owned"
+  match p.ty[x]? with
+  | some t =>
+    unless t.persistent do bad w s!"evConfined: x{x} passed as evidence at {t}, which is not persistent"
+  | none => bad w s!"x{x} has no type"
+
+/-- The evidence parameters a closure of type `t` takes at its call: after its argument (`lam`),
+or at its component `j` (`amp`). -/
+def evParamsOf (t : LTy) (arg : Bool) (j : Nat) : Option Nat :=
+  match t.peel with
+  | .thunk k => match k.whnf 8, arg with
+    | .arr _ c, true => some c.stripEv.1.length
+    | .amp c d, false => some (if j == 0 then c else d).stripEv.1.length
+    | k, false => some k.stripEv.1.length
+    | _, _ => none
+  | _ => none
 
 def useAll (w : String) (env : Std.HashSet Var) (xs : List Var) : LM (Std.HashSet Var) :=
   xs.foldlM (use w) env
@@ -144,19 +175,19 @@ def abandonable : Abandon → LTy → Bool
 
 /-- A slot a split duplicates (`Ctx.SplitP.dup`: of persistent type) is `copyable` at its LIR
 type. -/
-theorem copyable_ofV {ms : MachSet} {A : VTy} {t : LTy} (hA : A.persistent = true)
-    (h : ofV ms A = .ok t) : copiesAt .dup t = true := by
+theorem copyable_ofV {ms : MachSet} {fd : EvSet} {A : VTy} {t : LTy} (hA : A.persistent = true)
+    (h : ofV ms fd A = .ok t) : copiesAt .dup t = true := by
   simp [copiesAt, ofV_persistent hA h]
 
 /-- A slot a leaf consumes (`Ctx.DeadP.weaken`: of persistent type) is `weakenable` at its LIR type. -/
-theorem weakenable_ofV_persistent {ms : MachSet} {A : VTy} {t : LTy}
-    (hA : A.persistent = true) (h : ofV ms A = .ok t) : consumesAt .dead t = true := by
+theorem weakenable_ofV_persistent {ms : MachSet} {fd : EvSet} {A : VTy} {t : LTy}
+    (hA : A.persistent = true) (h : ofV ms fd A = .ok t) : consumesAt .dead t = true := by
   simp [consumesAt, ofV_persistent hA h]
 
 /-- A slot an abort abandons (`Ctx.Consumes`: of a `VTy.OwnFree` type) is `abandonable` at its LIR
 type. -/
-theorem abandonable_ofV_consume {ms : MachSet} {A : VTy} {t : LTy} (hA : A.OwnFree)
-    (h : ofV ms A = .ok t) : abandonable .letAbort t = true := by
+theorem abandonable_ofV_consume {ms : MachSet} {fd : EvSet} {A : VTy} {t : LTy} (hA : A.OwnFree)
+    (h : ofV ms fd A = .ok t) : abandonable .letAbort t = true := by
   simp [abandonable, ofV_consumes hA h]
 
 /-- **A `slotPop`'s premise, read on the LIR types** (`none` when it holds): one operand, an owned
@@ -189,11 +220,27 @@ def lintTm (w : String) (p : Prog) (inConsumeFn : Bool) : Nat → Std.HashSet Va
       let some code := p.codes[c]? | bad w s!"no code c{c}"
       for fn in code.fns do
         let some d := p.fns[fn]? | bad w s!"no function f{fn}"
-        let k := if code.kind == .lam then d.params.length - 1 else d.params.length
+        let k := d.params.length - d.evs - (if code.kind == .lam then 1 else 0)
         if k != xs.length then bad w s!"c{c}'s closure of {xs.length} values for {k}"
       return some (← useAll w env xs)
-    | .app g a => return some (← useAll w env [g, a])
-    | .app0 g => return some (← use w env g)
+    | .app g a => do
+      if (evParamsOf ((p.ty[g]?).getD .unit) true 0).any (· != 0) then
+        bad w s!"evConfined: x{g} called with no evidence where its type takes some"
+      return some (← useAll w env [g, a])
+    | .app0 g => do
+      if (evParamsOf ((p.ty[g]?).getD .unit) false 0).any (· != 0) then
+        bad w s!"evConfined: x{g} run with no evidence where its type takes some"
+      return some (← use w env g)
+    | .appE g a j ev => do
+      match evParamsOf ((p.ty[g]?).getD .unit) a.isSome j with
+      | some k => if k != ev.length then
+          bad w s!"evConfined: x{g} called with {ev.length} evidence values for {k}"
+      | none => bad w s!"x{g}: a call with evidence of a closure that is not called so"
+      for e in ev do evArg w p env e
+      let env ← use w env g
+      match a with
+      | some a => return some (← use w env a)
+      | none => return some env
     -- `⊤` has no elimination: a `&` whose second component is `⊤` (a must-resume `κ`'s cancel,
     -- `kTy`) is never observed at it.
     | .sel g j => do
@@ -206,7 +253,9 @@ def lintTm (w : String) (p : Prog) (inConsumeFn : Bool) : Nat → Std.HashSet Va
       let some d := p.fns[fn]? | bad w s!"no function f{fn}"
       if d.params.length != as.length then
         bad w s!"f{fn} ({d.name}) called on {as.length} arguments for {d.params.length}"
-      return some (← useAll w env as)
+      let k := as.length - d.evs
+      for e in as.drop k do evArg w p env e
+      return some (← useAll w env (as.take k))
     -- A path that reaches `unreachable` is never run, as one that ends at `absurd`.
     | .prim .unreachable as => do let _ ← useAll w env as; return none
     | .prim _ as => return some (← useAll w env as)
@@ -237,7 +286,9 @@ def lintTm (w : String) (p : Prog) (inConsumeFn : Bool) : Nat → Std.HashSet Va
         return some a
     | .absurd sv => do let _ ← use w env sv; return none
     | .copy r x x' b => do
-      if !env.contains x then bad w s!"x{x} copied when it is not owned"
+      if (← get).ev.contains x && r != .dup then
+        bad w s!"evConfined: the evidence x{x} copied at the rule {r.name}"
+      if !env.contains x && !(← get).ev.contains x then bad w s!"x{x} copied when it is not owned"
       match p.ty[x]? with
       | some t =>
         if !copiesAt r t then bad w s!"x{x} copied at {t} ({r.name}), where the rule's premise does not hold"
@@ -269,11 +320,19 @@ def lint (p : Prog) : Except String Unit := do
       let w := s!"f{i} ({d.name})"
       if !d.lendEncl.isEmpty && d.lendEncl.length != d.params.length then
         bad w s!"{d.lendEncl.length} lend bits for {d.params.length} parameters"
+      if d.evs > d.params.length then
+        bad w s!"{d.evs} evidence parameters of {d.params.length}"
+      let k := d.params.length - d.evs
       let mut env : Std.HashSet Var := {}
-      for x in d.params do env ← bindNew w p env x
+      for x in d.params.take k do env ← bindNew w p env x
+      modify fun s => { s with ev := {} }
+      for x in d.params.drop k do
+        let _ ← bindNew w p {} x
+        modify fun s => { s with ev := s.ev.insert x }
       match ← lintTm w p (p.consumeFns.contains i) (1 <<< 22) env d.body with
       | some rest => if !rest.isEmpty then bad w s!"ends with {rest.toList.map (s!"x{·}")} unconsumed"
       | none => pure ()
+    modify fun s => { s with ev := {} }
     match ← lintTm "main" p false (1 <<< 22) {} p.main with
     | some rest => if !rest.isEmpty then bad "main" s!"ends with {rest.toList.map (s!"x{·}")} unconsumed"
     | none => pure ()
