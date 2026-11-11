@@ -117,6 +117,7 @@ core-unsigned 0 0 0 0 0 0 # every value is a word: the unsigned integers are hel
 data-json-map-ser 16 0 0 699 420 205
 deep-gen-count 0 3 0 0 0 0
 effects-load-raise 4 0 0 204 184 15
+evidence-rebind 0 0 0 0 0 0
 fin-block-finaliser 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
 fin-bound-loop-abort 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
 fin-bound-loop-finish 0 0 0 0 0 0 # no cell; the loop finishes and the clause resumes

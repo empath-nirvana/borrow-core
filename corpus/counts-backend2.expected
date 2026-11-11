@@ -127,6 +127,7 @@ core-unsigned 0 0 0 0 0 0
 data-json-map-ser 16 0 0 489 379 133
 deep-gen-count 0 3 0 0 0 0
 effects-load-raise 4 0 0 204 184 15
+evidence-rebind 0 3 0 0 0 0 # `ask` called directly with `v` as its evidence; the indirect calls are the clause's calls of `v`, which three instances' closures reach in its one work: the flow analysis is monovariant (as a machine per instance, 0)
 fin-block-finaliser 0 0 0 0 0 0
 fin-bound-loop-abort 0 0 0 0 0 0
 fin-bound-loop-finish 0 0 0 0 0 0
