@@ -13209,11 +13209,12 @@ codes' types. Nothing is read from `TInfo` or `HSite`.
 - `corpus/loop-captured-bang.bc` (new): `0 0 0 0 0 0`, erasure `handles 2 performs 1 raises 1`,
   no machine, native in 64 KiB.
 - `corpus/evidence-rebind.bc` (new): closure captures, three instances of one site, at most two
-  live at once.
-- `corpus/evidence-rebind-value.bc` (new): an `i32` capture, in core syntax.
-- `corpus/evidence-nested-site.bc` (new): two nodes of one name in one function.
+  live at once: `(1, 2100)`. Stale evidence would answer `2002`.
+- `corpus/evidence-rebind-value.bc` (new): an `i32` capture, in core syntax: `(1, 2100)`.
+- `corpus/evidence-nested-site.bc` (new): two nodes of one name in one function: `2100`.
 - `corpus/evidence-outer-row.bc` (new): a name in the outer row of a node with a directly called
-  clause. It compiles; the exclusion keeps that clause a machine.
+  clause: `8`. The exclusion keeps that clause a machine, and its LIR is unchanged.
+- The new programs give `live 0`.
 - The machines become direct calls in `hygiene-handler-resume` (erasure from
   `machines 1 suspends 1` to `handles 2 performs 1`), `loop-captured-bang`, `evidence-rebind`,
   `evidence-rebind-value` and `evidence-nested-site`.
