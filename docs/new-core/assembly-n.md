@@ -49,6 +49,14 @@ Stage `i` (0 ≤ i < n) reads wire `i` (type `A_i`, end `K_i`) and writes wire `
 
 `Ended(k)` keeps `k` when `K_{i+1}` is unrestricted, and is `Ended(·)` otherwise (review G3). The last stage has no `Ended`: `finish` consumes its `R`.
 
+**Rev 2.6 (L1 `stop()`, 2026-11-11):** "if the region kept an error, raise it at κ_i" is built as follows.
+- **(i) `close_up_i` runs in the glue, in its one region, outside s_i, as before.**
+- **(ii) A handler outside the region reifies the kept error** as `inr (inj_j e)` over `cu_i`'s abortive operations. `stop()` answers `1 + (E_1 + … + E_k)`.
+- **(iii) s_i re-raises it by effect name, at the `stop()` call:** `match stop() { inl () → () | inr p → raise_j(e) }`. It is resolved lexically there (§19), so a local handler in s_i catches it. With none, it reaches s_i's own instance, which gives the same observables as the model's raise in s_i.
+- **The alternative is refuted:** running `close_up_i` inside s_i's frames would let s_i's handlers intercept the upstream's non-error operations, which breaks ≈.
+- **L1 limit:** only effects whose operations are all abortive are reified; a mixed effect in `cu_i` is refused.
+- **The case** (source cleanup raises 10, s_i's raises 20): `123`, `inr 20` (sel_ii), pending the user's reading of (ii).
+
 **Rev 2.5 (L1 code size, 2026-11-11):** the generator uses one shared frame function per stage, and each list becomes a chain of calls to them. **This is covered as written:** L-region concerns the *dynamic* nest of `withStop` frames, and a call adds no handler or finaliser. Three conditions:
 1. each shared frame function installs exactly one `withStop_j` and does nothing else effectful;
 2. **one cancel region per list instance, wrapping the whole call chain.** One region per function would break (ii), because the latest error would win across regions;
@@ -95,7 +103,7 @@ Stage `i` (0 ≤ i < n) reads wire `i` (type `A_i`, end `K_i`) and writes wire `
 - `Yield(b, κ)` from `n−1` (a `for` over the chain; rev 2.4): store `AtYield κ`; perform the `for`'s site operation `(b, w)` under `close_all`, with `w` passed out and back, never held in the glue.
 - `Fwd(op, κ)` (any `i`; rev 2.4): store `AtFwd(κ, op)`; run `forward_i op` under `close_all`; resume `κ` with the answer.
 - `FwdWait(w, κ)` (only for `i < n−1`): as `Fwd`, with `forwardWait_i`.
-- `Stop(κ)`: store `AtStop κ`; run `close_up_i` (one region); resume `κ` with `K_i`, or, if the region kept an error, raise it at `κ` (§75's "raised at the call of `stop()`").
+- `Stop(κ)`: store `AtStop κ`; run `close_up_i` (one region, outside s_i); a handler outside the region reifies a kept error over `cu_i`'s abortive operations, and `κ` is resumed with `inl ()` (and `K_i`) or `inr (inj_j e)`. s_i's elaboration re-raises `inr` by effect name at the `stop()` call (`raise_j(e)`, resolved lexically there), so s_i may catch it (§75's "raised at the call of `stop()`"; rev 2.6).
 - `Skip`: loop.
 
 The glue makes no other decisions. Abortive ops, `must_resume` ops and answering ops are not events: they pass through (§75, *Forwarding*). Since rev 2.4 every stage's capturable resumable ops are `Fwd` events.
@@ -175,7 +183,7 @@ The glue makes no other decisions. Abortive ops, `must_resume` ops and answering
 | `Fwd` (any `i`) | L-forward | the chain's external point (c3′)/(c8′) | (I2)/(I4): `AtFwd`, `close_all` |
 | the last stage's outward `yield` (a `for` over the chain) | L-forward (at the last wire) | the chain's external point; `break` cancels `close_all`, downstream-first (Thm S) | (I2)/(I4) as at `AtFwd`; `w` goes out with `(b, w)` |
 | `FwdWait`, `i < n−1` (not in L1) | L-forward-wait | as above; on cancel Thm X then `cancelled` | as above |
-| `Stop`, any `i > 0` | L-region on `close_up_i` | P2's `stop()`: the upstream downstream-first, then resume with `K_i`; a kept error is a raise at `i` (next row) | `j < i` all `Ended` |
+| `Stop`, any `i > 0` | L-region on `close_up_i` | P2's `stop()`: the upstream downstream-first (one region), then resume. A kept error is returned as a value and re-raised in s_i at the `stop()` call, i.e. a raise at `i` (next row: Thm R, so s_i's own unwinding, then downstream; `sel_ii`) | `j < i` all `Ended` |
 | a raise from `i` | L-region on `close_others_i` | Thm R: `u_i` (`i`'s own frames, masked), then `d` = `n−1 … i+1`, then `p` = `i−1 … 0`, reported by `sel_ii` | final (propagates) |
 
 The order in the raise row: `close_others_i` nests the most downstream innermost, so its stops run `n−1, …, i+1, i−1, …, 0`; `i`'s own frames are inside `step_i`, so they unwind first. That is `u ;; d ;; p` exactly, and L-region's `head` is `sel_ii`'s `head O_dp`, with the raiser's latest error kept when no stop raises. In the `AtFwd` rows the list is `close_all`: `n−1, …, 0` with `i` at its rank, Thm X's.
