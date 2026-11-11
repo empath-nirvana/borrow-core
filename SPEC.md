@@ -13590,8 +13590,8 @@ rules:
 - **Open chains** wait for L2 (above).
 - **No two adjacent stages share a capturable operation.** A stored stage's cancel is typed at its
   whole row, so the shared operation's cancel row would contain itself
-  (`corpus/reject/fin-cancel-capturing.bc`; §27 *Open*). The n-free `cancelTy` refinement, a
-  proposed kernel unit, lifts it.
+  (`corpus/reject/fin-cancel-capturing.bc`; §27 *Open*). The n-free `cancelTy` refinement (*Open*)
+  lifts it.
 - **A0:** a linear value live where a stage may raise or be closed is consumed on that path, or the
   checker refuses the program (§27's `[let]`).
 
@@ -13610,13 +13610,14 @@ Three stages: source 1, middle 2, sink 3; digits are the cleanups.
 | 7 | the sink raises; the middle's and the source's cleanups raise | `321` | the source's |
 
 These follow from the kernel's own laws for handlers, unwinding and cancel (`catch_step`,
-`kappaC_resume`, `unwind_prefix`, `cancel_prefix`) by induction over the nesting. The proof is on
+`kappaC_resume`, `unwind_prefix`, `cancel_prefix`) by induction over the nesting
+(`docs/new-core/pipes-bridge.md`). The proof is on
 paper. Two kernel lemma units are proposed to mechanise it: G1, the order lemmas with effectful
 finalisers; G2, the order lemmas through handler frames.
 
 P1 Thm A holds by the normal form. Lemma M holds by construction: both operators emit the same wire.
 
-Assembly(n) (`docs/new-core/assembly-n.md`) describes the connector design, which this design
+Assembly(n) (`docs/new-core/assembly-n.md`) describes the connector design, which this one
 supersedes.
 
 ---
@@ -13722,48 +13723,24 @@ does not support; they carry `-- check: old-backend-refuses`.
 
 ### Open
 
-- **Forwarding §29a marked waits** (`[await-c]`): `forwardWait_i`, `FwdWait` and L-forward-wait, in
-  the later unit that makes the checker emit `effAwait` (§29a *Not built*; *Open*, `EffCtx` carrying
-  `rc`).
-  - kernel-foreman's reading, on paper against `effThen` and not built: the shape types: `[then]`
-    with M = the connector's
-    `[await-c]` on the outer wait, N = resume the stage with `inl a`, and D = `close_all` in K2's
-    form.
-  - Its four conditions:
-    - **(hU)** the connector's row is `¬UnrD`;
-    - **(hfin)/(Row)** the wait's cancel row covers `close_all`'s row;
-    - **(Clause)** a clause for the fresh name's cancel target, never reached;
-    - **(Shield)**, below.
-  - **(R-wait), the restriction that comes with it.** A non-last stage may not catch `cancelled`
-    around a forwarded wait. The message:
-    `` a forwarded wait's cancel stops the whole chain, downstream-first, so a non-last stage cannot catch `cancelled` around it ``.
-  - **Law 5c's note on finalisers that wait (Shield).** After a §29a wait answers `inr ()`, law 5c
-    keeps the task cancelled. So a stage finaliser that waits on a marked wait raises `cancelled` at
-    once, and `cfin` keeps it. A finaliser that must wait uses §29a's shielded, unmarked `complete`.
+- **Marked waits (§29a) in a stage:** the checker does not emit `effAwait`; a stage's marked wait
+  would pass straight through the wires.
+- **The n-free `cancelTy` refinement** (a kernel unit, proposed). It lifts the restriction that no
+  two adjacent stages share a capturable operation.
 - **A protocol-level `peek`** would add a "yielded but not received" wire state (P1b row 2 → amber),
   a buffer-release rule on stop, raise and cancel, and new Thm A cases. Not adopted.
-- **NP-close-at-rest.** A stage that stops pulling without calling `stop()` leaves its upstream open
-  until the chain's rest is closed. Unit C's lint.
 - **Linear end values** on a wire: refused in L1. Providing them needs a decision on a repeated
   `next()`: a runtime protocol error, or typestate.
 - **`stop()` at a residual other than `1`** needs a cancel that hands back a residual. That is the
   same §15 *Open* item that blocks a stage holding a capability across `yield` (J2), and a kernel
   question (`cancelTy` answers `F_{fin ⊕ Σ} 1`).
-- **A stage's cleanup performing the forwarded operation** waits on §27 *Open*'s "`⊤` cancel rows".
 - **`connect`/`rest` at an effectful upstream:** `rest` would be #910's stored generator over a row;
   it waits on #910 (surface). L1 provides `connect` at an effect-free upstream.
-- **A stage's stored rest holding a lend or a capability between turns.** The model (P1/P1b,
-  Assembly(n)) has no lends, so whether a chain may hold one is a kernel/checker question; the
-  elaborator does not decide it. Today a chain inside a `borrow` block whose stages don't hold the
-  lend between turns is an ordinary computation.
-- **A chain of stages as a stage** (an open chain). It needs the head's `next`/`stop` forwarded. L2.
-- **A chain held across a per-observation lend** (a stage whose loop is in progress when the lend
-  ends) is refused (#1082). The general fix is either a `Code`-type outlives rule in the kernel (a
-  suspended div call outlives `@a` when its captures do) or boxing nested loops at `top` in the
-  machine. The refusal is Part A's, with the clause
-  `` a stream chain is not kept across a lend per observation, SPEC §75 *Open*, #1082 ``.
-- **Forwarding more per stage:** a second effect, an operation with another index, or one with
-  another answer type.
+- **A stage's stored rest holding a lend or a capability between turns,** including a chain kept
+  across a per-observation lend (#1082). The model has no lends, so whether a chain may hold one is
+  a kernel/checker question; the elaborator does not decide it. Today a chain inside a `borrow`
+  block whose stages don't hold the lend between turns is an ordinary computation.
+- **A chain of stages as a stage** (an open chain). L2.
 - **A user handler's storing clause around a loop** (`spawn` over a looping task) is #917's.
   `pending/async-channel.bc`, `async-fanout.bc` and `operator-reconcile.bc` are refused with its
   message: a `spawn` body that loops meets the storing `await` clause. `deep` at `Loop_Σ` is
@@ -13771,25 +13748,19 @@ does not support; they carry `-- check: old-backend-refuses`.
 - **The lend per observation (Part A, item 1), not provided:**
   - a call of a div function in progress, or a `for` over a generator, held in the state across
     the lend. It needs a rule that a code type `Code⟨N;E⟩ C` outlives `⊤` when its captures do (a
-    kernel unit), or the surface boxing the suspended call. A stage's stored κ is not limited:
-    §28's BOXED-κ (`effHandleVB`, at `d = ⊤`) boxes it at `⊤`, and the connector uses that;
+    kernel unit), or the surface boxing the suspended call;
   - the lend at a performing row;
   - `with … finally` around a lent loop;
   - a handler whose clauses use the lent place;
   - two lends;
   - reborrowed `mut` places.
-- **The unfused connector's code size and stop-path cost (#1096, parked).** The glue is linear in the number
-  of stages `n`, and so is its LIR function count (+396 per stage without cleanups, +434 with an
-  `unwind` cleanup per stage). Its WAT size is not: its second difference is about 0.22 MB (0.38 MB
-  with cleanups). The connector's state is a plain tuple of the stages' states, and Backend2's
-  Layout keeps it inline (§35), so each function that takes or answers it is O(n) in size. The stop
-  path copies: each shared frame's continuation captures the states of the stages after it, so a
-  frame list that runs allocates O(n) closures and stores O(n²) words. #1096's test is a WAT size
-  linear in `n`, with the stop-path counts at or below those of the glue with its lists written out.
-- **Fusion** (F, #923). The connector stores each stage's rest. The counts of the new programs are
-  recorded unfused, and no existing count changes.
-- **Mechanising Assembly(n),** and proving that per-observation handling is the deep handler: not
-  done. Assembly(n) is a paper proof, and the per-observation law is checked by programs.
+- **Fusion** (#923): adjacent push stages are the backend's tail-resumptive lowering (T-B1, T-B1′,
+  T-B2, semantics-preserving). The counts against the connector design are to be measured.
+- **Mechanising the bridge:** the proposed kernel units G1 (order lemmas with effectful
+  finalisers) and G2 (order through handler frames). Identity laws would need a two-run notion,
+  not proposed.
+- **Proving that per-observation handling is the deep handler:** not done; the per-observation law
+  is checked by programs.
 - **Two-way wires, fan-in and fan-out, borrowed items across wires:** scope §10.
 
 ---
