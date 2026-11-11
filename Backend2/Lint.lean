@@ -13,8 +13,11 @@ verifies and never fills in:
   variables, and a function ends with all of them consumed (a path that ends at `absurd` is
   unreachable);
 - every call has its callee's number of arguments, and every closure its code's environment;
-- every value has the shape its type says, and every term the type it is expected at (the shapes
-  of the values, below): eliminators, builders, literals, calls, closures, primitives, copies;
+- the typed checks of "The shapes of the values" below, on the LIR types (`Prog.ty`, `Fn.ret`,
+  `Prog.mainTy`, a code's type, the frame and region declarations): each eliminator's operand, each
+  builder's and literal's type, each call's arguments and answer, each closure against its code,
+  each primitive's operands and answer (`primBad`), and each copy's binder; what they leave
+  unchecked is listed there;
 - every `lend` answers a borrow of its kind: `mut` or `imm` (`Op.lend`, SPEC §57);
 - every `slotPop` is of an owned array and answers that family and its slot's contents
   (`slotPopBad`, SPEC §77);
@@ -42,10 +45,8 @@ abbrev Left := Option (Std.HashSet Var)
 
 structure St where
   bound : Std.HashSet Var := {}
-  /-- Each machine's frame contents, at its first `framePush`/`frameTop` (`primAt`). -/
-  frames : Std.HashMap Nat LTy := {}
-  /-- Each site's `κ` region contents, at its first `kappaPut`/`kappaTake` (`primAt`). -/
-  regions : Std.HashMap Nat LTy := {}
+  /-- The function being linted is a harness extern's (`Prog.hostFns`). -/
+  host : Bool := false
 
 abbrev LM := StateT St (Except String)
 
@@ -171,15 +172,21 @@ array `[Ref c]` (not a family of borrows, whose slots are not the family's to mo
 like any other, consumed once on every path (`lintTm`); the slot leaves the family, so the
 family's later `freeArr` cannot meet it written. That the operand's length is at least one is the
 code's test before the op (`genConsumeW`), checked on every run by the LIR interpreter.  `[spec §77]` -/
+def slotPopTyBad (a r : LTy) : Option String :=
+  match a.peel, r.peel with
+  | .fam (.ref c), .pair f c' =>
+    if !f.sameRep (.fam (.ref c)) then some s!"answers the family {f}, not its operand's"
+    else if !c'.sameRep c then some s!"answers contents {c'} for slots of {c}"
+    else none
+  | .fam (.ref c), t => some s!"answers {t}, not a pair of the family and its slot's contents {c}"
+  | t, _ => some s!"of {t}, which is not an owned array"
+
+/-- `slotPopTyBad` at a `letv`'s variable `x`. -/
 def slotPopBad (p : Prog) (x : Var) : List Var → Option String
   | [a] =>
-    match p.ty[a]?.map LTy.peel, p.ty[x]?.map LTy.peel with
-    | some (.fam (.ref c)), some (.pair f c') =>
-      if !f.sameRep (.fam (.ref c)) then some s!"answers the family {f}, not its operand's"
-      else if !c'.sameRep c then some s!"answers contents {c'} for slots of {c}"
-      else none
-    | some (.fam (.ref c)), some t => some s!"answers {t}, not a pair of the family and its slot's contents {c}"
-    | some t, _ => some s!"of {t}, which is not an owned array"
+    match p.ty[a]?, p.ty[x]? with
+    | some t, some r => slotPopTyBad t r
+    | some t, none => slotPopTyBad t .unit
     | none, _ => some s!"of x{a}, which has no type"
   | as => some s!"on {as.length} operands"
 
@@ -201,9 +208,18 @@ value is then `none` only on a program that is refused there.
 
 The calls, the closures, the literals, the primitives and the copies are checked on the types
 too (below: `callBad`, `codeBad`, `litTy`, `primBad`, `primAt`; a copy's binder at its source's
-type in `lintTm`). Not checked: an `alloc`'s width class (`Op.alloc`'s `cls`, a layout fact, not a
-type), a `divLit`'s operation against its operands' width (a byte's division is at `w32`), and
-the parameters of a `tab`'s loop past the function and the array it fills. -/
+type in `lintTm`).
+
+**Not checked.** The LIR erases lifetimes, so no borrow's lifetime or outlives relation is read
+(only its mode, `imm` or `mut`). An `alloc`'s width class (`Op.alloc`'s `cls`, a layout fact, not a
+type). A `divLit`'s operation against its operands' width (a byte's division is at `w32`). A `tab`
+loop's index and bound parameters (only the closure it takes, the array it fills and its answer).
+Which mode a `relend` answers (either). Which stack a `κ` access or a frame is of, and the static
+register a stack operation names: a handle is checked an address, no more; a stack machine's
+hand-over is `UNPROVED:` (`handsOver`). The I/O operations are checked at the externs' types of
+`lib/wasi.bc`, written here, not read from the program. A family's leaf at `emptyFam`. An
+`unreachable`'s operands and answer, and a value's range (an index in bounds, a length below
+`2³¹`): the code's tests, checked on every run by the LIR interpreter. -/
 
 /-- `x` and its type, for a message. -/
 def tyStr (p : Prog) (x : Var) : String :=
@@ -348,7 +364,9 @@ def callBad (p : Prog) (r : Option LTy) : Tm → Option String
     | _ => some s!"{tyStr p g} run: not a closure of a returner type"
   | .sel g j =>
     match closTy? (p.ty[g]?.getD .unit) with
-    | some (.amp k₀ k₁) => ansBad s!"x{g} observed at {j}" (answerTy (if j == 0 then k₀ else k₁))
+    | some (.amp k₀ k₁) =>
+      if j ≥ 2 then some s!"x{g} observed at {j}: a `&` has two components"
+      else ansBad s!"x{g} observed at {j}" (answerTy (if j == 0 then k₀ else k₁))
     | _ => some s!"{tyStr p g} observed at {j}: not a closure of a `&` type"
   | .clos c xs =>
     match p.codes[c]? with
@@ -395,33 +413,59 @@ def codeBad (p : Prog) (c : Nat) (code : Code) : Option String :=
   | .amp, .amp k₀ k₁, [f₀, f₁] => (ans f₀ (answerTy k₀)).orElse fun _ => ans f₁ (answerTy k₁)
   | _, k, fns => some s!"c{c}: a {reprStr code.kind} code of {fns.length} functions at {LTy.thunk k}"
 
-/-- `d` is the contents `c` read through `Imm̲` (`load`; `Layout.joinRe`): of `c`'s former with its
-parts read (a `μ` also through its unrolling, where a recursive pointer reads as a shared borrow of
-the `μ` itself), a pointer read as a shared borrow of the same contents, a closure, an opaque
-value or a cell of `Tok` (`Imm̲ 'b Tok = Unk`) read as `Unk`; a word, `1`, `0`, `Unk` or a type
-variable as itself. -/
+/-- **`d` is the contents `c` read through `Imm̲`** (`load`), clause by clause Core's `immG`
+(`Core/Types.lean`), on the LIR types (`ofV`: no `box`, `Tok` a cell of `1`):
+- `1` and `0` read as themselves; `⊗` and `⊕` componentwise;
+- a closure (`thunk`, `code`) reads as `Unk`, and as nothing else;
+- `Ref A`, `Imm A` and `Mut A` read as `Imm A`; `Tok`'s cell, `Ref 1` here, also as `Unk`
+  (`Imm̲ 'b Tok = Unk`);
+- `!A` reads as itself (up to `sameTy`): a persistent value is copied out whole;
+- a family componentwise; `Unk` as `Unk`; a word as itself; a type variable as itself;
+- an opaque value reads as `Unk`, and as nothing else;
+- `μX. A` as a `μ` of `A` read, or through its unrolling, where `immG`'s payload substitution makes
+  a recursive pointer a shared borrow of the `μ` itself. -/
 def readAs : Nat → LTy → LTy → Bool
   | 0, c, d => sameTy 64 c d
-  | f + 1, c, d => match c.peel, d.peel with
-    | .pair a b, .pair a' b' | .sum a b, .sum a' b' => readAs f a a' && readAs f b b'
-    | .mu a, .mu a' => readAs f a a' || readAs f a.unrollMu a'.unrollMu
-    | .fam a, .fam a' => readAs f a a'
-    | .ref a, .imm a' | .mut a, .imm a' | .imm a, .imm a' => sameTy 64 a a'
-    | .thunk _, .unk | .opq _, .unk | .ref _, .unk => true
-    | .pair .., _ | .sum .., _ | .mu _, _ | .fam _, _ | .ref _, _ | .mut _, _ | .imm _, _ => false
-    | _, _ => sameTy 64 c d
+  | f + 1, c, d => match c with
+    | .bang _ => sameTy 64 c d
+    | _ => match c, d.peel with
+      | .unit, .unit | .zero, .zero => true
+      | .pair a b, .pair a' b' | .sum a b, .sum a' b' => readAs f a a' && readAs f b b'
+      | .thunk _, .unk => true
+      | .ref a, .imm a' | .imm a, .imm a' | .mut a, .imm a' => sameTy 64 a a'
+      | .ref a, .unk => a.peel == .unit
+      | .fam a, .fam a' => readAs f a a'
+      | .unk, .unk => true
+      | .int w, .int w' => w == w'
+      | .opq _, .unk => true
+      | .tvar n, .tvar n' => n == n'
+      | .mu a, .mu a' => readAs f a a' || readAs f a.unrollMu a'.unrollMu
+      | _, _ => false
 
-/-- A cell of contents `c` holds a value of type `v`: `c` itself, or, at an opaque type, the
-host's word for it, which only the harness externs read or write (`Convert.mkClosOf`,
-`takeClosOf`): a stream's descriptor (`i32`), a clock's time (`i64`). -/
-def holds (c v : LTy) : Bool :=
-  sameTy 64 c v || match c.peel, v.peel with
+/-- A cell of contents `c` holds a value of type `v`: `c` itself, or, at an opaque type and in a
+harness extern's function (`host`: `Prog.hostFns`, `Convert.mkClosOf`, `takeClosOf`), the
+host's word for it: a stream's descriptor (`i32`), a clock's time (`i64`). -/
+def holds (host : Bool) (c v : LTy) : Bool :=
+  sameTy 64 c v || host && match c.peel, v.peel with
     | .opq .input, .int .w32 | .opq .output, .int .w32 | .opq .args, .int .w32 => true
     | .opq .clock, .int .w64 => true
     | _, _ => false
 
-/-- `t` is an integer type (a word: an index, a length, a handle). -/
-def isInt (t : LTy) : Bool := match t.peel with | .int _ => true | _ => false
+/-- `t` is an integer type, not a float. -/
+def isWord (t : LTy) : Bool := match t.peel with
+  | .int .f32 | .int .f64 => false
+  | .int _ => true
+  | _ => false
+
+/-- A family's leaf: its mode (`ref`, `imm` or `mut`) and contents. -/
+def famLeaf (t : LTy) : Option (String × LTy) :=
+  match t.peel with
+  | .fam l => match l.peel with
+    | .ref c => some ("ref", c)
+    | .imm c => some ("imm", c)
+    | .mut c => some ("mut", c)
+    | _ => none
+  | _ => none
 
 /-- A cell type's contents: `ref C`, `imm C` or `mut C`. -/
 def cellC? (t : LTy) : Option LTy :=
@@ -437,22 +481,27 @@ def famC? (t : LTy) : Option LTy :=
 
 /-- **A primitive's premise, read on the LIR types**: its operands' types `ts` (in order) and its
 answer's `r`, as the LIR interpreter (`Interp.evalOp`) and the layout (`Layout.walk`) read them.
-`none` when it holds. A frame's and a `κ` region's contents are not in the program: each machine's
-frames and each site's region are checked at one type, the first met (`St.frames`, `St.regions`). -/
-def primBad (p : Prog) (op : Op) (ts : List LTy) (r : LTy) : Option String :=
+`none` when it holds. A frame's and a `κ` region's contents are checked against the program's
+declarations (`Prog.frameTys`, `Prog.regionTys`) by `primAt`. -/
+def primBad (p : Prog) (host : Bool) (op : Op) (ts : List LTy) (r : LTy) : Option String :=
   let eq := sameTy 64
+  let i32 (t : LTy) : Bool := eq t (.int .w32)
   let wrong (what : String) : Option String :=
     some s!"{reprStr op |>.replace "\n" " "} on {ts} answering {r}: {what}"
   let need (b : Bool) (what : String) : Option String := if b then none else wrong what
+  -- The leaf of a family: `ref`, `imm` or `mut` (`famLeaf`), each row admitting the modes its
+  -- Core constants take.
+  let famIs (modes : List String) (t : LTy) : Bool :=
+    match famLeaf t with | some (m, _) => modes.contains m | none => false
   match op, ts with
   | .host o, [a] =>
     match ofV {} (hostArg o), ofV {} (hostRes o) with
     | .ok aT, .ok rT => need (eq a aT && eq r rT) s!"the host operation is {aT} -o {rT}"
     | _, _ => wrong "a host operation of no LIR type"
-  | .divLit _, [a, d] => need (isInt a && eq a d && eq r a) "a division of two integers of one type"
+  | .divLit _, [a, d] => need (isWord a && eq a d && eq r a) "a division of two integers of one type"
   | .alloc _, [v] | .allocLent _ _, [v] =>
-    need (match r.peel with | .ref c => holds c v | _ => false) "a cell of the argument"
-  | .free, [x] => need (match x.peel with | .ref c => holds c r | _ => false) "an owned cell's contents"
+    need (match r.peel with | .ref c => holds host c v | _ => false) "a cell of the argument"
+  | .free, [x] => need (match x.peel with | .ref c => holds host c r | _ => false) "an owned cell's contents"
   | .release, [x] => need ((match x.peel with | .ref _ => true | _ => false) && r.peel == .unit)
       "an owned cell released, answering ()"
   | .swap, [x, v] =>
@@ -479,58 +528,65 @@ def primBad (p : Prog) (op : Op) (ts : List LTy) (r : LTy) : Option String :=
   | .put, [b, v] =>
     need (match b.peel with | .mut c | .ref c => eq c v && eq r b | _ => false)
       "a `mut` borrow or an owned cell and its contents, answering it"
-  | .newArr, [n] => need (isInt n && (match r.peel with | .fam (.ref _) => true | _ => false))
-      "a length, answering an owned array"
+  | .newArr, [n] => need (i32 n && famIs ["ref"] r) "an i32 length, answering an owned array"
   | .tab fi, [f, n] | .tabLit fi, [f, n] =>
     match p.fns[fi]? with
     | some d =>
       match d.params.map (p.ty[·]?) with
       | [some pf, some pa, _, _] =>
-        need (isInt n && eq f pf && eq r pa && eq d.ret r)
-          s!"its loop f{fi} ({d.name}) takes {pf} and fills {pa}"
+        need (i32 n && famIs ["ref"] r && eq f pf && eq r pa && eq d.ret r)
+          s!"an owned array filled by its loop f{fi} ({d.name}), which takes {pf} and fills {pa}"
       | _ => wrong s!"its loop f{fi} does not take four typed parameters"
     | none => wrong s!"no function f{fi}"
+  -- `slotPut`, `slotTake`: the slot loops of an array's tabulation and drain (`genTab`,
+  -- `genArrFree`, a consume's), at an owned array or a family of `mut` borrows.
   | .slotPut, [a, i, v] =>
-    need (isInt i && eq r a && (match famC? a with | some c => eq c v | none => false))
-      "an array, an index and a slot's contents, answering the array"
+    need (i32 i && famIs ["ref", "mut"] a && eq r a && (match famLeaf a with
+      | some (_, c) => eq c v | none => false))
+      "an owned or `mut` family, an i32 index and a slot's contents, answering the family"
   | .slotTake, [a, i] =>
-    need (isInt i && (match famC? a, r.peel with
-      | some c, .pair a' c' => eq a a' && eq c c' | _, _ => false))
-      "an array and an index, answering the array and the slot's contents"
-  | .slotPop, [_] => none
-  | .freeArr, [a] => need ((match a.peel with | .fam (.ref _) => true | _ => false) && r.peel == .unit)
-      "an owned array, answering ()"
+    need (i32 i && famIs ["ref", "mut"] a && (match famLeaf a, r.peel with
+      | some (_, c), .pair a' c' => eq a a' && eq c c' | _, _ => false))
+      "an owned or `mut` family and an i32 index, answering it and the slot's contents"
+  | .slotPop, [a] => (slotPopTyBad a r).bind wrong
+  | .freeArr, [a] => need (famIs ["ref"] a && r.peel == .unit) "an owned array, answering ()"
+  -- `size`: `arr_size` (`[Ref A]`), `slice_len_mut` (`[Mut A]`).
   | .size, [v] =>
-    need (match v.peel, r.peel with
-      | .fam _, .pair v' n => eq v v' && isInt n | _, _ => false) "a family, answering it and its length"
-  | .len, [v] => need ((match v.peel with | .fam _ => true | _ => false) && isInt r)
-      "a family, answering its length"
+    need (famIs ["ref", "mut"] v && (match r.peel with
+      | .pair v' n => eq v v' && i32 n | _ => false))
+      "an owned or `mut` family, answering it and its i32 length"
+  -- `len`: `arr_len` (`[Imm A]`).
+  | .len, [v] => need (famIs ["imm"] v && i32 r) "an `imm` family, answering its i32 length"
+  -- `idx`: `arr_get` (`[Imm A]`), `slice_get_mut` (`[Mut A]`): a borrow of the slot or `()`.
   | .idx _, [v, i] =>
-    need (isInt i && (match v.peel, r.peel with
+    need (i32 i && famIs ["imm", "mut"] v && (match v.peel, r.peel with
       | .fam l, .sum l' u => eq l l' && u.peel == .unit | _, _ => false))
-      "a family and an index, answering a leaf or ()"
+      "an `imm` or `mut` family and an i32 index, answering a leaf or ()"
+  -- `split`: `slice_split_imm`, `slice_split_mut`: never an owned array into owned halves.
   | .split _, [v, i] =>
-    need (isInt i && (match v.peel, r.peel with
-      | .fam _, .sum (.pair a b) c => eq v a && eq v b && eq v c | _, _ => false))
-      "a family and an index, answering its two parts or itself"
-  | .emptyFam, [] => need (match r.peel with | .fam _ => true | _ => false) "answering a family"
+    need (i32 i && famIs ["imm", "mut"] v && (match r.peel with
+      | .sum (.pair a b) c => eq v a && eq v b && eq v c | _ => false))
+      "an `imm` or `mut` family and an i32 index, answering its two parts or itself"
+  | .emptyFam, [] => need (famLeaf r).isSome "answering a family"
+  -- `replace`: `arr_replace` (`[Ref A]`), `slice_replace_mut` (`[Mut A]`).
   | .replace, [v, i, x] =>
-    need (isInt i && (match famC? v, r.peel with
-      | some c, .pair v' (.sum o x') => eq c x && eq v v' && eq o c && eq x' c | _, _ => false))
-      "an array, an index and a slot's contents, answering the array and the old contents or the new"
+    need (i32 i && famIs ["ref", "mut"] v && (match famLeaf v, r.peel with
+      | some (_, c), .pair v' (.sum o x') => eq c x && eq v v' && eq o c && eq x' c | _, _ => false))
+      "an owned or `mut` family, an i32 index and a slot's contents, answering the family and the old contents or the new"
+  -- `swapSlots`: `slice_swap_mut` (`[Mut A]`).
   | .swapSlots, [v, i, j] =>
-    need (isInt i && isInt j && eq r v && (match v.peel with | .fam _ => true | _ => false))
-      "a family and two indices, answering the family"
+    need (i32 i && i32 j && eq r v && famIs ["mut"] v)
+      "a `mut` family and two i32 indices, answering the family"
   | .roll, [v] => need (match r.peel with | .mu a => eq v a.unrollMu | _ => false)
       "a value of the unrolling, answering the μ"
   | .unroll, [v] => need (match v.peel with | .mu a => eq r a.unrollMu | _ => false)
       "a μ, answering its unrolling"
-  | .litByte, [o, n, i] => need (isInt o && isInt n && isInt i && eq r (.int .w8))
-      "an offset, a length and an index, answering a byte"
-  | .clampLen, [c] => need (isInt c && eq r (.int .w32)) "a length, answering an i32"
-  | .cntLt, [i, n] => need (isInt i && eq i n && eq r (.sum .unit .unit))
-      "an index and its bound, answering a test"
-  | .cntSucc, [i] | .cntPred, [i] => need (isInt i && eq r i) "a count, answering a count"
+  | .litByte, [o, n, i] => need (i32 o && i32 n && i32 i && eq r (.int .w8))
+      "an i32 offset, length and index, answering a byte"
+  | .clampLen, [c] => need (i32 c && i32 r) "an i32 length, answering an i32"
+  | .cntLt, [i, n] => need (i32 i && i32 n && eq r (.sum .unit .unit))
+      "an i32 index and its bound, answering a test"
+  | .cntSucc, [i] | .cntPred, [i] => need (i32 i && i32 r) "an i32 count, answering an i32"
   | .stackSwap _, [h] => need (eq h LTy.addr && eq r LTy.addr) "a stack, answering a stack"
   | .stackFree, [h] => need (eq h LTy.addr && r.peel == .unit) "a stack, answering ()"
   | .stackNew _, [] => need (eq r LTy.addr) "answering a stack"
@@ -549,41 +605,48 @@ def primBad (p : Prog) (op : Op) (ts : List LTy) (r : LTy) : Option String :=
   | .litView _, _ => wrong "a literal's view, which no conversion makes"
   | _, _ => wrong s!"{ts.length} operands"
 where
-  /-- An I/O operation's argument and answer: `m` a borrow of the stream's or the clock's cell. -/
+  /-- An I/O operation's argument and answer, at its extern's type (`lib/wasi.bc`): a `mut` borrow
+  of the stream's or the clock's cell, a byte `u8`, the bytes `[Imm u8]` written or `[Mut u8]`
+  read into, the count read `i32`, a time `i64`. -/
   ioBad (k : IOKind) (a r : LTy) : Option String :=
     let eq := sameTy 64
+    let cap (ks : List Opaque) (m : LTy) : Bool :=
+      match m.peel with
+      | .mut c => match c.peel with | .opq o => ks.contains o | _ => false
+      | _ => false
+    let bytes (mode : String) (v : LTy) : Bool :=
+      match famLeaf v with
+      | some (m, c) => m == mode && eq c (.int .w8)
+      | none => false
     let ok : Bool := match k, a.peel, r.peel with
-      | .readByte, m, .pair m' (.sum b u) => (cellC? m).isSome && eq m m' && eq b (.int .w8) && u.peel == .unit
-      | .writeByte, .pair m b, m' => (cellC? m).isSome && eq m m' && eq b (.int .w8)
-      | .writeAll, .pair m v, m' => (cellC? m).isSome && eq m m' && (famC? v).isSome
+      | .readByte, m, .pair m' (.sum b u) =>
+        cap [.input, .args] m && eq m m' && eq b (.int .w8) && u.peel == .unit
+      | .writeByte, .pair m b, m' => cap [.output] m && eq m m' && eq b (.int .w8)
+      | .writeAll, .pair m v, m' => cap [.output] m && eq m m' && bytes "imm" v
       | .readInto, .pair m v, .pair m' (.pair v' n) =>
-        (cellC? m).isSome && eq m m' && (famC? v).isSome && eq v v' && isInt n
-      | .clockNow, m, .pair m' t => (cellC? m).isSome && eq m m' && isInt t
-      | .clockSleep, .pair m n, m' => (cellC? m).isSome && eq m m' && isInt n
+        cap [.input] m && eq m m' && bytes "mut" v && eq v v' && eq n (.int .w32)
+      | .clockNow, m, .pair m' t => cap [.clock] m && eq m m' && eq t (.int .w64)
+      | .clockSleep, .pair m n, m' => cap [.clock] m && eq m m' && eq n (.int .w64)
       | _, _, _ => false
-    if ok then none else some "an I/O operation's argument or answer"
+    if ok then none else some s!"not the extern's type"
 
-/-- A primitive's premise (`primBad`), and its frame's or `κ` region's contents at the one type
-of its machine's frames or its site's region. -/
+/-- A primitive's premise (`primBad`), and its frame's or `κ` region's contents at the type its
+machine or its site declares (`Prog.frameTys`, `Prog.regionTys`). -/
 def primAt (w : String) (p : Prog) (op : Op) (as : List Var) (r : LTy) : LM Unit := do
   let mut ts : List LTy := []
   for a in as do
     let some t := p.ty[a]? | bad w s!"x{a}, an operand, has no type"
     ts := ts ++ [t]
-  if let some e := primBad p op ts r then bad w e
-  let one (what : String) (m : Option LTy) (c : LTy) : LM (Option LTy) := do
-    match m with
-    | some c₀ =>
-      if !sameTy 64 c₀ c then bad w s!"{what} of {c}, where another holds {c₀}"
-      return none
-    | none => return some c
+  if let some e := primBad p (← get).host op ts r then bad w e
+  let declared (what : String) (d : Option LTy) (c : LTy) : LM Unit := do
+    match d with
+    | some d => if !sameTy 64 d c then bad w s!"{what} of {c}, declared {d}"
+    | none => bad w s!"{what} of {c}, which has no declared type"
   match op, ts, r.peel with
   | .framePush m _, _, .pair (.ref c) _ | .frameTop m _, _, .pair (.ref c) _ =>
-    if let some c := ← one s!"a frame of machine {m}" (← get).frames[m]? c then
-      modify fun s => { s with frames := s.frames.insert m c }
+    declared s!"a frame of machine {m}" p.frameTys[m]? c
   | .kappaPut s, [_, c], _ | .kappaTake s, _, .pair _ c =>
-    if let some c := ← one s!"the κ region of site {s}" (← get).regions[s]? c then
-      modify fun st => { st with regions := st.regions.insert s c }
+    declared s!"the κ region of site {s}" p.regionTys[s]? c
   | _, _, _ => pure ()
 
 /-- The variables left after `t`, its value consumed by its context. -/
@@ -616,8 +679,9 @@ def lintTm (w : String) (p : Prog) (inConsumeFn : Bool) :
     | .sel g j => do
       if j == 1 then
         if let some t := p.ty[g]? then
-          if let .thunk (.amp _ .top) := t.peel then
-            bad w s!"x{g} observed at `⊤` (its type {t}), which has no elimination"
+          if let some (.amp _ k₁) := closTy? t then
+            if k₁.whnf 8 == .top then
+              bad w s!"x{g} observed at `⊤` (its type {t}), which has no elimination"
       return some (← use w env g)
     | .call fn as => do
       let some d := p.fns[fn]? | bad w s!"no function f{fn}"
@@ -688,11 +752,13 @@ def lint (p : Prog) : Except String Unit := do
       let w := s!"f{i} ({d.name})"
       if !d.lendEncl.isEmpty && d.lendEncl.length != d.params.length then
         bad w s!"{d.lendEncl.length} lend bits for {d.params.length} parameters"
+      modify fun s => { s with host := p.hostFns.contains i }
       let mut env : Std.HashSet Var := {}
       for x in d.params do env ← bindNew w p env x
       match ← lintTm w p (p.consumeFns.contains i) (1 <<< 22) (some d.ret) env d.body with
       | some rest => if !rest.isEmpty then bad w s!"ends with {rest.toList.map (s!"x{·}")} unconsumed"
       | none => pure ()
+    modify fun s => { s with host := false }
     match ← lintTm "main" p false (1 <<< 22) (some p.mainTy) {} p.main with
     | some rest => if !rest.isEmpty then bad "main" s!"ends with {rest.toList.map (s!"x{·}")} unconsumed"
     | none => pure ()

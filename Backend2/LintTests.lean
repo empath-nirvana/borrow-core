@@ -507,14 +507,23 @@ def closProg (t e : LTy) : Prog where
 def primProg (op : Op) (args : List Var) (ts : List LTy) (r : LTy) : Prog :=
   fnProg (List.range ts.length) r (.prim op args) (ts.zipIdx.map fun (t, i) => (i, t))
 
+/-- `p` with `f0` a harness extern's function. -/
+def hostProg (p : Prog) : Prog := { p with hostFns := ({} : Std.HashSet Nat).insert 0 }
+
 -- The primitives, each at its operands' and answer's types (`primBad`).
 #guard accepts (primProg .free [0] [.ref i32T] i32T)
 #guard refuses (primProg .free [0] [.ref i32T] i64T) "an owned cell's contents"
 #guard refuses (primProg .free [0] [.imm i32T] i32T) "an owned cell's contents"
 -- A stream's cell holds its descriptor, a clock's its time; not another word.
-#guard accepts (primProg .free [0] [.ref (.opq .output)] i32T)
-#guard accepts (primProg .free [0] [.ref (.opq .clock)] i64T)
-#guard refuses (primProg .free [0] [.ref (.opq .clock)] i32T) "an owned cell's contents"
+#guard accepts (hostProg (primProg .free [0] [.ref (.opq .output)] i32T))
+#guard accepts (hostProg (primProg .free [0] [.ref (.opq .clock)] i64T))
+#guard refuses (hostProg (primProg .free [0] [.ref (.opq .clock)] i32T)) "an owned cell's contents"
+-- …only in a harness extern's function (`Prog.hostFns`): elsewhere a word is no capability.
+#guard refuses (primProg .free [0] [.ref (.opq .output)] i32T) "an owned cell's contents"
+#guard refuses (primProg (.alloc []) [0] [i32T] (.ref (.opq .output))) "a cell of the argument"
+#guard accepts (hostProg (primProg (.alloc []) [0] [i32T] (.ref (.opq .input))))
+#guard accepts (hostProg (primProg (.alloc []) [0] [i32T] (.ref (.opq .args))))
+#guard refuses (hostProg (primProg (.alloc []) [0] [i64T] (.ref (.opq .args)))) "a cell of the argument"
 #guard accepts (primProg (.alloc []) [0] [i32T] (.ref i32T))
 #guard refuses (primProg (.alloc []) [0] [i32T] (.ref i64T)) "a cell of the argument"
 -- `swap` answers the cell at its new contents' type and the old contents.
@@ -544,24 +553,140 @@ def primProg (op : Op) (args : List Var) (ts : List LTy) (r : LTy) : Prog :=
 -- An operand count no primitive takes.
 #guard refuses (primProg .free [0, 1] [.ref i32T, i32T] i32T) "2 operands"
 
--- A machine's frames are of one type, as a site's `κ` region.
-/-- A frame of machine 7 pushed at `c₁`, then its top read at `c₂`, and each popped. -/
-def framesProg (c₁ c₂ : LTy) : Prog :=
+-- A machine's frames are of the type it declares (`Prog.frameTys`), as a site's `κ` region
+-- (`Prog.regionTys`); one with no declaration is refused.
+/-- A frame of machine 7, declared `d`, pushed at `c₁`, then its top read at `c₂`, each popped. -/
+def framesProg (d : Option LTy) (c₁ c₂ : LTy) : Prog :=
   let pop (fa f a u : Var) (k : Tm) : Tm :=
     .letpair f a fa (.letv u (.prim (.framePop 0) [f]) (.consume .dead u (.consume .dead a k)))
-  fnProg [] .unit
-    (.letv 0 (.prim (.framePush 7 0) []) (pop 0 2 3 4
-      (.letv 1 (.prim (.frameTop 7 0) []) (pop 1 5 6 7 .unit))))
-    [(0, .pair (.ref c₁) LTy.addr), (1, .pair (.ref c₂) LTy.addr), (2, .ref c₁), (3, LTy.addr),
-     (4, .unit), (5, .ref c₂), (6, LTy.addr), (7, .unit)]
-#guard accepts (framesProg i32T i32T)
-#guard refuses (framesProg i32T i64T) "a frame of machine 7 of i64, where another holds i32"
-/-- `x1 : c₁` put in site 4's region of the stack `x0`, then the region of `x2` taken at `c₂`. -/
-def regionProg (c₁ c₂ : LTy) : Prog :=
-  fnProg [0, 1, 2] .unit (.letv 3 (.prim (.kappaPut 4) [0, 1]) (.consume .dead 3
-      (.letv 5 (.prim (.kappaTake 4) [2]) (.letpair 6 7 5 (.consume .dead 6 (.consume .dead 7 .unit))))))
-    [(0, LTy.addr), (1, c₁), (2, LTy.addr), (3, .unit), (5, .pair LTy.addr c₂), (6, LTy.addr), (7, c₂)]
-#guard accepts (regionProg i32T i32T)
-#guard refuses (regionProg i32T i64T) "the κ region of site 4 of i64, where another holds i32"
+  { fnProg [] .unit
+      (.letv 0 (.prim (.framePush 7 0) []) (pop 0 2 3 4
+        (.letv 1 (.prim (.frameTop 7 0) []) (pop 1 5 6 7 .unit))))
+      [(0, .pair (.ref c₁) LTy.addr), (1, .pair (.ref c₂) LTy.addr), (2, .ref c₁), (3, LTy.addr),
+       (4, .unit), (5, .ref c₂), (6, LTy.addr), (7, .unit)] with
+    frameTys := match d with | some t => ({} : Std.HashMap Nat LTy).insert 7 t | none => {} }
+#guard accepts (framesProg i32T i32T i32T)
+#guard refuses (framesProg i32T i32T i64T) "a frame of machine 7 of i64, declared i32"
+#guard refuses (framesProg i64T i32T i32T) "a frame of machine 7 of i32, declared i64"
+#guard refuses (framesProg none i32T i32T) "a frame of machine 7 of i32, which has no declared type"
+/-- `x1 : c₁` put in site 4's region (declared `d`) of the stack `x0`, then the region of `x2`
+taken at `c₂`. -/
+def regionProg (d : Option LTy) (c₁ c₂ : LTy) : Prog :=
+  { fnProg [0, 1, 2] .unit (.letv 3 (.prim (.kappaPut 4) [0, 1]) (.consume .dead 3
+        (.letv 5 (.prim (.kappaTake 4) [2]) (.letpair 6 7 5 (.consume .dead 6 (.consume .dead 7 .unit))))))
+      [(0, LTy.addr), (1, c₁), (2, LTy.addr), (3, .unit), (5, .pair LTy.addr c₂), (6, LTy.addr), (7, c₂)] with
+    regionTys := match d with | some t => ({} : Std.HashMap Nat LTy).insert 4 t | none => {} }
+#guard accepts (regionProg i32T i32T i32T)
+#guard refuses (regionProg i32T i32T i64T) "the κ region of site 4 of i64, declared i32"
+#guard refuses (regionProg none i32T i32T) "the κ region of site 4 of i32, which has no declared type"
+
+-- `load` is Core's `immG`: a persistent value (`!A`) is read as itself; a bare closure or an
+-- opaque value only as `Unk`.
+#guard accepts (primProg .load [0] [.imm (.bang closT)] (.bang closT))
+#guard refuses (primProg .load [0] [.imm closT] closT) "read through Imm"
+#guard accepts (primProg .load [0] [.imm (.opq .output)] .unk)
+#guard refuses (primProg .load [0] [.imm (.opq .output)] (.opq .output)) "read through Imm"
+
+-- The I/O operations at their externs' types (`lib/wasi.bc`).
+def outM : LTy := .mut (.opq .output)
+def inM : LTy := .mut (.opq .input)
+def clkM : LTy := .mut (.opq .clock)
+def u8T : LTy := .int .w8
+#guard accepts (primProg (.io .readByte) [0] [inM] (.pair inM (.sum u8T .unit)))
+#guard accepts (primProg (.io .readByte) [0] [.mut (.opq .args)] (.pair (.mut (.opq .args)) (.sum u8T .unit)))
+#guard refuses (primProg (.io .readByte) [0] [.imm (.opq .input)] (.pair (.imm (.opq .input)) (.sum u8T .unit))) "not the extern's type"
+#guard refuses (primProg (.io .readByte) [0] [outM] (.pair outM (.sum u8T .unit))) "not the extern's type"
+#guard accepts (primProg (.io .writeByte) [0] [.pair outM u8T] outM)
+#guard refuses (primProg (.io .writeByte) [0] [.pair inM u8T] inM) "not the extern's type"
+#guard accepts (primProg (.io .writeAll) [0] [.pair outM (.fam (.imm u8T))] outM)
+#guard refuses (primProg (.io .writeAll) [0] [.pair outM (.fam (.mut u8T))] outM) "not the extern's type"
+#guard accepts (primProg (.io .readInto) [0] [.pair inM (.fam (.mut u8T))]
+  (.pair inM (.pair (.fam (.mut u8T)) i32T)))
+#guard refuses (primProg (.io .readInto) [0] [.pair inM (.fam (.imm u8T))]
+  (.pair inM (.pair (.fam (.imm u8T)) i32T))) "not the extern's type"
+#guard refuses (primProg (.io .readInto) [0] [.pair inM (.fam (.mut u8T))]
+  (.pair inM (.pair (.fam (.mut u8T)) i64T))) "not the extern's type"
+#guard accepts (primProg (.io .clockNow) [0] [clkM] (.pair clkM i64T))
+#guard refuses (primProg (.io .clockNow) [0] [clkM] (.pair clkM i32T)) "not the extern's type"
+#guard accepts (primProg (.io .clockSleep) [0] [.pair clkM i64T] clkM)
+#guard refuses (primProg (.io .clockSleep) [0] [.pair clkM (.int .f64)] clkM) "not the extern's type"
+
+-- A family's leaf at the modes its Core constants take.
+#guard refuses (primProg (.idx true) [0, 1] [.fam (.ref i32T), i32T] (.sum (.ref i32T) .unit)) "an `imm` or `mut` family"
+#guard accepts (primProg (.idx true) [0, 1] [.fam (.mut i32T), i32T] (.sum (.mut i32T) .unit))
+#guard refuses (primProg (.split true) [0, 1] [.fam (.ref i32T), i32T]
+  (.sum (.pair (.fam (.ref i32T)) (.fam (.ref i32T))) (.fam (.ref i32T)))) "an `imm` or `mut` family"
+#guard accepts (primProg (.split true) [0, 1] [.fam (.imm i32T), i32T]
+  (.sum (.pair (.fam (.imm i32T)) (.fam (.imm i32T))) (.fam (.imm i32T))))
+#guard accepts (primProg .len [0] [.fam (.imm i32T)] i32T)
+#guard refuses (primProg .len [0] [.fam (.ref i32T)] i32T) "an `imm` family"
+#guard accepts (primProg .size [0] [.fam (.ref i32T)] (.pair (.fam (.ref i32T)) i32T))
+#guard refuses (primProg .size [0] [.fam (.imm i32T)] (.pair (.fam (.imm i32T)) i32T)) "an owned or `mut` family"
+#guard accepts (primProg .slotTake [0, 1] [.fam (.ref i32T), i32T] (.pair (.fam (.ref i32T)) i32T))
+#guard refuses (primProg .slotTake [0, 1] [.fam (.imm i32T), i32T] (.pair (.fam (.imm i32T)) i32T)) "an owned or `mut` family"
+#guard accepts (primProg .slotPut [0, 1, 2] [.fam (.ref i32T), i32T, i32T] (.fam (.ref i32T)))
+#guard refuses (primProg .slotPut [0, 1, 2] [.fam (.imm i32T), i32T, i32T] (.fam (.imm i32T))) "an owned or `mut` family"
+#guard accepts (primProg .replace [0, 1, 2] [.fam (.mut i32T), i32T, i32T] (.pair (.fam (.mut i32T)) (.sum i32T i32T)))
+#guard refuses (primProg .replace [0, 1, 2] [.fam (.imm i32T), i32T, i32T] (.pair (.fam (.imm i32T)) (.sum i32T i32T))) "an owned or `mut` family"
+#guard accepts (primProg .swapSlots [0, 1, 2] [.fam (.mut i32T), i32T, i32T] (.fam (.mut i32T)))
+#guard refuses (primProg .swapSlots [0, 1, 2] [.fam (.ref i32T), i32T, i32T] (.fam (.ref i32T))) "a `mut` family"
+#guard accepts (primProg .newArr [0] [i32T] (.fam (.ref i32T)))
+#guard refuses (primProg .newArr [0] [i64T] (.fam (.ref i32T))) "an i32 length"
+#guard accepts (primProg .freeArr [0] [.fam (.ref i32T)] .unit)
+#guard refuses (primProg .freeArr [0] [.fam (.imm i32T)] .unit) "an owned array"
+-- An index is an `i32`, not a float.
+#guard refuses (primProg (.idx true) [0, 1] [.fam (.imm i32T), .int .f32] (.sum (.imm i32T) .unit)) "an i32 index"
+#guard refuses (primProg (.divLit (.div .w32 .div_s)) [0, 1] [.int .f64, .int .f64] (.int .f64)) "two integers"
+#guard refuses (primProg (.divLit (.div .w32 .div_s)) [0, 1] [i32T, i64T] i32T) "two integers"
+-- A `slotPop` in a function's last position.
+#guard refuses (primProg .slotPop [0] [.fam (.imm i32T)] (.pair (.fam (.imm i32T)) (.imm i32T))) "not an owned array"
+-- The other rows.
+#guard refuses (primProg .release [0] [.imm i32T] .unit) "an owned cell released"
+#guard accepts (primProg .relend [0] [.mut i32T] (.pair (.mut i32T) (.imm i32T)))
+#guard refuses (primProg .relend [0] [.ref i32T] (.pair (.ref i32T) (.imm i32T))) "a `mut` borrow"
+#guard accepts (primProg .unroll [0] [.mu muA] muA.unrollMu)
+#guard refuses (primProg .unroll [0] [.mu muA] muA) "its unrolling"
+#guard accepts (primProg .litByte [0, 1, 2] [i32T, i32T, i32T] u8T)
+#guard refuses (primProg .litByte [0, 1, 2] [i32T, i64T, i32T] u8T) "answering a byte"
+#guard accepts (primProg .clampLen [0] [i32T] i32T)
+#guard refuses (primProg .clampLen [0] [i32T] i64T) "an i32 length"
+#guard accepts (primProg .cntLt [0, 1] [i32T, i32T] (.sum .unit .unit))
+#guard refuses (primProg .cntLt [0, 1] [i64T, i64T] (.sum .unit .unit)) "an i32 index"
+#guard refuses (primProg .cntSucc [0] [i64T] i64T) "an i32 count"
+#guard refuses (primProg .cntPred [0] [i32T] i64T) "an i32 count"
+#guard accepts (primProg (.stackSwap 0) [0] [LTy.addr] LTy.addr)
+#guard refuses (primProg (.stackSwap 0) [0] [i32T] LTy.addr) "a stack"
+#guard refuses (primProg .stackFree [0] [i32T] .unit) "a stack"
+#guard refuses (primProg (.stackNew 3) [] [] i32T) "answering a stack"
+#guard refuses (primProg (.kappaPut 4) [0, 1] [i32T, i32T] .unit) "a stack and a value"
+#guard refuses (primProg .framePut [0, 1] [.ref i32T, i64T] .unit) "a frame's cell and its contents"
+#guard refuses (primProg (.allocLent 0 []) [0] [i32T] (.ref i64T)) "a cell of the argument"
+
+/-- `f0 (x0 x1 : i32) : r = tab f1 [x0, x1]`, where `f1 (x10 : i32, x11 : fill, x12 x13 : i32)`
+is a tab loop answering `x11`. -/
+def tabProg (fill r : LTy) : Prog :=
+  { fnProg [0, 1] r (.prim (.tab 1) [0, 1]) [(0, i32T), (1, i32T), (10, i32T), (11, fill), (12, i32T), (13, i32T)] with
+    fns := #[{ name := "f", params := [0, 1], ret := r, body := .prim (.tab 1) [0, 1] },
+             { name := "tab", params := [10, 11, 12, 13], ret := fill,
+               body := .consume .dead 10 (.consume .dead 12 (.consume .dead 13 (.var 11))) }] }
+#guard accepts (tabProg (.fam (.ref i32T)) (.fam (.ref i32T)))
+#guard refuses (tabProg (.fam (.imm i32T)) (.fam (.imm i32T))) "an owned array filled by its loop"
+
+-- `sel` past a `&`'s two components; `⊤` seen through a `ν`.
+#guard refuses (fnProg [0] .unit (.sel 0 2) [(0, ampT)]) "a `&` has two components"
+#guard refuses (selProg (.thunk (.nu (.amp (.arr i32T (.ret .unit)) .top))) 1 .unit) "observed at `⊤`"
+
+-- A code's functions at its closure type: a `lam` code's argument, a `&` code's second answer,
+-- and a code of a kind its type is not.
+def codeProg (kind : CodeKind) (ty : LCTy) (fns : List Nat) : Prog :=
+  { fnProg [] .unit .unit [(20, i32T), (21, i32T)] with
+    fns := #[{ name := "main fn", params := [], ret := .unit, body := .unit },
+             { name := "a", params := [20], ret := i32T, body := .var 20 },
+             { name := "b", params := [21], ret := i32T, body := .var 21 }]
+    codes := #[{ kind, fns, ty }] }
+#guard accepts (codeProg .lam (.arr i32T (.ret i32T)) [1])
+#guard refuses (codeProg .lam (.arr i64T (.ret i32T)) [1]) "c0: f1 (a) takes i32, for i64"
+#guard refuses (codeProg .amp (.amp (.ret i32T) (.ret i64T)) [1, 2]) "c0: f2 (b) answers i32, for i64"
+#guard refuses (codeProg .unit (.ret i32T) [1, 2]) "code of 2 functions"
 
 end Backend2.LintTests

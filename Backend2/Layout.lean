@@ -169,9 +169,10 @@ structure GState where
   /-- The joins left to do: a work list, so that joining recursive nodes terminates. -/
   todo : List (Nat × Nat) := []
   /-- Each stack machine's frame node (SPEC §52): every frame of it is one cell's node, as the
-  frames pass through the stack. -/
+  frames pass through the stack; the node of its declared type (`Prog.frameTys`), a cell of it. -/
   frames : Std.HashMap Nat Nat := {}
-  /-- Each site's `κ` region's contents node (SPEC §52). -/
+  /-- Each site's `κ` region's contents node (SPEC §52): the node of its declared type
+  (`Prog.regionTys`). -/
   regions : Std.HashMap Nat Nat := {}
 
 abbrev GM := StateT GState (Except String)
@@ -513,7 +514,11 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
       let c ← kid dst 0
       match (← get).frames[m]? with
       | some fn => join fn c
-      | none => modify fun s => { s with frames := s.frames.insert m c }
+      | none =>
+        let some t := p.frameTys[m]? | throw s!"layout: machine {m}'s frame has no declared type"
+        let fn ← mkV [] (.ref t)
+        modify fun s => { s with frames := s.frames.insert m fn }
+        join fn c
     | .framePut => join (← kid (← a 0) 0) (← a 1)
     | .kappaPut s | .kappaTake s => do
       let c ← match op with
@@ -521,7 +526,11 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
         | _ => kid dst 1
       match (← get).regions[s]? with
       | some r => join r c
-      | none => modify fun st => { st with regions := st.regions.insert s c }
+      | none =>
+        let some t := p.regionTys[s]? | throw s!"layout: site {s}'s κ region has no declared type"
+        let r ← mkV [] t
+        modify fun st => { st with regions := st.regions.insert s r }
+        join r c
     | .io .readByte | .io .clockNow => join (← kid dst 0) (← a 0)
     | .io .writeByte | .io .writeAll | .io .clockSleep => join dst (← kid (← a 0) 0)
     | .io .readInto => do

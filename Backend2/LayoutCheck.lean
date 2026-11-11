@@ -25,7 +25,9 @@ variable's type is walked once):
   each pair of places the analysis's `walk` joins (`Layout.lean` `walk`, every constructor and
   every primitive) has one representative; a read through a shared borrow relates the contents
   and the reading as `joinRe` does (`reCompat`); every `framePush`/`frameTop` of one machine has
-  one frame node and every `κ` access of one site one region node, which is `Layouts.regions`.
+  one frame node and every `κ` access of one site one region node, which is `Layouts.regions`;
+  each frame and region node is a layout of the type its machine or site declares
+  (`Prog.frameTys`, `Prog.regionTys`).
 - **Every closure reaches a class that holds its code** (`walk`, `.clos`): a closure of code `c`
   made at a node is in that node's class's codes (`union`), `c`'s class (`codeClass`) is that
   class, and its captured values are the code's environment nodes (`codeEnv`). Since every move
@@ -741,6 +743,14 @@ def check (p : Prog) (L : Layouts) : Except String Unit := do
     let n ← rp L L.mainNode
     conf L "main's value" 4096 [] p.mainTy n
     roots := ("main's value", p.mainTy, n) :: roots
+    -- Each machine's frames and each site's κ region are of the type it declares
+    -- (`Prog.frameTys`, `Prog.regionTys`).
+    for (m, c) in (← get).frames.toList do
+      let some t := p.frameTys[m]? | throw s!"machine {m}'s frame has no declared type"
+      conf L s!"machine {m}'s frame" 4096 [] (.ref t) (← rp L c)
+    for (s, r) in (← get).regions.toList do
+      let some t := p.regionTys[s]? | throw s!"site {s}'s κ region has no declared type"
+      conf L s!"site {s}'s κ region" 4096 [] t (← rp L r)
     -- The κ regions are the layouts'.
     for (s, r) in (← get).regions.toList do
       match L.regions[s]? with

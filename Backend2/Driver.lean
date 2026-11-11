@@ -304,7 +304,8 @@ def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) :
     -- loop, the program then unchanged.
     let (p, st, L) ← if st.tailSites.any loop then do
         let (p₁, st₁) ← tailPass st loop
-        let p := { p with fns := p₁.fns, codes := p₁.codes, ty := p₁.ty }
+        let p := { p with fns := p₁.fns, codes := p₁.codes, ty := p₁.ty, frameTys := p₁.frameTys,
+                          regionTys := p₁.regionTys, hostFns := p₁.hostFns }
         pure (p, st₁, ← checkedLayouts p)
       else pure (p, st, L₁)
     let recursive (kc : Nat) : Bool := match L.codeClass[kc]? with
@@ -319,7 +320,8 @@ def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) :
     -- first three and makes no static): the program is `p`, whose layouts are `L`.
     if (cellSites st recursive).isEmpty then return (p, st, th, sk, some L)
     let (p₂, st₂) ← cellPass st recursive
-    return ({ p with fns := p₂.fns, codes := p₂.codes, ty := p₂.ty, statics := p₂.statics }, st₂,
+    return ({ p with fns := p₂.fns, codes := p₂.codes, ty := p₂.ty, statics := p₂.statics,
+                     frameTys := p₂.frameTys, regionTys := p₂.regionTys, hostFns := p₂.hostFns }, st₂,
       th, sk, none)
   let (p, st, th, sk, L) ← run {} {}
   if th.isEmpty && sk.isEmpty then return (p, st, L)

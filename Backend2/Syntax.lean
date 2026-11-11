@@ -325,6 +325,20 @@ structure Prog where
   /-- The functions that consume a leaf of a `consume` node's consume (`Convert.leafConsume`): the only
   functions where `Lint` admits a `consume` at the rule `consume`. -/
   consumeFns : Std.HashSet Nat := {}
+  /-- **Each stack machine's frame contents** (SPEC §52), by `Mach.start`: the type its frames
+  hold (`Op.framePush`, `Op.frameTop`), declared where the machine is made, from its points'
+  checked types (`Convert.stackedOf`). `Lint` checks every frame against it and `Layout` reads it
+  for the frame's node. -/
+  frameTys : Std.HashMap Nat LTy := {}
+  /-- **The harness externs' functions** (`Convert.mkClosOf`, `takeClosOf`, SPEC §11, §34): the
+  only functions where a capability's cell is made from, or freed to, the host's word for it (a
+  stream's descriptor, a clock's time), which `Lint` admits there and nowhere else. -/
+  hostFns : Std.HashSet Nat := {}
+  /-- **Each site's `κ` region contents** (SPEC §52), by the site's tag: the type its region holds
+  (`Op.kappaPut`, `Op.kappaTake`), declared where the site is converted, from `κ`'s type and the
+  handler's values' (`Convert.convDrive`'s `cellAt`). `Lint` checks every access against it and
+  `Layout` reads it for the region's node. -/
+  regionTys : Std.HashMap Nat LTy := {}
   deriving Inhabited
 
 end Backend2

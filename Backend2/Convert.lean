@@ -266,11 +266,30 @@ structure CState where
   stacked : Std.HashMap Nat LTy := {}
   /-- The static word that holds the current stack, once a stack machine or a site uses it. -/
   stackReg : Option Nat := none
+  /-- **Each site's `κ` region contents** (SPEC §52), by the site's tag, declared where the site is
+  converted (`convDrive`): `Prog.regionTys`. -/
+  regionTys : Std.HashMap Nat LTy := {}
+  /-- The harness externs' functions (`mkClosOf`, `takeClosOf`): `Prog.hostFns`. -/
+  hostFns : Std.HashSet Nat := {}
 
 abbrev CM := StateT CState (Except String)
 
 def fresh (t : LTy) : CM Var := modifyGet fun s =>
   (s.next, { s with next := s.next + 1, ty := s.ty.insert s.next t })
+
+/-- **A frame of machine `m` at contents `t`**: `t` is the machine's declared frame type, its entry
+in `stacked` (`Prog.frameTys`), up to `!`. -/
+def agreeFrame (m : Nat) (t : LTy) : CM Unit := do
+  match (← get).stacked[m]? with
+  | some d => unless d.sameRep t do throw s!"LIR: machine {m}'s frame holds {t}, declared {d}"
+  | none => throw s!"LIR: a frame of machine {m}, which is not a stack machine"
+
+/-- **A `κ` region of site `s` at contents `t`**: `t` is the site's declared region type
+(`Prog.regionTys`), up to `!`. -/
+def agreeRegion (s : Nat) (t : LTy) : CM Unit := do
+  match (← get).regionTys[s]? with
+  | some d => unless d.sameRep t do throw s!"LIR: site {s}'s κ region holds {t}, declared {d}"
+  | none => throw s!"LIR: a κ region of site {s}, which declares none"
 
 def tyOf (x : Var) : CM LTy := do
   match (← get).ty[x]? with
@@ -502,9 +521,11 @@ context (its argument's slot pushed when it has one). With `source`, the closure
 term's (a `λ` or a thunk) and its function's lend bits are set (`sourceEncl`); otherwise the
 conversion makes it, and they are cleared. -/
 def mkClos (name : String) (ctx : Ctx) (k : LCTy) (param : Option LTy) (ret : LTy)
-    (body : Ctx → CM Tm) (source : Bool := false) (emptyRow : Bool := false) : CM Tm := do
+    (body : Ctx → CM Tm) (source : Bool := false) (emptyRow : Bool := false) (host : Bool := false) :
+    CM Tm := do
   let (outer, inner, ctx') ← envOf ctx
   let fi ← reserveFn name
+  if host then modify fun s => { s with hostFns := s.hostFns.insert fi }
   let encl (ps : List Var) := if source then sourceEncl ps else []
   match param with
   | some pt =>
@@ -1510,6 +1531,7 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
   let stPay : Pay := ps.zipIdx.map fun (p, i) => ((0, i.toUInt32), tupleTy p.argTys)
   let stTy := (payTy stPay).getD .unit
   unless stTy.sameRep S do throw "LIR: a stack machine's frame differs from the first conversion's"
+  agreeFrame m.start stTy
   let reg ← stackRegister
   let fT : LTy := .ref stTy
   let aT : LTy := .addr
@@ -1721,6 +1743,7 @@ def withMachineK (F : OutInfo) (act : Kont → List Var → CM Tm) : CM Tm := do
     | some S, _ => do
       -- The level's frame reserved on the task stack (SPEC §52), and its address.
       let reg ← stackRegister
+      agreeFrame start S
       let fa ← fresh (.pair (.ref S) (.int .w64)); let f ← fresh (.ref S); let a ← fresh (.int .w64)
       pure (Tm.letv fa (.prim (.framePush start reg) []) (.letpair f a fa (← act [.stackF] [f, a])))
     | none, some stT => do
@@ -2668,7 +2691,7 @@ def mkClosOf (s : CapStream) (B : VTy) (t : LTy) : CM Tm := do
   let cell (c : IntLit) (w : Width) : CM Tm := do
     let l ← fresh (.int w)
     return .letv l (.lit c) (.prim (.alloc cls) [l])
-  mkClos "extern" [] (.arr a (.ret b)) (some a) b fun ctx => do
+  mkClos "extern" [] (.arr a (.ret b)) (some a) b (host := true) fun ctx => do
     let some p :: _ := ctx | throw "LIR: an extern's argument"
     match s with
     | .input => return .consume .dead p (← cell (.i32 0) .w32)
@@ -2689,7 +2712,7 @@ term: the term passes the capability `ref input`, whose contract the host meets,
 byte list. -/
 def takeClosOf (s : CapStream) (t : LTy) : CM Tm := do
   let .thunk (.arr a (.ret b)) := t.peel | throw s!"LIR: a harness take at {t}"
-  mkClos "extern" [] (.arr a (.ret b)) (some a) b fun ctx => do
+  mkClos "extern" [] (.arr a (.ret b)) (some a) b (host := true) fun ctx => do
     let some p :: _ := ctx | throw "LIR: an extern's argument"
     match s with
     | .clock => return .prim .free [p]
@@ -2921,6 +2944,7 @@ def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driv
       let rTys := kIn :: hvTys.dropLast
       let stT := tupleTy rTys
       let h ← fresh hTy
+      agreeRegion s stT
       let pr ← fresh (.pair hTy stT); let h' ← fresh hTy; let st ← fresh stT
       let b ← untuple st rTys fun xs => match xs with
         | k :: hv => body k (hv ++ [h'])
@@ -3710,6 +3734,11 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
         out := some j
     pure out
   let siteTag ← fresh .unit
+  -- The region's contents, declared here once (`Prog.regionTys`): `κ` of the operation it serves
+  -- and the handler's values, the stack (`κ`'s last) not among them.
+  if let some j := cellAt then
+    let rT := tupleTy ((← kTyAt T (n, j.toUInt32)) :: hvTys)
+    modify fun s => { s with regionTys := s.regionTys.insert siteTag rT }
   if cellAt.isSome then readFact "effHandleV:kappa region"
   let consumeAll (keep : Option Nat) (b : Tm) : Tm :=
     consumes .dead ((ctxs'.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
@@ -3785,6 +3814,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
               -- The environment written into the stack's region; `κ` is the stack.
               mkTuple (k :: hvC) fun st => do
                 let sh' ← fresh (.int .w64); let u ← fresh .unit
+                agreeRegion siteTag (← tyOf st)
                 return .copy .dup sh sh' (.letv u (.prim (.kappaPut siteTag) [sh', st])
                   (.consume .dead u (.letv kv (.clos kap [sh]) (.letv pr (.pair v kv) body))))
             | _, _ => pure (.letv kv (.clos kap (k :: hvC ++ shP?.toList)) (.letv pr (.pair v kv) body))
@@ -4493,7 +4523,8 @@ def tailPass (s : CState) (loop : Nat × Var × OutInfo × Nat → Bool) : Excep
         setFn fn { name := "tail", params := [oP], body := .var oP, ret := M.ty }
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics, lits := s'.lits, consumeFns := s'.consumeFns }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits, consumeFns := s'.consumeFns,
+            frameTys := s'.stacked, regionTys := s'.regionTys, hostFns := s'.hostFns }, s')
 
 /-- **State cells** (SPEC §49): each machine operation whose suspended computation's closure class
 holds itself (`recursive`, the layouts' classes that keep their environment on the heap, §35)
@@ -4511,7 +4542,8 @@ def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CS
       let _ ← genMach m withMachine ops
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics, lits := s'.lits, consumeFns := s'.consumeFns }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits, consumeFns := s'.consumeFns,
+            frameTys := s'.stacked, regionTys := s'.regionTys, hostFns := s'.hostFns }, s')
 
 /-- **The levels whose state cell is passed on** (SPEC §50), from a conversion's machines and the
 layouts' recursive classes (`recursive`, as `cellPass` reads them): each machine whose body takes
@@ -4581,6 +4613,7 @@ def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CT
   let ((m, mT), s) ← (convMain exts ctx t C arg loops).run
     { census, direct, mach, threaded, stacked, classes }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
-            statics := s.statics, lits := s.lits, consumeFns := s.consumeFns }, s)
+            statics := s.statics, lits := s.lits, consumeFns := s.consumeFns,
+            frameTys := s.stacked, regionTys := s.regionTys, hostFns := s.hostFns }, s)
 
 end Backend2
