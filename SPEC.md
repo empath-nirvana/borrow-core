@@ -1518,7 +1518,7 @@ value types fall in three groups.
    | `μX. T`, `T` in `FShape` (§6) | `foldOwn`, whose algebra is the consume of `T[1/X]` |
    | `μX. T`, `T` in `P` (§6, §61), not in `FShape` | `foldOwnG`, whose algebra at each key is the consume of the key's body (an array key's element type) at results `1` |
    | `U(C & F 1)` | `close`: force, then the second projection |
-   | `U(νX. C & F R)`, `R` closed and consumable (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the consume of `R`; at a system, per projection (§79, K-M.2) |
+   | `U(νX. C & F R)`, `R` closed and consumable (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the consume of `R`; at a system, per projection (§79, K-M.4b) |
    These are linear. A value of one of these types that goes unused is consumed by its
    consume, which the checker inserts. Because the consume deallocates memory and, at codata,
    runs the object's `close` code, where it is inserted can be observed.
@@ -12787,7 +12787,7 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
   contains `G`, at `δ[x↦α]`, and a code-typed `G`'s environment could mention `x`. `codeTy`,
   `hCode`, `hEnv` and `unfoldKTy` are in `Core/CodeNuOut.lean`.
 - §79 generalises `unfoldK` and `nuOutK` to finite systems of ν equations, per equation (§79,
-  K-M.4).
+  K-M.4a).
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
 - `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
@@ -14072,13 +14072,20 @@ five ν rules are generalised in place.
 
 - K-M.1, built (#1090): the former `CTy.nuSys m i Cs`, with `νX. C` the match-pattern
   abbreviation `nuSys 0 0 C`; every match carries the system case. No rule reaches a system yet,
-  and the backends refuse one. Until K-M.2 the relation reads a system at `m > 0` as its spine's
-  single body, which is inert.
-- K-M.2: the relation at systems in Core and the chain; `nuIn i`, `nuOut i`; consume per
-  projection; the checker's tests `sysOkB` and `sysFreshB`. Not built.
-- K-M.3: `unfoldᵢ` at systems in both developments. The kernel instance `lexProg`, the lexer modes
-  `Normal`/`InString`, is typed, evaluated, adequate, and covered by `goal791N`. Not built.
-- K-M.4: `unfoldK` and `nuOutK` per equation in both developments; `d_lexProgK`. Not built.
+  and the backends refuse one.
+- K-M.2, built (#1101): the relation at systems in Core and the chain, the `i`-th component of the
+  greatest tuple of candidates (`cC_nuS_iff`, `cN_nuS_iff`), unrolling by simultaneous
+  substitution; the same-term inversions at systems; `nuIn` and `nuOut` at every projection
+  (premise `SysOkAt m i`, target `unrollS m i C`).
+- K-M.3: `unfoldᵢ` at systems, in three slices. Not built.
+  - K-M.3a: the terms, and coiteration in Core;
+  - K-M.3b: coiteration in the chain;
+  - K-M.3c: the `unfold` rule, and the kernel instance `lexProg`, the lexer modes
+    `Normal`/`InString`: typed, evaluated, adequate, and covered by `goal791N`.
+- K-M.4, in two slices. Not built.
+  - K-M.4a: `unfoldK` and `nuOutK` per equation in both developments;
+  - K-M.4b: the checker's tests `sysOkB` and `sysFreshB`, consume per projection, and the final
+    program, `d_lexProgK`.
 
 ### Open
 
