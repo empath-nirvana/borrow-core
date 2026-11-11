@@ -2287,7 +2287,7 @@ unrolls to (memoized by the type, so a binder nested in another, which names the
 its own function calling the outer's), and an array of recursive data one loop function that
 destroys each element and then frees the buffer once (`freeArr`), as Rust consumes a `Vec`. -/
 
-/-! #### A consume by an in-place worklist (SPEC §TBD-1013)
+/-! #### A consume by an in-place worklist (SPEC §77)
 
 At a `μX. T` whose recursive positions include arrays of `X` (Json's `Vec[X]` and
 `Map[string, X]`), the consume is two functions of tail calls, `consume_up p` (free `p`) and
@@ -2339,8 +2339,8 @@ def hasArrX : FShape → Bool
   | .refX | .varX => false
   | .tensor F G | .sum F G => hasArrX F || hasArrX G
 
-/-- **The in-place consume's class** (SPEC §TBD-1013), on the `μ` body `T` the consume node's type
-carries.  `[spec §TBD-1013]` -/
+/-- **The in-place consume's class** (SPEC §77), on the `μ` body `T` the consume node's type
+carries.  `[spec §77]` -/
 def consumeW? (T : VTy) : Bool :=
   let F := toFShape T
   leavesW F && maxRecW F ≤ 1 && hasArrX F
@@ -2372,7 +2372,7 @@ def leafConsume (x : Var) : CM Tm := do
     setFn fi { name := "consume leaf", params := [u], ret := .unit, body := .consume .consume u .unit }
     return .call fi [x]
 
-/-- The step at a path's recursive position (the table of SPEC §TBD-1013). Every call is in tail
+/-- The step at a path's recursive position (the table of SPEC §77). Every call is in tail
 position. -/
 def stepW (T : VTy) (up down : Nat) (mode : WMode) (pos : WPos)
     (rest : CM Tm → CM Tm) (rb : Var → (Var → CM Tm) → CM Tm) : CM Tm := do
@@ -2499,7 +2499,7 @@ def genConsume (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
     return .letv pr (.prim .size [x]) (.letpair a' n' pr (← lit32 0 fun z => pure (.call fi [a', z, n'])))
   | _ => leafConsume x
 
-/-- The two functions of the in-place consume of `μX. T` (SPEC §TBD-1013), `up` on `p` and `down` on
+/-- The two functions of the in-place consume of `μX. T` (SPEC §77), `up` on `p` and `down` on
 `(c, p)`, each an unroll and a walk of the node (`walkW`).
 
 UNPROVED: that `consume_up x` frees exactly the cells and arrays the kernel's consume
@@ -2510,7 +2510,7 @@ holds the work pending, at the slot's own type) and frees a node only when nothi
 which `Lint` checks of the LIR (each variable consumed once) and the LIR interpreter checks of
 every run (no array freed with a written slot, `live 0`); and the order is unobservable because
 every leaf is closed and inert (`consumeW?`): its consume runs no code. A mismatch shows as a leak
-or a double free in `live`, or a disagreement with the source stage.  `[spec §TBD-1013]` -/
+or a double free in `live`, or a disagreement with the source stage.  `[spec §77]` -/
 def genConsumeW (fuel : Nat) (T : VTy) (up down : Nat) : CM Unit := do
   match fuel with
   | 0 => throw "LIR: a consume's type too deep"

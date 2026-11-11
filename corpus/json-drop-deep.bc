@@ -1,4 +1,4 @@
--- Freeing a deeply nested `Json` (SPEC §TBD-1013): a value as deep as the first argument (`.args`: 2000),
+-- Freeing a deeply nested `Json` (SPEC §77): a value as deep as the first argument (`.args`: 2000),
 -- built by a loop, its levels an array of one element and an object of one member in turn,
 -- dropped at the end of `main`. The consume is two functions of tail calls, the work pending
 -- kept in the arrays being freed, so it takes no native frame a level: at 2000 levels the

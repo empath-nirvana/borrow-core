@@ -15,7 +15,7 @@ verifies and never fills in:
 - every call has its callee's number of arguments, and every closure its code's environment;
 - every `lend` answers a borrow of its kind: `mut` or `imm` (`Op.lend`, SPEC §57);
 - every `slotPop` is of an owned array and answers that family and its slot's contents
-  (`slotPopBad`, SPEC §TBD-1013);
+  (`slotPopBad`, SPEC §77);
 - every `copy` meets the premise of the rule the node carries (`copiesAt`): `Ctx.SplitP.dup` at a
   persistent type, `!` read off the LIR type (`Types.ofV` keeps it); the `copy` constants and
   `copy_derives` at an `imm` borrow;
@@ -164,7 +164,7 @@ array `[Ref c]` (not a family of borrows, whose slots are not the family's to mo
 `[Ref c] ⊗ c`, the same family and its slot's contents. The popped contents are then a variable
 like any other, consumed once on every path (`lintTm`); the slot leaves the family, so the
 family's later `freeArr` cannot meet it written. That the operand's length is at least one is the
-code's test before the op (`genConsumeW`), checked on every run by the LIR interpreter.  `[spec §TBD-1013]` -/
+code's test before the op (`genConsumeW`), checked on every run by the LIR interpreter.  `[spec §77]` -/
 def slotPopBad (p : Prog) (x : Var) : List Var → Option String
   | [a] =>
     match p.ty[a]?.map LTy.peel, p.ty[x]?.map LTy.peel with

@@ -312,7 +312,7 @@ def f0Facts (p : Prog) : Except String Nat := do
 #guard f0Facts (borrowProg [false]) == .ok 0
 
 /-- `f0 (x0 : a) = let x1 : r = slotPop x0; letpair (x2, x3) = x1; (x2, x3)` (the result's
-parts at `r`'s components, or `a` and `i32` when `r` is not a pair).  [spec §TBD-1013] -/
+parts at `r`'s components, or `a` and `i32` when `r` is not a pair).  [spec §77] -/
 def popProg (a r : LTy) : Prog where
   fns := #[{ name := "pops", params := [0], ret := r,
              body := .letv 1 (.prim .slotPop [0]) (.letpair 2 3 1 (.pair 2 3)) }]

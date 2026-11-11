@@ -84,7 +84,7 @@ inductive Op where
   | slotTake
   /-- `slotPop a` (`n ≥ 1`): slot `n − 1`'s contents moved out, and `a` as the family of its first
   `n − 1` slots: `(a′, contents)`. The object is unchanged; `freeArr a′` frees all of it. The
-  in-place consume's cursor (`genConsumeW`).  `[spec §TBD-1013]` -/
+  in-place consume's cursor (`genConsumeW`).  `[spec §77]` -/
   | slotPop
   /-- The array's base freed, every slot unwritten. -/
   | freeArr

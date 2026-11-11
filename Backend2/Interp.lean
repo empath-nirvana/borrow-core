@@ -383,7 +383,7 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     pure (.pair (.fam b (n - 1)) v)
   -- The object at the base is freed whole, at the size it was allocated with, and every one of its
   -- slots must be unwritten: a family shortened by `slotPop` frees the object it came from.
-  -- `[spec §TBD-1013]`
+  -- `[spec §77]`
   | .freeArr, [.fam b _] => do
     if b == 0 || (b ≥ dataAt && b < staticAt) then return .unit
     let some k := (← get).objs[b]? | bad s!"a freeArr of {b}, which is not a live object"

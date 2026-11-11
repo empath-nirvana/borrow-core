@@ -126,7 +126,7 @@ if [ "$named" = 0 ]; then
   else
     echo "corpus/deep-list.bc: native in a stack of 64 KiB fails: $(head -3 "$tmp/err")"; bad=$((bad + 1))
   fi
-  # A Json 10^6 levels deep freed by the in-place consume (SPEC §TBD-1013) in a stack of 16 KiB: its
+  # A Json 10^6 levels deep freed by the in-place consume (SPEC §77) in a stack of 16 KiB: its
   # answer is the depth, and `live 0`.
   if [ "$backend" = new ]; then
     if BC_STACK=16384 "$bcc" run --backend new --native corpus/json-drop-deep.bc 1000000 < /dev/null > "$tmp/out" 2> "$tmp/err" &&
