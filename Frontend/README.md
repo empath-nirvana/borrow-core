@@ -265,7 +265,8 @@ chosen by the enclosing rule instead of threaded.
 **Implicit consumes** (SPEC §12). `Env.own` marks the slots **owed** to the computation
 being checked: variables bound by `x <- M; N`, `let (x, y) = V; M`, a `case` arm or `fun` whose
 type is linear and consumable (`consumableB`, which decides `Consumable`: `consumableB_iff`; the
-owed slot is exactly `LinearConsumable A`, `Env.pushOwn_own`). What is owed flows into tail positions:
+owed slot is exactly `LinearConsumable A`, or a stored generator over a row, closed at its row by
+`consumeOwedR`, SPEC §15, `Env.pushOwn_own`). What is owed flows into tail positions:
 the body of `<-` and `let` (less what the head or `V` used), both `case` arms, both `<,>`
 components, `fun`/`Fun` bodies, `nu_in` and ascriptions. The head `M` of `x <- M; N`, and the
 handled body of a handler site, are owed the owed variables they mention by name (`mentionsC`). A value
@@ -273,7 +274,7 @@ owes nothing itself; a computation inside one (`thunk M`, `thunkv N`, `run M`) i
 variables of the computation the value is in that it mentions (`Env.capture`), which `Env.clearOwn`
 and `Env.forVal` hold for it in `Env.cap`. At a terminal computation (`Comp.terminal`), the checker checks it with
 nothing owed, then wraps the result in `consumeE A xᵢ; …` for each owed slot `i` it neither used nor
-absorbed, the lowest index outermost (`consumeOwed`). Each wrap is `rConsume`, which applies
+absorbed, the lowest index outermost (`consumeOwedR`). Each wrap is `rConsume`, which applies
 `consumeSlot_derives` (`Core/Consume.lean`: `unitE` over `lolliE` of the variable and `consume_wf`) to a split
 of the variable leaf and the computation, so the result is still a `Res`, and
 `checkProgram_sound` is unchanged. The erasure contains the calls, and the backend compiles them

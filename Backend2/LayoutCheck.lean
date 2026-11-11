@@ -324,7 +324,7 @@ def walk (p : Prog) (w : String) : Nat → Tm → Nat → CM Unit
       | .slotPut => do
         eq "a slot's contents" (← kd (← kd (← a 0) 0) 0) (← a 2)
         eq "a slot put's array" dst (← a 0)
-      | .slotTake => do
+      | .slotTake | .slotPop => do
         eq "a slot take's array" (← kd dst 0) (← a 0)
         eq "a slot's contents" (← kd dst 1) (← kd (← kd (← a 0) 0) 0)
       | .size => eq "a family's size" (← kd dst 0) (← a 0)
@@ -591,7 +591,54 @@ def layoutOk (L : Layouts) : CM Unit := do
       | .int _ | .opq | .ref _ | .imm _ | .mut _ => pure (1, true)
       | .fam _ => pure (2, true)
       | .pair a b => pure ((← fieldW L v 0 a) + (← fieldW L v 1 b), (← fieldT L v 0 a) && (← fieldT L v 1 b))
-      | .sum a b => pure (1 + max (← fieldW L v 0 a) (← fieldW L v 1 b), (← fieldT L v 0 a) && (← fieldT L v 1 b))
+      | .sum a b => do
+        -- A sum's encoding (SPEC §43): its merged arm, tags and packing are `sumEnc` over its
+        -- arms' checked shapes, boxes, widths, packing and tags, so a merged arm's words are the
+        -- arm's own (its tags the arm's, the other arm's the one tag after them), and a packed
+        -- sum's leaves are each empty or a scalar of at most 32 bits.
+        let ra ← rp L a
+        let rb ← rp L b
+        let ch (j : Nat) : Nat := if j == 0 then ra else rb
+        let (m, t, pk, w) := sumEnc (fun j => L.boxed.contains (v, j)) (L.shape[ch ·]!) (L.width[ch ·]!)
+          (fun j => L.packed.getD (ch j) false) (fun j => L.tags.getD (ch j) 2)
+        unless L.mergeArm.getD v none == m do
+          throw s!"sum {v} merges arm {L.mergeArm.getD v none}, its arms give {m}: a merged arm's words are not its own"
+        unless L.tags.getD v 0 == t do
+          throw s!"sum {v} has {L.tags.getD v 0} tags, its arms give {t}"
+        unless L.packed.getD v false == pk do
+          throw s!"sum {v} is {if pk then "not " else ""}packed, its arms give {pk}"
+        -- The encoding's invariants, from the children directly (not through `sumEnc`): a merged
+        -- arm is a sum held inline, encoded as the sum is, its tags the sum's but one; a packed
+        -- sum's leaves each hold one word or none, of at most 32 bits, inline; the width.
+        let bx (j : Nat) : Bool := L.boxed.contains (v, j)
+        let isSumN (c : Nat) : Bool := match L.shape[c]! with | .sum .. => true | _ => false
+        let pv := L.packed.getD v false
+        let tv := L.tags.getD v 0
+        let mv := L.mergeArm.getD v none
+        match mv with
+        | some j =>
+          let c := ch j
+          unless j < 2 && !bx j && isSumN c do
+            throw s!"sum {v}'s merged arm {j} is not a sum held inline"
+          unless L.packed.getD c false == pv do
+            throw s!"sum {v}'s merged arm {j} is encoded otherwise than the sum"
+          unless tv == L.tags.getD c 0 + 1 do
+            throw s!"sum {v} has {tv} tags, not its merged arm's and one"
+        | none => unless tv == 2 do throw s!"sum {v} merges no arm and has {tv} tags, not 2"
+        let leafOk (j : Nat) : Bool :=
+          let c := ch j
+          !bx j && (if mv == some j then L.packed.getD c false else
+            L.width[c]! == 0 || (L.width[c]! == 1 && match L.shape[c]! with
+              | .int .w8 | .int .w32 | .int .u32 | .int .f32 => true
+              | _ => false))
+        let pay (j : Nat) : Nat :=
+          if mv == some j then L.width[ch j]! - 1 else if bx j then 1 else L.width[ch j]!
+        if pv then
+          unless leafOk 0 && leafOk 1 && tv ≤ 0x100000000 && w == 1 do
+            throw s!"sum {v} is packed, but a leaf is wider than 32 bits, boxed, or its tags do not fit"
+        else unless w == 1 + max (pay 0) (pay 1) do
+          throw s!"sum {v}'s width is not a tag word and its widest arm's payload"
+        pure (w, (← fieldT L v 0 a) && (← fieldT L v 1 b))
       | .clos .. =>
         if L.recCls.contains v then pure (1, false) else do
           let mut m := 0
@@ -1069,7 +1116,20 @@ def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
     | .prim .load _ => (freshPtrCopy 8 L (L.node x)).map fun (L', m) =>
       { L' with varNode := L'.varNode.insert x m }
     | _ => none
+  -- A sum's encoding (SPEC §43): its merged arm moved to the other arm, its tags one more, its
+  -- packing flipped.
+  let mergedSum := L.order.find? fun v => (L.mergeArm.getD v none).isSome
+  let packedSum := L.order.find? fun v => L.packed.getD v false
+  let moveMerge := mergedSum.map fun v =>
+    { L with mergeArm := L.mergeArm.set! v ((L.mergeArm.getD v none).map (1 - ·)) }
+  let dropMerge := mergedSum.map fun v => { L with mergeArm := L.mergeArm.set! v none }
+  let moreTags := mergedSum.map fun v => { L with tags := L.tags.set! v (L.tags[v]! + 1) }
+  let unpack := packedSum.map fun v => { L with packed := L.packed.set! v false }
   [("remove a code from its class", removeCode),
+   ("move a sum's merged arm", moveMerge),
+   ("drop a sum's merged arm", dropMerge),
+   ("give a sum another tag", moreTags),
+   ("unpack a packed sum", unpack),
    ("remove a code's class", removeClassOf),
    ("merge two classes of one shape and different widths", merge),
    ("change a class's width", width),

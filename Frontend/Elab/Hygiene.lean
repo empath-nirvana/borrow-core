@@ -198,6 +198,8 @@ where
       let cs ← h.clauses.mapM (Clause.hyg all ρ)
       pure (.chandler sp { h with params := ps.zip (h.params.map (·.2)), ret := (rx', rA, rM'),
                                   clauses := cs })
+    -- A template generic over rows and sites (SPEC §76): its declaration's locals.
+    | .gen sp rs ss d => do pure (.gen sp rs ss (← go d))
     | d => pure d
 
 /-- A library's declaration with the library's declarations named in `ρ` renamed as `ρ` says, in
@@ -209,12 +211,14 @@ def _root_.Frontend.Decl.renameDecls (ρ : Ren) (d : Decl) : Decl :=
   match d with
   | .def_ sp n ps A V mk => .def_ sp (n' n) ps A ((V.hygD ρ (fun _ => false) ρ).run' (0, "")) mk
   | .extern sp n A => .extern sp (n' n) A
+  | .gen sp rs ss d => .gen sp rs ss (d.renameDecls ρ)
   | d => d
 
 /-- The top-level names of value-level declarations: what a local must not be named. -/
 def _root_.Frontend.Decl.globals : Decl → List String
   | .def_ _ n .. | .extern _ n _ => [n.name]
   | .effect _ _ _ ops => ops.map (·.name.name)
+  | .gen _ _ _ d => d.globals
   | _ => []
 
 /-- Whether a local named `x` is renamed, given the top-level names `gs`. -/

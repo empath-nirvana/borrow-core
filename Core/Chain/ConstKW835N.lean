@@ -202,8 +202,9 @@ theorem _root_.BoCa.Fig16.Tree.Wp.Goal791.Const791.val_closed {Γx : Ctx VTy} {�
   | _, .w2 .., ⟨_, _, _, _, _, _, hdc, _⟩ => withborUE_closed (substAll_closed_of_meetsN hx hdc)
   | _, .w3 .., ⟨_, _, _, _, _, hdc, _⟩ => withborUE_closed (substAll_closed_of_meetsN hx hdc)
   | _, .wF .., ⟨_, _, _, _, _, hdc, _⟩ => by
-      have h := withborUE_closed (substAll_closed_of_meetsN hx hdc)
-      simp_all [withborUE, Const791.valAt, withborFV, withborFE, closedAt, thenE]
+      have h := closedAt_mono _ (substAll_closed_of_meetsN hx hdc) (Nat.zero_le 3)
+      simp_all [Const791.valAt, withborFV, withborFE, closedAt, thenE, Expr.val, Val.lam,
+        Val.unit, Val.prim]
   | _, .wl .., _ => rfl
   | _, .sm .., ⟨_, _, _, _, _, _, _, hdc, _⟩ =>
       withborUE_closed (substAll_closed_of_meetsN hx hdc)

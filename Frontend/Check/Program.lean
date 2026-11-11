@@ -218,6 +218,7 @@ def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey)
   | .chandler sp h => throw ⟨sp, s!"internal error: `handler {h.name.name}` was not elaborated"⟩
   | .poly sp n _ _ _ _ _ => throw ⟨sp, s!"internal error: `poly {n.name}` was not elaborated"⟩
   | .data sp d => throw ⟨sp, s!"internal error: `data {d.name.name}` was not elaborated"⟩
+  | .gen sp _ _ _ => throw ⟨sp, "internal error: a template over rows or sites was not instantiated (SPEC §76)"⟩
   | .extern _ n A => do
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
       pure (s!"extern {n.name} : {ppVTy A'}", none, [])
@@ -248,6 +249,7 @@ def _root_.Frontend.Decl.declared : Decl → List Ident
   | .chandler _ h => [h.name]
   | .data _ d => d.name :: d.cons.map (·.name)
   | .main .. | .include .. => []
+  | .gen _ _ _ d => d.declared
 
 /-- **A declaration of a name `run_io` reserves** (SPEC §11): a harness extern, or a wrapper's
 binder, declared at all; a capability declared other than as an extern. A program that declared a
@@ -283,7 +285,21 @@ def checkElaborated (el : Frontend.Elab.Elaborated) (wrapped : Bool) : Except Er
     ((List.range ds.size).foldlM (init := ((⟨[], none, el, []⟩ : Report), [])) fun (acc, ts) k =>
       match (ds[k]? : Option Decl) with
       | some d => do
-          let (line, m, t) ← checkDecl ds k el.keys closes d
+          -- An instance of a template over rows or sites (SPEC §76): an error in it names the
+          -- template and the use it was made for.  `[spec §76]`
+          let inst := match d with
+            | .def_ _ n .. => el.origins.findSome? fun ((sp, o) : Span × Frontend.Sugar.Origin) =>
+              match o with
+              | .rowInst x f => if x == n.name then some (x, f, sp) else none
+              | _ => none
+            | _ => none
+          let (line, m, t) ← tryCatch (checkDecl ds k el.keys closes d) fun e =>
+            throw (match inst with
+              | some (x, f, sp) =>
+                -- The pure use is the template as written, under its own name.
+                let what := if x == f then s!"`{f}`" else s!"the instance `{x}` of `{f}`"
+                { e with msg := s!"{e.msg}\n  in {what}, used at {sp.start.render}" }
+              | none => e)
           pure ({ acc with lines := if k < lib then acc.lines else acc.lines ++ [line],
                            main := m <|> acc.main }, ts ++ t)
       | none => pure (acc, ts) : CheckM _).run' []

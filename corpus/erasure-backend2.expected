@@ -128,6 +128,12 @@ core-pipe-plain erased handles 0 performs 0 raises 0 machines 13 suspends 8 left
 core-pipe-pushback erased handles 0 performs 0 raises 0 machines 13 suspends 6 left 0 0
 core-pipe-raise erased handles 0 performs 0 raises 1 machines 26 suspends 11 left 0 0
 core-pipe-step erased handles 1 performs 0 raises 1 machines 2 suspends 2 left 0 0
+core-row-capture-global erased handles 1 performs 0 raises 0 left 0 0
+core-row-generic erased handles 1 performs 0 raises 0 left 0 0
+core-row-key-tparam erased handles 1 performs 0 raises 0 left 0 0
+core-row-pipe-stop erased handles 1 performs 0 raises 1 left 0 0
+core-site-fresh-const erased handles 1 performs 0 raises 1 left 0 0
+core-site-generic erased handles 2 performs 2 raises 0 left 0 0
 core-unsigned erased handles 0 performs 0 raises 0 left 0 0
 data-json-map-ser erased handles 2 performs 0 raises 2 left 0 0
 deep-gen-count erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
@@ -159,12 +165,28 @@ fin-raise-unwind erased handles 2 performs 0 raises 3 left 0 0
 fin-resume-capturing-row erased handles 2 performs 0 raises 0 machines 1 suspends 1 left 0 0
 fin-timeout erased handles 1 performs 0 raises 1 machines 2 suspends 1 left 0 0
 for-arm-raises-owned erased handles 8 performs 0 raises 8 left 0 0
+gen-raise-annot erased handles 5 performs 0 raises 11 machines 8 suspends 4 left 0 0
+gen-raise-become erased handles 0 performs 0 raises 7 machines 6 suspends 5 left 0 0
+gen-raise-close-two erased handles 2 performs 0 raises 4 machines 8 suspends 7 left 0 0
+gen-raise-fold erased handles 4 performs 0 raises 6 machines 4 suspends 2 left 0 0
+gen-raise-local-bind erased handles 2 performs 0 raises 6 machines 6 suspends 3 left 0 0
+gen-raise-local-pure erased handles 2 performs 0 raises 5 machines 4 suspends 2 left 0 0
+gen-raise-op-terminal erased handles 0 performs 0 raises 12 machines 12 suspends 8 left 0 0
+gen-raise-pass erased handles 4 performs 0 raises 6 machines 4 suspends 2 left 0 0
+gen-raise-take erased handles 2 performs 0 raises 3 machines 8 suspends 5 left 0 0
+gen-raise-unused erased handles 4 performs 0 raises 8 machines 8 suspends 4 left 0 0
+gen-raise-with erased handles 0 performs 0 raises 4 machines 7 suspends 5 left 0 0
+gen-raise-zip erased handles 2 performs 0 raises 4 machines 8 suspends 4 left 0 0
 handle-arm-releases erased handles 2 performs 0 raises 2 left 0 0
 if-match-argument erased handles 0 performs 0 raises 0 left 0 0
 infer-local-from-call erased handles 1 performs 0 raises 1 left 0 0
 infer-local-sum-generic erased handles 0 performs 0 raises 0 left 0 0
 infer-local-unit erased handles 1 performs 0 raises 1 left 0 0
-json-parse erased handles 16 performs 0 raises 41 left 0 0
+json-drop-deep erased handles 4 performs 0 raises 7 left 0 0
+json-parse erased handles 16 performs 0 raises 46 left 0 0
+json-deep erased handles 12 performs 0 raises 42 left 0 0
+json-get erased handles 12 performs 0 raises 42 left 0 0
+parse-i64 erased handles 16 performs 0 raises 5 left 0 0
 kernel-cancel-now erased handles 0 performs 0 raises 0 machines 1 suspends 1 left 0 0
 kernel-deep-gen-plain erased handles 1 performs 1 raises 0 machines 1 suspends 2 left 0 0
 kernel-e7a erased handles 0 performs 0 raises 0 machines 1 suspends 1 left 0 0
@@ -489,9 +511,18 @@ map-drain erased handles 0 performs 0 raises 0 left 0 0
 map-iter-owned erased handles 0 performs 0 raises 0 left 0 0
 map-reuse erased handles 0 performs 0 raises 0 left 0 0
 map-views erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-counter-in-n erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-generator erased handles 0 performs 0 raises 0 machines 2 suspends 1 left 0 0
+mut-after-unwind-if-arm erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-if-in-while erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-let-head erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-nested erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-while erased handles 0 performs 0 raises 0 left 0 0
 mut-bind-arm erased handles 0 performs 0 raises 0 left 0 0
 mut-block erased handles 0 performs 0 raises 0 left 0 0
 mut-block-nested erased handles 0 performs 0 raises 0 left 0 0
+mut-cancel-loop-for erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0
+mut-cancel-loop-for-value erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0
 mut-lend-arm erased handles 0 performs 0 raises 0 left 0 0
 mut-modify erased handles 0 performs 0 raises 0 left 0 0
 mut-name-capture erased handles 0 performs 0 raises 0 left 0 0
@@ -544,6 +575,7 @@ reconcile-chain erased handles 0 performs 0 raises 4 machines 12 suspends 14 lef
 reconcile-clock erased handles 0 performs 0 raises 8 machines 20 suspends 20 left 0 0
 retry-block erased handles 2 performs 0 raises 2 left 0 0
 reverse-bytes erased handles 0 performs 0 raises 0 left 0 0
+row-site-fresh-handler erased handles 1 performs 0 raises 1 machines 1 suspends 0 left 0 0
 sched-a erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
 sched-a-div erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
 sched-b erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
@@ -568,6 +600,7 @@ surface/io-upper erased handles 0 performs 0 raises 0 left 0 0
 surface/io-wc erased handles 0 performs 0 raises 0 left 0 0
 surface/map-reuse erased handles 0 performs 0 raises 0 left 0 0
 swap-cell-width erased handles 0 performs 0 raises 0 left 0 0
+take-failing erased handles 2 performs 0 raises 3 machines 4 suspends 2 left 0 0
 text-lend-lifetime erased handles 0 performs 0 raises 0 left 0 0
 text-wordfreq erased handles 2 performs 0 raises 14 left 0 0
 tree-map erased handles 5 performs 2 raises 30 left 0 0
@@ -593,3 +626,4 @@ alpha-generic-arg erased handles 0 performs 0 raises 0 left 0 0
 alpha-lam-binder erased handles 0 performs 0 raises 0 left 0 0
 alpha-withbor2r erased handles 0 performs 0 raises 0 left 0 0
 clause-loop-value erased handles 1 performs 1 raises 0 machines 1 suspends 1 left 0 0
+sum-read-unk erased handles 0 performs 0 raises 0 left 0 0
