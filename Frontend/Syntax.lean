@@ -701,6 +701,20 @@ inductive SchemeMark where
   | litView
   deriving DecidableEq, Repr, Inhabited
 
+/-- What the parser records of a loop: the label `'ℓ:` written before it, and the enclosing `let mut`
+variables its body writes (SPEC §41, R2), in the order they were declared. A pass that moves the
+loop into a head of its own, apart from what follows it, hands these on from the head
+(`Elab.Fins`, a loop as the head of a cancel clause's path), as R3 has every frame do.
+`[spec §41]` -/
+structure LoopInfo where
+  label : Option Ident := none
+  writes : List Ident := []
+  deriving DecidableEq, Repr, Inhabited
+
+/-- `info` without spans. -/
+def LoopInfo.strip (i : LoopInfo) : LoopInfo :=
+  { label := i.label.map Ident.strip, writes := i.writes.map Ident.strip }
+
 mutual
 /-- Value-judged expressions (syntax-core §6.1), checked at a value type. -/
 inductive Val where
@@ -786,9 +800,9 @@ inductive Comp where
   /-- `(M : C)`. -/
   | ascribe (sp : Span) (M : Comp) (C : CTy)
   /-- A loop, `for x in V { M }; N`, `while V { M }; N` or `loop { M }; N` by its source `src`,
-  labelled `ℓ` when the program writes `'ℓ:` before it (`docs/loops.md` §2.1, §2.8). An exit
+  with what the parser records of it, `ℓ` (`LoopInfo`): labelled `ℓ.label` when the program writes `'ℓ:` before it (`docs/loops.md` §2.1, §2.8). An exit
   names the innermost loop. Elaborated away before checking (SPEC §14, §16). -/
-  | loop (sp : Span) (ℓ : Option Ident) (src : LoopSrc) (V : Val) (M N : Comp)
+  | loop (sp : Span) (ℓ : LoopInfo) (src : LoopSrc) (V : Val) (M N : Comp)
   /-- `perform[n.i] V`: the non-abortive operation `i` of the name `n` of the current row
   (`[perform]`).  `[spec §19]` -/
   | perform (sp : Span) (n i : Nat) (V : Val)
@@ -1122,7 +1136,7 @@ def Comp.strip : Comp → Comp
   | .nuIn _ M => .nuIn .none M.strip
   | .nuOut _ M => .nuOut .none M.strip
   | .ascribe _ M C => .ascribe .none M.strip C.strip
-  | .loop _ ℓ src V M N => .loop .none (ℓ.map Ident.strip) src.strip V.strip M.strip N.strip
+  | .loop _ ℓ src V M N => .loop .none ℓ.strip src.strip V.strip M.strip N.strip
   | .perform _ n i V => .perform .none n i V.strip
   | .abort _ n i V => .abort .none n i V.strip
   | .handle _ n st hr hc M => .handle .none n (st.map SiteRec.strip) hr.strip hc.strip M.strip
@@ -1245,6 +1259,23 @@ def Comp.anySugar (p : VSugar → Bool) : Comp → Bool
   | .withbor2r _ _ _ _ _ _ _ _ M => M.anySugar p
   | .force .. | .top _ => false
 end
+
+/-- `M` with `f` applied at each terminal of its spine: the tail positions, where the code after
+`M` would go. They are the rest of a bind or a `let`, both arms of a `case`, what follows a loop,
+and the continuation `N` of `x <- M₁ unwind (D); N`: by `[then]`, `ubind (N, D) v ↦ N v`, `N`
+runs in `M₁`'s continuation once `M₁` answers, outside the region `D` finalises, so the code after
+the form is the code after `N`. This is the one definition of the spine that every pass placing
+code at a body's terminals uses: a frame's hand-on of what it writes (SPEC §41, R3), a loop's turn
+handing on its state, a borrow block's result. A pass that walks the spine with a context of its
+own has a case for each of these forms, the `unwind`'s `N` among them.  `[spec §41]` -/
+def Comp.mapTail (f : Comp → Comp) : Comp → Comp
+  | .bind sp x A M N => .bind sp x A M (N.mapTail f)
+  | .letUnit sp V M => .letUnit sp V (M.mapTail f)
+  | .letPair sp x y V M => .letPair sp x y V (M.mapTail f)
+  | .case sp V x M y N => .case sp V x (M.mapTail f) y (N.mapTail f)
+  | .loop sp ℓ src V M N => .loop sp ℓ src V M (N.mapTail f)
+  | .unwind sp x A M D N => .unwind sp x A M D (N.mapTail f)
+  | T => f T
 
 /-- The variable a value copies, up to an ascription or a clone: `a`, `(a : T)`, `clone a`. A
 binding `x <- return V` of such a value is a copy: what the elaboration identifies by a binder

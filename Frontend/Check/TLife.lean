@@ -237,8 +237,8 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .foldOwn ii jj F R => []
   | .foldReuse ii jj F R => []
   | .foldOwnG ii jj B₀ => []
-  | .nuIn ii jj C t => t.lifeBinders
-  | .nuOut ii jj C t => t.lifeBinders
+  | .nuIn ii jj m i C t => t.lifeBinders
+  | .nuOut ii jj m i C t => t.lifeBinders
   | .unfoldN ii jj C S => []
   | .unfoldK ii jj C G S => []
   | .nuOutK ii jj i C G S => []
@@ -360,8 +360,8 @@ def TExpr.domFree : TExpr → Bool
   | .foldOwn ii jj F R => true
   | .foldReuse ii jj F R => true
   | .foldOwnG ii jj B₀ => true
-  | .nuIn ii jj C t => t.domFree
-  | .nuOut ii jj C t => t.domFree
+  | .nuIn ii jj m i C t => t.domFree
+  | .nuOut ii jj m i C t => t.domFree
   | .unfoldN ii jj C S => true
   | .unfoldK ii jj C G S => true
   | .nuOutK ii jj i C G S => true
@@ -482,8 +482,8 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .foldOwn ii jj F R => .foldOwn ii jj F R
   | .foldReuse ii jj F R => .foldReuse ii jj F R
   | .foldOwnG ii jj B₀ => .foldOwnG ii jj B₀
-  | .nuIn ii jj C t => .nuIn ii jj C (t.reAb Δr)
-  | .nuOut ii jj C t => .nuOut ii jj C (t.reAb Δr)
+  | .nuIn ii jj m i C t => .nuIn ii jj m i C (t.reAb Δr)
+  | .nuOut ii jj m i C t => .nuOut ii jj m i C (t.reAb Δr)
   | .unfoldN ii jj C S => .unfoldN ii jj C S
   | .unfoldK ii jj C G S => .unfoldK ii jj C G S
   | .nuOutK ii jj i C G S => .nuOutK ii jj i C G S

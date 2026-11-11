@@ -121,6 +121,7 @@ core-row-splice 0 0 0 0 0 0
 core-site-fresh-const 0 0 0 0 0 0
 core-site-generic 0 0 0 0 0 0
 core-unsigned 0 0 0 0 0 0 # every value is a word: the unsigned integers are held as the signed ones are
+core-unwind-sum-value 1 0 0 1 1 0
 data-json-map-ser 16 0 0 699 420 205
 deep-gen-count 0 3 0 0 0 0
 effects-load-raise 4 0 0 204 184 15
@@ -177,6 +178,10 @@ kernel-poly-id 0 0 0 0 0 0
 kernel-recursive-yield 20 0 0 420 630 0
 kernel-two-callees 0 3 0 0 0 0
 kernel-two-callees-tail 0 1 0 0 0 0
+mut-after-unwind-exits 3 0 0 3 3 0
+mut-after-unwind-for-gen 3 0 0 3 3 0
+mut-after-unwind-loop-in-n 3 0 0 3 3 0
+mut-cancel-unwind-region 0 0 0 0 0 0
 parse-i64 12 0 0 687 313 486
 kernel-cancel-now 0 0 0 0 0 0
 kernel-deep-gen-plain 0 0 0 0 0 0
