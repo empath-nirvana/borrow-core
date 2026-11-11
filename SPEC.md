@@ -13232,12 +13232,15 @@ tables and `HandlerLawN` are unchanged.
   drop `closedAt 0 d`. The finaliser stays typed at the rule's dead context, so it may name its
   persistent slots. `withborUE` shifts `d` under its binders; a closed `d` gives the same term, so
   no program changes.
-- K1.4: the kernel instance `progIO` (a lent `stdout` cell, written across a `wait`, resumed and
-  cancelled).
+- K1.4, built (#1072): the kernel instance `progIO` (`Core/Chain/IO791N.lean`). `stdout`'s cell
+  is made by `mk_output` and lent by a suspending constant whose finaliser is
+  `λr. consume (take_output r)`. The callback writes by `write_byte` on both sides of `wait`. It is
+  resumed (`progIO_res_orDiverges`) and cancelled (`progIO_can_orDiverges`, the finaliser handing
+  the cell back), both from `HandlerLawN` alone, the externs at their standard models.
 - K1.5: `IORun.every_runN` at the checked wrapper; `corpus/io-effects.bc` concluded by the
   extended `goal791N`; `bcc trusted` names it.
 
-K1.4 and K1.5 are not built; each unit's code PR marks its line *built*.
+K1.5 is not built; its code PR marks its line *built*.
 
 ### Open
 
