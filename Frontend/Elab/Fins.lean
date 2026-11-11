@@ -331,9 +331,18 @@ def thenInV : Nat → Val → Bool
     | _ => false
 
 /-- A computation runs an `x <- M unwind (D); N` (`[then]`) in place, outside the closures it
-builds. The checker's `[then]` finalises what is live across it at the row around it (SPEC §19's
-consume glue), so a clause's `κ` must not be live across one: a head that runs one is wrapped as
-a head that can abort is (`Sugar.cancelDropped`).  `[spec §27]` -/
+builds. A head of a clause's path that runs one is wrapped as a head that can abort is
+(`Sugar.cancelDropped`): `x <- M₁ unwind (cancel k); N`, so that `κ` is not live across the
+`[then]` inside it. When `M₁` can neither abort nor capture, the inserted finaliser never runs.
+`[spec §27]`
+
+UNPROVED: the wrap is an over-approximation. A `[then]` in a head whose row has an abortive
+operation is where the kernel asks the finaliser to account for `κ` (a clause's `κ` live across it
+is refused, the mut-combos `splits` row's case); one in a head that can neither abort nor capture
+the kernel accepts with `κ` live across it. Why it is safe: an over-count adds a finaliser that
+never fires, which the kernel checks as any `[then]`; an under-count (a `[then]` this walk misses,
+inside a closure the head forces) leaves `κ` live across it, which the kernel refuses (a refusal,
+never a wrong program). -/
 def thenInC : Nat → Comp → Bool
   | 0, _ => false
   | k + 1, M => match M with

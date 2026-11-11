@@ -835,7 +835,14 @@ return (thunkv nu_in < return (inl io_v), {close} >)"
 def latest (env : List (String × Option CVTy)) : List (String × Option CVTy) :=
   env.reverse.foldl (fun acc (y, T) => (acc.filter (·.1 != y)) ++ [(y, T)]) []
 
-/-- A computation binds `y` on its spine. -/
+/-- A computation binds `y` on its spine.
+
+UNPROVED: a loop's writes are rebuilt here from its body's bindings, not read from the parser's
+record (`LoopInfo.writes`), since core text and the elaboration's templates write loops with no
+record (their loops pass variables on by rebinding them, SPEC §41 R1's exception). Why it should
+hold: R1 gives every binder of a surface body a name of its own, so a binder of a `let mut`'s name
+on the spine is an assignment of it. What breaks if not: a variable taken for written that is not
+is threaded needlessly (harmless); one written and missed is not handed on, a lost write. -/
 def _root_.Frontend.Comp.rebindsN (y : String) : Comp → Bool
   | .bind _ x _ M N => x.name == y || M.rebindsN y || N.rebindsN y
   | .letUnit _ _ M => M.rebindsN y

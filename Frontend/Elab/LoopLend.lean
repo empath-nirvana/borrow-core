@@ -72,7 +72,13 @@ def Block.val (B : Block) (P : Val) (S : Comp) : Val :=
     (.thunkv B.tsp (.lam B.lsp B.b (.name B.lsp "_") S))
 
 /-- The names a computation binds on its spine: those it binds for what follows, and those a
-`for` or a `case` arm binds (a `for` threads the variables its body assigns). -/
+`for` or a `case` arm binds (a `for` threads the variables its body assigns).
+
+UNPROVED: a loop's writes are rebuilt here from its body's bindings, not read from the parser's
+record (`LoopInfo.writes`), which core text and templates do not carry. Why it should hold: R1
+gives every binder of a surface body its own name (SPEC §41), so a binder of a name in scope is
+an assignment of it. What breaks if not: a name missed is not handed on out of the borrow block
+(a lost write); one over-counted is handed on needlessly. -/
 def spineNames : Nat → Comp → List String
   | 0, _ => []
   | n + 1, .bind _ x _ _ N => x.name :: spineNames n N

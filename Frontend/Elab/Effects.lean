@@ -1928,15 +1928,19 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
     | .loop sp ℓ src V M N =>
       match src, cx.env.iterCall? V with
       | .each x, some (g, gs, i, f, W) =>
-        if (cx.ctl (rowC cx.env fuel M)).isEmpty && !mayLoop fuel M then
+        if (cx.ctl (rowC cx.env fuel M)).isEmpty && !mayLoop fuel M && !Fins.thenInC fuel M then
           forSite n cx cs wrap sp ℓ x g gs i f W M N
         else
           -- A body that performs a control operation would hold the continuation across it,
           -- which is not consumable (its cancel performs at the site's row), and one that loops
           -- cannot be a clause, which is total: the `for` drains the stored generator instead.
+          -- So does one that runs a `[then]` (`x <- M unwind (D); N`) in place: the clause's
+          -- continuation would be live across it, and the site's kind would not be tail.
           let (bs, V', _) ← pullSite n cx cs sp g gs i f W
-          report sp "lowering" (s!"for over {g}: its body performs a control operation or " ++
-            "loops, so it drains the stored generator")
+          report sp "lowering" (if (cx.ctl (rowC cx.env fuel M)).isEmpty && !mayLoop fuel M then
+              s!"for over {g}: its body runs an unwind region, so it drains the stored generator"
+            else s!"for over {g}: its body performs a control operation or " ++
+              "loops, so it drains the stored generator")
           chain bs (.loop sp ℓ src V' (← trC n cx [] false M) (← trC n cx cs wrap N))
       | _, _ =>
         let (bs, V') ← trV n cx cs V

@@ -71,10 +71,9 @@ NESTING = ['if', 'lethead', 'match', 'for', 'block', 'while', 'modify', 'borrow'
 # or `modify` around a `chk`), which is not this check's subject (open, #1053's report).
 NOT_IN_CLAUSE = {'while', 'gen', 'pause', 'cwith', 'with', 'finally', 'kdrop', 'borrow', 'modify',
                  'run'}
-# Inside a `for` over a generator (`gen`), whose body is the site's clause: an `unwind` there is
-# refused by the checker's cross-check of the site's kind, which does not look through `[then]`
-# (open, #1053's report).
-NOT_IN_GEN = {'unwind'}
+# Nothing is left out of a `for` over a generator (`gen`): one whose body runs an `unwind` drains
+# the stored generator (#1053).
+NOT_IN_GEN = set()
 # The State form expresses these; a body that loops (`while`, a `for` over a generator) is a div
 # computation, which no handler wraps (SPEC §21), so it is not.
 STATE_OK = {'assign', 'bindassign', 'rebind', 'shadow', 'pause', 'if', 'lethead', 'match', 'for',
