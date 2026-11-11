@@ -13370,13 +13370,13 @@ kernel error deep inside an instance.
 | `corpus/core-site-generic.bc` | a `def` with a private `site s` (`handle_with[s]` inside), used twice, nested; the inner activation's performs go to the inner handler | `i32[2321]`, `live 0` |
 | `corpus/core-row-pipe-stop.bc` | §75's `pipe_stop` at two rows | `i32[42]`, `live 0` |
 
-**Slices 2 and 3** (surface; answers worked by hand, to be confirmed by `bcc interp` when built):
+**Slices 2 and 3** (surface; the answers come with each slice):
 
-| Program | What | Answer |
+| Program | What | Slice |
 |---|---|---|
-| `corpus/row-compose.bc` | `compose[A, B, C, row r]` returns a closure, and `apply_all[row r]` folds a `List` of closures, at the caller's row: at `[]`, and under `with to_result` with a raising callback | `(i32[10], (inl i32[22], inr i32[120]))` |
-| `corpus/row-lexer.bc` | `data Lexer[row r]` keeps a stored generator `U (pull[..r] u8 1 1)` in a field; a lexer counts numbers over a pure source and over one that raises `4` part-way; the source is closed once on both paths | `(i32[3], inr i32[4])`, `live 0` |
-| `corpus/async-raise.bc` | `Task[A, row r]` and `spawn[A, row r]`: a task body that raises, resumed past its `await()`, reaches `to_result` | `inr i32[5]` |
+| `corpus/row-compose.bc` | `compose[A, B, C, row r]` returns a closure, and `apply_all[row r]` folds a `List` of closures, at the caller's row: at `[]`, and under `with to_result` with a raising callback | 2 |
+| `corpus/row-lexer.bc` | `data Lexer[row r]` keeps a stored generator `U (pull[..r] u8 1 1)` in a field; a lexer counts numbers over a pure source and over one that raises `4` part-way; the source is closed once on both paths | 2 |
+| `corpus/async-raise.bc` | `Task[A, row r]` and `spawn[A, row r]`: a task body that raises, resumed past its `await()`, reaches `to_result` | 3 |
 
 Rejects:
 - `corpus/reject/row-arg-mismatch.bc`: a wrong row argument, reported at the use site. Its message
