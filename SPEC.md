@@ -8860,11 +8860,13 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/mut-after-unwind-nested.bc` | nested `unwind`s in a `while` | `i32[12]` |
 | `corpus/mut-after-unwind-if-in-while.bc` | an `unwind` in an `if` arm inside a `while` | `i32[24]` |
 | `corpus/mut-after-unwind-counter-in-n.bc` | a loop counter written in the continuation | `i32[303]` |
-| `corpus/mut-after-unwind-generator.bc` | the same inside a generator | `i32[330]` |
-| `corpus/mut-after-unwind-exits.bc` | the continuation's writes on each exit | `(i32[603], i32[9])` |
+| `corpus/mut-after-unwind-generator.bc` | a write in an `unwind`'s continuation inside a generator's loop | `i32[330]` |
+| `corpus/mut-after-unwind-exits.bc` | `break` and `continue` in an `unwind`'s continuation | `(i32[603], i32[9])` |
 | `corpus/mut-after-unwind-loop-in-n.bc` | a loop in the continuation | `i32[50303]` |
 | `corpus/mut-cancel-loop-for.bc`, `mut-cancel-loop-for-value.bc` | #1053: a `k`-dropping cancel clause around a `for` that writes, unbound and bound | `inl (inr i32[3])` |
-| `corpus/mut-cancel-unwind-region.bc` | the same around an `unwind` region | `inl (inr i32[3])` |
+| `corpus/mut-cancel-unwind-region.bc` | `unwind`s whose heads do not abort, in a clause that drops `k` | `inl (inr i32[3])` |
+
+The #1053 programs (`mut-after-unwind-*`, `mut-cancel-*`) give `live 0` on every backend.
 
 `scripts/mut-combos.py` checks the rules on generated nestings (*Acceptance* below).
 `corpus/sugar/mut-heads.bc` and `mut-modify.bc` pin the elaboration beside the core written by
