@@ -286,6 +286,168 @@ theorem wpTS_selfV {B : Expr} (hB : closedAt 2 B = true) (w : Val) (ls : List SR
       (wpTS ls (.app (.val (selfV B)) (.val w)) Q) :=
   wpTS_selfV_in hB .hole w ls Q
 
+section ShiftPsub
+
+attribute [local simp] Expr.subst Val.val_shift Expr.shift_shift Expr.shift_zero
+
+/-! ### Shifts under a closing substitution -/
+
+theorem Expr.shift_shift_cut (d c : Nat) :
+    ∀ (e : Expr) (k : Nat), Expr.shift d (k + c) (Expr.shift c k e) = Expr.shift (c + d) k e
+  | .var i, k => by
+      by_cases h : i < k
+      · have h' : i < k + c := by omega
+        simp [Expr.shift, h, h']
+      · have h' : ¬ (i + c < k + c) := by omega
+        simp only [Expr.shift, h, if_false, h']
+        congr 1; omega
+  | .unit, _ => rfl
+  | .pair a b, k => by simp only [Expr.shift, Expr.shift_shift_cut d c a, Expr.shift_shift_cut d c b]
+  | .inj₁ a, k => by simp only [Expr.shift, Expr.shift_shift_cut d c a]
+  | .inj₂ a, k => by simp only [Expr.shift, Expr.shift_shift_cut d c a]
+  | .lam b, k => by
+      simp only [Expr.shift]
+      rw [show k + c + 1 = (k + 1) + c by omega, Expr.shift_shift_cut d c b (k + 1)]
+  | .loc _, _ => rfl
+  | .prim _, _ => rfl
+  | .seq a b, k => by simp only [Expr.shift, Expr.shift_shift_cut d c a, Expr.shift_shift_cut d c b]
+  | .letpair a b, k => by
+      simp only [Expr.shift]
+      rw [show k + c + 2 = (k + 2) + c by omega, Expr.shift_shift_cut d c a k,
+        Expr.shift_shift_cut d c b (k + 2)]
+  | .case a b₁ b₂, k => by
+      simp only [Expr.shift]
+      rw [show k + c + 1 = (k + 1) + c by omega, Expr.shift_shift_cut d c a k,
+        Expr.shift_shift_cut d c b₁ (k + 1), Expr.shift_shift_cut d c b₂ (k + 1)]
+  | .app f a, k => by simp only [Expr.shift, Expr.shift_shift_cut d c f, Expr.shift_shift_cut d c a]
+
+/-- **A closing substitution under `d` binders of a term shifted past them** is the shifted
+closing substitution. -/
+theorem Expr.psub_shift (d : Nat) (γ : List Val) :
+    ∀ (e : Expr) (c : Nat), Expr.psub (c + d) γ (Expr.shift d c e) = Expr.shift d c (Expr.psub c γ e)
+  | .var i, c => by
+      by_cases h : i < c
+      · have h' : i < c + d := by omega
+        simp [Expr.shift, Expr.psub, h, h']
+      · have h' : ¬ (i + d < c + d) := by omega
+        simp only [Expr.shift, h, if_false, Expr.psub, h']
+        rw [show i + d - (c + d) = i - c by omega]
+        cases hg : γ[i - c]? with
+        | some v =>
+            simp only [Expr.val, Val.val_shift]
+            have e := Expr.shift_shift_cut d c v.1 0
+            simp only [Nat.zero_add] at e
+            rw [e]
+        | none =>
+            simp only [Expr.shift]
+            have hl : γ.length ≤ i - c := by
+              by_contra hc; push Not at hc; rw [List.getElem?_eq_getElem hc] at hg; cases hg
+            rw [if_neg (by omega)]
+            congr 1; omega
+  | .unit, _ => rfl
+  | .pair a b, c => by simp only [Expr.shift, Expr.psub, Expr.psub_shift d γ a, Expr.psub_shift d γ b]
+  | .inj₁ a, c => by simp only [Expr.shift, Expr.psub, Expr.psub_shift d γ a]
+  | .inj₂ a, c => by simp only [Expr.shift, Expr.psub, Expr.psub_shift d γ a]
+  | .lam b, c => by
+      simp only [Expr.shift, Expr.psub]
+      rw [show c + d + 1 = (c + 1) + d by omega, Expr.psub_shift d γ b (c + 1)]
+  | .loc _, _ => rfl
+  | .prim _, _ => rfl
+  | .seq a b, c => by simp only [Expr.shift, Expr.psub, Expr.psub_shift d γ a, Expr.psub_shift d γ b]
+  | .letpair a b, c => by
+      simp only [Expr.shift, Expr.psub]
+      rw [show c + d + 2 = (c + 2) + d by omega, Expr.psub_shift d γ a c,
+        Expr.psub_shift d γ b (c + 2)]
+  | .case a b₁ b₂, c => by
+      simp only [Expr.shift, Expr.psub]
+      rw [show c + d + 1 = (c + 1) + d by omega, Expr.psub_shift d γ a c,
+        Expr.psub_shift d γ b₁ (c + 1), Expr.psub_shift d γ b₂ (c + 1)]
+  | .app f a, c => by simp only [Expr.shift, Expr.psub, Expr.psub_shift d γ f, Expr.psub_shift d γ a]
+
+theorem closedAt_shift_add (d : Nat) : ∀ (e : Expr) (k c : Nat), closedAt k e = true →
+    closedAt (k + d) (e.shift d c) = true
+  | .var i, k, c, h => by
+      simp only [closedAt, decide_eq_true_eq] at h
+      simp only [Expr.shift]; split <;> simp [closedAt] <;> omega
+  | .unit, _, _, _ => rfl
+  | .pair a b, k, c, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [Expr.shift, closedAt, closedAt_shift_add d a k c h.1, closedAt_shift_add d b k c h.2,
+        Bool.and_self]
+  | .inj₁ a, k, c, h => closedAt_shift_add d a k c h
+  | .inj₂ a, k, c, h => closedAt_shift_add d a k c h
+  | .lam b, k, c, h => by
+      have := closedAt_shift_add d b (k + 1) (c + 1) h
+      simp only [Expr.shift, closedAt]; rwa [show k + d + 1 = k + 1 + d by omega]
+  | .loc _, _, _, _ => rfl
+  | .prim _, _, _, _ => rfl
+  | .seq a b, k, c, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [Expr.shift, closedAt, closedAt_shift_add d a k c h.1, closedAt_shift_add d b k c h.2,
+        Bool.and_self]
+  | .letpair a b, k, c, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      have hb := closedAt_shift_add d b (k + 2) (c + 2) h.2
+      simp only [Expr.shift, closedAt, closedAt_shift_add d a k c h.1, Bool.true_and]
+      rwa [show k + d + 2 = k + 2 + d by omega]
+  | .case a b₁ b₂, k, c, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      have h₁ := closedAt_shift_add d b₁ (k + 1) (c + 1) h.1.2
+      have h₂ := closedAt_shift_add d b₂ (k + 1) (c + 1) h.2
+      simp only [Expr.shift, closedAt, closedAt_shift_add d a k c h.1.1, Bool.true_and,
+        Bool.and_eq_true]
+      rw [show k + d + 1 = k + 1 + d by omega]
+      exact ⟨h₁, h₂⟩
+  | .app f a, k, c, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [Expr.shift, closedAt, closedAt_shift_add d f k c h.1, closedAt_shift_add d a k c h.2,
+        Bool.and_self]
+
+theorem Expr.shift_shift_comm (k d c : Nat) :
+    ∀ (e : Expr) (b : Nat), (e.shift k b).shift d (b + c + k) = (e.shift d (b + c)).shift k b
+  | .var i, b => by
+      simp only [Expr.shift]
+      by_cases h₁ : i < b
+      · have h₂ : i < b + c := by omega
+        have h₃ : i < b + c + k := by omega
+        simp [h₁, h₂, h₃, Expr.shift]
+      · by_cases h₂ : i < b + c
+        · have h₃ : i + k < b + c + k := by omega
+          simp [h₁, h₂, h₃, Expr.shift]
+        · have h₃ : ¬ (i + k < b + c + k) := by omega
+          have h₄ : ¬ (i + d < b) := by omega
+          simp only [h₁, h₂, h₃, h₄, if_false, Expr.shift]
+          congr 1; omega
+  | .unit, _ => rfl
+  | .pair a e, b => by simp only [Expr.shift, Expr.shift_shift_comm k d c a b,
+      Expr.shift_shift_comm k d c e b]
+  | .inj₁ a, b => by simp only [Expr.shift, Expr.shift_shift_comm k d c a b]
+  | .inj₂ a, b => by simp only [Expr.shift, Expr.shift_shift_comm k d c a b]
+  | .lam a, b => by
+      simp only [Expr.shift]
+      have := Expr.shift_shift_comm k d c a (b + 1)
+      rw [show b + 1 + c + k = b + c + k + 1 by omega, show b + 1 + c = b + c + 1 by omega] at this
+      rw [this]
+  | .loc _, _ => rfl
+  | .prim _, _ => rfl
+  | .seq a e, b => by simp only [Expr.shift, Expr.shift_shift_comm k d c a b,
+      Expr.shift_shift_comm k d c e b]
+  | .letpair a e, b => by
+      simp only [Expr.shift, Expr.shift_shift_comm k d c a b]
+      have := Expr.shift_shift_comm k d c e (b + 2)
+      rw [show b + 2 + c + k = b + c + k + 2 by omega, show b + 2 + c = b + c + 2 by omega] at this
+      rw [this]
+  | .case a e₁ e₂, b => by
+      simp only [Expr.shift, Expr.shift_shift_comm k d c a b]
+      have h₁ := Expr.shift_shift_comm k d c e₁ (b + 1)
+      have h₂ := Expr.shift_shift_comm k d c e₂ (b + 1)
+      rw [show b + 1 + c + k = b + c + k + 1 by omega, show b + 1 + c = b + c + 1 by omega] at h₁ h₂
+      rw [h₁, h₂]
+  | .app f a, b => by simp only [Expr.shift, Expr.shift_shift_comm k d c f b,
+      Expr.shift_shift_comm k d c a b]
+
+end ShiftPsub
+
 end BoCa.Fig16.LogRel.Core
 
 end

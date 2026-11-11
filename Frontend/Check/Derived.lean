@@ -187,7 +187,7 @@ theorem lendR_plain {ℍ : Host} [HostIs ℍ] {S : Row} (hS : S.isEmpty = true) 
       show Expr.val (lendCb M) = (lendCb M).1 from rfl,
       subst_closedAt _ _ hcb (Nat.zero_le _)]
   rw [e]
-  refine withborUE_beta hTb hd u hu (lendCb M) ?_
+  refine withborUE_beta_closed hTb hd u hu (lendCb M) ?_
   refine ewp_fold hTb (wpG_bind (ubindK _ _) _ ls _ ρ ?_)
   refine wpG_mono (fun ls' t σ ht => ?_) ((ewp_abortive (opTable_abortive hA)).mp h)
   rcases ht with ⟨v, rfl, hv⟩ | hp

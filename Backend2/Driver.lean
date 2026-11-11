@@ -57,14 +57,16 @@ structure HNode where
   H : Expr
   /-- The node is `effHandleVB`: its clauses receive `κ` boxed (BOXED-κ, SPEC §28). -/
   boxed : Bool := false
+  /-- Each operation's cancel row, as its clause's `κ` reads it (`cancelTy`). -/
+  fs : Nat → CTy := fun _ => .ret .unit
 
 /-- The `handle` nodes of a typed term, within the depth `fuel`. -/
 def hnodes : Nat → TExpr → List HNode
   | 0, _ => []
   | f + 1, t =>
     let here : List HNode := match t with
-      | .effHandleV _ _ S E _ _ n _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, false⟩]
-      | .effHandleVB _ _ S E _ _ n _ _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, true⟩]
+      | .effHandleV _ _ S E fs _ n _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, false, fs⟩]
+      | .effHandleVB _ _ S E fs _ n _ _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, true, fs⟩]
       | _ => []
     here ++ t.children.flatMap fun (_, c) => hnodes f c
 
@@ -119,8 +121,9 @@ def machineOps (c : Frontend.Check.Checked) : MachSet := Id.run do
 /-- **The operations whose every `handle` node keeps `κ` boxed** (SPEC §52): each machine operation
 `(n, j)` whose clause at every node of `n` is `stored`, every node of `n` is `effHandleVB` (BOXED-κ,
 SPEC §28) and no operation of any node of `n` is `unr` (a site with a stack has no `κ` that may be
-copied). A stack machine's frames have one owner there:
-the stored site whose `κ` holds them, which keeps a stack. -/
+copied), and whose cancel row at every node holds no machine operation (a stack machine's cancel
+is a plain loop: a cancel that may suspend is not lowered on the task stack). A stack machine's
+frames have one owner there: the stored site whose `κ` holds them, which keeps a stack. -/
 def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t
   let ms := machineOps c
@@ -129,7 +132,10 @@ def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
     let same := nodes.filter (·.n == n)
     if !same.isEmpty && same.all (fun g => g.boxed && g.E.all (·.1 != .unr) &&
         (g.ks[j.toNat]?.map (·.kind)) == some .stored &&
-        (g.E[j.toNat]?.map (·.1)).any (· != .unr)) then
+        (g.E[j.toNat]?.map (·.1)).any (· != .unr) &&
+        (g.E[j.toNat]?).all fun (q, _, B) => match ofFinAt ms q B (g.fs j.toNat) with
+          | .ok cp => cp.all (·.ms.isEmpty)
+          | .error _ => false) then
       out := out.insert (n, j)
   return out
 
@@ -380,15 +386,35 @@ def framesLine (k : Backend.CheckedProg) : Except String String := do
   pure s!"framed {n} allocated {all.length - n}"
 
 /-- The closure classes of a program's layouts, one a line: its codes, its width, whether its
-environment is on the heap (`bcc lir --layout`). -/
+environment is on the heap; then the boxed fields; then each sum with a merged arm or packed
+(SPEC §43), its tags, its width and the width a tag word and its payload would take (`bcc lir --layout`). A node is numbered by its
+place in the canonical order (`Layouts.order`), and the lines are sorted by those numbers: the
+report depends on the program and its types, not on how the analysis numbered its nodes. -/
 def layoutReport (k : Backend.CheckedProg) : Except String (List String) := do
   let (p, _, L) ← lirLayOf k
   let L ← layoutsAt p L
-  let cls := (L.union.toList.filter (!·.2.isEmpty)).map fun (r, cs) =>
-    s!"class {r}: codes {cs.toList} width {L.w r}{if L.isRec r then " heap" else ""} : " ++
-      (p.codes[cs[0]!]?.map (fun c => (c.ty.pp.take 100).toString)).getD ""
-  let boxes := L.boxed.toList.map fun (v, i) => s!"boxed {v}.{i}"
-  pure (cls ++ boxes)
+  let idx : Std.HashMap Nat Nat := L.order.toList.zipIdx.foldl (fun m (v, i) => m.insert v i) {}
+  let num (v : Nat) : Nat := idx.getD (L.r v) 0
+  let cls := ((L.union.toList.filter (!·.2.isEmpty)).mergeSort fun a b => num a.1 ≤ num b.1).map
+    fun (r, cs) =>
+      s!"class {num r}: codes {cs.toList} width {L.w r}{if L.isRec r then " heap" else ""} : " ++
+        (p.codes[cs[0]!]?.map (fun c => (c.ty.pp.take 100).toString)).getD ""
+  let boxes := (L.boxed.toList.map fun (v, i) => (num v, i)).mergeSort fun a b =>
+    a.1 < b.1 || (a.1 == b.1 && a.2 ≤ b.2)
+  -- The sums a merged arm or packing lays out otherwise than a tag word and a payload (SPEC §43),
+  -- each with the words it would take as that (`was`).
+  let rec plainW (fuel v : Nat) : Nat := match fuel with
+    | 0 => L.w v
+    | f + 1 =>
+      let fw (j c : Nat) : Nat := if L.isBoxed v j then 1 else plainW f c
+      match L.sh v with
+      | .pair a b => fw 0 a + fw 1 b
+      | .sum a b => 1 + max (fw 0 a) (fw 1 b)
+      | _ => L.w v
+  let sums := (L.order.toList.filter fun v => (L.merged v).isSome || L.isPacked v).map fun v =>
+    s!"sum {num v}: merges {(L.merged v).map toString |>.getD "-"} tags {L.tagsOf v}" ++
+      s!"{if L.isPacked v then " packed" else ""} width {L.w v} was {plainW 64 v}"
+  pure (cls ++ boxes.map (fun (v, i) => s!"boxed {v}.{i}") ++ sums)
 
 /-- **The checks refuse wrong layouts** (`bcc lir --layout-reject`, the reject tests): the
 program's layouts and closure flow as computed, accepted; then each perturbation of them

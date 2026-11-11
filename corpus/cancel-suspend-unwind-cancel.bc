@@ -1,0 +1,20 @@
+-- check: old-backend-refuses
+-- SPEC §27 in the core text: a machine cancelled while a finaliser runs on an ordinary unwind.
+-- `abort[1.0]` unwinds through a finaliser that performs the capturable `4.0`, which suspends the
+-- machine with the raise pending; handler 4, outside handler 1, cancels the continuation instead
+-- of resuming it. The cancel unwinds the finaliser and the region; the pending raise is abandoned
+-- (the kernel's A2, `abort_absorbs`), so handler 1 never receives it.
+--
+-- Answer: (inl (), i32[9]), and `live 0`: handler 4's answer after the cancel.
+
+main : F ((1 + 1) * i32) =
+  handle_with[4](
+      ((!thunkv fun (v : 1 + 1) -> return (v, i32[0])) : !U (1 + 1 -o F ((1 + 1) * i32))),
+      (((!thunkv fun (p : 1 * U ((1 -o F ((1 + 1) * i32)) & F 1)) ->
+          let (u, k) = p; let () = u; c <- (force k).2; let () = c; return (inl (), i32[9])), ())
+        : !U (1 * U ((1 -o F ((1 + 1) * i32)) & F 1) -o F ((1 + 1) * i32)) * 1)) (
+    handle_with[1](
+        ((!thunkv fun (v : 0) -> return (inl ())) : !U (0 -o F[4.0 cancel 1 ~> 1] (1 + 1))),
+        (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F[4.0 cancel 1 ~> 1] (1 + 1)) * 1)) (
+      x <- abort[1.0] () unwind (perform[4.0] ());
+      return x))

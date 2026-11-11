@@ -407,7 +407,7 @@ theorem d_cbO {cl : Val} (hcl : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives ΔM
       first | exact absurd hl Bool.false_ne_true | exact nestC_noFree (by decide)
   refine bindW (.ret (appW (.unitI (by cdead)) (.alloc (by cdead)))) ?_
   refine bindW (.ret (.withbor2U (A := .unit) (B := .unit) 4 (by cdead) rfl ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id
-    (fun _ h => absurd h List.not_mem_nil) (by decide) (.free (by cdead)))) ?_
+    (fun _ h => absurd h List.not_mem_nil) (.free (by cdead)))) ?_
   refine .bind (.right (.right (.left (.dead (.dead (.dead (.left .nil))))))) (.ret (d_cbM hcl rfl)) ?_
   refine bindW (A := .tensor (.ref .unit) .unit)
     (appVW (appVW (.force (T := .thunk _) (C := .arr (.ref .unit) (.arr cbMTy
@@ -425,7 +425,7 @@ theorem d_prog {cl : Val} (hcl : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ
     CDerives LifeCtx.empty (ctx791 [nestC]) (prog (hnd cl)) (.comp (.ret .unit)) := by
   refine bindW (.ret (appW (.unitI (by cdead)) (.alloc (by cdead)))) ?_
   refine bindW (.ret (.withbor1U (A := .unit) (B := .unit) 3 (by cdead) rfl (fun _ h => h.elim) id id
-    (fun _ h => absurd h List.not_mem_nil) (by decide) (.free (by cdead)))) ?_
+    (fun _ h => absurd h List.not_mem_nil) (.free (by cdead)))) ?_
   refine .bind (.right (.right (.left .nil))) (.ret (d_cbO hcl rfl)) ?_
   refine bindW (A := .tensor (.ref .unit) .unit)
     (appVW (appVW (.force (T := .thunk _) (C := .arr (.ref .unit) (.arr cbOTy
@@ -460,16 +460,22 @@ theorem goal791N_premises_can :
 /-- **`Goal791N` at `progRes`**: the run that yields the outer borrow across the suspending lend
 and resumes is safe, leak-free, or diverges, from `HandlerLawN`.  `[spec §62]` -/
 theorem progRes_orDiverges (h : HandlerLawN (ℍ := ℍ)) :
-    OrDiverges (ℍ := ℍ) (substAll (vals791 [nestC]) progRes) :=
-  List.append_nil (vals791 [nestC]) ▸ goal791N h [nestC] [] [] progRes .unit
+    OrDiverges (ℍ := ℍ) (substAll (vals791 [nestC]) progRes) := by
+  have hg : OrDiverges (ℍ := ℍ)
+      (substAll (([nestC] : List Const791).map (fun c => c.valAt []) ++ []) progRes) :=
+    goal791N h [nestC] [] [] progRes .unit
     goal791N_premises_res.1 .nil ((List.append_nil _).symm ▸ goal791N_premises_res.2) rfl
+  rwa [Const791.map_valAt_nil, List.append_nil] at hg
 
 /-- **`Goal791N` at `progCan`**: the run that yields the outer borrow across the suspending lend
 and cancels is safe, leak-free, or diverges, from `HandlerLawN`.  `[spec §62]` -/
 theorem progCan_orDiverges (h : HandlerLawN (ℍ := ℍ)) :
-    OrDiverges (ℍ := ℍ) (substAll (vals791 [nestC]) progCan) :=
-  List.append_nil (vals791 [nestC]) ▸ goal791N h [nestC] [] [] progCan .unit
+    OrDiverges (ℍ := ℍ) (substAll (vals791 [nestC]) progCan) := by
+  have hg : OrDiverges (ℍ := ℍ)
+      (substAll (([nestC] : List Const791).map (fun c => c.valAt []) ++ []) progCan) :=
+    goal791N h [nestC] [] [] progCan .unit
     goal791N_premises_can.1 .nil ((List.append_nil _).symm ▸ goal791N_premises_can.2) rfl
+  rwa [Const791.map_valAt_nil, List.append_nil] at hg
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Nest844N
 

@@ -38,7 +38,7 @@ open BoCa.Fig16.LogRel.Core
 open BoCa.Fig16.LogRel.Core.Chain.SI
 open BoCa.Fig16.LogRel (LtLife substAll)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791)
+open BoCa.Fig16.Tree.Wp.Goal791 (Const791 ctx791 vals791 defines_meetOfDom_empty ansC_of_suspend)
 
 /-! ### The opaque types read as their representations -/
 
@@ -323,12 +323,6 @@ value of `Bytes` with no resource.  `[spec §72]` -/
 theorem externN_bytes {v : Val} (h : BytesV v) : ExternN (ℍ := ℍ) bytesTy v :=
   ⟨closedAt_of_bytesV h, rfl, fun _ _ _ _ => vN_bytes_iff.mpr ⟨rfl, h⟩⟩
 
-theorem length_of_meetsN {Γ : Ctx VTy} {γ : List Val} (h : ExternsMeetN (ℍ := ℍ) Γ γ) :
-    γ.length = Γ.length := by
-  induction h with
-  | nil => rfl
-  | cons _ _ ih => simp [ih]
-
 /-- One more extern at the end of the context. -/
 theorem meetsN_snoc {T : VTy} {v : Val} (hv : ExternN (ℍ := ℍ) T v) :
     ∀ {Γ : Ctx VTy} {γ : List Val}, ExternsMeetN (ℍ := ℍ) Γ γ →
@@ -458,6 +452,41 @@ theorem io_loop_every_runN (hL : HandlerLawN (ℍ := ℍ)) {Γ : Ctx VTy} {N : E
     (hγ : List.Forall₂ (fun s v => s.live = true ∧ (s.ty, v) ∈ stdModel) Γ γ)
     (bs : List UInt8) (n : ℕ) : OrDiverges (ℍ := ℍ) (substAll γ (ioLoopE N bs n)) :=
   externs_loop_every_runN hL h hR hR' (externsMeetN_of_model hL hγ) bs n
+
+/-! ### A lend of a capability cell whose finaliser hands it back to the host -/
+
+/-- The externs' context of `dTakeOutput`: `take_output`.  `[spec §72]` -/
+def takeOutputCtx : Ctx VTy := [⟨externTy (takeOutputC (.opq .output)), true⟩]
+
+/-- **`λr. consume (take_output r)`**: the finaliser of an `Output` cell, handing it back to the
+host through the extern `take_output` (slot `1` under the binder), the representation it returns
+consumed.  `[spec §72]` -/
+def dTakeOutput : Expr := .val (Val.lam (.app (consumeE outRep) (.app (.var 1) (.var 0))))
+
+/-- `Output`'s representation `I32 ⊗ Bytes` is consumable.  `[spec §72]` -/
+theorem consumable_outRep : Consumable outRep := by
+  have h : fshapeB bytesBody = true := by decide
+  exact .tensor .int (Consumable.muF (fshapeB_sound h).1 (fshapeB_sound h).2
+    (by simp only [bytesBody, toFShape, FShape.resO]; exact .sum .unit (.tensor .int .unit)))
+
+/-- **`dTakeOutput` is a finaliser of an `Output` source at the externs' context**:
+`U (Ref Output ⊸ F 1)` at `take_output`'s slot.  `[spec §72]` -/
+theorem d_dTakeOutput {Δ : LifeCtx} :
+    CDerives Δ takeOutputCtx dTakeOutput (.val (.lolli (.ref (.opq .output)) .unit)) :=
+  .thunkV rfl (.lam (.ret (.lolliE (.left (.left .nil))
+    (.lolliE (.left (.right .nil)) (.var (.here (.cons .nil)))
+      (.bangE (.var (.there (.here .nil)))))
+    (consume_wf consumable_outRep (.cons (.cons .nil))))))
+
+/-- **A suspending lend of an `Output` cell whose finaliser hands it back to the host has its
+rule's premises**: `withbor (2)` over `Ref Output` at the hardest case's row, its finaliser
+`dTakeOutput` typed at `take_output`'s context.  `[spec §72]` -/
+theorem w2_takeOutput_okAt (x : LifeVar) :
+    (Const791.w2 x LifeCtx.empty.meetOfDom (.opq .output) .unit hardestRow dTakeOutput).OKAt
+      LifeCtx.empty takeOutputCtx :=
+  ⟨defines_meetOfDom_empty, ⟨.top, fun _ _ => ⟨_, rfl⟩, .opq⟩, id, id, hardestRow_suspend _ x _,
+    ⟨_, defines_meetOfDom_empty, ansC_of_suspend (hardestRow_suspend _ x _)⟩, by decide,
+    d_dTakeOutput⟩
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

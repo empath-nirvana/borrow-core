@@ -28,6 +28,7 @@ import Core.DivDrive
 import Core.HandleLastErase
 import Core.EffCancel
 import Core.EffCancelTyped
+import Core.CancelToPrograms
 import Core.Persistent
 import Core.Compatibility
 import Core.NuRel

@@ -1,0 +1,21 @@
+-- A clause that resumes its continuation after a loop whose value is bound, with no finaliser
+-- anywhere (SPEC §27; #953 re-review H1). The clause's row has an abortive operation (`Fail`), but
+-- the loop's body performs nothing, so nothing can abort through it, and no head is wrapped (a
+-- bound loop is wrapped only when its body can abort or be cancelled through): the clause
+-- elaborates as without phase 2. `work` raises on a path it never takes, so its row holds the
+-- clause's abortive operation, as Backend2's fragment asks of a perform whose clause may abort.
+--
+-- Answer: inl (inl i32[5]), and `live 0`.
+
+include fail
+
+effect Wait { ctl wait() }
+
+handler tm[A]: Wait, A -> A + 1 with Fail[i32] = {
+  return(x) = inl x;
+  wait(k) = { let s = for i in 0..3 { () }; k(()) }
+}
+
+fn work() -> i32 with Wait, Fail[i32] = wait(); if 1 == 2 { let r = raise((9 : i32)); 5 } else { 5 }
+
+main -> (i32 + 1) + i32 = with to_result[i32, i32 + 1] { with tm[i32] { work() } }

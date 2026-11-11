@@ -45,6 +45,8 @@ def VTy.subst (σ : TySubst) : VTy → VTy
   | .app sp G A => .app sp (G.subst σ) (A.subst σ)
   | .lapp sp G a => .lapp sp (G.subst σ) a
   | .rowed sp G r => .rowed sp (G.subst σ) (r.subst σ)
+  | .rowArg sp r => .rowArg sp (r.subst σ)
+  | .siteArg sp n => .siteArg sp n
 
 def CTy.subst (σ : TySubst) : CTy → CTy
   | .ret sp A => .ret sp (A.subst σ)
@@ -65,6 +67,7 @@ def Row.subst (σ : TySubst) : Row → Row
   | .nil => .nil
   | .cons n i q A B f r => .cons n i q (A.subst σ) (B.subst σ) (f.subst σ) (r.subst σ)
   | .top => .top
+  | .var x => .var x
 
 def Shape.subst (σ : TySubst) : Shape → Shape
   | .leaf sp A => .leaf sp (A.subst σ)
@@ -140,7 +143,7 @@ def HInfo.subst (σ : TySubst) (i : HInfo) : HInfo :=
            known := i.known.map fun (x, A) => (x, A.subst σ),
            params := i.params.map fun (x, A) => (x, A.subst σ),
            retA := i.retA.subst σ, res := i.res.subst σ, after := i.after.map (·.subst σ),
-           site := i.site.mapTy (·.subst σ) }
+           site := i.site.mapTy (·.subst σ), fins := i.fins.map (·.subst σ) }
 
 mutual
 def Val.subst (σ : TySubst) : Val → Val

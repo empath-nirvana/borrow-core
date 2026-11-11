@@ -79,7 +79,7 @@ def operands (o : HostOp) : List UInt64 :=
   match Flat.hostArgWidth o with
   | .f32 => f32s
   | .f64 => f64s
-  | .w32 => ints.map (· &&& 0xffffffff) ++ [0xdeadbeef00000005]
+  | .w32 | .u32 => ints.map (· &&& 0xffffffff) ++ [0xdeadbeef00000005]
   | _ => ints
 
 /-- An arithmetic float result, whose NaN's sign and payload are not specified (SPEC §37). -/

@@ -86,6 +86,13 @@ theorem final_opPlug {K : Kont} {r : Bool} {p : Val} {n : UInt32}
     Final (ℍ := ℍ) μ (K.plug (opE r p)) :=
   fun _ _ h => opPlug_no_step hn hK h
 
+/-- A stop of `cancelTo` is final at every memory: no handler of its name encloses it.
+`[spec §51]` -/
+theorem final_cancelToPlug {K : Kont} {p : Val} {n : UInt32}
+    (hn : payloadName p = some n) (hK : K.HasHnd n = false) (μ : Heap) :
+    Final (ℍ := ℍ) μ (K.plug (BoCa.BoLo.cancelToE (.val p))) :=
+  fun _ _ h => cancelToPlug_no_step hn hK h
+
 /-! ### Safe, or it diverges -/
 
 /-- **Safe, or it diverges**: every configuration a run reaches goes on or is a value; a value is

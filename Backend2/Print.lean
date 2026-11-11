@@ -21,7 +21,7 @@ def ppOp : Op → String
   | .alloc _ => "alloc" | .allocLent s _ => s!"allocLent[s{s}]" | .free => "free" | .release => "release" | .swap => "swap"
   | .lend m => if m then "lend mut" else "lend imm" | .relend => "relend"
   | .load => "load" | .take => "take" | .put => "put" | .newArr => "newArr"
-  | .slotPut => "slotPut" | .slotTake => "slotTake" | .freeArr => "freeArr" | .size => "size"
+  | .slotPut => "slotPut" | .slotTake => "slotTake" | .slotPop => "slotPop" | .freeArr => "freeArr" | .size => "size"
   | .len => "len" | .emptyFam => "emptyFam" | .replace => "replace" | .swapSlots => "swapSlots"
   | .tab fi => s!"tab[f{fi}]" | .tabLit fi => s!"tabLit[f{fi}]"
   | .roll => "roll" | .unroll => "unroll" | .clampLen => "clampLen" | .cntLt => "cntLt" | .cntSucc => "cntSucc" | .cntPred => "cntPred"

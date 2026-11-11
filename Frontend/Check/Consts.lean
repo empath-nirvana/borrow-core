@@ -180,7 +180,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
       (cDeadStrict (fun j => .withbor1U (at_ sp) j A B S x (finNode sp (.ref A))) fun hd _ =>
-        .withbor1U x hd.toP hx (scopedB_sound hsc) h₁ h₂ hS hdc
+        .withbor1U x hd.toP hx (scopedB_sound hsc) h₁ h₂ hS
           (.consume hdt hdc hde hd))
   | .withbor2U _ b A B r => do
       let b ← E.elabL Δ b
@@ -193,7 +193,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
       (cDeadStrict (fun j => .withbor2U (at_ sp) j A B S x (finNode sp (.ref A))) fun hd _ =>
-        .withbor2U x hd.toP hx hside h₁ h₂ hS hdc
+        .withbor2U x hd.toP hx hside h₁ h₂ hS
           (.consume hdt hdc hde hd))
   | .withbor3U a _ A B r => do
       let a ← E.elabL Δ a
@@ -205,7 +205,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.mut a A)
       (cDeadStrict (fun j => .withbor3U (at_ sp) j a A B S x (finNode sp (.mut a A))) fun hd _ =>
-        .withbor3U x hd.toP hx h₁ h₂ hS hdc
+        .withbor3U x hd.toP hx h₁ h₂ hS
           (.consume hdt hdc hde hd))
   | .withloadU a _ A B r => do
       let a ← E.elabL Δ a
@@ -229,7 +229,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.fam (.ref A))
       (cDeadStrict (fun j => .sliceBorrowMU (at_ sp) j A B S x (finNode sp (.fam (.ref A))))
-        fun hd _ => .sliceBorrowMU x hd.toP hA hB h₁ h₂ hS hdc
+        fun hd _ => .sliceBorrowMU x hd.toP hA hB h₁ h₂ hS
           (.consume hdt hdc hde hd))
   | .sliceBorrowImmU _ b A B r => do
       let b ← E.elabL Δ b
@@ -244,7 +244,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.fam (.ref A))
       (cDeadStrict (fun j => .sliceBorrowIU (at_ sp) j A B S x (finNode sp (.fam (.ref A))))
-        fun hd _ => .sliceBorrowIU x hd.toP (scopedB_sound hsc) hA hB h₁ h₂ hS hdc
+        fun hd _ => .sliceBorrowIU x hd.toP (scopedB_sound hsc) hA hB h₁ h₂ hS
           (.consume hdt hdc hde hd))
   | _ => err sp "internal error: not an unwinding borrow"
 

@@ -120,9 +120,12 @@ theorem goal791N_premises_progK :
 /-- **`Goal791N` at `progK 3`**: the loop over a code-typed state, three observations and the
 close, is safe, leak-free, or diverges, from `HandlerLawN`.  `[spec §68]` -/
 theorem progK_orDiverges (h : HandlerLawN (ℍ := ℍ)) :
-    OrDiverges (ℍ := ℍ) (substAll (vals791 []) (progK 3)) :=
-  List.append_nil (vals791 ([] : List Const791)) ▸ goal791N h [] [] [] (progK 3) .unit
+    OrDiverges (ℍ := ℍ) (substAll (vals791 []) (progK 3)) := by
+  have hg : OrDiverges (ℍ := ℍ)
+      (substAll (([] : List Const791).map (fun c => c.valAt []) ++ []) (progK 3)) :=
+    goal791N h [] [] [] (progK 3) .unit
     goal791N_premises_progK.1 .nil ((List.append_nil _).symm ▸ goal791N_premises_progK.2) rfl
+  rwa [Const791.map_valAt_nil, List.append_nil] at hg
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.CodeLoop855N
 

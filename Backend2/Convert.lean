@@ -79,9 +79,8 @@ structure OutInfo where
   ty : LTy
   r : LTy
   pay : Pay
-  /-- Each machine operation's key, argument, answer, and its cancel row's payload (`none` at
-  `⊤`). -/
-  ms : List (Key × LTy × LTy × Option Pay)
+  /-- Each machine operation's key, argument, answer, and its cancel row (`none` at `⊤`). -/
+  ms : List (Key × LTy × LTy × Option CancelRow)
   /-- The machine operations at the qualifier `unr`, whose continuation may be copied. -/
   unrs : List Key := []
   deriving Inhabited
@@ -96,8 +95,9 @@ inductive Frame where
   arguments an abort consumes by their types. -/
   | letF (fn : Nat) (own : Nat) (abort : Option Abandon)
   /-- `[·] then x. N unwind D`: `N` the join `fnN`; `D` the finaliser `fnD`, on the frame's own
-  arguments, answering at its row's payload `pd`. -/
-  | thenF (fnN fnD : Nat) (own : Nat) (pd : Pay)
+  arguments, answering at its row's payload `pd`, or, when its row `Σ_D` has machine operations,
+  the outcome `dOut` of `F_{Σ_D} 1` (a machine of its own, called at a call point). -/
+  | thenF (fnN fnD : Nat) (own : Nat) (pd : Pay) (dOut : Option OutInfo)
   /-- Arguments consumed when the machine is cancelled; a forwarding drive's handler values. -/
   | consumeF (own : Nat)
   /-- **The level's state cell** (SPEC §50), the bottom frame of a machine whose state is a cell
@@ -111,24 +111,38 @@ inductive Frame where
   | stackF
   /-- A stored site's stack (SPEC §52), held by a forwarding point: freed when it is cancelled. -/
   | stackH
-  deriving Inhabited, BEq
+  /-- **The kernel's `cfin`** (`ufinC`, `[finalise-cancel]`), in a cancel that is a machine: the
+  finaliser (or the callee's cancel) runs before it, the frames after it are the cancelled region's.
+  Its one argument is the error kept so far, `1 ⊕ P` at the cancel row's payload `pay`. -/
+  | cfinF (pay : Pay)
+  /-- **A finaliser that may suspend, run on an unwind** (`ufin`, `then_fin`): the finaliser runs
+  before it, the frames after it are the unwound region's. Its one argument is the pending raise's
+  payload. -/
+  | unwindF
+  deriving Inhabited
 
 def Frame.own : Frame → Nat
-  | .letF _ k _ | .thenF _ _ k _ | .consumeF k => k
-  | .cellF | .stackH => 1
+  | .letF _ k _ | .thenF _ _ k _ _ | .consumeF k => k
+  | .cellF | .stackH | .cfinF _ | .unwindF => 1
   | .stackF => 2
+
+/-- A frame whose walk may make a call point: a finaliser that may suspend, or a frame that holds
+a finaliser's run. A continuation holding one is walked only where its machine is current. -/
+def Frame.mayPoint : Frame → Bool
+  | .thenF _ _ _ _ (some _) | .cfinF _ | .unwindF => true
+  | _ => false
 
 abbrev Kont := List Frame
 
 /-- **A resumption point** of a machine (SPEC §49): the operation it suspends at; at a call
-point the callee's suspended computation's type `kTy`, the callee's abortive payload `cPay` and the
+point the callee's suspended computation's type `kTy`, the callee's cancel row `cPay` and the
 step function (`step`, on the arguments and the callee's outcome); the arguments' types; the
 continuation; the function `mk` that builds the machine's suspended computation from the callee's
 and the arguments. -/
 structure MPoint where
   op : Key
   kTy : Option LTy
-  cPay : Option Pay
+  cPay : Option CancelRow
   argTys : List LTy
   step : Option Nat
   kont : Kont
@@ -692,20 +706,38 @@ where
 
 A computation at a row with machine operations answers its **outcome** (`Types.outcomeTy`): its
 value, an abort's payload, or a suspension at a machine operation, the operation's argument beside
-the suspended computation `k`, a closure of `(B ⊸ F O) & F (1 ⊕ P)`: resumed with the answer it
+the suspended computation `k`, a closure of `(B ⊸ F O) & F C`: resumed with the answer it
 answers the outcome again, cancelled it unwinds and answers `()` or the first error its finalisers
-raised (§19 *Cancels*).
+raised (§19 *Cancels*), `C = 1 ⊕ P`; where the operation's cancel row holds a machine operation, `C`
+is that row's outcome (`CancelRow`), and a suspension of the cancel is the canceller's (§27).
 
 A **machine** is the code of one function whose answer is an outcome, with the joins and steps
 its conversion makes (`convK`). Each resumption point of the machine is a variant of its
 **state**, per operation: the variables live there and, at a call point, the callee's `k`. So a
 caller's state holds its callee's `k`, and the machine's `k` is one closure of one code per
 operation (`genMach`): its resume entry switches on the state and continues at the point, its
-cancel entry unwinds the point's frames innermost first. -/
+cancel entry unwinds the point's frames innermost first.
+
+**A cancel that may suspend** (Paper's `ufinC`, `cfret`, `cferr`, `cfcancel`, `cancel`,
+`creraise`), one construct per step:
+- the cancel entry whose cancel row holds a machine operation is a machine of the row's outcome
+  (`genMach`, R1); the callee's cancel and each finaliser that may suspend in it are call points;
+- `Frame.cfinF` is the kernel's `cfin`: the error kept so far, the first kept when the finaliser
+  answers or raises (`applyKN`, `abortKN`), the earlier kept when the suspended cancel is cancelled
+  in turn, which goes on through the rest of the region (`cancelKN`); the run's end answers `()` or
+  re-raises the kept error (`cancelEnd`);
+- on an ordinary unwind a finaliser that may suspend is a call point of the same machine, the
+  pending raise held by `Frame.unwindF` (`ufin`, `then_fin`; R3);
+- `κ`'s cancel at a drive is a machine of `cancelTy`'s outcome over `k`'s cancel (`genKap`, R4).
+The cancel's suspensions go back to the code that observed `.2`, and on to the nearest live
+handler: the cancelled region's handlers are dead (the kernel's `Kont.dead`,
+`Paper/S3_Dynamics/Definitions.lean`). Here a cancel's suspension leaves its machine through
+`outSusp`, as the outcome the observer of `.2` receives; it never reaches the clauses of a drive
+inside the cancelled region, whose frames the cancel only walks (`cancelKN`). -/
 
 namespace OutInfo
-/-- The suspended computation at an operation answering `b`, cancelled at the payload `cp`. -/
-def kTy (o : OutInfo) (b : LTy) (cp : Option Pay) : LTy :=
+/-- The suspended computation at an operation answering `b`, cancelled at the cancel row `cp`. -/
+def kTy (o : OutInfo) (b : LTy) (cp : Option CancelRow) : LTy :=
   .thunk (.amp (.arr b (.ret o.ty)) (.ret (cancelResTy cp)))
 /-- The suspensions' summands: each machine operation's argument and `k`. -/
 def sPay (o : OutInfo) : Pay := o.ms.map fun (k, a, b, cp) => (k, .pair a (o.kTy b cp))
@@ -721,16 +753,16 @@ end OutInfo
 
 /-- The machine operations of a row, each key once with its argument and answer types, in the
 row's order.  `[spec §49]` -/
-def rowMs (S : Row) : CM (List (Key × LTy × LTy × Option Pay)) := do
+def rowMs (S : Row) : CM (List (Key × LTy × LTy × Option CancelRow)) := do
   let ms := (← get).mach
   if ms.isEmpty then return []
-  let mut acc : List (Key × LTy × LTy × Option Pay) := []
+  let mut acc : List (Key × LTy × LTy × Option CancelRow) := []
   for o in S do
     if o.n == divName then
       throw s!"an operation ({o.n}, {o.i}) in a computation type: outside the pure fragment"
     if !o.abort && ms.contains (o.n, o.i) && !(acc.any (·.1 == (o.n, o.i))) then
       let cp ← lift (ofFinAt ms o.q o.B o.fin)
-      acc := acc ++ [((o.n, o.i), ← vty o.A, ← vty o.B, cp.map dedupPay)]
+      acc := acc ++ [((o.n, o.i), ← vty o.A, ← vty o.B, cp)]
   return acc
 
 /-- The outcome of a computation answering `r` at the row `S`; `none` when `S` has no machine
@@ -745,6 +777,18 @@ def outInfo? (r : LTy) (S : Row) : CM (Option OutInfo) := do
   match ty with
   | .mu b => unless (LTy.unrollMu b).sameRep o.body do throw s!"LIR: the outcome {ty} does not unroll to {o.body}"
   | _ => throw "LIR: an outcome that is not a μ"
+  return some o
+
+/-- **The outcome of a cancel row** `F_{fin} 1` (R0): `none` when `fin` holds no machine operation
+(the cancel answers `1 ⊕ P_fin`); otherwise the outcome its `CancelRow` gives, whose cancel is a
+machine of it (R1). The outcome unrolls to its body (checked).  `[spec §27, §49]` -/
+def CancelRow.out? (cr : CancelRow) : CM (Option OutInfo) := do
+  if cr.ms.isEmpty then return none
+  let o : OutInfo := { ty := cr.ty, r := .unit, pay := cr.pay, ms := cr.ms, unrs := cr.unrs }
+  match o.ty with
+  | .mu b => unless (LTy.unrollMu b).sameRep o.body do
+      throw s!"LIR: the cancel's outcome {o.ty} does not unroll to {o.body}"
+  | _ => throw "LIR: a cancel's outcome that is not a μ"
   return some o
 
 /-- The row and value type of `F_Σ R`, through `∀`s. -/
@@ -865,91 +909,6 @@ def freeStackThen (h : Var) (b : Tm) : CM Tm := do
   let u ← fresh .unit
   return .letv u (.prim .stackFree [h]) (.consume .dead u b)
 
-/-- The value `x` handed to the continuation `K` over its arguments: the innermost frame's join,
-or the machine's answer (its cell released, or its frame popped, first). -/
-def applyK (F : OutInfo) : Kont → List Var → Var → CM Tm
-  | [], [], x => outValue F x
-  | [], _, _ => throw "LIR: a machine's answer with arguments left"
-  | [.cellF], [c], x => do releaseOpt c (← outValue F x)
-  | .cellF :: _, _, _ => throw "LIR: a level's cell above the bottom of its continuation"
-  | [.stackF], [f, d], x => do popThen f d (← outValue F x)
-  | .stackF :: _, _, _ => throw "LIR: a level's frame above the bottom of its continuation"
-  | .stackH :: _, _, _ => throw "LIR: a value at a site's stack"
-  | .letF fn _ _ :: _, args, x | .thenF fn _ _ _ :: _, args, x => pure (.call fn (args ++ [x]))
-  | .consumeF _ :: _, _, _ => throw "LIR: a value at a frame that only consumes"
-
-/-- The abort `e` (at the machine's payload) through `K`: each frame's arguments abandoned at the
-frame's rule (a `[let]`'s, `hW`) or consumed, a finaliser run, its own abort superseding
-(`then_fin`, `unwind_prefix`); then the machine's answer. A `raise` (`effRaise`) abandons nothing
-itself: its whole context is its argument's, carried in the abort. -/
-def abortK (F : OutInfo) : Kont → List Var → Var → CM Tm
-  | [], _, e => outAbort F e
-  | f :: rest, args, e => do
-    let own := args.take f.own
-    let more := args.drop f.own
-    match f with
-    | .thenF _ fnD _ pd =>
-      let d ← fresh (resTy .unit pd)
-      match payTy pd with
-      | none => return .letv d (.call fnD own) (.consume .dead d (← abortK F rest more e))
-      | some pdT =>
-        let some pF := payTy F.pay | throw "LIR: a finaliser's abort where the row holds none"
-        let e' ← fresh pF; let u ← fresh .unit; let e₂ ← fresh pdT
-        let sup ← coercePay pd F.pay e₂ fun v => pure (.var v)
-        -- The superseded payload `e` is abandoned: a raise's payload holds no owned cell
-        -- (`CDerives.effRaise`'s `hd : o.A.Consume`).
-        return .letv d (.call fnD own) (.letv e' (.case d u (.consume .dead u (.var e)) e₂ (.abandon .superseded e sup))
-          (← abortK F rest more e'))
-    | .cellF => match own with
-      | [c] => releaseOpt c (← abortK F rest more e)
-      | _ => throw "LIR: a level's cell frame without its cell"
-    | .stackF => match own with
-      | [fr, d] => popThen fr d (← abortK F rest more e)
-      | _ => throw "LIR: a level's frame without its cell"
-    | .stackH => match own with
-      | [h] => freeStackThen h (← abortK F rest more e)
-      | _ => throw "LIR: a site's stack frame without its stack"
-    | .letF _ _ (some r) => return abandons r own (← abortK F rest more e)
-    | _ => return consumes .dead own (← abortK F rest more e)
-
-/-- The cancel of `K`, `err` the error kept so far (`1 ⊕ P`, `cp` the cancel row's payload `P`):
-each frame's arguments abandoned at the frame's rule (a `[let]`'s, `hW`) or consumed, a finaliser
-run under the cancel, the first error kept (§19 *Cancels*, `[cfin-raise]`); a finaliser's error
-is one of the cancel row's (§27). -/
-def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
-  | [], _, err => pure (.var err)
-  | f :: rest, args, err => do
-    let own := args.take f.own
-    let more := args.drop f.own
-    match f with
-    | .thenF _ fnD _ pd =>
-      let d ← fresh (resTy .unit pd)
-      match payTy cp, payTy pd with
-      | _, none => return .letv d (.call fnD own) (.consume .dead d (← cancelK cp rest more err))
-      | none, some _ => throw "LIR: a finaliser's error outside its operation's cancel row"
-      | some pF, some pdT =>
-        let err' ← fresh (resTy .unit cp)
-        let u₀ ← fresh .unit; let e₀ ← fresh pF
-        let u₁ ← fresh .unit; let e₁ ← fresh pdT; let u₂ ← fresh .unit; let e₂ ← fresh pdT
-        let sup ← coercePay pd cp e₁ fun v => pure (.inj true v)
-        -- The error not kept (`e₀` superseded, or the finaliser's `e₂` after a kept one) is
-        -- abandoned: a raise's payload holds no owned cell (`CDerives.effRaise`'s
-        -- `hd : o.A.Consume`).
-        let kept : Tm := .case err u₀ (.case d u₁ (.consume .dead u₁ (.inj false u₀)) e₁ (.consume .dead u₀ sup))
-          e₀ (.case d u₂ (.consume .dead u₂ (.inj true e₀)) e₂ (.abandon .superseded e₂ (.inj true e₀)))
-        return .letv d (.call fnD own) (.letv err' kept (← cancelK cp rest more err'))
-    | .cellF => match own with
-      | [c] => releaseOpt c (← cancelK cp rest more err)
-      | _ => throw "LIR: a level's cell frame without its cell"
-    | .stackF => match own with
-      | [fr, d] => popThen fr d (← cancelK cp rest more err)
-      | _ => throw "LIR: a level's frame without its cell"
-    | .stackH => match own with
-      | [h] => freeStackThen h (← cancelK cp rest more err)
-      | _ => throw "LIR: a site's stack frame without its stack"
-    | .letF _ _ (some r) => return abandons r own (← cancelK cp rest more err)
-    | _ => return consumes .dead own (← cancelK cp rest more err)
-
 /-! #### Resumption points -/
 
 def curMach : CM OutInfo := do
@@ -958,7 +917,7 @@ def curMach : CM OutInfo := do
   | [] => throw "LIR: a machine's computation outside a machine"
 
 /-- Register a resumption point of the current machine; its `mk` function, set by `genMach`. -/
-def newPoint (op : Key) (kTy : Option LTy) (cPay : Option Pay) (argTys : List LTy) (step : Option Nat)
+def newPoint (op : Key) (kTy : Option LTy) (cPay : Option CancelRow) (argTys : List LTy) (step : Option Nat)
     (K : Kont) (callee : Option OutInfo := none) (inline : Bool := false)
     (outVar : Option Var := none) (swapAt : Option Nat := none) : CM Nat := do
   let mk ← reserveFn s!"suspend {op.1}.{op.2}"
@@ -971,8 +930,8 @@ def newPoint (op : Key) (kTy : Option LTy) (cPay : Option Pay) (argTys : List LT
   | [] => throw "LIR: a suspension outside a machine"
   return mk
 
-/-- The answer `b` and cancel row's payload of the machine operation `op` at a machine. -/
-def opAnswer (F : OutInfo) (op : Key) : CM (LTy × Option Pay) := do
+/-- The answer `b` and cancel row of the machine operation `op` at a machine. -/
+def opAnswer (F : OutInfo) (op : Key) : CM (LTy × Option CancelRow) := do
   match F.ms.find? (·.1 == op) with
   | some (_, _, b, cp) => pure (b, cp)
   | none => throw s!"LIR: a suspension at {op} where the machine's row does not hold it"
@@ -1008,12 +967,203 @@ structure Reuse where
   pts : List MPoint
   mkCells : Std.HashMap Nat Nat
 
+/-- Why a call point's step is inlined (SPEC §50): it is the machine's code after the call, one code
+with the machine (SPEC §49), a function only so that the resume entry can enter it again. -/
+def stepInline : String :=
+  "a call point's step: the machine's code after the call, one code with its machine (SPEC §49)"
+
+/-- The error kept so far `err` (`1 ⊕ P`, `P` the payload `p`) and the error `e` (at `p`) as the
+first kept (`[cfin-raise]`, `errNext`): `e` where none was kept, else the kept one, `e` abandoned
+(a raise's payload holds no owned cell, `CDerives.effRaise`'s `hd : o.A.Consume`). -/
+def keepFirst (p : Pay) (err e : Var) (k : Var → CM Tm) : CM Tm := do
+  let some pT := payTy p | throw "LIR: an error where the cancel row holds no abortive operation"
+  let err' ← fresh (resTy .unit p); let u ← fresh .unit; let e₀ ← fresh pT
+  return .letv err' (.case err u (.consume .dead u (.inj true e)) e₀
+    (.abandon .superseded e (.inj true e₀))) (← k err')
+
+/-- The error `err₁` kept by a cancel (`1 ⊕ P₁`, `P₁` the payload `p₁`) and the error `err₂` (at
+`p`) of the cancel that cancelled it, as one at `p`, the earlier kept (`[cfin-cancel]`,
+`err.or err'`): `err₂` where `err₁` holds none, else `err₁`, `err₂`'s abandoned. `p` holds `p₁`
+(`PendLe`): an operation it lacks is an error of the conversion. -/
+def keepEarlier (p₁ p : Pay) (err₁ err₂ : Var) (k : Var → CM Tm) : CM Tm := do
+  match payTy p₁ with
+  | none => return .consume .dead err₁ (← k err₂)
+  | some p₁T =>
+    let some pT := payTy p | throw "LIR: a kept error outside the cancel row of its cancel"
+    let err' ← fresh (resTy .unit p)
+    let u₁ ← fresh .unit; let e₁ ← fresh p₁T; let u₂ ← fresh .unit; let e₂ ← fresh pT
+    let kept₁ ← coercePay p₁ p e₁ fun v => pure (.inj true v)
+    let kept₂ ← coercePay p₁ p e₁ fun v => pure (.inj true v)
+    return .letv err' (.case err₁ u₁ (.consume .dead u₁ (.var err₂)) e₁
+      (.case err₂ u₂ (.consume .dead u₂ kept₁) e₂ (.abandon .superseded e₂ kept₂))) (← k err')
+
+/-- A cancel's end with the error kept `err` (at `cp`): the error itself, or, in a cancel that is a
+machine (`tgt`, R1), its outcome's value `()` (`[cancel]`) or abort (`[cancel-raise]`). -/
+def cancelEnd (cp : Pay) (tgt : Option OutInfo) (err : Var) : CM Tm := do
+  match tgt with
+  | none => pure (.var err)
+  | some T =>
+    match payTy cp with
+    | none => outValue T err
+    | some pT =>
+      let u ← fresh .unit; let e ← fresh pT
+      let some pO := payTy T.pay | throw "LIR: a cancel's error where its outcome holds none"
+      let e' ← fresh pO
+      return .case err u (← outValue T u) e
+        (.letv e' (← coercePay cp T.pay e fun v => pure (.var v)) (← outAbort T e'))
+
+/-- The fuel of the continuation's walks (`applyKN`, `abortKN`, `cancelKN`, a call point and its
+step): each call passes a frame or enters a call point's step, so it bounds the frames of a
+continuation and the finalisers that may suspend in it. -/
+def kFuel : Nat := 1 <<< 16
+
+/-- The refusal of a cancel that may suspend while it holds a stored site's stack (SPEC §52): the
+stack's one owner across the suspension is not established, so it is not lowered. -/
+def stackedCancelRefusal : String :=
+  "LIR: outside the fragment: a cancel that may suspend over a task's own stack (§52), #970"
+
+mutual
+/-- The value `x` handed to the continuation `K` over its arguments: the innermost frame's join,
+or the machine's answer (its cell released, or its frame popped, first). At a finaliser's frame
+the finaliser has answered `()`: the cancel goes on with the error kept so far (`cfinF`,
+`[cfin-ret]`), or the unwind with its raise (`unwindF`, `[finalise]`). -/
+def applyKN : Nat → OutInfo → Kont → List Var → Var → CM Tm
+  | 0, _, _, _, _ => throw "LIR: a continuation too deep"
+  | n + 1, F, K, args, x =>
+    match K, args with
+    | [], [] => outValue F x
+    | [], _ => throw "LIR: a machine's answer with arguments left"
+    | [.cellF], [c] => do releaseOpt c (← outValue F x)
+    | .cellF :: _, _ => throw "LIR: a level's cell above the bottom of its continuation"
+    | [.stackF], [f, d] => do popThen f d (← outValue F x)
+    | .stackF :: _, _ => throw "LIR: a level's frame above the bottom of its continuation"
+    | .stackH :: _, _ => throw "LIR: a value at a site's stack"
+    | .letF fn _ _ :: _, args => pure (.call fn (args ++ [x]))
+    | .thenF fn _ _ _ _ :: _, args => pure (.call fn (args ++ [x]))
+    | .consumeF _ :: _, _ => throw "LIR: a value at a frame that only consumes"
+    | .cfinF p :: rest, err :: more => do
+      return .consume .dead x (← cancelKN n p (some F) rest more err)
+    | .cfinF _ :: _, _ => throw "LIR: a cancel's finaliser frame without its error"
+    | .unwindF :: rest, e :: more => do return .consume .dead x (← abortKN n F rest more e)
+    | .unwindF :: _, _ => throw "LIR: an unwind's finaliser frame without its raise"
+
+/-- The abort `e` (at the machine's payload) through `K`: each frame's arguments abandoned at the
+frame's rule (a `[let]`'s, `hW`) or consumed, a finaliser run, its own abort superseding
+(`then_fin`, `unwind_prefix`); then the machine's answer. A `raise` (`effRaise`) abandons nothing
+itself: its whole context is its argument's, carried in the abort. A finaliser that may suspend is
+a call point of this machine (its row is within the machine's, `Σ_D ≤ Σ`), the pending raise held
+by `unwindF`; at `cfinF` the finaliser of a cancel raised: the first error is kept and the cancel
+goes on (`[cfin-raise]`). -/
+def abortKN : Nat → OutInfo → Kont → List Var → Var → CM Tm
+  | 0, _, _, _, _ => throw "LIR: a continuation too deep"
+  | _ + 1, F, [], _, e => outAbort F e
+  | n + 1, F, f :: rest, args, e => do
+    let own := args.take f.own
+    let more := args.drop f.own
+    match f with
+    | .thenF _ fnD _ _ (some MD) =>
+      if rest.any (· matches .stackH) then throw stackedCancelRefusal
+      readFact "effThen:finaliser call point"
+      pointKN n (.unwindF :: rest) (e :: more) (.call fnD own) MD none
+    | .thenF _ fnD _ pd none =>
+      let d ← fresh (resTy .unit pd)
+      match payTy pd with
+      | none => return .letv d (.call fnD own) (.consume .dead d (← abortKN n F rest more e))
+      | some pdT =>
+        let some pF := payTy F.pay | throw "LIR: a finaliser's abort where the row holds none"
+        let e' ← fresh pF; let u ← fresh .unit; let e₂ ← fresh pdT
+        let sup ← coercePay pd F.pay e₂ fun v => pure (.var v)
+        -- The superseded payload `e` is abandoned: a raise's payload holds no owned cell
+        -- (`CDerives.effRaise`'s `hd : o.A.Consume`).
+        return .letv d (.call fnD own) (.letv e' (.case d u (.consume .dead u (.var e)) e₂ (.abandon .superseded e sup))
+          (← abortKN n F rest more e'))
+    | .cfinF p => match own with
+      | [err] => keepFirst p err e fun err' => cancelKN n p (some F) rest more err'
+      | _ => throw "LIR: a cancel's finaliser frame without its error"
+    | .unwindF => match own with
+      -- The finaliser's raise supersedes the pending one, abandoned (`then_fin`).
+      | [e₀] => return .abandon .superseded e₀ (← abortKN n F rest more e)
+      | _ => throw "LIR: an unwind's finaliser frame without its raise"
+    | .cellF => match own with
+      | [c] => releaseOpt c (← abortKN n F rest more e)
+      | _ => throw "LIR: a level's cell frame without its cell"
+    | .stackF => match own with
+      | [fr, d] => popThen fr d (← abortKN n F rest more e)
+      | _ => throw "LIR: a level's frame without its cell"
+    | .stackH => match own with
+      | [h] => freeStackThen h (← abortKN n F rest more e)
+      | _ => throw "LIR: a site's stack frame without its stack"
+    | .letF _ _ (some r) => return abandons r own (← abortKN n F rest more e)
+    | _ => return consumes .dead own (← abortKN n F rest more e)
+
+/-- The cancel of `K`, `err` the error kept so far (`1 ⊕ P`, `cp` the cancel row's payload `P`):
+each frame's arguments abandoned at the frame's rule (a `[let]`'s, `hW`) or consumed, a finaliser
+run under the cancel, the first error kept (§19 *Cancels*, `[cfin-raise]`); a finaliser's error
+is one of the cancel row's (§27). `tgt` is the cancel row's outcome when the cancel is a machine
+(R1): a finaliser that may suspend is a call point of it, its answer or raise handed to `cfinF`
+(`[finalise-cancel]`), and the end answers the outcome (`cancelEnd`). A `cfinF` reached is a
+cancel cancelled while suspended in a finaliser (`[cfin-cancel]`): the earlier error is kept and
+the cancel goes on through the rest of the region. An `unwindF` reached is a machine cancelled
+while a finaliser ran on an unwind: the pending raise is abandoned (A2, `abort_absorbs`). -/
+def cancelKN : Nat → Pay → Option OutInfo → Kont → List Var → Var → CM Tm
+  | 0, _, _, _, _, _ => throw "LIR: a continuation too deep"
+  | _ + 1, cp, tgt, [], _, err => cancelEnd cp tgt err
+  | n + 1, cp, tgt, f :: rest, args, err => do
+    let own := args.take f.own
+    let more := args.drop f.own
+    match f with
+    | .thenF _ fnD _ _ (some MD) =>
+      -- A suspension of the finaliser is the cancel's, at an operation of its cancel row
+      -- (`ThenLe`): with no machine operation there, the frames are not the kernel's `K†`.
+      let some T := tgt
+        | throw "LIR: a finaliser that may suspend in a cancel whose cancel row holds no machine operation"
+      unless cp.map (·.1) == T.pay.map (·.1) do throw "LIR: a cancel's error outside its outcome"
+      if rest.any (· matches .stackH) then throw stackedCancelRefusal
+      readFact "effThen:finaliser call point"
+      pointKN n (.cfinF cp :: rest) (err :: more) (.call fnD own) MD none
+    | .thenF _ fnD _ pd none =>
+      let d ← fresh (resTy .unit pd)
+      match payTy cp, payTy pd with
+      | _, none => return .letv d (.call fnD own) (.consume .dead d (← cancelKN n cp tgt rest more err))
+      | none, some _ => throw "LIR: a finaliser's error outside its operation's cancel row"
+      | some pF, some pdT =>
+        let err' ← fresh (resTy .unit cp)
+        let u₀ ← fresh .unit; let e₀ ← fresh pF
+        let u₁ ← fresh .unit; let e₁ ← fresh pdT; let u₂ ← fresh .unit; let e₂ ← fresh pdT
+        let sup ← coercePay pd cp e₁ fun v => pure (.inj true v)
+        -- The error not kept (`e₀` superseded, or the finaliser's `e₂` after a kept one) is
+        -- abandoned: a raise's payload holds no owned cell (`CDerives.effRaise`'s
+        -- `hd : o.A.Consume`).
+        let kept : Tm := .case err u₀ (.case d u₁ (.consume .dead u₁ (.inj false u₀)) e₁ (.consume .dead u₀ sup))
+          e₀ (.case d u₂ (.consume .dead u₂ (.inj true e₀)) e₂ (.abandon .superseded e₂ (.inj true e₀)))
+        return .letv d (.call fnD own) (.letv err' kept (← cancelKN n cp tgt rest more err'))
+    | .cfinF p => match own with
+      | [err₁] => keepEarlier p cp err₁ err fun err' => cancelKN n cp tgt rest more err'
+      | _ => throw "LIR: a cancel's finaliser frame without its error"
+    | .unwindF => match own with
+      | [e₀] => return .abandon .superseded e₀ (← cancelKN n cp tgt rest more err)
+      | _ => throw "LIR: an unwind's finaliser frame without its raise"
+    | .cellF => match own with
+      | [c] => releaseOpt c (← cancelKN n cp tgt rest more err)
+      | _ => throw "LIR: a level's cell frame without its cell"
+    | .stackF => match own with
+      | [fr, d] => popThen fr d (← cancelKN n cp tgt rest more err)
+      | _ => throw "LIR: a level's frame without its cell"
+    | .stackH => match own with
+      | [h] => freeStackThen h (← cancelKN n cp tgt rest more err)
+      | _ => throw "LIR: a site's stack frame without its stack"
+    | .letF _ _ (some r) => return abandons r own (← cancelKN n cp tgt rest more err)
+    | _ => return consumes .dead own (← cancelKN n cp tgt rest more err)
+
 /-- The step at a call point: the callee's outcome `o` (of `M`) taken apart. A value goes to `K`,
 an abort through `K`'s frames, a suspension suspends the machine at this point, its state the
 callee's `k` and `K`'s arguments. With `reuse` (the resume entry of a machine whose state is a cell), a suspension
-again at the cell's operation writes the cell in place. -/
-def stepTm (F : OutInfo) (K : Kont) (args : List Var) (o : Var) (M : OutInfo) (stepFn : Nat)
-    (reuse : Option Reuse := none) : CM Tm := do
+again at the cell's operation writes the cell in place. `swapAt`: the point holds a stored site's
+stack among `args`, made current around the callee's resume and cancel (`MPoint.swapAt`). -/
+def stepTmN : Nat → OutInfo → Kont → List Var → Var → OutInfo → Nat → Option Reuse → Option Nat →
+    CM Tm
+  | 0, _, _, _, _, _, _, _, _ => throw "LIR: a continuation too deep"
+  | n + 1, F, K, args, o, M, stepFn, reuse, swapAt => do
   let w ← fresh M.body; let x ← fresh M.r; let ex ← fresh M.xTy
   let (K', args', _) := stripCell K args
   let argTys ← args'.mapM tyOf
@@ -1024,7 +1174,7 @@ def stepTm (F : OutInfo) (K : Kont) (args : List Var) (o : Var) (M : OutInfo) (s
   let abortArm (e : Var) : CM Tm := do
     let some pF := payTy F.pay | throw "LIR: an abort where the machine's row holds none"
     let e' ← fresh pF
-    released (.letv e' (← coercePay M.pay F.pay e fun v => pure (.var v)) (← abortK F K args e'))
+    released (.letv e' (← coercePay M.pay F.pay e fun v => pure (.var v)) (← abortKN n F K args e'))
   let suspArms (s : Var) : CM Tm := casePay M.sPay s fun j sv => do
     let some (op, _, b, cp) := M.ms[j]? | throw "LIR: a suspension's summand"
     letpairM sv fun v k => do
@@ -1032,7 +1182,7 @@ def stepTm (F : OutInfo) (K : Kont) (args : List Var) (o : Var) (M : OutInfo) (s
       match reuse with
       | none =>
         let mk ← newPoint op (some (M.kTy b cp)) cp argTys (some stepFn) K' (callee := some M)
-          (inline := true) (outVar := some o)
+          (inline := true) (outVar := some o) (swapAt := swapAt)
         return .letv k' (.call mk (k :: args)) (← outSusp F op v k')
       | some r =>
         let some p := r.pts.find? fun p => p.site == stepFn && p.op == op
@@ -1046,19 +1196,16 @@ def stepTm (F : OutInfo) (K : Kont) (args : List Var) (o : Var) (M : OutInfo) (s
     | some pT => do
       let e ← fresh pT; let s ← fresh M.sTy
       pure (Tm.case ex e (← abortArm e) s (← suspArms s))
-  return .letv w (.prim .unroll [o]) (.case w x (← released (← applyK F K args x)) ex exits)
-
-/-- Why a call point's step is inlined (SPEC §50): it is the machine's code after the call, one code
-with the machine (SPEC §49), a function only so that the resume entry can enter it again. -/
-def stepInline : String :=
-  "a call point's step: the machine's code after the call, one code with its machine (SPEC §49)"
+  return .letv w (.prim .unroll [o]) (.case w x (← released (← applyKN n F K args x)) ex exits)
 
 /-- **A call point**: `e` answers the callee's outcome (of `M`), handed to `K`: a step function,
 which the resume entry calls again, so the callee's `k` is in the machine's state and the machine
 is one code. In tail position at the machine's own outcome the step is made when the machine is
 complete (`withMachine`): a machine with that call and no other point passes its callee's
 outcome on; a call that closes a loop of tail calls passes it on too (`tailPass`). -/
-def pointK (K : Kont) (args : List Var) (e : Tm) (M : OutInfo) : CM Tm := do
+def pointKN : Nat → Kont → List Var → Tm → OutInfo → Option Nat → CM Tm
+  | 0, _, _, _, _, _ => throw "LIR: a continuation too deep"
+  | n + 1, K, args, e, M, swapAt => do
   let F ← curMach
   if K.isEmpty && args.isEmpty && M.ty.sameRep F.ty && M.keys == F.keys then
     let fn ← reserveFn "tail"
@@ -1073,10 +1220,23 @@ def pointK (K : Kont) (args : List Var) (e : Tm) (M : OutInfo) : CM Tm := do
   let stepFn ← reserveFn "step"
   let argPs ← args.mapM freshLike
   let oP ← fresh M.ty
-  let body ← stepTm F K argPs oP M stepFn
+  let body ← stepTmN n F K argPs oP M stepFn none swapAt
   setFn stepFn { name := "step", params := argPs ++ [oP], body, ret := F.ty, inline := some stepInline }
   readFact "machine:call point"
   return .letv o e (.call stepFn (args ++ [o]))
+end
+
+def applyK (F : OutInfo) (K : Kont) (args : List Var) (x : Var) : CM Tm := applyKN kFuel F K args x
+def abortK (F : OutInfo) (K : Kont) (args : List Var) (e : Var) : CM Tm := abortKN kFuel F K args e
+def cancelK (cp : Pay) (K : Kont) (args : List Var) (err : Var) (tgt : Option OutInfo := none) :
+    CM Tm :=
+  cancelKN kFuel cp tgt K args err
+def stepTm (F : OutInfo) (K : Kont) (args : List Var) (o : Var) (M : OutInfo) (stepFn : Nat)
+    (reuse : Option Reuse := none) (swapAt : Option Nat := none) : CM Tm :=
+  stepTmN kFuel F K args o M stepFn reuse swapAt
+def pointK (K : Kont) (args : List Var) (e : Tm) (M : OutInfo) (swapAt : Option Nat := none) :
+    CM Tm :=
+  pointKN kFuel K args e M swapAt
 
 /-- A result that is not an outcome (`a` at the payload `p`) handed to `K`. -/
 def resultK (K : Kont) (args : List Var) (e : Tm) (a : LTy) (p : Pay) : CM Tm := do
@@ -1147,7 +1307,7 @@ def resumeTm (F : OutInfo) (p : MPoint) (fs : List Var) (y : Var) (reuse : Optio
     let krT ← selTy kT 0
     let (_, mT) ← answerOf krT
     let kr ← fresh krT; let o ← fresh mT
-    match reuse, p.callee, p.inline with
+    match reuse, p.callee, p.inline && !(p.kont.any Frame.mayPoint) with
     | some _, some M, true =>
       -- The step in place: a suspension again at this operation reuses the cell.
       return .letv kr (.sel k 0) (.letv o (.app kr y) (← stepTm F p.kont args o M stepFn reuse))
@@ -1157,23 +1317,44 @@ def resumeTm (F : OutInfo) (p : MPoint) (fs : List Var) (y : Var) (reuse : Optio
   | none, args, _ => released (← applyK F p.kont args y)
   | _, _, _ => throw "LIR: a resumption point's state"
 
-/-- The cancel of a point's variant `fs`, `cp` the operation's cancel row's payload: the callee's
-`k` cancelled first, then the point's frames. -/
-def cancelTm (cp : Pay) (p : MPoint) (fs : List Var) : CM Tm := do
+/-- `()` as the error kept at the start of a cancel at the payload `cp`: `inl ()`, or `()` with no
+abortive operation in the cancel row. -/
+def errStart (cp : Pay) (k : Var → CM Tm) : CM Tm := do
+  let u ← fresh .unit
+  match payTy cp with
+  | none => return .letv u .unit (← k u)
+  | some _ =>
+    let err ← fresh (resTy .unit cp)
+    return .letv u .unit (.letv err (.inj false u) (← k err))
+
+/-- The cancel of a point's variant `fs`, `cr` the operation's cancel row and `tgt` its outcome
+when the cancel is a machine (R1): the callee's `k` cancelled first, then the point's frames. A
+callee whose cancel may suspend is a call point of the cancel's machine, its answer or error handed
+to `cfinF` (`[cfin-ret]`, `[cfin-raise]`), as the kernel's cancel reaches the callee's finalisers
+first. -/
+def cancelTm (cr : CancelRow) (tgt : Option OutInfo) (p : MPoint) (fs : List Var) : CM Tm := do
+  let cp := cr.pay
   match p.kTy, fs with
   | some kT, k :: args => do
     let cT ← selTy kT 1
-    let c ← fresh cT; let err ← fresh (resTy .unit cp)
-    let coerced ← coerceRes .unit (p.cPay.getD []) cp c
-    aroundRun p args (fun t => .letv c (.sel k 1) t) fun args => do
-      return .letv err coerced (← cancelK cp p.kont args err)
-  | none, args => do
-    let u ← fresh .unit
-    match payTy cp with
-    | none => return .letv u .unit (← cancelK cp p.kont args u)
-    | some _ =>
+    let c ← fresh cT
+    let Mk ← match p.cPay with
+      | some ccr => ccr.out?
+      | none => pure none
+    match Mk with
+    | some Mk =>
+      let some _ := tgt
+        | throw "LIR: a callee's cancel that may suspend in a cancel whose cancel row holds no machine operation"
+      -- A point holding a site's stack: refused (`stackedCancelRefusal`).
+      if p.swapAt.isSome || p.kont.any (· matches .stackH) then throw stackedCancelRefusal
+      errStart cp fun err₀ => do
+        return .letv c (.sel k 1) (← pointK (.cfinF cp :: p.kont) (err₀ :: args) (.var c) Mk)
+    | none =>
       let err ← fresh (resTy .unit cp)
-      return .letv u .unit (.letv err (.inj false u) (← cancelK cp p.kont args err))
+      let coerced ← coerceRes .unit ((p.cPay.map (·.pay)).getD []) cp c
+      aroundRun p args (fun t => .letv c (.sel k 1) t) fun args => do
+        return .letv err coerced (← cancelK cp p.kont args err tgt)
+  | none, args => errStart cp fun err => cancelK cp p.kont args err tgt
   | _, _ => throw "LIR: a resumption point's state"
 
 /-- The state of machine `m` at its operation `op`: one variant per point, each its suspended
@@ -1185,8 +1366,11 @@ def machStateTy (m : Mach) (op : Key) : LTy :=
 
 /-- **The codes of a machine**, once its points are known: per operation, its state (one variant
 per point), the suspended computation's `&` code (`resume`, `cancel`), the resume code that
-switches on the state, and each point's `mk`.  `[spec §49]` -/
-def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
+switches on the state, and each point's `mk`. A cancel entry whose cancel row holds a machine
+operation is the body of a machine of that row's outcome (R1), begun and finished by
+`cancelMach`.  `[spec §49]` -/
+def genMach (m : Mach) (cancelMach : OutInfo → CM Tm → CM Tm) (cellOps : List Key := []) :
+    CM (List (Key × Nat)) := do
   let F := m.info
   let mut kcs : List (Key × Nat) := []
   for (op, _, b, cp) in F.ms do
@@ -1258,13 +1442,18 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
     -- interpreter runs every gate program.
     let cb ← match cp with
       | none => pure (.prim .unreachable [s₂])
-      | some cp => withState s₂ fun c st => do
-        let arms ← casePay stPay st fun i fv => do
-          let some p := ps[i]? | throw "LIR: a machine's point"
-          untuple fv (fieldsOf p) fun fs => cancelTm cp p fs
-        match c with
-        | some c => releaseThen c arms
-        | none => pure arms
+      | some cr => do
+        let Oc ← cr.out?
+        let body : CM Tm := withState s₂ fun c st => do
+          let arms ← casePay stPay st fun i fv => do
+            let some p := ps[i]? | throw "LIR: a machine's point"
+            untuple fv (fieldsOf p) fun fs => cancelTm cr Oc p fs
+          match c with
+          | some c => releaseThen c arms
+          | none => pure arms
+        match Oc with
+        | some O => do readFact "machine:cancel machine"; cancelMach O body
+        | none => body
     setFn kcan { name := s!"cancel {op.1}.{op.2}", params := [s₂], body := cb, ret := cT }
     for (p, i) in ps.zipIdx do
       let xs ← (fieldsOf p).mapM fresh
@@ -1424,18 +1613,18 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
                  body := .prim .unreachable [base₆], ret := cT }
     setFn cstep { name := "stack cancel step", params := [], body := ← never cT, ret := cT }
   | some cpP =>
-    let errT := resTy .unit cpP
+    let errT := resTy .unit cpP.pay
     let base₇ ← fresh aT; let base₇' ← fresh aT; let err₇ ← fresh errT
     let bC ← top fun f a => do
       let err' ← fresh errT; let a' ← fresh aT
       let arms ← atFrame f fun p f' args =>
-        cancelK cpP (p.kont ++ [.stackF]) (args ++ [f', a']) err₇
+        cancelK cpP.pay (p.kont ++ [.stackF]) (args ++ [f', a']) err₇
       return .copy .dup a a' (.letv err' arms
         (← ifBase a base₇' (do return .consume .dead base₇ (.var err')) (pure (.call cstep [base₇, err']))))
     setFn cstep { name := "stack cancel step", params := [base₇, err₇], body := .copy .dup base₇ base₇' bC,
                   ret := errT }
     let u ← fresh .unit; let err₀ ← fresh errT
-    let start : Tm := match payTy cpP with
+    let start : Tm := match payTy cpP.pay with
       | none => .var u
       | some _ => .inj false u
     setFn kcan { name := s!"stack cancel {op.1}.{op.2}", params := [base₆],
@@ -1467,8 +1656,11 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
   return [(op, kc)]
 
 /-- The machine begun last (`withMachine`, `withMachineK`), its body `t` converted: its tail
-calls' functions, then its codes. -/
-def finishMachine (F : OutInfo) (t : Tm) : CM Tm := do
+calls' functions, then its codes. A cancel entry that is a machine (R1) is begun and finished here
+too, at one depth more of the cancel rows' nesting (`fuel`). -/
+def finishMachineN : Nat → OutInfo → Tm → CM Tm
+  | 0, _, _ => throw "LIR: cancel rows nested too deep"
+  | fuel + 1, F, t => do
   -- The tail calls: a machine with one and no other point passes its callee's outcome on (its
   -- `k` is the callee's); otherwise each is a point, so the machine's `k` is one code.
   let mut wrapped : Array (Nat × Var × OutInfo) := #[]
@@ -1491,14 +1683,21 @@ def finishMachine (F : OutInfo) (t : Tm) : CM Tm := do
     modify fun s => { s with machs := rest }
     if m.cell.isSome && !m.tails.isEmpty then
       throw "LIR: a level's cell passed on at a machine with calls in tail position"
+    let cancelMach (O : OutInfo) (act : CM Tm) : CM Tm := do
+      let start := (← get).begun
+      modify fun s => { s with begun := s.begun + 1, machs := { info := O, start } :: s.machs }
+      finishMachineN fuel O (← act)
     let kcs ← match m.stack with
       | some S => genStackMach m S
-      | none => genMach m
+      | none => genMach m cancelMach
     let i := (← get).done.size
     modify fun s => { s with done := s.done.push (m, kcs),
                              tailSites := s.tailSites ++ wrapped.map fun (fn, o, M) => (fn, o, M, i) }
   | [] => throw "LIR: a machine's stack"
   return t
+
+/-- `finishMachineN` at a bound on the nesting of cancel rows (§27: finite). -/
+def finishMachine (F : OutInfo) (t : Tm) : CM Tm := finishMachineN 16 F t
 
 /-- Convert `act` as the body of a machine of the outcome `F`, then make its codes. -/
 def withMachine (F : OutInfo) (act : CM Tm) : CM Tm := do
@@ -2088,6 +2287,76 @@ unrolls to (memoized by the type, so a binder nested in another, which names the
 its own function calling the outer's), and an array of recursive data one loop function that
 destroys each element and then frees the buffer once (`freeArr`), as Rust consumes a `Vec`. -/
 
+/-! #### A consume by an in-place worklist (SPEC §77)
+
+At a `μX. T` whose recursive positions include arrays of `X` (Json's `Vec[X]` and
+`Map[string, X]`), the consume is two functions of tail calls, `consume_up p` (free `p`) and
+`consume_down c p` (free `c`, then `p`), and `consume x` is `consume_up x`. The pending work `p`
+is a value of the type itself: a node whose array holds, in slot 0, the work pending before it,
+and in its other slots the children not yet freed. `down` at an array of `n ≥ 2` takes slot 0,
+puts `p` there and goes on with the child and the node; `up` at one pops the last slot
+(`slotPop`, the family's length the cursor) and goes on with it and the node; an array of one
+slot or none, an `X` or a `Ref X` frees the node and goes on with its child. Nothing is
+allocated: the work pending is stored in slots of the arrays being freed, which have the type's
+own slot type.
+
+**The class** (`consumeW?`) is read off the consume node's checked type alone: the `μ` body's
+`toFShape` (`Core/Consume.lean`), whose leaves are each either closed (`FoldP.clB 0`) and inert
+(`inertB`: no `U`, so its consume runs no code and only frees) or exactly `[Ref X]`, the array key
+`FoldP.Bnd.arr` at the binder's own variable (`FoldP.keysIn`'s `fam (ref S)` case at `S = X`);
+with at most one recursive position on any path through its `⊕`s (`maxRecW`), and at least one
+array of `X`. No term is recognised. Every other `μ` keeps `consumeShape`. -/
+
+/-- A leaf that is an array of the binder's own variable: `FoldP.keysIn`'s array key at `X`. -/
+def isArrX : VTy → Bool
+  | .fam (.ref (.tvar 0)) => true
+  | _ => false
+
+/-- A type whose consume runs no code: no thunk inside (`Consumable.close`, `Consumable.nu` run
+`close`), so its consume only frees and releases. -/
+def inertB : VTy → Bool
+  | .tensor A B | .sum A B => inertB A && inertB B
+  | .ref A | .box _ A | .fam A | .mu A => inertB A
+  | .thunk _ | .code .. | .opq _ => false
+  | _ => true
+
+/-- The recursive positions on the path through the `⊕`s with the most: `X`, `Ref X` and an
+array of `X` one each. -/
+def maxRecW : FShape → Nat
+  | .leaf A => if isArrX A then 1 else 0
+  | .refX | .varX => 1
+  | .tensor F G => maxRecW F + maxRecW G
+  | .sum F G => max (maxRecW F) (maxRecW G)
+
+/-- Every leaf an array of `X`, or closed and inert. -/
+def leavesW : FShape → Bool
+  | .leaf A => isArrX A || (FoldP.clB 0 A && inertB A)
+  | .refX | .varX => true
+  | .tensor F G | .sum F G => leavesW F && leavesW G
+
+def hasArrX : FShape → Bool
+  | .leaf A => isArrX A
+  | .refX | .varX => false
+  | .tensor F G | .sum F G => hasArrX F || hasArrX G
+
+/-- **The in-place consume's class** (SPEC §77), on the `μ` body `T` the consume node's type
+carries.  `[spec §77]` -/
+def consumeW? (T : VTy) : Bool :=
+  let F := toFShape T
+  leavesW F && maxRecW F ≤ 1 && hasArrX F
+
+/-- What a path through the node reaches: no recursive position, an `X` (at `Ref X`, its cell),
+or an array of `X`. -/
+inductive WPos where
+  | none
+  | x (cell : Bool) (v : Var)
+  | arr (v : Var)
+
+/-- Which of the two functions a walk builds the body of: `down` with the work pending `p`. -/
+inductive WMode where
+  | up
+  | down (p : Var)
+
 /-- **A leaf of a consume** (`consumeAt`'s `forget`, `consumeSlot_derives`) on `x`: a call of a function
 that consumes it, one per LIR type, registered in `Prog.consumeFns`, the only functions where `Lint`
 admits a consume at the rule `consume`. -/
@@ -2102,6 +2371,55 @@ def leafConsume (x : Var) : CM Tm := do
     let u ← fresh xT
     setFn fi { name := "consume leaf", params := [u], ret := .unit, body := .consume .consume u .unit }
     return .call fi [x]
+
+/-- The step at a path's recursive position (the table of SPEC §77). Every call is in tail
+position. -/
+def stepW (T : VTy) (up down : Nat) (mode : WMode) (pos : WPos)
+    (rest : CM Tm → CM Tm) (rb : Var → (Var → CM Tm) → CM Tm) : CM Tm := do
+  -- Done with this node: go on with the work pending (`down`), or return (`up`).
+  let next : CM Tm := match mode with
+    | .down p => pure (.call up [p])
+    | .up => pure .unit
+  -- Go on with a child, the work pending unchanged.
+  let onChild (v : Var) : CM Tm := match mode with
+    | .down p => pure (.call down [v, p])
+    | .up => pure (.call up [v])
+  let freeArr (a : Var) (k : CM Tm) : CM Tm := do
+    let u ← fresh .unit
+    return .letv u (.prim .freeArr [a]) (.consume .dead u (← k))
+  match pos with
+  | .none => rest next
+  | .x false v => rest (onChild v)
+  | .x true v => do
+    let c ← fresh (← vty (.mu T))
+    return .letv c (.prim .free [v]) (← rest (onChild c))
+  | .arr v => do
+    let aT ← tyOf v
+    let .fam (.ref eT) := aT.peel | throw "LIR: an array of `X` that is not an owned array"
+    let pr ← fresh (.pair aT i32T)
+    let a ← fresh aT; let n ← fresh i32T
+    -- Slot 0 moved out of `a`: `k a' v`.
+    let take0 (a : Var) (k : Var → Var → CM Tm) : CM Tm := lit32 0 fun z => do
+      let q ← fresh (.pair aT eT)
+      let a' ← fresh aT; let v ← fresh eT
+      return .letv q (.prim .slotTake [a, z]) (.letpair a' v q (← k a' v))
+    let many : CM Tm := match mode with
+      | .down p => take0 a fun a' v => lit32 0 fun z => do
+          -- The work pending stored in the slot the child left.
+          let a'' ← fresh aT
+          return .letv a'' (.prim .slotPut [a', z, p]) (← rb a'' fun nd => pure (.call down [v, nd]))
+      | .up => do
+          let q ← fresh (.pair aT eT)
+          let a' ← fresh aT; let v ← fresh eT
+          return .letv q (.prim .slotPop [a]) (.letpair a' v q
+            (← rb a' fun nd => pure (.call down [v, nd])))
+    let oneT : CM Tm := take0 a fun a' v => freeArr a' (rest (onChild v))
+    let noneT : CM Tm := freeArr a (rest next)
+    let body ← dup .dup n fun n n₁ => lit32 1 fun o =>
+      ifLt o n₁
+        (do return .consume .dead n (← many))
+        (lit32 0 fun z => ifLt z n oneT noneT)
+    return .letv pr (.prim .size [v]) (.letpair a n pr body)
 
 mutual
 /-- The consume of `A` on `x`: a term of type `1`. -/
@@ -2130,15 +2448,23 @@ def genConsume (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
     let key := ppVT (.mu T) (← get).mach
     let fi ← match (← get).consumeFnOf[key]? with
       | some fi => pure fi
-      | none => do
-        let fi ← reserveFn "consume"
-        modify fun s => { s with consumeFnOf := s.consumeFnOf.insert key fi }
-        let u ← fresh (← vty (.mu T))
-        let w ← fresh (← vty (VTy.inst (.mu T) T))
-        let body ← consumeShape f fi (toFShape T) T w
-        setFn fi { name := "consume", params := [u], ret := .unit,
-                   body := .letv w (.prim .unroll [u]) body }
-        pure fi
+      | none =>
+        if consumeW? T then do
+          -- The class is read off `T`, the consume node's checked type (`consume:type`) alone.
+          let up ← reserveFn "consume_up"
+          let down ← reserveFn "consume_down"
+          modify fun s => { s with consumeFnOf := s.consumeFnOf.insert key up }
+          genConsumeW f T up down
+          pure up
+        else do
+          let fi ← reserveFn "consume"
+          modify fun s => { s with consumeFnOf := s.consumeFnOf.insert key fi }
+          let u ← fresh (← vty (.mu T))
+          let w ← fresh (← vty (VTy.inst (.mu T) T))
+          let body ← consumeShape f fi (toFShape T) T w
+          setFn fi { name := "consume", params := [u], ret := .unit,
+                     body := .letv w (.prim .unroll [u]) body }
+          pure fi
     return .call fi [x]
   | .thunk (.nu (.amp _ (.ret R))) => do
     let rT ← selTy (← tyOf x) 1
@@ -2172,6 +2498,76 @@ def genConsume (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
     let a' ← fresh aT; let n' ← fresh i32T
     return .letv pr (.prim .size [x]) (.letpair a' n' pr (← lit32 0 fun z => pure (.call fi [a', z, n'])))
   | _ => leafConsume x
+
+/-- The two functions of the in-place consume of `μX. T` (SPEC §77), `up` on `p` and `down` on
+`(c, p)`, each an unroll and a walk of the node (`walkW`).
+
+UNPROVED: that `consume_up x` frees exactly the cells and arrays the kernel's consume
+`consumeE (.mu T)` frees (`foldOwnG` at results `1`: Json's body is in `P`, not in `FShape`), in
+another order, and observes nothing else. It should hold because both functions free exactly
+their arguments: each step moves owned values between owned places of the same type (a slot
+holds the work pending, at the slot's own type) and frees an array only when none of its slots is
+written (the nodes themselves are unboxed values: nothing to free). `Lint` checks the LIR's
+variables (each consumed once) but tracks no slot's contents: that a slot is taken before it is
+written and that every slot is empty at `freeArr` is checked only by the LIR interpreter, on the
+corpus runs (no array freed with a written slot, `live 0`), not natively; and the order is unobservable because
+every leaf is closed and inert (`consumeW?`): its consume runs no code. A mismatch shows as a leak
+or a double free in `live`, or a disagreement with the source stage.  `[spec §77]` -/
+def genConsumeW (fuel : Nat) (T : VTy) (up down : Nat) : CM Unit := do
+  match fuel with
+  | 0 => throw "LIR: a consume's type too deep"
+  | f + 1 =>
+  let muT ← vty (.mu T)
+  let wT ← vty (VTy.inst (.mu T) T)
+  let F := toFShape T
+  let roll (v : Var) (k : Var → CM Tm) : CM Tm := do
+    let n ← fresh muT; return .letv n (.prim .roll [v]) (← k n)
+  let c ← fresh muT; let p ← fresh muT; let w ← fresh wT
+  let bodyD ← walkW f T up down (.down p) F w (fun c => c) roll
+  setFn down { name := "consume_down", params := [c, p], ret := .unit,
+               body := .letv w (.prim .unroll [c]) bodyD }
+  let p ← fresh muT; let w ← fresh wT
+  let bodyU ← walkW f T up down .up F w (fun c => c) roll
+  setFn up { name := "consume_up", params := [p], ret := .unit,
+             body := .letv w (.prim .unroll [p]) bodyU }
+
+/-- The node part `w` (at the shape `F`) taken apart to the recursive position on each path, then
+the step of `mode` there (`stepW`). `rest` consumes what the path left beside the position; `rb`
+builds the node again around a new value at this part and rolls it. -/
+def walkW (fuel : Nat) (T : VTy) (up down : Nat) (mode : WMode) (F : FShape) (w : Var)
+    (rest : CM Tm → CM Tm) (rb : Var → (Var → CM Tm) → CM Tm) : CM Tm := do
+  match fuel with
+  | 0 => throw "LIR: a consume's shape too deep"
+  | f + 1 =>
+  -- A part with no recursive position, consumed whole.
+  let whole (G : FShape) (y : Var) (c : CM Tm) : CM Tm := do
+    let u ← fresh .unit
+    return .letv u (← genConsume f (VTy.inst (.mu T) G.ty) y) (.consume .dead u (← c))
+  if maxRecW F == 0 then
+    return ← stepW T up down mode .none (fun c => rest (whole F w c)) rb
+  match F with
+  | .leaf _ => stepW T up down mode (.arr w) rest rb
+  | .varX => stepW T up down mode (.x false w) rest rb
+  | .refX => stepW T up down mode (.x true w) rest rb
+  | .tensor F₁ F₂ => letpairM w fun a b => do
+    -- `maxRecW F ≤ 1`: one side holds the positions; the other is consumed or rebuilt whole.
+    if maxRecW F₁ != 0 then
+      walkW f T up down mode F₁ a (fun c => rest (whole F₂ b c)) (fun v k => do
+        let q ← fresh (.pair (← tyOf v) (← tyOf b))
+        return .letv q (.pair v b) (← rb q k))
+    else
+      walkW f T up down mode F₂ b (fun c => rest (whole F₁ a c)) (fun v k => do
+        let q ← fresh (.pair (← tyOf a) (← tyOf v))
+        return .letv q (.pair a v) (← rb q k))
+  | .sum F₁ F₂ => do
+    let wT ← tyOf w
+    let .sum aT bT := wT.peel | throw "LIR: a consume's sum"
+    let a ← fresh aT; let b ← fresh bT
+    let arm (right : Bool) (G : FShape) (y : Var) : CM Tm :=
+      walkW f T up down mode G y rest (fun v k => do
+        let s ← fresh wT
+        return .letv s (.inj right v) (← rb s k))
+    return .case w a (← arm false F₁ a) b (← arm true F₂ b)
 
 /-- The consume at a `μ` body's shape, recursive positions by the type's own consume `fi`. -/
 def consumeShape (fuel : Nat) (fi : Nat) (F : FShape) (T : VTy) (w : Var) : CM Tm := do
@@ -2571,11 +2967,30 @@ def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driv
       | some O => O.ty
       | none => resTy .unit cPay
     unless cT'.sameRep want do throw s!"LIR: κ's cancel answers {cT'}, its row {want}"
+    let Mk ← match cpIn with
+      | some cr => cr.out?
+      | none => pure none
     let (ps₂, b₂) ← envOf fun k hv => do
       let cv ← fresh (cancelResTy cpIn)
-      let body ← toResult .unit (cpIn.getD []) cM cPay cv
-      aroundK hv (fun t => .letv cv (.sel k 1) t) fun hv sh => do
-        freeSh sh (consumes .dead hv body)
+      match Mk, cM with
+      | some Mk, some O =>
+        -- **`κ`'s cancel may suspend** (R4): the computation's cancel answers the outcome `Mk` of
+        -- its cancel row `F_i`, so `κ`'s cancel is a machine of `cancelTy`'s outcome `O`
+        -- (`F_{F_i ⊕ Σ} 1`), a call point at `k`'s cancel. Its suspensions are at operations
+        -- of `F_i`, which go to the canceller: the region's handlers, this one's too, are dead
+        -- (the kernel's `Kont.dead`); here they leave `κ`'s cancel through `outSusp`, to the
+        -- observer of `.2`, never through this drive's clauses. The handler's values are consumed (the cancel does not read them). At a
+        -- site with a stack the run would hold it across a suspension: refused
+        -- (`stackedCancelRefusal`).
+        if swap then throw stackedCancelRefusal
+        readFact "effHandleV:kappa cancel machine"
+        withMachine O (do
+          return .letv cv (.sel k 1) (consumes .dead hv (← pointK [] [] (.var cv) Mk)))
+      | some _, none => throw "LIR: κ's cancel may suspend where its cancel row holds no machine operation"
+      | none, _ =>
+        let body ← toResult .unit ((cpIn.map (·.pay)).getD []) cM cPay cv
+        aroundK hv (fun t => .letv cv (.sel k 1) t) fun hv sh => do
+          freeSh sh (consumes .dead hv body)
     setFn kcan { name := s!"kappa {n}.{idx} cancel", params := ps₂, body := b₂, ret := cT' }
   | k => throw s!"LIR: κ's cancel branch at {k}"
   return kc
@@ -3006,16 +3421,24 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
   | .effThen _ _ A _ _ _ SD u tM tN tD => do
     readFact "effThen:machine join"
     let (pre, c₁, c₂) ← splitCtx ctx u "effThen"
-    unless (← rowMs SD).isEmpty do
-      throw "LIR: a finaliser that may suspend is outside the fragment"
     let fn ← joinFn fuel c₂ A tN K args
     let pd ← rowPay SD
     let (_, inner, cD) ← envOf c₂
     let fnD ← reserveFn "finaliser"
-    let dTm ← conv fuel (none :: cD) tD
-    setFn fnD { name := "finaliser", params := inner, body := dTm, ret := resTy .unit pd }
+    -- A finaliser whose row `Σ_D` has machine operations may suspend: it is a machine of its own,
+    -- of the outcome of `F_{Σ_D} 1` (read from the node's `Σ_D`), called at a call point where
+    -- the frame is walked (R3: `abortKN`; a cancel, `cancelKN`).
+    let dOut ← outInfo? .unit SD
+    match dOut with
+    | none =>
+      let dTm ← conv fuel (none :: cD) tD
+      setFn fnD { name := "finaliser", params := inner, body := dTm, ret := resTy .unit pd }
+    | some MD =>
+      readFact "effThen:finaliser machine"
+      let dTm ← withMachineK MD (convK fuel (none :: cD) tD)
+      setFn fnD { name := "finaliser", params := inner, body := dTm, ret := MD.ty }
     let own := live c₂
-    return pre (← convK fuel c₁ tM (.thenF fn fnD own.length pd :: K) (own ++ args))
+    return pre (← convK fuel c₁ tM (.thenF fn fnD own.length pd dOut :: K) (own ++ args))
   | .bind _ _ A _ u tM tN => do
     let (pre, c₁, c₂) ← splitCtx ctx u "bind"
     let unf := tM matches .unfoldStep ..
@@ -3098,7 +3521,7 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     setFn fnN { name := "join", params := [oN] ++ argsN ++ [b],
                 body := .letv pv (.pair oN b) (← applyK F K argsN pv), ret := F.ty }
     let pr ← fresh (.pair rT mT); let o ← fresh rT; let m ← fresh mT
-    let body ← convK fuel [some m] tM (.thenF fnN fnD 1 [] :: K) (o :: args)
+    let body ← convK fuel [some m] tM (.thenF fnN fnD 1 [] none :: K) (o :: args)
     readFact "lend"
     return leaf ctx (some 0) (.letv pr (.prim (.lend true) [r]) (.letpair o m pr body))
   | .lendScope _ _ rel c => withScope rel (convK fuel ctx c K args)
@@ -3762,7 +4185,9 @@ def convDivLit (fuel : Nat) (ctx : Ctx) (j : Jdg) (op : HostOp) (c : IntLit) (in
     let aT ← vty A
     readFact "divLit:divisor"
     return pre (leaf c₂ none (← bindTm (← conv fuel c₁ tM) aT fun a => do
-      let d ← fresh (match c with | .u8 _ => .int .w8 | .i64 _ => .int .w64 | _ => i32T)
+      let d ← fresh (match c with
+        | .u8 _ => .int .w8 | .i64 _ => .int .w64 | .u32 _ => .int .u32 | .u64 _ => .int .u64
+        | _ => i32T)
       return .letv d (.lit c) (.prim (.divLit op) [a, d])))
   | _ => conv fuel ctx inner
 where
@@ -4083,7 +4508,7 @@ def cellSites (s : CState) (recursive : Nat → Bool) : List (Mach × List Key) 
 def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CState) := do
   let act : CM Unit := do
     for (m, ops) in cellSites s recursive do
-      let _ ← genMach m ops
+      let _ ← genMach m withMachine ops
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
             data := s'.data, statics := s'.statics, lits := s'.lits, consumeFns := s'.consumeFns }, s')
@@ -4126,6 +4551,13 @@ def stackedOf (s : CState) (recursive : Nat → Bool) (stackOps : MachSet)
     unless th.contains m.start do continue
     let [(op, kc)] := kcs | continue
     unless stackOps.contains op do continue
+    -- A stack machine's cancel is a plain loop over its frames (`stack cancel step`): no frame of
+    -- it may make a call point (`Frame.mayPoint`: a finaliser that may suspend, or a finaliser's
+    -- run, `cfinF`, `unwindF`), and its operation's cancel row holds no machine operation
+    -- (SPEC §52; a cancel that suspends is not lowered on the task stack).
+    let pureCancel := m.points.all (fun p => !(p.kont.any Frame.mayPoint)) &&
+      (m.info.ms.find? (·.1 == op)).all fun (_, _, _, cp) => cp.all (·.ms.isEmpty)
+    unless pureCancel do continue
     let self := m.points.all fun p => match p.kTy, p.outVar, p.callee with
       | none, _, _ => true
       | some _, some o, some M => M.ty.sameRep m.info.ty && !(calleeCodes o M).isEmpty &&

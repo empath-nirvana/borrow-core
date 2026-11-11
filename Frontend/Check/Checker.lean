@@ -11,7 +11,7 @@ is a `Res`: the erasure with its `CDerives` derivations. Names are resolved on t
 variable to its de Bruijn slot (§6.3), a lifetime name to its `LifeVar` (§3), a `def` to its
 key's checked body, placed at the use (`useDef`, SPEC §3). Variables owed to the computation being checked (`Env.own`,
 SPEC §12) are passed to its tail positions and consumed before each terminal computation that
-leaves them unused (`consumeOwed`).
+leaves them unused (`consumeOwedR`).
 
 The recursion is structural on a fuel argument that bounds the depth of the call tree;
 running out is an error, not an assumption.
@@ -412,7 +412,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
   | n + 1, E, Δ, T, m =>
     if m.terminal && E.own.any id then do
       let ⟨C, r⟩ ← synC n E.clearOwn Δ T m
-      pure ⟨C, ← consumeOwed E m.span r⟩
+      pure ⟨C, ← consumeOwedR E m.span r (m matches .ret ..)⟩
     else match m with
     | .ret sp V => do
       let ⟨_, r⟩ ← synV n E Δ T V
@@ -463,7 +463,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       pure ⟨_, r⟩
     | .handle sp k st hr hc M => do
       -- The handled body is owed the owed variables it mentions, as the head of `x <- M; N` is;
-      -- the others are consumed before the site (`consumeOwed`).  `[spec §12]`
+      -- the others are consumed before the site (`consumeOwedR`).  `[spec §12]`
       let EM := E.ownIn (mentionsC · M)
       -- The handler's pair: the answer clause and the clauses, values checked here, whose
       -- slots are persistent (`[handle]`'s `Γ₁`).
@@ -509,7 +509,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                             let rM ← chkC n EM Δ T M (effOf Sh A)
                             if hso : usedSat (outlivesB Δ d) T rM.F.u = true then
                               if h₂ : overlapOK T rH.F.u rM.F.u = true then
-                                pure ⟨_, ← consumeOwed E sp (rEffHandleB (at_ sp)
+                                pure ⟨_, ← consumeOwedR E sp (rEffHandleB (at_ sp)
                                   (classifyHandler Es rH.t) site hr' hc' rH hp hv hn0 hnS hlen
                                   hdv hwf hSd rM hso h₂)⟩
                               else throw (splitErr E T sp rH.F.u rM.F.u)
@@ -546,7 +546,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                         let rM ← chkC n EM Δ T M
                           (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 (finsOf Fs) ++ S) A)
                         if h₂ : overlapOK T rH.F.u rM.F.u = true then
-                          pure ⟨_, ← consumeOwed E sp (rEffHandle (at_ sp)
+                          pure ⟨_, ← consumeOwedR E sp (rEffHandle (at_ sp)
                             (classifyHandler Es rH.t) site hr' hc' rH hp hv hn0 hnS hlen hdv rM h₂)⟩
                         else throw (splitErr E T sp rH.F.u rM.F.u)
                        else err sp divHandleMsg
@@ -823,9 +823,17 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
   | 0, _, _, _, m, _ => err m.span "expression nested too deeply"
   | n + 1, E, Δ, T, m, C =>
     let E := E.atC C
-    if m.terminal && E.own.any id then do
+    -- A tail call: owed stored generators over rows it does not take, dropped just before it,
+    -- after the rest of the path (`becomeDrops`, SPEC §15).
+    let ks := match effRowOf? C with
+      | some ⟨_ :: _, _, _⟩ => if m.becomeRun then becomeDrops E T m else []
+      | _ => []
+    if !ks.isEmpty then do
+      let r ← chkC n (E.minus ((List.range T.length).map (ks.contains ·))) Δ T m C
+      dropsBefore E m.span ks r
+    else if m.terminal && E.own.any id then do
       let r ← chkC n E.clearOwn Δ T m C
-      consumeOwed E m.span r
+      consumeOwedR E m.span r (m matches .ret ..)
     else match m with
     | .ret sp V =>
       match C with

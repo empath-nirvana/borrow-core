@@ -249,7 +249,7 @@ inductive R where
   | next (e : Expr)
   | value (v : Val)
   | stuck (msg : String)
-  | op (raise : Bool) (K : BoLo.Kont) (p : Val)
+  | op (kind : OpKind) (K : BoLo.Kont) (p : Val)
 
 def ofStep : BoCa.Step → R
   | .next _ e => .next e
@@ -530,7 +530,10 @@ def step (o : Opts) (act : List Nat) : Expr → M R
       | .next a' => return .next (.app f a')
       | .stuck r => return .stuck r
       | .op r K p =>
-        if r then endTag t
+        -- A `cancelTo` stop keeps the frame (`K†` keeps every frame but handlers and `ccatch`),
+        -- so it suspends the lend as a `perform` does.  No surface emits `cancelTo` yet; this
+        -- arm is unreachable until the lowering unit.  `[spec §51]`
+        if r = .raise then endTag t
         else
           if (← tagInfo t).any (·.live) then
             modify fun s => { s with suspends := s.suspends + 1,

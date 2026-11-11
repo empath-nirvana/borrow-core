@@ -1,0 +1,14 @@
+-- #975 K1.3: a lend's finaliser at the externs' context; Goal791N closes each constant by the externs' values  [spec §72]
+BoCa.Fig16.Tree.Wp.Goal791.Const791.valAt_nil
+BoCa.Fig16.Tree.Wp.Goal791.Const791.map_valAt_nil
+BoCa.Fig16.Tree.Wp.Goal791.Const791.okAt_nil_w2
+BoCa.Fig16.Tree.Wp.Goal791.Const791.val_closed
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.length_of_meetsN
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.closed_of_meetsN
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.gN_of_externsN
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.closedAt_psub
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.substAll_closed_of_meetsN
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.semJN_close
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.consumable_outRep
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.d_dTakeOutput
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.w2_takeOutput_okAt
