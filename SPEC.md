@@ -9817,15 +9817,14 @@ No change: no type, rule, term, typing, elaboration or semantics.
     flow record cannot catch (`cond2B` at `Checked.flows`): no frame between a `perform` and its
     handler catches them (`Checked.unhandledNames`, `tail_clause_names`);
   - holds one clause for it, closed (`closedAt 0` of the node's clause) or capturing only
-    persistent values passed as evidence (§71), at one outer row and one
-    signature, so the clause a `perform` reaches is the same code at every node and needs nothing
+    persistent values passed as evidence (§71), at one outer row and one signature, so the clause a `perform` reaches is the same code at every node and needs nothing
     from its handler's frame;
   - writes its clause tuple in place, a typed `tensorI` chain (#1110);
 
   and, at every `perform` of the operation, the `perform`'s row holds the abortive entries of its
   handler's outer row, so the clause's possible raise has a summand to travel in (#1110). These two
-  conditions are read from the checked term. Otherwise the operation is a
-  machine operation (§49), whose drive runs the clause and sends its raise to the handler's join.
+  conditions are read from the checked term. Otherwise the operation is a machine operation (§49),
+  whose drive runs the clause and sends its raise to the handler's join.
 
   The clause's work `M'` (`M` with each resume `κ.1 y` replaced by `y`, read along the paths of
   `TailResumesAt` through `[⊕E]`, `[⊗E]`, `[1E]`, `[let]` and `[sub]`, the right unit and the
