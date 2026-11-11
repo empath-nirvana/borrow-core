@@ -582,11 +582,14 @@ end
 declaration that uses it, and the templates removed; and each instance made, with its template
 and the use it was made for. A program with no template is unchanged. `floor` is the next site
 the effects pass would give: a fresh site is at or above it, and above every literal site.
+The templates (`tmpls`, the program's own when none are given) and the state the instances were
+made in are answered too, so that code written after this pass (the pipe connector's glue,
+SPEC §75) has its uses made instances by `runMore`, which shares the instances made here.
 `[spec §76]` -/
-def run (ds : List Decl) (floor : Nat) :
-    Except Error (List Decl × List (String × String × Span)) := do
-  let tmpls := templates ds
-  if tmpls.isEmpty then return (ds, [])
+def runSt (ds : List Decl) (floor : Nat) (tmpls₀ : List Tmpl := []) (st₀ : Option St := none) :
+    Except Error (List Decl × List (String × String × Span) × St) := do
+  let tmpls := tmpls₀ ++ templates ds
+  if tmpls.isEmpty then return (ds, [], st₀.getD { site := floor })
   -- A template's body is core text: the passes that elaborate surface forms ran before it is
   -- instantiated.
   for t in tmpls do
@@ -613,7 +616,25 @@ def run (ds : List Decl) (floor : Nat) :
       modify fun s => { s with out := #[] }
       if let some d' := d' then acc := acc.push d'
     pure acc
-  let (acc, st) ← go.run { site := site0 }
-  pure (acc.toList, st.made.toList)
+  let st₁ : St := match st₀ with
+    | some st => { st with site := max st.site site0, made := #[] }
+    | none => { site := site0 }
+  let (acc, st) ← go.run st₁
+  pure (acc.toList, st.made.toList, st)
+
+/-- `runSt`, its state left out.  `[spec §76]` -/
+def run (ds : List Decl) (floor : Nat) :
+    Except Error (List Decl × List (String × String × Span)) := do
+  let (ds, made, _) ← runSt ds floor
+  pure (ds, made)
+
+/-- The uses of the templates `tmpls` in code written after `runSt` made its instances (the pipe
+connector's glue, SPEC §75): made instances in the state `st` that pass left, so that a use with a
+key it met is its instance, and a new one is named after those.  `[spec §76]` -/
+def runMore (ds : List Decl) (tmpls : List Tmpl) (st : St) :
+    Except Error (List Decl × List (String × String × Span)) := do
+  if tmpls.isEmpty then return (ds, [])
+  let (ds, made, _) ← runSt ds st.site tmpls (some st)
+  pure (ds, made)
 
 end Frontend.Elab.RowInst

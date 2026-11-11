@@ -338,6 +338,9 @@ structure St where
   operation of one of them is a div loop, one turn per observation; of any other site, a total
   loop at the row (SPEC §16, *Effectful bodies*). -/
   perTurn : List Nat := []
+  /-- The pipe connector's sites (SPEC §75 Part B): a machine at a row that holds one boxes each
+  next state at `top`, so that the connector may keep a stage between its turns.  `[spec §75]` -/
+  boxSites : List Nat := []
   /-- The ports of each copy made for computation parameters (SPEC §33), by the copy's name: per
   parameter index, the site of each provided effect, and whether it is the copy's own (a `with`
   inside it) rather than one of its row's.  `[spec §33]` -/
@@ -1997,12 +2000,10 @@ def resultTyOf : VTy → Option VTy
   | _ => none
 
 /-- A run of stream edges from the source `src`, `run` its stages in order (SPEC §75): its wires'
-end values, each the result of the stage above it, are unrestricted; a stage that calls `stop()`
-is over an upstream whose residual is `1`; and the connector, which these checks precede, is
-assembled from `lib/pipe.bc`'s pieces. Four of them mention the chain's row and the stage's sites
-in their types, which a library definition does not take as parameters yet, so the chain is
-refused after the checks.  `[spec §75]` -/
-def streamRefuse (env : Env) (src : Val) (run : List (Span × PipeMode × Val)) : EM Unit := do
+end values, each the result of the stage above it, are unrestricted, and a stage that calls `stop()`
+is over an upstream whose residual is `1`. These checks precede the connector (`connector`).
+`[spec §75]` -/
+def streamChecks (env : Env) (src : Val) (run : List (Span × PipeMode × Val)) : EM Unit := do
   let stopOp : Option String := env.stream.bind fun st =>
     (env.ops.find? fun o => o.eff == st && o.idx == 1).map (·.decl.name.name)
   let stages := src :: run.map (·.2.2)
@@ -2025,11 +2026,6 @@ def streamRefuse (env : Env) (src : Val) (run : List (Span × PipeMode × Val)) 
       if callsStop && !unit then
         throw ⟨s.span, "`stop()` answers the upstream's residual `K`, which a stage closed at a " ++
           "suspension does not hand back (§15 Open)"⟩
-  let sp := (run.getLast?.map (·.1)).getD src.span
-  throw ⟨sp, "a stream chain runs on the pipe connector, whose pieces `pipe_step`, `pipe_stop`, " ++
-    "`pipe_with_stop`, `pipe_forward` and `pipe_finish` (lib/pipe.bc) mention the chain's row and " ++
-    "the stages' sites in their types: they wait for row- and site-generic definitions, which " ++
-    "are not provided yet"⟩
 
 mutual
 /-- `M` with its operations resolved, handing the capabilities `cs` back beside its result: each
@@ -2244,6 +2240,7 @@ def streamChain : Nat → Cx → List Cap → Val → EM (List Bind × Val)
     let mut acc := c.src
     let mut src := c.src
     let mut run : List (Span × PipeMode × Val) := []
+    let mut pre : List Bind := []
     for ed in c.edges do
       let sp : Span := if ed.mode == .pull then ⟨c.src.span.start, ed.stage.span.stop⟩ else ed.sp
       if isStage ed.stage then
@@ -2263,11 +2260,88 @@ def streamChain : Nat → Cx → List Cap → Val → EM (List Bind × Val)
         run := run ++ [(sp, ed.mode, ed.stage)]
       else
         if !run.isEmpty then
-          streamRefuse env src run
+          let (bs, v) ← connector k cx cs src run
+          pre := pre ++ bs
+          acc := v
           run := []
         acc ← pipeEdge env.pipes sp ed.mode acc ed.stage
-    if !run.isEmpty then streamRefuse env src run
-    trV k cx cs acc
+    if !run.isEmpty then
+      let (bs, v) ← connector k cx cs src run
+      pre := pre ++ bs
+      acc := v
+    let (bs, V') ← trV k cx cs acc
+    pure (pre ++ bs, V')
+
+/-- A run of stream edges from the source `src`, `run` its stages in order, on the pipe connector
+(SPEC §75 Part B), after its checks (`streamChecks`). Each stage is elaborated as the call it is
+(a source, as the computation it is) at sites of the connector's own, fresh per stage: its
+`Yield` at `y`, its `Stream` at `s`, and `f` for a forwarded operation; the stage's other
+operations are served around the chain. The stages, with their sites and the types at them, are
+left to the typed elaboration (`VSugar.connector`), which assembles the connector from
+`lib/pipe.bc`'s pieces. Nothing here decides what a stage owns: the pieces the connector calls
+are checked by the kernel.  `[spec §75]` -/
+def connector : Nat → Cx → List Cap → Val → List (Span × PipeMode × Val) → EM (List Bind × Val)
+  | 0, _, _, src, _ => throw ⟨src.span, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, _, src, run => do
+    let env := cx.env
+    streamChecks env src run
+    let sp : Span := ⟨src.span.start, ((run.getLast?.map (·.2.2.span.stop)).getD src.span.stop)⟩
+    let some st := env.stream | throw ⟨sp, "internal error: lib's `Stream`"⟩
+    let stages := src :: run.map (·.2.2)
+    let n := stages.length
+    let mut out : List ConnStage := []
+    let mut ths : List Val := []
+    for (s, i) in stages.zipIdx do
+      -- A stage `s` is the call `s()`, or `s(e, …)` as written; the source is the computation it is.
+      let call : Val := if i == 0 then s else match s with
+        | .var vsp _ | .defApp vsp _ _ => .app vsp s (.unit vsp)
+        | s => s
+      let row := rowV env fuel call
+      let yi := row.find? (env.iterEff ·.eff)
+      let si := row.find? (·.eff == st)
+      if i + 1 == n && yi.isSome then
+        throw ⟨s.span, "the last stage of this stream chain yields: a stream chain used as a " ++
+          "generator is not provided yet (SPEC §75)"⟩
+      if let some c := (cx.need row).head? then
+        throw ⟨s.span, s!"this stage of a stream chain uses the capability of `{c.eff}`: a stage " ++
+          "is held by the connector between its turns, with the capability: not provided"⟩
+      let argsOf (j : Inst) : EM (List VTy) := match j.args with
+        | some As => pure As
+        | none => throw ⟨s.span, s!"the type arguments of `{j.eff}` this stage performs are not " ++
+            "determined here: write them"⟩
+      let (B, ys) ← match yi with
+        | some j => do
+          let As ← argsOf j
+          pure (As.headD (.zero sp), some (j.eff, As))
+        | none => pure (VTy.zero sp, none)
+      let (A, K, ss) ← match si with
+        | some j => do
+          let As ← argsOf j
+          match As with
+          | [A, K] => pure (A, K, some As)
+          | _ => throw ⟨s.span, "internal error: `Stream`'s type arguments"⟩
+        | none => pure (VTy.zero sp, VTy.unit sp, none)
+      let y ← freshSite
+      let sn ← freshSite
+      let f ← freshSite
+      let what := "the pipe connector"
+      let own : List Site :=
+        (match ys with | some (e, As) => [{ eff := e, n := y, args := As, sp, what }] | none => []) ++
+        (match ss with | some As => [{ eff := st, n := sn, args := As, sp, what }] | none => [])
+      let cxS : Cx := { cx with sites := own ++ cx.sites.filter fun x => !own.any (·.eff == x.eff) }
+      let M ← trC k cxS [] true (.ret s.span call)
+      modify fun st => { st with boxSites := st.boxSites ++ [y, sn, f] }
+      out := out ++ [{ y, s := sn, f, A, K, B }]
+      ths := ths ++ [.thunk s.span M]
+    report sp "lowering" (s!"a stream chain of {n} stages on the pipe connector (SPEC §75), " ++
+      s!"each stage at sites of its own ({", ".intercalate (out.map fun o => s!"{o.y}, {o.s}, {o.f}")})")
+    let tup := match ths.reverse with
+      | [] => Val.unit sp
+      | t :: rest => rest.foldl (fun acc t' => Val.pair sp t' acc) t
+    -- The site of the connector's cancel regions (`core-pipe-close`'s form).
+    let c ← freshSite
+    let v ← fresh "fx_conn"
+    pure ([.one sp v none (.ret sp (.app sp (.sugar sp (.connector c out)) tup)) false], .var sp v)
 
 /-- A value with its effectful calls lifted out before it, as bindings (that thread the
 capabilities `cs` when they use them); the value refers to their results. Every plain call
@@ -4204,6 +4278,8 @@ structure Result where
   reports : List (Span × Report)
   perTurn : List Nat
   platform : List String
+  /-- The pipe connector's sites (`St.boxSites`).  `[spec §75]` -/
+  boxSites : List Nat := []
   exits : Bool := false
   withDivLib : Bool := false
   withPlatform : Bool := false
@@ -4440,7 +4516,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
   match go.run {} with
   | .ok ((ds, spliced), st) =>
     pure { decls := ds, reports := st.reports.toList, perTurn := st.perTurn, platform := st.platform,
-           exits := st.exits, withDivLib, withPlatform := spliced,
+           boxSites := st.boxSites, exits := st.exits, withDivLib, withPlatform := spliced,
            keys := st.keys.toList, sites := st.site }
   | .error e => throw e
 

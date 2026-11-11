@@ -174,6 +174,8 @@ def Val.subst (σ : TySubst) : Val → Val
   | .lend sp x m => .lend sp x m
   | .sugar sp (.forSite i) => .sugar sp (.forSite { i with T := i.T.subst σ })
   | .sugar sp (.pullSite i) => .sugar sp (.pullSite { i with T := i.T.subst σ })
+  | .sugar sp (.connector c ss) =>
+    .sugar sp (.connector c (ss.map fun s => { s with A := s.A.subst σ, K := s.K.subst σ, B := s.B.subst σ }))
   | .sugar sp (.hndCtl i) => .sugar sp (.hndCtl (i.subst σ))
   | .sugar sp s => .sugar sp s
   | .mark sp k V => .mark sp k (V.subst σ)

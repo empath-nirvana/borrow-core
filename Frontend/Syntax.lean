@@ -543,6 +543,19 @@ inductive PipeMode where
   | pull
   deriving DecidableEq, Repr, Inhabited
 
+/-- One stage of a stream chain on the pipe connector (SPEC §75), as `Frontend.Elab.Effects` leaves
+it: the connector's sites for the stage, fresh per stage (`y` its `Yield[B]`, `s` its
+`Stream[A, K]`, `f` the fresh name of a forwarded operation), and the types at them (`0` for an
+effect the stage does not perform; `K` is `1` at a source).  `[spec §75]` -/
+structure ConnStage where
+  y : Nat
+  s : Nat
+  f : Nat
+  A : VTy
+  K : VTy
+  B : VTy
+  deriving DecidableEq, Repr, Inhabited
+
 /-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied
 to its operands as values, and elaborated to core by the typed pass of `Frontend/Sugar.lean`. -/
 inductive VSugar where
@@ -609,6 +622,11 @@ inductive VSugar where
   /-- The stored generator of a call of a function that performs an iteration effect (SPEC §15),
   applied to the call of its copy for the site. -/
   | pullSite (info : ItInfo)
+  /-- A stream chain on the pipe connector (SPEC §75 Part B), applied to the right-nested tuple of
+  its stages' thunks, each a computation at its sites (`ConnStage`), with the site `c` of the
+  connector's cancel regions: assembled from `lib/pipe.bc`'s pieces where the types are known
+  (`Frontend.Elab.Connector`).  `[spec §75]` -/
+  | connector (c : Nat) (stages : List ConnStage)
   /-- `e |> s` (`m` push) or `e >| s` (`m` pull), applied to the pair of `e` and the stage `s`
   (SPEC §33): a handler `h(…)` is `with h(…) { e }`; a function whose first parameter is a
   computation parameter takes `e` suspended, `f({ () -> e }, …)`; any other function takes `e`

@@ -186,7 +186,8 @@ def Val.level : Val → Nat
   | .app _ (.app _ (.sugar _ (.fold ..)) _) _ => 2
   | .app _ (.sugar _ (.cells ..)) _ => 2
   | .app _ (.sugar _ (.like _)) _ => 2
-  | .app _ (.sugar _ .retE) _ | .app _ (.sugar _ (.forSite _)) _ | .app _ (.sugar _ (.pullSite _)) _ => 1
+  | .app _ (.sugar _ .retE) _ | .app _ (.sugar _ (.forSite _)) _ | .app _ (.sugar _ (.pullSite _)) _
+  | .app _ (.sugar _ (.connector _ _)) _ => 1
   | .app _ (.sugar _ (.writes _)) _ => 1
   | .app _ (.sugar _ .brace) _
   | .app _ (.app _ (.sugar _ (.borrow ..)) _) _ => 2
@@ -283,6 +284,8 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) (cx : PCtx := .core) : Stri
     | .app _ (.sugar _ (.writes xs)) V => "writes(" ++ ", ".intercalate xs ++ ") " ++ V.pp 1 k cx
     | .app _ (.sugar _ (.forSite i)) V => s!"for_site[{i.n}] " ++ V.pp 1 k cx
     | .app _ (.sugar _ (.pullSite i)) V => s!"pull_site[{i.n}] " ++ V.pp 1 k cx
+    | .app _ (.sugar _ (.connector c ss)) V =>
+      s!"pipe_connector[{c}; {", ".intercalate (ss.map fun s => s!"{s.y} {s.s} {s.f}")}] " ++ V.pp 1 k cx
     | .app _ (.sugar _ .brace) (.thunk _ M) => "{ " ++ M.pp 0 (k + 2) cx ++ " }"
     | .app _ (.sugar _ .brace) (.bangThunk _ M) => "!{ " ++ M.pp 0 (k + 2) cx ++ " }"
     | .app _ (.app _ (.sugar _ (.borrow bk x)) P) (.thunkv _ (.lam _ b _ M)) =>
