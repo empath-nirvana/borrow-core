@@ -65,8 +65,8 @@ def lendScopeT : TExpr → Bool
 /-- The kind of a borrow constant's node: `mut` at `withbor2`, `imm` at `withbor1`, and their
 unwinding forms. -/
 def TExpr.lendKind? : TExpr → Option Bool
-  | .withbor1 .. | .withbor1U .. => some false
-  | .withbor2 .. | .withbor2U .. => some true
+  | .withbor1 .. | .withbor1UD .. => some false
+  | .withbor2 .. | .withbor2UD .. => some true
   | _ => none
 
 /-- **A lend's kind**: the term is `C cell cb` with `C` a borrow constant of kind `m`. -/

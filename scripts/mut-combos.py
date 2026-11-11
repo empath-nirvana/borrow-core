@@ -59,14 +59,28 @@ fn upto(n: i32) -> 1 with Yield[i32] =
 
 # The constructs, the statements among them, those that nest, and those the State form expresses.
 ALL = ['assign', 'bindassign', 'rebind', 'shadow', 'pause', 'if', 'lethead', 'match', 'for',
-       'block', 'while', 'modify', 'borrow', 'with', 'cwith', 'gen', 'run']
-STATEMENTS = ['assign', 'bindassign', 'rebind', 'shadow', 'pause']
+       'block', 'while', 'modify', 'borrow', 'with', 'cwith', 'gen', 'run', 'unwind', 'finally',
+       'kdrop', 'chk']
+STATEMENTS = ['assign', 'bindassign', 'rebind', 'shadow', 'pause', 'unwind', 'chk']
 NESTING = ['if', 'lethead', 'match', 'for', 'block', 'while', 'modify', 'borrow', 'with', 'cwith',
-           'gen', 'run']
+           'gen', 'run', 'finally', 'kdrop']
+# Inside a clause that drops its continuation (`kdrop`, a separate declaration whose row is
+# `Fail`): no loop observed per turn (SPEC §14), no `pause`, no handler, no `cell`. Not `modify`
+# or `run` either: in such a clause they are refused today with no `unwind` in sight (a `modify`
+# whose callback rebinds with `let (a, r) = bump(a)`: "`let (x, y) = V` needs a `*` type"; a `run`
+# or `modify` around a `chk`), which is not this check's subject (open, #1053's report).
+# Nor `block`: a block that writes the clause's own `let mut` loses the write between its calls
+# (open, #1068: a wrong answer whether or not the clause drops `k`, on main too; not this check's
+# subject).
+NOT_IN_CLAUSE = {'while', 'gen', 'pause', 'cwith', 'with', 'finally', 'kdrop', 'borrow', 'modify',
+                 'run', 'block'}
+# Nothing is left out of a `for` over a generator (`gen`): one whose body runs an `unwind` drains
+# the stored generator (#1053).
+NOT_IN_GEN = set()
 # The State form expresses these; a body that loops (`while`, a `for` over a generator) is a div
 # computation, which no handler wraps (SPEC §21), so it is not.
 STATE_OK = {'assign', 'bindassign', 'rebind', 'shadow', 'pause', 'if', 'lethead', 'match', 'for',
-            'block', 'cwith', 'run'}
+            'block', 'cwith', 'run', 'unwind'}
 # Loops observed one turn at a time: on the spine only (SPEC §14), and in a body with no operation
 # that resumes (a handler does not wrap a div computation, SPEC §21).
 DIV = {'while', 'gen'}
@@ -79,6 +93,12 @@ ROWS = [
                 'for', 'block', 'modify', 'borrow', 'with', 'cwith', 'run']),
     ('loops', ['assign', 'bindassign', 'rebind', 'shadow', 'if', 'lethead', 'match', 'for',
                'block', 'while', 'gen', 'modify', 'borrow', 'with', 'run']),
+    # The forms that split their continuation off (#1053): `x <- M unwind (D); N`, `with …
+    # finally`, and a clause that drops its continuation, whose aborting heads and loops the
+    # elaboration wraps in `unwind (cancel k)`.
+    ('splits', ['assign', 'bindassign', 'rebind', 'shadow', 'if', 'lethead', 'match', 'for',
+                'block', 'while', 'gen', 'modify', 'borrow', 'run', 'unwind', 'finally', 'kdrop',
+                'chk']),
 ]
 
 M32 = 0xffffffff
@@ -103,6 +123,11 @@ class Gen:
         # On the spine of the body (SPEC §14): its statements, and a loop's body that is on it.
         self.spine = True
         self.inctl = False
+        # Inside a `kdrop` clause; inside a `gen` body.
+        self.inclause = False
+        self.ingen = False
+        # The `kdrop` clauses, each a handler declaration of the program.
+        self.clauses = []
 
     def fresh(self, p):
         self.n += 1
@@ -144,7 +169,9 @@ class Gen:
 
     def stmt(self, d, scope, muts):
         r = self.rng
-        choices = [c for c in STATEMENTS if c in self.constructs and not (c == 'pause' and self.lent)]
+        choices = [c for c in STATEMENTS if c in self.constructs and not (c == 'pause' and self.lent)
+                   and not (c == 'pause' and self.inclause) and not (c == 'chk' and not self.inclause)
+                   and not (c in NOT_IN_GEN and self.ingen)]
         if 'assign' in choices:
             choices.append('assign')
         if d > 0:
@@ -152,9 +179,11 @@ class Gen:
             # outside it (SPEC §18 *Not provided*).
             choices += [c for c in NESTING if c in self.constructs and
                         not (c in DIV and not self.spine) and not (c == 'cwith' and self.lent) and
-                        not (c == 'borrow' and (self.lent or self.inctl))]
+                        not (c == 'borrow' and (self.lent or self.inctl)) and
+                        not (c in NOT_IN_CLAUSE and self.inclause) and
+                        not (c == 'kdrop' and (self.lent or self.inctl))]
         c = r.choice(choices)
-        if c in ('assign', 'bindassign', 'rebind', 'modify') and not muts:
+        if c in ('assign', 'bindassign', 'rebind', 'modify', 'chk') and not muts:
             c = 'shadow'
         self.kinds.add(c)
         if c == 'assign':
@@ -167,6 +196,18 @@ class Gen:
             return ('rebind', r.choice(muts), x), scope | {x}, muts
         if c == 'pause':
             return ('pause',), scope, muts
+        if c == 'unwind':
+            # `x <- return e unwind (()); N`: what follows in the block is `N`. `x` is an outer
+            # `let mut` (a write through the head) or a new variable.
+            if muts and r.random() < 0.5:
+                return ('unwind', r.choice(muts), self.expr(scope), False), scope, muts
+            # A new variable: `a <- …` of a name in scope that is a `let mut` is a write (R2).
+            x = self.fresh('x')
+            return ('unwind', x, self.expr(scope), True), scope | {x}, muts
+        if c == 'chk':
+            # `v = chk(e)`: a call at the clause's row `Fail`, which never raises here, so the
+            # elaboration wraps it as an aborting head.
+            return ('chk', r.choice(muts), self.expr(scope)), scope, muts
         if c == 'shadow':
             v = self.binder('s')
             s2, m2 = self.without(scope, muts, v)
@@ -198,7 +239,10 @@ class Gen:
             i = self.binder('i')
             si, mi = self.without(scope, muts, i)
             # A counted `for` is one total step: a div loop is not inside it (SPEC §16).
+            g0 = self.ingen
+            self.ingen = g0 or c == 'gen'
             b, _ = self.sub(d - 1, si | {i}, mi, spine=(c == 'gen'))
+            self.ingen = g0
             return (c, i, r.randint(0, 3), b), scope, muts
         if c == 'while':
             b, _ = self.sub(d - 1, scope, muts)
@@ -243,11 +287,32 @@ class Gen:
         if c == 'run':
             b, be = self.sub(d - 1, scope, muts, spine=False)
             return ('run', x, b, self.expr(be)), s2, m2
+        if c == 'finally':
+            # `with … finally`: a control handler's body hands back nothing it writes; its
+            # finaliser runs when the body aborts, which it does not here.
+            c0 = self.inctl
+            self.inctl = True
+            b, _ = self.sub(d - 1, scope, [], spine=False)
+            self.inctl = c0
+            return ('finally', b), scope, muts
+        if c == 'kdrop':
+            # A clause that drops its continuation: a handler `kdN(a, b)` of its own, whose
+            # `stop` clause declares `let mut a`, `let mut b` from its parameters, runs its
+            # statements and answers `e`; the `with` around `stop()` answers it.
+            x = self.binder('t')
+            s2, m2 = self.without(scope, muts, x)
+            i0, sp0 = self.inclause, self.spine
+            self.inclause, self.spine = True, False
+            b, be = self.sub(d - 1, {'a', 'b'}, ['a', 'b'], spine=False)
+            self.inclause, self.spine = i0, sp0
+            n = len(self.clauses)
+            self.clauses.append((b, self.expr(be)))
+            return ('kdrop', x, n, self.expr(scope), self.expr(scope)), s2 | {x}, m2
         raise AssertionError(c)
 
     def program(self):
         body, _ = self.stmts(self.depth, {'a', 'b'}, ['a', 'b'])
-        return body
+        return (body, self.clauses)
 
 
 def uses(tree, kind):
@@ -316,6 +381,22 @@ class Render:
             return f'let ({v}, {x}) = bump({v})', bind(x)
         if k == 'pause':
             return 'pause()', spell
+        if k == 'unwind':
+            x, e, new = s[1:]
+            e = self.expr(e, spell)
+            if st and not new:
+                z = self.tmp()
+                return f'{z} <- return {e} unwind (()); h{x}.put({z})', spell
+            return f'{x} <- return {e} unwind (())', (bind(x) if new else spell)
+        if k == 'chk':
+            return f'{s[1]} = chk({self.expr(s[2], spell)})', spell
+        if k == 'finally':
+            return f'with resuming {{ {self.seq(s[1], spell)} }} finally {{ () }}', spell
+        if k == 'kdrop':
+            x, n, ea, eb = s[1:]
+            w = (f'with to_result[i32, i32] {{ with kd{n}({self.expr(ea, spell)}, '
+                 f'{self.expr(eb, spell)}) {{ stop() }} }}')
+            return f'let {x} = match {w} {{ inl v -> v | inr e -> 0 - 1 }}', bind(x)
         if k == 'let':
             return f'let {s[1]} = {self.expr(s[2], spell)}', bind(s[1])
         if k == 'if':
@@ -363,12 +444,29 @@ class Render:
         raise AssertionError(k)
 
 
-def render(body, state):
+KDROP_HEAD = '''include fail
+
+effect Stop { ctl stop() -> i32 }
+
+fn chk(x: i32) -> i32 with Fail[i32] = if x == 1234567 { raise(x) } else { x }
+'''
+
+
+def render(prog, state):
+    body, clauses = prog
     R = Render(state)
     spell = {'a': 'ha.get()', 'b': 'hb.get()'} if state else {'a': 'a', 'b': 'b'}
     text, sp2 = R.stmts(body, spell)
     fa, fb = sp2['a'], sp2['b']
     head = HEAD + (GEN_HEAD if uses(body, 'gen') else '')
+    if clauses:
+        head += KDROP_HEAD
+        for n, (cb, ce) in enumerate(clauses):
+            C = Render(False)
+            ct = C.seq(cb, {'a': 'a', 'b': 'b'}, ce)
+            head += (f'\nhandler kd{n}(a0: i32, b0: i32): Stop, i32 -> i32 with Fail[i32] = {{\n'
+                     f'  return(x) = x;\n'
+                     f'  stop(k) = {{ let mut a = a0; let mut b = b0; {ct} }}\n}}\n')
     cell = uses(body, 'borrow')
     pre = '  let mut cell = alloc(0);\n' if cell else ''
     post = '  let _ = free(cell);\n' if cell else ''
@@ -431,6 +529,23 @@ class Eval:
             return bind(s[2], old)
         if k == 'pause':
             return env
+        if k == 'unwind':
+            x, e, new = s[1:]
+            if new:
+                return bind(x, self.expr(e, env))
+            env[x].v = self.expr(e, env)
+            return env
+        if k == 'chk':
+            env[s[1]].v = self.expr(s[2], env)
+            return env
+        if k == 'finally':
+            self.seq(s[1], env)
+            return env
+        if k == 'kdrop':
+            x, n, ea, eb = s[1:]
+            cb, ce = self.clauses[n]
+            e2 = {'a': Cell(self.expr(ea, env)), 'b': Cell(self.expr(eb, env))}
+            return bind(x, self.seq(cb, e2, ce))
         if k == 'let':
             return bind(s[1], self.expr(s[2], env))
         if k == 'if':
@@ -484,7 +599,8 @@ class Eval:
             return bind(x, self.seq(b, env, be))
         raise AssertionError(k)
 
-    def program(self, body):
+    def program(self, prog):
+        body, self.clauses = prog
         env = self.stmts(body, {'a': Cell(1), 'b': Cell(2)})
         return f'(i32[{env["a"].v & M32}], i32[{env["b"].v & M32}])'
 

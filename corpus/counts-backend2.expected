@@ -127,6 +127,7 @@ core-row-capture-global 0 0 0 0 0 0
 core-row-generic 0 0 0 0 0 0
 core-row-key-tparam 0 0 0 0 0 0
 core-row-pipe-stop 0 0 0 0 0 0
+core-row-splice 0 0 0 0 0 0
 core-site-fresh-const 0 0 0 0 0 0
 core-site-generic 0 0 0 0 0 0
 core-unsigned 0 0 0 0 0 0
@@ -181,6 +182,16 @@ json-drop-deep 5006 0 0 135041 129024 8010
 json-parse 673 0 0 24137 13762 13197
 json-deep 5004 0 0 252010 184003 80003
 json-get 17 0 0 945 393 483
+kernel-at08-once 1 0 0 4 4 0
+kernel-div-residual 1 0 0 7 7 0
+kernel-poly-id 0 0 0 0 0 0
+kernel-recursive-yield 20 0 0 630 630 0
+kernel-two-callees 0 5 0 0 0 0
+kernel-two-callees-tail 0 1 0 0 0 0
+mut-after-unwind-exits 3 0 0 3 3 0
+mut-after-unwind-for-gen 3 0 0 3 3 0
+mut-after-unwind-loop-in-n 3 0 0 3 3 0
+mut-cancel-unwind-region 0 0 0 0 0 0
 parse-i64 12 0 0 687 313 270
 kernel-cancel-now 0 0 0 0 0 0
 kernel-deep-gen-plain 0 0 0 0 0 0
@@ -205,6 +216,10 @@ leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 695
 lend-call-raise 9 0 0 34 31 4
 lend-call-record 1 0 0 6 2 0
 lend-tail-call 1 0 0 5 3 0
+linear-dropped-k-owned 2 0 0 9 9 1
+linear-gen-ctl-buffer 4 0 0 9 9 2
+linear-move-in-restore 3 0 0 17 17 5
+linear-pipe-move-in 3 0 0 17 17 5
 lit-lend-raise 6 0 0 69 30 39
 load-for-linear 1 0 0 92 52 3
 mut-control-assign-raise 0 0 0 6 6 0
@@ -531,6 +546,7 @@ operator-rounds 83 0 24 803 519 0
 parse-int 4 0 0 240 80 105
 parse-recover 245 0 31 1848 1036 0
 parse-recover-gen 226 0 31 1983 1199 108
+parse-recover-view 18 0 0 399 263 129
 pipe-bracket 3 0 0 3 3 0
 pipe-handlers 0 0 0 0 0 0
 pipe-left-row 3 0 0 3 3 0

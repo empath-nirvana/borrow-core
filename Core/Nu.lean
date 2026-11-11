@@ -1,5 +1,5 @@
 import Core.FoldImm
-import Core.NuRel
+import Core.NuSys
 import Core.EffFin
 
 /-!
@@ -113,7 +113,7 @@ theorem nodeV_closed : ∀ C : CTy, closedAt 0 (nodeV C).1 = true
       simp [nodeV, closedAt, closedAt_mono _ (nodeV_closed D) (Nat.zero_le _)]
   | .all _ _ D => by
       simp [nodeV, closedAt, closedAt_mono _ (nodeV_closed D) (Nat.zero_le _)]
-  | .top | .nu _ => rfl
+  | .top | .nuSys _ _ _ => rfl
 
 /-- The body of `unfold_C = Z (λself. λg. λs. node_C (λs′. λo. self g s′ o) (λ_. g s))`. -/
 def fBN (C : CTy) : Expr :=
@@ -598,14 +598,22 @@ theorem unfold_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hC : C.NuOk) (S 
 /-! ### `νX. C` and its unrolling -/
 
 /-- `nuIn`: a computation of `C[U(νX. C)/X]` is one of `νX. C`. -/
-theorem nuIn_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy} (hC : C.NuOk)
-    (h : SemC Δ Γ e C.unroll) : SemC Δ Γ e (.nu C) :=
-  fun δ γ ls ρ hδ hΓ => (cC_nu_iff hC ls δ _ ρ).mpr (h δ γ ls ρ hδ hΓ)
+theorem nuIn_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} :
+    ∀ {m i : Nat} {C : CTy}, C.SysOkAt m i → SemC Δ Γ e (CTy.unrollS m i C) →
+      SemC Δ Γ e (.nuSys m i C)
+  | 0, 0, _, hC, h => fun δ γ ls ρ hδ hΓ => (cC_nu_iff hC ls δ _ ρ).mpr (h δ γ ls ρ hδ hΓ)
+  | 0, _ + 1, _, hC, _ => hC.elim
+  | _ + 1, _, _, hC, h => fun δ γ ls ρ hδ hΓ =>
+      (cC_nuS_iff hC.2 hC.1 ls δ _ ρ).mpr (h δ γ ls ρ hδ hΓ)
 
 /-- `nuOut`: a computation of `νX. C` is one of `C[U(νX. C)/X]`. -/
-theorem nuOut_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy} (hC : C.NuOk)
-    (h : SemC Δ Γ e (.nu C)) : SemC Δ Γ e C.unroll :=
-  fun δ γ ls ρ hδ hΓ => (cC_nu_iff hC ls δ _ ρ).mp (h δ γ ls ρ hδ hΓ)
+theorem nuOut_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} :
+    ∀ {m i : Nat} {C : CTy}, C.SysOkAt m i → SemC Δ Γ e (.nuSys m i C) →
+      SemC Δ Γ e (CTy.unrollS m i C)
+  | 0, 0, _, hC, h => fun δ γ ls ρ hδ hΓ => (cC_nu_iff hC ls δ _ ρ).mp (h δ γ ls ρ hδ hΓ)
+  | 0, _ + 1, _, hC, _ => hC.elim
+  | _ + 1, _, _, hC, h => fun δ γ ls ρ hδ hΓ =>
+      (cC_nuS_iff hC.2 hC.1 ls δ _ ρ).mp (h δ γ ls ρ hδ hΓ)
 
 end BoCa.Fig16.LogRel.Core
 

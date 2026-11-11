@@ -74,7 +74,7 @@ theorem tab_lookupRK : ∀ (F : CTy) {R : Nat → WProp} {vr : VRel} {g : KW →
   | .amp _ _, _, _, _, _, _, _, _, _, h => by simp [tabRK, OpTabK.empty] at h
   | .top, _, _, _, _, _, _, _, _, h => by simp [tabRK, OpTabK.empty] at h
   | .all _ _ _, _, _, _, _, _, _, _, _, h => by simp [tabRK, OpTabK.empty] at h
-  | .nu _, _, _, _, _, _, _, _, _, h => by simp [tabRK, OpTabK.empty] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, _, h => by simp [tabRK, OpTabK.empty] at h
 
 /-- **The frame's callback table may be stopped at under a lend at `α ⊏ @bnd`, at the typed
 world**. -/

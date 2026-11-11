@@ -1,0 +1,30 @@
+-- A must-resume clause that moves its continuation through a cell and resumes it once, the twin of
+-- the kernel program `at08-once` (Backend/Kernel.lean, `Core/Rejections.lean`'s `at08Once`; SPEC
+-- §19, AT08), in the core text:
+--
+--     op (a, κ) ⇒ c ← alloc κ; (c, k₁) ← swap c (); (c, u) ← swap c k₁; k₂ ← free c; u; resume k₂ a
+--
+-- The cell changes type at each `swap`. AT08 itself, which reads `κ` out twice, is refused
+-- (`not_der_at08`); this, with the copy used once, is typed (`d_at08Once`). The surface cannot
+-- write it: a continuation taken out of a cell has the type `U ((1 -o F 1) & top)`, and the
+-- surface resumes only a clause's own `k` (a call `k2(())` of it is refused as applying a
+-- non-function).
+--
+-- Answer: (); `live 0`. A continuation lost in the cell, or a cell left unfreed, would leave an
+-- object live; a resume that ran twice would be refused.
+
+type K = U ((1 -o F 1) & top)
+
+main : F 1 =
+  handle_with[5](
+      ((!thunkv fun (v : 1) -> return v) : !U (1 -o F 1)),
+      (((!thunkv fun (p : 1 * K) ->
+        let (a, k) = p;
+        c <- return (alloc[K] k);
+        q1 <- return (swap[K, 1] c ());
+        let (c1, k1) = q1;
+        q2 <- return (swap[1, K] c1 k1);
+        let (c2, u) = q2;
+        k2 <- return (free[K] c2);
+        let () = u;
+        (force k2).1 a), ()) : !U (1 * K -o F 1) * 1)) (perform[5.0] ())

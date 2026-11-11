@@ -216,14 +216,15 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .arrEmpty ii jj A => []
   | .sliceReplaceM ii jj a A => []
   | .sliceSwapM ii jj a A => []
+  | .sliceCopyM ii jj a b A => []
   | .withbor1 ii jj A B x => []
   | .withbor2 ii jj A B x => []
   | .withbor3 ii jj a A B x => []
   | .withload ii jj a A B x => []
   | .withswap ii jj a A B => []
-  | .withbor1U ii jj A B S x td => td.lifeBinders
-  | .withbor2U ii jj A B S x td => td.lifeBinders
-  | .withbor3U ii jj a A B S x td => td.lifeBinders
+  | .withbor1UD ii jj A B SM SD S x td => td.lifeBinders
+  | .withbor2UD ii jj A B SM SD S x td => td.lifeBinders
+  | .withbor3UD ii jj a A B SM SD S x td => td.lifeBinders
   | .withloadU ii jj a A B S x => []
   | .sliceBorrowMU ii jj A B S x td => td.lifeBinders
   | .sliceBorrowIU ii jj A B S x td => td.lifeBinders
@@ -236,8 +237,8 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .foldOwn ii jj F R => []
   | .foldReuse ii jj F R => []
   | .foldOwnG ii jj B₀ => []
-  | .nuIn ii jj C t => t.lifeBinders
-  | .nuOut ii jj C t => t.lifeBinders
+  | .nuIn ii jj m i C t => t.lifeBinders
+  | .nuOut ii jj m i C t => t.lifeBinders
   | .unfoldN ii jj C S => []
   | .unfoldK ii jj C G S => []
   | .nuOutK ii jj i C G S => []
@@ -338,14 +339,15 @@ def TExpr.domFree : TExpr → Bool
   | .arrEmpty ii jj A => true
   | .sliceReplaceM ii jj a A => true
   | .sliceSwapM ii jj a A => true
+  | .sliceCopyM ii jj a b A => true
   | .withbor1 ii jj A B x => false
   | .withbor2 ii jj A B x => false
   | .withbor3 ii jj a A B x => false
   | .withload ii jj a A B x => false
   | .withswap ii jj a A B => true
-  | .withbor1U ii jj A B S x td => false
-  | .withbor2U ii jj A B S x td => false
-  | .withbor3U ii jj a A B S x td => false
+  | .withbor1UD ii jj A B SM SD S x td => false
+  | .withbor2UD ii jj A B SM SD S x td => false
+  | .withbor3UD ii jj a A B SM SD S x td => false
   | .withloadU ii jj a A B S x => false
   | .sliceBorrowMU ii jj A B S x td => false
   | .sliceBorrowIU ii jj A B S x td => false
@@ -358,8 +360,8 @@ def TExpr.domFree : TExpr → Bool
   | .foldOwn ii jj F R => true
   | .foldReuse ii jj F R => true
   | .foldOwnG ii jj B₀ => true
-  | .nuIn ii jj C t => t.domFree
-  | .nuOut ii jj C t => t.domFree
+  | .nuIn ii jj m i C t => t.domFree
+  | .nuOut ii jj m i C t => t.domFree
   | .unfoldN ii jj C S => true
   | .unfoldK ii jj C G S => true
   | .nuOutK ii jj i C G S => true
@@ -459,14 +461,15 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .arrEmpty ii jj A => .arrEmpty ii jj A
   | .sliceReplaceM ii jj a A => .sliceReplaceM ii jj a A
   | .sliceSwapM ii jj a A => .sliceSwapM ii jj a A
+  | .sliceCopyM ii jj a b A => .sliceCopyM ii jj a b A
   | .withbor1 ii jj A B x => .withbor1 ii jj A B x
   | .withbor2 ii jj A B x => .withbor2 ii jj A B x
   | .withbor3 ii jj a A B x => .withbor3 ii jj a A B x
   | .withload ii jj a A B x => .withload ii jj a A B x
   | .withswap ii jj a A B => .withswap ii jj a A B
-  | .withbor1U ii jj A B S x td => .withbor1U ii jj A B S x (td.reAb Δr)
-  | .withbor2U ii jj A B S x td => .withbor2U ii jj A B S x (td.reAb Δr)
-  | .withbor3U ii jj a A B S x td => .withbor3U ii jj a A B S x (td.reAb Δr)
+  | .withbor1UD ii jj A B SM SD S x td => .withbor1UD ii jj A B SM SD S x (td.reAb Δr)
+  | .withbor2UD ii jj A B SM SD S x td => .withbor2UD ii jj A B SM SD S x (td.reAb Δr)
+  | .withbor3UD ii jj a A B SM SD S x td => .withbor3UD ii jj a A B SM SD S x (td.reAb Δr)
   | .withloadU ii jj a A B S x => .withloadU ii jj a A B S x
   | .sliceBorrowMU ii jj A B S x td => .sliceBorrowMU ii jj A B S x (td.reAb Δr)
   | .sliceBorrowIU ii jj A B S x td => .sliceBorrowIU ii jj A B S x (td.reAb Δr)
@@ -479,8 +482,8 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .foldOwn ii jj F R => .foldOwn ii jj F R
   | .foldReuse ii jj F R => .foldReuse ii jj F R
   | .foldOwnG ii jj B₀ => .foldOwnG ii jj B₀
-  | .nuIn ii jj C t => .nuIn ii jj C (t.reAb Δr)
-  | .nuOut ii jj C t => .nuOut ii jj C (t.reAb Δr)
+  | .nuIn ii jj m i C t => .nuIn ii jj m i C (t.reAb Δr)
+  | .nuOut ii jj m i C t => .nuOut ii jj m i C (t.reAb Δr)
   | .unfoldN ii jj C S => .unfoldN ii jj C S
   | .unfoldK ii jj C G S => .unfoldK ii jj C G S
   | .nuOutK ii jj i C G S => .nuOutK ii jj i C G S
@@ -845,6 +848,9 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | sliceSwapM a0 a1 a2 =>
       intro Δ' he hd
       exact TDerivesP.sliceSwapM a0 a1 a2
+  | sliceCopyM a0 a1 a2 a3 a4 =>
+      intro Δ' he hd
+      exact TDerivesP.sliceCopyM a0 a1 a2 a3 a4
   | withbor1 => intro _ _ hd; simp [TExpr.domFree] at hd
   | withbor2 => intro _ _ hd; simp [TExpr.domFree] at hd
   | withbor3 => intro _ _ hd; simp [TExpr.domFree] at hd
@@ -852,9 +858,9 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | withswap a0 =>
       intro Δ' he hd
       exact TDerivesP.withswap a0
-  | withbor1U => intro _ _ hd; simp [TExpr.domFree] at hd
-  | withbor2U => intro _ _ hd; simp [TExpr.domFree] at hd
-  | withbor3U => intro _ _ hd; simp [TExpr.domFree] at hd
+  | withbor1UD => intro _ _ hd; simp [TExpr.domFree] at hd
+  | withbor2UD => intro _ _ hd; simp [TExpr.domFree] at hd
+  | withbor3UD => intro _ _ hd; simp [TExpr.domFree] at hd
   | withloadU => intro _ _ hd; simp [TExpr.domFree] at hd
   | sliceBorrowMU => intro _ _ hd; simp [TExpr.domFree] at hd
   | sliceBorrowIU => intro _ _ hd; simp [TExpr.domFree] at hd
@@ -1194,6 +1200,9 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | sliceSwapM a0 a1 a2 =>
       intro Δ' he hd
       exact TDerivesAt.sliceSwapM a0 a1 a2
+  | sliceCopyM a0 a1 a2 a3 a4 =>
+      intro Δ' he hd
+      exact TDerivesAt.sliceCopyM a0 a1 a2 a3 a4
   | withbor1 => intro _ _ hd; simp [TExpr.domFree] at hd
   | withbor2 => intro _ _ hd; simp [TExpr.domFree] at hd
   | withbor3 => intro _ _ hd; simp [TExpr.domFree] at hd
@@ -1201,9 +1210,9 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | withswap a0 =>
       intro Δ' he hd
       exact TDerivesAt.withswap a0
-  | withbor1U => intro _ _ hd; simp [TExpr.domFree] at hd
-  | withbor2U => intro _ _ hd; simp [TExpr.domFree] at hd
-  | withbor3U => intro _ _ hd; simp [TExpr.domFree] at hd
+  | withbor1UD => intro _ _ hd; simp [TExpr.domFree] at hd
+  | withbor2UD => intro _ _ hd; simp [TExpr.domFree] at hd
+  | withbor3UD => intro _ _ hd; simp [TExpr.domFree] at hd
   | withloadU => intro _ _ hd; simp [TExpr.domFree] at hd
   | sliceBorrowMU => intro _ _ hd; simp [TExpr.domFree] at hd
   | sliceBorrowIU => intro _ _ hd; simp [TExpr.domFree] at hd

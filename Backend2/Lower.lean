@@ -912,11 +912,16 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
       (← emit d ([.loc m] ++ locs ts))
   | .io .writeByte => do
     match ← arg 0 with
-    | [m, b] => return [.putc (.load (.loc m) 0) (.loc b)] ++ (← emit d [.loc m])
+    | [m, b] =>
+      -- [spec §11] The descriptor, read at its cell's contents node (`Prog.hostRep`).
+      let (s, fd) ← loadCell (← child (← argN 0) 0) (.loc m) 1
+      return s ++ [.putc (.loc (fd.headD 0)) (.loc b)] ++ (← emit d [.loc m])
     | _ => throw "word IR: write_byte of a non-pair"
   | .io .writeAll => do
     match ← arg 0 with
-    | [m, a, k] => return [.putv (.load (.loc m) 0) (.loc a) (.loc k)] ++ (← emit d [.loc m])
+    | [m, a, k] =>
+      let (s, fd) ← loadCell (← child (← argN 0) 0) (.loc m) 1
+      return s ++ [.putv (.loc (fd.headD 0)) (.loc a) (.loc k)] ++ (← emit d [.loc m])
     | _ => throw "word IR: write_all of a non-pair"
   | .io .readInto => do
     match ← arg 0 with
@@ -1269,12 +1274,17 @@ where
       match L.sh c', L.sh n' with
       | .clos .., .unk => return ([], [])
       | .opq, .unk => return ([], [])
+      -- [spec §11] A host-typed opaque value (`Layouts.host`), an integer node, read as `Unk`:
+      -- discarded.
+      | .int _, .unk => if L.host.contains (L.r c') then return ([], []) else pure ()
       -- `Tok`'s cell (`Ref 1`) read as `Unk`: discarded.
       | .ref _, .unk => return ([], [])
-      | _, _ =>
-        if L.triv c' && sameEnc L 256 c' n' then return ([], locs vs)
-        let ts ← fresh (L.w n')
-        return ([.call ts (← helper (.reCopy (L.r c') (L.r n'))) (locs vs)], locs ts)
+      | _, _ => pure ()
+      if L.triv c' && sameEnc L 256 c' n' then return ([], locs vs)
+      let ts ← fresh (L.w n')
+      return ([.call ts (← helper (.reCopy (L.r c') (L.r n'))) (locs vs)], locs ts)
+    -- [spec §11] A host-typed opaque value read as `Unk`: discarded.
+    if L.host.contains (L.r c) && L.sh n == .unk then return ([], [])
     match L.sh c, L.sh n with
     | .clos .., .unk => return ([], [])
     | .opq, .unk => return ([], [])

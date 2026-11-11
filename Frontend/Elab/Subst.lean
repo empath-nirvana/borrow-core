@@ -68,6 +68,7 @@ def Row.subst (σ : TySubst) : Row → Row
   | .cons n i q A B f r => .cons n i q (A.subst σ) (B.subst σ) (f.subst σ) (r.subst σ)
   | .top => .top
   | .var x => .var x
+  | .splice x r => .splice x (r.subst σ)
 
 def Shape.subst (σ : TySubst) : Shape → Shape
   | .leaf sp A => .leaf sp (A.subst σ)
@@ -124,6 +125,7 @@ def Const.subst (σ : TySubst) : Const → Const
   | .sliceEmptyMut a A => .sliceEmptyMut a (A.subst σ)
   | .sliceReplaceMut a A => .sliceReplaceMut a (A.subst σ)
   | .sliceSwapMut a A => .sliceSwapMut a (A.subst σ)
+  | .sliceCopyMut a b A => .sliceCopyMut a b (A.subst σ)
   | .countFold S => .countFold (S.subst σ)
   | .countTry S E => .countTry (S.subst σ) (E.subst σ)
   | .boundedFix A C => .boundedFix (A.subst σ) (C.subst σ)

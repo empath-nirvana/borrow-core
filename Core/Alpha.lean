@@ -117,9 +117,9 @@ theorem CTy.alphaB_sound : ∀ {ρ : List (LifeVar × LifeVar)} {δ δ' : LSub} 
   | _, _, _, .amp C D, C', h, hα => by
       cases C' <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq] at hα
       exact ⟨CTy.alphaB_sound C _ h hα.1, CTy.alphaB_sound D _ h hα.2⟩
-  | _, _, _, .nu C, C', h, hα => by
-      cases C' <;> simp only [CTy.alphaB, reduceCtorEq] at hα
-      exact CTy.alphaB_sound C _ h hα
+  | _, _, _, .nuSys _ _ C, C', h, hα => by
+      cases C' <;> simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, reduceCtorEq] at hα
+      exact ⟨hα.1.1, hα.1.2, CTy.alphaB_sound C _ h hα.2⟩
   | _, _, _, .all x b C, C', h, hα => by
       cases C' with
       | all x' b' C' =>
@@ -188,7 +188,7 @@ theorem CTy.alphaB_diag : ∀ {ρ : List (LifeVar × LifeVar)}, AlphaDiag ρ →
   | _, h, .ret A => by simp [CTy.alphaB, VTy.alphaB_diag h A]
   | _, h, .arr A C => by simp [CTy.alphaB, VTy.alphaB_diag h A, CTy.alphaB_diag h C]
   | _, h, .amp C D => by simp [CTy.alphaB, CTy.alphaB_diag h C, CTy.alphaB_diag h D]
-  | _, h, .nu C => by simp [CTy.alphaB, CTy.alphaB_diag h C]
+  | _, h, .nuSys _ _ C => by simp [CTy.alphaB, CTy.alphaB_diag h C]
   | _, h, .all x b C => by
       simp [CTy.alphaB, lifeAlphaB_diag h b, CTy.alphaB_diag (h.cons x) C]
   | _, h, .eff n i q A B fin rc C => by
@@ -277,8 +277,9 @@ theorem CTy.alphaB_swap : ∀ (ρ : List (LifeVar × LifeVar)) (C C' : CTy),
   | ρ, .amp C D, C', h => by
       cases C' <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq] at h ⊢
       exact ⟨CTy.alphaB_swap ρ C _ h.1, CTy.alphaB_swap ρ D _ h.2⟩
-  | ρ, .nu C, C', h => by
-      cases C' <;> simp only [CTy.alphaB, reduceCtorEq] at h ⊢; exact CTy.alphaB_swap ρ C _ h
+  | ρ, .nuSys _ _ C, C', h => by
+      cases C' <;> simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, reduceCtorEq] at h ⊢
+      exact ⟨⟨h.1.1.symm, h.1.2.symm⟩, CTy.alphaB_swap ρ C _ h.2⟩
   | ρ, .all x b C, C', h => by
       cases C' with
       | all x' b' C' =>
@@ -430,10 +431,10 @@ theorem CTy.alphaB_trans : ∀ {ρ₁ ρ₂ : List (LifeVar × LifeVar)}, AlphaM
       cases D <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq] at h₁
       cases E <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq] at h₂ ⊢
       exact ⟨CTy.alphaB_trans hm _ _ _ h₁.1 h₂.1, CTy.alphaB_trans hm _ _ _ h₁.2 h₂.2⟩
-  | _, _, hm, .nu C, D, E, h₁, h₂ => by
-      cases D <;> simp only [CTy.alphaB, reduceCtorEq] at h₁
-      cases E <;> simp only [CTy.alphaB, reduceCtorEq] at h₂ ⊢
-      exact CTy.alphaB_trans hm _ _ _ h₁ h₂
+  | _, _, hm, .nuSys _ _ C, D, E, h₁, h₂ => by
+      cases D <;> simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, reduceCtorEq] at h₁
+      cases E <;> simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, reduceCtorEq] at h₂ ⊢
+      exact ⟨⟨h₁.1.1.trans h₂.1.1, h₁.1.2.trans h₂.1.2⟩, CTy.alphaB_trans hm _ _ _ h₁.2 h₂.2⟩
   | ρ₁, ρ₂, hm, .all x b C, D, E, h₁, h₂ => by
       cases D with
       | all y b' D =>
@@ -717,9 +718,9 @@ theorem CTy.alphaB_insert (ρ₀ ρ : List (LifeVar × LifeVar)) :
       cases C' <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at h ⊢
       exact ⟨CTy.alphaB_insert ρ₀ ρ ρ₁ C _ (by avoid_part hv) h.1,
         CTy.alphaB_insert ρ₀ ρ ρ₁ D _ (by avoid_part hv) h.2⟩
-  | ρ₁, .nu C, C', hv, h => by
-      cases C' <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at h ⊢
-      exact CTy.alphaB_insert ρ₀ ρ ρ₁ C _ (by avoid_part hv) h
+  | ρ₁, .nuSys _ _ C, C', hv, h => by
+      cases C' <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at h ⊢
+      exact ⟨h.1, CTy.alphaB_insert ρ₀ ρ ρ₁ C _ (by avoid_part hv) h.2⟩
   | ρ₁, .all x b C, C', hv, h => by
       cases C' with
       | all x' b' C' =>
@@ -812,7 +813,7 @@ theorem CTy.alphaB_instT {S S' : VTy} (hS : VTy.alphaB [] S S' = true) :
           exact ⟨h.1, CTy.alphaB_instT hS ρ₁ C C' hρ hb hb' h.2⟩
       | _ => simp [CTy.alphaB] at h
   | ρ₁, .top, C', _, _, _, h => by cases C' <;> simp_all [CTy.alphaB, CTy.instT]
-  | ρ₁, .nu C, C', _, _, _, h => by
+  | ρ₁, .nuSys _ _ C, C', _, _, _, h => by
       cases C' <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at h
       simpa [CTy.instT, CTy.alphaB] using h
 
@@ -918,7 +919,7 @@ theorem CTy.alphaB_rowOf : ∀ {F F' : CTy}, CTy.alphaB [] F F' = true →
           exact ⟨rfl, .cons ⟨hn, hi, hq, hr, hA, hB, hf⟩ (CTy.alphaB_rowOf hC).2⟩
       | _ => simp [CTy.alphaB] at h
   | .top, F', h => by cases F' <;> simp_all [CTy.alphaB, CTy.isTop, CTy.rowOf]
-  | .ret _, F', h | .arr _ _, F', h | .amp _ _, F', h | .all _ _ _, F', h | .nu _, F', h => by
+  | .ret _, F', h | .arr _ _, F', h | .amp _ _, F', h | .all _ _ _, F', h | .nuSys _ _ _, F', h => by
       cases F' <;> simp_all [CTy.alphaB, CTy.isTop, CTy.rowOf]
 
 /-- `𝒱⟦A⟧ = 𝒱⟦A'⟧` at α-equivalent value types. -/

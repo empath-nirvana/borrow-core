@@ -1,7 +1,8 @@
 -- SPEC §19 in the core text: a control operation `2.0 lin 1 ~> i32` (an `ask` of an `i32`), its
 -- handler's clause resuming `k` once, in tail position, with `10`. `twice` asks twice and adds the
 -- answers; it is a function at the row of the operation, and its binds are `[let]` (the row has
--- no weakening).
+-- no weakening). It is a core-text counterpart of the kernel program `resume-tail`
+-- (Backend/Kernel.lean, `Core/EffExamples.lean`'s `prog`), with an `i32` operation performed twice.
 --
 -- Answer: i32[20].
 

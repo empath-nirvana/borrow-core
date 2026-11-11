@@ -208,7 +208,7 @@ def _root_.Frontend.Val.synthInj : Val → Bool
 returned, and the first arm of a `case` (the second is checked against it). -/
 def _root_.Frontend.Comp.synthInj : Comp → Bool
   | .ret _ V => V.synthInj
-  | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N => N.synthInj
+  | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N | .unwind _ _ _ _ _ N => N.synthInj
   | .case _ _ _ M _ _ => M.synthInj
   | .absurd .. => true
   | _ => false
@@ -362,6 +362,12 @@ def synCM : Nat → MCx → Comp → MM MTy
     | .loop _ _ _ _ M N => do
       let _ ← synCM n c M
       synCM n c N
+    | .unwind _ x oA M _ N => do
+      -- As the checker synthesizes `[then]`: `N`'s type, `x` at `M`'s.
+      let t ← match oA.bind c.tc.elabV with
+        | some A => do chkCM n c M (.known A); pure (.known A)
+        | none => synCM n c M
+      synCM n (← c.push x.name t) N
     | m => match (c.tc.tyC m).bind effRow? with
       | some (_, A) => pure (.known A)
       | _ => freshM

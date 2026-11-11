@@ -31,6 +31,6 @@ for name in $("$bcc" kernel list); do
   if [ "$a" -gt "$wa" ] || [ "$i" -gt "$wi" ] || [ "$c" -gt "$wc" ]; then
     echo "$name: counts regressed: $got, expected at most allocs $wa, indirect $wi, copies $wc"; bad=1
   fi
-  echo "$name: $(echo "$src" | head -1); $got"
+  echo "$name: ${src%%$'\n'*}; $got"
 done
 exit "$bad"

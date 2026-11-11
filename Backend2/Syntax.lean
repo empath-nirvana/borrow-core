@@ -325,6 +325,10 @@ structure Prog where
   /-- The functions that consume a leaf of a `consume` node's consume (`Convert.leafConsume`): the only
   functions where `Lint` admits a `consume` at the rule `consume`. -/
   consumeFns : Std.HashSet Nat := {}
+  /-- **The host types of the opaque cells** (`Backend2/Driver.lean`, `hostRepOf`): each opaque
+  kind whose compiled cell holds an integer, and that integer's type, read from the checked extern
+  types (`Checked.ctx`). A kind not listed is laid out as `.opq`.  `[spec §11]` -/
+  hostRep : List (BoCa.Fig16.LogRel.Core.Opaque × LTy) := []
   deriving Inhabited
 
 end Backend2

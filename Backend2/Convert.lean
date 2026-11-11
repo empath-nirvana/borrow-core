@@ -334,7 +334,7 @@ def formersC (acc : List String) : CTy → List String
   | .arr A C => formersC (formersV ("C.arr" :: acc) A) C
   | .amp C D => formersC (formersC ("C.amp" :: acc) C) D
   | .all _ _ C => formersC ("C.all" :: acc) C
-  | .nu C => formersC ("C.nu" :: acc) C
+  | .nuSys _ _ C => formersC ("C.nu" :: acc) C
   | .eff _ _ _ A B fin _ C => formersC (formersC (formersV (formersV ("C.eff" :: acc) A) B) fin) C
   | .top => "C.top" :: acc
 end
@@ -2661,7 +2661,8 @@ descriptor (the clock's: the time `0`). `mk_input` and `mk_args` consume their a
 (persistent): the host's stream is the platform's standard input or arguments, whatever bytes the
 term passes. `mk_output` holds its argument, the descriptor. Each call allocates its own cell, as
 the model's `alloc` does, so the extern's contract (`mkInput_meets`, …) holds at every call, with
-no condition on the run. -/
+no condition on the run. That `Output`'s cell holds only the descriptor is trusted, and its layout
+is read from the checked extern types: `Driver.hostRepOf`'s TRUSTED note.  `[spec §11]` -/
 def mkClosOf (s : CapStream) (B : VTy) (t : LTy) : CM Tm := do
   let .thunk (.arr a (.ret b)) := t.peel | throw s!"LIR: a harness make at {t}"
   let cls ← classOf B
@@ -2686,7 +2687,8 @@ The cell of `ref input` (and `ref args`) holds, in the model, a byte list; in th
 stream's descriptor, an `i32`, which `free` answers here and the host discards. That is the host's
 representation of the cell, inside the trusted extern (`ExternsMeet`), not a value of the checked
 term: the term passes the capability `ref input`, whose contract the host meets, and gets back the
-byte list. -/
+byte list. `take_output`'s empty list (each byte already sent) is the trusted refinement of
+`Driver.hostRepOf`'s TRUSTED note.  `[spec §11]` -/
 def takeClosOf (s : CapStream) (t : LTy) : CM Tm := do
   let .thunk (.arr a (.ret b)) := t.peel | throw s!"LIR: a harness take at {t}"
   mkClos "extern" [] (.arr a (.ret b)) (some a) b fun ctx => do
@@ -2739,7 +2741,7 @@ def constArity : TExpr → Option Nat
   | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .boundedFix .. => some 1
   | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
-  | .withborF2I .. | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU ..
+  | .withborF2I .. | .withbor1UD .. | .withbor2UD .. | .withbor3UD .. | .withloadU ..
   | .sliceBorrowMU .. | .sliceBorrowIU .. => some 2
   | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. => some 0
   | _ => none
@@ -2748,8 +2750,8 @@ def constArity : TExpr → Option Nat
 box and the lifetime coercions, `ν`'s two coercions. -/
 def transparent? : TExpr → Option TExpr
   | .bangE _ _ _ t | .boxI _ _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t | .mutSub _ _ _ _ _ t
-  | .ofRet _ _ _ t | .ret _ _ _ t | .thunkV _ _ _ t | .bangThunkV _ _ _ t | .nuIn _ _ _ t
-  | .nuOut _ _ _ t => some t
+  | .ofRet _ _ _ t | .ret _ _ _ t | .thunkV _ _ _ t | .bangThunkV _ _ _ t | .nuIn _ _ _ _ _ t
+  | .nuOut _ _ _ _ _ t => some t
   -- `[α]`: a type renamed up to its lifetime binders' names, which no lowered type reads.
   | .alpha _ _ _ _ t => some t
   -- The derived nodes over a term the conversion reads as it reads the term (SPEC §57).
@@ -4069,7 +4071,7 @@ where
   cbConst : TExpr → Bool
     | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .sliceBorrowM ..
     | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I ..
-    | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU .. | .sliceBorrowMU ..
+    | .withbor1UD .. | .withbor2UD .. | .withbor3UD .. | .withloadU .. | .sliceBorrowMU ..
     | .sliceBorrowIU .. => true
     | _ => false
   go (fuel : Nat) (ctx : Ctx) : List (Masks × TExpr) → List Var → TExpr → LTy → CM Tm
@@ -4250,9 +4252,9 @@ def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM 
   | .withswap .. => genWithswap x cbT call
   | .withborSM .. | .withborF2M .. => genLendTree true x cbT call
   | .withborSI .. | .withborF2I .. => genLendTree false x cbT call
-  | .withbor1U _ _ _ _ _ _ td | .sliceBorrowIU _ _ _ _ _ _ td => genLendU _fuel (.lend false) x cbT call td
-  | .withbor2U _ _ _ _ _ _ td | .sliceBorrowMU _ _ _ _ _ _ td => genLendU _fuel (.lend true) x cbT call td
-  | .withbor3U _ _ _ _ _ _ _ td => genLendU _fuel .relend x cbT call td
+  | .withbor1UD _ _ _ _ _ _ _ _ td | .sliceBorrowIU _ _ _ _ _ _ td => genLendU _fuel (.lend false) x cbT call td
+  | .withbor2UD _ _ _ _ _ _ _ _ td | .sliceBorrowMU _ _ _ _ _ _ td => genLendU _fuel (.lend true) x cbT call td
+  | .withbor3UD _ _ _ _ _ _ _ _ _ td => genLendU _fuel .relend x cbT call td
   | .withloadU .. => genWithload x cbT call
   | c => throw s!"LIR: `{ruleName c}` is not a borrow (answer {resT})"
 
@@ -4318,11 +4320,11 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     freeTree v vT
   | .withborSM .., [x, cb] | .withborF2M .., [x, cb] => genLendTree true x (← tyOf cb) (callCb cb)
   | .withborSI .., [x, cb] | .withborF2I .., [x, cb] => genLendTree false x (← tyOf cb) (callCb cb)
-  | .withbor1U _ _ _ _ _ _ td, [x, cb] | .sliceBorrowIU _ _ _ _ _ _ td, [x, cb] =>
+  | .withbor1UD _ _ _ _ _ _ _ _ td, [x, cb] | .sliceBorrowIU _ _ _ _ _ _ td, [x, cb] =>
     genLendU fuel (.lend false) x (← tyOf cb) (callCb cb) td
-  | .withbor2U _ _ _ _ _ _ td, [x, cb] | .sliceBorrowMU _ _ _ _ _ _ td, [x, cb] =>
+  | .withbor2UD _ _ _ _ _ _ _ _ td, [x, cb] | .sliceBorrowMU _ _ _ _ _ _ td, [x, cb] =>
     genLendU fuel (.lend true) x (← tyOf cb) (callCb cb) td
-  | .withbor3U _ _ _ _ _ _ _ td, [m, cb] => genLendU fuel .relend m (← tyOf cb) (callCb cb) td
+  | .withbor3UD _ _ _ _ _ _ _ _ _ td, [m, cb] => genLendU fuel .relend m (← tyOf cb) (callCb cb) td
   | .withloadU .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .foldOwn _ _ F _, [g] | .foldReuse _ _ F _, [g] => do
     let k : FoldKind := match c with | .foldReuse .. => .reuse | _ => .own

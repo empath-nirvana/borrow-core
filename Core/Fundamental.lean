@@ -4,6 +4,7 @@ import Core.CodeNuOut
 import Core.Integers
 import Core.Arrays
 import Core.SliceOps
+import Core.SliceCopy
 import Core.CountFold
 import Core.BoundedFix
 import Core.FoldReuse
@@ -425,6 +426,10 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `slice_swap_mut : !([Mut @a A] ⊗ (I32 ⊗ I32) ⇒ [Mut @a A])`.  `[spec §9]` -/
   | sliceSwapM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val swapV) (.val (sliceSwapMTy a A))
+  /-- `slice_copy_mut : !([Mut @a A] ⊗ (I32 ⊗ ([Imm @b A] ⊗ (I32 ⊗ I32))) ⇒ [Mut @a A] ⊗ (1 ⊕ 1))`,
+  `A` persistent, the step `sliceCopy`.  `[spec §74]` -/
+  | sliceCopyM {Δ Γ} (a b : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) (hA : A.Persistent) :
+      CDerives Δ Γ (.val sliceCopyV) (.val (sliceCopyMTy a b A))
   | withbor1 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerives Δ Γ withbor (.val (axWithbor1Ty x Δ.meetOfDom A B))
@@ -442,25 +447,34 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerives Δ Γ withload (.val (axWithloadTy a x Δ.meetOfDom A B))
   | withswap {Δ Γ a A B} (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ withswap (.val (axWithswapTy a A B))
-  /-- The unwinding form of `withbor` (1): `Ref A` lent as `Imm 'x A` to a callback at a row of
-  abortive operations; when it unwinds, the finaliser `d` runs on the source. `d` is typed at the
-  rule's context, whose live slots are persistent, so it may name them.  `[spec §19, §72]` -/
-  | withbor1U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
-      CDerives Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S))
+  /-- The unwinding form of `withbor` (1): `Ref A` lent as `Imm 'x A` to a callback at a row
+  `Σ_M` of abortive operations; when it unwinds, the finaliser `d` runs on the source at its own
+  row `Σ_D`, and the result is at `Σ ≥ Σ_M, Σ_D` (K-b). `d` is typed at the rule's context, whose
+  live slots are persistent, so it may name them. At `Σ_D = ∅`, `Σ_M = Σ` it is
+  `CDerives.withbor1U`.  `[spec §19, §27, §72]` -/
+  | withbor1UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+      (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
+      (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
+      (hP : SD.UnrD → SM.PendPers)
+      (hd : CDerives Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
+      CDerives Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S))
   /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition
-  non-strict.  `[spec §19, §23]` -/
-  | withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
-      CDerives Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S))
-  /-- The unwinding form of `withbor` (3): `Mut @a A` reborrowed as `Mut 'x A`.  `[spec §19]` -/
-  | withbor3U {Δ Γ a A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hd : CDerives Δ Γ d (.val (.lolli (.mut a A) .unit))) :
-      CDerives Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S))
+  non-strict, the finaliser at `Σ_D`.  `[spec §19, §23, §27]` -/
+  | withbor2UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+      (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
+      (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
+      (hP : SD.UnrD → SM.PendPers)
+      (hd : CDerives Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
+      CDerives Δ Γ (withborUE d) (.val (withbor2UTyD x Δ.meetOfDom A B SM S))
+  /-- The unwinding form of `withbor` (3): `Mut @a A` reborrowed as `Mut 'x A`, the finaliser at
+  `Σ_D`.  `[spec §19, §27]` -/
+  | withbor3UD {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+      (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
+      (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
+      (hP : SD.UnrD → SM.PendPers)
+      (hd : CDerives Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
+      CDerives Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S))
   /-- The unwinding form of `withload`: its own term, the source consumed by the load.
   `[spec §19]` -/
   | withloadU {Δ Γ a A B} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
@@ -521,12 +535,13 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   (`FoldOwnG.lean`).  `[spec §6]` -/
   | foldOwnG {Δ Γ} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
       CDerives Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs))
-  /-- `νX. C` is its unrolling `C[U(νX. C)/X]` (`cC_nu_iff`), on the same term, at a positive
-  `C`.  `[spec §7]` -/
-  | nuIn {Δ Γ e C} (hC : C.NuOk) (h : CDerives Δ Γ e (.comp C.unroll)) :
-      CDerives Δ Γ e (.comp (.nu C))
-  | nuOut {Δ Γ e C} (hC : C.NuOk) (h : CDerives Δ Γ e (.comp (.nu C))) :
-      CDerives Δ Γ e (.comp C.unroll)
+  /-- `νᵢ` is its unrolling `Cᵢ[U ν₀/X₀, …]` (`cC_nuS_iff`; at one equation `C[U(νX. C)/X]`,
+  `cC_nu_iff`), on the same term, at a positive system (`CTy.SysOkAt`, today's `NuOk` at
+  `νX. C`).  `[spec §7, §79]` -/
+  | nuIn {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerives Δ Γ e (.comp (CTy.unrollS m i C))) :
+      CDerives Δ Γ e (.comp (.nuSys m i C))
+  | nuOut {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerives Δ Γ e (.comp (.nuSys m i C))) :
+      CDerives Δ Γ e (.comp (CTy.unrollS m i C))
   /-- Coiteration, a constant: `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)` (`Nu.lean`), at a
   positive `C`.  `[spec §7]` -/
   | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
@@ -728,6 +743,34 @@ theorem CDerives.effHandleCs {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (
     (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E fs)))
     (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
 
+/-- The unwinding form of `withbor` (1) with its finaliser at the pure row: `withbor1UD` at
+`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19, §72]` -/
+theorem CDerives.withbor1U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
+    (hS : S.Unwind x) (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    CDerives Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S)) :=
+  .withbor1UD (SD := []) x hΓ hx hsc₁ hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
+
+/-- The unwinding form of `withbor` (2) with its finaliser at the pure row: `withbor2UD` at
+`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19, §23]` -/
+theorem CDerives.withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+    (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    CDerives Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S)) :=
+  .withbor2UD (SD := []) x hΓ hx hside hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
+
+/-- The unwinding form of `withbor` (3) with its finaliser at the pure row: `withbor3UD` at
+`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19]` -/
+theorem CDerives.withbor3U {Δ Γ a A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+    (hd : CDerives Δ Γ d (.val (.lolli (.mut a A) .unit))) :
+    CDerives Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S)) :=
+  .withbor3UD (SD := []) x hΓ hx hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
+
 /-! ### The delay, stream and finite iterator instances  `[spec §7]`
 
 `D A`, `Stream A` and `Iter A R R'` are `νX. C` at fixed bodies (`CTy.delay`, `CTy.stream`,
@@ -756,11 +799,11 @@ abbrev unfoldSV (A : VTy) : Val := unfoldV (CTy.streamBody A)
 
 theorem CDerives.delayIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (delayUnroll A))) :
     CDerives Δ Γ e (.comp (.delay A)) :=
-  .nuIn (CTy.delayBody_nuOk A) (by rw [CTy.delay_unroll]; exact h)
+  .nuIn (m := 0) (i := 0) (CTy.delayBody_nuOk A) (by rw [CTy.unrollS_zero, CTy.delay_unroll]; exact h)
 
 theorem CDerives.delayOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.delay A))) :
     CDerives Δ Γ e (.comp (delayUnroll A)) := by
-  rw [← CTy.delay_unroll]; exact .nuOut (CTy.delayBody_nuOk A) h
+  rw [← CTy.delay_unroll]; exact .nuOut (m := 0) (i := 0) (CTy.delayBody_nuOk A) h
 
 /-- Guarded recursion on the delay type: `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)`. -/
 theorem CDerives.fixD {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
@@ -770,11 +813,11 @@ theorem CDerives.fixD {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
 
 theorem CDerives.streamIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (streamUnroll A))) :
     CDerives Δ Γ e (.comp (.stream A)) :=
-  .nuIn (CTy.streamBody_nuOk A) (by rw [CTy.stream_unroll]; exact h)
+  .nuIn (m := 0) (i := 0) (CTy.streamBody_nuOk A) (by rw [CTy.unrollS_zero, CTy.stream_unroll]; exact h)
 
 theorem CDerives.streamOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.stream A))) :
     CDerives Δ Γ e (.comp (streamUnroll A)) := by
-  rw [← CTy.stream_unroll]; exact .nuOut (CTy.streamBody_nuOk A) h
+  rw [← CTy.stream_unroll]; exact .nuOut (m := 0) (i := 0) (CTy.streamBody_nuOk A) h
 
 /-- Coiteration on the stream type: `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)`. -/
 theorem CDerives.unfoldS {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
@@ -880,15 +923,18 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | arrEmpty _ hΓ => exact arrEmpty_compatX hΓ
   | sliceReplaceM _ _ hΓ => exact sliceReplaceM_compatX hΓ
   | sliceSwapM _ _ hΓ => exact sliceSwapM_compatX hΓ
+  | sliceCopyM _ _ _ hΓ hA => exact sliceCopyM_compatX hΓ hA
   | withbor1 x hΓ hx hsc₁ hf₁ hf₂ => exact withbor1_compatX x hΓ hx hsc₁ hf₁ hf₂
   | withbor2 x hΓ hx hside hf₁ hf₂ => exact withbor2_compatX x hΓ hx hside hf₁ hf₂
   | withbor3 x hΓ hx hf₁ hf₂ => exact withbor3_compatX x hΓ hx hf₁ hf₂
   | withload x hΓ hx hf₁ hf₂ => exact withload_compatX x hΓ hx hf₁ hf₂
   | withswap hΓ => exact withswap_compatX hΓ
-  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS _ ihd => exact withbor1U_compatX x hΓ hsc₁ hf₁ hf₂ hS ihd
-  | withbor2U x hΓ _ hside hf₁ hf₂ hS _ ihd =>
-      exact withbor2U_compatX x hΓ hside hf₁ hf₂ hS ihd
-  | withbor3U x hΓ _ hf₁ hf₂ hS _ ihd => exact withbor3U_compatX x hΓ hf₁ hf₂ hS ihd
+  | withbor1UD x hΓ _ hsc₁ hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
+      exact withbor1UD_compatX x hΓ hsc₁ hf₁ hf₂ hS hMS hDS hSv hP ihd
+  | withbor2UD x hΓ _ hside hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
+      exact withbor2UD_compatX x hΓ hside hf₁ hf₂ hS hMS hDS hSv hP ihd
+  | withbor3UD x hΓ _ hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
+      exact withbor3UD_compatX x hΓ hf₁ hf₂ hS hMS hDS hSv hP ihd
   | withloadU x hΓ _ hf₁ hf₂ hS => exact withloadU_compatX x hΓ hf₁ hf₂ hS
   | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
       exact sliceBorrowMU_compatX x hΓ hA hB hf₁ hf₂ hS ihd

@@ -718,14 +718,15 @@ inductive TExpr where
   | arrEmpty (info : TInfo) (jdg : Jdg) (A : VTy)
   | sliceReplaceM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
   | sliceSwapM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
+  | sliceCopyM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (b : Lifetime.Life) (A : VTy)
   | withbor1 (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (x : LifeVar)
   | withbor2 (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (x : LifeVar)
   | withbor3 (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy) (x : LifeVar)
   | withload (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy) (x : LifeVar)
   | withswap (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy)
-  | withbor1U (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (x : LifeVar) (td : TExpr)
-  | withbor2U (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (x : LifeVar) (td : TExpr)
-  | withbor3U (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy) (S : Row) (x : LifeVar) (td : TExpr)
+  | withbor1UD (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (SM : Row) (SD : Row) (S : Row) (x : LifeVar) (td : TExpr)
+  | withbor2UD (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (SM : Row) (SD : Row) (S : Row) (x : LifeVar) (td : TExpr)
+  | withbor3UD (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy) (SM : Row) (SD : Row) (S : Row) (x : LifeVar) (td : TExpr)
   | withloadU (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy) (S : Row) (x : LifeVar)
   | sliceBorrowMU (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (x : LifeVar) (td : TExpr)
   | sliceBorrowIU (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (x : LifeVar) (td : TExpr)
@@ -738,8 +739,8 @@ inductive TExpr where
   | foldOwn (info : TInfo) (jdg : Jdg) (F : FShape) (R : VTy)
   | foldReuse (info : TInfo) (jdg : Jdg) (F : FShape) (R : VTy)
   | foldOwnG (info : TInfo) (jdg : Jdg) (B₀ : VTy)
-  | nuIn (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
-  | nuOut (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
+  | nuIn (info : TInfo) (jdg : Jdg) (m : Nat) (i : Nat) (C : CTy) (t : TExpr)
+  | nuOut (info : TInfo) (jdg : Jdg) (m : Nat) (i : Nat) (C : CTy) (t : TExpr)
   | unfoldN (info : TInfo) (jdg : Jdg) (C : CTy) (S : VTy)
   | unfoldK (info : TInfo) (jdg : Jdg) (C : CTy) (G : VTy) (S : VTy)
   | nuOutK (info : TInfo) (jdg : Jdg) (i : Nat) (C : CTy) (G : VTy) (S : VTy)
@@ -884,14 +885,15 @@ def TExpr.erase : TExpr → Expr
   | .arrEmpty _ _ _ => (.val emptyFamV)
   | .sliceReplaceM _ _ _ _ => (.val replaceV)
   | .sliceSwapM _ _ _ _ => (.val swapV)
+  | .sliceCopyM _ _ _ _ _ => (.val sliceCopyV)
   | .withbor1 _ _ _ _ _ => withbor
   | .withbor2 _ _ _ _ _ => withbor
   | .withbor3 _ _ _ _ _ _ => withbor
   | .withload _ _ _ _ _ _ => BoCa.withload
   | .withswap _ _ _ _ _ => BoCa.withswap
-  | .withbor1U _ _ _ _ _ _ td => (withborUE (td.erase))
-  | .withbor2U _ _ _ _ _ _ td => (withborUE (td.erase))
-  | .withbor3U _ _ _ _ _ _ _ td => (withborUE (td.erase))
+  | .withbor1UD _ _ _ _ _ _ _ _ td => (withborUE (td.erase))
+  | .withbor2UD _ _ _ _ _ _ _ _ td => (withborUE (td.erase))
+  | .withbor3UD _ _ _ _ _ _ _ _ _ td => (withborUE (td.erase))
   | .withloadU _ _ _ _ _ _ _ => BoCa.withload
   | .sliceBorrowMU _ _ _ _ _ _ td => (withborUE (td.erase))
   | .sliceBorrowIU _ _ _ _ _ _ td => (withborUE (td.erase))
@@ -904,8 +906,8 @@ def TExpr.erase : TExpr → Expr
   | .foldOwn _ _ F _ => (.val (foldOwnV F))
   | .foldReuse _ _ F _ => (.val (foldReuseV F))
   | .foldOwnG _ _ B₀ => (.val (FoldP.foldOwnGV B₀))
-  | .nuIn _ _ _ t => t.erase
-  | .nuOut _ _ _ t => t.erase
+  | .nuIn _ _ _ _ _ t => t.erase
+  | .nuOut _ _ _ _ _ t => t.erase
   | .unfoldN _ _ C _ => (.val (unfoldV C))
   | .unfoldK _ _ C _ _ => (.val (unfoldV C))
   | .nuOutK _ _ i _ _ _ => (.var i)
@@ -1009,14 +1011,15 @@ def TExpr.info : TExpr → TInfo
   | .arrEmpty i _ _ => i
   | .sliceReplaceM i _ _ _ => i
   | .sliceSwapM i _ _ _ => i
+  | .sliceCopyM i _ _ _ _ => i
   | .withbor1 i _ _ _ _ => i
   | .withbor2 i _ _ _ _ => i
   | .withbor3 i _ _ _ _ _ => i
   | .withload i _ _ _ _ _ => i
   | .withswap i _ _ _ _ => i
-  | .withbor1U i _ _ _ _ _ _ => i
-  | .withbor2U i _ _ _ _ _ _ => i
-  | .withbor3U i _ _ _ _ _ _ _ => i
+  | .withbor1UD i _ _ _ _ _ _ _ _ => i
+  | .withbor2UD i _ _ _ _ _ _ _ _ => i
+  | .withbor3UD i _ _ _ _ _ _ _ _ _ => i
   | .withloadU i _ _ _ _ _ _ => i
   | .sliceBorrowMU i _ _ _ _ _ _ => i
   | .sliceBorrowIU i _ _ _ _ _ _ => i
@@ -1029,8 +1032,8 @@ def TExpr.info : TExpr → TInfo
   | .foldOwn i _ _ _ => i
   | .foldReuse i _ _ _ => i
   | .foldOwnG i _ _ => i
-  | .nuIn i _ _ _ => i
-  | .nuOut i _ _ _ => i
+  | .nuIn i _ _ _ _ _ => i
+  | .nuOut i _ _ _ _ _ => i
   | .unfoldN i _ _ _ => i
   | .unfoldK i _ _ _ _ => i
   | .nuOutK i _ _ _ _ _ => i
@@ -1130,14 +1133,15 @@ def TExpr.jdg : TExpr → Jdg
   | .arrEmpty _ j _ => j
   | .sliceReplaceM _ j _ _ => j
   | .sliceSwapM _ j _ _ => j
+  | .sliceCopyM _ j _ _ _ => j
   | .withbor1 _ j _ _ _ => j
   | .withbor2 _ j _ _ _ => j
   | .withbor3 _ j _ _ _ _ => j
   | .withload _ j _ _ _ _ => j
   | .withswap _ j _ _ _ => j
-  | .withbor1U _ j _ _ _ _ _ => j
-  | .withbor2U _ j _ _ _ _ _ => j
-  | .withbor3U _ j _ _ _ _ _ _ => j
+  | .withbor1UD _ j _ _ _ _ _ _ _ => j
+  | .withbor2UD _ j _ _ _ _ _ _ _ => j
+  | .withbor3UD _ j _ _ _ _ _ _ _ _ => j
   | .withloadU _ j _ _ _ _ _ => j
   | .sliceBorrowMU _ j _ _ _ _ _ => j
   | .sliceBorrowIU _ j _ _ _ _ _ => j
@@ -1150,8 +1154,8 @@ def TExpr.jdg : TExpr → Jdg
   | .foldOwn _ j _ _ => j
   | .foldReuse _ j _ _ => j
   | .foldOwnG _ j _ => j
-  | .nuIn _ j _ _ => j
-  | .nuOut _ j _ _ => j
+  | .nuIn _ j _ _ _ _ => j
+  | .nuOut _ j _ _ _ _ => j
   | .unfoldN _ j _ _ => j
   | .unfoldK _ j _ _ _ => j
   | .nuOutK _ j _ _ _ _ => j
@@ -1259,14 +1263,15 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .arrEmpty _ _ _ => []
   | .sliceReplaceM _ _ _ _ => []
   | .sliceSwapM _ _ _ _ => []
+  | .sliceCopyM _ _ _ _ _ => []
   | .withbor1 _ _ _ _ _ => []
   | .withbor2 _ _ _ _ _ => []
   | .withbor3 _ _ _ _ _ _ => []
   | .withload _ _ _ _ _ _ => []
   | .withswap _ _ _ _ _ => []
-  | .withbor1U _ _ _ _ _ _ td => [(.push 0, td)]
-  | .withbor2U _ _ _ _ _ _ td => [(.push 0, td)]
-  | .withbor3U _ _ _ _ _ _ _ td => [(.push 0, td)]
+  | .withbor1UD _ _ _ _ _ _ _ _ td => [(.push 0, td)]
+  | .withbor2UD _ _ _ _ _ _ _ _ td => [(.push 0, td)]
+  | .withbor3UD _ _ _ _ _ _ _ _ _ td => [(.push 0, td)]
   | .withloadU _ _ _ _ _ _ _ => []
   | .sliceBorrowMU _ _ _ _ _ _ td => [(.push 0, td)]
   | .sliceBorrowIU _ _ _ _ _ _ td => [(.push 0, td)]
@@ -1279,8 +1284,8 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .foldOwn _ _ _ _ => []
   | .foldReuse _ _ _ _ => []
   | .foldOwnG _ _ _ => []
-  | .nuIn _ _ _ t => [(.push 0, t)]
-  | .nuOut _ _ _ t => [(.push 0, t)]
+  | .nuIn _ _ _ _ _ t => [(.push 0, t)]
+  | .nuOut _ _ _ _ _ t => [(.push 0, t)]
   | .unfoldN _ _ _ _ => []
   | .unfoldK _ _ _ _ _ => []
   | .nuOutK _ _ _ _ _ _ => []
@@ -1402,14 +1407,15 @@ def TExpr.isLam : TExpr → Bool
   | .arrEmpty _ _ _ => (((.val emptyFamV) : Expr) matches .lam _)
   | .sliceReplaceM _ _ _ _ => (((.val replaceV) : Expr) matches .lam _)
   | .sliceSwapM _ _ _ _ => (((.val swapV) : Expr) matches .lam _)
+  | .sliceCopyM _ _ _ _ _ => (((.val sliceCopyV) : Expr) matches .lam _)
   | .withbor1 _ _ _ _ _ => ((withbor : Expr) matches .lam _)
   | .withbor2 _ _ _ _ _ => ((withbor : Expr) matches .lam _)
   | .withbor3 _ _ _ _ _ _ => ((withbor : Expr) matches .lam _)
   | .withload _ _ _ _ _ _ => ((BoCa.withload : Expr) matches .lam _)
   | .withswap _ _ _ _ _ => ((BoCa.withswap : Expr) matches .lam _)
-  | .withbor1U _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
-  | .withbor2U _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
-  | .withbor3U _ _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
+  | .withbor1UD _ _ _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
+  | .withbor2UD _ _ _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
+  | .withbor3UD _ _ _ _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
   | .withloadU _ _ _ _ _ _ _ => ((BoCa.withload : Expr) matches .lam _)
   | .sliceBorrowMU _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
   | .sliceBorrowIU _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
@@ -1422,8 +1428,8 @@ def TExpr.isLam : TExpr → Bool
   | .foldOwn _ _ F _ => (((.val (foldOwnV F)) : Expr) matches .lam _)
   | .foldReuse _ _ F _ => (((.val (foldReuseV F)) : Expr) matches .lam _)
   | .foldOwnG _ _ B₀ => (((.val (FoldP.foldOwnGV B₀)) : Expr) matches .lam _)
-  | .nuIn _ _ _ t => t.isLam
-  | .nuOut _ _ _ t => t.isLam
+  | .nuIn _ _ _ _ _ t => t.isLam
+  | .nuOut _ _ _ _ _ t => t.isLam
   | .unfoldN _ _ C _ => (((.val (unfoldV C)) : Expr) matches .lam _)
   | .unfoldK _ _ C _ _ => (((.val (unfoldV C)) : Expr) matches .lam _)
   | .nuOutK _ _ _ _ _ _ => false
@@ -1527,14 +1533,15 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .arrEmpty _ _ _ => rfl
   | .sliceReplaceM _ _ _ _ => rfl
   | .sliceSwapM _ _ _ _ => rfl
+  | .sliceCopyM _ _ _ _ _ => rfl
   | .withbor1 _ _ _ _ _ => rfl
   | .withbor2 _ _ _ _ _ => rfl
   | .withbor3 _ _ _ _ _ _ => rfl
   | .withload _ _ _ _ _ _ => rfl
   | .withswap _ _ _ _ _ => rfl
-  | .withbor1U _ _ _ _ _ _ _ => rfl
-  | .withbor2U _ _ _ _ _ _ _ => rfl
-  | .withbor3U _ _ _ _ _ _ _ _ => rfl
+  | .withbor1UD _ _ _ _ _ _ _ _ _ => rfl
+  | .withbor2UD _ _ _ _ _ _ _ _ _ => rfl
+  | .withbor3UD _ _ _ _ _ _ _ _ _ _ => rfl
   | .withloadU _ _ _ _ _ _ _ => rfl
   | .sliceBorrowMU _ _ _ _ _ _ _ => rfl
   | .sliceBorrowIU _ _ _ _ _ _ _ => rfl
@@ -1547,8 +1554,8 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .foldOwn _ _ _ _ => rfl
   | .foldReuse _ _ _ _ => rfl
   | .foldOwnG _ _ _ => rfl
-  | .nuIn _ _ _ t => isLam_eq t
-  | .nuOut _ _ _ t => isLam_eq t
+  | .nuIn _ _ _ _ _ t => isLam_eq t
+  | .nuOut _ _ _ _ _ t => isLam_eq t
   | .unfoldN _ _ _ _ => rfl
   | .unfoldK _ _ _ _ _ => rfl
   | .nuOutK _ _ _ _ _ _ => rfl

@@ -173,6 +173,13 @@ structure GState where
   frames : Std.HashMap Nat Nat := {}
   /-- Each site's `κ` region's contents node (SPEC §52). -/
   regions : Std.HashMap Nat Nat := {}
+  /-- The host types of the opaque cells (`Prog.hostRep`).  `[spec §11]` -/
+  hostRep : List (BoCa.Fig16.LogRel.Core.Opaque × LTy) := []
+  /-- **The nodes of a host-typed opaque value** (`Prog.hostRep`), each laid out as its host
+  integer: every node `mkV` makes of such a kind, and every node one of them is joined into, so a
+  representative is here when a node of its class is. A reading of one through `Imm̲` is `Unk`
+  (`Imm̲ 'b Output = Unk`, SPEC §11), not joined (`joinRe`).  `[spec §11]` -/
+  host : Std.HashSet Nat := {}
 
 abbrev GM := StateT GState (Except String)
 
@@ -197,6 +204,15 @@ def newNode (k : NK) (s : Src) (pending : Bool) : GM Nat := modifyGet fun st =>
   (st.nodes.size, { st with nodes := st.nodes.push k, parent := st.parent.push st.nodes.size,
                             src := st.src.push s, pend := st.pend.push pending })
 
+/-- The host integer of an opaque kind (`Prog.hostRep`), if it has one.  `[spec §11]` -/
+def hostWidth (k : BoCa.Fig16.LogRel.Core.Opaque) : GM (Option Width) := do
+  match (← get).hostRep.lookup k with
+  | some (.int w) => pure (some w)
+  | _ => pure none
+
+/-- Node `i` lays out a host-typed opaque value.  `[spec §11]` -/
+def markHost (i : Nat) : GM Unit := modify fun s => { s with host := s.host.insert i }
+
 /-- **The node of a value type** under `env`, the nodes of the type variables bound around it: a
 leaf's shape is made at once, any other node's children when they are needed (`shapeOf`). `!A`
 is represented as `A`, and a type variable is its binder's node. -/
@@ -212,7 +228,14 @@ def mkV (env : List Nat) : LTy → GM Nat
   | t@.unit => newNode .unit (.v t []) false
   | t@.zero => newNode .zero (.v t []) false
   | t@.unk => newNode .unk (.v t []) false
-  | t@(.opq _) => newNode .opq (.v t []) false
+  -- [spec §11] A host-typed opaque value is laid out as its host integer (`Prog.hostRep`).
+  | t@(.opq k) => do
+    match ← hostWidth k with
+    | some w => do
+      let i ← newNode (.int w) (.v t []) false
+      markHost i
+      pure i
+    | none => newNode .opq (.v t []) false
   | t@(.int w) => newNode (.int w) (.v t []) false
   | t => newNode .unit (.v t env) true
 
@@ -232,7 +255,12 @@ def expandV (i : Nat) : Nat → List Nat → LTy → GM NK
     | .unit => pure .unit
     | .zero => pure .zero
     | .unk => pure .unk
-    | .opq _ => pure .opq
+    | .opq k => do
+      match ← hostWidth k with
+      | some w => do
+        markHost i
+        pure (.int w)
+      | none => pure .opq
     | .int w => pure (.int w)
     | .pair a b => do return .pair (← mkV env a) (← mkV env b)
     | .sum a b => do return .sum (← mkV env a) (← mkV env b)
@@ -320,6 +348,7 @@ def join (a b : Nat) : GM Unit := do
       let py := (← get).pend[ry]!
       if (px || py) && (← sameSrc sx sy) then
         modify fun s => { s with parent := if px then s.parent.set! rx ry else s.parent.set! ry rx }
+        if (← get).host.contains (if px then rx else ry) then markHost (if px then ry else rx)
         continue
       let kx ← shapeOf rx
       let ky ← shapeOf ry
@@ -327,6 +356,7 @@ def join (a b : Nat) : GM Unit := do
       let ox := sx.ty
       let oy := sy.ty
       modify fun s => { s with parent := s.parent.set! ry rx, codes := (s.codes.erase ry).insert rx cs }
+      if (← get).host.contains ry then markHost rx
       let more : List (Nat × Nat) ← match kx, ky with
         | .pair a b, .pair c d | .sum a b, .sum c d => pure [(a, c), (b, d)]
         | .ref a, .ref c | .imm a, .imm c | .mut a, .mut c | .fam a, .fam c => pure [(a, c)]
@@ -381,6 +411,8 @@ def joinRe (c v : Nat) : GM Unit := do
       | .ref a, .imm c | .mut a, .imm c | .imm a, .imm c => join a c
       | .fam a, .fam c => todo := (a, c) :: todo
       | .clos .., .unk | .opq, .unk => pure ()
+      -- [spec §11] A host-typed opaque value (`GState.host`), an integer node, read as `Unk`.
+      | .int _, .unk => if (← get).host.contains rx then pure () else join rx ry
       -- `Tok`'s cell (`ofV`: `Ref 1`) read through `Imm̲`: discarded, `Imm̲ 'b Tok = Unk`.
       | .ref _, .unk => pure ()
       | _, _ => join rx ry
@@ -583,7 +615,7 @@ def places (p : Prog) : Except String (GState × Nat) := do
           | .clos _ pa rs => pa.toList ++ rs ++ todo
           | _ => todo
     pure m
-  let (m, s) ← act.run {}
+  let (m, s) ← act.run { hostRep := p.hostRep }
   pure (s, m)
 
 
@@ -632,6 +664,9 @@ structure Layouts where
   /-- **The packed sum nodes**: one word, `tag << 32 | payload`, every leaf a scalar of at most 32
   bits or empty. -/
   packed : Array Bool := #[]
+  /-- **The representatives of host-typed opaque values** (`GState.host`): integer nodes a reading
+  through `Imm̲` reads as `Unk`.  `[spec §11]` -/
+  host : Std.HashSet Nat := {}
 
 namespace Layouts
 
@@ -1088,6 +1123,6 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
            regions := s.regions.fold (fun m k i => m.insert k rep[i]!) {},
            staticBytes := p.statics.map fun cls =>
              cls.foldl (fun b t => max b (tyBytes.getD t.unbang 0)) 0,
-           mergeArm, tags, packed }
+           mergeArm, tags, packed, host := s.host.fold (fun h i => h.insert rep[i]!) {} }
 
 end Backend2.Lay
