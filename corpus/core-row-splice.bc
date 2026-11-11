@@ -13,17 +13,17 @@
 -- Answer: i32[7].
 
 def cancel_on[row r1, row r2, site s] :
-    !U (U (F[s.0 cancel[..r1] 1 ~> 1, ..r2] i32) -o F[..r2] i32) =
-  !thunkv fun (t : U (F[s.0 cancel[..r1] 1 ~> 1, ..r2] i32)) ->
+    !U (U (1 -o F[s.0 cancel[..r1] 1 ~> 1, ..r2] i32) -o F[..r2] i32) =
+  !thunkv fun (t : U (1 -o F[s.0 cancel[..r1] 1 ~> 1, ..r2] i32)) ->
     handle_with[s](
         ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F[..r2] i32)),
         (((!thunkv fun (p : 1 * U ((1 -o F[..r2] i32) & F[..r1, ..r2] 1)) ->
             let (u, k) = p; let () = u; c <- (force k).2; let () = c; return i32[0]), ())
           : !U (1 * U ((1 -o F[..r2] i32) & F[..r1, ..r2] 1) -o F[..r2] i32) * 1)) (
-      force t)
+      w <- return (); force t w)
 
 main : F i32 =
-  t : U (F[5.0 cancel[4.0 cancel i32 ~> 0] 1 ~> 1, 4.0 cancel i32 ~> 0] i32) <- return (thunkv (
+  t : U (1 -o F[5.0 cancel[4.0 cancel i32 ~> 0] 1 ~> 1, 4.0 cancel i32 ~> 0] i32) <- return (thunkv fun (w : 1) -> (
          x <- perform[5.0] () unwind ((nv <- abort[4.0] i32[7]; (absurd nv : F[4.0 cancel i32 ~> 0] 1)));
          return i32[1]));
   handle_with[4](
