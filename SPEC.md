@@ -13567,8 +13567,11 @@ definitions (§76). `pipe_handoff` is value-level.
    - `cy`, `cn`, `cp`, `cf`: the cancel rows of its four operations, inferred per operation (§27);
    - `lr`, `lc`: its loop's turn row and close row.
 
-   `pipe_with_stop` also takes the cancel row of the region's operation, `cc`. `cc` holds what every
-   stage of the frame list performs when stopped, each operation once.
+   `pipe_with_stop` also takes the cancel row of the region's operation, `cc`, and the ambient row
+   `g`. `cc` holds what every stage of the frame list performs when stopped, each operation once.
+   A continuation's cancel branch is written `F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1`, which
+   needs §76's several splices with their repeats kept. `corpus/core-pipe-pieces.bc` is
+   `core-pipe-connector`'s three runs rebuilt over the pieces, and answers as the core text does.
 5. **A second instantiation pass.** The glue is written after §76's instances are made, so RowInst
    runs a second time over it (`runMore`). The second run shares the first run's instances and
    counts.
@@ -13830,33 +13833,37 @@ programs give the same answers on the old backend too, and on the flat stage.
 | `corpus/with-loop-lend-raise.bc` | a turn raises; the owner is handed back on the abortive clause, and `t` read after it holds the value written before the raise | `(inr i32[3], i32[3])` |
 | `corpus/reject/with-loop-lend-state.bc` | a div call held in the state across the lend | the message in Part A, item 1 |
 
-**Part B, the surface programs and the seven traces** (answers worked by hand).
+**Part B, the surface programs and the seven traces** (observed, `bcc interp`, `live 0`; Backend2's
+`bcc run` the same).
 
 The traces print one digit per cleanup through `effect Trace { must_resume ctl note(d: i32) }`,
 handled around the chain by `show`, a class (a) clause. `main` prints `.` between cases. Each stage's
-cleanup is `r <- (loop {…}) unwind (note(d)); note(d); r`. All are `old-backend-refuses`.
+cleanup is `r <- (loop {…}) unwind (note(d)); note(d); r`. Every program below except
+`pipe-pieces-step` is `old-backend-refuses`: the traces for their performing finalisers (§27), and
+`pipe-pushback`, `pipe-connector`, `pipe-stream-edge` and `pipe-rest` for the layout check
+`core-pipe-plain` fails.
 
 | Program | What | Answer |
 |---|---|---|
 | `corpus/pipe-stream-edge.bc` (from `pending/`) | an `if` of generator calls, piped with `>|` into a sink that calls `next()` three times | `i32[3]` |
 | `corpus/pipe-connector.bc` | `range(0, 10)`, `scale(3)`, `sum_all`: all `>|`, all `|>`, mixed, `a >| (b >| c)`, and a `for` over `range(0, 10) >| scale(3)` | `((i32[135], i32[135]), (i32[135], (i32[135], i32[135])))` |
 | `corpus/sugar/pipe-connector.bc` and `.lowered.bc` | three bracketings of one 4-stage chain give one connector | the `.lowered` text |
-| `corpus/pipe-close-order.bc` | traces 1 and 2; then a `for` with `break` at the 2nd item over `src(5) >| scale(10)` | `321.123.21(i32[30], (i32[3], i32[30]))` |
+| `corpus/pipe-close-order.bc` | traces 1 and 2; then a `for` with `break` at the 2nd item over `src(5) >| scale(10)` | `321.123.21(i32[30], (i32[30], i32[30]))` |
 | `corpus/pipe-raise-order.bc` | traces 3–5: the source, the middle and the sink raise `10`, `20`, `30` at item 2 | `132.231.321(inr i32[10], (inr i32[20], inr i32[30]))` |
-| `corpus/pipe-cancel-order.bc` | trace 6: `tm` cancels at the source's forwarded `wait()`; and, as the last-stage case, at the sink's `wait()` | `321.321(inr (), inr ())` |
-| `corpus/pipe-first-error.bc` | trace 7; the same cleanups under an outside cancel; a `stop()` whose upstream cleanup raises `10` | `321.321.123(inr i32[20], (inr i32[20], inr i32[10]))` |
-| `corpus/pipe-pushback.bc` | lookahead at the surface: `runs` over `1,1,2,2,2,3` (`10x + count`); a last stage reading past `5`; a middle stage stopping with `10` in its slot | `(i32[66], ((i32[6], inl i32[10]), (i32[6], (inl i32[10], ()))))` |
-| `corpus/pipe-rest.bc` | `connect(src(5) >| take_two)`, then `rest >| sum_all` | `(i32[3], i32[12])` |
+| `corpus/pipe-cancel-order.bc` | trace 6: `tm` cancels at a forwarded `wait()`, first while the source (not the last stage) is suspended at it, then at the sink's, which the connector forwards too | `321.321(inr (), inr ())` |
+| `corpus/pipe-first-error.bc` | trace 7; the same cleanups under an outside cancel; a `stop()` whose upstream cleanup raises `10` | `321inr i32[20]` |
+| `corpus/pipe-pushback.bc` | lookahead at the surface: `runs` over `1,1,2,2,2,3` (`10x + count`); a last stage reading past `5`; a middle stage stopping with `10` in its slot | `i32[66]` |
+| `corpus/pipe-rest.bc` | `connect(src(5) >| take_two)`, then `rest >| sum_all`; then `close(rest)` on a fresh chain's rest | `((i32[3], i32[12]), i32[3])` |
 | `corpus/reject/pipe-left-nothing.bc` | `3 >| sum_all` | `` `>|` connects stream stages; its left side yields nothing (no iteration effect in its inferred row) `` |
 | `corpus/reject/pipe-open-head.bc` | `scale(3) >| sum_all` | the open-chain message |
 | `corpus/reject/pipe-linear-end.bc` | a source whose end value is an owned list | the linear-`K` message |
 | `corpus/reject/pipe-stop-residual.bc` | `stop()` over a source that returns `i32` | the residual message |
 | `corpus/reject/pipe-multi-op.bc` | a non-last stage performs a `multi ctl` operation | the checker's `[then]`/`¬UnrD` refusal, with the note |
 | `corpus/reject/pipe-fin-forwarded.bc` | a middle stage's cleanup performs the `wait` the chain forwards | the checker's `⊤` refusal, as `fin-cancel-capturing` |
-| `corpus/core-pipe-pieces.bc` | (to come) | (to come) |
-| `corpus/pipe-pieces-step.bc` | (to come) | (to come) |
-| `corpus/reject/pipe-fwd-two.bc` | a stage that performs two effects the connector forwards | the one-forwarded-effect message |
-| `corpus/reject/pipe-lend-observation.bc` | a chain held across a per-observation lend | Part A's refusal, with the #1082 clause |
+| `corpus/core-pipe-pieces.bc` | `core-pipe-connector`'s three runs with the connector rebuilt over `lib/pipe.bc`'s pieces: hand-written stage loops at the pieces' types, and glue of the state tuple, the running stage with its input, and one `unfold`, calling `pipe_step`, `pipe_with_stop` (each frame list one region at site 5), `pipe_handoff`, `pipe_forward` and `pipe_finish` | `(i32[55], (i32[10], inr i32[3]))` |
+| `corpus/pipe-pieces-step.bc` | `pipe_step` and `pipe_stop` on a source that yields `1..3`: four turns (a yield, the turn's end, a yield, the turn's end), then the stage stopped, and the two items summed. The old backend runs it too | `i32[3]` |
+| `corpus/reject/pipe-fwd-two.bc` | a stage that performs `Wait` and `Ping` | `` this stage of a stream chain performs `Wait` and `Ping`, two effects the connector forwards; it forwards one per stage in this version (SPEC §75) `` |
+| `corpus/reject/pipe-lend-observation.bc` | a chain held across a per-observation lend | `` the loop's state would hold a stream chain on the pipe connector, of type `U (delay i32)`, across the per-turn lend of `t`: a turn's next state is boxed at `top`, which a thunk or a borrow does not outlive (not provided; a stream chain is not kept across a lend per observation, SPEC §75 *Open*, #1082) `` |
 
 Every core program above runs on Backend2 at its answer (a cancel row holding a machine operation
 is lowered, §69). The old backend refuses those whose finalisers perform (§27) or whose layout it
