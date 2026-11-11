@@ -231,6 +231,8 @@ structure Env where
   /-- The name of lib's `Yield` (`lib/yield.bc`), when the program includes `pipe`: a stage's wire
   out, keyed on that declaration.  `[spec §75]` -/
   yieldE : Option String := none
+  /-- Lib's `connect` (`lib/pipe.bc`), keyed on its declaration (SPEC §75).  `[spec §75]` -/
+  connectF : Option String := none
   /-- What `|>` and `>|` read of the program, for a chain left to this pass: one whose edges may
   be stream edges, decided on the inferred rows (`streamChain`).  `[spec §75]` -/
   pipes : PipeEnv := { handlers := [], sigs := [] }
@@ -773,6 +775,19 @@ where
 /-- The names of a function's parameters (`paramNamesIn`). -/
 def paramNames (f : FnParts) : List String := paramNamesIn f.p.name f.body
 
+/-- `V` is a stream chain (SPEC §75): a pipe node one of whose stages is a function whose
+inferred row has `Stream`. The one predicate the `for`'s row (`rowC`) and its elaboration (`trC`)
+read.  `[spec §75]` -/
+def Env.streamChainV (env : Env) (V : Val) : Bool :=
+  match env.stream, Pipes.pipeParts? V with
+  | some st, some _ =>
+    let stage (s : Val) : Bool := match s with
+      | .app _ (.var _ g) _ | .app _ (.defApp _ g _) _ | .var _ g | .defApp _ g _ =>
+        (env.fn? g).any (·.row.any (·.eff == st))
+      | _ => false
+    (Pipes.chainOf stage V).edges.any (stage ·.stage)
+  | _, _ => false
+
 mutual
 /-- The effects a value performs, outside the `with`s that handle them. A call of a function
 performing an iteration effect, as an argument at a stored generator's parameter, is the stored
@@ -873,10 +888,11 @@ def rowC (env : Env) : Nat → Comp → List Inst
       -- A `for` over a call that performs an iteration effect handles it.
       let src := match src, env.iterCall? V with
         | .each _, some (_, _, i, _, _) => without (rowV env n V) i.eff
-        -- A `for` over a stream chain handles its last stage's `Yield` (SPEC §75).
-        | .each _, none => match V, env.yieldE with
-          | .app _ (.sugar _ (.pipe _)) _, some ye => without (rowV env n V) ye
-          | _, _ => rowV env n V
+        -- A `for` over a stream chain handles its last stage's `Yield` (SPEC §75): a chain with a
+        -- stage whose inferred row has `Stream`, the predicate `trC`'s `for` reads too.
+        | .each _, none => match env.yieldE with
+          | some ye => if env.streamChainV V then without (rowV env n V) ye else rowV env n V
+          | none => rowV env n V
         | _, _ => rowV env n V
       env.union src (env.union (rowC env n M) (rowC env n N))
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
@@ -1966,6 +1982,9 @@ def PipeEnv.transitional (pe : PipeEnv) (x : String) : Bool :=
 
 /-- A stage `s` may be a stream stage (SPEC §75): it calls a function that is neither a handler nor
 a source-owning adapter. Whether it is one is its inferred row's (`streamChain`).  `[spec §75]` -/
+-- UNPROVED: (syntax, audit row 12) a function whose first written parameter is a stored generator
+-- is taken for §33's adapter, not a stream stage, before rows are known. A stream stage so written
+-- keeps its `Stream` unserved, which handler resolution refuses: a miss is only a refusal.
 def PipeEnv.maybeStage (pe : PipeEnv) (s : Val) : Bool := match stageHead? s with
   | some x => pe.sigs.any (·.1 == x) && !pe.handlers.contains x && !pe.transitional x
   | none => false
@@ -2032,34 +2051,6 @@ def resultTyOf : VTy → Option VTy
   | .lolli _ _ B => some B
   | _ => none
 
-/-- A run of stream edges from the source `src`, `run` its stages in order (SPEC §75): its wires'
-end values, each the result of the stage above it, are unrestricted, and a stage that calls `stop()`
-is over an upstream whose residual is `1`. These checks precede the connector (`connector`).
-`[spec §75]` -/
-def streamChecks (env : Env) (src : Val) (run : List (Span × PipeMode × Val)) : EM Unit := do
-  let stopOp : Option String := env.stream.bind fun st =>
-    (env.ops.find? fun o => o.eff == st && o.idx == 1).map (·.decl.name.name)
-  let stages := src :: run.map (·.2.2)
-  for (up, s) in stages.zip (run.map (·.2.2)) do
-    let upName := (stageHead? up).getD "the source"
-    let K? : Option VTy := (stageHead? up).bind fun x => (env.sigs.lookup x).bind resultTyOf
-    if let some K := K? then
-      if let some [T] := env.keyOf [K] then
-        if !T.persistent then
-          throw ⟨up.span, s!"the end value of `{upName}`, of type `{K.pp 0}`, is linear; a stream " ++
-            "wire's end value is unrestricted in this version"⟩
-      let unit := match K with | .unit _ => true | _ => false
-      let callsStop := match stopOp, stageHead? s with
-        | some o, some x => match env.fn? x with
-          | some g => match g.decl with
-            | .def_ _ _ _ _ W _ => (refsV fuel W).contains o
-            | _ => false
-          | none => false
-        | _, _ => false
-      if callsStop && !unit then
-        throw ⟨s.span, "`stop()` answers the upstream's residual `K`, which a stage closed at a " ++
-          "suspension does not hand back (§15 Open)"⟩
-
 /-- The re-raise of a connector stage's `stop()` answer `inr p`, `p` in the payload sum: a `case`
 per summand, each the raise `arms` gives for it (SPEC §75).  `[spec §75]` -/
 def stopRaise (sp : Span) : List (Nat × Nat) → Val → EM Comp
@@ -2069,6 +2060,21 @@ def stopRaise (sp : Span) : List (Nat × Nat) → Val → EM Comp
     let x ← fresh "fx_p"
     let y ← fresh "fx_p"
     pure (.case sp V ⟨x, sp⟩ (.abort sp n j (.var sp x)) ⟨y, sp⟩ (← stopRaise sp rest (.var sp y)))
+
+/-- A stream chain in `V`'s own value, outside the bodies of its thunks: an operand, an argument
+or a component (SPEC §75, *Restrictions in L1*).  `[spec §75]` -/
+def chainInValue : Val → Bool
+  | .app _ (.sugar _ (.pipe _)) _ => false
+  | .app _ (.app _ (.sugar _ (.pipe _)) _) _ => false
+  | .app _ V W | .pair _ V W => chainAt V || chainAt W
+  | .inl _ V | .inr _ V | .ascribe _ V _ | .mark _ _ V => chainAt V
+  | _ => false
+where
+  chainAt : Val → Bool
+    | .app _ (.sugar _ (.pipe _)) _ | .app _ (.app _ (.sugar _ (.pipe _)) _) _ => true
+    | .app _ V W | .pair _ V W => chainAt V || chainAt W
+    | .inl _ V | .inr _ V | .ascribe _ V _ | .mark _ _ V => chainAt V
+    | _ => false
 
 mutual
 /-- `M` with its operations resolved, handing the capabilities `cs` back beside its result: each
@@ -2118,12 +2124,8 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
       chain bs (.case sp V' x (← trC n cx cs wrap M) y (← trC n cx cs wrap N))
     | .loop sp ℓ src V M N =>
       -- A `for` over a stream chain: the connector is its generator (SPEC §75).
-      if let (.each x, some st, some _) := (src, cx.env.stream, Pipes.pipeParts? V) then
-        let stage (s : Val) : Bool := match s with
-          | .app _ (.var _ g) _ | .app _ (.defApp _ g _) _ | .var _ g | .defApp _ g _ =>
-            (cx.env.fn? g).any (·.row.any (·.eff == st))
-          | _ => false
-        if (Pipes.chainOf stage V).edges.any (stage ·.stage) then
+      if let .each x := src then
+        if cx.env.streamChainV V then
           return ← forChain n cx cs wrap sp ℓ x V M N
       match src, cx.env.iterCall? V with
       | .each x, some (g, gs, i, f, W) =>
@@ -2302,11 +2304,14 @@ def streamChain : Nat → Cx → List Cap → Val → Bool → EM (List Bind × 
               "is not provided yet (L2, #921)"⟩
           -- A stored generator as the source (`rest >| …`, SPEC §75): its items, by lib's
           -- `pipe_source`. A variable that is not one is refused where its type is known.
+          -- UNPROVED: (syntax, audit row 7) a variable whose inferred row has no `Yield` is taken
+          -- for a stored generator; this pass has no local variable's type. A miss is only a
+          -- refusal: the typed elaboration checks `pipe_source`'s argument against `U (pull …)`.
           if let .var vsp _ := acc then
-            if !(rowV env fuel acc).any (env.iterEff ·.eff) && env.lib.contains "pipe_source" then
+            if !(rowV env fuel acc).any (env.yieldE == some ·.eff) && env.lib.contains "pipe_source" then
               acc := .app vsp (.var vsp "pipe_source") acc
           -- A written row is an upper bound (§18): what the left side performs is its inferred row.
-          if !(rowV env fuel acc).any (env.iterEff ·.eff) then
+          if !(rowV env fuel acc).any (env.yieldE == some ·.eff) then
             if ed.mode == .pull then
               throw ⟨acc.span, "`>|` connects stream stages; its left side yields nothing (no " ++
                 "iteration effect in its inferred row)"⟩
@@ -2333,7 +2338,7 @@ def streamChain : Nat → Cx → List Cap → Val → Bool → EM (List Bind × 
     pure (pre ++ bs, V')
 
 /-- A run of stream edges from the source `src`, `run` its stages in order, on the pipe connector
-(SPEC §75 Part B), after its checks (`streamChecks`). Each stage is elaborated as the call it is
+(SPEC §75 Part B). Each stage is elaborated as the call it is
 (a source, as the computation it is) at sites of the connector's own, fresh per stage: its
 `Yield` at `y`, its `Stream` at `s`, and `f` for a forwarded operation; the stage's other
 operations are served around the chain. The stages, with their sites and the types at them, are
@@ -2349,7 +2354,6 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
   | k + 1, cx, _, src, run, forOut, rest => do
 
     let env := cx.env
-    streamChecks env src run
     let sp : Span := ⟨src.span.start, ((run.getLast?.map (·.2.2.span.stop)).getD src.span.stop)⟩
     let some st := env.stream | throw ⟨sp, "internal error: lib's `Stream`"⟩
     let stages := src :: run.map (·.2.2)
@@ -2361,11 +2365,9 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
     let mut fwdEffs : List String := []
     let mut fwdOf : List (Option String) := []
     -- The abortive operations of the stages so far, which a later stage's `stop()` may raise:
-    -- the effect, its type arguments, the operation's index and name, and whether every operation
-    -- of the effect is abortive.
-    let mut upAb : List (String × List VTy × Nat × String × Bool) := []
-    let stopOp : Option String :=
-      (env.ops.find? fun o => o.eff == st && o.idx == 1).map (·.decl.name.name)
+    -- the effect, its type arguments, the operation's index, the site that serves it around the
+    -- chain, and its payload's type.
+    let mut upAb : List (String × List VTy × Nat × Nat × VTy) := []
     for (s, i) in stages.zipIdx do
       -- A stage `s` is the call `s()`, or `s(e, …)` as written; the source is the computation it is.
       let call : Val := if i == 0 then s else match s with
@@ -2376,9 +2378,6 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
       let yi := row.find? fun j => env.yieldE == some j.eff
       let si := row.find? (·.eff == st)
       let last := i + 1 == n
-      if last && yi.isSome && forOut.isNone then
-        throw ⟨s.span, "the last stage of this stream chain yields: a stream chain that yields is " ++
-          "the generator of a `for` (SPEC §75)"⟩
       let argsOf (j : Inst) : EM (List VTy) := match j.args with
         | some As => pure As
         | none => throw ⟨s.span, s!"the type arguments of `{j.eff}` this stage performs are not " ++
@@ -2403,6 +2402,14 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
           | [A, K] => pure (A, K, some As)
           | _ => throw ⟨s.span, "internal error: `Stream`'s type arguments"⟩
         | none => pure (VTy.zero sp, VTy.unit sp, none)
+      -- The end value of the wire into it, its inferred `Stream[A, K]`'s `K`, is unrestricted in
+      -- this version (SPEC §75, *Restrictions in L1*). A `stop()` where `K` is not `1` is the
+      -- checker's to refuse: the stage resumes there with `1`.
+      if ss.isSome then
+        if let some [T] := env.keyOf [K] then
+          if !T.persistent then
+            throw ⟨s.span, s!"the end value of the wire into this stage, of type `{K.pp 0}`, is " ++
+              "linear; a stream wire's end value is unrestricted in this version (SPEC §75)"⟩
       let y ← freshSite
       let sn ← freshSite
       let f ← freshSite
@@ -2435,48 +2442,29 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
         | j₁ :: j₂ :: _ => throw ⟨s.span, s!"this stage of a stream chain performs `{j₁.eff}` and " ++
             s!"`{j₂.eff}`, two effects the connector forwards; it forwards one per stage in this " ++
             "version (SPEC §75)"⟩
-      -- The abortive operations it performs, outside its wires and what it forwards: the payloads
-      -- of the errors its `stop()` may raise (SPEC §75).
-      let mut mineAb : List (String × List VTy × Nat × String × Bool) := []
+      -- What its `stop()` may raise: the first error of closing its upstream, an abortive
+      -- operation of a stage upstream, each its own summand of `KP`, keyed by its effect, type
+      -- arguments and index. The re-raise at a `stop()` is elaborated where it is called; the
+      -- glue reifies the region's error at the site that serves it around the chain (SPEC §75).
+      let pays := upAb
+      let KP : VTy := match pays.reverse with
+        | [] => .zero sp
+        | p :: ps => ps.foldl (fun acc q => .sum sp q.2.2.2.2 acc) p.2.2.2.2
+      let stopAns := (VTy.sum sp (.unit sp) KP, pays.map fun (e, As, oi, _, _) => (e, As, oi))
+      -- The abortive operations it performs, outside its wires and what it forwards, for the
+      -- stages downstream.
       for j in row do
         if wireE j.eff || fsite.any (·.eff == j.eff) then continue
         let some e := env.eff? j.eff | continue
         unless e.ops.any (·.abortive) do continue
         let As ← argsOf j
+        let site ← (cx.serve s.span s!"this stage" ⟨j.eff, some As, none⟩ (strict := false) :
+          Except Error Site)
         for (o, oi) in e.ops.zipIdx do
-          if o.abortive then
-            mineAb := mineAb ++ [(j.eff, As, oi, o.name.name, e.ops.all (·.abortive))]
-      let pays : List (String × List VTy × Nat × VTy) := (mineAb.filter (·.2.2.2.2)).filterMap
-        fun (e, As, oi, _, _) => (env.eff? e).bind fun es => (es.ops[oi]?).map fun o =>
-          (e, As, oi, (tupleTy o.name.span (o.params.map (·.2))).subst (es.tps.zip As))
-      let calls : Bool := match stopOp, stageHead? s with
-        | some o, some x => match env.fn? x with
-          | some g => match g.decl with
-            | .def_ _ _ _ _ W _ => (refsV fuel W).contains o
-            | _ => false
-          | none => false
-        | _, _ => false
-      -- A stage that calls `stop()` raises there the first error of closing its upstream: its row
-      -- holds every abortive operation of the stages upstream, each of an effect whose operations
-      -- are all abortive (SPEC §75, *Restrictions in L1*).
-      if calls then
-        for (e, As, oi, nm, all) in upAb do
-          unless all do
-            throw ⟨s.span, s!"this stage of a stream chain calls `stop()`, and a stage upstream of it " ++
-              s!"performs `{e}`, whose operations are not all abortive: `stop()` raises the first " ++
-              "error of closing the upstream, which is provided for an effect whose operations are " ++
-              "all abortive in this version (SPEC §75)"⟩
-          unless pays.any (fun (e', As', oi', _) => e' == e && As'.map (·.strip) == As.map (·.strip) && oi' == oi) do
-            throw ⟨s.span, s!"this stage of a stream chain calls `stop()`, and a stage upstream of it " ++
-              s!"may raise `{e}.{nm}`, which this stage does not perform: `stop()` raises at its call " ++
-              "the first error of closing the upstream, so the stage's row holds it (SPEC §75)"⟩
-      for a in mineAb do
-        unless upAb.any (fun b => b.1 == a.1 && b.2.1.map (·.strip) == a.2.1.map (·.strip) && b.2.2.1 == a.2.2.1) do
-          upAb := upAb ++ [a]
-      let KP : VTy := match pays.reverse with
-        | [] => .zero sp
-        | p :: ps => ps.foldl (fun acc q => .sum sp q.2.2.2 acc) p.2.2.2
-      let stopAns := (VTy.sum sp (.unit sp) KP, pays.map fun (e, As, oi, _) => (e, As, oi))
+          if o.abortive && !upAb.any (fun b => b.1 == j.eff &&
+              b.2.1.map (·.strip) == As.map (·.strip) && b.2.2.1 == oi) then
+            upAb := upAb ++ [(j.eff, As, oi, site.n,
+              (tupleTy o.name.span (o.params.map (·.2))).subst (e.tps.zip As))]
       let own : List Site :=
         (match ys with | some (e, As) => [{ eff := e, n := y, args := As, sp, what }] | none => []) ++
         (match ss with | some As => [{ eff := st, n := sn, args := As, sp, what, stopAns := some stopAns }]
@@ -2484,9 +2472,13 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
         fsite
       let cxS : Cx := { cx with sites := own ++ cx.sites.filter fun x => !own.any (·.eff == x.eff),
                                 caps := cx.caps.filter fun c => !own.any (·.eff == c.eff) }
-      if let some c := (cxS.need row).head? then
-        throw ⟨s.span, s!"this stage of a stream chain uses the capability of `{c.eff}`: a stage " ++
-          "is held by the connector between its turns, with the capability: not provided"⟩
+      -- `connect(CHAIN)`: the rest, the stages above the last, is a stored generator, which is
+      -- provided when they perform nothing besides their wires (SPEC §75 *Open*).
+      if rest && !last then
+        if let some j := row.find? (fun j => !wireE j.eff) then
+          throw ⟨s.span, s!"this stage of `connect`'s chain performs `{j.eff}`, and is in the rest " ++
+            "`connect` answers: a rest whose stages perform effects is not provided in this " ++
+            "version (SPEC §75 *Open*)"⟩
       let M ← trC k cxS [] true (.ret s.span call)
       -- A cleanup of the stage that performs the operation it forwards: that operation's cancel
       -- row would hold itself, which only `⊤` does (SPEC §27 *Open*, §75). The instances of the
@@ -2497,11 +2489,26 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
           throw ⟨s.span, s!"a cleanup of this stage of a stream chain performs " ++
             s!"`{(fwdEffs.getLast?).getD "the operation"}`, which the connector forwards: its cancel " ++
             "row would hold itself, which only `top` does (SPEC §75, §27 *Open*)"⟩
-      let outF : Option (Nat × String × Row) := if !last then none else forOut.map fun (site, w) =>
+      let outF₀ : Option (Nat × String × Row) := if !last then none else forOut.map fun (site, w) =>
         (site.n, w, env.fins.finOf site.n 0)
-      out := out ++ [{ y, s := sn, f, A, K, B, fwd, out := outF, rest := rest && last,
-                       pays := pays.map fun (e, _, oi, P) =>
-                         (s!"{e}.{((env.eff? e).bind (·.ops[oi]?)).map (·.name.name) |>.getD ""}", P) }]
+      -- A chain whose last stage yields outside a `for` is a generator: the connector performs
+      -- each of its items at the `Yield` around the chain (SPEC §75).
+      -- Which it is, is the resolved site's: a `for`'s site, which threads its variable, makes
+      -- the chain that `for`'s generator; any other `Yield` site, a run that performs its items
+      -- there, as a generator's call does (SPEC §15, §75).
+      let (outF, gen) ← match yi, last && forOut.isNone with
+        | some j, true => do
+          let site ← (cx.serve s.span "this stage" ⟨j.eff, some (← argsOf j), none⟩ (strict := false) :
+            Except Error Site)
+          match site.thrVar with
+          | some w => pure (some (site.n, w, env.fins.finOf site.n 0), none)
+          | none => pure (outF₀, some site.n)
+        | _, _ => pure (outF₀, none)
+      let resU : Bool := match (stageHead? s).bind fun x => (env.sigs.lookup x).bind resultTyOf with
+        | some (.thunk ..) | some (.pull ..) => true
+        | _ => false
+      out := out ++ [{ y, s := sn, f, A, K, B, fwd, out := outF, rest := rest && last, gen, resU,
+                       pays := pays.map fun (_, _, oi, n, P) => (n, oi, P) }]
       fwdOf := fwdOf ++ [fsite.head?.map (·.eff)]
       ths := ths ++ [.thunk s.span M]
     -- No stage performs a forwarded operation unforwarded: its cancel row holds what every stage
@@ -2546,7 +2553,8 @@ def forChain : Nat → Cx → List Cap → Bool → Span → Option Ident → Id
       | _ => false
     let c := Pipes.chainOf stageOf V
     unless c.edges.all (stageOf ·.stage) && !stageOf c.src do
-      throw ⟨sp, "a `for` over a chain of edges that are not all stream edges is not provided"⟩
+      throw ⟨sp, "a `for` over a chain of edges that are not all stream edges is not provided in " ++
+        "this version (SPEC §75)"⟩
     let run := c.edges.map fun ed => (ed.sp, ed.mode, ed.stage)
     let last := (run.getLast?.map (·.2.2)).getD c.src
     let lastCall : Val := match last with
@@ -2583,9 +2591,9 @@ def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
     -- A chain left by `resolvePipes`, read on the inferred rows (SPEC §75).
     if cx.env.stream.isSome && (Pipes.pipeParts? V).isSome then return ← streamChain n cx cs V false
     -- `connect(CHAIN)`: the chain, answering its result with its rest (SPEC §75).
-    if cx.env.stream.isSome && cx.env.lib.contains "connect" then
+    if let (some _, some cn) := (cx.env.stream, cx.env.connectF) then
       if let .app _ f W := V then
-        if (match f with | .var _ "connect" | .defApp _ "connect" _ => true | _ => false) &&
+        if (match f with | .var _ x | .defApp _ x _ => x == cn | _ => false) &&
             (Pipes.pipeParts? W).isSome then
           return ← streamChain n cx cs W true
     let row := rowV cx.env fuel V
@@ -2600,7 +2608,15 @@ def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
     let writes := V.anySugar (· matches .writes _)
     -- A call of a block parameter whose block takes capabilities passes them (`blockParamCall`).
     let cbCall := cx.cbs.any fun (y, _, bcs) => !bcs.isEmpty && Frontend.Check.mentionsV y V
-    if !needs && !unhandled && !ret && !lcall && !writes && !cbCall && !withInV cx.env fuel V then
+    -- A stream chain inside (a block's body, say) is elaborated where it is, though its row,
+    -- its wires left out, may be empty (SPEC §75).
+    let chainIn := cx.env.stream.isSome && V.anySugar (· matches .pipe _)
+    -- A chain in an expression, outside a body: an operand, an argument, a component.
+    if chainIn && chainInValue V then
+      throw ⟨V.span, "a stream chain inside an expression is not provided in this version; bind " ++
+        "it first, `let x = CHAIN;` (SPEC §75)"⟩
+    if !needs && !unhandled && !ret && !lcall && !writes && !cbCall && !chainIn &&
+        !withInV cx.env fuel V then
       return ([], V)
     let (V, pre) ← if needs || lcall then (liftPlain cx fuel V).run [] else pure (V, [])
     let (bs, V') ← goV n cx cs V
@@ -2981,8 +2997,12 @@ def ctlCall : Nat → Cx → List Cap → Span → String → OpSig → Val → 
       let u ← fresh "fx_v"
       let mut arms : List (Nat × Nat) := []
       for (e, As, j) in ps do
-        let s' ← (cx.serve sp s!"the error `stop()` raises" (⟨e, some As, none⟩ : Inst) (strict := false) :
-          Except Error Site)
+        let s' ← match (cx.serve sp s!"the error `stop()` raises" (⟨e, some As, none⟩ : Inst)
+            (strict := false) : Except Error Site) with
+          | .ok s' => pure s'
+          | .error err => throw { err with msg := err.msg ++ s!"\n  note: `stop()` raises here the " ++
+              s!"first error of closing the stages above this one, which may be `{e}`'s; this stage " ++
+              "handles it around its `stop()`, or performs it (SPEC §75)" }
         arms := arms ++ [(s'.n, j)]
       let p ← fresh "fx_p"
       let rs ← stopRaise sp arms (.var sp p)
@@ -3328,6 +3348,10 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     for c in ch.clauses do
       unless eff.ops.any (·.name.name == c.name.name) do
         throw ⟨c.name.span, s!"`{c.name.name}` is not an operation of `{e}`"⟩
+      -- A stream chain in a clause (SPEC §75, *Restrictions in L1*).
+      if cx.env.stream.isSome && c.body.anySugar (· matches .pipe _) then
+        throw ⟨c.name.span, "a stream chain in a handler's clause is not provided in this version; " ++
+          "call a function that runs it (SPEC §75)"⟩
     let rest := tps.filter fun x => (σ.lookup x).isNone
     -- The handler's type parameters the site leaves open are named apart from the enclosing
     -- function's, so that instantiating a template cannot capture them (SPEC §38).
@@ -4554,7 +4578,7 @@ out otherwise.
 `[spec §18, §19, §39]` -/
 def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := [])
     (divLib : List Decl := []) (platform : List Decl := []) (fins : Fins.Table := [])
-    (stream : Option Decl := none) (yieldD : Option Decl := none) :
+    (stream : Option Decl := none) (yieldD : Option Decl := none) (connectD : Option Decl := none) :
     Except Error Result := do
   -- `|>`, before the rest (SPEC §33); a chain that may have a stream edge is left (SPEC §75).
   let ds ← match (resolvePipes ds stream.isSome).run {} with
@@ -4678,6 +4702,8 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
       | .def_ sp n ps A V mk =>
         env := { env with sigs := (n.name, A) :: env.sigs, owner := Instances.ownerKey n.name n.span,
                           ownerTps := ps.map (·.name) }
+        -- Lib's `connect`, keyed on its declaration (SPEC §75).
+        if connectD == some (.def_ sp n ps A V mk) then env := { env with connectF := some n.name }
         if isLayerTy (ps.map (·.name)) A then
           env := { env with layers := (n.name, .def_ sp n ps A V mk) :: env.layers }
         modify fun s => { s with quiet := lib.contains n.name }

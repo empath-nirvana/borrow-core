@@ -371,6 +371,10 @@ def walkV (rows : List (String × List Ent)) (glob : List Ent) : Nat → List En
       let t := ss.foldl (fun t st => match st.out with
         | some (n, _, _) => t.add n 0 SD
         | none => t) t
+      -- A generator's chain: the connector performs its items under `close_all` too.
+      let t := ss.foldl (fun t st => match st.gen with
+        | some n => t.add n 0 SD
+        | none => t) t
       -- An operation a stage performs that passes through (the last stage's, or any that is not
       -- forwarded) is cancelled with the connector's frame lists around it, which stop the other
       -- stages: its cancel row holds what their cleanups perform, their sites' cancel rows.

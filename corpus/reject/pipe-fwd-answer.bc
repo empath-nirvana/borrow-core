@@ -1,0 +1,24 @@
+-- expect: X
+-- SPEC §75, Part B, *Restrictions in L1*: a forwarded operation answers `()` in this version. The
+-- source performs `Ask`, whose `ask` answers an `i32`.
+
+include pipe
+
+effect Ask { ctl ask() -> i32 }
+
+handler give[A]: Ask, A -> A = {
+  return(x) = x;
+  ask(k) = k(1)
+}
+
+fn src(n: i32) -> 1 with Yield[i32], Ask =
+  yield(ask());
+  ()
+
+fn sum_all() -> i32 with Stream[i32, 1] =
+  let mut s = 0;
+  let mut go = true;
+  while go { match next() { inl v -> s = s + v | inr u -> go = false } };
+  s
+
+main -> i32 = with give[i32] { src(3) >| sum_all }

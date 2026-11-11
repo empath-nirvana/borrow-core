@@ -29,6 +29,12 @@ elaboration read off each stage as elaborated (`Stage`); nothing here infers the
 
 namespace Frontend.Elab.Connector
 
+/-- An abortive operation of a site whose errors a stage's `stop()` raises, in the handler that
+reifies them: its payload's type and its summand of `KP` (SPEC §75).  `[spec §75]` -/
+inductive Reify where
+  | pay (A : String) (k : Nat)
+  deriving Inhabited
+
 /-- One stage as the typed elaboration read it, each type and row printed as core text: the items
 `A` and end `K` of the wire into it, the items `B` of the wire out of it, its result `R`, its
 forwarded operation's argument `OA`; its rows (SPEC §75, `lib/pipe.bc`): `sg` what it performs
@@ -63,7 +69,11 @@ structure Stage where
   of that handler's answer, the region's cancel row without the sites handled so far.
   Payloads own nothing today; under #1061 the answer owns the payload, and its one raise at the
   `stop()` consumes it.  `[spec §75]` -/
-  reify : List (Nat × List (String × Nat) × String) := []
+  reify : List (Nat × List Reify × String) := []
+  /-- The last stage of a generator's chain: the site of the `Yield` around the chain and its
+  operation's cancel row, at which the connector performs each item under `close_all`.
+  `[spec §75]` -/
+  gen : Option (Nat × String) := none
   deriving Inhabited
 
 /-- A chain: its stages, the region's site `c` and its operation's cancel row `cc` (what any stage
@@ -86,61 +96,58 @@ structure Conn where
   /-- The glue of a chain's rest: a stored generator of its last stage's items.  `[spec §75]` -/
   pull : Bool := false
 
-/-- `F[r] A`, or `F A` at the empty row. -/
+/-- `F[r] A`, or `F A` at the empty row.  `[spec §75]` -/
 def fAt (r A : String) : String := if r.isEmpty then s!"F ({A})" else s!"F[{r}] ({A})"
 
-/-- Rows joined, the empty ones left out. -/
+/-- Rows joined, the empty ones left out.  `[spec §75]` -/
 def rowCat (rs : List String) : String := ", ".intercalate (rs.filter (!·.isEmpty))
 
-/-- A right-nested tuple of the parts. -/
+/-- A right-nested tuple of the parts.  `[spec §75]` -/
 def tup : List String → String
   | [] => "()"
   | [a] => a
   | a :: rest => s!"({a}, {tup rest})"
 
-/-- A right-nested product of the types. -/
+/-- A right-nested product of the types.  `[spec §75]` -/
 def prod : List String → String
   | [] => "1"
   | [a] => a
   | a :: rest => s!"({a}) * ({prod rest})"
 
-/-- A right-nested sum of the types. -/
+/-- A right-nested sum of the types.  `[spec §75]` -/
 def sum : List String → String
   | [] => "0"
   | [a] => a
   | a :: rest => s!"({a}) + ({sum rest})"
 
-/-- The `j`-th injection of `v` into a right-nested sum of `n` summands. -/
+/-- The `j`-th injection of `v` into a right-nested sum of `n` summands.  `[spec §75]` -/
 def inj (j n : Nat) (v : String) : String :=
   if n ≤ 1 then v
   else if j == 0 then s!"inl {v}"
   else s!"inr ({inj (j - 1) (n - 1) v})"
 
-/-- The stage's row arguments, in `lib/pipe.bc`'s order: `sg, cy, cn, cp, cf, lr, lc`. -/
+/-- The stage's row arguments, in `lib/pipe.bc`'s order: `sg, cy, cn, cp, cf, lr, lc`.  `[spec §75]` -/
 def Stage.rows (st : Stage) : String :=
   ", ".intercalate ([st.sg, st.cy, st.cn, st.cp, st.cf, st.lr, st.lc].map (s!"row ({·})"))
 
-/-- The stage's arguments to a piece over its types: types, rows, sites. -/
+/-- The stage's arguments to a piece over its types: types, rows, sites.  `[spec §75]` -/
 def Stage.args (st : Stage) : String :=
   s!"{st.A}, {st.K}, {st.KP}, {st.B}, {st.R}, {st.OA}, {st.rows}, site {st.y}, site {st.s}, site {st.f}"
 
-/-- The stage's state type, `lib/pipe.bc`'s `PipeSt`. -/
+/-- The stage's state type, `lib/pipe.bc`'s `PipeSt`.  `[spec §75]` -/
 def Stage.stTy (st : Stage) : String := s!"PipeSt[{st.args}]"
 
-/-- The stage's event type, `PipeEv`. -/
-def Stage.evTy (st : Stage) : String := s!"PipeEv[{st.args}]"
-
-/-- The stage's rest type, `PipeRest`. -/
+/-- The stage's rest type, `PipeRest`.  `[spec §75]` -/
 def Stage.restTy (st : Stage) : String := s!"PipeRest[{st.args}]"
 
-/-- The stage's loop, as a state's `Ready`. -/
+/-- The stage's loop, as a state's `Ready`.  `[spec §75]` -/
 def Stage.loopTy (st : Stage) : String := s!"PipeLoop[{st.R}, row ({st.lr}), row ({st.lc})]"
 
-/-- The input of a turn of the stage, `1 + (A + K)`. -/
+/-- The input of a turn of the stage, `(1 + KP) + (A + K)`.  `[spec §75]` -/
 def Stage.inTy (st : Stage) : String := s!"(1 + {st.KP}) + ({st.A} + {st.K})"
 
 /-- `v` taken apart into the names `xs`, a right-nested tuple, by one `let` per pair; `tmp` names
-the inner tuples. -/
+the inner tuples.  `[spec §75]` -/
 def destr (xs : List String) (v tmp : String) : String :=
   let rec go : List String → String → Nat → String
     | [], v, _ => s!"let () = {v};"
@@ -148,7 +155,7 @@ def destr (xs : List String) (v tmp : String) : String :=
     | x :: rest, v, k => s!"let ({x}, {tmp}{k}) = {v}; " ++ go rest s!"{tmp}{k}" (k + 1)
   go xs v 0
 
-/-- A call of the piece `f` (a `!` value) at the argument `a`, as a computation. -/
+/-- A call of the piece `f` (a `!` value) at the argument `a`, as a computation.  `[spec §75]` -/
 def call (f a : String) (k : String) : String :=
   s!"(io_fn{k} <- return (unbang {f}); io_ar{k} <- return ({a}); force io_fn{k} io_ar{k})"
 
@@ -331,6 +338,9 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
       else s!"io_gt{i}_{sfx} <- {call s!"io_get{i}_{sfx}" s!"io_sx_{sfx}" s!"gt{i}_{sfx}"}; let ({sv i}, {h}) = io_gt{i}_{sfx};"
     let stepCall := call s!"pipe_step[{st.args}]" s!"{sv i}, io_in{i}_{sfx}" s!"st{i}_{sfx}"
     let coCall := call s!"io_co{i}_{sfx}" (if n == 1 then "()" else h) s!"co{i}_{sfx}"
+    -- `close_all` on the states with stage `i`'s put: the setter only builds the tuple (its body
+    -- takes pairs apart and makes them, and performs nothing), so in a finaliser it runs nothing
+    -- but `close_all`.
     let callAll (x k : String) : String := s!"(io_ca{k}_{sfx} <- {setE i h x s!"cs{k}_{sfx}"}; {call s!"io_call_{sfx}" s!"io_ca{k}_{sfx}" s!"ca{k}_{sfx}"})"
     -- Yield(b, κ) and Return(k): to the stage downstream (`pipe_handoff`), or the end. Stage `i`
     -- and the one downstream change: the states are `set (i+1)` of `(pre i, t)` and `suf (i+2)`.
@@ -345,7 +355,19 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
                 io_hd{i}_{sfx} <- {hc};
                 let (io_t{i}_{sfx}, io_ri{i}_{sfx}) = io_hd{i}_{sfx}; let (io_ip{i}_{sfx}, io_tn{i}_{sfx}) = io_ri{i}_{sfx};
                 {nextC (call s!"io_set{i + 1}_{sfx}" s!"{pairV (some pre1) rest}, io_tn{i}_{sfx}" s!"hs{i}_{sfx}") (turnTo (i + 1) s!"io_ip{i}_{sfx}") s!"h{i}"}"
-    let yieldArm := if last then match cn.out with
+    let yieldArm := if last && st.gen.isSome then match st.gen with
+        | some (ng, co) =>
+          -- A generator's chain: the item goes to the `Yield` around the chain, under
+          -- `close_all`, as a forwarded operation does; the stage resumes the next turn.
+          let sy := s!"io_sy{i}_{sfx}"
+          let fw := call s!"pipe_forward[{st.B}, row ({co}), row ({G}), site {ng}]" s!"io_b{i}_{sfx}" s!"gy{i}_{sfx}"
+          s!"let (io_b{i}_{sfx}, io_ky{i}_{sfx}) = io_yk{i}_{sfx};
+                {sy} : {st.stTy} <- return (inr (inr (inl io_ky{i}_{sfx})));
+                io_gu{i}_{sfx} <- {fw} unwind {callAll sy s!"g{i}"};
+                let () = io_gu{i}_{sfx};
+                {nextC (setE i h sy s!"ng{i}_{sfx}") (turnTo i "inl (inl ())") s!"g{i}"}"
+        | none => ""
+      else if last then match cn.out with
         | some (nf, _, W) =>
           -- A `for`'s generator: the item goes out with the threaded value, which comes back in
           -- the site's answer; `close_all` stops every stage if the `for` drops the continuation.
@@ -411,8 +433,11 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
                   }"
     -- Stop(κ): the stages upstream stopped in one region (`close_up_i`); the stage resumes with
     -- the region's outcome, `inl ()`, or `inr` the payload of its first error, which the stage
-    -- raises at its `stop()` (Assembly(n) rev 2.6). The error is reified by handlers of its sites
-    -- outside the region, one per site, each answering the payload's injection into `KP`. Only a
+    -- raises at its `stop()` (Assembly(n) rev 2.6), wherever that `stop()` is written (in a helper
+    -- too: the re-raise is elaborated at the call, through the stage's `Stream` site). Every
+    -- stage with a `Stream` site has this arm; `KP` holds every abortive operation of the stages
+    -- upstream, and each site of one is reified by a handler outside the region, answering the
+    -- payload's injection into `KP`. Only a
     -- cancel from outside, landing in the region, runs the finaliser `close_down_i`, which stops
     -- the stage and those downstream of it: the stage's state is live across the region.
     -- That finaliser is a typing obligation (`[then]` needs the live state consumed on a cancel).
@@ -431,9 +456,10 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
         let dnCall := call s!"io_cd{i}_{sfx}" sufI s!"cd{i}_{sfx}"
         let reified := st.reify.foldl (fun body (site, ops, rowAfter) =>
           let ans := s!"!U ({X} -o {fAt rowAfter s!"({X})"})"
-          let cl := ops.map fun ((A, k) : String × Nat) =>
-            s!"(!thunkv fun (io_re_{sfx} : {A}) -> return (inr ({inj k st.np s!"io_re_{sfx}"}) : {X}))"
-          let clTy := prod ((ops.map fun ((A, _) : String × Nat) => s!"!U ({A} -o {fAt rowAfter s!"({X})"})") ++ ["1"])
+          let cl := ops.map fun
+            | .pay A k => s!"(!thunkv fun (io_re_{sfx} : {A}) -> return (inr ({inj k st.np s!"io_re_{sfx}"}) : {X}))"
+          let clTy := prod ((ops.map fun
+            | .pay A _ => s!"!U ({A} -o {fAt rowAfter s!"({X})"})") ++ ["1"])
           s!"handle_with[{site}](((!thunkv fun (io_ro_{sfx} : {X}) -> return io_ro_{sfx}) : {ans}), ({tup (cl ++ ["()"])} : {clTy})) ({body})")
           s!"(io_sq{i}_{sfx} <- {upCall}; return (inl io_sq{i}_{sfx} : {X}))"
         let (idleV, idleMk) := if i == 1 then (none, "")
@@ -522,7 +548,8 @@ def glue (cn : Conn) (fvs : List (String × String)) (tail : Option String := no
     else none
   (build cn fvs tail sub).1
 
-/-- The argument the connector's maker takes: the tuple of what the stages' states capture. -/
+/-- The argument the connector's maker takes: the tuple of what the stages' states capture.
+`[spec §75]` -/
 def makerArg (fvs : List (String × String)) : String := tup (fvs.map (·.1))
 
 end Frontend.Elab.Connector

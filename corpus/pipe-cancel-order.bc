@@ -24,8 +24,8 @@ handler tm[A]: Wait, A -> A + 1 = {
   wait(k) = inr ()
 }
 
--- The source waits before its second item when `w` is 1 (it is not the last stage: its `wait` is
--- forwarded); the sink waits after its first item when `w` is 3 (the last stage's passes through).
+-- The source waits before its second item when `w` is 1; the sink waits after its first item when
+-- `w` is 3. Every stage's `wait` is forwarded, the last stage's too.
 fn pause(v: i32, at: i32, w: i32, me: i32) -> i32 with Wait =
   if v == at && w == me { wait(); v } else { v }
 
@@ -71,11 +71,11 @@ fn sink0() -> i32 with Stream[i32, 1], Trace =
   note(3);
   x
 
--- The source's `wait` (a non-last stage, so forwarded): the cancel lands while the source is
+-- The source's `wait`, forwarded: the cancel lands while the source is
 -- suspended at it, and every stage stops downstream-first.
 fn go1() -> i32 + 1 with Trace = with tm[i32] { src(5, 1) >| mid >| sink0 }
 
--- The sink's `wait` (the last stage's, which passes straight through).
+-- The sink's `wait`, forwarded too.
 fn go3() -> i32 + 1 with Trace = with tm[i32] { src0(5) >| mid >| sink(3) }
 
 main -> (i32 + 1) * (i32 + 1) =

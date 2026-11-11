@@ -1,0 +1,26 @@
+-- expect: X
+-- SPEC §75, Part B, *Restrictions in L1*: a forwarded effect has one operation in this version.
+-- The source performs `Two`, a capturable, resumable effect of two operations.
+
+include pipe
+
+effect Two { ctl one(); ctl two() }
+
+handler tw[A]: Two, A -> A = {
+  return(x) = x;
+  one(k) = k(());
+  two(k) = k(())
+}
+
+fn src(n: i32) -> 1 with Yield[i32], Two =
+  one();
+  yield(n);
+  ()
+
+fn sum_all() -> i32 with Stream[i32, 1] =
+  let mut s = 0;
+  let mut go = true;
+  while go { match next() { inl v -> s = s + v | inr u -> go = false } };
+  s
+
+main -> i32 = with tw[i32] { src(3) >| sum_all }

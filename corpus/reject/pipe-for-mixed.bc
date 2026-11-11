@@ -1,0 +1,23 @@
+-- expect: X
+-- SPEC §75, Part B, *Restrictions in L1*: a `for` over a chain runs on the connector only when
+-- every edge is a stream edge. This chain has a stream stage, `scale`, and an adapter, `map`.
+
+include pipe
+include adapters
+
+fn s3(n: i32) -> 1 with Yield[i32] =
+  let mut i = 1;
+  while i <= n { yield(i); i = i + 1 };
+  ()
+
+fn scale(c: i32) -> 1 with Stream[i32, 1], Yield[i32] =
+  let mut go = true;
+  while go { match next() { inl v -> yield(v * c) | inr u -> go = false } };
+  ()
+
+fn sq(x: i32) -> i32 = x * x
+
+main -> i32 =
+  let mut s = 0;
+  for x in s3(3) >| scale(2) >| map(sq) { s = s + x };
+  s

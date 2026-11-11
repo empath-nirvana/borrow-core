@@ -1,0 +1,23 @@
+-- expect: X
+-- SPEC §75, Part B, *Restrictions in L1*, and §27 *Open*: a stage's cleanup that performs one of the
+-- stage's own wire operations makes that operation's cancel row hold itself, which only `top` does.
+-- The source's cleanup yields.
+
+include pipe
+
+fn bye() -> 1 with Yield[i32] = yield(0)
+
+fn src(n: i32) -> 1 with Yield[i32] =
+  x <- (
+    let mut i = 1;
+    while i <= n { yield(i); i = i + 1 };
+    ()) unwind (bye());
+  x
+
+fn sum_all() -> i32 with Stream[i32, 1] =
+  let mut s = 0;
+  let mut go = true;
+  while go { match next() { inl v -> s = s + v | inr u -> go = false } };
+  s
+
+main -> i32 = src(3) >| sum_all

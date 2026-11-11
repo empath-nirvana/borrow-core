@@ -235,7 +235,8 @@ def pipe_with_stop[A, K, KP, B, R, OA, Q, row sg, row cy, row cn, row cp, row cf
     u <- (fn2 <- return (unbang pipe_stop[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]); force fn2 st);
     return a
 
--- forward_i: performs the real outer operation `n.0` a non-last stage performed at its fresh name.
+-- forward_i: performs the real outer operation `n.0` that a stage performed at its fresh name, or
+-- a generator chain's last stage's item at the `Yield` around the chain.
 def pipe_forward[OA, row co, row g, site n] : !U (OA -o F[n.0 cancel[..co] OA ~> 1, ..g] 1) =
   !thunkv fun (a : OA) -> perform[n.0] a
 

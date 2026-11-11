@@ -2033,6 +2033,9 @@ structure DivSt where
   /-- The places lent by the borrow blocks being elaborated, innermost first, which a frame per
   observation on a block's spine may take (`TurnLend`).  `[spec §75]` -/
   turnLends : List TurnLend := []
+  /-- The places, as written, whose borrow block's lend a frame per observation took: the block
+  answers the place beside its result (`turnLendBlock`).  `[spec §75]` -/
+  turnTaken : List String := []
 
 /-- Elaboration with the state of the declarations. -/
 abbrev DM := StateT DivSt SM
@@ -3875,7 +3878,10 @@ def bareKC (ks : List String) : Comp → Bool
 end
 
 /-- The most resumes of `κ` on one path of a clause's code (a handler with a state resumes inside
-the function of its state). -/
+the function of its state). `κ` (or a copy) mentioned in a form this walk does not follow paths
+through (a loop, a handler, a borrow, a function, a value it is passed in) counts as two resumes,
+so that `obsTail` takes the clause for one that works after resuming, and the frame is refused:
+what the walk cannot follow is never read as no resume.  `[spec §75]` -/
 def resumesOn (ks : List String) : Nat → Comp → Nat
   | 0, _ => 0
   | k + 1, .bind _ x _ (.ret _ (.var _ y)) N =>
@@ -3885,7 +3891,8 @@ def resumesOn (ks : List String) : Nat → Comp → Nat
   | k + 1, .case _ _ _ M _ N => max (resumesOn ks k M) (resumesOn ks k N)
   | k + 1, .unwind _ _ _ M D N => resumesOn ks k M + max (resumesOn ks k D) (resumesOn ks k N)
   | k + 1, .ret _ (.thunkv _ (.lam _ _ _ M)) => resumesOn ks k M
-  | _ + 1, T => if isResumeOf ks T then 1 else 0
+  | _ + 1, T => if isResumeOf ks T then 1
+    else if ks.any (Frontend.Check.mentionsC · T) then 2 else 0
 
 /-- The computation answers the variable `x` as it is, through copies of it. -/
 def answersVar (x : String) : Nat → Comp → Bool
@@ -3898,13 +3905,11 @@ def answersVar (x : String) : Nat → Comp → Bool
 the resume's answer applied to the state) stays, its answer the turn's; any other terminal is
 `wrap`ped, an answer that finishes the loop. `none` when the clause works after resuming.
 
-UNPROVED: that the clause the result writes resumes `κ` last on every path, or not at all, is read
-off its syntax: a resume is `(force k).1 a` of `κ` or a copy bound by `x <- return k` (`isResumeOf`,
-`resumesOn`), and work after it is any binding that follows one. It assumes that the clause's code
-reaches `κ` only so, which holds of the code the effects pass writes for a clause; a resume reached
-another way (passed to a function, or under a binder this walk does not enter) would be taken for
-no resume, and the clause's answer for one that finishes the loop, which the kernel would then
-type at the turn's answer and refuse, or run as a clause that does not resume. -/
+That the clause resumes `κ` last on every path, or not at all, is read off its code: a resume is
+`(force k).1 a` of `κ` or a copy bound by `x <- return k` (`isResumeOf`, the form the effects pass
+writes, `Effects.resumeCall`), and work after it is any binding that follows one. `κ` mentioned in
+any other form, or under a binder this walk does not follow, counts as a resume that work follows
+(`resumesOn`), so such a clause is refused, never read as one that does not resume.  `[spec §75]` -/
 def obsTail (ks : List String) (stateful : Bool) (wrap : Comp → Comp) :
     Nat → List String → Comp → Option Comp
   | 0, _, M => some M
@@ -4548,6 +4553,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let taken := if k == .mut then (after.head?.bind (·.taken)) else none
         modify fun st => { st with turnLends := saved }
         if let some own := taken then
+          if let .var _ y := P then modify fun st => { st with turnTaken := y :: st.turnTaken }
           return ← turnLendBlock sp shown b.name own P' S'
         let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
@@ -5152,12 +5158,12 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         -- A borrow block of `&mut p` whose lend a frame per observation took (`TurnLend`): it
         -- answers the place beside its result, as the lend's borrow does, and the place is rebound
         -- from it here, where `Comp.elab` would have rebound it from the borrow.  [spec §75]
-        -- UNPROVED: that the lend of `p` was taken is read off the head: it lent a place as
-        -- written (`M`) and lends none once elaborated (`M'`), with a frame's call on its spine.
-        -- It assumes a frame's taking of a lend is the only elaboration that drops a head's
-        -- `&mut p`; another would have its answer taken apart as a pair here, which the kernel
-        -- would then refuse at the pair's type, or the place would be rebound wrongly.
+        -- That the lend of `p` was taken is the borrow block's record (`turnTaken`), set where
+        -- the frame took it (`turnLendBlock`).
+        let taken := (← get).turnTaken
         if let ([p], []) := (M.takeLends.2, M'.takeLends.2) then
+         if taken.contains p.name then
+          modify fun st => { st with turnTaken := st.turnTaken.erase p.name }
           let r : Ident := ⟨s!"io_tlp{sp.start.line}_{sp.start.col}", sp⟩
           let T := spineResTy c divFuel M'
           let (Tp, Tx) := match T with
@@ -6614,6 +6620,13 @@ def connParts : Nat → TCx → Span → (Nat × List ConnStage) → Val →
           | .sum R (.tvar 0) => some (lr, R, lc)
           | _ => none
         | _ => none
+      -- UNPROVED: (syntax, audit row 9) the stage's loop is read off its type's shape, not a
+      -- flag from the elaboration that made it. A stage whose declared result is itself a thunk
+      -- or a stored generator could have its result taken for its loop; such a stage is refused
+      -- (`resU`), so a miss here is only a refusal.
+      if loopOf?.isSome && cs₀.resU then
+        throw ⟨tsp, "this stage of a stream chain answers a thunk or a stored generator, which " ++
+          "the connector cannot tell from the stage's loop: not provided in this version (SPEC §75)"⟩
       let (lr, R, lc, loops) := match loopOf? with
         | some (lr, R, lc) => (lr, R, lc, true)
         | none => (row, T, row, false)
@@ -6622,9 +6635,10 @@ def connParts : Nat → TCx → Span → (Nat × List ConnStage) → Val →
       let finOf (k j : Nat) : DM String := do
         match lr.find? fun o => o.n.toNat == k && o.i.toNat == j with
         | some o =>
+          -- A wire operation's cancel row is `top` when the stage's cleanup performs it, which the
+          -- checker refuses in the stage's own body first (`reject/pipe-top-cancel.bc`).
           if o.fin.isTop then
-            throw ⟨tsp, "this stage of a stream chain performs an operation whose cancel row is `top`: " ++
-              "not provided (SPEC §27 *Open*)"⟩
+            throw ⟨tsp, "internal error: a stream stage's operation has the cancel row `top`"⟩
           ppR o.fin.rowOf
         | none => pure ""
       let hole := s!"io_hole_m{i}_{sfx}"
@@ -6650,8 +6664,14 @@ def connParts : Nat → TCx → Span → (Nat × List ConnStage) → Val →
         OA, fwd, sg := ← ppR (lr.filter (!mine ·)),
         cy := ← finOf cs₀.y 0, cn := ← finOf cs₀.s 0, cp := ← finOf cs₀.s 1, cf := ← finOf cs₀.f 0,
         lr := ← ppR lr, lc := ← ppR lc, y := cs₀.y, s := cs₀.s, f := cs₀.f, ready,
+        gen := ← match cs₀.gen with
+          | some ng => do
+            match (c.E.row.getD []).find? fun o => o.n.toNat == ng && o.i.toNat == 0 with
+            | some o => pure (some (ng, ← ppR o.fin.rowOf))
+            | none => throw ⟨tsp, "internal error: a generator chain's `Yield` is not in its row"⟩
+          | none => pure none,
         KP := if cs₀.pays.isEmpty then "0" else
-          Elab.Connector.sum (cs₀.pays.map fun (_, P) => s!"({P.pp 0})"),
+          Elab.Connector.sum (cs₀.pays.map fun (_, _, P) => s!"({P.pp 0})"),
         np := cs₀.pays.length }]
       used := used ++ (latest c.locals).filterMap fun (y, _) => if mentionsC y M' then some y else none
       -- A stage that performs a `multi ctl` operation: the connector's frames around it are
@@ -6665,9 +6685,11 @@ def connParts : Nat → TCx → Span → (Nat × List ConnStage) → Val →
         if o.fin.isTop then [] else o.fin.rowOf
       for o in stopRow do
         unless ccRow.any (fun o' => o'.n == o.n && o'.i == o.i) do ccRow := ccRow ++ [o]
-      let fwdEnt : Frontend.Check.CRow := match cs₀.fwd with
+      let fwdEnt : Frontend.Check.CRow := (match cs₀.fwd with
         | some (nOut, _) => ((c.E.row.getD []).find? fun o => o.n.toNat == nOut && o.i.toNat == 0).toList
-        | none => []
+        | none => []) ++ (match cs₀.gen with
+        | some ng => ((c.E.row.getD []).find? fun o => o.n.toNat == ng && o.i.toNat == 0).toList
+        | none => [])
       for o in lr.filter (!mine ·) ++ fwdEnt do
         unless gRow.any (fun o' => o'.n == o.n && o'.i == o.i) do gRow := gRow ++ [o]
     -- What the stages' states capture: the variables their computations use.
@@ -6692,31 +6714,39 @@ def connParts : Nat → TCx → Span → (Nat × List ConnStage) → Val →
         pure (some (nf, w, W), Elab.Connector.rowCat [G, ent],
           if fvs.any (·.1 == w) then fvs else fvs ++ [(w, W)])
       | _, _ => pure (none, G, fvs)
-    -- The sites whose errors a stage's `stop()` raises: each site of an upstream abortive operation
-    -- whose operations, as the chain's row has them, are all abortive and among the stage's own
-    -- (`connectorV` refuses a stage that calls `stop()` otherwise). Each is reified by a handler
-    -- around the region, whose answer's row is the region's cancel row without the sites handled
-    -- so far (SPEC §75).
+    -- The sites whose errors a stage's `stop()` raises: each site of an upstream abortive
+    -- operation, reified by a handler around the region whose answer's row is the region's cancel
+    -- row without the sites handled so far. Its abortive operations answer their payload's summand
+    -- of `KP` (`connectorV` keyed them by the site and index) (SPEC §75).
     let chainRow := c.E.row.getD []
     let mut stages' : List Elab.Connector.Stage := []
     for ((st, cs₀), up) in (stages.zip ss).zip upAbs do
       let mut done : List Nat := []
-      let mut reify : List (Nat × List (String × Nat) × String) := []
+      let mut reify : List (Nat × List Elab.Connector.Reify × String) := []
       for o in up do
         let n := o.n.toNat
         if done.contains n then continue
         done := done ++ [n]
         let ops := (chainRow.filter (·.n.toNat == n)).mergeSort (fun a b => a.i.toNat ≤ b.i.toNat)
-        let mut cls : List (String × Nat) := []
-        let mut ok := !ops.isEmpty
+        let handled := done
+        let rowAfter ← ppR (ccRow.filter fun o' => !handled.contains o'.n.toNat)
+        let mut cls : List Elab.Connector.Reify := []
         for e in ops do
-          let nm := ((← get).opNames.lookup (n, e.i.toNat)).getD ""
-          match (cs₀.pays.zipIdx.find? (·.1.1 == nm)), e.abort with
-          | some (_, k), true => cls := cls ++ [(← ppT e.A, k)]
-          | _, _ => ok := false
-        if ok then
-          let handled := (reify.map (·.1)) ++ [n]
-          reify := reify ++ [(n, cls, ← ppR (ccRow.filter fun o' => !handled.contains o'.n.toNat))]
+          if e.abort then
+            match cs₀.pays.zipIdx.find? (fun ((n', i', _), _) => n' == n && i' == e.i.toNat) with
+            | some (_, k) => cls := cls ++ [.pay (← ppT e.A) k]
+            | none => throw ⟨sp, s!"internal error: the stream chain's abortive operation {n}.{e.i} " ++
+                "has no payload in the stage's `stop()` answer"⟩
+          else
+            -- The handler that reifies the error is at the site's own name, and its answer's row
+            -- cannot hold the site, so it cannot perform this operation again outside.
+            let nm := ((← get).opNames.lookup (n, e.i.toNat)).getD s!"{n}.{e.i}"
+            throw ⟨sp, s!"a stage of this stream chain performs an effect with the abortive operation " ++
+              s!"`{((← get).opNames.lookup (n, o.i.toNat)).getD ""}` and the resuming `{nm}`: the " ++
+              "connector raises the first error of closing the stages above a stage at its `stop()`, " ++
+              "which is provided for an effect whose operations are all abortive in this version " ++
+              "(SPEC §75)"⟩
+        reify := reify ++ [(n, cls, rowAfter)]
       stages' := stages' ++ [{ st with reify }]
     pure ({ stages := stages', c := cs, cc := ← ppR ccRow, G, sfx, out,
             rest := (ss.getLast?.map (·.rest)).getD false }, fvs₂, holes)
@@ -7760,7 +7790,11 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let yieldDecl : Option Decl ← if incl.contains "pipe" then do
       pure ((← libOf "yield").find? fun | .effect .. => true | _ => false)
     else pure none
-  let fxr ← (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls [] streamDecl yieldDecl : Except Error _)
+  let connectDecl : Option Decl ← if incl.contains "pipe" then do
+      pure ((← libOf "pipe").find? fun | .def_ _ n _ _ _ _ => n.name == "connect" | _ => false)
+    else pure none
+  let fxr ← (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls [] streamDecl yieldDecl
+    connectDecl : Except Error _)
   -- The cancel rows its finalisers require, read off its output; when there are any, the pass
   -- again, its rows carrying them (SPEC §27, `Frontend.Elab.Fins`).  `[spec §18, §27]`
   let fins := Elab.Fins.table fxr.decls
@@ -7768,7 +7802,8 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- checker's glue closes on a cancel (SPEC §15).  `[spec §15]`
   let fins := Elab.FinsHeld.add fins fxr.decls
   let fxr ← if fins.isEmpty then pure fxr else
-    (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls fins streamDecl yieldDecl : Except Error _)
+    (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls fins streamDecl yieldDecl
+      connectDecl : Except Error _)
   let (decls, fx, perTurn, pcaps) := (fxr.decls, fxr.reports, fxr.perTurn, fxr.platform)
   for k in fxr.keys do
     modify (· ++ [(Span.none, .defKey k)])
