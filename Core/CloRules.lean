@@ -35,11 +35,11 @@ variable {Δ : LifeCtx}
 
 theorem CDerives.cloIn {Γ : Ctx VTy} {e : Expr} {c : Lifetime.Life} {A B : VTy} (hA : A.Cl 0)
     (h : CDerives Δ Γ e (.comp (cloUnroll c A B))) : CDerives Δ Γ e (.comp (cloC c A B)) :=
-  .nuIn (cloBody_nuOk hA c B) (by rw [cloBody_unroll]; exact h)
+  .nuIn (m := 0) (i := 0) (cloBody_nuOk hA c B) (by rw [CTy.unrollS_zero, cloBody_unroll]; exact h)
 
 theorem CDerives.cloOut {Γ : Ctx VTy} {e : Expr} {c : Lifetime.Life} {A B : VTy} (hA : A.Cl 0)
     (h : CDerives Δ Γ e (.comp (cloC c A B))) : CDerives Δ Γ e (.comp (cloUnroll c A B)) := by
-  rw [← cloBody_unroll]; exact .nuOut (cloBody_nuOk hA c B) h
+  rw [← cloBody_unroll]; exact .nuOut (m := 0) (i := 0) (cloBody_nuOk hA c B) h
 
 /-- `unfold` at `Clo^c A B`: `!U(S ⊸ (A ⊸ F(B ⊗ [@c] S)) & F 1) ⊸ !U(S ⊸ Clo^c A B)`. -/
 abbrev cloUnfoldTy (c : Lifetime.Life) (A B S : VTy) : VTy :=
