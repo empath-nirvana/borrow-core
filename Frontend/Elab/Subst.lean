@@ -175,7 +175,10 @@ def Val.subst (σ : TySubst) : Val → Val
   | .sugar sp (.forSite i) => .sugar sp (.forSite { i with T := i.T.subst σ })
   | .sugar sp (.pullSite i) => .sugar sp (.pullSite { i with T := i.T.subst σ })
   | .sugar sp (.connector c ss) =>
-    .sugar sp (.connector c (ss.map fun s => { s with A := s.A.subst σ, K := s.K.subst σ, B := s.B.subst σ }))
+    let sub (st : ConnStage) : ConnStage :=
+      { st with A := st.A.subst σ, K := st.K.subst σ, B := st.B.subst σ,
+                fwd := st.fwd.map (fun p => (p.1, p.2.subst σ)) }
+    .sugar sp (.connector c (ss.map sub))
   | .sugar sp (.hndCtl i) => .sugar sp (.hndCtl (i.subst σ))
   | .sugar sp s => .sugar sp s
   | .mark sp k V => .mark sp k (V.subst σ)

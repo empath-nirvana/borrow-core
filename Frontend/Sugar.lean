@@ -4988,7 +4988,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .ret sp V => do
       if let some (i, P, R, cls, B) := hndCtl? V then return (← hndCtlC n c sp i P R cls B none).1
       if let .app _ (.sugar _ (.pullSite i)) call := V then return ← pullView n c sp i call
-      if let .app _ (.sugar _ (.connector cs ss)) tup := V then return ← connView n c sp cs ss tup
+      if let .app _ (.sugar _ (.connector cs ss)) tup := V then return ← connView n c sp (cs, ss) tup
       if let some B := borrowBlock? V then
         if let some S := c.E.row then
           -- A borrow block whose body performs operations: the unwinding form of its borrow, at
@@ -6379,6 +6379,22 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let Wt ← pp Wc
     -- The call, with the threaded tuple: its instance, and whether its body loops.
     let cw := c.push i.w (some Wc)
+    -- A `for` over a stream chain (SPEC §75): the generator is the connector's maker (`connParts`),
+    -- bound first; its last stage yields at the `for`'s site, and the rest is as for a generator.
+    let (pre, call, cw) ← match call with
+      | .app _ (.sugar _ (.connector cs ss)) tup => do
+        let (cn, fvs, holes) ← connParts n cw sp (cs, ss) tup
+        let src := Elab.Connector.glue cn fvs (some "force io_hole_conn")
+        let Lc ← template sp "the pipe connector of a stream chain (SPEC §75)" src
+        let Lc := Lc.fill (fun _ => none) (fun v => holes.lookup v)
+        let maker := s!"io_cw_{cn.sfx}"
+        let some T := (match Lc with | .bind _ _ (some A) _ _ => cw.elabV A | _ => none)
+          | throw ⟨sp, "internal error: the pipe connector's maker"⟩
+        let .ret _ V ← template sp "the pipe connector of a stream chain (SPEC §75)"
+            s!"return ((unbang {maker}) {Elab.Connector.makerArg fvs})"
+          | throw ⟨sp, "internal error: the pipe connector's call"⟩
+        pure (some Lc, V, cw.push maker (some T))
+      | call => pure (none, call, cw)
     let call' ← surfV n cw none call
     let cw ← refresh cw
     let some g := (match call' with | .app _ f _ => calleeHead f | _ => none)
@@ -6523,7 +6539,9 @@ io_j{sfx} : {Jt} <- return ((unbang io_hwf{sfx}) io_l{sfx});
     modify fun s => { s with exits := .total Rt ret :: s.exits }
     let L' ← surfC n c exp L
     modify fun s => { s with exits := s.exits.drop 1 }
-    pure L'
+    match pre with
+    | some Lc => pure (Lc.fill (fun _ => none) (fun v => if v == "io_hole_conn" then some L' else none))
+    | none => pure L'
 
 /-- A stream chain on the pipe connector (SPEC §75 Part B): the stages `Frontend.Elab.Effects` left
 (`VSugar.connector`), each a computation at its sites, and the glue assembled around them from
@@ -6533,9 +6551,10 @@ itself as a loop of one turn; its row, each of its operations' cancel rows, and 
 Nothing here decides what a stage owns: the pieces take, store and stop each stage, and the kernel
 checks every instance. The connector is a frame's call in direct style (`markFrameCall`), run as
 the loop it is by the body around it.  `[spec §75]` -/
-def connView : Nat → TCx → Span → Nat → List ConnStage → Val → DM Comp
-  | 0, _, sp, _, _, _ => throw ⟨sp, "internal error: a stream chain nested too deeply"⟩
-  | n + 1, c, sp, cs, ss, tup => do
+def connParts : Nat → TCx → Span → (Nat × List ConnStage) → Val →
+    DM (Elab.Connector.Conn × List (String × String) × List (String × Comp))
+  | 0, _, sp, _, _ => throw ⟨sp, "internal error: a stream chain nested too deeply"⟩
+  | n + 1, c, sp, (cs, ss), tup => do
     let sfx := s!"{sp.start.line}_{sp.start.col}"
     let rec untup : Nat → Val → List Val
       | 0, _ => []
@@ -6555,6 +6574,9 @@ def connView : Nat → TCx → Span → Nat → List ConnStage → Val → DM Co
     let mut used : List String := []
     -- What any stage performs when stopped, each operation once.
     let mut ccRow : Frontend.Check.CRow := []
+    -- The row the chain runs at: what its stages perform besides their sites, and the outer
+    -- operations it forwards; each operation once.
+    let mut gRow : Frontend.Check.CRow := []
     for ((cs₀, th), i) in (ss.zip ths).zipIdx do
       let .thunk tsp M := th | throw ⟨sp, "internal error: a stream chain's stage"⟩
       let M' ← surfC n c none M
@@ -6593,9 +6615,20 @@ def connView : Nat → TCx → Span → Nat → List ConnStage → Val → DM Co
             s!"io_dl{i} <- force {hole}; (nu_out (force io_dl{i})).2 >)"
         else
           s!"inl (thunkv nu_in < io_dr{i} <- force {hole}; return (inl io_dr{i}), return () >)"
+      -- A forwarded operation: its site outside the chain, and its signature there, as the chain's
+      -- row has it.
+      let fwd ← match cs₀.fwd with
+        | some (nOut, _) => do
+          match (c.E.row.getD []).find? fun o => o.n.toNat == nOut && o.i.toNat == 0 with
+          | some o => pure (some (nOut, ← ppR o.fin.rowOf))
+          | none => throw ⟨tsp, "internal error: a forwarded operation is not in the chain's row"⟩
+        | none => pure none
+      let OA := match cs₀.fwd with
+        | some (_, OA) => s!"({OA.pp 0})"
+        | none => "0"
       stages := stages ++ [{
         A := s!"({cs₀.A.pp 0})", K := s!"({cs₀.K.pp 0})", B := s!"({cs₀.B.pp 0})", R := s!"({← ppT R})",
-        OA := "0", sg := ← ppR (lr.filter (!mine ·)),
+        OA, fwd, sg := ← ppR (lr.filter (!mine ·)),
         cy := ← finOf cs₀.y 0, cn := ← finOf cs₀.s 0, cp := ← finOf cs₀.s 1, cf := ← finOf cs₀.f 0,
         lr := ← ppR lr, lc := ← ppR lc, y := cs₀.y, s := cs₀.s, f := cs₀.f, ready }]
       used := used ++ (latest c.locals).filterMap fun (y, _) => if mentionsC y M' then some y else none
@@ -6603,16 +6636,32 @@ def connView : Nat → TCx → Span → Nat → List ConnStage → Val → DM Co
         if o.fin.isTop then [] else o.fin.rowOf
       for o in stopRow do
         unless ccRow.any (fun o' => o'.n == o.n && o'.i == o.i) do ccRow := ccRow ++ [o]
+      let fwdEnt : Frontend.Check.CRow := match cs₀.fwd with
+        | some (nOut, _) => ((c.E.row.getD []).find? fun o => o.n.toNat == nOut && o.i.toNat == 0).toList
+        | none => []
+      for o in lr.filter (!mine ·) ++ fwdEnt do
+        unless gRow.any (fun o' => o'.n == o.n && o'.i == o.i) do gRow := gRow ++ [o]
     -- What the stages' states capture: the variables their computations use.
     let mut fvs : List (String × String) := []
     for (y, T?) in latest c.locals do
       if used.contains y && !fvs.any (·.1 == y) then
         let some T := T? | throw ⟨sp, s!"the type of `{Hygiene.written y}`, which a stage of this stream chain uses, is not determined here: ascribe it"⟩
         fvs := fvs ++ [(y, ← ppT T)]
-    let G ← ppR (c.E.row.getD [])
-    let src := Elab.Connector.glue { stages, c := cs, cc := ← ppR ccRow, G, sfx } fvs
+    for o in ccRow do
+      unless gRow.any (fun o' => o'.n == o.n && o'.i == o.i) do gRow := gRow ++ [o]
+    let G ← ppR gRow
+    pure ({ stages, c := cs, cc := ← ppR ccRow, G, sfx }, fvs, holes)
+
+/-- A stream chain on the pipe connector, run where it is (SPEC §75 Part B): the glue
+(`connParts`, `Frontend.Elab.Connector.glue`) and its maker's call in direct style, a frame's call
+(`markFrameCall`) that the body around it runs as the loop it is.  `[spec §75]` -/
+def connView : Nat → TCx → Span → (Nat × List ConnStage) → Val → DM Comp
+  | 0, _, sp, _, _ => throw ⟨sp, "internal error: a stream chain nested too deeply"⟩
+  | n + 1, c, sp, css, tup => do
+    let (cn, fvs, holes) ← connParts n c sp css tup
+    let src := Elab.Connector.glue cn fvs
     let L ← template sp "the pipe connector of a stream chain (SPEC §75)" src
-    let L := markFrameCall s!"io_cw_{sfx}" L
+    let L := markFrameCall s!"io_cw_{cn.sfx}" L
     pure (L.fill (fun _ => none) (fun v => holes.lookup v))
 
 /-- The stored generator of `g(e)`, `g` performing an iteration effect (SPEC §15): the handler
@@ -7639,7 +7688,10 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let streamDecl : Option Decl ← if incl.contains "pipe" then do
       pure ((← libOf "pipe").find? fun | .effect .. => true | _ => false)
     else pure none
-  let fxr ← (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls [] streamDecl : Except Error _)
+  let yieldDecl : Option Decl ← if incl.contains "pipe" then do
+      pure ((← libOf "yield").find? fun | .effect .. => true | _ => false)
+    else pure none
+  let fxr ← (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls [] streamDecl yieldDecl : Except Error _)
   -- The cancel rows its finalisers require, read off its output; when there are any, the pass
   -- again, its rows carrying them (SPEC §27, `Frontend.Elab.Fins`).  `[spec §18, §27]`
   let fins := Elab.Fins.table fxr.decls
@@ -7647,7 +7699,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- checker's glue closes on a cancel (SPEC §15).  `[spec §15]`
   let fins := Elab.FinsHeld.add fins fxr.decls
   let fxr ← if fins.isEmpty then pure fxr else
-    (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls fins streamDecl : Except Error _)
+    (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls fins streamDecl yieldDecl : Except Error _)
   let (decls, fx, perTurn, pcaps) := (fxr.decls, fxr.reports, fxr.perTurn, fxr.platform)
   for k in fxr.keys do
     modify (· ++ [(Span.none, .defKey k)])

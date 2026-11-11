@@ -546,7 +546,8 @@ inductive PipeMode where
 /-- One stage of a stream chain on the pipe connector (SPEC §75), as `Frontend.Elab.Effects` leaves
 it: the connector's sites for the stage, fresh per stage (`y` its `Yield[B]`, `s` its
 `Stream[A, K]`, `f` the fresh name of a forwarded operation), and the types at them (`0` for an
-effect the stage does not perform; `K` is `1` at a source).  `[spec §75]` -/
+effect the stage does not perform; `K` is `1` at a source); and, when the stage forwards an outer
+operation, its site outside the chain and its argument's type.  `[spec §75]` -/
 structure ConnStage where
   y : Nat
   s : Nat
@@ -554,6 +555,7 @@ structure ConnStage where
   A : VTy
   K : VTy
   B : VTy
+  fwd : Option (Nat × VTy) := none
   deriving DecidableEq, Repr
 
 /-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied

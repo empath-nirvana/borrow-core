@@ -46,6 +46,8 @@ structure Stage where
   s : Nat
   f : Nat
   ready : String
+  /-- The outer operation it forwards: its site and its cancel row, as the chain's row has it. -/
+  fwd : Option (Nat × String) := none
   deriving Inhabited
 
 /-- A chain: its stages, the region's site `c` and its operation's cancel row `cc` (what any stage
@@ -128,9 +130,10 @@ def call (f a : String) (k : String) : String :=
 /-- The glue of the chain, as core text: a computation that binds the connector's maker
 `io_cw{sfx} : !(Q => U Lw)` and calls it in direct style on `q`, the tuple of what the stages'
 states capture (of type `Q`), answering the last stage's result. The caller marks the call as a
-frame's (`Sugar.markFrameCall`), so that the body around it runs it as the loop it is.
-`[spec §75]` -/
-def glue (cn : Conn) (fvs : List (String × String)) : String := Id.run do
+frame's (`Sugar.markFrameCall`), so that the body around it runs it as the loop it is. With `tail`,
+what follows the maker's binding instead: a `for` over the chain, whose generator the maker's call
+is.  `[spec §75]` -/
+def glue (cn : Conn) (fvs : List (String × String)) (tail : Option String := none) : String := Id.run do
   let ss := cn.stages.toArray
   let n := ss.size
   let sfx := cn.sfx
@@ -243,8 +246,19 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
                     io_su{i}_{sfx} <- {upCall} unwind {dnCall};
                     let () = io_su{i}_{sfx};
                     {next (tup ended) (turnTo i "inr (inr ())")}"
-    -- Fwd(a, κ): not yet given a forwarded operation; stored, and the stage resumes.
-    let fwdArm := s!"let (io_fa{i}_{sfx}, io_fk{i}_{sfx}) = io_fy{i}_{sfx}; let _ = io_fa{i}_{sfx};
+    -- Fwd(a, κ): stored (`AtFwd`); the connector performs the outer operation under `close_all`,
+    -- so that a cancel there stops every stage downstream-first; the stage resumes the next turn.
+    let fwdArm := match st.fwd with
+      | some (nOut, co) =>
+        let sf := s!"io_sf{i}_{sfx}"
+        let fw := call s!"pipe_forward[{st.OA}, row ({co}), row ({G}), site {nOut}]" s!"io_fa{i}_{sfx}" s!"fw{i}_{sfx}"
+        let ca := call s!"io_call_{sfx}" (states i sf) s!"fa{i}_{sfx}"
+        s!"let (io_fa{i}_{sfx}, io_fk{i}_{sfx}) = io_fy{i}_{sfx};
+              {sf} : {st.stTy} <- return (inr (inr (inl io_fk{i}_{sfx})));
+              io_fr{i}_{sfx} <- {fw} unwind {ca};
+              let () = io_fr{i}_{sfx};
+              {next (states i sf) (turnTo i "inl ()")}"
+      | none => s!"let (io_fa{i}_{sfx}, io_fk{i}_{sfx}) = io_fy{i}_{sfx}; let _ = io_fa{i}_{sfx};
               {next (states i s!"(inr (inr (inl io_fk{i}_{sfx})) : {st.stTy})") (turnTo i "inl ()")}"
     let arm := s!"{ev} <- {stepCall} unwind {coCall};
           case {ev} \{
@@ -285,8 +299,11 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
   {defs}{turnFn}io_st_{sfx} : {GS} <- return ({ready}, {turnTo (n - 1) "inl ()"});
   io_f_{sfx} <- return (unbang (unfold[{Lw}, {GS}] io_turn_{sfx}));
   return (thunkv nu_in < (nu_out (force io_f_{sfx} io_st_{sfx})).1, (nu_out (force io_f_{sfx} io_st_{sfx})).2 >));
-io_pipe_j_{sfx} : {Rlast} <- return ((unbang io_cw_{sfx}) {q});
-return io_pipe_j_{sfx}"
+{tail.getD s!"io_pipe_j_{sfx} : {Rlast} <- return ((unbang io_cw_{sfx}) {q});
+return io_pipe_j_{sfx}"}"
   pure body
+
+/-- The argument the connector's maker takes: the tuple of what the stages' states capture. -/
+def makerArg (fvs : List (String × String)) : String := tup (fvs.map (·.1))
 
 end Frontend.Elab.Connector

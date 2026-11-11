@@ -329,6 +329,14 @@ def rowNames (rows : List (String × List Ent)) (f : String) : List (Nat × Nat)
 def finRow (rows : List (String × List Ent)) (S : List Ent) (D : Comp) : List Ent :=
   entsAt S (opsOf (rowNames rows) D)
 
+/-- The stages' computations of a pipe connector's node: its right-nested tuple of `n` thunks.
+`[spec §75]` -/
+def connThunks : Nat → Val → List Comp
+  | 0, _ => []
+  | 1, .thunk _ M => [M]
+  | m + 1, .pair _ (.thunk _ M) W => M :: connThunks m W
+  | _, _ => []
+
 mutual
 /-- The cancel rows that the finalisers of a value require, at the row `S` around it.
 `[spec §27]` -/
@@ -341,6 +349,32 @@ def walkV (rows : List (String × List Ent)) (glob : List Ent) : Nat → List En
       let t := walkC rows glob k Si t M
       walkV rows glob k S t cls
     else match V with
+    -- The pipe connector (SPEC §75 Part B): a stage's forwarded operation is performed by the
+    -- connector as `[then]` whose finaliser stops every stage (`close_all`). What it reads is the
+    -- chain the effects pass built: each stage's computation, as elaborated, and the cancel rows
+    -- of its sites, inferred by this walk; so the forwarded operation's cancel row is the union of
+    -- what the stages perform (less their own sites) and their sites' cancel rows. Sound: the
+    -- kernel checks the connector's `[then]` (`F ⋈ Σ_D ≤ F`), so a row too small is refused, never
+    -- run.  `[spec §75]`
+    | .app _ (.sugar _ (.connector _ ss)) tup =>
+      let t := walkV rows glob k S t tup
+      let Ms := connThunks ss.length tup
+      let mine (e : Ent) : Bool := ss.any fun st => e.1 == st.y || e.1 == st.s || e.1 == st.f
+      let SD := (ss.zip Ms).foldl (fun acc (st, M) =>
+        let body := (entsAt glob (opsOf (rowNames rows) M)).filter (!mine ·)
+        let cancels := [(st.y, 0), (st.s, 0), (st.s, 1), (st.f, 0)].flatMap fun (n, i) => t.ents n i
+        addEnts acc (body ++ cancels)) []
+      let t := ss.foldl (fun t st => match st.fwd with
+        | some (n, _) => t.add n 0 SD
+        | none => t) t
+      -- An operation a stage performs that passes through (the last stage's, or any that is not
+      -- forwarded) is cancelled with the connector's frame lists around it, which stop the other
+      -- stages: its cancel row holds what their cleanups perform, their sites' cancel rows.
+      let cleanups := ss.foldl (fun acc st =>
+        addEnts acc ([(st.y, 0), (st.s, 0), (st.s, 1), (st.f, 0)].flatMap fun (n, i) => t.ents n i)) []
+      (ss.zip Ms).foldl (fun t (_, M) =>
+        ((entsAt glob (opsOf (rowNames rows) M)).filter (!mine ·)).foldl (fun t e =>
+          if e.captures then t.add e.1 e.2.1 cleanups else t) t) t
     | .pair _ V W | .app _ V W => walkV rows glob k S (walkV rows glob k S t V) W
     | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
     | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => walkV rows glob k S t V
