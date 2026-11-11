@@ -782,6 +782,14 @@ theorem nestLife_of_ag {W W' : WRes} {r : FrameRec} (t : ∀ a, AgW W' a → AgW
     (hN : NestLife W r) : NestLife W' r :=
   fun l₀ l S u hc a ha => hN l₀ l S u hc a (t a ha)
 
+/-- `W′ ∈ Res_β` gives the chain-positions premise: every view of `ag(W′)` is longer than `β`. -/
+theorem rebEndRec_of_inStratum {W' : WRes} {rs : List FrameRec} {w₀ : WRes} {β : Life}
+    (h : W'.InStratum β) : RebEndRec W' rs w₀ β := by
+  intro _ _ _ m _ _ _ _ a' ha' ψ s e hs x hx hxβ
+  have hin : β < s.meet := (Life.sqsupset_iff _ _).mp
+    (CellU.sqsupset_of_lsOf hs (BoCa.Fig16.BoLo.AgW.inStratum ha' β h m ψ e))
+  exact (lt_irrefl β (lt_of_lt_of_le hin (le_trans (s.meet_least x hx) hxβ))).elim
+
 theorem leInv_of_reb {W W' c : WRes} {rs : List FrameRec} (hvW : ResU.Valid W)
     (hW : ResU.CompS W c W') (il : LeInv W rs) : LeInv W' rs := by
   obtain ⟨aW, haW⟩ := agW_of_valid hvW
@@ -1807,7 +1815,7 @@ theorem TW.valid {W : WRes} {ps rs : List FrameRec} (h : TW W ps rs) : ResU.Vali
   | alloc _ _ _ _ hv _ => exact hv
   | immFrame _ _ _ _ _ _ _ _ _ hv _ _ => exact hv
   | reb _ _ _ _ _ _ _ _ _ _ hv _ => exact hv
-  | rebDeep _ _ _ _ _ _ _ _ _ _ _ hv _ => exact hv
+  | rebDeep _ _ _ _ _ _ _ _ _ _ _ _ hv _ => exact hv
   | mutFold _ _ _ _ hv _ => exact hv
   | mutUnfold _ _ _ _ hv _ => exact hv
   | free _ _ hv _ => exact hv
@@ -2345,7 +2353,7 @@ theorem ti_rebDeep {W W' c : WRes} {ps rs : List FrameRec} {r₀ : FrameRec} {p�
     (hvW : ResU.Valid W) (hr₀ : r₀ ∈ rs) (hch₀ : Chain r₀.R r₀.T r₀.v p₀ l₁ S₀ u₀)
     (hcell : W.get l₁ = some (CellU.immOf s u₀ w₀ hs)) (hx : ¬ VFree x S₀)
     (hreb : ResU.Reb β w₀ c) (hden : vShape (S₀.immReborrow (.var x)) (r₀.δ.extend x β) u₀ c)
-    (hβ : W.InStratum β) (hW : ResU.CompS W c W') (hv : ResU.Valid W') (h : TI W ps rs) :
+    (hβc : RebCellLe W l₁ β) (hW : ResU.CompS W c W') (hv : ResU.Valid W') (h : TI W ps rs) :
     TI W' ps rs := by
   obtain ⟨h3, hl, hid, hio, hN, hM, hmem, hC⟩ := h
   have hR₀ := (h3.2.2.2.1 r₀ hr₀).1
@@ -2370,10 +2378,9 @@ theorem ti_rebDeep {W W' c : WRes} {ps rs : List FrameRec} {r₀ : FrameRec} {p�
       subst hl'
       obtain ⟨aW', ac, haW', -, hcomp⟩ := (AgW.split hW).mp ha'
       rw [AgW.functional haW' haW] at hcomp
-      obtain ⟨ξ, t, eξ, ht, hy⟩ :=
-        (icp_trans (icpAt_agW haW l₀ _ hcell) (icpAt_left hcomp l₀)).ls
-          (CellU.lsOf_immOf _ _ _ _) s.meet_mem
-      exact ⟨ξ, t, s.meet, eξ, ht, hy, (hβ l₀ _ hcell : β ⊏ s.meet).le⟩)
+      obtain ⟨ψ₁, t₁, y, e₁, ht₁, hy₁, hβy⟩ := hβc aW haW
+      obtain ⟨ξ, t, eξ, ht, hy⟩ := (icpAt_left hcomp l₀ ψ₁ e₁).ls ht₁ hy₁
+      exact ⟨ξ, t, y, eξ, ht, hy, hβy⟩)
   refine ⟨chainInv_rebDeep hvW hr₀ hch₀ hcell hx hreb hden hW hv h3, hl', hid, hio, hN', hM', hmem,
     ?_⟩
   refine cov_reb_like hvW hcell hreb hW hC (leInvW_of hl' hmem) (fun m u eζ ⟨ψ, ec⟩ => ?_)
@@ -2399,6 +2406,7 @@ theorem xpath_ex_part {A C e : WRes} (hle : ResU.Le A C) (he : ExS C e) {p : Lis
   | cons em km hq =>
       have eC := (ResU.CompS.get_left_of_ne_imm hτ em (by rw [km]; simp)).2
       exact xpath_ex he (XPath.cons eC km hq) ex k
+
 
 /-- `immEnd` keeps `TI`. -/
 theorem ti_end {W Y X' W' : WRes} {ps rs ps' rs' : List FrameRec} {r : FrameRec} {s : LSet}
@@ -2558,7 +2566,7 @@ theorem ti_endReb {W W' c w₀ : WRes} {ps rs : List FrameRec} {le : Loc} {s : L
     {hs : w₀.InStratum s.join} {β : Life}
     (hvW : ResU.Valid W) (hle : W'.get le = some (CellU.immOf s v w₀ hs))
     (hreb : ResU.Reb β w₀ c) (hW : ResU.CompS W' (c.restrictDom w₀.exclPart) W)
-    (hβ : W'.InStratum β)
+    (hβ : RebEndRec W' rs w₀ β)
     (hexcl : ∀ r ∈ rs, ∀ u, w₀.get r.le ≠ some (CellU.ownOf u))
     (h : TI W ps rs) : TI W' ps rs := by
   obtain ⟨⟨h1, h2, h3, h4, h5, h6⟩, hle4, hid, hio, hN, hM, hmem, hC⟩ := h
@@ -2595,7 +2603,7 @@ theorem ti_endReb {W W' c w₀ : WRes} {ps rs : List FrameRec} {le : Loc} {s : L
         exact ⟨ζ, eζ, kζ, rζ.trans (r₂.trans r₁), wζ.trans (w₂.trans w₁)⟩
   have R4 : ∀ m (ζ : CellU Loc Val) t y, aW.get m = some ζ → ζ.lsOf = some t → t.mem y →
       (∃ (ζ' : CellU Loc Val) (t' : LSet), a'.get m = some ζ' ∧ ζ'.lsOf = some t' ∧ t'.mem y) ∨
-      y = β := by
+      (y = β ∧ ∃ ζ : CellU Loc Val, w₀.get m = some ζ ∧ ζ.kind ≠ Kind.imm) := by
     intro m ζ t y e ht hy
     rcases ResU.CompR.lsOf_inv hcomp e ht hy with h' | ⟨ξ, t₁, e₁, ht₁, hy₁⟩
     · exact Or.inl h'
@@ -2603,10 +2611,9 @@ theorem ti_endReb {W W' c w₀ : WRes} {ps rs : List FrameRec} {le : Loc} {s : L
           ⟨ξ₂, t₂, e₂, ht₂, hy₂⟩
       · obtain ⟨ec, ζw, eζw, kζw⟩ := crSrc m ξ₂ (hd' m ξ₂ e₂)
         rcases reb_cell_ls hreb ec with ⟨-, hl⟩ | ⟨ζ₃, eζ₃, kζ₃, -⟩
-        · rw [hl] at ht₂; cases Option.some.inj ht₂; exact Or.inr hy₂
+        · rw [hl] at ht₂; cases Option.some.inj ht₂; exact Or.inr ⟨hy₂, ζw, eζw, kζw⟩
         · rw [eζ₃] at eζw; cases Option.some.inj eζw; exact absurd kζ₃ kζw
       · exact Or.inl ((hbi m ξ₂ e₂).ls ht₂ hy₂)
-  have R5 : a'.InStratum β := BoCa.Fig16.BoLo.AgW.inStratum ha' β hβ
   have tm : ∀ x, MutAt W' x → MutAt W x := fun x hm => MutAt.of_compS_left hW hm
   have kimm : ∀ r ∈ rs, ∀ p m S u, Chain r.R r.T r.v p m S u → ∀ ψ : CellU Loc Val,
       a'.get m = some ψ → ψ.kind ≠ Kind.own → ψ.kind = Kind.imm := by
@@ -2620,11 +2627,10 @@ theorem ti_endReb {W W' c w₀ : WRes} {ps rs : List FrameRec} {le : Loc} {s : L
     rw [AgW.functional ha₁ ha'] at e ⊢
     obtain ⟨ζ, t, eζ, ht, hxt⟩ := (icpAt_left hcomp m ψ e).ls hs' hx
     obtain ⟨ζ₀, t₀, y, e₀, ht₀, hy, hxy⟩ := hN r hr l₀ m S u hc aW haW ζ t eζ ht x hxt
-    rcases R4 l₀ ζ₀ t₀ y e₀ ht₀ hy with ⟨ζ', t', e', ht', hy'⟩ | rfl
+    rcases R4 l₀ ζ₀ t₀ y e₀ ht₀ hy with ⟨ζ', t', e', ht', hy'⟩ | hβy
     · exact ⟨ζ', t', y, e', ht', hy', hxy⟩
-    · exfalso
-      have hin : y < s'.meet := (Life.sqsupset_iff _ _).mp (CellU.sqsupset_of_lsOf hs' (R5 m ψ e))
-      exact lt_irrefl y (lt_of_lt_of_le hin (le_trans (s'.meet_least x hx) hxy))
+    · obtain ⟨rfl, hex⟩ := hβy
+      exact hβ r hr l₀ m S u hc hex a' ha' ψ s' e hs' x hx hxy
   have parent : ∀ r ∈ rs, ∀ l₀ m S u, Chain r.R r.T r.v (some l₀) m S u →
       ∀ ψ : CellU Loc Val, a'.get m = some ψ → ψ.kind ≠ Kind.own →
       ∃ ζ : CellU Loc Val, a'.get l₀ = some ζ ∧ ζ.kind ≠ Kind.own := by
@@ -2723,8 +2729,8 @@ theorem TW.inv {W : WRes} {ps rs : List FrameRec} (h : TW W ps rs) : TI W ps rs 
       exact ti_frame hW₀.valid hadm hX hW hden hW' hv hds ih
   | reb r x hW₀ hr hle hx hreb hden _ hW hv ih =>
       exact ti_reb hW₀.valid hr hle hx hreb hden hW hv ih
-  | rebDeep r x hW₀ hr hch hcell hx hreb hden hβ hW hv ih =>
-      exact ti_rebDeep hW₀.valid hr hch hcell hx hreb hden hβ hW hv ih
+  | rebDeep r x hW₀ hr hch hcell hx hreb hden hβc _ hW hv ih =>
+      exact ti_rebDeep hW₀.valid hr hch hcell hx hreb hden hβc hW hv ih
   | mutFold hW₀ hX hW hW' _ ih => exact ti_mutFold hW₀.valid hX hW hW' ih
   | mutUnfold hW₀ hW hX hW' _ ih =>
       refine ti_of_ag (fun a ha => (mut_fold_ag hX hW' hW a).mp ha) (fun x hm => ?_) ih

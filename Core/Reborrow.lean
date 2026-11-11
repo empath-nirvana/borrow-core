@@ -168,13 +168,15 @@ theorem rebChooseTW_top {ls : List SRec} {r : FrameRec} {x : LifeVar} {δ' : LSu
   · -- entry: `TW.reb`, its shape premise from `vC_vShape`
     have hsh : vShape (r.T.immReborrow (.var x)) (r.δ.extend x β) r.v χ := by
       rw [← vShape_immReb_agree hag]; exact vC_vShape true _ hPχ
-    exact ⟨TW.reb r x hT hr hle hx hreb hsh (stratumLe_of_inStratum hβ) hWc hv',
+    exact ⟨TW.reb r x hT hr hle hx hreb hsh
+        (rebRecLe_of_stratumLe hT _ (stratumLe_of_inStratum hβ)) hWc hv',
       tagged_reb hT hr hle hreb (stratumLe_of_inStratum hβ) hWc htag⟩
   · -- exit: `TW.rebEnd`
     rintro ps' ls' Wp W'' - hls hTp htgp ⟨s'', hs'', hc''⟩ hcomp hβ''
     have hr' : r ∈ rsOf ls' := by
       obtain ⟨t, ht⟩ := mem_rsOf.mp hr; exact mem_rsOf.mpr ⟨t, (hls _).mpr ht⟩
-    exact ⟨TW.rebEnd r hTp hr' hc'' hreb hcomp hβ'', tagged_rebEnd hTp hcomp htgp⟩
+    exact ⟨TW.rebEnd r hTp hr' hc'' hreb hcomp (rebEndRec_of_inStratum hβ''),
+      tagged_rebEnd hTp hcomp htgp⟩
 
 /-- `RebChooseTW` at a chain view, at `vC`: the cell's value is the chain's own (`ExIn`);
 `image_vC_of_shape` with `coh_child`/`coh_mut_child`; `rebChooseO_deep_tw` chooses; entry
@@ -211,12 +213,14 @@ theorem rebChooseTW_deep {ls : List SRec} {r : FrameRec} {p₀ : Option Loc} {l�
   refine ⟨χ, hreb, hPχ, hagχ, hEF, hEI, fun W' hWc hv' => ?_, ?_⟩
   · have hsh : vShape (S₀.immReborrow (.var x)) (r.δ.extend x β) w χ := by
       rw [← vShape_immReb_agree hag]; exact vC_vShape true _ hPχ
-    exact ⟨TW.rebDeep r x hT hr hch hle hx hreb hsh hβ hWc hv',
+    exact ⟨TW.rebDeep r x hT hr hch hle hx hreb hsh (rebCellLe_of_inStratum hβ hle)
+        (rebRecLe_of_stratumLe hT _ (stratumLe_of_inStratum hβ)) hWc hv',
       tagged_rebDeep hT hr hch hle hreb hβ hWc htag⟩
   · rintro ps' ls' Wp W'' - hls hTp htgp ⟨s'', hs'', hc''⟩ hcomp hβ''
     have hr' : r ∈ rsOf ls' := by
       obtain ⟨t, ht⟩ := mem_rsOf.mp hr; exact mem_rsOf.mpr ⟨t, (hls _).mpr ht⟩
-    exact ⟨TW.rebEndDeep r hTp hr' hch hc'' hreb hcomp hβ'', tagged_rebEnd hTp hcomp htgp⟩
+    exact ⟨TW.rebEndDeep r hTp hr' hch hc'' hreb hcomp (rebEndRec_of_inStratum hβ''),
+      tagged_rebEnd hTp hcomp htgp⟩
 
 /-! ### Theorem 6.150 (↺ rule) at the typed world; record in `Paper/S6_7_WeakestPreconditionRules/Lemmas.lean` -/
 /-- `[TR]` Theorem 6.150 (`↺` rule, p. 39) at `wpG`, the run ending at any final term:

@@ -94,6 +94,29 @@ def StratumLe (W : WRes) (β : Life) : Prop := ∀ β', β' ⊏ β → W.InStrat
 theorem stratumLe_of_inStratum {W : WRes} {β : Life} (h : W.InStratum β) : StratumLe W β :=
   fun _ hβ' l ψ e => CellU.InStratum.mono hβ'.le (h l ψ e)
 
+/-- **The records-only premise of `reb`.** Every record proper whose lineage meets an exclusive
+location of the reborrowed escrow `w₀` has its frame no shorter than `β`. -/
+def RebRecLe (W : WRes) (ps : List FrameRec) (w₀ : WRes) (β : Life) : Prop :=
+  ∀ p ∈ ps, ∀ α, FrameLife W p α →
+    (∃ m, LinLoc p m ∧ ∃ ζ : CellU Loc Val, w₀.get m = some ζ ∧ ζ.kind ≠ Kind.imm) → β ⊑ α
+
+/-- **The chain-positions premise of `rebEnd`.** At a chain position of a record whose parent is
+an exclusive location of the reborrowed escrow `w₀`, every view of `ag(W′)` no longer than `β` has a
+view no shorter at the parent: the nesting of chain views survives the loss of `β` at the parent. -/
+def RebEndRec (W' : WRes) (rs : List FrameRec) (w₀ : WRes) (β : Life) : Prop :=
+  ∀ r ∈ rs, ∀ l₀ m S u, Chain r.R r.T r.v (some l₀) m S u →
+    (∃ ζ : CellU Loc Val, w₀.get l₀ = some ζ ∧ ζ.kind ≠ Kind.imm) →
+    ∀ a', AgW W' a' → ∀ (ψ : CellU Loc Val) s, a'.get m = some ψ → ψ.lsOf = some s →
+      ∀ x, s.mem x → x ⊑ β →
+      ∃ (ζ : CellU Loc Val) (t : LSet) (y : Life), a'.get l₀ = some ζ ∧ ζ.lsOf = some t ∧
+        t.mem y ∧ x ⊑ y
+
+/-- **The view premise of `rebDeep`.** The view of `ag(W)` at the reborrowed chain view has a
+lifetime no shorter than `β`: the new views below it are nested in it. -/
+def RebCellLe (W : WRes) (l₀ : Loc) (β : Life) : Prop :=
+  ∀ a, AgW W a → ∃ (ψ : CellU Loc Val) (t : LSet) (y : Life), a.get l₀ = some ψ ∧
+    ψ.lsOf = some t ∧ t.mem y ∧ β ⊑ y
+
 /-- The typed world.  `TW W ps rs`: the configuration `W` — every frame together with the
 resource a `wp` runs at, `[TR]` p. 6's `ρ_f ● ρ` — is reached from `∅` by the operations the
 printed proofs perform, and `ps` are the frames `[TR]` 6.64 has taken and not ended, `rs` those
@@ -101,9 +124,11 @@ frames with every sub-record of their lineages.  One constructor per operation: 
 (6.141), `free` (6.142), `store` (6.145), `immFrame`/`immEnd` (6.64's entry and exit, recording
 the frame and its lineage and consuming them), `mutFold`/`mutUnfold` (6.65 and 6.66), and
 `reb`/`rebDeep` with `rebEnd`/`rebEndDeep` (6.150's entry and exit, at a record's cell or at a
-chain view of one, at any record, a sub-record included).  `reb`'s `β` is at most every lifetime
-of the world (`StratumLe`); `rebDeep`'s is below every lifetime of the world, as 6.150's H11
-takes it.  The typing premises are at `vShape`, `𝒱⟦T⟧`'s wp-free
+chain view of one, at any record, a sub-record included).  `reb`'s and `rebDeep`'s `β` is at most
+every frame lifetime whose lineage the reborrowed escrow meets (`RebRecLe`), and `rebDeep`'s is at
+most a lifetime of the view it reborrows (`RebCellLe`); `rebEnd`'s chain views keep a parent
+(`RebEndRec`).  These are 6.150's H11 choices read where they are used, non-strict so that a
+shared borrow's views can sit at its own lifetime.  The typing premises are at `vShape`, `𝒱⟦T⟧`'s wp-free
 shape: a premise at the program's relation would put `TW` under the negative occurrence of
 `wpTS` in that relation's `⊸` clause.
 `[about ours: the configurations §6 quantifies over, as a family; docs/adjudications.md §12.72]` -/
@@ -124,14 +149,15 @@ inductive TW : WRes → List FrameRec → List FrameRec → Prop
       TW W ps rs → r ∈ rs → W.get le = some (CellU.immOf s r.v r.R hs) →
       ¬ VFree x r.T → ResU.Reb β r.R c →
       vShape (r.T.immReborrow (.var x)) (r.δ.extend x β) r.v c →
-      StratumLe W β → ResU.CompS W c W' → ResU.Valid W' → TW W' ps rs
+      RebRecLe W ps r.R β → ResU.CompS W c W' → ResU.Valid W' → TW W' ps rs
   | rebDeep {W W' c : WRes} {ps rs : List FrameRec} (r : FrameRec) {p : Option Loc} {l₀ : Loc}
       {S₀ : VTy} {u₀ : Val} {s : LSet} {w₀ : WRes} {hs : w₀.InStratum s.join} {β : Life}
       (x : LifeVar) :
       TW W ps rs → r ∈ rs → Chain r.R r.T r.v p l₀ S₀ u₀ →
       W.get l₀ = some (CellU.immOf s u₀ w₀ hs) → ¬ VFree x S₀ → ResU.Reb β w₀ c →
       vShape (S₀.immReborrow (.var x)) (r.δ.extend x β) u₀ c →
-      W.InStratum β → ResU.CompS W c W' → ResU.Valid W' → TW W' ps rs
+      RebCellLe W l₀ β → RebRecLe W ps w₀ β →
+      ResU.CompS W c W' → ResU.Valid W' → TW W' ps rs
   | mutFold {W X Z ρ W' : WRes} {ps rs : List FrameRec} {l : Loc} {v : Val} {b : Life}
       {hstr : ρ.InStratum b} {P : Val → SPropS Loc Val b} {hw : P v ⟨ρ, hstr⟩} :
       TW W ps rs → ResU.CompS (ResU.single l (CellU.ownOf v)) ρ X → ResU.CompS X Z W →
@@ -158,13 +184,13 @@ inductive TW : WRes → List FrameRec → List FrameRec → Prop
       {β : Life} {hs : r.R.InStratum s.join} :
       TW W ps rs → r ∈ rs → W'.get le = some (CellU.immOf s r.v r.R hs) →
       ResU.Reb β r.R c → ResU.CompS W' (c.restrictDom r.R.exclPart) W →
-      W'.InStratum β → TW W' ps rs
+      RebEndRec W' rs r.R β → TW W' ps rs
   | rebEndDeep {W W' c : WRes} {ps rs : List FrameRec} (r : FrameRec) {p : Option Loc}
       {l₀ : Loc} {S₀ : VTy} {u₀ : Val} {s : LSet} {w₀ : WRes} {hs : w₀.InStratum s.join}
       {β : Life} :
       TW W ps rs → r ∈ rs → Chain r.R r.T r.v p l₀ S₀ u₀ →
       W'.get l₀ = some (CellU.immOf s u₀ w₀ hs) → ResU.Reb β w₀ c →
-      ResU.CompS W' (c.restrictDom w₀.exclPart) W → W'.InStratum β → TW W' ps rs
+      ResU.CompS W' (c.restrictDom w₀.exclPart) W → RebEndRec W' rs w₀ β → TW W' ps rs
 
 /-- A tagged list agrees with the world: each record's tag is the frame lifetime of a
 record proper whose lineage holds it.  `[about ours: our tag discipline]` -/

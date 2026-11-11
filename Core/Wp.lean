@@ -326,6 +326,37 @@ theorem linLife_frame {W X Z R W' : WRes} {ps rs : List FrameRec} {l : Loc} {v :
   · obtain ⟨β, hβ⟩ := h p hp
     exact ⟨β, hold p hp β hβ⟩
 
+/-- A reborrow keeps `FrameLife` at a record whose frame is no shorter than `β`:
+`frameLife_reb_like` with its premise read where it is used. -/
+theorem frameLife_reb_rec {W W' c w₀ : WRes} {le : Loc} {s : LSet} {v : Val}
+    {hs : w₀.InStratum s.join} {β : Life} (hvW : ResU.Valid W)
+    (hle : W.get le = some (CellU.immOf s v w₀ hs)) (hreb : ResU.Reb β w₀ c)
+    (hW : ResU.CompS W c W') {p : FrameRec} {α : Life}
+    (hex : ∀ ζ : CellU Loc Val, w₀.get p.le = some ζ → ζ.kind = Kind.imm)
+    (hβα : (∃ m, LinLoc p m ∧ ∃ ζ : CellU Loc Val, w₀.get m = some ζ ∧ ζ.kind ≠ Kind.imm) →
+      β ⊑ α)
+    (h : FrameLife W p α) : FrameLife W' p α := by
+  obtain ⟨aW, haW⟩ := agW_of_valid hvW
+  have newls : ∀ a', AgW W' a' → ∀ m (ψ : CellU Loc Val) s' x, a'.get m = some ψ →
+      ψ.lsOf = some s' → s'.mem x →
+      (∃ (ζ : CellU Loc Val) (t : LSet), aW.get m = some ζ ∧ ζ.lsOf = some t ∧ t.mem x) ∨
+      (x = β ∧ ∃ ζ : CellU Loc Val, w₀.get m = some ζ ∧ ζ.kind ≠ Kind.imm) := by
+    intro a' ha' m ψ s' x e hs' hx
+    obtain ⟨aW', ac, haW', hac, hcomp⟩ := (AgW.split hW).mp ha'
+    rw [AgW.functional haW' haW] at hcomp
+    rcases ResU.CompR.lsOf_inv hcomp e hs' hx with h₁ | ⟨ξ, t₁, e₁, ht₁, hx₁⟩
+    · exact Or.inl h₁
+    · rcases img_ls haW hle hreb (fun _ _ e => e) hac e₁ ht₁ hx₁ with h₂ | ⟨rfl, -, h₃⟩
+      · exact Or.inl h₂
+      · exact Or.inr ⟨rfl, h₃⟩
+  refine ⟨fun a' ha' ζ t e ht y hy => ?_, fun a' ha' m hm ψ s' e hs' x hx => ?_⟩
+  · rcases newls a' ha' p.le ζ t y e ht hy with ⟨ζ', t', e', ht', hy'⟩ | ⟨-, ζ', e', k'⟩
+    · exact h.1 aW haW ζ' t' e' ht' y hy'
+    · exact absurd (hex ζ' e') k'
+  · rcases newls a' ha' m ψ s' x e hs' hx with ⟨ζ', t', e', ht', hx'⟩ | ⟨rfl, ζ', e', k'⟩
+    · exact h.2 aW haW m hm ζ' t' e' ht' x hx'
+    · exact hβα ⟨m, hm, ζ', e', k'⟩
+
 /-- Every `TW` world satisfies `LinLife`. -/
 theorem TW.linLife {W : WRes} {ps rs : List FrameRec} (h : TW W ps rs) : LinLife W ps := by
   induction h with
@@ -338,13 +369,12 @@ theorem TW.linLife {W : WRes} {ps rs : List FrameRec} (h : TW W ps rs) : LinLife
       intro p hp
       obtain ⟨α, hα⟩ := ih p hp
       have hpR : p ∈ rs := (hTI.2.2.2.2.2.2.1 p).mpr ⟨p, hp, DescR.refl p⟩
-      refine ⟨α, frameLife_reb_like hW₀.valid hle hreb hW hβ (fun ζ e => ?_)
-        (fun a ha => by obtain ⟨ψ, e, k, -⟩ := hTI.2.1 p hp a ha; exact ⟨ψ, e, k⟩) hα⟩
+      refine ⟨α, frameLife_reb_rec hW₀.valid hle hreb hW (fun ζ e => ?_) (hβ p hp α hα) hα⟩
       rcases CellU.rep ζ with ⟨u, rfl⟩ | ⟨s₁, v₁, χ₁, h₁, rfl⟩ | ⟨b₁, v₁, χ₁, h₁, P, hw, rfl⟩
       · exact (hTI.2.2.2.1 p hpR r hr u e).elim
       · exact CellU.kind_immOf _ _ _ _
       · exact (hTI.2.2.2.2.2.1.1 p hp (mutAt_of_cell hle (MutAt.top e (by simp)))).elim
-  | @rebDeep W W' c ps rs r p₀ l₁ S₀ u₀ s w₀ hs β x hW₀ hr hch hcell hx hreb hden hβ hW hv
+  | @rebDeep W W' c ps rs r p₀ l₁ S₀ u₀ s w₀ hs β x hW₀ hr hch hcell hx hreb hden _ hβ hW hv
       ih =>
       have hTI := hW₀.inv
       have hvW := hW₀.valid
@@ -357,8 +387,7 @@ theorem TW.linLife {W : WRes} {ps rs : List FrameRec} (h : TW W ps rs) : LinLife
       intro p hp
       obtain ⟨α, hα⟩ := ih p hp
       have hpR : p ∈ rs := (hTI.2.2.2.2.2.2.1 p).mpr ⟨p, hp, DescR.refl p⟩
-      refine ⟨α, frameLife_reb_like hvW hcell hreb hW (stratumLe_of_inStratum hβ) (fun ζ e => ?_)
-        (fun a ha => by obtain ⟨ψ, e, k, -⟩ := hTI.2.1 p hp a ha; exact ⟨ψ, e, k⟩) hα⟩
+      refine ⟨α, frameLife_reb_rec hvW hcell hreb hW (fun ζ e => ?_) (hβ p hp α hα) hα⟩
       rcases CellU.rep ζ with ⟨u, rfl⟩ | ⟨s₁, v₁, χ₁, h₁, rfl⟩ | ⟨b₁, v₁, χ₁, h₁, P, hw, rfl⟩
       · exact (hTI.2.2.2.1 p hpR r hr u (hw₀own _ u e)).elim
       · exact CellU.kind_immOf _ _ _ _
@@ -398,6 +427,30 @@ theorem TW.linLife {W : WRes} {ps rs : List FrameRec} (h : TW W ps rs) : LinLife
       obtain ⟨a'', acr, ha'', -, hcomp⟩ := (AgW.split hW).mp haW
       rw [AgW.functional ha'' ha'] at hcomp
       exact ⟨aW, haW, icpAt_left hcomp _, fun m _ => icpAt_left hcomp m⟩
+
+/-- `W ∈ Res_β` gives the view premise of `rebDeep`: the view at the reborrowed cell is longer
+than `β`. -/
+theorem rebCellLe_of_inStratum {W : WRes} {β : Life} (hβ : W.InStratum β) {l₀ : Loc} {s : LSet}
+    {u₀ : Val} {w₀ : WRes} {hs : w₀.InStratum s.join}
+    (hcell : W.get l₀ = some (CellU.immOf s u₀ w₀ hs)) : RebCellLe W l₀ β := fun a ha => by
+  obtain ⟨ξ, t, eξ, ht, hy⟩ :=
+    (icpAt_agW ha _ _ hcell).ls (CellU.lsOf_immOf _ _ _ _) (LSet.meet_mem _)
+  exact ⟨ξ, t, _, eξ, ht, hy,
+    ((Life.sqsupset_iff _ _).mp
+      (CellU.sqsupset_of_lsOf (CellU.lsOf_immOf _ _ _ _) (hβ _ _ hcell))).le⟩
+
+/-- `StratumLe` gives the records-only premise: `frameLife_reb_like`'s derivation of `β ⊑ α`. -/
+theorem rebRecLe_of_stratumLe {W : WRes} {ps rs : List FrameRec} (hT : TW W ps rs) (w₀ : WRes)
+    {β : Life} (hβ : StratumLe W β) : RebRecLe W ps w₀ β := by
+  intro p hp α h _
+  obtain ⟨aW, haW⟩ := agW_of_valid hT.valid
+  obtain ⟨ζ, e, k, -⟩ := hT.inv.2.1 p hp aW haW
+  obtain ⟨t, ht⟩ := lsOf_of_imm k
+  refine le_of_not_gt fun hlt => ?_
+  have h₁ : t.meet ⊐ α := CellU.sqsupset_of_lsOf ht (AgW.inStratum haW α (hβ α hlt) _ ζ e)
+  rw [h.1 aW haW ζ t e ht t.meet t.meet_mem] at h₁
+  exact lt_irrefl _ h₁
+
 
 /-- A cell a record `x` is relevant through, other than the frame's own cell, is a lineage
 location of every record proper whose lineage holds `x`. -/

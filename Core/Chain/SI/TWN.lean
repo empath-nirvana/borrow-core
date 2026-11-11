@@ -40,37 +40,8 @@ open BoCa.Fig16.BoLo
 open BoCa.Fig16.LogRel.Core
 open BoCa.Lifetime (LifeVar)
 
-/-- **The records-only premise of `reb`.** Every record proper whose lineage meets an exclusive
-location of the reborrowed escrow `w₀` has its frame no shorter than `β`. -/
-def RebRecLe (W : WRes) (ps : List FrameRec) (w₀ : WRes) (β : Life) : Prop :=
-  ∀ p ∈ ps, ∀ α, FrameLife W p α →
-    (∃ m, LinLoc p m ∧ ∃ ζ : CellU Loc Val, w₀.get m = some ζ ∧ ζ.kind ≠ Kind.imm) → β ⊑ α
-
-/-- **The chain-positions premise of `rebEnd`.** At a chain position of a record whose parent is
-an exclusive location of the reborrowed escrow `w₀`, every view of `ag(W′)` no longer than `β` has a
-view no shorter at the parent: the nesting of chain views survives the loss of `β` at the parent. -/
-def RebEndRec (W' : WRes) (rs : List FrameRec) (w₀ : WRes) (β : Life) : Prop :=
-  ∀ r ∈ rs, ∀ l₀ m S u, Chain r.R r.T r.v (some l₀) m S u →
-    (∃ ζ : CellU Loc Val, w₀.get l₀ = some ζ ∧ ζ.kind ≠ Kind.imm) →
-    ∀ a', AgW W' a' → ∀ (ψ : CellU Loc Val) s, a'.get m = some ψ → ψ.lsOf = some s →
-      ∀ x, s.mem x → x ⊑ β →
-      ∃ (ζ : CellU Loc Val) (t : LSet) (y : Life), a'.get l₀ = some ζ ∧ ζ.lsOf = some t ∧
-        t.mem y ∧ x ⊑ y
-
-/-- **The view premise of `rebDeep`.** The view of `ag(W)` at the reborrowed chain view has a
-lifetime no shorter than `β`: the new views below it are nested in it. -/
-def RebCellLe (W : WRes) (l₀ : Loc) (β : Life) : Prop :=
-  ∀ a, AgW W a → ∃ (ψ : CellU Loc Val) (t : LSet) (y : Life), a.get l₀ = some ψ ∧
-    ψ.lsOf = some t ∧ t.mem y ∧ β ⊑ y
-
-/-- `W′ ∈ Res_β` gives the chain-positions premise: every view of `ag(W′)` is longer than `β`. -/
-theorem rebEndRec_of_inStratum {W' : WRes} {rs : List FrameRec} {w₀ : WRes} {β : Life}
-    (h : W'.InStratum β) : RebEndRec W' rs w₀ β := by
-  intro _ _ _ m _ _ _ _ a' ha' ψ s e hs x hx hxβ
-  have hin : β < s.meet := (Life.sqsupset_iff _ _).mp
-    (CellU.sqsupset_of_lsOf hs (BoCa.Fig16.BoLo.AgW.inStratum ha' β h m ψ e))
-  exact (lt_irrefl β (lt_of_lt_of_le hin (le_trans (s.meet_least x hx) hxβ))).elim
-
+-- `TWN` now has `TW`'s constructors and premises exactly (`TW`'s reborrow premises are these);
+-- folding `TWN` into `TW` is a follow-up once the mint train lands.
 /-- The typed world with records-only reborrow premises: `TW` with `reb`'s `StratumLe W β`
 replaced by `RebRecLe W ps r.R β` and `rebEnd`'s `W′.InStratum β` by `RebEndRec W′ rs r.R β`.
 `[about ours: new design beside TW; SI/TWN.lean's header]` -/
@@ -296,37 +267,6 @@ theorem ti_endRebN {W W' c w₀ : WRes} {ps rs : List FrameRec} {le : Loc} {s : 
 
 
 
-/-- A reborrow keeps `FrameLife` at a record whose frame is no shorter than `β`:
-`frameLife_reb_like` with its premise read where it is used. -/
-theorem frameLife_reb_rec {W W' c w₀ : WRes} {le : Loc} {s : LSet} {v : Val}
-    {hs : w₀.InStratum s.join} {β : Life} (hvW : ResU.Valid W)
-    (hle : W.get le = some (CellU.immOf s v w₀ hs)) (hreb : ResU.Reb β w₀ c)
-    (hW : ResU.CompS W c W') {p : FrameRec} {α : Life}
-    (hex : ∀ ζ : CellU Loc Val, w₀.get p.le = some ζ → ζ.kind = Kind.imm)
-    (hβα : (∃ m, LinLoc p m ∧ ∃ ζ : CellU Loc Val, w₀.get m = some ζ ∧ ζ.kind ≠ Kind.imm) →
-      β ⊑ α)
-    (h : FrameLife W p α) : FrameLife W' p α := by
-  obtain ⟨aW, haW⟩ := agW_of_valid hvW
-  have newls : ∀ a', AgW W' a' → ∀ m (ψ : CellU Loc Val) s' x, a'.get m = some ψ →
-      ψ.lsOf = some s' → s'.mem x →
-      (∃ (ζ : CellU Loc Val) (t : LSet), aW.get m = some ζ ∧ ζ.lsOf = some t ∧ t.mem x) ∨
-      (x = β ∧ ∃ ζ : CellU Loc Val, w₀.get m = some ζ ∧ ζ.kind ≠ Kind.imm) := by
-    intro a' ha' m ψ s' x e hs' hx
-    obtain ⟨aW', ac, haW', hac, hcomp⟩ := (AgW.split hW).mp ha'
-    rw [AgW.functional haW' haW] at hcomp
-    rcases ResU.CompR.lsOf_inv hcomp e hs' hx with h₁ | ⟨ξ, t₁, e₁, ht₁, hx₁⟩
-    · exact Or.inl h₁
-    · rcases img_ls haW hle hreb (fun _ _ e => e) hac e₁ ht₁ hx₁ with h₂ | ⟨rfl, -, h₃⟩
-      · exact Or.inl h₂
-      · exact Or.inr ⟨rfl, h₃⟩
-  refine ⟨fun a' ha' ζ t e ht y hy => ?_, fun a' ha' m hm ψ s' e hs' x hx => ?_⟩
-  · rcases newls a' ha' p.le ζ t y e ht hy with ⟨ζ', t', e', ht', hy'⟩ | ⟨-, ζ', e', k'⟩
-    · exact h.1 aW haW ζ' t' e' ht' y hy'
-    · exact absurd (hex ζ' e') k'
-  · rcases newls a' ha' m ψ s' x e hs' hx with ⟨ζ', t', e', ht', hx'⟩ | ⟨rfl, ζ', e', k'⟩
-    · exact h.2 aW haW m hm ζ' t' e' ht' x hx'
-    · exact hβα ⟨m, hm, ζ', e', k'⟩
-
 /-- `ti_rebDeep` with `W ∈ Res_β` read where it is used: at the view's own cell, which is longer
 than `β`. -/
 theorem ti_rebDeepN {W W' c : WRes} {ps rs : List FrameRec} {r₀ : FrameRec} {p₀ : Option Loc}
@@ -513,19 +453,6 @@ theorem TWN.linLife {W : WRes} {ps rs : List FrameRec} (h : TWN W ps rs) : LinLi
       exact ⟨aW, haW, icpAt_left hcomp _, fun m _ => icpAt_left hcomp m⟩
 
 
-/-- `StratumLe` gives the records-only premise: `frameLife_reb_like`'s derivation of `β ⊑ α`. -/
-theorem rebRecLe_of_stratumLe {W : WRes} {ps rs : List FrameRec} (hT : TW W ps rs) (w₀ : WRes)
-    {β : Life} (hβ : StratumLe W β) : RebRecLe W ps w₀ β := by
-  intro p hp α h _
-  obtain ⟨aW, haW⟩ := agW_of_valid hT.valid
-  obtain ⟨ζ, e, k, -⟩ := hT.inv.2.1 p hp aW haW
-  obtain ⟨t, ht⟩ := lsOf_of_imm k
-  refine le_of_not_gt fun hlt => ?_
-  have h₁ : t.meet ⊐ α := CellU.sqsupset_of_lsOf ht (AgW.inStratum haW α (hβ α hlt) _ ζ e)
-  rw [h.1 aW haW ζ t e ht t.meet t.meet_mem] at h₁
-  exact lt_irrefl _ h₁
-
-
 /-! ### The records proper are roots, and `RebRecLe` from the tags -/
 
 /-- No record proper is a proper sub-record of another. -/
@@ -637,25 +564,19 @@ theorem twN_of_tw {W : WRes} {ps rs : List FrameRec} (h : TW W ps rs) : TWN W ps
   | alloc _ hL hμ hW hv ih => exact .alloc ih hL hμ hW hv
   | immFrame T δ hα _ hadm hX hW hden hW' hv hds ih =>
       exact .immFrame T δ hα ih hadm hX hW hden hW' hv hds
-  | reb r x hW₀ hr hle hx hreb hden hβ hW hv ih =>
-      exact .reb r x ih hr hle hx hreb hden (rebRecLe_of_stratumLe hW₀ _ hβ) hW hv
-  | rebDeep r x hW₀ hr hch hcell hx hreb hden hβ hW hv ih =>
-      refine .rebDeep r x ih hr hch hcell hx hreb hden (fun a ha => ?_)
-        (rebRecLe_of_stratumLe hW₀ _ (stratumLe_of_inStratum hβ)) hW hv
-      obtain ⟨ξ, t, eξ, ht, hy⟩ :=
-        (icpAt_agW ha _ _ hcell).ls (CellU.lsOf_immOf _ _ _ _) (LSet.meet_mem _)
-      exact ⟨ξ, t, _, eξ, ht, hy,
-        ((Life.sqsupset_iff _ _).mp
-          (CellU.sqsupset_of_lsOf (CellU.lsOf_immOf _ _ _ _) (hβ _ _ hcell))).le⟩
+  | reb r x _ hr hle hx hreb hden hβ hW hv ih =>
+      exact .reb r x ih hr hle hx hreb hden hβ hW hv
+  | rebDeep r x _ hr hch hcell hx hreb hden hβc hβ hW hv ih =>
+      exact .rebDeep r x ih hr hch hcell hx hreb hden hβc hβ hW hv
   | mutFold _ hX hW hW' hv ih => exact .mutFold ih hX hW hW' hv
   | mutUnfold _ hW hX hW' hv ih => exact .mutUnfold ih hW hX hW' hv
   | free _ hW hv ih => exact .free ih hW hv
   | store _ hW hW' hv ih => exact .store ih hW hW' hv
   | immEnd r _ hr hc hX' hW' hv hps hrs ih => exact .immEnd r ih hr hc hX' hW' hv hps hrs
   | rebEnd r _ hr hle hreb hW hβ ih =>
-      exact .rebEnd r ih hr hle hreb hW (rebEndRec_of_inStratum hβ)
+      exact .rebEnd r ih hr hle hreb hW hβ
   | rebEndDeep r _ hr hch hle hreb hW hβ ih =>
-      exact .rebEndDeep r ih hr hch hle hreb hW (rebEndRec_of_inStratum hβ)
+      exact .rebEndDeep r ih hr hch hle hreb hW hβ
 
 end BoCa.Fig16.LogRel.Core.Chain.SI
 
