@@ -72,6 +72,36 @@ theorem heap_del_upd_comm {μ : Heap} {ℓ ℓ' : Loc} (h : ℓ ≠ ℓ') (u : V
     · subst h₂; simp [Heap.del, Heap.upd, h₁]
     · simp [Heap.del, Heap.upd, h₁, h₂]
 
+/-- The copy step beside a free location: its ranges are in the memory, so neither holds `ℓ`.
+`[spec §74]` -/
+theorem copyHeap_upd_off {μ : Heap} {ℓd ℓs ℓ : Loc} {nd di ns si len : UInt32} (u : Val)
+    (h : copyOk nd di ns si len = true →
+      μ.HasRange (ℓd + di.toNat) len.toNat ∧ μ.HasRange (ℓs + si.toNat) len.toNat)
+    (h0 : μ ℓ = none) :
+    (BoCa.BoLo.copyHeap μ ℓd nd di ℓs ns si len).upd ℓ u =
+      BoCa.BoLo.copyHeap (μ.upd ℓ u) ℓd nd di ℓs ns si len := by
+  unfold BoCa.BoLo.copyHeap
+  split
+  · rename_i hok
+    obtain ⟨hd, hs⟩ := h hok
+    funext k
+    simp only [Heap.copy, Heap.upd]
+    by_cases hk : k = ℓ
+    · subst hk
+      have hout : ¬ (ℓd + di.toNat ≤ k ∧ k < ℓd + di.toNat + len.toNat) := by
+        rintro ⟨h₁, h₂⟩
+        exact hd (k - (ℓd + di.toNat)) (Nat.sub_lt_left_of_lt_add h₁ h₂)
+          (by rw [Nat.add_sub_cancel' h₁]; exact h0)
+      simp [hout]
+    · by_cases hin : ℓd + di.toNat ≤ k ∧ k < ℓd + di.toNat + len.toNat
+      · have hne : ℓs + si.toNat + (k - (ℓd + di.toNat)) ≠ ℓ := by
+          intro he
+          exact hs (k - (ℓd + di.toNat)) (Nat.sub_lt_left_of_lt_add hin.1 hin.2)
+            (by rw [he]; exact h0)
+        simp [hk, hin, hne]
+      · simp [hk, hin]
+  · rfl
+
 /-- **A head step beside a free location**: a step from a memory that does not hold `ℓ` to one
 that does not hold it is a step beside `ℓ` holding any `u`. -/
 theorem head_upd_off {μ μ' : Heap} {a a' : Expr} {ℓ : Loc} (u : Val) (h : Head (ℍ := ℍ) μ a μ' a')
@@ -132,6 +162,10 @@ theorem head_upd_off {μ μ' : Heap} {a a' : Expr} {ℓ : Loc} (u : Val) (h : He
   | cancel K hK => exact .cancel _ K hK
   | creraise E K hK => exact .creraise _ E K hK
   | cancelTo n qs hr hs k K hK => exact .cancelTo _ n qs hr hs k K hK
+  | sliceCopy ℓd nd di ℓs ns si len hc =>
+      rw [copyHeap_upd_off u hc h0]
+      exact .sliceCopy _ ℓd nd di ℓs ns si len fun hok =>
+        ⟨(hc hok).1.upd ℓ u, (hc hok).2.upd ℓ u⟩
 
 theorem step1_upd_off {μ μ' : Heap} {e e' : Expr} {ℓ : Loc} (u : Val)
     (h : Step1 (ℍ := ℍ) μ e μ' e') (h0 : μ ℓ = none) (h1 : μ' ℓ = none) :
