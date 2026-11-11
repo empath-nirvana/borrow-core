@@ -902,6 +902,9 @@ corpus/effects-tunnel.bc 14:20: handle 2: inside [3]; row []; ops 2.0 abortive; 
 corpus/effects-tunnel.bc 12:37: handle 3: inside []; row [2]; ops 3.0 abortive; names 3.0 []; condition 2 holds
 corpus/effects-tunnel.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/effects-tunnel.bc 3.0 abortive: -; condition 2 holds; -
+corpus/evidence-rebind-value.bc flows [0, 2, 4294967295]; main [2]
+corpus/evidence-rebind-value.bc 25:5: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/evidence-rebind-value.bc 2.0 tail: machine; condition 2 holds; -
 corpus/evidence-rebind.bc flows [0, 1, 4294967295]; main [1]
 corpus/evidence-rebind.bc 16:61: handle 1: inside []; row []; ops 1.0 tail; names 1.0 row; condition 2 holds
 corpus/evidence-rebind.bc 1.0 tail: machine; condition 2 holds; -
