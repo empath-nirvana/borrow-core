@@ -113,7 +113,7 @@ theorem nodeV_closed : ∀ C : CTy, closedAt 0 (nodeV C).1 = true
       simp [nodeV, closedAt, closedAt_mono _ (nodeV_closed D) (Nat.zero_le _)]
   | .all _ _ D => by
       simp [nodeV, closedAt, closedAt_mono _ (nodeV_closed D) (Nat.zero_le _)]
-  | .top | .nu _ => rfl
+  | .top | .nuSys _ _ _ => rfl
 
 /-- The body of `unfold_C = Z (λself. λg. λs. node_C (λs′. λo. self g s′ o) (λ_. g s))`. -/
 def fBN (C : CTy) : Expr :=

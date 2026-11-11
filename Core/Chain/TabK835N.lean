@@ -157,7 +157,7 @@ def finNK (vr : VRel) (g : KW → KW) : CTy → LSub →
   | .arr _ _, _ => some (cancelOblK (ℍ := ℍ) g (fun _ => OpTabK.empty))
   | .amp _ _, _ => some (cancelOblK (ℍ := ℍ) g (fun _ => OpTabK.empty))
   | .all _ _ _, _ => some (cancelOblK (ℍ := ℍ) g (fun _ => OpTabK.empty))
-  | .nu _, _ => some (cancelOblK (ℍ := ℍ) g (fun _ => OpTabK.empty))
+  | .nuSys _ _ _, _ => some (cancelOblK (ℍ := ℍ) g (fun _ => OpTabK.empty))
 end
 
 mutual
@@ -183,7 +183,7 @@ def finRK (R : Nat → WProp) (vr : VRel) (g : KW → KW) : CTy → LSub →
   | .arr _ _, _ => some (cancelOblRK (ℍ := ℍ) g (fun _ => OpTabK.empty) R)
   | .amp _ _, _ => some (cancelOblRK (ℍ := ℍ) g (fun _ => OpTabK.empty) R)
   | .all _ _ _, _ => some (cancelOblRK (ℍ := ℍ) g (fun _ => OpTabK.empty) R)
-  | .nu _, _ => some (cancelOblRK (ℍ := ℍ) g (fun _ => OpTabK.empty) R)
+  | .nuSys _ _ _, _ => some (cancelOblRK (ℍ := ℍ) g (fun _ => OpTabK.empty) R)
 end
 
 theorem finNK_eq (vr : VRel) (g : KW → KW) {F : CTy} (hF : F ≠ .top) (δ : LSub) :
@@ -229,7 +229,7 @@ theorem tab_lookupNK : ∀ (F : CTy) {vr : VRel} {g : KW → KW} {δ : LSub} {x 
   | .amp _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
   | .top, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
   | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .nu _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
 
 /-- **Every entry of the lender's tables owes along `KW.Owed`** (`g = id`). -/
 theorem tabNK_wk {vr : VRel} {F : CTy} {δ : LSub} {x : KW} {m j : UInt32} {en : OpEntK KW}

@@ -2864,7 +2864,7 @@ def phShiftC (k : Nat) : CCTy → CCTy
   | .ret A => .ret (phShiftV k A)
   | .arr A C => .arr (phShiftV k A) (phShiftC k C)
   | .amp C D => .amp (phShiftC k C) (phShiftC k D)
-  | .nu C => .nu (phShiftC k C)
+  | .nuSys m i C => .nuSys m i (phShiftC k C)
   | .all v b C => .all v b (phShiftC k C)
   | .top => .top
   | .eff n i q A B fin rc C =>

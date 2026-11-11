@@ -72,7 +72,7 @@ def hasPhC : CCTy → Bool
   | .ret A => hasPhV A
   | .arr A C => hasPhV A || hasPhC C
   | .amp C D => hasPhC C || hasPhC D
-  | .nu C | .all _ _ C => hasPhC C
+  | .nuSys _ _ C | .all _ _ C => hasPhC C
   | .top => false
   | .eff _ _ _ A B fin _ C => hasPhV A || hasPhV B || hasPhC fin || hasPhC C
 end

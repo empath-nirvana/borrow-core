@@ -104,7 +104,7 @@ theorem cN_step : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down → ∀ (c : L
   | .all x _ C, δ, Θ, hΘ, c, n, ls, ρ, _, _, hs, h =>
       fun α hα => cN_step C (δ.extend x α) Θ hΘ c n ls ρ _ _
         (fun μ => (hs μ).plug (Kont.appL .hole _)) (h α hα)
-  | .nu C, δ, Θ, hΘ, c, n, ls, ρ, _, _, hs, h => fun hS =>
+  | .nuSys _ _ C, δ, Θ, hΘ, c, n, ls, ρ, _, _, hs, h => fun hS =>
       (cN_nu_unfold hS δ Θ c n ls _ ρ).mpr (cBNP_step _ (thunkRN_down (nuCand_down C δ)) C δ Θ hΘ c n ls ρ _ _
         hs ((cN_nu_unfold hS δ Θ c n ls _ ρ).mp h)) hS
   | .eff _ _ _ _ _ _ _ _, _, _, hΘ, _, _, _, _, _, _, hs, h =>

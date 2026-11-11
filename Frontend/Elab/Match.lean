@@ -89,6 +89,8 @@ def matchC (m : MatchSt) (d : Nat) : CCTy → CCTy → Option MatchSt
   | .arr A C, .arr A' C' => (matchV m d A A').bind (matchC · d C C')
   | .amp C D, .amp C' D' => (matchC m d C C').bind (matchC · d D D')
   | .nu C, .nu C' => matchC m (d + 1) C C'
+  | .nuSys m₁ i₁ C, .nuSys m₂ i₂ C' =>
+    if m₁ == m₂ && i₁ == i₂ then matchC m (d + m₁ + 1) C C' else none
   | .all _ _ C, .all _ _ C' => matchC m d C C'
   | .eff n i q A B fin rc C, .eff n' i' q' A' B' fin' rc' C' =>
     if n == n' && i == i' && q == q' && rc == rc' then
@@ -111,7 +113,7 @@ def hasPhC : CCTy → Bool
   | .ret A => hasPhV A
   | .arr A C => hasPhV A || hasPhC C
   | .amp C D => hasPhC C || hasPhC D
-  | .nu C | .all _ _ C => hasPhC C
+  | .nuSys _ _ C | .all _ _ C => hasPhC C
   | .top => false
   | .eff _ _ _ A B fin _ C => hasPhV A || hasPhV B || hasPhC fin || hasPhC C
 end
@@ -137,7 +139,7 @@ def solvedC (σ : Array (Option CVTy)) (d : Nat) : CCTy → CCTy
   | .ret A => .ret (solvedV σ d A)
   | .arr A C => .arr (solvedV σ d A) (solvedC σ d C)
   | .amp C D => .amp (solvedC σ d C) (solvedC σ d D)
-  | .nu C => .nu (solvedC σ (d + 1) C)
+  | .nuSys m i C => .nuSys m i (solvedC σ (d + m + 1) C)
   | .all v b C => .all v b (solvedC σ d C)
   | .top => .top
   | .eff n i q A B fin rc C =>
