@@ -8951,7 +8951,9 @@ another and no two variables share a name. `bcc check` must print the same up to
 the renaming, so the check reaches the names sugar marks carry. On the corpus it finds 0
 differences. Run on the build before R1 (`--bcc`, renaming with this one's
 `--alpha`), it finds 19: each program of #504, #493 and #590, `T04`, `config-parse` and others
-whose meaning depended on two names coinciding.
+whose meaning depended on two names coinciding. Run on the build before #1068's fix, it finds the four R3
+block programs (`mut-block`, `mut-block-nested`, `mut-control-call-order`, `sugar/mut-block`) and
+one difference in a message only (`reject/mut-control-move`).
 
 **Justified: what is still identified by a name.**
 
