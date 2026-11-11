@@ -13331,13 +13331,15 @@ instances, resolved to what serves them at the call, as §38 resolves a row entr
 
 **An instance** is the template with the arguments substituted (`Frontend/Elab/RowInst.lean`).
 - It is keyed by the template, its stripped type, row and public-site arguments, and the caller's
-  type parameters those arguments mention. Those caller parameters become the instance's own, under
-  fresh names, and the use passes them on (`app__r2[T]`).
+  type parameters those arguments mention. Those caller parameters become the instance's own, named
+  `T__p` for each caller parameter `T`, and the use passes the caller's (`app__r2[T__p]`, used as
+  `app__r2[T]`).
 - It is a `def` of its own, named `f__r{k}`, with `k` counting from 1 per template in order of
   first use. It is placed just before its first user, and templates are dropped.
 - It is made once, and checked by the unchanged checker. A template is checked only when used,
   through its instances. An error inside an instance is reported with
-  `` in the instance `f__rk` of `f`, used at L:C ``.
+  `` in the instance `f__rk` of `f`, used at L:C ``, and one in a pure use with
+  `` in `f`, used at L:C ``.
 - Two templates' instances never share a slot: a private site is fresh, and a written entry equal to
   one of `..r`'s is one entry (§38). One that differs is refused:
   `` the row argument of `f` gives `n.i` a second signature ``.
@@ -13378,6 +13380,7 @@ kernel error deep inside an instance.
 | `corpus/core-site-generic.bc` | a `def` with a private `site s` (`handle_with[s]` inside), used twice, nested; the inner activation's performs go to the inner handler | `i32[2321]`, `live 0` |
 | `corpus/core-row-pipe-stop.bc` | §75's `pipe_stop` at two rows | `i32[42]`, `live 0` |
 | `corpus/core-row-key-tparam.bc` | a use whose arguments mention the caller's type parameter: the instance takes it as its own (`app__r2[T]`) | `(i32[3], inl ())`, `live 0` |
+| `corpus/core-row-capture-global.bc` | a template body naming a global type, used from a generic function with a same-named type parameter: the instance's own parameters take fresh names, so the global is not captured | `(inr (), i32[7])`, `live 0` |
 | `corpus/core-site-fresh-const.bc` | a private site's fresh name lies above a site written only in a constant's type (`unfold[…]`) and above the effects pass's sites | `i32[4]`, `live 0` |
 | `corpus/row-site-fresh-handler.bc` | a private site's fresh name beside a surface handler's site | `i32[4]`, `live 0` |
 
