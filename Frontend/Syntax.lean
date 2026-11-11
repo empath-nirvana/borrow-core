@@ -554,7 +554,7 @@ structure ConnStage where
   A : VTy
   K : VTy
   B : VTy
-  deriving DecidableEq, Repr, Inhabited
+  deriving DecidableEq, Repr
 
 /-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied
 to its operands as values, and elaborated to core by the typed pass of `Frontend/Sugar.lean`. -/

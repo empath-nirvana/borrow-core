@@ -6592,7 +6592,7 @@ def connView : Nat → TCx → Span → Nat → List ConnStage → Val → DM Co
           let (lr, O) ← Frontend.Check.effRow? C₁
           let (lc, _) ← Frontend.Check.effRow? D₁
           match O with
-          | .sum R (.box _ (.thunk (.tvar 0))) => some (lr, R, lc)
+          | .sum R (.box _ (.tvar 0)) => some (lr, R, lc)
           | _ => none
         | _ => none
       if let .thunk (.nu _) := T then

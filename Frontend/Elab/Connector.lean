@@ -47,6 +47,7 @@ structure Stage where
   s : Nat
   f : Nat
   ready : String
+  deriving Inhabited
 
 /-- A chain: its stages, the region's site `c` and its operation's cancel row `cc` (what any stage
 performs when stopped, each operation once: a region's call is the computation of an `unwind`, whose
