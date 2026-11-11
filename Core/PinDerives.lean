@@ -452,12 +452,13 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   (`FoldOwnG.lean`).  `[spec §6]` -/
   | foldOwnG {Δ Γ} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
       CDerivesP Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs))
-  /-- `νX. C` is its unrolling `C[U(νX. C)/X]` (`cC_nu_iff`), on the same term, at a positive
-  `C`.  `[spec §7]` -/
-  | nuIn {Δ Γ e C} (hC : C.NuOk) (h : CDerivesP Δ Γ e (.comp C.unroll)) :
-      CDerivesP Δ Γ e (.comp (.nu C))
-  | nuOut {Δ Γ e C} (hC : C.NuOk) (h : CDerivesP Δ Γ e (.comp (.nu C))) :
-      CDerivesP Δ Γ e (.comp C.unroll)
+  /-- `νᵢ` is its unrolling `Cᵢ[U ν₀/X₀, …]` (`cC_nuS_iff`; at one equation `C[U(νX. C)/X]`,
+  `cC_nu_iff`), on the same term, at a positive system (`CTy.SysOkAt`, today's `NuOk` at
+  `νX. C`).  `[spec §7, §79]` -/
+  | nuIn {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesP Δ Γ e (.comp (CTy.unrollS m i C))) :
+      CDerivesP Δ Γ e (.comp (.nuSys m i C))
+  | nuOut {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesP Δ Γ e (.comp (.nuSys m i C))) :
+      CDerivesP Δ Γ e (.comp (CTy.unrollS m i C))
   /-- Coiteration, a constant: `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)` (`Nu.lean`), at a
   positive `C`.  `[spec §7]` -/
   | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :

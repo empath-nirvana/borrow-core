@@ -1264,9 +1264,9 @@ theorem der_var {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | effSub hle _ ih =>
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.effSub _ _ _ hle)⟩
   | nuIn hC _ ih =>
-      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.nuIn (m := 0) (i := 0) _ hC)⟩
+      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.nuIn _ hC)⟩
   | nuOut hC _ ih =>
-      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.nuOut (m := 0) (i := 0) _ hC)⟩
+      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.nuOut _ hC)⟩
   | bangE _ ih =>
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.val (VS.bang _))⟩
   | boxI _ _ ih =>
@@ -1320,12 +1320,12 @@ theorem der_pair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
   | nuIn hC _ ih =>
       intro a b he
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
-      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.nuIn (m := 0) (i := 0) _ hC)⟩
+      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.nuIn _ hC)⟩
       · exact .inr h
   | nuOut hC _ ih =>
       intro a b he
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
-      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.nuOut (m := 0) (i := 0) _ hC)⟩
+      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.nuOut _ hC)⟩
       · exact .inr h
   | bangE _ ih =>
       intro a b he
@@ -1390,9 +1390,9 @@ theorem der_inj₁ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
       exact ⟨A, B, ha, hc.step (JS.effSub _ _ _ hle)⟩
   | nuIn hC _ ih =>
-      intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he; exact ⟨A, B, ha, hc.step (JS.nuIn (m := 0) (i := 0) _ hC)⟩
+      intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he; exact ⟨A, B, ha, hc.step (JS.nuIn _ hC)⟩
   | nuOut hC _ ih =>
-      intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he; exact ⟨A, B, ha, hc.step (JS.nuOut (m := 0) (i := 0) _ hC)⟩
+      intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he; exact ⟨A, B, ha, hc.step (JS.nuOut _ hC)⟩
   | bangE _ ih =>
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he
       exact ⟨A, B, ha, hc.step (JS.val (VS.bang _))⟩
@@ -1447,12 +1447,12 @@ theorem der_unit {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       · exact .inr (hr.tail (JS.effSub _ _ _ hle))
   | nuIn hC _ ih =>
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
-      · exact .inl ⟨hd, hc.step (JS.nuIn (m := 0) (i := 0) _ hC)⟩
-      · exact .inr (hr.tail (JS.nuIn (m := 0) (i := 0) _ hC))
+      · exact .inl ⟨hd, hc.step (JS.nuIn _ hC)⟩
+      · exact .inr (hr.tail (JS.nuIn _ hC))
   | nuOut hC _ ih =>
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
-      · exact .inl ⟨hd, hc.step (JS.nuOut (m := 0) (i := 0) _ hC)⟩
-      · exact .inr (hr.tail (JS.nuOut (m := 0) (i := 0) _ hC))
+      · exact .inl ⟨hd, hc.step (JS.nuOut _ hC)⟩
+      · exact .inr (hr.tail (JS.nuOut _ hC))
   | bangE _ ih =>
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
       · exact .inl ⟨hd, hc.step (JS.val (VS.bang _))⟩
@@ -1501,8 +1501,8 @@ theorem der_prim_alloc {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : C
   | alpha _ hα ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.ofAlpha hα)⟩
   | ofRet _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.ofRet _)⟩
   | effSub hle _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.effSub _ _ _ hle)⟩
-  | nuIn hC _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.nuIn (m := 0) (i := 0) _ hC)⟩
-  | nuOut hC _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.nuOut (m := 0) (i := 0) _ hC)⟩
+  | nuIn hC _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.nuIn _ hC)⟩
+  | nuOut hC _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.nuOut _ hC)⟩
   | bangE _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.bang _))⟩
   | boxI _ _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.boxI _ _))⟩
   | boxE _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.boxE _ _))⟩
@@ -1618,9 +1618,9 @@ theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | effSub hle _ ih =>
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he; exact ⟨j₀, hb, hr.tail (JS.effSub _ _ _ hle)⟩
   | nuIn hC _ ih =>
-      intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he; exact ⟨j₀, hb, hr.tail (JS.nuIn (m := 0) (i := 0) _ hC)⟩
+      intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he; exact ⟨j₀, hb, hr.tail (JS.nuIn _ hC)⟩
   | nuOut hC _ ih =>
-      intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he; exact ⟨j₀, hb, hr.tail (JS.nuOut (m := 0) (i := 0) _ hC)⟩
+      intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he; exact ⟨j₀, hb, hr.tail (JS.nuOut _ hC)⟩
   | bangE _ ih =>
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he; exact ⟨j₀, hb, hr.tail (JS.val (VS.bang _))⟩
   | boxI _ _ ih =>
@@ -1672,10 +1672,10 @@ theorem der_letpair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDer
       exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.effSub _ _ _ hle)⟩
   | nuIn hC _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
-      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.nuIn (m := 0) (i := 0) _ hC)⟩
+      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.nuIn _ hC)⟩
   | nuOut hC _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
-      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.nuOut (m := 0) (i := 0) _ hC)⟩
+      exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.nuOut _ hC)⟩
   | bangE _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr.tail (JS.val (VS.bang _))⟩
@@ -1727,10 +1727,10 @@ theorem der_seq {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.effSub _ _ _ hle)⟩
   | nuIn hC _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
-      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.nuIn (m := 0) (i := 0) _ hC)⟩
+      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.nuIn _ hC)⟩
   | nuOut hC _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
-      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.nuOut (m := 0) (i := 0) _ hC)⟩
+      exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.nuOut _ hC)⟩
   | bangE _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
       exact ⟨Γ₁, Γ₂, C, hs, hV, hM, hr.tail (JS.val (VS.bang _))⟩
@@ -2347,8 +2347,8 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | alpha _ hα ih => intro M he; exact (ih M he).step (JS.ofAlpha hα)
   | ofRet _ ih => intro M he; exact (ih M he).step (JS.ofRet _)
   | effSub hle _ ih => intro M he; exact (ih M he).step (JS.effSub _ _ _ hle)
-  | nuIn hC _ ih => intro M he; exact (ih M he).step (JS.nuIn (m := 0) (i := 0) _ hC)
-  | nuOut hC _ ih => intro M he; exact (ih M he).step (JS.nuOut (m := 0) (i := 0) _ hC)
+  | nuIn hC _ ih => intro M he; exact (ih M he).step (JS.nuIn _ hC)
+  | nuOut hC _ ih => intro M he; exact (ih M he).step (JS.nuOut _ hC)
   | bangE _ ih => intro M he; exact (ih M he).step (JS.val (VS.bang _))
   | boxI _ _ ih => intro M he; exact (ih M he).step (JS.val (VS.boxI _ _))
   | boxE _ ih => intro M he; exact (ih M he).step (JS.val (VS.boxE _ _))
@@ -2653,8 +2653,8 @@ theorem der_swap {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
   | ofRet _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.ofRet _)⟩
   | effSub hle _ ih =>
       intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.effSub _ _ _ hle)⟩
-  | nuIn hC _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.nuIn (m := 0) (i := 0) _ hC)⟩
-  | nuOut hC _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.nuOut (m := 0) (i := 0) _ hC)⟩
+  | nuIn hC _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.nuIn _ hC)⟩
+  | nuOut hC _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.nuOut _ hC)⟩
   | bangE _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.bang _))⟩
   | boxI _ _ ih =>
       intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.boxI _ _))⟩
@@ -3068,10 +3068,10 @@ theorem der_hndJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
       exact ⟨j₀, hb, hr.tail (JS.effSub _ _ _ hle)⟩
   | nuIn hC _ ih =>
-      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he; exact ⟨j₀, hb, hr.tail (JS.nuIn (m := 0) (i := 0) _ hC)⟩
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he; exact ⟨j₀, hb, hr.tail (JS.nuIn _ hC)⟩
   | nuOut hC _ ih =>
       intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
-      exact ⟨j₀, hb, hr.tail (JS.nuOut (m := 0) (i := 0) _ hC)⟩
+      exact ⟨j₀, hb, hr.tail (JS.nuOut _ hC)⟩
   | bangE _ ih =>
       intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.bang _))⟩
@@ -3185,10 +3185,10 @@ theorem der_thenJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeriv
       intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
       exact ⟨j₀, hb, hr.tail (JS.effSub _ _ _ hle)⟩
   | nuIn hC _ ih =>
-      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he; exact ⟨j₀, hb, hr.tail (JS.nuIn (m := 0) (i := 0) _ hC)⟩
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he; exact ⟨j₀, hb, hr.tail (JS.nuIn _ hC)⟩
   | nuOut hC _ ih =>
       intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
-      exact ⟨j₀, hb, hr.tail (JS.nuOut (m := 0) (i := 0) _ hC)⟩
+      exact ⟨j₀, hb, hr.tail (JS.nuOut _ hC)⟩
   | bangE _ ih =>
       intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.bang _))⟩
@@ -3256,10 +3256,10 @@ theorem der_performJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDe
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.effSub _ _ _ hle)⟩
   | nuIn hC _ ih =>
-      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.nuIn (m := 0) (i := 0) _ hC)⟩
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.nuIn _ hC)⟩
   | nuOut hC _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
-      exact ⟨j₀, hb, hr.tail (JS.nuOut (m := 0) (i := 0) _ hC)⟩
+      exact ⟨j₀, hb, hr.tail (JS.nuOut _ hC)⟩
   | bangE _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.bang _))⟩
@@ -3327,10 +3327,10 @@ theorem der_raiseJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.effSub _ _ _ hle)⟩
   | nuIn hC _ ih =>
-      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.nuIn (m := 0) (i := 0) _ hC)⟩
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.nuIn _ hC)⟩
   | nuOut hC _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
-      exact ⟨j₀, hb, hr.tail (JS.nuOut (m := 0) (i := 0) _ hC)⟩
+      exact ⟨j₀, hb, hr.tail (JS.nuOut _ hC)⟩
   | bangE _ ih =>
       intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
       exact ⟨j₀, hb, hr.tail (JS.val (VS.bang _))⟩
@@ -3442,12 +3442,12 @@ theorem der_letJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
   | nuIn hC _ ih =>
       intro N M he h₁ h₂ h₃ h₄ h₅ h₆
       rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
-      · exact .inl ⟨j₀, hb, hr.tail (JS.nuIn (m := 0) (i := 0) _ hC)⟩
+      · exact .inl ⟨j₀, hb, hr.tail (JS.nuIn _ hC)⟩
       · exact .inr h
   | nuOut hC _ ih =>
       intro N M he h₁ h₂ h₃ h₄ h₅ h₆
       rcases ih N M he h₁ h₂ h₃ h₄ h₅ h₆ with ⟨j₀, hb, hr⟩ | h
-      · exact .inl ⟨j₀, hb, hr.tail (JS.nuOut (m := 0) (i := 0) _ hC)⟩
+      · exact .inl ⟨j₀, hb, hr.tail (JS.nuOut _ hC)⟩
       · exact .inr h
   | bangE _ ih =>
       intro N M he h₁ h₂ h₃ h₄ h₅ h₆

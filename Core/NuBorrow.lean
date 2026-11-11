@@ -102,7 +102,7 @@ theorem d_fileRead {Δ : LifeCtx} (hlt : Δ.EntailsLt (.var 2) .top) :
   have hf : CDerives Δ [⟨.mut (.var 2) bufT, false⟩, ⟨fileT 1 (.var 0), true⟩] (.var 1)
       (.comp (.nu (fileBody 1 (.var 0)))) :=
     .force (T := .thunk _) (C := .nu (fileBody 1 (.var 0))) (.there (.here .nil)) rfl
-  have hu := CDerives.nuOut fileBody_nuOk₁ hf
+  have hu := CDerives.nuOut (m := 0) (i := 0) fileBody_nuOk₁ hf
   have hp := CDerives.allE (CDerives.proj₁ (CDerives.proj₁ hu)) hlt
   rw [fileRead_inst] at hp
   exact .app (.right (.left .nil)) hp (.here (.cons .nil))
@@ -115,7 +115,7 @@ theorem d_fileWrite {Δ : LifeCtx} (hlt : Δ.EntailsLt (.var 2) .top) :
   have hf : CDerives Δ [⟨.imm (.var 2) bufT, false⟩, ⟨fileT 1 (.var 0), true⟩] (.var 1)
       (.comp (.nu (fileBody 1 (.var 0)))) :=
     .force (T := .thunk _) (C := .nu (fileBody 1 (.var 0))) (.there (.here .nil)) rfl
-  have hu := CDerives.nuOut fileBody_nuOk₁ hf
+  have hu := CDerives.nuOut (m := 0) (i := 0) fileBody_nuOk₁ hf
   have hp := CDerives.allE (CDerives.proj₂ (CDerives.proj₁ hu)) hlt
   rw [fileWrite_inst] at hp
   exact .app (.right (.left .nil)) hp (.here (.cons .nil))

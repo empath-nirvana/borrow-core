@@ -530,12 +530,13 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   (`FoldOwnG.lean`).  `[spec §6]` -/
   | foldOwnG {Δ Γ} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
       CDerives Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs))
-  /-- `νX. C` is its unrolling `C[U(νX. C)/X]` (`cC_nu_iff`), on the same term, at a positive
-  `C`.  `[spec §7]` -/
-  | nuIn {Δ Γ e C} (hC : C.NuOk) (h : CDerives Δ Γ e (.comp C.unroll)) :
-      CDerives Δ Γ e (.comp (.nu C))
-  | nuOut {Δ Γ e C} (hC : C.NuOk) (h : CDerives Δ Γ e (.comp (.nu C))) :
-      CDerives Δ Γ e (.comp C.unroll)
+  /-- `νᵢ` is its unrolling `Cᵢ[U ν₀/X₀, …]` (`cC_nuS_iff`; at one equation `C[U(νX. C)/X]`,
+  `cC_nu_iff`), on the same term, at a positive system (`CTy.SysOkAt`, today's `NuOk` at
+  `νX. C`).  `[spec §7, §79]` -/
+  | nuIn {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerives Δ Γ e (.comp (CTy.unrollS m i C))) :
+      CDerives Δ Γ e (.comp (.nuSys m i C))
+  | nuOut {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerives Δ Γ e (.comp (.nuSys m i C))) :
+      CDerives Δ Γ e (.comp (CTy.unrollS m i C))
   /-- Coiteration, a constant: `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)` (`Nu.lean`), at a
   positive `C`.  `[spec §7]` -/
   | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
@@ -793,11 +794,11 @@ abbrev unfoldSV (A : VTy) : Val := unfoldV (CTy.streamBody A)
 
 theorem CDerives.delayIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (delayUnroll A))) :
     CDerives Δ Γ e (.comp (.delay A)) :=
-  .nuIn (CTy.delayBody_nuOk A) (by rw [CTy.delay_unroll]; exact h)
+  .nuIn (m := 0) (i := 0) (CTy.delayBody_nuOk A) (by rw [CTy.unrollS_zero, CTy.delay_unroll]; exact h)
 
 theorem CDerives.delayOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.delay A))) :
     CDerives Δ Γ e (.comp (delayUnroll A)) := by
-  rw [← CTy.delay_unroll]; exact .nuOut (CTy.delayBody_nuOk A) h
+  rw [← CTy.delay_unroll]; exact .nuOut (m := 0) (i := 0) (CTy.delayBody_nuOk A) h
 
 /-- Guarded recursion on the delay type: `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)`. -/
 theorem CDerives.fixD {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
@@ -807,11 +808,11 @@ theorem CDerives.fixD {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
 
 theorem CDerives.streamIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (streamUnroll A))) :
     CDerives Δ Γ e (.comp (.stream A)) :=
-  .nuIn (CTy.streamBody_nuOk A) (by rw [CTy.stream_unroll]; exact h)
+  .nuIn (m := 0) (i := 0) (CTy.streamBody_nuOk A) (by rw [CTy.unrollS_zero, CTy.stream_unroll]; exact h)
 
 theorem CDerives.streamOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.stream A))) :
     CDerives Δ Γ e (.comp (streamUnroll A)) := by
-  rw [← CTy.stream_unroll]; exact .nuOut (CTy.streamBody_nuOk A) h
+  rw [← CTy.stream_unroll]; exact .nuOut (m := 0) (i := 0) (CTy.streamBody_nuOk A) h
 
 /-- Coiteration on the stream type: `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)`. -/
 theorem CDerives.unfoldS {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) :

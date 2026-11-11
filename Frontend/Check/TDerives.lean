@@ -227,10 +227,10 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       TDerivesAt Ξ Δ Γ (TExpr.foldOwnG (info := info) (jdg := (.val (FoldP.foldGTy B₀ Rs))) (B₀ := B₀)) (.val (FoldP.foldGTy B₀ Rs))
   | foldReuse {Δ Γ} {info : TInfo} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
       TDerivesAt Ξ Δ Γ (TExpr.foldReuse (info := info) (jdg := (.val (.lolli (algRTy F R) (foldOTy F R)))) (F := F) (R := R)) (.val (.lolli (algRTy F R) (foldOTy F R)))
-  | nuIn {Δ Γ C} {info : TInfo} {t : TExpr} (hC : C.NuOk) (h : TDerivesAt Ξ Δ Γ t (.comp C.unroll)) :
-      TDerivesAt Ξ Δ Γ (TExpr.nuIn (info := info) (jdg := (.comp (.nu C))) (C := C) (t := t)) (.comp (.nu C))
-  | nuOut {Δ Γ C} {info : TInfo} {t : TExpr} (hC : C.NuOk) (h : TDerivesAt Ξ Δ Γ t (.comp (.nu C))) :
-      TDerivesAt Ξ Δ Γ (TExpr.nuOut (info := info) (jdg := (.comp C.unroll)) (C := C) (t := t)) (.comp C.unroll)
+  | nuIn {Δ Γ} {info : TInfo} {t : TExpr} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : TDerivesAt Ξ Δ Γ t (.comp (CTy.unrollS m i C))) :
+      TDerivesAt Ξ Δ Γ (TExpr.nuIn (info := info) (jdg := (.comp (.nuSys m i C))) (m := m) (i := i) (C := C) (t := t)) (.comp (.nuSys m i C))
+  | nuOut {Δ Γ} {info : TInfo} {t : TExpr} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : TDerivesAt Ξ Δ Γ t (.comp (.nuSys m i C))) :
+      TDerivesAt Ξ Δ Γ (TExpr.nuOut (info := info) (jdg := (.comp (CTy.unrollS m i C))) (m := m) (i := i) (C := C) (t := t)) (.comp (CTy.unrollS m i C))
   | unfoldN {Δ Γ} {info : TInfo} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.unfoldN (info := info) (jdg := (.val (unfoldTy C S))) (C := C) (S := S)) (.val (unfoldTy C S))
   | unfoldK {Δ Γ} {info : TInfo} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
@@ -538,10 +538,10 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       TDerivesP Δ Γ (TExpr.foldReuse (info := info) (jdg := (.val (.lolli (algRTy F R) (foldOTy F R)))) (F := F) (R := R)) (.val (.lolli (algRTy F R) (foldOTy F R)))
   | foldOwnG {Δ Γ} {info : TInfo} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
       TDerivesP Δ Γ (TExpr.foldOwnG (info := info) (jdg := (.val (FoldP.foldGTy B₀ Rs))) (B₀ := B₀)) (.val (FoldP.foldGTy B₀ Rs))
-  | nuIn {Δ Γ C} {info : TInfo} {t : TExpr} (hC : C.NuOk) (h : TDerivesP Δ Γ t (.comp C.unroll)) :
-      TDerivesP Δ Γ (TExpr.nuIn (info := info) (jdg := (.comp (.nu C))) (C := C) (t := t)) (.comp (.nu C))
-  | nuOut {Δ Γ C} {info : TInfo} {t : TExpr} (hC : C.NuOk) (h : TDerivesP Δ Γ t (.comp (.nu C))) :
-      TDerivesP Δ Γ (TExpr.nuOut (info := info) (jdg := (.comp C.unroll)) (C := C) (t := t)) (.comp C.unroll)
+  | nuIn {Δ Γ} {info : TInfo} {t : TExpr} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : TDerivesP Δ Γ t (.comp (CTy.unrollS m i C))) :
+      TDerivesP Δ Γ (TExpr.nuIn (info := info) (jdg := (.comp (.nuSys m i C))) (m := m) (i := i) (C := C) (t := t)) (.comp (.nuSys m i C))
+  | nuOut {Δ Γ} {info : TInfo} {t : TExpr} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : TDerivesP Δ Γ t (.comp (.nuSys m i C))) :
+      TDerivesP Δ Γ (TExpr.nuOut (info := info) (jdg := (.comp (CTy.unrollS m i C))) (m := m) (i := i) (C := C) (t := t)) (.comp (CTy.unrollS m i C))
   | unfoldN {Δ Γ} {info : TInfo} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.unfoldN (info := info) (jdg := (.val (unfoldTy C S))) (C := C) (S := S)) (.val (unfoldTy C S))
   | unfoldK {Δ Γ} {info : TInfo} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :

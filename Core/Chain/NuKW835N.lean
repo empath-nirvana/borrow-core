@@ -296,17 +296,25 @@ theorem cN_nuS_iff {m i : Nat} {Cs : CTy} (hC : Cs.SysOk (m + 1)) (hi : i ≤ m 
 
 /-- **`nuIn` at `SemJN`** (Core's `nuIn_compatX`): a computation of `C[U(νX. C)/X]` is one of
 `νX. C`. -/
-theorem nuIn_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy} (hC : C.NuOk)
-    (h : SemJN (ℍ := ℍ) Δ Γ e (.comp C.unroll)) : SemJN (ℍ := ℍ) Δ Γ e (.comp (.nu C)) :=
-  fun δ γ Θ c n ls ρ hδ hΘ hc hlw hg =>
-    (cN_nu_iff hC δ Θ c n ls _ ρ).mpr (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
+theorem nuIn_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} :
+    ∀ {m i : Nat} {C : CTy}, C.SysOkAt m i → SemJN (ℍ := ℍ) Δ Γ e (.comp (CTy.unrollS m i C)) →
+      SemJN (ℍ := ℍ) Δ Γ e (.comp (.nuSys m i C))
+  | 0, 0, _, hC, h => fun δ γ Θ c n ls ρ hδ hΘ hc hlw hg =>
+      (cN_nu_iff hC δ Θ c n ls _ ρ).mpr (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
+  | 0, _ + 1, _, hC, _ => hC.elim
+  | _ + 1, _, _, hC, h => fun δ γ Θ c n ls ρ hδ hΘ hc hlw hg =>
+      (cN_nuS_iff hC.2 hC.1 δ Θ c n ls _ ρ).mpr (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
 
 /-- **`nuOut` at `SemJN`** (Core's `nuOut_compatX`): a computation of `νX. C` is one of
 `C[U(νX. C)/X]`. -/
-theorem nuOut_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy} (hC : C.NuOk)
-    (h : SemJN (ℍ := ℍ) Δ Γ e (.comp (.nu C))) : SemJN (ℍ := ℍ) Δ Γ e (.comp C.unroll) :=
-  fun δ γ Θ c n ls ρ hδ hΘ hc hlw hg =>
-    (cN_nu_iff hC δ Θ c n ls _ ρ).mp (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
+theorem nuOut_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} :
+    ∀ {m i : Nat} {C : CTy}, C.SysOkAt m i → SemJN (ℍ := ℍ) Δ Γ e (.comp (.nuSys m i C)) →
+      SemJN (ℍ := ℍ) Δ Γ e (.comp (CTy.unrollS m i C))
+  | 0, 0, _, hC, h => fun δ γ Θ c n ls ρ hδ hΘ hc hlw hg =>
+      (cN_nu_iff hC δ Θ c n ls _ ρ).mp (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
+  | 0, _ + 1, _, hC, _ => hC.elim
+  | _ + 1, _, _, hC, h => fun δ γ Θ c n ls ρ hδ hΘ hc hlw hg =>
+      (cN_nuS_iff hC.2 hC.1 δ Θ c n ls _ ρ).mp (h δ γ Θ c n ls ρ hδ hΘ hc hlw hg)
 
 /-! ### Coiteration -/
 

@@ -601,7 +601,7 @@ theorem consume_wf {Δ : LifeCtx} {T : VTy} (hT : Consumable T) :
   | @nu C R hC hRc _ ih =>
       intro Γ hΓ
       have hM := CDerives.proj₂ (Δ := Δ)
-        (.nuOut hC (.force (T := .thunk _) (C := .nu (.amp C (.ret R))) (.here hΓ.toP) rfl))
+        (.nuOut (m := 0) (i := 0) hC (.force (T := .thunk _) (C := .nu (.amp C (.ret R))) (.here hΓ.toP) rfl))
       simp only [CTy.instT, VTy.inst, VTy.subst_closed0 hRc] at hM
       exact .thunkV rfl (.lam (.bind (.left (deadSplit hΓ)) hM
         (.ret (.lolliE (.left (.dead (deadSplit hΓ))) (.var (.here (Ctx.Dead.cons hΓ).toP))
