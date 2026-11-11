@@ -70,7 +70,8 @@ NESTING = ['if', 'lethead', 'match', 'for', 'block', 'while', 'modify', 'borrow'
 # whose callback rebinds with `let (a, r) = bump(a)`: "`let (x, y) = V` needs a `*` type"; a `run`
 # or `modify` around a `chk`), which is not this check's subject (open, #1053's report).
 # Nor `block`: a block that writes the clause's own `let mut` loses the write between its calls
-# (open; a wrong answer whether or not the clause drops `k`, on main too, not this check's subject).
+# (open, #1068: a wrong answer whether or not the clause drops `k`, on main too; not this check's
+# subject).
 NOT_IN_CLAUSE = {'while', 'gen', 'pause', 'cwith', 'with', 'finally', 'kdrop', 'borrow', 'modify',
                  'run', 'block'}
 # Nothing is left out of a `for` over a generator (`gen`): one whose body runs an `unwind` drains
