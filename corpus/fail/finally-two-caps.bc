@@ -1,4 +1,4 @@
--- expect: TBD
+-- expect: 16:50: a `finally` using two lent places (`Count`, `stdout`) has no kernel form yet (#1102, #1046)
 -- A `finally` that uses two capabilities the reborrow would hand back (SPEC §78 *Open*, #1102): a
 -- finaliser gets one source back, and an unwinding lend of two places is not a kernel form yet.
 

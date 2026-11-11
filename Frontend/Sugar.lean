@@ -3722,6 +3722,44 @@ def armRows (cx cy : TCx) (sp : Span) (M N : Comp) : Except Error (Option CCTy) 
     else pure none
   | _, _ => pure none
 
+/-- A reborrow with a finaliser (`finally`, SPEC §78, #940), `blk` the reborrow of the place `p`
+and `D` the finaliser, elaborated by `sc` and `sv` (`surfC`, `surfV`): at a body that performs
+operations of the row, the reborrow in its unwinding form with the written finaliser,
+`withbor3u[…] unwind (fun p -> D)`, `D` elaborated at the source's type and the empty row. At a
+body that performs none the block does not unwind: the plain reborrow (`D` runs after it, on the
+source it pairs back, in the term already). The kernel checks the reborrow, the row and the
+finaliser.  [spec §78] -/
+def lendFinC (c : TCx) (exp : Option CCTy) (sp : Span) (V blk : Val) (dtsp dsp : Span) (p : Ident)
+    (D : Comp) (sc : TCx → Option CCTy → Comp → DM Comp) (sv : TCx → Option CVTy → Val → DM Val) :
+    DM Comp := do
+  let some B := borrowBlock? blk
+    | throw ⟨V.span, "internal error: a `finally`'s reborrow is not a borrow block"⟩
+  let r := match c.E.row with
+    | some S =>
+      let used := (opsC c divFuel B).map (·.1)
+      S.filter fun o => used.contains o.n.toNat
+    | none => []
+  if r.isEmpty then return ← sc c exp (.ret sp blk)
+  let saved := (← get).cbRow
+  modify fun st => { st with cbRow := some r }
+  let blk' ← sv c none blk
+  modify fun st => { st with cbRow := saved }
+  match blk' with
+  | .app a₁ (.app a₂ (.const ksp C@(.withbor3U la _ As _ _)) P') cb' =>
+    let some T := c.tyV P'
+      | throw ⟨V.span, "internal error: the type of a `finally`'s reborrowed place"⟩
+    let cD := ({ c with E := { c.E with row := some [] } } : TCx).push p.name (some T)
+    let D' ← sc cD (some (Frontend.Check.effOf [] .unit)) D
+    let d : Val := .thunkv dtsp (.lam dsp p (.mut ksp la As) D')
+    match unwindingC? sp (.app a₁ (.app a₂ (.constU ksp C d) P') cb') with
+    | some M' => return M'
+    | none => throw ⟨V.span, "internal error: a `finally`'s reborrow in its unwinding form"⟩
+  | _ => throw ⟨V.span, "internal error: a `finally`'s place is not a `mut` borrow, so it has " ++
+      "no reborrow (SPEC §78)"⟩
+
+-- The `surfV`/`surfC` mutual block is past the compiler's default budget by its size, as the
+-- machine's block above is.
+set_option maxHeartbeats 400000 in
 mutual
 /-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/
 def surfV : Nat → TCx → Option CVTy → Val → DM Val
@@ -4529,37 +4567,9 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .ret sp V => do
       if let some (i, P, R, cls, B) := hndCtl? V then return ← hndCtlC n c sp i P R cls B
       if let .app _ (.sugar _ (.pullSite i)) call := V then return ← pullView n c sp i call
-      -- A reborrow with a finaliser (`finally`, SPEC §78, #940): at a body that performs
-      -- operations of the row, the reborrow in its unwinding form with the written finaliser,
-      -- `withbor3u[…] unwind (fun p -> D)`, `D` elaborated at the source's type and the empty row.
-      -- At a body that performs none the block does not unwind: the plain reborrow (`D` runs after
-      -- it, on the source it pairs back, in the term already). The kernel checks the reborrow, the
-      -- row and the finaliser.  [spec §78]
+      -- A reborrow with a finaliser (`finally`, SPEC §78, #940): `lendFinC`.
       if let .app _ (.sugar _ .lendFin) (.pair _ blk (.thunkv dtsp (.lam dsp p _ D))) := V then
-        let some B := borrowBlock? blk
-          | throw ⟨V.span, "internal error: a `finally`'s reborrow is not a borrow block"⟩
-        let r := match c.E.row with
-          | some S =>
-            let used := (opsC c divFuel B).map (·.1)
-            S.filter fun o => used.contains o.n.toNat
-          | none => []
-        if r.isEmpty then return ← surfC n c exp (.ret sp blk)
-        let saved := (← get).cbRow
-        modify fun st => { st with cbRow := some r }
-        let blk' ← surfV n c none blk
-        modify fun st => { st with cbRow := saved }
-        match blk' with
-        | .app a₁ (.app a₂ (.const ksp C@(.withbor3U la _ As _ _)) P') cb' =>
-          let some T := c.tyV P'
-            | throw ⟨V.span, "internal error: the type of a `finally`'s reborrowed place"⟩
-          let cD := ({ c with E := { c.E with row := some [] } } : TCx).push p.name (some T)
-          let D' ← surfC n cD (some (Frontend.Check.effOf [] .unit)) D
-          let d : Val := .thunkv dtsp (.lam dsp p (.mut ksp la As) D')
-          match unwindingC? sp (.app a₁ (.app a₂ (.constU ksp C d) P') cb') with
-          | some M' => return M'
-          | none => throw ⟨V.span, "internal error: a `finally`'s reborrow in its unwinding form"⟩
-        | _ => throw ⟨V.span, "internal error: a `finally`'s place is not a `mut` borrow, so it " ++
-            "has no reborrow (SPEC §78)"⟩
+        return ← lendFinC c exp sp V blk dtsp dsp p D (surfC n) (surfV n)
       if let some B := borrowBlock? V then
         if let some S := c.E.row then
           -- A borrow block whose body performs operations: the unwinding form of its borrow, at
