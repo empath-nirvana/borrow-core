@@ -13097,8 +13097,28 @@ spine has a loop that is not counted, or a direct-style call of a div function.
 1. **The lift.** `M` is elaborated as a loop value `l : U(Loop_{Σ_M} B R)` at its own row `Σ_M`,
    which includes the frame's own sites.
    - The variables `M` reads or assigns are threaded as a `for` body's are (§15, `forYield`):
-     locals, `let mut`s, capabilities and lends. They are taken first, and handed back in `B` and in
-     the residual `R`.
+     locals, `let mut`s and capabilities. They are taken first, and handed back in `B` and in the
+     residual `R`.
+   - **A place lent around the frame.** This is the borrow block of an outer `let mut` (the parser's
+     lend around a control handler site, §41 R3) or of a capability (the effects pass's, §34). The
+     frame takes it when its computation uses the borrow `m : mut 'l A`.
+     - The owner (`ref A`, a cell allocated for a value) goes into the frame's state, outside the
+       handler.
+     - Each observation is
+       `withbor2['l, dom, A, Ans] owner (Λ'l. λm. o <- handle(H′) ((nu_out l).1 ['l] m); boxed['l] o)`,
+       over the loop `νX. (∀'l < ⊤. mut 'l A ⊸ F_Σ(B ⊕ [@⊤] U X)) & F_Σ R`.
+     - The loop takes the borrow as a per-turn parameter, and boxes each next state at `⊤`
+       (`boxI`). A turn's rest is unboxed outside the lend.
+     - The frame answers the owner beside its answer, at an end and on an abortive clause. On close
+       it hands the owner back beside the residual, or frees a cell allocated for the lend. The
+       block answers `(owner, answer)`, as the borrow would have.
+     - **Refused:** a state that holds anything not shown to outlive `⊤`, such as a call of a div
+       function in progress, an iterator or a borrow:
+       `` the loop's state would hold a call of a div function, of type `U (delay i32)`, across the per-turn lend of `t`: a turn's next state is boxed at `top`, which a thunk or a borrow does not outlive (not provided) ``.
+     - **Not provided** (*Open*): the lend at a row that performs operations (the unwinding form); a
+       handler whose clauses use the lent place; two places lent per observation; a frame that took
+       the lend but is not on the block's spine (`with … finally`); reborrowed `mut` places.
+     - The kernel is unchanged: the rules used are lends (`withbor2`), loads, `box`/`unbox` and `ν`.
    - `l` runs nothing when it is made.
 2. **The frame per observation.** The frame is a direct-style call of the div value
    `unfold (λ(s, st). ⟨obs, cls⟩) (l, st₀)`, at the row `Σ` around the frame.
@@ -13470,6 +13490,12 @@ checked and run, and their answers below are the observed ones.
 | `corpus/state-across-generator.bc` (from `reject/`) | `State` instances across a generator's `while`, summed by a `for` | `i32[12]` |
 | `corpus/reject/with-loop-after-resume.bc` | a clause that works after `k(…)` around a `while` | the message in Part A, item 3 |
 | `corpus/reject/with-loop-resume-twice.bc` | the clause of `ask` resumes `k` twice around a loop | the message in Part A, item 3 |
+| `corpus/with-loop-lend-mut.bc` | an outer `let mut` assigned inside a looping `with` body, lent per observation | `(i32[4], i32[10])` |
+| `corpus/with-loop-lend-result.bc` | the same under `with to_result` | `(inl i32[4], i32[10])` |
+| `corpus/with-loop-lend-cap.bc` | a capability lent per observation | `0123inr i32[30]` |
+| `corpus/with-loop-lend-cap-after.bc` | the capability used after the frame | `inr i32[30]` |
+| `corpus/with-loop-lend-raise.bc` | a turn raises; the owner is handed back on the abortive clause | `(inr i32[3], i32[3])` |
+| `corpus/reject/with-loop-lend-state.bc` | a div call held in the state across the lend | the message in Part A, item 1 |
 
 **Part B, the surface programs and the seven traces** (answers worked by hand).
 
@@ -13534,9 +13560,14 @@ does not support; they carry `-- check: old-backend-refuses`.
   `pending/async-channel.bc`, `async-fanout.bc` and `operator-reconcile.bc` are refused with its
   message: a `spawn` body that loops meets the storing `await` clause. `deep` at `Loop_Σ` is
   #955's. A recursion whose body loops under `on_exhausted` is #955/#916's.
-- **An outer `let mut` assigned inside a looping `with` body,** declared outside the `with`: not
-  provided. It needs a per-observation lend of the site's lends, as `LoopLend` gives. An L1
-  follow-up.
+- **The lend per observation (Part A, item 1), not provided:**
+  - a state holding a thunk across the lend (a call of a div function in progress, a `for` over a
+    generator). It needs a rule that a code type outlives `⊤`, a kernel question;
+  - the lend at a performing row;
+  - `with … finally` around a lent loop;
+  - a handler whose clauses use the lent place;
+  - two lends;
+  - reborrowed `mut` places.
 - **Fusion** (F, #923). The connector stores each stage's rest. The counts of the new programs are
   recorded unfused, and no existing count changes.
 - **Mechanising Assembly(n),** and proving that per-observation handling is the deep handler: not
