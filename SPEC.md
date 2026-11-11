@@ -13478,7 +13478,8 @@ checked and run, and their answers below are the observed ones.
 | `corpus/core-pipe-pushback.bc` (`pipe3-pushback`) | lookahead with a pushback slot held by the consumer. It reads `1`, reads `2` ahead and puts it back, reads `2` from the slot, reads `3`, reads `4` ahead and puts it back, then `stop()` and returns `(1223, inl 4)` | `(i32[1223], inl i32[4])`, `live 0` | interpreter, the old closure interpreter, Backend2; the old backend's run fails the same layout check |
 
 **Part A** (surface; observed, `bcc interp`, `live 0`, and Backend2 the same).
-`with-loop-unwind` and `with-loop-finally` are `old-backend-refuses`.
+`with-loop-unwind` and `with-loop-finally` are `old-backend-refuses`. The `with-loop-lend-*`
+programs give the same answers on the old backend too, and on the flat stage.
 
 | Program | What | Answer |
 |---|---|---|
@@ -13494,7 +13495,7 @@ checked and run, and their answers below are the observed ones.
 | `corpus/with-loop-lend-result.bc` | the same under `with to_result` | `(inl i32[4], i32[10])` |
 | `corpus/with-loop-lend-cap.bc` | a capability lent per observation | `0123inr i32[30]` |
 | `corpus/with-loop-lend-cap-after.bc` | the capability used after the frame | `inr i32[30]` |
-| `corpus/with-loop-lend-raise.bc` | a turn raises; the owner is handed back on the abortive clause | `(inr i32[3], i32[3])` |
+| `corpus/with-loop-lend-raise.bc` | a turn raises; the owner is handed back on the abortive clause, and `t` read after it holds the value written before the raise | `(inr i32[3], i32[3])` |
 | `corpus/reject/with-loop-lend-state.bc` | a div call held in the state across the lend | the message in Part A, item 1 |
 
 **Part B, the surface programs and the seven traces** (answers worked by hand).
@@ -13561,8 +13562,10 @@ does not support; they carry `-- check: old-backend-refuses`.
   message: a `spawn` body that loops meets the storing `await` clause. `deep` at `Loop_Σ` is
   #955's. A recursion whose body loops under `on_exhausted` is #955/#916's.
 - **The lend per observation (Part A, item 1), not provided:**
-  - a state holding a thunk across the lend (a call of a div function in progress, a `for` over a
-    generator). It needs a rule that a code type outlives `⊤`, a kernel question;
+  - a call of a div function in progress, or a `for` over a generator, held in the state across
+    the lend. It needs a rule that a code type `Code⟨N;E⟩ C` outlives `⊤` when its captures do (a
+    kernel unit), or the surface boxing the suspended call. A stage's stored κ is not limited:
+    §28's BOXED-κ (`effHandleVB`, at `d = ⊤`) boxes it at `⊤`, and the connector uses that;
   - the lend at a performing row;
   - `with … finally` around a lent loop;
   - a handler whose clauses use the lent place;
