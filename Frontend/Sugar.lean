@@ -6576,6 +6576,8 @@ def connView : Nat → TCx → Span → Nat → List ConnStage → Val → DM Co
     let mut stages : List Elab.Connector.Stage := []
     let mut holes : List (String × Comp) := []
     let mut used : List String := []
+    -- What any stage performs when stopped, each operation once.
+    let mut ccRow : Frontend.Check.CRow := []
     for ((cs₀, th), i) in (ss.zip ths).zipIdx do
       let .thunk tsp M := th | throw ⟨sp, "internal error: a stream chain's stage"⟩
       let M' ← surfC n c none M
@@ -6623,6 +6625,10 @@ def connView : Nat → TCx → Span → Nat → List ConnStage → Val → DM Co
         cy := ← finOf cs₀.y 0, cn := ← finOf cs₀.s 0, cp := ← finOf cs₀.s 1, cf := ← finOf cs₀.f 0,
         lr := ← ppR lr, lc := ← ppR lc, y := cs₀.y, s := cs₀.s, f := cs₀.f, ready }]
       used := used ++ (latest c.locals).filterMap fun (y, _) => if mentionsC y M' then some y else none
+      let stopRow : Frontend.Check.CRow := (lr.filter (!mine ·)) ++ (lr.filter mine).flatMap fun o =>
+        if o.fin.isTop then [] else o.fin.rowOf
+      for o in stopRow do
+        unless ccRow.any (fun o' => o'.n == o.n && o'.i == o.i) do ccRow := ccRow ++ [o]
     -- What the stages' states capture: the variables their computations use.
     let mut fvs : List (String × String) := []
     for (y, T?) in latest c.locals do
@@ -6630,7 +6636,7 @@ def connView : Nat → TCx → Span → Nat → List ConnStage → Val → DM Co
         let some T := T? | throw ⟨sp, s!"the type of `{Hygiene.written y}`, which a stage of this stream chain uses, is not determined here: ascribe it"⟩
         fvs := fvs ++ [(y, ← ppT T)]
     let G ← ppR (c.E.row.getD [])
-    let src := Elab.Connector.glue { stages, c := cs, G, sfx } fvs
+    let src := Elab.Connector.glue { stages, c := cs, cc := ← ppR ccRow, G, sfx } fvs
     let L ← template sp "the pipe connector of a stream chain (SPEC §75)" src
     let L := markFrameCall s!"io_cw_{sfx}" L
     pure (L.fill (fun _ => none) (fun v => holes.lookup v))

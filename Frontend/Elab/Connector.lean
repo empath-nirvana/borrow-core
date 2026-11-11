@@ -48,11 +48,14 @@ structure Stage where
   f : Nat
   ready : String
 
-/-- A chain: its stages, the region's site `c`, the row `G` the chain runs at, and a suffix that
-makes its local names its own.  `[spec §75]` -/
+/-- A chain: its stages, the region's site `c` and its operation's cancel row `cc` (what any stage
+performs when stopped, each operation once: a region's call is the computation of an `unwind`, whose
+row has each operation once), the row `G` the chain runs at, and a suffix that makes its local names
+its own.  `[spec §75]` -/
 structure Conn where
   stages : List Stage
   c : Nat
+  cc : String
   G : String
   sfx : String
 
@@ -109,9 +112,6 @@ def Stage.loopTy (st : Stage) : String := s!"box top PipeLoop[{st.R}, row ({st.l
 /-- The input of a turn of the stage, `1 + (A + K)`. -/
 def Stage.inTy (st : Stage) : String := s!"1 + ({st.A} + {st.K})"
 
-/-- What the stage performs when stopped: `cy, cn, cp, cf, sg`. -/
-def Stage.stopRow (st : Stage) : String := rowCat [st.cy, st.cn, st.cp, st.cf, st.sg]
-
 /-- `v` taken apart into the names `xs`, a right-nested tuple, by one `let` per pair; `tmp` names
 the inner tuples. -/
 def destr (xs : List String) (v tmp : String) : String :=
@@ -136,7 +136,7 @@ def glue (cn : Conn) (fvs : List (String × String)) : String := Id.run do
   let sfx := cn.sfx
   let G := cn.G
   -- The regions: one cancel row for the region's operation, what any stage performs when stopped.
-  let cc := rowCat (cn.stages.map (·.stopRow))
+  let cc := cn.cc
   let regOp := s!"{cn.c}.0 cancel[{cc}] 1 ~> 1"
   let regRow := rowCat [regOp, cc]
   let Rlast := ss[n - 1]!.R
