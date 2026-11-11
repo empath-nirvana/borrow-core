@@ -49,17 +49,7 @@ Stage `i` (0 ≤ i < n) reads wire `i` (type `A_i`, end `K_i`) and writes wire `
 
 `Ended(k)` keeps `k` when `K_{i+1}` is unrestricted, and is `Ended(·)` otherwise (review G3). The last stage has no `Ended`: `finish` consumes its `R`.
 
-**Rev 2.6 (L1 `stop()`, 2026-11-11):** "if the region kept an error, raise it at κ_i" is built as follows.
-- **(i) `close_up_i` runs in the glue, in its one region, outside s_i, as before.**
-- **(ii) A handler outside the region reifies the kept error** as `inr (inj_j e)` over `cu_i`'s abortive operations. `stop()` answers `1 + (E_1 + … + E_k)`.
-- **(iii) s_i re-raises it by effect name, at the `stop()` call:** `match stop() { inl () → () | inr p → raise_j(e) }`. It is resolved lexically there (§19), so a local handler in s_i catches it. With none, it reaches s_i's own instance, which gives the same observables as the model's raise in s_i.
-- **The alternative is refuted:** running `close_up_i` inside s_i's frames would let s_i's handlers intercept the upstream's non-error operations, which breaks ≈.
-- **L1 limit:** only effects whose operations are all abortive are reified; a mixed effect in `cu_i` is refused.
-- **The case** (source cleanup raises 10, s_i's raises 20): `123`, `inr 20` (sel_ii), pending the user's reading of (ii).
-- **Addendum (as built):** `close_down_i` stays only as the stop arm's cancel-path finaliser (`REIFY(close_up_i) unwind close_down_i`), a typing obligation of `[then]`. The kernel absorbs a cancel during a cleanup region (SPEC §19 *Cancels*, `[cfin-cancel]`), so the path is reachable when an upstream cleanup performs a capturable op. Thm X gains a clause: such a cancel is absorbed, the region completes with its first error kept, and the remaining stages (n−1…i) then stop downstream-first. That is the specified behaviour; no `UNPROVED:` is needed.
-- **Built:** `pipe-first-error` gives `123`/`inr 20`, and the catch case gives `123`/`inl 40`.
-
-**Rev 2.7 (after L1's independent review, 2026-11-11; diagnosis in `theory/pipes-l1-diagnosis.md`).** Rev 2.6 realised "raise at κ_i" by elaborating each `stop()` *call*, and its claim of "the same observables as the model's raise in s_i" was argued only for a call written in s_i's own body. W2 (a `stop()` performed through a helper `fn`) falls in that gap. The laws are unchanged: P1/P1b already define `stop()` dynamically. This revision restates the realisation's obligation and gives two realisations without choosing between them.
+**Rev 2.7 (after L1's independent review, 2026-11-11).** Rev 2.6 realised "raise at κ_i" by elaborating each `stop()` *call*, and its claim of "the same observables as the model's raise in s_i" was argued only for a call written in s_i's own body. W2 (a `stop()` performed through a helper `fn`) falls in that gap. The laws are unchanged: P1/P1b already define `stop()` dynamically. This revision restates the realisation's obligation and gives two realisations without choosing between them.
 
 - **(S) `stop()`'s raise is a property of the operation.** At *every* perform of `Stream.stop` in s_i's dynamic extent (in s_i's body, in a helper it calls at any depth, under any handler s_i installs), the outcome of `close_up_i` reaches that perform site as follows:
   - **no error:** the perform answers `K_i`;
@@ -85,6 +75,16 @@ Stage `i` (0 ≤ i < n) reads wire `i` (type `A_i`, end `K_i`) and writes wire `
   - "At an effectful upstream, `rest` is #910's stored generator over a row" moves to *Open* (it waits on #910).
   - "A `fn` `Log` in a middle stage's cleanup is fine" stays as a *row* fact, with a condition added: if the stage holds `Log`'s capability between turns, that is the *Open* item below.
   - New *Open* item: "a stage's stored rest holding a lend or capability between turns". The model has no lends, so this is a kernel/checker question, and the elaborator does not decide it.
+
+**Rev 2.6 (L1 `stop()`, 2026-11-11):** "if the region kept an error, raise it at κ_i" is built as follows.
+- **(i) `close_up_i` runs in the glue, in its one region, outside s_i, as before.**
+- **(ii) A handler outside the region reifies the kept error** as `inr (inj_j e)` over `cu_i`'s abortive operations. `stop()` answers `1 + (E_1 + … + E_k)`.
+- **(iii) s_i re-raises it by effect name, at the `stop()` call:** `match stop() { inl () → () | inr p → raise_j(e) }`. It is resolved lexically there (§19), so a local handler in s_i catches it. With none, it reaches s_i's own instance, which gives the same observables as the model's raise in s_i.
+- **The alternative is refuted:** running `close_up_i` inside s_i's frames would let s_i's handlers intercept the upstream's non-error operations, which breaks ≈.
+- **L1 limit:** only effects whose operations are all abortive are reified; a mixed effect in `cu_i` is refused.
+- **The case** (source cleanup raises 10, s_i's raises 20): `123`, `inr 20` (sel_ii), pending the user's reading of (ii).
+- **Addendum (as built):** `close_down_i` stays only as the stop arm's cancel-path finaliser (`REIFY(close_up_i) unwind close_down_i`), a typing obligation of `[then]`. The kernel absorbs a cancel during a cleanup region (SPEC §19 *Cancels*, `[cfin-cancel]`), so the path is reachable when an upstream cleanup performs a capturable op. Thm X gains a clause: such a cancel is absorbed, the region completes with its first error kept, and the remaining stages (n−1…i) then stop downstream-first. That is the specified behaviour; no `UNPROVED:` is needed.
+- **Built:** `pipe-first-error` gives `123`/`inr 20`, and the catch case gives `123`/`inl 40`.
 
 **Rev 2.5 (L1 code size, 2026-11-11):** the generator uses one shared frame function per stage, and each list becomes a chain of calls to them. **This is covered as written:** L-region concerns the *dynamic* nest of `withStop` frames, and a call adds no handler or finaliser. Three conditions:
 1. each shared frame function installs exactly one `withStop_j` and does nothing else effectful;
