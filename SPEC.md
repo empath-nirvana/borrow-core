@@ -551,7 +551,8 @@ over it; a new codata shape is a new abbreviation, and a library of iterator ada
     C ::= … | νX. C          (computation types)
 
 `X` is a computation-type variable bound in `C`; it occurs only as the value type `U X`, "the
-rest of the codata". Every observation of a `νX. C` returns, possibly among other values, a
+rest of the codata". §79 generalises the former to finite systems of equations; `νX. C` is
+`ν₀(X₀). C`. Every observation of a `νX. C` returns, possibly among other values, a
 thunk of the rest.
 
 **Positivity** (`CTy.NuOk`). `C` is a `&` of two observation trees (`CTy.NuShape`), and an
@@ -1517,7 +1518,7 @@ value types fall in three groups.
    | `μX. T`, `T` in `FShape` (§6) | `foldOwn`, whose algebra is the consume of `T[1/X]` |
    | `μX. T`, `T` in `P` (§6, §61), not in `FShape` | `foldOwnG`, whose algebra at each key is the consume of the key's body (an array key's element type) at results `1` |
    | `U(C & F 1)` | `close`: force, then the second projection |
-   | `U(νX. C & F R)`, `R` closed and consumable (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the consume of `R` |
+   | `U(νX. C & F R)`, `R` closed and consumable (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the consume of `R`; at a system, per projection (§79, K-M.2) |
    These are linear. A value of one of these types that goes unused is consumed by its
    consume, which the checker inserts. Because the consume deallocates memory and, at codata,
    runs the object's `close` code, where it is inserted can be observed.
@@ -12778,6 +12779,8 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
 - `C.BindsFresh G` in `nuOutK`: the unrolling under a `∀'x` leaf reads the code type, which
   contains `G`, at `δ[x↦α]`, and a code-typed `G`'s environment could mention `x`. `codeTy`,
   `hCode`, `hEnv` and `unfoldKTy` are in `Core/CodeNuOut.lean`.
+- §79 generalises `unfoldK` and `nuOutK` to finite systems of ν equations, per equation (§79,
+  K-M.4).
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
 - `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
@@ -13734,6 +13737,138 @@ the old backend or a kernel program.
 - Two recursive positions on one path (binary trees, `X ⊗ [Ref X]`) keep the recursion.
 - Arrays of an `S ≠ X` holding `X` (`array (string ⊗ X)`), and inner `μ` keys.
 - Persistent `!μ` data copied or consumed by the word IR's helpers, which recurse.
+
+---
+
+## 79. Entry 78 — mutual codata: finite systems of ν equations (#995)
+
+This entry extends §7 (codata `νX. C`), and touches §12 (consume) and §68 (`unfoldK`, `nuOutK`).
+The user approved option M, mutual ν (#995). Code it adds is tagged `[spec §79]`, and the per-code
+rules `[spec §79, §68]`.
+
+### What it adds
+
+**Finite systems of codata equations.** A system is `νᵢ(X₀…Xₘ). C₀; …; Cₘ`: `n = m + 1` mutually
+recursive codata types, of which the `i`-th is selected. §7's `νX. C` is the case `m = 0`, by
+definition. Nothing is added to `VTy`, to the `CDerives` constructors or to `CDerives`' index. The
+five ν rules are generalised in place.
+
+1. **The former, generalised by deleting.**
+
+       C ::= … | νᵢ(X₀…Xₘ). C₀; …; Cₘ       (CTy.nuSys m i Cs, Cs = C₀ & (C₁ & … & Cₘ))
+       νX. C  ≜  ν₀(X₀). C                   (CTy.nu C := .nuSys 0 0 C)
+
+   - In each body `Cⱼ = Cs.body m j`, `U Xₖ` is the type variable `k` for `k ≤ m`, and a body's
+     outer types are shifted by `n`.
+   - The bodies are one `CTy`, a `&` spine with its length `m`, not a list, so `CTy` stays a plain,
+     non-nested mutual inductive.
+   - `CTy.nu` is an abbreviation usable as a pattern, so every type, abbreviation (`Loop`, `D`,
+     `Stream`, `Iter`, `Loop_Σ`) and program of §7 is unchanged.
+
+2. **Positivity over the system** (`SysOk m Cs`, with `NuOk C := SysOk 0 C`).
+   - Each body has §7's positive shape: a `&` of two observation trees.
+   - In each leaf result, every `U Xₖ` (`k ≤ m`) occurs only under `⊗`, `⊕` and `[@a]`
+     (`VTy.PolyAt k` for every `k ≤ m`; §7's `Poly` is `PolyAt 0`).
+   - Arguments and the operation types of `F_Σ` leaves are closed (`Cl 0`), as in §7, so no `Xₖ`
+     occurs in them.
+   - **Binder freshness over the system:** no lifetime bound by a `∀` leaf of any body is free in
+     any body. Unrolling `Cᵢ` puts every `U νⱼ` it mentions, and with it the whole system, under
+     `Cᵢ`'s `∀` leaves.
+
+3. **In and out, by simultaneous substitution.**
+
+       Γ ⊢ M : Cᵢ[U ν₀/X₀, …, U νₘ/Xₘ]         Γ ⊢ M : νᵢ(X⃗). C⃗
+       ──────────────────────────────  nuIn    ──────────────────────────────  nuOut
+       Γ ⊢ M : νᵢ(X⃗). C⃗                      Γ ⊢ M : Cᵢ[U ν₀/X₀, …, U νₘ/Xₘ]
+
+   - The premises are `SysOk m Cs` and `i ≤ m`.
+   - They are rules on the same term, as in §7.
+   - The substitution sends `Xₖ` to `U νₖ` and shifts the outer variables by `−n`. At `m = 0` it is
+     §7's `C[U(νX. C)/X]`.
+
+4. **Coiteration, one step per equation.**
+
+       unfoldᵢ : !U(S₀ ⊸ C₀[S⃗/X⃗]) ⊗ … ⊗ !U(Sₘ ⊸ Cₘ[S⃗/X⃗]) ⊸ !U(Sᵢ ⊸ νᵢ(X⃗). C⃗)
+
+   - The premises are `SysOk m Cs`, `i ≤ m`, a consumed context, and **freshness per pair**:
+     wherever `Xₖ` occurs in `Cⱼ`, `Cⱼ.BindsFresh Sₖ` (`SysFresh`).
+   - `unfoldᵢ steps s` answers an observation path of `Cᵢ` by running the same path of `stepᵢ s`.
+     It replaces each state `s′` at an `Xₖ` position by `unfoldₖ steps s′`.
+   - The recursion is the rule's, and the steps return states, never codata.
+   - At `m = 0` the type and the term are §7's `unfold`.
+   - It is sound by coinduction, with the candidate tuple `j ↦ {unfoldⱼ steps s | s ∈ 𝒱⟦Sⱼ⟧}`.
+
+5. **The per-code rules, per equation (§68).** `unfoldK` and `nuOutK` take the steps `Gs` (each
+   `Gⱼ.forceTy = some (Sⱼ ⊸ Cⱼ[S⃗/X⃗])`), and type every rest at `Xⱼ` at its own equation's code type:
+
+       Code⟨etaCode m j Cs; !G⃗ ⊗ (Sⱼ ⊗ 1)⟩ νⱼ
+
+   The other premises are §68's, per pair. At `m = 0` the codes and types are §68's.
+
+6. **The relation: a greatest fixed point over tuples.**
+   - `𝒞⟦νᵢ⟧` is the `i`-th component of the greatest tuple `R⃗` of candidates below one unfolding of
+     every body, with `U Xₖ` read at `Rₖ`. It is written in `Prop` as `∃ R⃗`.
+   - One unfolding is monotone in each component, since every `Xₖ` avoids `Mut` payloads and
+     arguments, so the tuple is a fixed point.
+   - It needs no step index in Core. In the chain each candidate carries the step index, as §7's
+     does. It is not a step-indexing question (#990 R3a).
+   - `𝒞⟦νᵢ⟧ = 𝒞⟦Cᵢ[U ν₀/X₀, …]⟧`.
+   - At `m = 0` the clause equals §7's propositionally, and §7's lemmas keep their statements.
+
+7. **Consume per projection (§12).** `U νᵢ(X⃗). C⃗` is consumable when `Cᵢ = D & F R`, with `R`
+   closed and consumable. The consume is §12's: force, `nuOut i`, the second projection (`close`),
+   then the consume of `R`.
+
+8. **Lowering** (not a kernel change; the backend's unit).
+   - The index `i` is static, in the type: no value carries a run-time tag. It reaches the layout
+     through `LCTy.nu m i`.
+   - `nuIn i` and `nuOut i` lower to nothing.
+   - `unfoldᵢ` lowers to one closure class per equation, sharing the steps' tuple. There is no
+     allocation per observation beyond the rest's closure.
+
+### Baseline
+
+- `fundamentalC`, `adequacyC`, `adequacyD`, `fundamentalN_all` and `goal791N` are re-proved with
+  the ν rules at systems. Their statements are unchanged.
+- `cC_nu_eq`, `cC_nu_unfold`, `cC_nu_iff`, `nuRel_out`, `nuRel_roll`, `cN_nu_out`, `cN_nu_roll`,
+  `cN_nu_unfold` and `cN_nu_iff` keep their statements, as the `m = 0` corollaries.
+- `unfold_compatX`, `unfoldK_compatX`, `nuOutK_compatX` and their chain forms are restated at
+  systems. Their `m = 0` instances are the statements of §7 and §68.
+- `loopBody_nuOk`, `streamBody_nuOk`, `iterBody_nuOk`, `loopEffBody_nuOk`, `CTy.loop_unroll` and
+  the other instance lemmas of §7 keep their statements. So do `d_drive`, `d_driveL`,
+  `tickProg_runs`, the `*_eval` kernel programs and the K4 instances (`CodeLoop855N`).
+- `consumeSlot_derives` and every `Consumable` instance are unchanged. `Consumable.nu` is kept as a
+  corollary.
+- Every corpus and kernel program keeps its output. No program's term changes: at `m = 0` the
+  types, the `unfold` term, the codes and the consume are §7's, §12's and §68's by definition.
+- There is no new judgment (`scripts/check-judgments.sh`), no new `CDerives` index, and no
+  inversion of `CDerives`.
+
+### Units
+
+- K-M.1, built (#1090): the former `CTy.nuSys m i Cs`, with `νX. C` the match-pattern
+  abbreviation `nuSys 0 0 C`; every match carries the system case. No rule reaches a system yet,
+  and the backends refuse one. Until K-M.2 the relation reads a system at `m > 0` as its spine's
+  single body, which is inert.
+- K-M.2: the relation at systems in Core and the chain; `nuIn i`, `nuOut i`; consume per
+  projection; the checker's tests `sysOkB` and `sysFreshB`. Not built.
+- K-M.3: `unfoldᵢ` at systems in both developments. The kernel instance `lexProg`, the lexer modes
+  `Normal`/`InString`, is typed, evaluated, adequate, and covered by `goal791N`. Not built.
+- K-M.4: `unfoldK` and `nuOutK` per equation in both developments; `d_lexProgK`. Not built.
+
+### Open
+
+- **Lowering.** Backend-foreman's n-ary ν unit: `LCTy.nu m i`, `genUnfold` per equation, and the
+  layout's cycle over `n`. Until it lands, the backends refuse a system with an error.
+- **Surface.** There is no syntax for a system. Still to come: `protocol` declarations, a core-text
+  spelling `nu_i (X, Y). (C; D)`, and corpus programs (HTTP with a streamed body, an SMTP-like
+  server, lexer modes) on both backends.
+- **Effectful leaves in a system.** `F_Σ` leaves are covered by the general proof. The kernel
+  instance is pure, and the HTTP body at the corpus stage is the first program with them.
+- **Nested ν** is not part of this entry. No program needs it.
+- **Binder freshness over all pairs** is stricter than needed. Freshness only for the pairs
+  `(i, j)` with `Xⱼ` in `Cᵢ` would also be sound; it is left until a program needs it.
+- From §7, unchanged: other positions of `X`, lifetime-indexed iteration, and `WpChainCommutes`.
 
 ---
 
