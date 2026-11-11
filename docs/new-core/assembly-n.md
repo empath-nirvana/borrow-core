@@ -92,12 +92,13 @@ Stage `i` (0 ≤ i < n) reads wire `i` (type `A_i`, end `K_i`) and writes wire `
 - `Next(κ)`: store `AtNext κ`. If `State_{i−1} = Ended(k)`, resume `κ` with `inr k` (stage `i` stays running; G3). Otherwise make `i−1` running.
 - `Yield`/`Return` from `i < n−1`: pass through `handoff_{i+1}`; make `i+1` running.
 - `Return(r)` from `n−1`: `finish r`.
-- `Fwd(op, κ)` (only for `i < n−1`): store `AtFwd(κ, op)`; run `forward_i op` under `close_all`; resume `κ` with the answer.
+- `Yield(b, κ)` from `n−1` (a `for` over the chain; rev 2.4): store `AtYield κ`; perform the `for`'s site operation `(b, w)` under `close_all`, with `w` passed out and back, never held in the glue.
+- `Fwd(op, κ)` (any `i`; rev 2.4): store `AtFwd(κ, op)`; run `forward_i op` under `close_all`; resume `κ` with the answer.
 - `FwdWait(w, κ)` (only for `i < n−1`): as `Fwd`, with `forwardWait_i`.
 - `Stop(κ)`: store `AtStop κ`; run `close_up_i` (one region); resume `κ` with `K_i`, or, if the region kept an error, raise it at `κ` (§75's "raised at the call of `stop()`").
 - `Skip`: loop.
 
-The glue makes no other decisions. The last stage's ops, abortive ops and `must_resume` ops are not events: they pass through (§75, *Forwarding*).
+The glue makes no other decisions. Abortive ops, `must_resume` ops and answering ops are not events: they pass through (§75, *Forwarding*). Since rev 2.4 every stage's capturable resumable ops are `Fwd` events.
 
 ---
 
