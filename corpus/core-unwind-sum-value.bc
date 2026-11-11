@@ -1,0 +1,18 @@
+-- SPEC §19 in the core text: an unwinding borrow at the empty row whose value type is a sum. The
+-- cell `c` is lent `imm` by `withbor1u` at the row `[]`, where the callback cannot abort; it
+-- answers `inr 7`, which is the borrow's value, not an abort: the borrow answers the pair of the
+-- owner and `inr 7`, and the finaliser does not run.
+--
+-- Answer: (i32[1], inr i32[7]), and `live 0`.
+
+main : F (i32 * (i32 + i32)) =
+  c <- return (alloc[i32] i32[1]);
+  w <- return withbor1u['x, i32, i32 + i32, []];
+  cb : U (forall 'x < dom. imm 'x i32 -o F (box 'x (i32 + i32))) <- return
+    (thunkv Fun 'x < dom. fun (m : imm 'x i32) ->
+      u <- return (release_imm['x, i32] m);
+      return (boxed['x] (inr i32[7])));
+  p <- force w c cb;
+  let (r, v) = p;
+  x <- return (free[i32] r);
+  return (x, v)
