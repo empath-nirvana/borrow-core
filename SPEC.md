@@ -13237,10 +13237,12 @@ tables and `HandlerLawN` are unchanged.
   `λr. consume (take_output r)`. The callback writes by `write_byte` on both sides of `wait`. It is
   resumed (`progIO_res_orDiverges`) and cancelled (`progIO_can_orDiverges`, the finaliser handing
   the cell back), both from `HandlerLawN` alone, the externs at their standard models.
-- K1.5: `IORun.every_runN` at the checked wrapper; `corpus/io-effects.bc` concluded by the
-  extended `goal791N`; `bcc trusted` names it.
+- K1.5, built (#1079): `IORun.every_runN` and `IORun.loop_every_runN`
+  (`Frontend/Check/Externs.lean`) conclude every checked `run_io` program with no pins from
+  `HandlerLawN`, at the standard models. `bcc trusted` names them beside Core's `IORun.every_run`.
+  `corpus/io-effects.bc`, a looping program, is concluded by `IORun.loop_every_runN`.
 
-K1.5 is not built; its code PR marks its line *built*.
+K1.1–K1.5 are built.
 
 ### Open
 
