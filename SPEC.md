@@ -8826,8 +8826,8 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/name-clash.bc` | #590 (1): a program's `fn take` beside `include buf`'s | `i32[2]` (was refused) |
 | `corpus/mut-name-capture.bc` | #590 (2): a callee's `let mut tbl` beside its caller's | prints `1`, `i32[0]` (was refused) |
 | `corpus/mut-block.bc` | #586: a block that writes, at a block parameter called once, twice, and in a loop | `(i32[52], (i32[4036], i32[323]))` (was `(12, …)`) |
-| `corpus/mut-block-clause.bc` | #1068: a block writing a handler clause's `let mut`, in a resuming clause and in one that drops `k` | `(-5999, 4606)` |
-| `corpus/mut-block-decl-name.bc` | #1068: a block writing a `let mut` named like a declaration | `1202` |
+| `corpus/mut-block-clause.bc` | #1068: a block writing a handler clause's `let mut`, in a resuming clause and in one that drops `k` | `(i32[4294961297], i32[4606])` (−5999 as `i32`) |
+| `corpus/mut-block-decl-name.bc` | #1068: a block writing a `let mut` named like a declaration | `i32[1202]` |
 | `corpus/mut-block-nested.bc` | a block inside a block, both writing | `(i32[13], i32[3])` |
 | `corpus/mut-run.bc` | #586: `run` that writes, bound | `(i32[52], i32[5102])` (was `12`) |
 | `corpus/fail/mut-run-nested.bc` | #586: `g(run if … { x = 5; … })`, a `run` that writes inside an argument | refused, R3 |
