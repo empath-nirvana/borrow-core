@@ -13321,24 +13321,30 @@ instances, resolved to what serves them at the call, as §38 resolves a row entr
   - at the surface, from what the elaboration knows of an argument: a block's sites (§30), a stored
     generator's row (§15), a copy's own parameter at `r` passed on, or a variable bound to the
     result of an instance at `r`.
-- **Slice 2:** a row nothing determines is `[]`. The pure use is the definition as written: no copy, and its name
-  is unchanged.
+- **Slice 2:** a row nothing determines is `[]`.
+- The pure use (every row argument `[]`) is the definition as written: no copy, and its name is
+  unchanged.
 - A **private** site is a site parameter that the definition's type does not mention. It is never
   written. Each instance takes a fresh static name for it, once per instance and shared by its uses,
-  above every literal site of the program. A **public** site is written or matched.
+  above the effects pass's last site and above every literal site of the program. A **public** site
+  is written or matched.
 
 **An instance** is the template with the arguments substituted (`Frontend/Elab/RowInst.lean`).
-- It is a `def` of its own, named `f__r{k}`, keyed by the template and its stripped arguments
-  (types, rows, public sites).
+- It is keyed by the template, its stripped type, row and public-site arguments, and the caller's
+  type parameters those arguments mention. Those caller parameters become the instance's own, under
+  fresh names, and the use passes them on (`app__r2[T]`).
+- It is a `def` of its own, named `f__r{k}`, with `k` counting from 1 per template in order of
+  first use. It is placed just before its first user, and templates are dropped.
 - It is made once, and checked by the unchanged checker. A template is checked only when used,
-  through its instances.
+  through its instances. An error inside an instance is reported with
+  `` in the instance `f__rk` of `f`, used at L:C ``.
 - Two templates' instances never share a slot: a private site is fresh, and a written entry equal to
   one of `..r`'s is one entry (§38). One that differs is refused:
   `` the row argument of `f` gives `n.i` a second signature ``.
 
 **Errors at the use site.** A wrong row argument is reported where the template is used, and names
 the template:
-`` `f` used at row R, but `f`'s body performs E outside R ``.
+`` `f` used at row R, but `f`'s body performs E outside it ``.
 Where it can be, this is checked before the template is instantiated, so that it is not only a
 kernel error deep inside an instance.
 
@@ -13346,7 +13352,9 @@ kernel error deep inside an instance.
 - polymorphic recursion over rows (below, *Open*);
 - one parameter at two rows that share no instance (rank 2; *Open*), once slice 2 infers rows;
 - a row argument whose entries name lifetimes not in scope at the template. Slice 1 refuses it;
-  slice 2 makes them lifetime parameters of the instance, as §15 does for types.
+  slice 2 makes them lifetime parameters of the instance, as §15 does for types;
+- in slice 1, a template's body is core text, and a surface form in it is refused;
+- a literal site at or above 2³², refused by the parser.
 
 ### Baseline
 
@@ -13362,13 +13370,16 @@ kernel error deep inside an instance.
 
 ### Programs
 
-**Slice 1** (core text; observed, `bcc interp`):
+**Slice 1** (observed, `bcc interp`):
 
 | Program | What | Answer |
 |---|---|---|
 | `corpus/core-row-generic.bc` | a core-text piece `stopk[A, row r]` over one stage's types, used at `F[4.0 cancel i32 ~> 0]` and at `F[]`; `handle_with[4]` around the use puts `main` at `F 1` | `()`, `live 0` |
 | `corpus/core-site-generic.bc` | a `def` with a private `site s` (`handle_with[s]` inside), used twice, nested; the inner activation's performs go to the inner handler | `i32[2321]`, `live 0` |
 | `corpus/core-row-pipe-stop.bc` | §75's `pipe_stop` at two rows | `i32[42]`, `live 0` |
+| `corpus/core-row-key-tparam.bc` | a use whose arguments mention the caller's type parameter: the instance takes it as its own (`app__r2[T]`) | `(i32[3], inl ())`, `live 0` |
+| `corpus/core-site-fresh-const.bc` | a private site's fresh name lies above every literal site and the effects pass's sites | `i32[4]`, `live 0` |
+| `corpus/row-site-fresh-handler.bc` | a private site's fresh name beside a surface handler's site | `i32[4]`, `live 0` |
 
 **Slices 2 and 3** (surface; the answers come with each slice):
 
@@ -13379,11 +13390,15 @@ kernel error deep inside an instance.
 | `corpus/async-raise.bc` | `Task[A, row r]` and `spawn[A, row r]`: a task body that raises, resumed past its `await()`, reaches `to_result` | 3 |
 
 Rejects:
-- `corpus/reject/row-arg-mismatch.bc`: a wrong row argument, reported at the use site. Its message
-  comes from slice 1's code.
-- `corpus/reject/row-poly-rec.bc`: polymorphic recursion over rows.
+- `corpus/reject/row-arg-mismatch.bc`: a wrong row argument, reported at the use site:
+  `` `tick` used at row (), but `tick`'s body performs `4.0` outside it ``.
+- `corpus/reject/row-args-unwritten.bc`: unwritten row arguments, refused in slice 1:
+  `` …its row and site arguments are written at each use…; reading them off the call is not built in slice 1 ``.
+- `corpus/reject/row-poly-rec.bc`: polymorphic recursion over rows, with a message naming the
+  missing kernel row binder.
 - `corpus/reject/row-two-sigs.bc`: a row argument that gives an entry a second signature.
-- `corpus/reject/row-rank2.bc`: unwritten row arguments, refused in slice 1 (inference is slice 2).
+- `corpus/reject/row-instance-error.bc`: an error inside an instance, reported with the instance and
+  its use.
 
 ### Open
 
