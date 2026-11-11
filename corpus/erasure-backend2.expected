@@ -519,6 +519,8 @@ mut-after-unwind-nested erased handles 0 performs 0 raises 0 left 0 0
 mut-after-unwind-while erased handles 0 performs 0 raises 0 left 0 0
 mut-bind-arm erased handles 0 performs 0 raises 0 left 0 0
 mut-block erased handles 0 performs 0 raises 0 left 0 0
+mut-block-clause erased handles 0 performs 0 raises 0 machines 2 suspends 2 left 0 0
+mut-block-decl-name erased handles 0 performs 0 raises 0 left 0 0
 mut-block-nested erased handles 0 performs 0 raises 0 left 0 0
 mut-cancel-loop-for erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0
 mut-cancel-loop-for-value erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0

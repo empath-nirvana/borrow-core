@@ -509,6 +509,8 @@ mut-after-unwind-nested 3 0 0 3 3 0
 mut-after-unwind-while 3 0 0 3 3 0
 mut-bind-arm 0 0 0 0 0 0
 mut-block 0 0 0 0 0 0
+mut-block-clause 0 3 0 0 0 0
+mut-block-decl-name 0 0 0 0 0 0
 mut-block-nested 0 0 0 0 0 0
 mut-cancel-loop-for 0 0 0 0 0 0
 mut-cancel-loop-for-value 0 0 0 0 0 0

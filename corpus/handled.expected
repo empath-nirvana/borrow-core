@@ -2074,6 +2074,12 @@ corpus/mut-after-unwind-loop-in-n.bc flows [0, 4294967295]; main [], finaliser
 corpus/mut-after-unwind-nested.bc flows [0, 4294967295], finaliser; main [], finaliser
 corpus/mut-after-unwind-while.bc flows [0, 4294967295], finaliser; main [], finaliser
 corpus/mut-bind-arm.bc flows [0, 4294967295]; main []
+corpus/mut-block-clause.bc flows [0, 1, 2, 4294967295]; main [1, 2]
+corpus/mut-block-clause.bc 20:4: handle 1: inside []; row []; ops 1.0 tail+state; names 1.0 row; condition 2 holds
+corpus/mut-block-clause.bc 20:26: handle 2: inside []; row []; ops 2.0 stored; names 2.0 row; condition 2 holds
+corpus/mut-block-clause.bc 1.0 tail+state: machine; condition 2 holds; -
+corpus/mut-block-clause.bc 2.0 stored: machine; condition 2 holds; -
+corpus/mut-block-decl-name.bc flows [0, 4294967295]; main []
 corpus/mut-block-nested.bc flows [0, 4294967295]; main []
 corpus/mut-block.bc flows [0, 4294967295]; main []
 corpus/mut-cancel-loop-for-value.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
