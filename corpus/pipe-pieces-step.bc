@@ -5,11 +5,11 @@ include pipe
 def plus : i32 * i32 => i32 = unbang host[add32]
 def lt : i32 * i32 => 1 + 1 = unbang host[lt_s32]
 
-def src_turn : !U (i32 -o F[1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1] (1 + box top i32) & F 1) =
+def src_turn : !U (i32 -o F[1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1] (1 + i32) & F 1) =
   !thunkv fun (i : i32) ->
     < c <- return (lt (i32[3], i));
       case c {
-        inl le -> u <- perform[1.0] i; return (inr (boxed[top] (plus (i, i32[1]))))
+        inl le -> u <- perform[1.0] i; return (inr (plus (i, i32[1])))
       | inr gt -> return (inl ())
       },
       return () >
@@ -38,9 +38,9 @@ def item : !U (i32 + 1 -o F i32) = !thunkv fun (x : i32 + 1) -> case x { inl v -
 
 main : F i32 =
   st0 : PipeSt[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3] <-
-    return (inl (boxed[top] (thunkv nu_in <
-      g <- return (unbang (unfold[nu X. F[1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1] (1 + box top U X) & F 1, i32] src_turn)); a <- return i32[1]; (nu_out (force g a)).1,
-      g <- return (unbang (unfold[nu X. F[1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1] (1 + box top U X) & F 1, i32] src_turn)); a <- return i32[1]; (nu_out (force g a)).2 >)));
+    return (inl ((thunkv nu_in <
+      g <- return (unbang (unfold[nu X. F[1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1] (1 + U X) & F 1, i32] src_turn)); a <- return i32[1]; (nu_out (force g a)).1,
+      g <- return (unbang (unfold[nu X. F[1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1] (1 + U X) & F 1, i32] src_turn)); a <- return i32[1]; (nu_out (force g a)).2 >)));
   e1 <- (unbang pipe_step[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]) (st0, inl ());
   p1 <- (unbang ev_st) e1;
   let (x1, st1) = p1;

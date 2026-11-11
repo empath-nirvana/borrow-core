@@ -285,8 +285,8 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
   {defs}{turnFn}io_st_{sfx} : {GS} <- return ({ready}, {turnTo (n - 1) "inl ()"});
   io_f_{sfx} <- return (unbang (unfold[{Lw}, {GS}] io_turn_{sfx}));
   return (thunkv nu_in < (nu_out (force io_f_{sfx} io_st_{sfx})).1, (nu_out (force io_f_{sfx} io_st_{sfx})).2 >));
-io_j_{sfx} : {Rlast} <- return ((unbang io_cw_{sfx}) {q});
-return io_j_{sfx}"
+io_pipe_j_{sfx} : {Rlast} <- return ((unbang io_cw_{sfx}) {q});
+return io_pipe_j_{sfx}"
   pure body
 
 end Frontend.Elab.Connector

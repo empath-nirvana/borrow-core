@@ -517,6 +517,9 @@ def use : Nat → Cx → Span → Tmpl → List VTy → Bool → M Val
     let mentions (s : String) : Bool := t.ty.ents.any (·.1 == siteOfName s)
     let pub := t.sites.filter mentions
     let priv := t.sites.filter (!mentions ·)
+    -- Met again by `runMore`: a pure use, already the definition as written, under its name.
+    if Rs.isEmpty && Ss.isEmpty && !t.rows.isEmpty && ((← get).insts.lookup (t.name, [])).isSome then
+      return (if Ts.isEmpty then .var sp t.name else .defApp sp t.name Ts)
     if bare && !(t.tps.isEmpty && t.rows.isEmpty && pub.isEmpty) then
       throw ⟨sp, s!"`{t.name}` is used without its arguments: its row and site arguments are " ++
         s!"written at each use, `{t.name}[…, row (…)]`; reading them off the call is not built " ++

@@ -1432,7 +1432,9 @@ def mCall (m : MCx) : Nat → TCx → TCx → Span → Ident → Option VTy → 
     let h : MHeld := { v, T := Tm, closeSrc := s!"io_r <- (nu_out (force {v})).2;\n{abort}", caps := hcaps }
     let excl := x.name :: lend.toList.map (·.name)
     let vars ← mVars m c [h] N excl
-    let what := "a call of a div function"
+    -- The pipe connector's call (`Elab.Connector.glue`) is a stream chain's.  [spec §75]
+    let what := if x.name.startsWith "io_pipe_j_" then "a stream chain on the pipe connector"
+      else "a call of a div function"
     let d ← mNewIn m sp what true true vars
     let vars := (← mPt d).vars
     let bindX := match lend, A with
@@ -3987,7 +3989,11 @@ def liftLoop (c : TCx) (sp : Span) (row : Frontend.Check.CRow) (A : CVTy) (M : C
         else if !BoCa.Fig16.LogRel.Core.Check.outlivesB cL.Δ .top T then
           some (s!"the loop's state would hold {y}, of type `{pp T}`, across the per-turn lend " ++
             s!"of `{t.shown}`: a turn's next state is boxed at `top`, which a thunk or a borrow " ++
-            "does not outlive (not provided)")
+            "does not outlive (not provided" ++
+            -- A stream chain held so: the connector keeps its stages unboxed.  [spec §75]
+            (if what == "a stream chain on the pipe connector" then
+              "; a stream chain is not kept across a lend per observation, SPEC §75 *Open*, #1082)"
+            else ")"))
         else none }
   pure (← divMachine cx row cL ws ab M mt, cx)
 
