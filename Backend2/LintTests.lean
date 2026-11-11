@@ -374,10 +374,71 @@ def i64T : LTy := .int .w64
 -- A pair built at a sum type, an injection at a pair type, or of the wrong summand: refused.
 #guard refuses (pairElim (.pair i32T i64T) (.sum i32T i64T)) "which is not a pair type"
 #guard refuses (sumElim (.sum i32T i64T) (.pair i64T i32T)) "which is not a sum type"
-#guard refuses (sumElim (.sum i32T i64T) (.sum i32T i64T)) "an inr at"
+-- Each arm's injection is checked: the first arm's alone wrong, then the second's alone.
+#guard refuses (sumElim (.sum i32T i64T) (.sum i64T i64T)) "an inr at (i64 + i64) of x1 : i32"
+#guard refuses (sumElim (.sum i32T i64T) (.sum i32T i32T)) "an inl at (i32 + i32) of x2 : i64"
 -- A letpair binding a component at another type: refused.
 #guard refuses ({ pairElim (.pair i32T i64T) with
     ty := ((({} : Std.HashMap Var LTy).insert 0 (.pair i32T i64T)).insert 1 i64T).insert 2 i64T })
   "a letpair binds x1"
+
+-- `sameTy`: a `ν` is its unrolling (no node rolls one); a `μ` is not (`Op.roll` does); `!` is
+-- ignored at any depth; a cell is not a borrow of it.
+/-- `C` of `νX. C`, `X` its variable `0`. -/
+def nuC : LCTy := .amp (.ret (.sum i32T (.tvar 0))) (.ret .unit)
+#guard nuC.unrollNu != nuC
+#guard Lint.sameTy 64 (.thunk (.nu nuC)) (.thunk nuC.unrollNu)
+#guard Lint.sameTy 64 (.sum i32T (.thunk nuC.unrollNu)) (.sum i32T (.thunk (.nu nuC)))
+/-- `A` of `μX. A`. -/
+def muA : LTy := .sum .unit (.pair i32T (.tvar 0))
+#guard muA.unrollMu != muA
+#guard !Lint.sameTy 64 (.mu muA) muA.unrollMu
+#guard Lint.sameTy 64 (.pair i32T (.bang (.sum i32T (.bang i64T)))) (.pair i32T (.sum i32T i64T))
+#guard !Lint.sameTy 64 (.ref i32T) (.imm i32T)
+
+-- An `absurd` of a variable not of type `0`: refused.
+#guard refuses ({ absorbProg (.ref i32T) with
+    ty := (({} : Std.HashMap Var LTy).insert 0 (.ref i32T)).insert 1 i32T })
+  "an absurd of x1 : i32, which is not 0"
+
+/-- `f0 (ps) : r = body`, its variables' types `ty`. -/
+def fnProg (ps : List Var) (r : LTy) (body : Tm) (ty : List (Var × LTy)) : Prog where
+  fns := #[{ name := "f", params := ps, ret := r, body := body }]
+  codes := #[]
+  main := .unit
+  mainTy := .unit
+  ty := ty.foldl (fun m (x, t) => m.insert x t) {}
+
+-- A `()` at a type not `1`: refused.
+#guard refuses (fnProg [] i32T .unit []) "a () at i32"
+-- A variable answered at a tail at another type than the function's `ret`, or `main`'s: refused.
+#guard accepts (fnProg [0] i32T (.var 0) [(0, i32T)])
+#guard refuses (fnProg [0] i64T (.var 0) [(0, i32T)]) "x0 : i32 answered at i64"
+#guard refuses ({ fnProg [] .unit .unit [(0, i32T)] with
+    main := .letv 0 (.lit (.i32 1)) (.var 0), mainTy := i64T }) "main: x0 : i32 answered at i64"
+-- A direct call whose callee answers another type than the one expected: refused.
+#guard refuses ({ fnProg [] i32T (.lit (.i32 0)) [] with
+    fns := #[{ name := "g", params := [], ret := i32T, body := .lit (.i32 0) },
+             { name := "f", params := [], ret := i64T, body := .call 0 [] }] })
+  "f0 (g), answering i32, called at i64"
+-- A `letv`'s value is checked at its variable's type, not at the function's `ret`: a pair bound
+-- to a pair-typed variable in a function answering `i32`, accepted; the same at a sum-typed
+-- variable, refused.
+def letvProg (t : LTy) : Prog :=
+  fnProg [1, 2] i32T (.letv 0 (.pair 1 2) (.letpair 3 4 0 (.consume .dead 3 (.var 4))))
+    [(0, t), (1, i32T), (2, i32T), (3, i32T), (4, i32T)]
+#guard accepts (letvProg (.pair i32T i32T))
+#guard refuses (letvProg (.sum i32T i32T)) "a pair of x1 and x2 at (i32 + i32), which is not a pair type"
+-- A variable with no type is refused where it is bound.
+#guard refuses ({ letvProg (.pair i32T i32T) with
+    ty := [(1, i32T), (2, i32T), (3, i32T), (4, i32T)].foldl (fun m (x, t) => m.insert x t) {} })
+  "x0 has no type"
+-- `copy`, `consume` and `abandon` pass the expected type on to their body.
+#guard accepts (fnProg [0] i32T (.copy .dup 0 1 (.consume .dead 1 (.var 0))) [(0, i32T), (1, i32T)])
+#guard refuses (fnProg [0] i64T (.copy .dup 0 1 (.consume .dead 1 (.var 0))) [(0, i32T), (1, i32T)])
+  "x0 : i32 answered at i64"
+#guard accepts (fnProg [0, 1] i32T (.abandon .letAbort 0 (.var 1)) [(0, .opq .output), (1, i32T)])
+#guard refuses (fnProg [0, 1] i64T (.abandon .letAbort 0 (.var 1)) [(0, .opq .output), (1, i32T)])
+  "x1 : i32 answered at i64"
 
 end Backend2.LintTests

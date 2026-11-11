@@ -189,7 +189,14 @@ top-level `!`s (`LTy.peel`: `!A` is represented as an `A`). The checks, each `no
 - a `pair` is built at a pair type from its components, an `inj` at a sum type from the summand
   it injects, a `()` at `1`;
 - a variable answered at a tail, and a direct `call`, have the type the term is expected at.
-Types are compared as representations (`sameTy`: up to `!`, and a `ν` read as its unrolling). -/
+Types are compared as representations (`sameTy`: up to `!`, and a `ν` read as its unrolling).
+A variable with no type is refused where it is bound (`bindNew`); the expected type of a `letv`'s
+value is then `none` only on a program that is refused there.
+
+Not yet checked on the types (#1087's follow-up): a call's arguments (`call`, `app`) against its
+parameter types; the operand shapes and the results of `app`, `app0` and `sel`; a `clos` against
+the closure type it is expected at; a literal's width; the operands and results of a `prim`
+(beyond `lend` and `slotPop`); a `copy`'s binder at its source's type. -/
 
 /-- `x` and its type, for a message. -/
 def tyStr (p : Prog) (x : Var) : String :=
