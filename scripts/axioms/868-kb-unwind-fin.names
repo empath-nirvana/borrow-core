@@ -1,0 +1,6 @@
+-- #868 K-b probe: the unwinding lends' finaliser at its own row, the chain's hand-over  [spec §19, §27]
+BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_unwindD
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claimD
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claimID
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claimMD
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor2UD_sem
