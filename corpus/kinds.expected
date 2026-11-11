@@ -242,6 +242,7 @@ corpus/core-pipe-close.bc 3.0 cancellable stored: machine: the handlers of the n
 corpus/core-pipe-step.bc 2.0 cancellable abortive: branch; agree
 corpus/core-pipe-step.bc 3.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-pipe-step.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/core-row-capture-global.bc 4.0 cancellable abortive: -; agree
 corpus/core-row-generic.bc 4.0 cancellable abortive: -; agree
 corpus/core-row-key-tparam.bc 4.0 cancellable abortive: -; agree
 corpus/core-row-pipe-stop.bc 9.0 cancellable abortive: branch; agree
