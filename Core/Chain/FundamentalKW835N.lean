@@ -10,6 +10,7 @@ import Core.Chain.NuKW835N
 import Core.Chain.CountKW835N
 import Core.Chain.FamKW835N
 import Core.Chain.FamOpsKW835N
+import Core.Chain.SliceCopyKW835N
 import Core.Chain.FamImmKW835N
 import Core.Chain.MuKW835N
 import Core.Chain.FoldGKW835N
@@ -168,6 +169,7 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | arrEmpty _ hΓ => exact arrEmpty_compatN hΓ
   | sliceReplaceM _ _ hΓ => exact sliceReplaceM_compatN hΓ
   | sliceSwapM _ _ hΓ => exact sliceSwapM_compatN hΓ
+  | sliceCopyM _ _ _ hΓ hA => exact sliceCopyM_compatN hΓ hA
   | withbor1 x hΓ _ hsc₁ hf₁ hf₂ => exact withbor1_compatN x hΓ hsc₁ hf₁ hf₂
   | withbor2 x hΓ _ hside hf₁ hf₂ => exact withbor2_compatN x hΓ hside hf₁ hf₂
   | withbor3 x hΓ _ hf₁ hf₂ => exact withbor3_compatN x hΓ hf₁ hf₂

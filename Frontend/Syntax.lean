@@ -371,6 +371,9 @@ inductive Const where
   | sliceEmptyMut (a : Life) (A : VTy)
   | sliceReplaceMut (a : Life) (A : VTy)
   | sliceSwapMut (a : Life) (A : VTy)
+  /-- `slice_copy_mut[@a, @b, A]`: the bulk copy of SPEC §74 from an `imm` family into a `mut`
+      one, at a persistent `A`. -/
+  | sliceCopyMut (a b : Life) (A : VTy)
   /-- `count_fold[S]`: the counted loop of SPEC §16. -/
   | countFold (S : VTy)
   /-- `count_try[S, E]`: the counted loop with an exit of SPEC §16. -/
@@ -1044,6 +1047,7 @@ def Const.strip : Const → Const
   | .sliceEmptyMut a A => .sliceEmptyMut a.strip A.strip
   | .sliceReplaceMut a A => .sliceReplaceMut a.strip A.strip
   | .sliceSwapMut a A => .sliceSwapMut a.strip A.strip
+  | .sliceCopyMut a b A => .sliceCopyMut a.strip b.strip A.strip
   | .countFold S => .countFold S.strip
   | .countTry S E => .countTry S.strip E.strip
   | .boundedFix A C => .boundedFix A.strip C.strip

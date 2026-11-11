@@ -718,6 +718,7 @@ inductive TExpr where
   | arrEmpty (info : TInfo) (jdg : Jdg) (A : VTy)
   | sliceReplaceM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
   | sliceSwapM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
+  | sliceCopyM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (b : Lifetime.Life) (A : VTy)
   | withbor1 (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (x : LifeVar)
   | withbor2 (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (x : LifeVar)
   | withbor3 (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy) (x : LifeVar)
@@ -884,6 +885,7 @@ def TExpr.erase : TExpr → Expr
   | .arrEmpty _ _ _ => (.val emptyFamV)
   | .sliceReplaceM _ _ _ _ => (.val replaceV)
   | .sliceSwapM _ _ _ _ => (.val swapV)
+  | .sliceCopyM _ _ _ _ _ => (.val sliceCopyV)
   | .withbor1 _ _ _ _ _ => withbor
   | .withbor2 _ _ _ _ _ => withbor
   | .withbor3 _ _ _ _ _ _ => withbor
@@ -1009,6 +1011,7 @@ def TExpr.info : TExpr → TInfo
   | .arrEmpty i _ _ => i
   | .sliceReplaceM i _ _ _ => i
   | .sliceSwapM i _ _ _ => i
+  | .sliceCopyM i _ _ _ _ => i
   | .withbor1 i _ _ _ _ => i
   | .withbor2 i _ _ _ _ => i
   | .withbor3 i _ _ _ _ _ => i
@@ -1130,6 +1133,7 @@ def TExpr.jdg : TExpr → Jdg
   | .arrEmpty _ j _ => j
   | .sliceReplaceM _ j _ _ => j
   | .sliceSwapM _ j _ _ => j
+  | .sliceCopyM _ j _ _ _ => j
   | .withbor1 _ j _ _ _ => j
   | .withbor2 _ j _ _ _ => j
   | .withbor3 _ j _ _ _ _ => j
@@ -1259,6 +1263,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .arrEmpty _ _ _ => []
   | .sliceReplaceM _ _ _ _ => []
   | .sliceSwapM _ _ _ _ => []
+  | .sliceCopyM _ _ _ _ _ => []
   | .withbor1 _ _ _ _ _ => []
   | .withbor2 _ _ _ _ _ => []
   | .withbor3 _ _ _ _ _ _ => []
@@ -1402,6 +1407,7 @@ def TExpr.isLam : TExpr → Bool
   | .arrEmpty _ _ _ => (((.val emptyFamV) : Expr) matches .lam _)
   | .sliceReplaceM _ _ _ _ => (((.val replaceV) : Expr) matches .lam _)
   | .sliceSwapM _ _ _ _ => (((.val swapV) : Expr) matches .lam _)
+  | .sliceCopyM _ _ _ _ _ => (((.val sliceCopyV) : Expr) matches .lam _)
   | .withbor1 _ _ _ _ _ => ((withbor : Expr) matches .lam _)
   | .withbor2 _ _ _ _ _ => ((withbor : Expr) matches .lam _)
   | .withbor3 _ _ _ _ _ _ => ((withbor : Expr) matches .lam _)
@@ -1527,6 +1533,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .arrEmpty _ _ _ => rfl
   | .sliceReplaceM _ _ _ _ => rfl
   | .sliceSwapM _ _ _ _ => rfl
+  | .sliceCopyM _ _ _ _ _ => rfl
   | .withbor1 _ _ _ _ _ => rfl
   | .withbor2 _ _ _ _ _ => rfl
   | .withbor3 _ _ _ _ _ _ => rfl

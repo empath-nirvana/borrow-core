@@ -4,6 +4,7 @@ import Core.CodeNuOut
 import Core.Integers
 import Core.Arrays
 import Core.SliceOps
+import Core.SliceCopy
 import Core.CountFold
 import Core.BoundedFix
 import Core.FoldReuse
@@ -425,6 +426,10 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `slice_swap_mut : !([Mut @a A] ⊗ (I32 ⊗ I32) ⇒ [Mut @a A])`.  `[spec §9]` -/
   | sliceSwapM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val swapV) (.val (sliceSwapMTy a A))
+  /-- `slice_copy_mut : !([Mut @a A] ⊗ (I32 ⊗ ([Imm @b A] ⊗ (I32 ⊗ I32))) ⇒ [Mut @a A] ⊗ (1 ⊕ 1))`,
+  `A` persistent, the step `sliceCopy`.  `[spec §74]` -/
+  | sliceCopyM {Δ Γ} (a b : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) (hA : A.Persistent) :
+      CDerives Δ Γ (.val sliceCopyV) (.val (sliceCopyMTy a b A))
   | withbor1 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerives Δ Γ withbor (.val (axWithbor1Ty x Δ.meetOfDom A B))
@@ -917,6 +922,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | arrEmpty _ hΓ => exact arrEmpty_compatX hΓ
   | sliceReplaceM _ _ hΓ => exact sliceReplaceM_compatX hΓ
   | sliceSwapM _ _ hΓ => exact sliceSwapM_compatX hΓ
+  | sliceCopyM _ _ _ hΓ hA => exact sliceCopyM_compatX hΓ hA
   | withbor1 x hΓ hx hsc₁ hf₁ hf₂ => exact withbor1_compatX x hΓ hx hsc₁ hf₁ hf₂
   | withbor2 x hΓ hx hside hf₁ hf₂ => exact withbor2_compatX x hΓ hx hside hf₁ hf₂
   | withbor3 x hΓ hx hf₁ hf₂ => exact withbor3_compatX x hΓ hx hf₁ hf₂

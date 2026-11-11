@@ -75,7 +75,7 @@ def keywords : List String :=
     "shorten_mut", "shorten_imm", "array_new", "array_empty", "array_free", "array_size", "array_replace",
     "slice_borrow_mut", "slice_borrow_imm", "slice_get_mut", "slice_len_mut", "count_fold", "count_try", "bounded_fix",
     "slice_split_imm", "slice_split_mut", "slice_empty_imm", "slice_empty_mut",
-    "slice_replace_mut", "slice_swap_mut",
+    "slice_replace_mut", "slice_swap_mut", "slice_copy_mut",
     "array_len", "array_get", "array_copy", "array_release",
     "withbor1u", "withbor2u", "withbor3u", "withloadu", "slice_borrow_mut_u", "slice_borrow_imm_u" ]
 

@@ -272,6 +272,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | t@(.arrEmpty ..) => t
   | t@(.sliceReplaceM ..) => t
   | t@(.sliceSwapM ..) => t
+  | t@(.sliceCopyM ..) => t
   | t@(.withbor1 ..) => t
   | t@(.withbor2 ..) => t
   | t@(.withbor3 ..) => t
@@ -353,6 +354,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .arrCopy .. | .arrRelease .. | .countFold .. | .countTry .. | .boundedFix ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
   | .sliceSplitM .. | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. | .sliceReplaceM .. | .sliceSwapM ..
+  | .sliceCopyM ..
   | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .withloadU ..
   | .foldImm .. | .foldOwn .. | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .unfoldK .. | .iterate .. | .divFuel ..
   | .reify .. =>

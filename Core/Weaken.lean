@@ -151,6 +151,7 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | arrEmpty A hΓ => exact .arrEmpty A (deadP_append h' hΓ)
   | sliceReplaceM a A hΓ => exact .sliceReplaceM a A (deadP_append h' hΓ)
   | sliceSwapM a A hΓ => exact .sliceSwapM a A (deadP_append h' hΓ)
+  | sliceCopyM a b A hΓ hA => exact .sliceCopyM a b A (deadP_append h' hΓ) hA
   | withbor1 x hΓ hx hsc hf₁ hf₂ => exact .withbor1 x (deadP_append h' hΓ) hx hsc hf₁ hf₂
   | withbor2 x hΓ hx hside hf₁ hf₂ => exact .withbor2 x (deadP_append h' hΓ) hx hside hf₁ hf₂
   | withbor3 x hΓ hx hf₁ hf₂ => exact .withbor3 x (deadP_append h' hΓ) hx hf₁ hf₂

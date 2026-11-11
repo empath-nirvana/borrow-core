@@ -1,4 +1,5 @@
 import Core.StepsN
+import Core.Fundamental
 
 /-!
 # Core — runs of `sliceCopy`  `[spec §74]`
@@ -17,6 +18,10 @@ import Core.StepsN
   answer is `(dst, inj₂ ())` (`scZero_run`).
 
 No surface or elaborator produces `sliceCopy` yet; these are closed core terms.
+
+The constant is typed by its rule (`CDerives.sliceCopyM`) at a persistent element, and so is in
+the relation (`sliceCopy_sem`, `fundamentalC`); at a non-persistent element the rule does not
+apply (`sliceCopy_not_ref`).
 -/
 
 noncomputable section
@@ -28,6 +33,7 @@ open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
 open BoCa.BoLo (Heap Steps Step1 Head Kont copyHeap)
+open BoCa.Lifetime (LifeCtx)
 
 /-- Cells `0, …, 3` hold `0`; cells `10, …, 13` hold `1, …, 4`. -/
 def μ₀ : Heap := fun k =>
@@ -131,6 +137,22 @@ theorem scZero_run :
   have h := sc_step (ℍ := ℍ) 4 4 0 (fun _ => ⟨fun i hi => absurd hi (by simp),
     fun i hi => absurd hi (by simp)⟩)
   rwa [copyHeap_zero, show copyAns 0 4 4 4 4 0 = Val.pair (Val.arr 0 4) (Val.inj₂ Val.unit) by simp [copyAns, hok]] at h
+
+/-! ### The rule -/
+
+/-- `slice_copy_mut` at `I32`, typed by its rule at the empty context. -/
+theorem sliceCopy_der (a b : Lifetime.Life) :
+    CDerives LifeCtx.empty [] (.val sliceCopyV) (.val (sliceCopyMTy a b (.int .w32))) :=
+  .sliceCopyM a b _ .nil rfl
+
+/-- **`slice_copy_mut` at `I32` is in the relation**: `fundamentalC` at its derivation. -/
+theorem sliceCopy_sem (a b : Lifetime.Life) :
+    SemJ (ℍ := ℍ) LifeCtx.empty [] (.val sliceCopyV) (.val (sliceCopyMTy a b (.int .w32))) :=
+  fundamentalC (sliceCopy_der a b)
+
+/-- The rule's premise fails at `Ref I32`: a copy of an owned element would duplicate its cell. -/
+theorem sliceCopy_not_ref : ¬ (VTy.ref (.int .w32)).Persistent := by
+  simp [VTy.Persistent, VTy.persistent]
 
 end BoCa.Fig16.LogRel.Core.SliceCopyPrograms
 

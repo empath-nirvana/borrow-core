@@ -138,6 +138,7 @@ def Const.respan (sp : Span) : Const → Const
   | .sliceEmptyMut a A => .sliceEmptyMut (a.respan sp) (A.respan sp)
   | .sliceReplaceMut a A => .sliceReplaceMut (a.respan sp) (A.respan sp)
   | .sliceSwapMut a A => .sliceSwapMut (a.respan sp) (A.respan sp)
+  | .sliceCopyMut a b A => .sliceCopyMut (a.respan sp) (b.respan sp) (A.respan sp)
   | .countFold S => .countFold (S.respan sp)
   | .countTry S E => .countTry (S.respan sp) (E.respan sp)
   | .boundedFix A C => .boundedFix (A.respan sp) (C.respan sp)

@@ -582,6 +582,10 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.sliceSwapM a A (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
+  | sliceCopyM a b A hΓ hA =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.sliceCopyM a b A (deadP_ins (live_eval_atom hf hp) Γa hΓ) hA,
+        (shift_closed0 (by rfl) _ _).symm⟩
   | withbor1 x hΓ hx hsc hf₁ hf₂ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.withbor1 x (deadP_ins (live_eval_atom hf hp) Γa hΓ) hx hsc hf₁ hf₂,
@@ -1185,6 +1189,10 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
   | sliceSwapM a A hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.sliceSwapM a A (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+        (shift_closed0 (by rfl) _ _).symm⟩
+  | sliceCopyM a b A hΓ hA =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.sliceCopyM a b A (deadP_ins (live_eval_atom hf hp) Γa hΓ) hA,
         (shift_closed0 (by rfl) _ _).symm⟩
   | withbor1 x hΓ hx hsc hf₁ hf₂ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'

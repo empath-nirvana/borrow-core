@@ -2495,7 +2495,7 @@ theorem vN_empty_of_persistent : ∀ (A : VTy), A.Persistent → ∀ {δ : LSub}
   | mu A =>
       exact h.2.2.2 (by
         show (VTy.inst (.mu A) A).persistent = true
-        rw [Inversions.persistent_inst_mu]; exact hp)
+        rw [persistent_inst_mu]; exact hp)
 
 /-- **The relation's reading of a row's table** (`rdNv` at `vN`, the lender's tables): every
 entry, and every entry of a cancel row, owes its continuation along `KW.Owed`. -/
