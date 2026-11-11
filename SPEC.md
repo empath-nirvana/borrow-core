@@ -12673,7 +12673,8 @@ at every stage of Backend2.
   backend's *linear* shapes, e.g. `A ⊕ X ⊕ (B ⊗ X)`) keep the recursion.
 - **Two recursive positions** (trees, `data-fold-tree`, `data-fold-forest`) keep a frame a level,
   as `fold_imm` does everywhere.
-- **`foldOwnG`** (§61) and the consume of a `μ` (`genConsume`, §12) recurse once per node.
+- **`foldOwnG`** (§61) and the consume of a `μ` (`genConsume`, §12) recurse once per node,
+  except the consume of §77's class, which runs in constant stack.
 
 ---
 
@@ -13337,6 +13338,86 @@ The surface part is not built: until it lands, the surface refuses the operators
 - Narrower unsigned widths (`U16`) and `I8`/`I16`: not asked for.
 - Whether `U8` gains arithmetic now that the grouped operations are admitted per width: not in
   this entry (`U8` keeps §8's "no arithmetic of its own").
+
+---
+
+## 77. Entry 76 — the new backend: a constant-stack consume of a μ with arrays of X (#1013)
+
+### Motivation
+
+Backend2's consume of a `μ` (`genConsume`, §12) is a function per type that calls itself at each
+recursive position. Where the position is an array of `X` (`Json`'s `Vec[X]` and
+`Map[string, X]`, `lib/json.bc`), the call sits inside the array's loop, not in tail position: one
+native frame and a loop frame a level, about 75 bytes. A `Json` 1000 deep, built by a loop,
+overflows a 64 KiB stack when dropped by that recursion (#1013), and freeing must not be what
+crashes a server on deep valid data. §67's pointer reversal covers a fold with one recursive position and a base `1`.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration, semantics or erasure. Backend2's
+conversion of a `consume` node at a `μ` of the class below changes, and the LIR gains one op.
+
+### The fact
+
+The `consume` node's checked type `μX. T` (as today, `consume:type`), read through `toFShape T`
+(`Core/Consume.lean`) and `FoldP.clB`; an array position is a leaf `[Ref X]`, `FoldP.keysIn`'s
+array key at the binder's own variable. The kernel's consume of such a type is `foldOwnG`
+(`Consumable.mu`: the body is in `P`, not in `FShape`).
+
+### The rule
+
+- **The class** (`consumeW?`): every leaf of `toFShape T` is `[Ref X]`, or closed and inert (no
+  `U` inside, so its consume runs no code); at most one recursive position (`X`, `Ref X`, `[Ref X]`)
+  on any path through the `⊕`s; at least one `[Ref X]`. Every other `μ` keeps the recursion.
+- **The lowering** (`genConsumeW`): two functions of tail calls, `consume_up p` (free `p`) and
+  `consume_down c p` (free `c`, then `p`); the consume is `consume_up`. At a node's position:
+
+  | position | `down c p` | `up p` |
+  |---|---|---|
+  | none | consume the node; `up p` | consume the node; return |
+  | `X`, `Ref X` | the child out (the cell freed), the rest consumed; `down child p` | the same; `up child` |
+  | `[Ref X]`, `n ≤ 1` | the slot's child out, the array freed, the rest consumed; `down child p` (`up p` at 0) | the same; `up child` (return at 0) |
+  | `[Ref X]`, `n ≥ 2` | slot 0's child out, `p` put in slot 0, the node rebuilt; `down child node` | the last slot popped (`slotPop`), the node rebuilt; `down child node` |
+
+  The work pending is a value of the type itself, stored in a slot of an array being freed, at the
+  slot's own type. Nothing is allocated.
+- **`slotPop a`** (LIR): slot `n − 1`'s contents moved out and `a` as the family of its first
+  `n − 1` slots; `freeArr` frees the whole object. `Lint` checks its operand is an owned array and
+  its answer that family and the slot's contents (`slotPopBad`); the LIR interpreter's `freeArr`
+  frees the object at its allocated size and requires every slot of it unwritten.
+
+### What it rests on
+
+- **Read:** the consume node's type; `Lint`'s discipline (each variable consumed once) over every
+  step, which only moves owned values between owned places of the same type.
+- **`UNPROVED:`** (`genConsumeW`): that `consume_up` frees exactly what `consumeE (μX. T)` frees,
+  in another order, observing nothing else; the order is unobservable because every leaf is closed
+  and inert. A mismatch shows as a leak or double free in `live`, or a disagreement with the
+  source stage.
+
+### Programs
+
+`corpus/json-drop-deep.bc`: a `Json` as deep as its argument (2000 in the corpus), arrays and
+objects in turn, dropped; `scripts/compile-native.sh` runs it natively on Backend2 at 10⁶ levels
+in a stack of 16 KiB, answer the depth and `live 0`. Every corpus program keeps its output at
+every Backend2 stage.
+
+Counts: no `allocs`, `indirect`, `copies` or `bounds` change. `loads` and `stores` rise, equally,
+by one slot's words per array of ≥ 2 elements freed by `down` (the stash and its read-back):
+the table below.
+
+(The table comes with the code.)
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the checker, the elaboration, the layouts,
+the old backend or a kernel program.
+
+### Open
+
+- Two recursive positions on one path (binary trees, `X ⊗ [Ref X]`) keep the recursion.
+- Arrays of an `S ≠ X` holding `X` (`array (string ⊗ X)`), and inner `μ` keys.
+- Persistent `!μ` data copied or consumed by the word IR's helpers, which recurse.
 
 ---
 
