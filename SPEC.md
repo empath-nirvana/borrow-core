@@ -13609,7 +13609,7 @@ handed back).
       ⊢ withborU d : U(Ref A ⊸ U(∀'x ⊏ ⊓Δ. Mut 'x A ⊸ F_{Σ_M}(['x] B)) ⊸ F_Σ(Ref A ⊗ B))
 
       Σ_M is Row.Unwind 'x;  Σ_M ≤ Σ;  Σ_D ≤ Σ;  Σ does not hold Div (so neither does Σ_D);
-      Σ_D.UnrD → Σ_M.PendPers
+      Σ_D.UnrD → Σ_M.PendPers   (hP)
 
 `withbor (1)` (`Ref A` lent as `Imm 'x A`) and `withbor (3)` (`Mut @a A` reborrowed as
 `Mut 'x A`, with `d : U(Mut @a A ⊸ F_{Σ_D} 1)`) take the same form.
@@ -13634,8 +13634,9 @@ handed back).
 4. **The rules of §19 are instances.** At `Σ_D = ∅` and `Σ_M = Σ`, the rule is §19's
    `withbor1U`/`withbor2U`/`withbor3U` (`.thunk (.arr src (F_∅ 1))` is `src ⊸ 1`). The three
    constructors are generalised in place as `withbor1UD`/`withbor2UD`/`withbor3UD`, and the forms of
-   §19 are theorems of the same names and statements. There is no new term former, type former,
-   `CDerives` index or machine step.
+   §19 are theorems of the same names and statements. There is no new constructor (the three are
+   renamed and generalised in place), and no new term former, type former, `CDerives` index or
+   machine step.
 5. **The cancel path is excluded by the types.** Every operation of `Σ_M` is abortive, so no
    continuation is captured while the lend is live, and no cancel reaches a region holding it. The
    finaliser runs after the lend has ended. A lend held across a suspension, with a cleanup that
