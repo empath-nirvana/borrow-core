@@ -1,0 +1,43 @@
+-- check: old-backend-refuses
+-- SPEC §27 in the core text: two finalisers in one cancelled region, both suspending, the first
+-- error kept. Handler 1 cancels `κ` at `1.0`, which `sub` performs below its own finaliser `D₀`;
+-- the region's finaliser `D₂` is `main`'s, around the call of `sub`. The cancel reaches `D₀` first
+-- (the callee's cancel, itself a machine: a call point of the canceller's), which performs `4.0`
+-- and raises `2.0`, kept; then `D₂`, which performs `4.0`, frees the cell `c` and raises `3.0`,
+-- abandoned for the earlier `2.0`. The kept `2.0` is re-raised at the canceller and caught by handler
+-- 2. Handler 4 resumes each `4.0` outside tail position and counts them. The cancel row of `1.0` is
+-- `[2.0, 3.0, 4.0]`.
+--
+-- Answer: `(inl (inr ()), i32[2])`, `live 0`: handler 2's answer, and two `4.0`s. A wrong
+-- implementation that keeps the later error answers `(inr (), i32[2])`; one that skips the callee's
+-- finaliser answers `(inr (), i32[1])`.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def sub : !U (1 -o F[1.0 cancel[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1 ~> 1, 2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1) =
+  !thunkv fun (u : 1) ->
+    x <- perform[1.0] u unwind (n <- perform[4.0] (); e <- abort[2.0] (); absurd e);
+    return x
+
+main : F (((1 + 1) + 1) * i32) =
+  handle_with[4](
+      ((!thunkv fun (v : (1 + 1) + 1) -> return (v, i32[0])) : !U ((1 + 1) + 1 -o F (((1 + 1) + 1) * i32))),
+      (((!thunkv fun (p : 1 * U ((1 -o F (((1 + 1) + 1) * i32)) & top)) ->
+          let (u, k) = p; r <- (force k).1 u; let (a, n) = r; return (a, plus (n, i32[1]))), ())
+        : !U (1 * U ((1 -o F (((1 + 1) + 1) * i32)) & top) -o F (((1 + 1) + 1) * i32)) * 1)) (
+    handle_with[3](
+        ((!thunkv fun (v : 1 + 1) -> return (inl v)) : !U (1 + 1 -o F[4.0 lin 1 ~> 1] ((1 + 1) + 1))),
+        (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F[4.0 lin 1 ~> 1] ((1 + 1) + 1)) * 1)) (
+      handle_with[2](
+          ((!thunkv fun (v : 1) -> return (inl v)) : !U (1 -o F[3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] (1 + 1))),
+          (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F[3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] (1 + 1)) * 1)) (
+        handle_with[1](
+            ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1)),
+            (((!thunkv fun (p : 1 * U ((1 -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1) & F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1, 2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1)) ->
+              let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+              : !U (1 * U ((1 -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1) & F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1, 2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1) -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1) * 1)) (
+          c <- return (alloc[i32] i32[3]);
+          y <- (f <- return (unbang sub); w <- return (); force f w)
+            unwind (m <- perform[4.0] (); z <- return (free[i32] c); e <- abort[3.0] (); absurd e);
+          z <- return (free[i32] c);
+          return y))))

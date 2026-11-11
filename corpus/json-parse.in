@@ -1,0 +1,27 @@
+{
+  "name": "Café \"Zoë\" — Montréal 🍰",
+  "id": 1042,
+  "open": true,
+  "closed": false,
+  "manager": null,
+  "rating": 4.75,
+  "balance": -1250.5,
+  "coords": [45.5017, -73.5673],
+  "avogadro": 6.022e23,
+  "planck": 6.62607015E-34,
+  "tags": ["coffee", "pastry", "wi-fi", "naïve"],
+  "escapes": "tab\there\nline\\back\/slash \u00e9\u0041 \ud83c\udf70 \"q\" \u0001",
+  "address": {
+    "street": "123 Rue Sainte-Catherine",
+    "city": "Montréal",
+    "postal": "H3B 1A7",
+    "floors": [0, 1, -1, -0, -0.0]
+  },
+  "menu": [
+    {"item": "espresso", "price": 3.0, "sizes": ["single", "double"]},
+    {"item": "croissant", "price": 2.5e0, "id": 505874924095815681, "allergens": {"gluten": true, "nuts": false}},
+    {"item": "tea", "price": 0, "sizes": [], "notes": {}}
+  ],
+  "empty": [],
+  "nothing": {}
+}

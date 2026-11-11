@@ -93,20 +93,110 @@ clo-consume 3 0 0 5 5 0 # three counters' cells, each freed by its `close`
 closure-capture-scalar 0 0 0 0 0 0 # every capture is a word; a closure's copy copies words and allocates nothing
 closure-captures-int 6 0 0 36 36 0 # the input list's 3 nodes and the mapped list's 3; the algebra copies `n` as a word
 closure-captures-list 3 0 0 9 9 0 # the list's 3 nodes, moved into the closure: no copy
+core-fin-cancel-propagated 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
+core-fin-cancel-reentered 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
+core-fin-cancel-reraised 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
+core-fin-check-afinc 0 0 0 0 0 0 # main returns (); the checked definition is not called
+core-fin-check-consume 0 0 0 0 0 0 # main returns (); the checked definition is not called
+core-fin-check-d2nested 0 0 0 0 0 0 # main returns (); the checked definition is not called
+core-fin-check-dthunk 0 0 0 0 0 0 # main returns (); the checked definition is not called
+core-fin-check-gapcall 0 0 0 0 0 0 # main returns (); the checked definition is not called
+core-fin-check-gapdeep 0 0 0 0 0 0 # main returns (); the checked definition is not called
+core-fin-check-keep 0 0 0 0 0 0 # main returns (); the checked definition is not called
+core-fin-check-nc 0 0 0 0 0 0 # main returns (); the checked definition is not called
+core-fin-check-same2 0 0 0 0 0 0 # main returns (); the checked definition is not called
+core-fin-e7b 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
+core-fin-e7d 0 0 0 0 0 0 # no cell; two finalisers raise, the first error is kept
+core-fin-e8b 0 0 0 0 0 0 # no cell; the finaliser's raise supersedes the pending one
+core-fin-nested 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
+core-fin-stored-k-fin 0 1 0 0 0 0 # the stashed closure's call is unknown
+core-fin-sub-row 0 0 0 0 0 0 # no cell; the finaliser's raise is kept across the cancel
+core-fin-top-row 0 0 0 0 0 0 # main returns (); f is not called
+core-pipe-step 1 0 0 1 1 0
+core-unsigned 0 0 0 0 0 0 # every value is a word: the unsigned integers are held as the signed ones are
 data-json-map-ser 16 0 0 699 420 205
+deep-gen-count 0 3 0 0 0 0
 effects-load-raise 4 0 0 204 184 15
+fin-block-finaliser 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-bound-loop-abort 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
+fin-bound-loop-finish 0 0 0 0 0 0 # no cell; the loop finishes and the clause resumes
+fin-bound-loop-pure 0 0 0 0 0 0 # no cell; the loop's body performs nothing
+fin-cancel-arm 0 3 0 0 0 0 # the indirect calls are of `tm`'s answer, a function of its state
+fin-cancel-loop 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
+fin-cancel-order 3 2 0 5 3 0 # stdout's cell and the two runs' state; the indirect calls are of `tm`'s answer, a function of its state
+fin-cancel-propagated 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-cancel-reentered 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-cancel-region 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
+fin-cancel-reraised 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-cancel-tail 3 1 0 5 3 0 # stdout's cell; the indirect call is of `tm`'s answer, a function of its state
+fin-cancel-unused-site 3 1 0 4 3 0 # stdout's cell; the indirect call is of `tm`'s answer, a function of its state
+fin-drop-capturing-row 0 1 0 0 0 0 # the indirect call is of `tm`'s answer, a function of its state
+fin-e7b 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-e7d 0 0 0 0 0 0 # no cell; two cleanups raise, the first error is kept
+fin-e8b 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the pending one
+fin-generic-call 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
+fin-handler-head 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-handler-head-raise 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-loop-break 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
+fin-loop-continue 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the clause's
+fin-raise-cancel 0 0 0 0 0 0 # no cell; the cleanup's raise is kept across the cancel
+fin-raise-unwind 0 0 0 0 0 0 # no cell; the cleanup's raise supersedes the pending one
+fin-resume-capturing-row 0 2 0 0 0 0 # the indirect calls are of `tm`'s answer, a function of its state
+fin-timeout 0 0 0 0 0 0 # no cell; the dropped continuation is cancelled at two rows
 for-arm-raises-owned 8 0 0 54 54 54
+gen-raise-annot 25 0 0 75 75 0 # the list cells of the inputs
+gen-raise-become 4 8 0 12 12 0 # the count handler's state cell and the lists; its clause's resumption and the sources' continuations are called indirectly
+gen-raise-close-two 0 16 0 0 0 0 # the old backend keeps the lists as plain values: no code walks `Bytes` in a loop here (`bcc-counts --sites`: recursive-types 0), so it allocates no cell, where Backend2 allocates the 24; its 16 indirect calls are dispatched ones Backend2 makes directly
+gen-raise-fold 0 0 0 0 0 0 # no cell; the step function is known
+gen-raise-local-bind 9009 9005 0 27027 27027 0 # a list cell and a stored generator per level; each level's previous generator is closed through its continuation
+gen-raise-local-pure 10 0 0 30 30 0 # the list cells of the inputs
+gen-raise-pass 12 0 0 36 36 0 # the 3 list cells of each of the four inputs
+gen-raise-take 17 0 0 51 51 0 # the 17 list cells of the two inputs; each closed path frees what is left
+gen-raise-unused 24 0 0 72 72 0 # the list cells of the inputs
+gen-raise-with 4 12 0 12 12 0 # the handlers' state cells and the lists; their resumptions and the suspended source's continuation are called indirectly
+gen-raise-zip 21 0 0 63 63 0 # the 7 list cells of each of the three inputs
 handle-arm-releases 2 0 0 13 13 13
 if-match-argument 0 0 0 0 0 0
 infer-local-from-call 4 0 0 16 16 0
 infer-local-sum-generic 1 0 0 16 16 5
 infer-local-unit 2 0 0 4 4 1
+json-parse 673 0 0 27534 15143 19164
+json-deep 5004 0 0 352010 284003 92003
+json-get 17 0 0 1253 501 590
+parse-i64 12 0 0 687 313 486
+kernel-cancel-now 0 0 0 0 0 0
+kernel-deep-gen-plain 0 0 0 0 0 0
+kernel-e7a 1 0 0 1 1 0
+kernel-fail-outside-native 0 0 0 0 0 0
+kernel-forward 4 0 0 17 21 0
+kernel-forward-cancel 1 0 0 1 1 0
+kernel-log-in-borrow 2 0 0 4 4 0
+kernel-log-outside-native 0 0 0 0 0 0
+kernel-loop-captured 0 9001 0 0 0 0
+kernel-loop-tail 0 0 0 0 0 0
+kernel-nested-fail-outside 0 1 0 0 0 0
+kernel-nested-log-outside 0 2 0 0 0 0
+kernel-reborrow-raise 1 0 0 2 2 0
+kernel-store-cancel 2 0 0 8 8 0
+kernel-stored-k-cancel 0 1 0 0 0 0
+kernel-stored-k-resume 0 3 0 0 0 0
+kernel-take-all 1 0 0 1 1 0
+kernel-tick-answering 1 0 0 4 4 0
+kernel-tick-native 0 0 0 0 0 0
 leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 4861 # as 0039-combination-sum: the same search, by a loop over the candidates
 lend-call-raise 9 0 0 34 31 4 # the cells of the eight lending runs, those scoped to a call included, and the table
 lend-call-record 1 0 0 6 2 0 # the cell scoped to the call, freed by the unwinding lend's finaliser
 lend-tail-call 1 0 0 10 6 0
 lit-lend-raise 6 0 0 69 30 39 # one array per literal view: the unwinding form is not marked as a literal's view (SPEC §18), so the table is tabulated into the heap
 load-for-linear 1 0 0 155 65 19
+mut-control-assign-raise 0 0 0 6 6 0
+mut-control-call-order 0 0 0 10 10 0
+mut-control-exhausted 13 0 0 105532 105532 75526
+mut-control-lend 1 0 0 23 23 8
+mut-control-nested 0 0 0 10009 10009 0
+mut-control-order 0 0 0 9 9 0
+mut-control-raise 0 0 0 13 13 0
+mut-control-with 0 0 0 2 2 0
 nu-file-read 2 0 0 7 6 0 # the buffer and the file's content cell; the observations are direct calls
 nu-file-twice 2 0 0 11 11 0 # as nu-file-read: three reads, one through a reborrow
 nu-file-consumed 2 0 0 5 5 0 # the buffer and the content cell, freed by the object's consume
@@ -400,9 +490,18 @@ map-drain 23 0 0 684 635 223
 map-iter-owned 16 0 0 594 314 278
 map-reuse 7 0 0 48 48 0
 map-views 32 0 0 11053 8337 3795 # the eight values' buffers; the first map's three arrays and one doubling; the second map's three arrays and five doublings (16 to 512 slots for 200 keys)
+mut-after-unwind-counter-in-n 3 0 0 3 3 0
+mut-after-unwind-generator 3 0 0 3 3 0
+mut-after-unwind-if-arm 0 0 0 0 0 0
+mut-after-unwind-if-in-while 3 0 0 3 3 0
+mut-after-unwind-let-head 0 0 0 0 0 0
+mut-after-unwind-nested 3 0 0 3 3 0
+mut-after-unwind-while 3 0 0 3 3 0
 mut-bind-arm 0 0 0 0 0 0
 mut-block 0 0 0 0 0 0
 mut-block-nested 0 0 0 0 0 0
+mut-cancel-loop-for 0 0 0 0 0 0
+mut-cancel-loop-for-value 0 0 0 0 0 0
 mut-lend-arm 0 0 0 4 4 0
 mut-modify 1 0 0 2 2 0
 mut-name-capture 5 0 0 12 11 8
@@ -416,7 +515,12 @@ operator-rounds 166 0 24 1551 823 0 # the cluster's and the desired state's list
 parse-int 4 0 0 240 80 137 # the line buffer, reused; literal views read-only data
 parse-recover 246 0 31 1808 984 28 # the token list's nodes and the lists rebuilt per statement; the copies are the written `clone(rest)` per statement
 parse-recover-gen 227 0 31 1943 1147 108
+pipe-bracket 3 0 0 3 3 0 # each bracketing is the nested calls
 pipe-handlers 0 0 0 0 0 0
+pipe-left-row 3 0 0 3 3 0
+pipe-mixed 3 0 0 3 3 0
+pipe-pull 3 0 0 3 3 0 # as gen-pipeline-pipe: `>|` into an adapter is the nested calls (until L2)
+pipe-push-paren 3 0 0 3 3 0
 poly-operators 0 0 0 0 0 0 # a case of an operator is a direct call; nothing is allocated
 poly-providers 2 0 0 90 48 69 # the two strings; the comparisons read views and allocate nothing
 print-borrowed-array 4 0 0 19 6 3
@@ -462,15 +566,18 @@ sort-numbers 4 0 0 167 133 137
 split-at-mut 4 0 0 133 93 51
 state-machine 0 0 0 0 0 0 # the generator's yields are direct calls of the loop's body
 state-machine-audit 1 0 0 15 15 0
+state-row-unused-site 3 2 0 4 3 0 # stdout's cell; the indirect calls are of `tm`'s answer, a function of its state
 storage-array 5461 0 0 71560 55180 10920 # one array per node of the tree of arrays (Rust's count, storage.rs)
 sum-i32 7 0 0 39 24 0
 sum-prog-exact 37 9 0 153 111 0
+sum-read-unk 0 0 0 24 12 0
 surface/array-sum 1 0 0 3000 3000 2024
 surface/family-swap 2 0 0 4 4 0
 surface/io-upper 3 0 0 136 3 0
 surface/io-wc 3 0 0 62 3 0
 surface/map-reuse 6 0 0 42 42 0
 swap-cell-width 1 0 0 1 1 0
+take-failing 0 0 0 0 0 0 # the raising source and take are stored generators whose states are stack values
 text-lend-lifetime 4 0 0 83 73 77
 text-wordfreq 969 0 192 5452 3360 65 # the words' and counts' list nodes; the copies are the written `clone`s of words in comparisons and lookups
 tree-map 29 0 2 209 161 0 # the trees' nodes, one object per node; the copies are the written `clone(m)`s
@@ -480,3 +587,4 @@ utf8-count 4 0 0 341 109 263 # the line buffer, reused; the stdin, stdout and st
 with-lend-head-type 0 0 0 4 4 0
 with-nested-lend 2 0 0 13 13 13
 yield-callback 3 0 0 3 3 0
+clause-loop-value 0 0 0 0 0 0

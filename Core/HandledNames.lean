@@ -2022,6 +2022,8 @@ theorem host_le (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = some r) 
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, _, -, rfl⟩ := h; exact hi32 _
       · obtain ⟨_, _, -, rfl⟩ := h; exact hi64 _
+      · obtain ⟨_, _, -, rfl⟩ := h; exact hob .u32 _
+      · obtain ⟨_, _, -, rfl⟩ := h; exact hob .u64 _
   | div w o =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, _, -, rfl⟩ := h
@@ -2030,16 +2032,28 @@ theorem host_le (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = some r) 
       · obtain ⟨_, _, -, rfl⟩ := h
         exact hopt _ fun v hv => by
           simp only [Option.map_eq_some_iff] at hv; obtain ⟨_, -, rfl⟩ := hv; exact hi64 _
+      · obtain ⟨_, _, -, rfl⟩ := h
+        exact hopt _ fun v hv => by
+          simp only [Option.map_eq_some_iff] at hv; obtain ⟨_, -, rfl⟩ := hv; exact hob .u32 _
+      · obtain ⟨_, _, -, rfl⟩ := h
+        exact hopt _ fun v hv => by
+          simp only [Option.map_eq_some_iff] at hv; obtain ⟨_, -, rfl⟩ := hv; exact hob .u64 _
   | un w o =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, -, rfl⟩ := h; exact hi32 _
       · obtain ⟨_, -, rfl⟩ := h; exact hi64 _
+      · obtain ⟨_, -, rfl⟩ := h; exact hob .u32 _
+      · obtain ⟨_, -, rfl⟩ := h; exact hob .u64 _
   | eqz w =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, -, rfl⟩ := h; exact hbool _
       · obtain ⟨_, -, rfl⟩ := h; exact hbool _
+      · obtain ⟨_, -, rfl⟩ := h; exact hbool _
+      · obtain ⟨_, -, rfl⟩ := h; exact hbool _
   | rel w o =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
+      · obtain ⟨_, _, -, rfl⟩ := h; exact hbool _
+      · obtain ⟨_, _, -, rfl⟩ := h; exact hbool _
       · obtain ⟨_, _, -, rfl⟩ := h; exact hbool _
       · obtain ⟨_, _, -, rfl⟩ := h; exact hbool _
   | wrap =>
@@ -2080,6 +2094,14 @@ theorem host_le (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = some r) 
       cases f <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
       · exact hob .f32 _
       · exact hob .f64 _
+  | reinterpret_u i =>
+      cases i <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
+      · exact hob .u32 _
+      · exact hob .u64 _
+  | reinterpret_s i =>
+      cases i <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
+      · exact hob .w32 _
+      · exact hob .w64 _
 
 /-! ### Head steps -/
 
@@ -2111,6 +2133,38 @@ theorem perform_hin {V : HIn} {K : Kont} {p : Val} (h : (K.plug (BoLo.performE (
     p.1.hin ≤ V := by
   have := le_trans (plug_hin_ge ⟨rfl, rfl⟩ K) h
   rw [hin_performE, empty_append] at this; exact this
+
+/-- The frames a `cancelTo` in a context holds: its continuation's are the context's filling's.
+`[spec §51]` -/
+theorem cancelTo_hin {V : HIn} {K : Kont} {n : UInt32} {k : Val}
+    (h : (K.plug (BoLo.cancelToE (.val (BoLo.cancelToPayload n k)))).hin ≤ V) : k.1.hin ≤ V := by
+  have := le_trans (plug_hin_ge ⟨rfl, rfl⟩ K) h
+  have e : (BoLo.cancelToE (.val (BoLo.cancelToPayload n k))).hin = {} ++ ({} ++ k.1.hin) := rfl
+  rw [e, empty_append, empty_append] at this; exact this
+
+/-- The cancelled region of a `cancelTo` holds a part of the region's frames.  `[spec §51]` -/
+theorem cancelTo_dead_hin {V : HIn} {K : Kont} {p : Val}
+    (h : (K.plug (BoLo.cancelToE (.val p))).hin ≤ V) :
+    (K.dead.plug (BoLo.raiseE (.val (BoLo.cancelVal none)))).hin ≤ V :=
+  plug_hin_le (hole_app _ _) (fun _ => by rw [hin_cancel_none]; exact empty_le _) K.dead
+    (plug_hin_dead (hole_app _ _) K h)
+
+/-- The names a `cancelTo` in a context performs: its continuation's are the context's filling's.
+`[spec §51]` -/
+theorem cancelTo_pn {V : HIn} {K : Kont} {n : UInt32} {k : Val}
+    (h : (K.plug (BoLo.cancelToE (.val (BoLo.cancelToPayload n k)))).pn ≤ V) : k.1.pn ≤ V := by
+  have := le_trans (plug_pn_ge rfl K) h
+  have e : (BoLo.cancelToE (.val (BoLo.cancelToPayload n k))).pn = {} ++ ({} ++ k.1.pn) := by
+    show (Expr.app (.prim .cancelTo) _).pn = _
+    rw [pn_app_eq rfl]; rfl
+  rw [e, empty_append, empty_append] at this; exact this
+
+/-- The cancelled region of a `cancelTo` performs a part of the region's names.  `[spec §51]` -/
+theorem cancelTo_dead_pn {V : HIn} {K : Kont} {p : Val}
+    (h : (K.plug (BoLo.cancelToE (.val p))).pn ≤ V) :
+    (K.dead.plug (BoLo.raiseE (.val (BoLo.cancelVal none)))).pn ≤ V :=
+  plug_pn_hole (hole_app _ _) (fun _ => by rw [pn_cancel_none]; exact empty_le _) K.dead
+    (plug_pn_dead (hole_app _ _) K h)
 
 theorem hin_cancelVal {V : HIn} {err : Option Val} (h : (BoLo.cancelVal err).1.hin ≤ V) :
     ∀ E, err = some E → E.1.hin ≤ V := by
@@ -2277,6 +2331,12 @@ theorem head_hin {V : HIn} (h0 : HIn.one 0 ≤ V) {μ μ' : Heap} {a a' : Expr}
       have hp := raise_hin ha.2
       rw [hin_raiseE]
       exact append_le (empty_le _) (hin_cancelVal hp _ rfl)
+  | cancelTo n qs hr hs k K _ =>
+      rw [hin_hndE] at ha
+      obtain ⟨-, hx⟩ := append_le_iff.mp ha
+      show (Expr.seq (BoLo.ccatchE _) (Expr.app (.val k) (.val Val.unit))).hin ≤ V
+      exact append_le (by rw [hin_ccatchE]; exact append_le h0 (cancelTo_dead_hin hx))
+        (hin_app_of (cancelTo_hin hx) (empty_le _))
 
 /-- **A head step keeps the names performed within a bound** holding the memory's values' and
 the tick's name `divEff`.  `[spec §19]` -/
@@ -2405,6 +2465,11 @@ theorem head_pn {W : HIn} (hdiv : HIn.one divEff ≤ W) {μ μ' : Heap} {a a' : 
       have hp := raise_pn ha.2
       rw [pn_raiseE]
       exact append_le (empty_le _) (pn_cancelVal hp _ rfl)
+  | cancelTo n qs hr hs k K _ =>
+      rw [pn_hndE, append_le_iff] at ha
+      show (Expr.seq (BoLo.ccatchE _) (Expr.app (.val k) (.val Val.unit))).pn ≤ W
+      exact append_le (by rw [pn_ccatchE]; exact append_le (empty_le _) (cancelTo_dead_pn ha.2))
+        (pn_app_of (cancelTo_pn ha.2) (empty_le _))
 
 /-- **A head step stores only what its redex holds.** -/
 theorem head_heap {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ' a') :
@@ -2600,6 +2665,11 @@ theorem head_fl {V W : HIn} (hW : W ≤ V) (h0 : HIn.one 0 ≤ V) {μ μ' : Heap
       have hpay := raise_fl ha
       rw [fl_raiseE]
       exact append_le (empty_le _) (le_trans (fl_le_hin _) (hin_cancelVal hpay _ rfl))
+  | cancelTo n qs hr hs k K _ =>
+      rw [fl_hndE_hndVal, append_le_iff] at ha
+      show (Expr.seq (BoLo.ccatchE _) (Expr.app (.val k) (.val Val.unit))).fl ≤ V
+      exact append_le (by rw [fl_ccatchE]; exact le_trans (fl_le_hin _) (cancelTo_dead_hin ha.2))
+        (le_trans (fl_le_hin _) (hin_app_of (cancelTo_hin ha.2) (empty_le _)))
 
 end heads
 

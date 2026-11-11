@@ -1,0 +1,18 @@
+-- A cancel clause (`wait(k)` drops `k`, under a `Fail` handler) whose body runs a `for` over a count
+-- calling an operation that may raise, and writes a `let mut` total in the loop: `t` is 0 + 1 + 2.
+-- Probe k3 of #1053.
+--
+-- KNOWN WRONG ANSWER (#1053): this prints inl (inr i32[0]); the correct answer is inl (inr i32[3]). Do not update this golden to "fix" it; fix #1053, then set the golden to the correct answer.
+include fail
+effect Wait { ctl wait() }
+fn chk(x: i32) -> i32 with Fail[i32] = if x == 30 { raise(x) } else { x }
+handler tm[A]: Wait, A -> A + i32 with Fail[i32] = {
+  return(x) = inl x;
+  wait(k) = {
+    let mut t = 0;
+    for i in 0..3 { let v = chk(i); t = t + v };
+    inr t
+  }
+}
+fn work() -> i32 with Wait = wait(); 5
+main -> (i32 + i32) + i32 = with to_result[i32, i32 + i32] { with tm[i32] { work() } }

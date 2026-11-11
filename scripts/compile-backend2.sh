@@ -18,6 +18,10 @@
 #     scripts/compile-backend2.sh --final [file.bc…]
 #     scripts/compile-backend2.sh --write-counts [file.bc…]
 #
+# `--write-counts` updates the rows of the programs run in both tables and inserts the row of a
+# program they lack, keeping every other row, the order and the comments; with no file named it
+# also drops the rows of programs not counted.
+#
 # `--final` (`make gate`) lints each program and runs it in Wasm only: no LIR or word-IR
 # interpreter, no native run, no erasure check and no counts. A program whose Wasm run differs
 # from the golden is then run at the `lir` and `flat` stages, and the first that differs is named.
@@ -35,7 +39,8 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-[ ${#files[@]} -gt 0 ] || files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc)
+named=1
+[ ${#files[@]} -gt 0 ] || { named=0; files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc); }
 command -v wasmtime >/dev/null || { echo "wasmtime is not on PATH"; exit 1; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
 . scripts/par.sh
@@ -136,12 +141,19 @@ program() {
 }
 export -f program localise argsOf statusOf
 par program "${files[@]}"
+# --write-counts: the run's rows replace the rows of their programs in place (scripts/merge-rows.awk)
+# and a new program's row is inserted; the other rows, the order and the comments are kept. With
+# no file named, the rows of programs this run did not count are dropped.
 if [ "$write" = 1 ]; then
+  [ -s "$expected" ] || echo "# The new backend's counts per run (scripts/compile-backend2.sh, bcc-counts --backend new): name allocs indirect copies loads stores bounds." > "$expected"
   cat "$tmp"/counts.* 2>/dev/null | sort > "$tmp/new"
-  { echo "# The new backend's counts per run (scripts/compile-backend2.sh, bcc-counts --backend new): name allocs indirect copies loads stores bounds."; cat "$tmp/new"; } > "$expected"
+  awk -v keep="$named" -f scripts/merge-rows.awk "$tmp/new" "$expected" > "$tmp/merged"
+  mv "$tmp/merged" "$expected"
   echo "wrote $expected"
+  [ -s "$erasure" ] || echo "# The effect erasure per program the new backend compiles (scripts/compile-backend2.sh, bcc lir --erasure; SPEC §47, §49): name, the handle, perform and raise nodes erased, the handle nodes compiled as drives and the performs as suspensions of state machines (machines, suspends), and the handle nodes left (stored-continuation sites, other)." > "$erasure"
   cat "$tmp"/erasure.* 2>/dev/null | sort > "$tmp/newe"
-  { echo "# The effect erasure per program the new backend compiles (scripts/compile-backend2.sh, bcc lir --erasure; SPEC §47, §49): name, the handle, perform and raise nodes erased, the handle nodes compiled as drives and the performs as suspensions of state machines (machines, suspends), and the handle nodes left (stored-continuation sites, other)."; cat "$tmp/newe"; } > "$erasure"
+  awk -v keep="$named" -f scripts/merge-rows.awk "$tmp/newe" "$erasure" > "$tmp/merged"
+  mv "$tmp/merged" "$erasure"
   echo "wrote $erasure"
 fi
 echo "Backend2: $(cat "$tmp"/counts.* 2>/dev/null | wc -l | tr -d ' ') program(s) at their goldens, $(ls "$tmp"/out.* 2>/dev/null | wc -l | tr -d ' ') outside its fragment; $par_failed failure(s)."

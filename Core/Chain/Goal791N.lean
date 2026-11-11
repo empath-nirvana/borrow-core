@@ -40,6 +40,16 @@ open BoCa.BoLo (Heap Kont hndE hndVal)
 
 /-! ## The interpretation -/
 
+/-- **One unfolding at the candidate `R`**: `cBNP` with `U X` at `R` (`thunkRN`).
+`cBN (ℍ := h) S R …` is `cBNP (ℍ := h) S (thunkRN R) …`. -/
+syntax "cBN" : term
+set_option hygiene false in
+macro_rules
+  | `(cBN $S $R $args*) => `(cBNP $S (thunkRN $R) $args*)
+set_option hygiene false in
+macro_rules
+  | `(cBN (ℍ := $h) $S $R $args*) => `(cBNP (ℍ := $h) $S (thunkRN $R) $args*)
+
 mutual
 /-- **`𝒱⟦A⟧δ` at the world and the index, under a type-variable environment `η`.** Core's `vCE`
 clause by clause, `⋆` written as `ResU.CompS`; `Mut` is Core's `ptoMutS` shape over the world
@@ -165,28 +175,29 @@ def cN : CTy → LSub → LocTy → (Loc → Option Life) → Nat → List SRec 
           (tabN C δ z)))
         (fun z k _ v ρ => retN C δ z.Θ k v ρ) ⟨Θ, c, lo⟩ n ls e ρ
   termination_by structural x => x
-/-- **One unfolding of an observation tree at the candidate `R`** (Core's `cB`): `cN`'s `F`, `&`,
-`F_Σ`, `⊸` and `∀` clauses, each leaf's answer read by `vNE` at `nuEnvN S (thunkRN R)`; a row's operation
+/-- **One unfolding of an observation tree with `U X` read at `P`** (Core's `cB`): `cN`'s `F`, `&`,
+`F_Σ`, `⊸` and `∀` clauses, each leaf's answer read by `vNE` at `nuEnvN S P`; a row's operation
 types and an observation's argument are closed and read by `vN`, a row's answers at the view as in
-`cN`. Other formers are not observation trees and hold trivially. -/
-def cBN (S : VTy) (R : CandN) : CTy → LSub → CandN
+`cN`. Other formers are not observation trees and hold trivially. `cBN S R` is `cBNP S (thunkRN R)`,
+`U X` at the candidate `R`. -/
+def cBNP (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) : CTy → LSub → CandN
   | .ret A, δ, Θ, c, n, ls, e, ρ => ∀ lo : Life,
       erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c) (fun z => opTableK z.lo OpTabK.empty)
-        (fun z k _ v ρ => vNE (nuEnvN S (thunkRN R)) A δ z.Θ k v ρ) ⟨Θ, c, lo⟩ n ls e ρ
-  | .amp C D, δ, Θ, c, n, ls, e, ρ => cBN S R C δ Θ c n ls (.app e (.val (Val.inj₁ .unit))) ρ ∧
-      cBN S R D δ Θ c n ls (.app e (.val (Val.inj₂ .unit))) ρ
+        (fun z k _ v ρ => vNE (nuEnvN S P) A δ z.Θ k v ρ) ⟨Θ, c, lo⟩ n ls e ρ
+  | .amp C D, δ, Θ, c, n, ls, e, ρ => cBNP S P C δ Θ c n ls (.app e (.val (Val.inj₁ .unit))) ρ ∧
+      cBNP S P D δ Θ c n ls (.app e (.val (Val.inj₂ .unit))) ρ
   | .eff m i q A B fin _ C, δ, Θ, c, n, ls, e, ρ => ∀ lo : Life,
       erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
         (fun z => opTableK z.lo (extTabK m i (entNK q B (fun k v ρ => vNE none A δ z.Θ k v ρ)
             (fun y k v ρ => vNE none B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
             (finN fin δ) (fun f y ρ => z.Owed f y ρ))
           (tabN C δ z)))
-        (fun z k _ v ρ => retNX S (thunkRN R) C δ z.Θ k v ρ) ⟨Θ, c, lo⟩ n ls e ρ
+        (fun z k _ v ρ => retNX S P C δ z.Θ k v ρ) ⟨Θ, c, lo⟩ n ls e ρ
   | .arr A D, δ, Θ, _, n, ls, e, ρ => ∀ c',
       ∀ k, k ≤ n → ∀ (v : Val) (ρv ρ' : WRes), ResU.CompS ρ ρv ρ' → vNE none A δ Θ k v ρv →
-        ConsistentX c' ρ' → cBN S R D δ Θ c' k ls (.app e (.val v)) ρ'
+        ConsistentX c' ρ' → cBNP S P D δ Θ c' k ls (.app e (.val v)) ρ'
   | .all x c' D, δ, Θ, c, n, ls, e, ρ =>
-      ∀ α, LtLife δ c' α → cBN S R D (δ.extend x α) Θ c n ls (.app e (.val .unit)) ρ
+      ∀ α, LtLife δ c' α → cBNP S P D (δ.extend x α) Θ c n ls (.app e (.val .unit)) ρ
   | .top, _, _, _, _, _, _, _ => True
   | .nu _, _, _, _, _, _, _, _ => True
   termination_by structural x => x
@@ -1230,20 +1241,20 @@ theorem cBN_poly_ty (S S' : VTy) (R : CandN) :
     ∀ {D : CTy}, D.NuLeaf → cBN (ℍ := ℍ) S R D = cBN (ℍ := ℍ) S' R D
   | .ret A, h => by
       have h₁ := vNX_poly_ty S S' (thunkRN R) (A := A) h
-      funext δ Θ c n ls e ρ; simp only [cBN, h₁]
+      funext δ Θ c n ls e ρ; simp only [cBNP, h₁]
   | .amp C D, h => by
       have h₁ := cBN_poly_ty S S' R (D := C) h.1
       have h₂ := cBN_poly_ty S S' R (D := D) h.2
-      funext δ Θ c n ls e ρ; simp only [cBN, h₁, h₂]
+      funext δ Θ c n ls e ρ; simp only [cBNP, h₁, h₂]
   | .eff _ _ _ _ _ _ _ D, h => by
       have h₁ := retNX_poly_ty S S' (thunkRN R) (D := D) h.2.2
-      funext δ Θ c n ls e ρ; simp only [cBN, h₁]
+      funext δ Θ c n ls e ρ; simp only [cBNP, h₁]
   | .arr _ D, h => by
       have h₁ := cBN_poly_ty S S' R (D := D) h.2
-      funext δ Θ c n ls e ρ; simp only [cBN, h₁]
+      funext δ Θ c n ls e ρ; simp only [cBNP, h₁]
   | .all _ _ D, h => by
       have h₁ := cBN_poly_ty S S' R (D := D) h
-      funext δ Θ c n ls e ρ; simp only [cBN, h₁]
+      funext δ Θ c n ls e ρ; simp only [cBNP, h₁]
   | .top, h | .nu _, h => h.elim
 
 
@@ -1318,7 +1329,7 @@ theorem cBN_eff_le {S : VTy} {R : CandN} {m i : UInt32} {q : Qual} {A B : VTy} {
     {c : Loc → Option Life} {k n : Nat} (hkn : k ≤ n) {ls : List SRec} {e : Expr} {ρ : WRes}
     (h : cBN (ℍ := ℍ) S R (.eff m i q A B fin rc D) δ Θ c n ls e ρ) :
     cBN (ℍ := ℍ) S R (.eff m i q A B fin rc D) δ Θ c k ls e ρ := by
-  simp only [cBN] at h ⊢
+  simp only [cBNP] at h ⊢
   intro lo
   have h' := h lo
   refine erwpK_le (x := (⟨Θ, c, lo⟩ : KW)) (Φ := fun z : KW => z.Θ.view z.c) (LocTy.view_down hΘ c)
@@ -1726,15 +1737,15 @@ theorem cBN_congr (S : VTy) (R : CandN) : ∀ (C : CTy) {δ δ' : LSub},
     cBN (ℍ := ℍ) S R C δ = cBN (ℍ := ℍ) S R C δ'
   | .ret A, δ, δ', h, hS => by
       have h₁ := vNE_congr A (nuEnvN S (thunkRN R)) (δ := δ) (δ' := δ') h (envAgreeN_nu hS)
-      funext Θ c n ls e ρ; simp only [cBN, h₁]
+      funext Θ c n ls e ρ; simp only [cBNP, h₁]
   | .arr A D, δ, δ', h, hS => by
       have h₁ := vNE_congr A none (δ := δ) (δ' := δ') (fun y hy => h y (.inl hy)) (envAgreeN_none _ _)
       have h₂ := cBN_congr S R D (δ := δ) (δ' := δ') (fun y hy => h y (.inr hy)) hS
-      funext Θ c n ls e ρ; simp only [cBN, h₁, h₂]
+      funext Θ c n ls e ρ; simp only [cBNP, h₁, h₂]
   | .amp C D, δ, δ', h, hS => by
       have h₁ := cBN_congr S R C (δ := δ) (δ' := δ') (fun y hy => h y (.inl hy)) hS
       have h₂ := cBN_congr S R D (δ := δ) (δ' := δ') (fun y hy => h y (.inr hy)) hS
-      funext Θ c n ls e ρ; simp only [cBN, h₁, h₂]
+      funext Θ c n ls e ρ; simp only [cBNP, h₁, h₂]
   | .top, _, _, _, _ => rfl
   | .all x c D, δ, δ', h, hS => by
       have ha := BoCa.Fig16.LogRel.interp_congr (δ₁ := δ) (δ₂ := δ') c (fun y hy => h y (.inl hy))
@@ -1755,7 +1766,7 @@ theorem cBN_congr (S : VTy) (R : CandN) : ∀ (C : CTy) {δ δ' : LSub},
             (fun y hy _ => hS y hy) hy)
       have hL : ∀ α : Life, LtLife δ c α = LtLife δ' c α := by
         intro α; unfold LtLife; rw [ha]
-      funext Θ c' n ls e ρ; simp only [cBN, h₁, hL]
+      funext Θ c' n ls e ρ; simp only [cBNP, h₁, hL]
   | .nu _, _, _, _, _ => rfl
   | .eff m i q A B fin rc C, δ, δ', h, hS => by
       have h₁ := vNE_congr A none (δ := δ) (δ' := δ') (fun y hy => h y (.inl hy)) (envAgreeN_none _ _)
@@ -1766,7 +1777,7 @@ theorem cBN_congr (S : VTy) (R : CandN) : ∀ (C : CTy) {δ δ' : LSub},
       have h₄ := tabN_congr C (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inr (.inr hy))))
       have h₅ := retNX_congr S (thunkRN R) C (δ := δ) (δ' := δ')
         (fun y hy => h y (.inr (.inr (.inr hy)))) hS
-      funext Θ c n ls e ρ; simp only [cBN, h₁, h₂, h₃, h₄, h₅]
+      funext Θ c n ls e ρ; simp only [cBNP, h₁, h₂, h₃, h₄, h₅]
   termination_by structural x => x
 /-- The answer of a row's layers with one type variable reads `δ` only at free variables. -/
 theorem retNX_congr (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) : ∀ (C : CTy) {δ δ' : LSub},
@@ -2380,19 +2391,21 @@ theorem cN_eff_det {m i : UInt32} {q : Qual} {A B : VTy} {fin : CTy} {rc : Bool}
   exact opTableK_downI (extTabK_entNK_downI (fun k v ρ h => vN_down A δ Θ k v ρ h)
     (finN_downI fin δ) (tabN_downI C δ _))
 
-/-- One unfolding's `F_Σ` clause is closed under a deterministic step backwards. -/
-theorem cBN_eff_det {S : VTy} {R : CandN} (hR : R.Down) {m i : UInt32} {q : Qual} {A B : VTy}
+/-- One unfolding's `F_Σ` clause is closed under a deterministic step backwards, at a `U X`
+reading `P` closed down the index. -/
+theorem cBNP_eff_det {S : VTy} {P : LocTy → Nat → Val → WRes → Prop}
+    (hP : ∀ Θ n v ρ, P Θ (n + 1) v ρ → P Θ n v ρ) {m i : UInt32} {q : Qual} {A B : VTy}
     {fin : CTy} {rc : Bool} {D : CTy} {δ : LSub} {Θ : LocTy} (hΘ : Θ.Down)
     {c : Loc → Option Life} {n : Nat} {ls : List SRec} {e e' : Expr} {ρ : WRes}
     (hdet : ∀ μ, Step1Only (ℍ := ℍ) μ e μ e')
-    (h : cBN (ℍ := ℍ) S R (.eff m i q A B fin rc D) δ Θ c n ls e' ρ) :
-    cBN (ℍ := ℍ) S R (.eff m i q A B fin rc D) δ Θ c n ls e ρ := by
-  simp only [cBN] at h ⊢
+    (h : cBNP (ℍ := ℍ) S P (.eff m i q A B fin rc D) δ Θ c n ls e' ρ) :
+    cBNP (ℍ := ℍ) S P (.eff m i q A B fin rc D) δ Θ c n ls e ρ := by
+  simp only [cBNP] at h ⊢
   intro lo
   have h' := h lo
   refine erwpK_det (x := (⟨Θ, c, lo⟩ : KW)) (Φ := fun z : KW => z.Θ.view z.c)
     (LocTy.view_down hΘ c) ?_
-    (fun (z : KW) k _ v ρ h => retNX_down S _ (thunkRN_down hR) D δ z.Θ k v ρ h) hdet h'
+    (fun (z : KW) k _ v ρ h => retNX_down S _ hP D δ z.Θ k v ρ h) hdet h'
   exact opTableK_downI (extTabK_entNK_downI (fun k v ρ h => vN_down A δ Θ k v ρ h)
     (finN_downI fin δ) (tabN_downI D δ _))
 
@@ -2415,7 +2428,7 @@ theorem cBN_head (S : VTy) {R : CandN} (hR : R.Down) : ∀ (D : CTy) (δ : LSub)
       fun α hα => cBN_head S hR D (δ.extend x α) Θ hΘ c n ls ρ (.appL K _) a a' hh hn (h α hα)
   | .nu _, _, _, _, _, _, _, _, _, _, _, _, _, h => h
   | .eff m i q A B fin rc D, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
-      cBN_eff_det hR hΘ (fun μ => step1Only_plug (hh μ) hn K) h
+      cBNP_eff_det (thunkRN_down hR) hΘ (fun μ => step1Only_plug (hh μ) hn K) h
 
 
 /-- **`𝒞⟦C⟧` is closed under a pure head step backwards**, in every evaluation context: the

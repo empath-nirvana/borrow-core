@@ -1,0 +1,15 @@
+-- SPEC §16: counted loops
+BoCa.Fig16.LogRel.Core.wpTS_count
+BoCa.Fig16.LogRel.Core.countLoop_wp
+BoCa.Fig16.LogRel.Core.countFold_compatX
+BoCa.Fig16.LogRel.Core.countTry_compatX
+BoCa.Fig16.LogRel.Core.countTryLoop_wp
+-- SPEC §16: the counted loop over data visits every element
+BoCa.BoLo.countTry_runs
+BoCa.BoLo.countTry_exit
+BoCa.arrLen_eq_of_lt
+BoCa.idxAns_lt
+BoCa.idxAns_ge
+BoCa.idxAns_count
+BoCa.splitFirst_lt
+BoCa.splitFirst_end

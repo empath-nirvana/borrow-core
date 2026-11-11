@@ -3,9 +3,9 @@
 -- source that fails: `upto(lo, hi, bad)` yields `lo`, `lo + 1`, … and returns `inl bad` when it
 -- reaches `bad` (`inr ()` at `hi`), handing back `()` when stored and closed. Each adapter returns
 -- its source's error, bound by `let e = for …`. The adapters that stop their source (`take`,
--- `take_until`, `zip`) take one that returns what it hands back when closed, which a failing
--- source does not (`corpus/reject/take-failing.bc`). `flat_map`'s function stores the generator
--- it makes.
+-- `take_until`, `zip`) take one that returns what it hands back when closed, which a source that
+-- returns its error does not; a source that raises its error instead does (`corpus/take-failing.bc`,
+-- SPEC §15). `flat_map`'s function stores the generator it makes.
 --
 -- Answer: i32[118052]: the elements, 118, and the errors, 52, one adapter per line:
 --   map, squares of upto(0, 10, 4)             0 1 4 9                 14    error 4

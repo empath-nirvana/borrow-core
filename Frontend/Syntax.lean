@@ -188,11 +188,13 @@ inductive CTy where
   /-- `F[n.i q A ~> B, …] R`: `F_Σ R`, the row's operations stacked over `F R`.  `[spec §19]` -/
   | eff (sp : Span) (row : Row) (A : VTy)
 
-/-- An effect row (SPEC §19): each entry the operation `i` of the handler name `n`, `A ↠^q B`.
-`[spec §19]` -/
+/-- An effect row (SPEC §19): each entry the operation `i` of the handler name `n`, `A ↠^q B`,
+with its cancel row `fin` (SPEC §27; `.nil`, the empty cancel row, when none is written). `top` is
+the cancel row `⊤` (`cancel[top]`), a cancel row only.  `[spec §19, §27]` -/
 inductive Row where
   | nil
-  | cons (n i : Nat) (q : Qual) (A B : VTy) (rest : Row)
+  | cons (n i : Nat) (q : Qual) (A B : VTy) (fin : Row) (rest : Row)
+  | top
 
 /-- Shapes `σ ::= leaf A | node σ σ | Name` (syntax-core §5). -/
 inductive Shape where
@@ -438,6 +440,12 @@ structure HInfo where
   /-- The elaboration's record of the site, its types in the frame of the site's code, over the
   type parameters still to be determined (`tps`) and the lifetime parameters (`lives`). -/
   site : SiteRec
+  /-- Each operation's cancel row, as inferred (`Frontend.Elab.Fins`); none past the end is the
+  empty cancel row.  `[spec §27]` -/
+  fins : List Row := []
+  /-- The handler has a state (§21): each clause answers a function of the state, run where the
+  `with` is, and the clause's own code is that function's body.  `[spec §21, §27]` -/
+  stateful : Bool := false
   deriving DecidableEq, Repr
 
 /-- **The elaborator's key of a `def` it generates** (SPEC §3): the template, function or group it
@@ -482,6 +490,12 @@ structure FieldCand where
   names : List String
   idx : Nat
   rolls : Bool
+  deriving DecidableEq, Repr, Inhabited
+
+/-- The mode of a pipe's wire: `|>` push, `>|` pull (decision B′).  `[spec §33, §70]` -/
+inductive PipeMode where
+  | push
+  | pull
   deriving DecidableEq, Repr, Inhabited
 
 /-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied
@@ -550,11 +564,13 @@ inductive VSugar where
   /-- The stored generator of a call of a function that performs an iteration effect (SPEC §15),
   applied to the call of its copy for the site. -/
   | pullSite (info : ItInfo)
-  /-- `e |> s`, applied to the pair of `e` and the stage `s` (SPEC §33): a handler `h(…)` is
-  `with h(…) { e }`; a function whose first parameter is a computation parameter takes `e`
-  suspended, `f({ () -> e }, …)`; any other function takes `e` first, `f(e, …)`. Elaborated away
-  by `Frontend.Elab.Effects`.  `[spec §33]` -/
-  | pipe
+  /-- `e |> s` (`m` push) or `e >| s` (`m` pull), applied to the pair of `e` and the stage `s`
+  (SPEC §33): a handler `h(…)` is `with h(…) { e }`; a function whose first parameter is a
+  computation parameter takes `e` suspended, `f({ () -> e }, …)`; any other function takes `e`
+  first, `f(e, …)`. A chain of stream stages is read in its normal form first
+  (`Frontend.Elab.Pipes.chainOf`). Elaborated away by `Frontend.Elab.Effects`.
+  `[spec §33, §70]` -/
+  | pipe (m : PipeMode)
   /-- `writes(x, …) V`: the closure `V` assigns the enclosing body's `let mut` variables `x, …`
   (SPEC §41, rule R3). It is given at a block parameter of a call, which passes them in and back
   out at each call of it; anywhere else it is refused. Elaborated away by `Frontend.Elab.Effects`.
@@ -919,7 +935,8 @@ def CTy.strip : CTy → CTy
 
 def Row.strip : Row → Row
   | .nil => .nil
-  | .cons n i q A B r => .cons n i q A.strip B.strip r.strip
+  | .cons n i q A B f r => .cons n i q A.strip B.strip f.strip r.strip
+  | .top => .top
 
 def Shape.strip : Shape → Shape
   | .leaf _ A => .leaf .none A.strip

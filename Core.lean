@@ -25,8 +25,10 @@ import Core.DivHandleLast
 import Core.DivPrograms
 import Core.DivRuntime
 import Core.DivDrive
+import Core.HandleLastErase
 import Core.EffCancel
 import Core.EffCancelTyped
+import Core.CancelToPrograms
 import Core.Persistent
 import Core.Compatibility
 import Core.NuRel
@@ -46,6 +48,7 @@ import Core.Nu
 import Core.CapNorm
 import Core.CodeNu
 import Core.CodeRules
+import Core.CodeNuOut
 import Core.Alpha
 import Core.Fundamental
 import Core.Examples

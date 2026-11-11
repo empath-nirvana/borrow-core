@@ -433,6 +433,12 @@ Integer literals and operations are constants (`SPEC.md` §8, `Core/Integers.lea
   where Wasm traps. At the surface `+ - * /` and the comparisons at a float type are the float
   operation and IEEE 754's comparison; `/` is only at floats. The grouped integer names at the
   float widths (`addf32`, …) take `0`.
+- **Unsigned integers** (`SPEC.md` §73): the types `u32` and `u64`, persistent, with the same
+  bits as `i32` and `i64`; the literals `u32[n]` and `u64[n]`. The grouped operations apply at
+  them with the suffix `u32`/`u64` (`host[addu64]`, `host[div_uu64]`, `host[lt_uu32]`), computing
+  what they compute at `i32`/`i64` on the same bits; the `_u` ones read the operands unsigned.
+  `host[u32_reinterpret_i32]` and `host[i32_reinterpret_u32]` (and at 64 bits) change the reading
+  and keep the bits. The surface's literals and operator choice at them are not yet given.
 - **Characters and strings** (`SPEC.md` §17): `'c'` (one character, or `'\n'`, `'\t'`,
   `'\r'`, `'\0'`, `'\\'`, `'\''`) is its scalar value, which the lexer reads as `i32[n]`; a
   lifetime `'x` is never followed by `'`. `"…"` is a string literal, its bytes UTF-8 with the

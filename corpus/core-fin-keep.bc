@@ -1,0 +1,30 @@
+-- check: old-backend-refuses
+-- SPEC §27 in the core text, the twin of the kernel program `progKeepT` (Core's
+-- `EffCancelTyped.lean`): `hnd 2o (hnd 4o (hnd 1 {perform k => cancel k} (((perform 1) then x. x
+-- unwind raise 2) then y. y unwind perform 4)))`. Handler 1 cancels `κ`: the inner finaliser
+-- raises `2.0`, which is kept, and the outer finaliser performs `4.0` with the error pending at its
+-- `cfin`. The cancel row of `1.0` is `[2.0, 4.0]`. Handler 4 (outside the canceller) resumes the
+-- finaliser outside tail position, so the cancel suspends in the canceller and is resumed; the
+-- cancel then re-raises the kept `2.0` at the canceller, which passes handler 4 and is caught by
+-- handler 2. `4.0` is must-resume, so `progConsumeT` (handler 4 does not resume the continuation) has no
+-- twin.
+--
+-- Answer: inr (), and `live 0`. A wrong implementation that loses the kept error across the
+-- suspension answers `inl ()`.
+
+main : F (1 + 1) =
+  handle_with[2](
+      ((!thunkv fun (v : 1 + 1) -> return v) : !U (1 + 1 -o F (1 + 1))),
+      (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F (1 + 1)) * 1)) (
+    handle_with[4](
+        ((!thunkv fun (v : 1) -> return (inl v)) : !U (1 -o F[2.0 cancel 1 ~> 0] (1 + 1))),
+        (((!thunkv fun (p : 1 * U ((1 -o F[2.0 cancel 1 ~> 0] (1 + 1)) & top)) ->
+            let (u, k) = p; r <- (force k).1 u; case r { inl a -> return (inl a) | inr b -> return (inr b) }), ())
+          : !U (1 * U ((1 -o F[2.0 cancel 1 ~> 0] (1 + 1)) & top) -o F[2.0 cancel 1 ~> 0] (1 + 1)) * 1)) (
+      handle_with[1](
+          ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[4.0 lin 1 ~> 1, 2.0 cancel 1 ~> 0] 1)),
+          (((!thunkv fun (p : 1 * U ((1 -o F[4.0 lin 1 ~> 1, 2.0 cancel 1 ~> 0] 1) & F[2.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1, 4.0 lin 1 ~> 1, 2.0 cancel 1 ~> 0] 1)) ->
+            let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+            : !U (1 * U ((1 -o F[4.0 lin 1 ~> 1, 2.0 cancel 1 ~> 0] 1) & F[2.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1, 4.0 lin 1 ~> 1, 2.0 cancel 1 ~> 0] 1) -o F[4.0 lin 1 ~> 1, 2.0 cancel 1 ~> 0] 1) * 1)) (
+        y <- (x <- perform[1.0] () unwind (abort[2.0] ()); return x) unwind (perform[4.0] ());
+        return y)))

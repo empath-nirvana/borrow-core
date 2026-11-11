@@ -20,6 +20,7 @@ import Core.Chain.WithloadKW835N
 import Core.Chain.RulesKW835N
 import Core.Fundamental
 import Core.Chain.CodeRulesKW835N
+import Core.Chain.CodeNuOutKW835N
 
 /-!
 # `FundamentalN` assembled by induction on `CDerives`  `[spec §62]`
@@ -172,16 +173,16 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | withbor3 x hΓ _ hf₁ hf₂ => exact withbor3_compatN x hΓ hf₁ hf₂
   | withload x hΓ _ hf₁ hf₂ => exact withload_compatN x hΓ hf₁ hf₂
   | withswap hΓ => exact withswap_compatN hΓ
-  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS hdc _ ihd =>
-      exact withbor1U_compatN x hΓ hsc₁ hf₁ hf₂ hS hdc ihd
-  | withbor2U x hΓ _ hside hf₁ hf₂ hS hdc _ ihd =>
-      exact withbor2U_compatN x hΓ hside hf₁ hf₂ hS hdc ihd
-  | withbor3U x hΓ _ hf₁ hf₂ hS hdc _ ihd => exact withbor3U_compatN x hΓ hf₁ hf₂ hS hdc ihd
+  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS _ ihd =>
+      exact withbor1U_compatN x hΓ hsc₁ hf₁ hf₂ hS ihd
+  | withbor2U x hΓ _ hside hf₁ hf₂ hS _ ihd =>
+      exact withbor2U_compatN x hΓ hside hf₁ hf₂ hS ihd
+  | withbor3U x hΓ _ hf₁ hf₂ hS _ ihd => exact withbor3U_compatN x hΓ hf₁ hf₂ hS ihd
   | withloadU x hΓ _ hf₁ hf₂ hS => exact withloadU_compatN x hΓ hf₁ hf₂ hS
-  | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS hdc _ ihd =>
-      exact sliceBorrowMU_compatN x hΓ hA hB hf₁ hf₂ hS hdc ihd
-  | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS hdc _ ihd =>
-      exact sliceBorrowIU_compatN x hΓ hsc hA hB hf₁ hf₂ hS hdc ihd
+  | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
+      exact sliceBorrowMU_compatN x hΓ hA hB hf₁ hf₂ hS ihd
+  | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS _ ihd =>
+      exact sliceBorrowIU_compatN x hΓ hsc hA hB hf₁ hf₂ hS ihd
   | lolliE hs _ _ iha ihf => exact lolliE_compatN hs iha ihf
   | allEV _ hlt ih => exact allEV_compatN ih hlt
   | ofRet _ ih => exact ofRet_compatN ih
@@ -194,6 +195,8 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | nuIn hC _ ih => exact nuIn_compatN hC ih
   | nuOut hC _ ih => exact nuOut_compatN hC ih
   | unfoldN C S hC hS hΓ => exact unfoldN_compatN hC S hS hΓ
+  | unfoldK C G S hC hG hS hΓ => exact unfoldK_compatN hC hG hS hΓ
+  | nuOutK hC hG hS hGf h => exact nuOutK_compatN hC hG hS hGf h
   | effSub hle _ ih => exact sub_compatN hle ih
   | effPerform hf hna _ _ ih => exact perform_compatN hf hna ih
   | effAwait hΓ hfa ha haA hfc hc =>

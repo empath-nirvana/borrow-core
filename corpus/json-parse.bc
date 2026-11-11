@@ -1,0 +1,61 @@
+-- J1 (#65): a JSON document parsed and serialised through the library (`include json`, SPEC §36
+-- *JSON*). The document is read whole from standard input, lent once as text at `'t`, parsed by
+-- `json_parse` into an owned `Json`, and serialised by borrow by `json_ser`: compact, an integer
+-- literal that fits `i64` printed exactly (`Int`, by `push_i64`), any other number by `push_f64`
+-- (an integral float as `3.0`), each object's members in the map's slot order.
+--
+-- `main` parses two documents: the input, whose field `name` and whole value are printed; and a
+-- document missing a `,` three levels down (`broken`), raising from a member of an object in an
+-- array in an object, where every enclosing frame owns partial data (a key, a vector, a map). A
+-- document nested past the recursion budget is `json-deep.bc`.
+--
+-- Answer: on `json-parse.in`, the line `"Café \"Zoë\" — Montréal 🍰"`, then the whole document
+-- in one line (658 bytes), then `(inl (inl i32[658]), inl (inr (i32[3], i32[29])))` and
+-- `live 0`. The croissant's `id`, `505874924095815681`, is past 2^53 and prints back exactly; read
+-- as a float it would be rounded. The floors `-0` and `-0.0` both print `-0.0`: `-0` is a `Float`,
+-- as `i64` has no negative zero. A surrogate pair decoded as two code points, a mishandled
+-- escape or a misrounded number changes the second line; a dropped level or member changes its
+-- length; a frame whose partial data is not consumed on the error shows in `live`.
+
+include json
+
+-- ### The field `name`
+
+-- The member `k` of the object `j` points at, appended to `out`; `null` when there is none.
+fn ser_field<'a>(j: imm 'a Json, k: lit, out: string) -> string with Exhausted =
+  let mut out = out;
+  borrow imm *j { 'y, v -> match v {
+      Obj(m) -> match map_get(m, string_of_lit(k)) {
+          inl x -> out = json_ser(x, out)
+        | inr u -> push_lit(&mut out, "null")
+        }
+    | _ -> push_lit(&mut out, "null")
+    } };
+  out
+
+-- ### The two documents
+
+-- The document in `s` parsed, its field `name` and its whole serialisation printed, one per line:
+-- the length of the serialisation, the error, or `inr ()` when it is nested past the budget.
+fn document(s: string) -> (i32 + JsonError) + 1 with Stdout =
+  borrow imm s { 't, t ->
+    with exhausted_to_option {
+      with to_result {
+        let mut j = json_parse(t);
+        let mut name = ser_field(&j, "name", string_new(64));
+        push_byte(&mut name, b'\n');
+        print_string(name);
+        let mut whole = json_ser(&j, string_new(1024));
+        let n = borrow imm whole { v -> len(v) };
+        push_byte(&mut whole, b'\n');
+        print_string(whole);
+        n
+      } } }
+
+-- A document missing a `,` after a member three levels down: error 3 at byte 29.
+def broken : lit = "{\"a\": [1, {\"b\": [true, null] \"c\"}]}"
+
+main -> ((i32 + JsonError) + 1) * ((i32 + JsonError) + 1) =
+  let a = document(read_all(&mut stdin));
+  let b = document(string_of_lit(broken));
+  (a, b)

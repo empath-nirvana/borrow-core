@@ -1,5 +1,6 @@
 import Core.Compat
 import Core.CodeRules
+import Core.CodeNuOut
 import Core.Integers
 import Core.Arrays
 import Core.SliceOps
@@ -442,22 +443,23 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | withswap {Δ Γ a A B} (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ withswap (.val (axWithswapTy a A B))
   /-- The unwinding form of `withbor` (1): `Ref A` lent as `Imm 'x A` to a callback at a row of
-  abortive operations; when it unwinds, the finaliser `d` runs on the source.  `[spec §19]` -/
+  abortive operations; when it unwinds, the finaliser `d` runs on the source. `d` is typed at the
+  rule's context, whose live slots are persistent, so it may name them.  `[spec §19, §72]` -/
   | withbor1U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
+      (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerives Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S))
   /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition
   non-strict.  `[spec §19, §23]` -/
   | withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
+      (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerives Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S))
   /-- The unwinding form of `withbor` (3): `Mut @a A` reborrowed as `Mut 'x A`.  `[spec §19]` -/
   | withbor3U {Δ Γ a A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerives Δ Γ d (.val (.lolli (.mut a A) .unit))) :
+      (hd : CDerives Δ Γ d (.val (.lolli (.mut a A) .unit))) :
       CDerives Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S))
   /-- The unwinding form of `withload`: its own term, the source consumed by the load.
   `[spec §19]` -/
@@ -469,14 +471,14 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | sliceBorrowMU {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
       (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerives Δ Γ d (.val (.lolli (.array A) .unit))) :
+      (hd : CDerives Δ Γ d (.val (.lolli (.array A) .unit))) :
       CDerives Δ Γ (withborUE d) (.val (sliceBorrowMUTy x Δ.meetOfDom A B S))
   /-- The unwinding form of `slice_borrow_imm`: an owned array lent as a family of `imm` leaves.
   `[spec §19]` -/
   | sliceBorrowIU {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A)
       (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerives Δ Γ d (.val (.lolli (.array A) .unit))) :
+      (hd : CDerives Δ Γ d (.val (.lolli (.array A) .unit))) :
       CDerives Δ Γ (withborUE d) (.val (sliceBorrowIUTy x Δ.meetOfDom A B S))
   -- Call-by-value derived forms: BoLo's application and `∀E` on arbitrary subterms, and the
   -- reading of a computation of `F A` as a value-judged expression at `A`.
@@ -529,6 +531,18 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   positive `C`.  `[spec §7]` -/
   | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S))
+  /-- `[unfold-K]`: coiteration at the step's code, a constant: `unfold : !G ⊸ !Code⟨hCode C;
+  !G ⊗ 1⟩ (S ⊸ F Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C))`, `G` forced at `S ⊸ C[S/X]`
+  (`U(S ⊸ C[S/X])` or a code type of it).  `[spec §68]` -/
+  | unfoldK {Δ Γ} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S)))
+      (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val (unfoldV C)) (.val (unfoldKTy C G S))
+  /-- `[ν-out-K]`: `force x : C[Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)/X]` for
+  `x : Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C)`, every rest at the same code type; `force x` at `νX. C`
+  is `x` (`forceE`).  `[spec §68]` -/
+  | nuOutK {Δ Γ i} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S)))
+      (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
+      CDerives Δ Γ (.var i) (.comp (C.instT (codeTy C G S)))
   /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
   | effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S')
       (h : CDerives Δ Γ e (.comp (CTy.effOf S A))) : CDerives Δ Γ e (.comp (CTy.effOf S' A))
@@ -871,15 +885,15 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | withbor3 x hΓ hx hf₁ hf₂ => exact withbor3_compatX x hΓ hx hf₁ hf₂
   | withload x hΓ hx hf₁ hf₂ => exact withload_compatX x hΓ hx hf₁ hf₂
   | withswap hΓ => exact withswap_compatX hΓ
-  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS hdc _ ihd => exact withbor1U_compatX x hΓ hsc₁ hf₁ hf₂ hS hdc ihd
-  | withbor2U x hΓ _ hside hf₁ hf₂ hS hdc _ ihd =>
-      exact withbor2U_compatX x hΓ hside hf₁ hf₂ hS hdc ihd
-  | withbor3U x hΓ _ hf₁ hf₂ hS hdc _ ihd => exact withbor3U_compatX x hΓ hf₁ hf₂ hS hdc ihd
+  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS _ ihd => exact withbor1U_compatX x hΓ hsc₁ hf₁ hf₂ hS ihd
+  | withbor2U x hΓ _ hside hf₁ hf₂ hS _ ihd =>
+      exact withbor2U_compatX x hΓ hside hf₁ hf₂ hS ihd
+  | withbor3U x hΓ _ hf₁ hf₂ hS _ ihd => exact withbor3U_compatX x hΓ hf₁ hf₂ hS ihd
   | withloadU x hΓ _ hf₁ hf₂ hS => exact withloadU_compatX x hΓ hf₁ hf₂ hS
-  | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS hdc _ ihd =>
-      exact sliceBorrowMU_compatX x hΓ hA hB hf₁ hf₂ hS hdc ihd
-  | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS hdc _ ihd =>
-      exact sliceBorrowIU_compatX x hΓ hsc hA hB hf₁ hf₂ hS hdc ihd
+  | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
+      exact sliceBorrowMU_compatX x hΓ hA hB hf₁ hf₂ hS ihd
+  | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS _ ihd =>
+      exact sliceBorrowIU_compatX x hΓ hsc hA hB hf₁ hf₂ hS ihd
   | lolliE hs _ _ iha ihf => exact lolliE_compatX hs iha ihf
   | allEV _ hlt ih => exact allE_compatX ih hlt
   | ofRet _ ih => exact ih
@@ -892,6 +906,8 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | nuIn hC _ ih => exact nuIn_compatX hC ih
   | nuOut hC _ ih => exact nuOut_compatX hC ih
   | unfoldN C S hC hS hΓ => exact unfold_compatX hC S hS hΓ
+  | unfoldK C G S hC hG hS hΓ => exact unfoldK_compatX hC hG hS hΓ
+  | nuOutK hC hG hS hGf h => exact nuOutK_compatX hC hG hS hGf h
   | effSub hle _ ih => exact sub_compatC hle ih
   | effPerform hf hna _ _ ih => exact perform_compatC hf hna ih
   | effAwait hΓ hfa ha haA hfc hc => exact semC_dead .nil hΓ (await_compatC hfa ha haA hfc hc)

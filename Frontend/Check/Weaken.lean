@@ -601,48 +601,40 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
   | withswap hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.withswap (deadP_ins (live_eval_atom hf hp) Γa hΓ), (shift_closed0 (by rfl) _ _).symm⟩
-  | withbor1U x hΓ hx hsc hf₁ hf₂ hS hdc _ ihd =>
+  | withbor1U x hΓ hx hsc hf₁ hf₂ hS _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      rw [shift_closed0 hdc] at e
-      exact ⟨.withbor1U x (deadP_ins (live_atom hpe) Γa hΓ) hx hsc hf₁ hf₂ hS (by rw [e]; exact hdc)
-        d, by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, shift_closed0 (withborUE_closed hdc)]⟩
-  | withbor2U x hΓ hx hside hf₁ hf₂ hS hdc _ ihd =>
+      exact ⟨.withbor1U x (deadP_ins (live_atom hpe) Γa hΓ) hx hsc hf₁ hf₂ hS
+        d, by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
+  | withbor2U x hΓ hx hside hf₁ hf₂ hS _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      rw [shift_closed0 hdc] at e
-      exact ⟨.withbor2U x (deadP_ins (live_atom hpe) Γa hΓ) hx hside hf₁ hf₂ hS
-        (by rw [e]; exact hdc) d,
-        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, shift_closed0 (withborUE_closed hdc)]⟩
-  | withbor3U x hΓ hx hf₁ hf₂ hS hdc _ ihd =>
+      exact ⟨.withbor2U x (deadP_ins (live_atom hpe) Γa hΓ) hx hside hf₁ hf₂ hS d,
+        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
+  | withbor3U x hΓ hx hf₁ hf₂ hS _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      rw [shift_closed0 hdc] at e
-      exact ⟨.withbor3U x (deadP_ins (live_atom hpe) Γa hΓ) hx hf₁ hf₂ hS (by rw [e]; exact hdc) d,
-        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, shift_closed0 (withborUE_closed hdc)]⟩
+      exact ⟨.withbor3U x (deadP_ins (live_atom hpe) Γa hΓ) hx hf₁ hf₂ hS d,
+        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
   | withloadU x hΓ hx hf₁ hf₂ hS =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.withloadU x (deadP_ins (live_eval_atom hf hp) Γa hΓ) hx hf₁ hf₂ hS,
         (shift_closed0 (by rfl) _ _).symm⟩
-  | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS hdc _ ihd =>
+  | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      rw [shift_closed0 hdc] at e
-      exact ⟨.sliceBorrowMU x (deadP_ins (live_atom hpe) Γa hΓ) hA hB hf₁ hf₂ hS
-        (by rw [e]; exact hdc) d,
-        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, shift_closed0 (withborUE_closed hdc)]⟩
-  | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS hdc _ ihd =>
+      exact ⟨.sliceBorrowMU x (deadP_ins (live_atom hpe) Γa hΓ) hA hB hf₁ hf₂ hS d,
+        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
+  | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      rw [shift_closed0 hdc] at e
-      exact ⟨.sliceBorrowIU x (deadP_ins (live_atom hpe) Γa hΓ) hsc hA hB hf₁ hf₂ hS
-        (by rw [e]; exact hdc) d,
-        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, shift_closed0 (withborUE_closed hdc)]⟩
+      exact ⟨.sliceBorrowIU x (deadP_ins (live_atom hpe) Γa hΓ) hsc hA hB hf₁ hf₂ hS d,
+        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
   | lolliE hs hm hcv _ _ iha ihf =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
@@ -696,6 +688,13 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.unfoldN C S hC hS (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (unfoldV_closed C) _ _).symm⟩
+  | unfoldK C G S hC hG hS hΓ =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.unfoldK C G S hC hG hS (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+        (shift_closed0 (unfoldV_closed C) _ _).symm⟩
+  | nuOutK hC hG hS hGf hs =>
+      intro Γa Γb Γp f hΓ hf hp; subst hΓ
+      exact ⟨.nuOutK hC hG hS hGf (soloP_ins (live_eval_atom hf hp) Γa hs), (var_shift _ _ _).symm⟩
   | effSub hle _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
@@ -1206,48 +1205,40 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
   | withswap hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.withswap (deadP_ins (live_eval_atom hf hp) Γa hΓ), (shift_closed0 (by rfl) _ _).symm⟩
-  | withbor1U x hΓ hx hsc hf₁ hf₂ hS hdc _ ihd =>
+  | withbor1U x hΓ hx hsc hf₁ hf₂ hS _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      rw [shift_closed0 hdc] at e
-      exact ⟨.withbor1U x (deadP_ins (live_atom hpe) Γa hΓ) hx hsc hf₁ hf₂ hS (by rw [e]; exact hdc)
-        d, by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, shift_closed0 (withborUE_closed hdc)]⟩
-  | withbor2U x hΓ hx hside hf₁ hf₂ hS hdc _ ihd =>
+      exact ⟨.withbor1U x (deadP_ins (live_atom hpe) Γa hΓ) hx hsc hf₁ hf₂ hS
+        d, by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
+  | withbor2U x hΓ hx hside hf₁ hf₂ hS _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      rw [shift_closed0 hdc] at e
-      exact ⟨.withbor2U x (deadP_ins (live_atom hpe) Γa hΓ) hx hside hf₁ hf₂ hS
-        (by rw [e]; exact hdc) d,
-        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, shift_closed0 (withborUE_closed hdc)]⟩
-  | withbor3U x hΓ hx hf₁ hf₂ hS hdc _ ihd =>
+      exact ⟨.withbor2U x (deadP_ins (live_atom hpe) Γa hΓ) hx hside hf₁ hf₂ hS d,
+        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
+  | withbor3U x hΓ hx hf₁ hf₂ hS _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      rw [shift_closed0 hdc] at e
-      exact ⟨.withbor3U x (deadP_ins (live_atom hpe) Γa hΓ) hx hf₁ hf₂ hS (by rw [e]; exact hdc) d,
-        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, shift_closed0 (withborUE_closed hdc)]⟩
+      exact ⟨.withbor3U x (deadP_ins (live_atom hpe) Γa hΓ) hx hf₁ hf₂ hS d,
+        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
   | withloadU x hΓ hx hf₁ hf₂ hS =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.withloadU x (deadP_ins (live_eval_atom hf hp) Γa hΓ) hx hf₁ hf₂ hS,
         (shift_closed0 (by rfl) _ _).symm⟩
-  | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS hdc _ ihd =>
+  | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      rw [shift_closed0 hdc] at e
-      exact ⟨.sliceBorrowMU x (deadP_ins (live_atom hpe) Γa hΓ) hA hB hf₁ hf₂ hS
-        (by rw [e]; exact hdc) d,
-        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, shift_closed0 (withborUE_closed hdc)]⟩
-  | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS hdc _ ihd =>
+      exact ⟨.sliceBorrowMU x (deadP_ins (live_atom hpe) Γa hΓ) hA hB hf₁ hf₂ hS d,
+        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
+  | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS _ ihd =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       obtain ⟨f', hf', hpe, hp'⟩ := live_withO hf hp
       obtain ⟨d, e⟩ := ihd Γa Γb Γp f' rfl hf' hp'
-      rw [shift_closed0 hdc] at e
-      exact ⟨.sliceBorrowIU x (deadP_ins (live_atom hpe) Γa hΓ) hsc hA hB hf₁ hf₂ hS
-        (by rw [e]; exact hdc) d,
-        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, shift_closed0 (withborUE_closed hdc)]⟩
+      exact ⟨.sliceBorrowIU x (deadP_ins (live_atom hpe) Γa hΓ) hsc hA hB hf₁ hf₂ hS d,
+        by rw [TExpr.shift, TExpr.erase, TExpr.erase, e, withborUE_shift]⟩
   | lolliE hs hm hcv _ _ iha ihf =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
@@ -1301,6 +1292,13 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.unfoldN C S hC hS (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (unfoldV_closed C) _ _).symm⟩
+  | unfoldK C G S hC hG hS hΓ =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.unfoldK C G S hC hG hS (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+        (shift_closed0 (unfoldV_closed C) _ _).symm⟩
+  | nuOutK hC hG hS hGf hs =>
+      intro Γa Γb Γp f hΓ hf hp; subst hΓ
+      exact ⟨.nuOutK hC hG hS hGf (soloP_ins (live_eval_atom hf hp) Γa hs), (var_shift _ _ _).symm⟩
   | effSub hle _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp

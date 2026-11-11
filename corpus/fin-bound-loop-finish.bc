@@ -1,0 +1,19 @@
+-- A loop whose value is bound, in a clause, whose body can abort (SPEC §27; #953 re-review, the
+-- bound loop): it is a head of the clause's path as an unbound loop is, wrapped with the binding of
+-- its value (`r <- (loop …; r <- return forRes; return r) unwind (cancel k); N`), so the wrap is
+-- around the loop as the typed elaboration elaborates it. Here the body never raises (`i == 9`): the loop finishes and the clause resumes `k`.
+--
+-- Answer: inl (inl i32[5]), and `live 0`.
+
+include fail
+
+effect Wait { ctl wait() }
+
+handler tm[A]: Wait, A -> A + 1 with Fail[i32] = {
+  return(x) = inl x;
+  wait(k) = { let s = for i in 0..3 { if i == 9 { let r = raise((7 : i32)); () } else { () } }; k(()) }
+}
+
+fn work() -> i32 with Wait, Fail[i32] = x <- wait() unwind (let r = raise((3 : i32)); ()); 5
+
+main -> (i32 + 1) + i32 = with to_result[i32, i32 + 1] { with tm[i32] { work() } }

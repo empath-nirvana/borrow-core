@@ -781,6 +781,8 @@ theorem raiseOK_host (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = som
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, _, -, rfl⟩ := h; exact hi32 _
       · obtain ⟨_, _, -, rfl⟩ := h; exact hi64 _
+      · obtain ⟨_, _, -, rfl⟩ := h; exact hob .u32 _
+      · obtain ⟨_, _, -, rfl⟩ := h; exact hob .u64 _
   | div w o =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, _, -, rfl⟩ := h
@@ -789,16 +791,28 @@ theorem raiseOK_host (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = som
       · obtain ⟨_, _, -, rfl⟩ := h
         exact raiseOK_opt fun v hv => by
           simp only [Option.map_eq_some_iff] at hv; obtain ⟨_, -, rfl⟩ := hv; exact hi64 _
+      · obtain ⟨_, _, -, rfl⟩ := h
+        exact raiseOK_opt fun v hv => by
+          simp only [Option.map_eq_some_iff] at hv; obtain ⟨_, -, rfl⟩ := hv; exact hob .u32 _
+      · obtain ⟨_, _, -, rfl⟩ := h
+        exact raiseOK_opt fun v hv => by
+          simp only [Option.map_eq_some_iff] at hv; obtain ⟨_, -, rfl⟩ := hv; exact hob .u64 _
   | un w o =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, -, rfl⟩ := h; exact hi32 _
       · obtain ⟨_, -, rfl⟩ := h; exact hi64 _
+      · obtain ⟨_, -, rfl⟩ := h; exact hob .u32 _
+      · obtain ⟨_, -, rfl⟩ := h; exact hob .u64 _
   | eqz w =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, -, rfl⟩ := h; exact raiseOK_bool _
       · obtain ⟨_, -, rfl⟩ := h; exact raiseOK_bool _
+      · obtain ⟨_, -, rfl⟩ := h; exact raiseOK_bool _
+      · obtain ⟨_, -, rfl⟩ := h; exact raiseOK_bool _
   | rel w o =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
+      · obtain ⟨_, _, -, rfl⟩ := h; exact raiseOK_bool _
+      · obtain ⟨_, _, -, rfl⟩ := h; exact raiseOK_bool _
       · obtain ⟨_, _, -, rfl⟩ := h; exact raiseOK_bool _
       · obtain ⟨_, _, -, rfl⟩ := h; exact raiseOK_bool _
   | wrap =>
@@ -839,6 +853,14 @@ theorem raiseOK_host (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = som
       cases f <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
       · exact hob .f32 _
       · exact hob .f64 _
+  | reinterpret_u i =>
+      cases i <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
+      · exact hob .u32 _
+      · exact hob .u64 _
+  | reinterpret_s i =>
+      cases i <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
+      · exact hob .w32 _
+      · exact hob .w64 _
 
 theorem raiseOK_tabFill {f : Val} (hf : f.1.RaiseOK P) (ℓ : Loc) (n : UInt32) :
     ∀ i k, (tabFill f ℓ n i k).RaiseOK P
@@ -1004,6 +1026,13 @@ theorem raiseOK_head (hP0 : ¬ P 0) {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ
       by_cases hm0 : m = 0
       · subst hm0; exact absurd hPm hP0
       · exact (raiseOK_raise_payload hm0).2 ⟨hPm, hw⟩
+  | cancelTo n qs hr hs k K hK =>
+      obtain ⟨-, hb⟩ := raiseOK_hndE.1 ha
+      obtain ⟨hKr, hp⟩ := plug_raiseOK_inv K (a := BoCa.BoLo.cancelToE _) trivial hb
+      have hkp := (raiseOK_primApp (P := P) (p := .cancelTo) (by decide) (by decide) _).1 hp
+      have hk : k.1.RaiseOK P := hkp.2
+      exact ⟨⟨raiseOK_ccatchE.2 (plug_raiseOK _ (kraiseOK_dead hKr) raiseOK_raise_cancel_none),
+        raiseOK_app_val hk trivial⟩, hμ⟩
 
 /-- **No step leaves the names `P`**, nor stores a value that does, when `0` is not one of them.
 `[spec §19]` -/
@@ -1357,9 +1386,6 @@ theorem rcE_withPair {M N : Expr} (hM : rcE q M = true) (hN : rcE q N = true) :
     rcE q (withPair M N) = true := by
   simp [withPair, rcE, hM, hN]
 
-theorem rcE_withborUE {d : Expr} (hd : rcE q d = true) : rcE q (withborUE d) = true := by
-  simp [withborUE, thenE, rcE, rcE_app, hd]
-
 /-- Filling a variable with a closed λ-value makes no primitive. -/
 theorem fill_prim_inv {b : Expr} (hc : closedAt 0 (Val.lam b).1 = true) {j : Nat} {p : Prim} :
     ∀ {x : Expr}, (x.subst j (Val.lam b)).shift 1 j = .prim p → x = .prim p
@@ -1477,6 +1503,9 @@ theorem rcE_shift (d : Nat) : ∀ (N : Expr) (c : Nat), rcE q (N.shift d c) = rc
         rw [rcE.eq_9 q _ _ hq, rcE.eq_9 q a b (fun m r h₁ h₂ => hp ⟨m, r, h₁, h₂⟩),
           rcE_shift d a c, rcE_shift d b c]
 
+theorem rcE_withborUE {d : Expr} (hd : rcE q d = true) : rcE q (withborUE d) = true := by
+  simp [withborUE, thenE, rcE, rcE_shift, hd]
+
 theorem rcE_pickE : ∀ (j : Nat) {t : Expr}, rcE q t = true → rcE q (pickE j t) = true
   | 0, t, h => by simp [pickE, rcE, h]
   | j + 1, t, h => by simp only [pickE, rcE, h, Bool.true_and]; exact rcE_pickE j rfl
@@ -1547,16 +1576,17 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
   induction h with
   | force => exact rcE_forceE_var _ _
   | withI _ _ ihM ihN => exact rcE_withPair ihM ihN
-  | withbor1U _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
-  | withbor2U _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
-  | withbor3U _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
-  | sliceBorrowMU _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
-  | sliceBorrowIU _ _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | withbor1U _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | withbor2U _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | withbor3U _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | sliceBorrowMU _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
   | foldImm => exact rcE_foldImmV _
   | foldOwn => exact rcE_foldOwnV _
   | foldOwnG => exact rcE_foldOwnGV _
   | foldReuse => exact rcE_foldReuseV _
   | unfoldN => exact rcE_unfoldV _
+  | unfoldK => exact rcE_unfoldV _
   | lolliE _ _ _ iha ihf => rw [rcE_app ihf]; exact iha
   | @effAwait _ _ S n a c hAt _ _ _ _ hfc _ =>
       have hn := names_of_rowAt hAt hfc

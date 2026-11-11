@@ -28,8 +28,10 @@ the image of a type the checker put on a node of the typed term.
   (those whose clause at some `handle` node of their name is not called where they are
   performed), make `F_Σ R` an *outcome*: `μY. R ⊕ (P ⊕ S)`, `S` one summand per machine
   operation `A ↠ B` of `Σ`, in the row's order, holding its argument and the suspended
-  computation `U((B ⊸ F Y) & F (1 ⊕ P))`: resumed with the answer, it answers the outcome again;
-  cancelled, it answers `()` or the first error its finalisers raised (`outcomeTy`).
+  computation `U((B ⊸ F Y) & F C)`: resumed with the answer, it answers the outcome again;
+  cancelled, it answers `C`, the outcome of its cancel row `F_{fin} 1` (`CancelRow`): `()` or the
+  first error its finalisers raised, `1 ⊕ P_fin`, and a suspension at each machine operation of
+  `fin` (`outcomeTy`).
 -/
 
 namespace Backend2
@@ -234,13 +236,35 @@ some `handle` node of `n` is not called where it is performed (`Backend2/Driver.
 `machineOps`). -/
 abbrev MachSet := Std.HashSet (UInt32 × UInt32)
 
-/-- What cancelling a computation suspended at an operation answers (SPEC §49): `()`, or the first
-error its finalisers raised, one of the operation's cancel row's abortive operations (`cp`, its
-payload's summands); `1` at a cancel row `⊤` (a must-resume operation, never cancelled). -/
-def cancelResTy (cp : Option (List ((UInt32 × UInt32) × LTy))) : LTy :=
-  match cp.bind payOf with
+/-- **A cancel row as a machine operation's `k` reads it** (SPEC §27, §49): the row `fin` of
+`F_{fin} 1`, what cancelling a computation suspended at the operation performs. `pay`, its abortive
+operations' payload (each key once, its first, `dedupPay`); `ms`, its machine operations (each key
+once, its first), each with its argument, its answer and its own cancel row, read as `OpSig.ent`
+reads it (`ofFinAt`); `unrs`, its operations at `unr`; `ty`, what the cancel answers:
+`outcomeTy 1 pay ms`, the outcome of `F_{fin} 1`. With no machine operation in `fin` that is `()` or
+the first error its finalisers raised, `1 ⊕ P_fin` (or `1`). The nesting is the cancel rows' own
+(§27), finite. -/
+inductive CancelRow where
+  | mk (pay : List ((UInt32 × UInt32) × LTy))
+      (ms : List ((UInt32 × UInt32) × LTy × LTy × Option CancelRow))
+      (unrs : List (UInt32 × UInt32)) (ty : LTy)
+
+instance : Inhabited CancelRow := ⟨.mk [] [] [] .unit⟩
+
+namespace CancelRow
+def pay : CancelRow → List ((UInt32 × UInt32) × LTy) | .mk p _ _ _ => p
+def ms : CancelRow → List ((UInt32 × UInt32) × LTy × LTy × Option CancelRow) | .mk _ m _ _ => m
+def unrs : CancelRow → List (UInt32 × UInt32) | .mk _ _ u _ => u
+def ty : CancelRow → LTy | .mk _ _ _ t => t
+end CancelRow
+
+/-- What cancelling a computation suspended at an operation answers (SPEC §27, §49): the outcome
+of its cancel row (`CancelRow.ty`); `1` at a cancel row `⊤` (an operation that is not capturable,
+never cancelled). -/
+def cancelResTy (cp : Option CancelRow) : LTy :=
+  match cp with
   | none => .unit
-  | some p => .sum .unit p
+  | some cr => cr.ty
 
 /-- **The outcome of a computation** at a row with machine operations  `[spec §49]`: `R`, the
 payload `P` of the row's abortive operations (`payOf`), and for each machine operation `A ↠ B`
@@ -250,7 +274,7 @@ the operation's cancel row): `μY. R ⊕ (P ⊕ S)`, or `μY. R ⊕ S` with no a
 no machine operation it is `R ⊕ P`, or `R`. `R`'s free type variables (an `X` of a `ν`) are
 lifted under the `μ`. -/
 def outcomeTy (r : LTy) (aborts : List ((UInt32 × UInt32) × LTy))
-    (machs : List ((UInt32 × UInt32) × LTy × LTy × Option (List ((UInt32 × UInt32) × LTy)))) : LTy :=
+    (machs : List ((UInt32 × UInt32) × LTy × LTy × Option CancelRow)) : LTy :=
   let ms := machs.foldl (fun acc p => if acc.any (·.1 == p.1) then acc else acc ++ [p]) []
   match ms with
   | [] => match payOf aborts with
@@ -258,7 +282,7 @@ def outcomeTy (r : LTy) (aborts : List ((UInt32 × UInt32) × LTy))
     | some p => .sum r p
   | _ =>
     let pay := payOf aborts
-    let kT (b : LTy) (cp : Option (List ((UInt32 × UInt32) × LTy))) : LTy :=
+    let kT (b : LTy) (cp : Option CancelRow) : LTy :=
       .thunk (.amp (.arr (b.lift 0) (.ret (.tvar 0))) (.ret ((cancelResTy cp).lift 0)))
     let s := (payOf (ms.map fun (k, a, b, cp) => (k, .pair (a.lift 0) (kT b cp)))).getD .unit
     let x := match pay with
@@ -299,7 +323,7 @@ def evInternal (n : UInt32) (why : String) : String :=
 
 mutual
 /-- A value type of the LIR: lifetimes, `[@a]` and `∀` erased, `!` kept; `ms` the program's
-machine operations, `fd` its evidence. -/
+machine operations. -/
 def ofV (ms : MachSet) (fd : EvSet) : VTy → Except String LTy
   | .unit => pure .unit
   | .zero => pure .zero
@@ -330,9 +354,7 @@ def ofU (ms : MachSet) (fd : EvSet) (under : Bool) : CTy → Except String LTy
   | .ret A => if under then ofV ms fd A else return .thunk (.ret (← ofV ms fd A))
   | C => return .thunk (← ofC ms fd C)
 
-/-- The LIR type of a computation type. A `∀` is its body (SPEC §44). At a row holding names of
-the program's evidence `fd`, the evidence parameters come first (`evLayers`, SPEC §47
-§71): `F_Σ R` is `Ev_Σ ⊸ ⟦F_Σ R⟧`. -/
+/-- The LIR type of a computation type. A `∀` is its body (SPEC §44). -/
 def ofC (ms : MachSet) (fd : EvSet) : CTy → Except String LCTy
   | .ret A => return .ret (← ofV ms fd A)
   | .arr A C => return .arr (← ofV ms fd A) (← ofC ms fd C)
@@ -351,7 +373,7 @@ def ofC (ms : MachSet) (fd : EvSet) : CTy → Except String LCTy
     return .nu c
   | C@(.eff n i q A B fin _ C') => do
     -- `F_Σ R`: `R`, `R ⊕ P` with the payload of `Σ`'s abortive operations (SPEC §47), or the
-    -- outcome at its machine operations (SPEC §49); its evidence first.
+    -- outcome at its machine operations (SPEC §49); its evidence first [spec §71].
     if n == divName then
       throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
     let (ps, qs, r) ← ofEff ms fd C'
@@ -360,39 +382,67 @@ def ofC (ms : MachSet) (fd : EvSet) : CTy → Except String LCTy
     if let (m, _) :: _ := es then
       if mach || !qs.isEmpty then throw (evInternal m "a machine's row")
     if abortB q B then return evWrap es (.ret (outcomeTy r (((n, i), ← ofV ms fd A) :: ps) qs))
-    else if mach then
-      return evWrap es (.ret (outcomeTy r ps (((n, i), ← ofV ms fd A, ← ofV ms fd B, ← ofFin ms fd fin) :: qs)))
+    else if ms.contains (n, i) then
+      -- The cancel row read at a capturable operation only (`ofFinAt`).
+      let cp ← if capB q B then ofFin ms fd fin else pure none
+      return evWrap es (.ret (outcomeTy r ps (((n, i), ← ofV ms fd A, ← ofV ms fd B, cp) :: qs)))
     else return evWrap es (.ret (outcomeTy r ps qs))
 
 /-- The layers of `F_Σ R` (`CTy.effOf`): each abortive operation's key and argument type, each
-machine operation's key, argument type, answer type and cancel row's payload, in the row's order,
-and `R`. `Div`'s operations are outside the fragment (N4).  [spec §47, §49] -/
+machine operation's key, argument type, answer type and cancel row, in the row's order, and `R`.
+`Div`'s operations are outside the fragment (N4).  [spec §47, §49] -/
 def ofEff (ms : MachSet) (fd : EvSet) : CTy →
     Except String (List ((UInt32 × UInt32) × LTy) ×
-      List ((UInt32 × UInt32) × LTy × LTy × Option (List ((UInt32 × UInt32) × LTy))) × LTy)
+      List ((UInt32 × UInt32) × LTy × LTy × Option CancelRow) × LTy)
   | .ret R => return ([], [], ← ofV ms fd R)
   | .eff n i q A B fin _ C => do
     if n == divName then
       throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
     let (ps, qs, r) ← ofEff ms fd C
     if abortB q B then return (((n, i), ← ofV ms fd A) :: ps, qs, r)
-    else if ms.contains (n, i) then return (ps, ((n, i), ← ofV ms fd A, ← ofV ms fd B, ← ofFin ms fd fin) :: qs, r)
+    else if ms.contains (n, i) then
+      -- The cancel row read at a capturable operation only (`ofFinAt`).
+      let cp ← if capB q B then ofFin ms fd fin else pure none
+      return (ps, ((n, i), ← ofV ms fd A, ← ofV ms fd B, cp) :: qs, r)
     else return (ps, qs, r)
   | _ => throw "a row's layers over a type that is not `F R`"
 
-/-- A cancel row's abortive operations (`CTy.rowOf`): `none` at `⊤`. A machine operation there (a
-finaliser that may suspend) is outside the fragment.  [spec §27, §49] -/
-def ofFin (ms : MachSet) (fd : EvSet) : CTy → Except String (Option (List ((UInt32 × UInt32) × LTy)))
+/-- A cancel row (`CTy.rowOf`) as its `k` reads it (`CancelRow`): `none` at `⊤`. A machine
+operation there (a finaliser that may suspend) is a suspension of the cancel, with its own cancel
+row, read at a capturable operation only.  [spec §27, §49] -/
+def ofFin (ms : MachSet) (fd : EvSet) : CTy → Except String (Option CancelRow)
   | .top => pure none
-  | .ret _ => pure (some [])
-  | .eff n i q A B _ _ C => do
-    let rest ← ofFin ms fd C
-    if abortB q B then return rest.map (((n, i), ← ofV ms fd A) :: ·)
+  | C => do
+    let (ps, qs, us) ← ofFinParts ms fd C
+    let ps := dedupPay ps
+    let qs := qs.foldl (fun acc p => if acc.any (·.1 == p.1) then acc else acc ++ [p]) []
+    return some (.mk ps qs us (outcomeTy .unit ps qs))
+
+/-- The layers of a cancel row: its abortive operations' keys and argument types, its machine
+operations' keys, argument and answer types and cancel rows (`ofFin`, at a capturable operation),
+and its operations at `unr`, in the row's order. -/
+def ofFinParts (ms : MachSet) (fd : EvSet) : CTy →
+    Except String (List ((UInt32 × UInt32) × LTy) ×
+      List ((UInt32 × UInt32) × LTy × LTy × Option CancelRow) × List (UInt32 × UInt32))
+  | .ret _ => pure ([], [], [])
+  | .eff n i q A B fin _ C => do
+    let (ps, qs, us) ← ofFinParts ms fd C
+    let us := if q == .unr then (n, i) :: us else us
+    if abortB q B then return (((n, i), ← ofV ms fd A) :: ps, qs, us)
     else if ms.contains (n, i) then
-      throw s!"a cancel row holding the machine operation ({n}, {i}): outside the fragment"
-    else return rest
+      let cp ← if capB q B then ofFin ms fd fin else pure none
+      return (ps, ((n, i), ← ofV ms fd A, ← ofV ms fd B, cp) :: qs, us)
+    else return (ps, qs, us)
   | _ => throw "a cancel row that is not a row"
 end
+
+/-- The cancel row of an operation `A ↠^q B` as its `k` reads it: `ofFin` of its cancel row `fin`
+at a capturable operation (`capB`, as the kernel's `OpSig.ent` reads it), and `none` (`⊤`) at a
+must-resume one, whose `κ` has the cancel component `⊤` (`kTy`'s `.lin` case) and is never
+cancelled (`kappaC_cancel_lin`). `ofC` and `ofEff` read it the same way, inline.
+[spec §27, §49] -/
+def ofFinAt (ms : MachSet) (fd : EvSet) (q : Qual) (B : VTy) (fin : CTy) : Except String (Option CancelRow) :=
+  if capB q B then ofFin ms fd fin else pure none
 
 /-- `ofV` keeps `!`: the LIR type of `!A` is `!` of `A`'s. -/
 theorem ofV_bang (ms : MachSet) (fd : EvSet) (A : VTy) : ofV ms fd (.bang A) = (ofV ms fd A).map .bang := by
@@ -485,6 +535,7 @@ def ofJ (ms : MachSet := {}) (fd : EvSet := {}) : Jdg → Except String (Sum LTy
 
 def widthName : Width → String
   | .w32 => "i32" | .w64 => "i64" | .w8 => "u8" | .f32 => "f32" | .f64 => "f64"
+  | .u32 => "u32" | .u64 => "u64"
 
 mutual
 def LTy.pp : LTy → String

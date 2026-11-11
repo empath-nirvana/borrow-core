@@ -340,6 +340,12 @@ there, and the first error is kept (`errNext`).  An operation of `D` passes the 
 nearest live handler; if that handler cancels its continuation, the new cancel reaches the running
 finaliser's `cfin`, and the error kept there, the earlier one, wins.  At `ccatch` the cancel answers
 `()`, or re-raises the kept error at the canceller.
+
+**The in-place cancel** (`[spec §51]`).  `cancelTo (n, k)` cancels the region between it and the
+nearest handler of `n` without capturing a continuation: `[cancel-to]` replaces the handler node
+by `ccatch (K†[raise (0, (0, none))]); k ()`, the cancel `κ`'s cancel branch would run, followed by
+`k ()`.  Only a handler of `n` catches it, so `K[cancelTo (n, k)]`, `K` free of `n`, is final, as
+`K[perform (n, …)]` is.
 -/
 
 /-- `hnd H e`.  `[spec §19]` -/
@@ -359,6 +365,12 @@ def performE (p : Expr) : Expr := .app (.val (.prim .perform)) p
 
 /-- `raise p`.  `[spec §19]` -/
 def raiseE (p : Expr) : Expr := .app (.val (.prim .raise)) p
+
+/-- `cancelTo p`, `p` the pair `(n, k)`.  `[spec §51]` -/
+def cancelToE (p : Expr) : Expr := .app (.val (.prim .cancelTo)) p
+
+/-- The payload `(n, k)` of `cancelTo_n k`.  `[spec §51]` -/
+def cancelToPayload (n : UInt32) (k : Val) : Val := .pair (.i32 n) k
 
 /-- The payload `(n, (i, v))` of an operation.  `[spec §19]` -/
 def opPayload (n i : UInt32) (v : Val) : Val := .pair (.i32 n) (.pair (.i32 i) v)
@@ -572,6 +584,12 @@ inductive Head {ℍ : Host} [HostIs ℍ] : Heap → Expr → Heap → Expr → P
       Head μ (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v))))) μ
         (.app (.val c) (.pair (.val v)
           (kappaAt (capTag qs.1 i.toNat) (hndVal n qs hr hs) K)))
+  /-- `[cancel-to]`: `hnd H K[cancelTo_n k] ↦ ccatch (K†[raise (0, (0, none))]); k ()`, `K` free
+      of `n`: the region `K` is cancelled in place (`Kont.dead`, as `κ`'s cancel branch runs it),
+      the handler frame is consumed, and `k` runs where it stood.  `[spec §19, §51]` -/
+  | cancelTo (μ : Heap) (n : UInt32) (qs hr hs k : Val) (K : Kont) (hK : K.HasHnd n = false) :
+      Head μ (hndE (hndVal n qs hr hs) (K.plug (cancelToE (.val (cancelToPayload n k))))) μ
+        (.seq (ccatchE (K.dead.plug (raiseE (.val (cancelVal none))))) (.app (.val k) (.val .unit)))
   /-- `[unwind]`: `hnd H K[raise (n, (i, v))] ↦ h_i v`, `K` catching nothing of `n`.
       `[spec §19]` -/
   | hunwind (μ : Heap) (n i : UInt32) (qs hr hs c v : Val) (K : Kont)

@@ -1,0 +1,16 @@
+-- The outer handler cancels a continuation that holds the inner handler and a cell, the twin of the
+-- kernel program `forward-cancel` (Backend/Kernel.lean, `Shapes.forwardCancel`): the body
+-- allocates a cell and performs `y9` under `h10` inside `h9`. `y9` passes `h10` to `h9`, whose clause
+-- does not resume, so the continuation, which holds `h10`'s frame and the cell, is cancelled, and
+-- the cell's finaliser frees it. The `free(c)` after `y9` never runs.
+--
+-- Answer: (); `live 0`. A cancel that stopped at `h10`'s frame, or skipped the cell's finaliser,
+-- would leave the cell live.
+
+effect A9 { ctl y9() }
+effect A10 { must_resume ctl y10() }
+
+handler h9[R]: A9, R -> 1 = { return(a) = (); y9(k) = () }
+handler h10[R]: A10, R -> R = { return(a) = a; y10(k) = k(()) }
+
+main -> 1 = with h9[1] { with h10[1] { let c: ref bool = alloc(true); y9(); let _ = free(c); () } }

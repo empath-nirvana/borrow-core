@@ -330,21 +330,46 @@ theorem effThenA (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ
     .effThen hs hm hcv hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
       (BoCa.Fig16.LogRel.Core.RowLe.nil S) hfin hP rfl hM.2 hN.2 hD.2⟩
 
+/-- `[then]` with `M` at its own row `Σ_M ≤ Σ` and the finaliser at its own row `Σ_D ≤ Σ`: each
+cancel row `F` of `Σ_M` read holds `F ⋈ Σ_D` (`ThenLe`), and a finaliser that may meet an
+unrestricted operation finds `Σ_M`'s pending errors persistent.  `[spec §27]` -/
+theorem effThen (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tM tN tD : TExpr}
+    {A B : CVTy} {S SM SD : CRow} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    (hcv : Covers u.u₁ 0 tM.erase ∧ Covers u.u₂ 1 tN.erase ∧ Covers u.u₂ 1 tD.erase) (hNZ : S.NZ)
+    (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : BoCa.Fig16.LogRel.Core.RowLe SM S)
+    (hDS : BoCa.Fig16.LogRel.Core.RowLe SD S)
+    (hfin : ∀ n k o o', BoCa.Fig16.LogRel.Core.Row.find SM n k = some o →
+      BoCa.Fig16.LogRel.Core.Row.find S n k = some o' → o.finRead = true →
+      BoCa.Fig16.LogRel.Core.ThenLe o.fin SD o'.fin)
+    (hP : SD.UnrD → SM.PendPers) (hSD : BoCa.Fig16.LogRel.Core.Row.divB SD = false)
+    (hM : TTied p₁ s₁ Δ Γ₁ tM (.comp (effOf SM A)))
+    (hN : TTied p₂ s₂ Δ (⟨A, true⟩ :: Γ₂) tN (.comp (effOf S B)))
+    (hD : TTied p₃ s₃ Δ (⟨.unit, false⟩ :: Γ₂) tD (.comp (effOf SD .unit))) :
+    TTied (p₁ ++ (p₂ ++ p₃)) (s₁ ∪ (s₂ ∪ s₃)) Δ Γ
+      (.effThen i (.comp (effOf S B)) A B S SM SD u tM tN tD) (.comp (effOf S B)) :=
+  ⟨fun hn Ξ h => .effThen hs hm hcv hNZ hUq hU hMS
+      hDS hfin hP hSD (hM.1 (nilL hn) Ξ (sigsAt_union_left h))
+      (hN.1 (nilL (nilR hn)) Ξ (sigsAt_union_left (sigsAt_union_right h)))
+      (hD.1 (nilR (nilR hn)) Ξ (sigsAt_union_right (sigsAt_union_right h))),
+    .effThen hs hm hcv hNZ hUq hU hMS
+      hDS hfin hP hSD hM.2 hN.2 hD.2⟩
+
 /-- `[handle]` reads its handled row, as `CDerivesAt.effHandleV`: the handler's pair `tc` a value
-form over a part `Γ₁` of the context whose live slots are persistent.  `[spec §19]` -/
+form over a part `Γ₁` of the context whose live slots are persistent, the handled operations at
+their cancel rows `fs`.  `[spec §19, §27]` -/
 theorem effHandle (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
     (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tc te : TExpr}
-    {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy}
+    {S : CRow} {E : List (CQual × CVTy × CVTy)} {fs : Nat → CCTy} {n : UInt32} {A R : CVTy}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
     (hcv : Covers u.u₁ 0 tc.erase ∧ Covers u.u₂ 0 te.erase)
     (hd : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ₁) (hH : tc.erase.ValFormIn Γ₁)
     (hc : TTied p₁ s₁ Δ Γ₁ tc (.val (.tensor (BoCa.Fig16.LogRel.Core.retTy S A R)
-      (BoCa.Fig16.LogRel.Core.clausesTy S R E))))
+      (BoCa.Fig16.LogRel.Core.clausesTy S R E fs))))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-    (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = false)
-    (he : TTied p₂ s₂ Δ Γ₂ te (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A))) :
-    TTied (p₁ ++ p₂) ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ (s₁ ∪ s₂)) Δ Γ
-      (.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil BoCa.Fig16.LogRel.Core.rcsNil n A R u ks site
+    (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) = false)
+    (he : TTied p₂ s₂ Δ Γ₂ te (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) A))) :
+    TTied (p₁ ++ p₂) ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) ∪ (s₁ ∪ s₂)) Δ Γ
+      (.effHandleV i (.comp (effOf S R)) S E fs BoCa.Fig16.LogRel.Core.rcsNil n A R u ks site
         te.erase.hin tc te)
       (.comp (effOf S R)) :=
   ⟨fun hn Ξ h => .effHandleV (rowAt_of_union_left h) hs hm hcv hd hH
@@ -352,22 +377,23 @@ theorem effHandle (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKin
       (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) rfl,
     .effHandleV hs hm hcv hd hH hc.2 hn0 hnS hlen hdv he.2 rfl⟩
 
-/-- BOXED-κ reads its handled row, as `CDerivesAt.effHandleB`.  `[spec §28]` -/
+/-- BOXED-κ reads its handled row, as `CDerivesAt.effHandleB`, the handled operations at their
+cancel rows `fs`.  `[spec §27, §28]` -/
 theorem effHandleB (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
     (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tc te : TExpr}
-    {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {d : CLife}
-    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    {S : CRow} {E : List (CQual × CVTy × CVTy)} {fs : Nat → CCTy} {n : UInt32} {A R : CVTy}
+    {d : CLife} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
     (hcv : Covers u.u₁ 0 tc.erase ∧ Covers u.u₂ 0 te.erase)
     (hd : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ₁) (hH : tc.erase.ValFormIn Γ₁)
     (hc : TTied p₁ s₁ Δ Γ₁ tc (.val (.tensor (BoCa.Fig16.LogRel.Core.retTy S A R)
-      (BoCa.Fig16.LogRel.Core.clausesTyB S R d E))))
+      (BoCa.Fig16.LogRel.Core.clausesTyB S R d E fs))))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-    (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = false)
-    (he : TTied p₂ s₂ Δ Γ₂ te (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
+    (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) = false)
+    (he : TTied p₂ s₂ Δ Γ₂ te (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) A)))
     (hΓd : CtxOutlives Δ Γ₂ d)
-    (hSd : BoCa.Fig16.LogRel.Core.Row.AnsOutlives Δ d (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S)) :
-    TTied (p₁ ++ p₂) ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ (s₁ ∪ s₂)) Δ Γ
-      (.effHandleVB i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil BoCa.Fig16.LogRel.Core.rcsNil n A R d u ks site
+    (hSd : BoCa.Fig16.LogRel.Core.Row.AnsOutlives Δ d (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S)) :
+    TTied (p₁ ++ p₂) ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) ∪ (s₁ ∪ s₂)) Δ Γ
+      (.effHandleVB i (.comp (effOf S R)) S E fs BoCa.Fig16.LogRel.Core.rcsNil n A R d u ks site
         te.erase.hin tc te)
       (.comp (effOf S R)) :=
   ⟨fun hn Ξ h => .effHandleVB (rowAt_of_union_left h) hs hm hcv hd hH

@@ -173,6 +173,10 @@ structure PState where
   angle : Bool := false
   /-- The `let mut` variables in scope. -/
   muts : List String := []
+  /-- The variables lent for the body of a control `with` being read, each the borrow of the
+  place it shadows (SPEC §41, R3): a read is `*&mut x`, an assignment `modify x { … }`.
+  `[spec §41]` -/
+  lent : List String := []
   /-- The `let mut` variables assigned since the enclosing `match` or `if` arm began. -/
   assigned : List String := []
   /-- The variables the `match` or `if` just parsed assigns, which it must hand on. -/
@@ -291,6 +295,16 @@ def bindName (x : Ident) : P Ident := do
   pushBinder x y
   pure { x with name := y }
 
+/-- A variable of its own that the elaboration binds for the name written `x` whose binder is
+numbered `b`: occurrences of `x` in its scope resolve to it, and are counted the binder `b`'s, so a
+renaming of the source renames them with it (`bcc alpha`). It has no binder in the source: a
+variable lent for a control handler's body, or the old content in an assignment of one (SPEC §41,
+R3).  [spec §41] -/
+def shadowAs (x : String) (b : Nat) : P String := do
+  let y ← freshVar x
+  modify fun s => { s with scope := (x, y, b) :: s.scope, declared := y :: s.declared }
+  pure y
+
 /-- Run `p` with the scope as it is now restored after it: the binders `p` makes are local to it. -/
 def withScope {α} (p : P α) : P α := do
   let sc := (← get).scope
@@ -334,6 +348,10 @@ def notePlaceWrite (x : String) : P Unit := do
 def bindOrAssign (x : Ident) : P Ident := do
   match ← mutOf? x.name with
   | some y =>
+    if (← get).lent.contains y then
+      throw ⟨x.span, s!"`{x.name}` is lent for the body of a control handler here: assign it " ++
+        s!"with `{x.name} = …` (SPEC §41, R3)"⟩
+
     modify fun s => { s with assigned := y :: s.assigned }
     if let some (_, b) := (← get).scope.lookup x.name then noteOcc x.span x.name y b
     pure { x with name := y }
@@ -684,6 +702,8 @@ def rtyAtom : Nat → P RTy
     | .kw "u8" => discard bump; pure (.int t.span .w8)
     | .kw "f32" => discard bump; pure (.int t.span .f32)
     | .kw "f64" => discard bump; pure (.int t.span .f64)
+    | .kw "u32" => discard bump; pure (.int t.span .u32)
+    | .kw "u64" => discard bump; pure (.int t.span .u64)
     | .kw "input" => discard bump; pure (.handle t.span .input)
     | .kw "output" => discard bump; pure (.handle t.span .output)
     -- `clock` and `args`, the clock's and the arguments' resources (SPEC §34): names, so that
@@ -776,11 +796,16 @@ def opNameNI (what : String) : P (Nat × Nat) := do
   | _ => expected what
 
 /-- The entries of a row up to its `]`: `n.i q A ~> B`, separated by `,`; `q` is `lin`, `cancel` or
-`unr`, read as a name here and nowhere else. -/
+`unr`, read as a name here and nowhere else. A capturable entry may write its cancel row after its
+qualifier, `n.i cancel[R] A ~> B` (or `unr[R]`), `R` a row's entries or `top` (`⊤`); none written
+is the empty cancel row. A `lin` entry has none.  `[spec §19, §27]` -/
 def rowEntries : Nat → P Row
   | 0 => outOfFuel
   | n + 1 => do
     if ← isSym "]" then return .nil
+    let tt ← peek
+    if tt.tok == .kw "top" then
+      failAt tt.span "`top` (`⊤`) is a cancel row only: write it as `n.i cancel[top] A ~> B`"
     let (k, i) ← opNameNI "an operation `n.i` of a row"
     let tq ← peek
     let q ← match tq.tok with
@@ -788,13 +813,28 @@ def rowEntries : Nat → P Row
       | .ident "cancel" => discard bump; pure Qual.cancel
       | .ident "unr" => discard bump; pure Qual.unr
       | _ => expected "a qualifier `lin`, `cancel` or `unr`"
+    let tf ← peek
+    if q == .lin && tf.tok == .sym "[" then
+      failAt tf.span s!"the operation {k}.{i} is `lin` (must resume): it is never cancelled, so it has no cancel row"
+    let fin ← if q != .lin && (← isSym "[") then do
+        discard bump
+        -- `⊤` (`top`): the cancel row of a continuation that cannot be cancelled.  `[spec §27]`
+        if ← isKw "top" then
+          discard bump
+          expectSym "]"
+          pure .top
+        else
+          let f ← rowEntries n
+          expectSym "]"
+          pure f
+      else pure .nil
     let A ← rvty n
     expectSym "~>"
     let B ← rvty n
     if ← isSym "," then
       discard bump
-      return .cons k i q A B (← rowEntries n)
-    pure (.cons k i q A B .nil)
+      return .cons k i q A B fin (← rowEntries n)
+    pure (.cons k i q A B fin .nil)
 
 /-- A shape: `leaf A`, `node σ τ`, or a shape atom. -/
 def shape : Nat → P Shape
@@ -1007,31 +1047,34 @@ def Val.lends : Val → Bool
 
 mutual
 /-- The places lent in a value, outside nested computations; with `vars`, the variables it names
-too. -/
-def Val.lentNames (vars : Bool := false) : Val → List String
+too. The body of a control handler of `ctl` lends nothing of its own: what it lends of the places
+outside it is lent around it (SPEC §41, R3). -/
+def Val.lentNames (vars : Bool := false) (ctl : List String := []) : Val → List String
   | .lend _ x _ => [x.name]
   | .var _ x => if vars then [x] else []
+  | .app _ (.app _ (.sugar _ (.handle h _ _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
+    P.lentNames vars ctl ++ (if ctl.contains h then [] else M.lentNames vars ctl)
   -- A borrow block's body runs in place: what it lends and names is the block's.
-  | .app _ (.app _ (.sugar _ (.borrow _ _)) P) (.thunkv _ (.lam _ _ _ M))
-  | .app _ (.app _ (.sugar _ (.handle _ _ _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
-    P.lentNames vars ++ M.lentNames vars
-  | .pair _ V W | .app _ V W => V.lentNames vars ++ W.lentNames vars
+  | .app _ (.app _ (.sugar _ (.borrow _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
+    P.lentNames vars ctl ++ M.lentNames vars ctl
+  | .pair _ V W | .app _ V W => V.lentNames vars ctl ++ W.lentNames vars ctl
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.lentNames vars
-  | .run _ M => M.lentNames vars
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.lentNames vars ctl
+  | .run _ M => M.lentNames vars ctl
   | _ => []
 
 /-- The places lent in a computation, outside nested closures; with `vars`, the variables it
 names too. -/
-def Comp.lentNames (vars : Bool := false) : Comp → List String
-  | .ret _ V | .absurd _ V => V.lentNames vars
-  | .bind _ _ _ M N => M.lentNames vars ++ N.lentNames vars
-  | .letUnit _ V M | .letPair _ _ _ V M => V.lentNames vars ++ M.lentNames vars
-  | .case _ V _ M _ N | .loop _ _ _ V M N => V.lentNames vars ++ M.lentNames vars ++ N.lentNames vars
-  | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.lentNames vars
-  | .perform _ _ _ V | .abort _ _ _ V => V.lentNames vars
-  | .handle _ _ _ hr hc M => hr.lentNames vars ++ hc.lentNames vars ++ M.lentNames vars
-  | .unwind _ _ _ M D N => M.lentNames vars ++ D.lentNames vars ++ N.lentNames vars
+def Comp.lentNames (vars : Bool := false) (ctl : List String := []) : Comp → List String
+  | .ret _ V | .absurd _ V => V.lentNames vars ctl
+  | .bind _ _ _ M N => M.lentNames vars ctl ++ N.lentNames vars ctl
+  | .letUnit _ V M | .letPair _ _ _ V M => V.lentNames vars ctl ++ M.lentNames vars ctl
+  | .case _ V _ M _ N | .loop _ _ _ V M N =>
+    V.lentNames vars ctl ++ M.lentNames vars ctl ++ N.lentNames vars ctl
+  | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.lentNames vars ctl
+  | .perform _ _ _ V | .abort _ _ _ V => V.lentNames vars ctl
+  | .handle _ _ _ hr hc M => hr.lentNames vars ctl ++ hc.lentNames vars ctl ++ M.lentNames vars ctl
+  | .unwind _ _ _ M D N => M.lentNames vars ctl ++ D.lentNames vars ctl ++ N.lentNames vars ctl
   | _ => []
 end
 
@@ -1071,9 +1114,10 @@ block `M` runs in place, a name of which is not bound where the block begins (`o
 declared in an inner `with` and lent there is the inner body's (#881). A binder of a name bound
 outside (a capability rebound, a variable core text passes on) is no declaration; in a program's
 source every other binder is renamed (SPEC §41, R1), so it shadows nothing outside.  [spec §41] -/
-def Comp.lentOuter (M : Comp) (bound : List String) (outer : List String) : List String :=
+def Comp.lentOuter (M : Comp) (bound : List String) (outer : List String)
+    (ctl : List String := []) : List String :=
   let inner := M.declNames.filter fun y => !outer.contains y && !capabilityNames.contains y
-  M.lentNames.filter fun x => !bound.contains x && !inner.contains x
+  (M.lentNames false ctl).filter fun x => !bound.contains x && !inner.contains x
 
 mutual
 /-- The cells lent to a `with h(&mut c)` in a value, outside nested closures, that are not bound
@@ -1151,7 +1195,7 @@ def varPat (sp : Span) : List String → Pat
 `modify &mut x { … }`, whose lend rebinds `x` (SPEC §41, rule R3). -/
 def Val.handsBack : Val → Bool
   | .run .. => true
-  | .app _ (.app _ (.sugar _ (.borrow .modify _)) (.lend ..)) _ => true
+  | .app _ (.app _ (.sugar _ (.borrow _ _)) (.lend ..)) _ => true
   | _ => false
 
 /-- A `run` that writes, read in the value `V` of a statement or binding, is `V` itself: inside an
@@ -1217,13 +1261,14 @@ inductive BinTok where
   | op (o : SurfOp)
   | and
   | or
-  /-- `a |> s` (SPEC §33): `VSugar.pipe` applied to the pair. -/
-  | pipe
+  /-- `a |> s` (SPEC §33) or `a >| s` (`[spec §70]`): `VSugar.pipe` applied to the pair. -/
+  | pipe (m : PipeMode)
 
-/-- The operator of a token, with its precedence: `|>` 0, `||` 1, `&&` 2, comparisons 3, `+`/`-`
+/-- The operator of a token, with its precedence: `|>` and `>|` 0, `||` 1, `&&` 2, comparisons 3, `+`/`-`
 4, `*`, `/` and `%` 5. -/
 def opOf (angle : Bool) : Tok → Option (BinTok × Nat)
-  | .sym "|>" => some (.pipe, 0)
+  | .sym "|>" => some (.pipe .push, 0)
+  | .sym ">|" => some (.pipe .pull, 0)
   | .sym "||" => some (.or, 1) | .sym "&&" => some (.and, 2)
   | .sym "==" => some (.op .eq, 3) | .sym "!=" => some (.op .ne, 3) | .sym "<" => some (.op .lt, 3)
   | .sym "<=" => some (.op .le, 3) | .sym ">=" => some (.op .ge, 3)
@@ -1298,6 +1343,136 @@ def handOn (h : HandOn) (xs : List String) (M : Comp) : Comp :=
       if V.isExit then bound T else .ret sp (.pair sp V (varTuple sp xs))
     | true, false, _, .ret sp (.unit _) => .ret sp (varTuple sp xs)
     | _, _, _, T => bound T) M
+
+/-- A read of the variable `x` lent for a control handler's body (SPEC §41, R3): `*&mut x`, the
+content copied through the borrow, which the read rebinds.  `[spec §41]` -/
+def lentRead (sp : Span) (x : String) : Val :=
+  .app sp (.sugar sp .deref) (.lend sp ⟨x, sp⟩ .mut)
+
+/-- `V` reads or lends one of the variables `lent` outside nested closures (a `run` runs in
+place, so what it reads counts). -/
+def usesLent (lent : List String) : Val → Bool
+  | .lend _ x _ => lent.contains x.name
+  | .pair _ V W => usesLent lent V || usesLent lent W
+  | .app _ V W => usesLent lent V || usesLent lent W
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => usesLent lent V
+  | .run _ M => (M.lentNames).any lent.contains
+  | _ => false
+
+/-- A call, as against a surface operator or block applied to its operands: what `hoistReadsV`
+binds in its turn. -/
+def isCallHead : Val → Bool
+  | .sugar .. | .app _ (.sugar ..) _ => false
+  | _ => true
+
+mutual
+/-- `V` in A-normal form for the variables `lent` (SPEC §41, R3): each read of one (`lentRead`)
+outside nested closures is replaced by a fresh variable that the computation `V` is in binds
+first; when `V` reads or lends one (`usesLent`, decided at its top, `all`), so is every call and every `run`, in the
+order `V` evaluates them (left to right, a call's argument before the call). Any call may write a
+lent variable (a reborrow, a closure given at a block parameter), so none is moved past a read.
+Reads inside a nested closure are bound there (`hoistReadsC`). -/
+def hoistReadsV (lent : List String) (all : Bool) : Nat → Val → StateT (List (String × Val)) P Val
+  | 0, V => pure V
+  | k + 1, V => match V with
+    | .app sp (.sugar dsp .deref) (.lend lsp x .mut) =>
+      if lent.contains x.name then do
+        let r ← (freshName "io_rd" : P String)
+        modify (· ++ [(r, .app sp (.sugar dsp .deref) (.lend lsp x .mut))])
+        pure (.var sp r)
+      else pure V
+    | .pair sp V W => return .pair sp (← hoistReadsV lent all k V) (← hoistReadsV lent all k W)
+    | .app sp V W => do
+      let V' ← hoistReadsV lent all k V
+      let W' ← hoistReadsV lent all k W
+      if all && isCallHead V' then
+        let r ← (freshName "io_rc" : P String)
+        modify (· ++ [(r, .app sp V' W')])
+        pure (.var sp r)
+      else pure (.app sp V' W')
+    | .inl sp V => return .inl sp (← hoistReadsV lent all k V)
+    | .inr sp V => return .inr sp (← hoistReadsV lent all k V)
+    | .unbang sp V => return .unbang sp (← hoistReadsV lent all k V)
+    | .boxed sp a V => return .boxed sp a (← hoistReadsV lent all k V)
+    | .unbox sp V => return .unbox sp (← hoistReadsV lent all k V)
+    | .sub sp V a => return .sub sp (← hoistReadsV lent all k V) a
+    | .roll sp V => return .roll sp (← hoistReadsV lent all k V)
+    | .unroll sp V => return .unroll sp (← hoistReadsV lent all k V)
+    | .inst sp V a => return .inst sp (← hoistReadsV lent all k V) a
+    | .ascribe sp V A => return .ascribe sp (← hoistReadsV lent all k V) A
+    | .shorten sp m σ a V => return .shorten sp m σ a (← hoistReadsV lent all k V)
+    | .mark sp m V => return .mark sp m (← hoistReadsV lent all k V)
+    | .thunk sp M => return .thunk sp (← hoistReadsC lent k M)
+    | .thunkv sp M => return .thunkv sp (← hoistReadsC lent k M)
+    | .bangThunk sp M => return .bangThunk sp (← hoistReadsC lent k M)
+    | .bangThunkv sp M => return .bangThunkv sp (← hoistReadsC lent k M)
+    | .run sp M => do
+      let M' ← hoistReadsC lent k M
+      let R : Val := .run sp M'
+      if all then
+        let r ← (freshName "io_rc" : P String)
+        modify (· ++ [(r, R)])
+        pure (.var sp r)
+      else pure R
+    | V => pure V
+  termination_by k V => (k, 0)
+
+/-- `M` with each read of a lent variable bound just before the computation it is in: a
+binding's head that is a value, before the binding (SPEC §41, R3). The read rebinds the borrow,
+which every frame it is in hands on (the parser counts it a write).  `[spec §41]` -/
+def hoistReadsC (lent : List String) : Nat → Comp → P Comp
+  | 0, M => pure M
+  | k + 1, M => do
+    let (M', rs) ← (node k M).run []
+    pure (rs.foldr (fun (r, V) K => .bind V.span ⟨r, V.span⟩ none (.ret V.span V) K) M')
+termination_by k M => (k, 0)
+where
+  node (k : Nat) : Comp → StateT (List (String × Val)) P Comp
+    | .ret sp V => return .ret sp (← hoistReadsV lent (usesLent lent V) k V)
+    | .bind sp x A (.ret rsp V) N => do
+      let V' ← hoistReadsV lent (usesLent lent V) k V
+      return .bind sp x A (.ret rsp V') (← hoistReadsC lent k N)
+    | .bind sp x A M N => return .bind sp x A (← hoistReadsC lent k M) (← hoistReadsC lent k N)
+    | .letUnit sp V M => do
+      let V' ← hoistReadsV lent (usesLent lent V) k V
+      return .letUnit sp V' (← hoistReadsC lent k M)
+    | .letPair sp x y V M => do
+      let V' ← hoistReadsV lent (usesLent lent V) k V
+      return .letPair sp x y V' (← hoistReadsC lent k M)
+    | .case sp V x M y N => do
+      let V' ← hoistReadsV lent (usesLent lent V) k V
+      return .case sp V' x (← hoistReadsC lent k M) y (← hoistReadsC lent k N)
+    | .absurd sp V => return .absurd sp (← hoistReadsV lent (usesLent lent V) k V)
+    | .loop sp l .while_ V M N => do
+      -- A `while`'s condition is tested before each turn: the reads in it are bound there,
+      -- `loop { if c { M } else { break } }`.
+      let (V', rs) ← ((hoistReadsV lent (usesLent lent V) k V).run [] : P _)
+      let M' ← hoistReadsC lent k M
+      let N' ← hoistReadsC lent k N
+      if rs.isEmpty then return .loop sp l .while_ V M' N'
+      let test : Comp := .case sp V' ⟨"io_else", sp⟩ (.ret sp (.sugar sp .brk)) ⟨"io_then", sp⟩ M'
+      let body := rs.foldr (fun (r, W) K => .bind W.span ⟨r, W.span⟩ none (.ret W.span W) K) test
+      return .loop sp l .forever (.unit sp) body N'
+    | .loop sp l src V M N => do
+      let V' ← hoistReadsV lent (usesLent lent V) k V
+      return .loop sp l src V' (← hoistReadsC lent k M) (← hoistReadsC lent k N)
+    | .perform sp n i V => return .perform sp n i (← hoistReadsV lent (usesLent lent V) k V)
+    | .abort sp n i V => return .abort sp n i (← hoistReadsV lent (usesLent lent V) k V)
+    | .lam sp x A M => return .lam sp x A (← hoistReadsC lent k M)
+    | .lamL sp x b M => return .lamL sp x b (← hoistReadsC lent k M)
+    | .app sp M x => return .app sp (← hoistReadsC lent k M) x
+    | .with_ sp M N => return .with_ sp (← hoistReadsC lent k M) (← hoistReadsC lent k N)
+    | .proj sp i M => return .proj sp i (← hoistReadsC lent k M)
+    | .inst sp M a => return .inst sp (← hoistReadsC lent k M) a
+    | .nuIn sp M => return .nuIn sp (← hoistReadsC lent k M)
+    | .nuOut sp M => return .nuOut sp (← hoistReadsC lent k M)
+    | .ascribe sp M C => return .ascribe sp (← hoistReadsC lent k M) C
+    | .unwind sp x A M D N =>
+      return .unwind sp x A (← hoistReadsC lent k M) (← hoistReadsC lent k D) (← hoistReadsC lent k N)
+    | M => pure M
+  termination_by M => (k, 1)
+end
 
 /-- `M` handing on `xs`, bound before `N` (`j <- M; N`): the pattern `p` of its value, beside
 the variables bound again, or the variables alone when there is no value (`p` none). -/
@@ -1389,14 +1564,14 @@ def opsLoop : Nat → Nat → Pos → Val → P Val
       if l != lvl then return a
       let osp := t.span
       discard bump
-      -- A stage of `|>` is a spine.
-      let b ← if lvl ≥ 5 || o matches .pipe then valPrefix m else valOps m (lvl + 1)
+      -- A stage of `|>` or `>|` is a spine.
+      let b ← if lvl ≥ 5 || o matches .pipe _ then valPrefix m else valOps m (lvl + 1)
       let sp ← spanFrom st
       let v := match o with
         | .op o => Val.app sp (.sugar osp (.op o)) (.pair sp a b)
         | .and => shortCircuit sp true a b
         | .or => shortCircuit sp false a b
-        | .pipe => Val.app sp (.sugar osp .pipe) (.pair sp a b)
+        | .pipe pm => Val.app sp (.sugar osp (.pipe pm)) (.pair sp a b)
       -- Comparisons do not associate.
       if lvl == 3 then return v else opsLoop m lvl st v
     | none => return a
@@ -1789,6 +1964,13 @@ def borrowBlock : Nat → P Val
       else if ← isKw "mut" then discard bump; pure .mut
       else expected "`imm` or `mut` after `borrow`"
     let place ← valPrefix n
+    -- A variable lent for a control handler's body is its borrow here, as a place: `modify x`,
+    -- `modify &mut x` and `borrow mut x` take the borrow (SPEC §41, R3).  [spec §41]
+    let lent := (← get).lent
+    let place := match place with
+      | .app _ (.sugar _ .deref) (.lend lsp y .mut)
+      | .lend lsp y .mut => if lent.contains y.name then Val.var lsp y.name else place
+      | _ => place
     -- A borrow block rebinds its place: a write of a `let mut` place (SPEC §41, rule R2).
     if let .var _ x := place then notePlaceWrite x
     let k := match k, place with
@@ -1812,7 +1994,7 @@ def borrowBlock : Nat → P Val
     -- standard capabilities it uses.
     let bound := M.boundNames ++ (match p with | .var b => [b.name] | _ => [])
     let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
-    let thr := (w ++ M.lentOuter bound outer ++
+    let thr := (w ++ M.lentOuter bound outer (← get).data.ctl ++
       M.withPlaces (match p with | .var b => [b.name] | _ => []) ++ caps).eraseDups
     -- A body already handing its variables back (a printed program read again) is kept. A
     -- `modify` hands back only the variables it writes: its body's value is the place's new
@@ -1868,39 +2050,107 @@ def withBlock : Nat → P Val
           | some w => some (Val.pair sp v w)) none |>.getD (Val.unit sp))
       else pure (Val.unit t.span)
     expectSym "{"
-    let (x, b) ← if (match (← peek).tok with | .life _ => true | _ => false) then do
-        let x ← lifeVar
-        expectSym ","
-        let b ← ident "the capability's name"
-        expectSym "->"
-        pure (x.name, b)
-      else pure (← freshName "fx_l", (⟨← freshName "fx_c", t.span⟩ : Ident))
-    let outer := (← get).declared
-    let ((b, M), w) ← frame (withScope do
-      let b ← bindName b
-      pure (b, ← comp n))
-    expectSym "}"
+    let s₀ ← get
+    -- The body, with the variables `ys` lent for it (SPEC §41, R3): each `(x, y)`, the borrow `y`
+    -- of the place `x`, which it shadows.
+    let body (ys : List (String × String)) : P (String × Ident × Comp × List String) := do
+      let (x, b) ← if (match (← peek).tok with | .life _ => true | _ => false) then do
+          let x ← lifeVar
+          expectSym ","
+          let b ← ident "the capability's name"
+          expectSym "->"
+          pure (x.name, b)
+        else pure (← freshName "fx_l", (⟨← freshName "fx_c", t.span⟩ : Ident))
+      let outer := (← get).declared
+      let ((b, M), w) ← frame (withScope do
+        let b ← bindName b
+        pure (b, ← comp n))
+      expectSym "}"
+      let bound := b.name :: M.boundNames
+      let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
+      let lentYs := ys.map (·.2)
+      let thr := (w ++ M.lentOuter bound outer (← get).data.ctl ++ M.withPlaces [b.name] ++
+        caps).eraseDups.filter (!lentYs.contains ·)
+      let thr := if bound.contains "io_bt" then [] else thr
+      -- In core text a control handler's body hands nothing back: the places it uses are lent
+      -- around it in the text, as the surface's are (SPEC §41, R3); `bcc print` reads back.
+      let s ← get
+      let thr := if !s.surf && s.data.ctl.contains h.name then [] else thr
+      pure (x, b, M, thr)
+    let (x, b, M, thr) ← body []
+    -- A control handler's body may be abandoned, so it hands back nothing: each place it writes
+    -- or lends that is declared outside it is lent around the handler site instead,
+    -- `borrow mut &mut x { 'l, x -> with h(…) { S } }`, and in `S` the name is the borrow. The
+    -- body is read again with them lent (SPEC §41, R3).  [spec §41]
+    let s₁ ← get
+    -- A capability (`stdout`, …) is a cell a function takes and hands back, not a place lent to
+    -- it: a body that passes one on is left to hand it back, which `with` refuses.
+    let lendable := thr.filter (!capabilityNames.contains ·)
+    let ctl := s₁.resolve && s₁.surf && s₁.data.ctl.contains h.name && !lendable.isEmpty
+    let (x, b, M, thr, ys) ← if !ctl then pure (x, b, M, thr, []) else do
+      set s₀
+      let ys ← lendable.mapM fun x => do
+        -- The name the source writes the place with, which the borrow's binder shadows.
+        let y ← match s₀.scope.find? (·.2.1 == x) with
+          | some (written, _, b) => shadowAs written b
+          | none => pure (← bindName ⟨x, Span.none⟩).name
+        modify fun s => { s with muts := y :: s.muts, lent := y :: s.lent }
+        pure (x, y)
+      let (x, b, M, thr) ← body ys
+      let M ← hoistReadsC (ys.map (·.2)) n M
+      modify fun s => { s with scope := s₀.scope, declared := s₀.declared, muts := s₀.muts,
+                               lent := s₀.lent }
+      -- The lends write the places, as `&mut x` does (SPEC §41, R2).
+      for (x, _) in ys do notePlaceWrite x
+      pure (x, b, M, thr, ys)
+    -- What is left to hand back is the capabilities, which `with` refuses (`Effects.withCtl`):
+    -- the site is not lent around then.
+    let ys := if thr.isEmpty then ys else []
     let sp ← spanFrom st
-    let bound := b.name :: M.boundNames
-    let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
-    let thr := (w ++ M.lentOuter bound outer ++ M.withPlaces [b.name] ++
-      caps).eraseDups
-    let thr := if bound.contains "io_bt" then [] else thr
     let M := if thr.isEmpty then M else handOn { t := "io_bt" } thr M
     modify fun s => { s with blockThreads := thr, joined := [] }
     let V : Val := .app sp (.app sp (.sugar t.span (.handle h.name x As nm)) place)
       (.thunkv sp (.lam sp b (holeTy sp) M))
     -- `with h { M } finally { D }` (SPEC §42): the sugar `fin`, which the effects pass
     -- elaborates to `[then]` (`Frontend.Elab.Effects`).
-    unless (← peek).tok == .ident "finally" do return V
-    discard bump
-    expectSym "{"
-    let D ← comp n
-    expectSym "}"
-    let fsp ← spanFrom st
-    -- `D`'s binder is `()`'s, which `D` does not name and the printed form does not write, so
-    -- it is one fixed name: the printed program reads back to the same term.
-    pure (.app fsp (.sugar fsp .fin) (.pair fsp V (.thunkv fsp (.lam fsp ⟨"io_finu", fsp⟩ (holeTy fsp) D))))
+    let V ← if (← peek).tok == .ident "finally" then do
+        discard bump
+        let dsp ← startPos
+        expectSym "{"
+        let (D, wD) ← frame (comp n)
+        expectSym "}"
+        -- A write of an outer `let mut` in the finaliser is not handed back (#940): refused,
+        -- not lost.  [spec §42]
+        if let some y := wD.head? then
+          failAt (← spanFrom dsp) (s!"a `finally` clause can't yet assign `{y}`, a variable " ++
+            "declared outside the handler: its write would be lost (#940)")
+        let fsp ← spanFrom st
+        -- `D`'s binder is `()`'s, which `D` does not name and the printed form does not write, so
+        -- it is one fixed name: the printed program reads back to the same term.
+        pure (.app fsp (.sugar fsp .fin) (.pair fsp V (.thunkv fsp (.lam fsp ⟨"io_finu", fsp⟩ (holeTy fsp) D))))
+      else pure V
+    if ys.isEmpty then return V
+    -- The lends around the site, innermost last: each callback hands back the places lent
+    -- inside it, beside the site's answer, as a borrow block hands back what it lends.
+    let sp := V.span
+    let mut inner : Val := V
+    let mut ws : List String := []
+    for (x, y) in ys.reverse do
+      let l ← freshName "io_l"
+      let k ← freshName "io_k"
+      let cb ← if ws.isEmpty then pure (Comp.ret sp inner) else do
+        let ws' := ws.drop 1
+        let C ← letVal sp n (.var ⟨k, sp⟩) none inner (.ret sp (.var sp k)) ws'
+        pure (handOn { t := "io_bt" } ws C)
+      inner := .app sp (.app sp (.sugar t.span (.borrow .mut l)) (.lend sp ⟨x, sp⟩ .mut))
+        (.thunkv sp (.lam sp ⟨y, sp⟩ (holeTy sp) cb))
+      ws := x :: ws
+    -- The lends hand the places back where the `with` is bound, as `run` hands back what it
+    -- writes; inside an expression they could not be, and `checkRun` refuses it.
+    let k ← freshName "io_k"
+    let C ← letVal sp n (.var ⟨k, sp⟩) none inner (.ret sp (.var sp k)) (ws.drop 1)
+    modify fun s => { s with blockThreads := ws, joined := [], pendingRun := some (sp, "with") }
+    pure (.run sp (handOn { t := "io_bt" } ws C))
 
 /-- The suffixes of a value spine, associating to the left: argument atoms and `[@]`. -/
 def valSuffixes : Nat → Pos → Val → P Val
@@ -1980,7 +2230,14 @@ def valAtom : Nat → P Val
         let As ← tyList n (fuelPerToken * ((← get).toks.size + 1))
         expectSym "]"
         pure (.defApp (← spanFrom st) s As)
-      else pure (.var t.span (← lookName s t.span))
+      else
+        let y ← lookName s t.span
+        -- A variable lent for a control handler's body is read through its borrow, which the
+        -- read rebinds (SPEC §41, R3).  [spec §41]
+        if (← get).lent.contains y then
+          notePlaceWrite y
+          return lentRead t.span y
+        pure (.var t.span y)
     | .int k => discard bump; pure (.sugar t.span (.lit k))
     | .flt x => discard bump; let (m, e) := decOfText x; pure (.sugar t.span (.flit m e))
     | .str bs => discard bump; pure (.sugar t.span (.str bs))
@@ -2121,6 +2378,28 @@ def compG : Nat → Bool → P Comp
       -- resolves to (SPEC §41, rule R2).
       discard bump; discard bump
       let x ← lookName x₀ t.span
+      if (← get).lent.contains x then
+        -- `x = e` of a variable lent for a control handler's body: `e` evaluated first, its
+        -- reads and lends of lent variables in order, to `t`; then `modify x { _ -> (t, ()) }`,
+        -- the borrow's content replaced by a callback that runs nothing (SPEC §41, R3).
+        -- [spec §41]
+        notePlaceWrite x
+        modify fun s => { s with blockThreads := [], pendingRun := none }
+        let V ← val n
+        let thr := (← get).blockThreads
+        checkRun V
+        let tv ← freshName "io_lv"
+        let o ← freshName "io_lo"
+        let msp ← spanFrom st
+        let MV : Val := .app msp (.app msp (.sugar t.span (.borrow .modify "")) (.var t.span x))
+          (.thunkv msp (.lam msp ⟨o, msp⟩ (holeTy msp)
+            (.ret msp (.pair msp (.var msp tv) (.unit msp)))))
+        let N ← if !head && (← isSym ";") then do discard bump; comp n
+          else pure (.ret msp (.unit msp))
+        let sp ← spanFrom st
+        modify fun s => { s with blockThreads := [], joined := [] }
+        let K ← letVal sp n (.wild t.span) none MV N []
+        return ← letVal sp n (.var ⟨tv, t.span⟩) none V K thr
       unless (← get).muts.contains x do
         failAt t.span s!"`{x₀}` is assigned, but it is not declared `let mut`"
       modify fun s => { s with assigned := x :: s.assigned, blockThreads := [], pendingRun := none }
@@ -3322,6 +3601,11 @@ def dataIn (toks : Array Token) : Data.Table := Id.run do
       match (decl fuel).run { toks, pos := i, lastStop := start } with
       | .ok (d, _) => out := { out with abbrevs := out.abbrevs ++ (Data.Abbrev.ofDecl? d).toList }
       | .error _ => pure ()
+    else if toks[i]!.tok == .kw "handler" then
+      -- A control handler, whose `with` lends what its body writes (SPEC §41, R3).  [spec §41]
+      match (decl fuel).run { toks, pos := i, lastStop := start } with
+      | .ok (.chandler _ ch, _) => out := { out with ctl := out.ctl ++ [ch.name.name] }
+      | _ => pure ()
   out
 
 /-- The modules the tokens `toks` include. -/
@@ -3364,7 +3648,8 @@ reading the library. The kernel evaluates the cross-checked programs' elaboratio
 def tableOf (lib : String → Option String) (incs : List String) (own : Data.Table) : Data.Table :=
   let pre := (dataOfModules lib 64 ["prelude"] []).1
   let mods := (dataOfModules lib 64 incs ["prelude"]).1
-  { decls := pre.decls ++ mods.decls ++ own.decls, abbrevs := mods.abbrevs ++ own.abbrevs }
+  { decls := pre.decls ++ mods.decls ++ own.decls, abbrevs := mods.abbrevs ++ own.abbrevs,
+    ctl := pre.ctl ++ mods.ctl ++ own.ctl }
 
 /-- The `data` declarations and the `type` abbreviations in scope in the source `src` (SPEC §42,
 §61), `lib` giving a module's source (`tableOf`). -/

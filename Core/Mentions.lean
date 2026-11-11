@@ -179,6 +179,15 @@ theorem mentions_fill {V : Val} (hV : closedAt 0 V.1 = true) :
         mentions_fill hV s j k hjk, mentions_fill hV a (j + 1) (k + 1) (by omega),
         mentions_fill hV b (j + 1) (k + 1) (by omega)]
 
+/-- The unwinding form mentions what its finaliser mentions.  `[spec §72]` -/
+theorem mentions_withborUE (k : Nat) (d : Expr) : mentions k (withborUE d) = mentions k d := by
+  have h := mentions_shift0 d 3 k
+  have h2 : (2 == k + 3) = false := by simp
+  have h1 : (1 == k + 2) = false := by simp
+  have h0 : (0 == k + 2) = false := by simp
+  have h0' : (0 == k + 3) = false := by simp
+  simp [withborUE, thenE, mentions, Expr.val, Val.lam, Val.unit, Val.prim, h, h2, h1, h0, h0']
+
 /-! ### The theorem -/
 
 /-- **A typed term mentions only live slots** of its context.  `[spec §55]` -/
@@ -258,15 +267,18 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
       · exact hs.liveAt_left (ihV k hk)
       · omega
       · omega
-  | withbor1U _ _ _ _ _ _ _ hdc _ _ | withbor2U _ _ _ _ _ _ _ hdc _ _
-  | withbor3U _ _ _ _ _ _ hdc _ _ | sliceBorrowMU _ _ _ _ _ _ _ hdc _ _
-  | sliceBorrowIU _ _ _ _ _ _ _ _ hdc _ _ =>
-      intro k hk; rw [mentions_of_closed (withborUE_closed hdc)] at hk; cases hk
+  | withbor1U _ _ _ _ _ _ _ _ ih | withbor2U _ _ _ _ _ _ _ _ ih
+  | withbor3U _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
+  | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih =>
+      intro k hk; rw [mentions_withborUE] at hk; exact ih k hk
   | foldImm => intro k hk; rw [mentions_of_closed (foldImmV_closed _)] at hk; cases hk
   | foldOwn => intro k hk; rw [mentions_of_closed (foldOwnV_closed _)] at hk; cases hk
   | foldOwnG => intro k hk; rw [mentions_of_closed (FoldP.foldOwnGV_closed _)] at hk; cases hk
   | foldReuse => intro k hk; rw [mentions_of_closed (foldReuseV_closed _)] at hk; cases hk
   | unfoldN => intro k hk; rw [mentions_of_closed (unfoldV_closed _)] at hk; cases hk
+  | unfoldK => intro k hk; rw [mentions_of_closed (unfoldV_closed _)] at hk; cases hk
+  | nuOutK _ _ _ _ h =>
+      intro k hk; simp only [mentions, beq_iff_eq] at hk; subst hk; exact h.live
   | divFuel => intro k hk; rw [mentions_of_closed divFuelV_closed] at hk; cases hk
   | reify _ _ _ _ _ hcl => intro k hk; rw [mentions_of_closed (reifyV_closed hcl)] at hk; cases hk
   | effPerform _ _ _ _ ih | effRaise _ _ _ _ _ ih =>

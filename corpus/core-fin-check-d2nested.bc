@@ -1,0 +1,9 @@
+-- SPEC §27 in the core text, checked, not run: `main` returns `()` and does not call `f`. the inner
+-- finaliser performs `4.0` while `M` also calls `g`, whose row gives `4.0` the cancel row `[3.0]`;
+-- the inner `[then]`'s `Σ_D` is `[4.0⟨∅⟩]`, the row its finaliser needs.
+
+def f : !U (!U (1 -o F[4.0 unr[3.0 cancel 1 ~> 0] 1 ~> 1, 3.0 cancel 1 ~> 0] 1) -o 1 -o F[1.0 unr[4.0 unr[6.0 unr 1 ~> 1] 1 ~> 1, 6.0 unr 1 ~> 1] 1 ~> 1, 4.0 unr[3.0 cancel 1 ~> 0, 6.0 unr[3.0 cancel 1 ~> 0] 1 ~> 1] 1 ~> 1, 3.0 cancel 1 ~> 0, 6.0 unr 1 ~> 1] 1) =
+  !thunkv fun (gb : !U (1 -o F[4.0 unr[3.0 cancel 1 ~> 0] 1 ~> 1, 3.0 cancel 1 ~> 0] 1)) -> fun (u : 1) ->
+    y <- (g <- return (unbang gb); v <- force g u; x <- perform[1.0] v unwind (perform[4.0] ()); return x) unwind (perform[6.0] ()); return y
+
+main : F 1 = return ()

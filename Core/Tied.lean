@@ -312,19 +312,19 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   abortive operations; when it unwinds, the finaliser `d` runs on the source.  `[spec §19]` -/
   | withbor1U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.ref A) .unit))) :
+      (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S))
   /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition
   non-strict.  `[spec §19, §23]` -/
   | withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.ref A) .unit))) :
+      (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S))
   /-- The unwinding form of `withbor` (3): `Mut @a A` reborrowed as `Mut 'x A`.  `[spec §19]` -/
   | withbor3U {Δ Γ a A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.mut a A) .unit))) :
+      (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.mut a A) .unit))) :
       CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S))
   /-- The unwinding form of `withload`: its own term, the source consumed by the load.
   `[spec §19]` -/
@@ -337,7 +337,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
       (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.array A) .unit))) :
+      (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.array A) .unit))) :
       CDerivesAt Ξ Δ Γ (withborUE d) (.val (sliceBorrowMUTy x Δ.meetOfDom A B S))
   /-- The unwinding form of `slice_borrow_imm`: an owned array lent as a family of `imm` leaves.
   `[spec §19]` -/
@@ -345,7 +345,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
       (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hdc : closedAt 0 d = true) (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.array A) .unit))) :
+      (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.array A) .unit))) :
       CDerivesAt Ξ Δ Γ (withborUE d) (.val (sliceBorrowIUTy x Δ.meetOfDom A B S))
   -- Call-by-value derived forms: BoLo's application and `∀E` on arbitrary subterms, and the
   -- reading of a computation of `F A` as a value-judged expression at `A`.
@@ -396,6 +396,15 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   positive `C`.  `[spec §7]` -/
   | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
       CDerivesAt Ξ Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S))
+  /-- `[unfold-K]`: coiteration at the step's code.  `[spec §68]` -/
+  | unfoldK {Δ Γ} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S)))
+      (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
+      CDerivesAt Ξ Δ Γ (.val (unfoldV C)) (.val (unfoldKTy C G S))
+  /-- `[ν-out-K]`: a codata of `unfold`'s code read at its unrolling, every rest at the same code
+  type.  `[spec §68]` -/
+  | nuOutK {Δ Γ i} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S)))
+      (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
+      CDerivesAt Ξ Δ Γ (.var i) (.comp (C.instT (codeTy C G S)))
   /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
   | effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S')
       (h : CDerivesAt Ξ Δ Γ e (.comp (CTy.effOf S A))) : CDerivesAt Ξ Δ Γ e (.comp (CTy.effOf S' A))
@@ -591,17 +600,17 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | withbor3 x hΓ hx hfree₁ hfree₂ => exact .withbor3 x hΓ hx hfree₁ hfree₂
   | withload x hΓ hx hfree₁ hfree₂ => exact .withload x hΓ hx hfree₁ hfree₂
   | withswap hΓ => exact .withswap hΓ
-  | withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS hdc _ ih1 =>
-      exact .withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS hdc ih1
-  | withbor2U x hΓ hx hside hfree₁ hfree₂ hS hdc _ ih1 =>
-      exact .withbor2U x hΓ hx hside hfree₁ hfree₂ hS hdc ih1
-  | withbor3U x hΓ hx hfree₁ hfree₂ hS hdc _ ih1 =>
-      exact .withbor3U x hΓ hx hfree₁ hfree₂ hS hdc ih1
+  | withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS _ ih1 =>
+      exact .withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS ih1
+  | withbor2U x hΓ hx hside hfree₁ hfree₂ hS _ ih1 =>
+      exact .withbor2U x hΓ hx hside hfree₁ hfree₂ hS ih1
+  | withbor3U x hΓ hx hfree₁ hfree₂ hS _ ih1 =>
+      exact .withbor3U x hΓ hx hfree₁ hfree₂ hS ih1
   | withloadU x hΓ hx hfree₁ hfree₂ hS => exact .withloadU x hΓ hx hfree₁ hfree₂ hS
-  | sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS hdc _ ih1 =>
-      exact .sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS hdc ih1
-  | sliceBorrowIU x hΓ hsc hsideA hsideB hfree₁ hfree₂ hS hdc _ ih1 =>
-      exact .sliceBorrowIU x hΓ hsc hsideA hsideB hfree₁ hfree₂ hS hdc ih1
+  | sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS _ ih1 =>
+      exact .sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS ih1
+  | sliceBorrowIU x hΓ hsc hsideA hsideB hfree₁ hfree₂ hS _ ih1 =>
+      exact .sliceBorrowIU x hΓ hsc hsideA hsideB hfree₁ hfree₂ hS ih1
   | lolliE hs _ _ ih1 ih2 => exact .lolliE hs ih1 ih2
   | allEV _ hlt ih1 => exact .allEV ih1 hlt
   | ofRet _ ih1 => exact .ofRet ih1
@@ -614,6 +623,8 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | nuIn hC _ ih1 => exact .nuIn hC ih1
   | nuOut hC _ ih1 => exact .nuOut hC ih1
   | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS hΓ
+  | unfoldK C G S hC hG hS hΓ => exact .unfoldK C G S hC hG hS hΓ
+  | nuOutK hC hG hS hGf h => exact .nuOutK hC hG hS hGf h
   | effSub hle _ ih1 => exact .effSub hle ih1
   | effPerform _ hf hna hac _ ih1 => exact .effPerform hf hna hac ih1
   | effAwait _ hΓ hfa ha haA hfc hc => exact .effAwait hΓ hfa ha haA hfc hc
@@ -905,7 +916,7 @@ theorem effFree_subst (e : Expr) : ∀ (j : Nat) (s : Val), e.effFree = true →
 
 /-- The facts `effFree` gives about the parts of a term, for `CDerivesAt.ofEffFree`. -/
 macro "eff_free" : tactic => `(tactic| (simp_all only [Expr.effFree, Expr.val, Val.lam, Val.prim,
-    Val.unit, Val.inj₁, Val.inj₂, withPair, absurdE, thenE, withborUE, Bool.and_eq_true,
+    Val.unit, Val.inj₁, Val.inj₂, withPair, absurdE, thenE, withborUE, effFree_shift, Bool.and_eq_true,
     bne_iff_ne, ne_eq, reduceCtorEq, not_false_eq_true, and_self, and_true, true_and]))
 
 /-- **A derivation of a term with no operation is tied at every effect context**: the three rules
@@ -991,17 +1002,17 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | withbor3 x hΓ hx hfree₁ hfree₂ => exact .withbor3 x hΓ hx hfree₁ hfree₂
   | withload x hΓ hx hfree₁ hfree₂ => exact .withload x hΓ hx hfree₁ hfree₂
   | withswap hΓ => exact .withswap hΓ
-  | withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS hdc _ ih1 =>
-      exact .withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS hdc (ih1 (by eff_free))
-  | withbor2U x hΓ hx hside hfree₁ hfree₂ hS hdc _ ih1 =>
-      exact .withbor2U x hΓ hx hside hfree₁ hfree₂ hS hdc (ih1 (by eff_free))
-  | withbor3U x hΓ hx hfree₁ hfree₂ hS hdc _ ih1 =>
-      exact .withbor3U x hΓ hx hfree₁ hfree₂ hS hdc (ih1 (by eff_free))
+  | withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS _ ih1 =>
+      exact .withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS (ih1 (by eff_free))
+  | withbor2U x hΓ hx hside hfree₁ hfree₂ hS _ ih1 =>
+      exact .withbor2U x hΓ hx hside hfree₁ hfree₂ hS (ih1 (by eff_free))
+  | withbor3U x hΓ hx hfree₁ hfree₂ hS _ ih1 =>
+      exact .withbor3U x hΓ hx hfree₁ hfree₂ hS (ih1 (by eff_free))
   | withloadU x hΓ hx hfree₁ hfree₂ hS => exact .withloadU x hΓ hx hfree₁ hfree₂ hS
-  | sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS hdc _ ih1 =>
-      exact .sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS hdc (ih1 (by eff_free))
-  | sliceBorrowIU x hΓ hsc hsideA hsideB hfree₁ hfree₂ hS hdc _ ih1 =>
-      exact .sliceBorrowIU x hΓ hsc hsideA hsideB hfree₁ hfree₂ hS hdc (ih1 (by eff_free))
+  | sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS _ ih1 =>
+      exact .sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS (ih1 (by eff_free))
+  | sliceBorrowIU x hΓ hsc hsideA hsideB hfree₁ hfree₂ hS _ ih1 =>
+      exact .sliceBorrowIU x hΓ hsc hsideA hsideB hfree₁ hfree₂ hS (ih1 (by eff_free))
   | lolliE hs _ _ ih1 ih2 => exact .lolliE hs (ih1 (by eff_free)) (ih2 (by eff_free))
   | allEV _ hlt ih1 => exact .allEV (ih1 (by eff_free)) hlt
   | ofRet _ ih1 => exact .ofRet (ih1 he)
@@ -1014,6 +1025,8 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | nuIn hC _ ih1 => exact .nuIn hC (ih1 he)
   | nuOut hC _ ih1 => exact .nuOut hC (ih1 he)
   | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS hΓ
+  | unfoldK C G S hC hG hS hΓ => exact .unfoldK C G S hC hG hS hΓ
+  | nuOutK hC hG hS hGf h => exact .nuOutK hC hG hS hGf h
   | effSub hle _ ih1 => exact .effSub hle (ih1 he)
   | effPerform => simp [BoCa.BoLo.performE, Expr.effFree, Expr.val, Val.prim] at he
   | effAwait => simp [awaitE, BoCa.BoLo.performE, BoCa.BoLo.raiseE, Expr.effFree, Expr.val,

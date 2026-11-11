@@ -113,12 +113,12 @@ theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | withbor3 a0 a1 a2 a3 a4 => exact CDerivesP.withbor3 a0 a1 a2 a3 a4
   | withload a0 a1 a2 a3 a4 => exact CDerivesP.withload a0 a1 a2 a3 a4
   | withswap a0 => exact CDerivesP.withswap a0
-  | withbor1U a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 => exact CDerivesP.withbor1U a0 a1 a2 a3 a4 a5 a6 a7 ih0
-  | withbor2U a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 => exact CDerivesP.withbor2U a0 a1 a2 a3 a4 a5 a6 a7 ih0
-  | withbor3U a0 a1 a2 a3 a4 a5 a6 a7 ih0 => exact CDerivesP.withbor3U a0 a1 a2 a3 a4 a5 a6 ih0
+  | withbor1U a0 a1 a2 a3 a4 a5 a6 a7 ih0 => exact CDerivesP.withbor1U a0 a1 a2 a3 a4 a5 a6 ih0
+  | withbor2U a0 a1 a2 a3 a4 a5 a6 a7 ih0 => exact CDerivesP.withbor2U a0 a1 a2 a3 a4 a5 a6 ih0
+  | withbor3U a0 a1 a2 a3 a4 a5 a6 ih0 => exact CDerivesP.withbor3U a0 a1 a2 a3 a4 a5 ih0
   | withloadU a0 a1 a2 a3 a4 a5 => exact CDerivesP.withloadU a0 a1 a2 a3 a4 a5
-  | sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 => exact CDerivesP.sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 ih0
-  | sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 => exact CDerivesP.sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0
+  | sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 ih0 => exact CDerivesP.sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 ih0
+  | sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 => exact CDerivesP.sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 ih0
   | lolliE a0 a1 a2 ih0 ih1 => exact CDerivesP.lolliE a0 ih0 ih1
   | allEV a0 a1 ih0 => exact CDerivesP.allEV ih0 a1
   | ofRet a0 ih0 => exact CDerivesP.ofRet ih0
@@ -131,6 +131,8 @@ theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | nuIn a0 a1 ih0 => exact CDerivesP.nuIn a0 ih0
   | nuOut a0 a1 ih0 => exact CDerivesP.nuOut a0 ih0
   | unfoldN a0 a1 a2 a3 a4 => exact CDerivesP.unfoldN a0 a1 a2 a3 a4
+  | unfoldK a0 a1 a2 a3 a4 a5 a6 => exact CDerivesP.unfoldK a0 a1 a2 a3 a4 a5 a6
+  | nuOutK a0 a1 a2 a3 a4 => exact CDerivesP.nuOutK a0 a1 a2 a3 a4
   | effSub a0 a1 ih0 => exact CDerivesP.effSub a0 ih0
   | effPerform a0 a1 a2 a3 ih0 => exact CDerivesP.effPerform a0 a1 a2 ih0
   | effAwait a0 a1 a2 a3 a4 a5 => exact CDerivesP.effAwait a0 a1 a2 a3 a4 a5
@@ -227,15 +229,15 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | withbor3 x hΓ hx hf₁ hf₂ => exact withbor3_compatX x hΓ hx hf₁ hf₂
   | withload x hΓ hx hf₁ hf₂ => exact withload_compatX x hΓ hx hf₁ hf₂
   | withswap hΓ => exact withswap_compatX hΓ
-  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS hdc _ ihd => exact withbor1U_compatX x hΓ hsc₁ hf₁ hf₂ hS hdc ihd
-  | withbor2U x hΓ _ hside hf₁ hf₂ hS hdc _ ihd =>
-      exact withbor2U_compatX x hΓ hside hf₁ hf₂ hS hdc ihd
-  | withbor3U x hΓ _ hf₁ hf₂ hS hdc _ ihd => exact withbor3U_compatX x hΓ hf₁ hf₂ hS hdc ihd
+  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS _ ihd => exact withbor1U_compatX x hΓ hsc₁ hf₁ hf₂ hS ihd
+  | withbor2U x hΓ _ hside hf₁ hf₂ hS _ ihd =>
+      exact withbor2U_compatX x hΓ hside hf₁ hf₂ hS ihd
+  | withbor3U x hΓ _ hf₁ hf₂ hS _ ihd => exact withbor3U_compatX x hΓ hf₁ hf₂ hS ihd
   | withloadU x hΓ _ hf₁ hf₂ hS => exact withloadU_compatX x hΓ hf₁ hf₂ hS
-  | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS hdc _ ihd =>
-      exact sliceBorrowMU_compatX x hΓ hA hB hf₁ hf₂ hS hdc ihd
-  | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS hdc _ ihd =>
-      exact sliceBorrowIU_compatX x hΓ hsc hA hB hf₁ hf₂ hS hdc ihd
+  | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
+      exact sliceBorrowMU_compatX x hΓ hA hB hf₁ hf₂ hS ihd
+  | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS _ ihd =>
+      exact sliceBorrowIU_compatX x hΓ hsc hA hB hf₁ hf₂ hS ihd
   | lolliE hs _ _ iha ihf => exact lolliE_compatX hs iha ihf
   | allEV _ hlt ih => exact allE_compatX ih hlt
   | ofRet _ ih => exact ih
@@ -248,6 +250,8 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | nuIn hC _ ih => exact nuIn_compatX hC ih
   | nuOut hC _ ih => exact nuOut_compatX hC ih
   | unfoldN C S hC hS hΓ => exact unfold_compatX hC S hS hΓ
+  | unfoldK C G S hC hG hS hΓ => exact unfoldK_compatX hC hG hS hΓ
+  | nuOutK hC hG hS hGf h => exact nuOutK_compatX hC hG hS hGf h
   | effSub hle _ ih => exact sub_compatC hle ih
   | effPerform hf hna _ _ ih => exact perform_compatC hf hna ih
   | effAwait hΓ hfa ha haA hfc hc => exact semC_dead .nil hΓ (await_compatC hfa ha haA hfc hc)

@@ -1,0 +1,32 @@
+-- check: old-backend-refuses
+-- SPEC §27 in the core text: a suspended cancel cancelled in turn while an earlier error is kept
+-- (`[cfin-cancel]`, `err.or err'`). Handler 1 cancels `κ`: the inner finaliser raises `2.0`, which
+-- is kept; the outer finaliser performs the unrestricted `4.0` with `2.0` pending. Handler 4
+-- cancels that finaliser's continuation, whose own finaliser raises `3.0`. The earlier `2.0` is
+-- kept, `3.0` abandoned, and `2.0` is re-raised at handler 4's cancel and caught by handler 2. The
+-- cancel row of `4.0` is `[3.0, 2.0]` and that of `1.0` `[2.0, 4.0, 3.0]`, so the kept error moves
+-- between payloads of a different order.
+--
+-- Answer: inl (inr ()), and `live 0`: handler 2's answer. A wrong implementation that keeps the
+-- later error answers `inr ()`.
+
+main : F (((1 + 1) + 1) + 1) =
+  handle_with[3](
+      ((!thunkv fun (v : (1 + 1) + 1) -> return (inl v)) : !U ((1 + 1) + 1 -o F (((1 + 1) + 1) + 1))),
+      (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F (((1 + 1) + 1) + 1)) * 1)) (
+    handle_with[2](
+        ((!thunkv fun (v : 1 + 1) -> return (inl v)) : !U (1 + 1 -o F[3.0 cancel 1 ~> 0] ((1 + 1) + 1))),
+        (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F[3.0 cancel 1 ~> 0] ((1 + 1) + 1)) * 1)) (
+      handle_with[4](
+          ((!thunkv fun (v : 1) -> return (inl v)) : !U (1 -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] (1 + 1))),
+          (((!thunkv fun (p : 1 * !U ((1 -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] (1 + 1)) & F[3.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] 1)) ->
+              let (u, kb) = p; let () = u; k <- return (unbang kb); c <- (force k).2; let () = c; return (inr ())), ())
+            : !U (1 * !U ((1 -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] (1 + 1)) & F[3.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] 1) -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] (1 + 1)) * 1)) (
+        handle_with[1](
+            ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[4.0 unr[3.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] 1)),
+            (((!thunkv fun (p : 1 * U ((1 -o F[4.0 unr[3.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] 1) & F[2.0 cancel 1 ~> 0, 4.0 unr[3.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0] 1 ~> 1, 3.0 cancel 1 ~> 0, 4.0 unr[3.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] 1)) ->
+              let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+              : !U (1 * U ((1 -o F[4.0 unr[3.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] 1) & F[2.0 cancel 1 ~> 0, 4.0 unr[3.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0] 1 ~> 1, 3.0 cancel 1 ~> 0, 4.0 unr[3.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] 1) -o F[4.0 unr[3.0 cancel 1 ~> 0, 2.0 cancel 1 ~> 0] 1 ~> 1, 2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] 1) * 1)) (
+          y <- (x <- perform[1.0] () unwind (abort[2.0] ()); return x)
+            unwind (w <- perform[4.0] () unwind (abort[3.0] ()); return w);
+          return y))))
