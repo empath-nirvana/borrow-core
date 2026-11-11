@@ -1,0 +1,58 @@
+-- Swapping two `let mut` locals (SPEC §41): `let t = a; a = b; b = t`, the spelling the surface
+-- has (there is no `swap(&mut a, &mut b)` of two locals).
+-- `let (a, b) = (b, a)` inside a loop body shadows the pair rather than assigning it, as in Rust:
+-- the loop's `a` and `b` are unchanged after the turn. Each swap assigns both variables, so a loop threads them and a
+-- branch's arms agree on them (R3). Three pairs: `i32`s, owned strings and owned buffers
+-- (`box buf[i32]`), each swapped in a loop and in a branch.
+--
+-- Answer:
+-- - `i32`s: the step `(a, b) <- (a + b, a)` by `b = a + b` then a swap, ten times from (0, 1),
+--   giving (55, 34), then the pair ordered by a conditional swap: 34, 55.
+-- - strings: each turn pushes onto `x` then swaps, so the pushes alternate between the two
+--   strings (`x` gets turns 0, 2, 4, 6, `y` turns 1, 3, 5); then a branch swaps them so the
+--   longer is first: the line `aceg bdf`, the only output.
+-- - buffers: pushing `i` onto `p` then swapping when `i` is even; then a branch swaps the pair so
+--   the one with the larger sum is first: the lengths 3, 2.
+-- - `main` answers `a * 10000 + b * 100 + len(p) * 10 + len(q)`, i32[345532]; `live 0`: every
+--   owned value is consumed once, wherever its variable ended up.
+include textio
+
+fn sum_buf(b: buf i32) -> buf i32 * i32 =
+  let (a, n) = b;
+  let mut s = 0;
+  for k in 0..n { let x = at(&a, k, 0); s = s + x };
+  ((a, n), s)
+
+main -> i32 =
+  -- `i32`s.
+  let mut a = 0;
+  let mut b = 1;
+  for i in 0..10 { b = a + b; let t = a; a = b; b = t };
+  if a > b { let t = a; a = b; b = t } else { () };
+  -- Owned strings.
+  let mut x = string_new(4);
+  let mut y = string_new(4);
+  for i in 0..7 {
+    push(&mut x, to_u8(97 + i));
+    let t = x; x = y; y = t
+  };
+  let (x, nx) = len_of(x);
+  let (y, ny) = len_of(y);
+  if nx < ny { let t = x; x = y; y = t } else { () };
+  x = write_string(&mut stdout, x);
+  putb(&mut stdout, b' ');
+  y = write_string(&mut stdout, y);
+  putb(&mut stdout, b'\n');
+  -- Owned buffers.
+  let mut p = box buf[i32](2);
+  let mut q = box buf[i32](2);
+  for i in 1..6 {
+    push(&mut p, i);
+    if i % 2 == 0 { let t = p; p = q; q = t } else { () }
+  };
+  let (p, sp) = sum_buf(p);
+  let (q, sq) = sum_buf(q);
+  if sp < sq { let t = p; p = q; q = t } else { () };
+  let (p, np) = len_of(p);
+  let (q, nq) = len_of(q);
+  a * 10000 + b * 100 + np * 10 + nq

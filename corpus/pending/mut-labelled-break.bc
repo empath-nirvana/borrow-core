@@ -1,0 +1,28 @@
+-- pending: a labelled `break 'ℓ` (and `continue 'ℓ`) leaving an outer loop is not parsed
+-- now: 17:80: expected a value, found lifetime `'rows`
+-- Labelled exits (SPEC §14, *The loop node*): a label `'ℓ:` on a loop is parsed and carried
+-- (`corpus/loop-labels.bc`), but `break` and `continue` are the innermost loop's and no exit
+-- names a label. Here `break 'rows` leaves both loops of a grid search from inside the inner
+-- one, `continue 'rows` skips the rest of a row, and `break 'scan v` gives an outer `for` its
+-- value from inside an inner `for`; `let mut` variables written before each exit are the
+-- outer loop's state after it.
+--
+-- Answer (when it lands): the first cell of the 6×6 grid with `i * j > 12` is (3, 5); the rows
+-- summed up to their first cell above the diagonal, 35; and the first `k` whose inner sum
+-- `0 + 1 + … + (k - 1)` reaches 10, 5: i32[53535].
+
+main -> i32 =
+  let mut fi = 0 - 1;
+  let mut fj = 0 - 1;
+  'rows: for i in 0..6 { for j in 0..6 { if i * j > 12 { fi = i; fj = j; break 'rows } else { () } } };
+  let mut s = 0;
+  'rows: for i in 0..6 {
+    for j in 0..6 {
+      if j > i { continue 'rows } else { s = s + j }
+    }
+  };
+  let r = 'scan: for k in 0..10 {
+    let mut c = 0;
+    for j in 0..k { c = c + j; if c >= 10 { break 'scan k } else { () } }
+  } else { 0 - 1 };
+  fi * 10 + fj + s * 100 + r * 10000

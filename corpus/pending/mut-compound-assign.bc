@@ -1,0 +1,42 @@
+-- pending: compound assignment (`x += e`, `-=`, `*=`, …) on a `let mut` variable is not parsed
+-- now: 15:38: expected a value, found `=`
+-- Compound assignment on `let mut` variables (SPEC §41): `x += e` for `x = x + e`, and `-=`,
+-- `*=`, `/=`, `%=` likewise, in a loop, in a branch and on a record field through a `mut`
+-- borrow. `corpus/data-particles.bc` is written "as written but for `+=`"; this program is the
+-- form it would take.
+--
+-- Answer (when it lands): the Collatz walk from 27 takes 111 steps and peaks at 9232 (kept as
+-- 19232 by `%=`); the evens below 10 added, 20, and the odds subtracted, -25; and a particle at 1
+-- moved 5 times by `p.x += p.v` with `v = 3`, 16: i32[19243] (checked with each `x op= e`
+-- written `x = x op e`).
+
+data P = { x: i32, v: i32 }
+
+fn step<'a>(p: mut 'a P) -> 1 = p.x += p.v; ()
+
+fn collatz(n: i32) -> i32 * i32 =
+  let mut n = n;
+  let mut steps = 0;
+  let mut peak = n;
+  while n != 1 {
+    if n % 2 == 0 { n /= 2 } else { n *= 3; n += 1 };
+    if n > peak { peak = n } else { () };
+    steps += 1
+  };
+  (steps, peak)
+
+main -> i32 =
+  let (steps, peak) = collatz(27);
+  let mut evens = 0;
+  let mut odds = 0;
+  for i in 0..10 {
+    if i % 2 == 0 { evens += i } else { odds -= i }
+  };
+  let mut p = P { x: 1, v: 3 };
+  for _ in 0..5 { step(&mut p) };
+  let P { x, v } = p;
+  let mut r = steps;
+  r *= 10000;
+  r += peak;
+  r %= 100000;
+  r + evens + odds + x
