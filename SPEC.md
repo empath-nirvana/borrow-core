@@ -8991,14 +8991,6 @@ whose meaning depended on two names coinciding.
   for a block parameter (`cbRows`) does not carry its `let mut` capabilities.
 - **`case V { … }` and `for` as expressions** are not read as `run`: `case` is printed core, and
   `for` as a value needs its loop result bound (`let r = for …`).
-- **Known wrong answers (#1053).** These programs are accepted and give a wrong answer:
-  1. a write to a `let mut` in the continuation `N` of `x <- M unwind (D); N`, where the finaliser
-     form is inside a loop, an `if` arm or a binding's head: the write is lost, and a loop whose
-     exit test reads that variable may not terminate;
-  2. a cancel clause that drops `k`, around a loop whose body can abort (the loop is wrapped as a
-     head, #868 Phase 2) and that writes a `let mut`, bound or not: the loop's writes are lost.
-
-  A redesign of `let mut` as sugar over a `State` effect is under study.
 
 ---
 
