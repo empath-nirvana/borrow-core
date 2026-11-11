@@ -1535,6 +1535,13 @@ leaf of `Cⱼ` is free in `Sₖ`. -/
 def SysFresh (m : Nat) (Cs : CTy) (Ss : List VTy) : Prop :=
   ∀ j k, j ≤ m → k ≤ m → (body m j Cs).Mentions k → (body m j Cs).BindsFresh (Ss.getD k .unit)
 
+/-- The premise of `νᵢ`'s rules: today's `NuOk` at the one equation `ν₀`, and at a system of
+`m + 2` equations an index in range and the system's positivity.  `[spec §79]` -/
+def SysOkAt : Nat → Nat → CTy → Prop
+  | 0, 0, C => C.NuOk
+  | 0, _ + 1, _ => False
+  | m + 1, i, Cs => i ≤ m + 1 ∧ SysOk (m + 1) Cs
+
 theorem sysOk_zero {C : CTy} : SysOk 0 C ↔ C.NuOk := Iff.rfl
 
 theorem unrollS_zero (i : Nat) (C : CTy) : unrollS 0 i C = C.unroll := rfl
