@@ -1,0 +1,17 @@
+-- A cancel clause (`wait(k)` drops `k`) with regions of its own, `x <- M unwind (D); N`, whose
+-- heads perform nothing (#1053): each region is a head of the clause's path, its finaliser `D` then
+-- `k`'s cancel, as a region whose head can abort is, so `k` is accounted for on both of `[then]`'s
+-- branches. The writes in each region's continuation reach `inr t`: `t` is 1 + 2.
+include fail
+effect Wait { ctl wait() }
+handler tm[A]: Wait, A -> A + i32 with Fail[i32] = {
+  return(x) = inl x;
+  wait(k) = {
+    let mut t = 0;
+    x <- (1 + 0) unwind (()); t = t + x;
+    y <- (2 + 0) unwind (()); t = t + y;
+    inr t
+  }
+}
+fn work() -> i32 with Wait = wait(); 5
+main -> (i32 + i32) + i32 = with to_result[i32, i32 + i32] { with tm[i32] { work() } }

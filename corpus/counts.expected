@@ -177,6 +177,10 @@ kernel-poly-id 0 0 0 0 0 0
 kernel-recursive-yield 20 0 0 420 630 0
 kernel-two-callees 0 3 0 0 0 0
 kernel-two-callees-tail 0 1 0 0 0 0
+mut-after-unwind-exits 3 0 0 3 3 0
+mut-after-unwind-for-gen 3 0 0 3 3 0
+mut-after-unwind-loop-in-n 3 0 0 3 3 0
+mut-cancel-unwind-region 0 0 0 0 0 0
 parse-i64 12 0 0 687 313 486
 kernel-cancel-now 0 0 0 0 0 0
 kernel-deep-gen-plain 0 0 0 0 0 0
