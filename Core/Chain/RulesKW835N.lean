@@ -347,7 +347,7 @@ theorem cBN_of_valid (S : VTy) (Rc : CandN) : ∀ (D : CTy) (δ : LSub) (Θ : Lo
   | .top, _, _, _, _, _, _, _, _ => trivial
   | .all x _ D, δ, Θ, c, n, ls, _, ρ, h => fun α hα =>
       cBN_of_valid S Rc D (δ.extend x α) Θ c n ls _ ρ (fun hv => h hv α hα)
-  | .nu _, _, _, _, _, _, _, _, _ => trivial
+  | .nuSys _ _ _, _, _, _, _, _, _, _, _ => trivial
   | .eff _ _ _ _ _ _ _ _, _, _, _, _, _, _, _, h => fun lo => erwpK_of_valid fun hv => h hv lo
 
 /-- **A computation may assume its resource valid** (chain only): at `F`/`F_Σ` by
@@ -369,7 +369,7 @@ theorem cN_of_valid : ∀ (C : CTy) (δ : LSub) (Θ : LocTy)
   | .top, _, _, _, _, _, _, _, _ => trivial
   | .all x _ C, δ, Θ, c, n, ls, _, ρ, h => fun α hα =>
       cN_of_valid C (δ.extend x α) Θ c n ls _ ρ (fun hv => h hv α hα)
-  | .nu C, δ, Θ, c, n, ls, e, ρ, h => fun hS => by
+  | .nuSys _ _ C, δ, Θ, c, n, ls, e, ρ, h => fun hS => by
       refine ⟨fun Θ c n ls e ρ => ResU.Valid ρ → nuCand (ℍ := ℍ) C δ Θ c n ls e ρ, ?_, h⟩
       intro Θ' c' k ls' e' ρ' hR
       refine cBN_of_valid _ _ C δ Θ' c' k ls' e' ρ' fun hv => ?_
@@ -450,7 +450,7 @@ theorem cBN_bind (S : VTy) (Rc : CandN) : ∀ (C : CTy) (δ : LSub) (Θ : LocTy)
       fun α hα => cBN_bind S Rc C (δ.extend x α) Θ hΘ (.appL K .unit) M P hP R hR
         (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' => h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' α hα)
         c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc
-  | .nu _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => trivial
+  | .nuSys _ _ _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => trivial
 
 
 /-- **Bind at `𝒞⟦C⟧`** (Core's `cC_bind`). Run `M` in the hole of `K`, framing `R` through the
@@ -509,7 +509,7 @@ theorem cN_bind : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down →
       fun α hα => cN_bind C (δ.extend x α) Θ hΘ (.appL K .unit) M P hP R hR
         (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' => h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' α hα)
         c n ls ρ₁ ρ₂ ρ hcρ hM hR₂ hc
-  | .nu C, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc => fun hS =>
+  | .nuSys _ _ C, δ, Θ, hΘ, K, M, P, hP, R, hR, h, c, n, ls, ρ₁, ρ₂, ρ, hcρ, hM, hR₂, hc => fun hS =>
       (cN_nu_unfold hS δ Θ c n ls _ ρ).mpr (cBN_bind _ _ C δ Θ hΘ K M P hP R hR
         (fun c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ' =>
           (cN_nu_unfold hS δ Θ c' k ls' _ σ).mp (h c' k ls' w σ₁ σ₂ σ hcσ hPw hRσ hcσ'))
@@ -737,7 +737,7 @@ theorem cBN_tyEq (T T' : VTy) (R : CandN) : ∀ (C : CTy) {C' : CTy} {δ δ' : L
       have ihD := cBN_tyEq T T' R D h.2 hT
       funext Θ c n ls e ρ; simp only [cBNP, ihC, ihD]
   | .top, C', _, _, h, _ => by cases C' <;> simp only [CTyEq] at h; rfl
-  | .nu C, C', _, _, h, _ => by cases C' <;> simp only [CTyEq] at h; rfl
+  | .nuSys _ _ C, C', _, _, h, _ => by cases C' <;> simp only [CTyEq] at h; rfl
   | .all x b C, C', δ, δ', h, hT => by
       cases C' <;> simp only [CTyEq] at h
       rename_i x' b' C'
@@ -770,7 +770,7 @@ theorem retNX_tyEq (T T' : VTy) (P : LocTy → Nat → Val → WRes → Prop) : 
       have ih := retNX_tyEq T T' P C h.2.2.2.2.2.2 hT
       funext Θ n v ρ; simp only [retNX, ih]
   | .arr _ _, C', _, _, h, _ | .amp _ _, C', _, _, h, _ | .top, C', _, _, h, _
-  | .all _ _ _, C', _, _, h, _ | .nu _, C', _, _, h, _ => by
+  | .all _ _ _, C', _, _, h, _ | .nuSys _ _ _, C', _, _, h, _ => by
       cases C' <;> simp only [CTyEq] at h; rfl
   termination_by structural x => x
 /-- **`𝒞⟦C⟧` reads a type only up to `CTyEq`** (Core's `cC_tyEq`, `cC_tyEq_aux`). -/
@@ -791,7 +791,7 @@ theorem cN_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' �
       have ihD := cN_tyEq D h.2
       funext Θ c n ls e ρ; simp only [cN, ihC, ihD]
   | .top, C', _, _, h => by cases C' <;> simp only [CTyEq] at h; rfl
-  | .nu C, C', δ, δ', h => by
+  | .nuSys _ _ C, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
       rename_i C'
       have hO : C.NuShape ↔ C'.NuShape := CTyEq.nuShape_iff h
@@ -839,7 +839,7 @@ theorem tabN_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' 
       have hz := TyEq.isZero_eq B hB
       funext Θ c; simp only [tabN, entNK, ihA, ihB, ihF, hT, hz]; rw [capB_congr hz]
   | .ret _, C', _, _, h | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
-  | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
+  | .all _ _ _, C', _, _, h | .nuSys _ _ _, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h; rfl
   termination_by structural x => x
 /-- The cancel obligation reads a type only up to `CTyEq`. -/
@@ -855,7 +855,7 @@ theorem finN_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' 
       have hz := TyEq.isZero_eq B hB
       simp only [finN, entNK, ihA, ihB, ihF, hT, hz]; rw [capB_congr hz]
   | .ret _, C', _, _, h | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
-  | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
+  | .all _ _ _, C', _, _, h | .nuSys _ _ _, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h; rfl
   termination_by structural x => x
 /-- The answer of a row's layers reads a type only up to `CTyEq`. -/
@@ -870,7 +870,7 @@ theorem retN_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' 
       have ih := retN_tyEq C h.2.2.2.2.2.2
       funext Θ n v ρ; simp only [retN, ih]
   | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
-  | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
+  | .all _ _ _, C', _, _, h | .nuSys _ _ _, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h; rfl
   termination_by structural x => x
 end

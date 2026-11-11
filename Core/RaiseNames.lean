@@ -1386,7 +1386,7 @@ theorem rcE_nodeV : ∀ C : CTy, rcE q (nodeV C).1 = true
   | .eff _ _ _ _ _ _ _ C => by simp [nodeV, bindE, rcE, rcE_app, rcE_mapV]
   | .arr _ D => by simp [nodeV, rcE, rcE_app, rcE_nodeV D]
   | .all _ _ D => by simp [nodeV, rcE, rcE_app, rcE_nodeV D]
-  | .top | .nu _ => rfl
+  | .top | .nuSys _ _ _ => rfl
 
 theorem rcE_unfoldV (C : CTy) : rcE q (unfoldV C).1 = true := by
   have hB : rcE q (fBN C) = true := by simp [fBN, rcE, rcE_app, rcE_nodeV]

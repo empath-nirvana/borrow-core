@@ -78,7 +78,7 @@ theorem tab_lookupNNK : ∀ (F : CTy) {vr : VRel} {g : KW → KW} {δ : LSub} {x
   | .amp _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
   | .top, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
   | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .nu _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
 
 /-- **An entry of `tabGK` is a layer's, and every `tabGK` at the same world has the layer's entry at
 the same key, its cancel run at its own guard and claim.** -/
@@ -110,7 +110,7 @@ theorem tab_lookupGGK : ∀ (F : CTy) {R : Nat → WProp} {G : ShareG} {vr : VRe
   | .amp _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
   | .top, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
   | .all _ _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
-  | .nu _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
 
 /-- Two guarded twins at the same world agree but for the cancel obligations. -/
 theorem tabGK_tabGK_twin (R : Nat → WProp) (G : ShareG) (R' : Nat → WProp) (G' : ShareG)

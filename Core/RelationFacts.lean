@@ -148,7 +148,7 @@ theorem CTyEq.applyLSub : ∀ (C : CTy) (σ : Lifetime.LSubst) (δ δ' : LSub),
       ⟨CTyEq.applyLSub C σ δ δ' (fun y hy => h y (Or.inl hy)),
        CTyEq.applyLSub D σ δ δ' (fun y hy => h y (Or.inr hy))⟩
   | .top, _, _, _, _ => trivial
-  | .nu C, σ, δ, δ', h => CTyEq.applyLSub C σ δ δ' h
+  | .nuSys _ _ C, σ, δ, δ', h => CTyEq.applyLSub C σ δ δ' h
   | .eff _ _ _ A B fin _ C, σ, δ, δ', h =>
       ⟨rfl, rfl, rfl, TyEq.applyLSub A σ δ δ' (fun y hy => h y (Or.inl hy)),
        TyEq.applyLSub B σ δ δ' (fun y hy => h y (Or.inr (Or.inl hy))),
@@ -806,7 +806,7 @@ theorem cC_congr : ∀ (C : CTy) {δ₁ δ₂ : LSub}, (∀ y, CFree y C → δ�
       have h₂ := cC_congr D (fun y hy => h y (Or.inr hy)) ls
       funext e; simp only [cC, h₁, h₂]
   | .top, _, _, _, _ => rfl
-  | .nu C, δ₁, δ₂, h, ls => by
+  | .nuSys _ _ C, δ₁, δ₂, h, ls => by
       have hB : ∀ (R : CPred) (ls' : List SRec),
           cB (some (nuEnv C R)) C ls' δ₁ = cB (some (nuEnv C R)) C ls' δ₂ :=
         fun R ls' => cB_congr C (some (nuEnv C R)) h (fun n y hy => by
@@ -842,7 +842,7 @@ theorem effTab_congr : ∀ (C : CTy) {δ₁ δ₂ : LSub}, (∀ y, CFree y C →
       have hT := effTab_congr C (fun y hy => h y (Or.inr (Or.inr (Or.inr hy))))
       simp only [effTab, hA, hB, hF, hT]
   | .ret _, _, _, _ | .arr _ _, _, _, _ | .amp _ _, _, _, _ | .top, _, _, _
-  | .all _ _ _, _, _, _ | .nu _, _, _, _ => by simp only [effTab]
+  | .all _ _ _, _, _, _ | .nuSys _ _ _, _, _, _ => by simp only [effTab]
 /-- A cancel row's obligation depends on `δ` only at its free variables. -/
 theorem finObl_congr : ∀ (C : CTy) {δ₁ δ₂ : LSub}, (∀ y, CFree y C → δ₁.find? y = δ₂.find? y) →
     finObl C δ₁ = finObl C δ₂
@@ -853,7 +853,7 @@ theorem finObl_congr : ∀ (C : CTy) {δ₁ δ₂ : LSub}, (∀ y, CFree y C →
       have hT := effTab_congr C (fun y hy => h y (Or.inr (Or.inr (Or.inr hy))))
       simp only [finObl, hA, hB, hF, hT]
   | .ret _, _, _, _ | .arr _ _, _, _, _ | .amp _ _, _, _, _ | .top, _, _, _
-  | .all _ _ _, _, _, _ | .nu _, _, _, _ => by simp only [finObl]
+  | .all _ _ _, _, _, _ | .nuSys _ _ _, _, _, _ => by simp only [finObl]
 /-- The answer relation of a row depends on `δ` only at its free variables. -/
 theorem effRet_congr : ∀ (C : CTy) {δ₁ δ₂ : LSub}, (∀ y, CFree y C → δ₁.find? y = δ₂.find? y) →
     effRet C δ₁ = effRet C δ₂
@@ -864,7 +864,7 @@ theorem effRet_congr : ∀ (C : CTy) {δ₁ δ₂ : LSub}, (∀ y, CFree y C →
       simp only [effRet]
       exact effRet_congr C (fun y hy => h y (Or.inr (Or.inr (Or.inr hy))))
   | .arr _ _, _, _, _ | .amp _ _, _, _, _ | .top, _, _, _
-  | .all _ _ _, _, _, _ | .nu _, _, _, _ => by simp only [effRet]
+  | .all _ _ _, _, _, _ | .nuSys _ _ _, _, _, _ => by simp only [effRet]
 /-- The answer relation of a row under an environment depends on `δ` only at the free variables
 of the row and of the environment's types. -/
 theorem effRetE_congr : ∀ (C : CTy) (η : Option (Nat → TEnt)) {δ₁ δ₂ : LSub},
@@ -877,7 +877,7 @@ theorem effRetE_congr : ∀ (C : CTy) (η : Option (Nat → TEnt)) {δ₁ δ₂ 
       simp only [effRetE]
       exact effRetE_congr C η (fun y hy => h y (Or.inr (Or.inr (Or.inr hy)))) hη
   | .arr _ _, _, _, _, _, _ | .amp _ _, _, _, _, _, _ | .top, _, _, _, _, _
-  | .all _ _ _, _, _, _, _, _ | .nu _, _, _, _, _, _ => by simp only [effRetE]
+  | .all _ _ _, _, _, _, _, _ | .nuSys _ _ _, _, _, _, _, _ => by simp only [effRetE]
 /-- One unfolding of an observation tree depends on `δ` only at the free variables of the tree
 and of the environment's types. -/
 theorem cB_congr : ∀ (C : CTy) (η : Option (Nat → TEnt)) {δ₁ δ₂ : LSub},
@@ -917,7 +917,7 @@ theorem cB_congr : ∀ (C : CTy) (η : Option (Nat → TEnt)) {δ₁ δ₂ : LSu
       have hL : ∀ α : Life, LtLife δ₁ c α = LtLife δ₂ c α := by intro α; unfold LtLife; rw [hc]
       funext e; simp only [cB, hD, hL]
   | .top, _, _, _, _, _, _
-  | .nu _, _, _, _, _, _, _ => rfl
+  | .nuSys _ _ _, _, _, _, _, _, _ => rfl
 end
 
 /-- `𝒱⟦A⟧δ` depends on `δ` only at the variables free in `A`. -/
@@ -973,7 +973,7 @@ theorem CTyEq.effLeaf_iff : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ
       obtain ⟨rfl, rfl, rfl, hA, hB, -, hC⟩ := h
       exact and_congr (TyEq.Cl_iff A 0 hA) (and_congr (TyEq.Cl_iff B 0 hB)
         (CTyEq.effLeaf_iff C hC))
-  | .arr _ _, C', _, _, h | .top, C', _, _, h | .all _ _ _, C', _, _, h | .nu _, C', _, _, h
+  | .arr _ _, C', _, _, h | .top, C', _, _, h | .all _ _ _, C', _, _, h | .nuSys _ _ _, C', _, _, h
   | .amp _ _, C', _, _, h => by
       cases C' <;> simp_all [CTyEq, CTy.EffLeaf]
 
@@ -996,7 +996,7 @@ theorem CTyEq.nuLeaf_iff : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ 
       show D.NuLeaf ↔ _
       rename_i D'
       exact CTyEq.nuLeaf_iff D (C' := D') (h.2 (0 : Life))
-  | .top, C', _, _, h | .nu _, C', _, _, h => by
+  | .top, C', _, _, h | .nuSys _ _ _, C', _, _, h => by
       cases C' <;> simp_all [CTyEq, CTy.NuLeaf]
 
 theorem TyEq.isUnitB_eq (A : VTy) {A' : VTy} {δ δ' : LSub} (h : TyEq A δ A' δ') :
@@ -1017,7 +1017,7 @@ theorem CTyEq.divAt_eq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C'
       simp only [CTy.divAt, tickB, TyEq.isUnitB_eq A hA, TyEq.isNextB_eq B hB,
         CTyEq.divAt_eq C hC]
   | .ret _, C', _, _, h | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
-  | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
+  | .all _ _ _, C', _, _, h | .nuSys _ _ _, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h <;> rfl
 
 /-- The positive shape is invariant under `CTyEq` (freshness of leaf binders is not: a partner
@@ -1084,7 +1084,7 @@ theorem cB_poly_ty (P : Bool → List SRec → Val → WProp) (T T' : VTy) (η :
       funext e; simp only [cB, cB_poly_ty P T T' η (D := D) h.2 ls δ]
   | .all x c D, h, ls, δ => by
       funext e; simp only [cB, cB_poly_ty P T T' η (D := D) h ls]
-  | .top, h, _, _ | .nu _, h, _, _ => h.elim
+  | .top, h, _, _ | .nuSys _ _ _, h, _, _ => h.elim
 
 /-- The environment of one unfolding at the candidate `R`, `X` given the type `1`. -/
 def nuEnvU (R : CPred) : Nat → TEnt := VTy.scons ⟨.unit, nuP R⟩ (tEnv none)
@@ -1216,7 +1216,7 @@ theorem cC_tyEq_aux : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
   | .top, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h
       intro ls; rfl
-  | .nu C, C', δ, δ', h => by
+  | .nuSys _ _ C, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
       rename_i C'
       have hO : C.NuShape ↔ C'.NuShape := CTyEq.nuShape_iff h
@@ -1267,7 +1267,7 @@ theorem effTab_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
       have hz := TyEq.isZero_eq B hB
       simp only [effTab, ihA, ihB, ihF, hT, hz]; rw [capB_congr hz]
   | .ret _, C', _, _, h | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
-  | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
+  | .all _ _ _, C', _, _, h | .nuSys _ _ _, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h <;> simp only [effTab]
 theorem finObl_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' →
     finObl C δ = finObl C' δ'
@@ -1281,7 +1281,7 @@ theorem finObl_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
       have hz := TyEq.isZero_eq B hB
       simp only [finObl, ihA, ihB, ihF, hT, hz]; rw [capB_congr hz]
   | .ret _, C', _, _, h | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
-  | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
+  | .all _ _ _, C', _, _, h | .nuSys _ _ _, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h <;> simp only [finObl]
 theorem effRet_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' →
     effRet C δ = effRet C' δ'
@@ -1294,7 +1294,7 @@ theorem effRet_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
       simp only [effRet]
       exact effRet_tyEq C h.2.2.2.2.2.2
   | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
-  | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
+  | .all _ _ _, C', _, _, h | .nuSys _ _ _, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h <;> simp only [effRet]
 theorem effRetE_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' →
     ∀ (η η' : Option (Nat → TEnt)), EnvEq η η' δ δ' → effRetE η C δ = effRetE η' C' δ'
@@ -1307,7 +1307,7 @@ theorem effRetE_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' �
       simp only [effRetE]
       exact effRetE_tyEq C h.2.2.2.2.2.2 η η' hη
   | .arr _ _, C', _, _, h, _, _, _ | .amp _ _, C', _, _, h, _, _, _ | .top, C', _, _, h, _, _, _
-  | .all _ _ _, C', _, _, h, _, _, _ | .nu _, C', _, _, h, _, _, _ => by
+  | .all _ _ _, C', _, _, h, _, _, _ | .nuSys _ _ _, C', _, _, h, _, _, _ => by
       cases C' <;> simp_all [CTyEq, effRetE]
 theorem cB_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' →
     ∀ (η η' : Option (Nat → TEnt)), (∀ δ₁ δ₂, EnvEq η η' δ₁ δ₂) →
@@ -1346,7 +1346,7 @@ theorem cB_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' �
         intro α; unfold LtLife; rw [h.1]
       funext e; simp only [cB, hT, hL]
   | .top, C', _, _, h, _, _, _, _
-  | .nu _, C', _, _, h, _, _, _, _ => by
+  | .nuSys _ _ _, C', _, _, h, _, _, _, _ => by
       cases C' <;> simp only [CTyEq] at h
       rfl
 end

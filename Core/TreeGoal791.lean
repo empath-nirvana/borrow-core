@@ -105,7 +105,7 @@ theorem ansC_of_suspendC {x : LifeVar} {bnd : Lifetime.Life} :
     ∀ F : CTy, F.SuspendC LifeCtx.empty x bnd → F.AnsC (VOutlives LifeCtx.empty bnd)
   | .eff _ _ _ _ _ fin _ C, ⟨⟨_, _, _, _, hB, hfin⟩, hC⟩ =>
       ⟨⟨hB, fun hcap => ansC_of_suspendC fin (hfin hcap)⟩, ansC_of_suspendC C hC⟩
-  | .ret _, _ | .arr _ _, _ | .amp _ _, _ | .top, _ | .all _ _ _, _ | .nu _, _ => trivial
+  | .ret _, _ | .arr _ _, _ | .amp _ _, _ | .top, _ | .all _ _ _, _ | .nuSys _ _ _, _ => trivial
 
 /-- At the empty context, `Row.Suspend` gives its answers' outliving clause. -/
 theorem ansC_of_suspend {S : Row} {x : LifeVar} {bnd : Lifetime.Life}
@@ -369,7 +369,7 @@ def cT : CTy → LSub → SCmp
   | .all x c C, δ => match c.interp δ with
     | some γ => SCmp.all (OrderDual.toDual γ) (fun α => cT C (δ.extend x (OrderDual.ofDual α)))
     | none => SCmp.none
-  | .nu _, _ => SCmp.none
+  | .nuSys _ _ _, _ => SCmp.none
   | .eff n i q A B _ _ C, δ =>
       SCmp.retAt (opTableT (extTab n i (entT q B (vT A δ) (vT B δ)) (tabT C δ))) (retT C δ)
 /-- The table of a row's layers below the top one. -/

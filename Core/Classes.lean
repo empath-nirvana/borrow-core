@@ -241,10 +241,11 @@ theorem consumeAt_effFree : ∀ (b : Bool) (A : VTy), (consumeAt b A).effFree = 
       rw [consumeAt_thunk b C]
       match C with
       | .nu (.amp _ (.ret R)) => simp [consumeAt, bindE, Expr.effFree, consumeAt_effFree false R]
+      | .nuSys (_ + 1) _ _ | .nuSys 0 (_ + 1) _
       | .nu (.amp _ (.arr _ _)) | .nu (.amp _ (.amp _ _)) | .nu (.amp _ .top)
-      | .nu (.amp _ (.all _ _ _)) | .nu (.amp _ (.nu _)) | .nu (.amp _ (.eff _ _ _ _ _ _ _ _))
+      | .nu (.amp _ (.all _ _ _)) | .nu (.amp _ (.nuSys _ _ _)) | .nu (.amp _ (.eff _ _ _ _ _ _ _ _))
       | .nu (.eff _ _ _ _ _ _ _ _) | .eff _ _ _ _ _ _ _ _ | .nu (.ret _) | .nu (.arr _ _) | .nu .top
-      | .nu (.all _ _ _) | .nu (.nu _) | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ => rfl
+      | .nu (.all _ _ _) | .nu (.nuSys _ _ _) | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ => rfl
   | _, .code _ _ _ => rfl
   | b, .fam (.ref A) => by
       simp only [consumeAt]; split
