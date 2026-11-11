@@ -13674,12 +13674,12 @@ handed back).
 
 ### Units
 
-- K-b.1, Core, built (#PR): `withbor{1,2,3}U` generalised in place as `withbor{1,2,3}UD`
+- K-b.1, Core, built (#1081): `withbor{1,2,3}U` generalised in place as `withbor{1,2,3}UD`
   (callback at `Σ_M`, result at `Σ`, finaliser at `Σ_D`; premises `Σ_M ≤ Σ`, `Σ_D ≤ Σ`,
   `divB Σ = false` and `hP`, with `divB Σ_D = false` derived), the forms of §19 as same-named
   theorems at `Σ_D = ∅`, `Σ_M = Σ`; `fin_runD`, `ewp_unwindD` (`ewp_unwind` with `seq_raise_run` at
   the raise); the three compatibility lemmas restated.
-- K-b.2, the chain, built (#PR): `erwpK_unwindD`, with the callback's run at one world
+- K-b.2, the chain, built (#1081): `erwpK_unwindD`, with the callback's run at one world
   (`cN_unwind_iff` at `Σ_M`) and the finaliser's at the `KW` worlds of `Σ` (`seq_raise_runK`); the
   effectful `fin_claim`; the three `_compatN` restated.
 - K-b.3, the checker: `unwind (d)` in core text, the finaliser's row synthesised, the deciders, the
