@@ -68,6 +68,7 @@ def Row.subst (σ : TySubst) : Row → Row
   | .cons n i q A B f r => .cons n i q (A.subst σ) (B.subst σ) (f.subst σ) (r.subst σ)
   | .top => .top
   | .var x => .var x
+  | .splice x r => .splice x (r.subst σ)
 
 def Shape.subst (σ : TySubst) : Shape → Shape
   | .leaf sp A => .leaf sp (A.subst σ)

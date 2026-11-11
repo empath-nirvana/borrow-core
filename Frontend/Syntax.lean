@@ -205,6 +205,10 @@ inductive Row where
   /-- `..r`: the row parameter `r` as a row's tail, substituted by `Frontend.Elab.RowInst` before
   checking.  `[spec §76]` -/
   | var (x : String)
+  /-- `..r, …`: the row parameter `r` spliced ahead of more entries, the row their concatenation
+  in written order (`F[..cr, ..sg]`); substituted by `Frontend.Elab.RowInst` before checking.
+  `[spec §76]` -/
+  | splice (x : String) (rest : Row)
 
 /-- Shapes `σ ::= leaf A | node σ σ | Name` (syntax-core §5). -/
 inductive Shape where
@@ -982,6 +986,7 @@ def Row.strip : Row → Row
   | .cons n i q A B f r => .cons n i q A.strip B.strip f.strip r.strip
   | .top => .top
   | .var x => .var x
+  | .splice x r => .splice x r.strip
 
 def Shape.strip : Shape → Shape
   | .leaf _ A => .leaf .none A.strip

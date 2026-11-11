@@ -435,7 +435,8 @@ def elabRow : Nat → TyEnv → Span → Row → Except Error CRow
     | .top => err sp "`top` (`⊤`) is a cancel row only: write it as `n.i cancel[top] A ~> B`"
     -- `Frontend.Elab.RowInst` substitutes every row parameter, or refuses the program.
     -- `[spec §76]`
-    | .var x => err sp s!"internal error: the row parameter `..{x}` was not substituted (SPEC §76)"
+    | .var x | .splice x _ =>
+      err sp s!"internal error: the row parameter `..{x}` was not substituted (SPEC §76)"
     | .cons k i q A B f r => do
         if k < 2 ^ 32 ∧ i < 2 ^ 32 then
           -- The entry's cancel row (SPEC §27): `F_R 1`, `R` its written row; `F 1` when none is
