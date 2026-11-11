@@ -715,3 +715,175 @@ def trustedReport (k : Backend.CheckedProg) : List String :=
     hand ++ encl ++ wr ++ nativeAssumptions
 
 end Backend2
+
+/-!
+# Backend2 — an unwinding borrow's non-constant finaliser, lowered  `[spec §19, §47, §72]`
+
+**These tests run the lowering on terms the checker did not produce.** No program text spells an
+unwinding borrow whose finaliser is not the source's `consume` yet (the checker's `finNode`), and a
+checked program's term cannot be changed (`Checked.tied`). So each program below is checked, and
+its `withbor1u`s' finalisers are then replaced, in the typed term only, by a closure written at the
+node's context (`lamFin`); the term is converted (`convertProg`), linted (`Lint.lint`) and run on
+the LIR interpreter (`runLIR`). Where a callback aborts, the finaliser runs on the unwind
+(`genLendU`, `thenFin`), applied to the owner at a copy of the rule's context (`finCtx`); where it
+returns, the value arm consumes the copy. Each must give the output of the checked program, whose
+finaliser is the constant. The tests are in this module because they parse and check programs,
+and this module is Backend2's one contact with the frontend (`scripts/check-backend2.sh`).
+
+They cover the conversion of a borrowing constant used as a value (`constClos`, the copy carried in
+its closures' environments) and the β of a λ finaliser (`applyTo`). The kernel side, and the spine
+of a surface borrow (`convSpine`), are covered by the surface programs of #940 (G1, G3, G3b) once
+their syntax lands.
+-/
+
+namespace Backend2.ConvertTests
+open Backend2 BoCa BoCa.Fig16.LogRel.Core BoCa.Fig16.LogRel.Core.Check
+
+/-- `corpus/core-effects-borrows.bc`: two unwinding borrows whose callbacks abort. -/
+def src : String := "
+main : F ((i32 + i32) * (i32 + i32)) =
+  c <- return (alloc[i32] i32[1]);
+  r1 <- handle_with[1](
+      ((!thunkv fun (p : ref i32 * i32) -> let (r, v) = p; return (inl v)) : !U (ref i32 * i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (
+    w <- return withbor1u['x, i32, i32, [1.0 cancel i32 ~> 0]];
+    cb : U (forall 'x < dom. imm 'x i32 -o F[1.0 cancel i32 ~> 0] (box 'x i32)) <- return
+      (thunkv Fun 'x < dom. fun (m : imm 'x i32) -> abort[1.0] i32[42]);
+    force w c cb);
+  a <- return (array_new[i32] (i32[2], !thunkv fun (i : i32) -> return i));
+  r2 <- handle_with[1](
+      ((!thunkv fun (p : array i32 * i32) -> let (r, v) = p; return (inl v)) : !U (array i32 * i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (
+    w <- return slice_borrow_mut_u['x, top, i32, i32, [1.0 cancel i32 ~> 0]];
+    cb : U (forall 'x < dom. array_mut 'x i32 -o F[1.0 cancel i32 ~> 0] (box 'x i32)) <- return
+      (thunkv Fun 'x < dom. fun (m : array_mut 'x i32) -> abort[1.0] i32[43]);
+    force w a cb);
+  return (r1, r2)
+"
+
+/-- Two unwinding borrows after a persistent `n`: the first callback aborts, the second returns.
+Its first binding is `n`'s (`swapFin` relies on it). -/
+def srcN : String := "
+main : F ((i32 + i32) * (i32 + i32)) =
+  n <- return i32[5];
+  c <- return (alloc[i32] i32[1]);
+  r1 <- handle_with[1](
+      ((!thunkv fun (p : ref i32 * i32) -> let (r, v) = p; return (inl v)) : !U (ref i32 * i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (
+    w <- return withbor1u['x, i32, i32, [1.0 cancel i32 ~> 0]];
+    cb : U (forall 'x < dom. imm 'x i32 -o F[1.0 cancel i32 ~> 0] (box 'x i32)) <- return
+      (thunkv Fun 'x < dom. fun (m : imm 'x i32) -> abort[1.0] i32[42]);
+    force w c cb);
+  d <- return (alloc[i32] i32[2]);
+  r2 <- handle_with[1](
+      ((!thunkv fun (p : ref i32 * i32) -> let (r, v) = p; return (inl v)) : !U (ref i32 * i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (
+    w <- return withbor1u['x, i32, i32, [1.0 cancel i32 ~> 0]];
+    cb : U (forall 'x < dom. imm 'x i32 -o F[1.0 cancel i32 ~> 0] (box 'x i32)) <- return
+      (thunkv Fun 'x < dom. fun (m : imm 'x i32) ->
+        u <- return (release_imm['x, i32] m);
+        return (boxed['x] i32[9]));
+    force w d cb);
+  return (r1, r2)
+"
+
+/-- The golden of `src` (`corpus/core-effects-borrows.out`). -/
+def golden : String := "(inr i32[42], inr i32[43])\nlive 0\n"
+
+/-- A context of `n` slots, slot `j` (when given) to the first part, the rest to neither. -/
+def only (n : Nat) (j : Option Nat) : List (Bool × Bool) :=
+  (List.range n).map fun i => (some i == j, false)
+
+/-- A closure finaliser `U(Ref A ⊸ F 1)` at a context of `n` slots, not a constant: `λr. consume r`,
+or, with `j`, `λr. x <- return n; consume r`, `n` the slot `j` (a persistent `i32`). -/
+def lamFin (n : Nat) (A : VTy) (j : Option Nat) : TExpr :=
+  let i : TInfo := default
+  let C : CTy := .arr (.ref A) (.ret .unit)
+  let use (m : Nat) (k : Nat) : TExpr :=
+    .ret i (.comp (.ret .unit)) .unit
+      (.lolliE i (.val .unit) (.ref A) .unit ⟨(List.range m).map fun l => (l == k, false)⟩
+        (.var i (.val (.ref A)) k (.ref A))
+        (.consume i (.val (.lolli (.ref A) .unit)) (.ref A)))
+  let body : TExpr := match j with
+    | none => use (n + 1) 0
+    | some j =>
+      let i32 : VTy := .int .w32
+      .bind i (.comp (.ret .unit)) i32 (.ret .unit)
+        ⟨(false, true) :: only n (some j)⟩
+        (.ret i (.comp (.ret i32)) i32 (.var i (.val i32) (j + 1) i32))
+        (use (n + 2) 1)
+  .thunkV i (.val (.thunk C)) C (.lam i (.comp C) (.ref A) (.ret .unit) body)
+
+/-- A mask's slot `j` given to the part `left` (the first) or not, as well as where it was. -/
+def give (u : Masks) (j : Nat) (left : Bool) : Masks :=
+  ⟨u.ms.zipIdx.map fun ((a, b), i) =>
+    if i != j then (a, b) else if left then (true, b) else (a, true)⟩
+
+/-- `t` with each `withbor1UD` node's finaliser replaced by `lamFin` at its context, `n` the length
+of `t`'s context; and the number replaced. Only the nodes on the paths to the borrows are entered
+(a `bind`'s body has one slot more, `TExpr.children`). With `named`, the term's first binding
+(`srcN`'s `n`) is the slot `k`, given at each split on a path to the part that holds the borrow,
+and named by the finaliser. -/
+def swapFin (named : Bool) : Nat → Nat → Option Nat → TExpr → TExpr × Nat
+  | 0, _, _, t => (t, 0)
+  | f + 1, n, k, t => match t with
+    | .withbor1UD i j A B SM SD S x _ => (.withbor1UD i j A B SM SD S x (lamFin n A k), 1)
+    | .bind i j A C u tM tN =>
+      let kN := if named then some ((k.map (· + 1)).getD 0) else none
+      let (tM', k₁) := swapFin named f n k tM
+      let (tN', k₂) := swapFin named f (n + 1) kN tN
+      let u := match k with
+        | some s =>
+          let u := if k₁ > 0 then give u s true else u
+          if k₂ > 0 then give u s false else u
+        | none => u
+      (.bind i j A C u tM' tN', k₁ + k₂)
+    | .ret i j A t =>
+      let (t', m) := swapFin named f n k t
+      (.ret i j A t', m)
+    | .effHandleV i j S E fs cs nm A R u ks site inside tc te =>
+      let (tc', k₁) := swapFin named f n k tc
+      let (te', k₂) := swapFin named f n k te
+      let u := match k with
+        | some s =>
+          let u := if k₁ > 0 then give u s true else u
+          if k₂ > 0 then give u s false else u
+        | none => u
+      (.effHandleV i j S E fs cs nm A R u ks site inside tc' te', k₁ + k₂)
+    | t => (t, 0)
+
+/-- `s` checked, its finalisers replaced when `swap` holds (`want` of them), converted, linted and
+run on the LIR interpreter: its output, and whether the conversion lowered a finaliser term. -/
+def run (s : String) (named swap : Bool) (want : Nat) : Except String (String × Bool) := do
+  let k ← Backend.checkedOf "convert-tests.bc" s
+  let c := k.main
+  let (t, m) := if swap then swapFin named 64 c.ctx.length none c.t else (c.t, want)
+  unless m == want do throw s!"replaced {m} finalisers"
+  let (p, st) ← convertProg [] (c.ctx.map fun s => (s.ty, s.live)) t c.C none false false
+    (directFacts c) (machineOps c) {} {} (← classesOf c)
+  unless st.done.isEmpty do throw "a machine"
+  let p := { p with exits := c.exitsOnDivError, slots := slotsOf p st.owners }
+  Lint.lint p
+  let o ← runLIR p Backend.runFuel []
+  return (String.fromUTF8! o.out, st.reads.contains "withborU:finaliser term")
+
+/-- The run gives `out`, by the finaliser term's lowering exactly when `term`. -/
+def gives (r : Except String (String × Bool)) (out : String) (term : Bool) : Bool :=
+  match r with
+  | .ok (o, t) => o == out && t == term
+  | .error _ => false
+
+-- The checked program, its finaliser the constant: the golden, by the constant's expansion.
+#guard gives (run src false false 1) golden false
+-- Its finaliser a closure: the golden, by the finaliser term's lowering; the cell freed by it.
+#guard gives (run src false true 1) golden true
+
+/-- `srcN`'s output, its finalisers the constant. -/
+def goldenN : String := "(inr i32[42], inl i32[9])\nlive 0\n"
+
+#guard gives (run srcN true false 2) goldenN false
+-- Its finalisers closures naming `n`, copied at each borrow and carried in the constant's
+-- closures: the first runs on the abort, the second borrow's value arm consumes the copy.
+#guard gives (run srcN true true 2) goldenN true
+
+end Backend2.ConvertTests
