@@ -1,0 +1,3 @@
+-- #975 K1.5: the chain's end to end at the checked wrapper  [spec §72]
+Frontend.Check.IORun.every_runN
+Frontend.Check.IORun.loop_every_runN

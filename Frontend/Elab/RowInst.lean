@@ -92,6 +92,7 @@ def _root_.Frontend.CTy.ents : CTy → List (Nat × Nat)
 
 def _root_.Frontend.Row.ents : Row → List (Nat × Nat)
   | .cons n i _ A B f r => (n, i) :: (A.ents ++ B.ents ++ f.ents ++ r.ents)
+  | .splice _ r => r.ents
   | _ => []
 
 def _root_.Frontend.Shape.ents : Shape → List (Nat × Nat)
@@ -215,18 +216,50 @@ def Cx.site (c : Cx) (n : Nat) : Nat := (c.sites.lookup n).getD n
 def Cx.tmpl? (c : Cx) (x : String) (isType : Bool) : Option Tmpl :=
   c.tmpls.find? fun t => t.name == x && t.isType == isType
 
-/-- A row with the entries of its tail after the first of each operation: a row argument spliced
-after written entries is one entry where it repeats one (SPEC §38), and refused where it gives the
-operation another signature.  `[spec §76]` -/
-def mergeRow (sp : Span) (who : String) : List (Nat × Nat × Row) → Row → Except Error Row
-  | seen, .cons n i q A B f r => do
-    match seen.find? fun (n', i', _) => n' == n && i' == i with
-    | some (_, _, e) =>
-      if e == (Row.cons n i q A B f .nil).strip then mergeRow sp who seen r
-      else throw ⟨sp, s!"the row argument of `{who}` gives `{sitePp n}.{i}` a second signature"⟩
-    | none =>
-      pure (.cons n i q A B f (← mergeRow sp who ((n, i, (Row.cons n i q A B f .nil).strip) :: seen) r))
-  | _, r => pure r
+/-- An entry of a row being instantiated, `n.i q[f] A ~> B` as a one-entry row, with where it came
+from: written in the template (`none`), or spliced from a row argument by the `g`-th splice of the
+row (`some g`).  `[spec §76]` -/
+abbrev REnt := Option Nat × Row
+
+/-- The operation of an entry, `n.i`. -/
+def REnt.op : REnt → Nat × Nat
+  | (_, .cons n i _ _ _ _ _) => (n, i)
+  | _ => (0, 0)
+
+/-- A row argument's entries, spliced by the `g`-th splice, and its tail. -/
+def splicedOf (g : Nat) : Row → List REnt × Row
+  | .cons n i q A B f r => let (es, t) := splicedOf g r; ((some g, .cons n i q A B f .nil) :: es, t)
+  | t => ([], t)
+
+/-- Entries ahead of a tail, as a row. -/
+def toRow : List REnt → Row → Row
+  | [], t => t
+  | (_, .cons n i q A B f _) :: es, t => .cons n i q A B f (toRow es t)
+  | _ :: es, t => toRow es t
+
+/-- A row's entries in written order, merged as SPEC §76 says. A row argument is one row, and so are
+the entries the template writes: a repeat within either is one entry (§38). A written entry and an
+equal spliced one are one entry, one for one: each written entry takes the first equal spliced
+entry not yet taken, wherever it is, and keeps its own place. Repeats from two splices (of two
+parameters, or of one parameter twice) are kept: a row is a list whose repeats are significant, as
+a continuation's cancel branch `fin ++ Σ`, read back by its length (§27). An operation given two
+signatures anywhere in the row is refused.  `[spec §76]` -/
+def mergeEnts (sp : Span) (who : String) (es : List REnt) : Except Error (List REnt) := do
+  let key (e : REnt) : Row := e.2.strip
+  -- Two signatures for one operation, anywhere in the row.
+  for (e, k) in es.zipIdx do
+    if (es.take k).any fun e' => e'.op == e.op && key e' != key e then
+      throw ⟨sp, s!"the row argument of `{who}` gives `{sitePp e.op.1}.{e.op.2}` a second signature"⟩
+  -- A repeat within the written entries, or within one splice's: one entry.
+  let es := es.zipIdx.filter (fun (e, k) => !(es.take k).any fun e' => e'.1 == e.1 && key e' == key e)
+    |>.map (·.1)
+  -- Each written entry takes the first equal spliced entry not yet taken.
+  let mut taken : List Nat := []
+  for (e, _) in es.zipIdx do
+    if e.1.isNone then
+      if let some (_, k) := es.zipIdx.find? fun (e', k) => e'.1.isSome && key e' == key e && !taken.contains k then
+        taken := k :: taken
+  pure ((es.zipIdx.filter fun (_, k) => !taken.contains k).map (·.1))
 
 /-- The type arguments, row arguments and site arguments of a use, each in order. -/
 def splitArgs (As : List VTy) : List VTy × List Row × List Nat :=
@@ -237,6 +270,7 @@ def splitArgs (As : List VTy) : List VTy × List Row × List Nat :=
 /-- The lifetimes a row's entries name. -/
 def rowLives : Row → List String
   | .cons _ _ _ A B f r => A.lifeVars ++ B.lifeVars ++ rowLives f ++ rowLives r
+  | .splice _ r => rowLives r
   | _ => []
 
 /-- The fuel of a substitution: its depth in a term. -/
@@ -324,29 +358,44 @@ def substC : Nat → Cx → CTy → M CTy
     | .pull sp A B R => return .pull sp (← substV n c A) (← substV n c B) (← substV n c R)
     | .eff sp r A => return .eff sp (← substR n c sp r) (← substV n c A)
 
-/-- A row with its tail's row parameter and its sites substituted, a repeated entry merged
-(`mergeRow`). -/
+/-- A row with its row parameters and its sites substituted, its entries merged as SPEC §76 says
+(`mergeEnts`).  `[spec §76]` -/
 def substR : Nat → Cx → Span → Row → M Row
   | 0, _, sp, _ => throw ⟨sp, "a row nested too deeply"⟩
   | n + 1, c, sp, r => do
-    let r' ← substEnts n c sp r
-    if c.rows.isEmpty then pure r' else
-      match mergeRow ((c.stack.head?.map (·.2)).getD sp) ((c.stack.head?.map (·.1)).getD "") [] r' with
-      | .ok r => pure r
+    let (es, t) ← substEnts n c sp 0 r
+    if c.rows.isEmpty then pure (toRow es t) else
+      match mergeEnts ((c.stack.head?.map (·.2)).getD sp) ((c.stack.head?.map (·.1)).getD "") es with
+      | .ok es => pure (toRow es t)
       | .error e => throw e
 
-/-- A row's entries substituted, its tail `..r` replaced by `r`'s argument. -/
-def substEnts : Nat → Cx → Span → Row → M Row
-  | 0, _, sp, _ => throw ⟨sp, "a row nested too deeply"⟩
-  | n + 1, c, sp, r => match r with
+/-- A row's entries substituted, each with where it came from (`REnt`), and its tail: each `..r`
+replaced by `r`'s argument, spliced in written order, `g` counting the splices.  `[spec §76]` -/
+def substEnts : Nat → Cx → Span → Nat → Row → M (List REnt × Row)
+  | 0, _, sp, _, _ => throw ⟨sp, "a row nested too deeply"⟩
+  | n + 1, c, sp, g, r => match r with
     | .cons k i q A B f r => do
       let f' ← match f with
         | .top => pure .top
         | f => substR n c sp f
-      return .cons (c.site k) i q (← substV n c A) (← substV n c B) f' (← substEnts n c sp r)
-    | .nil => pure .nil
-    | .top => pure .top
-    | .var x => pure ((c.rows.lookup x).getD (.var x))
+      let e : Row := .cons (c.site k) i q (← substV n c A) (← substV n c B) f' .nil
+      let (es, t) ← substEnts n c sp g r
+      return ((none, e) :: es, t)
+    | .nil => pure ([], .nil)
+    | .top => pure ([], .top)
+    | .var x => match c.rows.lookup x with
+      | some a => pure (splicedOf g a)
+      | none => pure ([], .var x)
+    | .splice x r => do
+      let (es, t) ← substEnts n c sp (g + 1) r
+      match c.rows.lookup x with
+      | some a =>
+        let (as, ta) := splicedOf g a
+        -- A row argument is a list of entries: `top` is refused where it is written.
+        unless ta == .nil do
+          throw ⟨sp, s!"internal error: the row argument spliced at `..{x}` is not a list of entries"⟩
+        pure (as ++ es, t)
+      | none => pure ([], .splice x (toRow es t))
 
 def substS : Nat → Cx → Shape → M Shape
   | 0, _, σ => throw ⟨σ.span, "a shape nested too deeply"⟩

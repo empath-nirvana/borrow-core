@@ -1,0 +1,18 @@
+-- pending: #595, #728 (a recursive type nested in another: a `mu` that mentions the enclosing one)
+-- The kernel program `nested-fold` (Backend/Kernel.lean, `Core/NestedPrograms.lean`'s `nestProg`;
+-- SPEC §6, §12) at the surface: `Node` is `mu X. i32 * array (mu Y. 1 + (ref X * ref Y))`, a node
+-- holding an array of chains of children. Two trees are built, the root 1 with the children 10,
+-- 11 and 12, each in a chain of one; the first is summed by an owned fold, the general fold with
+-- one algebra per key (the root, the array, the chain), and the second is consumed. Answer:
+-- i32[34], with every cell freed. The core text cannot write it either: its types refuse a `mu`
+-- that mentions an enclosing type variable, and `fold_own` takes only a closed shape (the general
+-- fold, `foldOwnG`, has no spelling). Only the declarations and a fold of
+-- the root are sketched here; the refusal is the declaration's.
+
+data Chain[T] = CNil | CCons(T, box Chain[T])
+data Node = Node(i32, array Chain[box Node])
+
+fn root(t: Node) -> i32 = fold_own t { Node(v, cs) -> v }
+
+main -> i32 = 0
+-- now: 13:6: the recursive type occurs under `Chain`, which is recursive itself: its `mu` would mention the enclosing recursive type, and a `mu` must be closed (B14, U3)

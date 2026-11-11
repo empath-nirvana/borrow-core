@@ -71,6 +71,10 @@ structure CSt where
   /-- The value types each representative is checked a layout of (`conf`), each with the
   representatives of its type variables' nodes. -/
   confd : Std.HashMap Nat (List (LTy × List Nat)) := {}
+  /-- The host types of the opaque cells (`Prog.hostRep`).  `[spec §11]` -/
+  hostRep : List (BoCa.Fig16.LogRel.Core.Opaque × LTy) := []
+  /-- The representatives `conf` checked a layout of a host-typed opaque kind.  `[spec §11]` -/
+  hostSeen : Std.HashSet Nat := {}
 
 abbrev CM := StateT CSt (Except String)
 
@@ -153,7 +157,17 @@ def conf (w : String) : Nat → List Nat → LTy → Nat → CM Unit
     let check : CM Unit := do
       match t, k with
       | .unit, .unit | .zero, .zero | .unk, .unk => pure ()
-      | .opq _, .opq | .opq _, .int _ | .int _, .opq => pure ()
+      -- [spec §11] A host-typed opaque kind is laid out as its host integer (`Prog.hostRep`), and
+      -- only as it; another opaque kind is held as the word the extern stores.
+      | .opq o, k =>
+        match (← get).hostRep.lookup o, k with
+        | some (.int hw), .int kw =>
+          if hw == kw then modify fun s => { s with hostSeen := s.hostSeen.insert r } else bad
+        | some h, _ =>
+          throw s!"{w}: node {← rp L n} ({short k}) is not a layout of the host type {h} of {t}"
+        | none, .opq | none, .int _ => pure ()
+        | none, _ => bad
+      | .int _, .opq => pure ()
       | .int a, .int b => if a == b then pure () else bad
       | .pair a b, .pair x y | .sum a b, .sum x y => do
         conf w f env a x
@@ -238,6 +252,9 @@ def reCompat (w : String) (c d : Nat) : CM Unit := do
         same L w "a pointer read through a shared borrow: its contents" a c
       | .fam a, .fam c => todo := (a, c) :: todo
       | .clos .., .unk | .opq, .unk => pure ()
+      -- [spec §11] A host-typed opaque value (`Layouts.host`), an integer node, read as `Unk`.
+      | .int _, .unk => if L.host.contains rx then pure () else
+        throw s!"{w}: a read through a shared borrow of contents at node {rx} (an integer) as `Unk`"
       -- `Tok`'s cell read through `Imm̲`: discarded (`Imm̲ 'b Tok = Unk`).
       | .ref _, .unk => pure ()
       | kx, ky =>
@@ -754,10 +771,24 @@ def check (p : Prog) (L : Layouts) : Except String Unit := do
     for (c, R) in L.codeClass.toList do
       unless (L.union.getD R #[]).contains c do
         throw s!"code c{c}'s class is {R}, whose codes do not hold it"
+    -- [spec §11] The nodes read as `Unk` through `Imm̲` as host-typed opaque values (`Layouts.host`)
+    -- are layouts of one, and every type laid out at one is that kind or an integer (its host
+    -- integer: `conf` checked the width).
+    for h in L.host.toList do
+      unless (← get).hostSeen.contains h do
+        throw s!"node {h} is marked as a capability's host-typed contents (`Layouts.host`), but no such contents are laid out at it"
+      let hr := (← get).hostRep
+      for (t, _) in (← get).confd.getD h [] do
+        let ok := match t.unbang with
+          | .opq o => (hr.lookup o).isSome
+          | .int _ => true
+          | _ => false
+        unless ok do
+          throw s!"node {h} holds a capability's host-typed contents (`Layouts.host`) and a value of the type {t}"
     layoutOk L
     staticsOk p L
     cellsOk L (clsTysOf p).toArray roots
-  let _ ← act.run {}
+  let _ ← act.run { hostRep := p.hostRep }
 
 /-! ### The closure flow -/
 
@@ -1125,11 +1156,15 @@ def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
   let dropMerge := mergedSum.map fun v => { L with mergeArm := L.mergeArm.set! v none }
   let moreTags := mergedSum.map fun v => { L with tags := L.tags.set! v (L.tags[v]! + 1) }
   let unpack := packedSum.map fun v => { L with packed := L.packed.set! v false }
+  -- [spec §11] A capability's host-typed contents laid out as an opaque word (`Layouts.host`).
+  let hostOpq := (L.host.toList.mergeSort (· ≤ ·)).head?.map fun h =>
+    { L with shape := L.shape.set! h .opq, bytes := L.bytes.set! h 8 }
   [("remove a code from its class", removeCode),
    ("move a sum's merged arm", moveMerge),
    ("drop a sum's merged arm", dropMerge),
    ("give a sum another tag", moreTags),
    ("unpack a packed sum", unpack),
+   ("lay a capability's host-typed contents as an untyped word", hostOpq),
    ("remove a code's class", removeClassOf),
    ("merge two classes of one shape and different widths", merge),
    ("change a class's width", width),

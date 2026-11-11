@@ -78,6 +78,7 @@ def Row.respan (sp : Span) : Row → Row
   | .cons n i q A B f r => .cons n i q (A.respan sp) (B.respan sp) (f.respan sp) (r.respan sp)
   | .top => .top
   | .var x => .var x
+  | .splice x r => .splice x (r.respan sp)
 
 def Shape.respan (sp : Span) : Shape → Shape
   | .leaf _ A => .leaf sp (A.respan sp)

@@ -13354,12 +13354,15 @@ tables and `HandlerLawN` are unchanged.
   drop `closedAt 0 d`. The finaliser stays typed at the rule's dead context, so it may name its
   persistent slots. `withborUE` shifts `d` under its binders; a closed `d` gives the same term, so
   no program changes.
-- K1.4: the kernel instance `progIO` (a lent `stdout` cell, written across a `wait`, resumed and
-  cancelled).
+- K1.4, built (#1072): the kernel instance `progIO` (`Core/Chain/IO791N.lean`). `stdout`'s cell
+  is made by `mk_output` and lent by a suspending constant whose finaliser is
+  `λr. consume (take_output r)`. The callback writes by `write_byte` on both sides of `wait`. It is
+  resumed (`progIO_res_orDiverges`) and cancelled (`progIO_can_orDiverges`, the finaliser handing
+  the cell back), both from `HandlerLawN` alone, the externs at their standard models.
 - K1.5: `IORun.every_runN` at the checked wrapper; `corpus/io-effects.bc` concluded by the
   extended `goal791N`; `bcc trusted` names it.
 
-K1.4 and K1.5 are not built; each unit's code PR marks its line *built*.
+K1.5 is not built; its code PR marks its line *built*.
 
 ### Open
 
@@ -13464,6 +13467,99 @@ The surface part is not built: until it lands, the surface refuses the operators
 - Narrower unsigned widths (`U16`) and `I8`/`I16`: not asked for.
 - Whether `U8` gains arithmetic now that the grouped operations are admitted per width: not in
   this entry (`U8` keeps §8's "no arithmetic of its own").
+
+---
+
+## 74. Entry 73 — `sliceCopyM`, a bulk copy between array regions (#1014)
+
+### Motivation
+
+A copy between two arrays' regions runs one element at a time today: `grow`, `push_str` and
+`push_lit`, and the string parse and serialise of `lib/json.bc` (#977's `citm` and `twitter`).
+This entry adds one kernel constant for the copy at persistent elements, and lowers it to one
+machine copy.
+
+### The constant
+
+Beside §9's slice constants (`sliceGetM`, `sliceReplaceM`, the splits):
+
+    sliceCopyM : !(ArrayMut @a A ⊗ (I32 ⊗ (ArrayImm @b A ⊗ (I32 ⊗ I32))) ⇒ ArrayMut @a A ⊗ (1 ⊕ 1))     A persistent
+
+- `sliceCopyM (dst, (di, (src, (si, len))))` checks the bounds once: `0 ≤ di`, `0 ≤ si`,
+  `0 ≤ len`, `di + len ≤ len dst` and `si + len ≤ len src`, on mathematical integers: a negative
+  input, or `di + len` or `si + len` past 2³¹ − 1, is out of range, never wrapped. In range it
+  writes `dst[di + k] := src[si + k]` for every `k < len`, in one machine step, and answers
+  `(dst, inr ())`. Out of range it writes nothing and answers `(dst, inl ())`; the kernel has no
+  trap, so the surface raises on `inl`, as with `array_replace`'s sum.
+- **The element type is persistent** (§10: the integer and float scalars, `U8`, `1`, `!` values,
+  which are copied bitwise): it owns no resource, so a copy is a write of equal values. Owned or
+  linear elements (a move) are not covered.
+- **No overlap, by the types.** `dst` is `Mut @a`, exclusive, and `src` an `Imm @b` view, so the two
+  ranges are disjoint: no run-time aliasing check, and no memmove.
+- An owned `Array A` destination is reached through the existing borrow (`sliceBorrowM`). A text or
+  `str` source that is an `ArrayImm U8` qualifies directly.
+
+**Machine.** The primitive `sliceCopy` has one head step, `Head.sliceCopy`, on
+`(dst, (di, (src, (si, len))))`. It reads `len` cells of `src`'s range, writes them to `dst`'s range
+in place, and allocates nothing (`Heap.copy`, `copyHeap`; `copyOk`, `copyArg`, `copyAns`;
+`Paper/S1_Syntax`, `Paper/S3_Dynamics`, `Support/Dynamics/Arrays`).
+- The bounds are tested on `toNat`, with every quantity below 2³¹, so nothing wraps.
+- In range, the step needs both ranges present in memory (`Heap.HasRange`), as `store` needs its
+  cell. Nothing out of range is touched.
+- Determinism and unique decomposition gain the case. The reference interpreter runs it
+  (`Mem.copy?`).
+
+**Typing.** One `CDerives` constant (`Γ` dead), as the other slice constants. Its compatibility
+lemma iterates `sliceReplaceM`'s over `fam`'s `sepRange`, split at `[di, di + len)`, with `src`'s
+cells read in imm mode, as `sliceGet`'s are; the chain's lemma at `erwpK`/`KW` likewise. No new
+index.
+
+### Lowering (Backend2)
+
+A word-IR statement `copy (dst, src, bytes)` after the LIR's single range test: `memory.copy` in
+Wasm (bulk memory, which wasmtime, the gate's runner, enables by default), `llvm.memcpy` natively,
+the disjointness cited at the site from the constant's types. The element layouts of `src` and
+`dst` are `A`'s, the same stride, so it is one copy of `len × stride` bytes. The flat IR's
+interpreter runs the statement as a word or byte loop with the same counts.
+
+**Counts.** A copy of `len` elements counts as the loads and stores of the element loop it
+replaces: `len ×` the element's words of each, or `len` `load8`/`store8` for `U8`. The range test
+counts as 2 bounds checks per call (against `len src` and `len dst`), not one per element, so a
+program that switches to `sliceCopyM` has fewer bounds checks.
+
+### The library (§17)
+
+`grow` (`lib/buf.bc`), `push_str` and `push_lit` (`lib/text.bc`) copy by `sliceCopyM` at persistent
+element types; an out-of-range answer raises as `array_replace`'s does. `lib/json.bc`'s string
+parse and serialise copy unescaped runs by it (#1015). An owned `array A` reaches it through the
+existing borrow.
+
+### Baseline
+
+`fundamentalC`, `adequacyC`/`adequacyD` and `fundamentalN_all`/`goal791N`, with their statements
+unchanged; every existing slice constant's compatibility lemma; §13's determinism, with the new
+case. Every corpus and kernel program keeps its output: no existing term changes. Counts are
+unchanged for a program that does not use `sliceCopyM`; a program the library switches to it keeps
+its loads and stores and has fewer bounds checks.
+
+### Programs
+
+A corpus program copying at the bounds (in range, `len = 0`, each bound one past, sums past
+2³¹ − 1), `live 0`; #977's `citm` and `twitter` for the time. The machine step's tests are in
+`Core/SliceCopyPrograms.lean`.
+
+### Units
+
+- S.1, the machine (Support): the step, determinism and decomposition, and the interpreter. Built.
+- S.2, Core: the constant's rule and compatibility lemma. Not built.
+- S.3, the chain: the compatibility lemma at `erwpK`/`KW`. Not built.
+- The lowering (Backend2) and the library uses: backend-foreman's. Not built.
+
+### Open
+
+- Owned or linear elements, a bulk move: the source cells must be left filled with a filler, as
+  `grow` does today.
+- A copy within one array (`copy_within`, overlapping): it needs memmove and a single `Mut` view.
 
 ---
 

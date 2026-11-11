@@ -1,0 +1,14 @@
+-- pending: #870 (a function cannot return an effectful block it is given)
+-- The kernel program `poly-id` (Backend/Kernel.lean, `Shapes.polyId`) at the surface: `id` returns
+-- the block it is given, and is used at the pure row and at `Fail`'s, each use lowered on its own.
+-- Answer: (true, inr ()). Its core-text twin is `corpus/kernel-poly-id.bc`.
+
+include fail
+
+fn id(f: !(1 => bool)) -> !(1 => bool) = f
+
+main -> bool * (bool + 1) =
+  let a = id(!{ u -> true })(());
+  let b = with to_result[1, bool] { id(!{ u -> raise(()) })(()) };
+  (a, b)
+-- now: 8:42: `f` is a block parameter given an effectful block: it can only be called, or passed on to a block parameter of a call; a block is not stored (SPEC §30)

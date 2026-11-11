@@ -900,7 +900,8 @@ def rowEntries : Nat → P Row
   | 0 => outOfFuel
   | n + 1 => do
     if (← isSym "]") || (← isSym ")") then return .nil
-    -- `..r`: the row parameter `r` as the row's tail (SPEC §76).  `[spec §76]`
+    -- `..r`: the row parameter `r`, the row's tail or spliced ahead of more entries (`..r, …`),
+    -- the row their concatenation in written order (SPEC §76).  `[spec §76]`
     if (← isSym ".") && (← peekAt 1).tok == .sym "." then
       discard bump; discard bump
       let t ← peek
@@ -909,6 +910,9 @@ def rowEntries : Nat → P Row
         failAt t.span (s!"`..{r.name}`: `{r.name}` is not a row parameter of this declaration. " ++
           "A definition checked once for all rows is not provided: it needs a row binder in the " ++
           "kernel (decision 62's row variables), which Core does not have (SPEC §76 *Open*)")
+      if ← isSym "," then
+        discard bump
+        return .splice r.name (← rowEntries n)
       return .var r.name
     let tt ← peek
     if tt.tok == .kw "top" then
