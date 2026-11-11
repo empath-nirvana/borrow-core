@@ -198,9 +198,9 @@ theorem not_release_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
         cases C' <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hTα
         obtain ⟨D', he, hD'⟩ := hr''.ampNu (.inl ⟨_, _, rfl⟩)
         simp only [Jdg.comp.injEq] at he
-        rcases hD' with ⟨_, _, h'⟩ | ⟨_, h'⟩
+        rcases hD' with ⟨_, _, h'⟩ | ⟨_, _, _, h'⟩
         · exact effOf_ne_amp _ _ _ _ (he.trans h')
-        · exact effOf_ne_nu _ _ _ (he.trans h')
+        · exact effOf_ne_nu _ _ _ _ _ (he.trans h')
     · have := hr'.top_eq
       simp only [Jdg.comp.injEq] at this
       exact effOf_ne_top _ _ this
@@ -696,7 +696,7 @@ theorem at05_M {Δ : LifeCtx} {Γ : Ctx VTy} {W F : Expr} {j : Jdg}
           · obtain ⟨D', he, hα⟩ := hr'.rigid hR; cases he; exact hα
           · obtain ⟨D', he, hD'⟩ := hr'.ampNu hN
             cases he
-            rcases hD' with ⟨_, _, h'⟩ | ⟨_, h'⟩ <;> cases h'
+            rcases hD' with ⟨_, _, h'⟩ | ⟨_, _, _, h'⟩ <;> cases h'
         obtain ⟨Δ', Γ', S', hW⟩ := hc.wt rfl _ (splitP_le_left hs _ _ hTw)
         rcases wb_view hW (.inr ⟨S', rfl⟩) ((vview_forceTy hTwC).tail (VS.alpha (A := .thunk C_w) hCwα)) with
           hp | ⟨x, bnd, L, B, S'', R, hα, hL⟩
