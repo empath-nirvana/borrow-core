@@ -53,6 +53,8 @@ def VTy.renameLife (f : Span → String → Life) : VTy → VTy
   | .app s G A => .app s (G.renameLife f) (A.renameLife f)
   | .lapp s G a => .lapp s (G.renameLife f) (a.renameLife f)
   | .rowed s G r => .rowed s (G.renameLife f) (r.renameLife f)
+  | .rowArg s r => .rowArg s (r.renameLife f)
+  | .siteArg s n => .siteArg s n
 
 def CTy.renameLife (f : Span → String → Life) : CTy → CTy
   | .ret s A => .ret s (A.renameLife f)
@@ -73,6 +75,7 @@ def Row.renameLife (f : Span → String → Life) : Row → Row
   | .nil => .nil
   | .cons n i q A B g r => .cons n i q (A.renameLife f) (B.renameLife f) (g.renameLife f) (r.renameLife f)
   | .top => .top
+  | .var x => .var x
 
 def Shape.renameLife (f : Span → String → Life) : Shape → Shape
   | .leaf s A => .leaf s (A.renameLife f)

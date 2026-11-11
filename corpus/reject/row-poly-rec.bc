@@ -1,0 +1,7 @@
+-- SPEC §76: polymorphic recursion over rows: `deep[row r]` calls itself at a row that grows.
+-- expect: 5:34: `deep` is used inside its own instance at other arguments (row (7.0 cancel i32 ~> 0); the instance was asked for at 7:38): polymorphic recursion over rows is not provided; it needs a row binder in the kernel (decision 62's row variables), which Core does not have (SPEC §76 *Open*)
+
+def deep[row r] : !U (1 -o F[..r] 1) =
+  !thunkv fun (u : 1) -> (unbang deep[row (7.0 cancel i32 ~> 0, ..r)]) u
+
+main : F 1 = u <- return (); (unbang deep[row ()]) u
