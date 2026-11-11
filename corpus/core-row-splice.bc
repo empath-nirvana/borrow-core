@@ -8,7 +8,8 @@
 -- `F[4.0 cancel i32 ~> 0, 4.0 cancel i32 ~> 0] 1`, its repeat kept, so `s.0`'s cancel row is read
 -- as `[4.0]`. The thunk performs `5.0` under a finaliser that raises `4.0` with 7; the clause
 -- cancels it, the finaliser runs and raises, and the handler at 4 answers 7. Were the repeat merged,
--- `5.0`'s cancel row would be read as empty and the finaliser's raise refused.
+-- `s.0`'s cancel row would be read as empty, and the thunk, whose `5.0` has the cancel row `[4.0]`,
+-- would not match it: a type mismatch at `force t w`.
 --
 -- Answer: i32[7].
 
