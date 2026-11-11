@@ -372,6 +372,10 @@ def elabV : Nat → TyEnv → VTy → Except Error CVTy
     | .rowed sp _ _ =>
         err sp ("a function type with a provided row is the type of a computation parameter " ++
           "(SPEC §33): it is written on a parameter of a function")
+    -- `[spec §76]`
+    | .rowArg sp _ | .siteArg sp _ =>
+        err sp ("a row or site argument is written in the brackets of a definition or a type " ++
+          "with row or site parameters (SPEC §76)")
     | A@(.app sp _ _) | A@(.lapp sp _ _) =>
         -- `N[A, …]<'a, …>`: the arguments elaborated at the use, then `N`'s body in its own scope
         -- with its parameters bound to them.  `[spec §7]`
@@ -429,6 +433,9 @@ def elabRow : Nat → TyEnv → Span → Row → Except Error CRow
     -- The parser reads `top` only as a whole cancel row (`rowEntries`); a `Row.top` built
     -- elsewhere is refused here with the parser's message.
     | .top => err sp "`top` (`⊤`) is a cancel row only: write it as `n.i cancel[top] A ~> B`"
+    -- `Frontend.Elab.RowInst` substitutes every row parameter, or refuses the program.
+    -- `[spec §76]`
+    | .var x => err sp s!"internal error: the row parameter `..{x}` was not substituted (SPEC §76)"
     | .cons k i q A B f r => do
         if k < 2 ^ 32 ∧ i < 2 ^ 32 then
           -- The entry's cancel row (SPEC §27): `F_R 1`, `R` its written row; `F 1` when none is

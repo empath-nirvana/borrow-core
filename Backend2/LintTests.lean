@@ -361,4 +361,25 @@ def evProg (body : Tm) (ret : LTy) (more : List (Var × LTy) := []) : Prog where
     (.letv 5 (.call 1 [0, 4]) (.letv 6 (.prim .free [4]) (.consume .dead 6 (.var 5))))) i32T
   [(4, .ref i32T), (5, i32T), (6, i32T)]) "evConfined: x4 passed as evidence at ref i32, which is not persistent"
 
+/-- `f0 (x0 : a) = let x1 : r = slotPop x0; letpair (x2, x3) = x1; (x2, x3)` (the result's
+parts at `r`'s components, or `a` and `i32` when `r` is not a pair).  [spec §77] -/
+def popProg (a r : LTy) : Prog where
+  fns := #[{ name := "pops", params := [0], ret := r,
+             body := .letv 1 (.prim .slotPop [0]) (.letpair 2 3 1 (.pair 2 3)) }]
+  codes := #[]
+  main := .unit
+  mainTy := .unit
+  ty := (((({} : Std.HashMap Var LTy).insert 0 a).insert 1 r).insert 2
+      (match r with | .pair x _ => x | _ => a)).insert 3 (match r with | .pair _ y => y | _ => i32T)
+-- A `slotPop` of an owned array, answering the family and its slot's contents: accepted.
+#guard accepts (popProg (.fam (.ref i32T)) (.pair (.fam (.ref i32T)) i32T))
+-- Of a family of borrows, whose slots are not the family's to move: refused.
+#guard refuses (popProg (.fam (.imm i32T)) (.pair (.fam (.imm i32T)) (.imm i32T))) "not an owned array"
+#guard refuses (popProg (.fam (.mut i32T)) (.pair (.fam (.mut i32T)) (.mut i32T))) "not an owned array"
+-- Answering another family, or contents of another type: refused.
+#guard refuses (popProg (.fam (.ref i32T)) (.pair (.fam (.ref (.int .w64))) i32T)) "not its operand's"
+#guard refuses (popProg (.fam (.ref i32T)) (.pair (.fam (.ref i32T)) (.int .w64))) "answers contents"
+-- Answering no pair: refused, as such.
+#guard refuses (popProg (.fam (.ref i32T)) i32T) "not a pair of the family"
+
 end Backend2.LintTests

@@ -517,7 +517,7 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
     | .take => do join (← kid dst 0) (← a 0); join (← kid dst 1) (← kid (← a 0) 0)
     | .put => do join (← kid (← a 0) 0) (← a 1); join dst (← a 0)
     | .slotPut => do join (← kid (← kid (← a 0) 0) 0) (← a 2); join dst (← a 0)
-    | .slotTake => do
+    | .slotTake | .slotPop => do
       join (← kid dst 0) (← a 0)
       join (← kid dst 1) (← kid (← kid (← a 0) 0) 0)
     | .size => join (← kid dst 0) (← a 0)

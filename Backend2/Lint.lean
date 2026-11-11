@@ -14,6 +14,8 @@ verifies and never fills in:
   unreachable);
 - every call has its callee's number of arguments, and every closure its code's environment;
 - every `lend` answers a borrow of its kind: `mut` or `imm` (`Op.lend`, SPEC §57);
+- every `slotPop` is of an owned array and answers that family and its slot's contents
+  (`slotPopBad`, SPEC §77);
 - every `copy` meets the premise of the rule the node carries (`copiesAt`): `Ctx.SplitP.dup` at a
   persistent type, `!` read off the LIR type (`Types.ofV` keeps it); the `copy` constants and
   `copy_derives` at an `imm` borrow;
@@ -188,6 +190,24 @@ theorem abandonable_ofV_consume {ms : MachSet} {fd : EvSet} {A : VTy} {t : LTy} 
     (h : ofV ms fd A = .ok t) : abandonable .letAbort t = true := by
   simp [abandonable, ofV_consumes hA h]
 
+/-- **A `slotPop`'s premise, read on the LIR types** (`none` when it holds): one operand, an owned
+array `[Ref c]` (not a family of borrows, whose slots are not the family's to move), and the result
+`[Ref c] ⊗ c`, the same family and its slot's contents. The popped contents are then a variable
+like any other, consumed once on every path (`lintTm`); the slot leaves the family, so the
+family's later `freeArr` cannot meet it written. That the operand's length is at least one is the
+code's test before the op (`genConsumeW`), checked on every run by the LIR interpreter.  `[spec §77]` -/
+def slotPopBad (p : Prog) (x : Var) : List Var → Option String
+  | [a] =>
+    match p.ty[a]?.map LTy.peel, p.ty[x]?.map LTy.peel with
+    | some (.fam (.ref c)), some (.pair f c') =>
+      if !f.sameRep (.fam (.ref c)) then some s!"answers the family {f}, not its operand's"
+      else if !c'.sameRep c then some s!"answers contents {c'} for slots of {c}"
+      else none
+    | some (.fam (.ref c)), some t => some s!"answers {t}, not a pair of the family and its slot's contents {c}"
+    | some t, _ => some s!"of {t}, which is not an owned array"
+    | none, _ => some s!"of x{a}, which has no type"
+  | as => some s!"on {as.length} operands"
+
 /-- The variables left after `t`, its value consumed by its context. -/
 def lintTm (w : String) (p : Prog) (inConsumeFn : Bool) : Nat → Std.HashSet Var → Tm → LM Left
   | 0, _, _ => bad w "a term too deep"
@@ -240,6 +260,8 @@ def lintTm (w : String) (p : Prog) (inConsumeFn : Bool) : Nat → Std.HashSet Va
     | .prim .unreachable as => do let _ ← useAll w env as; return none
     | .prim _ as => return some (← useAll w env as)
     | .letv x e b => do
+      if let .prim .slotPop as := e then
+        if let some e := slotPopBad p x as then bad w s!"x{x}: a slotPop {e}"
       if let .prim (.lend m) _ := e then
         match p.ty[x]? with
         | some (.pair _ bT) =>

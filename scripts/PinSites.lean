@@ -129,10 +129,12 @@ def sites : List (Name × List Name) := [
   (``Backend2.releaseOpt, [``Backend2.ConsumeRule.dead]),
   (``Backend2.releaseThen, [``Backend2.ConsumeRule.dead]),
   (``Backend2.splitCtx, [``Backend2.ConsumeRule.unused, ``Backend2.CopyRule.dup]),
+  (``Backend2.stepW, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.takeClosOf, [``Backend2.ConsumeRule.dead]),
   (``Backend2.travF, [``Backend2.CopyRule.dup]),
   (``Backend2.unitThen, [``Backend2.ConsumeRule.dead]),
   (``Backend2.untuple, [``Backend2.ConsumeRule.dead]),
+  (``Backend2.walkW, [``Backend2.ConsumeRule.dead]),
   -- Readers of a rule, which build no node: the lint, and the statements of the `UNPROVED:` ones.
   (``Backend2.Lint.lintTm, [``Backend2.ConsumeRule.consume, ``Backend2.ConsumeRule.stackK,
     ``Backend2.CopyRule.dup]),

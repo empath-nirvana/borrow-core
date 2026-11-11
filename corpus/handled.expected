@@ -600,6 +600,24 @@ corpus/core-pipe-step.bc 66:15: handle 1: inside []; row [2]; ops 1.0 stored; na
 corpus/core-pipe-step.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/core-pipe-step.bc 3.0 stored: machine; condition 2 holds; -
 corpus/core-pipe-step.bc 1.0 stored: machine; condition 2 holds; -
+corpus/core-row-capture-global.bc flows [0, 4294967295]; main [4]
+corpus/core-row-capture-global.bc 18:3: handle 4: inside []; row []; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/core-row-capture-global.bc 4.0 abortive: -; condition 2 holds; -
+corpus/core-row-generic.bc flows [0, 4294967295]; main [4]
+corpus/core-row-generic.bc 18:3: handle 4: inside []; row []; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/core-row-generic.bc 4.0 abortive: -; condition 2 holds; -
+corpus/core-row-key-tparam.bc flows [0, 4294967295]; main [4]
+corpus/core-row-key-tparam.bc 25:3: handle 4: inside []; row []; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/core-row-key-tparam.bc 4.0 abortive: -; condition 2 holds; -
+corpus/core-row-pipe-stop.bc flows [0, 4294967295]; main [9]
+corpus/core-row-pipe-stop.bc 59:3: handle 9: inside []; row []; ops 9.0 abortive; names 9.0 []; condition 2 holds
+corpus/core-row-pipe-stop.bc 9.0 abortive: branch; condition 2 holds; -
+corpus/core-site-fresh-const.bc flows [0, 4294967295]; main [2]
+corpus/core-site-fresh-const.bc 9:5: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/core-site-fresh-const.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/core-site-generic.bc flows [0, 1, 4294967295]; main [1]
+corpus/core-site-generic.bc 16:5: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/core-site-generic.bc 1.0 tail: machine; condition 2 holds; -
 corpus/core-unsigned.bc flows [0, 4294967295]; main []
 corpus/core-yield-loop.bc flows [0, 1, 4294967295]; main [1]
 corpus/core-yield-loop.bc 36:7: handle 1: inside []; row []; ops 1.0 resume-or-cancel; names 1.0 []; condition 2 holds
@@ -1668,6 +1686,14 @@ corpus/json-deep.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/json-deep.bc 5.0 abortive: branch; condition 2 holds; -
 corpus/json-deep.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/json-deep.bc 4.0 abortive: branch; condition 2 holds; -
+corpus/json-drop-deep.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
+corpus/json-drop-deep.bc 16:36: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/json-drop-deep.bc 409:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/json-drop-deep.bc 412:15: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/json-drop-deep.bc 413:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/json-drop-deep.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/json-drop-deep.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/json-drop-deep.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/json-get.bc flows [0, 1, 2, 3, 4, 5, 4294967295], finaliser; main [1, 2, 3, 4, 5], finaliser
 corpus/json-get.bc 54:15: handle 1: inside [1, 2, 3, 4, 5], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/json-get.bc 55:37: handle 2: inside [1, 2, 3, 4, 5], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
@@ -2458,6 +2484,11 @@ corpus/retry-block.bc 40:11: handle 2: inside []; row []; ops 2.0 abortive; name
 corpus/retry-block.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/retry-block.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/reverse-bytes.bc flows [0, 4294967295]; main []
+corpus/row-site-fresh-handler.bc flows [0, 2, 4294967295]; main [1, 2]
+corpus/row-site-fresh-handler.bc 17:15: handle 1: inside [2]; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/row-site-fresh-handler.bc 12:5: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/row-site-fresh-handler.bc 1.0 stored: -; condition 2 holds; -
+corpus/row-site-fresh-handler.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/sched-a-div.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
 corpus/sched-a-div.bc 91:5: handle 1: inside []; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
 corpus/sched-a-div.bc 1.0 stored: machine; condition 2 holds; -

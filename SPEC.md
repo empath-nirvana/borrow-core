@@ -6888,7 +6888,8 @@ built (*Open*).
 The kernel checks each port as any site: `[handle]` asks the port to be absent from the site's
 outer row, which a fresh name is. The argument's type names the port where the argument is
 written, outside the port's site; a value has no row, so nothing is performed there, and decision
-57's site freshness (R3) reads a provided port as bound.
+57's site freshness (R3) reads a provided port as bound. R3 as a
+rule that sites are lexical is not adopted: effects are dynamically scoped (§76 *Open*, #1052).
 
 ### The argument
 
@@ -10420,9 +10421,9 @@ corpus or a golden.
 
 ### `cancelTo_n`: the in-place cancel-mode unwind (#1002)
 
-A seventh effect primitive, `cancelTo_n k`, cancels the handled region of the nearest `hnd(n, H)`
-in place, in cancel mode, without capturing a continuation, and then runs `k` outside the node
-(§19's step `[cancel-to]`):
+A seventh effect primitive, `cancelTo_n k`, a machine primitive with no typing rule (below), cancels
+the handled region of the nearest `hnd(n, H)` in place, in cancel mode, without capturing a
+continuation, and then runs `k` outside the node (§19's step `[cancel-to]`):
 
     (μ, hnd (n, H) K[cancelTo_n k])  ↦  (μ, ccatch (K†[raise (⊥, none)]) ; k ())     K free of n   [cancel-to]
 
@@ -10437,19 +10438,21 @@ in place, in cancel mode, without capturing a continuation, and then runs `k` ou
 - Determinism and unique decomposition gain the case: `K[cancelTo_n k]` is final until the
   enclosing `hnd(n, _)` reduces it, as `K[perform (n, v)]` is.
 
-**Typing, inside a `[handle-last]` node's region.**
+**No typing rule.** `cancelTo_n` is a machine primitive that no program the checker types
+contains: only the fusion lowering produces it, in a fused `[handle-last]` node. It is justified by
+correspondence, as the erasure laws are, not by `CDerives`:
+- `cancelTo_last_cancel` (`Core/HandleLastErase.lean`, #1043) proves that its step reaches the
+  configuration the `[op]` step plus the clause's `κ.2 ()` reaches. The `[cancel-to]` step builds a
+  `seq` frame where the `[op]` route has an application frame, and both reach `K₀[(λ_. nf z) ()]`
+  at the same memory.
+- The fused form as a whole is justified by P3's whole-run simulation (#1001), which is not yet
+  mechanised.
+- Until it is, the fusion lowering marks its use of `cancelTo` `UNPROVED:`. The mark states the
+  assumption (fused and unfused runs correspond) and what breaks if it fails (cleanup order and the
+  reported error).
 
-    Γ ⊢ k : U(1 ⊸ F_Σ R)        (Σ, R the node's outer row and answer)
-    ──────────────────────────────────────────────────  [cancel-to]
-    Γ ⊢ cancelTo_n k : F_{n:E[fs] ⊕ Σ′} B        (any B)
-
-- It is admitted where the region's row carries the node's name `n`, as an operation of `E` that
-  is cancellable or abortive with cancel row `fs j`.
-- Its cancel obligation, `K`'s finalisers, is covered by that cancel row under `LastFinOK`'s
-  conditions: below `Σ` (D3), not `⊤`, no `Div`.
-- Whatever `k` closes over is held across the cancel: `[let]`'s `hW` at `Row.Cancels`, as for an
-  exit's `z`.
-- No new index: one `CDerives` rule with its compatibility lemma.
+The relation has no stop for `K[cancelTo_n k]`, and the row does not record a node's answer. So a
+typing rule would need a new stop kind and a new row coordinate (#1002's C.2 analysis). Not built.
 
 **The fused form it gives pipe fusion** (P3, #1001):
 
@@ -10462,21 +10465,22 @@ handlers are dead), on the `inr` exit, and on an outer cancel of a continuation 
 the node. It is not exact for a perform by the work of a name that has a live handler inside `K`;
 that case keeps T-B2's condition, `Σ_W`'s names unhandled in `K`.
 
-**Baseline.** `fundamentalC`, `adequacyC`, `adequacyD`, `fundamentalN_all` and `goal791N`, with
-their statements unchanged; every existing compatibility lemma; §13's determinism (`head_det`, with
-the new case); the laws `last_resume_direct`, `last_cancel_direct` (and `_exit`) and
-`last_perform_direct`, unchanged. Every corpus and kernel program keeps its output: no existing term
-changes.
+**Baseline.** No `CDerives` rule and no relation change: `fundamentalC`, `adequacyC`/`adequacyD` and
+`fundamentalN_all`/`goal791N` are untouched, and no checked program contains `cancelTo`. Every
+existing compatibility lemma; §13's determinism (`head_det`, with the new case); the laws
+`last_resume_direct`, `last_cancel_direct` (and `_exit`) and `last_perform_direct`, unchanged. Every
+corpus and kernel program keeps its output: no existing term changes.
 
 **Units.** C.1, the machine (Support): the `Expr` former, `[cancel-to]`, and the cases in
-determinism, decomposition and `StepsOff`/frame. C.2, Core: the rule and its compatibility lemma,
-from the cancel branch's proof (`erwp_kappaC_cancel`, `ewp_handle_or`'s `hTc` at `lastTc`). C.3,
-the chain: the compatibility lemma at `erwpK`/`KW`. The backend: the in-place cancel-mode unwind in
-the interpreters and Backend2. C.1 is built; C.2, C.3 and the backend are not.
+determinism, decomposition and `StepsOff`/frame; built (#1043). C.2 and C.3 are dropped: there is no
+typing rule (#1002). The lowering is backend-foreman's: the in-place cancel-mode unwind in the
+interpreters and Backend2, marked `UNPROVED:` at the fusion site until P3's simulation is
+mechanised.
 
-**Open.** The fused-vs-unfused simulation (P3's whole-run relation), which discharges *a raise or
-cancel crosses the active frame* above; performs re-entered in `K`; a surface or elaborator producer
-for the fused form.
+**Open.** P3's whole-run simulation (#1001), which justifies `cancelTo`'s use in the fused form
+and discharges the fusion site's `UNPROVED:` mark (*Units*), and *a raise or cancel crosses the
+active frame* above; performs re-entered in `K`; a surface or elaborator producer for the fused
+form.
 
 ### Open
 
@@ -12673,7 +12677,8 @@ at every stage of Backend2.
   backend's *linear* shapes, e.g. `A ⊕ X ⊕ (B ⊗ X)`) keep the recursion.
 - **Two recursive positions** (trees, `data-fold-tree`, `data-fold-forest`) keep a frame a level,
   as `fold_imm` does everywhere.
-- **`foldOwnG`** (§61) and the consume of a `μ` (`genConsume`, §12) recurse once per node.
+- **`foldOwnG`** (§61) and the consume of a `μ` (`genConsume`, §12) recurse once per node,
+  except the consume of §77's class, which runs in constant stack.
 
 ---
 
@@ -13337,6 +13342,251 @@ The surface part is not built: until it lands, the surface refuses the operators
 - Narrower unsigned widths (`U16`) and `I8`/`I16`: not asked for.
 - Whether `U8` gains arithmetic now that the grouped operations are admitted per width: not in
   this entry (`U8` keeps §8's "no arithmetic of its own").
+
+---
+
+## 76. Entry 75 — row and site parameters for library definitions (#1051)
+
+The spelling throughout (`[A, row r, site s]`, `..r`, `f[T, row (…), site k]`) is provisional,
+until the syntax bake-off.
+
+### Motivation
+
+Library code is generic over value types (§15, §31), but not over what its values perform. Each of
+these needs one definition used at several rows:
+- a closure returned or kept in data (§30 *Open*, #870, #161 B);
+- a stored generator kept in a record (#783);
+- a task at its body's row (`lib/async.bc`);
+- the pieces of §75's pipe connector, whose types mention the chain's row and a stage's private sites
+  (`docs/new-core/assembly-n.md` §1).
+
+The kernel has no row variable (§24, §30). So, as for types, each use is an instance at closed rows.
+Per-use instances are what generic `fn`s already are (§15's `f__gN`). #766 is the inferred half: its
+instance keys are this entry's.
+
+### Adds
+
+**Declaring.** A definition's brackets take row and site parameters beside its type parameters:
+
+    def name[A, row r, site s] : T = V
+    fn  name[A, row r](x: P, …) -> B with E, ..r = S
+    type N[A, row r, site s] = T
+    data N[A, row r] = …                                (slice 2)
+    handler h[A, row r]: E, A -> R with ..r = { … }     (slice 3)
+
+- `row r` names a row. In a type it is written `..r` inside a row: `F[s.0 cancel A ~> B, ..r] R`,
+  `with Fail[E], ..r`, a cancel row `cancel[..r]`, `pull[..r] A B R` (the surface `pull_Σ`), and
+  `(A => B with ..r)`.
+  - `..r` is *carried*: it is what an argument performs, resolved where the argument was written,
+    as a block's operations are (§30). The callee does not serve it.
+  - An effect name in the same position keeps §33's meaning: *provided*.
+- `site s` names a static name. It is written where a literal site is: `handle_with[s]`,
+  `perform[s.i]`, `abort[s.i]`, and `s.i …` in a row. It is core text only: a surface `fn`'s sites
+  are §18's, by effect name.
+
+**Instantiating.** A use writes `f[T, row (ROW), site k]` in core text, with `ROW` written as
+entries (`4.0 cancel i32 ~> 0, …`). At the surface it writes `f[T, row {Fail[i32], …}]`: effect
+instances, resolved to what serves them at the call, as §38 resolves a row entry.
+- **Slice 1:** every row argument is written. A use of a row template without its row arguments is
+  refused.
+- **Slice 2:** an argument that is not written is read off the call:
+  - by matching parameter types against argument types, with `..r` a tail placeholder (§15's
+    first-order matching, extended at `CTy.eff`);
+  - at the surface, from what the elaboration knows of an argument: a block's sites (§30), a stored
+    generator's row (§15), a copy's own parameter at `r` passed on, or a variable bound to the
+    result of an instance at `r`.
+- **Slice 2:** a row nothing determines is `[]`.
+- The pure use (every row argument `[]`) is the definition as written: no copy, and its name is
+  unchanged.
+- A **private** site is a site parameter that the definition's type does not mention. It is never
+  written. Each instance takes a fresh static name for it, once per instance and shared by its uses,
+  above the effects pass's last site and above every literal site of the program. A **public** site
+  is written or matched.
+
+**An instance** is the template with the arguments substituted (`Frontend/Elab/RowInst.lean`).
+- It is keyed by the template, its stripped type, row and public-site arguments, and the caller's
+  type parameters those arguments mention. Those caller parameters become the instance's own, named
+  `T__p` for each caller parameter `T`, and the use passes the caller's (`app__r2[T__p]`, used as
+  `app__r2[T]`).
+- It is a `def` of its own, named `f__r{k}`, with `k` counting from 1 per template in order of
+  first use. It is placed just before its first user, and templates are dropped.
+- It is made once, and checked by the unchanged checker. A template is checked only when used,
+  through its instances. An error inside an instance is reported with
+  `` in the instance `f__rk` of `f`, used at L:C ``, and one in a pure use with
+  `` in `f`, used at L:C ``.
+- Two templates' instances never share a slot: a private site is fresh, and a written entry equal to
+  one of `..r`'s is one entry (§38). One that differs is refused:
+  `` the row argument of `f` gives `n.i` a second signature ``.
+
+**Errors at the use site.** A wrong row argument is reported where the template is used, and names
+the template:
+`` `f` used at row R, but `f`'s body performs E outside it ``.
+Where it can be, this is checked before the template is instantiated, so that it is not only a
+kernel error deep inside an instance.
+
+**Not provided**, each refused with its own message:
+- polymorphic recursion over rows (below, *Open*);
+- one parameter at two rows that share no instance (rank 2; *Open*), once slice 2 infers rows;
+- a row argument whose entries name lifetimes not in scope at the template. Slice 1 refuses it;
+  slice 2 makes them lifetime parameters of the instance, as §15 does for types;
+- in slice 1, a template's body is core text, and a surface form in it is refused;
+- a literal site at or above 2³², refused by the parser.
+
+### Baseline
+
+- No `CDerives` rule, relation clause, machine step, `CTy` or `VTy` former, or `TExpr` node is
+  added. `fundamentalC`, `adequacyC`, `fundamentalD` and `adequacyD` keep their statements, and
+  every instance is checked under them.
+- Every borrow guarantee holds: an instance is ordinary code, and a closure or stored generator at
+  `r` is linear or `!` as its type says.
+- Every corpus and kernel program keeps its output and counts. A program that writes no row or site
+  parameter elaborates to the same core, byte for byte (`bcc desugar`): its copy keys, site numbers
+  and cancel rows are unchanged.
+- §38's abstraction safety: instantiation never merges slots.
+
+### Programs
+
+**Slice 1** (observed, `bcc interp`):
+
+| Program | What | Answer |
+|---|---|---|
+| `corpus/core-row-generic.bc` | a core-text piece `stopk[A, row r]` over one stage's types, used at `F[4.0 cancel i32 ~> 0]` and at `F[]`; `handle_with[4]` around the use puts `main` at `F 1` | `()`, `live 0` |
+| `corpus/core-site-generic.bc` | a `def` with a private `site s` (`handle_with[s]` inside), used twice, nested; the inner activation's performs go to the inner handler | `i32[2321]`, `live 0` |
+| `corpus/core-row-pipe-stop.bc` | §75's `pipe_stop` at two rows | `i32[42]`, `live 0` |
+| `corpus/core-row-key-tparam.bc` | a use whose arguments mention the caller's type parameter: the instance takes it as its own (`app__r2[T]`) | `(i32[3], inl ())`, `live 0` |
+| `corpus/core-row-capture-global.bc` | a template body naming a global type, used from a generic function with a same-named type parameter: the instance's own parameters take fresh names, so the global is not captured | `(inr (), i32[7])`, `live 0` |
+| `corpus/core-site-fresh-const.bc` | a private site's fresh name lies above a site written only in a constant's type (`unfold[…]`) and above the effects pass's sites | `i32[4]`, `live 0` |
+| `corpus/row-site-fresh-handler.bc` | a private site's fresh name beside a surface handler's site | `i32[4]`, `live 0` |
+
+**Slices 2 and 3** (surface; the answers come with each slice):
+
+| Program | What | Slice |
+|---|---|---|
+| `corpus/row-compose.bc` | `compose[A, B, C, row r]` returns a closure, and `apply_all[row r]` folds a `List` of closures, at the caller's row: at `[]`, and under `with to_result` with a raising callback | 2 |
+| `corpus/row-lexer.bc` | `data Lexer[row r]` keeps a stored generator `U (pull[..r] u8 1 1)` in a field; a lexer counts numbers over a pure source and over one that raises `4` part-way; the source is closed once on both paths | 2 |
+| `corpus/async-raise.bc` | `Task[A, row r]` and `spawn[A, row r]`: a task body that raises, resumed past its `await()`, reaches `to_result` | 3 |
+
+Rejects:
+- `corpus/reject/row-arg-mismatch.bc`: a wrong row argument, reported at the use site:
+  `` `tick` used at row (), but `tick`'s body performs `4.0` outside it ``.
+- `corpus/reject/row-args-unwritten.bc`: unwritten row arguments, refused in slice 1:
+  `` `idk` is used without its arguments: its row and site arguments are written at each use, `idk[…, row (…)]`; reading them off the call is not built in slice 1 (SPEC §76) ``.
+- `corpus/reject/row-poly-rec.bc`: polymorphic recursion over rows, with a message naming the
+  missing kernel row binder.
+- `corpus/reject/row-two-sigs.bc`: a row argument that gives an entry a second signature.
+- `corpus/reject/row-instance-error.bc`: an error inside an instance, reported with the instance and
+  its use.
+
+### Open
+
+- **Refused until the kernel has a row binder.** Each of these needs decision 62's row variables in
+  the kernel, a later kernel unit, or decision 57's renaming lemma. Each is refused with a message
+  that names the missing kernel row binder:
+  - **polymorphic recursion over rows:** a group member calling itself at another row argument, or
+    through a site its callback tunnels;
+  - **rank 2:** one parameter called at two rows that share no instance (§30 *Open*);
+  - **checking a definition once for all rows,** as separate compilation would.
+- Inferring rows by unification rather than per argument (#766 Phase A). This entry's instance key
+  is #766 Phase B's.
+- **Effects are dynamically scoped:** a value that performs at a handler's site may leave it and
+  run under another instance (decision 57's lexical R3 is not adopted; #1052). A narrowed lexical
+  rule is an option recorded in #1058.
+- Row aliases (`row Io = Fail[IoError], Async`), deferred as in #766.
+- The spelling of everything above.
+
+---
+
+## 77. Entry 76 — the new backend: a constant-stack consume of a μ with arrays of X (#1013)
+
+### Motivation
+
+Backend2's consume of a `μ` (`genConsume`, §12) is a function per type that calls itself at each
+recursive position. Where the position is an array of `X` (`Json`'s `Vec[X]` and
+`Map[string, X]`, `lib/json.bc`), the call sits inside the array's loop, not in tail position: one
+native frame and a loop frame a level, about 75 bytes. A `Json` 1000 deep, built by a loop,
+overflows a 64 KiB stack when dropped by that recursion (#1013), and freeing must not be what
+crashes a server on deep valid data. §67's pointer reversal covers a fold with one recursive
+position and a base `1`.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration, semantics or erasure. Backend2's
+conversion of a `consume` node at a `μ` of the class below changes, and the LIR gains one op.
+
+### The fact
+
+The `consume` node's checked type `μX. T` (as today, `consume:type`), read through `toFShape T`
+(`Core/Consume.lean`) and `FoldP.clB`; an array position is a leaf `[Ref X]`, `FoldP.keysIn`'s
+array key at the binder's own variable. The kernel's consume of such a type is `foldOwnG`
+(`Consumable.mu`: the body is in `P`, not in `FShape`).
+
+### The rule
+
+- **The class** (`consumeW?`): every leaf of `toFShape T` is `[Ref X]`, or closed and inert (no
+  `U` inside, so its consume runs no code); at most one recursive position (`X`, `Ref X`, `[Ref X]`)
+  on any path through the `⊕`s; at least one `[Ref X]`. Every other `μ` keeps the recursion.
+- **The lowering** (`genConsumeW`): two functions of tail calls, `consume_up p` (free `p`) and
+  `consume_down c p` (free `c`, then `p`); the consume is `consume_up`. At a node's position:
+
+  | position | `down c p` | `up p` |
+  |---|---|---|
+  | none | consume the node; `up p` | consume the node; return |
+  | `X`, `Ref X` | the child out (the cell freed), the rest consumed; `down child p` | the same; `up child` |
+  | `[Ref X]`, `n ≤ 1` | the slot's child out, the array freed, the rest consumed; `down child p` (`up p` at 0) | the same; `up child` (return at 0) |
+  | `[Ref X]`, `n ≥ 2` | slot 0's child out, `p` put in slot 0, the node rebuilt; `down child node` | the last slot popped (`slotPop`), the node rebuilt; `down child node` |
+
+  The work pending is a value of the type itself, stored in a slot of an array being freed, at the
+  slot's own type. Nothing is allocated.
+- **`slotPop a`** (LIR): slot `n − 1`'s contents moved out and `a` as the family of its first
+  `n − 1` slots; `freeArr` frees the whole object. `Lint` checks its operand is an owned array and
+  its answer that family and the slot's contents (`slotPopBad`); the LIR interpreter's `freeArr`
+  frees the object at its allocated size and requires every slot of it unwritten.
+
+### What it rests on
+
+- **Read:** the consume node's type; `Lint`'s discipline (each variable consumed once) over every
+  step, which only moves owned values between owned places of the same type.
+- **`UNPROVED:`** (`genConsumeW`): that `consume_up` frees exactly what `consumeE (μX. T)` frees,
+  in another order, observing nothing else; the order is unobservable because every leaf is closed
+  and inert. A mismatch shows as a leak or double free in `live`, or a disagreement with the
+  source stage.
+- **Checked at run time only:** that an array is freed with every slot empty (the LIR
+  interpreter's `freeArr`); `Lint` tracks no slot state.
+
+### Programs
+
+`corpus/json-drop-deep.bc`: a `Json` as deep as its argument (2000 in the corpus), arrays and
+objects in turn, dropped; `scripts/compile-native.sh` runs it natively on Backend2 at 10⁶ levels
+in a stack of 16 KiB, answer the depth and `live 0`. Every corpus program keeps its output at
+every Backend2 stage.
+
+Counts: no `allocs`, `indirect`, `copies` or `bounds` change. `loads` and `stores` rise, equally,
+by one slot's words per array of ≥ 2 elements freed by `down` (the stash and its read-back):
+the table below.
+
+| Program | `loads` / `stores` before | after | stashes × slot words |
+|---|---|---|---|
+| `json-parse` | 24025 / 13650 | 24137 / 13762 | 14 × 8 |
+| `json-get` | 937 / 385 | 945 / 393 | 1 × 8 |
+| `data-json-map` | 1283 / 1097 | 1291 / 1105 | 1 × 8 |
+| `data-abbr-root` | 1283 / 1097 | 1291 / 1105 | 1 × 8 |
+| `data-json-map-ser` | 489 / 379 | 497 / 387 | 1 × 8 |
+| `data-json-vec` | 188 / 188 | 192 / 192 | 1 × 4 |
+| `data-rose-vec` | 220 / 220 | 224 / 224 | 1 × 4 |
+| `storage-array` | 55180 / 55180 | 59257 / 59257 | 1359 × 3 |
+
+`storage-array` frees 1365 nodes of 4 children; the 6 on the root's slot-0 path never stash.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the checker, the elaboration, the layouts,
+the old backend or a kernel program.
+
+### Open
+
+- Two recursive positions on one path (binary trees, `X ⊗ [Ref X]`) keep the recursion.
+- Arrays of an `S ≠ X` holding `X` (`array (string ⊗ X)`), and inner `μ` keys.
+- Persistent `!μ` data copied or consumed by the word IR's helpers, which recurse.
 
 ---
 

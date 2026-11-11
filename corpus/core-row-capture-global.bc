@@ -1,0 +1,23 @@
+-- SPEC §76: an instance's own type parameters take fresh names. `tm[A, row r]`'s body names the
+-- global `type T = i32`; used from `g[T]` at `A = T`, its instance is `tm__r1[T__p]`, so the
+-- global `T` in its result is not captured by `g`'s parameter.
+--
+-- Answer: (inr (), i32[7]).
+
+type T = i32
+
+def tm[A, row r] : !U (A -o F[..r] (A * T)) =
+  !thunkv fun (x : A) -> return (x, i32[7])
+
+def g[T] : !U (T -o F[4.0 cancel i32 ~> 0] (T * i32)) =
+  !thunkv fun (x : T) ->
+    f <- return (unbang tm[T, row (4.0 cancel i32 ~> 0)]);
+    (force f) x
+
+main : F ((1 + 1) * i32) =
+  handle_with[4](
+      ((!thunkv fun (v : (1 + 1) * i32) -> return v) : !U ((1 + 1) * i32 -o F ((1 + 1) * i32))),
+      (((!thunkv fun (e : i32) -> return (inl (), e)), ()) : !U (i32 -o F ((1 + 1) * i32)) * 1)) (
+    y : 1 + 1 <- return (inr ());
+    gb <- return (unbang g[1 + 1]);
+    (force gb) y)
