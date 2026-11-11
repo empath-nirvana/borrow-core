@@ -13551,14 +13551,16 @@ definitions (§76). `pipe_handoff` is value-level.
 **The pieces' types.**
 1. **One rest type.**
    - Every stored rest of a stage, at a `next()`, a `yield`, a `stop()` or a forwarded operation,
-     has one type, resumed with the turn's input `1 + (A + K)`.
+     has one type, resumed with the turn's input `(1 + KP) + (A + K)` (`KP`: item 2).
    - The rests cannot be two mutually recursive types: a `nu` type's variable may not occur under an
      inner `U` (§7), and the checker refuses the nested form with
      `` the `nu` variable `XN` occurs under an inner `U` ``.
    - So the states are `Ready`, `AtNext`, `AtYield` (which also holds a rest at a `stop()` or a
      forwarded operation) and `Ended`.
-2. **`stop()` answers `1` in the connector's row.** The stage's `Stream` site gives `stop` the entry
-   `1 ~> 1`, since `stop()` is provided at `K = 1` only (*Restrictions in L1*).
+2. **`stop()` answers `1 + KP` in the connector's row** (Assembly(n) rev 2.6). `KP` is the sum of
+   the payloads of the stage's own abortive operations, `0` with none, and `lib/pipe.bc`'s pieces
+   take it beside `K`. `inl ()` is `K = 1`: `stop()` is provided at `K = 1` only (*Restrictions in
+   L1*). The effect's declaration, `ctl stop() -> K`, is unchanged.
 3. **The connector stores stages unboxed.** The storing clauses take `κ` plainly, a stage's loop has
    `U X` leaves, and `Ready` is the loop itself. Nothing the connector keeps needs to outlive `top`.
 4. **Rows, read off each stage as elaborated.** Each piece takes the stage's rows as arguments, as the
@@ -13614,8 +13616,9 @@ continuation.
   - `Return(r)` from `n−1`: `finish`.
   - `Fwd`: store `AtYield`; run `forward_i` under `close_all`; set the pending input to the answer.
     The stage resumes on the next turn, under `close_others_i`.
-  - `Stop`: store `AtYield`; run `close_up_i`; resume with `()`. If the region kept an error, it is
-    raised at the call of `stop()`.
+  - `Stop`: store `AtYield`; run `close_up_i`, one region, under the `unwind` frame `close_down_i`;
+    resume with the region's outcome as a value, `inl ()` or `inr` the error's payload. The stage
+    raises it at the call of `stop()` (below).
   - `Skip`: loop.
 - A hand-off or a forward is split across two turns, with no operation between them. Theory counts
   this as one model step plus a stutter (I6).
@@ -13627,7 +13630,7 @@ continuation.
 **Assembly(n).** The connector is generated per chain from `lib/pipe.bc`'s pieces (`step_i`,
 `stop_i`, `withStop_i`, `handoff_i`, `forward_i`, `finish`). By Assembly(n) (theory's paper proof, `docs/new-core/assembly-n.md`), for every `n` it is weakly
 bisimilar to P1's flat chain, observing effects, cleanup order and the reported error, under P1b's
-premises (NP-cooperative, NP-masked-cleanup, NP-no-wire-cleanup, A0) and L1's restrictions. So
+premises (NP-cooperative, NP-absorbed-cleanup, NP-no-wire-cleanup, A0) and L1's restrictions. So
 P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain under them.
 - The proof is on paper: a direct simulation by the running stage's position and event, one lemma
   per piece, and the chain-wide invariants (I2) and (I5), which are P1's own.
@@ -13708,7 +13711,25 @@ P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain under them.
     `` `stop()` answers the upstream's residual `K`, which a stage closed at a suspension does not hand back (§15 Open) ``.
   - A cleanup error is the first one, raised at the call of `stop()`. If an error is kept, the order
     is: the upstream's stops, then `s_i`'s unwinding, then the stages downstream of `s_i`; without
-    one, `s_i` resumes.
+    one, `s_i` resumes. The connector does this as follows (Assembly(n) rev 2.6):
+    - **The region.** Handlers of the sites of the upstream's abortive operations sit outside
+      `close_up_i`'s region, around its final re-raise, never inside it. They turn the region's first
+      error into a value: the region answers `inl ()`, or `inr` the error's payload. The first-error
+      keeping among the upstream stops (`[cfin-raise]`) is untouched.
+    - **The elaboration of `stop()`.** At a connector stage, `stop()` is
+      `match stop() { inl () -> () | inr p -> E_j.op_j(e) }`, one arm per summand of `KP`. The raise
+      is elaborated where `stop()` is called, so it reaches the innermost handler of that effect
+      there, and a handler the stage writes around `stop()` catches it. There is exactly one raise,
+      with the same payload and operation as the upstream cleanup's. This is sugar into core terms
+      the kernel checks.
+    - **The error path.** If the stage does not catch the raise, its own frames unwind, and
+      `pipe_step`'s finaliser `close_others_i` stops the downstream; the upstream has already ended.
+    - **The cancel path.** The stage's state is live across the region, so the stop arm is
+      `close_up_i`, reified, under the `unwind` frame `close_down_i`. That frame stops the stage and
+      those downstream of it, downstream-first, and runs only when a cancel from outside lands in
+      the region.
+    - **Payloads own nothing in L1.** Under #1061 the answer owns the payload, and its one raise at
+      the `stop()` consumes it.
 - **The end.** When `s_{n−1}` returns `r`, `finish` stops the others, downstream-first and in one
   region, then answers `r`, or raises the first cleanup error. So `r` is live across a close that
   may raise, and the kernel asks that it be consumable there (A0).
@@ -13731,6 +13752,14 @@ P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain under them.
   So the error reported is the first cleanup error across the closed stages if there is one, and
   otherwise the raiser's: P1b's `sel_ii`.
 - **On an outside cancel,** the kept error is re-raised at the canceller.
+- **A cancel arriving while a cleanup region is running is absorbed** (§19, `[cfin-cancel]`): that
+  region completes with its first error kept, and the remaining stages then stop downstream-first
+  (P1b Thm X). A stop runs once, and a stop that performs a cancellable operation may be cut at it.
+  At `stop()` by `s_i` the order is the rest of the upstream (in `close_up_i`), then `s_i` and the
+  stages downstream of it (`close_down_i`). At the surface this path is not reachable: it needs an
+  upstream cleanup that performs a forwarded operation, which is refused
+  (`corpus/reject/pipe-fin-forwarded.bc`). Its test is the core text
+  `corpus/core-pipe-stop-cancel.bc`.
 - Fusion merges two stages' cancels into one, and the first error across stages is the first within
   the merged stage. So F keeps the reported error.
 
@@ -13749,6 +13778,12 @@ P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain under them.
   (`¬Row.UnrD`). This is the checker's refusal; the elaboration adds a note and does not refuse the
   chain itself. Unit C (#922) turns it into an amber check.
 - **(Row)** (above): the checker's.
+- **A stage that calls `stop()` performs every abortive operation of the stages upstream of it,**
+  since its `stop()` raises their first cleanup error:
+  `` this stage of a stream chain calls `stop()`, and a stage upstream of it may raise `E.op`, which this stage does not perform: `stop()` raises at its call the first error of closing the upstream, so the stage's row holds it (SPEC §75) ``.
+- **The upstream's abortive operations belong to effects whose operations are all abortive** (an
+  effect with resuming operations too would need forwarding clauses around the region):
+  `` this stage of a stream chain calls `stop()`, and a stage upstream of it performs `E`, whose operations are not all abortive: `stop()` raises the first error of closing the upstream, which is provided for an effect whose operations are all abortive in this version (SPEC §75) ``.
 - **One forwarded effect per stage.** A stage that performs two capturable, resumable outer effects
   is refused:
   `` this stage of a stream chain performs `E₁` and `E₂`, two effects the connector forwards; it forwards one per stage in this version (SPEC §75) ``.
@@ -13860,7 +13895,7 @@ cleanup is `r <- (loop {…}) unwind (note(d)); note(d); r`. Every program below
 | `corpus/pipe-close-order.bc` | traces 1 and 2; then a `for` with `break` at the 2nd item over `src(5) >| scale(10)` | `321.123.21(i32[30], (i32[30], i32[30]))` |
 | `corpus/pipe-raise-order.bc` | traces 3–5: the source, the middle and the sink raise `10`, `20`, `30` at item 2 | `132.231.321(inr i32[10], (inr i32[20], inr i32[30]))` |
 | `corpus/pipe-cancel-order.bc` | trace 6: `tm` cancels at a forwarded `wait()`, first while the source (not the last stage) is suspended at it, then at the sink's, which the connector forwards too | `321.321(inr (), inr ())` |
-| `corpus/pipe-first-error.bc` | trace 7; the same cleanups under an outside cancel; a `stop()` whose upstream cleanup raises `10` | `321.321.123(inr i32[20], (inr i32[20], inr i32[10]))` (to be observed) |
+| `corpus/pipe-first-error.bc` | trace 7; the same cleanups under an outside cancel; a `stop()` by the middle whose upstream cleanup raises `10`, then the middle's own cleanup raises `20`, which replaces it on the middle's unwinding; the middle catching the `10` at its `stop()`, yielding it as a value and ending normally | `321.321.123.123(inr i32[20], (inr i32[20], (inr i32[20], inl i32[40])))` |
 | `corpus/pipe-pushback.bc` | lookahead at the surface: `runs` over `1,1,2,2,2,3` (`10x + count`); a last stage reading past `5`; a middle stage stopping with `10` in its slot | `(i32[66], ((i32[6], inl i32[10]), (i32[6], (inl i32[10], ()))))` |
 | `corpus/pipe-rest.bc` | `connect(src(5) >| take_two)`, then `rest >| sum_all`; then `close(rest)` on a fresh chain's rest | `((i32[3], i32[12]), i32[3])` |
 | `corpus/reject/pipe-left-nothing.bc` | `3 >| sum_all` | `` `>|` connects stream stages; its left side yields nothing (no iteration effect in its inferred row) `` |
@@ -13871,6 +13906,9 @@ cleanup is `r <- (loop {…}) unwind (note(d)); note(d); r`. Every program below
 | `corpus/reject/pipe-fin-forwarded.bc` | a stage's cleanup performs the `wait` the connector forwards from it | the cleanup message in *Restrictions in L1* |
 | `corpus/core-pipe-pieces.bc` | `core-pipe-connector`'s three runs with the connector rebuilt over `lib/pipe.bc`'s pieces: hand-written stage loops at the pieces' types, and glue of the state tuple, the running stage with its input, and one `unfold`, calling `pipe_step`, `pipe_with_stop` (each frame list one region at site 5), `pipe_handoff`, `pipe_forward` and `pipe_finish` | `(i32[55], (i32[10], inr i32[3]))` |
 | `corpus/pipe-pieces-step.bc` | `pipe_step` and `pipe_stop` on a source that yields `1..3`: four turns (a yield, the turn's end, a yield, the turn's end), then the stage stopped, and the two items summed. The old backend runs it too | `i32[3]` |
+| `corpus/core-pipe-stop-cancel.bc` | a cancel from outside landing in `close_up_i`'s region at a `stop()`, absorbed: the region completes, then `close_down_i` stops the stage and the downstream | `(i32[99], i32[2143])`, the trace `2143` |
+| `corpus/reject/pipe-stop-missing.bc` | a stage calls `stop()` without performing an upstream stage's abortive operation | the first `stop()` message in *Restrictions in L1* |
+| `corpus/reject/pipe-stop-mixed.bc` | an upstream stage performs an effect whose operations are not all abortive | the second `stop()` message in *Restrictions in L1* |
 | `corpus/reject/pipe-fwd-two.bc` | a stage that performs `Wait` and `Ping` | `` this stage of a stream chain performs `Wait` and `Ping`, two effects the connector forwards; it forwards one per stage in this version (SPEC §75) `` |
 | `corpus/reject/pipe-lend-observation.bc` | a chain held across a per-observation lend | `` the loop's state would hold a stream chain on the pipe connector, of type `U (delay i32)`, across the per-turn lend of `t`: a turn's next state is boxed at `top`, which a thunk or a borrow does not outlive (not provided; a stream chain is not kept across a lend per observation, SPEC §75 *Open*, #1082) `` |
 
@@ -13930,7 +13968,7 @@ does not support; they carry `-- check: old-backend-refuses`.
   - a handler whose clauses use the lent place;
   - two lends;
   - reborrowed `mut` places.
-- **The unfused connector's code size and stop-path cost (#1096).** The glue is linear in the number
+- **The unfused connector's code size and stop-path cost (#1096, parked).** The glue is linear in the number
   of stages `n`, and so is its LIR function count (+396 per stage without cleanups, +434 with an
   `unwind` cleanup per stage). Its WAT size is not: its second difference is about 0.22 MB (0.38 MB
   with cleanups). The connector's state is a plain tuple of the stages' states, and Backend2's
