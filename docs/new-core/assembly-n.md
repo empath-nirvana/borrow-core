@@ -1,5 +1,7 @@
 # Assembly(n): the generated connector is the paper model's flat n-chain (L1, #920)
 
+**Superseded for pipes by §75's nested wires (#1103); see `docs/new-core/pipes-bridge.md`.**
+
 Issue: borrow-core #920 (pipes unit L1). Track: theory-foreman. Date: 2026-11-10, rev 2.2 (after one independent review, §7). **Kernel target: none.** Paper proof; mechanisation is out of scope. Cited by SPEC §75.
 
 Claims about the paper model cite P1 or P1b, theory's notes on the paper model, which are not in this repository (as in `scope-pipes.md`). The one P1b definition this proof changed, `sel_ii`, is restated in §2.
