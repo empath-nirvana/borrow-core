@@ -341,6 +341,7 @@ corpus/effects-sum-gen.bc 1.0 cancellable abortive: branch; agree
 corpus/effects-tunnel.bc 1.0 cancellable abortive: -; agree
 corpus/effects-tunnel.bc 3.0 cancellable abortive: -; agree
 corpus/effects-tunnel.bc 2.0 cancellable abortive: branch; agree
+corpus/evidence-rebind.bc 1.0 cancellable tail: machine: the handlers of the name have 3 clauses for it; disagree
 corpus/filler-mu.bc 1.0 cancellable abortive: -; agree
 corpus/fin-block-finaliser.bc 2.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/fin-block-finaliser.bc 1.0 cancellable abortive: branch; agree
@@ -703,6 +704,8 @@ corpus/list-capability.bc 1.0 cancellable abortive: branch; agree
 corpus/list-generic.bc 1.0 cancellable abortive: branch; agree
 corpus/lit-lend-raise.bc 1.0 cancellable abortive: branch; agree
 corpus/lit-lend-raise.bc 2.0 cancellable abortive: branch; agree
+corpus/loop-captured-bang.bc 1.0 cancellable abortive: branch; agree
+corpus/loop-captured-bang.bc 2.0 must-resume tail: machine: the clause captures values; disagree
 corpus/loop-handler-binder.bc 1.0 cancellable abortive: branch; agree
 corpus/loop-handler-binder.bc 3.0 cancellable abortive: branch; agree
 corpus/loop-handler-binder.bc 2.0 cancellable abortive: branch; agree

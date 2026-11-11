@@ -884,6 +884,9 @@ corpus/effects-tunnel.bc 14:20: handle 2: inside [3]; row []; ops 2.0 abortive; 
 corpus/effects-tunnel.bc 12:37: handle 3: inside []; row [2]; ops 3.0 abortive; names 3.0 []; condition 2 holds
 corpus/effects-tunnel.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/effects-tunnel.bc 3.0 abortive: -; condition 2 holds; -
+corpus/evidence-rebind.bc flows [0, 1, 4294967295]; main [1]
+corpus/evidence-rebind.bc 16:61: handle 1: inside []; row []; ops 1.0 tail; names 1.0 row; condition 2 holds
+corpus/evidence-rebind.bc 1.0 tail: machine; condition 2 holds; -
 corpus/family-swap.bc flows [0, 4294967295]; main []
 corpus/fields.bc flows [0, 4294967295]; main []
 corpus/filler-mu.bc flows [0, 4294967295]; main [1]
@@ -2012,6 +2015,11 @@ corpus/lit-lend-raise.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/lit-lend-raise.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/literal-array-written.bc flows [0, 4294967295]; main []
 corpus/load-for-linear.bc flows [0, 4294967295]; main []
+corpus/loop-captured-bang.bc flows [0, 2, 4294967295]; main [1, 2]
+corpus/loop-captured-bang.bc 25:3: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/loop-captured-bang.bc 25:33: handle 2: inside []; row [1]; ops 2.0 tail; names 2.0 row; condition 2 holds
+corpus/loop-captured-bang.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/loop-captured-bang.bc 2.0 tail: machine; condition 2 holds; -
 corpus/loop-handler-binder.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
 corpus/loop-handler-binder.bc 21:13: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/loop-handler-binder.bc 409:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
