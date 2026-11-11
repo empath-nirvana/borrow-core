@@ -2422,6 +2422,15 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
         throw ⟨s.span, s!"this stage of a stream chain uses the capability of `{c.eff}`: a stage " ++
           "is held by the connector between its turns, with the capability: not provided"⟩
       let M ← trC k cxS [] true (.ret s.span call)
+      -- A cleanup of the stage that performs the operation it forwards: that operation's cancel
+      -- row would hold itself, which only `⊤` does (SPEC §27 *Open*, §75). The instances of the
+      -- pieces refuse this already (`RowInst`: "gives `n.i` a second signature"); this message
+      -- only replaces that one, and adds no restriction.
+      if let some (_, _) := fwd then
+        if (Fins.Row.ents (env.fins.finOf f 0)).any (·.1 == f) then
+          throw ⟨s.span, s!"a cleanup of this stage of a stream chain performs " ++
+            s!"`{(fwdEffs.getLast?).getD "the operation"}`, which the connector forwards: its cancel " ++
+            "row would hold itself, which only `top` does (SPEC §75, §27 *Open*)"⟩
       let outF : Option (Nat × String × Row) := if !last then none else forOut.map fun (site, w) =>
         (site.n, w, env.fins.finOf site.n 0)
       out := out ++ [{ y, s := sn, f, A, K, B, fwd, out := outF, rest := rest && last }]

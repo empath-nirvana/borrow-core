@@ -1,0 +1,27 @@
+-- expect: lib/pipe.bc:224:5: `st`, of type `U (nu X. F[6.0 cancel 1 ~> i32 + 1, 6.1 cancel 1 ~> 1] (i32 + U X) & F[6.0 cancel 1 ~> i32 + 1, 6.1 cancel 1 ~> 1] 1) + U (nu X. (1 + i32 + 1 -o F ((0 * U X + i32 + U (nu X. F[6.0 cancel 1 ~> i32 + 1, 6.1 cancel 1 ~> 1] (i32 + U X) & F[6.0 cancel 1 ~> i32 + 1, 6.1 cancel 1 ~> 1] 1)) + (U X + U X) + 0 * U X)) & F 1) + U (nu X. (1 + i32 + 1 -o F ((0 * U X + i32 + U (nu X. F[6.0 cancel 1 ~> i32 + 1, 6.1 cancel 1 ~> 1] (i32 + U X) & F[6.0 cancel 1 ~> i32 + 1, 6.1 cancel 1 ~> 1] 1)) + (U X + U X) + 0 * U X)) & F 1) + i32`, is used after an operation of the row `[8.0 cancel[1.0 unr 1 ~> i32] 1 ~> 1, 1.0 unr 1 ~> i32]`, which may resume more than once: it must be a `!` type
+-- expect|   in the instance `pipe_with_stop__r1` of `pipe_with_stop`, used at 27:32
+-- expect|   note: `Ask.ask` resumes any number of times (`multi ctl`), so a stage of a stream chain cannot perform it: the connector stops its stages around it (SPEC §75)
+-- SPEC §75, Part B, *Restrictions in L1*: a stage of a stream chain that performs a `multi ctl`
+-- operation is refused by the checker inside the connector's frames (`pipe_with_stop`'s `[then]`,
+-- `¬Row.UnrD`); the elaboration attaches a note naming the operation. The source performs `ask`.
+
+include pipe
+
+effect Ask { multi ctl ask() -> i32 }
+
+handler give[A]: Ask, A -> A = {
+  return(x) = x;
+  ask(k) = k(1)
+}
+
+fn src(n: i32) -> 1 with Yield[i32], Ask =
+  yield(ask());
+  ()
+
+fn sum_all() -> i32 with Stream[i32, 1] =
+  let mut s = 0;
+  let mut go = true;
+  while go { match next() { inl v -> s = s + v | inr u -> go = false } };
+  s
+
+main -> i32 = with give[i32] { src(3) >| sum_all }

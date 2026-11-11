@@ -298,7 +298,12 @@ def checkElaborated (el : Frontend.Elab.Elaborated) (wrapped : Bool) : Except Er
               | some (x, f, sp) =>
                 -- The pure use is the template as written, under its own name.
                 let what := if x == f then s!"`{f}`" else s!"the instance `{x}` of `{f}`"
-                { e with msg := s!"{e.msg}\n  in {what}, used at {sp.start.render}" }
+                -- A note the elaboration left for code used there (`Origin.note`).  [spec §75]
+                let notes := el.origins.filterMap fun ((s, o) : Span × Frontend.Sugar.Origin) =>
+                  match o with
+                  | .note m => if s == sp then some s!"\n  note: {m}" else none
+                  | _ => none
+                { e with msg := s!"{e.msg}\n  in {what}, used at {sp.start.render}{String.join notes}" }
               | none => e)
           pure ({ acc with lines := if k < lib then acc.lines else acc.lines ++ [line],
                            main := m <|> acc.main }, ts ++ t)

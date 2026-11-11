@@ -1,0 +1,29 @@
+-- expect: 29:34: a cleanup of this stage of a stream chain performs `Wait`, which the connector forwards: its cancel row would hold itself, which only `top` does (SPEC §75, §27 *Open*)
+-- SPEC §75, Part B, *Restrictions in L1*: a cleanup of a stage that performs the operation the
+-- connector forwards from that stage. That operation's cancel row would hold itself, which only `top`
+-- does (§27 *Open*). The pieces' instances refuse it already; this message replaces theirs and adds
+-- no restriction. The source's cleanup performs `wait`, which is forwarded.
+
+include pipe
+
+effect Wait { ctl wait() }
+
+handler tm[A]: Wait, A -> A + 1 = {
+  return(x) = inl x;
+  wait(k) = inr ()
+}
+
+fn src(n: i32) -> 1 with Yield[i32], Wait =
+  x <- (
+    let mut i = 1;
+    while i <= n { yield(i); i = i + 1 };
+    ()) unwind (wait());
+  x
+
+fn sum_all() -> i32 with Stream[i32, 1] =
+  let mut s = 0;
+  let mut go = true;
+  while go { match next() { inl v -> s = s + v | inr u -> go = false } };
+  s
+
+main -> i32 + 1 = with tm[i32] { src(3) >| sum_all }
