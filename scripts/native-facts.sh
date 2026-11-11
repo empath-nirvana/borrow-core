@@ -49,7 +49,7 @@ statusOf() {
 }
 
 program() {
-  local f=$1 w=${PAR_TMP:-$tmp} base in err rc fns fn left old new
+  local f=$1 w=${PAR_TMP:-$tmp} base in err rc fns fn left old new sigs
   grep -q '^-- check: parse-only' "$f" && return 0
   grep -q '^main' "$f" || return 0
   base=${f%.bc}
@@ -105,8 +105,8 @@ program() {
   esac
   if [ -n "$pair" ]; then
     "$bcc" lir "$f" > "$w/lir" 2>/dev/null || { echo "$f: bcc lir failed"; return 1; }
-    if ! grep -E "^f[0-9]+ $pair\(" "$w/lir" | grep -q "mut i32" ||
-       ! grep -E "^f[0-9]+ $pair\(" "$w/lir" | grep -q "ref i32"; then
+    sigs=$(grep -E "^f[0-9]+ $pair\(" "$w/lir" || true)
+    if ! grep -q "mut i32" <<< "$sigs" || ! grep -q "ref i32" <<< "$sigs"; then
       echo "$f: the regression's \`$pair\` no longer takes a mut borrow beside its owner"; return 1
     fi
     if grep -q "($pair)\$" "$w/facted"; then echo "$f: \`$pair\` has a borrow fact"; return 1; fi

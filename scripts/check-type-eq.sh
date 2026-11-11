@@ -37,7 +37,7 @@ check() {
   awk -F'\t' '$1 != "#scanned" {print $1 "\t" $2}' "$tmp/census" > "$tmp/hits"
   local bad=0 used=""
   while IFS=$'\t' read -r mod decl; do
-    if printf '%s\n' "$allow" | grep -qxF "$decl"; then used="$used$decl"$'\n'
+    if grep -qxF "$decl" <<< "$allow"; then used="$used$decl"$'\n'
     else echo "  $decl ($mod): compares kernel types outside the helper"; bad=1
     fi
   done < "$tmp/hits"
