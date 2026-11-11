@@ -1,6 +1,6 @@
 -- SPEC §71 in the core text: one function that performs a control operation `2.0 lin 1 ~> i32`
--- (an `ask`), run under three live instances of one handler site, two of them nested, each
--- capturing a different `i32`. The clause resumes `k` in tail position with `w`, a persistent
+-- (an `ask`), run under three instances of one handler site, each capturing a different `i32`,
+-- at most two live at once: one nested inside the other. The clause resumes `k` in tail position with `w`, a persistent
 -- value of the handler's context (`[handle]`'s `DeadP`) and not a closure: a direct call with `w`
 -- passed as the name's evidence, and each `perform` reaches the innermost instance's `w` (the
 -- kernel's dynamic rebinding). `with_v` handles `f`'s `ask` with `w`; `get` asks; `nest` asks,

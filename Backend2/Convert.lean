@@ -3144,6 +3144,11 @@ def genMerges : CM Unit := do
     let mut fns : Array Nat := #[]
     for (f₀, j) in c₀.fns.zipIdx do
       let some d₀ := (← get).fns[f₀]? | throw "LIR: a task variant's function"
+      -- A task variant's code takes no evidence: its code is a stored site's answer, made in a
+      -- machine, whose row holds no evidence name (`evNames`) [spec §71].
+      if d₀.evs != 0 then
+        let n := ((evParams (.thunk c₀.ty) (c₀.kind == .lam)).head?.map (·.1)).getD 0
+        throw (evInternal n "a task variant's code")
       let fi ← reserveFn "task"
       let st ← fresh stTy
       let a? ← match c₀.kind, d₀.params.getLast? with
@@ -3335,9 +3340,12 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     -- place, and passed at every call of a code whose row holds the name (`withEv`, `LCTy.ev`);
     -- a code at such a row runs only under a frame of the name, by the row's typing; and no
     -- machine, whose resumption could run under another frame, takes evidence (`outInfo?`).
-    -- `evConfined` keeps evidence out of every value, so none outlives its node. If it fails, the
-    -- right clause runs on another activation's captures: a wrong answer, never a type error or a
-    -- freed value. Look for a call that does not pass evidence, or a node that binds another's.
+    -- `evConfined` keeps a function's evidence parameters out of every value it builds; the
+    -- values a node binds as evidence are its own persistent captures, owned by the node and
+    -- consumed after its handled computation, so a call never receives evidence from a node no
+    -- longer running. If it fails, the right clause runs on another activation's captures: a
+    -- wrong answer, never a type error or a freed value. Look for a call that does not pass
+    -- evidence, or a node that binds another's.
     let fd := (← get).fd
     let evIn ← if fd.contains o.n then evArgs ((fd.getD o.n []).map (o.n, ·)) else pure []
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => do

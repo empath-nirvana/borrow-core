@@ -304,11 +304,18 @@ def evExcludedAt (cur : List UInt32) (ms : MachSet) (j : Jdg) (helper : Bool) : 
       | _ => []
     here ++ comp
 
-/-- A `handle` node of `n` at the outer row `S` excludes `n`  `[spec §71]`: its clause's work runs
-at `S`, and the first cut builds it as no machine and with no evidence of `S`. -/
-def evExcludedNode (cur : List UInt32) (ms : MachSet) (n : UInt32) (S : Row) : Bool :=
+/-- The names a `handle` node of `n` at the outer row `S` excludes  `[spec §71]`: `n`, when its
+clause's work, which runs at `S`, would be a machine or need evidence of `S` (the first cut builds
+neither); and, when any of the node's clauses is called directly (`direct`, `closed` or `env`),
+the evidence names `S` holds, since every direct work runs at `S` with no evidence in scope. -/
+def evExcludedNode (cur : List UInt32) (ms : MachSet) (n : UInt32) (S : Row) (direct : Bool) :
+    List UInt32 :=
   let outer := CTy.effOf S .unit
-  cur.contains n && (machRow ms outer || outer.effNames.any cur.contains)
+  let own := if cur.contains n && (machRow ms outer || outer.effNames.any cur.contains)
+    then [n] else []
+  -- Any direct work runs at `S` with no evidence in scope: `S`'s evidence names are excluded.
+  let outerNames := if direct then outer.effNames.filter cur.contains else []
+  own ++ outerNames
 
 /-- The judgments of the nodes of a typed term, within the depth `fuel`, each with whether the node
 is a constant whose expansion is a generated helper calling a closure argument (`evExcludedAt`). -/
@@ -329,7 +336,8 @@ once. A name is excluded, from the checked types, rows and nodes, when its evide
   its clause's work would be a machine);
 - a `&` or `ν` component at a row holding the name (`evExcludedAt`);
 - a generated helper other than `bounded_fix`'s loop (`evExcludedAt`);
-- a work whose outer row holds an evidence name (`evExcludedNode`);
+- a work, of any name, whose outer row holds an evidence name (`evExcludedNode`): the outer
+  row's evidence names are excluded;
 - a captured value whose type has no LIR type.
 Excluding a name makes its `env` operations machine operations, which may exclude another: the
 exclusions are taken to a fixed point, from all `env` names down. A call site with no evidence in
@@ -345,10 +353,12 @@ def evNames (c : Frontend.Check.Checked) (kinds : Std.HashMap UInt32 (List Direc
   let jdgs := jdgsOf Frontend.Check.copiesFuel c.t
   let mut cur := all
   for _ in [0:all.length + 1] do
-    let ms := machineOps c (directOf kinds (all.filter (!cur.contains ·)))
+    let dir := directOf kinds (all.filter (!cur.contains ·))
+    let ms := machineOps c dir
     let mut bad : List UInt32 := jdgs.flatMap fun (j, h) => evExcludedAt cur ms j h
     for g in nodes do
-      if evExcludedNode cur ms g.n g.S then bad := g.n :: bad
+      let direct := (dir.getD g.n []).any id
+      bad := evExcludedNode cur ms g.n g.S direct ++ bad
     for (n, sl) in envs.toList do
       let tys : Except String (List LTy) := sl.mapM fun (p : Nat × VTy) => ofV ms {} p.2
       if cur.contains n && tys.toOption.isNone then bad := n :: bad
@@ -931,9 +941,13 @@ def ms2 : MachSet := ({} : MachSet).insert (2, 0)
 #guard evExcludedAt [5] {} (.val (.thunk (.arr (.thunk (.arr .unit (rowT [(5, 0)]))) (.ret .unit)))) true == [5]
 #guard evExcludedAt [5] {} (.val (.thunk (.arr (.thunk (.arr .unit (rowT [(5, 0)]))) (.ret .unit)))) false == []
 -- A work whose outer row holds an evidence name, or a machine operation; and one that holds neither.
-#guard evExcludedNode [5, 6] {} 5 [{ n := 6, i := 0, q := .lin, A := .unit, B := .unit }]
-#guard evExcludedNode [5] ms2 5 [{ n := 2, i := 0, q := .lin, A := .unit, B := .unit }]
-#guard !evExcludedNode [5] ms2 5 [{ n := 3, i := 0, q := .lin, A := .unit, B := .unit }]
+#guard (evExcludedNode [5, 6] {} 5 [{ n := 6, i := 0, q := .lin, A := .unit, B := .unit }] true).contains 5
+#guard evExcludedNode [5] ms2 5 [{ n := 2, i := 0, q := .lin, A := .unit, B := .unit }] false == [5]
+#guard evExcludedNode [5] ms2 5 [{ n := 3, i := 0, q := .lin, A := .unit, B := .unit }] true == []
+-- A direct work of another name, 7, at an outer row holding the evidence name 5: 5 is excluded;
+-- with no direct clause at the node, it is not.
+#guard evExcludedNode [5] {} 7 [{ n := 5, i := 0, q := .lin, A := .unit, B := .unit }] true == [5]
+#guard evExcludedNode [5] {} 7 [{ n := 5, i := 0, q := .lin, A := .unit, B := .unit }] false == []
 
 /-- The evidence names of a program (`evNames` on its checked `main`), and its `env` names. -/
 def evNamesOf (src : String) : Option (List UInt32 × List UInt32) := do
