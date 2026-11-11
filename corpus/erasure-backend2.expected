@@ -181,6 +181,10 @@ json-drop-deep erased handles 4 performs 0 raises 7 left 0 0
 json-parse erased handles 16 performs 0 raises 46 left 0 0
 json-deep erased handles 12 performs 0 raises 42 left 0 0
 json-get erased handles 12 performs 0 raises 42 left 0 0
+mut-after-unwind-exits erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-for-gen erased handles 0 performs 0 raises 0 machines 2 suspends 1 left 0 0
+mut-after-unwind-loop-in-n erased handles 0 performs 0 raises 0 left 0 0
+mut-cancel-unwind-region erased handles 1 performs 0 raises 0 machines 1 suspends 1 left 0 0
 parse-i64 erased handles 16 performs 0 raises 5 left 0 0
 kernel-cancel-now erased handles 0 performs 0 raises 0 machines 1 suspends 1 left 0 0
 kernel-deep-gen-plain erased handles 1 performs 1 raises 0 machines 1 suspends 2 left 0 0

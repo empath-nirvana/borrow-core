@@ -204,8 +204,11 @@ def Comp.level : Comp → Nat
 /-- A newline followed by `k` spaces. -/
 def nl (k : Nat) : String := "\n" ++ "".pushn ' ' k
 
-/-- A loop's label as written before it, `'ℓ: `, or nothing. -/
-def lbl : Option Ident → String
+/-- What is written before a loop: what its body writes, `writes(x, …) ` (`LoopInfo.writes`), and
+its label, `'ℓ: `.  `[spec §41]` -/
+def lbl (ℓ : LoopInfo) : String :=
+  (if ℓ.writes.isEmpty then "" else "writes(" ++ ", ".intercalate (ℓ.writes.map (·.name)) ++ ") ") ++
+  match ℓ.label with
   | some ℓ => "'" ++ ℓ.name ++ ": "
   | none => ""
 
