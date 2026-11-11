@@ -36,6 +36,7 @@ families=(
   "drop a sum's merged arm|merges arm .*, its arms give"
   "give a sum another tag|has [0-9]+ tags, its arms give"
   "unpack a packed sum|packed, its arms give"
+  "lay a capability's host-typed contents as an untyped word|is not a layout of the host type"
   "remove a code's class|'s class is none"
   "merge two classes of one shape and different widths|has width [0-9]+, its children give"
   "change a class's width|has width [0-9]+, its children give"

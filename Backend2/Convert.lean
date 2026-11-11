@@ -2661,7 +2661,8 @@ descriptor (the clock's: the time `0`). `mk_input` and `mk_args` consume their a
 (persistent): the host's stream is the platform's standard input or arguments, whatever bytes the
 term passes. `mk_output` holds its argument, the descriptor. Each call allocates its own cell, as
 the model's `alloc` does, so the extern's contract (`mkInput_meets`, …) holds at every call, with
-no condition on the run. -/
+no condition on the run. That `Output`'s cell holds only the descriptor is trusted, and its layout
+is read from the checked extern types: `Driver.hostRepOf`'s TRUSTED note.  `[spec §11]` -/
 def mkClosOf (s : CapStream) (B : VTy) (t : LTy) : CM Tm := do
   let .thunk (.arr a (.ret b)) := t.peel | throw s!"LIR: a harness make at {t}"
   let cls ← classOf B
@@ -2686,7 +2687,8 @@ The cell of `ref input` (and `ref args`) holds, in the model, a byte list; in th
 stream's descriptor, an `i32`, which `free` answers here and the host discards. That is the host's
 representation of the cell, inside the trusted extern (`ExternsMeet`), not a value of the checked
 term: the term passes the capability `ref input`, whose contract the host meets, and gets back the
-byte list. -/
+byte list. `take_output`'s empty list (each byte already sent) is the trusted refinement of
+`Driver.hostRepOf`'s TRUSTED note.  `[spec §11]` -/
 def takeClosOf (s : CapStream) (t : LTy) : CM Tm := do
   let .thunk (.arr a (.ret b)) := t.peel | throw s!"LIR: a harness take at {t}"
   mkClos "extern" [] (.arr a (.ret b)) (some a) b fun ctx => do
