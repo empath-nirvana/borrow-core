@@ -188,6 +188,7 @@ kernel-poly-id 0 0 0 0 0 0
 kernel-recursive-yield 20 0 0 630 630 0
 kernel-two-callees 0 5 0 0 0 0
 kernel-two-callees-tail 0 1 0 0 0 0
+mut-swap 8 0 0 48 39 23
 parse-i64 12 0 0 687 313 270
 kernel-cancel-now 0 0 0 0 0 0
 kernel-deep-gen-plain 0 0 0 0 0 0
