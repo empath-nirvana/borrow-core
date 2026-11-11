@@ -794,6 +794,7 @@ theorem cN_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' �
   | .nuSys _ _ C, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
       rename_i C'
+      obtain ⟨rfl, rfl, h⟩ := h
       have hO : C.NuShape ↔ C'.NuShape := CTyEq.nuShape_iff h
       have hB : C.NuShape → ∀ R : CandN, cBN (ℍ := ℍ) (.thunk (.nu C)) R C δ =
           cBN (ℍ := ℍ) (.thunk (.nu C')) R C' δ' := fun hC R => by
