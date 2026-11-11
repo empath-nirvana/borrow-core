@@ -28,8 +28,7 @@ namespace Frontend.Elab.Connector
 `A` and end `K` of the wire into it, the items `B` of the wire out of it, its result `R`, its
 forwarded operation's argument `OA`; its rows (SPEC §75, `lib/pipe.bc`): `sg` what it performs
 besides its sites, `cy`, `cn`, `cp`, `cf` the cancel rows of its four operations, `lr`, `lc` its
-loop's turn and close rows; its sites; and its state before it runs, a deferred loop boxed at
-`top` (`ready`).  `[spec §75]` -/
+loop's turn and close rows; its sites; and its state before it runs, its loop (`ready`).  `[spec §75]` -/
 structure Stage where
   A : String
   K : String
@@ -107,8 +106,8 @@ def Stage.evTy (st : Stage) : String := s!"PipeEv[{st.args}]"
 /-- The stage's rest type, `PipeRest`. -/
 def Stage.restTy (st : Stage) : String := s!"PipeRest[{st.args}]"
 
-/-- The stage's loop boxed at `top`, as a state's `Ready`. -/
-def Stage.loopTy (st : Stage) : String := s!"box top PipeLoop[{st.R}, row ({st.lr}), row ({st.lc})]"
+/-- The stage's loop, as a state's `Ready`. -/
+def Stage.loopTy (st : Stage) : String := s!"PipeLoop[{st.R}, row ({st.lr}), row ({st.lc})]"
 
 /-- The input of a turn of the stage, `1 + (A + K)`. -/
 def Stage.inTy (st : Stage) : String := s!"1 + ({st.A} + {st.K})"
@@ -234,9 +233,9 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
         -- is never run again, and is left a loop that runs nothing (`pipe_idle`).
         let idle (j : Nat) : String :=
           let sj := ss[j]!
-          let body := s!"nu X. {fAt sj.lr s!"({sj.R}) + box top U X"} & {fAt sj.lc "1"}"
+          let body := s!"nu X. {fAt sj.lr s!"({sj.R}) + U X"} & {fAt sj.lc "1"}"
           let mk := s!"io_ig{j}_{sfx} <- return (unbang (unfold[{body}, 1] pipe_idle[{sj.R}, row ({sj.lr}), row ({sj.lc})])); io_iz{j}_{sfx} <- return ()"
-          s!"(inl (boxed[top] (thunkv nu_in < {mk}; (nu_out (force io_ig{j}_{sfx} io_iz{j}_{sfx})).1, {mk}; (nu_out (force io_ig{j}_{sfx} io_iz{j}_{sfx})).2 >)) : {sj.stTy})"
+          s!"(inl (thunkv nu_in < {mk}; (nu_out (force io_ig{j}_{sfx} io_iz{j}_{sfx})).1, {mk}; (nu_out (force io_ig{j}_{sfx} io_iz{j}_{sfx})).2 >) : {sj.stTy})"
         let ended := (List.range n).map fun j =>
           if j + 1 < i then idle j else if j + 1 == i then s!"(inr (inr (inr ())) : {ss[j]!.stTy})"
           else if j == i then t else sv j

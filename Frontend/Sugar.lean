@@ -1100,10 +1100,6 @@ structure MCx where
   pre : Bool := false
   /-- The borrow lent per turn, when the machine takes one.  `[spec §75]` -/
   turn : Option MTurn := none
-  /-- Each next state is boxed at `top`, with no borrow lent per turn: the machine of a stage of the
-  pipe connector, which keeps the stage between its turns (SPEC §75 Part B). A component of a state
-  not shown to outlive `top` is refused by `boxBad`.  `[spec §75]` -/
-  boxTop : Option (String → String → CVTy → Option String) := none
 
 /-- The `F_Σ` layers of a computation type, its cancel rows' at every depth included.
 `[spec §15, §27]` -/
@@ -1142,11 +1138,7 @@ def MCx.fSrc (m : MCx) (A : String) : String :=
 
 /-- The machine's observations perform operations, or take a borrow per turn: a move forward runs
 in the same observation, and a point's function is a computation.  `[spec §19, §75]` -/
-def MCx.atRow (m : MCx) : Bool := !m.row.isEmpty || m.turn.isSome || m.boxTop.isSome
-
-/-- Each next state is boxed at `top`: with a borrow lent per turn, or at a connector's stage.
-`[spec §75]` -/
-def MCx.boxes (m : MCx) : Bool := m.turn.isSome || m.boxTop.isSome
+def MCx.atRow (m : MCx) : Bool := !m.row.isEmpty || m.turn.isSome
 
 structure MSt where
   pts : Array MPoint := #[]
@@ -1240,7 +1232,7 @@ def mInj (sp : Span) (id : Nat) (vars : List (String × CVTy)) : Val :=
 /-- A skip to the state `s`; with a borrow lent per turn, the state boxed at `⊤` (`boxI`), which the
 kernel admits when no component holds the borrow.  `[spec §75]` -/
 def MCx.skip (m : MCx) (sp : Span) (s : Val) : Val :=
-  if m.boxes then .inr sp (.boxed sp (.top sp) s) else .inr sp s
+  if m.turn.isSome then .inr sp (.boxed sp (.top sp) s) else .inr sp s
 
 /-- A move to point `q`, from the code of `m`. -/
 def mGoto (m : MCx) (sp : Span) (q : Nat) : MM Comp := do
@@ -1624,21 +1616,18 @@ def mAssemble (m : MCx) (sp : Span) (st : MSt) (s0 : Option Val) (pre : Option C
       if p.id == 0 && s0.isSome then continue
       for (y, T) in p.vars do
         if let some why := t.bad p.what y T then throw ⟨p.sp, why⟩
-  if let some bad := m.boxTop then
-    for p in sums do
-      if p.id == 0 && s0.isSome then continue
-      for (y, T) in p.vars do
-        if let some why := bad p.what y T then throw ⟨p.sp, why⟩
-  let Obs := if m.boxes then s!"({m.pp m.L.B}) + (box top ({S}))"
-    else s!"({m.pp m.L.B}) + ({S})"
+  let Obs := match m.turn with
+    | some _ => s!"({m.pp m.L.B}) + (box top ({S}))"
+    | none => s!"({m.pp m.L.B}) + ({S})"
   let Fs := m.fSrc
   -- A turn that takes the borrow lent per turn: `∀'l < b. mut 'l A ⊸ C`.
   let turnTy (C : String) : String := match m.turn with
     | some t => s!"(forall '{t.life} < {t.dom}. {t.ty} -o {C})"
     | none => C
-  let Cod := if m.boxes then s!"nu X. {turnTy (Fs s!"({m.pp m.L.B}) + box top U X")} & {Fs (m.pp m.L.R)}"
-    else if m.row.isEmpty then s!"loop ({m.pp m.L.B}) ({m.pp m.L.R})"
-    else s!"nu X. {Fs s!"({m.pp m.L.B}) + U X"} & {Fs (m.pp m.L.R)}"
+  let Cod := match m.turn with
+    | some _ => s!"nu X. {turnTy (Fs s!"({m.pp m.L.B}) + box top U X")} & {Fs (m.pp m.L.R)}"
+    | none => if m.row.isEmpty then s!"loop ({m.pp m.L.B}) ({m.pp m.L.R})"
+      else s!"nu X. {Fs s!"({m.pp m.L.B}) + U X"} & {Fs (m.pp m.L.R)}"
   -- A point a move calls has a function of its own; any other point's code is its arm of the
   -- step. A point whose code takes the borrow lent per turn takes it beside its tuple.
   let takes (p : MPoint) : Option MTurn := m.turn.filter fun _ => p.turnArg
@@ -1696,16 +1685,15 @@ return (thunkv nu_in < {obs} >)"
 there. At a row: the machine, whose first state holds `start` (the parameter), where its first
 observation runs the body `M` from the top; `close0` is the `close` there.  `[spec §14, §19]` -/
 def divMachine (cx : LoopCx) (row : Frontend.Check.CRow) (c : TCx) (start : List (String × CVTy))
-    (close0 : Comp) (M : Comp) (turn : Option MTurn := none)
-    (boxTop : Option (String → String → CVTy → Option String) := none) : SM Comp := do
+    (close0 : Comp) (M : Comp) (turn : Option MTurn := none) : SM Comp := do
   -- Types are printed with the context's lifetimes by their names.
   let pp : CVTy → String := fun T => Frontend.Check.ppV c.E.lenv 0 0 T
-  if row.isEmpty && turn.isNone && boxTop.isNone then
+  if row.isEmpty && turn.isNone then
     let m : MCx := { L := cx, pp, pre := true }
     let (pre, st) ← (mWalk m divFuel c M).run {}
     mAssemble m M.span st none (some pre)
   else
-    let m : MCx := { L := cx, row, pp, turn, boxTop }
+    let m : MCx := { L := cx, row, pp, turn }
     let go : MM Unit := do
       let s ← mNewIn m M.span "a div body" true false start
       let code ← mWalk m divFuel c M
@@ -1800,7 +1788,7 @@ def _root_.Frontend.VTy.mayReturnLoop : VTy → Bool
 functions when it is one. A div function is `thunkv fun (x : A) -> M` at `A => B`, or
 `!thunkv fun (x : A) -> M` at `!(A => B)`. `scope` is the declarations before it, the
 libraries first.  `[spec §14]` -/
-def elabDef (scope : List Decl) (boxSites : List Nat := []) : Decl → SM (Decl × Option (String × VTy))
+def elabDef (scope : List Decl) : Decl → SM (Decl × Option (String × VTy))
   | d@(.def_ sp n ps A V mk) => do
     let c := TCx.ofScope scope false
     if (loopSig A).isSome || (A.mayReturnLoop && ((c.elabV A).bind loopFnOf).isSome) then
@@ -1844,17 +1832,6 @@ def elabDef (scope : List Decl) (boxSites : List Nat := []) : Decl → SM (Decl 
       let some (S, Bc) := resultRowOf ty
         | throw ⟨A.span, s!"the type of `{n.name}` does not elaborate"⟩
       let cx ← loopCxOf sp Bc M (bare := !S.isEmpty)
-      -- A copy at a row that holds a site of the pipe connector: a stage, kept by the connector
-      -- between its turns, so its machine boxes each next state at `top`, and refuses a state that
-      -- does not outlive `top` (SPEC §75 Part B).  [spec §75]
-      let boxTopAt (S : Frontend.Check.CRow) : Option (String → String → CVTy → Option String) :=
-        if !S.any (boxSites.contains ·.n.toNat) then none else some fun what y T =>
-          if BoCa.Fig16.LogRel.Core.Check.outlivesB cl.Δ .top T then none else
-            let y := if y.startsWith "io_" then what else s!"`{Hygiene.written y}`"
-            some (s!"a stage of a stream chain keeps {y}, of type " ++
-              s!"`{Frontend.Check.ppV cl.E.lenv 0 0 T}`, from one turn to the next, and the pipe " ++
-              "connector keeps the stage between its turns boxed at `top`, which it does not " ++
-              "outlive (a call of a div function in progress, a thunk or a borrow; not provided)")
       let cP₀ := cl.push x.name (cl.elabV Ax)
       let cP := { cP₀ with E := { cP₀.E with row := if S.isEmpty then none else some S } }
       let M' ← if S.isEmpty then divBody cx cP M else do
@@ -1863,14 +1840,11 @@ def elabDef (scope : List Decl) (boxSites : List Nat := []) : Decl → SM (Decl 
         let some Pc := cl.elabV Ax | throw ⟨Ax.span, s!"the parameter type of `{n.name}` does not elaborate"⟩
         let (closes, _) := closeGiven cx ((x.name, cl.elabV Ax) :: paramsOf divFuel cP M)
         let ab ← template sp "a div body's `close` before it starts" s!"{closes}return {cx.rSrc}"
-        divMachine cx S cP [(x.name, Pc)] (paramPrefix M ab) M (boxTop := boxTopAt S)
+        divMachine cx S cP [(x.name, Pc)] (paramPrefix M ab) M
       let Rs ← (cl.surface sp cx.R : Except Error VTy)
-      -- At a connector's stage, each next state is boxed at `top` (SPEC §75 Part B).
-      let leaf : VTy := .thunk B.span (.name B.span "X")
-      let leaf := if (boxTopAt S).isSome then .box B.span (.top B.span) leaf else leaf
       let L : CTy := match row with
         | .nil => .loop B.span B Rs
-        | r => .nu B.span ⟨"X", B.span⟩ (.amp B.span (.eff B.span r (.sum B.span B leaf))
+        | r => .nu B.span ⟨"X", B.span⟩ (.amp B.span (.eff B.span r (.sum B.span B (.thunk B.span (.name B.span "X"))))
             (.eff B.span r Rs))
       let F := VTy.lolli A.span Ar (.thunk B.span L)
       let lamC := Comp.lam (match Mi with | .lam lsp .. => lsp | _ => sp) x Ax M'
@@ -2038,8 +2012,6 @@ structure DivSt where
   /-- The handler sites that observe their computation one turn at a time (a `for`'s site and a
   stored generator's, `Elab.Effects.St.perTurn`).  `[spec §16]` -/
   perTurn : List Nat := []
-  /-- The pipe connector's sites (`Elab.Effects.St.boxSites`).  `[spec §75]` -/
-  boxSites : List Nat := []
   /-- Each handler site's operation `n.i` by its surface name, `E.op`, for messages
   (`Fins.opNames`).  `[spec §27]` -/
   opNames : List ((Nat × Nat) × String) := []
@@ -6550,9 +6522,8 @@ io_j{sfx} : {Jt} <- return ((unbang io_hwf{sfx}) io_l{sfx});
 /-- A stream chain on the pipe connector (SPEC §75 Part B): the stages `Frontend.Elab.Effects` left
 (`VSugar.connector`), each a computation at its sites, and the glue assembled around them from
 `lib/pipe.bc`'s pieces (`Frontend.Elab.Connector.glue`). What the glue is given of each stage is
-read off the stage as elaborated: its loop, when its computation answers one (the copy of a stage
-whose body loops boxes each next state at `top`), else the computation itself as a loop of one
-turn; its row, each of its operations' cancel rows, and what it performs besides its sites.
+read off the stage as elaborated: its loop, when its computation answers one, else the computation
+itself as a loop of one turn; its row, each of its operations' cancel rows, and what it performs besides its sites.
 Nothing here decides what a stage owns: the pieces take, store and stop each stage, and the kernel
 checks every instance. The connector is a frame's call in direct style (`markFrameCall`), run as
 the loop it is by the body around it.  `[spec §75]` -/
@@ -6586,19 +6557,16 @@ def connView : Nat → TCx → Span → Nat → List ConnStage → Val → DM Co
         | throw ⟨tsp, "the type of this stage of a stream chain is not determined here"⟩
       let some (row, T) := Frontend.Check.effRow? C
         | throw ⟨tsp, "the type of this stage of a stream chain is not determined here"⟩
-      -- Its loop, when it answers one; else it is a loop of one turn, at its own row.
+      -- Its loop, when it answers one (the copy of a stage whose body loops); else it is a loop of
+      -- one turn, at its own row.
       let loopOf? : Option (Frontend.Check.CRow × CVTy × Frontend.Check.CRow) := match T with
         | .thunk (.nu (.amp C₁ D₁)) => do
           let (lr, O) ← Frontend.Check.effRow? C₁
           let (lc, _) ← Frontend.Check.effRow? D₁
           match O with
-          | .sum R (.box _ (.tvar 0)) => some (lr, R, lc)
+          | .sum R (.tvar 0) => some (lr, R, lc)
           | _ => none
         | _ => none
-      if let .thunk (.nu _) := T then
-        if loopOf?.isNone then
-          throw ⟨tsp, "this stage of a stream chain answers a loop whose next state is not boxed at " ++
-            "`top`: a stage is a call of a function at the connector's sites (SPEC §75)"⟩
       let (lr, R, lc, loops) := match loopOf? with
         | some (lr, R, lc) => (lr, R, lc, true)
         | none => (row, T, [], false)
@@ -6615,10 +6583,10 @@ def connView : Nat → TCx → Span → Nat → List ConnStage → Val → DM Co
       let hole := s!"io_hole_m{i}_{sfx}"
       holes := holes ++ [(hole, M')]
       let ready := if loops then
-          s!"inl (boxed[top] (thunkv nu_in < io_dl{i} <- force {hole}; (nu_out (force io_dl{i})).1, " ++
-            s!"io_dl{i} <- force {hole}; (nu_out (force io_dl{i})).2 >))"
+          s!"inl (thunkv nu_in < io_dl{i} <- force {hole}; (nu_out (force io_dl{i})).1, " ++
+            s!"io_dl{i} <- force {hole}; (nu_out (force io_dl{i})).2 >)"
         else
-          s!"inl (boxed[top] (thunkv nu_in < io_dr{i} <- force {hole}; return (inl io_dr{i}), return () >))"
+          s!"inl (thunkv nu_in < io_dr{i} <- force {hole}; return (inl io_dr{i}), return () >)"
       stages := stages ++ [{
         A := s!"({cs₀.A.pp 0})", K := s!"({cs₀.K.pp 0})", B := s!"({cs₀.B.pp 0})", R := s!"({← ppT R})",
         OA := "0", sg := ← ppR (lr.filter (!mine ·)),
@@ -7237,7 +7205,7 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
         if nm.name.endsWith "__mach_src" then recMachine (st.lib ++ st.out) d else pure d
       | d => pure d
     let (d, st) ← (specDecl fuel d).run st
-    let (d', e) ← elabDef (st.lib ++ st.out) st.boxSites d
+    let (d', e) ← elabDef (st.lib ++ st.out) d
     let elaborated := e.isSome && decide (d' ≠ d)
     pure { st with srcs := d :: st.srcs, out := st.out ++ [d'], any := st.any || elaborated }
 
@@ -7371,14 +7339,13 @@ end
 whether any body was elaborated as a loop. -/
 def elabDivs (lib decls : List Decl) (libNames : List String) (perTurn : List Nat := [])
     (polys : PolyTab := {}) (opNames : List ((Nat × Nat) × String) := [])
-    (fnRows : List (String × List (Nat × Nat)) := []) (boxSites : List Nat := []) :
-    SM (List Decl × Bool) := do
+    (fnRows : List (String × List (Nat × Nat)) := []) : SM (List Decl × Bool) := do
   -- Every family and case is known before any call is elaborated, so that a case is chosen
   -- among all of them (SPEC §36).
   (polyCheck (TCx.ofScope (lib ++ decls) false) polys : Except Error Unit)
   let names := polys.fams.map (·.1) ++ polys.cases.map (·.name)
   let templates := decls.filter fun | .def_ _ m _ _ _ _ => names.contains m.name | _ => false
-  let st ← decls.foldlM (init := ({ lib, libNames, perTurn, polys, templates, opNames, fnRows, boxSites } : DivSt))
+  let st ← decls.foldlM (init := ({ lib, libNames, perTurn, polys, templates, opNames, fnRows } : DivSt))
     (elabDecl divFuel)
   pure (st.out, st.any)
 
@@ -7729,7 +7696,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
     | .effect _ e _ ops => some (e.name, ops.map (·.name.name))
     | _ => none
   let (decls, anyDiv) ← elabDivs typing p.decls libNames perTurn polys
-    (Elab.Fins.opNames effOps fxr.decls) (Elab.Fins.fnRows fxr.decls) fxr.boxSites
+    (Elab.Fins.opNames effOps fxr.decls) (Elab.Fins.fnRows fxr.decls)
   let rest := decls.filter fun | .main .. => false | _ => true
   let mc := TCx.ofScope (typing ++ rest ++ capDecls) true
   let mainLoops := match decls.findSome? (fun | .main _ C M => some (C, M) | _ => none) with

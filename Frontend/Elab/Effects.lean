@@ -338,9 +338,6 @@ structure St where
   operation of one of them is a div loop, one turn per observation; of any other site, a total
   loop at the row (SPEC §16, *Effectful bodies*). -/
   perTurn : List Nat := []
-  /-- The pipe connector's sites (SPEC §75 Part B): a machine at a row that holds one boxes each
-  next state at `top`, so that the connector may keep a stage between its turns.  `[spec §75]` -/
-  boxSites : List Nat := []
   /-- The ports of each copy made for computation parameters (SPEC §33), by the copy's name: per
   parameter index, the site of each provided effect, and whether it is the copy's own (a `with`
   inside it) rather than one of its row's.  `[spec §33]` -/
@@ -2297,7 +2294,9 @@ def connector : Nat → Cx → List Cap → Val → List (Span × PipeMode × Va
         | .var vsp _ | .defApp vsp _ _ => .app vsp s (.unit vsp)
         | s => s
       let row := rowV env fuel call
-      let yi := row.find? (env.iterEff ·.eff)
+      -- Its wire out is an iteration effect a stop can cancel: not `must_resume` (a stage's trace).
+      let yi := row.find? fun j => env.iterEff j.eff &&
+        ((env.eff? j.eff).any fun e => e.ops.all (·.qual != .lin))
       let si := row.find? (·.eff == st)
       if i + 1 == n && yi.isSome then
         throw ⟨s.span, "the last stage of this stream chain yields: a stream chain used as a " ++
@@ -2330,7 +2329,6 @@ def connector : Nat → Cx → List Cap → Val → List (Span × PipeMode × Va
         (match ss with | some As => [{ eff := st, n := sn, args := As, sp, what }] | none => [])
       let cxS : Cx := { cx with sites := own ++ cx.sites.filter fun x => !own.any (·.eff == x.eff) }
       let M ← trC k cxS [] true (.ret s.span call)
-      modify fun st => { st with boxSites := st.boxSites ++ [y, sn, f] }
       out := out ++ [{ y, s := sn, f, A, K, B }]
       ths := ths ++ [.thunk s.span M]
     report sp "lowering" (s!"a stream chain of {n} stages on the pipe connector (SPEC §75), " ++
@@ -4278,8 +4276,6 @@ structure Result where
   reports : List (Span × Report)
   perTurn : List Nat
   platform : List String
-  /-- The pipe connector's sites (`St.boxSites`).  `[spec §75]` -/
-  boxSites : List Nat := []
   exits : Bool := false
   withDivLib : Bool := false
   withPlatform : Bool := false
@@ -4516,7 +4512,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
   match go.run {} with
   | .ok ((ds, spliced), st) =>
     pure { decls := ds, reports := st.reports.toList, perTurn := st.perTurn, platform := st.platform,
-           boxSites := st.boxSites, exits := st.exits, withDivLib, withPlatform := spliced,
+           exits := st.exits, withDivLib, withPlatform := spliced,
            keys := st.keys.toList, sites := st.site }
   | .error e => throw e
 
