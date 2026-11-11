@@ -1,5 +1,5 @@
--- Linear state moved into a control handler's body and restored after it (must not regress;
--- `theory/linear-state` probe p04). A `let mut` string `b` is moved into `fill`, the body of a
+-- Linear state moved into a control handler's body and restored after it (#1064, p04).
+-- A `let mut` string `b` is moved into `fill`, the body of a
 -- `to_result` handler, each turn of a counted `for`: the body hands the string back with its
 -- length, and the `inl` arm writes it back into `b`. When `fill` raises, the string it was given is
 -- consumed by the unwind (SPEC §19), and the `inr` arm refills `b` with a fresh one. Nothing leaves

@@ -1,5 +1,5 @@
--- Linear state moved into a body whose continuation a handler drops (`theory/linear-state` probe
--- p16; must not regress). `deadline` answers `wait` by resuming, or, past 50 ms, by dropping `k`
+-- Linear state moved into a body whose continuation a handler drops (#1064,
+-- p16). `deadline` answers `wait` by resuming, or, past 50 ms, by dropping `k`
 -- (`(force k).2`, the continuation's consume) and raising 408. The string `b` moved into `recv` is
 -- held by the dropped continuation, so dropping `k` consumes it; `to_result`'s `inr` arm refills `b`.
 --

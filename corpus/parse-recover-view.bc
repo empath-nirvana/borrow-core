@@ -5,7 +5,7 @@
 -- value with the index after what it read. A statement that raises leaves the tokens where they
 -- were, so the error arm resynchronises from the statement's own start, `skip_statement(v, i)`,
 -- with no copy of the tokens: `parse-recover-gen.bc` clones the whole remaining list twice per
--- statement for that (`theory/linear-state` design, P6 "lend, don't move").
+-- statement for that (#1064, P6: lend, don't move).
 --
 -- The view is used many times. Each use past the first is the checker's derived copy of the view
 -- (SPEC §12, *The derived copy at `imm`*), a copy of the handle, not of the tokens.

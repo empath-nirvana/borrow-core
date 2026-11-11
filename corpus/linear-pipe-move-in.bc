@@ -1,5 +1,5 @@
--- `linear-move-in-restore.bc` with the handler applied by `|>` (`theory/linear-state` probe p05;
--- must not regress): `fill(b, k - i) |> to_result[…]` moves the `let mut` string `b` into the
+-- `linear-move-in-restore.bc` with the handler applied by `|>` (#1064, p05):
+-- `fill(b, k - i) |> to_result[…]` moves the `let mut` string `b` into the
 -- handled computation, and both arms of the `match` write `b` back.
 --
 -- Answer: `(i32[303], i32[4294967196])`, as `linear-move-in-restore.bc`.

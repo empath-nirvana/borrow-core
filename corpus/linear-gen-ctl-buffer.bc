@@ -1,5 +1,5 @@
 -- A generator whose `let mut` buffer is moved into a control handler's body each turn and restored
--- after it (`theory/linear-state` probe p14; must not regress). `chunks_of` moves `b` into `recv`
+-- after it (#1064, p14). `chunks_of` moves `b` into `recv`
 -- under `to_result` (standing in for a timeout), writes it back on `inl` and yields its length; on
 -- `inr` the unwind has consumed the buffer, `b` is refilled and the loop stops. The buffer lives in
 -- the generator's state across each `yield`.
