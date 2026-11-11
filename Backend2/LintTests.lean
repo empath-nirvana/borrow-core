@@ -332,4 +332,52 @@ def popProg (a r : LTy) : Prog where
 -- Answering no pair: refused, as such.
 #guard refuses (popProg (.fam (.ref i32T)) i32T) "not a pair of the family"
 
+/-! ### The shapes of the values  (#1087)
+
+A `letpair` takes apart a pair and a `case` a sum; a `pair` and an `inj` are built at the type
+they are expected at (`Lint.elimBad`, `Lint.introBad`). -/
+
+/-- `f0 (x0 : t) = letpair (x1, x2) = x0; (x1, x2)`, answering `r` (by default `t`), the parts at
+`t`'s components (`i32` when `t` is not a pair). -/
+def pairElim (t : LTy) (r : LTy := t) : Prog where
+  fns := #[{ name := "unpairs", params := [0], ret := r, body := .letpair 1 2 0 (.pair 1 2) }]
+  codes := #[]
+  main := .unit
+  mainTy := .unit
+  ty := ((({} : Std.HashMap Var LTy).insert 0 t).insert 1
+      (match t.peel with | .pair a _ => a | _ => i32T)).insert 2
+      (match t.peel with | .pair _ b => b | _ => i32T)
+
+/-- `f0 (x0 : t) = case x0 {inl x1. inr x1 | inr x2. inl x2}`, answering `r`, the arms' variables
+at `t`'s summands (`i32` when `t` is not a sum). -/
+def sumElim (t : LTy) (r : LTy) : Prog where
+  fns := #[{ name := "swaps", params := [0], ret := r,
+             body := .case 0 1 (.inj true 1) 2 (.inj false 2) }]
+  codes := #[]
+  main := .unit
+  mainTy := .unit
+  ty := ((({} : Std.HashMap Var LTy).insert 0 t).insert 1
+      (match t.peel with | .sum a _ => a | _ => i32T)).insert 2
+      (match t.peel with | .sum _ b => b | _ => i32T)
+
+def i64T : LTy := .int .w64
+
+-- A pair taken apart and rebuilt, a sum's arms swapped: accepted, also through a `!`.
+#guard accepts (pairElim (.pair i32T i64T))
+#guard accepts (pairElim (.bang (.pair i32T i64T)) (.pair i32T i64T))
+#guard accepts (sumElim (.sum i32T i64T) (.sum i64T i32T))
+-- A `letpair` of a sum injection (the #940 mis-lowering's shape), or of an integer: refused.
+#guard refuses (pairElim (.sum i32T i64T) (.pair i32T i32T)) "a letpair takes apart x0 : (i32 + i64), which is not a pair"
+#guard refuses (pairElim i32T (.pair i32T i32T)) "which is not a pair"
+-- A `case` of a pair: refused.
+#guard refuses (sumElim (.pair i32T i64T) (.sum i32T i32T)) "a case takes apart x0 : (i32 * i64), which is not a sum"
+-- A pair built at a sum type, an injection at a pair type, or of the wrong summand: refused.
+#guard refuses (pairElim (.pair i32T i64T) (.sum i32T i64T)) "which is not a pair type"
+#guard refuses (sumElim (.sum i32T i64T) (.pair i64T i32T)) "which is not a sum type"
+#guard refuses (sumElim (.sum i32T i64T) (.sum i32T i64T)) "an inr at"
+-- A letpair binding a component at another type: refused.
+#guard refuses ({ pairElim (.pair i32T i64T) with
+    ty := ((({} : Std.HashMap Var LTy).insert 0 (.pair i32T i64T)).insert 1 i64T).insert 2 i64T })
+  "a letpair binds x1"
+
 end Backend2.LintTests

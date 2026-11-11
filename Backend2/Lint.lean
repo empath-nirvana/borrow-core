@@ -177,10 +177,114 @@ def slotPopBad (p : Prog) (x : Var) : List Var → Option String
     | none, _ => some s!"of x{a}, which has no type"
   | as => some s!"on {as.length} operands"
 
+/-! ### The shapes of the values, read on the LIR types
+
+ A variable's type is `Prog.ty`, the
+type `Types.ofV` gave it from the checked term; a term's expected type is the type of the variable
+a `letv` binds it to, a function's `Fn.ret`, or `Prog.mainTy`, passed down through the tails of
+`letv`, `letpair`, `case` and the other binding nodes. A type's shape is read through its
+top-level `!`s (`LTy.peel`: `!A` is represented as an `A`). The checks, each `none` when it holds:
+- a `letpair` takes apart a pair, binding its two components at their types;
+- a `case` takes apart a sum, binding each arm's variable at its summand's type; an `absurd`, a `0`;
+- a `pair` is built at a pair type from its components, an `inj` at a sum type from the summand
+  it injects, a `()` at `1`;
+- a variable answered at a tail, and a direct `call`, have the type the term is expected at.
+Types are compared as representations (`sameTy`: up to `!`, and a `ν` read as its unrolling). -/
+
+/-- `x` and its type, for a message. -/
+def tyStr (p : Prog) (x : Var) : String :=
+  match p.ty[x]? with
+  | some t => s!"x{x} : {t}"
+  | none => s!"x{x} (no type)"
+
+mutual
+/-- **Two types of one representation, a `ν` read as its unrolling**: `sameRep` (equal up to
+`!`), or of one former whose parts are, a closure type compared after its `ν`s are unrolled
+(`LCTy.whnf`). No node rolls or unrolls a `ν` (an observation reads the unrolling, as `Convert`
+does), so a closure of `νX. C` is one of `C[U(νX. C)/X]`; a `μ` is rolled by `Op.roll`, and is
+compared as written. `false` when the fuel runs out. -/
+def sameTy : Nat → LTy → LTy → Bool
+  | 0, a, b => a.sameRep b
+  | f + 1, a, b => a.sameRep b || match a.peel, b.peel with
+    | .pair a b, .pair c d | .sum a b, .sum c d => sameTy f a c && sameTy f b d
+    | .ref a, .ref b | .imm a, .imm b | .mut a, .mut b | .fam a, .fam b => sameTy f a b
+    | .thunk k, .thunk k' => sameCTy f (k.whnf 8) (k'.whnf 8)
+    | _, _ => false
+/-- `sameTy` at closure types. -/
+def sameCTy : Nat → LCTy → LCTy → Bool
+  | 0, k, k' => k.sameRep k'
+  | f + 1, k, k' => k.sameRep k' || match k.whnf 8, k'.whnf 8 with
+    | .ret a, .ret b => sameTy f a b
+    | .arr a k, .arr b k' => sameTy f a b && sameCTy f k k'
+    | .amp k₁ k₂, .amp k₁' k₂' => sameCTy f k₁ k₁' && sameCTy f k₂ k₂'
+    | .top, .top => true
+    | _, _ => false
+end
+
+/-- `x` has a type of the representation of `t` (`sameTy`). -/
+def hasRep (p : Prog) (x : Var) (t : LTy) : Bool :=
+  match p.ty[x]? with
+  | some u => sameTy 64 u t
+  | none => false
+
+/-- An eliminator's premise: what it takes apart is of the shape it eliminates, and the
+variables it binds are at the component types. -/
+def elimBad (p : Prog) : Tm → Option String
+  | .letpair x y q _ =>
+    match p.ty[q]?.map LTy.peel with
+    | some (.pair a b) =>
+      if !hasRep p x a then some s!"a letpair binds {tyStr p x} for the component {a} of x{q}"
+      else if !hasRep p y b then some s!"a letpair binds {tyStr p y} for the component {b} of x{q}"
+      else none
+    | _ => some s!"a letpair takes apart {tyStr p q}, which is not a pair"
+  | .case sv x _ y _ =>
+    match p.ty[sv]?.map LTy.peel with
+    | some (.sum a b) =>
+      if !hasRep p x a then some s!"a case binds {tyStr p x} for the summand {a} of x{sv}"
+      else if !hasRep p y b then some s!"a case binds {tyStr p y} for the summand {b} of x{sv}"
+      else none
+    | _ => some s!"a case takes apart {tyStr p sv}, which is not a sum"
+  | .absurd sv =>
+    match p.ty[sv]?.map LTy.peel with
+    | some .zero => none
+    | _ => some s!"an absurd of {tyStr p sv}, which is not 0"
+  | _ => none
+
+/-- A value's premise at the type `t` it is expected at: a `pair` at a pair type of its
+components', an `inj` at a sum type of its summand's, `()` at `1`, a variable or a direct call's
+answer at `t` itself. -/
+def introBad (p : Prog) (t : LTy) : Tm → Option String
+  | .pair a b =>
+    match t.peel with
+    | .pair ta tb =>
+      if !hasRep p a ta then some s!"a pair at {t} of {tyStr p a}"
+      else if !hasRep p b tb then some s!"a pair at {t} of {tyStr p b}"
+      else none
+    | _ => some s!"a pair of x{a} and x{b} at {t}, which is not a pair type"
+  | .inj r a =>
+    match t.peel with
+    | .sum ta tb =>
+      if !hasRep p a (if r then tb else ta) then
+        some s!"an {if r then "inr" else "inl"} at {t} of {tyStr p a}"
+      else none
+    | _ => some s!"an {if r then "inr" else "inl"} of x{a} at {t}, which is not a sum type"
+  | .unit => if t.peel == .unit then none else some s!"a () at {t}"
+  | .var x => if hasRep p x t then none else some s!"{tyStr p x} answered at {t}"
+  | .call fn _ =>
+    match p.fns[fn]? with
+    | some d => if sameTy 64 d.ret t then none else some s!"f{fn} ({d.name}), answering {d.ret}, called at {t}"
+    | none => none
+  | _ => none
+
 /-- The variables left after `t`, its value consumed by its context. -/
-def lintTm (w : String) (p : Prog) (inConsumeFn : Bool) : Nat → Std.HashSet Var → Tm → LM Left
-  | 0, _, _ => bad w "a term too deep"
-  | f + 1, env, t => match t with
+def lintTm (w : String) (p : Prog) (inConsumeFn : Bool) :
+    Nat → Option LTy → Std.HashSet Var → Tm → LM Left
+  | 0, _, _, _ => bad w "a term too deep"
+  | f + 1, ans, env, t => do
+    if let some e := elimBad p t then bad w e
+    if let some aT := ans then
+      if let some e := introBad p aT t then bad w e
+    match t with
     | .var x => return some (← use w env x)
     | .unit | .lit _ => return some env
     | .pair a b => return some (← useAll w env [a, b])
@@ -218,17 +322,17 @@ def lintTm (w : String) (p : Prog) (inConsumeFn : Bool) : Nat → Std.HashSet Va
         | some (.pair _ bT) =>
           if borrowMode bT != some m then bad w s!"x{x}: a lend of kind {m} answers a borrow at {bT}"
         | t => bad w s!"x{x}: a lend answers {t.map (·.pp)}"
-      match ← lintTm w p inConsumeFn f env e with
+      match ← lintTm w p inConsumeFn f p.ty[x]? env e with
       | none => return none
-      | some env' => lintTm w p inConsumeFn f (← bindNew w p env' x) b
+      | some env' => lintTm w p inConsumeFn f ans (← bindNew w p env' x) b
     | .letpair x y q b => do
       let env ← use w env q
       let env ← bindNew w p env x
-      lintTm w p inConsumeFn f (← bindNew w p env y) b
+      lintTm w p inConsumeFn f ans (← bindNew w p env y) b
     | .case sv x b₁ y b₂ => do
       let env ← use w env sv
-      let l₁ ← lintTm w p inConsumeFn f (← bindNew w p env x) b₁
-      let l₂ ← lintTm w p inConsumeFn f (← bindNew w p env y) b₂
+      let l₁ ← lintTm w p inConsumeFn f ans (← bindNew w p env x) b₁
+      let l₂ ← lintTm w p inConsumeFn f ans (← bindNew w p env y) b₂
       match l₁, l₂ with
       | none, l | l, none => return l
       | some a, some b =>
@@ -242,7 +346,7 @@ def lintTm (w : String) (p : Prog) (inConsumeFn : Bool) : Nat → Std.HashSet Va
       | some t =>
         if !copiesAt r t then bad w s!"x{x} copied at {t} ({r.name}), where the rule's premise does not hold"
       | none => bad w s!"x{x} has no type"
-      lintTm w p inConsumeFn f (← bindNew w p env x') b
+      lintTm w p inConsumeFn f ans (← bindNew w p env x') b
     | .consume r x b => do
       match p.ty[x]? with
       | some t =>
@@ -253,14 +357,14 @@ def lintTm (w : String) (p : Prog) (inConsumeFn : Bool) : Nat → Std.HashSet Va
         if r == .consume && !inConsumeFn then
           bad w s!"x{x} consumed at the rule consume outside a consume function"
       | none => bad w s!"x{x} has no type"
-      lintTm w p inConsumeFn f (← use w env x) b
+      lintTm w p inConsumeFn f ans (← use w env x) b
     | .abandon r x b => do
       match p.ty[x]? with
       | some t =>
         if !abandonable r t then
           bad w s!"x{x} abandoned at {t} ({r.name}), where the rule's premise does not hold"
       | none => bad w s!"x{x} has no type"
-      lintTm w p inConsumeFn f (← use w env x) b
+      lintTm w p inConsumeFn f ans (← use w env x) b
 
 /-- Lint a program. -/
 def lint (p : Prog) : Except String Unit := do
@@ -271,10 +375,10 @@ def lint (p : Prog) : Except String Unit := do
         bad w s!"{d.lendEncl.length} lend bits for {d.params.length} parameters"
       let mut env : Std.HashSet Var := {}
       for x in d.params do env ← bindNew w p env x
-      match ← lintTm w p (p.consumeFns.contains i) (1 <<< 22) env d.body with
+      match ← lintTm w p (p.consumeFns.contains i) (1 <<< 22) (some d.ret) env d.body with
       | some rest => if !rest.isEmpty then bad w s!"ends with {rest.toList.map (s!"x{·}")} unconsumed"
       | none => pure ()
-    match ← lintTm "main" p false (1 <<< 22) {} p.main with
+    match ← lintTm "main" p false (1 <<< 22) (some p.mainTy) {} p.main with
     | some rest => if !rest.isEmpty then bad "main" s!"ends with {rest.toList.map (s!"x{·}")} unconsumed"
     | none => pure ()
   let _ ← act.run {}
