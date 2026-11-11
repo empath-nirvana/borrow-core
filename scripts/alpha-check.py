@@ -12,9 +12,10 @@ difference.
 Two passes:
 
 * `program`: each program renamed, the library as it is. Its binders are named `{x}__q{k}`, which
-  Hygiene renames again (`hygName`), so the renamed program's locals all take Hygiene's path. The check's positions and names are
-  mapped back through the renaming: a column on a renamed line, a name `{x}q{k}` to `x`, and a
-  generated name that carries a position (`io_lb12_5_0`).
+  Hygiene renames again (`hygName`), so the renamed program's locals all take Hygiene's path. The
+  check's positions and names are mapped back through the renaming: a column on a renamed line, a
+  name `{x}__q{k}` (with Hygiene's `hy{n}[c{h}]_` prefix stripped) to `x`, and a generated name
+  that carries a position (`io_lb12_5_0`).
 * `library`: every module of `lib/` renamed (`BCC_LIB`), each program as it is. A message from a
   module's code is printed at the module's position under the program's name, so columns are
   compared only up to the line; names are mapped back as above, and the original's renamed
