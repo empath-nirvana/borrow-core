@@ -8868,6 +8868,7 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/mut-after-unwind-generator.bc` | a write in an `unwind`'s continuation inside a generator's loop | `i32[330]` |
 | `corpus/mut-after-unwind-exits.bc` | `break` and `continue` in an `unwind`'s continuation | `(i32[603], i32[9])` |
 | `corpus/mut-after-unwind-loop-in-n.bc` | a loop in the continuation | `i32[50303]` |
+| `corpus/mut-after-unwind-for-gen.bc` | an `unwind` in the body of a `for` over a generator: the stored generator is drained | `i32[3]` |
 | `corpus/mut-cancel-loop-for.bc`, `mut-cancel-loop-for-value.bc` | #1053: a `k`-dropping cancel clause around a `for` that writes, unbound and bound | `inl (inr i32[3])` |
 | `corpus/mut-cancel-unwind-region.bc` | `unwind`s whose heads do not abort, in a clause that drops `k` | `inl (inr i32[3])` |
 
@@ -9015,8 +9016,7 @@ whose meaning depended on two names coinciding.
   for a block parameter (`cbRows`) does not carry its `let mut` capabilities.
 - **`case V { … }` and `for` as expressions** are not read as `run`: `case` is printed core, and
   `for` as a value needs its loop result bound (`let r = for …`).
-- **Refused, not wrong:** an `unwind` in the body of a `for` over a generator (an internal error
-  from the kinds cross-check); `modify` or `run` in a clause that drops `k`.
+- **Refused, not wrong:** `modify` or `run` in a clause that drops `k`.
 - **A redesign of `let mut` as a Core former `var_n`** (#1058) is parked.
 
 ---
