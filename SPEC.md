@@ -13851,8 +13851,8 @@ cleanup is `r <- (loop {…}) unwind (note(d)); note(d); r`. Every program below
 | `corpus/pipe-close-order.bc` | traces 1 and 2; then a `for` with `break` at the 2nd item over `src(5) >| scale(10)` | `321.123.21(i32[30], (i32[30], i32[30]))` |
 | `corpus/pipe-raise-order.bc` | traces 3–5: the source, the middle and the sink raise `10`, `20`, `30` at item 2 | `132.231.321(inr i32[10], (inr i32[20], inr i32[30]))` |
 | `corpus/pipe-cancel-order.bc` | trace 6: `tm` cancels at a forwarded `wait()`, first while the source (not the last stage) is suspended at it, then at the sink's, which the connector forwards too | `321.321(inr (), inr ())` |
-| `corpus/pipe-first-error.bc` | trace 7; the same cleanups under an outside cancel; a `stop()` whose upstream cleanup raises `10` | `321inr i32[20]` |
-| `corpus/pipe-pushback.bc` | lookahead at the surface: `runs` over `1,1,2,2,2,3` (`10x + count`); a last stage reading past `5`; a middle stage stopping with `10` in its slot | `i32[66]` |
+| `corpus/pipe-first-error.bc` | trace 7; the same cleanups under an outside cancel; a `stop()` whose upstream cleanup raises `10` | `321.321.123(inr i32[20], (inr i32[20], inr i32[10]))` (to be observed) |
+| `corpus/pipe-pushback.bc` | lookahead at the surface: `runs` over `1,1,2,2,2,3` (`10x + count`); a last stage reading past `5`; a middle stage stopping with `10` in its slot | `(i32[66], ((i32[6], inl i32[10]), (i32[6], (inl i32[10], ()))))` (to be observed) |
 | `corpus/pipe-rest.bc` | `connect(src(5) >| take_two)`, then `rest >| sum_all`; then `close(rest)` on a fresh chain's rest | `((i32[3], i32[12]), i32[3])` |
 | `corpus/reject/pipe-left-nothing.bc` | `3 >| sum_all` | `` `>|` connects stream stages; its left side yields nothing (no iteration effect in its inferred row) `` |
 | `corpus/reject/pipe-open-head.bc` | `scale(3) >| sum_all` | the open-chain message |
