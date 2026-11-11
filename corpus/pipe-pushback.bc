@@ -1,8 +1,13 @@
 -- check: old-backend-refuses
 -- SPEC §75, Part B, lookahead: one item read ahead is held in the stage's own pushback slot, not a
--- protocol operation. `runs` turns each run of equal items into `10 * x + count`: over
--- 1, 1, 2, 2, 2, 3 that is 12, 23, 31, summed by the sink.
--- Answer: `i32[66]`, `live 0`.
+-- protocol operation.
+--   * `runs` turns each run of equal items into `10 * x + count`: over 1, 1, 2, 2, 2, 3 that is 12,
+--     23, 31, summed by the sink: `66`.
+--   * The last stage sums the items below `5` and reads past them: over 1, 2, 3, 10, 20 it holds
+--     `10` in its slot and returns `(6, inl 10)`; the connector's end stops the source.
+--   * The same read-ahead in the last stage of three, which then stops its upstream with `10` in
+--     its slot (`stop()` answers `()`) and returns the slot and that answer: `(6, (inl 10, ()))`.
+-- Answer: `(i32[66], ((i32[6], inl i32[10]), (i32[6], (inl i32[10], ()))))`, `live 0`.
 
 include pipe
 
@@ -45,4 +50,37 @@ fn sum_all() -> i32 with Stream[i32, 1] =
   while go { match next() { inl v -> s = s + v | inr u -> go = false } };
   s
 
-main -> i32 = items(0) >| runs >| sum_all
+fn five() -> 1 with Yield[i32] =
+  yield(1); yield(2); yield(3); yield(10); yield(20);
+  ()
+
+-- The items below `5`, summed, and the first item read past them, held in the slot.
+fn below5() -> i32 * (i32 + 1) with Stream[i32, 1] =
+  let mut s = 0;
+  let mut more = true;
+  let mut held : i32 + 1 = inr ();
+  while more {
+    match next() {
+      inl y -> if y < 5 { s = s + y } else { held = (inl y : i32 + 1); more = false }
+    | inr u -> more = false
+    }
+  };
+  (s, held)
+
+fn pass() -> 1 with Stream[i32, 1], Yield[i32] =
+  let mut go = true;
+  while go { match next() { inl v -> yield(v) | inr u -> go = false } };
+  ()
+
+-- `below5`, then `stop()` with the slot still held.
+fn below5_stop() -> i32 * ((i32 + 1) * 1) with Stream[i32, 1] =
+  let p = below5();
+  let (s, h) = p;
+  let u = stop();
+  (s, (h, u))
+
+main -> i32 * ((i32 * (i32 + 1)) * (i32 * ((i32 + 1) * 1))) =
+  let a = items(0) >| runs >| sum_all;
+  let b = five() >| below5;
+  let c = five() >| pass >| below5_stop;
+  (a, (b, c))
