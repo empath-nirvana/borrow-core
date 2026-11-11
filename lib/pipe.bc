@@ -80,11 +80,18 @@ def pipe_f_hc[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, ro
 def pipe_s_hr[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] : !U (PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) =
   !thunkv fun (e : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) -> return e
 
--- A loop whose every turn ends without an operation: what a rest at a `next()` becomes when
--- resumed with no item, after its continuation is cancelled. `pipe_step` never resumes it so (it
--- answers `Next` again).
+-- A loop whose every turn ends without an operation: a stage above one that `stop()` closed, which
+-- the glue never runs again.
 def pipe_idle[R, row lr, row lc] : !U (1 -o F[..lr] (R + 1) & F[..lc] 1) =
   !thunkv fun (u : 1) -> < let () = u; return (inr ()), let () = u; return () >
+
+-- A stalled stage (see `pipe_s_hc`): a loop whose every turn ends at once, keeping the rest `k`
+-- uncancelled; closing it cancels `k`, under clauses that cancel.
+def pipe_stall[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] :
+    !U (U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)
+        -o F[..lr] (R + U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)) & F[..lc] 1) =
+  !thunkv fun (k : U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)) ->
+    < return (inr k), handle_with[f](pipe_f_cr[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)], pipe_f_cc[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)]) ((force k).2) >
 
 def pipe_s_hc[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] :
     !U (1 * U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1) -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
@@ -94,11 +101,16 @@ def pipe_s_hc[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, ro
      kn : PipeRest[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] <-
        return (thunkv nu_in <
          fun (i : 1 + (A + K)) -> handle_with[f](pipe_f_hr[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_f_hc[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) (case i {
-             inl u -> let () = u; c <- (force bk).2; let () = c;
-               dl : PipeLoop[R, row (..lr), row (..lc)] <- return (thunkv nu_in <
-                 g <- return (unbang (unfold[nu X. F[..lr] (R + U X) & F[..lc] 1, 1] pipe_idle[R, row (..lr), row (..lc)])); z <- return (); (nu_out (force g z)).1,
-                 g <- return (unbang (unfold[nu X. F[..lr] (R + U X) & F[..lc] 1, 1] pipe_idle[R, row (..lr), row (..lc)])); z <- return (); (nu_out (force g z)).2 >);
-               return (inl (inr (inr dl)) : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
+             inl u -> let () = u;
+               -- UNPROVED: (I1′, Assembly(n) rev 2.3) a rest at a `next()` is resumed with the item
+               -- or the end, `inr`: `pipe_step` answers `Next` again on `inl ()`, and every case of
+               -- the glue's dispatch keeps the input's tag the state's. Were it broken here, the
+               -- stage would stall: the turn ends with the rest kept, uncancelled, in a loop that
+               -- only skips, so that no cleanup runs out of order; the chain hangs instead.
+               st : PipeLoop[R, row (..lr), row (..lc)] <- return (thunkv nu_in <
+                 g <- return (unbang (unfold[nu X. F[..lr] (R + U X) & F[..lc] 1, U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)] pipe_stall[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])); (nu_out (force g bk)).1,
+                 g <- return (unbang (unfold[nu X. F[..lr] (R + U X) & F[..lc] 1, U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)] pipe_stall[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])); (nu_out (force g bk)).2 >);
+               return (inl (inr (inr st)) : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
            | inr v -> (force bk).1 v
            }),
          handle_with[f](pipe_f_cr[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)], pipe_f_cc[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)]) ((force bk).2) >);
@@ -172,6 +184,8 @@ def pipe_step[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, ro
           ((nu_out (force bl)).1)))
     | inr r1 -> case r1 {
         inl kn -> case inp {
+            -- UNPROVED: (I1′) unreachable from the glue, which gives a stage at a `next()` the item
+            -- or the end; answered by `Next` again, the stage keeps waiting, and nothing runs.
             inl u -> let () = u; return (inr (inl (inl kn)) : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
           | inr v -> w : 1 + (A + K) <- return (inr v); (nu_out (force kn)).1 w
           }

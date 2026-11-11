@@ -6575,7 +6575,7 @@ def connView : Nat → TCx → Span → Nat → List ConnStage → Val → DM Co
         | _ => none
       let (lr, R, lc, loops) := match loopOf? with
         | some (lr, R, lc) => (lr, R, lc, true)
-        | none => (row, T, [], false)
+        | none => (row, T, row, false)
       let mine (o : BoCa.Fig16.LogRel.Core.OpSig) : Bool :=
         o.n.toNat == cs₀.y || o.n.toNat == cs₀.s || o.n.toNat == cs₀.f
       let finOf (k j : Nat) : DM String := do

@@ -793,6 +793,29 @@ def rowV (env : Env) : Nat → Val → List Inst
     | .app sp (.sugar _ (.named x op)) W =>
       env.union ((env.op? op).toList.map (env.opInst · sp (some x))) (rowV env n W)
     | .app sp f W =>
+      -- A stream chain (SPEC §75): what its stages perform besides their wires, which the
+      -- connector serves: a stage's `Stream`, and the iteration effect of all but the last.
+      let stageOf (s : Val) : Option FSig := match s with
+        | .app _ (.var _ x) _ | .app _ (.defApp _ x _) _ | .var _ x | .defApp _ x _ =>
+          (env.fn? x).filter fun g => env.stream.any fun st => g.row.any (·.eff == st)
+        | _ => none
+      let chain := match f with
+        | .sugar _ (.pipe _) => if env.stream.isNone then none else
+          let c := Pipes.chainOf (stageOf · |>.isSome) V
+          if c.edges.any (stageOf ·.stage |>.isSome) then some c else none
+        | _ => none
+      if let some c := chain then
+        let parts := c.src :: c.edges.map (·.stage)
+        let wire (j : Inst) : Bool := env.stream.any (· == j.eff) || (env.iterEff j.eff &&
+          ((env.eff? j.eff).any fun e => e.ops.all (·.qual != .lin)))
+        parts.zipIdx.foldl (fun r (s, i) =>
+          let rs := match stageOf s, s with
+            | some g, .var _ _ | some g, .defApp .. => env.callRow g
+            | _, s => rowV env n s
+          let rs := if i + 1 == parts.length then rs.filter (fun j => !env.stream.any (· == j.eff))
+            else rs.filter (!wire ·)
+          env.union r rs) []
+      else
       let head := match headName f with
         | some x => match env.op? x, env.fn? x with
           | some o, _ => [env.opInst o sp]
