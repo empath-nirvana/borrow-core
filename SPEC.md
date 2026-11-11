@@ -13608,7 +13608,7 @@ handed back).
       d : U(Ref A ⊸ F_{Σ_D} 1)        at the rule's dead context
       ⊢ withborU d : U(Ref A ⊸ U(∀'x ⊏ ⊓Δ. Mut 'x A ⊸ F_{Σ_M}(['x] B)) ⊸ F_Σ(Ref A ⊗ B))
 
-      Σ_M is Row.Unwind 'x;  Σ_M ≤ Σ;  Σ_D ≤ Σ;  Σ_D and Σ do not hold Div;
+      Σ_M is Row.Unwind 'x;  Σ_M ≤ Σ;  Σ_D ≤ Σ;  Σ does not hold Div (so neither does Σ_D);
       Σ_D.UnrD → Σ_M.PendPers
 
 `withbor (1)` (`Ref A` lent as `Imm 'x A`) and `withbor (3)` (`Mut @a A` reborrowed as
@@ -13633,9 +13633,9 @@ handed back).
    - `hP` is kept.
 4. **The rules of §19 are instances.** At `Σ_D = ∅` and `Σ_M = Σ`, the rule is §19's
    `withbor1U`/`withbor2U`/`withbor3U` (`.thunk (.arr src (F_∅ 1))` is `src ⊸ 1`). The three
-   constructors are generalised in place, and the forms of §19 are theorems of the same names and
-   statements. There is no new constructor, term former, type former, `CDerives` index or machine
-   step.
+   constructors are generalised in place as `withbor1UD`/`withbor2UD`/`withbor3UD`, and the forms of
+   §19 are theorems of the same names and statements. There is no new term former, type former,
+   `CDerives` index or machine step.
 5. **The cancel path is excluded by the types.** Every operation of `Σ_M` is abortive, so no
    continuation is captured while the lend is live, and no cancel reaches a region holding it. The
    finaliser runs after the lend has ended. A lend held across a suspension, with a cleanup that
@@ -13673,15 +13673,18 @@ handed back).
 
 ### Units
 
-- K-b.1, Core: the three rules generalised, with the forms of §19 as theorems; `fin_runD`,
-  `ewp_unwindD` (`ewp_unwind` with `seq_raise_run` at the raise); the three compatibility lemmas
-  restated. Not built.
-- K-b.2, the chain: `erwpK_unwindD`, with the callback's run at one world (`cN_unwind_iff` at
-  `Σ_M`) and the finaliser's at the `KW` worlds of `Σ` (`seq_raise_runK`); the effectful
-  `fin_claim`; the three `_compatN` restated. Not built.
+- K-b.1, Core, built (#PR): `withbor{1,2,3}U` generalised in place as `withbor{1,2,3}UD`
+  (callback at `Σ_M`, result at `Σ`, finaliser at `Σ_D`; premises `Σ_M ≤ Σ`, `Σ_D ≤ Σ`,
+  `divB Σ = false` and `hP`, with `divB Σ_D = false` derived), the forms of §19 as same-named
+  theorems at `Σ_D = ∅`, `Σ_M = Σ`; `fin_runD`, `ewp_unwindD` (`ewp_unwind` with `seq_raise_run` at
+  the raise); the three compatibility lemmas restated.
+- K-b.2, the chain, built (#PR): `erwpK_unwindD`, with the callback's run at one world
+  (`cN_unwind_iff` at `Σ_M`) and the finaliser's at the `KW` worlds of `Σ` (`seq_raise_runK`); the
+  effectful `fin_claim`; the three `_compatN` restated.
 - K-b.3, the checker: `unwind (d)` in core text, the finaliser's row synthesised, the deciders, the
-  refusal; `TExpr`/`TDerives` carry `Σ_M`. Not built.
-- K-b.4, programs, with answers from the interpreter. Not built:
+  cancel-path refusal; `TExpr`/`TDerives` carry `Σ_M`. It extends the surface's #940 producer. Not
+  built.
+- K-b.4, programs, with answers from the interpreter, after K-b.3. Not built:
   - `corpus/core-kb-close-raise.bc`: a capability written, then closed by a cleanup that raises;
   - `corpus/core-kb-close-perform.bc`: the cleanup performs an answering operation;
   - `corpus/core-kb-reborrow-write.bc` (#940): a reborrowed `let mut` written by an effectful
