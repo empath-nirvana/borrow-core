@@ -8991,6 +8991,7 @@ whose meaning depended on two names coinciding.
   for a block parameter (`cbRows`) does not carry its `let mut` capabilities.
 - **`case V { … }` and `for` as expressions** are not read as `run`: `case` is printed core, and
   `for` as a value needs its loop result bound (`let r = for …`).
+- **A redesign of `let mut` as a Core former `var_n`** (#1058) is parked.
 
 ---
 
