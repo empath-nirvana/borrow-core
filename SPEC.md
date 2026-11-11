@@ -5898,14 +5898,15 @@ runs once, and every row and clause is what it was.
   hit: stricter only when a cancel row repeats an operation key.
 - **Answering effects in a finaliser** (a capability: `Stdout`, `Fs` #769, `Net` #597; a `fn`
   effect): the capability is a threaded `mut` borrow, and `[then]` splits the context `Γ₁ | Γ₂`,
-  so `M` and `D` cannot both hold it; R1 (§29) needs empty cancel rows (`Row.ResumeO`), and an
-  unwinding lend's finaliser `d : Ref T ⊸ 1` is closed, pure and abortive only. It does not type
-  today by any route, and #940 (a `let mut` both `M` and `D` write) has the same root. The
-  smallest change proposed is a fused `[then]` over a lend (`m : Mut @a T ∈ Γ₂`; `M` gets a
-  reborrow, `D` gets `m` back at `Σ_D`): one rule and its compatibility lemmas. Its raise path is
-  direct; its cancel path is a lend across a suspension, which needs #844 Tier 2 and #821.
+  so `M` and `D` cannot both hold it; R1 (§29) needs empty cancel rows (`Row.ResumeO`). #940 (a
+  `let mut` both `M` and `D` write) has the same root. The raise path types through the unwinding
+  lends with a finaliser at its own row, `withbor{1,2,3}UD` (§78, K-b): `M` gets a reborrow and `D`
+  gets the place back at `Σ_D`. The checker's producer for it is K-b.3. The cancel path is a lend
+  across a suspension, which needs #844 Tier 2 and #821 (§78 *Open*).
 - **An owner's finaliser that performs** (a declared value's drop that closes a socket): not a
-  consume (§42 *Not this*); Backend2's `genLendU` lowers only a constant finaliser.
+  consume (§42 *Not this*). Backend2's `genLendU` lowers a closure finaliser at `Σ_D = ∅` (#1089),
+  reading `Σ_M` and `Σ_D` from the node, and refuses a finaliser that performs, or a callback row
+  other than the borrow's, until K-b's lowering (#1046).
 - **Task codata** (`lib/async.bc`, `F (A + …) & F 1`): a task whose finalisers perform needs its
   close at `F_R 1`; it waits on the lowering of a finaliser that suspends.
 - **`[then]`'s two premises on unrestricted operations** restrict `unr` beyond §19's `[then]`
@@ -12091,6 +12092,10 @@ The top-level theorem is plain adequacy, every handler inside the program
     goal791N            : HandlerLawN → Goal791N
     fundamentalN_all    : MissingN → CDerives Δ Γ e j → SemJN Δ Γ e j
     handlerLawN_iff     : HandlerLawN ↔ MissingN
+
+`goal791N_nil` (#1024, `Core/Chain/GoalNil791N.lean`) is `Goal791N`'s instance with no constants
+and no externs, without `HandlerLawN`: it covers every program with no suspending-lend constant.
+`goal791N_nil_externs` is the same over host externs closed by values that meet Core's contract.
 
 No scheduler, scheduler contract (`SchedOKN`) or restriction on handler names is quantified over:
 a program that suspends handles its operations inside itself, and those handlers are typed by
