@@ -12,8 +12,9 @@ This module writes only the **glue**, as core text:
 * the tuple of the stage states and the running stage with its input, a sum over the stages;
 * the frame lists, each nested `pipe_with_stop`s, the most downstream innermost, in one cancel
   region at the site `c` (`core-pipe-close`'s form): `close_others_i` around `pipe_step` of `i`,
-  `close_all` around `pipe_forward`, and `close_up_i`, the region of `stop()` by `i`, under the
-  frame list of `i` and the stages downstream of it. The frames are shared: one function per stage
+  `close_all` around `pipe_forward`, and `close_up_i`, the region of `stop()` by `i`, whose first
+  error, reified outside it, the stage raises at its `stop()`, under `close_down_i`, the frame list
+  of `i` and the stages downstream of it, for a cancel from outside. The frames are shared: one function per stage
   and direction installs that stage's frame around the rest of the chain (`io_dn{j}`, `io_up{i}`),
   and each list is one region around one such chain, so the frames are linear in the stages;
 * per-stage getters and setters (`io_get{i}`, `io_set{i}`), between turns only, so that a turn
@@ -52,6 +53,17 @@ structure Stage where
   ready : String
   /-- The outer operation it forwards: its site and its cancel row, as the chain's row has it. -/
   fwd : Option (Nat × String) := none
+  /-- The payloads of its own abortive operations, a sum of `np` summands, `0` with none: its
+  `stop()` answers `1 + KP`, `inr` the first error of the region that closed its upstream, which
+  it raises at its `stop()` (SPEC §75).  `[spec §75]` -/
+  KP : String := "0"
+  np : Nat := 0
+  /-- The sites of the upstream's abortive operations whose first error its `stop()` raises, the
+  innermost first: each with its operations' payload types and their summands of `KP`, and the row
+  of that handler's answer, the region's cancel row without the sites handled so far.
+  Payloads own nothing today; under #1061 the answer owns the payload, and its one raise at the
+  `stop()` consumes it.  `[spec §75]` -/
+  reify : List (Nat × List (String × Nat) × String) := []
   deriving Inhabited
 
 /-- A chain: its stages, the region's site `c` and its operation's cancel row `cc` (what any stage
@@ -110,7 +122,7 @@ def Stage.rows (st : Stage) : String :=
 
 /-- The stage's arguments to a piece over its types: types, rows, sites. -/
 def Stage.args (st : Stage) : String :=
-  s!"{st.A}, {st.K}, {st.B}, {st.R}, {st.OA}, {st.rows}, site {st.y}, site {st.s}, site {st.f}"
+  s!"{st.A}, {st.K}, {st.KP}, {st.B}, {st.R}, {st.OA}, {st.rows}, site {st.y}, site {st.s}, site {st.f}"
 
 /-- The stage's state type, `lib/pipe.bc`'s `PipeSt`. -/
 def Stage.stTy (st : Stage) : String := s!"PipeSt[{st.args}]"
@@ -125,7 +137,7 @@ def Stage.restTy (st : Stage) : String := s!"PipeRest[{st.args}]"
 def Stage.loopTy (st : Stage) : String := s!"PipeLoop[{st.R}, row ({st.lr}), row ({st.lc})]"
 
 /-- The input of a turn of the stage, `1 + (A + K)`. -/
-def Stage.inTy (st : Stage) : String := s!"1 + ({st.A} + {st.K})"
+def Stage.inTy (st : Stage) : String := s!"(1 + {st.KP}) + ({st.A} + {st.K})"
 
 /-- `v` taken apart into the names `xs`, a right-nested tuple, by one `let` per pair; `tmp` names
 the inner tuples. -/
@@ -200,7 +212,7 @@ def build (cn : Conn) (fvs : List (String × String)) (tail : Option String)
   let kStop (x : String) : String :=
     s!"thunkv fun (io_pz{x}_{sfx} : 1) -> (perform[{cn.c}.0] io_pz{x}_{sfx} : {fAt regRow "1"})"
   let wsArgs (st : Stage) : String :=
-    s!"{st.A}, {st.K}, {st.B}, {st.R}, {st.OA}, 1, {st.rows}, row ({cc}), row ({cc}), site {st.y}, site {st.s}, site {st.f}, site {cn.c}"
+    s!"{st.A}, {st.K}, {st.KP}, {st.B}, {st.R}, {st.OA}, 1, {st.rows}, row ({cc}), row ({cc}), site {st.y}, site {st.s}, site {st.f}, site {cn.c}"
   let ws (j : Nat) : String := s!"pipe_with_stop[{wsArgs ss[j]!}]"
   let mut defs := s!"io_chr_{sfx} : !U (1 -o {fAt cc "1"}) <- return (!thunkv fun (io_cv_{sfx} : 1) -> return io_cv_{sfx});
 io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o {fAt cc "1"}) * 1 <- return
@@ -326,7 +338,7 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
       let dn := ss[i + 1]!
       let (s1, rest, splitN) := if i + 2 == n then (hs, none, "")
         else (s!"io_hn{i}_{sfx}", some s!"io_hr{i}_{sfx}", s!"let (io_hn{i}_{sfx}, io_hr{i}_{sfx}) = {hs};")
-      let hc := call s!"pipe_handoff[{st.loopTy}, {st.restTy}, {st.restTy}, {st.B}, {st.R}, {dn.stTy}]"
+      let hc := call s!"pipe_handoff[{st.loopTy}, {st.restTy}, {st.restTy}, {st.B}, {st.R}, {dn.KP}, {dn.stTy}]"
         s!"({v} : {st.B} * {st.restTy} + {st.R}), {s1}" s!"h{i}_{sfx}"
       let pre1 := pairV preV (some s!"io_t{i}_{sfx}")
       s!"{splitHole} {splitN}
@@ -343,15 +355,15 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
                 io_wo{i}_{sfx} : ({st.B}) * ({W}) <- return (io_b{i}_{sfx}, io_ow_{sfx});
                 io_w2{i}_{sfx} <- (perform[{nf}.0] io_wo{i}_{sfx}) unwind {callAll sy s!"y{i}"};
                 io_ny{i}_{sfx} <- {setE i h sy s!"ny{i}_{sfx}"};
-                return (inr (({s!"io_ny{i}_{sfx}"}, io_w2{i}_{sfx}), {turnTo i "inl ()"}) : {Obs})"
+                return (inr (({s!"io_ny{i}_{sfx}"}, io_w2{i}_{sfx}), {turnTo i "inl (inl ())"}) : {Obs})"
         | none => if cn.pull then
           -- A chain's rest: the last stage's item is the stored generator's.
           s!"let (io_b{i}_{sfx}, io_ky{i}_{sfx}) = io_yk{i}_{sfx};
                 io_ny{i}_{sfx} <- {setE i h s!"(inr (inr (inl io_ky{i}_{sfx})) : {st.stTy})" s!"ny{i}_{sfx}"};
-                return (inl (io_b{i}_{sfx}, ({withW s!"io_ny{i}_{sfx}" s!"io_ow_{sfx}"}, {turnTo i "inl ()"})) : {Obs})"
+                return (inl (io_b{i}_{sfx}, ({withW s!"io_ny{i}_{sfx}" s!"io_ow_{sfx}"}, {turnTo i "inl (inl ())"})) : {Obs})"
           else
           s!"let (io_b{i}_{sfx}, io_ky{i}_{sfx}) = io_yk{i}_{sfx}; let _ = io_b{i}_{sfx};
-                {nextC (setE i h s!"(inr (inr (inl io_ky{i}_{sfx})) : {st.stTy})" s!"ny{i}_{sfx}") (turnTo i "inl ()") s!"y{i}"}"
+                {nextC (setE i h s!"(inr (inr (inl io_ky{i}_{sfx})) : {st.stTy})" s!"ny{i}_{sfx}") (turnTo i "inl (inl ())") s!"y{i}"}"
       else handoff s!"inl io_yk{i}_{sfx}"
     let returnArm := if last && cn.pull then
         s!"io_v{i}_{sfx} <- {coCall}; let () = io_v{i}_{sfx};
@@ -361,7 +373,7 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
         -- glue takes their states right-nested; the hole has them left-nested.
         let m := n - 1
         let ups := (List.range m).map sv
-        let subTurn := s!"({inj (n - 2) (n - 1) "inl ()"} : {sum ((cn.stages.take (n - 1)).map (·.inTy))})"
+        let subTurn := s!"({inj (n - 2) (n - 1) "inl (inl ())"} : {sum ((cn.stages.take (n - 1)).map (·.inTy))})"
         s!"{lsplit m h}
                 io_rs{i}_{sfx} <- return ((unbang io_rw_{sfx}r) ({tup ups}, {subTurn}));
                 return (inl (io_r{i}_{sfx}, io_rs{i}_{sfx}) : {Obs})"
@@ -371,7 +383,7 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
         let res := if hasW then s!"(io_ow_{sfx}, io_v{i}_{sfx})" else s!"io_v{i}_{sfx}"
         s!"io_v{i}_{sfx} <- {fin}; return (inl {res} : {Obs})"
       else handoff s!"inr io_r{i}_{sfx}"
-    let skipArm := nextC (setE i h s!"(inl io_bl{i}_{sfx} : {st.stTy})" s!"nb{i}_{sfx}") (turnTo i "inl ()") s!"b{i}"
+    let skipArm := nextC (setE i h s!"(inl io_bl{i}_{sfx} : {st.stTy})" s!"nb{i}_{sfx}") (turnTo i "inl (inl ())") s!"b{i}"
     -- Next(κ): stored; the stage upstream runs, or, when it has ended, the end again. Stage `i`
     -- and the one upstream change: the states are `set (i−1)` of `(pre (i−1), (t, suf (i+1)))`.
     let nextArm := if i == 0 then
@@ -385,7 +397,7 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
         let hUp := pairV pq (some (pairV (some t) sufV))
         let put (x turn k : String) : String :=
           nextC (setE (i - 1) hUp s!"({x} : {upSt.stTy})" s!"nu{k}{i}_{sfx}") turn s!"u{k}{i}"
-        let keep (ctor k : String) : String := put ctor (turnTo (i - 1) "inl ()") k
+        let keep (ctor k : String) : String := put ctor (turnTo (i - 1) "inl (inl ())") k
         s!"{splitHole} {splitP}
                   case {su} \{
                     inl io_ua{i}_{sfx} -> {keep s!"inl io_ua{i}_{sfx}" "a"}
@@ -397,24 +409,41 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
                       }
                     }
                   }"
-    -- Stop(κ): the stages upstream stopped in one region (`close_up_i`), under the frame list of
-    -- the stage and those downstream of it; then the stage resumes with `()`.
+    -- Stop(κ): the stages upstream stopped in one region (`close_up_i`); the stage resumes with
+    -- the region's outcome, `inl ()`, or `inr` the payload of its first error, which the stage
+    -- raises at its `stop()` (Assembly(n) rev 2.6). The error is reified by handlers of its sites
+    -- outside the region, one per site, each answering the payload's injection into `KP`. Only a
+    -- cancel from outside, landing in the region, runs the finaliser `close_down_i`, which stops
+    -- the stage and those downstream of it: the stage's state is live across the region.
+    -- That finaliser is a typing obligation (`[then]` needs the live state consumed on a cancel).
+    -- The surface does not reach it: a cancel lands there only at an upstream cleanup's
+    -- forwarded operation, which is refused (`connectorV`, `reject/pipe-fin-forwarded.bc`).
+    -- Reached from core text, the order is Thm X's absorbed-cleanup clause (SPEC §19 *Cancels*,
+    -- `[cfin-cancel]`): the region completes, its first error kept, and `close_down_i` then
+    -- stops the stage and those downstream, downstream-first.
     let stopArm := if i == 0 then
-        nextC (setE i h s!"(inr (inr (inl io_ks{i}_{sfx})) : {st.stTy})" s!"ns{i}_{sfx}") (turnTo i "inl ()") s!"s{i}"
+        nextC (setE i h s!"(inr (inr (inl io_ks{i}_{sfx})) : {st.stTy})" s!"ns{i}_{sfx}") (turnTo i "inl (inl ())") s!"s{i}"
       else
         let t := s!"io_ts{i}_{sfx}"
         let sufI := pairV (some t) sufV
+        let X := s!"1 + {st.KP}"
         let upCall := call s!"io_cu{i}_{sfx}" hp s!"cu{i}_{sfx}"
         let dnCall := call s!"io_cd{i}_{sfx}" sufI s!"cd{i}_{sfx}"
+        let reified := st.reify.foldl (fun body (site, ops, rowAfter) =>
+          let ans := s!"!U ({X} -o {fAt rowAfter s!"({X})"})"
+          let cl := ops.map fun ((A, k) : String × Nat) =>
+            s!"(!thunkv fun (io_re_{sfx} : {A}) -> return (inr ({inj k st.np s!"io_re_{sfx}"}) : {X}))"
+          let clTy := prod ((ops.map fun ((A, _) : String × Nat) => s!"!U ({A} -o {fAt rowAfter s!"({X})"})") ++ ["1"])
+          s!"handle_with[{site}](((!thunkv fun (io_ro_{sfx} : {X}) -> return io_ro_{sfx}) : {ans}), ({tup (cl ++ ["()"])} : {clTy})) ({body})")
+          s!"(io_sq{i}_{sfx} <- {upCall}; return (inl io_sq{i}_{sfx} : {X}))"
         let (idleV, idleMk) := if i == 1 then (none, "")
           else (some s!"io_il{i}_{sfx}", s!"io_il{i}_{sfx} <- {call s!"io_id{i - 1}_{sfx}" "()" s!"il{i}_{sfx}"};")
         let ended := s!"(inr (inr (inr ())) : {ss[i - 1]!.stTy})"
         s!"{splitHole}
                     {t} : {st.stTy} <- return (inr (inr (inl io_ks{i}_{sfx})));
-                    io_su{i}_{sfx} <- {upCall} unwind {dnCall};
-                    let () = io_su{i}_{sfx};
+                    io_su{i}_{sfx} : {X} <- {reified} unwind {dnCall};
                     {idleMk}
-                    {nextC (setE (i - 1) (pairV idleV (some sufI)) ended s!"ns{i}_{sfx}") (turnTo i "inr (inr ())") s!"s{i}"}"
+                    {nextC (setE (i - 1) (pairV idleV (some sufI)) ended s!"ns{i}_{sfx}") (turnTo i s!"inl io_su{i}_{sfx}") s!"s{i}"}"
     -- Fwd(a, κ): stored (`AtFwd`); the connector performs the outer operation under `close_all`,
     -- so that a cancel there stops every stage downstream-first; the stage resumes the next turn.
     let fwdArm := match st.fwd with
@@ -425,9 +454,9 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
               {sf} : {st.stTy} <- return (inr (inr (inl io_fk{i}_{sfx})));
               io_fr{i}_{sfx} <- {fw} unwind {callAll sf s!"f{i}"};
               let () = io_fr{i}_{sfx};
-              {nextC (setE i h sf s!"nf{i}_{sfx}") (turnTo i "inl ()") s!"f{i}"}"
+              {nextC (setE i h sf s!"nf{i}_{sfx}") (turnTo i "inl (inl ())") s!"f{i}"}"
       | none => s!"let (io_fa{i}_{sfx}, io_fk{i}_{sfx}) = io_fy{i}_{sfx}; let _ = io_fa{i}_{sfx};
-              {nextC (setE i h s!"(inr (inr (inl io_fk{i}_{sfx})) : {st.stTy})" s!"nf{i}_{sfx}") (turnTo i "inl ()") s!"f{i}"}"
+              {nextC (setE i h s!"(inr (inr (inl io_fk{i}_{sfx})) : {st.stTy})" s!"nf{i}_{sfx}") (turnTo i "inl (inl ())") s!"f{i}"}"
     let arm := s!"{getS}
           {ev} <- {stepCall} unwind {coCall};
           case {ev} \{
@@ -477,7 +506,7 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
     | none => ""
   let body := s!"io_cw_{sfx} : !({Q} => U ({Lw})) <- return (!thunkv fun (io_q_{sfx} : {Q}) ->
   {destr (fvs.map (·.1)) s!"io_q_{sfx}" s!"io_qt_{sfx}_"}
-  {subDef}{defs}{turnFn}io_st_{sfx} : {GS} <- return ({ready}, {turnTo (n - 1) "inl ()"});
+  {subDef}{defs}{turnFn}io_st_{sfx} : {GS} <- return ({ready}, {turnTo (n - 1) "inl (inl ())"});
   io_f_{sfx} <- return (unbang (unfold[{Lw}, {GS}] io_turn_{sfx}));
   return (thunkv nu_in < (nu_out (force io_f_{sfx} io_st_{sfx})).1, (nu_out (force io_f_{sfx} io_st_{sfx})).2 >));
 {tail.getD s!"io_pipe_j_{sfx} : {Rlast} <- return ((unbang io_cw_{sfx}) {q});

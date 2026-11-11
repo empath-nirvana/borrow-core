@@ -562,6 +562,9 @@ structure ConnStage where
   /-- The last stage of `connect(CHAIN)`: the chain answers its result with the rest, a stored
   generator of the wire into it.  `[spec §75]` -/
   rest : Bool := false
+  /-- The payloads of its own abortive operations, each with the operation's name (`E.op`): its
+  `stop()` answers `1 +` their sum (SPEC §75).  `[spec §75]` -/
+  pays : List (String × VTy) := []
   deriving DecidableEq, Repr
 
 /-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied

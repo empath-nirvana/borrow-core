@@ -10,12 +10,14 @@
 --     downstream-first in one region: the middle's `20` is the first error, and it replaces the
 --     cancel: `321`, `inr i32[20]`.
 --   * At `stop()`: the middle takes two items and stops its upstream; the sink raises nothing. The
---     source's cleanup raises `10` in that region (`close_up`). The connector raises the region's
---     error under the frame list of the middle and the stages downstream of it (`close_down`),
---     which stops them downstream-first in one region: the sink, then the middle, whose cleanup
---     raises `20`, that region's first error, which replaces the `10` in flight: `132`,
---     `inr i32[20]`.
--- Answer: `321.321.132(inr i32[20], (inr i32[20], inr i32[20]))`, `live 0`.
+--     source's cleanup raises `10` in that region (`close_up`), whose first error the middle's
+--     `stop()` raises where it is called. The middle unwinds, and its own cleanup raises `20`,
+--     which replaces the `10` as any cleanup's raise replaces the error in flight; then the sink is
+--     stopped: `123`, `inr i32[20]`.
+--   * The same, with the middle catching the error at its `stop()`: a handler around `stop()`
+--     turns the `10` into a value, which the middle yields; it ends normally: `123`, the sum
+--     10 + 20 + 10, `inl i32[40]`.
+-- Answer: `321.321.123.123(inr i32[20], (inr i32[20], (inr i32[20], inl i32[40])))`, `live 0`.
 
 include io
 include pipe
@@ -71,6 +73,20 @@ fn take2() -> 1 with Stream[i32, 1], Yield[i32], Trace, Fail[i32] =
   note(2);
   x
 
+-- The middle takes two items, stops its upstream and catches the error its `stop()` raises,
+-- which it yields.
+fn take2_catch() -> 1 with Stream[i32, 1], Yield[i32], Trace, Fail[i32] =
+  x <- (
+    let a = match next() { inl v -> v | inr u -> 0 };
+    yield(a * 10);
+    let b = match next() { inl v -> v | inr u -> 0 };
+    yield(b * 10);
+    let caught : 1 + i32 = with to_result[i32, 1] { stop() };
+    match caught { inl u -> () | inr e -> yield(e) };
+    ()) unwind (bye(2, 20));
+  note(2);
+  x
+
 fn sink() -> i32 with Stream[i32, 1], Trace, Fail[i32] =
   x <- (
     let mut s = 0;
@@ -107,12 +123,14 @@ fn plain(r: i32 + i32) -> i32 + i32 = r
 fn on_cancel(r: (i32 + 1) + i32) -> i32 + i32 =
   match r { inl a -> (match a { inl v -> (inl v : i32 + i32) | inr u -> (inl 0 : i32 + i32) }) | inr e -> (inr e : i32 + i32) }
 
-main -> (i32 + i32) * ((i32 + i32) * (i32 + i32)) =
-  with show[(i32 + i32) * ((i32 + i32) * (i32 + i32))] {
+main -> (i32 + i32) * ((i32 + i32) * ((i32 + i32) * (i32 + i32))) =
+  with show[(i32 + i32) * ((i32 + i32) * ((i32 + i32) * (i32 + i32)))] {
     let a = plain(with to_result[i32, i32] { src(5) >| mid >| sink });
     dot();
     let b = on_cancel(with to_result[i32, i32 + 1] { with tm[i32] { src(5) >| mid >| sink_wait } });
     dot();
     let c = plain(with to_result[i32, i32] { src(5) >| take2 >| sum_all });
-    (a, (b, c))
+    dot();
+    let d = plain(with to_result[i32, i32] { src(5) >| take2_catch >| sum_all });
+    (a, (b, (c, d)))
   }

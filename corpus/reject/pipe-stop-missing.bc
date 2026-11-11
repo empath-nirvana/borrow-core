@@ -1,0 +1,29 @@
+-- expect: 29:58: this stage of a stream chain calls `stop()`, and a stage upstream of it may raise `Fail.raise`, which this stage does not perform: `stop()` raises at its call the first error of closing the upstream, so the stage's row holds it (SPEC §75)
+-- SPEC §75, Part B, *Restrictions in L1*: `stop()` raises at its call the first error of closing
+-- the upstream, so a stage that calls `stop()` performs every abortive operation of the stages
+-- upstream of it. The source's cleanup may raise `Fail[i32]`; the middle, which calls `stop()`,
+-- does not perform `Fail`.
+
+include pipe
+include fail
+
+fn src(n: i32) -> 1 with Yield[i32], Fail[i32] =
+  x <- (
+    let mut i = 1;
+    while i <= n { yield(i); i = i + 1 };
+    ()) unwind (raise(10));
+  x
+
+fn take1() -> 1 with Stream[i32, 1], Yield[i32] =
+  let a = match next() { inl v -> v | inr u -> 0 };
+  yield(a);
+  stop();
+  ()
+
+fn sum_all() -> i32 with Stream[i32, 1] =
+  let mut s = 0;
+  let mut go = true;
+  while go { match next() { inl v -> s = s + v | inr u -> go = false } };
+  s
+
+main -> i32 + i32 = with to_result[i32, i32] { src(3) >| take1 >| sum_all }

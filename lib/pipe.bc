@@ -23,7 +23,9 @@ effect Stream[A, K] { ctl next() -> A + K; ctl stop() -> K }
 -- fresh per stage: `y` its `Yield[B]`, `s` its `Stream[A, K]`, `f` the fresh name of its forwarded
 -- operation. A component a stage does not have is never performed: a source's `A` is `0`, a sink's
 -- `B` is `0`, and a stage that forwards nothing has `OA = 0`. `stop()` is provided at `K = 1` only
--- (SPEC §75), so its entry answers `1`.
+-- (SPEC §75); its entry answers `1 + KP`: `inl ()`, or `inr` the payload of the first error of the
+-- region that closed the upstream, among `KP`, the payloads of the stage's own abortive operations,
+-- which the stage raises at its `stop()`.
 --
 -- Its rows, each written by the use from the stage as it was elaborated: `sg`, what it performs
 -- besides its sites, which passes to the outer handler; `cy`, `cn`, `cp`, `cf`, the cancel rows of
@@ -42,20 +44,21 @@ type PipeLoop[R, row lr, row lc] = U (nu X. F[..lr] (R + U X) & F[..lc] 1)
 type PipeEvt[B, R, OA, KR, row lr, row lc] =
   (B * KR + (R + PipeLoop[R, row (..lr), row (..lc)])) + ((KR + KR) + OA * KR)
 
--- A stored rest, resumed with the turn's input `1 + (A + K)`: at a `next()` with the item or the
--- end, at a `yield`, a `stop()` or a forwarded operation with `()` (SPEC §75 (One-frame)). One type
+-- A stored rest, resumed with the turn's input `(1 + KP) + (A + K)`: at a `next()` with the item or
+-- the end, at a `yield` or a forwarded operation with `inl ()`, at a `stop()` with the region's
+-- outcome (SPEC §75 (One-frame)). One type
 -- for every rest: a `nu` type's variable occurs under no inner `U`, so two rests cannot be
 -- mutually recursive types.  `[spec §75]`
-type PipeRest[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] =
-  U (nu X. (1 + (A + K) -o F[..sg] PipeEvt[B, R, OA, U X, row (..lr), row (..lc)])
+type PipeRest[A, K, KP, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] =
+  U (nu X. ((1 + KP) + (A + K) -o F[..sg] PipeEvt[B, R, OA, U X, row (..lr), row (..lc)])
     & F[..cy, ..cn, ..cp, ..cf, ..sg] 1)
 
 -- A turn's event.  `[spec §75]`
-type PipeEv[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] = PipeEvt[B, R, OA, PipeRest[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], row (..lr), row (..lc)]
+type PipeEv[A, K, KP, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] = PipeEvt[B, R, OA, PipeRest[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], row (..lr), row (..lc)]
 
 -- A stage's state: Ready(l), a loop not yet run or between turns | AtNext(κ) | AtYield(κ),
 -- AtStop(κ) or AtFwd(κ) | Ended(r).  `[spec §75]`
-type PipeSt[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] = PipeLoop[R, row (..lr), row (..lc)] + (PipeRest[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] + (PipeRest[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] + R))
+type PipeSt[A, K, KP, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] = PipeLoop[R, row (..lr), row (..lc)] + (PipeRest[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] + (PipeRest[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] + R))
 
 -- ---- The storing clauses of a stage's sites (Part A, class (c)) -------------------------------
 --
@@ -64,21 +67,21 @@ type PipeSt[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row 
 -- (SPEC §75 (One-frame)). A rest's cancel, and a loop's close, run under clauses that cancel: a
 -- stage's cleanup performs none of its sites' operations.
 
-def pipe_f_hr[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] : !U (PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] -o F[..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) =
-  !thunkv fun (e : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) -> return e
+def pipe_f_hr[A, K, KP, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] : !U (PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] -o F[..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) =
+  !thunkv fun (e : PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) -> return e
 
-def pipe_f_hc[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] :
-    !U (OA * U ((1 -o F[..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cf, ..sg] 1) -o F[..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) * 1 =
-  (!thunkv fun (q : OA * U ((1 -o F[..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cf, ..sg] 1)) ->
+def pipe_f_hc[A, K, KP, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] :
+    !U (OA * U ((1 -o F[..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cf, ..sg] 1) -o F[..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) * 1 =
+  (!thunkv fun (q : OA * U ((1 -o F[..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cf, ..sg] 1)) ->
      let (a, bk) = q;
-     ky : PipeRest[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] <-
+     ky : PipeRest[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] <-
        return (thunkv nu_in <
-         fun (i : 1 + (A + K)) -> let _ = i; w <- return (); (force bk).1 w,
+         fun (i : (1 + KP) + (A + K)) -> let _ = i; w <- return (); (force bk).1 w,
          (force bk).2 >);
-     return (inr (inr (a, ky)) : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]), ())
+     return (inr (inr (a, ky)) : PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]), ())
 
-def pipe_s_hr[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] : !U (PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) =
-  !thunkv fun (e : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) -> return e
+def pipe_s_hr[A, K, KP, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] : !U (PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) =
+  !thunkv fun (e : PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) -> return e
 
 -- A loop whose every turn ends without an operation: a stage above one that `stop()` closed, which
 -- the glue never runs again.
@@ -87,60 +90,67 @@ def pipe_idle[R, row lr, row lc] : !U (1 -o F[..lr] (R + 1) & F[..lc] 1) =
 
 -- A stalled stage (see `pipe_s_hc`): a loop whose every turn ends at once, keeping the rest `k`
 -- uncancelled; closing it cancels `k`, under clauses that cancel.
-def pipe_stall[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] :
-    !U (U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)
-        -o F[..lr] (R + U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)) & F[..lc] 1) =
-  !thunkv fun (k : U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)) ->
+def pipe_stall[A, K, KP, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] :
+    !U (U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)
+        -o F[..lr] (R + U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)) & F[..lc] 1) =
+  !thunkv fun (k : U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)) ->
     < return (inr k), handle_with[f](pipe_f_cr[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)], pipe_f_cc[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)]) ((force k).2) >
 
-def pipe_s_hc[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] :
-    !U (1 * U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1) -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
-    * (!U (1 * U ((1 -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cp, f.0 cancel[..cf] OA ~> 1, ..sg] 1) -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) * 1) =
-  (!thunkv fun (q : 1 * U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)) ->
+def pipe_s_hc[A, K, KP, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] :
+    !U (1 * U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1) -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
+    * (!U (1 * U ((1 + KP -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cp, f.0 cancel[..cf] OA ~> 1, ..sg] 1) -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) * 1) =
+  (!thunkv fun (q : 1 * U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)) ->
      let (u, bk) = q; let () = u;
-     kn : PipeRest[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] <-
+     kn : PipeRest[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] <-
        return (thunkv nu_in <
-         fun (i : 1 + (A + K)) -> handle_with[f](pipe_f_hr[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_f_hc[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) (case i {
-             inl u -> let () = u;
+         fun (i : (1 + KP) + (A + K)) -> handle_with[f](pipe_f_hr[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_f_hc[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) (case i {
+             inl u -> let _ = u;
                -- UNPROVED: (I1′, Assembly(n) rev 2.3) a rest at a `next()` is resumed with the item
                -- or the end, `inr`: `pipe_step` answers `Next` again on `inl ()`, and every case of
                -- the glue's dispatch keeps the input's tag the state's. Were it broken here, the
                -- stage would stall: the turn ends with the rest kept, uncancelled, in a loop that
                -- only skips, so that no cleanup runs out of order; the chain hangs instead.
                st : PipeLoop[R, row (..lr), row (..lc)] <- return (thunkv nu_in <
-                 g <- return (unbang (unfold[nu X. F[..lr] (R + U X) & F[..lc] 1, U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)] pipe_stall[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])); (nu_out (force g bk)).1,
-                 g <- return (unbang (unfold[nu X. F[..lr] (R + U X) & F[..lc] 1, U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)] pipe_stall[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])); (nu_out (force g bk)).2 >);
-               return (inl (inr (inr st)) : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
+                 g <- return (unbang (unfold[nu X. F[..lr] (R + U X) & F[..lc] 1, U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)] pipe_stall[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])); (nu_out (force g bk)).1,
+                 g <- return (unbang (unfold[nu X. F[..lr] (R + U X) & F[..lc] 1, U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..sg] 1)] pipe_stall[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])); (nu_out (force g bk)).2 >);
+               return (inl (inr (inr st)) : PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
            | inr v -> (force bk).1 v
            }),
          handle_with[f](pipe_f_cr[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)], pipe_f_cc[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)]) ((force bk).2) >);
-     return (inr (inl (inl kn)) : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]),
-   !thunkv fun (q : 1 * U ((1 -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cp, f.0 cancel[..cf] OA ~> 1, ..sg] 1)) ->
+     return (inr (inl (inl kn)) : PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]),
+   !thunkv fun (q : 1 * U ((1 + KP -o F[f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cp, f.0 cancel[..cf] OA ~> 1, ..sg] 1)) ->
      let (u, bk) = q; let () = u;
-     ky : PipeRest[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] <-
+     ky : PipeRest[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] <-
        return (thunkv nu_in <
-         fun (i : 1 + (A + K)) -> let _ = i; w <- return (); handle_with[f](pipe_f_hr[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_f_hc[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) ((force bk).1 w),
+         -- A rest at a `stop()`: resumed with the region's outcome, `inl ()` or `inr` the first
+         -- cleanup error's payload, which the stage raises at its `stop()` (SPEC §75).
+         fun (i : (1 + KP) + (A + K)) -> handle_with[f](pipe_f_hr[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_f_hc[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) (case i {
+             inl w -> (force bk).1 w
+             -- UNPROVED: (I1′) unreachable from the glue, which resumes a stage at a `stop()` with
+             -- the region's outcome, `inl`; were it broken, the stage would resume with `()`.
+           | inr v -> let _ = v; w : 1 + KP <- return (inl ()); (force bk).1 w
+           }),
          handle_with[f](pipe_f_cr[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)], pipe_f_cc[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)]) ((force bk).2) >);
-     return (inr (inl (inr ky)) : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]),
+     return (inr (inl (inr ky)) : PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]),
    ())
 
-def pipe_y_hr[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] : !U (R + PipeLoop[R, row (..lr), row (..lc)] -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1, f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) =
+def pipe_y_hr[A, K, KP, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] : !U (R + PipeLoop[R, row (..lr), row (..lc)] -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1 + KP, f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) =
   !thunkv fun (o : R + PipeLoop[R, row (..lr), row (..lc)]) ->
     case o {
-      inl r -> return (inl (inr (inl r)) : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
-    | inr bl -> return (inl (inr (inr bl)) : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
+      inl r -> return (inl (inr (inl r)) : PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
+    | inr bl -> return (inl (inr (inr bl)) : PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
     }
 
-def pipe_y_hc[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] :
-    !U (B * U ((1 -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1, f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cy, s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1, f.0 cancel[..cf] OA ~> 1, ..sg] 1) -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1, f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) * 1 =
-  (!thunkv fun (q : B * U ((1 -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1, f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cy, s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1, f.0 cancel[..cf] OA ~> 1, ..sg] 1)) ->
+def pipe_y_hc[A, K, KP, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] :
+    !U (B * U ((1 -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1 + KP, f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cy, s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1 + KP, f.0 cancel[..cf] OA ~> 1, ..sg] 1) -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1 + KP, f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) * 1 =
+  (!thunkv fun (q : B * U ((1 -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1 + KP, f.0 cancel[..cf] OA ~> 1, ..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) & F[..cy, s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1 + KP, f.0 cancel[..cf] OA ~> 1, ..sg] 1)) ->
      let (b, bk) = q;
-     ky : PipeRest[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] <-
+     ky : PipeRest[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] <-
        return (thunkv nu_in <
-         fun (i : 1 + (A + K)) -> let _ = i; w <- return ();
-           handle_with[f](pipe_f_hr[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_f_hc[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) (handle_with[s](pipe_s_hr[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_s_hc[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) ((force bk).1 w)),
-         handle_with[f](pipe_f_cr[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)], pipe_f_cc[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)]) (handle_with[s](pipe_s_cr[A, K, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), site f], pipe_s_cc[A, K, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), site f]) ((force bk).2)) >);
-     return (inl (inl (b, ky)) : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]), ())
+         fun (i : (1 + KP) + (A + K)) -> let _ = i; w <- return ();
+           handle_with[f](pipe_f_hr[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_f_hc[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) (handle_with[s](pipe_s_hr[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_s_hc[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) ((force bk).1 w)),
+         handle_with[f](pipe_f_cr[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)], pipe_f_cc[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)]) (handle_with[s](pipe_s_cr[A, K, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), site f], pipe_s_cc[A, K, KP, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), site f]) ((force bk).2)) >);
+     return (inl (inl (b, ky)) : PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]), ())
 
 -- ---- The clauses that cancel, around a rest's cancel or a loop's close ------------------------
 
@@ -153,54 +163,54 @@ def pipe_f_cc[OA, row sg, row cy, row cn, row cp, row cf] :
 
 def pipe_s_cr[A, K, OA, row sg, row cy, row cn, row cp, row cf, site f] : !U (1 -o F[f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) = !thunkv fun (v : 1) -> return v
 
-def pipe_s_cc[A, K, OA, row sg, row cy, row cn, row cp, row cf, site f] :
+def pipe_s_cc[A, K, KP, OA, row sg, row cy, row cn, row cp, row cf, site f] :
     !U (1 * U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) -o F[f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1)
-    * (!U (1 * U ((1 -o F[f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) & F[..cp, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) -o F[f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) * 1) =
+    * (!U (1 * U ((1 + KP -o F[f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) & F[..cp, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) -o F[f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) * 1) =
   (!thunkv fun (q : 1 * U ((A + K -o F[f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) & F[..cn, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1)) ->
      let (u, k) = q; let () = u; (force k).2,
-   !thunkv fun (q : 1 * U ((1 -o F[f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) & F[..cp, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1)) ->
+   !thunkv fun (q : 1 * U ((1 + KP -o F[f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) & F[..cp, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1)) ->
      let (u, k) = q; let () = u; (force k).2,
    ())
 
-def pipe_y_cr[A, K, B, OA, row sg, row cy, row cn, row cp, row cf, site s, site f] : !U (1 -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) = !thunkv fun (v : 1) -> return v
+def pipe_y_cr[A, K, KP, B, OA, row sg, row cy, row cn, row cp, row cf, site s, site f] : !U (1 -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1 + KP, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) = !thunkv fun (v : 1) -> return v
 
-def pipe_y_cc[A, K, B, OA, row sg, row cy, row cn, row cp, row cf, site s, site f] :
-    !U (B * U ((1 -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) & F[..cy, s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) * 1 =
-  (!thunkv fun (q : B * U ((1 -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) & F[..cy, s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1)) ->
+def pipe_y_cc[A, K, KP, B, OA, row sg, row cy, row cn, row cp, row cf, site s, site f] :
+    !U (B * U ((1 -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1 + KP, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) & F[..cy, s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1 + KP, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1 + KP, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) * 1 =
+  (!thunkv fun (q : B * U ((1 -o F[s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1 + KP, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1) & F[..cy, s.0 cancel[..cn] 1 ~> A + K, s.1 cancel[..cp] 1 ~> 1 + KP, f.0 cancel[..cf] OA ~> 1, ..cy, ..cn, ..cp, ..cf, ..sg] 1)) ->
      let (b, k) = q; let _ = b; (force k).2, ())
 
 -- ---- The pieces (Assembly(n) §1)  `[spec §75, §76]` -------------------------------------------
 
 -- step_i: one observation of the stage's loop under its storing clauses, or one resume of its rest
--- with the turn's input `1 + (A + K)`. An input that does not fit the state is dropped: at a `next()`
+-- with the turn's input `(1 + KP) + (A + K)`. An input that does not fit the state is dropped: at a `next()`
 -- the rest is answered again (`Next`), at any other rest it is resumed with `()`; at `Ended` the
 -- result is answered again.
-def pipe_step[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] : !U (PipeSt[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] * (1 + (A + K)) -o F[..sg] PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) =
-  !thunkv fun (p : PipeSt[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] * (1 + (A + K))) ->
+def pipe_step[A, K, KP, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] : !U (PipeSt[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] * ((1 + KP) + (A + K)) -o F[..sg] PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) =
+  !thunkv fun (p : PipeSt[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] * ((1 + KP) + (A + K))) ->
     let (st, inp) = p;
     case st {
       inl bl -> let _ = inp;
-        handle_with[f](pipe_f_hr[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_f_hc[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) (handle_with[s](pipe_s_hr[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_s_hc[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) (handle_with[y](pipe_y_hr[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_y_hc[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
+        handle_with[f](pipe_f_hr[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_f_hc[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) (handle_with[s](pipe_s_hr[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_s_hc[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) (handle_with[y](pipe_y_hr[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f], pipe_y_hc[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
           ((nu_out (force bl)).1)))
     | inr r1 -> case r1 {
         inl kn -> case inp {
             -- UNPROVED: (I1′) unreachable from the glue, which gives a stage at a `next()` the item
             -- or the end; answered by `Next` again, the stage keeps waiting, and nothing runs.
-            inl u -> let () = u; return (inr (inl (inl kn)) : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
-          | inr v -> w : 1 + (A + K) <- return (inr v); (nu_out (force kn)).1 w
+            inl u -> let _ = u; return (inr (inl (inl kn)) : PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
+          | inr v -> w : (1 + KP) + (A + K) <- return (inr v); (nu_out (force kn)).1 w
           }
       | inr r2 -> case r2 {
           inl ky -> (nu_out (force ky)).1 inp
-        | inr r -> let _ = inp; return (inl (inr (inl r)) : PipeEv[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
+        | inr r -> let _ = inp; return (inl (inr (inl r)) : PipeEv[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f])
         }
       }
     }
 
 -- stop_i: cancels the stored rest; closes the loop, under clauses that cancel; `()` at `Ended`.
-def pipe_stop[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] : !U (PipeSt[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] -o F[..cy, ..cn, ..cp, ..cf, ..sg] 1) =
-  !thunkv fun (st : PipeSt[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) ->
+def pipe_stop[A, K, KP, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, row lc, site y, site s, site f] : !U (PipeSt[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] -o F[..cy, ..cn, ..cp, ..cf, ..sg] 1) =
+  !thunkv fun (st : PipeSt[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]) ->
     case st {
-      inl bl -> handle_with[f](pipe_f_cr[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)], pipe_f_cc[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)]) (handle_with[s](pipe_s_cr[A, K, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), site f], pipe_s_cc[A, K, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), site f]) (handle_with[y](pipe_y_cr[A, K, B, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), site s, site f], pipe_y_cc[A, K, B, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), site s, site f])
+      inl bl -> handle_with[f](pipe_f_cr[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)], pipe_f_cc[OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf)]) (handle_with[s](pipe_s_cr[A, K, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), site f], pipe_s_cc[A, K, KP, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), site f]) (handle_with[y](pipe_y_cr[A, K, KP, B, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), site s, site f], pipe_y_cc[A, K, KP, B, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), site s, site f])
           ((nu_out (force bl)).2)))
     | inr r1 -> case r1 {
         inl kn -> (nu_out (force kn)).2
@@ -215,14 +225,14 @@ def pipe_stop[A, K, B, R, OA, row sg, row cy, row cn, row cp, row cf, row lr, ro
 -- the three frame lists, each one cancel region at the site `c`, whose operation's cancel row `cc`
 -- holds what every stage of the list performs when stopped. The ambient row `g` holds what
 -- `pipe_stop` performs, since the stage is stopped on the normal path too.
-def pipe_with_stop[A, K, B, R, OA, Q, row sg, row cy, row cn, row cp, row cf, row lr, row lc, row cc, row g, site y, site s, site f, site c] :
-    !U (PipeSt[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] * U (1 -o F[c.0 cancel[..cc] 1 ~> 1, ..g] Q)
+def pipe_with_stop[A, K, KP, B, R, OA, Q, row sg, row cy, row cn, row cp, row cf, row lr, row lc, row cc, row g, site y, site s, site f, site c] :
+    !U (PipeSt[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] * U (1 -o F[c.0 cancel[..cc] 1 ~> 1, ..g] Q)
         -o F[c.0 cancel[..cc] 1 ~> 1, ..g] Q) =
-  !thunkv fun (p : PipeSt[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] * U (1 -o F[c.0 cancel[..cc] 1 ~> 1, ..g] Q)) ->
+  !thunkv fun (p : PipeSt[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f] * U (1 -o F[c.0 cancel[..cc] 1 ~> 1, ..g] Q)) ->
     let (st, t) = p;
     w <- return ();
-    a <- force t w unwind (fn1 <- return (unbang pipe_stop[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]); force fn1 st);
-    u <- (fn2 <- return (unbang pipe_stop[A, K, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]); force fn2 st);
+    a <- force t w unwind (fn1 <- return (unbang pipe_stop[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]); force fn1 st);
+    u <- (fn2 <- return (unbang pipe_stop[A, K, KP, B, R, OA, row (..sg), row (..cy), row (..cn), row (..cp), row (..cf), row (..lr), row (..lc), site y, site s, site f]); force fn2 st);
     return a
 
 -- forward_i: performs the real outer operation `n.0` a non-last stage performed at its fresh name.
@@ -241,16 +251,16 @@ def pipe_finish[R, row g] : !U (R * U (1 -o F[..g] 1) -o F[..g] R) =
 -- handoff_i: wire `i`, from stage `i−1` to stage `i`, at an upstream event `Yield(b, κ)` or
 -- `Return(k)` (`B * KY + K`), with stage `i`'s state `S`, which it hands back as it is (stage `i` is
 -- `AtNext`, Assembly(n)'s (I5)). Upstream becomes `AtYield(κ)` or `Ended(k)`, and stage `i`'s input
--- is `inl b` or `inr k`.  `[spec §75]`
-def pipe_handoff[L, KN, KY, B, K, S] :
-    !((B * KY + K) * S => (L + (KN + (KY + K))) * ((1 + (B + K)) * S)) =
+-- is `inr (inl b)` or `inr (inr k)`.  `[spec §75]`
+def pipe_handoff[L, KN, KY, B, K, KP, S] :
+    !((B * KY + K) * S => (L + (KN + (KY + K))) * (((1 + KP) + (B + K)) * S)) =
   !thunkv fun (p : (B * KY + K) * S) ->
     let (e, s) = p;
     case e {
       inl yk ->
         let (b, ky) = yk;
-        return ((inr (inr (inl ky)) : L + (KN + (KY + K))), ((inr (inl b) : 1 + (B + K)), s))
-    | inr k -> return ((inr (inr (inr k)) : L + (KN + (KY + K))), ((inr (inr k) : 1 + (B + K)), s))
+        return ((inr (inr (inl ky)) : L + (KN + (KY + K))), ((inr (inl b) : (1 + KP) + (B + K)), s))
+    | inr k -> return ((inr (inr (inr k)) : L + (KN + (KY + K))), ((inr (inr k) : (1 + KP) + (B + K)), s))
     }
 
 -- ---- A chain's rest (provisional spellings, SPEC §75)  `[spec §75]` ---------------------------

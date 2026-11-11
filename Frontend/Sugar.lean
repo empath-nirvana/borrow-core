@@ -6591,6 +6591,8 @@ def connParts : Nat → TCx → Span → (Nat × List ConnStage) → Val →
     let mut used : List String := []
     -- What any stage performs when stopped, each operation once.
     let mut ccRow : Frontend.Check.CRow := []
+    -- Per stage, the abortive operations of the stages upstream of it: what its `stop()` may raise.
+    let mut upAbs : List Frontend.Check.CRow := []
     -- The row the chain runs at: what its stages perform besides their sites, and the outer
     -- operations it forwards; each operation once.
     let mut gRow : Frontend.Check.CRow := []
@@ -6647,7 +6649,10 @@ def connParts : Nat → TCx → Span → (Nat × List ConnStage) → Val →
         A := s!"({cs₀.A.pp 0})", K := s!"({cs₀.K.pp 0})", B := s!"({cs₀.B.pp 0})", R := s!"({← ppT R})",
         OA, fwd, sg := ← ppR (lr.filter (!mine ·)),
         cy := ← finOf cs₀.y 0, cn := ← finOf cs₀.s 0, cp := ← finOf cs₀.s 1, cf := ← finOf cs₀.f 0,
-        lr := ← ppR lr, lc := ← ppR lc, y := cs₀.y, s := cs₀.s, f := cs₀.f, ready }]
+        lr := ← ppR lr, lc := ← ppR lc, y := cs₀.y, s := cs₀.s, f := cs₀.f, ready,
+        KP := if cs₀.pays.isEmpty then "0" else
+          Elab.Connector.sum (cs₀.pays.map fun (_, P) => s!"({P.pp 0})"),
+        np := cs₀.pays.length }]
       used := used ++ (latest c.locals).filterMap fun (y, _) => if mentionsC y M' then some y else none
       -- A stage that performs a `multi ctl` operation: the connector's frames around it are
       -- refused by the checker (`[then]`'s `¬Row.UnrD`), whose message this note explains.
@@ -6655,6 +6660,7 @@ def connParts : Nat → TCx → Span → (Nat × List ConnStage) → Val →
         let nm := ((← get).opNames.lookup (o.n.toNat, o.i.toNat)).getD s!"{o.n}.{o.i}"
         noteWhy sp (s!"`{nm}` resumes any number of times (`multi ctl`), so a stage of a stream " ++
           "chain cannot perform it: the connector stops its stages around it (SPEC §75)")
+      upAbs := upAbs ++ [ccRow.filter (·.abort)]
       let stopRow : Frontend.Check.CRow := (lr.filter (!mine ·)) ++ (lr.filter mine).flatMap fun o =>
         if o.fin.isTop then [] else o.fin.rowOf
       for o in stopRow do
@@ -6686,7 +6692,33 @@ def connParts : Nat → TCx → Span → (Nat × List ConnStage) → Val →
         pure (some (nf, w, W), Elab.Connector.rowCat [G, ent],
           if fvs.any (·.1 == w) then fvs else fvs ++ [(w, W)])
       | _, _ => pure (none, G, fvs)
-    pure ({ stages, c := cs, cc := ← ppR ccRow, G, sfx, out,
+    -- The sites whose errors a stage's `stop()` raises: each site of an upstream abortive operation
+    -- whose operations, as the chain's row has them, are all abortive and among the stage's own
+    -- (`connectorV` refuses a stage that calls `stop()` otherwise). Each is reified by a handler
+    -- around the region, whose answer's row is the region's cancel row without the sites handled
+    -- so far (SPEC §75).
+    let chainRow := c.E.row.getD []
+    let mut stages' : List Elab.Connector.Stage := []
+    for ((st, cs₀), up) in (stages.zip ss).zip upAbs do
+      let mut done : List Nat := []
+      let mut reify : List (Nat × List (String × Nat) × String) := []
+      for o in up do
+        let n := o.n.toNat
+        if done.contains n then continue
+        done := done ++ [n]
+        let ops := (chainRow.filter (·.n.toNat == n)).mergeSort (fun a b => a.i.toNat ≤ b.i.toNat)
+        let mut cls : List (String × Nat) := []
+        let mut ok := !ops.isEmpty
+        for e in ops do
+          let nm := ((← get).opNames.lookup (n, e.i.toNat)).getD ""
+          match (cs₀.pays.zipIdx.find? (·.1.1 == nm)), e.abort with
+          | some (_, k), true => cls := cls ++ [(← ppT e.A, k)]
+          | _, _ => ok := false
+        if ok then
+          let handled := (reify.map (·.1)) ++ [n]
+          reify := reify ++ [(n, cls, ← ppR (ccRow.filter fun o' => !handled.contains o'.n.toNat))]
+      stages' := stages' ++ [{ st with reify }]
+    pure ({ stages := stages', c := cs, cc := ← ppR ccRow, G, sfx, out,
             rest := (ss.getLast?.map (·.rest)).getD false }, fvs₂, holes)
 
 /-- A stream chain on the pipe connector, run where it is (SPEC §75 Part B): the glue

@@ -1,0 +1,33 @@
+-- expect: 33:53: this stage of a stream chain calls `stop()`, and a stage upstream of it performs `Bad`, whose operations are not all abortive: `stop()` raises the first error of closing the upstream, which is provided for an effect whose operations are all abortive in this version (SPEC §75)
+-- SPEC §75, Part B, *Restrictions in L1*: `stop()` raises the first error of closing the upstream,
+-- which is provided for an effect whose operations are all abortive. The source performs `Bad`,
+-- whose `fail` is abortive and whose `warn` resumes (`must_resume`, so not forwarded).
+
+include pipe
+
+effect Bad { must_resume ctl warn() -> 1; ctl fail(e: i32) -> never }
+
+handler catch_bad[A]: Bad, A -> A + i32 = {
+  return(a) = inl a;
+  warn(k) = k(());
+  fail(e) = inr e
+}
+
+fn src(n: i32) -> 1 with Yield[i32], Bad =
+  warn();
+  yield(1);
+  ()
+
+fn take1() -> 1 with Stream[i32, 1], Yield[i32], Bad =
+  let a = match next() { inl v -> v | inr u -> 0 };
+  yield(a);
+  stop();
+  ()
+
+fn sum_all() -> i32 with Stream[i32, 1] =
+  let mut s = 0;
+  let mut go = true;
+  while go { match next() { inl v -> s = s + v | inr u -> go = false } };
+  s
+
+main -> i32 + i32 = with catch_bad[i32] { src(3) >| take1 >| sum_all }

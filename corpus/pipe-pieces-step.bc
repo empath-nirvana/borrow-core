@@ -5,7 +5,7 @@ include pipe
 def plus : i32 * i32 => i32 = unbang host[add32]
 def lt : i32 * i32 => 1 + 1 = unbang host[lt_s32]
 
-def src_turn : !U (i32 -o F[1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1] (1 + i32) & F 1) =
+def src_turn : !U (i32 -o F[1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1] (1 + i32) & F 1) =
   !thunkv fun (i : i32) ->
     < c <- return (lt (i32[3], i));
       case c {
@@ -15,45 +15,45 @@ def src_turn : !U (i32 -o F[1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 canc
       return () >
 
 -- An event's item, if any, and the stage's state after it.
-def ev_st : !U (PipeEv[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3] -o F ((i32 + 1) * PipeSt[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3])) =
-  !thunkv fun (e : PipeEv[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]) ->
+def ev_st : !U (PipeEv[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3] -o F ((i32 + 1) * PipeSt[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3])) =
+  !thunkv fun (e : PipeEv[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]) ->
     case e {
       inl a -> case a {
-          inl bk -> let (b, ky) = bk; return ((inl b : i32 + 1), (inr (inr (inl ky)) : PipeSt[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]))
+          inl bk -> let (b, ky) = bk; return ((inl b : i32 + 1), (inr (inr (inl ky)) : PipeSt[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]))
         | inr rl -> case rl {
-            inl r -> return ((inr () : i32 + 1), (inr (inr (inr r)) : PipeSt[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]))
-          | inr bl -> return ((inr () : i32 + 1), (inl bl : PipeSt[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]))
+            inl r -> return ((inr () : i32 + 1), (inr (inr (inr r)) : PipeSt[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]))
+          | inr bl -> return ((inr () : i32 + 1), (inl bl : PipeSt[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]))
           }
         }
     | inr b -> case b {
           inl c -> case c {
-              inl kn -> return ((inr () : i32 + 1), (inr (inl kn) : PipeSt[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]))
-            | inr ky -> return ((inr () : i32 + 1), (inr (inr (inl ky)) : PipeSt[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]))
+              inl kn -> return ((inr () : i32 + 1), (inr (inl kn) : PipeSt[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]))
+            | inr ky -> return ((inr () : i32 + 1), (inr (inr (inl ky)) : PipeSt[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]))
             }
-        | inr aky -> let (a, ky) = aky; let _ = a; return ((inr () : i32 + 1), (inr (inr (inl ky)) : PipeSt[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]))
+        | inr aky -> let (a, ky) = aky; let _ = a; return ((inr () : i32 + 1), (inr (inr (inl ky)) : PipeSt[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]))
         }
     }
 
 def item : !U (i32 + 1 -o F i32) = !thunkv fun (x : i32 + 1) -> case x { inl v -> return v | inr u -> return i32[0] }
 
 main : F i32 =
-  st0 : PipeSt[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3] <-
+  st0 : PipeSt[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3] <-
     return (inl ((thunkv nu_in <
-      g <- return (unbang (unfold[nu X. F[1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1] (1 + U X) & F 1, i32] src_turn)); a <- return i32[1]; (nu_out (force g a)).1,
-      g <- return (unbang (unfold[nu X. F[1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1] (1 + U X) & F 1, i32] src_turn)); a <- return i32[1]; (nu_out (force g a)).2 >)));
-  e1 <- (unbang pipe_step[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]) (st0, inl ());
+      g <- return (unbang (unfold[nu X. F[1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1] (1 + U X) & F 1, i32] src_turn)); a <- return i32[1]; (nu_out (force g a)).1,
+      g <- return (unbang (unfold[nu X. F[1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1] (1 + U X) & F 1, i32] src_turn)); a <- return i32[1]; (nu_out (force g a)).2 >)));
+  e1 <- (unbang pipe_step[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]) (st0, inl (inl ()));
   p1 <- (unbang ev_st) e1;
   let (x1, st1) = p1;
-  e2 <- (unbang pipe_step[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]) (st1, inl ());
+  e2 <- (unbang pipe_step[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]) (st1, inl (inl ()));
   p2 <- (unbang ev_st) e2;
   let (x2, st2) = p2;
-  e3 <- (unbang pipe_step[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]) (st2, inl ());
+  e3 <- (unbang pipe_step[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]) (st2, inl (inl ()));
   p3 <- (unbang ev_st) e3;
   let (x3, st3) = p3;
-  e4 <- (unbang pipe_step[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]) (st3, inl ());
+  e4 <- (unbang pipe_step[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]) (st3, inl (inl ()));
   p4 <- (unbang ev_st) e4;
   let (x4, st4) = p4;
-  u <- (unbang pipe_stop[0, 1, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]) st4;
+  u <- (unbang pipe_stop[0, 1, 0, i32, 1, 0, row (), row (), row (), row (), row (), row (1.0 cancel i32 ~> 1, 2.0 cancel 1 ~> 0 + 1, 2.1 cancel 1 ~> 1 + 0, 3.0 cancel 0 ~> 1), row (), site 1, site 2, site 3]) st4;
   let () = u;
   v1 <- (unbang item) x1;
   v2 <- (unbang item) x2;

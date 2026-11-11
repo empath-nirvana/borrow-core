@@ -288,6 +288,11 @@ structure Site where
   type arguments in the frame of the code being elaborated are these. Slots are unordered: an
   operation that two of them could serve is ambiguous (SPEC §38). -/
   slot : Option (List VTy) := none
+  /-- A stage's `Stream` site on the pipe connector: its `stop()` answers `1 + KP` (the first
+  error of the region that closed its upstream, `inr`, or `inl ()`), and the call re-raises an
+  `inr`; `KP` is the sum of the payloads of the stage's own abortive operations, each the effect,
+  its type arguments and the operation's index (SPEC §75).  `[spec §75]` -/
+  stopAns : Option (VTy × List (String × List VTy × Nat)) := none
 
 /-- The type arguments an operation is resolved against at the site: the slot's, in a copy. -/
 def Site.at (s : Site) : List VTy := s.slot.getD s.args
@@ -528,11 +533,13 @@ def Env.siteOps (env : Env) (s : Site) : List (Qual × VTy × VTy) :=
   | none => []
   | some e =>
     let σ : TySubst := e.tps.zip s.args
-    e.ops.map fun o =>
+    e.ops.zipIdx.map fun (o, i) =>
       let A := (tupleTy o.name.span (o.params.map (·.2))).subst σ
-      match s.thr with
-      | some (_, W) => (o.qual, .tensor o.name.span A (.name o.name.span W), .name o.name.span W)
-      | none => (o.qual, A, o.res.subst σ)
+      match s.thr, s.stopAns with
+      | some (_, W), _ => (o.qual, .tensor o.name.span A (.name o.name.span W), .name o.name.span W)
+      -- A connector stage's `stop()` (SPEC §75).
+      | none, some (X, _) => (o.qual, A, if i == 1 && env.stream == some s.eff then X else o.res.subst σ)
+      | none, none => (o.qual, A, o.res.subst σ)
 
 /-- The row entries of the sites `ss`, in order: `n.i q A ~> B`, each site once (two slots of a
 row may be served by one site, SPEC §38), each with its inferred cancel row (`Fins`, SPEC §27).
@@ -2053,6 +2060,16 @@ def streamChecks (env : Env) (src : Val) (run : List (Span × PipeMode × Val)) 
         throw ⟨s.span, "`stop()` answers the upstream's residual `K`, which a stage closed at a " ++
           "suspension does not hand back (§15 Open)"⟩
 
+/-- The re-raise of a connector stage's `stop()` answer `inr p`, `p` in the payload sum: a `case`
+per summand, each the raise `arms` gives for it (SPEC §75).  `[spec §75]` -/
+def stopRaise (sp : Span) : List (Nat × Nat) → Val → EM Comp
+  | [], V => pure (.absurd sp V)
+  | [(n, j)], V => pure (.abort sp n j V)
+  | (n, j) :: rest, V => do
+    let x ← fresh "fx_p"
+    let y ← fresh "fx_p"
+    pure (.case sp V ⟨x, sp⟩ (.abort sp n j (.var sp x)) ⟨y, sp⟩ (← stopRaise sp rest (.var sp y)))
+
 mutual
 /-- `M` with its operations resolved, handing the capabilities `cs` back beside its result: each
 terminal answering `v` answers `(c₁, (…, (cₙ, v)))`. With `wrap := false` (the body of a loop,
@@ -2343,6 +2360,12 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
     -- its own fresh site, and the connector performs it (SPEC §75, *Forwarding*).
     let mut fwdEffs : List String := []
     let mut fwdOf : List (Option String) := []
+    -- The abortive operations of the stages so far, which a later stage's `stop()` may raise:
+    -- the effect, its type arguments, the operation's index and name, and whether every operation
+    -- of the effect is abortive.
+    let mut upAb : List (String × List VTy × Nat × String × Bool) := []
+    let stopOp : Option String :=
+      (env.ops.find? fun o => o.eff == st && o.idx == 1).map (·.decl.name.name)
     for (s, i) in stages.zipIdx do
       -- A stage `s` is the call `s()`, or `s(e, …)` as written; the source is the computation it is.
       let call : Val := if i == 0 then s else match s with
@@ -2412,9 +2435,52 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
         | j₁ :: j₂ :: _ => throw ⟨s.span, s!"this stage of a stream chain performs `{j₁.eff}` and " ++
             s!"`{j₂.eff}`, two effects the connector forwards; it forwards one per stage in this " ++
             "version (SPEC §75)"⟩
+      -- The abortive operations it performs, outside its wires and what it forwards: the payloads
+      -- of the errors its `stop()` may raise (SPEC §75).
+      let mut mineAb : List (String × List VTy × Nat × String × Bool) := []
+      for j in row do
+        if wireE j.eff || fsite.any (·.eff == j.eff) then continue
+        let some e := env.eff? j.eff | continue
+        unless e.ops.any (·.abortive) do continue
+        let As ← argsOf j
+        for (o, oi) in e.ops.zipIdx do
+          if o.abortive then
+            mineAb := mineAb ++ [(j.eff, As, oi, o.name.name, e.ops.all (·.abortive))]
+      let pays : List (String × List VTy × Nat × VTy) := (mineAb.filter (·.2.2.2.2)).filterMap
+        fun (e, As, oi, _, _) => (env.eff? e).bind fun es => (es.ops[oi]?).map fun o =>
+          (e, As, oi, (tupleTy o.name.span (o.params.map (·.2))).subst (es.tps.zip As))
+      let calls : Bool := match stopOp, stageHead? s with
+        | some o, some x => match env.fn? x with
+          | some g => match g.decl with
+            | .def_ _ _ _ _ W _ => (refsV fuel W).contains o
+            | _ => false
+          | none => false
+        | _, _ => false
+      -- A stage that calls `stop()` raises there the first error of closing its upstream: its row
+      -- holds every abortive operation of the stages upstream, each of an effect whose operations
+      -- are all abortive (SPEC §75, *Restrictions in L1*).
+      if calls then
+        for (e, As, oi, nm, all) in upAb do
+          unless all do
+            throw ⟨s.span, s!"this stage of a stream chain calls `stop()`, and a stage upstream of it " ++
+              s!"performs `{e}`, whose operations are not all abortive: `stop()` raises the first " ++
+              "error of closing the upstream, which is provided for an effect whose operations are " ++
+              "all abortive in this version (SPEC §75)"⟩
+          unless pays.any (fun (e', As', oi', _) => e' == e && As'.map (·.strip) == As.map (·.strip) && oi' == oi) do
+            throw ⟨s.span, s!"this stage of a stream chain calls `stop()`, and a stage upstream of it " ++
+              s!"may raise `{e}.{nm}`, which this stage does not perform: `stop()` raises at its call " ++
+              "the first error of closing the upstream, so the stage's row holds it (SPEC §75)"⟩
+      for a in mineAb do
+        unless upAb.any (fun b => b.1 == a.1 && b.2.1.map (·.strip) == a.2.1.map (·.strip) && b.2.2.1 == a.2.2.1) do
+          upAb := upAb ++ [a]
+      let KP : VTy := match pays.reverse with
+        | [] => .zero sp
+        | p :: ps => ps.foldl (fun acc q => .sum sp q.2.2.2 acc) p.2.2.2
+      let stopAns := (VTy.sum sp (.unit sp) KP, pays.map fun (e, As, oi, _) => (e, As, oi))
       let own : List Site :=
         (match ys with | some (e, As) => [{ eff := e, n := y, args := As, sp, what }] | none => []) ++
-        (match ss with | some As => [{ eff := st, n := sn, args := As, sp, what }] | none => []) ++
+        (match ss with | some As => [{ eff := st, n := sn, args := As, sp, what, stopAns := some stopAns }]
+                       | none => []) ++
         fsite
       let cxS : Cx := { cx with sites := own ++ cx.sites.filter fun x => !own.any (·.eff == x.eff),
                                 caps := cx.caps.filter fun c => !own.any (·.eff == c.eff) }
@@ -2433,7 +2499,9 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
             "row would hold itself, which only `top` does (SPEC §75, §27 *Open*)"⟩
       let outF : Option (Nat × String × Row) := if !last then none else forOut.map fun (site, w) =>
         (site.n, w, env.fins.finOf site.n 0)
-      out := out ++ [{ y, s := sn, f, A, K, B, fwd, out := outF, rest := rest && last }]
+      out := out ++ [{ y, s := sn, f, A, K, B, fwd, out := outF, rest := rest && last,
+                       pays := pays.map fun (e, _, oi, P) =>
+                         (s!"{e}.{((env.eff? e).bind (·.ops[oi]?)).map (·.name.name) |>.getD ""}", P) }]
       fwdOf := fwdOf ++ [fsite.head?.map (·.eff)]
       ths := ths ++ [.thunk s.span M]
     -- No stage performs a forwarded operation unforwarded: its cancel row holds what every stage
@@ -2903,6 +2971,25 @@ def ctlCall : Nat → Cx → List Cap → Span → String → OpSig → Val → 
     report sp "call" (s!"{x} ({o.eff}) → {if abortive then "abort" else "perform"}[{s.n}.{o.idx}], " ++
       s!"handled by {s.what} at {s.sp.start.render}" ++
       (if abortive then ": abortive, it never resumes" else ""))
+    -- A connector stage's `stop()`: an `inr` answer is the first error of the region that closed
+    -- the upstream, raised here, once, by the operation that raised it, at the site that serves
+    -- its effect at this call (SPEC §75, Assembly(n) rev 2.6).
+    let reraise : Option (List (String × List VTy × Nat)) := match s.stopAns with
+      | some (_, ps) => if o.idx == 1 && cx.env.stream == some o.eff then some ps else none
+      | none => none
+    if let some ps := reraise then
+      let u ← fresh "fx_v"
+      let mut arms : List (Nat × Nat) := []
+      for (e, As, j) in ps do
+        let s' ← (cx.serve sp s!"the error `stop()` raises" (⟨e, some As, none⟩ : Inst) (strict := false) :
+          Except Error Site)
+        arms := arms ++ [(s'.n, j)]
+      let p ← fresh "fx_p"
+      let rs ← stopRaise sp arms (.var sp p)
+      let bind : Bind := .k fun N =>
+        pure (.bind sp ⟨r, sp⟩ none (.perform sp s.n o.idx W')
+          (.case sp (.var sp r) ⟨u, sp⟩ N ⟨p, sp⟩ rs))
+      return (b ++ [bind], .var sp u)
     let bind : Bind := if abortive then
         -- What follows an abort does not run.
         .k fun _ => pure (.abort sp s.n o.idx W')

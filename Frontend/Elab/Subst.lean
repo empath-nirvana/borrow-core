@@ -178,7 +178,8 @@ def Val.subst (σ : TySubst) : Val → Val
     let sub (st : ConnStage) : ConnStage :=
       { st with A := st.A.subst σ, K := st.K.subst σ, B := st.B.subst σ,
                 fwd := st.fwd.map (fun p => (p.1, p.2.subst σ)),
-                out := st.out.map (fun p => (p.1, p.2.1, p.2.2.subst σ)) }
+                out := st.out.map (fun p => (p.1, p.2.1, p.2.2.subst σ)),
+                pays := st.pays.map (fun p => (p.1, p.2.subst σ)) }
     .sugar sp (.connector c (ss.map sub))
   | .sugar sp (.hndCtl i) => .sugar sp (.hndCtl (i.subst σ))
   | .sugar sp s => .sugar sp s

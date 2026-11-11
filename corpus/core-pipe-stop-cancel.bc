@@ -1,0 +1,55 @@
+-- check: old-backend-refuses
+-- SPEC §75, Part B, Thm X's absorbed-cleanup clause, in the core text: a cancel arriving while a
+-- cleanup region runs is absorbed (SPEC §19 *Cancels*, `[cfin-cancel]`). The region completes,
+-- its first error kept, and the remaining stages then stop downstream-first. This is the
+-- connector's `stop()` arm by stage 2 of four (`close_up_2`, under the `unwind` frame
+-- `close_down_2`), with each stage's stop written as its cleanup, which traces its digit with the
+-- must-resume operation 6.0.
+--   * `close_up_2` is one cancel region at site 5 over the frames of stages 0 (outer) and 1
+--     (inner). Its operation 5.0 is cancelled by its handler, so the frames' cleanups run
+--     downstream-first: stage 1's first, which traces `2` and performs the outer `wait` 8.0.
+--   * The outer handler of 8 cancels there. The region absorbs that cancel: stage 1's cleanup ends,
+--     and stage 0's runs, tracing `1`.
+--   * The cancel then unwinds out of the region, through `close_down_2`, which stops stage 3, then
+--     stage 2, downstream-first: `4`, `3`. The handler of 8 answers `99`.
+--   * The surface does not reach this path: it needs an upstream cleanup that performs a forwarded
+--     operation, which is refused (`reject/pipe-fin-forwarded.bc`).
+-- Answer: (i32[99], i32[2143]), and `live 0`.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+def mul : i32 * i32 => i32 = unbang host[mul32]
+
+-- The region at site 5: its handler cancels the continuation of 5.0, running the frames' cleanups.
+def c5_hr : !U (1 -o F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] 1) = !thunkv fun (v : 1) -> return v
+def c5_hc : !U (1 * U ((1 -o F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] 1) & F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] 1) -o F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] 1) * 1 =
+  (!thunkv fun (p : 1 * U ((1 -o F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] 1) & F[6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1, 6.0 lin i32 ~> 1, 8.0 cancel[6.0 lin i32 ~> 1] 1 ~> 1] 1)) ->
+     let (u, k) = p; let () = u; (force k).2, ())
+
+-- The outer `wait` at site 8: its handler cancels, answering 99.
+def h8_hr : !U (i32 -o F[6.0 lin i32 ~> 1] i32) = !thunkv fun (v : i32) -> return v
+def h8_hc : !U (1 * U ((1 -o F[6.0 lin i32 ~> 1] i32) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1) -o F[6.0 lin i32 ~> 1] i32) * 1 =
+  (!thunkv fun (p : 1 * U ((1 -o F[6.0 lin i32 ~> 1] i32) & F[6.0 lin i32 ~> 1, 6.0 lin i32 ~> 1] 1)) ->
+     let (u, k) = p; let () = u; z <- (force k).2; return i32[99], ())
+
+-- The trace at site 6: the digits in the order traced, the first the most significant.
+def t_hr : !U (i32 -o F (i32 * (i32 * i32))) = !thunkv fun (v : i32) -> return (v, (i32[0], i32[1]))
+def t_hc : !U (i32 * U ((1 -o F (i32 * (i32 * i32))) & top) -o F (i32 * (i32 * i32))) * 1 =
+  (!thunkv fun (p : i32 * U ((1 -o F (i32 * (i32 * i32))) & top)) ->
+     let (d, k) = p;
+     u <- return ();
+     r <- (force k).1 u;
+     let (v, tp) = r; let (t, w) = tp;
+     return (v, (plus (mul (d, w), t), mul (w, i32[10]))), ())
+
+main : F (i32 * i32) =
+  r <- handle_with[6](t_hr, t_hc) (handle_with[8](h8_hr, h8_hc) (
+    -- `close_up_2`, the region, under `close_down_2`.
+    x <- handle_with[5](c5_hr, c5_hc) (
+        a <- (b <- perform[5.0] () unwind (t1 <- perform[6.0] i32[2]; perform[8.0] ()); return b)
+          unwind (t0 <- perform[6.0] i32[1]; return ());
+        return a)
+      unwind (t3 <- perform[6.0] i32[4]; t2 <- perform[6.0] i32[3]; return ());
+    let () = x;
+    return i32[0]));
+  let (v, tw) = r; let (t, w) = tw; let _ = w;
+  return (v, t)
