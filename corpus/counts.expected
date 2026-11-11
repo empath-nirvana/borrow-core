@@ -489,9 +489,18 @@ map-drain 23 0 0 684 635 223
 map-iter-owned 16 0 0 594 314 278
 map-reuse 7 0 0 48 48 0
 map-views 32 0 0 11053 8337 3795 # the eight values' buffers; the first map's three arrays and one doubling; the second map's three arrays and five doublings (16 to 512 slots for 200 keys)
+mut-after-unwind-counter-in-n 3 0 0 3 3 0
+mut-after-unwind-generator 3 0 0 3 3 0
+mut-after-unwind-if-arm 0 0 0 0 0 0
+mut-after-unwind-if-in-while 3 0 0 3 3 0
+mut-after-unwind-let-head 0 0 0 0 0 0
+mut-after-unwind-nested 3 0 0 3 3 0
+mut-after-unwind-while 3 0 0 3 3 0
 mut-bind-arm 0 0 0 0 0 0
 mut-block 0 0 0 0 0 0
 mut-block-nested 0 0 0 0 0 0
+mut-cancel-loop-for 0 0 0 0 0 0
+mut-cancel-loop-for-value 0 0 0 0 0 0
 mut-lend-arm 0 0 0 4 4 0
 mut-modify 1 0 0 2 2 0
 mut-name-capture 5 0 0 12 11 8

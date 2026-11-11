@@ -499,9 +499,18 @@ map-drain erased handles 0 performs 0 raises 0 left 0 0
 map-iter-owned erased handles 0 performs 0 raises 0 left 0 0
 map-reuse erased handles 0 performs 0 raises 0 left 0 0
 map-views erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-counter-in-n erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-generator erased handles 0 performs 0 raises 0 machines 2 suspends 1 left 0 0
+mut-after-unwind-if-arm erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-if-in-while erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-let-head erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-nested erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-while erased handles 0 performs 0 raises 0 left 0 0
 mut-bind-arm erased handles 0 performs 0 raises 0 left 0 0
 mut-block erased handles 0 performs 0 raises 0 left 0 0
 mut-block-nested erased handles 0 performs 0 raises 0 left 0 0
+mut-cancel-loop-for erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0
+mut-cancel-loop-for-value erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0
 mut-lend-arm erased handles 0 performs 0 raises 0 left 0 0
 mut-modify erased handles 0 performs 0 raises 0 left 0 0
 mut-name-capture erased handles 0 performs 0 raises 0 left 0 0
