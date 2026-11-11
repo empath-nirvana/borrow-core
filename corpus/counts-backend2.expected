@@ -181,6 +181,12 @@ json-drop-deep 5006 0 0 135041 129024 8010
 json-parse 673 0 0 24137 13762 13197
 json-deep 5004 0 0 252010 184003 80003
 json-get 17 0 0 945 393 483
+kernel-at08-once 1 0 0 4 4 0
+kernel-div-residual 1 0 0 7 7 0
+kernel-poly-id 0 0 0 0 0 0
+kernel-recursive-yield 20 0 0 630 630 0
+kernel-two-callees 0 5 0 0 0 0
+kernel-two-callees-tail 0 1 0 0 0 0
 parse-i64 12 0 0 687 313 270
 kernel-cancel-now 0 0 0 0 0 0
 kernel-deep-gen-plain 0 0 0 0 0 0

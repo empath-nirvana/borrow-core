@@ -629,6 +629,7 @@ corpus/json-parse.bc 3.0 cancellable abortive: branch; agree
 corpus/json-parse.bc 4.0 cancellable abortive: branch; agree
 corpus/json-parse.bc 2.0 cancellable abortive: branch; agree
 corpus/json-parse.bc 5.0 cancellable abortive: branch; agree
+corpus/kernel-at08-once.bc 5.0 must-resume stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/kernel-cancel-now.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/kernel-deep-gen-plain.bc 1.0 must-resume tail: direct; agree
 corpus/kernel-deep-gen-plain.bc 2.0 cancellable tail: machine: the clause suspends; disagree
@@ -649,12 +650,17 @@ corpus/kernel-nested-fail-outside.bc 1.0 cancellable abortive: branch; agree
 corpus/kernel-nested-fail-outside.bc 2.0 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/kernel-nested-log-outside.bc 1.0 must-resume tail+state: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/kernel-nested-log-outside.bc 2.0 cancellable abortive: branch; agree
+corpus/kernel-poly-id.bc 1.0 cancellable abortive: branch; agree
 corpus/kernel-reborrow-raise.bc 1.0 cancellable abortive: branch; agree
+corpus/kernel-recursive-yield.bc 1.0 cancellable abortive: branch; agree
+corpus/kernel-recursive-yield.bc 2.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/kernel-store-cancel.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/kernel-stored-k-cancel.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/kernel-stored-k-resume.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/kernel-take-all.bc 1.0 cancellable resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/kernel-tick-native.bc 1.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/kernel-two-callees-tail.bc 7.0 cancellable tail: direct; agree
+corpus/kernel-two-callees.bc 7.0 cancellable once: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/key-value.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/dp/0039-combination-sum-loop.bc 1.0 cancellable abortive: branch; agree
 corpus/leetcode/dp/0039-combination-sum.bc 1.0 cancellable abortive: branch; agree

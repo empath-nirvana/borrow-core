@@ -6,6 +6,10 @@
 -- * `Fail` outside `Log`: the abort unwinds the `with tally(0)`, a borrow of the log's cell (its
 --   unwinding form): the lend ends and the cell's finaliser frees it, so the log is lost.
 --
+-- `log_outside` is the twin of the kernel program `log-outside` and `fail_outside` the twin of the
+-- kernel program `fail-outside` (Backend/Kernel.lean, `logOutside`, `failOutside`), with an `i32`
+-- count of notes where the kernel's log is a `bool` cell.
+--
 -- Answer: `((i32[2], inr i32[7]), (inr i32[7], inl i32[3]))`: two notes before the error when
 -- `Log` is outside; with `Fail` outside, the error, and for 3 the value.
 include fail
