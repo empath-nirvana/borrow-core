@@ -171,6 +171,7 @@ if-match-argument 0 0 0 0 0 0
 infer-local-from-call 4 0 0 12 12 0
 infer-local-sum-generic 1 0 0 8 8 5
 infer-local-unit 2 0 0 4 4 1
+json-drop-deep 5006 0 0 135041 129024 8010
 json-parse 673 0 0 24137 13762 13197
 json-deep 5004 0 0 252010 184003 80003
 json-get 17 0 0 945 393 483
