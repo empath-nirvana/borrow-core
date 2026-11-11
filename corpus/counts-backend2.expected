@@ -212,6 +212,10 @@ leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 695
 lend-call-raise 9 0 0 34 31 4
 lend-call-record 1 0 0 6 2 0
 lend-tail-call 1 0 0 5 3 0
+linear-dropped-k-owned 2 0 0 9 9 1
+linear-gen-ctl-buffer 4 0 0 9 9 2
+linear-move-in-restore 3 0 0 17 17 5
+linear-pipe-move-in 3 0 0 17 17 5
 lit-lend-raise 6 0 0 69 30 39
 load-for-linear 1 0 0 92 52 3
 mut-control-assign-raise 0 0 0 6 6 0
@@ -538,6 +542,7 @@ operator-rounds 83 0 24 803 519 0
 parse-int 4 0 0 240 80 105
 parse-recover 245 0 31 1848 1036 0
 parse-recover-gen 226 0 31 1983 1199 108
+parse-recover-view 18 0 0 399 263 129
 pipe-bracket 3 0 0 3 3 0
 pipe-handlers 0 0 0 0 0 0
 pipe-left-row 3 0 0 3 3 0
