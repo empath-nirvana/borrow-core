@@ -13434,9 +13434,9 @@ instances, resolved to what serves them at the call, as §38 resolves a row entr
   (`finOfBranch`, §27). So `F[..cr, ..sg]`, with an operation in both `cr` and `sg`, keeps it
   twice.
 - **A row that keeps a repeat is refused wherever the kernel needs each operation once:** at
-  `[then]` and `unwind` (S.Uniq, `` … has an operation twice ``). So a template that puts
-  `F[..r1, ..r2]` under an `unwind`, used where `r1` and `r2` share an operation, is refused in its
-  instance.
+  `[then]` and `unwind` (S.Uniq): `` the row `R` has an operation twice ``. So a template that
+  puts `F[..r1, ..r2]` under an `unwind`, used where `r1` and `r2` share an operation, is refused in
+  its instance, with the message's `` in the instance `f__rk` of `f`, used at L:C ``.
 - **A second signature is refused wherever one row would give `n.i` two signatures:** between a
   written entry and a spliced one, between two splices, and within one row argument:
   `` the row argument of `f` gives `n.i` a second signature ``.
