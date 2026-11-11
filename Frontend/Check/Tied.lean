@@ -203,11 +203,11 @@ theorem unroll {s : CRow} {e : BoCa.Expr} {A : CVTy} (h : TiedAt s Δ Γ e (.val
 
 theorem nuIn {s : CRow} {e : BoCa.Expr} {C : CCTy} (hC : C.NuOk)
     (h : TiedAt s Δ Γ e (.comp C.unroll)) : TiedAt s Δ Γ e (.comp (.nu C)) :=
-  fun Ξ hΞ => .nuIn hC (h Ξ hΞ)
+  fun Ξ hΞ => .nuIn (m := 0) (i := 0) hC (h Ξ hΞ)
 
 theorem nuOut {s : CRow} {e : BoCa.Expr} {C : CCTy} (hC : C.NuOk)
     (h : TiedAt s Δ Γ e (.comp (.nu C))) : TiedAt s Δ Γ e (.comp C.unroll) :=
-  fun Ξ hΞ => .nuOut hC (h Ξ hΞ)
+  fun Ξ hΞ => .nuOut (m := 0) (i := 0) hC (h Ξ hΞ)
 
 /-! ### The effect rules -/
 
@@ -534,12 +534,12 @@ theorem unroll {p : Pins} {s : CRow} {e : BoCa.Expr} {A : CVTy} (h : TiedDer p s
 theorem nuIn {p : Pins} {s : CRow} {e : BoCa.Expr} {C : CCTy} (hC : C.NuOk)
     (h : TiedDer p s Δ Γ e (.comp C.unroll)) : TiedDer p s Δ Γ e (.comp (.nu C)) :=
   ⟨fun hn => TiedAt.nuIn hC (h.1 hn),
-    CDerivesP.nuIn hC h.2⟩
+    CDerivesP.nuIn (m := 0) (i := 0) hC h.2⟩
 
 theorem nuOut {p : Pins} {s : CRow} {e : BoCa.Expr} {C : CCTy} (hC : C.NuOk)
     (h : TiedDer p s Δ Γ e (.comp (.nu C))) : TiedDer p s Δ Γ e (.comp C.unroll) :=
   ⟨fun hn => TiedAt.nuOut hC (h.1 hn),
-    CDerivesP.nuOut hC h.2⟩
+    CDerivesP.nuOut (m := 0) (i := 0) hC h.2⟩
 
 theorem effSub {p : Pins} {s : CRow} {e : BoCa.Expr} {S S' : CRow} {A : CVTy}
     (hle : BoCa.Fig16.LogRel.Core.RowLe S S') (h : TiedDer p s Δ Γ e (.comp (effOf S A))) :

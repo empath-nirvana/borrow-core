@@ -205,6 +205,10 @@ inductive Row where
   /-- `..r`: the row parameter `r` as a row's tail, substituted by `Frontend.Elab.RowInst` before
   checking.  `[spec §76]` -/
   | var (x : String)
+  /-- `..r, …`: the row parameter `r` spliced ahead of more entries, the row their concatenation
+  in written order (`F[..cr, ..sg]`); substituted by `Frontend.Elab.RowInst` before checking.
+  `[spec §76]` -/
+  | splice (x : String) (rest : Row)
 
 /-- Shapes `σ ::= leaf A | node σ σ | Name` (syntax-core §5). -/
 inductive Shape where
@@ -367,6 +371,9 @@ inductive Const where
   | sliceEmptyMut (a : Life) (A : VTy)
   | sliceReplaceMut (a : Life) (A : VTy)
   | sliceSwapMut (a : Life) (A : VTy)
+  /-- `slice_copy_mut[@a, @b, A]`: the bulk copy of SPEC §74 from an `imm` family into a `mut`
+      one, at a persistent `A`. -/
+  | sliceCopyMut (a b : Life) (A : VTy)
   /-- `count_fold[S]`: the counted loop of SPEC §16. -/
   | countFold (S : VTy)
   /-- `count_try[S, E]`: the counted loop with an exit of SPEC §16. -/
@@ -996,6 +1003,7 @@ def Row.strip : Row → Row
   | .cons n i q A B f r => .cons n i q A.strip B.strip f.strip r.strip
   | .top => .top
   | .var x => .var x
+  | .splice x r => .splice x r.strip
 
 def Shape.strip : Shape → Shape
   | .leaf _ A => .leaf .none A.strip
@@ -1053,6 +1061,7 @@ def Const.strip : Const → Const
   | .sliceEmptyMut a A => .sliceEmptyMut a.strip A.strip
   | .sliceReplaceMut a A => .sliceReplaceMut a.strip A.strip
   | .sliceSwapMut a A => .sliceSwapMut a.strip A.strip
+  | .sliceCopyMut a b A => .sliceCopyMut a.strip b.strip A.strip
   | .countFold S => .countFold S.strip
   | .countTry S E => .countTry S.strip E.strip
   | .boundedFix A C => .boundedFix A.strip C.strip

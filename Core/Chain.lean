@@ -163,6 +163,7 @@ import Core.Chain.LetKW835N
 import Core.Chain.ThenKW835N
 import Core.Chain.CountKW835N
 import Core.Chain.FamOpsKW835N
+import Core.Chain.SliceCopyKW835N
 import Core.Chain.MuKW835N
 import Core.Chain.FoldGKW835N
 import Core.Chain.BorrowKW835N
@@ -196,3 +197,4 @@ import Core.Chain.StopKW835N
 import Core.Chain.Spike844N
 import Core.Chain.Nest844N
 import Core.Chain.Externs791N
+import Core.Chain.IO791N

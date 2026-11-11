@@ -444,6 +444,10 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
   | sliceSwapM a A hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := swapV.1) (by rfl)]; exact .sliceSwapM a A (deadP_insert hd Γa hΓ)
+  | sliceCopyM a b A hΓ hA =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (e := sliceCopyV.1) (by rfl)]
+      exact .sliceCopyM a b A (deadP_insert hd Γa hΓ) hA
   | withbor1 x hΓ hx hsc hf₁ hf₂ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := withbor) (by rfl)]
@@ -463,21 +467,21 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
   | withswap hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.withswap) (by rfl)]; exact .withswap (deadP_insert hd Γa hΓ)
-  | withbor1U x hΓ hx hsc hf₁ hf₂ hS _ ihd =>
+  | withbor1UD x hΓ hx hsc hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       intro Γa Γb hΓ'; subst hΓ'
       have ed := ihd Γa Γb rfl
       rw [withborUE_shift]
-      exact .withbor1U x (deadP_insert hd Γa hΓ) hx hsc hf₁ hf₂ hS ed
-  | withbor2U x hΓ hx hside hf₁ hf₂ hS _ ihd =>
+      exact .withbor1UD x (deadP_insert hd Γa hΓ) hx hsc hf₁ hf₂ hS hMS hDS hSv hP ed
+  | withbor2UD x hΓ hx hside hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       intro Γa Γb hΓ'; subst hΓ'
       have ed := ihd Γa Γb rfl
       rw [withborUE_shift]
-      exact .withbor2U x (deadP_insert hd Γa hΓ) hx hside hf₁ hf₂ hS ed
-  | withbor3U x hΓ hx hf₁ hf₂ hS _ ihd =>
+      exact .withbor2UD x (deadP_insert hd Γa hΓ) hx hside hf₁ hf₂ hS hMS hDS hSv hP ed
+  | withbor3UD x hΓ hx hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       intro Γa Γb hΓ'; subst hΓ'
       have ed := ihd Γa Γb rfl
       rw [withborUE_shift]
-      exact .withbor3U x (deadP_insert hd Γa hΓ) hx hf₁ hf₂ hS ed
+      exact .withbor3UD x (deadP_insert hd Γa hΓ) hx hf₁ hf₂ hS hMS hDS hSv hP ed
   | withloadU x hΓ hx hf₁ hf₂ hS =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.withload) (by rfl)]
@@ -849,6 +853,10 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
   | sliceSwapM a A hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := swapV.1) (by rfl)]; exact .sliceSwapM a A (deadP_insert hd Γa hΓ)
+  | sliceCopyM a b A hΓ hA =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (e := sliceCopyV.1) (by rfl)]
+      exact .sliceCopyM a b A (deadP_insert hd Γa hΓ) hA
   | withbor1 x hΓ hx hsc hf₁ hf₂ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := withbor) (by rfl)]
@@ -868,21 +876,21 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
   | withswap hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.withswap) (by rfl)]; exact .withswap (deadP_insert hd Γa hΓ)
-  | withbor1U x hΓ hx hsc hf₁ hf₂ hS _ ihd =>
+  | withbor1UD x hΓ hx hsc hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       intro Γa Γb hΓ'; subst hΓ'
       have ed := ihd Γa Γb rfl
       rw [withborUE_shift]
-      exact .withbor1U x (deadP_insert hd Γa hΓ) hx hsc hf₁ hf₂ hS ed
-  | withbor2U x hΓ hx hside hf₁ hf₂ hS _ ihd =>
+      exact .withbor1UD x (deadP_insert hd Γa hΓ) hx hsc hf₁ hf₂ hS hMS hDS hSv hP ed
+  | withbor2UD x hΓ hx hside hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       intro Γa Γb hΓ'; subst hΓ'
       have ed := ihd Γa Γb rfl
       rw [withborUE_shift]
-      exact .withbor2U x (deadP_insert hd Γa hΓ) hx hside hf₁ hf₂ hS ed
-  | withbor3U x hΓ hx hf₁ hf₂ hS _ ihd =>
+      exact .withbor2UD x (deadP_insert hd Γa hΓ) hx hside hf₁ hf₂ hS hMS hDS hSv hP ed
+  | withbor3UD x hΓ hx hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       intro Γa Γb hΓ'; subst hΓ'
       have ed := ihd Γa Γb rfl
       rw [withborUE_shift]
-      exact .withbor3U x (deadP_insert hd Γa hΓ) hx hf₁ hf₂ hS ed
+      exact .withbor3UD x (deadP_insert hd Γa hΓ) hx hf₁ hf₂ hS hMS hDS hSv hP ed
   | withloadU x hΓ hx hf₁ hf₂ hS =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.withload) (by rfl)]

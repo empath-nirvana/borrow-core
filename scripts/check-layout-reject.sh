@@ -36,6 +36,7 @@ families=(
   "drop a sum's merged arm|merges arm .*, its arms give"
   "give a sum another tag|has [0-9]+ tags, its arms give"
   "unpack a packed sum|packed, its arms give"
+  "lay a capability's host-typed contents as an untyped word|is not a layout of the host type"
   "remove a code's class|'s class is none"
   "merge two classes of one shape and different widths|has width [0-9]+, its children give"
   "change a class's width|has width [0-9]+, its children give"
@@ -68,7 +69,7 @@ for f in "${progs[@]}"; do
   if ! "$bcc" lir --layout-reject "$f" > "$tmp/out" 2>&1; then
     echo "$f: $(head -3 "$tmp/out")"; fail=1; continue
   fi
-  if ! head -1 "$tmp/out" | grep -q '^accepted:'; then
+  if ! grep -q '^accepted:' <<< "$(head -1 "$tmp/out")"; then
     echo "$f: the layouts as computed are not accepted: $(head -1 "$tmp/out")"; fail=1
   fi
   if grep '^ACCEPTED:' "$tmp/out"; then
@@ -85,7 +86,7 @@ if ! cmp -s "$tmp/names" "$tmp/known"; then
 fi
 for fam in "${families[@]}"; do
   name=${fam%%|*}; re=${fam#*|}
-  if ! grep -F "refused: $name: " "$tmp/all" | grep -Eq -e "$re"; then
+  if ! grep -Eq -e "$re" <<< "$(grep -F "refused: $name: " "$tmp/all")"; then
     echo "perturbation \"$name\" was not refused by its family's refusal ($re) on any program"; fail=1
   fi
 done

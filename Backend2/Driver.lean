@@ -158,6 +158,51 @@ def classesOf (c : Frontend.Check.Checked) : Except String (List (VTy × List LT
       out := out ++ cls.map fun cl => (cl.root, lir cl.tys)
   return out
 
+/-- **The host types of the opaque cells** (SPEC §11): the integer type a compiled `Output`'s or
+`Clock`'s cell holds, read from the checked extern types (`Checked.ctx`, the slots `checkExterns`
+matched against Core's `mkOutputC`, `takeOutputC`, `takeClockC`; the context's slot `i` is extern
+`n − 1 − i`, as `convMain` binds them). `Output`'s is `mk_output`'s argument type, checked equal to
+the first component of `take_output`'s answer; `Clock`'s is `take_clock`'s answer, the clock's
+model (`vN_clockRep`). `Input` and `Args` have none: no checked type names their host word.
+
+TRUSTED (SPEC §11, `ExternsMeet`): that the compiled `Output` cell holds only the descriptor, not
+the model's `I32 ⊗ Bytes` (`outRep`). Assumed: the host sends each byte to the descriptor as it is
+written (`write_byte`, `write_all`), so the cell needs no byte list and `take_output` answers the
+descriptor and the empty list (`takeClosOf`). It should hold because that is the host's
+implementation of the trusted externs, which SPEC §11 states ("in compiled code the content of an
+`Input` or `Output` cell is the stream's file descriptor"); the kernel cannot check it, the host
+being outside Core. If it fails, the cell's contents are read or written at the wrong width (the
+cell itself is allocated in whole words). The host's side is `Convert.mkClosOf` and
+`Convert.takeClosOf`. `[spec §11]` -/
+def hostRepOf (c : Frontend.Check.Checked) (xs : List Frontend.Check.ExternSpec) :
+    Except String (List (Opaque × LTy)) := do
+  let ms := machineOps c
+  let n := c.ctx.length
+  let leaf (A : VTy) : Except String LTy := do
+    match ← ofV ms A with
+    | t@(.int _) => pure t
+    | t => throw s!"internal error: a capability cell's host type {t} is not an integer"
+  let mut outMk : Option LTy := none
+  let mut outTake : Option LTy := none
+  let mut clock : Option LTy := none
+  for (s, i) in c.ctx.zipIdx do
+    let some x := xs[n - 1 - i]? | continue
+    match x.role, s.ty with
+    | .mk .output, .bang (.thunk (.arr A (.ret (.ref (.opq .output))))) => outMk := some (← leaf A)
+    | .take .output, .bang (.thunk (.arr (.ref (.opq .output)) (.ret (.tensor A _)))) =>
+      outTake := some (← leaf A)
+    | .take .clock, .bang (.thunk (.arr (.ref (.opq .clock)) (.ret A))) => clock := some (← leaf A)
+    | .mk .output, _ | .take .output, _ | .take .clock, _ =>
+      throw s!"internal error: extern `{x.name}` is not at its checked type"
+    | _, _ => pure ()
+  let out ← match outMk, outTake with
+    | some a, some b =>
+      if a == b then pure [(Opaque.output, a)]
+      else throw s!"internal error: mk_output takes {a}, take_output answers {b}"
+    | none, none => pure []
+    | _, _ => throw "internal error: mk_output and take_output are not both externs"
+  return out ++ (clock.map fun t => (Opaque.clock, t)).toList
+
 /-- Each variable's uses in a term: whether each is the operand of a `free`. -/
 def freeUses : Nat → Tm → List (Var × Bool)
   | 0, _ => []
@@ -280,17 +325,18 @@ def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) :
     Except String (Prog × CState × Option Lay.Layouts) := do
   -- A program with capabilities is compiled as `run_io` (SPEC §11), the term `IORun.every_run`
   -- is about.
-  let (c, exts, arg, loops) ← match ← k.runIO with
-    | none => pure (k.main, [], none, false)
-    | some (r, xs) => pure (r.c, ← extsOf xs, some [], r.loops)
+  let (c, exts, arg, loops, xs) ← match ← k.runIO with
+    | none => pure (k.main, [], none, false, [])
+    | some (r, xs) => pure (r.c, ← extsOf xs, some [], r.loops, xs)
   let classes ← classesOf c
+  let hostRep ← hostRepOf c xs
   let ctx := c.ctx.map fun s => (s.ty, s.live)
   let run (threaded stacked : Std.HashMap Nat LTy) :
       Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy ×
         Option Lay.Layouts) := do
     let (p, st) ← convertProg exts ctx c.t c.C arg loops census (directFacts c) (machineOps c)
       threaded stacked classes
-    let p := { p with exits := c.exitsOnDivError }
+    let p := { p with exits := c.exitsOnDivError, hostRep }
     if st.done.isEmpty then return (p, st, {}, {}, none)
     -- A call in tail position whose callee's suspended computations may be the machine's own
     -- closes a loop of tail calls, and passes its outcome on (SPEC §49, `tailPass`).

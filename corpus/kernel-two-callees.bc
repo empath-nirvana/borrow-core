@@ -1,0 +1,27 @@
+-- A call that may reach either of two codes that suspend, the twin of the kernel program
+-- `two-callees` (Backend/Kernel.lean, `Shapes.twoCallees Shapes.resumeThen`), in the core text: `h`
+-- is `f` (one `perform[7.0]`) or `g` (two), chosen by a `case` on a sum the compiler does not
+-- decide, and `h` is called under the handler of `7`. The clause resumes `k` and then answers
+-- `()`, so each operation is a resumption point. The surface cannot choose an effectful block at
+-- run time (#161), and its `if b { f() } else { g() }` would be two direct calls.
+--
+-- Answer: (); `live 0`. A call that reached the wrong code, or a continuation not resumed, would
+-- stop early; a suspension not freed would leave objects live.
+
+def f : !U (1 -o F[7.0 cancel 1 ~> 1] 1) = !thunkv fun (u : 1) -> perform[7.0] u
+
+def g : !U (1 -o F[7.0 cancel 1 ~> 1] 1) =
+  !thunkv fun (u : 1) -> a <- perform[7.0] u; perform[7.0] a
+
+main : F 1 =
+  t <- return (inr () : 1 + 1);
+  h : U (1 -o F[7.0 cancel 1 ~> 1] 1) <-
+    case t { inl a -> let () = a; return (unbang f) | inr b -> let () = b; return (unbang g) };
+  u <- return ();
+  handle_with[7](
+      ((!thunkv fun (v : 1) -> return v) : !U (1 -o F 1)),
+      (((!thunkv fun (p : 1 * U ((1 -o F 1) & F 1)) ->
+        let (u, k) = p;
+        r <- (force k).1 u;
+        let () = r;
+        return ()), ()) : !U (1 * U ((1 -o F 1) & F 1) -o F 1) * 1)) (force h u)

@@ -28,6 +28,7 @@ inductive CKw where
   | arrayNew | arrayEmpty | arrayFree | arraySize | arrayReplace | arrayLen | arrayGet | arrayCopy
   | arrayRelease | sliceBorrowMut | sliceBorrowImm | sliceGetMut | sliceLenMut
   | sliceSplitImm | sliceSplitMut | sliceEmptyImm | sliceEmptyMut | sliceReplaceMut | sliceSwapMut
+  | sliceCopyMut
   | countFold | countTry | boundedFix
   | withbor1U | withbor2U | withbor3U | withloadU | sliceBorrowMutU | sliceBorrowImmU
   deriving DecidableEq, Repr
@@ -56,6 +57,7 @@ def CKw.str : CKw → String
   | .sliceSplitImm => "slice_split_imm" | .sliceSplitMut => "slice_split_mut"
   | .sliceEmptyImm => "slice_empty_imm" | .sliceEmptyMut => "slice_empty_mut"
   | .sliceReplaceMut => "slice_replace_mut" | .sliceSwapMut => "slice_swap_mut"
+  | .sliceCopyMut => "slice_copy_mut"
   | .countFold => "count_fold" | .countTry => "count_try"
   | .boundedFix => "bounded_fix"
   | .withbor1U => "withbor1u" | .withbor2U => "withbor2u" | .withbor3U => "withbor3u"
@@ -72,7 +74,7 @@ def CKw.all : List CKw :=
    .arrayNew, .arrayEmpty, .arrayFree, .arraySize, .arrayReplace, .arrayLen, .arrayGet, .arrayCopy,
    .arrayRelease, .sliceBorrowMut, .sliceBorrowImm, .sliceGetMut, .sliceLenMut,
    .sliceSplitImm, .sliceSplitMut, .sliceEmptyImm, .sliceEmptyMut, .sliceReplaceMut,
-   .sliceSwapMut,
+   .sliceSwapMut, .sliceCopyMut,
    .countFold, .countTry, .boundedFix,
    .withbor1U, .withbor2U, .withbor3U, .withloadU, .sliceBorrowMutU, .sliceBorrowImmU]
 
@@ -88,6 +90,7 @@ def CKw.sig : CKw → List ArgKind
   | .sliceGetMut | .sliceLenMut => [life, ty]
   | .sliceSplitImm | .sliceSplitMut | .sliceEmptyImm | .sliceEmptyMut | .sliceReplaceMut
   | .sliceSwapMut => [life, ty]
+  | .sliceCopyMut => [life, life, ty]
   | .sliceBorrowMut | .sliceBorrowImm => [binder, life, ty, ty]
   | .swap | .foldOwn | .foldReuse | .fixd | .unfoldS | .countTry => [ty, ty]
   | .unfold => [cty, ty]
@@ -168,6 +171,7 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .sliceEmptyMut, [.life a, .ty A] => some (.sliceEmptyMut a A)
   | .sliceReplaceMut, [.life a, .ty A] => some (.sliceReplaceMut a A)
   | .sliceSwapMut, [.life a, .ty A] => some (.sliceSwapMut a A)
+  | .sliceCopyMut, [.life a, .life b, .ty A] => some (.sliceCopyMut a b A)
   | .countFold, [.ty S] => some (.countFold S)
   | .countTry, [.ty S, .ty E] => some (.countTry S E)
   | .boundedFix, [.ty A, .cty C] => some (.boundedFix A C)
@@ -240,6 +244,7 @@ def Const.toArgs : Const → CKw × List Arg
   | .sliceEmptyMut a A => (.sliceEmptyMut, [.life a, .ty A])
   | .sliceReplaceMut a A => (.sliceReplaceMut, [.life a, .ty A])
   | .sliceSwapMut a A => (.sliceSwapMut, [.life a, .ty A])
+  | .sliceCopyMut a b A => (.sliceCopyMut, [.life a, .life b, .ty A])
   | .countFold S => (.countFold, [.ty S])
   | .countTry S E => (.countTry, [.ty S, .ty E])
   | .boundedFix A C => (.boundedFix, [.ty A, .cty C])

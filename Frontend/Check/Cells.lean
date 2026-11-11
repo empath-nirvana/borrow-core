@@ -59,7 +59,7 @@ def _root_.BoCa.Fig16.LogRel.Core.CTy.eraseLife : CTy → CTy
   | .amp C D => .amp C.eraseLife D.eraseLife
   | .top => .top
   | .all _ _ C => .all 0 .top C.eraseLife
-  | .nu C => .nu C.eraseLife
+  | .nuSys m i C => .nuSys m i C.eraseLife
   | .eff n i q A B fin rc C => .eff n i q A.eraseLife B.eraseLife fin.eraseLife rc C.eraseLife
 end
 
@@ -126,8 +126,9 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CTy.eraseLife_of_alphaB :
   | _, .all _ _ C, D, h => by
       cases D <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq] at h
       simp [CTy.eraseLife, CTy.eraseLife_of_alphaB C h.2]
-  | _, .nu C, D, h => by
-      cases D <;> simp only [CTy.alphaB, reduceCtorEq] at h
+  | _, .nuSys _ _ C, D, h => by
+      cases D <;> simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, reduceCtorEq] at h
+      obtain ⟨⟨rfl, rfl⟩, h⟩ := h
       simp [CTy.eraseLife, CTy.eraseLife_of_alphaB C h]
   | _, .eff _ _ _ A B fin _ C, D, h => by
       cases D <;> simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq] at h

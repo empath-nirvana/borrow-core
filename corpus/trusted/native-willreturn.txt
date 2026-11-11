@@ -16,7 +16,7 @@ extern take_input : !(ref input => (mu X. 1 + u8 * X))
 extern take_output : !(ref output => i32 * (mu X. 1 + u8 * X))
   contract: model proved (7), takeOutput_meets
   host: the cell freed, answering the descriptor and the empty list (each byte went to the descriptor when it was written); assumed (1)
-typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)
+typing: unconditional: a CDerives derivation (fundamentalC, adequacyD); run_io: IORun.every_run, the chain's IORun.every_runN (goal791N from HandlerLawN)
 unproved boundaries: 6 (write_all, stdout, mk_input, mk_output, take_input, take_output)
 always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime
 backend: LendEnclosesFn (Backend2/Driver.lean), the native borrow facts' lends enclose their functions: 7 functions

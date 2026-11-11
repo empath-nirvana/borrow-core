@@ -808,7 +808,7 @@ def tlowerFn (k : Nat) (f : Fn) : EM (List String) := do
     s!"{tyName (pp.getD i false)}{String.join (as.map (" " ++ ·))} %a{i}"
   let cites := if attrs then (f.facts.filter fun pf => pp.getD pf.param false).map fun pf =>
       s!"; %a{pf.param}: {" ".intercalate (pf.facts.map pfactAttr)} — {pf.cite}" else []
-  let mut locals : List String := []
+  let mut locals : Array String := #[]
   for i in List.range (f.params + f.locals) do
     let lp := st.ptrs.contains i
     let init ← if i < f.params then
@@ -818,8 +818,8 @@ def tlowerFn (k : Nat) (f : Fn) : EM (List String) := do
     let cvt := if i < f.params && pp.getD i false != lp then
         [if lp then s!"  %c{i} = inttoptr i64 %a{i} to ptr" else s!"  %c{i} = ptrtoint ptr %a{i} to i64"]
       else []
-    locals := locals ++ [s!"  %l{i} = alloca {tyName lp}, align 8"] ++ cvt ++
-      [s!"  store {tyName lp} {init}, ptr %l{i}"]
+    locals := (locals.push s!"  %l{i} = alloca {tyName lp}, align 8" ++ cvt.toArray).push
+      s!"  store {tyName lp} {init}, ptr %l{i}"
   let frame := if f.frame == 0 then [] else [s!"  %frame = alloca [{f.frame} x i64], align 8"]
   let rslots := if viaExit then (List.range f.results).map (s!"  %r{·} = alloca i64, align 8") else []
   let exit ← if !viaExit then pure [] else do
@@ -851,7 +851,7 @@ def tlowerFn (k : Nat) (f : Fn) : EM (List String) := do
     | none => [])
   pure ([s!"; {f.name}"] ++ why ++ cites ++
     [s!"define internal {resTy wide f.results} @f{k}({", ".intercalate ps}) nounwind{fattrs} \{",
-    "entry:"] ++ locals ++ frame ++ rslots ++ st.allocas.toList ++ ["  br label %body", "body:"] ++
+    "entry:"] ++ locals.toList ++ frame ++ rslots ++ st.allocas.toList ++ ["  br label %body", "body:"] ++
     st.body.toList ++ exit ++ trap ++ ["}", ""])
 
 /-! ### Tail-call classes -/
@@ -955,11 +955,13 @@ def printProg (p : Prog) (triple : String) (cnt : Bool := false) (typed : Bool :
   let arity := classArity p.fns
   let ctx : Ctx := { fns := p.fns, wide := regResults triple, cnt, arity, typed, attrs,
                      ptrParams := if typed then classPtrs p.fns arity else #[] }
+  -- Each function's lines are collected in an array and joined once: a `List` append per
+  -- function copies every line printed so far, quadratic in the program's size.
   let go : EM (List String) := do
-    let mut ls : List String := []
+    let mut ls : Array (List String) := #[]
     for (f, k) in p.fns.toList.zipIdx do
-      ls := ls ++ (← if typed then tlowerFn k f else lowerFn k f)
-    pure ls
+      ls := ls.push (← if typed then tlowerFn k f else lowerFn k f)
+    pure (ls.toList.flatten)
   let (fns, _) ← (go.run ctx).run {}
   let L := p.data.size
   let data := if L == 0 then "@bc_data = internal global [8 x i8] zeroinitializer, align 8"

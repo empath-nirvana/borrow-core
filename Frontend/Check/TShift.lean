@@ -190,9 +190,9 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .boxE i j a A t => .boxE i j a A (t.shift d c)
   | .immSub i j a b A t => .immSub i j a b A (t.shift d c)
   | .mutSub i j a b A t => .mutSub i j a b A (t.shift d c)
-  | .withbor1U i j A B S x td => .withbor1U i j A B S x (td.shift d c)
-  | .withbor2U i j A B S x td => .withbor2U i j A B S x (td.shift d c)
-  | .withbor3U i j a A B S x td => .withbor3U i j a A B S x (td.shift d c)
+  | .withbor1UD i j A B SM SD S x td => .withbor1UD i j A B SM SD S x (td.shift d c)
+  | .withbor2UD i j A B SM SD S x td => .withbor2UD i j A B SM SD S x (td.shift d c)
+  | .withbor3UD i j a A B SM SD S x td => .withbor3UD i j a A B SM SD S x (td.shift d c)
   | .sliceBorrowMU i j A B S x td => .sliceBorrowMU i j A B S x (td.shift d c)
   | .sliceBorrowIU i j A B S x td => .sliceBorrowIU i j A B S x (td.shift d c)
   | .lolliE i j A B u ta tf => .lolliE i j A B (u.ins d c) (ta.shift d c) (tf.shift d c)
@@ -200,8 +200,8 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .ofRet i j A t => .ofRet i j A (t.shift d c)
   | .roll i j A t => .roll i j A (t.shift d c)
   | .unroll i j A t => .unroll i j A (t.shift d c)
-  | .nuIn i j C t => .nuIn i j C (t.shift d c)
-  | .nuOut i j C t => .nuOut i j C (t.shift d c)
+  | .nuIn i j m k C t => .nuIn i j m k C (t.shift d c)
+  | .nuOut i j m k C t => .nuOut i j m k C (t.shift d c)
   | .effSub i j S S' A t => .effSub i j S S' A (t.shift d c)
   | .alpha i j j₀ j' t => .alpha i j j₀ j' (t.shift d c)
   | .effPerform i j S o t => .effPerform i j S o (t.shift d c)
@@ -272,6 +272,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | t@(.arrEmpty ..) => t
   | t@(.sliceReplaceM ..) => t
   | t@(.sliceSwapM ..) => t
+  | t@(.sliceCopyM ..) => t
   | t@(.withbor1 ..) => t
   | t@(.withbor2 ..) => t
   | t@(.withbor3 ..) => t
@@ -308,7 +309,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .lam _ _ _ _ t | .lamDead _ _ _ _ t | .proj₁ _ _ _ _ t | .proj₂ _ _ _ _ t
   | .allE _ _ _ _ _ _ t | .bangE _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t
   | .mutSub _ _ _ _ _ t | .allEV _ _ _ _ _ _ t | .ofRet _ _ _ t | .roll _ _ _ t
-  | .unroll _ _ _ t | .nuIn _ _ _ t | .nuOut _ _ _ t | .effSub _ _ _ _ _ t | .alpha _ _ _ _ t
+  | .unroll _ _ _ t | .nuIn _ _ _ _ _ t | .nuOut _ _ _ _ _ t | .effSub _ _ _ _ _ t | .alpha _ _ _ _ t
   | .effPerform _ _ _ _ t | .effRaise _ _ _ _ _ t | .litFn _ _ _ t | .divLit _ _ _ _ t
   | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t
   | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t | .codeErase _ _ _ _ t
@@ -323,7 +324,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .allI _ _ x b _ _ t => AbsF.withO (.atom (.nfree x)) (t.absF (Δ.extend x b))
   | .bangThunkF _ _ _ t | .bangThunkV _ _ _ t => AbsF.withO (.atom .flat) (t.absF Δ)
   | .boxI _ _ a _ t => AbsF.withO (.atom (.outl Δ a)) (t.absF Δ)
-  | .withbor1U _ _ _ _ _ _ td | .withbor2U _ _ _ _ _ _ td | .withbor3U _ _ _ _ _ _ _ td
+  | .withbor1UD _ _ _ _ _ _ _ _ td | .withbor2UD _ _ _ _ _ _ _ _ td | .withbor3UD _ _ _ _ _ _ _ _ _ td
   | .sliceBorrowMU _ _ _ _ _ _ td | .sliceBorrowIU _ _ _ _ _ _ td =>
       AbsF.withO (.atom .pers) (td.absF Δ)
   | .effLet _ _ _ _ S _ tM tN =>
@@ -353,6 +354,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .arrCopy .. | .arrRelease .. | .countFold .. | .countTry .. | .boundedFix ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
   | .sliceSplitM .. | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. | .sliceReplaceM .. | .sliceSwapM ..
+  | .sliceCopyM ..
   | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .withloadU ..
   | .foldImm .. | .foldOwn .. | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .unfoldK .. | .iterate .. | .divFuel ..
   | .reify .. =>

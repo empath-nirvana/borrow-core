@@ -155,7 +155,7 @@ def finF (R : RowRd ι M) (μ : M) : CTy → Option (ι → Nat → List SRec �
   | .arr _ _ => some (R.canc (ℍ := ℍ) (fun _ => OpTabK.empty))
   | .amp _ _ => some (R.canc (ℍ := ℍ) (fun _ => OpTabK.empty))
   | .all _ _ _ => some (R.canc (ℍ := ℍ) (fun _ => OpTabK.empty))
-  | .nu _ => some (R.canc (ℍ := ℍ) (fun _ => OpTabK.empty))
+  | .nuSys _ _ _ => some (R.canc (ℍ := ℍ) (fun _ => OpTabK.empty))
 end
 
 /-! ### The typed world -/
@@ -225,7 +225,7 @@ theorem tabF_finF_N (vr : VRel) (g : KW → KW) (δ : LSub) : ∀ F : CTy,
   | .amp _ _ => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]; rfl⟩
   | .top => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]⟩
   | .all _ _ _ => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]; rfl⟩
-  | .nu _ => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]; rfl⟩
+  | .nuSys _ _ _ => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]; rfl⟩
   termination_by structural F => F
 
 /-- **The typed tables are the family at the one-mode reading**: `tabNK vr g` is
@@ -289,7 +289,7 @@ theorem tabF_rowOf (μ : M) : ∀ (F : CTy) (x : ι),
   | .amp _ _, _ => by simp [CTy.rowOf, CTy.effOf, tabF]
   | .top, _ => by simp [CTy.rowOf, CTy.effOf, tabF]
   | .all _ _ _, _ => by simp [CTy.rowOf, CTy.effOf, tabF]
-  | .nu _, _ => by simp [CTy.rowOf, CTy.effOf, tabF]
+  | .nuSys _ _ _, _ => by simp [CTy.rowOf, CTy.effOf, tabF]
 
 variable {R}
 
@@ -454,7 +454,7 @@ theorem tabF_finF_down (hR : R.OK) : ∀ F : CTy,
   | .all _ _ _ => ⟨fun _ _ => by simpa [tabF] using OpTabK.empty_downI R.Inv, fun _ P hP => by
       simp only [finF, Option.some.injEq] at hP; subst hP
       exact canc_down hR (fun _ => OpTabK.empty_downI R.Inv)⟩
-  | .nu _ => ⟨fun _ _ => by simpa [tabF] using OpTabK.empty_downI R.Inv, fun _ P hP => by
+  | .nuSys _ _ _ => ⟨fun _ _ => by simpa [tabF] using OpTabK.empty_downI R.Inv, fun _ P hP => by
       simp only [finF, Option.some.injEq] at hP; subst hP
       exact canc_down hR (fun _ => OpTabK.empty_downI R.Inv)⟩
   termination_by structural F => F

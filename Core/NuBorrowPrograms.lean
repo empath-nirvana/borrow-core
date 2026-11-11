@@ -190,7 +190,7 @@ theorem d_fileCall {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
       ⟨fileGenT, true⟩ :: Γ) (.app (.var 3) (.var 2)) (.comp (.nu fileTopC)) :=
     .app (.dead (.dead (.right (.left (deadSplit hΓ))))) hg
       (.there (.there (.here (.cons (Ctx.Dead.toP hΓ)))))
-  have hu := CDerives.nuOut fileTopC_nuOk hgs
+  have hu := CDerives.nuOut (m := 0) (i := 0) fileTopC_nuOk hgs
   have hp := CDerives.allE (a := .var 0) (CDerives.proj₁ (CDerives.proj₁ hu))
     (fun _ hδ => hδ 0 _ rfl)
   rw [fileTop_read_inst] at hp
@@ -235,7 +235,7 @@ theorem d_fileWriteCall {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   have hf : CDerives ΔL (⟨fileTopU, true⟩ :: ⟨.imm (.var 0) bufT, false⟩ :: Γ) (.var 0)
       (.comp (.nu fileTopC)) :=
     .force (T := .thunk _) (.here (.cons (Ctx.Dead.toP hΓ))) rfl
-  have hu := CDerives.nuOut fileTopC_nuOk hf
+  have hu := CDerives.nuOut (m := 0) (i := 0) fileTopC_nuOk hf
   have hp := CDerives.allE (a := .var 0) (CDerives.proj₂ (CDerives.proj₁ hu))
     (fun _ hδ => hδ 0 _ rfl)
   rw [fileTop_write_inst] at hp
@@ -314,7 +314,7 @@ theorem d_fileReadWith {K : Expr} {A : VTy}
       (by simp [VFree, CFree, Lifetime.Life.mentions])))) ?_
   refine letP (A := .i32) (B := .box .top fileTopU) (.var (by csoloP)) ?_
   refine bindP (A := .i32) (bindP (A := fileTopU) (.boxE (.var (by csoloP)))
-    (.ofRet (.proj₂ (.nuOut fileTopC_nuOk (.force (T := .thunk _) (C := .nu fileTopC) (by csoloP) rfl))))) ?_
+    (.ofRet (.proj₂ (.nuOut (m := 0) (i := 0) fileTopC_nuOk (.force (T := .thunk _) (C := .nu fileTopC) (by csoloP) rfl))))) ?_
   refine bindP (A := .i32) (appP (.var (by csoloP)) (.free (by cdeadP))) ?_
   exact hK
 

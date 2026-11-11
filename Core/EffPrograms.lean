@@ -713,13 +713,13 @@ theorem d_driveLog : ∀ (n : ℕ) {Γ : Ctx VTy}, Ctx.Dead Γ →
   | 0, Γ, hΓ => by
       refine .bind (.left (deadSplit hΓ))
         (d_withLogG (S := []) (A := .unit) (by simp) rfl
-          (.proj₂ (.nuOut tickC_nuOk (.force (T := .thunk _) (.there (.there (.here hΓ.toP))) rfl)))) ?_
+          (.proj₂ (.nuOut (m := 0) (i := 0) tickC_nuOk (.force (T := .thunk _) (.there (.there (.here hΓ.toP))) rfl)))) ?_
       refine .tensorE (.left (.dead (deadSplit hΓ))) (.var (.here (by cdead))) ?_
       exact .ret (seqW (.var (by csolo)) (d_dropB (.var (by csolo)) (by cdead)))
   | n + 1, Γ, hΓ => by
       refine .bind (.left (deadSplit hΓ))
         (d_withLogG (S := []) (A := .sum .zero (.thunk (.nu TickC))) (by simp) rfl
-          (.proj₁ (.nuOut tickC_nuOk (.force (T := .thunk _) (.there (.there (.here hΓ.toP))) rfl)))) ?_
+          (.proj₁ (.nuOut (m := 0) (i := 0) tickC_nuOk (.force (T := .thunk _) (.there (.there (.here hΓ.toP))) rfl)))) ?_
       refine .tensorE (.left (.dead (deadSplit hΓ))) (.var (.here (by cdead))) ?_
       refine .unitE (.left (.right (.dead (.dead (deadSplit hΓ))))) (d_dropB (.var (by csolo)) (by cdead)) ?_
       exact .sumE (.dead (.left (.dead (.dead (deadSplit hΓ))))) (.var (by csolo))
@@ -744,8 +744,8 @@ theorem d_tickProg (n : ℕ) :
     (.ret (.bangE (.lolliE (deadSplit (.cons .nil)) (d_tickStep (.cons .nil))
       (.unfoldN TickC .unit tickC_nuOk (CTy.BindsFresh.of_hasAll rfl _) (Ctx.Dead.cons Ctx.Dead.nil).toP)))) ?_
   refine .bind (.left (.left .nil))
-    (.ret (.thunkV rfl (.nuIn tickC_nuOk (.withI (.proj₁ (.nuOut tickC_nuOk d_fs))
-      (.proj₂ (.nuOut tickC_nuOk d_fs)))))) ?_
+    (.ret (.thunkV rfl (.nuIn (m := 0) (i := 0) tickC_nuOk (.withI (.proj₁ (.nuOut (m := 0) (i := 0) tickC_nuOk d_fs))
+      (.proj₂ (.nuOut (m := 0) (i := 0) tickC_nuOk d_fs)))))) ?_
   exact d_driveLog n (.cons (.cons .nil))
 
 /-- **Program 4 runs**: for every `n`, every run of `n` effectful observations and a close, under

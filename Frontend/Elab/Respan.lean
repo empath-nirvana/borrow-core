@@ -78,6 +78,7 @@ def Row.respan (sp : Span) : Row → Row
   | .cons n i q A B f r => .cons n i q (A.respan sp) (B.respan sp) (f.respan sp) (r.respan sp)
   | .top => .top
   | .var x => .var x
+  | .splice x r => .splice x (r.respan sp)
 
 def Shape.respan (sp : Span) : Shape → Shape
   | .leaf _ A => .leaf sp (A.respan sp)
@@ -137,6 +138,7 @@ def Const.respan (sp : Span) : Const → Const
   | .sliceEmptyMut a A => .sliceEmptyMut (a.respan sp) (A.respan sp)
   | .sliceReplaceMut a A => .sliceReplaceMut (a.respan sp) (A.respan sp)
   | .sliceSwapMut a A => .sliceSwapMut (a.respan sp) (A.respan sp)
+  | .sliceCopyMut a b A => .sliceCopyMut (a.respan sp) (b.respan sp) (A.respan sp)
   | .countFold S => .countFold (S.respan sp)
   | .countTry S E => .countTry (S.respan sp) (E.respan sp)
   | .boundedFix A C => .boundedFix (A.respan sp) (C.respan sp)

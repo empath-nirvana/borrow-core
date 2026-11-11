@@ -1,4 +1,5 @@
 import Core.EffRules
+import Core.EffFin
 import Core.DivRules
 import Core.FoldImm
 import Core.Slices
@@ -89,6 +90,46 @@ theorem ewp_unwind (T : OpTab) (hA : T.AbortOnly) (hL : T.Local) (h0 : ∀ i, T 
   exact wpG_here _ _ _ τ (Or.inr (Or.inr ⟨.hole, n, i, v, en,
     pure_sep_mk ⟨rfl, rfl, hT, ha⟩
       ⟨ra, z, hcz, ⟨hPA', hnA'⟩, noOwn_compS hz hnw hnr⟩⟩))
+
+/-- **The unwinding frame, its finaliser at its own row** (K-b): `ewp_unwind` with the callback at
+the abortive row `Σ_M ≤ Σ` and the finaliser at `Σ_D ≤ Σ`. At a `raise` of `Σ_M` the finaliser
+runs on the frame and the `raise` goes on (`seq_raise_run`, `[finalise]`): the raise's entry is
+`Σ`'s at its key, its argument persistent where `Σ_D` may stop at an unrestricted operation.
+`[spec §19, §27]` -/
+theorem ewp_unwindD (δ : LSub) (S SM SD : Row) (hMS : RowLe SM S) (hDS : RowLe SD S)
+    (hP : SD.UnrD → SM.PendPers) (hA : (Row.tab SM δ).AbortOnly)
+    (h0 : ∀ i, Row.tab SM δ 0 i = none) (Nv Dv : Val) (Fr : List SRec → WProp)
+    {Qd : List SRec → Val → WProp} (hQd : ∀ ls v ρ, Qd ls v ρ → v = .unit ∧ NoOwn ρ)
+    (hD : ∀ ls, Entails (Fr ls)
+      (ewpTS ls (.app (.val Dv) (.val .unit)) (opTable (Row.tab SD δ)) Qd))
+    (Q₁ Q : List SRec → Val → WProp)
+    (hk : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls)
+      (ewpTS ls ((ubindK Nv Dv).plug (.val v)) (opTable (Row.tab S δ)) Q))
+    {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : ewpTS ls e ((opTable (Row.tab SM δ)).withFr Fr) (fun ls v => Q₁ ls v ⋆ Fr ls) ρ) :
+    ewpTS ls ((ubindK Nv Dv).plug e) (opTable (Row.tab S δ)) Q ρ := by
+  have hM := opTable_mono (Row.tab S δ)
+  refine ewp_fold hM (wpG_bind (ubindK Nv Dv) e ls _ ρ ?_)
+  refine wpG_mono (fun ls' t σ ht => ?_)
+    ((ewp_abortive (Table.withFr_abortive (opTable_abortive hA) Fr)).mp h)
+  rcases ht with ⟨v, rfl, hv⟩ | ⟨σ₁, σ₂, hcσ, hp, hF⟩
+  · exact ewp_unfold hM (hk ls' v σ hv)
+  rcases hp with ⟨K₁, n, i, v, en, hp⟩ | ⟨K₁, n, i, v, en, hp⟩
+  · obtain ⟨⟨-, -, hT, ha⟩, -⟩ := pure_sep_iff.mp hp
+    rw [hA n i en hT] at ha; exact absurd ha (by simp)
+  obtain ⟨⟨rfl, hK₁, hT, ha⟩, ρa, ρn, hcan, ⟨hPA, hnA⟩, hn⟩ := pure_sep_iff.mp hp
+  have hn0 : n ≠ 0 := fun h => by subst h; rw [h0 i] at hT; exact absurd hT (by simp)
+  obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
+  obtain ⟨o', hf', hle⟩ := hMS n i o hf
+  refine wpG_head (fun μ => Head.ufin μ Nv Dv n i v K₁ hn0 hK₁) rfl _ _ σ (ewp_unfold hM ?_)
+  obtain ⟨z, hz, hcz⟩ := compS_reassoc hcan hcσ
+  obtain ⟨y, hy, hcy⟩ := compS_lcomm hz hcz
+  refine ewp_absorb hM ?_ hn (ResU.CompS.comm hcy)
+  have hPA' : (o'.ent δ).PA ls' v ρa := by simpa only [OpSig.ent, hle.1.2.2.2.1] using hPA
+  exact seq_raise_run δ S SD hDS false (fun h => by cases h) (Row.tab_find hf')
+    (show o'.abort = true by rw [← hle.1.abort_eq]; exact ha) hQd (hD ls' σ₂ hF) ⟨hPA', hnA⟩
+    (fun hu => vP_empty_of_persistent (((hP hu) o (Row.find_mem hf).1).1 ha) hPA)
+    (ResU.CompS.comm hy)
 
 /-! ### A callback's run under a frame -/
 
@@ -201,6 +242,31 @@ def withbor3UTy (a : Lifetime.Life) (x : LifeVar) (bnd : Lifetime.Life) (A B : V
     VTy :=
   withborUTy (.mut a A) (cbUTy x bnd (.mut (.var x) A) B S) S (.tensor (.mut a A) B)
 
+/-- `withbor (1)`'s unwinding type with the callback at `Σ_M` and the result at `Σ` (K-b);
+`withbor1UTy` is its instance at `Σ_M = Σ`.  `[spec §19, §27]` -/
+def withbor1UTyD (x : LifeVar) (bnd : Lifetime.Life) (A B : VTy) (SM S : Row) : VTy :=
+  withborUTy (.ref A) (cbUTy x bnd (.imm (.var x) A) B SM) S (.tensor (.ref A) B)
+
+/-- `withbor (2)`'s unwinding type with the callback at `Σ_M` and the result at `Σ`.
+`[spec §19, §27]` -/
+def withbor2UTyD (x : LifeVar) (bnd : Lifetime.Life) (A B : VTy) (SM S : Row) : VTy :=
+  withborUTy (.ref A) (cbUTy x bnd (.mut (.var x) A) B SM) S (.tensor (.ref A) B)
+
+/-- `withbor (3)`'s unwinding type with the callback at `Σ_M` and the result at `Σ`.
+`[spec §19, §27]` -/
+def withbor3UTyD (a : Lifetime.Life) (x : LifeVar) (bnd : Lifetime.Life) (A B : VTy) (SM S : Row) :
+    VTy :=
+  withborUTy (.mut a A) (cbUTy x bnd (.mut (.var x) A) B SM) S (.tensor (.mut a A) B)
+
+theorem withbor1UTyD_self (x : LifeVar) (bnd : Lifetime.Life) (A B : VTy) (S : Row) :
+    withbor1UTyD x bnd A B S S = withbor1UTy x bnd A B S := rfl
+
+theorem withbor2UTyD_self (x : LifeVar) (bnd : Lifetime.Life) (A B : VTy) (S : Row) :
+    withbor2UTyD x bnd A B S S = withbor2UTy x bnd A B S := rfl
+
+theorem withbor3UTyD_self (a : Lifetime.Life) (x : LifeVar) (bnd : Lifetime.Life) (A B : VTy)
+    (S : Row) : withbor3UTyD a x bnd A B S S = withbor3UTy a x bnd A B S := rfl
+
 /-- **The unwinding form of `withbor`**, finalising the source with `d`:
 `λr. λf. (f [] r) then b. (r, b) unwind d r`. `d` sits under the three binders `r`, `f` and the
 unwind arm's, so it is shifted past them: it may name slots of the rule's context.
@@ -306,6 +372,28 @@ theorem fin_run {d : Expr} {src : VTy} {δ : LSub} {u : Val}
   rintro ls' - g σ ⟨σ₁, σ₂, hcσ, hg, hu''⟩
   exact (hg ls' (Ext.refl _ _)) u σ₂ σ hu'' hcσ
 
+/-- **The finaliser at its own row**: `λ_. d u` on the returned source, `d` at
+`U(src ⊸ F_{Σ_D} 1)` under the frame's binder; a run at `Σ_D`'s table.  `[spec §19, §27]` -/
+theorem fin_runD {d : Expr} {src : VTy} {SD : Row} (hSD : Row.divB SD = false) {δ : LSub}
+    {u : Val} (hu : closedAt 0 u.1 = true)
+    (hd : ∀ ls, wpTS ls d (fun ls'' => vP (.thunk (.arr src (CTy.effOf SD .unit))) ls'' δ)
+      PMap.empty)
+    (ls : List SRec) :
+    Entails (vP src ls δ u)
+      (ewpTS ls (.app (.val (Val.lam (.app (d.shift 1 0) (.val u)))) (.val .unit))
+        (opTable (Row.tab SD δ)) (fun ls v => vP .unit ls δ v)) := by
+  intro ρ hu'
+  refine ewp_step (opTable_mono _) (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) ls _ ρ ?_
+  rw [show Expr.subst 0 Val.unit (.app (d.shift 1 0) (.val u)) = .app d (.val u) by
+    simp [Expr.subst, subst_shift_succ (j := 0) (d := 0) _ d (le_refl _), Expr.shift_zero,
+      Expr.val, closed_subst hu]]
+  refine ewp_bind_pure_frame (opTable_mono _) (.appL .hole u) d ls
+    (fun ls => vP (.thunk (.arr src (CTy.effOf SD .unit))) ls δ)
+    (fun ls => vP src ls δ u) _ (fun _ hs _ h => vP_same hs h) ?_ ρ
+    ⟨PMap.empty, ρ, compS_empty_left ρ, hd ls, hu'⟩
+  rintro ls' - g σ ⟨σ₁, σ₂, hcσ, hg, hu''⟩
+  exact (cC_effOf SD .unit ls' δ _ σ hSD).mp ((hg ls' (Ext.refl _ _)) u σ₂ σ hu'' hcσ)
+
 /-- At a return the unwinding form pairs the source with the answer. -/
 theorem ewp_ret_pair {Tb : Table} (hTb : Tb.Mono) (u : Val) (hu : closedAt 0 u.1 = true)
     (Dv w : Val) {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
@@ -323,14 +411,21 @@ theorem ewp_ret_pair {Tb : Table} (hTb : Tb.Mono) (u : Val) (hu : closedAt 0 u.1
 /-- **`withbor` (2) at an unwinding row**: `Ref A` lent as `Mut 'x A`.  `[TR]` 6.173's proof
 (`withbor2_compatX`), with the frame over `ewpTS` (`ewpTS_M_frameU`) at the row's table, the
 returned source beside each stop.  Every end of the callback is boxed at the frame's lifetime
-(`ewp_box_end`), so the frame ends at a `raise` as at a return; then `ewp_unwind` pairs the
+(`ewp_box_end`), so the frame ends at a `raise` as at a return; then `ewp_unwindD` pairs the
 source with the answer, or finalises it and raises again.  Its side conditions are non-strict,
-read at `↓@bδ`.  `[spec §19, §23]` -/
-theorem withbor2U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
+read at `↓@bδ`.  The callback at `Σ_M`, the result at `Σ`, the finaliser at
+`Σ_D` (`ewp_unwindD`, `fin_runD`).  `[spec §19, §23]` -/
+theorem withbor2UD_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {SM SD S : Row} {d : Expr}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-    (hd : SemV Δ Γ d (.lolli (.ref A) .unit)) :
-    SemV Δ Γ (withborUE d) (withbor2UTy x Δ.meetOfDom A B S) := by
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x)
+    (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
+    (hPend : SD.UnrD → SM.PendPers)
+    (hd : SemV Δ Γ d (.thunk (.arr (.ref A) (CTy.effOf SD .unit)))) :
+    SemV Δ Γ (withborUE d) (withbor2UTyD x Δ.meetOfDom A B SM S) := by
+  have hSD : Row.divB SD = false := by
+    cases h : Row.divB SD
+    · rfl
+    · rw [Row.divB_le hDS h] at hSv; cases hSv
   intro δ γ ls ρ hδ hg
   have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
@@ -343,15 +438,15 @@ theorem withbor2U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
   obtain ⟨ℓ, vℓ, hs₁⟩ := hv₁
   obtain ⟨rfl, ρℓ, ρP, hcℓ, hown, hP⟩ := pure_sep_iff.mp hs₁
   intro vf ρ₂ τ hvf hc₂
-  let T := Row.tab S δ
+  let T := Row.tab SM δ
   have hA : T.AbortOnly := hS.abort δ
-  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr (withborUE_beta (opTable_mono _) (.loc ℓ) rfl vf ?_)
+  refine (cC_effOf S _ ls₁ δ _ τ hSv).mpr (withborUE_beta (opTable_mono _) (.loc ℓ) rfl vf ?_)
   -- the source handed back at every end of the callback
   let Fr : List SRec → WProp := fun ls => vP (.ref A) ls δ (.loc ℓ)
   let Q₁ : List SRec → Val → WProp := fun ls v => vP B ls δ v
-  refine ewp_unwind T hA (Row.tab_local S δ) (Row.tab_zero hS.nz δ) _ _ Fr
+  refine ewp_unwindD δ S SM SD hMS hDS hPend hA (Row.tab_zero hS.nz δ) _ _ Fr
     (Qd := fun ls v => vP .unit ls δ v) (fun _ _ _ h => by obtain ⟨rfl, rfl⟩ := h; exact ⟨rfl, noOwn_empty⟩)
-    (fun ls => fin_run rfl hdg ls) Q₁ _ ?_ ?_
+    (fun ls => fin_runD hSD rfl hdg ls) Q₁ _ ?_ ?_
   · -- a return: `(ℓ, v)`
     rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hFr⟩
     refine ewp_ret_pair (opTable_mono _) (.loc ℓ) rfl _ v ?_
@@ -400,17 +495,34 @@ theorem withbor2U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
     obtain ⟨s, hs, hρs⟩ := compS_reassoc hcc hcp
     exact Or.inr ⟨ρ'', s, hρs, hst, ⟨ℓ, w, pure_sep_mk rfl ⟨c₁, p₁, hs, hc₁, hp⟩⟩⟩
 
+/-- `withbor2UD_compatX` at `Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19]` -/
+theorem withbor2U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
+    (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+    (hd : SemV Δ Γ d (.lolli (.ref A) .unit)) :
+    SemV Δ Γ (withborUE d) (withbor2UTy x Δ.meetOfDom A B S) :=
+  withbor2UD_compatX x hΓ hside hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
+
 /-! ### `withbor` (3), unwinding -/
 
 /-- **`withbor` (3) at an unwinding row**: `Mut @a A` reborrowed as `Mut 'x A`.  `[TR]` 6.174's
 proof (`withbor3_compatX`): `AntiFrame` over `ewpTS` (`ewpTS_M_antiFrameU`) at the row's table,
 the borrow given back beside each stop, then `MutFrame` (`wpG_M_frameX`) with its premise read off
-the borrow in hand.  `[spec §19]` -/
-theorem withbor3U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy} {S : Row}
+the borrow in hand.  The callback at `Σ_M`, the result at `Σ`, the finaliser at
+`Σ_D` (`ewp_unwindD`, `fin_runD`).  `[spec §19]` -/
+theorem withbor3UD_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy}
+    {SM SD S : Row}
     {d : Expr} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
-    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-    (hd : SemV Δ Γ d (.lolli (.mut a A) .unit)) :
-    SemV Δ Γ (withborUE d) (withbor3UTy a x Δ.meetOfDom A B S) := by
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x)
+    (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
+    (hPend : SD.UnrD → SM.PendPers)
+    (hd : SemV Δ Γ d (.thunk (.arr (.mut a A) (CTy.effOf SD .unit)))) :
+    SemV Δ Γ (withborUE d) (withbor3UTyD a x Δ.meetOfDom A B SM S) := by
+  have hSD : Row.divB SD = false := by
+    cases h : Row.divB SD
+    · rfl
+    · rw [Row.divB_le hDS h] at hSv; cases hSv
   intro δ γ ls ρ hδ hg
   have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
@@ -424,16 +536,16 @@ theorem withbor3U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
   obtain ⟨α₀, ha, ℓ, hs₂⟩ := id hv₁
   obtain ⟨rfl, hmut⟩ := pure_sep_iff.mp hs₂
   intro vf ρ₂ τ hvf hc₂
-  let T := Row.tab S δ
+  let T := Row.tab SM δ
   have hA : T.AbortOnly := hS.abort δ
-  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr (withborUE_beta (opTable_mono _) (.loc ℓ) rfl vf ?_)
+  refine (cC_effOf S _ ls₁ δ _ τ hSv).mpr (withborUE_beta (opTable_mono _) (.loc ℓ) rfl vf ?_)
   -- the borrow handed back at every end of the callback
   let Fr : List SRec → WProp := fun ls => vP (.mut a A) ls δ (.loc ℓ)
   let Q₁ : List SRec → Val → WProp := fun ls v => vP B ls δ v
-  refine ewp_unwind T hA (Row.tab_local S δ) (Row.tab_zero hS.nz δ) _ _ Fr
+  refine ewp_unwindD δ S SM SD hMS hDS hPend hA (Row.tab_zero hS.nz δ) _ _ Fr
     (Qd := fun ls v => vP .unit ls δ v)
     (fun _ _ _ h => by obtain ⟨rfl, rfl⟩ := h; exact ⟨rfl, noOwn_empty⟩)
-    (fun ls => fin_run rfl hdg ls) Q₁ _ ?_ ?_
+    (fun ls => fin_runD hSD rfl hdg ls) Q₁ _ ?_ ?_
   · rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hFr⟩
     refine ewp_ret_pair (opTable_mono _) (.loc ℓ) rfl _ v ?_
     exact ⟨.loc ℓ, v, pure_sep_mk rfl ⟨σ₂, σ₁, ResU.CompS.comm hcσ, hFr, hv⟩⟩
@@ -479,6 +591,15 @@ theorem withbor3U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
     exact ⟨w, c₁, W, hcW, hc₁, p₁, ρ'', hcWi, hp, fun m₁ m₂ hm hcm =>
       Or.inr ⟨ρ'', m₁, hcm, hst, ⟨α₀, ha, ℓ, pure_sep_mk rfl hm⟩⟩⟩
 
+/-- `withbor3UD_compatX` at `Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19]` -/
+theorem withbor3U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B : VTy} {S : Row}
+    {d : Expr} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+    (hd : SemV Δ Γ d (.lolli (.mut a A) .unit)) :
+    SemV Δ Γ (withborUE d) (withbor3UTy a x Δ.meetOfDom A B S) :=
+  withbor3UD_compatX x hΓ hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
+
 /-! ### `withbor` (1), unwinding -/
 
 /-- A stop of an abortive table is carried along `Ext`. -/
@@ -494,12 +615,19 @@ theorem opTable_ext {T : OpTab} (hA : T.AbortOnly) (hL : T.Local) {ls ls' : List
 
 /-- **`withbor` (1) at an unwinding row**: `Ref A` lent as `Imm 'x A`.  `[TR]` 6.172's proof
 (`withbor1_compatX`), with the frame over `ewpTS` (`ewpTS_I_frameU`) at the row's table, the
-returned source beside each stop.  `[spec §19]` -/
-theorem withbor1U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
+returned source beside each stop.  The callback at `Σ_M`, the result at `Σ`, the finaliser at
+`Σ_D` (`ewp_unwindD`, `fin_runD`).  `[spec §19]` -/
+theorem withbor1UD_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {SM SD S : Row} {d : Expr}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc₁ : VScoped Δ A)
-    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-    (hd : SemV Δ Γ d (.lolli (.ref A) .unit)) :
-    SemV Δ Γ (withborUE d) (withbor1UTy x Δ.meetOfDom A B S) := by
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x)
+    (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
+    (hPend : SD.UnrD → SM.PendPers)
+    (hd : SemV Δ Γ d (.thunk (.arr (.ref A) (CTy.effOf SD .unit)))) :
+    SemV Δ Γ (withborUE d) (withbor1UTyD x Δ.meetOfDom A B SM S) := by
+  have hSD : Row.divB SD = false := by
+    cases h : Row.divB SD
+    · rfl
+    · rw [Row.divB_le hDS h] at hSv; cases hSv
   intro δ γ ls ρ hδ hg
   have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
@@ -512,16 +640,16 @@ theorem withbor1U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
   obtain ⟨ℓ, vℓ, hs₁⟩ := hv₁
   obtain ⟨rfl, ρℓ, ρP, hcℓ, hown, hP⟩ := pure_sep_iff.mp hs₁
   intro vf ρ₂ τ hvf hc₂
-  let T := Row.tab S δ
+  let T := Row.tab SM δ
   have hA : T.AbortOnly := hS.abort δ
-  have hL : T.Local := Row.tab_local S δ
-  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr (withborUE_beta (opTable_mono _) (.loc ℓ) rfl vf ?_)
+  have hL : T.Local := Row.tab_local SM δ
+  refine (cC_effOf S _ ls₁ δ _ τ hSv).mpr (withborUE_beta (opTable_mono _) (.loc ℓ) rfl vf ?_)
   let Fr : List SRec → WProp := fun ls => vP (.ref A) ls δ (.loc ℓ)
   let Q₁ : List SRec → Val → WProp := fun ls v => vP B ls δ v
-  refine ewp_unwind T hA hL (Row.tab_zero hS.nz δ) _ _ Fr
+  refine ewp_unwindD δ S SM SD hMS hDS hPend hA (Row.tab_zero hS.nz δ) _ _ Fr
     (Qd := fun ls v => vP .unit ls δ v)
     (fun _ _ _ h => by obtain ⟨rfl, rfl⟩ := h; exact ⟨rfl, noOwn_empty⟩)
-    (fun ls => fin_run rfl hdg ls) Q₁ _ ?_ ?_
+    (fun ls => fin_runD hSD rfl hdg ls) Q₁ _ ?_ ?_
   · rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hFr⟩
     refine ewp_ret_pair (opTable_mono _) (.loc ℓ) rfl _ v ?_
     exact ⟨.loc ℓ, v, pure_sep_mk rfl ⟨σ₂, σ₁, ResU.CompS.comm hcσ, hFr, hv⟩⟩
@@ -569,6 +697,15 @@ theorem withbor1U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
   · intro ls'' t ρ'' hst c₁ c₂ hc₁ hcc p₁ p₂ hp hcp
     obtain ⟨s, hs, hρs⟩ := compS_reassoc hcc hcp
     exact Or.inr ⟨ρ'', s, hρs, hst, ⟨ℓ, vℓ, pure_sep_mk rfl ⟨c₁, p₁, hs, hc₁, hp⟩⟩⟩
+
+/-- `withbor1UD_compatX` at `Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19]` -/
+theorem withbor1U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
+    (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc₁ : VScoped Δ A)
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+    (hd : SemV Δ Γ d (.lolli (.ref A) .unit)) :
+    SemV Δ Γ (withborUE d) (withbor1UTy x Δ.meetOfDom A B S) :=
+  withbor1UD_compatX x hΓ hsc₁ hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
 
 /-! ### `withload`, unwinding -/
 

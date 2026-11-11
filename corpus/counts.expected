@@ -117,6 +117,7 @@ core-row-capture-global 0 0 0 0 0 0
 core-row-generic 0 0 0 0 0 0
 core-row-key-tparam 0 0 0 0 0 0
 core-row-pipe-stop 0 0 0 0 0 0
+core-row-splice 0 0 0 0 0 0
 core-site-fresh-const 0 0 0 0 0 0
 core-site-generic 0 0 0 0 0 0
 core-unsigned 0 0 0 0 0 0 # every value is a word: the unsigned integers are held as the signed ones are
@@ -170,6 +171,12 @@ json-drop-deep 5006 0 0 317041 193024 19026
 json-parse 673 0 0 27534 15143 19164
 json-deep 5004 0 0 352010 284003 92003
 json-get 17 0 0 1253 501 590
+kernel-at08-once 1 0 0 10 10 0
+kernel-div-residual 1 0 0 7 7 0
+kernel-poly-id 0 0 0 0 0 0
+kernel-recursive-yield 20 0 0 420 630 0
+kernel-two-callees 0 3 0 0 0 0
+kernel-two-callees-tail 0 1 0 0 0 0
 mut-after-unwind-exits 3 0 0 3 3 0
 mut-after-unwind-for-gen 3 0 0 3 3 0
 mut-after-unwind-loop-in-n 3 0 0 3 3 0
@@ -198,6 +205,10 @@ leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 4861 # as 0039-combinatio
 lend-call-raise 9 0 0 34 31 4 # the cells of the eight lending runs, those scoped to a call included, and the table
 lend-call-record 1 0 0 6 2 0 # the cell scoped to the call, freed by the unwinding lend's finaliser
 lend-tail-call 1 0 0 10 6 0
+linear-dropped-k-owned 2 0 0 9 9 9
+linear-gen-ctl-buffer 4 0 0 9 9 6
+linear-move-in-restore 3 0 0 17 17 17
+linear-pipe-move-in 3 0 0 17 17 17
 lit-lend-raise 6 0 0 69 30 39 # one array per literal view: the unwinding form is not marked as a literal's view (SPEC §18), so the table is tabulated into the heap
 load-for-linear 1 0 0 155 65 19
 mut-control-assign-raise 0 0 0 6 6 0
@@ -527,6 +538,7 @@ operator-rounds 166 0 24 1551 823 0 # the cluster's and the desired state's list
 parse-int 4 0 0 240 80 137 # the line buffer, reused; literal views read-only data
 parse-recover 246 0 31 1808 984 28 # the token list's nodes and the lists rebuilt per statement; the copies are the written `clone(rest)` per statement
 parse-recover-gen 227 0 31 1943 1147 108
+parse-recover-view 19 0 0 415 267 129 # the tokens lent as a view and read by index: no list is built, so `parse-recover-gen`'s token list and its two clones per statement are gone
 pipe-bracket 3 0 0 3 3 0 # each bracketing is the nested calls
 pipe-handlers 0 0 0 0 0 0
 pipe-left-row 3 0 0 3 3 0
