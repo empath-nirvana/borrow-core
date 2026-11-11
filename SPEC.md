@@ -5771,8 +5771,9 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
    effect's capability used in `D` is refused, "a cleanup can't yet use `c`, which the body also
    uses (the kernel's [then] splits them; see #868)" when `M` uses it too, and "a cleanup can't yet
    use `c`: a capability is threaded through the code around it, and the kernel's [then] gives the
-   cleanup a context of its own (see #868)" when only `D` does. The kernel's answer is K-b (§78);
-   the surface lifts this item after it.
+   cleanup a context of its own (see #868)" when only `D` does. The kernel's answer is K-b (§78):
+   finalisers that only write (`Σ_D = ∅`) are typed by the §19 forms and lifted by the surface's
+   #940 unit; finalisers that perform, after K-b.
 
 6. **Reading cancel rows back.** The typed elaboration and its inference re-read a `handle_n`'s
    row from its clauses' types with their cancel rows (`clausesReadF`, `finsOf`), as the checker
