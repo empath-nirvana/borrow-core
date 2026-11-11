@@ -3736,7 +3736,8 @@ Six rules, over `CDerives` with its context premises (§10):
   - the unwinding constant is `U(src ⊸ U(∀'x ⊏ ⊓Δ. L ⊸ F_Σ(['x] B)) ⊸ F_Σ R)`, with the pure
     form's source `src`, lend `L` and result `R`;
   - its term is `withborU d = λr. λf. (f [] r) then b. (r, b) unwind d r`, with a closed finaliser
-    `d : src ⊸ F 1` typed by a premise. The elaborator passes the source's consume `consumeE src`
+    `d : src ⊸ F 1` typed by a premise. For `withbor` 1–3 the finaliser may perform at a row of its
+    own (§78); `d : src ⊸ F 1` is the instance at the empty row. The elaborator passes the source's consume `consumeE src`
     (§12), which is `forget` at `Mut`/`Imm`;
   - `withload`'s source is consumed by its load, so nothing goes back to the lender: its unwinding
     form is `withload`'s own term at the effectful type (`withloadU`), with no finaliser. The
@@ -5775,8 +5776,9 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
    effect's capability used in `D` is refused, "a cleanup can't yet use `c`, which the body also
    uses (the kernel's [then] splits them; see #868)" when `M` uses it too, and "a cleanup can't yet
    use `c`: a capability is threaded through the code around it, and the kernel's [then] gives the
-   cleanup a context of its own (see #868)" when only `D` does. This is the kernel question K-b
-   (Open).
+   cleanup a context of its own (see #868)" when only `D` does. The kernel's answer is K-b (§78):
+   finalisers that only write (`Σ_D = ∅`) are typed by the §19 forms and lifted by the surface's
+   #940 unit; finalisers that perform, after K-b.
 
 6. **Reading cancel rows back.** The typed elaboration and its inference re-read a `handle_n`'s
    row from its clauses' types with their cancel rows (`clausesReadF`, `finsOf`), as the checker
@@ -13369,7 +13371,7 @@ K1.5 is not built; its code PR marks its line *built*.
 - **Suspending I/O answered by the platform** (the "stop" reading, scope §4.3): it needs a run
   relation with world steps and a new adequacy theorem. Out of K1 (C2).
 - **Effectful finalisers** (I/O performed on cancel through an effect, surface A4): that is K-b
-  for the lend form (approved, after K1.3), not K1.
+  for the lend form (§78), not K1.
 - **A buffer borrowed across an `await`** (#844 Tier 2, `read(sock, &mut buf).await`): the loans
   line.
 - **`HandlerLawN` on the models** (C4): `stdModel_meetsN` keeps `HandlerLawN` as a hypothesis. A
@@ -13833,6 +13835,124 @@ the old backend or a kernel program.
 - Two recursive positions on one path (binary trees, `X ⊗ [Ref X]`) keep the recursion.
 - Arrays of an `S ≠ X` holding `X` (`array (string ⊗ X)`), and inner `μ` keys.
 - Persistent `!μ` data copied or consumed by the word IR's helpers, which recurse.
+
+---
+
+## 78. Entry 77 — the unwinding lends' finaliser performs at its own row (#1046, K-b)
+
+This entry amends §19 (*Borrows*, the unwinding forms) and §27 (the finaliser's row; *The
+surface*, item 5). It serves #868 (effectful cleanup of a capability) and #940 (a `finally`'s write
+handed back).
+
+### What it adds
+
+**The unwinding lends' finaliser performs at its own row `Σ_D`.** The term is unchanged:
+
+    withborU d = λr. λf. (f [] r) then b. (r, b) unwind d r
+
+    withbor (2), unwinding:
+      d : U(Ref A ⊸ F_{Σ_D} 1)        at the rule's dead context
+      ⊢ withborU d : U(Ref A ⊸ U(∀'x ⊏ ⊓Δ. Mut 'x A ⊸ F_{Σ_M}(['x] B)) ⊸ F_Σ(Ref A ⊗ B))
+
+      Σ_M is Row.Unwind 'x;  Σ_M ≤ Σ;  Σ_D ≤ Σ;  Σ does not hold Div (so neither does Σ_D);
+      Σ_D.UnrD → Σ_M.PendPers   (hP)
+
+`withbor (1)` (`Ref A` lent as `Imm 'x A`) and `withbor (3)` (`Mut @a A` reborrowed as
+`Mut 'x A`, with `d : U(Mut @a A ⊸ F_{Σ_D} 1)`) take the same form.
+
+1. **It is `[then]` fused with the lend.**
+   - The callback is the body, at `Σ_M`, whose operations are all abortive (`Row.Unwind`, the
+     callback row of §19).
+   - The rest pairs the source with the answer.
+   - On an unwind, the finaliser gets the lend's source back and runs at `Σ_D`, and then the raise
+     continues. A raise of the finaliser supersedes it (§19, law 6). An operation of the finaliser
+     keeps the pending raise in its continuation, as `[then]`'s `[finalise]` does (§27).
+2. **The finaliser gets back the owner:** the owned cell `Ref A` for `withbor (1)` and `(2)`, and
+   the outer `Mut @a A` for `withbor (3)`. It consumes it.
+   - A capability cell is closed by `d`, possibly through an effect.
+   - A reborrowed `let mut` or `mut` capability is written through and released, and the write
+     lands in the outer cell.
+3. **Premises, against `[then]`'s.**
+   - `hfin` (`ThenLe`) is not needed: `Σ_M` has no capturable operation and no cancellable wait,
+     so no cancel runs through the finaliser.
+   - `[then]`'s `Banged Γ₂` is not needed: the lend's frame is never in a captured continuation.
+   - `hP` is kept.
+4. **The rules of §19 are instances.** At `Σ_D = ∅` and `Σ_M = Σ`, the rule is §19's
+   `withbor1U`/`withbor2U`/`withbor3U` (`.thunk (.arr src (F_∅ 1))` is `src ⊸ 1`). The three
+   constructors are generalised in place as `withbor1UD`/`withbor2UD`/`withbor3UD`, and the forms of
+   §19 are theorems of the same names and statements. There is no new constructor (the three are
+   renamed and generalised in place), and no new term former, type former, `CDerives` index or
+   machine step.
+5. **The cancel path is excluded by the types.** Every operation of `Σ_M` is abortive, so no
+   continuation is captured while the lend is live, and no cancel reaches a region holding it. The
+   finaliser runs after the lend has ended. A lend held across a suspension, with a cleanup that
+   gets it back, is not provided (*Open*), and the checker refuses it with a message that says so.
+
+**The checker.**
+- **Core text:** `withbor2u['x, b, A, B, R] unwind (d)`. Without `unwind (d)`, the finaliser is the
+  source's consume, so all core text without it reads the same.
+- **The finaliser's row:** `d` is checked at the dead context at `U(src ⊸ F_{Σ_D} 1)`, with `Σ_D`
+  read from `d`'s derivation as `[then]`'s finaliser row is (§27 *The checker*), and `Σ = R ∪ Σ_D`.
+- **Deciders:** the `RowLe`s, `divB` and `pendPersB` are §27's.
+- **The emitted rule:** at `Σ_D = ∅` the checker emits the rule of §19.
+- **Refused:** a callback row that is not unwind-only, with a written finaliser. The message names
+  the operation it may suspend at.
+
+**The surface** (surface-foreman's units, after the kernel):
+- §27 *The surface*, item 5, is lifted for an unwind-only body. A cleanup that uses a capability or
+  a `let mut` the body also uses is the unwinding lend of that place across the region. The cleanup
+  is its finaliser, and on the normal path it runs on the source the lend pairs back.
+- #940's parse-time refusal is replaced the same way.
+
+### Baseline
+
+- `fundamentalC`, `adequacyC`/`adequacyD`, `fundamentalN_all`, `goal791N` and `handlerLawN_iff`
+  keep their statements.
+- `then_compatC`, `then_compatN`, `seq_raise_run` and `seq_raise_runK` are unchanged, and reused.
+- `withbor1U/2U/3U_compatX` and `_compatN` are restated at `(Σ_M, Σ_D, Σ)`. Their statements in §19
+  are the instance `Σ_D = ∅`, `Σ_M = Σ`.
+- The frame lemmas `ewpTS_I_frameU`, `ewpTS_M_frameU`, `ewpTS_M_antiFrameU`, `erwp_M_frameR` and
+  `erwp_I_frameR` are unchanged.
+- §72's `Const791.OKAt` and the suspending constants (`TreeGoal791`) are unchanged.
+- §13's determinism is unchanged: no machine step changes.
+- Every corpus and kernel program keeps its output. No existing term changes, and a finaliser that
+  performs nothing gives the derivation of §19.
+
+### Units
+
+- K-b.1, Core, built (#1081): `withbor{1,2,3}U` generalised in place as `withbor{1,2,3}UD`
+  (callback at `Σ_M`, result at `Σ`, finaliser at `Σ_D`; premises `Σ_M ≤ Σ`, `Σ_D ≤ Σ`,
+  `divB Σ = false` and `hP`, with `divB Σ_D = false` derived), the forms of §19 as same-named
+  theorems at `Σ_D = ∅`, `Σ_M = Σ`; `fin_runD`, `ewp_unwindD` (`ewp_unwind` with `seq_raise_run` at
+  the raise); the three compatibility lemmas restated.
+- K-b.2, the chain, built (#1081): `erwpK_unwindD`, with the callback's run at one world
+  (`cN_unwind_iff` at `Σ_M`) and the finaliser's at the `KW` worlds of `Σ` (`seq_raise_runK`); the
+  effectful `fin_claim`; the three `_compatN` restated.
+- K-b.3, the checker: `unwind (d)` in core text, the finaliser's row synthesised, the deciders, the
+  cancel-path refusal; `TExpr`/`TDerives` carry `Σ_M`. It extends the surface's #940 producer. Not
+  built.
+- K-b.4, programs, with answers from the interpreter, after K-b.3. Not built:
+  - `corpus/core-kb-close-raise.bc`: a capability written, then closed by a cleanup that raises;
+  - `corpus/core-kb-close-perform.bc`: the cleanup performs an answering operation;
+  - `corpus/core-kb-reborrow-write.bc` (#940): a reborrowed `let mut` written by an effectful
+    cleanup, read after the catch;
+  - `corpus/reject/core-kb-suspend.bc`: the body suspends while lent.
+- The surface (§27 item 5 lifted, #940's fix) is surface-foreman's. The backend's check that the
+  lend's lowering takes an effectful finaliser is backend-foreman's.
+
+### Open
+
+- **A lend held across a suspension whose cleanup gets it back** (the cancel path: the body
+  performs a capturable operation or awaits while lent). It needs the cancel-row record (`Σ_D` in
+  the cancel rows of the callback's capturable operations) and the suspending constants'
+  finaliser at `Σ_D`. That is #844 Tier 2 and #821, a separate unit; refused until then.
+- **The slice lends** `sliceBorrowMU` and `sliceBorrowIU` keep a pure finaliser. They take the same
+  generalisation when a program needs it.
+- **A cleanup that uses two lent places** gets only one source back: not provided.
+- **A result row holding `Div`** is reached by `[sub]` after the application, not at the constant.
+- **Not derived:** the chain's hand-over from the lend's one-world run to the finaliser's run at the
+  `KW` worlds (K-b.2). Its obstruction has not been checked. If it fails, the entry narrows `Σ_D`
+  to operations that do not capture, rather than changing the relation.
 
 ---
 
