@@ -1065,6 +1065,7 @@ def mentionsV (x : String) : Val → Bool
   | .var _ y | .clone _ y => y == x
   | .defApp .. | .unit _ | .const .. | .sugar .. => false
   | .pair _ V W | .app _ V W => mentionsV x V || mentionsV x W
+  | .constU _ _ d => mentionsV x d
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
   | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => mentionsV x V
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => mentionsC x M

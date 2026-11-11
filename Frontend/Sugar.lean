@@ -125,6 +125,7 @@ def _root_.Frontend.Val.elab (lend : Bool) : Val → Except Error Val
   | .bangThunkv sp M => return .bangThunkv sp (← M.elab false)
   | .run sp M => return .run sp (← M.elab lend)
   | .mark sp k V => return .mark sp k (← V.elab lend)
+  | .constU sp c d => return .constU sp c (← d.elab false)
   | V@(.var ..) | V@(.clone ..) | V@(.defApp ..) | V@(.unit ..) | V@(.const ..) | V@(.sugar ..) => pure V
 
 /-- Elaborate `&c` in a computation: in `x <- M; N`, one `&c` in `M` becomes
@@ -3275,7 +3276,15 @@ inside a scheme (a buffer's, a literal's: `run` of the code around the lend, asc
 is that scheme as a computation, its lend in the unwinding form (`unwindingM?`), ascribed the
 same type. -/
 def unwindingC? (sp : Span) : Val → Option Comp
-  | .app _ (.app _ (.const ksp C) P) cb => match C with
+  | .app _ (.app _ K P) cb =>
+    -- The constant, with its written finaliser when it has one (SPEC §78).
+    let kc : Option Const := match K with
+      | .const _ C | .constU _ C _ => some C
+      | _ => none
+    match kc with
+    | none => none
+    | some C =>
+    match C with
     | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU .. | .sliceBorrowMutU ..
     | .sliceBorrowImmU .. =>
       let sfx := s!"{sp.start.line}_{sp.start.col}"
@@ -3296,7 +3305,7 @@ def unwindingC? (sp : Span) : Val → Option Comp
       let cb := match cb with
         | .thunkv tsp (.lamL lsp xi b (.ret _ (.thunkv _ L))) => Val.thunkv tsp (.lamL lsp xi b L)
         | cb => cb
-      some (.bind sp k none (.ret sp (.const ksp C)) (.bind sp p none (.ret sp P)
+      some (.bind sp k none (.ret sp K) (.bind sp p none (.ret sp P)
         (.bind sp f cbTy (.ret sp cb) (.app sp (.app sp (.force sp k) p) f))))
     | _ => none
   -- A marked scheme's unwinding form is not marked: a mark fixes the shape of the pure scheme
@@ -4507,6 +4516,37 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .ret sp V => do
       if let some (i, P, R, cls, B) := hndCtl? V then return ← hndCtlC n c sp i P R cls B
       if let .app _ (.sugar _ (.pullSite i)) call := V then return ← pullView n c sp i call
+      -- A reborrow with a finaliser (`finally`, SPEC §78, #940): at a body that performs
+      -- operations of the row, the reborrow in its unwinding form with the written finaliser,
+      -- `withbor3u[…] unwind (fun p -> D)`, `D` elaborated at the source's type and the empty row.
+      -- At a body that performs none the block does not unwind: the plain reborrow (`D` runs after
+      -- it, on the source it pairs back, in the term already). The kernel checks the reborrow, the
+      -- row and the finaliser.  [spec §78]
+      if let .app _ (.sugar _ .lendFin) (.pair _ blk (.thunkv dtsp (.lam dsp p _ D))) := V then
+        let some B := borrowBlock? blk
+          | throw ⟨V.span, "internal error: a `finally`'s reborrow is not a borrow block"⟩
+        let r := match c.E.row with
+          | some S =>
+            let used := (opsC c divFuel B).map (·.1)
+            S.filter fun o => used.contains o.n.toNat
+          | none => []
+        if r.isEmpty then return ← surfC n c exp (.ret sp blk)
+        let saved := (← get).cbRow
+        modify fun st => { st with cbRow := some r }
+        let blk' ← surfV n c none blk
+        modify fun st => { st with cbRow := saved }
+        match blk' with
+        | .app a₁ (.app a₂ (.const ksp C@(.withbor3U la _ As _ _)) P') cb' =>
+          let some T := c.tyV P'
+            | throw ⟨V.span, "internal error: the type of a `finally`'s reborrowed place"⟩
+          let cD := ({ c with E := { c.E with row := some [] } } : TCx).push p.name (some T)
+          let D' ← surfC n cD (some (Frontend.Check.effOf [] .unit)) D
+          let d : Val := .thunkv dtsp (.lam dsp p (.mut ksp la As) D')
+          match unwindingC? sp (.app a₁ (.app a₂ (.constU ksp C d) P') cb') with
+          | some M' => return M'
+          | none => throw ⟨V.span, "internal error: a `finally`'s reborrow in its unwinding form"⟩
+        | _ => throw ⟨V.span, "internal error: a `finally`'s place is not a `mut` borrow, so it " ++
+            "has no reborrow (SPEC §78)"⟩
       if let some B := borrowBlock? V then
         if let some S := c.E.row then
           -- A borrow block whose body performs operations: the unwinding form of its borrow, at
@@ -6360,6 +6400,7 @@ def specV : Nat → TCx → Val → DM Val
     | .bangThunkv sp M => do pure (.bangThunkv sp (← specC n c M))
     | .run sp M => do pure (.run sp (← specC n c M))
     | .mark sp k V => do pure (.mark sp k (← specV n c V))
+    | .constU sp k d => do pure (.constU sp k (← specV n c d))
     | V => pure V
 
 /-- A computation with its calls of higher-order functions specialized. -/

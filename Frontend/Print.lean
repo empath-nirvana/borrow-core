@@ -244,6 +244,18 @@ def PCtx.body : PCtx → PCtx
   | .core => .core
   | _ => .loop
 
+/-- Whether a value's text ends with an unwinding borrow constant (`withbor{1,2,3}u[…]`), after
+which `unwind (d)` is the constant's finaliser (SPEC §78).  [spec §78] -/
+def Val.endsUnwConst : Val → Bool
+  | .const _ (.withbor1U ..) | .const _ (.withbor2U ..) | .const _ (.withbor3U ..) => true
+  | .app _ _ W => W.endsUnwConst
+  | _ => false
+
+/-- `Val.endsUnwConst` of `return V`. -/
+def Comp.endsUnwConst : Comp → Bool
+  | .ret _ V => V.endsUnwConst
+  | _ => false
+
 mutual
 /-- A value-judged expression at level `lvl`, indented by `k` after each line break, printed in
 the context `cx`. A value's computations are read in a closure, block or `run`. -/
@@ -311,6 +323,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) (cx : PCtx := .core) : Stri
     | .inst _ V a => V.pp 2 k cx ++ " [" ++ a.pp ++ "]"
     | .ascribe _ V A => "(" ++ V.pp 1 k cx ++ " : " ++ A.pp ++ ")"
     | .const _ c => c.pp
+    | .constU _ c d => c.pp ++ " unwind (" ++ d.pp 0 k cx ++ ")"
     | .shorten _ m σ a V =>
       "shorten_" ++ m.pp ++ "[" ++ σ.pp ++ ", " ++ a.pp ++ "] " ++ V.pp 1 k cx
     | .lend _ x m => (if m == .mut then "&mut " else "&") ++ x.name
@@ -342,7 +355,11 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) (cx : PCtx := .core) : St
     | .bind _ x (some A) M N =>
       x.name ++ " : " ++ A.pp ++ " <- " ++ M.pp 1 (k + 2) cx ++ ";" ++ nl k ++ N.pp 0 k cx
     | .unwind _ x A M D N =>
-      x.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " <- " ++ M.pp 1 (k + 2) cx ++
+      -- A head ending in an unwinding borrow constant is parenthesized: `unwind (D)` right after
+      -- the constant would be read as its finaliser (SPEC §78).
+      let Ms := M.pp 1 (k + 2) cx
+      let Ms := if M.endsUnwConst then "(" ++ Ms ++ ")" else Ms
+      x.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " <- " ++ Ms ++
         " unwind (" ++ D.pp 0 (k + 2) cx ++ ");" ++ nl k ++ N.pp 0 k cx
     | .perform _ n i V => s!"perform[{sitePp n}.{i}] " ++ V.pp 1 k cx
     | .abort _ n i V => s!"abort[{sitePp n}.{i}] " ++ V.pp 1 k cx
