@@ -130,6 +130,7 @@ core-row-pipe-stop erased handles 1 performs 0 raises 1 left 0 0
 core-site-fresh-const erased handles 1 performs 0 raises 1 left 0 0
 core-site-generic erased handles 2 performs 2 raises 0 left 0 0
 core-unsigned erased handles 0 performs 0 raises 0 left 0 0
+core-unwind-sum-value erased handles 0 performs 0 raises 0 left 0 0
 data-json-map-ser erased handles 2 performs 0 raises 2 left 0 0
 deep-gen-count erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
 effects-load-raise erased handles 3 performs 0 raises 6 left 0 0

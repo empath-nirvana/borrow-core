@@ -130,6 +130,7 @@ core-row-pipe-stop 0 0 0 0 0 0
 core-site-fresh-const 0 0 0 0 0 0
 core-site-generic 0 0 0 0 0 0
 core-unsigned 0 0 0 0 0 0
+core-unwind-sum-value 1 0 0 1 1 0
 data-json-map-ser 16 0 0 497 387 133
 deep-gen-count 0 3 0 0 0 0
 effects-load-raise 4 0 0 204 184 15
