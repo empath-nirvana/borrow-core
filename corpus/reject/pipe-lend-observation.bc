@@ -1,4 +1,4 @@
--- expect: 30:13: the loop's state would hold a stream chain on the pipe connector, of type `U (nu X. F[1.0 cancel i32 ~> i32] (i32 + U X) & F[1.0 cancel i32 ~> i32] 1)`, across the per-turn lend of `t`: a turn's next state is boxed at `top`, which a thunk or a borrow does not outlive (not provided; a stream chain is not kept across a lend per observation, SPEC §75 *Open*, #1082)
+-- expect: 30:13: the loop's state would hold a stream chain on the pipe connector, of type `U (delay i32)`, across the per-turn lend of `t`: a turn's next state is boxed at `top`, which a thunk or a borrow does not outlive (not provided; a stream chain is not kept across a lend per observation, SPEC §75 *Open*, #1082)
 -- SPEC §75, Part B, *Open* (#1082): a stream chain held across a lend per observation is refused.
 -- The `with idh` body loops (the chain is a loop) and assigns `t`, a `let mut` lent per
 -- observation (Part A, item 1), so the frame's loop would hold the chain, a stage's loop in

@@ -6448,7 +6448,17 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     -- (`Jt`), or the rest of the loop.
     let Lg ← pp Res
     let Ot := if looping then s!"({Jt}) + {Lg}" else Jt
-    let K ← do pure s!"U (({Wt} -o {← F Ot}) & {← F "1"})"
+    -- The continuation's cancel branch is at the operation's cancel row, then the row (SPEC §27):
+    -- the generator's row gives it (a stream chain's connector performs it under its frame lists,
+    -- SPEC §75).
+    let yfin : Frontend.Check.CRow := ((rowG.find? (·.n.toNat == i.n)).map (·.fin.rowOf)).getD []
+    let Fc (A : String) : DM String := do
+      let R := yfin ++ S
+      if R.isEmpty then return s!"F ({A})"
+      let es ← R.mapM fun o => do
+        opSrcM pp (finDepth o) o
+      pure s!"F[{", ".intercalate es}] ({A})"
+    let K ← do pure s!"U (({Wt} -o {← F Ot}) & {← Fc "1"})"
     let clT ← do pure s!"!U ((({Tt}) * ({Wt})) * {K} -o {← F Ot})"
     let hrIn := if looping then s!"(({Wt}) * ({Bt})) + {Lg}" else s!"({Wt}) * ({Bt})"
     let hrBody := if looping then
@@ -6505,7 +6515,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
       let fOb ← F s!"({Jt}) + U X"
       let fCl ← F Rgs
       let Lw := if S.isEmpty then s!"loop ({Jt}) ({Rgs})" else s!"nu X. {fOb} & {fCl}"
-      let Kc ← do pure s!"U (({Wt} -o {← F Rgs}) & {← F "1"})"
+      let Kc ← do pure s!"U (({Wt} -o {← F Rgs}) & {← Fc "1"})"
       let closer := s!"((!thunkv fun (io_cv{sfx} : {Rgs}) -> return io_cv{sfx}) : !U ({Rgs} -o {← F Rgs})),
   (((!thunkv fun (io_cp{sfx} : (({Tt}) * ({Wt})) * {Kc}) ->
     let (io_cxw{sfx}, io_ck{sfx}) = io_cp{sfx};
@@ -6650,7 +6660,20 @@ def connParts : Nat → TCx → Span → (Nat × List ConnStage) → Val →
     for o in ccRow do
       unless gRow.any (fun o' => o'.n == o.n && o'.i == o.i) do gRow := gRow ++ [o]
     let G ← ppR gRow
-    pure ({ stages, c := cs, cc := ← ppR ccRow, G, sfx }, fvs, holes)
+    -- A `for`'s generator: the `for`'s operation, performed by the connector, threading `w`.
+    let lastSt := stages.getLast?
+    let (out, G, fvs₂) ← match ss.getLast?.bind (·.out), lastSt with
+      | some (nf, w, fin), some st => do
+        let some (some Wt) := (latest c.locals).lookup w
+          | throw ⟨sp, "internal error: the `for`'s threaded variable"⟩
+        let W ← ppT Wt
+        let fin := fin.pp
+        let q := if fin.isEmpty then "cancel" else s!"cancel[{fin}]"
+        let ent := s!"{nf}.0 {q} ({st.B}) * ({W}) ~> ({W})"
+        pure (some (nf, w, W), Elab.Connector.rowCat [G, ent],
+          if fvs.any (·.1 == w) then fvs else fvs ++ [(w, W)])
+      | _, _ => pure (none, G, fvs)
+    pure ({ stages, c := cs, cc := ← ppR ccRow, G, sfx, out }, fvs₂, holes)
 
 /-- A stream chain on the pipe connector, run where it is (SPEC §75 Part B): the glue
 (`connParts`, `Frontend.Elab.Connector.glue`) and its maker's call in direct style, a frame's call

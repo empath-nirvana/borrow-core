@@ -60,6 +60,10 @@ structure Conn where
   cc : String
   G : String
   sfx : String
+  /-- The chain is a `for`'s generator: the `for`'s site, the variable it threads and its type. The
+  glue performs the site's operation with each item of the last stage, `(b, w)`, answering the next
+  `w`, which it keeps between turns and never across that operation.  `[spec §75]` -/
+  out : Option (Nat × String × String) := none
 
 /-- `F[r] A`, or `F A` at the empty row. -/
 def fAt (r A : String) : String := if r.isEmpty then s!"F ({A})" else s!"F[{r}] ({A})"
@@ -142,8 +146,15 @@ def glue (cn : Conn) (fvs : List (String × String)) (tail : Option String := no
   let cc := cn.cc
   let regOp := s!"{cn.c}.0 cancel[{cc}] 1 ~> 1"
   let regRow := rowCat [regOp, cc]
-  let Rlast := ss[n - 1]!.R
-  let Sts := cn.stages.map (·.stTy)
+  let Rlast := match cn.out with
+    | some (_, _, W) => s!"({W}) * ({ss[n - 1]!.R})"
+    | none => ss[n - 1]!.R
+  let wv : List String := match cn.out with
+    | some _ => [s!"io_ow_{sfx}"]
+    | none => []
+  let Sts := cn.stages.map (·.stTy) ++ (match cn.out with
+    | some (_, _, W) => [W]
+    | none => [])
   let GS := s!"({prod Sts}) * ({sum (cn.stages.map (·.inTy))})"
   let Lw := s!"nu Z. {fAt G s!"({Rlast}) + U Z"} & {fAt G "1"}"
   let sv (i : Nat) : String := s!"io_s{i}_{sfx}"
@@ -175,7 +186,7 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
       defs := defs ++ listDef s!"io_cd{i}_{sfx}" (down i)
   -- The states as a tuple with stage `i`'s replaced by `t`.
   let states (i : Nat) (t : String) : String :=
-    tup ((List.range n).map fun j => if j == i then t else sv j)
+    tup (((List.range n).map fun j => if j == i then t else sv j) ++ wv)
   let next (stTup turn : String) : String := s!"return (inr ({stTup}, {turn}) : ({Rlast}) + ({GS}))"
   let turnTo (j : Nat) (v : String) : String :=
     s!"({inj j n v} : {sum (cn.stages.map (·.inTy))})"
@@ -194,15 +205,27 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
         s!"({v} : {st.B} * {st.restTy} + {st.R}), {sv (i + 1)}" s!"h{i}_{sfx}"
       s!"io_h{i}_{sfx} <- {h};
                 let (io_t{i}_{sfx}, io_ri{i}_{sfx}) = io_h{i}_{sfx}; let (io_ip{i}_{sfx}, io_tn{i}_{sfx}) = io_ri{i}_{sfx};
-                {next (tup ((List.range n).map fun j => if j == i then s!"io_t{i}_{sfx}" else if j == i + 1 then s!"io_tn{i}_{sfx}" else sv j)) (turnTo (i + 1) s!"io_ip{i}_{sfx}")}"
-    let yieldArm := if last then
-        s!"let (io_b{i}_{sfx}, io_ky{i}_{sfx}) = io_yk{i}_{sfx}; let _ = io_b{i}_{sfx};
+                {next (tup (((List.range n).map fun j => if j == i then s!"io_t{i}_{sfx}" else if j == i + 1 then s!"io_tn{i}_{sfx}" else sv j) ++ wv)) (turnTo (i + 1) s!"io_ip{i}_{sfx}")}"
+    let yieldArm := if last then match cn.out with
+        | some (nf, _, W) =>
+          -- A `for`'s generator: the item goes out with the threaded value, which comes back in
+          -- the site's answer; `close_all` stops every stage if the `for` drops the continuation.
+          let sy := s!"io_sy{i}_{sfx}"
+          let ca := call s!"io_call_{sfx}" (tup ((List.range n).map fun j => if j == i then sy else sv j)) s!"fy{i}_{sfx}"
+          s!"let (io_b{i}_{sfx}, io_ky{i}_{sfx}) = io_yk{i}_{sfx};
+                {sy} : {st.stTy} <- return (inr (inr (inl io_ky{i}_{sfx})));
+                io_wo{i}_{sfx} : ({st.B}) * ({W}) <- return (io_b{i}_{sfx}, io_ow_{sfx});
+                io_w2{i}_{sfx} <- (perform[{nf}.0] io_wo{i}_{sfx}) unwind {ca};
+                {next (tup (((List.range n).map fun j => if j == i then sy else sv j) ++ [s!"io_w2{i}_{sfx}"])) (turnTo i "inl ()")}"
+        | none =>
+          s!"let (io_b{i}_{sfx}, io_ky{i}_{sfx}) = io_yk{i}_{sfx}; let _ = io_b{i}_{sfx};
                 {next (states i s!"(inr (inr (inl io_ky{i}_{sfx})) : {st.stTy})") (turnTo i "inl ()")}"
       else handoff s!"inl io_yk{i}_{sfx}"
     let returnArm := if last then
         let fin := call s!"pipe_finish[{st.R}, row ({G})]"
           s!"io_r{i}_{sfx}, (thunkv fun (io_fw_{sfx} : 1) -> {call s!"io_co{i}_{sfx}" (othersTup i) s!"fco{i}_{sfx}"} : U (1 -o {fAt G "1"}))" s!"fin{i}_{sfx}"
-        s!"io_v{i}_{sfx} <- {fin}; return (inl io_v{i}_{sfx} : ({Rlast}) + ({GS}))"
+        let res := if wv.isEmpty then s!"io_v{i}_{sfx}" else s!"(io_ow_{sfx}, io_v{i}_{sfx})"
+        s!"io_v{i}_{sfx} <- {fin}; return (inl {res} : ({Rlast}) + ({GS}))"
       else handoff s!"inr io_r{i}_{sfx}"
     let skipArm := next (states i s!"(inl io_bl{i}_{sfx} : {st.stTy})") (turnTo i "inl ()")
     -- Next(κ): stored; the stage upstream runs, or, when it has ended, the end again.
@@ -212,7 +235,7 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
         let upSt := ss[i - 1]!
         let t := s!"(inr (inl io_kn{i}_{sfx}) : {st.stTy})"
         let keep (ctor : String) : String :=
-          next (tup ((List.range n).map fun j => if j == i then t else if j == i - 1 then s!"({ctor} : {upSt.stTy})" else sv j))
+          next (tup (((List.range n).map fun j => if j == i then t else if j == i - 1 then s!"({ctor} : {upSt.stTy})" else sv j) ++ wv))
             (turnTo (i - 1) "inl ()")
         s!"case {sv (i - 1)} \{
                     inl io_ua{i}_{sfx} -> {keep s!"inl io_ua{i}_{sfx}"}
@@ -220,7 +243,7 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
                       inl io_uc{i}_{sfx} -> {keep s!"inr (inl io_uc{i}_{sfx})"}
                     | inr io_ud{i}_{sfx} -> case io_ud{i}_{sfx} \{
                         inl io_ue{i}_{sfx} -> {keep s!"inr (inr (inl io_ue{i}_{sfx}))"}
-                      | inr io_uk{i}_{sfx} -> {next (tup ((List.range n).map fun j => if j == i then t else if j == i - 1 then s!"(inr (inr (inr io_uk{i}_{sfx})) : {upSt.stTy})" else sv j)) (turnTo i s!"inr (inr io_uk{i}_{sfx})")}
+                      | inr io_uk{i}_{sfx} -> {next (tup (((List.range n).map fun j => if j == i then t else if j == i - 1 then s!"(inr (inr (inr io_uk{i}_{sfx})) : {upSt.stTy})" else sv j) ++ wv)) (turnTo i s!"inr (inr io_uk{i}_{sfx})")}
                       }
                     }
                   }"
@@ -245,7 +268,7 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
         s!"{t} : {st.stTy} <- return (inr (inr (inl io_ks{i}_{sfx})));
                     io_su{i}_{sfx} <- {upCall} unwind {dnCall};
                     let () = io_su{i}_{sfx};
-                    {next (tup ended) (turnTo i "inr (inr ())")}"
+                    {next (tup (ended ++ wv)) (turnTo i "inr (inr ())")}"
     -- Fwd(a, κ): stored (`AtFwd`); the connector performs the outer operation under `close_all`,
     -- so that a cancel there stops every stage downstream-first; the stage resumes the next turn.
     let fwdArm := match st.fwd with
@@ -287,11 +310,15 @@ io_chc_{sfx} : !U (1 * U ((1 -o {fAt cc "1"}) & {fAt (rowCat [cc, cc]) "1"}) -o 
       | inr io_tr{i}_{sfx} -> {dispatch s!"io_tr{i}_{sfx}" (i + 1) rest}
       }"
   let turnFn := s!"io_turn_{sfx} : !U ({GS} -o {fAt G s!"({Rlast}) + ({GS})"} & {fAt G "1"}) <- return (!thunkv fun (io_g_{sfx} : {GS}) ->
-    < let (io_ss_{sfx}, io_tn_{sfx}) = io_g_{sfx}; {destr ((List.range n).map sv) s!"io_ss_{sfx}" s!"io_sst_{sfx}_"}
+    < let (io_ss_{sfx}, io_tn_{sfx}) = io_g_{sfx}; {destr ((List.range n).map sv ++ wv) s!"io_ss_{sfx}" s!"io_sst_{sfx}_"}
       {dispatch s!"io_tn_{sfx}" 0 arms},
       let (io_ss_{sfx}, io_tn_{sfx}) = io_g_{sfx}; let _ = io_tn_{sfx};
-      {call s!"io_call_{sfx}" s!"io_ss_{sfx}" s!"cl_{sfx}"} >);\n"
-  let ready := tup (cn.stages.map (·.ready))
+      {if wv.isEmpty then call s!"io_call_{sfx}" s!"io_ss_{sfx}" s!"cl_{sfx}" else
+        s!"{destr ((List.range n).map sv ++ wv) s!"io_ss_{sfx}" s!"io_scl_{sfx}_"} let _ = io_ow_{sfx}; " ++
+        call s!"io_call_{sfx}" (tup ((List.range n).map sv)) s!"cl_{sfx}"} >);\n"
+  let ready := tup (cn.stages.map (·.ready) ++ (match cn.out with
+    | some (_, w, _) => [w]
+    | none => []))
   let Q := prod (fvs.map (·.2))
   let q := tup (fvs.map (·.1))
   let body := s!"io_cw_{sfx} : !({Q} => U ({Lw})) <- return (!thunkv fun (io_q_{sfx} : {Q}) ->

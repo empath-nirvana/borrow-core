@@ -866,6 +866,10 @@ def rowC (env : Env) : Nat → Comp → List Inst
       -- A `for` over a call that performs an iteration effect handles it.
       let src := match src, env.iterCall? V with
         | .each _, some (_, _, i, _, _) => without (rowV env n V) i.eff
+        -- A `for` over a stream chain handles its last stage's `Yield` (SPEC §75).
+        | .each _, none => match V, env.yieldE with
+          | .app _ (.sugar _ (.pipe _)) _, some ye => without (rowV env n V) ye
+          | _, _ => rowV env n V
         | _, _ => rowV env n V
       env.union src (env.union (rowC env n M) (rowC env n N))
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
@@ -2290,14 +2294,14 @@ def streamChain : Nat → Cx → List Cap → Val → EM (List Bind × Val)
         run := run ++ [(sp, ed.mode, ed.stage)]
       else
         if !run.isEmpty then
-          let (cV, _) ← connectorV k cx cs src run []
+          let (cV, _) ← connectorV k cx cs src run none
           let v ← fresh "fx_conn"
           pre := pre ++ [.one cV.span v none (.ret cV.span cV) false]
           acc := .var cV.span v
           run := []
         acc ← pipeEdge env.pipes sp ed.mode acc ed.stage
     if !run.isEmpty then
-      let (cV, _) ← connectorV k cx cs src run []
+      let (cV, _) ← connectorV k cx cs src run none
       let v ← fresh "fx_conn"
       pre := pre ++ [.one cV.span v none (.ret cV.span cV) false]
       acc := .var cV.span v
@@ -2311,13 +2315,14 @@ def streamChain : Nat → Cx → List Cap → Val → EM (List Bind × Val)
 operations are served around the chain. The stages, with their sites and the types at them, are
 left to the typed elaboration (`VSugar.connector`), which assembles the connector from
 `lib/pipe.bc`'s pieces. Nothing here decides what a stage owns: the pieces the connector calls
-are checked by the kernel. `lastCaps` are the capabilities the last stage is given: a `for`'s
-threaded variable when the chain is the `for`'s generator (`forChain`), whose site serves the last
-stage's iteration effect. Answers the node and the last stage's row.  `[spec §75]` -/
-def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × Val) → List Cap →
+are checked by the kernel. `forOut` is the `for`'s site and threaded variable when the chain is a
+`for`'s generator (`forChain`): the last stage yields at a site of its own, as any stage does, and
+the connector performs the `for`'s operation with each item. Answers the node and the last stage's
+row.  `[spec §75]` -/
+def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × Val) → Option (Site × String) →
     EM (Val × List Inst)
   | 0, _, _, src, _, _ => throw ⟨src.span, "internal error: a value nested too deeply"⟩
-  | k + 1, cx, _, src, run, lastCaps => do
+  | k + 1, cx, _, src, run, forOut => do
 
     let env := cx.env
     streamChecks env src run
@@ -2341,14 +2346,14 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
       let yi := row.find? fun j => env.yieldE == some j.eff
       let si := row.find? (·.eff == st)
       let last := i + 1 == n
-      if last && yi.isSome && lastCaps.isEmpty then
+      if last && yi.isSome && forOut.isNone then
         throw ⟨s.span, "the last stage of this stream chain yields: a stream chain that yields is " ++
           "the generator of a `for` (SPEC §75)"⟩
       let argsOf (j : Inst) : EM (List VTy) := match j.args with
         | some As => pure As
         | none => throw ⟨s.span, s!"the type arguments of `{j.eff}` this stage performs are not " ++
             "determined here: write them"⟩
-      let (B, ys) ← match (if last then none else yi) with
+      let (B, ys) ← match yi with
         | some j => do
           let As ← argsOf j
           pure (As.headD (.zero sp), some (j.eff, As))
@@ -2364,16 +2369,17 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
       let sn ← freshSite
       let f ← freshSite
       let what := "the pipe connector"
-      -- Forwarded: a capturable, cancellable, resumable outer operation of a stage that is not the
-      -- last (an outside cancel may land at it). Answering, `must_resume` and abortive operations
-      -- pass straight through, and so does everything the last stage performs.
+      -- Forwarded: a capturable, cancellable, resumable outer operation of any stage (an outside
+      -- cancel may land at it). Answering, `must_resume` and abortive operations pass straight
+      -- through. The last stage's is forwarded too: the same instance, performed just inside the
+      -- outer handler, so that no stage keeps a capturable operation in its row, which stopping it
+      -- would perform (SPEC §75, *Forwarding*).
       let wireE (e : String) : Bool := e == st || (ys.any (·.1 == e))
       let fwdable (j : Inst) : Bool := !wireE j.eff && !env.answering j.eff &&
         ((env.eff? j.eff).any fun e => e.ops.any fun o => o.qual == .cancel && !o.abortive)
       let mut fwd : Option (Nat × VTy) := none
       let mut fsite : List Site := []
-      if i + 1 < n then
-        match row.filter fwdable with
+      match row.filter fwdable with
         | [] => pure ()
         | [j] =>
           let some e := env.eff? j.eff | throw ⟨s.span, "internal error: an effect"⟩
@@ -2388,19 +2394,22 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
           fwd := some (outer.n, OA)
           fsite := [{ outer with n := f, sp, what, name := none, slot := none }]
           fwdEffs := fwdEffs ++ [j.eff]
-        | _ => throw ⟨s.span, "this stage of a stream chain performs more than one operation the " ++
-            "connector forwards; one per stage in this version (SPEC §75)"⟩
+        | j₁ :: j₂ :: _ => throw ⟨s.span, s!"this stage of a stream chain performs `{j₁.eff}` and " ++
+            s!"`{j₂.eff}`, two effects the connector forwards; it forwards one per stage in this " ++
+            "version (SPEC §75)"⟩
       let own : List Site :=
         (match ys with | some (e, As) => [{ eff := e, n := y, args := As, sp, what }] | none => []) ++
         (match ss with | some As => [{ eff := st, n := sn, args := As, sp, what }] | none => []) ++
         fsite
       let cxS : Cx := { cx with sites := own ++ cx.sites.filter fun x => !own.any (·.eff == x.eff),
                                 caps := cx.caps.filter fun c => !own.any (·.eff == c.eff) }
-      if let some c := (cxS.need row).find? (fun c => !(last && lastCaps.any (·.eff == c.eff))) then
+      if let some c := (cxS.need row).head? then
         throw ⟨s.span, s!"this stage of a stream chain uses the capability of `{c.eff}`: a stage " ++
           "is held by the connector between its turns, with the capability: not provided"⟩
-      let M ← trC k cxS (if last then lastCaps else []) true (.ret s.span call)
-      out := out ++ [{ y, s := sn, f, A, K, B, fwd }]
+      let M ← trC k cxS [] true (.ret s.span call)
+      let outF : Option (Nat × String × Row) := if !last then none else forOut.map fun (site, w) =>
+        (site.n, w, env.fins.finOf site.n 0)
+      out := out ++ [{ y, s := sn, f, A, K, B, fwd, out := outF }]
       fwdOf := fwdOf ++ [fsite.head?.map (·.eff)]
       ths := ths ++ [.thunk s.span M]
     -- No stage performs a forwarded operation unforwarded: its cancel row holds what every stage
@@ -2430,8 +2439,9 @@ def connectorV : Nat → Cx → List Cap → Val → List (Span × PipeMode × V
     pure (.app sp (.sugar sp (.connector c out)) tup, lastRow)
 
 /-- `for x in CHAIN { M }; N`, a stream chain whose last stage yields (SPEC §75): the chain is the
-`for`'s generator. The `for`'s site, threading the body's variables as `forSite`'s does, serves the
-last stage's iteration effect; the connector (`connectorV`) is the generator's call.
+`for`'s generator. The `for`'s site threads the body's variables as `forSite`'s does; the
+connector (`connectorV`) is the generator's call, and performs the site's operation with each item
+the last stage yields.
 `[spec §75]` -/
 def forChain : Nat → Cx → List Cap → Bool → Span → Option Ident → Ident → Val → Comp → Comp → EM Comp
   | 0, _, _, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
@@ -2459,10 +2469,7 @@ def forChain : Nat → Cx → List Cap → Bool → Span → Option Ident → Id
     let w := s!"fx_w{n}"
     let Wn := s!"fx_W{n}"
     let site : Site := { eff := i.eff, n, args := As, sp, what := "the `for`", thr := some (w, Wn) }
-    let tcap := threadCap sp i.eff w Wn
-    let cxF : Cx := { cx with sites := site :: cx.sites.filter (·.eff != i.eff),
-                              caps := tcap :: cx.caps.filter (fun c => c.blk || c.eff != i.eff) }
-    let (connV, _) ← connectorV k cxF [] c.src run [tcap]
+    let (connV, _) ← connectorV k cx [] c.src run (some (site, w))
     let T := match (env.siteOps { site with thr := none }).head? with
       | some (_, A, _) => A
       | none => .unit sp

@@ -1,0 +1,34 @@
+-- expect: 34:53: this stage of a stream chain performs `Wait` and `Ping`, two effects the connector forwards; it forwards one per stage in this version (SPEC §75)
+-- SPEC §75, Part B, *Restrictions in L1*: the connector forwards each capturable, resumable outer
+-- operation a stage performs, and one effect per stage in this version. The source performs
+-- `Wait` and `Ping`, both of which it would forward.
+
+include pipe
+
+effect Wait { ctl wait() }
+effect Ping { ctl ping() }
+
+handler tm[A]: Wait, A -> A + 1 = {
+  return(x) = inl x;
+  wait(k) = inr ()
+}
+
+handler pg[A]: Ping, A -> A = {
+  return(x) = x;
+  ping(k) = k(())
+}
+
+-- The source waits and pings: two capturable resumable effects, both of which the connector
+-- would forward from one stage.
+fn src(n: i32) -> 1 with Yield[i32], Wait, Ping =
+  let mut i = 1;
+  while i <= n { wait(); ping(); yield(i); i = i + 1 };
+  ()
+
+fn sum_all() -> i32 with Stream[i32, 1] =
+  let mut s = 0;
+  let mut go = true;
+  while go { match next() { inl v -> s = s + v | inr u -> go = false } };
+  s
+
+main -> i32 + 1 = with pg[i32 + 1] { with tm[i32] { src(3) >| sum_all } }
