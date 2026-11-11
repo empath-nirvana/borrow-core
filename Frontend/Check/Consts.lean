@@ -498,6 +498,13 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
       (cDead (fun j => .sliceSwapM (at_ sp) j a A) fun hd _ => .sliceSwapM a A hd)
+  | .sliceCopyMut a b A => do
+      let a ← E.elabL Δ a
+      let b ← E.elabL Δ b
+      let A ← E.elabV Δ A
+      if hA : A.persistent = true then
+        (cDead (fun j => .sliceCopyM (at_ sp) j a b A) fun hd _ => .sliceCopyM a b A hd hA)
+      else err sp s!"`slice_copy_mut` copies values of a persistent type, and `{ppVTy A}` is not one"
   | .withborF2Imm _ _ _ A B T' => do
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B

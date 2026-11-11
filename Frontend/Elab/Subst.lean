@@ -124,6 +124,7 @@ def Const.subst (σ : TySubst) : Const → Const
   | .sliceEmptyMut a A => .sliceEmptyMut a (A.subst σ)
   | .sliceReplaceMut a A => .sliceReplaceMut a (A.subst σ)
   | .sliceSwapMut a A => .sliceSwapMut a (A.subst σ)
+  | .sliceCopyMut a b A => .sliceCopyMut a b (A.subst σ)
   | .countFold S => .countFold (S.subst σ)
   | .countTry S E => .countTry (S.subst σ) (E.subst σ)
   | .boundedFix A C => .boundedFix (A.subst σ) (C.subst σ)

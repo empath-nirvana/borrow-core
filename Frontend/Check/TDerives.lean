@@ -187,6 +187,8 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       TDerivesAt Ξ Δ Γ (TExpr.sliceReplaceM (info := info) (jdg := (.val (sliceReplaceMTy a A))) (a := a) (A := A)) (.val (sliceReplaceMTy a A))
   | sliceSwapM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.sliceSwapM (info := info) (jdg := (.val (sliceSwapMTy a A))) (a := a) (A := A)) (.val (sliceSwapMTy a A))
+  | sliceCopyM {Δ Γ} {info : TInfo} (a b : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) (hA : A.Persistent) :
+      TDerivesAt Ξ Δ Γ (TExpr.sliceCopyM (info := info) (jdg := (.val (sliceCopyMTy a b A))) (a := a) (b := b) (A := A)) (.val (sliceCopyMTy a b A))
   | withbor1 {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       TDerivesAt Ξ Δ Γ (TExpr.withbor1 (info := info) (jdg := (.val (axWithbor1Ty x Δ.meetOfDom A B))) (A := A) (B := B) (x := x)) (.val (axWithbor1Ty x Δ.meetOfDom A B))
   | withbor2 {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
@@ -498,6 +500,8 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       TDerivesP Δ Γ (TExpr.sliceReplaceM (info := info) (jdg := (.val (sliceReplaceMTy a A))) (a := a) (A := A)) (.val (sliceReplaceMTy a A))
   | sliceSwapM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.sliceSwapM (info := info) (jdg := (.val (sliceSwapMTy a A))) (a := a) (A := A)) (.val (sliceSwapMTy a A))
+  | sliceCopyM {Δ Γ} {info : TInfo} (a b : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) (hA : A.Persistent) :
+      TDerivesP Δ Γ (TExpr.sliceCopyM (info := info) (jdg := (.val (sliceCopyMTy a b A))) (a := a) (b := b) (A := A)) (.val (sliceCopyMTy a b A))
   | withbor1 {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       TDerivesP Δ Γ (TExpr.withbor1 (info := info) (jdg := (.val (axWithbor1Ty x Δ.meetOfDom A B))) (A := A) (B := B) (x := x)) (.val (axWithbor1Ty x Δ.meetOfDom A B))
   | withbor2 {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
@@ -899,6 +903,9 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
   | sliceSwapM a0 a1 a2 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.sliceSwapM a0 a1 a2
+  | sliceCopyM a0 a1 a2 a3 a4 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesAt.sliceCopyM a0 a1 a2 a3 a4
   | withbor1 a0 a1 a2 a3 a4 a5 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.withbor1 a0 a1 a2 a3 a4 a5
@@ -1264,6 +1271,9 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | sliceSwapM a0 a1 a2 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.sliceSwapM a0 a1 a2
+  | sliceCopyM a0 a1 a2 a3 a4 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesP.sliceCopyM a0 a1 a2 a3 a4
   | withbor1 a0 a1 a2 a3 a4 a5 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.withbor1 a0 a1 a2 a3 a4 a5
@@ -1482,6 +1492,7 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | arrEmpty a0 a1 => exact TDerivesP.arrEmpty a0 a1
   | sliceReplaceM a0 a1 a2 => exact TDerivesP.sliceReplaceM a0 a1 a2
   | sliceSwapM a0 a1 a2 => exact TDerivesP.sliceSwapM a0 a1 a2
+  | sliceCopyM a0 a1 a2 a3 a4 => exact TDerivesP.sliceCopyM a0 a1 a2 a3 a4
   | withbor1 a0 a1 a2 a3 a4 a5 => exact TDerivesP.withbor1 a0 a1 a2 a3 a4 a5
   | withbor2 a0 a1 a2 a3 a4 a5 => exact TDerivesP.withbor2 a0 a1 a2 a3 a4 a5
   | withbor3 a0 a1 a2 a3 a4 => exact TDerivesP.withbor3 a0 a1 a2 a3 a4

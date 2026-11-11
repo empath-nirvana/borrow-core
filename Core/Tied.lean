@@ -291,6 +291,10 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   /-- `slice_swap_mut : !([Mut @a A] ⊗ (I32 ⊗ I32) ⇒ [Mut @a A])`.  `[spec §9]` -/
   | sliceSwapM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       CDerivesAt Ξ Δ Γ (.val swapV) (.val (sliceSwapMTy a A))
+  /-- `slice_copy_mut : !([Mut @a A] ⊗ (I32 ⊗ ([Imm @b A] ⊗ (I32 ⊗ I32))) ⇒ [Mut @a A] ⊗ (1 ⊕ 1))`,
+  `A` persistent, the step `sliceCopy`.  `[spec §74]` -/
+  | sliceCopyM {Δ Γ} (a b : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) (hA : A.Persistent) :
+      CDerivesAt Ξ Δ Γ (.val sliceCopyV) (.val (sliceCopyMTy a b A))
   | withbor1 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerivesAt Ξ Δ Γ withbor (.val (axWithbor1Ty x Δ.meetOfDom A B))
@@ -631,6 +635,7 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | arrEmpty A hΓ => exact .arrEmpty A hΓ
   | sliceReplaceM a A hΓ => exact .sliceReplaceM a A hΓ
   | sliceSwapM a A hΓ => exact .sliceSwapM a A hΓ
+  | sliceCopyM a b A hΓ hA => exact .sliceCopyM a b A hΓ hA
   | withbor1 x hΓ hx hsc₁ hfree₁ hfree₂ => exact .withbor1 x hΓ hx hsc₁ hfree₁ hfree₂
   | withbor2 x hΓ hx hside hfree₁ hfree₂ => exact .withbor2 x hΓ hx hside hfree₁ hfree₂
   | withbor3 x hΓ hx hfree₁ hfree₂ => exact .withbor3 x hΓ hx hfree₁ hfree₂
@@ -1033,6 +1038,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | arrEmpty A hΓ => exact .arrEmpty A hΓ
   | sliceReplaceM a A hΓ => exact .sliceReplaceM a A hΓ
   | sliceSwapM a A hΓ => exact .sliceSwapM a A hΓ
+  | sliceCopyM a b A hΓ hA => exact .sliceCopyM a b A hΓ hA
   | withbor1 x hΓ hx hsc₁ hfree₁ hfree₂ => exact .withbor1 x hΓ hx hsc₁ hfree₁ hfree₂
   | withbor2 x hΓ hx hside hfree₁ hfree₂ => exact .withbor2 x hΓ hx hside hfree₁ hfree₂
   | withbor3 x hΓ hx hfree₁ hfree₂ => exact .withbor3 x hΓ hx hfree₁ hfree₂

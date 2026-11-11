@@ -33,6 +33,10 @@ typed terms only. Those at a `κ` use the thunk `κ = ()`, which no `[op]` step 
 resumption of every `κ` the step does hand takes a step (`kappa_resume_not_final`,
 `kappaC_resume_not_final`).
 
+**`slice_copy_mut`.** A fourth field, `sliceCopy` (`SliceCopyN`, Core's `sliceCopyM_compatX`), is
+not a handler rule: the chain has no compatibility lemma at `slice_copy_mut` (`[spec §74]`) yet, and
+the field states it as that lemma would be. Core proves it on its own relation.
+
 **Not vacuous.**
 * `handle_resume_inst`: the conclusion shared by `HandleVN` and `HandleVBN` holds at the handler
   `resumeH` (`h_ret = λx. x`, one unrestricted clause `λ(x, κ). (λk'. k'.1 x) κ` that receives
@@ -63,7 +67,7 @@ open BoCa.BoLo (Heap Head Kont hndE hndVal clauseAt capTag kappa kappaC performE
 open BoCa.Fig16.LogRel.Core.CancelIntercept (idV resumeCT)
 
 /-- **HandlerLawN**: the named assumption for the three handler rules with no compatibility lemma
-at `cN`, each stated over `SemJN` premises only. -/
+at `cN`, and for `slice_copy_mut`, each stated over `SemJN` premises only. -/
 structure HandlerLawN : Prop where
   /-- `[handle]` at a value form is in the relation (`effHandleV`). -/
   handleV : HandleVN (ℍ := ℍ)
@@ -71,10 +75,13 @@ structure HandlerLawN : Prop where
   handleVB : HandleVBN (ℍ := ℍ)
   /-- `reify_res` is in the relation (`reify`). -/
   reify : ReifyN (ℍ := ℍ)
+  /-- `slice_copy_mut` is in the relation (`sliceCopyM`): not a handler rule, and not a belief
+  about one; the chain has no compatibility lemma at it yet.  `[spec §74]` -/
+  sliceCopy : SliceCopyN (ℍ := ℍ)
 
 /-- `HandlerLawN` says what `MissingN` says. -/
 theorem handlerLawN_iff : HandlerLawN (ℍ := ℍ) ↔ MissingN (ℍ := ℍ) :=
-  ⟨fun h => ⟨h.handleV, h.handleVB, h.reify⟩, fun ⟨a, b, c⟩ => ⟨a, b, c⟩⟩
+  ⟨fun h => ⟨h.handleV, h.handleVB, h.reify, h.sliceCopy⟩, fun ⟨a, b, c, d⟩ => ⟨a, b, c, d⟩⟩
 
 /-- **`FundamentalN` from `HandlerLawN`.** -/
 theorem fundamentalN_of_handlerLaw (h : HandlerLawN (ℍ := ℍ)) : FundamentalN (ℍ := ℍ) :=

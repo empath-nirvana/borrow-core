@@ -216,6 +216,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .arrEmpty ii jj A => []
   | .sliceReplaceM ii jj a A => []
   | .sliceSwapM ii jj a A => []
+  | .sliceCopyM ii jj a b A => []
   | .withbor1 ii jj A B x => []
   | .withbor2 ii jj A B x => []
   | .withbor3 ii jj a A B x => []
@@ -338,6 +339,7 @@ def TExpr.domFree : TExpr → Bool
   | .arrEmpty ii jj A => true
   | .sliceReplaceM ii jj a A => true
   | .sliceSwapM ii jj a A => true
+  | .sliceCopyM ii jj a b A => true
   | .withbor1 ii jj A B x => false
   | .withbor2 ii jj A B x => false
   | .withbor3 ii jj a A B x => false
@@ -459,6 +461,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .arrEmpty ii jj A => .arrEmpty ii jj A
   | .sliceReplaceM ii jj a A => .sliceReplaceM ii jj a A
   | .sliceSwapM ii jj a A => .sliceSwapM ii jj a A
+  | .sliceCopyM ii jj a b A => .sliceCopyM ii jj a b A
   | .withbor1 ii jj A B x => .withbor1 ii jj A B x
   | .withbor2 ii jj A B x => .withbor2 ii jj A B x
   | .withbor3 ii jj a A B x => .withbor3 ii jj a A B x
@@ -845,6 +848,9 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | sliceSwapM a0 a1 a2 =>
       intro Δ' he hd
       exact TDerivesP.sliceSwapM a0 a1 a2
+  | sliceCopyM a0 a1 a2 a3 a4 =>
+      intro Δ' he hd
+      exact TDerivesP.sliceCopyM a0 a1 a2 a3 a4
   | withbor1 => intro _ _ hd; simp [TExpr.domFree] at hd
   | withbor2 => intro _ _ hd; simp [TExpr.domFree] at hd
   | withbor3 => intro _ _ hd; simp [TExpr.domFree] at hd
@@ -1194,6 +1200,9 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | sliceSwapM a0 a1 a2 =>
       intro Δ' he hd
       exact TDerivesAt.sliceSwapM a0 a1 a2
+  | sliceCopyM a0 a1 a2 a3 a4 =>
+      intro Δ' he hd
+      exact TDerivesAt.sliceCopyM a0 a1 a2 a3 a4
   | withbor1 => intro _ _ hd; simp [TExpr.domFree] at hd
   | withbor2 => intro _ _ hd; simp [TExpr.domFree] at hd
   | withbor3 => intro _ _ hd; simp [TExpr.domFree] at hd

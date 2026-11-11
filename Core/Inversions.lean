@@ -226,66 +226,6 @@ theorem VView.eq_of_heads {T T' : VTy} (hv : VView T T') (hTb : ∀ a A, T ≠ .
 
 /-! ### Persistence is a property of the head -/
 
-theorem persistent_rename (r : Nat → Nat) : ∀ A : VTy, (A.rename r).persistent = A.persistent
-  | .unit | .zero | .unk | .int _ | .opq _ | .tvar _ | .thunk _ | .code _ _ _ => rfl
-  | .tensor A B | .sum A B => by
-      simp only [VTy.rename, VTy.persistent, persistent_rename r A, persistent_rename r B]
-  | .ref _ | .imm _ _ | .mut _ _ | .fam _ | .bang _ => rfl
-  | .box _ A => by simp only [VTy.rename, VTy.persistent, persistent_rename r A]
-  | .mu A => by simp only [VTy.rename, VTy.persistent, persistent_rename _ A]
-
-theorem persistent_subst_false : ∀ (A : VTy) (σ : Nat → VTy), A.persistent = false →
-    (A.subst σ).persistent = false
-  | .unit, _, h | .zero, _, h | .unk, _, h | .int _, _, h | .tvar _, _, h | .bang _, _, h => by
-      simp [VTy.persistent] at h
-  | .opq _, _, _ | .thunk _, _, _ | .code _ _ _, _, _ | .ref _, _, _ | .imm _ _, _, _ | .mut _ _, _, _ | .fam _, _, _ =>
-      rfl
-  | .tensor A B, σ, h | .sum A B, σ, h => by
-      simp only [VTy.persistent, Bool.and_eq_false_iff] at h
-      simp only [VTy.subst, VTy.persistent, Bool.and_eq_false_iff]
-      rcases h with h | h
-      · exact .inl (persistent_subst_false A σ h)
-      · exact .inr (persistent_subst_false B σ h)
-  | .box _ A, σ, h => by
-      simp only [VTy.persistent] at h
-      simp only [VTy.subst, VTy.persistent]; exact persistent_subst_false A σ h
-  | .mu A, σ, h => by
-      simp only [VTy.persistent] at h
-      simp only [VTy.subst, VTy.persistent]; exact persistent_subst_false A _ h
-
-theorem persistent_subst_true : ∀ (A : VTy) (σ : Nat → VTy), A.persistent = true →
-    (∀ n, (σ n).persistent = true) → (A.subst σ).persistent = true
-  | .unit, _, _, _ | .zero, _, _, _ | .unk, _, _, _ | .int _, _, _, _ | .bang _, _, _, _ => rfl
-  | .tvar n, σ, _, hσ => hσ n
-  | .opq _, _, h, _ | .thunk _, _, h, _ | .ref _, _, h, _ | .imm _ _, _, h, _ | .mut _ _, _, h, _
-  | .fam _, _, h, _ => by simp [VTy.persistent] at h
-  | .tensor A B, σ, h, hσ | .sum A B, σ, h, hσ => by
-      simp only [VTy.persistent, Bool.and_eq_true] at h
-      simp only [VTy.subst, VTy.persistent, Bool.and_eq_true]
-      exact ⟨persistent_subst_true A σ h.1 hσ, persistent_subst_true B σ h.2 hσ⟩
-  | .box _ A, σ, h, hσ => by
-      simp only [VTy.persistent] at h
-      simp only [VTy.subst, VTy.persistent]; exact persistent_subst_true A σ h hσ
-  | .mu A, σ, h, hσ => by
-      simp only [VTy.persistent] at h
-      simp only [VTy.subst, VTy.persistent]
-      refine persistent_subst_true A _ h ?_
-      intro n
-      cases n with
-      | zero => rfl
-      | succ n => simp only [VTy.upS, VTy.scons, persistent_rename]; exact hσ n
-
-/-- Unrolling a `μ` keeps its persistence. -/
-theorem persistent_inst_mu (A : VTy) : (VTy.inst (.mu A) A).persistent = A.persistent := by
-  cases hA : A.persistent with
-  | false => exact persistent_subst_false A _ hA
-  | true =>
-      refine persistent_subst_true A _ hA ?_
-      intro n
-      cases n with
-      | zero => simpa [VTy.scons, VTy.persistent] using hA
-      | succ n => rfl
-
 /-- **A type is persistent exactly when its head is.** -/
 theorem Hnf.persistent {T h : VTy} (hh : Hnf T h) : T.persistent = h.persistent := by
   induction hh with
@@ -1054,7 +994,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
 /-- The term constants of `CDerives`'s conclusions, unfolded to their head constructors, so that a
 rule whose conclusion's term has another head is told apart. -/
 macro "cd_terms" : tactic => `(tactic| (try simp_all [withPair, absurdE, copy, forget, swap,
-    withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, releaseV, emptyFamV, swapV,
+    withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, releaseV, emptyFamV, swapV, sliceCopyV,
     Val.arr, withborUE, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
     BoCa.BoLo.raiseE, opArgE, awaitE, thenE, hndTerm, hndExpr, Expr.val, Val.lam, Val.prim, Val.unit,
     Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store', mintE, burnE]))
@@ -1068,7 +1008,7 @@ theorem forceE_var {C : CTy} {i : Nat} {e : Expr} (h : forceE C (.var i) = e) :
 
 /-- The same, at one hypothesis alone. -/
 macro "cd_at " h:ident : tactic => `(tactic| (simp [withPair, absurdE, copy, forget, swap,
-    withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, releaseV, emptyFamV, swapV,
+    withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, releaseV, emptyFamV, swapV, sliceCopyV,
     Val.arr, withborUE, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
     BoCa.BoLo.raiseE, opArgE, awaitE, thenE, hndTerm, hndExpr, Expr.val, Val.lam, Val.prim, Val.unit,
     Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store', mintE, burnE] at $h:ident))
@@ -1076,7 +1016,7 @@ macro "cd_at " h:ident : tactic => `(tactic| (simp [withPair, absurdE, copy, for
 /-- The primitives that have a rule of their own. -/
 def PrimRule : Prim → Prop
   | .alloc | .free | .host _ | .lit _ | .tab | .drop | .idx | .count | .countTry | .boundedFix
-  | .split | .iterate => True
+  | .split | .iterate | .sliceCopy => True
   | _ => False
 
 /-- **A primitive is typed only by its own rule.** -/
@@ -2455,7 +2395,7 @@ theorem not_der_load_app {Δ : LifeCtx} {Γ : Ctx VTy} {X : Expr} {j : Jdg} :
 
 /-- A term is no λ-constant, by unfolding. -/
 macro "not_const" : tactic => `(tactic| (simp only [NotConst, OtherLam, forget, copy, swap, withbor,
-    withload, withswap, sizeV, replaceV, arrLenV, swapV, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV,
+    withload, withswap, sizeV, replaceV, arrLenV, swapV, sliceCopyV, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV,
     withborUE, divFuelV, reifyV, rkV, BoCa.BoLo.hndE,
     Expr.val, Val.lam, lam2, elet, unit', v0, v1, v2, v3, load', store', thenE, ne_eq,
     bindE, hndTerm, hndExpr, Val.unit, Val.prim, Val.i32, Val.inj₁, Val.inj₂, Val.pair,
@@ -2466,7 +2406,7 @@ macro "not_const" : tactic => `(tactic| (simp only [NotConst, OtherLam, forget, 
 
 /-- A hypothesis that a term is one of the other λ-constants is refuted by unfolding. -/
 macro "not_other " h:ident : tactic => `(tactic| (simp [OtherLam, copy, swap, withbor, withload,
-    withswap, sizeV, replaceV, arrLenV, swapV, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, Expr.val,
+    withswap, sizeV, replaceV, arrLenV, swapV, sliceCopyV, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, Expr.val,
     divFuelV, reifyV, rkV, BoCa.BoLo.hndE, Val.lam, lam2, elet, unit', v0, v1, v2, v3, withborUE,
     thenE, load', store', Val.prim, mintE, burnE,
     Val.unit] at $h:ident))
