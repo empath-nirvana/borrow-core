@@ -1,16 +1,19 @@
 -- Generator adapters (SPEC §15). Each is a generic generator, written once and instantiated at the
--- types of each call: the instance is ordinary code at those types, so an adapter over a pure
--- source and one over a source that fails are two instances of one definition. Each body is one
--- state machine (SPEC §14), so a pipeline of adapters whose functions are known makes no
--- allocation and no dispatched call.
+-- types of each call, and at its source's row: the instance is ordinary code at those types, so an
+-- adapter over a pure source and one over a source that raises are two instances of one
+-- definition. Each body is one state machine (SPEC §14), so a pipeline of adapters whose functions
+-- are known makes no allocation and no dispatched call.
 --
 -- A source is a stored generator `U (pull A K R)` (`lib/yield.bc`): it gives `A`s, returns `K`,
 -- and, closed early, hands back `R`; the call of a generator at a parameter of that type is its
--- stored generator. An adapter that runs its source to the end returns the source's `K`. One that
--- may stop the source early (`take`, `take_until`, `zip`) needs a source that returns what it
--- hands back when closed, `U (pull A K K)`: a pure source (`1`). A source that fails returns an
--- error it hands back no part of when closed (`i32 + 1`, closed `1`): stopped early it has no
--- error to report, and it is rejected there (`corpus/reject/take-failing.bc`).
+-- stored generator. A source whose generator also performs other effects (a `Fail`) is a stored
+-- generator over that row, `pull_Σ`: its observations, and its close, perform them, and the
+-- adapter's copy for that call is at that row as well (`with Yield[B], Σ`), so a source's `raise`
+-- propagates out through every adapter to the handler around the consumer. An adapter that runs
+-- its source to the end returns the source's `K`. One that may stop the source early (`take`,
+-- `take_until`, `zip`) needs a source that returns what it hands back when closed,
+-- `U (pull A K K)`; a source that raises returns `1` and is closed as a pure one is
+-- (`corpus/take-failing.bc`).
 --
 -- `include adapters` puts them in scope; only those a program calls are elaborated.
 

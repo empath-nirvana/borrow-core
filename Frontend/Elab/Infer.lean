@@ -115,6 +115,42 @@ def valLends : Val → Bool
   | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => valLends V
   | _ => false
 
+/-- `U (pull_Σ A B R)`, at any row: `Σ`, `A`, `B` and `R` (SPEC §15).  `[spec §15]` -/
+def pullRowOf (V : CVTy) : Option (CRow × CVTy × CVTy × CVTy) :=
+  match V with
+  | .thunk (.nu (.amp C D)) => do
+    let (S, O) ← effRow? C
+    let (_, R) ← effRow? D
+    match O with
+    | .sum (.tensor A (.tvar 0)) (.sum B (.tvar 0)) =>
+      if tyEqV V (.thunk (Frontend.Check.pullRowTy S A B R)) then some (S, A, B, R) else none
+    | _ => none
+  | _ => none
+
+/-- A written type `A` with each stored generator it writes as a pure `pull` given the row of the
+one at the same place of `S`, the type of what flows into it (SPEC §15): an annotation's
+stored generators get their rows by inference, each occurrence its own.  `[spec §15]` -/
+def withRows : CVTy → CVTy → CVTy
+  | A, S =>
+    match pullRowOf A, pullRowOf S with
+    | some ([], a, b, r), some (_, a', b', r') =>
+      if tyEqV a a' && tyEqV b b' && tyEqV r r' then S else A
+    | _, _ => match A, S with
+      | .tensor A₁ A₂, .tensor S₁ S₂ => .tensor (withRows A₁ S₁) (withRows A₂ S₂)
+      | .sum A₁ A₂, .sum S₁ S₂ => .sum (withRows A₁ S₁) (withRows A₂ S₂)
+      | A, _ => A
+
+/-- `(V : A)`'s type: `A`, its stored generators at the rows of the parts of `V` at their places
+(`withRows`), read through `V`'s pairs, injections and ascriptions, a part's type by `syn`.
+`[spec §15]` -/
+def refineAsc (syn : Val → Option CVTy) : Val → CVTy → CVTy
+  | .pair _ V W, .tensor A B => .tensor (refineAsc syn V A) (refineAsc syn W B)
+  | .inl _ V, .sum A B => .sum (refineAsc syn V A) B
+  | .inr _ V, .sum A B => .sum A (refineAsc syn V B)
+  | V, A => match syn V with
+    | some S => withRows A S
+    | none => A
+
 mutual
 /-- The inference nodes of a value, checked against `exp` when it is given. -/
 def inferV : Nat → Env → LifeCtx → Slots → Option CVTy → Val → IM TNode
@@ -207,7 +243,12 @@ def inferV : Nat → Env → LifeCtx → Slots → Option CVTy → Val → IM TN
         | _, _ => none
       pure (node (direct <|> askV E Δ T v) [a])
     | .ascribe _ V A => do
-      let A' := (E.elabV Δ A).toOption
+      -- The stored generators it writes at the rows of what flows into them (SPEC §15).
+      let syn (W : Val) : Option CVTy := ((inferV n E Δ T none W).run' 0).ty.v?
+      -- What flows out of it, the type expected of it, gives a row to the rest.
+      let A' := (E.elabV Δ A).toOption.map fun A => match exp with
+        | some X => withRows (refineAsc syn V A) X
+        | none => refineAsc syn V A
       let a ← inferV n E Δ T A' V
       pure (node A' [a])
     | .shorten _ _ _ _ V => do

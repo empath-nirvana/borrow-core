@@ -1,0 +1,56 @@
+-- A pure stored generator bound in a copy at a row (SPEC §15). `mix` is given a stored generator
+-- over the row of `Fail`, so its copy is at that row; the generator it stores itself,
+-- `let g : U (pull i32 1 1) = pure_src(l)`, stays pure: the annotation's row is what flows into
+-- it, the empty row, not the parameter's.
+--
+-- Answer: `(inl i32[1017], inr i32[2])`: 1 + 2 + 3 + 1000 + 5 + 6; the parameter's error 2. `live 0`.
+
+include adapters
+include fail
+include rec
+
+type Bytes = mu X. 1 + (i32 * X)
+
+def nil : Bytes = roll inl ()
+fn cons(b: i32, t: Bytes) -> Bytes = roll inr (b, t)
+
+-- `own_src(l, bad)` owns a list and yields its elements, raising `bad` when it reaches it.
+fn own_src(l: Bytes, bad: i32) -> 1 with Yield[i32], Fail[i32] =
+  let mut l = l;
+  while true {
+    match unroll l {
+      inl u -> break
+    | inr (b, t) -> l = t; if b == bad { raise(b) } else { () }; yield(b)
+    }
+  };
+  ()
+
+fn drain(it: U (pull i32 1 1), acc: i32) -> i32 with Exhausted =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> drain(it, acc + x)
+  | inr d -> match d { inl u -> acc | inr it -> drain(it, acc) }
+  }
+
+-- `pure_src(l)` owns a list and yields its elements.
+fn pure_src(l: Bytes) -> 1 with Yield[i32] =
+  let mut l = l;
+  while true {
+    match unroll l {
+      inl u -> break
+    | inr (b, t) -> l = t; yield(b)
+    }
+  };
+  ()
+
+fn mix(a: U (pull i32 1 1)) -> i32 with Exhausted =
+  let l = cons(5, cons(6, nil));
+  let g : U (pull i32 1 1) = pure_src(l);
+  let x = drain(a, 0);
+  x + drain(g, 1000)
+
+fn t(bad: i32) -> i32 + i32 =
+  let l1 = cons(1, cons(2, cons(3, nil)));
+  with on_exhausted(!{ u -> inr 0 }) { with to_result { mix(own_src(l1, bad)) } }
+
+main -> (i32 + i32) * (i32 + i32) = (t(0), t(2))

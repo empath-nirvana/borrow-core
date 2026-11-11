@@ -220,7 +220,7 @@ theorem withbor2S_compat {Δ : LifeCtx} {x : LifeVar} {bnd : Lifetime.Life} {A B
     simp [Kont.plug, Expr.subst, Expr.shift, thenE, ubindE, NFv, DFv, Val.shift, Val.pair,
       Val.loc, Val.lam, Expr.val, Val.prim,
       subst_closedAt d (s := _) hdc (Nat.zero_le _)]
-  rw [e₃]
+  rw [shift_closedAt d 3 hdc (Nat.zero_le 0), e₃]
   -- the lender's post: at a world whose location typing above `α` is the lend's, the pair
   set Ql : KW → PostN := fun z k _ b ρ => z.Θ.above α = Θ.above α →
     vN (ℍ := ℍ) (.tensor (.ref A) B) δ z.Θ k (Val.pair (Val.loc l) b) ρ with hQl

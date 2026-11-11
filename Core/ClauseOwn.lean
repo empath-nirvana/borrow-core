@@ -288,6 +288,7 @@ theorem Fo.head {N : List UInt32} {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ :
   | cfcancel => cases ha
   | cancel => cases ha with | primApp hp _ => simp [primOwn] at hp
   | creraise => cases ha with | primApp hp _ => simp [primOwn] at hp
+  | cancelTo => cases ha
 
 /-- **A step keeps a first-order term first-order**, from any memory.  `[spec §19]` -/
 theorem Fo.step1 {N : List UInt32} {μ μ' : Heap} {e e' : Expr} (h : Step1 (ℍ := ℍ) μ e μ' e')

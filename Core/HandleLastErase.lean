@@ -131,6 +131,7 @@ theorem head_upd_off {μ μ' : Heap} {a a' : Expr} {ℓ : Loc} (u : Val) (h : He
   | cfcancel err err' K hK => exact .cfcancel _ err err' K hK
   | cancel K hK => exact .cancel _ K hK
   | creraise E K hK => exact .creraise _ E K hK
+  | cancelTo n qs hr hs k K hK => exact .cancelTo _ n qs hr hs k K hK
 
 theorem step1_upd_off {μ μ' : Heap} {e e' : Expr} {ℓ : Loc} (u : Val)
     (h : Step1 (ℍ := ℍ) μ e μ' e') (h0 : μ ℓ = none) (h1 : μ' ℓ = none) :
@@ -387,6 +388,35 @@ theorem last_cancel_exit {μ μ' μ'' : Heap} {ℓ : Loc} {n i : UInt32} {qs hr 
   refine ((last_cancel_direct (.val .unit) hc hcl htag hK hg hw).1.trans
     ((hcan.plug ((exitK j vn z))).plug K₀)).trans ?_
   exact DivDrive.pure_steps ((exitK_steps j vn z gn hn).plug K₀) _
+
+/-! ### `[cancel-to]` reaches T-B1′'s configuration -/
+
+/-- The exit `λ_. nf z` of `exitK`, as a value. -/
+def exitV (j : Nat) (vn z : Val) : Val :=
+  Val.lam (.app (pickE j ((Expr.val vn).shift 1 0)) (.val (z.shift 1 0)))
+
+theorem exitK_eq (j : Nat) (vn z : Val) : exitK j vn z = .appR (.val (exitV j vn z)) .hole := rfl
+
+/-- **`[cancel-to]` is T-B1′ in one step**: `hnd H K[cancelTo_n (λ_. nf z)]` steps once, with no
+`κ` cell, to `ccatch (K†[raise ⊥]); (λ_. nf z) ()`, the cancel run of `K` that
+`last_cancel_direct`'s post-state `(λ_. nf z) (ccatch K†[raise ⊥])` holds, followed by the same
+exit.  When `K`'s cancel run answers `()`, both reach the exit `(λ_. nf z) ()` in `K₀`, at the same
+memory.  `[spec §51]` -/
+theorem cancelTo_last_cancel {μ μ' : Heap} {n : UInt32} {qs hr hs vn z : Val} {j : Nat}
+    {K K₀ : Kont} (hK : K.HasHnd n = false)
+    (hcan : Steps (ℍ := ℍ) μ (ccatchE (K.dead.plug (raiseE (.val (cancelVal none))))) μ'
+      (.val .unit)) :
+    Steps (ℍ := ℍ) μ (K₀.plug (hndE (hndVal n qs hr hs)
+        (K.plug (BoCa.BoLo.cancelToE (.val (BoCa.BoLo.cancelToPayload n (exitV j vn z)))))))
+      μ' (K₀.plug ((exitK j vn z).plug (.val .unit))) ∧
+    Steps (ℍ := ℍ) μ (K₀.plug ((exitK j vn z).plug
+        (ccatchE (K.dead.plug (raiseE (.val (cancelVal none)))))))
+      μ' (K₀.plug ((exitK j vn z).plug (.val .unit))) := by
+  refine ⟨?_, (hcan.plug (exitK j vn z)).plug K₀⟩
+  refine .more ⟨K₀, _, _, rfl, rfl, Head.cancelTo μ n qs hr hs (exitV j vn z) K hK⟩ ?_
+  refine ((hcan.plug (.seq .hole (.app (.val (exitV j vn z)) (.val .unit)))).plug K₀).trans ?_
+  exact .more ⟨K₀, .seq (.val Val.unit) ((exitK j vn z).plug (.val .unit)), _, rfl, rfl,
+    Head.seq μ' _⟩ (.refl _ _)
 
 /-! ### Outer handlers that answer in place -/
 

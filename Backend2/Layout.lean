@@ -27,6 +27,13 @@ both:
   which field of a cycle is boxed follows from the program and the types, not from how the nodes
   are numbered. A closure class that holds itself among its codes' captured values keeps its
   environment on the heap.
+- **Sums** (SPEC §43). A sum is a tag word and its payload's words, padded. One arm of a sum may be
+  *merged*: the right arm, else the left, when its field is not boxed and its node is a sum (the
+  type's `⊕`, read off the node, so a right-nested chain `A ⊕ (B ⊕ (C ⊕ …))` is one tag word). On
+  that arm the sum's words are the arm's own words, padded: its tags are the arm's own `[0, T)`,
+  and the other arm is the one tag `T`. A sum whose leaves are each empty or a scalar of at most 32
+  bits (`u8`, `i32`, `u32`, `f32`), one of them not empty, is *packed*: one word, `tag << 32 | payload`. A
+  packed arm is merged only into a packed sum, whose word is then the arm's word.
 - **Cells.** A value in a cell takes the bytes of its type: a byte at `u8`, 4 bytes at `i32` and
   `f32` (L-6), its words otherwise. An allocation is as wide as the widest type of its width
   class, the checker's class rooted at the type it allocates at (`Checked.classAt`, SPEC §57),
@@ -481,7 +488,7 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
     | .take => do join (← kid dst 0) (← a 0); join (← kid dst 1) (← kid (← a 0) 0)
     | .put => do join (← kid (← a 0) 0) (← a 1); join dst (← a 0)
     | .slotPut => do join (← kid (← kid (← a 0) 0) 0) (← a 2); join dst (← a 0)
-    | .slotTake => do
+    | .slotTake | .slotPop => do
       join (← kid dst 0) (← a 0)
       join (← kid dst 1) (← kid (← kid (← a 0) 0) 0)
     | .size => join (← kid dst 0) (← a 0)
@@ -617,6 +624,14 @@ structure Layouts where
   /-- **Each static cell's bytes** (`Prog.statics`): the most bytes of its width
   class's types, each read through `tyBytes` with its `!`s erased. -/
   staticBytes : Array Nat := #[]
+  /-- **Each sum node's merged arm** (`0` left, `1` right), whose words are the sum's on that arm:
+  its tags the arm's own, the other arm's the one tag after them.  `[spec §43]` -/
+  mergeArm : Array (Option Nat) := #[]
+  /-- **Each sum node's tags**: its merged arm's and one, or `2`. -/
+  tags : Array Nat := #[]
+  /-- **The packed sum nodes**: one word, `tag << 32 | payload`, every leaf a scalar of at most 32
+  bits or empty. -/
+  packed : Array Bool := #[]
 
 namespace Layouts
 
@@ -634,6 +649,12 @@ def fieldW (L : Layouts) (i k : Nat) : Nat :=
     | _, _ => i
   if L.isBoxed i k then 1 else L.w c
 def unionOf (L : Layouts) (i : Nat) : Array Nat := L.union.getD (L.r i) #[]
+/-- The merged arm of a sum at `i`, if any. -/
+def merged (L : Layouts) (i : Nat) : Option Nat := (L.mergeArm[L.r i]?).getD none
+/-- A sum at `i` is one packed word. -/
+def isPacked (L : Layouts) (i : Nat) : Bool := (L.packed[L.r i]?).getD false
+/-- The tags of a sum at `i`. -/
+def tagsOf (L : Layouts) (i : Nat) : Nat := (L.tags[L.r i]?).getD 2
 def isRec (L : Layouts) (i : Nat) : Bool := L.recCls.contains (L.r i)
 def tagOf (L : Layouts) (c : Nat) : Nat :=
   match L.codeClass[c]? with
@@ -781,6 +802,34 @@ def sumBoxes (order : List Nat) (fs : Nat → Array Nat) (shape : Nat → NK) (c
       out := es.foldl (·.erase ·) out
       out := boxes.fold (·.insert ·) out
   return out
+
+/-- A node of shape `k` and `w` words is a narrow leaf of a packed sum: empty, or a scalar of at
+most 32 bits. -/
+def narrowLeaf (k : NK) (w : Nat) : Bool :=
+  w == 0 || match k with
+    | .int .w8 | .int .w32 | .int .u32 | .int .f32 => true
+    | _ => false
+
+/-- **A sum's encoding** (SPEC §43), from its arms: each arm's field boxed (`bx`), its child's shape,
+width, packing and tags. The merged arm, the tags, whether it is packed, and its words.
+A candidate arm (the right, else the left: not boxed, a sum) is merged unless it is packed and
+the other arm is not a narrow leaf, or its tags do not fit 32 bits beside a packed payload.  `[spec §43]` -/
+def sumEnc (bx : Nat → Bool) (k : Nat → NK) (w : Nat → Nat) (pk : Nat → Bool) (tg : Nat → Nat) :
+    Option Nat × Nat × Bool × Nat :=
+  let isSum (j : Nat) : Bool := !bx j && match k j with | .sum .. => true | _ => false
+  let fw (j : Nat) : Nat := if bx j then 1 else w j
+  let nar (j : Nat) : Bool := !bx j && narrowLeaf (k j) (w j)
+  let plain : Option Nat × Nat × Bool × Nat :=
+    let p := nar 0 && nar 1 && (fw 0 == 1 || fw 1 == 1)
+    (none, 2, p, if p then 1 else 1 + max (fw 0) (fw 1))
+  let cand : Option Nat := if isSum 1 then some 1 else if isSum 0 then some 0 else none
+  match cand with
+  | none => plain
+  | some m =>
+    let o := 1 - m
+    if pk m then
+      if nar o && tg m < 0xFFFFFFFF then (some m, tg m + 1, true, 1) else plain
+    else (some m, tg m + 1, false, 1 + max (w m - 1) (fw o))
 
 /-- Each node's representative: the root of its tree in `parent`, a forest. -/
 def reps (parent : Array Nat) : Array Nat := Id.run do
@@ -940,6 +989,9 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
   let mut color : Array Nat := Array.replicate n 0
   let mut width : Array Nat := Array.replicate n 0
   let mut trivial : Array Bool := Array.replicate n true
+  let mut mergeArm : Array (Option Nat) := Array.replicate n none
+  let mut tags : Array Nat := Array.replicate n 2
+  let mut packed : Array Bool := Array.replicate n false
   let bound := 4 * n + 4 + succ.foldl (· + ·.length) 0
   for root in reps do
     if color[root]! != 0 then continue
@@ -978,7 +1030,11 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
             | .int _ | .opq | .ref _ | .imm _ | .mut _ => (1, true)
             | .fam _ => (2, true)
             | .pair a b => (fw 0 a + fw 1 b, ft 0 a && ft 1 b)
-            | .sum a b => (1 + max (fw 0 a) (fw 1 b), ft 0 a && ft 1 b)
+            | .sum a b =>
+              let ch (j : Nat) : Nat := if j == 0 then a else b
+              let (_, _, _, w) := sumEnc (fun j => boxed.contains (v, j)) (shape[ch ·]!) (width[ch ·]!)
+                (packed[ch ·]!) (tags[ch ·]!)
+              (w, ft 0 a && ft 1 b)
             | .clos .. =>
               if recCls.contains v then (1, false) else
               let cs := (union.getD v #[]).toList
@@ -986,6 +1042,13 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
                cs.all fun c => (codeEnv.getD c []).all (trivial[·]!))
           width := width.set! v wv
           trivial := trivial.set! v tv
+          if let .sum a b := shape[v]! then
+            let ch (j : Nat) : Nat := if j == 0 then a else b
+            let (m, t, p, _) := sumEnc (fun j => boxed.contains (v, j)) (shape[ch ·]!) (width[ch ·]!)
+              (packed[ch ·]!) (tags[ch ·]!)
+            mergeArm := mergeArm.set! v m
+            tags := tags.set! v t
+            packed := packed.set! v p
           color := color.set! v 2
           stack := rest
   -- **Cells.** A value in a cell takes its node's bytes (`repB`): a `u8` one, an `i32` or `f32`
@@ -1024,6 +1087,7 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
            fnRet, mainNode := rep[mainNode]!, codeClass, codeEnv,
            regions := s.regions.fold (fun m k i => m.insert k rep[i]!) {},
            staticBytes := p.statics.map fun cls =>
-             cls.foldl (fun b t => max b (tyBytes.getD t.unbang 0)) 0 }
+             cls.foldl (fun b t => max b (tyBytes.getD t.unbang 0)) 0,
+           mergeArm, tags, packed }
 
 end Backend2.Lay

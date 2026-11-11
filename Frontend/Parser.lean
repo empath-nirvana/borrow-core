@@ -76,6 +76,10 @@ inductive RTy where
   | lapp (sp : Span) (F : RTy) (a : Life)
   /-- `(A => B with E₁, E₂[T])`: a function type with a provided row (`VTy.rowed`).  `[spec §33]` -/
   | rowed (sp : Span) (F : RTy) (effs : List (Ident × List VTy))
+  /-- `row (ROW)` and `site k` in a bracket's arguments (`VTy.rowArg`, `VTy.siteArg`).
+  `[spec §76]` -/
+  | rowArg (sp : Span) (r : Row)
+  | siteArg (sp : Span) (n : Nat)
 
 def RTy.span : RTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .U sp _ | .F sp _ | .ref sp _
@@ -84,7 +88,7 @@ def RTy.span : RTy → Span
   | .top sp | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ | .nu sp _ _ | .delay sp _
   | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .pull sp _ _ _ | .array sp _ | .arrayImm sp _ _
   | .arrayMut sp _ _ | .sized sp _ _ _ | .eff sp _ _ | .app sp _ _ | .lapp sp _ _
-  | .rowed sp _ _ => sp
+  | .rowed sp _ _ | .rowArg sp _ | .siteArg sp _ => sp
 
 /-- What a raw type is, for sort errors. -/
 def RTy.former : RTy → String
@@ -135,6 +139,8 @@ def RTy.toV : RTy → Except Error VTy
     match ← G.toV with
     | H@(.lolli ..) => pure (.rowed sp H (VTy.ofRowEffs sp es))
     | H => .error ⟨H.span, "a provided row `with E` is written on a function type `A => B`"⟩
+  | .rowArg sp r => pure (.rowArg sp r)
+  | .siteArg sp n => pure (.siteArg sp n)
   | t@(.F ..) | t@(.arr ..) | t@(.forall_ ..) | t@(.amp ..) | t@(.top ..) | t@(.nu ..)
   | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) | t@(.loop ..) | t@(.pull ..)
   | t@(.eff ..) => sortErr t true
@@ -227,6 +233,10 @@ structure PState where
   literal or a pattern (SPEC §42): the name there is a field's and a variable's, so a renaming of
   the variable writes `f: f'` (`bcc alpha`). -/
   shorthands : List Pos := []
+  /-- The row parameters and the site parameters of the declaration being read (SPEC §76):
+  what `..r` and a site name may name.  `[spec §76]` -/
+  rowPs : List String := []
+  sitePs : List String := []
 
 abbrev P := StateT PState (Except Error)
 
@@ -715,6 +725,19 @@ def rtyAtom : Nat → P RTy
       unless (← get).internal do failAt t.span "unknown type `tok`"
       discard bump; pure (.handle t.span .tok)
     | .kw "top" => discard bump; pure (.top t.span)
+    -- `row (ROW)`, a row argument in a bracket, and `site k`, a site argument (SPEC §76): `row`
+    -- and `site` are words here, not keywords.  `[spec §76]`
+    | .ident "row" =>
+      if (← peekAt 1).tok != .sym "(" then expected "a type"
+      discard bump
+      discard bump
+      let r ← rowEntries n
+      expectSym ")"
+      pure (.rowArg (← spanFrom t.span.start) r)
+    | .ident "site" =>
+      discard bump
+      let k ← siteRef "a site, `site k`"
+      pure (.siteArg (← spanFrom t.span.start) k)
     -- `bool` is `1 + 1`, `inr ()` for true (the prelude, typed elaboration §5.4).
     | .ident "bool" => discard bump; pure (.sum t.span (.unit t.span) (.unit t.span))
     -- `string` is `buf u8`, and `lit`, a literal, is `i32 * !(i32 => u8)` (design §2.2, §5.7).
@@ -785,14 +808,42 @@ def nDotI? (s : String) : Option (Nat × Nat) :=
     else none
   | _ => none
 
-/-- An operation `n.i`. -/
+/-- A site parameter's number (`siteOfName`), the name `s` read: one of the declaration's site
+parameters.  `[spec §76]` -/
+def siteParam (t : Token) (s : String) : P Nat := do
+  unless (← get).sitePs.contains s do
+    failAt t.span s!"`{s}` is not a site parameter of this declaration (`[…, site {s}]`)"
+  if s.length > 32 then failAt t.span s!"a site parameter's name is at most 32 characters"
+  pure (siteOfName s)
+
+/-- A literal site, below `2^32`: the numbers above are site parameters' (`siteOfName`), so a
+literal never names one.  `[spec §19, §76]` -/
+def litSite (t : Token) (k : Nat) : P Nat := do
+  unless k < 2 ^ 32 do failAt t.span s!"the site {k}: a site is below 2^32"
+  pure k
+
+/-- A site: a literal `n`, or a site parameter's name.  `[spec §19, §76]` -/
+def siteRef (what : String) : P Nat := do
+  let t ← peek
+  match t.tok with
+  | .int k => discard bump; litSite t k
+  | .ident s => discard bump; siteParam t s
+  | _ => expected what
+
+/-- An operation `n.i`, or `s.i` at a site parameter `s` (SPEC §76). -/
 def opNameNI (what : String) : P (Nat × Nat) := do
   let t ← peek
   match t.tok with
   | .flt s =>
     match nDotI? s with
-    | some ki => discard bump; pure ki
+    | some (k, i) => discard bump; return (← litSite t k, i)
     | none => expected what
+  | .ident s =>
+    if (← peekAt 1).tok == .sym "." then
+      if let .int i := (← peekAt 2).tok then
+        discard bump; discard bump; discard bump
+        return (← siteParam t s, i)
+    expected what
   | _ => expected what
 
 /-- The entries of a row up to its `]`: `n.i q A ~> B`, separated by `,`; `q` is `lin`, `cancel` or
@@ -802,7 +853,17 @@ is the empty cancel row. A `lin` entry has none.  `[spec §19, §27]` -/
 def rowEntries : Nat → P Row
   | 0 => outOfFuel
   | n + 1 => do
-    if ← isSym "]" then return .nil
+    if (← isSym "]") || (← isSym ")") then return .nil
+    -- `..r`: the row parameter `r` as the row's tail (SPEC §76).  `[spec §76]`
+    if (← isSym ".") && (← peekAt 1).tok == .sym "." then
+      discard bump; discard bump
+      let t ← peek
+      let r ← ident "a row parameter after `..`"
+      unless (← get).rowPs.contains r.name do
+        failAt t.span (s!"`..{r.name}`: `{r.name}` is not a row parameter of this declaration. " ++
+          "A definition checked once for all rows is not provided: it needs a row binder in the " ++
+          "kernel (decision 62's row variables), which Core does not have (SPEC §76 *Open*)")
+      return .var r.name
     let tt ← peek
     if tt.tok == .kw "top" then
       failAt tt.span "`top` (`⊤`) is a cancel row only: write it as `n.i cancel[top] A ~> B`"
@@ -2725,9 +2786,7 @@ def compPrefix : Nat → P Comp
       -- `handle_with[n](V, W) M` (SPEC §19): the answer clause and the clauses, values.
       discard bump
       expectSym "["
-      let k ← match (← peek).tok with
-        | .int k => discard bump; pure k
-        | _ => expected "the name `n` of a handler"
+      let k ← siteRef "the name `n` of a handler"
       expectSym "]"
       expectSym "("
       let angle := (← get).angle
@@ -3092,13 +3151,7 @@ def decl (n : Nat) : P Decl := do
     -- `type N[T, …]<'a, …> = A` (SPEC §7): the parameters, both lists possibly absent.
     discard bump
     let x ← uident "a type name"
-    let mut tps : List Ident := []
-    if ← isSym "[" then
-      discard bump
-      repeat
-        tps := tps ++ [← uident "a type parameter"]
-        if ← isSym "," then discard bump else break
-      expectSym "]"
+    let (tps, rs, ss) ← genParams n
     let mut lps : List Ident := []
     if ← isSym "<" then
       discard bump
@@ -3107,8 +3160,11 @@ def decl (n : Nat) : P Decl := do
         if ← isSym "," then discard bump else break
       expectSym ">"
     expectSym "="
-    let A ← vty n
-    pure (.type (← spanFrom st) x tps lps A)
+    unless rs.isEmpty && ss.isEmpty || lps.isEmpty do
+      failAt x.span s!"`{x.name}` has row or site parameters, and takes no lifetime parameters (SPEC §76)"
+    let A ← withGenParams rs ss (vty n)
+    let sp ← spanFrom st
+    pure (genDecl sp rs ss (.type sp x tps lps A))
   | .kw "shape" =>
     discard bump
     let x ← uident "a shape name"
@@ -3368,23 +3424,21 @@ where
   /-- A `def` after its keyword: `name[P₁, …] : A = V`. -/
   defRest (st : Pos) (mk : Mark) : P Decl := do
     let x ← ident "a `def` name"
-    let ps ← if ← isSym "[" then do
-        discard bump
-        let ps ← uidents n
-        expectSym "]"
-        pure ps
-      else pure []
+    let (ps, rs, ss) ← genParams n
     -- `fn def f[S, …] where S: 'c : A = V`: a template's printed bounds.
     let bs ← whereBounds ps []
     let mk := match mk with
       | .template m _ => .template m bs
       | mk => mk
     expectSym ":"
-    let A ← vty n
-    expectSym "="
-    modify fun s => { s with muts := [], assigned := [], scope := [] }
-    let V ← val n
-    pure (.def_ (← spanFrom st) x ps A V mk)
+    let (A, V) ← withGenParams rs ss do
+      let A ← vty n
+      expectSym "="
+      modify fun s => { s with muts := [], assigned := [], scope := [] }
+      let V ← val n
+      pure (A, V)
+    let sp ← spanFrom st
+    pure (genDecl sp rs ss (.def_ sp x ps A V mk))
   /-- A `fn` after its keyword (draft 0 §2.5): `name[P₁, …]<'a, …>(x₁: A₁, …, xₙ: Aₙ) -> T = S`,
   the type parameters and the lifetime parameters each optional. It is the persistent
   `def name : !(A₁ * … * Aₙ => T) = !thunkv fun (p : A₁ * … * Aₙ) -> …`, the parameters bound
@@ -3534,6 +3588,37 @@ where
     | x :: xs, M => do
       let r ← freshName "io_p"
       pure (.letPair sp x ⟨r, sp⟩ (.var sp p) (← bindParams sp r xs M))
+  /-- `[A, row r, site s, …]` after a `def` or `type` name: its type parameters, its row parameters
+  and its site parameters, each list in the order written; none when no bracket follows.
+  `[spec §76]` -/
+  genParams (n : Nat) : P (List Ident × List Ident × List Ident) := do
+    if !(← isSym "[") then return ([], [], [])
+    discard bump
+    let mut tps : Array Ident := #[]
+    let mut rs : Array Ident := #[]
+    let mut ss : Array Ident := #[]
+    for _ in [0:n] do
+      let t ← peek
+      match t.tok, (← peekAt 1).tok with
+      | .ident "row", .ident _ => discard bump; rs := rs.push (← ident "a row parameter")
+      | .ident "site", .ident _ => discard bump; ss := ss.push (← ident "a site parameter")
+      | _, _ => tps := tps.push (← uident "a type parameter")
+      if ← isSym "," then discard bump else break
+    expectSym "]"
+    let all := rs.toList ++ ss.toList
+    if let some y := all.find? fun y => (all.filter (·.name == y.name)).length > 1 then
+      failAt y.span s!"`{y.name}` is declared twice in this bracket"
+    pure (tps.toList, rs.toList, ss.toList)
+  /-- `p` read with the row and site parameters `rs` and `ss` in scope.  `[spec §76]` -/
+  withGenParams {α} (rs ss : List Ident) (p : P α) : P α := do
+    modify fun s => { s with rowPs := rs.map (·.name), sitePs := ss.map (·.name) }
+    let a ← p
+    modify fun s => { s with rowPs := [], sitePs := [] }
+    pure a
+  /-- The declaration `d`, generic over the rows `rs` and the sites `ss` when there are any.
+  `[spec §76]` -/
+  genDecl (sp : Span) (rs ss : List Ident) (d : Decl) : Decl :=
+    if rs.isEmpty && ss.isEmpty then d else .gen sp rs ss d
   /-- `P₁, …, Pₙ`: a `def`'s type parameters, at least one. -/
   uidents : Nat → P (List Ident)
     | 0 => outOfFuel

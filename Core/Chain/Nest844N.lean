@@ -407,7 +407,7 @@ theorem d_cbO {cl : Val} (hcl : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives ΔM
       first | exact absurd hl Bool.false_ne_true | exact nestC_noFree (by decide)
   refine bindW (.ret (appW (.unitI (by cdead)) (.alloc (by cdead)))) ?_
   refine bindW (.ret (.withbor2U (A := .unit) (B := .unit) 4 (by cdead) rfl ⟨.top, fun _ _ => ⟨_, rfl⟩, .unit⟩ id id
-    (fun _ h => absurd h List.not_mem_nil) (by decide) (.free (by cdead)))) ?_
+    (fun _ h => absurd h List.not_mem_nil) (.free (by cdead)))) ?_
   refine .bind (.right (.right (.left (.dead (.dead (.dead (.left .nil))))))) (.ret (d_cbM hcl rfl)) ?_
   refine bindW (A := .tensor (.ref .unit) .unit)
     (appVW (appVW (.force (T := .thunk _) (C := .arr (.ref .unit) (.arr cbMTy
@@ -425,7 +425,7 @@ theorem d_prog {cl : Val} (hcl : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ
     CDerives LifeCtx.empty (ctx791 [nestC]) (prog (hnd cl)) (.comp (.ret .unit)) := by
   refine bindW (.ret (appW (.unitI (by cdead)) (.alloc (by cdead)))) ?_
   refine bindW (.ret (.withbor1U (A := .unit) (B := .unit) 3 (by cdead) rfl (fun _ h => h.elim) id id
-    (fun _ h => absurd h List.not_mem_nil) (by decide) (.free (by cdead)))) ?_
+    (fun _ h => absurd h List.not_mem_nil) (.free (by cdead)))) ?_
   refine .bind (.right (.right (.left .nil))) (.ret (d_cbO hcl rfl)) ?_
   refine bindW (A := .tensor (.ref .unit) .unit)
     (appVW (appVW (.force (T := .thunk _) (C := .arr (.ref .unit) (.arr cbOTy

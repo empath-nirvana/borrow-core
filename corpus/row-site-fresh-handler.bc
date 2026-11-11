@@ -1,0 +1,17 @@
+-- SPEC §76: a private site is fresh above the sites the effects pass gave. `with to_r` is given
+-- site 1; `scoped[site s]`'s instance, made after the effects pass, takes site 2.
+--
+-- Answer: i32[4].
+
+effect Fail { ctl fail(x: i32) }
+
+handler to_r: Fail, i32 -> i32 = { return(x) = x; fail(x, k) = x }
+
+def scoped[site s] : !U (U (F i32) -o F i32) =
+  !thunkv fun (k : U (F i32)) ->
+    handle_with[s](
+        ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+        (((!thunkv fun (x : i32) -> return x), ()) : !U (i32 -o F i32) * 1)) (
+      a <- force k; abort[s.0] a)
+
+main -> i32 = with to_r { (unbang scoped)(thunk (return i32[4])) }

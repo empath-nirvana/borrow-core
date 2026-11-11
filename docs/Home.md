@@ -43,7 +43,8 @@ research notes behind them.
 - Open scopes: [borrowed payloads to handlers](new-core/scope-844-borrowed-payloads.md) (#844;
   Tier 1 is built, Tier 2 is open), [per-code closure types](new-core/scope-855-per-code-types.md)
   (#855, decision 76) and [pipes](new-core/scope-pipes.md): `|>` push and `>|` pull, the connector
-  and the unit split (#907, #918–#925).
+  and the unit split (#907, #918–#925), with [Assembly(n)](new-core/assembly-n.md), the paper proof
+  that the connector generated per chain is the flat n-chain of the paper model (#920).
 
 ## Designs
 

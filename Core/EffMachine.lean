@@ -118,6 +118,19 @@ theorem stuck_ne_op {s : Expr} (hs : StuckAt (ℍ := ℍ) s) (K K' : Kont) (r : 
     · subst h0; exact hs.not_op r p h₁.symm
     · exact hs.not_val (isVal_of_plug_opE h₁.symm h0)
 
+/-- A stuck redex and a `cancelTo` are never both at evaluation positions of one term.
+`[spec §51]` -/
+theorem stuck_ne_cancelTo {s : Expr} (hs : StuckAt (ℍ := ℍ) s) (K K' : Kont) (p : Val) :
+    K.plug s ≠ K'.plug (BoCa.BoLo.cancelToE (.val p)) := by
+  intro h
+  rcases plug_cmp K K' hs.not_val (cancelToE_not_isVal p) h with ⟨K'', h₁, -⟩ | ⟨K'', h₁, -⟩
+  · by_cases h0 : K'' = .hole
+    · subst h0; exact hs.not_inert .cancelTo p trivial h₁
+    · exact cancelToE_not_isVal p (hs.subs K'' _ h₁ h0)
+  · by_cases h0 : K'' = .hole
+    · subst h0; exact hs.not_inert .cancelTo p trivial h₁.symm
+    · exact h0 (plug_primApp h₁.symm hs.not_val)
+
 /-- **A term holding a stuck redex at an evaluation position takes no step.** -/
 theorem stuck_no_step {s : Expr} (hs : StuckAt (ℍ := ℍ) s) (K : Kont) {μ μ' : Heap} {t : Expr} :
     ¬ Step1 (ℍ := ℍ) μ (K.plug s) μ' t := by
@@ -145,6 +158,9 @@ theorem stuck_no_step {s : Expr} (hs : StuckAt (ℍ := ℍ) s) (K : Kont) {μ μ
       | hunwind n' i _ _ _ _ v K₀ =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hX
           exact stuck_ne_op hs K₃ K₀ true (opPayload n' i v) hX.2
+      | cancelTo _ _ _ _ k K₀ =>
+          simp only [hndE, Kont.plug, Expr.app.injEq] at hX
+          exact stuck_ne_cancelTo hs K₃ K₀ _ hX.2
       | _ => simp_all [Kont.plug, ubindE, ccatchE, cfinE]
     · generalize hX : (Kont.appR (.app (.val (.prim .ubind)) (.val (Val.pair N D))) K₃).plug s = X
         at h₁
@@ -772,6 +788,24 @@ theorem opPlug_no_step {μ μ' : Heap} {K : Kont} {r : Bool} {p : Val} {n : UInt
   · subst h₂
     exact head_not_opPlug hn (opFree_right hK) (h₁ ▸ hh)
 
+/-- **A `cancelTo` whose context has no handler of its name takes no step**: `K[cancelTo_n k]`, `K`
+free of `n`, is final until the enclosing `hnd (n, _)` reduces it, as `K[perform (n, …)]` is.
+`[spec §51]` -/
+theorem cancelToPlug_no_step {μ μ' : Heap} {K : Kont} {p : Val} {n : UInt32} {t' : Expr}
+    (hn : payloadName p = some n) (hK : K.HasHnd n = false) :
+    ¬ Step1 (ℍ := ℍ) μ (K.plug (BoCa.BoLo.cancelToE (.val p))) μ' t' := by
+  rintro ⟨K', a, a', he, -, hh⟩
+  rcases plug_cmp K K' (cancelToE_not_isVal p) hh.not_isVal he with ⟨K'', h₁, h₂⟩ | ⟨K'', h₁, h₂⟩
+  · have hK'' := plug_primApp (h₁.symm.trans rfl) hh.not_isVal
+    subst hK''
+    have ha : a = BoCa.BoLo.cancelToE (.val p) := by simpa [Kont.plug] using h₁.symm
+    subst ha
+    exact head_not_cancelToPlug (K₁ := .hole) hn rfl hh
+  · subst h₂
+    rw [hasHnd_comp] at hK
+    simp only [Bool.or_eq_false_iff] at hK
+    exact head_not_cancelToPlug hn hK.2 (h₁ ▸ hh)
+
 /-- The context a handler `hnd (n, H)` forms with the contexts around and inside it. -/
 theorem plug_hndK (K₁ : Kont) (H : Val) (K : Kont) (e : Expr) :
     (K₁.comp ((hndK H).comp K)).plug e = K₁.plug (hndE H (K.plug e)) := by
@@ -851,6 +885,9 @@ theorem head_raise_ctx {μ μ' : Heap} {K' : Kont} {p : Val} {n : UInt32} {a' : 
     | hop m' i _ _ _ _ v K₄ =>
         simp only [hndE, Kont.plug, Expr.app.injEq] at hX
         exact (plug_perform_ne_raise _ _ _ _ hX.2.symm).elim
+    | cancelTo _ _ _ _ k K₄ =>
+        simp only [hndE, Kont.plug, Expr.app.injEq] at hX
+        exact (plug_cancelTo_ne_raise _ _ _ _ hX.2.symm).elim
     | hret _ _ _ _ w =>
         simp only [hndE, Kont.plug, Expr.app.injEq] at hX
         exact (plug_raise_ne_val _ _ _ hX.2).elim

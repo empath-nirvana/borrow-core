@@ -1,0 +1,11 @@
+-- SPEC §76: a template used without its row arguments: they are written at each use, and
+-- reading them off the call is not built in slice 1.
+-- expect: 11:29: `idk` is used without its arguments: its row and site arguments are written at each use, `idk[…, row (…)]`; reading them off the call is not built in slice 1 (SPEC §76)
+
+def idk[row r] : !U (U (F[..r] 1) -o F[..r] 1) =
+  !thunkv fun (k : U (F[..r] 1)) -> force k
+
+def apply : !U (!U (U (F 1) -o F 1) -o F 1) =
+  !thunkv fun (f : !U (U (F 1) -o F 1)) -> k <- return (thunk (return ())); (unbang f) k
+
+main : F 1 = (unbang apply) idk

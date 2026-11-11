@@ -330,7 +330,7 @@ theorem sliceBorrowMS_compat {Δ : LifeCtx} {x : LifeVar} {bnd : Lifetime.Life} 
     simp [Kont.plug, Expr.subst, thenE, ubindE, NFa, DFa, Val.pair,
       Val.lam, Expr.val, Val.prim, shift_arr, subst_arr,
       subst_closedAt d (s := _) hdc (Nat.zero_le _)]
-  rw [e₃]
+  rw [shift_closedAt d 3 hdc (Nat.zero_le 0), e₃]
   -- the frames, the composite claim the array
   let Ψ : LocTy → PostN := fun Θ k _ v ρ => vN (ℍ := ℍ) B δ Θ k v ρ
   have hM := erwpK_M_frameListKWP (ℍ := ℍ) (V := KW.PostK) hunif hδ hmb hFS Ψ
