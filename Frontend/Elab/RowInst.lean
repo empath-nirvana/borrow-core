@@ -100,7 +100,7 @@ def _root_.Frontend.Shape.ents : Shape → List (Nat × Nat)
   | .name _ _ => []
 end
 
-/-- The operations a constant's bracket arguments write. -/
+/-- The operations a constant's bracket arguments write.  `[spec §76]` -/
 def constEnts (k : Const) : List (Nat × Nat) :=
   k.toArgs.2.flatMap fun
     | .ty A => A.ents
@@ -162,6 +162,7 @@ def _root_.Frontend.Val.surface? : Val → Option Span
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.surface?
   | _ => none
 
+/-- The span of a surface form in a computation (`Val.surface?`).  `[spec §76]` -/
 def _root_.Frontend.Comp.surface? : Comp → Option Span
   | .loop sp .. => some sp
   | .ret _ V | .absurd _ V => V.surface?
@@ -514,8 +515,14 @@ def use : Nat → Cx → Span → Tmpl → List VTy → Bool → M Val
                              site := s.site + priv.length }
     let σs : List (Nat × Nat) :=
       (pub.map siteOfName).zip Ss ++ (priv.map siteOfName).zip ((List.range priv.length).map (fresh + ·))
-    let c' : Cx := { tmpls := c.tmpls, tys := if isPure then [] else t.tps.zip Ts,
-                     rows := t.rows.zip Rs, sites := σs, tps,
+    -- The instance's own type parameters take fresh names, `T__p` for the caller's `T`, so that
+    -- a global type the template names is not captured by them.
+    let own := tps.map (· ++ "__p")
+    let ρ : TySubst := tps.zip (own.map (VTy.name .none))
+    let Ts' := Ts.map (·.subst ρ)
+    let Rs' := Rs.map (·.subst ρ)
+    let c' : Cx := { tmpls := c.tmpls, tys := if isPure then [] else t.tps.zip Ts',
+                     rows := t.rows.zip Rs', sites := σs, tps := if isPure then tps else own,
                      stack := (t.name, sp) :: c.stack }
     let A ← substV n c' t.ty
     -- A wrong row argument, reported here rather than inside the instance: an operation the
@@ -528,7 +535,8 @@ def use : Nat → Cx → Span → Tmpl → List VTy → Bool → M Val
         throw ⟨sp, s!"`{t.name}` used at row {rows}, but `{t.name}`'s body performs " ++
           s!"`{sitePp k}.{i}` outside it"⟩
     let V ← substVal n c' t.val
-    let d : Decl := .def_ t.sp ⟨name, t.sp⟩ (tps.map fun x => ⟨x, t.sp⟩) A V t.mark
+    let d : Decl := .def_ t.sp ⟨name, t.sp⟩ ((if isPure then tps else own).map fun x => ⟨x, t.sp⟩)
+      A V t.mark
     modify fun s => { s with out := s.out.push d, made := s.made.push (name, t.name, sp) }
     return ref inst
 end

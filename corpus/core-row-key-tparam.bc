@@ -1,6 +1,6 @@
 -- SPEC §76: an instance's key holds the type parameters of the code it is used in. `app[T, row …]`
 -- is used in `h`, where `T` is the global type `T = i32`, and in `g[T]`, where `T` is `g`'s
--- parameter: two instances, `app__r1` at `i32` and `app__r2[T]`, which `g` passes its `T`.
+-- parameter: two instances, `app__r1` at `i32` and `app__r2[T__p]`, which `g` passes its `T`.
 --
 -- Answer: (i32[3], inl ()).
 
