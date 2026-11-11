@@ -13593,7 +13593,8 @@ the old backend or a kernel program.
 ## 79. Entry 78 — mutual codata: finite systems of ν equations (#995)
 
 This entry extends §7 (codata `νX. C`), and touches §12 (consume) and §68 (`unfoldK`, `nuOutK`).
-The user approved option M, mutual ν (#995). Code it adds is tagged `[spec §79]`.
+The user approved option M, mutual ν (#995). Code it adds is tagged `[spec §79]`, and the per-code
+rules `[spec §79, §68]`.
 
 ### What it adds
 
