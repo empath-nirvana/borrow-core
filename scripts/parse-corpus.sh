@@ -12,7 +12,7 @@ for f in corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus
   if ! "$bcc" parse "$f"; then bad=$((bad + 1)); fi
 done
 for f in corpus/fail/*.bc; do
-  want=$(sed -n 's/^-- expect: //p' "$f" | head -1)
+  want=$(sed -n '/^-- expect: /{s///p;q;}' "$f")
   if out=$("$bcc" parse "$f" 2>&1); then
     echo "$f: accepted, but must fail"; bad=$((bad + 1))
   elif [ "$out" != "$f:$want" ]; then

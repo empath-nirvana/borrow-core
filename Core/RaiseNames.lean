@@ -583,6 +583,14 @@ theorem heapRaiseOK_upd {μ : Heap} (hμ : HeapRaiseOK P μ) (ℓ : Loc) {v : Va
   · subst hk; simp at h; subst h; exact hv
   · rw [Heap.upd_other hk] at h; exact hμ k w h
 
+/-- The copy step's write keeps the memory's values within the names `P`.  `[spec §74]` -/
+theorem heapRaiseOK_copyHeap {μ : Heap} (hμ : HeapRaiseOK P μ) (ℓd : Loc) (nd di : UInt32)
+    (ℓs : Loc) (ns si len : UInt32) :
+    HeapRaiseOK P (BoCa.BoLo.copyHeap μ ℓd nd di ℓs ns si len) := by
+  intro k w h
+  obtain ⟨k', h'⟩ := BoCa.BoLo.copyHeap_some h
+  exact hμ k' w h'
+
 theorem heapRaiseOK_del {μ : Heap} (hμ : HeapRaiseOK P μ) (ℓ : Loc) : HeapRaiseOK P (μ.del ℓ) := by
   intro k w h
   by_cases hk : k = ℓ
@@ -933,6 +941,11 @@ theorem raiseOK_head (hP0 : ¬ P 0) {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ
       simp only [splitAns]; split
       · exact ⟨raiseOK_arr _ _, raiseOK_arr _ _⟩
       · exact raiseOK_arr _ _
+  | sliceCopy ℓd nd di ℓs ns si len _ =>
+      refine ⟨?_, heapRaiseOK_copyHeap hμ ℓd nd di ℓs ns si len⟩
+      simp only [copyAns]; split
+      · exact ⟨raiseOK_arr _ _, trivial⟩
+      · exact ⟨raiseOK_arr _ _, trivial⟩
   | drop f ℓ n =>
       have h1 := (raiseOK_primApp (by decide) (by decide) _).1 ha
       exact ⟨raiseOK_dropFill h1.1 ℓ _ _, hμ⟩
@@ -1373,7 +1386,7 @@ theorem rcE_nodeV : ∀ C : CTy, rcE q (nodeV C).1 = true
   | .eff _ _ _ _ _ _ _ C => by simp [nodeV, bindE, rcE, rcE_app, rcE_mapV]
   | .arr _ D => by simp [nodeV, rcE, rcE_app, rcE_nodeV D]
   | .all _ _ D => by simp [nodeV, rcE, rcE_app, rcE_nodeV D]
-  | .top | .nu _ => rfl
+  | .top | .nuSys _ _ _ => rfl
 
 theorem rcE_unfoldV (C : CTy) : rcE q (unfoldV C).1 = true := by
   have hB : rcE q (fBN C) = true := by simp [fBN, rcE, rcE_app, rcE_nodeV]
@@ -1576,9 +1589,9 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
   induction h with
   | force => exact rcE_forceE_var _ _
   | withI _ _ ihM ihN => exact rcE_withPair ihM ihN
-  | withbor1U _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
-  | withbor2U _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
-  | withbor3U _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | withbor1UD _ _ _ _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | withbor2UD _ _ _ _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
+  | withbor3UD _ _ _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
   | sliceBorrowMU _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
   | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
   | foldImm => exact rcE_foldImmV _

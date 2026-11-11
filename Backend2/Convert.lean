@@ -334,7 +334,7 @@ def formersC (acc : List String) : CTy → List String
   | .arr A C => formersC (formersV ("C.arr" :: acc) A) C
   | .amp C D => formersC (formersC ("C.amp" :: acc) C) D
   | .all _ _ C => formersC ("C.all" :: acc) C
-  | .nu C => formersC ("C.nu" :: acc) C
+  | .nuSys _ _ C => formersC ("C.nu" :: acc) C
   | .eff _ _ _ A B fin _ C => formersC (formersC (formersV (formersV ("C.eff" :: acc) A) B) fin) C
   | .top => "C.top" :: acc
 end
@@ -2739,7 +2739,7 @@ def constArity : TExpr → Option Nat
   | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .boundedFix .. => some 1
   | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
-  | .withborF2I .. | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU ..
+  | .withborF2I .. | .withbor1UD .. | .withbor2UD .. | .withbor3UD .. | .withloadU ..
   | .sliceBorrowMU .. | .sliceBorrowIU .. => some 2
   | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. => some 0
   | _ => none
@@ -3109,7 +3109,8 @@ def thenFin (d : Var) (dTm : Tm) (pm pd ps : Pay) (e : Var) : CM Tm := do
       (.abandon .superseded e (← coercePay pd ps e₂ fun e' => pure (.inj true e')))))
 
 /-- **The row `Σ_D` of an unwinding borrow's finaliser** `d : U(src ⊸ F_{Σ_D} 1)`, read from its
-typed term's judgment.  `[spec §19, §72]` -/
+typed term's judgment: at `sliceBorrow*U`, whose node has no `Σ_D` (the `withbor*UD` nodes carry
+it).  `[spec §19, §72]` -/
 def finRow (td : TExpr) : CM Row :=
   match td.jdg with
   | .val (.thunk (.arr _ C)) => match effParts C with
@@ -3122,7 +3123,8 @@ whose typed term is converted at the head's context (`withborUE d` places `d` in
 context, SPEC §72). `none` at any other head and at a constant finaliser, which needs no slot. -/
 def finTerm? (hd : TExpr) : Option TExpr :=
   match hd with
-  | .withbor1U _ _ _ _ _ _ td | .withbor2U _ _ _ _ _ _ td | .withbor3U _ _ _ _ _ _ _ td
+  | .withbor1UD _ _ _ _ _ _ _ _ td | .withbor2UD _ _ _ _ _ _ _ _ td
+  | .withbor3UD _ _ _ _ _ _ _ _ _ td
   | .sliceBorrowMU _ _ _ _ _ _ td | .sliceBorrowIU _ _ _ _ _ _ td =>
     if constArity (headOf 64 td) == some 1 then none else some td
   | _ => none
@@ -3135,7 +3137,7 @@ abbrev FinApp := Ctx × (Ctx → Var → CM Tm)
 /-- **The context of an unwinding borrow's finaliser**, at a borrow head `hd` whose context is
 `ctx`: a non-constant finaliser is converted on the abort arm at a copy of `ctx`, made here, before
 the head's leaf consumes `ctx`; the borrow consumes the copies on its value arm. Every live slot
-is persistent (the rule's `Ctx.DeadP Γ`, `withbor1U`'s `hΓ`), so the copy is a split's `dup`
+is persistent (the rule's `Ctx.DeadP Γ`, `withbor1UD`'s `hΓ`), so the copy is a split's `dup`
 (`Lint` checks it). `app` applies a finaliser's typed term to the owner at a context (`applyTo`,
 passed in so that the borrow's expansion makes no call back into the conversion). At any other
 head: no copy, and `none`.  `[spec §19, §72]` -/
@@ -4118,7 +4120,7 @@ where
   cbConst : TExpr → Bool
     | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .sliceBorrowM ..
     | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I ..
-    | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU .. | .sliceBorrowMU ..
+    | .withbor1UD .. | .withbor2UD .. | .withbor3UD .. | .withloadU .. | .sliceBorrowMU ..
     | .sliceBorrowIU .. => true
     | _ => false
   go (fuel : Nat) (ctx : Ctx) : List (Masks × TExpr) → List Var → TExpr → LTy → CM Tm
@@ -4274,20 +4276,24 @@ owner lent as `genLend` does; the callback's value `b` gives `(r, b)`; its abort
 the finaliser `d` on the owner, and is handed on (`then_fin`), as `[then]`'s abort arm (`thenFin`).
 A constant finaliser is expanded at the owner. Any other is the typed term `td`, applied to the
 owner (`applyTo`: a λ's body, or a closure's call) at `dctx`, the copy of the rule's context
-`finCtx` made, which the value arm consumes. Its row `Σ_D` is read from `td`'s type (`finRow`);
-the borrow's `S` from the node.  `[spec §19, §47, §72]` -/
-def genLendU (fuel : Nat) (op : Op) (src : Var) (cbT : LTy) (call : Var → CM Tm) (S : Row)
-    (td : TExpr) (dctx : Option FinApp) : CM Tm := do
+`finCtx` made, which the value arm consumes. The rows are the node's: the callback's `SM`, the
+borrow's `S`, and the finaliser's `Σ_D` (`SD`; at a node without it, read from `td`'s type,
+`finRow`).  `[spec §19, §27, §47, §72]` -/
+def genLendU (fuel : Nat) (op : Op) (src : Var) (cbT : LTy) (call : Var → CM Tm) (SM S : Row)
+    (SD : Option Row) (td : TExpr) (dctx : Option FinApp) : CM Tm := do
   match fuel with
   | 0 => throw "LIR: the typed term is too deep"
   | fuel + 1 =>
   let (some bT, rT) ← answerOf cbT | throw "LIR: a borrow's callback takes no borrow"
-  -- Value or abort is read from the borrow's row `S` (the node's), never from the shape of the
+  -- Value or abort is read from the callback's row `SM` (the node's), never from the shape of the
   -- callback's answer: at a row with no abort that answer is the value, a sum when `B` is one.
-  let ps ← rowPay S
-  match payTy ps with
+  let pm ← rowPay SM; let ps ← rowPay S
+  -- The borrow answers at `S`, the callback at `SM ≤ S` (K-b, #1046): one payload here.
+  unless pm.map (·.1) == ps.map (·.1) do
+    throw "LIR: an unwinding borrow whose callback's row is not its own is outside the pure fragment (#1046)"
+  match payTy pm with
   | some eT => do
-    -- The row holds an abort: the callback answers `vT ⊕ P_S` (`resTy`).
+    -- The row holds an abort: the callback answers `vT ⊕ P_SM` (`resTy`).
     let .sum vT _ := rT.peel
       | throw "LIR: an unwinding borrow's callback at a row with an abort does not answer a sum"
     readFact "withborU:finaliser"
@@ -4307,28 +4313,31 @@ def genLendU (fuel : Nat) (op : Op) (src : Var) (cbT : LTy) (call : Var → CM T
       throw "LIR: an unwinding borrow whose finaliser is not a constant, not applied where it is written, is outside the pure fragment"
     | _, some (dc, app) =>
       readFact "withborU:finaliser term"
-      let SD ← finRow td
+      let SD ← match SD with
+        | some SD => pure SD
+        | none => finRow td
       -- `Σ_D` with a machine operation: the finaliser may suspend, a machine of its own as
       -- `[then]`'s is (`thenF`, `unwindF`); not yet lowered here (#1046).
       if (← outInfo? .unit SD).isSome then
         throw "LIR: an unwinding borrow's finaliser at a row with a machine operation is outside the pure fragment (#1046)"
-      -- K-b (#1046) widens `Σ_D` past `∅`; `thenFin` already hands a raise of the finaliser's own
-      -- on, superseding the pending one, and `conv` lowers a perform of a tail-resumptive clause.
+      -- The kernel types a finaliser at `Σ_D ≠ ∅` (K-b, #1081); its lowering is #1046. `thenFin`
+      -- already hands a raise of the finaliser's own on, superseding the pending one, and `conv`
+      -- lowers a perform of a tail-resumptive clause.
       unless SD.isEmpty do
         throw "LIR: an unwinding borrow's finaliser at a non-empty row is outside the pure fragment (#1046)"
       let pd ← rowPay SD
       let cbTm ← call b
       let d ← fresh (resTy .unit pd)
       let dTm ← app dc o
-      let fin ← thenFin d dTm ps pd ps e
+      let fin ← thenFin d dTm pm pd ps e
       return .letv pr (.prim op [src]) (.letpair o b pr (.letv r cbTm
         (.case r v (.letv q (.pair o v) (consumes .dead (live dc) (.inj false q))) e fin)))
   | none =>
-    -- The row `S` holds no abort. `S.Unwind x` (the rule's `hS`) makes every operation of `S`
-    -- abortive, so `S` is empty: the callback never stops and the finaliser never runs (`[then]`
+    -- The row `SM` holds no abort. `SM.Unwind x` (the rule's `hS`) makes every operation of `SM`
+    -- abortive, so `SM` is empty: the callback never stops and the finaliser never runs (`[then]`
     -- at the empty row); the callback's answer, a sum or not, is its value. A non-constant
     -- finaliser at any other row would be dropped here: refused.
-    if dctx.isSome && !S.isEmpty then
+    if dctx.isSome && !SM.isEmpty then
       throw "LIR: an unwinding borrow's finaliser at a non-empty row with no abort"
     return consumes .dead ((dctx.map (live ·.1)).getD []) (← genLend op src cbT call)
 
@@ -4344,9 +4353,11 @@ def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM 
   | .withswap .. => genWithswap x cbT call
   | .withborSM .. | .withborF2M .. => genLendTree true x cbT call
   | .withborSI .. | .withborF2I .. => genLendTree false x cbT call
-  | .withbor1U _ _ _ _ S _ td | .sliceBorrowIU _ _ _ _ S _ td => genLendU _fuel (.lend false) x cbT call S td dctx
-  | .withbor2U _ _ _ _ S _ td | .sliceBorrowMU _ _ _ _ S _ td => genLendU _fuel (.lend true) x cbT call S td dctx
-  | .withbor3U _ _ _ _ _ S _ td => genLendU _fuel .relend x cbT call S td dctx
+  | .withbor1UD _ _ _ _ SM SD S _ td => genLendU _fuel (.lend false) x cbT call SM S (some SD) td dctx
+  | .sliceBorrowIU _ _ _ _ S _ td => genLendU _fuel (.lend false) x cbT call S S none td dctx
+  | .withbor2UD _ _ _ _ SM SD S _ td => genLendU _fuel (.lend true) x cbT call SM S (some SD) td dctx
+  | .sliceBorrowMU _ _ _ _ S _ td => genLendU _fuel (.lend true) x cbT call S S none td dctx
+  | .withbor3UD _ _ _ _ _ SM SD S _ td => genLendU _fuel .relend x cbT call SM S (some SD) td dctx
   | .withloadU .. => genWithload x cbT call
   | c => throw s!"LIR: `{ruleName c}` is not a borrow (answer {resT})"
 
@@ -4413,11 +4424,16 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) (dctx : Optio
     freeTree v vT
   | .withborSM .., [x, cb] | .withborF2M .., [x, cb] => genLendTree true x (← tyOf cb) (callCb cb)
   | .withborSI .., [x, cb] | .withborF2I .., [x, cb] => genLendTree false x (← tyOf cb) (callCb cb)
-  | .withbor1U _ _ _ _ S _ td, [x, cb] | .sliceBorrowIU _ _ _ _ S _ td, [x, cb] =>
-    genLendU fuel (.lend false) x (← tyOf cb) (callCb cb) S td dctx
-  | .withbor2U _ _ _ _ S _ td, [x, cb] | .sliceBorrowMU _ _ _ _ S _ td, [x, cb] =>
-    genLendU fuel (.lend true) x (← tyOf cb) (callCb cb) S td dctx
-  | .withbor3U _ _ _ _ _ S _ td, [m, cb] => genLendU fuel .relend m (← tyOf cb) (callCb cb) S td dctx
+  | .withbor1UD _ _ _ _ SM SD S _ td, [x, cb] =>
+    genLendU fuel (.lend false) x (← tyOf cb) (callCb cb) SM S (some SD) td dctx
+  | .sliceBorrowIU _ _ _ _ S _ td, [x, cb] =>
+    genLendU fuel (.lend false) x (← tyOf cb) (callCb cb) S S none td dctx
+  | .withbor2UD _ _ _ _ SM SD S _ td, [x, cb] =>
+    genLendU fuel (.lend true) x (← tyOf cb) (callCb cb) SM S (some SD) td dctx
+  | .sliceBorrowMU _ _ _ _ S _ td, [x, cb] =>
+    genLendU fuel (.lend true) x (← tyOf cb) (callCb cb) S S none td dctx
+  | .withbor3UD _ _ _ _ _ SM SD S _ td, [m, cb] =>
+    genLendU fuel .relend m (← tyOf cb) (callCb cb) SM S (some SD) td dctx
   | .withloadU .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .foldOwn _ _ F _, [g] | .foldReuse _ _ F _, [g] => do
     let k : FoldKind := match c with | .foldReuse .. => .reuse | _ => .own

@@ -113,9 +113,9 @@ theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | withbor3 a0 a1 a2 a3 a4 => exact CDerivesP.withbor3 a0 a1 a2 a3 a4
   | withload a0 a1 a2 a3 a4 => exact CDerivesP.withload a0 a1 a2 a3 a4
   | withswap a0 => exact CDerivesP.withswap a0
-  | withbor1U a0 a1 a2 a3 a4 a5 a6 a7 ih0 => exact CDerivesP.withbor1U a0 a1 a2 a3 a4 a5 a6 ih0
-  | withbor2U a0 a1 a2 a3 a4 a5 a6 a7 ih0 => exact CDerivesP.withbor2U a0 a1 a2 a3 a4 a5 a6 ih0
-  | withbor3U a0 a1 a2 a3 a4 a5 a6 ih0 => exact CDerivesP.withbor3U a0 a1 a2 a3 a4 a5 ih0
+  | withbor1UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 => exact CDerivesP.withbor1UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0
+  | withbor2UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 => exact CDerivesP.withbor2UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0
+  | withbor3UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0 => exact CDerivesP.withbor3UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0
   | withloadU a0 a1 a2 a3 a4 a5 => exact CDerivesP.withloadU a0 a1 a2 a3 a4 a5
   | sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 ih0 => exact CDerivesP.sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 ih0
   | sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 => exact CDerivesP.sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 ih0
@@ -229,10 +229,12 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | withbor3 x hΓ hx hf₁ hf₂ => exact withbor3_compatX x hΓ hx hf₁ hf₂
   | withload x hΓ hx hf₁ hf₂ => exact withload_compatX x hΓ hx hf₁ hf₂
   | withswap hΓ => exact withswap_compatX hΓ
-  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS _ ihd => exact withbor1U_compatX x hΓ hsc₁ hf₁ hf₂ hS ihd
-  | withbor2U x hΓ _ hside hf₁ hf₂ hS _ ihd =>
-      exact withbor2U_compatX x hΓ hside hf₁ hf₂ hS ihd
-  | withbor3U x hΓ _ hf₁ hf₂ hS _ ihd => exact withbor3U_compatX x hΓ hf₁ hf₂ hS ihd
+  | withbor1UD x hΓ _ hsc₁ hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
+      exact withbor1UD_compatX x hΓ hsc₁ hf₁ hf₂ hS hMS hDS hSv hP ihd
+  | withbor2UD x hΓ _ hside hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
+      exact withbor2UD_compatX x hΓ hside hf₁ hf₂ hS hMS hDS hSv hP ihd
+  | withbor3UD x hΓ _ hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
+      exact withbor3UD_compatX x hΓ hf₁ hf₂ hS hMS hDS hSv hP ihd
   | withloadU x hΓ _ hf₁ hf₂ hS => exact withloadU_compatX x hΓ hf₁ hf₂ hS
   | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
       exact sliceBorrowMU_compatX x hΓ hA hB hf₁ hf₂ hS ihd

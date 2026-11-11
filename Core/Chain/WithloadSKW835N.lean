@@ -48,7 +48,7 @@ theorem finN_of_tabN : ∀ (F : CTy) {δ₁ δ₂ : LSub},
   | .amp _ _, _, _, _ => rfl
   | .top, _, _, _ => rfl
   | .all _ _ _, _, _, _ => rfl
-  | .nu _, _, _, _ => rfl
+  | .nuSys _ _ _, _, _, _ => rfl
 
 /-- **A row whose layers do not mention `'x` has one table at the typed world at `δ` and
 `δ['x ↦ α]`.** -/
@@ -67,7 +67,7 @@ theorem tabN_extend_suspendC {Δ : LifeCtx} {x : LifeVar} {bnd : Lifetime.Life} 
   | .amp _ _, _, _, _ => rfl
   | .top, _, _, _ => rfl
   | .all _ _ _, _, _, _ => rfl
-  | .nu _, _, _, _ => rfl
+  | .nuSys _ _ _, _, _, _ => rfl
 
 /-- **The callback at the image, at `SemJN`**: the callback, at
 `β ⊏ @bnd`, applied to the image `χ` of the loaded payload, typed at `Imm̲ 'x A`, runs at the

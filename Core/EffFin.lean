@@ -49,7 +49,7 @@ theorem rowOf_fin_lt : ∀ (F : CTy) {o : OpSig}, o ∈ F.rowOf → sizeOf o.fin
       · simp; omega
       · have := rowOf_fin_lt C h; simp; omega
   | .ret _, _, h | .arr _ _, _, h | .amp _ _, _, h | .top, _, h | .all _ _ _, _, h
-  | .nu _, _, h => by simp [CTy.rowOf] at h
+  | .nuSys _ _ _, _, h => by simp [CTy.rowOf] at h
 
 /-- A cancel row's table is the table of its layers. -/
 theorem effTab_rowOf (δ : LSub) : ∀ F : CTy, effTab F δ = Row.tab F.rowOf δ
@@ -60,7 +60,7 @@ theorem effTab_rowOf (δ : LSub) : ∀ F : CTy, effTab F δ = Row.tab F.rowOf δ
       · simp [h, Row.tab, Row.find, List.find?, OpSig.ent, OpSig.abort]
       · rw [if_neg h]
         simp [Row.tab, Row.find, List.find?, h]
-  | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ | .nu _ => by
+  | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ | .nuSys _ _ _ => by
       funext n i; simp [effTab, OpTab.empty, CTy.rowOf, Row.tab, Row.find]
 
 /-- **A cancel row's obligation**: none at `⊤`, otherwise the cancel run at its layers' table. -/
@@ -72,7 +72,7 @@ theorem finObl_eq (δ : LSub) (F : CTy) :
       have h := effTab_rowOf δ (.eff n i q A B f rc C)
       simp only [effTab] at h
       simp only [finObl, CTy.isTop, Bool.false_eq_true, if_false, h]
-  | ret _ | arr _ _ | amp _ _ | all _ _ _ | nu _ =>
+  | ret _ | arr _ _ | amp _ _ | all _ _ _ | nuSys _ _ _ =>
       have h : Row.tab ([] : Row) δ = OpTab.empty := by
         funext n i; simp [Row.tab, Row.find, OpTab.empty]
       simp [finObl, CTy.isTop, CTy.rowOf, h]
@@ -282,7 +282,7 @@ theorem finUnr_of_mem : ∀ {G : CTy} {o : OpSig}, o ∈ G.rowOf →
         · exact Or.inr (Or.inl h)
       · exact Or.inr (Or.inr (finUnr_of_mem ho h))
   | .ret _, _, ho, _ | .arr _ _, _, ho, _ | .amp _ _, _, ho, _ | .top, _, ho, _
-  | .all _ _ _, _, ho, _ | .nu _, _, ho, _ => by simp [CTy.rowOf] at ho
+  | .all _ _ _, _, ho, _ | .nuSys _ _ _, _, ho, _ => by simp [CTy.rowOf] at ho
 
 /-- A capturable entry of a row's table, its obligation the cancel run at its cancel row's table. -/
 theorem ent_fin_some {δ : LSub} {o : OpSig} {P : List SRec → Expr → WProp}
@@ -424,7 +424,7 @@ theorem finPers_of_mem : ∀ {F : CTy} {o : OpSig}, F.FinPers → o ∈ F.rowOf 
       · exact ⟨h.1, h.2.1⟩
       · exact finPers_of_mem h.2.2 ho
   | .ret _, _, _, ho | .arr _ _, _, _, ho | .amp _ _, _, _, ho | .top, _, _, ho
-  | .all _ _ _, _, _, ho | .nu _, _, _, ho => by simp [CTy.rowOf] at ho
+  | .all _ _ _, _, _, ho | .nuSys _ _ _, _, _, ho => by simp [CTy.rowOf] at ho
 
 /-- A kept error of a cancel row whose errors are persistent holds nothing. -/
 theorem errOk_empty_of_pers {δ : LSub} {F : CTy} (hF : F.FinPers) {ls : List SRec} :
@@ -1078,7 +1078,7 @@ theorem CTy.divB_rowOf : ∀ C : CTy, Row.divB C.rowOf = C.divAt
   | .eff n i q A B fin _ C => by
       simp only [CTy.rowOf, Row.divB, CTy.effOf, CTy.divAt]
       rw [show (CTy.effOf C.rowOf .unit).divAt = Row.divB C.rowOf from rfl, CTy.divB_rowOf C]
-  | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ | .nu _ => rfl
+  | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ | .nuSys _ _ _ => rfl
 
 /-! ### `Closing` at a row -/
 

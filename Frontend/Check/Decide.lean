@@ -238,7 +238,7 @@ theorem CTy.effLeafB_sound : ∀ C : CTy, CTy.effLeafB C = true → C.EffLeaf
   | .eff _ _ _ A B fin _ C, h => by
       simp only [CTy.effLeafB, Bool.and_eq_true] at h
       exact ⟨VTy.clB_sound 0 A h.1.1, VTy.clB_sound 0 B h.1.2, effLeafB_sound C h.2⟩
-  | .arr _ _, h | .amp _ _, h | .top, h | .all _ _ _, h | .nu _, h => by simp [CTy.effLeafB] at h
+  | .arr _ _, h | .amp _ _, h | .top, h | .all _ _ _, h | .nuSys _ _ _, h => by simp [CTy.effLeafB] at h
 
 /-- `CTy.NuLeaf`, decided.  `[spec §7, §22]` -/
 def CTy.nuLeafB : CTy → Bool
@@ -259,7 +259,7 @@ theorem CTy.nuLeafB_sound : ∀ C : CTy, CTy.nuLeafB C = true → C.NuLeaf
       simp only [CTy.nuLeafB, Bool.and_eq_true] at h
       exact ⟨VTy.clB_sound 0 A h.1, nuLeafB_sound D h.2⟩
   | .all _ _ D, h => nuLeafB_sound D h
-  | .top, h | .nu _, h => by simp [CTy.nuLeafB] at h
+  | .top, h | .nuSys _ _ _, h => by simp [CTy.nuLeafB] at h
 
 /-- `CTy.NuShape`, decided. -/
 def CTy.nuShapeB : CTy → Bool
@@ -270,7 +270,7 @@ theorem CTy.nuShapeB_sound : ∀ C : CTy, CTy.nuShapeB C = true → C.NuShape
   | .amp C D, h => by
       simp only [CTy.nuShapeB, Bool.and_eq_true] at h
       exact ⟨CTy.nuLeafB_sound C h.1, CTy.nuLeafB_sound D h.2⟩
-  | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h | .eff _ _ _ _ _ _ _ _, h => by
+  | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nuSys _ _ _, h | .eff _ _ _ _ _ _ _ _, h => by
       simp [CTy.nuShapeB] at h
 
 /-- `VTy.polyB` is complete for `VTy.Poly`. -/
@@ -290,7 +290,7 @@ theorem CTy.effLeafB_complete : ∀ C : CTy, C.EffLeaf → CTy.effLeafB C = true
   | .eff _ _ _ A B _ _ C, h => by
       simp [CTy.effLeafB, VTy.clB_complete 0 A h.1, VTy.clB_complete 0 B h.2.1,
         effLeafB_complete C h.2.2]
-  | .arr _ _, h | .amp _ _, h | .top, h | .all _ _ _, h | .nu _, h => h.elim
+  | .arr _ _, h | .amp _ _, h | .top, h | .all _ _ _, h | .nuSys _ _ _, h => h.elim
 
 /-- `CTy.nuLeafB` is complete for `CTy.NuLeaf`. -/
 theorem CTy.nuLeafB_complete : ∀ C : CTy, C.NuLeaf → CTy.nuLeafB C = true
@@ -299,13 +299,13 @@ theorem CTy.nuLeafB_complete : ∀ C : CTy, C.NuLeaf → CTy.nuLeafB C = true
   | .eff n i q A B fin rc C, h => CTy.effLeafB_complete (.eff n i q A B fin rc C) h
   | .arr A D, h => by simp [CTy.nuLeafB, VTy.clB_complete 0 A h.1, nuLeafB_complete D h.2]
   | .all _ _ D, h => by simpa [CTy.nuLeafB] using nuLeafB_complete D h
-  | .top, h | .nu _, h => h.elim
+  | .top, h | .nuSys _ _ _, h => h.elim
 
 /-- `CTy.nuShapeB` is complete for `CTy.NuShape`. -/
 theorem CTy.nuShapeB_complete : ∀ C : CTy, C.NuShape → CTy.nuShapeB C = true
   | .amp C D, h => by
       simp [CTy.nuShapeB, CTy.nuLeafB_complete C h.1, CTy.nuLeafB_complete D h.2]
-  | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h | .eff _ _ _ _ _ _ _ _, h => h.elim
+  | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nuSys _ _ _, h | .eff _ _ _ _ _ _ _ _, h => h.elim
 
 /-- The bodies `C` of the thunks `U(νX. C)` in a value type: where `nu_in` looks for the type
 whose unrolling its body has. -/
@@ -352,7 +352,7 @@ def cfreeB (x : LifeVar) : CTy → Bool
   | .amp C D => cfreeB x C || cfreeB x D
   | .top => false
   | .all y b C => b.mentions x || (x != y && cfreeB x C)
-  | .nu C => cfreeB x C
+  | .nuSys _ _ C => cfreeB x C
   | .eff _ _ _ A B fin _ C => vfreeB x A || vfreeB x B || cfreeB x fin || cfreeB x C
 end
 
@@ -381,7 +381,7 @@ theorem cfreeB_iff (x : LifeVar) : ∀ C : CTy, cfreeB x C = true ↔ CFree x C
   | .amp C D => by simp [cfreeB, CFree, cfreeB_iff x C, cfreeB_iff x D]
   | .top => by simp [cfreeB, CFree]
   | .all y b C => by simp [cfreeB, CFree, cfreeB_iff x C]
-  | .nu C => by simp [cfreeB, CFree, cfreeB_iff x C]
+  | .nuSys _ _ C => by simp [cfreeB, CFree, cfreeB_iff x C]
   | .eff _ _ _ A B fin _ C => by
       simp [cfreeB, CFree, vfreeB_iff x A, vfreeB_iff x B, cfreeB_iff x fin, cfreeB_iff x C,
         or_assoc]
@@ -404,7 +404,7 @@ theorem CTy.leafBinds_iff (x : LifeVar) : ∀ C : CTy, C.LeafBinds x ↔ x ∈ (
       simp [CTy.LeafBinds, CTy.leafBindsL, CTy.leafBinds_iff x C, CTy.leafBinds_iff x D]
   | .arr _ D => by simp [CTy.LeafBinds, CTy.leafBindsL, CTy.leafBinds_iff x D]
   | .all y _ D => by simp [CTy.LeafBinds, CTy.leafBindsL, CTy.leafBinds_iff x D, eq_comm]
-  | .ret _ | .top | .nu _ | .eff _ _ _ _ _ _ _ _ => by simp [CTy.LeafBinds, CTy.leafBindsL]
+  | .ret _ | .top | .nuSys _ _ _ | .eff _ _ _ _ _ _ _ _ => by simp [CTy.LeafBinds, CTy.leafBindsL]
 
 /-- `CTy.NuOk`, decided: the shape, and no leaf binder free in the body. -/
 def CTy.nuOkB (C : CTy) : Bool :=
@@ -766,7 +766,7 @@ def cScopedB (Δ : LifeCtx) (ex : List LifeVar) : CTy → Bool
   | .amp C D => cScopedB Δ ex C && cScopedB Δ ex D
   | .top => true
   | .all y b C => lifeScopedB Δ ex b && cScopedB Δ (y :: ex) C
-  | .nu C => cScopedB Δ ex C
+  | .nuSys _ _ C => cScopedB Δ ex C
   | .eff _ _ _ A B fin _ C =>
       vScopedB Δ ex A && vScopedB Δ ex B && cScopedB Δ ex fin && cScopedB Δ ex C
 end
@@ -822,7 +822,7 @@ theorem cScopedB_sound {Δ : LifeCtx} {y : LifeVar} : ∀ {ex : List LifeVar} (C
           · exact absurd rfl hne
           · exact Or.inl hm
         · exact Or.inr hs
-  | _, .nu C, h, hf => cScopedB_sound C h hf
+  | _, .nuSys _ _ C, h, hf => cScopedB_sound C h hf
   | _, .eff _ _ _ A B fin _ C, h, hf => by
       simp only [cScopedB, Bool.and_eq_true] at h
       rcases hf with hf | hf | hf | hf
@@ -952,7 +952,7 @@ theorem layersLeB_sound : ∀ (F : CTy) {R' : Row}, layersLeB F R' = true →
         · cases h₁
       · exact layersLeB_sound C h.2 o ho
   | .ret _, _, _, _, ho | .arr _ _, _, _, _, ho | .amp _ _, _, _, _, ho | .top, _, _, _, ho
-  | .all _ _ _, _, _, _, ho | .nu _, _, _, _, ho => by simp [CTy.rowOf] at ho
+  | .all _ _ _, _, _, _, ho | .nuSys _ _ _, _, _, _, ho => by simp [CTy.rowOf] at ho
 
 theorem finLeB_sound {F F' : CTy} (h : finLeB F F' = true) : FinLe F F' := by
   simp only [finLeB, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
@@ -1018,7 +1018,7 @@ theorem finUnrB_iff : ∀ C : CTy, finUnrB C = true ↔ C.FinUnr
   | .eff _ _ q _ B f _ C => by
       simp only [finUnrB, CTy.FinUnr, Bool.or_eq_true, beq_iff_eq, Bool.and_eq_true,
         finUnrB_iff f, finUnrB_iff C, or_assoc]
-  | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ | .nu _ => by
+  | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ | .nuSys _ _ _ => by
       simp [finUnrB, CTy.FinUnr]
 
 /-- `Row.UnrD`, decided. -/
@@ -1101,7 +1101,7 @@ theorem pendLayersB_sound (P : Row) : ∀ (G G' : CTy), pendLayersB P G G' = tru
         · cases h₁
       · exact pendLayersB_sound P C G' h.2 o ho
   | .ret _, _, _, _, ho | .arr _ _, _, _, _, ho | .amp _ _, _, _, _, ho | .top, _, _, _, ho
-  | .all _ _ _, _, _, _, ho | .nu _, _, _, _, ho => by simp [CTy.rowOf] at ho
+  | .all _ _ _, _, _, _, ho | .nuSys _ _ _, _, _, _, ho => by simp [CTy.rowOf] at ho
 
 /-- `pendLeB` decides `PendLe` soundly. -/
 theorem pendLeB_sound {P : Row} {G G' : CTy} (h : pendLeB P G G' = true) : PendLe P G G' := by
@@ -1172,7 +1172,7 @@ theorem thenLayersB_sound (E : Row) : ∀ (F T : CTy), thenLayersB E F T = true 
         · cases h₁
       · exact thenLayersB_sound E C T h.2 o ho
   | .ret _, _, _, _, ho | .arr _ _, _, _, _, ho | .amp _ _, _, _, _, ho | .top, _, _, _, ho
-  | .all _ _ _, _, _, _, ho | .nu _, _, _, _, ho => by simp [CTy.rowOf] at ho
+  | .all _ _ _, _, _, _, ho | .nuSys _ _ _, _, _, _, ho => by simp [CTy.rowOf] at ho
 
 /-- `thenLeB` decides `ThenLe` soundly.  `[spec §27]` -/
 theorem thenLeB_sound {F : CTy} {E : Row} {T : CTy} (h : thenLeB F E T = true) : ThenLe F E T := by
@@ -1219,7 +1219,7 @@ theorem finPersB_sound : ∀ (C : CTy), finPersB C = true → C.FinPers
       · rcases h₂ with hn | hp
         · rw [hc] at hn; cases hn
         · exact finPersB_sound f hp
-  | .ret _, _ | .arr _ _, _ | .amp _ _, _ | .top, _ | .all _ _ _, _ | .nu _, _ => trivial
+  | .ret _, _ | .arr _ _, _ | .amp _ _, _ | .top, _ | .all _ _ _, _ | .nuSys _ _ _, _ => trivial
 
 /-- `Row.PendPers`, decided.  `[spec §27]` -/
 def pendPersB (S : Row) : Bool :=

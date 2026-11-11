@@ -773,7 +773,7 @@ def give (u : Masks) (j : Nat) (left : Bool) : Masks :=
   ⟨u.ms.zipIdx.map fun ((a, b), i) =>
     if i != j then (a, b) else if left then (true, b) else (a, true)⟩
 
-/-- `t` with each `withbor1U` node's finaliser replaced by `lamFin` at its context, `n` the length
+/-- `t` with each `withbor1UD` node's finaliser replaced by `lamFin` at its context, `n` the length
 of `t`'s context; and the number replaced. Only the nodes on the paths to the borrows are entered
 (a `bind`'s body has one slot more, `TExpr.children`). With `named`, the term's first binding
 (`srcN`'s `n`) is the slot `k`, given at each split on a path to the part that holds the borrow,
@@ -781,7 +781,7 @@ and named by the finaliser. -/
 def swapFin (named : Bool) : Nat → Nat → Option Nat → TExpr → TExpr × Nat
   | 0, _, _, t => (t, 0)
   | f + 1, n, k, t => match t with
-    | .withbor1U i j A B S x _ => (.withbor1U i j A B S x (lamFin n A k), 1)
+    | .withbor1UD i j A B SM SD S x _ => (.withbor1UD i j A B SM SD S x (lamFin n A k), 1)
     | .bind i j A C u tM tN =>
       let kN := if named then some ((k.map (· + 1)).getD 0) else none
       let (tM', k₁) := swapFin named f n k tM

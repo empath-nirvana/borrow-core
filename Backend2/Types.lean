@@ -325,6 +325,7 @@ def ofC (ms : MachSet) : CTy → Except String LCTy
   | .top => pure .top
   | .all _ _ C => ofC ms C
   | .nu C => return .nu (← ofC ms C)
+  | .nuSys _ _ _ => throw "LIR: a system of codata equations (mutual ν) is not lowered  [spec §79]"
   | .eff n i q A B fin _ C => do
     -- `F_Σ R`: `R`, `R ⊕ P` with the payload of `Σ`'s abortive operations (SPEC §47), or the
     -- outcome at its machine operations (SPEC §49).

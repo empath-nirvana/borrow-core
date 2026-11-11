@@ -152,7 +152,7 @@ consistent with the argument's and the function's resource and every later index
 step-indexed `−∗`); `∀'x ⊏ @c` every `α ⊏ @cδ` (Core's `cC`: vacuous where `@c` has no
 interpretation; a constant's premises carry its bound's definedness, `Const791.OK`); `νX. C` at a
 `NuShape` body some candidate below one unfolding of `C` at it (`cBN`, Core's greatest fixed
-point). -/
+point); a system of equations read at its spine as one body, as Core's `cC` does.  `[spec §79]` -/
 def cN : CTy → LSub → LocTy → (Loc → Option Life) → Nat → List SRec → Expr → WRes → Prop
   | .ret A, δ, Θ, c, n, ls, e, ρ => ∀ lo : Life,
       erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c) (fun z => opTableK z.lo OpTabK.empty)
@@ -165,7 +165,7 @@ def cN : CTy → LSub → LocTy → (Loc → Option Life) → Nat → List SRec 
   | .top, _, _, _, _, _, _, _ => True
   | .all x c' C, δ, Θ, c, n, ls, e, ρ =>
       ∀ α, LtLife δ c' α → cN C (δ.extend x α) Θ c n ls (.app e (.val .unit)) ρ
-  | .nu C, δ, Θ, c, n, ls, e, ρ => C.NuShape →
+  | .nuSys _ _ C, δ, Θ, c, n, ls, e, ρ => C.NuShape →
       ∃ R : CandN, R.Le (cBN (.thunk (.nu C)) R C δ) ∧ R Θ c n ls e ρ
   | .eff m i q A B fin _ C, δ, Θ, c, n, ls, e, ρ => ∀ lo : Life,
       erwpK (ℍ := ℍ) KW.PostK (fun z => z.Θ.view z.c)
@@ -199,7 +199,7 @@ def cBNP (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) : CTy → LSub 
   | .all x c' D, δ, Θ, c, n, ls, e, ρ =>
       ∀ α, LtLife δ c' α → cBNP S P D (δ.extend x α) Θ c n ls (.app e (.val .unit)) ρ
   | .top, _, _, _, _, _, _, _ => True
-  | .nu _, _, _, _, _, _, _, _ => True
+  | .nuSys _ _ _, _, _, _, _, _, _, _ => True
   termination_by structural x => x
 /-- The answer of a row's layers with one type variable (Core's `effRetE`). -/
 def retNX (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
@@ -210,7 +210,7 @@ def retNX (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) :
   | .amp _ _, _, _, _, _, _ => False
   | .top, _, _, _, _, _ => False
   | .all _ _ _, _, _, _, _, _ => False
-  | .nu _, _, _, _, _, _ => False
+  | .nuSys _ _ _, _, _, _, _, _ => False
   termination_by structural x => x
 /-- **The table of a row's layers at the typed world**, its values at `vN`: every entry owes its
 continuation along `KW.Owed`, at the floor the stop chooses. -/
@@ -235,7 +235,7 @@ def finN : CTy → LSub → Option (KW → Nat → List SRec → Expr → WProp)
   | .arr _ _, _ => some (cancelOblK (ℍ := ℍ) id (fun _ => OpTabK.empty))
   | .amp _ _, _ => some (cancelOblK (ℍ := ℍ) id (fun _ => OpTabK.empty))
   | .all _ _ _, _ => some (cancelOblK (ℍ := ℍ) id (fun _ => OpTabK.empty))
-  | .nu _, _ => some (cancelOblK (ℍ := ℍ) id (fun _ => OpTabK.empty))
+  | .nuSys _ _ _, _ => some (cancelOblK (ℍ := ℍ) id (fun _ => OpTabK.empty))
   termination_by structural x => x
 /-- The answer of a row's layers. -/
 def retN : CTy → LSub → LocTy → Nat → Val → WRes → Prop
@@ -245,7 +245,7 @@ def retN : CTy → LSub → LocTy → Nat → Val → WRes → Prop
   | .amp _ _, _, _, _, _, _ => False
   | .top, _, _, _, _, _ => False
   | .all _ _ _, _, _, _, _, _ => False
-  | .nu _, _, _, _, _, _ => False
+  | .nuSys _ _ _, _, _, _, _, _ => False
   termination_by structural x => x
 
 end
@@ -1200,7 +1200,7 @@ theorem cBN_mono {S : VTy} {R R' : CandN} (hR : R.LeOK R') :
       cBN_mono hR (D := D) hD.2 δ Θ c' k ls _ ρ' (h c' k hk v ρv ρ' hc hv hcon)
   | .all x _ D, hD, δ, Θ, c, n, ls, _, ρ, h => fun α hα =>
       cBN_mono hR (D := D) hD (δ.extend x α) Θ c n ls _ ρ (h α hα)
-  | .top, hD, _, _, _, _, _, _, _, _ | .nu _, hD, _, _, _, _, _, _, _, _ => hD.elim
+  | .top, hD, _, _, _, _, _, _, _, _ | .nuSys _ _ _, hD, _, _, _, _, _, _, _, _ => hD.elim
 
 
 /-- **At a polynomial type `vNX` does not read `X`'s closed type** (Core's `cB_poly_ty` at a
@@ -1255,7 +1255,7 @@ theorem cBN_poly_ty (S S' : VTy) (R : CandN) :
   | .all _ _ D, h => by
       have h₁ := cBN_poly_ty S S' R (D := D) h
       funext δ Θ c n ls e ρ; simp only [cBNP, h₁]
-  | .top, h | .nu _, h => h.elim
+  | .top, h | .nuSys _ _ _, h => h.elim
 
 
 /-- **One more entry of a table at the typed world is closed in the index** at the worlds whose
@@ -1438,7 +1438,7 @@ theorem cN_down : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down → ∀ (c : L
   | .top, _, _, _, _, _, _, _, _, h => h
   | .all x c' C, δ, Θ, hΘ, c, n, ls, e, ρ, h =>
       fun α hα => cN_down C (δ.extend x α) Θ hΘ c n ls _ ρ (h α hα)
-  | .nu C, δ, Θ, hΘ, c, n, ls, e, ρ, h => fun hS => by
+  | .nuSys _ _ C, δ, Θ, hΘ, c, n, ls, e, ρ, h => fun hS => by
       obtain ⟨R, hR, hr⟩ := h hS
       refine ⟨fun Θ c k ls e ρ => Θ.Down ∧ ∃ m, k ≤ m ∧ R Θ c m ls e ρ, ?_,
         hΘ, n + 1, Nat.le_succ n, hr⟩
@@ -1467,7 +1467,7 @@ theorem cBN_le (S : VTy) (R : CandN) (hR : R.Down) : ∀ (D : CTy) (δ : LSub) (
   | .top, _, _, _, _, _, _, _, _, _, _, h => h
   | .all x c' D, δ, Θ, hΘ, c, k, n, hkn, ls, e, ρ, h =>
       fun α hα => cBN_le S R hR D (δ.extend x α) Θ hΘ c k n hkn ls _ ρ (h α hα)
-  | .nu _, _, _, _, _, _, _, _, _, _, _, h => h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, _, _, _, h => h
   | .eff m i q A B fin rc D, δ, Θ, hΘ, c, k, n, hkn, ls, e, ρ, h =>
       cBN_eff_le hΘ (fun Θ k v ρ h => vNE_down A none envDownN_none δ Θ k v ρ h)
         (finN_downI fin δ) (tabN_downI D δ)
@@ -1484,7 +1484,7 @@ theorem retNX_down (S : VTy) (P : LocTy → Nat → Val → WRes → Prop)
   | .amp _ _, _, _, _, _, _, h => h
   | .top, _, _, _, _, _, h => h
   | .all _ _ _, _, _, _, _, _, h => h
-  | .nu _, _, _, _, _, _, h => h
+  | .nuSys _ _ _, _, _, _, _, _, h => h
   termination_by structural x => x
 theorem tabN_downI : ∀ (C : CTy) (δ : LSub) (x : KW),
     (tabN (ℍ := ℍ) C δ x).DownI (fun z : KW => z.Θ.Down)
@@ -1496,7 +1496,7 @@ theorem tabN_downI : ∀ (C : CTy) (δ : LSub) (x : KW),
   | .amp _ _, _, _ => OpTabK.empty_downI _
   | .top, _, _ => OpTabK.empty_downI _
   | .all _ _ _, _, _ => OpTabK.empty_downI _
-  | .nu _, _, _ => OpTabK.empty_downI _
+  | .nuSys _ _ _, _, _ => OpTabK.empty_downI _
   termination_by structural x => x
 theorem finN_downI : ∀ (F : CTy) (δ : LSub) P,
     finN (ℍ := ℍ) F δ = some P → ∀ y : KW, y.Θ.Down → ∀ k ls e ρ,
@@ -1520,7 +1520,7 @@ theorem finN_downI : ∀ (F : CTy) (δ : LSub) P,
   | .all _ _ _, _, P, h => by
       simp only [finN, Option.some.injEq] at h; subst h
       exact cancelOblK_id_down (fun _ => OpTabK.empty_downI _)
-  | .nu _, _, P, h => by
+  | .nuSys _ _ _, _, P, h => by
       simp only [finN, Option.some.injEq] at h; subst h
       exact cancelOblK_id_down (fun _ => OpTabK.empty_downI _)
   termination_by structural x => x
@@ -1532,7 +1532,7 @@ theorem retN_down : ∀ (C : CTy) (δ : LSub) (Θ : LocTy) (n : Nat) (v : Val) (
   | .amp _ _, _, _, _, _, _, h => h
   | .top, _, _, _, _, _, h => h
   | .all _ _ _, _, _, _, _, _, h => h
-  | .nu _, _, _, _, _, _, h => h
+  | .nuSys _ _ _, _, _, _, _, _, h => h
   termination_by structural x => x
 end
 
@@ -1767,7 +1767,7 @@ theorem cBN_congr (S : VTy) (R : CandN) : ∀ (C : CTy) {δ δ' : LSub},
       have hL : ∀ α : Life, LtLife δ c α = LtLife δ' c α := by
         intro α; unfold LtLife; rw [ha]
       funext Θ c' n ls e ρ; simp only [cBNP, h₁, hL]
-  | .nu _, _, _, _, _ => rfl
+  | .nuSys _ _ _, _, _, _, _ => rfl
   | .eff m i q A B fin rc C, δ, δ', h, hS => by
       have h₁ := vNE_congr A none (δ := δ) (δ' := δ') (fun y hy => h y (.inl hy)) (envAgreeN_none _ _)
       have h₂ := vNE_congr B none (δ := δ) (δ' := δ') (fun y hy => h y (.inr (.inl hy)))
@@ -1793,7 +1793,7 @@ theorem retNX_congr (S : VTy) (P : LocTy → Nat → Val → WRes → Prop) : �
   | .amp _ _, _, _, _, _ => rfl
   | .top, _, _, _, _ => rfl
   | .all _ _ _, _, _, _, _ => rfl
-  | .nu _, _, _, _, _ => rfl
+  | .nuSys _ _ _, _, _, _, _ => rfl
   termination_by structural x => x
 theorem cN_congr : ∀ (C : CTy) {δ δ' : LSub}, (∀ y, CFree y C → δ.find? y = δ'.find? y) →
     cN (ℍ := ℍ) C δ = cN (ℍ := ℍ) C δ'
@@ -1822,7 +1822,7 @@ theorem cN_congr : ∀ (C : CTy) {δ δ' : LSub}, (∀ y, CFree y C → δ.find?
       have hL : ∀ α : Life, LtLife δ c α = LtLife δ' c α := by
         intro α; unfold LtLife; rw [ha]
       funext Θ c' n ls e ρ; simp only [cN, h₁, hL, ha]
-  | .nu C, δ, δ', h => by
+  | .nuSys _ _ C, δ, δ', h => by
       have hB : ∀ R : CandN, cBN (ℍ := ℍ) (.thunk (.nu C)) R C δ = cBN (ℍ := ℍ) (.thunk (.nu C)) R C δ' :=
         fun R => cBN_congr _ R C h h
       funext Θ c n ls e ρ; simp only [cN, hB]
@@ -1849,7 +1849,7 @@ theorem tabN_congr : ∀ (C : CTy) {δ δ' : LSub},
   | .amp _ _, _, _, _ => rfl
   | .top, _, _, _ => rfl
   | .all _ _ _, _, _, _ => rfl
-  | .nu _, _, _, _ => rfl
+  | .nuSys _ _ _, _, _, _ => rfl
   termination_by structural x => x
 theorem finN_congr : ∀ (F : CTy) {δ δ' : LSub},
     (∀ y, CFree y F → δ.find? y = δ'.find? y) → finN (ℍ := ℍ) F δ = finN (ℍ := ℍ) F δ'
@@ -1865,7 +1865,7 @@ theorem finN_congr : ∀ (F : CTy) {δ δ' : LSub},
   | .amp _ _, _, _, _ => rfl
   | .top, _, _, _ => rfl
   | .all _ _ _, _, _, _ => rfl
-  | .nu _, _, _, _ => rfl
+  | .nuSys _ _ _, _, _, _ => rfl
   termination_by structural x => x
 theorem retN_congr : ∀ (C : CTy) {δ δ' : LSub}, (∀ y, CFree y C → δ.find? y = δ'.find? y) →
     retN (ℍ := ℍ) C δ = retN (ℍ := ℍ) C δ'
@@ -1879,7 +1879,7 @@ theorem retN_congr : ∀ (C : CTy) {δ δ' : LSub}, (∀ y, CFree y C → δ.fin
   | .amp _ _, _, _, _ => rfl
   | .top, _, _, _ => rfl
   | .all _ _ _, _, _, _ => rfl
-  | .nu _, _, _, _ => rfl
+  | .nuSys _ _ _, _, _, _ => rfl
   termination_by structural x => x
 end
 
@@ -2286,7 +2286,7 @@ theorem cN_extA : ∀ (C : CTy), noEffSpine C → ∀ (δ : LSub) {Θ Θ' : LocT
   | .top, _, _, _, _, _, _, _, _, _, _, h => h
   | .all x _ C, hC, δ, _, _, hE, c, n, ls, e, ρ, h =>
       fun α hα => cN_extA C hC (δ.extend x α) hE c n ls _ ρ (h α hα)
-  | .nu _, hC, _, _, _, _, _, _, _, _, _, _ => hC.elim
+  | .nuSys _ _ _, hC, _, _, _, _, _, _, _, _, _, _ => hC.elim
   | .eff _ _ _ _ _ _ _ _, hC, _, _, _, _, _, _, _, _, _, _ => hC.elim
 
 
@@ -2426,7 +2426,7 @@ theorem cBN_head (S : VTy) {R : CandN} (hR : R.Down) : ∀ (D : CTy) (δ : LSub)
   | .top, _, _, _, _, _, _, _, _, _, _, _, _, h => h
   | .all x c' D, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
       fun α hα => cBN_head S hR D (δ.extend x α) Θ hΘ c n ls ρ (.appL K _) a a' hh hn (h α hα)
-  | .nu _, _, _, _, _, _, _, _, _, _, _, _, _, h => h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, _, _, _, _, _, h => h
   | .eff m i q A B fin rc D, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
       cBNP_eff_det (thunkRN_down hR) hΘ (fun μ => step1Only_plug (hh μ) hn K) h
 
@@ -2449,7 +2449,7 @@ theorem cN_head : ∀ (C : CTy) (δ : LSub) (Θ : LocTy), Θ.Down → ∀ (c : L
   | .top, _, _, _, _, _, _, _, _, _, _, _, _, h => h
   | .all x c' C, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
       fun α hα => cN_head C (δ.extend x α) Θ hΘ c n ls ρ (.appL K _) a a' hh hn (h α hα)
-  | .nu C, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h => fun hS =>
+  | .nuSys _ _ C, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h => fun hS =>
       (cN_nu_unfold hS δ Θ c n ls _ ρ).mpr (cBN_head _ (nuCand_down C δ) C δ Θ hΘ c n ls ρ K a a'
         hh hn ((cN_nu_unfold hS δ Θ c n ls _ ρ).mp h)) hS
   | .eff m i q A B fin rc C, δ, Θ, hΘ, c, n, ls, ρ, K, a, a', hh, hn, h =>
@@ -2525,7 +2525,7 @@ theorem tabN_finN_eq (δ : LSub) : ∀ F : CTy,
   | .amp _ _ => ⟨fun _ => by simp [tabF, tabN], by simp [finF, finN]; rfl⟩
   | .top => ⟨fun _ => by simp [tabF, tabN], by simp [finF, finN]⟩
   | .all _ _ _ => ⟨fun _ => by simp [tabF, tabN], by simp [finF, finN]; rfl⟩
-  | .nu _ => ⟨fun _ => by simp [tabF, tabN], by simp [finF, finN]; rfl⟩
+  | .nuSys _ _ _ => ⟨fun _ => by simp [tabF, tabN], by simp [finF, finN]; rfl⟩
   termination_by structural F => F
 
 theorem tabN_eq (F : CTy) (δ : LSub) (x : KW) :
