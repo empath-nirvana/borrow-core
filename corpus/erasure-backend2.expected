@@ -549,6 +549,7 @@ pipe-pull erased handles 0 performs 0 raises 0 machines 16 suspends 8 left 0 0
 pipe-push-paren erased handles 0 performs 0 raises 0 machines 4 suspends 2 left 0 0
 pipe-pushback erased handles 0 performs 0 raises 0 machines 155 suspends 19 left 0 0
 pipe-raise-order erased handles 0 performs 0 raises 1 machines 159 suspends 26 left 0 0
+pipe-rest erased handles 0 performs 0 raises 0 machines 289 suspends 29 left 0 0
 pipe-stream-edge erased handles 0 performs 0 raises 0 machines 79 suspends 12 left 0 0
 poly-operators erased handles 0 performs 0 raises 0 left 0 0
 poly-providers erased handles 0 performs 0 raises 0 left 0 0

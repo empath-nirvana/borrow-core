@@ -1015,6 +1015,33 @@ corpus/pipe-raise-order.bc 12.0 cancellable stored: error: capture: a finaliser 
 corpus/pipe-raise-order.bc 2.0 cancellable abortive: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/pipe-raise-order.bc 1.0 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/pipe-raise-order.bc 1.1 must-resume tail+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/pipe-rest.bc 3.0 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 2.0 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 2.1 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 1.0 cancellable once,stored: machine: the handlers of the name have 2 clauses for it; agree
+corpus/pipe-rest.bc 6.0 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 5.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-rest.bc 5.1 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 4.0 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 7.0 cancellable stored: machine: the handlers of the name have 2 clauses for it; agree
+corpus/pipe-rest.bc 10.0 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 9.0 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 9.1 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 8.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-rest.bc 13.0 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 12.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-rest.bc 12.1 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 11.0 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 17.0 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 16.0 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 16.1 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 15.0 cancellable once,stored: machine: the handlers of the name have 2 clauses for it; agree
+corpus/pipe-rest.bc 20.0 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 19.0 cancellable once,stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-rest.bc 19.1 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 18.0 cancellable once,stored: -; agree
+corpus/pipe-rest.bc 14.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/pipe-rest.bc 21.0 cancellable stored: machine: the handlers of the name have 2 clauses for it; agree
 corpus/pipe-stream-edge.bc 3.0 cancellable once,stored: -; agree
 corpus/pipe-stream-edge.bc 2.0 cancellable once,stored: -; agree
 corpus/pipe-stream-edge.bc 2.1 cancellable once,stored: -; agree
