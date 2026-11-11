@@ -8669,6 +8669,12 @@ variables, in the order they were declared, the construct writes too. The rule t
 each construct's parts. Writes are of resolved variables (R1), so a shadowing `let` is never taken
 for the variable it shadows.
 
+An `unwind`'s continuation is a tail position of the spine. A loop that a cancel clause wraps as a
+head hands its writes on to the rest of the clause (#1053).
+
+`bcc print` writes a loop's `let mut` writes as `writes(x, …)` before it, as it does for closures,
+so the printed program reads back. A surface body cannot write `writes(…)`.
+
 ### R3: the boundary
 
 A construct whose part runs in another frame, before the code after it (an arm, a binding's head,
@@ -8848,6 +8854,17 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/div-residual-copy.bc` | a div function's residual handed back by a copy, `let j = i`, and by `let i = i` | `i32[4]` on `abc` (was refused; `let i = i` ran before R1) |
 | `corpus/loop-handler-binder.bc` | #493's handler-clause binder, from `corpus/pending/` | `i32[42]` (was refused) |
 | `corpus/generated-names.bc` | a source binder named `io_bt` | `i32[62]` (was `61`) |
+| `corpus/mut-after-unwind-while.bc` | #1053: a write in an `unwind`'s continuation inside a `while` | `i32[6]` |
+| `corpus/mut-after-unwind-if-arm.bc` | the same in an `if` arm | `i32[15]` |
+| `corpus/mut-after-unwind-let-head.bc` | the same in a binding's head | `i32[17]` |
+| `corpus/mut-after-unwind-nested.bc` | nested `unwind`s in a `while` | `i32[12]` |
+| `corpus/mut-after-unwind-if-in-while.bc` | an `unwind` in an `if` arm inside a `while` | `i32[24]` |
+| `corpus/mut-after-unwind-counter-in-n.bc` | a loop counter written in the continuation | `i32[303]` |
+| `corpus/mut-after-unwind-generator.bc` | the same inside a generator | `i32[330]` |
+| `corpus/mut-after-unwind-exits.bc` | the continuation's writes on each exit | `(i32[603], i32[9])` |
+| `corpus/mut-after-unwind-loop-in-n.bc` | a loop in the continuation | `i32[50303]` |
+| `corpus/mut-cancel-loop-for.bc`, `mut-cancel-loop-for-value.bc` | #1053: a `k`-dropping cancel clause around a `for` that writes, unbound and bound | `inl (inr i32[3])` |
+| `corpus/mut-cancel-unwind-region.bc` | the same around an `unwind` region | `inl (inr i32[3])` |
 
 `scripts/mut-combos.py` checks the rules on generated nestings (*Acceptance* below).
 `corpus/sugar/mut-heads.bc` and `mut-modify.bc` pin the elaboration beside the core written by
@@ -8991,6 +9008,8 @@ whose meaning depended on two names coinciding.
   for a block parameter (`cbRows`) does not carry its `let mut` capabilities.
 - **`case V { … }` and `for` as expressions** are not read as `run`: `case` is printed core, and
   `for` as a value needs its loop result bound (`let r = for …`).
+- **Refused, not wrong:** an `unwind` in the body of a `for` over a generator (an internal error
+  from the kinds cross-check); `modify` or `run` in a clause that drops `k`.
 - **A redesign of `let mut` as a Core former `var_n`** (#1058) is parked.
 
 ---
