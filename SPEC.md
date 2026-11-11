@@ -5738,7 +5738,11 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
      (`let r = for …; N`) is wrapped with the binding of its value,
      `r <- (loop …; r <- return forRes; return r) unwind (cancel k); N`, so the wrap is around the
      loop as the typed elaboration elaborates it (`boundRes?`). A head of `x <- M₁; N` or of
-     `x <- M₁ unwind (D); N` that mentions `k` is entered by the same rule.
+     `x <- M₁ unwind (D); N` that mentions `k` is entered by the same rule. A head that runs a
+     `[then]` in place (an `unwind` region in the head) is itself wrapped,
+     `… unwind (cancel k)`, in a clause that drops `k`, and every `unwind` region in such a clause
+     is a head. The wrap is a finaliser that never fires when the head can neither abort nor
+     capture.
    Exactly once: from its binding `k` is live until the first of a head's abort (its finaliser
    cancels it; nothing after runs), the end of the path (the cancel before the terminal), or a use
    the program wrote (nothing is inserted after it). `[then]`'s finaliser and rest are exclusive,
@@ -8670,6 +8674,12 @@ variables, in the order they were declared, the construct writes too. The rule t
 each construct's parts. Writes are of resolved variables (R1), so a shadowing `let` is never taken
 for the variable it shadows.
 
+An `unwind`'s continuation is a tail position of the spine. A loop that a cancel clause wraps as a
+head hands its writes on to the rest of the clause (#1053).
+
+`bcc print` writes a loop's `let mut` writes as `writes(x, …)` before it, as it does for closures,
+so the printed program reads back. A surface body cannot write `writes(…)`.
+
 ### R3: the boundary
 
 A construct whose part runs in another frame, before the code after it (an arm, a binding's head,
@@ -8708,6 +8718,7 @@ what its parts write and has no boundary of its own.
 | `x <- M` on a `let mut` | `{x} ∪ W(M)` | — |
 | `let (x, q) = f(…, x, …)` | `{x}` | — |
 | `let p = e; N`, `x <- M; N`, `S; N` | `W(e) ∪ W(N)` | — |
+| `x <- M unwind (D); N` | `W(M) ∪ W(D) ∪ W(N)` | — : the continuation `N` is a tail position (an `unwind` writes what its parts write) |
 | `&mut x`, `&x` | `{x}` | the lend rebinds `x` (typed elaboration §5.1) |
 | `if`, `match`, `case` (a statement) | `W(arm₁) ∪ W(arm₂)` | each arm hands on `W` (`handArms`); the statement rebinds it |
 | `let p = if/match …`, `x <- M` (a head) | `W(M)` | each terminal hands on `(value, W)`; the binding takes it apart (`bindForm`) |
@@ -8849,6 +8860,20 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/div-residual-copy.bc` | a div function's residual handed back by a copy, `let j = i`, and by `let i = i` | `i32[4]` on `abc` (was refused; `let i = i` ran before R1) |
 | `corpus/loop-handler-binder.bc` | #493's handler-clause binder, from `corpus/pending/` | `i32[42]` (was refused) |
 | `corpus/generated-names.bc` | a source binder named `io_bt` | `i32[62]` (was `61`) |
+| `corpus/mut-after-unwind-while.bc` | #1053: a write in an `unwind`'s continuation inside a `while` | `i32[6]` |
+| `corpus/mut-after-unwind-if-arm.bc` | the same in an `if` arm | `i32[15]` |
+| `corpus/mut-after-unwind-let-head.bc` | the same in a binding's head | `i32[17]` |
+| `corpus/mut-after-unwind-nested.bc` | nested `unwind`s in a `while` | `i32[12]` |
+| `corpus/mut-after-unwind-if-in-while.bc` | an `unwind` in an `if` arm inside a `while` | `i32[24]` |
+| `corpus/mut-after-unwind-counter-in-n.bc` | a loop counter written in the continuation | `i32[303]` |
+| `corpus/mut-after-unwind-generator.bc` | a write in an `unwind`'s continuation inside a generator's loop | `i32[330]` |
+| `corpus/mut-after-unwind-exits.bc` | `break` and `continue` in an `unwind`'s continuation | `(i32[603], i32[9])` |
+| `corpus/mut-after-unwind-loop-in-n.bc` | a loop in the continuation | `i32[50303]` |
+| `corpus/mut-after-unwind-for-gen.bc` | an `unwind` in the body of a `for` over a generator: the stored generator is drained | `i32[3]` |
+| `corpus/mut-cancel-loop-for.bc`, `mut-cancel-loop-for-value.bc` | #1053: a `k`-dropping cancel clause around a `for` that writes, unbound and bound | `inl (inr i32[3])` |
+| `corpus/mut-cancel-unwind-region.bc` | `unwind`s whose heads do not abort, in a clause that drops `k` | `inl (inr i32[3])` |
+
+The #1053 programs (`mut-after-unwind-*`, `mut-cancel-*`) give `live 0` on every backend.
 
 `scripts/mut-combos.py` checks the rules on generated nestings (*Acceptance* below).
 `corpus/sugar/mut-heads.bc` and `mut-modify.bc` pin the elaboration beside the core written by
@@ -8992,14 +9017,8 @@ whose meaning depended on two names coinciding.
   for a block parameter (`cbRows`) does not carry its `let mut` capabilities.
 - **`case V { … }` and `for` as expressions** are not read as `run`: `case` is printed core, and
   `for` as a value needs its loop result bound (`let r = for …`).
-- **Known wrong answers (#1053).** These programs are accepted and give a wrong answer:
-  1. a write to a `let mut` in the continuation `N` of `x <- M unwind (D); N`, where the finaliser
-     form is inside a loop, an `if` arm or a binding's head: the write is lost, and a loop whose
-     exit test reads that variable may not terminate;
-  2. a cancel clause that drops `k`, around a loop whose body can abort (the loop is wrapped as a
-     head, #868 Phase 2) and that writes a `let mut`, bound or not: the loop's writes are lost.
-
-  A redesign of `let mut` as sugar over a `State` effect is under study.
+- **Refused, not wrong:** `modify` or `run` in a clause that drops `k`.
+- **A redesign of `let mut` as a Core former `var_n`** (#1058) is parked.
 
 ---
 
