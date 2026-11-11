@@ -56,6 +56,8 @@ import Backend2.Driver
                                 every host operation on a table of operands, at the flat-IR
                                 interpreter or built natively (`Backend.Native.Tests.lean`)
     lake exe bcc cc             the C compiler the native target builds with (SPEC §40)
+    lake exe bcc cc --flags     the flags it builds a native program with
+    lake exe bcc cc --runtime   the native runtime's C source it builds beside the program
     lake exe bcc tailcalls <n>  `n` turns of a loop of tail calls, built natively and run on a
                                 stack of 64 KiB
     lake exe bcc kernel (list | negatives | interp [--stage S | --check M | --alloc least] <name>
@@ -667,6 +669,8 @@ def main (argv : List String) : IO UInt32 := do
       IO.eprintln "usage: bcc interp [--backend old|new] [--stage S | --check fresh|tags | --alloc least | --key [--digest D]] [--stats] <file>"
       return 2
   | ["hostops", stage] => hostops stage
+  | ["cc", "--flags"] => IO.println (" ".intercalate Backend.clangArgs.toList); return 0
+  | ["cc", "--runtime"] => IO.print Backend.Native.runtimeC; return 0
   | ["cc"] => match ← Backend.nativeCC with
     | some (cc, pre) => IO.println (" ".intercalate (cc :: pre.toList)); return 0
     | none => IO.eprintln "no C compiler for the native target"; return 1

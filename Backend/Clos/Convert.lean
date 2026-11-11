@@ -235,6 +235,8 @@ def Op.ofPrim? : Prim → Option Op
   -- The primitives of spec §19 are converted by their shapes in `conv`; as values `primValue`
   -- rejects them.
   | .perform | .raise | .hnd | .ubind | .ccatch | .cfin => none
+  -- `cancelTo` (spec §51): no surface emits it yet; `conv` refuses it until the lowering unit.
+  | .cancelTo => none
 
 /-- `bounded_fix` (spec §20) as two codes: `fix (s, (k, a))` calls `s` on `(self, a)`, `self`
 `inj₁ ()` at `k = 0` and otherwise `inj₂` of a closure of `self` over `s` and `k − 1`, whose call
@@ -734,6 +736,9 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       -- `perform p` (§19): `p`, then the control operation, which `Capture` lowers.
       let pv ← fresh
       return .letv pv (← conv ctx p k₂) (.perform pv)
+  | .app (.prim .cancelTo) _ =>
+      -- `cancelTo` (spec §51): no surface emits it yet; unreachable until the lowering unit.
+      throw "`cancelTo` has no lowering yet (spec §51)"
   | .app (.prim .ccatch) _ | .app (.app (.prim .cfin) _) _ =>
       throw "a cancel frame (`ccatch`, `cfin`) is a frame of the machine's continuations, not a term of a program"
   | .app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair _ (.pair hr cls)))) e => do

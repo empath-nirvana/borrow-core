@@ -170,7 +170,7 @@ theorem plug_primApp {K : Kont} {a : Expr} {p : Prim} {v : Val}
 
 /-- The primitives that are not head redexes at one argument. -/
 def _root_.BoCa.Prim.Inert : Prim → Prop
-  | .perform | .raise | .hnd | .ubind | .ccatch | .cfin => True
+  | .perform | .raise | .hnd | .ubind | .ccatch | .cfin | .cancelTo => True
   | _ => False
 
 theorem head_not_inertApp {μ μ' : Heap} {p : Prim} {v : Val} {a' : Expr} (hp : p.Inert)
@@ -278,6 +278,64 @@ theorem plug_raise_inj {K K' : Kont} {p p' : Val}
     (h : K.plug (raiseE (.val p)) = K'.plug (raiseE (.val p'))) : K = K' ∧ p = p' :=
   let h' := plug_opE_eq (r := true) (r' := true) h; ⟨h'.1, h'.2.2⟩
 
+/-! ### `cancelTo` holds no redex  `[spec §51]` -/
+
+theorem cancelToE_not_isVal (p : Val) : ¬ IsVal (cancelToE (.val p)) := by
+  simp [cancelToE]
+
+/-- A plugged `cancelTo` against a plugged operation or `cancelTo`: the same context and the same
+primitive. -/
+theorem plug_cancelTo_cmp {K K' : Kont} {p : Val} {q : Prim} {p' : Val}
+    (hq : ¬ IsVal (.app (.val (.prim q)) (.val p')))
+    (h : K.plug (cancelToE (.val p)) = K'.plug (.app (.val (.prim q)) (.val p'))) :
+    K = K' ∧ q = .cancelTo ∧ p = p' := by
+  rcases plug_cmp K K' (cancelToE_not_isVal p) hq h with ⟨K'', h₁, h₂⟩ | ⟨K'', h₁, h₂⟩
+  · have hK := plug_primApp (h₁.symm.trans rfl) hq
+    subst hK
+    simp only [Kont.plug] at h₁
+    rw [Kont.comp_hole] at h₂
+    subst h₂
+    simp only [cancelToE, Expr.app.injEq, Expr.val, Val.prim, Expr.prim.injEq] at h₁
+    exact ⟨rfl, h₁.1.symm, Subtype.ext h₁.2⟩
+  · have hK := plug_primApp (h₁.symm.trans rfl) (cancelToE_not_isVal p)
+    subst hK
+    simp only [Kont.plug] at h₁
+    rw [Kont.comp_hole] at h₂
+    subst h₂
+    simp only [cancelToE, Expr.app.injEq, Expr.val, Val.prim, Expr.prim.injEq] at h₁
+    exact ⟨rfl, h₁.1, (Subtype.ext h₁.2).symm⟩
+
+theorem plug_cancelTo_ne_val (K : Kont) (p w : Val) : K.plug (cancelToE (.val p)) ≠ Expr.val w :=
+  fun h => cancelToE_not_isVal p (K.isVal_of_plug (h ▸ w.2))
+
+theorem plug_cancelTo_ne_opE (K K' : Kont) (p : Val) (r : Bool) (p' : Val) :
+    K.plug (cancelToE (.val p)) ≠ K'.plug (opE r p') := fun h => by
+  rw [opE_eq_app] at h
+  have := (plug_cancelTo_cmp (by rw [← opE_eq_app]; exact opE_not_isVal r p') h).2.1
+  cases r <;> simp at this
+
+theorem plug_cancelTo_ne_perform (K K' : Kont) (p p' : Val) :
+    K.plug (cancelToE (.val p)) ≠ K'.plug (performE (.val p')) :=
+  plug_cancelTo_ne_opE K K' p false p'
+
+theorem plug_cancelTo_ne_raise (K K' : Kont) (p p' : Val) :
+    K.plug (cancelToE (.val p)) ≠ K'.plug (raiseE (.val p')) :=
+  plug_cancelTo_ne_opE K K' p true p'
+
+theorem plug_cancelTo_inj {K K' : Kont} {p p' : Val}
+    (h : K.plug (cancelToE (.val p)) = K'.plug (cancelToE (.val p'))) : K = K' ∧ p = p' :=
+  let h' := plug_cancelTo_cmp (cancelToE_not_isVal p') h; ⟨h'.1, h'.2.2⟩
+
+theorem cancelToPayload_inj {n n' : UInt32} {k k' : Val}
+    (h : cancelToPayload n k = cancelToPayload n' k') : n = n' ∧ k = k' := by
+  have h := congrArg Subtype.val h
+  simp only [cancelToPayload, Val.pair, Val.i32, Expr.pair.injEq, Expr.prim.injEq, Prim.lit.injEq,
+    IntLit.i32.injEq] at h
+  exact ⟨h.1, Subtype.ext h.2⟩
+
+@[simp] theorem payloadName_cancelToPayload (n : UInt32) (k : Val) :
+    payloadName (cancelToPayload n k) = some n := rfl
+
 theorem errVal_inj {e e' : Option Val} (h : errVal e = errVal e') : e = e' := by
   have h := congrArg Subtype.val h
   cases e <;> cases e' <;> simp [errVal, Val.inj₁, Val.inj₂] at h ⊢
@@ -317,6 +375,9 @@ theorem head_plug {μ μ' : Heap} {E a' : Expr} (hh : Head μ E μ' a') :
           simp only [hndE, Kont.plug, Expr.app.injEq] at hE
           exact .inl ⟨n, qs, hr, hs, K, by rw [hE.1]⟩
       | hunwind n i qs hr hs c v K₀ hc hK₀ =>
+          simp only [hndE, Kont.plug, Expr.app.injEq] at hE
+          exact .inl ⟨n, qs, hr, hs, K, by rw [hE.1]⟩
+      | cancelTo n qs hr hs k K₀ hK₀ =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hE
           exact .inl ⟨n, qs, hr, hs, K, by rw [hE.1]⟩
       | ufin N D n i v K₀ hn hK₀ =>
@@ -362,6 +423,9 @@ theorem head_plug {μ μ' : Heap} {E a' : Expr} (hh : Head μ E μ' a') :
       | hunwind n i qs hr hs c w K₀ hc hK₀ =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hE
           exact (opE_not_isVal true (opPayload n i w) (K₀.isVal_of_plug (show IsVal (K₀.plug (raiseE (.val (opPayload n i w)))) from by rw [hE.2]; exact v.2))).elim
+      | cancelTo n qs hr hs k K₀ hK₀ =>
+          simp only [hndE, Kont.plug, Expr.app.injEq] at hE
+          exact (plug_cancelTo_ne_val K₀ _ v hE.2).elim
       | ufin N D n i w K₀ hn hK₀ =>
           simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
           exact (opE_not_isVal true (opPayload n i w) (K₀.isVal_of_plug (show IsVal (K₀.plug (raiseE (.val (opPayload n i w)))) from by rw [hE.2]; exact v.2))).elim
@@ -440,6 +504,9 @@ theorem head_not_opPlug {μ μ' : Heap} {a' : Expr} {K₁ : Kont} {r : Bool} {p 
         obtain rfl : n₀ = n' := by simp [hndVal, Val.pair, Val.i32, Expr.val] at hH; exact hH.1
         simp at hn; subst hn
         simp [OpFree, Kont.Catches, hndVal, Val.i32, Val.pair] at hK
+    | cancelTo n' qs hr hs k K₀ hK₀ =>
+        simp only [hndE, Kont.plug, Expr.app.injEq] at hE
+        exact plug_cancelTo_ne_opE K₀ K' _ r p hE.2.symm
     | hret n' qs hr hs w =>
         simp only [hndE, Kont.plug, Expr.app.injEq] at hE
         exact opE_not_isVal r p (K'.isVal_of_plug (hE.2 ▸ w.2))
@@ -516,6 +583,87 @@ theorem nested_op {μ₂ μ₂' : Heap} {a a' : Expr} {K' K₀ : Kont} {r : Bool
     · exact head_not_inertApp (p := .perform) trivial ha
     · exact head_not_inertApp (p := .raise) trivial ha
 
+/-- **A redex holds no redex around a `cancelTo` its context does not catch.**  `[spec §51]` -/
+theorem head_not_cancelToPlug {μ μ' : Heap} {a' : Expr} {K₁ : Kont} {p : Val} {n : UInt32}
+    (hn : payloadName p = some n) (hK : K₁.HasHnd n = false)
+    (h : Head μ (K₁.plug (cancelToE (.val p))) μ' a') : False := by
+  by_cases h0 : K₁ = .hole
+  · subst h0
+    exact head_not_inertApp (p := .cancelTo) trivial (by simpa [cancelToE] using h)
+  rcases head_plug h K₁ (cancelToE_not_isVal p) rfl h0 with
+    ⟨n₀, qs₀, hr₀, hs₀, K', rfl⟩ | ⟨N₀, D₀, K', rfl⟩ | ⟨K', rfl⟩ | ⟨w, H, q, hq, rfl, he⟩ |
+      ⟨err₀, K', rfl⟩
+  · generalize hE : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal n₀ qs₀ hr₀ hs₀))) K').plug
+      (cancelToE (.val p)) = E at h
+    cases h with
+    | hop n' i qs hr hs c v K₀ hc hK₀ =>
+        simp only [hndE, Kont.plug, Expr.app.injEq] at hE
+        exact plug_cancelTo_ne_perform K' K₀ p _ hE.2
+    | hunwind n' i qs hr hs c v K₀ hc hK₀ =>
+        simp only [hndE, Kont.plug, Expr.app.injEq] at hE
+        exact plug_cancelTo_ne_raise K' K₀ p _ hE.2
+    | cancelTo n' qs hr hs k K₀ hK₀ =>
+        simp only [hndE, Kont.plug, Expr.app.injEq] at hE
+        obtain ⟨⟨-, hH⟩, hE⟩ := hE
+        obtain ⟨rfl, rfl⟩ := plug_cancelTo_inj hE
+        obtain rfl : n₀ = n' := by simp [hndVal, Val.pair, Val.i32, Expr.val] at hH; exact hH.1
+        simp at hn; subst hn
+        simp [Kont.HasHnd, hndVal, Val.i32, Val.pair] at hK
+    | hret n' qs hr hs w =>
+        simp only [hndE, Kont.plug, Expr.app.injEq] at hE
+        exact cancelToE_not_isVal p (K'.isVal_of_plug (hE.2 ▸ w.2))
+    | _ => simp_all [Kont.plug, ubindE, ccatchE, cfinE, cancelToE]
+  · generalize hE : (Kont.appR (.app (.val (.prim .ubind)) (.val (Val.pair N₀ D₀))) K').plug
+      (cancelToE (.val p)) = E at h
+    cases h with
+    | ufin N D n' i v K₀ hn' hK₀ =>
+        simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
+        exact plug_cancelTo_ne_raise K' K₀ p _ hE.2
+    | ufinC N D err K₀ hK₀ =>
+        simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
+        exact plug_cancelTo_ne_raise K' K₀ p _ hE.2
+    | uthen N D w =>
+        simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
+        exact cancelToE_not_isVal p (K'.isVal_of_plug (hE.2 ▸ w.2))
+    | _ => simp_all [Kont.plug, hndE, ccatchE, cfinE, cancelToE]
+  · generalize hE : (Kont.appR (.val (.prim .ccatch)) K').plug (cancelToE (.val p)) = E at h
+    cases h with
+    | cancel K₀ hK₀ =>
+        simp only [ccatchE, Kont.plug, Expr.app.injEq] at hE
+        exact plug_cancelTo_ne_raise K' K₀ p _ hE.2
+    | creraise E K₀ hK₀ =>
+        simp only [ccatchE, Kont.plug, Expr.app.injEq] at hE
+        exact plug_cancelTo_ne_raise K' K₀ p _ hE.2
+    | _ => simp_all [Kont.plug, hndE, ubindE, cfinE, cancelToE]
+  · generalize hE : (Kont.appL .hole w).plug (cancelToE (.val p)) = E at h
+    cases h <;> simp_all [Kont.plug, hndE, ubindE, ccatchE, cfinE, cancelToE]
+  · generalize hE : (Kont.appR (.app (.val (.prim .cfin)) (.val (cancelVal err₀))) K').plug
+      (cancelToE (.val p)) = E at h
+    cases h with
+    | cferr err m j v K₀ hm hK₀ =>
+        simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
+        exact plug_cancelTo_ne_raise K' K₀ p _ hE.2
+    | cfcancel err err' K₀ hK₀ =>
+        simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
+        exact plug_cancelTo_ne_raise K' K₀ p _ hE.2
+    | cfret err w =>
+        simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
+        exact cancelToE_not_isVal p (K'.isVal_of_plug (hE.2 ▸ w.2))
+    | _ => simp_all [Kont.plug, hndE, ubindE, ccatchE, cancelToE]
+
+/-- A redex `a` meets no `cancelTo` under a context free of its name.  `[spec §51]` -/
+theorem nested_cancelTo {μ₂ μ₂' : Heap} {a a' : Expr} {K' K₀ : Kont} {p : Val} {n : UInt32}
+    (hn : payloadName p = some n) (hK₀ : K₀.HasHnd n = false) (ha : Head μ₂ a μ₂' a')
+    (h : K'.plug a = K₀.plug (cancelToE (.val p))) : False := by
+  rcases plug_cmp K' K₀ ha.not_isVal (cancelToE_not_isVal p) h with ⟨K'', h₁, h₂⟩ | ⟨K'', h₁, h₂⟩
+  · subst h₁
+    exact head_not_cancelToPlug hn (by rw [h₂, hasHnd_comp] at hK₀; simp at hK₀; exact hK₀.2) ha
+  · have hK := plug_primApp (h₁.symm.trans rfl) ha.not_isVal
+    subst hK
+    simp only [Kont.plug] at h₁
+    subst h₁
+    exact head_not_inertApp (p := .cancelTo) trivial ha
+
 /-- **No redex strictly holds another at an evaluation position.** -/
 theorem head_nested {μ μ' μ₂ μ₂' : Heap} {E E' a a' : Expr} (hh : Head μ E μ' E')
     (K : Kont) (hE : E = K.plug a) (ha : Head μ₂ a μ₂' a') : K = .hole := by
@@ -534,6 +682,9 @@ theorem head_nested {μ μ' μ₂ μ₂' : Heap} {E E' a a' : Expr} (hh : Head �
         simp only [hndE, Kont.plug, Expr.app.injEq] at hE
         exact nested_op (r := true) (payloadName_opPayload n i v) (by simpa [OpFree] using hK₀) ha
           (by simpa [opE] using hE.2)
+    | cancelTo n qs hr hs k K₀ hK₀ =>
+        simp only [hndE, Kont.plug, Expr.app.injEq] at hE
+        exact nested_cancelTo (payloadName_cancelToPayload n k) hK₀ ha hE.2
     | hret n qs hr hs w =>
         simp only [hndE, Kont.plug, Expr.app.injEq] at hE
         exact ha.not_isVal (K'.isVal_of_plug (by rw [hE.2]; exact w.2))
@@ -618,6 +769,14 @@ theorem head_det_eff {μ μ₁ μ₂ : Heap} {a a₁ a₂ : Expr} (h₁ : Head �
           | exact absurd h2.symm (plug_raise_ne_val _ _ _)
           | exact absurd h2 (plug_perform_ne_raise _ _ _ _)
           | exact absurd h2.symm (plug_perform_ne_raise _ _ _ _)
+          | exact absurd h2 (plug_cancelTo_ne_val _ _ _)
+          | exact absurd h2.symm (plug_cancelTo_ne_val _ _ _)
+          | exact absurd h2 (plug_cancelTo_ne_perform _ _ _ _)
+          | exact absurd h2.symm (plug_cancelTo_ne_perform _ _ _ _)
+          | exact absurd h2 (plug_cancelTo_ne_raise _ _ _ _)
+          | exact absurd h2.symm (plug_cancelTo_ne_raise _ _ _ _)
+          | (obtain ⟨rfl, hp⟩ := plug_cancelTo_inj h2
+             obtain ⟨rfl, rfl⟩ := cancelToPayload_inj hp)
           | (obtain ⟨rfl, hp⟩ := plug_perform_inj h2
              obtain ⟨rfl, rfl, rfl⟩ := opPayload_inj hp)
           | (obtain ⟨rfl, hp⟩ := plug_raise_inj h2
@@ -640,6 +799,12 @@ theorem head_det_eff {μ μ₁ μ₂ : Heap} {a a₁ a₂ : Expr} (h₁ : Head �
           | exact absurd hx.symm (plug_raise_ne_val _ _ _)
           | exact absurd hx (plug_perform_ne_raise _ _ _ _)
           | exact absurd hx.symm (plug_perform_ne_raise _ _ _ _)
+          | exact absurd hx (plug_cancelTo_ne_val _ _ _)
+          | exact absurd hx.symm (plug_cancelTo_ne_val _ _ _)
+          | exact absurd hx (plug_cancelTo_ne_perform _ _ _ _)
+          | exact absurd hx.symm (plug_cancelTo_ne_perform _ _ _ _)
+          | exact absurd hx (plug_cancelTo_ne_raise _ _ _ _)
+          | exact absurd hx.symm (plug_cancelTo_ne_raise _ _ _ _)
           | (obtain ⟨rfl, hp⟩ := plug_perform_inj hx
              obtain ⟨rfl, rfl, rfl⟩ := opPayload_inj hp)
           | (obtain ⟨rfl, hp⟩ := plug_raise_inj hx

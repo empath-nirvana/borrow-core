@@ -138,10 +138,10 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | zeroE hs _ ihV =>
       rw [(splitP_length hs).1] at ihV
       simp [absurdE, closedAt, ihV]
-  | withbor1U _ _ _ _ _ _ _ hdc _ _ | withbor2U _ _ _ _ _ _ _ hdc _ _
-  | withbor3U _ _ _ _ _ _ hdc _ _ | sliceBorrowMU _ _ _ _ _ _ _ hdc _ _
-  | sliceBorrowIU _ _ _ _ _ _ _ _ hdc _ _ =>
-      exact closedAt_of_zero (withborUE_closed hdc) _
+  | withbor1U _ _ _ _ _ _ _ _ ih | withbor2U _ _ _ _ _ _ _ _ ih
+  | withbor3U _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
+  | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih =>
+      exact withborUE_closedAt ih
   | foldImm => exact closedAt_of_zero (foldImmV_closed _) _
   | foldOwn => exact closedAt_of_zero (foldOwnV_closed _) _
   | foldOwnG => exact closedAt_of_zero (FoldP.foldOwnGV_closed _) _
@@ -470,6 +470,8 @@ theorem closedAt_host (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = so
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, _, -, rfl⟩ := h; exact hi32 _
       · obtain ⟨_, _, -, rfl⟩ := h; exact hi64 _
+      · obtain ⟨_, _, -, rfl⟩ := h; exact hob .u32 _
+      · obtain ⟨_, _, -, rfl⟩ := h; exact hob .u64 _
   | div w o =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, _, -, rfl⟩ := h
@@ -478,16 +480,28 @@ theorem closedAt_host (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = so
       · obtain ⟨_, _, -, rfl⟩ := h
         exact hopt _ fun v hv => by
           simp only [Option.map_eq_some_iff] at hv; obtain ⟨_, -, rfl⟩ := hv; exact hi64 _
+      · obtain ⟨_, _, -, rfl⟩ := h
+        exact hopt _ fun v hv => by
+          simp only [Option.map_eq_some_iff] at hv; obtain ⟨_, -, rfl⟩ := hv; exact hob .u32 _
+      · obtain ⟨_, _, -, rfl⟩ := h
+        exact hopt _ fun v hv => by
+          simp only [Option.map_eq_some_iff] at hv; obtain ⟨_, -, rfl⟩ := hv; exact hob .u64 _
   | un w o =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, -, rfl⟩ := h; exact hi32 _
       · obtain ⟨_, -, rfl⟩ := h; exact hi64 _
+      · obtain ⟨_, -, rfl⟩ := h; exact hob .u32 _
+      · obtain ⟨_, -, rfl⟩ := h; exact hob .u64 _
   | eqz w =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
       · obtain ⟨_, -, rfl⟩ := h; exact hbool _
       · obtain ⟨_, -, rfl⟩ := h; exact hbool _
+      · obtain ⟨_, -, rfl⟩ := h; exact hbool _
+      · obtain ⟨_, -, rfl⟩ := h; exact hbool _
   | rel w o =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
+      · obtain ⟨_, _, -, rfl⟩ := h; exact hbool _
+      · obtain ⟨_, _, -, rfl⟩ := h; exact hbool _
       · obtain ⟨_, _, -, rfl⟩ := h; exact hbool _
       · obtain ⟨_, _, -, rfl⟩ := h; exact hbool _
   | wrap =>
@@ -528,6 +542,14 @@ theorem closedAt_host (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = so
       cases f <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
       · exact hob .f32 _
       · exact hob .f64 _
+  | reinterpret_u i =>
+      cases i <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
+      · exact hob .u32 _
+      · exact hob .u64 _
+  | reinterpret_s i =>
+      cases i <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
+      · exact hob .w32 _
+      · exact hob .w64 _
 
 theorem closedAt_tabFill {f : Val} (hf : closedAt 0 f.1 = true) (ℓ : Loc) (n : UInt32) :
     ∀ i k, closedAt 0 (tabFill f ℓ n i k) = true
@@ -719,6 +741,16 @@ theorem closed_head {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ
         Bool.and_eq_true] at hs
       simp only [raiseE, closedAt, Expr.val, Val.prim, Bool.and_eq_true]
       exact ⟨⟨trivial, hs.2.2⟩, hμ⟩
+  | cancelTo n qs hr hs k K hK =>
+      simp only [hndE, closedAt, Expr.val, Val.prim, Bool.and_eq_true] at ha
+      rw [closedAt_plug_iff] at ha
+      simp only [BoCa.BoLo.cancelToE, BoCa.BoLo.cancelToPayload, closedAt, Expr.val, Val.prim,
+        Val.pair, Val.i32, Bool.and_eq_true] at ha
+      refine ⟨?_, hμ⟩
+      simp only [ccatchE, closedAt, Expr.val, Val.prim, Val.unit, Bool.and_eq_true]
+      rw [closedAt_plug_iff]
+      simp only [raiseE, closedAt, Expr.val, Val.prim, Bool.and_eq_true]
+      exact ⟨⟨trivial, closedAt_dead 0 K ha.2.1, trivial, rfl⟩, ha.2.2.2.2, trivial⟩
 
 /-- A step keeps a closed term closed, and stores only closed values. -/
 theorem closed_step1 {μ μ' : Heap} {e e' : Expr} (h : Step1 (ℍ := ℍ) μ e μ' e')

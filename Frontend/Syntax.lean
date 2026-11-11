@@ -160,6 +160,13 @@ inductive VTy where
   instances in order, each the effect's name applied to its type arguments (`VTy.rowEffs`).
   Elaborated away by `Frontend.Elab.Effects`.  `[spec §33]` -/
   | rowed (sp : Span) (F : VTy) (row : VTy)
+  /-- `row (ROW)`: a row argument of a definition with row parameters, written in its brackets
+  (`f[T, row (4.0 cancel i32 ~> 0)]`). Substituted away by `Frontend.Elab.RowInst` before
+  checking.  `[spec §76]` -/
+  | rowArg (sp : Span) (r : Row)
+  /-- `site k`: a site argument of a definition with site parameters, written in its brackets.
+  Substituted away by `Frontend.Elab.RowInst` before checking.  `[spec §76]` -/
+  | siteArg (sp : Span) (n : Nat)
 
 /-- Computation types (syntax-core §4). -/
 inductive CTy where
@@ -188,11 +195,16 @@ inductive CTy where
   /-- `F[n.i q A ~> B, …] R`: `F_Σ R`, the row's operations stacked over `F R`.  `[spec §19]` -/
   | eff (sp : Span) (row : Row) (A : VTy)
 
-/-- An effect row (SPEC §19): each entry the operation `i` of the handler name `n`, `A ↠^q B`.
-`[spec §19]` -/
+/-- An effect row (SPEC §19): each entry the operation `i` of the handler name `n`, `A ↠^q B`,
+with its cancel row `fin` (SPEC §27; `.nil`, the empty cancel row, when none is written). `top` is
+the cancel row `⊤` (`cancel[top]`), a cancel row only.  `[spec §19, §27]` -/
 inductive Row where
   | nil
-  | cons (n i : Nat) (q : Qual) (A B : VTy) (rest : Row)
+  | cons (n i : Nat) (q : Qual) (A B : VTy) (fin : Row) (rest : Row)
+  | top
+  /-- `..r`: the row parameter `r` as a row's tail, substituted by `Frontend.Elab.RowInst` before
+  checking.  `[spec §76]` -/
+  | var (x : String)
 
 /-- Shapes `σ ::= leaf A | node σ σ | Name` (syntax-core §5). -/
 inductive Shape where
@@ -209,6 +221,32 @@ def VTy.sizedExpand (sp : Span) (D S A : VTy) : VTy :=
   .tensor sp D (.tensor sp S (.bang sp (.lolli sp (.tensor sp D S)
     (.tensor sp (.tensor sp D S) (.sum sp A (.sum sp (.unit sp) (.unit sp)))))))
 deriving instance Repr for VTy, CTy, Row, Shape
+
+/-! ### Site parameters  `[spec §76]` -/
+
+/-- The bytes of a site parameter's name, read as a number in base 256. -/
+def siteCode (s : String) : Nat := s.foldl (fun acc c => acc * 256 + c.toNat % 256) 0
+
+/-- A site parameter `s`, written where a literal site is (`perform[s.0]`, `handle_with[s]`,
+`s.0 … ~> …` in a row): the number `2^32 · (1 + code s)`, above every literal site. A name is
+never confused with a literal site: the checker refuses a site at or above `2^32`
+(`Frontend.Check.elabRow`, `checkC`'s `perform`), and `Frontend.Elab.RowInst` substitutes every
+site parameter, or refuses one that is left. The parser takes a site name only where a site
+parameter of the enclosing declaration is in scope, of at most 32 characters.  `[spec §76]` -/
+def siteOfName (s : String) : Nat := 2 ^ 32 * (1 + siteCode s)
+
+/-- The name of a site parameter, from the number `siteOfName` gives it; none for a literal
+site.  `[spec §76]` -/
+def siteName? (n : Nat) : Option String :=
+  if n < 2 ^ 32 || n % 2 ^ 32 != 0 then none
+  else some (String.ofList (go 64 (n / 2 ^ 32 - 1) []))
+where
+  go : Nat → Nat → List Char → List Char
+    | 0, _, acc => acc
+    | fuel + 1, k, acc => if k == 0 then acc else go fuel (k / 256) (Char.ofNat (k % 256) :: acc)
+
+/-- A site as written: its number, or its name when it is a site parameter.  `[spec §76]` -/
+def sitePp (n : Nat) : String := (siteName? n).getD (toString n)
 
 /-- A field of a `data` constructor: its name when it is written (`C(f: A)`, a record's), and its
 type as written; `box A` is a cell of its own (SPEC §42).  `[spec §42]` -/
@@ -438,6 +476,12 @@ structure HInfo where
   /-- The elaboration's record of the site, its types in the frame of the site's code, over the
   type parameters still to be determined (`tps`) and the lifetime parameters (`lives`). -/
   site : SiteRec
+  /-- Each operation's cancel row, as inferred (`Frontend.Elab.Fins`); none past the end is the
+  empty cancel row.  `[spec §27]` -/
+  fins : List Row := []
+  /-- The handler has a state (§21): each clause answers a function of the state, run where the
+  `with` is, and the clause's own code is that function's body.  `[spec §21, §27]` -/
+  stateful : Bool := false
   deriving DecidableEq, Repr
 
 /-- **The elaborator's key of a `def` it generates** (SPEC §3): the template, function or group it
@@ -482,6 +526,12 @@ structure FieldCand where
   names : List String
   idx : Nat
   rolls : Bool
+  deriving DecidableEq, Repr, Inhabited
+
+/-- The mode of a pipe's wire: `|>` push, `>|` pull (decision B′).  `[spec §33, §70]` -/
+inductive PipeMode where
+  | push
+  | pull
   deriving DecidableEq, Repr, Inhabited
 
 /-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied
@@ -550,11 +600,13 @@ inductive VSugar where
   /-- The stored generator of a call of a function that performs an iteration effect (SPEC §15),
   applied to the call of its copy for the site. -/
   | pullSite (info : ItInfo)
-  /-- `e |> s`, applied to the pair of `e` and the stage `s` (SPEC §33): a handler `h(…)` is
-  `with h(…) { e }`; a function whose first parameter is a computation parameter takes `e`
-  suspended, `f({ () -> e }, …)`; any other function takes `e` first, `f(e, …)`. Elaborated away
-  by `Frontend.Elab.Effects`.  `[spec §33]` -/
-  | pipe
+  /-- `e |> s` (`m` push) or `e >| s` (`m` pull), applied to the pair of `e` and the stage `s`
+  (SPEC §33): a handler `h(…)` is `with h(…) { e }`; a function whose first parameter is a
+  computation parameter takes `e` suspended, `f({ () -> e }, …)`; any other function takes `e`
+  first, `f(e, …)`. A chain of stream stages is read in its normal form first
+  (`Frontend.Elab.Pipes.chainOf`). Elaborated away by `Frontend.Elab.Effects`.
+  `[spec §33, §70]` -/
+  | pipe (m : PipeMode)
   /-- `writes(x, …) V`: the closure `V` assigns the enclosing body's `let mut` variables `x, …`
   (SPEC §41, rule R3). It is given at a block parameter of a call, which passes them in and back
   out at each call of it; anywhere else it is refused. Elaborated away by `Frontend.Elab.Effects`.
@@ -855,6 +907,12 @@ inductive Decl where
   /-- A `data` declaration (SPEC §42): elaborated to `type` and `shape` declarations
   (`Frontend.Data.typeDecls`) after the program's modules are in. -/
   | data (sp : Span) (d : DataDecl)
+  /-- `def name[A, row r, site s] : T = V` or `type N[A, row r, site s] = T`: the declaration `d`
+  (a `def_` or a `type`, with its type parameters) generic over the rows `rows` and the sites
+  `sites` besides. A template: each use writes its row and site arguments, and
+  `Frontend.Elab.RowInst` makes the instance it names. It never reaches the checker.
+  `[spec §76]` -/
+  | gen (sp : Span) (rows sites : List Ident) (d : Decl)
   deriving DecidableEq, Repr
 
 /-- A source file: its declarations in order. -/
@@ -901,6 +959,8 @@ def VTy.strip : VTy → VTy
   | .app _ G A => .app .none G.strip A.strip
   | .lapp _ G a => .lapp .none G.strip a.strip
   | .rowed _ F r => .rowed .none F.strip r.strip
+  | .rowArg _ r => .rowArg .none r.strip
+  | .siteArg _ n => .siteArg .none n
 
 def CTy.strip : CTy → CTy
   | .ret _ A => .ret .none A.strip
@@ -919,7 +979,9 @@ def CTy.strip : CTy → CTy
 
 def Row.strip : Row → Row
   | .nil => .nil
-  | .cons n i q A B r => .cons n i q A.strip B.strip r.strip
+  | .cons n i q A B f r => .cons n i q A.strip B.strip f.strip r.strip
+  | .top => .top
+  | .var x => .var x
 
 def Shape.strip : Shape → Shape
   | .leaf _ A => .leaf .none A.strip
@@ -1094,6 +1156,7 @@ def Decl.strip : Decl → Decl
       (H.map VTy.strip) A.strip V.strip
   | .data _ d => .data .none (DataDecl.mk d.name.strip (d.tps.map Ident.strip) (d.lps.map Ident.strip)
       d.record (d.cons.map fun c => DCon.mk c.name.strip (c.fields.map fun f => DField.mk (f.name.map Ident.strip) f.ty.strip (f.close.map (·.map Ident.strip)))))
+  | .gen _ rs ss d => .gen .none (rs.map Ident.strip) (ss.map Ident.strip) d.strip
 
 def Program.strip (p : Program) : Program := ⟨p.decls.map Decl.strip⟩
 
@@ -1121,7 +1184,7 @@ def VTy.span : VTy → Span
   | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .handle sp _ | .mu sp _ _ | .name sp _
   | .lolli sp _ _ | .all sp _ _ _ | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _
   | .array sp _ | .arrayImm sp _ _ | .arrayMut sp _ _ | .sized sp _ _ _ | .app sp _ _
-  | .lapp sp _ _ | .rowed sp _ _ => sp
+  | .lapp sp _ _ | .rowed sp _ _ | .rowArg sp _ | .siteArg sp _ => sp
 
 def CTy.span : CTy → Span
   | .ret sp _ | .arr sp _ _ | .amp sp _ _ | .top sp | .all sp _ _ _ | .nu sp _ _ | .name sp _

@@ -1,0 +1,85 @@
+-- A function that writes its stored generators' types, given generators over different rows
+-- (SPEC §15). `two` ascribes the pair of its parameters `U (pull i32 1 1) * U (pull i32 1 1)`. Each
+-- written `pull` gets its row from what flows into it, so the ascription is, per component, the row
+-- of the generator given there: one over the row of `Fail` and a pure one, or one over `Fail`'s
+-- and one over `Oops`'s. The two are taken apart again and drained in turn.
+--
+-- Answer: `((inl i32[1036], inr i32[2]), (inl (inl i32[1036]), (inl (inr i32[2]), inr i32[20])))`:
+-- 1 + 2 + 3 + 1000 + 10 + 20; the first source's error 2; then the same with the second source
+-- raising `Oops` at 20. `live 0`. An ascription that gave both components one row is refused.
+
+include adapters
+include fail
+include rec
+
+type Bytes = mu X. 1 + (i32 * X)
+
+def nil : Bytes = roll inl ()
+fn cons(b: i32, t: Bytes) -> Bytes = roll inr (b, t)
+
+-- `own_src(l, bad)` owns a list and yields its elements, raising `bad` when it reaches it.
+fn own_src(l: Bytes, bad: i32) -> 1 with Yield[i32], Fail[i32] =
+  let mut l = l;
+  while true {
+    match unroll l {
+      inl u -> break
+    | inr (b, t) -> l = t; if b == bad { raise(b) } else { () }; yield(b)
+    }
+  };
+  ()
+
+fn drain(it: U (pull i32 1 1), acc: i32) -> i32 with Exhausted =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> drain(it, acc + x)
+  | inr d -> match d { inl u -> acc | inr it -> drain(it, acc) }
+  }
+
+-- `pure_src(l)` owns a list and yields its elements.
+fn pure_src(l: Bytes) -> 1 with Yield[i32] =
+  let mut l = l;
+  while true {
+    match unroll l {
+      inl u -> break
+    | inr (b, t) -> l = t; yield(b)
+    }
+  };
+  ()
+
+effect Oops { ctl oops(e: i32) -> never }
+
+handler catch_oops[A]: Oops, A -> A + i32 = {
+  return(a) = inl a;
+  oops(e) = inr e
+}
+
+fn oops_src(l: Bytes, bad: i32) -> 1 with Yield[i32], Oops =
+  let mut l = l;
+  while true {
+    match unroll l {
+      inl u -> break
+    | inr (b, t) -> l = t; if b == bad { oops(b) } else { () }; yield(b)
+    }
+  };
+  ()
+
+fn two(a: U (pull i32 1 1), b: U (pull i32 1 1)) -> i32 with Exhausted =
+  let p = ((a, b) : U (pull i32 1 1) * U (pull i32 1 1));
+  let (a, b) = p;
+  let x = drain(a, 0);
+  x + drain(b, 1000)
+
+fn t(bad: i32) -> i32 + i32 =
+  let l1 = cons(1, cons(2, cons(3, nil)));
+  let l2 = cons(10, cons(20, nil));
+  with on_exhausted(!{ u -> inr 0 }) { with to_result { two(own_src(l1, bad), pure_src(l2)) } }
+
+fn u(b1: i32, b2: i32) -> (i32 + i32) + i32 =
+  let l1 = cons(1, cons(2, cons(3, nil)));
+  let l2 = cons(10, cons(20, nil));
+  with catch_oops {
+    with on_exhausted(!{ u -> inr 0 }) { with to_result { two(own_src(l1, b1), oops_src(l2, b2)) } }
+  }
+
+main -> ((i32 + i32) * (i32 + i32)) * (((i32 + i32) + i32) * (((i32 + i32) + i32) * ((i32 + i32) + i32))) =
+  ((t(0), t(2)), (u(0, 0), (u(2, 0), u(0, 20))))

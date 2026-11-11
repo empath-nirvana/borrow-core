@@ -59,6 +59,8 @@ def VTy.canon (ρ τ : List (String × String)) (d : Nat) : VTy → VTy
   | .app s G A => .app s (G.canon ρ τ d) (A.canon ρ τ d)
   | .lapp s G a => .lapp s (G.canon ρ τ d) (a.canon ρ)
   | .rowed s G r => .rowed s (G.canon ρ τ d) (r.canon ρ τ d)
+  | .rowArg s r => .rowArg s (r.canon ρ τ d)
+  | .siteArg s n => .siteArg s n
 
 /-- `C` with each binder renamed by its depth. -/
 def CTy.canon (ρ τ : List (String × String)) (d : Nat) : CTy → CTy
@@ -80,7 +82,9 @@ def CTy.canon (ρ τ : List (String × String)) (d : Nat) : CTy → CTy
 /-- A row with each binder renamed by its depth. -/
 def Row.canon (ρ τ : List (String × String)) (d : Nat) : Row → Row
   | .nil => .nil
-  | .cons n i q A B r => .cons n i q (A.canon ρ τ d) (B.canon ρ τ d) (r.canon ρ τ d)
+  | .cons n i q A B f r => .cons n i q (A.canon ρ τ d) (B.canon ρ τ d) (f.canon ρ τ d) (r.canon ρ τ d)
+  | .top => .top
+  | .var x => .var x
 
 /-- A shape with each binder renamed by its depth. -/
 def Shape.canon (ρ τ : List (String × String)) (d : Nat) : Shape → Shape

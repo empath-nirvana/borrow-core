@@ -1,0 +1,7 @@
+-- #868 (SPEC §27): the checker builds `[then]` at a finaliser's own row and handlers with cancel
+-- rows. The deciders of `[then]`'s cancel-row premises, each sound for exactly the kernel premise.
+BoCa.Fig16.LogRel.Core.Check.thenLeB_sound
+BoCa.Fig16.LogRel.Core.Check.pendLeB_sound
+BoCa.Fig16.LogRel.Core.Check.thenFinB_sound
+BoCa.Fig16.LogRel.Core.Check.finPersB_sound
+BoCa.Fig16.LogRel.Core.Check.pendPersB_sound

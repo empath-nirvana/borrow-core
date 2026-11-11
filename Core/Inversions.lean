@@ -825,6 +825,17 @@ theorem hasVar_shift_inv (d : Nat) : ∀ (e : Expr) (c k : Nat), c ≤ k →
         (fun h => hasVar_shift_inv d b₂ (c + 1) (k + 1) (by omega) (by rwa [show k + 1 + d = k + d + 1 by omega])))
   | .unit, _, _, _, h | .loc _, _, _, _, h | .prim _, _, _, _, h => h.elim
 
+/-- A variable of the unwinding form is one of its finaliser's.  `[spec §72]` -/
+theorem hasVar_withborUE {d : Expr} {k : Nat} (h : (withborUE d).HasVar k) : d.HasVar k := by
+  have hs : ∀ m, m = k + 3 → (d.shift 3 0).HasVar m → d.HasVar k := by
+    rintro m rfl hm; exact hasVar_shift_inv 3 d 0 k (Nat.zero_le k) hm
+  simp only [withborUE, thenE, Expr.val, Val.lam, Val.unit, Val.prim, Expr.HasVar] at h
+  rcases h with ((h | h) | (h | h)) | h
+  all_goals first
+    | omega
+    | exact hs _ (by omega) h
+    | (simp_all; try omega)
+
 theorem hasVar_pickE : ∀ (j : Nat) {t : Expr} {k : Nat}, (pickE j t).HasVar k → t.HasVar k
   | 0, t, k, h => by
       simp only [pickE, Expr.HasVar] at h
@@ -1011,10 +1022,10 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       · obtain ⟨T, hT⟩ := ihN (k + 1) (hasVar_fill hcl _ 0 (k + 1) (by omega) hk)
         exact ⟨T, slot_succ hT⟩
       · exact absurd hk (not_hasVar_closed hcl)
-  | withbor1U _ _ _ _ _ _ _ hdc _ _ | withbor2U _ _ _ _ _ _ _ hdc _ _
-  | withbor3U _ _ _ _ _ _ hdc _ _ | sliceBorrowMU _ _ _ _ _ _ _ hdc _ _
-  | sliceBorrowIU _ _ _ _ _ _ _ _ hdc _ _ =>
-      intro k hk; exact absurd hk (not_hasVar_closed (withborUE_closed hdc))
+  | withbor1U _ _ _ _ _ _ _ _ ih | withbor2U _ _ _ _ _ _ _ _ ih
+  | withbor3U _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
+  | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih =>
+      intro k hk; exact ih k (hasVar_withborUE hk)
   | foldImm => intro k hk; exact absurd hk (not_hasVar_closed (foldImmV_closed _))
   | foldOwn => intro k hk; exact absurd hk (not_hasVar_closed (foldOwnV_closed _))
   | foldOwnG => intro k hk; exact absurd hk (not_hasVar_closed (FoldP.foldOwnGV_closed _))

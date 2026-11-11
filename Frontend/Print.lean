@@ -53,6 +53,8 @@ def widthName : BoCa.Width → String
   | .w8 => "u8"
   | .f32 => "f32"
   | .f64 => "f64"
+  | .u32 => "u32"
+  | .u64 => "u64"
 
 /-- A printed shape as a shape atom: a name as it is, anything else parenthesized. -/
 def ppShapeAtom (σ : Shape) (printed : String) : String :=
@@ -102,6 +104,8 @@ def VTy.pp (A : VTy) (lvl : Nat := 0) : String :=
     | .rowed _ F r =>
       let (_, ts, _) := r.ppArgs
       "(" ++ F.pp 0 ++ " with " ++ ", ".intercalate ts ++ ")"
+    | .rowArg _ r => "row (" ++ r.pp ++ ")"
+    | .siteArg _ n => "site " ++ sitePp n
 
 /-- `N[A, …]<'a, …>`: the head name, the printed type arguments and lifetime arguments. -/
 def VTy.ppArgs : VTy → String × List String × List String
@@ -130,8 +134,18 @@ def CTy.pp (C : CTy) (lvl : Nat := 0) : String :=
 /-- A row's entries, `n.i q A ~> B, …`, without the brackets. -/
 def Row.pp : Row → String
   | .nil => ""
-  | .cons n i q A B .nil => s!"{n}.{i} {q.str} " ++ A.pp ++ " ~> " ++ B.pp
-  | .cons n i q A B r => s!"{n}.{i} {q.str} " ++ A.pp ++ " ~> " ++ B.pp ++ ", " ++ r.pp
+  | .cons n i q A B f r =>
+      -- The cancel row after the qualifier: nothing when it is empty, else `[R]`.  `[spec §27]`
+      let fin := match f with
+        | .nil => ""
+        | .top => "[top]"
+        | f => "[" ++ f.pp ++ "]"
+      let e := s!"{sitePp n}.{i} {q.str}" ++ fin ++ " " ++ A.pp ++ " ~> " ++ B.pp
+      match r with
+      | .nil => e
+      | r => e ++ ", " ++ r.pp
+  | .top => "top"
+  | .var x => ".." ++ x
 
 def Shape.pp : Shape → String
   | .leaf _ A => "leaf " ++ A.pp 4
@@ -251,7 +265,8 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) (cx : PCtx := .core) : Stri
     | .app _ (.sugar _ (.op o)) (.pair _ a b) => "(" ++ a.pp 2 k cx ++ " " ++ o.str ++ " " ++ b.pp 2 k cx ++ ")"
     | .app _ (.sugar _ (.call c)) W => c ++ "(" ++ W.pp 0 k cx ++ ")"
     | .app _ (.sugar _ .count) (.pair _ a b) => "(" ++ a.pp 2 k cx ++ ".." ++ b.pp 2 k cx ++ ")"
-    | .app _ (.sugar _ .pipe) (.pair _ a s) => "(" ++ a.pp 1 k cx ++ " |> " ++ s.pp 2 k cx ++ ")"
+    | .app _ (.sugar _ (.pipe m)) (.pair _ a s) =>
+      "(" ++ a.pp 1 k cx ++ (if m == .pull then " >| " else " |> ") ++ s.pp 2 k cx ++ ")"
     | .app _ (.sugar _ .deref) V => "*" ++ V.pp 3 k cx
     | .app _ (.sugar _ (.field f _)) V => "(" ++ V.pp 0 k cx ++ ")." ++ f
     | .app _ (.sugar _ (.update f _)) (.pair _ r e) => "(" ++ r.pp 0 k cx ++ ").{" ++ f ++ " = " ++ e.pp 0 k cx ++ "}"
@@ -326,10 +341,10 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) (cx : PCtx := .core) : St
     | .unwind _ x A M D N =>
       x.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " <- " ++ M.pp 1 (k + 2) cx ++
         " unwind (" ++ D.pp 0 (k + 2) cx ++ ");" ++ nl k ++ N.pp 0 k cx
-    | .perform _ n i V => s!"perform[{n}.{i}] " ++ V.pp 1 k cx
-    | .abort _ n i V => s!"abort[{n}.{i}] " ++ V.pp 1 k cx
+    | .perform _ n i V => s!"perform[{sitePp n}.{i}] " ++ V.pp 1 k cx
+    | .abort _ n i V => s!"abort[{sitePp n}.{i}] " ++ V.pp 1 k cx
     | .handle _ n _ hr hc M =>
-      s!"handle_with[{n}](" ++ hr.pp 0 (k + 2) cx ++ ", " ++ hc.pp 0 (k + 2) cx ++ ") " ++ M.pp 1 k cx
+      s!"handle_with[{sitePp n}](" ++ hr.pp 0 (k + 2) cx ++ ", " ++ hc.pp 0 (k + 2) cx ++ ") " ++ M.pp 1 k cx
     | .withbor2r _ x b A B r p m M =>
       let as := (Const.withbor2U x b A B r).toArgs.2
       "withbor2r[" ++ ", ".intercalate (as.map Arg.pp) ++ s!"]({p.name}, {m.name}) " ++ M.pp 1 k cx
@@ -384,14 +399,16 @@ def Decl.ppPoly (n : Ident) (tps lps : List Ident) (H : Option VTy) (A : VTy) (V
   | none => "poly def " ++ n.name ++ params ++ " : " ++ A.pp ++ " =" ++ nl 2 ++ V.pp 0 2
   | some H => "poly def " ++ n.name ++ params ++ lives ++ " at " ++ H.pp ++ " =" ++ nl 2 ++ V.pp 0 2
 
-def Decl.pp : Decl → String
+def Decl.pp (d : Decl) (extra : List String := []) : String := match d with
   | .type _ n ps ls A =>
-    "type " ++ n.name ++ (if ps.isEmpty then "" else "[" ++ ", ".intercalate (ps.map (·.name)) ++ "]") ++
+    let ps := ps.map (·.name) ++ extra
+    "type " ++ n.name ++ (if ps.isEmpty then "" else "[" ++ ", ".intercalate ps ++ "]") ++
       (if ls.isEmpty then "" else "<" ++ ", ".intercalate (ls.map ("'" ++ ·.name)) ++ ">") ++
       " = " ++ A.pp
   | .shape _ n σ => "shape " ++ n.name ++ " = " ++ σ.pp
   | .def_ _ n ps A V m =>
-    let params := if ps.isEmpty then "" else "[" ++ ", ".intercalate (ps.map (·.name)) ++ "]"
+    let ps := ps.map (·.name) ++ extra
+    let params := if ps.isEmpty then "" else "[" ++ ", ".intercalate ps ++ "]"
     let rec mk : Mark → String
       | .none => "" | .total => "total " | .div => "div "
       | .template m _ => mk m ++ "fn "
@@ -458,7 +475,10 @@ def Decl.pp : Decl → String
       " = {" ++ nl 2 ++ cl "return" [rx] rM ++ ";" ++
       String.join (h.clauses.map fun c => nl 2 ++ cl c.name.name c.params c.body ++ ";") ++ nl 0 ++ "}"
 
+  -- `[spec §76]`
+  | .gen _ rs ss d => d.pp (rs.map ("row " ++ ·.name) ++ ss.map ("site " ++ ·.name))
+
 def Program.pp (p : Program) : String :=
-  "\n\n".intercalate (p.decls.map Decl.pp) ++ "\n"
+  "\n\n".intercalate (p.decls.map (·.pp)) ++ "\n"
 
 end Frontend

@@ -160,9 +160,29 @@ def Const791.val : Const791 → Val
   | .sm _ _ _ _ _ d => withborUV d
   | .poly _ _ c => Val.lam c.val.1
 
+/-- **The constant's value closed by the externs' values `γx`**: each finaliser `d`, typed at the
+externs' context, under the closing substitution `d[γx]`. At `γx = []` it is `Const791.val`
+(`Const791.valAt_nil`).  `[spec §72]` -/
+def Const791.valAt (γx : List Val) : Const791 → Val
+  | .w2 _ _ _ _ _ d => withborUV (substAll γx d)
+  | .w3 _ _ _ _ _ _ d => withborUV (substAll γx d)
+  | .wF _ _ _ _ _ _ d => withborFV (substAll γx d)
+  | .wl _ _ _ _ _ _ => withloadV
+  | .sm _ _ _ _ _ d => withborUV (substAll γx d)
+  | .poly _ _ c => Val.lam (c.valAt γx).1
+
+/-- At no externs the closed value is the constant's value.  `[spec §72]` -/
+theorem Const791.valAt_nil : ∀ c : Const791, c.valAt [] = c.val
+  | .w2 .. | .w3 .. | .wF .. | .sm .. => by
+      simp only [Const791.valAt, Const791.val, substAll, BoCa.Adequacy.psub_nil]
+  | .wl .. => rfl
+  | .poly _ _ c => by simp only [Const791.valAt, Const791.val, Const791.valAt_nil c]
+
 /-- **The rule's premises, at the lifetime context `Δ`**: a lend constant's are the
 corresponding `CDerives` constructor's (`withbor2U`, `withbor3U`, `withloadU`, `sliceBorrowMU`) at
-`Δ`, `hS : S.Unwind x` read as `S.Suspend Δ x bnd`; the finaliser closed and typed at `Δ`. The
+`Δ`, `hS : S.Unwind x` read as `S.Suspend Δ x bnd`; the finaliser typed at `Δ` and the externs'
+context `Γx` (its slots persistent, closed by the externs' values, `Const791.valAt`), and closed
+above `Γx`. At `Γx = []` the finaliser is closed and typed at the empty context. The
 field reborrow's are `withbor3U`'s at `Mut @a (Ref A)`. A binder's are `allI`'s side conditions
 (the bound and `Δ`'s bounds do not mention `'y`), its body's read at `Δ, 'y ⊏ @b`.
 
@@ -176,33 +196,44 @@ The answers are read at a closed bound (`Row.AnsC` at `VOutlives ∅ b`, `∅ �
 lies in `Res_⊤` and is consistent with every view, which discharges the answer's move between the
 lender's view and the lend's (`AnsViewG`). At the empty context this is `Row.Suspend`'s own answer
 clause (`ansC_of_suspend`). `[spec §62]` -/
-def Const791.OKAt : LifeCtx → Const791 → Prop
-  | Δ, .w2 x bnd A B S d => Δ.Defines bnd ∧
+def Const791.OKAt : LifeCtx → Ctx VTy → Const791 → Prop
+  | Δ, Γx, .w2 x bnd A B S d => Δ.Defines bnd ∧
       (∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) ∧
       ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend Δ x bnd ∧
       (∃ b, LifeCtx.empty.Defines b ∧ S.AnsC (VOutlives LifeCtx.empty b)) ∧
-      closedAt 0 d = true ∧ CDerives Δ [] d (.val (.lolli (.ref A) .unit))
-  | Δ, .w3 a x bnd A B S d => Δ.Defines bnd ∧
+      closedAt Γx.length d = true ∧ CDerives Δ Γx d (.val (.lolli (.ref A) .unit))
+  | Δ, Γx, .w3 a x bnd A B S d => Δ.Defines bnd ∧
       ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend Δ x bnd ∧
       (∃ b, LifeCtx.empty.Defines b ∧ S.AnsC (VOutlives LifeCtx.empty b)) ∧
-      closedAt 0 d = true ∧ CDerives Δ [] d (.val (.lolli (.mut a A) .unit))
-  | Δ, .wF a x bnd A B S d => Δ.Defines bnd ∧
+      closedAt Γx.length d = true ∧ CDerives Δ Γx d (.val (.lolli (.mut a A) .unit))
+  | Δ, Γx, .wF a x bnd A B S d => Δ.Defines bnd ∧
       ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend Δ x bnd ∧
       (∃ b, LifeCtx.empty.Defines b ∧ S.AnsC (VOutlives LifeCtx.empty b)) ∧
-      closedAt 0 d = true ∧ CDerives Δ [] d (.val (.lolli (.mut a (.ref A)) .unit))
-  | Δ, .wl _ x bnd A B S => Δ.Defines bnd ∧ ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend Δ x bnd
-  | Δ, .sm x bnd A B S d => Δ.Defines bnd ∧
+      closedAt Γx.length d = true ∧ CDerives Δ Γx d (.val (.lolli (.mut a (.ref A)) .unit))
+  | Δ, _, .wl _ x bnd A B S => Δ.Defines bnd ∧ ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend Δ x bnd
+  | Δ, Γx, .sm x bnd A B S d => Δ.Defines bnd ∧
       (∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) ∧
       (∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) ∧
       ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend Δ x bnd ∧
       (∃ b, LifeCtx.empty.Defines b ∧ S.AnsC (VOutlives LifeCtx.empty b)) ∧
-      closedAt 0 d = true ∧ CDerives Δ [] d (.val (.lolli (.array A) .unit))
-  | Δ, .poly y b c => b.mentions y = false ∧
-      (∀ z u, Δ.find? z = some u → u.mentions y = false) ∧ c.OKAt (Δ.extend y b)
+      closedAt Γx.length d = true ∧ CDerives Δ Γx d (.val (.lolli (.array A) .unit))
+  | Δ, Γx, .poly y b c => b.mentions y = false ∧
+      (∀ z u, Δ.find? z = some u → u.mentions y = false) ∧ c.OKAt (Δ.extend y b) Γx
 
 /-- **The rule's premises** of a constant used by a closed program: `Const791.OKAt` at the empty
-context. `[spec §62]` -/
-def Const791.OK (c : Const791) : Prop := c.OKAt LifeCtx.empty
+context, at no externs. `[spec §62]` -/
+def Const791.OK (c : Const791) : Prop := c.OKAt LifeCtx.empty []
+
+/-- **At no externs a lend's finaliser clause is closed and typed at the empty context**: the
+clause `OKAt` read before the externs' context (here at `w2`; the other lends alike).
+`[spec §72]` -/
+theorem Const791.okAt_nil_w2 {Δ : LifeCtx} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
+    {S : Row} {d : Expr} :
+    (Const791.w2 x bnd A B S d).OKAt Δ [] ↔ Δ.Defines bnd ∧
+      (∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) ∧
+      ¬ VFree x A ∧ ¬ VFree x B ∧ S.Suspend Δ x bnd ∧
+      (∃ b, LifeCtx.empty.Defines b ∧ S.AnsC (VOutlives LifeCtx.empty b)) ∧
+      closedAt 0 d = true ∧ CDerives Δ [] d (.val (.lolli (.ref A) .unit)) := Iff.rfl
 
 /-- **Core's bound meets `Const791.OK`'s first conjunct**: `LifeCtx.empty.meetOfDom`, the bound
 Core's rules fix at the empty context, is defined at every `δ`. -/
@@ -239,6 +270,11 @@ def ctx791 (cs : List Const791) : Ctx VTy := cs.map fun c => ⟨.bang c.ty, true
 
 /-- The values closing it. -/
 def vals791 (cs : List Const791) : List Val := cs.map Const791.val
+
+/-- At no externs the constants' closed values are their values.  `[spec §72]` -/
+theorem Const791.map_valAt_nil (cs : List Const791) :
+    cs.map (fun c => c.valAt []) = vals791 cs := by
+  simp only [vals791, Const791.valAt_nil]
 
 /-! ## §2. The interpretation -/
 

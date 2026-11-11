@@ -301,7 +301,7 @@ theorem d_failOutsideBody :
   refine .bind (.right (.right (.dead (.dead .nil))))
     (.ret (.withbor2U (A := Flag) (B := .zero) (S := Sf) 0 (by cdead) rfl
       ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree]) (by simp [VFree])
-      (Sf_unwind 0) dFlag_closed (consume_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
+      (Sf_unwind 0) (consume_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
   refine .effLet (A := .tensor (.ref Flag) .zero) (.left (.left (.left (.dead (.dead .nil)))))
     (fun _ => Ctx.Dead.consumes (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))
@@ -368,7 +368,7 @@ theorem d_outerCb {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
       (d_logRaise0 (.cons (.cons hΓ))))) ?_
   refine .bind (.right (.right (.dead (deadSplit hΓ))))
     (.ret (.withbor3U (a := .var 0) (A := Flag) (B := .zero) (S := Sf) (d := forget) 1 (by cdead)
-      rfl (by simp [VFree]) (by simp [VFree]) (Sf_unwind 1) rfl (.releaseMut (by cdead)))) ?_
+      rfl (by simp [VFree]) (by simp [VFree]) (Sf_unwind 1) (.releaseMut (by cdead)))) ?_
   refine .effLet (A := .tensor (.mut (.var 0) Flag) .zero)
     (.left (.left (.left (.dead (deadSplit hΓ)))))
     (fun _ => Ctx.Dead.consumes (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
@@ -388,7 +388,7 @@ theorem d_reborrowRaiseBody :
   refine .bind (.right (.right (.dead (.dead .nil))))
     (.ret (.withbor2U (A := Flag) (B := .zero) (S := Sf) 0 (by cdead) rfl
       ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree]) (by simp [VFree])
-      (Sf_unwind 0) dFlag_closed (consume_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
+      (Sf_unwind 0) (consume_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
   refine .effLet (A := .tensor (.ref Flag) .zero) (.left (.left (.left (.dead (.dead .nil)))))
     (fun _ => Ctx.Dead.consumes (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))

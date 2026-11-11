@@ -15,7 +15,7 @@ bcc=.lake/build/bin/bcc
 # several codes and widths, recursive types with boxed fields, a class kept on the heap, cells,
 # κ regions and frames, a capability's cell whose width class holds a `!` type, a host operation's pair
 # argument and the literal tables' class (neither on a cycle), a pointer read through a shared
-# borrow at a node of the owner's former.
+# borrow at a node of the owner's former, a sum with a merged arm and a packed one (SPEC §43).
 progs=(
   corpus/clo-higher.bc
   corpus/deep-list.bc
@@ -27,10 +27,15 @@ progs=(
   corpus/array-replace.bc
   corpus/div-unhandled.bc
   corpus/tree-view-tasks.bc
+  corpus/data-json-map.bc
 )
 # Each perturbation, and the refusal of its family (an extended regular expression).
 families=(
   "remove a code from its class|do not hold c[0-9]+"
+  "move a sum's merged arm|merges arm .*, its arms give"
+  "drop a sum's merged arm|merges arm .*, its arms give"
+  "give a sum another tag|has [0-9]+ tags, its arms give"
+  "unpack a packed sum|packed, its arms give"
   "remove a code's class|'s class is none"
   "merge two classes of one shape and different widths|has width [0-9]+, its children give"
   "change a class's width|has width [0-9]+, its children give"

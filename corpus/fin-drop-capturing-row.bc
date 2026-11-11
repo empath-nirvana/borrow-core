@@ -1,0 +1,24 @@
+-- A clause that drops its continuation, whose cancel performs (the body's finaliser raises `3`),
+-- in a row with an abortive and a capturing operation, after a head that performs neither
+-- (SPEC §27; #953 re-review H2, `r01`). Nothing can abort or be cancelled through the head, so it
+-- is not wrapped, and `k` is cancelled at the end of the path: the cleanup's error is kept,
+-- re-raised at the canceller, and `to_result` catches it.
+--
+-- Answer: inr i32[3], and `live 0`.
+
+include fail
+
+effect Wait { ctl wait() }
+effect Ask { ctl ask() }
+
+handler asker[A]: Ask, A -> A = { return(x) = x; ask(k) = k(()) }
+
+handler tm[A](n: i32): Wait, A -> A + 1 with Fail[i32], Ask = {
+  return(x) = inl x;
+  wait(k) = { let y = n + 1; inr () }
+}
+
+fn work() -> i32 with Wait, Fail[i32] = x <- wait() unwind (let r = raise((3 : i32)); ()); 5
+
+main -> (i32 + 1) + i32 =
+  with asker[(i32 + 1) + i32] { with to_result[i32, i32 + 1] { with tm[i32](1) { work() } } }

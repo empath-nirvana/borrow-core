@@ -50,12 +50,16 @@ def qualStr : CQual → String
   | .cancel => "cancel"
   | .unr => "unr"
 
-/-- `pull A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R`: a stored generator (SPEC §15). It is an
-abbreviation of the frontend over `ν` (SPEC §7: a new codata shape is a new abbreviation), with no
-counterpart in `Core/`. -/
-def pullTy (A B R : CVTy) : CCTy :=
-  .nu (.amp (.ret (.sum (.tensor (A.rename Nat.succ) (.tvar 0)) (.sum (B.rename Nat.succ) (.tvar 0))))
-    (.ret (R.rename Nat.succ)))
+/-- `pull_Σ A B R = νX. F_Σ((A ⊗ U X) ⊕ (B ⊕ U X)) & F_Σ R`: a stored generator whose
+observations and `close` perform `Σ` (SPEC §15).  `[spec §15]` -/
+def pullRowTy (S : CRow) (A B R : CVTy) : CCTy :=
+  .nu (.amp (effOf S (.sum (.tensor (A.rename Nat.succ) (.tvar 0)) (.sum (B.rename Nat.succ) (.tvar 0))))
+    (effOf S (R.rename Nat.succ)))
+
+/-- `pull A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R`: a stored generator (SPEC §15), `pull_[]`.
+It is an abbreviation of the frontend over `ν` (SPEC §7: a new codata shape is a new
+abbreviation), with no counterpart in `Core/`. -/
+def pullTy (A B R : CVTy) : CCTy := pullRowTy [] A B R
 
 /-- The declarations visible at a point: those before index `upto`. -/
 structure Scope where
@@ -146,6 +150,12 @@ def codeDigest (N : BoCa.Expr) : String :=
   let h := hash (reprStr N)
   "#" ++ String.ofList (Nat.toDigits 16 (h.toNat % 2 ^ 32))
 
+/-- An entry's cancel row after its qualifier, as the core text writes it (`n.i cancel[R] A ~> B`),
+from its entries `es` (printed at every depth by `ppEff`): nothing when it is empty, `[top]` at `⊤`
+(the parser reads `top` and `⊤` there).  `[spec §27]` -/
+def finBrackets (top : Bool) (es : List String) : String :=
+  if top then "[top]" else if es.isEmpty then "" else "[" ++ ", ".intercalate es ++ "]"
+
 -- The case split of `ppC`'s nested `ν` patterns over every value-type former exceeds the default.
 set_option maxHeartbeats 800000 in
 mutual
@@ -172,6 +182,8 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .int .w8 => "u8"
   | .int .f32 => "f32"
   | .int .f64 => "f64"
+  | .int .u32 => "u32"
+  | .int .u64 => "u64"
   | .opq .input => "input"
   | .opq .output => "output"
   | .opq .clock => "clock"
@@ -208,12 +220,13 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
   | .eff n i q A B fin _ C =>
       let (es, r) := ppEff nm C
       parenIf (p > 5)
-        s!"F[{", ".intercalate (s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es)}] {r}"
-/-- The entries of a row's layers `F_Σ`, and what is under them. -/
+        s!"F[{", ".intercalate (s!"{n}.{i} {qualStr q}{finBrackets fin.isTop (ppEff nm fin).1} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es)}] {r}"
+/-- The entries of a row's layers `F_Σ`, each with its cancel row (`finBrackets`), and what is under
+them. -/
 def ppEff (nm : List (String × LifeVar)) : CCTy → List String × String
   | .eff n i q A B fin _ C =>
       let (es, r) := ppEff nm C
-      (s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es, r)
+      (s!"{n}.{i} {qualStr q}{finBrackets fin.isTop (ppEff nm fin).1} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es, r)
   | .ret A => ([], ppV nm 0 6 A)
   | C => ([], ppC nm 6 C)
 end
@@ -359,6 +372,10 @@ def elabV : Nat → TyEnv → VTy → Except Error CVTy
     | .rowed sp _ _ =>
         err sp ("a function type with a provided row is the type of a computation parameter " ++
           "(SPEC §33): it is written on a parameter of a function")
+    -- `[spec §76]`
+    | .rowArg sp _ | .siteArg sp _ =>
+        err sp ("a row or site argument is written in the brackets of a definition or a type " ++
+          "with row or site parameters (SPEC §76)")
     | A@(.app sp _ _) | A@(.lapp sp _ _) =>
         -- `N[A, …]<'a, …>`: the arguments elaborated at the use, then `N`'s body in its own scope
         -- with its parameters bound to them.  `[spec §7]`
@@ -413,11 +430,25 @@ def elabRow : Nat → TyEnv → Span → Row → Except Error CRow
   | 0, _, sp, _ => err sp "type abbreviations nested too deeply"
   | n + 1, E, sp, r => match r with
     | .nil => pure []
-    | .cons k i q A B r => do
+    -- The parser reads `top` only as a whole cancel row (`rowEntries`); a `Row.top` built
+    -- elsewhere is refused here with the parser's message.
+    | .top => err sp "`top` (`⊤`) is a cancel row only: write it as `n.i cancel[top] A ~> B`"
+    -- `Frontend.Elab.RowInst` substitutes every row parameter, or refuses the program.
+    -- `[spec §76]`
+    | .var x => err sp s!"internal error: the row parameter `..{x}` was not substituted (SPEC §76)"
+    | .cons k i q A B f r => do
         if k < 2 ^ 32 ∧ i < 2 ^ 32 then
+          -- The entry's cancel row (SPEC §27): `F_R 1`, `R` its written row; `F 1` when none is
+          -- written.  `[spec §27]`
+          let fin ← match f with
+            | .top => pure .top
+            | f => pure (BoCa.Fig16.LogRel.Core.CTy.effOf (← elabRow n E sp f) .unit)
           let o : COpSig :=
-            ⟨UInt32.ofNat k, UInt32.ofNat i, q.toCore, ← elabV n E A, ← elabV n E B, .ret .unit, false⟩
-          if o.q == .unr && o.B.isZero then
+            ⟨UInt32.ofNat k, UInt32.ofNat i, q.toCore, ← elabV n E A, ← elabV n E B, fin, false⟩
+          if o.B.isZero && (match f with | .nil => false | _ => true) then
+            err sp (s!"the operation {k}.{i} is abortive: it captures no continuation, so it " ++
+              "has no cancel row")
+          else if o.q == .unr && o.B.isZero then
             err sp (s!"the operation {k}.{i} is unrestricted and answers `0`: an abortive " ++
               s!"operation is cancellable, `{k}.{i} cancel … ~> 0` (decision 63)")
           else pure (o :: (← elabRow n E sp r))

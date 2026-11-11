@@ -1,0 +1,26 @@
+-- check: old-backend-refuses
+-- SPEC §27 in the core text: a suspended cancel cancelled in turn, which goes on through the rest
+-- of the region (`[cfin-cancel]`). `core-fin-nc` with a second finaliser outward: handler 1
+-- cancels `κ`; the inner finaliser performs the capturable `4.0`, and the live outer handler 4
+-- cancels its continuation. That cancel unwinds the finaliser, reaches the running cancel's `cfin`,
+-- and goes on to the outer finaliser, which frees the cell `c` that the rest would have freed.
+--
+-- Answer: (), and `live 0`. A wrong implementation that stops at the cancelled finaliser leaves
+-- `c` live.
+
+main : F 1 =
+  handle_with[4](
+      ((!thunkv fun (v : 1) -> return v) : !U (1 -o F 1)),
+      (((!thunkv fun (p : 1 * U ((1 -o F 1) & F 1)) ->
+          let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+        : !U (1 * U ((1 -o F 1) & F 1) -o F 1) * 1)) (
+    handle_with[1](
+        ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[4.0 cancel 1 ~> 1] 1)),
+        (((!thunkv fun (p : 1 * U ((1 -o F[4.0 cancel 1 ~> 1] 1) & F[4.0 cancel 1 ~> 1, 4.0 cancel 1 ~> 1] 1)) ->
+          let (u, k) = p; let () = u; c <- (force k).2; return c), ())
+          : !U (1 * U ((1 -o F[4.0 cancel 1 ~> 1] 1) & F[4.0 cancel 1 ~> 1, 4.0 cancel 1 ~> 1] 1) -o F[4.0 cancel 1 ~> 1] 1) * 1)) (
+      c <- return (alloc[i32] i32[3]);
+      y <- (x <- perform[1.0] () unwind (perform[4.0] ()); return x)
+        unwind (z <- return (free[i32] c); return ());
+      z <- return (free[i32] c);
+      return y))

@@ -1,0 +1,13 @@
+-- A cleanup that uses a capability the body also uses (SPEC §42 *Open*, #868 K-b): `work` writes on
+-- `stdout`, and so would the `finally`. A capability is a threaded `mut` cell, and the kernel's
+-- `[then]` gives the body and the cleanup disjoint contexts, so the cleanup cannot hold it beside
+-- the body. Cleanup that performs control effects is accepted (`corpus/fin-operator.bc`); this is
+-- the kernel question, open. Refused.
+
+include io
+include fail
+
+fn work() -> i32 with Stdout = print_byte(to_u8(65)); 1
+
+main -> i32 + u8 = with to_result[u8, i32] { work() } finally { print_byte(to_u8(66)); () }
+-- expect: 12:65: a cleanup can't yet use `stdout`, which the body also uses (the kernel's [then] splits them; see #868)

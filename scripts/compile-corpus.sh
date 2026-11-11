@@ -67,8 +67,9 @@
 # (`name allocs indirect copies loads stores bounds`, the name the file's path
 # under `corpus/`, as `io-wc`, `surface/io-wc`, `axes/data-effects` or `aoc/2022-01`); a count
 # above it fails, one below it is reported so the file can be lowered. `--write-counts` rewrites the entries of the
-# programs run (every program, when none is named) with this run's counts, keeping the comment an
-# entry ends with (`# …`) and the file's header.
+# programs run (every program, when none is named) with this run's counts in place, inserting a
+# new program's entry, and keeps every other entry, the file's order and comments, and the comment
+# an entry ends with (`# …`); with no file named it drops the entries of programs not counted.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 usage() { echo "usage: scripts/compile-corpus.sh [--source] [--final] [--write-goldens | --write-counts | --write-keys] [file.bc…]"; exit 2; }
@@ -322,9 +323,11 @@ if [ -n "$bigpid" ]; then
   if wait "$bigpid"; then cat "$tmp/bigcat.log"; else cat "$tmp/bigcat.log"; bad=$((bad + 1)); fi
 fi
 if [ "$write" = 1 ]; then
-  # Keep the entries of the programs not named.
-  [ "$named" = 0 ] || awk 'NR == FNR { run[$1] = 1; next } /^#/ { next } !($1 in run)' "$tmp/counts" "$expected" >> "$tmp/counts"
-  { grep '^#' "$expected"; sort "$tmp/counts"; } > "$tmp/expected"
+  # The run's entries replace those of their programs in place and a new program's is inserted
+  # (scripts/merge-rows.awk); the entries of the programs not named, the order and the comments
+  # are kept. With no file named, the entries of programs not counted are dropped.
+  sort "$tmp/counts" > "$tmp/new"
+  awk -v keep="$named" -f scripts/merge-rows.awk "$tmp/new" "$expected" > "$tmp/expected"
   mv "$tmp/expected" "$expected"
   echo "wrote $expected"
 fi

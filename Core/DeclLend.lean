@@ -200,7 +200,7 @@ theorem d_declAcrossBody :
   refine .bind (.right (.dead (.dead .nil))) (.ret (d_declRaiseCb (by cdead))) ?_
   refine .bind (.right (.right (.dead (.dead .nil))))
     (.ret (.withbor1U (A := N₁) (B := .zero) (S := Sf) 0 (by cdead) rfl (fun _ h => by rcases h with h | h <;> simp [VFree] at h)
-      (by simp [VFree]) (by simp [VFree]) (Sf_unwind 0) declFin_closed (d_declFin (by cdead)))) ?_
+      (by simp [VFree]) (by simp [VFree]) (Sf_unwind 0) (d_declFin (by cdead)))) ?_
   refine .effLet (A := .tensor (.ref N₁) .zero) (.left (.left (.left (.dead (.dead .nil)))))
     (fun _ => Ctx.Dead.consumes (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))

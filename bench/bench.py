@@ -36,9 +36,11 @@ BCC = os.path.join(ROOT, ".lake", "build", "bin", "bcc")
 
 RUSTC = ["rustc", "--edition=2024", "--crate-type", "bin", "-C", "opt-level=3",
          "-C", "embed-bitcode=no", "-C", "strip=debuginfo"]
-CFLAGS = ["-O2", "-w"]
-# What `bcc run --native` passes (`Pipeline/Driver.lean`, `clangArgs`).
-BC_CFLAGS = ["-O2", "-w", "-pthread"]
+# What `bcc run --native` passes (`Pipeline/Driver.lean`, `clangArgs`), read from `bcc cc --flags`;
+# on macOS it pins the deployment target (`macosMinVersion`), which the C baselines share.
+BC_CFLAGS = subprocess.run([BCC, "cc", "--flags"], check=True, capture_output=True,
+                           text=True).stdout.split()
+CFLAGS = ["-O2", "-w"] + [f for f in BC_CFLAGS if f.startswith("-mmacosx-version-min=")]
 
 
 # The order of the table: table A of #537 (where Rust is famously good), then table B (where we

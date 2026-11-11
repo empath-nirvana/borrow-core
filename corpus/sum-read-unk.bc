@@ -1,0 +1,26 @@
+-- A field read through a shared borrow of a record whose other field is a sum holding a closure
+-- (SPEC §43). `t.id` reads the record at `Imm̲`, where the closure is `Unk` (SPEC §1): the cell's
+-- `(i64 + ((i32 => i32) + i32)) * i32` and the read's `(i64 + (Unk + i32)) * i32` are as wide,
+-- three words, but their sums are encoded otherwise. In the cell the inner sum is the outer's
+-- merged arm (three tags in one word, the closure a word of its own); in the read the inner sum is
+-- packed (`Unk` has no words) beside the outer's tag. The read is converted field by field
+-- (`reCopy`), not copied as its words: only the two encodings' agreement (`Lower.sameEnc`) licenses
+-- the copy. The read's sum is consumed, never matched (a `*` or a projection of a type holding a
+-- closure is refused), so a wrong copy would not change the answer; the program keeps the
+-- conversion compiled and run.
+--
+-- Answer: `(i32[51], (i32[32], i32[3]))`: `id` read through the borrow, plus ten times the arm's
+-- value after the borrow (`5`; `inc(2)`; nothing at `inl`).
+data R = { v: i64 + ((i32 => i32) + i32), id: i32 }
+
+fn peek<'a>(t: imm 'a R) -> i32 = t.id
+
+fn inc(x: i32) -> i32 = x + 1
+
+fn look(r: R) -> i32 =
+  let mut t = r;
+  let k = peek(&t);
+  match t { R { v, id } -> match v { inl a -> k | inr q -> match q { inl f -> k + 10 * f(id) | inr j -> k + 10 * j } } }
+
+main -> i32 * (i32 * i32) =
+  (look(R { v: inr (inr 5), id: 1 }), (look(R { v: inr (inl (unbang inc)), id: 2 }), look(R { v: inl i64[9], id: 3 })))

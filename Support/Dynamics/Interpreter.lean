@@ -52,13 +52,19 @@ inductive Stuck where
   | unhandled
   deriving DecidableEq, Repr
 
+/-- The operation a stopped term holds: `perform`, `raise` (`[spec §19]`) or `cancelTo`
+(`[spec §51]`). -/
+inductive OpKind where
+  | perform | raise | cancelTo
+  deriving DecidableEq, Repr
+
 inductive Step where
   | next  (μ : Mem) (e : Expr)
   | value (v : Val)
   | stuck (r : Stuck)
-  /-- The term is `K[perform p]` (`raise = false`) or `K[raise p]`, `K` catching nothing of it:
-  a stopped operation, for a frame outside to catch (`[spec §19]`). -/
-  | op (raise : Bool) (K : BoLo.Kont) (p : Val)
+  /-- The term is `K[perform p]`, `K[raise p]` or `K[cancelTo p]` (by `kind`), `K` catching
+  nothing of it: a stopped operation, for a frame outside to catch (`[spec §19, §51]`). -/
+  | op (kind : OpKind) (K : BoLo.Kont) (p : Val)
 
 /-!
 ### 3.37 · — no printed counterpart; the print gives a relation — · [TR] p. 4 · `[repair]`
@@ -115,9 +121,9 @@ def delta (H : Host) (μ : Mem) : Expr → Val → Step
 /-! ### Handlers, operations and finalisers  `[spec §19]`
 
 The capture steps of `Head` (`hret`, `hop`, `hunwind`, `uthen`, `ufin`, `ufinC`, `cfret`,
-`cferr`, `cfcancel`, `cancel`, `creraise`), executable: a `perform` or `raise` stops (`Step.op`),
-the stop passes outward through the frames that do not catch it, and the first that does
-reduces. -/
+`cferr`, `cfcancel`, `cancel`, `creraise`, and §51's `cancelTo`), executable: a `perform`, `raise`
+or `cancelTo` stops (`Step.op`), the stop passes outward through the frames that do not catch it,
+and the first that does reduces. -/
 
 /-- `e` is a value, decided. -/
 def isValB : Expr → Bool
@@ -150,7 +156,8 @@ theorem isVal_of_isValB : ∀ e : Expr, isValB e = true → IsVal e
   | .app (.prim .iterate) _, h
   | .app (.prim .perform) _, h
   | .app (.prim .raise) _, h | .app (.prim .hnd) _, h | .app (.prim .ubind) _, h
-  | .app (.prim .ccatch) _, h | .app (.prim .cfin) _, h => by simp [isValB] at h
+  | .app (.prim .ccatch) _, h | .app (.prim .cfin) _, h
+  | .app (.prim .cancelTo) _, h => by simp [isValB] at h
 
 /-- The value of a term that is one. -/
 def valOf? (e : Expr) : Option Val :=
@@ -168,10 +175,10 @@ def errOf : Expr → Option (Option Val)
   | .inj₂ e => (valOf? e).map some
   | _ => none
 
-/-- What the frame `f [·]` makes of the stopped operation `K[op p]`: a step when it catches it,
-or the stop passed outward. -/
-def catchOp (μ : Mem) (f : Expr) (r : Bool) (K : BoLo.Kont) (p : Val) : Step :=
-  let pass := Step.op r (.appR f K) p
+/-- What the frame `f [·]` makes of the stopped `K[perform p]` (`r = false`) or `K[raise p]`
+(`r = true`): a step when it catches it, or the stop passed outward. -/
+def catchOpPR (μ : Mem) (f : Expr) (r : Bool) (K : BoLo.Kont) (p : Val) : Step :=
+  let pass := Step.op (if r then .raise else .perform) (.appR f K) p
   match f, p.1 with
   | .app (.prim .hnd) (.pair (.prim (.lit (.i32 m))) (.pair qs (.pair hr hs))),
       .pair (.prim (.lit (.i32 n))) (.pair (.prim (.lit (.i32 i))) v) =>
@@ -215,16 +222,41 @@ def catchOp (μ : Mem) (f : Expr) (r : Bool) (K : BoLo.Kont) (p : Val) : Step :=
     else pass
   | _, _ => pass
 
+/-- What the frame `f [·]` makes of the stopped `K[cancelTo (n, k)]`: `[cancel-to]` at a handler
+of `n`, `ccatch (K†[raise (0, (0, none))]); k ()`; every other frame passes it outward.
+`[spec §51]` -/
+def catchCancelTo (μ : Mem) (f : Expr) (K : BoLo.Kont) (p : Val) : Step :=
+  let pass := Step.op .cancelTo (.appR f K) p
+  match f, p.1 with
+  | .app (.prim .hnd) (.pair (.prim (.lit (.i32 m))) _), .pair (.prim (.lit (.i32 n))) k =>
+    if n = m then
+      match valOf? k with
+      | some kv =>
+        .next μ (.seq (BoLo.ccatchE (K.dead.plug (BoLo.raiseE (.val (BoLo.cancelVal none)))))
+          (.app (.val kv) (.val .unit)))
+      | none => .stuck .badPrimArg
+    else pass
+  | _, _ => pass
+
+/-- What the frame `f [·]` makes of the stopped operation `K[op p]`: a step when it catches it,
+or the stop passed outward.  `[spec §19, §51]` -/
+def catchOp (μ : Mem) (f : Expr) (r : OpKind) (K : BoLo.Kont) (p : Val) : Step :=
+  match r with
+  | .perform => catchOpPR μ f false K p
+  | .raise => catchOpPR μ f true K p
+  | .cancelTo => catchCancelTo μ f K p
+
 /-- The frame's reduction when the term in it is a value: `[ret]`, `[then]`, `[cfin-ret]`, and
-`perform`/`raise` stopping. -/
+`perform`/`raise`/`cancelTo` stopping. -/
 def effApp? (μ : Mem) (f : Expr) (v : Val) : Option Step :=
   match f with
   | .app (.prim .hnd) (.pair _ (.pair _ (.pair hr _))) =>
       (valOf? hr).map fun h => .next μ (.app (.val h) (.val v))
   | .app (.prim .ubind) (.pair nn _) => (valOf? nn).map fun N => .next μ (.app (.val N) (.val v))
   | .app (.prim .cfin) s => (valOf? s).map fun st => .next μ (BoLo.raiseE (.val st))
-  | .prim .perform => some (.op false .hole v)
-  | .prim .raise => some (.op true .hole v)
+  | .prim .perform => some (.op .perform .hole v)
+  | .prim .raise => some (.op .raise .hole v)
+  | .prim .cancelTo => some (.op .cancelTo .hole v)
   | _ => none
 
 /-- One step of call-by-value reduction.

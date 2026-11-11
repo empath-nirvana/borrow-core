@@ -341,17 +341,17 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | withbor3 x hΓ hx hf₁ hf₂ => exact .withbor3 x (deadP_append h' hΓ) hx hf₁ hf₂
   | withload x hΓ hx hf₁ hf₂ => exact .withload x (deadP_append h' hΓ) hx hf₁ hf₂
   | withswap hΓ => exact .withswap (deadP_append h' hΓ)
-  | withbor1U x hΓ hx hsc hf₁ hf₂ hS hdc _ ihd =>
-      exact .withbor1U x (deadP_append h' hΓ) hx hsc hf₁ hf₂ hS hdc ihd
-  | withbor2U x hΓ hx hside hf₁ hf₂ hS hdc _ ihd =>
-      exact .withbor2U x (deadP_append h' hΓ) hx hside hf₁ hf₂ hS hdc ihd
-  | withbor3U x hΓ hx hf₁ hf₂ hS hdc _ ihd =>
-      exact .withbor3U x (deadP_append h' hΓ) hx hf₁ hf₂ hS hdc ihd
+  | withbor1U x hΓ hx hsc hf₁ hf₂ hS _ ihd =>
+      exact .withbor1U x (deadP_append h' hΓ) hx hsc hf₁ hf₂ hS ihd
+  | withbor2U x hΓ hx hside hf₁ hf₂ hS _ ihd =>
+      exact .withbor2U x (deadP_append h' hΓ) hx hside hf₁ hf₂ hS ihd
+  | withbor3U x hΓ hx hf₁ hf₂ hS _ ihd =>
+      exact .withbor3U x (deadP_append h' hΓ) hx hf₁ hf₂ hS ihd
   | withloadU x hΓ hx hf₁ hf₂ hS => exact .withloadU x (deadP_append h' hΓ) hx hf₁ hf₂ hS
-  | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS hdc _ ihd =>
-      exact .sliceBorrowMU x (deadP_append h' hΓ) hA hB hf₁ hf₂ hS hdc ihd
-  | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS hdc _ ihd =>
-      exact .sliceBorrowIU x (deadP_append h' hΓ) hsc hA hB hf₁ hf₂ hS hdc ihd
+  | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
+      exact .sliceBorrowMU x (deadP_append h' hΓ) hA hB hf₁ hf₂ hS ihd
+  | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS _ ihd =>
+      exact .sliceBorrowIU x (deadP_append h' hΓ) hsc hA hB hf₁ hf₂ hS ihd
   | lolliE hs _ _ iha ihf => exact .lolliE (splitP_append h' hs) iha ihf
   | allEV _ hlt ih => exact .allEV ih hlt
   | ofRet _ ih => exact .ofRet ih

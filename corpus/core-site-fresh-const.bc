@@ -1,0 +1,20 @@
+-- SPEC §76: a private site is fresh above every site of the program, those a constant's bracket
+-- writes among them. The only mention of site 1 is the `nu` type in `unfold[…]`; `scoped[site s]`'s
+-- instance takes site 2, so the program has one signature for `1.0`.
+--
+-- Answer: i32[4].
+
+def scoped[site s] : !U (U (F i32) -o F i32) =
+  !thunkv fun (k : U (F i32)) ->
+    handle_with[s](
+        ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+        (((!thunkv fun (x : i32) -> return x), ()) : !U (i32 -o F i32) * 1)) (
+      a <- force k; abort[s.0] a)
+
+def mk : !U (i32 -o F 1) =
+  !thunkv fun (n : i32) ->
+    f <- return (unbang (unfold[nu X. F[1.0 lin 1 ~> i32] (i32 + U X) & F 1, i32]
+      (!thunkv fun (s : i32) -> < return (inl s), return () >)));
+    (nu_out ((force f) n)).2
+
+main : F i32 = k <- return (thunk (return i32[4])); (unbang scoped) k

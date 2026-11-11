@@ -55,6 +55,8 @@ def VTy.respan (sp : Span) : VTy → VTy
   | .app _ G A => .app sp (G.respan sp) (A.respan sp)
   | .lapp _ G a => .lapp sp (G.respan sp) (a.respan sp)
   | .rowed _ G r => .rowed sp (G.respan sp) (r.respan sp)
+  | .rowArg _ r => .rowArg sp (r.respan sp)
+  | .siteArg _ n => .siteArg sp n
 
 def CTy.respan (sp : Span) : CTy → CTy
   | .ret _ A => .ret sp (A.respan sp)
@@ -73,7 +75,9 @@ def CTy.respan (sp : Span) : CTy → CTy
 
 def Row.respan (sp : Span) : Row → Row
   | .nil => .nil
-  | .cons n i q A B r => .cons n i q (A.respan sp) (B.respan sp) (r.respan sp)
+  | .cons n i q A B f r => .cons n i q (A.respan sp) (B.respan sp) (f.respan sp) (r.respan sp)
+  | .top => .top
+  | .var x => .var x
 
 def Shape.respan (sp : Span) : Shape → Shape
   | .leaf _ A => .leaf sp (A.respan sp)
