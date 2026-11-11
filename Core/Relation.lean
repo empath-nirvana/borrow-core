@@ -166,7 +166,8 @@ def vCE : Option (Nat → TEnt) → Bool → VTy → List SRec → LSub → Val 
 trivial unless `C` has the positive shape (`CTy.NuShape`, invariant under `CTyEq`; the rules ask
 `CTy.NuOk`, which adds that no leaf binder is free in `C`).  At `F_Σ A` the relation at the row's table is
 `effWp`: `cwp`, the greatest fixed point over segments, where the row holds `Div`, and `ewpTS`
-elsewhere.  `[spec §3, §7, §14, §19]` -/
+elsewhere.  A system of equations (`nuSys m i Cs`) is read at its spine as one body until its
+relation lands: no rule types a term at a system other than `νX. C`.  `[spec §3, §7, §14, §19, §79]` -/
 def cC : CTy → List SRec → LSub → Expr → WProp
   | .ret A, ls, δ, e => wpTS ls e (fun ls'' => vCE none true A ls'' δ)
   | .arr A C, ls, δ, e => fun ρ =>
@@ -176,7 +177,7 @@ def cC : CTy → List SRec → LSub → Expr → WProp
   | .top, _, _, _ => fun _ => True
   | .all x c C, ls, δ, e => fun ρ =>
       ∀ α, (⌜LtLife δ c α⌝ ─⋆ cC C ls (δ.extend x α) (.app e (.val .unit))) ρ
-  | .nu C, ls, δ, e => fun ρ => C.NuShape →
+  | .nuSys _ _ C, ls, δ, e => fun ρ => C.NuShape →
       ∃ R : CPred, R.Le (fun ls' e' => cB (some (nuEnv C R)) C ls' δ e') ∧ R ls e ρ
   | .eff n i q A B fin rc C, ls, δ, e =>
       effWp (CTy.eff n i q A B fin rc C).divAt (OpTab.ext n i
@@ -230,14 +231,14 @@ def cB : Option (Nat → TEnt) → CTy → List SRec → LSub → Expr → WProp
       ∀ v, (vCE none true A ls δ v ─⋆ cB η D ls δ (.app e (.val v))) ρ
   | η, .all x c D, ls, δ, e => fun ρ =>
       ∀ α, (⌜LtLife δ c α⌝ ─⋆ cB η D ls (δ.extend x α) (.app e (.val .unit))) ρ
-  | _, .top, _, _, _ | _, .nu _, _, _, _ =>
+  | _, .top, _, _, _ | _, .nuSys _ _ _, _, _, _ =>
       fun _ => True
 end
 
 theorem effRetE_none : ∀ (C : CTy) (δ : LSub), effRetE none C δ = effRet C δ
   | .ret _, _ => rfl
   | .eff _ _ _ _ _ _ _ C, δ => effRetE_none C δ
-  | .arr _ _, _ | .amp _ _, _ | .top, _ | .all _ _ _, _ | .nu _, _ => rfl
+  | .arr _ _, _ | .amp _ _, _ | .top, _ | .all _ _ _, _ | .nuSys _ _ _, _ => rfl
 
 /-- `𝒱⟦A⟧(ls)δ(v)`: the relation at a type read with no environment. -/
 notation "vC" => vCE none

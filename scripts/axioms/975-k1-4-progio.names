@@ -1,0 +1,13 @@
+-- #975 K1.4: progIO, a lent Output cell written across wait, resumed and cancelled, from HandlerLawN at the externs' models  [spec §72]
+BoCa.Fig16.LogRel.Core.Chain.SI.IO791N.ioRow_suspend
+BoCa.Fig16.LogRel.Core.Chain.SI.IO791N.d_dTakeOutputX
+BoCa.Fig16.LogRel.Core.Chain.SI.IO791N.ioC_okAt
+BoCa.Fig16.LogRel.Core.Chain.SI.IO791N.d_wbE
+BoCa.Fig16.LogRel.Core.Chain.SI.IO791N.d_cbIO
+BoCa.Fig16.LogRel.Core.Chain.SI.IO791N.d_bodyIO
+BoCa.Fig16.LogRel.Core.Chain.SI.IO791N.d_clRes
+BoCa.Fig16.LogRel.Core.Chain.SI.IO791N.d_clCan
+BoCa.Fig16.LogRel.Core.Chain.SI.IO791N.d_progIO
+BoCa.Fig16.LogRel.Core.Chain.SI.IO791N.ioX_meetsN
+BoCa.Fig16.LogRel.Core.Chain.SI.IO791N.progIO_res_orDiverges
+BoCa.Fig16.LogRel.Core.Chain.SI.IO791N.progIO_can_orDiverges

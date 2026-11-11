@@ -173,6 +173,20 @@ theorem fd_fill {μ : Heap} (h : FinDom μ) (ℓ : Loc) (n : ℕ) (v : Val) :
     exact List.mem_append_left _ (List.mem_range'_1.2 ⟨hr.1, hr.2⟩)
   · exact List.mem_append_right _ (hd k hk)
 
+/-- The copy step writes only cells of its destination range.  `[spec §74]` -/
+theorem fd_copyHeap {μ : Heap} (h : FinDom μ) (ℓd : Loc) (nd di : UInt32) (ℓs : Loc)
+    (ns si len : UInt32) : FinDom (BoCa.BoLo.copyHeap μ ℓd nd di ℓs ns si len) := by
+  obtain ⟨d, hd⟩ := h
+  refine ⟨List.range' (ℓd + di.toNat) len.toNat ++ d, fun k hk => ?_⟩
+  unfold BoCa.BoLo.copyHeap at hk
+  split at hk
+  · simp only [BoCa.BoLo.Heap.copy] at hk
+    split at hk
+    · rename_i hr
+      exact List.mem_append_left _ (List.mem_range'_1.2 ⟨hr.1, hr.2⟩)
+    · exact List.mem_append_right _ (hd k hk)
+  · exact List.mem_append_right _ (hd k hk)
+
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
 theorem fd_step1 {μ μ' : Heap} {e e' : Expr} (h : BoLo.Step1 (ℍ := ℍ) μ e μ' e')
@@ -184,6 +198,7 @@ theorem fd_step1 {μ μ' : Heap} {e e' : Expr} (h : BoLo.Step1 (ℍ := ℍ) μ e
     | exact fd_upd hf _ _
     | exact fd_del hf _
     | exact fd_fill hf _ _ _
+    | exact fd_copyHeap hf _ _ _ _ _ _ _
 
 theorem fd_empty : FinDom emp := ⟨[], fun _ h => absurd rfl h⟩
 

@@ -190,9 +190,9 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .boxE i j a A t => .boxE i j a A (t.shift d c)
   | .immSub i j a b A t => .immSub i j a b A (t.shift d c)
   | .mutSub i j a b A t => .mutSub i j a b A (t.shift d c)
-  | .withbor1U i j A B S x td => .withbor1U i j A B S x (td.shift d c)
-  | .withbor2U i j A B S x td => .withbor2U i j A B S x (td.shift d c)
-  | .withbor3U i j a A B S x td => .withbor3U i j a A B S x (td.shift d c)
+  | .withbor1UD i j A B SM SD S x td => .withbor1UD i j A B SM SD S x (td.shift d c)
+  | .withbor2UD i j A B SM SD S x td => .withbor2UD i j A B SM SD S x (td.shift d c)
+  | .withbor3UD i j a A B SM SD S x td => .withbor3UD i j a A B SM SD S x (td.shift d c)
   | .sliceBorrowMU i j A B S x td => .sliceBorrowMU i j A B S x (td.shift d c)
   | .sliceBorrowIU i j A B S x td => .sliceBorrowIU i j A B S x (td.shift d c)
   | .lolliE i j A B u ta tf => .lolliE i j A B (u.ins d c) (ta.shift d c) (tf.shift d c)
@@ -323,7 +323,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .allI _ _ x b _ _ t => AbsF.withO (.atom (.nfree x)) (t.absF (Δ.extend x b))
   | .bangThunkF _ _ _ t | .bangThunkV _ _ _ t => AbsF.withO (.atom .flat) (t.absF Δ)
   | .boxI _ _ a _ t => AbsF.withO (.atom (.outl Δ a)) (t.absF Δ)
-  | .withbor1U _ _ _ _ _ _ td | .withbor2U _ _ _ _ _ _ td | .withbor3U _ _ _ _ _ _ _ td
+  | .withbor1UD _ _ _ _ _ _ _ _ td | .withbor2UD _ _ _ _ _ _ _ _ td | .withbor3UD _ _ _ _ _ _ _ _ _ td
   | .sliceBorrowMU _ _ _ _ _ _ td | .sliceBorrowIU _ _ _ _ _ _ td =>
       AbsF.withO (.atom .pers) (td.absF Δ)
   | .effLet _ _ _ _ S _ tM tN =>

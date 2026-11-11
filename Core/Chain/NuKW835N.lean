@@ -114,7 +114,7 @@ theorem tabN_instT (S : VTy) : ∀ (D : CTy) (δ : LSub),
   | .eff m i q A B fin rc D, δ => by
       have h₁ := tabN_instT S D δ
       funext x; simp only [CTy.instT, tabN, h₁]
-  | .ret _, _ | .amp _ _, _ | .arr _ _, _ | .top, _ | .all _ _ _, _ | .nu _, _ => by
+  | .ret _, _ | .amp _ _, _ | .arr _ _, _ | .top, _ | .all _ _ _, _ | .nuSys _ _ _, _ => by
       funext x; simp only [CTy.instT, tabN]
 
 /-- `U X` at `𝒞⟦νX. C⟧δ₀` is `𝒱⟦U(νX. C)⟧δ`, at a `δ` agreeing with `δ₀` on `νX. C`. -/
@@ -159,7 +159,7 @@ theorem cBNP_unroll (T : VTy) (P : LocTy → Nat → Val → WRes → Prop) (F :
           cN (ℍ := ℍ) (D.instT T) (δ.extend x α) := fun α =>
         cBNP_unroll T P F δ₀ hP (D := D) hD (fun y hy => hfr y (Or.inr hy)) (δ.extend x α) (hag' α)
       funext Θ c n ls e ρ; simp only [cBNP, cN, CTy.instT, h₁]
-  | .top, hD, _, _, _ | .nu _, hD, _, _, _ => hD.elim
+  | .top, hD, _, _, _ | .nuSys _ _ _, hD, _, _, _ => hD.elim
 
 /-- **One unfolding at `𝒞⟦νX. C⟧` is `𝒞⟦C[U(νX. C)/X]⟧`** (Core's `cB_unroll`): `cBNP_unroll` at
 `U X` read at the candidate `𝒞⟦νX. C⟧δ₀` (`thunkRN_nuCand`), the tree read at `δ` agreeing on the
@@ -215,7 +215,7 @@ theorem cBNP_step (S : VTy) {P : LocTy → Nat → Val → WRes → Prop}
   | .all x _ D, δ, Θ, hΘ, c, n, ls, ρ, _, _, hs, h =>
       fun α hα => cBNP_step S hP D (δ.extend x α) Θ hΘ c n ls ρ _ _
         (fun μ => (hs μ).plug (Kont.appL .hole _)) (h α hα)
-  | .nu _, _, _, _, _, _, _, _, _, _, _, h => h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, _, _, _, h => h
   | .eff _ _ _ _ _ _ _ _, _, _, hΘ, _, _, _, _, _, _, hs, h =>
       cBNP_eff_det hP hΘ (fun μ => step1Only_of_step1N (hs μ)) h
 
@@ -428,7 +428,7 @@ theorem node_okP (C : CTy) (g : Val) (S : VTy) (kg : Nat) (T : VTy)
           Θ hΘ c j hj (childA cv .unit) (.app M (.val .unit)) ls ρ
           ((childA_steps cv .unit).trans (PureSteps.plug (.appL .hole _) hc)) (hM α hα))
   | .top, hD, _, _, _, _, _, _, _, _, _, _, _, _, _, _
-  | .nu _, hD, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => hD.elim
+  | .nuSys _ _ _, hD, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => hD.elim
 
 /-- **The node lemma at the candidate** (Core's `node_ok`): `node_okP` with `U X` read at the
 candidate at `δ`, which is the candidate at every `δ′` agreeing with `δ` on the state type's free

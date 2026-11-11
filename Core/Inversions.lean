@@ -421,6 +421,14 @@ theorem rigid_all (x : BoCa.Lifetime.LifeVar) (b : Lifetime.Life) (C : CTy) :
 theorem rigid_top : Rigid .top := by
   refine ⟨fun S Y h => effOf_ne_top S Y h.symm, fun _ _ h => ?_, fun _ h => ?_⟩ <;> cases h
 
+/-- A projection of a system other than today's `νX. C` is rigid: no same-term rule reads it.
+`[spec §79]` -/
+theorem rigid_nuSys {m i : Nat} (h : ¬ (m = 0 ∧ i = 0)) (C : CTy) : Rigid (.nuSys m i C) := by
+  refine ⟨fun S Y hS => ?_, fun _ _ h' => ?_, fun _ h' => ?_⟩
+  · cases S <;> simp [CTy.effOf] at hS
+  · cases h'
+  · cases h'; exact h ⟨rfl, rfl⟩
+
 /-- An α-equivalent of a type that is no row's is no row's. -/
 theorem alpha_not_effOf {D D' : CTy} (hα : CTy.alphaB [] D D' = true)
     (hD : ∀ S A, D ≠ CTy.effOf S A) : ∀ S A, D' ≠ CTy.effOf S A := by
@@ -435,7 +443,9 @@ theorem Rigid.alpha {D D' : CTy} (hD : Rigid D) (hα : CTy.alphaB [] D D' = true
     cases D <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
     exact ha _ _ rfl
   · rintro C rfl
-    cases D <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
+    cases D <;> simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, reduceCtorEq,
+      Bool.false_eq_true] at hα
+    obtain ⟨⟨rfl, rfl⟩, -⟩ := hα
     exact hn _ rfl
 
 /-- A same-term rule leaves a rigid type only for an α-equivalent of it. -/
@@ -518,9 +528,10 @@ theorem JR.ampNu {D : CTy} {j : Jdg} (hr : JR (.comp D) j) (hD : AmpNu D) :
       | @alpha _ D'' hα =>
           refine ⟨D'', rfl, ?_⟩
           rcases hD' with ⟨_, _, rfl⟩ | ⟨_, rfl⟩ <;> cases D'' <;>
-            simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
+            simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, reduceCtorEq,
+              Bool.false_eq_true] at hα
           · exact .inl ⟨_, _, rfl⟩
-          · exact .inr ⟨_, rfl⟩
+          · obtain ⟨⟨rfl, rfl⟩, -⟩ := hα; exact .inr ⟨_, rfl⟩
 
 /-- An `&`-tree instantiated is an `&`. -/
 theorem instT_amp_of_nuOk {C : CTy} (hC : C.NuOk) (T : VTy) :
@@ -585,9 +596,10 @@ theorem AmpCls.step {C₁ C₂ : CTy} {j j' : Jdg} (hs : JS j j') (h : AmpCls C�
   | @alpha D D' hα =>
       rcases h with ⟨D₁, D₂, h, h₁, h₂⟩ | ⟨C, C₀, h, hC₀, hα₀, hu⟩ <;>
         simp only [Jdg.comp.injEq] at h <;> subst h <;> cases D' <;>
-        simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at hα
+        simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, reduceCtorEq, Bool.false_eq_true] at hα
       · exact .inl ⟨_, _, rfl, CTy.alphaB_trans' h₁ hα.1, CTy.alphaB_trans' h₂ hα.2⟩
-      · exact .inr ⟨_, C₀, rfl, hC₀, CTy.alphaB_trans' hα₀ hα, hu⟩
+      · obtain ⟨⟨rfl, rfl⟩, hα⟩ := hα
+        exact .inr ⟨_, C₀, rfl, hC₀, CTy.alphaB_trans' hα₀ hα, hu⟩
 
 /-- **An `&` is read at itself and at the `ν`s that unroll to it**, up to α-equivalence. -/
 theorem JR.amp {C₁ C₂ : CTy} {j : Jdg} (hr : JR (.comp (.amp C₁ C₂)) j) : AmpCls C₁ C₂ j := by
@@ -1022,8 +1034,8 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       · obtain ⟨T, hT⟩ := ihN (k + 1) (hasVar_fill hcl _ 0 (k + 1) (by omega) hk)
         exact ⟨T, slot_succ hT⟩
       · exact absurd hk (not_hasVar_closed hcl)
-  | withbor1U _ _ _ _ _ _ _ _ ih | withbor2U _ _ _ _ _ _ _ _ ih
-  | withbor3U _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
+  | withbor1UD _ _ _ _ _ _ _ _ _ _ _ _ ih | withbor2UD _ _ _ _ _ _ _ _ _ _ _ _ ih
+  | withbor3UD _ _ _ _ _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
   | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih =>
       intro k hk; exact ih k (hasVar_withborUE hk)
   | foldImm => intro k hk; exact absurd hk (not_hasVar_closed (foldImmV_closed _))
@@ -1743,9 +1755,10 @@ def ReleaseTy (T : VTy) : Prop :=
     ((∃ A, X = .bang A) ∨ (∃ a A, X = .imm a A) ∨ (∃ a A, X = .mut a A) ∨ X = .unk)) ∨
   (∃ a A, T = .bang (.thunk (.arr (.fam (.imm a A)) (.ret .unit))))
 
-/-- The unwinding constants' types: `U(src ⊸ cb ⊸ F_Σ R)`, the callback's argument a borrow. -/
+/-- The unwinding constants' types: `U(src ⊸ cb ⊸ F_Σ R)`, the callback's argument a borrow, the
+callback at a row `Σ_M` of its own.  `[spec §19, §27]` -/
 def WithborUTy (T : VTy) : Prop :=
-  ∃ src x bnd L B S R, T = withborUTy src (cbUTy x bnd L B S) S R ∧ L.persistent = false
+  ∃ src x bnd L B SM S R, T = withborUTy src (cbUTy x bnd L B SM) S R ∧ L.persistent = false
 
 /-- The other λ-constants. -/
 def OtherLam (e : Expr) : Prop :=
@@ -2288,21 +2301,21 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | releaseUnk =>
       intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inr (.inr rfl))⟩))
   | arrRelease => intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inr ⟨_, _, rfl⟩))
-  | withbor1U x =>
+  | withbor1UD x =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
-  | withbor2U x =>
+      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
+  | withbor2UD x =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
-  | withbor3U x =>
+      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
+  | withbor3UD x =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
+      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
   | sliceBorrowMU x =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
+      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
   | sliceBorrowIU x =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
+      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
   | force => intro M he; rcases forceE_var he with h | h <;> cases h
   | _ => intro M he; cd_at he
 
@@ -2687,7 +2700,10 @@ theorem rigid_or_ampNu {C : CTy} (h : C.isRet = false) : Rigid C ∨ AmpNu C := 
   | all x b C => exact .inl (rigid_all x b C)
   | top => exact .inl rigid_top
   | amp C D => exact .inr (.inl ⟨C, D, rfl⟩)
-  | nu C => exact .inr (.inr ⟨C, rfl⟩)
+  | nuSys m i C =>
+      by_cases hmi : m = 0 ∧ i = 0
+      · obtain ⟨rfl, rfl⟩ := hmi; exact .inr (.inr ⟨C, rfl⟩)
+      · exact .inl (rigid_nuSys hmi C)
 
 /-- A value class read at a value, or at a row over it. -/
 theorem ValCls.at {T₀ T : VTy} {j : Jdg} (h : ValCls T₀ j)

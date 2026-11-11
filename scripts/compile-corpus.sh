@@ -255,7 +255,7 @@ program() {
   fi
   if grep -q '^-- check: no-source' "$f"; then
     local why
-    why=$(sed -n 's/^-- check: no-source: *//p' "$f" | head -1)
+    why=$(sed -n '/^-- check: no-source: */{s///p;q;}' "$f")
     note=" (no-source: not run at the source stage: ${why:-too large for the source interpreter})"
   elif withSource "$f" "$w/key" "$w/why"; then
     stages="source $stages"

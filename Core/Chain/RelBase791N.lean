@@ -294,7 +294,7 @@ def noEffSpine : CTy → Prop
   | .amp C D => noEffSpine C ∧ noEffSpine D
   | .top => True
   | .all _ _ C => noEffSpine C
-  | .nu _ => False
+  | .nuSys _ _ _ => False
   | .eff _ _ _ _ _ _ _ _ => False
 
 /-! ### The lifetime order -/
@@ -324,7 +324,7 @@ def _root_.BoCa.Fig16.LogRel.Core.CTy.inFrag : CTy → Bool
   | .amp C D => C.inFrag && D.inFrag
   | .top => true
   | .all _ _ C => C.inFrag
-  | .nu C => C.inFragNu
+  | .nuSys _ _ C => C.inFragNu
   | .eff _ _ _ A B fin _ C => A.inFrag && B.inFrag && fin.inFrag && C.inFrag
 /-- The value-type formers a `ν` body covers: `VTy.inFrag`'s, and the body's variable `X`
 (index `0`). A thunk is read by `vN`, where `X` does not occur. -/
@@ -343,7 +343,7 @@ def _root_.BoCa.Fig16.LogRel.Core.CTy.inFragNu : CTy → Bool
   | .amp C D => C.inFragNu && D.inFragNu
   | .top => true
   | .all _ _ C => C.inFragNu
-  | .nu C => C.inFragNu
+  | .nuSys _ _ C => C.inFragNu
   | .eff _ _ _ A B fin _ C => A.inFragNu && B.inFragNu && fin.inFrag && C.inFragNu
 end
 

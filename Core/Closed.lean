@@ -138,8 +138,8 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | zeroE hs _ ihV =>
       rw [(splitP_length hs).1] at ihV
       simp [absurdE, closedAt, ihV]
-  | withbor1U _ _ _ _ _ _ _ _ ih | withbor2U _ _ _ _ _ _ _ _ ih
-  | withbor3U _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
+  | withbor1UD _ _ _ _ _ _ _ _ _ _ _ _ ih | withbor2UD _ _ _ _ _ _ _ _ _ _ _ _ ih
+  | withbor3UD _ _ _ _ _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
   | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih =>
       exact withborUE_closedAt ih
   | foldImm => exact closedAt_of_zero (foldImmV_closed _) _
@@ -301,6 +301,14 @@ theorem heapClosed_del {μ : Heap} (hμ : HeapClosed μ) (ℓ : Loc) : HeapClose
   by_cases hk : k = ℓ
   · subst hk; simp at h
   · rw [Heap.del_other hk] at h; exact hμ k w h
+
+/-- The copy step's write keeps a closed memory closed: it stores cells of the memory.
+`[spec §74]` -/
+theorem heapClosed_copyHeap {μ : Heap} (hμ : HeapClosed μ) (ℓd : Loc) (nd di : UInt32) (ℓs : Loc)
+    (ns si len : UInt32) : HeapClosed (BoCa.BoLo.copyHeap μ ℓd nd di ℓs ns si len) := by
+  intro k w h
+  obtain ⟨k', h'⟩ := BoCa.BoLo.copyHeap_some h
+  exact hμ k' w h'
 
 theorem heapClosed_fill {μ : Heap} (hμ : HeapClosed μ) (ℓ : Loc) (n : ℕ) {v : Val}
     (hv : closedAt 0 v.1 = true) : HeapClosed (μ.fill ℓ n v) := by
@@ -602,6 +610,9 @@ theorem closed_head {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ
   | split ℓ n i =>
       refine ⟨?_, hμ⟩
       simp only [splitAns]; split <;> rfl
+  | sliceCopy ℓd nd di ℓs ns si len _ =>
+      refine ⟨?_, heapClosed_copyHeap hμ ℓd nd di ℓs ns si len⟩
+      simp only [copyAns]; split <;> rfl
   | drop f ℓ n =>
       simp only [closedAt, Expr.val, Val.prim, Val.pair, Val.arr, Bool.and_eq_true] at ha
       exact ⟨closedAt_dropFill ha.2.1 ℓ _ _, hμ⟩

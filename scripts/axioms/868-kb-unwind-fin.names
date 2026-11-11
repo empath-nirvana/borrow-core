@@ -1,0 +1,19 @@
+-- #868 K-b: the unwinding lends' finaliser at its own row  [spec §19, §27]
+BoCa.Fig16.LogRel.Core.ewp_unwindD
+BoCa.Fig16.LogRel.Core.fin_runD
+BoCa.Fig16.LogRel.Core.withbor1UD_compatX
+BoCa.Fig16.LogRel.Core.withbor2UD_compatX
+BoCa.Fig16.LogRel.Core.withbor3UD_compatX
+BoCa.Fig16.LogRel.Core.CDerives.withbor1U
+BoCa.Fig16.LogRel.Core.CDerives.withbor2U
+BoCa.Fig16.LogRel.Core.CDerives.withbor3U
+BoCa.Fig16.LogRel.Core.Chain.SI.erwpK_unwindD
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claimD
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claimID
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claimMD
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor1UD_sem
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor2UD_sem
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor3UD_sem
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor1UD_compatN
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor2UD_compatN
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.withbor3UD_compatN
