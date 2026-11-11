@@ -117,6 +117,7 @@ core-row-capture-global 0 0 0 0 0 0
 core-row-generic 0 0 0 0 0 0
 core-row-key-tparam 0 0 0 0 0 0
 core-row-pipe-stop 0 0 0 0 0 0
+core-row-splice 0 0 0 0 0 0
 core-site-fresh-const 0 0 0 0 0 0
 core-site-generic 0 0 0 0 0 0
 core-unsigned 0 0 0 0 0 0 # every value is a word: the unsigned integers are held as the signed ones are

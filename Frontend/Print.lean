@@ -146,6 +146,9 @@ def Row.pp : Row → String
       | r => e ++ ", " ++ r.pp
   | .top => "top"
   | .var x => ".." ++ x
+  | .splice x r => match r with
+    | .nil => ".." ++ x
+    | r => ".." ++ x ++ ", " ++ r.pp
 
 def Shape.pp : Shape → String
   | .leaf _ A => "leaf " ++ A.pp 4
