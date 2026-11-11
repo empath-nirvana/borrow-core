@@ -59,6 +59,33 @@ Stage `i` (0 ≤ i < n) reads wire `i` (type `A_i`, end `K_i`) and writes wire `
 - **Addendum (as built):** `close_down_i` stays only as the stop arm's cancel-path finaliser (`REIFY(close_up_i) unwind close_down_i`), a typing obligation of `[then]`. The kernel absorbs a cancel during a cleanup region (SPEC §19 *Cancels*, `[cfin-cancel]`), so the path is reachable when an upstream cleanup performs a capturable op. Thm X gains a clause: such a cancel is absorbed, the region completes with its first error kept, and the remaining stages (n−1…i) then stop downstream-first. That is the specified behaviour; no `UNPROVED:` is needed.
 - **Built:** `pipe-first-error` gives `123`/`inr 20`, and the catch case gives `123`/`inl 40`.
 
+**Rev 2.7 (after L1's independent review, 2026-11-11; diagnosis in `theory/pipes-l1-diagnosis.md`).** Rev 2.6 realised "raise at κ_i" by elaborating each `stop()` *call*, and its claim of "the same observables as the model's raise in s_i" was argued only for a call written in s_i's own body. W2 (a `stop()` performed through a helper `fn`) falls in that gap. The laws are unchanged: P1/P1b already define `stop()` dynamically. This revision restates the realisation's obligation and gives two realisations without choosing between them.
+
+- **(S) `stop()`'s raise is a property of the operation.** At *every* perform of `Stream.stop` in s_i's dynamic extent (in s_i's body, in a helper it calls at any depth, under any handler s_i installs), the outcome of `close_up_i` reaches that perform site as follows:
+  - **no error:** the perform answers `K_i`;
+  - **an error:** the perform raises, at that site, the error's operation with its payload.
+
+  A handler between the perform and s_i's boundary catches it. Uncaught, it unwinds s_i, and then `close_others_i` stops the downstream: the order upstream, s_i, downstream (`123`).
+- **(I) The same operation instance.** "The error's operation" is the upstream cleanup's operation *instance*: its effect, its type arguments, and its operation index. Under §19 two instances of one effect at different type arguments are different operations. Rev 2.6's "re-raises it by effect name" is withdrawn; it admitted the coarse key of W1.
+- **Two realisations of (S), presented without choosing:**
+  1. **Per-site re-raise (rev 2.6's construction, extended).** Every perform site of `stop()` in s_i's extent is elaborated as `match stop() { inl () → () | inr p → raise_j(e) }`, keyed by (I).
+     - A helper performing `stop()` must see `1 + KP` and hold the upstream's abortive operations in its row. That means a row/site parameter (§76) or per-chain specialisation of the helper.
+     - The simulation case for `Stop` then needs a lemma, over the stage transformation, that *every* perform site is so elaborated: recognition must come from the elaborated row and call graph, not from a syntactic scan.
+     - Its cost is per perform site, plus the helper's parameters.
+  2. **Resume κ_i with a raise.** The glue resumes the stored κ_i *with a raise* of the kept error (§29a's "a cancel as a resume with a raise" shape) rather than with a value.
+     - The raise occurs at the perform site, whatever its depth, with no call-site elaboration, and `stop()` keeps its declared answer `K`.
+     - The simulation case for `Stop` is one glue case.
+     - It needs the resume-with-raise form to be available to the connector's handler: today it reaches core only through the checker's `effAwait`, which L1 doesn't emit [kernel-foreman, question A3].
+     - With it, the reify handler outside `close_up_i`'s region still turns the region's first error into a value (one summand per operation instance), and the glue raises that value into κ_i.
+
+  In both realisations, §75's restrictions stand: `K_i = 1`, upstream abortive effects all-abortive, and s_i's row holding the upstream's abortive operations. They now apply to every function in s_i's extent that performs `stop()`.
+- **Rev 2.4 (b), the raise case, added.** A raise in a `for` body over a chain is P1b Thm R at the last stage. The body runs at the site operation, which the glue performs under `close_all`. The raise unwinds through `close_all`, which stops every stage downstream-first in one region, and the reported error is `sel_ii`'s. **Condition (explicit now):** at the site operation, nothing the glue holds is live except the stage states that `close_all` stops and the `for`'s `w`, which travels in the operation's argument. In particular no generated linear temporary is live across it. (The review's `for-raise2` refusal is the generated glue breaking this condition.)
+- **What this revision does not change:** P1, P1b and their theorems; I1′, I2, I5 and I6; the frame lists; (ii)/`sel_ii`; NP-absorbed-cleanup; the open (ii) reading (10 vs 20).
+- **For §75 (via docs-foreman, as a follow-up to L1's SPEC):**
+  - "At an effectful upstream, `rest` is #910's stored generator over a row" moves to *Open* (it waits on #910).
+  - "A `fn` `Log` in a middle stage's cleanup is fine" stays as a *row* fact, with a condition added: if the stage holds `Log`'s capability between turns, that is the *Open* item below.
+  - New *Open* item: "a stage's stored rest holding a lend or capability between turns". The model has no lends, so this is a kernel/checker question, and the elaborator does not decide it.
+
 **Rev 2.5 (L1 code size, 2026-11-11):** the generator uses one shared frame function per stage, and each list becomes a chain of calls to them. **This is covered as written:** L-region concerns the *dynamic* nest of `withStop` frames, and a call adds no handler or finaliser. Three conditions:
 1. each shared frame function installs exactly one `withStop_j` and does nothing else effectful;
 2. **one cancel region per list instance, wrapping the whole call chain.** One region per function would break (ii), because the latest error would win across regions;
