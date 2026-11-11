@@ -2506,9 +2506,11 @@ UNPROVED: that `consume_up x` frees exactly the cells and arrays the kernel's co
 `consumeE (.mu T)` frees (`foldOwnG` at results `1`: Json's body is in `P`, not in `FShape`), in
 another order, and observes nothing else. It should hold because both functions free exactly
 their arguments: each step moves owned values between owned places of the same type (a slot
-holds the work pending, at the slot's own type) and frees a node only when nothing is left in it,
-which `Lint` checks of the LIR (each variable consumed once) and the LIR interpreter checks of
-every run (no array freed with a written slot, `live 0`); and the order is unobservable because
+holds the work pending, at the slot's own type) and frees an array only when none of its slots is
+written (the nodes themselves are unboxed values: nothing to free). `Lint` checks the LIR's
+variables (each consumed once) but tracks no slot's contents: that a slot is taken before it is
+written and that every slot is empty at `freeArr` is checked only by the LIR interpreter, on the
+corpus runs (no array freed with a written slot, `live 0`), not natively; and the order is unobservable because
 every leaf is closed and inert (`consumeW?`): its consume runs no code. A mismatch shows as a leak
 or a double free in `live`, or a disagreement with the source stage.  `[spec §77]` -/
 def genConsumeW (fuel : Nat) (T : VTy) (up down : Nat) : CM Unit := do

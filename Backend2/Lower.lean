@@ -750,6 +750,11 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     return s ++ (← emit d (locs a ++ locs vs))
   | .slotPop => do
     -- The array's last slot moved out; the family's length is one less, its base the object's.
+    -- UNPROVED: that the family is not empty. At `n = 0` the length wraps and the load is of a
+    -- wild address. It should hold because the one emitter, `stepW` (`Convert.lean`), pops only
+    -- under its test `1 < n` (`ifLt o n₁`) on the same family; the LIR interpreter refuses a pop
+    -- of an empty family on every corpus run. If another emitter pops unguarded, native code reads
+    -- past the array.
     let leaf ← leafOf (← argN 0)
     let st ← slotStride leaf
     let a ← arg 0

@@ -172,6 +172,7 @@ def slotPopBad (p : Prog) (x : Var) : List Var → Option String
       if !f.sameRep (.fam (.ref c)) then some s!"answers the family {f}, not its operand's"
       else if !c'.sameRep c then some s!"answers contents {c'} for slots of {c}"
       else none
+    | some (.fam (.ref c)), some t => some s!"answers {t}, not a pair of the family and its slot's contents {c}"
     | some t, _ => some s!"of {t}, which is not an owned array"
     | none, _ => some s!"of x{a}, which has no type"
   | as => some s!"on {as.length} operands"

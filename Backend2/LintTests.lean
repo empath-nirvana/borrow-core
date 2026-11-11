@@ -329,5 +329,7 @@ def popProg (a r : LTy) : Prog where
 -- Answering another family, or contents of another type: refused.
 #guard refuses (popProg (.fam (.ref i32T)) (.pair (.fam (.ref (.int .w64))) i32T)) "not its operand's"
 #guard refuses (popProg (.fam (.ref i32T)) (.pair (.fam (.ref i32T)) (.int .w64))) "answers contents"
+-- Answering no pair: refused, as such.
+#guard refuses (popProg (.fam (.ref i32T)) i32T) "not a pair of the family"
 
 end Backend2.LintTests
