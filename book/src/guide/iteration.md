@@ -299,6 +299,41 @@ main -> 1 =
 `|>` into a handler is `with`: `e |> to_result` is `with to_result { e }`
 ([Effects and handlers](effects.md#computation-parameters-and-)).
 
+### Stream stages
+
+A **stage** is a function that reads a stream: it performs `include pipe`'s
+`Stream[A, K]`, whose `next()` answers an item `inl a` or the end `inr k`. A middle stage also
+yields. `>|` (or `|>`) from a generator into a stage makes one chain, and the chain runs on one
+connector. Each stage keeps its own state between items, and the stages are closed
+downstream-first.
+
+```bc
+include io
+include pipe
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn scale(c: i32) -> 1 with Stream[i32, 1], Yield[i32] =
+  let mut go = true;
+  while go { match next() { inl x -> yield(x * c) | inr u -> go = false } };
+  ()
+
+fn sum_all() -> i32 with Stream[i32, 1] =
+  let mut s = 0;
+  let mut go = true;
+  while go { match next() { inl x -> s = s + x | inr u -> go = false } };
+  s
+
+main -> 1 =
+  let t = range(0, 10) >| scale(3) >| sum_all;
+  print_dec(t);
+  print_byte(b'\n')
+-- output: 135
+```
+
 ## Borrows and loops
 
 A borrow block around a loop is free: the loop body can use the borrow at every step. What the
