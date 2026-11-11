@@ -194,6 +194,10 @@ leetcode/dp/0039-combination-sum-loop 40 0 0 5494 4929 4861 # as 0039-combinatio
 lend-call-raise 9 0 0 34 31 4 # the cells of the eight lending runs, those scoped to a call included, and the table
 lend-call-record 1 0 0 6 2 0 # the cell scoped to the call, freed by the unwinding lend's finaliser
 lend-tail-call 1 0 0 10 6 0
+linear-dropped-k-owned 2 0 0 9 9 9
+linear-gen-ctl-buffer 4 0 0 9 9 6
+linear-move-in-restore 3 0 0 17 17 17
+linear-pipe-move-in 3 0 0 17 17 17
 lit-lend-raise 6 0 0 69 30 39 # one array per literal view: the unwinding form is not marked as a literal's view (SPEC §18), so the table is tabulated into the heap
 load-for-linear 1 0 0 155 65 19
 mut-control-assign-raise 0 0 0 6 6 0
@@ -521,6 +525,7 @@ operator-rounds 166 0 24 1551 823 0 # the cluster's and the desired state's list
 parse-int 4 0 0 240 80 137 # the line buffer, reused; literal views read-only data
 parse-recover 246 0 31 1808 984 28 # the token list's nodes and the lists rebuilt per statement; the copies are the written `clone(rest)` per statement
 parse-recover-gen 227 0 31 1943 1147 108
+parse-recover-view 19 0 0 415 267 129 # the tokens lent as a view and read by index: no list is built, so `parse-recover-gen`'s token list and its two clones per statement are gone
 pipe-bracket 3 0 0 3 3 0 # each bracketing is the nested calls
 pipe-handlers 0 0 0 0 0 0
 pipe-left-row 3 0 0 3 3 0

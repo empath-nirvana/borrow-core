@@ -2018,6 +2018,22 @@ corpus/lend-shadow.bc flows [0, 4294967295]; main []
 corpus/lend-tail-call.bc flows [0, 4294967295], finaliser; main [1], finaliser
 corpus/lend-tail-call.bc 19:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/lend-tail-call.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/linear-dropped-k-owned.bc flows [0, 2, 4294967295], finaliser; main [1, 2], finaliser
+corpus/linear-dropped-k-owned.bc 24:9: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/linear-dropped-k-owned.bc 24:45: handle 2: inside [], finaliser; row [1]; ops 2.0 resume-or-cancel; names 2.0 [1]; condition 2 fails at 1
+corpus/linear-dropped-k-owned.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/linear-dropped-k-owned.bc 2.0 resume-or-cancel: machine; condition 2 fails; -
+corpus/linear-gen-ctl-buffer.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
+corpus/linear-gen-ctl-buffer.bc 22:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/linear-gen-ctl-buffer.bc 33:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/linear-gen-ctl-buffer.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/linear-gen-ctl-buffer.bc 1.0 tail: direct; condition 2 holds; agree
+corpus/linear-move-in-restore.bc flows [0, 1, 4294967295]; main [1]
+corpus/linear-move-in-restore.bc 22:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/linear-move-in-restore.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/linear-pipe-move-in.bc flows [0, 1, 4294967295]; main [1]
+corpus/linear-pipe-move-in.bc 17:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/linear-pipe-move-in.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/list-blocks.bc flows [0, 2, 4294967295], finaliser; main [1, 2, 3], finaliser
 corpus/list-blocks.bc 22:12: handle 3: inside [], finaliser; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
 corpus/list-blocks.bc 19:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
@@ -2153,6 +2169,14 @@ corpus/parse-recover-gen.bc 139:3: handle 1: inside []; row []; ops 1.0 tail; na
 corpus/parse-recover-gen.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/parse-recover-gen.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/parse-recover-gen.bc 1.0 tail: direct; condition 2 holds; agree
+corpus/parse-recover-view.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
+corpus/parse-recover-view.bc 121:3: handle 2: inside [2, 3], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/parse-recover-view.bc 102:3: handle 2: inside [3], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/parse-recover-view.bc 105:13: handle 3: inside [], finaliser; row [2]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/parse-recover-view.bc 116:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 row; condition 2 holds
+corpus/parse-recover-view.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/parse-recover-view.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/parse-recover-view.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/parse-recover.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/parse-recover.bc 135:3: handle 1: inside [1, 2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/parse-recover.bc 121:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds

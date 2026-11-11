@@ -705,6 +705,12 @@ corpus/lend-pipeline.bc 3.0 cancellable stored,tail: machine: a path of the clau
 corpus/lend-pipeline.bc 2.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/lend-pipeline.bc 1.0 cancellable tail: direct; agree
 corpus/lend-tail-call.bc 1.0 cancellable abortive: branch; agree
+corpus/linear-dropped-k-owned.bc 1.0 cancellable abortive: branch; agree
+corpus/linear-dropped-k-owned.bc 2.0 cancellable resume-or-cancel: machine: the handlers of the name have 2 clauses for it; agree
+corpus/linear-gen-ctl-buffer.bc 2.0 cancellable abortive: branch; agree
+corpus/linear-gen-ctl-buffer.bc 1.0 cancellable tail: direct; agree
+corpus/linear-move-in-restore.bc 1.0 cancellable abortive: branch; agree
+corpus/linear-pipe-move-in.bc 1.0 cancellable abortive: branch; agree
 corpus/list-blocks.bc 1.0 cancellable abortive: branch; agree
 corpus/list-blocks.bc 2.0 cancellable abortive: branch; agree
 corpus/list-blocks.bc 3.0 cancellable abortive: branch; agree
@@ -742,6 +748,9 @@ corpus/parse-int.bc 2.0 cancellable abortive: branch; agree
 corpus/parse-recover-gen.bc 1.0 cancellable tail: direct; agree
 corpus/parse-recover-gen.bc 2.0 cancellable abortive: branch; agree
 corpus/parse-recover-gen.bc 3.0 cancellable abortive: branch; agree
+corpus/parse-recover-view.bc 1.0 cancellable tail: direct; agree
+corpus/parse-recover-view.bc 2.0 cancellable abortive: branch; agree
+corpus/parse-recover-view.bc 3.0 cancellable abortive: branch; agree
 corpus/parse-recover.bc 1.0 cancellable abortive: branch; agree
 corpus/parse-recover.bc 2.0 cancellable abortive: branch; agree
 corpus/pipe-bracket.bc 4.0 cancellable stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
