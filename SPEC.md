@@ -13398,7 +13398,7 @@ Rejects:
   is #766 Phase B's.
 - **Effects are dynamically scoped:** a value that performs at a handler's site may leave it and
   run under another instance (decision 57's lexical R3 is not adopted; #1052). A narrowed lexical
-  rule is an option recorded under the `State`-effect study.
+  rule is an option recorded in #1058.
 - Row aliases (`row Io = Fail[IoError], Async`), deferred as in #766.
 - The spelling of everything above.
 
