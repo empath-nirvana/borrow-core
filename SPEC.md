@@ -13161,6 +13161,106 @@ probes that differ write `>|`, which main does not parse.
 
 ---
 
+## 71. Entry 70 — the new backend: a tail clause's captures passed as evidence (#960, E1)
+
+### Motivation
+
+§47 calls a tail-resumptive clause directly only when it is closed (`closedAt 0`). A `tail` clause
+that reads a value captured at its handler (a handler parameter at a `!` type, say) is otherwise a
+state machine: a suspension per `perform` and a drive at the node. Rust calls it directly with the
+closure's environment. The kernel's `[handle]` makes every captured value persistent
+(`hd : Ctx.DeadP Γ₁`), so the captures can be passed by value.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration, semantics or erasure.
+
+### Lowering (`Backend2/`)
+
+- **Direct kinds** (`Driver.directFacts`). Each operation's direct call is `closed`, `env` or `no`.
+  `env` is §47's conditions (`ks` via `classifyHandler_sound`, `cond2B` at `Checked.flows`, one
+  clause erasure, one row and signature up to `[α]`), with `closedAt 0` replaced by: the clause
+  erasure's free variables are slots of the node's context (`freeAt`); their types, as the
+  clause's typed term records them (`var`, `force`, `app`: `slotTypes`), are persistent; they
+  agree at every node up to `[α]` (`tyEqV`); and they hold no row naming a name with an `env`
+  operation. A name's evidence is the captured slots of its `env` clauses, in slot order.
+- **The names that take evidence are decided before conversion** by `evNames`, from the checked
+  conditions above. A name is excluded if its evidence would reach a machine row or a `&` or `ν`
+  component, a generated helper other than `bounded_fix`, a work whose `handle` node's outer row
+  holds a machine operation or another evidence name, a name in the outer row of a node with a
+  directly called clause, or a captured value with no LIR type. A task-variant code never takes
+  evidence; meeting one that would is an internal error.
+  Excluding a name can make new machine operations, so `evNames` repeats to a fixed point. A call
+  with no evidence in scope then cannot arise; meeting one is an internal error. Conversion runs
+  once.
+- **Evidence types** (`Types.ofC ms fd`). `F_Σ R` at a row holding names of `fd` is
+  `Ev_Σ ⊸ ⟦F_Σ R⟧` (`LCTy.ev n e k`): one parameter per captured slot, names in the row's order,
+  after the code's argument. `[sub]` drops what the smaller row lacks: a call passes what its
+  callee's type takes.
+- **LIR.** `Tm.appE f a j ev` is a closure call with evidence, and `Fn.evs` marks a function's
+  trailing evidence parameters. Evidence is passed and kept: the caller still owns it. Layout's
+  closure classes carry evidence nodes, which LayoutCheck checks; Flow links them; Lower passes
+  their words after the argument; the LIR interpreter reads them without taking them.
+- **The node.** A `handle` node of an `env` name binds the values of its captured slots, from the
+  clauses' parts of the context, as the name's evidence for its handled computation, which runs in
+  place. They are consumed with those parts after it.
+- **The `perform`** calls the work on `(v, ev)`. **The work** takes the evidence as parameters; its
+  captured slots are `dup` copies of them.
+- **Codes.** A closure's code takes its type's evidence as parameters and has only those in scope.
+  `bounded_fix`'s loop and its self-reference pass the step's evidence.
+- **`evConfined`** (`Lint`). Evidence is only an evidence argument or a `dup` copy's source, at a
+  persistent type: never in a pair, sum, closure environment, cell, consume or value. A closure
+  call passes exactly the evidence its type takes. Negative tests are in `Backend2/LintTests.lean`.
+- `UNPROVED:` the evidence in scope at a `perform` is the innermost frame's. `evConfined` keeps a
+  function's evidence parameters out of the values it builds. A node's evidence is its own
+  persistent captures, which it owns and consumes after its handled computation, so no call
+  receives evidence from a node that is no longer running. A mistake gives a wrong answer, never
+  undefined behaviour.
+
+### Facts read
+
+`ks` and `classifyHandler_sound`; `Checked.flows` and `cond2B`; the clause's erasure; the slot
+types its typed term records; persistence, which `[handle]`'s `DeadP` gives; the rows of the
+codes' types. Nothing is read from `TInfo` or `HSite`.
+
+### Programs
+
+- `corpus/loop-captured-bang.bc` (new): `0 0 0 0 0 0`, erasure `handles 2 performs 1 raises 1`,
+  no machine, native in 64 KiB.
+- `corpus/evidence-rebind.bc` (new): closure captures, three instances of one site, at most two
+  live at once: `(1, 2100)`. Stale evidence would answer `2002`.
+- `corpus/evidence-rebind-value.bc` (new): an `i32` capture, in core syntax: `(1, 2100)`.
+- `corpus/evidence-nested-site.bc` (new): two nodes of one name in one function: `2100`.
+- `corpus/evidence-outer-row.bc` (new): a name in the outer row of a node with a directly called
+  clause: `8`. The exclusion keeps that clause a machine, and its LIR is unchanged.
+- The new programs give `live 0`.
+- The machines become direct calls in `hygiene-handler-resume` (erasure from
+  `machines 1 suspends 1` to `handles 2 performs 1`), `loop-captured-bang`, `evidence-rebind`,
+  `evidence-rebind-value` and `evidence-nested-site`.
+- Counts are unchanged, except `evidence-rebind`'s `indirect`, 0 → 3 (*Open*).
+- `gen-return` and `gen-take-print` are unchanged: each name's two nodes hold different clauses.
+
+### Baseline
+
+No change to `CDerives`, `Core/`, the checker, the elaboration, the old backend or the kernel
+programs. Every corpus program's output is unchanged. With no evidence, every program's LIR is
+byte-identical.
+
+### Open
+
+- Resume entries taking fresh evidence (evidence in machines).
+- `&` and `ν` codes at evidence rows.
+- The other generated helpers.
+- A work at an outer row holding evidence names: pass Σ's evidence with the name's.
+- Several instances of one site capturing different closures share one work, whose call through
+  the evidence is indirect (`evidence-rebind`: `indirect` 0 → 3). Specialising per code type is
+  #1066 (after #855 B1, §68).
+- Captures that are not `!` closures arise only in core syntax today. A non-`!` handler parameter
+  makes the handler `tail+state` (E2).
+- E2 (`tail+state`): after K-S1–K-S3 and the proved lemma P-EV (#960, design §12).
+
+---
+
 ## 72. Entry 71 — host externs under the chain's adequacy (#963, K1)
 
 ### Motivation
