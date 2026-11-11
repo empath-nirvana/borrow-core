@@ -1665,6 +1665,14 @@ corpus/json-deep.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/json-deep.bc 5.0 abortive: branch; condition 2 holds; -
 corpus/json-deep.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/json-deep.bc 4.0 abortive: branch; condition 2 holds; -
+corpus/json-drop-deep.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
+corpus/json-drop-deep.bc 16:36: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/json-drop-deep.bc 409:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/json-drop-deep.bc 412:15: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/json-drop-deep.bc 413:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/json-drop-deep.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/json-drop-deep.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/json-drop-deep.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/json-get.bc flows [0, 1, 2, 3, 4, 5, 4294967295], finaliser; main [1, 2, 3, 4, 5], finaliser
 corpus/json-get.bc 54:15: handle 1: inside [1, 2, 3, 4, 5], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/json-get.bc 55:37: handle 2: inside [1, 2, 3, 4, 5], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
