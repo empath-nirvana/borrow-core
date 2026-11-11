@@ -1,0 +1,10 @@
+-- Two nested `unwind`s in a `while` body, the inner one's continuation writing `t`: the loop adds
+-- 2 * i for i = 1, 2, 3. Probe u11 of #1053.
+--
+-- KNOWN WRONG ANSWER (#1053): this prints i32[0]; the correct answer is i32[12]. Do not update this golden to "fix" it; fix #1053, then set the golden to the correct answer.
+fn go() -> i32 =
+  let mut i = 0;
+  let mut t = 0;
+  while i < 3 { i = i + 1; x <- (i + 0) unwind (()); y <- (x + x) unwind (()); t = t + y };
+  t
+main -> i32 = go()

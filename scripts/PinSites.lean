@@ -82,8 +82,11 @@ def cites : List Cite := [
 /-- **The sites**: each declaration that builds a node at a rule, and the rules it uses. -/
 def sites : List (Name × List Name) := [
   -- Backend2.
-  (``Backend2.abortK, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.superseded]),
-  (``Backend2.cancelK, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.superseded]),
+  (``Backend2.abortKN, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.superseded]),
+  (``Backend2.applyKN, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.superseded]),
+  (``Backend2.cancelKN, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.superseded]),
+  (``Backend2.keepEarlier, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.superseded]),
+  (``Backend2.keepFirst, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.superseded]),
   (``Backend2.conv, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.superseded,
     ``Backend2.Abandon.letAbort, ``Backend2.Abandon.top]),
   (``Backend2.convDrive, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
@@ -124,10 +127,12 @@ def sites : List (Name × List Name) := [
   (``Backend2.releaseOpt, [``Backend2.ConsumeRule.dead]),
   (``Backend2.releaseThen, [``Backend2.ConsumeRule.dead]),
   (``Backend2.splitCtx, [``Backend2.ConsumeRule.unused, ``Backend2.CopyRule.dup]),
+  (``Backend2.stepW, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
   (``Backend2.takeClosOf, [``Backend2.ConsumeRule.dead]),
   (``Backend2.travF, [``Backend2.CopyRule.dup]),
   (``Backend2.unitThen, [``Backend2.ConsumeRule.dead]),
   (``Backend2.untuple, [``Backend2.ConsumeRule.dead]),
+  (``Backend2.walkW, [``Backend2.ConsumeRule.dead]),
   -- Readers of a rule, which build no node: the lint, and the statements of the `UNPROVED:` ones.
   (``Backend2.Lint.lintTm, [``Backend2.ConsumeRule.consume, ``Backend2.ConsumeRule.stackK]),
   (``Backend2.enter, [``Backend2.ConsumeRule.stackK]),

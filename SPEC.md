@@ -3497,6 +3497,7 @@ below and the cancel steps (*Cancels*) do not allocate:
     (μ, hnd (n, H) K[raise (n, v)])    ↦  (μ, h_op v)          K free of n, unwind-clear   [unwind]
     (μ, ubind (N, D) v)                ↦  (μ, N v)                                         [then]
     (μ, ubind (N, D) K[raise (m, v)])  ↦  (μ, D (); raise (m, v))   K unwind-clear, m ≠ ⊥  [finalise]
+    (μ, hnd (n, H) K[cancelTo_n k])    ↦  (μ, ccatch (K†[raise (⊥, none)]) ; k ())   K free of n   [cancel-to]
 
 - **The continuation.** The `[op]` step's `κ` is the pair of its entries:
 
@@ -8991,6 +8992,14 @@ whose meaning depended on two names coinciding.
   for a block parameter (`cbRows`) does not carry its `let mut` capabilities.
 - **`case V { … }` and `for` as expressions** are not read as `run`: `case` is printed core, and
   `for` as a value needs its loop result bound (`let r = for …`).
+- **Known wrong answers (#1053).** These programs are accepted and give a wrong answer:
+  1. a write to a `let mut` in the continuation `N` of `x <- M unwind (D); N`, where the finaliser
+     form is inside a loop, an `if` arm or a binding's head: the write is lost, and a loop whose
+     exit test reads that variable may not terminate;
+  2. a cancel clause that drops `k`, around a loop whose body can abort (the loop is wrapped as a
+     head, #868 Phase 2) and that writes a `let mut`, bound or not: the loop's writes are lost.
+
+  A redesign of `let mut` as sugar over a `State` effect is under study.
 
 ---
 
@@ -10409,6 +10418,67 @@ the checker emits no such node, and its absorption places none at a wider contex
 `effHandleT`'s. No change to the checker's output, the elaboration, `Backend/`, `Backend2/`, the
 corpus or a golden.
 
+
+### `cancelTo_n`: the in-place cancel-mode unwind (#1002)
+
+A seventh effect primitive, `cancelTo_n k`, cancels the handled region of the nearest `hnd(n, H)`
+in place, in cancel mode, without capturing a continuation, and then runs `k` outside the node
+(§19's step `[cancel-to]`):
+
+    (μ, hnd (n, H) K[cancelTo_n k])  ↦  (μ, ccatch (K†[raise (⊥, none)]) ; k ())     K free of n   [cancel-to]
+
+- `K†` is the cancelled region of §19 *Cancels*: its handler and `ccatch` frames are removed, so
+  they are dead. The unwind runs `K`'s finalisers and the unwinding forms of its borrows,
+  innermost first, under `cfin`. The first error is kept (`[cfin-raise]`) and re-raised at the
+  `ccatch` (`[cancel-raise]`), and then `k ()` does not run.
+- The handler frame `hnd(n, H)` is consumed: `k` runs where the node stood.
+- It is the configuration the `[op]` step followed by the clause's `κ.2 ()` reaches (T-B1′,
+  `last_cancel_direct`: `K₀[(λ_. nf z)(ccatch K†[raise ⊥])]`), in one step with no `κ` cell. No
+  other machine step changes.
+- Determinism and unique decomposition gain the case: `K[cancelTo_n k]` is final until the
+  enclosing `hnd(n, _)` reduces it, as `K[perform (n, v)]` is.
+
+**Typing, inside a `[handle-last]` node's region.**
+
+    Γ ⊢ k : U(1 ⊸ F_Σ R)        (Σ, R the node's outer row and answer)
+    ──────────────────────────────────────────────────  [cancel-to]
+    Γ ⊢ cancelTo_n k : F_{n:E[fs] ⊕ Σ′} B        (any B)
+
+- It is admitted where the region's row carries the node's name `n`, as an operation of `E` that
+  is cancellable or abortive with cancel row `fs j`.
+- Its cancel obligation, `K`'s finalisers, is covered by that cancel row under `LastFinOK`'s
+  conditions: below `Σ` (D3), not `⊤`, no `Div`.
+- Whatever `k` closes over is held across the cancel: `[let]`'s `hW` at `Row.Cancels`, as for an
+  exit's `z`.
+- No new index: one `CDerives` rule with its compatibility lemma.
+
+**The fused form it gives pipe fusion** (P3, #1001):
+
+    hnd(n,H) K[ (hnd(m₁..m_k, X)(w v)) then r. case r {inl y → y | inr z → cancelTo_n (λ_. nf z)} ]
+    X at each escaping abortive site mᵢ:  λe. cancelTo_n (λ_. raise (mᵢ, e))
+
+It is exact against the unfused node (`lastClause` plus the `[op]` capture) on a raise from the
+work to an outer site (the order of cleanup errors, first kept, and which handler catches: `K`'s
+handlers are dead), on the `inr` exit, and on an outer cancel of a continuation captured outside
+the node. It is not exact for a perform by the work of a name that has a live handler inside `K`;
+that case keeps T-B2's condition, `Σ_W`'s names unhandled in `K`.
+
+**Baseline.** `fundamentalC`, `adequacyC`, `adequacyD`, `fundamentalN_all` and `goal791N`, with
+their statements unchanged; every existing compatibility lemma; §13's determinism (`head_det`, with
+the new case); the laws `last_resume_direct`, `last_cancel_direct` (and `_exit`) and
+`last_perform_direct`, unchanged. Every corpus and kernel program keeps its output: no existing term
+changes.
+
+**Units.** C.1, the machine (Support): the `Expr` former, `[cancel-to]`, and the cases in
+determinism, decomposition and `StepsOff`/frame. C.2, Core: the rule and its compatibility lemma,
+from the cancel branch's proof (`erwp_kappaC_cancel`, `ewp_handle_or`'s `hTc` at `lastTc`). C.3,
+the chain: the compatibility lemma at `erwpK`/`KW`. The backend: the in-place cancel-mode unwind in
+the interpreters and Backend2. C.1 is built; C.2, C.3 and the backend are not.
+
+**Open.** The fused-vs-unfused simulation (P3's whole-run relation), which discharges *a raise or
+cancel crosses the active frame* above; performs re-entered in `K`; a surface or elaborator producer
+for the fused form.
+
 ### Open
 
 - **The erasure laws** (`Core/HandleLastErase.lean`, #918) are proved at the direct call `hnd H
@@ -10427,9 +10497,9 @@ corpus or a golden.
   the same whatever continuation it captures. Open: runs the hypothesis does not give (a work that
   diverges or does not leave κ's cell free); T-B2 when an outer handler stores or cancels the
   captured κ, or a raise or cancel crosses the active frame (an early stop, `stop()`, a raise across
-  a fused stage), not derived and not refuted (a whole-run simulation); a Core term for the in-place
-  cancel-mode unwind (Core expresses it only through κ's `ccatch K†`); the laws are stated on
-  machine values, not on typed `lastH`.
+  a fused stage), not derived and not refuted (a whole-run simulation); the laws are stated on
+  machine values, not on typed `lastH`. The in-place cancel-mode unwind is `cancelTo_n`
+  (*`cancelTo_n`*, below).
 - **The elaboration** of `for` with `break`/`return` and a body that performs, and the adapters
   over a source computation (R-1's frontend): it needs a checker producer for the node
   (`TTied`'s builder, the clause kinds of the node, `Frontend/Check/Kinds.lean`, and its handled
@@ -12604,7 +12674,8 @@ at every stage of Backend2.
   backend's *linear* shapes, e.g. `A ⊕ X ⊕ (B ⊗ X)`) keep the recursion.
 - **Two recursive positions** (trees, `data-fold-tree`, `data-fold-forest`) keep a frame a level,
   as `fold_imm` does everywhere.
-- **`foldOwnG`** (§61) and the consume of a `μ` (`genConsume`, §12) recurse once per node.
+- **`foldOwnG`** (§61) and the consume of a `μ` (`genConsume`, §12) recurse once per node,
+  except the consume of §77's class, which runs in constant stack.
 
 ---
 
@@ -13419,6 +13490,100 @@ Rejects:
   rule is an option recorded in #1058.
 - Row aliases (`row Io = Fail[IoError], Async`), deferred as in #766.
 - The spelling of everything above.
+
+---
+
+## 77. Entry 76 — the new backend: a constant-stack consume of a μ with arrays of X (#1013)
+
+### Motivation
+
+Backend2's consume of a `μ` (`genConsume`, §12) is a function per type that calls itself at each
+recursive position. Where the position is an array of `X` (`Json`'s `Vec[X]` and
+`Map[string, X]`, `lib/json.bc`), the call sits inside the array's loop, not in tail position: one
+native frame and a loop frame a level, about 75 bytes. A `Json` 1000 deep, built by a loop,
+overflows a 64 KiB stack when dropped by that recursion (#1013), and freeing must not be what
+crashes a server on deep valid data. §67's pointer reversal covers a fold with one recursive
+position and a base `1`.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration, semantics or erasure. Backend2's
+conversion of a `consume` node at a `μ` of the class below changes, and the LIR gains one op.
+
+### The fact
+
+The `consume` node's checked type `μX. T` (as today, `consume:type`), read through `toFShape T`
+(`Core/Consume.lean`) and `FoldP.clB`; an array position is a leaf `[Ref X]`, `FoldP.keysIn`'s
+array key at the binder's own variable. The kernel's consume of such a type is `foldOwnG`
+(`Consumable.mu`: the body is in `P`, not in `FShape`).
+
+### The rule
+
+- **The class** (`consumeW?`): every leaf of `toFShape T` is `[Ref X]`, or closed and inert (no
+  `U` inside, so its consume runs no code); at most one recursive position (`X`, `Ref X`, `[Ref X]`)
+  on any path through the `⊕`s; at least one `[Ref X]`. Every other `μ` keeps the recursion.
+- **The lowering** (`genConsumeW`): two functions of tail calls, `consume_up p` (free `p`) and
+  `consume_down c p` (free `c`, then `p`); the consume is `consume_up`. At a node's position:
+
+  | position | `down c p` | `up p` |
+  |---|---|---|
+  | none | consume the node; `up p` | consume the node; return |
+  | `X`, `Ref X` | the child out (the cell freed), the rest consumed; `down child p` | the same; `up child` |
+  | `[Ref X]`, `n ≤ 1` | the slot's child out, the array freed, the rest consumed; `down child p` (`up p` at 0) | the same; `up child` (return at 0) |
+  | `[Ref X]`, `n ≥ 2` | slot 0's child out, `p` put in slot 0, the node rebuilt; `down child node` | the last slot popped (`slotPop`), the node rebuilt; `down child node` |
+
+  The work pending is a value of the type itself, stored in a slot of an array being freed, at the
+  slot's own type. Nothing is allocated.
+- **`slotPop a`** (LIR): slot `n − 1`'s contents moved out and `a` as the family of its first
+  `n − 1` slots; `freeArr` frees the whole object. `Lint` checks its operand is an owned array and
+  its answer that family and the slot's contents (`slotPopBad`); the LIR interpreter's `freeArr`
+  frees the object at its allocated size and requires every slot of it unwritten.
+
+### What it rests on
+
+- **Read:** the consume node's type; `Lint`'s discipline (each variable consumed once) over every
+  step, which only moves owned values between owned places of the same type.
+- **`UNPROVED:`** (`genConsumeW`): that `consume_up` frees exactly what `consumeE (μX. T)` frees,
+  in another order, observing nothing else; the order is unobservable because every leaf is closed
+  and inert. A mismatch shows as a leak or double free in `live`, or a disagreement with the
+  source stage.
+- **Checked at run time only:** that an array is freed with every slot empty (the LIR
+  interpreter's `freeArr`); `Lint` tracks no slot state.
+
+### Programs
+
+`corpus/json-drop-deep.bc`: a `Json` as deep as its argument (2000 in the corpus), arrays and
+objects in turn, dropped; `scripts/compile-native.sh` runs it natively on Backend2 at 10⁶ levels
+in a stack of 16 KiB, answer the depth and `live 0`. Every corpus program keeps its output at
+every Backend2 stage.
+
+Counts: no `allocs`, `indirect`, `copies` or `bounds` change. `loads` and `stores` rise, equally,
+by one slot's words per array of ≥ 2 elements freed by `down` (the stash and its read-back):
+the table below.
+
+| Program | `loads` / `stores` before | after | stashes × slot words |
+|---|---|---|---|
+| `json-parse` | 24025 / 13650 | 24137 / 13762 | 14 × 8 |
+| `json-get` | 937 / 385 | 945 / 393 | 1 × 8 |
+| `data-json-map` | 1283 / 1097 | 1291 / 1105 | 1 × 8 |
+| `data-abbr-root` | 1283 / 1097 | 1291 / 1105 | 1 × 8 |
+| `data-json-map-ser` | 489 / 379 | 497 / 387 | 1 × 8 |
+| `data-json-vec` | 188 / 188 | 192 / 192 | 1 × 4 |
+| `data-rose-vec` | 220 / 220 | 224 / 224 | 1 × 4 |
+| `storage-array` | 55180 / 55180 | 59257 / 59257 | 1359 × 3 |
+
+`storage-array` frees 1365 nodes of 4 children; the 6 on the root's slot-0 path never stash.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the checker, the elaboration, the layouts,
+the old backend or a kernel program.
+
+### Open
+
+- Two recursive positions on one path (binary trees, `X ⊗ [Ref X]`) keep the recursion.
+- Arrays of an `S ≠ X` holding `X` (`array (string ⊗ X)`), and inner `μ` keys.
+- Persistent `!μ` data copied or consumed by the word IR's helpers, which recurse.
 
 ---
 
