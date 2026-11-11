@@ -54,6 +54,14 @@ def ptoImmS (l : Loc) (α : Life) (ls : List SRec) (P : List SRec → Val → WP
     ρ = ResU.single l (CellU.immOf s u σ h) ∧ P ls₀ u σ ∧ α ⊑ s.meet ∧
     ∀ x, x ∈ ls₀ ↔ (x ∈ ls ∧ x.2 ⊐ s.meet)
 
+/-- `ptoImmS` at a named stored value `u`: `ℓ ↦ imm(β̄, u, σ)` with `α ⊑ ⊓β̄` and the payload
+at `ls₀`.  `[spec §6]` -/
+def ptoImmSv (l : Loc) (α : Life) (ls : List SRec) (u : Val) (P : List SRec → Val → WProp) :
+    WProp :=
+  fun ρ => ∃ (s : LSet) (σ : WRes) (h : σ.InStratum s.join) (ls₀ : List SRec),
+    ρ = ResU.single l (CellU.immOf s u σ h) ∧ P ls₀ u σ ∧ α ⊑ s.meet ∧
+    ∀ x, x ∈ ls₀ ↔ (x ∈ ls ∧ x.2 ⊐ s.meet)
+
 /-- `Coh` up to `TyEq`. -/
 def CohE (rs : List FrameRec) (m : Loc) (S : VTy) (δ : LSub) : Prop :=
   ∃ S₀ δ₀, TyEq S δ S₀ δ₀ ∧ Coh rs m S₀ δ₀
@@ -68,21 +76,28 @@ def forceE : CTy → Expr → Expr
   | _, e => e
 
 /-- An entry of the relation's type-variable environment: the closed type the variable stands
-for (the `Imm` clause reads coherence at it) and the candidate the variable is read at, over
-the mode, the record list and the value. -/
+for (the `Imm` clause reads coherence at it), the candidate the variable is read at, over
+the mode, the record list and the value, and the candidate for its views at a lifetime
+(`shrE`).  `[spec §6]` -/
 structure TEnt where
   ty : VTy
   P : Bool → List SRec → Val → WProp
+  S : Life → List SRec → Val → WProp
 
 /-- The environment of a closed type: every variable is empty. -/
 def tEnv : Option (Nat → TEnt) → Nat → TEnt
-  | none => fun n => ⟨.tvar n, fun _ _ _ _ => False⟩
+  | none => fun n => ⟨.tvar n, fun _ _ _ _ => False, fun _ _ _ _ => False⟩
   | some η => η
 
 /-- A variable's candidate. -/
 def tEnvP : Option (Nat → TEnt) → Nat → Bool → List SRec → Val → WProp
   | none, _, _, _, _ => fun _ => False
   | some η, n, b, ls, v => (η n).P b ls v
+
+/-- A variable's views candidate. -/
+def tEnvS : Option (Nat → TEnt) → Nat → Life → List SRec → Val → WProp
+  | none, _, _, _, _ => fun _ => False
+  | some η, n, α, ls, v => (η n).S α ls v
 
 /-- The closed type a type stands for under the environment. -/
 def tClose : Option (Nat → TEnt) → VTy → VTy
@@ -109,7 +124,8 @@ def nuP (R : CPred) : Bool → List SRec → Val → WProp
 
 /-- The environment of `C`'s value types in one unfolding of `νX. C` at the candidate `R`:
 the variable `0` is `U(νX. C)`, read at `nuP R`. -/
-def nuEnv (C : CTy) (R : CPred) : Nat → TEnt := VTy.scons ⟨.thunk (.nu C), nuP R⟩ (tEnv none)
+def nuEnv (C : CTy) (R : CPred) : Nat → TEnt :=
+  VTy.scons ⟨.thunk (.nu C), nuP R, fun _ _ _ => emp⟩ (tEnv none)
 
 /-- A capture list as one value: right-nested pairs ending in `()`.  `[spec §68]` -/
 def tupleV : List Val → Val
@@ -145,8 +161,8 @@ def vCE : Option (Nat → TEnt) → Bool → VTy → List SRec → LSub → Val 
   | η, b, .ref A, ls, δ, v =>
       ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vCE η b A ls δ v'
   | η, _, .imm a A, ls, δ, v =>
-      atLife δ a fun α => ex fun ℓ => ⌜v = .loc ℓ ∧ CohE (rsOf ls) ℓ (tClose η A) δ⌝ ⋆
-        ptoImmS ℓ α ls (fun ls₀ => vCE η false A ls₀ δ)
+      atLife δ a fun α => ex fun ℓ => ex fun u => ⌜v = .loc ℓ ∧ CohE (rsOf ls) ℓ (tClose η A) δ⌝ ⋆
+        ptoImmSv ℓ α ls u (fun ls₀ => vCE η false A ls₀ δ) ⋆ shrE η A α ls δ u
   | η, _, .mut a A, ls, δ, v =>
       atLife δ a fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆
         ptoMutS ℓ α ls (fun ls₀ => vCE η true A ls₀ δ)
@@ -155,12 +171,46 @@ def vCE : Option (Nat → TEnt) → Bool → VTy → List SRec → LSub → Val 
   | _, _, .opq k, _, _, v => k.rel v
   | η, b, .tvar n, ls, _, v => tEnvP η n b ls v
   | η, b, .mu A, ls, δ, v => fun ρ => VTy.NoMut 0 A ∧ (tClose η (.mu A)).Cl 0 ∧
-      ∀ P : Bool → List SRec → Val → WProp,
-        (∀ b' ls' v' ρ', vCE (some (VTy.scons ⟨tClose η (.mu A), P⟩ (tEnv η))) b' A ls' δ v' ρ' →
+      ∀ (P : Bool → List SRec → Val → WProp) (S : Life → List SRec → Val → WProp),
+        (∀ b' ls' v' ρ', vCE (some (VTy.scons ⟨tClose η (.mu A), P, S⟩ (tEnv η))) b' A ls' δ v' ρ' →
           P b' ls' v' ρ') →
+        (∀ α' ls' v' ρ', shrE (some (VTy.scons ⟨tClose η (.mu A), P, S⟩ (tEnv η))) A α' ls' δ v' ρ' →
+          S α' ls' v' ρ') →
         P b ls v ρ
   | η, b, .fam L, ls, δ, v => ex fun ℓ => ex fun c => ⌜v = Val.arr ℓ c ∧ c.toNat < 2 ^ 31⌝ ⋆
       sepRange (fun m => vCE η b L ls δ (.loc m)) ℓ c.toNat
+/-- `shrE η A α ls δ v`: the views at `α` of what `v : A` reaches through owned pointers — the
+deep part of `𝒱⟦Imm @a A⟧`.  At `Ref B` a view `ℓ ↦ I_α 𝒱⟦B⟧` of the pointee at its stored
+value, with the pointee's own views; a frozen `Mut @b B` reads as `Ref B`; through `⊗`, `⊕`,
+`[@a]` and families componentwise; nothing at `1`, `!`, `Imm`, `U`, `Code`, `Unk` and the base
+types; at a variable the environment's views candidate; at `μX. A` the views component of the
+least fixed point `vCE` takes there, joint with it.  `[spec §6]` -/
+def shrE : Option (Nat → TEnt) → VTy → Life → List SRec → LSub → Val → WProp
+  | η, .tensor A B, α, ls, δ, v =>
+      ex fun v₁ => ex fun v₂ => ⌜v = .pair v₁ v₂⌝ ⋆ shrE η A α ls δ v₁ ⋆ shrE η B α ls δ v₂
+  | η, .sum A B, α, ls, δ, v =>
+      BoLo.or (ex fun v₁ => ⌜v = .inj₁ v₁⌝ ⋆ shrE η A α ls δ v₁)
+              (ex fun v₂ => ⌜v = .inj₂ v₂⌝ ⋆ shrE η B α ls δ v₂)
+  | η, .box _ A, α, ls, δ, v => shrE η A α ls δ v
+  | η, .ref B, α, ls, δ, v =>
+      ex fun ℓ => ex fun u => ⌜v = .loc ℓ⌝ ⋆
+        ptoImmSv ℓ α ls u (fun ls₀ => vCE η false B ls₀ δ) ⋆ shrE η B α ls δ u
+  | η, .mut _ B, α, ls, δ, v =>
+      ex fun ℓ => ex fun u => ⌜v = .loc ℓ⌝ ⋆
+        ptoImmSv ℓ α ls u (fun ls₀ => vCE η false B ls₀ δ) ⋆ shrE η B α ls δ u
+  | η, .fam L, α, ls, δ, v => ex fun ℓ => ex fun c => ⌜v = Val.arr ℓ c⌝ ⋆
+      sepRange (fun m => shrE η L α ls δ (.loc m)) ℓ c.toNat
+  | η, .tvar n, α, ls, _, v => tEnvS η n α ls v
+  | η, .mu A, α, ls, δ, v => fun ρ => VTy.NoMut 0 A ∧ (tClose η (.mu A)).Cl 0 ∧
+      ∀ (P : Bool → List SRec → Val → WProp) (S : Life → List SRec → Val → WProp),
+        (∀ b' ls' v' ρ', vCE (some (VTy.scons ⟨tClose η (.mu A), P, S⟩ (tEnv η))) b' A ls' δ v' ρ' →
+          P b' ls' v' ρ') →
+        (∀ α' ls' v' ρ', shrE (some (VTy.scons ⟨tClose η (.mu A), P, S⟩ (tEnv η))) A α' ls' δ v' ρ' →
+          S α' ls' v' ρ') →
+        S α ls v ρ
+  | _, .unit, _, _, _, _ | _, .zero, _, _, _, _ | _, .thunk _, _, _, _, _
+  | _, .code _ _ _, _, _, _, _ | _, .bang _, _, _, _, _ | _, .imm _ _, _, _, _, _
+  | _, .unk, _, _, _, _ | _, .int _, _, _, _, _ | _, .opq _, _, _, _, _ => emp
 /-- `𝒞⟦C⟧(ls)δ(e)`, curried on the connective.  At `νX. C` the greatest fixed point
 `⋃{R | R ⊆ cB (nuEnv C R) C}`, written in `Prop` as `∃ R` (`docs/scope-recursion.md` §3.1), and
 trivial unless `C` has the positive shape (`CTy.NuShape`, invariant under `CTyEq`; the rules ask
