@@ -13583,6 +13583,11 @@ definitions (§76). `pipe_handoff` is value-level.
    - the site, and `pipe_step`'s re-emitted `Next`, carry `UNPROVED:` notes that state I1′.
 
    Core has no trap that the pieces could raise instead.
+7. **Shared frames, and per-stage setters (Assembly(n) rev 2.5).** Every frame list is one region at
+   `c` around the frames of its stages, the most downstream innermost. The frames are one function
+   per stage and direction; each installs that stage's `withStop` around a continuation and does
+   nothing else. A turn reaches the states through per-stage getters and setters, between turns
+   only. So the glue's size is linear in the number of stages.
 
 **The states and events:**
 
@@ -13661,9 +13666,10 @@ P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain under them.
   - **(Fresh)** The fresh name is connector-local and absent from the chain's outer row
     (`[handle]`'s `hnS`).
   - **(No unr)** A forwarded operation is not `unr`, and the connector's row is `¬Row.UnrD`
-    (decision 63; `[then]`'s `!Γ₂`). A non-last stage that performs a `multi ctl` operation is
-    refused by the checker, and the elaboration adds the note:
-    `` `op` resumes any number of times (`multi ctl`), so a non-last stage of a stream chain cannot perform it ``.
+    (decision 63; `[then]`'s `!Γ₂`). A `multi ctl` operation is never forwarded. A stage that
+    performs one is refused by the checker inside the connector's frames (`pipe_with_stop`'s
+    `[then]`), and the refusal carries the note
+    `` note: `E.op` resumes any number of times (`multi ctl`), so a stage of a stream chain cannot perform it: the connector stops its stages around it (SPEC §75) ``.
   - **(One-frame)** The forward site's handler sits **outside** the stage's yield site's handler.
     The rests stored at either site have **one type**, so `AtYield` holds either, and `step_i`
     resumes it the same way.
@@ -13747,6 +13753,9 @@ P1 Thm S, P1b Thm R and Thm X, and (ii), hold for every chain under them.
   is refused:
   `` this stage of a stream chain performs `E₁` and `E₂`, two effects the connector forwards; it forwards one per stage in this version (SPEC §75) ``.
   A forwarded effect has one operation, and that operation answers `()`.
+- **A cleanup of a stage that performs the operation the connector forwards from that stage** is
+  refused:
+  `` a cleanup of this stage of a stream chain performs `E`, which the connector forwards: its cancel row would hold itself, which only `top` does (SPEC §75, §27 *Open*) ``.
 - **No stage performs a forwarded operation unforwarded.** Every stage forwards its own, so this does
   not arise. The elaboration keeps it as a guard, with the message
   `` this stage of a stream chain performs `E` unforwarded, and the connector forwards `E` from another of its stages: no stage of a chain performs a forwarded operation unforwarded, since its cancel row would hold itself (SPEC §75, §27 *Open*) ``.
@@ -13852,14 +13861,14 @@ cleanup is `r <- (loop {…}) unwind (note(d)); note(d); r`. Every program below
 | `corpus/pipe-raise-order.bc` | traces 3–5: the source, the middle and the sink raise `10`, `20`, `30` at item 2 | `132.231.321(inr i32[10], (inr i32[20], inr i32[30]))` |
 | `corpus/pipe-cancel-order.bc` | trace 6: `tm` cancels at a forwarded `wait()`, first while the source (not the last stage) is suspended at it, then at the sink's, which the connector forwards too | `321.321(inr (), inr ())` |
 | `corpus/pipe-first-error.bc` | trace 7; the same cleanups under an outside cancel; a `stop()` whose upstream cleanup raises `10` | `321.321.123(inr i32[20], (inr i32[20], inr i32[10]))` (to be observed) |
-| `corpus/pipe-pushback.bc` | lookahead at the surface: `runs` over `1,1,2,2,2,3` (`10x + count`); a last stage reading past `5`; a middle stage stopping with `10` in its slot | `(i32[66], ((i32[6], inl i32[10]), (i32[6], (inl i32[10], ()))))` (to be observed) |
+| `corpus/pipe-pushback.bc` | lookahead at the surface: `runs` over `1,1,2,2,2,3` (`10x + count`); a last stage reading past `5`; a middle stage stopping with `10` in its slot | `(i32[66], ((i32[6], inl i32[10]), (i32[6], (inl i32[10], ()))))` |
 | `corpus/pipe-rest.bc` | `connect(src(5) >| take_two)`, then `rest >| sum_all`; then `close(rest)` on a fresh chain's rest | `((i32[3], i32[12]), i32[3])` |
 | `corpus/reject/pipe-left-nothing.bc` | `3 >| sum_all` | `` `>|` connects stream stages; its left side yields nothing (no iteration effect in its inferred row) `` |
 | `corpus/reject/pipe-open-head.bc` | `scale(3) >| sum_all` | the open-chain message |
 | `corpus/reject/pipe-linear-end.bc` | a source whose end value is an owned list | the linear-`K` message |
 | `corpus/reject/pipe-stop-residual.bc` | `stop()` over a source that returns `i32` | the residual message |
-| `corpus/reject/pipe-multi-op.bc` | a non-last stage performs a `multi ctl` operation | the checker's `[then]`/`¬UnrD` refusal, with the note |
-| `corpus/reject/pipe-fin-forwarded.bc` | a middle stage's cleanup performs the `wait` the chain forwards | the checker's `⊤` refusal, as `fin-cancel-capturing` |
+| `corpus/reject/pipe-unr-stage.bc` | a stage performs a `multi ctl` operation | the checker's `[then]`/`¬UnrD` refusal, with the note in (No unr) |
+| `corpus/reject/pipe-fin-forwarded.bc` | a stage's cleanup performs the `wait` the connector forwards from it | the cleanup message in *Restrictions in L1* |
 | `corpus/core-pipe-pieces.bc` | `core-pipe-connector`'s three runs with the connector rebuilt over `lib/pipe.bc`'s pieces: hand-written stage loops at the pieces' types, and glue of the state tuple, the running stage with its input, and one `unfold`, calling `pipe_step`, `pipe_with_stop` (each frame list one region at site 5), `pipe_handoff`, `pipe_forward` and `pipe_finish` | `(i32[55], (i32[10], inr i32[3]))` |
 | `corpus/pipe-pieces-step.bc` | `pipe_step` and `pipe_stop` on a source that yields `1..3`: four turns (a yield, the turn's end, a yield, the turn's end), then the stage stopped, and the two items summed. The old backend runs it too | `i32[3]` |
 | `corpus/reject/pipe-fwd-two.bc` | a stage that performs `Wait` and `Ping` | `` this stage of a stream chain performs `Wait` and `Ping`, two effects the connector forwards; it forwards one per stage in this version (SPEC §75) `` |
@@ -13921,6 +13930,14 @@ does not support; they carry `-- check: old-backend-refuses`.
   - a handler whose clauses use the lent place;
   - two lends;
   - reborrowed `mut` places.
+- **The unfused connector's code size and stop-path cost (#1096).** The glue is linear in the number
+  of stages `n`, and so is its LIR function count (+396 per stage without cleanups, +434 with an
+  `unwind` cleanup per stage). Its WAT size is not: its second difference is about 0.22 MB (0.38 MB
+  with cleanups). The connector's state is a plain tuple of the stages' states, and Backend2's
+  Layout keeps it inline (§35), so each function that takes or answers it is O(n) in size. The stop
+  path copies: each shared frame's continuation captures the states of the stages after it, so a
+  frame list that runs allocates O(n) closures and stores O(n²) words. #1096's test is a WAT size
+  linear in `n`, with the stop-path counts at or below those of the glue with its lists written out.
 - **Fusion** (F, #923). The connector stores each stage's rest. The counts of the new programs are
   recorded unfused, and no existing count changes.
 - **Mechanising Assembly(n),** and proving that per-observation handling is the deep handler: not
