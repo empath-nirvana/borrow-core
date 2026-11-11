@@ -13394,6 +13394,8 @@ array key at the binder's own variable. The kernel's consume of such a type is `
   in another order, observing nothing else; the order is unobservable because every leaf is closed
   and inert. A mismatch shows as a leak or double free in `live`, or a disagreement with the
   source stage.
+- **Checked at run time only:** that an array is freed with every slot empty (the LIR
+  interpreter's `freeArr`); `Lint` tracks no slot state.
 
 ### Programs
 
