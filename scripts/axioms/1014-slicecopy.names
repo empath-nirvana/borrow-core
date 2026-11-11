@@ -1,0 +1,13 @@
+-- #1014: slice_copy_mut, its rule at Core's relation and at the chain's  [spec §74]
+BoCa.Fig16.LogRel.Core.vC_true_of_persistent
+BoCa.Fig16.LogRel.Core.wpTS_copy
+BoCa.Fig16.LogRel.Core.wpTS_M_antiFrameRange
+BoCa.Fig16.LogRel.Core.sliceCopyM_compatX
+BoCa.Fig16.LogRel.Core.SliceCopyPrograms.sliceCopy_sem
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vO_vN_of_persistent
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.rwp_copy
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.rwp_copy_out
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.rwp_M_antiFrameRange
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceCopyM_compatN
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fundamentalN_all
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.goal791N

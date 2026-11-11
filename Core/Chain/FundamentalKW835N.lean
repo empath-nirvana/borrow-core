@@ -10,6 +10,7 @@ import Core.Chain.NuKW835N
 import Core.Chain.CountKW835N
 import Core.Chain.FamKW835N
 import Core.Chain.FamOpsKW835N
+import Core.Chain.SliceCopyKW835N
 import Core.Chain.FamImmKW835N
 import Core.Chain.MuKW835N
 import Core.Chain.FoldGKW835N
@@ -27,12 +28,12 @@ import Core.Chain.CodeNuOutKW835N
 
 `docs/new-core/scope-835-tables.md` §10.13. `fundamentalN_all` is Core's `fundamentalC` at
 `SemJN`, the relation at `KW`: one case per constructor of `CDerives`, in `fundamentalC`'s order
-and with its case splits, each calling the rule's compatibility lemma at `cN`. The four rules with
+and with its case splits, each calling the rule's compatibility lemma at `cN`. The three rules with
 no compatibility lemma are the conjuncts of `MissingN`, each stated as its `*_compatN` would be:
 Core's lemma with `SemV`/`SemC` read as `SemJN`.
 
 * `ReifyN` (Core's `reify_compatX`), `HandleVN` (Core's `handleV_compatC`), `HandleVBN` (Core's
-  `handleV_compatCB`), `SliceCopyN` (Core's `sliceCopyM_compatX`).
+  `handleV_compatCB`).
 * `fundamentalN_all`: every derivation is in `SemJN`, from `MissingN`. No compatibility lemma takes
   a fragment premise.
 * `fundamentalN_of`: `FundamentalN` read off it, the fragment premise unused.
@@ -84,14 +85,9 @@ def HandleVBN : Prop :=
     CtxOutlives Δ Γ₂ d → Row.AnsOutlives Δ d (Row.ofEff n E 0 fs ++ S) →
     SemJN (ℍ := ℍ) Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
 
-/-- `slice_copy_mut` (Core's `sliceCopyM_compatX`).  `[spec §74]` -/
-def SliceCopyN : Prop :=
-  ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {a b : Lifetime.Life} {A : VTy}, Ctx.DeadP Γ → A.Persistent →
-    SemJN (ℍ := ℍ) Δ Γ (.val sliceCopyV) (.val (sliceCopyMTy a b A))
-
 /-- **The rules the chain has no lemma for**, each as its `*_compatN` would be. -/
 def MissingN : Prop :=
-  HandleVN (ℍ := ℍ) ∧ HandleVBN (ℍ := ℍ) ∧ ReifyN (ℍ := ℍ) ∧ SliceCopyN (ℍ := ℍ)
+  HandleVN (ℍ := ℍ) ∧ HandleVBN (ℍ := ℍ) ∧ ReifyN (ℍ := ℍ)
 
 /-! ### The induction -/
 
@@ -99,7 +95,7 @@ def MissingN : Prop :=
 case. -/
 theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr}
     {j : Jdg} (h : CDerives Δ Γ e j) : SemJN (ℍ := ℍ) Δ Γ e j := by
-  obtain ⟨hHV, hHVB, hReify, hCopy⟩ := hm
+  obtain ⟨hHV, hHVB, hReify⟩ := hm
   induction h with
   | var h => exact var_compatN h
   | unitI h => exact unitI_compatN h
@@ -173,7 +169,7 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | arrEmpty _ hΓ => exact arrEmpty_compatN hΓ
   | sliceReplaceM _ _ hΓ => exact sliceReplaceM_compatN hΓ
   | sliceSwapM _ _ hΓ => exact sliceSwapM_compatN hΓ
-  | sliceCopyM _ _ _ hΓ hA => exact hCopy hΓ hA
+  | sliceCopyM _ _ _ hΓ hA => exact sliceCopyM_compatN hΓ hA
   | withbor1 x hΓ _ hsc₁ hf₁ hf₂ => exact withbor1_compatN x hΓ hsc₁ hf₁ hf₂
   | withbor2 x hΓ _ hside hf₁ hf₂ => exact withbor2_compatN x hΓ hside hf₁ hf₂
   | withbor3 x hΓ _ hf₁ hf₂ => exact withbor3_compatN x hΓ hf₁ hf₂

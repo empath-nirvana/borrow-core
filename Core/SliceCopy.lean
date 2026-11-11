@@ -133,12 +133,20 @@ theorem writeRange_succ (μ : Heap) (d n : Nat) (w : Loc → Val) :
     · subst h₂; rw [if_pos rfl, if_pos (by lomega)]
     · rw [if_neg h₂, if_neg (by lomega)]
 
-/-- One owned cell rewritten: the world after `TW.store`, with the frame kept.  `[spec §74]` -/
-theorem store_world {ρf ρ σ R : WRes} {ps rs : List FrameRec} {μ : Heap} {l : Loc} {v₁ v₂ : Val}
+/-- A world predicate closed under rewriting an owned cell: `TW`'s and the chain's `store`.
+`[spec §74]` -/
+def StoreClosed (Tw : WRes → Prop) : Prop :=
+  ∀ {W Z W' : WRes} {l : Loc} {v₁ v₂ : Val}, Tw W →
+    ResU.CompS (ResU.single l (CellU.ownOf v₁)) Z W →
+    ResU.CompS (ResU.single l (CellU.ownOf v₂)) Z W' → ResU.Valid W' → Tw W'
+
+/-- One owned cell rewritten: the world after a `store`, with the frame kept.  `[spec §74]` -/
+theorem store_world {Tw : WRes → Prop} (hst : StoreClosed Tw) {ρf ρ σ R : WRes} {μ : Heap}
+    {l : Loc} {v₁ v₂ : Val}
     (hcρ : ResU.CompS (ResU.single l (CellU.ownOf v₁)) R ρ)
-    (hf : ResU.Hash ρf ρ) (hσ : ResU.CompS ρf ρ σ) (hT : TW σ ps rs) (hμ : ResU.Lower σ μ) :
+    (hf : ResU.Hash ρf ρ) (hσ : ResU.CompS ρf ρ σ) (hT : Tw σ) (hμ : ResU.Lower σ μ) :
     ∃ x σ', ResU.CompS R (ResU.single l (CellU.ownOf v₂)) x ∧ ResU.Hash ρf x ∧
-      ResU.CompS ρf x σ' ∧ TW σ' ps rs ∧ ResU.Lower σ' (μ.upd l v₂) ∧ ResU.UpdV ρ x ∧
+      ResU.CompS ρf x σ' ∧ Tw σ' ∧ ResU.Lower σ' (μ.upd l v₂) ∧ ResU.UpdV ρ x ∧
       (∀ a, AgW σ' a → AgW σ a) ∧ μ l = some v₁ := by
   have h₂ : ResU.Hash ρf R :=
     ResU.hash_symm (ResU.Hash.split hcρ (ResU.hash_symm hf)).2
@@ -159,7 +167,7 @@ theorem store_world {ρf ρ σ R : WRes} {ps rs : List FrameRec} {μ : Heap} {l 
     ⟨x, hx, hσ'x⟩
   cases ResU.CompS.functional hy hσ₂
   refine ⟨x, σ', hx, hfx, hσ'x,
-    TW.store hT (ResU.CompS.comm hσ₂σ) (ResU.CompS.comm hyσ') (hash_valid_comp hfx hσ'x),
+    hst hT (ResU.CompS.comm hσ₂σ) (ResU.CompS.comm hyσ') (hash_valid_comp hfx hσ'x),
     hstep ▸ hlow', ?_, fun a ha => (own_cell_ag (ResU.CompS.comm hσ₂σ) a).mpr
       ((own_cell_ag (ResU.CompS.comm hyσ') a).mp ha), hlv⟩
   exact ResU.UpdV.trans
@@ -167,12 +175,12 @@ theorem store_world {ρf ρ σ R : WRes} {ps rs : List FrameRec} {μ : Heap} {l 
     (updV_compS_own hx (hash_valid h₂).2 (hash_valid hfx).2)
 
 /-- `n` owned cells from `d` rewritten to `w`: `n` of `store_world`.  `[spec §74]` -/
-theorem store_block {ρf : WRes} {ps rs : List FrameRec} (w : Loc → Val) :
+theorem store_block {Tw : WRes → Prop} (hst : StoreClosed Tw) {ρf : WRes} (w : Loc → Val) :
     ∀ (n : Nat) (d : Loc) {ρ σ ρd R : WRes} {μ : Heap},
       sepRange (fun l => ex fun v => ptoOwn l v) d n ρd → ResU.CompS ρd R ρ →
-      ResU.Hash ρf ρ → ResU.CompS ρf ρ σ → TW σ ps rs → ResU.Lower σ μ →
+      ResU.Hash ρf ρ → ResU.CompS ρf ρ σ → Tw σ → ResU.Lower σ μ →
       ∃ ρd' x σ', sepRange (fun l => ptoOwn l (w l)) d n ρd' ∧ ResU.CompS ρd' R x ∧
-        ResU.Hash ρf x ∧ ResU.CompS ρf x σ' ∧ TW σ' ps rs ∧
+        ResU.Hash ρf x ∧ ResU.CompS ρf x σ' ∧ Tw σ' ∧
         ResU.Lower σ' (writeRange μ d n w) ∧ ResU.UpdV ρ x ∧ (∀ a, AgW σ' a → AgW σ a) ∧
         μ.HasRange d n
   | 0, d, ρ, σ, ρd, R, μ, hd, hρ, hf, hσ, hT, hμ => by
@@ -186,10 +194,10 @@ theorem store_block {ρf : WRes} {ps rs : List FrameRec} (w : Loc → Val) :
       subst hv
       obtain ⟨Y, hY, hρY⟩ := compS_reassoc h12 hρ
       obtain ⟨x₁, σ₁, hx₁, hf₁, hσ₁, hT₁, hμ₁, hu₁, hag₁, hdv⟩ :=
-        store_world (v₂ := w d) hρY hf hσ hT hμ
+        store_world hst (v₂ := w d) hρY hf hσ hT hμ
       obtain ⟨bc, hbc, hx₁'⟩ := compS_reassoc hY hx₁
       obtain ⟨ρd₂', x, σ', hd₂', hx, hf', hσ', hT', hμ', hu, hag, hrange⟩ :=
-        store_block w n (d + 1) hd₂ hx₁' hf₁ hσ₁ hT₁ hμ₁
+        store_block hst w n (d + 1) hd₂ hx₁' hf₁ hσ₁ hT₁ hμ₁
       obtain ⟨ab, hab, habx⟩ := compS_reassoc' (ResU.CompS.comm hbc) hx
       refine ⟨ab, x, σ', ⟨_, ρd₂', ResU.CompS.comm hab, rfl, hd₂'⟩, habx, hf', hσ', hT', ?_,
         hu₁.trans hu, fun a ha => hag₁ a (hag a ha), fun i hi => ?_⟩
@@ -225,7 +233,8 @@ theorem wpTS_copy {ls : List SRec} {ℓd : Loc} {nd di : UInt32} {ℓs : Loc} {n
     obtain ⟨ψ₃, hψ₃, he₃⟩ := compS_get_erase (ResU.CompS.comm hc) hψ₂
     rw [lower_get hμ hψ₃, he₃, he₂, he₁, he]
   obtain ⟨ρd', x, σ', hd', hx, hf', hσ', hT', hμ', hu, hag, hrange⟩ :=
-    store_block (fun l => u (l - (ℓd + di.toNat))) len.toNat (ℓd + di.toNat) hd hρ hf hc hT hμ
+    store_block (Tw := fun W => TW W ps (rsOf ls)) (fun hT h₁ h₂ hv => TW.store hT h₁ h₂ hv)
+      (fun l => u (l - (ℓd + di.toNat))) len.toNat (ℓd + di.toNat) hd hρ hf hc hT hμ
   have hheap : copyHeap μ ℓd nd di ℓs ns si len =
       writeRange μ (ℓd + di.toNat) len.toNat (fun l => u (l - (ℓd + di.toNat))) := by
     unfold copyHeap
