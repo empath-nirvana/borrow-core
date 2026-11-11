@@ -96,8 +96,10 @@ inductive CTy where
   | top
   /-- `∀'x ⊏ @b. C`. -/
   | all (x : LifeVar) (b : Lifetime.Life) (C : CTy)
-  /-- `νX. C`: the greatest fixed point, with `U X` the type variable `0` in `C`.  `[spec §7]` -/
-  | nu (C : CTy)
+  /-- `νᵢ(X₀…Xₘ). C₀; …; Cₘ`: the `i`-th of a system of `m + 1` codata equations, the bodies the
+  `&`-spine `Cs`.  Today's `νX. C` is the system of one equation, `CTy.nu C = nuSys 0 0 C`, with
+  `U X` the type variable `0` in `C`.  `[spec §7, §79]` -/
+  | nuSys (m i : Nat) (Cs : CTy)
   /-- One operation of an effect row: `C` extended by the operation `i` of the name `n`,
   `A ↠^q B`, with its cancel row `fin`: what cancelling a continuation captured at the operation
   may raise or perform, `⊤` when it cannot be cancelled, otherwise the operations of `fin`'s layers
@@ -107,6 +109,9 @@ inductive CTy where
 end
 
 deriving instance DecidableEq for VTy, CTy
+
+/-- `νX. C`: the system of one equation, `ν₀(X₀). C`.  `[spec §7, §79]` -/
+@[match_pattern] abbrev CTy.nu (C : CTy) : CTy := .nuSys 0 0 C
 
 /-- The value-type eliminator with `U C` a leaf, and `Code⟨N; E⟩ C` recursing into `E` only. -/
 @[elab_as_elim]
@@ -164,7 +169,7 @@ def VTy.isZero : VTy → Bool
 `wpTS` at its end.  `[spec §19]` -/
 def CTy.EffFree : CTy → Prop
   | .ret _ | .top => True
-  | .arr _ C | .all _ _ C | .nu C => C.EffFree
+  | .arr _ C | .all _ _ C | .nuSys _ _ C => C.EffFree
   | .amp C D => C.EffFree ∧ D.EffFree
   | .eff _ _ _ _ _ _ _ _ => False
 
@@ -244,7 +249,7 @@ def CFree (x : LifeVar) : CTy → Prop
   | .amp C D => CFree x C ∨ CFree x D
   | .top => False
   | .all y b C => b.mentions x = true ∨ (x ≠ y ∧ CFree x C)
-  | .nu C => CFree x C
+  | .nuSys _ _ C => CFree x C
   | .eff _ _ _ A B fin _ C => VFree x A ∨ VFree x B ∨ CFree x fin ∨ CFree x C
 end
 
@@ -1243,7 +1248,7 @@ theorem not_leafBinds_of_hasAll : ∀ {C : CTy}, C.hasAll = false → ∀ x, ¬ 
       exact hb.elim (not_leafBinds_of_hasAll h.1 x) (not_leafBinds_of_hasAll h.2 x)
   | .arr _ D, h, x, hb => not_leafBinds_of_hasAll (C := D) h x hb
   | .all _ _ _, h, _, _ => by simp [hasAll] at h
-  | .ret _, _, _, hb | .top, _, _, hb | .nu _, _, _, hb | .eff _ _ _ _ _ _ _ _, _, _, hb => hb
+  | .ret _, _, _, hb | .top, _, _, hb | .nuSys _ _ _, _, _, hb | .eff _ _ _ _ _ _ _ _, _, _, hb => hb
 
 /-- A positive shape with no `∀` leaf is positive: it binds no lifetime. -/
 theorem NuOk.of_shape {C : CTy} (hS : C.NuShape) (hA : C.hasAll = false) : C.NuOk :=
@@ -1653,7 +1658,7 @@ def CTy.lifeBound : CTy → Nat
   | .amp C D => max C.lifeBound D.lifeBound
   | .top => 0
   | .all x b C => max (x + 1) (max b.varBound C.lifeBound)
-  | .nu C => C.lifeBound
+  | .nuSys _ _ C => C.lifeBound
   | .eff _ _ _ A B fin _ C => max A.lifeBound (max B.lifeBound (max fin.lifeBound C.lifeBound))
 end
 
@@ -1691,7 +1696,7 @@ def CTy.applyLSub (σ : LSubst) : CTy → CTy
             (max (y + 1) (max (lsubRangeBound (lsubDrop σ y)) C.lifeBound))) :: lsubDrop σ y))
       else
         .all y (b.applySub σ) (C.applyLSub (lsubDrop σ y))
-  | .nu C => .nu (C.applyLSub σ)
+  | .nuSys m i C => .nuSys m i (C.applyLSub σ)
   | .eff n i q A B fin rc C =>
       .eff n i q (A.applyLSub σ) (B.applyLSub σ) (fin.applyLSub σ) rc (C.applyLSub σ)
 end
@@ -1739,7 +1744,7 @@ def CTy.alphaB (ρ : List (LifeVar × LifeVar)) : CTy → CTy → Bool
   | .amp C D, .amp C' D' => CTy.alphaB ρ C C' && CTy.alphaB ρ D D'
   | .top, .top => true
   | .all x b C, .all x' b' C' => lifeAlphaB ρ b b' && CTy.alphaB ((x, x') :: ρ) C C'
-  | .nu C, .nu C' => CTy.alphaB ρ C C'
+  | .nuSys m i C, .nuSys m' i' C' => m == m' && i == i' && CTy.alphaB ρ C C'
   | .eff n i q A B fin rc C, .eff n' i' q' A' B' fin' rc' C' =>
       n == n' && i == i' && decide (q = q') && rc == rc' && VTy.alphaB ρ A A' &&
         VTy.alphaB ρ B B' && CTy.alphaB ρ fin fin' && CTy.alphaB ρ C C'
@@ -1821,7 +1826,7 @@ theorem lt_cLifeBound {x : LifeVar} : ∀ {C : CTy}, CFree x C → x < C.lifeBou
           (Nat.le_trans (Nat.le_max_left _ _) (Nat.le_max_right _ _))
       · exact Nat.lt_of_lt_of_le (lt_cLifeBound h)
           (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _))
-  | .nu C, h => lt_cLifeBound (C := C) h
+  | .nuSys _ _ C, h => lt_cLifeBound (C := C) h
   | .eff _ _ _ A B fin _ C, h => by
       rcases h with h | h | h | h
       · exact Nat.lt_of_lt_of_le (lt_vLifeBound h) (Nat.le_max_left _ _)

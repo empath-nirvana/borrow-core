@@ -36,3 +36,4 @@ import Frontend.Elab.Meta
 import Frontend.Elab.Pipeline
 import Frontend.Elab.LoopLend
 import Frontend.Elab.Pipes
+import Frontend.Elab.RowInst

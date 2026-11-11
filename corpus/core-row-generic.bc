@@ -1,0 +1,23 @@
+-- SPEC §76: a core-text piece generic over a row, `stopk[A, row r]` (stop_i's shape over one
+-- stage's types), used at `F[4.0 cancel i32 ~> 0]` and at `F[]`. Each use writes its row
+-- argument and is an instance: `stopk__r1` at the first row, and `stopk` itself, as written, at
+-- the empty row. `handle_with[4]` around the uses puts `main` at `F 1`.
+--
+-- Answer: ().
+
+def stopk[A, row r] : !U (U ((A -o F[..r] 1) & F[..r] 1) -o F[..r] 1) =
+  !thunkv fun (q : U ((A -o F[..r] 1) & F[..r] 1)) -> (force q).2
+
+def k0 : U ((i32 -o F[4.0 cancel i32 ~> 0] 1) & F[4.0 cancel i32 ~> 0] 1) =
+  thunkv < fun (x : i32) -> return (), return () >
+
+def k1 : U ((i32 -o F 1) & F 1) =
+  thunkv < fun (x : i32) -> return (), return () >
+
+main : F 1 =
+  handle_with[4](
+      ((!thunkv fun (v : 1) -> return v) : !U (1 -o F 1)),
+      (((!thunkv fun (x : i32) -> return ()), ()) : !U (i32 -o F 1) * 1)) (
+    u <- (unbang stopk[i32, row (4.0 cancel i32 ~> 0)]) k0;
+    let () = u;
+    (unbang stopk[i32, row ()]) k1)

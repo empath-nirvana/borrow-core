@@ -1,0 +1,11 @@
+-- SPEC §76: a row argument that gives an entry of the template's own row a second signature.
+-- `thunk1[row r]`'s type writes `4.0 cancel i32 ~> 0` before `..r`; the use's row argument gives
+-- `4.0` the signature `cancel i64 ~> 0`.
+-- expect: 11:43: the row argument of `thunk1` gives `4.0` a second signature
+
+def thunk1[row r] : !U (U (F[4.0 cancel i32 ~> 0, ..r] 1) -o F[4.0 cancel i32 ~> 0, ..r] 1) =
+  !thunkv fun (k : U (F[4.0 cancel i32 ~> 0, ..r] 1)) -> force k
+
+def k0 : U (F[4.0 cancel i32 ~> 0] 1) = thunkv return ()
+
+main : F[4.0 cancel i32 ~> 0] 1 = (unbang thunk1[row (4.0 cancel i64 ~> 0)]) k0

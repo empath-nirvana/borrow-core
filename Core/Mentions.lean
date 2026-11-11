@@ -267,8 +267,8 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
       · exact hs.liveAt_left (ihV k hk)
       · omega
       · omega
-  | withbor1U _ _ _ _ _ _ _ _ ih | withbor2U _ _ _ _ _ _ _ _ ih
-  | withbor3U _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
+  | withbor1UD _ _ _ _ _ _ _ _ _ _ _ _ ih | withbor2UD _ _ _ _ _ _ _ _ _ _ _ _ ih
+  | withbor3UD _ _ _ _ _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
   | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih =>
       intro k hk; rw [mentions_withborUE] at hk; exact ih k hk
   | foldImm => intro k hk; rw [mentions_of_closed (foldImmV_closed _)] at hk; cases hk

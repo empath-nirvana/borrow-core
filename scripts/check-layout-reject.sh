@@ -68,7 +68,7 @@ for f in "${progs[@]}"; do
   if ! "$bcc" lir --layout-reject "$f" > "$tmp/out" 2>&1; then
     echo "$f: $(head -3 "$tmp/out")"; fail=1; continue
   fi
-  if ! head -1 "$tmp/out" | grep -q '^accepted:'; then
+  if ! grep -q '^accepted:' <<< "$(head -1 "$tmp/out")"; then
     echo "$f: the layouts as computed are not accepted: $(head -1 "$tmp/out")"; fail=1
   fi
   if grep '^ACCEPTED:' "$tmp/out"; then
@@ -85,7 +85,7 @@ if ! cmp -s "$tmp/names" "$tmp/known"; then
 fi
 for fam in "${families[@]}"; do
   name=${fam%%|*}; re=${fam#*|}
-  if ! grep -F "refused: $name: " "$tmp/all" | grep -Eq -e "$re"; then
+  if ! grep -Eq -e "$re" <<< "$(grep -F "refused: $name: " "$tmp/all")"; then
     echo "perturbation \"$name\" was not refused by its family's refusal ($re) on any program"; fail=1
   fi
 done

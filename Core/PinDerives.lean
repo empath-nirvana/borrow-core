@@ -364,25 +364,34 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerivesP Δ Γ withload (.val (axWithloadTy a x Δ.meetOfDom A B))
   | withswap {Δ Γ a A B} (hΓ : Ctx.DeadP Γ) :
       CDerivesP Δ Γ withswap (.val (axWithswapTy a A B))
-  /-- The unwinding form of `withbor` (1): `Ref A` lent as `Imm 'x A` to a callback at a row of
-  abortive operations; when it unwinds, the finaliser `d` runs on the source. `d` is typed at the
-  rule's context, whose live slots are persistent, so it may name them.  `[spec §19, §72]` -/
-  | withbor1U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hd : CDerivesP Δ Γ d (.val (.lolli (.ref A) .unit))) :
-      CDerivesP Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S))
+  /-- The unwinding form of `withbor` (1): `Ref A` lent as `Imm 'x A` to a callback at a row
+  `Σ_M` of abortive operations; when it unwinds, the finaliser `d` runs on the source at its own
+  row `Σ_D`, and the result is at `Σ ≥ Σ_M, Σ_D` (K-b). `d` is typed at the rule's context, whose
+  live slots are persistent, so it may name them. At `Σ_D = ∅`, `Σ_M = Σ` it is
+  `CDerivesP.withbor1U`.  `[spec §19, §27, §72]` -/
+  | withbor1UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+      (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
+      (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
+      (hP : SD.UnrD → SM.PendPers)
+      (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
+      CDerivesP Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S))
   /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition
-  non-strict.  `[spec §19, §23]` -/
-  | withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hd : CDerivesP Δ Γ d (.val (.lolli (.ref A) .unit))) :
-      CDerivesP Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S))
-  /-- The unwinding form of `withbor` (3): `Mut @a A` reborrowed as `Mut 'x A`.  `[spec §19]` -/
-  | withbor3U {Δ Γ a A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hd : CDerivesP Δ Γ d (.val (.lolli (.mut a A) .unit))) :
-      CDerivesP Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S))
+  non-strict, the finaliser at `Σ_D`.  `[spec §19, §23, §27]` -/
+  | withbor2UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+      (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
+      (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
+      (hP : SD.UnrD → SM.PendPers)
+      (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
+      CDerivesP Δ Γ (withborUE d) (.val (withbor2UTyD x Δ.meetOfDom A B SM S))
+  /-- The unwinding form of `withbor` (3): `Mut @a A` reborrowed as `Mut 'x A`, the finaliser at
+  `Σ_D`.  `[spec §19, §27]` -/
+  | withbor3UD {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+      (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
+      (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
+      (hP : SD.UnrD → SM.PendPers)
+      (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
+      CDerivesP Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S))
   /-- The unwinding form of `withload`: its own term, the source consumed by the load.
   `[spec §19]` -/
   | withloadU {Δ Γ a A B} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
@@ -694,6 +703,34 @@ theorem CDerivesP.effHandleCs {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List 
   exact .effHandleV (cs := cs) hs
     (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E fs)))
     (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
+
+/-- The unwinding form of `withbor` (1) with its finaliser at the pure row: `withbor1UD` at
+`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19, §72]` -/
+theorem CDerivesP.withbor1U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
+    (hS : S.Unwind x) (hd : CDerivesP Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    CDerivesP Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S)) :=
+  .withbor1UD (SD := []) x hΓ hx hsc₁ hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
+
+/-- The unwinding form of `withbor` (2) with its finaliser at the pure row: `withbor2UD` at
+`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19, §23]` -/
+theorem CDerivesP.withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+    (hd : CDerivesP Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    CDerivesP Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S)) :=
+  .withbor2UD (SD := []) x hΓ hx hside hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
+
+/-- The unwinding form of `withbor` (3) with its finaliser at the pure row: `withbor3UD` at
+`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19]` -/
+theorem CDerivesP.withbor3U {Δ Γ a A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+    (hd : CDerivesP Δ Γ d (.val (.lolli (.mut a A) .unit))) :
+    CDerivesP Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S)) :=
+  .withbor3UD (SD := []) x hΓ hx hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
 
 end BoCa.Fig16.LogRel.Core
 

@@ -45,6 +45,8 @@ def VTy.subst (σ : TySubst) : VTy → VTy
   | .app sp G A => .app sp (G.subst σ) (A.subst σ)
   | .lapp sp G a => .lapp sp (G.subst σ) a
   | .rowed sp G r => .rowed sp (G.subst σ) (r.subst σ)
+  | .rowArg sp r => .rowArg sp (r.subst σ)
+  | .siteArg sp n => .siteArg sp n
 
 def CTy.subst (σ : TySubst) : CTy → CTy
   | .ret sp A => .ret sp (A.subst σ)
@@ -65,6 +67,7 @@ def Row.subst (σ : TySubst) : Row → Row
   | .nil => .nil
   | .cons n i q A B f r => .cons n i q (A.subst σ) (B.subst σ) (f.subst σ) (r.subst σ)
   | .top => .top
+  | .var x => .var x
 
 def Shape.subst (σ : TySubst) : Shape → Shape
   | .leaf sp A => .leaf sp (A.subst σ)

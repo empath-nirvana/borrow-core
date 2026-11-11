@@ -123,6 +123,12 @@ core-fin-sub-row 0 0 0 0 0 0
 core-fin-top-row 0 0 0 0 0 0
 core-pipe-close 2 0 0 2 2 0
 core-pipe-step 1 0 0 1 1 0
+core-row-capture-global 0 0 0 0 0 0
+core-row-generic 0 0 0 0 0 0
+core-row-key-tparam 0 0 0 0 0 0
+core-row-pipe-stop 0 0 0 0 0 0
+core-site-fresh-const 0 0 0 0 0 0
+core-site-generic 0 0 0 0 0 0
 core-unsigned 0 0 0 0 0 0
 data-json-map-ser 16 0 0 497 387 133
 deep-gen-count 0 3 0 0 0 0
@@ -568,6 +574,7 @@ reconcile-chain 16 3 0 373 355 0
 reconcile-clock 25 8 0 272 236 0
 retry-block 2 0 0 5 5 0
 reverse-bytes 4 0 0 133 92 39
+row-site-fresh-handler 0 0 0 0 0 0
 sched-a 40 18 0 477 473 0
 sched-a-div 11 5 0 384 380 0
 sched-b 41 18 0 480 474 0

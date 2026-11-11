@@ -551,7 +551,8 @@ over it; a new codata shape is a new abbreviation, and a library of iterator ada
     C ::= … | νX. C          (computation types)
 
 `X` is a computation-type variable bound in `C`; it occurs only as the value type `U X`, "the
-rest of the codata". Every observation of a `νX. C` returns, possibly among other values, a
+rest of the codata". §79 generalises the former to finite systems of equations; `νX. C` is
+`ν₀(X₀). C`. Every observation of a `νX. C` returns, possibly among other values, a
 thunk of the rest.
 
 **Positivity** (`CTy.NuOk`). `C` is a `&` of two observation trees (`CTy.NuShape`), and an
@@ -1517,7 +1518,7 @@ value types fall in three groups.
    | `μX. T`, `T` in `FShape` (§6) | `foldOwn`, whose algebra is the consume of `T[1/X]` |
    | `μX. T`, `T` in `P` (§6, §61), not in `FShape` | `foldOwnG`, whose algebra at each key is the consume of the key's body (an array key's element type) at results `1` |
    | `U(C & F 1)` | `close`: force, then the second projection |
-   | `U(νX. C & F R)`, `R` closed and consumable (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the consume of `R` |
+   | `U(νX. C & F R)`, `R` closed and consumable (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the consume of `R`; at a system, per projection (§79, K-M.2) |
    These are linear. A value of one of these types that goes unused is consumed by its
    consume, which the checker inserts. Because the consume deallocates memory and, at codata,
    runs the object's `close` code, where it is inserted can be observed.
@@ -5738,7 +5739,11 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
      (`let r = for …; N`) is wrapped with the binding of its value,
      `r <- (loop …; r <- return forRes; return r) unwind (cancel k); N`, so the wrap is around the
      loop as the typed elaboration elaborates it (`boundRes?`). A head of `x <- M₁; N` or of
-     `x <- M₁ unwind (D); N` that mentions `k` is entered by the same rule.
+     `x <- M₁ unwind (D); N` that mentions `k` is entered by the same rule. A head that runs a
+     `[then]` in place (an `unwind` region in the head) is itself wrapped,
+     `… unwind (cancel k)`, in a clause that drops `k`, and every `unwind` region in such a clause
+     is a head. The wrap is a finaliser that never fires when the head can neither abort nor
+     capture.
    Exactly once: from its binding `k` is live until the first of a head's abort (its finaliser
    cancels it; nothing after runs), the end of the path (the cancel before the terminal), or a use
    the program wrote (nothing is inserted after it). `[then]`'s finaliser and rest are exclusive,
@@ -8670,6 +8675,12 @@ variables, in the order they were declared, the construct writes too. The rule t
 each construct's parts. Writes are of resolved variables (R1), so a shadowing `let` is never taken
 for the variable it shadows.
 
+An `unwind`'s continuation is a tail position of the spine. A loop that a cancel clause wraps as a
+head hands its writes on to the rest of the clause (#1053).
+
+`bcc print` writes a loop's `let mut` writes as `writes(x, …)` before it, as it does for closures,
+so the printed program reads back. A surface body cannot write `writes(…)`.
+
 ### R3: the boundary
 
 A construct whose part runs in another frame, before the code after it (an arm, a binding's head,
@@ -8708,6 +8719,7 @@ what its parts write and has no boundary of its own.
 | `x <- M` on a `let mut` | `{x} ∪ W(M)` | — |
 | `let (x, q) = f(…, x, …)` | `{x}` | — |
 | `let p = e; N`, `x <- M; N`, `S; N` | `W(e) ∪ W(N)` | — |
+| `x <- M unwind (D); N` | `W(M) ∪ W(D) ∪ W(N)` | — : the continuation `N` is a tail position (an `unwind` writes what its parts write) |
 | `&mut x`, `&x` | `{x}` | the lend rebinds `x` (typed elaboration §5.1) |
 | `if`, `match`, `case` (a statement) | `W(arm₁) ∪ W(arm₂)` | each arm hands on `W` (`handArms`); the statement rebinds it |
 | `let p = if/match …`, `x <- M` (a head) | `W(M)` | each terminal hands on `(value, W)`; the binding takes it apart (`bindForm`) |
@@ -8849,6 +8861,20 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/div-residual-copy.bc` | a div function's residual handed back by a copy, `let j = i`, and by `let i = i` | `i32[4]` on `abc` (was refused; `let i = i` ran before R1) |
 | `corpus/loop-handler-binder.bc` | #493's handler-clause binder, from `corpus/pending/` | `i32[42]` (was refused) |
 | `corpus/generated-names.bc` | a source binder named `io_bt` | `i32[62]` (was `61`) |
+| `corpus/mut-after-unwind-while.bc` | #1053: a write in an `unwind`'s continuation inside a `while` | `i32[6]` |
+| `corpus/mut-after-unwind-if-arm.bc` | the same in an `if` arm | `i32[15]` |
+| `corpus/mut-after-unwind-let-head.bc` | the same in a binding's head | `i32[17]` |
+| `corpus/mut-after-unwind-nested.bc` | nested `unwind`s in a `while` | `i32[12]` |
+| `corpus/mut-after-unwind-if-in-while.bc` | an `unwind` in an `if` arm inside a `while` | `i32[24]` |
+| `corpus/mut-after-unwind-counter-in-n.bc` | a loop counter written in the continuation | `i32[303]` |
+| `corpus/mut-after-unwind-generator.bc` | a write in an `unwind`'s continuation inside a generator's loop | `i32[330]` |
+| `corpus/mut-after-unwind-exits.bc` | `break` and `continue` in an `unwind`'s continuation | `(i32[603], i32[9])` |
+| `corpus/mut-after-unwind-loop-in-n.bc` | a loop in the continuation | `i32[50303]` |
+| `corpus/mut-after-unwind-for-gen.bc` | an `unwind` in the body of a `for` over a generator: the stored generator is drained | `i32[3]` |
+| `corpus/mut-cancel-loop-for.bc`, `mut-cancel-loop-for-value.bc` | #1053: a `k`-dropping cancel clause around a `for` that writes, unbound and bound | `inl (inr i32[3])` |
+| `corpus/mut-cancel-unwind-region.bc` | `unwind`s whose heads do not abort, in a clause that drops `k` | `inl (inr i32[3])` |
+
+The #1053 programs (`mut-after-unwind-*`, `mut-cancel-*`) give `live 0` on every backend.
 
 `scripts/mut-combos.py` checks the rules on generated nestings (*Acceptance* below).
 `corpus/sugar/mut-heads.bc` and `mut-modify.bc` pin the elaboration beside the core written by
@@ -8992,14 +9018,8 @@ whose meaning depended on two names coinciding.
   for a block parameter (`cbRows`) does not carry its `let mut` capabilities.
 - **`case V { … }` and `for` as expressions** are not read as `run`: `case` is printed core, and
   `for` as a value needs its loop result bound (`let r = for …`).
-- **Known wrong answers (#1053).** These programs are accepted and give a wrong answer:
-  1. a write to a `let mut` in the continuation `N` of `x <- M unwind (D); N`, where the finaliser
-     form is inside a loop, an `if` arm or a binding's head: the write is lost, and a loop whose
-     exit test reads that variable may not terminate;
-  2. a cancel clause that drops `k`, around a loop whose body can abort (the loop is wrapped as a
-     head, #868 Phase 2) and that writes a `let mut`, bound or not: the loop's writes are lost.
-
-  A redesign of `let mut` as sugar over a `State` effect is under study.
+- **Refused, not wrong:** `modify` or `run` in a clause that drops `k`.
+- **A redesign of `let mut` as a Core former `var_n`** (#1058) is parked.
 
 ---
 
@@ -10421,9 +10441,9 @@ corpus or a golden.
 
 ### `cancelTo_n`: the in-place cancel-mode unwind (#1002)
 
-A seventh effect primitive, `cancelTo_n k`, cancels the handled region of the nearest `hnd(n, H)`
-in place, in cancel mode, without capturing a continuation, and then runs `k` outside the node
-(§19's step `[cancel-to]`):
+A seventh effect primitive, `cancelTo_n k`, a machine primitive with no typing rule (below), cancels
+the handled region of the nearest `hnd(n, H)` in place, in cancel mode, without capturing a
+continuation, and then runs `k` outside the node (§19's step `[cancel-to]`):
 
     (μ, hnd (n, H) K[cancelTo_n k])  ↦  (μ, ccatch (K†[raise (⊥, none)]) ; k ())     K free of n   [cancel-to]
 
@@ -10438,19 +10458,21 @@ in place, in cancel mode, without capturing a continuation, and then runs `k` ou
 - Determinism and unique decomposition gain the case: `K[cancelTo_n k]` is final until the
   enclosing `hnd(n, _)` reduces it, as `K[perform (n, v)]` is.
 
-**Typing, inside a `[handle-last]` node's region.**
+**No typing rule.** `cancelTo_n` is a machine primitive that no program the checker types
+contains: only the fusion lowering produces it, in a fused `[handle-last]` node. It is justified by
+correspondence, as the erasure laws are, not by `CDerives`:
+- `cancelTo_last_cancel` (`Core/HandleLastErase.lean`, #1043) proves that its step reaches the
+  configuration the `[op]` step plus the clause's `κ.2 ()` reaches. The `[cancel-to]` step builds a
+  `seq` frame where the `[op]` route has an application frame, and both reach `K₀[(λ_. nf z) ()]`
+  at the same memory.
+- The fused form as a whole is justified by P3's whole-run simulation (#1001), which is not yet
+  mechanised.
+- Until it is, the fusion lowering marks its use of `cancelTo` `UNPROVED:`. The mark states the
+  assumption (fused and unfused runs correspond) and what breaks if it fails (cleanup order and the
+  reported error).
 
-    Γ ⊢ k : U(1 ⊸ F_Σ R)        (Σ, R the node's outer row and answer)
-    ──────────────────────────────────────────────────  [cancel-to]
-    Γ ⊢ cancelTo_n k : F_{n:E[fs] ⊕ Σ′} B        (any B)
-
-- It is admitted where the region's row carries the node's name `n`, as an operation of `E` that
-  is cancellable or abortive with cancel row `fs j`.
-- Its cancel obligation, `K`'s finalisers, is covered by that cancel row under `LastFinOK`'s
-  conditions: below `Σ` (D3), not `⊤`, no `Div`.
-- Whatever `k` closes over is held across the cancel: `[let]`'s `hW` at `Row.Cancels`, as for an
-  exit's `z`.
-- No new index: one `CDerives` rule with its compatibility lemma.
+The relation has no stop for `K[cancelTo_n k]`, and the row does not record a node's answer. So a
+typing rule would need a new stop kind and a new row coordinate (#1002's C.2 analysis). Not built.
 
 **The fused form it gives pipe fusion** (P3, #1001):
 
@@ -10463,21 +10485,22 @@ handlers are dead), on the `inr` exit, and on an outer cancel of a continuation 
 the node. It is not exact for a perform by the work of a name that has a live handler inside `K`;
 that case keeps T-B2's condition, `Σ_W`'s names unhandled in `K`.
 
-**Baseline.** `fundamentalC`, `adequacyC`, `adequacyD`, `fundamentalN_all` and `goal791N`, with
-their statements unchanged; every existing compatibility lemma; §13's determinism (`head_det`, with
-the new case); the laws `last_resume_direct`, `last_cancel_direct` (and `_exit`) and
-`last_perform_direct`, unchanged. Every corpus and kernel program keeps its output: no existing term
-changes.
+**Baseline.** No `CDerives` rule and no relation change: `fundamentalC`, `adequacyC`/`adequacyD` and
+`fundamentalN_all`/`goal791N` are untouched, and no checked program contains `cancelTo`. Every
+existing compatibility lemma; §13's determinism (`head_det`, with the new case); the laws
+`last_resume_direct`, `last_cancel_direct` (and `_exit`) and `last_perform_direct`, unchanged. Every
+corpus and kernel program keeps its output: no existing term changes.
 
 **Units.** C.1, the machine (Support): the `Expr` former, `[cancel-to]`, and the cases in
-determinism, decomposition and `StepsOff`/frame. C.2, Core: the rule and its compatibility lemma,
-from the cancel branch's proof (`erwp_kappaC_cancel`, `ewp_handle_or`'s `hTc` at `lastTc`). C.3,
-the chain: the compatibility lemma at `erwpK`/`KW`. The backend: the in-place cancel-mode unwind in
-the interpreters and Backend2. C.1 is built; C.2, C.3 and the backend are not.
+determinism, decomposition and `StepsOff`/frame; built (#1043). C.2 and C.3 are dropped: there is no
+typing rule (#1002). The lowering is backend-foreman's: the in-place cancel-mode unwind in the
+interpreters and Backend2, marked `UNPROVED:` at the fusion site until P3's simulation is
+mechanised.
 
-**Open.** The fused-vs-unfused simulation (P3's whole-run relation), which discharges *a raise or
-cancel crosses the active frame* above; performs re-entered in `K`; a surface or elaborator producer
-for the fused form.
+**Open.** P3's whole-run simulation (#1001), which justifies `cancelTo`'s use in the fused form
+and discharges the fusion site's `UNPROVED:` mark (*Units*), and *a raise or cancel crosses the
+active frame* above; performs re-entered in `K`; a surface or elaborator producer for the fused
+form.
 
 ### Open
 
@@ -12756,6 +12779,8 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
 - `C.BindsFresh G` in `nuOutK`: the unrolling under a `∀'x` leaf reads the code type, which
   contains `G`, at `δ[x↦α]`, and a code-typed `G`'s environment could mention `x`. `codeTy`,
   `hCode`, `hEnv` and `unfoldKTy` are in `Core/CodeNuOut.lean`.
+- §79 generalises `unfoldK` and `nuOutK` to finite systems of ν equations, per equation (§79,
+  K-M.4).
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
 - `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
@@ -13139,6 +13164,106 @@ probes that differ write `>|`, which main does not parse.
 
 ---
 
+## 71. Entry 70 — the new backend: a tail clause's captures passed as evidence (#960, E1)
+
+### Motivation
+
+§47 calls a tail-resumptive clause directly only when it is closed (`closedAt 0`). A `tail` clause
+that reads a value captured at its handler (a handler parameter at a `!` type, say) is otherwise a
+state machine: a suspension per `perform` and a drive at the node. Rust calls it directly with the
+closure's environment. The kernel's `[handle]` makes every captured value persistent
+(`hd : Ctx.DeadP Γ₁`), so the captures can be passed by value.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration, semantics or erasure.
+
+### Lowering (`Backend2/`)
+
+- **Direct kinds** (`Driver.directFacts`). Each operation's direct call is `closed`, `env` or `no`.
+  `env` is §47's conditions (`ks` via `classifyHandler_sound`, `cond2B` at `Checked.flows`, one
+  clause erasure, one row and signature up to `[α]`), with `closedAt 0` replaced by: the clause
+  erasure's free variables are slots of the node's context (`freeAt`); their types, as the
+  clause's typed term records them (`var`, `force`, `app`: `slotTypes`), are persistent; they
+  agree at every node up to `[α]` (`tyEqV`); and they hold no row naming a name with an `env`
+  operation. A name's evidence is the captured slots of its `env` clauses, in slot order.
+- **The names that take evidence are decided before conversion** by `evNames`, from the checked
+  conditions above. A name is excluded if its evidence would reach a machine row or a `&` or `ν`
+  component, a generated helper other than `bounded_fix`, a work whose `handle` node's outer row
+  holds a machine operation or another evidence name, a name in the outer row of a node with a
+  directly called clause, or a captured value with no LIR type. A task-variant code never takes
+  evidence; meeting one that would is an internal error.
+  Excluding a name can make new machine operations, so `evNames` repeats to a fixed point. A call
+  with no evidence in scope then cannot arise; meeting one is an internal error. Conversion runs
+  once.
+- **Evidence types** (`Types.ofC ms fd`). `F_Σ R` at a row holding names of `fd` is
+  `Ev_Σ ⊸ ⟦F_Σ R⟧` (`LCTy.ev n e k`): one parameter per captured slot, names in the row's order,
+  after the code's argument. `[sub]` drops what the smaller row lacks: a call passes what its
+  callee's type takes.
+- **LIR.** `Tm.appE f a j ev` is a closure call with evidence, and `Fn.evs` marks a function's
+  trailing evidence parameters. Evidence is passed and kept: the caller still owns it. Layout's
+  closure classes carry evidence nodes, which LayoutCheck checks; Flow links them; Lower passes
+  their words after the argument; the LIR interpreter reads them without taking them.
+- **The node.** A `handle` node of an `env` name binds the values of its captured slots, from the
+  clauses' parts of the context, as the name's evidence for its handled computation, which runs in
+  place. They are consumed with those parts after it.
+- **The `perform`** calls the work on `(v, ev)`. **The work** takes the evidence as parameters; its
+  captured slots are `dup` copies of them.
+- **Codes.** A closure's code takes its type's evidence as parameters and has only those in scope.
+  `bounded_fix`'s loop and its self-reference pass the step's evidence.
+- **`evConfined`** (`Lint`). Evidence is only an evidence argument or a `dup` copy's source, at a
+  persistent type: never in a pair, sum, closure environment, cell, consume or value. A closure
+  call passes exactly the evidence its type takes. Negative tests are in `Backend2/LintTests.lean`.
+- `UNPROVED:` the evidence in scope at a `perform` is the innermost frame's. `evConfined` keeps a
+  function's evidence parameters out of the values it builds. A node's evidence is its own
+  persistent captures, which it owns and consumes after its handled computation, so no call
+  receives evidence from a node that is no longer running. A mistake gives a wrong answer, never
+  undefined behaviour.
+
+### Facts read
+
+`ks` and `classifyHandler_sound`; `Checked.flows` and `cond2B`; the clause's erasure; the slot
+types its typed term records; persistence, which `[handle]`'s `DeadP` gives; the rows of the
+codes' types. Nothing is read from `TInfo` or `HSite`.
+
+### Programs
+
+- `corpus/loop-captured-bang.bc` (new): `0 0 0 0 0 0`, erasure `handles 2 performs 1 raises 1`,
+  no machine, native in 64 KiB.
+- `corpus/evidence-rebind.bc` (new): closure captures, three instances of one site, at most two
+  live at once: `(1, 2100)`. Stale evidence would answer `2002`.
+- `corpus/evidence-rebind-value.bc` (new): an `i32` capture, in core syntax: `(1, 2100)`.
+- `corpus/evidence-nested-site.bc` (new): two nodes of one name in one function: `2100`.
+- `corpus/evidence-outer-row.bc` (new): a name in the outer row of a node with a directly called
+  clause: `8`. The exclusion keeps that clause a machine, and its LIR is unchanged.
+- The new programs give `live 0`.
+- The machines become direct calls in `hygiene-handler-resume` (erasure from
+  `machines 1 suspends 1` to `handles 2 performs 1`), `loop-captured-bang`, `evidence-rebind`,
+  `evidence-rebind-value` and `evidence-nested-site`.
+- Counts are unchanged, except `evidence-rebind`'s `indirect`, 0 → 3 (*Open*).
+- `gen-return` and `gen-take-print` are unchanged: each name's two nodes hold different clauses.
+
+### Baseline
+
+No change to `CDerives`, `Core/`, the checker, the elaboration, the old backend or the kernel
+programs. Every corpus program's output is unchanged. With no evidence, every program's LIR is
+byte-identical.
+
+### Open
+
+- Resume entries taking fresh evidence (evidence in machines).
+- `&` and `ν` codes at evidence rows.
+- The other generated helpers.
+- A work at an outer row holding evidence names: pass Σ's evidence with the name's.
+- Several instances of one site capturing different closures share one work, whose call through
+  the evidence is indirect (`evidence-rebind`: `indirect` 0 → 3). Specialising per code type is
+  #1066 (after #855 B1, §68).
+- Captures that are not `!` closures arise only in core syntax today. A non-`!` handler parameter
+  makes the handler `tail+state` (E2).
+- E2 (`tail+state`): after K-S1–K-S3 and the proved lemma P-EV (#960, design §12).
+
+---
+
 ## 72. Entry 71 — host externs under the chain's adequacy (#963, K1)
 
 ### Motivation
@@ -13374,6 +13499,11 @@ instance keys are this entry's.
 - `row r` names a row. In a type it is written `..r` inside a row: `F[s.0 cancel A ~> B, ..r] R`,
   `with Fail[E], ..r`, a cancel row `cancel[..r]`, `pull[..r] A B R` (the surface `pull_Σ`), and
   `(A => B with ..r)`.
+  - A row may **splice several row parameters, anywhere among its entries**: `F[..cr, ..sg] 1`,
+    `F[..cr, s.0 cancel[..cr] 1 ~> A, ..sg] B`, `cancel[..r1, ..r2]`.
+  - The row is the **concatenation in written order** of its written entries and each splice's
+    argument.
+  - This is core text only. At the surface, `with E, ..r` has one tail.
   - `..r` is *carried*: it is what an argument performs, resolved where the argument was written,
     as a block's operations are (§30). The callee does not serve it.
   - An effect name in the same position keeps §33's meaning: *provided*.
@@ -13411,8 +13541,26 @@ instances, resolved to what serves them at the call, as §38 resolves a row entr
   through its instances. An error inside an instance is reported with
   `` in the instance `f__rk` of `f`, used at L:C ``, and one in a pure use with
   `` in `f`, used at L:C ``.
-- Two templates' instances never share a slot: a private site is fresh, and a written entry equal to
-  one of `..r`'s is one entry (§38). One that differs is refused:
+- Two templates' instances never share a slot. A private site is fresh, and entries merge as §38
+  merges them:
+  - **Within one row argument,** repeats with the same signature are one entry (§38). So are two
+    written entries.
+  - **A written entry and a spliced one** match one for one. Each written entry absorbs at most one
+    equal spliced entry, the first in written order, wherever it stands, and the merged entry takes
+    the written entry's place. A row's length is its written entries plus its spliced ones, less
+    the matches.
+- **Repeats between splices are kept:** entries of two different splices, and of the same parameter
+  spliced twice, are never merged. A row is a list, and these repeats are significant, as a
+  duplicate label is in Koka's scoped labels (Leijen, "Extensible records with scoped labels",
+  TFP 2005). A continuation's cancel branch is `fin ++ Σ`, which the checker reads back by length
+  (`finOfBranch`, §27). So `F[..cr, ..sg]`, with an operation in both `cr` and `sg`, keeps it
+  twice.
+- **A row that keeps a repeat is refused wherever the kernel needs each operation once:** at
+  `[then]` and `unwind` (S.Uniq): `` the row `R` has an operation twice ``. So a template that
+  puts `F[..r1, ..r2]` under an `unwind`, used where `r1` and `r2` share an operation, is refused in
+  its instance, with the message's `` in the instance `f__rk` of `f`, used at L:C ``.
+- **A second signature is refused wherever one row would give `n.i` two signatures:** between a
+  written entry and a spliced one, between two splices, and within one row argument:
   `` the row argument of `f` gives `n.i` a second signature ``.
 
 **Errors at the use site.** A wrong row argument is reported where the template is used, and names
@@ -13440,6 +13588,10 @@ kernel error deep inside an instance.
   parameter elaborates to the same core, byte for byte (`bcc desugar`): its copy keys, site numbers
   and cancel rows are unchanged.
 - §38's abstraction safety: instantiation never merges slots.
+- A row with one splice at its tail and no repeated entry elaborates to the same core, byte for
+  byte. Every §76 program and reject keeps its output, its desugar, its counts and its message.
+  Splicing is in the frontend only (`Frontend/Syntax.lean`'s `Row`, the parser,
+  `Frontend/Elab/RowInst.lean`), with no kernel or checker change.
 
 ### Programs
 
@@ -13451,6 +13603,7 @@ kernel error deep inside an instance.
 | `corpus/core-site-generic.bc` | a `def` with a private `site s` (`handle_with[s]` inside), used twice, nested; the inner activation's performs go to the inner handler | `i32[2321]`, `live 0` |
 | `corpus/core-row-pipe-stop.bc` | §75's `pipe_stop` at two rows | `i32[42]`, `live 0` |
 | `corpus/core-row-key-tparam.bc` | a use whose arguments mention the caller's type parameter: the instance takes it as its own (`app__r2[T]`) | `(i32[3], inl ())`, `live 0` |
+| `corpus/core-row-splice.bc` | a plain definition with two row parameters, a cancel row `cancel[..r1]` and a clause whose continuation's cancel branch is `F[..r1, ..r2] 1` (`fin ++ Σ`), used where both rows give the same operation; the handler reads the cancel row as `r1`, so the cleanup's raise reaches the outer handler | `i32[7]`, `live 0` |
 | `corpus/core-row-capture-global.bc` | a template body naming a global type, used from a generic function with a same-named type parameter: the instance's own parameters take fresh names, so the global is not captured | `(inr (), i32[7])`, `live 0` |
 | `corpus/core-site-fresh-const.bc` | a private site's fresh name lies above a site written only in a constant's type (`unfold[…]`) and above the effects pass's sites | `i32[4]`, `live 0` |
 | `corpus/row-site-fresh-handler.bc` | a private site's fresh name beside a surface handler's site | `i32[4]`, `live 0` |
@@ -13584,6 +13737,138 @@ the old backend or a kernel program.
 - Two recursive positions on one path (binary trees, `X ⊗ [Ref X]`) keep the recursion.
 - Arrays of an `S ≠ X` holding `X` (`array (string ⊗ X)`), and inner `μ` keys.
 - Persistent `!μ` data copied or consumed by the word IR's helpers, which recurse.
+
+---
+
+## 79. Entry 78 — mutual codata: finite systems of ν equations (#995)
+
+This entry extends §7 (codata `νX. C`), and touches §12 (consume) and §68 (`unfoldK`, `nuOutK`).
+The user approved option M, mutual ν (#995). Code it adds is tagged `[spec §79]`, and the per-code
+rules `[spec §79, §68]`.
+
+### What it adds
+
+**Finite systems of codata equations.** A system is `νᵢ(X₀…Xₘ). C₀; …; Cₘ`: `n = m + 1` mutually
+recursive codata types, of which the `i`-th is selected. §7's `νX. C` is the case `m = 0`, by
+definition. Nothing is added to `VTy`, to the `CDerives` constructors or to `CDerives`' index. The
+five ν rules are generalised in place.
+
+1. **The former, generalised by deleting.**
+
+       C ::= … | νᵢ(X₀…Xₘ). C₀; …; Cₘ       (CTy.nuSys m i Cs, Cs = C₀ & (C₁ & … & Cₘ))
+       νX. C  ≜  ν₀(X₀). C                   (CTy.nu C := .nuSys 0 0 C)
+
+   - In each body `Cⱼ = Cs.body m j`, `U Xₖ` is the type variable `k` for `k ≤ m`, and a body's
+     outer types are shifted by `n`.
+   - The bodies are one `CTy`, a `&` spine with its length `m`, not a list, so `CTy` stays a plain,
+     non-nested mutual inductive.
+   - `CTy.nu` is an abbreviation usable as a pattern, so every type, abbreviation (`Loop`, `D`,
+     `Stream`, `Iter`, `Loop_Σ`) and program of §7 is unchanged.
+
+2. **Positivity over the system** (`SysOk m Cs`, with `NuOk C := SysOk 0 C`).
+   - Each body has §7's positive shape: a `&` of two observation trees.
+   - In each leaf result, every `U Xₖ` (`k ≤ m`) occurs only under `⊗`, `⊕` and `[@a]`
+     (`VTy.PolyAt k` for every `k ≤ m`; §7's `Poly` is `PolyAt 0`).
+   - Arguments and the operation types of `F_Σ` leaves are closed (`Cl 0`), as in §7, so no `Xₖ`
+     occurs in them.
+   - **Binder freshness over the system:** no lifetime bound by a `∀` leaf of any body is free in
+     any body. Unrolling `Cᵢ` puts every `U νⱼ` it mentions, and with it the whole system, under
+     `Cᵢ`'s `∀` leaves.
+
+3. **In and out, by simultaneous substitution.**
+
+       Γ ⊢ M : Cᵢ[U ν₀/X₀, …, U νₘ/Xₘ]         Γ ⊢ M : νᵢ(X⃗). C⃗
+       ──────────────────────────────  nuIn    ──────────────────────────────  nuOut
+       Γ ⊢ M : νᵢ(X⃗). C⃗                      Γ ⊢ M : Cᵢ[U ν₀/X₀, …, U νₘ/Xₘ]
+
+   - The premises are `SysOk m Cs` and `i ≤ m`.
+   - They are rules on the same term, as in §7.
+   - The substitution sends `Xₖ` to `U νₖ` and shifts the outer variables by `−n`. At `m = 0` it is
+     §7's `C[U(νX. C)/X]`.
+
+4. **Coiteration, one step per equation.**
+
+       unfoldᵢ : !U(S₀ ⊸ C₀[S⃗/X⃗]) ⊗ … ⊗ !U(Sₘ ⊸ Cₘ[S⃗/X⃗]) ⊸ !U(Sᵢ ⊸ νᵢ(X⃗). C⃗)
+
+   - The premises are `SysOk m Cs`, `i ≤ m`, a consumed context, and **freshness per pair**:
+     wherever `Xₖ` occurs in `Cⱼ`, `Cⱼ.BindsFresh Sₖ` (`SysFresh`).
+   - `unfoldᵢ steps s` answers an observation path of `Cᵢ` by running the same path of `stepᵢ s`.
+     It replaces each state `s′` at an `Xₖ` position by `unfoldₖ steps s′`.
+   - The recursion is the rule's, and the steps return states, never codata.
+   - At `m = 0` the type and the term are §7's `unfold`.
+   - It is sound by coinduction, with the candidate tuple `j ↦ {unfoldⱼ steps s | s ∈ 𝒱⟦Sⱼ⟧}`.
+
+5. **The per-code rules, per equation (§68).** `unfoldK` and `nuOutK` take the steps `Gs` (each
+   `Gⱼ.forceTy = some (Sⱼ ⊸ Cⱼ[S⃗/X⃗])`), and type every rest at `Xⱼ` at its own equation's code type:
+
+       Code⟨etaCode m j Cs; !G⃗ ⊗ (Sⱼ ⊗ 1)⟩ νⱼ
+
+   The other premises are §68's, per pair. At `m = 0` the codes and types are §68's.
+
+6. **The relation: a greatest fixed point over tuples.**
+   - `𝒞⟦νᵢ⟧` is the `i`-th component of the greatest tuple `R⃗` of candidates below one unfolding of
+     every body, with `U Xₖ` read at `Rₖ`. It is written in `Prop` as `∃ R⃗`.
+   - One unfolding is monotone in each component, since every `Xₖ` avoids `Mut` payloads and
+     arguments, so the tuple is a fixed point.
+   - It needs no step index in Core. In the chain each candidate carries the step index, as §7's
+     does. It is not a step-indexing question (#990 R3a).
+   - `𝒞⟦νᵢ⟧ = 𝒞⟦Cᵢ[U ν₀/X₀, …]⟧`.
+   - At `m = 0` the clause equals §7's propositionally, and §7's lemmas keep their statements.
+
+7. **Consume per projection (§12).** `U νᵢ(X⃗). C⃗` is consumable when `Cᵢ = D & F R`, with `R`
+   closed and consumable. The consume is §12's: force, `nuOut i`, the second projection (`close`),
+   then the consume of `R`.
+
+8. **Lowering** (not a kernel change; the backend's unit).
+   - The index `i` is static, in the type: no value carries a run-time tag. It reaches the layout
+     through `LCTy.nu m i`.
+   - `nuIn i` and `nuOut i` lower to nothing.
+   - `unfoldᵢ` lowers to one closure class per equation, sharing the steps' tuple. There is no
+     allocation per observation beyond the rest's closure.
+
+### Baseline
+
+- `fundamentalC`, `adequacyC`, `adequacyD`, `fundamentalN_all` and `goal791N` are re-proved with
+  the ν rules at systems. Their statements are unchanged.
+- `cC_nu_eq`, `cC_nu_unfold`, `cC_nu_iff`, `nuRel_out`, `nuRel_roll`, `cN_nu_out`, `cN_nu_roll`,
+  `cN_nu_unfold` and `cN_nu_iff` keep their statements, as the `m = 0` corollaries.
+- `unfold_compatX`, `unfoldK_compatX`, `nuOutK_compatX` and their chain forms are restated at
+  systems. Their `m = 0` instances are the statements of §7 and §68.
+- `loopBody_nuOk`, `streamBody_nuOk`, `iterBody_nuOk`, `loopEffBody_nuOk`, `CTy.loop_unroll` and
+  the other instance lemmas of §7 keep their statements. So do `d_drive`, `d_driveL`,
+  `tickProg_runs`, the `*_eval` kernel programs and the K4 instances (`CodeLoop855N`).
+- `consumeSlot_derives` and every `Consumable` instance are unchanged. `Consumable.nu` is kept as a
+  corollary.
+- Every corpus and kernel program keeps its output. No program's term changes: at `m = 0` the
+  types, the `unfold` term, the codes and the consume are §7's, §12's and §68's by definition.
+- There is no new judgment (`scripts/check-judgments.sh`), no new `CDerives` index, and no
+  inversion of `CDerives`.
+
+### Units
+
+- K-M.1, built (#1090): the former `CTy.nuSys m i Cs`, with `νX. C` the match-pattern
+  abbreviation `nuSys 0 0 C`; every match carries the system case. No rule reaches a system yet,
+  and the backends refuse one. Until K-M.2 the relation reads a system at `m > 0` as its spine's
+  single body, which is inert.
+- K-M.2: the relation at systems in Core and the chain; `nuIn i`, `nuOut i`; consume per
+  projection; the checker's tests `sysOkB` and `sysFreshB`. Not built.
+- K-M.3: `unfoldᵢ` at systems in both developments. The kernel instance `lexProg`, the lexer modes
+  `Normal`/`InString`, is typed, evaluated, adequate, and covered by `goal791N`. Not built.
+- K-M.4: `unfoldK` and `nuOutK` per equation in both developments; `d_lexProgK`. Not built.
+
+### Open
+
+- **Lowering.** Backend-foreman's n-ary ν unit: `LCTy.nu m i`, `genUnfold` per equation, and the
+  layout's cycle over `n`. Until it lands, the backends refuse a system with an error.
+- **Surface.** There is no syntax for a system. Still to come: `protocol` declarations, a core-text
+  spelling `nu_i (X, Y). (C; D)`, and corpus programs (HTTP with a streamed body, an SMTP-like
+  server, lexer modes) on both backends.
+- **Effectful leaves in a system.** `F_Σ` leaves are covered by the general proof. The kernel
+  instance is pure, and the HTTP body at the corpus stage is the first program with them.
+- **Nested ν** is not part of this entry. No program needs it.
+- **Binder freshness over all pairs** is stricter than needed. Freshness only for the pairs
+  `(i, j)` with `Xⱼ` in `Cᵢ` would also be sound; it is left until a program needs it.
+- From §7, unchanged: other positions of `X`, lifetime-indexed iteration, and `WpChainCommutes`.
 
 ---
 

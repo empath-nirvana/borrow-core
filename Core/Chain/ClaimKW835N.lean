@@ -72,7 +72,7 @@ def finRWK (R : KW → Nat → WProp) (vr : VRel) : CTy → LSub →
   | .arr _ _, _ => some (cancelOblRWK (ℍ := ℍ) (fun _ => OpTabK.empty) R)
   | .amp _ _, _ => some (cancelOblRWK (ℍ := ℍ) (fun _ => OpTabK.empty) R)
   | .all _ _ _, _ => some (cancelOblRWK (ℍ := ℍ) (fun _ => OpTabK.empty) R)
-  | .nu _, _ => some (cancelOblRWK (ℍ := ℍ) (fun _ => OpTabK.empty) R)
+  | .nuSys _ _ _, _ => some (cancelOblRWK (ℍ := ℍ) (fun _ => OpTabK.empty) R)
 end
 
 theorem finRWK_eq (R : KW → Nat → WProp) (vr : VRel) {F : CTy} (hF : F ≠ .top) (δ : LSub) :
@@ -110,7 +110,7 @@ theorem tab_lookupRK_RW : ∀ (F : CTy) {R : Nat → WProp} {vr : VRel} {δ : LS
   | .amp _ _, _, _, _, _, _, _, _, h => by simp [tabRK, OpTabK.empty] at h
   | .top, _, _, _, _, _, _, _, h => by simp [tabRK, OpTabK.empty] at h
   | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabRK, OpTabK.empty] at h
-  | .nu _, _, _, _, _, _, _, _, h => by simp [tabRK, OpTabK.empty] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, h => by simp [tabRK, OpTabK.empty] at h
 
 /-- **An entry of `tabRWK` is a layer's, and `tabNK` at `g = id` has the layer's entry at the same
 key.** -/
@@ -142,7 +142,7 @@ theorem tab_lookupRWK : ∀ (F : CTy) {RW : KW → Nat → WProp} {vr : VRel} {�
   | .amp _ _, _, _, _, _, _, _, _, h => by simp [tabRWK, OpTabK.empty] at h
   | .top, _, _, _, _, _, _, _, h => by simp [tabRWK, OpTabK.empty] at h
   | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabRWK, OpTabK.empty] at h
-  | .nu _, _, _, _, _, _, _, _, h => by simp [tabRWK, OpTabK.empty] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, h => by simp [tabRWK, OpTabK.empty] at h
 
 mutual
 /-- **`tabRK` at `g = id` is `tabRWK` at a claim read alike at every world.** -/
@@ -156,7 +156,7 @@ theorem tabRK_id_eq (R : Nat → WProp) (vr : VRel) : ∀ (F : CTy) (δ : LSub) 
   | .amp _ _, _, _ => by simp [tabRK, tabRWK]
   | .top, _, _ => by simp [tabRK, tabRWK]
   | .all _ _ _, _, _ => by simp [tabRK, tabRWK]
-  | .nu _, _, _ => by simp [tabRK, tabRWK]
+  | .nuSys _ _ _, _, _ => by simp [tabRK, tabRWK]
 /-- `finRK` at `g = id` is `finRWK` at a claim read alike at every world. -/
 theorem finRK_id_eq (R : Nat → WProp) (vr : VRel) : ∀ (F : CTy) (δ : LSub),
     finRK (ℍ := ℍ) R vr id F δ = finRWK (ℍ := ℍ) (fun _ => R) vr F δ
@@ -170,7 +170,7 @@ theorem finRK_id_eq (R : Nat → WProp) (vr : VRel) : ∀ (F : CTy) (δ : LSub),
   | .amp _ _, _ => rfl
   | .top, _ => rfl
   | .all _ _ _, _ => rfl
-  | .nu _, _ => rfl
+  | .nuSys _ _ _, _ => rfl
 end
 
 /-- `tabRK` at `g = id` and `tabRWK` agree but for the cancel obligations. -/

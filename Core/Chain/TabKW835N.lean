@@ -74,7 +74,7 @@ def finGK (R : Nat → WProp) (G : ShareG) (vr : VRel) (g : KW → KW) : CTy →
   | .arr _ _, _ => some (cancelOblGK (ℍ := ℍ) g (fun _ => OpTabK.empty) G R)
   | .amp _ _, _ => some (cancelOblGK (ℍ := ℍ) g (fun _ => OpTabK.empty) G R)
   | .all _ _ _, _ => some (cancelOblGK (ℍ := ℍ) g (fun _ => OpTabK.empty) G R)
-  | .nu _, _ => some (cancelOblGK (ℍ := ℍ) g (fun _ => OpTabK.empty) G R)
+  | .nuSys _ _ _, _ => some (cancelOblGK (ℍ := ℍ) g (fun _ => OpTabK.empty) G R)
 end
 
 theorem finGK_eq (R : Nat → WProp) (G : ShareG) (vr : VRel) (g : KW → KW) {F : CTy}
@@ -116,7 +116,7 @@ theorem tab_lookupNGK : ∀ (F : CTy) {vr : VRel} {g : KW → KW} {δ : LSub} {x
   | .amp _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
   | .top, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
   | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .nu _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
 
 /-- **An entry of `tabGK` is a layer's, and every `tabRK` has the layer's entry at the same
 key.** -/
@@ -148,7 +148,7 @@ theorem tab_lookupGK : ∀ (F : CTy) {R : Nat → WProp} {G : ShareG} {vr : VRel
   | .amp _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
   | .top, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
   | .all _ _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
-  | .nu _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
 
 /-! ### The guarded Mut Frame at the typed tables -/
 
@@ -546,7 +546,7 @@ theorem tabNK_linOnly {vr : VRel} {g : KW → KW} {δ : LSub} {x : KW} :
   | .amp _ _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
   | .top, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
   | .all _ _ _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .nu _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
+  | .nuSys _ _ _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
 
 /-- **The Imm Frame at the typed tables, every layer must-resume** (`erwp_I_frame` at `KW`): the
 callback's table is the row's `tabNK` at the lend's world (`KW.lendImm`), indexed by the lender's

@@ -149,7 +149,7 @@ theorem sC_down : ∀ (C : CTy) (n : Nat) (e : Expr) (σ : Heap),
       simp only [sC] at h ⊢
       exact ewp_down (sProt_down (.eff m i q A B fin rc C)) (sRet_down (.eff m i q A B fin rc C)) n e σ h
   | .all _ _ _, _, _, _, h => by simp [sC] at h
-  | .nu _, _, _, _, h => by simp [sC] at h
+  | .nuSys _ _ _, _, _, _, h => by simp [sC] at h
 theorem sProt_down : ∀ C : CTy, (sProt (ℍ := ℍ) C).Down
   | .eff m i q A B fin rc C => by
       have hC := sProt_down C
@@ -184,7 +184,7 @@ theorem sProt_down : ∀ C : CTy, (sProt (ℍ := ℍ) C).Down
   | .amp _ _ => by simp only [sProt]; exact protNoneDown
   | .top => by simp only [sProt]; exact protNoneDown
   | .all _ _ _ => by simp only [sProt]; exact protNoneDown
-  | .nu _ => by simp only [sProt]; exact protNoneDown
+  | .nuSys _ _ _ => by simp only [sProt]; exact protNoneDown
 theorem sFin_down : ∀ (F : CTy) (G : Nat → Expr → Heap → Prop), sFin (ℍ := ℍ) F = some G →
     ∀ n e σ, G (n + 1) e σ → G n e σ
   | .top, _, h => by simp [sFin] at h
@@ -204,7 +204,7 @@ theorem sFin_down : ∀ (F : CTy) (G : Nat → Expr → Heap → Prop), sFin (�
   | .all _ _ _, G, h => by
       simp only [sFin, Option.some.injEq] at h; subst h
       exact fun n e σ hp => cancelObl_down_of (P := Prot.none) protNoneDown hp
-  | .nu _, G, h => by
+  | .nuSys _ _ _, G, h => by
       simp only [sFin, Option.some.injEq] at h; subst h
       exact fun n e σ hp => cancelObl_down_of (P := Prot.none) protNoneDown hp
 theorem sRet_down : ∀ C : CTy, (sRet (ℍ := ℍ) C).Down
@@ -214,7 +214,7 @@ theorem sRet_down : ∀ C : CTy, (sRet (ℍ := ℍ) C).Down
   | .amp _ _ => fun _ _ _ h => by simp [sRet] at h
   | .top => fun _ _ _ h => by simp [sRet] at h
   | .all _ _ _ => fun _ _ _ h => by simp [sRet] at h
-  | .nu _ => fun _ _ _ h => by simp [sRet] at h
+  | .nuSys _ _ _ => fun _ _ _ h => by simp [sRet] at h
 end
 
 theorem sV_le {A : VTy} {k n : Nat} (hkn : k ≤ n) {v : Val} {σ : Heap}
@@ -349,7 +349,7 @@ theorem sProt_rowOf_perf (S : Row) (R : VTy) : ∀ (F : CTy) (m i : UInt32) (s :
   | .amp _ _, _, _, _, h => by simp [sProt, Prot.none] at h
   | .top, _, _, _, h => by simp [sProt, Prot.none] at h
   | .all _ _ _, _, _, _, h => by simp [sProt, Prot.none] at h
-  | .nu _, _, _, _, h => by simp [sProt, Prot.none] at h
+  | .nuSys _ _ _, _, _, _, h => by simp [sProt, Prot.none] at h
 
 /-- The cancel obligation of a cancel row that is not `⊤` is a cancel run at some operations,
 each an entry of the row it puts ahead of `Σ`. -/

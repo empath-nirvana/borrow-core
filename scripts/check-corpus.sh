@@ -84,7 +84,7 @@ copies() {
 # A pending program: exit 0 if it fails as recorded, 1 if not.
 pending() {
   local f=$1 issue want out
-  issue=$(sed -n 's/^-- pending: //p' "$f" | head -1)
+  issue=$(sed -n '/^-- pending: /{s///p;q;}' "$f")
   want=$(sed -n 's/^-- now: //p; s/^-- now| //p' "$f")
   if [ -z "$issue" ] || [ -z "$want" ]; then
     echo "$f: needs a \`-- pending:\` line and a \`-- now:\` line"; return 1

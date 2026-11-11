@@ -69,7 +69,7 @@ theorem effOf_of_effRow? : ∀ {C : CCTy} {S : CRow} {A : CVTy}, effRow? C = som
       simp only [effOf, BoCa.Fig16.LogRel.Core.CTy.effOf]
       rw [show BoCa.Fig16.LogRel.Core.CTy.effOf S' R' = C from effOf_of_effRow? h']
   | .arr _ _, _, _, h | .amp _ _, _, _, h | .top, _, _, h | .all _ _ _, _, _, h
-  | .nu _, _, _, h => by simp [effRow?] at h
+  | .nuSys _ _ _, _, _, h => by simp [effRow?] at h
 
 /-- `C` as a returner chain `F_Σ A`, with the proof that `F_Σ A` is `C` (`effOf_of_effRow?`). -/
 def effRowOf? (C : CCTy) : Option (Σ' (S : CRow) (A : CVTy), effOf S A = C) :=

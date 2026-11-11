@@ -97,7 +97,7 @@ block() {
   case "$attrs" in
     ignore) return 0 ;;
     run)
-      want=$(sed -n 's/^-- answer: //p' "$f" | head -1)
+      want=$(sed -n '/^-- answer: /{s///p;q;}' "$f")
       if [ -z "$want" ] && grep -q '^-- output:' "$f"; then want='()'; fi
       if [ -z "$want" ]; then fail "$at" "a \`bc\` block needs an \`-- answer:\` or \`-- output:\` line (or mark it \`bc,check\`)"; return 1; fi
       if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; return 1; fi
@@ -141,7 +141,7 @@ block() {
       if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; return 1; fi
       ;;
     reject)
-      want=$(sed -n 's/^-- expect: //p' "$f" | head -1)
+      want=$(sed -n '/^-- expect: /{s///p;q;}' "$f")
       if [ -z "$want" ]; then fail "$at" "a \`bc,reject\` block needs an \`-- expect:\` line"; return 1; fi
       if ! out=$("$bcc" parse "$f" 2>&1); then fail "$at" "does not parse, so it does not test the checker" "${out#"$f:"}"; return 1; fi
       if out=$("$bcc" check "$f" 2>&1); then fail "$at" "accepted, but must be rejected"; return 1; fi
