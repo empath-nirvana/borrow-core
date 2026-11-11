@@ -202,7 +202,7 @@ def Comp.level : Comp → Nat
 def nl (k : Nat) : String := "\n" ++ "".pushn ' ' k
 
 /-- A loop's label as written before it, `'ℓ: `, or nothing. -/
-def lbl : Option Ident → String
+def lbl (ℓ : LoopInfo) : String := match ℓ.label with
   | some ℓ => "'" ++ ℓ.name ++ ": "
   | none => ""
 

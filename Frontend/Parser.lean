@@ -380,6 +380,18 @@ def frame (p : P α) : P (α × List String) := do
                            blockThreads := s₀.blockThreads, pendingRun := s₀.pendingRun }
   pure (M, (s₀.muts.filter a.contains).reverse)
 
+/-- `p`, a loop's body, with the enclosing `let mut` variables it writes (SPEC §41, R2), in the
+order they were declared: what the loop's `LoopInfo` records. What it writes, the enclosing frame
+writes too; unlike `frame`, nothing else of the state is the body's own, since a loop's turn is
+no frame of its own here.  `[spec §41]` -/
+def loopWrites (sp : Span) (p : P α) : P (α × List Ident) := do
+  let s₀ ← get
+  set { s₀ with assigned := [] }
+  let M ← p
+  let a := (← get).assigned
+  modify fun s => { s with assigned := s₀.assigned ++ a }
+  pure (M, (s₀.muts.filter a.contains).reverse.map (⟨·, sp⟩))
+
 /-- Parse a loop's body: in a function's body, a statement `return e` in it returns from the
 function (`VSugar.retE`). -/
 def withLoop {α} (p : P α) : P α := do
@@ -1292,15 +1304,6 @@ def nest (sp : Span) : List Val → Val
   | [V] => V
   | V :: Vs => .pair sp V (nest sp Vs)
 
-/-- A computation with `f` applied at each terminal reached through tail positions. -/
-def wrapTerms (f : Comp → Comp) : Comp → Comp
-  | .bind sp x A M N => .bind sp x A M (wrapTerms f N)
-  | .letUnit sp V M => .letUnit sp V (wrapTerms f M)
-  | .letPair sp x y V M => .letPair sp x y V (wrapTerms f M)
-  | .case sp V x M y N => .case sp V x (wrapTerms f M) y (wrapTerms f N)
-  | .loop sp ℓ src V M N => .loop sp ℓ src V M (wrapTerms f N)
-  | T => f T
-
 /-- A closure `V` that writes the enclosing `let mut` variables `xs`, marked with them (SPEC §41,
 rule R3); itself when it writes none. -/
 def writesOf (sp : Span) (xs : List String) (V : Val) : Val :=
@@ -1337,7 +1340,7 @@ def handOn (h : HandOn) (xs : List String) (M : Comp) : Comp :=
     .bind T.span ⟨h.t, T.span⟩ h.A T
       (.ret T.span (if h.keep then .pair T.span (.var T.span h.t) (varTuple T.span xs)
         else varTuple T.span xs))
-  wrapTerms (fun T => match h.direct, h.keep, h.A, T with
+  Comp.mapTail (fun T => match h.direct, h.keep, h.A, T with
     | true, true, none, .ret sp V =>
       -- An exit (`break`, `continue`, `return e` in a loop) stays a terminal of its own.
       if V.isExit then bound T else .ret sp (.pair sp V (varTuple sp xs))
@@ -2483,9 +2486,9 @@ def compG : Nat → Bool → P Comp
         expectKw "in"
         let V ← val n
         expectSym "{"
-        let (x, M) ← withScope do
+        let ((x, M), ws) ← loopWrites x.span (withScope do
           let x ← bindName x
-          pure (x, ← withLoop (comp n))
+          pure (x, ← withLoop (comp n)))
         expectSym "}"
         let els ← forElse n
         expectSym ";"
@@ -2494,7 +2497,7 @@ def compG : Nat → Bool → P Comp
           | _ => failAt (← spanFrom st) "`let … = for …` binds a name"
         let N ← comp n
         let sp ← spanFrom st
-        return .loop sp ℓ (.each x) V M (.bind sp r A (.ret sp (forResOf sp els)) N)
+        return .loop sp { label := ℓ, writes := ws } (.each x) V M (.bind sp r A (.ret sp (forResOf sp els)) N)
       if (← peek).tok == .kw "match" || (← peek).tok == .kw "if" then
         let (M, xs) ← frame (compPrefix n)
         expectSym ";"
@@ -2824,9 +2827,10 @@ def loopC : Nat → Pos → Option Ident → P Comp
       expectKw "in"
       let V ← val n
       expectSym "{"
-      let (x, M) ← withScope do
+      let ((x, M), ws) ← loopWrites t.span (withScope do
         let x ← bindName x
-        pure (x, ← withLoop (comp n))
+        pure (x, ← withLoop (comp n)))
+      let li : LoopInfo := { label := ℓ, writes := ws }
       expectSym "}"
       -- `else { d }`: the loop's value when its source ends (`VSugar.forRes`).
       let els ← forElse n
@@ -2838,11 +2842,11 @@ def loopC : Nat → Pos → Option Ident → P Comp
         discard bump
         let N ← comp n
         let sp ← spanFrom st
-        pure (.loop sp ℓ (.each x) V M (match els with
+        pure (.loop sp li (.each x) V M (match els with
           | some d => .bind sp ⟨r, sp⟩ none (.ret sp (forResOf sp (some d))) N
           | none => N))
       else
-        pure (.loop sp₀ ℓ (.each x) V M (match els with
+        pure (.loop sp₀ li (.each x) V M (match els with
           | some d => .bind sp₀ ⟨r, sp₀⟩ none (.ret sp₀ (forResOf sp₀ (some d))) (.ret sp₀ (.var sp₀ r))
           | none => .ret sp₀ (.unit sp₀)))
     | .kw "while" =>
@@ -2850,21 +2854,21 @@ def loopC : Nat → Pos → Option Ident → P Comp
       discard bump
       let c ← val n
       expectSym "{"
-      let M ← withLoop (comp n)
+      let (M, ws) ← loopWrites t.span (withLoop (comp n))
       expectSym "}"
       -- Last in a body, what follows it is `()`.
       let N ← if ← isSym ";" then do discard bump; comp n else pure (.ret t.span (.unit t.span))
       let sp ← spanFrom st
-      pure (.loop sp ℓ .while_ c M N)
+      pure (.loop sp { label := ℓ, writes := ws } .while_ c M N)
     | .kw "loop" =>
       -- `loop { M }`: no source, so what follows it runs only after a `break`.
       discard bump
       expectSym "{"
-      let M ← withLoop (comp n)
+      let (M, ws) ← loopWrites t.span (withLoop (comp n))
       expectSym "}"
       let N ← if ← isSym ";" then do discard bump; comp n else pure (.ret t.span (.unit t.span))
       let sp ← spanFrom st
-      pure (.loop sp ℓ .forever (.unit t.span) M N)
+      pure (.loop sp { label := ℓ, writes := ws } .forever (.unit t.span) M N)
     | _ => expected "`for`, `while` or `loop`"
 
 /-- A computation atom: `force x`, `<>`, `<M, N>`, `case V { … }`, `match V { … }`, `if`,

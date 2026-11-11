@@ -80,20 +80,10 @@ def spineNames : Nat → Comp → List String
   | n + 1, .letUnit _ _ M => spineNames n M
   | n + 1, .case _ _ x M y N => x.name :: y.name :: (spineNames n M ++ spineNames n N)
   | n + 1, .loop _ _ _ _ M N => spineNames n M ++ spineNames n N
+  | n + 1, .unwind _ x _ _ _ N => x.name :: spineNames n N
   | _, _ => []
 
 def fuel : Nat := 1 <<< 16
-
-/-- Apply `f` to every terminal of a computation: through binds, `let`s, `case` arms and what
-follows a `for`. -/
-def spliceTail (f : Comp → Comp) : Nat → Comp → Comp
-  | 0, M => M
-  | n + 1, .bind sp x A M N => .bind sp x A M (spliceTail f n N)
-  | n + 1, .letUnit sp V M => .letUnit sp V (spliceTail f n M)
-  | n + 1, .letPair sp x y V M => .letPair sp x y V (spliceTail f n M)
-  | n + 1, .case sp V x M y N => .case sp V x (spliceTail f n M) y (spliceTail f n N)
-  | n + 1, .loop sp ℓ src V M N => .loop sp ℓ src V M (spliceTail f n N)
-  | _, T => f T
 
 /-- A right-nested tuple of variables (`()` when empty). -/
 def tupleVal (sp : Span) : List String → Val
@@ -129,6 +119,7 @@ the head of a binding or at a terminal. -/
 def loopsOnSpine (divCall : Val → Bool) (fin : Finite) : Nat → Comp → Bool
   | 0, _ => false
   | n + 1, .bind _ _ _ M N => isLoopHead divCall M || loopsOnSpine divCall fin n N
+  | n + 1, .unwind _ _ _ _ _ N => loopsOnSpine divCall fin n N
   | n + 1, .letUnit _ _ M | n + 1, .letPair _ _ _ _ M => loopsOnSpine divCall fin n M
   | n + 1, .case _ _ _ M _ N => loopsOnSpine divCall fin n M || loopsOnSpine divCall fin n N
   | n + 1, .loop _ _ src V M N => !src.fin fin V M N || loopsOnSpine divCall fin n N
@@ -225,9 +216,9 @@ def Env.flush (E : Env) (sp : Span) (s : Seg) (rest : Comp) : LM (Comp → Comp)
   let hole := s!"io_lk{E.B.sp.start.line}_{E.B.sp.start.col}_{n}"
   set (n + 1)
   let L ← E.blockBind sp (s.wrap (.ret sp (tupleVal sp vs))) vs (.force sp ⟨hole, sp⟩)
-  pure fun K => spliceTail (fun T => match T with
+  pure fun K => Comp.mapTail (fun T => match T with
     | .force _ h => if h.name == hole then K else T
-    | T => T) fuel L
+    | T => T) L
 
 /-- The body of a `for` inside the block: in a borrow block of its own when it uses the borrow,
 handing on the variables in scope that it assigns. -/
@@ -236,9 +227,9 @@ def Env.forBody (E : Env) (scope : List String) (sp : Span) (ys : List String) (
   let ws := (spineNames fuel M).eraseDups.filter fun z =>
     scope.contains z && !E.aliases.contains z && !ys.contains z
   -- A terminal `()` is consumed, not bound.
-  let body := spliceTail (fun T => match T with
+  let body := Comp.mapTail (fun T => match T with
     | .ret _ (.unit _) => .ret T.span (tupleVal T.span ws)
-    | T => .bind T.span ⟨"io_u", T.span⟩ none T (.ret T.span (tupleVal T.span ws))) fuel M
+    | T => .bind T.span ⟨"io_u", T.span⟩ none T (.ret T.span (tupleVal T.span ws))) M
   E.blockBind sp body ws (.ret sp (.unit sp))
 
 /-- A terminal of the block's body, after the stretch `s`: the block's result `(place, r)`. -/
@@ -334,6 +325,11 @@ def Env.step (E : Env) : Nat → List String → Seg → Comp → LM Comp
       pure (pre (.bind sp z A M (← E.walk n (scope ++ s.names ++ [z.name]) {} N)))
     else
       E.walk n (scope ++ [z.name]) (s.push (fun K => .bind sp z A M K) [z.name] (E.usesC M)) N
+  | n, scope, s, .unwind sp z A M D N =>
+    -- `z <- M unwind (D); N`: a statement of the stretch, with `N` on the spine
+    -- (`Comp.mapTail`).  `[spec §41]`
+    E.walk n (scope ++ [z.name])
+      (s.push (fun K => .unwind sp z A M D K) [z.name] (E.usesC M || E.usesC D)) N
   | n, scope, s, .letUnit sp V M =>
     E.walk n scope (s.push (fun K => .letUnit sp V K) [] (E.usesV V)) M
   | n, scope, s, .letPair sp y z V M =>
@@ -383,7 +379,8 @@ def spineAliases : Nat → List String → List String → Comp → List String
     match Binding.of? as cs M with
     | some bd => spineAliases n (as ++ bd.parts) (cs ++ bd.whole) bd.rest
     | none => match M with
-      | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N =>
+      | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N
+      | .unwind _ _ _ _ _ N =>
         spineAliases n as cs N
       | .case _ _ _ M _ N => spineAliases n (spineAliases n as cs M) cs N
       | _ => as
@@ -444,7 +441,7 @@ def lendBind (c : TCx) (divCall : Val → Bool) (fin' : TCx → Finite) (sp : Sp
   let rest : Comp → Comp := match N, A with
     | .ret _ (.var _ y), none => if y == x.name then id else fun T => .bind sp x A T N
     | _, _ => fun T => .bind sp x A T N
-  pure (some (bindP (spliceTail rest fuel L)))
+  pure (some (bindP (Comp.mapTail rest L)))
 
 /-- `let r = &x; S` (or `&mut x`), with `x` a name: the borrow block `borrow imm x { r -> S }`
 (`borrow mut`) over the rest of the body, after which `x` is rebound. The place may not be used

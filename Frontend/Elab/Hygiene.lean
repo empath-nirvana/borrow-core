@@ -144,11 +144,11 @@ def _root_.Frontend.Comp.hygD (defs : Ren) (glob : String → Bool) (ρ : Ren) :
     let V' ← V.hygD defs glob ρ
     let (x', ρx) ← bind glob ρ x
     let M' ← M.hygD defs glob ρx
-    pure (.loop sp ℓ (.each x') V' M' (← N.hygD defs glob ρ))
+    pure (.loop sp { ℓ with writes := ℓ.writes.map (lookI ρ) } (.each x') V' M' (← N.hygD defs glob ρ))
   | .loop sp ℓ src V M N => do
     let V' ← V.hygD defs glob ρ
     let M' ← M.hygD defs glob ρ
-    pure (.loop sp ℓ src V' M' (← N.hygD defs glob ρ))
+    pure (.loop sp { ℓ with writes := ℓ.writes.map (lookI ρ) } src V' M' (← N.hygD defs glob ρ))
   | .perform sp n i V => do pure (.perform sp n i (← V.hygD defs glob ρ))
   | .abort sp n i V => do pure (.abort sp n i (← V.hygD defs glob ρ))
   | .handle sp n st hr hc M => do
