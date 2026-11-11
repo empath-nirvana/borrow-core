@@ -347,6 +347,9 @@ corpus/effects-sum-gen.bc 1.0 cancellable abortive: branch; agree
 corpus/effects-tunnel.bc 1.0 cancellable abortive: -; agree
 corpus/effects-tunnel.bc 3.0 cancellable abortive: -; agree
 corpus/effects-tunnel.bc 2.0 cancellable abortive: branch; agree
+corpus/evidence-nested-site.bc 2.0 must-resume tail: machine: the handlers of the name have 2 clauses for it; disagree
+corpus/evidence-outer-row.bc 1.0 must-resume tail: machine: the clause captures values; disagree
+corpus/evidence-outer-row.bc 2.0 cancellable tail: machine: the clause suspends; disagree
 corpus/evidence-rebind-value.bc 2.0 must-resume tail: machine: the handlers of the name have 3 clauses for it; disagree
 corpus/evidence-rebind.bc 1.0 cancellable tail: machine: the handlers of the name have 3 clauses for it; disagree
 corpus/filler-mu.bc 1.0 cancellable abortive: -; agree
