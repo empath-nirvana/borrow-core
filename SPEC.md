@@ -13551,9 +13551,12 @@ A corpus program copying at the bounds (in range, `len = 0`, each bound one past
 ### Units
 
 - S.1, the machine (Support): the step, determinism and decomposition, and the interpreter. Built.
-- S.2, Core: the constant's rule and compatibility lemma. Not built.
-- S.3, the chain: the compatibility lemma at `erwpK`/`KW`. Not built.
-- The lowering (Backend2) and the library uses: backend-foreman's. Not built.
+- S.2, Core: the constant's rule and compatibility lemma. Built (#1098): the rule `slice_copy_mut`
+  (`CDerives` `sliceCopyM`, `A` persistent) with `sliceCopyM_compatX`, and the core-text constant
+  `slice_copy_mut[@a, @b, A]`.
+- S.3, the chain: the compatibility lemma at `erwpK`/`KW`. Built (#1098): `sliceCopyM_compatN`.
+- The lowering (Backend2) and the library uses: backend-foreman's. Not built. The corpus program
+  follows the lowering.
 
 ### Open
 
