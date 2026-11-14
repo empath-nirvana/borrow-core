@@ -64,7 +64,13 @@ effects (#188), and `Yield` inside generators (#159).
 
 ## What is proved
 
-All in Lean, with no axioms beyond `propext`, `Classical.choice` and `Quot.sound`:
+The [kernel assurance map](kernel-assurance.md) shows the current proof paths and their
+premises. The ordinary Core results below concern `CDerives`; accepted programs using relaxed
+borrowing have `CDerivesP` and need `PinLaw` for the corresponding semantic guarantees. The
+chain results separately assume `HandlerLawN` where stated. These explicit hypotheses are not
+global Lean axioms: an axiom inventory alone does not show that a theorem is unconditional.
+
+The Lean proofs use no axioms beyond `propext`, `Classical.choice` and `Quot.sound`:
 
 - **Fundamental Property:** every typing rule is sound in the logical relation (`fundamentalC`;
   `fundamentalD` at the demonic `wp`). This includes §19's six rules (`Core/EffRules.lean`) and
@@ -72,8 +78,9 @@ All in Lean, with no axioms beyond `propext`, `Classical.choice` and `Quot.sound
   type:
   - at `F A`, total correctness: the computation terminates with a value of `A`, and the
     memory it leaves is described by the type (`wpTS`);
-  - at `F_Σ A`, the computation performs finitely many operations of `Σ`, each at its protocol,
-    and then answers a value of `A` (`ewpTS`, a least fixed point);
+  - at `F_Σ A` without `Div`, the computation performs finitely many operations of `Σ`, each
+    at its protocol, and then answers a value of `A` (`ewpTS`, a least fixed point); with
+    `Div`, `effWp` selects the partial-correctness `cwp` reading;
   - at `νX. C`, each observation terminates; the whole may be observed without end.
 - **Adequacy, every run:** take a closed program of type `F 1` and every allocator that returns
   free locations; no run gets stuck, and every run continues to `()` at the empty memory: no
@@ -85,7 +92,8 @@ All in Lean, with no axioms beyond `propext`, `Classical.choice` and `Quot.sound
 - **Totality:** a closed program of type `F A`, handled effects included, has no infinite run
   (`total_no_infinite_run`), and every run of it continues to a value (`total_every_run`).
 - **Checker soundness:** when `bcc check` accepts a program, it returns a proof of the typing
-  judgment for it (`checkProgram_sound`), so the theorems above apply to it.
+  judgment for its typed-term erasure (`checkProgram_soundP`). Empty pins additionally give
+  the ordinary judgment (`Checked.deriv`); relaxed programs use the `PinLaw` path.
 - **Elaborated handlers:** §18's handlers are core terms, safe by the theorems above; each class
   of clause has a law about the runs of the terms emitted (`op_tail`, `handle_fold`,
   `abort_passes`, `loop_abort` in `Core/Handlers.lean`).

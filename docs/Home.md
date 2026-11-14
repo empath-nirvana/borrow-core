@@ -9,6 +9,7 @@ research notes behind them.
 | page | what it covers |
 |---|---|
 | [Overview](overview.md) | what the language is, what is proved, and what is trusted |
+| [Kernel assurance map](kernel-assurance.md) | visual proof paths, theorem premises, trust boundaries, and open coverage |
 | [Roadmap](roadmap.md) | where the work goes next, with the issue for each item |
 | [Pipeline](pipeline.md) | from a `.bc` file to WebAssembly or native code: the `bcc` commands and the scripts |
 | [Glossary](glossary.md) | the terms used across the spec, the code and the docs |

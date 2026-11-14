@@ -3,6 +3,9 @@
 What implements each SPEC entry, one paragraph per file. `scripts/status.sh` prints them in
 order: the list `SPEC.md`'s Status section points to.
 
+The [kernel assurance map](../kernel-assurance.md) gives a cross-entry view of exported
+proofs, their assumptions and the visual dependency paths.
+
 ## Files
 
 - `legacy/NN-<slug>.md`: the paragraphs written before the list was split, numbered by their

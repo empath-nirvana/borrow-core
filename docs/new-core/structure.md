@@ -3,6 +3,10 @@
 The structure SPEC §62 is built against, and its rules. Lean names and branches are in
 `evidence.md`; conditions and gaps, numbered, in `conditions.md`.
 
+For the current checker-to-theorem paths and their hypotheses, start with the
+[kernel assurance map](../kernel-assurance.md). This design document also retains earlier
+tree/capture plans; they are not all the active operational proof route.
+
 ## 1. The target theorem
 
 For every closed, well-typed Core program `P`, including programs that hold borrows across

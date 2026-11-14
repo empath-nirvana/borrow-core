@@ -8,6 +8,9 @@ implements it, and code an entry adds or changes is tagged `[spec §N]`. Experim
 in `experiments/`, which the library never imports; work from one lands in the library only
 after its entry is written.
 
+The [kernel assurance map](docs/kernel-assurance.md) records the current exported proof paths,
+their assumptions and implementation gaps; it describes coverage without changing this contract.
+
 Notation follows Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Borrowing*
 (PACMPL 9:OOPSLA2:415, 2025): `[CONF]` is the paper, `[TR]` its supplement.
 
@@ -12087,14 +12090,17 @@ as one hypothesis, a `Prop` and not an axiom, in `PinLaw`'s form (§29): three f
 The top-level theorem is plain adequacy, every handler inside the program
 (`Core/Chain/Adequacy791N.lean`):
 
-    Goal791N : every cs, e₀ with (∀ c ∈ cs, c.OK) and CDerives ∅ (ctx791 cs) e₀ (F 1)
-               has OrDiverges (substAll (vals791 cs) e₀)
+    Goal791N : every cs, Γx, γx, e₀, persistent R with (∀ c ∈ cs, c.OKAt ∅ Γx),
+               ExternsMeetN Γx γx and CDerives ∅ (ctx791 cs ++ Γx) e₀ (F R)
+               has OrDiverges (substAll (cs.map (·.valAt γx) ++ γx) e₀)
     goal791N            : HandlerLawN → Goal791N
     fundamentalN_all    : MissingN → CDerives Δ Γ e j → SemJN Δ Γ e j
     handlerLawN_iff     : HandlerLawN ↔ MissingN
 
 `goal791N_nil` (#1024, `Core/Chain/GoalNil791N.lean`) is `Goal791N`'s instance with no constants
-and no externs, without `HandlerLawN`: it covers every program with no suspending-lend constant.
+and no externs, without `HandlerLawN`: it covers ordinary `CDerives` programs with no
+suspending-lend constant, at persistent answers. This does not include arbitrary `CDerivesP`
+programs relying on `PinLaw`.
 `goal791N_nil_externs` is the same over host externs closed by values that meet Core's contract.
 
 No scheduler, scheduler contract (`SchedOKN`) or restriction on handler names is quantified over:
@@ -13366,10 +13372,13 @@ tables and `HandlerLawN` are unchanged.
   `λr. consume (take_output r)`. The callback writes by `write_byte` on both sides of `wait`. It is
   resumed (`progIO_res_orDiverges`) and cancelled (`progIO_can_orDiverges`, the finaliser handing
   the cell back), both from `HandlerLawN` alone, the externs at their standard models.
-- K1.5: `IORun.every_runN` at the checked wrapper; `corpus/io-effects.bc` concluded by the
-  extended `goal791N`; `bcc trusted` names it.
+- K1.5, partial: `IORun.every_runN` and `IORun.loop_every_runN` at the checked wrapper are
+  built in `Frontend/Check/Externs.lean`, under `HandlerLawN` and empty pins. Remaining:
+  `corpus/io-effects.bc` concluded by the extended `goal791N`; `bcc trusted` names it.
 
-K1.5 is not built; its code PR marks its line *built*.
+The earlier representation-congruence risk is resolved: K1.2 (#1008) provides `cN_*C_congr`
+in `Core/Chain/Externs791N.lean`. There is no `vC → vN` lemma; both follow from the
+behavioural claim.
 
 ### Open
 
@@ -13384,9 +13393,6 @@ K1.5 is not built; its code PR marks its line *built*.
 - **Pins:** the theorems ask for `pins = []`. A program relying on `PinLaw` stays outside.
 - **Descriptors:** the empty final memory covers capability cells, not descriptors (§11). That a
   freed cell's descriptor is closed is the host's claim.
-- **Not derived:** the representation congruences at `vN` are expected to be `funext` equations
-  under `famL` (risk, measured on `read_byte` first in K1.2). There is no `vC → vN` lemma; both
-  follow from the behavioural claim.
 
 ---
 
