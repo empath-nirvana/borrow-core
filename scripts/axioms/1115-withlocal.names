@@ -1,0 +1,3 @@
+-- SPEC §80: a plain local is a derivation in the existing kernel.
+BoCa.Fig16.LogRel.Core.withlocal_wf
+BoCa.Fig16.LogRel.Core.withlocal_closed

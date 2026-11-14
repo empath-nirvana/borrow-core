@@ -377,7 +377,12 @@ when the conversion computed them. The layouts do not read the frame slots. -/
 def lirLayOf (k : Backend.CheckedProg) (census : Bool := false) :
     Except String (Prog × CState × Option Lay.Layouts) := do
   let (p, st, L) ← lirOf₀ k census
-  pure ({ p with slots := slotsOf p st.owners }, st, L)
+  let slots := slotsOf p st.owners
+  if !st.localScopes.isEmpty then
+    let placed := slots.fold (fun acc _ scope => acc.insert scope) ({} : Std.HashSet Nat)
+    unless st.localScopes.toList.all placed.contains do
+      throw "LIR: withlocal requires a frame slot; heap fallback is forbidden"
+  pure ({ p with slots, localScopes := st.localScopes }, st, L)
 
 /-- The LIR of a checked program (`lirLayOf`). -/
 def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do

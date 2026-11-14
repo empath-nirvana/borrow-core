@@ -1,0 +1,15 @@
+-- #1115 negative scope probe: an unrestricted closure must not capture the local's mutable lend.
+-- Expected: checker refusal at the ! capture, not a silently copied local.
+main : F (i32 * 1) =
+  q <- return (withlocal['l, top, i32, 1] i32[0]
+    (thunkv Fun 'l < dom. return (thunkv fun (m : mut 'l i32) ->
+      f <- return (!thunkv fun (u : 1) ->
+        let () = u;
+        return (release_mut['l, i32] m));
+      g <- return (unbang f);
+      u <- return ();
+      z <- force g u;
+      return (boxed['l] z))));
+  return q
+
+-- expect: 6:20: `!thunk` promotes only over flat types (scalars and tuples of them), but `m`, of type `mut 'l i32`, which is not flat, is used inside: capture it in an ordinary closure

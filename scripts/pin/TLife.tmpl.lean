@@ -147,6 +147,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
 --@BINDERS@
   | .consume .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => []
+  | .withlocal .. => []
   | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t
   | .nuEta _ _ _ _ t | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t
   | .use _ _ _ _ _ _ t => t.lifeBinders
@@ -155,6 +156,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
 and family borrows, and the relaxed lends are absent. -/
 def TExpr.domFree : TExpr → Bool
 --@DOMFREE@
+  | .withlocal .. => false
   | .consume .. | .allocS .. | .freeS .. => true
   | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I .. => false
   | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t
@@ -164,6 +166,7 @@ def TExpr.domFree : TExpr → Bool
 /-- **The term at a larger lifetime context `D`**: each `use` node's absorption at its context. -/
 def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
 --@REAB@
+  | t@(.withlocal ..) => t
   | t@(.consume ..) | t@(.allocS ..) | t@(.freeS ..) | t@(.withborSM ..) | t@(.withborSI ..)
   | t@(.withborF2M ..) | t@(.withborF2I ..) => t
   | .litFn i j bs t => .litFn i j bs (t.reAb Δr)
@@ -299,6 +302,7 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   induction h with
 --@P_WEAKENL@
   | consume hA hc he hΓ => intro _ _ _; exact .consume hA hc he hΓ
+  | withlocal => intro _ _ hd; simp [TExpr.domFree] at hd
   | allocS σ he hΓ => intro _ _ _; exact .allocS σ he hΓ
   | freeS σ he hΓ => intro _ _ _; exact .freeS σ he hΓ
   | withborSM => intro _ _ hd; simp [TExpr.domFree] at hd
@@ -338,6 +342,7 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   induction h with
 --@AT_WEAKENL@
   | consume hA hc he hΓ => intro _ _ _; exact .consume hA hc he hΓ
+  | withlocal => intro _ _ hd; simp [TExpr.domFree] at hd
   | allocS σ he hΓ => intro _ _ _; exact .allocS σ he hΓ
   | freeS σ he hΓ => intro _ _ _; exact .freeS σ he hΓ
   | withborSM => intro _ _ hd; simp [TExpr.domFree] at hd
