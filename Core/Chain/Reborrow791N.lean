@@ -23,8 +23,7 @@ anti-frame runs across stops, raises and layered cancel runs.
 
 The lender's guarded twin at the typed world (`tabGK`/`finGK`, `TabKW835N`) has every cancel run
 at its cancel row's own guarded table, ending at the claim; the two transfers are by induction on
-how deep cancel rows nest. The rule at `SemJN` is `withbor3S_compat` (`ReborrowKW835N`), its
-constant `constN_w3` (`ConstKW835N`).
+how deep cancel rows nest. The rule at `SemJN` is `withbor3S_compat` (`ReborrowKW835N`).
 -/
 
 noncomputable section

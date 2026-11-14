@@ -4,7 +4,7 @@ import Core.EffCancelTyped
 /-!
 # `HandlerLawN`, the named assertion for the three handler rules  `[spec §62]`
 
-`FundamentalN` is proved at every `CDerives` derivation from `MissingN` (`fundamentalN_all`):
+`fundamentalN_all` proves every `CDerives` derivation sound at `SemJN` from `MissingN`:
 every rule but `[handle]` at a value form (`effHandleV`), BOXED-κ `[handle]` (`effHandleVB`) and
 `reify` has a compatibility lemma at `cN`, the relation at `KW`. `HandlerLawN` names those three as
 one hypothesis, a `Prop` and not an axiom, in the form of `PinLaw` (`Core/PinLaw.lean`): three
@@ -75,10 +75,6 @@ structure HandlerLawN : Prop where
 /-- `HandlerLawN` says what `MissingN` says. -/
 theorem handlerLawN_iff : HandlerLawN (ℍ := ℍ) ↔ MissingN (ℍ := ℍ) :=
   ⟨fun h => ⟨h.handleV, h.handleVB, h.reify⟩, fun ⟨a, b, c⟩ => ⟨a, b, c⟩⟩
-
-/-- **`FundamentalN` from `HandlerLawN`.** -/
-theorem fundamentalN_of_handlerLaw (h : HandlerLawN (ℍ := ℍ)) : FundamentalN (ℍ := ℍ) :=
-  fundamentalN_of (handlerLawN_iff.mp h)
 
 /-! ### The continuation a clause is handed
 

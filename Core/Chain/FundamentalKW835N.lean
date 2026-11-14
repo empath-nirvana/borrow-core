@@ -24,7 +24,7 @@ import Core.Chain.CodeRulesKW835N
 import Core.Chain.CodeNuOutKW835N
 
 /-!
-# `FundamentalN` assembled by induction on `CDerives`  `[spec §62]`
+# `fundamentalN_all` assembled by induction on `CDerives`  `[spec §62]`
 
 `docs/new-core/scope-835-tables.md` §10.13. `fundamentalN_all` is Core's `fundamentalC` at
 `SemJN`, the relation at `KW`: one case per constructor of `CDerives`, in `fundamentalC`'s order
@@ -36,7 +36,6 @@ Core's lemma with `SemV`/`SemC` read as `SemJN`.
   `handleV_compatCB`).
 * `fundamentalN_all`: every derivation is in `SemJN`, from `MissingN`. No compatibility lemma takes
   a fragment premise.
-* `fundamentalN_of`: `FundamentalN` read off it, the fragment premise unused.
 -/
 
 noncomputable section
@@ -231,10 +230,6 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
       exact handleL_compatN hs hd hHr hHw hHn ihc hnS hlen hNZ hCancel hSW hSu hFin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatN (Val.lam b) hcl ihN
   | alpha _ hα ih => exact alpha_compatN hα ih
-
-/-- **`FundamentalN` from `MissingN`**: `fundamentalN_all`, the fragment premise unused. -/
-theorem fundamentalN_of (h : MissingN (ℍ := ℍ)) : FundamentalN (ℍ := ℍ) :=
-  fun _ _ _ _ hder _ => fundamentalN_all h hder
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

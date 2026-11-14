@@ -25,9 +25,7 @@ that do not read the relation itself:
   `thunkRN_mono`), `δ` read only at free variables (`cohE_congr_ty`, `immWitW_congr`,
   `EnvAgreeN`), stability along the resource-relative order (`EnvExtRN`), and the computation
   types read through no effect row (`noEffSpine`).
-* **§3. The fragment.** The formers the interpretation covers (`VTy.inFrag`, `CTy.inFrag`, their
-  `ν`-body forms `VTy.inFragNu`, `CTy.inFragNu`), a judgment and a #791 constant inside it
-  (`JdgInFrag`, `Const791.InFrag`), and `liveWithin_ctx791`.
+* `liveWithin_ctx791`: the constants' context is met by their closed values.
 -/
 
 noncomputable section
@@ -326,68 +324,6 @@ def noEffSpine : CTy → Prop
 
 /-- `Δ ⊨ a ⊑ b`'s order on interpretations is `Life`'s. -/
 theorem sLe_life {m n : Life} (h : BoCa.Lifetime.SLife.Le m n) : m ≤ n := h
-
-/-! ## §3. The fragment -/
-
-mutual
-/-- **The formers the interpretation covers**: every former. `μ` is covered at a covered body, a
-type variable always (its environment entry, empty at the empty environment). `ν` is covered at a
-covered body, whose variable `X` (`VTy.inFragNu`) `cN` reads at the candidate. Families (arrays and
-slices) are covered at a covered leaf, and opaque types (`Tok` and the host types) always.
-`Code⟨N; E⟩ C` is covered at a covered `E` and `C` (`[spec §68]`). Decidable. -/
-def _root_.BoCa.Fig16.LogRel.Core.VTy.inFrag : VTy → Bool
-  | .unit | .zero | .unk | .int _ | .opq _ => true
-  | .tensor A B | .sum A B => A.inFrag && B.inFrag
-  | .thunk C => C.inFrag
-  | .code _ E C => E.inFrag && C.inFrag
-  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A | .mu A => A.inFrag
-  | .tvar _ => true
-/-- The computation-type formers the interpretation covers. -/
-def _root_.BoCa.Fig16.LogRel.Core.CTy.inFrag : CTy → Bool
-  | .ret A => A.inFrag
-  | .arr A C => A.inFrag && C.inFrag
-  | .amp C D => C.inFrag && D.inFrag
-  | .top => true
-  | .all _ _ C => C.inFrag
-  | .nuSys _ _ C => C.inFragNu
-  | .eff _ _ _ A B fin _ C => A.inFrag && B.inFrag && fin.inFrag && C.inFrag
-/-- The value-type formers a `ν` body covers: `VTy.inFrag`'s, and the body's variable `X`
-(index `0`). A thunk is read by `vN`, where `X` does not occur. -/
-def _root_.BoCa.Fig16.LogRel.Core.VTy.inFragNu : VTy → Bool
-  | .tvar 0 => true
-  | .unit | .zero | .unk | .int _ | .opq _ => true
-  | .tensor A B | .sum A B => A.inFragNu && B.inFragNu
-  | .thunk C => C.inFrag
-  | .code _ E C => E.inFrag && C.inFrag
-  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A => A.inFragNu
-  | .tvar (_ + 1) | .mu _ => false
-/-- The computation-type formers a `ν` body covers. -/
-def _root_.BoCa.Fig16.LogRel.Core.CTy.inFragNu : CTy → Bool
-  | .ret A => A.inFragNu
-  | .arr A C => A.inFragNu && C.inFragNu
-  | .amp C D => C.inFragNu && D.inFragNu
-  | .top => true
-  | .all _ _ C => C.inFragNu
-  | .nuSys _ _ C => C.inFragNu
-  | .eff _ _ _ A B fin _ C => A.inFragNu && B.inFragNu && fin.inFrag && C.inFragNu
-end
-
-/-- **A judgment inside the fragment**: its context's types and its own type use only the formers
-the interpretation covers. -/
-def JdgInFrag (Γ : Ctx VTy) (j : Jdg) : Bool :=
-  Γ.all (fun s => s.ty.inFrag) &&
-    match j with
-    | .val A => A.inFrag
-    | .comp C => C.inFrag
-
-/-- **A #791 constant inside the fragment**: its type uses only the formers the interpretation
-covers. -/
-def _root_.BoCa.Fig16.Tree.Wp.Goal791.Const791.InFrag (c : Const791) : Prop := c.ty.inFrag = true
-
-/-- A finaliser's judgment `L ⊸ 1` is in the fragment where `L` is. -/
-theorem jdgInFrag_lolli {L : VTy} (h : L.inFrag = true) :
-    JdgInFrag [] (.val (.lolli L .unit)) = true := by
-  simp [JdgInFrag, VTy.lolli, VTy.inFrag, CTy.inFrag, h]
 
 theorem liveWithin_ctx791 : ∀ cs : List Const791, Ctx.LiveWithin (ctx791 cs) (vals791 cs)
   | [] => trivial
