@@ -1,0 +1,28 @@
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.current_update_cannot_close' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.W1_scalar_return_main' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.ordinary_arrow_all_brands' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.plain_U_unit' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.plain_stored_U_unit' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.returned_to_vN' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.vN_to_returned' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.shallow_mut_iff_brand' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.brandAt_extR' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.returned_future_typed' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.unit_member_constant' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.stored_U_all_worlds' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
