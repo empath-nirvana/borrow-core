@@ -1,0 +1,155 @@
+### TypedCasePort.UpdMask (exit 0)
+
+### TypedCasePort.Ghost (exit 0)
+
+### TypedCasePort.XRes (exit 0)
+
+### TypedCasePort.FrameKept (exit 0)
+
+### TypedCasePort.ErwpX (exit 0)
+
+### TypedCasePort.GuardedHeap (exit 0)
+
+### TypedCasePort.HeapX (exit 0)
+
+### TypedCasePort.HandleX (exit 0)
+
+### TypedCasePort.MutLoan (exit 0)
+
+### TypedCasePort.Integration (exit 0)
+BoCa.Fig16.LogRel.Core.Chain.SI.erwpX {ℍ : BoCa.Host} [BoCa.HostIs ℍ] (Φ : BoCa.Fig16.LogRel.Core.Chain.SI.LocFam) :
+  BoCa.Fig16.LogRel.Core.Chain.SI.Mask →
+    BoCa.Fig16.LogRel.Core.Chain.SI.TableX →
+      BoCa.Fig16.LogRel.Core.Chain.SI.PostX →
+        ℕ → List BoCa.Fig16.LogRel.Core.SRec → BoCa.Expr → BoCa.Fig16.LogRel.Core.Chain.SI.XProp
+BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vNE {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+  (η : Option (ℕ → BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.TEntN)) :
+  BoCa.Fig16.LogRel.Core.VTy →
+    BoCa.Lifetime.LSub → BoCa.Fig16.LogRel.Core.Chain.SI.LocTy → ℕ → BoCa.Val → BoCa.Fig16.BoLo.WRes → Prop
+BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_mutLoanOpen {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+  {Φ : BoCa.Fig16.LogRel.Core.Chain.SI.LocFam} {M : BoCa.Fig16.LogRel.Core.Chain.SI.Mask}
+  {Tb : BoCa.Fig16.LogRel.Core.Chain.SI.TableX} {Q : BoCa.Fig16.LogRel.Core.Chain.SI.PostX} {n : ℕ} {l : BoCa.Loc}
+  {κ : BoCa.Fig16.Life} (hl : (l, BoCa.Fig16.LogRel.Core.Chain.SI.Auth.mloan κ) ∈ M) {β : BoCa.Fig16.Life}
+  {v : BoCa.Val} {hstr : BoCa.Fig16.ResU.InStratum β BoCa.Fig16.PMap.empty}
+  {P : BoCa.Val → BoCa.Fig16.SPropS BoCa.Loc BoCa.Val β} (hw : P v ⟨BoCa.Fig16.PMap.empty, hstr⟩) (e : BoCa.Expr)
+  (ls : List BoCa.Fig16.LogRel.Core.SRec) {ρa ρ : BoCa.Fig16.BoLo.WRes} {g : BoCa.Fig16.LogRel.Core.Chain.SI.GRes}
+  (hcρ : (BoCa.Fig16.ResU.single l (BoCa.Fig16.CellU.ownOf v)).CompS ρa ρ)
+  (hbody :
+    ∀ (ρm : BoCa.Fig16.ResU BoCa.Loc BoCa.Val),
+      (BoCa.Fig16.ResU.single l (BoCa.Fig16.CellU.mutOf β v BoCa.Fig16.PMap.empty hstr P hw)).CompS ρa ρm →
+        BoCa.Fig16.LogRel.Core.Chain.SI.erwpX Φ M Tb Q n ls e (ρm, g)) :
+  BoCa.Fig16.LogRel.Core.Chain.SI.erwpX Φ M Tb Q n ls e (ρ, g)
+
+### TypedCaseProof.Algebra (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.future_family' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.close_without_return_impossible' depends on axioms: [propext,
+ choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.extend' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.allocate' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.close' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.registered_valid' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.match_return' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.no_pending_after_close' depends on axioms: [propext, choice, Quot.sound]
+
+### TypedCaseProof.MainBridge (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.current_update_cannot_close' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.W1_scalar_return_main' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.ordinary_arrow_all_brands' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.plain_U_unit' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.plain_stored_U_unit' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.returned_to_vN' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.vN_to_returned' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.shallow_mut_iff_brand' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.brandAt_extR' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.returned_future_typed' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.unit_member_constant' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.stored_U_all_worlds' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+
+### TypedCaseProof.Cell (exit 0)
+
+### TypedCaseProof.WorldSat (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.owned_key' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.owned_return_typed' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.owned_return_typed_match' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.owned_return_any' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.W1_sat' depends on axioms: [propext, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.W1_allocate' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.W1_first_valid' depends on axioms: [propext, Classical.choice, Quot.sound]
+
+### TypedCaseProof.ClaimHandle (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.claimTable_local' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.handle_claim_le' depends on axioms: [propext, Classical.choice, Quot.sound]
+
+### TypedCaseProof.TypedResources (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.RefX_zero_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.RefX_preserves_owned' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.RefX_intro' depends on axioms: [propext, Classical.choice, Quot.sound]
+
+### TypedCaseProof.GhostUpdate (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.rwpGX_ghost_update' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.erwpX_ghost_update' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+
+### TypedCaseProof.GhostValidity (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.rwpGX_ghost_valid' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.erwpX_ghost_valid' depends on axioms: [propext, Classical.choice, Quot.sound]
+
+### TypedCaseProof.StorePark (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.erwpX_perform_same' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.storePark_compat' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.storePark_finish' depends on axioms: [propext, Classical.choice, Quot.sound]
+
+### TypedCaseProof.Protocol (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.ScalarU_of_capture' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.ScalarU_apply' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.ScalarRef_preserves_claim' depends on axioms: [propext, choice, Quot.sound]
+
+### TypedCaseProof.Execution (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.out_opened' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.borrowOut_owned' depends on axioms: [propext, choice, Quot.sound]
+
+### TypedCaseProof.TypedStore (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.typed_retrieve_resume' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.storedClause_typed' depends on axioms: [propext, choice, Quot.sound]
+
+### TypedCaseProof.Program (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.loanTab_down' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.storedProgram_typed' depends on axioms: [propext, choice, Quot.sound]
+
+### TypedCaseProof.Case (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.forged_same_slot_rejected' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.ScalarU_no_ghost_erasure' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.ScalarRef_no_ghost_erasure' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.W1_admitted' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.W1_return_actual_main' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.complete_scalar_case' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.wrong_return_rejected' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.zero_protocol_stored_U' depends on axioms: [propext, choice, Quot.sound]

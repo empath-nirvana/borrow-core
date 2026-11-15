@@ -1,0 +1,49 @@
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.future_family' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.close_without_return_impossible' depends on axioms: [propext,
+ choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.extend' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.allocate' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.close' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.registered_valid' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.match_return' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.no_pending_after_close' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.rwpGX_ghost_update' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.erwpX_ghost_update' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.rwpGX_ghost_valid' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.erwpX_ghost_valid' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.erwpX_perform_same' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.storePark_compat' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.storePark_finish' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.returned_match' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.open_owned' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.close_owned' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.out_opened' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.borrowOut_owned' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.W1_opens_unrelated' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.W1_all_permissions_valid' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.W1_allowed' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.W1_preserves_claim' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.W1_park_reply' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.W1_returned' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.positive_initial_ghost' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.positive_W1_ghost' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.wrong_slot_rejected' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.terminal_requires_return' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.parkTab_down' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.storedClause_compat' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.loanTab_down' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.storedProgram_owned' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.W1_program' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.two_loans_coexist' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.same_lifetime_wrong_return_rejected' depends on axioms: [propext,
+ choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.forged_same_slot_rejected' depends on axioms: [propext, choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.park_debt_visible' depends on axioms: [propext, choice, Quot.sound]
