@@ -1,4 +1,4 @@
-import TypedCasePort.HandleX
+import Core.Chain.SI.LoanX.HandleX
 
 noncomputable section
 namespace BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan

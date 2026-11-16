@@ -1,46 +1,14 @@
-### TypedCasePort.UpdMask (exit 0)
+### Core.Chain.SI.LoanX.UpdMask (exit 0)
 
-### TypedCasePort.Ghost (exit 0)
+### Core.Chain.SI.LoanX.Ghost (exit 0)
 
-### TypedCasePort.XRes (exit 0)
+### Core.Chain.SI.LoanX.XRes (exit 0)
 
-### TypedCasePort.FrameKept (exit 0)
+### Core.Chain.SI.LoanX.FrameKept (exit 0)
 
-### TypedCasePort.ErwpX (exit 0)
+### Core.Chain.SI.LoanX.ErwpX (exit 0)
 
-### TypedCasePort.GuardedHeap (exit 0)
-
-### TypedCasePort.HeapX (exit 0)
-
-### TypedCasePort.HandleX (exit 0)
-
-### TypedCasePort.MutLoan (exit 0)
-
-### TypedCasePort.Integration (exit 0)
-BoCa.Fig16.LogRel.Core.Chain.SI.erwpX {ℍ : BoCa.Host} [BoCa.HostIs ℍ] (Φ : BoCa.Fig16.LogRel.Core.Chain.SI.LocFam) :
-  BoCa.Fig16.LogRel.Core.Chain.SI.Mask →
-    BoCa.Fig16.LogRel.Core.Chain.SI.TableX →
-      BoCa.Fig16.LogRel.Core.Chain.SI.PostX →
-        ℕ → List BoCa.Fig16.LogRel.Core.SRec → BoCa.Expr → BoCa.Fig16.LogRel.Core.Chain.SI.XProp
-BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.vNE {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
-  (η : Option (ℕ → BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.TEntN)) :
-  BoCa.Fig16.LogRel.Core.VTy →
-    BoCa.Lifetime.LSub → BoCa.Fig16.LogRel.Core.Chain.SI.LocTy → ℕ → BoCa.Val → BoCa.Fig16.BoLo.WRes → Prop
-BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_mutLoanOpen {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
-  {Φ : BoCa.Fig16.LogRel.Core.Chain.SI.LocFam} {M : BoCa.Fig16.LogRel.Core.Chain.SI.Mask}
-  {Tb : BoCa.Fig16.LogRel.Core.Chain.SI.TableX} {Q : BoCa.Fig16.LogRel.Core.Chain.SI.PostX} {n : ℕ} {l : BoCa.Loc}
-  {κ : BoCa.Fig16.Life} (hl : (l, BoCa.Fig16.LogRel.Core.Chain.SI.Auth.mloan κ) ∈ M) {β : BoCa.Fig16.Life}
-  {v : BoCa.Val} {hstr : BoCa.Fig16.ResU.InStratum β BoCa.Fig16.PMap.empty}
-  {P : BoCa.Val → BoCa.Fig16.SPropS BoCa.Loc BoCa.Val β} (hw : P v ⟨BoCa.Fig16.PMap.empty, hstr⟩) (e : BoCa.Expr)
-  (ls : List BoCa.Fig16.LogRel.Core.SRec) {ρa ρ : BoCa.Fig16.BoLo.WRes} {g : BoCa.Fig16.LogRel.Core.Chain.SI.GRes}
-  (hcρ : (BoCa.Fig16.ResU.single l (BoCa.Fig16.CellU.ownOf v)).CompS ρa ρ)
-  (hbody :
-    ∀ (ρm : BoCa.Fig16.ResU BoCa.Loc BoCa.Val),
-      (BoCa.Fig16.ResU.single l (BoCa.Fig16.CellU.mutOf β v BoCa.Fig16.PMap.empty hstr P hw)).CompS ρa ρm →
-        BoCa.Fig16.LogRel.Core.Chain.SI.erwpX Φ M Tb Q n ls e (ρm, g)) :
-  BoCa.Fig16.LogRel.Core.Chain.SI.erwpX Φ M Tb Q n ls e (ρ, g)
-
-### TypedCaseProof.Algebra (exit 0)
+### Core.Chain.SI.LoanX.Algebra (exit 0)
 'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.future_family' depends on axioms: [propext, choice, Quot.sound]
 'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.close_without_return_impossible' depends on axioms: [propext,
  choice,
@@ -52,7 +20,7 @@ BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_mutLoanOpen {ℍ : BoCa.Host} [BoCa.HostIs
 'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.match_return' depends on axioms: [propext, choice, Quot.sound]
 'BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan.no_pending_after_close' depends on axioms: [propext, choice, Quot.sound]
 
-### TypedCaseProof.MainBridge (exit 0)
+### Core.Chain.SI.LoanX.MainBridge (exit 0)
 'BoCa.Fig16.LogRel.Core.Chain.SI.TypedBridge.current_update_cannot_close' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]
@@ -82,9 +50,18 @@ BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_mutLoanOpen {ℍ : BoCa.Host} [BoCa.HostIs
  Classical.choice,
  Quot.sound]
 
-### TypedCaseProof.Cell (exit 0)
+### Core.Chain.SI.LoanX.Cell (exit 0)
 
-### TypedCaseProof.WorldSat (exit 0)
+### Core.Chain.SI.LoanX.Erasure (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.rwpGX_erases' depends on axioms: [propext, Classical.choice, Quot.sound]
+
+### Core.Chain.SI.LoanX.GuardedHeap (exit 0)
+
+### Core.Chain.SI.LoanX.HeapX (exit 0)
+
+### Core.Chain.SI.LoanX.HandleX (exit 0)
+
+### Core.Chain.SI.LoanX.WorldSat (exit 0)
 'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.owned_key' depends on axioms: [propext, Classical.choice, Quot.sound]
 'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.owned_return_typed' depends on axioms: [propext,
  Classical.choice,
@@ -96,6 +73,21 @@ BoCa.Fig16.LogRel.Core.Chain.SI.erwpX_mutLoanOpen {ℍ : BoCa.Host} [BoCa.HostIs
 'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.W1_sat' depends on axioms: [propext, Quot.sound]
 'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.W1_allocate' depends on axioms: [propext, Classical.choice, Quot.sound]
 'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.W1_first_valid' depends on axioms: [propext, Classical.choice, Quot.sound]
+
+### Core.Chain.SI.LoanX.KWBridge (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.exampleKW_owed_own' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.W1_main_reply_admitted' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+
+### Core.Chain.SI.LoanX.LoanWorld (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.LoanKW.owed_self' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.LoanKW.Owed.trans' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.scalarWorld_reply' depends on axioms: [propext, Classical.choice, Quot.sound]
+
+### Core.Chain.SI.LoanX.MutLoan (exit 0)
 
 ### TypedCaseProof.ClaimHandle (exit 0)
 'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.claimTable_local' depends on axioms: [propext, Classical.choice, Quot.sound]

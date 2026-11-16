@@ -1,10 +1,10 @@
-import TypedCasePort.HeapX
+import Core.Chain.SI.LoanX.HeapX
 import Core.Chain.SI.HandleN
 
 /-!
 # A handler at `erwpX`: `erwpX_handle_le`  `[spec §62]`
 
-`docs/new-core/scope-821-loans.md`, stage 2b. `erwp_handle_le`'s proof (`SI/HandleN.lean`) at the
+`docs/new-core/scope-owned-scalar-kernel.md`, stage 2b. `erwp_handle_le`'s proof (`SI/HandleN.lean`) at the
 one relation, over an operation table whose predicates read `XRes` (`OpEntX`, `opTableX`).
 
 **The table at a mask.** A stop at an operation names the mask its continuation resumes at

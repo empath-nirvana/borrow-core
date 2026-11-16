@@ -1,11 +1,11 @@
 import Core.Chain.SI.ErwpN
-import TypedCasePort.XRes
-import TypedCasePort.FrameKept
+import Core.Chain.SI.LoanX.XRes
+import Core.Chain.SI.LoanX.FrameKept
 
 /-!
 # The one relation: `erwp` over `WRes × GRes` at a mask  `[spec §62]`
 
-`docs/new-core/scope-821-loans.md`, stages 1 and 2, with the mask an index of the relation, as in
+`docs/new-core/scope-owned-scalar-kernel.md`, stages 1 and 2, with the mask an index of the relation, as in
 Iris's `WP_E e {Q}`. `erwpX Φ M Tb Q n ls e x` is `erwp`'s definition (`SI/ErwpN.lean`) over
 `XRes = WRes × GRes` at the mask `M`.
 

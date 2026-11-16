@@ -4,8 +4,10 @@ Status: **one restricted typed scalar-loan case now checks end to end** in the
 [TypedCase experiment](TypedCase/README.md). It includes real capture, typed
 heap storage, a second suspension, a changed typed world and registry, return,
 and discharge. Its scalar argument and result use the current main `vN` facts;
-its resource-aware callable and storage clauses are experimental. No production
-definitions, typing rules, SPEC entries, or assumptions were changed.
+its resource-aware callable and storage clauses are experimental. The draft
+integration adds the checked masked resource/run modules, registry algebra, and
+actual-main return bridge under `Core/Chain/SI/LoanX`;
+existing typing rules, SPEC entries, and assumptions are unchanged.
 
 The target is one shallow mutable loan sent to a handler, with the real captured
 continuation stored during unrelated work, then resumed with the loan returned

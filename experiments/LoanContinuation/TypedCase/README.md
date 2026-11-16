@@ -12,12 +12,13 @@ Run from this checkout:
 python3 experiments/LoanContinuation/TypedCase/check.py
 ```
 
-`check.py` checks all isolated modules against this checkout's Core and writes `check.log`. It does not rebuild the production library broadly. The experiment was developed against current main `c1d16d42fa43fd919c97d343750f4e94bcf7b618`, using the same-semantic warm build at `/private/tmp/borrow-core-remove-chain-fragments` (`1fa13095c93597f30149c6693c1d14a5120378f6`). Relevant `Goal791N`, `LocTy`, and `ErwpK` source blobs are identical between those snapshots, as recorded in `../TypedBridge/README.md`.
+`check.py` checks the new `Core/Chain/SI/LoanX` modules and the isolated typed proof against this checkout, writing `check.log`. It does not rebuild the production library broadly. The experiment was developed against current main `c1d16d42fa43fd919c97d343750f4e94bcf7b618`, using the same-semantic warm build at `/private/tmp/borrow-core-remove-chain-fragments` (`1fa13095c93597f30149c6693c1d14a5120378f6`). Relevant `Goal791N`, `LocTy`, and `ErwpK` source blobs are identical between those snapshots, as recorded in `../TypedBridge/README.md`.
 
 All proof modules were checked individually with exit 0 and no warnings/errors before packaging. Every printed axiom set is contained in `[propext, Classical.choice, Quot.sound]` (`choice` can be printed under an open namespace). There are no admitted proofs, new axioms, unsafe code, or native_decide. The exact durable-tree replay log is `check.log`.
 
 Important source locations:
 
+- `Core/Chain/SI/LoanX`: masked run/heap/handler rules, registry algebra, actual-main `vN` return bridge, `LoanKW.Owed` with a concrete changed-world reply, and one-way zero-ghost run erasure.
 - `ProofTree/TypedCaseProof/Case.lean`: `complete_scalar_case`, positive/negative controls.
 - `Program.lean`: the generic complete restricted program theorem.
 - `ClaimHandle.lean`: generic positive ownership through actual linear capture.
@@ -27,7 +28,7 @@ Important source locations:
 - `WorldSat.lean`: authoritative registry/current-main family coherence and changed-world fixtures.
 - `Execution.lean`: claim creation with opening and matched typed closure.
 
-Production Core, SPEC, `OwnedClaim/W1.lean`, and the earlier `TypedBridge` baselines remain unchanged. No full repository gate or general adequacy result is claimed.
+The draft PR adds the checked masked resource and execution modules, generic registry algebra, and actual-main scalar return bridge under `Core/Chain/SI/LoanX`; existing `rwpG`, `erwpK`, `Goal791N.cN`, typing rules, and SPEC remain unchanged. `OwnedClaim/W1.lean` and the earlier `TypedBridge` baselines remain unchanged. No general adequacy result is claimed.
 
 ## The program and the proof path
 
@@ -63,7 +64,7 @@ The proposed callable protocol is branded/relational. It does not promise that o
 
 The concrete original world contains the first key `(location 0, lifetime 1)`. The future adds `(location 1, lifetime 2)` and an active unrelated loan descriptor. Both main worlds are valid; both the world and registry differ. `W1_allocate` proves a generic frame-preserving allocation of the second loan's claim and return permission. `W1_admitted`, `W1_reply`, and `W1_return_actual_main` prove valid composition, an inhabited typed park reply, and actual main Mut typing at the future world.
 
-The new loan is a surrounding-world action permitted by the park contract; the enclosing scheduler/resumer implementation is outside this case. The first computation's unrelated heap allocation/free is actual code, executed while κ is heap-stored.
+The new loan is a surrounding-world action permitted by the park contract. `W1_main_reply_admitted` additionally checks the changed world against main `KW.Owed` at the stop floor for an owned continuation share. The enclosing scheduler/resumer implementation is outside this case. The first computation's unrelated heap allocation/free is actual code, executed while κ is heap-stored.
 
 ## Negative and baseline controls
 
@@ -76,7 +77,7 @@ The new loan is a surrounding-world action permitted by the park contract; the e
 
 ## Compatibility harness and precise limits
 
-`PortTree/TypedCasePort` reuses the previously checked cross821 masked-execution proof modules in an isolated current-main-compatible test harness. Main and cross cannot be imported directly together: main added structured LocFam/ImmTieL and removed the old FrameKept guard from its rwp/rwpG. The harness retains masked X's STRONGER FrameKept semantics and derives guarded owned heap rules directly. It does not assume current-main rwp entails that stronger relation. This proof reuse changes no production import or definition.
+`Core/Chain/SI/LoanX` now holds the previously checked cross821 masked-execution proof modules as additive main-kernel infrastructure, together with the registry algebra and actual-main scalar bridge. Main and cross cannot be imported directly together: main added structured LocFam/ImmTieL and removed the old FrameKept guard from its rwp/rwpG. These modules retain masked X's STRONGER FrameKept semantics and derive guarded owned heap rules directly. `rwpGX_erases` proves that a zero-ghost, empty-mask run with a zero-ghost post entails current `rwpG`; the converse is not claimed. No existing production import or definition is changed; `Goal791N.cN` does not yet use this relation.
 
 The case has one shallow mutable unit/scalar loan, one-shot capture, empty stored witness, fixed scope-record list and mask, and empty execution LocFam outside the masked loan. It admits actual-main scalar world changes justified by registry coherence. It does not prove arbitrary KW/floor/FoldInv transport, recursive higher-order family compatibility, cancellation/quiescence, shared loans, nested borrow-view reconstruction, multi-shot continuations, or a general scheduler/fundamental theorem.
 

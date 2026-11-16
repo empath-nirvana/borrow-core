@@ -1,4 +1,5 @@
-import TypedCasePort.ErwpX
+import Core.Chain.SI.LoanX.ErwpX
+/-! Owned registry claims and frame-preserving updates for loan return [spec §62]. -/
 noncomputable section
 namespace BoCa.Fig16.LogRel.Core.Chain.SI.OwnedLoan
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel.Core

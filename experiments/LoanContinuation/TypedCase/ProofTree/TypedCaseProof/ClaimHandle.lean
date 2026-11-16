@@ -1,4 +1,4 @@
-import TypedCasePort.HandleX
+import Core.Chain.SI.LoanX.HandleX
 
 /-! Positive ghost ownership at a real linear capture. Generic derived rule; no machine
 or erwpX definition changes. Unlike KapRelX alone, the stop carries J positively. -/

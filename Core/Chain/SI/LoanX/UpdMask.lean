@@ -3,7 +3,7 @@ import Core.Chain.SI.UpdN
 /-!
 # `↭` with a mask, and `[TR]` 6.48 at a mask  `[spec §62]`
 
-`docs/new-core/scope-821-loans.md`, stage 1, change 2: `UpdVN Φ k ρ π` becomes
+`docs/new-core/scope-owned-scalar-kernel.md`, stage 1, change 2: `UpdVN Φ k ρ π` becomes
 `UpdVNm Φ k M ρ π`, `UpdN`'s `imm` and `mut` clauses read only at locations outside `M`.
 
 `updVNm_frame` is `[TR]` 6.48 at a mask, by `updVN_frame`'s proof (`SI/UpdN.lean`): the same three

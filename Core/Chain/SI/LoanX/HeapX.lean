@@ -1,11 +1,11 @@
-import TypedCasePort.ErwpX
-import TypedCasePort.GuardedHeap
+import Core.Chain.SI.LoanX.ErwpX
+import Core.Chain.SI.LoanX.GuardedHeap
 import Core.Chain.SI.HeapN
 
 /-!
 # The heap primitives at `erwpX`  `[spec §62]`
 
-`docs/new-core/scope-821-loans.md`, stage 2b. `rwpGX_of_rwp_own` lifts a run of `rwp` from a part
+`docs/new-core/scope-owned-scalar-kernel.md`, stage 2b. `rwpGX_of_rwp_own` lifts a run of `rwp` from a part
 `ρ₀` whose flattening holds only `own` cells into `rwpGX`, beside the rest `ρ_r` of the resource and
 the whole ghost `g`, at any mask. `↭` from `ρ₀` keeps every `imm` cell and every `mut` cell, so the
 run's end and garbage hold none: the end carries no lifetime, the garbage is empty, and the ghost

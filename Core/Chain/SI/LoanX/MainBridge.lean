@@ -1,10 +1,10 @@
 import Core.Chain.Goal791N
 import Core.Chain.SI.AFrameK
 
-/-! Isolated typed-boundary experiment [spec §62].
-All typing conclusions below use ACTUAL main Goal791N.vN/cN, unchanged. FamilyBrand is
-proof-carrying metadata extracted from that interpretation, not a replacement type model.
-No execution relation or future clause is weakened. OwnedClaim/W1 remains a separate baseline.
+/-! Owned-loan return facts at the current typed interpretation [spec §62].
+All typing conclusions below use actual `Goal791N.vN/cN`, unchanged. `FamilyBrand`
+is proof-carrying metadata extracted from that interpretation. The proposed
+resource-aware callable and storage clauses are separate from this module.
 -/
 noncomputable section
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]

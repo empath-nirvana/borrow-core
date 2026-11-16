@@ -1,6 +1,6 @@
 import TypedCaseProof.ClaimHandle
-import TypedCaseProof.MainBridge
-import TypedCaseProof.Algebra
+import Core.Chain.SI.LoanX.MainBridge
+import Core.Chain.SI.LoanX.Algebra
 
 noncomputable section
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]

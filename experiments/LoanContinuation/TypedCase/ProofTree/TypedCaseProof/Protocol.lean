@@ -1,9 +1,9 @@
-import TypedCaseProof.WorldSat
+import Core.Chain.SI.LoanX.WorldSat
 import TypedCaseProof.TypedResources
 import TypedCaseProof.GhostUpdate
 import TypedCaseProof.GhostValidity
 import TypedCaseProof.StorePark
-import TypedCasePort.MutLoan
+import Core.Chain.SI.LoanX.MutLoan
 
 noncomputable section
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]

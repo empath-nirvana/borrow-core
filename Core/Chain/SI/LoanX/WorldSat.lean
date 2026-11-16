@@ -1,4 +1,4 @@
-import TypedCaseProof.Cell
+import Core.Chain.SI.LoanX.Cell
 
 /-! The owned registry fragment connects a parked scalar loan to the actual
 current-main value interpretation after unrelated registry changes. -/
