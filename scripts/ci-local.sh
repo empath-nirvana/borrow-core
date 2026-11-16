@@ -13,7 +13,8 @@
 # The sanity gate (`gateSteps` below) checks that the library builds; hygiene (no forbidden
 # keyword, every declaration's axioms within propext, Classical.choice and Quot.sound) and the
 # axioms of the theorems SPEC.md names (listed in `scripts/axioms/*.names`, read by
-# `scripts/AxiomCheck.lean`); the typing-judgment freeze and the new backend's import
+# `scripts/AxiomCheck.lean`); the typing-judgment freeze, the hypothesis register (`assumptions`:
+# every hypothesis a theorem takes is listed in Core/Assumptions.lean) and the new backend's import
 # fence; that every type comparison goes through the one `[α]` helper (`type equality`); that the
 # corpus parses and checks, and elaborates the same under a renaming of its binders (`renaming`);
 # and that every corpus program, compiled to WebAssembly
@@ -86,6 +87,7 @@ steps=(
   "hygiene + axioms" "scripts/check-hygiene.sh"
   "spec files"       "scripts/check-spec-files.sh"
   "judgment freeze"  "scripts/check-judgments.sh"
+  "assumptions"      "scripts/check-assumptions.sh"
   "type equality"    "scripts/check-type-eq.sh"
   "axiom report"     "lake env lean scripts/AxiomCheck.lean"
   "insertion pins"   "scripts/check-pins.sh"
@@ -111,7 +113,7 @@ steps=(
 )
 # The sanity gate's steps (`make gate`, `--changed`). The corpus runs named `final` are its own:
 # the full gate runs the corpus at every stage instead.
-gateSteps=("hygiene + axioms" "spec files" "judgment freeze" "axiom report" "type equality" "parse corpus"
+gateSteps=("hygiene + axioms" "spec files" "judgment freeze" "assumptions" "axiom report" "type equality" "parse corpus"
   "check corpus" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)" "backend2 fence")
 if [ "$full" = 1 ]; then
   everyStep=("compile scaling")
@@ -149,6 +151,7 @@ if [ "$changed" = 1 ]; then
         scripts/compile-corpus.sh|scripts/source-stage.sh|scripts/interp-digest.sh) add "corpus (old backend, final)" ;;
         scripts/compile-backend2.sh) add "corpus (Backend2, final)" ;;
         scripts/check-backend2.sh) add "backend2 fence" ;;
+        scripts/check-assumptions.sh) add "assumptions" ;;
         scripts/check-type-eq.sh|scripts/TypeEq.lean|scripts/type-eq.allow) add "type equality" ;;
         scripts/alpha-check.py) add "renaming" ;;
         SPEC.md|docs/changelog/*|docs/status/*|scripts/changelog.sh|scripts/status.sh|scripts/check-spec-files.sh) add "spec files" ;;
