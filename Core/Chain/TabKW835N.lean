@@ -138,11 +138,11 @@ theorem tab_lookupGK : ∀ (F : CTy) {R : Nat → WProp} {G : ShareG} {vr : VRel
         cases Option.some.inj h
         obtain ⟨rfl, rfl⟩ := hmj
         exact ⟨q, A, B, fin, .inl ⟨rfl, rfl, rfl, rfl⟩, rfl, fun R' => by
-          simp only [tabRK, extTabK, and_self, if_true]⟩
+          simp only [tabRK, finRK, tabClaimK, extTabK, and_self, if_true]⟩
       · rename_i hmj
         obtain ⟨q', A', B', fin', hL, he, hR⟩ := tab_lookupGK C h
         exact ⟨q', A', B', fin', .inr hL, he, fun R' => by
-          simp only [tabRK, extTabK, if_neg hmj]; exact hR R'⟩
+          simp only [tabRK, tabClaimK, extTabK, if_neg hmj]; exact hR R'⟩
   | .ret _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
   | .arr _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
   | .amp _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
@@ -319,7 +319,7 @@ theorem tabRK_canAK {vr : VRel} {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Li
   intro P' hP'
   simp only [entNK, hcap, if_true] at hP' hc
   by_cases htop : fin = .top
-  · subst htop; simp [finRK] at hP'
+  · subst htop; simp [finRK, finClaimK] at hP'
   rw [finRK_eq _ _ _ htop] at hP'
   cases Option.some.inj hP'
   have hM := erwpK_M_antiFrame_cancelRunCR (ℍ := ℍ) (V := KW.PostK)
