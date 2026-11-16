@@ -62,13 +62,13 @@ open BoCa.Fig16.LogRel.Core
 
 /-- A table downward closed in the index it stops at. -/
 def TableT.Down (Tb : TableT) : Prop :=
-  ∀ F k w ls O t (Ψ : ContT) ρ, Tb F (k + 1) w ls O t Ψ ρ → Tb F k w ls O t Ψ ρ
+  ∀ (Ψc : ContP) F k w ls O t (Ψ : ContT) ρ, Tb Ψc F (k + 1) w ls O t Ψ ρ → Tb Ψc F k w ls O t Ψ ρ
 
 theorem cerwpPostT_down {Tb : TableT} {Q : TPostV} (hQ : Q.Down) (hTb : Tb.Down) {Ψ : ContT}
-    {F : TFrame} : (cerwpPostT Tb Q Ψ F).Down := by
+    {Ψc : ContP} {F : TFrame} : (cerwpPostT Tb Q Ψ Ψc F).Down := by
   rintro n w ls O t ρ (⟨v, rfl, h⟩ | h)
   · exact Or.inl ⟨v, rfl, hQ _ _ _ _ _ _ h⟩
-  · exact Or.inr (hTb _ _ _ _ _ _ _ _ h)
+  · exact Or.inr (hTb _ _ _ _ _ _ _ _ _ h)
 
 /-- **`cerwpT` is downward closed.** What is owed below the index is read only below it
 (`TableT.Local`), so the continuation relation at the larger index serves. -/
@@ -95,7 +95,8 @@ theorem cerwpT_post_mono_n {Tb : TableT} (hL : Tb.Local) {Q₁ Q₂ : TPostV}
   refine twp_mono_le (fun k hk w' ls' O' t ρ' ht => ?_) h
   rcases ht with ⟨v, rfl, hv⟩ | ht
   · exact Or.inl ⟨v, rfl, hQ _ _ _ _ _ _ hv⟩
-  · refine Or.inr (hL Fb k w' ls' O' t _ _ ρ' (fun F' w'' O'' k' hk' ls'' e'' ρ'' hΨ => ?_) ht)
+  · refine Or.inr (hL _ _ Fb k w' ls' O' t _ _ ρ' (fun F' w'' O'' k' hk' ls'' e'' ρ'' hΨ => ?_)
+      (fun _ _ _ _ _ _ _ _ _ _ _ h => h) ht)
     simp only [cerwpTC, show k' < n by omega, if_true] at hΨ ⊢
     exact ih k' (by omega) F' w'' ls'' O'' e'' ρ'' hΨ
 
@@ -106,13 +107,14 @@ theorem cerwpT_post_mono {Tb : TableT} (hL : Tb.Local) {Q₁ Q₂ : TPostV}
   cerwpT_post_mono_n hL hQ n F w ls O e ρ h
 
 /-- An operation's entry downward closed: its payload. Its cancel branch is owed as a continuation
-(`contShareT`), so the table's own downward closure covers it. -/
+(`contShareT`), so the table's own downward closure covers it. `PADown T` is every entry of `T`
+downward closed. -/
 def OpEntT.Down (en : OpEntT) : Prop := ∀ n w ls v ρ, en.PA (n + 1) w ls v ρ → en.PA n w ls v ρ
 
 /-- **The operation tables are downward closed** when their entries are. -/
 theorem opTableT_down {T : OpTabT} (hT : ∀ n i en, T n i = some en → en.Down) :
     (opTableT T).Down := by
-  intro F k w ls O t Ψ ρ h
+  intro Ψc F k w ls O t Ψ ρ h
   obtain ⟨K, n, i, v, en, h₁, h₂, h₃, h₄, h₅, ρa, ρk, hc, hA, hu, hcont⟩ := h
   exact ⟨K, n, i, v, en, h₁, h₂, h₃, h₄, h₅, ρa, ρk, hc, hT n i en h₃ _ _ _ _ _ hA, hu,
     fun w' ρ' ls' O' hE hr hx hO =>

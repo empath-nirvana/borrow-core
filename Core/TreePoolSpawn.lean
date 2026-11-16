@@ -134,6 +134,8 @@ def enSpawnP (P : TVProp) : OpEntT where
   fin := true
   fd := fdJoinT
   oc := fun _ _ => True
+  cn := fun _ _ => False
+  QC := QV
 
 /-- `par`'s entry, at a payload condition `P`: the parent is resumed with copies of lends. -/
 def enParP (P : TVProp) : OpEntT where
@@ -144,6 +146,8 @@ def enParP (P : TVProp) : OpEntT where
   fin := false
   fd := fdJoinT
   oc := fun _ _ => True
+  cn := fun _ _ => False
+  QC := Qunit
 
 /-- **A child, run as a new task from `ρ`**: at every index `j` below `k`, at every extension of
 the stop's world on `ρ`'s re-reading, at every list, at every base frame condition every valid frame
@@ -228,9 +232,9 @@ theorem tabOf_down (T : Nat → OpTabT) : ∀ m i en, tabOf (ℍ := ℍ) T m i =
 
 /-- **A table includes another at the stops up to `N`.** -/
 def InclLe (N : Nat) (Tb₁ Tb₂ : TableT) : Prop :=
-  ∀ F k w ls O t (Ψ Ψ' : ContT) ρ, k ≤ N →
+  ∀ (Ψc : ContP) F k w ls O t (Ψ Ψ' : ContT) ρ, k ≤ N →
     (∀ F' w' O' k', k' < k → ∀ ls' e ρ', Ψ F' w' O' k' ls' e ρ' → Ψ' F' w' O' k' ls' e ρ') →
-    Tb₁ F k w ls O t Ψ ρ → Tb₂ F k w ls O t Ψ' ρ
+    Tb₁ Ψc F k w ls O t Ψ ρ → Tb₂ Ψc F k w ls O t Ψ' ρ
 
 /-- **A run verified at a table at an index up to `N` is verified at a table including it at the
 stops up to `N`**, by strong induction on the index: every stop of the run is at an index up to
@@ -247,7 +251,7 @@ theorem cerwpT_table_mono_le {Tb₁ Tb₂ : TableT} {N : Nat} (hI : InclLe N Tb�
   refine twp_mono_le (fun k hk w' ls' O' t ρ' ht => ?_) h
   rcases ht with ht | ht
   · exact Or.inl ht
-  · refine Or.inr (hI Fb k w' ls' O' t _ _ ρ' (by omega)
+  · refine Or.inr (hI _ Fb k w' ls' O' t _ _ ρ' (by omega)
       (fun F' w'' O'' k' hk' ls'' e'' ρ'' hΨ => ?_) ht)
     simp only [cerwpTC, show k' < n by omega, if_true] at hΨ ⊢
     exact ih k' (by omega) (by omega) F' w'' ls'' O'' e'' ρ'' hΨ
@@ -264,18 +268,29 @@ theorem childOK_trunc {k k' : Nat} (hk : k' ≤ k) {w : TWd} {th : Val} {ρ : TR
 /-- **`tabAt k` is included in `TJ` at the stops up to `k`**: the entries are the same but for
 the payload conditions, and those agree up to `k`. -/
 theorem tabAt_inclLe (k : Nat) : InclLe k (opTableT (tabAt (ℍ := ℍ) k)) (opTableT (TJ (ℍ := ℍ))) := by
-  intro F k' w ls O t Ψ Ψ' ρ hk hΨ ht
+  intro Ψc F k' w ls O t Ψ Ψ' ρ hk hΨ ht
   obtain ⟨K, n, i, v, en, h₁, h₂, h₃, h₄, h₅, ρa, ρk, hc, hA, hcont⟩ := ht
-  rw [tabAt_eq] at h₃
-  refine opTableT_local _ F k' w ls O t Ψ Ψ' ρ hΨ ?_
+  rw [tabAt_eq] at h₃ hcont
+  refine opTableT_local _ Ψc Ψc F k' w ls O t Ψ Ψ' ρ hΨ (fun _ _ _ _ _ _ _ _ _ _ _ h => h) ?_
+  have hrow : ∀ T T' : Nat → OpTabT,
+      (tabOf (ℍ := ℍ) T).restrict enPark.cn = (tabOf (ℍ := ℍ) T').restrict enPark.cn :=
+    fun T T' => OpTabT.restrict_congr fun m i hc => by
+      obtain ⟨rfl, rfl⟩ := hc; rw [tabOf_park, tabOf_park]
+  have hnil : ∀ (T₁ T₂ : OpTabT) (cn : UInt32 → UInt32 → Prop), (∀ m i, ¬ cn m i) →
+      T₁.restrict cn = T₂.restrict cn :=
+    fun T₁ T₂ cn h => OpTabT.restrict_congr fun m i hc => absurd hc (h m i)
   obtain ⟨rfl, ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩⟩ := tabOf_some h₃
-  · exact ⟨K, nP, 0, v, enPark, h₁, h₂, tabOf_park _, h₄, h₅, ρa, ρk, hc, hA, hcont⟩
+  · exact ⟨K, nP, 0, v, enPark, h₁, h₂, tabOf_park _, h₄, h₅, ρa, ρk, hc, hA,
+      contShareT_congr (hrow _ _) hcont⟩
   · exact ⟨K, nP, 1, v, enSpawnP (spawnPA (ℍ := ℍ) (tabAt (ℍ := ℍ))), h₁, h₂, tabOf_spawn _, h₄, h₅,
-      ρa, ρk, hc, ⟨hA.1, childOK_trunc hk hA.2⟩, hcont⟩
-  · exact ⟨K, nP, 2, v, enPark, h₁, h₂, tabOf_cancel _, h₄, h₅, ρa, ρk, hc, hA, hcont⟩
+      ρa, ρk, hc, ⟨hA.1, childOK_trunc hk hA.2⟩,
+      contShareT_congr (hnil _ _ _ fun _ _ h => h) hcont⟩
+  · exact ⟨K, nP, 2, v, enPark, h₁, h₂, tabOf_cancel _, h₄, h₅, ρa, ρk, hc, hA,
+      contShareT_congr (hrow _ _) hcont⟩
   · obtain ⟨th₁, th₂, ρ₁, ρ₂, e₁, e₂, e₃, e₄, e₅, e₆⟩ := hA
     exact ⟨K, nP, 3, v, enParP (parPA (ℍ := ℍ) (tabAt (ℍ := ℍ))), h₁, h₂, tabOf_par _, h₄, h₅, ρa,
-      ρk, hc, ⟨th₁, th₂, ρ₁, ρ₂, e₁, e₂, e₃, e₄, childOK_trunc hk e₅, childOK_trunc hk e₆⟩, hcont⟩
+      ρk, hc, ⟨th₁, th₂, ρ₁, ρ₂, e₁, e₂, e₃, e₄, childOK_trunc hk e₅, childOK_trunc hk e₆⟩,
+      contShareT_congr (hnil _ _ _ fun _ _ h => h) hcont⟩
 
 /-- **A child verified at `tabAt j` at index `j` is verified at `TJ`.** -/
 theorem cerwpT_tabAt {Q : TPostV} {Fb F : TFrame} {j : Nat} {w : TWd} {ls : List (SRecT w.K)}
@@ -353,6 +368,8 @@ def enU : OpEntT where
   fin := true
   fd := fdJoinT
   oc := fun _ _ => True
+  cn := fun _ _ => False
+  QC := QV
 
 /-- **The stack invariant**: every entry may be resumed by the return clause; a ready entry is
 tagged `inj₁ ()` and cancellable, a joiner tagged `inj₂ ()`. -/
@@ -625,7 +642,8 @@ theorem kapSchedT_κU {N : Nat}
         (fdMask (recMask ([] : List (FrameRecT w'.K)))) k' w' ls' []
         (.app (κU HS th).1 (.val (Val.inj₂ Val.unit))) ρ' := by
       have hPD := cerwpPostT_down (Ψ := cerwpTC (ℍ := ℍ) (opTableT (TJ (ℍ := ℍ))) QV
-        (fun w ρf => ResUT.Valid ρf) k') (F := fun w ρf => ResUT.Valid ρf) QV_down
+        (fun w ρf => ResUT.Valid ρf) k') (Ψc := cerwpTK (ℍ := ℍ) k')
+        (F := fun w ρf => ResUT.Valid ρf) QV_down
         TJ_down
       refine cerwpT_det hPD (fun μ => step1Only_plug (Head.beta μ _ (Val.inj₂ Val.unit)) rfl
         .hole) ?_
@@ -757,6 +775,12 @@ theorem hs_schedOKLe : ∀ N, SchedOKTLe (ℍ := ℍ) N (TJ (ℍ := ℍ)) nP qsS
   refine ⟨fun m i hm => by simp [TJ, tabOf, hm], fun i en h _ => ?_, fun i en h v w O ρf hj => ?_,
     poolAns_down _ _ _, fun F k w ls O v ρ _ =>
       stackRet_okAt (fun t ts hi => ⟨(invS_cons hi).1.1, (invS_cons hi).2⟩) F k w ls O v ρ,
+    fun i en h _ hf => by
+      obtain ⟨-, ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩⟩ := tabOf_some h
+      all_goals first
+        | exact absurd hf Bool.false_ne_true
+        | exact fun F k w ls O v ρ _ =>
+            stackRet_okAt (fun t ts hi => ⟨(invS_cons hi).1.1, (invS_cons hi).2⟩) F k w ls O v ρ,
     fun i en h => ?_⟩
   · obtain ⟨-, ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩⟩ := tabOf_some h <;> rfl
   · obtain ⟨-, ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩⟩ := tabOf_some h <;> exact hj

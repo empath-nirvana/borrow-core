@@ -66,9 +66,8 @@ theorem fdMask_of_false {M : BoCa.Loc → Prop} (hM : ∀ x, ¬ M x) {w : TWd} {
   ⟨hv, NoneAt.of_false hM ρ⟩
 
 /-- A post whose answers do not read the index is downward closed. -/
-theorem cerwpPostT_down {T : OpTabT} {Q : TPostV} (hQ : Q.Down) {Ψ : ContT} {F : TFrame}
-    (hPA : ∀ m i en, T m i = some en → ∀ k w ls v ρ, en.PA (k + 1) w ls v ρ → en.PA k w ls v ρ) :
-    (cerwpPostT (opTableT T) Q Ψ F).Down := by
+theorem cerwpPostT_down {T : OpTabT} {Q : TPostV} (hQ : Q.Down) {Ψ : ContT} {Ψc : ContP}
+    {F : TFrame} (hPA : PADown T) : (cerwpPostT (opTableT T) Q Ψ Ψc F).Down := by
   intro k w ls O t ρ h
   rcases h with ⟨v, hv, hq⟩ | ⟨K, m, i, v, en, ht, hK, hT, ha, hoc, ρa, ρk, hc, hA, hsh⟩
   · exact Or.inl ⟨v, hv, hQ _ _ _ _ _ _ hq⟩
@@ -80,7 +79,7 @@ theorem cerwpPostT_down {T : OpTabT} {Q : TPostV} (hQ : Q.Down) {Ψ : ContT} {F 
 /-- A deterministic step in front of `cerwpT`, for free. -/
 theorem cerwpT_det {Tb : TableT} {Q : TPostV} {Fb F : TFrame} {n : Nat} {w : TWd}
     {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {e e' : Expr} {ρ : TRes w.K}
-    (hD : (cerwpPostT Tb Q (cerwpTC (ℍ := ℍ) Tb Q Fb n) Fb).Down)
+    (hD : (cerwpPostT Tb Q (cerwpTC (ℍ := ℍ) Tb Q Fb n) (cerwpTK (ℍ := ℍ) n) Fb).Down)
     (hdet : ∀ μ, Step1Only (ℍ := ℍ) μ e μ e') (h : cerwpT (ℍ := ℍ) Tb Q Fb F n w ls O e' ρ) :
     cerwpT (ℍ := ℍ) Tb Q Fb F n w ls O e ρ := by
   rw [cerwpT_eq] at h ⊢
@@ -139,6 +138,8 @@ def enAsk : OpEntT where
   fin := false
   fd := fdJoinT
   oc := fun _ O => O = []
+  cn := fun _ _ => False
+  QC := Qunit
 
 def TA : OpTabT := fun m i => if m = nA ∧ i = 0 then some enAsk else none
 
@@ -153,7 +154,8 @@ theorem TA_some {m i : UInt32} {en : OpEntT} (h : TA m i = some en) : m = nA ∧
   · rename_i hm; cases h; exact ⟨hm.1, hm.2, rfl⟩
   · cases h
 
-theorem TA_down {Ψ : ContT} {F : TFrame} : (cerwpPostT (opTableT TA) QA Ψ F).Down :=
+theorem TA_down {Ψ : ContT} {Ψc : ContP} {F : TFrame} :
+    (cerwpPostT (opTableT TA) QA Ψ Ψc F).Down :=
   cerwpPostT_down QA_down
     (fun m i en h k w ls v ρ hA => by obtain ⟨-, -, rfl⟩ := TA_some h; exact hA)
 
@@ -312,7 +314,8 @@ theorem retClause_ok : SchedRetT (ℍ := ℍ) QA QA retClause := by
 /-- **The scheduler meets `SchedOKT`.** -/
 theorem async_schedOK : SchedOKT (ℍ := ℍ) TA nA qsA retClause hsA QA QA := by
   refine ⟨fun m i hm => by simp [TA, hm], fun i en h _ => ?_, fun i en h v w O ρf hj => ?_,
-    QA_down, retClause_ok, fun i en h => ?_⟩
+    QA_down, retClause_ok, fun _ _ h hq _ => absurd (by obtain ⟨-, -, rfl⟩ := TA_some h; rfl) hq,
+    fun i en h => ?_⟩
   · obtain ⟨-, rfl, rfl⟩ := TA_some h
     rfl
   · obtain ⟨-, -, rfl⟩ := TA_some h
@@ -399,6 +402,8 @@ def enPass : OpEntT where
   fin := false
   fd := fdJoinT
   oc := fun _ O => O = []
+  cn := fun _ _ => False
+  QC := Qunit
 
 def TS : OpTabT := fun m i => if m = nS ∧ i = 0 then some enPass else none
 
@@ -505,7 +510,9 @@ theorem stepRet_ok {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt) :
 theorem schedS_ok {Qt : TPostV} (hQt : Qt.Down) (hst : QtStable Qt) :
     SchedOKT (ℍ := ℍ) TS nS qsS stepRet hsS Qt (QS (ℍ := ℍ) Qt) := by
   refine ⟨fun m i hm => by simp [TS, hm], fun i en h _ => ?_, fun i en h v w O ρf hj => ?_,
-    QS_down hQt, stepRet_ok hQt hst, fun i en h => ?_⟩
+    QS_down hQt, stepRet_ok hQt hst,
+    fun _ _ h _ hf => absurd (by obtain ⟨-, -, rfl⟩ := TS_some h; exact hf) Bool.false_ne_true,
+    fun i en h => ?_⟩
   · obtain ⟨-, rfl, rfl⟩ := TS_some h
     rfl
   · obtain ⟨-, -, rfl⟩ := TS_some h
@@ -551,8 +558,8 @@ theorem Qd_stable : QtStable Qd := by
   rintro k w w₀ ls O ls₀ O₀ r ρ ρ₀ - hr - ⟨m, u, x, rfl, rfl⟩
   exact ⟨m, u, x, rfl, rr_single_own hr⟩
 
-theorem TS_down {Qt : TPostV} (hQt : Qt.Down) {Ψ : ContT} {F : TFrame} :
-    (cerwpPostT (opTableT TS) Qt Ψ F).Down :=
+theorem TS_down {Qt : TPostV} (hQt : Qt.Down) {Ψ : ContT} {Ψc : ContP} {F : TFrame} :
+    (cerwpPostT (opTableT TS) Qt Ψ Ψc F).Down :=
   cerwpPostT_down hQt
     (fun m i en h k w ls v ρ hA => by obtain ⟨-, -, rfl⟩ := TS_some h; exact hA)
 
@@ -584,7 +591,7 @@ theorem fill_cerwpT (n : Nat) (w : TWd) (ls : List (SRecT w.K)) (l : BoCa.Loc) (
     cerwpT (ℍ := ℍ) (opTableT TS) Qf (fun _ _ => True) (fun _ _ => True) n w ls []
       (.app fillV.1 (.loc l))
       (ResUT.single l (CellUT.ownOf u)) := by
-  have hD := TS_down (Qt := Qf) (Ψ := cerwpTC (ℍ := ℍ) (opTableT TS) Qf (fun _ _ => True) n)
+  have hD := TS_down (Qt := Qf) (Ψ := cerwpTC (ℍ := ℍ) (opTableT TS) Qf (fun _ _ => True) n) (Ψc := cerwpTK (ℍ := ℍ) n)
     (F := fun _ _ => True) (fun _ _ _ _ _ _ h => h)
   refine cerwpT_det hD (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
   show cerwpT (ℍ := ℍ) (opTableT TS) Qf _ _ n w ls []
@@ -604,14 +611,14 @@ theorem drain_cerwpT (n : Nat) (w : TWd) (ls : List (SRecT w.K)) (l : BoCa.Loc) 
     cerwpT (ℍ := ℍ) (opTableT TS) Qd (fun _ _ => True) (fun _ _ => True) n w ls []
       (.app drainV.1 (.loc l))
       (ResUT.single l (CellUT.ownOf u)) := by
-  have hD := TS_down (Qt := Qd) (Ψ := cerwpTC (ℍ := ℍ) (opTableT TS) Qd (fun _ _ => True) n)
+  have hD := TS_down (Qt := Qd) (Ψ := cerwpTC (ℍ := ℍ) (opTableT TS) Qd (fun _ _ => True) n) (Ψc := cerwpTK (ℍ := ℍ) n)
     (F := fun _ _ => True) (fun _ _ _ _ _ _ h => h)
   refine cerwpT_det hD (fun μ => step1Only_plug (Head.beta μ _ (Val.loc l)) rfl .hole) ?_
   show cerwpT (ℍ := ℍ) (opTableT TS) Qd _ _ n w ls []
     ((Kont.appR (.lam (drainB.subst 1 (Val.loc l))) .hole).plug
       (performE (.val (opPayload nS 0 (Val.loc l))))) _
   refine pass_stop _ (by simp [Kont.HasHnd]) l u fun k' _ w' ls' O' m u' => ?_
-  have hD' := TS_down (Qt := Qd) (Ψ := cerwpTC (ℍ := ℍ) (opTableT TS) Qd (fun _ _ => True) k')
+  have hD' := TS_down (Qt := Qd) (Ψ := cerwpTC (ℍ := ℍ) (opTableT TS) Qd (fun _ _ => True) k') (Ψc := cerwpTK (ℍ := ℍ) k')
     (F := fun _ _ => True) (fun _ _ _ _ _ _ h => h)
   refine cerwpT_det hD' (fun μ => step1Only_plug (Head.beta μ _ (Val.loc m)) rfl .hole) ?_
   show cerwpT (ℍ := ℍ) (opTableT TS) Qd _ _ k' w' ls' O'

@@ -372,11 +372,14 @@ def twpG (F : TFrame) (Q : TPost) (n : Nat) (w : TWd) (ls : List (SRecT w.K))
   ∀ g ρg : TRes w.K, NoOwnT g → ResUT.CompS ρ g ρg → twp (ℍ := ℍ) F (garbP Q) n w ls O e ρg
 
 /-- **`cerwpT` over `twpG`.** -/
-def cerwpTG (Tb : TableT) (Q : TPostV) (Fb : TFrame) : TFrame → Nat → (w : TWd) →
+def cerwpTG : TableT → TPostV → TFrame → TFrame → Nat → (w : TWd) →
     List (SRecT w.K) → List (FrameRecT w.K) → Expr → TRes w.K → Prop
-  | F, n, w, ls, O, e => twpG (ℍ := ℍ) F (cerwpPostT Tb Q (fun F' w' O' k' ls' e' =>
-      if _h : k' < n then cerwpTG Tb Q Fb F' k' w' ls' O' e' else fun _ => False) Fb) n w ls O e
-termination_by _ n => n
+  | Tb, Q, Fb, F, n, w, ls, O, e => twpG (ℍ := ℍ) F (cerwpPostT Tb Q (fun F' w' O' k' ls' e' =>
+      if _h : k' < n then cerwpTG Tb Q Fb F' k' w' ls' O' e' else fun _ => False)
+      (fun T' Q' Fb' F' w' O' k' ls' e' =>
+        if _h : k' < n then cerwpTG (opTableT T') Q' Fb' F' k' w' ls' O' e' else fun _ => False)
+      Fb) n w ls O e
+termination_by _ _ _ _ n => n
 
 /-- **Pinned extension** (`roots-791`'s `TWd.PinExt`): `TWd.Ext`, and every location the carried
 resource holds a cell at keeps its code. A location nothing holds may be re-typed (a freed
@@ -419,11 +422,11 @@ def CellFoldT (l : BoCa.Loc) (A : KTy) : (w : TWd) → TRes w.K → Prop := fun 
     ResUT.CompS (ResUT.single l (CellUT.ownOf u)) rest ρ ∧ ResUT.CompS χ R rest
 
 /-- `opTableT`'s stops, the continuation's share guarded. -/
-def opTableGT (T : OpTabT) (G : (w : TWd) → TRes w.K → Prop) : TableT := fun F k w ls O t Ψ ρ =>
+def opTableGT (T : OpTabT) (G : (w : TWd) → TRes w.K → Prop) : TableT := fun Ψc F k w ls O t Ψ ρ =>
   ∃ (K : Kont) (n i : UInt32) (v : Val) (en : OpEntT),
     t = K.plug (performE (.val (opPayload n i v))) ∧ K.HasHnd n = false ∧ T n i = some en ∧
     en.abort = false ∧ en.oc w O ∧ ∃ ρa ρk : TRes w.K, ResUT.CompS ρa ρk ρ ∧
-      en.PA k w ls v ρa ∧ G w ρk ∧ contShareT en F k w ls O K v Ψ ρk
+      en.PA k w ls v ρa ∧ G w ρk ∧ contShareT T en F k w ls O K v Ψ Ψc ρk
 
 /-- **A1. The Mut Frame within a segment** (6.65 at `twpG`, `wpTS_M_frameX`): the lender's run
 from `ℓ ↦ own(v) ● ρ_P ● ρ_b`, given the borrowed run from `ρ_b ● ℓ ↦ mut(α, v, ρ_P, P̂)` at

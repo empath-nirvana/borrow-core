@@ -61,7 +61,7 @@ def spawnE (th : Val) : Expr := performE (.val (opPayload nP 1 th))
 /-- A post whose answers do not read the index, at a table whose payloads do not either. -/
 theorem post_down {T : OpTabT}
     (hTd : ∀ m i en, T m i = some en → ∀ k w ls v ρ, en.PA (k + 1) w ls v ρ → en.PA k w ls v ρ)
-    {Ψ : ContT} {F : TFrame} : (cerwpPostT (opTableT T) QS Ψ F).Down :=
+    {Ψ : ContT} {Ψc : ContP} {F : TFrame} : (cerwpPostT (opTableT T) QS Ψ Ψc F).Down :=
   cerwpPostT_down QB_down hTd
 
 /-- **The resumer's guarantee at a park owning a lend's record** holds nothing at the lent cell. -/
@@ -109,6 +109,13 @@ theorem cerwpT_unit {T : OpTabT} {Fb F : TFrame} {n : Nat} {w : TWd} {ls : List 
   cerwpT_val (v := Val.unit) fun _ _ _ _ _ hr _ hO => by
     cases hO; exact ⟨rfl, rfl, RR.of_empty hr⟩
 
+/-- A task answering `QS` answers `QV`. -/
+theorem cerwpT_QV {T : OpTabT} {Fb F : TFrame} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
+    {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K}
+    (h : cerwpT (ℍ := ℍ) (opTableT T) QS Fb F n w ls O e ρ) :
+    cerwpT (ℍ := ℍ) (opTableT T) QV Fb F n w ls O e ρ :=
+  cerwpT_post_mono (opTableT_local T) (fun _ _ _ _ _ _ h => QS_QV h) h
+
 /-! ### The loan task -/
 
 /-- `λa. ubind (λ_. free a, λ_. free a) (park ())`'s body. -/
@@ -138,9 +145,9 @@ theorem twp_cancelTail {F : TFrame} {P : TPost} (hP : P.Down) {l : BoCa.Loc} {α
   exact twp_det hP (fun μ => step1Only_plug (Head.cancel μ .hole rfl) rfl .hole) h
 
 /-- The end of a run: `()`, owning nothing. -/
-theorem twp_unitEnd {T : OpTabT} {Ψ : ContT} {Fb F : TFrame} {n : Nat} {w : TWd}
+theorem twp_unitEnd {T : OpTabT} {Ψ : ContT} {Ψc : ContP} {Fb F : TFrame} {n : Nat} {w : TWd}
     {ls : List (SRecT w.K)} :
-    twp (ℍ := ℍ) F (cerwpPostT (opTableT T) QS Ψ Fb) n w ls [] (.val Val.unit) PMap.empty :=
+    twp (ℍ := ℍ) F (cerwpPostT (opTableT T) QS Ψ Ψc Fb) n w ls [] (.val Val.unit) PMap.empty :=
   twp_here (fun μ => final_val μ Val.unit) fun _ _ _ _ _ hr _ hO => by
     cases hO; exact Or.inl ⟨Val.unit, rfl, rfl, rfl, RR.of_empty hr⟩
 
@@ -154,8 +161,9 @@ theorem cerwpT_parkLend {T : OpTabT} (hT0 : T nP 0 = some enPark)
       cerwpT (ℍ := ℍ) (opTableT T) QS Fb (fdAt enPark Val.unit Fb [lendRec (K := w'.K) l]) k' w'
         ls' [lendRec l] (K.plug (.val Val.unit)) (viewRes α l))
     (hcan : ∀ k', k' < n → ∀ (w' : TWd) (ls' : List (SRecT w'.K)),
-      cerwpT (ℍ := ℍ) (opTableT T) QS Fb (fdAt enPark Val.unit Fb [lendRec (K := w'.K) l]) k' w'
-        ls' [lendRec l] (ccatchE (K.dead.plug (raiseE (.val (cancelVal none))))) (viewRes α l)) :
+      cerwpT (ℍ := ℍ) (opTableT (T.restrict enPark.cn)) enPark.QC Fb
+        (fdAt enPark Val.unit Fb [lendRec (K := w'.K) l]) k' w' ls' [lendRec l] (unwindE K)
+        (viewRes α l)) :
     cerwpT (ℍ := ℍ) (opTableT T) QS Fb F n w ls [lendRec l] (K.plug parkE) (viewRes α l) := by
   refine cerwpT_perform K hK hT0 rfl ?_
   intro w₀ ρ₀ ls₀ O₀ _ hr _ hO
@@ -168,8 +176,8 @@ theorem cerwpT_parkLend {T : OpTabT} (hT0 : T nP 0 = some enPark)
   obtain rfl := hO₀ hO
   refine ⟨trivial, PMap.empty, viewRes α l, ResUT.CompS.comm (ResUT.compS_empty_right _),
     ⟨rfl, rfl⟩, (⟨(fun h => by cases h), fun w' ρ' ls' O' _ hr' _ hO' => ?_⟩ :
-      contShareT enPark Fb n w₀ ls₀ [lendRec l] K Val.unit
-        (cerwpTC (ℍ := ℍ) (opTableT T) QS Fb n) (viewRes α l))⟩
+      contShareT T enPark Fb n w₀ ls₀ [lendRec l] K Val.unit
+        (cerwpTC (ℍ := ℍ) (opTableT T) QS Fb n) (cerwpTK (ℍ := ℍ) n) (viewRes α l))⟩
   obtain rfl := hO₀ hO'
   obtain rfl := rr_view_eq hr'
   refine ⟨fun k' hk' a σ σ' hB hcσ => ?_, fun _ _ k' hk' => ?_⟩
@@ -177,7 +185,7 @@ theorem cerwpT_parkLend {T : OpTabT} (hT0 : T nP 0 = some enPark)
     obtain rfl := compS_empty_right_eq hcσ
     simp only [cerwpTC, hk', if_true]
     exact hres k' hk' w' ls'
-  · simp only [cerwpTC, hk', if_true]
+  · simp only [cerwpTK, hk', if_true]
     exact hcan k' hk' w' ls'
 
 /-- **The loan task at any table with `park`**, owning nothing, at every index and frame
@@ -188,7 +196,7 @@ theorem L_cerwpT {T : OpTabT} (hT0 : T nP 0 = some enPark)
     (hTd : ∀ m i en, T m i = some en → ∀ k w ls v ρ, en.PA (k + 1) w ls v ρ → en.PA k w ls v ρ)
     (α : Life) (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K)) :
     cerwpT (ℍ := ℍ) (opTableT T) QS Fb F n w ls [] L PMap.empty := by
-  have hD := post_down hTd (Ψ := cerwpTC (ℍ := ℍ) (opTableT T) QS Fb n) (F := Fb)
+  have hD := post_down hTd (Ψ := cerwpTC (ℍ := ℍ) (opTableT T) QS Fb n) (Ψc := cerwpTK (ℍ := ℍ) n) (F := Fb)
   rw [cerwpT_eq]
   refine twp_alloc_here hD (.appR (.lam Lbody) .hole) Val.unit fun l ρ₁ hc => ?_
   obtain rfl := compS_empty_left_eq hc
@@ -200,8 +208,9 @@ theorem L_cerwpT {T : OpTabT} (hT0 : T nP 0 = some enPark)
     (fun k' _ w' ls' => ?_)
   · rw [cerwpT_eq]
     exact twp_resumeTail (post_down hTd) .hole fdAt_lend (Nf l) twp_unitEnd
-  · rw [cerwpT_eq]
-    exact twp_cancelTail (post_down hTd) fdAt_lend (Nf l) twp_unitEnd
+  · refine cerwpT_QV ?_
+    rw [cerwpT_eq]
+    exact twp_cancelTail (post_down (PADown.restrict hTd _)) fdAt_lend (Nf l) twp_unitEnd
 
 /-! ### The loan task whose finaliser parks -/
 
@@ -238,18 +247,21 @@ theorem LC_cancel {T : OpTabT} (hT0 : T nP 0 = some enPark)
     {l : BoCa.Loc} {α : Life} {n : Nat} {Fb F : TFrame} {w : TWd} {ls : List (SRecT w.K)} :
     cerwpT (ℍ := ℍ) (opTableT T) QS Fb F n w ls [lendRec l]
       (ccatchE ((ubK (Nf l) (Dc l)).plug (raiseE (.val (cancelVal none))))) (viewRes α l) := by
-  have hD := post_down hTd (Ψ := cerwpTC (ℍ := ℍ) (opTableT T) QS Fb n) (F := Fb)
+  have hD := post_down hTd (Ψ := cerwpTC (ℍ := ℍ) (opTableT T) QS Fb n) (Ψc := cerwpTK (ℍ := ℍ) n) (F := Fb)
   rw [cerwpT_eq]
   refine twp_det hD (fun μ => step1Only_plug (Head.ufinC μ (Nf l) (Dc l) none .hole rfl) rfl ccK) ?_
   refine twp_det hD (fun μ => step1Only_plug (Head.beta μ _ Val.unit) rfl cfK2) ?_
   rw [Dc_beta, ← cerwpT_eq]
   refine cerwpT_parkLend hT0 hTd (K3 l) rfl (fun k' _ w' ls' => ?_) (fun k' _ w' ls' => ?_)
-  · have hD' := post_down hTd (Ψ := cerwpTC (ℍ := ℍ) (opTableT T) QS Fb k') (F := Fb)
+  · have hD' := post_down hTd (Ψ := cerwpTC (ℍ := ℍ) (opTableT T) QS Fb k') (Ψc := cerwpTK (ℍ := ℍ) k') (F := Fb)
     rw [cerwpT_eq]
     refine twp_resumeTail hD' cfK2 fdAt_lend (Nf l) ?_
     refine twp_det hD' (fun μ => step1Only_plug (Head.cfret μ none Val.unit) rfl ccK) ?_
     exact twp_det hD' (fun μ => step1Only_plug (Head.cancel μ .hole rfl) rfl .hole) twp_unitEnd
-  · have hD' := post_down hTd (Ψ := cerwpTC (ℍ := ℍ) (opTableT T) QS Fb k') (F := Fb)
+  · refine cerwpT_QV ?_
+    have hD' := post_down (PADown.restrict hTd enPark.cn)
+      (Ψ := cerwpTC (ℍ := ℍ) (opTableT (T.restrict enPark.cn)) QS Fb k')
+      (Ψc := cerwpTK (ℍ := ℍ) k') (F := Fb)
     rw [cerwpT_eq]
     refine twp_det hD' (fun μ => step1Only_plug (Head.ufinC μ (Nf l) (Nf l) none .hole rfl) rfl
       cfK2) ?_
@@ -265,7 +277,7 @@ theorem LC_cerwpT {T : OpTabT} (hT0 : T nP 0 = some enPark)
     (hTd : ∀ m i en, T m i = some en → ∀ k w ls v ρ, en.PA (k + 1) w ls v ρ → en.PA k w ls v ρ)
     (α : Life) (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K)) :
     cerwpT (ℍ := ℍ) (opTableT T) QS Fb F n w ls [] LC PMap.empty := by
-  have hD := post_down hTd (Ψ := cerwpTC (ℍ := ℍ) (opTableT T) QS Fb n) (F := Fb)
+  have hD := post_down hTd (Ψ := cerwpTC (ℍ := ℍ) (opTableT T) QS Fb n) (Ψc := cerwpTK (ℍ := ℍ) n) (F := Fb)
   rw [cerwpT_eq]
   refine twp_alloc_here hD (.appR (.lam LCbody) .hole) Val.unit fun l ρ₁ hc => ?_
   obtain rfl := compS_empty_left_eq hc
@@ -274,7 +286,8 @@ theorem LC_cerwpT {T : OpTabT} (hT0 : T nP 0 = some enPark)
   refine twp_det hD (fun μ => step1Only_plug (Head.beta μ LCbody (Val.loc l)) rfl .hole) ?_
   rw [Kont.plug, LCbody_beta, ← cerwpT_eq]
   refine cerwpT_parkLend hT0 hTd (ubK (Nf l) (Dc l)) rfl (fun k' _ w' ls' => ?_)
-    (fun k' _ w' ls' => LC_cancel hT0 hTd)
+    (fun k' _ w' ls' => cerwpT_QV <| LC_cancel (T := T.restrict enPark.cn)
+      (by simp [OpTabT.restrict, enPark, hT0]) (PADown.restrict hTd _))
   rw [cerwpT_eq]
   exact twp_resumeTail (post_down hTd) .hole fdAt_lend (Dc l) twp_unitEnd
 
@@ -299,8 +312,8 @@ theorem cerwpT_parkThen {T : OpTabT}
   obtain rfl := RR.of_empty hr
   refine ⟨trivial, PMap.empty, PMap.empty, ResUT.compS_empty_right _, ⟨rfl, rfl⟩,
     (⟨(fun _ => rfl), fun w' ρ' ls' O' _ hr' _ hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
-      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT enPark Fb n w₀ ls₀ [] (.appR (.lam b) .hole) Val.unit
-        (cerwpTC (ℍ := ℍ) (opTableT T) QS Fb n) PMap.empty)⟩
+      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT T enPark Fb n w₀ ls₀ [] (.appR (.lam b) .hole)
+        Val.unit (cerwpTC (ℍ := ℍ) (opTableT T) QS Fb n) (cerwpTK (ℍ := ℍ) n) PMap.empty)⟩
   · obtain ⟨rfl, rfl⟩ := hB
     obtain rfl := RR.of_empty hr'
     obtain rfl := compS_empty_right_eq hcσ
@@ -310,9 +323,9 @@ theorem cerwpT_parkThen {T : OpTabT}
       (hb k' hk' w' ls')
   · obtain rfl := RR.of_empty hr'
     cases hO'
-    simp only [cerwpTC, hk', if_true]
-    exact cerwpT_det (post_down hTd) (fun μ => step1Only_plug (Head.cancel μ _ rfl) rfl .hole)
-      cerwpT_unit
+    simp only [cerwpTK, hk', if_true]
+    exact cerwpT_QV (cerwpT_det (post_down (PADown.restrict hTd _))
+      (fun μ => step1Only_plug (Head.cancel μ _ rfl) rfl .hole) cerwpT_unit)
 
 /-- **`(λ_. b) (spawn th)` at a table `tabOf Tc`**, owning nothing: the thunk verified at the
 children's tables; resumed, `b`; its cancel answers `()`. -/
@@ -338,9 +351,9 @@ theorem cerwpT_spawnThen {Tc : Nat → OpTabT} {th : Val} {n : Nat}
     ⟨rfl, fun j hj w' ρ' ls' _ hr' Fb' Fe' h₁ h₂ => by
       obtain rfl := RR.of_empty hr'; exact hth j hj w' ls' Fb' Fe' h₁ h₂⟩,
     (⟨(fun _ => rfl), fun w' ρ' ls' O' _ hr' _ hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
-      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT (enSpawnP (spawnPA (ℍ := ℍ) Tc)) Fb n w₀ ls₀ []
-        (.appR (.lam b) .hole) th
-        (cerwpTC (ℍ := ℍ) (opTableT (tabOf (ℍ := ℍ) Tc)) QS Fb n) PMap.empty)⟩
+      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT (tabOf (ℍ := ℍ) Tc)
+        (enSpawnP (spawnPA (ℍ := ℍ) Tc)) Fb n w₀ ls₀ [] (.appR (.lam b) .hole) th
+        (cerwpTC (ℍ := ℍ) (opTableT (tabOf (ℍ := ℍ) Tc)) QS Fb n) (cerwpTK (ℍ := ℍ) n) PMap.empty)⟩
   · obtain ⟨rfl, rfl⟩ := hB
     obtain rfl := RR.of_empty hr'
     obtain rfl := compS_empty_right_eq hcσ
@@ -350,9 +363,9 @@ theorem cerwpT_spawnThen {Tc : Nat → OpTabT} {th : Val} {n : Nat}
       rfl .hole) (hb k' hk' w' ls')
   · obtain rfl := RR.of_empty hr'
     cases hO'
-    simp only [cerwpTC, hk', if_true]
-    exact cerwpT_det (post_down (tabOf_down Tc)) (fun μ => step1Only_plug (Head.cancel μ _ rfl)
-      rfl .hole) cerwpT_unit
+    simp only [cerwpTK, hk', if_true]
+    exact cerwpT_QV (cerwpT_det (post_down (PADown.restrict (tabOf_down Tc) _))
+      (fun μ => step1Only_plug (Head.cancel μ _ rfl) rfl .hole) cerwpT_unit)
 
 /-! ### The programs -/
 
@@ -382,12 +395,6 @@ theorem tabAt_down (j : Nat) : ∀ m i en, tabAt (ℍ := ℍ) j m i = some en �
     ∀ k w ls v ρ, en.PA (k + 1) w ls v ρ → en.PA k w ls v ρ := by
   rw [tabAt_eq]; exact tabOf_down _
 
-/-- A task answering `QS` answers `QV`. -/
-theorem cerwpT_QV {T : OpTabT} {Fb F : TFrame} {n : Nat} {w : TWd} {ls : List (SRecT w.K)}
-    {O : List (FrameRecT w.K)} {e : Expr} {ρ : TRes w.K}
-    (h : cerwpT (ℍ := ℍ) (opTableT T) QS Fb F n w ls O e ρ) :
-    cerwpT (ℍ := ℍ) (opTableT T) QV Fb F n w ls O e ρ :=
-  cerwpT_post_mono (opTableT_local T) (fun _ _ _ _ _ _ h => QS_QV h) h
 
 theorem thL_ok (j : Nat) (w' : TWd) (ls' : List (SRecT w'.K)) (Fb' Fe' : TFrame) :
     cerwpT (ℍ := ℍ) (opTableT (tabAt (ℍ := ℍ) j)) QS Fb' Fe' j w' ls' [] (.app thL.1 (.val Val.unit))

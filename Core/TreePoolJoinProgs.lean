@@ -116,7 +116,7 @@ def parE (v : Val) : Expr := performE (.val (opPayload nP 3 v))
 
 theorem post_downV {T : OpTabT}
     (hTd : ∀ m i en, T m i = some en → ∀ k w ls v ρ, en.PA (k + 1) w ls v ρ → en.PA k w ls v ρ)
-    {Ψ : ContT} {F : TFrame} : (cerwpPostT (opTableT T) QV Ψ F).Down :=
+    {Ψ : ContT} {Ψc : ContP} {F : TFrame} : (cerwpPostT (opTableT T) QV Ψ Ψc F).Down :=
   cerwpPostT_down QV_down hTd
 
 /-- A value answering `()` holding copies. -/
@@ -145,8 +145,8 @@ theorem cerwpT_parkThenV {T : OpTabT}
   have hV₀ := hV.rr hr
   refine ⟨trivial, PMap.empty, ρ₀, ResUT.CompS.comm (ResUT.compS_empty_right _), ⟨rfl, rfl⟩,
     (⟨(fun h => by cases h), fun w' ρ' ls' O' _ hr' _ hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
-      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT enPark Fb n w₀ ls₀ [] (.appR (.lam b) .hole) Val.unit
-        (cerwpTC (ℍ := ℍ) (opTableT T) QV Fb n) ρ₀)⟩
+      (fun _ _ k' hk' => ?_)⟩⟩ : contShareT T enPark Fb n w₀ ls₀ [] (.appR (.lam b) .hole)
+        Val.unit (cerwpTC (ℍ := ℍ) (opTableT T) QV Fb n) (cerwpTK (ℍ := ℍ) n) ρ₀)⟩
   · obtain ⟨rfl, rfl⟩ := hB
     obtain rfl : ρ' = σ' := (compS_empty_right_eq hcσ).symm
     cases hO'
@@ -154,9 +154,9 @@ theorem cerwpT_parkThenV {T : OpTabT}
     exact cerwpT_det (post_downV hTd) (fun μ => step1Only_plug (Head.beta μ b Val.unit) rfl .hole)
       (hb k' hk' w' ls' ρ' (hV₀.rr hr'))
   · cases hO'
-    simp only [cerwpTC, hk', if_true]
-    exact cerwpT_det (post_downV hTd) (fun μ => step1Only_plug (Head.cancel μ _ rfl) rfl .hole)
-      (cerwpT_unitV (hV₀.rr hr'))
+    simp only [cerwpTK, hk', if_true]
+    exact cerwpT_det (post_downV (PADown.restrict hTd _))
+      (fun μ => step1Only_plug (Head.cancel μ _ rfl) rfl .hole) (cerwpT_unitV (hV₀.rr hr'))
 
 /-- The records a run owns at a `par` stop, one list at every carrier, carried by re-reading. -/
 def RecsFixed (Os : (K : WCactus) → List (FrameRecT K)) : Prop :=
@@ -211,9 +211,10 @@ theorem cerwpT_parThen {Tc : Nat → OpTabT} {th₁ th₂ : Val} {n : Nat} {β :
     ⟨th₁, th₂, viewRes β l, viewRes β l, rfl, viewRes_dup β l, ViewsT.view β l, ViewsT.view β l,
       hchild hth₁, hchild hth₂⟩,
     (⟨(fun h => by cases h), fun w' ρ' ls' O' _ hr' _ hO' => ⟨fun k' hk' a σ σ' hB hcσ => ?_,
-      (fun hq => absurd rfl hq)⟩⟩ : contShareT (enParP (parPA (ℍ := ℍ) Tc)) Fb n w₀ ls₀ (Os w₀.K)
-        (.appR (.lam b) .hole) (Val.pair th₁ th₂)
-        (cerwpTC (ℍ := ℍ) (opTableT (tabOf (ℍ := ℍ) Tc)) QV Fb n) (viewRes β l))⟩
+      (fun hq => absurd rfl hq)⟩⟩ : contShareT (tabOf (ℍ := ℍ) Tc) (enParP (parPA (ℍ := ℍ) Tc)) Fb
+        n w₀ ls₀ (Os w₀.K) (.appR (.lam b) .hole) (Val.pair th₁ th₂)
+        (cerwpTC (ℍ := ℍ) (opTableT (tabOf (ℍ := ℍ) Tc)) QV Fb n) (cerwpTK (ℍ := ℍ) n)
+        (viewRes β l))⟩
   obtain ⟨rfl, hV⟩ := hB
   obtain rfl := rr_view_eq hr'
   obtain rfl := hOs _ _ _ _ hO'
@@ -351,7 +352,7 @@ theorem rootJ_cerwpT (d : Nat) (α : Life) {k n : Nat} (hn : n ≤ k) (Fb F : TF
     (ls : List (SRecT w.K)) :
     cerwpT (ℍ := ℍ) (opTableT (tabAt (ℍ := ℍ) k)) QV Fb F n w ls [] (rootJ d) PMap.empty := by
   have hD := post_downV (tabAt_down k) (Ψ := cerwpTC (ℍ := ℍ) (opTableT (tabAt (ℍ := ℍ) k)) QV Fb n)
-    (F := Fb)
+    (Ψc := cerwpTK (ℍ := ℍ) n) (F := Fb)
   rw [cerwpT_eq]
   refine twp_alloc_here hD (.appR (.lam (rootB d)) .hole) Val.unit fun l ρ₁ hc => ?_
   obtain rfl := compS_empty_left_eq hc
@@ -370,7 +371,7 @@ theorem rootJ_cerwpT (d : Nat) (α : Life) {k n : Nat} (hn : n ≤ k) (Fb F : TF
     fun k' _ w' ls' σ σ' hV hcσ => ?_
   have hD' := post_downV (tabOf_down (fun i => if i < k then tabAt (ℍ := ℍ) i else OpTabT.empty))
     (Ψ := cerwpTC (ℍ := ℍ) (opTableT (tabOf (ℍ := ℍ)
-      (fun i => if i < k then tabAt (ℍ := ℍ) i else OpTabT.empty))) QV Fb k') (F := Fb)
+      (fun i => if i < k then tabAt (ℍ := ℍ) i else OpTabT.empty))) QV Fb k') (Ψc := cerwpTK (ℍ := ℍ) k') (F := Fb)
   have e : (freeE (.val (Val.loc l))).subst 0 Val.unit = freeE (.val (Val.loc l)) := by
     simp [freeE, Expr.subst]
   rw [e, cerwpT_eq]

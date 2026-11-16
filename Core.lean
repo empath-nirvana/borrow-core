@@ -156,6 +156,8 @@ import Core.TreePoolSpawn
 import Core.TreePoolSpawnProgs
 import Core.TreePoolShare
 import Core.TreePoolJoinProgs
+import Core.TreeHandleFwd
+import Core.TreeHandleFwdProgs
 import Core.TreeGoal791
 import Core.Chain
 

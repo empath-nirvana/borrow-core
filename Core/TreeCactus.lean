@@ -375,9 +375,9 @@ theorem recInv_empty (P : ParentFn) :
 /-- Nothing stops at the empty table. -/
 def OpTabT.empty : OpTabT := fun _ _ => none
 
-theorem opTableT_empty_false {F : TFrame} {k : Nat} {w : TWd} {ls : List (SRecT w.K)}
-    {O : List (FrameRecT w.K)} {t : Expr} {Ψ : ContT} {ρ : TRes w.K}
-    (h : opTableT OpTabT.empty F k w ls O t Ψ ρ) : False := by
+theorem opTableT_empty_false {Ψc : ContP} {F : TFrame} {k : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {t : Expr} {Ψ : ContT} {ρ : TRes w.K}
+    (h : opTableT OpTabT.empty Ψc F k w ls O t Ψ ρ) : False := by
   obtain ⟨_, _, _, _, _, _, _, h, _⟩ := h
   simp [OpTabT.empty] at h
 

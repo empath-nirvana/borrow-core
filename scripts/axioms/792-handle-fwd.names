@@ -1,0 +1,15 @@
+-- #792 (research branch rq1-tree): [handle] for typed handlers on the tree.
+BoCa.Fig16.Tree.Wp.cerwpT_schedHandle_leQ
+BoCa.Fig16.Tree.Wp.twp_bind_fdAt
+BoCa.Fig16.Tree.Wp.cerwpT_handleQ
+BoCa.Fig16.Tree.Wp.cerwpT_handle
+BoCa.Fig16.Tree.Wp.cerwpT_handleStack
+BoCa.Fig16.Tree.Wp.cerwpT_base_mono
+BoCa.Fig16.Tree.Wp.contShareT_congr
+BoCa.Fig16.Tree.Wp.SchedProgs.Park.QCV_stable
+BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.hFw_ok
+BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.rootFwd_cerwpT
+BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.progFwd_safe
+BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.progFwdCancel_safe
+BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.progFwdCancel3_safe
+BoCa.Fig16.Tree.Wp.SchedProgs.FwdProgs.handleC_ok

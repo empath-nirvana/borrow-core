@@ -453,7 +453,6 @@ BoCa.Fig16.Tree.Wp.poolSchedAdequacyT
 BoCa.Fig16.Tree.Wp.schedProgram_twp
 BoCa.Fig16.Tree.Wp.SchedProgs.Stack.stack_schedOK
 BoCa.Fig16.Tree.Wp.SchedProgs.Stack.stackProg_safe
-BoCa.Fig16.Tree.Wp.cerwpT_schedHandle_le
 BoCa.Fig16.Tree.Wp.schedOKT_of_le
 BoCa.Fig16.Tree.Wp.poolAns_run_le
 BoCa.Fig16.Tree.Wp.poolAns_cancelSnd
