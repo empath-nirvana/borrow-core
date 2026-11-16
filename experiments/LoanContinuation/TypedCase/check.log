@@ -55,12 +55,6 @@
 ### Core.Chain.SI.LoanX.Erasure (exit 0)
 'BoCa.Fig16.LogRel.Core.Chain.SI.rwpGX_erases' depends on axioms: [propext, Classical.choice, Quot.sound]
 
-### Core.Chain.SI.LoanX.GuardedHeap (exit 0)
-
-### Core.Chain.SI.LoanX.HeapX (exit 0)
-
-### Core.Chain.SI.LoanX.HandleX (exit 0)
-
 ### Core.Chain.SI.LoanX.WorldSat (exit 0)
 'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.owned_key' depends on axioms: [propext, Classical.choice, Quot.sound]
 'BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase.owned_return_typed' depends on axioms: [propext,
@@ -86,6 +80,16 @@
 'BoCa.Fig16.LogRel.Core.Chain.SI.LoanKW.owed_self' depends on axioms: [propext, Classical.choice, Quot.sound]
 'BoCa.Fig16.LogRel.Core.Chain.SI.LoanKW.Owed.trans' depends on axioms: [propext, Classical.choice, Quot.sound]
 'BoCa.Fig16.LogRel.Core.Chain.SI.scalarWorld_reply' depends on axioms: [propext, Classical.choice, Quot.sound]
+
+### Core.Chain.SI.LoanX.GuardedHeap (exit 0)
+
+### Core.Chain.SI.LoanX.HeapX (exit 0)
+
+### Core.Chain.SI.LoanX.HandleX (exit 0)
+
+### Core.Chain.SI.LoanX.ErwpKX (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.erwpKX_eq' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.loanPerformTableX_local' depends on axioms: [propext, Classical.choice, Quot.sound]
 
 ### Core.Chain.SI.LoanX.MutLoan (exit 0)
 

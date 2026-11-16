@@ -18,7 +18,7 @@ All proof modules were checked individually with exit 0 and no warnings/errors b
 
 Important source locations:
 
-- `Core/Chain/SI/LoanX`: masked run/heap/handler rules, registry algebra, actual-main `vN` return bridge, `LoanKW.Owed` with a concrete changed-world reply, and one-way zero-ghost run erasure.
+- `Core/Chain/SI/LoanX`: masked run/heap/handler rules, registry algebra, actual-main `vN` return bridge, `LoanKW.Owed` with a concrete changed-world reply, the world-indexed `erwpKX` perform table, and one-way zero-ghost run erasure.
 - `ProofTree/TypedCaseProof/Case.lean`: `complete_scalar_case`, positive/negative controls.
 - `Program.lean`: the generic complete restricted program theorem.
 - `ClaimHandle.lean`: generic positive ownership through actual linear capture.

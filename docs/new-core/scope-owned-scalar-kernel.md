@@ -45,6 +45,9 @@ experimental `erwpX`, does not meet this criterion.
 - `LoanKW.Owed` combines all of main `KW.Owed` with authoritative registry
   compatibility at the continuation's complete resource; `scalarWorld_reply`
   checks the concrete changed-world reply at that combined order.
+- `erwpKX` indexes the masked X run by `LoanKW`. Its perform table carries the
+  actual continuation share into `LoanKW.Owed`, reads answers at the admitted
+  world, and satisfies the recursive table locality law.
 
 Run `python3 experiments/LoanContinuation/TypedCase/check.py` from the repo
 root. The durable check uses the current main `Goal791N` definitions and no
@@ -86,8 +89,10 @@ or equivalence from the stronger `FrameKept` relation.
 
 **K-L1 — Typed world and storage seam.** `LoanKW` now packages main's stop
 world with registry coherence, and `LoanKW.Owed` keeps every `KW.Owed` field.
-The remaining work is to use that order in a world-indexed X run and a
-resource-aware `Ref`/positive-claim continuation clause. Prove the
+`erwpKX` now provides a world-indexed masked run, and `loanPerformTableX`
+owes each continuation at every admitted loan world. The remaining work is to
+connect this relation to a resource-aware `Ref`/positive-claim continuation
+clause and prove its handler rules. Prove the
 zero-protocol embedding for recursive values and stops, extending the checked
 one-way run erasure and isolated value-level `RefX_zero_iff`.
 
