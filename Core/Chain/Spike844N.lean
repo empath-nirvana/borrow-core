@@ -1,5 +1,5 @@
 import Core.Chain.Goal791N
-import Core.TreeGoal791
+import Core.Chain.Const791
 
 /-!
 # Borrowed payloads at a suspending lend: where the present constants stop  `[spec §62]`
