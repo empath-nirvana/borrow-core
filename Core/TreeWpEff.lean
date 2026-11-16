@@ -1,5 +1,6 @@
 import Core.TreeWp
 import Support.Model.Tree.World.ExtF
+import Core.Chain.SchedProgs
 
 /-!
 # The step-indexed relation with operations, over the tree world: `cerwpT`  `[spec §62]`
@@ -53,25 +54,6 @@ open BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Step1 Head Kont performE raiseE cancelVal opPayload ccatchE)
 /-! ### Tables -/
 
-/-- A world-indexed predicate over values at a step index, reading the list. -/
-abbrev TVProp : Type := Nat → (w : TWd) → List (SRecT w.K) → Val → TRes w.K → Prop
-
-/-- An operation's entry over the tree world. -/
-structure OpEntT where
-  q : Qual
-  abort : Bool
-  PA : TVProp
-  /-- The answer, read at the payload. -/
-  PBv : Val → TVProp
-  /-- Whether the continuation's cancel branch is owed: at a cancellable entry (`q ≠ lin`), the
-  unwinding `ccatch (K†[raise …])` is owed as a continuation, like a resume (`contShareT`). -/
-  fin : Bool
-  /-- What the resumer guarantees of the frame at the resume, read at the payload and at the
-  records the resumed run owns there. -/
-  fd : Val → (w : TWd) → List (FrameRecT w.K) → TRes w.K → Prop
-  /-- What the stopped branch may own at the stop. -/
-  oc : (w : TWd) → List (FrameRecT w.K) → Prop
-
 abbrev OpTabT := UInt32 → UInt32 → Option OpEntT
 
 /-- What a stop owes: a continuation at a frame condition, a world, the records it owns, an
@@ -84,10 +66,6 @@ owing `Ψ`. -/
 abbrev TableT : Type :=
   TFrame → Nat → (w : TWd) → List (SRecT w.K) → List (FrameRecT w.K) → Expr → ContT →
     TRes w.K → Prop
-
-/-- A postcondition over values. -/
-abbrev TPostV : Type :=
-  Nat → (w : TWd) → List (SRecT w.K) → List (FrameRecT w.K) → Val → TRes w.K → Prop
 
 /-- A record list's re-reading is single-valued. -/
 theorem RecsRR.func {K K' : WCactus} {Θ' : CodeTy} {O : List (FrameRecT K)} :

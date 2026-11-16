@@ -1,6 +1,7 @@
 import Core.TreePoolSched
 import Core.TreeSchedRelay
 import Core.TreeSemC
+import Core.Chain.SchedProgs
 
 /-!
 # A scheduler handler that keeps a pool in its state, through `PoolSchedAdequacyT`  `[spec §62]`
@@ -78,25 +79,8 @@ theorem clause_beta (κ s : Val) :
   simp [Expr.subst, resumeE, Val.inj₁]
   exact Expr.subst_shift 0 0 0 _ _ (by omega) (by omega) |>.trans (Expr.shift_zero _ _)
 
-/-- The return clause's body under `λv. λs.`, and its first branch: the top's entry
-`((tag, κ), s′)`, `κ` resumed with `(h, s′)`. -/
-def retL : Expr :=
-  .letpair (.var 0) (.letpair (.var 1)
-    (.app (.app (.app (.var 0) (.inj₁ .unit)) .unit) (.pair (.var 6) (.var 2))))
-
-def retBody : Expr := .letpair (.var 0) (.case (.var 0) retL (.var 4))
-
-/-- `λv. λ(h, p). case p {inj₁ q. let (e, s′) = q in let (_, κ) = e in κ (inj₁ ()) () (h, s′) |
-inj₂ _. v}`. -/
-def stackRet : Val := Val.lam (.lam retBody)
-
 def hsStack : Val := Val.pair stackClause Val.unit
 def HStack : Val := hndVal nP qsP stackRet hsStack
-
-/-- A substitution below a shift by more than its index undoes one step of the shift. -/
-theorem subst_shift0' (d j : Nat) (s : Val) (e : Expr) (h : j ≤ d) :
-    Expr.subst j s (Expr.shift (d + 1) 0 e) = Expr.shift d 0 e :=
-  Expr.subst_shift d 0 j s e (Nat.zero_le _) (by omega)
 
 /-- **An entry the return clause may resume**: at `()` with what it has collected (copies of
 lends; nothing for a task that is not a joiner). -/
