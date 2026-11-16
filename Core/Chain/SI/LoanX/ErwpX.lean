@@ -21,7 +21,8 @@ because the end composes with the same frame); at the end world's counted set `C
 garbage are `WF_C′`, and the frame carries no lifetime counted at `C′` and not at `C`
 (`NewNotCarried`), which with the frame's `WF_C` at the start is its `WF_C′`; the end is
 `MaskShallow` at `M′` and holds `M′`'s authorities, and the end with its garbage is `MaskShallow` at
-`M ∪ M′`; the garbage holds only copies at a location `M′` lends across stops (`MaskOff`). What `M′`
+`M ∪ M′`; the garbage holds only copies at a location `M′` lends across stops (`MaskOff`), and no
+borrow at a location `M` lends `mut` across stops (`NoBorrowAt`). What `M′`
 masks and `M` does not (`M.fresh M′`) the frame does not hold (`FlatNone`), and the start is
 shallow there. The records and the list are as at the start off the locations `M ∪ M′` lends
 across stops (`RecAgree`, `ListAgree`). `M′` and `C′` are passed to the post.
@@ -75,7 +76,7 @@ def EndOKX (Φ : LocFam) (M : Mask) (Q : PostGX) (k : Nat) (ls : List SRec) (x x
     WFC (xf.2 + (g' + gp)).counted (ρ', g') ∧ WFC (xf.2 + (g' + gp)).counted (ρp, gp) ∧
     MaskShallow M'.locs ρ' ∧ MaskShallow (M ∪ M').locs π ∧ MaskAuth M' g' ∧ MaskOff M' ρp ∧
     MaskShallow (M'.locs \ M.locs) x.1 ∧ FlatNone (M.fresh M') xf.1 ∧
-    Q M' (xf.2 + (g' + gp)).counted k ls' t (ρ', g')
+    NoBorrowAt M.mloanLocs ρp ∧ Q M' (xf.2 + (g' + gp)).counted k ls' t (ρ', g')
 
 /-- **`wpG` at the step index over `WRes × GRes`, at the mask `M`.** -/
 def rwpGX (Φ : LocFam) (M : Mask) (Q : PostGX) (n : Nat) (ls : List SRec) (e : Expr) : XProp :=
@@ -129,9 +130,9 @@ theorem EndOKX.mono {Φ : LocFam} {M : Mask} {P Q : PostGX} {k k' : Nat} (hΦ : 
     {ls : List SRec} {x xf : XRes} {ps : List FrameRec} {μ' : Heap}
     (h : EndOKX Φ M P k ls x xf ps μ' t) : EndOKX Φ M Q k' ls x xf ps μ' t := by
   obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀,
-    h₁₁, h₁₂, h₁₃, h₁₄, h₁₅, h₁₆, h₁₇, h₁₈, h₁₉, h₂₀, h₂₁, h₂₂, h₂₃⟩ := h
+    h₁₁, h₁₂, h₁₃, h₁₄, h₁₅, h₁₆, h₁₇, h₁₈, h₁₉, h₂₀, h₂₁, h₂₂, h₂₄, h₂₃⟩ := h
   exact ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇.down hΦ hk, h₈,
-    h₉, h₁₀, h₁₁, h₁₂, h₁₃, h₁₄, h₁₅, h₁₆, h₁₇, h₁₈, h₁₉, h₂₀, h₂₁, h₂₂, hPQ _ _ _ _ h₂₃⟩
+    h₉, h₁₀, h₁₁, h₁₂, h₁₃, h₁₄, h₁₅, h₁₆, h₁₇, h₁₈, h₁₉, h₂₀, h₂₁, h₂₂, h₂₄, hPQ _ _ _ _ h₂₃⟩
 
 /-- `EndOKX` at another postcondition, at the same index. -/
 theorem EndOKX.post {Φ : LocFam} {M : Mask} {P Q : PostGX} {k : Nat} {t : Expr}
@@ -139,9 +140,9 @@ theorem EndOKX.post {Φ : LocFam} {M : Mask} {P Q : PostGX} {k : Nat} {t : Expr}
     {ls : List SRec} {x xf : XRes} {ps : List FrameRec} {μ' : Heap}
     (h : EndOKX Φ M P k ls x xf ps μ' t) : EndOKX Φ M Q k ls x xf ps μ' t := by
   obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀,
-    h₁₁, h₁₂, h₁₃, h₁₄, h₁₅, h₁₆, h₁₇, h₁₈, h₁₉, h₂₀, h₂₁, h₂₂, h₂₃⟩ := h
+    h₁₁, h₁₂, h₁₃, h₁₄, h₁₅, h₁₆, h₁₇, h₁₈, h₁₉, h₂₀, h₂₁, h₂₂, h₂₄, h₂₃⟩ := h
   exact ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈,
-    h₉, h₁₀, h₁₁, h₁₂, h₁₃, h₁₄, h₁₅, h₁₆, h₁₇, h₁₈, h₁₉, h₂₀, h₂₁, h₂₂, hPQ _ _ _ _ h₂₃⟩
+    h₉, h₁₀, h₁₁, h₁₂, h₁₃, h₁₄, h₁₅, h₁₆, h₁₇, h₁₈, h₁₉, h₂₀, h₂₁, h₂₂, h₂₄, hPQ _ _ _ _ h₂₃⟩
 
 theorem rwpGX_le {Φ : LocFam} (hΦ : Φ.Down) {M : Mask} {Q : PostGX} (hQ : Q.Down) {m n : Nat}
     (hmn : m ≤ n) {ls : List SRec} {e : Expr} {x : XRes} (h : rwpGX (ℍ := ℍ) Φ M Q n ls e x) :
@@ -185,7 +186,7 @@ theorem endOKX_refl {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {ls : List S
     ResU.hash_symm (ResU.hash_empty_right (hash_valid_comp hf hc)), ResU.comp_empty_right _, hl,
     ResU.comp_empty_right _, UpdVNm.refl Φ _ _ hvρ, noOwn_empty, hT, htg,
     RecAgree.refl _ _, ListAgree.refl _ _, ?_, ?_, ?_, ?_, hsh, ?_, hau, maskOff_emptyRes _, ?_,
-    ?_, ?_⟩
+    ?_, noBorrowAt_emptyRes _, ?_⟩
   · simpa using hv
   · intro α h₁ h₂; simp at h₁; exact absurd h₁ h₂
   · simpa using hwx
@@ -258,7 +259,7 @@ theorem rwpGX_compose {Φ : LocFam} (hΦ : Φ.Down) {M : Mask} {Q : PostGX} (K :
     (hrun : StepsN (ℍ := ℍ) j₂ μ₁ (K.plug t) μ' E) :
     Final (ℍ := ℍ) μ' E → EndOKX Φ M Q (k₁ - j₂) ls x xf ps μ' E := by
   obtain ⟨M₁, ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₆, h₇, h₉, hA, hB, hT', htg',
-    hps', hls', hV, hN, hW', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hC⟩ := hend
+    hps', hls', hV, hN, hW', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hNB, hC⟩ := hend
   rcases hC with ⟨hM₁, hC⟩ | ⟨hfinK, hQ⟩
   swap
   · -- a stop: the composite ends where the bound run ended
@@ -267,7 +268,7 @@ theorem rwpGX_compose {Φ : LocFam} (hΦ : Φ.Down) {M : Mask} {Q : PostGX} (K :
     | refl =>
     have hend' : EndOKX Φ M Q k₁ ls x xf ps μ₁ (K.plug t) :=
       ⟨M₁, ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₆, h₇, h₉, hA, hB, hT', htg',
-        hps', hls', hV, hN, hW', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hQ⟩
+        hps', hls', hV, hN, hW', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hNB, hQ⟩
     exact fun _ => by simpa using hend'
   subst M₁
   rw [Set.union_self] at hA hps' hls' hSπ
@@ -286,7 +287,7 @@ theorem rwpGX_compose {Φ : LocFam} (hΦ : Φ.Down) {M : Mask} {Q : PostGX} (K :
     hzY hV₂ hWf₂ hW₂ hS' hAu (maskOff_comp hfz hoff₀ hOff) hT' htg' h₇ hfd₁ j₂ μ' E hj hrun
   intro hfin
   obtain ⟨M₂, ρ'', ρpp, Y'', Y''p, π'', g'', gpp, ps'', ls'', k₁', k₂, k₃, k₆, k₇, k₉, kA, kB,
-    kT, ktg, kps, kls, kV, kN, kW, kWp, kS', kSπ, kAu, kOff, kSx, kFx, kC⟩ := hr hfin
+    kT, ktg, kps, kls, kV, kN, kW, kWp, kS', kSπ, kAu, kOff, kSx, kFx, kNB, kC⟩ := hr hfin
   -- what `M₂` masks newly the frame `ρ_f ● ρp` does not hold, so neither part does
   have kFxf : FlatNone (M.fresh M₂) xf.1 := FlatNone.left hfz hvz kFx
   have kFp : FlatNone (M.fresh M₂) ρp := FlatNone.right hfz hvz kFx
@@ -321,7 +322,7 @@ theorem rwpGX_compose {Φ : LocFam} (hΦ : Φ.Down) {M : Mask} {Q : PostGX} (K :
     kps.trans (hps'.mono (Mask.lendLocs_mono Set.subset_union_left)),
     kls.trans (hls'.mono (Mask.lendLocs_mono Set.subset_union_left)), ?_, ?_, ?_,
     ?_, kS', maskShallow_comp hYn hSp₂ kSπ, kAu,
-    maskOff_comp hZZ' (maskOff_fresh hOff kFp) kOff, ?_, kFxf, ?_⟩
+    maskOff_comp hZZ' (maskOff_fresh hOff kFp) kOff, ?_, kFxf, noBorrowAt_comp hZZ' hNB kNB, ?_⟩
   · have := UpdVNm.trans hΦ (Nat.sub_le k₁ j₂) hA
       (updVNm_frame (ResU.CompS.comm h₉) hYn (ResU.hash_symm hpρ') hpπ hS'₂ kSπ kA)
     exact this.mono (Set.union_subset (Mask.locs_mono Set.subset_union_left) le_rfl)
@@ -412,7 +413,7 @@ theorem rwpGX_frame_post {Φ : LocFam} {M : Mask} {P : PostGX} (R : List SRec �
     hT htg hl hfd j μ' e' hj hrun
   intro hfin
   obtain ⟨M', ρ', ρp, Y', Y'p, π', g', gp, ps', ls', g₁', g₂', g₃, g₆, g₇, g₉, gA, gB, gT, gtg,
-    gps, gls, gV, gN, gW, gWp, gS', gSπ, gAu, gOff, gSx, gFx, gC⟩ := hr hfin
+    gps, gls, gV, gN, gW, gWp, gS', gSπ, gAu, gOff, gSx, gFx, gNB, gC⟩ := hr hfin
   -- what `M′` masks newly the inner frame `ρ_f ● ρ₂` does not hold
   have gFf : FlatNone (M.fresh M') xf.1 := FlatNone.left hy hvy gFx
   have gF₂ : FlatNone (M.fresh M') ρ₂ := FlatNone.right hy hvy gFx
@@ -438,7 +439,7 @@ theorem rwpGX_frame_post {Φ : LocFam} {M : Mask} {P : PostGX} (R : List SRec �
   refine ⟨M', W, ρp, Y', Y'p, πn, g' + g₂, gp, ps', ls', hWf, hfW, g₃, g₆, g₇, hWπ, ?_, gB, gT,
     gtg, gps, gls, ?_, fun α hα hα₀ hc => hNy α hα hα₀ (carries_comp_left hy hvy hc), ?_, ?_,
     maskShallow_comp (ResU.CompS.comm hW) gS' (maskShallow_fresh hsh₂ gF₂),
-    maskShallow_comp hπn hsh₂' gSπ, gAu.add_right ?_, gOff, ?_, gFf,
+    maskShallow_comp hπn hsh₂' gSπ, gAu.add_right ?_, gOff, ?_, gFf, gNB,
     ρ', ρ₂, g', g₂, ResU.CompS.comm hW, rfl, ?_, hR _ _ _ _ _ _ gC gls _ hR₂⟩
   · exact updVNm_frame (ResU.CompS.comm hcρ) hπn
       ⟨(ResU.CompS.comm hcρ).1, ρ, ResU.CompS.comm hcρ, hvρ⟩ h₂π hsh₁' gSπ gA

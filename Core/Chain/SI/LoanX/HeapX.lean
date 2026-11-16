@@ -149,7 +149,7 @@ theorem rwpGX_of_rwp_own {Φ : LocFam} {M : Mask} {P : PostN} {n : Nat} {ls : Li
     ResU.comp_empty_right _, ?_, gB, gT, gtg, RecAgree.of_iff gps, ListAgree.of_iff gls, ?_,
     ?_, hwW, ?_, maskShallow_fresh hshW (by simpa using flatNone_empty _), ?_, by simpa using hau,
     maskOff_emptyRes _, by simpa using maskShallow_empty _, by simpa using flatNone_empty _,
-    rfl, rfl, ⟨e', hve⟩, rfl, ρ', ResU.CompS.comm hW, gC⟩
+    noBorrowAt_emptyRes _, rfl, rfl, ⟨e', hve⟩, rfl, ρ', ResU.CompS.comm hW, gC⟩
   · rw [Set.union_self]
     exact (updVNm_empty_iff.mpr hU).mono (Set.empty_subset _)
   · simpa using hv

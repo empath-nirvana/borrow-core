@@ -26,7 +26,7 @@ theorem rwpGX_erases {Φ : LocFam} {Q : PostG} {n : Nat} {ls : List SRec}
     (maskShallow_locs_empty ρ) (maskAuth_empty 0) (maskOff_empty ρf)
     htw htag hlow hfd j μ' e' hj hs
   obtain ⟨M',ρ',ρp,fρ',fρ'p,π,g',gp,ps',ls',h₁,h₂,h₃,h₄,h₅,h₆,h₇,h₈,
-    h₉,h₁₀,h₁₁,h₁₂,_,_,_,_,_,_,hAuth,_,_,_,hPost⟩ := hx hfin
+    h₉,h₁₀,h₁₁,h₁₂,_,_,_,_,_,_,hAuth,_,_,_,_,hPost⟩ := hx hfin
   obtain ⟨hg,hQ⟩ := hPost
   have hM : M' = ∅ := by
     change g' = 0 at hg

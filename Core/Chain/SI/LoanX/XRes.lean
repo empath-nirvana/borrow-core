@@ -476,6 +476,86 @@ theorem RecAgree.mono {M M' : Mask} (hM : M.lendLocs ⊆ M'.lendLocs) {a b : Lis
 theorem ListAgree.mono {M M' : Mask} (hM : M.lendLocs ⊆ M'.lendLocs) {a b : List SRec}
     (h : ListAgree M a b) : ListAgree M' a b := fun y hy => h y (fun h' => hy (hM h'))
 
+/-! ### No borrow at the locations lent `mut` across stops -/
+
+/-- The locations masked by a `mut` loan held across stops. -/
+def Mask.mloanLocs (M : Mask) : Set Loc := {l | ∃ κ, (l, Auth.mloan κ) ∈ M}
+
+/-- **`ρ` holds no borrow at `L`**: every cell of its flattening there is `own`. -/
+def NoBorrowAt (L : Set Loc) (ρ : WRes) : Prop :=
+  ∀ l, l ∈ L → ∀ ψ, ρ.FlatAt l ψ → ψ.kind = Kind.own
+
+theorem noBorrowAt_emptyRes (L : Set Loc) : NoBorrowAt L (PMap.empty : WRes) := by
+  intro l _ ψ ⟨σ, hσ, hg⟩
+  obtain rfl := ResU.Flat.functional hσ flat_empty
+  rw [PMap.empty_get] at hg; cases hg
+
+theorem NoBorrowAt.mono {L L' : Set Loc} (hL : L' ⊆ L) {ρ : WRes} (h : NoBorrowAt L ρ) :
+    NoBorrowAt L' ρ := fun l hl => h l (hL hl)
+
+/-- `○` of two `own` cells is `own`. -/
+theorem CellU.CompR.kind_own {ψ₁ ψ₂ ψ : CellU Loc Val} (h : CellU.CompR ψ₁ ψ₂ ψ)
+    (h₁ : ψ₁.kind = Kind.own) (h₂ : ψ₂.kind = Kind.own) : ψ.kind = Kind.own := by
+  cases h with
+  | same => exact h₁
+  | strict k =>
+      obtain ⟨s₁, s₂, w, τ, k₁, k₂, k₃, f₁, f₂, f₃⟩ := CellU.compS_spec _ _ k
+      rw [f₁, CellU.kind_immOf] at h₁; cases h₁
+  | mutMut => simp at h₁
+  | mutOwn => simp at h₁
+  | ownMut => simp at h₂
+  | immOwn => simp at h₁
+  | ownImm => simp at h₂
+  | immMut => simp at h₁
+  | mutImm => simp at h₁
+
+/-- An `own` result of `○` has `own` parts. -/
+theorem CellU.CompR.own_parts {ψ₁ ψ₂ ψ : CellU Loc Val} (h : CellU.CompR ψ₁ ψ₂ ψ)
+    (hk : ψ.kind = Kind.own) : ψ₁.kind = Kind.own ∧ ψ₂.kind = Kind.own := by
+  cases h with
+  | same => exact ⟨hk, hk⟩
+  | strict k =>
+      obtain ⟨s₁, s₂, w, τ, k₁, k₂, k₃, f₁, f₂, f₃⟩ := CellU.compS_spec _ _ k
+      rw [f₃, CellU.kind_immOf] at hk; cases hk
+  | mutMut => simp at hk
+  | mutOwn => simp at hk
+  | ownMut => simp at hk
+  | immOwn => simp at hk
+  | ownImm => simp at hk
+  | immMut => simp at hk
+  | mutImm => simp at hk
+
+/-- `NoBorrowAt` of a composite from its parts: `⦇ρ₁ ● ρ₂⦈ = ⦇ρ₁⦈ ○ ⦇ρ₂⦈`. -/
+theorem noBorrowAt_comp {L : Set Loc} {ρ₁ ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ)
+    (h₁ : NoBorrowAt L ρ₁) (h₂ : NoBorrowAt L ρ₂) : NoBorrowAt L ρ := by
+  intro l hl ψ ⟨σ, hσ, hg⟩
+  obtain ⟨σ₁, σ₂, hσ₁, hσ₂, hR⟩ := flat_compR hc hσ
+  rcases ResU.Comp.get hR l with ⟨-, -, f⟩ | ⟨ζ, f₁, -, f⟩ | ⟨ζ, -, f₂, f⟩ |
+      ⟨ζ₁, ζ₂, ζ, f₁, f₂, f, hC⟩
+  · rw [hg] at f; cases f
+  · rw [hg] at f; cases f; exact h₁ l hl _ ⟨σ₁, hσ₁, f₁⟩
+  · rw [hg] at f; cases f; exact h₂ l hl _ ⟨σ₂, hσ₂, f₂⟩
+  · rw [hg] at f; cases f
+    exact CellU.CompR.kind_own hC (h₁ l hl _ ⟨σ₁, hσ₁, f₁⟩) (h₂ l hl _ ⟨σ₂, hσ₂, f₂⟩)
+
+/-- A part of a composite with no borrow at `L` has none there. -/
+theorem NoBorrowAt.left {L : Set Loc} {ρ₁ ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ) (hv : ρ.Valid)
+    (h : NoBorrowAt L ρ) : NoBorrowAt L ρ₁ := by
+  intro l hl ψ ⟨σ₁', hσ₁', hg⟩
+  obtain ⟨σ, hσ⟩ := hv
+  obtain ⟨σ₁, σ₂, hσ₁, hσ₂, hR⟩ := flat_compR hc hσ
+  obtain rfl := ResU.Flat.functional hσ₁' hσ₁
+  rcases ResU.Comp.get hR l with ⟨f₁, -, -⟩ | ⟨ζ, f₁, -, f⟩ | ⟨ζ, f₁, -, -⟩ |
+      ⟨ζ₁, ζ₂, ζ, f₁, -, f, hC⟩
+  · rw [hg] at f₁; cases f₁
+  · rw [hg] at f₁; cases f₁; exact h l hl _ ⟨σ, hσ, f⟩
+  · rw [hg] at f₁; cases f₁
+  · rw [hg] at f₁; cases f₁; exact (CellU.CompR.own_parts hC (h l hl _ ⟨σ, hσ, f⟩)).1
+
+theorem NoBorrowAt.right {L : Set Loc} {ρ₁ ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ) (hv : ρ.Valid)
+    (h : NoBorrowAt L ρ) : NoBorrowAt L ρ₂ :=
+  NoBorrowAt.left (ResU.CompS.comm hc) hv h
+
 end BoCa.Fig16.LogRel.Core.Chain.SI
 
 end

@@ -169,13 +169,13 @@ theorem rwpGX_mutLoanOpen {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : L
     htgin hlowin hfd jr μ' e' hj hrun
   intro hfin
   obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
-    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hq⟩ := hr hfin
+    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hNB, hq⟩ := hr hfin
   have hlM : l ∈ M.locs := Mask.locs_of_mem hl
   have hoffl : ∀ m, m ≠ l → ∀ ψ, ρ.FlatAt m ψ ↔ ρm.FlatAt m ψ := fun m hml ψ =>
     flatAt_off_swap single_own_off single_mut_off hcρ (ResU.CompS.comm hρm) hvρ hvρm hml ψ
   refine ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, ?_, hNo, hT', htg',
     hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff,
-    maskShallow_swap hSx (fun m hm ψ => (hoffl m (fun h => hm.2 (h ▸ hlM)) ψ).mp), hFx, hq⟩
+    maskShallow_swap hSx (fun m hm ψ => (hoffl m (fun h => hm.2 (h ▸ hlM)) ψ).mp), hFx, hNB, hq⟩
   refine UpdVNm.of_flatAt_off hU hvρ (fun m hm ψ => hoffl m (fun h => hm ?_) ψ)
   rw [h, Mask.locs_union]; exact Or.inl hlM
 
@@ -226,13 +226,13 @@ theorem rwpGX_mutLoanEnd {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : Lo
     htgin hlowin hfd jr μ' e' hj hrun
   intro hfin
   obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
-    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hq⟩ := hr hfin
+    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hNB, hq⟩ := hr hfin
   have hlM : l ∈ M.locs := Mask.locs_of_mem hl
   have hoffl : ∀ m, m ≠ l → ∀ ψ, ρ.FlatAt m ψ ↔ ρo.FlatAt m ψ := fun m hml ψ =>
     flatAt_off_swap single_mut_off single_own_off hcρ (ResU.CompS.comm hρo) hvρ hvρo hml ψ
   refine ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, ?_, hNo, hT', htg',
     hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff,
-    maskShallow_swap hSx (fun m hm ψ => (hoffl m (fun h => hm.2 (h ▸ hlM)) ψ).mp), hFx, hq⟩
+    maskShallow_swap hSx (fun m hm ψ => (hoffl m (fun h => hm.2 (h ▸ hlM)) ψ).mp), hFx, hNB, hq⟩
   refine UpdVNm.of_flatAt_off hU hvρ (fun m hm ψ => hoffl m (fun h => hm ?_) ψ)
   rw [h, Mask.locs_union]; exact Or.inl hlM
 

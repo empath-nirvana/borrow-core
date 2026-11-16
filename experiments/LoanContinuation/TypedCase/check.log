@@ -92,6 +92,14 @@
 'BoCa.Fig16.LogRel.Core.Chain.SI.erwpKX_unfold_at' depends on axioms: [propext, Classical.choice, Quot.sound]
 'BoCa.Fig16.LogRel.Core.Chain.SI.loanPerformTableX_local' depends on axioms: [propext, Classical.choice, Quot.sound]
 
+### Core.Chain.SI.LoanX.LiftX (exit 0)
+'BoCa.Fig16.LogRel.Core.Chain.SI.exists_not_carried' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.rwpG_of_rwpGX_mloan' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.rwpGX_of_rwpG' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.erwpKX_of_erwpK' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.erwpKX_of_cN_ret' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.erwpKX_of_cN_eff' depends on axioms: [propext, Classical.choice, Quot.sound]
+
 ### Core.Chain.SI.LoanX.MutLoan (exit 0)
 
 ### TypedCaseProof.ClaimHandle (exit 0)
