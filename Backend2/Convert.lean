@@ -211,6 +211,8 @@ structure CState where
   scopeCell : Option Nat := none
   scopeOwner : Option Nat := none
   owners : Std.HashMap Var Nat := {}
+  /-- Checked plain locals requiring frame placement; never silently heap allocated. `[spec §80]` -/
+  localScopes : Std.HashSet Nat := {}
   /-- While a `use` template is renamed (`renameTm`): each of its scopes' number in the copy. -/
   scopeCopy : Std.HashMap Nat Nat := {}
   /-- The `array_new` converted next is a literal's view's (`TExpr.litView`, SPEC §57). -/
@@ -1810,6 +1812,29 @@ def genCountTry (fT sT eT : LTy) (p : Var) : CM Tm := do
     let n ← fresh i32T
     return .letv n (.prim .clampLen [c]) (.call fi [f, n, i, st])
 
+/-- A plain local's owner stays in this function until its free. `[spec §80]`
+UNPROVED: the derived allocation/lend/free can use a function-frame cell with the same contents
+and observations. The checked callback cannot export the fresh view or suspend beyond the invocation; its owner is
+kept here and freed after the call. If this storage simulation fails, a borrow may read dead
+storage. The singleton width class reads the checked `A`: only `Mut A` reaches the callback,
+so no type-changing owner swap can change this wrapper's payload type. `lirLayOf` refuses
+any local scope not placed in its allocating frame. -/
+def genLocal (A : VTy) (value : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm := do
+  let aT ← vty A
+  let (some bT, rT) ← answerOf cbT | throw "LIR: withlocal callback takes no borrow"
+  let scope ← newScope
+  let cell ← fresh (.ref aT)
+  let pr ← fresh (.pair (.ref aT) bT)
+  let owner ← fresh (.ref aT)
+  let borrow ← fresh bT
+  let answer ← fresh rT
+  let final ← fresh aT
+  modify fun st => { st with owners := st.owners.insert owner scope, localScopes := st.localScopes.insert scope }
+  readFact "withlocal:frame"
+  return .letv cell (.prim (.allocLent scope [aT]) [value])
+    (.letv pr (.prim (.lend true) [cell]) (.letpair owner borrow pr
+      (.letv answer (← call borrow) (.letv final (.prim .free [owner]) (.pair final answer)))))
+
 /-- A borrow `withbor`'s way (SPEC §1): `(x, f [] x)`, the owner `src` lent as the borrow the
 callback `cb` (a `∀` closure, its instantiation erased: SPEC §44) is given, by `op` (`lend`,
 `relend`). -/
@@ -2739,7 +2764,7 @@ def constArity : TExpr → Option Nat
   | .arrRelease .. | .countFold .. | .countTry .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
   | .sliceSplitM .. | .sliceReplaceM .. | .sliceSwapM .. | .consume .. | .foldImm .. | .foldOwn ..
   | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .boundedFix .. => some 1
-  | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
+  | .withlocal .. | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. | .withbor1UD .. | .withbor2UD .. | .withbor3UD .. | .withloadU ..
   | .sliceBorrowMU .. | .sliceBorrowIU .. => some 2
@@ -2851,7 +2876,7 @@ def copyScope (s : Nat) : CM Nat := do
   | some s' => pure s'
   | none =>
     let s' ← newScope
-    modify fun st => { st with scopeCopy := st.scopeCopy.insert s s' }
+    modify fun st => { st with scopeCopy := st.scopeCopy.insert s s', localScopes := if st.localScopes.contains s then st.localScopes.insert s' else st.localScopes }
     pure s'
 
 /-- Rename every variable a term binds to a fresh one, and its free ones by `m`; each lend scope a
@@ -4092,6 +4117,19 @@ def convWork (fuel : Nat) (k : Nat) (ph : Pay) (ctx : Ctx) (t : TExpr) : CM Tm :
   | .lendScope _ _ _ c | .litView _ _ c | .unfoldStep _ _ c => convWork fuel k ph ctx c
   | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
 
+/-- The plain local invokes its callback's lifetime abstraction before the value lambda.
+Read that checked `allI` directly; its slot is dead, as in `allI_inst`. Do not move a computation
+out of an abstraction: only the value-lambda form accepted by `lamOf` is inlined. `[spec §80]` -/
+def localLamOf : Nat → TExpr → Option (Nat × TExpr)
+  | 0, _ => none
+  | f + 1, t => match transparent? t with
+    | some child => localLamOf f child
+    | none => match t with
+      | .allI _ _ _ _ _ _ body => (lamOf f body).map fun (k, l) => (k + 1, l)
+      | .use _ _ _ _ _ _ body =>
+        if tsize (inlineBound + 1) body ≤ inlineBound then localLamOf f body else none
+      | _ => lamOf f t
+
 /-- A spine of `lolliE` nodes: its arguments evaluated outermost first, then its function: a
 constant's operation (`expand`), a λ's body (β), or a closure call. -/
 def convSpine (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
@@ -4104,7 +4142,10 @@ def convSpine (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   -- closure made (the λ-value's construction does nothing).
   match as, cbConst (headOf 64 h) with
   | [(u₁, cb), (u₂, x)], true =>
-    match lamOf 64 cb with
+    let cbLam := match headOf 64 h with
+      | .withlocal .. => localLamOf 64 cb
+      | _ => lamOf 64 cb
+    match cbLam with
     | some (k, .lam _ _ _ _ body) => do
       readFact "lolliE:callback beta"
       let (pre₁, cA, cF) ← splitCtx ctx u₁ "lolliE"
@@ -4120,7 +4161,7 @@ def convSpine (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | _, _ => go fuel ctx as [] h resT
 where
   cbConst : TExpr → Bool
-    | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .sliceBorrowM ..
+    | .withlocal .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .sliceBorrowM ..
     | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I ..
     | .withbor1UD .. | .withbor2UD .. | .withbor3UD .. | .withloadU .. | .sliceBorrowMU ..
     | .sliceBorrowIU .. => true
@@ -4348,6 +4389,7 @@ def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM 
     (dctx : Option FinApp := none) : CM Tm := do
   readFact s!"{ruleName c}:expand"
   match c with
+  | .withlocal _ _ A _ _ => genLocal A x cbT call
   | .withbor1 .. | .sliceBorrowI .. => genLend (.lend false) x cbT call
   | .withbor2 .. | .sliceBorrowM .. => genLend (.lend true) x cbT call
   | .withbor3 .. => genLend .relend x cbT call
@@ -4418,6 +4460,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) (dctx : Optio
   | .withbor1 .., [x, cb] | .sliceBorrowI .., [x, cb] => genLend (.lend false) x (← tyOf cb) (callCb cb)
   | .withbor2 .., [x, cb] | .sliceBorrowM .., [x, cb] => genLend (.lend true) x (← tyOf cb) (callCb cb)
   | .withbor3 .., [m, cb] => genLend .relend m (← tyOf cb) (callCb cb)
+  | .withlocal _ _ A _ _, [x, cb] => genLocal A x (← tyOf cb) (callCb cb)
   | .withload .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .withswap .., [m, f] => genWithswap m (← tyOf f) fun old => pure (.app f old)
   | .allocS _ _ σ, [v] => allocTree v resT σ

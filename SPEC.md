@@ -14103,6 +14103,53 @@ five ν rules are generalised in place.
 
 ---
 
+## 80. Entry 79 — plain local cells (`withlocal`, #1115)
+
+### Construction
+
+`withlocal['l, @b, A, B] : A ⊸ (∀'l ⊏ ⊓Δ. Mut 'l A ⊸ ['l] B) ⊸ A ⊗ B`.
+The bracket bound `@b` witnesses `Δ ⊢ A ⊒ @b`; `'l` is fresh for `Δ`, `A` and `B`.
+The callback and its result use the existing plain `withbor2` premises, including its box.
+
+The term allocates a cell containing its first argument, lends the cell mutably to the
+callback, frees the cell after the callback returns, and answers the final contents paired
+with the callback's result. The owner is never passed to the callback. `free` returns the
+contents; it does not destroy them. Updating an owned payload uses the existing swap and
+consume rules, with no implicit duplication or abandonment.
+
+This is a derived constant, not a new typing rule, type former or machine step. Its callback has no outgoing effect row: any operation inside it must be handled there,
+and no suspension or unwind can escape the invocation. Capturing the view into an unrestricted closure and
+returning it outside the fresh lifetime are rejected by the existing kernel rules.
+
+### Lowering
+
+The checker emits a derived typed `withlocal` node whose erasure is the construction above.
+Backend2 reads that node, never a surface name or an analysis of the erased term. Its wrapper
+cell is a register or a slot in the allocating function's frame, never a heap allocation.
+The wrapper retains its declared payload type `A`, since only `Mut A`, not the owner,
+reaches the callback. Its width therefore comes from `A` itself, independently of unrelated
+type-changing owned cells. `bcc-counts --frames` reports actual frame slots;
+`--registers` separately counts promoted locals per invocation, with no target instruction.
+The native-facts gate accounts for both placements when comparing with the old backend.
+Unsupported placement is a compilation error. Explicit allocations in the payload remain
+explicit allocations. A supported straight-line numeric scalar callback must have the same allocation,
+dispatch, copy, load and store counts as explicit state. Address-taken callbacks may use a
+frame slot. The lowering's unproved storage simulation is marked `UNPROVED:` at its site.
+
+### Baseline
+
+`fundamentalC`, `adequacyC`, `adequacyD`, `fundamentalN_all` and `goal791N` keep their
+statements and assumptions: the typing lemma composes existing rules. Every existing corpus
+and kernel program keeps its answer. No existing surface form changes, and no elaborator
+state threading is introduced. There is no new index on `CDerives` and no inversion of it.
+
+### Open
+
+Unwinding, suspension, handler-owned state and the §41 surface migration are separate work.
+The old backend compiles the erasure; its scalar locals are not register-promoted by this entry.
+
+---
+
 ## Status
 
 What implements each entry is kept one paragraph per file in `docs/status/`: the paragraphs

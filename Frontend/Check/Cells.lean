@@ -155,6 +155,7 @@ def cellsFuel : Nat := 1 <<< 20
 changes a cell's type, lifetimes erased. -/
 def TExpr.cellOps : TExpr → List VTy × List (VTy × VTy)
   | .alloc _ _ A => ([A.eraseLife], [])
+  | .withlocal _ _ A _ _ => ([A.eraseLife], [])
   | .allocS _ _ σ => (σ.leaves.map VTy.eraseLife, [])
   | .swap _ _ A B => ([], [(A.eraseLife, B.eraseLife)])
   | .foldReuse _ _ F _ =>

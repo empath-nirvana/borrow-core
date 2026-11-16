@@ -319,6 +319,8 @@ structure Prog where
   /-- The lend scopes whose cell is a frame slot (`Op.allocLent`), and each one's owner, the
   variable its `free` releases (`Backend2/Driver.lean`, `slotsOf`). -/
   slots : Std.HashMap Var Nat := {}
+  /-- Scopes of checked plain local cells, all required to be frame slots. `[spec §80]` -/
+  localScopes : Std.HashSet Nat := {}
   /-- `main` is served `Fail[DivError]` by the platform's handler (`Checked.exitsOnDivError`,
   SPEC §39): its value is `inl v`, whose `v` is reported, or `inr ()`, the exit status `1`. -/
   exits : Bool := false
