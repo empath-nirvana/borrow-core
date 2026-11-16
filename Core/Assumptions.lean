@@ -57,7 +57,8 @@ inductive Standing where
 structure Entry where
   /-- The definition, a closed `Prop`. -/
   decl : Lean.Name
-  /-- Its research question in issue #1122's register, or `none` (engineering). -/
+  /-- Its research question in issue #1122's register, or `none`; an open engineering debt says
+  so, with its issue. -/
   rq : String
   /-- Where it stands. -/
   standing : Standing
@@ -185,7 +186,7 @@ def register : List Entry := [
     note := "R2's compatibility lemma; LoopFrame (PinLaw.loop)." },
   -- Engineering residuals no headline reads.
   { decl := ``BoCa.Fig16.LogRel.Core.WpChainCommutes
-    rq := "none"
+    rq := "none: engineering, #180"
     standing := .assumed
     takenBy := [
       ``BoCa.Fig16.LogRel.Core.approxLim_le_delayRel,
@@ -226,7 +227,7 @@ def register : List Entry := [
 def outside : List OutsideEntry := [
   { name := "UnmentionedAbsorbed"
     file := "Frontend/Check/Masks.lean"
-    rq := "none"
+    rq := "none: engineering, #746 F5"
     note := "Assumed (UNPROVED:, #746 F5). Taken by Frontend.Check.neitherAbsorbed_of; \
       SplitMasks.NeitherAbsorbed is read by Backend2's Convert and Lint." }]
 
