@@ -89,6 +89,7 @@
 
 ### Core.Chain.SI.LoanX.ErwpKX (exit 0)
 'BoCa.Fig16.LogRel.Core.Chain.SI.erwpKX_eq' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.erwpKX_unfold_at' depends on axioms: [propext, Classical.choice, Quot.sound]
 'BoCa.Fig16.LogRel.Core.Chain.SI.loanPerformTableX_local' depends on axioms: [propext, Classical.choice, Quot.sound]
 
 ### Core.Chain.SI.LoanX.MutLoan (exit 0)

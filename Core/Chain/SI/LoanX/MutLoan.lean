@@ -167,9 +167,9 @@ theorem rwpGX_mutLoanOpen {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : L
     maskShallow_comp hρm (maskShallow_right hcρ hvρ hsh) (maskShallow_single_mut _)
   have hr := hbody ρm (ResU.CompS.comm hρm) xf W' ps μ hHf hfm hv hwf hwxm hshm hau hoff hTin
     htgin hlowin hfd jr μ' e' hj hrun
-  refine ⟨hr.1, fun hfin => ?_⟩
+  intro hfin
   obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
-    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hq⟩ := hr.2 hfin
+    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hq⟩ := hr hfin
   have hlM : l ∈ M.locs := Mask.locs_of_mem hl
   have hoffl : ∀ m, m ≠ l → ∀ ψ, ρ.FlatAt m ψ ↔ ρm.FlatAt m ψ := fun m hml ψ =>
     flatAt_off_swap single_own_off single_mut_off hcρ (ResU.CompS.comm hρm) hvρ hvρm hml ψ
@@ -224,9 +224,9 @@ theorem rwpGX_mutLoanEnd {Φ : LocFam} {M : Mask} {Q : PostGX} {n : Nat} {l : Lo
     maskShallow_comp hρo (maskShallow_right hcρ hvρ hsh) (maskShallow_single_own _ _ _)
   have hr := hbody ρo (ResU.CompS.comm hρo) xf W' ps μ hHf hfo hv hwf hwxo hsho hau hoff hTin
     htgin hlowin hfd jr μ' e' hj hrun
-  refine ⟨hr.1, fun hfin => ?_⟩
+  intro hfin
   obtain ⟨M', ρ', ρp, fρ', fρ'p, π, g', gp, ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, hU, hNo, hT', htg',
-    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hq⟩ := hr.2 hfin
+    hps', hls', hV, hN, hW'', hWp, hS', hSπ, hAu, hOff, hSx, hFx, hq⟩ := hr hfin
   have hlM : l ∈ M.locs := Mask.locs_of_mem hl
   have hoffl : ∀ m, m ≠ l → ∀ ψ, ρ.FlatAt m ψ ↔ ρo.FlatAt m ψ := fun m hml ψ =>
     flatAt_off_swap single_mut_off single_own_off hcρ (ResU.CompS.comm hρo) hvρ hvρo hml ψ

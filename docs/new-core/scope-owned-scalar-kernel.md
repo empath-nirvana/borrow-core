@@ -118,3 +118,22 @@ and existing corpus outputs. The entry adds no permission to cancel/drop the
 one-shot continuation or to resume it twice. General indexed payload families,
 cross-task loans, `withlocal` across `await`, effectful cancellation, and an
 outer scheduler remain open after K-L2.
+
+## Dropped: per-step access guard G (threads)
+
+The X relation (`rwpGX`/`rwpGXat`, `Core/Chain/SI/LoanX/ErwpX.lean`) drops #821
+stage 1.5's per-step access guard G: "nothing is written through an `imm` copy,
+not even transiently" (`FrameKept xf.1 μ'` at every reached configuration). A
+run speaks at its final configurations only, as main `rwpG` does. Frame
+preservation is kept at segment ends and at stops (`EndOKX.frameKept`).
+
+Soundness rests on single-threaded execution. The frame's owner observes the
+heap only at segment boundaries, so a cell shared `imm` with the frame may be
+written and restored within a segment unobserved. Main `rwpG` admits such runs
+(`Head.store` checks only presence), so a main IH cannot supply G mid-segment.
+
+Threads must restore G, or an equivalent, before this relation is used for
+parallel runs: under a parallel scheduler the frame's owner can observe a
+transient write.
+
+This follows the user's 2026-11-05 priority: loans first, threads tabled.

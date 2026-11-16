@@ -107,8 +107,8 @@ theorem rwpGX_of_rwp_own {Φ : LocFam} {M : Mask} {P : PostN} {n : Nat} {ls : Li
   cases ResU.CompS.functional hy' hy
   have hvρ : ρ.Valid := (hash_valid hf).2
   have hvy : y.Valid := (hash_valid hy₁).1
-  obtain ⟨hG, hval, hprog⟩ := hwp y fρ ps μ hy₁ hyfρ hT htg hl hfd j μ' e' hj hrun
-  refine ⟨hG.of_compS hy hvy, fun hfin => ?_⟩
+  obtain ⟨hval, hprog⟩ := hwp y fρ ps μ hy₁ hyfρ hT htg hl hfd j μ' e' hj hrun
+  intro hfin
   have hve : IsVal e' := by
     by_contra hn
     obtain ⟨_, _, hs⟩ := hprog hn

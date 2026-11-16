@@ -34,8 +34,8 @@ theorem rwpGX_ghost_update {g h : GRes}
     cases a <;> simpa only [Auth.Held, ← htok, ← hxm] using hh
   have hr := hrun xf fρ ps μ hf hc (hup xf.2 hv) hwf' hwx' hsh hma' hoff
     htw htag hlow hfd j μ' e' hj hs
-  refine ⟨hr.1, fun hfin => ?_⟩
-  simpa only [EndOKX, Prod.fst, Prod.snd, hC] using hr.2 hfin
+  intro hfin
+  simpa only [EndOKX, Prod.fst, Prod.snd, hC] using hr hfin
 
 /-- The same update at the recursive effectful relation, for arbitrary stop tables and posts. -/
 theorem erwpX_ghost_update {g h : GRes}

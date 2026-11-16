@@ -10,7 +10,6 @@ def rwpOwn (Φ : LocFam) (Q : PostN) (n : Nat) (ls : List SRec) (e : Expr) : WPr
     ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → TWNC fρ ps (rsOf ls) → Tagged fρ ps ls →
     ResU.Lower fρ μ → FinDom μ →
     ∀ j μ' e', j < n → StepsN (ℍ := ℍ) j μ e μ' e' →
-      FrameKept ρf μ' ∧
       (∀ v : Val, e' = v.1 → EndOK Φ Q (n - j) ls ρ ρf ps μ' v) ∧
       (¬ IsVal e' → ∃ μ'' e'', Step1 (ℍ := ℍ) μ' e' μ'' e'')
 
@@ -37,13 +36,13 @@ theorem ownwp_head1 {Φ : LocFam} {Q : PostN} {n : Nat} {ls : List SRec} {e : Ex
   have hnv : ¬ IsVal e := hred.not_isVal
   cases hrun with
   | refl =>
-      exact ⟨frameKept_of_lower hc hl, fun v hv => absurd (hv ▸ v.2) hnv,
+      exact ⟨fun v hv => absurd (hv ▸ v.2) hnv,
         fun _ => ⟨μ₁, e₁, ⟨Kont.hole, e, e₁, by simp [Kont.plug], by simp [Kont.plug], hh⟩⟩⟩
   | @more j' _ μ₂ _ _ e₂ _ h t =>
       obtain ⟨w, rfl, hEnd⟩ := hend μ₂ e₂ (step1_head hred h)
       cases t with
       | refl =>
-          refine ⟨hEnd.frameKept, fun v hv => ?_, fun hn => absurd w.2 hn⟩
+          refine ⟨fun v hv => ?_, fun hn => absurd w.2 hn⟩
           have : v = w := Subtype.ext hv.symm
           subst this
           simpa using hEnd
