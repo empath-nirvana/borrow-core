@@ -1,5 +1,5 @@
-import TypedCaseProof.Algebra
-import TypedCaseProof.MainBridge
+import Core.Chain.SI.LoanX.Algebra
+import Core.Chain.SI.LoanX.MainBridge
 
 noncomputable section
 namespace BoCa.Fig16.LogRel.Core.Chain.SI.TypedCase

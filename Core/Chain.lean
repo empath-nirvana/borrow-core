@@ -198,3 +198,6 @@ import Core.Chain.Spike844N
 import Core.Chain.Nest844N
 import Core.Chain.Externs791N
 import Core.Chain.IO791N
+import Core.Chain.SI.LoanX.KWBridge
+import Core.Chain.SI.LoanX.Erasure
+import Core.Chain.SI.LoanX.LoanWorld

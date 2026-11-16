@@ -2,8 +2,8 @@
 
 Status: draft kernel scope for #821 / #844 Tier 2, based on the checked
 `experiments/LoanContinuation/TypedCase` case. This document is the proposed
-content for a new SPEC entry. It does not itself change `SPEC.md` or a production
-typing rule; docs-foreman assigns the entry and version before `Core` changes.
+content for a future SPEC entry. `SPEC.md` remains separate from this draft
+Core integration, and no production typing rule has changed yet.
 
 ## Target program and done-when
 
@@ -36,6 +36,15 @@ experimental `erwpX`, does not meet this criterion.
 - `TypedBridge.current_update_cannot_close`: current `UpdVN` cannot turn the
   borrowed endpoint into the owned endpoint. This is why simply interpreting
   the current `U` clause at the new return is insufficient.
+- `TypedCase.W1_main_reply_admitted`: the concrete changed scalar world also
+  satisfies main `KW.Owed` at the stop floor for an owned continuation share,
+  together with registry coherence and fragment validity.
+- `rwpGX_erases`: a zero-ghost, empty-mask X run with a zero-ghost post entails
+  the existing main `rwpG` judgment. The converse is not asserted because the
+  X run requires stronger frame preservation.
+- `LoanKW.Owed` combines all of main `KW.Owed` with authoritative registry
+  compatibility at the continuation's complete resource; `scalarWorld_reply`
+  checks the concrete changed-world reply at that combined order.
 
 Run `python3 experiments/LoanContinuation/TypedCase/check.py` from the repo
 root. The durable check uses the current main `Goal791N` definitions and no
@@ -51,9 +60,10 @@ new axioms or admitted proofs.
    must retain the frame and mask guarantees required by main's borrow lemmas.
 2. **Typed world.** Main `KW = (Θ,c,lo)` and `KW.Owed` require `ExtP`, `OK`,
    `ConsistentX`, floor monotonicity, and preservation of every relevant
-   `FoldInv`. The experiment's `WorldSat(m,Θ)` establishes scalar registry/key
-   coherence but does not imply those `KW.Owed` obligations. The new world
-   interface must combine both, and every admitted stop reply must satisfy it.
+   `FoldInv`. `WorldSat(m,Θ)` establishes scalar registry/key coherence but
+   does not imply those `KW.Owed` obligations. `LoanKW.Owed` now combines both
+   requirements, and the concrete W1 reply inhabits it. The future typed stop
+   table must quantify over that combined order for every admitted reply.
 3. **Recursive value and computation interpretation.** Main `vNE(U C)` uses
    physical `ExtR` and main `vNE(Ref A)` recursively stores only physical
    resources. The experiment's `ScalarU` requires a positive claim and a
@@ -67,18 +77,19 @@ new axioms or admitted proofs.
 
 ## Proposed implementation order
 
-**K-L0 — Resource/run seam.** Specify the combined resource and masked update
-in main, including ghost validity and frame-preserving registry laws. Prove a
-main-level scalar open/close under the new run while preserving the current
-`UpdVN` and no-loan cases as explicit regressions. In particular, prove the
-physical frame and world conditions needed at a stop; do not assume the
-experimental stronger `FrameKept` relation is equivalent to current `rwpG`.
+**K-L0 — Resource/run seam.** The draft now places the combined resource,
+masked update, frame-preserving registry laws, and scalar open/close under
+`Core/Chain/SI/LoanX`. The current `UpdVN` stays unchanged. Its first no-loan
+regression is the one-way `rwpGX_erases` theorem. Further physical frame and
+world conditions are needed for a general typed stop; do not infer a converse
+or equivalence from the stronger `FrameKept` relation.
 
-**K-L1 — Typed world and storage seam.** Extend the main stop world to track
-the claim and scalar family coherently while retaining all `KW.Owed` fields.
-Establish a resource-aware `Ref` clause and a positive-claim continuation
-clause. Prove the zero-protocol embedding for recursive values and runs, not
-only the isolated value-level `RefX_zero_iff`.
+**K-L1 — Typed world and storage seam.** `LoanKW` now packages main's stop
+world with registry coherence, and `LoanKW.Owed` keeps every `KW.Owed` field.
+The remaining work is to use that order in a world-indexed X run and a
+resource-aware `Ref`/positive-claim continuation clause. Prove the
+zero-protocol embedding for recursive values and stops, extending the checked
+one-way run erasure and isolated value-level `RefX_zero_iff`.
 
 **K-L2 — One vertical theorem.** Add the narrow loan-return typing interface,
 prove its handler compatibility, and type and conclude `storedProgram` in the

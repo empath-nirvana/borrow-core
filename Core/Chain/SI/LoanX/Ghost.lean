@@ -1,9 +1,9 @@
-import TypedCasePort.UpdMask
+import Core.Chain.SI.LoanX.UpdMask
 
 /-!
 # The ghost resource of the one relation  `[spec §62]`
 
-`docs/new-core/scope-821-loans.md`, stage 1. `GRes` has three parts, each with the standard
+`docs/new-core/scope-owned-scalar-kernel.md`, stage 1. `GRes` has three parts, each with the standard
 composition and validity:
 
 * **lifetime tokens** `[α]_q`, `Life → ℚ≥0`, composed by adding fractions, valid when every sum

@@ -1,4 +1,4 @@
-import TypedCasePort.HandleX
+import Core.Chain.SI.LoanX.HandleX
 
 /-! Generic derived rules used by the owned-loan experiment. -/
 noncomputable section

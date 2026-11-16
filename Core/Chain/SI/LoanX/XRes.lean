@@ -1,9 +1,9 @@
-import TypedCasePort.Ghost
+import Core.Chain.SI.LoanX.Ghost
 
 /-!
 # The pair `WRes × GRes`: carrying a lifetime, `WF_C`, masks with their authorities  `[spec §62]`
 
-`docs/new-core/scope-821-loans.md`, stage 1.
+`docs/new-core/scope-owned-scalar-kernel.md`, stage 1.
 
 * A resource **carries** `α` when its flattening holds an `imm` cell whose lifetime set holds `α`
   (`Carries`). Carrying passes from a part to a composite and back

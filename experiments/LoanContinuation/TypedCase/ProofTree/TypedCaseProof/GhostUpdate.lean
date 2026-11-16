@@ -1,4 +1,4 @@
-import TypedCasePort.HandleX
+import Core.Chain.SI.LoanX.HandleX
 
 /-! Generic registry-ghost updates inside the existing masked execution relation.
 Updates preserve lifetime counts and mutable masking authorities. No execution rule is assumed.

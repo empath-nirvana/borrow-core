@@ -11,19 +11,22 @@ import sys
 
 here = Path(__file__).resolve().parent
 repo = here.parents[2]
-source_roots = (here / "PortTree", here / "ProofTree")
+source_roots = (
+    (repo, repo / "Core" / "Chain" / "SI" / "LoanX", "Core.Chain.SI.LoanX"),
+    (here / "ProofTree", here / "ProofTree" / "TypedCaseProof", "TypedCaseProof"),
+)
 output_root = repo / ".lake" / "build" / "lib" / "lean"
 
 sources: dict[str, tuple[Path, Path]] = {}
-for root in source_roots:
-    for source in root.rglob("*.lean"):
-        name = ".".join(source.relative_to(root).with_suffix("").parts)
+for root, module_dir, prefix in source_roots:
+    for source in module_dir.rglob("*.lean"):
+        name = prefix + "." + ".".join(source.relative_to(module_dir).with_suffix("").parts)
         if name in sources:
             raise SystemExit(f"duplicate module: {name}")
         sources[name] = (root, source)
 
 if not sources or not any(name.startswith("TypedCaseProof.") for name in sources):
-    raise SystemExit("TypedCase PortTree or ProofTree sources are missing")
+    raise SystemExit("Core LoanX or TypedCaseProof sources are missing")
 
 order: list[str] = []
 visiting: set[str] = set()
