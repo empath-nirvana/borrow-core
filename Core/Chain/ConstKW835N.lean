@@ -4,13 +4,10 @@ import Core.Chain.FamCancel836N
 /-!
 # The #791 constants at the typed world  `[spec §62]`
 
-The statements `ConstN`, `ConstsN` and `FundamentalN` at `SemJN`: a constant is a value of `!` its
-type at `vN`, and the fundamental property is read at `SemJN`. Each constant's `constN_*` is the
-compatibility lemma at `cN` (`withbor2S_compat`, `withbor3S_compat`, `withborFS_compat`,
-`withloadS_compat`, `sliceBorrowMS_compat`), its finaliser's judgment read by the fundamental
-property; `constsN_of` gathers them. The instances at the hardest case's row discharge every
-hypothesis of each compatibility lemma, the finalisers read at `SemJN` (`dFree_sem`, `dRelease_sem`,
-`dArrFree_sem`).
+`ConstN` and `ConstNAt` state a constant's semantic typing. The finaliser judgments
+`dFree_sem`, `dRelease_sem` and `dArrFree_sem` discharge the direct constant compatibility
+lemmas in the concrete instances below. `constN_wl` needs no finaliser and is also used by
+the general constant assembly in `Adequacy791N`.
 
 A constant's finaliser may name host externs: it is typed at the externs' context `Γx`, and the
 constant's value is closed by the externs' values (`Const791.valAt`). `ExternN`/`ExternsMeetN` are
@@ -182,15 +179,6 @@ theorem constN_of_at {c : Const791} (h : ConstNAt (ℍ := ℍ) LifeCtx.empty [] 
     ConstN (ℍ := ℍ) c :=
   fun hc δ Θ n hΘ => c.valAt_nil ▸ h hc .nil δ (models_empty_any δ) Θ n hΘ
 
-/-- Every #791 constant inside the fragment, at the typed world. -/
-def ConstsN : Prop := ∀ c : Const791, c.InFrag → ConstN (ℍ := ℍ) c
-
-/-- **The fundamental property at the typed world, on the fragment**: every
-derivation of the existing judgment whose context and type lie in the fragment. -/
-def FundamentalN : Prop :=
-  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg), CDerives Δ Γ e j → JdgInFrag Γ j = true →
-    SemJN (ℍ := ℍ) Δ Γ e j
-
 /-! ### A constant under a lifetime binder -/
 
 /-- **A constant's value is closed by the externs' values**, from its premises: a lend
@@ -251,77 +239,12 @@ theorem constNAt_poly {y : LifeVar} {b : Lifetime.Life} {c : Const791} {Γx : Ct
 
 /-! ### Each constant -/
 
-/-- **`ConstNAt` for `withbor (2)` at a suspending row**, from the fundamental property at the
-finaliser's derivation.  `[spec §62]` -/
-theorem constN_w2 (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} {d : Expr} (hfr : (Const791.w2 x bnd A B S d).InFrag) (Δ : LifeCtx) :
-    ConstNAt (ℍ := ℍ) Δ [] [] (.w2 x bnd A B S d) := by
-  rintro ⟨hbnd, hO, hA, hB, hS, hAns, hdc, hder⟩ - δ hδ Θ n _
-  have hL : (VTy.ref A).inFrag = true := by
-    simp_all [Const791.InFrag, Const791.ty, withbor2UTy, withborUTy, VTy.inFrag, CTy.inFrag]
-  rw [Const791.valAt_nil]
-  exact withbor2S_compat hbnd hO hA hB hS hAns hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ hδ Θ n
-
-/-- **`ConstNAt` for `withbor (3)` at a suspending row**, from the fundamental property at the
-finaliser's derivation.  `[spec §62]` -/
-theorem constN_w3 (hF : FundamentalN (ℍ := ℍ)) {a : Lifetime.Life} {x : LifeVar}
-    {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
-    (hfr : (Const791.w3 a x bnd A B S d).InFrag) (Δ : LifeCtx) :
-    ConstNAt (ℍ := ℍ) Δ [] [] (.w3 a x bnd A B S d) := by
-  rintro ⟨hbnd, hA, hB, hS, hAns, hdc, hder⟩ - δ hδ Θ n _
-  have hL : (VTy.mut a A).inFrag = true := by
-    simp_all [Const791.InFrag, Const791.ty, withbor3UTy, withborUTy, VTy.inFrag, CTy.inFrag]
-  rw [Const791.valAt_nil]
-  exact withbor3S_compat hbnd hA hB hS hAns hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ hδ Θ n
-
-/-- **`ConstNAt` for the field reborrow at a suspending row**, from the fundamental property at
-the finaliser's derivation.  `[spec §62]` -/
-theorem constN_wF (hF : FundamentalN (ℍ := ℍ)) {a : Lifetime.Life} {x : LifeVar}
-    {bnd : Lifetime.Life} {A B : VTy} {S : Row} {d : Expr}
-    (hfr : (Const791.wF a x bnd A B S d).InFrag) (Δ : LifeCtx) :
-    ConstNAt (ℍ := ℍ) Δ [] [] (.wF a x bnd A B S d) := by
-  rintro ⟨hbnd, hA, hB, hS, hAns, hdc, hder⟩ - δ hδ Θ n _
-  have hL : (VTy.mut a (.ref A)).inFrag = true := by
-    simp_all [Const791.InFrag, Const791.ty, withborFSTy, withborUTy, VTy.inFrag, CTy.inFrag]
-  rw [Const791.valAt_nil]
-  exact withborFS_compat hbnd hA hB hS hAns hdc (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ hδ Θ n
-
 /-- **`ConstNAt` for `withload` at a suspending row**, from its rule's premises.
 `[spec §62]` -/
 theorem constN_wl {a : Lifetime.Life} {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
     {S : Row} (Δ : LifeCtx) : ConstNAt (ℍ := ℍ) Δ [] [] (.wl a x bnd A B S) := by
   rintro ⟨hbnd, hA, hB, hS⟩ - δ hδ Θ n _
   exact withloadS_compat hbnd hA hB hS δ hδ Θ n
-
-/-- **`ConstNAt` for `slice_borrow_mut` at a suspending row**, from the fundamental property at
-the finaliser's derivation.  `[spec §62]` -/
-theorem constN_sm (hF : FundamentalN (ℍ := ℍ)) {x : LifeVar} {bnd : Lifetime.Life} {A B : VTy}
-    {S : Row} {d : Expr} (hfr : (Const791.sm x bnd A B S d).InFrag) (Δ : LifeCtx) :
-    ConstNAt (ℍ := ℍ) Δ [] [] (.sm x bnd A B S d) := by
-  rintro ⟨hbnd, hOA, hOB, hA, hB, hS, hAns, hdc, hder⟩ - δ hδ Θ n _
-  have hL : (VTy.array A).inFrag = true := by
-    simp_all [Const791.InFrag, Const791.ty, sliceBorrowMUTy, withborUTy, VTy.inFrag, CTy.inFrag]
-  rw [Const791.valAt_nil]
-  exact sliceBorrowMS_compat hbnd hOA hOB hA hB hS hAns hdc
-    (hF _ _ _ _ hder (jdgInFrag_lolli hL)) δ hδ Θ n
-
-/-- **`ConstNAt` from the fundamental property at the typed world**, at every context: each lend
-constant inside the fragment by its compatibility lemma, a binder by `constNAt_poly`.
-`[spec §62]` -/
-theorem constNAt_of (hF : FundamentalN (ℍ := ℍ)) :
-    ∀ c : Const791, c.InFrag → ∀ Δ, ConstNAt (ℍ := ℍ) Δ [] [] c
-  | .w2 .., hfr => constN_w2 hF hfr
-  | .w3 .., hfr => constN_w3 hF hfr
-  | .wF .., hfr => constN_wF hF hfr
-  | .wl .., _ => constN_wl
-  | .sm .., hfr => constN_sm hF hfr
-  | .poly _ _ c, hfr => constNAt_poly (constNAt_of hF c (by
-      simpa [Const791.InFrag, Const791.ty, VTy.inFrag, CTy.inFrag] using hfr))
-
-/-- **`ConstsN` from the fundamental property at the typed world**: every constant inside the
-fragment, at the empty context (`constNAt_of`). -/
-theorem constsN_of (hF : FundamentalN (ℍ := ℍ)) : ConstsN (ℍ := ℍ) :=
-  fun c hfr => constN_of_at (constNAt_of hF c hfr LifeCtx.empty)
 
 /-! ### The finalisers at `SemJN` -/
 

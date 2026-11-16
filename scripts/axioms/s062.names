@@ -695,7 +695,6 @@ BoCa.Fig16.LogRel.Core.Chain.SI.exS_none_of_walk
 BoCa.Fig16.LogRel.Core.Chain.SI.consistentX_leftE
 BoCa.Fig16.LogRel.Core.Chain.SI.exS_mut_wit_get
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sLe_life
-BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.jdgInFrag_lolli
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.hardestRow_suspend
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.linSig_suspend
 BoCa.Fig16.Tree.Wp.Goal791.defines_meetOfDom_empty
@@ -1542,9 +1541,7 @@ BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwp_I_frameListRN
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowI_sem
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowI_compatN
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fundamentalN_all
-BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fundamentalN_of
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.handlerLawN_iff
-BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fundamentalN_of_handlerLaw
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.handle_resume_inst
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.semJN_idV
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.semJN_resumeCT
@@ -1600,12 +1597,7 @@ BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.tabNK_lendMapB_comap
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.erwpK_lendMapB_comap
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.fin_claimArr
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowMS_compat
-BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_w2
-BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_w3
-BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_wF
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_wl
-BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constN_sm
-BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constsN_of
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.dRelease_sem
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.dFree_sem
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.dArrFree_sem
@@ -1706,7 +1698,6 @@ BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.sliceBorrowMS_compat
 BoCa.Fig16.Tree.Wp.Goal791.Const791.val_closed
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.models_extend_of
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constNAt_poly
-BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constNAt_of
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.constNAt_all
 BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.polyC_ok
 BoCa.Fig16.LogRel.Core.Chain.SI.Nest844N.nestC_ok

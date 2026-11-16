@@ -6078,7 +6078,7 @@ use R1 keeps them unconditionally.
 
 The chain interpretation of §62 has a second named hypothesis of the same form, `HandlerLawN`
 (`Core/Chain/HandlerLawN.lean`): the compatibility lemmas of `[handle]` at a value form, BOXED-κ
-`[handle]` and `reify`, from which `FundamentalN` and plain adequacy `Goal791N` are proved (§62,
+`[handle]` and `reify`, from which `fundamentalN_all` and plain adequacy `Goal791N` are proved (§62,
 *The named assertion*).
 
 *R1 and `PinLaw` stay as stated here until surface A1 (#843, §19).*
@@ -11513,6 +11513,25 @@ inside it, under the named assertion `HandlerLawN` (`goal791N`, *The named asser
 proved by `fundamentalC` over every typing rule and adequacy, at one step-indexed safety relation. The existing total relation keeps the termination
 results (`total_every_run`, `Closing`, `total_open`/`total_call`/`total_subrun`) for derivations
 that use none of the new rules.
+
+### Proof maintenance: remove the unused chain fragment assembly (#840)
+
+The chain's active fundamental theorem is `fundamentalN_all : MissingN → CDerives Δ Γ e j →
+SemJN Δ Γ e j`; its constant and adequacy path uses `constNAt_all` and `goal791N`. Remove the
+unused type-former fragment predicates, `FundamentalN`/`ConstsN`, their two adapters from
+`MissingN`/`HandlerLawN`, and the closed group of fragment-dependent constant assembly lemmas.
+Do not replace a client with a theorem requiring a stronger assumption: first inventory every
+client, including references in theorem types, and verify that none provides an active
+assumption-free handler fragment. The old predicates classify context/result types, not which
+handler rules a derivation uses.
+
+Preserve the statements and assumptions of `fundamentalN_all`, `constNAt_all`, `constN_all`,
+`goal791N`, `goal791N_nil`, `goal791N_nil_externs`, and the checked frontend theorem paths.
+Preserve direct constant compatibility and concrete instances, including the assumption-free
+`constN_wl` and finaliser instances. Compare surviving theorem types and axiom footprints;
+removing unused interfaces must not add `HandlerLawN` to a retained proof. No typing rule,
+relation, machine step, accepted program or program output changes. `HandlerLawN` remains
+open as stated below; this cleanup does not discharge any field.
 
 ### Lifetimes ordered as a tree (#773)
 
