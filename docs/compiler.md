@@ -45,12 +45,13 @@ agreed on #552, and loops U1–U4 are taken as decided and placed in the new pip
   recommendation is **(b), a typed term with an indexed derivation**:
   - The checker returns `t : TExpr`, the derivation's skeleton as data: one node per rule, with
     the rule's types, rows, lifetimes, qualifiers and use masks. The derivation stays a `Prop`,
-    `TDerives Δ Γ t j`, generated from `CDerives` the way `CDerivesP` already is
-    (`scripts/gen-pin.py`).
+    `TDerives Δ Γ t j`, generated from `CDerives` the way `CDerivesP` then was
+    (`scripts/gen-pin.py`). Since #798 both are one judgment each at an index: `CDerivesX I`
+    and `TDerivesX I` (SPEC §83).
   - One projection, `TDerives Δ Γ t j → CDerives Δ Γ t.erase j`, carries FP, adequacy, PinLaw
     and `TiedDer` over unchanged. `Checked.e` is defined as `t.erase`, so the compiled term is the
     checked one by definition.
-  - Cost: a generated mirror (as `CDerivesP` is), one more field in each rule builder, and
+  - Cost: a generated mirror (as `CDerivesP` then was), one more field in each rule builder, and
     `Program.lean`'s theorems restated at `t.erase`. No proof of FP or adequacy changes. Check
     time grows by about one allocation per node (hypothesis).
 - **The pipeline** (§3):
@@ -218,13 +219,15 @@ substitute. "From the typed term" is what compiling from it gives. All by inspec
 
 ### 2.1 What constrains the choice
 
-- **The judgments.** `CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop`
-  (`Core/Fundamental.lean:85`), 92 rules, indexed by the untyped `Expr`. `CDerivesAt Ξ` copies it
-  with `RowAt Ξ` premises (`Core/Tied.lean:53`). `CDerivesP` copies it with R1, R2 and `nilDead`
-  added, and is generated from `CDerives` by `scripts/gen-pin.py`, which the gate checks for
-  staleness (`gen-pin.py:11–12`, `:128`). `TiedDer` is the pair the checker returns
-  (`Frontend/Check/Tied.lean:317–318`). FP (`fundamentalC`), adequacy (`adequacyC`),
-  `fundamentalC_pin` and `stop_lemma` take these `Prop`s.
+- **The judgments.** One inductive, `CDerivesX I : LifeCtx → Ctx VTy → Expr → Jdg → Prop`
+  (`Core/Judgment.lean`), indexed by the untyped `Expr`, each rule once at a judgment index
+  `I : JIdx` (SPEC §83). `CDerives := CDerivesX {}`; `CDerivesAt Ξ := CDerivesX {ties := some Ξ}`,
+  `RowAt Ξ` at the rules that read a signature off a row; `CDerivesP := CDerivesX {pin := true}`,
+  with R1, R2 and `nilDead` admitted. `scripts/gen-pin.py` generates each instance's rules and
+  eliminator (`Core/JudgmentElim.lean`), and the gate checks it for staleness. `TiedDer` is the
+  pair the checker returns (`Frontend/Check/Tied.lean:317–318`). FP (`fundamentalC`), adequacy
+  (`adequacyC`), `fundamentalC_pin` and `stop_lemma` take these `Prop`s; `fundamentalC` and
+  `fundamentalC_pin` are instances of one `fundamentalX`.
 - **The checker builds a family, not a derivation.** `Fam T P` holds the masks `u`, `w` (data) and
   `d : ∀ L, Btw u w L → P L` (`Fam.lean:49–54`). The enclosing rule chooses the liveness `L`.
   The builders destructure existentials inside `d` (`rPair`: `fun _ ⟨_, _, hs, h₁, h₂⟩ =>
@@ -267,9 +270,9 @@ non-context arguments (types, rows, lifetimes, qualifiers, names, use masks) and
 - *Theorems*: FP, adequacy, PinLaw, `stop_lemma` and the borrow theorems are untouched. `TTied`
   projects to `TiedDer` at `t.erase`. `Program.lean`'s eight theorems are restated at
   `c.t.erase`, which is definitionally `c.e`.
-- *What is generated*: `TDerivesAt` and `TDerivesP`, and their projections, from
-  `CDerivesAt`/`CDerivesP`. This is the mechanism `gen-pin.py` already runs. A rule added to
-  `CDerives` is picked up by rerunning it.
+- *What is generated*: `TDerivesX I` and its projection to `CDerivesX I`, from `CDerivesX`
+  (`TDerivesAt Ξ` and `TDerivesP` its instances, SPEC §83). This is the mechanism `gen-pin.py`
+  runs. A rule added to `CDerivesX` is picked up by rerunning it.
 - *Compile time*: one node per rule application, its fields pointers to types the checker has
   already built. About twice the erasure's allocation (hypothesis). Proofs stay erased.
 - *Backend*: it matches plain data. No `CDerives` inversion anywhere.
@@ -330,8 +333,8 @@ needs it.
 
 - **Derived nodes.** A fixed scheme the backend recognises today (C1–C7, A8 of
   `docs/pipeline-architecture.md` §1.2) becomes a node whose erasure is the scheme and whose
-  `TDerives` case is the lemma that types it. These are written by hand, as `CDerivesP`'s extra
-  rules are written in `scripts/pin/CDerivesP.tmpl.lean`. The elaborator emits the scheme once,
+  `TDerives` case is the lemma that types it. These are written by hand, in
+  `scripts/pin/TDerives.tmpl.lean`. The elaborator emits the scheme once,
   and the checker builds the node. Where Core has no single typing lemma for a scheme (the Z
   combinator is typed as a composite, `Core/Fix.lean`), the unit writes it. The scheme's
   recogniser is deleted when its node lands.
@@ -369,7 +372,8 @@ needs it.
 
 ### 2.5 Against the growth discipline
 
-- No index is added to `CDerives`. `TDerives` is a generated sibling, as `CDerivesP` is.
+- No index is added to `CDerives`. `TDerives` is a generated sibling; since #798 it is one
+  `TDerivesX I` over `CDerivesX I`, a new coordinate a field of `JIdx` (SPEC §83).
 - No inversion: the backend matches on `TExpr`.
 - What grows is the generator's template, by one case per derived node.
 
