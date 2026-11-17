@@ -24,21 +24,49 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "Core" / "Fundamental.lean"
+JUDG = ROOT / "Core" / "Judgment.lean"
 TMPL = ROOT / "scripts" / "pin"
 CHECK = "--check" in sys.argv[1:]
 
 text = SRC.read_text().splitlines()
+judg_src = JUDG.read_text()
 
 
-def block(start_pat, stop_pat):
-    i = next(k for k, l in enumerate(text) if re.match(start_pat, l))
-    j = next(k for k in range(i + 1, len(text)) if re.match(stop_pat, text[k]))
-    return text[i:j]
+def block(start_pat, stop_pat, lines=None):
+    lines = text if lines is None else lines
+    i = next(k for k, l in enumerate(lines) if re.match(start_pat, l))
+    j = next(k for k in range(i + 1, len(lines)) if re.match(stop_pat, lines[k]))
+    return lines[i:j]
 
 
-ind = block(r"^inductive CDerives ", r"^/-- `\[then\]` with its finaliser at the pure row")
-while ind and ind[-1].strip() == "":
-    ind.pop()
+def bal_end(s, i):
+    """The index after the bracket group opening at `s[i]`."""
+    d = 0
+    for k in range(i, len(s)):
+        if s[k] in "({[⟨":
+            d += 1
+        elif s[k] in ")}]⟩":
+            d -= 1
+            if d == 0:
+                return k + 1
+    sys.exit("gen-pin: an unbalanced group")
+
+
+def drop_ties(t):
+    """`t` with each tie premise `(hAt : I.RowOK …)` removed with the line break before it."""
+    while True:
+        m = re.search(r"\n\s*\(hAt : I\.RowOK ", t)
+        if not m:
+            return t
+        t = t[:m.start()] + t[bal_end(t, t.index("(", m.start())):]
+
+
+# The one source of the rules: `CDerivesX` (`Core/Judgment.lean`), up to the next top-level line.
+# `CDerives` is it at no tie: its rules are `CDerivesX`'s with the tie premises dropped.
+xind = block(r"^inductive CDerivesX ", r"^\S", judg_src.splitlines())
+while xind and xind[-1].strip() == "":
+    xind.pop()
+ind = drop_ties("\n".join(xind)).replace("CDerivesX I", "CDerives").splitlines()
 # fundamentalC's induction: up to the next top-level declaration or section
 fund = block(r"^theorem fundamentalC ", r"^(/-! |/-- |theorem |def |lemma )")
 # `[then]` at the pure row and `[handle]` at two variables, stated after the inductive
@@ -117,7 +145,8 @@ der = der.replace("--@CORE_DERIVED@", "\n".join(rename(derived)))
 fun = (TMPL / "PinFundamental.tmpl.lean").read_text()
 fcases = rename(fund)
 # consume the signature and `induction` line: the template supplies them
-start = next(k for k, l in enumerate(fcases) if l.strip() == "induction h with") + 1
+start = next(k for k, l in enumerate(fcases)
+             if l.strip() == "induction h using CDerivesP.induct with") + 1
 fun = fun.replace("--@CORE_CASES@", "\n".join(fcases[start:]))
 fun = fun.replace("--@OFC_CASES@", "\n".join(ofc))
 
@@ -596,7 +625,9 @@ def to_p_case(ra, rp):
 
 
 rulesP = [Rule(n, rest, "CDerivesP") for n, rest in ctor_texts(der, "inductive CDerivesP ")]
-tied_src = (ROOT / "Core" / "Tied.lean").read_text()
+# `CDerivesAt Ξ` is `CDerivesX` at the tie `Ξ`: its rules are `CDerivesX`'s with `RowAt Ξ` for the tie.
+tied_src = re.sub(r"\bI\.RowOK ", "RowAt Ξ ", "\n".join(xind) + "\nend").replace("CDerivesX I", "CDerivesAt Ξ") \
+    .replace("inductive CDerivesX (I : JIdx)", "inductive CDerivesAt (Ξ : EffCtx)")
 rulesAt = [Rule(n, rest, "CDerivesAt Ξ") for n, rest in ctor_texts(tied_src, "inductive CDerivesAt ")]
 fieldsof = {r.name: r.fields for r in rulesP}
 for r in rulesAt:
@@ -767,8 +798,154 @@ tlife = tlife.replace("--@REAB@", "\n".join(c for _, _, c in lc))
 tlife = tlife.replace("--@P_WEAKENL@", "\n".join(weaken_life_case(r) for r in rulesP))
 tlife = tlife.replace("--@AT_WEAKENL@", "\n".join(weaken_life_case(r) for r in rulesAt))
 
+# --- the judgment's instances (`Core/JudgmentElim.lean`) ---------------------------------------
+# `CDerivesX` (`Core/Judgment.lean`) is written once; its instances `CDerives := CDerivesX {}` and
+# `CDerivesAt Ξ := CDerivesX {ties := some Ξ}` get, generated here, each rule under the instance's
+# name with the instance's premises (`hAt : I.RowOK S` dropped at `{}`, read `RowAt Ξ S` at
+# `{ties := some Ξ}`), an eliminator with the instance's cases, and `CDerivesX.mono`.
+
+TIE = re.compile(r"I\.RowOK ")
+
+class XRule:
+    """One constructor of `CDerivesX`: its binder groups, its premises and its conclusion."""
+
+    def __init__(self, name, rest):
+        self.name = name
+        self.groups, concl = binders(rest)
+        c = top_split(concl)
+        if c[:2] != ["CDerivesX", "I"] or len(c) != 6:
+            sys.exit(f"gen-pin: CDerivesX.{name}: a conclusion not of the form `CDerivesX I Δ Γ e j`")
+        self.concl = c[2:]
+        self.prem = {}
+        for kind, names, ty in self.groups:
+            if ty and ty.startswith("CDerivesX I "):
+                a = top_split(ty)
+                if len(a) != 6 or kind != "(":
+                    sys.exit(f"gen-pin: CDerivesX.{name}: a premise not of the form `CDerivesX I Δ Γ e j`")
+                for nm in names:
+                    self.prem[nm] = a[2:]
+            elif ty and "CDerivesX" in ty:
+                sys.exit(f"gen-pin: CDerivesX.{name}: a premise not of the form `CDerivesX I …`: {ty}")
+            if ty and TIE.match(ty) and (kind != "(" or names != ["hAt"]):
+                sys.exit(f"gen-pin: CDerivesX.{name}: a tie premise not `(hAt : I.RowOK S)`")
+        self.explicit = [nm for kind, names, _ in self.groups if kind == "(" for nm in names]
+        self.implicit = [nm for kind, names, _ in self.groups if kind == "{" for nm in names]
+
+
+# the instances: name, its binders, its index, how it reads the tie premise (None: dropped)
+INSTANCES = [("CDerives", "", "{}", None),
+             ("CDerivesAt", "{Ξ : EffCtx}", "{ties := some Ξ}", "RowAt Ξ ")]
+
+
+def inst_ty(ty, judg, tie):
+    """A binder's type in an instance. A Core term named as a rule (`copy`, `swap`, …) is written
+    in full: the eliminator's cases and the instance's rules are bound under those names."""
+    ty = subst(re.sub(r"\bCDerivesX I\b", judg, ty), XGLOBAL)
+    return TIE.sub(tie, ty) if tie else ty
+
+
+def binder_ty(r, nm):
+    """The type of a binder `CDerivesX` leaves unannotated. The eliminators state every binder's
+    type: a statement with many unannotated binders is elaborated far more slowly (#798)."""
+    if nm == "Δ":
+        return "LifeCtx"
+    if nm.startswith("Γ"):
+        return "Ctx VTy"
+    if nm in EXPR_NAMES or nm in {a[2] for a in r.prem.values()}:
+        return "Expr"
+    if nm in NAME_TY:
+        return NAME_TY[nm]
+    sys.exit(f"gen-pin: CDerivesX.{r.name}: the type of the binder `{nm}` is not known")
+
+
+def inst_binders(r, judg, tie, typed=False):
+    out = []
+    for kind, names, ty in r.groups:
+        if tie is None and ty and TIE.match(ty):
+            continue
+        c = {"(": ")", "{": "}", "[": "]"}[kind]
+        if ty is None and typed:
+            out += [f"{kind}{nm} : {binder_ty(r, nm)}{c}" for nm in names]
+            continue
+        out.append(f"{kind}{' '.join(names)}{(' : ' + inst_ty(ty, judg, tie)) if ty else ''}{c}")
+    return out
+
+
+def inst_ctor(r, idx, tie, named=True):
+    """`CDerivesX.r` at the index `idx`, applied to the rule's binders (`trivial` for a dropped tie)."""
+    args = [f"(I := {idx})"] + ([f"({n} := {n})" for n in r.implicit] if named else [])
+    for nm in r.explicit:
+        args.append("trivial" if (tie is None and nm == "hAt") else nm)
+    return f"(CDerivesX.{r.name} {' '.join(args)})"
+
+
+def jname(inst):
+    return inst[0] + (" Ξ" if inst[1] else "")
+
+
+def alias(r, inst):
+    nm, bnd, idx, tie = inst
+    J = jname(inst)
+    bs = ([bnd] if bnd else []) + inst_binders(r, J, tie)
+    concl = f"{J} {subst(' '.join(r.concl), XGLOBAL)}"
+    return (f"theorem {nm}.{r.name} {' '.join(bs)} :\n    {concl} :=\n  "
+            f"{inst_ctor(r, idx, tie, named=False)}")
+
+
+def elim(rules, inst):
+    nm, bnd, idx, tie = inst
+    J = jname(inst)
+    minors, arms = [], []
+    for r in rules:
+        bs = inst_binders(r, J, tie, typed=True)
+        ihs = [f"({p}_ih : motive {' '.join(r.prem[p])} {p})" for p in r.explicit if p in r.prem]
+        app = inst_ctor(r, idx, tie)
+        minors.append(f"    ({r.name} : ∀ {' '.join(bs + ihs)},\n      motive {subst(' '.join(r.concl), XGLOBAL)} {app})"
+                      .replace("∀ ,", "").replace("∀  ", "∀ "))
+        pat = [f"a{k}" for k in range(len(r.explicit))]
+        ih = [f"ih{k}" for k in range(len(r.prem))]
+        use = [a for a, x in zip(pat, r.explicit) if not (tie is None and x == "hAt")]
+        arms.append(f"  | {' '.join([r.name] + pat + ih)} => exact {' '.join([r.name] + use + ih)}")
+    head = (f"/-- `{J}`'s eliminator: its cases are `CDerivesX`'s at `{idx}`"
+            + (", the tie premise dropped" if tie is None else ", the tie premise `RowAt Ξ`") + ". -/\n"
+            f"@[elab_as_elim]\ntheorem {nm}.induct {bnd + ' ' if bnd else ''}"
+            f"{{motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Expr) → (j : Jdg) → {J} Δ Γ e j → Prop}}\n")
+    tail = (f"\n    {{Δ : LifeCtx}} {{Γ : Ctx VTy}} {{e : Expr}} {{j : Jdg}} (h : {J} Δ Γ e j) :"
+            f" motive Δ Γ e j h := by\n  induction h with\n")
+    return head + "\n".join(minors) + tail + "\n".join(arms)
+
+
+def mono(rules):
+    arms = []
+    for r in rules:
+        pat = [f"a{k}" for k in range(len(r.explicit))]
+        ih = [f"ih{k}" for k in range(len(r.prem))]
+        args, n = [], 0
+        for a, x in zip(pat, r.explicit):
+            if x in r.prem:
+                args.append(f"ih{n}")
+                n += 1
+            elif x == "hAt":
+                args.append(f"(hI.rowOK {a})")
+            elif x == "hPin":
+                args.append(f"(hI.pinOK {a})")
+            else:
+                args.append(a)
+        arms.append(f"  | {' '.join([r.name] + pat + ih)} => exact CDerivesX.{r.name} {' '.join(args)}".rstrip())
+    return "\n".join(arms)
+
+
+xrules = [XRule(n, rest) for n, rest in ctor_texts("\n".join(xind) + "\nend", "inductive CDerivesX ")]
+XGLOBAL = {r.name: f"BoCa.{r.name}" for r in xrules}
+if [r.name for r in xrules] != [n for n, _ in ctors]:
+    sys.exit("gen-pin: CDerivesX's rules and CDerives's differ")
+jel = (TMPL / "JudgmentElim.tmpl.lean").read_text()
+jel = jel.replace("--@ALIASES@", "\n\n".join(alias(r, inst) for inst in INSTANCES for r in xrules))
+jel = jel.replace("--@ELIMS@", "\n\n".join(elim(xrules, inst) for inst in INSTANCES))
+jel = jel.replace("--@MONO_CASES@", mono(xrules))
+
 stale = []
-outs = (("Core/PinDerives.lean", der), ("Core/PinFundamental.lean", fun),
+outs = (("Core/JudgmentElim.lean", jel), ("Core/PinDerives.lean", der), ("Core/PinFundamental.lean", fun),
         ("Frontend/Check/TExpr.lean", tex), ("Frontend/Check/TDerives.lean", tder),
         ("Frontend/Check/TLife.lean", tlife))
 for name, txt in outs:

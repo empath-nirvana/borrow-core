@@ -1,0 +1,5 @@
+-- SPEC §80: a loop local is a derivation in the existing kernel.
+BoCa.Fig16.LogRel.Core.withlocalLoop_wf
+BoCa.Fig16.LogRel.Core.withlocalLoop_closed
+BoCa.Fig16.LogRel.Core.withlocalLoop_effFree
+BoCa.Fig16.LogRel.Core.unfoldV_effFree
