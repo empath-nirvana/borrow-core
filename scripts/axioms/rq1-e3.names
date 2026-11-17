@@ -1,0 +1,24 @@
+-- RQ1 E3.0 (research branch rq1-tree): value types owning records.
+BoCa.Fig16.Tree.Wp.RecsRR.nil_left
+BoCa.Fig16.Tree.Wp.RecsRR.append_left
+BoCa.Fig16.Tree.Wp.RecsRR.exists_retype
+BoCa.Fig16.Tree.Wp.STy.toO_nil
+BoCa.Fig16.Tree.Wp.STyO.down_le
+BoCa.Fig16.Tree.Wp.STyO.reread
+BoCa.Fig16.Tree.Wp.STy.kontO_down
+BoCa.Fig16.Tree.Wp.STy.kontO_mono
+BoCa.Fig16.Tree.Wp.STy.kontO_resume
+BoCa.Fig16.Tree.Wp.STy.kontO_toO_nil
+-- the world operations ported from tree-inv
+BoCa.Fig16.Tree.Wp.CovR.compS
+BoCa.Fig16.Tree.Wp.winv_swap
+BoCa.Fig16.Tree.Wp.immLend_world
+BoCa.Fig16.Tree.Wp.mutLend_world
+BoCa.Fig16.Tree.Wp.mutEnd_world
+BoCa.Fig16.Tree.ParentFn.graftOf_graft
+BoCa.Fig16.Tree.TWd.graft_ext
+BoCa.Fig16.Tree.TWd.graft_lt
+BoCa.Fig16.Tree.TWd.fresh_ext
+BoCa.Fig16.Tree.agreeOn_set
+BoCa.Fig16.Tree.TWd.setTy_ext
+BoCa.Fig16.Tree.TWd.setTy_self

@@ -158,6 +158,7 @@ import Core.TreePoolShare
 import Core.TreePoolJoinProgs
 import Core.TreeHandleFwd
 import Core.TreeHandleFwdProgs
+import Core.TreeSemO
 import Core.TreeGoal791
 import Core.Chain
 
