@@ -1,4 +1,6 @@
-# Typing judgments that exist today (#798). Frozen: do not add lines; fold judgments instead.
+# Typing judgments (#798): one kernel judgment, CDerivesX, and one checker judgment, TDerivesX, each
+# at a judgment index JIdx. Frozen: do not add lines; a new coordinate is a field of JIdx.
+# The other lines are the paper transcription's and experiments' own judgments.
 # Format: path name
 Core/Judgment.lean CDerivesX
 experiments/Affine/Affine/Elab.lean ADerives
