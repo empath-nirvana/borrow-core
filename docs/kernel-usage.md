@@ -14,11 +14,11 @@ The rows come from the definitions themselves, by script, not from a list kept b
 | `CDerivesP`-only rules (SPEC §29) | the rules of `CDerivesX` gated by `hPin : I.pin = true` (`Core/Judgment.lean`), not in `CDerives` | 3 |
 | derived nodes and `use` | the constructors of `TExpr` (`Frontend/Check/TExpr.lean:263`) that are not rules | 15 |
 | type formers | the constructors of `VTy` and `CTy` (`Core/Types.lean:44`) | 23 |
-| derived forms with no node of their own | every `Core` declaration that is a theorem concluding with `CDerivesX` (any instance), or a definition of a `VTy`, `CTy`, `Expr` or `Val`, outside the program and example files (`scripts/KernelDecls.lean`; 770 declarations, `docs/kernel-usage/decls.tsv`), grouped into the forms SPEC names | 8 |
+| derived forms with no node of their own | every `Core` declaration that is a theorem concluding with `CDerivesX` or one of its instances (not the generated rule names of `Core/JudgmentElim.lean`), or a definition of a `VTy`, `CTy`, `Expr` or `Val`, outside the program and example files (`scripts/KernelDecls.lean`; 1311 declarations at #798-D, `docs/kernel-usage/decls.tsv`), grouped into the forms SPEC names | 8 |
 | **total** | | **145** |
 
 The 114 `TExpr` constructors are exactly the first three groups, so `TExpr.ctorIdx` gives each node
-its row. The 770 Core declarations include each program's own derivation (`d_*` in
+its row. The 1311 Core declarations include each program's own derivation (`d_*` in
 `*Programs.lean`, `Folds.lean`, `CommonList.lean`, `Count.lean`, `Stdio.lean`'s model), the
 `Splits.lean` weakening helpers, and the auxiliary terms of a rule (`DivReify.lean`'s `rkV`, …).
 These are not forms a program can produce, so they get no row. `decls.tsv` lists them with their
