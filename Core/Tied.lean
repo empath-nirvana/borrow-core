@@ -1,7 +1,7 @@
 import Core.Fundamental
 
 /-!
-# Core — decision R: a derivation tied to its program's effect context  `[spec §19]`
+# Core — decision R: a derivation tied to its program's effect context  `[spec §19, §83]`
 
 An **effect context** `Ξ` gives each operation name its signature: the `i`-th operation of the
 name `n` is `(Ξ n)[i] = (q, A, B)`.  A row is **tied** to `Ξ` (`RowAt`) when every operation it
@@ -16,10 +16,10 @@ Every other rule is `CDerives`'s, `[then]` with its finaliser's row and the canc
 among them; the tie reads no cancel row (`rowAt_ofEff_fs`).  So a name has one signature across
 a derivation: every instance of a handler site has one protocol (§19 *Names*).
 
-* `CDerivesAt.toCDerives` (`CDerivesX.mono`): a tied derivation is one of `CDerives`, so `fundamentalC` and the
-  adequacy theorems hold of it.
+* `CDerivesAt.toCDerives` (`CDerivesX.mono`): a tied derivation is one of `CDerives`, so
+  `fundamentalC` and the adequacy theorems hold of it.
 * `CDerivesAt.ofEffFree`: a derivation of a term holding no `perform`, `raise` or `hnd`
-  (`Expr.effFree`) is tied at every effect context.
+  (`Expr.effFree`) is tied at every effect context; `CDerivesX.ofEffFree`, one at every index.
 * `CDerivesAt.effThenA`, `CDerivesAt.effHandle`: `CDerives.effThenA` and `CDerives.effHandle`,
   tied.
 * At a handler the tie makes its signature `E` a prefix of `Ξ n` up to α (`sig_prefix_of_rowAt`), so the
@@ -77,7 +77,7 @@ theorem CDerivesAt.withbor3U {Ξ : EffCtx} {Δ Γ a A B d} {S : Row} (x : LifeVa
     (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
 
 /-- **Every tied derivation is one of `CDerives`**: the tie dropped (`CDerivesX.mono`).
-`[spec §19]` -/
+`[spec §19, §83]` -/
 theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerivesAt Ξ Δ Γ e j) : CDerives Δ Γ e j :=
   CDerivesX.mono (I := {ties := some Ξ}) (I' := {}) ⟨Or.inl rfl, fun h => h⟩ h
@@ -485,6 +485,17 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
       exact .letPoly b hcl (ihV he.2)
         (ihN (by rw [effFree_shift]; exact effFree_subst N 0 (Val.lam b) he.1 he.2))
   | alpha _ hα ih => exact .alpha (ih he) hα
+
+/-- **A derivation of a term with no operation is one at every judgment index**: tied at the
+index's effect context, if any (`CDerivesAt.ofEffFree`), then `CDerivesX.mono`.  `[spec §19, §83]` -/
+theorem CDerivesX.ofEffFree {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
+    (h : CDerives Δ Γ e j) (he : e.effFree = true) : CDerivesX I Δ Γ e j := by
+  cases hI : I.ties with
+  | none =>
+      exact CDerivesX.mono (I := {}) (I' := I) ⟨Or.inl hI, fun h => absurd h Bool.false_ne_true⟩ h
+  | some Ξ =>
+      exact CDerivesX.mono (I := {ties := some Ξ}) (I' := I)
+        ⟨Or.inr hI, fun h => absurd h Bool.false_ne_true⟩ (CDerivesAt.ofEffFree h he)
 
 /-! ### Signature lists -/
 

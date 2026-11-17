@@ -70,10 +70,10 @@ theorem dead_append_dead {Γ Γ' : Ctx VTy} (h : Ctx.Dead Γ) (h' : Ctx.Dead Γ'
   | nil => exact h'
   | cons _ ih => exact .cons ih
 
-/-- **Weakening** by consumed slots at the end. -/
-theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
-    (h : CDerives Δ Γ e j) : CDerives Δ (Γ ++ Γ') e j := by
-  induction h using CDerives.induct with
+/-- **Weakening** by consumed slots at the end, at every judgment index.  `[spec §83]` -/
+theorem CDerivesX.append_dead {I : JIdx} {Γ' : Ctx VTy} (h' : Ctx.Dead Γ') {Δ : LifeCtx}
+    {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerivesX I Δ Γ e j) : CDerivesX I Δ (Γ ++ Γ') e j := by
+  induction h with
   | var hs => exact .var (soloP_append h' hs)
   | unitI hd => exact .unitI (deadP_append h' hd)
   | tensorI hs _ _ ih₁ ih₂ => exact .tensorI (splitP_append h' hs) ih₁ ih₂
@@ -136,10 +136,8 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | countFold S hΓ => exact .countFold S (deadP_append h' hΓ)
   | countTry S E hΓ => exact .countTry S E (deadP_append h' hΓ)
   | boundedFix A C hΓ => exact .boundedFix A C (deadP_append h' hΓ)
-  | iterate S St B R hS hΓ => exact .iterate S St B R hS (deadP_append h' hΓ)
-  | divFuel S A hS hΓ => exact .divFuel S A hS (deadP_append h' hΓ)
-  | reify S B R res hS hcl hres hΓ _ => exact .reify S B R res hS hcl hres (deadP_append h' hΓ)
-  | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact .sliceBorrowM x (deadP_append h' hΓ) hA hB hf₁ hf₂
+  | sliceBorrowM x hΓ hA hB hf₁ hf₂ =>
+      exact .sliceBorrowM x (deadP_append h' hΓ) hA hB hf₁ hf₂
   | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ =>
       exact .sliceBorrowI x (deadP_append h' hΓ) hsc hA hB hf₁ hf₂
   | sliceGetM a A hΓ => exact .sliceGetM a A (deadP_append h' hΓ)
@@ -153,7 +151,8 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | sliceSwapM a A hΓ => exact .sliceSwapM a A (deadP_append h' hΓ)
   | sliceCopyM a b A hΓ hA => exact .sliceCopyM a b A (deadP_append h' hΓ) hA
   | withbor1 x hΓ hx hsc hf₁ hf₂ => exact .withbor1 x (deadP_append h' hΓ) hx hsc hf₁ hf₂
-  | withbor2 x hΓ hx hside hf₁ hf₂ => exact .withbor2 x (deadP_append h' hΓ) hx hside hf₁ hf₂
+  | withbor2 x hΓ hx hside hf₁ hf₂ =>
+      exact .withbor2 x (deadP_append h' hΓ) hx hside hf₁ hf₂
   | withbor3 x hΓ hx hf₁ hf₂ => exact .withbor3 x (deadP_append h' hΓ) hx hf₁ hf₂
   | withload x hΓ hx hf₁ hf₂ => exact .withload x (deadP_append h' hΓ) hx hf₁ hf₂
   | withswap hΓ => exact .withswap (deadP_append h' hΓ)
@@ -184,9 +183,10 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | unfoldK C G S hC hG hS hΓ => exact .unfoldK C G S hC hG hS (deadP_append h' hΓ)
   | nuOutK hC hG hS hGf hs => exact .nuOutK hC hG hS hGf (soloP_append h' hs)
   | effSub hle _ ih => exact .effSub hle ih
-  | effPerform hf hna hac _ ih => exact .effPerform hf hna hac ih
-  | effAwait hΓ hfa ha haA hfc hc => exact .effAwait (dead_append_dead hΓ h') hfa ha haA hfc hc
-  | effRaise hf ha hrc hd _ ih => exact .effRaise hf ha hrc hd ih
+  | effPerform hAt hf hna hac _ ih => exact .effPerform hAt hf hna hac ih
+  | effAwait hAt hΓ hfa ha haA hfc hc =>
+      exact .effAwait hAt (dead_append_dead hΓ h') hfa ha haA hfc hc
+  | effRaise hAt hf ha hrc hd _ ih => exact .effRaise hAt hf ha hrc hd ih
   | effLet hs hW hU _ _ ihM ihN =>
       exact .effLet (splitP_append h' hs)
         (fun hw => live_append (P := fun s => s.ty.OwnFree) h' (hW hw))
@@ -197,20 +197,28 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
       exact .effThenDiv (splitP_append h' hs) hNZ hUq (fun hu => banged_append h' (hU hu))
         hMS hDS hfin hP hSD ihM ihN ihD
-  | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
-      exact .effHandleV (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen hdv
-        ihe
-  | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
-      exact .effHandleVB (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen hdv
-        ihe (ctxOutlives_append h' hΓd) hSd
-  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
-      exact .effHandleT (splitP_append h' hs) (deadP_append h' hd) hHr.append hHc.append ihc hn0
-        hnd hnS hlen hSN hLin ihe
-  | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
-      exact .effHandleL (splitP_append h' hs) (deadP_append h' hd) hHr.append hHw.append
+  | effHandleV hAt hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
+      exact .effHandleV hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
+        hdv ihe
+  | effHandleVB hAt hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+      exact .effHandleVB hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
+        hdv ihe (ctxOutlives_append h' hΓd) hSd
+  | effHandleT hAt hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+      exact .effHandleT hAt (splitP_append h' hs) (deadP_append h' hd) hHr.append hHc.append ihc
+        hn0 hnd hnS hlen hSN hLin ihe
+  | effHandleL hAt hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
+      exact .effHandleL hAt (splitP_append h' hs) (deadP_append h' hd) hHr.append hHw.append
         hHn.append ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
+  | iterate S St B R hAt hS hΓ => exact .iterate S St B R hAt hS (deadP_append h' hΓ)
+  | divFuel S A hAt hS hΓ => exact .divFuel S A hAt hS (deadP_append h' hΓ)
+  | reify S B R res hAt hS hcl hres hΓ _ => exact .reify S B R res hAt hS hcl hres (deadP_append h' hΓ)
   | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
   | alpha _ hα ih => exact .alpha ih hα
+
+/-- **Weakening** by consumed slots at the end. -/
+theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
+    (h : CDerives Δ Γ e j) : CDerives Δ (Γ ++ Γ') e j :=
+  CDerivesX.append_dead h' h
 
 end BoCa.Fig16.LogRel.Core
 

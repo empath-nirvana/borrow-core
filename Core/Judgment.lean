@@ -20,7 +20,7 @@ import Core.Tok
 import Core.Alpha
 
 /-!
-# Core — the typing judgment  `[spec §3, §19]`
+# Core — the typing judgment  `[spec §3, §19, §83]`
 
 `CDerivesX I Δ Γ e j`: the CBPV typing judgment on BoLo expressions, each rule once, at a
 judgment index `I` (`JIdx`), a parameter.  A field of the index is a premise that is the same
@@ -68,19 +68,19 @@ def RowAt (Ξ : EffCtx) (S : Row) : Prop :=
 
 /-- A judgment index: the gating premises of `CDerivesX`.  `ties`: the effect context the
 operation and handler rules' rows are tied to, if any.  `pin`: whether the pin rules are admitted
-(none is gated by it yet).  `[spec §3, §19, §29]` -/
+(none is gated by it yet).  `[spec §3, §19, §29, §83]` -/
 structure JIdx where
   ties : Option EffCtx := none
   pin : Bool := false
 
-/-- The tie premise at a row: `RowAt Ξ S` at `ties = some Ξ`, `True` at `none`.  `[spec §19]` -/
+/-- The tie premise at a row: `RowAt Ξ S` at `ties = some Ξ`, `True` at `none`.  `[spec §19, §83]` -/
 def JIdx.RowOK (I : JIdx) (S : Row) : Prop :=
   match I.ties with
   | none => True
   | some Ξ => RowAt Ξ S
 
 /-- `I ≤ I'`: every derivation at `I` is one at `I'`, field by field: a tie may be dropped
-(`some Ξ ≤ none`), a pin rule admitted (`false ≤ true`).  `[spec §3, §19]` -/
+(`some Ξ ≤ none`), a pin rule admitted (`false ≤ true`).  `[spec §3, §19, §83]` -/
 structure JIdx.Le (I I' : JIdx) : Prop where
   ties : I'.ties = none ∨ I'.ties = I.ties
   pin : I.pin = true → I'.pin = true
@@ -112,7 +112,7 @@ def Jdg.alphaB : Jdg → Jdg → Bool
   | _, _ => false
 
 /-- The CBPV typing judgment.  Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and
-`Ctx.SoloP`: a live slot of persistent type may be duplicated and consumed.  `[spec §3, §10]` -/
+`Ctx.SoloP`: a live slot of persistent type may be duplicated and consumed.  `[spec §3, §10, §83]` -/
 inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | var {Δ Γ i A} (h : Ctx.SoloP Γ i A) : CDerivesX I Δ Γ (.var i) (.val A)
   | unitI {Δ Γ} (h : Ctx.DeadP Γ) : CDerivesX I Δ Γ (.val .unit) (.val .unit)
@@ -619,11 +619,11 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   | alpha {Δ Γ e} {j j' : Jdg} (h : CDerivesX I Δ Γ e j) (hα : j.alphaB j' = true) :
       CDerivesX I Δ Γ e j'
 
-/-- The kernel's typing judgment: `CDerivesX` with no tie.  `[spec §3, §10]` -/
+/-- The kernel's typing judgment: `CDerivesX` with no tie.  `[spec §3, §10, §83]` -/
 abbrev CDerives := CDerivesX {}
 
 /-- **`CDerives` with its operations' and handlers' rows tied to `Ξ`** (decision R): `CDerivesX`
-at the tie `Ξ`.  `[spec §19, §28]` -/
+at the tie `Ξ`.  `[spec §19, §28, §83]` -/
 abbrev CDerivesAt (Ξ : EffCtx) := CDerivesX {ties := some Ξ}
 
 end BoCa.Fig16.LogRel.Core
