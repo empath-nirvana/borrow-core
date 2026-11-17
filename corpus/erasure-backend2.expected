@@ -132,6 +132,7 @@ core-site-fresh-const erased handles 1 performs 0 raises 1 left 0 0
 core-site-generic erased handles 2 performs 2 raises 0 left 0 0
 core-unsigned erased handles 0 performs 0 raises 0 left 0 0
 core-unwind-sum-value erased handles 0 performs 0 raises 0 left 0 0
+core-withbor3u-fin erased handles 1 performs 0 raises 1 left 0 0
 core-withlocal erased handles 0 performs 0 raises 0 left 0 0
 core-withlocal-branch erased handles 0 performs 0 raises 0 left 0 0
 core-withlocal-callback erased handles 0 performs 0 raises 0 left 0 0
@@ -156,6 +157,8 @@ fin-cancel-region erased handles 1 performs 0 raises 2 machines 1 suspends 1 lef
 fin-cancel-reraised erased handles 1 performs 0 raises 1 machines 2 suspends 1 left 0 0
 fin-cancel-tail erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
 fin-cancel-unused-site erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0
+fin-capability erased handles 1 performs 0 raises 0 left 0 0
+fin-capability-unwind erased handles 2 performs 0 raises 1 left 0 0
 fin-drop-capturing-row erased handles 2 performs 0 raises 1 machines 1 suspends 1 left 0 0
 fin-e7b erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
 fin-e7d erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0

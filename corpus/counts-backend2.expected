@@ -132,6 +132,7 @@ core-site-fresh-const 0 0 0 0 0 0
 core-site-generic 0 0 0 0 0 0
 core-unsigned 0 0 0 0 0 0
 core-unwind-sum-value 1 0 0 1 1 0
+core-withbor3u-fin 1 0 0 3 3 0
 core-withlocal 0 0 0 0 0 0
 core-withlocal-branch 0 0 0 2 2 0
 core-withlocal-callback 0 0 0 2 2 0
@@ -156,6 +157,8 @@ fin-cancel-region 0 0 0 0 0 0
 fin-cancel-reraised 0 0 0 0 0 0
 fin-cancel-tail 3 1 0 5 3 0
 fin-cancel-unused-site 3 0 0 4 3 0
+fin-capability 3 0 0 5 3 0
+fin-capability-unwind 0 0 0 4 4 0
 fin-drop-capturing-row 0 1 0 0 0 0
 fin-e7b 0 0 0 0 0 0
 fin-e7d 0 0 0 0 0 0
