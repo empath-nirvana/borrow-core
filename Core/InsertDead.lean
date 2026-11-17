@@ -637,7 +637,7 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
   CDerivesX.insert_dead rfl hd h
 
 /-- **Weakening of a tied derivation** by consumed slots inside its context, as
-`CDerives.insert_dead`: the tie is on rows, which the shift leaves alone.  `[spec §3, §19]` -/
+`CDerives.insert_dead`: the tie is on rows, which the shift leaves alone.  `[spec §3, §19, §83]` -/
 theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy}
     {e : Expr} {j : Jdg} (h : CDerivesAt Ξ Δ Γ₀ e j) : ∀ (Γa Γb : Ctx VTy), Γ₀ = Γa ++ Γb →
     CDerivesAt Ξ Δ (Γa ++ Γd ++ Γb) (e.shift Γd.length Γa.length) j :=
