@@ -14798,10 +14798,10 @@ its instances: abbreviations that keep their names, their rules and every statem
 
 ### Units
 
-**Status by step.** This entry states the whole target and lands before the code. Each step makes
+**Status by step.** This entry states the whole target, ahead of steps B to D. Each step makes
 true the clauses it names:
 
-- **A** (`ties`): built, PR #1178. True with A: `CDerivesX` and `JIdx`, `CDerives` and
+- **A** (`ties`): built, landed as #1178. True with A: `CDerivesX` and `JIdx`, `CDerives` and
   `CDerivesAt` as instances, the generated rules and eliminators, `mono`, one `insert_dead` and
   one `append_dead`; §3 *Typing*, §10, §19's `CDerivesAt Ξ`, §28's induction list, §61, §68.
 - **B** (`pin`; one `fundamentalX`): code to follow. True with B: `CDerivesP` as
