@@ -214,6 +214,40 @@ theorem finRK_eq (R : Nat → WProp) (vr : VRel) (g : KW → KW) {F : CTy} (hF :
       some (cancelOblRK (ℍ := ℍ) g (fun x => tabRK (ℍ := ℍ) R vr g F δ x) R) := by
   cases F <;> simp_all [finRK, tabRK, finClaimK, tabClaimK, cancelOblRK, tabCK, finCK, cancelOblCK, cancelOblClaimK]
 
+/-- **An entry of `tabCK` is a layer's, and every `tabCK` at any cancel table has the layer's entry
+at the same key.** The lookup lemmas of `tabNK`, `tabRK`, `tabRWK` and `tabGK` are its instances. -/
+theorem tab_lookupCK : ∀ (F : CTy) {ct : KW → Life → OpTabK KW → TableK KW} {vr : VRel}
+    {g : KW → KW} {δ : LSub} {x : KW} {m j : UInt32} {en : OpEntK KW},
+    tabCK (ℍ := ℍ) ct vr g F δ x m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
+      en = entNK q B (fun k v ρ => vr A δ x.Θ k v ρ)
+        (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+        (finCK (ℍ := ℍ) ct vr g fin δ) (fun f y ρ => (g x).Owed f (g y) ρ) ∧
+      ∀ (ct₂ : KW → Life → OpTabK KW → TableK KW) (g₂ : KW → KW) (δ₂ : LSub) (x₂ : KW),
+        tabCK (ℍ := ℍ) ct₂ vr g₂ F δ₂ x₂ m j =
+          some (entNK q B (fun k v ρ => vr A δ₂ x₂.Θ k v ρ)
+            (fun y k v ρ => vr B δ₂ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+            (finCK (ℍ := ℍ) ct₂ vr g₂ fin δ₂)
+            (fun f y ρ => (g₂ x₂).Owed f (g₂ y) ρ))
+  | .eff m₀ i₀ q A B fin rc C, ct, vr, g, δ, x, m, j, en, h => by
+      simp only [tabCK] at h
+      unfold extTabK at h
+      split at h
+      · rename_i hmj
+        cases Option.some.inj h
+        obtain ⟨rfl, rfl⟩ := hmj
+        exact ⟨q, A, B, fin, .inl ⟨rfl, rfl, rfl, rfl⟩, rfl, fun ct₂ g₂ δ₂ x₂ => by
+          simp only [tabCK, extTabK, and_self, if_true]⟩
+      · rename_i hmj
+        obtain ⟨q', A', B', fin', hL, he, hR⟩ := tab_lookupCK C h
+        exact ⟨q', A', B', fin', .inr hL, he, fun ct₂ g₂ δ₂ x₂ => by
+          simp only [tabCK, extTabK, if_neg hmj]; exact hR ct₂ g₂ δ₂ x₂⟩
+  | .ret _, _, _, _, _, _, _, _, _, h => by simp [tabCK, OpTabK.empty] at h
+  | .arr _ _, _, _, _, _, _, _, _, _, h => by simp [tabCK, OpTabK.empty] at h
+  | .amp _ _, _, _, _, _, _, _, _, _, h => by simp [tabCK, OpTabK.empty] at h
+  | .top, _, _, _, _, _, _, _, _, h => by simp [tabCK, OpTabK.empty] at h
+  | .all _ _ _, _, _, _, _, _, _, _, _, h => by simp [tabCK, OpTabK.empty] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, _, h => by simp [tabCK, OpTabK.empty] at h
+
 /-- **An entry of `tabNK` is a layer's, and every `tabRK` has the layer's entry at the same
 key.** -/
 theorem tab_lookupNK : ∀ (F : CTy) {vr : VRel} {g : KW → KW} {δ : LSub} {x : KW}
@@ -228,26 +262,9 @@ theorem tab_lookupNK : ∀ (F : CTy) {vr : VRel} {g : KW → KW} {δ : LSub} {x 
             (fun y k v ρ => vr B δ₂ y.Θ k v ρ ∧ ConsistentX y.c ρ)
             (finRK (ℍ := ℍ) R vr g₂ fin δ₂)
             (fun f y ρ => (g₂ x₂).Owed f (g₂ y) ρ))
-  | .eff m₀ i₀ q A B fin rc C, vr, g, δ, x, m, j, en, h => by
-      simp only [tabNK, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
-      unfold extTabK at h
-      split at h
-      · rename_i hmj
-        cases Option.some.inj h
-        obtain ⟨rfl, rfl⟩ := hmj
-        exact ⟨q, A, B, fin, .inl ⟨rfl, rfl, rfl, rfl⟩, rfl, fun R g₂ δ₂ x₂ => by
-          simp only [tabRK, finRK, tabClaimK, finClaimK, extTabK, and_self, if_true, tabCK, finCK,
-            cancelOblCK]⟩
-      · rename_i hmj
-        obtain ⟨q', A', B', fin', hL, he, hR⟩ := tab_lookupNK C h
-        exact ⟨q', A', B', fin', .inr hL, he, fun R g₂ δ₂ x₂ => by
-          simp only [tabRK, tabClaimK, extTabK, if_neg hmj, tabCK, finCK, cancelOblCK, finClaimK, cancelOblClaimK]; exact hR R g₂ δ₂ x₂⟩
-  | .ret _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
-  | .arr _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
-  | .amp _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
-  | .top, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
-  | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
-  | .nuSys _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | F, vr, g, δ, x, m, j, en, h => by
+      obtain ⟨q, A, B, fin, hL, he, hR⟩ := tab_lookupCK (ℍ := ℍ) (ct := (fun _ lo T => cancelTabK lo T)) F h
+      exact ⟨q, A, B, fin, hL, he, fun R g₂ δ₂ x₂ => hR (fun _ lo T => cancelTabRK lo T R) g₂ δ₂ x₂⟩
 
 /-- **Every entry of the lender's tables owes along `KW.Owed`** (`g = id`). -/
 theorem tabNK_wk {vr : VRel} {F : CTy} {δ : LSub} {x : KW} {m j : UInt32} {en : OpEntK KW}
