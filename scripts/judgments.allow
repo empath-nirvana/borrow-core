@@ -1,8 +1,7 @@
 # Typing judgments that exist today (#798). Frozen: do not add lines; fold judgments instead.
 # Format: path name
-Core/Fundamental.lean CDerives
+Core/Judgment.lean CDerivesX
 Core/PinDerives.lean CDerivesP
-Core/Tied.lean CDerivesAt
 experiments/Affine/Affine/Elab.lean ADerives
 experiments/CBPVCore/CBPVCore/Fundamental.lean CDerives
 experiments/CBPVMu/CBPVMu/Fundamental.lean CDerives
