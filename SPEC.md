@@ -14239,6 +14239,21 @@ unchanged. Backend2 keeps the cell in a frame slot on both paths. On the abort p
 slot's end and emits nothing, and the persistent contents are dropped with no release (`UNPROVED:`
 at `genLocalU`).
 
+**The loop kind (#1140).** `loop A S B R`, core text `withlocal_loop['x, @b, A, S, B, R]`, keeps
+a local cell across an uncounted loop. Its type (`withlocalLoopTy`) is
+`A ⊗ S ⊸ !(S ⊸ ∀'x ⊏ ⊓Δ. Mut 'x A ⊸ ['x](B ⊕ S)) ⊗ !(S ⊸ ∀'x ⊏ ⊓Δ. Mut 'x A ⊸ ['x]R)
+⊸ U(Loop (A ⊗ B) (A ⊗ R))`. Its term
+`withlocalLoopE` is `unfold` over the state `A ⊗ S`. Each observation lends the contents as a plain
+local (`withlocalE`) to the callback that the caller's step gives for its state: `next` finishes
+with the final contents and `B`, or goes on with the new contents and state; `close` answers the
+final contents and `R`. The rule erases to the derived lemma `withlocalLoop_wf`: `unfold`, then
+`withlocal_wf` per turn, so there is no further copy of alloc → lend → free, and no judgment or
+machine rule is added. Its side condition is `LocalBase` plus `x` free in neither `S` nor `R`. The
+kind carries its four types because the term's `unfold` reads them. Backend2 keeps the contents in
+the loop's state, a word tuple passed by value (no heap cell), and each turn lends them from a frame
+slot of that turn's function (`genLocalLoop`), so a loop makes no allocation beyond its own. Nothing
+new is `UNPROVED:`; each turn relies on `genLocal`'s frame-cell note.
+
 ### Lowering
 
 The checker emits a derived typed `withlocal` node whose erasure is the construction above. Backend2
@@ -14269,6 +14284,7 @@ Observed, `bcc interp`, `live 0`:
 | `corpus/core-withlocal-unit.bc` | `((), i32[17])` |
 | `corpus/core-withlocal-widths.bc` | each scalar width's two extremes, as bits (`u8` to `f64`) |
 | `corpus/core-withlocal-unwind.bc` (the unwinding kind: a scope that divides, and aborts at `d = 0` with the value it read) | `(inl (i32[36], i32[25]), inr i32[10])` |
+| `corpus/core-withlocal-loop.bc` (the loop kind: 0190's `count` shape; 3 allocations, all the runtime harness's I/O cells, as without a local) | `(i32[4], (i32[4], i32[128]))` |
 | `corpus/reject/core-withlocal-escape.bc` | refused: the view does not outlive `'l` (`boxed['l]`) |
 | `corpus/reject/core-withlocal-unrestricted.bc` | refused: `!thunk` does not promote over `mut 'l i32` |
 
@@ -14285,12 +14301,15 @@ state threading is introduced. There is no new index on `CDerives` and no invers
   its typed node through the checker, and Backend2's frame and register placement.
 - The family's one checker rule, indexed by `LocalKind` (#1148), built (#1162).
 - The unwinding kind (#1128), built (#1167).
+- The loop kind (#1140), built (#1174).
 - A surface form, and its producer, are #1115's. Not built.
 
 ### Open
 
-The later kinds: a local across an uncounted loop (#1140), and a `Mut` to `Imm` reborrow for
-read-only stretches (#1141). Suspension and handler-owned state are separate work.
+The later kind: a `Mut` to `Imm` reborrow for read-only stretches (#1141). Suspension and
+handler-owned state are separate work. For the loop kind: several `let mut`s in one loop (one cell
+holding a product, then a split view, or nesting), and wiring the surface `let mut` over `loop {}`
+to this constant (#1130).
 The old backend compiles the erasure; its scalar locals are not register-promoted by this entry.
 
 ---
