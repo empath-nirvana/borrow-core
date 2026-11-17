@@ -35,7 +35,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 /-- Every `CDerives` derivation is a `CDerivesP` derivation. -/
 theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ e j) : CDerivesP Δ Γ e j := by
-  induction h with
+  induction h using CDerives.induct with
 --@OFC_CASES@
 
 /-- **The Fundamental Property under `PinLaw`.** -/

@@ -259,7 +259,7 @@ def timeoutProg : Expr := bindE timeoutRE timeoutUses
 theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' : Ctx VTy}
     (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerivesAt Ξ Δ Γ e j) : CDerivesAt Ξ Δ (Γ ++ Γ') e j := by
-  induction h with
+  induction h using CDerivesAt.induct with
   | var hs => exact .var (soloP_append h' hs)
   | unitI hd => exact .unitI (deadP_append h' hd)
   | tensorI hs _ _ ih₁ ih₂ => exact .tensorI (splitP_append h' hs) ih₁ ih₂
