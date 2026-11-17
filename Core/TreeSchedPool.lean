@@ -1,5 +1,6 @@
 import Core.TreePool
 import Core.TreeCactus
+import Core.Chain.SchedProgs
 
 /-!
 # The scheduler's pool: stored tasks and their separation, kept by every operation  `[spec §62]`
@@ -41,17 +42,6 @@ open BoCa.Fig16.Tree
 open BoCa.Fig16.BoLo
 open BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Kont hndE)
-
-/-- **A stored task**: what its continuation `κ` answers (`Q`), its mask, its entry, the scheduler
-it runs under (`H`), its index and payload. -/
-structure StoredT where
-  Q : TPostV
-  M : BoCa.Loc → Prop
-  en : OpEntT
-  H : Val
-  k : Nat
-  v : Val
-  κ : Val
 
 /-- **The pool**: the tasks' shares and records, each task held at `w` with the list `ls`, its
 mask its records' masks, and each apart from the tasks after it, both ways. -/

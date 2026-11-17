@@ -1,5 +1,6 @@
 import Core.Chain.Const791
-import Core.TreePoolSpawnProgs
+import Core.Chain.SchedProgs
+import Core.StepsN
 
 /-!
 # The hardest case of #791 as a closed program  `[spec §62]`
@@ -27,8 +28,8 @@ open BoCa.BoLo (hndE hndVal freeE Kont performE opPayload)
 
 open BoCa.Fig16.Tree.Wp.SchedProgs.Park (nP)
 open BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs (parkE spawnE cancelE progOf)
-open BoCa.Fig16.Tree.Wp.SchedProgs.Spawn (TJ qsS hsS InvS hs_schedOK)
-open BoCa.Fig16.Tree.Wp.SchedProgs.Stack (QV QS stackRet)
+open BoCa.Fig16.Tree.Wp.SchedProgs.Spawn (qsS hsS)
+open BoCa.Fig16.Tree.Wp.SchedProgs.Stack (stackRet)
 
 /-- `let x = M in N`. -/
 def letE (M N : Expr) : Expr := .app (.lam N) M
