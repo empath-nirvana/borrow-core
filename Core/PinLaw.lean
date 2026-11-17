@@ -1,4 +1,4 @@
-import Core.PinDerives
+import Core.JudgmentElim
 
 /-!
 # Core — `PinLaw`, the one named hypothesis  `[spec §29]`

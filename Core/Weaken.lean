@@ -70,8 +70,10 @@ theorem dead_append_dead {Γ Γ' : Ctx VTy} (h : Ctx.Dead Γ) (h' : Ctx.Dead Γ'
   | nil => exact h'
   | cons _ ih => exact .cons ih
 
-/-- **Weakening** by consumed slots at the end, at every judgment index.  `[spec §83]` -/
-theorem CDerivesX.append_dead {I : JIdx} {Γ' : Ctx VTy} (h' : Ctx.Dead Γ') {Δ : LifeCtx}
+/-- **Weakening** by consumed slots at the end, at every judgment index without the pin rules: R1
+and R2 conclude at `r : Ref T` alone.  `[spec §83]` -/
+theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (h' : Ctx.Dead Γ')
+    {Δ : LifeCtx}
     {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerivesX I Δ Γ e j) : CDerivesX I Δ (Γ ++ Γ') e j := by
   induction h with
   | var hs => exact .var (soloP_append h' hs)
@@ -214,11 +216,14 @@ theorem CDerivesX.append_dead {I : JIdx} {Γ' : Ctx VTy} (h' : Ctx.Dead Γ') {Δ
   | reify S B R res hAt hS hcl hres hΓ _ => exact .reify S B R res hAt hS hcl hres (deadP_append h' hΓ)
   | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
   | alpha _ hα ih => exact .alpha ih hα
+  | lendR hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true
+  | lendLoopR hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true
+  | nilDead hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true
 
 /-- **Weakening** by consumed slots at the end. -/
 theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ e j) : CDerives Δ (Γ ++ Γ') e j :=
-  CDerivesX.append_dead h' h
+  CDerivesX.append_dead rfl h' h
 
 end BoCa.Fig16.LogRel.Core
 

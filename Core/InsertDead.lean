@@ -212,10 +212,12 @@ theorem live_insert (hd : Ctx.Dead Γd) {P : Slot VTy → Prop} {Γa Γb : Ctx V
 
 /-! ### Weakening -/
 
-/-- **Weakening by consumed slots inside a context**, at every judgment index: a derivation at
-`Γa ++ Γb` is one at `Γa ++ Γd ++ Γb` for dead `Γd`, the term's variables past `Γa` shifted past
-`Γd`. A tie is on rows, which the shift leaves alone.  `[spec §3, §19, §83]` -/
-theorem CDerivesX.insert_dead {I : JIdx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy}
+/-- **Weakening by consumed slots inside a context**, at every judgment index without the pin
+rules: a derivation at `Γa ++ Γb` is one at `Γa ++ Γd ++ Γb` for dead `Γd`, the term's variables
+past `Γa` shifted past `Γd`. A tie is on rows, which the shift leaves alone. R1 and R2 conclude at
+`r : Ref T` alone, so the pin rules are excluded.  `[spec §3, §19, §83]` -/
+theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γd) {Δ : LifeCtx}
+    {Γ₀ : Ctx VTy}
     {e : Expr} {j : Jdg} (h : CDerivesX I Δ Γ₀ e j) : ∀ (Γa Γb : Ctx VTy), Γ₀ = Γa ++ Γb →
     CDerivesX I Δ (Γa ++ Γd ++ Γb) (e.shift Γd.length Γa.length) j := by
   induction h with
@@ -623,20 +625,23 @@ theorem CDerivesX.insert_dead {I : JIdx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ�
       rw [hb]
       exact .letPoly b hcl hV eN
   | alpha _ hα ih => intro Γa Γb hΓ; exact .alpha (ih Γa Γb hΓ) hα
+  | lendR hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true
+  | lendLoopR hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true
+  | nilDead hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true
 
 /-- **Weakening by consumed slots inside a context**: a derivation at `Γa ++ Γb` is one at
 `Γa ++ Γd ++ Γb` for dead `Γd`, the term's variables past `Γa` shifted past `Γd`.  `[spec §3]` -/
 theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ₀ e j) : ∀ (Γa Γb : Ctx VTy), Γ₀ = Γa ++ Γb →
     CDerives Δ (Γa ++ Γd ++ Γb) (e.shift Γd.length Γa.length) j :=
-  CDerivesX.insert_dead hd h
+  CDerivesX.insert_dead rfl hd h
 
 /-- **Weakening of a tied derivation** by consumed slots inside its context, as
 `CDerives.insert_dead`: the tie is on rows, which the shift leaves alone.  `[spec §3, §19, §83]` -/
 theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy}
     {e : Expr} {j : Jdg} (h : CDerivesAt Ξ Δ Γ₀ e j) : ∀ (Γa Γb : Ctx VTy), Γ₀ = Γa ++ Γb →
     CDerivesAt Ξ Δ (Γa ++ Γd ++ Γb) (e.shift Γd.length Γa.length) j :=
-  CDerivesX.insert_dead hd h
+  CDerivesX.insert_dead rfl hd h
 
 
 end BoCa.Fig16.LogRel.Core

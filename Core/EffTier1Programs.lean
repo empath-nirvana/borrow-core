@@ -259,7 +259,7 @@ def timeoutProg : Expr := bindE timeoutRE timeoutUses
 theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' : Ctx VTy}
     (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerivesAt Ξ Δ Γ e j) : CDerivesAt Ξ Δ (Γ ++ Γ') e j :=
-  CDerivesX.append_dead h' h
+  CDerivesX.append_dead rfl h' h
 
 /-! ### Typing: calls, callbacks and one-operation handlers -/
 
