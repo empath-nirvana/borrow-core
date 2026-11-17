@@ -117,6 +117,7 @@ core-fin-nc 0 0 0 0 0 0
 core-fin-nested 0 0 0 0 0 0
 core-fin-op 0 0 0 0 0 0
 core-fin-op-cap 0 0 0 0 0 0
+core-fin-sched-own-row 0 1 0 0 0 0
 core-fin-stored-k-fin 0 1 0 0 0 0
 core-fin-stored-k-op 0 1 0 0 0 0
 core-fin-sub-row 0 0 0 0 0 0

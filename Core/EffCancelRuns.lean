@@ -2043,8 +2043,8 @@ theorem dAt_progT {Δ : LifeCtx} : CDerivesAt Ξ₁₂ Δ [] progT (.comp (CTy.e
       (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil))) rfl)
     (by decide) (by simp [rSig]) (by simp) rfl ?_
   · refine RowLe.of_mem fun o ho => ?_
-    rw [show (finR 2).rowOf ++ [rSig 2] = [rSig 2, rSig 2] from rfl] at ho
-    simp only [List.mem_cons, List.not_mem_nil, or_false, or_self] at ho
+    rw [show (finR 2).rowOf = [rSig 2] from rfl] at ho
+    simp only [List.mem_singleton] at ho
     subst ho
     exact ⟨rSig 2, rfl, OpSig.LeF.refl _⟩
   · refine .effSub (RowLe.of_mem fun o ho => ?_) dAt_inner₂
@@ -2212,8 +2212,8 @@ theorem dAt_progTA {Δ : LifeCtx} :
       (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil))) rfl)
     (by decide) (by simp [rSigA]) (by simp) rfl ?_
   · refine RowLe.of_mem fun o ho => ?_
-    rw [show (finRA 2).rowOf ++ [rSigA 2] = [rSigA 2, rSigA 2] from rfl] at ho
-    simp only [List.mem_cons, List.not_mem_nil, or_false, or_self] at ho
+    rw [show (finRA 2).rowOf = [rSigA 2] from rfl] at ho
+    simp only [List.mem_singleton] at ho
     subst ho
     exact ⟨rSigA 2, rfl, OpSig.LeF.refl _⟩
   · refine .effSub (RowLe.of_mem fun o ho => ?_) dAt_inner₂A

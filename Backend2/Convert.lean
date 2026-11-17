@@ -3003,7 +3003,7 @@ def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driv
       | some Mk, some O =>
         -- **`κ`'s cancel may suspend** (R4): the computation's cancel answers the outcome `Mk` of
         -- its cancel row `F_i`, so `κ`'s cancel is a machine of `cancelTy`'s outcome `O`
-        -- (`F_{F_i ⊕ Σ} 1`), a call point at `k`'s cancel. Its suspensions are at operations
+        -- (`F_{F_i} 1`), a call point at `k`'s cancel. Its suspensions are at operations
         -- of `F_i`, which go to the canceller: the region's handlers, this one's too, are dead
         -- (the kernel's `Kont.dead`); here they leave `κ`'s cancel through `outSusp`, to the
         -- observer of `.2`, never through this drive's clauses. The handler's values are consumed (the cancel does not read them). At a
@@ -3837,7 +3837,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
           let idx := key.2.toNat
           let some o := E[idx]? | throw "LIR: an operation"
           let kT ← vty (kTy S R o.1 o.2.2 (fs idx))
-          let cancelC := cancelTy S (fs idx)
+          let cancelC := cancelTy (fs idx)
           let cM ← outInfoC cancelC
           let cPay ← match effParts cancelC with
             | some (Sc, _) => rowPay Sc

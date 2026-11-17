@@ -33,9 +33,9 @@ main : F (((1 + 1) + 1) * i32) =
           (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F[3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] (1 + 1)) * 1)) (
         handle_with[1](
             ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1)),
-            (((!thunkv fun (p : 1 * U ((1 -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1) & F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1, 2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1)) ->
+            (((!thunkv fun (p : 1 * U ((1 -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1) & F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1)) ->
               let (u, k) = p; let () = u; c <- (force k).2; return c), ())
-              : !U (1 * U ((1 -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1) & F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1, 2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1) -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1) * 1)) (
+              : !U (1 * U ((1 -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1) & F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1) -o F[2.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0, 4.0 lin 1 ~> 1] 1) * 1)) (
           c <- return (alloc[i32] i32[3]);
           y <- (f <- return (unbang sub); w <- return (); force f w)
             unwind (m <- perform[4.0] (); z <- return (free[i32] c); e <- abort[3.0] (); absurd e);

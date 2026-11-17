@@ -476,7 +476,7 @@ theorem noUnrExn_ΞE : ΞE.NoUnrExn := by
 
 section E7
 open BoCa.Fig16.LogRel.Core.CancelIntercept (exnRow waitRow finExn find_ofEff_one find_wait
-  rowLe_append_right rowLe_dup rowLe_ofEff_cons rowLe_of_find_eq thenLe_exn dAt_timeout
+  rowLe_append_right rowLe_ofEff_cons rowLe_of_find_eq thenLe_exn dAt_timeout
   dAt_toResult dAt_raiseU dAt_bodyF)
 
 theorem rowAt_exn1 : RowAt ΞE (exnRow 1 .cancel ++ []) :=
@@ -499,7 +499,7 @@ theorem dAt_e7b {Δ : LifeCtx} :
   refine dAt_toResult ΞE_1 (by decide) (by decide) (S := []) (rowAt_nil ΞE) (by simp) ?_
   refine dAt_timeout ΞE_2 (by decide) rowAt_exn1 hn (X := boolT) (F := finExn 1 .cancel) rfl ?_ ?_
   · rw [CTy.rowOf_effOf, List.append_nil]
-    exact rowLe_dup _
+    exact RowLe.refl _
   · refine dAt_bodyF ΞE_2 (by decide) (S := exnRow 1 .cancel ++ []) (SD := exnRow 1 .cancel)
       ?_ (by simp [Row.Uniq, Row.ofEff]) ?_ (thenLe_exn 1 .cancel)
       (dAt_raiseU (.cons .nil) ΞE_1 (by decide) (by decide) .unit)
@@ -607,9 +607,9 @@ theorem dAt_e7d {Δ : LifeCtx} :
   refine dAt_timeout ΞE_2 (by decide) hSBA hnBA (X := boolT) (F := finExn2) rfl ?_ ?_
   · refine RowLe.of_mem fun o ho => ?_
     rw [CTy.rowOf_effOf] at ho
-    simp only [rowBA, Row.ofEff, List.cons_append, List.nil_append, List.mem_cons,
+    simp only [Row.ofEff, List.cons_append, List.nil_append, List.mem_cons,
       List.not_mem_nil, or_false] at ho
-    rcases ho with rfl | rfl | rfl | rfl <;>
+    rcases ho with rfl | rfl <;>
       exact ⟨_, by simp [Row.ofEff, Row.find], OpSig.LeF.refl _⟩
   -- the outer `[then]`, its finaliser `raise exn_b`
   show CDerivesAt ΞE Δ [] (thenE (.var 0) (raiseU 6) (bodyF 2 (raiseU 1))) _
@@ -683,7 +683,7 @@ theorem dAt_kResume {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
         (.here (.cons hΓ.toP))
   | cancel =>
       exact .app (.right (.left (deadSplit hΓ)))
-        (.proj₁ (.force (T := .thunk _) (C := .amp (.arr B (CTy.effOf S R)) (CTy.effOf S .unit))
+        (.proj₁ (.force (T := .thunk _) (C := .amp (.arr B (CTy.effOf S R)) (CTy.effOf [] .unit))
           (.there (.here hΓ.toP)) rfl))
         (.here (.cons hΓ.toP))
   | unr => exact absurd rfl hq
@@ -830,7 +830,7 @@ end E5
 
 section E9
 open BoCa.Fig16.LogRel.Core.CancelIntercept (exnRow finExn find_ofEff_one rowLe_ofEff_cons
-  rowLe_append_right rowLe_dup thenLe_exn dAt_toResult dAt_raiseU)
+  rowLe_append_right thenLe_exn dAt_toResult dAt_raiseU)
 
 /-- `stash`'s answer at the row `S`: a closure `U(bool ⊸ F_Σ bool)`. -/
 abbrev stashR (S : Row) : VTy := .thunk (.arr boolT (CTy.effOf S boolT))
@@ -847,10 +847,10 @@ theorem dAt_stashRet {Δ : LifeCtx} (S : Row) :
 
 /-- **`stash`'s clause** at the cancellable `bool ↠ 1` of cancel row `F`, at a row `S` with no `unr`
 operation: the closure it answers holds `k` and `x`; its cancel branch is a `[let]` of `cancel k`,
-whose `F_{F ⊕ S} 1` is read at `S`, holding `x` across it; its resume branch is a `[let]` of
+whose `F_F 1` is read at `S`, holding `x` across it; its resume branch is a `[let]` of
 `resume k ()`, applying the closure the resumed computation answers. -/
 theorem dAt_stashCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} {F : CTy}
-    (hF : F.isTop = false) (hFS : RowLe (F.rowOf ++ S) S) (hU : ¬ S.Unr) :
+    (hF : F.isTop = false) (hFS : RowLe F.rowOf S) (hU : ¬ S.Unr) :
     CDerivesAt ΞE Δ Γ (.val stashClV) (.val (clauseTy S (stashR S) (.cancel, boolT, .unit) F)) := by
   rw [Inversions.clauseTy_resuming rfl]
   refine .bangThunkV (dead_noLive hΓ) rfl
@@ -861,7 +861,7 @@ theorem dAt_stashCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
   refine .sumE (A := .unit) (B := .unit) (.left (.right (.right (.dead (deadSplit hΓ)))))
     (.var (.here (.cons (.cons (.cons hΓ.toP))))) ?_ ?_
   · -- `inl _ ⇒ cancel k; x`: `u` at `0`, `k` at `2`, `x` at `3`
-    have hct : cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit := by simp [cancelTy, hF]
+    have hct : cancelTy F = CTy.effOf F.rowOf .unit := by simp [cancelTy, hF]
     refine .effLet (A := .unit) (.right (.dead (.left (.right (.dead (deadSplit hΓ))))))
       (fun _ => fun s hs hl => ?_) (fun hS => absurd hS hU) ?_ ?_
     · simp only [List.mem_cons] at hs
@@ -874,7 +874,7 @@ theorem dAt_stashCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
       · exact dead_noLive (P := fun s => s.ty.OwnFree) hΓ s hs hl
     · refine .effSub hFS ?_
       rw [← hct]
-      exact .proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (stashR S))) (cancelTy S F))
+      exact .proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (stashR S))) (cancelTy F))
         (.there (.there (.here (.cons (.cons hΓ.toP))))) rfl)
     · exact .effSub (RowLe.nil S) (.ret (.var (.skip rfl (.skip rfl (.there (.there
         (.here (.cons hΓ.toP))))))))
@@ -894,7 +894,7 @@ theorem dAt_stashCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
         (.ret (.unitI (.weaken rfl (.cons (.cons (.weaken rfl (.cons hΓ.toP))))))) ?_
       show CDerivesAt ΞE Δ _ (.app (.app (.var 3) (.inj₁ .unit)) (.var 0)) _
       exact .app (.right (.dead (.dead (.left (.dead (.dead (deadSplit hΓ)))))))
-        (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (stashR S))) (cancelTy S F))
+        (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (stashR S))) (cancelTy F))
           (.there (.there (.there (.here (.cons (.cons hΓ.toP)))))) rfl))
         (.here (.cons (.cons (.cons (.cons (.cons hΓ.toP))))))
     · -- `g (inr ())`
@@ -908,7 +908,7 @@ theorem dAt_stashCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
 
 /-- **`stash M` at the row `S`**, `M` at `yield`'s row of cancel row `F` before `S`. -/
 theorem dAt_stash {Δ : LifeCtx} {S : Row} (hS : RowAt ΞE S) (hnS : ∀ o ∈ S, o.n ≠ 3)
-    {F : CTy} (hF : F.isTop = false) (hFS : RowLe (F.rowOf ++ S) S) (hU : ¬ S.Unr) {M : Expr}
+    {F : CTy} (hF : F.isTop = false) (hFS : RowLe F.rowOf S) (hU : ¬ S.Unr) {M : Expr}
     (hM : CDerivesAt ΞE Δ [] M
       (.comp (CTy.effOf (Row.ofEff 3 [(.cancel, boolT, .unit)] 0 (fun _ => F) ++ S) .unit))) :
     CDerivesAt ΞE Δ [] (hndE stashH M) (.comp (CTy.effOf S (stashR S))) :=
@@ -964,7 +964,7 @@ theorem dAt_storedKFin {Δ : LifeCtx} :
     ?_ (dAt_callVar .nil (.sumI₁ (.unitI (.cons .nil))))
   refine dAt_stash rowAt_exn1 hn (F := finExn 1 .cancel) rfl ?_ hU ?_
   · rw [CTy.rowOf_effOf, List.append_nil]
-    exact rowLe_dup _
+    exact RowLe.refl _
   -- `gen then x. x unwind raise exnₒ ()` at `yield`'s row of cancel row `{exnₒ}`
   show CDerivesAt ΞE Δ [] (thenE (.var 0) (raiseU 1) gen9E) _
   refine .effThen (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := yieldRow) (SD := exnRow 1 .cancel)
@@ -1035,7 +1035,7 @@ theorem dAt_tickingCl {Δ : LifeCtx} :
     (.ret (.unitI (.weaken rfl (.cons (.cons (.cons .nil)))))) ?_
   exact .app (.right (.dead (.left (.dead (.dead .nil)))))
     (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf (tickRow ++ []) .unit))
-      (CTy.effOf (tickRow ++ []) .unit)) (.there (.there (.here (.cons (.cons .nil))))) rfl))
+      (CTy.effOf [] .unit)) (.there (.there (.here (.cons (.cons .nil))))) rfl))
     (.here (.cons (.cons (.cons (.cons .nil)))))
 
 /-- **`deepGen` at `tick`'s row**: the handler at `tick`'s row, the yields at `yield`'s row before
@@ -1298,8 +1298,9 @@ theorem dAt_tmCl {Δ : LifeCtx} (S : Row) :
     rcases hs with rfl | rfl | rfl <;> cases hl
   · simp only [List.mem_cons, List.not_mem_nil, or_false] at hs
     rcases hs with rfl | rfl | rfl <;> cases hl
-  · exact .proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S boolT)) (CTy.effOf S .unit))
-      (.here (.weaken rfl (.cons .nil))) rfl)
+  · exact .effSub (RowLe.nil S) (.proj₂ (.force (T := .thunk _)
+      (C := .amp (.arr .unit (CTy.effOf S boolT)) (CTy.effOf [] .unit))
+      (.here (.weaken rfl (.cons .nil))) rfl))
   · exact .effSub (RowLe.nil S) (.ret (.sumI₁ (.unitI (.weaken rfl (.cons (.cons (.cons .nil)))))))
 
 /-- **`timeout` at the row `r`**, `r` without `wait`: `U(1 ⊸ F_{wait ⊙ r} bool) ⊸ F_r bool`.

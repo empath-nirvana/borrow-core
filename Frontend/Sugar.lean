@@ -4877,7 +4877,7 @@ def siteAtCall (c : TCx) (sp : Span) (g : String) (r : SiteRec) : DM SiteRec := 
     pure (r.mapTy (·.subst σ))
 
 /-- A clause that does not use its `κ` on some path, at an operation whose cancel branch
-`cancelTy S F` performs (its cancel row `F` or the handler's row `S` is not empty), cancels it
+`cancelTy F` performs (its cancel row `F` is not empty), cancels it
 exactly once on that path (`Fins.cancelAtEnds`): at the end of the path, and on the way out of an
 abort or a cancel through a head whose row (`Fins.opsOf`, the functions' rows by their types)
 holds an abortive
@@ -4887,7 +4887,7 @@ computation, which the elaboration writes and the kernel types. The clause's bod
 its argument `p` apart, `let (a, k) = p; M`. A boxed `κ` (BOXED-κ) is left as written. A clause
 whose heads can neither abort nor capture, and that uses `κ` on every path, is left as it is.
 
-The finaliser of an inserted `unwind (cancel k)` performs the cancel branch's row `F ⊕ S`, and runs
+The finaliser of an inserted `unwind (cancel k)` performs the cancel branch's row `F`, and runs
 when a continuation the head captures is cancelled: a capturing operation of `S` that the head
 performs would need its cancel row to hold itself (`⊤`, SPEC §27 *Open*), which the kernel
 refuses; such a clause is refused here, naming the operation.  `[spec §12, §27]` -/
@@ -4896,7 +4896,7 @@ def cancelDropped (S : Frontend.Check.CRow) (F : CCTy) (q : Frontend.Check.CQual
     (opName : Nat → Nat → String) (M : Comp) : Except Error Comp :=
   match M with
   | .letPair sp a k (.var vsp p') N =>
-    if boxK || p' != p || !BoCa.Fig16.LogRel.Core.capB q B || F.isTop || (F.rowOf ++ S).isEmpty
+    if boxK || p' != p || !BoCa.Fig16.LogRel.Core.capB q B || F.isTop || F.rowOf.isEmpty
     then pure M
     else
       let headOps (M₁ : Comp) : List Frontend.Check.COpSig :=
@@ -4947,7 +4947,7 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
       pure (coreQual q, ← need sp "an operation's type" (c.elabV A),
         ← need sp "an operation's type" (c.elabV B))
     -- Each operation's cancel row, as inferred (`HInfo.fins`, SPEC §27): the row its `κ`'s cancel
-    -- branch performs ahead of `S` (`cancelTy`).  `[spec §27]`
+    -- branch performs (`cancelTy`).  `[spec §27]`
     let finsC ← i.fins.mapM fun r => do
       match c.elabV (.thunk sp (.eff sp r (.unit sp))) with
       | some (.thunk C) => pure C
@@ -5782,7 +5782,7 @@ def pullView : Nat → TCx → Span → ItInfo → Val → DM Comp
     let Tc := yo.A
     -- What its observations perform besides what it yields (SPEC §15): the stored
     -- generator is `pull_Σ`, its clauses answer at `F_Σ`, and its `close`, the cancel of the
-    -- continuation, is at `cancelTy Σ fin`.  `[spec §15]`
+    -- continuation, is at `cancelTy fin`.  `[spec §15]`
     let rest := row.filter (·.n.toNat != i.n)
     let ppC (C : CCTy) : DM String := do
       match ← (c.surface sp (.thunk C) : Except Error VTy) with
@@ -5792,7 +5792,7 @@ def pullView : Nat → TCx → Span → ItInfo → Val → DM Comp
       | .thunk _ (.eff _ r _) => pure r.pp
       | _ => pure ""
     let Fr (A : String) : String := if rest.isEmpty then s!"F ({A})" else s!"F[{rowS}] ({A})"
-    let Kc ← ppC (BoCa.Fig16.LogRel.Core.cancelTy rest yo.fin)
+    let Kc ← ppC (BoCa.Fig16.LogRel.Core.cancelTy yo.fin)
     let Pt ← ppC (Frontend.Check.pullRowTy rest Tc Bg .unit)
     let Tt ← pp Tc
     let Bt ← pp Bg
