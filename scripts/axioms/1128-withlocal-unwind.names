@@ -1,0 +1,4 @@
+-- SPEC §80: an unwinding local is a derivation in the existing kernel.
+BoCa.Fig16.LogRel.Core.withlocalU_wf
+BoCa.Fig16.LogRel.Core.withlocalU_closed
+BoCa.Fig16.LogRel.Core.localFin_wf

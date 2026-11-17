@@ -132,6 +132,7 @@ def Const.subst (σ : TySubst) : Const → Const
   | .boundedFix A C => .boundedFix (A.subst σ) (C.subst σ)
   | .withbor1U x A B r => .withbor1U x (A.subst σ) (B.subst σ) (r.subst σ)
   | .withbor2U x b A B r => .withbor2U x b (A.subst σ) (B.subst σ) (r.subst σ)
+  | .withlocalU x b A B r => .withlocalU x b (A.subst σ) (B.subst σ) (r.subst σ)
   | .withbor3U a x A B r => .withbor3U a x (A.subst σ) (B.subst σ) (r.subst σ)
   | .withloadU a x A B r => .withloadU a x (A.subst σ) (B.subst σ) (r.subst σ)
   | .sliceBorrowMutU x b A B r => .sliceBorrowMutU x b (A.subst σ) (B.subst σ) (r.subst σ)
