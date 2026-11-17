@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Typing judgments are frozen: every `inductive …Derives…` in a Lean source must be listed in
 # scripts/judgments.allow as `path name`. The kernel has one judgment, `CDerivesX`, and the checker
-# one, `TDerivesX` (#798): a new coordinate is a field of `JIdx`, never a new judgment. Adding a line
+# one, `TDerivesX` (#798): never a new judgment; a coordinate that only gates rules is a field of `JIdx`. Adding a line
 # to the allowlist is the only way past this check, and it shows up in review; the library's own
 # lines (Core/, Frontend/, scripts/pin/) may name only those two.
 #

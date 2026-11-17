@@ -81,11 +81,11 @@ choice, block layout, a loop counter's representation) needs none of this.
 The proof burden of the previous language grew until it was unmaintainable
 (`docs/l-lang-kernel-and-lit.md` §2). Three rules (`docs/decisions.md` 19–21):
 
-- **One kernel judgment and one checker judgment.** The kernel has one typing judgment,
-  `CDerivesX I`, and the checker one, `TDerivesX I`; `CDerives`, `CDerivesAt Ξ`, `CDerivesP`,
-  `TDerivesAt Ξ` and `TDerivesP` are abbreviations at fixed indices. A new coordinate is a field of
-  `JIdx`: a gating premise the same across a rule's premises and its conclusion. Never a new
-  judgment, never a new index: a coordinate a rule changes goes in a type former or in the model.
+- **One kernel judgment and one checker judgment** (`CDerivesX`, `TDerivesX`, at a judgment
+  index `JIdx`; `CDerives`, `CDerivesAt Ξ`, `CDerivesP`, `TDerivesAt Ξ` and `TDerivesP` are
+  abbreviations at fixed indices). Never a new judgment, never a new index. A new coordinate that
+  only gates rules, the same premise across a rule's premises and its conclusion, is a field of
+  `JIdx`. Any other coordinate goes in a type former or in the model.
 - **Generalize by deleting.** A general former lands in the same change that turns the fixed
   formers it replaces into abbreviations.
 - **Do not invert `CDerivesX` casually.** Inversion lemmas, substitution over derivations, checker
