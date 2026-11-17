@@ -62,11 +62,19 @@ def lendScopeT : TExpr → Bool
   | .effLet _ _ _ _ _ _ tM tN => retLendT tM && pairOf0T tN
   | _ => false
 
+/-- The kind of an unwinding lend's borrow: `imm` at `refImm`, `mut` at `refMut`, none at a
+reborrow.  `[spec §78]` -/
+def _root_.BoCa.Fig16.LogRel.Core.LendUKind.lendKind? : BoCa.Fig16.LogRel.Core.LendUKind → Option Bool
+  | .refImm => some false
+  | .refMut => some true
+  | .reborrow _ => none
+
 /-- The kind of a borrow constant's node: `mut` at `withbor2`, `imm` at `withbor1`, and their
 unwinding forms. -/
 def TExpr.lendKind? : TExpr → Option Bool
-  | .withbor1 .. | .withborUD _ _ _ _ _ _ _ .refImm .. => some false
-  | .withbor2 .. | .withborUD _ _ _ _ _ _ _ .refMut .. => some true
+  | .withbor1 .. => some false
+  | .withbor2 .. => some true
+  | .withborUD _ _ _ _ _ _ _ k .. => k.lendKind?
   | _ => none
 
 /-- **A lend's kind**: the term is `C cell cb` with `C` a borrow constant of kind `m`. -/

@@ -2368,9 +2368,9 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | releaseUnk =>
       intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inr (.inr rfl))⟩))
   | arrRelease => intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inr ⟨_, _, rfl⟩))
-  | withborUD _ x =>
+  | withborUD k x =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
+      cases k <;> exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
   | sliceBorrowMU x =>
       intro M he
       exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
