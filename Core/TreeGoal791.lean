@@ -64,7 +64,8 @@ def SCmp.none : SCmp where
 
 /-- **An operation's entry at the tree**: the qualifier; abortive as Core's (`B` empty, not `lin`);
 payload and answer read at their value types; the cancel branch owed where Core's `capB` reads a
-cancel row (D15); the resumer guarantee the scheduler's (`fdJoinT`). -/
+cancel row (D15), its unwinding performing no operation and answering Core's `1` (`Qunit`); the
+resumer guarantee the scheduler's (`fdJoinT`). -/
 def entT (q : Qual) (B : VTy) (τA τB : STy) : OpEntT where
   q := q
   abort := B.isZero && q != .lin
@@ -73,6 +74,8 @@ def entT (q : Qual) (B : VTy) (τA τB : STy) : OpEntT where
   fin := capB q B
   fd := fdJoinT
   oc := fun _ _ => True
+  cn := fun _ _ => False
+  QC := Qunit
 
 /-- One more entry of a table. -/
 def extTab (n i : UInt32) (en : OpEntT) (T : OpTabT) : OpTabT :=
