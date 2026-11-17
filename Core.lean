@@ -102,7 +102,6 @@ import Core.Totality
 import Core.EffSafety
 import Core.Tied
 import Core.InsertDead
-import Core.PinDerives
 import Core.PinLaw
 import Core.PinFundamental
 import Core.AwaitCancel

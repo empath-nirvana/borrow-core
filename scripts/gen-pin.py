@@ -4,7 +4,6 @@
 `CDerivesX` (`Core/Judgment.lean`) holds every rule once. Its instances `CDerives`, `CDerivesAt Ξ`
 and `CDerivesP` get, in `Core/JudgmentElim.lean`, each rule under the instance's name at the
 instance's premises, an eliminator with the instance's cases, and `CDerivesX.mono`.
-`Core/PinDerives.lean` states `CDerives`'s derived rules (`Core/Fundamental.lean`) in `CDerivesP`.
 
 The typed term (`Frontend/Check/TExpr.lean`, from `scripts/pin/TExpr.tmpl.lean`) has one node per
 `CDerivesP` rule, holding the rule's arguments and one child per premise; `TExpr.erase` is the
@@ -21,17 +20,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "Core" / "Fundamental.lean"
 JUDG = ROOT / "Core" / "Judgment.lean"
 TMPL = ROOT / "scripts" / "pin"
 CHECK = "--check" in sys.argv[1:]
 
-text = SRC.read_text().splitlines()
 judg_src = JUDG.read_text()
 
 
-def block(start_pat, stop_pat, lines=None):
-    lines = text if lines is None else lines
+def block(start_pat, stop_pat, lines):
     i = next(k for k, l in enumerate(lines) if re.match(start_pat, l))
     j = next(k for k in range(i + 1, len(lines)) if re.match(stop_pat, lines[k]))
     return lines[i:j]
@@ -101,17 +97,9 @@ xcore = xhead + [l for n, b in xblocks if n not in PIN_RULES for l in b]
 while xcore and xcore[-1].strip() == "":
     xcore.pop()
 ind = drop_ties("\n".join(xcore)).replace("CDerivesX I", "CDerives").splitlines()
-# `[then]` at the pure row and `[handle]` at two variables, stated after the inductive
-derived = block(r"^/-- `\[then\]` with its finaliser at the pure row", r"^/-! ### The delay, stream")
-while derived and derived[-1].strip() == "":
-    derived.pop()
 
 
-def rename(lines):
-    return [re.sub(r"\bCDerives\b", "CDerivesP", l) for l in lines]
-
-
-# --- constructors and their explicit binders, for `PDerives.ofC` ---------------------------------
+# --- `CDerives`'s constructors, to check them against `CDerivesX`'s ----------------------------
 body = "\n".join(ind[1:])
 ctors = []
 for m in re.finditer(r"^  \| (\S+)(.*?)(?=^  \| |^  /--|\Z)", body, re.S | re.M):
@@ -151,9 +139,6 @@ for m in re.finditer(r"^  \| (\S+)(.*?)(?=^  \| |^  /--|\Z)", body, re.S | re.M)
     ctors.append((name, explicit))
 
 # --- assemble ---------------------------------------------------------------------------------
-# `Core/PinDerives.lean`: `CDerives`'s derived rules (`effThenA`, `effHandle`, …) stated in `CDerivesP`.
-der = (TMPL / "CDerivesP.tmpl.lean").read_text()
-der = der.replace("--@CORE_DERIVED@", "\n".join(rename(derived)))
 
 
 # --- the typed term (docs/compiler.md §2.3, §2.4) ---------------------------------------------
@@ -967,7 +952,7 @@ jel = jel.replace("--@ELIMS@", "\n\n".join(elim(xrules, inst) for inst in INSTAN
 jel = jel.replace("--@MONO_CASES@", mono(xrules))
 
 stale = []
-outs = (("Core/JudgmentElim.lean", jel), ("Core/PinDerives.lean", der),
+outs = (("Core/JudgmentElim.lean", jel),
         ("Frontend/Check/TExpr.lean", tex), ("Frontend/Check/TDerives.lean", tder),
         ("Frontend/Check/TLife.lean", tlife))
 for name, txt in outs:

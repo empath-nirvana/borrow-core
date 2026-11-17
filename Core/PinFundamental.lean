@@ -1,4 +1,4 @@
-import Core.PinDerives
+import Core.Demonic
 
 /-!
 # Core — the Fundamental Property and adequacy of `CDerivesP` under `PinLaw`  `[spec §29]`

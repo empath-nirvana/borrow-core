@@ -72,8 +72,8 @@ def RowAt (Ξ : EffCtx) (S : Row) : Prop :=
 /-! ### The judgment index -/
 
 /-- A judgment index: the gating premises of `CDerivesX`.  `ties`: the effect context the
-operation and handler rules' rows are tied to, if any.  `pin`: whether the pin rules are admitted
-(none is gated by it yet).  `[spec §3, §19, §29, §83]` -/
+operation and handler rules' rows are tied to, if any.  `pin`: whether the relaxed rules
+`lendR`, `lendLoopR` and `nilDead` (SPEC §29) are admitted.  `[spec §3, §19, §29, §83]` -/
 structure JIdx where
   ties : Option EffCtx := none
   pin : Bool := false
@@ -722,7 +722,7 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   target (`Row.ResumeOC`), typed in `CDerivesP` with the
   view `m : Mut 'x T` alone in its context. `d : Ref T ⊸ 1` is the owner's finaliser, run when a
   continuation captured inside the callback is cancelled. The side conditions are
-  `withbor2U`'s, with the callback's row resuming instead of unwinding. -/
+  `withbor2U`'s, with the callback's row resuming instead of unwinding.  `[spec §29, §83]` -/
   | lendR {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Life} {T B : VTy} {d M : Expr} {S : Row}
       (hPin : I.pin = true)
       (hb : Δ.Defines b) (hx : Δ.find? x = none) (hbx : b.mentions x = false)
@@ -744,7 +744,7 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   `s₀` are typed in `CDerivesP`; the steps see only the pair `(view, state)`.
 
   Only the `imm` lend: each observation hands the step a fresh view beside the state's, and two
-  `imm` views of one place are sound together; two `mut` views are not. -/
+  `imm` views of one place are sound together; two `mut` views are not.  `[spec §29, §83]` -/
   | lendLoopR {Δ : LifeCtx} {x : LifeVar} {A S B R : VTy} {N K s0 : Expr}
       (hPin : I.pin = true)
       (hx : Δ.find? x = none) (hbx : Δ.meetOfDom.mentions x = false)
@@ -761,7 +761,7 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
         (.comp (CTy.loop (.tensor (.ref A) B) (.tensor (.ref A) R)))
   /-- **A derivation at the empty context is one at every consumed context.** R1 and R2 conclude
   at `r : Ref T` alone; under binders they are `(λr. lend) x`, the λ typed at `[]` and placed
-  here.  `[spec §29]` -/
+  here.  `[spec §29, §83]` -/
   | nilDead {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       (hPin : I.pin = true)
       (hΓ : Ctx.Dead Γ) (h : CDerivesX I Δ [] e j) : CDerivesX I Δ Γ e j
@@ -774,7 +774,7 @@ at the tie `Ξ`.  `[spec §19, §28, §83]` -/
 abbrev CDerivesAt (Ξ : EffCtx) := CDerivesX {ties := some Ξ}
 
 /-- **The extended judgment**: `CDerivesX` with the relaxed rules `lendR`, `lendLoopR` and
-`nilDead` admitted, whose soundness is `PinLaw` (`Core/PinLaw.lean`).  `[spec §29]` -/
+`nilDead` admitted, whose soundness is `PinLaw` (`Core/PinLaw.lean`).  `[spec §29, §83]` -/
 abbrev CDerivesP := CDerivesX {pin := true}
 
 end BoCa.Fig16.LogRel.Core
