@@ -10,10 +10,8 @@ experiments/Grades/Grades/Judgment.lean GDerives
 experiments/HandlersAsBorrows/HandlersAsBorrows/Source.lean VDerives
 experiments/HandlersAsBorrows/HandlersAsBorrows/Source.lean XDerives
 experiments/Outlives/Outlives/Derives.lean LDerives
-Frontend/Check/TDerives.lean TDerivesAt
-Frontend/Check/TDerives.lean TDerivesP
+Frontend/Check/TDerives.lean TDerivesX
 Paper/S2_Statics/Definitions.lean Derives
-scripts/pin/TDerives.tmpl.lean TDerivesAt
-scripts/pin/TDerives.tmpl.lean TDerivesP
+scripts/pin/TDerives.tmpl.lean TDerivesX
 Support/LogicalRelation/Compatibility.lean DerivesIn
 Support/Statics/Presupposed.lean DerivesWf
