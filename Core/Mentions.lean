@@ -1,4 +1,4 @@
-import Core.PinDerives
+import Core.Demonic
 import Core.ClauseKinds
 import Core.Closed
 
