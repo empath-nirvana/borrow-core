@@ -12,6 +12,7 @@ cd "$(dirname "$0")/.."
 reg=Core/Assumptions.lean
 pats=()
 for d in Core Support Paper Examples Frontend Pipeline Reference Target Backend Backend2; do pats+=("$d/*.lean"); done
+pats+=("research/tree/*.lean")  # the tree archive (#1133)
 # Closed `Prop`s: implicit and instance binders only, then `: Prop`. The last name component.
 props=$(git grep -hoE '^(noncomputable )?(def|abbrev|structure) (_root_\.)?[A-Za-z0-9_.]+( \{[^}]*\}| \[[^]]*\])* : Prop( |$)' \
   -- "${pats[@]}" | sed -E 's/^(noncomputable )?(def|abbrev|structure) (_root_\.)?//; s/ .*//; s/.*\.//' | sort -u)

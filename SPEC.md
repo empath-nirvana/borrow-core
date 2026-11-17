@@ -14346,6 +14346,332 @@ The old backend compiles the erasure; its scalar locals are not register-promote
 
 ---
 
+## 82. Entry 81 — the surface respelling (#1116)
+
+### What it adds
+
+A new spelling of today's surface: kaikai's punctuation, Koka's effect semantics as today, and
+Hylo's parameter modes where they mean a lend or move the language already has. **It is a
+respelling.** Every construct that `corpus/**` (outside `corpus/pending/`) and `lib/**` use gets a
+new spelling, and each new form maps to one existing form, with that form's meaning and kernel
+term, cited by section below. Nothing the language cannot do today is added, except `local`
+(*Local storage*), the surface form of §80's `withlocal`. There is no kernel change.
+
+**Not built.** No parser reads the new spelling yet (#1131), and the corpus is not rewritten
+(#1132). Today's surface stays the one `bcc` reads until both land.
+
+### The rules
+
+1. **Kaikai's punctuation where kaikai has the construct:** function headers `: R / E1 + E2`, `#`
+   comments, `handle { … } with …`, `->` in handler clauses, newline-separated arms and
+   statements, `import`, `as` for a named instance, and trailing brace blocks.
+2. **#1116's decided items apply where today's language has what they name:**
+   - **Hylo modes** spell the lends and moves the language has (*Modes*): `let`, the default, for a
+     shared lend of a fresh region; `inout` for a mutable lend of a fresh region; `sink` for an
+     owned move; and `&x` at a call that may change `x`.
+   - **No `let mut`** (#1104): its sites are written in the forms of #1104's templates, all of
+     which exist today (*`let mut` sites*).
+   - `Some`/`None` are today's constructors (`lib/prelude.bc`).
+   - An effect operation and a function do not share a name.
+3. **Every other name keeps its spelling.** Keywords (`while`, `loop`, `for`, `break`, `borrow`,
+   `modify`, `fold_own`, `poly`, `must_close`, …), library names, builtins and constants are
+   unchanged. A name changes only where rule 1 or 2 changes it.
+4. **Core text is not respelled.** `def`, `main : C = M`, `x <- M`, `return V`, `thunkv`,
+   `fun (x : A) ->`, `Fun 'x < @.`, the lend constants and the other kernel formers are the
+   kernel's own text (§3, §62), and are accepted in `def` bodies as written today. Builtins a
+   surface body calls (`count_fold[S]`, `array_copy['t, u8]`, `unbang`, `inl`/`inr`,
+   `roll`/`unroll`) keep their names and bracket arguments.
+
+### Lexical
+
+| Today | New | Note |
+|---|---|---|
+| `-- comment` | `# comment` | kaikai's |
+| statements separated by `;` | a newline, or `;` | `;` keeps one-line bodies legal |
+| a statement over several lines | a newline does not end a statement inside `(…)` or `[…]`, after a line ending in a binary operator, `,`, `->`, `=` or `:`, or before a line starting with `else`, `finally`, `with`, a binary operator or `.` | the layout rule of Go, Kotlin and Koka |
+| `i32[n]`, `u8[n]`, `u64[n]`; `42`, `1.5`, `b'a'`, `'c'`, `"…"` | unchanged | §8, §17, §37 |
+| names, `'a` lifetimes, `[T]` type arguments | unchanged | kaikai writes type parameters in `[…]` too |
+
+Reserved words added: `handle`, `import`, `inout`, `sink`, `as`, `local`. Operator added: `:=`.
+None is removed, since core text uses them.
+
+### The table: today's form, the new form
+
+Every row keeps today's kernel term.
+
+**Declarations**
+
+| # | Today | New | SPEC |
+|---|---|---|---|
+| D1 | `fn f[T]<'a>(x: A, …) -> B = S` | `fn f[T]<'a>(x: A, …) : B { S }`, or `… : B = e` for one expression | §3, §31 |
+| D2 | `fn f(…) -> B with E1, E2[A] = S` | `fn f(…) : B / E1 + E2[A] { S }` | §18, §38 |
+| D3 | a named row entry `with src: E` | `/ src: E` | §38 |
+| D4 | `where S: 'c` | unchanged, after the row: `fn f[S]<'c>(…) : B where S: 'c { … }` | §23 |
+| D5 | `total fn …`, `div def …` | unchanged | §14 |
+| D6 | `main -> T = S` | `fn main() : T { S }` | §11, §34 |
+| D7 | `include name` | `import name` (the same splice of `lib/name.bc`) | §11 |
+| D8 | `extern name : A` | unchanged | §11, §72 |
+| D9 | `type N[T]<'a> = A` (an alias) | unchanged | §42 |
+| D10 | `data N[T] = C1 \| C2(A, B) \| C3(f: A)` | unchanged: `data` introduces constructors, `type` stays the alias | §42 |
+| D11 | `data N = { f: A, … }` (a record) | unchanged | §42 |
+| D12 | `shape`, `block σ`, `val σ`, `fam` | unchanged | §5 |
+| D13 | `poly f[T]<'a>(x: view 'a T) -> R`, `poly f at T = e` | `poly f[T]<'a>(x: view 'a T) : R`, `poly f at T = e` | §36 |
+| D14 | `effect E[T] { fn op(x: A) -> B; ctl op2(x: A) -> B }` | `effect E[T] { op(x: A) : B; ctl op2(x: A) : B }`: an answering operation is unmarked, and `ctl` marks a control operation | §18, §38 |
+| D15 | `must_resume ctl op(…) -> B`, `multi ctl op(…) -> B`, `-> never` | `must_resume ctl op(…) : B`, `multi ctl op(…) : B`, `: never` | §18, §25 |
+| D16 | `handler h[T](p: P): E[A], A -> R with E2 = { return(x) = M; op(x, k) = N }` | `handler h[T](p: P) : E[A], (A) -> R / E2 { return(x) -> M; op(x, k) -> N }` | §18, §19 |
+| D17 | an answering handler `handler h(mut s: S): E = { op(x) = e }` | `handler h(mut s: S) : E { op(x) -> e }` | §18 |
+| D18 | lent handler state `handler h(&mut i: I): E = { … }` | `handler h(inout i: I) : E { … }` | §18, §32 |
+| D19 | the field marker `must_close(release) f: A` | unchanged | §27 |
+| D20 | `def name[P] : A = V`, `main : C = M` | unchanged (core text) | §3, §76 |
+
+Also unchanged: projections `.1`/`.2`; field reads `x.f`; hex literals `0x…`; the lifetimes
+`top`, `dom`, `/\`, `\/`, `'main`; the binders `all`, `forall`, `Fun`, `Λ`; core rows `~>`,
+`lin`/`cancel`/`unr`, `row r`, `site s`, `cancel[…]`; the capabilities `stdin`, `stdout`, `stderr`,
+`clock`, `args`; library names; every `host[op]`; the Unicode spellings (`⊸ ⊕ μ λ ∀ ⊏ ⊓ ⊔ ⊓Δ ⊤`);
+and the constants written only in `corpus/forms.bc` (`shorten_imm`, `withbor_s_*`, `withbor_f2_*`,
+the `*u` lends, `release_bang`/`release_unk`, `copy_bang`, `:>`).
+
+**Types**
+
+| # | Today | New | SPEC |
+|---|---|---|---|
+| T1 | `!(A => B)`, `!(A => B with E)` in surface signatures, also under `all 'x < @.` | `!((A) -> B)`, `!((A) -> B / E)`; `1 => B` is `(1) -> B`. Types in core text keep `=>` | §2, §33 |
+| T2 | `A => B` without `!` (a linear block type) | `(A) -> B` | §30, §33 |
+| T3 | `A * B`, `1`, `A + B`, `0`, `never`, `bool` | unchanged | §3, §42 |
+| T4 | `imm 'a T`, `mut 'a T`, `view 'a T`, `array_imm 'a A`, `array_mut 'a A`, `text 'a`, `text_mut 'a`, `box 'c A`, `ref A` | unchanged as types. Only `imm`, `mut`, `array_imm` and `array_mut` at a parameter with a fresh region are written as a mode (P1–P3) | §4, §9, §17, §23 |
+| T5 | `U`, `F`, `-o`, `&`, `mu`, `nu`, `pull`, `sized`, `loop A B`, `all 'x < @.`, `Clo[A, B]<'c>` | unchanged | §3, §7, §14, §15, §22 |
+| T6 | `i32 i64 u8 u32 u64 f32 f64`, `array A`, `string`, `buf A`, `lit`, `Option[T]` | unchanged | §8, §9, §17, §37, §73 |
+
+**Parameters, lends and places**
+
+| # | Today | New | SPEC |
+|---|---|---|---|
+| P1 | `fn f<'a>(x: imm 'a T)`, `'a` used nowhere else; the call `f(&v)` | `fn f(x: T)` (`let`); the call `f(v)` | §12, §62 |
+| P2 | `fn f<'a>(x: array_imm 'a A)`, `'a` fresh; the call `f(&v)` | `fn f(x: array A)`; the call `f(v)` | §9 |
+| P3 | `fn f<'a>(x: mut 'a T)` or `array_mut 'a A`, `'a` fresh; the call `f(&mut v)` | `fn f(x: inout T)` or `x: inout array A`; the call `f(&v)` | §9, §12 |
+| P4 | an owned parameter `x: T` of a linear type or of a type variable, in a `fn` or a `handler` | `x: sink T` (a bare `x: A` reads as a lend) | §3 |
+| P5 | a parameter of a persistent type (`i32`, `bool`, `!…`, `lit`) | `x: T`, unchanged: `let` and `sink` coincide at `!` | §2 |
+| P6 | a parameter whose region is named elsewhere (the result, another parameter, a `where`, a row) | its type unchanged, `x: imm 'a T`; the call's `&v` is `v` | §23 |
+| P7 | `&mut x` where a lend is passed (`map_insert(&mut m, k, v)`, `with h(&mut c)`) | `&x` | §12 |
+| P8 | `&x`, a shared lend at a call | `x` (the callee's mode says it is lent) | §12 |
+| P9 | `let r = &x; S`, a shared lend for the rest of the block | `borrow imm x { r -> S }` | §14 |
+| P10 | `borrow imm P { 'x, b -> S }`, `borrow mut P { … }`, `borrow mut (r1, r2) { … }` | unchanged | §4, §9 |
+| P11 | `borrow mut &mut x { 'l, b -> S }` | `borrow mut &x { 'l, b -> S }` | §12 |
+| P12 | `modify P { v -> S }`, `modify &mut x { v -> (e, r) }` | `modify P { v -> S }`, `modify &x { v -> (e, r) }` | §12, §41 |
+| P13 | `*e`, `*&mut m` | `*e`, `*&m` | §4 |
+| P14 | `clone(x)` | unchanged | §42 |
+| P15 | `x.f` read; `x.f = e` on a `for`'s `mut` leaf | unchanged; on a `let mut` record, #1104's template | §42, §60 |
+
+**Expressions and data**
+
+| # | Today | New | SPEC |
+|---|---|---|---|
+| E1 | `let p = e; N` | `let p = e`, then `N` on the next line or after `;` | §42 |
+| E2 | `x <- M; N` in a surface body | `let x = M`; `x <- return V` is `let x = V` | §3 |
+| E3 | a final `return V` in a surface body | `V` | §3 |
+| E4 | `if c { S1 } else { S2 }`, `if c { S }` | unchanged | §42 |
+| E5 | `match e { p1 -> M1 \| p2 -> M2 }` | arms one per line, or separated by `\|` on one line | §42 |
+| E6 | patterns `x _ () (p, …) C C(p) box C(p) N { f: p } n u8[n] 'c' true false inl p inr p` | unchanged | §42 |
+| E7 | `case V { inl x -> M \| inr y -> N }` | arms as E5 | §3 |
+| E8 | `C(e, …)`, `box C(e, …)`, `N { f: e, … }` | unchanged | §42 |
+| E9 | `fold_imm e { … }`, `fold_own e { … }`, `fold_reuse e { … }` | unchanged, arms as E5 | §60, §61 |
+| E10 | blocks `!{ x -> S }`, `{ () -> e }`, `{ x -> S }` | unchanged; a block that is a call's last argument may trail the call: `f(a) { x -> S }` is `f(a, { x -> S })` | §30, §33 |
+| E11 | infix `+ - * / % == != < <= > >= && \|\|`, `not` | unchanged | §8, §39 |
+| E12 | library functions (`checked_div`, `div_euclid`, `get`, `at`, `set`, `swap_at`, `map_*`, `buf_*`, `eq_lit`, …) | unchanged | `lib/` |
+| E13 | builtins `array_new[A] (n, f)`, `count_fold[S] (…)`, `count_try`, `unbang`, `roll`, `unroll`, `absurd`, `boxed['x]`, `unbox`, `copy[…]`, `release_*`, `host[op]`, `withbor*`, `withlocal`, `slice_*` | unchanged | §2–§9, §16, §80 |
+
+**Effects and handlers**
+
+| # | Today | New | SPEC |
+|---|---|---|---|
+| H1 | `with h(e) { M }` | `handle { M } with h(e)` | §18, §19 |
+| H2 | `match with h { M } { arms }` | `match handle { M } with h { arms }`. The handler after `with` is never a call with a trailing block: a `{` after it belongs to the enclosing form | §18 |
+| H3 | a named instance `with n = h(e) { M }`; `n.op(v)` | `handle { M } with h(e) as n`; `n.op(v)` | §38 |
+| H4 | `with h(…) { M } finally { D }` | `handle { M } with h(…) finally { D }` | §27 |
+| H5 | `op(v)` | unchanged | §18 |
+| H6 | `k(v)` in a clause | unchanged: the clause names its continuation | §19 |
+| H7 | `with deep { … }`, `with on_exhausted(f) { … }`, `with spawn { … }` | `handle { … } with deep`, `handle { … } with on_exhausted(f)`, `handle { … } with spawn` | §20, §30 |
+| H8 | `raise(e)`, `to_result`, `default(d)`, `map_err(f)` | unchanged | §39 |
+| H9 | `perform[n.i]`, `abort[n.i]`, `handle_with[n](…)`, `M unwind (D)` | unchanged (core text) | §19, §27 |
+
+**Loops, generators, pipes, tasks, I/O**
+
+| # | Today | New | SPEC |
+|---|---|---|---|
+| L1 | `while c { M }`, `loop { M }` | unchanged | §14 |
+| L2 | `for x in a..b { M }`; `for x in xs { M }` over `sized` data | unchanged | §16 |
+| L3 | `for x in g(e) { M }` over a `Yield[T]` generator | unchanged | §15 |
+| L4 | `break`, `break e`, `continue`, `return e` in a loop body | unchanged, with today's meaning | §14, §16 |
+| L5 | `for … { … } else { d }`, a loop's value | unchanged | §16 |
+| L6 | `yield(x)`, `effect Yield[T]` | unchanged | §15 |
+| L7 | `let g : U (pull A B R) = gen(v)` | unchanged | §15 |
+| L8 | `e \|> s`, `e >\| s` | unchanged | §33, §70 |
+| L9 | `effect Async { ctl await(); ctl log(x: i32) }`, `spawn`, `Task[A]` | `effect Async { ctl await() : 1; ctl log(x: i32) : 1 }`; sites as H1 | §30, §32 |
+| L10 | `Stdin`, `Stdout`, … and their operations, `println`, … | declared as D14; calls unchanged | §34 |
+| L11 | recursion, `bounded_fix`, `Exhausted` | unchanged | §20, §21 |
+
+### Local storage: `local`
+
+The one row beyond today's surface spelling: the explicit form of §80's `withlocal`. Its kernel
+constant is built (§80); its surface producer is #1115's, not built. No corpus program uses it.
+`let mut` does not elaborate to it.
+
+| # | Form | Meaning | SPEC |
+|---|---|---|---|
+| S1 | `local x = e` or `local x: A = e`, then the rest of the block | one `withlocal` scope over the rest of the enclosing block: `withlocal['l, @b, A, B] e (Λ'l. λx. ⟦rest⟧)`, `'l` fresh. `x` names the view `mut 'l A`, never a value | §80 |
+| S2 | `x` in an expression | a read of the contents: a `withswap` answering `(v, v)`. Persistent `A` only; a read of a linear local is the kernel's refusal | §80, §12 |
+| S3 | `x := e` | a store: a `withswap` answering `(e, ())`, `e` evaluated first. The old contents are consumed by the existing rules | §80 |
+| S4 | the end of the block | the view is released; the final contents come back with the result (`A ⊗ B`) and are consumed | §80 |
+
+Its limits are §80's: the plain variant only, so the scope's row is empty, and no unwind or
+suspension leaves it (§80 *Open*).
+
+### Modes
+
+| Mode | Means exactly | Today | Kernel |
+|---|---|---|---|
+| `x: T` (`let`) | a shared lend for the call, its region fresh | `x: imm 'a T` or `array_imm 'a A`, `'a` fresh; the caller writes `&v` | `withbor1`, or `copy` of an `imm` (§12, §62) |
+| `x: inout T` | a mutable lend for the call, its region fresh | `x: mut 'a T` or `array_mut 'a A`, `'a` fresh; the caller writes `&mut v` | `withbor2`/`withbor3` (§12, §62) |
+| `x: sink T` | an owned move | `x: T`, linear | the argument itself (§3) |
+| `&x` at a call | the call may change `x` | `&mut x` | lend sugar (§12) |
+
+- Inside the body nothing changes: an `inout` parameter is a `mut 'a T`, written with `modify`,
+  `*`, and the `slice_*` and `array_*` constants as today. Its region is anonymous unless the
+  signature names it (P6).
+- A parameter of a persistent type needs no mode, since `let` and `sink` coincide. A parameter
+  whose region is named elsewhere in the signature keeps its explicit type (P6): a mode cannot say
+  which region a result borrows from.
+- With `&` gone from shared lends (P8), a lend `at(a, i)` and a move `array_set(a, i, v)` look the
+  same at the call; the callee's mode says which, as in Hylo.
+
+### `let mut` sites
+
+`let mut` is removed (#1104), so it has no new spelling. Each site is written in the form #1104's
+migration templates give for its pattern; each of those forms exists today and has a row above:
+
+| Template | Today's form | Rows |
+|---|---|---|
+| T-value | `let x = e` shadowing; `let x = if …`; a loop's value `for … { break v } else { d }` | E1, E4, L5 |
+| T-fold | `count_fold[S] (!{ (i, s) -> … }, hi, lo, s0)`, `count_try[S, E]` | E10, E13 |
+| T-rec | a recursive `fn go(state…)`, with `Exhausted` | D1, L11 |
+| T-mutlend | `f(&mut x)`, `borrow mut a { 'x, v -> … }`, `modify` on a `mut 'a` parameter | P3, P7, P10, P12 |
+| T-lend | `modify &mut x { x -> (e, ()) }` on a plain `let` | P12: `modify &x { x -> (e, ()) }` |
+| T-gen | a generator `fn` whose locals are its state | L3, L6 |
+
+Every `let mut` pattern of the corpus has a template that checks and gives the same output, so no
+corpus program is lost. T-lend is threaded by the same elaboration as `let mut`; whether it stays
+is #1111's question.
+
+### Grammar
+
+Productions not listed are today's (§3, §42). `NL` is a newline.
+
+```
+program   ::= (decl NL)*
+decl      ::= 'import' name
+            | 'fn' name tparams? '(' params? ')' ':' type row? where? fbody
+            | 'fn' 'main' '(' ')' ':' type row? fbody
+            | 'effect' name tparams? '{' (opdecl sep)* '}'
+            | 'handler' name tparams? ('(' hparams ')')? ':' hsig row? '{' (clause sep)* '}'
+            | 'data' name tparams? '=' datadef
+            | 'type' name tparams? '=' type
+            | 'poly' name tparams? '(' params ')' ':' type
+            | 'poly' name 'at' type '=' expr
+            | 'extern' name ':' type
+            | coredecl                                    # def …, main : C = M (unchanged)
+tparams   ::= ('[' name (',' name)* ']')? ('<' lifetime (',' lifetime)* '>')?
+params    ::= param (',' param)*
+param     ::= name ':' mode? type
+mode      ::= 'inout' | 'sink'                            # absent: let
+hparams   ::= hparam (',' hparam)*
+hparam    ::= 'mut' name ':' type | name ':' mode? type
+hsig      ::= rowitem (',' '(' type ')' '->' type)?       # E[A], (A) -> R   or   E
+row       ::= '/' rowitem ('+' rowitem)*
+rowitem   ::= (name ':')? name ('[' type (',' type)* ']')?
+where     ::= 'where' name ':' lifetime (',' name ':' lifetime)*
+fbody     ::= '=' expr | block
+opdecl    ::= qual? name '(' params? ')' ':' type         # no qual: answering
+qual      ::= 'ctl' | 'must_resume' 'ctl' | 'multi' 'ctl'
+clause    ::= name '(' names? ')' '->' (expr | block)     # return(x) -> …, op(x) -> …, op(x, k) -> …
+                                                          # several statements need a block
+block     ::= '{' (stmt sep)* expr? '}'
+stmt      ::= 'let' pat (':' type)? '=' expr
+            | 'local' name (':' type)? '=' expr           # one withlocal over the rest of the block
+            | name ':=' expr                              # a store into a local
+            | expr
+sep       ::= NL | ';'
+expr      ::= today's expressions, and
+            | 'handle' block 'with' name targs? ('(' args ')')? ('as' name)? ('finally' block)?
+            | 'match' expr '{' arm (armsep arm)* '}'      # armsep ::= NL | '|'
+            | call block                                  # a trailing block is the last argument
+            | '&' place                                   # today: &mut place
+type      ::= today's types, and
+            | '(' types? ')' '->' type row?               # today: A => B with E
+```
+
+### Spelling choices
+
+| Old form | Spelling | Not taken |
+|---|---|---|
+| `data Option[T] = Some(T) \| None` | `data` for declarations with constructors; `type` stays the alias | kaikai's `type` for both |
+| `effect Stdout { fn print_byte(b: u8) }`, `ctl raise(e: E) -> never` | an answering operation is unmarked (`print_byte(b: u8) : 1`); `ctl` marks a control operation | keeping `fn`; Koka's `fun`/`ctl` |
+| `match t { None -> n \| Some(r) -> n + sum(r) }` | arms on new lines, or `\|` between arms on one line | new lines only; `;` |
+| `: Fail[E], A -> A with Fail[E2]` | `: Fail[E], (A) -> A / Fail[E2]`, read as the function type a handler is | `A -> A / …`; `on A -> …` |
+| `local`'s keyword | `local`, which names the kernel constant and reads as storage; `:=` is the store, as in kaikai | `cell`, `place` |
+
+Consequences: `handle { … } with h` puts the handler after its body, so nested handlers read
+inside out. `count_fold[S] (step, hi, lo, s0)` keeps today's order, the end before the start.
+
+### Programs
+
+Ten corpus programs are translated whole, beside today's text (#1116): `corpus/aoc/2020-08.bc`,
+`corpus/aoc/2021-06.bc`, `corpus/alpha-effect-row.bc`, `lib/fail.bc`, `corpus/async-bank.bc`,
+`corpus/async-bank-inbox.bc`, `corpus/effects-sum-gen.bc`, `corpus/data-option-block.bc`,
+`corpus/data-config.bc` and `corpus/decl-guard.bc`. Each is expressible. They are checked by hand
+only: with no parser, the translations are not run.
+
+### Baseline
+
+No kernel, checker, elaborator, backend or library change: every theorem, rule and program answer
+is unchanged. Today's surface is the one `bcc` reads.
+
+### Units
+
+- The parser for the new spelling (#1131). Not built.
+- The corpus and library rewritten in it (#1132). Not built.
+- `local`'s surface producer (#1115). Not built.
+
+### Open
+
+These are not part of the respelling.
+- **Loop state across an uncounted loop.** Its step is a `!` closure, which cannot capture a `mut`
+  view, and a lend held across turns is a lend across a stop (§14). The routes are a relaxed
+  `withlocal` variant or §14's per-turn re-lend.
+- **`iterate`** has no core-text spelling, no producer and no Backend2 rule.
+- **The loop-state spelling** (`loop_with`, Futhark's `loop`, `for` over `withlocal`) and whether
+  T-lend stays (#1111).
+- **Rebinding** beyond a shadowing `let`.
+- **`let mut` as kaikai's `var x := e` / `x := e`**: the removal stands (#1104).
+- **Views as values and named regions** beyond `imm 'a`, `mut 'a` and `view 'a`.
+- **Borrow extent**, lexical or until last use.
+- **Pipes:** kaikai's `|`, `||`, `|?`, `|!`, and §75's connector (#1103).
+- **A handler short form** beyond today's answering handlers.
+- **Absence and failure** (`Option` answers and an absence effect).
+- **Capability threading** (#1111).
+- **The `set` mode** (the kernel has no uninitialised places, #639) and **`subscript … yield`** (no
+  user-written lend projection).
+- **`&x` as a write to a plain `let` value**, T-lend's form (#1111).
+- **Exits as effects** (`Return`, `Break`, `Continue`), and a producer for `[handle-last]`.
+- **New forms:** `#{…}` interpolation, match guards, array literals and `xs[i]`, operators at
+  `u32`/`u64`, `{ r with f = e }`, effect-qualified calls (`Log.log(…)`), row aliases, inclusive
+  ranges `[a..b]`.
+- **`box resume`**, a written BOXED-κ marker; drivers recognised by type.
+- **Kernel pieces:** field lends of record values; `withlocal`'s effect-row variants; a kernel form
+  for handler-local state; shared borrows across tasks' waits (#821); a `finally` writing places;
+  two index lends into one array; array literals of linear elements.
+
+---
+
 ## Status
 
 What implements each entry is kept one paragraph per file in `docs/status/`: the paragraphs
