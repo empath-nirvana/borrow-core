@@ -177,6 +177,7 @@ def Val.renameLife (f : Span → String → Life) : Val → Val
   | .inst s V a => .inst s (V.renameLife f) (a.renameLife f)
   | .ascribe s V A => .ascribe s (V.renameLife f) (A.renameLife f)
   | .const s c => .const s (c.renameLife f)
+  | .constU s c d => .constU s (c.renameLife f) (d.renameLife f)
   | .shorten s m σ a V => .shorten s m (σ.renameLife f) (a.renameLife f) (V.renameLife f)
   | .lend s x m => .lend s (x.renameLife f) m
   | .sugar s g => .sugar s g

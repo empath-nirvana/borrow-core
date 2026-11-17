@@ -251,7 +251,70 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
           (.consume hdt hdc hde hd))
   | _ => err sp "internal error: not an unwinding borrow"
 
+/-! ### Unwinding borrows with a written finaliser  `[spec §78]` -/
 
+/-- The node of an unwinding borrow whose finaliser `d` is written (SPEC §78), from `d`'s check at
+`U(src ⊸ F_∅ 1)`: the rule's context is dead up to persistent slots, so every slot `d` uses is
+persistent (`d` may name them, K1.3b).  [spec §78] -/
+def finRes {src A : CVTy} (dsp : Span) (mk : TExpr → TExpr)
+    (rd : Res Δ T (.val (.thunk (.arr src (effOf [] .unit)))))
+    (h : ∀ {Γ}, BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ →
+      TTied rd.pins rd.sigs Δ Γ rd.t (.val (.thunk (.arr src (effOf [] .unit)))) →
+      TTied rd.pins rd.sigs Δ Γ (mk rd.t) (.val A)) :
+    Except Error (Σ B : CVTy, Res Δ T (.val B)) :=
+  if hs : usedSat BoCa.Fig16.LogRel.Core.VTy.persistent T rd.F.u = true then
+    pure ⟨A, mk rd.t, rd.sigs, rd.pins,
+      (rd.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hs).map fun _ ⟨hd, hp⟩ =>
+        h (deadP_of_live hp) hd⟩
+  else err dsp ("the finaliser of an unwinding borrow holds a variable that is not persistent: " ++
+    "it runs at the borrow's context, where only persistent variables are live")
+
+/-- `withbor{1,2,3}u[…] unwind (d)` at `Σ_D = ∅`, `Σ_M = Σ` (SPEC §78, §19's rule): the source's
+type, the callback's row, and the node given `d`'s check at the source at the empty row. The
+premises are §19's, decided as for the consume finaliser (`synConstU`).  `[spec §78]` -/
+def synConstFin (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp dsp : Span) :
+    Const → Except Error (Σ src : CVTy, CRow ×
+      (Res Δ T (.val (.thunk (.arr src (effOf [] .unit)))) →
+        Except Error (Σ A : CVTy, Res Δ T (.val A))))
+  | .withbor1U _ A B r => do
+      let A ← E.elabV Δ A
+      let B ← E.elabV Δ B
+      let S ← E.elabRow Δ sp r
+      let x := Δ.freshVar
+      let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
+      let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
+      let ⟨hS⟩ ← unwindRow sp x S
+      pure ⟨.ref A, S, fun rd =>
+        finRes dsp (fun td => .withbor1UD (at_ sp)
+            (.val (BoCa.Fig16.LogRel.Core.withbor1UTyD x Δ.meetOfDom A B S S)) A B S [] S x td) rd
+          fun hΓ h => TTied.withbor1UFin (at_ sp) x hΓ hx (scopedB_sound hsc) h₁ h₂ hS h⟩
+  | .withbor2U _ b A B r => do
+      let b ← E.elabL Δ b
+      let A ← E.elabV Δ A
+      let B ← E.elabV Δ B
+      let S ← E.elabRow Δ sp r
+      let x := Δ.freshVar
+      let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
+      let ⟨hside⟩ ← outlivesWitness sp b A
+      let ⟨hS⟩ ← unwindRow sp x S
+      pure ⟨.ref A, S, fun rd =>
+        finRes dsp (fun td => .withbor2UD (at_ sp)
+            (.val (BoCa.Fig16.LogRel.Core.withbor2UTyD x Δ.meetOfDom A B S S)) A B S [] S x td) rd
+          fun hΓ h => TTied.withbor2UFin (at_ sp) x hΓ hx hside h₁ h₂ hS h⟩
+  | .withbor3U a _ A B r => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      let B ← E.elabV Δ B
+      let S ← E.elabRow Δ sp r
+      let x := Δ.freshVar
+      let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
+      let ⟨hS⟩ ← unwindRow sp x S
+      pure ⟨.mut a A, S, fun rd =>
+        finRes dsp (fun td => .withbor3UD (at_ sp)
+            (.val (BoCa.Fig16.LogRel.Core.withbor3UTyD a x Δ.meetOfDom A B S S)) a A B S [] S x td)
+          rd
+          fun hΓ h => TTied.withbor3UFin (at_ sp) x hΓ hx h₁ h₂ hS h⟩
+  | _ => err sp "`unwind (d)` is the finaliser of `withbor1u`, `withbor2u` or `withbor3u` only"
 
 /-- The type and derivations of a constant or derived form (syntax-core §8, §8a, §9). -/
 def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :

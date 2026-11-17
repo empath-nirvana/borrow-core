@@ -100,6 +100,7 @@ def _root_.Frontend.Val.hygD (defs : Ren) (glob : String → Bool) (ρ : Ren) : 
   | .inst sp V a => do pure (.inst sp (← V.hygD defs glob ρ) a)
   | .ascribe sp V A => do pure (.ascribe sp (← V.hygD defs glob ρ) A)
   | .const sp c => pure (.const sp c)
+  | .constU sp c d => do pure (.constU sp c (← d.hygD defs glob ρ))
   | .shorten sp m s a V => do pure (.shorten sp m s a (← V.hygD defs glob ρ))
   | .lend sp x m => pure (.lend sp (lookI ρ x) m)
   | .sugar sp (.forSite i) => pure (.sugar sp (.forSite { i with w := look ρ i.w }))

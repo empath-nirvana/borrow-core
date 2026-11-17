@@ -2433,7 +2433,24 @@ def valAtom : Nat → P Val
           expectSym "]"
           pure as
         match Const.ofArgs k as with
-        | some c => pure (.const (← spanFrom st) c)
+        | some c =>
+          -- `withbor{1,2,3}u[…] unwind (d)`: the unwinding borrow with the written finaliser `d`
+          -- (SPEC §78). `unwind` right after the constant is its own, not a `[then]`'s.
+          -- [spec §78]
+          let unw := match c with
+            | .withbor1U .. | .withbor2U .. | .withbor3U .. => true
+            | _ => false
+          if unw && (← isKw "unwind") && (← peekAt 1).tok == .sym "(" then
+            -- Core text only: a surface `finally` is elaborated to it.  [spec §78]
+            if (← get).resolve && (← get).surf then
+              failAt (← peek).span ("`unwind (d)` after an unwinding borrow is core text; in a " ++
+                "surface body it is not written (a `finally` is elaborated to it)")
+            discard bump
+            expectSym "("
+            let d ← val n
+            expectSym ")"
+            return .constU (← spanFrom st) c d
+          pure (.const (← spanFrom st) c)
         | none => failAt (← spanFrom st) s!"malformed arguments of `{k.str}`"
       | none => expected "a value"
 
