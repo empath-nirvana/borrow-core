@@ -8,8 +8,8 @@ technique) after the flattening-pointwise relation `UpdXW` failed its frame step
 
 **Evidence kept.**
 - `Support/Model/Tree/World/UpdXW.lean`: the pointwise relation `UpdXW` and its composition (`XOptW.trans`). `not_xoptWFrameAt`, which refuted `xopt_comp`'s route at it, is retired (see "Retired results").
-- `twp_refuses_last_copy` and `twp_refuses_lendEnd_live_copy`, now in `Core/TreeConsume.lean`. Neither reads `↭`.
-- `Core/TreeConsume.lean` (#793).
+- `twp_refuses_last_copy` and `twp_refuses_lendEnd_live_copy`, now in `research/tree/ResearchTree/TreeConsume.lean`. Neither reads `↭`.
+- `research/tree/ResearchTree/TreeConsume.lean` (#793).
 
 All `#print axioms` are ⊆ [propext, Classical.choice, Quot.sound].
 
@@ -96,15 +96,15 @@ In `EndT`, `UpdX (sem w′.Θ) (recMask O₀) (recMask O′) ρ₀ ρ′` become
 | `World/UpdX.lean`, `UpdXInv.lean`, `UpdXMasks.lean` | everything | no |
 | `World/UpdXW.lean` | kept as evidence; `EndT` does not read it | — |
 | `World/StepKeep.lean` | `fdEsc_of_updX` → `fdEsc_of_updA` | **yes** (approved): `hu : UpdA … ρ ρ′ fρ′` |
-| `Core/TreeWp.lean` | `EndT` | **yes** (approved) |
+| `research/tree/ResearchTree/TreeWp.lean` | `EndT` | **yes** (approved) |
 | same | `endT_inv` | **yes** (approved): its conclusion exposes the clause, which becomes `XOptA` with `∃ τw, Flat fρ′ τw`. `XInv` is unchanged (it reads pairs of `mut` cells at one location) |
 | same | `twp_here` (`UpdX.toA`), `twp_bind` (`UpdA.trans`, `InvKept.transA`), `twp_frame` and `twp_frame_w` (`UpdA.frame`), `twp_extend` and `twp_update` (`UpdX.transA`) | no |
-| `Core/TreeHeap.lean` (:287, :337, :463, :536) | the heap rules | no |
-| `Core/TreeStepKeep.lean` | `StepKeepsFdEsc`, `StepKeepsFdEscNoUpd` (defs), `stepKeepsFdEsc` | **yes** (approved): the defs quote `EndT` |
-| `Core/TreePool.lean` (:168, :211), `Core/TreeHandle.lean` (:123) | the pool frame; bind through the handler | no |
-| `Core/TreeLend.lean` | `twp_lendOpen`, `twp_lendEnd` | **no** |
-| `Core/TreeResume`, `TreeSched*`, `TreePool*`, `TreeRelay*`, `TreeCactus`, `TreeHeadlines` | — | no (they read `EndT` only through the rules) |
-| `Core/TreeConsume.lean` | `updX_consume_view_false` stays (it is about `UpdX`). `twp_refuses_consume_view(_at)`, `twp_frame_callee_refused` and `twp_child_refused` are **retired**, replaced by T1–T3 | — |
+| `research/tree/ResearchTree/TreeHeap.lean` (:287, :337, :463, :536) | the heap rules | no |
+| `research/tree/ResearchTree/TreeStepKeep.lean` | `StepKeepsFdEsc`, `StepKeepsFdEscNoUpd` (defs), `stepKeepsFdEsc` | **yes** (approved): the defs quote `EndT` |
+| `research/tree/ResearchTree/TreePool.lean` (:168, :211), `research/tree/ResearchTree/TreeHandle.lean` (:123) | the pool frame; bind through the handler | no |
+| `research/tree/ResearchTree/TreeLend.lean` | `twp_lendOpen`, `twp_lendEnd` | **no** |
+| `research/tree/ResearchTree/TreeResume`, `TreeSched*`, `TreePool*`, `TreeRelay*`, `TreeCactus`, `TreeHeadlines` | — | no (they read `EndT` only through the rules) |
+| `research/tree/ResearchTree/TreeConsume.lean` | `updX_consume_view_false` stays (it is about `UpdX`). `twp_refuses_consume_view(_at)`, `twp_frame_callee_refused` and `twp_child_refused` are **retired**, replaced by T1–T3 | — |
 | same | the rest | no |
 
 `twp_frame`'s statement does not change. `UpdA.frame` takes `MutOne` of the end world as a hypothesis, and `twp_frame` reads that off the end's `RecInv` (`TWNT.mutOne`), as it already does for `InvKept.frame`.
@@ -333,7 +333,7 @@ The cases follow the ancestor:
 
 ### Step 5 and T1–T4: built
 
-**`EndT` reads `UpdA`** (`Core/TreeWp.lean`). Its run clause is `UpdA (sem w′.Θ) (recMask O₀)
+**`EndT` reads `UpdA`** (`research/tree/ResearchTree/TreeWp.lean`). Its run clause is `UpdA (sem w′.Θ) (recMask O₀)
 (recMask O′) ρ₀ ρ′ fρ′`, and its codes clause is `InvKeptA` (below). Every `twp` rule is
 re-proved, and so are the heap rules, the handler bind, the pool frame and `StepKeepsFdEsc`.
 
@@ -381,7 +381,7 @@ the ancestor technique at `P̂`. It composes along every rule:
 
 `endT_inv` reads only `.1`.
 
-**T1–T4** (`Core/TreeConsume.lean`). The retired refusals are removed.
+**T1–T4** (`research/tree/ResearchTree/TreeConsume.lean`). The retired refusals are removed.
 - **T1, `twp_consume_view_framed`:** `Z ● v ↭ Z` at one world (`updA_consume_view`, which is
   `UpdA.frame` with `v` absorbed and `Z` framed), then `UpdA.trans` with the run from `Z`.
   - The world is unchanged (`consume_view_world`).
@@ -402,7 +402,7 @@ the ancestor technique at `P̂`. It composes along every rule:
   3. `twp_bind`;
   4. `twp_lendEnd` as it stands, at the callee's end world.
 
-  Closed instance, every hypothesis discharged (`Core/TreeConsumeInst.lean`):
+  Closed instance, every hypothesis discharged (`research/tree/ResearchTree/TreeConsumeInst.lean`):
   `twp_lendEnd_after_framed_consume_inst`, at `wE` with `Z = ∅`, the lender alone (`FEmpty`),
   the callee `twp_admits_consume_view`'s run, and `K = [ ]`. `hrest`, at every expression `t`,
   is `twp_own_any`: a run owning one `own` cell, alone and with no records, ends at every final
@@ -414,7 +414,7 @@ the ancestor technique at `P̂`. It composes along every rule:
 
 **Not done.**
 - **C-2:** resolved by retiring `UpdX.frame` (see "Retired results").
-- **`not_xoptWFrameAt`'s configuration admitted in Lean:** done, `updA_admits_frameAt` (`Core/TreeConsume.lean`). At the graft cactus, the run's copy `ℓ ↦ x` is given up beside the frame's `n ↦ imm(…, ℓ ↦ y)`. The world is the start composite, which is valid (`acF_valid`, walks built cell by cell) and `MutOne`. The proof is `updA_consume_view` (`UpdA.frame`).
+- **`not_xoptWFrameAt`'s configuration admitted in Lean:** done, `updA_admits_frameAt` (`research/tree/ResearchTree/TreeConsume.lean`). At the graft cactus, the run's copy `ℓ ↦ x` is given up beside the frame's `n ↦ imm(…, ℓ ↦ y)`. The world is the start composite, which is valid (`acF_valid`, walks built cell by cell) and `MutOne`. The proof is `updA_consume_view` (`UpdA.frame`).
 - **`Clause.lean`** was deleted (see "Retired results").
 
 ### The user's decisions (2026-11-04)
@@ -446,7 +446,7 @@ Each entry names what was removed, why, and how to restore it.
   140–186.
 - **`docs/new-core/scope-806/Clause.lean`.** It no longer elaborated, because its names are now
   defined twice. Its useful results:
-  - `twp_refuses_last_copy` and `twp_refuses_lendEnd_live_copy`, now in `Core/TreeConsume.lean`;
+  - `twp_refuses_last_copy` and `twp_refuses_lendEnd_live_copy`, now in `research/tree/ResearchTree/TreeConsume.lean`;
   - `CellAbs`, `CellSub`, `XOptW`, `UpdXW` and `UpdX.toW`, now in `World/UpdXW.lean`;
   - `HoldsView` and `StmtConsumeFramed`, the targets T1 was planned against.
 

@@ -40,7 +40,7 @@ Read at `main` e52174e1 (worktree `borrow-core-scope844`, branch `scope-844`).
 
 ### 1.1 The clauses and where they are read
 
-`Row.Suspend S 'x @bnd` (`Core/TreeGoal791.lean:73`) asks, of every operation `o`:
+`Row.Suspend S 'x @bnd` (`research/tree/ResearchTree/TreeGoal791.lean:73`) asks, of every operation `o`:
 - `o.q ≠ unr`;
 - `o.n ≠ 0`;
 - `¬ VFree x o.A` and `¬ VFree x o.B`;

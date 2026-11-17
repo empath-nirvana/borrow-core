@@ -451,7 +451,7 @@ prints lifetime binders canonically: not verified).
     `ExtR`/`KW.Owed` come from `E`'s, by induction.
   - A captured borrow is read by `Imm`/`Mut`'s existing clauses inside `𝒱⟦E⟧`.
 - **8.3 `Const791` (#844).** Its constants' callbacks are `U …` arguments
-  (`origin/tier1-844:Core/TreeGoal791.lean:135–161`).
+  (`origin/tier1-844:research/tree/ResearchTree/TreeGoal791.lean:135–161`).
   - They do **not** become generic in the kernel. The caller's `erase` node carries the
     callback's code, and the backend reads it at the constant's site (§7, last row).
   - `.poly 'y @b c` is untouched.

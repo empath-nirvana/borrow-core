@@ -40,7 +40,7 @@ unmerged Fs branch `fs-769` (2b322a61) was read for the owned-buffer shape. Coun
   quantify over every context (`FundamentalKW835N.lean:57–84`).
 - **The hardest case is a suspending lend of a capability cell, at its cancel.**
   - `Const791.OKAt` asks for the lend's finaliser at the empty context, closed, at
-    `Ref A ⊸ F 1` (`Core/TreeGoal791.lean:184`, and `:188`, `:192`, `:199` for the other forms).
+    `Ref A ⊸ F 1` (`research/tree/ResearchTree/TreeGoal791.lean:184`, and `:188`, `:192`, `:199` for the other forms).
   - At `A = Output` or a socket, the finaliser must give the cell back to the host, which only
     an extern can do (`Consumable` has no `opq` case, `Core/Consume.lean:406–431`). The extern
     is a slot of the program's context, out of the finaliser's reach.
@@ -93,7 +93,7 @@ def Goal791N : Prop :=
 (`Core/Chain/Adequacy791N.lean:80–83`.)
 
 The premise that makes it "closed, extern-free" is the context `ctx791 cs`
-(`Core/TreeGoal791.lean:238`): one slot `!c.ty` per constant, and nothing else. A program that
+(`research/tree/ResearchTree/TreeGoal791.lean:238`): one slot `!c.ty` per constant, and nothing else. A program that
 names an extern is typed at a context with a slot the constants do not supply. The type
 `.comp (.ret .unit)` is the second narrowness: `run_io` answers `F R` for a persistent `R`.
 
@@ -312,7 +312,7 @@ The cancel goes as follows:
 
 **The obstruction.** `d` is fixed by `Const791.OKAt`:
 `closedAt 0 d = true ∧ CDerives Δ [] d (.val (.lolli (.ref A) .unit))`
-(`Core/TreeGoal791.lean:184`; `:188`, `:192`, `:199` for `w3`, `wF`, `sm`).
+(`research/tree/ResearchTree/TreeGoal791.lean:184`; `:188`, `:192`, `:199` for `w3`, `wF`, `sm`).
 - `.lolli (.ref A) .unit` is `U (Ref A ⊸ F 1)` (`Core/Types.lean:213`).
 - At `A = Output`, `d` must end the cell's content, an opaque value. `Consumable` has no `opq`
   case (`Core/Consume.lean:406–431`), so `consumeE` is not available.

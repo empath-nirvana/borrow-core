@@ -30,7 +30,7 @@ The configurations each design choice rests on are indexed in `configurations.md
 | `Core/Chain/ImmImage791N.lean`, `Withload791N.lean` | the observable view `vO`'s facts, the reborrow's image at `vN`; `withloadS_compat`, `constN_wl` |
 | `Core/Chain/ImmLend833N.lean` | `withbor1`, `withbor1U`, `withbor2`, `withbor2U` at `SemJN` |
 | `Core/Chain/Inst791N.lean` | the compat lemmas instantiated, every hypothesis discharged; `Const791.OK` inhabited |
-| `Core/TreeGoal791.lean` | `Row.Suspend`, `CTy.SuspendC`, `Const791`, `Const791.OK` (shared with the tree track) |
+| `research/tree/ResearchTree/TreeGoal791.lean` | `Row.Suspend`, `CTy.SuspendC`, `Const791`, `Const791.OK` (shared with the tree track) |
 
 The relation's `↭` (`UpdN`, `PredStep`, `MutStep`) and `EndOKG` are as the chain relation has
 them; its `mut` frames (`erwp_M_frame*`, `erwp_M_antiFrame`, `erwp_withbor3`, `rwp_M_frame`) are
@@ -191,7 +191,7 @@ rules remain `MissingN`/`HandlerLawN`.
 
 ## 4. The row and the constants' premises
 
-`Row.Suspend S 'x @bnd` (`Core/TreeGoal791.lean`): every operation not unrestricted, named
+`Row.Suspend S 'x @bnd` (`research/tree/ResearchTree/TreeGoal791.lean`): every operation not unrestricted, named
 (`n ≠ 0`), its payload and answer types free of `'x` and outliving `@bnd` (`VOutlives ∅ bnd`),
 and each capturable operation's cancel row meeting the same clauses (`CTy.SuspendC`). SPEC §62
 ("Typing: suspension") states it.
@@ -419,7 +419,7 @@ choice: a configuration that forces it, or a return to Core's reading. `scope-83
 §5 lists what each return would touch.
 
 **Other open items.**
-- `Goal791Top` (`Core/TreeGoal791.lean`) is the tree track's form of `Goal791N`. No Lean lemma
+- `Goal791Top` (`research/tree/ResearchTree/TreeGoal791.lean`) is the tree track's form of `Goal791N`. No Lean lemma
   relates the two.
 - `cN_extA` at `F_Σ R`: not derived, obstruction not verified. No rule needs it
   (`scope-831-map.md` §3.2): it would need an `erwp` lemma over tables whose payloads grow and

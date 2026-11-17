@@ -225,7 +225,7 @@ theorem tabNK_lend_comap {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life}
     by_cases hcap : capB q B = true
     · rw [if_pos hcap] at hP
       by_cases htop : fin = .top
-      · subst htop; simp [finNK] at hP
+      · subst htop; simp [finNK, tabCK, finCK, cancelOblCK, tabNK, cancelOblK] at hP
       rw [finNK_eq _ _ htop] at hP
       cases Option.some.inj hP
       have hfin := hfinS hcap
