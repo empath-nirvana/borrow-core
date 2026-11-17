@@ -6206,6 +6206,15 @@ carries the list `p` of the relaxed rules used, with where each is used, and is 
 (`LendFrame` at its form, or `LoopFrame`).
 The programmer writes nothing.
 
+`bcc check --proved-only` refuses a `main` whose assurance is not `unconditional` (#1125). The
+error is at the first relaxed rule in the source and names each site's hypothesis with its
+research question (#1122): R1 rests on `PinLaw.lendFrame` (`LendFrame`, RQ1), and R2 on
+`PinLaw.loopFrame` (`LoopFrame`, RQ2). No checked program rests on `HandlerLawN`: the checker emits
+no suspending-lend constant (`Const791`), and `fundamentalC_pin` reads no hypothesis but `PinLaw`,
+its handler and `reify` cases being Core's compatibility lemmas. `bcc trusted` cites Core's
+`IORun.every_run` and `IORun.loop_every_run` for `run_io`; they take no hypothesis.
+`corpus/reject/proved-only-r1.bc` checks without the flag and is refused with it.
+
 ### Lowering
 
 A cell lent across a suspension must not move while the view is held (§3.5 of
@@ -12152,6 +12161,21 @@ value is posted at, and are proved (`handleT_compatN`, `handleL_compatN`).
   residual `λx. x` (`reifyN_premises_inst`); no instance of its conclusion is proved. `Goal791N`'s
   premises hold at `prog791` (`goal791N_premises_inst`): a cell lent `mut` with `withbor (2)`,
   its callback performing `wait` while it holds the borrow, `wait` handled inside the program.
+
+### The hypothesis register (#1124)
+
+`Core/Assumptions.lean` lists every named hypothesis: each closed `Prop` a theorem takes as a
+premise, and the schemas it is made of. Each entry gives its research question (#1122, or none),
+its standing (assumed, proved by a named theorem, or refuted by a named theorem) and the theorems
+that take it, and Lean checks each name and standing. The assumed entries are:
+- `HandlerLawN` ≡ `MissingN` (fields `HandleVN`, `HandleVBN`, `ReifyN`; RQ1). Its consumers are
+  the chain's `goal791N` and the kernel programs on `Const791` only;
+- `PinLaw` ≡ `PinStop ∧ PinLoop` (`lendFrame`/`LendFrame` RQ1, `loopFrame`/`LoopFrame` RQ2);
+- `WpChainCommutes` (#180);
+- `UnmentionedAbsorbed` (#746 F5).
+
+`scripts/check-assumptions.sh`, in the sanity gate, fails on a hypothesis taken as a premise that
+the register does not list, and on a registered name that is no longer defined.
 
 ### The answer's view across a lend (#844, T1.3)
 
