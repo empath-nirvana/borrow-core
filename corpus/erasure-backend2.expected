@@ -138,6 +138,7 @@ core-withlocal erased handles 0 performs 0 raises 0 left 0 0
 core-withlocal-branch erased handles 0 performs 0 raises 0 left 0 0
 core-withlocal-callback erased handles 0 performs 0 raises 0 left 0 0
 core-withlocal-class erased handles 0 performs 0 raises 0 left 0 0
+core-withlocal-loop erased handles 0 performs 0 raises 0 left 0 0
 core-withlocal-nested erased handles 0 performs 0 raises 0 left 0 0
 core-withlocal-owned erased handles 0 performs 0 raises 0 left 0 0
 core-withlocal-unit erased handles 0 performs 0 raises 0 left 0 0

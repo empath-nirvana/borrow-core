@@ -638,6 +638,7 @@ corpus/core-withbor3u-fin.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-withlocal-branch.bc flows [0, 4294967295]; main []
 corpus/core-withlocal-callback.bc flows [0, 4294967295]; main []
 corpus/core-withlocal-class.bc flows [0, 4294967295]; main []
+corpus/core-withlocal-loop.bc flows [0, 4294967295]; main []
 corpus/core-withlocal-nested.bc flows [0, 4294967295]; main []
 corpus/core-withlocal-owned.bc flows [0, 4294967295]; main []
 corpus/core-withlocal-unit.bc flows [0, 4294967295]; main []
