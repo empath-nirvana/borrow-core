@@ -3311,7 +3311,7 @@ three things:
 - **The reentry rule is admissible.** It is the linearity of the state token
   (`not_borrowSpansForward`).
 - **A continuation's contraction is its capture's persistence.** A continuation may be copied only if
-  what it captures is persistent (`lam_bang_persistent`).
+  what it captures is persistent (in Core, an unrestricted stop's share is empty: `contShareN`).
 
 This entry adds handlers, control operations, unwinding and one effectful returner type to the
 kernel. Several effects run at once, each handled by its own handler, and a handler passes the
@@ -3350,7 +3350,7 @@ of three continuation types:
 |---|---|---|---|---|
 | **must resume** (`lin`) | `must_resume ctl` | linear | resumed exactly once: a must-complete computation | `U((B ⊸ F_Σ R) & ⊤)` |
 | **cancellable** (`cancel`) | `ctl` | linear | resumed once, or cancelled (the cancel a consume when it is pure, `kTy_cancel_consumable_iff`) | `U((B ⊸ F_Σ R) & F_Σ 1)` |
-| **unrestricted** (`unr`) | `multi ctl` | unrestricted | resumed any number of times, or cancelled; its captures are persistent (`lam_bang_persistent`) | `!U((B ⊸ F_Σ R) & F_Σ 1)` |
+| **unrestricted** (`unr`) | `multi ctl` | unrestricted | resumed any number of times, or cancelled; its captures are persistent (an `unr` stop's share is empty, `contShareN`) | `!U((B ⊸ F_Σ R) & F_Σ 1)` |
 
 **A cancel has computational content: the continuation's consume.**
 
@@ -14124,7 +14124,7 @@ five ν rules are generalised in place.
 
 ## 80. Entry 79 — plain local cells (`withlocal`, #1115)
 
-### Construction
+### What it adds
 
 `withlocal['l, @b, A, B] : A ⊸ (∀'l ⊏ ⊓Δ. Mut 'l A ⊸ ['l] B) ⊸ A ⊗ B`.
 The bracket bound `@b` witnesses `Δ ⊢ A ⊒ @b`; `'l` is fresh for `Δ`, `A` and `B`.
@@ -14136,24 +14136,42 @@ with the callback's result. The owner is never passed to the callback. `free` re
 contents; it does not destroy them. Updating an owned payload uses the existing swap and
 consume rules, with no implicit duplication or abandonment.
 
-This is a derived constant, not a new typing rule, type former or machine step. Its callback has no outgoing effect row: any operation inside it must be handled there,
-and no suspension or unwind can escape the invocation. Capturing the view into an unrestricted closure and
-returning it outside the fresh lifetime are rejected by the existing kernel rules.
+This is a derived constant, not a new typing rule, type former or machine step. Its callback
+has no outgoing effect row: any operation inside it must be handled there, and no suspension or
+unwind can escape the invocation. Capturing the view into an unrestricted closure and returning
+it outside the fresh lifetime are refused by the existing kernel rules.
 
 ### Lowering
 
-The checker emits a derived typed `withlocal` node whose erasure is the construction above.
-Backend2 reads that node, never a surface name or an analysis of the erased term. Its wrapper
-cell is a register or a slot in the allocating function's frame, never a heap allocation.
-The wrapper retains its declared payload type `A`, since only `Mut A`, not the owner,
-reaches the callback. Its width therefore comes from `A` itself, independently of unrelated
-type-changing owned cells. `bcc-counts --frames` reports actual frame slots;
-`--registers` separately counts promoted locals per invocation, with no target instruction.
-The native-facts gate accounts for both placements when comparing with the old backend.
-Unsupported placement is a compilation error. Explicit allocations in the payload remain
-explicit allocations. A supported straight-line numeric scalar callback must have the same allocation,
-dispatch, copy, load and store counts as explicit state. Address-taken callbacks may use a
-frame slot. The lowering's unproved storage simulation is marked `UNPROVED:` at its site.
+The checker emits a derived typed `withlocal` node whose erasure is the construction above. Backend2
+reads that node, never a surface name or an analysis of the erased term. Its wrapper cell is a
+register or a slot in the allocating function's frame, never a heap allocation. The wrapper retains
+its declared payload type `A`, since only `Mut A`, not the owner, reaches the callback. Its width
+therefore comes from `A` itself, independently of unrelated type-changing owned cells.
+`bcc-counts --frames` reports actual frame slots; `--registers` separately counts promoted locals per
+invocation, with no target instruction. The native-facts gate accounts for both placements when
+comparing with the old backend. Unsupported placement is a compilation error. Explicit allocations
+in the payload remain explicit allocations. A supported straight-line numeric scalar callback must
+have the same allocation, dispatch, copy, load and store counts as explicit state. Address-taken
+callbacks may use a frame slot. The lowering's unproved storage simulation is marked `UNPROVED:` at
+its site.
+
+### Programs
+
+Observed, `bcc interp`, `live 0`:
+
+| Program | Answer |
+|---|---|
+| `corpus/core-withlocal.bc` | `(i32[12], i32[512])` |
+| `corpus/core-withlocal-branch.bc` | `(i32[7], i32[0])` |
+| `corpus/core-withlocal-callback.bc` | `(i32[7], i32[3])` |
+| `corpus/core-withlocal-class.bc` | `((i32[7], i32[3]), i64[9])` |
+| `corpus/core-withlocal-nested.bc` | `(i32[18], i32[15])` |
+| `corpus/core-withlocal-owned.bc` | `(i32[42], i32[7])` |
+| `corpus/core-withlocal-unit.bc` | `((), i32[17])` |
+| `corpus/core-withlocal-widths.bc` | each scalar width's two extremes, as bits (`u8` to `f64`) |
+| `corpus/reject/core-withlocal-escape.bc` | refused: the view does not outlive `'l` (`boxed['l]`) |
+| `corpus/reject/core-withlocal-unrestricted.bc` | refused: `!thunk` does not promote over `mut 'l i32` |
 
 ### Baseline
 
@@ -14162,9 +14180,15 @@ statements and assumptions: the typing lemma composes existing rules. Every exis
 and kernel program keeps its answer. No existing surface form changes, and no elaborator
 state threading is introduced. There is no new index on `CDerives` and no inversion of it.
 
+### Units
+
+- #1115's plain variant, built (#1117): the derived constant (`Core/Local.lean`, `withlocal_wf`),
+  its typed node through the checker, and Backend2's frame and register placement.
+- The surface form is §82's `local`; its producer is #1115's. Not built.
+
 ### Open
 
-Unwinding, suspension, handler-owned state and the §41 surface migration are separate work.
+Unwinding, suspension and handler-owned state are separate work.
 The old backend compiles the erasure; its scalar locals are not register-promoted by this entry.
 
 ---
