@@ -1835,12 +1835,51 @@ def genLocal (A : VTy) (value : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm 
     (.letv pr (.prim (.lend true) [cell]) (.letpair owner borrow pr
       (.letv answer (← call borrow) (.letv final (.prim .free [owner]) (.pair final answer)))))
 
+/-- **An unwinding local** (`withlocalUE`, SPEC §80): `genLocal`'s frame slot, lent as
+`genLendU` lends at a row with an abort. The value arm frees the owner and answers
+`(contents, value)`; the abort arm runs the finaliser `λr. forget (free r)` and hands the abort on.
+At a row with no abort (`SM` empty, by `Row.Unwind`) it is the plain local. `[spec §80]`
+UNPROVED: as `genLocal`, the derived allocation/lend/free can use a function-frame cell. On the
+abort arm the finaliser's `free` of a frame slot's owner is the slot's end (`unslot`), which
+emits no instruction: the slot dies with the frame. The dropped contents are persistent (the
+kind's `A.Persistent`, `LocalOK`), so dropping them releases nothing. The callback's view ends
+before either arm (the lend's scope); if it did not, a read through it after the abort could see
+a reused frame. -/
+def genLocalU (A : VTy) (value : Var) (cbT : LTy) (call : Var → CM Tm) (SM S : Row) : CM Tm := do
+  let pm ← rowPay SM; let ps ← rowPay S
+  unless pm.map (·.1) == ps.map (·.1) do
+    throw "LIR: an unwinding local whose callback's row is not its own is outside the pure fragment (#1046)"
+  match payTy pm with
+  | none => genLocal A value cbT call
+  | some eT => do
+    let aT ← vty A
+    let (some bT, rT) ← answerOf cbT | throw "LIR: withlocalu callback takes no borrow"
+    let .sum vT _ := rT.peel
+      | throw "LIR: an unwinding local's callback at a row with an abort does not answer a sum"
+    let scope ← newScope
+    let cell ← fresh (.ref aT)
+    let pr ← fresh (.pair (.ref aT) bT)
+    let owner ← fresh (.ref aT)
+    let borrow ← fresh bT
+    let r ← fresh rT
+    let v ← fresh vT; let e ← fresh eT
+    let final ← fresh aT
+    let q ← fresh (.pair aT vT)
+    let dropped ← fresh aT
+    modify fun st => { st with owners := st.owners.insert owner scope, localScopes := st.localScopes.insert scope }
+    readFact "withlocalu:frame"
+    return .letv cell (.prim (.allocLent scope [aT]) [value])
+      (.letv pr (.prim (.lend true) [cell]) (.letpair owner borrow pr (.letv r (← call borrow)
+        (.case r v (.letv final (.prim .free [owner]) (.letv q (.pair final v) (.inj false q)))
+          e (.letv dropped (.prim .free [owner]) (.consume .dead dropped (.inj true e)))))))
+
 /-- A local of the kind `k` the checked node carries (`TExpr.withlocal`), lowered by that kind's
 generator. `[spec §80]` -/
 def genLocalKind (k : LocalKind) (A : VTy) (value : Var) (cbT : LTy) (call : Var → CM Tm) :
     CM Tm :=
   match k with
   | .plain => genLocal A value cbT call
+  | .unwind SM S => genLocalU A value cbT call SM S
 
 /-- A borrow `withbor`'s way (SPEC §1): `(x, f [] x)`, the owner `src` lent as the borrow the
 callback `cb` (a `∀` closure, its instantiation erased: SPEC §44) is given, by `op` (`lend`,
