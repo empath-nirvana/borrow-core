@@ -320,6 +320,7 @@ inductive Const where
   | releaseBang (A : VTy)
   | withbor1 (x : Ident) (A B : VTy)
   | withbor2 (x : Ident) (b : Life) (A B : VTy)
+  | withlocal (x : Ident) (b : Life) (A B : VTy)
   | withbor3 (a : Life) (x : Ident) (A B : VTy)
   | withload (a : Life) (x : Ident) (A B : VTy)
   | withswap (a : Life) (A B : VTy)
@@ -1033,6 +1034,7 @@ def Const.strip : Const → Const
   | .releaseBang A => .releaseBang A.strip
   | .withbor1 x A B => .withbor1 x.strip A.strip B.strip
   | .withbor2 x b A B => .withbor2 x.strip b.strip A.strip B.strip
+  | .withlocal x b A B => .withlocal x.strip b.strip A.strip B.strip
   | .withbor3 a x A B => .withbor3 a.strip x.strip A.strip B.strip
   | .withload a x A B => .withload a.strip x.strip A.strip B.strip
   | .withswap a A B => .withswap a.strip A.strip B.strip

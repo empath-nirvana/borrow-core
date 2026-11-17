@@ -123,6 +123,14 @@ core-site-generic 0 0 0 0 0 0
 core-unsigned 0 0 0 0 0 0 # every value is a word: the unsigned integers are held as the signed ones are
 core-unwind-sum-value 1 0 0 1 1 0
 core-withbor3u-fin 1 0 0 3 3 0 # the reborrow aborts; its written finaliser writes the cell
+core-withlocal 0 0 0 3 3 0
+core-withlocal-branch 0 0 0 2 2 0
+core-withlocal-callback 0 0 0 2 2 0
+core-withlocal-class 1 0 0 4 4 0
+core-withlocal-nested 0 0 0 4 4 0
+core-withlocal-owned 2 0 0 4 4 0
+core-withlocal-unit 0 0 0 0 0 0
+core-withlocal-widths 0 0 0 14 14 0
 data-json-map-ser 16 0 0 699 420 205
 deep-gen-count 0 3 0 0 0 0
 effects-load-raise 4 0 0 204 184 15
@@ -581,6 +589,8 @@ reconcile-clock 29 8 0 400 380 0 # the fake clock's cells, the journals' list no
 retry-block 2 0 0 5 5 0 # the clock cells
 reverse-bytes 4 0 0 133 92 41
 row-site-fresh-handler 0 0 0 0 0 0
+rq1-exampleA-mut 2 0 0 6 6 0
+rq1-generator 2 0 0 7 7 0
 sched-a 63 18 0 1558 897 0
 sched-a-div 34 5 0 1465 804 0
 sched-b 64 18 0 1561 898 0

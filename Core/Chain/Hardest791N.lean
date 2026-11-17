@@ -1,7 +1,7 @@
 import Core.Chain.PoolSpawnN
 import Core.Chain.SI.AntiCancelProg
 import Core.Chain.SI.UbindGN
-import Core.TreeGoal791
+import Core.Chain.HardestCase791
 
 /-!
 # #791's hardest case over the chain relation  `[spec §62]`

@@ -1,5 +1,6 @@
 import Core.TreeSchedPool
 import Core.TreeLendJoin
+import Core.Chain.SchedProgs
 
 /-!
 # A pool whose tasks hold views of each other's lends, kept as a stack  `[spec §62]`
@@ -388,14 +389,6 @@ theorem ViewsT.split_at {ρ : TRes K} (h : ViewsT ρ) (l : BoCa.Loc) :
 end Views
 
 /-! ### The stack -/
-
-/-- **A pool entry**: a stored task, whether it waits for the tasks above it (`join`), the lent
-locations it shares with them (`sh`), and the tag the scheduler's code stores beside it. -/
-structure StoredJ where
-  t : StoredT
-  join : Bool
-  sh : BoCa.Loc → Prop
-  tag : Val
 
 /-- What the nearest joiner shares. -/
 def shTop : List StoredJ → BoCa.Loc → Prop

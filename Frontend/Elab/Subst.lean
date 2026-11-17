@@ -90,6 +90,7 @@ def Const.subst (σ : TySubst) : Const → Const
   | .releaseBang A => .releaseBang (A.subst σ)
   | .withbor1 x A B => .withbor1 x (A.subst σ) (B.subst σ)
   | .withbor2 x b A B => .withbor2 x b (A.subst σ) (B.subst σ)
+  | .withlocal x b A B => .withlocal x b (A.subst σ) (B.subst σ)
   | .withbor3 a x A B => .withbor3 a x (A.subst σ) (B.subst σ)
   | .withload a x A B => .withload a x (A.subst σ) (B.subst σ)
   | .withswap a A B => .withswap a (A.subst σ) (B.subst σ)

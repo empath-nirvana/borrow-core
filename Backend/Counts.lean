@@ -9,6 +9,7 @@ import Pipeline.Counts
     lake exe bcc-counts [--backend old|new] <file> [-- arg…]
     lake exe bcc-counts [--backend old|new] --native <file> [-- arg…]
     lake exe bcc-counts [--backend old|new] --frames <file> [-- arg…]
+    lake exe bcc-counts [--backend old|new] --registers <file> [-- arg…]
     lake exe bcc-counts --sites <file>
     lake exe bcc-counts --lowering <file>
     lake exe bcc-counts --kernel [--sites] <name>
@@ -54,6 +55,9 @@ With `--kernel`, the program is the kernel program `name` (`Backend/Kernel.lean`
 With `--frames`, print only `slots N`: the frame slots the run starts at the flat IR (`Exp.slot`),
 the cells placed in a frame slot rather than allocated, per run. `scripts/native-facts.sh`
 compares Backend2's with the old backend's (SPEC §50).
+`--registers` prints `registers N`: the checked straight-line locals promoted to registers,
+counted per function invocation. This is diagnostic metadata, with no target instruction
+(SPEC §80). The physical frame count remains separate.
 
 The program is compiled by Backend2 (`Backend2/`), the default: its word IR and its Wasm or
 native build. With `--backend old` first, it is compiled by the old backend (`Backend/`), counted
@@ -193,9 +197,10 @@ def main (argv₀ : List String) : IO UInt32 := do
     | .error e => IO.eprintln e; return 1
   -- `--frames`: the frame slots a run starts (the flat IR's `Exp.slot`), at the old or new
   -- backend's lowering: the cells placed in a frame slot, per run (SPEC §50).
-  let (frames, argv) := match argv with
-    | "--frames" :: rest => (true, rest)
-    | _ => (false, argv)
+  let (placement, argv) := match argv with
+    | "--frames" :: rest => (some false, rest)
+    | "--registers" :: rest => (some true, rest)
+    | _ => (none, argv)
   let (file, args) ← match argv with
     | [file] => pure (file, [])
     | file :: "--" :: args => pure (file, args)
@@ -210,8 +215,8 @@ def main (argv₀ : List String) : IO UInt32 := do
   let (flat, status, mem) ← match memR with
     | .ok (o, m) => pure (String.fromUTF8! o.out, o.status, m)
     | .error e => IO.eprintln e; return 1
-  if frames then
-    IO.println s!"slots {mem.slots}"
+  if let some registers := placement then
+    IO.println (if registers then s!"registers {mem.registers}" else s!"slots {mem.slots}")
     return 0
   let wat ← match k >>= (fun k => if new then Backend2.watOf k true else k.wat true) with
     | .ok w => pure w

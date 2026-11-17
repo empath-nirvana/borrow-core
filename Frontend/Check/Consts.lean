@@ -365,6 +365,14 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
       let ⟨hside⟩ ← outlivesWitness sp b A
       (cDead (fun j => .withbor2 (at_ sp) j A B x) fun hd _ => .withbor2 x hd hx hside h₁ h₂)
+  | .withlocal _ b A B => do
+      let b ← E.elabL Δ b
+      let A ← E.elabV Δ A
+      let B ← E.elabV Δ B
+      let x := Δ.freshVar
+      let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
+      let ⟨hside⟩ ← outlivesWitness sp b A
+      (cDeadStrict (fun j => .withlocal (at_ sp) j A B x) fun hd _ => .withlocal x hd hx hside h₁ h₂)
   | .withbor3 a _ A B => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
