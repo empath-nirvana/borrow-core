@@ -255,7 +255,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
 
 /-- The node of an unwinding borrow whose finaliser `d` is written (SPEC §78), from `d`'s check at
 `U(src ⊸ F_∅ 1)`: the rule's context is dead up to persistent slots, so every slot `d` uses is
-persistent (`d` may name them, K1.3b). -/
+persistent (`d` may name them, K1.3b).  [spec §78] -/
 def finRes {src A : CVTy} (dsp : Span) (mk : TExpr → TExpr)
     (rd : Res Δ T (.val (.thunk (.arr src (effOf [] .unit)))))
     (h : ∀ {Γ}, BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ →

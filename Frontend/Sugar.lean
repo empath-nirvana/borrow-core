@@ -3748,6 +3748,7 @@ def lendFinC (c : TCx) (exp : Option CCTy) (sp : Span) (V blk : Val) (dtsp dsp :
   | .app a₁ (.app a₂ (.const ksp C@(.withbor3U la _ As _ _)) P') cb' =>
     let some T := c.tyV P'
       | throw ⟨V.span, "internal error: the type of a `finally`'s reborrowed place"⟩
+    -- At the empty row: the effects pass refuses a cleanup that performs (#1046).
     let cD := ({ c with E := { c.E with row := some [] } } : TCx).push p.name (some T)
     let D' ← sc cD (some (Frontend.Check.effOf [] .unit)) D
     let d : Val := .thunkv dtsp (.lam dsp p (.mut ksp la As) D')
@@ -3757,8 +3758,8 @@ def lendFinC (c : TCx) (exp : Option CCTy) (sp : Span) (V blk : Val) (dtsp dsp :
   | _ => throw ⟨V.span, "internal error: a `finally`'s place is not a `mut` borrow, so it has " ++
       "no reborrow (SPEC §78)"⟩
 
--- The `surfV`/`surfC` mutual block is past the compiler's default budget by its size, as the
--- machine's block above is.
+-- The heartbeat budget of the `surfV`/`surfC` mutual block: compiling its matches over every
+-- surface form takes more than the default, as the machine's block above does.
 set_option maxHeartbeats 400000 in
 mutual
 /-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/

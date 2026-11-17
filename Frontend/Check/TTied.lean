@@ -653,8 +653,8 @@ theorem weakenΔ {p : Pins} {s : CRow} {Δ' : LifeCtx} {t : TExpr} {j : Jdg}
 
 /-! ### The unwinding borrows with a written finaliser  `[spec §78]`
 
-At `Σ_D = ∅`, `Σ_M = Σ` (§19's forms, Entry 77's instance): the finaliser `td`'s derivation at the
-rule's dead context, its lists the node's. -/
+At `Σ_D = ∅`, `Σ_M = Σ` (§19's forms, Entry 77's instance): the node from the derivation of the
+finaliser `td` at the rule's dead context; the node's pins and rows are `td`'s. -/
 
 section
 open BoCa.Fig16.LogRel.Core (VFree VScoped VOutlivesLe Row RowLe CTy withbor1UTyD withbor2UTyD

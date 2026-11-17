@@ -254,7 +254,7 @@ def Val.endsUnwConst : Val → Bool
   | .app _ _ W => W.endsUnwConst
   | _ => false
 
-/-- `Val.endsUnwConst` of `return V`. -/
+/-- `Val.endsUnwConst` of `return V`.  [spec §78] -/
 def Comp.endsUnwConst : Comp → Bool
   | .ret _ V => V.endsUnwConst
   | _ => false

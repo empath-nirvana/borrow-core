@@ -2441,6 +2441,10 @@ def valAtom : Nat → P Val
             | .withbor1U .. | .withbor2U .. | .withbor3U .. => true
             | _ => false
           if unw && (← isKw "unwind") && (← peekAt 1).tok == .sym "(" then
+            -- Core text only: a surface `finally` is elaborated to it.  [spec §78]
+            if (← get).resolve && (← get).surf then
+              failAt (← peek).span ("`unwind (d)` after an unwinding borrow is core text; in a " ++
+                "surface body it is not written (a `finally` is elaborated to it)")
             discard bump
             expectSym "("
             let d ← val n

@@ -2118,10 +2118,18 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
         goV k cx cs (.run sp (.unwind sp ⟨r, sp⟩ none (.ret sp W) D
           (.bind sp ⟨u, sp⟩ none D (.ret sp (.var sp r)))))
       | [c] =>
+        -- A cleanup that also performs a control operation would be the finaliser at a row of
+        -- its own, `Σ_D ≠ ∅`: K-b's (#1046), not provided yet.  [spec §78]
+        if let some i := (cx.ctl (rowC cx.env fuel D)).head? then
+          let nm := if c.h.cell then c.var else c.eff
+          throw ⟨D.span, s!"this cleanup uses `{nm}`, which the body also uses, and performs an " ++
+            s!"operation of `{i.eff}`; a cleanup of a lent place that performs is not provided " ++
+            "yet (#1046)"⟩
         let p := c.var
         -- The reborrow's lifetime is named as the capability's, as `reborrowed`'s is: the calls in
-        -- `M` instantiate it by name, and in `D` it is the source's.
-        let l := c.life
+        -- `M` instantiate it by name, and in `D` it is the source's. A capability whose lifetime
+        -- has no name (`main`'s platform capabilities, instantiated by type) gets a fresh one.
+        let l ← if c.life.isEmpty then fresh "fx_fl" else pure c.life
         let t ← fresh "fx_ft"
         let pi : Ident := ⟨p, sp⟩
         let blk : Val := .app sp (.app sp (.sugar sp (.borrow .mut l)) (.var sp p))
