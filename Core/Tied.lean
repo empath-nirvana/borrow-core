@@ -7,15 +7,16 @@ An **effect context** `Ξ` gives each operation name its signature: the `i`-th o
 name `n` is `(Ξ n)[i] = (q, A, B)`.  A row is **tied** to `Ξ` (`RowAt`) when every operation it
 finds is of a nonzero name with at most `2³²` operations, at the signature `Ξ` gives it.
 
-**`CDerivesAt Ξ`** is `CDerives` with the premise `RowAt Ξ` at the three rules that read an
-operation's signature off a row: `[perform]` and `[raise]` (the row the operation is found in) and
-`[handle]` (the handled row `(n)↑E ⊙ Σ`, whose qualifiers are the handler value's tags, §25).
-An operation's argument and answer are the context's up to α (`OpSig.AtEntry`, §3).
-Every other rule is `CDerives`'s verbatim, `[then]` with its finaliser's row and the cancel rows of
-§27 among them; the tie reads no cancel row (`rowAt_ofEff_fs`).  So a name has one signature across
+**`CDerivesAt Ξ`** is `CDerivesX {ties := some Ξ}` (`Core/Judgment.lean`): `CDerives` with the
+premise `RowAt Ξ` at the ten rules that read an operation's signature off a row: `iterate`,
+`divFuel`, `reify`, `[perform]`, `[await]` and `[raise]` (the row the operation is found in), and
+`[handle]`'s four forms (the handled row `(n)↑E ⊙ Σ`, whose qualifiers are the handler value's tags,
+§25). An operation's argument and answer are the context's up to α (`OpSig.AtEntry`, §3).
+Every other rule is `CDerives`'s, `[then]` with its finaliser's row and the cancel rows of §27
+among them; the tie reads no cancel row (`rowAt_ofEff_fs`).  So a name has one signature across
 a derivation: every instance of a handler site has one protocol (§19 *Names*).
 
-* `CDerivesAt.toCDerives`: a tied derivation is one of `CDerives`, so `fundamentalC` and the
+* `CDerivesAt.toCDerives` (`CDerivesX.mono`): a tied derivation is one of `CDerives`, so `fundamentalC` and the
   adequacy theorems hold of it.
 * `CDerivesAt.ofEffFree`: a derivation of a term holding no `perform`, `raise` or `hnd`
   (`Expr.effFree`) is tied at every effect context.
@@ -352,9 +353,9 @@ macro "eff_free" : tactic => `(tactic| (simp_all only [Expr.effFree, Expr.val, V
     Val.unit, Val.inj₁, Val.inj₂, withPair, absurdE, thenE, withborUE, effFree_shift, Bool.and_eq_true,
     bne_iff_ne, ne_eq, reduceCtorEq, not_false_eq_true, and_self, and_true, true_and]))
 
-/-- **A derivation of a term with no operation is tied at every effect context**: the three rules
-that read a signature off a row type a `perform`, a `raise` or a `hnd`, and every other rule is the
-same in both judgments.  `[spec §19]` -/
+/-- **A derivation of a term with no operation is tied at every effect context**: the ten rules
+that read a signature off a row type terms `Expr.effFree` excludes (a `perform`, a `raise`, a `hnd`,
+or a constant built from them), and every other rule is the same in both judgments.  `[spec §19]` -/
 theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ e j) (he : e.effFree = true) : CDerivesAt Ξ Δ Γ e j := by
   induction h using CDerives.induct with
