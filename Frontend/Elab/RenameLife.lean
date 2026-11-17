@@ -146,6 +146,9 @@ def Const.renameLife (f : Span → String → Life) : Const → Const
       .withbor2U (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
   | .withlocalU x b A B r =>
       .withlocalU (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
+  | .withlocalLoop x b A S B R =>
+      .withlocalLoop (x.renameLife f) (b.renameLife f) (A.renameLife f) (S.renameLife f)
+        (B.renameLife f) (R.renameLife f)
   | .withbor3U a x A B r =>
       .withbor3U (a.renameLife f) (x.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
   | .withloadU a x A B r =>

@@ -114,6 +114,7 @@ def sites : List (Name × List Name) := [
   (``Backend2.genKap, [``Backend2.ConsumeRule.dead]),
   (``Backend2.genLendU, [``Backend2.ConsumeRule.dead]),
   (``Backend2.genLocalU, [``Backend2.ConsumeRule.dead]),
+  (``Backend2.genLocalLoop, [``Backend2.ConsumeRule.dead]),
   (``Backend2.genMach, [``Backend2.ConsumeRule.dead]),
   (``Backend2.genStackMach, [``Backend2.ConsumeRule.dead, ``Backend2.ConsumeRule.stackK,
     ``Backend2.CopyRule.dup]),
