@@ -617,6 +617,60 @@ def typed_explicit(r):
     return out
 
 
+def t_mono_case(r):
+    """`TDerivesX.mono`'s case at `r`: the same node at `I'`, the tie and pin premises carried."""
+    ex = typed_explicit(r)
+    pats = [f"a{k}" for k in range(len(ex))]
+    ihs = [f"ih{k}" for k in range(sum(1 for _, p in ex if p))]
+    args, q = [], 0
+    for k, (nm, prem) in enumerate(ex):
+        if prem:
+            args.append(ihs[q])
+            q += 1
+        elif nm == "hAt":
+            args.append(f"(hI.rowOK a{k})")
+        elif nm == "hPin":
+            args.append(f"(hI.pinOK a{k})")
+        else:
+            args.append(f"a{k}")
+    return f"  | {' '.join([r.name] + pats + ihs)} => exact TDerivesX.{r.name} {' '.join(args)}".rstrip()
+
+
+# the checker's instances: name, binders, index, how the tie premise reads (None: dropped), pin rules
+T_INSTANCES = [("TDerivesAt", "{Ξ : EffCtx} ", "{ties := some Ξ}", "RowAt Ξ", False),
+               ("TDerivesP", "", "{pin := true}", None, True)]
+
+
+def t_alias(n, rest, inst):
+    """`TDerivesX.n` under the instance's name at the instance's premises (`TDerivesAt.unfoldN`,
+    `TDerivesP.lendR`), or `None` for a pin rule at an instance without them."""
+    nm, bnd, idx, tie, pin = inst
+    rest = " ".join(rest.split())
+    groups, concl = binders(rest)
+    J = nm + (" Ξ" if bnd else "")
+    names = [x for _, ns, _ in groups for x in ns]
+    if "hPin" in names and not pin:
+        return None
+    out, call = [], []
+    for kind, ns, ty in groups:
+        if ns == ["hAt"] and tie is None:
+            call.append("(hAt := trivial)")
+            continue
+        if ns == ["hPin"]:
+            call.append("(hPin := rfl)")
+            continue
+        c = {"(": ")", "{": "}", "[": "]"}[kind]
+        if ty is not None:
+            ty = re.sub(r"\bTDerivesX I\b", J, ty)
+            if tie:
+                ty = re.sub(r"\bI\.RowOK\b", tie, ty)
+        out.append(f"{kind}{' '.join(ns)}{(' : ' + ty) if ty is not None else ''}{c}")
+        call += [f"({x} := {x})" for x in ns]
+    concl = re.sub(r"\bTDerivesX I\b", J, concl)
+    return (f"theorem {nm}.{n} {bnd}{' '.join(out)} :\n    {concl} :=\n  "
+            f"TDerivesX.{n} (I := {idx}) {' '.join(call)}")
+
+
 def to_p_case(ra, rp):
     """`TDerivesAt.toP`'s case at `ra`: the same node in `TDerivesP`, its tie consumed."""
     ea = typed_explicit(ra)
@@ -634,18 +688,16 @@ def to_p_case(ra, rp):
 pin_src = drop_pin(drop_ties("\n".join(xind) + "\nend")).replace("CDerivesX I", "CDerivesP") \
     .replace("inductive CDerivesX (I : JIdx)", "inductive CDerivesP")
 rulesP = [Rule(n, rest, "CDerivesP") for n, rest in ctor_texts(pin_src, "inductive CDerivesP ")]
-# `CDerivesAt Ξ` is `CDerivesX` at the tie `Ξ`: its rules are `CDerivesX`'s but the pin rules, with
-# `RowAt Ξ` for the tie.
-tied_src = re.sub(r"\bI\.RowOK ", "RowAt Ξ ", "\n".join(xcore) + "\nend").replace("CDerivesX I", "CDerivesAt Ξ") \
-    .replace("inductive CDerivesX (I : JIdx)", "inductive CDerivesAt (Ξ : EffCtx)")
-rulesAt = [Rule(n, rest, "CDerivesAt Ξ") for n, rest in ctor_texts(tied_src, "inductive CDerivesAt ")]
+# `TDerivesX` is `CDerivesX` over the typed term: its rules are read at `CDerivesX I`, the tie and pin
+# premises kept as proofs (not node fields).
+rulesX = [Rule(n, rest, "CDerivesX I") for n, rest in ctor_texts("\n".join(xind) + "\nend", "inductive CDerivesX ")]
 fieldsof = {r.name: r.fields for r in rulesP}
-for r in rulesAt:
-    if r.name not in fieldsof:
-        sys.exit(f"gen-pin: CDerivesAt.{r.name} is not a rule of CDerivesP")
+if [r.name for r in rulesX] != [r.name for r in rulesP]:
+    sys.exit("gen-pin: CDerivesX's rules and CDerivesP's differ")
+for r in rulesX:
     if [n for n, _ in r.fields] != [n for n, _ in fieldsof[r.name]] or r.kids != next(
             q.kids for q in rulesP if q.name == r.name):
-        sys.exit(f"gen-pin: CDerivesAt.{r.name} and CDerivesP.{r.name} give different nodes")
+        sys.exit(f"gen-pin: CDerivesX.{r.name} and CDerivesP.{r.name} give different nodes")
 
 tex = (TMPL / "TExpr.tmpl.lean").read_text()
 tex = tex.replace("--@TEXPR_CTORS@", "\n".join(r.texpr_ctor() for r in rulesP))
@@ -671,12 +723,14 @@ tex = tex.replace("--@ISLAM_CASES@", "\n".join(a for a, _ in lams))
 tex = tex.replace("--@ISLAM_EQ@", "\n".join(b for _, b in lams))
 
 tder = (TMPL / "TDerives.tmpl.lean").read_text()
-byP = {r.name: r for r in rulesP}
-tder = tder.replace("--@TOP_CASES@", "\n".join(to_p_case(r, byP[r.name]) for r in rulesAt))
-for tag, rules in (("AT", rulesAt), ("P", rulesP)):
-    pairs = [typed_rule(r, fieldsof) for r in rules]
-    tder = tder.replace(f"--@{tag}_RULES@", "\n".join(c for c, _ in pairs))
-    tder = tder.replace(f"--@{tag}_ERASE@", "\n".join(p for _, p in pairs))
+pairs = [typed_rule(r, fieldsof) for r in rulesX]
+tder = tder.replace("--@X_RULES@", "\n".join(c for c, _ in pairs))
+tder = tder.replace("--@X_ERASE@", "\n".join(p for _, p in pairs))
+tder = tder.replace("--@MONO_CASES@", "\n".join(t_mono_case(r) for r in rulesX))
+# the aliases are read off the assembled inductive: every typed rule and derived node
+tder = tder.replace("--@ALIASES@", "\n\n".join(
+    a for inst in T_INSTANCES for n, rest in ctor_texts(tder, "inductive TDerivesX ")
+    for a in [t_alias(n, rest, inst)] if a))
 
 def lint_texpr(txt):
     """The nodes that hold an untyped term (`Expr`, `Val`, a surface term): none may."""
@@ -805,8 +859,7 @@ lc = [life_cases(r, "P") for r in rulesP]
 tlife = tlife.replace("--@BINDERS@", "\n".join(a for a, _, _ in lc))
 tlife = tlife.replace("--@DOMFREE@", "\n".join(b for _, b, _ in lc))
 tlife = tlife.replace("--@REAB@", "\n".join(c for _, _, c in lc))
-tlife = tlife.replace("--@P_WEAKENL@", "\n".join(weaken_life_case(r) for r in rulesP))
-tlife = tlife.replace("--@AT_WEAKENL@", "\n".join(weaken_life_case(r) for r in rulesAt))
+tlife = tlife.replace("--@X_WEAKENL@", "\n".join(weaken_life_case(r) for r in rulesX))
 
 # --- the judgment's instances (`Core/JudgmentElim.lean`) ---------------------------------------
 # `CDerivesX` (`Core/Judgment.lean`) is written once; its instances `CDerives := CDerivesX {}` and
