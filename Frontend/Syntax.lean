@@ -387,6 +387,8 @@ inductive Const where
   `slice_borrow_imm_u['x, @b, A, B, [r]]`.  `[spec §19]` -/
   | withbor1U (x : Ident) (A B : VTy) (r : Row)
   | withbor2U (x : Ident) (b : Life) (A B : VTy) (r : Row)
+  /-- `withlocalu['x, @b, A, B, [r]]`: the unwinding local of SPEC §80. -/
+  | withlocalU (x : Ident) (b : Life) (A B : VTy) (r : Row)
   | withbor3U (a : Life) (x : Ident) (A B : VTy) (r : Row)
   | withloadU (a : Life) (x : Ident) (A B : VTy) (r : Row)
   | sliceBorrowMutU (x : Ident) (b : Life) (A B : VTy) (r : Row)
@@ -1077,6 +1079,7 @@ def Const.strip : Const → Const
   | .boundedFix A C => .boundedFix A.strip C.strip
   | .withbor1U x A B r => .withbor1U x.strip A.strip B.strip r.strip
   | .withbor2U x b A B r => .withbor2U x.strip b.strip A.strip B.strip r.strip
+  | .withlocalU x b A B r => .withlocalU x.strip b.strip A.strip B.strip r.strip
   | .withbor3U a x A B r => .withbor3U a.strip x.strip A.strip B.strip r.strip
   | .withloadU a x A B r => .withloadU a.strip x.strip A.strip B.strip r.strip
   | .sliceBorrowMutU x b A B r => .sliceBorrowMutU x.strip b.strip A.strip B.strip r.strip
