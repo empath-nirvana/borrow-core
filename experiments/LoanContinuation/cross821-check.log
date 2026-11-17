@@ -1,0 +1,16 @@
+'BoCa.Fig16.LogRel.Core.Chain.SI.LoanBridgeProbe.borrowOutX' depends on axioms: [propext, Classical.choice, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.LoanBridgeProbe.answer_inhabited' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.LoanBridgeProbe.resume_world_allowed' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.StoredLoanProbe.storeWait_compat' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.StoredLoanProbe.storedClause_compat' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.StoredLoanProbe.storedProgram_erwpX' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]

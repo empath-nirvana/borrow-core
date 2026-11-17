@@ -1,0 +1,8 @@
+'BoCa.Fig16.LogRel.Core.Chain.SI.LoanMemberBoundary.member_write_is_legal' depends on axioms: [propext, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.LoanMemberBoundary.member_predicates_differ' depends on axioms: [propext, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.LoanMemberBoundary.fixed_member_return_rejected' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.LoanMemberBoundary.fixed_member_is_not_a_general_loan_identity' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]

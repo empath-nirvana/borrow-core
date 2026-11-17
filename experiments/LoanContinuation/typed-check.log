@@ -1,0 +1,32 @@
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedLoanOrderProbe.same_lifetime_wrong_answer' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedLoanOrderProbe.typedBorrow_survives_allowed_change' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedLoanOrderProbe.current_U_captured_demands_drop' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedLoanOrderProbe.concrete_allowed_change' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedLoanOrderProbe.typedBorrow_at_source' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedLoanOrderProbe.typedBorrow_not_at_dropped_world' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedLoanOrderProbe.no_loan_U' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedLoanOrderProbe.UClaims_transport' depends on axioms: [propext, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedLoanOrderProbe.mutL_transport' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedLoanOrderProbe.typed_payload_transport' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedLoanOrderProbe.unrelated_lend' depends on axioms: [propext, Quot.sound]
+'BoCa.Fig16.LogRel.Core.Chain.SI.TypedLoanOrderProbe.dropping_loan_allowed_by_current_U' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
