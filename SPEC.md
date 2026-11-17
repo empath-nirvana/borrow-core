@@ -167,9 +167,9 @@ data is materialized, and gives codata (`&`, and the formers of §7) a home.
 
 ### Typing
 
-`CDerives Δ Γ e j`, with `j` either `val A` or `comp C`, over BoLo expressions in A-normal form:
-the CBPV formers (`thunk`, `force`, `return`, `to`, `λ`, application, `⟨·,·⟩`, projections),
-the lifetime `∀` (elimination at every `C`), the `!` rules of §2 (promotion over a flat
+`CDerives Δ Γ e j` (`CDerivesX {}`, §83), with `j` either `val A` or `comp C`, over BoLo
+expressions in A-normal form: the CBPV formers (`thunk`, `force`, `return`, `to`, `λ`,
+application, `⟨·,·⟩`, projections), the lifetime `∀` (elimination at every `C`), the `!` rules of §2 (promotion over a flat
 context, §10), `[]I` at every value type,
 `⊑Imm`/`⊑Mut`, one constant per borrow axiom of `[TR]` p. 3 at arbitrary value-type payloads,
 three call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), and conversion up to the names of
@@ -212,8 +212,9 @@ premise that types a term built from other arguments (`thunkV`'s `λN`) carries 
 between the child's erasure and that term. They project to `CDerivesAt`/`CDerivesP` at
 `t.erase` (`TDerivesAt.erase`, `TDerivesP.erase`), so a derivation fixes every field of every
 node, and every theorem below, and §19's and §29's, holds of `t.erase` as stated. The node types,
-the derivations, the projections and the erasure are generated from `CDerivesAt` and `CDerivesP`
-by `scripts/gen-pin.py`, so a rule added to `CDerives` is picked up by rerunning it.
+the derivations, the projections and the erasure are generated from the one judgment `CDerivesX`
+(§83) by `scripts/gen-pin.py`, as `TDerivesX` at the same index (`TDerivesAt Ξ` and `TDerivesP` its
+instances), so a rule added to `CDerivesX` is picked up by rerunning it.
 
 **A split's masks are fixed by its derivation.** A typed rule at a split has one premise its
 `CDerives` rule does not: the node's masks are the ones its parts' contexts have
@@ -312,7 +313,7 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
     ────────────────────────  [α]
          Δ; Γ ⊢ e : j'
 
-- **The relation.** `j ≡α j'` is `Jdg.alphaB j j' = true` (`Core/Fundamental.lean`): `VTy.alphaB`/
+- **The relation.** `j ≡α j'` is `Jdg.alphaB j j' = true` (`Core/Judgment.lean`): `VTy.alphaB`/
   `CTy.alphaB` at no binder pairs (`Core/Types.lean`). The binders are `CTy.all` alone (`VTy.all`
   is `U (∀'x ⊏ @b. F A)`); passing `∀'x ⊏ @b. C` and `∀'x' ⊏ @b'. C'` pairs `'x` with `'x'`, and
   a variable is read through the innermost pair that binds it on either side, or is free on both.
@@ -320,7 +321,7 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
   type (`OpSig.AlphaEq`, `RowAlpha`). It is an equivalence (`VTy.alphaB_refl`, `_symm`, `_trans'`,
   `Core/Alpha.lean`).
 - **Rows and the effect context.** A row is tied to the effect context `Ξ` up to α (`RowAt`,
-  `OpAt`, `Core/Tied.lean`): an operation's qualifier is `Ξ`'s and its argument and answer are
+  `Core/Judgment.lean`; `OpAt`, `Core/Tied.lean`): an operation's qualifier is `Ξ`'s and its argument and answer are
   α-equivalent to `Ξ`'s (`OpSig.AtEntry`), so an operation whose type is elaborated in two lifetime
   contexts has one signature. A handler's signature is a prefix of `Ξ`'s up to α
   (`sig_prefix_of_rowAt`); its tags are a prefix of `Ξ`'s qualifiers as before (`hndTags_of_rowAt`).
@@ -1058,8 +1059,8 @@ duplication (`Copy`, flat captures only) from explicit (`Clone`); the explicit h
   chain's `bangThunkF_compatN`, `bangThunkV_compatN`) need only that the context relation holds at
   `∅`. `gSepC_persistent` (the chain's `gN_persistent`) gives it from `Flat(Γ)` through
   `flat ⇒ persistent`, slot by slot, by `vCE_empty_of_persistent` (`vN_empty_of_persistent`).
-- **Mirrors.** `CDerivesAt` (`Core/Tied.lean`) and the generated `CDerivesP`, `TDerivesAt` and
-  `TDerivesP` (`scripts/gen-pin.py`) take the same premise. The checker's promotion test
+- **Instances.** The rule is `CDerivesX`'s (§83), so `CDerivesAt` and `CDerivesP` have it, and the
+  generated `TDerivesAt` and `TDerivesP` (`scripts/gen-pin.py`) take the same premise. The checker's promotion test
   (`Frontend/Check/Rules.lean`) asks `VTy.flat` of each live slot. The inversion of a λ read at a
   `!` thunk (`LamCls`, `lam_bang`) gives a flat context, and AT06's rejection reads that the
   captured cell's type, a view of `Ref`, is not flat.
@@ -2118,7 +2119,7 @@ writes, until B2 (#563's successor) elaborates loops to it.
 it has no cancel, so closing a loop is a resume with *close*. `tick` is not abortive, so it is in
 no unwind-only row, and no borrow callback's row holds it (`Row.Unwind.divB`).
 
-**The constants** (`Core/Fundamental.lean`, each a rule of `CDerives`):
+**The constants** (`Core/Judgment.lean`, each a rule of `CDerives`):
 
     iterate   : !U(!U(S ⊸ F_Σ(B ⊕ S) & F_Σ R) ⊗ S ⊸ F_Σ(B ⊕ R))        Σ holds Div
     div_fuel  : !U(U(1 ⊸ F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)                  Div ∉ Σ
@@ -3654,7 +3655,7 @@ Six rules, over `CDerives` with its context premises (§10):
     an abortive operation's clause is !U(A_i ⊸ F_Σ R): the machine has cancelled κ
     (§27, §81: F_i is the operation's cancel row; the cancel branch performs F_i alone)
 
-- **As built** (`Core/Fundamental.lean`, `CDerives.eff*`; `Core/EffRules.lean`):
+- **As built** (`Core/Judgment.lean`, `CDerives.eff*`; `Core/EffRules.lean`):
   - a row is a list of operations `(n, i, q, A_i, B_i)`, and `F_Σ R` is `CTy.effOf Σ R`;
   - `[sub]` is `RowLe` (every operation of `Σ` is `Σ′`'s);
   - `[raise]`'s argument type holds no owned cell (`VTy.OwnFree`): the raise abandons it, which
@@ -3674,9 +3675,10 @@ Six rules, over `CDerives` with its context premises (§10):
 - **One signature per operation** (decision R). An *effect context* `Ξ` gives each name its
   signature, `(Ξ n)[i] = (q, A_i, B_i)`. A row is tied to `Ξ` when every operation it finds is of a
   nonzero name at `Ξ`'s signature (`RowAt`). `CDerivesAt Ξ` is `CDerives` with `RowAt Ξ` at the
-  three rules that read an operation's signature off a row: `[perform]` and `[raise]` (their row)
-  and `[handle]` (the handled row `Σ, n : E`). Every other rule is `CDerives`'s, `[sub]`, `[let]`,
-  `[then]` and the cancel rows among them (`Core/Tied.lean`).
+  rules that read an operation's signature off a row: `[perform]`, `[await-c]` and `[raise]` (their
+  row), the four `[handle]` rules (the handled row `Σ, n : E`), `iterate`, `divFuel` and `reify`.
+  Every other rule is `CDerives`'s, `[sub]`, `[let]`, `[then]` and the cancel rows among them. It is
+  `CDerivesX {ties := some Ξ}` (§83, `Core/Judgment.lean`).
   - A tied derivation is a `CDerives` derivation (`CDerivesAt.toCDerives`), and a derivation of a
     term with no `perform`, `raise` or `hnd` is tied at every effect context
     (`CDerivesAt.ofEffFree`).
@@ -5061,7 +5063,7 @@ refused, and a closure capturing `mut 'x T` is still bounded strictly below `'x`
 The side condition of the borrows that lend a payload `mut` is `∃ @b. Δ ⊨ @b ∧ Δ ⊢ A ⊒ @b`
 (was `Δ ⊢ A ⊐ @b`), at every rule that carries one: `withbor2` and `withbor2U`, and the slice
 borrows `sliceBorrowM`, `sliceBorrowI`, `sliceBorrowMU` and `sliceBorrowIU` at both their payload
-and their result (`Core/Fundamental.lean`). The family borrows (`Family.borrowsMut`) and the
+and their result (`Core/Judgment.lean`). The family borrows (`Family.borrowsMut`) and the
 block borrows (`BlockBorrow.formerMut`) are derived from `withbor2` and take it with it.
 
 The condition reaches each proof through 6.60, as `𝒱⟦A⟧δ ⊧ [@bδ] 𝒱⟦A⟧δ` ([TR] 6.173), and the
@@ -5999,9 +6001,9 @@ borrow lemma. `Core/EffBoxed.lean`:
 lemma keep their statements, over the extended judgment; adequacy stays unconditional. New:
 `stop_lemma`, `stop_sem`, `ewp_stratify`, `ewp_handleS`, `handle_compatCB`, `handleV_compatCB`.
 
-Each induction over `CDerives` and `CDerivesAt` takes the rule as a case (`Core/Closed.lean`,
-`Core/Weaken.lean`, `Core/InsertDead.lean`, `Core/Tied.lean`, `Core/RaiseNames.lean`,
-`Core/EffTier1Programs.lean`). The inversions (`Core/Inversions.lean`) read a handler's clause
+Each induction over `CDerives` and `CDerivesAt` (one over `CDerivesX` where both are covered, §83)
+takes the rule as a case (`Core/Closed.lean`, `Core/Weaken.lean`, `Core/InsertDead.lean`,
+`Core/Tied.lean`, `Core/RaiseNames.lean`). The inversions (`Core/Inversions.lean`) read a handler's clause
 tuple at `clausesTyO Σ R ob E fs`, `κ` bare (`ob = none`, `clausesTy`) or boxed (`ob = some d`,
 `clausesTyB`): `der_hnd`, `der_hndJ`'s `HndBase`, `hnd_clauses`. A boxed `κ`'s views keep the thunk
 head (`vview_kBoxO_thunk`, `kviewO`), and `κ`'s cancel branch is read the same way at either
@@ -6125,12 +6127,11 @@ A1 (#843), for §62's shapes.
   `PinLaw.loop` derives its compatibility lemma. The checker does not emit it, and that is frozen
   (T1, §19: the checker's rule until surface A1, #843, for §62's shapes).
 
-**The extended judgment.** `CDerivesP` (`Core/PinDerives.lean`) is `CDerives` with every premise
-in `CDerivesP`, plus `lendR`, `lendLoopR` and `nilDead`. It is generated from
-`Core/Fundamental.lean` by `scripts/gen-pin.py` (templates in `scripts/pin/`), so a rule added to
-`CDerives` is in it after a rerun; `python3 scripts/gen-pin.py --check` fails when the generated
-files are stale. §28's BOXED-κ (`effHandleVB`) is in it so, its case in `fundamentalC_pin`
-`handleV_compatCB`, as in `fundamentalC`.
+**The extended judgment.** `CDerivesP` is `CDerives` with every premise in `CDerivesP`, plus
+`lendR`, `lendLoopR` and `nilDead`: it is `CDerivesX {pin := true}` (§83), the three rules gated by
+`hPin : I.pin = true` in `Core/Judgment.lean`, so a rule added to `CDerivesX` is in it. §28's
+BOXED-κ (`effHandleVB`) is in it so, its case in the one Fundamental Property `fundamentalX`
+`handleV_compatCB`.
 
 **`PinLaw`** (`Core/PinLaw.lean`) is a `structure … : Prop` of two schemas: `LendFrame`, the
 relaxed `withborUV` lend's compatibility lemma at every `LendForm` (R1 is the form `ref`), and
@@ -6231,9 +6232,11 @@ with the counts of `corpus/counts.expected`.
     PinLaw.stop : PinLaw → PinStop          PinLaw.loop : PinLaw → PinLoop
     pinLaw_iff : PinLaw ↔ PinStop ∧ PinLoop
 
-`fundamentalC_pin` is `fundamentalC`'s induction, case for case, with `hPin.lendFrame` at `lendR`
-(form `ref`) and `hPin.loopFrame` at `lendLoopR`, each at the induction hypothesis of its callback
-(steps), and `semC_dead` at `nilDead` (`Core/PinFundamental.lean`, generated). `PinLaw.stop` and `PinLaw.loop` follow from it;
+`fundamentalC_pin` and `fundamentalC` are instances of one induction, `fundamentalX (hLaw : I.pin =
+true → PinLaw) : CDerivesX I Δ Γ e j → SemJ Δ Γ e j` (§83, `Core/Fundamental.lean`), with
+`lendFrame` at `lendR` (form `ref`) and `loopFrame` at `lendLoopR`, each at the induction hypothesis
+of its callback (steps), and `semC_dead` at `nilDead`; at `{}` its hypothesis is vacuous.
+`CDerivesP.ofC` is `CDerivesX.mono`. `PinLaw.stop` and `PinLaw.loop` follow from it;
 `PinLaw.of_stop_loop` is the converse.
 At the checker: `checkProgram_soundP` (every checked `main` has a `CDerivesP` derivation),
 `checked_sem_pin` and `checked_runs_pin`; `checkProgram_sound`, `checkProgram_tied`,
@@ -11312,8 +11315,8 @@ and traverses `S`; an array is a `count` loop (§16) that moves each element out
 ### Soundness
 
 `foldOwnG_compatX` (`Core/FoldOwnG.lean`) is the rule's semantic typing, the CDerives rule
-`foldOwnG` its use (`Core/Fundamental.lean`), mirrored in `CDerivesAt` (`Core/Tied.lean`) and
-`CDerivesP` (`Core/PinDerives.lean`), with a case in each induction over them. The proof is
+`foldOwnG` its use (`Core/Judgment.lean`), a rule of `CDerivesX` and so of `CDerivesAt` and
+`CDerivesP` (§83), with a case in each induction over them. The proof is
 U0's, with the algebras taken out of the tuple: `trav_spec` is induction on the position
 `A ∈ P`, one case per former, given every key's call below the measure `(cells, value size,
 rank)` lexicographically; `hs_all` is strong induction on that measure; `fold_spec` is the fold
@@ -12659,7 +12662,7 @@ conversion of a `foldOwn` or `foldReuse` node changes.
 
 The node itself, with its shape `F : FShape` (`TExpr.foldOwn`, `TExpr.foldReuse`;
 `TDerives.foldOwn`, `TDerives.foldReuse`, `Frontend/Check/TDerives.lean`; `CDerives.foldOwn`,
-`CDerives.foldReuse`, `Core/Fundamental.lean`, by `foldOwn_compatX` (`Core/FoldOwn.lean`) and
+`CDerives.foldReuse`, `Core/Judgment.lean`, by `foldOwn_compatX` (`Core/FoldOwn.lean`) and
 `foldReuse_compatX` (`Core/FoldReuse.lean`)). Its type `!U(A′_R ⊸ F R) ⊸ !U(μX. F.ty ⊸ F R)`
 (`algOTy`, `foldOTy`; `A″_R`, `algRTy`, at `foldReuse`) says:
 
@@ -12817,8 +12820,9 @@ lemmas the later units reuse, and no `VTy` former, rule or relation clause (K1�
 
 ### The rules
 
-Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP` and `TDerives*`
-by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No new index and no new judgment.
+Each is a `CDerives` rule with one compatibility lemma, a rule of `CDerivesX` and so of its
+instances `CDerivesAt` and `CDerivesP` (§83), mirrored into `TDerives*` by `scripts/gen-pin.py`. No
+new index and no new judgment.
 
 | Rule | Statement | Unit |
 |---|---|---|
@@ -12935,8 +12939,8 @@ proofs; every corpus and kernel program its output. The later units must preserv
 
 K3 (the four rules and the restated `force`): `fundamentalC`, `adequacyC` and `goal791N :
 HandlerLawN → Goal791N` keep their statements and cover the new rules, the chain's through
-`FundamentalKW835N`. The judgment freeze holds: no new judgment, and the rules join `CDerives`,
-mirrored by `scripts/gen-pin.py` and, into `CDerivesAt`, by hand. Every rejection theorem keeps its verdict; one that flips is
+`FundamentalKW835N`. The judgment freeze holds: no new judgment, and the rules join `CDerivesX`
+(§83), and so every instance, mirrored into the checker by `scripts/gen-pin.py`. Every rejection theorem keeps its verdict; one that flips is
 reported as an intended change.
 
 ### Open
@@ -14702,6 +14706,123 @@ These are not part of the respelling.
 - **Kernel pieces:** field lends of record values; `withlocal`'s effect-row variants; a kernel form
   for handler-local state; shared borrows across tasks' waits (#821); a `finally` writing places;
   two index lends into one array; array literals of linear elements.
+
+---
+
+## 83. Entry 82 — one typing judgment: `CDerivesX` at a judgment index (#798)
+
+### What it adds
+
+The kernel's typing judgments become one inductive, `CDerivesX I Δ Γ e j` (`Core/Judgment.lean`),
+each rule written once, at a **judgment index** `I : JIdx`. The judgments the kernel has today are
+its instances: abbreviations that keep their names, their rules and every statement over them.
+
+    structure JIdx where
+      ties : Option EffCtx := none   -- RowAt Ξ at the rules that read a signature off a row
+      pin  : Bool := false           -- the relaxed rules of §29
+    abbrev CDerives        := CDerivesX {}
+    abbrev CDerivesAt (Ξ)  := CDerivesX {ties := some Ξ}
+    abbrev CDerivesP       := CDerivesX {pin := true}
+
+- **The fields.** A field is a gating premise of the rules it gates.
+  - `ties`: at `some Ξ`, ten rules take `hAt : I.RowOK S`, which is `RowAt Ξ S` (§19, decision
+    R). These are the rules that read an operation's signature off a row: `iterate`, `divFuel`,
+    `reify`, `effPerform`, `effAwait`, `effRaise`, `effHandleV`, `effHandleVB`, `effHandleT`,
+    `effHandleL`. At `none` the premise is `True`.
+  - `pin`: `lendR`, `lendLoopR` and `nilDead` (§29) take `hPin : I.pin = true`. Every other rule
+    is the same at every index.
+  - `I ≤ I'` holds field by field. A tie may be dropped (`some Ξ ≤ none`), and the relaxed rules
+    may be enabled (`false ≤ true`). `CDerivesX.mono` states that a derivation at `I` is one at
+    every `I' ≥ I`.
+- **The freeze.** `JIdx` is a **parameter** of the one inductive, not an index on `CDerives`.
+  - A field is a premise uniform across a rule's premises and its conclusion: a derivation never
+    changes index, and elimination stays non-dependent.
+  - A coordinate that a rule switches would be an index, and is not admitted.
+  - A new field is a new judgment, and is decided as one: by decision 19 (`docs/decisions.md`)
+    and review. `scripts/check-judgments.sh` sees only a new inductive, not a new field.
+    `CDerives` itself carries no index.
+- **Generated per instance** (`Core/JudgmentElim.lean`, by `scripts/gen-pin.py`):
+  - each rule under the instance's name, at the instance's premises: `CDerives.effPerform`
+    without `hAt`, `CDerivesAt.effPerform` with `RowAt Ξ S`, `CDerivesP.lendR` without `hPin`;
+  - the instance's eliminator, with the instance's own cases (`induction h using
+    CDerives.induct`). A rule whose field is off at the instance is refuted, so it is no case.
+- **A, `ties`.**
+  - `CDerives` and `CDerivesAt` become abbreviations of `CDerivesX`, and `Core/Tied.lean`'s
+    hand-written copy of the rules goes.
+  - `scripts/gen-pin.py` reads its rules from `CDerivesX`.
+  - `CDerivesAt.toCDerives` is an instance of `mono`.
+  - The `CDerives`/`CDerivesAt` pairs `insert_dead` and `append_dead` are one induction each.
+- **B, `pin`.**
+  - The three relaxed rules and their definitions (`NoThunkT`, `Row.ResumeO`, `Row.ResumeOC`,
+    `lendCb`, `lendLoopApp`, …) move to `Core/Judgment.lean`.
+  - `CDerivesP` becomes an abbreviation and is no longer generated.
+  - `PinLaw` (`Core/PinLaw.lean`) is stated before the Fundamental Property, which becomes one
+    theorem:
+
+        fundamentalX (hLaw : I.pin = true → PinLaw) : CDerivesX I Δ Γ e j → SemJ Δ Γ e j
+
+    `fundamentalC` is `fundamentalX` at `{}`, where its hypothesis is vacuous; `fundamentalC_pin
+    hPin` is it at `{pin := true}`; `CDerivesP.ofC` is `mono`. `Core/PinFundamental.lean` is
+    written by hand and holds the corollaries under `PinLaw`.
+  - The merged `insert_dead` and `append_dead` take `I.pin = false`, since R1 and R2 conclude at
+    `r : Ref T` alone.
+- **C, the checker.**
+  - `TDerivesX I` is generated from `CDerivesX`, with `TDerivesAt Ξ` and `TDerivesP` its
+    abbreviations.
+  - There is one `erase`, one `weaken` and one `weakenΔ`, and `TDerivesAt.toP` is an instance of
+    `TDerivesX.mono`.
+- **D, the rule.** The gate and `CLAUDE.md` say "one judgment; a new coordinate is a field", and
+  `scripts/judgments.allow` lists `CDerivesX` and `TDerivesX` for the kernel and the checker.
+
+### Baseline
+
+- **Every registered statement keeps its type** (`scripts/axioms/*.names`), through the
+  abbreviations, or as an instance of the general lemma. Each step checks this by the snapshot
+  method: every registered name's type and `#print axioms` before and after, with any change
+  listed.
+- **`fundamentalC`, `adequacyC`/`adequacyD` and `goal791N_nil`** keep their statements and take
+  no hypothesis. `fundamentalN_all` and `goal791N` keep theirs.
+- **The `PinLaw` theorems.** `fundamentalC_pin`, `adequacyC_pin`, `adequacyD_pin`,
+  `adequacyD_pin_safe`, `total_open_pin`, `PinLaw.stop`, `PinLaw.loop` and `pinLaw_iff` keep
+  their statements under `PinLaw`. `PinLaw`, `LendFrame`, `LoopFrame`, `PinStop` and `PinLoop`
+  keep their text. The register (`Core/Assumptions.lean`) lists `fundamentalX` as taking
+  `PinLaw` at `I.pin = true`.
+- **Axioms.** Every result's axioms stay within `propext`, `Classical.choice` and `Quot.sound`. A
+  changed axiom line inside those is listed, with its reason.
+- **Rules.** No rule is added or removed, and no rule's premises change at any instance. Each keeps
+  its one compatibility lemma.
+- **Names.** The constructor names that `scripts/PinSites.lean` and `scripts/axioms/s051.names`
+  cite resolve, as generated rules of the instance.
+- **No other change.** No relation, machine step, checker output or backend changes. Every corpus
+  and kernel program gives the same output.
+
+### Units
+
+**Status by step.** This entry states the whole target, ahead of steps B to D. Each step makes
+true the clauses it names:
+
+- **A** (`ties`): built, landed as #1178. True with A: `CDerivesX` and `JIdx`, `CDerives` and
+  `CDerivesAt` as instances, the generated rules and eliminators, `mono`, one `insert_dead` and
+  one `append_dead`; §3 *Typing*, §10, §19's `CDerivesAt Ξ`, §28's induction list, §61, §68.
+- **B** (`pin`; one `fundamentalX`): code to follow. True with B: `CDerivesP` as
+  `CDerivesX {pin := true}` and the relaxed rules gated by `hPin` (§29 *The extended
+  judgment*); `fundamentalX`, with `fundamentalC` and `fundamentalC_pin` its instances, and
+  `CDerivesP.ofC` as `mono` (§29 *Theorems*); `Core/PinFundamental.lean` written by hand.
+- **C** (`TDerivesX`): code to follow. True with C: §3's typed term generated as `TDerivesX`,
+  with `TDerivesAt Ξ` and `TDerivesP` its instances.
+- **D** (the gate's and `CLAUDE.md`'s wording): code to follow.
+
+They land in that order.
+
+### Open
+
+- **`general`**: a third field, for the rules whose soundness is `HandlerLawN` (L2(a)). Its
+  default is `true`, so that `CDerives` stays this judgment.
+- **Providers (#778)**, as a field.
+- **The checker's `TTied` conjunction** (two derivations per node), folded into one derivation
+  with ties as a predicate field.
+- **The derived rules stated per instance** (`effThenA`, `effHandle`, `withbor1U`, …), as one each
+  over `I`.
 
 ---
 
