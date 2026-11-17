@@ -14218,6 +14218,15 @@ has no outgoing effect row: any operation inside it must be handled there, and n
 unwind can escape the invocation. Capturing the view into an unrestricted closure and returning
 it outside the fresh lifetime are refused by the existing kernel rules.
 
+**One rule for the family (#1148).** The checker types every scoped local with one rule and one
+typed-term node, `withlocal`, indexed by a kind `k : LocalKind`. The kind selects the side
+condition (`LocalOK k`), the result type (`localTy k`), the erased core term (`localE k`), and the
+derived kernel lemma the rule projects to (`LocalKind.wf`; for `plain`, `withlocal_wf`). Plain
+`withlocal[…]` is the first kind, `plain`: its text, typing and lowering are unchanged. Backend2
+reads the kind from the node. A new kind adds a constructor and a clause to each of these
+functions in `Core/Local.lean`, not a checker rule. `CDerives` is unchanged, and the checker
+judgment's rule count does not grow.
+
 ### Lowering
 
 The checker emits a derived typed `withlocal` node whose erasure is the construction above. Backend2
@@ -14261,11 +14270,13 @@ state threading is introduced. There is no new index on `CDerives` and no invers
 
 - #1115's plain variant, built (#1117): the derived constant (`Core/Local.lean`, `withlocal_wf`),
   its typed node through the checker, and Backend2's frame and register placement.
+- The family's one checker rule, indexed by `LocalKind` (#1148), built (#1162).
 - A surface form, and its producer, are #1115's. Not built.
 
 ### Open
 
-Unwinding, suspension and handler-owned state are separate work.
+The later kinds: unwinding (#1128), a local across an uncounted loop (#1140), and a `Mut` to `Imm`
+reborrow for read-only stretches (#1141). Suspension and handler-owned state are separate work.
 The old backend compiles the erasure; its scalar locals are not register-promoted by this entry.
 
 ---
