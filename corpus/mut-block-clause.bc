@@ -1,0 +1,20 @@
+-- A block given at a block parameter inside a handler clause assigns the clause's own `let mut`
+-- (#1068): `ap`'s copy passes it at each call of the block, so the second call sees the first's
+-- write (SPEC §41, rule R3). `h` resumes its continuation, `hd` drops it; the `with` of `h` is in
+-- the scope of a local of the same name as the clause's.
+--
+-- Answer: (i32[4294961297], i32[4606]), the first -5999.
+effect Stop { ctl stop() -> i32 }
+fn ap(f: !(i32 => i32)) -> i32 = f(1) * 10 + f(2)
+fn bump(x: i32) -> i32 * i32 = (x + 1, x)
+handler h(a0: i32): Stop, i32 -> i32 = {
+  return(x) = x;
+  stop(k) = { let mut a = a0; let t = ap(!{ u -> let (a, r) = bump(a); r * 6 }); k(t * 100 + a) }
+}
+handler hd(a0: i32): Stop, i32 -> i32 = {
+  return(x) = x;
+  stop(k) = { let mut a = a0; let t = ap(!{ u -> a = a + u; a }); t * 100 + a }
+}
+main -> i32 * i32 =
+  let a = 0 - 1;
+  (with h(a) { stop() }, with hd(3) { stop() })
