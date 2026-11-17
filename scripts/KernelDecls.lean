@@ -8,10 +8,10 @@ import Backend
     lake env lean scripts/KernelDecls.lean
 
 List every declaration of a `Core` module that is a derived rule (a theorem concluding with a
-`CDerivesX` judgment, at any of its instances) or a derived form (a definition whose value is a
-value type, a computation type, a term or a value), outside the files of programs and examples; and
-for each,
-the `Frontend` and `Backend` declarations that mention it. Prints tab-separated lines
+`CDerivesX` judgment or one of its instances `CDerives`, `CDerivesAt`, `CDerivesP`, outside the
+rules' generated names in `Core/JudgmentElim.lean`) or a derived form (a definition whose value is
+a value type, a computation type, a term or a value), outside the files of programs and examples;
+and for each, the `Frontend` and `Backend` declarations that mention it. Prints tab-separated lines
 `<kind> <module> <name> <frontend users> <backend users>`, a user count and up to three users each.
 -/
 
@@ -44,12 +44,16 @@ def resultHead (t : Expr) : MetaM Name :=
   for (n, ci) in env.constants.toList do
     let some m := modOf n | continue
     if !(`Core).isPrefixOf m || isProgramModule m then continue
+    -- the rules themselves under each instance's name (generated), not derived rules
+    if m == `Core.JudgmentElim then continue
     if n.isInternal || n.isImplementationDetail then continue
     let kind ← match ci with
       | .thmInfo _ =>
         let h ← resultHead ci.type
-        -- `forallTelescopeReducing` unfolds the instances (`CDerives`, `CDerivesAt Ξ`, `CDerivesP`)
-        pure (if h == ``BoCa.Fig16.LogRel.Core.CDerivesX then "rule" else "")
+        -- the result's head as written: `CDerivesX` or one of its instances' abbreviations
+        pure (if [``BoCa.Fig16.LogRel.Core.CDerivesX, ``BoCa.Fig16.LogRel.Core.CDerives,
+            ``BoCa.Fig16.LogRel.Core.CDerivesAt, ``BoCa.Fig16.LogRel.Core.CDerivesP].contains h
+          then "rule" else "")
       | .defnInfo _ =>
         let h ← resultHead ci.type
         pure (if h == ``BoCa.Fig16.LogRel.Core.VTy || h == ``BoCa.Fig16.LogRel.Core.CTy then "type"
