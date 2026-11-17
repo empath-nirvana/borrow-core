@@ -210,7 +210,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
         s!"the contents `{ppVTy A}` of an unwinding local are not persistent, so its unwind cannot drop them"
       (cDeadStrict (fun j => .withlocal (at_ sp) j (.unwind S S) A B x) fun hd _ =>
         .withlocal (.unwind S S) x hd
-          ⟨hx, hside, h₁, h₂, hP, hS, BoCa.Fig16.LogRel.Core.RowLe.refl S, hS.divB⟩)
+          ⟨⟨hx, hside, h₁, h₂⟩, hP, hS, BoCa.Fig16.LogRel.Core.RowLe.refl S, hS.divB⟩)
   | .withbor3U a _ A B r => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A

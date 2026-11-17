@@ -112,14 +112,17 @@ inductive LocalKind where
   | unwind (SM S : Row)
   deriving Inhabited
 
+/-- The side condition every kind shares, plain's whole: `x` fresh, `Δ ⊢ A ⊒ @b` for some
+defined `@b`, and `x` free in neither `A` nor `B`. `[spec §80]` -/
+abbrev LocalBase (Δ : LifeCtx) (x : LifeVar) (A B : VTy) : Prop :=
+  Δ.find? x = none ∧ (∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) ∧ ¬ VFree x A ∧ ¬ VFree x B
+
 /-- The kind's side condition at the lifetime context `Δ`, the callback's fresh lifetime `x`,
-the contents `A` and the callback's answer `B`. `[spec §80]` -/
+the contents `A` and the callback's answer `B`: `LocalBase` and the kind's own. `[spec §80]` -/
 def LocalOK : LocalKind → LifeCtx → LifeVar → VTy → VTy → Prop
-  | .plain, Δ, x, A, B =>
-      Δ.find? x = none ∧ (∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) ∧ ¬ VFree x A ∧ ¬ VFree x B
+  | .plain, Δ, x, A, B => LocalBase Δ x A B
   | .unwind SM S, Δ, x, A, B =>
-      Δ.find? x = none ∧ (∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) ∧ ¬ VFree x A ∧ ¬ VFree x B ∧
-        A.Persistent ∧ SM.Unwind x ∧ RowLe SM S ∧ Row.divB S = false
+      LocalBase Δ x A B ∧ A.Persistent ∧ SM.Unwind x ∧ RowLe SM S ∧ Row.divB S = false
 
 /-- The kind's type at `Δ`. `[spec §80]` -/
 def localTy : LocalKind → LifeCtx → LifeVar → VTy → VTy → VTy
@@ -144,7 +147,7 @@ theorem LocalKind.wf {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {A B : VTy} :
     ∀ k : LocalKind, Ctx.Dead Γ → LocalOK k Δ x A B →
       CDerives Δ Γ (localE k) (.val (localTy k Δ x A B))
   | .plain, hΓ, ⟨hx, hside, hA, hB⟩ => withlocal_wf x A B hΓ hx hside hA hB
-  | .unwind .., hΓ, ⟨hx, hside, hA, hB, hP, hS, hMS, hSv⟩ =>
+  | .unwind .., hΓ, ⟨⟨hx, hside, hA, hB⟩, hP, hS, hMS, hSv⟩ =>
       withlocalU_wf x A B hΓ hx hside hA hB hP hS hMS hSv
 
 end BoCa.Fig16.LogRel.Core
