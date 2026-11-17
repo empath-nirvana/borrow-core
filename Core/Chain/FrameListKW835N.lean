@@ -57,24 +57,24 @@ theorem tab_lookupRK : ∀ (F : CTy) {R : Nat → WProp} {vr : VRel} {g : KW →
             (finRK (ℍ := ℍ) R₂ vr g₂ fin δ₂)
             (fun f y ρ => (g₂ x₂).Owed f (g₂ y) ρ))
   | .eff m₀ i₀ q A B fin rc C, R, vr, g, δ, x, m, j, en, h => by
-      simp only [tabRK, tabClaimK] at h
+      simp only [tabRK, tabClaimK, tabCK, finCK, cancelOblCK, finClaimK, cancelOblClaimK] at h
       unfold extTabK at h
       split at h
       · rename_i hmj
         cases Option.some.inj h
         obtain ⟨rfl, rfl⟩ := hmj
         exact ⟨q, A, B, fin, .inl ⟨rfl, rfl, rfl, rfl⟩, rfl, fun R₂ g₂ δ₂ x₂ => by
-          simp only [tabRK, finRK, tabClaimK, extTabK, and_self, if_true]⟩
+          simp only [tabRK, finRK, tabClaimK, extTabK, and_self, if_true, tabCK, finCK, cancelOblCK, finClaimK, cancelOblClaimK]⟩
       · rename_i hmj
         obtain ⟨q', A', B', fin', hL, he, hR⟩ := tab_lookupRK C h
         exact ⟨q', A', B', fin', .inr hL, he, fun R₂ g₂ δ₂ x₂ => by
-          simp only [tabRK, tabClaimK, extTabK, if_neg hmj]; exact hR R₂ g₂ δ₂ x₂⟩
-  | .ret _, _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty] at h
-  | .arr _ _, _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty] at h
-  | .amp _ _, _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty] at h
-  | .top, _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty] at h
-  | .all _ _ _, _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty] at h
-  | .nuSys _ _ _, _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty] at h
+          simp only [tabRK, tabClaimK, extTabK, if_neg hmj, tabCK, finCK, cancelOblCK, finClaimK, cancelOblClaimK]; exact hR R₂ g₂ δ₂ x₂⟩
+  | .ret _, _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty, tabCK, finCK, cancelOblCK, finClaimK, cancelOblClaimK] at h
+  | .arr _ _, _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty, tabCK, finCK, cancelOblCK, finClaimK, cancelOblClaimK] at h
+  | .amp _ _, _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty, tabCK, finCK, cancelOblCK, finClaimK, cancelOblClaimK] at h
+  | .top, _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty, tabCK, finCK, cancelOblCK, finClaimK, cancelOblClaimK] at h
+  | .all _ _ _, _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty, tabCK, finCK, cancelOblCK, finClaimK, cancelOblClaimK] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty, tabCK, finCK, cancelOblCK, finClaimK, cancelOblClaimK] at h
 
 /-- **The frame's callback table may be stopped at under a lend at `α ⊏ @bnd`, at the typed
 world**. -/
@@ -172,7 +172,7 @@ theorem tabRK_canRK {vr : VRel} (hv : ValRelOK vr) {Δ : LifeCtx} {xv : LifeVar}
   intro P' hP'
   simp only [entNK, hcap, if_true] at hP' hc
   by_cases htop : fin = .top
-  · subst htop; simp [finRK, finClaimK] at hP'
+  · subst htop; simp [finRK, finClaimK, tabCK, finCK, cancelOblCK, tabClaimK, cancelOblClaimK] at hP'
   rw [finRK_eq _ _ _ htop] at hP'
   cases Option.some.inj hP'
   have hin := hc _ (finRK_eq _ _ _ htop _)
@@ -274,7 +274,7 @@ theorem tabRK_finLe {R R' : Nat → WProp} (hR : ∀ k ρ, R k ρ → R' k ρ) (
   by_cases hcap : capB q B = true
   · rw [if_pos hcap] at hP' ⊢
     by_cases htop : fin = .top
-    · subst htop; simp [finRK, finClaimK] at hP'
+    · subst htop; simp [finRK, finClaimK, tabCK, finCK, cancelOblCK, tabClaimK, cancelOblClaimK] at hP'
     rw [finRK_eq _ _ _ htop] at hP' ⊢
     cases Option.some.inj hP'
     have hfd := layer_cdepth F hL
