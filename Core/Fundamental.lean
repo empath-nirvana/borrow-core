@@ -18,7 +18,7 @@ import Core.DivHandle
 import Core.DivHandleLast
 import Core.Tok
 import Core.Alpha
-import Core.JudgmentElim
+import Core.PinLaw
 import Support.LogicalRelation.Adequacy
 
 /-!
@@ -337,10 +337,13 @@ theorem alpha_compatJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} :
   | .comp _, .comp _, hα, h => alpha_compatC hα h
   | .val _, .comp _, hα, _ | .comp _, .val _, hα, _ => by simp [Jdg.alphaB] at hα
 
-/-- **Fundamental Property** of the CBPV judgment over the typed world at CBPV types.  `[spec §3]` -/
-theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
-    (h : CDerives Δ Γ e j) : SemJ Δ Γ e j := by
-  induction h using CDerives.induct with
+/-- **The Fundamental Property at every judgment index** (SPEC §83): every derivation is sound,
+outright when the relaxed rules are off, and under `PinLaw` when they are on (R1's case is
+`PinLaw.lendFrame` at the form `ref`, R2's `PinLaw.loopFrame`, each at the induction hypotheses of
+its code; `nilDead`'s is `semC_dead`). A tie is not read.  `[spec §3, §29, §83]` -/
+theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {Δ : LifeCtx}
+    {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerivesX I Δ Γ e j) : SemJ (ℍ := ℍ) Δ Γ e j := by
+  induction h with
   | var h => exact var_compatC h
   | unitI h => exact unitI_compatC h
   | tensorI hs _ _ ih₁ ih₂ => exact tensorI_compatC hs ih₁ ih₂
@@ -400,9 +403,9 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | countFold _ hΓ => exact countFold_compatX hΓ
   | countTry _ _ hΓ => exact countTry_compatX hΓ
   | boundedFix _ _ hΓ => exact boundedFix_compatX hΓ
-  | iterate _ _ _ _ hS hΓ => exact iterate_compatX hS hΓ
-  | divFuel _ _ hS hΓ => exact divFuel_compatX hS hΓ
-  | reify _ _ _ _ hS hcl _ hΓ ihres => exact reify_compatX hS hcl ihres hΓ
+  | iterate _ _ _ _ _ hS hΓ => exact iterate_compatX hS hΓ
+  | divFuel _ _ _ hS hΓ => exact divFuel_compatX hS hΓ
+  | reify _ _ _ _ _ hS hcl _ hΓ ihres => exact reify_compatX hS hcl ihres hΓ
   | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact sliceBorrowM_compatX x hΓ hA hB hf₁ hf₂
   | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ => exact sliceBorrowI_compatX x hΓ hsc hA hB hf₁ hf₂
   | sliceGetM _ _ hΓ => exact sliceGetM_compatX hΓ
@@ -446,9 +449,9 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | unfoldK C G S hC hG hS hΓ => exact unfoldK_compatX hC hG hS hΓ
   | nuOutK hC hG hS hGf h => exact nuOutK_compatX hC hG hS hGf h
   | effSub hle _ ih => exact sub_compatC hle ih
-  | effPerform hf hna _ _ ih => exact perform_compatC hf hna ih
-  | effAwait hΓ hfa ha haA hfc hc => exact semC_dead .nil hΓ (await_compatC hfa ha haA hfc hc)
-  | effRaise hf ha _ hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_ownFree hd h) ih
+  | effPerform _ hf hna _ _ ih => exact perform_compatC hf hna ih
+  | effAwait _ hΓ hfa ha haA hfc hc => exact semC_dead .nil hΓ (await_compatC hfa ha haA hfc hc)
+  | effRaise _ hf ha _ hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_ownFree hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatC hs hW hU ihM ihN
   | effThen hs hNZ _ hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
       exact then_compatC hs hNZ hU hMS hDS
@@ -458,19 +461,32 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       · exact then_compatC hs hNZ hU hMS hDS
           (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc)) hP hSD ihM ihN ihD
       · exact then_compatC_div hs hNZ hU hMS hDS hP hcap hSD ihM ihN ihD
-  | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
+  | effHandleV _ hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       exact handleV_compatC hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
         (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe)
-  | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+  | effHandleVB _ hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
       exact handleV_compatCB hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
         (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe) hΓd
         (Row.ansOutlives_ofEff_rc hSd)
-  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+  | effHandleT _ hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
       exact handleT_compatC hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
-  | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
+  | effHandleL _ hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
       exact handleL_compatC hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN
   | alpha _ hα ih => exact alpha_compatJ hα ih
+  | lendR hPin hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc _ hM ihd ihM =>
+      exact (hLaw hPin).lendFrame _ _ _ _ _ _ _ _ _ _ (.ref hT hside)
+        hb hx hbx hΔx hB hBn hS hM1 hcb hdc ihd (hM.mono (JIdx.le_pin _)) ihM
+  | lendLoopR hPin hx hbx hΔx hA hB hR hBn hRn hsc hN1 hK1 hs0c hN hK hs0 ihN ihK ihs0 =>
+      exact (hLaw hPin).loopFrame _ _ _ _ _ _ _ _ _ hx hbx hΔx hA hB hR hBn hRn hsc hN1 hK1 hs0c
+        (hN.mono (JIdx.le_pin _)) (hK.mono (JIdx.le_pin _)) (hs0.mono (JIdx.le_pin _)) ihN ihK ihs0
+  | @nilDead _ _ _ j _ hΓ _ ih => cases j <;> exact semC_dead .nil hΓ ih
+
+/-- **Fundamental Property** of the CBPV judgment over the typed world at CBPV types:
+`fundamentalX` at `{}`, where its hypothesis is vacuous.  `[spec §3]` -/
+theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
+    (h : CDerives Δ Γ e j) : SemJ Δ Γ e j :=
+  fundamentalX (fun h => absurd h Bool.false_ne_true) h
 
 /-- **The stop lemma** (BOXED-κ's premise, `[spec §28]`): a computation typed at `F_Σ A` under
 `Γ`, with `Δ ⊨ Γ ⊐ @d` and every non-abortive answer type of `Σ` outliving `@d`, has the

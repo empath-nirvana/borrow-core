@@ -193,7 +193,7 @@ theorem mentions_withborUE (k : Nat) (d : Expr) : mentions k (withborUE d) = men
 /-- **A typed term mentions only live slots** of its context.  `[spec §55]` -/
 theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerivesP Δ Γ e j) : ∀ k, mentions k e = true → Ctx.LiveAt Γ k := by
-  induction h with
+  induction h using CDerivesP.induct with
   | var h =>
       intro k hk; simp only [mentions, beq_iff_eq] at hk; subst hk; exact h.live
   | @force _ _ i _ C h _ =>

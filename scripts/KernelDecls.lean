@@ -8,8 +8,8 @@ import Backend
     lake env lean scripts/KernelDecls.lean
 
 List every declaration of a `Core` module that is a derived rule (a theorem concluding with a
-`CDerives` or `CDerivesP` judgment) or a derived form (a definition whose value is a value type,
-a computation type, a term or a value), outside the files of programs and examples; and for each,
+`CDerivesX` judgment: `CDerives`, `CDerivesAt` or `CDerivesP`) or a derived form (a definition whose
+value is a value type, a computation type, a term or a value), outside the files of programs and examples; and for each,
 the `Frontend` and `Backend` declarations that mention it. Prints tab-separated lines
 `<kind> <module> <name> <frontend users> <backend users>`, a user count and up to three users each.
 -/
@@ -47,7 +47,8 @@ def resultHead (t : Expr) : MetaM Name :=
     let kind ← match ci with
       | .thmInfo _ =>
         let h ← resultHead ci.type
-        pure (if h == ``BoCa.Fig16.LogRel.Core.CDerives || h == ``BoCa.Fig16.LogRel.Core.CDerivesP
+        pure (if h == ``BoCa.Fig16.LogRel.Core.CDerivesX || h == ``BoCa.Fig16.LogRel.Core.CDerives
+          || h == ``BoCa.Fig16.LogRel.Core.CDerivesP
           then "rule" else "")
       | .defnInfo _ =>
         let h ← resultHead ci.type
