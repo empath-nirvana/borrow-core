@@ -95,7 +95,7 @@ case. -/
 theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr}
     {j : Jdg} (h : CDerives Δ Γ e j) : SemJN (ℍ := ℍ) Δ Γ e j := by
   obtain ⟨hHV, hHVB, hReify⟩ := hm
-  induction h with
+  induction h using CDerives.induct with
   | var h => exact var_compatN h
   | unitI h => exact unitI_compatN h
   | tensorI hs _ _ ih₁ ih₂ => exact tensorI_compatN hs ih₁ ih₂

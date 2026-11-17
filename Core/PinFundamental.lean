@@ -35,7 +35,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 /-- Every `CDerives` derivation is a `CDerivesP` derivation. -/
 theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ e j) : CDerivesP Δ Γ e j := by
-  induction h with
+  induction h using CDerives.induct with
   | var a0 => exact CDerivesP.var a0
   | unitI a0 => exact CDerivesP.unitI a0
   | tensorI a0 a1 a2 ih0 ih1 => exact CDerivesP.tensorI a0 ih0 ih1
