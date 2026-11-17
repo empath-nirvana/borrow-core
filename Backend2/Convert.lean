@@ -1835,6 +1835,13 @@ def genLocal (A : VTy) (value : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm 
     (.letv pr (.prim (.lend true) [cell]) (.letpair owner borrow pr
       (.letv answer (← call borrow) (.letv final (.prim .free [owner]) (.pair final answer)))))
 
+/-- A local of the kind `k` the checked node carries (`TExpr.withlocal`), lowered by that kind's
+generator. `[spec §80]` -/
+def genLocalKind (k : LocalKind) (A : VTy) (value : Var) (cbT : LTy) (call : Var → CM Tm) :
+    CM Tm :=
+  match k with
+  | .plain => genLocal A value cbT call
+
 /-- A borrow `withbor`'s way (SPEC §1): `(x, f [] x)`, the owner `src` lent as the borrow the
 callback `cb` (a `∀` closure, its instantiation erased: SPEC §44) is given, by `op` (`lend`,
 `relend`). -/
@@ -4389,7 +4396,7 @@ def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM 
     (dctx : Option FinApp := none) : CM Tm := do
   readFact s!"{ruleName c}:expand"
   match c with
-  | .withlocal _ _ A _ _ => genLocal A x cbT call
+  | .withlocal _ _ k A _ _ => genLocalKind k A x cbT call
   | .withbor1 .. | .sliceBorrowI .. => genLend (.lend false) x cbT call
   | .withbor2 .. | .sliceBorrowM .. => genLend (.lend true) x cbT call
   | .withbor3 .. => genLend .relend x cbT call
@@ -4460,7 +4467,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) (dctx : Optio
   | .withbor1 .., [x, cb] | .sliceBorrowI .., [x, cb] => genLend (.lend false) x (← tyOf cb) (callCb cb)
   | .withbor2 .., [x, cb] | .sliceBorrowM .., [x, cb] => genLend (.lend true) x (← tyOf cb) (callCb cb)
   | .withbor3 .., [m, cb] => genLend .relend m (← tyOf cb) (callCb cb)
-  | .withlocal _ _ A _ _, [x, cb] => genLocal A x (← tyOf cb) (callCb cb)
+  | .withlocal _ _ k A _ _, [x, cb] => genLocalKind k A x (← tyOf cb) (callCb cb)
   | .withload .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .withswap .., [m, f] => genWithswap m (← tyOf f) fun old => pure (.app f old)
   | .allocS _ _ σ, [v] => allocTree v resT σ

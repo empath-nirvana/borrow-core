@@ -269,12 +269,11 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
   | consume {Δ Γ A} {info : TInfo} (hA : Consumable A) (hc : closedAt 0 (consumeE A) = true)
       (he : (consumeE A).effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.consume info (.val (.lolli A .unit)) A) (.val (.lolli A .unit))
-  /-- Plain scoped local, derived from existing rules. `[spec §80]` -/
-  | withlocal {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : BoCa.Ctx.Dead Γ)
-      (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hA : ¬ VFree x A) (hB : ¬ VFree x B) :
-      TDerivesAt Ξ Δ Γ (.withlocal info (.val (withlocalTy x Δ.meetOfDom A B)) A B x)
-        (.val (withlocalTy x Δ.meetOfDom A B))
+  /-- **Derived**: a scoped local of kind `k`, its side condition, type and term the kind's
+  (`LocalOK`, `localTy`, `localE`, `Core/Local.lean`). `[spec §80]` -/
+  | withlocal {Δ Γ A B} {info : TInfo} (k : LocalKind) (x : LifeVar) (hΓ : BoCa.Ctx.Dead Γ)
+      (hk : LocalOK k Δ x A B) :
+      TDerivesAt Ξ Δ Γ (.withlocal info (.val (localTy k Δ x A B)) k A B x) (.val (localTy k Δ x A B))
   /-- **Derived**: a block's allocation (`d_allocS`). -/
   | allocS {Δ Γ} {info : TInfo} (σ : Shape) (he : (allocS σ).effFree = true)
       (hΓ : BoCa.Ctx.Dead Γ) :
@@ -594,12 +593,11 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
   | consume {Δ Γ A} {info : TInfo} (hA : Consumable A) (hc : closedAt 0 (consumeE A) = true)
       (he : (consumeE A).effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
       TDerivesP Δ Γ (TExpr.consume info (.val (.lolli A .unit)) A) (.val (.lolli A .unit))
-  /-- Plain scoped local, derived from existing rules. `[spec §80]` -/
-  | withlocal {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : BoCa.Ctx.Dead Γ)
-      (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hA : ¬ VFree x A) (hB : ¬ VFree x B) :
-      TDerivesP Δ Γ (.withlocal info (.val (withlocalTy x Δ.meetOfDom A B)) A B x)
-        (.val (withlocalTy x Δ.meetOfDom A B))
+  /-- **Derived**: a scoped local of kind `k`, its side condition, type and term the kind's
+  (`LocalOK`, `localTy`, `localE`, `Core/Local.lean`). `[spec §80]` -/
+  | withlocal {Δ Γ A B} {info : TInfo} (k : LocalKind) (x : LifeVar) (hΓ : BoCa.Ctx.Dead Γ)
+      (hk : LocalOK k Δ x A B) :
+      TDerivesP Δ Γ (.withlocal info (.val (localTy k Δ x A B)) k A B x) (.val (localTy k Δ x A B))
   /-- **Derived**: a block's allocation (`d_allocS`). -/
   | allocS {Δ Γ} {info : TInfo} (σ : Shape) (he : (allocS σ).effFree = true)
       (hΓ : BoCa.Ctx.Dead Γ) :
@@ -1040,7 +1038,7 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
       dsimp only [TExpr.erase]
       exact CDerivesAt.alpha ih0 a1
   | consume hA _ he hΓ => exact CDerivesAt.ofEffFree (consume_wf hA hΓ) he
-  | withlocal x hΓ hx hs hA hB => exact CDerivesAt.ofEffFree (withlocal_wf x _ _ hΓ hx hs hA hB) rfl
+  | withlocal k _ hΓ hk => exact CDerivesAt.ofEffFree (LocalKind.wf k hΓ hk) (LocalKind.effFree k)
   | allocS σ he hΓ => exact CDerivesAt.ofEffFree (d_allocS σ hΓ) he
   | freeS σ he hΓ => exact CDerivesAt.ofEffFree (d_freeS σ hΓ) he
   | withborSM σ c _ hσ hT hΔ hc _ he hΓ => exact CDerivesAt.ofEffFree (withborSM_wf hσ c hT hΔ hc hΓ) he
@@ -1418,7 +1416,7 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       dsimp only [TExpr.erase]
       exact CDerivesP.nilDead a0 ih0
   | consume hA _ _ hΓ => exact CDerivesP.ofC (consume_wf hA hΓ)
-  | withlocal x hΓ hx hs hA hB => exact CDerivesP.ofC (withlocal_wf x _ _ hΓ hx hs hA hB)
+  | withlocal k _ hΓ hk => exact CDerivesP.ofC (LocalKind.wf k hΓ hk)
   | allocS σ _ hΓ => exact CDerivesP.ofC (d_allocS σ hΓ)
   | freeS σ _ hΓ => exact CDerivesP.ofC (d_freeS σ hΓ)
   | withborSM σ c _ hσ hT hΔ hc _ _ hΓ => exact CDerivesP.ofC (withborSM_wf hσ c hT hΔ hc hΓ)
@@ -1546,7 +1544,7 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | letPoly a0 a1 a2 a3 a4 a5 ih0 ih1 => exact TDerivesP.letPoly a0 a1 ih0 a3 ih1 a5
   | alpha a0 a1 ih0 => exact TDerivesP.alpha ih0 a1
   | consume hA hc he hΓ => exact .consume hA hc he hΓ
-  | withlocal x hΓ hx hs hA hB => exact .withlocal x hΓ hx hs hA hB
+  | withlocal k x hΓ hk => exact .withlocal k x hΓ hk
   | allocS σ he hΓ => exact .allocS σ he hΓ
   | freeS σ he hΓ => exact .freeS σ he hΓ
   | withborSM σ c T hσ hT hΔ hc hcl he hΓ => exact .withborSM σ c T hσ hT hΔ hc hcl he hΓ
