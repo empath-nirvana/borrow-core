@@ -1241,12 +1241,12 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | foldOwn a0 a1 a2 a3 a4 =>
       intro Δ' he hd
       exact TDerivesAt.foldOwn a0 a1 a2 a3 a4
-  | foldOwnG a0 a1 a2 a3 =>
-      intro Δ' he hd
-      exact TDerivesAt.foldOwnG a0 a1 a2 a3
   | foldReuse a0 a1 a2 a3 a4 =>
       intro Δ' he hd
       exact TDerivesAt.foldReuse a0 a1 a2 a3 a4
+  | foldOwnG a0 a1 a2 a3 =>
+      intro Δ' he hd
+      exact TDerivesAt.foldOwnG a0 a1 a2 a3
   | nuIn a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesAt.nuIn a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))

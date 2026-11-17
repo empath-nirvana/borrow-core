@@ -225,10 +225,10 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       TDerivesAt Ξ Δ Γ (TExpr.foldImm (info := info) (jdg := (.val (.lolli (algTy F y R) (foldTy F y c R)))) (F := F) (y := y) (c := c) (R := R)) (.val (.lolli (algTy F y R) (foldTy F y c R)))
   | foldOwn {Δ Γ} {info : TInfo} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
       TDerivesAt Ξ Δ Γ (TExpr.foldOwn (info := info) (jdg := (.val (.lolli (algOTy F R) (foldOTy F R)))) (F := F) (R := R)) (.val (.lolli (algOTy F R) (foldOTy F R)))
-  | foldOwnG {Δ Γ} {info : TInfo} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
-      TDerivesAt Ξ Δ Γ (TExpr.foldOwnG (info := info) (jdg := (.val (FoldP.foldGTy B₀ Rs))) (B₀ := B₀)) (.val (FoldP.foldGTy B₀ Rs))
   | foldReuse {Δ Γ} {info : TInfo} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
       TDerivesAt Ξ Δ Γ (TExpr.foldReuse (info := info) (jdg := (.val (.lolli (algRTy F R) (foldOTy F R)))) (F := F) (R := R)) (.val (.lolli (algRTy F R) (foldOTy F R)))
+  | foldOwnG {Δ Γ} {info : TInfo} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
+      TDerivesAt Ξ Δ Γ (TExpr.foldOwnG (info := info) (jdg := (.val (FoldP.foldGTy B₀ Rs))) (B₀ := B₀)) (.val (FoldP.foldGTy B₀ Rs))
   | nuIn {Δ Γ} {info : TInfo} {t : TExpr} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : TDerivesAt Ξ Δ Γ t (.comp (CTy.unrollS m i C))) :
       TDerivesAt Ξ Δ Γ (TExpr.nuIn (info := info) (jdg := (.comp (.nuSys m i C))) (m := m) (i := i) (C := C) (t := t)) (.comp (.nuSys m i C))
   | nuOut {Δ Γ} {info : TInfo} {t : TExpr} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : TDerivesAt Ξ Δ Γ t (.comp (.nuSys m i C))) :
@@ -970,12 +970,12 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
   | foldOwn a0 a1 a2 a3 a4 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.foldOwn a0 a1 a2 a3 a4
-  | foldOwnG a0 a1 a2 a3 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesAt.foldOwnG a0 a1 a2 a3
   | foldReuse a0 a1 a2 a3 a4 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.foldReuse a0 a1 a2 a3 a4
+  | foldOwnG a0 a1 a2 a3 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesAt.foldOwnG a0 a1 a2 a3
   | nuIn a0 a1 ih0 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.nuIn a0 ih0
@@ -1523,8 +1523,8 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | unroll a0 ih0 => exact TDerivesP.unroll ih0
   | foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 => exact TDerivesP.foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9
   | foldOwn a0 a1 a2 a3 a4 => exact TDerivesP.foldOwn a0 a1 a2 a3 a4
-  | foldOwnG a0 a1 a2 a3 => exact TDerivesP.foldOwnG a0 a1 a2 a3
   | foldReuse a0 a1 a2 a3 a4 => exact TDerivesP.foldReuse a0 a1 a2 a3 a4
+  | foldOwnG a0 a1 a2 a3 => exact TDerivesP.foldOwnG a0 a1 a2 a3
   | nuIn a0 a1 ih0 => exact TDerivesP.nuIn a0 ih0
   | nuOut a0 a1 ih0 => exact TDerivesP.nuOut a0 ih0
   | unfoldN a0 a1 a2 a3 a4 => exact TDerivesP.unfoldN a0 a1 a2 a3 a4
