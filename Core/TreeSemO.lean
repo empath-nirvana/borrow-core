@@ -1,4 +1,5 @@
 import Core.TreeSemK
+import Core.TreeLend
 
 /-!
 # Value types owning records, at the lifetime tree (E3.0)
@@ -30,6 +31,19 @@ every use of `STy` is unchanged:
   `O′`; such a re-reading exists when the extension keeps the code of every location the records'
   escrows hold a `mut` cell at (`AgreeOn` on each escrow), which is what "no other branch ends or
   re-types `O`'s records" provides. `RecsRR.exists_retype` builds it.
+* **E3.1** (`STy.kontO_of_share`, `STy.kontBoxO_of_share`): a continuation captured at a stop
+  owning `O` (`contShareT … O …`) is a value of `STy.kontO` owning `O`, at the run
+  `SCmpO.ret … (fdAt en v Fb)`.
+* **E3.2** (`STy.kontBoxO_resume_after`): boxed, carried along an extension with its share and its
+  records re-read, and resumed there, a run owning the re-read records. The re-reading of the
+  records is not built from `AgreeOn`: the cactus operations give it for every branch but the
+  running one (`EndT`'s `RecsRR w′.Θ psF psF′`, through `cactusT_step` and `cactusT_extend`).
+* **E3.3** (`STy.kontO_exit`): the resumed run, owning the records of `imm` lends its branch
+  opened (`lendRec`s), ends one of them inside the resumed branch: the lend cell goes back to
+  `ℓ ↦ own(())` in the run's resource and the record leaves the run's records (`twp_lendEnd`, which
+  is `EndT`'s `MaskDiff` clause at the record's mask), under the resumer's guarantee `fdJoinT`,
+  which holds the frame to nothing at the owned records (`fdAt_joinT_noneAt`). `mut` lends open no
+  record on the tree (`TWNT.mutFold`/`mutUnfold`), so a continuation's island is its `imm` lends.
 -/
 
 noncomputable section
@@ -62,18 +76,6 @@ theorem RecsRR.append_left {K K' : WCactus} {Θ' : CodeTy} {O₂ : List (FrameRe
       | cons hr t =>
           obtain ⟨O₁', O₂', rfl, h₁, h₂⟩ := RecsRR.append_left t
           exact ⟨_ :: O₁', O₂', rfl, List.Forall₂.cons hr h₁, h₂⟩
-
-/-- **Owned records have a re-reading** at every extension of the tree keeping the code of every
-location their escrows hold a `mut` cell at. -/
-theorem RecsRR.exists_retype {K K' : WCactus} (hE : K.Ext K') {Θ Θ' : CodeTy} :
-    ∀ {O : List (FrameRecT K)}, (∀ r ∈ O, CovR (sem Θ) K r.R) → (∀ r ∈ O, AgreeOn Θ Θ' r.R) →
-      ∃ O' : List (FrameRecT K'), RecsRR Θ' O O'
-  | [], _, _ => ⟨[], List.Forall₂.nil⟩
-  | r :: O, hc, hag => by
-      obtain ⟨R', hR, -⟩ := RR.exists_retype hE (hc r (List.Mem.head _)) (hag r (List.Mem.head _))
-      obtain ⟨O', hO⟩ := RecsRR.exists_retype hE (fun x hx => hc x (List.Mem.tail _ hx))
-        (fun x hx => hag x (List.Mem.tail _ hx))
-      exact ⟨⟨r.le, r.v, R', r.T⟩ :: O', List.Forall₂.cons ⟨rfl, rfl, rfl, hR⟩ hO⟩
 
 /-! ### Value types owning records -/
 
@@ -255,6 +257,157 @@ theorem STy.kontO_toO_nil {τB : STy} {C : SCmp} {n : Nat} {w : TWd} {ls : List 
 
 /-- **A continuation owning records, boxed at `d`**: `[@d] U (B ⊸ C)`. -/
 def STy.kontBoxO (d : Life) (τB : STy) (C : SCmpO) : STyO := STyO.box d (STy.kontO τB C)
+
+/-! ### E3.1: a captured continuation owning records is a value of its type -/
+
+/-- **The resume of a captured continuation owning `O` is a run owning the re-read records**, at
+every extension of the stop's world, on the share's re-reading, at every list keeping the records
+the share reads, at every re-reading `O′` of `O`, below the stop's index: the share's resume
+(`contShareT_resume` at general `O`) and one step of `κ`'s application. -/
+theorem kontO_run_of_share {Tb : TableT} (hL : Tb.Local) {Q : TPostV} {τB : STy} {en : OpEntT}
+    {Fb : TFrame} {k : Nat} {w w' : TWd} {ls : List (SRecT w.K)} {ls' : List (SRecT w'.K)}
+    {O : List (FrameRecT w.K)} {O' : List (FrameRecT w'.K)} {K : Kont} {v κ : Val}
+    {ρ : TRes w.K} {ρ' : TRes w'.K}
+    (hκ : ∀ (a : Val) μ, Step1Only (ℍ := ℍ) μ (.app (.val κ) (.val a)) μ (K.plug (.val a)))
+    (hB : ∀ j (w' : TWd) ls' a σ, τB.P j w' ls' a σ → en.PBv v j w' ls' a σ)
+    {T : OpTabT} {Ψc : ContP}
+    (h : contShareT T en Fb k w ls O K v (cerwpTC (ℍ := ℍ) Tb Q Fb k) Ψc ρ)
+    (hE : w.Ext w' ρ) (hr : RRw (w := w) (w' := w') ρ ρ') (hk : KeepRel w'.Θ ls ls' ρ)
+    (hO : RecsRR w'.Θ O O') {j : Nat} (hj : j < k) {a : Val} {ρa σ : TRes w'.K}
+    (hc : ResUT.CompS ρ' ρa σ) (ha : τB.P j w' ls' a ρa) :
+    cerwpT (ℍ := ℍ) Tb Q Fb (fdAt en v Fb O') j w' ls' O' (.app (.val κ) (.val a)) σ := by
+  cases j with
+  | zero => exact cerwpT_zero
+  | succ j =>
+      refine cerwpT_step hL (hκ a) ?_
+      have hres := contShareT_resume h hE hr hk hO (k' := j) (by omega)
+        (hB j w' ls' a ρa (τB.down j w' ls' a ρa ha)) hc
+      simp only [cerwpTC, show j < k by omega, if_true] at hres
+      exact hres
+
+/-- **E3.1: a continuation captured owning `O` is a value of `U (B ⊸ C)` owning `O`.** The share
+`ρ` of a stop at `w`, `ls`, owning the records `O` (the lends its own branch opened), owing the
+relation at `Tb`, `Q`, `Fb`: `κ` is a value of `STy.kontO τB (SCmpO.ret … (fdAt en v Fb))` at `w`,
+`ls`, `O`, `ρ` at every index below the stop's. -/
+theorem STy.kontO_of_share {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {Q : TPostV}
+    (hQ : Q.Down) {τB : STy} {en : OpEntT} {Fb : TFrame} {k : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {K : Kont} {v κ : Val} {ρ : TRes w.K}
+    (hκ : ∀ (a : Val) μ, Step1Only (ℍ := ℍ) μ (.app (.val κ) (.val a)) μ (K.plug (.val a)))
+    (hB : ∀ j (w' : TWd) ls' a σ, τB.P j w' ls' a σ → en.PBv v j w' ls' a σ)
+    {T : OpTabT} {Ψc : ContP}
+    (h : contShareT T en Fb k w ls O K v (cerwpTC (ℍ := ℍ) Tb Q Fb k) Ψc ρ) {n : Nat}
+    (hn : n < k) :
+    (STy.kontO τB (SCmpO.ret (ℍ := ℍ) Tb hL hTb Q hQ Fb
+      (fun w' O' => fdAt en v Fb (w' := w') O'))).PO n w ls O κ ρ := by
+  intro w' ρ' ls' O' hE hr hk hO j hj a ρa σ hc ha
+  exact kontO_run_of_share hL hκ hB h hE hr hk hO (by omega) hc ha
+
+/-- **Boxed at a lifetime its share outlives**: `[@d] U (B ⊸ C)` owning `O`. -/
+theorem STy.kontBoxO_of_share {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {Q : TPostV}
+    (hQ : Q.Down) {τB : STy} {en : OpEntT} {Fb : TFrame} {k : Nat} {w : TWd}
+    {ls : List (SRecT w.K)} {O : List (FrameRecT w.K)} {K : Kont} {v κ : Val} {ρ : TRes w.K}
+    {d : Life}
+    (hκ : ∀ (a : Val) μ, Step1Only (ℍ := ℍ) μ (.app (.val κ) (.val a)) μ (K.plug (.val a)))
+    (hB : ∀ j (w' : TWd) ls' a σ, τB.P j w' ls' a σ → en.PBv v j w' ls' a σ)
+    {T : OpTabT} {Ψc : ContP}
+    (h : contShareT T en Fb k w ls O K v (cerwpTC (ℍ := ℍ) Tb Q Fb k) Ψc ρ)
+    (hd : ρ.InStratum (TSet.single d)) {n : Nat} (hn : n < k) :
+    (STy.kontBoxO d τB (SCmpO.ret (ℍ := ℍ) Tb hL hTb Q hQ Fb
+      (fun w' O' => fdAt en v Fb (w' := w') O'))).PO n w ls O κ ρ :=
+  ⟨STy.kontO_of_share hL hTb hQ hκ hB h hn, hd⟩
+
+/-! ### E3.2: carried with its records and resumed -/
+
+/-- **E3.2: a boxed continuation owning records, carried and resumed.** A `κ` captured owning `O`
+(its share `ρ`, at the stop list `ls`), boxed at `d`, is carried to any extension `w′` of the stop's
+world on the share's re-reading, at any list `ls′` keeping the records of `ls` the share reads,
+**with its records re-read (`O′`)**. Other branches may have opened and ended records of their own.
+There it is a value of its type owning `O′`, and resuming it at any answer of `B` is a run owning
+`O′`.
+
+The carrying premises (`hE`, `hr`, `hO`) are what the cactus operations give every branch other
+than the running one (`cactusT_step`, `cactusT_extend`: `w.Ext w′ ρ`, `RRw ρ ρ′`, `RecsRR O O′`,
+from `EndT`'s `RecsRR w′.Θ psF psF′` on the frame's records). Forcing at the reflexive extension
+needs the list's and the records' escrows covered, which a start provides (`RecInv.cov_ls`,
+`RecInv.cov_ps`). -/
+theorem STy.kontBoxO_resume_after {Tb : TableT} (hL : Tb.Local) (hTb : Tb.Down) {Q : TPostV}
+    (hQ : Q.Down) {τB : STy} {en : OpEntT} {Fb : TFrame} {k : Nat} {w w' : TWd}
+    {ls : List (SRecT w.K)} {ls' : List (SRecT w'.K)} {O : List (FrameRecT w.K)}
+    {O' : List (FrameRecT w'.K)} {K : Kont} {v κ : Val} {ρ : TRes w.K} {ρ' : TRes w'.K}
+    {d : Life}
+    (hκ : ∀ (a : Val) μ, Step1Only (ℍ := ℍ) μ (.app (.val κ) (.val a)) μ (K.plug (.val a)))
+    (hB : ∀ j (w' : TWd) ls' a σ, τB.P j w' ls' a σ → en.PBv v j w' ls' a σ)
+    {T : OpTabT} {Ψc : ContP}
+    (h : contShareT T en Fb k w ls O K v (cerwpTC (ℍ := ℍ) Tb Q Fb k) Ψc ρ)
+    (hd : ρ.InStratum (TSet.single d)) (hc : CovR (sem w.Θ) w.K ρ) (hE : w.Ext w' ρ)
+    (hr : RRw (w := w) (w' := w') ρ ρ') (hk : KeepRel w'.Θ ls ls' ρ) (hO : RecsRR w'.Θ O O')
+    (hls : ∀ x ∈ ls', CovR (sem w'.Θ) w'.K x.1.R) (hcO : ∀ r ∈ O', CovR (sem w'.Θ) w'.K r.R)
+    {n : Nat} (hn : n < k) :
+    (STy.kontBoxO d τB (SCmpO.ret (ℍ := ℍ) Tb hL hTb Q hQ Fb
+      (fun w' O' => fdAt en v Fb (w' := w') O'))).PO n w' ls' O' κ ρ' ∧
+      ∀ (a : Val) (ρa σ : TRes w'.K), ResUT.CompS ρ' ρa σ → τB.P n w' ls' a ρa →
+        cerwpT (ℍ := ℍ) Tb Q Fb (fdAt en v Fb O') n w' ls' O' (.app (.val κ) (.val a)) σ := by
+  have hb := STy.kontBoxO_of_share hL hTb hQ hκ hB h hd hn
+  have hb' := (STy.kontBoxO d τB _).mono n w w' ls ls' O O' κ ρ ρ' hE hr hk hO hc hb
+  exact ⟨hb', fun a ρa σ hcσ ha => STy.kontO_resume hb'.1 (TWd.Ext.refl w' ρ')
+    (RR.refl hr.cov) (KeepRel.refl hls ρ') (RecsRR.refl hcO) le_rfl hcσ ha⟩
+
+/-! ### E3.3: the exit returns the records -/
+
+/-- Lend records re-read to themselves at every tree. -/
+theorem lendRecs_rr {K K' : WCactus} {Θ' : CodeTy} :
+    ∀ Ls : List BoCa.Loc, RecsRR Θ' (Ls.map (lendRec (K := K))) (Ls.map (lendRec (K := K')))
+  | [] => List.Forall₂.nil
+  | l :: Ls => List.Forall₂.cons (lendRec_rr l) (lendRecs_rr Ls)
+
+/-- **The resumer's guarantee `fdJoinT` at a run owning lend records holds nothing at their
+cells**, at every world the frame is read at: the records re-read to themselves. -/
+theorem fdAt_joinT_noneAt {en : OpEntT} (hfd : en.fd = fdJoinT) {v : Val} {Fb : TFrame}
+    {w' : TWd} {Ls : List BoCa.Loc} {l : BoCa.Loc} (hl : l ∈ Ls) :
+    ∀ w ρf, fdAt en v Fb (Ls.map (lendRec (K := w'.K))) w ρf → NoneAt (· = l) ρf := by
+  intro w ρf h
+  have h2 := h.2 (Ls.map (lendRec (K := w.K))) (lendRecs_rr Ls)
+  rw [hfd] at h2
+  exact h2.2.mono fun x hx => by
+    subst hx
+    exact ⟨lendRec x, List.mem_map.mpr ⟨x, hl, rfl⟩, Or.inl rfl⟩
+
+/-- **Ending a lend inside a `cerwpT` run**: `twp_lendEnd` at the run's unfolding. The record
+leaves the run's records and the list; the frame must hold nothing at the cell. -/
+theorem cerwpT_lendEnd {Tb : TableT} {Q : TPostV} {Fb F : TFrame} {n : Nat} {w : TWd}
+    {ls ls₁ : List (SRecT w.K)} {O O₁ : List (FrameRecT w.K)} {e : Expr} {Z ρ ρ₁ : TRes w.K}
+    {l : BoCa.Loc} {α : Life}
+    (hρ : ResUT.CompS Z (viewRes α l) ρ)
+    (hρ₁ : ResUT.CompS Z (ResUT.single l (CellUT.ownOf BoCa.Val.unit)) ρ₁)
+    (hvZ : ResUT.Valid Z) (hZ : NoneAt (· = l) Z)
+    (hF : ∀ w' ρf, F w' ρf → NoneAt (· = l) ρf)
+    (hO : ∀ x, x ∈ O ↔ x = lendRec l ∨ x ∈ O₁) (hO₁ : lendRec l ∉ O₁)
+    (hls : ∀ x ∈ ls, x.1 = lendRec l ∨ x ∈ ls₁) (hls₁in : ∀ x ∈ ls₁, x ∈ ls)
+    (hls₁ : ∀ x ∈ ls₁, x.1 ≠ lendRec l)
+    (h : cerwpT (ℍ := ℍ) Tb Q Fb F n w ls₁ O₁ e ρ₁) :
+    cerwpT (ℍ := ℍ) Tb Q Fb F n w ls O e ρ := by
+  rw [cerwpT_eq] at h ⊢
+  exact twp_lendEnd hρ hρ₁ hvZ hZ hF hO hO₁ hls hls₁in hls₁ h
+
+/-- **E3.3: the exit.** A resumed continuation's run, owning the records `Ls.map lendRec` of the
+`imm` lends its branch opened, at the frame its resumer guarantees (`fdAt en v Fb`, `en.fd =
+fdJoinT`), ends the lend of `ℓ ∈ Ls` inside the resumed branch: from the lend cell beside `Z` to
+`ℓ ↦ own(())` beside `Z`, the run owning `O₁` (the records without `ℓ`'s) and the list without its
+entries. -/
+theorem STy.kontO_exit {Tb : TableT} {Q : TPostV} {en : OpEntT} (hfd : en.fd = fdJoinT)
+    {v : Val} {Fb : TFrame} {n : Nat} {w : TWd} {ls ls₁ : List (SRecT w.K)}
+    {Ls : List BoCa.Loc} {O₁ : List (FrameRecT w.K)} {e : Expr} {Z ρ ρ₁ : TRes w.K}
+    {l : BoCa.Loc} {α : Life} (hl : l ∈ Ls)
+    (hρ : ResUT.CompS Z (viewRes α l) ρ)
+    (hρ₁ : ResUT.CompS Z (ResUT.single l (CellUT.ownOf BoCa.Val.unit)) ρ₁)
+    (hvZ : ResUT.Valid Z) (hZ : NoneAt (· = l) Z)
+    (hO : ∀ x, x ∈ Ls.map (lendRec (K := w.K)) ↔ x = lendRec l ∨ x ∈ O₁) (hO₁ : lendRec l ∉ O₁)
+    (hls : ∀ x ∈ ls, x.1 = lendRec l ∨ x ∈ ls₁) (hls₁in : ∀ x ∈ ls₁, x ∈ ls)
+    (hls₁ : ∀ x ∈ ls₁, x.1 ≠ lendRec l)
+    (h : cerwpT (ℍ := ℍ) Tb Q Fb (fdAt en v Fb (Ls.map (lendRec (K := w.K)))) n w ls₁ O₁ e ρ₁) :
+    cerwpT (ℍ := ℍ) Tb Q Fb (fdAt en v Fb (Ls.map (lendRec (K := w.K)))) n w ls
+      (Ls.map lendRec) e ρ :=
+  cerwpT_lendEnd hρ hρ₁ hvZ hZ (fdAt_joinT_noneAt hfd hl) hO hO₁ hls hls₁in hls₁ h
 
 end BoCa.Fig16.Tree.Wp
 

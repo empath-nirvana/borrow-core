@@ -1,7 +1,6 @@
 -- RQ1 E3.0 (research branch rq1-tree): value types owning records.
 BoCa.Fig16.Tree.Wp.RecsRR.nil_left
 BoCa.Fig16.Tree.Wp.RecsRR.append_left
-BoCa.Fig16.Tree.Wp.RecsRR.exists_retype
 BoCa.Fig16.Tree.Wp.STy.toO_nil
 BoCa.Fig16.Tree.Wp.STyO.down_le
 BoCa.Fig16.Tree.Wp.STyO.reread
@@ -22,3 +21,15 @@ BoCa.Fig16.Tree.TWd.fresh_ext
 BoCa.Fig16.Tree.agreeOn_set
 BoCa.Fig16.Tree.TWd.setTy_ext
 BoCa.Fig16.Tree.TWd.setTy_self
+BoCa.Fig16.Tree.Wp.kontO_run_of_share
+BoCa.Fig16.Tree.Wp.STy.kontO_of_share
+BoCa.Fig16.Tree.Wp.STy.kontBoxO_of_share
+BoCa.Fig16.Tree.Wp.STy.kontBoxO_resume_after
+BoCa.Fig16.Tree.Wp.lendRecs_rr
+BoCa.Fig16.Tree.Wp.fdAt_joinT_noneAt
+BoCa.Fig16.Tree.Wp.cerwpT_lendEnd
+BoCa.Fig16.Tree.Wp.STy.kontO_exit
+BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.loan_resume_exit
+BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.loan_share
+BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.loan_kontO
+BoCa.Fig16.Tree.Wp.SchedProgs.SpawnProgs.loan_carried_resumed
