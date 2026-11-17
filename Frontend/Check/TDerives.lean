@@ -275,6 +275,13 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       (hA : ¬ VFree x A) (hB : ¬ VFree x B) :
       TDerivesAt Ξ Δ Γ (.withlocal info (.val (withlocalTy x Δ.meetOfDom A B)) A B x)
         (.val (withlocalTy x Δ.meetOfDom A B))
+  /-- Unwinding scoped local, derived from existing rules. `[spec §80]` -/
+  | withlocalU {Δ Γ A B} {SM S : Row} {info : TInfo} (x : LifeVar) (hΓ : BoCa.Ctx.Dead Γ)
+      (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+      (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hP : A.Persistent)
+      (hS : SM.Unwind x) (hMS : RowLe SM S) (hSv : Row.divB S = false) :
+      TDerivesAt Ξ Δ Γ (.withlocalU info (.val (withlocalUTy x Δ.meetOfDom A B SM S)) A B SM S x)
+        (.val (withlocalUTy x Δ.meetOfDom A B SM S))
   /-- **Derived**: a block's allocation (`d_allocS`). -/
   | allocS {Δ Γ} {info : TInfo} (σ : Shape) (he : (allocS σ).effFree = true)
       (hΓ : BoCa.Ctx.Dead Γ) :
@@ -600,6 +607,13 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       (hA : ¬ VFree x A) (hB : ¬ VFree x B) :
       TDerivesP Δ Γ (.withlocal info (.val (withlocalTy x Δ.meetOfDom A B)) A B x)
         (.val (withlocalTy x Δ.meetOfDom A B))
+  /-- Unwinding scoped local, derived from existing rules. `[spec §80]` -/
+  | withlocalU {Δ Γ A B} {SM S : Row} {info : TInfo} (x : LifeVar) (hΓ : BoCa.Ctx.Dead Γ)
+      (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+      (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hP : A.Persistent)
+      (hS : SM.Unwind x) (hMS : RowLe SM S) (hSv : Row.divB S = false) :
+      TDerivesP Δ Γ (.withlocalU info (.val (withlocalUTy x Δ.meetOfDom A B SM S)) A B SM S x)
+        (.val (withlocalUTy x Δ.meetOfDom A B SM S))
   /-- **Derived**: a block's allocation (`d_allocS`). -/
   | allocS {Δ Γ} {info : TInfo} (σ : Shape) (he : (allocS σ).effFree = true)
       (hΓ : BoCa.Ctx.Dead Γ) :
@@ -1041,6 +1055,8 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
       exact CDerivesAt.alpha ih0 a1
   | consume hA _ he hΓ => exact CDerivesAt.ofEffFree (consume_wf hA hΓ) he
   | withlocal x hΓ hx hs hA hB => exact CDerivesAt.ofEffFree (withlocal_wf x _ _ hΓ hx hs hA hB) rfl
+  | withlocalU x hΓ hx hs hA hB hP hS hMS hSv =>
+      exact CDerivesAt.ofEffFree (withlocalU_wf x _ _ hΓ hx hs hA hB hP hS hMS hSv) rfl
   | allocS σ he hΓ => exact CDerivesAt.ofEffFree (d_allocS σ hΓ) he
   | freeS σ he hΓ => exact CDerivesAt.ofEffFree (d_freeS σ hΓ) he
   | withborSM σ c _ hσ hT hΔ hc _ he hΓ => exact CDerivesAt.ofEffFree (withborSM_wf hσ c hT hΔ hc hΓ) he
@@ -1419,6 +1435,8 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       exact CDerivesP.nilDead a0 ih0
   | consume hA _ _ hΓ => exact CDerivesP.ofC (consume_wf hA hΓ)
   | withlocal x hΓ hx hs hA hB => exact CDerivesP.ofC (withlocal_wf x _ _ hΓ hx hs hA hB)
+  | withlocalU x hΓ hx hs hA hB hP hS hMS hSv =>
+      exact CDerivesP.ofC (withlocalU_wf x _ _ hΓ hx hs hA hB hP hS hMS hSv)
   | allocS σ _ hΓ => exact CDerivesP.ofC (d_allocS σ hΓ)
   | freeS σ _ hΓ => exact CDerivesP.ofC (d_freeS σ hΓ)
   | withborSM σ c _ hσ hT hΔ hc _ _ hΓ => exact CDerivesP.ofC (withborSM_wf hσ c hT hΔ hc hΓ)
@@ -1547,6 +1565,7 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | alpha a0 a1 ih0 => exact TDerivesP.alpha ih0 a1
   | consume hA hc he hΓ => exact .consume hA hc he hΓ
   | withlocal x hΓ hx hs hA hB => exact .withlocal x hΓ hx hs hA hB
+  | withlocalU x hΓ hx hs hA hB hP hS hMS hSv => exact .withlocalU x hΓ hx hs hA hB hP hS hMS hSv
   | allocS σ he hΓ => exact .allocS σ he hΓ
   | freeS σ he hΓ => exact .freeS σ he hΓ
   | withborSM σ c T hσ hT hΔ hc hcl he hΓ => exact .withborSM σ c T hσ hT hΔ hc hcl he hΓ

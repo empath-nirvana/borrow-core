@@ -276,6 +276,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | t@(.withbor1 ..) => t
   | t@(.withbor2 ..) => t
   | t@(.withlocal ..) => t
+  | t@(.withlocalU ..) => t
   | t@(.withbor3 ..) => t
   | t@(.withload ..) => t
   | t@(.withswap ..) => t
@@ -345,7 +346,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   -- Not placed at a wider context: `[code-I]`'s environment type is read off the context, and the
   -- checker does not apply it.  `[spec §68]`
   | .codeI .. | .codeIB .. => none
-  | .withlocal .. | .consume .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
+  | .withlocal .. | .withlocalU .. | .consume .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => some .ff
   | .use _ _ _ _ _ ab _ => ab
   | .var .. | .force .. | .nuOutK .. | .unitI .. | .copyBang .. | .releaseBang .. | .alloc .. | .free ..

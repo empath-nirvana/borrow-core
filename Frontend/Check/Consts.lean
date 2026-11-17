@@ -197,6 +197,19 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
         .withbor2UD x hd.toP hx hside h₁ h₂ hS (BoCa.Fig16.LogRel.Core.RowLe.refl S) (BoCa.Fig16.LogRel.Core.RowLe.nil S) hS.divB
           (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil)
           (.consume hdt hdc hde hd))
+  | .withlocalU _ b A B r => do
+      let b ← E.elabL Δ b
+      let A ← E.elabV Δ A
+      let B ← E.elabV Δ B
+      let S ← E.elabRow Δ sp r
+      let x := Δ.freshVar
+      let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
+      let ⟨hside⟩ ← outlivesWitness sp b A
+      let ⟨hS⟩ ← unwindRow sp x S
+      let ⟨hP⟩ ← needB sp A.persistent
+        s!"the contents `{ppVTy A}` of an unwinding local are not persistent, so its unwind cannot drop them"
+      (cDeadStrict (fun j => .withlocalU (at_ sp) j A B S S x) fun hd _ =>
+        .withlocalU x hd hx hside h₁ h₂ hP hS (BoCa.Fig16.LogRel.Core.RowLe.refl S) hS.divB)
   | .withbor3U a _ A B r => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
@@ -531,7 +544,7 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       (cDeadStrict (fun j => .withborF2I (at_ sp) j c x y A B T') fun hd _ =>
         .withborF2I s (scopedB_sound hA) (scopedB_sound hB) (outlivesB_sound _ _ _ hBo)
           (outlivesB_sound _ _ _ hTo) he hd)
-  | c@(.withbor1U ..) | c@(.withbor2U ..) | c@(.withbor3U ..) | c@(.withloadU ..)
+  | c@(.withbor1U ..) | c@(.withbor2U ..) | c@(.withbor3U ..) | c@(.withloadU ..) | c@(.withlocalU ..)
   | c@(.sliceBorrowMutU ..) | c@(.sliceBorrowImmU ..) => synConstU E Δ T sp c
 
 /-- The lifetime of a family at a shape: the lifetime of its first leaf. -/

@@ -2764,7 +2764,7 @@ def constArity : TExpr → Option Nat
   | .arrRelease .. | .countFold .. | .countTry .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
   | .sliceSplitM .. | .sliceReplaceM .. | .sliceSwapM .. | .consume .. | .foldImm .. | .foldOwn ..
   | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .boundedFix .. => some 1
-  | .withlocal .. | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
+  | .withlocal .. | .withlocalU .. | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. | .withbor1UD .. | .withbor2UD .. | .withbor3UD .. | .withloadU ..
   | .sliceBorrowMU .. | .sliceBorrowIU .. => some 2
@@ -4143,7 +4143,7 @@ def convSpine (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   match as, cbConst (headOf 64 h) with
   | [(u₁, cb), (u₂, x)], true =>
     let cbLam := match headOf 64 h with
-      | .withlocal .. => localLamOf 64 cb
+      | .withlocal .. | .withlocalU .. => localLamOf 64 cb
       | _ => lamOf 64 cb
     match cbLam with
     | some (k, .lam _ _ _ _ body) => do
@@ -4161,7 +4161,7 @@ def convSpine (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | _, _ => go fuel ctx as [] h resT
 where
   cbConst : TExpr → Bool
-    | .withlocal .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .sliceBorrowM ..
+    | .withlocal .. | .withlocalU .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .sliceBorrowM ..
     | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I ..
     | .withbor1UD .. | .withbor2UD .. | .withbor3UD .. | .withloadU .. | .sliceBorrowMU ..
     | .sliceBorrowIU .. => true
@@ -4384,12 +4384,51 @@ def genLendU (fuel : Nat) (op : Op) (src : Var) (cbT : LTy) (call : Var → CM T
       throw "LIR: an unwinding borrow's finaliser at a non-empty row with no abort"
     return consumes .dead ((dctx.map (live ·.1)).getD []) (← genLend op src cbT call)
 
+/-- **An unwinding local** (`withlocalUE`, SPEC §80): `genLocal`'s frame slot, lent as
+`genLendU` lends at a row with an abort. The value arm frees the owner and answers
+`(contents, value)`; the abort arm runs the finaliser `λr. forget (free r)` and hands the abort on.
+At a row with no abort (`SM` empty, by `Row.Unwind`) it is the plain local. `[spec §80]`
+UNPROVED: as `genLocal`, the derived allocation/lend/free can use a function-frame cell. On the
+abort arm the finaliser's `free` of a frame slot's owner is the slot's end (`unslot`), which
+emits no instruction: the slot dies with the frame. The dropped contents are persistent (the
+rule's `A.Persistent`), so dropping them releases nothing. The callback's view ends before
+either arm (the lend's scope); if it did not, a read through it after the abort could see a
+reused frame. -/
+def genLocalU (A : VTy) (value : Var) (cbT : LTy) (call : Var → CM Tm) (SM S : Row) : CM Tm := do
+  let pm ← rowPay SM; let ps ← rowPay S
+  unless pm.map (·.1) == ps.map (·.1) do
+    throw "LIR: an unwinding local whose callback's row is not its own is outside the pure fragment (#1046)"
+  match payTy pm with
+  | none => genLocal A value cbT call
+  | some eT => do
+    let aT ← vty A
+    let (some bT, rT) ← answerOf cbT | throw "LIR: withlocalu callback takes no borrow"
+    let .sum vT _ := rT.peel
+      | throw "LIR: an unwinding local's callback at a row with an abort does not answer a sum"
+    let scope ← newScope
+    let cell ← fresh (.ref aT)
+    let pr ← fresh (.pair (.ref aT) bT)
+    let owner ← fresh (.ref aT)
+    let borrow ← fresh bT
+    let r ← fresh rT
+    let v ← fresh vT; let e ← fresh eT
+    let final ← fresh aT
+    let q ← fresh (.pair aT vT)
+    let dropped ← fresh aT
+    modify fun st => { st with owners := st.owners.insert owner scope, localScopes := st.localScopes.insert scope }
+    readFact "withlocalu:frame"
+    return .letv cell (.prim (.allocLent scope [aT]) [value])
+      (.letv pr (.prim (.lend true) [cell]) (.letpair owner borrow pr (.letv r (← call borrow)
+        (.case r v (.letv final (.prim .free [owner]) (.letv q (.pair final v) (.inj false q)))
+          e (.letv dropped (.prim .free [owner]) (.consume .dead dropped (.inj true e)))))))
+
 /-- A borrowing constant applied to its first argument `x`, its callback's call given by `call`. -/
 def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM Tm) (resT : LTy)
     (dctx : Option FinApp := none) : CM Tm := do
   readFact s!"{ruleName c}:expand"
   match c with
   | .withlocal _ _ A _ _ => genLocal A x cbT call
+  | .withlocalU _ _ A _ SM S _ => genLocalU A x cbT call SM S
   | .withbor1 .. | .sliceBorrowI .. => genLend (.lend false) x cbT call
   | .withbor2 .. | .sliceBorrowM .. => genLend (.lend true) x cbT call
   | .withbor3 .. => genLend .relend x cbT call
@@ -4461,6 +4500,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) (dctx : Optio
   | .withbor2 .., [x, cb] | .sliceBorrowM .., [x, cb] => genLend (.lend true) x (← tyOf cb) (callCb cb)
   | .withbor3 .., [m, cb] => genLend .relend m (← tyOf cb) (callCb cb)
   | .withlocal _ _ A _ _, [x, cb] => genLocal A x (← tyOf cb) (callCb cb)
+  | .withlocalU _ _ A _ SM S _, [x, cb] => genLocalU A x (← tyOf cb) (callCb cb) SM S
   | .withload .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .withswap .., [m, f] => genWithswap m (← tyOf f) fun old => pure (.app f old)
   | .allocS _ _ σ, [v] => allocTree v resT σ
