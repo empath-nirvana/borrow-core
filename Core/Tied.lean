@@ -54,8 +54,7 @@ theorem CDerivesAt.withbor1U {Ξ : EffCtx} {Δ Γ A B d} {S : Row} (x : LifeVar)
     (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
     (hS : S.Unwind x) (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.ref A) .unit))) :
     CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S)) :=
-  .withbor1UD (SD := []) x hΓ hx hsc₁ hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
-    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
+  CDerivesX.withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS hd
 
 /-- The unwinding form of `withbor` (2) with its finaliser at the pure row: `withbor2UD` at
 `Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19, §23]` -/
@@ -64,8 +63,7 @@ theorem CDerivesAt.withbor2U {Ξ : EffCtx} {Δ Γ A B d} {S : Row} (x : LifeVar)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
     (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.ref A) .unit))) :
     CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S)) :=
-  .withbor2UD (SD := []) x hΓ hx hside hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
-    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
+  CDerivesX.withbor2U x hΓ hx hside hfree₁ hfree₂ hS hd
 
 /-- The unwinding form of `withbor` (3) with its finaliser at the pure row: `withbor3UD` at
 `Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19]` -/
@@ -73,8 +71,7 @@ theorem CDerivesAt.withbor3U {Ξ : EffCtx} {Δ Γ a A B d} {S : Row} (x : LifeVa
     (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
     (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.mut a A) .unit))) :
     CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S)) :=
-  .withbor3UD (SD := []) x hΓ hx hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
-    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
+  CDerivesX.withbor3U x hΓ hx hfree₁ hfree₂ hS hd
 
 /-- **Every tied derivation is one of `CDerives`**: the tie dropped (`CDerivesX.mono`).
 `[spec §19, §83]` -/
@@ -90,9 +87,7 @@ theorem CDerivesAt.effThenA {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row
     (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
     (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
     CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
-  .effThen (SD := []) hs hNZ hUq hU (RowLe.refl S) (RowLe.nil S)
-    (fun _ _ o _ hf hf' _ => by rw [hf] at hf'; cases hf'; exact ThenLe.nil o.fin)
-    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) rfl hM hN hD
+  CDerivesX.effThenA hs hNZ hUq hU hM hN hD
 
 /-- `[handle]` at two variables, tied: `CDerives.effHandle` with the handled row tied to `Ξ`.
 `[spec §19]` -/
@@ -103,14 +98,8 @@ theorem CDerivesAt.effHandle {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Ro
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (hdv : Row.divB (Row.ofEff n E 0 ++ S) = false)
     (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
-    CDerivesAt Ξ Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) := by
-  obtain ⟨sr, hsr, hlr⟩ := hr.live
-  obtain ⟨sc, hsc, hlc⟩ := hc.live
-  obtain ⟨sr', hsr', hlr'⟩ := hs₁.live_left hsr hlr
-  obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
-  exact .effHandleV hAt hs
-    (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E finsNil)))
-    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
+    CDerivesAt Ξ Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) :=
+  CDerivesX.effHandle hAt hs hs₁ hr hc hn0 hnS hlen hdv he
 
 /-- BOXED-κ at two variables, tied: `CDerivesAt.effHandle` with the clauses at `clausesTyB`.
 `[spec §28]` -/

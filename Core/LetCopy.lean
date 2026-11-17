@@ -85,6 +85,28 @@ theorem subst_unfill {b : Expr} (hcl : closedAt 0 (Val.lam b).1 = true) :
 
 /-! ### The let from the copy -/
 
+/-- **The copy gives the let** (`[let-poly]`), at every index without the pin rules: `N` filled
+with a closed λ-value, typed at `Γ`, is, with the bound slot dead in front, the rule's premise term
+(`CDerivesX.insert_dead`).  `[spec §24, §83]` -/
+theorem CDerivesX.letPoly_of_fill {I : JIdx} (hpf : I.pin = false) {Δ : LifeCtx} {Γ : Ctx VTy}
+    {N : Expr} {C : CTy} {j : Jdg}
+    (b : Expr) (hcl : closedAt 0 (Val.lam b).1 = true) (hV : CDerivesX I Δ [] (.val (.lam b)) j)
+    (h : CDerivesX I Δ Γ (N.subst 0 (Val.lam b)) (.comp C)) :
+    CDerivesX I Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C) :=
+  .letPoly b hcl hV
+    (by simpa using h.insert_dead hpf (Γd := [⟨.unit, false⟩]) (.cons .nil) [] Γ rfl)
+
+/-- **A function copied at each use is let-bound once**, at every index without the pin rules:
+any derivation of `e` gives `[let-poly]`'s derivation of the let of a closed λ-value typed at the
+empty context, its body `e.unfill b 0`, whose filling is `e` (`subst_unfill`).
+`[spec §18, §24, §83]` -/
+theorem CDerivesX.letPoly_copy {I : JIdx} (hpf : I.pin = false) {Δ : LifeCtx} {Γ : Ctx VTy}
+    {e : Expr} {C : CTy} {j : Jdg}
+    (b : Expr) (hcl : closedAt 0 (Val.lam b).1 = true) (hV : CDerivesX I Δ [] (.val (.lam b)) j)
+    (h : CDerivesX I Δ Γ e (.comp C)) :
+    CDerivesX I Δ Γ (.app (.val (.lam (e.unfill b 0))) (.val (.lam b))) (.comp C) :=
+  CDerivesX.letPoly_of_fill hpf b hcl hV (by rw [subst_unfill hcl]; exact h)
+
 /-- **The copy gives the let** (`[let-poly]`): `N` filled with a closed λ-value, typed at `Γ`, is,
 with the bound slot dead in front, the rule's premise term (`CDerives.insert_dead`).
 `[spec §24]` -/
@@ -92,7 +114,7 @@ theorem CDerives.letPoly_of_fill {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : C
     (b : Expr) (hcl : closedAt 0 (Val.lam b).1 = true) (hV : CDerives Δ [] (.val (.lam b)) j)
     (h : CDerives Δ Γ (N.subst 0 (Val.lam b)) (.comp C)) :
     CDerives Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C) :=
-  .letPoly b hcl hV (by simpa using h.insert_dead (Γd := [⟨.unit, false⟩]) (.cons .nil) [] Γ rfl)
+  CDerivesX.letPoly_of_fill rfl b hcl hV h
 
 /-- **A function copied at each use is let-bound once**: any derivation of `e` gives
 `[let-poly]`'s derivation of the let of a closed λ-value typed at the empty context, its body
@@ -101,7 +123,7 @@ theorem CDerives.letPoly_copy {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy}
     (b : Expr) (hcl : closedAt 0 (Val.lam b).1 = true) (hV : CDerives Δ [] (.val (.lam b)) j)
     (h : CDerives Δ Γ e (.comp C)) :
     CDerives Δ Γ (.app (.val (.lam (e.unfill b 0))) (.val (.lam b))) (.comp C) :=
-  .letPoly_of_fill b hcl hV (by rw [subst_unfill hcl]; exact h)
+  CDerivesX.letPoly_copy rfl b hcl hV h
 
 /-- `CDerives.letPoly_of_fill` for a tied derivation.  `[spec §19, §24]` -/
 theorem CDerivesAt.letPoly_of_fill {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy}
@@ -109,14 +131,14 @@ theorem CDerivesAt.letPoly_of_fill {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {
     (hV : CDerivesAt Ξ Δ [] (.val (.lam b)) j)
     (h : CDerivesAt Ξ Δ Γ (N.subst 0 (Val.lam b)) (.comp C)) :
     CDerivesAt Ξ Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C) :=
-  .letPoly b hcl hV (by simpa using h.insert_dead (Γd := [⟨.unit, false⟩]) (.cons .nil) [] Γ rfl)
+  CDerivesX.letPoly_of_fill rfl b hcl hV h
 
 /-- `CDerives.letPoly_copy` for a tied derivation.  `[spec §18, §19, §24]` -/
 theorem CDerivesAt.letPoly_copy {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy}
     {j : Jdg} (b : Expr) (hcl : closedAt 0 (Val.lam b).1 = true)
     (hV : CDerivesAt Ξ Δ [] (.val (.lam b)) j) (h : CDerivesAt Ξ Δ Γ e (.comp C)) :
     CDerivesAt Ξ Δ Γ (.app (.val (.lam (e.unfill b 0))) (.val (.lam b))) (.comp C) :=
-  .letPoly_of_fill b hcl hV (by rw [subst_unfill hcl]; exact h)
+  CDerivesX.letPoly_copy rfl b hcl hV h
 
 end BoCa.Fig16.LogRel.Core
 

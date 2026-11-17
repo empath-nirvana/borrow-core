@@ -1880,6 +1880,7 @@ def genLocalKind (k : LocalKind) (A : VTy) (value : Var) (cbT : LTy) (call : Var
   match k with
   | .plain => genLocal A value cbT call
   | .unwind SM S => genLocalU A value cbT call SM S
+  | .loop .. => throw "LIR: a loop local's steps are not a callback (`genLocalLoop`)"
 
 /-- A borrow `withbor`'s way (SPEC §1): `(x, f [] x)`, the owner `src` lent as the borrow the
 callback `cb` (a `∀` closure, its instantiation erased: SPEC §44) is given, by `op` (`lend`,
@@ -2315,6 +2316,59 @@ def genUnfold (C : LCTy) (Cv : CTy) (gT sT : LTy) : CM Nat := do
   modify fun s => { s with codes := s.codes.set! obs { kind := .amp, fns := fis.toList, ty := .nu C } }
   readFact "unfoldN:body"
   return obs
+
+/-- **A loop local** (`withlocalLoopE`, SPEC §80): `unfold step (v)` with `step = λp. ⟨next,
+close⟩` over the caller's steps `(nx, cl)`, as the kernel term builds it. The loop's state is
+`A ⊗ S`, the cell's contents beside the caller's state, carried in the codata's environment like
+any state; each turn lends the contents as a plain local (`genLocal`, a frame slot of the turn's
+function) to the callback `nx s` (or `cl s`), and the final contents go back into the next state
+(`next`) or the answer (`close`). The unused step of a turn is dropped (`forget`). No heap cell:
+the turn's slot is `genLocal`'s, under its `UNPROVED:` simulation; nothing else is rebuilt. The
+types are the kind's (`LocalKind.loop A S B R`). `[spec §80]` -/
+def genLocalLoop (A S B R : VTy) (v steps : Var) : CM Tm := do
+  let C := localLoopC A B R
+  let lC ← cty C
+  let aT ← vty A
+  let sT ← vty (.tensor A S)
+  let nT ← vty (.sum (.tensor A B) (.tensor A S))
+  let cT ← vty (.tensor A R)
+  let ampK : LCTy := .amp (.ret nT) (.ret cT)
+  let gT : LTy := .bang (.thunk (.arr sT ampK))
+  -- One turn at `p = (a, s)`: `f s` the callback, lent the contents as a plain local.
+  let turn (next : Bool) (p f other : Var) : CM Tm := do
+    let (_, cbT) ← arrowOf (← tyOf f)
+    let (some _, rT) ← answerOf cbT | throw "LIR: a loop local's callback takes no borrow"
+    letpairM p fun a s => do
+      let cb ← fresh cbT
+      let q ← fresh (.pair aT rT)
+      let lt ← genLocal A a cbT fun b => pure (.app cb b)
+      let k ← if next then
+          letpairM q fun a' o => do
+            let .sum bT s2T := rT.peel
+              | throw "LIR: a loop local's `next` callback does not answer a sum"
+            let b ← fresh bT; let s2 ← fresh s2T
+            let p₁ ← fresh (.pair aT bT); let p₂ ← fresh (.pair aT s2T)
+            return .case o b (.letv p₁ (.pair a' b) (.inj false p₁))
+              s2 (.letv p₂ (.pair a' s2) (.inj true p₂))
+        else pure (.var q)
+      return .consume .dead other (.letv cb (.app f s) (.letv q lt k))
+  letpairM steps fun nx cl => do
+    let stepTm ← mkClos "withlocal_loop step" [some nx, some cl] (.arr sT ampK) (some sT)
+      (.thunk ampK) fun ctx => do
+        match ctx with
+        | some p :: some nx :: some cl :: _ =>
+          mkAmp "withlocal_loop turn" [some p, some nx, some cl] ampK [nT, cT] [
+            fun c => match c with
+              | some p :: some nx :: some cl :: _ => turn true p nx cl
+              | _ => throw "LIR: a loop local's turn environment",
+            fun c => match c with
+              | some p :: some nx :: some cl :: _ => turn false p cl nx
+              | _ => throw "LIR: a loop local's turn environment"]
+        | _ => throw "LIR: a loop local's step environment"
+    bindTm stepTm gT fun g => do
+      let obs ← genUnfold lC C gT sT
+      readFact "withlocal_loop:unfold"
+      return .clos obs [g, v]
 
 /-! ### `bounded_fix`  `[spec §48]` -/
 
@@ -4206,6 +4260,7 @@ def convSpine (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | _, _ => go fuel ctx as [] h resT
 where
   cbConst : TExpr → Bool
+    | .withlocal _ _ (.loop ..) _ _ _ => false
     | .withlocal .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .sliceBorrowM ..
     | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I ..
     | .withborUD .. | .withloadU .. | .sliceBorrowMU ..
@@ -4511,6 +4566,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) (dctx : Optio
   | .withbor1 .., [x, cb] | .sliceBorrowI .., [x, cb] => genLend (.lend false) x (← tyOf cb) (callCb cb)
   | .withbor2 .., [x, cb] | .sliceBorrowM .., [x, cb] => genLend (.lend true) x (← tyOf cb) (callCb cb)
   | .withbor3 .., [m, cb] => genLend .relend m (← tyOf cb) (callCb cb)
+  | .withlocal _ _ (.loop A S B R) _ _ _, [v, st] => genLocalLoop A S B R v st
   | .withlocal _ _ k A _ _, [x, cb] => genLocalKind k A x (← tyOf cb) (callCb cb)
   | .withload .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .withswap .., [m, f] => genWithswap m (← tyOf f) fun old => pure (.app f old)

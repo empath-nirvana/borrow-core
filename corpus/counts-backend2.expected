@@ -138,6 +138,7 @@ core-withlocal 0 0 0 0 0 0
 core-withlocal-branch 0 0 0 2 2 0
 core-withlocal-callback 0 0 0 2 2 0
 core-withlocal-class 1 0 0 2 2 0
+core-withlocal-loop 3 0 0 12 12 0
 core-withlocal-nested 0 0 0 0 0 0
 core-withlocal-owned 2 0 0 4 4 0
 core-withlocal-unit 0 0 0 0 0 0
