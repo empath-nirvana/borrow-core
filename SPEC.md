@@ -13897,7 +13897,8 @@ handed back).
   §19's, at `(Σ_M, Σ_D, Σ) = (S, [], S)`.
 - **Binding:** `unwind (d)` right after the brackets is the constant's. A `[then]` around such a
   constant parenthesizes it, `x <- (return withbor3u[…]) unwind (D); N`, and the printer writes it
-  so.
+  so. The form is core text only: a surface body that writes it is refused by the parser,
+  `` `unwind (d)` after an unwinding borrow is core text; in a surface body it is not written (a `finally` is elaborated to it) ``.
 - **The finaliser's row:** `d` is checked at the dead context at `U(src ⊸ F_{Σ_D} 1)`, with `Σ_D`
   read from `d`'s derivation as `[then]`'s finaliser row is (§27 *The checker*), and `Σ = R ∪ Σ_D`.
   The synthesis of a non-empty `Σ_D` is K-b.3's.
@@ -13923,19 +13924,25 @@ handed back).
 - **Refused:**
   - a cleanup that uses two capabilities:
     `` a `finally` using two lent places (`Count`, `stdout`) has no kernel form yet (#1102, #1046) ``;
-  - a cleanup that performs an operation while using a capability, by the checker:
+  - a cleanup that uses a capability and performs, at the surface, since its finaliser row is
+    K-b.3's:
+    `` this cleanup uses `Count`, which the body also uses, and performs an operation of `Fail`; a cleanup of a lent place that performs is not provided yet (#1046) ``;
+  - in core text, a written finaliser that performs, by the checker:
     `` this finaliser performs `[1.0 cancel i32 ~> 0]`; a finaliser of a lent place that performs is not provided yet (#1046) ``.
 - **A `let mut` in a `finally`** is not this entry's: `let mut` leaves the surface (#1104), and §42's
   parse-time refusal of a `finally` that assigns a `let mut` stays.
-- **Programs** (observed, `bcc interp`, `live 0`):
+- **Programs** (observed, `bcc interp`, `live 0`; the three accepted programs give the same on
+  Backend2):
 
   | Program | What | Answer |
   |---|---|---|
   | `corpus/fin-capability.bc` (from `reject/`) | a `finally` using a capability the body also uses, at an empty body row: a plain `withbor3` | `AB`, `inl i32[1]` |
   | `corpus/fin-capability-unwind.bc` | the body ticks a `Count` capability (a handler's `mut` cell) and raises `500` past a `default` handler; the `with` is a reborrow of the capability whose cleanup ticks it again as the abort passes, and the tick lands in the handler's cell (`i32[2]` would mean it was lost) | `(inr i32[500], i32[3])` |
   | `corpus/core-withbor3u-fin.bc` | core text: a cell `1`, lent; the reborrow writes `5` and aborts `42`; `d` writes `99` | `(i32[99], inr i32[42])` |
-  | `corpus/reject/core-withbor3u-fin-performs.bc` | `d` aborts | the second refusal above |
   | `corpus/reject/finally-two-caps.bc` | a cleanup using `stdout` and a `Count` capability | the first refusal above |
+  | `corpus/reject/fin-capability-performs.bc` | a cleanup that uses a `Count` capability the body also uses, and raises through `Fail` | the second refusal above |
+  | `corpus/reject/core-withbor3u-fin-performs.bc` | core text: `d` aborts | the third refusal above |
+  | `corpus/fail/surface-withbor3u-unwind.bc` | a surface body writing `withbor3u[…] unwind (d)` | the parser's refusal (*The checker*, *Binding*) |
 
 ### Baseline
 
@@ -13970,8 +13977,10 @@ handed back).
   - `corpus/core-kb-reborrow-write.bc` (#940): a reborrowed `let mut` written by an effectful
     cleanup, read after the catch;
   - `corpus/reject/core-kb-suspend.bc`: the body suspends while lent.
-- The surface (§27 item 5 lifted, #940's fix) is surface-foreman's. The backend's check that the
-  lend's lowering takes an effectful finaliser is backend-foreman's.
+- #940's capability part is built (#1138): a `finally` whose cleanup uses one capability, at
+  `Σ_D = ∅`, with the refusals and programs of *The surface*.
+- §27 item 5 lifted for a performing cleanup waits on K-b.3. The backend's check that the lend's
+  lowering takes an effectful finaliser is backend-foreman's.
 
 ### Open
 
@@ -13982,6 +13991,9 @@ handed back).
 - **The slice lends** `sliceBorrowMU` and `sliceBorrowIU` keep a pure finaliser. They take the same
   generalisation when a program needs it.
 - **A cleanup that uses two lent places** gets only one source back: not provided.
+- **Known gaps in #940's surface:** a cleanup using a different capability from the body's is
+  refused as used twice (#1136); a `with … finally` around a `for` over a generator fails with a
+  core type mismatch (#1137).
 - **A result row holding `Div`** is reached by `[sub]` after the application, not at the constant.
 - **Not derived:** the chain's hand-over from the lend's one-world run to the finaliser's run at the
   `KW` worlds (K-b.2). Its obstruction has not been checked. If it fails, the entry narrows `Σ_D`
