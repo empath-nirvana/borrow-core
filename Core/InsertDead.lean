@@ -267,7 +267,7 @@ theorem CDerivesX.insert_dead {I : JIdx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ�
       have eM := ih Γa₁ Γb₁ rfl
       have hx' := soloP_insert hd Γa₂ hx
       rw [h₁] at eM; rw [h₂] at hx'
-      show CDerivesX _ _ _ _ (.app _ ((Expr.var _).shift _ _)) _
+      show CDerivesX _ _ _ (.app _ ((Expr.var _).shift _ _)) _
       rw [var_shift]; exact .app hs' eM hx'
   | withI _ _ ihM ihN =>
       intro Γa Γb hΓ; subst hΓ
@@ -618,7 +618,7 @@ theorem CDerivesX.insert_dead {I : JIdx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ�
       have eN := ihN (⟨.unit, false⟩ :: Γa) Γb rfl
       rw [List.length_cons, ← fill_shift hcl Γd.length N 0 Γa.length (Nat.zero_le _)] at eN
       have hb : (Expr.lam b).shift Γd.length Γa.length = .lam b := shift_closed0 hcl _ _
-      show CDerivesX _ _ _ _
+      show CDerivesX _ _ _
         (Expr.app (Expr.lam (N.shift _ (Γa.length + 1))) ((Expr.lam b).shift _ _)) _
       rw [hb]
       exact .letPoly b hcl hV eN
