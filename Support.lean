@@ -141,6 +141,7 @@ import Support.Model.Tree.World.UpdA
 import Support.Model.Tree.World.UpdAFrame
 import Support.Model.Tree.World.UpdATrans
 import Support.Model.Tree.World.UpdXInv
+import Support.Model.Tree.World.Ops
 import Support.Model.Tree.World.UpdXMasks
 import Support.Model.Tree.World.World
 import Support.Model.Update
