@@ -14227,6 +14227,16 @@ reads the kind from the node. A new kind adds a constructor and a clause to each
 functions in `Core/Local.lean`, not a checker rule. `CDerives` is unchanged, and the checker
 judgment's rule count does not grow.
 
+**The unwinding kind (#1128).** `unwind SM S`, core text `withlocalu['x, @b, A, B, [r]]`, has
+type `U (A ⊸ U(∀'x ⊏ @b. Mut 'x A ⊸ F_SM(['x] B)) ⊸ F_S(A ⊗ B))` (`withlocalUTy`). Its side
+condition is the plain kind's, plus `A` persistent, `SM.Unwind x` (the callback's row is abortive
+only), `RowLe SM S` and `Row.divB S = false`. Its term `withlocalUE` allocates the cell, lends it
+by `withbor2UD` (§78) with the finaliser `localFin = λr. forget (free r)`, and frees it on the value
+path. `withlocalU_wf` derives it from existing rules, so `CDerives` and the checker's rule count
+are unchanged. Backend2 keeps the cell in a frame slot on both paths. On the abort path the free
+is the slot's end and emits nothing, and the persistent contents are dropped with no release
+(`UNPROVED:` at `genLocalU`).
+
 ### Lowering
 
 The checker emits a derived typed `withlocal` node whose erasure is the construction above. Backend2
@@ -14256,6 +14266,7 @@ Observed, `bcc interp`, `live 0`:
 | `corpus/core-withlocal-owned.bc` | `(i32[42], i32[7])` |
 | `corpus/core-withlocal-unit.bc` | `((), i32[17])` |
 | `corpus/core-withlocal-widths.bc` | each scalar width's two extremes, as bits (`u8` to `f64`) |
+| `corpus/core-withlocal-unwind.bc` (the unwinding kind: a scope that divides, and aborts at `d = 0` with the value it read) | `(inl (i32[36], i32[25]), inr i32[10])` |
 | `corpus/reject/core-withlocal-escape.bc` | refused: the view does not outlive `'l` (`boxed['l]`) |
 | `corpus/reject/core-withlocal-unrestricted.bc` | refused: `!thunk` does not promote over `mut 'l i32` |
 
@@ -14271,12 +14282,13 @@ state threading is introduced. There is no new index on `CDerives` and no invers
 - #1115's plain variant, built (#1117): the derived constant (`Core/Local.lean`, `withlocal_wf`),
   its typed node through the checker, and Backend2's frame and register placement.
 - The family's one checker rule, indexed by `LocalKind` (#1148), built (#1162).
+- The unwinding kind (#1128), built (#1167).
 - A surface form, and its producer, are #1115's. Not built.
 
 ### Open
 
-The later kinds: unwinding (#1128), a local across an uncounted loop (#1140), and a `Mut` to `Imm`
-reborrow for read-only stretches (#1141). Suspension and handler-owned state are separate work.
+The later kinds: a local across an uncounted loop (#1140), and a `Mut` to `Imm` reborrow for
+read-only stretches (#1141). Suspension and handler-owned state are separate work.
 The old backend compiles the erasure; its scalar locals are not register-promoted by this entry.
 
 ---
