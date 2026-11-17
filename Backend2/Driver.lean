@@ -825,10 +825,10 @@ def give (u : Masks) (j : Nat) (left : Bool) : Masks :=
     if i != j then (a, b) else if left then (true, b) else (a, true)⟩
 
 /-- `t` with the finaliser of each `withborUD` node at the kind `refImm` replaced by `lamFin` at its
-context, `n` the length of `t`'s context; and the number replaced. Only the nodes on the paths to the borrows are entered
-(a `bind`'s body has one slot more, `TExpr.children`). With `named`, the term's first binding
-(`srcN`'s `n`) is the slot `k`, given at each split on a path to the part that holds the borrow,
-and named by the finaliser. -/
+context, `n` the length of `t`'s context; and the number replaced. Only the nodes on the paths to
+the borrows are entered (a `bind`'s body has one slot more, `TExpr.children`). With `named`, the
+term's first binding (`srcN`'s `n`) is the slot `k`, given at each split on a path to the part that
+holds the borrow, and named by the finaliser. -/
 def swapFin (named : Bool) : Nat → Nat → Option Nat → TExpr → TExpr × Nat
   | 0, _, _, t => (t, 0)
   | f + 1, n, k, t => match t with
