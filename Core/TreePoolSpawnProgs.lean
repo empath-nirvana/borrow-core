@@ -1,4 +1,5 @@
 import Core.TreePoolSpawn
+import Core.Chain.SchedProgs
 
 /-!
 # Interleaved tasks holding lends across parks, through `PoolSchedAdequacyT`  `[spec §62]`
@@ -54,10 +55,6 @@ def ubK (N D : Val) : Kont := .appR (.app (.prim .ubind) (Val.pair N D).1) .hole
 
 /-- `λ_. free ℓ`. -/
 def Nf (l : BoCa.Loc) : Val := Val.lam (freeE (.val (Val.loc l)))
-def parkE : Expr := performE (.val (opPayload nP 0 Val.unit))
-def cancelE : Expr := performE (.val (opPayload nP 2 Val.unit))
-def spawnE (th : Val) : Expr := performE (.val (opPayload nP 1 th))
-
 /-- A post whose answers do not read the index, at a table whose payloads do not either. -/
 theorem post_down {T : OpTabT}
     (hTd : ∀ m i en, T m i = some en → ∀ k w ls v ρ, en.PA (k + 1) w ls v ρ → en.PA k w ls v ρ)
@@ -470,9 +467,6 @@ theorem root_TJ {e : Expr}
     (n : Nat) (Fb F : TFrame) (w : TWd) (ls : List (SRecT w.K)) :
     cerwpT (ℍ := ℍ) (opTableT (TJ (ℍ := ℍ))) QV Fb F n w ls [] e PMap.empty :=
   cerwpT_QV (cerwpT_tabAt (h n n le_rfl Fb F w ls))
-
-/-- `(hnd HS root) (HS, [])`. -/
-def progOf (root : Expr) : Expr := .app (hndE HS root) (stateVal HS []).1
 
 def progLoan : Expr := progOf rootLoan
 def progCancel : Expr := progOf rootCancel

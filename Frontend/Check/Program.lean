@@ -106,6 +106,24 @@ def Pins.assurance : Pins → String
       | [] => none
       | xs => some s!"{r} at {", ".intercalate xs}"
     s!"assurance: PinLaw ({"; ".intercalate parts})"
+-- `HandlerLawN` sites (`Core/Assumptions.lean`) become reportable once the checker emits a
+-- `Const791` constant; it emits none, and `fundamentalC_pin` reads no hypothesis but `PinLaw`.
+
+/-- The field of `PinLaw` a relaxed rule's use rests on, with its research question (issue #1122,
+`Core/Assumptions.lean`): R1's `LendFrame` (RQ1), R2's `LoopFrame` (RQ2).  `[spec §29]` -/
+def Pin.hypothesis (q : Pin) : String :=
+  if q.rule == "R2" then "PinLaw.loopFrame (LoopFrame, RQ2)" else "PinLaw.lendFrame (LendFrame, RQ1)"
+
+/-- What `bcc check --proved-only` refuses: a `main` whose assurance is not `unconditional`. The
+first site in the source, and the message naming each site's hypothesis and research question.
+`[spec §29]` -/
+def Pins.unproved (ps : Pins) : Option (Nat × Nat × String) :=
+  match ps.eraseDups.mergeSort (fun p q => p.line < q.line || (p.line == q.line && p.col ≤ q.col)) with
+  | [] => none
+  | ps@(q :: _) =>
+    let sites := ps.map fun p => s!"{p.rule} at {p.line}:{p.col} rests on {p.hypothesis}"
+    some (q.line, q.col, "--proved-only: main's typing rests on a hypothesis, not a theorem: " ++
+      s!"{"; ".intercalate sites} (Core/Assumptions.lean, issue #1122)")
 
 /-- What `bcc check` prints, the checked `main`, and the elaborated program the checker checked:
 the backend reads the program, and whether `main` is served `Fail[DivError]` (SPEC §39), from it. -/

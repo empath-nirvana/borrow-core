@@ -1,6 +1,6 @@
 import Core.Chain.PoolN
 import Core.Chain.SI.LendCancelProg
-import Core.TreePoolSpawn
+import Core.Chain.SchedProgs
 
 /-!
 # The scheduler `HS` over the chain relation: park, spawn and cancel  `[spec §62]`

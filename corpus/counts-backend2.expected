@@ -131,6 +131,15 @@ core-row-splice 0 0 0 0 0 0
 core-site-fresh-const 0 0 0 0 0 0
 core-site-generic 0 0 0 0 0 0
 core-unsigned 0 0 0 0 0 0
+core-unwind-sum-value 1 0 0 1 1 0
+core-withlocal 0 0 0 0 0 0
+core-withlocal-branch 0 0 0 2 2 0
+core-withlocal-callback 0 0 0 2 2 0
+core-withlocal-class 1 0 0 2 2 0
+core-withlocal-nested 0 0 0 0 0 0
+core-withlocal-owned 2 0 0 4 4 0
+core-withlocal-unit 0 0 0 0 0 0
+core-withlocal-widths 0 0 0 0 0 0
 data-json-map-ser 16 0 0 497 387 133
 deep-gen-count 0 3 0 0 0 0
 effects-load-raise 4 0 0 204 184 15
@@ -587,6 +596,8 @@ reconcile-clock 25 8 0 272 236 0
 retry-block 2 0 0 5 5 0
 reverse-bytes 4 0 0 133 92 39
 row-site-fresh-handler 0 0 0 0 0 0
+rq1-exampleA-mut 2 0 0 6 6 0
+rq1-generator 2 0 0 7 7 0
 sched-a 40 18 0 477 473 0
 sched-a-div 11 5 0 384 380 0
 sched-b 41 18 0 480 474 0

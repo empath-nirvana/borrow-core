@@ -12,6 +12,9 @@ import Backend2.Driver
     lake exe bcc parse <file>   parse, and check that printing and re-parsing gives the same AST
     lake exe bcc print <file>   parse and print in the canonical ASCII spelling
     lake exe bcc check <file>   parse and type-check: print each declaration's type, or the error
+    lake exe bcc check --proved-only <file>
+                                the same, but refuse a `main` whose assurance is not
+                                `unconditional`, naming each hypothesis and its research question
     lake exe bcc compile [--backend old|new] [--timings] <file> -o <out.wat>
                                 compile a closed `main` to WebAssembly text by Backend2
                                 (`Backend2/`), or with `--backend old` by the old backend
@@ -596,6 +599,31 @@ def roundTrip (p : Program) : Except String Unit := do
     if q.strip == p.strip then pure ()
     else throw s!"printing and re-parsing changed the program:\n{out}"
 
+/-- `bcc check`: parse and type-check `file`, printing each declaration's line and `main`'s
+assurance. With `provedOnly`, a `main` whose assurance is not `unconditional` is an error at its
+first relaxed rule, naming each site's hypothesis and research question (`Pins.unproved`).
+`[spec §29]` -/
+def checkCmd (provedOnly : Bool) (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  | .error e =>
+    IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc)
+    return 1
+  | .ok p =>
+    match Check.checkProgram p with
+    | .error e =>
+      IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc)
+      return 1
+    | .ok r =>
+      if provedOnly then
+        if let some (line, col, msg) := r.main.bind (·.pins.unproved) then
+          IO.eprintln s!"{file}:{line}:{col}: {msg}"
+          return 1
+      let rs := renamesOf src Frontend.Sugar.libSrc
+      for l in r.lines do
+        IO.println (unrename rs l)
+      return 0
+
 /-- The backend `bcc compile` and `bcc run` use: Backend2 (`Backend2/`) unless the words start
 with `--backend old`; `--backend new` names Backend2 explicitly. Whether it is the old backend,
 and the words after the option. -/
@@ -715,8 +743,10 @@ def main (argv : List String) : IO UInt32 := do
                 return 0
   | ["alpha", file] => alpha false file
   | ["alpha", "--map", file] => alpha true file
+  | ["check", "--proved-only", file] => checkCmd true file
+  | ["check", file] => checkCmd false file
   | [cmd, file] =>
-    if cmd != "parse" && cmd != "print" && cmd != "check" then
+    if cmd != "parse" && cmd != "print" then
       IO.eprintln s!"unknown command `{cmd}`"; return 2
     let src ← IO.FS.readFile file
     match parseProgram src (lib := Frontend.Sugar.libSrc) with
@@ -727,16 +757,6 @@ def main (argv : List String) : IO UInt32 := do
       if cmd == "print" then
         IO.print p.pp
         return 0
-      if cmd == "check" then
-        match Check.checkProgram p with
-        | .error e =>
-          IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc)
-          return 1
-        | .ok r =>
-          let rs := renamesOf src Frontend.Sugar.libSrc
-          for l in r.lines do
-            IO.println (unrename rs l)
-          return 0
       match roundTrip p with
       | .error msg =>
         IO.eprintln s!"{file}: {msg}"
@@ -745,5 +765,5 @@ def main (argv : List String) : IO UInt32 := do
         IO.println s!"{file}: ok, {p.decls.length} declarations"
         return 0
   | _ =>
-    IO.eprintln "usage: bcc (parse | print | check | run [--backend old|new] | trusted | desugar | erase | interp [--backend old|new] [--stage S]) <file>\n       bcc compile [--backend old|new] <file> -o <out.wat>"
+    IO.eprintln "usage: bcc (parse | print | check [--proved-only] | run [--backend old|new] | trusted | desugar | erase | interp [--backend old|new] [--stage S]) <file>\n       bcc compile [--backend old|new] <file> -o <out.wat>"
     return 2

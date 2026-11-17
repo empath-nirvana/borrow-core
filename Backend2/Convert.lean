@@ -211,6 +211,8 @@ structure CState where
   scopeCell : Option Nat := none
   scopeOwner : Option Nat := none
   owners : Std.HashMap Var Nat := {}
+  /-- Checked plain locals requiring frame placement; never silently heap allocated. `[spec §80]` -/
+  localScopes : Std.HashSet Nat := {}
   /-- While a `use` template is renamed (`renameTm`): each of its scopes' number in the copy. -/
   scopeCopy : Std.HashMap Nat Nat := {}
   /-- The `array_new` converted next is a literal's view's (`TExpr.litView`, SPEC §57). -/
@@ -1810,6 +1812,29 @@ def genCountTry (fT sT eT : LTy) (p : Var) : CM Tm := do
     let n ← fresh i32T
     return .letv n (.prim .clampLen [c]) (.call fi [f, n, i, st])
 
+/-- A plain local's owner stays in this function until its free. `[spec §80]`
+UNPROVED: the derived allocation/lend/free can use a function-frame cell with the same contents
+and observations. The checked callback cannot export the fresh view or suspend beyond the invocation; its owner is
+kept here and freed after the call. If this storage simulation fails, a borrow may read dead
+storage. The singleton width class reads the checked `A`: only `Mut A` reaches the callback,
+so no type-changing owner swap can change this wrapper's payload type. `lirLayOf` refuses
+any local scope not placed in its allocating frame. -/
+def genLocal (A : VTy) (value : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm := do
+  let aT ← vty A
+  let (some bT, rT) ← answerOf cbT | throw "LIR: withlocal callback takes no borrow"
+  let scope ← newScope
+  let cell ← fresh (.ref aT)
+  let pr ← fresh (.pair (.ref aT) bT)
+  let owner ← fresh (.ref aT)
+  let borrow ← fresh bT
+  let answer ← fresh rT
+  let final ← fresh aT
+  modify fun st => { st with owners := st.owners.insert owner scope, localScopes := st.localScopes.insert scope }
+  readFact "withlocal:frame"
+  return .letv cell (.prim (.allocLent scope [aT]) [value])
+    (.letv pr (.prim (.lend true) [cell]) (.letpair owner borrow pr
+      (.letv answer (← call borrow) (.letv final (.prim .free [owner]) (.pair final answer)))))
+
 /-- A borrow `withbor`'s way (SPEC §1): `(x, f [] x)`, the owner `src` lent as the borrow the
 callback `cb` (a `∀` closure, its instantiation erased: SPEC §44) is given, by `op` (`lend`,
 `relend`). -/
@@ -2739,7 +2764,7 @@ def constArity : TExpr → Option Nat
   | .arrRelease .. | .countFold .. | .countTry .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
   | .sliceSplitM .. | .sliceReplaceM .. | .sliceSwapM .. | .consume .. | .foldImm .. | .foldOwn ..
   | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .boundedFix .. => some 1
-  | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
+  | .withlocal .. | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. | .withbor1UD .. | .withbor2UD .. | .withbor3UD .. | .withloadU ..
   | .sliceBorrowMU .. | .sliceBorrowIU .. => some 2
@@ -2851,7 +2876,7 @@ def copyScope (s : Nat) : CM Nat := do
   | some s' => pure s'
   | none =>
     let s' ← newScope
-    modify fun st => { st with scopeCopy := st.scopeCopy.insert s s' }
+    modify fun st => { st with scopeCopy := st.scopeCopy.insert s s', localScopes := if st.localScopes.contains s then st.localScopes.insert s' else st.localScopes }
     pure s'
 
 /-- Rename every variable a term binds to a fresh one, and its free ones by `m`; each lend scope a
@@ -3097,6 +3122,60 @@ def withLitView (act : CM Tm) : CM Tm := do
   modify fun st => { st with litPending := false }
   return r
 
+/-- **An unwind's abort arm** (`then_fin`, `unwind_prefix`), at a finaliser that cannot suspend:
+the finaliser's answer `d` bound to `dTm`, then the pending raise `e` (at the payload `pm`) handed
+on at `ps`; a raise of the finaliser's own (its payload `pd`) supersedes it, the pending one
+abandoned. Shared by `[then]` and the unwinding borrow (`withborUE d`).  `[spec §19, §47]` -/
+def thenFin (d : Var) (dTm : Tm) (pm pd ps : Pay) (e : Var) : CM Tm := do
+  let pass ← coercePay pm ps e fun e' => pure (.inj true e')
+  match payTy pd with
+  | none => pure (Tm.letv d dTm (.consume .dead d pass))
+  | some pdT => do
+    let w ← fresh .unit; let e₂ ← fresh pdT
+    pure (Tm.letv d dTm (.case d w (.consume .dead w pass) e₂
+      (.abandon .superseded e (← coercePay pd ps e₂ fun e' => pure (.inj true e')))))
+
+/-- **The row `Σ_D` of an unwinding borrow's finaliser** `d : U(src ⊸ F_{Σ_D} 1)`, read from its
+typed term's judgment: at `sliceBorrow*U`, whose node has no `Σ_D` (the `withbor*UD` nodes carry
+it).  `[spec §19, §72]` -/
+def finRow (td : TExpr) : CM Row :=
+  match td.jdg with
+  | .val (.thunk (.arr _ C)) => match effParts C with
+    | some (S, _) => pure S
+    | none => throw "LIR: an unwinding borrow's finaliser does not answer `F_Σ 1`"
+  | _ => throw "LIR: an unwinding borrow's finaliser is not a function of its source"
+
+/-- An unwinding borrow's finaliser that is not a constant: the finaliser of a `withbor*U` head,
+whose typed term is converted at the head's context (`withborUE d` places `d` in the rule's
+context, SPEC §72). `none` at any other head and at a constant finaliser, which needs no slot. -/
+def finTerm? (hd : TExpr) : Option TExpr :=
+  match hd with
+  | .withbor1UD _ _ _ _ _ _ _ _ td | .withbor2UD _ _ _ _ _ _ _ _ td
+  | .withbor3UD _ _ _ _ _ _ _ _ _ td
+  | .sliceBorrowMU _ _ _ _ _ _ td | .sliceBorrowIU _ _ _ _ _ _ td =>
+    if constArity (headOf 64 td) == some 1 then none else some td
+  | _ => none
+
+/-- **A non-constant finaliser of an unwinding borrow**: the copy of its context `finCtx` made,
+and the finaliser applied to the owner at a context (the copy, or the copy as a closure's
+environment renames it). -/
+abbrev FinApp := Ctx × (Ctx → Var → CM Tm)
+
+/-- **The context of an unwinding borrow's finaliser**, at a borrow head `hd` whose context is
+`ctx`: a non-constant finaliser is converted on the abort arm at a copy of `ctx`, made here, before
+the head's leaf consumes `ctx`; the borrow consumes the copies on its value arm. Every live slot
+is persistent (the rule's `Ctx.DeadP Γ`, `withbor1UD`'s `hΓ`), so the copy is a split's `dup`
+(`Lint` checks it). `app` applies a finaliser's typed term to the owner at a context (`applyTo`,
+passed in so that the borrow's expansion makes no call back into the conversion). At any other
+head: no copy, and `none`.  `[spec §19, §72]` -/
+def finCtx (hd : TExpr) (ctx : Ctx) (app : Ctx → TExpr → Var → CM Tm) :
+    CM ((Tm → Tm) × Ctx × Option FinApp) := do
+  match finTerm? hd with
+  | none => return (id, ctx, none)
+  | some td =>
+    let (pre, c₁, c₂) ← splitCtx ctx ⟨ctx.map fun s => (s.isSome, s.isSome)⟩ "withborU:finaliser"
+    return (pre, c₁, some (c₂, fun c o => app c td o))
+
 set_option maxHeartbeats 4000000 in
 mutual
 /-- **The conversion of a node** at its context: the term of its value. -/
@@ -3218,13 +3297,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       let m ← fresh (.sum aT pmT); let x ← fresh aT; let e ← fresh pmT
       let d ← fresh (resTy .unit pd)
       let dTm ← conv fuel (none :: c₂) tD
-      let pass ← coercePay pm ps e fun e' => pure (.inj true e')
-      let fin ← match payTy pd with
-        | none => pure (Tm.letv d dTm (.consume .dead d pass))
-        | some pdT => do
-          let w ← fresh .unit; let e₂ ← fresh pdT
-          pure (Tm.letv d dTm (.case d w (.consume .dead w pass) e₂
-            (.abandon .superseded e (← coercePay pd ps e₂ fun e' => pure (.inj true e')))))
+      let fin ← thenFin d dTm pm pd ps e
       return pre (.letv m (← conv fuel c₁ tM) (.case m x (← conv fuel (some x :: c₂) tN) e fin))
   | .effHandleV _ _ S E fs _ n A R u ks site _ tc te =>
     convHandle fuel ctx S E fs n A R u ks site tc te
@@ -3362,7 +3435,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     | some c => conv fuel ctx c
     | none =>
       match constArity t with
-      | some _ => return leaf ctx none (← constClos fuel t)
+      | some _ => do
+        let (dpre, ctx, dc) ← finCtx t ctx (applyTo fuel)
+        return dpre (leaf ctx none (← constClos fuel t dc))
       | none => throw s!"LIR: no conversion for `{ruleName t}`"
 
 /-- `x <- M; N`: `M`'s value bound, then `N`. -/
@@ -4042,6 +4117,19 @@ def convWork (fuel : Nat) (k : Nat) (ph : Pay) (ctx : Ctx) (t : TExpr) : CM Tm :
   | .lendScope _ _ _ c | .litView _ _ c | .unfoldStep _ _ c => convWork fuel k ph ctx c
   | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
 
+/-- The plain local invokes its callback's lifetime abstraction before the value lambda.
+Read that checked `allI` directly; its slot is dead, as in `allI_inst`. Do not move a computation
+out of an abstraction: only the value-lambda form accepted by `lamOf` is inlined. `[spec §80]` -/
+def localLamOf : Nat → TExpr → Option (Nat × TExpr)
+  | 0, _ => none
+  | f + 1, t => match transparent? t with
+    | some child => localLamOf f child
+    | none => match t with
+      | .allI _ _ _ _ _ _ body => (lamOf f body).map fun (k, l) => (k + 1, l)
+      | .use _ _ _ _ _ _ body =>
+        if tsize (inlineBound + 1) body ≤ inlineBound then localLamOf f body else none
+      | _ => lamOf f t
+
 /-- A spine of `lolliE` nodes: its arguments evaluated outermost first, then its function: a
 constant's operation (`expand`), a λ's body (β), or a closure call. -/
 def convSpine (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
@@ -4054,7 +4142,10 @@ def convSpine (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   -- closure made (the λ-value's construction does nothing).
   match as, cbConst (headOf 64 h) with
   | [(u₁, cb), (u₂, x)], true =>
-    match lamOf 64 cb with
+    let cbLam := match headOf 64 h with
+      | .withlocal .. => localLamOf 64 cb
+      | _ => lamOf 64 cb
+    match cbLam with
     | some (k, .lam _ _ _ _ body) => do
       readFact "lolliE:callback beta"
       let (pre₁, cA, cF) ← splitCtx ctx u₁ "lolliE"
@@ -4062,14 +4153,15 @@ def convSpine (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       let xT ← repJ x.jdg
       let cbT ← repJ cb.jdg
       return pre₁ (pre₂ (← bindTm (← conv fuel cX x) xT fun xv => do
+        let (dpre, cH, dc) ← finCtx (headOf 64 h) cH (applyTo fuel)
         let body ← expandCb fuel (headOf 64 h) xv cbT
-          (fun b => conv fuel (some b :: (List.replicate k none ++ cA)) body) resT
-        return leaf cH none body))
+          (fun b => conv fuel (some b :: (List.replicate k none ++ cA)) body) resT dc
+        return dpre (leaf cH none body)))
     | _ => go fuel ctx as [] h resT
   | _, _ => go fuel ctx as [] h resT
 where
   cbConst : TExpr → Bool
-    | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .sliceBorrowM ..
+    | .withlocal .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .sliceBorrowM ..
     | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I ..
     | .withbor1UD .. | .withbor2UD .. | .withbor3UD .. | .withloadU .. | .sliceBorrowMU ..
     | .sliceBorrowIU .. => true
@@ -4084,14 +4176,15 @@ where
       let hd := headOf 64 h
       match constArity hd with
       | some n =>
+        let (dpre, ctx, dc) ← finCtx hd ctx (applyTo fuel)
         if vs.length < n then
           let f ← fresh (← repJ h.jdg)
-          return leaf ctx none (.letv f (← constClos fuel hd) (← applyAll f vs))
+          return dpre (leaf ctx none (.letv f (← constClos fuel hd dc) (← applyAll f vs)))
         let first := vs.take n
         let more := vs.drop n
-        if more.isEmpty then return leaf ctx none (← expand fuel hd first resT)
+        if more.isEmpty then return dpre (leaf ctx none (← expand fuel hd first resT dc))
         let r ← fresh (← satTy (← repJ hd.jdg) n)
-        return leaf ctx none (.letv r (← expand fuel hd first (← tyOf r)) (← applyAll r more))
+        return dpre (leaf ctx none (.letv r (← expand fuel hd first (← tyOf r) dc) (← applyAll r more)))
       | none =>
         match lamOf 64 h, vs with
         | some (k, .lam _ lj _ _ body), a :: more => do
@@ -4129,10 +4222,11 @@ def convLendCell (fuel : Nat) (ctx : Ctx) (t inner : TExpr) : CM Tm := do
       let vv ← fresh (← repJ v.jdg)
       let vTm ← conv fuel c₃ v
       let cell ← fresh (← repJ aApp.jdg)
-      let body ← expand fuel (headOf 64 h) [cell, cbv] (← repJ t.jdg)
+      let (dpre, cH, dc) ← finCtx (headOf 64 h) cH (applyTo fuel)
+      let body ← expand fuel (headOf 64 h) [cell, cbv] (← repJ t.jdg) dc
       if scope.isSome then modify fun st => { st with scopeOwner := some s }
       return pre₁ (.letv cbv cbTm (pre₂ (pre₃ (.letv vv vTm (leaf cA none
-        (.letv cell (.prim (.allocLent s cls) [vv]) (leaf cH none body)))))))
+        (.letv cell (.prim (.allocLent s cls) [vv]) (dpre (leaf cH none body))))))))
     | _, _ => conv fuel ctx inner
   | _ => conv fuel ctx inner
 
@@ -4197,54 +4291,105 @@ where
     | .ofRet _ _ _ t | .ret _ _ _ t => peelRet t
     | t => t
 
-/-- A constant as a value: a closure of a code that applies it, one argument at a time. -/
-def constClos (fuel : Nat) (c : TExpr) : CM Tm := do
+/-- A constant as a value: a closure of a code that applies it, one argument at a time. `dctx`,
+the context of an unwinding borrow's non-constant finaliser (`finCtx`), is carried in each
+closure's environment, after the arguments, to the borrow's expansion. -/
+def constClos (fuel : Nat) (c : TExpr) (dctx : Option FinApp := none) : CM Tm := do
   let some n := constArity c | throw "LIR: not a constant"
   let cT ← repJ c.jdg
-  if n == 0 then return ← expand fuel c [] cT
-  curry fuel c cT [] n
+  if n == 0 then return ← expand fuel c [] cT dctx
+  curry fuel c cT [] n dctx
 where
-  curry (fuel : Nat) (c : TExpr) (t : LTy) (got : List Var) : Nat → CM Tm
-    | 0 => throw "LIR: a constant of no arguments"
-    | k + 1 => do
+  curry (fuel : Nat) (c : TExpr) (t : LTy) (got : List Var) : Nat → Option FinApp → CM Tm
+    | 0, _ => throw "LIR: a constant of no arguments"
+    | k + 1, dctx => do
       let .thunk ck := t.peel | throw s!"LIR: a constant at a non-function type {t}"
       let (some aT, rT) ← answerOf t | throw "LIR: a constant takes no argument"
-      let ctx : Ctx := got.reverse.map some
+      let ctx : Ctx := got.reverse.map some ++ (dctx.map (·.1)).getD []
       mkClos "const" ctx ck (some aT) rT fun ctx' => do
-        let got' := (ctx'.filterMap id).reverse
-        if k == 0 then expand fuel c got'.reverse.reverse rT
-        else curry fuel c rT got' k
+        -- `ctx'` is the parameter, the arguments so far, then the finaliser's context.
+        let (args, dc) := ctx'.splitAt (got.length + 1)
+        let dctx' := dctx.map fun (_, app) => (dc, app)
+        let got' := (args.filterMap id).reverse
+        if k == 0 then expand fuel c got'.reverse.reverse rT dctx'
+        else curry fuel c rT got' k dctx'
 
 /-- **An unwinding borrow** (`withborUE d`, SPEC §19): `(f [] r) then b. (r, b) unwind d r`. The
 owner lent as `genLend` does; the callback's value `b` gives `(r, b)`; its abort ends the lend, runs
-the finaliser `d` on the owner, and is handed on (`then_fin`).  `[spec §47]` -/
-def genLendU (fuel : Nat) (op : Op) (src : Var) (cbT : LTy) (call : Var → CM Tm) (td : TExpr) :
-    CM Tm := do
+the finaliser `d` on the owner, and is handed on (`then_fin`), as `[then]`'s abort arm (`thenFin`).
+A constant finaliser is expanded at the owner. Any other is the typed term `td`, applied to the
+owner (`applyTo`: a λ's body, or a closure's call) at `dctx`, the copy of the rule's context
+`finCtx` made, which the value arm consumes. The rows are the node's: the callback's `SM`, the
+borrow's `S`, and the finaliser's `Σ_D` (`SD`; at a node without it, read from `td`'s type,
+`finRow`).  `[spec §19, §27, §47, §72]` -/
+def genLendU (fuel : Nat) (op : Op) (src : Var) (cbT : LTy) (call : Var → CM Tm) (SM S : Row)
+    (SD : Option Row) (td : TExpr) (dctx : Option FinApp) : CM Tm := do
   match fuel with
   | 0 => throw "LIR: the typed term is too deep"
   | fuel + 1 =>
   let (some bT, rT) ← answerOf cbT | throw "LIR: a borrow's callback takes no borrow"
-  match rT.peel with
-  | .sum vT eT => do
+  -- Value or abort is read from the callback's row `SM` (the node's), never from the shape of the
+  -- callback's answer: at a row with no abort that answer is the value, a sum when `B` is one.
+  let pm ← rowPay SM; let ps ← rowPay S
+  -- The borrow answers at `S`, the callback at `SM ≤ S` (K-b, #1046): one payload here.
+  unless pm.map (·.1) == ps.map (·.1) do
+    throw "LIR: an unwinding borrow whose callback's row is not its own is outside the pure fragment (#1046)"
+  match payTy pm with
+  | some eT => do
+    -- The row holds an abort: the callback answers `vT ⊕ P_SM` (`resTy`).
+    let .sum vT _ := rT.peel
+      | throw "LIR: an unwinding borrow's callback at a row with an abort does not answer a sum"
     readFact "withborU:finaliser"
     let pr ← fresh (.pair (← tyOf src) bT)
     let o ← freshLike src; let b ← fresh bT
     let r ← fresh rT
     let v ← fresh vT; let e ← fresh eT
     let q ← fresh (.pair (← tyOf src) vT)
-    let u ← fresh .unit
-    let fin ← match constArity (headOf 64 td) with
-      | some 1 => expand fuel (headOf 64 td) [o] .unit
-      | _ => throw "LIR: an unwinding borrow's finaliser that is not a constant is outside the pure fragment"
-    return .letv pr (.prim op [src]) (.letpair o b pr (.letv r (← call b)
-      (.case r v (.letv q (.pair o v) (.inj false q)) e (.letv u fin (.consume .dead u (.inj true e))))))
-  | _ => genLend op src cbT call
+    match constArity (headOf 64 td), dctx with
+    | some 1, none =>
+      let u ← fresh .unit
+      let fin ← expand fuel (headOf 64 td) [o] .unit
+      return .letv pr (.prim op [src]) (.letpair o b pr (.letv r (← call b)
+        (.case r v (.letv q (.pair o v) (.inj false q)) e (.letv u fin (.consume .dead u (.inj true e))))))
+    | some 1, some _ => throw "LIR: an unwinding borrow's constant finaliser given a context"
+    | _, none =>
+      throw "LIR: an unwinding borrow whose finaliser is not a constant, not applied where it is written, is outside the pure fragment"
+    | _, some (dc, app) =>
+      readFact "withborU:finaliser term"
+      let SD ← match SD with
+        | some SD => pure SD
+        | none => finRow td
+      -- `Σ_D` with a machine operation: the finaliser may suspend, a machine of its own as
+      -- `[then]`'s is (`thenF`, `unwindF`); not yet lowered here (#1046).
+      if (← outInfo? .unit SD).isSome then
+        throw "LIR: an unwinding borrow's finaliser at a row with a machine operation is outside the pure fragment (#1046)"
+      -- The kernel types a finaliser at `Σ_D ≠ ∅` (K-b, #1081); its lowering is #1046. `thenFin`
+      -- already hands a raise of the finaliser's own on, superseding the pending one, and `conv`
+      -- lowers a perform of a tail-resumptive clause.
+      unless SD.isEmpty do
+        throw "LIR: an unwinding borrow's finaliser at a non-empty row is outside the pure fragment (#1046)"
+      let pd ← rowPay SD
+      let cbTm ← call b
+      let d ← fresh (resTy .unit pd)
+      let dTm ← app dc o
+      let fin ← thenFin d dTm pm pd ps e
+      return .letv pr (.prim op [src]) (.letpair o b pr (.letv r cbTm
+        (.case r v (.letv q (.pair o v) (consumes .dead (live dc) (.inj false q))) e fin)))
+  | none =>
+    -- The row `SM` holds no abort. `SM.Unwind x` (the rule's `hS`) makes every operation of `SM`
+    -- abortive, so `SM` is empty: the callback never stops and the finaliser never runs (`[then]`
+    -- at the empty row); the callback's answer, a sum or not, is its value. A non-constant
+    -- finaliser at any other row would be dropped here: refused.
+    if dctx.isSome && !SM.isEmpty then
+      throw "LIR: an unwinding borrow's finaliser at a non-empty row with no abort"
+    return consumes .dead ((dctx.map (live ·.1)).getD []) (← genLend op src cbT call)
 
 /-- A borrowing constant applied to its first argument `x`, its callback's call given by `call`. -/
-def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM Tm) (resT : LTy) :
-    CM Tm := do
+def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM Tm) (resT : LTy)
+    (dctx : Option FinApp := none) : CM Tm := do
   readFact s!"{ruleName c}:expand"
   match c with
+  | .withlocal _ _ A _ _ => genLocal A x cbT call
   | .withbor1 .. | .sliceBorrowI .. => genLend (.lend false) x cbT call
   | .withbor2 .. | .sliceBorrowM .. => genLend (.lend true) x cbT call
   | .withbor3 .. => genLend .relend x cbT call
@@ -4252,15 +4397,18 @@ def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM 
   | .withswap .. => genWithswap x cbT call
   | .withborSM .. | .withborF2M .. => genLendTree true x cbT call
   | .withborSI .. | .withborF2I .. => genLendTree false x cbT call
-  | .withbor1UD _ _ _ _ _ _ _ _ td | .sliceBorrowIU _ _ _ _ _ _ td => genLendU _fuel (.lend false) x cbT call td
-  | .withbor2UD _ _ _ _ _ _ _ _ td | .sliceBorrowMU _ _ _ _ _ _ td => genLendU _fuel (.lend true) x cbT call td
-  | .withbor3UD _ _ _ _ _ _ _ _ _ td => genLendU _fuel .relend x cbT call td
+  | .withbor1UD _ _ _ _ SM SD S _ td => genLendU _fuel (.lend false) x cbT call SM S (some SD) td dctx
+  | .sliceBorrowIU _ _ _ _ S _ td => genLendU _fuel (.lend false) x cbT call S S none td dctx
+  | .withbor2UD _ _ _ _ SM SD S _ td => genLendU _fuel (.lend true) x cbT call SM S (some SD) td dctx
+  | .sliceBorrowMU _ _ _ _ S _ td => genLendU _fuel (.lend true) x cbT call S S none td dctx
+  | .withbor3UD _ _ _ _ _ SM SD S _ td => genLendU _fuel .relend x cbT call SM S (some SD) td dctx
   | .withloadU .. => genWithload x cbT call
   | c => throw s!"LIR: `{ruleName c}` is not a borrow (answer {resT})"
 
 /-- **A constant applied to its arguments**, `args` in the order they apply, its answer of type
-`resT`. -/
-def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
+`resT`; `dctx`, the context of an unwinding borrow's non-constant finaliser (`finCtx`). -/
+def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) (dctx : Option FinApp := none) :
+    CM Tm := do
   readFact s!"{ruleName c}:expand"
   match c, args with
   | .alloc _ _ A, [v] => return .prim (.alloc (← classOf A)) [v]
@@ -4312,6 +4460,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
   | .withbor1 .., [x, cb] | .sliceBorrowI .., [x, cb] => genLend (.lend false) x (← tyOf cb) (callCb cb)
   | .withbor2 .., [x, cb] | .sliceBorrowM .., [x, cb] => genLend (.lend true) x (← tyOf cb) (callCb cb)
   | .withbor3 .., [m, cb] => genLend .relend m (← tyOf cb) (callCb cb)
+  | .withlocal _ _ A _ _, [x, cb] => genLocal A x (← tyOf cb) (callCb cb)
   | .withload .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .withswap .., [m, f] => genWithswap m (← tyOf f) fun old => pure (.app f old)
   | .allocS _ _ σ, [v] => allocTree v resT σ
@@ -4320,11 +4469,16 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     freeTree v vT
   | .withborSM .., [x, cb] | .withborF2M .., [x, cb] => genLendTree true x (← tyOf cb) (callCb cb)
   | .withborSI .., [x, cb] | .withborF2I .., [x, cb] => genLendTree false x (← tyOf cb) (callCb cb)
-  | .withbor1UD _ _ _ _ _ _ _ _ td, [x, cb] | .sliceBorrowIU _ _ _ _ _ _ td, [x, cb] =>
-    genLendU fuel (.lend false) x (← tyOf cb) (callCb cb) td
-  | .withbor2UD _ _ _ _ _ _ _ _ td, [x, cb] | .sliceBorrowMU _ _ _ _ _ _ td, [x, cb] =>
-    genLendU fuel (.lend true) x (← tyOf cb) (callCb cb) td
-  | .withbor3UD _ _ _ _ _ _ _ _ _ td, [m, cb] => genLendU fuel .relend m (← tyOf cb) (callCb cb) td
+  | .withbor1UD _ _ _ _ SM SD S _ td, [x, cb] =>
+    genLendU fuel (.lend false) x (← tyOf cb) (callCb cb) SM S (some SD) td dctx
+  | .sliceBorrowIU _ _ _ _ S _ td, [x, cb] =>
+    genLendU fuel (.lend false) x (← tyOf cb) (callCb cb) S S none td dctx
+  | .withbor2UD _ _ _ _ SM SD S _ td, [x, cb] =>
+    genLendU fuel (.lend true) x (← tyOf cb) (callCb cb) SM S (some SD) td dctx
+  | .sliceBorrowMU _ _ _ _ S _ td, [x, cb] =>
+    genLendU fuel (.lend true) x (← tyOf cb) (callCb cb) S S none td dctx
+  | .withbor3UD _ _ _ _ _ SM SD S _ td, [m, cb] =>
+    genLendU fuel .relend m (← tyOf cb) (callCb cb) SM S (some SD) td dctx
   | .withloadU .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .foldOwn _ _ F _, [g] | .foldReuse _ _ F _, [g] => do
     let k : FoldKind := match c with | .foldReuse .. => .reuse | _ => .own

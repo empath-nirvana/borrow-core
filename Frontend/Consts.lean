@@ -21,7 +21,7 @@ inductive ArgKind where
 inductive CKw where
   | alloc | free | swap | copy | copyBang | releaseImm | releaseMut | releaseUnk | releaseBang
   | tokMint | tokBurn
-  | withbor1 | withbor2 | withbor3 | withload | withswap
+  | withlocal | withbor1 | withbor2 | withbor3 | withload | withswap
   | foldImm | foldOwn | foldReuse | fixd | unfoldS | unfold
   | i32 | i64 | u8 | f32 | f64 | u32 | u64 | host
   | allocS | freeS | withborSMut | withborSImm | withborF2Mut | withborF2Imm
@@ -39,6 +39,7 @@ def CKw.str : CKw → String
   | .copyBang => "copy_bang" | .releaseImm => "release_imm" | .releaseMut => "release_mut"
   | .releaseUnk => "release_unk" | .releaseBang => "release_bang"
   | .tokMint => "tok_mint" | .tokBurn => "tok_burn"
+  | .withlocal => "withlocal"
   | .withbor1 => "withbor1" | .withbor2 => "withbor2" | .withbor3 => "withbor3"
   | .withload => "withload" | .withswap => "withswap"
   | .foldImm => "fold_imm" | .foldOwn => "fold_own" | .foldReuse => "fold_reuse"
@@ -67,7 +68,7 @@ def CKw.str : CKw → String
 def CKw.all : List CKw :=
   [.alloc, .free, .swap, .copy, .copyBang, .releaseImm, .releaseMut, .releaseUnk, .releaseBang,
    .tokMint, .tokBurn,
-   .withbor1, .withbor2, .withbor3, .withload, .withswap,
+   .withlocal, .withbor1, .withbor2, .withbor3, .withload, .withswap,
    .foldImm, .foldOwn, .foldReuse, .fixd, .unfoldS, .unfold, .i32, .i64, .u8, .f32, .f64, .u32, .u64,
    .host,
    .allocS, .freeS, .withborSMut, .withborSImm, .withborF2Mut, .withborF2Imm,
@@ -99,6 +100,7 @@ def CKw.sig : CKw → List ArgKind
   | .releaseUnk | .tokMint | .tokBurn => []
   | .withbor1 => [binder, ty, ty]
   | .withbor2 => [binder, life, ty, ty]
+  | .withlocal => [binder, life, ty, ty]
   | .withbor3 | .withload => [life, binder, ty, ty]
   | .withswap => [life, ty, ty]
   | .foldImm => [ty, binder, life, ty]
@@ -127,6 +129,7 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .releaseBang, [.ty A] => some (.releaseBang A)
   | .withbor1, [.binder x, .ty A, .ty B] => some (.withbor1 x A B)
   | .withbor2, [.binder x, .life b, .ty A, .ty B] => some (.withbor2 x b A B)
+  | .withlocal, [.binder x, .life b, .ty A, .ty B] => some (.withlocal x b A B)
   | .withbor3, [.life a, .binder x, .ty A, .ty B] => some (.withbor3 a x A B)
   | .withload, [.life a, .binder x, .ty A, .ty B] => some (.withload a x A B)
   | .withswap, [.life a, .ty A, .ty B] => some (.withswap a A B)
@@ -200,6 +203,7 @@ def Const.toArgs : Const → CKw × List Arg
   | .releaseBang A => (.releaseBang, [.ty A])
   | .withbor1 x A B => (.withbor1, [.binder x, .ty A, .ty B])
   | .withbor2 x b A B => (.withbor2, [.binder x, .life b, .ty A, .ty B])
+  | .withlocal x b A B => (.withlocal, [.binder x, .life b, .ty A, .ty B])
   | .withbor3 a x A B => (.withbor3, [.life a, .binder x, .ty A, .ty B])
   | .withload a x A B => (.withload, [.life a, .binder x, .ty A, .ty B])
   | .withswap a A B => (.withswap, [.life a, .ty A, .ty B])

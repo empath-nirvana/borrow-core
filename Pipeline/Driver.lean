@@ -168,15 +168,14 @@ def ioRunOf (file : String) (k : CheckedProg) (m : Frontend.Check.IOMain)
 /-- What the typing of `main` rests on (SPEC §29): nothing beyond Core's theorems, or `PinLaw` at
 each relaxed rule the derivation uses. A program run through `run_io` (`loops` its `IORun`'s
 `loops`, given when the wrapper's derivation uses no relaxed rule) names the end-to-end theorems
-at its checked wrapper: Core's `IORun.every_run` and the chain's `IORun.every_runN` (`goal791N`
-from `HandlerLawN`), or their loop forms.  `[spec §72]` -/
+at its checked wrapper: Core's `IORun.every_run`, or its loop form, which take no hypothesis.
+`[spec §29, §72]` -/
 def typingReport (c : Frontend.Check.Checked) (loops : Option Bool := none) : String :=
   match c.pins with
   | [] => "typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)" ++
     match loops with
-    | some false => "; run_io: IORun.every_run, the chain's IORun.every_runN (goal791N from HandlerLawN)"
-    | some true =>
-      "; run_io: IORun.loop_every_run, the chain's IORun.loop_every_runN (goal791N from HandlerLawN)"
+    | some false => "; run_io: IORun.every_run (no hypothesis)"
+    | some true => "; run_io: IORun.loop_every_run (no hypothesis)"
     | none => ""
   | ps =>
     let ps := ps.eraseDups
