@@ -25,7 +25,8 @@
 # program whose WebAssembly run is wrong. The full gate runs every
 # step in `steps`, the two corpus runs at every stage with their counts (each against its own
 # table: `corpus/counts-backend2.expected`, `corpus/counts.expected`), the kernel programs on the
-# old backend, and the compile-time guard on Backend2 (`compile scaling`).
+# old backend, the compile-time guard on Backend2 (`compile scaling`), and the tree archive
+# (`research archive`: `research/tree` builds and its registered names' axioms, scripts/check-research.sh).
 #
 # The source stage. A corpus program's `.out` and a book block's `-- answer:` are goldens: the
 # output of `Support`'s interpreter (`bcc interp`), the reference semantics. Every compiled stage
@@ -91,6 +92,7 @@ steps=(
   "type equality"    "scripts/check-type-eq.sh"
   "axiom report"     "lake env lean scripts/AxiomCheck.lean"
   "insertion pins"   "scripts/check-pins.sh"
+  "research archive" "scripts/check-research.sh"
   "parse corpus"     "scripts/parse-corpus.sh"
   "check corpus"     "scripts/check-corpus.sh"
   "clause kinds"     "scripts/check-kinds.sh"

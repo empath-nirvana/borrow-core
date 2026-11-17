@@ -1,0 +1,33 @@
+import ResearchTree.TreeBorrowEdges
+import ResearchTree.TreeCactus
+import ResearchTree.TreeConsume
+import ResearchTree.TreeConsumeInst
+import ResearchTree.TreeGoal791
+import ResearchTree.TreeHandle
+import ResearchTree.TreeHeadlines
+import ResearchTree.TreeHeap
+import ResearchTree.TreeLend
+import ResearchTree.TreeLendJoin
+import ResearchTree.TreePool
+import ResearchTree.TreePoolJoinProgs
+import ResearchTree.TreePoolSched
+import ResearchTree.TreePoolSchedProgs
+import ResearchTree.TreePoolShare
+import ResearchTree.TreePoolSpawn
+import ResearchTree.TreePoolSpawnProgs
+import ResearchTree.TreeResume
+import ResearchTree.TreeSched
+import ResearchTree.TreeSchedPool
+import ResearchTree.TreeSchedProgs
+import ResearchTree.TreeSchedRelay
+import ResearchTree.TreeSem
+import ResearchTree.TreeSemC
+import ResearchTree.TreeSemK
+import ResearchTree.TreeSemKEx
+import ResearchTree.TreeSemObs
+import ResearchTree.TreeStepKeep
+import ResearchTree.TreeWp
+import ResearchTree.TreeWpEff
+import ResearchTree.Assumptions
+
+/-! The tree interpretation (#840, #1133): archived off the default build. `lake build ResearchTree`; checked by gate-full's `research archive` step (`scripts/check-research.sh`). -/

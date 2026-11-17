@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # No `sorry`, `axiom`, `native_decide`, `implemented_by`, `opaque`, `partial`,
 # `unsafe` in Paper/, Support/, Examples/, Core/, Frontend/, Target/, Pipeline/, Reference/, Backend/
-# and Backend2/,
+# and Backend2/, and in the tree archive research/tree/,
 # outside comments; then every declaration's axioms.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -12,6 +12,7 @@ hits = 0
 files = []
 for d in ("Paper", "Support", "Examples", "Core", "Frontend", "Target", "Pipeline", "Reference", "Backend", "Backend2"):
     files += sorted(pathlib.Path(d).glob("**/*.lean")) + [pathlib.Path(d + ".lean")]
+files += sorted(pathlib.Path("research/tree/ResearchTree").glob("**/*.lean")) + [pathlib.Path("research/tree/ResearchTree.lean")]  # the tree archive (#1133)
 for p in files:
     src = p.read_text(encoding="utf-8")
     out, i, depth = [], 0, 0
@@ -34,6 +35,12 @@ if grep -rhE '^import ' Frontend Frontend.lean Target Target.lean Pipeline Pipel
     Backend Backend.lean Backend2 Backend2.lean \
     | grep -vE '^import +(Frontend|Target|Pipeline|Reference|Backend|Backend2|Support|Paper|Examples|Core|Std)([. ]|$)'; then
   echo "Frontend/, Target/, Pipeline/, Reference/, Backend/ or Backend2/ imports a module outside the library."; exit 1
+fi
+# The library and the compiler never import the tree archive (research/tree, #1133).
+if grep -rlE '^import +ResearchTree([. ]|$)' Paper Support Examples Core Frontend Target Pipeline Reference \
+    Backend Backend2 Paper.lean Support.lean Examples.lean Core.lean Frontend.lean Target.lean Pipeline.lean \
+    Reference.lean Backend.lean Backend2.lean; then
+  echo "A module of the library or the compiler imports the tree archive (ResearchTree)."; exit 1
 fi
 # The prelude declares no `type` abbreviation: the data table reads none from it
 # (`Parser.tableOf`, SPEC §61), so one would not be opened around a recursive declaration.
