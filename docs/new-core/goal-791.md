@@ -3,7 +3,7 @@
 *History: the tree track's plan for #791. #839 landed on the chain relation instead, with `goal791N : HandlerLawN → Goal791N` (decision 75); the current design is `chain-interpretation.md` and SPEC §62. The text below is kept as the record.*
 
 Part of #771, the tree track. Branch `goal-791`, from `tree-core` (35fc7c0e). The Lean is
-`Core/TreeGoal791.lean`. Every `def … : Prop` there elaborates, and every theorem there is
+`research/tree/ResearchTree/TreeGoal791.lean`. Every `def … : Prop` there elaborates, and every theorem there is
 proved, with axioms within `[propext, Classical.choice, Quot.sound]`. Nothing here is a build of
 #791. This is a map of what #791 must prove, and what the evidence says about each piece.
 
@@ -129,7 +129,7 @@ headline hypothesis? (It must be self-contained, believed true, and used at few 
 | A4 `CerwpTGAntiFrame` (:608) | A2; the guard `CellFoldT`, produced by the inner Mut Frame's fold (`erwp_M_frameF`) | **N** (chain: `erwp_M_antiFrame(C)`) | as A3 |
 | A5 `TopAdequacyG` (:623) | A6, `cerwpT_adequacy`'s route | **N** (0.3–0.6k) | no: small and provable |
 | A6 `ReclaimT` (:632) | `TaggedT` at `[]`: no borrow cell without a record | **P** (Core's `reclaim`) | no: small |
-| PinExt (:513) | `TWd.Ext` replaced in `twp`, `EndT`, `contShareT`, `TVal.Mono` | **N** (a definition change; every `Core/Tree*` proof re-checked, +3–8k) | not an assertion |
+| PinExt (:513) | `TWd.Ext` replaced in `twp`, `EndT`, `contShareT`, `TVal.Mono` | **N** (a definition change; every `research/tree/ResearchTree/Tree*` proof re-checked, +3–8k) | not an assertion |
 | B1 `semRec` (:645) | a `mut` record constructor for `TWNT`, `TIT` clauses, coverage read through records, `STy.mut` reading `ls` | **N/U** | no |
 | B2 `TokenBackT` (:655) | false direction: the step `endT_drop_frees` refuses it at every start where the frame holds nothing at `ℓ` | not refuted (no `mut`-token start world built) | no |
 

@@ -641,6 +641,9 @@ corpus/core-withlocal-class.bc flows [0, 4294967295]; main []
 corpus/core-withlocal-nested.bc flows [0, 4294967295]; main []
 corpus/core-withlocal-owned.bc flows [0, 4294967295]; main []
 corpus/core-withlocal-unit.bc flows [0, 4294967295]; main []
+corpus/core-withlocal-unwind.bc flows [0, 4294967295], finaliser; main [1], finaliser
+corpus/core-withlocal-unwind.bc 10:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/core-withlocal-unwind.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-withlocal-widths.bc flows [0, 4294967295]; main []
 corpus/core-withlocal.bc flows [0, 4294967295]; main []
 corpus/core-yield-loop.bc flows [0, 1, 4294967295]; main [1]

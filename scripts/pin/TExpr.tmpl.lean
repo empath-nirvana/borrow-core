@@ -650,8 +650,9 @@ inductive TExpr where
 --@TEXPR_CTORS@
   /-- **Derived**: the consume function of `A` (`consumeE`, SPEC §12), applied as an implicit consume or as a finaliser. -/
   | consume (info : TInfo) (jdg : Jdg) (A : VTy)
+  /-- **Derived**: a scoped local of kind `k` (`localE`, SPEC §80). -/
+  | withlocal (info : TInfo) (jdg : Jdg) (k : LocalKind) (A B : VTy) (x : LifeVar)
   /-- **Derived**: a block's allocation at the shape `σ` (`allocS`, SPEC §5). -/
-  | withlocal (info : TInfo) (jdg : Jdg) (A B : VTy) (x : LifeVar)
   | allocS (info : TInfo) (jdg : Jdg) (σ : Shape)
   /-- **Derived**: a block's release at the shape `σ` (`freeS`, SPEC §5). -/
   | freeS (info : TInfo) (jdg : Jdg) (σ : Shape)
@@ -704,7 +705,7 @@ inductive TExpr where
 def TExpr.erase : TExpr → Expr
 --@ERASE_CASES@
   | .consume _ _ A => consumeE A
-  | .withlocal _ _ _ _ _ => withlocalE
+  | .withlocal _ _ k _ _ _ => localE k
   | .allocS _ _ σ => BoCa.Fig16.LogRel.Core.allocS σ
   | .freeS _ _ σ => BoCa.Fig16.LogRel.Core.freeS σ
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => withborS σ
@@ -717,7 +718,7 @@ def TExpr.erase : TExpr → Expr
 /-- The node's source. -/
 def TExpr.info : TExpr → TInfo
 --@INFO_CASES@
-  | .withlocal i _ _ _ _ => i
+  | .withlocal i _ _ _ _ _ => i
   | .consume i _ _ | .allocS i _ _ | .freeS i _ _ | .withborSM i _ _ _ _ | .withborSI i _ _ _ _
   | .withborF2M i _ _ _ _ _ _ _ | .withborF2I i _ _ _ _ _ _ _ | .litFn i _ _ _ => i
   | .divLit i _ _ _ _ | .walk i _ _ _ _ | .walkGet i _ _ _ | .selfCall i _ _ _ _ | .lendCell i _ _ _ | .nuEta i _ _ _ _ => i
@@ -727,7 +728,7 @@ def TExpr.info : TExpr → TInfo
 /-- The node's judgment. -/
 def TExpr.jdg : TExpr → Jdg
 --@JDG_CASES@
-  | .withlocal _ j _ _ _ => j
+  | .withlocal _ j _ _ _ _ => j
   | .consume _ j _ | .allocS _ j _ | .freeS _ j _ | .withborSM _ j _ _ _ | .withborSI _ j _ _ _
   | .withborF2M _ j _ _ _ _ _ _ | .withborF2I _ j _ _ _ _ _ _ | .litFn _ j _ _ => j
   | .divLit _ j _ _ _ | .walk _ j _ _ _ | .walkGet _ j _ _ | .selfCall _ j _ _ _ | .lendCell _ j _ _ | .nuEta _ j _ _ _ => j
@@ -763,7 +764,7 @@ erasure is computed only where the rule's term is a definition's. -/
 def TExpr.isLam : TExpr → Bool
 --@ISLAM_CASES@
   | .consume _ _ A => (consumeE A matches .lam _)
-  | .withlocal .. => true
+  | .withlocal _ _ k _ _ _ => (localE k matches .lam _)
   | .allocS _ _ σ => (BoCa.Fig16.LogRel.Core.allocS σ matches .lam _)
   | .freeS _ _ σ => (BoCa.Fig16.LogRel.Core.freeS σ matches .lam _)
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => (withborS σ matches .lam _)

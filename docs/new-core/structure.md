@@ -61,7 +61,7 @@ For that the relation must:
 4. **Keep handler forwarding** (operations passing outward through `[handle]`).
 5. Restore `↭` at stops where a lender needs it, or show that no lender does.
 
-The relation is read over the tree world of §4 (`cerwpT`, `Core/TreeWpEff.lean`), with frame
+The relation is read over the tree world of §4 (`cerwpT`, `research/tree/ResearchTree/TreeWpEff.lean`), with frame
 records, `TWNT` and `TaggedT` (condition 21).
 
 Open: are the table fields `fd` (resumer guarantee), `PBv` (payload-dependent answer) and `oc`
@@ -107,10 +107,10 @@ A valid world stays valid, carried, across a graft, with no renaming.
 type read at the current tree, re-read when the tree grows (`reread`), not a fixed predicate:
 a cell carried unchanged by `trU` is not a value of this `Mut` (`trU_not_kmono`). Store types are syntactic
 codes read at the tree; the store typing grows at allocation and a location keeps its type
-(condition 16). The relation's value types (`STy`, `Core/TreeSem.lean`) read the record list and
+(condition 16). The relation's value types (`STy`, `research/tree/ResearchTree/TreeSem.lean`) read the record list and
 are downward closed and monotone along the tree and `KeepRel` for every former, `Mut` only at a
-store-code payload (E1, #790), continuation and task types included (`Core/TreeSemK.lean`: a
-captured `κ` is a value of its type); the computation types (`SCmp`, `Core/TreeSemC.lean`) are
+store-code payload (E1, #790), continuation and task types included (`research/tree/ResearchTree/TreeSemK.lean`: a
+captured `κ` is a value of its type); the computation types (`SCmp`, `research/tree/ResearchTree/TreeSemC.lean`) are
 downward closed, `F A` is a bare run, Kripke along the whole-list re-reading (`SCmp.ret_reread`),
 and they reach values under `U`, whose quantifier over later lists is the only one
 (`STy.thunk`); thunks are introduced by `STy.thunk_intro`. Effect rows
@@ -137,7 +137,7 @@ The operations, each to be proved to preserve it:
 instances of these operations. A proof that goes around the invariant is not the target.
 
 Status: `CactusInv` is stated with `cactus_step`, `cactus_move`, `joinReady_fd`, and not yet used.
-Over the tree world (`Core/TreeCactus.lean`), `CactusInvT` is kept by step, growth, move, spawn and
+Over the tree world (`research/tree/ResearchTree/TreeCactus.lean`), `CactusInvT` is kept by step, growth, move, spawn and
 join, and `cerwpT_adequacy` is derived through `cactusT_step` at one branch. Adequacy over several
 branches (`multiBranchAdequacyT`, `poolSchedAdequacyT`) goes through `cerwpT_adequacy` at one
 branch, the stored branches carried in pool form (`KapSchedT`, `PoolTJ`: each share resuming at
@@ -190,7 +190,7 @@ Over the single relation:
    the computation types, `F A` is a bare run, Kripke along the whole-list re-reading
    (`SCmp.ret_reread`); the quantifier over later lists is `U`'s alone (`STy.thunk`), and thunks
    are introduced by `STy.thunk_intro`. Done at the tree (`STy`, `SCmp`, κ and task
-   types, `Core/TreeSem.lean`, `Core/TreeSemC.lean`, `Core/TreeSemK.lean`) for every former but
+   types, `research/tree/ResearchTree/TreeSem.lean`, `research/tree/ResearchTree/TreeSemC.lean`, `research/tree/ResearchTree/TreeSemK.lean`) for every former but
    `Mut` at a payload that is not a store code (#790) and effect rows (`CTy.eff`).
 2. `SemJ`, then compatibility for every `CDerives` rule. The new rules are lend/reborrow/Anti-Frame
    across stops (with the unwinding borrow forms `withborU`), `[then]` across stops (the

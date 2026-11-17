@@ -45,7 +45,7 @@ second layer over it, step-indexed and read at the tree world:
 | type variables | none | `STy.var` at an environment `Nat → STy` |
 | families `[L]` | none | `STy.fam` (`sepRange` at the tree) |
 | opaque types | none | `STy.opq` (`Opaque.rel` at the tree) |
-| continuation and task types | none | no new former (`scope-789.md` §2.4): `STy.kont` = `U (B ⊸ C)`, `STy.kontBox` = `[@d] U (B ⊸ C)`, `STy.task` = `[@d] U C` (`Core/TreeSemK.lean`); a captured `κ` is a value of its type (`STy.kont_of_share`), carried and resumed (`STy.kontBox_resume_after`) |
+| continuation and task types | none | no new former (`scope-789.md` §2.4): `STy.kont` = `U (B ⊸ C)`, `STy.kontBox` = `[@d] U (B ⊸ C)`, `STy.task` = `[@d] U C` (`research/tree/ResearchTree/TreeSemK.lean`); a captured `κ` is a value of its type (`STy.kont_of_share`), carried and resumed (`STy.kontBox_resume_after`) |
 
 **Layout.**
 
@@ -53,12 +53,12 @@ second layer over it, step-indexed and read at the tree world:
 |---|---|
 | `Support/Model/Tree/KSem.lean` | from `Tree/KSem.lean`: `KMono`, `MonoΘ`, existence of the re-reading at a semantic typing (`RC.exists_cell`, `RR.exists_stratum`, `RR.exists`, `reread`, `reread_extends`), `vMut`, `vThunk`, the `kmono_*` results |
 | `Support/Model/Tree/KSemGraft.lean` | from `Tree/KSemGraft.lean`: round 7 (`round7_refused_before`, `round7_admitted_after`, `round7_write`) and `trU_not_kmono` |
-| `Core/TreeSem.lean` | `STy`, every value former with `Down` and `Mono`; `μ`; type variables; the `mut` re-reading results |
-| `Core/TreeSemC.lean` | `cerwpT_le`, `opTableT_down`; `cerwpT_nil_of_imm`; `SCmp`, the computation formers; thunks at `cerwpT`; `ν`; `∀` over lifetimes |
-| `Core/TreeSemK.lean` | continuation and task types; `STy.kont_of_share`, `STy.kontBox_resume_after`, `STy.not_kontBox_of_view` |
-| `Core/TreeSemKEx.lean` | the instances, at a proper extension (`dExt`, `dExt_proper`: a fresh child grafted into a chain): `κ = λy. K[y]` (`kontV_step`), a share holding a value built at any world (`share_val`, `share_viewR`), depth 1 and depth 3 (`kontBox_depth1`; `kontBox_depth3`, a view whose witness holds the two enclosing views), `STy.reread` on the nested view (`reread_v3`), round 7 at codes (`round7_codes`: `STy.mut_reread`, `RC.mut_extends`), the rules-out instances, `nilRun_stuck` |
-| `Core/TreeSemObs.lean` | `Obs.cerwpT_not_keepKripkeNil` (a bare run owning no records is not Kripke along `KeepRel`); `Obs.d1_nonvacuous` (the depth-1 resume configuration has starts) |
-| `Support/Model/Tree/World/ExtF.lean`, `Core/TreeWpEff.lean` | slice (d)'s (#807, D13 of `scope-781.md`), unchanged here: `KeepRel`, `contShareT` resumed at any list keeping the records the share reads |
+| `research/tree/ResearchTree/TreeSem.lean` | `STy`, every value former with `Down` and `Mono`; `μ`; type variables; the `mut` re-reading results |
+| `research/tree/ResearchTree/TreeSemC.lean` | `cerwpT_le`, `opTableT_down`; `cerwpT_nil_of_imm`; `SCmp`, the computation formers; thunks at `cerwpT`; `ν`; `∀` over lifetimes |
+| `research/tree/ResearchTree/TreeSemK.lean` | continuation and task types; `STy.kont_of_share`, `STy.kontBox_resume_after`, `STy.not_kontBox_of_view` |
+| `research/tree/ResearchTree/TreeSemKEx.lean` | the instances, at a proper extension (`dExt`, `dExt_proper`: a fresh child grafted into a chain): `κ = λy. K[y]` (`kontV_step`), a share holding a value built at any world (`share_val`, `share_viewR`), depth 1 and depth 3 (`kontBox_depth1`; `kontBox_depth3`, a view whose witness holds the two enclosing views), `STy.reread` on the nested view (`reread_v3`), round 7 at codes (`round7_codes`: `STy.mut_reread`, `RC.mut_extends`), the rules-out instances, `nilRun_stuck` |
+| `research/tree/ResearchTree/TreeSemObs.lean` | `Obs.cerwpT_not_keepKripkeNil` (a bare run owning no records is not Kripke along `KeepRel`); `Obs.d1_nonvacuous` (the depth-1 resume configuration has starts) |
+| `Support/Model/Tree/World/ExtF.lean`, `research/tree/ResearchTree/TreeWpEff.lean` | slice (d)'s (#807, D13 of `scope-781.md`), unchanged here: `KeepRel`, `contShareT` resumed at any list keeping the records the share reads |
 
 `Core/` because the computation types read `cerwpT` and the opaque types read `Core.Opaque`.
 
@@ -108,7 +108,7 @@ every body built from them, shown at `STy.allBody_mono` and `STy.list_cons`; a m
 bodies to monotone bodies is not built. `ν` folds at Core's shape `F(A ⊕ U X) & F B`
 (`SCmp.loopBody_mono`, `SCmp.loop_nonempty`).
 
-**The instances** (`Core/TreeSemKEx.lean`) are at a proper extension: before it, `0 ⊐ 1 ⊐ 2 ⊐ 3 ⊐
+**The instances** (`research/tree/ResearchTree/TreeSemKEx.lean`) are at a proper extension: before it, `0 ⊐ 1 ⊐ 2 ⊐ 3 ⊐
 4` is a chain and `5` a bare child of the root; after it, `5` is a child of `3` (`dExt`,
 `dExt_proper`). The resume list adds a record at `5`. `kontBox_depth1` and `kontBox_depth3` keep
 both conjuncts of `STy.kontBox_resume_after`. At depth 3 the share's view holds the views of the
@@ -135,7 +135,7 @@ several branches (`multiBranchAdequacyT`) goes through `cerwpT_adequacy` at one 
 stored continuations in pool form (`KapSchedT`, `PoolT`): each share resumes at `KeepRel`, the
 condition the value types here read, and every two are apart at each other's record masks. It
 does not rest on `CactusInvT` over several branches. The results here are about one continuation
-at `KeepRel`; the instances (`Core/TreeSemKEx.lean`) are configurations of that condition, not of
+at `KeepRel`; the instances (`research/tree/ResearchTree/TreeSemKEx.lean`) are configurations of that condition, not of
 a pool. Borrows shared across tasks are excluded by the pool invariant itself (#795); the view
 the instances' `κ` holds is of a lend whose record is in its own stop list. The tree has no `withborU` rule yet (row 6).
 A run giving up a copy of an `imm` view held elsewhere (D4) is resolved by #806 (`EndT` reads
@@ -187,7 +187,7 @@ invariant reads: `RecInv`). A value type that does not read the list can run its
 list fixed in advance, and the only list every world has is `[]`. At `[]`, a run over a resource holding a view holds of every term: no world whose list is empty
 holds an `imm` cell, since the list's records are the world's lineage (`TIT`) and every `imm`
 cell of the world's agreement is a record's cell or a chain position (`CoverageT`). This is
-`cerwpT_nil_of_imm` (`Core/TreeSemC.lean`), and at the instances' view, a term that never steps is
+`cerwpT_nil_of_imm` (`research/tree/ResearchTree/TreeSemC.lean`), and at the instances' view, a term that never steps is
 such a run (`nilRun_stuck`). So the record a continuation's view needs, its lend's, is what such a
 type cannot express: its thunk type holds of every thunk holding a borrow, resumable or not, and
 "rules out a `κ` that cannot resume" is unprovable of it.
@@ -195,7 +195,7 @@ type cannot express: its thunk type holds of every thunk holding a borrow, resum
 **The reading.** `STy`'s predicate reads the list (`P n w ls v ρ`), and its monotonicity is along
 extension at every list keeping the re-readings of the records of `ls` the resource reads
 (`KeepRel`, the per-branch condition of the continuation share, D13 of `scope-781.md`, slice (d)'s
-(#807): `Support/Model/Tree/World/ExtF.lean`'s `KeepRel` block and `Core/TreeWpEff.lean`'s
+(#807): `Support/Model/Tree/World/ExtF.lean`'s `KeepRel` block and `research/tree/ResearchTree/TreeWpEff.lean`'s
 `contShareT`). Every former's downward closure and monotonicity is
 proved at it: the formers other than thunks pass the list to their components, at parts of the
 resource (`KeepRel.of_compS_left`/`_right`, `KeepRel.of_imm_res`, `KeepRel.of_get_sub`); thunks
@@ -208,7 +208,7 @@ along `KeepRel`: `twp` quantifies over starts whose list re-reads its list whole
 resource holding a view has none (`cerwpT_nil_of_imm`), so Kripke along `KeepRel` would make the
 stuck `() ()`, over the view of a lend the program opens, a run at the lend's own list, and
 `let a = alloc () in () ()` a run at the empty world, which adequacy refutes
-(`Obs.KeepKripkeRunNil`, `Obs.cerwpT_not_keepKripkeNil`, `Core/TreeSemObs.lean`; the refutation
+(`Obs.KeepKripkeRunNil`, `Obs.cerwpT_not_keepKripkeNil`, `research/tree/ResearchTree/TreeSemObs.lean`; the refutation
 is at no records owned, the lend's record in the run's list, the stuck run framed beside it by
 `twp_frame`). That matters only to a thunk built from a run at the current list. Core never builds
 one so: `cC (.ret A)` is a bare `wpTS` run, and `thunkF_compatC` builds the thunk from `SemC` at

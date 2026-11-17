@@ -97,7 +97,7 @@ of the borrowed share into `own` in the lender's share (`extP_foldFrame`). So af
 - `ρk` (what `κ` owns): the lent cell as `own` at `ℓ`, every other local of the task, every
   outer lend frame's cell. The lender's `Ref` and the callback's view are both `loc ℓ`, both
   inside `K`.
-- `ρa` (what the handler is handed): the payload. `Row.Suspend` (`Core/TreeGoal791.lean:73`)
+- `ρa` (what the handler is handed): the payload. `Row.Suspend` (`research/tree/ResearchTree/TreeGoal791.lean:73`)
   asks `VOutlives ∅ bnd o.A`, which at a closed bound `⊤` excludes, outside a box or `!`, every
   `Imm`/`Mut` at a variable lifetime, every `U C` and `Unk`; a `[@⊤] U C` passes but holds no
   borrow cell (`CellU.InStratum ⊤` asks a cell strictly longer-lived than `⊤`). So the payload

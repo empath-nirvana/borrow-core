@@ -141,6 +141,7 @@ core-withlocal-class erased handles 0 performs 0 raises 0 left 0 0
 core-withlocal-nested erased handles 0 performs 0 raises 0 left 0 0
 core-withlocal-owned erased handles 0 performs 0 raises 0 left 0 0
 core-withlocal-unit erased handles 0 performs 0 raises 0 left 0 0
+core-withlocal-unwind erased handles 2 performs 0 raises 2 left 0 0
 core-withlocal-widths erased handles 0 performs 0 raises 0 left 0 0
 data-json-map-ser erased handles 2 performs 0 raises 2 left 0 0
 deep-gen-count erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
