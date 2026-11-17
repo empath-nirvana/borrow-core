@@ -46,6 +46,12 @@ Each entry: the decision, and why. Newest last.
 19. **No judgment index "for later".** A new coordinate (grades, temporal order) goes in a type
     former or in the model, never as a defaulted index on `CDerives`: every index is a tax on every
     rule, even when nothing reads it ([l_lang kernel](https://github.com/empath-nirvana/borrow-core/blob/main/docs/l-lang-kernel-and-lit.md), lesson L1).
+    *Refined by #798 (SPEC §83):* the kernel has one judgment, `CDerivesX I`, and the checker one,
+    `TDerivesX I`, at a judgment index `JIdx` that is a parameter, not an index; `CDerives`,
+    `CDerivesAt Ξ` and `CDerivesP` are its instances. A new coordinate is a field of `JIdx` when it
+    is a gating premise the same across a rule's premises and conclusion, and otherwise still goes
+    in a type former or in the model; never a new judgment, never a new index (`CLAUDE.md`,
+    *Growth discipline*).
 20. **A generalization lands with the deletion of its instances.** When a general former replaces
     fixed ones (general `ν` for `delay` and `stream`), the fixed ones become abbreviations in the
     same change; building the general form alongside them only adds proof (lesson L5).
