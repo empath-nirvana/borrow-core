@@ -192,7 +192,8 @@ def elabSites : List (Name × List Name × List Name) := [
   (``Frontend.Const.renameLife, elabConsts, []), (``Frontend.Const.respan, elabConsts, []),
   (``Frontend.Const.subst, elabConsts, []), (``Frontend.Elab.Instances.safeDivisor, elabConsts, []),
   (``Frontend.Sugar.safeDivisor, elabConsts, []), (``Frontend.Sugar.Const.unwinding, elabConsts, []),
-  (``Frontend.Sugar.relaxedC?, elabConsts, []), (``Frontend.Sugar.unwindingC?, elabConsts, [])]
+  (``Frontend.Sugar.relaxedC?, elabConsts, []), (``Frontend.Sugar.unwindingC?, elabConsts, []),
+  (``Frontend.Sugar.lendFinC, elabConsts, [])]
 
 /-- The only callers of the burn, and the declarations that build a `tok_burn` constant: the
 compilation of a written `match` (SPEC §42), and the maps over every constant. -/
