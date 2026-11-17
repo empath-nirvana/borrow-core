@@ -763,8 +763,9 @@ inductive TExpr where
   | nilDead (info : TInfo) (jdg : Jdg) (j : Jdg) (t : TExpr)
   /-- **Derived**: the consume function of `A` (`consumeE`, SPEC §12), applied as an implicit consume or as a finaliser. -/
   | consume (info : TInfo) (jdg : Jdg) (A : VTy)
+  /-- **Derived**: a scoped local of kind `k` (`localE`, SPEC §80). -/
+  | withlocal (info : TInfo) (jdg : Jdg) (k : LocalKind) (A B : VTy) (x : LifeVar)
   /-- **Derived**: a block's allocation at the shape `σ` (`allocS`, SPEC §5). -/
-  | withlocal (info : TInfo) (jdg : Jdg) (A B : VTy) (x : LifeVar)
   | allocS (info : TInfo) (jdg : Jdg) (σ : Shape)
   /-- **Derived**: a block's release at the shape `σ` (`freeS`, SPEC §5). -/
   | freeS (info : TInfo) (jdg : Jdg) (σ : Shape)
@@ -930,7 +931,7 @@ def TExpr.erase : TExpr → Expr
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase))
   | .nilDead _ _ _ t => t.erase
   | .consume _ _ A => consumeE A
-  | .withlocal _ _ _ _ _ => withlocalE
+  | .withlocal _ _ k _ _ _ => localE k
   | .allocS _ _ σ => BoCa.Fig16.LogRel.Core.allocS σ
   | .freeS _ _ σ => BoCa.Fig16.LogRel.Core.freeS σ
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => withborS σ
@@ -1056,7 +1057,7 @@ def TExpr.info : TExpr → TInfo
   | .lendR i _ _ _ _ _ _ _ _ => i
   | .lendLoopR i _ _ _ _ _ _ _ _ _ => i
   | .nilDead i _ _ _ => i
-  | .withlocal i _ _ _ _ => i
+  | .withlocal i _ _ _ _ _ => i
   | .consume i _ _ | .allocS i _ _ | .freeS i _ _ | .withborSM i _ _ _ _ | .withborSI i _ _ _ _
   | .withborF2M i _ _ _ _ _ _ _ | .withborF2I i _ _ _ _ _ _ _ | .litFn i _ _ _ => i
   | .divLit i _ _ _ _ | .walk i _ _ _ _ | .walkGet i _ _ _ | .selfCall i _ _ _ _ | .lendCell i _ _ _ | .nuEta i _ _ _ _ => i
@@ -1179,7 +1180,7 @@ def TExpr.jdg : TExpr → Jdg
   | .lendR _ j _ _ _ _ _ _ _ => j
   | .lendLoopR _ j _ _ _ _ _ _ _ _ => j
   | .nilDead _ j _ _ => j
-  | .withlocal _ j _ _ _ => j
+  | .withlocal _ j _ _ _ _ => j
   | .consume _ j _ | .allocS _ j _ | .freeS _ j _ | .withborSM _ j _ _ _ | .withborSI _ j _ _ _
   | .withborF2M _ j _ _ _ _ _ _ | .withborF2I _ j _ _ _ _ _ _ | .litFn _ j _ _ => j
   | .divLit _ j _ _ _ | .walk _ j _ _ _ | .walkGet _ j _ _ | .selfCall _ j _ _ _ | .lendCell _ j _ _ | .nuEta _ j _ _ _ => j
@@ -1455,7 +1456,7 @@ def TExpr.isLam : TExpr → Bool
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (((lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase)) : Expr) matches .lam _)
   | .nilDead _ _ _ t => t.isLam
   | .consume _ _ A => (consumeE A matches .lam _)
-  | .withlocal .. => true
+  | .withlocal _ _ k _ _ _ => (localE k matches .lam _)
   | .allocS _ _ σ => (BoCa.Fig16.LogRel.Core.allocS σ matches .lam _)
   | .freeS _ _ σ => (BoCa.Fig16.LogRel.Core.freeS σ matches .lam _)
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => (withborS σ matches .lam _)
