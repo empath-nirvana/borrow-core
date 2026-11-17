@@ -231,6 +231,9 @@ corpus/core-fin-op-cap.bc 4.0 cancellable once: error: capture: a finaliser that
 corpus/core-fin-op-cap.bc 1.0 cancellable resume-or-cancel: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/core-fin-op.bc 4.0 must-resume once: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/core-fin-op.bc 1.0 cancellable resume-or-cancel: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/core-fin-sched-own-row.bc 8.0 must-resume once: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/core-fin-sched-own-row.bc 9.0 cancellable resume-or-cancel: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
+corpus/core-fin-sched-own-row.bc 3.0 cancellable resume-or-cancel+state: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
 corpus/core-fin-stored-k-fin.bc 1.0 cancellable abortive: branch; agree
 corpus/core-fin-stored-k-fin.bc 3.0 cancellable resume-or-cancel+state: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-fin-stored-k-op.bc 4.0 must-resume once: error: capture: a finaliser that may perform an operation of a control handler is not lowered (SPEC §27); disagree
@@ -411,7 +414,7 @@ corpus/fin-raise-unwind.bc 2.0 cancellable abortive: -; agree
 corpus/fin-resume-capturing-row.bc 1.0 cancellable tail: -; agree
 corpus/fin-resume-capturing-row.bc 2.0 cancellable abortive: -; agree
 corpus/fin-resume-capturing-row.bc 3.0 cancellable tail+state: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/fin-timeout.bc 2.0 cancellable resume-or-cancel: -; agree
+corpus/fin-timeout.bc 2.0 cancellable stored: -; agree
 corpus/fin-timeout.bc 3.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/fin-timeout.bc 1.0 cancellable abortive: branch; agree
 corpus/float-roundtrip.bc 1.0 cancellable abortive: branch; agree

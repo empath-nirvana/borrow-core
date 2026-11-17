@@ -319,31 +319,6 @@ theorem lastD_steps (κ : Val) :
   simp [subst_shift_succ, Val.inj₂, Val.unit]
   exact .refl
 
-/-! ### `κ`'s own type as a finaliser -/
-
-/-- **`κ.2 ()` at its own type, as a finaliser**: a `[then]` whose finaliser is `κ.2 ()`, typed at
-`cancelTy Σ F = F_{F ⊕ Σ} 1`, around a capturable operation `o` of `Σ` asks, through `[then]`'s
-`hfin` (`ThenLe o.fin (F ⊕ Σ) o.fin`), that `o`'s cancel row be `⊤` or find `o`'s own key: the
-finaliser's row holds `o` itself.  `[handle-last]` writes its clauses and gives `κ`'s cancel the
-table of the operation's own cancel row instead, so this does not arise there.  `[spec §51]` -/
-def KappaFinSelf : Prop :=
-  ∀ (F : CTy) (S : Row) (o : OpSig), o ∈ S → Row.find S o.n o.i = some o →
-    capB o.q o.B = true → ThenLe o.fin (F.rowOf ++ S) o.fin →
-    o.fin.isTop = true ∨ ∃ o', Row.find o.fin.rowOf o.n o.i = some o'
-
-theorem kappaFinSelf : KappaFinSelf := by
-  intro F S o _ hf _ h
-  rw [ThenLe] at h
-  rcases h with h | ⟨-, -, hE⟩
-  · exact .inl h
-  · obtain ⟨o₁, h₁⟩ : ∃ o₁, Row.find (F.rowOf ++ S) o.n o.i = some o₁ := by
-      rw [Row.find_append]
-      cases h' : Row.find F.rowOf o.n o.i with
-      | none => exact ⟨o, by simp [hf]⟩
-      | some o₁ => exact ⟨o₁, rfl⟩
-    obtain ⟨o', h', -⟩ := hE _ _ _ h₁
-    exact .inr ⟨o', h'⟩
-
 /-! ### The cancel rows -/
 
 /-- What the rule asks of the `j`-th operation's cancel row `F`, at the work's row `Σ_W`, the

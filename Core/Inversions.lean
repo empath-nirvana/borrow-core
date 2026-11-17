@@ -3560,15 +3560,15 @@ theorem kcancel_jr_cancellable {Δ : LifeCtx} {Γ Γ' : Ctx VTy} {C₁ C₂ : CT
       exact Relation.ReflTransGen.head (JS.alpha (CTy.alphaB_trans' hE h₂)) hr
     · rcases ob with _ | d <;> simp [kBoxO, VTy.alphaB] at hT
 
-/-- **`κ`'s cancel read at a row**: the cancel row is no `⊤`, and its operations, ahead of the row,
-are below the row. -/
+/-- **`κ`'s cancel read at a row**: the cancel row is no `⊤`, and its operations are below the
+row. -/
 theorem cancelTy_rowLe {S : Row} {F : CTy} {R : VTy}
-    (h : JR (.comp (cancelTy S F)) (.comp (CTy.effOf S R))) :
-    F.isTop = false ∧ RowReach (F.rowOf ++ S) S := by
+    (h : JR (.comp (cancelTy F)) (.comp (CTy.effOf S R))) :
+    F.isTop = false ∧ RowReach F.rowOf S := by
   cases hF : F.isTop
-  · rw [show cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit by simp [cancelTy, hF]] at h
+  · rw [show cancelTy F = CTy.effOf F.rowOf .unit by simp [cancelTy, hF]] at h
     exact ⟨rfl, JR.rowLe h⟩
-  · rw [show cancelTy S F = .top by simp [cancelTy, hF]] at h
+  · rw [show cancelTy F = .top by simp [cancelTy, hF]] at h
     obtain ⟨D', he, hα⟩ := JR.rigid h rigid_top
     simp only [Jdg.comp.injEq] at he
     subst he

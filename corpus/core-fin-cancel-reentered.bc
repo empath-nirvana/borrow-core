@@ -14,9 +14,9 @@ main : F (1 + 1) =
       (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F (1 + 1)) * 1)) (
     handle_with[1](
         ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[3.0 cancel 1 ~> 0] 1)),
-        (((!thunkv fun (p : 1 * U ((1 -o F[3.0 cancel 1 ~> 0] 1) & F[3.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] 1)) ->
+        (((!thunkv fun (p : 1 * U ((1 -o F[3.0 cancel 1 ~> 0] 1) & F[3.0 cancel 1 ~> 0] 1)) ->
           let (u, k) = p; let () = u; c <- (force k).2; return c), ())
-          : !U (1 * U ((1 -o F[3.0 cancel 1 ~> 0] 1) & F[3.0 cancel 1 ~> 0, 3.0 cancel 1 ~> 0] 1) -o F[3.0 cancel 1 ~> 0] 1) * 1)) (
+          : !U (1 * U ((1 -o F[3.0 cancel 1 ~> 0] 1) & F[3.0 cancel 1 ~> 0] 1) -o F[3.0 cancel 1 ~> 0] 1) * 1)) (
       x <- (handle_with[3](
               ((!thunkv fun (v : 1) -> return v) : !U (1 -o F[1.0 cancel[3.0 cancel 1 ~> 0] 1 ~> 1] 1)),
               (((!thunkv fun (e : 1) -> return ()), ()) : !U (1 -o F[1.0 cancel[3.0 cancel 1 ~> 0] 1 ~> 1] 1) * 1)) (

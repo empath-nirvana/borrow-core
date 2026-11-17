@@ -697,26 +697,24 @@ def needRowOf : Nat → Bool → TExpr → CRow
             | _ => false
           if vals || isComp then J acc (needRowOf k vals c.2) else acc) []
 
-/-- The cancel row `F` whose `cancelTy S F` is the cancel branch `C` of a `κ`: `C`'s layers ahead
-of `S`'s, counted by `S`'s length (the clause's type, rebuilt at it, is then compared whole).
-`[spec §27]` -/
-def finOfBranch (S : CRow) (C : CCTy) : CCTy :=
-  let R := C.rowOf
-  BoCa.Fig16.LogRel.Core.CTy.effOf (R.take (R.length - S.length)) .unit
+/-- The cancel row `F` whose `cancelTy F` is the cancel branch `C` of a `κ`: `C`'s layers (the
+clause's type, rebuilt at it, is then compared whole).  `[spec §27]` -/
+def finOfBranch (C : CCTy) : CCTy :=
+  BoCa.Fig16.LogRel.Core.CTy.effOf C.rowOf .unit
 
 /-- The cancel row a `κ`'s type `K` is at, read back from its cancel branch (`finOfBranch`).
 `[spec §27]` -/
-def kFin (S : CRow) : CVTy → CCTy
-  | .thunk (.amp _ C) => finOfBranch S C
-  | .bang (.thunk (.amp _ C)) => finOfBranch S C
+def kFin : CVTy → CCTy
+  | .thunk (.amp _ C) => finOfBranch C
+  | .bang (.thunk (.amp _ C)) => finOfBranch C
   | _ => .ret .unit
 
 /-- The cancel row a clause's type gives its operation: `κ`'s (`kFin`), read only at a capturable
 operation (`capB`); the empty cancel row at any other.  `[spec §27]` -/
-def clauseFin (S : CRow) (c : CVTy) (e : CQual × CVTy × CVTy) : CCTy :=
+def clauseFin (c : CVTy) (e : CQual × CVTy × CVTy) : CCTy :=
   if BoCa.Fig16.LogRel.Core.capB e.1 e.2.2 then
     match c with
-    | .bang (.thunk (.arr (.tensor _ K) _)) => kFin S K
+    | .bang (.thunk (.arr (.tensor _ K) _)) => kFin K
     | _ => .ret .unit
   else .ret .unit
 
@@ -726,7 +724,7 @@ def firstClause (S : CRow) (R c : CVTy) :
     List (CQual × CVTy × CVTy) → Option ((CQual × CVTy × CVTy) × CCTy)
   | [] => none
   | e :: es =>
-    let F := clauseFin S c e
+    let F := clauseFin c e
     if tyEqV (BoCa.Fig16.LogRel.Core.clauseTy S R e F) c then some (e, F)
       else firstClause S R c es
 
@@ -761,10 +759,10 @@ def clauseCandsB : CVTy → List (CQual × CVTy × CVTy)
 
 /-- The cancel row a clause's type under BOXED-κ gives its operation, as `clauseFin`.
 `[spec §27, §28]` -/
-def clauseFinB (S : CRow) (c : CVTy) (e : CQual × CVTy × CVTy) : CCTy :=
+def clauseFinB (c : CVTy) (e : CQual × CVTy × CVTy) : CCTy :=
   if BoCa.Fig16.LogRel.Core.capB e.1 e.2.2 then
     match c with
-    | .bang (.thunk (.arr (.tensor _ (.box _ K)) _)) => kFin S K
+    | .bang (.thunk (.arr (.tensor _ (.box _ K)) _)) => kFin K
     | _ => .ret .unit
   else .ret .unit
 
@@ -774,7 +772,7 @@ def firstClauseB (S : CRow) (R : CVTy) (d : CLife) (c : CVTy) :
     List (CQual × CVTy × CVTy) → Option ((CQual × CVTy × CVTy) × CCTy)
   | [] => none
   | e :: es =>
-    let F := clauseFinB S c e
+    let F := clauseFinB c e
     if tyEqV (BoCa.Fig16.LogRel.Core.clauseTyB S R d e F) c then some (e, F)
       else firstClauseB S R d c es
 

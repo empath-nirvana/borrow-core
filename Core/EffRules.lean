@@ -1185,20 +1185,21 @@ def Row.ofEff (n : UInt32) (E : List (Qual × VTy × VTy)) (k : Nat) (fs : Nat �
   | (q, A, B) :: E => ⟨n, UInt32.ofNat k, q, A, B, fs 0, cs 0⟩ ::
       Row.ofEff n E (k + 1) (fun j => fs (j + 1)) (fun j => cs (j + 1))
 
-/-- The type of `κ`'s cancel branch at a handler whose outer row is `Σ`, for an operation whose
-cancel row is `F`: `F_{F ⊕ Σ} 1`, the cancel row's operations ahead of `Σ`, or `⊤` when `F` is
-`⊤`.  At the empty cancel row it is `F_Σ 1`.  `[spec §27]` -/
-def cancelTy (S : Row) (F : CTy) : CTy :=
-  if F.isTop then .top else CTy.effOf (F.rowOf ++ S) .unit
+/-- The type of `κ`'s cancel branch for an operation whose cancel row is `F`: `F_F 1`, the
+cancel row's operations alone, or `⊤` when `F` is `⊤`.  The cancel runs no handler frame
+(`Kont.dead`), so it performs only its operation's cancel row; at the empty cancel row it is
+`F 1`.  `[spec §27]` -/
+def cancelTy (F : CTy) : CTy :=
+  if F.isTop then .top else CTy.effOf F.rowOf .unit
 
 /-- `κ`'s type at an operation `A ↠^q B` of a handler answering `F_Σ R`, whose cancel row is `F`:
 `U((B ⊸ F_Σ R) & ⊤)` (must resume: resumed), `U((B ⊸ F_Σ R) & C)` (cancellable: resumed or
-cancelled), and its `!` (unrestricted), with `C = cancelTy Σ F`.  `[spec §19, §27]` -/
+cancelled), and its `!` (unrestricted), with `C = cancelTy F`.  `[spec §19, §27]` -/
 def kTy (S : Row) (R : VTy) (q : Qual) (B : VTy) (F : CTy := .ret .unit) : VTy :=
   match q with
   | .lin => .thunk (.amp (.arr B (CTy.effOf S R)) .top)
-  | .cancel => .thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy S F))
-  | .unr => .bang (.thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy S F)))
+  | .cancel => .thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy F))
+  | .unr => .bang (.thunk (.amp (.arr B (CTy.effOf S R)) (cancelTy F)))
 
 /-- A clause's type: `!U(A ⊗ K ⊸ F_Σ R)`, or `!U(A ⊸ F_Σ R)` at an abortive operation, `K` at the
 operation's cancel row `F`.  `[spec §19, §27]` -/

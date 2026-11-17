@@ -371,11 +371,11 @@ theorem kTy_cancel_linear {S : Row} {R B : VTy} {F : CTy} : Linear (kTy S R .can
 /-- The cancel of `κ` at the default qualifier is a consume exactly when it is pure: when
 the cancel row is empty. -/
 theorem kTy_cancel_consumable_iff {S : Row} {R B : VTy} {F : CTy} :
-    Consumable (kTy S R .cancel B F) ↔ cancelTy S F = .ret .unit := by
+    Consumable (kTy S R .cancel B F) ↔ cancelTy F = .ret .unit := by
   simp only [kTy]
   constructor
   · intro h
-    generalize hc : cancelTy S F = c at h
+    generalize hc : cancelTy F = c at h
     cases h
     rfl
   · intro h

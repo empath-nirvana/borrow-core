@@ -335,15 +335,15 @@ theorem ofEff_rais_n {n : UInt32} {S : Row} (hS : ∀ o ∈ S, o.n ≠ n) (A : V
         rw [this]; rfl
       · exact ofEff_rais_n hS A E (k + 1) _ _ (fun o ho => hE o (by simp [ho])) i
 
-/-- A cancel row's entries are entries of the row it puts ahead of `Σ`. -/
-theorem sProt_rowOf_perf (S : Row) (R : VTy) : ∀ (F : CTy) (m i : UInt32) (s : OpSpec),
+/-- A cancel row's entries are entries of its row at any answer. -/
+theorem sProt_rowOf_perf (R : VTy) : ∀ (F : CTy) (m i : UInt32) (s : OpSpec),
     (sProt (ℍ := ℍ) F).perf m i = some s →
-      (sProt (ℍ := ℍ) (CTy.effOf (F.rowOf ++ S) R)).perf m i = some s
+      (sProt (ℍ := ℍ) (CTy.effOf F.rowOf R)).perf m i = some s
   | .eff m₀ i₀ q A B fin rc C, m, i, s, h => by
-      simp only [CTy.rowOf, List.cons_append, CTy.effOf, sProt] at h ⊢
+      simp only [CTy.rowOf, CTy.effOf, sProt] at h ⊢
       by_cases hmi : m = m₀ ∧ i = i₀
       · rw [if_pos hmi] at h ⊢; exact h
-      · rw [if_neg hmi] at h ⊢; exact sProt_rowOf_perf S R C m i s h
+      · rw [if_neg hmi] at h ⊢; exact sProt_rowOf_perf R C m i s h
   | .ret _, _, _, _, h => by simp [sProt, Prot.none] at h
   | .arr _ _, _, _, _, h => by simp [sProt, Prot.none] at h
   | .amp _ _, _, _, _, h => by simp [sProt, Prot.none] at h
@@ -352,15 +352,15 @@ theorem sProt_rowOf_perf (S : Row) (R : VTy) : ∀ (F : CTy) (m i : UInt32) (s :
   | .nuSys _ _ _, _, _, _, h => by simp [sProt, Prot.none] at h
 
 /-- The cancel obligation of a cancel row that is not `⊤` is a cancel run at some operations,
-each an entry of the row it puts ahead of `Σ`. -/
+each an entry of the cancel row. -/
 theorem sFin_cases {F : CTy} {G : Nat → Expr → Heap → Prop} (hG : sFin (ℍ := ℍ) F = some G)
-    (S : Row) (R : VTy) : ∃ Pc : UInt32 → UInt32 → Option OpSpec,
+    (R : VTy) : ∃ Pc : UInt32 → UInt32 → Option OpSpec,
       G = cancelObl (ℍ := ℍ) Pc ∧
-      ∀ m i s, Pc m i = some s → (sProt (ℍ := ℍ) (CTy.effOf (F.rowOf ++ S) R)).perf m i = some s := by
+      ∀ m i s, Pc m i = some s → (sProt (ℍ := ℍ) (CTy.effOf F.rowOf R)).perf m i = some s := by
   cases F with
   | eff m i q A B fin rc C =>
       simp only [sFin, Option.some.injEq] at hG
-      exact ⟨_, hG.symm, sProt_rowOf_perf S R _⟩
+      exact ⟨_, hG.symm, sProt_rowOf_perf R _⟩
   | top => simp [sFin] at hG
   | _ =>
       simp only [sFin, Option.some.injEq] at hG
@@ -410,7 +410,7 @@ theorem kap_sem {S : Row} {R : VTy} {q : Qual} {B : VTy} {F : CTy} {H : Val} {k 
         have hG : ∃ G, sFin (ℍ := ℍ) F = some G := by
           cases F <;> simp_all [sFin, CTy.isTop]
         obtain ⟨G, hG⟩ := hG
-        obtain ⟨Pc, rfl, hPc⟩ := sFin_cases hG S .unit
+        obtain ⟨Pc, rfl, hPc⟩ := sFin_cases hG .unit
         have hc := sFin_le hG (k := k - 5) (by omega) (hcan rfl _ hG)
         have h₀ := ewp_ccatch (ℍ := ℍ) (Q' := fun k v σ => sV (ℍ := ℍ) .unit k v σ) hPc
           (fun _ => by simp [sV]) (k - 5) _ σk hc

@@ -473,7 +473,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   /-- `[handle]`: `handle_n e with H`, the handler's pair `H = (h_ret, hs)` a value form over a
   part of the context whose live slots are persistent, `n` not in `Σ`, the handled row tied to
   `Ξ`.  The `j`-th operation's cancel row is `fs j`, and its clause's `κ` has its cancel branch at
-  `cancelTy Σ (fs j)`.  At two variables and empty cancel rows it is `hndTerm`
+  `cancelTy (fs j)`.  At two variables and empty cancel rows it is `hndTerm`
   (`CDerivesAt.effHandle`).  `[spec §19, §24, §27]` -/
   | effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
       {cs : Nat → Bool}
