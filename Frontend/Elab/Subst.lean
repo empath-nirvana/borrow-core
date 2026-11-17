@@ -172,6 +172,7 @@ def Val.subst (σ : TySubst) : Val → Val
   | .inst sp V a => .inst sp (V.subst σ) a
   | .ascribe sp V A => .ascribe sp (V.subst σ) (A.subst σ)
   | .const sp c => .const sp (c.subst σ)
+  | .constU sp c d => .constU sp (c.subst σ) (d.subst σ)
   | .shorten sp m s a V => .shorten sp m (s.subst σ) a (V.subst σ)
   | .lend sp x m => .lend sp x m
   | .sugar sp (.forSite i) => .sugar sp (.forSite { i with T := i.T.subst σ })

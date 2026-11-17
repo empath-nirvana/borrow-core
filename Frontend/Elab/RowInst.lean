@@ -120,6 +120,7 @@ def _root_.Frontend.Val.sitesIn (h : List Nat) : Val → List (Bool × Nat × Na
   | .unroll _ V | .inst _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.sitesIn h
   | .ascribe _ V A => V.sitesIn h ++ A.ents.map ((false, ·))
   | .const _ k => (constEnts k).map ((false, ·))
+  | .constU _ k d => (constEnts k).map ((false, ·)) ++ d.sitesIn h
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.sitesIn h
   | _ => []
 
@@ -448,6 +449,7 @@ def substVal : Nat → Cx → Val → M Val
     | .inst sp V a => return .inst sp (← substVal n c V) a
     | .ascribe sp V A => return .ascribe sp (← substVal n c V) (← substV n c A)
     | .const sp k => return .const sp (← substConst n c sp k)
+    | .constU sp k d => return .constU sp (← substConst n c sp k) (← substVal n c d)
     | .shorten sp m σ a V => return .shorten sp m (← substS n c σ) a (← substVal n c V)
     | .lend sp x m => return .lend sp (← ident n c x) m
     -- A form the effects pass left for the sugar: its types substituted.

@@ -351,7 +351,7 @@ theorem ewp_handle_valsB {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat →
   refine ewp_handleS α (Row.tab (Row.ofEff n E 0 fs ++ S) δ) (Row.tab S δ) n hn0 ?_
     (qualsVal (E.map Prod.fst)) vr vc
     (fun ls v => vC true A ls δ v) (fun ls v => vC true R ls δ v)
-    (fun i => cancelTabOf S (fs i.toNat) δ)
+    (fun i => cancelTabOf (fs i.toNat) δ)
     (fun i en hT _ => capTag_ofEff hnS hlen i en hT) ?_ ?_ ?_ he
   · intro m i hm
     simp [Row.tab, Row.find_append, Row.find_ofEff_ne n E 0 fs m i hm]
@@ -364,7 +364,7 @@ theorem ewp_handle_valsB {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat →
     · cases hTk
     · rename_i hnT
       cases hTk
-      refine ⟨Row.tab (fs j).rowOf δ, ?_, tab_le_cancelTab S (fs j) δ⟩
+      refine ⟨Row.tab (fs j).rowOf δ, ?_, OpTab.Le.refl _⟩
       rw [OpSig.ent_fin, if_pos hcap, finObl_eq]
       simp only [hnT, Bool.false_eq_true, if_false]
   · intro ls' v σ hv

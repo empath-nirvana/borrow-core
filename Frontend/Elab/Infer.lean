@@ -170,6 +170,9 @@ def inferV : Nat → Env → LifeCtx → Slots → Option CVTy → Val → IM TN
       pure (node a.ty.v? [a])
     | .const sp c =>
       pure (node (match synConst E Δ T.chk sp c with | .ok ⟨A, _⟩ => some A | .error _ => none) [])
+    -- With a written finaliser (SPEC §78): the constant's type, at `Σ_D = ∅`, `Σ_M = Σ`.
+    | .constU sp c _ =>
+      pure (node (match synConst E Δ T.chk sp c with | .ok ⟨A, _⟩ => some A | .error _ => none) [])
     | .pair _ V W => do
       let (ea, eb) := match exp with
         | some (.tensor A B) => (some A, some B)

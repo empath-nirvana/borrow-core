@@ -624,7 +624,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
   /-- `[handle]`: `handle_n e with H`, the handler's pair `H = (h_ret, hs)` a value form over a
   part of the context whose live slots are persistent, `n` not in `Σ`.  The `j`-th operation's
-  cancel row is `fs j`, and its clause's `κ` has its cancel branch at `cancelTy Σ (fs j)`.  The
+  cancel row is `fs j`, and its clause's `κ` has its cancel branch at `cancelTy (fs j)`.  The
   handled row does not hold `Div`: a handler of `Div`, or of another name around a computation
   that ticks, is `effHandleT` (decision 68).  The `j`-th operation's marker is `cs j`
   (`OpSig.rc`), which only the typing reads.  At two variables, empty cancel rows and no markers it is
