@@ -8,6 +8,9 @@
 # `corpus/kernel-counts.expected` (`name allocs indirect copies`).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# One unit of the result cache (scripts/gate_cache.py `step`): a recorded pass is replayed when
+# the binaries, the library, scripts/, the tools and corpus/kernel-counts.expected are as they were.
+[ "${GATE_CACHE_INNER:-}" = kernel ] || exec python3 scripts/gate_cache.py step kernel bcc --files corpus/kernel-counts.expected -- scripts/compile-kernel.sh "$@"
 command -v wasmtime >/dev/null || { echo "wasmtime is not on PATH"; exit 1; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
 bcc=.lake/build/bin/bcc

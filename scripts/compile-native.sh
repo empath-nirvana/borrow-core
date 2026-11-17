@@ -77,10 +77,17 @@ program() {
   echo "$f: native as $base.out | $got"
 }
 export -f program argsOf statusOf
+# Each program is a unit of the result cache (scripts/par.sh; the C compiler is among its tools).
+export PAR_CACHE="compile-native backend=$backend"
 par program "${files[@]}"
 bad=$par_failed
 
-if [ "$named" = 0 ]; then
+# The checks after the corpus, one after another, when no file is named: one unit of the result
+# cache (scripts/par.sh), keyed on the corpus files they read and on Lake's configuration (they run
+# `lake env`). It counts its failures in the side file `serialbad`.
+serial() {
+  set -e
+  local bad=0 tmp=$PAR_TMP name want out rc wdir ccmd cflags f n weak
   for name in $("$bcc" kernel list); do
     want=$("$bcc" kernel interp --stage flat "$name" 2>&1) || true
     out=$("$bcc" kernel run --native "$name" 2>&1) || true
@@ -88,8 +95,6 @@ if [ "$named" = 0 ]; then
     else echo "kernel $name: native differs: $out (flat: $want)"; bad=$((bad + 1)); fi
   done
 
-  tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' EXIT
   "$bcc" hostops flat > "$tmp/flat" || { echo "hostops: the flat IR fails"; bad=$((bad + 1)); }
   "$bcc" hostops native > "$tmp/native" || { echo "hostops: native fails"; bad=$((bad + 1)); }
   if cmp -s "$tmp/flat" "$tmp/native"; then
@@ -136,25 +141,35 @@ if [ "$named" = 0 ]; then
       echo "corpus/json-drop-deep.bc: 10^6 levels native in a stack of 16 KiB fails: $(head -3 "$tmp/out") $(head -3 "$tmp/err")"; bad=$((bad + 1))
     fi
   fi
-fi
-# No weak imports (macOS): a native program is built pinned to the oldest supported OS
-# (`Pipeline/Driver.lean`, `macosMinVersion`), so an API that OS lacks is a build error. A weak
-# import would be null at run time on that OS. One program of each shape the runtime serves.
-if [ "$(uname)" = Darwin ] && [ "$named" = 0 ]; then
-  wdir=$tmp/weak; mkdir -p "$wdir"
-  "$bcc" cc --runtime > "$wdir/runtime.c"
-  read -r -a ccmd <<< "$("$bcc" cc)"; read -r -a cflags <<< "$("$bcc" cc --flags)"
-  for f in corpus/io-cat.bc corpus/io-task.bc corpus/async-borrow.bc corpus/float-arith.bc corpus/deep-list.bc; do
-    n=$(basename "$f" .bc)
-    if "$bcc" compile --backend "$backend" --target native "$f" -o "$wdir/$n.ll" > /dev/null 2> "$wdir/$n.err" &&
-        "${ccmd[@]}" "${cflags[@]}" "$wdir/$n.ll" "$wdir/runtime.c" -o "$wdir/$n" 2>> "$wdir/$n.err"; then
-      weak=$(nm -m "$wdir/$n" | grep -i 'weak' | grep -i 'undefined' || true)
-      if [ -n "$weak" ]; then echo "$f: native build weak-imports: $weak"; bad=$((bad + 1))
-      else echo "$f: native build has no weak import"; fi
-    else
-      echo "$f: native build for the weak-import check fails: $(head -3 "$wdir/$n.err")"; bad=$((bad + 1))
-    fi
-  done
+  # No weak imports (macOS): a native program is built pinned to the oldest supported OS
+  # (`Pipeline/Driver.lean`, `macosMinVersion`), so an API that OS lacks is a build error. A weak
+  # import would be null at run time on that OS. One program of each shape the runtime serves.
+  if [ "$(uname)" = Darwin ]; then
+    wdir=$tmp/weak; mkdir -p "$wdir"
+    "$bcc" cc --runtime > "$wdir/runtime.c"
+    read -r -a ccmd <<< "$("$bcc" cc)"; read -r -a cflags <<< "$("$bcc" cc --flags)"
+    for f in corpus/io-cat.bc corpus/io-task.bc corpus/async-borrow.bc corpus/float-arith.bc corpus/deep-list.bc; do
+      n=$(basename "$f" .bc)
+      if "$bcc" compile --backend "$backend" --target native "$f" -o "$wdir/$n.ll" > /dev/null 2> "$wdir/$n.err" &&
+          "${ccmd[@]}" "${cflags[@]}" "$wdir/$n.ll" "$wdir/runtime.c" -o "$wdir/$n" 2>> "$wdir/$n.err"; then
+        weak=$(nm -m "$wdir/$n" | grep -i 'weak' | grep -i 'undefined' || true)
+        if [ -n "$weak" ]; then echo "$f: native build weak-imports: $weak"; bad=$((bad + 1))
+        else echo "$f: native build has no weak import"; fi
+      else
+        echo "$f: native build for the weak-import check fails: $(head -3 "$wdir/$n.err")"; bad=$((bad + 1))
+      fi
+    done
+  fi
+  echo "$bad" > "$PAR_SIDE/serialbad"
+  [ "$bad" = 0 ]
+}
+if [ "$named" = 0 ]; then
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  export -f serial
+  export PAR_COLLECT=$tmp PAR_CACHE_DEPS="files:$(echo corpus/{div-unhandled,deep-list,json-drop-deep,io-cat,io-task,async-borrow,float-arith}.* lean-toolchain lakefile.toml lake-manifest.json)"
+  PAR_CACHE=${PAR_CACHE:+compile-native-serial backend=$backend} JOBS=1 par serial corpus/div-unhandled.bc
+  bad=$((bad + $(cat "$tmp/serialbad" 2>/dev/null || echo 1)))
 fi
 echo "$bad failure(s)."
 [ "$bad" -eq 0 ]

@@ -102,6 +102,9 @@ pending() {
   fi
 }
 export -f checks rejects reports trusted copies pending
+# Each program, reject, reports file and pending program is a unit of the result cache
+# (scripts/par.sh, scripts/gate_cache.py).
+export PAR_CACHE=check-corpus
 if [ $# -gt 0 ]; then
   for f in "$@"; do [ -f "$f" ] || { echo "$f: no such file"; exit 2; }; done
   for f in "$@"; do

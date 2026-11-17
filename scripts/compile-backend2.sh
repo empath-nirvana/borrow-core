@@ -86,7 +86,7 @@ program() {
   base=${f%.bc}
   [ -f "$base.out" ] || return 0
   if ! "$bcc" lir --lint "$f" > "$w/lint" 2>&1; then
-    if grep -q 'outside the pure fragment' "$w/lint"; then echo "$f: outside the new backend's fragment"; : > "$tmp/out.$RANDOM$RANDOM"; return 0; fi
+    if grep -q 'outside the pure fragment' "$w/lint"; then echo "$f: outside the new backend's fragment"; echo "$f" >> "$PAR_SIDE/outside"; return 0; fi
     echo "$f: lint: $(head -3 "$w/lint")"; return 1
   fi
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
@@ -107,7 +107,7 @@ program() {
       return 1
     fi
   done
-  if [ "$final" = 1 ]; then echo "$f: ok at wasm"; echo "$f" > "$tmp/counts.$$.$RANDOM"; return 0; fi
+  if [ "$final" = 1 ]; then echo "$f: ok at wasm"; echo "$f" >> "$PAR_SIDE/counts"; return 0; fi
   name=${f#corpus/}; name=${name%.bc}
   local er wer
   er=$("$bcc" lir --erasure "$f" 2>&1)
@@ -115,7 +115,7 @@ program() {
     "erased "*" left 0 0") ;;
     *) echo "$f: the effect erasure's postcondition: $er"; return 1 ;;
   esac
-  echo "$name $er" >> "$tmp/erasure.$$.$RANDOM"
+  echo "$name $er" >> "$PAR_SIDE/erasure"
   if [ "$write" != 1 ]; then
     wer=$(awk -v n="$name" '$1 == n { $1 = ""; sub(/^ /, ""); print }' "$erasure" 2>/dev/null || true)
     if [ "$wer" != "$er" ]; then echo "$f: erasure \"$er\", pinned \"$wer\" ($erasure)"; return 1; fi
@@ -127,7 +127,7 @@ program() {
   oldc=$(awk -v n="$name" '$1 == n { print $2, $3, $4 }' "$old" 2>/dev/null || true)
   note=$(awk -v n="$name" '$1 == n { sub(/^[^#]*/, ""); print }' "$expected" 2>/dev/null || true)
   echo "$name $a $i $c $l $s $b${note:+ $note}" > "$w/count"
-  cat "$w/count" >> "$tmp/counts.$$.$RANDOM"
+  cat "$w/count" >> "$PAR_SIDE/counts"
   [ "$write" = 1 ] && { echo "$f: ok (allocs $a indirect $i copies $c; old $oldc)"; return 0; }
   want=$(awk -v n="$name" '$1 == n { sub(/#.*/, ""); print $2, $3, $4, $5, $6, $7 }' "$expected" 2>/dev/null || true)
   if [ -z "$want" ]; then echo "$f: no entry in $expected (allocs $a indirect $i copies $c loads $l stores $s bounds $b)"; return 1; fi
@@ -140,21 +140,26 @@ program() {
   echo "$f: ok (allocs $a indirect $i copies $c; old $oldc)"
 }
 export -f program localise argsOf statusOf
+# Each program's counts and erasure rows, and the programs outside the fragment, are side files
+# (scripts/par.sh), gathered in $tmp in the programs' order. A run that writes the tables is not
+# cached.
+export PAR_COLLECT=$tmp
+[ "$write" = 1 ] || export PAR_CACHE="compile-backend2 final=$final native=$native"
 par program "${files[@]}"
 # --write-counts: the run's rows replace the rows of their programs in place (scripts/merge-rows.awk)
 # and a new program's row is inserted; the other rows, the order and the comments are kept. With
 # no file named, the rows of programs this run did not count are dropped.
 if [ "$write" = 1 ]; then
   [ -s "$expected" ] || echo "# The new backend's counts per run (scripts/compile-backend2.sh, bcc-counts --backend new): name allocs indirect copies loads stores bounds." > "$expected"
-  cat "$tmp"/counts.* 2>/dev/null | sort > "$tmp/new"
+  cat "$tmp/counts" 2>/dev/null | sort > "$tmp/new"
   awk -v keep="$named" -f scripts/merge-rows.awk "$tmp/new" "$expected" > "$tmp/merged"
   mv "$tmp/merged" "$expected"
   echo "wrote $expected"
   [ -s "$erasure" ] || echo "# The effect erasure per program the new backend compiles (scripts/compile-backend2.sh, bcc lir --erasure; SPEC §47, §49): name, the handle, perform and raise nodes erased, the handle nodes compiled as drives and the performs as suspensions of state machines (machines, suspends), and the handle nodes left (stored-continuation sites, other)." > "$erasure"
-  cat "$tmp"/erasure.* 2>/dev/null | sort > "$tmp/newe"
+  cat "$tmp/erasure" 2>/dev/null | sort > "$tmp/newe"
   awk -v keep="$named" -f scripts/merge-rows.awk "$tmp/newe" "$erasure" > "$tmp/merged"
   mv "$tmp/merged" "$erasure"
   echo "wrote $erasure"
 fi
-echo "Backend2: $(cat "$tmp"/counts.* 2>/dev/null | wc -l | tr -d ' ') program(s) at their goldens, $(ls "$tmp"/out.* 2>/dev/null | wc -l | tr -d ' ') outside its fragment; $par_failed failure(s)."
+echo "Backend2: $(cat "$tmp/counts" 2>/dev/null | wc -l | tr -d ' ') program(s) at their goldens, $(cat "$tmp/outside" 2>/dev/null | wc -l | tr -d ' ') outside its fragment; $par_failed failure(s)."
 [ "$par_failed" -eq 0 ]

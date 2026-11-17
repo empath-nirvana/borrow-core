@@ -171,6 +171,21 @@ def main():
     a = ap.parse_args()
     files = a.files or programs(a.probes)
     ab = a.alpha or a.bcc
+
+    # Each program is a unit of the result cache (scripts/gate_cache.py): a recorded pass is
+    # skipped when the program, the binaries (`--bcc`, `--alpha`), the library, scripts/ and the
+    # tools are as they were.
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    import gate_cache
+    units = gate_cache.Units("alpha-check", bins=[a.bcc, ab])
+    keys = {f: units.key(f) for f in files}
+    todo = [f for f in files if not units.hit(keys[f])]
+    units.replayed, units.ran = len(files) - len(todo), len(todo)
+    if not todo:
+        units.done()
+        print(f"alpha-check: {len(files)} program(s), 0 difference(s)")
+        sys.exit(0)
     tmp = tempfile.mkdtemp(prefix="alpha-")
 
     # The library renamed, and each module's renaming read backwards (names only).
@@ -217,13 +232,16 @@ def main():
 
     bad = 0
     with ThreadPoolExecutor(a.jobs) as ex:
-        for f, diffs in ex.map(one, enumerate(files)):
+        for f, diffs in ex.map(one, enumerate(todo)):
             if diffs:
                 bad += 1
                 print(f"{f}: differs under renaming")
                 for d in diffs:
                     print("  " + d.replace("\n", "\n  "))
+            else:
+                units.pass_(keys[f])
     shutil.rmtree(tmp, ignore_errors=True)
+    units.done()
     print(f"alpha-check: {len(files)} program(s), {bad} difference(s)")
     sys.exit(1 if bad else 0)
 

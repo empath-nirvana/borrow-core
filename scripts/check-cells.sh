@@ -19,6 +19,9 @@ row() {
   [ -z "$r" ] || printf '%s: %s\n' "$f" "$r"
 }
 . scripts/par.sh
+# Each program's rows are a unit of the result cache (scripts/par.sh), except when the table is
+# written.
+[ "${1:-}" = "--write" ] || export PAR_CACHE=check-cells
 export counts
 export -f row
 # The working tree's corpus, as the other gate steps read it: a program not yet committed is in

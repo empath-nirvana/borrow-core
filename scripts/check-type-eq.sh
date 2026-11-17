@@ -20,6 +20,9 @@
 #     scripts/check-type-eq.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# One unit of the result cache (scripts/gate_cache.py `step`): a recorded pass is replayed when
+# the Lean sources, Lake's configuration, scripts/ and the tools are as they were.
+[ "${GATE_CACHE_INNER:-}" = type-eq ] || exec python3 scripts/gate_cache.py step type-eq lean -- scripts/check-type-eq.sh "$@"
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build Frontend Backend Backend2 >/dev/null
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

@@ -167,6 +167,8 @@ program() {
   echo "$f: ok${new:+ (frame slots $new, register locals $registers, old $old)}${fns:+ (inlined $(echo $fns | wc -w | tr -d ' '))} (facts at $(wc -l < "$w/facted" | tr -d ' ') functions, willreturn at $(wc -l < "$w/wr" | tr -d ' '))"
 }
 export -f program argsOf statusOf
+# Each program is a unit of the result cache (scripts/par.sh; the C compiler is among its tools).
+export PAR_CACHE="native-facts cc=$cc"
 par program "${files[@]}"
 echo "native facts: $par_failed failure(s)."
 [ "$par_failed" -eq 0 ]

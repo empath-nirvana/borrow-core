@@ -676,6 +676,14 @@ def main():
                     help="the gate's rows (`ROWS`); fails on any difference or refusal")
     a = ap.parse_args()
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if a.bcc is None and a.keep is None:
+        # One unit of the result cache (scripts/gate_cache.py `step`): the programs are generated
+        # from the seed, so a recorded pass is replayed when the binaries, the library, scripts/,
+        # the tools and the arguments are as they were.
+        sys.dont_write_bytecode = True
+        sys.path.insert(0, os.path.join(root, 'scripts'))
+        import gate_cache
+        gate_cache.wrap_self('mut-combos', 'bcc')
     bcc = a.bcc or os.path.join(root, '.lake/build/bin/bcc')
     tmp = a.keep or tempfile.mkdtemp()
     os.makedirs(tmp, exist_ok=True)

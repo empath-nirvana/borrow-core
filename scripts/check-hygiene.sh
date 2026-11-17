@@ -5,6 +5,9 @@
 # outside comments; then every declaration's axioms.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# One unit of the result cache (scripts/gate_cache.py `step`): a recorded pass is replayed when
+# the Lean sources, Lake's configuration, scripts/, the tools and lib/prelude.bc are as they were.
+[ "${GATE_CACHE_INNER:-}" = hygiene ] || exec python3 scripts/gate_cache.py step hygiene lean --files lib/prelude.bc -- scripts/check-hygiene.sh "$@"
 python3 - <<'PY'
 import re, pathlib, sys
 BAD = re.compile(r"\b(sorry|axiom|native_decide|implemented_by|opaque|partial|unsafe)\b")

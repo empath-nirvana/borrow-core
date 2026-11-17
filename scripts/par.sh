@@ -6,23 +6,38 @@
 #
 # FN runs under `set -uo pipefail`. FN, and every variable and function it uses, must be exported (`export -f`, `export`). Each run
 # gets a scratch directory of its own in `$PAR_TMP`.
+#
+# Side files. A run hands files back to its script by writing them under `$PAR_SIDE`; after every
+# run has ended, each run's files are appended, in the order the files were given, to the file of
+# the same relative path under `$PAR_COLLECT` (the script's own directory).
+#
+# The result cache (scripts/gate_cache.py). When `PAR_CACHE` is set (`<step> <mode…>`: the step's
+# name and every flag or variable that changes what FN does), each run is a unit whose key covers
+# what it reads: FN, `PAR_CACHE`, the binaries, the library, scripts/, the tools, the `BC_*`,
+# `BCC_*` and `CI_LOCAL_*` variables, and the files of FILE (`PAR_CACHE_DEPS`: `corpus`, the
+# default, FILE and its sidecars and table rows; `sugar`, `book`, or `files:<path…>`). A unit
+# recorded as passing is replayed (its output and side files) instead of run; a run that passes
+# is recorded, unless it calls `par_nostore` (it ran the source interpreter, or wrote a file of
+# the tree). `GATE_CACHE=0` neither reads nor writes the cache.
+unset PAR_CACHE PAR_CACHE_DEPS PAR_COLLECT
+PAR_HOME=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}
-export JOBS
+export JOBS PAR_HOME
 par() {
   local fn=$1; shift
-  local dir i j n=$#
+  local dir i f
   dir=$(mktemp -d)
   par_failed=0
   [ $# -gt 0 ] || { rm -rf "$dir"; return 0; }
-  i=0; for f in "$@"; do i=$((i + 1)); printf '%s\n%s\n' "$i" "$f"; done |
-    PAR_DIR="$dir" xargs -P "$JOBS" -n 2 bash -c '
+  i=0; for f in "$@"; do i=$((i + 1)); printf '%s\n%s\n' "$i" "$f"; done > "$dir/jobs"
+  python3 "$PAR_HOME/gate_cache.py" par-start "$dir" "$fn" > "$dir/run" || { echo "par: the cache's keys failed ($fn)"; rm -rf "$dir"; par_failed=$#; return 0; }
+  [ ! -s "$dir/run" ] || PAR_DIR="$dir" xargs -P "$JOBS" -n 2 bash -c '
       set -uo pipefail
-      mkdir "$PAR_DIR/$1.d"
-      PAR_TMP="$PAR_DIR/$1.d" '"$fn"' "$2" > "$PAR_DIR/$1.out" 2>&1
-      echo $? > "$PAR_DIR/$1.rc"' _
-  for ((j = 1; j <= n; j++)); do
-    cat "$dir/$j.out" 2>/dev/null || echo "par: job $j ($fn) did not run"
-    [ "$(cat "$dir/$j.rc" 2>/dev/null || echo 1)" = 0 ] || par_failed=$((par_failed + 1))
-  done
+      mkdir "$PAR_DIR/$1.d"; mkdir -p "$PAR_DIR/$1.side"
+      par_nostore() { : > "$PAR_NOSTORE"; }; export -f par_nostore
+      PAR_TMP="$PAR_DIR/$1.d" PAR_SIDE="$PAR_DIR/$1.side" PAR_NOSTORE="$PAR_DIR/$1.nostore" '"$fn"' "$2" > "$PAR_DIR/$1.out" 2>&1
+      echo $? > "$PAR_DIR/$1.rc"' _ < "$dir/run"
+  python3 "$PAR_HOME/gate_cache.py" par-finish "$dir" "$fn"
+  par_failed=$(cat "$dir/failed" 2>/dev/null || echo $#)
   rm -rf "$dir"
 }

@@ -15,7 +15,7 @@ ifeq (run,$(firstword $(MAKECMDGOALS)))
   $(eval $(RUN_ARGS):;@:)
 endif
 
-.PHONY: bcc run tools gate gate-full gate-fast goldens keys verify-goldens bench
+.PHONY: bcc run tools gate gate-full gate-full-nocache gate-fast goldens keys verify-goldens bench
 
 # Build the `bcc` compiler.
 bcc: $(CACHE_STAMP) | tools
@@ -41,6 +41,11 @@ gate: | tools
 # changed.
 gate-full: | tools
 	scripts/ci-local.sh --full
+
+# The full gate with every unit run, the result cache (scripts/gate_cache.py) neither read nor
+# written.
+gate-full-nocache: | tools
+	scripts/ci-local.sh --full --no-cache
 
 # Re-verify every golden: the source stage on every corpus program and book block (with each
 # compiled to WebAssembly), whatever its key. Writes no key.

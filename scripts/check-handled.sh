@@ -65,6 +65,9 @@ row() {
     }' <(printf '%s\n' "$l") <(printf '%s\n' "$h")
 }
 . scripts/par.sh
+# Each program's rows are a unit of the result cache (scripts/par.sh), except when the table is
+# written.
+[ "${1:-}" = "--write" ] || export PAR_CACHE=check-handled
 export bcc counts
 export -f row
 # The working tree's corpus, as the other gate steps read it: a program not yet committed is in
