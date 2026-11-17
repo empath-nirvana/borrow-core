@@ -14229,15 +14229,15 @@ reads the kind from the node. A new kind adds a constructor and a clause to each
 functions in `Core/Local.lean`, not a checker rule. `CDerives` is unchanged, and the checker
 judgment's rule count does not grow.
 
-**The unwinding kind (#1128).** `unwind SM S`, core text `withlocalu['x, @b, A, B, [r]]`, has
-type `U (A ⊸ U(∀'x ⊏ @b. Mut 'x A ⊸ F_SM(['x] B)) ⊸ F_S(A ⊗ B))` (`withlocalUTy`). Its side
-condition is the plain kind's, plus `A` persistent, `SM.Unwind x` (the callback's row is abortive
-only), `RowLe SM S` and `Row.divB S = false`. Its term `withlocalUE` allocates the cell, lends it
-by `withbor2UD` (§78) with the finaliser `localFin = λr. forget (free r)`, and frees it on the value
-path. `withlocalU_wf` derives it from existing rules, so `CDerives` and the checker's rule count
-are unchanged. Backend2 keeps the cell in a frame slot on both paths. On the abort path the free
-is the slot's end and emits nothing, and the persistent contents are dropped with no release
-(`UNPROVED:` at `genLocalU`).
+**The unwinding kind (#1128).** `unwind SM S`, core text `withlocalu['x, @b, A, B, [r]]`, has type
+`U (A ⊸ U(∀'x ⊏ @b. Mut 'x A ⊸ F_SM(['x] B)) ⊸ F_S(A ⊗ B))` (`withlocalUTy`). Its side condition is
+the plain kind's (`LocalBase`), plus `A` persistent, `SM.Unwind x` (the callback's row is abortive
+only), `RowLe SM S` and `Row.divB S = false`. Its term `withlocalUE` allocates the cell, lends it by
+`withbor2UD` (§78) with the finaliser `localFin = λr. forget (free r)`, and frees it on the value
+path. `withlocalU_wf` derives it from existing rules, so `CDerives` and the checker's rule count are
+unchanged. Backend2 keeps the cell in a frame slot on both paths. On the abort path the free is the
+slot's end and emits nothing, and the persistent contents are dropped with no release (`UNPROVED:`
+at `genLocalU`).
 
 ### Lowering
 
