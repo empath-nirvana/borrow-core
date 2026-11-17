@@ -79,7 +79,7 @@ theorem CDerivesAt.withbor3U {Ξ : EffCtx} {Δ Γ a A B d} {S : Row} (x : LifeVa
 `[spec §19]` -/
 theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerivesAt Ξ Δ Γ e j) : CDerives Δ Γ e j :=
-  CDerivesX.mono ⟨Or.inl rfl, fun h => h⟩ h
+  CDerivesX.mono (I := {ties := some Ξ}) (I' := {}) ⟨Or.inl rfl, fun h => h⟩ h
 
 /-- `[then]` with its finaliser at the pure row (§24, option A), tied: `effThen` at `Σ_M = Σ` and
 `Σ_D = ∅`, as `CDerives.effThenA`.  `[spec §24, §27]` -/
