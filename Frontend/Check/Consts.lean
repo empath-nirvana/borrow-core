@@ -179,8 +179,8 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
-      (cDeadStrict (fun j => .withbor1UD (at_ sp) j A B S [] S x (finNode sp (.ref A))) fun hd _ =>
-        .withbor1UD x hd.toP hx (scopedB_sound hsc) h₁ h₂ hS (BoCa.Fig16.LogRel.Core.RowLe.refl S) (BoCa.Fig16.LogRel.Core.RowLe.nil S) hS.divB
+      (cDeadStrict (fun j => .withborUD (at_ sp) j A B S [] S .refImm x (finNode sp (.ref A))) fun hd _ =>
+        .withborUD .refImm x hd.toP hx (scopedB_sound hsc) h₁ h₂ hS (BoCa.Fig16.LogRel.Core.RowLe.refl S) (BoCa.Fig16.LogRel.Core.RowLe.nil S) hS.divB
           (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil)
           (.consume hdt hdc hde hd))
   | .withbor2U _ b A B r => do
@@ -193,8 +193,8 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hside⟩ ← outlivesWitness sp b A
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
-      (cDeadStrict (fun j => .withbor2UD (at_ sp) j A B S [] S x (finNode sp (.ref A))) fun hd _ =>
-        .withbor2UD x hd.toP hx hside h₁ h₂ hS (BoCa.Fig16.LogRel.Core.RowLe.refl S) (BoCa.Fig16.LogRel.Core.RowLe.nil S) hS.divB
+      (cDeadStrict (fun j => .withborUD (at_ sp) j A B S [] S .refMut x (finNode sp (.ref A))) fun hd _ =>
+        .withborUD .refMut x hd.toP hx hside h₁ h₂ hS (BoCa.Fig16.LogRel.Core.RowLe.refl S) (BoCa.Fig16.LogRel.Core.RowLe.nil S) hS.divB
           (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil)
           (.consume hdt hdc hde hd))
   | .withlocalU _ b A B r => do
@@ -220,8 +220,9 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.mut a A)
-      (cDeadStrict (fun j => .withbor3UD (at_ sp) j a A B S [] S x (finNode sp (.mut a A))) fun hd _ =>
-        .withbor3UD x hd.toP hx h₁ h₂ hS (BoCa.Fig16.LogRel.Core.RowLe.refl S) (BoCa.Fig16.LogRel.Core.RowLe.nil S) hS.divB
+      (cDeadStrict (fun j => .withborUD (at_ sp) j A B S [] S (.reborrow a) x (finNode sp (.mut a A)))
+          fun hd _ =>
+        .withborUD (.reborrow a) x hd.toP hx trivial h₁ h₂ hS (BoCa.Fig16.LogRel.Core.RowLe.refl S) (BoCa.Fig16.LogRel.Core.RowLe.nil S) hS.divB
           (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil)
           (.consume hdt hdc hde hd))
   | .withloadU a _ A B r => do
@@ -299,9 +300,10 @@ def synConstFin (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp dsp : Span) :
       let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
       let ⟨hS⟩ ← unwindRow sp x S
       pure ⟨.ref A, S, fun rd =>
-        finRes dsp (fun td => .withbor1UD (at_ sp)
-            (.val (BoCa.Fig16.LogRel.Core.withbor1UTyD x Δ.meetOfDom A B S S)) A B S [] S x td) rd
-          fun hΓ h => TTied.withbor1UFin (at_ sp) x hΓ hx (scopedB_sound hsc) h₁ h₂ hS h⟩
+        finRes dsp (fun td => .withborUD (at_ sp)
+            (.val (BoCa.Fig16.LogRel.Core.LendUKind.refImm.ty x Δ.meetOfDom A B S S)) A B S [] S
+            .refImm x td) rd
+          fun hΓ h => TTied.withborUFin (at_ sp) .refImm x hΓ hx (scopedB_sound hsc) h₁ h₂ hS h⟩
   | .withbor2U _ b A B r => do
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
@@ -312,9 +314,10 @@ def synConstFin (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp dsp : Span) :
       let ⟨hside⟩ ← outlivesWitness sp b A
       let ⟨hS⟩ ← unwindRow sp x S
       pure ⟨.ref A, S, fun rd =>
-        finRes dsp (fun td => .withbor2UD (at_ sp)
-            (.val (BoCa.Fig16.LogRel.Core.withbor2UTyD x Δ.meetOfDom A B S S)) A B S [] S x td) rd
-          fun hΓ h => TTied.withbor2UFin (at_ sp) x hΓ hx hside h₁ h₂ hS h⟩
+        finRes dsp (fun td => .withborUD (at_ sp)
+            (.val (BoCa.Fig16.LogRel.Core.LendUKind.refMut.ty x Δ.meetOfDom A B S S)) A B S [] S
+            .refMut x td) rd
+          fun hΓ h => TTied.withborUFin (at_ sp) .refMut x hΓ hx hside h₁ h₂ hS h⟩
   | .withbor3U a _ A B r => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
@@ -324,10 +327,10 @@ def synConstFin (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp dsp : Span) :
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
       let ⟨hS⟩ ← unwindRow sp x S
       pure ⟨.mut a A, S, fun rd =>
-        finRes dsp (fun td => .withbor3UD (at_ sp)
-            (.val (BoCa.Fig16.LogRel.Core.withbor3UTyD a x Δ.meetOfDom A B S S)) a A B S [] S x td)
-          rd
-          fun hΓ h => TTied.withbor3UFin (at_ sp) x hΓ hx h₁ h₂ hS h⟩
+        finRes dsp (fun td => .withborUD (at_ sp)
+            (.val ((BoCa.Fig16.LogRel.Core.LendUKind.reborrow a).ty x Δ.meetOfDom A B S S)) A B S []
+            S (.reborrow a) x td) rd
+          fun hΓ h => TTied.withborUFin (at_ sp) (.reborrow a) x hΓ hx trivial h₁ h₂ hS h⟩
   | _ => err sp "`unwind (d)` is the finaliser of `withbor1u`, `withbor2u` or `withbor3u` only"
 
 /-- The type and derivations of a constant or derived form (syntax-core §8, §8a, §9). -/

@@ -1098,6 +1098,19 @@ theorem withbor3U_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
   withbor3UD_compatN x hΓ hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S)
     (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
 
+/-- **The unwinding lend of kind `k` at `SemJN`**: by kind, `withbor1UD_compatN`,
+`withbor2UD_compatN`, `withbor3UD_compatN`.  `[spec §78]` -/
+theorem withborUD_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {SM SD S : Row} {d : Expr}
+    (k : LendUKind) (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hk : k.OK Δ A)
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x)
+    (hMS : RowLe SM S) (hDS : RowLe SD S) (hPend : SD.UnrD → SM.PendPers)
+    (hd : SemJN (ℍ := ℍ) Δ Γ d (.val (.thunk (.arr (k.src A) (CTy.effOf SD .unit))))) :
+    SemJN (ℍ := ℍ) Δ Γ (withborUE d) (.val (k.ty x Δ.meetOfDom A B SM S)) := by
+  cases k with
+  | refImm => exact withbor1UD_compatN x hΓ hk hfree₁ hfree₂ hS hMS hDS hPend hd
+  | refMut => exact withbor2UD_compatN x hΓ hk hfree₁ hfree₂ hS hMS hDS hPend hd
+  | reborrow a => exact withbor3UD_compatN x hΓ hfree₁ hfree₂ hS hMS hDS hPend hd
+
 /-! ### `withload` at an unwinding row -/
 
 /-- **The unwinding callback at the image**: the callback, at `β ⊏ @bnd`, applied to the image

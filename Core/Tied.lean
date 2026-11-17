@@ -426,12 +426,8 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | withbor3 x hΓ hx hfree₁ hfree₂ => exact .withbor3 x hΓ hx hfree₁ hfree₂
   | withload x hΓ hx hfree₁ hfree₂ => exact .withload x hΓ hx hfree₁ hfree₂
   | withswap hΓ => exact .withswap hΓ
-  | withbor1UD x hΓ hx hsc₁ hfree₁ hfree₂ hS hMS hDS hSv hP _ ih1 =>
-      exact .withbor1UD x hΓ hx hsc₁ hfree₁ hfree₂ hS hMS hDS hSv hP (ih1 (by eff_free))
-  | withbor2UD x hΓ hx hside hfree₁ hfree₂ hS hMS hDS hSv hP _ ih1 =>
-      exact .withbor2UD x hΓ hx hside hfree₁ hfree₂ hS hMS hDS hSv hP (ih1 (by eff_free))
-  | withbor3UD x hΓ hx hfree₁ hfree₂ hS hMS hDS hSv hP _ ih1 =>
-      exact .withbor3UD x hΓ hx hfree₁ hfree₂ hS hMS hDS hSv hP (ih1 (by eff_free))
+  | withborUD k x hΓ hx hk hfree₁ hfree₂ hS hMS hDS hSv hP _ ih1 =>
+      exact .withborUD k x hΓ hx hk hfree₁ hfree₂ hS hMS hDS hSv hP (ih1 (by eff_free))
   | withloadU x hΓ hx hfree₁ hfree₂ hS => exact .withloadU x hΓ hx hfree₁ hfree₂ hS
   | sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS _ ih1 =>
       exact .sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS (ih1 (by eff_free))

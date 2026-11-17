@@ -339,17 +339,9 @@ theorem CDerives.withswap {Δ Γ a A B} (hΓ : Ctx.DeadP Γ) :
     CDerives Δ Γ BoCa.withswap (.val (axWithswapTy a A B)) :=
   (CDerivesX.withswap (I := {}) hΓ)
 
-theorem CDerives.withbor1UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerives Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
-    CDerives Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S)) :=
-  (CDerivesX.withbor1UD (I := {}) x hΓ hx hsc₁ hfree₁ hfree₂ hS hMS hDS hSv hP hd)
-
-theorem CDerives.withbor2UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerives Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
-    CDerives Δ Γ (withborUE d) (.val (withbor2UTyD x Δ.meetOfDom A B SM S)) :=
-  (CDerivesX.withbor2UD (I := {}) x hΓ hx hside hfree₁ hfree₂ hS hMS hDS hSv hP hd)
-
-theorem CDerives.withbor3UD {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerives Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
-    CDerives Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) :=
-  (CDerivesX.withbor3UD (I := {}) x hΓ hx hfree₁ hfree₂ hS hMS hDS hSv hP hd)
+theorem CDerives.withborUD {Δ Γ A B d} {SM SD S : Row} (k : LendUKind) (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hk : k.OK Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerives Δ Γ d (.val (.thunk (.arr (k.src A) (CTy.effOf SD .unit))))) :
+    CDerives Δ Γ (withborUE d) (.val (k.ty x Δ.meetOfDom A B SM S)) :=
+  (CDerivesX.withborUD (I := {}) k x hΓ hx hk hfree₁ hfree₂ hS hMS hDS hSv hP hd)
 
 theorem CDerives.withloadU {Δ Γ a A B} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) :
     CDerives Δ Γ BoCa.withload (.val (withloadUTy a x Δ.meetOfDom A B S)) :=
@@ -470,6 +462,18 @@ theorem CDerives.letPoly {Δ Γ N C} {j : Jdg} (b : Expr) (hcl : closedAt 0 (Val
 theorem CDerives.alpha {Δ Γ e} {j j' : Jdg} (h : CDerives Δ Γ e j) (hα : j.alphaB j' = true) :
     CDerives Δ Γ e j' :=
   (CDerivesX.alpha (I := {}) h hα)
+
+theorem CDerives.withbor1UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerives Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
+    CDerives Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S)) :=
+  (CDerivesX.withbor1UD (I := {}) x hΓ hx hsc₁ hfree₁ hfree₂ hS hMS hDS hSv hP hd)
+
+theorem CDerives.withbor2UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerives Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
+    CDerives Δ Γ (withborUE d) (.val (withbor2UTyD x Δ.meetOfDom A B SM S)) :=
+  (CDerivesX.withbor2UD (I := {}) x hΓ hx hside hfree₁ hfree₂ hS hMS hDS hSv hP hd)
+
+theorem CDerives.withbor3UD {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerives Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
+    CDerives Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) :=
+  (CDerivesX.withbor3UD (I := {}) x hΓ hx hfree₁ hfree₂ hS hMS hDS hSv hP hd)
 
 theorem CDerivesAt.var {Ξ : EffCtx} {Δ Γ i A} (h : Ctx.SoloP Γ i A) :
     CDerivesAt Ξ Δ Γ (.var i) (.val A) :=
@@ -783,17 +787,9 @@ theorem CDerivesAt.withswap {Ξ : EffCtx} {Δ Γ a A B} (hΓ : Ctx.DeadP Γ) :
     CDerivesAt Ξ Δ Γ BoCa.withswap (.val (axWithswapTy a A B)) :=
   (CDerivesX.withswap (I := {ties := some Ξ}) hΓ)
 
-theorem CDerivesAt.withbor1UD {Ξ : EffCtx} {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesAt Ξ Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
-    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S)) :=
-  (CDerivesX.withbor1UD (I := {ties := some Ξ}) x hΓ hx hsc₁ hfree₁ hfree₂ hS hMS hDS hSv hP hd)
-
-theorem CDerivesAt.withbor2UD {Ξ : EffCtx} {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesAt Ξ Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
-    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor2UTyD x Δ.meetOfDom A B SM S)) :=
-  (CDerivesX.withbor2UD (I := {ties := some Ξ}) x hΓ hx hside hfree₁ hfree₂ hS hMS hDS hSv hP hd)
-
-theorem CDerivesAt.withbor3UD {Ξ : EffCtx} {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesAt Ξ Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
-    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) :=
-  (CDerivesX.withbor3UD (I := {ties := some Ξ}) x hΓ hx hfree₁ hfree₂ hS hMS hDS hSv hP hd)
+theorem CDerivesAt.withborUD {Ξ : EffCtx} {Δ Γ A B d} {SM SD S : Row} (k : LendUKind) (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hk : k.OK Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesAt Ξ Δ Γ d (.val (.thunk (.arr (k.src A) (CTy.effOf SD .unit))))) :
+    CDerivesAt Ξ Δ Γ (withborUE d) (.val (k.ty x Δ.meetOfDom A B SM S)) :=
+  (CDerivesX.withborUD (I := {ties := some Ξ}) k x hΓ hx hk hfree₁ hfree₂ hS hMS hDS hSv hP hd)
 
 theorem CDerivesAt.withloadU {Ξ : EffCtx} {Δ Γ a A B} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) :
     CDerivesAt Ξ Δ Γ BoCa.withload (.val (withloadUTy a x Δ.meetOfDom A B S)) :=
@@ -914,6 +910,18 @@ theorem CDerivesAt.letPoly {Ξ : EffCtx} {Δ Γ N C} {j : Jdg} (b : Expr) (hcl :
 theorem CDerivesAt.alpha {Ξ : EffCtx} {Δ Γ e} {j j' : Jdg} (h : CDerivesAt Ξ Δ Γ e j) (hα : j.alphaB j' = true) :
     CDerivesAt Ξ Δ Γ e j' :=
   (CDerivesX.alpha (I := {ties := some Ξ}) h hα)
+
+theorem CDerivesAt.withbor1UD {Ξ : EffCtx} {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesAt Ξ Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
+    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S)) :=
+  (CDerivesX.withbor1UD (I := {ties := some Ξ}) x hΓ hx hsc₁ hfree₁ hfree₂ hS hMS hDS hSv hP hd)
+
+theorem CDerivesAt.withbor2UD {Ξ : EffCtx} {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesAt Ξ Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
+    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor2UTyD x Δ.meetOfDom A B SM S)) :=
+  (CDerivesX.withbor2UD (I := {ties := some Ξ}) x hΓ hx hside hfree₁ hfree₂ hS hMS hDS hSv hP hd)
+
+theorem CDerivesAt.withbor3UD {Ξ : EffCtx} {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesAt Ξ Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
+    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) :=
+  (CDerivesX.withbor3UD (I := {ties := some Ξ}) x hΓ hx hfree₁ hfree₂ hS hMS hDS hSv hP hd)
 
 theorem CDerivesP.var {Δ Γ i A} (h : Ctx.SoloP Γ i A) :
     CDerivesP Δ Γ (.var i) (.val A) :=
@@ -1227,17 +1235,9 @@ theorem CDerivesP.withswap {Δ Γ a A B} (hΓ : Ctx.DeadP Γ) :
     CDerivesP Δ Γ BoCa.withswap (.val (axWithswapTy a A B)) :=
   (CDerivesX.withswap (I := {pin := true}) hΓ)
 
-theorem CDerivesP.withbor1UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
-    CDerivesP Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S)) :=
-  (CDerivesX.withbor1UD (I := {pin := true}) x hΓ hx hsc₁ hfree₁ hfree₂ hS hMS hDS hSv hP hd)
-
-theorem CDerivesP.withbor2UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
-    CDerivesP Δ Γ (withborUE d) (.val (withbor2UTyD x Δ.meetOfDom A B SM S)) :=
-  (CDerivesX.withbor2UD (I := {pin := true}) x hΓ hx hside hfree₁ hfree₂ hS hMS hDS hSv hP hd)
-
-theorem CDerivesP.withbor3UD {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
-    CDerivesP Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) :=
-  (CDerivesX.withbor3UD (I := {pin := true}) x hΓ hx hfree₁ hfree₂ hS hMS hDS hSv hP hd)
+theorem CDerivesP.withborUD {Δ Γ A B d} {SM SD S : Row} (k : LendUKind) (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hk : k.OK Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (k.src A) (CTy.effOf SD .unit))))) :
+    CDerivesP Δ Γ (withborUE d) (.val (k.ty x Δ.meetOfDom A B SM S)) :=
+  (CDerivesX.withborUD (I := {pin := true}) k x hΓ hx hk hfree₁ hfree₂ hS hMS hDS hSv hP hd)
 
 theorem CDerivesP.withloadU {Δ Γ a A B} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) :
     CDerivesP Δ Γ BoCa.withload (.val (withloadUTy a x Δ.meetOfDom A B S)) :=
@@ -1370,6 +1370,18 @@ theorem CDerivesP.lendLoopR {Δ : LifeCtx} {x : LifeVar} {A S B R : VTy} {N K s0
 theorem CDerivesP.nilDead {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (hΓ : Ctx.Dead Γ) (h : CDerivesP Δ [] e j) :
     CDerivesP Δ Γ e j :=
   (CDerivesX.nilDead (I := {pin := true}) rfl hΓ h)
+
+theorem CDerivesP.withbor1UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
+    CDerivesP Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S)) :=
+  (CDerivesX.withbor1UD (I := {pin := true}) x hΓ hx hsc₁ hfree₁ hfree₂ hS hMS hDS hSv hP hd)
+
+theorem CDerivesP.withbor2UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
+    CDerivesP Δ Γ (withborUE d) (.val (withbor2UTyD x Δ.meetOfDom A B SM S)) :=
+  (CDerivesX.withbor2UD (I := {pin := true}) x hΓ hx hside hfree₁ hfree₂ hS hMS hDS hSv hP hd)
+
+theorem CDerivesP.withbor3UD {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
+    CDerivesP Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) :=
+  (CDerivesX.withbor3UD (I := {pin := true}) x hΓ hx hfree₁ hfree₂ hS hMS hDS hSv hP hd)
 
 /-! ### The eliminators -/
 
@@ -1532,12 +1544,8 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
       motive Δ Γ BoCa.withload (.val (axWithloadTy a x Δ.meetOfDom A B)) (CDerivesX.withload (I := {}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) x hΓ hx hfree₁ hfree₂))
     (withswap : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy} {B : VTy} (hΓ : Ctx.DeadP Γ),
       motive Δ Γ BoCa.withswap (.val (axWithswapTy a A B)) (CDerivesX.withswap (I := {}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) hΓ))
-    (withbor1UD : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {B : VTy} {d : Expr} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerives Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) (hd_ih : motive Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit)))) hd),
-      motive Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S)) (CDerivesX.withbor1UD (I := {}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (d := d) (SM := SM) (SD := SD) (S := S) x hΓ hx hsc₁ hfree₁ hfree₂ hS hMS hDS hSv hP hd))
-    (withbor2UD : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {B : VTy} {d : Expr} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerives Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) (hd_ih : motive Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit)))) hd),
-      motive Δ Γ (withborUE d) (.val (withbor2UTyD x Δ.meetOfDom A B SM S)) (CDerivesX.withbor2UD (I := {}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (d := d) (SM := SM) (SD := SD) (S := S) x hΓ hx hside hfree₁ hfree₂ hS hMS hDS hSv hP hd))
-    (withbor3UD : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy} {B : VTy} {d : Expr} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerives Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) (hd_ih : motive Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit)))) hd),
-      motive Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) (CDerivesX.withbor3UD (I := {}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) (d := d) (SM := SM) (SD := SD) (S := S) x hΓ hx hfree₁ hfree₂ hS hMS hDS hSv hP hd))
+    (withborUD : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {B : VTy} {d : Expr} {SM SD S : Row} (k : LendUKind) (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hk : k.OK Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerives Δ Γ d (.val (.thunk (.arr (k.src A) (CTy.effOf SD .unit))))) (hd_ih : motive Δ Γ d (.val (.thunk (.arr (k.src A) (CTy.effOf SD .unit)))) hd),
+      motive Δ Γ (withborUE d) (.val (k.ty x Δ.meetOfDom A B SM S)) (CDerivesX.withborUD (I := {}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (d := d) (SM := SM) (SD := SD) (S := S) k x hΓ hx hk hfree₁ hfree₂ hS hMS hDS hSv hP hd))
     (withloadU : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy} {B : VTy} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x),
       motive Δ Γ BoCa.withload (.val (withloadUTy a x Δ.meetOfDom A B S)) (CDerivesX.withloadU (I := {}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) (S := S) x hΓ hx hfree₁ hfree₂ hS))
     (sliceBorrowMU : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {B : VTy} {d : Expr} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : CDerives Δ Γ d (.val (.lolli (.array A) .unit))) (hd_ih : motive Δ Γ d (.val (.lolli (.array A) .unit)) hd),
@@ -1678,9 +1686,7 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
   | withbor3 a0 a1 a2 a3 a4 => exact withbor3 a0 a1 a2 a3 a4
   | withload a0 a1 a2 a3 a4 => exact withload a0 a1 a2 a3 a4
   | withswap a0 => exact withswap a0
-  | withbor1UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 => exact withbor1UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0
-  | withbor2UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 => exact withbor2UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0
-  | withbor3UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0 => exact withbor3UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0
+  | withborUD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 => exact withborUD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0
   | withloadU a0 a1 a2 a3 a4 a5 => exact withloadU a0 a1 a2 a3 a4 a5
   | sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 ih0 => exact sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 ih0
   | sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 => exact sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0
@@ -1874,12 +1880,8 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
       motive Δ Γ BoCa.withload (.val (axWithloadTy a x Δ.meetOfDom A B)) (CDerivesX.withload (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) x hΓ hx hfree₁ hfree₂))
     (withswap : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy} {B : VTy} (hΓ : Ctx.DeadP Γ),
       motive Δ Γ BoCa.withswap (.val (axWithswapTy a A B)) (CDerivesX.withswap (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) hΓ))
-    (withbor1UD : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {B : VTy} {d : Expr} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesAt Ξ Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) (hd_ih : motive Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit)))) hd),
-      motive Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S)) (CDerivesX.withbor1UD (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (d := d) (SM := SM) (SD := SD) (S := S) x hΓ hx hsc₁ hfree₁ hfree₂ hS hMS hDS hSv hP hd))
-    (withbor2UD : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {B : VTy} {d : Expr} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesAt Ξ Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) (hd_ih : motive Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit)))) hd),
-      motive Δ Γ (withborUE d) (.val (withbor2UTyD x Δ.meetOfDom A B SM S)) (CDerivesX.withbor2UD (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (d := d) (SM := SM) (SD := SD) (S := S) x hΓ hx hside hfree₁ hfree₂ hS hMS hDS hSv hP hd))
-    (withbor3UD : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy} {B : VTy} {d : Expr} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesAt Ξ Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) (hd_ih : motive Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit)))) hd),
-      motive Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) (CDerivesX.withbor3UD (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) (d := d) (SM := SM) (SD := SD) (S := S) x hΓ hx hfree₁ hfree₂ hS hMS hDS hSv hP hd))
+    (withborUD : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {B : VTy} {d : Expr} {SM SD S : Row} (k : LendUKind) (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hk : k.OK Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesAt Ξ Δ Γ d (.val (.thunk (.arr (k.src A) (CTy.effOf SD .unit))))) (hd_ih : motive Δ Γ d (.val (.thunk (.arr (k.src A) (CTy.effOf SD .unit)))) hd),
+      motive Δ Γ (withborUE d) (.val (k.ty x Δ.meetOfDom A B SM S)) (CDerivesX.withborUD (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (d := d) (SM := SM) (SD := SD) (S := S) k x hΓ hx hk hfree₁ hfree₂ hS hMS hDS hSv hP hd))
     (withloadU : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy} {B : VTy} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x),
       motive Δ Γ BoCa.withload (.val (withloadUTy a x Δ.meetOfDom A B S)) (CDerivesX.withloadU (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) (S := S) x hΓ hx hfree₁ hfree₂ hS))
     (sliceBorrowMU : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {B : VTy} {d : Expr} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.array A) .unit))) (hd_ih : motive Δ Γ d (.val (.lolli (.array A) .unit)) hd),
@@ -2020,9 +2022,7 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
   | withbor3 a0 a1 a2 a3 a4 => exact withbor3 a0 a1 a2 a3 a4
   | withload a0 a1 a2 a3 a4 => exact withload a0 a1 a2 a3 a4
   | withswap a0 => exact withswap a0
-  | withbor1UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 => exact withbor1UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0
-  | withbor2UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 => exact withbor2UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0
-  | withbor3UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0 => exact withbor3UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0
+  | withborUD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 => exact withborUD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0
   | withloadU a0 a1 a2 a3 a4 a5 => exact withloadU a0 a1 a2 a3 a4 a5
   | sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 ih0 => exact sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 ih0
   | sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 => exact sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0
@@ -2216,12 +2216,8 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
       motive Δ Γ BoCa.withload (.val (axWithloadTy a x Δ.meetOfDom A B)) (CDerivesX.withload (I := {pin := true}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) x hΓ hx hfree₁ hfree₂))
     (withswap : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy} {B : VTy} (hΓ : Ctx.DeadP Γ),
       motive Δ Γ BoCa.withswap (.val (axWithswapTy a A B)) (CDerivesX.withswap (I := {pin := true}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) hΓ))
-    (withbor1UD : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {B : VTy} {d : Expr} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) (hd_ih : motive Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit)))) hd),
-      motive Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S)) (CDerivesX.withbor1UD (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (d := d) (SM := SM) (SD := SD) (S := S) x hΓ hx hsc₁ hfree₁ hfree₂ hS hMS hDS hSv hP hd))
-    (withbor2UD : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {B : VTy} {d : Expr} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) (hd_ih : motive Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit)))) hd),
-      motive Δ Γ (withborUE d) (.val (withbor2UTyD x Δ.meetOfDom A B SM S)) (CDerivesX.withbor2UD (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (d := d) (SM := SM) (SD := SD) (S := S) x hΓ hx hside hfree₁ hfree₂ hS hMS hDS hSv hP hd))
-    (withbor3UD : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy} {B : VTy} {d : Expr} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) (hd_ih : motive Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit)))) hd),
-      motive Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) (CDerivesX.withbor3UD (I := {pin := true}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) (d := d) (SM := SM) (SD := SD) (S := S) x hΓ hx hfree₁ hfree₂ hS hMS hDS hSv hP hd))
+    (withborUD : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {B : VTy} {d : Expr} {SM SD S : Row} (k : LendUKind) (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hk : k.OK Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (k.src A) (CTy.effOf SD .unit))))) (hd_ih : motive Δ Γ d (.val (.thunk (.arr (k.src A) (CTy.effOf SD .unit)))) hd),
+      motive Δ Γ (withborUE d) (.val (k.ty x Δ.meetOfDom A B SM S)) (CDerivesX.withborUD (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (d := d) (SM := SM) (SD := SD) (S := S) k x hΓ hx hk hfree₁ hfree₂ hS hMS hDS hSv hP hd))
     (withloadU : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VTy} {B : VTy} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x),
       motive Δ Γ BoCa.withload (.val (withloadUTy a x Δ.meetOfDom A B S)) (CDerivesX.withloadU (I := {pin := true}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) (S := S) x hΓ hx hfree₁ hfree₂ hS))
     (sliceBorrowMU : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {B : VTy} {d : Expr} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : CDerivesP Δ Γ d (.val (.lolli (.array A) .unit))) (hd_ih : motive Δ Γ d (.val (.lolli (.array A) .unit)) hd),
@@ -2368,9 +2364,7 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
   | withbor3 a0 a1 a2 a3 a4 => exact withbor3 a0 a1 a2 a3 a4
   | withload a0 a1 a2 a3 a4 => exact withload a0 a1 a2 a3 a4
   | withswap a0 => exact withswap a0
-  | withbor1UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 => exact withbor1UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0
-  | withbor2UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 => exact withbor2UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0
-  | withbor3UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0 => exact withbor3UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0
+  | withborUD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 => exact withborUD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0
   | withloadU a0 a1 a2 a3 a4 a5 => exact withloadU a0 a1 a2 a3 a4 a5
   | sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 ih0 => exact sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 ih0
   | sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 => exact sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0
@@ -2490,9 +2484,7 @@ theorem CDerivesX.mono {I I' : JIdx} (hI : I ≤ I') {Δ : LifeCtx} {Γ : Ctx VT
   | withbor3 a0 a1 a2 a3 a4 => exact CDerivesX.withbor3 a0 a1 a2 a3 a4
   | withload a0 a1 a2 a3 a4 => exact CDerivesX.withload a0 a1 a2 a3 a4
   | withswap a0 => exact CDerivesX.withswap a0
-  | withbor1UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 => exact CDerivesX.withbor1UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0
-  | withbor2UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 => exact CDerivesX.withbor2UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0
-  | withbor3UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0 => exact CDerivesX.withbor3UD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0
+  | withborUD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 => exact CDerivesX.withborUD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0
   | withloadU a0 a1 a2 a3 a4 a5 => exact CDerivesX.withloadU a0 a1 a2 a3 a4 a5
   | sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 ih0 => exact CDerivesX.sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 ih0
   | sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 => exact CDerivesX.sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 ih0

@@ -470,21 +470,11 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
   | withswap hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.withswap) (by rfl)]; exact .withswap (deadP_insert hd Γa hΓ)
-  | withbor1UD x hΓ hx hsc hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
+  | withborUD k x hΓ hx hk hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       intro Γa Γb hΓ'; subst hΓ'
       have ed := ihd Γa Γb rfl
       rw [withborUE_shift]
-      exact .withbor1UD x (deadP_insert hd Γa hΓ) hx hsc hf₁ hf₂ hS hMS hDS hSv hP ed
-  | withbor2UD x hΓ hx hside hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
-      intro Γa Γb hΓ'; subst hΓ'
-      have ed := ihd Γa Γb rfl
-      rw [withborUE_shift]
-      exact .withbor2UD x (deadP_insert hd Γa hΓ) hx hside hf₁ hf₂ hS hMS hDS hSv hP ed
-  | withbor3UD x hΓ hx hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
-      intro Γa Γb hΓ'; subst hΓ'
-      have ed := ihd Γa Γb rfl
-      rw [withborUE_shift]
-      exact .withbor3UD x (deadP_insert hd Γa hΓ) hx hf₁ hf₂ hS hMS hDS hSv hP ed
+      exact .withborUD k x (deadP_insert hd Γa hΓ) hx hk hf₁ hf₂ hS hMS hDS hSv hP ed
   | withloadU x hΓ hx hf₁ hf₂ hS =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.withload) (by rfl)]

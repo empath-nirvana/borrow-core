@@ -158,12 +158,8 @@ theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (
   | withbor3 x hΓ hx hf₁ hf₂ => exact .withbor3 x (deadP_append h' hΓ) hx hf₁ hf₂
   | withload x hΓ hx hf₁ hf₂ => exact .withload x (deadP_append h' hΓ) hx hf₁ hf₂
   | withswap hΓ => exact .withswap (deadP_append h' hΓ)
-  | withbor1UD x hΓ hx hsc hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
-      exact .withbor1UD x (deadP_append h' hΓ) hx hsc hf₁ hf₂ hS hMS hDS hSv hP ihd
-  | withbor2UD x hΓ hx hside hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
-      exact .withbor2UD x (deadP_append h' hΓ) hx hside hf₁ hf₂ hS hMS hDS hSv hP ihd
-  | withbor3UD x hΓ hx hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
-      exact .withbor3UD x (deadP_append h' hΓ) hx hf₁ hf₂ hS hMS hDS hSv hP ihd
+  | withborUD k x hΓ hx hk hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
+      exact .withborUD k x (deadP_append h' hΓ) hx hk hf₁ hf₂ hS hMS hDS hSv hP ihd
   | withloadU x hΓ hx hf₁ hf₂ hS => exact .withloadU x (deadP_append h' hΓ) hx hf₁ hf₂ hS
   | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
       exact .sliceBorrowMU x (deadP_append h' hΓ) hA hB hf₁ hf₂ hS ihd
