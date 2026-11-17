@@ -56,6 +56,14 @@ name = "kernel-census"
 srcDir = "scripts"
 root = "KernelCensus"
 
+# The tree interpretation (#840), archived (#1133): not a default target; the library never imports
+# it. `lake build ResearchTree`; gate-full's `research archive` step builds it and checks the axioms
+# of its registered names (`research/tree/axioms/`).
+[[lean_lib]]
+name = "ResearchTree"
+srcDir = "research/tree"
+roots = ["ResearchTree"]
+
 # Experiments: not default targets; the library never imports them.
 
 # The size of per-code closure types over the corpus (#855 K0, SPEC §68).
