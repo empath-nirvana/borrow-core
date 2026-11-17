@@ -887,6 +887,8 @@ corpus/retry-block.bc 2.0 cancellable abortive: branch; agree
 corpus/retry-block.bc 1.0 cancellable abortive: branch; agree
 corpus/row-site-fresh-handler.bc 2.0 cancellable abortive: branch; agree
 corpus/row-site-fresh-handler.bc 1.0 cancellable stored: -; agree
+corpus/rq1-exampleA-mut.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/rq1-generator.bc 1.0 cancellable stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/sched-a-div.bc 1.0 cancellable stored: machine: the handlers of the name have 2 clauses for it; agree
 corpus/sched-a.bc 1.0 cancellable stored: machine: the handlers of the name have 2 clauses for it; agree
 corpus/sched-b.bc 1.0 cancellable stored: machine: the handlers of the name have 2 clauses for it; agree
