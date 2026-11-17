@@ -14798,10 +14798,19 @@ its instances: abbreviations that keep their names, their rules and every statem
 
 ### Units
 
-- **A** (`ties`): not built.
-- **B** (`pin`; one `fundamentalX`): not built.
-- **C** (`TDerivesX`): not built.
-- **D** (the gate's and `CLAUDE.md`'s wording): not built.
+**Status by step.** This entry states the whole target and lands before the code. Each step makes
+true the clauses it names:
+
+- **A** (`ties`): built, PR #1178. True with A: `CDerivesX` and `JIdx`, `CDerives` and
+  `CDerivesAt` as instances, the generated rules and eliminators, `mono`, one `insert_dead` and
+  one `append_dead`; §3 *Typing*, §10, §19's `CDerivesAt Ξ`, §28's induction list, §61, §68.
+- **B** (`pin`; one `fundamentalX`): code to follow. True with B: `CDerivesP` as
+  `CDerivesX {pin := true}` and the relaxed rules gated by `hPin` (§29 *The extended
+  judgment*); `fundamentalX`, with `fundamentalC` and `fundamentalC_pin` its instances, and
+  `CDerivesP.ofC` as `mono` (§29 *Theorems*); `Core/PinFundamental.lean` written by hand.
+- **C** (`TDerivesX`): code to follow. True with C: §3's typed term generated as `TDerivesX`,
+  with `TDerivesAt Ξ` and `TDerivesP` its instances.
+- **D** (the gate's and `CLAUDE.md`'s wording): code to follow.
 
 They land in that order.
 
