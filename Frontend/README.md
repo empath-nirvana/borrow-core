@@ -115,7 +115,10 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
     callback's row as their last bracket argument, `[n.i q A ~> B, …]`: `withbor1u['x, A, B, [ROW]]`,
     `withbor2u['x, @b, A, B, [ROW]]`, `withbor3u[@a, 'x, A, B, [ROW]]`,
     `withloadu[@a, 'x, A, B, [ROW]]`, `slice_borrow_mut_u['x, @b, A, B, [ROW]]`,
-    `slice_borrow_imm_u['x, @b, A, B, [ROW]]`. `perform`, `abort`, `handle_with`, `unwind` and the
+    `slice_borrow_imm_u['x, @b, A, B, [ROW]]`. `withbor1u`, `withbor2u` and `withbor3u` take a
+    written finaliser, `withbor3u[@a, 'x, A, B, [ROW]] unwind (d)` (SPEC §78): `unwind (d)` right
+    after the brackets is the constant's, and a `[then]` around such a constant parenthesizes it,
+    `x <- (return withbor3u[…]) unwind (D); N`. `perform`, `abort`, `handle_with`, `unwind` and the
     six constants are reserved (`handle` is not: the corpus names a `def` so).
 19. **Computation parameters and `|>` (SPEC §33).** `(A => B with E₁, E₂[T])`, in parentheses,
     is a function type with a provided row (`VTy.rowed`, its row the effect instances applied to

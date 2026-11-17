@@ -309,6 +309,22 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
       let r ← chkV n E Δ T V A'
       pure ⟨A', r⟩
     | .const sp c => synConst E Δ T sp c
+    -- `withbor{1,2,3}u[…] unwind (d)` (SPEC §78): `d` checked at `U(src ⊸ F_∅ 1)`, the node at
+    -- `Σ_D = ∅`, `Σ_M = Σ`. A finaliser that performs (`Σ_D ≠ ∅`) is K-b's (#1046).  [spec §78]
+    | .constU sp c d => do
+      let ⟨src, S, mk⟩ ← synConstFin E Δ T sp d.span c
+      match ← attempt (chkV n E Δ T d (.thunk (.arr src (effOf [] .unit)))) with
+      | .ok rd => mk rd
+      | .error e₀ =>
+        -- At the callback's row: the operations it performs, which the empty row refused.
+        let SD ← match ← attempt (chkV n E Δ T d (.thunk (.arr src (effOf S .unit)))) with
+          | .ok rS =>
+            let need := needRowOf opKeysFuel false rS.t
+            pure (S.filterMap fun o => need.find? (keyEq · o))
+          | .error _ => pure []
+        if SD.isEmpty then throw e₀
+        err d.span (s!"this finaliser performs `{ppRow E SD}`; a finaliser of a lent place that " ++
+          "performs is not provided yet (#1046)")
     | .shorten sp m σ a V => do
       let s ← E.elabS Δ σ
       let al ← E.elabL Δ a

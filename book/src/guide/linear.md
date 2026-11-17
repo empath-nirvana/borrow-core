@@ -222,7 +222,7 @@ main -> 1 =
 
 The second call raises inside `counted`, the error passes through it to `to_result`, and the
 `finally` releases the guard on the way. Both runs end with nothing allocated. A `finally` block
-can't do I/O yet.
+can write through a capability, but not perform an operation (#1046).
 
 ## Values a program wants to discard
 

@@ -36,8 +36,8 @@ def up_obs : !U (1 -o F[1.0 cancel i32 ~> 1, 2.0 cancel i32 ~> 0] 1) =
 
 def u_hr : !U (1 -o F[2.0 cancel i32 ~> 0] (1 + i32 * U (nu Y. F[2.0 cancel i32 ~> 0] (1 + i32 * U Y) & F[2.0 cancel i32 ~> 0] 1))) =
   !thunkv fun (v : 1) -> return (inl v)
-def u_hc : !U (i32 * U ((1 -o F[2.0 cancel i32 ~> 0] (1 + i32 * U (nu Y. F[2.0 cancel i32 ~> 0] (1 + i32 * U Y) & F[2.0 cancel i32 ~> 0] 1))) & F[2.0 cancel i32 ~> 0] 1) -o F[2.0 cancel i32 ~> 0] (1 + i32 * U (nu Y. F[2.0 cancel i32 ~> 0] (1 + i32 * U Y) & F[2.0 cancel i32 ~> 0] 1))) * 1 =
-  (!thunkv fun (p : i32 * U ((1 -o F[2.0 cancel i32 ~> 0] (1 + i32 * U (nu Y. F[2.0 cancel i32 ~> 0] (1 + i32 * U Y) & F[2.0 cancel i32 ~> 0] 1))) & F[2.0 cancel i32 ~> 0] 1)) ->
+def u_hc : !U (i32 * U ((1 -o F[2.0 cancel i32 ~> 0] (1 + i32 * U (nu Y. F[2.0 cancel i32 ~> 0] (1 + i32 * U Y) & F[2.0 cancel i32 ~> 0] 1))) & F 1) -o F[2.0 cancel i32 ~> 0] (1 + i32 * U (nu Y. F[2.0 cancel i32 ~> 0] (1 + i32 * U Y) & F[2.0 cancel i32 ~> 0] 1))) * 1 =
+  (!thunkv fun (p : i32 * U ((1 -o F[2.0 cancel i32 ~> 0] (1 + i32 * U (nu Y. F[2.0 cancel i32 ~> 0] (1 + i32 * U Y) & F[2.0 cancel i32 ~> 0] 1))) & F 1)) ->
      let (x, k) = p;
      return (inr (x, thunkv nu_in < u <- return (); (force k).1 u, (force k).2 >)), ())
 

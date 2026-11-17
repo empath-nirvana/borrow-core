@@ -462,7 +462,7 @@ theorem d_clL {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hΓ : Ctx.Dead 
   refine .effLet (A := .tensor A Flag) (.left (.left (.dead (deadSplit hΓ))))
     (fun _ => Ctx.Dead.consumes (by cdead)) (fun _ => dead_noLive (by cdead)) ?_ ?_
   · refine .app (.left (.right (.dead (deadSplit hΓ)))) ?_ (.there (.here (by cdead)))
-    exact .proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (.tensor A Flag))) (CTy.effOf S .unit))
+    exact .proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (.tensor A Flag))) (CTy.effOf [] .unit))
       (.here (by cdead)) rfl)
   · refine .tensorE (.left (deadSplit (by cdead))) (.var (.here (by cdead))) ?_
     refine .unitE (.left (.right (deadSplit (by cdead))))

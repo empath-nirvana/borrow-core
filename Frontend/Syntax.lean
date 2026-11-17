@@ -597,6 +597,11 @@ inductive VSugar where
   /-- `with h(…) { M } finally { D }` (SPEC §42), applied to `(with h(…) { M }, thunkv fun _ -> D)`:
   `[then]` around the handled computation, elaborated by `Frontend.Elab.Effects` next to `with`. -/
   | fin
+  /-- A borrow block with a finaliser (SPEC §78, #940), applied to `(blk, thunkv fun p -> D)`, `blk`
+  a `borrow mut` reborrow of the capability `p`: the reborrow, `D` its finaliser on the source when
+  the block unwinds. Written by `Frontend.Elab.Effects` for `finally`, elaborated where the types
+  are known (`Frontend.Sugar`) to `withbor3u[…] unwind (fun p -> D)`.  [spec §78] -/
+  | lendFin
   /-- A handler site of a control effect (SPEC §19), resolved by `Frontend.Elab.Effects` and
   assembled with its clauses where the types are known (`Frontend.Sugar`): applied to the
   handler's arguments, its return clause, the tuple of its operation clauses and the thunk of its
@@ -755,6 +760,9 @@ inductive Val where
   /-- `(V : A)`. -/
   | ascribe (sp : Span) (V : Val) (A : VTy)
   | const (sp : Span) (c : Const)
+  /-- `withbor{1,2,3}u[…] unwind (d)`: an unwinding borrow with the written finaliser `d`
+  (SPEC §78). -/
+  | constU (sp : Span) (c : Const) (d : Val)
   /-- `shorten_mut[σ, @a] V` / `shorten_imm[σ, @a] V`. -/
   | shorten (sp : Span) (m : Mode) (σ : Shape) (a : Life) (V : Val)
   /-- `&mut x` (`mut`) or `&x` (`imm`): lend the place `x` to one call, which hands it back,
@@ -1115,6 +1123,7 @@ def Val.strip : Val → Val
   | .inst _ V a => .inst .none V.strip a.strip
   | .ascribe _ V A => .ascribe .none V.strip A.strip
   | .const _ c => .const .none c.strip
+  | .constU _ c d => .constU .none c.strip d.strip
   | .shorten _ m σ a V => .shorten .none m σ.strip a.strip V.strip
   | .lend _ x m => .lend .none x.strip m
   | .sugar _ s => .sugar .none s.strip
@@ -1190,8 +1199,8 @@ def Val.span : Val → Span
   | .var sp _ | .clone sp _ | .defApp sp _ _ | .unit sp | .pair sp _ _ | .inl sp _ | .inr sp _
   | .thunk sp _ | .thunkv sp _ | .bangThunk sp _ | .bangThunkv sp _ | .unbang sp _
   | .boxed sp _ _ | .unbox sp _ | .sub sp _ _ | .roll sp _ | .unroll sp _ | .run sp _
-  | .app sp _ _ | .inst sp _ _ | .ascribe sp _ _ | .const sp _ | .shorten sp _ _ _ _
-  | .lend sp _ _ | .sugar sp _ | .mark sp _ _ => sp
+  | .app sp _ _ | .inst sp _ _ | .ascribe sp _ _ | .const sp _ | .constU sp _ _
+  | .shorten sp _ _ _ _ | .lend sp _ _ | .sugar sp _ | .mark sp _ _ => sp
 
 /-- The span of a computation. -/
 def Comp.span : Comp → Span

@@ -20,12 +20,12 @@ main : F ((1 + 1) + 1) =
     g <- handle_with[3](
         ((!thunkv fun (v : 1) -> return (thunkv fun (c : 1 + 1) -> return (inl ())))
           : !U (1 -o F[4.0 lin 1 ~> 1] (U (1 + 1 -o F[4.0 lin 1 ~> 1] (1 + 1))))),
-        (((!thunkv fun (p : (1 + 1) * U ((1 -o F[4.0 lin 1 ~> 1] (U (1 + 1 -o F[4.0 lin 1 ~> 1] (1 + 1)))) & F[4.0 lin 1 ~> 1, 4.0 lin 1 ~> 1] 1)) ->
+        (((!thunkv fun (p : (1 + 1) * U ((1 -o F[4.0 lin 1 ~> 1] (U (1 + 1 -o F[4.0 lin 1 ~> 1] (1 + 1)))) & F[4.0 lin 1 ~> 1] 1)) ->
           let (x, k) = p;
           return (thunkv fun (c : 1 + 1) -> case c {
               inl a -> u <- (force k).2; let () = u; return (inr ())
             | inr b -> w <- return (); g2 <- (force k).1 w; t : 1 + 1 <- return (inr ()); force g2 t })), ())
-          : !U ((1 + 1) * U ((1 -o F[4.0 lin 1 ~> 1] (U (1 + 1 -o F[4.0 lin 1 ~> 1] (1 + 1)))) & F[4.0 lin 1 ~> 1, 4.0 lin 1 ~> 1] 1)
+          : !U ((1 + 1) * U ((1 -o F[4.0 lin 1 ~> 1] (U (1 + 1 -o F[4.0 lin 1 ~> 1] (1 + 1)))) & F[4.0 lin 1 ~> 1] 1)
               -o F[4.0 lin 1 ~> 1] (U (1 + 1 -o F[4.0 lin 1 ~> 1] (1 + 1)))) * 1)) (
       y <- (a <- perform[3.0] (inr ()); perform[3.0] (inl ())) unwind (perform[4.0] ());
       return y);

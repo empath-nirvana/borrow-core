@@ -756,6 +756,9 @@ def rowV (env : Env) : Nat → Val → List Inst
   | n + 1, V => match V with
     | .app _ (.sugar _ .fin) (.pair _ V (.thunkv _ (.lam _ _ _ D))) =>
       env.union (rowV env n V) (rowC env n D)
+    -- A reborrow with its finaliser (SPEC §78): the block's and the finaliser's.
+    | .app _ (.sugar _ .lendFin) (.pair _ V (.thunkv _ (.lam _ _ _ D))) =>
+      env.union (rowV env n V) (rowC env n D)
     | .app _ (.app _ (.sugar _ (.handle h _ As nm)) P) (.thunkv _ (.lam _ _ _ M)) =>
       let inner := rowC env n M
       let inner := match env.handler? h, env.chandler? h with
@@ -1773,7 +1776,7 @@ def withInV (env : Env) : Nat → Val → Bool
   | 0, _ => false
   | k + 1, V => match V with
     | .app _ (.app _ (.sugar _ (.handle ..)) _) _ => true
-    | .app _ (.sugar _ .fin) _ => true
+    | .app _ (.sugar _ .fin) _ | .app _ (.sugar _ .lendFin) _ => true
     | .app _ f W =>
       let pull := match headName f with
         | some x => (env.pullArgs x W).any fun (V, p) => p && (env.iterCall? V).isSome
@@ -2099,11 +2102,63 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
   | k + 1, cx, cs, V => match V with
     -- `with h(…) { M } finally { D }` (SPEC §42): `[then]` around the handled computation, `D`
     -- the finaliser and run again on the normal exit: `x <- with h(…) { M } unwind (D); D; x`.
+    -- When `D` uses a capability (`needC`, a threaded `mut` cell): the reborrow of it across
+    -- `with h(…) { M }`, `D` its finaliser on the source, and `D` run on the source the reborrow
+    -- pairs back,
+    -- `(p, x) <- borrow mut p { 'l, p -> with h(…) { M } } finally (fun p -> D); D; x`
+    -- (`lendFin`, SPEC §78, #940). The kernel's `[then]` gives `M` and `D` disjoint contexts, so
+    -- they cannot share the place; the unwinding reborrow is `[then]` fused with the lend.
     | .app sp (.sugar _ .fin) (.pair _ W (.thunkv _ (.lam _ _ _ D))) => do
       let r ← fresh "fx_fin"
       let u ← fresh "fx_finu"
-      goV k cx cs (.run sp (.unwind sp ⟨r, sp⟩ none (.ret sp W) D
-        (.bind sp ⟨u, sp⟩ none D (.ret sp (.var sp r)))))
+      let capsD := (cx.needC D).foldl
+        (fun acc c => if acc.any (·.var == c.var) then acc else acc ++ [c]) []
+      match capsD with
+      | [] =>
+        goV k cx cs (.run sp (.unwind sp ⟨r, sp⟩ none (.ret sp W) D
+          (.bind sp ⟨u, sp⟩ none D (.ret sp (.var sp r)))))
+      | [c] =>
+        -- A cleanup that also performs a control operation would be the finaliser at a row of
+        -- its own, `Σ_D ≠ ∅`: K-b's (#1046), not provided yet.  [spec §78]
+        if let some i := (cx.ctl (rowC cx.env fuel D)).head? then
+          let nm := if c.h.cell then c.var else c.eff
+          throw ⟨D.span, s!"this cleanup uses `{nm}`, which the body also uses, and performs an " ++
+            s!"operation of `{i.eff}`; a cleanup of a lent place that performs is not provided " ++
+            "yet (#1046)"⟩
+        let p := c.var
+        -- The reborrow's lifetime is named as the capability's, as `reborrowed`'s is: the calls in
+        -- `M` instantiate it by name, and in `D` it is the source's. A capability whose lifetime
+        -- has no name (`main`'s platform capabilities, instantiated by type) gets a fresh one.
+        let l ← if c.life.isEmpty then fresh "fx_fl" else pure c.life
+        let t ← fresh "fx_ft"
+        let pi : Ident := ⟨p, sp⟩
+        let blk : Val := .app sp (.app sp (.sugar sp (.borrow .mut l)) (.var sp p))
+          (.thunkv sp (.lam sp pi (holeTy sp) (.ret sp W)))
+        let lf : Val := .app sp (.sugar sp .lendFin)
+          (.pair sp blk (.thunkv sp (.lam sp pi (holeTy sp) D)))
+        report sp "lowering" (s!"finally: the capability of `{c.eff}` is reborrowed across the " ++
+          "`with`, the cleanup its finaliser (SPEC §78)")
+        goV k cx cs (.run sp (.bind sp ⟨t, sp⟩ none (.ret sp lf)
+          (.letPair sp pi ⟨r, sp⟩ (.var sp t) (.bind sp ⟨u, sp⟩ none D (.ret sp (.var sp r))))))
+      | c :: c' :: _ =>
+        -- A finaliser gets one source back; a lend of two places that unwinds is not a kernel
+        -- form yet.
+        let nm (c : Cap) := if c.h.cell then c.var else c.eff
+        throw ⟨D.span, s!"a `finally` using two lent places (`{nm c}`, `{nm c'}`) has no kernel " ++
+          "form yet (#1102, #1046)"⟩
+    -- The reborrow of `finally` (above): its body with the capabilities it uses rebound by name
+    -- and not handed back (the borrow is the capability's, which the reborrow pairs back), and the
+    -- finaliser likewise, at the source.  [spec §78]
+    | .app sp (.sugar fsp .lendFin)
+        (.pair psp (.app sp₁ (.app sp₂ (.sugar ksp k') P) (.thunkv tsp (.lam lsp b A M)))
+          (.thunkv dsp (.lam dlsp p Ap D))) => do
+      let (bsP, P') ← goV k cx cs P
+      let csM := cx.needC M
+      let M' ← trC k cx csM false M
+      let D' ← trC k cx (cx.needC D) false D
+      pure (bsP, .app sp (.sugar fsp .lendFin)
+        (.pair psp (.app sp₁ (.app sp₂ (.sugar ksp k') P') (.thunkv tsp (.lam lsp b A M')))
+          (.thunkv dsp (.lam dlsp p Ap D'))))
     | .app sp (.app sp₂ (.sugar ksp (.handle h l As nm)) P) (.thunkv tsp (.lam lsp b A M)) =>
       match cx.env.handler? h, cx.env.chandler? h with
       | some hs, _ => withBlk k cx cs sp sp₂ ksp hs l P tsp lsp b A M nm

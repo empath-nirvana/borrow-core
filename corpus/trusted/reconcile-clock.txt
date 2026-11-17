@@ -30,21 +30,21 @@ unproved boundaries: 9 (clock_now, clock_sleep, clock, mk_input, mk_output, take
 always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime
 backend: LendEnclosesFn (Backend2/Driver.lean), the native borrow facts' lends enclose their functions: 11 functions
   f14 (lam)
-  f159 (lam)
-  f160 (lam)
-  f304 (lam)
-  f305 (lam)
-  f306 (lam)
-  f307 (lam)
-  f446 (lam)
-  f450 (lam)
-  f589 (lam)
-  f593 (lam)
-backend (native): CallRelated and HostStack (Backend2/Driver.lean, nativeAssumptions' list), a willreturn function returns (total_open; total_open_pin under PinLaw) at a reached call at related arguments (total_subrun at a closed program's plain context) with no stack overflow: 4 functions
-  f154 (lam)
+  f156 (lam)
+  f157 (lam)
+  f298 (lam)
   f299 (lam)
-  f446 (lam)
-  f589 (lam)
+  f300 (lam)
+  f301 (lam)
+  f437 (lam)
+  f441 (lam)
+  f577 (lam)
+  f581 (lam)
+backend (native): CallRelated and HostStack (Backend2/Driver.lean, nativeAssumptions' list), a willreturn function returns (total_open; total_open_pin under PinLaw) at a reached call at related arguments (total_subrun at a closed program's plain context) with no stack overflow: 4 functions
+  f151 (lam)
+  f293 (lam)
+  f437 (lam)
+  f577 (lam)
 backend (native): NoUnwind (Backend2/Driver.lean, nativeAssumptions), every function nounwind: no invoke, landingpad or resume is emitted; the runtime is C and cancels no thread
 backend (native): WidthClass (Backend2/Lower.lean, .alloc), a cell holds only its width class's types, so its class's widest bytes hold them (dereferenceable)
 backend (native): the runtime (Backend/Native/Runtime.lean) and clang
