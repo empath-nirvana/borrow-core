@@ -148,6 +148,9 @@ def Const.respan (sp : Span) : Const → Const
       .withbor2U (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
   | .withlocalU x b A B r =>
       .withlocalU (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
+  | .withlocalLoop x b A S B R =>
+      .withlocalLoop (x.respan sp) (b.respan sp) (A.respan sp) (S.respan sp) (B.respan sp)
+        (R.respan sp)
   | .withbor3U a x A B r =>
       .withbor3U (a.respan sp) (x.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
   | .withloadU a x A B r =>
