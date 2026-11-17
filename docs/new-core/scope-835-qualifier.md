@@ -122,7 +122,7 @@ and mix two questions.
   - `ub` on an `unr` operation is inert. No lend row holds `unr` (`Row.Suspend`), so it is never
     performed under a borrow; it only narrows which handlers may catch it. A kinding check
     refusing it is optional.
-- **`Row.Suspend`** (`Core/TreeGoal791.lean`). Unchanged. It still asks `q ≠ unr`, the data
+- **`Row.Suspend`** (`research/tree/ResearchTree/TreeGoal791.lean`). Unchanged. It still asks `q ≠ unr`, the data
   clauses and `CTy.SuspendC`. `Row.UBOnly` sits beside it as `Const791.UBOK`, as
   `Const791.SchedOK` does today, so `Const791.OK` and `constN_*`'s statements do not change.
   Folding it into `Row.Suspend` is possible later.
@@ -482,7 +482,7 @@ files: `Expr.HndAvoids` and its four lemmas, then `CNW835N.lean` once the rework
 | the other 37 files that mention the relation in statements | U | statements over `cN`/`vN`/`gN`/`SemJN`/`tabN` with unchanged arguments, proofs that never open `F`/`F_Σ`; they depend on the block only through laws whose statements stay (tables §10.2) |
 | `PoolN.lean`, `PoolSpawnN.lean` | U | `SchedOKNLe`, `poolAnsN_run_le` and `hs_schedOKN` stay at one world; §3.2 reads `poolAnsN_run_le` at the empty table. `hs_schedOKN` at `KW` is the deferred unit |
 | `Core/Types.lean`, `Core/EffRules.lean`, `Core/EffFin.lean`, `Core/Fundamental.lean` | M | `OpSig.ub`, `CTy.eff`'s field, `Row.ofEff`'s `us`, `OpSig.Sig`; `effHandleT`/`effHandleL` gain `us` and §2.4's premises |
-| `Core/Tree*.lean`, `Frontend/**`, other `Core/*.lean` | M | `.eff` patterns and `OpSig` constructors gain the field. On the branch, `.eff` patterns with three or more fields written out: 309 in 49 files, 126 of them in `Core/Chain`; about 61 anonymous `OpSig` constructors |
+| `research/tree/ResearchTree/Tree*.lean`, `Frontend/**`, other `Core/*.lean` | M | `.eff` patterns and `OpSig` constructors gain the field. On the branch, `.eff` patterns with three or more fields written out: 309 in 49 files, 126 of them in `Core/Chain`; about 61 anonymous `OpSig` constructors |
 | `rule-791`'s `HandlerLaw.lean` (not on this branch) | D | `HandlerLawN` goes (§4); `handle_resume_inst` and its helpers carry over to §3.3 |
 
 ## 7. What `main`'s programs see

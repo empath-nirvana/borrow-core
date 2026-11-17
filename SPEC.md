@@ -11647,8 +11647,10 @@ deep reborrows, and the Anti-Frame (`erwp_M_frame`, `erwp_I_frame`, `erwp_reborr
 (`HandlerLendProg`); cross-task scopes (`cerwp_scope`, `cerwp_scopeM`, which hold over any body),
 tested by programs with one child and a fixed order of events (`CrossProg`, `CrossProgM`).
 `CactusInv` (`reb-canon`) is stated, with `cactus_step`, `cactus_move` and
-`joinReady_fd`, and not yet used: the cross-task programs are proved without it. **Built over the library's typed tree world** (`Core/StepsN.lean`, `Core/TreeWp.lean`,
-`Core/TreeWpEff.lean`, `Core/TreeCactus.lean`, `Core/TreeStepKeep.lean`, `Core/TreeHeadlines.lean`).
+`joinReady_fd`, and not yet used: the cross-task programs are proved without it. **Built over the typed tree world** (`Core/StepsN.lean`, `research/tree/ResearchTree/TreeWp.lean`,
+`research/tree/ResearchTree/TreeWpEff.lean`, `research/tree/ResearchTree/TreeCactus.lean`, `research/tree/ResearchTree/TreeStepKeep.lean`, `research/tree/ResearchTree/TreeHeadlines.lean`). The tree world is a research archive (#1133):
+`research/tree/`, not in the default build (`lake build ResearchTree`), its registered names in
+`research/tree/axioms/s062.names`, checked by gate-full's `research archive` step.
 `twp` is the step-indexed relation at a world that grows: a run starts at any extension of its
 world, from the re-reading of its resource, and ends at an extension of the start, the frame
 re-read there and the start and end related by row 5.27's `↭` masked at the run's own records,
@@ -11667,7 +11669,7 @@ continuation share (`contShareT`), a Kripke wand resumed at any extension and an
 the re-readings of the stop list's records the share reads (`KeepRel`, `contShareT_resume`; the
 whole-list condition with `extFT` against it implies it, `contShareT_resume_ext`). `CactusInvT` is kept by a step, by tree growth, by moving a part
 between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactusT_move`,
-`cactusT_spawn`, `cactusT_join`). Proved at one branch (`Core/TreeHeadlines.lean`):
+`cactusT_spawn`, `cactusT_join`). Proved at one branch (`research/tree/ResearchTree/TreeHeadlines.lean`):
 - **adequacy** (`topAdequacyT`, `cerwpT_adequacy`): a closed program at `cerwpT` at the empty table,
   from the empty world, whose result holds nothing, is `OrDiverges`; derived through `cactusT_step`;
 - **R1**, a step keeps every other branch's open lend (`r1_stepKeepsFdEsc`, `stepKeepsFdEsc`):
@@ -11689,7 +11691,7 @@ between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactu
   `extLT_admits_drop`, `not_extLT_drop_relevant` and `not_extLT_drop_longer` show what each clause
   admits and refuses.
 
-**Over several branches** (`Core/TreeHeap.lean`, `Core/TreeHandle.lean`, `Core/TreeSched.lean`):
+**Over several branches** (`research/tree/ResearchTree/TreeHeap.lean`, `research/tree/ResearchTree/TreeHandle.lean`, `research/tree/ResearchTree/TreeSched.lean`):
 `[handle]` without `hdv` at `cerwpT` for a scheduler at the program's top (`cerwpT_schedHandle`,
 by induction on the index), with `κ`'s cell, resume and cancel at `twp` (`twp_kappaCell`,
 `twp_kappaC_resume`, `twp_kappa_cancel`, `twp_kappaC_cancel`) and allocation, freeing, load and
@@ -11716,7 +11718,7 @@ scheduler's state is in the resumed branch's frame, and a valid frame avoids the
 from their opening, so the task may end a lend it opened. A
 stopped branch's clause knows its frame holds nothing of the branch's lends, those it opened
 during the segment included (`twp_bind_fd`, `noneAt_recMask_end`). One program is proved through
-the headline (`Core/TreeSchedProgs.lean`, `asyncProg_safe`): a scheduler that resumes a task beside
+the headline (`research/tree/ResearchTree/TreeSchedProgs.lean`, `asyncProg_safe`): a scheduler that resumes a task beside
 a state of its own, its cells owned rather than borrowed. For `pingpong-mut` the stepper each task
 runs under meets `SchedOKT` (`schedS_ok`, its answers a step-indexed fixpoint) and both tasks are
 proved; the relay that hands the borrow between them is not.
@@ -11727,8 +11729,8 @@ resume at any list keeping the re-readings of the stop list's records the share 
 (`keepRel_of_extFT`, `contShareT_resume_ext`), and a share is carried along `KeepRel`
 (`contShareT_kripke`, `KapSchedT.kripke`).
 
-**A stored continuation across another branch's run** (`Core/TreeResume.lean`,
-`Core/TreePool.lean`): a run that owns no record at its start ends at a list holding the
+**A stored continuation across another branch's run** (`research/tree/ResearchTree/TreeResume.lean`,
+`research/tree/ResearchTree/TreePool.lean`): a run that owns no record at its start ends at a list holding the
 re-reading of every record of its start list (`twp_keepsList`), so a `κ` held beside it
 (`KapAtT`: captured at its stop, share and records re-read, the records its share reads kept) is
 held at the run's end (`twp_keepsKap`) and resumed there (`KapAtT.resume`,
@@ -11744,7 +11746,7 @@ runner's lend, R2 at the stored branch (`kapStored_end_refused`) refuses the run
 location keeps the child's share, a view of the parent's lend, resumable. Record lists have
 re-readings wherever the code typing agrees on their escrows (`SRecsRR.exists_retype`).
 
-**Opening and ending a lend at `twp`** (`Core/TreeLend.lean`), each a `twp_update` instance, for a
+**Opening and ending a lend at `twp`** (`research/tree/ResearchTree/TreeLend.lean`), each a `twp_update` instance, for a
 lend of `ℓ ↦ own(())` with the empty escrow (record `lendRec ℓ`). Open (`twp_lendOpen`): the cell
 becomes the lend cell `ℓ ↦ imm({α}, (), ∅)`, the run owns the record and the list carries it
 tagged `α` (`TWNT.immFrame`; the record's frame lifetime read off the lend cell, the only view at
@@ -11768,7 +11770,7 @@ the branch's lends; there is no per-type close (decision 73). #793 keeps this ru
 may hold `own` cells, `mut` cells, a copy of a view that only the frame holds, or a view's last
 copy, and none of these may be discarded without running the branch.
 
-**The scheduler's pool** (`Core/TreeSchedPool.lean`). `PoolT` is a list of stored tasks, each a
+**The scheduler's pool** (`research/tree/ResearchTree/TreeSchedPool.lean`). `PoolT` is a list of stored tasks, each a
 continuation held at the present world (`KapAtT`) whose mask is its present records' masks, every
 two apart both ways (`NoneAt` of each other's record masks, and record locations distinct). Every
 scheduler operation keeps it: a segment (`twp_keepsPool`, from `twp_frame_keep`: the run may open,
@@ -11777,13 +11779,13 @@ end, allocate and free, those lends open when a stored task stopped included), a
 of the pool beside the resumed run and a pool again at its every end (`PoolPost`: apart both ways,
 records at distinct lent locations, so a task that parks again rejoins it).
 
-**The park stepper** (`Core/TreeSchedRelay.lean`). The stepper `HP` (`schedP_ok`) hands a parked
+**The park stepper** (`research/tree/ResearchTree/TreeSchedRelay.lean`). The stepper `HP` (`schedP_ok`) hands a parked
 task's continuation back, at the masks of the records the task owns at its stop. The loop `drive`
 (`driveV`, the Z combinator) resumes a parked task each time it parks until it answers;
 `drive_twp` keeps a pool of any length beside it, by strong induction on the index through
 `poolT_park` and `poolT_resume`. These are lemmas, not a headline.
 
-**Pool-scheduler adequacy** (`Core/TreePoolSched.lean`, over `Core/TreePoolShare.lean`). A
+**Pool-scheduler adequacy** (`research/tree/ResearchTree/TreePoolSched.lean`, over `research/tree/ResearchTree/TreePoolShare.lean`). A
 scheduler handler keeps its stopped tasks in its state as a **stack**: the state value is the
 handler with the entries, each a tag beside a continuation (`stateVal H ts`, `poolVal ts`), and its
 resource is `PoolTJ`. Each entry is held apart from the entries below it at their masks, except at
@@ -11814,7 +11816,7 @@ joiner (`poolAns_park`), resume the top with what it has collected (`poolAns_res
 (`poolAns_resumeSnd`, `poolAns_cancelSnd`, `PoolTJ.swap`), cancel the top (`poolAns_cancel`,
 `poolTJ_cancel`), or hand a finished task's copies to the nearest joiner and resume the top
 (`poolAns_depositResume`: at a joiner on top this is the join). The stack scheduler
-(`Core/TreePoolSchedProgs.lean`, `stack_schedOK`) meets `SchedOKT` at `PoolAns` for every stack, its
+(`research/tree/ResearchTree/TreePoolSchedProgs.lean`, `stack_schedOK`) meets `SchedOKT` at `PoolAns` for every stack, its
 return clause (`stackRet`, `stackRet_okAt`) the deposit-and-resume move; `stackProg_safe` is a
 closed program through the headline.
 
@@ -11826,7 +11828,7 @@ only a new clause. Each view a joiner collects is a copy of a lend of `own(())` 
 escrow (`ViewsT`); the stack reads only that its cells are `imm`, the join's end of the lend reads
 the shape. This is generalised when #791 lands lends with a non-empty escrow.
 
-**Ending a lend at its copies composed** (`Core/TreeLendJoin.lean`). Copies of a lend cell compose
+**Ending a lend at its copies composed** (`research/tree/ResearchTree/TreeLendJoin.lean`). Copies of a lend cell compose
 to `ℓ ↦ imm(S, (), ∅)`, `S` the union of their lifetime sets (`viewResS_compS`). In every world `S`
 is the lend's lifetime: a tagged record proper's frame is at its tag (`frameLife_of_tagged`, from
 `TaggedT` and `not_desc_proper`), and every cell at its location carries that lifetime and no other
@@ -11834,7 +11836,7 @@ is the lend's lifetime: a tagged record proper's frame is at its tag (`frameLife
 copies, the run owning the lend's record (its tag read from the start world's list, `RecInv`),
 through `twp_lendEnd` unchanged.
 
-**A scheduler with spawn, cancel and join** (`Core/TreePoolSpawn.lean`). `SchedOKTLe N` is
+**A scheduler with spawn, cancel and join** (`research/tree/ResearchTree/TreePoolSpawn.lean`). `SchedOKTLe N` is
 `SchedOKT` with the return clause and the clauses asked only at stops `k ≤ N`;
 `cerwpT_schedHandle_le` is `[handle]` at every index `n ≤ N` from it. A clause that runs a task
 under its own scheduler proves its stop at `k` from `SchedOKTLe` below `k`, so `∀ N, SchedOKTLe N`
@@ -11854,7 +11856,7 @@ for every stack. Limits of this scheduler: `park` exchanges the stopped task wit
 rather than queueing it; a joiner is never cancelled (`cancel` cancels only a ready top); `par`
 children hold only copies of lends (`ViewsT`); `spawn` children hold nothing.
 
-**Interleaved lends across parks** (`Core/TreePoolSpawnProgs.lean`), three closed programs
+**Interleaved lends across parks** (`research/tree/ResearchTree/TreePoolSpawnProgs.lean`), three closed programs
 `(hnd HS root) (HS, [])`, each `OrDiverges` through `poolSchedAdequacyT` with every premise
 discharged. The program text has no borrow form: each task's lend is opened and ended in the proof,
 by `twp_lendOpen` and `twp_lendEnd` (each a `twp_update` instance) around the task's own code. Each
@@ -11869,7 +11871,7 @@ own. `progCancel_safe`: the root runs `LC` (as `L`, its finaliser parking again 
 view; the finaliser parks, is resumed, and ends the lend. `progDepth3_safe`: the root spawns two
 `L`s and runs a third; three tasks hold a lend open across a park at once.
 
-**A lend shared by a tree of tasks** (`Core/TreePoolJoinProgs.lean`). `rootJ d = let a = alloc ()
+**A lend shared by a tree of tasks** (`research/tree/ResearchTree/TreePoolJoinProgs.lean`). `rootJ d = let a = alloc ()
 in let _ = par (node d, node d) in free a`, with `node 0 = λ_. park (); cancel (); ()` and
 `node (d + 1) = λ_. let _ = par (node d, node d) in ()`. The root opens a lend of `a`; every task of
 the tree holds a copy of it (`viewRes_dup`), every inner node a joiner; leaves interleave by parking
@@ -11891,7 +11893,7 @@ branch point; and if the part holds any cell at the location of a record proper 
 premise linking the cell to `α`: a part on a branch not inside `α` holding a cell there is refused
 (`fd_le_of_branch`: a view carries `α`, an `own` cell is beneath a borrow, `TWNT.noOwnUnder`, a
 `mut` cell is refused by `NoMutT`). A view there carries `α` and nothing else
-(`view_at_lender`, `lender_view_carries`). Instances (`Core/TreeBorrowEdges.lean`), built from
+(`view_at_lender`, `lender_view_carries`). Instances (`research/tree/ResearchTree/TreeBorrowEdges.lean`), built from
 the empty world by `TWNT.alloc` and `TWNT.immFrame` (`recWInv_lendStep`, `twp_lendOpen`'s update
 at the world), the second branch added by hand with `cactusT_spawn`: `lenderEdge_depth1` (a branch
 at a lend's own lifetime holding its view) and `lenderEdge_depth3` (three lends nested
@@ -11925,7 +11927,7 @@ layers (`docs/new-core/scope-782.md`):
   tree grows. A code's meaning is carried along the re-reading of a covered resource, at every
   re-typing that agrees on the locations it holds a `mut` cell at (`interp_retype`,
   `RR.exists_retype`; `Support/Model/Tree/Reread.lean`, `World/Codes.lean`).
-- **The relation's value types** (`STy`, `Core/TreeSem.lean`) are step-indexed predicates at the
+- **The relation's value types** (`STy`, `research/tree/ResearchTree/TreeSem.lean`) are step-indexed predicates at the
   tree world and the record list, each downward closed in the index and monotone along world
   extension, on the re-reading, at every list keeping the re-readings of the records of the old
   list the resource reads (`KeepRel`: records it does not read may have been ended, and records
@@ -11937,13 +11939,13 @@ layers (`docs/new-core/scope-782.md`):
   `STy.list_cons`; a map from `NoMut` bodies to monotone bodies is not built) and type variables. A value stored
   before a graft meets its type after it (`STy.reread`; at a proper extension, on a view nested
   three deep, `reread_v3`). **The computation types** (`SCmp`,
-  `Core/TreeSemC.lean`) are downward closed: `F A` (`SCmp.ret`), `⊸`, `&`, `⊤`, `∀α ⊏ c` over the
+  `research/tree/ResearchTree/TreeSemC.lean`) are downward closed: `F A` (`SCmp.ret`), `⊸`, `&`, `⊤`, `∀α ⊏ c` over the
   lifetimes below `c` in the current tree, and `ν` (greatest fixed point over candidates).
 - **`F A` is a bare run** (`SCmp.ret`), as Core's `cC (.ret A)` is a bare `wpTS` run: a
   `cerwpT` run at the world and list it is read at, owning no records, to a value of `A`. It is
   Kripke along the re-reading of its whole list (`SCmp.ret_reread`, from `cerwpT_kripke`) and not
   along `KeepRel`: a bare `cerwpT` run owning no records, the records `F A` runs at, is not
-  (`Obs.cerwpT_not_keepKripkeNil`, `Core/TreeSemObs.lean`). `cerwpT` quantifies over starts whose
+  (`Obs.cerwpT_not_keepKripkeNil`, `research/tree/ResearchTree/TreeSemObs.lean`). `cerwpT` quantifies over starts whose
   list re-reads its list whole, a resource holding a view has none at `[]` (`cerwpT_nil_of_imm`),
   and the property would make the stuck `() ()` over a lend's view a run at the lend's list owning
   no records; framed beside the lend's record (`twp_frame`), `let a = alloc () in () ()` would be
@@ -11961,7 +11963,7 @@ layers (`docs/new-core/scope-782.md`):
   `STy.thunkRet_lam`), and of a value (`STy.thunkC_val`).
   `ν` folds and unfolds at Core's body shape `F(A ⊕ U X) & F B` (`SCmp.loopBody_mono`), and is not
   empty there (`SCmp.loop_nonempty`).
-- **Continuation and task types** (`Core/TreeSemK.lean`) are thunks and boxed thunks, no new
+- **Continuation and task types** (`research/tree/ResearchTree/TreeSemK.lean`) are thunks and boxed thunks, no new
   former: a continuation is `U (B ⊸ C)` (`STy.kont`), boxed at `@d` by BOXED-κ (`STy.kontBox`),
   a task `[@d] U C` (`STy.task`). The value types read the record list because a thunk is a run,
   and a run is at a list: read at a list fixed in advance (`[]`), a thunk type holds of every
@@ -11974,7 +11976,7 @@ layers (`docs/new-core/scope-782.md`):
   in which other branches opened and ended records of their own, and resumed there at its type
   (`STy.kontBox_resume_after`): the resume is read off the carried value (`STy.kont_resume` at
   the reflexive extension), at a list whose records are covered, which a start provides
-  (`RecInv.cov_ls`). Instances (`Core/TreeSemKEx.lean`) at a proper
+  (`RecInv.cov_ls`). Instances (`research/tree/ResearchTree/TreeSemKEx.lean`) at a proper
   extension of the tree (a fresh child grafted into a chain, `dExt`, `dExt_proper`), with the
   resume list adding a record at the lifetime the extension opened and not a re-reading of the stop
   list: a lend at depth 1 (`kontBox_depth1`), and a view whose witness holds the views of its two
@@ -12042,7 +12044,7 @@ given the entries'); the typing rules and the fundamental theorem over these typ
   unrestricted operation is excluded while a borrow or owned resource is live.
   Multi-shot continuations over duplicable state are a hypothesis, not a rule.
 - **A lend's callback `∀'x ⊏ @bnd` may suspend at a row `Row.Suspend 'x @bnd`**
-  (`Core/TreeGoal791.lean`): every operation named and not unrestricted; its payload and answer
+  (`research/tree/ResearchTree/TreeGoal791.lean`): every operation named and not unrestricted; its payload and answer
   types free of `'x` and outliving `@bnd` at the constant's context (`VOutlives Δ bnd`), so their
   values lie in the stratum of every lend `α ⊏ @bnd`, what the Mut Frame asks of a stop (the
   relation's `LendOK`); and each capturable operation's cancel row meeting the same clauses
@@ -12969,7 +12971,7 @@ reported as an intended change.
     substitution enters it.
   - `TyEq` at `code`: equal `N`, `TyEq` at `E` and `C`. `VTy.inFrag` at `code`: `E` and `C`.
     `NoThunkT` at `code` is `False`, as at `U`. `VTy.persistent`, `VOutlives`: as `U`.
-  - The step-indexed model (`Core/Chain/SI/Sem.lean`) and the tree model (`Core/TreeGoal791.lean`)
+  - The step-indexed model (`Core/Chain/SI/Sem.lean`) and the tree model (`research/tree/ResearchTree/TreeGoal791.lean`)
     read `code` as empty, as they read `μ` (#840).
   - Printing: the checker prints `Code⟨#h; E⟩ C`, `#h` a hash of `N`'s serialisation, not
     `{closure@span}` (a kernel type has no span). Backend2's `useKey` prints a type `ofV` refuses
@@ -14218,6 +14220,15 @@ has no outgoing effect row: any operation inside it must be handled there, and n
 unwind can escape the invocation. Capturing the view into an unrestricted closure and returning
 it outside the fresh lifetime are refused by the existing kernel rules.
 
+**One rule for the family (#1148).** The checker types every scoped local with one rule and one
+typed-term node, `withlocal`, indexed by a kind `k : LocalKind`. The kind selects the side
+condition (`LocalOK k`), the result type (`localTy k`), the erased core term (`localE k`), and the
+derived kernel lemma the rule projects to (`LocalKind.wf`; for `plain`, `withlocal_wf`). Plain
+`withlocal[…]` is the first kind, `plain`: its text, typing and lowering are unchanged. Backend2
+reads the kind from the node. A new kind adds a constructor and a clause to each of these
+functions in `Core/Local.lean`, not a checker rule. `CDerives` is unchanged, and the checker
+judgment's rule count does not grow.
+
 ### Lowering
 
 The checker emits a derived typed `withlocal` node whose erasure is the construction above. Backend2
@@ -14261,11 +14272,13 @@ state threading is introduced. There is no new index on `CDerives` and no invers
 
 - #1115's plain variant, built (#1117): the derived constant (`Core/Local.lean`, `withlocal_wf`),
   its typed node through the checker, and Backend2's frame and register placement.
+- The family's one checker rule, indexed by `LocalKind` (#1148), built (#1162).
 - A surface form, and its producer, are #1115's. Not built.
 
 ### Open
 
-Unwinding, suspension and handler-owned state are separate work.
+The later kinds: unwinding (#1128), a local across an uncounted loop (#1140), and a `Mut` to `Imm`
+reborrow for read-only stretches (#1141). Suspension and handler-owned state are separate work.
 The old backend compiles the erasure; its scalar locals are not register-promoted by this entry.
 
 ---

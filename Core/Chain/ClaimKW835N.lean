@@ -59,7 +59,7 @@ def finRWK (R : KW → Nat → WProp) (vr : VRel) : CTy → LSub →
 theorem finRWK_eq (R : KW → Nat → WProp) (vr : VRel) {F : CTy} (hF : F ≠ .top) (δ : LSub) :
     finRWK (ℍ := ℍ) R vr F δ =
       some (cancelOblRWK (ℍ := ℍ) (fun x => tabRWK (ℍ := ℍ) R vr F δ x) R) := by
-  cases F <;> simp_all [finRWK, tabRWK, finClaimK, tabClaimK, cancelOblRWK]
+  cases F <;> simp_all [finRWK, tabRWK, finClaimK, tabClaimK, cancelOblRWK, tabCK, finCK, cancelOblCK, cancelOblClaimK]
 
 /-- **An entry of `tabRK` at `g = id` is a layer's, and every `tabRWK` has the layer's entry at the
 same key.** -/
@@ -73,25 +73,9 @@ theorem tab_lookupRK_RW : ∀ (F : CTy) {R : Nat → WProp} {vr : VRel} {δ : LS
         some (entNK q B (fun k v ρ => vr A δ x.Θ k v ρ)
           (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
           (finRWK (ℍ := ℍ) RW vr fin δ) (fun f y ρ => x.Owed f y ρ))
-  | .eff m₀ i₀ q A B fin rc C, R, vr, δ, x, m, j, en, h => by
-      simp only [tabRK, tabClaimK] at h
-      unfold extTabK at h
-      split at h
-      · rename_i hmj
-        cases Option.some.inj h
-        obtain ⟨rfl, rfl⟩ := hmj
-        exact ⟨q, A, B, fin, .inl ⟨rfl, rfl, rfl, rfl⟩, rfl, fun RW => by
-          simp only [tabRWK, finRWK, tabClaimK, extTabK, id_eq, and_self, if_true]⟩
-      · rename_i hmj
-        obtain ⟨q', A', B', fin', hL, he, hR⟩ := tab_lookupRK_RW C h
-        exact ⟨q', A', B', fin', .inr hL, he, fun RW => by
-          simp only [tabRWK, tabClaimK, extTabK, if_neg hmj]; exact hR RW⟩
-  | .ret _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty] at h
-  | .arr _ _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty] at h
-  | .amp _ _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty] at h
-  | .top, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty] at h
-  | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty] at h
-  | .nuSys _ _ _, _, _, _, _, _, _, _, h => by simp [tabRK, tabClaimK, OpTabK.empty] at h
+  | F, R, vr, δ, x, m, j, en, h => by
+      obtain ⟨q, A, B, fin, hL, he, hR⟩ := tab_lookupCK (ℍ := ℍ) (ct := (fun _ lo T => cancelTabRK lo T R)) F h
+      exact ⟨q, A, B, fin, hL, he, fun RW => hR (fun z lo T => cancelTabRK lo T (RW z)) id δ x⟩
 
 /-- **An entry of `tabRWK` is a layer's, and `tabNK` at `g = id` has the layer's entry at the same
 key.** -/
@@ -105,25 +89,9 @@ theorem tab_lookupRWK : ∀ (F : CTy) {RW : KW → Nat → WProp} {vr : VRel} {�
         some (entNK q B (fun k v ρ => vr A δ x.Θ k v ρ)
           (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
           (finNK (ℍ := ℍ) vr id fin δ) (fun f y ρ => x.Owed f y ρ))
-  | .eff m₀ i₀ q A B fin rc C, RW, vr, δ, x, m, j, en, h => by
-      simp only [tabRWK, tabClaimK] at h
-      unfold extTabK at h
-      split at h
-      · rename_i hmj
-        cases Option.some.inj h
-        obtain ⟨rfl, rfl⟩ := hmj
-        exact ⟨q, A, B, fin, .inl ⟨rfl, rfl, rfl, rfl⟩, rfl, by
-          simp only [tabNK, extTabK, and_self, if_true]; rfl⟩
-      · rename_i hmj
-        obtain ⟨q', A', B', fin', hL, he, hN⟩ := tab_lookupRWK C h
-        exact ⟨q', A', B', fin', .inr hL, he, by
-          simp only [tabNK, extTabK, if_neg hmj]; exact hN⟩
-  | .ret _, _, _, _, _, _, _, _, h => by simp [tabRWK, tabClaimK, OpTabK.empty] at h
-  | .arr _ _, _, _, _, _, _, _, _, h => by simp [tabRWK, tabClaimK, OpTabK.empty] at h
-  | .amp _ _, _, _, _, _, _, _, _, h => by simp [tabRWK, tabClaimK, OpTabK.empty] at h
-  | .top, _, _, _, _, _, _, _, h => by simp [tabRWK, tabClaimK, OpTabK.empty] at h
-  | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabRWK, tabClaimK, OpTabK.empty] at h
-  | .nuSys _ _ _, _, _, _, _, _, _, _, h => by simp [tabRWK, tabClaimK, OpTabK.empty] at h
+  | F, RW, vr, δ, x, m, j, en, h => by
+      obtain ⟨q, A, B, fin, hL, he, hR⟩ := tab_lookupCK (ℍ := ℍ) (ct := (fun z lo T => cancelTabRK lo T (RW z))) F h
+      exact ⟨q, A, B, fin, hL, he, hR (fun _ lo T => cancelTabK lo T) id δ x⟩
 
 /-- **`tabRK` at `g = id` is `tabRWK` at a claim read alike at every world.** -/
 theorem tabRK_id_eq (R : Nat → WProp) (vr : VRel) : ∀ (F : CTy) (δ : LSub) (x : KW),
@@ -181,8 +149,8 @@ theorem erwpK_cancelRun_claimXK {vr : VRel} {R : Nat → WProp} {δ : LSub} :
   induction n using Nat.strong_induction_on with
   | _ n ih =>
   intro y ls e ρ hc h
-  unfold cancelOblRK cancelOblClaimK at h
-  unfold cancelOblRWK cancelOblClaimK
+  unfold cancelOblRK cancelOblClaimK cancelOblCK at h
+  unfold cancelOblRWK cancelOblClaimK cancelOblCK
   rw [erwpK_eq] at h ⊢
   refine rwpG_mono_le (fun k hk ls' t σ ht => ?_) (rwpG_consistentXV h hc)
   obtain ⟨ht, hcσ, hvσ⟩ := ht
@@ -202,7 +170,7 @@ theorem erwpK_cancelRun_claimXK {vr : VRel} {R : Nat → WProp} {δ : LSub} :
       have hy'' : y.Owed f y' ρk := hy'
       simp only [entNK, hcap, if_true] at hP
       by_cases htop : fin = .top
-      · subst htop; simp [finRWK, finClaimK] at hP
+      · subst htop; simp [finRWK, finClaimK, tabCK, finCK, cancelOblCK, tabClaimK, cancelOblClaimK] at hP
       rw [finRWK_eq _ _ htop] at hP
       cases Option.some.inj hP
       have hin := (hcont y' hy' ls'' he).2 hql _
@@ -248,7 +216,7 @@ theorem erwpK_claimXK {vr : VRel} {R : Nat → WProp} {F : CTy} {δ : LSub} {Q :
       have hy'' : x.Owed f y' ρk := hy'
       simp only [entNK, hcap, if_true] at hP
       by_cases htop : fin = .top
-      · subst htop; simp [finRWK, finClaimK] at hP
+      · subst htop; simp [finRWK, finClaimK, tabCK, finCK, cancelOblCK, tabClaimK, cancelOblClaimK] at hP
       rw [finRWK_eq _ _ htop] at hP
       cases Option.some.inj hP
       have hin := (hcont y' hy' ls'' he).2 hql _
@@ -324,7 +292,7 @@ theorem tabRWK_ubindCan {vr : VRel} (hv : ValRelOK vr) {RW : KW → Nat → WPro
   by_cases hcap : capB q B = true
   · simp only [entNK, hcap, if_true] at hP hc
     by_cases htop : fin = .top
-    · subst htop; simp [finNK] at hP
+    · subst htop; simp [finNK, tabCK, finCK, cancelOblCK, tabNK, cancelOblK] at hP
     rw [finNK_eq _ _ htop] at hP
     cases Option.some.inj hP
     have hin := hc _ (finRWK_eq RW vr htop δ)
@@ -433,7 +401,7 @@ theorem tabNK_flr_comap {vr : VRel} {δ : LSub} (a : Life) :
     by_cases hcap : capB q B = true
     · rw [if_pos hcap] at hP
       by_cases htop : fin = .top
-      · subst htop; simp [finNK] at hP
+      · subst htop; simp [finNK, tabCK, finCK, cancelOblCK, tabNK, cancelOblK] at hP
       rw [finNK_eq _ _ htop] at hP
       cases Option.some.inj hP
       have hs := (hcont (y'.flr a) (hy''.flr a) ls' he).2 hq _
