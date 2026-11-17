@@ -73,7 +73,7 @@ theorem dead_append_dead {Γ Γ' : Ctx VTy} (h : Ctx.Dead Γ) (h' : Ctx.Dead Γ'
 /-- **Weakening** by consumed slots at the end. -/
 theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ e j) : CDerives Δ (Γ ++ Γ') e j := by
-  induction h with
+  induction h using CDerives.induct with
   | var hs => exact .var (soloP_append h' hs)
   | unitI hd => exact .unitI (deadP_append h' hd)
   | tensorI hs _ _ ih₁ ih₂ => exact .tensorI (splitP_append h' hs) ih₁ ih₂

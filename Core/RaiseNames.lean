@@ -1586,7 +1586,7 @@ theorem names_of_rowAt {Ξ : EffCtx} {S : Row} (h : RowAt Ξ S) {n i : UInt32} {
 `[raise]` finds its operation in a row tied to `Ξ` (decision R).  `[spec §19]` -/
 theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerivesAt Ξ Δ Γ e j) : rcE Ξ.names e = true := by
-  induction h with
+  induction h using CDerivesAt.induct with
   | force => exact rcE_forceE_var _ _
   | withI _ _ ihM ihN => exact rcE_withPair ihM ihN
   | withbor1UD _ _ _ _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih

@@ -102,7 +102,7 @@ theorem closedAt_of_fill {V : Val} (hV : closedAt 0 V.1 = true) :
 /-- **A typed term is closed at its context.** -/
 theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ e j) : closedAt Γ.length e = true := by
-  induction h with
+  induction h using CDerives.induct with
   | var h => simpa [closedAt] using soloP_lt h
   | @force _ _ _ _ C h _ =>
       have := soloP_lt h

@@ -79,7 +79,7 @@ theorem CDerivesAt.withbor3U {Ξ : EffCtx} {Δ Γ a A B d} {S : Row} (x : LifeVa
 `[spec §19]` -/
 theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerivesAt Ξ Δ Γ e j) : CDerives Δ Γ e j :=
-  CDerivesX.mono ⟨Or.inl rfl, fun h => h⟩ h
+  CDerivesX.mono (I := {ties := some Ξ}) (I' := {}) ⟨Or.inl rfl, fun h => h⟩ h
 
 /-- `[then]` with its finaliser at the pure row (§24, option A), tied: `effThen` at `Σ_M = Σ` and
 `Σ_D = ∅`, as `CDerives.effThenA`.  `[spec §24, §27]` -/
@@ -357,7 +357,7 @@ that read a signature off a row type a `perform`, a `raise` or a `hnd`, and ever
 same in both judgments.  `[spec §19]` -/
 theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ e j) (he : e.effFree = true) : CDerivesAt Ξ Δ Γ e j := by
-  induction h with
+  induction h using CDerives.induct with
   | var h => exact .var h
   | unitI h => exact .unitI h
   | tensorI hs _ _ ih1 ih2 => exact .tensorI hs (ih1 (by eff_free)) (ih2 (by eff_free))
