@@ -3,8 +3,9 @@
 # `corpus/axes/*.bc`, `corpus/aoc/*.bc` and `corpus/leetcode/*/*.bc` must check, except a file marked `-- check: parse-only`
 # (it is for the parser); every `corpus/reject/*.bc` must parse and be rejected by the checker
 # with the message on its `-- expect:` line (`line:col: message`), continued by any `-- expect| `
-# lines for a message of several lines. A message at a position inside an included library module
-# names the module's file instead (`lib/m.bc:line:col: message`, #883).
+# lines for a message of several lines. A reject marked `-- check: proved-only` must check, and be
+# rejected by `bcc check --proved-only` (SPEC §29). A message at a position inside an included
+# library module names the module's file instead (`lib/m.bc:line:col: message`, #883).
 #
 # Reports. For every corpus/reports/<name>.txt, the effects lines `bcc check corpus/<name>.bc` prints
 # (`effect`, `row`, `lowering`, `call`: SPEC §18) must be exactly that file: the rows, the lowering
@@ -48,11 +49,14 @@ checks() {
   fi
 }
 rejects() {
-  local f=$1 want out
+  local f=$1 want out flag
   want=$(sed -n 's/^-- expect: //p; s/^-- expect| //p' "$f")
+  flag=; grep -q '^-- check: proved-only' "$f" && flag=--proved-only
   if ! "$bcc" parse "$f" >/dev/null 2>&1; then
     echo "$f: does not parse, so it does not test the checker"; return 1
-  elif out=$("$bcc" check "$f" 2>&1); then
+  elif [ -n "$flag" ] && ! out=$("$bcc" check "$f" 2>&1); then
+    echo "$f: rejected without --proved-only, but must check"; echo "  $out"; return 1
+  elif out=$("$bcc" check $flag "$f" 2>&1); then
     echo "$f: accepted, but must be rejected"; return 1
   elif [ "$out" != "$f:$want" ] && { [ "${want#lib/}" = "$want" ] || [ "$out" != "$want" ]; }; then
     echo "$f: wrong error"; echo "  want: $want"; echo "  got:  ${out#"$f:"}"; return 1

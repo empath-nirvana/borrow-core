@@ -2,6 +2,7 @@ import Core.TreeSchedProgs
 import Core.TreeSchedPool
 import Core.TreeLend
 import Core.Fix
+import Core.Chain.SchedProgs
 
 /-!
 # The park stepper: a task parks holding a share, and is resumed or cancelled  `[spec §62]`
@@ -27,9 +28,6 @@ open BoCa.Fig16.BoLo
 open BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Step1 Head Kont performE opPayload hndE hndVal capTag clauseAt freeE ccatchE
   raiseE cancelVal)
-
-/-- The stepper's name. -/
-abbrev nP : UInt32 := 3
 
 /-- `park`: cancellable, no payload and no answer resource; the continuation owns its share. The
 parked branch may own records at the stop. -/

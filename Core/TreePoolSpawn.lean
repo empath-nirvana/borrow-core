@@ -1,4 +1,5 @@
 import Core.TreePoolSchedProgs
+import Core.Chain.SchedProgs
 
 /-!
 # An interleaving scheduler with park, spawn, cancel and join, through `PoolSchedAdequacyT`  `[spec §62]`
@@ -286,59 +287,6 @@ theorem cerwpT_tabAt {Q : TPostV} {Fb F : TFrame} {j : Nat} {w : TWd} {ls : List
 
 /-! ### The clauses -/
 
-/-- The common prefix `λ(v, κ). λs. let (h, p) = s in b`. -/
-def clauseOf (b : Expr) : Val := Val.lam (.letpair (.var 0) (.lam (.letpair (.var 0) b)))
-
-/-- The stopped task as a ready entry, under `h, p, s, κ, v` and `n` more binders. -/
-def readyE (n : Nat) : Expr := .pair (.inj₁ .unit) (.var (3 + n))
-
-/-- `park`'s body: the top ready, `κ' (inj₁ ()) () (h, inj₁ ((inj₁ (), κ), p′))`; the top a
-joiner or the stack empty, `κ (inj₁ ()) () (h, p)`. -/
-def parkB : Expr :=
-  .case (.var 0)
-    (.letpair (.var 0) (.letpair (.var 1) (.case (.var 1)
-      (.app (.app (.app (.var 1) (.inj₁ .unit)) .unit)
-        (.pair (.var 7) (.inj₁ (.pair (readyE 6) (.var 3)))))
-      (.app (.app (.app (.var 9) (.inj₁ .unit)) .unit) (.pair (.var 7) (.var 6))))))
-    (.app (.app (.app (.var 4) (.inj₁ .unit)) .unit) (.pair (.var 2) (.var 1)))
-
-/-- `cancel`'s body: the top ready, `(hnd h (κ' (inj₂ ()))) (h, inj₁ ((inj₁ (), κ), p′))`;
-otherwise `κ (inj₁ ()) () (h, p)`. -/
-def cancelB : Expr :=
-  .case (.var 0)
-    (.letpair (.var 0) (.letpair (.var 1) (.case (.var 1)
-      (.app (.app (.app (.prim .hnd) (.var 7)) (.app (.var 1) (.inj₂ .unit)))
-        (.pair (.var 7) (.inj₁ (.pair (readyE 6) (.var 3)))))
-      (.app (.app (.app (.var 9) (.inj₁ .unit)) .unit) (.pair (.var 7) (.var 6))))))
-    (.app (.app (.app (.var 4) (.inj₁ .unit)) .unit) (.pair (.var 2) (.var 1)))
-
-/-- `spawn`'s body: `(hnd h (th ())) (h, inj₁ ((inj₁ (), κ), p))`. -/
-def spawnB : Expr :=
-  .app (.app (.app (.prim .hnd) (.var 1)) (.app (.var 4) .unit))
-    (.pair (.var 1) (.inj₁ (.pair (readyE 0) (.var 0))))
-
-/-- The unstarted second child, under `th₂, th₁, p, h`: `λx. case x {inj₁ _. λ_. hnd h (th₂ ())
-| inj₂ _. ()}`. -/
-def kUB : Expr :=
-  .lam (.case (.var 0) (.lam (.app (.app (.prim .hnd) (.var 6)) (.app (.var 3) .unit))) .unit)
-
-/-- `par`'s body: `let (th₁, th₂) = v in (hnd h (th₁ ())) (h, inj₁ ((inj₁ (), κU), inj₁ ((inj₂ (),
-κ), p)))`. -/
-def parB : Expr :=
-  .letpair (.var 4) (.app (.app (.app (.prim .hnd) (.var 3)) (.app (.var 1) .unit))
-    (.pair (.var 3) (.inj₁ (.pair (.pair (.inj₁ .unit) kUB)
-      (.inj₁ (.pair (.pair (.inj₂ .unit) (.var 5)) (.var 2)))))))
-
-def parkCl : Val := clauseOf parkB
-def spawnCl : Val := clauseOf spawnB
-def cancelCl : Val := clauseOf cancelB
-def parCl : Val := clauseOf parB
-
-def qsS : Val :=
-  Val.pair (Val.i32 1) (Val.pair (Val.i32 1) (Val.pair (Val.i32 1) (Val.pair (Val.i32 0) Val.unit)))
-def hsS : Val := Val.pair parkCl (Val.pair spawnCl (Val.pair cancelCl (Val.pair parCl Val.unit)))
-def HS : Val := hndVal nP qsS stackRet hsS
-
 /-- **The unstarted child** `κU H th`: resumed, `th ()` under `H`; cancelled, `()`. -/
 def κU (H th : Val) : Val :=
   Val.lam (.case (.var 0) (.lam (.app (.app (.prim .hnd) (H.shift 3 0).1)
@@ -369,11 +317,6 @@ theorem invS_cons {t : StoredJ} {ts : List StoredJ} (h : InvS (t :: ts)) :
 abbrev PA_S : TPostV := PoolAns (ℍ := ℍ) QS HS InvS
 
 set_option linter.unusedSimpArgs false
-
-/-- A substitution below a shift by more than its index undoes one step of the shift. -/
-theorem subst_shift0 (d j : Nat) (s : Val) (e : Expr) (h : j ≤ d) :
-    Expr.subst j s (Expr.shift (d + 1) 0 e) = Expr.shift d 0 e :=
-  Expr.subst_shift d 0 j s e (Nat.zero_le _) (by omega)
 
 /-- Substitution into a clause body after a step. -/
 syntax "ssimp" (" [" Lean.Parser.Tactic.simpLemma,* "]")? : tactic

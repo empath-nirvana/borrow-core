@@ -812,6 +812,10 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
   | consume hA hc he hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.consume hA hc he (dead_ins (live_eval_ff hf hp) Γa hΓ), (shift_closed0 hc _ _).symm⟩
+  | withlocal x hΓ hx hs hA hB =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.withlocal x (dead_ins (live_eval_ff hf hp) Γa hΓ) hx hs hA hB,
+        (shift_closed0 withlocal_closed _ _).symm⟩
   | allocS σ he hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.allocS σ he (dead_ins (live_eval_ff hf hp) Γa hΓ),
@@ -1417,6 +1421,10 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
   | consume hA hc he hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.consume hA hc he (dead_ins (live_eval_ff hf hp) Γa hΓ), (shift_closed0 hc _ _).symm⟩
+  | withlocal x hΓ hx hs hA hB =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.withlocal x (dead_ins (live_eval_ff hf hp) Γa hΓ) hx hs hA hB,
+        (shift_closed0 withlocal_closed _ _).symm⟩
   | allocS σ he hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.allocS σ he (dead_ins (live_eval_ff hf hp) Γa hΓ),

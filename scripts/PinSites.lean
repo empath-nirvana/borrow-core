@@ -228,15 +228,26 @@ def generated (env : Environment) (n : Name) (ci : ConstantInfo) : Bool :=
             | _ => false)
       | _ => false)
 
+/-- For each module of the environment, by its index, whether `mods` holds of it. Computed once
+per scan: reading `env.header` is slow, and the scans visit every declaration. -/
+def modMask (env : Environment) (mods : Name → Bool) : Array Bool :=
+  env.header.moduleNames.map mods
+
+/-- Whether a declaration is of a module in `mask`; a declaration of the file this runs on (the
+script's negative tests) counts as everywhere. -/
+def inMask (env : Environment) (mask : Array Bool) (n : Name) : Bool :=
+  match env.getModuleIdxFor? n with
+  | some i => mask[i.toNat]!
+  | none => true
+
 /-- The declarations of `mods` whose value uses one of `cs`, each with the ones it uses. -/
 def usersOf (env : Environment) (mods : Name → Bool) (cs : List Name) :
     Std.HashMap Name (List Name) := Id.run do
+  let mask := modMask env mods
   let mut out : Std.HashMap Name (List Name) := {}
   for (n, ci) in env.constants.toList do
-    -- A declaration of the file this runs on (the script's negative tests) counts as everywhere.
-    let mod := (env.getModuleIdxFor? n).map (env.header.moduleNames[·.toNat]!)
     if (`PinSites).isPrefixOf n then continue
-    unless mod.all mods do continue
+    unless inMask env mask n do continue
     let some v := ci.value? | continue
     if generated env n ci then continue
     let used := v.getUsedConstants
@@ -267,13 +278,12 @@ def sameSet (a b : List Name) : Bool := a.all b.contains && b.all a.contains
   -- A rule is written where a node is built: no definition outside the LIRs' syntax is a rule, or
   -- a function answering one, so no site builds a node at a rule chosen elsewhere.
   let ruleTys := [``Backend2.ConsumeRule, ``Backend2.CopyRule, ``Backend2.Abandon, ``Backend.Clos.Licence]
+  let mask := modMask env fun m => ((`Backend2).isPrefixOf m || (`Backend).isPrefixOf m ||
+      (`Target).isPrefixOf m || (`Pipeline).isPrefixOf m || (`Reference).isPrefixOf m ||
+      (`Frontend).isPrefixOf m) && m != `Backend2.Syntax && m != `Backend.Clos.Syntax
   for (n, ci) in env.constants.toList do
     if (`PinSites).isPrefixOf n then continue
-    let mod := (env.getModuleIdxFor? n).map (env.header.moduleNames[·.toNat]!)
-    unless mod.all (fun m => (`Backend2).isPrefixOf m || (`Backend).isPrefixOf m ||
-      (`Target).isPrefixOf m || (`Pipeline).isPrefixOf m || (`Reference).isPrefixOf m ||
-      (`Frontend).isPrefixOf m) do continue
-    if mod == some `Backend2.Syntax || mod == some `Backend.Clos.Syntax then continue
+    unless inMask env mask n do continue
     unless ci matches .defnInfo _ do continue
     if generated env n ci then continue
     match ci.type.getForallBody.getAppFn with

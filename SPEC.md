@@ -1518,7 +1518,7 @@ value types fall in three groups.
    | `μX. T`, `T` in `FShape` (§6) | `foldOwn`, whose algebra is the consume of `T[1/X]` |
    | `μX. T`, `T` in `P` (§6, §61), not in `FShape` | `foldOwnG`, whose algebra at each key is the consume of the key's body (an array key's element type) at results `1` |
    | `U(C & F 1)` | `close`: force, then the second projection |
-   | `U(νX. C & F R)`, `R` closed and consumable (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the consume of `R`; at a system, per projection (§79, K-M.2) |
+   | `U(νX. C & F R)`, `R` closed and consumable (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the consume of `R`; at a system, per projection (§79, K-M.4b) |
    These are linear. A value of one of these types that goes unused is consumed by its
    consume, which the checker inserts. Because the consume deallocates memory and, at codata,
    runs the object's `close` code, where it is inserted can be observed.
@@ -5898,14 +5898,15 @@ runs once, and every row and clause is what it was.
   hit: stricter only when a cancel row repeats an operation key.
 - **Answering effects in a finaliser** (a capability: `Stdout`, `Fs` #769, `Net` #597; a `fn`
   effect): the capability is a threaded `mut` borrow, and `[then]` splits the context `Γ₁ | Γ₂`,
-  so `M` and `D` cannot both hold it; R1 (§29) needs empty cancel rows (`Row.ResumeO`), and an
-  unwinding lend's finaliser `d : Ref T ⊸ 1` is closed, pure and abortive only. It does not type
-  today by any route, and #940 (a `let mut` both `M` and `D` write) has the same root. The
-  smallest change proposed is a fused `[then]` over a lend (`m : Mut @a T ∈ Γ₂`; `M` gets a
-  reborrow, `D` gets `m` back at `Σ_D`): one rule and its compatibility lemmas. Its raise path is
-  direct; its cancel path is a lend across a suspension, which needs #844 Tier 2 and #821.
+  so `M` and `D` cannot both hold it; R1 (§29) needs empty cancel rows (`Row.ResumeO`). #940 (a
+  `let mut` both `M` and `D` write) has the same root. The raise path types through the unwinding
+  lends with a finaliser at its own row, `withbor{1,2,3}UD` (§78, K-b): `M` gets a reborrow and `D`
+  gets the place back at `Σ_D`. The checker's producer for it is K-b.3. The cancel path is a lend
+  across a suspension, which needs #844 Tier 2 and #821 (§78 *Open*).
 - **An owner's finaliser that performs** (a declared value's drop that closes a socket): not a
-  consume (§42 *Not this*); Backend2's `genLendU` lowers only a constant finaliser.
+  consume (§42 *Not this*). Backend2's `genLendU` lowers a closure finaliser at `Σ_D = ∅` (#1089),
+  reading `Σ_M` and `Σ_D` from the node, and refuses a finaliser that performs, or a callback row
+  other than the borrow's, until K-b's lowering (#1046).
 - **Task codata** (`lib/async.bc`, `F (A + …) & F 1`): a task whose finalisers perform needs its
   close at `F_R 1`; it waits on the lowering of a finaliser that suspends.
 - **`[then]`'s two premises on unrestricted operations** restrict `unr` beyond §19's `[then]`
@@ -6077,7 +6078,7 @@ use R1 keeps them unconditionally.
 
 The chain interpretation of §62 has a second named hypothesis of the same form, `HandlerLawN`
 (`Core/Chain/HandlerLawN.lean`): the compatibility lemmas of `[handle]` at a value form, BOXED-κ
-`[handle]` and `reify`, from which `FundamentalN` and plain adequacy `Goal791N` are proved (§62,
+`[handle]` and `reify`, from which `fundamentalN_all` and plain adequacy `Goal791N` are proved (§62,
 *The named assertion*).
 
 *R1 and `PinLaw` stay as stated here until surface A1 (#843, §19).*
@@ -11512,6 +11513,25 @@ proved by `fundamentalC` over every typing rule and adequacy, at one step-indexe
 results (`total_every_run`, `Closing`, `total_open`/`total_call`/`total_subrun`) for derivations
 that use none of the new rules.
 
+### Proof maintenance: remove the unused chain fragment assembly (#840)
+
+The chain's active fundamental theorem is `fundamentalN_all : MissingN → CDerives Δ Γ e j →
+SemJN Δ Γ e j`; its constant and adequacy path uses `constNAt_all` and `goal791N`. Remove the
+unused type-former fragment predicates, `FundamentalN`/`ConstsN`, their two adapters from
+`MissingN`/`HandlerLawN`, and the closed group of fragment-dependent constant assembly lemmas.
+Do not replace a client with a theorem requiring a stronger assumption: first inventory every
+client, including references in theorem types, and verify that none provides an active
+assumption-free handler fragment. The old predicates classify context/result types, not which
+handler rules a derivation uses.
+
+Preserve the statements and assumptions of `fundamentalN_all`, `constNAt_all`, `constN_all`,
+`goal791N`, `goal791N_nil`, `goal791N_nil_externs`, and the checked frontend theorem paths.
+Preserve direct constant compatibility and concrete instances, including the assumption-free
+`constN_wl` and finaliser instances. Compare surviving theorem types and axiom footprints;
+removing unused interfaces must not add `HandlerLawN` to a retained proof. No typing rule,
+relation, machine step, accepted program or program output changes. `HandlerLawN` remains
+open as stated below; this cleanup does not discharge any field.
+
 ### Lifetimes ordered as a tree (#773)
 
 Lifetimes form a well-founded cactus. A fresh lifetime is a child of the current branch's
@@ -12090,6 +12110,10 @@ The top-level theorem is plain adequacy, every handler inside the program
     goal791N            : HandlerLawN → Goal791N
     fundamentalN_all    : MissingN → CDerives Δ Γ e j → SemJN Δ Γ e j
     handlerLawN_iff     : HandlerLawN ↔ MissingN
+
+`goal791N_nil` (#1024, `Core/Chain/GoalNil791N.lean`) is `Goal791N`'s instance with no constants
+and no externs, without `HandlerLawN`: it covers every program with no suspending-lend constant.
+`goal791N_nil_externs` is the same over host externs closed by values that meet Core's contract.
 
 No scheduler, scheduler contract (`SchedOKN`) or restriction on handler names is quantified over:
 a program that suspends handles its operations inside itself, and those handlers are typed by
@@ -12781,7 +12805,7 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
   contains `G`, at `δ[x↦α]`, and a code-typed `G`'s environment could mention `x`. `codeTy`,
   `hCode`, `hEnv` and `unfoldKTy` are in `Core/CodeNuOut.lean`.
 - §79 generalises `unfoldK` and `nuOutK` to finite systems of ν equations, per equation (§79,
-  K-M.4).
+  K-M.4a).
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
 - `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
@@ -14109,13 +14133,20 @@ five ν rules are generalised in place.
 
 - K-M.1, built (#1090): the former `CTy.nuSys m i Cs`, with `νX. C` the match-pattern
   abbreviation `nuSys 0 0 C`; every match carries the system case. No rule reaches a system yet,
-  and the backends refuse one. Until K-M.2 the relation reads a system at `m > 0` as its spine's
-  single body, which is inert.
-- K-M.2: the relation at systems in Core and the chain; `nuIn i`, `nuOut i`; consume per
-  projection; the checker's tests `sysOkB` and `sysFreshB`. Not built.
-- K-M.3: `unfoldᵢ` at systems in both developments. The kernel instance `lexProg`, the lexer modes
-  `Normal`/`InString`, is typed, evaluated, adequate, and covered by `goal791N`. Not built.
-- K-M.4: `unfoldK` and `nuOutK` per equation in both developments; `d_lexProgK`. Not built.
+  and the backends refuse one.
+- K-M.2, built (#1101): the relation at systems in Core and the chain, the `i`-th component of the
+  greatest tuple of candidates (`cC_nuS_iff`, `cN_nuS_iff`), unrolling by simultaneous
+  substitution; the same-term inversions at systems; `nuIn` and `nuOut` at every projection
+  (premise `SysOkAt m i`, target `unrollS m i C`).
+- K-M.3: `unfoldᵢ` at systems, in three slices. Not built.
+  - K-M.3a: the terms, and coiteration in Core;
+  - K-M.3b: coiteration in the chain;
+  - K-M.3c: the `unfold` rule, and the kernel instance `lexProg`, the lexer modes
+    `Normal`/`InString`: typed, evaluated, adequate, and covered by `goal791N`.
+- K-M.4, in two slices. Not built.
+  - K-M.4a: `unfoldK` and `nuOutK` per equation in both developments;
+  - K-M.4b: the checker's tests `sysOkB` and `sysFreshB`, consume per projection, and the final
+    program, `d_lexProgK`.
 
 ### Open
 
@@ -14130,6 +14161,53 @@ five ν rules are generalised in place.
 - **Binder freshness over all pairs** is stricter than needed. Freshness only for the pairs
   `(i, j)` with `Xⱼ` in `Cᵢ` would also be sound; it is left until a program needs it.
 - From §7, unchanged: other positions of `X`, lifetime-indexed iteration, and `WpChainCommutes`.
+
+---
+
+## 80. Entry 79 — plain local cells (`withlocal`, #1115)
+
+### Construction
+
+`withlocal['l, @b, A, B] : A ⊸ (∀'l ⊏ ⊓Δ. Mut 'l A ⊸ ['l] B) ⊸ A ⊗ B`.
+The bracket bound `@b` witnesses `Δ ⊢ A ⊒ @b`; `'l` is fresh for `Δ`, `A` and `B`.
+The callback and its result use the existing plain `withbor2` premises, including its box.
+
+The term allocates a cell containing its first argument, lends the cell mutably to the
+callback, frees the cell after the callback returns, and answers the final contents paired
+with the callback's result. The owner is never passed to the callback. `free` returns the
+contents; it does not destroy them. Updating an owned payload uses the existing swap and
+consume rules, with no implicit duplication or abandonment.
+
+This is a derived constant, not a new typing rule, type former or machine step. Its callback has no outgoing effect row: any operation inside it must be handled there,
+and no suspension or unwind can escape the invocation. Capturing the view into an unrestricted closure and
+returning it outside the fresh lifetime are rejected by the existing kernel rules.
+
+### Lowering
+
+The checker emits a derived typed `withlocal` node whose erasure is the construction above.
+Backend2 reads that node, never a surface name or an analysis of the erased term. Its wrapper
+cell is a register or a slot in the allocating function's frame, never a heap allocation.
+The wrapper retains its declared payload type `A`, since only `Mut A`, not the owner,
+reaches the callback. Its width therefore comes from `A` itself, independently of unrelated
+type-changing owned cells. `bcc-counts --frames` reports actual frame slots;
+`--registers` separately counts promoted locals per invocation, with no target instruction.
+The native-facts gate accounts for both placements when comparing with the old backend.
+Unsupported placement is a compilation error. Explicit allocations in the payload remain
+explicit allocations. A supported straight-line numeric scalar callback must have the same allocation,
+dispatch, copy, load and store counts as explicit state. Address-taken callbacks may use a
+frame slot. The lowering's unproved storage simulation is marked `UNPROVED:` at its site.
+
+### Baseline
+
+`fundamentalC`, `adequacyC`, `adequacyD`, `fundamentalN_all` and `goal791N` keep their
+statements and assumptions: the typing lemma composes existing rules. Every existing corpus
+and kernel program keeps its answer. No existing surface form changes, and no elaborator
+state threading is introduced. There is no new index on `CDerives` and no inversion of it.
+
+### Open
+
+Unwinding, suspension, handler-owned state and the §41 surface migration are separate work.
+The old backend compiles the erasure; its scalar locals are not register-promoted by this entry.
 
 ---
 

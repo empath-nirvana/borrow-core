@@ -7,9 +7,9 @@ compatible at `SemJN`; the three (`effHandleV`, `effHandleVB`, `reify`) are the 
 `HandlerLawN`, and plain adequacy of every closed program, its handlers inside it, follows
 (`Goal791N`, §6.4).
 
-The configurations each design choice rests on are indexed in `configurations.md`. The plan for
-`FundamentalN` is `scope-831-interface.md` (the lemma interface and units L1–L7), over the
-rule-by-rule map `scope-831-map.md`. How the design got here is Appendix A.
+The configurations each design choice rests on are indexed in `configurations.md`. The historical plan is
+`scope-831-interface.md` (the lemma interface and units L1–L7), over the rule-by-rule map
+`scope-831-map.md`; the current theorem is `fundamentalN_all`. How the design got here is Appendix A.
 
 ## 1. Where it is
 
@@ -17,16 +17,16 @@ rule-by-rule map `scope-831-map.md`. How the design got here is Appendix A.
 |---|---|
 | `Core/Chain/SI/LocTy.lean` | the world `LocTy`, its orders `ExtA`/`ExtR`, `Keeps`, `addImm`, the view, `ConsistentX`, `erwp_consistent`, the reseal at the lend's entry |
 | `Core/Chain/SI/UpdN.lean` | `ImmTieL`, the relation's entry tie; `rwp`, `rwpG`, `rwpG0` read it (`SI/WpN.lean`, `SI/RwpG.lean`) |
-| `Core/Chain/RelBase791N.lean` | the definitions the relation is built on: `TEntN`, `CandN`, `thunkRN`, `nuEnvN`, `EnvDownN`, `ImmWitW`, the fragment predicates (`VTy.inFrag`, `JdgInFrag`) |
+| `Core/Chain/RelBase791N.lean` | the definitions the relation is built on: `TEntN`, `CandN`, `thunkRN`, `nuEnvN`, `EnvDownN`, `ImmWitW` |
 | `Core/Chain/Goal791N.lean` | `vN`, `vO`, `cN`, `tabN`, `finN`, `retN`, `gN`, `SemJN`, `rowTabN` at `KW`; the laws |
-| `Core/Chain/*KW835N.lean` | the compatibility lemmas at `cN`, every rule but `effHandleV`, `effHandleVB`, `reify`; the constants (`ConstKW835N`: `ConstN`, `ConstsN`, `FundamentalN`, `constN_*`, `constsN_of`) |
-| `Core/Chain/FundamentalKW835N.lean` | `MissingN`, `fundamentalN_all`, `fundamentalN_of` |
+| `Core/Chain/*KW835N.lean` | the compatibility lemmas at `cN`, every rule but `effHandleV`, `effHandleVB`, `reify`; the constant contracts and concrete instances (`ConstKW835N`: `ConstN`, `ConstNAt`, `constN_wl`) |
+| `Core/Chain/FundamentalKW835N.lean` | `MissingN`, `fundamentalN_all` |
 | `Core/Chain/HandlerLawN.lean` | `HandlerLawN`, its non-vacuity at a clause that resumes `κ` (`handle_resume_inst`) |
 | `Core/Chain/Adequacy791N.lean` | `Goal791N`, `goal791N`; the instance `prog791` |
 | `Core/Chain/ConfigsKW835N.lean`, `StopKW835N.lean` | the configurations that read `vN`/`cN`; BOXED-κ's stop lemma at `SemJN` |
-| `Core/Chain/Lend791N.lean`, `Cancel791N.lean` | the suspending `mut` lend: row lemmas, cancel runs at their rows' tables, the finaliser frame; `withbor2S_compat`, `constN_w2` |
-| `Core/Chain/Reborrow791N.lean` | guarded tables, the Mut Frame with its fold, the anti-frame across stops; `withbor3S_compat`, `constN_w3` |
-| `Core/Chain/Field791N.lean` | the frame at a field; `withborFS_compat`, `constN_wF` |
+| `Core/Chain/Lend791N.lean`, `Cancel791N.lean` | the suspending `mut` lend: row lemmas, cancel runs at their rows' tables, the finaliser frame; `withbor2S_compat` |
+| `Core/Chain/Reborrow791N.lean` | guarded tables, the Mut Frame with its fold, the anti-frame across stops; `withbor3S_compat` |
+| `Core/Chain/Field791N.lean` | the frame at a field; `withborFS_compat` |
 | `Core/Chain/ImmImage791N.lean`, `Withload791N.lean` | the observable view `vO`'s facts, the reborrow's image at `vN`; `withloadS_compat`, `constN_wl` |
 | `Core/Chain/ImmLend833N.lean` | `withbor1`, `withbor1U`, `withbor2`, `withbor2U` at `SemJN` |
 | `Core/Chain/Inst791N.lean` | the compat lemmas instantiated, every hypothesis discharged; `Const791.OK` inhabited |
@@ -178,15 +178,16 @@ ImmWitW I ℓ s A δ := ∃ x ∈ I, ⊓s ≤ x.2 ∧ ∃ d, DescR x.1 d ∧ Coh
   witnessed by the lend's record at `α`; `withload`'s new cells `imm({β}, …)` by the source's
   record.
 
-### 3.3 The fragment
+### 3.3 Type coverage
 
 `cN` reads `ν` at a `NuShape` body (`scope-831-interface.md` §12); every value-type former has a
 clause. `vN`/`vO` are `vNE`/`vOE`
 at the empty environment: a type variable is its entry's candidate (`False` at the empty
 environment) and `μX. A` is Core's least fixed point, the candidate joint over the mode, the world
-and the index (`scope-831-interface.md` §13). `VTy.inFrag`/`CTy.inFrag` mark the formers read;
-`JdgInFrag Γ j` a judgment whose context and type use only those; `Const791.InFrag` a constant
-whose type does.
+and the index (`scope-831-interface.md` §13). The active `fundamentalN_all` has no fragment
+premise. The retired predicates classified context/result types, not use of handler rules;
+they did not provide a handler-free fundamental theorem. The three missing compatibility
+rules remain `MissingN`/`HandlerLawN`.
 
 ## 4. The row and the constants' premises
 
@@ -285,15 +286,16 @@ the Mut Frame across the row's raises (`erwp_M_frameR`) and the claim's consiste
 
 Each `*S_compat` proves the constant a value of `!` its type at every `δ`, world and index, from
 `Const791.OK`'s clauses and, where the constant has a finaliser, the finaliser's semantic judgment
-`hd`. `constN_*` reads `hd` off `FundamentalN` at the finaliser's derivation; `constN_all` reads it
-off `fundamentalN_all`, with no fragment premise.
+`hd`. `constNAt_all` reads `hd` off `fundamentalN_all` with the same `MissingN` hypothesis;
+`constN_all` specializes it to the empty extern context. Concrete finalisers also have direct
+semantic proofs, used by the instances below without `MissingN` or `HandlerLawN`.
 
-| Constant | Compat lemma | `ConstN` | Instance, every hypothesis discharged |
+| Constant | Compat lemma | General semantic assembly | Instance, every hypothesis discharged |
 |---|---|---|---|
-| `w2` | `withbor2S_compat` | `constN_w2 : FundamentalN → InFrag → ConstN` | `withbor2S_inst`; `w2_ok`; `withbor2S_perform` (a callback that stops at a must-resume operation holding the borrow) |
-| `w3` | `withbor3S_compat` | `constN_w3 : FundamentalN → InFrag → ConstN` | `withbor3S_inst`; `w3_ok` |
-| `wF` | `withborFS_compat` | `constN_wF : FundamentalN → InFrag → ConstN` | `withborFS_inst`; `wF_ok` |
-| `wl` | `withloadS_compat` | `constN_wl : ConstN` (no finaliser) | `withloadS_inst`, `constN_wl_inst`; `wl_ok` |
+| `w2` | `withbor2S_compat` | `constNAt_all` at `.w2` (from `MissingN`) | `withbor2S_inst`; `w2_ok`; `withbor2S_perform` (a callback that stops at a must-resume operation holding the borrow) |
+| `w3` | `withbor3S_compat` | `constNAt_all` at `.w3` (from `MissingN`) | `withbor3S_inst`; `w3_ok` |
+| `wF` | `withborFS_compat` | `constNAt_all` at `.wF` (from `MissingN`) | `withborFS_inst`; `wF_ok` |
+| `wl` | `withloadS_compat` | `constN_wl : ∀ Δ, ConstNAt Δ [] [] (.wl …)` (no finaliser) | `withloadS_inst`, `constN_wl_inst`; `wl_ok` |
 
 The instances are at the hardest case's row (`hardestRow`, `hardestRow_suspend`) and the bound
 `LifeCtx.empty.meetOfDom`; finalisers `dFree` (`λr. free r`) and `dRelease` (`λr. ()`, Core's
@@ -349,15 +351,12 @@ Core's `lifeBound_of_tagged`), which is why the entry tie matches a record's lif
 | Statement | Meaning |
 |---|---|
 | `ConstN c` | `c.OK → ∀ δ Θ n, Θ.OK → vN (! c.ty) δ Θ n c.val ∅` |
-| `ConstsN` | `ConstN c` for every `c` with `c.InFrag` |
-| `FundamentalN` | every `CDerives Δ Γ e j` with `JdgInFrag Γ j` gives `SemJN Δ Γ e j` |
 | `MissingN` | `HandleVN ∧ HandleVBN ∧ ReifyN`: the three rules with no compatibility lemma, each as its `*_compatN` would be |
 | `HandlerLawN` | a structure of the same three fields, a `Prop` hypothesis in `PinLaw`'s form |
-| `Goal791N` | every closed program typed at `F 1` from constants meeting their premises, its handlers inside it, is `OrDiverges` |
+| `Goal791N` | every program typed at `F R`, persistent `R`, from `Const791.OKAt` constants and `ExternsMeetN` externs, closed by their values, is `OrDiverges` |
 
 ```
 fundamentalN_all : MissingN → CDerives Δ Γ e j → SemJN Δ Γ e j
-fundamentalN_of  : MissingN → FundamentalN
 constN_all       : MissingN → ∀ c, ConstN c
 goal791N         : HandlerLawN → Goal791N
 ```
@@ -432,6 +431,9 @@ choice: a configuration that forces it, or a return to Core's reading. `scope-83
   (#821).
 
 ## Appendix A. History
+
+The fragment interfaces mentioned below describe earlier commits. They are retired; the
+current unrestricted theorem and its assumptions are listed in §6.4.
 
 Each paragraph is one attempt, oldest first. The detailed scope documents of each step are in git
 history: `docs/new-core/scope-791-rule.md` and `docs/new-core/scope-791-loctype.md` at 9ba78899.
