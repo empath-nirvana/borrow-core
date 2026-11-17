@@ -130,6 +130,7 @@ core-withlocal-class 1 0 0 4 4 0
 core-withlocal-nested 0 0 0 4 4 0
 core-withlocal-owned 2 0 0 4 4 0
 core-withlocal-unit 0 0 0 0 0 0
+core-withlocal-unwind 2 0 0 5 5 0
 core-withlocal-widths 0 0 0 14 14 0
 data-json-map-ser 16 0 0 699 420 205
 deep-gen-count 0 3 0 0 0 0
