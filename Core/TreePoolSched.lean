@@ -1,6 +1,7 @@
 import Core.TreePoolShare
 import Core.TreeHeadlines
 import Core.TreeSchedProgs
+import Core.Chain.SchedProgs
 
 /-!
 # Pool-scheduler adequacy: a scheduler handler whose invariant covers the running task and its pool  `[spec §62]`
@@ -60,16 +61,6 @@ open BoCa.Fig16.Tree
 open BoCa.Fig16.BoLo
 open BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Kont hndE hndVal)
-
-/-- **The scheduler's state**: the stored entries, each its tag beside its continuation, as a list
-value, `inj₁ ((tag, κ), rest)` or `inj₂ ()`. -/
-def poolVal : List StoredJ → Val
-  | [] => Val.inj₂ Val.unit
-  | s :: ss => Val.inj₁ (Val.pair (Val.pair s.tag s.t.κ) (poolVal ss))
-
-/-- **The scheduler's state**: its own handler value, so a clause can run a task under it (a new
-task, or a stored task's cancel branch) without naming itself, and its stack. -/
-def stateVal (H : Val) (ss : List StoredJ) : Val := Val.pair H (poolVal ss)
 
 /-- **A scheduler answer at index `k`** (`PoolAns` closes it downward): `f` applied to any stack
 meeting `Inv` whose tasks are good at `k` (run under `H`, held at index at least `k`, and answer

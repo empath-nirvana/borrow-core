@@ -98,6 +98,7 @@ def Const.renameLife (f : Span → String → Life) : Const → Const
   | .releaseBang A => .releaseBang (A.renameLife f)
   | .withbor1 x A B => .withbor1 (x.renameLife f) (A.renameLife f) (B.renameLife f)
   | .withbor2 x b A B => .withbor2 (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f)
+  | .withlocal x b A B => .withlocal (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f)
   | .withbor3 a x A B => .withbor3 (a.renameLife f) (x.renameLife f) (A.renameLife f) (B.renameLife f)
   | .withload a x A B => .withload (a.renameLife f) (x.renameLife f) (A.renameLife f) (B.renameLife f)
   | .withswap a A B => .withswap (a.renameLife f) (A.renameLife f) (B.renameLife f)

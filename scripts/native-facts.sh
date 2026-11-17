@@ -8,9 +8,9 @@
 #     both are `clang -O2`;
 #   * `alwaysinline`: no call of a function the word IR asks to inline (`Fn.inline`) is left in the
 #     `clang -O2` IR of the build with its facts;
-#   * the frame slots: the cells the new backend places in a frame slot per run are at least the
+#   * local placement: frame slots plus checked register-promoted locals per run are at least the
 #     old backend's, in every program where the old backend has a scoped cell (`bcc-counts
-#     --sites`' `scoped-cells`): `bcc-counts --frames`, the frame slots a run starts at the flat IR;
+#     --sites`' `scoped-cells`): physical frames plus checked locals promoted to registers;
 #   * the lend bits (`Fn.lendEncl`): every function with a borrow fact is a source function, the
 #     code of a source `λ`, thunk or `&` (`lam`, `thunk`, `with`). The functions are read off the
 #     word IR's `Fn.facts` (`bcc trusted`'s `LendEnclosesFn` lines), not the emitted attributes,
@@ -77,17 +77,20 @@ program() {
     done
     if [ -n "$left" ]; then echo "$f: alwaysinline, but called after -O2:$left"; return 1; fi
   fi
-  # Frame slots: the cells the new backend places in a frame slot per run at least the old
-  # backend's, where the old backend has a scoped cell (`--sites`); counted at the flat IR.
-  old=""; new=""
+  # Physical frame slots plus checked register-promoted locals must cover the old backend's
+  # frame slots. Both counts are dynamic; a promoted local is not an actual frame slot.
+  old=""; new=""; registers=0
   # A program the old backend refuses (`-- check: old-backend-refuses`) has no old count to compare.
   if ! grep -q '^-- check: old-backend-refuses' "$f" && [ "$("$bccCounts" --sites "$f" 2>/dev/null | sed -n 's/.*scoped-cells framed \([0-9]*\).*/\1/p')" != 0 ]; then
     old=$("$bccCounts" --backend old --frames "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>/dev/null | sed -n 's/^slots //p')
     new=$("$bccCounts" --backend new --frames "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>/dev/null | sed -n 's/^slots //p')
     if [ -z "$old" ] || [ -z "$new" ]; then echo "$f: no frame slot counts (old '$old', new '$new')"; return 1; fi
     if [ "$new" -lt "$old" ]; then
-      echo "$f: $new frame slots per run, the old backend's $old"
-      return 1
+      registers=$("$bccCounts" --backend new --registers "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>/dev/null | sed -n 's/^registers //p')
+      if [ -z "$registers" ] || [ "$((new + registers))" -lt "$old" ]; then
+        echo "$f: $new frame slots and ${registers:-unknown} register locals per run, the old backend's $old frame slots"
+        return 1
+      fi
     fi
   fi
   # The lend bits: the functions with a borrow fact, from the word IR (`bcc trusted`).
@@ -161,7 +164,7 @@ program() {
       echo "$f: the willreturn pair is gone (class '$(echo $have)', found '$out')"; return 1
     fi
   fi
-  echo "$f: ok${new:+ (frame slots $new, old $old)}${fns:+ (inlined $(echo $fns | wc -w | tr -d ' '))} (facts at $(wc -l < "$w/facted" | tr -d ' ') functions, willreturn at $(wc -l < "$w/wr" | tr -d ' '))"
+  echo "$f: ok${new:+ (frame slots $new, register locals $registers, old $old)}${fns:+ (inlined $(echo $fns | wc -w | tr -d ' '))} (facts at $(wc -l < "$w/facted" | tr -d ' ') functions, willreturn at $(wc -l < "$w/wr" | tr -d ' '))"
 }
 export -f program argsOf statusOf
 par program "${files[@]}"

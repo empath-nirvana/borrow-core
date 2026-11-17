@@ -541,6 +541,7 @@ keyword because each mode is a separate theorem.
 | form | type / conclusion | erasure | theorem | side conditions |
 |---|---|---|---|---|
 | `alloc_s[σ]` | `val σ => block σ` | `allocS σ` `Bl:77` | `d_allocS` `Bl:103` | none |
+| `withlocal['x, @b, A, B]` | `A => (all 'x < dom. mut 'x A => box 'x B) => A * B` | `withlocalE` (`Core/Local.lean`, SPEC §80) | `withlocal_wf` | `x` fresh; `Δ ⊢ A ⊒ @b`; `x` free in neither `A` nor `B` |
 | `free_s[σ]` | `block σ => val σ` | `freeS σ` `Bl:83` | `d_freeS` `Bl:115` | none |
 | `withbor_s_mut[σ, 'c, T]` | `block σ => (all 'c < dom. fam mut 'c σ => box 'c T) => block σ * T` | `withborS σ` `BB:344` | `withborSM_wf` `BB:553` | `σ.plain`, `plainV T` (`BB:47,106`); `Δ.Ok`; `'c` fresh |
 | `withbor_s_imm[σ, 'c, T]` | the same with `fam imm` | `withborS σ` | `withborSI_wf` `BB:559` | the same |

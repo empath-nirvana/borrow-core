@@ -136,6 +136,9 @@ structure Fn where
   /-- The words of the function's frame: its slots (`Exp.slot`), taken from the stack on entry
   and given back on return. -/
   frame : Nat := 0
+  /-- Checked plain local cells promoted to registers in this straight-line function. A dynamic
+  diagnostic counts these per invocation; targets emit no instruction for this metadata. `[spec §80]` -/
+  promotedLocals : Nat := 0
   body : List Stmt
   /-- The locals (parameters among them) that hold an address, by their layout: a target with
   typed pointers holds them as pointers. Empty for a producer that does not say. -/

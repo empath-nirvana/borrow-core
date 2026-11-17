@@ -54,6 +54,8 @@ structure FState where
   bounds : Nat := 0
   /-- Frame slots started so far (`Exp.slot`). -/
   slotsStarted : Nat := 0
+  /-- Plain locals eliminated by scalar replacement, counted once per function invocation. -/
+  registerLocals : Nat := 0
   /-- The end of the read-only data: an address below it is not freed. -/
   staticEnd : Nat := 0
   /-- Live frame slots: start ↦ length in words. They are not ranges: `live` does not count
@@ -316,7 +318,7 @@ def callFn (p : Prog) : Nat → Nat → List UInt64 → Option Nat → FM (List 
     -- The frame: a fresh range of addresses, as a stack frame's is when the stack is reused.
     let fp := (← get).next
     modify fun st => { st with next := st.next + (if fn.frame == 0 then 0 else 8 * fn.frame + 8),
-                               frames := (fp, fn.frame) :: st.frames }
+                               frames := (fp, fn.frame) :: st.frames, registerLocals := st.registerLocals + fn.promotedLocals }
     let r ← execBlock p n fr fn.body
     endFrame
     modify fun st => { st with frames := st.frames.drop 1 }
@@ -428,6 +430,7 @@ structure MemCounts where
   stores : Nat
   bounds : Nat
   slots : Nat := 0
+  registers : Nat := 0
 
 /-- Run the entry function on the standard input `input`: what it writes, and its memory
 operations. -/
@@ -443,7 +446,7 @@ def interpMem (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 :=
   let (_, s) ← (callFn p fuel p.entry [] (some 0)).run
     { mem, ranges := {}, next, input, args, out := .empty, err := .empty,
       staticEnd := if L == 0 then 0 else staticEnd L }
-  pure (⟨s.out, s.err, s.status⟩, { loads := s.loads, stores := s.stores, bounds := s.bounds, slots := s.slotsStarted })
+  pure (⟨s.out, s.err, s.status⟩, { loads := s.loads, stores := s.stores, bounds := s.bounds, slots := s.slotsStarted, registers := s.registerLocals })
 
 /-- Run the entry function on the standard input `input`: what it writes. -/
 def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []) :

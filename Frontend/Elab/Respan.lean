@@ -100,6 +100,7 @@ def Const.respan (sp : Span) : Const → Const
   | .releaseBang A => .releaseBang (A.respan sp)
   | .withbor1 x A B => .withbor1 (x.respan sp) (A.respan sp) (B.respan sp)
   | .withbor2 x b A B => .withbor2 (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp)
+  | .withlocal x b A B => .withlocal (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp)
   | .withbor3 a x A B => .withbor3 (a.respan sp) (x.respan sp) (A.respan sp) (B.respan sp)
   | .withload a x A B => .withload (a.respan sp) (x.respan sp) (A.respan sp) (B.respan sp)
   | .withswap a A B => .withswap (a.respan sp) (A.respan sp) (B.respan sp)
