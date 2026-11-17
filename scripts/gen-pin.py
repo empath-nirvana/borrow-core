@@ -261,7 +261,7 @@ NAME_TY = {"A": "VTy", "B": "VTy", "R": "VTy", "S": "VTy", "T": "VTy", "C": "CTy
            "a": "Lifetime.Life", "b": "Lifetime.Life", "x": "LifeVar", "y": "LifeVar",
            "i": "Nat", "j": "Jdg"}
 EXPR_NAMES = {"e", "e₁", "e₂", "M", "N", "V", "H", "f", "d", "M₁", "M₂", "K", "s0"}
-DATA_TY = {"VTy", "CTy", "Row", "LifeVar", "Lifetime.Life", "IntLit", "HostOp", "FShape", "Expr",
+DATA_TY = {"LendUKind", "VTy", "CTy", "Row", "LifeVar", "Lifetime.Life", "IntLit", "HostOp", "FShape", "Expr",
            "Jdg", "OpSig", "UInt32", "Nat", "List (Qual × VTy × VTy)", "Nat → CTy", "Val"}
 TOKEN = r"[^\s()\[\]{}⟨⟩,.:]+"
 # erasures that are a `λ` whatever the children's (`withPair M N = λs. case s {…}`)
@@ -1013,8 +1013,14 @@ xrules = [XRule(n, rest) for n, rest in ctor_texts("\n".join(xind) + "\nend", "i
 XGLOBAL = {r.name: f"BoCa.{r.name}" for r in xrules}
 if [r.name for r in xrules if not r.pin] != [n for n, _ in ctors]:
     sys.exit("gen-pin: CDerivesX's rules and CDerives's differ")
+# Derived rules: theorems `CDerivesX.<name> {I : JIdx} …` written after the inductive in
+# `Core/Judgment.lean` (a rule's former name, now a kind of a folded rule). Each instance gets them
+# under its own name, as it gets the rules.
+DERIVED_RULES = [XRule(m.group(1), m.group(2)) for m in re.finditer(
+    r"^theorem CDerivesX\.(\w+) \{I : JIdx\} (.*?) :=\n", judg_src, re.S | re.M)]
 jel = (TMPL / "JudgmentElim.tmpl.lean").read_text()
-jel = jel.replace("--@ALIASES@", "\n\n".join(alias(r, inst) for inst in INSTANCES for r in xrules
+jel = jel.replace("--@ALIASES@", "\n\n".join(alias(r, inst) for inst in INSTANCES
+                                                for r in xrules + DERIVED_RULES
                                                 if inst[4] or not r.pin))
 jel = jel.replace("--@ELIMS@", "\n\n".join(elim(xrules, inst) for inst in INSTANCES))
 jel = jel.replace("--@MONO_CASES@", mono(xrules))

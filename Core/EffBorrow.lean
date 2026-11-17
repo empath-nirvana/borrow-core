@@ -258,6 +258,46 @@ def withbor3UTyD (a : Lifetime.Life) (x : LifeVar) (bnd : Lifetime.Life) (A B : 
     VTy :=
   withborUTy (.mut a A) (cbUTy x bnd (.mut (.var x) A) B SM) S (.tensor (.mut a A) B)
 
+/-! ### The kinds of unwinding lend  `[spec §78]` -/
+
+/-- The kinds of unwinding lend: `Ref A` lent as `Imm 'x A` (`withbor (1)`), `Ref A` lent as
+`Mut 'x A` (`(2)`), `Mut @a A` reborrowed as `Mut 'x A` (`(3)`).  `[spec §78]` -/
+inductive LendUKind where
+  | refImm
+  | refMut
+  | reborrow (a : Lifetime.Life)
+  deriving DecidableEq, Repr, Inhabited
+
+/-- The kind's lent source.  `[spec §78]` -/
+def LendUKind.src : LendUKind → VTy → VTy
+  | .refImm, A => .ref A
+  | .refMut, A => .ref A
+  | .reborrow a, A => .mut a A
+
+/-- The callback's leaf at the lend's lifetime `x`.  `[spec §78]` -/
+def LendUKind.leaf : LendUKind → LifeVar → VTy → VTy
+  | .refImm, x, A => .imm (.var x) A
+  | .refMut, x, A => .mut (.var x) A
+  | .reborrow _, x, A => .mut (.var x) A
+
+/-- The kind's side condition on the contents `A`.  `[spec §78]` -/
+def LendUKind.OK : LendUKind → LifeCtx → VTy → Prop
+  | .refImm, Δ, A => VScoped Δ A
+  | .refMut, Δ, A => ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A
+  | .reborrow _, _, _ => True
+
+/-- The kind's constant type: `U(src ⊸ (∀'x ⊏ @bnd. leaf ⊸ F_{Σ_M}(['x] B)) ⊸ F_Σ(src ⊗ B))`;
+`withbor1UTyD`, `withbor2UTyD`, `withbor3UTyD` at the three kinds.  `[spec §78]` -/
+def LendUKind.ty (k : LendUKind) (x : LifeVar) (bnd : Lifetime.Life) (A B : VTy) (SM S : Row) : VTy :=
+  withborUTy (k.src A) (cbUTy x bnd (k.leaf x A) B SM) S (.tensor (k.src A) B)
+
+theorem LendUKind.ty_refImm (x bnd A B SM S) :
+    LendUKind.refImm.ty x bnd A B SM S = withbor1UTyD x bnd A B SM S := rfl
+theorem LendUKind.ty_refMut (x bnd A B SM S) :
+    LendUKind.refMut.ty x bnd A B SM S = withbor2UTyD x bnd A B SM S := rfl
+theorem LendUKind.ty_reborrow (a x bnd A B SM S) :
+    (LendUKind.reborrow a).ty x bnd A B SM S = withbor3UTyD a x bnd A B SM S := rfl
+
 theorem withbor1UTyD_self (x : LifeVar) (bnd : Lifetime.Life) (A B : VTy) (S : Row) :
     withbor1UTyD x bnd A B S S = withbor1UTy x bnd A B S := rfl
 
@@ -706,6 +746,20 @@ theorem withbor1U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
     SemV Δ Γ (withborUE d) (withbor1UTy x Δ.meetOfDom A B S) :=
   withbor1UD_compatX x hΓ hsc₁ hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
     (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
+
+/-- **The unwinding lend of kind `k`**: by kind, `withbor1UD_compatX`, `withbor2UD_compatX`,
+`withbor3UD_compatX`.  `[spec §78]` -/
+theorem withborUD_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {SM SD S : Row} {d : Expr}
+    (k : LendUKind) (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hk : k.OK Δ A)
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x)
+    (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
+    (hPend : SD.UnrD → SM.PendPers)
+    (hd : SemV Δ Γ d (.thunk (.arr (k.src A) (CTy.effOf SD .unit)))) :
+    SemV Δ Γ (withborUE d) (k.ty x Δ.meetOfDom A B SM S) := by
+  cases k with
+  | refImm => exact withbor1UD_compatX x hΓ hk hfree₁ hfree₂ hS hMS hDS hSv hPend hd
+  | refMut => exact withbor2UD_compatX x hΓ hk hfree₁ hfree₂ hS hMS hDS hSv hPend hd
+  | reborrow a => exact withbor3UD_compatX x hΓ hfree₁ hfree₂ hS hMS hDS hSv hPend hd
 
 /-! ### `withload`, unwinding -/
 

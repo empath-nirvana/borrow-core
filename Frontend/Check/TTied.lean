@@ -660,38 +660,17 @@ section
 open BoCa.Fig16.LogRel.Core (VFree VScoped VOutlivesLe Row RowLe CTy withbor1UTyD withbor2UTyD
   withbor3UTyD)
 
-theorem withbor1UFin {p : Pins} {s : CRow} {td : TExpr} {A B : CVTy} {S : CRow} (x : LifeVar)
-    (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc : VScoped Δ A)
+/-- **The unwinding lend of kind `k`** at `Σ_D = ∅`, `Σ_M = Σ`.  `[spec §78]` -/
+theorem withborUFin {p : Pins} {s : CRow} {td : TExpr} {A B : CVTy} {S : CRow}
+    (k : BoCa.Fig16.LogRel.Core.LendUKind) (x : LifeVar)
+    (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) (hx : Δ.find? x = none) (hk : k.OK Δ A)
     (h₁ : ¬ VFree x A) (h₂ : ¬ VFree x B) (hS : Row.Unwind S x)
-    (h : TTied p s Δ Γ td (.val (.thunk (.arr (.ref A) (CTy.effOf [] .unit))))) :
-    TTied p s Δ Γ (.withbor1UD i (.val (withbor1UTyD x Δ.meetOfDom A B S S)) A B S [] S x td)
-      (.val (withbor1UTyD x Δ.meetOfDom A B S S)) :=
-  ⟨fun hn Ξ hΞ => .withbor1UD x hΓ hx hsc h₁ h₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+    (h : TTied p s Δ Γ td (.val (.thunk (.arr (k.src A) (CTy.effOf [] .unit))))) :
+    TTied p s Δ Γ (.withborUD i (.val (k.ty x Δ.meetOfDom A B S S)) A B S [] S k x td)
+      (.val (k.ty x Δ.meetOfDom A B S S)) :=
+  ⟨fun hn Ξ hΞ => .withborUD k x hΓ hx hk h₁ h₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
       (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) (h.1 hn Ξ hΞ),
-    .withbor1UD x hΓ hx hsc h₁ h₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
-      (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) h.2⟩
-
-theorem withbor2UFin {p : Pins} {s : CRow} {td : TExpr} {A B : CVTy} {S : CRow} (x : LifeVar)
-    (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) (hx : Δ.find? x = none)
-    (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-    (h₁ : ¬ VFree x A) (h₂ : ¬ VFree x B) (hS : Row.Unwind S x)
-    (h : TTied p s Δ Γ td (.val (.thunk (.arr (.ref A) (CTy.effOf [] .unit))))) :
-    TTied p s Δ Γ (.withbor2UD i (.val (withbor2UTyD x Δ.meetOfDom A B S S)) A B S [] S x td)
-      (.val (withbor2UTyD x Δ.meetOfDom A B S S)) :=
-  ⟨fun hn Ξ hΞ => .withbor2UD x hΓ hx hside h₁ h₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
-      (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) (h.1 hn Ξ hΞ),
-    .withbor2UD x hΓ hx hside h₁ h₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
-      (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) h.2⟩
-
-theorem withbor3UFin {p : Pins} {s : CRow} {td : TExpr} {a : CLife} {A B : CVTy} {S : CRow}
-    (x : LifeVar) (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) (hx : Δ.find? x = none)
-    (h₁ : ¬ VFree x A) (h₂ : ¬ VFree x B) (hS : Row.Unwind S x)
-    (h : TTied p s Δ Γ td (.val (.thunk (.arr (.mut a A) (CTy.effOf [] .unit))))) :
-    TTied p s Δ Γ (.withbor3UD i (.val (withbor3UTyD a x Δ.meetOfDom A B S S)) a A B S [] S x td)
-      (.val (withbor3UTyD a x Δ.meetOfDom A B S S)) :=
-  ⟨fun hn Ξ hΞ => .withbor3UD x hΓ hx h₁ h₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
-      (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) (h.1 hn Ξ hΞ),
-    .withbor3UD x hΓ hx h₁ h₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+    .withborUD k x hΓ hx hk h₁ h₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
       (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) h.2⟩
 
 end

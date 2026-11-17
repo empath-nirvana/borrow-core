@@ -462,34 +462,17 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
       CDerivesX I Δ Γ withload (.val (axWithloadTy a x Δ.meetOfDom A B))
   | withswap {Δ Γ a A B} (hΓ : Ctx.DeadP Γ) :
       CDerivesX I Δ Γ withswap (.val (axWithswapTy a A B))
-  /-- The unwinding form of `withbor` (1): `Ref A` lent as `Imm 'x A` to a callback at a row
+  /-- The unwinding lend of kind `k` (`LendUKind`): the kind's source lent to a callback at a row
   `Σ_M` of abortive operations; when it unwinds, the finaliser `d` runs on the source at its own
   row `Σ_D`, and the result is at `Σ ≥ Σ_M, Σ_D` (K-b). `d` is typed at the rule's context, whose
-  live slots are persistent, so it may name them. At `Σ_D = ∅`, `Σ_M = Σ` it is
-  `CDerives.withbor1U`.  `[spec §19, §27, §72]` -/
-  | withbor1UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
-      (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
+  live slots are persistent, so it may name them. `withbor1UD`/`withbor2UD`/`withbor3UD` are it at
+  the kinds `refImm`, `refMut`, `reborrow a`.  `[spec §19, §27, §72, §78]` -/
+  | withborUD {Δ Γ A B d} {SM SD S : Row} (k : LendUKind) (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+      (hx : Δ.find? x = none) (hk : k.OK Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
       (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
       (hP : SD.UnrD → SM.PendPers)
-      (hd : CDerivesX I Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
-      CDerivesX I Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S))
-  /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition
-  non-strict, the finaliser at `Σ_D`.  `[spec §19, §23, §27]` -/
-  | withbor2UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
-      (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
-      (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
-      (hP : SD.UnrD → SM.PendPers)
-      (hd : CDerivesX I Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
-      CDerivesX I Δ Γ (withborUE d) (.val (withbor2UTyD x Δ.meetOfDom A B SM S))
-  /-- The unwinding form of `withbor` (3): `Mut @a A` reborrowed as `Mut 'x A`, the finaliser at
-  `Σ_D`.  `[spec §19, §27]` -/
-  | withbor3UD {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
-      (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
-      (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
-      (hP : SD.UnrD → SM.PendPers)
-      (hd : CDerivesX I Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
-      CDerivesX I Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S))
+      (hd : CDerivesX I Δ Γ d (.val (.thunk (.arr (k.src A) (CTy.effOf SD .unit))))) :
+      CDerivesX I Δ Γ (withborUE d) (.val (k.ty x Δ.meetOfDom A B SM S))
   /-- The unwinding form of `withload`: its own term, the source consumed by the load.
   `[spec §19]` -/
   | withloadU {Δ Γ a A B} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
@@ -765,6 +748,42 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   | nilDead {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       (hPin : I.pin = true)
       (hΓ : Ctx.Dead Γ) (h : CDerivesX I Δ [] e j) : CDerivesX I Δ Γ e j
+
+/-! ### Derived rules: the three unwinding lends, the kinds of `withborUD`
+
+`scripts/gen-pin.py` gives each its instances' names (`CDerives.withbor1UD`, …), as it does the
+rules. -/
+
+/-- The unwinding form of `withbor` (1): `Ref A` lent as `Imm 'x A` (`withborUD` at `refImm`).
+At `Σ_D = ∅`, `Σ_M = Σ` it is `CDerives.withbor1U`.  `[spec §19, §27, §72, §78]` -/
+theorem CDerivesX.withbor1UD {I : JIdx} {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
+    (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
+    (hP : SD.UnrD → SM.PendPers)
+    (hd : CDerivesX I Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
+    CDerivesX I Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S)) :=
+  .withborUD .refImm x hΓ hx hsc₁ hfree₁ hfree₂ hS hMS hDS hSv hP hd
+
+/-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition
+non-strict (`withborUD` at `refMut`).  `[spec §19, §23, §27, §78]` -/
+theorem CDerivesX.withbor2UD {I : JIdx} {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
+    (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
+    (hP : SD.UnrD → SM.PendPers)
+    (hd : CDerivesX I Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
+    CDerivesX I Δ Γ (withborUE d) (.val (withbor2UTyD x Δ.meetOfDom A B SM S)) :=
+  .withborUD .refMut x hΓ hx hside hfree₁ hfree₂ hS hMS hDS hSv hP hd
+
+/-- The unwinding form of `withbor` (3): `Mut @a A` reborrowed as `Mut 'x A` (`withborUD` at
+`reborrow a`).  `[spec §19, §27, §78]` -/
+theorem CDerivesX.withbor3UD {I : JIdx} {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
+    (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
+    (hP : SD.UnrD → SM.PendPers)
+    (hd : CDerivesX I Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
+    CDerivesX I Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) :=
+  .withborUD (.reborrow a) x hΓ hx trivial hfree₁ hfree₂ hS hMS hDS hSv hP hd
 
 /-- The kernel's typing judgment: `CDerivesX` with no tie.  `[spec §3, §10, §83]` -/
 abbrev CDerives := CDerivesX {}

@@ -2812,7 +2812,7 @@ def constArity : TExpr → Option Nat
   | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .boundedFix .. => some 1
   | .withlocal .. | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
-  | .withborF2I .. | .withbor1UD .. | .withbor2UD .. | .withbor3UD .. | .withloadU ..
+  | .withborF2I .. | .withborUD .. | .withloadU ..
   | .sliceBorrowMU .. | .sliceBorrowIU .. => some 2
   | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. => some 0
   | _ => none
@@ -3196,8 +3196,7 @@ whose typed term is converted at the head's context (`withborUE d` places `d` in
 context, SPEC §72). `none` at any other head and at a constant finaliser, which needs no slot. -/
 def finTerm? (hd : TExpr) : Option TExpr :=
   match hd with
-  | .withbor1UD _ _ _ _ _ _ _ _ td | .withbor2UD _ _ _ _ _ _ _ _ td
-  | .withbor3UD _ _ _ _ _ _ _ _ _ td
+  | .withborUD _ _ _ _ _ _ _ _ _ td
   | .sliceBorrowMU _ _ _ _ _ _ td | .sliceBorrowIU _ _ _ _ _ _ td =>
     if constArity (headOf 64 td) == some 1 then none else some td
   | _ => none
@@ -3210,7 +3209,7 @@ abbrev FinApp := Ctx × (Ctx → Var → CM Tm)
 /-- **The context of an unwinding borrow's finaliser**, at a borrow head `hd` whose context is
 `ctx`: a non-constant finaliser is converted on the abort arm at a copy of `ctx`, made here, before
 the head's leaf consumes `ctx`; the borrow consumes the copies on its value arm. Every live slot
-is persistent (the rule's `Ctx.DeadP Γ`, `withbor1UD`'s `hΓ`), so the copy is a split's `dup`
+is persistent (the rule's `Ctx.DeadP Γ`, `withborUD`'s `hΓ`), so the copy is a split's `dup`
 (`Lint` checks it). `app` applies a finaliser's typed term to the owner at a context (`applyTo`,
 passed in so that the borrow's expansion makes no call back into the conversion). At any other
 head: no copy, and `none`.  `[spec §19, §72]` -/
@@ -4209,7 +4208,7 @@ where
   cbConst : TExpr → Bool
     | .withlocal .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .sliceBorrowM ..
     | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I ..
-    | .withbor1UD .. | .withbor2UD .. | .withbor3UD .. | .withloadU .. | .sliceBorrowMU ..
+    | .withborUD .. | .withloadU .. | .sliceBorrowMU ..
     | .sliceBorrowIU .. => true
     | _ => false
   go (fuel : Nat) (ctx : Ctx) : List (Masks × TExpr) → List Var → TExpr → LTy → CM Tm
@@ -4360,6 +4359,14 @@ where
         if k == 0 then expand fuel c got'.reverse.reverse rT dctx'
         else curry fuel c rT got' k dctx'
 
+
+/-- **The lowering's operation at an unwinding lend's kind**, read off the node (`LendUKind`):
+`lend imm` at `refImm`, `lend mut` at `refMut`, `relend` at a reborrow.  `[spec §78]` -/
+def lendUOp : LendUKind → Op
+  | .refImm => .lend false
+  | .refMut => .lend true
+  | .reborrow _ => .relend
+
 /-- **An unwinding borrow** (`withborUE d`, SPEC §19): `(f [] r) then b. (r, b) unwind d r`. The
 owner lent as `genLend` does; the callback's value `b` gives `(r, b)`; its abort ends the lend, runs
 the finaliser `d` on the owner, and is handed on (`then_fin`), as `[then]`'s abort arm (`thenFin`).
@@ -4443,11 +4450,9 @@ def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM 
   | .withswap .. => genWithswap x cbT call
   | .withborSM .. | .withborF2M .. => genLendTree true x cbT call
   | .withborSI .. | .withborF2I .. => genLendTree false x cbT call
-  | .withbor1UD _ _ _ _ SM SD S _ td => genLendU _fuel (.lend false) x cbT call SM S (some SD) td dctx
+  | .withborUD _ _ _ _ SM SD S k _ td => genLendU _fuel (lendUOp k) x cbT call SM S (some SD) td dctx
   | .sliceBorrowIU _ _ _ _ S _ td => genLendU _fuel (.lend false) x cbT call S S none td dctx
-  | .withbor2UD _ _ _ _ SM SD S _ td => genLendU _fuel (.lend true) x cbT call SM S (some SD) td dctx
   | .sliceBorrowMU _ _ _ _ S _ td => genLendU _fuel (.lend true) x cbT call S S none td dctx
-  | .withbor3UD _ _ _ _ _ SM SD S _ td => genLendU _fuel .relend x cbT call SM S (some SD) td dctx
   | .withloadU .. => genWithload x cbT call
   | c => throw s!"LIR: `{ruleName c}` is not a borrow (answer {resT})"
 
@@ -4515,16 +4520,12 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) (dctx : Optio
     freeTree v vT
   | .withborSM .., [x, cb] | .withborF2M .., [x, cb] => genLendTree true x (← tyOf cb) (callCb cb)
   | .withborSI .., [x, cb] | .withborF2I .., [x, cb] => genLendTree false x (← tyOf cb) (callCb cb)
-  | .withbor1UD _ _ _ _ SM SD S _ td, [x, cb] =>
-    genLendU fuel (.lend false) x (← tyOf cb) (callCb cb) SM S (some SD) td dctx
+  | .withborUD _ _ _ _ SM SD S k _ td, [x, cb] =>
+    genLendU fuel (lendUOp k) x (← tyOf cb) (callCb cb) SM S (some SD) td dctx
   | .sliceBorrowIU _ _ _ _ S _ td, [x, cb] =>
     genLendU fuel (.lend false) x (← tyOf cb) (callCb cb) S S none td dctx
-  | .withbor2UD _ _ _ _ SM SD S _ td, [x, cb] =>
-    genLendU fuel (.lend true) x (← tyOf cb) (callCb cb) SM S (some SD) td dctx
   | .sliceBorrowMU _ _ _ _ S _ td, [x, cb] =>
     genLendU fuel (.lend true) x (← tyOf cb) (callCb cb) S S none td dctx
-  | .withbor3UD _ _ _ _ _ SM SD S _ td, [m, cb] =>
-    genLendU fuel .relend m (← tyOf cb) (callCb cb) SM S (some SD) td dctx
   | .withloadU .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .foldOwn _ _ F _, [g] | .foldReuse _ _ F _, [g] => do
     let k : FoldKind := match c with | .foldReuse .. => .reuse | _ => .own

@@ -423,12 +423,8 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
   | withbor3 x hΓ hx hf₁ hf₂ => exact withbor3_compatX x hΓ hx hf₁ hf₂
   | withload x hΓ hx hf₁ hf₂ => exact withload_compatX x hΓ hx hf₁ hf₂
   | withswap hΓ => exact withswap_compatX hΓ
-  | withbor1UD x hΓ _ hsc₁ hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
-      exact withbor1UD_compatX x hΓ hsc₁ hf₁ hf₂ hS hMS hDS hSv hP ihd
-  | withbor2UD x hΓ _ hside hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
-      exact withbor2UD_compatX x hΓ hside hf₁ hf₂ hS hMS hDS hSv hP ihd
-  | withbor3UD x hΓ _ hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
-      exact withbor3UD_compatX x hΓ hf₁ hf₂ hS hMS hDS hSv hP ihd
+  | withborUD k x hΓ _ hk hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
+      exact withborUD_compatX k x hΓ hk hf₁ hf₂ hS hMS hDS hSv hP ihd
   | withloadU x hΓ _ hf₁ hf₂ hS => exact withloadU_compatX x hΓ hf₁ hf₂ hS
   | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
       exact sliceBorrowMU_compatX x hΓ hA hB hf₁ hf₂ hS ihd

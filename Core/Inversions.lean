@@ -1102,8 +1102,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       · obtain ⟨T, hT⟩ := ihN (k + 1) (hasVar_fill hcl _ 0 (k + 1) (by omega) hk)
         exact ⟨T, slot_succ hT⟩
       · exact absurd hk (not_hasVar_closed hcl)
-  | withbor1UD _ _ _ _ _ _ _ _ _ _ _ _ ih | withbor2UD _ _ _ _ _ _ _ _ _ _ _ _ ih
-  | withbor3UD _ _ _ _ _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
+  | withborUD _ _ _ _ _ _ _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
   | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih =>
       intro k hk; exact ih k (hasVar_withborUE hk)
   | foldImm => intro k hk; exact absurd hk (not_hasVar_closed (foldImmV_closed _))
@@ -2369,13 +2368,7 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | releaseUnk =>
       intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inr (.inr rfl))⟩))
   | arrRelease => intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inr ⟨_, _, rfl⟩))
-  | withbor1UD x =>
-      intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
-  | withbor2UD x =>
-      intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
-  | withbor3UD x =>
+  | withborUD _ x =>
       intro M he
       exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
   | sliceBorrowMU x =>
