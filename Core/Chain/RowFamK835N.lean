@@ -218,14 +218,14 @@ theorem tabF_finF_N (vr : VRel) (g : KW → KW) (δ : LSub) : ∀ F : CTy,
       have hf := tabF_finF_N vr g δ fin
       have hC := tabF_finF_N vr g δ C
       refine ⟨fun x => ?_, ?_⟩
-      · simp only [tabF, tabNK, hf.2, hC.1]; rfl
-      · simp only [finF, finNK, hf.2, hC.1]; rfl
-  | .ret _ => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]; rfl⟩
-  | .arr _ _ => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]; rfl⟩
-  | .amp _ _ => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]; rfl⟩
-  | .top => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]⟩
-  | .all _ _ _ => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]; rfl⟩
-  | .nuSys _ _ _ => ⟨fun _ => by simp [tabF, tabNK], by simp [finF, finNK]; rfl⟩
+      · simp only [tabF, tabNK, hf.2, hC.1, tabCK, finCK, cancelOblCK, finNK, cancelOblK]; rfl
+      · simp only [finF, finNK, hf.2, hC.1, tabCK, finCK, cancelOblCK, tabNK, cancelOblK]; rfl
+  | .ret _ => ⟨fun _ => by simp [tabF, tabNK, tabCK, finCK, cancelOblCK, finNK, cancelOblK], by simp [finF, finNK, tabCK, finCK, cancelOblCK, tabNK, cancelOblK]; rfl⟩
+  | .arr _ _ => ⟨fun _ => by simp [tabF, tabNK, tabCK, finCK, cancelOblCK, finNK, cancelOblK], by simp [finF, finNK, tabCK, finCK, cancelOblCK, tabNK, cancelOblK]; rfl⟩
+  | .amp _ _ => ⟨fun _ => by simp [tabF, tabNK, tabCK, finCK, cancelOblCK, finNK, cancelOblK], by simp [finF, finNK, tabCK, finCK, cancelOblCK, tabNK, cancelOblK]; rfl⟩
+  | .top => ⟨fun _ => by simp [tabF, tabNK, tabCK, finCK, cancelOblCK, finNK, cancelOblK], by simp [finF, finNK, tabCK, finCK, cancelOblCK, tabNK, cancelOblK]⟩
+  | .all _ _ _ => ⟨fun _ => by simp [tabF, tabNK, tabCK, finCK, cancelOblCK, finNK, cancelOblK], by simp [finF, finNK, tabCK, finCK, cancelOblCK, tabNK, cancelOblK]; rfl⟩
+  | .nuSys _ _ _ => ⟨fun _ => by simp [tabF, tabNK, tabCK, finCK, cancelOblCK, finNK, cancelOblK], by simp [finF, finNK, tabCK, finCK, cancelOblCK, tabNK, cancelOblK]; rfl⟩
   termination_by structural F => F
 
 /-- **The typed tables are the family at the one-mode reading**: `tabNK vr g` is

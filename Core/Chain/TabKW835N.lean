@@ -44,44 +44,28 @@ open BoCa.BoLo (Heap Kont performE raiseE cancelVal opPayload)
 /-! ### The lender's guarded twin at the typed world -/
 
 /-- **The cancel run at a guarded table, ending at a claim, at the typed world** (`cancelOblGN`):
-at the view and the floor of `g y`, its stops at `T`'s entries guarded by `G`. -/
+at the view and the floor of `g y`, its stops at `T`'s entries guarded by `G` (`cancelOblCK` at
+`cancelTabGRK`). -/
 def cancelOblGK (g : KW → KW) (T : KW → OpTabK KW) (G : ShareG) (R : Nat → WProp) :
     KW → Nat → List SRec → Expr → WProp :=
-  fun y k ls e => erwpK (ℍ := ℍ) KW.PostK (fun z => (g z).Θ.view (g z).c)
-    (fun z => cancelTabGRK (g z).lo (T z) G R) (fun _ _ _ _ _ => False) y k ls e
+  cancelOblCK (ℍ := ℍ) (fun _ lo T => cancelTabGRK lo T G R) g T
 
-mutual
 /-- **The lender's guarded table at the typed world**: `tabRK`'s entries, every
-capturable one's cancel run at its cancel row's own guarded table, ending at `R`. -/
+capturable one's cancel run at its cancel row's own guarded table, ending at `R` (`tabCK` at
+`cancelTabGRK`). -/
 def tabGK (R : Nat → WProp) (G : ShareG) (vr : VRel) (g : KW → KW) :
-    CTy → LSub → KW → OpTabK KW
-  | .eff m i q A B fin _ C, δ, x => extTabK m i
-      (entNK q B (fun k v ρ => vr A δ x.Θ k v ρ)
-        (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
-        (finGK R G vr g fin δ) (fun f y ρ => (g x).Owed f (g y) ρ))
-      (tabGK R G vr g C δ x)
-  | _, _, _ => OpTabK.empty
+    CTy → LSub → KW → OpTabK KW :=
+  tabCK (ℍ := ℍ) (fun _ lo T => cancelTabGRK lo T G R) vr g
 /-- The guarded cancel obligation of a cancel row at the typed world: `none` at `⊤`. -/
 def finGK (R : Nat → WProp) (G : ShareG) (vr : VRel) (g : KW → KW) : CTy → LSub →
-    Option (KW → Nat → List SRec → Expr → WProp)
-  | .top, _ => none
-  | .eff m i q A B fin _ C, δ => some (cancelOblGK (ℍ := ℍ) g (fun x => extTabK m i
-      (entNK q B (fun k v ρ => vr A δ x.Θ k v ρ)
-        (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
-        (finGK R G vr g fin δ) (fun f y ρ => (g x).Owed f (g y) ρ))
-      (tabGK R G vr g C δ x)) G R)
-  | .ret _, _ => some (cancelOblGK (ℍ := ℍ) g (fun _ => OpTabK.empty) G R)
-  | .arr _ _, _ => some (cancelOblGK (ℍ := ℍ) g (fun _ => OpTabK.empty) G R)
-  | .amp _ _, _ => some (cancelOblGK (ℍ := ℍ) g (fun _ => OpTabK.empty) G R)
-  | .all _ _ _, _ => some (cancelOblGK (ℍ := ℍ) g (fun _ => OpTabK.empty) G R)
-  | .nuSys _ _ _, _ => some (cancelOblGK (ℍ := ℍ) g (fun _ => OpTabK.empty) G R)
-end
+    Option (KW → Nat → List SRec → Expr → WProp) :=
+  finCK (ℍ := ℍ) (fun _ lo T => cancelTabGRK lo T G R) vr g
 
 theorem finGK_eq (R : Nat → WProp) (G : ShareG) (vr : VRel) (g : KW → KW) {F : CTy}
     (hF : F ≠ .top) (δ : LSub) :
     finGK (ℍ := ℍ) R G vr g F δ =
       some (cancelOblGK (ℍ := ℍ) g (fun x => tabGK (ℍ := ℍ) R G vr g F δ x) G R) := by
-  cases F <;> simp_all [finGK, tabGK]
+  cases F <;> simp_all [finGK, tabGK, tabCK, finCK, cancelOblCK, cancelOblGK]
 
 /-- **An entry of `tabNK` is a layer's, and every `tabGK` has the layer's entry at the same
 key.** -/
@@ -99,24 +83,24 @@ theorem tab_lookupNGK : ∀ (F : CTy) {vr : VRel} {g : KW → KW} {δ : LSub} {x
             (finGK (ℍ := ℍ) R G vr g₂ fin δ₂)
             (fun f y ρ => (g₂ x₂).Owed f (g₂ y) ρ))
   | .eff m₀ i₀ q A B fin rc C, vr, g, δ, x, m, j, en, h => by
-      simp only [tabNK] at h
+      simp only [tabNK, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
       unfold extTabK at h
       split at h
       · rename_i hmj
         cases Option.some.inj h
         obtain ⟨rfl, rfl⟩ := hmj
         exact ⟨q, A, B, fin, .inl ⟨rfl, rfl, rfl, rfl⟩, rfl, fun R G g₂ δ₂ x₂ => by
-          simp only [tabGK, extTabK, and_self, if_true]⟩
+          simp only [tabGK, extTabK, and_self, if_true, tabCK, finCK, cancelOblCK, finGK, cancelOblGK]⟩
       · rename_i hmj
         obtain ⟨q', A', B', fin', hL, he, hR⟩ := tab_lookupNGK C h
         exact ⟨q', A', B', fin', .inr hL, he, fun R G g₂ δ₂ x₂ => by
-          simp only [tabGK, extTabK, if_neg hmj]; exact hR R G g₂ δ₂ x₂⟩
-  | .ret _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .arr _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .amp _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .top, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .nuSys _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
+          simp only [tabGK, extTabK, if_neg hmj, tabCK, finCK, cancelOblCK, finGK, cancelOblGK]; exact hR R G g₂ δ₂ x₂⟩
+  | .ret _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .arr _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .amp _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .top, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
 
 /-- **An entry of `tabGK` is a layer's, and every `tabRK` has the layer's entry at the same
 key.** -/
@@ -131,24 +115,24 @@ theorem tab_lookupGK : ∀ (F : CTy) {R : Nat → WProp} {G : ShareG} {vr : VRel
           (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
           (finRK (ℍ := ℍ) R' vr g fin δ) (fun f y ρ => (g x).Owed f (g y) ρ))
   | .eff m₀ i₀ q A B fin rc C, R, G, vr, g, δ, x, m, j, en, h => by
-      simp only [tabGK] at h
+      simp only [tabGK, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
       unfold extTabK at h
       split at h
       · rename_i hmj
         cases Option.some.inj h
         obtain ⟨rfl, rfl⟩ := hmj
         exact ⟨q, A, B, fin, .inl ⟨rfl, rfl, rfl, rfl⟩, rfl, fun R' => by
-          simp only [tabRK, finRK, tabClaimK, extTabK, and_self, if_true]⟩
+          simp only [tabRK, finRK, tabClaimK, extTabK, and_self, if_true, tabCK, finCK, cancelOblCK, finClaimK, cancelOblClaimK]⟩
       · rename_i hmj
         obtain ⟨q', A', B', fin', hL, he, hR⟩ := tab_lookupGK C h
         exact ⟨q', A', B', fin', .inr hL, he, fun R' => by
-          simp only [tabRK, tabClaimK, extTabK, if_neg hmj]; exact hR R'⟩
-  | .ret _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
-  | .arr _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
-  | .amp _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
-  | .top, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
-  | .all _ _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
-  | .nuSys _ _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
+          simp only [tabRK, tabClaimK, extTabK, if_neg hmj, tabCK, finCK, cancelOblCK, finClaimK, cancelOblClaimK]; exact hR R'⟩
+  | .ret _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
+  | .arr _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
+  | .amp _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
+  | .top, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
+  | .all _ _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
 
 /-! ### The guarded Mut Frame at the typed tables -/
 
@@ -211,7 +195,7 @@ theorem tabGK_canK {vr : VRel} (hv : ValRelOK vr)
   intro P' hP'
   simp only [entNK, hcap, if_true] at hP' hc
   by_cases htop : fin = .top
-  · subst htop; simp [finGK] at hP'
+  · subst htop; simp [finGK, tabCK, finCK, cancelOblCK, tabGK, cancelOblGK] at hP'
   rw [finGK_eq _ _ _ _ htop] at hP'
   cases Option.some.inj hP'
   have hin := hc _ (finNK_eq _ _ htop _)
@@ -319,7 +303,7 @@ theorem tabRK_canAK {vr : VRel} {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Li
   intro P' hP'
   simp only [entNK, hcap, if_true] at hP' hc
   by_cases htop : fin = .top
-  · subst htop; simp [finRK, finClaimK] at hP'
+  · subst htop; simp [finRK, finClaimK, tabCK, finCK, cancelOblCK, tabClaimK, cancelOblClaimK] at hP'
   rw [finRK_eq _ _ _ htop] at hP'
   cases Option.some.inj hP'
   have hM := erwpK_M_antiFrame_cancelRunCR (ℍ := ℍ) (V := KW.PostK)
@@ -431,7 +415,7 @@ theorem tabNK_rebCanK {vr : VRel} (hv : ValRelOK vr) {Δ : LifeCtx} {xv : LifeVa
   intro P hP
   simp only [entNK, hcap, if_true] at hP hc
   by_cases htop : fin = .top
-  · subst htop; simp [finNK] at hP
+  · subst htop; simp [finNK, tabCK, finCK, cancelOblCK, tabNK, cancelOblK] at hP
   rw [finNK_eq _ _ htop] at hP
   cases Option.some.inj hP
   have hin := hc _ (finNK_eq _ _ htop _)
@@ -537,16 +521,16 @@ theorem tabNK_linOnly {vr : VRel} {g : KW → KW} {δ : LSub} {x : KW} :
     ∀ {F : CTy}, F.LinOnly → ∀ {m j : UInt32} {en : OpEntK KW},
       tabNK (ℍ := ℍ) vr g F δ x m j = some en → en.q = .lin ∧ en.abort = false
   | .eff m₀ i₀ q A B fin rc C, hL, m, j, en, h => by
-      simp only [tabNK] at h
+      simp only [tabNK, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
       rcases extTabK_some h with ⟨rfl, -, rfl⟩ | h
       · simp [entNK, hL.1]
       · exact tabNK_linOnly hL.2 h
-  | .ret _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .arr _ _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .amp _ _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .top, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .all _ _ _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .nuSys _ _ _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
+  | .ret _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .arr _ _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .amp _ _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .top, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .all _ _ _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .nuSys _ _ _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
 
 /-- **The Imm Frame at the typed tables, every layer must-resume** (`erwp_I_frame` at `KW`): the
 callback's table is the row's `tabNK` at the lend's world (`KW.lendImm`), indexed by the lender's
