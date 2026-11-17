@@ -844,12 +844,29 @@ def inst_ty(ty, judg, tie):
     return TIE.sub(tie, ty) if tie else ty
 
 
-def inst_binders(r, judg, tie):
+def binder_ty(r, nm):
+    """The type of a binder `CDerivesX` leaves unannotated. The eliminators state every binder's
+    type: a statement with many unannotated binders is elaborated far more slowly (#798)."""
+    if nm == "Δ":
+        return "LifeCtx"
+    if nm.startswith("Γ"):
+        return "Ctx VTy"
+    if nm in EXPR_NAMES or nm in {a[2] for a in r.prem.values()}:
+        return "Expr"
+    if nm in NAME_TY:
+        return NAME_TY[nm]
+    sys.exit(f"gen-pin: CDerivesX.{r.name}: the type of the binder `{nm}` is not known")
+
+
+def inst_binders(r, judg, tie, typed=False):
     out = []
     for kind, names, ty in r.groups:
         if tie is None and ty and TIE.match(ty):
             continue
         c = {"(": ")", "{": "}", "[": "]"}[kind]
+        if ty is None and typed:
+            out += [f"{kind}{nm} : {binder_ty(r, nm)}{c}" for nm in names]
+            continue
         out.append(f"{kind}{' '.join(names)}{(' : ' + inst_ty(ty, judg, tie)) if ty else ''}{c}")
     return out
 
@@ -880,7 +897,7 @@ def elim(rules, inst):
     J = jname(inst)
     minors, arms = [], []
     for r in rules:
-        bs = inst_binders(r, J, tie)
+        bs = inst_binders(r, J, tie, typed=True)
         ihs = [f"({p}_ih : motive {' '.join(r.prem[p])} {p})" for p in r.explicit if p in r.prem]
         app = inst_ctor(r, idx, tie)
         minors.append(f"    ({r.name} : ∀ {' '.join(bs + ihs)},\n      motive {subst(' '.join(r.concl), XGLOBAL)} {app})"
