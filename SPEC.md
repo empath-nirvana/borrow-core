@@ -13945,15 +13945,39 @@ handed back).
    - `[then]`'s `Banged Γ₂` is not needed: the lend's frame is never in a captured continuation.
    - `hP` is kept.
 4. **The rules of §19 are instances.** At `Σ_D = ∅` and `Σ_M = Σ`, the rule is §19's
-   `withbor1U`/`withbor2U`/`withbor3U` (`.thunk (.arr src (F_∅ 1))` is `src ⊸ 1`). The three
-   constructors are generalised in place as `withbor1UD`/`withbor2UD`/`withbor3UD`, and the forms of
-   §19 are theorems of the same names and statements. There is no new constructor (the three are
-   renamed and generalised in place), and no new term former, type former, `CDerives` index or
-   machine step.
+   `withbor1U`/`withbor2U`/`withbor3U` (`.thunk (.arr src (F_∅ 1))` is `src ⊸ 1`). The three are
+   one rule, `withborUD`, at a kind `k : LendUKind` (*One rule for the three lends*, #1170);
+   `withbor1UD`/`withbor2UD`/`withbor3UD` are its theorems at the kinds `refImm`, `refMut` and
+   `reborrow a`, and the forms of §19 are theorems of the same names and statements. There is no new
+   term former, type former, `CDerives` index or machine step.
 5. **The cancel path is excluded by the types.** Every operation of `Σ_M` is abortive, so no
    continuation is captured while the lend is live, and no cancel reaches a region holding it. The
    finaliser runs after the lend has ended. A lend held across a suspension, with a cleanup that
    gets it back, is not provided (*Open*), and the checker refuses it with a message that says so.
+
+**One rule for the three lends (#1170).** The kernel types `withbor (1)`, `(2)` and `(3)`'s
+unwinding forms with one rule, `withborUD`, and the checker with one typed-term node of the same
+name, both indexed by a kind `k : LendUKind` (`Core/EffBorrow.lean`): `refImm` (`Ref A` lent as
+`Imm 'x A`), `refMut` (`Ref A` lent as `Mut 'x A`) and `reborrow a` (`Mut @a A` reborrowed as
+`Mut 'x A`). The kind selects the lent source (`LendUKind.src`: `Ref A`, `Ref A`, `Mut @a A`), the
+callback's leaf (`LendUKind.leaf`), the side condition on the contents (`LendUKind.OK`: `VScoped Δ A`,
+an outliving witness, none) and the type
+`LendUKind.ty k = withborUTy (src) (cbUTy x ⊓Δ (leaf) B Σ_M) Σ (src ⊗ B)`, which is
+`withbor1UTyD`/`withbor2UTyD`/`withbor3UTyD` at the three kinds by definition. The remaining premises
+are the three rules' own and in the same order (`hΓ`, `hx`, the two freshness premises, `Σ_M`
+unwinding, `Σ_M ≤ Σ`, `Σ_D ≤ Σ`, `divB Σ = false`, `hP`, the finaliser's derivation).
+- **The old names stay.** `withbor1UD`, `withbor2UD` and `withbor3UD` are theorems of the judgment
+  and of each of its instances (`CDerives`, `CDerivesAt Ξ`, `CDerivesP`) with today's binders and
+  statements, so calls by position and by name (`(SD := [])`) are unchanged.
+- **The Fundamental Property's case** splits on the kind and applies `withbor1UD_compatX`,
+  `withbor2UD_compatX` or `withbor3UD_compatX` (`withborUD_compatX`). The chain does the same with the
+  `_compatN` lemmas (`withborUD_compatN`). No compatibility lemma changes.
+- **The term** is `withborUE d` at every kind, as before. Backend2 reads the lowering's lend
+  operation off the node's kind (`LendUKind.lendOp`: `lend imm`, `lend mut`, `relend`) and rebuilds
+  nothing. The surface constants `withbor1u`/`withbor2u`/`withbor3u` and their messages are
+  unchanged: each emits its kind.
+- The rule count of `CDerives` and of the checker's judgment each drops by two. A later kind adds a
+  constructor and a clause to each `LendUKind` function, not a rule.
 
 **The checker.**
 - **Core text:** `withbor{1,2,3}u[…] unwind (d)`. Without `unwind (d)`, the finaliser is the
@@ -14044,6 +14068,7 @@ handed back).
   - `corpus/reject/core-kb-suspend.bc`: the body suspends while lent.
 - #940's capability part is built (#1138): a `finally` whose cleanup uses one capability, at
   `Σ_D = ∅`, with the refusals and programs of *The surface*.
+- The three lends as one rule at `LendUKind` (#1170), after #798's steps A–D. Not built.
 - §27 item 5 lifted for a performing cleanup waits on K-b.3. The backend's check that the lend's
   lowering takes an effectful finaliser is backend-foreman's.
 
@@ -14053,8 +14078,10 @@ handed back).
   performs a capturable operation or awaits while lent). It needs the cancel-row record (`Σ_D` in
   the cancel rows of the callback's capturable operations) and the suspending constants'
   finaliser at `Σ_D`. That is #844 Tier 2 and #821, a separate unit; refused until then.
-- **The slice lends** `sliceBorrowMU` and `sliceBorrowIU` keep a pure finaliser. They take the same
-  generalisation when a program needs it.
+- **The slice lends** `sliceBorrowMU` and `sliceBorrowIU` keep a pure finaliser and stay separate
+  rules: their shape and bound premises differ in kind from the kinds of `LendUKind` (#1170). They
+  join it as kinds if they take the same generalisation, when a program needs it. `withloadU` (no
+  finaliser, its own term) stays separate too.
 - **A cleanup that uses two lent places** gets only one source back: not provided.
 - **Known gaps in #940's surface:** a cleanup using a different capability from the body's is
   refused as used twice (#1136); a `with … finally` around a `for` over a generator fails with a
