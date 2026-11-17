@@ -1,5 +1,6 @@
 -- pending: RQ1 (#838; register #1122): an `imm` borrow held across a resuming operation (SPEC §29, R1's surface, OQ-2)
 -- now: 38:13: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a borrow held across a suspension is not supported yet; planned: surface A1). End the borrow before the operation, or move the value into the code that suspends and have it handed back
+-- Goal program for RQ1 (#1122): to check under PinLaw (an accepted assumption); see the register.
 -- OBEff's Example A (Chen, Tanabe, Sekiyama, PPL 2026, §3.2 and §4.2.4) as the paper writes it: a
 -- shared borrow `&*x` made inside the handled block, `op` performed under it, and `κ` reading
 -- through it after the resume. The handler, the cells and the lend `β` of `c2` beside the parked

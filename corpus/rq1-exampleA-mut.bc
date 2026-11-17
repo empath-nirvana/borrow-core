@@ -1,3 +1,4 @@
+-- Goal program for RQ1 (#1122): checks under PinLaw (an accepted assumption); see the register.
 -- RQ1 (#838; register #1122), the first configuration of E3 at the surface: OBEff's Example A
 -- (Chen, Tanabe, Sekiyama, PPL 2026, §3.2 and §4.2.4) in its `mut` form. The cell `c` is owned
 -- outside the handled block, moved in and handed back. Inside the block a `mut` borrow of it (the
@@ -7,7 +8,7 @@
 -- borrow twice and the borrow ends, so `c` returns to its owner. `corpus/rq1-generator.bc` is the
 -- same cells with the resumption under `β` instead of beside it.
 --
--- Today it checks with `assurance: PinLaw (R1 at 37:13)`: `α` is R1 (`withbor2r`), with PinLaw's
+-- Today it checks with `assurance: PinLaw (R1 at 38:13)`: `α` is R1 (`withbor2r`), with PinLaw's
 -- `LendFrame` assumed there. It is pending an unconditional assurance (RQ1 E3.3's done-when);
 -- `corpus/trusted/rq1-exampleA-mut.txt` pins the site, so the gate fails when that changes.
 --

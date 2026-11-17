@@ -1,3 +1,4 @@
+-- Goal program for RQ1 (#1122): checks under PinLaw (an accepted assumption); see the register.
 -- RQ1 (#838; register #1122), the generator configuration of E3: the cells of
 -- `corpus/rq1-exampleA-mut.bc`, with `κ` resumed under the other cell's lend instead of beside it.
 -- `gen` is given the cell `c`, opens a `mut` borrow of it (the lend `α`) and yields twice under it,
@@ -10,7 +11,7 @@
 -- stepped generator could not leave `β` at all: a `U` value cannot be shown to outlive a lend,
 -- whether or not it holds a borrow.)
 --
--- Today it checks with `assurance: PinLaw (R1 at 35:11)`: `α` is R1 (`withbor2r`), with PinLaw's
+-- Today it checks with `assurance: PinLaw (R1 at 36:11)`: `α` is R1 (`withbor2r`), with PinLaw's
 -- `LendFrame` assumed there. It is pending an unconditional assurance (RQ1 E3.3's done-when);
 -- `corpus/trusted/rq1-generator.txt` pins the site, so the gate fails when that changes.
 --
