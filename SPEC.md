@@ -5762,9 +5762,11 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
    **The inference needs no cancel row for the inserted cancels.** A wrapped head performs no
    capturing operation of `Σ` (that is refused, below), so no cancel row is read under it, and
    *The checker*'s `[then]` takes `Σ_M`'s cancel rows from `M`'s own finalisers. **Limit:** the cancel
-   performs the cancel branch's row `F`; when a wrapped head performs a capturing operation of
-   `Σ`, that operation's cancel row would hold itself (`⊤`), which the kernel refuses (without the
-   wrap it refuses `k` live across it): refused by the elaboration, "this clause's continuation is
+   performs the cancel branch's row `F` (§81). When a wrapped head performs a capturing operation
+   `o`, `o`'s cancel row must hold `F`; when `F` itself holds `o`, that row must hold `o`'s own
+   entry, which the surface does not infer. The elaboration refuses wider than that: whenever `F`
+   is not empty and a wrapped head performs a capturing operation of `Σ` (`cancelDropped`; without
+   the wrap the kernel refuses `k` live across it), with "this clause's continuation is
    live across `Ask.ask` (1.0), an operation that captures a continuation, and its cancel performs:
    if the continuation captured at `Ask.ask` (1.0) is cancelled, this one must be cancelled with
    it, and `Ask.ask` (1.0)'s cancel row would contain itself" (`corpus/reject/fin-cancel-capturing.bc`).
@@ -5873,9 +5875,10 @@ runs once, and every row and clause is what it was.
   the limit of *The surface*.
 - **Drop flags.** A head that uses `k` on some of its paths cancels it at the end of the others,
   inside the head, not at the end of the enclosing path as Rust's drop flags would.
-- **A cleanup that performs a cancellable operation** needs that operation's cancel row to hold
-  itself at every depth, `⊤`. Core text spells it (`cancel[top]`); the surface's inference does
-  not infer `⊤` yet, so the kernel refuses such a program, and a cleanup's operations are
+- **A cleanup that performs a cancellable operation `o`, around a computation that also performs
+  `o`,** needs `o`'s cancel row to hold an entry for `o` itself. `ThenLe` matches nested entries
+  by signature, so the finite solution puts `⊤` one level down: `o cancel[…, o cancel[top]]`. Core
+  text spells it; the surface's inference does not infer it yet, so the kernel refuses such a program, and a cleanup's operations are
   `must_resume` today.
 - **Per-occurrence cancel rows.** The union per name is the least row only when every finaliser in
   an operation's scope is relevant to it.
