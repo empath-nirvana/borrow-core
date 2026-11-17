@@ -2354,7 +2354,7 @@ allocates nothing and dispatches no call (`corpus/gen-pipeline-adapters.bc`: 0, 
   `pull A B R` is `pull_[] A B R`.
 - An observation performs `Σ`: a `raise` inside `g` propagates out of the `next` that ran it, to
   the handler around the consumer. `close` is the cancel of `g`'s continuation, and the kernel
-  types that at `F_{fin ⊕ Σ} 1` (`cancelTy`, §27), so it is at `Σ` too. The pull view's clauses
+  types that at `F_{fin} 1`, the operation's own cancel row (`cancelTy`, §27, §81). The pull view's clauses
   answer at `F_Σ`.
 - `pullView` (`Frontend/Sugar.lean`) carries `F_Σ` through the view. `pullSite`
   (`Frontend/Elab/Effects.lean`) stores it. The kernel's ν rules admit effectful leaves
@@ -3349,14 +3349,15 @@ of three continuation types:
 | qualifier | surface | class | its one use | `κ` is |
 |---|---|---|---|---|
 | **must resume** (`lin`) | `must_resume ctl` | linear | resumed exactly once: a must-complete computation | `U((B ⊸ F_Σ R) & ⊤)` |
-| **cancellable** (`cancel`) | `ctl` | linear | resumed once, or cancelled (the cancel a consume when it is pure, `kTy_cancel_consumable_iff`) | `U((B ⊸ F_Σ R) & F_Σ 1)` |
-| **unrestricted** (`unr`) | `multi ctl` | unrestricted | resumed any number of times, or cancelled; its captures are persistent (`lam_bang_persistent`) | `!U((B ⊸ F_Σ R) & F_Σ 1)` |
+| **cancellable** (`cancel`) | `ctl` | linear | resumed once, or cancelled (the cancel a consume when it is pure, `kTy_cancel_consumable_iff`) | `U((B ⊸ F_Σ R) & F_F 1)` |
+| **unrestricted** (`unr`) | `multi ctl` | unrestricted | resumed any number of times, or cancelled; its captures are persistent (`lam_bang_persistent`) | `!U((B ⊸ F_Σ R) & F_F 1)` |
 
 **A cancel has computational content: the continuation's consume.**
 
 - To cancel `κ` is to **unwind** it: its frames finalise innermost first, and each lend in it
   ends, as §12 derives a record's consume from its fields', frame by frame.
-- `(B ⊸ F_Σ R) & F_Σ 1` is a linear type with a cancel branch, the `A & 1` encoding. The `1`
+- `(B ⊸ F_Σ R) & F_F 1` is a linear type with a cancel branch, the `A & 1` encoding. `F` is the
+  operation's cancel row (§27), and at the empty cancel row the branch is `F 1` (§81). The `1`
   branch, `cancel`, is the consume. The additive `&` makes the two branches share the one
   captured context.
 - A must-resume `κ` has no `1` branch, so it must be resumed.
@@ -3649,9 +3650,9 @@ Six rules, over `CDerives` with its context premises (§10):
     ──────────────────────────────────────────────────────────────────────── [handle]
     Δ; Γ ⊢ hnd (n, H) e : F_Σ R          (n ∉ Σ)
 
-    K_i = U((B_i ⊸ F_Σ R) & ⊤) (lin),   U((B_i ⊸ F_Σ R) & F_Σ 1) (cancel),   !U((B_i ⊸ F_Σ R) & F_Σ 1) (unr)
+    K_i = U((B_i ⊸ F_Σ R) & ⊤) (lin),   U((B_i ⊸ F_Σ R) & F_{F_i} 1) (cancel),   !U((B_i ⊸ F_Σ R) & F_{F_i} 1) (unr)
     an abortive operation's clause is !U(A_i ⊸ F_Σ R): the machine has cancelled κ
-    (§27: the cancel branch is at F_{F_i ⊕ Σ} 1, F_i the operation's cancel row)
+    (§27, §81: F_i is the operation's cancel row; the cancel branch performs F_i alone)
 
 - **As built** (`Core/Fundamental.lean`, `CDerives.eff*`; `Core/EffRules.lean`):
   - a row is a list of operations `(n, i, q, A_i, B_i)`, and `F_Σ R` is `CTy.effOf Σ R`;
@@ -3763,7 +3764,7 @@ Six rules, over `CDerives` with its context premises (§10):
   is the dead region's, `K†[raise (⊥, none)]`, owed at the empty error table (`cancelOwed`): a
   finaliser lets no raise escape it (§24), so the cancel keeps no error and its `ccatch` answers
   `()`. A handler the stop passes outward is dead in that run, so the run a forwarded stop owes is
-  the inner one unchanged. So `κ`'s type stays `U((B_i ⊸ F_Σ R) & F_Σ 1)`. At an abortive
+  the inner one unchanged. So `κ`'s cancel branch performs only its operation's cancel row: `U((B_i ⊸ F_Σ R) & F_{F_i} 1)` (§81). At an abortive
   operation the continuation is abandoned, so it must hold nothing owned:
 
       Π_Σ n i ls v Φ  ≜  𝒱⟦A_i⟧(ls)δ(v) ⋆ (λρ_k. NoOwn ρ_k)
@@ -5525,10 +5526,10 @@ cancel is invoked.
   `clausesTy S R E fs`), and
 
       K_i = U((B_i ⊸ F_Σ R) & ⊤) (lin),   U((B_i ⊸ F_Σ R) & C_i) (cancel),   !U((B_i ⊸ F_Σ R) & C_i) (unr)
-      C_i = F_{F_i ⊕ Σ} 1,   ⊤ when F_i = ⊤                                          (`cancelTy`)
+      C_i = F_{F_i} 1,   ⊤ when F_i = ⊤                                               (`cancelTy`)
 
-  `F_i ⊕ Σ` is `F_i`'s layers ahead of `Σ`'s (`F.rowOf ++ Σ`), rows being read first match. At
-  `F_i = []` it is `Σ`, so `κ`'s type is unchanged for every existing derivation. `[handle]` gains
+  The cancel performs `F_i` alone: it runs no handler frame (`Kont.dead`, §19 *Cancels*), so `Σ`
+  is not in it (§81). At `F_i = []` it is `F 1`, a cancel that performs nothing. `[handle]` gains
   no premise: D3's check is `[sub]` from `C_i` to the row of the code that invokes the cancel. A
   handler that never cancels is checked for nothing.
 - **Every other rule is unchanged**, `[let]`'s side condition included; `[perform]` and `[raise]`
@@ -5684,7 +5685,7 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
   non-empty `Σ_D`.
 - **Handlers read their operations' cancel rows.** `[handle]` passes `fs j`, the cancel row the
   handled row gives operation `j`, so a clause's `κ` has its cancel branch at
-  `cancelTy Σ (fs j) = F_{F_j ⊕ Σ} 1`. A clause that cancels `κ` then performs, at its own row,
+  `cancelTy (fs j) = F_{F_j} 1`. A clause that cancels `κ` then performs, at its own row,
   what the cancelled region's finalisers perform: D3 is `[sub]` there.
 - **Written, and checked.** A cancel row is written, in handler and ascription types; a row the
   effects pass infers (`Env.rowOf`) carries the empty cancel row. `[then]`'s `hfin` checks each.
@@ -5709,12 +5710,12 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
    row, a block's, a recursive group's, a stateful handler's state function) its cancel row, and a
    handler site's info carries its operations' (`HInfo.fins`). The typed elaboration builds the
    site's row `Row.ofEff n ops 0 fs ++ Σ` and its clauses at `clausesTy Σ R ops fs` (`κ`'s cancel
-   branch `cancelTy Σ F`). The kernel checks every one of these (`[then]`'s `ThenLe`, `[handle]`,
+   branch `cancelTy F`). The kernel checks every one of these (`[then]`'s `ThenLe`, `[handle]`,
    `[sub]`'s `finLeB` at calls); the elaborator decides nothing the kernel does not re-check.
 4. **A clause that does not use a cancellable `κ` whose cancel performs** (#953; Rust's drop
    model). The kernel's `κ` is consumable only when its cancel branch is
-   `F 1` (empty row); a consume is effect-free. When its cancel branch `cancelTy Σ F` performs
-   (the inferred cancel row `F` or the handler's outer row `Σ` is not empty), the elaboration
+   `F 1` (empty row); a consume is effect-free. When its cancel branch `cancelTy F` performs
+   (the inferred cancel row `F` is not empty), the elaboration
    cancels `κ`, `u <- (force k).2; let () = u; T` (`[&E₂]`), exactly once on each path of the
    clause that does not use `k` (`Frontend/Sugar.lean`, `cancelAtEnds`, `cancelDropped`):
    - **on finishing**, at the end of the path, after all its effects: before a terminal value
@@ -5761,7 +5762,7 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
    **The inference needs no cancel row for the inserted cancels.** A wrapped head performs no
    capturing operation of `Σ` (that is refused, below), so no cancel row is read under it, and
    *The checker*'s `[then]` takes `Σ_M`'s cancel rows from `M`'s own finalisers. **Limit:** the cancel
-   performs the cancel branch's row `F ⊕ Σ`; when a wrapped head performs a capturing operation of
+   performs the cancel branch's row `F`; when a wrapped head performs a capturing operation of
    `Σ`, that operation's cancel row would hold itself (`⊤`), which the kernel refuses (without the
    wrap it refuses `k` live across it): refused by the elaboration, "this clause's continuation is
    live across `Ask.ask` (1.0), an operation that captures a continuation, and its cancel performs:
@@ -10403,10 +10404,7 @@ of another former, effect equation, machine step or `𝒱⟦·⟧` clause change
 
 **`κ`'s cancel branch.** The proof gives `κ.2` the table of the operation's own cancel row `fs j`
 (`lastTc`), which `ewp_handle_or`'s `hTc` permits: it asks only that the table be above the
-entry's cancel obligation. `κ`'s type at a clause the program writes, `cancelTy Σ F = F_{F ⊕ Σ} 1`,
-holds `Div` whenever `Σ` does, and as a finaliser it makes the cancel row of every capturable
-operation of `Σ` beneath it find that operation's own key (`kappaFinSelf`). A rule-written clause
-avoids both.
+entry's cancel obligation. `κ`'s type at a clause the program writes, `cancelTy F = F_F 1` (§81), is at that same row.
 
 ### The proof
 
@@ -14166,6 +14164,71 @@ state threading is introduced. There is no new index on `CDerives` and no invers
 
 Unwinding, suspension, handler-owned state and the §41 surface migration are separate work.
 The old backend compiles the erasure; its scalar locals are not register-promoted by this entry.
+
+---
+
+## 81. Entry 80 — a captured continuation's cancel performs its operation's cancel row (#1105)
+
+### What it adds
+
+- **The rule.** The cancel branch of a captured continuation performs only its operation's cancel
+  row `F` (§27):
+
+      cancelTy F = F_F 1,   ⊤ when F = ⊤
+
+  `κ`'s type keeps `Σ` in its resume branch, `U((B ⊸ F_Σ R) & cancelTy F)` (`kTy`). At `F = []`
+  the cancel branch is `F 1`, a cancel that performs nothing. §18's table, §19's and §27's
+  `[handle]`, §15's stored generator and §51's clause read it so.
+- **Why it is sound.** `κ`'s cancel runs `ccatch (K†[raise])`. `Kont.dead` drops every handler
+  frame of every name, so no clause runs during a cancel (§19 *Cancels*), and what it performs is
+  what the cancelled region's finalisers perform, the operation's cancel row. The handle
+  compatibility lemmas already prove the cancel at that row (`ewp_handle_or`'s `T₁ ≤ Tk`), and
+  `[handle-last]` already reads `κ`'s cancel at it (`lastTc`, §51). `Σ` in the cancel branch was a
+  weakening only.
+- **What programs gain.**
+  - A continuation whose operation's cancel row is empty is consumable at any row
+    (`kTy_cancel_consumable_iff`).
+  - An operation's cancel row need not hold the operations of `Σ` a `κ` stored across it would
+    otherwise perform, so stored-`κ` schedulers and pipes whose stages perform different
+    capturable operations type: a cancel row no longer has to hold itself through a `κ` cancelled
+    in a finaliser.
+- **The checker** reads a `κ`'s cancel row back from its cancel branch whole (`finOfBranch`,
+  `kFin`, `clauseFin`), with no handler row to strip.
+- **The surface.** A clause that does not use its `κ` cancels it where the cancel branch performs,
+  that is where `F` is not empty (§27 *The surface* item 4); the handler's row no longer counts.
+- **Programs** (observed, `bcc interp`, `live 0`):
+
+  | Program | What | Answer |
+  |---|---|---|
+  | `corpus/core-fin-sched-own-row.bc` | a stored-`κ` scheduler parks a task at `3.0`, whose cleanup writes (`8.0`, must resume) after it reads input (`9.0`, capturable); the scheduler's I/O wait has the parked task's cancel as its finaliser and is timed out. The parked `κ`'s cancel is at `F[8.0] 1`, `3.0`'s cancel row, so `9.0`'s cancel row need not hold `9.0` | `inr ()` |
+
+  Every other corpus program keeps its output: 62 `κ` cancel annotations in 24 files are written
+  at the new type.
+
+### Baseline
+
+- `fundamentalC`, `adequacyC`/`adequacyD`, `fundamentalN_all` and `goal791N` keep their statements.
+- `HandlerLawN` and `MissingN` keep their text. Their content strengthens: more handlers type,
+  since `κ`'s type is more usable, so the assumption covers more of them (`Core/Assumptions.lean`).
+- Statements that change:
+  - `cancelTy` drops its row argument, and `kTy`'s cancel component with it;
+  - `cancelTy_rowLe` concludes `RowReach F.rowOf S`;
+  - `sProt_rowOf_perf` and `sFin_cases` are restated without the handler's row, and `cancelTabOf`
+    with them;
+  - the kernel programs' lemmas `d_cancelCT`, `d_timeoutCl`, `dAt_timeout`, `dAt_stashCl` and
+    `dAt_stash` take `RowLe F.rowOf S`.
+- Deleted: `tab_le_cancelTab`, `rowLe_dup`, and `KappaFinSelf` with `kappaFinSelf`, whose
+  limitation this entry removes.
+- Every corpus and kernel program gives the same output. No machine step changes.
+
+### Units
+
+- #1105, built (#1139): `cancelTy`, `kTy`, the checker's read-back, the surface's cancel
+  insertion, the restated lemmas, the corpus annotations and `core-fin-sched-own-row`.
+
+### Open
+
+- **Pipes** stay paused; this entry removes only their obstacle of a cancel row holding itself.
 
 ---
 
