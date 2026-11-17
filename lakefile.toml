@@ -215,3 +215,9 @@ roots = ["DepSpike"]
 name = "NestedFold"
 srcDir = "experiments/NestedFold"
 roots = ["NestedFold"]
+
+# RQ1 T-X: the decisive test for a `mut` lend on the tree (research branch rq1-tree).
+[[lean_lib]]
+name = "RQ1TX"
+srcDir = "experiments/RQ1TX"
+roots = ["RQ1TX"]
