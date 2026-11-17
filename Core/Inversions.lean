@@ -982,7 +982,7 @@ theorem qualsVal_noVar (qs : List Qual) {k : Nat} : ¬ (qualsVal qs).1.HasVar k 
 /-- **Every free variable of a typed term has a live slot.** -/
 theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ k, e.HasVar k → ∃ T, Γ[k]? = some ⟨T, true⟩ := by
-  induction h with
+  induction h using CDerives.induct with
   | var hs =>
       intro k hk; simp only [Expr.HasVar] at hk; subst hk; exact ⟨_, soloP_le hs⟩
   | @force _ _ i _ C hs _ =>
@@ -1150,7 +1150,7 @@ def PrimRule : Prim → Prop
 /-- **A primitive is typed only by its own rule.** -/
 theorem der_prim {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ p, e = .prim p → PrimRule p := by
-  induction h <;> intro p he <;> cd_terms <;> (try subst he) <;> (try trivial)
+  induction h using CDerives.induct <;> intro p he <;> cd_terms <;> (try subst he) <;> (try trivial)
   case force _ _ i _ C _ _ =>
     rcases forceE_cases C (.var i) with hf | hf <;> rw [hf] at he <;> simp at he
 
@@ -1162,7 +1162,7 @@ theorem not_der_load {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ
 (`[perform]`, `[raise]`). -/
 theorem not_der_app_prim {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ p X, e = .app (.prim p) X → ¬ PrimRule p → p ≠ .perform → p ≠ .raise → False := by
-  induction h <;> intro p X he hp hpe hpr <;> cd_terms
+  induction h using CDerives.induct <;> intro p X he hp hpe hpr <;> cd_terms
   case force _ _ i _ C _ _ =>
     rcases forceE_cases C (.var i) with hf | hf <;> rw [hf] at he <;> simp at he
   all_goals exact hp (der_prim ‹CDerives _ _ (.prim p) _› p rfl)
@@ -1187,7 +1187,7 @@ theorem VarCls.step {T : VTy} {j j' : Jdg} (hs : JS j j') (h : VarCls T j) : Var
 /-- **A variable is read at a view of its live slot's type.** -/
 theorem der_var {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ i, e = .var i → ∃ T, Γ[i]? = some ⟨T, true⟩ ∧ VarCls T j := by
-  induction h with
+  induction h using CDerives.induct with
   | var hs => intro i he; cases he; exact ⟨_, soloP_le hs, .inl (ValCls.refl _)⟩
   | @force _ _ i' T C hs hT =>
       intro i he
@@ -1232,7 +1232,7 @@ theorem der_pair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
     ∀ a b, e = .pair a b →
       (∃ Γ₁ Γ₂ A B, Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerives Δ Γ₁ a (.val A) ∧ CDerives Δ Γ₂ b (.val B) ∧
         ValCls (.tensor A B) j) ∨ Expr.pair a b = emptyFamV.1 := by
-  induction h with
+  induction h using CDerives.induct with
   | tensorI hs h₁ h₂ => intro a b he; cases he; exact .inl ⟨_, _, _, _, hs, h₁, h₂, ValCls.refl _⟩
   | sliceEmptyI => intro a b he; exact .inr he.symm
   | sliceEmptyM => intro a b he; exact .inr he.symm
@@ -1318,7 +1318,7 @@ theorem der_pair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
 /-- **`inj₁ a` is read at the views of a sum**, `a` typed in the same context. -/
 theorem der_inj₁ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ a, e = .inj₁ a → ∃ A B, CDerives Δ Γ a (.val A) ∧ ValCls (.sum A B) j := by
-  induction h with
+  induction h using CDerives.induct with
   | sumI₁ h => intro a he; cases he; exact ⟨_, _, h, ValCls.refl _⟩
   | ret _ ih =>
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he; exact ⟨A, B, ha, hc.step (JS.ret _)⟩
@@ -1366,7 +1366,7 @@ theorem der_inj₁ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
 /-- **`()` is read at `1`'s views over a consumed context, or at `⊤`.** -/
 theorem der_unit {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     e = .unit → (Ctx.DeadP Γ ∧ ValCls .unit j) ∨ JR (.comp .top) j := by
-  induction h with
+  induction h using CDerives.induct with
   | unitI hd => intro _; exact .inl ⟨hd, ValCls.refl _⟩
   | topI => intro _; exact .inr .refl
   | ret _ ih =>
@@ -1435,7 +1435,7 @@ theorem der_unit {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
 /-- **`alloc` is read at the views of `A ⊸ Ref A`.** -/
 theorem der_prim_alloc {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     e = .prim .alloc → ∃ A, ValCls (.lolli A (.ref A)) j := by
-  induction h with
+  induction h using CDerives.induct with
   | alloc => intro _; exact ⟨_, ValCls.refl _⟩
   | ret _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.ret _)⟩
   | alpha _ hα ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.ofAlpha hα)⟩
@@ -1492,7 +1492,7 @@ def AppBase (Δ : LifeCtx) (Γ : Ctx VTy) (X Y : Expr) (j₀ : Jdg) : Prop :=
 /-- **An application is typed by a rule that concludes with one, then the same-term rules.** -/
 theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ X Y, e = .app X Y → ∃ j₀, AppBase Δ Γ X Y j₀ ∧ JR j₀ j := by
-  induction h with
+  induction h using CDerives.induct with
   | lolliE hs ha hf =>
       intro X Y he; cases he
       exact ⟨_, .inl ⟨_, _, _, _, hs, ha, hf, rfl⟩, .refl⟩
@@ -1596,7 +1596,7 @@ theorem der_letpair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDer
     ∀ V M, e = .letpair V M → ∃ Γ₁ Γ₂ A B C, Ctx.SplitP Γ Γ₁ Γ₂ ∧
       CDerives Δ Γ₁ V (.val (.tensor A B)) ∧ CDerives Δ (⟨B, true⟩ :: ⟨A, true⟩ :: Γ₂) M (.comp C) ∧
       JR (.comp C) j := by
-  induction h with
+  induction h using CDerives.induct with
   | tensorE hs hV hM => intro V M he; cases he; exact ⟨_, _, _, _, _, hs, hV, hM, .refl⟩
   | ret _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
@@ -1651,7 +1651,7 @@ reach the `;`'s judgement. -/
 theorem der_seq {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ V M, e = .seq V M → ∃ Γ₁ Γ₂ C, Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerives Δ Γ₁ V (.val .unit) ∧
       CDerives Δ Γ₂ M (.comp C) ∧ JR (.comp C) j := by
-  induction h with
+  induction h using CDerives.induct with
   | unitE hs hV hM => intro V M he; cases he; exact ⟨_, _, _, hs, hV, hM, .refl⟩
   | ret _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
@@ -1705,7 +1705,7 @@ theorem der_seq {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
 theorem der_then {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ N D M, e = thenE N D M → ∃ Γ₁ Γ₂ A j₁ j₂, Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerives Δ Γ₁ M j₁ ∧
       CDerives Δ (⟨A, true⟩ :: Γ₂) N j₂ := by
-  induction h with
+  induction h using CDerives.induct with
   | effThen hs _ _ _ _ _ _ _ _ hM hN _ => intro N D M he; cases he; exact ⟨_, _, _, _, _, hs, hM, hN⟩
   | effThenDiv hs _ _ _ _ _ _ _ _ hM hN _ => intro N D M he; cases he; exact ⟨_, _, _, _, _, hs, hM, hN⟩
   | force => intro N D M he; rcases forceE_var he with h | h <;> simp [thenE] at h
@@ -1776,7 +1776,7 @@ theorem der_hnd {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
         H = .pair Hr (lastTuple E 0 Hw Hn) ∧
         CDerives Δ Γ₁ (.pair Hr (.pair Hw Hn))
           (.val (.tensor (retTy S A R) (.tensor (worksTy S SW R Xs E 0) (exitsTy S R Xs E 0))))) := by
-  induction h with
+  induction h using CDerives.induct with
   | effHandleV hs hd _ hc _ _ _ _ =>
       intro n Q H M he
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he
@@ -2266,7 +2266,7 @@ theorem LamInv.codeIB {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
 /-- **A λ-value is typed through the rule that types its body, or as a λ-constant.** -/
 theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ M, e = .lam M → LamInv Δ Γ M j := by
-  induction h with
+  induction h using CDerives.induct with
   | lam h => intro M he; cases he; exact .inl ⟨_, _, h, .inl ⟨_, rfl, CTy.alphaB_refl _⟩⟩
   | lamDead h => intro M he; cases he; exact .inr (.inl ⟨_, _, h, .inl ⟨_, rfl, CTy.alphaB_refl _⟩⟩)
   | allI _ _ _ h =>
@@ -2575,7 +2575,7 @@ theorem not_der_swapBody₁ {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerive
 body, it would load its cell. -/
 theorem der_swap {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     e = swap → ∃ A B, ValClsC (axSwapTy A B) j := by
-  induction h with
+  induction h using CDerives.induct with
   | swap => intro _; exact ⟨_, _, ValClsC.refl _⟩
   | codeI _ _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.codeI _ _⟩
   | codeIB _ _ _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.codeIB _ _⟩
@@ -2955,7 +2955,7 @@ theorem der_hndJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
     ∀ (n : UInt32) (Q H M : Expr),
       e = .app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair Q H))) M →
       ∃ j₀, HndBase Δ Γ n Q H M j₀ ∧ JR j₀ j := by
-  induction h with
+  induction h using CDerives.induct with
   | effHandleV hs _ _ hc _ hnS _ _ he =>
       intro n Q H M he'
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he'
@@ -3093,7 +3093,7 @@ rows below the `[then]`'s, each capturable operation of `M`'s row recording the 
 its cancel row (`ThenLe`). -/
 theorem der_thenJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ N D M, e = thenE N D M → ∃ j₀, ThenBase Δ Γ D M j₀ ∧ JR j₀ j := by
-  induction h with
+  induction h using CDerives.induct with
   | effThen hs _ _ _ hMS hDS hfin _ _ hM _ hD _ _ _ =>
       intro N D M he; cases he
       exact ⟨_, ⟨_, _, _, _, _, _, _, hs, hMS, hDS,
@@ -3166,7 +3166,7 @@ def PerfBase (n i : UInt32) (j₀ : Jdg) : Prop :=
 /-- **A `perform` is `[perform]`'s, then the same-term rules**: its row finds the operation. -/
 theorem der_performJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ n i V, e = BoCa.BoLo.performE (opArgE n i V) → ∃ j₀, PerfBase n i j₀ ∧ JR j₀ j := by
-  induction h with
+  induction h using CDerives.induct with
   | effPerform hf hna hac _ =>
       intro n i V he
       simp only [BoCa.BoLo.performE, opArgE, Expr.val, Val.prim, Val.i32, Expr.app.injEq,
@@ -3237,7 +3237,7 @@ def RaiseBase (n i : UInt32) (j₀ : Jdg) : Prop :=
 /-- **A `raise` is `[raise]`'s, then the same-term rules**: its row finds the operation. -/
 theorem der_raiseJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ n i V, e = BoCa.BoLo.raiseE (opArgE n i V) → ∃ j₀, RaiseBase n i j₀ ∧ JR j₀ j := by
-  induction h with
+  induction h using CDerives.induct with
   | effRaise hf ha hrc _ _ =>
       intro n i V he
       simp only [BoCa.BoLo.raiseE, opArgE, Expr.val, Val.prim, Val.i32, Expr.app.injEq,
@@ -3314,7 +3314,7 @@ theorem der_letJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       M ≠ .inj₁ .unit → M ≠ .inj₂ .unit →
       (∀ n, N ≠ .case (.var 0) (.var 0) (BoCa.BoLo.raiseE (opArgE n 1 (.var 0)))) →
       (∃ j₀, LetBase Δ Γ M j₀ ∧ JR j₀ j) ∨ ∃ Γ₁ A, CtxLe Γ₁ Γ ∧ CDerives Δ Γ₁ M (.val A) := by
-  induction h with
+  induction h using CDerives.induct with
   | effAwait =>
       intro N M he _ _ _ _ _ hNa
       simp only [awaitE, Expr.app.injEq, Expr.val, Val.lam, Expr.lam.injEq] at he
