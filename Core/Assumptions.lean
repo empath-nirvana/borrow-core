@@ -6,7 +6,6 @@ import Core.Chain.IO791N
 import Core.Chain.Nest844N
 import Core.PinFundamental
 import Core.DelayApprox
-import Core.TreeSemObs
 import Core.EffCancel
 import Support.Model.Tree.World.EscBeneath
 import Support.Model.Tree.Port.Six34to39
@@ -206,14 +205,6 @@ def register : List Entry := [
     standing := .proved ``BoCa.Fig16.Tree.ResUT.sixThirtyEightResidual
     takenBy := [``BoCa.Fig16.Tree.ResUT.sixThirtyEight_of_residual] },
   -- Candidate statements a theorem refutes.
-  { decl := ``BoCa.Fig16.Tree.Wp.Obs.KeepKripkeRun
-    rq := "none"
-    standing := .refuted ``BoCa.Fig16.Tree.Wp.Obs.cerwpT_not_keepKripke
-    takenBy := [``BoCa.Fig16.Tree.Wp.Obs.keepKripkeRunNil_of] },
-  { decl := ``BoCa.Fig16.Tree.Wp.Obs.KeepKripkeRunNil
-    rq := "none"
-    standing := .refuted ``BoCa.Fig16.Tree.Wp.Obs.cerwpT_not_keepKripkeNil
-    takenBy := [``BoCa.Fig16.Tree.Wp.Obs.obsE_cerwpT] },
   { decl := ``BoCa.Fig16.LogRel.Core.CancelIntercept.ThenAbortCompat
     rq := "none"
     standing := .refuted ``BoCa.Fig16.LogRel.Core.CancelIntercept.not_thenAbort_compatC
@@ -229,7 +220,19 @@ def outside : List OutsideEntry := [
     file := "Frontend/Check/Masks.lean"
     rq := "none: engineering, #746 F5"
     note := "Assumed (UNPROVED:, #746 F5). Taken by Frontend.Check.neitherAbsorbed_of; \
-      SplitMasks.NeitherAbsorbed is read by Backend2's Convert and Lint." }]
+      SplitMasks.NeitherAbsorbed is read by Backend2's Convert and Lint." },
+  { name := "KeepKripkeRun"
+    file := "research/tree/ResearchTree/TreeSemObs.lean"
+    rq := "none"
+    note := "Refuted by BoCa.Fig16.Tree.Wp.Obs.cerwpT_not_keepKripke; taken by \
+      BoCa.Fig16.Tree.Wp.Obs.keepKripkeRunNil_of. The tree archive (#1133): checked by \
+      research/tree/ResearchTree/Assumptions.lean." },
+  { name := "KeepKripkeRunNil"
+    file := "research/tree/ResearchTree/TreeSemObs.lean"
+    rq := "none"
+    note := "Refuted by BoCa.Fig16.Tree.Wp.Obs.cerwpT_not_keepKripkeNil; taken by \
+      BoCa.Fig16.Tree.Wp.Obs.obsE_cerwpT. The tree archive (#1133): checked by \
+      research/tree/ResearchTree/Assumptions.lean." }]
 
 /-! ### The entries' standing and premises, checked
 
@@ -259,10 +262,6 @@ example : BoCa.Fig16.ResU.SixThirtyEightResidual := BoCa.Fig16.ResU.sixThirtyEig
 example {K : BoCa.Fig16.Tree.WCactus} : BoCa.Fig16.Tree.ResUT.SixThirtyEightResidual (K := K) :=
   BoCa.Fig16.Tree.ResUT.sixThirtyEightResidual
 
-example : ¬ BoCa.Fig16.Tree.Wp.Obs.KeepKripkeRun (ℍ := ℍ) :=
-  BoCa.Fig16.Tree.Wp.Obs.cerwpT_not_keepKripke
-example : ¬ BoCa.Fig16.Tree.Wp.Obs.KeepKripkeRunNil (ℍ := ℍ) :=
-  BoCa.Fig16.Tree.Wp.Obs.cerwpT_not_keepKripkeNil
 example : ¬ CancelIntercept.ThenAbortCompat (ℍ := ℍ) := CancelIntercept.not_thenAbort_compatC
 example : ¬ BoCa.Fig16.LogRel.EveryDerivationInRegime (ℍ := ℍ) :=
   BoCa.Fig16.LogRel.not_everyDerivationInRegime
