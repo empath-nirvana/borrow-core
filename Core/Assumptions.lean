@@ -152,6 +152,8 @@ def register : List Entry := [
     rq := "RQ1, RQ2"
     standing := .assumed
     takenBy := [
+      -- `fundamentalX` takes it under `I.pin = true` only (SPEC §83)
+      ``BoCa.Fig16.LogRel.Core.fundamentalX,
       ``BoCa.Fig16.LogRel.Core.fundamentalC_pin,
       ``BoCa.Fig16.LogRel.Core.PinLaw.stop,
       ``BoCa.Fig16.LogRel.Core.PinLaw.loop,
