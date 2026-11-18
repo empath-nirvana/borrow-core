@@ -44,7 +44,7 @@
 #              changed path is in the elaborator's or the reference interpreter's import closure
 #              (below), and every step on the touched programs.
 #   full       lean-toolchain, lake-manifest.json, lakefile.toml; the gate's own machinery
-#              (ci-local.sh, par.sh, par_unit.py, slot, slotpool.py, gate_cache.py, gate-tier.sh,
+#              (ci-local.sh, par.sh, grepq.sh, par_unit.py, slot, slotpool.py, gate_cache.py, gate-tier.sh,
 #              source-stage.sh, interp-digest.sh, corpus-set.sh, exhausted.sh, check-exhausted.sh,
 #              the Makefile); and every path that
 #              matches no rule here: every step on every
@@ -152,7 +152,7 @@ STEP_SCRIPTS = {
     "census-neg/pins.lean": ["insertion pins"],
     "census-neg/": ["hygiene + axioms", "type equality", "axiom report", "insertion pins"],
 }
-MACHINERY = {"ci-local.sh", "par.sh", "gate_cache.py", "gate-tier.sh", "source-stage.sh", "interp-digest.sh",
+MACHINERY = {"ci-local.sh", "par.sh", "grepq.sh", "gate_cache.py", "gate-tier.sh", "source-stage.sh", "interp-digest.sh",
              "corpus-set.sh", "par_unit.py", "slot", "slotpool.py", "exhausted.sh", "check-exhausted.sh"}
 NO_STEP = {"falsify.sh", "kernel-census.sh", "KernelCensus.lean", "KernelDecls.lean", "new-worktree.sh",
            "gate-daily.sh", "gate-daily.plist"}
