@@ -14624,6 +14624,8 @@ is not. The test is on the written type, so a by-value owned parameter of a `dat
 - `x: sink T` means `x: T`;
 - every other `x: T` means what it says. A shared borrow of a by-value type keeps its explicit
   type, `r: imm 'a i32`, as P6.
+  A borrow of an array, `imm 'a (array A)` or `mut 'a (array A)`, keeps its explicit type too:
+  `x: array A` and `x: inout array A` are `array_imm` and `array_mut`, different types.
 
 Each `'f` is a new lifetime parameter of the function, named apart from every name in the
 declaration. A parameter whose region is named anywhere else (another parameter, the result, a
