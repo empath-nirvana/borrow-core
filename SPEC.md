@@ -2168,7 +2168,7 @@ and `ewp_handle_or` (`Core/EffRules.lean`, `Core/EffFin.lean`), with `ewp_frame_
 `ewp_frame_then` and `ewp_handle` their instances at `Π = ⊥`.
 
 - **`[then]`** at a row holding `Div` (`cwp_then`, `cwp_then_div`): a finaliser whose row is
-  `Div`-free terminates by totality; one whose row holds `Div` (`effThenDiv`, §29a) puts `Div` in the
+  `Div`-free terminates by totality; one whose row holds `Div` (`effThenDiv`, the right disjunct of `effThenF`, §29a) puts `Div` in the
   enclosing row, which must be handled (`div_fuel`, `driveE n`) before the program is a closed
   `F A`. No separate rule is involved. A finaliser may perform operations and raise.
 - **`[handle]` of another name around a computation that ticks** is typed only when its clauses
@@ -5646,8 +5646,8 @@ program and no count changes. Finalisers that raise run at every stage in the ke
 ### The checker (#868)
 
 The checker emits `[then]` with a finaliser at its own row, and the cancel rows `[handle]` gives
-its clauses. No Core change: `CDerives.effThen`, `CDerivesAt.effThen`, `TDerives.effThen` and the
-cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
+its clauses. No Core change: `CDerives.effThen`, `CDerivesAt.effThen`, the typed node of `[then]`
+(`effThenF`, §29a) and the cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
 
 - **Cancel rows in core text.** A row entry of a cancellable or an unrestricted operation may
   carry its cancel row, `n.i cancel[R] A ~> B` or `n.i unr[R] A ~> B`, `R` a row written as a
@@ -5683,8 +5683,8 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
   `Row.find SM n i = some o → Row.find S n i = some o' → o.finRead → ThenLe o.fin SD o'.fin`. A
   refusal names the operation that fails, at the cancel row it was checked with (D3), and which
   half of `PendLe` fails; it never says a row lacks what it holds. A nested entry is named as such
-  ("the cancel row of 1.0 … holds 4.0, whose own cancel row … must hold …"). At `Σ_D = []` the checker emits `effThenA`, as before; `effThen` only at a
-  non-empty `Σ_D`.
+  ("the cancel row of 1.0 … holds 4.0, whose own cancel row … must hold …"). At `Σ_D = []` the checker emits `effThenA`, as before; `effThenF` (at `effThen`'s
+  disjunct) only at a non-empty `Σ_D`.
 - **Handlers read their operations' cancel rows.** `[handle]` passes `fs j`, the cancel row the
   handled row gives operation `j`, so a clause's `κ` has its cancel branch at
   `cancelTy (fs j) = F_{F_j} 1`. A clause that cancels `κ` then performs, at its own row,
@@ -6326,6 +6326,24 @@ its lend schema's row widened (§29).
   keeps `Div` out of the task handler's own row only. A closed program uses it and runs
   (`d_thenDivFuel`, `thenDivFuel_runs`). A finaliser whose row holds `Div` puts `Div` in the
   enclosing row, which must be handled before the program is closed; totality covers the rest.
+- **`[then]` is one rule (#1170).** The kernel types `[then]` with one rule, `effThenF`, and the
+  checker with one typed-term node of the same name: `effThen`'s premises, in the same order, with
+  its finaliser condition `Row.divB Σ_D = false` replaced by the disjunction
+
+      hF : Row.divB Σ_D = false ∨ ∀ o ∈ Σ_M, capB o.q o.B = false
+
+  whose right disjunct is `effThenDiv`'s `hcap`. The premise lists of the two rules were otherwise
+  the same, so derivability is exactly the same.
+  - **The old names stay.** `effThen` and `effThenDiv` are theorems of the judgment and of each of
+    its instances (`CDerives`, `CDerivesAt Ξ`, `CDerivesP`) at the left and right disjunct, with
+    today's binders and statements.
+  - **The Fundamental Property's case** splits on `Row.divB Σ_D`, as `effThenDiv`'s case did: at
+    `false` it applies `then_compatC`, at `true` `then_compatC_div` with `hcap` from `hF`. The chain
+    does the same with `then_compatN` and `thenDiv_compatN`. No compatibility lemma changes.
+  - **The typed term** has one node, `effThenF`. The checker emits it at the left disjunct, where it
+    emitted `effThen`. Backend2 reads the one node.
+  - The rule count of `CDerives` and of the checker's judgment each drops by one.
+  - **Status:** the fold (#1170, unit 1170-SMALL), after #798. Not built.
 - **A value that is not consumable is closed on every exit, the cancel included.** No new premise:
   `[await-c]`'s cancel target is abortive, so the row `Cancels` (`Row.cancels_of_await`), and
   `[let]`'s `hW` refuses a value that is not `OwnFree` held across the wait
@@ -9518,7 +9536,7 @@ the one it was, and its output.
 
 `Backend2/`, the default of `bcc compile|run`, `bcc interp --stage lir|flat` and `bcc-counts`
 (`--backend old` selects the old backend until it is deleted). The fragment is the programs whose typed term has no effect node
-(`effPerform`, `effRaise`, `effHandle*`, `effThen`, `effLet` at a nonempty row, `effSub`,
+(`effPerform`, `effRaise`, `effHandle*`, `effThenF`, `effLet` at a nonempty row, `effSub`,
 `lendR`, `lendLoopR`, `nilDead`, the `…U` borrows, `iterate`, `divFuel`, `reify`,
 `bounded_fix`): 222 corpus programs, I/O programs and codata among them. A program outside it is
 refused by the new backend ("outside the pure fragment") and compiled by the old.
@@ -9822,7 +9840,7 @@ No change: no type, rule, term, typing, elaboration or semantics.
 - **`[let]` at a row** (`effLet`): `N` on `inl`, the abort handed on and `N`'s context consumed
   (`effLet`'s `hW`: it holds no own cell), the branch per call of §19 (`abort_to`, `abort_passes`).
 - **`[sub]`** (`effSub`): the payload of `Σ` re-injected at `Σ'`'s summands (`RowLe`).
-- **`[then]`** (`effThen`): `N` on a value; on an abort the finaliser `D`, then the abort, or the
+- **`[then]`** (`effThenF`): `N` on a value; on an abort the finaliser `D`, then the abort, or the
   finaliser's own, which supersedes it, handed on (`then_ret`, `then_fin`, `unwind_prefix`).
 - **The unwinding borrows** (`withbor1U`, `withbor2U`, `withbor3U`, `withloadU`, `sliceBorrowMU`,
   `sliceBorrowIU`; `withborUE d`): the lend as §43's; the callback's abort ends it, runs the
@@ -10874,7 +10892,7 @@ and `CDerivesP` consume the premise as they consume `SplitMasks`.
   the premise `hcv`: each part's term, at the binders its premise pushes, is covered by its part's
   mask; `M x`'s second part is its argument `x`. Generated with the rules (`scripts/gen-pin.py`,
   `cov_premise`): `tensorI`, `bind`, `app`, `unitE`, `tensorE`, `sumE`, `zeroE`, `lolliE`,
-  `effLet`, `effThen`, `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL`. It names the slots
+  `effLet`, `effThenF`, `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL`. It names the slots
   a part's term mentions, not its context's liveness, so the checker's masks are unchanged.
 - **A typed term mentions only live slots** (`CDerivesP.mentions_live`, `Core/Mentions.lean`): a
   term `CDerivesP` types at `Γ` mentions only slots live in `Γ`. Induction on `CDerivesP`, as
