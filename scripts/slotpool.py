@@ -7,7 +7,7 @@ pool bounds how many run, machine-wide. The locks are this process's: the kernel
 it exits, however it exits. A subprocess's own timeout counts from when it starts, as before.
 
 The pool is off (the body runs at once) with `SLOT_OFF=1`, inside a slot already (`SLOT_HELD`),
-or when scripts/slot cannot run (no perl).
+or when scripts/slot does not answer (`slot -s`), as ci-local and scripts/par.sh decide.
 """
 import contextlib, fcntl, os, random, subprocess, time
 

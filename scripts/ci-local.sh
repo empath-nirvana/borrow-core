@@ -212,12 +212,15 @@ wanted() {
 # each subprocess of the Python pools and `gate-census` take their slots there; the serial steps
 # below take one; the build and the compile-time guard take the whole CPU pool. `SLOT_OFF=1`
 # turns it off.
+# The pool is on when scripts/slot answers; otherwise SLOT_OFF=1 for every step (scripts/par.sh
+# and scripts/slotpool.py decide the same way when run alone).
 pool=""
-if [ "${SLOT_OFF:-}" != 1 ] && command -v perl >/dev/null && size=$(scripts/slot -s); then
+if [ "${SLOT_OFF:-}" = 1 ]; then echo "ci-local: job pool off (SLOT_OFF=1)"
+elif size=$(scripts/slot -s 2>&1); then
   read -r poolN poolM <<< "$size"; pool=scripts/slot
   echo "ci-local: job pool on ($poolN CPU slots, $poolM GB, shared by every gate on the machine)"
 else
-  echo "ci-local: job pool off ($([ "${SLOT_OFF:-}" = 1 ] && echo SLOT_OFF=1 || echo 'no perl'))"
+  export SLOT_OFF=1; echo "ci-local: job pool off (scripts/slot -s: ${size:-no answer})"
 fi
 # slotted CPU MEM CMD…: CMD in the pool, or CMD itself when the pool is off.
 slotted() { local c=$1 m=$2; shift 2; if [ -n "$pool" ]; then "$pool" -c "$c" -m "$m" -- "$@"; else "$@"; fi; }

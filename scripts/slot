@@ -13,7 +13,9 @@
 # A token is an flock(2) lock on a file of the pool (`cpu.<i>`, `mem.<i>`). The kernel drops it
 # when the last process holding the file open exits, however it exits: a dead holder frees its
 # tokens, and no daemon or cleanup is needed. slot takes the locks and execs COMMAND with the
-# files left open, so no wrapper process stays and COMMAND's children inherit the tokens.
+# files left open, so no wrapper process stays and COMMAND's children inherit the tokens. A
+# descendant that outlives COMMAND (a background child) keeps them until it exits; no gate step
+# starts one.
 #
 # A waiter takes the pool's door (a blocking flock) before taking tokens and keeps it until it
 # has them all: a large request is not starved by small ones, and no two waiters each hold part

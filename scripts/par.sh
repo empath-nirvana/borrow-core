@@ -27,11 +27,14 @@ unset PAR_CACHE PAR_CACHE_DEPS PAR_COLLECT
 PAR_HOME=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}
 export JOBS PAR_HOME
-# The job pool's prefix for each job's shell, or none when the pool is off.
+# The job pool is on when scripts/slot answers (`slot -s`), as ci-local and scripts/slotpool.py
+# decide; otherwise SLOT_OFF=1, for every job.
+if [ "${SLOT_OFF:-}" != 1 ] && ! "$PAR_HOME/slot" -s >/dev/null 2>&1; then export SLOT_OFF=1; fi
+# The job pool's prefix for each job's shell, or none when the pool is off. A job (FN) holds its
+# slot while it runs, so it must not call `par` with `PAR_CACHE` set: a nested cached unit could
+# wait on another gate's entry lock (scripts/par_unit.py) while holding a slot.
 par_slot() {
-  if [ "${SLOT_OFF:-}" != 1 ] && command -v perl >/dev/null; then
-    printf '%s\n' "$PAR_HOME/slot" -m "${PAR_MEM:-1}" --
-  fi
+  if [ "${SLOT_OFF:-}" != 1 ]; then printf '%s\n' "$PAR_HOME/slot" -m "${PAR_MEM:-1}" --; fi
 }
 par() {
   local fn=$1; shift
