@@ -45,7 +45,9 @@ _runs = {}
 def run(bcc, args, env=None):
     """`bcc args` under env: its status and output. A run in this process's own environment is
     made once: `compare` checks and erases the original program in both passes, the same command
-    on the same file, and the second reads the first's result."""
+    on the same file, and the second reads the first's result. The memo is keyed by the command
+    line, so a file must not change while the run lasts (each program and each renamed copy is
+    written once, before it is read)."""
     k = (bcc, tuple(args)) if env is None else None
     if k is not None and k in _runs:
         return _runs[k]
