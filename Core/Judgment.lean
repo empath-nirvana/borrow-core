@@ -559,12 +559,16 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
   | effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S')
       (h : CDerivesX I Δ Γ e (.comp (CTy.effOf S A))) : CDerivesX I Δ Γ e (.comp (CTy.effOf S' A))
-  /-- `[perform]`: a non-abortive, unmarked operation of the row: a marked one is performed only
-  by `[await-c]`.  `[spec §19, §29a]` -/
-  | effPerform {Δ Γ V} {S : Row} {o : OpSig}
+  /-- `[perform]` and `[raise]`: an unmarked operation of the row, at the primitive its abort flag
+  `ab` names (`opPrim`): a marked one is performed or raised only by `[await-c]`.  Non-abortive
+  (`perform`), the answer is the operation's; abortive (`raise`), any answer, the argument
+  consuming.  At `ab = false` it is `CDerivesX.effPerform`, at `true` `CDerivesX.effRaise`.
+  `[spec §19, §29a]` -/
+  | effOp {Δ Γ V} {S : Row} {o : OpSig} {B : VTy} {ab : Bool}
       (hAt : I.RowOK S) (hf : Row.find S o.n o.i = some o)
-      (hna : o.abort = false) (hac : o.rc = false) (h : CDerivesX I Δ Γ V (.val o.A)) :
-      CDerivesX I Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B))
+      (hab : o.abort = ab) (hrc : o.rc = false) (hB : ab = false → B = o.B)
+      (hd : ab = true → o.A.OwnFree) (h : CDerivesX I Δ Γ V (.val o.A)) :
+      CDerivesX I Δ Γ (.app (.val (.prim (opPrim ab))) (opArgE o.n o.i V)) (.comp (CTy.effOf S B))
   /-- `[await-c]`: a cancellable wait `a` (`OpSig.Cancellable`) is performed only as `await_n`,
   which raises the cancel target `c` at the same name, operation `1`, on the answer `inr ()`: a
   cancel, a resume with `inr ()`, is not a value the body may ignore.  `[spec §29a]` -/
@@ -573,12 +577,6 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
       (hfa : Row.find S n 0 = some a) (ha : a.Cancellable) (haA : a.A = .unit)
       (hfc : Row.find S n 1 = some c) (hc : c.CancelTarget) :
       CDerivesX I Δ Γ (awaitE n) (.comp (CTy.effOf S .unit))
-  /-- `[raise]`: an abortive, unmarked operation of the row, at any answer, its argument consuming:
-  a marked one, a cancel target, is raised only by `[await-c]`.  `[spec §19, §29a]` -/
-  | effRaise {Δ Γ V} {S : Row} {o : OpSig} {B : VTy}
-      (hAt : I.RowOK S) (hf : Row.find S o.n o.i = some o)
-      (ha : o.abort = true) (hrc : o.rc = false) (hd : o.A.OwnFree) (h : CDerivesX I Δ Γ V (.val o.A)) :
-      CDerivesX I Δ Γ (BoCa.BoLo.raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B))
   /-- `[let]`: `M to x. N` at a row; `N`'s context consumes at a row with weakening and is
   persistent at an unrestricted row.  `[spec §19]` -/
   | effLet {Δ Γ Γ₁ Γ₂ M N A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
@@ -789,6 +787,25 @@ theorem CDerivesX.effThenDiv {I : JIdx} {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD :
     (hD : CDerivesX I Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
     CDerivesX I Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
   .effThenF hs hNZ hUq hU hMS hDS hfin hP (.inr hcap) hM hN hD
+
+/-! ### Derived rules: `[perform]` and `[raise]`, the two sides of `effOp`'s abort flag -/
+
+/-- `[perform]`: a non-abortive, unmarked operation of the row (`effOp` at `ab = false`): a marked
+one is performed only by `[await-c]`.  `[spec §19, §29a]` -/
+theorem CDerivesX.effPerform {I : JIdx} {Δ Γ V} {S : Row} {o : OpSig}
+    (hAt : I.RowOK S) (hf : Row.find S o.n o.i = some o)
+    (hna : o.abort = false) (hac : o.rc = false) (h : CDerivesX I Δ Γ V (.val o.A)) :
+    CDerivesX I Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B)) :=
+  .effOp (ab := false) hAt hf hna hac (fun _ => rfl) nofun h
+
+/-- `[raise]`: an abortive, unmarked operation of the row, at any answer, its argument consuming
+(`effOp` at `ab = true`): a marked one, a cancel target, is raised only by `[await-c]`.
+`[spec §19, §29a]` -/
+theorem CDerivesX.effRaise {I : JIdx} {Δ Γ V} {S : Row} {o : OpSig} {B : VTy}
+    (hAt : I.RowOK S) (hf : Row.find S o.n o.i = some o)
+    (ha : o.abort = true) (hrc : o.rc = false) (hd : o.A.OwnFree) (h : CDerivesX I Δ Γ V (.val o.A)) :
+    CDerivesX I Δ Γ (BoCa.BoLo.raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B)) :=
+  .effOp (ab := true) hAt hf ha hrc nofun (fun _ => hd) h
 
 /-! ### Derived rules: `[handle]` at a value form, its continuation plain or boxed, the two
 sides of `effHandleVO`'s `d?` -/

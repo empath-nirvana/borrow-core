@@ -1603,10 +1603,12 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
       have hn := names_of_rowAt hAt hfc
       simp [awaitE, BoCa.BoLo.raiseE, BoCa.BoLo.performE, opArgE, Expr.val, Val.prim, Val.i32,
         Val.lam, Val.unit, rcE, rcE_app, hn]
-  | @effRaise _ _ V S o _ hAt hf _ _ _ _ ih =>
-      simp only [BoCa.BoLo.raiseE, opArgE, Expr.val, Val.prim, Val.i32, rcE, ih,
-        names_of_rowAt hAt hf, Bool.and_true, Bool.true_and]
-      rfl
+  | @effOp _ _ V S o _ ab hAt hf _ _ _ _ _ ih =>
+      cases ab
+      · first | rfl | simp_all [rcE, rcE_app, opPrim, opArgE, Val.i32]
+      · simp only [opPrim, opArgE, Expr.val, Val.prim, Val.i32, rcE, ih,
+          names_of_rowAt hAt hf, Bool.and_true, Bool.true_and]
+        rfl
   | effHandleVO _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       simp [hndExpr, Val.i32, rcE, rcE_app, rcE_qualsVal, ihc, ihe]
   | effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>

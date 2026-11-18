@@ -744,9 +744,8 @@ inductive TExpr where
   | unfoldK (info : TInfo) (jdg : Jdg) (C : CTy) (G : VTy) (S : VTy)
   | nuOutK (info : TInfo) (jdg : Jdg) (i : Nat) (C : CTy) (G : VTy) (S : VTy)
   | effSub (info : TInfo) (jdg : Jdg) (S : Row) (S' : Row) (A : VTy) (t : TExpr)
-  | effPerform (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (t : TExpr)
+  | effOp (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (B : VTy) (ab : Bool) (t : TExpr)
   | effAwait (info : TInfo) (jdg : Jdg) (S : Row) (n : UInt32) (a : OpSig) (c : OpSig)
-  | effRaise (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (B : VTy) (t : TExpr)
   | effLet (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (u : Masks) (tM tN : TExpr)
   | effThenF (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (SM : Row) (SD : Row) (u : Masks) (tM tN tD : TExpr)
   | effHandleVO (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (cs : Nat → Bool) (n : UInt32) (A : VTy) (R : VTy) (d? : Option Lifetime.Life) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
@@ -909,9 +908,8 @@ def TExpr.erase : TExpr → Expr
   | .unfoldK _ _ C _ _ => (.val (unfoldV C))
   | .nuOutK _ _ i _ _ _ => (.var i)
   | .effSub _ _ _ _ _ t => t.erase
-  | .effPerform _ _ _ o t => (BoCa.BoLo.performE (opArgE o.n o.i (t.erase)))
+  | .effOp _ _ _ o _ ab t => (.app (.val (.prim (opPrim ab))) (opArgE o.n o.i (t.erase)))
   | .effAwait _ _ _ n _ _ => (awaitE n)
-  | .effRaise _ _ _ o _ t => (BoCa.BoLo.raiseE (opArgE o.n o.i (t.erase)))
   | .effLet _ _ _ _ _ _ tM tN => (.app (.val (.lam (tN.erase))) (tM.erase))
   | .effThenF _ _ _ _ _ _ _ _ tM tN tD => (thenE (tN.erase) (tD.erase) (tM.erase))
   | .effHandleVO _ _ _ E _ _ n _ _ _ _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (tc.erase) (te.erase))
@@ -1032,9 +1030,8 @@ def TExpr.info : TExpr → TInfo
   | .unfoldK i _ _ _ _ => i
   | .nuOutK i _ _ _ _ _ => i
   | .effSub i _ _ _ _ _ => i
-  | .effPerform i _ _ _ _ => i
+  | .effOp i _ _ _ _ _ _ => i
   | .effAwait i _ _ _ _ _ => i
-  | .effRaise i _ _ _ _ _ => i
   | .effLet i _ _ _ _ _ _ _ => i
   | .effThenF i _ _ _ _ _ _ _ _ _ _ => i
   | .effHandleVO i _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => i
@@ -1151,9 +1148,8 @@ def TExpr.jdg : TExpr → Jdg
   | .unfoldK _ j _ _ _ => j
   | .nuOutK _ j _ _ _ _ => j
   | .effSub _ j _ _ _ _ => j
-  | .effPerform _ j _ _ _ => j
+  | .effOp _ j _ _ _ _ _ => j
   | .effAwait _ j _ _ _ _ => j
-  | .effRaise _ j _ _ _ _ => j
   | .effLet _ j _ _ _ _ _ _ => j
   | .effThenF _ j _ _ _ _ _ _ _ _ _ => j
   | .effHandleVO _ j _ _ _ _ _ _ _ _ _ _ _ _ _ _ => j
@@ -1278,9 +1274,8 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .unfoldK _ _ _ _ _ => []
   | .nuOutK _ _ _ _ _ _ => []
   | .effSub _ _ _ _ _ t => [(.push 0, t)]
-  | .effPerform _ _ _ _ t => [(.push 0, t)]
+  | .effOp _ _ _ _ _ _ t => [(.push 0, t)]
   | .effAwait _ _ _ _ _ _ => []
-  | .effRaise _ _ _ _ _ t => [(.push 0, t)]
   | .effLet _ _ _ _ _ _ tM tN => [(.push 0, tM), (.push 1, tN)]
   | .effThenF _ _ _ _ _ _ _ _ tM tN tD => [(.push 0, tM), (.push 1, tN), (.push 1, tD)]
   | .effHandleVO _ _ _ _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
@@ -1416,9 +1411,8 @@ def TExpr.isLam : TExpr → Bool
   | .unfoldK _ _ C _ _ => (((.val (unfoldV C)) : Expr) matches .lam _)
   | .nuOutK _ _ _ _ _ _ => false
   | .effSub _ _ _ _ _ t => t.isLam
-  | .effPerform _ _ _ o t => (((BoCa.BoLo.performE (opArgE o.n o.i (t.erase))) : Expr) matches .lam _)
+  | .effOp _ _ _ _ _ _ _ => false
   | .effAwait _ _ _ n _ _ => (((awaitE n) : Expr) matches .lam _)
-  | .effRaise _ _ _ o _ t => (((BoCa.BoLo.raiseE (opArgE o.n o.i (t.erase))) : Expr) matches .lam _)
   | .effLet _ _ _ _ _ _ _ _ => false
   | .effThenF _ _ _ _ _ _ _ _ tM tN tD => (((thenE (tN.erase) (tD.erase) (tM.erase)) : Expr) matches .lam _)
   | .effHandleVO _ _ _ E _ _ n _ _ _ _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (tc.erase) (te.erase)) : Expr) matches .lam _)
@@ -1539,9 +1533,8 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .unfoldK _ _ _ _ _ => rfl
   | .nuOutK _ _ _ _ _ _ => rfl
   | .effSub _ _ _ _ _ t => isLam_eq t
-  | .effPerform _ _ _ _ _ => rfl
+  | .effOp _ _ _ _ _ _ _ => rfl
   | .effAwait _ _ _ _ _ _ => rfl
-  | .effRaise _ _ _ _ _ _ => rfl
   | .effLet _ _ _ _ _ _ _ _ => rfl
   | .effThenF _ _ _ _ _ _ _ _ _ _ _ => rfl
   | .effHandleVO _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
@@ -1580,6 +1573,15 @@ abbreviation of the folded rule's node, so that statements over the node keep th
     (fs : Nat → CTy) (cs : Nat → Bool) (n : UInt32) (A R : VTy) (d : Lifetime.Life) (u : Masks)
     (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr) : TExpr :=
   .effHandleVO info jdg S E fs cs n A R (some d) u ks site inside tc te
+
+/-- `[perform]`: `effOp`'s node at `ab = false`, its answer the operation's.  `[spec §19]` -/
+abbrev TExpr.effPerform (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (t : TExpr) : TExpr :=
+  .effOp info jdg S o o.B false t
+
+/-- `[raise]`: `effOp`'s node at `ab = true`.  `[spec §19]` -/
+abbrev TExpr.effRaise (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (B : VTy)
+    (t : TExpr) : TExpr :=
+  .effOp info jdg S o B true t
 
 theorem TExpr.isLam_sound (t : TExpr) (h : t.isLam = true) : ∃ N, t.erase = .val (.lam N) := by
   rw [isLam_eq] at h

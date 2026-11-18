@@ -241,9 +241,8 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .unfoldK ii jj C G S => []
   | .nuOutK ii jj i C G S => []
   | .effSub ii jj S S' A t => t.lifeBinders
-  | .effPerform ii jj S o t => t.lifeBinders
+  | .effOp ii jj S o B ab t => t.lifeBinders
   | .effAwait ii jj S n a c => []
-  | .effRaise ii jj S o B t => t.lifeBinders
   | .effLet ii jj A B S u tM tN => tM.lifeBinders ++ tN.lifeBinders
   | .effThenF ii jj A B S SM SD u tM tN tD => tM.lifeBinders ++ tN.lifeBinders ++ tD.lifeBinders
   | .effHandleVO ii jj S E fs cs n A R d? u ks site inside tc te => tc.lifeBinders ++ te.lifeBinders
@@ -361,9 +360,8 @@ def TExpr.domFree : TExpr → Bool
   | .unfoldK ii jj C G S => true
   | .nuOutK ii jj i C G S => true
   | .effSub ii jj S S' A t => t.domFree
-  | .effPerform ii jj S o t => t.domFree
+  | .effOp ii jj S o B ab t => t.domFree
   | .effAwait ii jj S n a c => true
-  | .effRaise ii jj S o B t => t.domFree
   | .effLet ii jj A B S u tM tN => tM.domFree && tN.domFree
   | .effThenF ii jj A B S SM SD u tM tN tD => tM.domFree && tN.domFree && tD.domFree
   | .effHandleVO ii jj S E fs cs n A R d? u ks site inside tc te => tc.domFree && te.domFree
@@ -480,9 +478,8 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .unfoldK ii jj C G S => .unfoldK ii jj C G S
   | .nuOutK ii jj i C G S => .nuOutK ii jj i C G S
   | .effSub ii jj S S' A t => .effSub ii jj S S' A (t.reAb Δr)
-  | .effPerform ii jj S o t => .effPerform ii jj S o (t.reAb Δr)
+  | .effOp ii jj S o B ab t => .effOp ii jj S o B ab (t.reAb Δr)
   | .effAwait ii jj S n a c => .effAwait ii jj S n a c
-  | .effRaise ii jj S o B t => .effRaise ii jj S o B (t.reAb Δr)
   | .effLet ii jj A B S u tM tN => .effLet ii jj A B S u (tM.reAb Δr) (tN.reAb Δr)
   | .effThenF ii jj A B S SM SD u tM tN tD => .effThenF ii jj A B S SM SD u (tM.reAb Δr) (tN.reAb Δr) (tD.reAb Δr)
   | .effHandleVO ii jj S E fs cs n A R d? u ks site inside tc te => .effHandleVO ii jj S E fs cs n A R d? u ks site inside (tc.reAb Δr) (te.reAb Δr)
@@ -898,15 +895,12 @@ theorem TDerivesX.weakenΔ {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} 
   | effSub a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesX.effSub a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | effPerform a0 a1 a2 a3 a4 ih0 =>
+  | effOp a0 a1 a2 a3 a4 a5 a6 ih0 =>
       intro Δ' he hd
-      exact TDerivesX.effPerform a0 a1 a2 a3 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
+      exact TDerivesX.effOp a0 a1 a2 a3 a4 a5 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
   | effAwait a0 a1 a2 a3 a4 a5 a6 =>
       intro Δ' he hd
       exact TDerivesX.effAwait a0 a1 a2 a3 a4 a5 a6
-  | effRaise a0 a1 a2 a3 a4 a5 ih0 =>
-      intro Δ' he hd
-      exact TDerivesX.effRaise a0 a1 a2 a3 a4 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
   | effLet a0 a1 a2 a3 a4 a5 a6 ih0 ih1 =>
       intro Δ' he hd
       exact TDerivesX.effLet a0 a1 (by simpa only [TExpr.reAb_erase] using a2) a3 a4 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))

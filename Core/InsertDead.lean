@@ -530,13 +530,12 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       intro Γa Γb hΓ; subst hΓ
       rw [var_shift]; exact .nuOutK hC hG hS hGf (soloP_insert hd Γa hs)
   | effSub hle _ ih => intro Γa Γb hΓ; exact .effSub hle (ih Γa Γb hΓ)
-  | effPerform hAt hf hna hac _ ih => intro Γa Γb hΓ; exact .effPerform hAt hf hna hac (ih Γa Γb hΓ)
+  | effOp hAt hf hab hrc hB hd _ ih => intro Γa Γb hΓ; exact .effOp hAt hf hab hrc hB hd (ih Γa Γb hΓ)
   | effAwait hAt hΓ hfa ha haA hfc hc =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := awaitE _) (by simp [awaitE, closedAt, opArgE, BoCa.BoLo.performE,
         BoCa.BoLo.raiseE, Expr.val, Val.prim, Val.i32, Val.lam, Val.unit])]
       exact .effAwait hAt (dead_insert hd Γa hΓ) hfa ha haA hfc hc
-  | effRaise hAt hf ha hrc hdr _ ih => intro Γa Γb hΓ; exact .effRaise hAt hf ha hrc hdr (ih Γa Γb hΓ)
   | effLet hs hW hU _ _ ihM ihN =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs

@@ -697,16 +697,11 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.alpha d hα, e⟩
   | effAwait => intro _ _ _ _ _ hf; simp [TExpr.absF] at hf
-  | effPerform hAt hf₀ hna hac _ ih =>
+  | effOp hAt hf₀ hab hrc hB hd _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.effPerform hAt hf₀ hna hac d, by
-        simp only [TExpr.shift, TExpr.erase, BoCa.BoLo.performE, opArgE, Expr.shift, e]; rfl⟩
-  | effRaise hAt hf₀ ha hrc hd _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.effRaise hAt hf₀ ha hrc hd d, by
-        simp only [TExpr.shift, TExpr.erase, BoCa.BoLo.raiseE, opArgE, Expr.shift, e]; rfl⟩
+      exact ⟨.effOp hAt hf₀ hab hrc hB hd d, by
+        simp only [TExpr.shift, TExpr.erase, opArgE, Expr.shift, e]; rfl⟩
   | effLet hs hm hcv hW hU _ _ ihM ihN =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp

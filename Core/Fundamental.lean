@@ -557,9 +557,11 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
   | unfoldK C G S hC hG hS hΓ => exact unfoldK_compatX hC hG hS hΓ
   | nuOutK hC hG hS hGf h => exact nuOutK_compatX hC hG hS hGf h
   | effSub hle _ ih => exact sub_compatC hle ih
-  | effPerform _ hf hna _ _ ih => exact perform_compatC hf hna ih
+  | @effOp _ _ _ _ _ _ ab _ hf hab _ hB hd _ ih =>
+      cases ab
+      · obtain rfl := hB rfl; exact perform_compatC hf hab ih
+      · exact raise_compatC hf hab (fun _ _ _ _ h => vC_noOwn_of_ownFree (hd rfl) h) ih
   | effAwait _ hΓ hfa ha haA hfc hc => exact semC_dead .nil hΓ (await_compatC hfa ha haA hfc hc)
-  | effRaise _ hf ha _ hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_ownFree hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatC hs hW hU ihM ihN
   | @effThenF _ _ _ _ _ _ _ _ _ _ SM SD hs hNZ _ hU hMS hDS hfin hP hF _ _ _ ihM ihN ihD =>
       cases hSD : Row.divB SD

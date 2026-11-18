@@ -1049,9 +1049,9 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       · obtain ⟨T, hT⟩ := ihV k hk; exact ⟨T, splitP_le_left hs k T hT⟩
       · omega
       · omega
-  | effPerform _ _ _ _ ih | effRaise _ _ _ _ _ ih =>
+  | effOp _ _ _ _ _ _ ih =>
       intro k hk
-      simp only [BoCa.BoLo.performE, BoCa.BoLo.raiseE, opArgE, Expr.val, Val.prim, Val.i32,
+      simp only [opArgE, Expr.val, Val.prim, Val.i32,
         Expr.HasVar, false_or] at hk
       exact ih k hk
   | effThenF hs _ _ _ _ _ _ _ _ _ _ _ ihM ihN ihD =>
@@ -1522,13 +1522,11 @@ theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       · cases h
       · cases h; exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
           (.inl ⟨rfl, _, rfl⟩)))))))), .refl⟩
-  | effPerform =>
-      intro X Y he; cases he
-      exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl rfl))))))))), .refl⟩
-  | effRaise =>
-      intro X Y he; cases he
-      exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl rfl)))))))))),
-        .refl⟩
+  | @effOp _ _ _ _ _ _ ab =>
+      intro X Y he; cases he; cases ab
+      · exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl rfl))))))))), .refl⟩
+      · exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl rfl)))))))))),
+          .refl⟩
   | effThenF =>
       intro X Y he; cases he
       exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
@@ -3125,12 +3123,13 @@ def PerfBase (n i : UInt32) (j₀ : Jdg) : Prop :=
 theorem der_performJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ n i V, e = BoCa.BoLo.performE (opArgE n i V) → ∃ j₀, PerfBase n i j₀ ∧ JR j₀ j := by
   induction h using CDerives.induct with
-  | effPerform hf hna hac _ =>
+  | effOp hf hab hac hB _ _ =>
       intro n i V he
       simp only [BoCa.BoLo.performE, opArgE, Expr.val, Val.prim, Val.i32, Expr.app.injEq,
-        Expr.pair.injEq, Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at he
-      obtain ⟨-, rfl, rfl, -⟩ := he
-      exact ⟨_, ⟨_, _, hf, hna, hac, rfl⟩, .refl⟩
+        Expr.pair.injEq, Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq, opPrim_eq_iff] at he
+      obtain ⟨⟨rfl, -⟩ | ⟨-, ⟨⟩⟩, rfl, rfl, -⟩ := he
+      obtain rfl := hB rfl
+      exact ⟨_, ⟨_, _, hf, hab, hac, rfl⟩, .refl⟩
   | force => intro n i V he; rcases forceE_var he with h | h <;> cd_at h
   | lolliE _ _ hf =>
       intro n i V he; simp only [BoCa.BoLo.performE, Expr.app.injEq] at he
@@ -3196,12 +3195,12 @@ def RaiseBase (n i : UInt32) (j₀ : Jdg) : Prop :=
 theorem der_raiseJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ n i V, e = BoCa.BoLo.raiseE (opArgE n i V) → ∃ j₀, RaiseBase n i j₀ ∧ JR j₀ j := by
   induction h using CDerives.induct with
-  | effRaise hf ha hrc _ _ =>
+  | effOp hf hab hrc _ _ _ =>
       intro n i V he
       simp only [BoCa.BoLo.raiseE, opArgE, Expr.val, Val.prim, Val.i32, Expr.app.injEq,
-        Expr.pair.injEq, Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at he
-      obtain ⟨-, rfl, rfl, -⟩ := he
-      exact ⟨_, ⟨_, _, _, hf, ha, hrc, rfl⟩, .refl⟩
+        Expr.pair.injEq, Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq, opPrim_eq_iff] at he
+      obtain ⟨⟨-, ⟨⟩⟩ | ⟨rfl, -⟩, rfl, rfl, -⟩ := he
+      exact ⟨_, ⟨_, _, _, hf, hab, hrc, rfl⟩, .refl⟩
   | force => intro n i V he; rcases forceE_var he with h | h <;> cd_at h
   | lolliE _ _ hf =>
       intro n i V he; simp only [BoCa.BoLo.raiseE, Expr.app.injEq] at he

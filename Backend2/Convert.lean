@@ -3328,7 +3328,7 @@ def joinWith (c₂ : Ctx) (A : VTy) (args : List Var) (body : Ctx → List Var �
 at an outcome, each is converted inside a machine.  `[spec §49]` -/
 def machNode : TExpr → Bool
   | .effLet .. | .effThenF .. | .bind .. | .sumE .. | .tensorE .. | .unitE .. | .zeroE .. | .effSub ..
-  | .effRaise .. | .effPerform .. | .nilDead .. | .lendR .. => true
+  | .effOp .. | .nilDead .. | .lendR .. => true
   | .lendScope _ _ _ t | .alpha _ _ _ _ t => machNode t
   | _ => false
 
@@ -3492,7 +3492,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let p ← rowPay S; let q ← rowPay S'
     let a ← vty A
     bindTm (← conv fuel ctx c) (resTy a p) fun r => coerceRes a p q r
-  | .effRaise _ _ S o _ c => do
+  | .effOp _ _ S o _ true c => do
     -- `raise`: the abort at its operation's summand, handed to the handler's join (`catch_abort`,
     -- `abort_absorbs`).  [spec §47]
     readFact "effRaise:op"
@@ -3500,7 +3500,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let p ← rowPay S
     let some j := payIdx p (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay p j v fun w => pure (.inj true w)
-  | .effPerform _ _ S o c => do
+  | .effOp _ _ S o _ false c => do
     -- `perform` of a tail-resumptive clause: a direct call of the clause's work (`tail_resumes`,
     -- `TailResumesAt.subst_kappa`, `tail_clause_names`, `Checked.unhandledNames`).  [spec §47]
     if (← get).mach.contains (o.n, o.i) then
@@ -3795,13 +3795,13 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     readFact "effSub:rows"
     convK fuel ctx c K args
   | .alpha _ _ _ _ c => convK fuel ctx c K args
-  | .effRaise _ _ _ o _ c => do
+  | .effOp _ _ _ o _ true c => do
     readFact "effRaise:op"
     modify fun st => { st with erased := st.erased.insert "raise" (st.erased.getD "raise" 0 + 1) }
     let F ← curMach
     let some j := payIdx F.pay (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay F.pay j v fun e => abortK F K args e
-  | .effPerform _ _ _ o c => do
+  | .effOp _ _ _ o _ false c => do
     if (← get).mach.contains (o.n, o.i) then
       readFact "effPerform:machine"
       bindTm (← conv fuel ctx c) (← vty o.A) fun v => performK K args (o.n, o.i) v

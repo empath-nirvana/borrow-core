@@ -806,6 +806,15 @@ abbreviation of the folded rule's node, so that statements over the node keep th
     (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr) : TExpr :=
   .effHandleVO info jdg S E fs cs n A R (some d) u ks site inside tc te
 
+/-- `[perform]`: `effOp`'s node at `ab = false`, its answer the operation's.  `[spec §19]` -/
+abbrev TExpr.effPerform (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (t : TExpr) : TExpr :=
+  .effOp info jdg S o o.B false t
+
+/-- `[raise]`: `effOp`'s node at `ab = true`.  `[spec §19]` -/
+abbrev TExpr.effRaise (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (B : VTy)
+    (t : TExpr) : TExpr :=
+  .effOp info jdg S o B true t
+
 theorem TExpr.isLam_sound (t : TExpr) (h : t.isLam = true) : ∃ N, t.erase = .val (.lam N) := by
   rw [isLam_eq] at h
   match he : t.erase, h with

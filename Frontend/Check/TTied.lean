@@ -285,16 +285,18 @@ theorem effPerform {p : Pins} {s : CRow} {t : TExpr} {S : CRow} {o : COpSig}
     (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o) (hna : o.abort = false)
     (hac : o.rc = false) (h : TTied p s Δ Γ t (.val o.A)) :
     TTied p (S ∪ s) Δ Γ (.effPerform i (.comp (effOf S o.B)) S o t) (.comp (effOf S o.B)) :=
-  ⟨fun hn Ξ hΞ => .effPerform (rowAt_of_union_left hΞ) hf hna hac (h.1 hn Ξ (sigsAt_union_right hΞ)),
-    .effPerform hf hna hac h.2⟩
+  ⟨fun hn Ξ hΞ => .effOp (rowAt_of_union_left hΞ) hf hna hac (fun _ => rfl) nofun
+      (h.1 hn Ξ (sigsAt_union_right hΞ)),
+    .effOp hf hna hac (fun _ => rfl) nofun h.2⟩
 
 /-- `[raise]` reads its row. -/
 theorem effRaise {p : Pins} {s : CRow} {t : TExpr} {S : CRow} {o : COpSig} {B : CVTy}
     (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o) (ha : o.abort = true)
     (hrc : o.rc = false) (hd : o.A.OwnFree) (h : TTied p s Δ Γ t (.val o.A)) :
     TTied p (S ∪ s) Δ Γ (.effRaise i (.comp (effOf S B)) S o B t) (.comp (effOf S B)) :=
-  ⟨fun hn Ξ hΞ => .effRaise (rowAt_of_union_left hΞ) hf ha hrc hd (h.1 hn Ξ (sigsAt_union_right hΞ)),
-    .effRaise hf ha hrc hd h.2⟩
+  ⟨fun hn Ξ hΞ => .effOp (rowAt_of_union_left hΞ) hf ha hrc nofun (fun _ => hd)
+      (h.1 hn Ξ (sigsAt_union_right hΞ)),
+    .effOp hf ha hrc nofun (fun _ => hd) h.2⟩
 
 theorem effLet (u : Masks) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tM tN : TExpr} {A B : CVTy}
     {S : CRow} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)

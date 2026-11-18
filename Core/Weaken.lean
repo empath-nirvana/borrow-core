@@ -181,10 +181,9 @@ theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (
   | unfoldK C G S hC hG hS hΓ => exact .unfoldK C G S hC hG hS (deadP_append h' hΓ)
   | nuOutK hC hG hS hGf hs => exact .nuOutK hC hG hS hGf (soloP_append h' hs)
   | effSub hle _ ih => exact .effSub hle ih
-  | effPerform hAt hf hna hac _ ih => exact .effPerform hAt hf hna hac ih
+  | effOp hAt hf hab hrc hB hd _ ih => exact .effOp hAt hf hab hrc hB hd ih
   | effAwait hAt hΓ hfa ha haA hfc hc =>
       exact .effAwait hAt (dead_append_dead hΓ h') hfa ha haA hfc hc
-  | effRaise hAt hf ha hrc hd _ ih => exact .effRaise hAt hf ha hrc hd ih
   | effLet hs hW hU _ _ ihM ihN =>
       exact .effLet (splitP_append h' hs)
         (fun hw => live_append (P := fun s => s.ty.OwnFree) h' (hW hw))

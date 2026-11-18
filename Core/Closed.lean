@@ -148,8 +148,8 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | unfoldN => exact closedAt_of_zero (unfoldV_closed _) _
   | unfoldK => exact closedAt_of_zero (unfoldV_closed _) _
   | nuOutK _ _ _ _ h => simpa [closedAt] using soloP_lt h
-  | effPerform _ _ _ _ ih | effRaise _ _ _ _ _ ih =>
-      simp [performE, raiseE, opArgE, closedAt, Expr.val, Val.prim, Val.i32, ih]
+  | effOp _ _ _ _ _ _ ih =>
+      simp [opArgE, closedAt, Expr.val, Val.prim, Val.i32, ih]
   | effAwait =>
       simp [awaitE, performE, raiseE, opArgE, closedAt, Expr.val, Val.prim, Val.i32, Val.lam,
         Val.unit]

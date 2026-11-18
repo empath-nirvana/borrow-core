@@ -196,14 +196,15 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | unfoldK C G S hC hG hS hΓ => exact unfoldK_compatN hC hG hS hΓ
   | nuOutK hC hG hS hGf h => exact nuOutK_compatN hC hG hS hGf h
   | effSub hle _ ih => exact sub_compatN hle ih
-  | effPerform hf hna _ _ ih => exact perform_compatN hf hna ih
+  | @effOp _ _ _ _ _ _ ab hf hab _ hB hd _ ih =>
+      cases ab
+      · obtain rfl := hB rfl; exact perform_compatN hf hab ih
+      · exact raise_compatN hf hab (fun _ _ _ _ _ h => vN_noOwn_of_ownFree (hd rfl) h) ih
   | effAwait hΓ hfa ha haA hfc hc =>
       exact semJN_dead .nil hΓ (fun γ γ' => by
           rw [show substAll γ (awaitE _) = _ from psub_closedAt _ γ awaitE_closed le_rfl,
             show substAll γ' (awaitE _) = _ from psub_closedAt _ γ' awaitE_closed le_rfl])
         (await_compatN hfa ha haA hfc hc)
-  | effRaise hf ha _ hd _ ih =>
-      exact raise_compatN hf ha (fun _ _ _ _ _ h => vN_noOwn_of_ownFree hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatN hs hW hU ihM ihN
   | @effThenF _ _ _ _ _ _ _ _ _ _ SM SD hs hNZ _ hU hMS hDS hfin hP hF _ _ _ ihM ihN ihD =>
       cases hSD : Row.divB SD

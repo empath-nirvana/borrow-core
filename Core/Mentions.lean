@@ -280,9 +280,9 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
       intro k hk; simp only [mentions, beq_iff_eq] at hk; subst hk; exact h.live
   | divFuel => intro k hk; rw [mentions_of_closed divFuelV_closed] at hk; cases hk
   | reify _ _ _ _ _ hcl => intro k hk; rw [mentions_of_closed (reifyV_closed hcl)] at hk; cases hk
-  | effPerform _ _ _ _ ih | effRaise _ _ _ _ _ ih =>
+  | effOp _ _ _ _ _ _ ih =>
       intro k hk
-      simp [BoCa.BoLo.performE, BoCa.BoLo.raiseE, opArgE, mentions, Expr.val, Val.prim, Val.i32] at hk
+      simp [opArgE, mentions, Expr.val, Val.prim, Val.i32] at hk
       exact ih k hk
   | effThenF hs _ _ _ _ _ _ _ _ _ _ _ ihM ihN ihD =>
       intro k hk
