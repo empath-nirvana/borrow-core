@@ -165,11 +165,12 @@ theorem TDerivesAt.withbor2_witness_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx 
     {A B : VTy} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (b₁ b₂ : Lifetime.Life)
     (h₁ : Δ.Defines b₁ ∧ VOutlivesLe Δ b₁ A) (h₂ : Δ.Defines b₂ ∧ VOutlivesLe Δ b₂ A) :
-    TDerivesAt Ξ Δ Γ (.withbor2 i (.val (axWithbor2Ty x Δ.meetOfDom A B)) A B x)
+    TDerivesAt Ξ Δ Γ (.constK i (.val (axWithbor2Ty x Δ.meetOfDom A B)) (.withbor2 A B x))
         (.val (axWithbor2Ty x Δ.meetOfDom A B)) ∧
-      TDerivesAt Ξ Δ Γ (.withbor2 i (.val (axWithbor2Ty x Δ.meetOfDom A B)) A B x)
+      TDerivesAt Ξ Δ Γ (.constK i (.val (axWithbor2Ty x Δ.meetOfDom A B)) (.withbor2 A B x))
         (.val (axWithbor2Ty x Δ.meetOfDom A B)) :=
-  ⟨.withbor2 x hΓ hx ⟨b₁, h₁⟩ hfree₁ hfree₂, .withbor2 x hΓ hx ⟨b₂, h₂⟩ hfree₁ hfree₂⟩
+  ⟨.constK _ (rowAt_nil Ξ) ⟨hx, ⟨b₁, h₁⟩, hfree₁, hfree₂⟩ hΓ,
+    .constK _ (rowAt_nil Ξ) ⟨hx, ⟨b₂, h₂⟩, hfree₁, hfree₂⟩ hΓ⟩
 
 /-- **The clause kinds are the checker's, not the derivation's**: a typed derivation of a
 `handle` node is one at any kinds. -/

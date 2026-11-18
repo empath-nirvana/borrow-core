@@ -145,7 +145,6 @@ theorem extΔB_sound {Δ Δ' : LifeCtx} {B : List LifeVar} (h : extΔB Δ Δ' B 
 /-- **The lifetime variables a term's rules bind**: `∀I`'s, and the relaxed lends'. -/
 def TExpr.lifeBinders : TExpr → List LifeVar
   | .var ii jj i A => []
-  | .unitI ii jj => []
   | .tensorI ii jj A B u t₁ t₂ => t₁.lifeBinders ++ t₂.lifeBinders
   | .sumI₁ ii jj A B t => t.lifeBinders
   | .sumI₂ ii jj A B t => t.lifeBinders
@@ -174,56 +173,13 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .codeErase ii jj C E t => t.lifeBinders
   | .codeEraseB ii jj C E t => t.lifeBinders
   | .bangE ii jj A t => t.lifeBinders
-  | .copyBang ii jj A => []
-  | .releaseBang ii jj A => []
   | .boxI ii jj a A t => t.lifeBinders
   | .boxE ii jj a A t => t.lifeBinders
   | .immSub ii jj a b A t => t.lifeBinders
   | .mutSub ii jj a b A t => t.lifeBinders
-  | .alloc ii jj A => []
-  | .free ii jj A => []
-  | .tokMint ii jj => []
-  | .tokBurn ii jj => []
-  | .swap ii jj A B => []
-  | .copy ii jj a A => []
-  | .releaseImm ii jj a A => []
-  | .releaseMut ii jj a A => []
-  | .releaseUnk ii jj => []
-  | .lit ii jj c => []
-  | .hostOp ii jj op => []
-  | .arrNew ii jj A => []
-  | .arrFree ii jj A => []
-  | .arrSize ii jj A => []
-  | .arrReplace ii jj A => []
-  | .arrLen ii jj a A => []
-  | .arrGet ii jj a A => []
-  | .arrCopy ii jj a A => []
-  | .arrRelease ii jj a A => []
-  | .countFold ii jj S => []
-  | .countTry ii jj S E => []
-  | .boundedFix ii jj A C => []
-  | .iterate ii jj S St B R => []
-  | .divFuel ii jj S A => []
+  | .constK ii jj k => []
   | .reify ii jj S B R tres => tres.lifeBinders
-  | .sliceBorrowM ii jj A B x => []
-  | .sliceBorrowI ii jj A B x => []
-  | .sliceGetM ii jj a A => []
-  | .sliceLenM ii jj a A => []
-  | .sliceSplitI ii jj a A => []
-  | .sliceSplitM ii jj a A => []
-  | .sliceEmptyI ii jj a A => []
-  | .sliceEmptyM ii jj a A => []
-  | .arrEmpty ii jj A => []
-  | .sliceReplaceM ii jj a A => []
-  | .sliceSwapM ii jj a A => []
-  | .sliceCopyM ii jj a b A => []
-  | .withbor1 ii jj A B x => []
-  | .withbor2 ii jj A B x => []
-  | .withbor3 ii jj a A B x => []
-  | .withload ii jj a A B x => []
-  | .withswap ii jj a A B => []
   | .withborUD ii jj A B SM SD S k x td => td.lifeBinders
-  | .withloadU ii jj a A B S x => []
   | .sliceBorrowMU ii jj A B S x td => td.lifeBinders
   | .sliceBorrowIU ii jj A B S x td => td.lifeBinders
   | .lolliE ii jj A B u ta tf => ta.lifeBinders ++ tf.lifeBinders
@@ -231,14 +187,8 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .ofRet ii jj A t => t.lifeBinders
   | .roll ii jj A t => t.lifeBinders
   | .unroll ii jj A t => t.lifeBinders
-  | .foldImm ii jj F y c R => []
-  | .foldOwn ii jj F R => []
-  | .foldReuse ii jj F R => []
-  | .foldOwnG ii jj B₀ => []
   | .nuIn ii jj m i C t => t.lifeBinders
   | .nuOut ii jj m i C t => t.lifeBinders
-  | .unfoldN ii jj C S => []
-  | .unfoldK ii jj C G S => []
   | .nuOutK ii jj i C G S => []
   | .effSub ii jj S S' A t => t.lifeBinders
   | .effPerform ii jj S o t => t.lifeBinders
@@ -267,7 +217,6 @@ def TExpr.lifeBinders : TExpr → List LifeVar
 and family borrows, and the relaxed lends are absent. -/
 def TExpr.domFree : TExpr → Bool
   | .var ii jj i A => true
-  | .unitI ii jj => true
   | .tensorI ii jj A B u t₁ t₂ => t₁.domFree && t₂.domFree
   | .sumI₁ ii jj A B t => t.domFree
   | .sumI₂ ii jj A B t => t.domFree
@@ -296,56 +245,13 @@ def TExpr.domFree : TExpr → Bool
   | .codeErase ii jj C E t => t.domFree
   | .codeEraseB ii jj C E t => t.domFree
   | .bangE ii jj A t => t.domFree
-  | .copyBang ii jj A => true
-  | .releaseBang ii jj A => true
   | .boxI ii jj a A t => t.domFree
   | .boxE ii jj a A t => t.domFree
   | .immSub ii jj a b A t => t.domFree
   | .mutSub ii jj a b A t => t.domFree
-  | .alloc ii jj A => true
-  | .free ii jj A => true
-  | .tokMint ii jj => true
-  | .tokBurn ii jj => true
-  | .swap ii jj A B => true
-  | .copy ii jj a A => true
-  | .releaseImm ii jj a A => true
-  | .releaseMut ii jj a A => true
-  | .releaseUnk ii jj => true
-  | .lit ii jj c => true
-  | .hostOp ii jj op => true
-  | .arrNew ii jj A => true
-  | .arrFree ii jj A => true
-  | .arrSize ii jj A => true
-  | .arrReplace ii jj A => true
-  | .arrLen ii jj a A => true
-  | .arrGet ii jj a A => true
-  | .arrCopy ii jj a A => true
-  | .arrRelease ii jj a A => true
-  | .countFold ii jj S => true
-  | .countTry ii jj S E => true
-  | .boundedFix ii jj A C => true
-  | .iterate ii jj S St B R => true
-  | .divFuel ii jj S A => true
+  | .constK ii jj k => k.domFree
   | .reify ii jj S B R tres => tres.domFree
-  | .sliceBorrowM ii jj A B x => false
-  | .sliceBorrowI ii jj A B x => false
-  | .sliceGetM ii jj a A => true
-  | .sliceLenM ii jj a A => true
-  | .sliceSplitI ii jj a A => true
-  | .sliceSplitM ii jj a A => true
-  | .sliceEmptyI ii jj a A => true
-  | .sliceEmptyM ii jj a A => true
-  | .arrEmpty ii jj A => true
-  | .sliceReplaceM ii jj a A => true
-  | .sliceSwapM ii jj a A => true
-  | .sliceCopyM ii jj a b A => true
-  | .withbor1 ii jj A B x => false
-  | .withbor2 ii jj A B x => false
-  | .withbor3 ii jj a A B x => false
-  | .withload ii jj a A B x => false
-  | .withswap ii jj a A B => true
   | .withborUD ii jj A B SM SD S k x td => false
-  | .withloadU ii jj a A B S x => false
   | .sliceBorrowMU ii jj A B S x td => false
   | .sliceBorrowIU ii jj A B S x td => false
   | .lolliE ii jj A B u ta tf => ta.domFree && tf.domFree
@@ -353,14 +259,8 @@ def TExpr.domFree : TExpr → Bool
   | .ofRet ii jj A t => t.domFree
   | .roll ii jj A t => t.domFree
   | .unroll ii jj A t => t.domFree
-  | .foldImm ii jj F y c R => true
-  | .foldOwn ii jj F R => true
-  | .foldReuse ii jj F R => true
-  | .foldOwnG ii jj B₀ => true
   | .nuIn ii jj m i C t => t.domFree
   | .nuOut ii jj m i C t => t.domFree
-  | .unfoldN ii jj C S => true
-  | .unfoldK ii jj C G S => true
   | .nuOutK ii jj i C G S => true
   | .effSub ii jj S S' A t => t.domFree
   | .effPerform ii jj S o t => t.domFree
@@ -388,7 +288,6 @@ def TExpr.domFree : TExpr → Bool
 /-- **The term at a larger lifetime context `D`**: each `use` node's absorption at its context. -/
 def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .var ii jj i A => .var ii jj i A
-  | .unitI ii jj => .unitI ii jj
   | .tensorI ii jj A B u t₁ t₂ => .tensorI ii jj A B u (t₁.reAb Δr) (t₂.reAb Δr)
   | .sumI₁ ii jj A B t => .sumI₁ ii jj A B (t.reAb Δr)
   | .sumI₂ ii jj A B t => .sumI₂ ii jj A B (t.reAb Δr)
@@ -417,56 +316,13 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .codeErase ii jj C E t => .codeErase ii jj C E (t.reAb Δr)
   | .codeEraseB ii jj C E t => .codeEraseB ii jj C E (t.reAb Δr)
   | .bangE ii jj A t => .bangE ii jj A (t.reAb Δr)
-  | .copyBang ii jj A => .copyBang ii jj A
-  | .releaseBang ii jj A => .releaseBang ii jj A
   | .boxI ii jj a A t => .boxI ii jj a A (t.reAb Δr)
   | .boxE ii jj a A t => .boxE ii jj a A (t.reAb Δr)
   | .immSub ii jj a b A t => .immSub ii jj a b A (t.reAb Δr)
   | .mutSub ii jj a b A t => .mutSub ii jj a b A (t.reAb Δr)
-  | .alloc ii jj A => .alloc ii jj A
-  | .free ii jj A => .free ii jj A
-  | .tokMint ii jj => .tokMint ii jj
-  | .tokBurn ii jj => .tokBurn ii jj
-  | .swap ii jj A B => .swap ii jj A B
-  | .copy ii jj a A => .copy ii jj a A
-  | .releaseImm ii jj a A => .releaseImm ii jj a A
-  | .releaseMut ii jj a A => .releaseMut ii jj a A
-  | .releaseUnk ii jj => .releaseUnk ii jj
-  | .lit ii jj c => .lit ii jj c
-  | .hostOp ii jj op => .hostOp ii jj op
-  | .arrNew ii jj A => .arrNew ii jj A
-  | .arrFree ii jj A => .arrFree ii jj A
-  | .arrSize ii jj A => .arrSize ii jj A
-  | .arrReplace ii jj A => .arrReplace ii jj A
-  | .arrLen ii jj a A => .arrLen ii jj a A
-  | .arrGet ii jj a A => .arrGet ii jj a A
-  | .arrCopy ii jj a A => .arrCopy ii jj a A
-  | .arrRelease ii jj a A => .arrRelease ii jj a A
-  | .countFold ii jj S => .countFold ii jj S
-  | .countTry ii jj S E => .countTry ii jj S E
-  | .boundedFix ii jj A C => .boundedFix ii jj A C
-  | .iterate ii jj S St B R => .iterate ii jj S St B R
-  | .divFuel ii jj S A => .divFuel ii jj S A
+  | .constK ii jj k => .constK ii jj k
   | .reify ii jj S B R tres => .reify ii jj S B R (tres.reAb Δr)
-  | .sliceBorrowM ii jj A B x => .sliceBorrowM ii jj A B x
-  | .sliceBorrowI ii jj A B x => .sliceBorrowI ii jj A B x
-  | .sliceGetM ii jj a A => .sliceGetM ii jj a A
-  | .sliceLenM ii jj a A => .sliceLenM ii jj a A
-  | .sliceSplitI ii jj a A => .sliceSplitI ii jj a A
-  | .sliceSplitM ii jj a A => .sliceSplitM ii jj a A
-  | .sliceEmptyI ii jj a A => .sliceEmptyI ii jj a A
-  | .sliceEmptyM ii jj a A => .sliceEmptyM ii jj a A
-  | .arrEmpty ii jj A => .arrEmpty ii jj A
-  | .sliceReplaceM ii jj a A => .sliceReplaceM ii jj a A
-  | .sliceSwapM ii jj a A => .sliceSwapM ii jj a A
-  | .sliceCopyM ii jj a b A => .sliceCopyM ii jj a b A
-  | .withbor1 ii jj A B x => .withbor1 ii jj A B x
-  | .withbor2 ii jj A B x => .withbor2 ii jj A B x
-  | .withbor3 ii jj a A B x => .withbor3 ii jj a A B x
-  | .withload ii jj a A B x => .withload ii jj a A B x
-  | .withswap ii jj a A B => .withswap ii jj a A B
   | .withborUD ii jj A B SM SD S k x td => .withborUD ii jj A B SM SD S k x (td.reAb Δr)
-  | .withloadU ii jj a A B S x => .withloadU ii jj a A B S x
   | .sliceBorrowMU ii jj A B S x td => .sliceBorrowMU ii jj A B S x (td.reAb Δr)
   | .sliceBorrowIU ii jj A B S x td => .sliceBorrowIU ii jj A B S x (td.reAb Δr)
   | .lolliE ii jj A B u ta tf => .lolliE ii jj A B u (ta.reAb Δr) (tf.reAb Δr)
@@ -474,14 +330,8 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .ofRet ii jj A t => .ofRet ii jj A (t.reAb Δr)
   | .roll ii jj A t => .roll ii jj A (t.reAb Δr)
   | .unroll ii jj A t => .unroll ii jj A (t.reAb Δr)
-  | .foldImm ii jj F y c R => .foldImm ii jj F y c R
-  | .foldOwn ii jj F R => .foldOwn ii jj F R
-  | .foldReuse ii jj F R => .foldReuse ii jj F R
-  | .foldOwnG ii jj B₀ => .foldOwnG ii jj B₀
   | .nuIn ii jj m i C t => .nuIn ii jj m i C (t.reAb Δr)
   | .nuOut ii jj m i C t => .nuOut ii jj m i C (t.reAb Δr)
-  | .unfoldN ii jj C S => .unfoldN ii jj C S
-  | .unfoldK ii jj C G S => .unfoldK ii jj C G S
   | .nuOutK ii jj i C G S => .nuOutK ii jj i C G S
   | .effSub ii jj S S' A t => .effSub ii jj S S' A (t.reAb Δr)
   | .effPerform ii jj S o t => .effPerform ii jj S o (t.reAb Δr)
@@ -636,9 +486,6 @@ theorem TDerivesX.weakenΔ {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} 
   | var a0 =>
       intro Δ' he hd
       exact TDerivesX.var a0
-  | unitI a0 =>
-      intro Δ' he hd
-      exact TDerivesX.unitI a0
   | tensorI a0 a1 a2 a3 a4 ih0 ih1 =>
       intro Δ' he hd
       exact TDerivesX.tensorI a0 a1 (by simpa only [TExpr.reAb_erase] using a2) (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
@@ -723,12 +570,6 @@ theorem TDerivesX.weakenΔ {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} 
   | bangE a0 ih0 =>
       intro Δ' he hd
       exact TDerivesX.bangE (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | copyBang a0 =>
-      intro Δ' he hd
-      exact TDerivesX.copyBang a0
-  | releaseBang a0 =>
-      intro Δ' he hd
-      exact TDerivesX.releaseBang a0
   | boxI a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesX.boxI (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (LeΔ.ctxOutlives he.1 a1)
@@ -741,122 +582,15 @@ theorem TDerivesX.weakenΔ {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} 
   | mutSub a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesX.mutSub (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (LeΔ.entailsLe he.1 a1)
-  | alloc a0 =>
-      intro Δ' he hd
-      exact TDerivesX.alloc a0
-  | free a0 =>
-      intro Δ' he hd
-      exact TDerivesX.free a0
-  | tokMint a0 =>
-      intro Δ' he hd
-      exact TDerivesX.tokMint a0
-  | tokBurn a0 =>
-      intro Δ' he hd
-      exact TDerivesX.tokBurn a0
-  | swap a0 =>
-      intro Δ' he hd
-      exact TDerivesX.swap a0
-  | copy a0 =>
-      intro Δ' he hd
-      exact TDerivesX.copy a0
-  | releaseImm a0 =>
-      intro Δ' he hd
-      exact TDerivesX.releaseImm a0
-  | releaseMut a0 =>
-      intro Δ' he hd
-      exact TDerivesX.releaseMut a0
-  | releaseUnk a0 =>
-      intro Δ' he hd
-      exact TDerivesX.releaseUnk a0
-  | lit a0 a1 =>
-      intro Δ' he hd
-      exact TDerivesX.lit a0 a1
-  | hostOp a0 a1 =>
-      intro Δ' he hd
-      exact TDerivesX.hostOp a0 a1
-  | arrNew a0 a1 =>
-      intro Δ' he hd
-      exact TDerivesX.arrNew a0 a1
-  | arrFree a0 a1 =>
-      intro Δ' he hd
-      exact TDerivesX.arrFree a0 a1
-  | arrSize a0 a1 =>
-      intro Δ' he hd
-      exact TDerivesX.arrSize a0 a1
-  | arrReplace a0 a1 =>
-      intro Δ' he hd
-      exact TDerivesX.arrReplace a0 a1
-  | arrLen a0 a1 a2 =>
-      intro Δ' he hd
-      exact TDerivesX.arrLen a0 a1 a2
-  | arrGet a0 a1 a2 =>
-      intro Δ' he hd
-      exact TDerivesX.arrGet a0 a1 a2
-  | arrCopy a0 a1 a2 =>
-      intro Δ' he hd
-      exact TDerivesX.arrCopy a0 a1 a2
-  | arrRelease a0 a1 a2 =>
-      intro Δ' he hd
-      exact TDerivesX.arrRelease a0 a1 a2
-  | countFold a0 a1 =>
-      intro Δ' he hd
-      exact TDerivesX.countFold a0 a1
-  | countTry a0 a1 a2 =>
-      intro Δ' he hd
-      exact TDerivesX.countTry a0 a1 a2
-  | boundedFix a0 a1 a2 =>
-      intro Δ' he hd
-      exact TDerivesX.boundedFix a0 a1 a2
-  | iterate a0 a1 a2 a3 a4 a5 a6 =>
-      intro Δ' he hd
-      exact TDerivesX.iterate a0 a1 a2 a3 a4 a5 a6
-  | divFuel a0 a1 a2 a3 a4 =>
-      intro Δ' he hd
-      exact TDerivesX.divFuel a0 a1 a2 a3 a4
+  | constK a0 a1 a2 a3 =>
+      intro Δ' _ hd
+      have hk : ConstKind.domFree a0 = true := by simpa [TExpr.domFree] using hd
+      rw [ConstKind.ty_domFree hk _ Δ'.meetOfDom]
+      exact TDerivesX.constK a0 a1 (ConstKind.OK_domFree hk a2) a3
   | reify a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 =>
       intro Δ' he hd
       exact TDerivesX.reify a0 a1 a2 a3 a4 a5 a6 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a8) a9
-  | sliceBorrowM => intro _ _ hd; simp [TExpr.domFree] at hd
-  | sliceBorrowI => intro _ _ hd; simp [TExpr.domFree] at hd
-  | sliceGetM a0 a1 a2 =>
-      intro Δ' he hd
-      exact TDerivesX.sliceGetM a0 a1 a2
-  | sliceLenM a0 a1 a2 =>
-      intro Δ' he hd
-      exact TDerivesX.sliceLenM a0 a1 a2
-  | sliceSplitI a0 a1 a2 =>
-      intro Δ' he hd
-      exact TDerivesX.sliceSplitI a0 a1 a2
-  | sliceSplitM a0 a1 a2 =>
-      intro Δ' he hd
-      exact TDerivesX.sliceSplitM a0 a1 a2
-  | sliceEmptyI a0 a1 a2 =>
-      intro Δ' he hd
-      exact TDerivesX.sliceEmptyI a0 a1 a2
-  | sliceEmptyM a0 a1 a2 =>
-      intro Δ' he hd
-      exact TDerivesX.sliceEmptyM a0 a1 a2
-  | arrEmpty a0 a1 =>
-      intro Δ' he hd
-      exact TDerivesX.arrEmpty a0 a1
-  | sliceReplaceM a0 a1 a2 =>
-      intro Δ' he hd
-      exact TDerivesX.sliceReplaceM a0 a1 a2
-  | sliceSwapM a0 a1 a2 =>
-      intro Δ' he hd
-      exact TDerivesX.sliceSwapM a0 a1 a2
-  | sliceCopyM a0 a1 a2 a3 a4 =>
-      intro Δ' he hd
-      exact TDerivesX.sliceCopyM a0 a1 a2 a3 a4
-  | withbor1 => intro _ _ hd; simp [TExpr.domFree] at hd
-  | withbor2 => intro _ _ hd; simp [TExpr.domFree] at hd
-  | withbor3 => intro _ _ hd; simp [TExpr.domFree] at hd
-  | withload => intro _ _ hd; simp [TExpr.domFree] at hd
-  | withswap a0 =>
-      intro Δ' he hd
-      exact TDerivesX.withswap a0
   | withborUD => intro _ _ hd; simp [TExpr.domFree] at hd
-  | withloadU => intro _ _ hd; simp [TExpr.domFree] at hd
   | sliceBorrowMU => intro _ _ hd; simp [TExpr.domFree] at hd
   | sliceBorrowIU => intro _ _ hd; simp [TExpr.domFree] at hd
   | lolliE a0 a1 a2 a3 a4 ih0 ih1 =>
@@ -874,30 +608,12 @@ theorem TDerivesX.weakenΔ {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} 
   | unroll a0 ih0 =>
       intro Δ' he hd
       exact TDerivesX.unroll (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 =>
-      intro Δ' he hd
-      exact TDerivesX.foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9
-  | foldOwn a0 a1 a2 a3 a4 =>
-      intro Δ' he hd
-      exact TDerivesX.foldOwn a0 a1 a2 a3 a4
-  | foldReuse a0 a1 a2 a3 a4 =>
-      intro Δ' he hd
-      exact TDerivesX.foldReuse a0 a1 a2 a3 a4
-  | foldOwnG a0 a1 a2 a3 =>
-      intro Δ' he hd
-      exact TDerivesX.foldOwnG a0 a1 a2 a3
   | nuIn a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesX.nuIn a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
   | nuOut a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesX.nuOut a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | unfoldN a0 a1 a2 a3 a4 =>
-      intro Δ' he hd
-      exact TDerivesX.unfoldN a0 a1 a2 a3 a4
-  | unfoldK a0 a1 a2 a3 a4 a5 a6 =>
-      intro Δ' he hd
-      exact TDerivesX.unfoldK a0 a1 a2 a3 a4 a5 a6
   | nuOutK a0 a1 a2 a3 a4 =>
       intro Δ' he hd
       exact TDerivesX.nuOutK a0 a1 a2 a3 a4

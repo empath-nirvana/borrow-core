@@ -72,8 +72,8 @@ def _root_.BoCa.Fig16.LogRel.Core.LendUKind.lendKind? : BoCa.Fig16.LogRel.Core.L
 /-- The kind of a borrow constant's node: `mut` at `withbor2`, `imm` at `withbor1`, and their
 unwinding forms. -/
 def TExpr.lendKind? : TExpr → Option Bool
-  | .withbor1 .. => some false
-  | .withbor2 .. => some true
+  | .constK _ _ (.withbor1 ..) => some false
+  | .constK _ _ (.withbor2 ..) => some true
   | .withborUD _ _ _ _ _ _ _ k .. => k.lendKind?
   | _ => none
 
@@ -84,12 +84,12 @@ def lendKindB (m : Bool) : TExpr → Bool
 
 /-- `return` of `array_new` applied. -/
 def tabT : TExpr → Bool
-  | .ret _ _ _ (.lolliE _ _ _ _ _ _ (.bangE _ _ _ (.arrNew ..))) => true
+  | .ret _ _ _ (.lolliE _ _ _ _ _ _ (.bangE _ _ _ (.constK _ _ (.arrNew ..)))) => true
   | _ => false
 
 /-- `return` of `slice_borrow_imm` applied to the variable `0` and a callback. -/
 def immLendT : TExpr → Bool
-  | .ret _ _ _ (.lolliE _ _ _ _ _ _ (.lolliE _ _ _ _ _ x (.sliceBorrowI ..))) => x.isVarT 0
+  | .ret _ _ _ (.lolliE _ _ _ _ _ _ (.lolliE _ _ _ _ _ x (.constK _ _ (.sliceBorrowI ..)))) => x.isVarT 0
   | _ => false
 
 /-- The consume applied to the variable `1`. -/
@@ -111,7 +111,7 @@ def litViewT : TExpr → Bool
 
 /-- The node is the `unfoldN` constant. -/
 def TExpr.isUnfoldN : TExpr → Bool
-  | .unfoldN .. => true
+  | .constK _ _ (.unfoldN ..) => true
   | _ => false
 
 /-- **`unfold step`**: the `unfoldN` constant applied, through `return`, `unbang` and `ofRet`. -/
@@ -127,7 +127,7 @@ def Masks.at (m : Masks) (k : Nat) : Bool × Bool := m.ms.getD k (false, false)
 
 /-- The node frees a cell: `free`, or the consume of a cell. -/
 def TExpr.isRelease : TExpr → Bool
-  | .free .. => true
+  | .constK _ _ (.free ..) => true
   | .consume _ _ (.ref _) => true
   | _ => false
 

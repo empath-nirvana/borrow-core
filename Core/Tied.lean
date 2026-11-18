@@ -337,6 +337,15 @@ theorem effFree_subst (e : Expr) : ∀ (j : Nat) (s : Val), e.effFree = true →
       exact ⟨⟨iha j s he.1.1 hs, ihb (j + 1) _ he.1.2 hs'⟩, ihc (j + 1) _ he.2 hs'⟩
   | _ => intro j s he hs; simp_all [Expr.subst, Expr.effFree]
 
+/-- A constant whose term holds no operation ties no row: `iterate` and `div_fuel` hold one.
+`[spec §19, §83]` -/
+theorem ConstKind.rowOK_of_effFree (I : JIdx) {k : ConstKind} (he : k.E.effFree = true) :
+    I.RowOK k.row := by
+  cases k <;> first
+    | exact I.rowOK_nil
+    | simp [ConstKind.E, divFuelV, fuelH, BoCa.BoLo.hndVal, BoCa.BoLo.hndE, Expr.effFree, Expr.val,
+        Val.prim, Val.lam] at he
+
 /-- The facts `effFree` gives about the parts of a term, for `CDerivesAt.ofEffFree`. -/
 macro "eff_free" : tactic => `(tactic| (simp_all only [Expr.effFree, Expr.val, Val.lam, Val.prim,
     Val.unit, Val.inj₁, Val.inj₂, withPair, absurdE, thenE, withborUE, effFree_shift, Bool.and_eq_true,
@@ -349,7 +358,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
     (h : CDerives Δ Γ e j) (he : e.effFree = true) : CDerivesAt Ξ Δ Γ e j := by
   induction h using CDerives.induct with
   | var h => exact .var h
-  | unitI h => exact .unitI h
+  | constK k hk hΓ => exact .constK k (ConstKind.rowOK_of_effFree {ties := some Ξ} he) hk hΓ
   | tensorI hs _ _ ih1 ih2 => exact .tensorI hs (ih1 (by eff_free)) (ih2 (by eff_free))
   | sumI₁ _ ih1 => exact .sumI₁ (ih1 (by eff_free))
   | sumI₂ _ ih1 => exact .sumI₂ (ih1 (by eff_free))
@@ -379,56 +388,12 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | codeErase _ ih1 => exact .codeErase (ih1 he)
   | codeEraseB _ ih1 => exact .codeEraseB (ih1 he)
   | bangE _ ih1 => exact .bangE (ih1 he)
-  | copyBang hΓ => exact .copyBang hΓ
-  | releaseBang hΓ => exact .releaseBang hΓ
   | boxI _ hΓ ih1 => exact .boxI (ih1 he) hΓ
   | boxE _ ih1 => exact .boxE (ih1 he)
   | immSub _ hle ih1 => exact .immSub (ih1 he) hle
   | mutSub _ hle ih1 => exact .mutSub (ih1 he) hle
-  | alloc hΓ => exact .alloc hΓ
-  | free hΓ => exact .free hΓ
-  | tokMint hΓ => exact .tokMint hΓ
-  | tokBurn hΓ => exact .tokBurn hΓ
-  | swap hΓ => exact .swap hΓ
-  | copy hΓ => exact .copy hΓ
-  | releaseImm hΓ => exact .releaseImm hΓ
-  | releaseMut hΓ => exact .releaseMut hΓ
-  | releaseUnk hΓ => exact .releaseUnk hΓ
-  | lit c hΓ => exact .lit c hΓ
-  | hostOp op hΓ => exact .hostOp op hΓ
-  | arrNew A hΓ => exact .arrNew A hΓ
-  | arrFree A hΓ => exact .arrFree A hΓ
-  | arrSize A hΓ => exact .arrSize A hΓ
-  | arrReplace A hΓ => exact .arrReplace A hΓ
-  | arrLen a A hΓ => exact .arrLen a A hΓ
-  | arrGet a A hΓ => exact .arrGet a A hΓ
-  | arrCopy a A hΓ => exact .arrCopy a A hΓ
-  | arrRelease a A hΓ => exact .arrRelease a A hΓ
-  | countFold S hΓ => exact .countFold S hΓ
-  | countTry S E hΓ => exact .countTry S E hΓ
-  | boundedFix A C hΓ => exact .boundedFix A C hΓ
-  | sliceBorrowM x hΓ hsideA hsideB hfree₁ hfree₂ =>
-      exact .sliceBorrowM x hΓ hsideA hsideB hfree₁ hfree₂
-  | sliceBorrowI x hΓ hsc hsideA hsideB hfree₁ hfree₂ =>
-      exact .sliceBorrowI x hΓ hsc hsideA hsideB hfree₁ hfree₂
-  | sliceGetM a A hΓ => exact .sliceGetM a A hΓ
-  | sliceLenM a A hΓ => exact .sliceLenM a A hΓ
-  | sliceSplitI a A hΓ => exact .sliceSplitI a A hΓ
-  | sliceSplitM a A hΓ => exact .sliceSplitM a A hΓ
-  | sliceEmptyI a A hΓ => exact .sliceEmptyI a A hΓ
-  | sliceEmptyM a A hΓ => exact .sliceEmptyM a A hΓ
-  | arrEmpty A hΓ => exact .arrEmpty A hΓ
-  | sliceReplaceM a A hΓ => exact .sliceReplaceM a A hΓ
-  | sliceSwapM a A hΓ => exact .sliceSwapM a A hΓ
-  | sliceCopyM a b A hΓ hA => exact .sliceCopyM a b A hΓ hA
-  | withbor1 x hΓ hx hsc₁ hfree₁ hfree₂ => exact .withbor1 x hΓ hx hsc₁ hfree₁ hfree₂
-  | withbor2 x hΓ hx hside hfree₁ hfree₂ => exact .withbor2 x hΓ hx hside hfree₁ hfree₂
-  | withbor3 x hΓ hx hfree₁ hfree₂ => exact .withbor3 x hΓ hx hfree₁ hfree₂
-  | withload x hΓ hx hfree₁ hfree₂ => exact .withload x hΓ hx hfree₁ hfree₂
-  | withswap hΓ => exact .withswap hΓ
   | withborUD k x hΓ hx hk hfree₁ hfree₂ hS hMS hDS hSv hP _ ih1 =>
       exact .withborUD k x hΓ hx hk hfree₁ hfree₂ hS hMS hDS hSv hP (ih1 (by eff_free))
-  | withloadU x hΓ hx hfree₁ hfree₂ hS => exact .withloadU x hΓ hx hfree₁ hfree₂ hS
   | sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS _ ih1 =>
       exact .sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS (ih1 (by eff_free))
   | sliceBorrowIU x hΓ hsc hsideA hsideB hfree₁ hfree₂ hS _ ih1 =>
@@ -438,14 +403,8 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | ofRet _ ih1 => exact .ofRet (ih1 he)
   | roll hA hc _ ih1 => exact .roll hA hc (ih1 he)
   | unroll _ ih1 => exact .unroll (ih1 he)
-  | foldImm F y c R hΓ hF hG hyM hyR hR => exact .foldImm F y c R hΓ hF hG hyM hyR hR
-  | foldOwn F R hΓ hF hG => exact .foldOwn F R hΓ hF hG
-  | foldOwnG B₀ Rs hΓ hB => exact .foldOwnG B₀ Rs hΓ hB
-  | foldReuse F R hΓ hF hG => exact .foldReuse F R hΓ hF hG
   | nuIn hC _ ih1 => exact .nuIn hC (ih1 he)
   | nuOut hC _ ih1 => exact .nuOut hC (ih1 he)
-  | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS hΓ
-  | unfoldK C G S hC hG hS hΓ => exact .unfoldK C G S hC hG hS hΓ
   | nuOutK hC hG hS hGf h => exact .nuOutK hC hG hS hGf h
   | effSub hle _ ih1 => exact .effSub hle (ih1 he)
   | effPerform => simp [BoCa.BoLo.performE, Expr.effFree, Expr.val, Val.prim] at he
@@ -461,9 +420,6 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
         (ih3 (by eff_free))
   | effHandleV | effHandleVB | effHandleT | effHandleL =>
       simp [hndExpr, Expr.effFree, Expr.val, Val.prim] at he
-  | iterate => simp [Expr.effFree, Expr.val, Val.prim] at he
-  | divFuel => simp [divFuelV, fuelH, BoCa.BoLo.hndVal, BoCa.BoLo.hndE, Expr.effFree, Expr.val, Val.prim,
-      Val.lam] at he
   | reify => simp [reifyV, BoCa.BoLo.hndE, Expr.effFree, Expr.val, Val.prim, Val.lam] at he
   | @letPoly _ _ N _ _ b hcl _ _ ihV ihN =>
       simp only [Expr.effFree, Expr.val, Val.lam, Bool.and_eq_true] at he

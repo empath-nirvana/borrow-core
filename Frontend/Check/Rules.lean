@@ -103,7 +103,7 @@ def rVar (k : Nat) (A : CVTy) (h : T[k]? = some A) : Res Δ T (.val A) :=
   ⟨.var i (.val A) k A, [], [], (Fam.var T k A h).map fun _ hs => TTied.var i hs⟩
 
 def rUnit : Res Δ T (.val .unit) :=
-  ⟨.unitI i (.val .unit), [], [], (Fam.dead T).map fun _ h => TTied.unitI i h⟩
+  ⟨.constK i (.val .unit) .unitI, [], [], (Fam.dead T).map fun _ h => TTied.constK i .unitI trivial h⟩
 
 def rTop : Res Δ T (.comp .top) :=
   ⟨.topI i (.comp .top), [], [], (Fam.top T).map fun _ _ => TTied.topI i⟩

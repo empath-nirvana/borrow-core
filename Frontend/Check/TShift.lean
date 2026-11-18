@@ -233,60 +233,10 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .lendScope i j r t => .lendScope i j r (t.shift d c)
   | .litView i j t => .litView i j (t.shift d c)
   | .unfoldStep i j t => .unfoldStep i j (t.shift d c)
-  | t@(.unitI ..) => t
+  | t@(.constK ..) => t
   | t@(.topI ..) => t
-  | t@(.copyBang ..) => t
-  | t@(.releaseBang ..) => t
-  | t@(.alloc ..) => t
-  | t@(.free ..) => t
-  | t@(.swap ..) => t
-  | t@(.copy ..) => t
-  | t@(.releaseImm ..) => t
-  | t@(.releaseMut ..) => t
-  | t@(.releaseUnk ..) => t
-  | t@(.tokMint ..) => t
-  | t@(.tokBurn ..) => t
-  | t@(.lit ..) => t
-  | t@(.hostOp ..) => t
-  | t@(.arrNew ..) => t
-  | t@(.arrFree ..) => t
-  | t@(.arrSize ..) => t
-  | t@(.arrReplace ..) => t
-  | t@(.arrLen ..) => t
-  | t@(.arrGet ..) => t
-  | t@(.arrCopy ..) => t
-  | t@(.arrRelease ..) => t
-  | t@(.countFold ..) => t
-  | t@(.countTry ..) => t
-  | t@(.boundedFix ..) => t
-  | t@(.sliceBorrowM ..) => t
-  | t@(.sliceBorrowI ..) => t
-  | t@(.sliceGetM ..) => t
-  | t@(.sliceLenM ..) => t
-  | t@(.sliceSplitI ..) => t
-  | t@(.sliceSplitM ..) => t
-  | t@(.sliceEmptyI ..) => t
-  | t@(.sliceEmptyM ..) => t
-  | t@(.arrEmpty ..) => t
-  | t@(.sliceReplaceM ..) => t
-  | t@(.sliceSwapM ..) => t
-  | t@(.sliceCopyM ..) => t
-  | t@(.withbor1 ..) => t
-  | t@(.withbor2 ..) => t
   | t@(.withlocal ..) => t
-  | t@(.withbor3 ..) => t
-  | t@(.withload ..) => t
-  | t@(.withswap ..) => t
-  | t@(.withloadU ..) => t
-  | t@(.foldImm ..) => t
-  | t@(.foldOwn ..) => t
-  | t@(.foldOwnG ..) => t
-  | t@(.foldReuse ..) => t
-  | t@(.unfoldN ..) => t
-  | t@(.unfoldK ..) => t
   | t@(.lendR ..) => t
-  | t@(.iterate ..) => t
-  | t@(.divFuel ..) => t
   | t@(.reify ..) => t
   | t@(.consume ..) => t
   | t@(.allocS ..) => t
@@ -346,16 +296,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .withlocal .. | .consume .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => some .ff
   | .use _ _ _ _ _ ab _ => ab
-  | .var .. | .force .. | .nuOutK .. | .unitI .. | .copyBang .. | .releaseBang .. | .alloc .. | .free ..
-  | .swap .. | .copy .. | .releaseImm .. | .releaseMut .. | .releaseUnk .. | .tokMint .. | .tokBurn .. | .lit ..
-  | .hostOp ..
-  | .arrNew .. | .arrFree .. | .arrSize .. | .arrReplace .. | .arrLen .. | .arrGet ..
-  | .arrCopy .. | .arrRelease .. | .countFold .. | .countTry .. | .boundedFix ..
-  | .sliceBorrowM .. | .sliceBorrowI .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
-  | .sliceSplitM .. | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. | .sliceReplaceM .. | .sliceSwapM ..
-  | .sliceCopyM ..
-  | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .withloadU ..
-  | .foldImm .. | .foldOwn .. | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .unfoldK .. | .iterate .. | .divFuel ..
+  | .var .. | .force .. | .nuOutK .. | .constK ..
   | .reify .. =>
       some (.atom .pers)
 where

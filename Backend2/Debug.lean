@@ -70,8 +70,8 @@ def ppMasks (m : Masks) : String :=
 /-- The fields of a node worth printing beside its rule. -/
 def nodeFields : TExpr → String
   | .var i _ n _ => s!"#{n} {i.name}"
-  | .lit _ _ c => reprStr c
-  | .hostOp _ _ o => reprStr o
+  | .constK _ _ (.lit c) => reprStr c
+  | .constK _ _ (.hostOp o) => reprStr o
   | .use _ _ name decl targs ab _ =>
     s!"{name} decl {decl} [{", ".intercalate (targs.map ppVT)}] ab {ab.isSome}"
   | .force _ _ i _ _ => s!"#{i}"

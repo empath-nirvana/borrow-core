@@ -648,7 +648,6 @@ theorem Expr.letBody_shift (M b : Expr) :
 /-- **The typed term**: one node per rule application of the checked derivation.  `[spec §3]` -/
 inductive TExpr where
   | var (info : TInfo) (jdg : Jdg) (i : Nat) (A : VTy)
-  | unitI (info : TInfo) (jdg : Jdg)
   | tensorI (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (u : Masks) (t₁ t₂ : TExpr)
   | sumI₁ (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (t : TExpr)
   | sumI₂ (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (t : TExpr)
@@ -677,56 +676,13 @@ inductive TExpr where
   | codeErase (info : TInfo) (jdg : Jdg) (C : CTy) (E : VTy) (t : TExpr)
   | codeEraseB (info : TInfo) (jdg : Jdg) (C : CTy) (E : VTy) (t : TExpr)
   | bangE (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
-  | copyBang (info : TInfo) (jdg : Jdg) (A : VTy)
-  | releaseBang (info : TInfo) (jdg : Jdg) (A : VTy)
   | boxI (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (t : TExpr)
   | boxE (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (t : TExpr)
   | immSub (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (b : Lifetime.Life) (A : VTy) (t : TExpr)
   | mutSub (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (b : Lifetime.Life) (A : VTy) (t : TExpr)
-  | alloc (info : TInfo) (jdg : Jdg) (A : VTy)
-  | free (info : TInfo) (jdg : Jdg) (A : VTy)
-  | tokMint (info : TInfo) (jdg : Jdg)
-  | tokBurn (info : TInfo) (jdg : Jdg)
-  | swap (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy)
-  | copy (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | releaseImm (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | releaseMut (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | releaseUnk (info : TInfo) (jdg : Jdg)
-  | lit (info : TInfo) (jdg : Jdg) (c : IntLit)
-  | hostOp (info : TInfo) (jdg : Jdg) (op : HostOp)
-  | arrNew (info : TInfo) (jdg : Jdg) (A : VTy)
-  | arrFree (info : TInfo) (jdg : Jdg) (A : VTy)
-  | arrSize (info : TInfo) (jdg : Jdg) (A : VTy)
-  | arrReplace (info : TInfo) (jdg : Jdg) (A : VTy)
-  | arrLen (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | arrGet (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | arrCopy (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | arrRelease (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | countFold (info : TInfo) (jdg : Jdg) (S : VTy)
-  | countTry (info : TInfo) (jdg : Jdg) (S : VTy) (E : VTy)
-  | boundedFix (info : TInfo) (jdg : Jdg) (A : VTy) (C : CTy)
-  | iterate (info : TInfo) (jdg : Jdg) (S : Row) (St : VTy) (B : VTy) (R : VTy)
-  | divFuel (info : TInfo) (jdg : Jdg) (S : Row) (A : VTy)
+  | constK (info : TInfo) (jdg : Jdg) (k : ConstKind)
   | reify (info : TInfo) (jdg : Jdg) (S : Row) (B : VTy) (R : VTy) (tres : TExpr)
-  | sliceBorrowM (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (x : LifeVar)
-  | sliceBorrowI (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (x : LifeVar)
-  | sliceGetM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | sliceLenM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | sliceSplitI (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | sliceSplitM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | sliceEmptyI (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | sliceEmptyM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | arrEmpty (info : TInfo) (jdg : Jdg) (A : VTy)
-  | sliceReplaceM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | sliceSwapM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
-  | sliceCopyM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (b : Lifetime.Life) (A : VTy)
-  | withbor1 (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (x : LifeVar)
-  | withbor2 (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (x : LifeVar)
-  | withbor3 (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy) (x : LifeVar)
-  | withload (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy) (x : LifeVar)
-  | withswap (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy)
   | withborUD (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (SM : Row) (SD : Row) (S : Row) (k : LendUKind) (x : LifeVar) (td : TExpr)
-  | withloadU (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (B : VTy) (S : Row) (x : LifeVar)
   | sliceBorrowMU (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (x : LifeVar) (td : TExpr)
   | sliceBorrowIU (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (x : LifeVar) (td : TExpr)
   | lolliE (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (u : Masks) (ta tf : TExpr)
@@ -734,14 +690,8 @@ inductive TExpr where
   | ofRet (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
   | roll (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
   | unroll (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
-  | foldImm (info : TInfo) (jdg : Jdg) (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy)
-  | foldOwn (info : TInfo) (jdg : Jdg) (F : FShape) (R : VTy)
-  | foldReuse (info : TInfo) (jdg : Jdg) (F : FShape) (R : VTy)
-  | foldOwnG (info : TInfo) (jdg : Jdg) (B₀ : VTy)
   | nuIn (info : TInfo) (jdg : Jdg) (m : Nat) (i : Nat) (C : CTy) (t : TExpr)
   | nuOut (info : TInfo) (jdg : Jdg) (m : Nat) (i : Nat) (C : CTy) (t : TExpr)
-  | unfoldN (info : TInfo) (jdg : Jdg) (C : CTy) (S : VTy)
-  | unfoldK (info : TInfo) (jdg : Jdg) (C : CTy) (G : VTy) (S : VTy)
   | nuOutK (info : TInfo) (jdg : Jdg) (i : Nat) (C : CTy) (G : VTy) (S : VTy)
   | effSub (info : TInfo) (jdg : Jdg) (S : Row) (S' : Row) (A : VTy) (t : TExpr)
   | effPerform (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (t : TExpr)
@@ -815,7 +765,6 @@ inductive TExpr where
 /-- **The erasure**: the term the node's rule concludes with. -/
 def TExpr.erase : TExpr → Expr
   | .var _ _ i _ => (.var i)
-  | .unitI _ _ => (.val .unit)
   | .tensorI _ _ _ _ _ t₁ t₂ => (.pair (t₁.erase) (t₂.erase))
   | .sumI₁ _ _ _ _ t => (.inj₁ (t.erase))
   | .sumI₂ _ _ _ _ t => (.inj₂ (t.erase))
@@ -844,56 +793,13 @@ def TExpr.erase : TExpr → Expr
   | .codeErase _ _ _ _ t => t.erase
   | .codeEraseB _ _ _ _ t => t.erase
   | .bangE _ _ _ t => t.erase
-  | .copyBang _ _ _ => BoCa.copy
-  | .releaseBang _ _ _ => forget
   | .boxI _ _ _ _ t => t.erase
   | .boxE _ _ _ _ t => t.erase
   | .immSub _ _ _ _ _ t => t.erase
   | .mutSub _ _ _ _ _ t => t.erase
-  | .alloc _ _ _ => (.val (.prim .alloc))
-  | .free _ _ _ => (.val (.prim .free))
-  | .tokMint _ _ => mintE
-  | .tokBurn _ _ => burnE
-  | .swap _ _ _ _ => BoCa.swap
-  | .copy _ _ _ _ => BoCa.copy
-  | .releaseImm _ _ _ _ => forget
-  | .releaseMut _ _ _ _ => forget
-  | .releaseUnk _ _ => forget
-  | .lit _ _ c => (.val ⟨.prim (.lit c), .prim⟩)
-  | .hostOp _ _ op => (.val (.prim (.host op)))
-  | .arrNew _ _ _ => (.val (.prim .tab))
-  | .arrFree _ _ _ => (.val (.prim .drop))
-  | .arrSize _ _ _ => (.val sizeV)
-  | .arrReplace _ _ _ => (.val replaceV)
-  | .arrLen _ _ _ _ => (.val arrLenV)
-  | .arrGet _ _ _ _ => (.val (.prim .idx))
-  | .arrCopy _ _ _ _ => (.val copyV)
-  | .arrRelease _ _ _ _ => (.val releaseV)
-  | .countFold _ _ _ => (.val (.prim .count))
-  | .countTry _ _ _ _ => (.val (.prim .countTry))
-  | .boundedFix _ _ _ _ => (.val (.prim .boundedFix))
-  | .iterate _ _ _ _ _ _ => (.val (.prim .iterate))
-  | .divFuel _ _ _ _ => (.val divFuelV)
+  | .constK _ _ k => k.E
   | .reify _ _ _ _ _ tres => (.val (reifyV (Expr.toVal (tres.erase))))
-  | .sliceBorrowM _ _ _ _ _ => withbor
-  | .sliceBorrowI _ _ _ _ _ => withbor
-  | .sliceGetM _ _ _ _ => (.val (.prim .idx))
-  | .sliceLenM _ _ _ _ => (.val sizeV)
-  | .sliceSplitI _ _ _ _ => (.val (.prim .split))
-  | .sliceSplitM _ _ _ _ => (.val (.prim .split))
-  | .sliceEmptyI _ _ _ _ => (.val emptyFamV)
-  | .sliceEmptyM _ _ _ _ => (.val emptyFamV)
-  | .arrEmpty _ _ _ => (.val emptyFamV)
-  | .sliceReplaceM _ _ _ _ => (.val replaceV)
-  | .sliceSwapM _ _ _ _ => (.val swapV)
-  | .sliceCopyM _ _ _ _ _ => (.val sliceCopyV)
-  | .withbor1 _ _ _ _ _ => withbor
-  | .withbor2 _ _ _ _ _ => withbor
-  | .withbor3 _ _ _ _ _ _ => withbor
-  | .withload _ _ _ _ _ _ => BoCa.withload
-  | .withswap _ _ _ _ _ => BoCa.withswap
   | .withborUD _ _ _ _ _ _ _ _ _ td => (withborUE (td.erase))
-  | .withloadU _ _ _ _ _ _ _ => BoCa.withload
   | .sliceBorrowMU _ _ _ _ _ _ td => (withborUE (td.erase))
   | .sliceBorrowIU _ _ _ _ _ _ td => (withborUE (td.erase))
   | .lolliE _ _ _ _ _ ta tf => (.app (tf.erase) (ta.erase))
@@ -901,14 +807,8 @@ def TExpr.erase : TExpr → Expr
   | .ofRet _ _ _ t => t.erase
   | .roll _ _ _ t => t.erase
   | .unroll _ _ _ t => t.erase
-  | .foldImm _ _ F _ _ _ => (.val (foldImmV F))
-  | .foldOwn _ _ F _ => (.val (foldOwnV F))
-  | .foldReuse _ _ F _ => (.val (foldReuseV F))
-  | .foldOwnG _ _ B₀ => (.val (FoldP.foldOwnGV B₀))
   | .nuIn _ _ _ _ _ t => t.erase
   | .nuOut _ _ _ _ _ t => t.erase
-  | .unfoldN _ _ C _ => (.val (unfoldV C))
-  | .unfoldK _ _ C _ _ => (.val (unfoldV C))
   | .nuOutK _ _ i _ _ _ => (.var i)
   | .effSub _ _ _ _ _ t => t.erase
   | .effPerform _ _ _ o t => (BoCa.BoLo.performE (opArgE o.n o.i (t.erase)))
@@ -940,7 +840,6 @@ def TExpr.erase : TExpr → Expr
 /-- The node's source. -/
 def TExpr.info : TExpr → TInfo
   | .var i _ _ _ => i
-  | .unitI i _ => i
   | .tensorI i _ _ _ _ _ _ => i
   | .sumI₁ i _ _ _ _ => i
   | .sumI₂ i _ _ _ _ => i
@@ -969,56 +868,13 @@ def TExpr.info : TExpr → TInfo
   | .codeErase i _ _ _ _ => i
   | .codeEraseB i _ _ _ _ => i
   | .bangE i _ _ _ => i
-  | .copyBang i _ _ => i
-  | .releaseBang i _ _ => i
   | .boxI i _ _ _ _ => i
   | .boxE i _ _ _ _ => i
   | .immSub i _ _ _ _ _ => i
   | .mutSub i _ _ _ _ _ => i
-  | .alloc i _ _ => i
-  | .free i _ _ => i
-  | .tokMint i _ => i
-  | .tokBurn i _ => i
-  | .swap i _ _ _ => i
-  | .copy i _ _ _ => i
-  | .releaseImm i _ _ _ => i
-  | .releaseMut i _ _ _ => i
-  | .releaseUnk i _ => i
-  | .lit i _ _ => i
-  | .hostOp i _ _ => i
-  | .arrNew i _ _ => i
-  | .arrFree i _ _ => i
-  | .arrSize i _ _ => i
-  | .arrReplace i _ _ => i
-  | .arrLen i _ _ _ => i
-  | .arrGet i _ _ _ => i
-  | .arrCopy i _ _ _ => i
-  | .arrRelease i _ _ _ => i
-  | .countFold i _ _ => i
-  | .countTry i _ _ _ => i
-  | .boundedFix i _ _ _ => i
-  | .iterate i _ _ _ _ _ => i
-  | .divFuel i _ _ _ => i
+  | .constK i _ _ => i
   | .reify i _ _ _ _ _ => i
-  | .sliceBorrowM i _ _ _ _ => i
-  | .sliceBorrowI i _ _ _ _ => i
-  | .sliceGetM i _ _ _ => i
-  | .sliceLenM i _ _ _ => i
-  | .sliceSplitI i _ _ _ => i
-  | .sliceSplitM i _ _ _ => i
-  | .sliceEmptyI i _ _ _ => i
-  | .sliceEmptyM i _ _ _ => i
-  | .arrEmpty i _ _ => i
-  | .sliceReplaceM i _ _ _ => i
-  | .sliceSwapM i _ _ _ => i
-  | .sliceCopyM i _ _ _ _ => i
-  | .withbor1 i _ _ _ _ => i
-  | .withbor2 i _ _ _ _ => i
-  | .withbor3 i _ _ _ _ _ => i
-  | .withload i _ _ _ _ _ => i
-  | .withswap i _ _ _ _ => i
   | .withborUD i _ _ _ _ _ _ _ _ _ => i
-  | .withloadU i _ _ _ _ _ _ => i
   | .sliceBorrowMU i _ _ _ _ _ _ => i
   | .sliceBorrowIU i _ _ _ _ _ _ => i
   | .lolliE i _ _ _ _ _ _ => i
@@ -1026,14 +882,8 @@ def TExpr.info : TExpr → TInfo
   | .ofRet i _ _ _ => i
   | .roll i _ _ _ => i
   | .unroll i _ _ _ => i
-  | .foldImm i _ _ _ _ _ => i
-  | .foldOwn i _ _ _ => i
-  | .foldReuse i _ _ _ => i
-  | .foldOwnG i _ _ => i
   | .nuIn i _ _ _ _ _ => i
   | .nuOut i _ _ _ _ _ => i
-  | .unfoldN i _ _ _ => i
-  | .unfoldK i _ _ _ _ => i
   | .nuOutK i _ _ _ _ _ => i
   | .effSub i _ _ _ _ _ => i
   | .effPerform i _ _ _ _ => i
@@ -1061,7 +911,6 @@ def TExpr.info : TExpr → TInfo
 /-- The node's judgment. -/
 def TExpr.jdg : TExpr → Jdg
   | .var _ j _ _ => j
-  | .unitI _ j => j
   | .tensorI _ j _ _ _ _ _ => j
   | .sumI₁ _ j _ _ _ => j
   | .sumI₂ _ j _ _ _ => j
@@ -1090,56 +939,13 @@ def TExpr.jdg : TExpr → Jdg
   | .codeErase _ j _ _ _ => j
   | .codeEraseB _ j _ _ _ => j
   | .bangE _ j _ _ => j
-  | .copyBang _ j _ => j
-  | .releaseBang _ j _ => j
   | .boxI _ j _ _ _ => j
   | .boxE _ j _ _ _ => j
   | .immSub _ j _ _ _ _ => j
   | .mutSub _ j _ _ _ _ => j
-  | .alloc _ j _ => j
-  | .free _ j _ => j
-  | .tokMint _ j => j
-  | .tokBurn _ j => j
-  | .swap _ j _ _ => j
-  | .copy _ j _ _ => j
-  | .releaseImm _ j _ _ => j
-  | .releaseMut _ j _ _ => j
-  | .releaseUnk _ j => j
-  | .lit _ j _ => j
-  | .hostOp _ j _ => j
-  | .arrNew _ j _ => j
-  | .arrFree _ j _ => j
-  | .arrSize _ j _ => j
-  | .arrReplace _ j _ => j
-  | .arrLen _ j _ _ => j
-  | .arrGet _ j _ _ => j
-  | .arrCopy _ j _ _ => j
-  | .arrRelease _ j _ _ => j
-  | .countFold _ j _ => j
-  | .countTry _ j _ _ => j
-  | .boundedFix _ j _ _ => j
-  | .iterate _ j _ _ _ _ => j
-  | .divFuel _ j _ _ => j
+  | .constK _ j _ => j
   | .reify _ j _ _ _ _ => j
-  | .sliceBorrowM _ j _ _ _ => j
-  | .sliceBorrowI _ j _ _ _ => j
-  | .sliceGetM _ j _ _ => j
-  | .sliceLenM _ j _ _ => j
-  | .sliceSplitI _ j _ _ => j
-  | .sliceSplitM _ j _ _ => j
-  | .sliceEmptyI _ j _ _ => j
-  | .sliceEmptyM _ j _ _ => j
-  | .arrEmpty _ j _ => j
-  | .sliceReplaceM _ j _ _ => j
-  | .sliceSwapM _ j _ _ => j
-  | .sliceCopyM _ j _ _ _ => j
-  | .withbor1 _ j _ _ _ => j
-  | .withbor2 _ j _ _ _ => j
-  | .withbor3 _ j _ _ _ _ => j
-  | .withload _ j _ _ _ _ => j
-  | .withswap _ j _ _ _ => j
   | .withborUD _ j _ _ _ _ _ _ _ _ => j
-  | .withloadU _ j _ _ _ _ _ => j
   | .sliceBorrowMU _ j _ _ _ _ _ => j
   | .sliceBorrowIU _ j _ _ _ _ _ => j
   | .lolliE _ j _ _ _ _ _ => j
@@ -1147,14 +953,8 @@ def TExpr.jdg : TExpr → Jdg
   | .ofRet _ j _ _ => j
   | .roll _ j _ _ => j
   | .unroll _ j _ _ => j
-  | .foldImm _ j _ _ _ _ => j
-  | .foldOwn _ j _ _ => j
-  | .foldReuse _ j _ _ => j
-  | .foldOwnG _ j _ => j
   | .nuIn _ j _ _ _ _ => j
   | .nuOut _ j _ _ _ _ => j
-  | .unfoldN _ j _ _ => j
-  | .unfoldK _ j _ _ _ => j
   | .nuOutK _ j _ _ _ _ => j
   | .effSub _ j _ _ _ _ => j
   | .effPerform _ j _ _ _ => j
@@ -1190,7 +990,6 @@ inductive TScope where
 /-- The node's children, in the rule's order, each with the context its premise is at. -/
 def TExpr.children : TExpr → List (TScope × TExpr)
   | .var _ _ _ _ => []
-  | .unitI _ _ => []
   | .tensorI _ _ _ _ _ t₁ t₂ => [(.push 0, t₁), (.push 0, t₂)]
   | .sumI₁ _ _ _ _ t => [(.push 0, t)]
   | .sumI₂ _ _ _ _ t => [(.push 0, t)]
@@ -1219,56 +1018,13 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .codeErase _ _ _ _ t => [(.push 0, t)]
   | .codeEraseB _ _ _ _ t => [(.push 0, t)]
   | .bangE _ _ _ t => [(.push 0, t)]
-  | .copyBang _ _ _ => []
-  | .releaseBang _ _ _ => []
   | .boxI _ _ _ _ t => [(.push 0, t)]
   | .boxE _ _ _ _ t => [(.push 0, t)]
   | .immSub _ _ _ _ _ t => [(.push 0, t)]
   | .mutSub _ _ _ _ _ t => [(.push 0, t)]
-  | .alloc _ _ _ => []
-  | .free _ _ _ => []
-  | .tokMint _ _ => []
-  | .tokBurn _ _ => []
-  | .swap _ _ _ _ => []
-  | .copy _ _ _ _ => []
-  | .releaseImm _ _ _ _ => []
-  | .releaseMut _ _ _ _ => []
-  | .releaseUnk _ _ => []
-  | .lit _ _ _ => []
-  | .hostOp _ _ _ => []
-  | .arrNew _ _ _ => []
-  | .arrFree _ _ _ => []
-  | .arrSize _ _ _ => []
-  | .arrReplace _ _ _ => []
-  | .arrLen _ _ _ _ => []
-  | .arrGet _ _ _ _ => []
-  | .arrCopy _ _ _ _ => []
-  | .arrRelease _ _ _ _ => []
-  | .countFold _ _ _ => []
-  | .countTry _ _ _ _ => []
-  | .boundedFix _ _ _ _ => []
-  | .iterate _ _ _ _ _ _ => []
-  | .divFuel _ _ _ _ => []
+  | .constK _ _ _ => []
   | .reify _ _ _ _ _ tres => [(.fresh 0, tres)]
-  | .sliceBorrowM _ _ _ _ _ => []
-  | .sliceBorrowI _ _ _ _ _ => []
-  | .sliceGetM _ _ _ _ => []
-  | .sliceLenM _ _ _ _ => []
-  | .sliceSplitI _ _ _ _ => []
-  | .sliceSplitM _ _ _ _ => []
-  | .sliceEmptyI _ _ _ _ => []
-  | .sliceEmptyM _ _ _ _ => []
-  | .arrEmpty _ _ _ => []
-  | .sliceReplaceM _ _ _ _ => []
-  | .sliceSwapM _ _ _ _ => []
-  | .sliceCopyM _ _ _ _ _ => []
-  | .withbor1 _ _ _ _ _ => []
-  | .withbor2 _ _ _ _ _ => []
-  | .withbor3 _ _ _ _ _ _ => []
-  | .withload _ _ _ _ _ _ => []
-  | .withswap _ _ _ _ _ => []
   | .withborUD _ _ _ _ _ _ _ _ _ td => [(.push 0, td)]
-  | .withloadU _ _ _ _ _ _ _ => []
   | .sliceBorrowMU _ _ _ _ _ _ td => [(.push 0, td)]
   | .sliceBorrowIU _ _ _ _ _ _ td => [(.push 0, td)]
   | .lolliE _ _ _ _ _ ta tf => [(.push 0, ta), (.push 0, tf)]
@@ -1276,14 +1032,8 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .ofRet _ _ _ t => [(.push 0, t)]
   | .roll _ _ _ t => [(.push 0, t)]
   | .unroll _ _ _ t => [(.push 0, t)]
-  | .foldImm _ _ _ _ _ _ => []
-  | .foldOwn _ _ _ _ => []
-  | .foldReuse _ _ _ _ => []
-  | .foldOwnG _ _ _ => []
   | .nuIn _ _ _ _ _ t => [(.push 0, t)]
   | .nuOut _ _ _ _ _ t => [(.push 0, t)]
-  | .unfoldN _ _ _ _ => []
-  | .unfoldK _ _ _ _ _ => []
   | .nuOutK _ _ _ _ _ _ => []
   | .effSub _ _ _ _ _ t => [(.push 0, t)]
   | .effPerform _ _ _ _ t => [(.push 0, t)]
@@ -1332,7 +1082,6 @@ head is a constructor, and through the child where the rule keeps its premise's 
 erasure is computed only where the rule's term is a definition's. -/
 def TExpr.isLam : TExpr → Bool
   | .var _ _ _ _ => false
-  | .unitI _ _ => false
   | .tensorI _ _ _ _ _ _ _ => false
   | .sumI₁ _ _ _ _ _ => false
   | .sumI₂ _ _ _ _ _ => false
@@ -1361,56 +1110,13 @@ def TExpr.isLam : TExpr → Bool
   | .codeErase _ _ _ _ t => t.isLam
   | .codeEraseB _ _ _ _ t => t.isLam
   | .bangE _ _ _ t => t.isLam
-  | .copyBang _ _ _ => ((BoCa.copy : Expr) matches .lam _)
-  | .releaseBang _ _ _ => ((forget : Expr) matches .lam _)
   | .boxI _ _ _ _ t => t.isLam
   | .boxE _ _ _ _ t => t.isLam
   | .immSub _ _ _ _ _ t => t.isLam
   | .mutSub _ _ _ _ _ t => t.isLam
-  | .alloc _ _ _ => false
-  | .free _ _ _ => false
-  | .tokMint _ _ => ((mintE : Expr) matches .lam _)
-  | .tokBurn _ _ => ((burnE : Expr) matches .lam _)
-  | .swap _ _ _ _ => ((BoCa.swap : Expr) matches .lam _)
-  | .copy _ _ _ _ => ((BoCa.copy : Expr) matches .lam _)
-  | .releaseImm _ _ _ _ => ((forget : Expr) matches .lam _)
-  | .releaseMut _ _ _ _ => ((forget : Expr) matches .lam _)
-  | .releaseUnk _ _ => ((forget : Expr) matches .lam _)
-  | .lit _ _ _ => false
-  | .hostOp _ _ _ => false
-  | .arrNew _ _ _ => false
-  | .arrFree _ _ _ => false
-  | .arrSize _ _ _ => (((.val sizeV) : Expr) matches .lam _)
-  | .arrReplace _ _ _ => (((.val replaceV) : Expr) matches .lam _)
-  | .arrLen _ _ _ _ => (((.val arrLenV) : Expr) matches .lam _)
-  | .arrGet _ _ _ _ => false
-  | .arrCopy _ _ _ _ => (((.val copyV) : Expr) matches .lam _)
-  | .arrRelease _ _ _ _ => (((.val releaseV) : Expr) matches .lam _)
-  | .countFold _ _ _ => false
-  | .countTry _ _ _ _ => false
-  | .boundedFix _ _ _ _ => false
-  | .iterate _ _ _ _ _ _ => false
-  | .divFuel _ _ _ _ => (((.val divFuelV) : Expr) matches .lam _)
+  | .constK _ _ k => ((k.E : Expr) matches .lam _)
   | .reify _ _ _ _ _ tres => (((.val (reifyV (Expr.toVal (tres.erase)))) : Expr) matches .lam _)
-  | .sliceBorrowM _ _ _ _ _ => ((withbor : Expr) matches .lam _)
-  | .sliceBorrowI _ _ _ _ _ => ((withbor : Expr) matches .lam _)
-  | .sliceGetM _ _ _ _ => false
-  | .sliceLenM _ _ _ _ => (((.val sizeV) : Expr) matches .lam _)
-  | .sliceSplitI _ _ _ _ => false
-  | .sliceSplitM _ _ _ _ => false
-  | .sliceEmptyI _ _ _ _ => (((.val emptyFamV) : Expr) matches .lam _)
-  | .sliceEmptyM _ _ _ _ => (((.val emptyFamV) : Expr) matches .lam _)
-  | .arrEmpty _ _ _ => (((.val emptyFamV) : Expr) matches .lam _)
-  | .sliceReplaceM _ _ _ _ => (((.val replaceV) : Expr) matches .lam _)
-  | .sliceSwapM _ _ _ _ => (((.val swapV) : Expr) matches .lam _)
-  | .sliceCopyM _ _ _ _ _ => (((.val sliceCopyV) : Expr) matches .lam _)
-  | .withbor1 _ _ _ _ _ => ((withbor : Expr) matches .lam _)
-  | .withbor2 _ _ _ _ _ => ((withbor : Expr) matches .lam _)
-  | .withbor3 _ _ _ _ _ _ => ((withbor : Expr) matches .lam _)
-  | .withload _ _ _ _ _ _ => ((BoCa.withload : Expr) matches .lam _)
-  | .withswap _ _ _ _ _ => ((BoCa.withswap : Expr) matches .lam _)
   | .withborUD _ _ _ _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
-  | .withloadU _ _ _ _ _ _ _ => ((BoCa.withload : Expr) matches .lam _)
   | .sliceBorrowMU _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
   | .sliceBorrowIU _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
   | .lolliE _ _ _ _ _ _ _ => false
@@ -1418,14 +1124,8 @@ def TExpr.isLam : TExpr → Bool
   | .ofRet _ _ _ t => t.isLam
   | .roll _ _ _ t => t.isLam
   | .unroll _ _ _ t => t.isLam
-  | .foldImm _ _ F _ _ _ => (((.val (foldImmV F)) : Expr) matches .lam _)
-  | .foldOwn _ _ F _ => (((.val (foldOwnV F)) : Expr) matches .lam _)
-  | .foldReuse _ _ F _ => (((.val (foldReuseV F)) : Expr) matches .lam _)
-  | .foldOwnG _ _ B₀ => (((.val (FoldP.foldOwnGV B₀)) : Expr) matches .lam _)
   | .nuIn _ _ _ _ _ t => t.isLam
   | .nuOut _ _ _ _ _ t => t.isLam
-  | .unfoldN _ _ C _ => (((.val (unfoldV C)) : Expr) matches .lam _)
-  | .unfoldK _ _ C _ _ => (((.val (unfoldV C)) : Expr) matches .lam _)
   | .nuOutK _ _ _ _ _ _ => false
   | .effSub _ _ _ _ _ t => t.isLam
   | .effPerform _ _ _ o t => (((BoCa.BoLo.performE (opArgE o.n o.i (t.erase))) : Expr) matches .lam _)
@@ -1457,7 +1157,6 @@ def TExpr.isLam : TExpr → Bool
 /-- `isLam` is the erasure's head. -/
 theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .var _ _ _ _ => rfl
-  | .unitI _ _ => rfl
   | .tensorI _ _ _ _ _ _ _ => rfl
   | .sumI₁ _ _ _ _ _ => rfl
   | .sumI₂ _ _ _ _ _ => rfl
@@ -1486,56 +1185,13 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .codeErase _ _ _ _ t => isLam_eq t
   | .codeEraseB _ _ _ _ t => isLam_eq t
   | .bangE _ _ _ t => isLam_eq t
-  | .copyBang _ _ _ => rfl
-  | .releaseBang _ _ _ => rfl
   | .boxI _ _ _ _ t => isLam_eq t
   | .boxE _ _ _ _ t => isLam_eq t
   | .immSub _ _ _ _ _ t => isLam_eq t
   | .mutSub _ _ _ _ _ t => isLam_eq t
-  | .alloc _ _ _ => rfl
-  | .free _ _ _ => rfl
-  | .tokMint _ _ => rfl
-  | .tokBurn _ _ => rfl
-  | .swap _ _ _ _ => rfl
-  | .copy _ _ _ _ => rfl
-  | .releaseImm _ _ _ _ => rfl
-  | .releaseMut _ _ _ _ => rfl
-  | .releaseUnk _ _ => rfl
-  | .lit _ _ _ => rfl
-  | .hostOp _ _ _ => rfl
-  | .arrNew _ _ _ => rfl
-  | .arrFree _ _ _ => rfl
-  | .arrSize _ _ _ => rfl
-  | .arrReplace _ _ _ => rfl
-  | .arrLen _ _ _ _ => rfl
-  | .arrGet _ _ _ _ => rfl
-  | .arrCopy _ _ _ _ => rfl
-  | .arrRelease _ _ _ _ => rfl
-  | .countFold _ _ _ => rfl
-  | .countTry _ _ _ _ => rfl
-  | .boundedFix _ _ _ _ => rfl
-  | .iterate _ _ _ _ _ _ => rfl
-  | .divFuel _ _ _ _ => rfl
+  | .constK _ _ _ => rfl
   | .reify _ _ _ _ _ _ => rfl
-  | .sliceBorrowM _ _ _ _ _ => rfl
-  | .sliceBorrowI _ _ _ _ _ => rfl
-  | .sliceGetM _ _ _ _ => rfl
-  | .sliceLenM _ _ _ _ => rfl
-  | .sliceSplitI _ _ _ _ => rfl
-  | .sliceSplitM _ _ _ _ => rfl
-  | .sliceEmptyI _ _ _ _ => rfl
-  | .sliceEmptyM _ _ _ _ => rfl
-  | .arrEmpty _ _ _ => rfl
-  | .sliceReplaceM _ _ _ _ => rfl
-  | .sliceSwapM _ _ _ _ => rfl
-  | .sliceCopyM _ _ _ _ _ => rfl
-  | .withbor1 _ _ _ _ _ => rfl
-  | .withbor2 _ _ _ _ _ => rfl
-  | .withbor3 _ _ _ _ _ _ => rfl
-  | .withload _ _ _ _ _ _ => rfl
-  | .withswap _ _ _ _ _ => rfl
   | .withborUD _ _ _ _ _ _ _ _ _ _ => rfl
-  | .withloadU _ _ _ _ _ _ _ => rfl
   | .sliceBorrowMU _ _ _ _ _ _ _ => rfl
   | .sliceBorrowIU _ _ _ _ _ _ _ => rfl
   | .lolliE _ _ _ _ _ _ _ => rfl
@@ -1543,14 +1199,8 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .ofRet _ _ _ t => isLam_eq t
   | .roll _ _ _ t => isLam_eq t
   | .unroll _ _ _ t => isLam_eq t
-  | .foldImm _ _ _ _ _ _ => rfl
-  | .foldOwn _ _ _ _ => rfl
-  | .foldReuse _ _ _ _ => rfl
-  | .foldOwnG _ _ _ => rfl
   | .nuIn _ _ _ _ _ t => isLam_eq t
   | .nuOut _ _ _ _ _ t => isLam_eq t
-  | .unfoldN _ _ _ _ => rfl
-  | .unfoldK _ _ _ _ _ => rfl
   | .nuOutK _ _ _ _ _ _ => rfl
   | .effSub _ _ _ _ _ t => isLam_eq t
   | .effPerform _ _ _ _ _ => rfl

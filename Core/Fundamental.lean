@@ -449,6 +449,68 @@ theorem alpha_compatJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} :
   | .comp _, .comp _, hα, h => alpha_compatC hα h
   | .val _, .comp _, hα, _ | .comp _, .val _, hα, _ => by simp [Jdg.alphaB] at hα
 
+/-- **Every constant is sound**: `constK` at each kind is its constant's compatibility lemma.  A tie
+is not read.  `[spec §3]` -/
+theorem constK_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (k : ConstKind) (hk : k.OK Δ)
+    (hΓ : Ctx.DeadP Γ) : SemJ (ℍ := ℍ) Δ Γ k.E (.val (k.ty Δ.meetOfDom)) := by
+  cases k with
+  | unitI => exact unitI_compatC hΓ
+  | copyBang => exact copyBang_compatC hΓ
+  | releaseBang => exact releaseBang_compatC hΓ
+  | alloc => exact alloc_compatX hΓ
+  | free => exact free_compatX hΓ
+  | tokMint => exact tokMint_compatX hΓ
+  | tokBurn => exact tokBurn_compatX hΓ
+  | swap => exact swap_compatX hΓ
+  | copy => exact copy_compatX hΓ
+  | releaseImm => exact forgetImm_compatX hΓ
+  | releaseMut => exact forgetMut_compatX hΓ
+  | releaseUnk => exact forgetUnk_compatX hΓ
+  | lit c => exact lit_compatX c hΓ
+  | hostOp op => exact hostOp_compatX op hΓ
+  | arrNew => exact arrNew_compatX hΓ
+  | arrFree => exact arrFree_compatX hΓ
+  | arrSize => exact arrSize_compatX hΓ
+  | arrReplace => exact arrReplace_compatX hΓ
+  | arrLen => exact arrLen_compatX hΓ
+  | arrGet => exact arrGet_compatX hΓ
+  | arrCopy => exact arrCopy_compatX hΓ
+  | arrRelease => exact arrRelease_compatX hΓ
+  | countFold => exact countFold_compatX hΓ
+  | countTry => exact countTry_compatX hΓ
+  | boundedFix => exact boundedFix_compatX hΓ
+  | iterate => exact iterate_compatX hk hΓ
+  | divFuel => exact divFuel_compatX hk hΓ
+  | sliceBorrowM _ _ x =>
+      obtain ⟨hA, hB, hf₁, hf₂⟩ := hk; exact sliceBorrowM_compatX x hΓ hA hB hf₁ hf₂
+  | sliceBorrowI _ _ x =>
+      obtain ⟨hsc, hA, hB, hf₁, hf₂⟩ := hk; exact sliceBorrowI_compatX x hΓ hsc hA hB hf₁ hf₂
+  | sliceGetM => exact sliceGetM_compatX hΓ
+  | sliceLenM => exact sliceLenM_compatX hΓ
+  | sliceSplitI => exact sliceSplitI_compatX hΓ
+  | sliceSplitM => exact sliceSplitM_compatX hΓ
+  | sliceEmptyI => exact sliceEmptyI_compatX hΓ
+  | sliceEmptyM => exact sliceEmptyM_compatX hΓ
+  | arrEmpty => exact arrEmpty_compatX hΓ
+  | sliceReplaceM => exact sliceReplaceM_compatX hΓ
+  | sliceSwapM => exact sliceSwapM_compatX hΓ
+  | sliceCopyM => exact sliceCopyM_compatX hΓ hk
+  | withbor1 _ _ x =>
+      obtain ⟨hx, hsc₁, hf₁, hf₂⟩ := hk; exact withbor1_compatX x hΓ hx hsc₁ hf₁ hf₂
+  | withbor2 _ _ x =>
+      obtain ⟨hx, hside, hf₁, hf₂⟩ := hk; exact withbor2_compatX x hΓ hx hside hf₁ hf₂
+  | withbor3 _ _ _ x => obtain ⟨hx, hf₁, hf₂⟩ := hk; exact withbor3_compatX x hΓ hx hf₁ hf₂
+  | withload _ _ _ x => obtain ⟨hx, hf₁, hf₂⟩ := hk; exact withload_compatX x hΓ hx hf₁ hf₂
+  | withswap => exact withswap_compatX hΓ
+  | withloadU _ _ _ _ x => obtain ⟨_, hf₁, hf₂, hS⟩ := hk; exact withloadU_compatX x hΓ hf₁ hf₂ hS
+  | foldImm F y c R =>
+      obtain ⟨hF, hG, hyM, hyR, hR⟩ := hk; exact foldImm_compatX F hF hG y c R hΓ hyM hyR hR
+  | foldOwn F R => obtain ⟨hF, hG⟩ := hk; exact foldOwn_compatX F hF hG R hΓ
+  | foldReuse F R => obtain ⟨hF, hG⟩ := hk; exact foldReuse_compatX F hF hG R hΓ
+  | foldOwnG B₀ Rs => exact FoldP.foldOwnG_compatX B₀ hk Rs hΓ
+  | unfoldN C S => obtain ⟨hC, hS⟩ := hk; exact unfold_compatX hC S hS hΓ
+  | unfoldK => obtain ⟨hC, hG, hS⟩ := hk; exact unfoldK_compatX hC hG hS hΓ
+
 /-- **The Fundamental Property at every judgment index** (SPEC §83): every derivation is sound,
 outright when the relaxed rules are off, and under `PinLaw` when they are on (R1's case is
 `PinLaw.lendFrame` at the form `ref`, R2's `PinLaw.loopFrame`, each at the induction hypotheses of
@@ -457,7 +519,7 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
     {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerivesX I Δ Γ e j) : SemJ (ℍ := ℍ) Δ Γ e j := by
   induction h with
   | var h => exact var_compatC h
-  | unitI h => exact unitI_compatC h
+  | constK k _ hk hΓ => exact constK_compatX k hk hΓ
   | tensorI hs _ _ ih₁ ih₂ => exact tensorI_compatC hs ih₁ ih₂
   | sumI₁ _ ih => exact sumI₁_compatC ih
   | sumI₂ _ ih => exact sumI₂_compatC ih
@@ -487,57 +549,13 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
   | codeErase _ ih => exact codeErase_compatC ih
   | codeEraseB _ ih => exact codeEraseB_compatC ih
   | bangE _ ih => exact bangE_compatC ih
-  | copyBang hΓ => exact copyBang_compatC hΓ
-  | releaseBang hΓ => exact releaseBang_compatC hΓ
   | boxI _ hΓ ih => exact boxI_compatC ih hΓ
   | boxE _ ih => exact boxE_compatC ih
   | immSub _ hle ih => exact immSub_compatC ih hle
   | mutSub _ hle ih => exact mutSub_compatC ih hle
-  | alloc hΓ => exact alloc_compatX hΓ
-  | free hΓ => exact free_compatX hΓ
-  | tokMint hΓ => exact tokMint_compatX hΓ
-  | tokBurn hΓ => exact tokBurn_compatX hΓ
-  | swap hΓ => exact swap_compatX hΓ
-  | copy hΓ => exact copy_compatX hΓ
-  | releaseImm hΓ => exact forgetImm_compatX hΓ
-  | releaseMut hΓ => exact forgetMut_compatX hΓ
-  | releaseUnk hΓ => exact forgetUnk_compatX hΓ
-  | lit c hΓ => exact lit_compatX c hΓ
-  | hostOp op hΓ => exact hostOp_compatX op hΓ
-  | arrNew _ hΓ => exact arrNew_compatX hΓ
-  | arrFree _ hΓ => exact arrFree_compatX hΓ
-  | arrSize _ hΓ => exact arrSize_compatX hΓ
-  | arrReplace _ hΓ => exact arrReplace_compatX hΓ
-  | arrLen _ _ hΓ => exact arrLen_compatX hΓ
-  | arrGet _ _ hΓ => exact arrGet_compatX hΓ
-  | arrCopy _ _ hΓ => exact arrCopy_compatX hΓ
-  | arrRelease _ _ hΓ => exact arrRelease_compatX hΓ
-  | countFold _ hΓ => exact countFold_compatX hΓ
-  | countTry _ _ hΓ => exact countTry_compatX hΓ
-  | boundedFix _ _ hΓ => exact boundedFix_compatX hΓ
-  | iterate _ _ _ _ _ hS hΓ => exact iterate_compatX hS hΓ
-  | divFuel _ _ _ hS hΓ => exact divFuel_compatX hS hΓ
   | reify _ _ _ _ _ hS hcl _ hΓ ihres => exact reify_compatX hS hcl ihres hΓ
-  | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact sliceBorrowM_compatX x hΓ hA hB hf₁ hf₂
-  | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ => exact sliceBorrowI_compatX x hΓ hsc hA hB hf₁ hf₂
-  | sliceGetM _ _ hΓ => exact sliceGetM_compatX hΓ
-  | sliceLenM _ _ hΓ => exact sliceLenM_compatX hΓ
-  | sliceSplitI _ _ hΓ => exact sliceSplitI_compatX hΓ
-  | sliceSplitM _ _ hΓ => exact sliceSplitM_compatX hΓ
-  | sliceEmptyI _ _ hΓ => exact sliceEmptyI_compatX hΓ
-  | sliceEmptyM _ _ hΓ => exact sliceEmptyM_compatX hΓ
-  | arrEmpty _ hΓ => exact arrEmpty_compatX hΓ
-  | sliceReplaceM _ _ hΓ => exact sliceReplaceM_compatX hΓ
-  | sliceSwapM _ _ hΓ => exact sliceSwapM_compatX hΓ
-  | sliceCopyM _ _ _ hΓ hA => exact sliceCopyM_compatX hΓ hA
-  | withbor1 x hΓ hx hsc₁ hf₁ hf₂ => exact withbor1_compatX x hΓ hx hsc₁ hf₁ hf₂
-  | withbor2 x hΓ hx hside hf₁ hf₂ => exact withbor2_compatX x hΓ hx hside hf₁ hf₂
-  | withbor3 x hΓ hx hf₁ hf₂ => exact withbor3_compatX x hΓ hx hf₁ hf₂
-  | withload x hΓ hx hf₁ hf₂ => exact withload_compatX x hΓ hx hf₁ hf₂
-  | withswap hΓ => exact withswap_compatX hΓ
   | withborUD k x hΓ _ hk hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       exact withborUD_compatX k x hΓ hk hf₁ hf₂ hS hMS hDS hSv hP ihd
-  | withloadU x hΓ _ hf₁ hf₂ hS => exact withloadU_compatX x hΓ hf₁ hf₂ hS
   | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
       exact sliceBorrowMU_compatX x hΓ hA hB hf₁ hf₂ hS ihd
   | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS _ ihd =>
@@ -547,14 +565,8 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
   | ofRet _ ih => exact ih
   | roll hA hc _ ih => exact roll_compatX hA hc ih
   | unroll _ ih => exact unroll_compatX ih
-  | foldImm F y c R hΓ hF hG hyM hyR hR => exact foldImm_compatX F hF hG y c R hΓ hyM hyR hR
-  | foldOwn F R hΓ hF hG => exact foldOwn_compatX F hF hG R hΓ
-  | foldReuse F R hΓ hF hG => exact foldReuse_compatX F hF hG R hΓ
-  | foldOwnG B₀ Rs hΓ hB => exact FoldP.foldOwnG_compatX B₀ hB Rs hΓ
   | nuIn hC _ ih => exact nuIn_compatX hC ih
   | nuOut hC _ ih => exact nuOut_compatX hC ih
-  | unfoldN C S hC hS hΓ => exact unfold_compatX hC S hS hΓ
-  | unfoldK C G S hC hG hS hΓ => exact unfoldK_compatX hC hG hS hΓ
   | nuOutK hC hG hS hGf h => exact nuOutK_compatX hC hG hS hGf h
   | effSub hle _ ih => exact sub_compatC hle ih
   | effPerform _ hf hna _ _ ih => exact perform_compatC hf hna ih

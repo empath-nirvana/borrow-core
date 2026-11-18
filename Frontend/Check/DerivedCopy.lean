@@ -78,11 +78,11 @@ def copyConst (info : TInfo) (A : CVTy) (h : derivedCopyB A = true) :
     Res Δ T (.val (.lolli A (.tensor A A))) :=
   match A, h with
   | .imm a B, _ =>
-    ⟨.copy info (.val (.lolli (.imm a B) (.tensor (.imm a B) (.imm a B)))) a B, [], [],
-      (Fam.dead T).map fun _ hd => TTied.ofAt fun _ => .copy hd⟩
+    ⟨.constK info (.val (.lolli (.imm a B) (.tensor (.imm a B) (.imm a B)))) (.copy a B), [], [],
+      (Fam.dead T).map fun _ hd => TTied.constK info (.copy a B) trivial hd⟩
   | .fam (.imm a B), _ =>
-    rBangE info ⟨.arrCopy info (.val (BoCa.Fig16.LogRel.Core.arrCopyTy a B)) a B, [], [],
-      (Fam.dead T).map fun _ hd => TTied.ofAt fun _ => .arrCopy a B hd⟩
+    rBangE info ⟨.constK info (.val (BoCa.Fig16.LogRel.Core.arrCopyTy a B)) (.arrCopy a B), [], [],
+      (Fam.dead T).map fun _ hd => TTied.constK info (.arrCopy a B) trivial hd⟩
 
 /-- **The derived copy of slot `i`** around a computation `r` checked under the two copies and
 the pair's slot: `p <- return (copyC A xᵢ); let (x₁, x₂) = p; r`, the shape of `copy_derives`.
@@ -160,8 +160,8 @@ def _root_.BoCa.Fig16.LogRel.Core.Check.TExpr.insertedCopies : Nat → TExpr →
   | 0, _ => none
   | f + 1, t => do
     let here := match t with
-      | .copy i _ a A => if i.inserted then [(i.sp, i.name, (.imm a A : CVTy))] else []
-      | .arrCopy i _ a A => if i.inserted then [(i.sp, i.name, (.fam (.imm a A) : CVTy))] else []
+      | .constK i _ (.copy a A) => if i.inserted then [(i.sp, i.name, (.imm a A : CVTy))] else []
+      | .constK i _ (.arrCopy a A) => if i.inserted then [(i.sp, i.name, (.fam (.imm a A) : CVTy))] else []
       | _ => []
     let ks ← t.children.mapM fun (_, k) => k.insertedCopies f
     pure (here ++ ks.flatten)
@@ -174,7 +174,7 @@ copy of `Imm @a A`, a `DerivedCopy` type. The checker inserts a copy only as thi
 declared type, whatever decides where it goes.  `[spec §12]` -/
 theorem _root_.BoCa.Fig16.LogRel.Core.Check.TDerivesP.copy_at {Δ : LifeCtx} {Γ : BoCa.Ctx CVTy}
     {i : TInfo} {j : BoCa.Fig16.LogRel.Core.Jdg} {a : Lifetime.Life} {A : CVTy}
-    {j' : BoCa.Fig16.LogRel.Core.Jdg} (h : TDerivesP Δ Γ (.copy i j a A) j') :
+    {j' : BoCa.Fig16.LogRel.Core.Jdg} (h : TDerivesP Δ Γ (.constK i j (.copy a A)) j') :
     j' = .val (BoCa.Fig16.LogRel.Core.axCopyTy a A) ∧ DerivedCopy (.imm a A) := by
   cases h
   exact ⟨rfl, .imm a A⟩
@@ -183,7 +183,7 @@ theorem _root_.BoCa.Fig16.LogRel.Core.Check.TDerivesP.copy_at {Δ : LifeCtx} {Γ
 `arrCopyTy a A`, the copy of `[Imm @a A]`, a `DerivedCopy` type.  `[spec §9, §12]` -/
 theorem _root_.BoCa.Fig16.LogRel.Core.Check.TDerivesP.arrCopy_at {Δ : LifeCtx}
     {Γ : BoCa.Ctx CVTy} {i : TInfo} {j : BoCa.Fig16.LogRel.Core.Jdg} {a : Lifetime.Life} {A : CVTy}
-    {j' : BoCa.Fig16.LogRel.Core.Jdg} (h : TDerivesP Δ Γ (.arrCopy i j a A) j') :
+    {j' : BoCa.Fig16.LogRel.Core.Jdg} (h : TDerivesP Δ Γ (.constK i j (.arrCopy a A)) j') :
     j' = .val (BoCa.Fig16.LogRel.Core.arrCopyTy a A) ∧ DerivedCopy (.fam (.imm a A)) := by
   cases h
   exact ⟨rfl, .arrImm a A⟩

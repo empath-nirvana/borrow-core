@@ -1592,12 +1592,16 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
   | withborUD _ _ _ _ _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
   | sliceBorrowMU _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
   | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
-  | foldImm => exact rcE_foldImmV _
-  | foldOwn => exact rcE_foldOwnV _
-  | foldOwnG => exact rcE_foldOwnGV _
-  | foldReuse => exact rcE_foldReuseV _
-  | unfoldN => exact rcE_unfoldV _
-  | unfoldK => exact rcE_unfoldV _
+  | constK k hAt hk hΓ =>
+      cases k with
+      | foldImm => exact rcE_foldImmV _
+      | foldOwn => exact rcE_foldOwnV _
+      | foldOwnG => exact rcE_foldOwnGV _
+      | foldReuse => exact rcE_foldReuseV _
+      | unfoldN => exact rcE_unfoldV _
+      | unfoldK => exact rcE_unfoldV _
+      | divFuel => exact rcE_divFuelV
+      | _ => first | rfl | simp_all [rcE, rcE_app, absurdE, thenE, performE, opArgE, Val.i32]
   | lolliE _ _ _ iha ihf => rw [rcE_app ihf]; exact iha
   | @effAwait _ _ S n a c hAt _ _ _ _ hfc _ =>
       have hn := names_of_rowAt hAt hfc
@@ -1617,7 +1621,6 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
       simp [hndExpr, Val.i32, rcE, rcE_app, rcE_qualsVal, ihc.1, ihe,
         rcE_lastTuple ihc.2.1 ihc.2.2]
   | reify _ _ _ _ _ _ _ _ _ ihres => exact rcE_reifyV ihres
-  | divFuel => exact rcE_divFuelV
   | @letPoly _ _ N _ _ b hcl _ _ ihV ihN =>
       have hb : rcE Ξ.names b = true := ihV
       rw [rcE_fill hb hcl N 0] at ihN
