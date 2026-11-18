@@ -132,7 +132,6 @@ steps=(
   "corpus (old backend, final)"  "scripts/compile-corpus.sh --final"
   "kernel (old backend)"     "scripts/compile-kernel.sh"
   "backend2 fence"   "scripts/check-backend2.sh"
-  "result cache"     "scripts/check-gate-cache.sh"
   "layout rejects"   "scripts/check-layout-reject.sh"
   "native facts"     "scripts/native-facts.sh"
   "native"           "scripts/compile-native.sh"
@@ -141,6 +140,7 @@ steps=(
   "renaming"         "scripts/alpha-check.py"
   "book doc-tests"   "scripts/book-doctest.sh"
   "book build"       "mdbook build book"
+  "result cache"     "scripts/check-gate-cache.sh"
 )
 # The sanity gate's steps (`make gate`, `--changed`). The corpus runs named `final` are its own:
 # the full gate runs the corpus at every stage instead.
