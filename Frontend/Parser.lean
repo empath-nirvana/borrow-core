@@ -2187,7 +2187,8 @@ def foldBlock : Nat → P Val
       decl₀ := match ns.toList with
         | m :: ps => some (m, ps)
         | [] => none
-    let V ← withNoTrail true (val n)
+    -- The scrutinee keeps today's `&` (answers A3), as a loop's source does.
+    let V ← loopHead n
     expectSym "{"
     if ← isSym "|" then discard bump
     let reuse₀ := (← get).reuseArm
@@ -2710,8 +2711,8 @@ def bindRest : Nat → Pos → Ident → Option VTy → Bool → P Comp
     let sp ← spanFrom st
     bindForm sp n x A M D N xs
 
-/-- The source of a `for` loop: no trailing block in it, and in the new spelling its first atom
-keeps today's `&` (answers A3).  `[spec §82]` -/
+/-- The source of a `for` loop or a fold's scrutinee: no trailing block in it, and in the new
+spelling its first atom keeps today's `&` (answers A3).  `[spec §82]` -/
 def loopHead : Nat → P Val
   | 0 => outOfFuel
   | n + 1 => withNoTrail true do

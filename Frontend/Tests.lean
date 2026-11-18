@@ -156,11 +156,39 @@ theorem nd_modes : sameProgram
     "fn f(l: array i32) : i32 = 0\nfn g(m: inout array i32) : i32 = 0\nfn main() : i32 = modify &a { v -> v }"
     = true := by decide +kernel
 
+-- Hazards of the layout rule: a line that starts with `&` begins a statement, a line-leading `|`
+-- separates arms, a label alone on its line joins the next, a call's `{` in the head of `if` is
+-- the `if`'s, `x = M` for a computation assigns.
+theorem nd_hazards : sameProgram
+    ("main -> i32 = let mut a = 0; 'l: for i in 0..3 { () }; a <- force g; " ++
+     "let b = match 1 { 0 -> 5 | k -> k }; let c = if f(a) { 1 } else { 2 }; &mut a")
+    ("fn main() : i32 {\n  var a = 0\n  'l:\n  for i in 0..3 { () }\n  a = force g\n" ++
+     "  let b = match 1 {\n    0 -> 5\n    | k -> k\n  }\n  let c = if f(a) { 1 } else { 2 }\n  &a\n}")
+    = true := by decide +kernel
+
+-- An arm's `-> { S }` is its statements, `-> ({ S })` the block value.
+theorem nd_block_arm : sameProgram "main -> i32 = match 1 { _ -> { 5 } }"
+    "fn main() : i32 = match 1 { _ -> ({ 5 }) }" = true ∧
+    sameProgram "main -> i32 = match 1 { _ -> let x = 5; x }"
+    "fn main() : i32 = match 1 { _ -> { let x = 5; x } }" = true := by decide +kernel
+
+/-- The new-spelling text `nw` is refused with the message `msg`. -/
+def ndRejectsWith (nw msg : String) : Bool :=
+  match parseProgram ("#! dialect 82\n" ++ nw) with
+  | .ok _ => false
+  | .error e => e.msg == msg
+
 -- Refused in the new spelling: today's surface forms.
 theorem nd_refused :
     ndRejects "fn main() : i32 {\n  x <- return 1\n  x\n}" = true ∧
     ndRejects "fn main() : i32 = let mut x = 1; x" = true ∧
     ndRejects "fn main() : i32 = modify &mut x { v -> v }" = true ∧
-    ndRejects "main -> i32 = 1" = true := by decide +kernel
+    ndRejects "main -> i32 = 1" = true ∧
+    ndRejects "fn main() : i32 {\n  let p = q\n  .f\n}" = true ∧
+    ndRejectsWith "fn main() : i32 = modify &mut x { v -> v }"
+      "`&mut x` is written `&x` in the new spelling (SPEC §82 P7)" = true ∧
+    ndRejectsWith "fn main() : i32 {\n  x <- return 1\n  x\n}"
+      "`x <- M` is written `let x = M` in a surface body of the new spelling (SPEC §82 E2)" = true
+    := by decide +kernel
 
 end Frontend.Tests
