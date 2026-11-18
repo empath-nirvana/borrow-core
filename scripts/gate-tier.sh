@@ -37,7 +37,10 @@
 #              misses after any script change; the cut keeps that to the compiler tier's cost.
 #              Scripts no gate step runs (falsify, the kernel census, new-worktree, gate-daily): A.
 #   compiler   any other .lean, scripts/axioms/*.names, lib/, the CrossCheck corpus files: the
-#              whole build, A, L, the cut (C and X on every program), R on every program when a
+#              whole build, A, L but research archive (left to the research tier and the daily
+#              run: it catches the research tree no longer building, or its registered names'
+#              axioms changing, and costs a rebuild of the tree's 32 modules after any edit
+#              upstream of Core.Chain.SchedProgs), the cut (C and X on every program), R on every program when a
 #              changed path is in the elaborator's or the reference interpreter's import closure
 #              (below), and every step on the touched programs.
 #   full       lean-toolchain, lake-manifest.json, lakefile.toml; the gate's own machinery
@@ -326,7 +329,7 @@ else:
     if "compiler" in present:
         build = "all"
         if any(classes[p] == "compiler" and p.endswith(".lean") or p.startswith("scripts/axioms/") for p in classes):
-            every(L)
+            every([s for s in L if s != "research archive"])
         closure = r_closure()
         r_paths = [p for p in paths if p in closure or p.startswith("lib/")
                    or (p in cross and "Frontend/Check/CrossCheck.lean" in closure)]

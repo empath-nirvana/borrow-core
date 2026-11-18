@@ -107,7 +107,9 @@ and paste its three tier lines (the `gate tier:` line, the `ci-local [tier …]:
 The per-PR gate's steps are chosen by `scripts/gate-tier.sh` from the paths changed since the merge
 base with origin/main, never by judgement: docs (no build; spec files, judgment freeze,
 assumptions); book (the book steps); corpus (every step on the programs the change touches);
-research (the Lean checks); compiler (any other `.lean`, `lib/`: the Lean checks, every program
+research (the Lean checks); compiler (any other `.lean`, `lib/`: the Lean checks but the research
+archive, which the research tier and the daily run keep (it would catch the research tree no
+longer building, or its registered names' axioms changing), every program
 parsed, checked and run in WebAssembly on both backends with the source stage, the cheap whole
 steps, and renaming and `let mut` combinations when the change is in the elaborator's or the
 interpreter's import closure); scripts (that step on every program, plus the compiler set); full
