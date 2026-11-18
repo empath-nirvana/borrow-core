@@ -71,7 +71,8 @@ program() {
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
   err=/dev/null; [ -f "$base.err" ] && err="$base.err"
   argsOf "$f"
-  "$bcc" run --backend "$backend" --native "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$?
+  if [ "$backend" = new ]; then rc=$(native_result "$NATIVE_RUNS" "$f" "$w")
+  else "$bcc" run --backend "$backend" --native "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$?; fi
   if [ "$rc" != "$(statusOf "$f")" ]; then
     echo "$f: native exits with $rc, not $(statusOf "$f"): $(head -3 "$w/err")"; return 1
   fi
@@ -87,11 +88,16 @@ program() {
   echo "$f: native as $base.out | $got"
 }
 export -f program argsOf statusOf
+# Backend2's native runs, made once for this step and compile-backend2.sh (scripts/native-run.sh).
+. scripts/native-run.sh
+NATIVE_RUNS=$(mktemp -d); export NATIVE_RUNS
+trap 'rm -rf "$NATIVE_RUNS"' EXIT
+[ "$backend" = new ] && native_runs "$NATIVE_RUNS" "${files[@]}"
 # Each program is a unit of the result cache (scripts/par.sh; the C compiler is among its tools).
 # Its skip lines are a side file (`skips`), gathered in $skipdir.
 export PAR_CACHE="compile-native backend=$backend"
 skipdir=$(mktemp -d)
-trap 'rm -rf "$skipdir"' EXIT
+trap 'rm -rf "$skipdir" "$NATIVE_RUNS"' EXIT
 export PAR_COLLECT=$skipdir
 : > "$skipdir/skips"
 par program "${files[@]}"
@@ -196,7 +202,7 @@ serial() {
 }
 if [ "$named" = 0 ]; then
   tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp" "$skipdir"' EXIT
+  trap 'rm -rf "$tmp" "$skipdir" "$NATIVE_RUNS"' EXIT
   export -f serial
   export PAR_COLLECT=$tmp PAR_CACHE_DEPS="files:$(echo corpus/{div-unhandled,deep-list,json-drop-deep,io-cat,io-task,async-borrow,float-arith}.* lean-toolchain lakefile.toml lake-manifest.json)"
   parts=(kernels hostops lake-env tailcalls loop-tail deep-list)
