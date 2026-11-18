@@ -1,0 +1,76 @@
+#!/usr/bin/perl
+# The machine-wide pool of job slots that every gate on the machine shares.
+#
+#     scripts/slot [-c CPU] [-m MEM] -- COMMAND ARG...   COMMAND, holding its share of the pool
+#     scripts/slot -s                                     the pool's size: `N M`
+#
+# COMMAND runs holding CPU slots (default 1) and MEM memory tokens (GB, default 1) of the pool in
+# $SLOT_DIR (default ~/repos/.gate-slots). The pool's size is the pool's, in its file `size`
+# (`N M`), written once by its first user: $SLOT_N cpu slots (default the core count) and
+# $SLOT_MEM memory tokens (default 3/4 of the RAM, in GB). A request larger than the pool takes
+# the whole pool.
+#
+# A token is an flock(2) lock on a file of the pool (`cpu.<i>`, `mem.<i>`). The kernel drops it
+# when the last process holding the file open exits, however it exits: a dead holder frees its
+# tokens, and no daemon or cleanup is needed. slot takes the locks and execs COMMAND with the
+# files left open, so no wrapper process stays and COMMAND's children inherit the tokens.
+#
+# A waiter takes the pool's door (a blocking flock) before taking tokens and keeps it until it
+# has them all: a large request is not starved by small ones, and no two waiters each hold part
+# of what the other needs. Releasing never needs the door.
+#
+# A command started inside a slot (`SLOT_HELD` set) runs at once: it is part of the job that holds
+# the slot. With `SLOT_OFF=1` COMMAND runs with no pool. An error of slot itself (the pool's
+# directory cannot be opened, a lock fails) is the job's failure: slot exits 125.
+#
+# The gate's processes take their slots here: each `par` job (scripts/par.sh), each subprocess of
+# the Python pools (scripts/slotpool.py), `gate-census` (scripts/gate-census.sh), the serial
+# steps and the build (scripts/ci-local.sh).
+use strict; use warnings; no warnings "exec";
+use Fcntl qw(:flock F_GETFD F_SETFD FD_CLOEXEC O_RDWR O_CREAT);
+use Time::HiRes qw(usleep);
+my $usage = "usage: slot [-c CPU] [-m MEM] -- COMMAND ARG...  |  slot -s\n";
+sub fail { print STDERR "slot: $_[0]\n"; exit 125 }
+my ($cpu, $mem, $show) = (1, 1, 0);
+while (@ARGV && $ARGV[0] ne '--') {
+  my $o = shift @ARGV;
+  if ($o eq '-c') { $cpu = shift @ARGV } elsif ($o eq '-m') { $mem = shift @ARGV }
+  elsif ($o eq '-s') { $show = 1 } else { print STDERR $usage; exit 2 }
+}
+shift @ARGV if @ARGV;
+unless ($show) {
+  @ARGV or do { print STDERR $usage; exit 2 };
+  if ($ENV{SLOT_HELD} || $ENV{SLOT_OFF}) { exec { $ARGV[0] } @ARGV or fail("cannot run $ARGV[0]: $!") }
+}
+my $dir = $ENV{SLOT_DIR} // "$ENV{HOME}/repos/.gate-slots";
+-d $dir or mkdir $dir or -d $dir or fail("$dir: $!");
+sub opn { my $f; sysopen($f, "$dir/$_[0]", O_RDWR | O_CREAT) or fail("$dir/$_[0]: $!"); $f }
+my $door = opn("door");
+flock($door, LOCK_EX) or fail("door: $!");
+my ($n, $m);
+if (open(my $s, '<', "$dir/size")) { ($n, $m) = split ' ', (scalar <$s> // '') }
+unless ($n && $m) {
+  $n = $ENV{SLOT_N} // `sysctl -n hw.ncpu` + 0;
+  $m = $ENV{SLOT_MEM} // int((`sysctl -n hw.memsize` + 0) / 2**30 * 3 / 4);
+  open(my $s, '>', "$dir/size.tmp") or fail("$dir/size.tmp: $!");
+  print $s "$n $m\n"; close $s; rename("$dir/size.tmp", "$dir/size") or fail("$dir/size: $!");
+}
+if ($show) { print "$n $m\n"; exit 0 }
+$cpu = $n if $cpu > $n; $mem = $m if $mem > $m;
+my @held;
+for my $kind (['cpu', $n, $cpu], ['mem', $m, $mem]) {
+  my ($name, $total, $want) = @$kind;
+  my ($got, $start, $sleep) = (0, int(rand($total)), 2000);
+  while ($got < $want) {
+    for my $k (0 .. $total - 1) {
+      last if $got >= $want;
+      my $f = opn("$name." . (($start + $k) % $total));
+      if (flock($f, LOCK_EX | LOCK_NB)) { push @held, $f; $got++ } else { close $f }
+    }
+    if ($got < $want) { usleep($sleep); $sleep = $sleep < 50000 ? $sleep * 2 : 50000 }
+  }
+}
+close $door;
+for my $f (@held) { fcntl($f, F_SETFD, fcntl($f, F_GETFD, 0) & ~FD_CLOEXEC) or fail("fcntl: $!") }
+$ENV{SLOT_HELD} = "$cpu $mem";
+exec { $ARGV[0] } @ARGV or fail("cannot run $ARGV[0]: $!");

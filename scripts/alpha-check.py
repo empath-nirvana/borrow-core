@@ -30,6 +30,9 @@ import argparse, os, re, shutil, subprocess, sys, tempfile, threading
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import slotpool  # noqa: E402  (the machine-wide job pool, scripts/slot)
 
 
 # Per program (thread): whether a run ended other than a deterministic run ends (a signal), or the
@@ -38,7 +41,8 @@ UNSURE = threading.local()
 
 
 def run(bcc, args, env=None):
-    p = subprocess.run([bcc] + args, capture_output=True, text=True, env=env, cwd=ROOT)
+    with slotpool.held():
+        p = subprocess.run([bcc] + args, capture_output=True, text=True, env=env, cwd=ROOT)
     if p.returncode < 0:
         UNSURE.flag = True
     return p.returncode, p.stdout + p.stderr

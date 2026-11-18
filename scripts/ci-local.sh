@@ -208,8 +208,34 @@ wanted() {
   case "$run" in *"|$1|"*) return 0 ;; *) return 1 ;; esac
 }
 
-if [ "$all" = 1 ]; then step "build" lake build
-else step "build (bcc, bcc-counts)" lake build bcc bcc-counts gate-census; fi
+# The machine-wide job pool (scripts/slot), shared by every gate on the machine: each `par` job,
+# each subprocess of the Python pools and `gate-census` take their slots there; the serial steps
+# below take one; the build and the compile-time guard take the whole CPU pool. `SLOT_OFF=1`
+# turns it off.
+pool=""
+if [ "${SLOT_OFF:-}" != 1 ] && command -v perl >/dev/null && size=$(scripts/slot -s); then
+  read -r poolN poolM <<< "$size"; pool=scripts/slot
+  echo "ci-local: job pool on ($poolN CPU slots, $poolM GB, shared by every gate on the machine)"
+else
+  echo "ci-local: job pool off ($([ "${SLOT_OFF:-}" = 1 ] && echo SLOT_OFF=1 || echo 'no perl'))"
+fi
+# slotted CPU MEM CMD…: CMD in the pool, or CMD itself when the pool is off.
+slotted() { local c=$1 m=$2; shift 2; if [ -n "$pool" ]; then "$pool" -c "$c" -m "$m" -- "$@"; else "$@"; fi; }
+# The build: nothing when Lake finds every target up to date (`--no-build`, exit 3 when one is
+# not); otherwise the build itself, holding the whole CPU pool (Lake starts a Lean process per
+# core and has no job limit).
+build() {
+  local rc=0
+  [ -n "$pool" ] || { lake build "$@"; return; }
+  lake build --no-build "$@" || rc=$?
+  [ "$rc" = 3 ] || return "$rc"
+  # UNPROVED: a build's memory is under 24 GB (14 Lean processes, each at most ~1.7 GB beside the
+  # shared .oleans). Assumed from per-module peaks, not measured on a full rebuild; if a build
+  # needs more, the gates beside it may run short of memory (swap, never a wrong verdict).
+  slotted 999 24 lake build "$@"
+}
+if [ "$all" = 1 ]; then step "build" build
+else step "build (bcc, bcc-counts)" build bcc bcc-counts gate-census; fi
 built=$fail
 [ "$built" = 0 ] && export CI_LOCAL_BUILT=1
 # When the build fails, the steps run one after another, each trying its own build, with the cache
@@ -235,7 +261,10 @@ if [ "$built" = 0 ]; then
   wanted "insertion pins" && GATE_CENSUS_ALL+=" pins pins+scripts/census-neg/pins.lean"
 fi
 
-if wanted "compile scaling"; then step "compile scaling" scripts/compile-scaling.sh --guard; fi
+# The compile-time guard measures time: it runs holding the whole CPU pool, alone on the machine.
+if wanted "compile scaling"; then step "compile scaling" slotted 999 1 scripts/compile-scaling.sh --guard; fi
+# The steps that run their programs one at a time take one slot for the whole step.
+serial() { case "$1" in "layout rejects") return 0 ;; *) return 1 ;; esac; }
 
 mdbook=1; command -v mdbook >/dev/null || mdbook=0
 names=(); pids=()
@@ -245,10 +274,12 @@ for ((i = 0; i < ${#steps[@]}; i += 2)); do
   if [ "$name" = "book build" ] && [ "$mdbook" = 0 ]; then continue; fi
   if [ "$built" = 0 ]; then
     k=${#names[@]}
-    (t=$SECONDS; $cmd > "$out/$k.log" 2>&1; rc=$?; echo $((SECONDS - t)) > "$out/$k.time"; exit $rc) &
+    pre=(); serial "$name" && pre=(slotted 1 1)
+    (t=$SECONDS; ${pre[@]+"${pre[@]}"} $cmd > "$out/$k.log" 2>&1; rc=$?; echo $((SECONDS - t)) > "$out/$k.time"; exit $rc) &
     names+=("$name"); pids+=($!)
   else
-    step "$name" $cmd
+    pre=(); serial "$name" && pre=(slotted 1 1)
+    step "$name" ${pre[@]+"${pre[@]}"} $cmd
   fi
 done
 for ((k = 0; k < ${#names[@]}; k++)); do
@@ -272,6 +303,7 @@ tag="ci-local"; [ "$changed" = 1 ] && tag="ci-local --changed"; [ "$full" = 1 ] 
 [ "${GATE_CACHE:-1}" = record ] && tag="$tag --record-cache"
 if [ "${GATE_CACHE:-1}" = 0 ]; then cache="cache off${cachenote:-}"
 else cache=$(awk '{ r += $1; n += $2; f += $3 } END { printf "cache: %d unit(s) replayed, %d run", r, n; if (f) printf "; WARNING: %d pass(es) could not be recorded (store not writable)", f }' "$GATE_CACHE_STATS"); fi
+if [ -n "$pool" ]; then cache="$cache; job pool $poolN/$poolM GB"; else cache="$cache; job pool off"; fi
 if [ "$fail" -eq 0 ]; then echo "$tag: ALL PASSED ($((SECONDS - start))s; $cache)"; else echo "$tag: FAILURES (see above) ($((SECONDS - start))s; $cache)"; fi
 [ "$changed" = 1 ] && echo "(--changed is for iteration only: the sanity gate, scripts/ci-local.sh, runs before a PR)"
 [ "$full" = 0 ] && echo "(the sanity gate: \`make gate-full\` runs every check; \`make verify-goldens\` re-verifies every golden)"
