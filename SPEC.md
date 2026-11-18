@@ -175,6 +175,48 @@ context, §10), `[]I` at every value type,
 three call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), and conversion up to the names of
 lifetime binders (`[α]`, *Lifetime binders and `[α]`* below). No new machine rules.
 
+**The constants are one rule (#1170).** A *constant* is a closed term typed at a consumed context
+under side conditions that read no derivation: `()`, the borrow axioms, the `!` axioms of §2 and
+every primitive the later entries add. The kernel types all of them with one rule, `constK`, and
+the checker with one typed-term node of the same name, both indexed by a kind `k : ConstKind`
+(`Core/ConstKind.lean`):
+
+    k.OK Δ    I.RowOK k.row    DeadP Γ
+    ─────────────────────────────────── [const]
+    Δ; Γ ⊢ k.E : k.ty ⊓Δ
+
+- **The kinds** are the 51 constants, each carrying the data its term and type are read at, and
+  each stated in its entry: `unitI`; `copyBang`, `releaseBang` (§2); `alloc`, `free`, `swap`,
+  `copy`, `releaseImm`, `releaseMut`, `releaseUnk`, `withbor1`, `withbor2`, `withbor3`, `withload`,
+  `withswap` (the borrow axioms, §3, §5, §9, §23); `foldImm`, `foldOwn`, `foldReuse`, `foldOwnG`
+  (§6, §61); `unfoldN` (§7); `lit`, `hostOp` (§8, §73); `arrNew`, `arrFree`, `arrSize`,
+  `arrReplace`, `arrLen`, `arrGet`, `arrCopy`, `arrRelease`, `arrEmpty`, `sliceBorrowM`,
+  `sliceBorrowI`, `sliceGetM`, `sliceLenM`, `sliceSplitI`, `sliceSplitM`, `sliceEmptyI`,
+  `sliceEmptyM`, `sliceReplaceM`, `sliceSwapM` (§9, §61); `tokMint`, `tokBurn` (§11); `iterate`,
+  `divFuel` (§14); `countFold`, `countTry` (§16); `withloadU` (§19); `boundedFix` (§20); `unfoldK`
+  (§68); `sliceCopyM` (§74).
+- **The kind's functions.** `ConstKind.E` is the constant's term and `ConstKind.ty` its type at
+  `⊓Δ` (only the lends read `⊓Δ`), each as its entry states it. `ConstKind.OK` is the constant's
+  side condition, the conjunction of its former premises other than `DeadP Γ` (`True` where there
+  were none). `ConstKind.row` is the row the rule ties where the index ties rows (§83): `Σ` at
+  `iterate`, `tick, Σ` at `divFuel`, and `[]` at every other kind, which every effect context ties.
+  `ConstKind.domFree` is false at the seven lends whose type or side condition reads `Δ`
+  (`withbor1`/`2`/`3`, `withload`, `withloadU`, `sliceBorrowM`/`I`), so the checker's weakening of
+  `Δ` treats exactly the constants it treated before as reading it.
+- **The old names stay.** Each constant's former rule (`CDerives.alloc`, `CDerives.countFold S`,
+  …) is a theorem of the judgment and of each of its instances (`CDerives`, `CDerivesAt Ξ`,
+  `CDerivesP`) with today's binders and statement, so calls by position and by name are unchanged.
+  Derivability is exactly the same: a `constK` derivation at a kind is one of the former rule.
+- **The Fundamental Property's case** applies `constK_compatX`, which splits on the kind and applies
+  the constant's unchanged compatibility lemma (`alloc_compatX`, `countFold_compatX`, …). The chain
+  does the same with the `_compatN` lemmas (`constK_compatN`). No compatibility lemma changes.
+- **The typed term** has one node `constK` holding the kind. Backend2 lowers each constant as before,
+  reading which one it is off the node's kind, and rebuilds nothing. The surface constants and
+  their messages are unchanged: each emits its kind.
+- The rule count of `CDerives` and of the checker's judgment each drops by 50. A later constant
+  adds a kind and a clause to each `ConstKind` function, not a rule.
+- **Status:** the fold (#1170, unit 1170-Z), after #798. Not built.
+
 ### Semantics
 
 The typed world of §1, re-typed at `VTy`/`CTy`: `vC`, `cC`, `SemV`, `SemC`. `U C` is a leaf of the
@@ -4496,7 +4538,7 @@ up (§16), so the step is the same at every host. The step decides what a spent 
 
 - **As built.** The primitive `Prim.boundedFix` and its head step `Head.boundedFix`
   (`Paper/S1_Syntax`, `Paper/S3_Dynamics`; `boundedFixNext`, `fixSelf` in
-  `Support/Dynamics/Arrays.lean`), the interpreter's step, the `CDerives` rule `boundedFix`, its
+  `Support/Dynamics/Arrays.lean`), the interpreter's step, the `CDerives` constant `boundedFix` (a kind of `constK`, §3), its
   soundness `boundedFix_compatX` (`Core/BoundedFix.lean`), and the checker's constant
   `bounded_fix[A, C]`.
 - **The proof** is the induction on the budget at every `Σ`: the self-reference at `k` is valid
@@ -8086,7 +8128,7 @@ its big-integer library (#509).
 ### Baseline
 
 The Fundamental Property and adequacy hold unchanged: `CDerives.lit` and `CDerives.hostOp` are the
-rules they were, at more literals and operations, and `host_call_sound` covers the new operations
+constants they were (kinds of `constK`, §3), at more literals and operations, and `host_call_sound` covers the new operations
 at every host. No new rule, index or former. Every existing corpus and kernel program keeps its
 output, goldens, `corpus/kernel-counts.expected` and counts. The lexer reads `n.i`, an operation
 of a row, as a float literal's text, and the parser reads it back (`nDotI?`), so every row is read
@@ -11398,8 +11440,9 @@ the first summand that has one at `⊕`, the empty view at a borrowed family, **
 at an owned one, the constant function at `!(A ⇒ B)`, and at `μB` the filler of `B` with the
 `μ`'s own variable having none (the least fixed point's first approximant), rolled. The empty
 array is the constant `array_empty[A] : Array A` (§9), the empty family `(0, 0)` that
-`famEmpty_compatX` already types at every leaf, here at `Ref A`: the CDerives rule `arrEmpty`
-(and `CDerivesAt`'s, `CDerivesP`'s, the typed term's), whose soundness is `arrEmpty_compatX`.
+`famEmpty_compatX` already types at every leaf, here at `Ref A`: the CDerives constant `arrEmpty`
+(a kind of `constK`, §3, in every instance and in the typed term), whose soundness is
+`arrEmpty_compatX`.
 `array_new` at length 0 needs a function to an element, so an element type whose only finite
 values are built from empty arrays (`data Tree = Tree(i32, Vec[Tree])`, `μX. Array X`) had no
 closed term without it. So `Json`'s filler is `Num(0)` whichever constructor is first, the rose
@@ -12660,10 +12703,11 @@ conversion of a `foldOwn` or `foldReuse` node changes.
 
 ### The fact
 
-The node itself, with its shape `F : FShape` (`TExpr.foldOwn`, `TExpr.foldReuse`;
-`TDerives.foldOwn`, `TDerives.foldReuse`, `Frontend/Check/TDerives.lean`; `CDerives.foldOwn`,
-`CDerives.foldReuse`, `Core/Judgment.lean`, by `foldOwn_compatX` (`Core/FoldOwn.lean`) and
-`foldReuse_compatX` (`Core/FoldReuse.lean`)). Its type `!U(A′_R ⊸ F R) ⊸ !U(μX. F.ty ⊸ F R)`
+The node itself, with its shape `F : FShape`: the constants' node `constK` at the kind
+`foldOwn F R` or `foldReuse F R` (§3; `TExpr.constK`, `TDerivesX.constK`,
+`Frontend/Check/TDerives.lean`; `CDerives.foldOwn`, `CDerives.foldReuse`, theorems in
+`Core/Judgment.lean`, by `foldOwn_compatX` (`Core/FoldOwn.lean`) and `foldReuse_compatX`
+(`Core/FoldReuse.lean`)). Its type `!U(A′_R ⊸ F R) ⊸ !U(μX. F.ty ⊸ F R)`
 (`algOTy`, `foldOTy`; `A″_R`, `algRTy`, at `foldReuse`) says:
 
 - the fold consumes the structure: `μX. F.ty` is taken by `⊸` and given back nowhere, so every
@@ -12821,8 +12865,9 @@ lemmas the later units reuse, and no `VTy` former, rule or relation clause (K1�
 ### The rules
 
 Each is a `CDerives` rule with one compatibility lemma, a rule of `CDerivesX` and so of its
-instances `CDerivesAt` and `CDerivesP` (§83), mirrored into `TDerives*` by `scripts/gen-pin.py`. No
-new index and no new judgment.
+instances `CDerivesAt` and `CDerivesP` (§83), mirrored into `TDerives*` by `scripts/gen-pin.py`;
+`unfoldK` is a kind of the constants' rule `constK` (§3), and its name a theorem of the same
+statement. No new index and no new judgment.
 
 | Rule | Statement | Unit |
 |---|---|---|
@@ -14081,7 +14126,7 @@ unwinding, `Σ_M ≤ Σ`, `Σ_D ≤ Σ`, `divB Σ = false`, `hP`, the finaliser'
 - **The slice lends** `sliceBorrowMU` and `sliceBorrowIU` keep a pure finaliser and stay separate
   rules: their shape and bound premises differ in kind from the kinds of `LendUKind` (#1170). They
   join it as kinds if they take the same generalisation, when a program needs it. `withloadU` (no
-  finaliser, its own term) stays separate too.
+  finaliser, its own term) is not a kind of `LendUKind`: it is a constant, a kind of `constK` (§3).
 - **A cleanup that uses two lent places** gets only one source back: not provided.
 - **Known gaps in #940's surface:** a cleanup using a different capability from the body's is
   refused as used twice (#1136); a `with … finally` around a `for` over a generator fails with a
@@ -14752,10 +14797,11 @@ its instances: abbreviations that keep their names, their rules and every statem
     abbrev CDerivesP       := CDerivesX {pin := true}
 
 - **The fields.** A field is a gating premise of the rules it gates.
-  - `ties`: at `some Ξ`, ten rules take `hAt : I.RowOK S`, which is `RowAt Ξ S` (§19, decision
-    R). These are the rules that read an operation's signature off a row: `iterate`, `divFuel`,
-    `reify`, `effPerform`, `effAwait`, `effRaise`, `effHandleV`, `effHandleVB`, `effHandleT`,
-    `effHandleL`. At `none` the premise is `True`.
+  - `ties`: at `some Ξ`, the rules that read an operation's signature off a row take
+    `hAt : I.RowOK S`, which is `RowAt Ξ S` (§19, decision R): `reify`, `effPerform`, `effAwait`,
+    `effRaise`, `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL`, and the constants' rule
+    `constK` at its kind's row (§3), which is `iterate`'s and `divFuel`'s row and `[]` at every other
+    kind. At `none` the premise is `True`.
   - `pin`: `lendR`, `lendLoopR` and `nilDead` (§29) take `hPin : I.pin = true`. Every other rule
     is the same at every index.
   - `I ≤ I'` holds field by field. A tie may be dropped (`some Ξ ≤ none`), and the relaxed rules
