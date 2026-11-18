@@ -417,6 +417,41 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
 arguments, or a copy's function and keys (the handlers and sites that serve its effects, its
 blocks'). Copies whose keys differ only in their sites' names have one `body`.
 
+**The conversions are one rule (#1170).** A *conversion* types a term at a new judgment from a
+derivation of the same term: `return` at `F A` (`ret`) and back (`ofRet`), `!E` (`bangE`), `[]I`
+and its elimination (`boxI`, `boxE`), `⊑Imm`/`⊑Mut` (`immSub`, `mutSub`), the code erasures of §68
+(`codeErase`, `codeEraseB`), `roll`/`unroll` (§6), `nuIn`/`nuOut` (§7), `[sub]` (§19, `effSub`)
+and `[α]` (`alpha`). The kernel types all 15 with one rule, `conv`, and the checker with one
+typed-term node of the same name, both indexed by a kind `k : ConvKind` (`Core/Judgment.lean`):
+
+    Δ; Γ ⊢ e : j    JConv Δ Γ k j j′
+    ──────────────────────────────── [conv]
+    Δ; Γ ⊢ e : j′
+
+- **The kind** carries the former node's data (`ret A`, `boxI a A`, `immSub a b A`,
+  `effSub Σ Σ′ A`, `nuIn m i C`, …; `alpha` none). **`JConv Δ Γ k j j′`** has one case per kind,
+  which fixes `j` and `j′` from the kind's data exactly as the former rule's premise and conclusion,
+  and holds exactly the former rule's side premises: `CtxOutlives Δ Γ a` at `boxI`,
+  `Δ.EntailsLe a b` at `immSub`/`mutSub`, `NoMut` and `Cl` at `roll`, `SysOkAt` at `nuIn`/`nuOut`,
+  `RowLe` at `effSub`, `Jdg.alphaB j j′` at `alpha`, none at the others. The conclusion's judgment
+  is the variable `j′`, so a derivation at a concrete judgment still splits by its rules.
+- **The inversions' relations stay.** `JS`/`VS` (`Core/Inversions.lean`) keep their cases and stay
+  without side premises; `JConv.toJS` maps a conversion to its step, and every inversion takes the
+  `conv` case through it.
+- **The old names stay.** Each former rule (`CDerives.ret`, `CDerives.boxI`, `CDerives.effSub`, …)
+  is a theorem of the judgment and of each of its instances (`CDerives`, `CDerivesAt Ξ`,
+  `CDerivesP`) with today's binders and statement, so calls by position and by name are unchanged.
+  Derivability is exactly the same.
+- **The Fundamental Property's case** applies `conv_compatX`, which splits on `JConv` and applies the
+  former rule's unchanged compatibility lemma (`ret_compatC`, `boxI_compatC`, `sub_compatC`,
+  `alpha_compatJ`, …; at `ofRet` the premise's own meaning). The chain does the same with the
+  `_compatN` lemmas (`conv_compatN`). No compatibility lemma changes.
+- **The typed term** has one node `conv` holding the kind and the two judgments. Backend2 reads which
+  conversion a node is off its kind (`effSub`'s rows, `roll`, `codeErase`, …) and rebuilds nothing.
+- The rule count of `CDerives` and of the checker's judgment each drops by 14. A later conversion
+  adds a kind and a case of `JConv`, not a rule.
+- **Status:** the fold (#1170, unit 1170-CONV), after #798. Not built.
+
 ### Baseline, restated
 
 - **Fundamental Property** — `CDerives Δ Γ e j → SemV`/`SemC` (`fundamentalC`).
@@ -509,7 +544,7 @@ under `Mut`. `U C` is a leaf for type variables.
 
 ### Typing
 
-`roll`/`unroll` on the same term (no machine step). `Imm̲` at `μ` substitutes the closed `μ` type
+`roll`/`unroll` on the same term (no machine step; kinds of the conversion rule `conv`, §3). `Imm̲` at `μ` substitutes the closed `μ` type
 for `X` under `Ref`, `Imm`, `Mut`, `!` and keeps `X` at head positions.
 
 ### Folds
@@ -585,7 +620,8 @@ binder, and the rules carry it through `NuOk`.
     ──────────────────────  nuIn     ──────────────────────  nuOut
     Γ ⊢ M : νX. C                    Γ ⊢ M : C[U(νX. C)/X]
 
-on the same term, at a positive `C`. Observing a `νX. C` is `nuOut` followed by the projections
+on the same term, at a positive `C` (kinds of the conversion rule `conv`, §3). Observing a
+`νX. C` is `nuOut` followed by the projections
 of the unrolling.
 
 **Coiteration.** At every positive `C` and every state type `S` that mentions no lifetime
@@ -3657,7 +3693,8 @@ Six rules, over `CDerives` with its context premises (§10):
 
 - **As built** (`Core/Judgment.lean`, `CDerives.eff*`; `Core/EffRules.lean`):
   - a row is a list of operations `(n, i, q, A_i, B_i)`, and `F_Σ R` is `CTy.effOf Σ R`;
-  - `[sub]` is `RowLe` (every operation of `Σ` is `Σ′`'s);
+  - `[sub]` is `RowLe` (every operation of `Σ` is `Σ′`'s), a kind of the conversion rule `conv`
+    (§3);
   - `[raise]`'s argument type holds no owned cell (`VTy.OwnFree`): the raise abandons it, which
     is not a consume;
   - `[then]` asks `Σ`'s names to be nonzero and its keys unique, and `!Γ₂` at an unrestricted
@@ -9821,7 +9858,7 @@ No change: no type, rule, term, typing, elaboration or semantics.
   join (`catch_abort`; frames that catch nothing of its name are passed, `abort_absorbs`).
 - **`[let]` at a row** (`effLet`): `N` on `inl`, the abort handed on and `N`'s context consumed
   (`effLet`'s `hW`: it holds no own cell), the branch per call of §19 (`abort_to`, `abort_passes`).
-- **`[sub]`** (`effSub`): the payload of `Σ` re-injected at `Σ'`'s summands (`RowLe`).
+- **`[sub]`** (the `conv` node at `effSub`): the payload of `Σ` re-injected at `Σ'`'s summands (`RowLe`).
 - **`[then]`** (`effThen`): `N` on a value; on an abort the finaliser `D`, then the abort, or the
   finaliser's own, which supersedes it, handed on (`then_ret`, `then_fin`, `unwind_prefix`).
 - **The unwinding borrows** (`withbor1U`, `withbor2U`, `withbor3U`, `withloadU`, `sliceBorrowMU`,
@@ -12849,8 +12886,9 @@ new index and no new judgment.
   K-M.4a).
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
-- `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
-  which Backend2 reads (B4). In the machine it is the identity.
+- `codeErase` is not subsumption: it is a conversion on the same term (a kind of the rule `conv`,
+  §3), so the typed term has a `conv` node for it at the kind `codeErase`, which Backend2 reads
+  (B4). In the machine it is the identity.
 - `eraseD` (covariant erasure inside `C`, K6) is not in this entry.
 - **The inversion's cost** (CLAUDE.md, *Do not invert `CDerives` casually*). `codeI` types the
   term `λM` at a new type, and `codeErase`/`codeEraseB` add a view step from a code type to `U`.
@@ -12875,7 +12913,7 @@ new index and no new judgment.
 - **C3, silently at a join.** Two different codes joined (`if`/`match` arms) with no expected type
   are erased to `U C`; S1's census counts these sites.
 - Wherever the expected type is `U C` (parameters written `dyn`, data fields, arrays, `Ref`
-  contents, handler arguments and state), `convVal` inserts the `codeErase` node.
+  contents, handler arguments and state), `convVal` inserts the `conv` node at `codeErase`.
 - **The growing-instantiation guard.** A template whose instantiation reaches itself at a type
   argument containing the previous one is instantiated at the argument's erasure, with a note
   (scope §4.4). It is load-bearing: without it nested `Code⟨…⟩` inside `E` grows without bound.
