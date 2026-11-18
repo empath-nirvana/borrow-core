@@ -92,10 +92,11 @@ def endsOpen (t : Tok) : Bool := match t with
   | .kw "in" => true
   | _ => false
 
-/-- A token a line may start with and continue the line before (the layout rule of SPEC §82, and
-the prefix forms that are also operators, Q10). -/
+/-- A token a line may start with and continue the line before (§82 *The layout rule*: a binary
+operator, `.`, `|`, a closing bracket, `else`, `with`, `finally`). A line starting with `&` begins a
+new statement. -/
 def startsOpen (t : Tok) : Bool := match t with
-  | .sym s => binops.contains s || [".", "&", "|", ")", "]", "}"].contains s
+  | .sym s => binops.contains s || [".", "|", ")", "]", "}"].contains s
   | .kw "else" | .kw "with" => true
   | .ident "finally" => true
   | _ => false
@@ -180,7 +181,7 @@ def rowRespell (S : Src) (w e : Nat) : RM Unit := do
   for k in S.atDepth0 (w + 1) e (· == .sym ",") do replTok S k " +"
 
 /-- A `;` at `i` that ends a statement or a declaration's item: dropped when a new line follows
-and the line after it plainly starts a new statement (the layout rule, Q10). `rets` are the
+and the line after it plainly starts a new statement (§82 *The layout rule*). `rets` are the
 `return`s the respelling drops (E3): the statement then starts with the token after it. -/
 def dropSemi (S : Src) (paren : Array Bool) (rets : List Nat) (i : Nat) : RM Unit := do
   unless S.tok i == .sym ";" do return
@@ -213,7 +214,7 @@ def isStmts (S : Src) (a b : Nat) : Bool :=
     | .ident _, .sym "=" | .ident _, .sym "<-" | .ident _, .sym ":" => true
     | _, _ => false)
 
-/-- A body `= S` (D1, D6, A6): `= e` for one expression, `{ S }` for statements. `eq` is the `=`,
+/-- A body `= S` (D1, D6, D13): `= e` for one expression, `{ S }` for statements. `eq` is the `=`,
 `[eq + 1, e)` the body, `ind` the declaration's indentation. -/
 def bodyRespell (S : Src) (eq e : Nat) (ind : String) : RM Unit := do
   if e ≤ eq + 1 then return
@@ -221,7 +222,7 @@ def bodyRespell (S : Src) (eq e : Nat) (ind : String) : RM Unit := do
     replTok S eq "{"
     closeAfter S (e - 1) ind
 
-/-- An arm's or a clause's body `[a, b)` (A7): several statements need a block; a body that is a
+/-- An arm's or a clause's body `[a, b)` (§82 *Arm and clause bodies*): several statements need a block; a body that is a
 block value `{ … }` is parenthesised, since a block there is statements. -/
 def armRespell (S : Src) (a b : Nat) : RM Unit := do
   if b ≤ a then return
@@ -249,9 +250,9 @@ def argComps (S : Src) (a b : Nat) : List (Nat × Nat) :=
     starts.zip stops
   else [(a, b)]
 
-/-! ### Parameter modes (P1–P6, A2) -/
+/-! ### Parameter modes (P1–P6, §82 *Modes*) -/
 
-/-- Whether a parameter of type `A` is by value (answers A2): after its aliases are expanded, a
+/-- Whether a parameter of type `A` is by value (§82 *By value*): after its aliases are expanded, a
 scalar, `bool`, `lit`, `1`, `0`, `never`, a `!` type, or a product or sum of these. `bool` and
 `lit` are read as `1 + 1` and `i32 * !(i32 => u8)` already. `fuel` bounds alias expansion. -/
 def byValue (tbl : Data.Table) : Nat → VTy → Bool
@@ -284,7 +285,8 @@ mode, `x: T`, `x: array A`, `x: inout T`, `x: inout array A`, its lifetime dropp
 owned parameter not by value is `x: sink T`; the rest are as written. A lifetime is fresh when the
 declaration (`[lv.1, e)`) names it only at its binder, which has no bound, and at this parameter;
 a shared or mutable borrow of a by-value type keeps its explicit type, as bare it reads by value
-(P5). -/
+(P5), and so does one of an array, `imm 'a (array A)`, as bare `array A` reads as its views
+`array_imm` (P2). -/
 def fnModes (S : Src) (tbl : Data.Table) (lv : Nat × Nat) (ps : List (Nat × Nat × VTy)) (e : Nat) :
     RM Unit := do
   let bs := binders S lv.1 lv.2
@@ -300,8 +302,9 @@ def fnModes (S : Src) (tbl : Data.Table) (lv : Nat × Nat) (ps : List (Nat × Na
       | _ => none
     match S.tok t, base, S.tok (t + 1) with
     | .kw k, some B, .life l =>
+      let isArray := match B with | .array .. => true | _ => false
       if fresh && ["imm", "mut", "array_imm", "array_mut"].contains k &&
-          !((k == "imm" || k == "mut") && byValue tbl 16 B) then
+          !((k == "imm" || k == "mut") && (byValue tbl 16 B || isArray)) then
         let mode := match k with
           | "imm" => "" | "array_imm" => "array " | "mut" => "inout " | _ => "inout array "
         repl (S.ts t) (S.ts (t + 2)) mode
@@ -406,7 +409,7 @@ def rewrite (S : Src) (evs : Array Ev) (sigs : List (String × List VTy)) (tbl :
       if (← get).doneLends.contains a then pure ()
       else if let some (_, P) := callComps.find? (·.1 == (a, b)) then
         -- A shared lend at a parameter that is no shared borrow (a capability lent, §11) is
-        -- `&x`: today's `&mut x` there is the same term (route.md §5).
+        -- `&x`: today's `&mut x` there is the same term (§82 *Lends that are not P8*).
         let shared := match P with
           | some (.imm ..) | some (.arrayImm ..) | none => true
           | some _ => false
@@ -422,7 +425,7 @@ def rewrite (S : Src) (evs : Array Ev) (sigs : List (String × List VTy)) (tbl :
       emit ⟨S.ts w, S.te rb, [.lit "handle ", .src (S.ts lb) (S.te rb), .lit " with ",
         .src (S.ts h₀) (S.te (h₁ - 1))] ++ named, .repl, 0⟩
     | _ => pure ()
-  -- The layout rule (Q10): a statement broken across lines where a new line would end it is
+  -- The layout rule (§82): a statement broken across lines where a new line would end it is
   -- joined onto one line, or marked when a comment is in the break.
   let sts := stmts.eraseDups
   for (a, b) in sts.filter (fun (a, _) => !(paren[a]?.getD false)) do
@@ -437,9 +440,10 @@ def rewrite (S : Src) (evs : Array Ev) (sigs : List (String × List VTy)) (tbl :
         if (S.cs.extract (S.te k) (S.ts (k + 1))).all (fun c => c == ' ' || c == '\n' || c == '\t') then
           repl (S.te k) (S.ts (k + 1)) " "
         else mark (S.ts k) "a statement broken across lines (layout rule)"
-  -- `handle` is a reserved word of the new spelling.
+  -- The words the new spelling reserves (`newKeywords`) are names in today's.
   for i in [0:S.toks.size] do
-    if S.tok i == .ident "handle" then mark (S.ts i) "`handle` used as a name"
+    if let .ident w := S.tok i then
+      if newKeywords.contains w then mark (S.ts i) s!"`{w}` used as a name"
 
 /-- The `--` comments of the gaps between tokens, as `#`. -/
 def comments (S : Src) : RM Unit := do

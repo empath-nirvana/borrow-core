@@ -23,7 +23,7 @@ inductive Ev where
   | mainHead (mainTok : Nat) (arrow : Nat) (eq : Nat) (bodyEnd : Nat)
   /-- `poly f[T](…) -> R` (D13): its `->`. -/
   | polyFam (arrow : Nat)
-  /-- `poly f at T = S` (D13, A6): its `=` and the end of its body. -/
+  /-- `poly f at T = S` (D13): its `=` and the end of its body. -/
   | polyAt (eq : Nat) (bodyEnd : Nat)
   /-- An operation of an `effect` (D14, D15, L9): its `fn`, its `->`, and its `)`. -/
   | opDecl (fnTok : Option Nat) (arrow : Option Nat) (rparen : Nat)
@@ -70,7 +70,7 @@ inductive Ev where
   /-- A call's or a handler's arguments: their range, and the callee when it is a declaration of
   the program or a library module, by name (P7, P8). -/
   | callArgs (a b : Nat) (callee : Option String)
-  /-- A loop's source, or a fold's scrutinee: its range (A3: kept as written). -/
+  /-- A loop's source, or a fold's scrutinee: its range (§82 *Lends that are not P8*: kept as written). -/
   | loopSrc (a b : Nat)
   /-- `let r = &x; S` (P9): the `let`, the `;`, and the end of `S`. -/
   | letRef (letTok : Nat) (semi : Nat) (restEnd : Nat)

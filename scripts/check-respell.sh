@@ -6,7 +6,9 @@
 # For every pair:
 #
 #   * a program: `bcc erase` of the two (the de Bruijn erasure of the checked `main`) is
-#     byte-identical, so the two have the same core term and the same golden;
+#     byte-identical, so the two have the same core term and the same golden; and, since the
+#     erasure holds no types, `bcc check`'s declarations with their checked types are the same
+#     (`sigs`: positions blanked);
 #   * a refusal (a reject, fail or pending file, or any file whose check fails): both fail, with
 #     the same message up to positions (`msg`: the positions move with the spelling);
 #   * a file with no `main` (a library module): `bcc print` of the two (the declarations read, as
@@ -33,14 +35,24 @@ isNew() { [ "$(head -n 1 "$1")" = "$pragma" ]; }
 export -f twin spelt isNew
 # The message of a refusal, without the file and position it is reported at, with every position
 # it quotes blanked (the respelling moves lines, by the pragma line, and columns, by braces added
-# round an arm) and every lifetime name blanked (a mode drops a written lifetime, and the parser
-# names it `'io_lf<n>`: answers B5). With `new`, the line in a generated name `io_l<k><L>_<n>` is
-# mapped back by the pragma line.
+# round an arm, so a line shift alone does not map them) and every lifetime name blanked on both
+# sides (a mode drops a written lifetime, and the parser names it `'io_lf<n>`). With `new`, the line
+# in a generated name `io_l<k><L>_<n>` is mapped back by the pragma line.
 msg() {
   sed -E '1s/^[^:]*:[0-9]+:[0-9]+: //; 1s/^[^:]*: no `main`$/no `main`/' | perl -pe "s/\\b\\d+:\\d+\\b/L:C/g; s/'[a-z][A-Za-z0-9_]*/'_/g" |
     if [ "${1:-}" = new ]; then perl -pe 's/\b(io_l[a-z]+)(\d+)_/$1.($2-1)."_"/ge'; else cat; fi
 }
 export -f msg
+# What `bcc check` prints of a program that checks: each declaration with its checked type (its
+# lifetimes numbered by the checker), and notes on its loops, calls and effects, with positions
+# blanked and, with `new`, generated names mapped back by the pragma line, as in `msg`. The lines
+# are sorted: the notes come in the order of their positions, which the respelling moves.
+sigs() {
+  perl -pe 's/\b\d+:\d+\b/L:C/g' |
+    if [ "${1:-}" = new ]; then perl -pe 's/\b(io_l[a-z]+)(\d+)_/$1.($2-1)."_"/ge'; else cat; fi |
+    sort
+}
+export -f sigs
 # A pair: the file in the new spelling and its twin (under `set -e`, as check-sugar.sh's pairs).
 pair() {
   set -e
@@ -51,8 +63,15 @@ pair() {
   "$bcc" erase "$old" > "$tmp/o" 2> "$tmp/oe" || ro=$?
   "$bcc" erase "$f" > "$tmp/n" 2> "$tmp/ne" || rn=$?
   if [ "$ro" = 0 ] && [ "$rn" = 0 ]; then
-    if cmp -s "$tmp/o" "$tmp/n"; then echo "$f: erases as $old"; return 0; fi
-    echo "$f: its erasure differs from $old's"; return 1
+    if ! cmp -s "$tmp/o" "$tmp/n"; then echo "$f: its erasure differs from $old's"; return 1; fi
+    # The erasure holds no types: the declarations' checked types are compared as well.
+    "$bcc" check "$old" 2>&1 | sigs > "$tmp/os"
+    "$bcc" check "$f" 2>&1 | sigs new > "$tmp/ns"
+    if ! cmp -s "$tmp/os" "$tmp/ns"; then
+      echo "$f: the checked types of its declarations differ from $old's:"
+      diff "$tmp/os" "$tmp/ns" | sed 's/^/  /'; return 1
+    fi
+    echo "$f: erases as $old, with the same declaration types"; return 0
   fi
   if [ "$ro" = 0 ] || [ "$rn" = 0 ]; then
     echo "$f: one of the pair checks and the other does not:"
