@@ -3434,6 +3434,44 @@ end
 
 /-! ### Declarations (syntax-core §10) -/
 
+/-- A type name applied to its type and lifetime arguments, `N[A, …]<'a, …>`. -/
+def tySpine : VTy → Option (String × List VTy × List Life)
+  | .name _ n => some (n, [], [])
+  | .app _ F A => (tySpine F).map fun (n, As, ls) => (n, As ++ [A], ls)
+  | .lapp _ F a => (tySpine F).map fun (n, As, ls) => (n, As, ls ++ [a])
+  | _ => none
+
+/-- Whether a parameter of the type `A` is by value in the new spelling (answers A2): after its
+abbreviations are expanded, `A` is a scalar, `bool`, `lit`, `1`, `0`, `never`, `!X`, or a product
+or sum of these. A type variable, a `data` type, an array, `string`, a function type and any other
+type is not.  `[spec §82]` -/
+def byValue (t : Data.Table) : Nat → VTy → Bool
+  | 0, _ => false
+  | k + 1, A => match A with
+    | .int .. | .unit _ | .zero _ | .bang .. => true
+    | .tensor _ A B | .sum _ A B => byValue t k A && byValue t k B
+    | A => match tySpine A with
+      | some (n, As, ls) => match t.decl? n, t.abbrev? n with
+        | none, some a => byValue t k (a.at As ls)
+        | _, _ => false
+      | none => false
+
+/-- The lifetime parameters of a `fn` whose header writes `lives` and whose parameters `ps` each
+give their type's written lifetimes and, for a mode, the fresh lifetime of its region (§82 P1–P3):
+the written ones in their order, each fresh one before the first written one that does not occur
+in an earlier parameter than its own (route.md §4).  `[spec §82]` -/
+def placeFresh (lives : List (Ident × Life)) (ps : List (Option Ident × List String)) :
+    List (Ident × Life) :=
+  let written := lives.map (·.1.name)
+  let occ (w : String) : Nat := (ps.findIdx? (fun (_, ls) => ls.contains w)).getD ps.length
+  ps.zipIdx.foldl (fun acc ((f?, _), i) => match f? with
+    | none => acc
+    | some f =>
+      let e := (f, Life.top f.span)
+      match acc.findIdx? (fun (a, _) => written.contains a.name && occ a.name ≥ i) with
+      | some k => acc.take k ++ [e] ++ acc.drop k
+      | none => acc ++ [e]) lives
+
 /-- The fields of a `data` constructor, `f: A` or `A`, or of a record, `f: A` (`named`): up to
 the closing bracket, a trailing `,` allowed.  `[spec §42]` -/
 def dataFields (n : Nat) (named : Bool) (close : String) : P (List DField) := do
@@ -3866,9 +3904,16 @@ where
       return ← defRest st (.template mk)
     let x ← ident "a `fn` name"
     let tps ← typeParams
-    let lives ← lifeParams
+    let lives₀ ← lifeParams
     expectSym "("
-    let ps ← if ← isSym ")" then pure [] else params n
+    -- In the new spelling a parameter has a mode (§82 P1–P5), whose fresh lifetimes join the
+    -- written ones.
+    let (ps, lives) ← if (← get).nd then do
+        let mps ← if ← isSym ")" then pure [] else modeParams n
+        pure (mps.map (fun (x, A, _) => (x, A)), placeFresh lives₀ (mps.map (·.2.2)))
+      else do
+        let ps ← if ← isSym ")" then pure [] else params n
+        pure (ps, lives₀)
     expectSym ")"
     let nd := (← get).nd
     -- `fn f(…) : B / E₁ + E₂[A] { S }` in the new spelling (§82 D1–D3).
@@ -3880,7 +3925,7 @@ where
       else pure []
     let es := nes.map (·.2)
     let ns := if nes.all (·.1.isNone) then [] else nes.map (·.1)
-    let bs ← whereBounds tps (lives.map (·.1.name))
+    let bs ← whereBounds tps (lives₀.map (·.1.name))
     let M ← if nd then
         fnBody do
           modify fun s => { s with muts := [], assigned := [], scope := [] }
@@ -4007,6 +4052,46 @@ where
         discard bump
         return (x, A) :: (← params m)
       else pure [(x, A)]
+  /-- `x₁: m₁ A₁, …` in a `fn` header of the new spelling, at least one, each with a mode
+  (§82 P1–P5, *Modes*): `inout T` is `mut 'f T` (`array_mut 'f A` for `array A`); a bare `T` that
+  is not by value (`byValue`) and is not written as a borrow is `imm 'f T` (`array_imm 'f A`);
+  `sink T` and every other bare `T` are as written. `'f` is a fresh lifetime. Each with the
+  lifetimes its type writes and its fresh one, for `placeFresh`.  `[spec §82]` -/
+  modeParams : Nat → P (List (Ident × VTy × Option Ident × List String))
+    | 0 => outOfFuel
+    | m + 1 => do
+      let x ← ident "a parameter name"
+      expectSym ":"
+      let mode : Nat ← if ← isKw "inout" then do discard bump; pure 1
+        else if ← isKw "sink" then do discard bump; pure 2
+        else pure 0
+      let i₀ := (← get).pos
+      let t₀ ← peek
+      let A ← vty n
+      let toks := (← get).toks.extract i₀ (← get).pos
+      let ls := toks.toList.filterMap fun t => match t.tok with
+        | .life s => some s
+        | _ => none
+      let borrowHead := match t₀.tok with
+        | .kw "imm" | .kw "mut" | .kw "view" | .kw "array_imm" | .kw "array_mut"
+        | .ident "text" | .ident "text_mut" => true
+        | _ => false
+      let lend (mutable : Bool) : P (VTy × Option Ident) := do
+        let sp := A.span
+        let f : Ident := ⟨← freshName "io_lf", sp⟩
+        let l : Life := .var sp f.name
+        pure (match A with
+          | .array asp E => if mutable then .arrayMut asp l E else .arrayImm asp l E
+          | A => if mutable then .mut sp l A else .imm sp l A, some f)
+      let (A, f) ← match mode with
+        | 1 => lend true
+        | 2 => pure (A, none)
+        | _ => if borrowHead || byValue (← get).data 64 A then pure (A, none) else lend false
+      let p := (x, A, f, ls)
+      if ← isSym "," then
+        discard bump
+        return p :: (← modeParams m)
+      pure [p]
   /-- The parameter tuple's type (`1` with no parameters). -/
   tupleTy (sp : Span) : List VTy → VTy
     | [] => .unit sp
