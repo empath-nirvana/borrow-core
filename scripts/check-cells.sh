@@ -23,14 +23,19 @@ export counts
 export -f row
 # The working tree's corpus programs and sugar files (`scripts/corpus-set.sh programs sugar`), as
 # the other gate steps read them: a program not yet committed is in the table too. A file marked
-# `-- check: parse-only` is skipped, as pinned in `corpus/skips.expected`.
+# `-- check: parse-only`, one with no `main`, and one marked `-- check: old-backend-refuses` (the
+# layout side is the old backend's, which does not lower it) are skipped, as pinned in
+# `corpus/skips.expected`.
 list=$(scripts/corpus-set.sh programs sugar | sort)
 fs=()
 skips=$(mktemp)
 for f in $list; do
-  if grep -q '^-- check: parse-only' "$f"; then echo "parse-only $f" >> "$skips"; else fs+=("$f"); fi
+  if grep -q '^-- check: parse-only' "$f"; then echo "parse-only $f" >> "$skips"
+  elif ! grep -q '^main' "$f"; then echo "no-main $f" >> "$skips"
+  elif grep -q '^-- check: old-backend-refuses' "$f"; then echo "old-backend-refuses $f" >> "$skips"
+  else fs+=("$f"); fi
 done
-skipped=$(scripts/corpus-set.sh --skips check-cells parse-only < "$skips") || { rm -f "$skips"; echo "$skipped"; exit 1; }
+skipped=$(scripts/corpus-set.sh --skips check-cells parse-only no-main old-backend-refuses < "$skips") || { rm -f "$skips"; echo "$skipped"; exit 1; }
 rm -f "$skips"
 echo "$skipped"
 # The table; a file the tool fails on is a line `<file>: FAILS: <tool>`, which fails the step.
