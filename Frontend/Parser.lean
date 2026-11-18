@@ -258,6 +258,11 @@ structure PState where
   /-- New spelling: inside `(…)`, where a newline does not end a statement (§82 *Lexical*).
   `[spec §82]` -/
   inParen : Bool := false
+  /-- New spelling: in a body written without braces (an arm's, a clause's, `= e`), the index of
+  the first token that starts a line at the body's own nesting: a newline there ends the body,
+  so a sequence inside it (a `fun` body) does not continue across it (§82 *Arm and clause
+  bodies*, *The layout rule*).  `[spec §82]` -/
+  oneStop : Option Nat := none
 
 abbrev P := StateT PState (Except Error)
 
@@ -491,6 +496,7 @@ def sepNext : P Bool := do
   unless ← layoutHere do return false
   let t ← peek
   if t.tok == .sym "}" || t.tok == .eof || t.tok == .sym "." then return false
+  if (← get).oneStop == some (← get).pos then return false
   nlBefore
 
 /-- The separator `sepNext` found: a `;` is read, a newline needs nothing.  `[spec §82]` -/
@@ -515,6 +521,35 @@ def withInParen {α} (b : Bool) (p : P α) : P α := do
   modify fun s => { s with inParen := b }
   let r ← p
   modify fun s => { s with inParen := t₀ }
+  pure r
+
+/-- The index of the first token after index `i` that starts a line at the nesting depth of
+token `i` (counting `(…)`, `[…]` and `{…}`), if one comes before that nesting closes.
+`[spec §82]` -/
+def lineStopFrom (toks : Array Token) (i : Nat) : Option Nat := Id.run do
+  let mut depth := 0
+  for j in [i:toks.size] do
+    let t := toks[j]!
+    if j > i && depth == 0 then
+      if t.span.start.line > toks[j - 1]!.span.stop.line then return some j
+    match t.tok with
+    | .sym "{" | .sym "(" | .sym "[" => depth := depth + 1
+    | .sym "}" | .sym ")" | .sym "]" =>
+      if depth == 0 then return none
+      depth := depth - 1
+    | _ => pure ()
+  return none
+
+/-- `p`, a body written without braces (an arm's, a clause's, `= e`): where the layout rule
+applies, a newline at the body's own nesting ends it, inside any sequence `p` reads.
+`[spec §82]` -/
+def oneExpr {α} (p : P α) : P α := do
+  unless ← layout do return ← p
+  let s₀ ← get
+  let o₀ := s₀.oneStop
+  set { s₀ with oneStop := lineStopFrom s₀.toks s₀.pos }
+  let r ← p
+  modify fun s => { s with oneStop := o₀ }
   pure r
 
 /-- The flag `armBody`, read and cleared: whether the statement now read is an arm's body
@@ -2744,7 +2779,7 @@ def armComp : Nat → P Comp
       expectSym "}"
       return M
     modify fun s => { s with armBody := true }
-    comp n
+    oneExpr (comp n)
 
 /-- A computation: a binding form (`x <- M; N`, `x : A <- M; N`, `let`, `fun`, `Fun`, `for`),
     which extends as far right as possible, or a statement. In the head `M`
@@ -3846,7 +3881,7 @@ def decl (n : Nat) : P Decl := do
           let M ← comp n
           expectSym "}"
           pure M
-        else compG n true
+        else oneExpr (compG n true)
       modify fun s => { s with muts := [], assigned := [], surf := false, scope := [] }
       if isRet then
         let some x := xs[0]? | failAt o.span "`return(x) = M`: the return clause binds the body's value"
@@ -4017,7 +4052,7 @@ where
         pure M
       else do
         modify fun s => { s with armBody := true }
-        comp n
+        oneExpr (comp n)
     modify fun s => { s with surf := false }
     pure M
   /-- `where S: 'c, …`: lifetime bounds on the type parameters `tps`, each by a lifetime

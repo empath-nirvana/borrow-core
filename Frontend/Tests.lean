@@ -177,6 +177,19 @@ theorem nd_block_arm : sameProgram "main -> i32 = match 1 { _ -> { 5 } }"
     sameProgram "main -> i32 = match 1 { _ -> let x = 5; x }"
     "fn main() : i32 = match 1 { _ -> { let x = 5; x } }" = true := by decide +kernel
 
+-- A body without braces ends at a newline at its own nesting, also inside a `fun` it ends with:
+-- an arm's, a clause's and a `= e` body.
+theorem nd_one_expr : sameProgram
+    ("effect E { fn op() -> i32; fn op2() -> i32 }\n" ++
+     "handler h(mut s: i32): E = { op() = (!thunkv fun (x : i32) -> return x); op2() = s }\n" ++
+     "fn g() -> i32 = !thunkv fun (x : i32) -> return x\n" ++
+     "main -> i32 = match 1 { 0 -> !thunkv fun (x : i32) -> return x | k -> k }")
+    ("effect E { op() : i32; op2() : i32 }\n" ++
+     "handler h(mut s: i32) : E {\n  op() -> !thunkv fun (x : i32) -> return x\n  op2() -> s\n}\n" ++
+     "fn g() : i32 = !thunkv fun (x : i32) -> return x\n" ++
+     "fn main() : i32 = match 1 {\n  0 -> !thunkv fun (x : i32) -> return x\n  k -> k\n}")
+    = true := by decide +kernel
+
 /-- The new-spelling text `nw` is refused with the message `msg`. -/
 def ndRejectsWith (nw msg : String) : Bool :=
   match parseProgram ("#! dialect 82\n" ++ nw) with
