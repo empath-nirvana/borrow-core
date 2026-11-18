@@ -69,6 +69,10 @@ expect "README.md weird/thing.txt" full +"native" ="unrecognised, so full: weird
 expect "corpus/skips.expected" corpus +"corpus (Backend2)" +"native" +"check corpus" -"renaming"
 expect "scripts/corpus-set.sh" full
 expect "scripts/slot" full
+expect "scripts/exhausted.sh" full +"handle exhaustion"
+expect "scripts/check-exhausted.sh" full +"handle exhaustion"
+expect "corpus/int-slash.bc" corpus @bins +"handle exhaustion"
+expect "docs/x.md" docs @none -"handle exhaustion"
 expect "scripts/GateCensus/View.lean" scripts +"type equality" +"hygiene + axioms" @all
 expect "scripts/census-neg/pins.lean" scripts +"insertion pins" @all
 expect "scripts/census-neg/axioms.lean" scripts +"hygiene + axioms" @all

@@ -25,7 +25,7 @@ export -f native_run
 native_runs() {
   local dir=$1 f fs=(); shift
   for f in "$@"; do
-    grep -q '^-- check: parse-only' "$f" || ! grep -q '^main' "$f" || fs+=("$f")
+    grepq '^-- check: parse-only' "$f" || ! grepq '^main' "$f" || fs+=("$f")
   done
   mkdir -p "$dir"
   ( export PAR_COLLECT=$dir PAR_CACHE=native-run PAR_CACHE_NATIVE=1; unset PAR_CACHE_DEPS; par native_run ${fs[@]+"${fs[@]}"} > /dev/null )
