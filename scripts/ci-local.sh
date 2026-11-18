@@ -147,7 +147,7 @@ if [ "$changed" = 1 ]; then
     corpus=("parse corpus" "check corpus" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)")
     for f in $files; do
       case "$f" in
-        corpus/*|lib/*) add "${corpus[@]}" ;;
+        corpus/*|lib/*|scripts/corpus-set.sh) add "${corpus[@]}" ;;
         scripts/ci-local.sh|scripts/par.sh) add "${everyStep[@]}" ;;
         scripts/parse-corpus.sh) add "parse corpus" ;;
         scripts/check-corpus.sh) add "check corpus" ;;

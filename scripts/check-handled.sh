@@ -24,7 +24,7 @@ bcc=.lake/build/bin/bcc
 counts=.lake/build/bin/bcc-counts
 row() {
   local f=$1 h l
-  h=$("$bcc" handled "$f" 2>/dev/null) || return 0
+  h=$("$bcc" handled "$f" 2>/dev/null) || { echo "$f: FAILS: bcc handled"; return 1; }
   [ -n "$h" ] || return 0
   l=$("$counts" --lowering "$f" 2>&1) || l="error: $l"
   awk -v f="$f" '
@@ -67,25 +67,38 @@ row() {
 . scripts/par.sh
 export bcc counts
 export -f row
-# The working tree's corpus, as the other gate steps read it: a program not yet committed is in
-# the table too.
+# The working tree's corpus programs and sugar files (`scripts/corpus-set.sh programs sugar`), as
+# the other gate steps read them: a program not yet committed is in the table too. A file marked
+# `-- check: parse-only` is skipped, as pinned in `corpus/skips.expected`.
+list=$(scripts/corpus-set.sh programs sugar | sort)
+fs=()
+skips=$(mktemp)
+all=(); while IFS= read -r f; do [ -z "$f" ] || all+=("$f"); done <<< "$list"
+for f in "${all[@]}"; do
+  if grep -q '^-- check: parse-only' "$f"; then echo "parse-only $f" >> "$skips"; else fs+=("$f"); fi
+done
+skipped=$(scripts/corpus-set.sh --skips check-handled parse-only < "$skips") || { rm -f "$skips"; echo "$skipped"; exit 1; }
+rm -f "$skips"
+echo "$skipped"
+# The table; a file the tool fails on is a line `<file>: FAILS: <tool>`, which fails the step.
 table() {
-  local fs=()
-  while read -r f; do
-    grep -q '^-- check: parse-only' "$f" || fs+=("$f")
-  done < <(find corpus -name '*.bc' -type f | grep -v '^corpus/\(reject\|pending\|fail\)/' | sort)
-  par row "${fs[@]}"
+  local t; t=$(mktemp)
+  par row "${fs[@]}" > "$t"
+  if grep ': FAILS: ' "$t" >&2; then rm -f "$t"; echo "check-handled: the table could not be made for the files above" >&2; return 1; fi
+  cat "$t"; rm -f "$t"
 }
 summary() {
   local t=$1
   echo "$(grep -c ': handle ' "$t") handle nodes, $(grep -c '; agree$' "$t") direct calls where condition 2 holds, $(grep -c '; disagree$' "$t") where it does not"
 }
 if [ "${1:-}" = "--write" ]; then
-  table > corpus/handled.expected
+  t=$(mktemp); table > "$t"; cat "$t" > corpus/handled.expected; rm -f "$t"
   echo "corpus/handled.expected: $(summary corpus/handled.expected)"
   exit 0
 fi
-if ! diff -u corpus/handled.expected <(table); then
+got=$(mktemp); trap 'rm -f "$got"' EXIT
+table > "$got"
+if ! diff -u corpus/handled.expected "$got"; then
   echo "check-handled: the records at [handle] or the backend's lowering changed (corpus/handled.expected)"
   exit 1
 fi
