@@ -15,7 +15,7 @@ ifeq (run,$(firstword $(MAKECMDGOALS)))
   $(eval $(RUN_ARGS):;@:)
 endif
 
-.PHONY: bcc run tools gate gate-full gate-fast gate-daily goldens keys verify-goldens bench
+.PHONY: bcc run tools gate gate-full gate-full-nocache gate-full-record gate-fast gate-daily goldens keys verify-goldens bench
 
 # Build the `bcc` compiler.
 bcc: $(CACHE_STAMP) | tools
@@ -41,6 +41,16 @@ gate: | tools
 # changed.
 gate-full: | tools
 	scripts/ci-local.sh --full
+
+# The full gate with every unit run, the result cache (scripts/gate_cache.py) neither read nor
+# written.
+gate-full-nocache: | tools
+	scripts/ci-local.sh --full --no-cache
+
+# The full gate with every unit run and its passes recorded, none replayed: the daily run on main,
+# which re-establishes every result and fills the result cache for that day's main.
+gate-full-record: | tools
+	scripts/ci-local.sh --full --record-cache
 
 # The daily full gate on main (scripts/gate-daily.sh): `make gate-full` without the result cache
 # on origin/main in a checkout of its own, its verdict posted to the board for the coordinator.

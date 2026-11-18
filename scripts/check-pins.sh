@@ -10,6 +10,9 @@
 #     scripts/check-pins.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# One unit of the result cache (scripts/gate_cache.py `step`): a recorded pass is replayed when
+# the Lean sources, Lake's configuration, scripts/ and the tools are as they were.
+[ "${GATE_CACHE_INNER:-}" = pins ] || exec python3 scripts/gate_cache.py step pins lean -- scripts/check-pins.sh "$@"
 lake env lean scripts/PinSites.lean
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

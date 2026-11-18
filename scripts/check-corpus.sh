@@ -34,15 +34,19 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc >/dev/null
+export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
 . scripts/par.sh
 export bcc=.lake/build/bin/bcc
-export skips; skips=$(mktemp)
-trap 'rm -f "$skips"' EXIT
+# A unit's skip lines are a side file (`skips`, scripts/par.sh), gathered in $skipdir.
+export skipdir; skipdir=$(mktemp -d)
+trap 'rm -rf "$skipdir"' EXIT
+export PAR_COLLECT=$skipdir
+: > "$skipdir/skips"
 bad=0
 checks() {
   local f=$1 out
   if grep -q '^-- check: parse-only' "$f"; then
-    echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$skips"; return 0
+    echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0
   fi
   if out=$("$bcc" check "$f" 2>&1); then
     echo "$f: checks"
@@ -104,6 +108,9 @@ pending() {
   fi
 }
 export -f checks rejects reports trusted copies pending
+# Each program, reject, reports file and pending program is a unit of the result cache
+# (scripts/par.sh, scripts/gate_cache.py).
+export PAR_CACHE=check-corpus
 if [ $# -gt 0 ]; then
   for f in "$@"; do [ -f "$f" ] || { echo "$f: no such file"; exit 2; }; done
   for f in "$@"; do
@@ -129,7 +136,7 @@ rejectFiles=(); while IFS= read -r f; do [ -z "$f" ] || rejectFiles+=("$f"); don
 list=$(scripts/corpus-set.sh pending)
 pend=(); while IFS= read -r f; do [ -z "$f" ] || pend+=("$f"); done <<< "$list"
 par checks "${progs[@]}"; bad=$((bad + par_failed))
-scripts/corpus-set.sh --skips check-corpus parse-only < "$skips" || bad=$((bad + 1))
+scripts/corpus-set.sh --skips check-corpus parse-only < "$skipdir/skips" || bad=$((bad + 1))
 shopt -s nullglob
 par rejects ${rejectFiles[@]+"${rejectFiles[@]}"}; bad=$((bad + par_failed))
 par reports corpus/reports/*.txt; bad=$((bad + par_failed))

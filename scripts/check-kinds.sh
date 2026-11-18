@@ -20,13 +20,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
+export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
 bcc=.lake/build/bin/bcc
 counts=.lake/build/bin/bcc-counts
 row() {
   local f=$1 k l
   k=$("$bcc" kinds "$f" 2>/dev/null) || { echo "$f: FAILS: bcc kinds"; return 1; }
   [ -n "$k" ] || return 0
-  l=$("$counts" --lowering "$f" 2>&1) || l="error: $l"
+  # A failed tool's message is a row; it is never recorded in the cache (a run killed under load).
+  l=$("$counts" --lowering "$f" 2>&1) || { par_nostore; l="error: $l"; }
   awk -v f="$f" '
     FNR == NR {
       if ($0 ~ /^error/) { err = $0; next }
@@ -63,6 +65,9 @@ row() {
     }' <(printf '%s\n' "$l") <(printf '%s\n' "$k")
 }
 . scripts/par.sh
+# Each program's rows are a unit of the result cache (scripts/par.sh), except when the table is
+# written.
+[ "${1:-}" = "--write" ] || export PAR_CACHE=check-kinds
 export bcc counts
 export -f row
 # The working tree's corpus programs and sugar files (`scripts/corpus-set.sh programs sugar`), as

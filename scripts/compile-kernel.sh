@@ -10,6 +10,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v wasmtime >/dev/null || { echo "wasmtime is not on PATH"; exit 1; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
+export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
+# One unit of the result cache (scripts/gate_cache.py `step`): a recorded pass is replayed when
+# the binaries, the library, scripts/, the tools and corpus/kernel-counts.expected are as they were.
+[ "${GATE_CACHE_INNER:-}" = kernel ] || exec python3 scripts/gate_cache.py step kernel bcc --files corpus/kernel-counts.expected -- scripts/compile-kernel.sh "$@"
 bcc=.lake/build/bin/bcc
 bccCounts=.lake/build/bin/bcc-counts
 expected=corpus/kernel-counts.expected

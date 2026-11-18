@@ -26,14 +26,21 @@ under `corpus/` (and the probes under `docs/expressiveness-probes/` with `--prob
 named. It fails on any difference, and prints each. `--alpha` renames with another build than the
 one checked, to run the check on a build that has no `bcc alpha`.
 """
-import argparse, os, re, shutil, subprocess, sys, tempfile
+import argparse, os, re, shutil, subprocess, sys, tempfile, threading
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+# Per program (thread): whether a run ended other than a deterministic run ends (a signal), or the
+# renaming failed, so that the result cache does not record it.
+UNSURE = threading.local()
+
+
 def run(bcc, args, env=None):
     p = subprocess.run([bcc] + args, capture_output=True, text=True, env=env, cwd=ROOT)
+    if p.returncode < 0:
+        UNSURE.flag = True
     return p.returncode, p.stdout + p.stderr
 
 
@@ -41,6 +48,7 @@ def renaming(bcc, f):
     """`bcc alpha --map f`: [(line, col, written, new, variable)], or None when it does not parse."""
     rc, out = run(bcc, ["alpha", "--map", f])
     if rc != 0:
+        UNSURE.flag = True
         return None
     edits = []
     for l in out.splitlines():
@@ -172,6 +180,21 @@ def main():
     a = ap.parse_args()
     files = a.files or programs(a.probes)
     ab = a.alpha or a.bcc
+
+    # Each program is a unit of the result cache (scripts/gate_cache.py): a recorded pass is
+    # skipped when the program, the binaries (`--bcc`, `--alpha`), the library, scripts/ and the
+    # tools are as they were.
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    import gate_cache
+    units = gate_cache.Units("alpha-check", bins=[a.bcc, ab])
+    keys = {f: units.key(f) for f in files}
+    todo = [f for f in files if not units.hit(keys[f])]
+    units.replayed, units.ran = len(files) - len(todo), len(todo)
+    if not todo:
+        units.done()
+        print(f"alpha-check: {len(files)} program(s), 0 difference(s)")
+        sys.exit(0)
     tmp = tempfile.mkdtemp(prefix="alpha-")
 
     # The library renamed, and each module's renaming read backwards (names only).
@@ -195,6 +218,7 @@ def main():
 
     def one(i_f):
         i, f = i_f
+        UNSURE.flag = False
         diffs = []
         edits = renaming(ab, f)
         if edits is not None:
@@ -214,17 +238,20 @@ def main():
         own = set(WORD.findall(open(os.path.join(ROOT, f)).read()))
         rf = Back([], {v: x for v, x in libVars.items() if v not in own}, cols=False)
         diffs += ["library pass: " + d for d in compare(a.bcc, f, f, back, envLib, rf)]
-        return f, diffs
+        return f, diffs, UNSURE.flag
 
     bad = 0
     with ThreadPoolExecutor(a.jobs) as ex:
-        for f, diffs in ex.map(one, enumerate(files)):
+        for f, diffs, unsure in ex.map(one, enumerate(todo)):
             if diffs:
                 bad += 1
                 print(f"{f}: differs under renaming")
                 for d in diffs:
                     print("  " + d.replace("\n", "\n  "))
+            elif not unsure:
+                units.pass_(f, keys[f])
     shutil.rmtree(tmp, ignore_errors=True)
+    units.done()
     print(f"alpha-check: {len(files)} program(s), {bad} difference(s)")
     sys.exit(1 if bad else 0)
 

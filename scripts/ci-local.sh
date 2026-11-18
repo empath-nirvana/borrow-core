@@ -9,13 +9,35 @@
 #                                     book block, re-verifying every golden
 #     scripts/ci-local.sh --changed   for iteration only: the sanity gate's steps the changes since
 #                                     origin/main can affect (below) (`make gate-fast`)
+#     … --no-cache                    with any of the above: run every unit, neither reading nor
+#                                     writing the result cache (`make gate-full-nocache`; also
+#                                     `GATE_CACHE=0`)
+#     … --record-cache                with any of the above: run every unit and record its passes,
+#                                     reading none (`make gate-full-record`, the daily run on main;
+#                                     also `GATE_CACHE=record`)
+#
+# The result cache (scripts/gate_cache.py). Every unit of work a step has, one program of one
+# step (each job of scripts/par.sh) or a whole step that is not per program, has a key: a sha256
+# over everything it reads (the binaries `bcc` and `bcc-counts` and the library they read, or the
+# Lean sources and Lake's configuration; every file under scripts/ and the Makefile; the tools'
+# versions; the `BC_*`, `BCC_*` and `CI_LOCAL_*` variables; the step's mode; and the unit's own
+# files: a program with its sidecars, goldens, reports and table rows). A unit whose key has a
+# recorded pass in `${GATE_CACHE_DIR:-~/repos/.gate-cache}` (shared by every worktree) is
+# replayed, its output and side files as the run gave them, instead of run; a unit that passes is
+# recorded. A failure is never recorded, nor a unit that runs the source interpreter or writes a
+# key, nor any unit of a writing mode (`--write-goldens`, `--write-counts`, `--write-keys`,
+# `--write`) or of `--source`. The steps that always run: compile scaling (it measures time),
+# spec files, judgment freeze, assumptions, layout rejects and the book build. The summary line
+# counts the units replayed and run. scripts/check-gate-cache.sh shows that a change to each kind
+# of input misses.
 #
 # The sanity gate (`gateSteps` below) checks that the library builds; hygiene (no forbidden
 # keyword, every declaration's axioms within propext, Classical.choice and Quot.sound) and the
 # axioms of the theorems SPEC.md names (listed in `scripts/axioms/*.names`, read by
 # `scripts/AxiomCheck.lean`); the typing-judgment freeze, the hypothesis register (`assumptions`:
 # every hypothesis a theorem takes is listed in Core/Assumptions.lean) and the new backend's import
-# fence; that every type comparison goes through the one `[α]` helper (`type equality`); that the
+# fence; that the result cache misses on a change to each kind of input (`result cache`,
+# scripts/check-gate-cache.sh); that every type comparison goes through the one `[α]` helper (`type equality`); that the
 # corpus parses and checks, and elaborates the same under a renaming of its binders (`renaming`);
 # and that every corpus program, compiled to WebAssembly
 # by each backend, prints its golden output with `live 0`: by Backend2, the default
@@ -59,13 +81,23 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 changed=0
 full=0
-[ $# -le 1 ] || { echo "usage: scripts/ci-local.sh [--full | --source | --changed]"; exit 2; }
-case "${1:-}" in
+mode=""
+usage() { echo "usage: scripts/ci-local.sh [--full | --source | --changed] [--no-cache | --record-cache]"; exit 2; }
+for a in "$@"; do
+  case "$a" in
+    --no-cache) export GATE_CACHE=0 ;;
+    --record-cache) export GATE_CACHE=record ;;
+    --changed|--full|--source) [ -z "$mode" ] || usage; mode=$a ;;
+    *) usage ;;
+  esac
+done
+case "${GATE_CACHE:-1}" in 1|0|record) ;; *) echo "ci-local: GATE_CACHE=$GATE_CACHE: not one of 1, 0, record"; exit 2 ;; esac
+# The tools line is this gate's own (below); one left in the environment is not used.
+unset GATE_CACHE_TOOLS_FILE GATE_CACHE_BUILT
+case "$mode" in
   --changed) changed=1; export BCC_SOURCE=0 ;;
   --full) full=1 ;;
   --source) full=1; export BCC_SOURCE=1 ;;
-  "") ;;
-  *) echo "usage: scripts/ci-local.sh [--full | --source | --changed]"; exit 2 ;;
 esac
 # A change that reaches the reference semantics or the compiler needs the full gate.
 reach=""
@@ -77,6 +109,9 @@ scripts/lake-packages.sh check
 start=$SECONDS
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
+# The result cache's count of units replayed and run (scripts/gate_cache.py).
+export GATE_CACHE_STATS=$out/cache-stats
+: > "$GATE_CACHE_STATS"
 fail=0
 step() {
   local name="$1" t=$SECONDS; shift
@@ -91,7 +126,7 @@ steps=(
   "judgment freeze"  "scripts/check-judgments.sh"
   "assumptions"      "scripts/check-assumptions.sh"
   "type equality"    "scripts/check-type-eq.sh"
-  "axiom report"     "lake env lean scripts/AxiomCheck.lean"
+  "axiom report"     "python3 scripts/gate_cache.py step axiom-report lean -- lake env lean scripts/AxiomCheck.lean"
   "insertion pins"   "scripts/check-pins.sh"
   "research archive" "scripts/check-research.sh"
   "parse corpus"     "scripts/parse-corpus.sh"
@@ -113,11 +148,12 @@ steps=(
   "renaming"         "scripts/alpha-check.py"
   "book doc-tests"   "scripts/book-doctest.sh"
   "book build"       "mdbook build book"
+  "result cache"     "scripts/check-gate-cache.sh"
 )
 # The sanity gate's steps (`make gate`, `--changed`). The corpus runs named `final` are its own:
 # the full gate runs the corpus at every stage instead.
 gateSteps=("hygiene + axioms" "spec files" "judgment freeze" "assumptions" "axiom report" "type equality" "parse corpus"
-  "check corpus" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)" "backend2 fence")
+  "check corpus" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)" "backend2 fence" "result cache")
 if [ "$full" = 1 ]; then
   everyStep=("compile scaling")
   for ((i = 0; i < ${#steps[@]}; i += 2)); do
@@ -148,12 +184,13 @@ if [ "$changed" = 1 ]; then
     for f in $files; do
       case "$f" in
         corpus/*|lib/*|scripts/corpus-set.sh) add "${corpus[@]}" ;;
-        scripts/ci-local.sh|scripts/par.sh) add "${everyStep[@]}" ;;
+        scripts/ci-local.sh|scripts/par.sh|scripts/gate_cache.py) add "${everyStep[@]}" ;;
         scripts/parse-corpus.sh) add "parse corpus" ;;
         scripts/check-corpus.sh) add "check corpus" ;;
         scripts/compile-corpus.sh|scripts/source-stage.sh|scripts/interp-digest.sh) add "corpus (old backend, final)" ;;
-        scripts/compile-backend2.sh) add "corpus (Backend2, final)" ;;
+        scripts/compile-backend2.sh) add "corpus (Backend2, final)" "result cache" ;;
         scripts/check-backend2.sh) add "backend2 fence" ;;
+        scripts/check-gate-cache.sh) add "result cache" ;;
         scripts/check-assumptions.sh) add "assumptions" ;;
         scripts/check-type-eq.sh|scripts/TypeEq.lean|scripts/type-eq.allow) add "type equality" ;;
         scripts/alpha-check.py) add "renaming" ;;
@@ -175,6 +212,14 @@ if [ "$all" = 1 ]; then step "build" lake build
 else step "build (bcc, bcc-counts)" lake build bcc bcc-counts; fi
 built=$fail
 [ "$built" = 0 ] && export CI_LOCAL_BUILT=1
+# When the build fails, the steps run one after another, each trying its own build, with the cache
+# off: the binaries left in .lake are not this tree's, and nothing is replayed or recorded.
+if [ "$built" != 0 ] && [ "${GATE_CACHE:-1}" != 0 ]; then export GATE_CACHE=0; cachenote=" (the build failed)"; fi
+# The tools in every cache key, found once for the whole gate after the build (they do not change
+# during it).
+if [ "$built" = 0 ] && [ "${GATE_CACHE:-1}" != 0 ]; then
+  python3 scripts/gate_cache.py tools > "$out/tools" && export GATE_CACHE_TOOLS_FILE=$out/tools
+fi
 
 if wanted "compile scaling"; then step "compile scaling" scripts/compile-scaling.sh --guard; fi
 
@@ -209,7 +254,11 @@ fi
 echo
 tag="ci-local"; [ "$changed" = 1 ] && tag="ci-local --changed"; [ "$full" = 1 ] && tag="ci-local --full"
 [ "${BCC_SOURCE:-}" = 1 ] && [ "$full" = 1 ] && tag="ci-local --source"
-if [ "$fail" -eq 0 ]; then echo "$tag: ALL PASSED ($((SECONDS - start))s)"; else echo "$tag: FAILURES (see above) ($((SECONDS - start))s)"; fi
+[ "${GATE_CACHE:-1}" = 0 ] && [ -z "${cachenote:-}" ] && tag="$tag --no-cache"
+[ "${GATE_CACHE:-1}" = record ] && tag="$tag --record-cache"
+if [ "${GATE_CACHE:-1}" = 0 ]; then cache="cache off${cachenote:-}"
+else cache=$(awk '{ r += $1; n += $2; f += $3 } END { printf "cache: %d unit(s) replayed, %d run", r, n; if (f) printf "; WARNING: %d pass(es) could not be recorded (store not writable)", f }' "$GATE_CACHE_STATS"); fi
+if [ "$fail" -eq 0 ]; then echo "$tag: ALL PASSED ($((SECONDS - start))s; $cache)"; else echo "$tag: FAILURES (see above) ($((SECONDS - start))s; $cache)"; fi
 [ "$changed" = 1 ] && echo "(--changed is for iteration only: the sanity gate, scripts/ci-local.sh, runs before a PR)"
 [ "$full" = 0 ] && echo "(the sanity gate: \`make gate-full\` runs every check; \`make verify-goldens\` re-verifies every golden)"
 [ -z "$reach" ] || echo "($reach changed: \`make gate-full\` is required as well)"

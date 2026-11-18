@@ -12,6 +12,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc-counts >/dev/null
+export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
 counts=.lake/build/bin/bcc-counts
 row() {
   local f=$1 r
@@ -19,6 +20,9 @@ row() {
   [ -z "$r" ] || printf '%s: %s\n' "$f" "$r"
 }
 . scripts/par.sh
+# Each program's rows are a unit of the result cache (scripts/par.sh), except when the table is
+# written.
+[ "${1:-}" = "--write" ] || export PAR_CACHE=check-cells
 export counts
 export -f row
 # The working tree's corpus programs and sugar files (`scripts/corpus-set.sh programs sugar`), as

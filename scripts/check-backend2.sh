@@ -18,6 +18,9 @@
 #     scripts/check-backend2.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# One unit of the result cache (scripts/gate_cache.py `step`): a recorded pass is replayed when
+# the Lean sources, Lake's configuration, scripts/ and the tools are as they were.
+[ "${GATE_CACHE_INNER:-}" = backend2-fence ] || exec python3 scripts/gate_cache.py step backend2-fence lean -- scripts/check-backend2.sh "$@"
 fail=0
 
 # The repository modules a module imports.

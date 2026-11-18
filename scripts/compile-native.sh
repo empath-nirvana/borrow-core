@@ -27,6 +27,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
+export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
 # The C compiler is the one `bcc` builds with (`bcc cc`, Backend.nativeCC): `$BC_CC`, else
 # `xcrun clang` on macOS, else a clang on PATH outside a Lean toolchain.
 cc=$(.lake/build/bin/bcc cc 2>/dev/null) || { echo "no C compiler for the native target: it is not checked"; exit 0; }
@@ -56,8 +57,8 @@ statusOf() {
 # One corpus program, built natively and run, then counted.
 program() {
   local f=$1 w=$PAR_TMP base in err rc=0 got
-  if grep -q '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$skips"; return 0; fi
-  if ! grep -q '^main' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$skips"; return 0; fi
+  if grep -q '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0; fi
+  if ! grep -q '^main' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$PAR_SIDE/skips"; return 0; fi
   # The old backend refuses it at compile time (scripts/compile-corpus.sh).
   if [ "$backend" = old ] && grep -q '^-- check: old-backend-refuses' "$f"; then
     echo "$f: the old backend refuses it, skipped"; return 0
@@ -86,24 +87,33 @@ program() {
   echo "$f: native as $base.out | $got"
 }
 export -f program argsOf statusOf
-export skips; skips=$(mktemp)
-trap 'rm -f "$skips"' EXIT
+# Each program is a unit of the result cache (scripts/par.sh; the C compiler is among its tools).
+# Its skip lines are a side file (`skips`), gathered in $skipdir.
+export PAR_CACHE="compile-native backend=$backend"
+skipdir=$(mktemp -d)
+trap 'rm -rf "$skipdir"' EXIT
+export PAR_COLLECT=$skipdir
+: > "$skipdir/skips"
 par program "${files[@]}"
 bad=$par_failed
 if [ "$named" = 0 ]; then
-  scripts/corpus-set.sh --skips compile-native parse-only no-main < "$skips" || bad=$((bad + 1))
+  scripts/corpus-set.sh --skips compile-native parse-only no-main < "$skipdir/skips" || bad=$((bad + 1))
 fi
 
-if [ "$named" = 0 ]; then
+# The checks after the corpus, one after another, when no file is named: one unit of the result
+# cache (scripts/par.sh), keyed on the corpus files they read and on Lake's configuration (they run
+# `lake env`). It counts its failures in the side file `serialbad`.
+serial() {
+  set -e
+  local bad=0 tmp=$PAR_TMP name want out rc wdir ccmd cflags f n weak
   for name in $("$bcc" kernel list); do
-    want=$("$bcc" kernel interp --stage flat "$name" 2>&1) || true
-    out=$("$bcc" kernel run --native "$name" 2>&1) || true
+    # A failed run is compared as its output, and never recorded in the cache (`par_nostore`).
+    want=$("$bcc" kernel interp --stage flat "$name" 2>&1) || par_nostore
+    out=$("$bcc" kernel run --native "$name" 2>&1) || par_nostore
     if [ "$out" = "$want" ]; then echo "kernel $name: native as flat"
     else echo "kernel $name: native differs: $out (flat: $want)"; bad=$((bad + 1)); fi
   done
 
-  tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp" "$skips"' EXIT
   "$bcc" hostops flat > "$tmp/flat" || { echo "hostops: the flat IR fails"; bad=$((bad + 1)); }
   "$bcc" hostops native > "$tmp/native" || { echo "hostops: native fails"; bad=$((bad + 1)); }
   if cmp -s "$tmp/flat" "$tmp/native"; then
@@ -130,8 +140,8 @@ if [ "$named" = 0 ]; then
   # and corpus/deep-list.bc (lists of 50000 built and summed by loops, folded by pointer reversal,
   # SPEC §67 on Backend2), on the backend `--backend` selects.
   "$bcc" tailcalls 100000000 || bad=$((bad + 1))
-  want=$("$bcc" kernel interp --stage flat loop-tail 2>&1) || true
-  out=$(BC_STACK=65536 "$bcc" kernel run --native loop-tail 2>&1) || true
+  want=$("$bcc" kernel interp --stage flat loop-tail 2>&1) || par_nostore
+  out=$(BC_STACK=65536 "$bcc" kernel run --native loop-tail 2>&1) || par_nostore
   if [ "$out" = "$want" ]; then echo "kernel loop-tail: native in a stack of 64 KiB"
   else echo "kernel loop-tail: native in a stack of 64 KiB fails: $out"; bad=$((bad + 1)); fi
   if BC_STACK=65536 "$bcc" run --backend "$backend" --native corpus/deep-list.bc < /dev/null > "$tmp/out" 2> "$tmp/err" &&
@@ -150,25 +160,35 @@ if [ "$named" = 0 ]; then
       echo "corpus/json-drop-deep.bc: 10^6 levels native in a stack of 16 KiB fails: $(head -3 "$tmp/out") $(head -3 "$tmp/err")"; bad=$((bad + 1))
     fi
   fi
-fi
-# No weak imports (macOS): a native program is built pinned to the oldest supported OS
-# (`Pipeline/Driver.lean`, `macosMinVersion`), so an API that OS lacks is a build error. A weak
-# import would be null at run time on that OS. One program of each shape the runtime serves.
-if [ "$(uname)" = Darwin ] && [ "$named" = 0 ]; then
-  wdir=$tmp/weak; mkdir -p "$wdir"
-  "$bcc" cc --runtime > "$wdir/runtime.c"
-  read -r -a ccmd <<< "$("$bcc" cc)"; read -r -a cflags <<< "$("$bcc" cc --flags)"
-  for f in corpus/io-cat.bc corpus/io-task.bc corpus/async-borrow.bc corpus/float-arith.bc corpus/deep-list.bc; do
-    n=$(basename "$f" .bc)
-    if "$bcc" compile --backend "$backend" --target native "$f" -o "$wdir/$n.ll" > /dev/null 2> "$wdir/$n.err" &&
-        "${ccmd[@]}" "${cflags[@]}" "$wdir/$n.ll" "$wdir/runtime.c" -o "$wdir/$n" 2>> "$wdir/$n.err"; then
-      weak=$(nm -m "$wdir/$n" | grep -i 'weak' | grep -i 'undefined' || true)
-      if [ -n "$weak" ]; then echo "$f: native build weak-imports: $weak"; bad=$((bad + 1))
-      else echo "$f: native build has no weak import"; fi
-    else
-      echo "$f: native build for the weak-import check fails: $(head -3 "$wdir/$n.err")"; bad=$((bad + 1))
-    fi
-  done
+  # No weak imports (macOS): a native program is built pinned to the oldest supported OS
+  # (`Pipeline/Driver.lean`, `macosMinVersion`), so an API that OS lacks is a build error. A weak
+  # import would be null at run time on that OS. One program of each shape the runtime serves.
+  if [ "$(uname)" = Darwin ]; then
+    wdir=$tmp/weak; mkdir -p "$wdir"
+    "$bcc" cc --runtime > "$wdir/runtime.c"
+    read -r -a ccmd <<< "$("$bcc" cc)"; read -r -a cflags <<< "$("$bcc" cc --flags)"
+    for f in corpus/io-cat.bc corpus/io-task.bc corpus/async-borrow.bc corpus/float-arith.bc corpus/deep-list.bc; do
+      n=$(basename "$f" .bc)
+      if "$bcc" compile --backend "$backend" --target native "$f" -o "$wdir/$n.ll" > /dev/null 2> "$wdir/$n.err" &&
+          "${ccmd[@]}" "${cflags[@]}" "$wdir/$n.ll" "$wdir/runtime.c" -o "$wdir/$n" 2>> "$wdir/$n.err"; then
+        weak=$(nm -m "$wdir/$n" | grep -i 'weak' | grep -i 'undefined' || true)
+        if [ -n "$weak" ]; then echo "$f: native build weak-imports: $weak"; bad=$((bad + 1))
+        else echo "$f: native build has no weak import"; fi
+      else
+        echo "$f: native build for the weak-import check fails: $(head -3 "$wdir/$n.err")"; bad=$((bad + 1))
+      fi
+    done
+  fi
+  echo "$bad" > "$PAR_SIDE/serialbad"
+  [ "$bad" = 0 ]
+}
+if [ "$named" = 0 ]; then
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp" "$skipdir"' EXIT
+  export -f serial
+  export PAR_COLLECT=$tmp PAR_CACHE_DEPS="files:$(echo corpus/{div-unhandled,deep-list,json-drop-deep,io-cat,io-task,async-borrow,float-arith}.* lean-toolchain lakefile.toml lake-manifest.json)"
+  PAR_CACHE=${PAR_CACHE:+compile-native-serial backend=$backend} JOBS=1 par serial corpus/div-unhandled.bc
+  bad=$((bad + $(cat "$tmp/serialbad" 2>/dev/null || echo 1)))
 fi
 echo "$bad failure(s)."
 [ "$bad" -eq 0 ]

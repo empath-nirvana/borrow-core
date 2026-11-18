@@ -32,6 +32,7 @@ files=("$@")
 named=1
 [ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=(); while IFS= read -r f; do [ -z "$f" ] || files+=("$f"); done <<< "$list"; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
+export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
 export bcc=.lake/build/bin/bcc
 export bccCounts=.lake/build/bin/bcc-counts
 if ! cc=$("$bcc" cc 2>/dev/null); then echo "native-facts: no C compiler: skipped"; exit 0; fi
@@ -54,8 +55,8 @@ statusOf() {
 
 program() {
   local f=$1 w=${PAR_TMP:-$tmp} base in err rc fns fn left old new sigs
-  if grep -q '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$tmp/skips"; return 0; fi
-  if ! grep -q '^main' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$tmp/skips"; return 0; fi
+  if grep -q '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0; fi
+  if ! grep -q '^main' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$PAR_SIDE/skips"; return 0; fi
   base=${f%.bc}
   if [ ! -f "$base.out" ]; then
     echo "$f: no golden $base.out: write it from the source stage with \`scripts/compile-corpus.sh --write-goldens $f\`"
@@ -63,7 +64,7 @@ program() {
   fi
   if ! "$bcc" compile --backend new --target native "$f" -o "$w/on.ll" > "$w/log" 2>&1; then
     if grep -q 'outside the pure fragment' "$w/log"; then
-      echo "$f: outside the new backend's fragment, skipped"; echo "outside-fragment $f" >> "$tmp/skips"; return 0
+      echo "$f: outside the new backend's fragment, skipped"; echo "outside-fragment $f" >> "$PAR_SIDE/skips"; return 0
     fi
     echo "$f: $(head -3 "$w/log")"; return 1
   fi
@@ -79,7 +80,7 @@ program() {
   # `alwaysinline`: the functions asked for, and no call of one left after `-O2`.
   fns=$(sed -n 's/^define internal .* @\(f[0-9]*\)(.*) nounwind alwaysinline .*/\1/p' "$w/on.ll")
   if [ -n "$fns" ]; then
-    $cc -O2 -S -emit-llvm -w "$w/on.ll" -o "$w/opt.ll" 2>/dev/null
+    $cc -O2 -S -emit-llvm -w "$w/on.ll" -o "$w/opt.ll" 2>/dev/null || par_nostore
     left=""
     for fn in $fns; do
       grep -q "call .*@$fn(" "$w/opt.ll" && left="$left $fn"
@@ -90,7 +91,10 @@ program() {
   # frame slots. Both counts are dynamic; a promoted local is not an actual frame slot.
   old=""; new=""; registers=0
   # A program the old backend refuses (`-- check: old-backend-refuses`) has no old count to compare.
-  if ! grep -q '^-- check: old-backend-refuses' "$f" && [ "$("$bccCounts" --sites "$f" 2>/dev/null | sed -n 's/.*scoped-cells framed \([0-9]*\).*/\1/p')" != 0 ]; then
+  # (A failed tool here is never recorded in the cache: `par_nostore`.)
+  sites=""
+  if ! grep -q '^-- check: old-backend-refuses' "$f"; then sites=$("$bccCounts" --sites "$f" 2>/dev/null) || par_nostore; fi
+  if ! grep -q '^-- check: old-backend-refuses' "$f" && [ "$(printf '%s\n' "$sites" | sed -n 's/.*scoped-cells framed \([0-9]*\).*/\1/p')" != 0 ]; then
     old=$("$bccCounts" --backend old --frames "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>/dev/null | sed -n 's/^slots //p')
     new=$("$bccCounts" --backend new --frames "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>/dev/null | sed -n 's/^slots //p')
     if [ -z "$old" ] || [ -z "$new" ]; then echo "$f: no frame slot counts (old '$old', new '$new')"; return 1; fi
@@ -176,6 +180,9 @@ program() {
   echo "$f: ok${new:+ (frame slots $new, register locals $registers, old $old)}${fns:+ (inlined $(echo $fns | wc -w | tr -d ' '))} (facts at $(wc -l < "$w/facted" | tr -d ' ') functions, willreturn at $(wc -l < "$w/wr" | tr -d ' '))"
 }
 export -f program argsOf statusOf
+# Each program is a unit of the result cache (scripts/par.sh; the C compiler is among its tools).
+# Its skip lines are a side file (`skips`), gathered in $tmp.
+export PAR_COLLECT=$tmp PAR_CACHE="native-facts cc=$cc"
 par program "${files[@]}"
 skipbad=0
 if [ "$named" = 0 ]; then

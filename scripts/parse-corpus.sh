@@ -6,24 +6,32 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc >/dev/null
-bcc=.lake/build/bin/bcc
-bad=0
+export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
+. scripts/par.sh
+export bcc=.lake/build/bin/bcc
+parses() { "$bcc" parse "$1"; }
+fails() {
+  set -e
+  local f=$1 want out
+  want=$(sed -n '/^-- expect: /{s///p;q;}' "$f")
+  if out=$("$bcc" parse "$f" 2>&1); then
+    echo "$f: accepted, but must fail"; return 1
+  elif [ "$out" != "$f:$want" ]; then
+    echo "$f: wrong error"; echo "  want: $want"; echo "  got:  ${out#"$f:"}"; return 1
+  else
+    echo "$f: rejected as expected"
+  fi
+}
+export -f parses fails
+# Each file is a unit of the result cache (scripts/par.sh), run one at a time, in order.
+export PAR_CACHE=parse-corpus
 list=$(scripts/corpus-set.sh)
 progs=(); while IFS= read -r f; do [ -z "$f" ] || progs+=("$f"); done <<< "$list"
 list=$(scripts/corpus-set.sh fail)
 fails=(); while IFS= read -r f; do [ -z "$f" ] || fails+=("$f"); done <<< "$list"
-for f in "${progs[@]}"; do
-  if ! "$bcc" parse "$f"; then bad=$((bad + 1)); fi
-done
-for f in ${fails[@]+"${fails[@]}"}; do
-  want=$(sed -n '/^-- expect: /{s///p;q;}' "$f")
-  if out=$("$bcc" parse "$f" 2>&1); then
-    echo "$f: accepted, but must fail"; bad=$((bad + 1))
-  elif [ "$out" != "$f:$want" ]; then
-    echo "$f: wrong error"; echo "  want: $want"; echo "  got:  ${out#"$f:"}"; bad=$((bad + 1))
-  else
-    echo "$f: rejected as expected"
-  fi
-done
+JOBS=1 par parses "${progs[@]}"
+bad=$par_failed
+JOBS=1 par fails ${fails[@]+"${fails[@]}"}
+bad=$((bad + par_failed))
 echo "$bad failure(s)."
 [ "$bad" -eq 0 ]
