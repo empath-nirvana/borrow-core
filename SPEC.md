@@ -14588,8 +14588,9 @@ constant is built (§80); its surface producer is #1115's, not built. No corpus 
 | S3 | `x := e` | a store: a `withswap` answering `(e, ())`, `e` evaluated first. The old contents are consumed by the existing rules | §80 |
 | S4 | the end of the block | the view is released; the final contents come back with the result (`A ⊗ B`) and are consumed | §80 |
 
-Its limits are §80's: the plain variant only, so the scope's row is empty, and no unwind or
-suspension leaves it (§80 *Open*).
+`local` and `:=` are reserved in the new spelling, and until that producer is built a text that
+uses them is refused. Its limits are §80's: the plain variant only, so the scope's row is empty,
+and no unwind or suspension leaves it (§80 *Open*).
 
 ### Modes
 
@@ -14671,19 +14672,23 @@ today, with `;`, `|` between arms, `x <- M`, `&x` and `&mut x` as lends, `with`,
 new-spelling text only their comments change. The core values and builtins inside a surface body
 (`thunkv`, `fun (x : A) ->`, `unbang`, bracket arguments, `<M, N>`) are written as today.
 
-**The layout rule.** In a surface body, outside `(…)` and `[…]`:
+**The layout rule.** In a surface body, where the innermost open bracket is not `(` or `[`:
 - a newline ends a statement, an arm or a clause, unless the line ends in a binary operator, `,`,
   `->`, `=` or `:`, or the next line starts with a binary operator (`+ - * / % == != < <= > >= &&
   || |> >|`, so a line starting with `*` or `-` multiplies or subtracts), with `else` (after an
   `if` or a `for`), with `with` or `finally` (after `handle`), with `unwind (D)` (after a `let`'s
   right side), with `.` (a `.1`, `.2` or `.f` suffix of the line before), or with `}`. A line
   starting with `&` begins a new statement;
-- a juxtaposed application (`f x`) and a `[…]` instantiation stop at a newline, and a handler's
-  `[…]`/`(…)` after `with h` and a constructor's `(…)` or `{ f: … }` start on the name's line;
+- a juxtaposed application (`f x`) and a `[…]` instantiation stop at a newline, and a call's
+  `(…)`, a handler's `[…]`/`(…)` after `with h` and a constructor's `(…)` or `{ f: … }` start on
+  the name's line: `f` with `(1)` on the next line is two statements, so a line starting with `(`
+  needs no `;` before it;
 - `break` and `return` at the end of a line take no value;
 - a line holding only a loop label joins the next line;
 - a `|` at the start of a line, after a newline, is one arm separator;
-- a block `{ … }` inside parentheses has the rule again inside its braces.
+- a block `{ … }` inside `(…)` or `[…]` (an `if`, a `match`, a loop or a closure written as an
+  argument) has the rule again inside its braces. The innermost open bracket decides, and
+  `<M, N>` is not a bracket for the rule.
 
 `;` separates statements wherever a newline does; a `;` just before `}` is refused, as today. The
 rule ends statements, arms and clauses only: a declaration's header is read to its `{` or `=`,
@@ -14700,6 +14705,10 @@ is `op(x, k) -> body`. A body `{ S }` is the statements `S`; a closure `{ p -> �
 value, and a block value `{ S }` as the whole body is written `({ S })`. A body without braces is
 one expression: several statements need a block. The `= e` form of a body (D1, D6,
 `poly f at T = e`) is likewise one expression, and `poly f at T { S }` takes a block as D1 does.
+A body without braces ends at the first newline at its own bracket nesting where the layout rule
+ends a statement, also when it ends in `fun … -> M`: that `fun`'s body does not read the next arm,
+clause or declaration. Inside a block, a `fun … -> M` reads the following statements to the
+block's end, as today, so a `fun` that is not last is written in parentheses.
 
 **Trailing blocks (E10).** A block trails a call only right after the call's parenthesised
 arguments, on the same line, in a surface body, and it is the call's last argument:
@@ -14724,6 +14733,9 @@ spelling; the messages are respelled when today's surface is removed.
 - A statement that begins with `*` or `-` continues the line before it as a binary operator; a `;`
   ends that line.
 - `&x` reads as a shared lend at a loop source or a fold, and as a mutable lend at a call.
+- A mode drops a written lifetime name: `fn f<'a>(v: array_mut 'a i32)`, `'a` fresh, is
+  `fn f(v: inout array i32)`, and a refusal that names the region names the lifetime the mode
+  introduces, not `'a`.
 
 ### `let mut` sites
 
