@@ -179,10 +179,12 @@ NAMED = re.compile(r'"((?:corpus|lib|book|docs|scripts|research)/[^"{}\s]+)"')
 def class_lines(cls, extra=()):
     lines = []
     if "bcc" in cls.split(","):
-        libs = set()
+        # By content only: no path of the worktree enters a key, so every worktree shares entries.
+        libs, shas = set(), set()
         for b in binaries(extra):
-            lines.append(f"bin {b} {sha_file(b)}")
+            shas.add(sha_file(b))
             libs.add(os.path.realpath(lib_of(b)))
+        lines += [f"bin {h}" for h in sorted(shas)]
         for l in sorted(libs):
             for r, _, fs in os.walk(l):
                 for f in sorted(fs):
@@ -326,7 +328,8 @@ def book_deps(n):
             with open(os.path.join(ROOT, p), encoding="utf-8", errors="surrogateescape") as fh:
                 for l in fh:
                     _keylines.setdefault(l.split(" ", 1)[0], []).append(l.rstrip("\n"))
-    lines = [f"block {attrs}\t{md}\t{line}", f"text {hashlib.sha256(text).hexdigest()}"]
+    # The job index too: the block's verified keys line is replayed as the side file `ok/<n>`.
+    lines = [f"arg {n}", f"block {attrs}\t{md}\t{line}", f"text {hashlib.sha256(text).hexdigest()}"]
     return lines + [f"key {l}" for l in sorted(_keylines.get(bh, []))]
 
 
@@ -655,7 +658,10 @@ def prune(argv):
     removed = freed = 0
     keep = []
     for m, size, p in entries:
-        if now - m > days * 86400 or os.path.basename(p).startswith(".tmp."):
+        tmp = os.path.basename(p).startswith(".tmp.")
+        # A temporary entry an hour old is left over from an interrupted write; a younger one may
+        # be another gate's write in progress.
+        if now - m > (3600 if tmp else days * 86400):
             shutil.rmtree(p, ignore_errors=True); removed += 1; freed += size
         else:
             keep.append((m, size, p))
@@ -664,6 +670,8 @@ def prune(argv):
         for m, size, p in sorted(keep):
             if total <= maxmb * 1048576:
                 break
+            if os.path.basename(p).startswith(".tmp."):
+                continue
             shutil.rmtree(p, ignore_errors=True); removed += 1; freed += size; total -= size
     print(f"gate_cache: removed {removed} entr{'y' if removed == 1 else 'ies'} ({freed / 1048576:.1f} MiB); {total / 1048576:.1f} MiB left in {root}")
 
@@ -679,6 +687,10 @@ def main():
         par_finish(a[1], a[2])
     elif a[0] == "step":
         return step(a[1:])
+    elif a[0] == "unit-key":
+        # The key of one `par` unit: `unit-key FN ARG`, with PAR_CACHE and PAR_CACHE_DEPS set.
+        spec, mode = os.environ["PAR_CACHE"], os.environ.get("PAR_CACHE_DEPS", "corpus")
+        print(digest(base_lines(spec, "bcc") + [f"fn {a[1]}", f"deps {mode}"] + unit_deps(mode, a[2])))
     elif a[0] == "step-key":
         print(step_args(a[1:])[1])
     elif a[0] == "prune":

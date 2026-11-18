@@ -160,5 +160,72 @@ probe > /dev/null
 if [ "$(probe)" = "0 1" ]; then echo "check-gate-cache: a unit whose input changes while it runs: run again"
 else echo "check-gate-cache: a unit whose input changes while it runs was recorded"; bad=1; fi
 
+# The same tree in another directory replays every unit: no path of the worktree is in a key.
+w2=$t/other/tree
+mkdir -p "$t/other"
+cp -R "$w" "$w2"
+for b in bcc bcc-counts; do cp -c "$w/.lake/build/bin/$b" "$w2/.lake/build/bin/$b" 2>/dev/null || cp "$w/.lake/build/bin/$b" "$w2/.lake/build/bin/$b"; done
+w0=$w; w=$w2
+expect "the same tree in another directory" 2 0 0 --final
+w=$w0
+if [ "$(key)" = "$(cd "$w2" && python3 scripts/gate_cache.py step-key probe lean --files corpus/kernel-counts.expected -- true)" ]; then
+  echo "check-gate-cache: a whole step's key in another directory: the same"
+else echo "check-gate-cache: a whole step's key in another directory: differs"; bad=1; fi
+
+# One unit's key (`gate_cache.py unit-key`) misses on each of the inputs below.
+GATE_CACHE_TOOLS=$(cd "$w" && python3 scripts/gate_cache.py tools); export GATE_CACHE_TOOLS
+ukey() { (cd "$w" && PAR_CACHE=probe python3 scripts/gate_cache.py unit-key fn "$1"); }
+# miss WHAT ARG CMD…: ARG's unit key before and after CMD differ.
+miss() {
+  local what=$1 arg=$2 k; shift 2
+  k=$(ukey "$arg")
+  "$@"
+  if [ "$(ukey "$arg")" = "$k" ]; then echo "check-gate-cache: a unit's key: $what: unchanged"; bad=1
+  else echo "check-gate-cache: a unit's key: $what: changed"; fi
+}
+p0=corpus/${progs[0]}.bc
+miss "source_digest" "$p0" export source_digest=probe
+unset source_digest
+miss "LC_COLLATE" "$p0" export LC_COLLATE=C.probe
+unset LC_COLLATE
+for d in reports trusted copies; do
+  mkdir -p "$w/corpus/$d"
+  miss "its corpus/$d file" "$p0" eval "echo x > '$w/corpus/$d/${progs[0]}.txt'"
+  miss "corpus/$d's program" "corpus/$d/${progs[0]}.txt" eval "echo '-- x' >> '$w/$p0'"
+done
+mkdir -p "$w/corpus/sugar"
+printf -- '-- core: other.core.bc\n' > "$w/corpus/sugar/s.bc"; echo x > "$w/corpus/sugar/other.core.bc"
+printf -- '-- lowers: %s\n' "$p0" > "$w/corpus/sugar/l.lowered.bc"
+PAR_CACHE_DEPS=sugar miss "a sugared file's named core form" corpus/sugar/s.bc eval "echo y >> '$w/corpus/sugar/other.core.bc'"
+PAR_CACHE_DEPS=sugar miss "a lowering's program" corpus/sugar/l.lowered.bc eval "echo '-- y' >> '$w/$p0'"
+PAR_CACHE_DEPS="files:corpus/${progs[1]}.out" miss "a file of a files: unit" x eval "echo y >> '$w/corpus/${progs[1]}.out'"
+# A book block: its text, its index, and a keys line recorded for its text.
+export tmp=$t/book
+mkdir -p "$tmp" "$w/book/keys"
+printf '1\trun\tbook/src/x.md\t3\n2\trun\tbook/src/x.md\t9\n' > "$tmp/manifest"
+echo 'main = 1' > "$tmp/1.bc"; cp "$tmp/1.bc" "$tmp/2.bc"
+bh=$({ printf 'run\n'; cat "$tmp/1.bc"; } | shasum -a 256 | cut -d' ' -f1)
+PAR_CACHE_DEPS=book miss "a book block's text" 1 eval "echo '-- x' >> '$tmp/1.bc'"
+if [ "$(PAR_CACHE_DEPS=book ukey 1)" = "$(PAR_CACHE_DEPS=book ukey 2)" ]; then
+  echo "check-gate-cache: a unit's key: a book block's index: the same"; bad=1
+else echo "check-gate-cache: a unit's key: a book block's index: changed"; fi
+PAR_CACHE_DEPS=book miss "a book block's keys line" 2 eval "echo '$bh k' > '$w/book/keys/x.keys'"
+unset tmp
+# A file a .lean source names in a string.
+mkdir -p "$w/Core"
+echo 'def f := "corpus/named.txt"' > "$w/Core/Named.lean"; echo x > "$w/corpus/named.txt"
+k1=$(key); echo y >> "$w/corpus/named.txt"
+if [ "$(key)" = "$k1" ]; then echo "check-gate-cache: a whole step's key: a file a .lean source names: unchanged"; bad=1
+else echo "check-gate-cache: a whole step's key: a file a .lean source names: changed"; fi
+# The C compiler's version: an xcrun first on PATH that reports another clang.
+if command -v xcrun > /dev/null; then
+  printf '#!/bin/sh\n[ "$1 $2" = "clang --version" ] && { echo "clang 0.0.0-stub"; exit 0; }\nexec "%s" "$@"\n' "$(command -v xcrun)" > "$t/bin/xcrun"
+  chmod +x "$t/bin/xcrun"
+  unset GATE_CACHE_TOOLS
+  k1=$(ukey "$p0")
+  if [ "$(PATH="$t/bin:$PATH" ukey "$p0")" = "$k1" ]; then echo "check-gate-cache: a unit's key: the C compiler's version: unchanged"; bad=1
+  else echo "check-gate-cache: a unit's key: the C compiler's version: changed"; fi
+fi
+
 [ "$bad" = 0 ] && echo "check-gate-cache: every change of an input misses, and no failure is recorded"
 exit "$bad"
