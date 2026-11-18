@@ -7,7 +7,7 @@ ships is the chain's (`Core/Chain/`).
 - **Build:** `lake build ResearchTree`. `lakefile.toml`'s `ResearchTree` lib (`srcDir = "research/tree"`)
   is not a default target, and the library never imports it.
 - **Checked by:** gate-full's `research archive` step (`scripts/check-research.sh`): it builds the lib
-  and runs `AxiomCheck.lean` (the library's reader, under this lib's imports) on
+  and runs `gate-census research-axiom-report` (the library's report, under this lib's imports) on
   `axioms/*.names`, the registered names SPEC §62 cites. The sanity gate's hygiene and
   hypothesis-register checks scan this directory too.
 - **Names:** module `Core.TreeX` became `ResearchTree.TreeX`; every declaration keeps its name and

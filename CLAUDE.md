@@ -172,5 +172,5 @@ library modules `lib/*.bc` are read when `bcc` starts, so editing them rebuilds 
   `Paper/`, `Support/`, `Examples/` or `Core/`.
 - Every result's `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 - `lake build` clean; `scripts/check-hygiene.sh` and the axiom check passing
-  (`lake env lean scripts/AxiomCheck.lean`).
+  (`scripts/gate-census.sh axiom-report`).
 - Comments say what the code is, not how it got here.

@@ -1,10 +1,14 @@
-import Lean
-/-!
-`#print axioms` for every declaration of `Paper.*`, `Support.*`, `Examples.*`, `Core.*`, `Frontend.*`, `Target.*`, `Pipeline.*`, `Reference.*`, `Backend.*` and `Backend2.*` at once: for
-each, the axioms its type and value reach, transitively.  Fails unless every
-one is among `propext`, `Classical.choice` and `Quot.sound`.
+import GateCensus.View
+import GateCensus.Result
 
-    lake env lean --run scripts/CheckAxioms.lean
+/-!
+# Every declaration's axioms  (`gate-census axioms`, hygiene)
+
+`#print axioms` for every declaration of `Paper.*`, `Support.*`, `Examples.*`, `Core.*`,
+`Frontend.*`, `Target.*`, `Pipeline.*`, `Reference.*` and `Backend.*` at once, and of the
+declarations of no module (those the negative test of `scripts/check-hygiene.sh` elaborates into
+the environment): for each, the axioms its type and value reach, transitively. Fails unless every
+one is among `propext`, `Classical.choice` and `Quot.sound`.
 
 One traversal serves every declaration. A forward walk from all of them, sharing one visited set,
 records each reached constant's users (the reverse edges) and the axioms it meets. A declaration
@@ -12,7 +16,14 @@ reaches an axiom exactly when the axiom reaches it backwards along those edges, 
 walk from each axiom outside the three finds every declaration that depends on it: the same
 answer as a separate `#print axioms` per declaration, in time linear in the graph.
 -/
+
 open Lean
+
+namespace GateCensus.Axioms
+
+/-- The modules read. -/
+def imports : Array Name :=
+  #[`Paper, `Support, `Examples, `Core, `Frontend, `Target, `Pipeline, `Reference, `Backend]
 
 /-- The constants a declaration's type and value mention. -/
 def uses (ci : ConstantInfo) : Array Name :=
@@ -23,23 +34,27 @@ def uses (ci : ConstantInfo) : Array Name :=
     | _ => #[]
   ci.type.getUsedConstants ++ v
 
-unsafe def main : IO UInt32 := do
-  initSearchPath (← findSysroot)
-  enableInitializersExecution
-  let env ← importModules #[{ module := `Paper }, { module := `Support }, { module := `Examples }, { module := `Core }, { module := `Frontend }, { module := `Target }, { module := `Pipeline }, { module := `Reference }, { module := `Backend }, { module := `Backend2 }] {} 0 (loadExts := true)
+def run (env : Environment) (view : View) : Result := Id.run do
   let ok : NameSet := NameSet.empty |>.insert ``propext |>.insert ``Classical.choice |>.insert ``Quot.sound
   -- The project's declarations, module by module (a module may list a name twice).
   let mut decls : Array Name := #[]
   let mut listed : NameSet := {}
-  for mod in env.header.moduleNames, data in env.header.moduleData do
+  for h : i in [0:env.header.moduleNames.size] do
+    let mod := env.header.moduleNames[i]
+    unless view.hasModule i do continue
     unless (`Paper).isPrefixOf mod || (`Support).isPrefixOf mod || (`Examples).isPrefixOf mod ||
         (`Core).isPrefixOf mod || (`Frontend).isPrefixOf mod || (`Target).isPrefixOf mod ||
-        (`Pipeline).isPrefixOf mod || (`Reference).isPrefixOf mod || (`Backend).isPrefixOf mod ||
-        (`Backend2).isPrefixOf mod do continue
-    for n in data.constNames do
+        (`Pipeline).isPrefixOf mod || (`Reference).isPrefixOf mod || (`Backend).isPrefixOf mod do continue
+    for n in env.header.moduleData[i]!.constNames do
       unless listed.contains n do
         listed := listed.insert n
         decls := decls.push n
+  -- The declarations of no module (the negative test's, elaborated into the environment), by name.
+  let extra := env.constants.foldStage2 (fun acc n _ => acc.push n) (#[] : Array Name)
+  for n in extra.qsort Name.lt do
+    unless listed.contains n do
+      listed := listed.insert n
+      decls := decls.push n
   -- Forward: everything the declarations reach, with each constant's users and the axioms met.
   let mut seen : NameSet := {}
   let mut users : Std.HashMap Name (Array Name) := {}
@@ -54,7 +69,7 @@ unsafe def main : IO UInt32 := do
     if let .axiomInfo _ := ci then
       unless ok.contains n do axs := axs.push n
     for c in uses ci do
-      users := users.insert c ((users.getD c #[]).push n)
+      users := users.alter c fun us => some ((us.getD #[]).push n)
       unless seen.contains c do stack := stack.push c
   -- Backward: from each axiom outside the three, every constant that reaches it.
   let mut reachers : Std.HashMap Name (Array Name) := {}
@@ -66,13 +81,16 @@ unsafe def main : IO UInt32 := do
       work := work.pop
       if back.contains n then continue
       back := back.insert n
-      reachers := reachers.insert n ((reachers.getD n #[]).push a)
+      reachers := reachers.alter n fun as => some ((as.getD #[]).push a)
       for u in users.getD n #[] do
         unless back.contains u do work := work.push u
+  let mut out : Array String := #[]
   let mut bad := 0
   for n in decls do
     for a in reachers.getD n #[] do
-      IO.println s!"{n} depends on axiom {a}"
+      out := out.push s!"{n} depends on axiom {a}"
       bad := bad + 1
-  IO.println s!"{decls.size} declarations checked; {bad} depend on an axiom outside [propext, Classical.choice, Quot.sound]."
-  return (if bad == 0 then 0 else 1)
+  out := out.push s!"{decls.size} declarations checked; {bad} depend on an axiom outside [propext, Classical.choice, Quot.sound]."
+  return { lines := out, code := if bad == 0 then 0 else 1 }
+
+end GateCensus.Axioms

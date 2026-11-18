@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # The checker, the elaborator and the backends compare two kernel types only up to `[α]`, through
 # one helper (SPEC §3): `tyEqV`/`tyEqC`/`tyEqEnts` (Frontend/Check/TyEq.lean) and
-# `convVal`/`convComp` (Frontend/Check/Conv.lean). `scripts/TypeEq.lean` lists every declaration
-# of a compiled module (`bcc`'s import closure outside `Core`, `Support` and `Paper`: `Frontend`,
-# `Backend`, `Backend2`) whose elaborated body decides, at run time, an equality of a `VTy`, `CTy`,
-# `OpSig` or a row, directly or through a kernel declaration that does; each one must be the
-# helper or in scripts/type-eq.allow, with its reason. Then the script's own negative tests: the
-# same check, with declarations added that a correct check refuses, must fail with each one named:
+# `convVal`/`convComp` (Frontend/Check/Conv.lean). `gate-census type-eq`
+# (scripts/TypeEq.lean) lists every declaration of a compiled module (`bcc`'s import
+# closure outside `Core`, `Support` and `Paper`: `Frontend`, `Backend`, `Backend2`) whose
+# elaborated body decides, at run time, an equality of a `VTy`, `CTy`, `OpSig` or a row, directly
+# or through a kernel declaration that does; each one must be the helper or in
+# scripts/type-eq.allow, with its reason. Then the script's own negative tests: the
+# same check, with declarations added that a correct check refuses, must fail with each one named
+# (the same `gate-census` run, on the environment with them elaborated into it):
 #
 #   * `Frontend.Check.negBeq`, a `==` of two value types;
 #   * `Frontend.Check.negDecide`, a `decide (C = D)` of two computation types;
@@ -28,10 +30,12 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 allow=$(grep -vE '^(#|$)' scripts/type-eq.allow | awk '{print $1}' | sort -u)
 
-# check FILE: the census of FILE's declarations in the compiled modules (and of FILE itself),
-# against the allowlist. Prints the unlisted ones; fails when there are any.
+# check LABEL: the census `gate-census` wrote as LABEL (`type-eq`, or `type-eq-neg` with the
+# negative tests' declarations), against the allowlist. Prints the unlisted ones; fails when there
+# are any.
 check() {
-  lake env lean "$1" > "$tmp/census" 2>&1 || { echo "check-type-eq: the census failed:"; cat "$tmp/census"; return 2; }
+  cp "$tmp/c/$1.out" "$tmp/census"
+  [ "$(cat "$tmp/c/$1.status")" = 0 ] || { echo "check-type-eq: the census failed:"; cat "$tmp/census"; return 2; }
   scanned=$(awk -F'\t' '$1 == "#scanned" {print $2}' "$tmp/census")
   if [ "$scanned" != "Backend Backend2 Frontend Pipeline Reference Target" ]; then
     echo "check-type-eq: the census read the modules under \"$scanned\", not Backend Backend2 Frontend Pipeline Reference Target"
@@ -55,16 +59,7 @@ check() {
   fi
 }
 
-if ! check scripts/TypeEq.lean; then
-  echo "check-type-eq: route these through tyEqV/tyEqC/tyEqEnts or convVal/convComp, or add them"
-  echo "to scripts/type-eq.allow with the reason the exact comparison is right"
-  exit 1
-fi
-n=$(wc -l < "$tmp/hits" | tr -d ' ')
-
-{
-  sed -n '/^import /p' scripts/TypeEq.lean
-  cat <<'LEAN'
+cat > "$tmp/Neg.lean" <<'LEAN'
 def Frontend.Check.negBeq (A B : Frontend.Check.CVTy) : Bool := A == B
 def Frontend.Check.negDecide (C D : Frontend.Check.CCTy) : Bool := decide (C = D)
 def Frontend.Check.negFind (S : Frontend.Check.CRow) (o : Frontend.Check.COpSig) : Bool :=
@@ -79,9 +74,16 @@ def Backend2.negHandle (g h : Backend2.HNode) : Bool :=
   decide (BoCa.Fig16.LogRel.Core.CTy.effOf g.S .unit = BoCa.Fig16.LogRel.Core.CTy.effOf h.S .unit) &&
     decide (g.E = h.E)
 LEAN
-  sed '/^import /d' scripts/TypeEq.lean
-} > "$tmp/Neg.lean"
-if check "$tmp/Neg.lean" > "$tmp/negout"; then
+mkdir "$tmp/c"
+scripts/gate-census.sh --out "$tmp/c" type-eq "type-eq+$tmp/Neg.lean"
+if ! check type-eq; then
+  echo "check-type-eq: route these through tyEqV/tyEqC/tyEqEnts or convVal/convComp, or add them"
+  echo "to scripts/type-eq.allow with the reason the exact comparison is right"
+  exit 1
+fi
+n=$(wc -l < "$tmp/hits" | tr -d ' ')
+
+if check type-eq-neg > "$tmp/negout"; then
   echo "check-type-eq: the negative tests passed the check"; exit 1
 fi
 for want in Frontend.Check.negBeq Frontend.Check.negDecide Frontend.Check.negFind \

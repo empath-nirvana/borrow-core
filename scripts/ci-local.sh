@@ -34,7 +34,7 @@
 # The sanity gate (`gateSteps` below) checks that the library builds; hygiene (no forbidden
 # keyword, every declaration's axioms within propext, Classical.choice and Quot.sound) and the
 # axioms of the theorems SPEC.md names (listed in `scripts/axioms/*.names`, read by
-# `scripts/AxiomCheck.lean`); the typing-judgment freeze, the hypothesis register (`assumptions`:
+# `gate-census axiom-report`); the typing-judgment freeze, the hypothesis register (`assumptions`:
 # every hypothesis a theorem takes is listed in Core/Assumptions.lean) and the new backend's import
 # fence; that the result cache misses on a change to each kind of input (`result cache`,
 # scripts/check-gate-cache.sh); that every type comparison goes through the one `[α]` helper (`type equality`); that the
@@ -74,9 +74,9 @@
 #   * a `.lean` file outside experiments/, the lakefile, the manifest or the toolchain: every
 #     step of the sanity gate (the compiler imports the proofs, so every Lean change reaches it);
 #   * otherwise no Lean step runs (no `lake build` of the library, no hygiene, no axioms): only
-#     `lake build bcc bcc-counts`, and the sanity gate's steps whose inputs changed: corpus/ or lib/
-#     for the corpus steps, a script for its own step (source-stage.sh for the corpus runs), and
-#     ci-local.sh or par.sh for all of them. Documentation alone runs nothing.
+#     `lake build bcc bcc-counts gate-census`, and the sanity gate's steps whose inputs changed:
+#     corpus/ or lib/ for the corpus steps, a script for its own step (source-stage.sh for the
+#     corpus runs), and ci-local.sh or par.sh for all of them. Documentation alone runs nothing.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 changed=0
@@ -126,7 +126,7 @@ steps=(
   "judgment freeze"  "scripts/check-judgments.sh"
   "assumptions"      "scripts/check-assumptions.sh"
   "type equality"    "scripts/check-type-eq.sh"
-  "axiom report"     "python3 scripts/gate_cache.py step axiom-report lean -- lake env lean scripts/AxiomCheck.lean"
+  "axiom report"     "python3 scripts/gate_cache.py step axiom-report lean -- scripts/gate-census.sh axiom-report"
   "insertion pins"   "scripts/check-pins.sh"
   "research archive" "scripts/check-research.sh"
   "parse corpus"     "scripts/parse-corpus.sh"
@@ -192,7 +192,7 @@ if [ "$changed" = 1 ]; then
         scripts/check-backend2.sh) add "backend2 fence" ;;
         scripts/check-gate-cache.sh) add "result cache" ;;
         scripts/check-assumptions.sh) add "assumptions" ;;
-        scripts/check-type-eq.sh|scripts/TypeEq.lean|scripts/type-eq.allow) add "type equality" ;;
+        scripts/check-type-eq.sh|scripts/type-eq.allow) add "type equality" ;;
         scripts/alpha-check.py) add "renaming" ;;
         SPEC.md|docs/changelog/*|docs/status/*|scripts/changelog.sh|scripts/status.sh|scripts/check-spec-files.sh) add "spec files" ;;
       esac
@@ -209,7 +209,7 @@ wanted() {
 }
 
 if [ "$all" = 1 ]; then step "build" lake build
-else step "build (bcc, bcc-counts)" lake build bcc bcc-counts; fi
+else step "build (bcc, bcc-counts)" lake build bcc bcc-counts gate-census; fi
 built=$fail
 [ "$built" = 0 ] && export CI_LOCAL_BUILT=1
 # When the build fails, the steps run one after another, each trying its own build, with the cache

@@ -1,7 +1,7 @@
 # The declarations of the compiled modules (the checker, the elaborator and both backends: every
 # module of `bcc`'s import closure outside `Core`, `Support` and `Paper`) that may decide an
 # equality of a kernel type (`VTy`, `CTy`, `OpSig`, a row) other than through the
-# type-compatibility helper. Read by scripts/check-type-eq.sh against scripts/TypeEq.lean's census
+# type-compatibility helper. Read by scripts/check-type-eq.sh against `gate-census type-eq`'s census
 # of the elaborated terms. Format: `declaration  reason`. Every other comparison of two types goes
 # through `tyEqV`/`tyEqC`/`tyEqEnts` (Frontend/Check/TyEq.lean) or `convVal`/`convComp`
 # (Frontend/Check/Conv.lean). Adding a line here is the only way past the check, and it shows up
