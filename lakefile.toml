@@ -1,5 +1,5 @@
 name = "borrow_core"
-defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Target", "Pipeline", "Reference", "Backend", "Backend2", "bcc", "bcc-counts"]
+defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Target", "Pipeline", "Reference", "Backend", "Backend2", "bcc", "bcc-counts", "gate-census"]
 
 [[require]]
 name = "mathlib"
@@ -79,6 +79,20 @@ root = "Frontend.Main"
 [[lean_exe]]
 name = "bcc-counts"
 root = "Backend.Counts"
+
+# The gate's checks that read the Lean environment (`scripts/GateCensus.lean`): built by the gate's
+# `lake build gate-census`. It imports only `Lean` and loads the library's .oleans when it runs, so
+# it is outside `bcc`'s import closure and links no library code.
+[[lean_lib]]
+name = "GateCensus"
+srcDir = "scripts"
+globs = ["GateCensus.+", "CheckAxioms", "AxiomCheck", "TypeEq", "PinSites"]
+
+[[lean_exe]]
+name = "gate-census"
+srcDir = "scripts"
+root = "GateCensus"
+supportInterpreter = true
 
 # Not a default target: the census of kernel nodes in the corpus (`docs/kernel-usage.md`).
 [[lean_exe]]

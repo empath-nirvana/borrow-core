@@ -1,5 +1,5 @@
 -- The tree archive's registered names (#1133), moved from scripts/axioms/s062.names in its
--- order, with its headings. Read by research/tree/AxiomCheck.lean (gate-full, `research archive`).
+-- order, with its headings. Read by `gate-census research-axiom-report` (gate-full, `research archive`).
 
 -- The tree-stratified carrier (SPEC §62, #773): the chain instance, the laws, graft, the ported lemmas.
 BoCa.Fig16.Tree.Wp.STy.reread
