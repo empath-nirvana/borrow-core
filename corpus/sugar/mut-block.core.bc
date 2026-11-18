@@ -1,6 +1,7 @@
--- `mut-block.bc` as its elaboration should read: written by hand in core. The copy of `ap` for
--- the block takes the block's capabilities first, then its parameter (SPEC §32's calling
--- convention), and the block's call is in its tail position.
+#! dialect 82
+# `mut-block.bc` as its elaboration should read: written by hand in core. The copy of `ap` for
+# the block takes the block's capabilities first, then its parameter (SPEC §32's calling
+# convention), and the block's call is in its tail position.
 def ap__x : !(i32 * !(i32 * i32 => i32 * i32) => i32 * i32) =
   !thunkv fun (p : i32 * !(i32 * i32 => i32 * i32)) ->
     let (x, f) = p;

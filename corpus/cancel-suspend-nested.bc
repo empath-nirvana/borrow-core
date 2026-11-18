@@ -1,16 +1,17 @@
--- check: old-backend-refuses
--- SPEC §27 in the core text: two finalisers in one cancelled region, both suspending, the first
--- error kept. Handler 1 cancels `κ` at `1.0`, which `sub` performs below its own finaliser `D₀`;
--- the region's finaliser `D₂` is `main`'s, around the call of `sub`. The cancel reaches `D₀` first
--- (the callee's cancel, itself a machine: a call point of the canceller's), which performs `4.0`
--- and raises `2.0`, kept; then `D₂`, which performs `4.0`, frees the cell `c` and raises `3.0`,
--- abandoned for the earlier `2.0`. The kept `2.0` is re-raised at the canceller and caught by handler
--- 2. Handler 4 resumes each `4.0` outside tail position and counts them. The cancel row of `1.0` is
--- `[2.0, 3.0, 4.0]`.
---
--- Answer: `(inl (inr ()), i32[2])`, `live 0`: handler 2's answer, and two `4.0`s. A wrong
--- implementation that keeps the later error answers `(inr (), i32[2])`; one that skips the callee's
--- finaliser answers `(inr (), i32[1])`.
+#! dialect 82
+# check: old-backend-refuses
+# SPEC §27 in the core text: two finalisers in one cancelled region, both suspending, the first
+# error kept. Handler 1 cancels `κ` at `1.0`, which `sub` performs below its own finaliser `D₀`;
+# the region's finaliser `D₂` is `main`'s, around the call of `sub`. The cancel reaches `D₀` first
+# (the callee's cancel, itself a machine: a call point of the canceller's), which performs `4.0`
+# and raises `2.0`, kept; then `D₂`, which performs `4.0`, frees the cell `c` and raises `3.0`,
+# abandoned for the earlier `2.0`. The kept `2.0` is re-raised at the canceller and caught by handler
+# 2. Handler 4 resumes each `4.0` outside tail position and counts them. The cancel row of `1.0` is
+# `[2.0, 3.0, 4.0]`.
+#
+# Answer: `(inl (inr ()), i32[2])`, `live 0`: handler 2's answer, and two `4.0`s. A wrong
+# implementation that keeps the later error answers `(inr (), i32[2])`; one that skips the callee's
+# finaliser answers `(inr (), i32[1])`.
 
 def plus : i32 * i32 => i32 = unbang host[add32]
 

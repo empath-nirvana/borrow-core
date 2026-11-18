@@ -1,14 +1,15 @@
--- SPEC §76, §75 Part B: pipes L1's `pipe_stop` (lib/pipe.bc at 5a5bbaeb, its commented
--- signature) as a core-text template over the chain's row `sg`, the stages' cleanup row `cr`,
--- and a stage's sites `y` (its `Yield[B]`) and `s` (its `Stream[A, K]`); a last stage, so no
--- forwarded site. `pipe_stop` cancels a stored rest, closes a loop not yet run, and is `()` at
--- `Ended`. The rests' event types are parameters `EN`, `EY`: `pipe_stop` never resumes them.
---
--- It is used at two rows: at `sg = cr = ()` on a loop not yet run and on an ended stage, and at
--- `sg = cr = (9.0 cancel i32 ~> 0)` on a loop whose close raises `9.0` with 42, which the
--- handler at 9 answers.
---
--- Answer: i32[42].
+#! dialect 82
+# SPEC §76, §75 Part B: pipes L1's `pipe_stop` (lib/pipe.bc at 5a5bbaeb, its commented
+# signature) as a core-text template over the chain's row `sg`, the stages' cleanup row `cr`,
+# and a stage's sites `y` (its `Yield[B]`) and `s` (its `Stream[A, K]`); a last stage, so no
+# forwarded site. `pipe_stop` cancels a stored rest, closes a loop not yet run, and is `()` at
+# `Ended`. The rests' event types are parameters `EN`, `EY`: `pipe_stop` never resumes them.
+#
+# It is used at two rows: at `sg = cr = ()` on a loop not yet run and on an ended stage, and at
+# `sg = cr = (9.0 cancel i32 ~> 0)` on a loop whose close raises `9.0` with 42, which the
+# handler at 9 answers.
+#
+# Answer: i32[42].
 
 type PipeState[L, KN, KY, K] = L + (KN + (KY + K))
 

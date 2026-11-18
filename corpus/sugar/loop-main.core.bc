@@ -1,6 +1,7 @@
--- `loop-main.bc` in core, as `bcc desugar` prints it: `main` is a state machine (SPEC §15) whose
--- one state holds the loop of `once`, with no capability; it finishes with the number, and closed
--- early hands back `()`.
+#! dialect 82
+# `loop-main.bc` in core, as `bcc desugar` prints it: `main` is a state machine (SPEC §15) whose
+# one state holds the loop of `once`, with no capability; it finishes with the number, and closed
+# early hands back `()`.
 
 def once : i32 => U loop i32 1 =
   thunkv fun (n : i32) ->

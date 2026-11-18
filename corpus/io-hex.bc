@@ -1,10 +1,11 @@
--- Hex encoding (SPEC §11): each input byte as two lower-case hex digits, then a newline.
--- `put_hex` takes only an output, and hands it back first, so `&mut stdout` can lend it.
---
--- Answer: `48656c6c6f2c20576f726c64210a` for `Hello, World!\n`. Swapped nibbles, a digit
--- offset by one, or upper-case letters give a different line.
+#! dialect 82
+# Hex encoding (SPEC §11): each input byte as two lower-case hex digits, then a newline.
+# `put_hex` takes only an output, and hands it back first, so `&mut stdout` can lend it.
+#
+# Answer: `48656c6c6f2c20576f726c64210a` for `Hello, World!\n`. Swapped nibbles, a digit
+# offset by one, or upper-case letters give a different line.
 
--- A hex digit: 0-9 as `0`-`9`, 10-15 as `a`-`f`.
+# A hex digit: 0-9 as `0`-`9`, 10-15 as `a`-`f`.
 def hexv : i32 => i32 =
   thunkv fun (n : i32) ->
     case (unbang host[lt_u32]) (n, i32[10]) {

@@ -1,0 +1,40 @@
+-- check: old-backend-refuses
+-- SPEC §27, `κ`'s cancel at its operation's cancel row alone (`cancelTy F = F_F 1`): a stored-`κ`
+-- scheduler (handler 3) parks a task at `3.0`. The task first reads input (`9.0`, I/O, capturable
+-- and cancellable) and its cleanup writes (`8.0`, must-resume). The scheduler then waits on I/O
+-- (`9.0 (inr ())`) with the parked task's cancel as the wait's finaliser; the I/O handler times
+-- the wait out (cancels its `κ`), which cancels the parked task, whose cleanup performs `8.0` at
+-- handler 8.
+--   IO = 9.0 cancel[8.0 lin 1 ~> 1] 1 + 1 ~> i32      W = 8.0 lin 1 ~> 1
+-- The parked `κ`'s cancel is at `F[W] 1`, the cancel row of `3.0`, not `F[W, IO, W] 1`: so the
+-- cancel row of `9.0` need not hold `9.0` itself.
+-- Answer: inr (), the cleanup ran, and `live 0`.
+
+main : F ((i32 + 1) + 1) =
+  handle_with[8](
+      ((!thunkv fun (v : i32 + 1) -> return (inl v)) : !U (i32 + 1 -o F ((i32 + 1) + 1))),
+      (((!thunkv fun (p : 1 * U ((1 -o F ((i32 + 1) + 1)) & top)) ->
+          let (u, k) = p; r <- (force k).1 u; case r { inl a -> return (inr ()) | inr b -> return (inr b) }), ())
+        : !U (1 * U ((1 -o F ((i32 + 1) + 1)) & top) -o F ((i32 + 1) + 1)) * 1)) (
+    handle_with[9](
+        ((!thunkv fun (v : i32 + 1) -> return v) : !U (i32 + 1 -o F[8.0 lin 1 ~> 1] (i32 + 1))),
+        (((!thunkv fun (p : (1 + 1) * U ((i32 -o F[8.0 lin 1 ~> 1] (i32 + 1)) & F[8.0 lin 1 ~> 1] 1)) ->
+            let (a, k) = p;
+            case a {
+              inl r -> let () = r; x <- return i32[10]; (force k).1 x
+            | inr t -> let () = t; c <- (force k).2; let () = c; return (inr ())
+            }), ())
+          : !U ((1 + 1) * U ((i32 -o F[8.0 lin 1 ~> 1] (i32 + 1)) & F[8.0 lin 1 ~> 1] 1) -o F[8.0 lin 1 ~> 1] (i32 + 1)) * 1)) (
+      g <- handle_with[3](
+          ((!thunkv fun (v : 1) -> return (thunkv fun (z : 1) -> return z))
+            : !U (1 -o F[9.0 cancel[8.0 lin 1 ~> 1] 1 + 1 ~> i32, 8.0 lin 1 ~> 1] (U (1 -o F[8.0 lin 1 ~> 1] 1)))),
+          (((!thunkv fun (p : 1 * U ((1 -o F[9.0 cancel[8.0 lin 1 ~> 1] 1 + 1 ~> i32, 8.0 lin 1 ~> 1] (U (1 -o F[8.0 lin 1 ~> 1] 1))) & F[8.0 lin 1 ~> 1] 1)) ->
+              let (u, k) = p; let () = u;
+              return (thunkv fun (z : 1) -> let () = z; c <- (force k).2; return c)), ())
+            : !U (1 * U ((1 -o F[9.0 cancel[8.0 lin 1 ~> 1] 1 + 1 ~> i32, 8.0 lin 1 ~> 1] (U (1 -o F[8.0 lin 1 ~> 1] 1))) & F[8.0 lin 1 ~> 1] 1)
+                -o F[9.0 cancel[8.0 lin 1 ~> 1] 1 + 1 ~> i32, 8.0 lin 1 ~> 1] (U (1 -o F[8.0 lin 1 ~> 1] 1))) * 1)) (
+        y <- (x <- perform[9.0] (inl ()); let _ = x; perform[3.0] ()) unwind (perform[8.0] ());
+        return y);
+      v <- perform[9.0] (inr ()) unwind (u <- return (); force g u);
+      u2 <- return (); d <- force g u2; let () = d;
+      return (inl v)))

@@ -1,4 +1,5 @@
--- [spec §80] An unrelated type-changing owner must not widen a local's fixed payload class.
+#! dialect 82
+# [spec §80] An unrelated type-changing owner must not widen a local's fixed payload class.
 main : F ((i32 * i32) * i64) =
   c <- return (alloc[i32] i32[0]);
   p <- return (swap[i32, i64] c i64[9]);

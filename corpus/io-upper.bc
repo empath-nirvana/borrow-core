@@ -1,8 +1,9 @@
--- An uppercase filter (SPEC §11): `a`-`z` become `A`-`Z`, every other byte passes through. The
--- test is one unsigned comparison, `b - 97 < 26`.
---
--- Answer: the input upper-cased. The bytes around the range (`` ` `` is 96, `{` is 123, `@` is
--- 64, `[` is 91) stay as they are; an off-by-one bound would change one of them.
+#! dialect 82
+# An uppercase filter (SPEC §11): `a`-`z` become `A`-`Z`, every other byte passes through. The
+# test is one unsigned comparison, `b - 97 < 26`.
+#
+# Answer: the input upper-cased. The bytes around the range (`` ` `` is 96, `{` is 123, `@` is
+# 64, `[` is 91) stay as they are; an off-by-one bound would change one of them.
 
 def upper : i32 => i32 =
   thunkv fun (b : i32) ->

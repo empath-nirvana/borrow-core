@@ -1,17 +1,18 @@
--- A source closed early (SPEC §11, §7): the input as the library's stream `bytes stdin`, an
--- iterator that owns the input capability. Five bytes are taken from it by a bounded loop, then
--- it is closed early, and its `close` hands the capability back; the program then reads on from
--- where the iterator stopped, with a `for` over a new stream. (A file source would be the same
--- program over a file's `input`; files are not externs yet, so the source is standard input.)
---
--- Answer: `hello | , world` for `hello, world`: the five bytes through the first stream, then
--- the rest through the capability it returned. A capability not handed back could not read the
--- rest; a byte lost at the close would consume the comma.
+#! dialect 82
+# A source closed early (SPEC §11, §7): the input as the library's stream `bytes stdin`, an
+# iterator that owns the input capability. Five bytes are taken from it by a bounded loop, then
+# it is closed early, and its `close` hands the capability back; the program then reads on from
+# where the iterator stopped, with a `for` over a new stream. (A file source would be the same
+# program over a file's `input`; files are not externs yet, so the source is standard input.)
+#
+# Answer: `hello | , world` for `hello, world`: the five bytes through the first stream, then
+# the rest through the capability it returned. A capability not handed back could not read the
+# rest; a byte lost at the close would consume the comma.
 
 type It = U (iter u8 In In)
 
--- Taking up to `k` bytes: (output, (the stream, or the capability once it has finished, k)).
--- At `k = 0` the stream is closed early.
+# Taking up to `k` bytes: (output, (the stream, or the capability once it has finished, k)).
+# At `k = 0` the stream is closed early.
 type T = Out * ((It + In) * i32)
 
 def take_step : !(T => T) =

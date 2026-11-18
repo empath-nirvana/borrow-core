@@ -1,13 +1,14 @@
--- A finite iterator (SPEC §7): `range 1 5` as `iter i32 i32 1`, built by `unfold` from the
--- state (i, n). `next` yields i and continues at (i + 1, n) while i <= n, and otherwise finishes
--- with the result i; `close` has nothing to free. `pull` is one step of a sum: it adds the
--- element to the accumulator and keeps the rest, or records the sum and the finishing result.
--- Six pulls are five elements and the finish.
---
--- Answer: (i32[15], i32[6]): 1 + 2 + 3 + 4 + 5 and the result `next` finishes with. An iterator
--- that yields one element too many (1..6) is unfinished after six pulls and gives
--- (i32[21], i32[4294967295]); one that stops one early (1..4) gives (i32[10], i32[5]); a state
--- not advanced gives (i32[6], i32[4294967295]).
+#! dialect 82
+# A finite iterator (SPEC §7): `range 1 5` as `iter i32 i32 1`, built by `unfold` from the
+# state (i, n). `next` yields i and continues at (i + 1, n) while i <= n, and otherwise finishes
+# with the result i; `close` has nothing to free. `pull` is one step of a sum: it adds the
+# element to the accumulator and keeps the rest, or records the sum and the finishing result.
+# Six pulls are five elements and the finish.
+#
+# Answer: (i32[15], i32[6]): 1 + 2 + 3 + 4 + 5 and the result `next` finishes with. An iterator
+# that yields one element too many (1..6) is unfinished after six pulls and gives
+# (i32[21], i32[4294967295]); one that stops one early (1..4) gives (i32[10], i32[5]); a state
+# not advanced gives (i32[6], i32[4294967295]).
 
 type It = U (iter i32 i32 1)
 type Pull = i32 * It + i32 * i32
@@ -29,7 +30,7 @@ def range : i32 * i32 => It =
     f <- return (unbang (unfold[iter i32 i32 1, i32 * i32] range_step));
     return (thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >)
 
--- One pull: `inl (sum, rest)` while the iterator runs, `inr (sum, result)` once it finishes.
+# One pull: `inl (sum, rest)` while the iterator runs, `inr (sum, result)` once it finishes.
 def pull : Pull => Pull =
   thunkv fun (st : Pull) ->
     case st {

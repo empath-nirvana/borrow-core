@@ -1,9 +1,10 @@
--- [spec §80] An unwinding local: the scope divides by a variable and aborts on zero. The local
--- starts at 10 and is bumped to 11; `100 / d` is then added to it, or, at `d = 0`, the scope aborts
--- with the value it read. The unwind frees the local (its finaliser) and the handler answers the
--- error.
---
--- Answer: (inl (i32[36], i32[25]), inr i32[10]), and `live 0` on both paths.
+#! dialect 82
+# [spec §80] An unwinding local: the scope divides by a variable and aborts on zero. The local
+# starts at 10 and is bumped to 11; `100 / d` is then added to it, or, at `d = 0`, the scope aborts
+# with the value it read. The unwind frees the local (its finaliser) and the handler answers the
+# error.
+#
+# Answer: (inl (i32[36], i32[25]), inr i32[10]), and `live 0` on both paths.
 
 def scaled : i32 => (i32 * i32) + i32 =
   thunkv fun (d : i32) ->

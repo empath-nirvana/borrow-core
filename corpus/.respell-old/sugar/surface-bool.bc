@@ -1,0 +1,14 @@
+-- `bool` and the prelude (typed elaboration §5.4, §5.9). `bool` is `1 + 1` with `inr ()` true;
+-- `true`, `false` and `not` are the prelude's, named here by `include prelude` (the prelude is in
+-- scope without it too). `&&` and `||` do not evaluate their right operand when the left decides;
+-- `if` is a `case` with `inr ()` the true arm, and `else if` nests. `surface-bool.core.bc` is the
+-- program written by hand in core.
+-- Answer: (i32[1], inr ()).
+include prelude
+
+fn between(x: i32, lo: i32, hi: i32) -> bool = lo <= x && x < hi
+
+main -> i32 * bool =
+  let b = between(5, 1, 10) || false;
+  let n = if not(b) { 0 } else if b { 1 } else { 2 };
+  (n, true)

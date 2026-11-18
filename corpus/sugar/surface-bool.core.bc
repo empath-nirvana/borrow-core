@@ -1,5 +1,6 @@
--- `surface-bool.bc` written by hand in core: the prelude's declarations, `&&` and `||` as `case`s,
--- and each `if` a `case` whose `inr` arm is the true one.
+#! dialect 82
+# `surface-bool.bc` written by hand in core: the prelude's declarations, `&&` and `||` as `case`s,
+# and each `if` a `case` whose `inr` arm is the true one.
 def true : 1 + 1 = inr ()
 
 def false : 1 + 1 = inl ()

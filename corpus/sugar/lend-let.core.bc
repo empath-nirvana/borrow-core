@@ -1,6 +1,7 @@
--- `lend-let.bc` in core, as `bcc desugar` prints it: `let tb = &t` over the rest of `main`, lent
--- per observation. The loop's state holds the iterator, `t` and `acc`; each step borrows `t` around
--- its body, and `get` is applied to the step's lifetime.
+#! dialect 82
+# `lend-let.bc` in core, as `bcc desugar` prints it: `let tb = &t` over the rest of `main`, lent
+# per observation. The loop's state holds the iterator, `t` and `acc`; each step borrows `t` around
+# its body, and `get` is applied to the step's lifetime.
 
 def get : !(all 'a < top. imm 'a array i32 * i32 => i32) =
   !thunkv Fun 'a < top.

@@ -1,10 +1,11 @@
--- A borrow block over a loop (SPEC §14, borrow scopes over loops): the table's cell `t` is
--- borrowed around code before a `for`, the `for`, and code after it, each of which reads it. The
--- block is lent per observation: the stretch before the loop, each step of the loop, and the
--- stretch after it each borrow `t` for themselves, and the loop threads `t` in its state.
--- `lend-block.core.bc` is its elaboration in core, as `bcc desugar` prints it.
--- Answer: i32[134]: the entries at 4, 3, 2, 1 of 10 * i sum to 100, the first entry read before
--- the loop is 10 (added once per step, 40), and the entry read after it is 0 less 6.
+#! dialect 82
+# A borrow block over a loop (SPEC §14, borrow scopes over loops): the table's cell `t` is
+# borrowed around code before a `for`, the `for`, and code after it, each of which reads it. The
+# block is lent per observation: the stretch before the loop, each step of the loop, and the
+# stretch after it each borrow `t` for themselves, and the loop threads `t` in its state.
+# `lend-block.core.bc` is its elaboration in core, as `bcc desugar` prints it.
+# Answer: i32[134]: the entries at 4, 3, 2, 1 of 10 * i sum to 100, the first entry read before
+# the loop is 10 (added once per step, 40), and the entry read after it is 0 less 6.
 
 def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
   !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
@@ -14,7 +15,7 @@ def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
 
 def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return ((unbang host[mul32]) (i, i32[10]))
 
--- The numbers from `n` down to 1.
+# The numbers from `n` down to 1.
 def down : i32 => U (iter i32 1 1) =
   thunkv fun (n : i32) ->
     f <- return (unbang (unfold[iter i32 1 1, i32] (!thunkv fun (k : i32) ->
@@ -25,12 +26,13 @@ def down : i32 => U (iter i32 1 1) =
         return () >)));
     return (thunkv nu_in < (nu_out (force f n)).1, (nu_out (force f n)).2 >)
 
-main -> i32 =
-  let t = alloc(array_new[i32] (10, tab));
+fn main() : i32 {
+  let t = alloc(array_new[i32] (10, tab))
   let n = borrow imm t { b ->
-    let first = get(b, 1);
-    let mut acc = 0;
-    for i in down(4) { acc = acc + first + get(b, i) };
+    let first = get(b, 1)
+    var acc = 0
+    for i in down(4) { acc = acc + first + get(b, i) }
     acc - 6 + get(b, 0)
-  };
+  }
   n
+}
