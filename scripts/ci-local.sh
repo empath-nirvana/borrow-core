@@ -33,7 +33,8 @@
 # axioms of the theorems SPEC.md names (listed in `scripts/axioms/*.names`, read by
 # `scripts/AxiomCheck.lean`); the typing-judgment freeze, the hypothesis register (`assumptions`:
 # every hypothesis a theorem takes is listed in Core/Assumptions.lean) and the new backend's import
-# fence; that every type comparison goes through the one `[α]` helper (`type equality`); that the
+# fence; that the result cache misses on a change to each kind of input (`result cache`,
+# scripts/check-gate-cache.sh); that every type comparison goes through the one `[α]` helper (`type equality`); that the
 # corpus parses and checks, and elaborates the same under a renaming of its binders (`renaming`);
 # and that every corpus program, compiled to WebAssembly
 # by each backend, prints its golden output with `live 0`: by Backend2, the default

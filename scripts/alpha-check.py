@@ -239,7 +239,7 @@ def main():
                 for d in diffs:
                     print("  " + d.replace("\n", "\n  "))
             else:
-                units.pass_(keys[f])
+                units.pass_(f, keys[f])
     shutil.rmtree(tmp, ignore_errors=True)
     units.done()
     print(f"alpha-check: {len(files)} program(s), {bad} difference(s)")

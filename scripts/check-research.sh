@@ -6,8 +6,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 # One unit of the result cache (scripts/gate_cache.py `step`): a recorded pass is replayed when
-# the Lean sources, Lake's configuration, scripts/ and the tools are as they were.
-[ "${GATE_CACHE_INNER:-}" = research ] || exec python3 scripts/gate_cache.py step research lean -- scripts/check-research.sh "$@"
+# the Lean sources, Lake's configuration, scripts/, the tools and research/tree/ are as they were.
+[ "${GATE_CACHE_INNER:-}" = research ] || exec python3 scripts/gate_cache.py step research lean --files research/tree -- scripts/check-research.sh "$@"
 body() { sed '1,/^import Lean$/d' "$1"; }
 if ! diff <(body scripts/AxiomCheck.lean) <(body research/tree/AxiomCheck.lean) >/dev/null; then
   echo "check-research: research/tree/AxiomCheck.lean is not scripts/AxiomCheck.lean below its imports"; exit 1

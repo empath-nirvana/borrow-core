@@ -85,6 +85,14 @@ def walk(d, prune=(".git", ".lake", "__pycache__")):
     return sorted(out)
 
 
+def forget():
+    """Drop every file hash and listing read so far, to compute a key again."""
+    global _tables, _keylines
+    _hashes.clear()
+    _listings.clear()
+    _tables = _keylines = None
+
+
 def files_lines(tag, paths):
     return [f"{tag} {p} {sha_file(os.path.join(ROOT, p))}" for p in paths]
 
@@ -94,7 +102,7 @@ def tools_line():
     env = os.environ.get("GATE_CACHE_TOOLS")
     if env:
         return env
-    parts = [" ".join(os.uname()[i] for i in (0, 4)), "python " + sys.version.split()[0]]
+    parts = [" ".join(os.uname()[i] for i in (0, 2, 4)), "python " + sys.version.split()[0]]
 
     def out(cmd):
         try:
@@ -110,6 +118,9 @@ def tools_line():
     parts.append(f"cc {cc}")
     if cc.startswith("0 "):
         parts.append(f"cc-version {out(cc[2:].split() + ['--version'])}")
+    if shutil.which("xcrun"):
+        for a in (["--show-sdk-path"], ["--show-sdk-version"], ["ld", "-v"], ["-f", "nm"]):
+            parts.append(f"xcrun {' '.join(a)} {out(['xcrun'] + a)}")
     return " | ".join(parts).replace("\n", " ")
 
 
@@ -119,7 +130,7 @@ ENV_SKIP = {"CI_LOCAL_BUILT", "CI_LOCAL_BASE"}
 def env_lines():
     out = []
     for k in sorted(os.environ):
-        if (re.match(r"^(BC_|BCC_|CI_LOCAL_)", k) and k not in ENV_SKIP) or k == "source_digest":
+        if (re.match(r"^(BC_|BCC_|CI_LOCAL_|LC_)", k) and k not in ENV_SKIP) or k in ("source_digest", "LANG"):
             out.append(f"env {k}={os.environ[k]}")
     return out
 
@@ -150,6 +161,9 @@ def binaries(extra=()):
     return out
 
 
+NAMED = re.compile(r'"((?:corpus|lib|book|docs|scripts|research)/[^"{}\s]+)"')
+
+
 def class_lines(cls, extra=()):
     lines = []
     if "bcc" in cls.split(","):
@@ -165,6 +179,13 @@ def class_lines(cls, extra=()):
     if "lean" in cls.split(","):
         lean = [p for p in walk(".") if p.endswith(".lean")]
         lines += files_lines("lean", lean)
+        # A file of the repository a Lean source names in a string (read at elaboration time, as
+        # `bcc_program% "corpus/…"` in Frontend/Check/CrossCheck.lean): Lake does not trace it.
+        named = set()
+        for p in lean:
+            with open(os.path.join(ROOT, p), encoding="utf-8", errors="surrogateescape") as fh:
+                named.update(NAMED.findall(fh.read()))
+        lines += files_lines("named", sorted(f for f in named if os.path.isfile(os.path.join(ROOT, f))))
         lines += files_lines("config", ["lakefile.toml", "lake-manifest.json", "lean-toolchain"])
     return lines
 
@@ -355,6 +376,10 @@ def par_start(d, fn):
         return
     mode = os.environ.get("PAR_CACHE_DEPS", "corpus")
     step = spec.split()[0]
+    tools = tools_line()
+    with open(os.path.join(d, "tools"), "w") as fh:
+        fh.write(tools)
+    os.environ["GATE_CACHE_TOOLS"] = tools
     base = base_lines(spec, "bcc") + [f"fn {fn}", f"deps {mode}"]
     keys = []
     for i, a in jobs:
@@ -396,9 +421,10 @@ def append_tree(src, dst):
 
 
 def par_finish(d, fn):
-    """Store each miss that passed (and did not mark itself `nostore`); append each job's side
-    files to $PAR_COLLECT in job order; print each job's output in order; exit with the number of
-    jobs that failed (at most 255 are told apart, as the caller reads only zero or not)."""
+    """Store each miss that passed, did not mark itself `nostore` and whose key, computed again
+    now, is the one it ran under (no input changed while it ran); append each job's side files to
+    $PAR_COLLECT in job order; print each job's output in order; write the number of jobs that
+    failed to DIR/failed."""
     with open(os.path.join(d, "jobs"), encoding="utf-8", errors="surrogateescape") as fh:
         ws = fh.read().split("\n")
     n = len(ws) // 2
@@ -412,6 +438,13 @@ def par_finish(d, fn):
     spec = os.environ.get("PAR_CACHE", "")
     step = spec.split()[0] if spec else ""
     collect = os.environ.get("PAR_COLLECT", "")
+    base = None
+    if keys and enabled():
+        try:
+            os.environ.setdefault("GATE_CACHE_TOOLS", open(os.path.join(d, "tools")).read())
+        except OSError:
+            pass
+    args = {ws[k]: ws[k + 1] for k in range(0, 2 * n - 1, 2)}
     failed = replayed = ran = 0
     out = sys.stdout.buffer
     for j in range(1, n + 1):
@@ -429,7 +462,11 @@ def par_finish(d, fn):
             else:
                 ran += 1
                 if rc == "0" and i in keys and not os.path.exists(os.path.join(d, f"{i}.nostore")):
-                    put(step, keys[i], o, side)
+                    mode = os.environ.get("PAR_CACHE_DEPS", "corpus")
+                    if base is None:
+                        base = base_lines(spec, "bcc") + [f"fn {fn}", f"deps {mode}"]
+                    if digest(base + unit_deps(mode, args[i])) == keys[i]:
+                        put(step, keys[i], o, side)
         if collect and os.path.isdir(side):
             append_tree(side, collect)
         try:
@@ -502,7 +539,9 @@ def step(argv):
             rc = p.wait()
         stat(0, 1)
         if rc == 0 and not os.path.exists(env["GATE_CACHE_NOSTORE"]):
-            put(sid, key, log)
+            forget()
+            if step_args(argv)[1] == key:
+                put(sid, key, log)
         return rc
     finally:
         shutil.rmtree(t, ignore_errors=True)
@@ -526,9 +565,11 @@ class Units:
     def __init__(self, spec, mode="corpus", cls="bcc", bins=()):
         self.on = enabled()
         self.step = spec.split()[0]
+        self.args = (spec, cls, bins, mode)
         self.base = base_lines(spec, cls, bins) + [f"deps {mode}"] if self.on else []
         self.mode = mode
         self.replayed = self.ran = 0
+        self.passed = []
 
     def key(self, arg):
         return digest(self.base + unit_deps(self.mode, arg)) if self.on else None
@@ -536,21 +577,31 @@ class Units:
     def hit(self, key):
         return self.on and key is not None and os.path.isdir(entry(self.step, key))
 
-    def pass_(self, key, text=""):
-        if not self.on or key is None:
-            return
-        t = tempfile.mkdtemp(prefix="gate-cache-")
-        try:
-            o = os.path.join(t, "out")
-            with open(o, "w") as fh:
-                fh.write(text)
-            put(self.step, key, o)
-        finally:
-            shutil.rmtree(t, ignore_errors=True)
+    def pass_(self, arg, key, text=""):
+        if self.on and key is not None:
+            self.passed.append((arg, key, text))
 
     def done(self):
-        if self.on:
-            stat(self.replayed, self.ran)
+        """Record the passes whose key, computed again now, is the one they ran under."""
+        if not self.on:
+            return
+        stat(self.replayed, self.ran)
+        if not self.passed:
+            return
+        forget()
+        spec, cls, bins, mode = self.args
+        base = base_lines(spec, cls, bins) + [f"deps {mode}"]
+        t = tempfile.mkdtemp(prefix="gate-cache-")
+        try:
+            for arg, key, text in self.passed:
+                if digest(base + unit_deps(mode, arg)) != key:
+                    continue
+                o = os.path.join(t, "out")
+                with open(o, "w") as fh:
+                    fh.write(text)
+                put(self.step, key, o)
+        finally:
+            shutil.rmtree(t, ignore_errors=True)
 
 
 def main():

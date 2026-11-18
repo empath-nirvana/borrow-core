@@ -103,6 +103,20 @@ PR is `make gate` (`scripts/ci-local.sh`), a sanity check. Run it before opening
 and paste its final summary into the PR body. Never report a PR as passing without it.
 `make gate-full` (`scripts/ci-local.sh --full`) runs every check.
 
+The gate caches results (`scripts/gate_cache.py`). Each unit of work a step has (one program in
+one step, or a whole step that is not per program) is keyed on a sha256 of everything it reads:
+`bcc`, `bcc-counts` and the `lib/` they read, or every `.lean` file and Lake's configuration; every
+file under `scripts/` and the Makefile; the tools' versions (wasmtime, the C compiler and SDK,
+Python, the OS); the `BC_*`, `BCC_*`, `CI_LOCAL_*` and locale variables; the step's mode; and the
+unit's own files (the program with its sidecars, goldens, reports and table rows). A unit whose key
+has a recorded pass in `${GATE_CACHE_DIR:-~/repos/.gate-cache}` (shared by every worktree) is
+replayed, output and side files as the run gave them, instead of run. A failure is never recorded,
+nor a unit that runs the source interpreter or writes a key, nor any unit of a writing mode or of
+`--source`. Compile scaling (it measures time) and the grep-level steps always run.
+`--no-cache` (with any mode; or `GATE_CACHE=0`; `make gate-full-nocache`) runs every unit and
+reads and writes no cache. The summary line counts the units replayed and run.
+`scripts/check-gate-cache.sh`, a gate step, shows that a change to each kind of input misses.
+
 Goldens are the oracle. Every corpus program has a `<name>.out` and every book `bc` block an
 `-- answer:`: the output of `Support`'s interpreter (`bcc interp`), the reference semantics.
 `make gate` checks the build, hygiene, axioms, the judgment freeze, the Backend2 fence, that every

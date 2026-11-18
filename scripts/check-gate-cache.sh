@@ -13,8 +13,8 @@
 # Each change is undone after its run, and the next run replays again. A unit that fails (its
 # golden changed so that it differs) runs, fails, and fails again on the next run: no failure is
 # recorded. A whole step's key (`gate_cache.py step-key`) changes with a `.lean` file, a new
-# `.lean` file, the lakefile, the manifest and the toolchain, and with a file it names. The tree's
-# own files are only read.
+# `.lean` file, the lakefile, the manifest and the toolchain, and with a file it names; a unit
+# whose input changes while it runs is not recorded. The tree's own files are only read.
 #
 #     scripts/check-gate-cache.sh
 set -euo pipefail
@@ -139,6 +139,14 @@ lean "lake-manifest.json" eval 'echo " " >> "$w/lake-manifest.json"'; undo
 lean "lean-toolchain" eval 'echo " " >> "$w/lean-toolchain"'; undo
 lean "a file it names" eval 'echo "# x" >> "$w/corpus/kernel-counts.expected"'; undo
 [ "$(key)" = "$k0" ] || { echo "check-gate-cache: a whole step's key differs after every change is undone"; bad=1; }
+
+# A unit whose input changes while it runs is not recorded: a step that appends to a file its key
+# names runs again on the next run.
+: > "$w/corpus/probe.txt"
+probe() { : > "$t/stats"; (cd "$w" && GATE_CACHE_STATS=$t/stats python3 scripts/gate_cache.py step probe bcc --files corpus/probe.txt -- sh -c 'echo x >> corpus/probe.txt') > /dev/null; awk '{ r += $1; n += $2 } END { print r + 0, n + 0 }' "$t/stats"; }
+probe > /dev/null
+if [ "$(probe)" = "0 1" ]; then echo "check-gate-cache: a unit whose input changes while it runs: run again"
+else echo "check-gate-cache: a unit whose input changes while it runs was recorded"; bad=1; fi
 
 [ "$bad" = 0 ] && echo "check-gate-cache: every change of an input misses, and no failure is recorded"
 exit "$bad"
