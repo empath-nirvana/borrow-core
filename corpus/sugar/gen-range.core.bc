@@ -1,4 +1,5 @@
--- The elaboration of `gen-range.bc` in core, as `bcc desugar` prints it.
+#! dialect 82
+# The elaboration of `gen-range.bc` in core, as `bcc desugar` prints it.
 
 def range__n1__g0 : !(i32 * i32 * i32 => U (nu X. F[1.0 cancel i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 cancel i32 * i32 ~> i32] 1)) =
   !thunkv fun (fx_pp1 : i32 * i32 * i32) ->

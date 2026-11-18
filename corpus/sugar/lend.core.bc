@@ -1,5 +1,6 @@
--- `lend.bc` with `&mut stdout` written out: the call takes the capability, and the pair it answers
--- rebinds it.
+#! dialect 82
+# `lend.bc` with `&mut stdout` written out: the call takes the capability, and the pair it answers
+# rebinds it.
 extern stdout : ref output
 extern write_byte : !(all 'a < top. mut 'a output * u8 => mut 'a output)
 

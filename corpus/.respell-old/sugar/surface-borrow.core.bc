@@ -1,0 +1,32 @@
+-- `surface-borrow.bc` written by hand in core: `withbor1`, `withbor2`, `withbor_f2_mut` and
+-- `withswap` with every type argument, each callback's tail boxed, each place rebound.
+def peek : !(all 'a < top. imm 'a i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (b : imm 'a i32) ->
+    return (withload['a, 'y, i32, i32] b (thunkv Fun 'y < dom. return (thunkv fun (v : i32) ->
+      return (boxed['y] v)))))
+
+main : F (i32 * i32) =
+  r <- return (alloc[i32] i32[41]);
+  q1 <- return (withbor1['x, i32, i32] r (thunkv Fun 'x < dom. return (thunkv fun (b : imm 'x i32) ->
+          k <- return ((unbang peek) ['x] b);
+          return (boxed['x] k))));
+  let (r, n) = q1;
+  q2 <- return (withbor2['y, top, i32, 1] r (thunkv Fun 'y < dom. return (thunkv fun (m : mut 'y i32) ->
+          w <- return (withswap['y, i32, 1] m (thunkv fun (v : i32) ->
+                 return ((unbang host[add32]) (v, n), ())));
+          let (m, u) = w;
+          return (boxed['y] u))));
+  let (r, d1) = q2;
+  s <- return (alloc[i32] i32[1]);
+  q3 <- return (withbor_f2_mut['c, 'ca, 'cb, top, i32, i32, 1] (r, s)
+          (thunkv Fun 'c < dom. return (thunkv fun (pq : mut 'c i32 * mut 'c i32) ->
+            let (p, q) = pq;
+            w1 <- return (withswap['c, i32, 1] p (thunkv fun (a : i32) ->
+                    w2 <- return (withswap['c, i32, i32] q (thunkv fun (b : i32) -> return (a, b)));
+                    let (q, b) = w2;
+                    return (b, ())));
+            let (p, u) = w1;
+            return (boxed['c] u))));
+  let (rs, d3) = q3;
+  let (r, s) = rs;
+  return (free[i32] r, free[i32] s)

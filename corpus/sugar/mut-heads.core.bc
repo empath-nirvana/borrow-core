@@ -1,5 +1,6 @@
--- `mut-heads.bc` as its elaboration reads, written by hand in core: each head's arms hand on
--- `(value, W)`, and the binding takes the pair apart.
+#! dialect 82
+# `mut-heads.bc` as its elaboration reads, written by hand in core: each head's arms hand on
+# `(value, W)`, and the binding takes the pair apart.
 main : F i32 =
   x <- return i32[1];
   y <- return i32[1];

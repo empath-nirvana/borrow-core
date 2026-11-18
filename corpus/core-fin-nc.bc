@@ -1,15 +1,16 @@
--- check: old-backend-refuses
--- SPEC §27 in the core text, the twin of Core's `progNC₁T` (`EffCancelTyped.lean`, `[cfin-cancel]`):
--- `hnd 4o (hnd 1 {perform k => cancel k} ((perform 1) then x. x unwind perform 4))`. Handler 1
--- cancels `κ`; the cancel runs the finaliser, which performs the capturable `4.0`; the live outer
--- handler 4 cancels the finaliser's continuation in turn. `[then]` is at `Σ_M = [1.0]` with `1.0`'s
--- own (empty) cancel row, `Σ_D = [4.0]`, the site's `1.0 cancel[4.0 cancel 1 ~> 1] 1 ~> 1` above
--- it: `F ⋈ Σ_D ≤ F'` with `F = []`, so `4.0` need not hold itself. On Backend2 the cancel is a
--- machine suspended in the finaliser; handler 4's cancel of it cancels the finaliser first, then
--- reaches the cancel's `cfin` frame, which keeps the earlier error and goes on through the rest of
--- the region.
---
--- Answer: (), and `live 0`.
+#! dialect 82
+# check: old-backend-refuses
+# SPEC §27 in the core text, the twin of Core's `progNC₁T` (`EffCancelTyped.lean`, `[cfin-cancel]`):
+# `hnd 4o (hnd 1 {perform k => cancel k} ((perform 1) then x. x unwind perform 4))`. Handler 1
+# cancels `κ`; the cancel runs the finaliser, which performs the capturable `4.0`; the live outer
+# handler 4 cancels the finaliser's continuation in turn. `[then]` is at `Σ_M = [1.0]` with `1.0`'s
+# own (empty) cancel row, `Σ_D = [4.0]`, the site's `1.0 cancel[4.0 cancel 1 ~> 1] 1 ~> 1` above
+# it: `F ⋈ Σ_D ≤ F'` with `F = []`, so `4.0` need not hold itself. On Backend2 the cancel is a
+# machine suspended in the finaliser; handler 4's cancel of it cancels the finaliser first, then
+# reaches the cancel's `cfin` frame, which keeps the earlier error and goes on through the rest of
+# the region.
+#
+# Answer: (), and `live 0`.
 
 main : F 1 =
   handle_with[4](

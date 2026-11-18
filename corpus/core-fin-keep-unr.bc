@@ -1,13 +1,14 @@
--- check: old-backend-refuses
--- SPEC §27 in the core text, the twin of Core's `progKeepT` (`EffCancelTyped.lean`) with the
--- kernel's unrestricted `4.0` (`4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1`): handler 1 cancels `κ`; the
--- inner finaliser raises `2.0`, which is kept; the outer finaliser performs `4.0` with the error
--- pending. Handler 4 resumes its continuation (out of its `!` box) outside tail position: the
--- cancel goes on and re-raises the kept `2.0` at the canceller, which passes handler 4 and is
--- caught by handler 2. `core-fin-keep` is the must-resume form.
---
--- Answer: inr (), and `live 0`. A wrong implementation that loses the kept error across the
--- suspension answers `inl ()`.
+#! dialect 82
+# check: old-backend-refuses
+# SPEC §27 in the core text, the twin of Core's `progKeepT` (`EffCancelTyped.lean`) with the
+# kernel's unrestricted `4.0` (`4.0 unr[2.0 cancel 1 ~> 0] 1 ~> 1`): handler 1 cancels `κ`; the
+# inner finaliser raises `2.0`, which is kept; the outer finaliser performs `4.0` with the error
+# pending. Handler 4 resumes its continuation (out of its `!` box) outside tail position: the
+# cancel goes on and re-raises the kept `2.0` at the canceller, which passes handler 4 and is
+# caught by handler 2. `core-fin-keep` is the must-resume form.
+#
+# Answer: inr (), and `live 0`. A wrong implementation that loses the kept error across the
+# suspension answers `inl ()`.
 
 main : F (1 + 1) =
   handle_with[2](

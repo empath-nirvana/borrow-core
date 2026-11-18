@@ -1,0 +1,7 @@
+-- A counted loop with an accumulator. `mut-for-acc.core.bc` is its elaboration, written by hand, a
+-- `count_fold` whose state is the accumulator alone.
+-- Answer: i32[10].
+main -> i32 =
+  let mut acc = 0;
+  for i in 0..5 { acc = acc + i };
+  acc

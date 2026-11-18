@@ -1,0 +1,20 @@
+-- `let mut` and `&mut` of a value (typed elaboration §5.1, §5.2). `n` and `k` are assigned in the
+-- arms of an `if`, which hands both on (the join); `bump(&mut n)` borrows the value `n` in a cell
+-- scoped to the call, and hands the new value back to `n`. `surface-mut.core.bc` is the program
+-- written by hand in core.
+-- Answer: (i32[11], i32[1]): 5 * 2, bumped, and the arm taken.
+
+-- One more in a `mut` borrow.
+def bump : !(all 'a < top. mut 'a i32 => 1) =
+  !thunkv Fun 'a < top. return (thunkv fun (m : mut 'a i32) ->
+    w <- return (withswap['a, i32, 1] m (thunkv fun (v : i32) ->
+      return ((unbang host[add32]) (v, i32[1]), ())));
+    let (m2, u) = w;
+    return u)
+
+main -> i32 * i32 =
+  let mut n = 5;
+  let mut k = 0;
+  if n > 3 { n = n * 2; k = 1 } else { k = 2 };
+  bump(&mut n);
+  (n, k)

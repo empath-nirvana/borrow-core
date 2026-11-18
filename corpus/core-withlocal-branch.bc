@@ -1,4 +1,5 @@
--- [spec §80] A local remains a frame slot across a branch; both arms update the same cell.
+#! dialect 82
+# [spec §80] A local remains a frame slot across a branch; both arms update the same cell.
 main : F (i32 * i32) =
   q <- return (withlocal['l, top, i32, i32] i32[0]
     (thunkv Fun 'l < dom. return (thunkv fun (m : mut 'l i32) ->

@@ -1,0 +1,52 @@
+-- A finite iterator (SPEC §7): `range 1 5` as `iter i32 i32 1`, built by `unfold` from the
+-- state (i, n). `next` yields i and continues at (i + 1, n) while i <= n, and otherwise finishes
+-- with the result i; `close` has nothing to free. `pull` is one step of a sum: it adds the
+-- element to the accumulator and keeps the rest, or records the sum and the finishing result.
+-- Six pulls are five elements and the finish.
+--
+-- Answer: (i32[15], i32[6]): 1 + 2 + 3 + 4 + 5 and the result `next` finishes with. An iterator
+-- that yields one element too many (1..6) is unfinished after six pulls and gives
+-- (i32[21], i32[4294967295]); one that stops one early (1..4) gives (i32[10], i32[5]); a state
+-- not advanced gives (i32[6], i32[4294967295]).
+
+type It = U (iter i32 i32 1)
+type Pull = i32 * It + i32 * i32
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def range_step : !U (i32 * i32 -o F (i32 * (i32 * i32) + i32) & F 1) =
+  !thunkv fun (s : i32 * i32) ->
+    < let (i, n) = s;
+      case (unbang host[gt_s32]) (i, n) {
+        inl u -> return (inl (i, (plus (i, i32[1]), n)))
+      | inr u -> return (inr i)
+      },
+      let (i, n) = s;
+      return () >
+
+def range : i32 * i32 => It =
+  thunkv fun (s : i32 * i32) ->
+    f <- return (unbang (unfold[iter i32 i32 1, i32 * i32] range_step));
+    return (thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >)
+
+-- One pull: `inl (sum, rest)` while the iterator runs, `inr (sum, result)` once it finishes.
+def pull : Pull => Pull =
+  thunkv fun (st : Pull) ->
+    case st {
+      inl a ->
+        let (acc, it) = a;
+        o <- (nu_out (force it)).1;
+        case o {
+          inl p -> let (x, rest) = p; return (inl (plus (acc, x), rest))
+        | inr r -> return (inr (acc, r))
+        }
+    | inr d -> return (inr d)
+    }
+
+main : F (i32 * i32) =
+  it <- return (range (i32[1], i32[5]));
+  st <- return (pull (pull (pull (pull (pull (pull (inl (i32[0], it) : Pull)))))));
+  case st {
+    inl a -> let (acc, rest) = a; return (acc, i32[4294967295])
+  | inr d -> return d
+  }

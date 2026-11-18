@@ -1,9 +1,10 @@
--- A negative length (SPEC §9): `array_new` at i32[0xFFFFFFFF], which is -1 as a signed
--- integer, makes the empty array rather than 4294967295 cells. `array_size` reads the length,
--- and index 0 is out of range. The tabulator is never called.
---
--- Answer: (i32[0], inr i32[5]). A length read as unsigned would try to allocate 2^32 - 1 cells;
--- a bounds check that lets index 0 through gives `inl`.
+#! dialect 82
+# A negative length (SPEC §9): `array_new` at i32[0xFFFFFFFF], which is -1 as a signed
+# integer, makes the empty array rather than 4294967295 cells. `array_size` reads the length,
+# and index 0 is out of range. The tabulator is never called.
+#
+# Answer: (i32[0], inr i32[5]). A length read as unsigned would try to allocate 2^32 - 1 cells;
+# a bounds check that lets index 0 through gives `inl`.
 
 type A = array i32
 

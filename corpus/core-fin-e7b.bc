@@ -1,12 +1,13 @@
--- SPEC §27 in the core text, the twin of the kernel program `e7b` (`bcc kernel interp e7b`, E7b):
--- `timeout` (handler 2) cancels a body suspended at `2.0`, whose finaliser raises `1.0` to
--- `to_result` (handler 1) outside the `timeout`. The finaliser performs, so the `[then]` is at its own
--- row `[1.0]`, and the cancel row of `2.0` holds `1.0`: `κ`'s cancel branch is at
--- `F[1.0 …] 1` (`cancelTy`, the cancel row alone). The error raised
--- during the cancel is kept and re-raised at the canceller, where handler 1 catches it.
---
--- Answer: inr (), and `live 0`. A wrong implementation that skips the finaliser on a cancel, or
--- drops the error it raises, answers `inl (inr ())` (the `timeout`'s own answer).
+#! dialect 82
+# SPEC §27 in the core text, the twin of the kernel program `e7b` (`bcc kernel interp e7b`, E7b):
+# `timeout` (handler 2) cancels a body suspended at `2.0`, whose finaliser raises `1.0` to
+# `to_result` (handler 1) outside the `timeout`. The finaliser performs, so the `[then]` is at its own
+# row `[1.0]`, and the cancel row of `2.0` holds `1.0`: `κ`'s cancel branch is at
+# `F[1.0 …] 1` (`cancelTy`, the cancel row alone). The error raised
+# during the cancel is kept and re-raised at the canceller, where handler 1 catches it.
+#
+# Answer: inr (), and `live 0`. A wrong implementation that skips the finaliser on a cancel, or
+# drops the error it raises, answers `inl (inr ())` (the `timeout`'s own answer).
 
 main : F ((1 + 1) + 1) =
   handle_with[1](

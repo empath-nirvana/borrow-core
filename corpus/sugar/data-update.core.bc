@@ -1,8 +1,9 @@
--- `data-update.bc` written by hand in core, by SPEC §42's rules: `p.x = p.x + p.v` of a `let mut`
--- record is its body run in place, the record taken apart and rebuilt (E6, SPEC §41's rule for a
--- `let mut` value); `let y = p.x;` of a persistent record its projection (E5); through the `mut`
--- borrow of a cell, the update is `withswap` around the same body, and `let r = q.x;` a `withswap`
--- that hands back the record and the field, the borrow rebound.
+#! dialect 82
+# `data-update.bc` written by hand in core, by SPEC §42's rules: `p.x = p.x + p.v` of a `let mut`
+# record is its body run in place, the record taken apart and rebuilt (E6, SPEC §41's rule for a
+# `let mut` value); `let y = p.x;` of a persistent record its projection (E5); through the `mut`
+# borrow of a cell, the update is `withswap` around the same body, and `let r = q.x;` a `withswap`
+# that hands back the record and the field, the borrow rebound.
 type P = i32 * i32
 
 main : F i32 =

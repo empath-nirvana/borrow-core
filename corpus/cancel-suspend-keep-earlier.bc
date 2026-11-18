@@ -1,14 +1,15 @@
--- check: old-backend-refuses
--- SPEC §27 in the core text: a suspended cancel cancelled in turn while an earlier error is kept
--- (`[cfin-cancel]`, `err.or err'`). Handler 1 cancels `κ`: the inner finaliser raises `2.0`, which
--- is kept; the outer finaliser performs the unrestricted `4.0` with `2.0` pending. Handler 4
--- cancels that finaliser's continuation, whose own finaliser raises `3.0`. The earlier `2.0` is
--- kept, `3.0` abandoned, and `2.0` is re-raised at handler 4's cancel and caught by handler 2. The
--- cancel row of `4.0` is `[3.0, 2.0]` and that of `1.0` `[2.0, 4.0, 3.0]`, so the kept error moves
--- between payloads of a different order.
---
--- Answer: inl (inr ()), and `live 0`: handler 2's answer. A wrong implementation that keeps the
--- later error answers `inr ()`.
+#! dialect 82
+# check: old-backend-refuses
+# SPEC §27 in the core text: a suspended cancel cancelled in turn while an earlier error is kept
+# (`[cfin-cancel]`, `err.or err'`). Handler 1 cancels `κ`: the inner finaliser raises `2.0`, which
+# is kept; the outer finaliser performs the unrestricted `4.0` with `2.0` pending. Handler 4
+# cancels that finaliser's continuation, whose own finaliser raises `3.0`. The earlier `2.0` is
+# kept, `3.0` abandoned, and `2.0` is re-raised at handler 4's cancel and caught by handler 2. The
+# cancel row of `4.0` is `[3.0, 2.0]` and that of `1.0` `[2.0, 4.0, 3.0]`, so the kept error moves
+# between payloads of a different order.
+#
+# Answer: inl (inr ()), and `live 0`: handler 2's answer. A wrong implementation that keeps the
+# later error answers `inr ()`.
 
 main : F (((1 + 1) + 1) + 1) =
   handle_with[3](

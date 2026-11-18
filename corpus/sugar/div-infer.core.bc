@@ -1,7 +1,8 @@
--- `div-infer.bc` in core (SPEC §14), as `bcc desugar` prints it: `two_lines` and `main` have
--- their loop types, and each is one state machine (SPEC §15). A direct-style call of a div
--- function is a state holding the callee's loop with what the rest uses; each observation
--- observes the callee once, a skip until it finishes, then runs the rest up to the next state.
+#! dialect 82
+# `div-infer.bc` in core (SPEC §14), as `bcc desugar` prints it: `two_lines` and `main` have
+# their loop types, and each is one state machine (SPEC §15). A direct-style call of a div
+# function is a state holding the callee's loop with what the rest uses; each observation
+# observes the callee once, a skip until it finishes, then runs the rest up to the next state.
 
 extern stdin : ref input
 

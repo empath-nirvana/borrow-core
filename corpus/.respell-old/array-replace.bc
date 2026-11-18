@@ -1,0 +1,38 @@
+-- `array_replace` (SPEC §9) on an owned array, then through a `mut` borrow. Index 2 of
+-- [0, 10, 20, 30] is replaced by 42 and then read back by replacing it again; index 4 is out of
+-- range, so the new element comes back on the error branch. The array is then put in a cell
+-- and lent `mut` by `withbor2`: `withswap` takes the array out of the cell, `array_replace`
+-- sets index 0 to 99, and the array goes back. Freeing the cell returns the array, whose index
+-- 0 is read back.
+--
+-- Answer: (inl i32[20], (inl i32[42], (inr i32[5], (inl i32[0], inl i32[99])))). An index off
+-- by one gives 10 or 30 in the first component; a replace that does not store gives 20 back in
+-- the second and 0 in the last; a bounds check that accepts 4 gives `inl`.
+
+type A = array i32
+type O = i32 + i32
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return ((unbang host[mul32]) (i, i32[10]))
+
+def replace : A * (i32 * i32) => A * O = unbang array_replace[i32]
+
+main : F (O * (O * (O * (O * O)))) =
+  a <- return ((unbang array_new[i32]) (i32[4], tab));
+  q1 <- return (replace (a, (i32[2], i32[42])));
+  let (a1, old) = q1;
+  q2 <- return (replace (a1, (i32[2], i32[7])));
+  let (a2, back) = q2;
+  q3 <- return (replace (a2, (i32[4], i32[5])));
+  let (a3, oob) = q3;
+  r <- return (alloc[A] a3);
+  q4 <- return (withbor2['x, top, A, O] r
+         (thunkv Fun 'x < top. return (thunkv fun (m : mut 'x A) ->
+            s <- return (withswap['x, A, O] m
+                   (thunkv fun (arr : A) -> return (replace (arr, (i32[0], i32[99])))));
+            let (m2, o) = s;
+            return (boxed['x] o))));
+  let (r2, first) = q4;
+  a4 <- return (free[A] r2);
+  q5 <- return (replace (a4, (i32[0], i32[1])));
+  let (a5, now) = q5;
+  return (old, (back, (oob, (first, now))))

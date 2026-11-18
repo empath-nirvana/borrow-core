@@ -8,7 +8,7 @@
 #   * a program: `bcc erase` of the two (the de Bruijn erasure of the checked `main`) is
 #     byte-identical, so the two have the same core term and the same golden;
 #   * a refusal (a reject, fail or pending file, or any file whose check fails): both fail, with
-#     the same message after its `file:line:col:` (the position may move with the spelling);
+#     the same message up to positions (`msg`: the positions move with the spelling);
 #   * a file with no `main` (a library module): `bcc print` of the two (the declarations read, as
 #     core text, with no positions) is byte-identical; its terms are compared again in every
 #     program that imports it.
@@ -31,8 +31,15 @@ twin() { case "$1" in corpus/*) echo "corpus/.respell-old/${1#corpus/}" ;; lib/*
 spelt() { local r=${1#corpus/.respell-old/}; case "$r" in lib/*) echo "$r" ;; *) echo "corpus/$r" ;; esac; }
 isNew() { [ "$(head -n 1 "$1")" = "$pragma" ]; }
 export -f twin spelt isNew
-# The message of a refusal, without the file and position it is reported at.
-msg() { sed -E '1s/^[^:]*:[0-9]+:[0-9]+: //; 1s/^[^:]*: no `main`$/no `main`/'; }
+# The message of a refusal, without the file and position it is reported at, with every position
+# it quotes blanked (the respelling moves lines, by the pragma line, and columns, by braces added
+# round an arm) and every lifetime name blanked (a mode drops a written lifetime, and the parser
+# names it `'io_lf<n>`: answers B5). With `new`, the line in a generated name `io_l<k><L>_<n>` is
+# mapped back by the pragma line.
+msg() {
+  sed -E '1s/^[^:]*:[0-9]+:[0-9]+: //; 1s/^[^:]*: no `main`$/no `main`/' | perl -pe "s/\\b\\d+:\\d+\\b/L:C/g; s/'[a-z][A-Za-z0-9_]*/'_/g" |
+    if [ "${1:-}" = new ]; then perl -pe 's/\b(io_l[a-z]+)(\d+)_/$1.($2-1)."_"/ge'; else cat; fi
+}
 export -f msg
 # A pair: the file in the new spelling and its twin (under `set -e`, as check-sugar.sh's pairs).
 pair() {
@@ -51,7 +58,7 @@ pair() {
     echo "$f: one of the pair checks and the other does not:"
     sed 's/^/  /' "$tmp/oe" "$tmp/ne"; return 1
   fi
-  msg < "$tmp/oe" > "$tmp/om"; msg < "$tmp/ne" > "$tmp/nm"
+  msg < "$tmp/oe" > "$tmp/om"; msg new < "$tmp/ne" > "$tmp/nm"
   if ! cmp -s "$tmp/om" "$tmp/nm"; then
     echo "$f: refused differently from $old:"; echo "  old: $(cat "$tmp/oe")"; echo "  new: $(cat "$tmp/ne")"; return 1
   fi
