@@ -448,10 +448,12 @@ _put_failed = 0
 
 # How a tool says the machine or the process ran out of file handles: ENFILE (the system's vnode or
 # file table: "Too many open files in system"; Lean's "resource exhausted (error code: 4294967273,
-# file table overflow)") and EMFILE ("Too many open files"). Output that says so is the machine's
+# file table overflow)") and EMFILE ("Too many open files"); and perl that cannot open its own
+# modules ("Can't locate strict.pm in @INC", which is how slot fails when it cannot open
+# anything). Output that says so is the machine's
 # failure, never a result: it is never recorded, and the gate names the step (scripts/exhausted.sh,
 # scripts/ci-local.sh).
-EXHAUSTED = re.compile(rb"too many open files|file table overflow", re.I)
+EXHAUSTED = re.compile(rb"too many open files|file table overflow|can't locate [a-z/]+\.pm in @inc", re.I)
 
 
 def exhausted(data):

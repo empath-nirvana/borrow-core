@@ -264,15 +264,21 @@ echo "ci-local plan: build $planBuild; steps: ${planSteps:-none}"
 # each subprocess of the Python pools and `gate-census` take their slots there; the serial steps
 # below take one; the build and the compile-time guard take the whole CPU pool. `SLOT_OFF=1`
 # turns it off.
-# The pool is on when scripts/slot answers; otherwise SLOT_OFF=1 for every step (scripts/par.sh
-# and scripts/slotpool.py decide the same way when run alone).
+# The pool is off with SLOT_OFF=1 or without perl, for every step. With perl, a pool that does not
+# answer (`slot -s`: under ENFILE perl cannot even load its modules) stops the gate in one line
+# (exit 75 when the machine ran out of file handles), as scripts/par.sh and scripts/slotpool.py
+# stop their calls: it never runs unbounded.
+. scripts/exhausted.sh
 pool=""
 if [ "${SLOT_OFF:-}" = 1 ]; then echo "ci-local: job pool off (SLOT_OFF=1)"
+elif ! command -v perl >/dev/null; then export SLOT_OFF=1; echo "ci-local: job pool off (no perl)"
 elif size=$(scripts/slot -s 2>&1); then
   read -r poolN poolM poolL <<< "$size"; pool=scripts/slot
   echo "ci-local: job pool on ($poolN CPU slots, $poolM GB, $poolL library tokens, shared by every gate on the machine)"
 else
-  export SLOT_OFF=1; echo "ci-local: job pool off (scripts/slot -s: ${size:-no answer})"
+  echo "ci-local: the job pool does not answer (scripts/slot -s: $(printf '%s' "$size" | head -1)): the gate does not start"
+  if exhausted <(printf '%s\n' "$size"); then exit 75; fi
+  exit 1
 fi
 # slotted CPU MEM [-l LEAN] CMD…: CMD in the pool, or CMD itself when the pool is off. A process
 # that maps the library's .olean files (a building `lake build`, gate-census) takes a library token
@@ -296,9 +302,8 @@ build() {
 }
 # The machine's file handles (scripts/exhausted.sh): a gate does not start while the vnode table is
 # full, which would fail its steps here and there with ENFILE; it waits a bounded time, or fails in
-# one line.
-. scripts/exhausted.sh
-vnode_preflight || exit 1
+# one line with exit status 75 (no verdict on the tree).
+vnode_preflight || exit 75
 if [ "$tiered" = 1 ] && [ "$tierBuild" = none ]; then echo "==> build: none (no step of this tier reads the build)"
 elif [ "$tiered" = 1 ] && [ "$tierBuild" = bins ]; then step "build (bcc, bcc-counts)" build bcc bcc-counts gate-census
 elif [ "$all" = 1 ]; then step "build" build
@@ -387,4 +392,7 @@ if [ "$fail" -eq 0 ]; then echo "$tag: ALL PASSED ($((SECONDS - start))s; $cache
 if [ -n "$tierLine" ]; then echo "$tierLine"; echo "($tierLeft)"
 elif [ "$full" = 0 ]; then echo "(the sanity gate: \`make gate-full\` runs every check; \`make verify-goldens\` re-verifies every golden)"; fi
 [ -z "$reach" ] || echo "($reach changed: \`make gate-full\` is required as well)"
+# Exit status 75 (EX_TEMPFAIL): the machine ran out of file handles, so the run is no verdict on
+# the tree (scripts/gate-daily.sh records it like a timeout, and gates the commit again).
+[ ${#exhaustedSteps[@]} -eq 0 ] || exit 75
 exit "$fail"

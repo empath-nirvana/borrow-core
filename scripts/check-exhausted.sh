@@ -62,6 +62,16 @@ if printf '%s\n' "$out" | grep -q '^failed 1$' && printf '%s\n' "$out" > "$t/log
   ok "a par job out of descriptors fails and says so"
 else no "a par job out of descriptors: $out"; fi
 
+# A pool that does not answer (`slot -s` failing: under ENFILE perl cannot load its modules) makes a
+# par call fail and say so, never run its jobs outside the pool.
+mkdir -p "$t/home"; cp scripts/par.sh scripts/gate_cache.py scripts/par_unit.py "$t/home/"
+printf '#!/bin/sh\necho "Can'"'"'t locate strict.pm in @INC (simulated)" >&2\nexit 2\n' > "$t/home/slot"; chmod +x "$t/home/slot"
+out=$(GATE_CACHE=0 bash -c '. "$1/par.sh"; f() { echo ran; }; export -f f; par f one; echo "failed $par_failed"' _ "$t/home" 2>&1)
+printf '%s\n' "$out" > "$t/log"
+if printf '%s\n' "$out" | grep -q '^failed 1$' && ! printf '%s\n' "$out" | grep -q '^ran$' && exhausted "$t/log"; then
+  ok "a pool that does not answer: the par call fails and says so ($(head -1 "$t/log"))"
+else no "a pool that does not answer: $out"; fi
+
 # The vnode preflight, on synthetic samples.
 export GATE_VNODE_STEP=0 GATE_VNODE_POLL=1
 GATE_VNODE_SAMPLE="echo 100 263168 0" vnode_preflight > "$t/out" && [ ! -s "$t/out" ] &&
@@ -114,7 +124,7 @@ srun() { GATE_CACHE_DIR=$t/store GATE_CACHE_STATS=$t/stats python3 scripts/gate_
   no "cache: exhausted whole step: $(cat "$t/stats" | tr '\n' ' ')"
 # No golden says those words (else a passing unit that prints its program's output would never
 # be recorded, and a gate would name the step as out of handles).
-if g=$(grep -rlIiE 'too many open files|file table overflow' corpus book/src lib 2>/dev/null) && [ -n "$g" ]; then
+if g=$(grep -rlIiE "too many open files|file table overflow|can't locate [a-z/]+\.pm in @inc" corpus book/src lib 2>/dev/null) && [ -n "$g" ]; then
   no "a golden holds the out-of-handles words: $g"
 else ok "no golden output holds the out-of-handles words"; fi
 
