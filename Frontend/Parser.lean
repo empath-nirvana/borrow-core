@@ -4130,7 +4130,7 @@ where
     -- In the new spelling a parameter has a mode (§82 P1–P5), whose fresh lifetimes join the
     -- written ones.
     let (ps, lives) ← if (← get).nd then do
-        let mps ← if ← isSym ")" then pure [] else modeParams n
+        let mps ← if ← isSym ")" then pure [] else modeParams n 0
         pure (mps.map (fun (x, A, _) => (x, A)), placeFresh lives₀ (mps.map (·.2.2)))
       else do
         let ps ← if ← isSym ")" then pure [] else params n
@@ -4285,11 +4285,13 @@ where
   /-- `x₁: m₁ A₁, …` in a `fn` header of the new spelling, at least one, each with a mode
   (§82 P1–P5, *Modes*): `inout T` is `mut 'f T` (`array_mut 'f A` for `array A`); a bare `T` that
   is not by value (`byValue`) and is not written as a borrow is `imm 'f T` (`array_imm 'f A`);
-  `sink T` and every other bare `T` are as written. `'f` is a fresh lifetime. Each with the
-  lifetimes its type writes and its fresh one, for `placeFresh`.  `[spec §82]` -/
-  modeParams : Nat → P (List (Ident × VTy × Option Ident × List String))
-    | 0 => outOfFuel
-    | m + 1 => do
+  `sink T` and every other bare `T` are as written. `'f` is a fresh lifetime, `'io_lfK` for the
+  header's `K`-th (`k` the next): numbered per header, so headers written alike declare alike
+  (the members of a recursive group take the same lifetime parameters). Each with the lifetimes
+  its type writes and its fresh one, for `placeFresh`.  `[spec §82]` -/
+  modeParams : Nat → Nat → P (List (Ident × VTy × Option Ident × List String))
+    | 0, _ => outOfFuel
+    | m + 1, k => do
       let x ← ident "a parameter name"
       expectSym ":"
       let mode : Nat ← if ← isKw "inout" then do discard bump; pure 1
@@ -4308,7 +4310,7 @@ where
         | _ => false
       let lend (mutable : Bool) : P (VTy × Option Ident) := do
         let sp := A.span
-        let f : Ident := ⟨← freshName "io_lf", sp⟩
+        let f : Ident := ⟨s!"io_lf{k}", sp⟩
         let l : Life := .var sp f.name
         pure (match A with
           | .array asp E => if mutable then .arrayMut asp l E else .arrayImm asp l E
@@ -4320,7 +4322,7 @@ where
       let p := (x, A, f, ls)
       if ← isSym "," then
         discard bump
-        return p :: (← modeParams m)
+        return p :: (← modeParams m (if f.isSome then k + 1 else k))
       pure [p]
   /-- The parameter tuple's type (`1` with no parameters). -/
   tupleTy (sp : Span) : List VTy → VTy

@@ -152,8 +152,14 @@ theorem nd_handle : sameProgram "main -> i32 = with n = h(1) { ap(2, { y -> y })
 -- lifetimes are named as the parser names them); `&x` is today's `&mut x`.
 theorem nd_modes : sameProgram
     ("fn f<'io_lf0>(l: array_imm 'io_lf0 i32) -> i32 = 0\n" ++
-     "fn g<'io_lf1>(m: array_mut 'io_lf1 i32) -> i32 = 0\nmain -> i32 = modify &mut a { v -> v }")
+     "fn g<'io_lf0>(m: array_mut 'io_lf0 i32) -> i32 = 0\nmain -> i32 = modify &mut a { v -> v }")
     "fn f(l: array i32) : i32 = 0\nfn g(m: inout array i32) : i32 = 0\nfn main() : i32 = modify &a { v -> v }"
+    = true ∧
+    -- Fresh lifetimes are numbered per header: headers written alike declare alike.
+    sameProgram
+    ("fn h<'io_lf0, 'io_lf1>(a: array_imm 'io_lf0 i32, b: array_mut 'io_lf1 i32) -> i32 = 0\n" ++
+     "fn k<'io_lf0>(a: array_imm 'io_lf0 i32) -> i32 = 0")
+    "fn h(a: array i32, b: inout array i32) : i32 = 0\nfn k(a: array i32) : i32 = 0"
     = true := by decide +kernel
 
 -- Hazards of the layout rule: a line that starts with `&` begins a statement, a line-leading `|`
