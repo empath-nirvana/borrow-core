@@ -14678,8 +14678,8 @@ new-spelling text only their comments change. The core values and builtins insid
   `if` or a `for`), with `with` or `finally` (after `handle`), with `unwind (D)` (after a `let`'s
   right side), with `.` (a `.1`, `.2` or `.f` suffix of the line before), or with `}`. A line
   starting with `&` begins a new statement;
-- a juxtaposed application (`f x`) and a `[…]` instantiation stop at a newline, and a handler's `[…]`/`(…)` after `with h` and a constructor's `(…)` or `{ f: … }`
-  start on the name's line;
+- a juxtaposed application (`f x`) and a `[…]` instantiation stop at a newline, and a handler's
+  `[…]`/`(…)` after `with h` and a constructor's `(…)` or `{ f: … }` start on the name's line;
 - `break` and `return` at the end of a line take no value;
 - a line holding only a loop label joins the next line;
 - a `|` at the start of a line, after a newline, is one arm separator;
