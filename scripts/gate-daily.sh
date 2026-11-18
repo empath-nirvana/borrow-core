@@ -26,6 +26,11 @@
 #      scripts/gate_cache.py knows that mode (run every unit, record the passes, so current main
 #      warms the machine-wide cache), else `GATE_CACHE=0`; the mode and the reason for it are
 #      printed, written at the top of the log and named in the board note.
+#   5b. After a passing gate run with GATE_CACHE=record, also records the corpus at the final
+#      target (`make gate-warm-final`: compile-backend2.sh and compile-corpus.sh `--final`, the
+#      units the per-PR gate's compiler and scripts tiers run on every program, which the full gate
+#      does not run), through gate-serial in the same checkout (about 420 CPU-s; its log is
+#      appended to the gate's). A failure there makes the verdict FAIL, named "warm --final".
 #   6. Writes the log ($out/<date>-<commit>.log; kept whatever the verdict) and one line in
 #      $out/verdicts.tsv: date, commit, verdict (PASS, FAIL or TIMEOUT), failing steps, wall
 #      seconds, CPU seconds, log. The verdict is the gate's own exit status (and its `ALL PASSED`
@@ -39,7 +44,8 @@
 #
 # Environment (defaults in brackets): GATE_DAILY_DIR [~/repos/borrow-core-daily],
 # GATE_DAILY_OUT [~/repos/scratch-archive/gate30/daily], GATE_DAILY_LAKE_FROM [this checkout],
-# GATE_DAILY_LIMIT [4h], GATE_DAILY_UNIT [gate30], GATE_DAILY_CMD [the gate-serial command; a
+# GATE_DAILY_LIMIT [4h], GATE_DAILY_UNIT [gate30], GATE_DAILY_WARM_CMD [the gate-serial command
+# of step 5b; a command line run by `bash -c` in the daily checkout], GATE_DAILY_CMD [the gate-serial command; a
 # command line run by `bash -c` in the daily checkout, for tests: e.g. a stub printing a gate's
 # summary], GATE_DAILY_BOARD [~/repos/scratch-archive/board/board; the command posting the note],
 # GATE_DAILY_SAMPLER [~/repos/scratch-archive/gate30/tools/gate-measure.sh; ignored if absent].
@@ -86,6 +92,7 @@ unit=${GATE_DAILY_UNIT:-gate30}
 board=${GATE_DAILY_BOARD:-$HOME/repos/scratch-archive/board/board}
 sampler=${GATE_DAILY_SAMPLER:-$HOME/repos/scratch-archive/gate30/tools/gate-measure.sh}
 gatecmd=${GATE_DAILY_CMD:-$HOME/repos/scripts-local/gate-serial.sh gate-full}
+warmcmd=${GATE_DAILY_WARM_CMD:-$HOME/repos/scripts-local/gate-serial.sh gate-warm-final}
 verdicts=$out/verdicts.tsv
 lock=$out/.lock
 
@@ -183,6 +190,18 @@ rm -f "$stem.rc"
 wall=$(( $(date +%s) - started ))
 cpu=$(awk '/^(user|sys) / { s += $2 } END { printf "%.0f", s }' "$stem.time" 2>/dev/null)
 rm -f "$stem.time"
+# 5b. The corpus at the final target, recorded for the per-PR gate (only after a passing record run).
+warmrc=""
+if [ "$mode" = record ] && [ "$grc" = 0 ] && grep -q 'ALL PASSED' "$log" &&
+    grep -q '^gate-warm-final:' "$dir/Makefile" 2>/dev/null; then
+  {
+    echo
+    echo "gate-daily: recording the corpus at the final target: $warmcmd"
+    (cd "$dir" && timeout --kill-after=120 "$limit" caffeinate -i bash -c "$warmcmd")
+  } >> "$log" 2>&1
+  warmrc=$?
+  echo "gate-daily: warm --final exited $warmrc" >> "$log"
+fi
 mfile=$out/measure/daily-$(basename "$stem").txt
 [ ! -f "$mfile" ] || { echo; echo "gate-daily: the sampler's record ($mfile):"; cat "$mfile"; } >> "$log"
 
@@ -190,6 +209,8 @@ mfile=$out/measure/daily-$(basename "$stem").txt
 steps=$(sed -n 's/^    FAILED: \(.*\) ([0-9?]*s)$/\1/p' "$log" | paste -sd ',' - | sed 's/,/, /g')
 if [ "$rc" = 124 ] || [ "$rc" = 137 ]; then verdict=TIMEOUT; steps=${steps:-"none failed before the limit"}
 elif [ -z "$grc" ]; then verdict=FAIL; steps=${steps:-"the gate's exit status was not recorded; the wrappers exited $rc (see the log)"}
+elif [ "$grc" = 0 ] && grep -q 'ALL PASSED' "$log" && [ "${warmrc:-0}" != 0 ]; then
+  verdict=FAIL; steps="warm --final (the gate passed; recording the corpus at the final target exited $warmrc)"
 elif [ "$grc" = 0 ] && grep -q 'ALL PASSED' "$log"; then verdict=PASS
 else verdict=FAIL; steps=${steps:-"no step failed; the gate exited $grc (see the log)"}
 fi
