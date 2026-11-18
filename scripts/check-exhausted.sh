@@ -20,6 +20,14 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 . scripts/exhausted.sh
+# ci-local reads every step's output for the out-of-handles words (scripts/exhausted.sh), so this
+# step, which handles them, never prints them: everything it prints passes through `mask`, and the
+# last check runs it again and requires its output to hold none of them.
+mask() { perl -pe 's/too many open files|file table overflow|can.t locate \S+\.pm in \@inc/<out-of-handles words>/gi'; }
+if [ -z "${CHECK_EXHAUSTED_MASKED:-}" ]; then
+  CHECK_EXHAUSTED_MASKED=1 "$0" "$@" 2>&1 | mask
+  exit "${PIPESTATUS[0]}"
+fi
 t=$(mktemp -d)
 trap 'rm -rf "$t"' EXIT
 bad=0
@@ -127,6 +135,13 @@ srun() { GATE_CACHE_DIR=$t/store GATE_CACHE_STATS=$t/stats python3 scripts/gate_
 if g=$(grep -rlIiE "too many open files|file table overflow|can't locate [a-z/]+\.pm in @inc" corpus book/src lib 2>/dev/null) && [ -n "$g" ]; then
   no "a golden holds the out-of-handles words: $g"
 else ok "no golden output holds the out-of-handles words"; fi
+
+# Its own output holds none of the words: ci-local would take this step for one that ran out.
+if [ -z "${CHECK_EXHAUSTED_INNER:-}" ]; then
+  env -u CHECK_EXHAUSTED_MASKED CHECK_EXHAUSTED_INNER=1 scripts/check-exhausted.sh > "$t/self" 2>&1
+  if exhausted "$t/self"; then no "this step's own output holds the out-of-handles words"
+  else ok "this step's own output holds none of the out-of-handles words"; fi
+fi
 
 [ "$bad" = 0 ] && echo "check-exhausted: out-of-handles is said and fails, is never recorded, and the library tokens bound their holders"
 exit "$bad"
