@@ -23,7 +23,7 @@ namespace GateCensus.Axioms
 /-- The libraries whose declarations are checked: the census imports each, and walks every
 module under each. -/
 def imports : Array Name :=
-  #[`Paper, `Support, `Examples, `Core, `Frontend, `Target, `Pipeline, `Reference, `Backend]
+  #[`Paper, `Support, `Examples, `Core, `Frontend, `Target, `Pipeline, `Reference, `Backend, `Backend2]
 
 /-- The constants a declaration's type and value mention. -/
 def uses (ci : ConstantInfo) : Array Name :=
