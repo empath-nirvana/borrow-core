@@ -6378,7 +6378,7 @@ state; its `await` clause reads it.
 ### Not built
 
 The surface `await` and `complete`, `lib/async.bc`'s `cancelled` clause and a suspending scheduler's
-typing, `run_in`, the checker emitting `effAwait` or `effThenDiv`, the nursery over owned or copied request data
+typing, `run_in`, the checker emitting `effAwait` or `effThenF` at its right disjunct (`effThenDiv`), the nursery over owned or copied request data
 (over borrowed data it stays refused after A1: #821 / #844 Tier 2), cancel scopes inside a task, and the lowering of a
 suspending finaliser.
 
