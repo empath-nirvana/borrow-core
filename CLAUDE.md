@@ -114,7 +114,10 @@ replayed, output and side files as the run gave them, instead of run. A failure 
 nor a unit that runs the source interpreter or writes a key, nor any unit of a writing mode or of
 `--source`. Compile scaling (it measures time) and the grep-level steps always run.
 `--no-cache` (with any mode; or `GATE_CACHE=0`; `make gate-full-nocache`) runs every unit and
-reads and writes no cache. The summary line counts the units replayed and run.
+reads and writes no cache; `--record-cache` (`GATE_CACHE=record`; `make gate-full-record`, the
+daily run on main) runs every unit and records its passes. The summary line counts the units
+replayed and run. `scripts/gate_cache.py prune [--days N] [--max-mb M]` trims the store (never
+during a gate).
 `scripts/check-gate-cache.sh`, a gate step, shows that a change to each kind of input misses.
 
 Goldens are the oracle. Every corpus program has a `<name>.out` and every book `bc` block an

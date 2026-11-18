@@ -29,12 +29,14 @@ The store is `${GATE_CACHE_DIR:-$HOME/repos/.gate-cache}/<step>/<key>/`, shared 
 script, scripts/par.sh's `$PAR_SIDE`). Only passes are stored; a unit that marks itself
 (`par_nostore`, or `$GATE_CACHE_NOSTORE` for a whole step) is not, as one that ran the source
 interpreter or wrote a key. An entry is written under a temporary name in the same directory and
-renamed, so a reader sees a whole entry or none. `GATE_CACHE=0` reads and writes nothing.
+renamed, so a reader sees a whole entry or none. `GATE_CACHE=0` reads and writes nothing;
+`GATE_CACHE=record` runs every unit and records its passes (the daily uncached run on main).
 
     gate_cache.py par-start DIR FN       (scripts/par.sh) keys, hits replayed into DIR, misses printed
     gate_cache.py par-finish DIR FN      store the passing misses, collect side files, print in order
     gate_cache.py step ID CLASS [--files F…] -- CMD…   a whole step, run or replayed
     gate_cache.py step-key ID CLASS [--files F…] -- CMD…   the key `step` would use
+    gate_cache.py prune [--days N] [--max-mb M]   remove old entries (never during a gate)
     gate_cache.py tools                  the tools line (ci-local exports it as GATE_CACHE_TOOLS)
 """
 import hashlib, os, re, shutil, subprocess, sys, tempfile
@@ -45,7 +47,13 @@ VERSION = "gate-cache 1"
 
 
 def enabled():
+    """Whether passes are recorded: `GATE_CACHE` is not `0`."""
     return os.environ.get("GATE_CACHE", "1") != "0"
+
+
+def reading():
+    """Whether recorded passes are replayed: `GATE_CACHE` is neither `0` nor `record`."""
+    return os.environ.get("GATE_CACHE", "1") not in ("0", "record")
 
 
 def store_dir():
@@ -102,7 +110,9 @@ def tools_line():
     env = os.environ.get("GATE_CACHE_TOOLS")
     if env:
         return env
-    parts = [" ".join(os.uname()[i] for i in (0, 2, 4)), "python " + sys.version.split()[0]]
+    import resource
+    parts = [" ".join(os.uname()[i] for i in (0, 2, 4)), "python " + sys.version.split()[0],
+             "stack " + " ".join(str(x) for x in resource.getrlimit(resource.RLIMIT_STACK))]
 
     def out(cmd):
         try:
@@ -118,6 +128,8 @@ def tools_line():
     parts.append(f"cc {cc}")
     if cc.startswith("0 "):
         parts.append(f"cc-version {out(cc[2:].split() + ['--version'])}")
+    m = shutil.which("mdbook")
+    parts.append(f"mdbook {m} {out([m, '--version']) if m else '-'}")
     if shutil.which("xcrun"):
         for a in (["--show-sdk-path"], ["--show-sdk-version"], ["ld", "-v"], ["-f", "nm"]):
             parts.append(f"xcrun {' '.join(a)} {out(['xcrun'] + a)}")
@@ -130,7 +142,7 @@ ENV_SKIP = {"CI_LOCAL_BUILT", "CI_LOCAL_BASE"}
 def env_lines():
     out = []
     for k in sorted(os.environ):
-        if (re.match(r"^(BC_|BCC_|CI_LOCAL_|LC_)", k) and k not in ENV_SKIP) or k in ("source_digest", "LANG"):
+        if (re.match(r"^(BC_|BCC_|CI_LOCAL_|LC_)", k) and k not in ENV_SKIP) or k in ("source_digest", "LANG", "DEVELOPER_DIR", "SDKROOT"):
             out.append(f"env {k}={os.environ[k]}")
     return out
 
@@ -386,8 +398,9 @@ def par_start(d, fn):
         k = digest(base + unit_deps(mode, a))
         keys.append(f"{i} {k}")
         e = entry(step, k)
-        if os.path.isdir(e):
+        if reading() and os.path.isdir(e):
             try:
+                os.utime(e)
                 shutil.copyfile(os.path.join(e, "out"), os.path.join(d, f"{i}.out"))
                 if os.path.isdir(os.path.join(e, "side")):
                     shutil.copytree(os.path.join(e, "side"), os.path.join(d, f"{i}.side"), dirs_exist_ok=True)
@@ -520,7 +533,11 @@ def step(argv):
         os.chdir(ROOT)
         os.execvpe(cmd[0], cmd, env)
     e = entry(sid, key)
-    if os.path.isdir(e):
+    if reading() and os.path.isdir(e):
+        try:
+            os.utime(e)
+        except OSError:
+            pass
         with open(os.path.join(e, "out"), "rb") as fh:
             shutil.copyfileobj(fh, sys.stdout.buffer)
         sys.stdout.flush()
@@ -575,7 +592,7 @@ class Units:
         return digest(self.base + unit_deps(self.mode, arg)) if self.on else None
 
     def hit(self, key):
-        return self.on and key is not None and os.path.isdir(entry(self.step, key))
+        return self.on and reading() and key is not None and os.path.isdir(entry(self.step, key))
 
     def pass_(self, arg, key, text=""):
         if self.on and key is not None:
@@ -604,6 +621,53 @@ class Units:
             shutil.rmtree(t, ignore_errors=True)
 
 
+def prune(argv):
+    """`prune [--days N] [--max-mb M]`: remove the entries not used for N days (default 14), then
+    the least recently used until the store holds at most M MiB. An entry's time is its directory's
+    modification time, which a replay renews (`touch`). Never run during a gate."""
+    days, maxmb = 14.0, None
+    k = 0
+    while k < len(argv):
+        if argv[k] == "--days":
+            days = float(argv[k + 1]); k += 2
+        elif argv[k] == "--max-mb":
+            maxmb = float(argv[k + 1]); k += 2
+        else:
+            raise SystemExit("usage: gate_cache.py prune [--days N] [--max-mb M]")
+    import time
+    root = store_dir()
+    entries = []
+    for st in (os.listdir(root) if os.path.isdir(root) else []):
+        sd = os.path.join(root, st)
+        if not os.path.isdir(sd):
+            continue
+        for e in os.listdir(sd):
+            p = os.path.join(sd, e)
+            size = 0
+            for r, _, fs in os.walk(p):
+                for f in fs:
+                    try:
+                        size += os.lstat(os.path.join(r, f)).st_size
+                    except OSError:
+                        pass
+            entries.append((os.stat(p).st_mtime, size, p))
+    now = time.time()
+    removed = freed = 0
+    keep = []
+    for m, size, p in entries:
+        if now - m > days * 86400 or os.path.basename(p).startswith(".tmp."):
+            shutil.rmtree(p, ignore_errors=True); removed += 1; freed += size
+        else:
+            keep.append((m, size, p))
+    total = sum(sz for _, sz, _ in keep)
+    if maxmb is not None:
+        for m, size, p in sorted(keep):
+            if total <= maxmb * 1048576:
+                break
+            shutil.rmtree(p, ignore_errors=True); removed += 1; freed += size; total -= size
+    print(f"gate_cache: removed {removed} entr{'y' if removed == 1 else 'ies'} ({freed / 1048576:.1f} MiB); {total / 1048576:.1f} MiB left in {root}")
+
+
 def main():
     a = sys.argv[1:]
     if not a:
@@ -617,6 +681,8 @@ def main():
         return step(a[1:])
     elif a[0] == "step-key":
         print(step_args(a[1:])[1])
+    elif a[0] == "prune":
+        prune(a[1:])
     elif a[0] == "tools":
         print(tools_line())
     elif a[0] == "key-lines":

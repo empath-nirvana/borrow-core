@@ -12,6 +12,9 @@
 #     … --no-cache                    with any of the above: run every unit, neither reading nor
 #                                     writing the result cache (`make gate-full-nocache`; also
 #                                     `GATE_CACHE=0`)
+#     … --record-cache                with any of the above: run every unit and record its passes,
+#                                     reading none (`make gate-full-record`, the daily run on main;
+#                                     also `GATE_CACHE=record`)
 #
 # The result cache (scripts/gate_cache.py). Every unit of work a step has, one program of one
 # step (each job of scripts/par.sh) or a whole step that is not per program, has a key: a sha256
@@ -79,10 +82,11 @@ cd "$(dirname "$0")/.."
 changed=0
 full=0
 mode=""
-usage() { echo "usage: scripts/ci-local.sh [--full | --source | --changed] [--no-cache]"; exit 2; }
+usage() { echo "usage: scripts/ci-local.sh [--full | --source | --changed] [--no-cache | --record-cache]"; exit 2; }
 for a in "$@"; do
   case "$a" in
     --no-cache) export GATE_CACHE=0 ;;
+    --record-cache) export GATE_CACHE=record ;;
     --changed|--full|--source) [ -z "$mode" ] || usage; mode=$a ;;
     *) usage ;;
   esac
@@ -244,6 +248,7 @@ echo
 tag="ci-local"; [ "$changed" = 1 ] && tag="ci-local --changed"; [ "$full" = 1 ] && tag="ci-local --full"
 [ "${BCC_SOURCE:-}" = 1 ] && [ "$full" = 1 ] && tag="ci-local --source"
 [ "${GATE_CACHE:-1}" = 0 ] && tag="$tag --no-cache"
+[ "${GATE_CACHE:-1}" = record ] && tag="$tag --record-cache"
 if [ "${GATE_CACHE:-1}" = 0 ]; then cache="cache off"
 else cache=$(awk '{ r += $1; n += $2 } END { printf "cache: %d unit(s) replayed, %d run", r, n }' "$GATE_CACHE_STATS"); fi
 if [ "$fail" -eq 0 ]; then echo "$tag: ALL PASSED ($((SECONDS - start))s; $cache)"; else echo "$tag: FAILURES (see above) ($((SECONDS - start))s; $cache)"; fi

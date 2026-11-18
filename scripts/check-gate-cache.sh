@@ -8,7 +8,8 @@
 #   the program's text; each sidecar (`.in`, `.args`, `.out`, `.err`, `.status`, `.key`); the
 #   golden; its row in a corpus table; a library module; a script; the binary (a byte appended to
 #   the copy `bcc` names); a tool's version (a `wasmtime` on PATH that reports another); an
-#   environment variable (`BC_*`, `BCC_*`); and the mode (`--final` dropped).
+#   environment variable (`BC_*`, `BCC_*`); and the mode (`--final` dropped). `GATE_CACHE=record`
+#   runs every unit and records; `GATE_CACHE=0` runs every unit and writes nothing.
 #
 # Each change is undone after its run, and the next run replays again. A unit that fails (its
 # golden changed so that it differs) runs, fails, and fails again on the next run: no failure is
@@ -74,6 +75,17 @@ append() { printf '%s\n' "${APPEND:--- a comment}" >> "$1"; }
 
 expect "first run" 0 2 0 --final
 expect "second run" 2 0 0 --final
+# The switches: GATE_CACHE=record runs every unit and records; GATE_CACHE=0 runs every unit and
+# neither reads nor records (no stats are kept).
+GATE_CACHE=record expect "GATE_CACHE=record" 0 2 0 --final
+rm -rf "$GATE_CACHE_DIR"
+GATE_CACHE=record expect "GATE_CACHE=record, store emptied" 0 2 0 --final
+expect "after GATE_CACHE=record" 2 0 0 --final
+rm -rf "$GATE_CACHE_DIR"
+GATE_CACHE=0 expect "GATE_CACHE=0, store emptied" 0 0 0 --final
+if [ -e "$GATE_CACHE_DIR" ]; then echo "check-gate-cache: GATE_CACHE=0 wrote the store"; bad=1; fi
+expect "after GATE_CACHE=0" 0 2 0 --final
+expect "again" 2 0 0 --final
 cmp -s <(grep -v '^Backend2:' "$t/out") <(GATE_CACHE=0 "$w/scripts/compile-backend2.sh" --final "${files[@]}" 2>&1 | grep -v '^Backend2:') ||
   { echo "check-gate-cache: the replayed output differs from an uncached run"; bad=1; }
 
