@@ -25,8 +25,11 @@ def deps(x, out):
                 if isinstance(e, list) and e and isinstance(e[0], str): out.add(e[0])
         for y in x: deps(y, out)
     return out
-traced = {os.path.relpath(p, os.getcwd()) for p in deps(t.get("inputs", []), set()) if os.path.isabs(p)}
-missing = [f for f in read if f not in traced]
+# Lake records the inputs by absolute path, of the checkout that built the module: a checkout whose
+# .lake was cloned from another (scripts/new-worktree.sh) has that one's paths. A file read counts
+# as traced when a traced path ends in it.
+traced = [p for p in deps(t.get("inputs", []), set()) if os.path.isabs(p)]
+missing = [f for f in read if not any(p.endswith("/" + f) for p in traced)]
 if missing:
     print(f"check-crosscheck-trace: {src} reads {', '.join(missing)}, not in its build trace "
           "(lakefile.toml: the CrossCheck library, after Frontend, with an [[input_file]] for each)")
