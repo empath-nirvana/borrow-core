@@ -225,7 +225,68 @@ theorem allEV {p : Pins} {s : CRow} {t : TExpr} {x : LifeVar} {b a : CLife} {A :
     TTied p s Δ Γ (.allEV i (.val (A.instLife x a)) x b a A t) (.val (A.instLife x a)) :=
   ⟨fun hn Ξ hΞ => .allEV (h.1 hn Ξ hΞ) hlt, .allEV h.2 hlt⟩
 
+/-! ### The same-term rules' former lemmas: `conv` at each step -/
+
+theorem ret {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (h : TTied p s Δ Γ t (.val A)) :
+    TTied p s Δ Γ (.ret i (.comp (.ret A)) A t) (.comp (.ret A)) :=
+  conv i .ret h
+
+theorem bangE {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (h : TTied p s Δ Γ t (.val (.bang A))) :
+    TTied p s Δ Γ (.bangE i (.val A) A t) (.val A) :=
+  conv i .bangE h
+
+theorem boxI {p : Pins} {s : CRow} {t : TExpr} {a : CLife} {A : CVTy} (h : TTied p s Δ Γ t (.val A))
+    (hΓ : CtxOutlives Δ Γ a) : TTied p s Δ Γ (.boxI i (.val (.box a A)) a A t) (.val (.box a A)) :=
+  conv i (.boxI hΓ) h
+
+theorem boxE {p : Pins} {s : CRow} {t : TExpr} {a : CLife} {A : CVTy}
+    (h : TTied p s Δ Γ t (.val (.box a A))) : TTied p s Δ Γ (.boxE i (.val A) a A t) (.val A) :=
+  conv i .boxE h
+
+theorem immSub {p : Pins} {s : CRow} {t : TExpr} {a b : CLife} {A : CVTy}
+    (h : TTied p s Δ Γ t (.val (.imm b A))) (hle : Δ.EntailsLe a b) :
+    TTied p s Δ Γ (.immSub i (.val (.imm a A)) a b A t) (.val (.imm a A)) :=
+  conv i (.immSub hle) h
+
+theorem mutSub {p : Pins} {s : CRow} {t : TExpr} {a b : CLife} {A : CVTy}
+    (h : TTied p s Δ Γ t (.val (.mut b A))) (hle : Δ.EntailsLe a b) :
+    TTied p s Δ Γ (.mutSub i (.val (.mut a A)) a b A t) (.val (.mut a A)) :=
+  conv i (.mutSub hle) h
+
+theorem ofRet {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (h : TTied p s Δ Γ t (.comp (.ret A))) :
+    TTied p s Δ Γ (.ofRet i (.val A) A t) (.val A) :=
+  conv i .ofRet h
+
+theorem roll {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (hA : A.NoMut 0)
+    (hc : (BoCa.Fig16.LogRel.Core.VTy.mu A).Cl 0)
+    (h : TTied p s Δ Γ t (.val (BoCa.Fig16.LogRel.Core.VTy.inst (.mu A) A))) :
+    TTied p s Δ Γ (.roll i (.val (.mu A)) A t) (.val (.mu A)) :=
+  conv i (.roll hA hc) h
+
+theorem unroll {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (h : TTied p s Δ Γ t (.val (.mu A))) :
+    TTied p s Δ Γ (.unroll i (.val (BoCa.Fig16.LogRel.Core.VTy.inst (.mu A) A)) A t)
+      (.val (BoCa.Fig16.LogRel.Core.VTy.inst (.mu A) A)) :=
+  conv i .unroll h
+
+theorem nuIn {p : Pins} {s : CRow} {t : TExpr} {C : CCTy} (hC : C.NuOk)
+    (h : TTied p s Δ Γ t (.comp C.unroll)) : TTied p s Δ Γ (.nuIn i (.comp (.nu C)) 0 0 C t) (.comp (.nu C)) :=
+  conv i (.nuIn (m := 0) (i := 0) hC) h
+
+theorem nuOut {p : Pins} {s : CRow} {t : TExpr} {C : CCTy} (hC : C.NuOk)
+    (h : TTied p s Δ Γ t (.comp (.nu C))) : TTied p s Δ Γ (.nuOut i (.comp C.unroll) 0 0 C t) (.comp C.unroll) :=
+  conv i (.nuOut (m := 0) (i := 0) hC) h
+
+/-- `[α]`: the judgment up to the names of its types' lifetime binders.  `[spec §3]` -/
+theorem alpha {p : Pins} {s : CRow} {t : TExpr} {j j' : Jdg} (hα : j.alphaB j' = true)
+    (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.alpha i j' j j' t) j' :=
+  conv i (.alpha hα) h
+
 /-! ### The effect rules -/
+
+theorem effSub {p : Pins} {s : CRow} {t : TExpr} {S S' : CRow} {A : CVTy}
+    (hle : BoCa.Fig16.LogRel.Core.RowLe S S') (h : TTied p s Δ Γ t (.comp (effOf S A))) :
+    TTied p s Δ Γ (.effSub i (.comp (effOf S' A)) S S' A t) (.comp (effOf S' A)) :=
+  conv i (.effSub hle) h
 
 /-- `[perform]` reads its row. -/
 theorem effPerform {p : Pins} {s : CRow} {t : TExpr} {S : CRow} {o : COpSig}

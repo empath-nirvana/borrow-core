@@ -1477,6 +1477,71 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => isLam_eq t
   | .use _ _ _ _ _ _ t => isLam_eq t
 
+/-! ### The same-term rules' former nodes
+
+Each former same-term rule (now a step of `conv`, `Core/Judgment.lean`) keeps its node's name as an
+abbreviation of the `conv` node at its step, so that statements over the node keep their type. -/
+
+/-- `return`'s node.  `[spec §3]` -/
+@[match_pattern] abbrev TExpr.ret (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr) : TExpr :=
+  .conv info jdg (.val A) (.comp (.ret A)) (.ret A) t
+
+/-- `ofRet`'s node.  `[spec §3]` -/
+@[match_pattern] abbrev TExpr.ofRet (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr) : TExpr :=
+  .conv info jdg (.comp (.ret A)) (.val A) (.ofRet A) t
+
+/-- Dereliction's node.  `[spec §3]` -/
+@[match_pattern] abbrev TExpr.bangE (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr) : TExpr :=
+  .conv info jdg (.val (.bang A)) (.val A) (.bangE A) t
+
+/-- `[]I`'s node.  `[spec §3]` -/
+@[match_pattern] abbrev TExpr.boxI (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
+    (t : TExpr) : TExpr :=
+  .conv info jdg (.val A) (.val (.box a A)) (.boxI a A) t
+
+/-- `[]E`'s node.  `[spec §3]` -/
+@[match_pattern] abbrev TExpr.boxE (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
+    (t : TExpr) : TExpr :=
+  .conv info jdg (.val (.box a A)) (.val A) (.boxE a A) t
+
+/-- `⊑` at `Imm`'s node.  `[spec §3]` -/
+@[match_pattern] abbrev TExpr.immSub (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (b : Lifetime.Life)
+    (A : VTy) (t : TExpr) : TExpr :=
+  .conv info jdg (.val (.imm b A)) (.val (.imm a A)) (.immSub a b A) t
+
+/-- `⊑` at `Mut`'s node.  `[spec §3]` -/
+@[match_pattern] abbrev TExpr.mutSub (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (b : Lifetime.Life)
+    (A : VTy) (t : TExpr) : TExpr :=
+  .conv info jdg (.val (.mut b A)) (.val (.mut a A)) (.mutSub a b A) t
+
+/-- `roll`'s node.  `[spec §6]` -/
+@[match_pattern] abbrev TExpr.roll (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr) : TExpr :=
+  .conv info jdg (.val (VTy.inst (.mu A) A)) (.val (.mu A)) (.roll A) t
+
+/-- `unroll`'s node.  `[spec §6]` -/
+@[match_pattern] abbrev TExpr.unroll (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr) : TExpr :=
+  .conv info jdg (.val (.mu A)) (.val (VTy.inst (.mu A) A)) (.unroll A) t
+
+/-- `nuIn`'s node.  `[spec §7, §79]` -/
+@[match_pattern] abbrev TExpr.nuIn (info : TInfo) (jdg : Jdg) (m : Nat) (i : Nat) (C : CTy)
+    (t : TExpr) : TExpr :=
+  .conv info jdg (.comp (CTy.unrollS m i C)) (.comp (.nuSys m i C)) (.nuIn m i C) t
+
+/-- `nuOut`'s node.  `[spec §7, §79]` -/
+@[match_pattern] abbrev TExpr.nuOut (info : TInfo) (jdg : Jdg) (m : Nat) (i : Nat) (C : CTy)
+    (t : TExpr) : TExpr :=
+  .conv info jdg (.comp (.nuSys m i C)) (.comp (CTy.unrollS m i C)) (.nuOut m i C) t
+
+/-- `[sub]`'s node.  `[spec §19]` -/
+@[match_pattern] abbrev TExpr.effSub (info : TInfo) (jdg : Jdg) (S : Row) (S' : Row) (A : VTy)
+    (t : TExpr) : TExpr :=
+  .conv info jdg (.comp (CTy.effOf S A)) (.comp (CTy.effOf S' A)) (.effSub S S' A) t
+
+/-- `[α]`'s node.  `[spec §3]` -/
+@[match_pattern] abbrev TExpr.alpha (info : TInfo) (jdg : Jdg) (j : Jdg) (j' : Jdg) (t : TExpr) :
+    TExpr :=
+  .conv info jdg j j' .alpha t
+
 theorem TExpr.isLam_sound (t : TExpr) (h : t.isLam = true) : ∃ N, t.erase = .val (.lam N) := by
   rw [isLam_eq] at h
   match he : t.erase, h with
