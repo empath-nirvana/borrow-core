@@ -14452,7 +14452,7 @@ term, cited by section below. Nothing the language cannot do today is added, exc
 |---|---|---|
 | `-- comment` | `# comment` | kaikai's |
 | statements separated by `;` | a newline, or `;` | `;` keeps one-line bodies legal |
-| a statement over several lines | a newline does not end a statement inside `(…)` or `[…]`, after a line ending in a binary operator, `,`, `->`, `=` or `:`, or before a line starting with `else`, `finally`, `with` or a binary operator (*The layout rule*) | the layout rule of Go, Kotlin and Koka |
+| a statement over several lines | a newline does not end a statement inside `(…)` or `[…]`, after a line ending in a binary operator, `,`, `->`, `=` or `:`, or before a line starting with `else`, `finally`, `with`, a binary operator or `.` | the layout rule of Go, Kotlin and Koka |
 | `i32[n]`, `u8[n]`, `u64[n]`; `42`, `1.5`, `b'a'`, `'c'`, `"…"` | unchanged | §8, §17, §37 |
 | names, `'a` lifetimes, `[T]` type arguments | unchanged | kaikai writes type parameters in `[…]` too |
 
@@ -14676,9 +14676,9 @@ new-spelling text only their comments change. The core values and builtins insid
   `->`, `=` or `:`, or the next line starts with a binary operator (`+ - * / % == != < <= > >= &&
   || |> >|`, so a line starting with `*` or `-` multiplies or subtracts), with `else` (after an
   `if` or a `for`), with `with` or `finally` (after `handle`), with `unwind (D)` (after a `let`'s
-  right side), or with `}`. A line starting with `&` or `.` begins a new statement;
-- a juxtaposed application (`f x`), a `[…]` instantiation and a `.1`/`.2`/`.f` suffix stop at a
-  newline, and a handler's `[…]`/`(…)` after `with h` and a constructor's `(…)` or `{ f: … }`
+  right side), with `.` (a `.1`, `.2` or `.f` suffix of the line before), or with `}`. A line
+  starting with `&` begins a new statement;
+- a juxtaposed application (`f x`) and a `[…]` instantiation stop at a newline, and a handler's `[…]`/`(…)` after `with h` and a constructor's `(…)` or `{ f: … }`
   start on the name's line;
 - `break` and `return` at the end of a line take no value;
 - a line holding only a loop label joins the next line;
