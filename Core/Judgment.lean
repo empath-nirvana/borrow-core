@@ -104,11 +104,9 @@ theorem JIdx.Le.pinOK {I I' : JIdx} (h : I ≤ I') (hPin : I.pin = true) : I'.pi
 theorem JIdx.le_pin (I : JIdx) : I ≤ {pin := true} := ⟨.inl rfl, fun _ => rfl⟩
 
 /-- Every index ties the empty row: no operation is found in it.  `[spec §19, §83]` -/
-theorem JIdx.rowOK_nil (I : JIdx) : I.RowOK [] := by
-  unfold JIdx.RowOK
-  split
-  · trivial
-  · intro n i o h; simp [Row.find] at h
+theorem JIdx.rowOK_nil : ∀ I : JIdx, I.RowOK []
+  | ⟨none, _⟩ => trivial
+  | ⟨some _, _⟩ => fun _ _ _ h => nomatch h
 
 /-! ### The relaxed rules' terms and rows  `[spec §29]`
 
