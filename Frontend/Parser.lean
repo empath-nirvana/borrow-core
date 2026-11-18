@@ -2153,7 +2153,9 @@ def dataValue : Nat → Pos → Ident → Bool → P Val
     let t1 ← peek
     let t2 ← peekAt 1
     let t3 ← peekAt 2
-    let isRec := t1.tok == .sym "{" && (tab.decl? c.name).isSome && (match t2.tok, t3.tok with
+    -- In the new spelling's layout a constructor's arguments are on its line.
+    let ends ← lineEnds
+    let isRec := !ends && t1.tok == .sym "{" && (tab.decl? c.name).isSome && (match t2.tok, t3.tok with
       | .ident _, .sym ":" | .ident _, .sym "," | .ident _, .sym "}" => true
       | _, _ => false)
     let angle := (← get).angle
@@ -2177,7 +2179,7 @@ def dataValue : Nat → Pos → Ident → Bool → P Val
         liftE (Data.recordVal tab sp c.name boxed fs.toList (fun f => (vars.lookup f).getD f)
           (← get).reuseArm)
       else do
-        let args ← if ← isSym "(" then do
+        let args ← if !ends && (← isSym "(") then do
             discard bump
             let mut vs : Array Val := #[]
             for _ in [0:n] do
@@ -2331,13 +2333,14 @@ def withBlock : Nat → P Val
     let handlerArgs : P (Nat × Ident × List VTy × Val) := do
       let ih ← rsAt
       let h ← ident "a handler name"
-      let As ← if ← isSym "[" then do
+      -- In the new spelling's layout the handler's arguments are on its line.
+      let As ← if (← isSym "[") && !(← lineEnds) then do
           discard bump
           let As ← tyList n (fuelPerToken * ((← get).toks.size + 1))
           expectSym "]"
           pure As
         else pure []
-      let place ← if ← isSym "(" then do
+      let place ← if (← isSym "(") && !(← lineEnds) then do
           let psp ← startPos
           let ia ← rsAt
           discard bump
@@ -2744,11 +2747,12 @@ def comp : Nat → P Comp
   | n + 1 => compG n false
 
 /-- `x <- M; N` (or `x : A <- M; N`) after its `<-`: the head `M`, with the finaliser
-`unwind (D)` when it has one (SPEC §19), the separator, and the rest `N`. In the new spelling it
-is `let x = M` (§82 E2). -/
-def bindRest : Nat → Pos → Ident → Option VTy → P Comp
-  | 0, _, _, _ => outOfFuel
-  | n + 1, st, x, A => do
+`unwind (D)` when it has one (SPEC §19), the separator, and the rest `N`. With `assign`, `x`
+naming a `let mut` variable is an assignment of it (SPEC §41, R2); without, `x` is a new binder.
+In the new spelling it is `let x = M`, a new binder, or `x = M`, an assignment (§82 E2). -/
+def bindRest : Nat → Pos → Ident → Option VTy → Bool → P Comp
+  | 0, _, _, _, _ => outOfFuel
+  | n + 1, st, x, A, assign => do
     let i₀ := (← get).rs.stmt₀
     let (M, xs) ← frame (compG n true)
     -- `x <- M unwind (D); N` (SPEC §19).
@@ -2756,7 +2760,7 @@ def bindRest : Nat → Pos → Ident → Option VTy → P Comp
     rsSeq i₀
     expectSep
     withScope do
-    let x ← bindOrAssign x
+    let x ← if assign then bindOrAssign x else bindName x
     let N ← comp n
     let sp ← spanFrom st
     bindForm sp n x A M D N xs
@@ -2811,7 +2815,7 @@ def compG : Nat → Bool → P Comp
       discard bump; discard bump
       rsNoteS (.bind i₀ (i₀ + 1) (← mutOf? x).isSome)
       rsStmt i₀
-      bindRest n st ⟨x, t.span⟩ none
+      bindRest n st ⟨x, t.span⟩ none true
     | .ident x, .sym ":" =>
       discard bump; discard bump
       rsT1 (← get).surf
@@ -2821,8 +2825,19 @@ def compG : Nat → Bool → P Comp
       expectSym "<-"
       rsNoteS (.bind i₀ ia (← mutOf? x).isSome)
       rsStmt i₀
-      bindRest n st ⟨x, t.span⟩ (some A)
+      bindRest n st ⟨x, t.span⟩ (some A) true
     | .ident x₀, .sym "=" =>
+      -- New spelling: `x = M` for a computation `M` is today's assigning `x <- M` (§82 E2,
+      -- ruling 11-18 #1).  [spec §82]
+      let compRhs := match (← peekAt 2).tok, (← peekAt 3).tok with
+        | .kw "match", _ | .kw "if", _ => false
+        | .ident _, .sym "!" => true
+        | tok, _ => startsComp tok
+      if (← layout) && compRhs then
+        discard bump; discard bump
+        if (← mutOf? x₀).isNone then
+          failAt t.span s!"`{x₀}` is assigned, but it is not declared `let mut`"
+        return ← bindRest n st ⟨x₀, t.span⟩ none true
       -- `x = e`: a `let mut` variable rebound (typed elaboration §5.2), the variable the name
       -- resolves to (SPEC §41, rule R2).
       discard bump; discard bump
@@ -2970,7 +2985,7 @@ def compG : Nat → Bool → P Comp
         | .ident _, .sym "!" => true
         | tok, _ => startsComp tok
       if (← layout) && !isVar && compRhs then
-        if let some x := bindVar? then return ← bindRest n st x A
+        if let some x := bindVar? then return ← bindRest n st x A false
       if (← peek).tok == .kw "match" || (← peek).tok == .kw "if" then
         let (M, xs) ← frame (compPrefix n)
         rsSeq i₀
@@ -2996,7 +3011,7 @@ def compG : Nat → Bool → P Comp
           | .inl V => pure (.inl V)
           | .inr e₁ =>
             set saved
-            match ← (try Sum.inl <$> bindRest n st (bindVar?.getD ⟨"_", t.span⟩) A
+            match ← (try Sum.inl <$> bindRest n st (bindVar?.getD ⟨"_", t.span⟩) A false
                 catch e₂ => pure (.inr e₂)) with
             | .inl M => pure (.inr M)
             | .inr e₂ => throw (if e₂.span.start.later e₁.span.start then e₂ else e₁)
@@ -3007,7 +3022,7 @@ def compG : Nat → Bool → P Comp
           | .inl _ => outOfFuel
       if nd && (← isKw "unwind") then
         set saved
-        return ← bindRest n st (bindVar?.getD ⟨"_", t.span⟩) A
+        return ← bindRest n st (bindVar?.getD ⟨"_", t.span⟩) A false
       -- `let y = x.f;`: the place `x` lent for the read, and rebound (SPEC §42, E5).
       let V ← match p, V with
         | .var _, .app sp (.sugar fsp (.field f cs)) (.var vsp x) => do
