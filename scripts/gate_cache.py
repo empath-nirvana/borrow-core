@@ -64,6 +64,14 @@ def enabled():
     return mode() != "0"
 
 
+def built(cls):
+    """Whether a unit of class cls may use the cache: one that reads the binaries (`bcc`) only once
+    they were built in this invocation, by the gate (`CI_LOCAL_BUILT`) or by the script itself
+    (`GATE_CACHE_BUILT`, which a script exports after its own build). Stale binaries left by a
+    failed build are never looked up."""
+    return "bcc" not in cls.split(",") or bool(os.environ.get("CI_LOCAL_BUILT") or os.environ.get("GATE_CACHE_BUILT"))
+
+
 def reading():
     """Whether recorded passes are replayed: `GATE_CACHE` is neither `0` nor `record`."""
     return mode() == "1"
@@ -93,7 +101,8 @@ def note_stat(ap):
 
 
 def recording(fn):
-    """fn's value, and the files and directories it read through sha_file and listing."""
+    """fn's value, and the files and directories it read (through sha_file, listing, tables and
+    book_deps, which note each one's stat)."""
     global _rec
     old, _rec = _rec, set()
     try:
@@ -269,6 +278,7 @@ _listings = {}
 
 
 def listing(d):
+    note_stat(os.path.join(ROOT, d))
     if d not in _listings:
         try:
             _listings[d] = sorted(os.listdir(os.path.join(ROOT, d)))
@@ -322,6 +332,7 @@ def corpus_deps(p):
     name = p[len("corpus/"):] if p.startswith("corpus/") else p
     name = name[:-3] if name.endswith(".bc") else name
     for t, rows in sorted(tables().items()):
+        note_stat(os.path.join(ROOT, "corpus", t))
         for k in (name, p, p + ":"):
             for r in rows.get(k, []):
                 lines.append(f"row {t} {r}")
@@ -357,6 +368,8 @@ def book_deps(n):
     text by content, and every recorded keys line that starts with its block hash."""
     global _keylines
     tmp = os.environ["tmp"]
+    note_stat(os.path.join(tmp, "manifest"))
+    note_stat(os.path.join(tmp, f"{n}.bc"))
     attrs, md, line = "", "", ""
     with open(os.path.join(tmp, "manifest"), encoding="utf-8", errors="surrogateescape") as fh:
         for l in fh:
@@ -368,9 +381,13 @@ def book_deps(n):
     with open(f, "rb") as fh:
         text = fh.read()
     bh = hashlib.sha256(attrs.encode() + b"\n" + text).hexdigest()
+    keyfiles = walk("book/keys")
+    note_stat(os.path.join(ROOT, "book/keys"))
+    for p in keyfiles:
+        note_stat(os.path.join(ROOT, p))
     if _keylines is None:
         _keylines = {}
-        for p in walk("book/keys"):
+        for p in keyfiles:
             with open(os.path.join(ROOT, p), encoding="utf-8", errors="surrogateescape") as fh:
                 for l in fh:
                     _keylines.setdefault(l.split(" ", 1)[0], []).append(l.rstrip("\n"))
@@ -420,6 +437,8 @@ def put(step, key, out_file, side_dir=None):
             shutil.copytree(side_dir, os.path.join(t, "side"))
         else:
             os.mkdir(os.path.join(t, "side"))
+        with open(os.path.join(t, "sum"), "w") as fh:
+            fh.write(entry_sum(t) + "\n")
         os.rename(t, final)
     except OSError as e:
         if t:
@@ -433,15 +452,36 @@ def put(step, key, out_file, side_dir=None):
         _put_failed += 1
 
 
+def entry_sum(e):
+    """The sha256 over an entry's `out` and every file under its `side/`, each by relative path,
+    length and content."""
+    h = hashlib.sha256()
+    files = ["out"]
+    for r, ds, fs in os.walk(os.path.join(e, "side")):
+        ds.sort()
+        files += sorted(os.path.relpath(os.path.join(r, f), e) for f in fs)
+    for f in files:
+        with open(os.path.join(e, f), "rb") as fh:
+            data = fh.read()
+        h.update(f"{f} {len(data)}\n".encode())
+        h.update(data)
+    return h.hexdigest()
+
+
 def get(e):
-    """An entry's `out` bytes and its `side/` directory, or None when it is not whole (being
-    pruned, or written by an older version without `side/`): then the unit is a miss."""
+    """An entry's `out` bytes and its `side/` directory, or None when it is not whole and intact:
+    no `side/` or no `sum` (being pruned, or written by an older version), or files whose checksum
+    is not its `sum` (truncated, say by a power loss before the data reached the disk). Then the
+    unit is a miss, and its pass replaces the entry."""
     try:
         with open(os.path.join(e, "out"), "rb") as fh:
             data = fh.read()
         side = os.path.join(e, "side")
         if not os.path.isdir(side):
             return None
+        with open(os.path.join(e, "sum")) as fh:
+            if fh.read().strip() != entry_sum(e):
+                return None
         return data, side
     except OSError:
         return None
@@ -483,7 +523,7 @@ def par_start(d, fn):
     """Read DIR/jobs (`i` and `arg`, a line each); for each hit, write DIR/i.out, DIR/i.rc and
     DIR/i.side as the run would have; print the misses (`i` and `arg`, a line each) for xargs."""
     jobs = read_jobs(d)
-    if not os.environ.get("PAR_CACHE") or not enabled():
+    if not os.environ.get("PAR_CACHE") or not enabled() or not built("bcc"):
         for i, a in jobs:
             sys.stdout.write(f"{i}\n{a}\n")
         return
@@ -600,7 +640,7 @@ def step_args(argv):
     if not rest or rest[0] != "--" or len(rest) < 2:
         raise SystemExit("usage: gate_cache.py step ID CLASS [--files F…] -- CMD…")
     cmd = rest[1:]
-    if not enabled():
+    if not enabled() or not built(cls):
         return sid, None, None, cmd
 
     def lines():
@@ -660,7 +700,7 @@ def step(argv):
 
 def wrap_self(sid, cls, files=()):
     """For a Python script: run the rest of the script under `step`, unless already inside it."""
-    if os.environ.get("GATE_CACHE_INNER") == sid or not enabled():
+    if os.environ.get("GATE_CACHE_INNER") == sid or not enabled() or not built(cls):
         return
     script = os.path.relpath(os.path.abspath(sys.argv[0]), ROOT)
     argv = [sid, cls] + (["--files", *files] if files else []) + ["--", "python3", script, *sys.argv[1:]]
@@ -674,7 +714,7 @@ class Units:
     """Keys of one step's units, computed with the same base as `par`."""
 
     def __init__(self, spec, mode="corpus", cls="bcc", bins=()):
-        self.on = enabled()
+        self.on = enabled() and built(cls)
         self.step = spec.split()[0]
         self.args = (spec, cls, bins, mode)
         self.mode = mode

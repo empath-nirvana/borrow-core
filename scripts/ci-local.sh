@@ -93,7 +93,7 @@ for a in "$@"; do
 done
 case "${GATE_CACHE:-1}" in 1|0|record) ;; *) echo "ci-local: GATE_CACHE=$GATE_CACHE: not one of 1, 0, record"; exit 2 ;; esac
 # The tools line is this gate's own (below); one left in the environment is not used.
-unset GATE_CACHE_TOOLS_FILE
+unset GATE_CACHE_TOOLS_FILE GATE_CACHE_BUILT
 case "$mode" in
   --changed) changed=1; export BCC_SOURCE=0 ;;
   --full) full=1 ;;
@@ -211,6 +211,9 @@ if [ "$all" = 1 ]; then step "build" lake build
 else step "build (bcc, bcc-counts)" lake build bcc bcc-counts; fi
 built=$fail
 [ "$built" = 0 ] && export CI_LOCAL_BUILT=1
+# When the build fails, the steps run one after another, each trying its own build, with the cache
+# off: the binaries left in .lake are not this tree's, and nothing is replayed or recorded.
+if [ "$built" != 0 ] && [ "${GATE_CACHE:-1}" != 0 ]; then export GATE_CACHE=0; cachenote=" (the build failed)"; fi
 # The tools in every cache key, found once for the whole gate after the build (they do not change
 # during it).
 if [ "$built" = 0 ] && [ "${GATE_CACHE:-1}" != 0 ]; then
@@ -250,9 +253,9 @@ fi
 echo
 tag="ci-local"; [ "$changed" = 1 ] && tag="ci-local --changed"; [ "$full" = 1 ] && tag="ci-local --full"
 [ "${BCC_SOURCE:-}" = 1 ] && [ "$full" = 1 ] && tag="ci-local --source"
-[ "${GATE_CACHE:-1}" = 0 ] && tag="$tag --no-cache"
+[ "${GATE_CACHE:-1}" = 0 ] && [ -z "${cachenote:-}" ] && tag="$tag --no-cache"
 [ "${GATE_CACHE:-1}" = record ] && tag="$tag --record-cache"
-if [ "${GATE_CACHE:-1}" = 0 ]; then cache="cache off"
+if [ "${GATE_CACHE:-1}" = 0 ]; then cache="cache off${cachenote:-}"
 else cache=$(awk '{ r += $1; n += $2; f += $3 } END { printf "cache: %d unit(s) replayed, %d run", r, n; if (f) printf "; WARNING: %d pass(es) could not be recorded (store not writable)", f }' "$GATE_CACHE_STATS"); fi
 if [ "$fail" -eq 0 ]; then echo "$tag: ALL PASSED ($((SECONDS - start))s; $cache)"; else echo "$tag: FAILURES (see above) ($((SECONDS - start))s; $cache)"; fi
 [ "$changed" = 1 ] && echo "(--changed is for iteration only: the sanity gate, scripts/ci-local.sh, runs before a PR)"

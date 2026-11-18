@@ -17,12 +17,15 @@
 # `.lean` file, the lakefile, the manifest and the toolchain, and with a file it names; a unit
 # whose input changes while it runs is not recorded. par records neither a unit that calls
 # `par_nostore` nor one whose input changed, even and back, while it ran; an entry without its side
-# files is a miss; an unknown `GATE_CACHE` is refused; an unwritable store is reported. The tree's
+# files, or whose files do not match its checksum, is a miss; stale binaries (no build in this
+# invocation) are never looked up; an unknown `GATE_CACHE` is refused; an unwritable store is reported. The tree's
 # own files are only read.
 #
 #     scripts/check-gate-cache.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
+[ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
+export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
 # Itself one unit of the result cache (scripts/gate_cache.py `step`): a recorded pass is replayed
 # when the binaries, the library, the Lean sources, Lake's configuration, scripts/, the tools and
 # the files it copies are as they were.
@@ -40,7 +43,7 @@ progs=(io-args ascii-upper)
 for p in "${progs[@]}"; do cp corpus/"$p".* "$w/corpus/"; done
 for b in bcc bcc-counts; do cp -c .lake/build/bin/$b "$w/.lake/build/bin/$b" 2>/dev/null || cp .lake/build/bin/$b "$w/.lake/build/bin/$b"; done
 files=(); for p in "${progs[@]}"; do files+=("corpus/$p.bc"); done
-unset GATE_CACHE GATE_CACHE_TOOLS_FILE GATE_CACHE_INNER GATE_CACHE_STATS PAR_CACHE PAR_CACHE_DEPS PAR_COLLECT
+unset GATE_CACHE GATE_CACHE_BUILT GATE_CACHE_TOOLS_FILE GATE_CACHE_INNER GATE_CACHE_STATS PAR_CACHE PAR_CACHE_DEPS PAR_COLLECT
 for v in $(env | sed -n 's/^\(BC_[A-Za-z0-9_]*\|BCC_[A-Za-z0-9_]*\|CI_LOCAL_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$v"; done
 export GATE_CACHE_DIR=$t/store CI_LOCAL_BUILT=1
 bad=0
@@ -126,6 +129,20 @@ BCC_GATE_CACHE_PROBE=1 expect "an environment variable (BCC_*)" 0 2 0 --final
 expect "the mode (--final dropped)" 0 2 0
 expect "the mode, again" 2 0 0
 expect "the mode --final, again" 2 0 0 --final
+
+# Stale binaries are never looked up: with no build in this invocation (no CI_LOCAL_BUILT), the
+# script's own `lake build` runs, fails in the copy (it has no Lake project), and nothing is
+# replayed though every entry for these binaries is recorded; and a whole step of class `bcc`
+# whose caller built nothing runs uncached.
+rc=0; : > "$t/stats"
+(unset CI_LOCAL_BUILT; GATE_CACHE_STATS=$t/stats "$w/scripts/compile-backend2.sh" --final "${files[@]}" > "$t/out" 2>&1) || rc=$?
+if [ "$rc" != 0 ] && [ ! -s "$t/stats" ]; then echo "check-gate-cache: stale binaries and a failing build: exit $rc, nothing replayed"
+else echo "check-gate-cache: stale binaries and a failing build: exit $rc, $(cat "$t/stats")"; bad=1; fi
+sp() { : > "$t/stats"; (unset CI_LOCAL_BUILT; cd "$w" && GATE_CACHE_STATS=$t/stats python3 scripts/gate_cache.py step built-probe bcc -- true); awk '{ r += $1; n += $2 } END { print r + 0, n + 0 }' "$t/stats"; }
+GATE_CACHE_BUILT=1 sp > /dev/null
+if [ "$(GATE_CACHE_BUILT=1 sp)" = "1 0" ] && [ "$(sp)" = "0 0" ]; then
+  echo "check-gate-cache: a bcc step replays only after a build in its invocation"
+else echo "check-gate-cache: a bcc step replays without a build in its invocation"; bad=1; fi
 
 # A failure is never recorded: a golden that differs fails on every run.
 cp -p "$w/$p.out" "$t/saved"; echo x >> "$w/$p.out"
@@ -252,8 +269,10 @@ par probe "$@"
 [ "$par_failed" = 0 ]
 PROBE
 chmod +x "$t/par-probe.sh"
-for n in plain nostore change back; do echo "main = 1" > "$w/corpus/p-$n.bc"; done
-pp=(corpus/p-plain.bc corpus/p-nostore.bc corpus/p-change.bc corpus/p-back.bc)
+# (Each in a directory of its own: a unit's directory listing is in its fingerprint, and the
+# changing one writes beside itself.)
+for n in plain nostore change back; do mkdir -p "$w/corpus/p$n"; echo "main = 1" > "$w/corpus/p$n/p-$n.bc"; done
+pp=(corpus/pplain/p-plain.bc corpus/pnostore/p-nostore.bc corpus/pchange/p-change.bc corpus/pback/p-back.bc)
 # pexpect WHAT REPLAYED RAN: one run of the probe.
 pexpect() {
   : > "$t/stats"; rc=0
@@ -263,22 +282,26 @@ pexpect() {
   else echo "check-gate-cache: par: $1: $r replayed, $n run, exit $rc; expected $2 replayed, $3 run, exit 0"; sed 's/^/  /' "$t/out"; bad=1; fi
 }
 pexpect "first run" 0 4
-rm -f "$w/corpus/p-change.extra"
+rm -f "$w/corpus/pchange/p-change.extra"
 pexpect "nostore, changed and changed-back units run again; the plain one replays" 1 3
-rm -f "$w/corpus/p-change.extra"
+rm -f "$w/corpus/pchange/p-change.extra"
 find "$GATE_CACHE_DIR/par-probe" -mindepth 2 -maxdepth 2 -name side -exec rm -r {} +
 pexpect "an entry without its side files is a miss" 0 4
-rm -f "$w/corpus/p-change.extra"
+rm -f "$w/corpus/pchange/p-change.extra"
+pexpect "recorded again" 1 3
+for e in "$GATE_CACHE_DIR"/par-probe/*/out; do : > "$e"; done
+pexpect "an entry whose out is truncated (its checksum differs) is a miss" 0 4
+rm -f "$w/corpus/pchange/p-change.extra"
 pexpect "recorded again" 1 3
 
 # The switches' values: anything but 1, 0 and record is an error.
-if GATE_CACHE=off "$t/par-probe.sh" "$w" corpus/p-plain.bc > "$t/out" 2>&1; then
+if GATE_CACHE=off "$t/par-probe.sh" "$w" corpus/pplain/p-plain.bc > "$t/out" 2>&1; then
   echo "check-gate-cache: GATE_CACHE=off is not refused"; bad=1
 else echo "check-gate-cache: GATE_CACHE=off is refused: $(grep -m1 'GATE_CACHE=off' "$t/out")"; fi
 # A store that cannot be written is said, in the step's output and in the counts.
 mkdir -p "$t/ro"; chmod 555 "$t/ro"
 : > "$t/stats"
-GATE_CACHE_DIR=$t/ro/store GATE_CACHE_STATS=$t/stats "$t/par-probe.sh" "$w" corpus/p-plain.bc > "$t/out" 2>&1 || true
+GATE_CACHE_DIR=$t/ro/store GATE_CACHE_STATS=$t/stats "$t/par-probe.sh" "$w" corpus/pplain/p-plain.bc > "$t/out" 2>&1 || true
 chmod 755 "$t/ro"
 if grep -q 'WARNING: cannot record' "$t/out" && [ "$(awk '{ s += $3 } END { print s + 0 }' "$t/stats")" -gt 0 ]; then
   echo "check-gate-cache: an unwritable store is reported: $(grep -m1 WARNING "$t/out")"

@@ -27,6 +27,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
+export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
 # The C compiler is the one `bcc` builds with (`bcc cc`, Backend.nativeCC): `$BC_CC`, else
 # `xcrun clang` on macOS, else a clang on PATH outside a Lean toolchain.
 cc=$(.lake/build/bin/bcc cc 2>/dev/null) || { echo "no C compiler for the native target: it is not checked"; exit 0; }

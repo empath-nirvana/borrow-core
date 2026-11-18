@@ -32,6 +32,7 @@ files=("$@")
 named=1
 [ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=(); while IFS= read -r f; do [ -z "$f" ] || files+=("$f"); done <<< "$list"; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
+export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
 export bcc=.lake/build/bin/bcc
 export bccCounts=.lake/build/bin/bcc-counts
 if ! cc=$("$bcc" cc 2>/dev/null); then echo "native-facts: no C compiler: skipped"; exit 0; fi
