@@ -19,7 +19,8 @@
 # `par_nostore` nor one whose input changed, even and back, while it ran; an entry without its side
 # files, or whose files do not match its checksum, is a miss; stale binaries (no build in this
 # invocation) are never looked up; an unknown `GATE_CACHE` is refused; an unwritable store is reported. The tree's
-# own files are only read.
+# own files are only read. A Lean-class step beside a write into book/book is recorded; one
+# during which a `.lean` file appears and disappears is not.
 #
 #     scripts/check-gate-cache.sh
 set -euo pipefail
@@ -183,6 +184,24 @@ lean "lean-toolchain" eval 'echo " " >> "$w/lean-toolchain"'; undo
 lean "a file it names" eval 'echo "# x" >> "$w/corpus/kernel-counts.expected"'; undo
 [ "$(key)" = "$k0" ] || { echo "check-gate-cache: a whole step's key differs after every change is undone"; bad=1; }
 
+# A Lean-class step is recorded although a gate writes into a generated directory beside it
+# (book/book, mdbook's output: outside every key and fingerprint), and is not recorded when a
+# `.lean` file appears and disappears while it runs (its directory's stat is in the fingerprint).
+mkdir -p "$w/book/book"
+lp() {
+  : > "$t/stats"
+  (cd "$w" && GATE_CACHE_STATS=$t/stats python3 scripts/gate_cache.py step "$1" lean -- sh -c "$2") > /dev/null
+  awk '{ r += $1; n += $2 } END { print r + 0, n + 0 }' "$t/stats"
+}
+gen='date > book/book/index.html; mkdir -p book/book/sub; date > book/book/sub/x.html'
+lp lean-gen "$gen" > /dev/null
+if [ "$(lp lean-gen "$gen")" = "1 0" ]; then echo "check-gate-cache: a Lean step beside a write into book/book: recorded, replayed"
+else echo "check-gate-cache: a Lean step beside a write into book/book: not recorded"; bad=1; fi
+add='echo "-- x" > Core/Transient.lean; sleep 1; rm Core/Transient.lean'
+lp lean-add "$add" > /dev/null
+if [ "$(lp lean-add "$add")" = "0 1" ]; then echo "check-gate-cache: a Lean step while a .lean file appears and disappears: not recorded"
+else echo "check-gate-cache: a Lean step while a .lean file appears and disappears: recorded"; bad=1; fi
+
 # A unit whose input changes while it runs is not recorded: a step that appends to a file its key
 # names runs again on the next run.
 : > "$w/corpus/probe.txt"
@@ -219,6 +238,16 @@ miss "source_digest" "$p0" export source_digest=probe
 unset source_digest
 miss "LC_COLLATE" "$p0" export LC_COLLATE=C.probe
 unset LC_COLLATE
+# The stack limit is keyed only in a unit that runs a native executable (`PAR_CACHE_NATIVE=1`).
+hard=$(ulimit -H -s)
+if [ "$hard" != 8192 ]; then
+  [ "$hard" = unlimited ] && hard=65536
+  kn8=$( (ulimit -s 8192; ukey "$p0") ); kn64=$( (ulimit -s "$hard"; ukey "$p0") )
+  ky8=$( (ulimit -s 8192; PAR_CACHE_NATIVE=1 ukey "$p0") ); ky64=$( (ulimit -s "$hard"; PAR_CACHE_NATIVE=1 ukey "$p0") )
+  if [ "$kn8" = "$kn64" ] && [ "$ky8" != "$ky64" ]; then
+    echo "check-gate-cache: the stack limit (8192 / $hard KB): a unit's key the same; a native unit's key changed"
+  else echo "check-gate-cache: the stack limit: non-native same $([ "$kn8" = "$kn64" ] && echo yes || echo no), native changed $([ "$ky8" != "$ky64" ] && echo yes || echo no)"; bad=1; fi
+fi
 for d in reports trusted copies; do
   mkdir -p "$w/corpus/$d"
   miss "its corpus/$d file" "$p0" eval "echo x > '$w/corpus/$d/${progs[0]}.txt'"

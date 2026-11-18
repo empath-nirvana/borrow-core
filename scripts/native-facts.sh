@@ -182,7 +182,7 @@ program() {
 export -f program argsOf statusOf
 # Each program is a unit of the result cache (scripts/par.sh; the C compiler is among its tools).
 # Its skip lines are a side file (`skips`), gathered in $tmp.
-export PAR_COLLECT=$tmp PAR_CACHE="native-facts cc=$cc"
+export PAR_COLLECT=$tmp PAR_CACHE="native-facts cc=$cc" PAR_CACHE_NATIVE=1
 par program "${files[@]}"
 skipbad=0
 if [ "$named" = 0 ]; then

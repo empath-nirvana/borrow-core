@@ -157,6 +157,8 @@ export PAR_COLLECT=$tmp
 export NATIVE_RUNS=$tmp/native-runs
 [ "$native" = 1 ] && [ "$final" = 0 ] && native_runs "$NATIVE_RUNS" "${files[@]}"
 [ "$write" = 1 ] || export PAR_CACHE="compile-backend2 final=$final native=$native"
+# A unit runs a native executable (its native stage) unless --final or there is no C compiler.
+if [ "$final" = 0 ] && [ "$native" = 1 ]; then export PAR_CACHE_NATIVE=1; fi
 par program "${files[@]}"
 skipbad=0
 if [ "$named" = 0 ]; then

@@ -15,7 +15,7 @@ ifeq (run,$(firstword $(MAKECMDGOALS)))
   $(eval $(RUN_ARGS):;@:)
 endif
 
-.PHONY: bcc run tools gate gate-full gate-full-nocache gate-full-record gate-fast gate-daily goldens keys verify-goldens bench
+.PHONY: bcc run tools gate gate-full gate-full-nocache gate-full-record gate-warm-final gate-fast gate-daily goldens keys verify-goldens bench
 
 # Build the `bcc` compiler.
 bcc: $(CACHE_STAMP) | tools
@@ -49,6 +49,13 @@ gate-full-nocache: | tools
 # which re-establishes every result and fills the result cache for that day's main.
 gate-full-record: | tools
 	scripts/ci-local.sh --full --record-cache
+
+# The corpus at the final target (`--final`, what the per-PR gate's compiler and scripts tiers run
+# on every program), its passes recorded and none replayed. The daily run on main runs it after its
+# full gate, so that a PR's gate finds these units recorded for current main.
+gate-warm-final: | tools
+	GATE_CACHE=record scripts/compile-backend2.sh --final
+	GATE_CACHE=record scripts/compile-corpus.sh --final
 
 # The daily full gate on main (scripts/gate-daily.sh): `make gate-full` without the result cache
 # on origin/main in a checkout of its own, its verdict posted to the board for the coordinator.

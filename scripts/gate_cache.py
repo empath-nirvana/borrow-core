@@ -133,15 +133,28 @@ def sha_file(p):
     return d
 
 
+# Directories a gate writes into while it runs, left out of every walk (their files are in no
+# key, and their stats in no fingerprint, which a write during the run would otherwise change):
+#   book/book   mdbook's output (`book build`), rewritten on every full gate; gitignored. No
+#               `.lean` file there can be built: a module `book.book.X` belongs to no library of
+#               lakefile.toml, so no import of it resolves.
+# Other writes during a gate land in walked directories but create no directory entry except
+# when a new file appears: a source-stage key (`corpus/**/<name>.key`) or a chapter's keys file
+# (`book/keys/`) written for the first time. Then a Lean step that ran beside it is not recorded
+# and runs again next time.
+GENERATED = ("book/book",)
+
+
 def walk(d, prune=(".git", ".lake", "__pycache__")):
-    """Every file under directory d (relative to ROOT), sorted."""
+    """Every file under directory d (relative to ROOT), sorted, outside `GENERATED`."""
     out = []
     top = os.path.join(ROOT, d)
+    generated = {os.path.join(ROOT, g) for g in GENERATED}
     # Each directory's stat is noted before it is listed (the top here, each subdirectory as its
     # parent yields it), so a fingerprint sees a file added or removed (scripts/par_unit.py).
     note_stat(top)
     for r, ds, fs in os.walk(top):
-        ds[:] = sorted(x for x in ds if x not in prune)
+        ds[:] = sorted(x for x in ds if x not in prune and os.path.normpath(os.path.join(r, x)) not in generated)
         for x in ds:
             note_stat(os.path.join(r, x))
         for f in fs:
@@ -170,9 +183,7 @@ def tools_line():
     if f and os.path.isfile(f):
         with open(f) as fh:
             return fh.read().strip()
-    import resource
-    parts = [" ".join(os.uname()[i] for i in (0, 2, 4)), "python " + sys.version.split()[0],
-             "stack " + " ".join(str(x) for x in resource.getrlimit(resource.RLIMIT_STACK))]
+    parts = [" ".join(os.uname()[i] for i in (0, 2, 4)), "python " + sys.version.split()[0]]
 
     def out(cmd):
         try:
@@ -271,6 +282,14 @@ def base_lines(step, cls, extra=()):
     lines = [VERSION, f"step {step}", f"class {cls}"]
     lines += files_lines("script", walk("scripts") + ["Makefile"])
     lines.append("tools " + tools_line())
+    # The stack limit (`ulimit -s`), only for a unit that runs a native executable
+    # (`PAR_CACHE_NATIVE=1`): a native program with BC_STACK set but empty or invalid runs on the
+    # main thread, whose stack is that limit (Target/Native/Runtime.lean). No other unit depends on
+    # it, and GNU make raises it (8 MB to 64 MB), so a unit keyed on it would not be shared between
+    # `make gate-full` and `scripts/ci-local.sh --full`.
+    if os.environ.get("PAR_CACHE_NATIVE") == "1":
+        import resource
+        lines.append("stack " + " ".join(str(x) for x in resource.getrlimit(resource.RLIMIT_STACK)))
     lines += env_lines()
     lines += class_lines(cls, extra)
     return lines

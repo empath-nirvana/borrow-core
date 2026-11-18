@@ -28,7 +28,7 @@ native_runs() {
     grep -q '^-- check: parse-only' "$f" || ! grep -q '^main' "$f" || fs+=("$f")
   done
   mkdir -p "$dir"
-  ( export PAR_COLLECT=$dir PAR_CACHE=native-run; unset PAR_CACHE_DEPS; par native_run ${fs[@]+"${fs[@]}"} > /dev/null )
+  ( export PAR_COLLECT=$dir PAR_CACHE=native-run PAR_CACHE_NATIVE=1; unset PAR_CACHE_DEPS; par native_run ${fs[@]+"${fs[@]}"} > /dev/null )
 }
 # native_result DIR F W: the recorded run of F into W/out and W/err; its status on standard output.
 # A program with no recorded run (its run did not end) has status `none`, which matches no golden.
