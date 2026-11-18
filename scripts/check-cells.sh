@@ -29,7 +29,8 @@ export -f row
 list=$(scripts/corpus-set.sh programs sugar | sort)
 fs=()
 skips=$(mktemp)
-for f in $list; do
+all=(); while IFS= read -r f; do [ -z "$f" ] || all+=("$f"); done <<< "$list"
+for f in "${all[@]}"; do
   if grep -q '^-- check: parse-only' "$f"; then echo "parse-only $f" >> "$skips"
   elif ! grep -q '^main' "$f"; then echo "no-main $f" >> "$skips"
   elif grep -q '^-- check: old-backend-refuses' "$f"; then echo "old-backend-refuses $f" >> "$skips"

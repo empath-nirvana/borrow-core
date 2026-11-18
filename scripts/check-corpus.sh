@@ -122,17 +122,19 @@ if [ $# -gt 0 ]; then
   [ "$bad" -eq 0 ]
   exit
 fi
-progs=$(scripts/corpus-set.sh)
-rejectFiles=$(scripts/corpus-set.sh reject)
-pendFiles=$(scripts/corpus-set.sh pending)
-par checks $progs; bad=$((bad + par_failed))
+list=$(scripts/corpus-set.sh)
+progs=(); while IFS= read -r f; do [ -z "$f" ] || progs+=("$f"); done <<< "$list"
+list=$(scripts/corpus-set.sh reject)
+rejectFiles=(); while IFS= read -r f; do [ -z "$f" ] || rejectFiles+=("$f"); done <<< "$list"
+list=$(scripts/corpus-set.sh pending)
+pend=(); while IFS= read -r f; do [ -z "$f" ] || pend+=("$f"); done <<< "$list"
+par checks "${progs[@]}"; bad=$((bad + par_failed))
 scripts/corpus-set.sh --skips check-corpus parse-only < "$skips" || bad=$((bad + 1))
 shopt -s nullglob
-par rejects $rejectFiles; bad=$((bad + par_failed))
+par rejects ${rejectFiles[@]+"${rejectFiles[@]}"}; bad=$((bad + par_failed))
 par reports corpus/reports/*.txt; bad=$((bad + par_failed))
 par trusted corpus/trusted/*.txt; bad=$((bad + par_failed))
 par copies corpus/copies/*.txt; bad=$((bad + par_failed))
-pend=($pendFiles)
 par pending ${pend[@]+"${pend[@]}"}; bad=$((bad + par_failed))
 echo "$(( ${#pend[@]} - par_failed )) pending program(s), expected failures."
 echo "$bad failure(s)."

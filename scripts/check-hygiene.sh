@@ -2,7 +2,8 @@
 # No `sorry`, `axiom`, `native_decide`, `implemented_by`, `opaque`, `partial`,
 # `unsafe` in Paper/, Support/, Examples/, Core/, Frontend/, Target/, Pipeline/, Reference/, Backend/
 # and Backend2/, and in the tree archive research/tree/,
-# outside comments; then every declaration's axioms.
+# outside comments; that CrossCheck's corpus files are in its build trace; then every
+# declaration's axioms.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 - <<'PY'
@@ -50,4 +51,6 @@ fi
 # The extended judgment of SPEC §29 and the typed term of SPEC §3 are generated from `CDerives`:
 # they must be up to date.
 python3 scripts/gen-pin.py --check
+# The corpus files CrossCheck reads at elaboration are in its build trace.
+scripts/check-crosscheck-trace.sh
 lake env lean --run scripts/CheckAxioms.lean

@@ -42,7 +42,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 named=1
-[ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=($list); }
+[ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=(); while IFS= read -r f; do [ -z "$f" ] || files+=("$f"); done <<< "$list"; }
 command -v wasmtime >/dev/null || { echo "wasmtime is not on PATH"; exit 1; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
 . scripts/par.sh

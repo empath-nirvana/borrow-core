@@ -40,7 +40,7 @@ if [ "${1:-}" = --backend ]; then
 fi
 named=1
 files=("$@")
-[ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=($list); }
+[ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=(); while IFS= read -r f; do [ -z "$f" ] || files+=("$f"); done <<< "$list"; }
 for f in "${files[@]}"; do [ -f "$f" ] || { echo "$f: no such file"; exit 2; }; done
 
 argsOf() {

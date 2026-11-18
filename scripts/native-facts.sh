@@ -30,7 +30,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 files=("$@")
 named=1
-[ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=($list); }
+[ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=(); while IFS= read -r f; do [ -z "$f" ] || files+=("$f"); done <<< "$list"; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
 export bcc=.lake/build/bin/bcc
 export bccCounts=.lake/build/bin/bcc-counts

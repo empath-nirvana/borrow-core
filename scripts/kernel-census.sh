@@ -11,7 +11,8 @@ cd "$(dirname "$0")/.."
 lake build kernel-census >/dev/null
 if [ $# -eq 0 ]; then
   list=$(scripts/corpus-set.sh)
-  set -- $list
+  progs=(); while IFS= read -r f; do [ -z "$f" ] || progs+=("$f"); done <<< "$list"
+  set -- "${progs[@]}"
 fi
 files=()
 for f in "$@"; do grep -q '^-- check: parse-only' "$f" || files+=("$f"); done

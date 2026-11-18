@@ -8,12 +8,14 @@ cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc >/dev/null
 bcc=.lake/build/bin/bcc
 bad=0
-progs=$(scripts/corpus-set.sh)
-fails=$(scripts/corpus-set.sh fail)
-for f in $progs; do
+list=$(scripts/corpus-set.sh)
+progs=(); while IFS= read -r f; do [ -z "$f" ] || progs+=("$f"); done <<< "$list"
+list=$(scripts/corpus-set.sh fail)
+fails=(); while IFS= read -r f; do [ -z "$f" ] || fails+=("$f"); done <<< "$list"
+for f in "${progs[@]}"; do
   if ! "$bcc" parse "$f"; then bad=$((bad + 1)); fi
 done
-for f in $fails; do
+for f in ${fails[@]+"${fails[@]}"}; do
   want=$(sed -n '/^-- expect: /{s///p;q;}' "$f")
   if out=$("$bcc" parse "$f" 2>&1); then
     echo "$f: accepted, but must fail"; bad=$((bad + 1))

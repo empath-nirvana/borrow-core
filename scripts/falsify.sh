@@ -122,7 +122,8 @@ all=0
 if [ ${#files[@]} -eq 0 ]; then
   all=1
   list=$(scripts/corpus-set.sh)
-  for f in $list; do
+  progs=(); while IFS= read -r f; do [ -z "$f" ] || progs+=("$f"); done <<< "$list"
+  for f in "${progs[@]}"; do
     grep -q '^-- check: parse-only' "$f" && continue
     grep -q '^-- check: no-source' "$f" && { echo "$f: no-source, skipped"; continue; }
     grep -q '^main' "$f" || continue

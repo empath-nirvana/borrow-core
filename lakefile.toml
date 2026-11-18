@@ -18,6 +18,8 @@ name = "Examples"
 [[lean_lib]]
 name = "Core"
 
+# `Frontend.Check.CrossCheck` belongs to the `CrossCheck` library below, which must stay after this
+# one (scripts/check-crosscheck-trace.sh).
 [[lean_lib]]
 name = "Frontend"
 

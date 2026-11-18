@@ -71,7 +71,8 @@ export -f row
 list=$(scripts/corpus-set.sh programs sugar | sort)
 fs=()
 skips=$(mktemp)
-for f in $list; do
+all=(); while IFS= read -r f; do [ -z "$f" ] || all+=("$f"); done <<< "$list"
+for f in "${all[@]}"; do
   if grep -q '^-- check: parse-only' "$f"; then echo "parse-only $f" >> "$skips"; else fs+=("$f"); fi
 done
 skipped=$(scripts/corpus-set.sh --skips check-kinds parse-only < "$skips") || { rm -f "$skips"; echo "$skipped"; exit 1; }
