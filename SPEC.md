@@ -14452,7 +14452,7 @@ term, cited by section below. Nothing the language cannot do today is added, exc
 |---|---|---|
 | `-- comment` | `# comment` | kaikai's |
 | statements separated by `;` | a newline, or `;` | `;` keeps one-line bodies legal |
-| a statement over several lines | a newline does not end a statement inside `(…)` or `[…]`, after a line ending in a binary operator, `,`, `->`, `=` or `:`, or before a line starting with `else`, `finally`, `with`, a binary operator or `.` | the layout rule of Go, Kotlin and Koka |
+| a statement over several lines | a newline does not end a statement inside `(…)` or `[…]`, after a line ending in a binary operator, `,`, `->`, `=` or `:`, or before a line starting with `else`, `finally`, `with` or a binary operator (*The layout rule*) | the layout rule of Go, Kotlin and Koka |
 | `i32[n]`, `u8[n]`, `u64[n]`; `42`, `1.5`, `b'a'`, `'c'`, `"…"` | unchanged | §8, §17, §37 |
 | names, `'a` lifetimes, `[T]` type arguments | unchanged | kaikai writes type parameters in `[…]` too |
 
@@ -14673,10 +14673,13 @@ new-spelling text only their comments change. The core values and builtins insid
 
 **The layout rule.** In a surface body, outside `(…)` and `[…]`:
 - a newline ends a statement, an arm or a clause, unless the line ends in a binary operator, `,`,
-  `->`, `=` or `:`, or the next line starts with `else`, `finally`, `with`, `.`, `}`, `&`, or a
-  binary operator (`*` and `-` included, even where the line means them as prefixes);
-- a juxtaposed application (`f x`), a `[…]` instantiation and a `.1`/`.2` projection stop at a
-  newline;
+  `->`, `=` or `:`, or the next line starts with a binary operator (`+ - * / % == != < <= > >= &&
+  || |> >|`, so a line starting with `*` or `-` multiplies or subtracts), with `else` (after an
+  `if` or a `for`), with `with` or `finally` (after `handle`), with `unwind (D)` (after a `let`'s
+  right side), or with `}`. A line starting with `&` or `.` begins a new statement;
+- a juxtaposed application (`f x`), a `[…]` instantiation and a `.1`/`.2`/`.f` suffix stop at a
+  newline, and a handler's `[…]`/`(…)` after `with h` and a constructor's `(…)` or `{ f: … }`
+  start on the name's line;
 - `break` and `return` at the end of a line take no value;
 - a line holding only a loop label joins the next line;
 - a `|` at the start of a line, after a newline, is one arm separator;
@@ -14716,9 +14719,10 @@ arrow type with a row is written in parentheses.
 spelling; the messages are respelled when today's surface is removed.
 
 **Limits** (today's, kept):
-- An effect operation's argument is not lent by P8; it is written `&x`.
+- An effect operation's argument is not lent by P8.
 - A lent argument names a place: an expression is not lent, and one call lends at most one place.
-- A statement that begins with `*`, `-` or `&` continues the line before it; a `;` ends that line.
+- A statement that begins with `*` or `-` continues the line before it as a binary operator; a `;`
+  ends that line.
 - `&x` reads as a shared lend at a loop source or a fold, and as a mutable lend at a call.
 
 ### `let mut` sites
