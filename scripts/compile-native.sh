@@ -95,7 +95,7 @@ trap 'rm -rf "$NATIVE_RUNS"' EXIT
 [ "$backend" = new ] && native_runs "$NATIVE_RUNS" "${files[@]}"
 # Each program is a unit of the result cache (scripts/par.sh; the C compiler is among its tools).
 # Its skip lines are a side file (`skips`), gathered in $skipdir.
-export PAR_CACHE="compile-native backend=$backend"
+export PAR_CACHE="compile-native backend=$backend" PAR_CACHE_NATIVE=1
 skipdir=$(mktemp -d)
 trap 'rm -rf "$skipdir" "$NATIVE_RUNS"' EXIT
 export PAR_COLLECT=$skipdir

@@ -238,6 +238,16 @@ miss "source_digest" "$p0" export source_digest=probe
 unset source_digest
 miss "LC_COLLATE" "$p0" export LC_COLLATE=C.probe
 unset LC_COLLATE
+# The stack limit is keyed only in a unit that runs a native executable (`PAR_CACHE_NATIVE=1`).
+hard=$(ulimit -H -s)
+if [ "$hard" != 8192 ]; then
+  [ "$hard" = unlimited ] && hard=65536
+  kn8=$( (ulimit -s 8192; ukey "$p0") ); kn64=$( (ulimit -s "$hard"; ukey "$p0") )
+  ky8=$( (ulimit -s 8192; PAR_CACHE_NATIVE=1 ukey "$p0") ); ky64=$( (ulimit -s "$hard"; PAR_CACHE_NATIVE=1 ukey "$p0") )
+  if [ "$kn8" = "$kn64" ] && [ "$ky8" != "$ky64" ]; then
+    echo "check-gate-cache: the stack limit (8192 / $hard KB): a unit's key the same; a native unit's key changed"
+  else echo "check-gate-cache: the stack limit: non-native same $([ "$kn8" = "$kn64" ] && echo yes || echo no), native changed $([ "$ky8" != "$ky64" ] && echo yes || echo no)"; bad=1; fi
+fi
 for d in reports trusted copies; do
   mkdir -p "$w/corpus/$d"
   miss "its corpus/$d file" "$p0" eval "echo x > '$w/corpus/$d/${progs[0]}.txt'"

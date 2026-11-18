@@ -183,9 +183,7 @@ def tools_line():
     if f and os.path.isfile(f):
         with open(f) as fh:
             return fh.read().strip()
-    import resource
-    parts = [" ".join(os.uname()[i] for i in (0, 2, 4)), "python " + sys.version.split()[0],
-             "stack " + " ".join(str(x) for x in resource.getrlimit(resource.RLIMIT_STACK))]
+    parts = [" ".join(os.uname()[i] for i in (0, 2, 4)), "python " + sys.version.split()[0]]
 
     def out(cmd):
         try:
@@ -284,6 +282,14 @@ def base_lines(step, cls, extra=()):
     lines = [VERSION, f"step {step}", f"class {cls}"]
     lines += files_lines("script", walk("scripts") + ["Makefile"])
     lines.append("tools " + tools_line())
+    # The stack limit (`ulimit -s`), only for a unit that runs a native executable
+    # (`PAR_CACHE_NATIVE=1`): a native program with BC_STACK set but empty or invalid runs on the
+    # main thread, whose stack is that limit (Target/Native/Runtime.lean). No other unit depends on
+    # it, and GNU make raises it (8 MB to 64 MB), so a unit keyed on it would not be shared between
+    # `make gate-full` and `scripts/ci-local.sh --full`.
+    if os.environ.get("PAR_CACHE_NATIVE") == "1":
+        import resource
+        lines.append("stack " + " ".join(str(x) for x in resource.getrlimit(resource.RLIMIT_STACK)))
     lines += env_lines()
     lines += class_lines(cls, extra)
     return lines
