@@ -4360,7 +4360,7 @@ def unrename (rs : List (String × String)) (s : String) : String :=
 
 /-- The source text of the span `sp` of `src` (lines and columns from 1). -/
 def srcText (src : String) (sp : Span) : String :=
-  let ls := src.splitOn "\n"
+  let ls := (unmarkDialect src).splitOn "\n"
   if sp.start.line == sp.stop.line then
     let l := (ls[sp.start.line - 1]?).getD ""
     String.ofList ((l.toList.drop (sp.start.col - 1)).take (sp.stop.col - sp.start.col))
