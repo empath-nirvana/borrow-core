@@ -206,11 +206,8 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .effRaise i j S o B t => .effRaise i j S o B (t.shift d c)
   | .effLet i j A B S u tM tN =>
       .effLet i j A B S (u.ins d c) (tM.shift d c) (tN.shift d (c + 1))
-  | .effThen i j A B S SM SD u tM tN tD =>
-      .effThen i j A B S SM SD (u.ins d c) (tM.shift d c) (tN.shift d (c + 1))
-        (tD.shift d (c + 1))
-  | .effThenDiv i j A B S SM SD u tM tN tD =>
-      .effThenDiv i j A B S SM SD (u.ins d c) (tM.shift d c) (tN.shift d (c + 1))
+  | .effThenF i j A B S SM SD u tM tN tD =>
+      .effThenF i j A B S SM SD (u.ins d c) (tM.shift d c) (tN.shift d (c + 1))
         (tD.shift d (c + 1))
   | t@(.effAwait ..) => t
   | .effHandleV i j S E fs cs n A R u ks st ins tc te =>
@@ -328,7 +325,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
       AbsF.withO (.atom .pers) (td.absF Δ)
   | .effLet _ _ _ _ S _ tM tN =>
       AbsF.orO (tM.absF Δ) (AbsF.withO (letCond S) (tN.absF Δ))
-  | .effThen _ _ _ _ S _ _ _ tM tN tD | .effThenDiv _ _ _ _ S _ _ _ tM tN tD =>
+  | .effThenF _ _ _ _ S _ _ _ tM tN tD =>
       AbsF.orO (tM.absF Δ) (AbsF.withO (if Row.unrDB S then .atom .bang else .tt)
         (AbsF.andO (tN.absF Δ) (tD.absF Δ)))
   | .effHandleV _ _ _ _ _ _ _ _ _ _ _ _ _ tc te =>
