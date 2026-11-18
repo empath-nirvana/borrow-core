@@ -149,8 +149,8 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .tensorI ii jj A B u t₁ t₂ => t₁.lifeBinders ++ t₂.lifeBinders
   | .sumI₁ ii jj A B t => t.lifeBinders
   | .sumI₂ ii jj A B t => t.lifeBinders
-  | .thunkF ii jj A t => t.lifeBinders
-  | .thunkV ii jj C t => t.lifeBinders
+  | .thunkFb ii jj A T b t => t.lifeBinders
+  | .thunkVb ii jj C T b t => t.lifeBinders
   | .ret ii jj A t => t.lifeBinders
   | .bind ii jj A C u tM tN => tM.lifeBinders ++ tN.lifeBinders
   | .force ii jj i T C => []
@@ -167,10 +167,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .zeroE ii jj C u tV => tV.lifeBinders
   | .allI ii jj x b S C t => [x] ++ t.lifeBinders
   | .allE ii jj x b a C t => t.lifeBinders
-  | .bangThunkF ii jj A t => t.lifeBinders
-  | .bangThunkV ii jj C t => t.lifeBinders
-  | .codeI ii jj C t => t.lifeBinders
-  | .codeIB ii jj C t => t.lifeBinders
+  | .codeIb ii jj C T b t => t.lifeBinders
   | .codeErase ii jj C E t => t.lifeBinders
   | .codeEraseB ii jj C E t => t.lifeBinders
   | .bangE ii jj A t => t.lifeBinders
@@ -270,8 +267,8 @@ def TExpr.domFree : TExpr → Bool
   | .tensorI ii jj A B u t₁ t₂ => t₁.domFree && t₂.domFree
   | .sumI₁ ii jj A B t => t.domFree
   | .sumI₂ ii jj A B t => t.domFree
-  | .thunkF ii jj A t => t.domFree
-  | .thunkV ii jj C t => t.domFree
+  | .thunkFb ii jj A T b t => t.domFree
+  | .thunkVb ii jj C T b t => t.domFree
   | .ret ii jj A t => t.domFree
   | .bind ii jj A C u tM tN => tM.domFree && tN.domFree
   | .force ii jj i T C => true
@@ -288,10 +285,7 @@ def TExpr.domFree : TExpr → Bool
   | .zeroE ii jj C u tV => tV.domFree
   | .allI ii jj x b S C t => t.domFree
   | .allE ii jj x b a C t => t.domFree
-  | .bangThunkF ii jj A t => t.domFree
-  | .bangThunkV ii jj C t => t.domFree
-  | .codeI ii jj C t => t.domFree
-  | .codeIB ii jj C t => t.domFree
+  | .codeIb ii jj C T b t => t.domFree
   | .codeErase ii jj C E t => t.domFree
   | .codeEraseB ii jj C E t => t.domFree
   | .bangE ii jj A t => t.domFree
@@ -390,8 +384,8 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .tensorI ii jj A B u t₁ t₂ => .tensorI ii jj A B u (t₁.reAb Δr) (t₂.reAb Δr)
   | .sumI₁ ii jj A B t => .sumI₁ ii jj A B (t.reAb Δr)
   | .sumI₂ ii jj A B t => .sumI₂ ii jj A B (t.reAb Δr)
-  | .thunkF ii jj A t => .thunkF ii jj A (t.reAb Δr)
-  | .thunkV ii jj C t => .thunkV ii jj C (t.reAb Δr)
+  | .thunkFb ii jj A T b t => .thunkFb ii jj A T b (t.reAb Δr)
+  | .thunkVb ii jj C T b t => .thunkVb ii jj C T b (t.reAb Δr)
   | .ret ii jj A t => .ret ii jj A (t.reAb Δr)
   | .bind ii jj A C u tM tN => .bind ii jj A C u (tM.reAb Δr) (tN.reAb Δr)
   | .force ii jj i T C => .force ii jj i T C
@@ -408,10 +402,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .zeroE ii jj C u tV => .zeroE ii jj C u (tV.reAb Δr)
   | .allI ii jj x b S C t => .allI ii jj x b S C (t.reAb (Δr.extend x b))
   | .allE ii jj x b a C t => .allE ii jj x b a C (t.reAb Δr)
-  | .bangThunkF ii jj A t => .bangThunkF ii jj A (t.reAb Δr)
-  | .bangThunkV ii jj C t => .bangThunkV ii jj C (t.reAb Δr)
-  | .codeI ii jj C t => .codeI ii jj C (t.reAb Δr)
-  | .codeIB ii jj C t => .codeIB ii jj C (t.reAb Δr)
+  | .codeIb ii jj C T b t => .codeIb ii jj C T b (t.reAb Δr)
   | .codeErase ii jj C E t => .codeErase ii jj C E (t.reAb Δr)
   | .codeEraseB ii jj C E t => .codeEraseB ii jj C E (t.reAb Δr)
   | .bangE ii jj A t => .bangE ii jj A (t.reAb Δr)
@@ -645,12 +636,12 @@ theorem TDerivesX.weakenΔ {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} 
   | sumI₂ a0 ih0 =>
       intro Δ' he hd
       exact TDerivesX.sumI₂ (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | thunkF a0 ih0 =>
+  | thunkFb a0 a1 a2 a3 ih0 =>
       intro Δ' he hd
-      exact TDerivesX.thunkF (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | thunkV a0 a1 a2 ih0 =>
+      exact TDerivesX.thunkFb a0 a1 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) a3
+  | thunkVb a0 a1 a2 a3 a4 a5 ih0 =>
       intro Δ' he hd
-      exact TDerivesX.thunkV a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a2)
+      exact TDerivesX.thunkVb a0 a1 a2 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a4) a5
   | ret a0 ih0 =>
       intro Δ' he hd
       exact TDerivesX.ret (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
@@ -699,18 +690,9 @@ theorem TDerivesX.weakenΔ {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} 
   | allE a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesX.allE (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (LeΔ.entailsLt he.1 a1)
-  | bangThunkF a0 a1 ih0 =>
+  | codeIb a0 a1 a2 a3 a4 a5 ih0 =>
       intro Δ' he hd
-      exact TDerivesX.bangThunkF a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | bangThunkV a0 a1 a2 a3 ih0 =>
-      intro Δ' he hd
-      exact TDerivesX.bangThunkV a0 a1 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a3)
-  | codeI a0 a1 a2 ih0 =>
-      intro Δ' he hd
-      exact TDerivesX.codeI (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a1) a2
-  | codeIB a0 a1 a2 a3 ih0 =>
-      intro Δ' he hd
-      exact TDerivesX.codeIB a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a2) a3
+      exact TDerivesX.codeIb a0 a1 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a3) a4 a5
   | codeErase a0 ih0 =>
       intro Δ' he hd
       exact TDerivesX.codeErase (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))

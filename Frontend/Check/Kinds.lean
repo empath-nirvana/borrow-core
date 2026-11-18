@@ -145,7 +145,7 @@ def onPaths (leaf : Nat → TExpr → Bool) : Nat → TExpr → Bool
 /-- The clause answers the state-passing function `[thunkV]` of `λs. S`, and `S`'s paths end in
 `leaf`. -/
 def stateFnB (leaf : Nat → TExpr → Bool) (k : Nat) : TExpr → Bool
-  | .ret _ _ _ (.thunkV _ _ _ (.lam _ _ _ _ tS)) => onPaths leaf (k + 1) tS
+  | .ret _ _ _ (.thunkVb _ _ _ _ false (.lam _ _ _ _ tS)) => onPaths leaf (k + 1) tS
   | _ => false
 
 /-! ### The classifier -/
@@ -173,7 +173,7 @@ when the signature gives the clause no `κ`; the kind of its body `M` when it is
 def classifyClause (o : Qual × VTy × VTy) (c : Option TExpr) : HKind :=
   ⟨o.1, if isAbortive o then .abortive else
     match c.map TExpr.unUse with
-    | some (.bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM))) =>
+    | some (.thunkVb _ _ _ _ true (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM))) =>
         classifyBody tM
     | _ => .stored⟩
 

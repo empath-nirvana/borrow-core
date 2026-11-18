@@ -306,15 +306,26 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.sumI₂ d, by simp only [TExpr.shift, TExpr.erase, Expr.shift, e]⟩
-  | thunkF _ ih =>
+  | thunkFb b hpΓ _ hT ih =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f rfl hf hp
-      rw [List.length_cons] at d e
-      exact ⟨.thunkF d, by simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, e]⟩
-  | thunkV hC _ q ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.thunkV hC d (by rw [e, q]; rfl), e⟩
+      cases b
+      · obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f rfl hf hp
+        rw [List.length_cons] at d e
+        exact ⟨.thunkFb false (fun h => nomatch h) d hT, by
+          simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, e]⟩
+      · obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
+        obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f' rfl hf' hp'
+        rw [List.length_cons] at d e
+        exact ⟨.thunkFb true (fun _ => flatLive_ins (live_atom hb) (hpΓ rfl)) d hT, by
+          simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, e]⟩
+  | thunkVb b hpΓ hC _ q hT ih =>
+      intro Γa Γb Γp f hΓ hf hp; subst hΓ
+      cases b
+      · obtain ⟨d, e⟩ := ih Γa Γb Γp f rfl hf hp
+        exact ⟨.thunkVb false (fun h => nomatch h) hC d (by rw [e, q]; rfl) hT, e⟩
+      · obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
+        obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
+        exact ⟨.thunkVb true (fun _ => flatLive_ins (live_atom hb) (hpΓ rfl)) hC d (by rw [e, q]; rfl) hT, e⟩
   | ret _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
@@ -416,20 +427,7 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.allE d hlt, by simp only [TExpr.shift, TExpr.erase, Expr.shift, e]; rfl⟩
-  | bangThunkF hpΓ _ ih =>
-      intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
-      obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f' rfl hf' hp'
-      rw [List.length_cons] at d e
-      exact ⟨.bangThunkF (flatLive_ins (live_atom hb) hpΓ) d, by
-        simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, e]⟩
-  | bangThunkV hpΓ hC _ q ih =>
-      intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
-      exact ⟨.bangThunkV (flatLive_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
-  | codeI => intro _ _ _ _ _ hf _; cases hf
-  | codeIB => intro _ _ _ _ _ hf _; cases hf
+  | codeIb => intro _ _ _ _ _ hf _; cases hf
   | codeErase _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp

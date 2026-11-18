@@ -274,8 +274,9 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
   | tensorI hs _ _ ih₁ ih₂ => exact tensorI_compatC hs ih₁ ih₂
   | sumI₁ _ ih => exact sumI₁_compatC ih
   | sumI₂ _ ih => exact sumI₂_compatC ih
-  | thunkF _ ih => exact thunkF_compatC ih
-  | thunkV hC _ ih => exact thunkV_compatC hC ih
+  | thunkFb b hp _ hT ih => subst hT; cases b; exacts [thunkF_compatC ih, bangThunkF_compatC (hp rfl) ih]
+  | thunkVb b hp hC _ hT ih =>
+      subst hT; cases b; exacts [thunkV_compatC hC ih, bangThunkV_compatC (hp rfl) hC ih]
   | ret _ ih => exact ret_compatC ih
   | bind hs _ _ ihM ihN => exact bind_compatC hs ihM ihN
   | force h hT => exact force_compatC h hT
@@ -293,10 +294,8 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
   | allI hbx hΔx hΓx _ ih =>
       exact allI_compatC hbx hΔx hΓx ((semC_liveEq (.dead (LiveEq.refl _))).mp ih)
   | allE _ hlt ih => exact allE_compatC ih hlt
-  | bangThunkF hp _ ih => exact bangThunkF_compatC hp ih
-  | bangThunkV hp hC _ ih => exact bangThunkV_compatC hp hC ih
-  | codeI _ hok ih => exact codeI_compatC ih hok
-  | codeIB hp _ hok ih => exact codeIB_compatC hp ih hok
+  | codeIb b hp _ hok hT ih =>
+      subst hT; cases b; exacts [codeI_compatC ih hok, codeIB_compatC (hp rfl) ih hok]
   | codeErase _ ih => exact codeErase_compatC ih
   | codeEraseB _ ih => exact codeEraseB_compatC ih
   | bangE _ ih => exact bangE_compatC ih

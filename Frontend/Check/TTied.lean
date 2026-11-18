@@ -91,12 +91,12 @@ theorem sumI₂ {p : Pins} {s : CRow} {t : TExpr} {A B : CVTy} (h : TTied p s Δ
 theorem thunkF {p : Pins} {s : CRow} {t : TExpr} {A : CVTy}
     (h : TTied p s Δ (⟨.unit, false⟩ :: Γ) t (.comp (.ret A))) :
     TTied p s Δ Γ (.thunkF i (.val (.thunk (.ret A))) A t) (.val (.thunk (.ret A))) :=
-  ⟨fun hn Ξ hΞ => .thunkF (h.1 hn Ξ hΞ), .thunkF h.2⟩
+  ⟨fun hn Ξ hΞ => .thunkFb false (nomatch ·) (h.1 hn Ξ hΞ) rfl, .thunkFb false (nomatch ·) h.2 rfl⟩
 
 theorem thunkV {p : Pins} {s : CRow} {t : TExpr} {N : BoCa.Expr} {C : CCTy}
     (hC : C.isRet = false) (h : TTied p s Δ Γ t (.comp C)) (q : t.erase = .val (BoCa.Val.lam N)) :
     TTied p s Δ Γ (.thunkV i (.val (.thunk C)) C t) (.val (.thunk C)) :=
-  ⟨fun hn Ξ hΞ => .thunkV hC (h.1 hn Ξ hΞ) q, .thunkV hC h.2 q⟩
+  ⟨fun hn Ξ hΞ => .thunkVb false (nomatch ·) hC (h.1 hn Ξ hΞ) q rfl, .thunkVb false (nomatch ·) hC h.2 q rfl⟩
 
 theorem ret {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (h : TTied p s Δ Γ t (.val A)) :
     TTied p s Δ Γ (.ret i (.comp (.ret A)) A t) (.comp (.ret A)) :=
@@ -201,13 +201,13 @@ theorem bangThunkF {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (hp : BoCa.Fig16
     (h : TTied p s Δ (⟨.unit, false⟩ :: Γ) t (.comp (.ret A))) :
     TTied p s Δ Γ (.bangThunkF i (.val (.bang (.thunk (.ret A)))) A t)
       (.val (.bang (.thunk (.ret A)))) :=
-  ⟨fun hn Ξ hΞ => .bangThunkF hp (h.1 hn Ξ hΞ), .bangThunkF hp h.2⟩
+  ⟨fun hn Ξ hΞ => .thunkFb true (fun _ => hp) (h.1 hn Ξ hΞ) rfl, .thunkFb true (fun _ => hp) h.2 rfl⟩
 
 theorem bangThunkV {p : Pins} {s : CRow} {t : TExpr} {N : BoCa.Expr} {C : CCTy}
     (hp : BoCa.Fig16.LogRel.Core.Ctx.FlatLive Γ) (hC : C.isRet = false) (h : TTied p s Δ Γ t (.comp C))
     (q : t.erase = .val (BoCa.Val.lam N)) :
     TTied p s Δ Γ (.bangThunkV i (.val (.bang (.thunk C))) C t) (.val (.bang (.thunk C))) :=
-  ⟨fun hn Ξ hΞ => .bangThunkV hp hC (h.1 hn Ξ hΞ) q, .bangThunkV hp hC h.2 q⟩
+  ⟨fun hn Ξ hΞ => .thunkVb true (fun _ => hp) hC (h.1 hn Ξ hΞ) q rfl, .thunkVb true (fun _ => hp) hC h.2 q rfl⟩
 
 theorem bangE {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (h : TTied p s Δ Γ t (.val (.bang A))) :
     TTied p s Δ Γ (.bangE i (.val A) A t) (.val A) :=

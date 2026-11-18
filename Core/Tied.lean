@@ -307,8 +307,8 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | tensorI hs _ _ ih1 ih2 => exact .tensorI hs (ih1 (by eff_free)) (ih2 (by eff_free))
   | sumI₁ _ ih1 => exact .sumI₁ (ih1 (by eff_free))
   | sumI₂ _ ih1 => exact .sumI₂ (ih1 (by eff_free))
-  | thunkF _ ih1 => exact .thunkF (ih1 (by eff_free))
-  | thunkV hC _ ih1 => exact .thunkV hC (ih1 he)
+  | thunkFb b hp _ hT ih1 => exact .thunkFb b hp (ih1 (by eff_free)) hT
+  | thunkVb b hp hC _ hT ih1 => exact .thunkVb b hp hC (ih1 he) hT
   | ret _ ih1 => exact .ret (ih1 he)
   | bind hs _ _ ih1 ih2 => exact .bind hs (ih1 (by eff_free)) (ih2 (by eff_free))
   | force h hT => exact .force h hT
@@ -326,10 +326,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | zeroE hs _ ih1 => exact .zeroE hs (ih1 (by eff_free))
   | allI hbx hΔx hΓx _ ih1 => exact .allI hbx hΔx hΓx (ih1 (by eff_free))
   | allE _ hlt ih1 => exact .allE (ih1 (by eff_free)) hlt
-  | bangThunkF hp _ ih1 => exact .bangThunkF hp (ih1 (by eff_free))
-  | bangThunkV hp hC _ ih1 => exact .bangThunkV hp hC (ih1 he)
-  | codeI _ hok ih1 => exact .codeI (ih1 he) hok
-  | codeIB hp _ hok ih1 => exact .codeIB hp (ih1 he) hok
+  | codeIb b hp _ hok hT ih1 => exact .codeIb b hp (ih1 he) hok hT
   | codeErase _ ih1 => exact .codeErase (ih1 he)
   | codeEraseB _ ih1 => exact .codeEraseB (ih1 he)
   | bangE _ ih1 => exact .bangE (ih1 he)

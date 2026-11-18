@@ -101,8 +101,9 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | tensorI hs _ _ ih₁ ih₂ => exact tensorI_compatN hs ih₁ ih₂
   | sumI₁ _ ih => exact sumI₁_compatN ih
   | sumI₂ _ ih => exact sumI₂_compatN ih
-  | thunkF _ ih => exact thunkF_compatN ih
-  | thunkV hC _ ih => exact thunkV_compatN hC ih
+  | thunkFb b hp _ hT ih => subst hT; cases b; exacts [thunkF_compatN ih, bangThunkF_compatN (hp rfl) ih]
+  | thunkVb b hp hC _ hT ih =>
+      subst hT; cases b; exacts [thunkV_compatN hC ih, bangThunkV_compatN (hp rfl) hC ih]
   | ret _ ih => exact ret_compatN ih
   | bind hs _ _ ihM ihN => exact bind_compatN hs ihM ihN
   | force h hT => exact force_compatN h hT
@@ -119,10 +120,8 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | zeroE hs _ ihV => exact zeroE_compatN hs ihV
   | allI hbx hΔx hΓx _ ih => exact allI_compatN hbx hΔx hΓx ih
   | allE _ hlt ih => exact allE_compatN ih hlt
-  | bangThunkF hp _ ih => exact bangThunkF_compatN hp ih
-  | bangThunkV hp hC _ ih => exact bangThunkV_compatN hp hC ih
-  | codeI _ hok ih => exact codeI_compatN ih hok
-  | codeIB hp _ hok ih => exact codeIB_compatN hp ih hok
+  | codeIb b hp _ hok hT ih =>
+      subst hT; cases b; exacts [codeI_compatN ih hok, codeIB_compatN (hp rfl) ih hok]
   | codeErase _ ih => exact codeErase_compatN ih
   | codeEraseB _ ih => exact codeEraseB_compatN ih
   | bangE _ ih => exact bangE_compatN ih

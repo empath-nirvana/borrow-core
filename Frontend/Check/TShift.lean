@@ -159,8 +159,8 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .tensorI i j A B u t₁ t₂ => .tensorI i j A B (u.ins d c) (t₁.shift d c) (t₂.shift d c)
   | .sumI₁ i j A B t => .sumI₁ i j A B (t.shift d c)
   | .sumI₂ i j A B t => .sumI₂ i j A B (t.shift d c)
-  | .thunkF i j A t => .thunkF i j A (t.shift d (c + 1))
-  | .thunkV i j C t => .thunkV i j C (t.shift d c)
+  | .thunkFb i j A T b t => .thunkFb i j A T b (t.shift d (c + 1))
+  | .thunkVb i j C T b t => .thunkVb i j C T b (t.shift d c)
   | .ret i j A t => .ret i j A (t.shift d c)
   | .bind i j A C u tM tN => .bind i j A C (u.ins d c) (tM.shift d c) (tN.shift d (c + 1))
   | .force i j k T C => .force i j (sIdx d c k) T C
@@ -179,10 +179,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .zeroE i j C u tV => .zeroE i j C (u.ins d c) (tV.shift d c)
   | .allI i j x b S C t => .allI i j x b S C (t.shift d (c + 1))
   | .allE i j x b a C t => .allE i j x b a C (t.shift d c)
-  | .bangThunkF i j A t => .bangThunkF i j A (t.shift d (c + 1))
-  | .bangThunkV i j C t => .bangThunkV i j C (t.shift d c)
-  | .codeI i j C t => .codeI i j C (t.shift d c)
-  | .codeIB i j C t => .codeIB i j C (t.shift d c)
+  | .codeIb i j C T b t => .codeIb i j C T b (t.shift d c)
   | .codeErase i j C E t => .codeErase i j C E (t.shift d c)
   | .codeEraseB i j C E t => .codeEraseB i j C E (t.shift d c)
   | .bangE i j A t => .bangE i j A (t.shift d c)
@@ -301,7 +298,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
 under `Δ`. -/
 def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .tensorI _ _ _ _ _ t₁ t₂ => AbsF.orO (t₁.absF Δ) (t₂.absF Δ)
-  | .sumI₁ _ _ _ _ t | .sumI₂ _ _ _ _ t | .thunkF _ _ _ t | .thunkV _ _ _ t | .ret _ _ _ t
+  | .sumI₁ _ _ _ _ t | .sumI₂ _ _ _ _ t | .ret _ _ _ t
   | .lam _ _ _ _ t | .lamDead _ _ _ _ t | .proj₁ _ _ _ _ t | .proj₂ _ _ _ _ t
   | .allE _ _ _ _ _ _ t | .bangE _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t
   | .mutSub _ _ _ _ _ t | .allEV _ _ _ _ _ _ t | .ofRet _ _ _ t | .roll _ _ _ t
@@ -318,7 +315,8 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .zeroE _ _ _ _ tV => AbsF.orO (tV.absF Δ) (some .tt)
   | .topI _ _ => some .tt
   | .allI _ _ x b _ _ t => AbsF.withO (.atom (.nfree x)) (t.absF (Δ.extend x b))
-  | .bangThunkF _ _ _ t | .bangThunkV _ _ _ t => AbsF.withO (.atom .flat) (t.absF Δ)
+  | .thunkFb _ _ _ _ b t | .thunkVb _ _ _ _ b t =>
+      if b then AbsF.withO (.atom .flat) (t.absF Δ) else t.absF Δ
   | .boxI _ _ a _ t => AbsF.withO (.atom (.outl Δ a)) (t.absF Δ)
   | .withborUD _ _ _ _ _ _ _ _ _ td
   | .sliceBorrowMU _ _ _ _ _ _ td | .sliceBorrowIU _ _ _ _ _ _ td =>
@@ -339,7 +337,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .effHandleT .. | .effHandleL .. | .letPoly .. => none
   -- Not placed at a wider context: `[code-I]`'s environment type is read off the context, and the
   -- checker does not apply it.  `[spec §68]`
-  | .codeI .. | .codeIB .. => none
+  | .codeIb .. => none
   | .withlocal .. | .consume .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => some .ff
   | .use _ _ _ _ _ ab _ => ab

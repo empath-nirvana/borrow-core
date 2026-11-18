@@ -2875,14 +2875,14 @@ def constArity : TExpr → Option Nat
 box and the lifetime coercions, `ν`'s two coercions. -/
 def transparent? : TExpr → Option TExpr
   | .bangE _ _ _ t | .boxI _ _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t | .mutSub _ _ _ _ _ t
-  | .ofRet _ _ _ t | .ret _ _ _ t | .thunkV _ _ _ t | .bangThunkV _ _ _ t | .nuIn _ _ _ _ _ t
+  | .ofRet _ _ _ t | .ret _ _ _ t | .thunkVb _ _ _ _ _ t | .nuIn _ _ _ _ _ t
   | .nuOut _ _ _ _ _ t => some t
   -- `[α]`: a type renamed up to its lifetime binders' names, which no lowered type reads.
   | .alpha _ _ _ _ t => some t
   -- The derived nodes over a term the conversion reads as it reads the term (SPEC §57).
   | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => some t
   -- `[code-I]` and `[erase]` (SPEC §68): the same value at another type; the machine's identity.
-  | .codeI _ _ _ t | .codeIB _ _ _ t | .codeErase _ _ _ _ t | .codeEraseB _ _ _ _ t => some t
+  | .codeIb _ _ _ _ _ t | .codeErase _ _ _ _ t | .codeEraseB _ _ _ _ t => some t
   | _ => none
 
 /-- A function position's head through transparent nodes, and through a `use` whose body is a
@@ -3308,9 +3308,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | .sumI₂ _ j _ _ c => do
     let .sum _ bT := (← repJ j).peel | throw "LIR: an injection at a non-sum"
     bindTm (← conv fuel ctx c) bT fun a => pure (.inj true a)
-  | .thunkF _ j _ c | .bangThunkF _ j _ c => do
+  | .thunkFb _ j _ _ _ c => do
     let .thunk k := (← repJ j).peel | throw "LIR: a thunk at a non-closure type"
-    -- A thunk's body is at `F A` (`thunkF`, `bangThunkF`): the empty row.  [spec §50]
+    -- A thunk's body is at `F A` (`thunkFb`): the empty row.  [spec §50]
     mkClos "thunk" ctx k none (← repK k) (fun ctx' => convBody fuel (none :: ctx') c) (source := true)
       (emptyRow := true)
   | .lam _ j A C c => do
@@ -4122,7 +4122,7 @@ def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
     (o : Qual × VTy × VTy) (c : TExpr) : CM Unit := do
   if (← get).works.contains (n, j) then return
   match c.unUse with
-  | .bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => do
+  | .thunkVb _ _ _ _ true (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => do
     readFact "effHandleV:tail work"
     let x ← fresh (← vty o.2.1)
     let kv ← fresh .unit
