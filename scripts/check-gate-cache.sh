@@ -483,6 +483,16 @@ st=$t/store-rc1
 (unset GATE_CACHE_TOOLS_FILE; cd "$w" && PATH="$t/bin1:$PATH" GATE_CACHE_DIR=$st scripts/compile-backend2.sh --final "$p0f") > "$t/out" 2>&1 || true
 if [ -n "$(find "$st" -name unit 2>/dev/null)" ]; then echo "check-gate-cache: a tool probe that exits 1: its status is in the key, the unit is recorded"
 else echo "check-gate-cache: a tool probe that exits 1 made the key unsure"; sed 's/^/  /' "$t/out" | tail -5; bad=1; fi
+# The same for `bcc cc` itself: a bcc that answers `cc` with exit 1 (no C compiler, a supported
+# state) gives sure keys: the unit is recorded on the first run and replayed on the second.
+mv "$w/.lake/build/bin/bcc" "$w/.lake/build/bin/bcc.real"
+printf '#!/bin/sh\n[ "$1" = cc ] && { echo "no C compiler"; exit 1; }\nexec "%s" "$@"\n' "$w/.lake/build/bin/bcc.real" > "$w/.lake/build/bin/bcc.new"
+chmod +x "$w/.lake/build/bin/bcc.new"; mv "$w/.lake/build/bin/bcc.new" "$w/.lake/build/bin/bcc"
+st=$t/store-nocc
+for k in 1 2; do : > "$t/fs"; (unset GATE_CACHE_TOOLS_FILE; cd "$w" && GATE_CACHE_STATS=$t/fs GATE_CACHE_DIR=$st scripts/compile-backend2.sh --final "$p0f") > "$t/out" 2>&1 || true; done
+if [ "$(awk '{ s += $1 } END { print s + 0 }' "$t/fs")" = 1 ]; then echo "check-gate-cache: no C compiler (bcc cc exits 1): sure keys, the unit recorded and then replayed"
+else echo "check-gate-cache: no C compiler (bcc cc exits 1): the second run replayed $(cat "$t/fs")"; sed 's/^/  /' "$t/out" | tail -5; bad=1; fi
+mv "$w/.lake/build/bin/bcc.real" "$w/.lake/build/bin/bcc"
 # A whole step whose key read fails runs uncached: run twice, never replayed, nothing recorded.
 st=$t/store-fault-step
 for k in 1 2; do : > "$t/fs"; (cd "$w" && FAULT_LIST="/Core" PYTHONPATH="$t/fault" GATE_CACHE_STATS=$t/fs GATE_CACHE_DIR=$st python3 scripts/gate_cache.py step fault-step lean -- true) > /dev/null 2>&1; done
