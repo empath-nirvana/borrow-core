@@ -503,6 +503,24 @@ def read_jobs(d):
     return [(ws[k], ws[k + 1]) for k in range(0, len(ws) - 1, 2)]
 
 
+def weight_file(step, arg):
+    """Where a unit's memory weight is kept: by step and argument, not by key, so a unit that
+    misses (its key changed) still finds the peak its last run reached."""
+    return os.path.join(store_dir(), re.sub(r"[^A-Za-z0-9_.-]+", "_", step), "weights",
+                        hashlib.sha256(arg.encode("utf-8", "surrogateescape")).hexdigest()[:32])
+
+
+def weight(step, arg):
+    """The memory tokens (GB) a unit's job takes in the job pool (scripts/slot): the peak resident
+    memory its last run reached (scripts/par_unit.py records it), rounded up, or `$PAR_MEM` (default
+    1) when it has not run. Not a part of any key: it decides only when the job starts."""
+    try:
+        with open(weight_file(step, arg)) as fh:
+            return max(1, int(fh.read().split()[0]))
+    except (OSError, ValueError, IndexError):
+        return int(os.environ.get("PAR_MEM", "1"))
+
+
 class ParKeys:
     """The keys of one `par` call's units, and the fingerprint (`fingerprint`) of the files each
     read: the base once, then each unit's own files."""
@@ -516,6 +534,7 @@ class ParKeys:
 
     def of(self, arg):
         deps, files = recording(lambda: unit_deps(self.mode, arg))
+        self.files = files
         return digest(self.base + deps), fingerprint(self.base_files | files)
 
 
@@ -532,7 +551,7 @@ def par_start(d, fn):
         fh.write(tools)
     os.environ["GATE_CACHE_TOOLS_FILE"] = os.path.join(d, "tools")
     pk = ParKeys(fn)
-    keys = []
+    keys, misses = [], []
     for i, a in jobs:
         k, fp = pk.of(a)
         keys.append(f"{i} {k} {fp}")
@@ -560,8 +579,19 @@ def par_start(d, fn):
                         pass
                 shutil.rmtree(os.path.join(d, f"{i}.side"), ignore_errors=True)
         sys.stdout.write(f"{i}\n{a}\n")
+        misses.append(i)
+        with open(os.path.join(d, f"{i}.files"), "w", encoding="utf-8", errors="surrogateescape") as fh:
+            fh.write("".join(f"{p}\n" for p in sorted(pk.files)))
     with open(os.path.join(d, "keys"), "w") as fh:
         fh.write("\n".join(keys) + "\n")
+    # For scripts/par_unit.py, which runs each miss so that a gate missing the same key at the same
+    # time waits on the entry's lock and replays it, and stores a pass as soon as its job ends: the
+    # files the base read (each miss's own are DIR/i.files), and each miss's memory weight.
+    with open(os.path.join(d, "base.files"), "w", encoding="utf-8", errors="surrogateescape") as fh:
+        fh.write("".join(f"{p}\n" for p in sorted(pk.base_files)))
+    with open(os.path.join(d, "entries"), "w", encoding="utf-8", errors="surrogateescape") as fh:
+        args = dict(jobs)
+        fh.write("".join(f"{i} {weight(pk.step, args[i])}\n" for i in misses))
 
 
 def append_tree(src, dst):
@@ -605,7 +635,8 @@ def par_finish(d, fn):
                 replayed += 1
             else:
                 ran += 1
-                if rc == "0" and i in keys and not os.path.exists(os.path.join(d, f"{i}.nostore")):
+                if rc == "0" and i in keys and not os.path.exists(os.path.join(d, f"{i}.nostore")) \
+                        and not os.path.exists(os.path.join(d, f"{i}.stored")):
                     if pk is None:
                         os.environ["GATE_CACHE_TOOLS_FILE"] = os.path.join(d, "tools")
                         pk = ParKeys(fn)
@@ -795,6 +826,8 @@ def prune(argv):
             continue
         for e in os.listdir(sd):
             p = os.path.join(sd, e)
+            if e.endswith(".lock"):
+                continue
             size = 0
             for r, _, fs in os.walk(p):
                 for f in fs:
@@ -822,6 +855,19 @@ def prune(argv):
             if os.path.basename(p).startswith(".tmp."):
                 continue
             drop(p); removed += 1; freed += size; total -= size
+    # An entry's lock (scripts/par_unit.py) goes with its entry, or after an hour if it has none.
+    for st in (os.listdir(root) if os.path.isdir(root) else []):
+        sd = os.path.join(root, st)
+        if not os.path.isdir(sd):
+            continue
+        for e in os.listdir(sd):
+            p = os.path.join(sd, e)
+            if e.endswith(".lock") and not os.path.isdir(p[: -len(".lock")]):
+                try:
+                    if now - os.stat(p).st_mtime > 3600:
+                        os.remove(p)
+                except OSError:
+                    pass
     print(f"gate_cache: removed {removed} entr{'y' if removed == 1 else 'ies'} ({freed / 1048576:.1f} MiB); {total / 1048576:.1f} MiB left in {root}")
 
 

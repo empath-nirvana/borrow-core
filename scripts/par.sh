@@ -41,9 +41,12 @@ par() {
   [ $# -gt 0 ] || { rm -rf "$dir"; return 0; }
   i=0; for f in "$@"; do i=$((i + 1)); printf '%s\n%s\n' "$i" "$f"; done > "$dir/jobs"
   python3 "$PAR_HOME/gate_cache.py" par-start "$dir" "$fn" > "$dir/run" || { echo "par: the cache's keys failed ($fn)"; rm -rf "$dir"; par_failed=$#; return 0; }
-  local slot=()
-  while IFS= read -r i; do slot+=("$i"); done < <(par_slot)
-  [ ! -s "$dir/run" ] || PAR_DIR="$dir" xargs -P "$JOBS" -n 2 ${slot[@]+"${slot[@]}"} bash -c '
+  # Each job: in a slot of the job pool; and, when its result is cached, under its entry's lock,
+  # so that a gate missing the same unit at the same time replays it instead (scripts/par_unit.py).
+  local pre=()
+  [ ! -s "$dir/entries" ] || pre=(python3 -S "$PAR_HOME/par_unit.py" "$dir" --)
+  while IFS= read -r i; do pre+=("$i"); done < <(par_slot)
+  [ ! -s "$dir/run" ] || PAR_DIR="$dir" xargs -P "$JOBS" -n 2 ${pre[@]+"${pre[@]}"} bash -c '
       set -uo pipefail
       mkdir "$PAR_DIR/$1.d"; mkdir -p "$PAR_DIR/$1.side"
       par_nostore() { : > "$PAR_NOSTORE"; }; export -f par_nostore
