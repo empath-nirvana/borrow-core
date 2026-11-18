@@ -255,9 +255,10 @@ structure PState where
   /-- New spelling: the next value is a loop's source, where `&a` and `&mut a` keep today's
   meaning (answers A3).  `[spec §82]` -/
   loopSrc : Bool := false
-  /-- New spelling: inside `(…)`, where a newline does not end a statement (§82 *Lexical*).
-  `[spec §82]` -/
-  inParen : Bool := false
+  /-- For each token, whether the innermost bracket open before it is `(` or `[` (not `{`):
+  there a newline does not end a statement (§82 *The layout rule*), and a block `{ … }` has the
+  rule again inside its braces.  `[spec §82]` -/
+  parenAt : Array Bool := #[]
   /-- New spelling: in a body written without braces (an arm's, a clause's, `= e`), the index of
   the first token that starts a line at the body's own nesting: a newline there ends the body,
   so a sequence inside it (a `fun` body) does not continue across it (§82 *Arm and clause
@@ -484,7 +485,9 @@ def layout : P Bool := return (← get).nd && (← get).surf
 
 /-- Where the layout rule ends a statement at a newline: in `layout`, outside `(…)`.
 `[spec §82]` -/
-def layoutHere : P Bool := return (← get).nd && (← get).surf && !(← get).inParen
+def layoutHere : P Bool := do
+  let s ← get
+  return s.nd && s.surf && !(s.parenAt[s.pos]?.getD false)
 
 /-- A newline comes between the last token read and the next.  `[spec §82]` -/
 def nlBefore : P Bool := return (← peek).span.start.line > (← get).lastStop.line
@@ -515,13 +518,19 @@ def lineEnds : P Bool := do
   -- A line starting with `.` (`.f`, `.1`) continues the statement (§82 *Lexical*).
   if (← layoutHere) && !(← isSym ".") then nlBefore else pure false
 
-/-- `p` read with the flag `inParen` set to `b`, restored after.  `[spec §82]` -/
-def withInParen {α} (b : Bool) (p : P α) : P α := do
-  let t₀ := (← get).inParen
-  modify fun s => { s with inParen := b }
-  let r ← p
-  modify fun s => { s with inParen := t₀ }
-  pure r
+/-- For each token of `toks`, whether the innermost bracket open before it is `(` or `[` rather
+than `{`.  `[spec §82]` -/
+def parenNesting (toks : Array Token) : Array Bool := Id.run do
+  let mut st : List Bool := []
+  let mut out : Array Bool := #[]
+  for t in toks do
+    out := out.push (st.headD false)
+    match t.tok with
+    | .sym "(" | .sym "[" => st := true :: st
+    | .sym "{" => st := false :: st
+    | .sym ")" | .sym "]" | .sym "}" => st := st.drop 1
+    | _ => pure ()
+  return out
 
 /-- The index of the first token after index `i` that starts a line at the nesting depth of
 token `i` (counting `(…)`, `[…]` and `{…}`), if one comes before that nesting closes.
@@ -1895,7 +1904,7 @@ def closureOf : Nat → Pos → (Span → Comp → Val) → P Val
 /-- A block: `{ S }`, or a closure `{ p -> S }`; `!` before it makes it persistent. -/
 def brace : Nat → Pos → Bool → P Val
   | 0, _, _ => outOfFuel
-  | n + 1, st, bang => inClosure <| withInParen false <| withNoTrail false do
+  | n + 1, st, bang => inClosure <| withNoTrail false do
     expectSym "{"
     -- A closure when a pattern and `->` come first.
     let saved ← get
@@ -2344,7 +2353,7 @@ def withBlock : Nat → P Val
           let mut vs : Array Val := #[]
           for _ in [0:n] do
             if ← isSym ")" then break
-            vs := vs.push (← withInParen true (withNoTrail false (val n)))
+            vs := vs.push (← withNoTrail false (val n))
             if ← isSym "," then discard bump
           expectSym ")"
           let sp ← spanFrom psp
@@ -2657,9 +2666,8 @@ def valAtom : Nat → P Val
       -- Inside parentheses `>` is an operator again.
       let angle := (← get).angle
       modify fun s => { s with angle := false }
-      let ip₀ := (← get).inParen
       let nt₀ := (← get).noTrail
-      modify fun s => { s with inParen := true, noTrail := false }
+      modify fun s => { s with noTrail := false }
       let V ← val n
       let t' ← peek
       let r ← match t'.tok with
@@ -2683,7 +2691,7 @@ def valAtom : Nat → P Val
           expectSym ")"
           pure (.sub (← spanFrom st) V a)
         | _ => expected "`)`, `,`, `:` or `:>`"
-      modify fun s => { s with angle, inParen := ip₀, noTrail := nt₀ }
+      modify fun s => { s with angle, noTrail := nt₀ }
       -- `(V).f`: a field of `V` (SPEC §42).
       fieldSuffixes n st r
     | .sym "&" =>
@@ -2775,7 +2783,7 @@ def armComp : Nat → P Comp
     unless ← layout do return ← comp n
     if (← isSym "{") && !(← closureNext) then
       discard bump
-      let M ← withInParen false (comp n)
+      let M ← comp n
       expectSym "}"
       return M
     modify fun s => { s with armBody := true }
@@ -3485,7 +3493,7 @@ def compAtom : Nat → P Comp
       discard bump
       let angle := (← get).angle
       modify fun s => { s with angle := false }
-      let M ← withInParen true (withNoTrail false (comp n))
+      let M ← withNoTrail false (comp n)
       let r ← if ← isSym ":" then do
           discard bump
           let C ← cty n
@@ -4257,7 +4265,9 @@ def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data
   let taken := if resolve then toks.toList.filterMap (fun t => match t.tok with
     | .ident s => some s
     | _ => none) |>.eraseDups else []
-  go.run { toks, pos := 0, lastStop := ⟨1, 1, file⟩, resolve, taken, data, internal, lendAt, nd }
+  let parenAt := if nd then parenNesting toks else #[]
+  go.run { toks, pos := 0, lastStop := ⟨1, 1, file⟩, resolve, taken, data, internal, lendAt, nd,
+            parenAt := parenAt }
 
 /-- The table of the tokens `toks`: the `data` declarations (SPEC §42) and the `type`
 abbreviations (SPEC §61) written in them, each read where it is: a declaration is in scope in its
@@ -4266,20 +4276,21 @@ whole module. A declaration that does not read is left to the parse proper, whic
 def dataIn (toks : Array Token) (nd : Bool := false) : Data.Table := Id.run do
   let fuel := fuelPerToken * (toks.size + 1)
   let start : Pos := ⟨1, 1, (toks[0]?.map (·.span.start.file)).getD ""⟩
+  let parenAt := if nd then parenNesting toks else #[]
   let mut out : Data.Table := {}
   for i in [0:toks.size] do
     let named := match toks[i + 1]?.map Token.tok with | some (Tok.uident _) => true | _ => false
     if named && toks[i]!.tok == .ident "data" then
-      match (dataDecl fuel).run { toks, pos := i, lastStop := start, nd } with
+      match (dataDecl fuel).run { toks, pos := i, lastStop := start, nd, parenAt } with
       | .ok (d, _) => out := { out with decls := out.decls ++ [d] }
       | .error _ => pure ()
     else if named && toks[i]!.tok == .kw "type" then
-      match (decl fuel).run { toks, pos := i, lastStop := start, nd } with
+      match (decl fuel).run { toks, pos := i, lastStop := start, nd, parenAt } with
       | .ok (d, _) => out := { out with abbrevs := out.abbrevs ++ (Data.Abbrev.ofDecl? d).toList }
       | .error _ => pure ()
     else if toks[i]!.tok == .kw "handler" then
       -- A control handler, whose `with` lends what its body writes (SPEC §41, R3).  [spec §41]
-      match (decl fuel).run { toks, pos := i, lastStop := start, nd } with
+      match (decl fuel).run { toks, pos := i, lastStop := start, nd, parenAt } with
       | .ok (.chandler _ ch, _) => out := { out with ctl := out.ctl ++ [ch.name.name] }
       | _ => pure ()
   out

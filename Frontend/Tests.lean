@@ -190,6 +190,15 @@ theorem nd_one_expr : sameProgram
      "fn main() : i32 = match 1 {\n  0 -> !thunkv fun (x : i32) -> return x\n  k -> k\n}")
     = true := by decide +kernel
 
+-- Inside `(…)` a newline does not end a statement; a block `{ … }` there (of `if`, `match`, a
+-- closure) has the layout rule again.
+theorem nd_paren_block : sameProgram
+    ("main -> i32 = let a = f(1,\n 2); f(if c { let a = 1; a } else { 2 }, " ++
+     "match 1 { 0 -> 1 | k -> k }, { y -> let z = y; z })")
+    ("fn main() : i32 {\n  let a = f(1,\n    2)\n  f(if c {\n    let a = 1\n    a\n  } else { 2 }, " ++
+     "match 1 {\n    0 -> 1\n    k -> k\n  }, { y ->\n    let z = y\n    z\n  })\n}")
+    = true := by decide +kernel
+
 /-- The new-spelling text `nw` is refused with the message `msg`. -/
 def ndRejectsWith (nw msg : String) : Bool :=
   match parseProgram ("#! dialect 82\n" ++ nw) with
