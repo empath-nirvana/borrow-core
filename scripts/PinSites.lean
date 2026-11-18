@@ -1,15 +1,15 @@
-import Frontend
-import Backend
-import Backend2
+import GateCensus.View
+import GateCensus.Result
 
 /-!
-# The insertion pins  `[spec §12, §19]` (#746)
+# The insertion pins  `[spec §12, §19]` (#746)  (`gate-census pins`, `scripts/check-pins.sh`)
 
 Every site of the compiler that inserts a consume, a copy or an abandonment cites the kernel rule it
-emits, and this file checks the citations. It fails to elaborate, or reports an error, when:
+emits, and this file checks the citations. It reports an error when:
 
-* a rule a citation names is not a declaration (the names are resolved when this file is
-  elaborated: a renamed or deleted rule stops it);
+* a name the tables below write is not a declaration of the modules read (`imports`): every name
+  is resolved first, as Lean resolves a name in this file (under `open Lean Elab Command
+  BoCa.Fig16.LogRel.Core`), so a renamed or deleted rule stops the census;
 * a statement an `UNPROVED:` citation names is not a definition of a `Prop`, or a rule has neither
   a rule nor such a statement;
 * a definition outside the LIRs' syntax is a rule, or answers one (a rule is written where its
@@ -31,14 +31,19 @@ statement (`Backend.Clos.LicenceSound`). The checker's consumes are typed nodes:
 `CDerivesP`, so the checker inserts no consume no kernel rule licenses; no table of its sites is kept. Its copies
 are the `copy` and `array_copy` constants' nodes (`Frontend/Check/DerivedCopy.lean`), typed only at
 `DerivedCopy` (`TDerivesP.copy_at`, `TDerivesP.arrCopy_at`), so the same holds of them.
-
-    lake env lean scripts/PinSites.lean
 -/
 
 open Lean Elab Command
-open BoCa.Fig16.LogRel.Core
 
-namespace PinSites
+namespace GateCensus.PinSites
+
+/-- The modules read. -/
+def imports : Array Name := #[`Frontend, `Backend, `Backend2]
+
+/-- The namespaces the tables' names are resolved under. -/
+def openDecls : List OpenDecl :=
+  [.simple `Lean [], .simple `Lean.Elab [], .simple `Lean.Elab.Command [],
+   .simple `BoCa.Fig16.LogRel.Core []]
 
 /-- A rule's citation: the kernel declarations that license it, and, where that is not proved,
 the statement it needs (`UNPROVED:`), a `def … : Prop`. -/
@@ -50,156 +55,159 @@ structure Cite where
 /-- **The rules**, each cited. -/
 def cites : List Cite := [
   -- Backend2: the LIR's `consume` (`Backend2.ConsumeRule`).
-  ⟨``Backend2.ConsumeRule.dead, [``Ctx.DeadP.weaken, ``Ctx.SoloP.skip, ``CDerives.effHandleV], none⟩,
-  ⟨``Backend2.ConsumeRule.release, [``CDerives.releaseImm, ``CDerives.releaseMut, ``CDerives.releaseUnk,
-    ``CDerives.arrRelease], none⟩,
-  ⟨``Backend2.ConsumeRule.consume, [``consumeSlot_derives, ``consume_wf, ``Consumable.arrayMut,
-    ``Check.TDerivesP.consume_consumable], none⟩,
-  ⟨``Backend2.ConsumeRule.unused, [``Ctx.DeadP.weaken, ``vP_empty_of_persistent,
-    ``Check.neitherAbsorbed_of], some ``Check.SplitMasks.NeitherAbsorbed⟩,
-  ⟨``Backend2.ConsumeRule.stackK, [], some ``Backend2.StackKHandOver⟩,
+  ⟨`Backend2.ConsumeRule.dead, [`Ctx.DeadP.weaken, `Ctx.SoloP.skip, `CDerives.effHandleV], none⟩,
+  ⟨`Backend2.ConsumeRule.release, [`CDerives.releaseImm, `CDerives.releaseMut, `CDerives.releaseUnk,
+    `CDerives.arrRelease], none⟩,
+  ⟨`Backend2.ConsumeRule.consume, [`consumeSlot_derives, `consume_wf, `Consumable.arrayMut,
+    `Check.TDerivesP.consume_consumable], none⟩,
+  ⟨`Backend2.ConsumeRule.unused, [`Ctx.DeadP.weaken, `vP_empty_of_persistent,
+    `Check.neitherAbsorbed_of], some `Check.SplitMasks.NeitherAbsorbed⟩,
+  ⟨`Backend2.ConsumeRule.stackK, [], some `Backend2.StackKHandOver⟩,
   -- Backend2: the LIR's `copy` (`Backend2.CopyRule`).
-  ⟨``Backend2.CopyRule.dup, [``Ctx.SplitP.dup, ``Check.SplitMasks.both_persistent], none⟩,
-  ⟨``Backend2.CopyRule.const, [``CDerives.copy, ``CDerives.arrCopy], none⟩,
-  ⟨``Backend2.CopyRule.derived, [``copy_derives, ``DerivedCopy], none⟩,
+  ⟨`Backend2.CopyRule.dup, [`Ctx.SplitP.dup, `Check.SplitMasks.both_persistent], none⟩,
+  ⟨`Backend2.CopyRule.const, [`CDerives.copy, `CDerives.arrCopy], none⟩,
+  ⟨`Backend2.CopyRule.derived, [`copy_derives, `DerivedCopy], none⟩,
   -- Backend2: the LIR's `abandon` (`Backend2.Abandon`).
-  ⟨``Backend2.Abandon.letAbort, [``CDerives.effLet, ``vC_noOwn_of_ownFree], none⟩,
-  ⟨``Backend2.Abandon.top, [``CDerives.topI], none⟩,
-  ⟨``Backend2.Abandon.superseded, [``CDerives.effRaise, ``vC_noOwn_of_ownFree], none⟩,
+  ⟨`Backend2.Abandon.letAbort, [`CDerives.effLet, `vC_noOwn_of_ownFree], none⟩,
+  ⟨`Backend2.Abandon.top, [`CDerives.topI], none⟩,
+  ⟨`Backend2.Abandon.superseded, [`CDerives.effRaise, `vC_noOwn_of_ownFree], none⟩,
   -- The old backend (`Backend.Clos.Licence`): none read from the typed term.
-  ⟨``Backend.Clos.Licence.word, [``Ctx.DeadP.weaken, ``Ctx.SplitP.dup], some ``Backend.Clos.WordSound⟩,
-  ⟨``Backend.Clos.Licence.clauses, [``clausesTy_persistent], some ``Backend.Clos.ClausesSound⟩,
-  ⟨``Backend.Clos.Licence.const, [``CDerives.swap], some ``Backend.Clos.ConstSound⟩,
-  ⟨``Backend.Clos.Licence.payload, [``CDerives.effRaise], some ``Backend.Clos.PayloadSound⟩,
-  ⟨``Backend.Clos.Licence.split, [``Ctx.SplitP.dup, ``CDerives.copy, ``CDerives.arrCopy],
-    some ``Backend.Clos.SplitSound⟩,
-  ⟨``Backend.Clos.Licence.unused, [``Ctx.DeadP.weaken, ``CDerives.topI, ``CDerives.zeroE],
-    some ``Backend.Clos.UnusedSound⟩,
-  ⟨``Backend.Clos.Licence.abort, [``CDerives.effLet], some ``Backend.Clos.AbortSound⟩,
-  ⟨``Backend.Clos.Licence.kappa, [``kTy_unr, ``kTy_cancel_consumable_iff], some ``Backend.Clos.KappaSound⟩,
-  ⟨``Backend.Clos.Licence.step, [``Ctx.SplitP.dup], some ``Backend.Clos.StepSound⟩]
+  ⟨`Backend.Clos.Licence.word, [`Ctx.DeadP.weaken, `Ctx.SplitP.dup], some `Backend.Clos.WordSound⟩,
+  ⟨`Backend.Clos.Licence.clauses, [`clausesTy_persistent], some `Backend.Clos.ClausesSound⟩,
+  ⟨`Backend.Clos.Licence.const, [`CDerives.swap], some `Backend.Clos.ConstSound⟩,
+  ⟨`Backend.Clos.Licence.payload, [`CDerives.effRaise], some `Backend.Clos.PayloadSound⟩,
+  ⟨`Backend.Clos.Licence.split, [`Ctx.SplitP.dup, `CDerives.copy, `CDerives.arrCopy],
+    some `Backend.Clos.SplitSound⟩,
+  ⟨`Backend.Clos.Licence.unused, [`Ctx.DeadP.weaken, `CDerives.topI, `CDerives.zeroE],
+    some `Backend.Clos.UnusedSound⟩,
+  ⟨`Backend.Clos.Licence.abort, [`CDerives.effLet], some `Backend.Clos.AbortSound⟩,
+  ⟨`Backend.Clos.Licence.kappa, [`kTy_unr, `kTy_cancel_consumable_iff], some `Backend.Clos.KappaSound⟩,
+  ⟨`Backend.Clos.Licence.step, [`Ctx.SplitP.dup], some `Backend.Clos.StepSound⟩]
 
 /-- **The sites**: each declaration that builds a node at a rule, and the rules it uses. -/
 def sites : List (Name × List Name) := [
   -- Backend2.
-  (``Backend2.abortKN, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.superseded]),
-  (``Backend2.applyKN, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.superseded]),
-  (``Backend2.cancelKN, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.superseded]),
-  (``Backend2.keepEarlier, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.superseded]),
-  (``Backend2.keepFirst, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.superseded]),
-  (``Backend2.conv, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.superseded,
-    ``Backend2.Abandon.letAbort, ``Backend2.Abandon.top]),
-  (``Backend2.convDrive, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
-  (``Backend2.convDrive.proj, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.convHandle, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.convK, [``Backend2.ConsumeRule.dead, ``Backend2.Abandon.letAbort]),
-  (``Backend2.convSpine.go, [``Backend2.ConsumeRule.dead, ``Backend2.ConsumeRule.unused,
-    ``Backend2.Abandon.superseded, ``Backend2.CopyRule.dup, ``Backend2.Abandon.letAbort,
-    ``Backend2.Abandon.top]),
-  (``Backend2.convUse, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.convWork, [``Backend2.ConsumeRule.dead, ``Backend2.ConsumeRule.unused,
-    ``Backend2.Abandon.letAbort]),
-  (``Backend2.convWorkK, [``Backend2.ConsumeRule.dead, ``Backend2.ConsumeRule.unused,
-    ``Backend2.Abandon.letAbort]),
-  (``Backend2.consumeShape, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.leafConsume, [``Backend2.ConsumeRule.consume]),
-  (``Backend2.expand, [``Backend2.ConsumeRule.dead, ``Backend2.ConsumeRule.release,
-    ``Backend2.CopyRule.const]),
-  (``Backend2.freeStackThen, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.genArrFree, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
-  (``Backend2.genCount, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
-  (``Backend2.genCountTry, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
-  (``Backend2.genConsume, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
+  (`Backend2.abortKN, [`Backend2.ConsumeRule.dead, `Backend2.Abandon.superseded]),
+  (`Backend2.applyKN, [`Backend2.ConsumeRule.dead, `Backend2.Abandon.superseded]),
+  (`Backend2.cancelKN, [`Backend2.ConsumeRule.dead, `Backend2.Abandon.superseded]),
+  (`Backend2.keepEarlier, [`Backend2.ConsumeRule.dead, `Backend2.Abandon.superseded]),
+  (`Backend2.keepFirst, [`Backend2.ConsumeRule.dead, `Backend2.Abandon.superseded]),
+  (`Backend2.conv, [`Backend2.ConsumeRule.dead, `Backend2.Abandon.letAbort,
+    `Backend2.Abandon.top]),
+  (`Backend2.convDrive, [`Backend2.ConsumeRule.dead, `Backend2.CopyRule.dup]),
+  (`Backend2.convDrive.proj, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.convHandle, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.convK, [`Backend2.ConsumeRule.dead, `Backend2.Abandon.letAbort]),
+  (`Backend2.convSpine.go, [`Backend2.ConsumeRule.dead, `Backend2.ConsumeRule.unused,
+    `Backend2.CopyRule.dup, `Backend2.Abandon.letAbort, `Backend2.Abandon.top]),
+  (`Backend2.convUse, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.convWork, [`Backend2.ConsumeRule.dead, `Backend2.ConsumeRule.unused,
+    `Backend2.Abandon.letAbort]),
+  (`Backend2.convWorkK, [`Backend2.ConsumeRule.dead, `Backend2.ConsumeRule.unused,
+    `Backend2.Abandon.letAbort]),
+  (`Backend2.consumeShape, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.leafConsume, [`Backend2.ConsumeRule.consume]),
+  (`Backend2.expand, [`Backend2.ConsumeRule.dead, `Backend2.ConsumeRule.release,
+    `Backend2.CopyRule.const]),
+  (`Backend2.freeStackThen, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.genArrFree, [`Backend2.ConsumeRule.dead, `Backend2.CopyRule.dup]),
+  (`Backend2.genCount, [`Backend2.ConsumeRule.dead, `Backend2.CopyRule.dup]),
+  (`Backend2.genCountTry, [`Backend2.ConsumeRule.dead, `Backend2.CopyRule.dup]),
+  (`Backend2.genConsume, [`Backend2.ConsumeRule.dead, `Backend2.CopyRule.dup]),
   -- A work's captured slots: `dup` copies of its evidence, persistent (`[handle]`'s `DeadP`). [spec §71]
-  (``Backend2.ensureWork, [``Backend2.CopyRule.dup]),
-  (``Backend2.genFix, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
-  (``Backend2.genFoldRev, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
-  (``Backend2.genKap, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.genLendU, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.genMach, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.genStackMach, [``Backend2.ConsumeRule.dead, ``Backend2.ConsumeRule.stackK,
-    ``Backend2.CopyRule.dup]),
-  (``Backend2.genTab, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
-  (``Backend2.ifLt, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.leaf, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.mapStates, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
-  (``Backend2.mkClosOf, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.nodeAt, [``Backend2.CopyRule.dup]),
-  (``Backend2.popThen, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.releaseOpt, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.releaseThen, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.splitCtx, [``Backend2.ConsumeRule.unused, ``Backend2.CopyRule.dup]),
-  (``Backend2.stepW, [``Backend2.ConsumeRule.dead, ``Backend2.CopyRule.dup]),
-  (``Backend2.takeClosOf, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.travF, [``Backend2.CopyRule.dup]),
-  (``Backend2.unitThen, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.untuple, [``Backend2.ConsumeRule.dead]),
-  (``Backend2.walkW, [``Backend2.ConsumeRule.dead]),
+  (`Backend2.ensureWork, [`Backend2.CopyRule.dup]),
+  (`Backend2.genFix, [`Backend2.ConsumeRule.dead, `Backend2.CopyRule.dup]),
+  (`Backend2.genFoldRev, [`Backend2.ConsumeRule.dead, `Backend2.CopyRule.dup]),
+  (`Backend2.genKap, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.genLendU, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.genLocalU, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.genLocalLoop, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.genMach, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.genStackMach, [`Backend2.ConsumeRule.dead, `Backend2.ConsumeRule.stackK,
+    `Backend2.CopyRule.dup]),
+  (`Backend2.genTab, [`Backend2.ConsumeRule.dead, `Backend2.CopyRule.dup]),
+  (`Backend2.ifLt, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.leaf, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.mapStates, [`Backend2.ConsumeRule.dead, `Backend2.CopyRule.dup]),
+  (`Backend2.mkClosOf, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.nodeAt, [`Backend2.CopyRule.dup]),
+  (`Backend2.popThen, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.releaseOpt, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.releaseThen, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.splitCtx, [`Backend2.ConsumeRule.unused, `Backend2.CopyRule.dup]),
+  (`Backend2.stepW, [`Backend2.ConsumeRule.dead, `Backend2.CopyRule.dup]),
+  (`Backend2.takeClosOf, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.thenFin, [`Backend2.ConsumeRule.dead, `Backend2.Abandon.superseded]),
+  (`Backend2.travF, [`Backend2.CopyRule.dup]),
+  (`Backend2.unitThen, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.untuple, [`Backend2.ConsumeRule.dead]),
+  (`Backend2.walkW, [`Backend2.ConsumeRule.dead]),
   -- Readers of a rule, which build no node: the lint, and the statements of the `UNPROVED:` ones.
-  (``Backend2.Lint.lintTm, [``Backend2.ConsumeRule.consume, ``Backend2.ConsumeRule.stackK,
-    ``Backend2.CopyRule.dup]),
-  (``Backend2.enter, [``Backend2.ConsumeRule.stackK]),
-  (``Backend2.Tm.hasHandOver, [``Backend2.ConsumeRule.stackK]),
-  (``Backend2.StackKHandOver, [``Backend2.ConsumeRule.stackK]),
-  (``Backend.Clos.WordSound, [``Backend.Clos.Licence.word]),
-  (``Backend.Clos.ClausesSound, [``Backend.Clos.Licence.clauses]),
-  (``Backend.Clos.ConstSound, [``Backend.Clos.Licence.const]),
-  (``Backend.Clos.PayloadSound, [``Backend.Clos.Licence.payload]),
-  (``Backend.Clos.SplitSound, [``Backend.Clos.Licence.split]),
-  (``Backend.Clos.UnusedSound, [``Backend.Clos.Licence.unused]),
-  (``Backend.Clos.AbortSound, [``Backend.Clos.Licence.abort]),
-  (``Backend.Clos.KappaSound, [``Backend.Clos.Licence.kappa]),
-  (``Backend.Clos.StepSound, [``Backend.Clos.Licence.step]),
+  (`Backend2.Lint.lintTm, [`Backend2.ConsumeRule.consume, `Backend2.ConsumeRule.stackK,
+    `Backend2.CopyRule.dup]),
+  (`Backend2.enter, [`Backend2.ConsumeRule.stackK]),
+  (`Backend2.Tm.hasHandOver, [`Backend2.ConsumeRule.stackK]),
+  (`Backend2.StackKHandOver, [`Backend2.ConsumeRule.stackK]),
+  (`Backend.Clos.WordSound, [`Backend.Clos.Licence.word]),
+  (`Backend.Clos.ClausesSound, [`Backend.Clos.Licence.clauses]),
+  (`Backend.Clos.ConstSound, [`Backend.Clos.Licence.const]),
+  (`Backend.Clos.PayloadSound, [`Backend.Clos.Licence.payload]),
+  (`Backend.Clos.SplitSound, [`Backend.Clos.Licence.split]),
+  (`Backend.Clos.UnusedSound, [`Backend.Clos.Licence.unused]),
+  (`Backend.Clos.AbortSound, [`Backend.Clos.Licence.abort]),
+  (`Backend.Clos.KappaSound, [`Backend.Clos.Licence.kappa]),
+  (`Backend.Clos.StepSound, [`Backend.Clos.Licence.step]),
   -- The old backend.
-  (``Backend.Clos.MEnv.cancelArm, [``Backend.Clos.Licence.abort]),
-  (``Backend.Clos.MEnv.cancelArm.go, [``Backend.Clos.Licence.word]),
-  (``Backend.Clos.MEnv.payload, [``Backend.Clos.Licence.word]),
-  (``Backend.Clos.Tm.consumeResume, [``Backend.Clos.Licence.word, ``Backend.Clos.Licence.kappa]),
-  (``Backend.Clos.abortiveSite, [``Backend.Clos.Licence.word, ``Backend.Clos.Licence.clauses]),
-  (``Backend.Clos.byName, [``Backend.Clos.Licence.word]),
-  (``Backend.Clos.controlSite, [``Backend.Clos.Licence.word]),
-  (``Backend.Clos.conv, [``Backend.Clos.Licence.word, ``Backend.Clos.Licence.const,
-    ``Backend.Clos.Licence.unused]),
-  (``Backend.Clos.directCalls, [``Backend.Clos.Licence.word]),
-  (``Backend.Clos.dispatchOp, [``Backend.Clos.Licence.word]),
-  (``Backend.Clos.drvBody, [``Backend.Clos.Licence.clauses]),
-  (``Backend.Clos.errNext, [``Backend.Clos.Licence.word, ``Backend.Clos.Licence.payload]),
-  (``Backend.Clos.finNormal, [``Backend.Clos.Licence.abort]),
-  (``Backend.Clos.finalise, [``Backend.Clos.Licence.word, ``Backend.Clos.Licence.payload]),
-  (``Backend.Clos.fixValue, [``Backend.Clos.Licence.word, ``Backend.Clos.Licence.step]),
-  (``Backend.Clos.ioValue, [``Backend.Clos.Licence.word]),
-  (``Backend.Clos.kapBody, [``Backend.Clos.Licence.word, ``Backend.Clos.Licence.clauses,
-    ``Backend.Clos.Licence.payload]),
-  (``Backend.Clos.mkValue, [``Backend.Clos.Licence.word]),
-  (``Backend.Clos.propagateOn, [``Backend.Clos.Licence.abort]),
-  (``Backend.Clos.takeValue, [``Backend.Clos.Licence.word]),
-  (``Backend.Clos.unTuple, [``Backend.Clos.Licence.word]),
-  (``Backend.Clos.withClause, [``Backend.Clos.Licence.clauses]),
-  (``Backend.Clos.wrapCopies, [``Backend.Clos.Licence.split]),
-  (``Backend.Clos.wrapConsumes, [``Backend.Clos.Licence.unused]),
-  (``Backend.Clos.wrapRaise, [``Backend.Clos.Licence.word])]
+  (`Backend.Clos.MEnv.cancelArm, [`Backend.Clos.Licence.abort]),
+  (`Backend.Clos.MEnv.cancelArm.go, [`Backend.Clos.Licence.word]),
+  (`Backend.Clos.MEnv.payload, [`Backend.Clos.Licence.word]),
+  (`Backend.Clos.Tm.consumeResume, [`Backend.Clos.Licence.word, `Backend.Clos.Licence.kappa]),
+  (`Backend.Clos.abortiveSite, [`Backend.Clos.Licence.word, `Backend.Clos.Licence.clauses]),
+  (`Backend.Clos.byName, [`Backend.Clos.Licence.word]),
+  (`Backend.Clos.controlSite, [`Backend.Clos.Licence.word]),
+  (`Backend.Clos.conv, [`Backend.Clos.Licence.word, `Backend.Clos.Licence.const,
+    `Backend.Clos.Licence.unused]),
+  (`Backend.Clos.directCalls, [`Backend.Clos.Licence.word]),
+  (`Backend.Clos.dispatchOp, [`Backend.Clos.Licence.word]),
+  (`Backend.Clos.drvBody, [`Backend.Clos.Licence.clauses]),
+  (`Backend.Clos.errNext, [`Backend.Clos.Licence.word, `Backend.Clos.Licence.payload]),
+  (`Backend.Clos.finNormal, [`Backend.Clos.Licence.abort]),
+  (`Backend.Clos.finalise, [`Backend.Clos.Licence.word, `Backend.Clos.Licence.payload]),
+  (`Backend.Clos.fixValue, [`Backend.Clos.Licence.word, `Backend.Clos.Licence.step]),
+  (`Backend.Clos.ioValue, [`Backend.Clos.Licence.word]),
+  (`Backend.Clos.kapBody, [`Backend.Clos.Licence.word, `Backend.Clos.Licence.clauses,
+    `Backend.Clos.Licence.payload]),
+  (`Backend.Clos.mkValue, [`Backend.Clos.Licence.word]),
+  (`Backend.Clos.propagateOn, [`Backend.Clos.Licence.abort]),
+  (`Backend.Clos.takeValue, [`Backend.Clos.Licence.word]),
+  (`Backend.Clos.unTuple, [`Backend.Clos.Licence.word]),
+  (`Backend.Clos.withClause, [`Backend.Clos.Licence.clauses]),
+  (`Backend.Clos.wrapCopies, [`Backend.Clos.Licence.split]),
+  (`Backend.Clos.wrapConsumes, [`Backend.Clos.Licence.unused]),
+  (`Backend.Clos.wrapRaise, [`Backend.Clos.Licence.word])]
 
 /-- The kernel constants that copy, release or burn, as the elaboration writes them. -/
-def elabConsts : List Name := [``Frontend.Const.copy, ``Frontend.Const.copyBang,
-  ``Frontend.Const.releaseImm, ``Frontend.Const.releaseMut, ``Frontend.Const.releaseUnk,
-  ``Frontend.Const.releaseBang, ``Frontend.Const.tokBurn, ``Frontend.Const.arrayCopy,
-  ``Frontend.Const.arrayRelease]
+def elabConsts : List Name := [`Frontend.Const.copy, `Frontend.Const.copyBang,
+  `Frontend.Const.releaseImm, `Frontend.Const.releaseMut, `Frontend.Const.releaseUnk,
+  `Frontend.Const.releaseBang, `Frontend.Const.tokBurn, `Frontend.Const.arrayCopy,
+  `Frontend.Const.arrayRelease]
 
 /-- **The elaboration's emitters of those constants**, each with the rule the checker then types
 it by. The maps and tests over every constant rebuild the constant they read. -/
 def elabSites : List (Name × List Name × List Name) := [
   -- `array_copy` of an `imm` view in a template: the constant, `CDerives.arrCopy`.
-  (``Frontend.Sugar.surfV, [``Frontend.Const.arrayCopy], [``CDerives.arrCopy]),
+  (`Frontend.Sugar.surfV, [`Frontend.Const.arrayCopy], [`CDerives.arrCopy]),
   -- The burn at a written `match` (`burnCallers`): `CDerives.tokBurn`.
-  (``Frontend.Data.burnBind, [``Frontend.Const.tokBurn], [``CDerives.tokBurn]),
-  (``Frontend.Const.renameLife, elabConsts, []), (``Frontend.Const.respan, elabConsts, []),
-  (``Frontend.Const.subst, elabConsts, []), (``Frontend.Elab.Instances.safeDivisor, elabConsts, []),
-  (``Frontend.Sugar.safeDivisor, elabConsts, []), (``Frontend.Sugar.Const.unwinding, elabConsts, []),
-  (``Frontend.Sugar.relaxedC?, elabConsts, []), (``Frontend.Sugar.unwindingC?, elabConsts, [])]
+  (`Frontend.Data.burnBind, [`Frontend.Const.tokBurn], [`CDerives.tokBurn]),
+  (`Frontend.Const.renameLife, elabConsts, []), (`Frontend.Const.respan, elabConsts, []),
+  (`Frontend.Const.subst, elabConsts, []), (`Frontend.Elab.Instances.safeDivisor, elabConsts, []),
+  (`Frontend.Sugar.safeDivisor, elabConsts, []), (`Frontend.Sugar.Const.unwinding, elabConsts, []),
+  (`Frontend.Sugar.relaxedC?, elabConsts, []), (`Frontend.Sugar.unwindingC?, elabConsts, []),
+  (`Frontend.Sugar.lendFinC, elabConsts, [])]
 
 /-- The only callers of the burn, and the declarations that build a `tok_burn` constant: the
 compilation of a written `match` (SPEC §42), and the maps over every constant. -/
-def burnCallers : List Name := [``Frontend.Data.compile]
+def burnCallers : List Name := [`Frontend.Data.compile]
 
 /-- The rule constructors whose uses locate the sites. -/
 def tags : List Name := cites.map (·.tag)
@@ -231,15 +239,25 @@ def generated (env : Environment) (n : Name) (ci : ConstantInfo) : Bool :=
             | _ => false)
       | _ => false)
 
+/-- For each module of the environment, by its index, whether `mods` holds of it. Computed once
+per scan: reading `env.header` is slow, and the scans visit every declaration. -/
+def modMask (env : Environment) (view : View) (mods : Name → Bool) : Array Bool :=
+  env.header.moduleNames.mapIdx fun i m => view.hasModule i && mods m
+
+/-- Whether a declaration is of a module in `mask`; a declaration of the file this runs on (the
+script's negative tests elaborate into the environment) counts as everywhere. -/
+def inMask (env : Environment) (mask : Array Bool) (n : Name) : Bool :=
+  match env.getModuleIdxFor? n with
+  | some i => mask[i.toNat]!
+  | none => true
+
 /-- The declarations of `mods` whose value uses one of `cs`, each with the ones it uses. -/
-def usersOf (env : Environment) (mods : Name → Bool) (cs : List Name) :
+def usersOf (env : Environment) (view : View) (mods : Name → Bool) (cs : List Name) :
     Std.HashMap Name (List Name) := Id.run do
+  let mask := modMask env view mods
   let mut out : Std.HashMap Name (List Name) := {}
   for (n, ci) in env.constants.toList do
-    -- A declaration of the file this runs on (the script's negative tests) counts as everywhere.
-    let mod := (env.getModuleIdxFor? n).map (env.header.moduleNames[·.toNat]!)
-    if (`PinSites).isPrefixOf n then continue
-    unless mod.all mods do continue
+    unless inMask env mask n do continue
     let some v := ci.value? | continue
     if generated env n ci then continue
     let used := v.getUsedConstants
@@ -251,8 +269,42 @@ def usersOf (env : Environment) (mods : Name → Bool) (cs : List Name) :
 
 def sameSet (a b : List Name) : Bool := a.all b.contains && b.all a.contains
 
-#eval show CommandElabM Unit from do
-  let env ← getEnv
+
+/-- The rule types: each constructor of one is a rule. -/
+def ruleTysRaw : List Name := [`Backend2.ConsumeRule, `Backend2.CopyRule, `Backend2.Abandon, `Backend.Clos.Licence]
+
+/-- The burn the elaboration emits at a written `match`. -/
+def burnRaw : Name := `Frontend.Data.burnBind
+
+/-- Every name the tables write. -/
+def tableNames : List Name :=
+  (cites.flatMap fun c => c.tag :: c.rules ++ c.unproved.toList) ++
+  (sites.flatMap fun (n, rs) => n :: rs) ++ elabConsts ++
+  (elabSites.flatMap fun (n, cs, rs) => n :: cs ++ rs) ++ burnCallers ++ ruleTysRaw ++ [burnRaw]
+
+/-- Each name the tables write, resolved as Lean resolves it in this file; an error for each that
+does not resolve to one declaration of the modules read. -/
+def resolveAll (env : Environment) (view : View) : CoreM (Std.HashMap Name Name × Array String) := do
+  let mut map : Std.HashMap Name Name := {}
+  let mut bad : Array String := #[]
+  for n in tableNames do
+    if map.contains n then continue
+    try
+      let c ← realizeGlobalConstNoOverload (mkIdent n)
+      if view.has env c then map := map.insert n c
+      else bad := bad.push s!"unknown constant '{n}': its module is not among the census's imports"
+    catch e => bad := bad.push (← e.toMessageData.toString)
+  return (map, bad)
+
+/-- The census, over the tables with their names resolved by `q`. -/
+def check (env : Environment) (view : View) (q : Name → Name) : Array String × String := Id.run do
+  let cites := cites.map fun c => { c with tag := q c.tag, rules := c.rules.map q, unproved := c.unproved.map q }
+  let sites := sites.map fun (n, rs) => (q n, rs.map q)
+  let elabConsts := elabConsts.map q
+  let elabSites := elabSites.map fun (n, cs, rs) => (q n, cs.map q, rs.map q)
+  let burnCallers := burnCallers.map q
+  let tags := cites.map (·.tag)
+  let ruleTys := ruleTysRaw.map q
   let mut bad : Array String := #[]
   -- Every rule cited, once; every `UNPROVED:` statement a `Prop`.
   for c in cites do
@@ -263,20 +315,17 @@ def sameSet (a b : List Name) : Bool := a.all b.contains && b.all a.contains
       | some (.defnInfo d) =>
         unless d.type == .sort .zero do bad := bad.push s!"{c.tag}: {u} is not a `Prop`"
       | _ => bad := bad.push s!"{c.tag}: {u} is not a definition"
-  for ty in [``Backend2.ConsumeRule, ``Backend2.CopyRule, ``Backend2.Abandon, ``Backend.Clos.Licence] do
+  for ty in ruleTys do
     let some (.inductInfo i) := env.find? ty | bad := bad.push s!"{ty}: not an inductive"; continue
     for k in i.ctors do
       unless tags.contains k do bad := bad.push s!"{k}: a rule with no citation"
   -- A rule is written where a node is built: no definition outside the LIRs' syntax is a rule, or
   -- a function answering one, so no site builds a node at a rule chosen elsewhere.
-  let ruleTys := [``Backend2.ConsumeRule, ``Backend2.CopyRule, ``Backend2.Abandon, ``Backend.Clos.Licence]
-  for (n, ci) in env.constants.toList do
-    if (`PinSites).isPrefixOf n then continue
-    let mod := (env.getModuleIdxFor? n).map (env.header.moduleNames[·.toNat]!)
-    unless mod.all (fun m => (`Backend2).isPrefixOf m || (`Backend).isPrefixOf m ||
+  let mask := modMask env view fun m => ((`Backend2).isPrefixOf m || (`Backend).isPrefixOf m ||
       (`Target).isPrefixOf m || (`Pipeline).isPrefixOf m || (`Reference).isPrefixOf m ||
-      (`Frontend).isPrefixOf m) do continue
-    if mod == some `Backend2.Syntax || mod == some `Backend.Clos.Syntax then continue
+      (`Frontend).isPrefixOf m) && m != `Backend2.Syntax && m != `Backend.Clos.Syntax
+  for (n, ci) in env.constants.toList do
+    unless inMask env mask n do continue
     unless ci matches .defnInfo _ do continue
     if generated env n ci then continue
     match ci.type.getForallBody.getAppFn with
@@ -284,7 +333,7 @@ def sameSet (a b : List Name) : Bool := a.all b.contains && b.all a.contains
       if ruleTys.contains c then bad := bad.push s!"{n}: a definition of a rule ({c}) outside the syntax"
     | _ => pure ()
   -- Every site in the table, with exactly the rules it uses.
-  let found := usersOf env (fun m => (`Backend2).isPrefixOf m && m != `Backend2.LintTests ||
+  let found := usersOf env view (fun m => (`Backend2).isPrefixOf m && m != `Backend2.LintTests ||
     (`Backend).isPrefixOf m || (`Target).isPrefixOf m || (`Pipeline).isPrefixOf m ||
     (`Reference).isPrefixOf m) tags
   for (n, used) in found.toList do
@@ -295,7 +344,7 @@ def sameSet (a b : List Name) : Bool := a.all b.contains && b.all a.contains
   for (n, _) in sites do
     unless found.contains n do bad := bad.push s!"{n}: has an entry and builds no node"
   -- The elaboration's constants: each emitter in the table, with exactly the constants it emits.
-  let emits := usersOf env (fun m => (`Frontend.Elab).isPrefixOf m || m == `Frontend.Sugar) elabConsts
+  let emits := usersOf env view (fun m => (`Frontend.Elab).isPrefixOf m || m == `Frontend.Sugar) elabConsts
   for (n, used) in emits.toList do
     match elabSites.find? (·.1 == n) with
     | none => bad := bad.push s!"{n}: the elaboration emits {used}, and has no entry"
@@ -304,13 +353,21 @@ def sameSet (a b : List Name) : Bool := a.all b.contains && b.all a.contains
   for (n, _) in elabSites do
     unless emits.contains n do bad := bad.push s!"{n}: has an entry and emits no constant"
   -- The burn at a written `match` only.
-  let burns := usersOf env (fun m => (`Frontend).isPrefixOf m) [``Frontend.Data.burnBind]
+  let burns := usersOf env view (fun m => (`Frontend).isPrefixOf m) [q burnRaw]
   for (n, _) in burns.toList do
     unless burnCallers.contains n do bad := bad.push s!"{n}: emits `tok_burn` outside a written `match`"
   if burns.isEmpty then bad := bad.push "no written `match` emits `tok_burn`"
-  if bad.isEmpty then
-    logInfo m!"insertion pins: {found.size} backend sites, {cites.length} rules cited, {emits.size} elaboration emitters, the burn at a written `match` only"
-  else
-    for b in bad do logError b
+  return (bad, s!"insertion pins: {found.size} backend sites, {cites.length} rules cited, {emits.size} elaboration emitters, the burn at a written `match` only")
 
-end PinSites
+/-- The census: one information line when it holds, else an error line per fault. -/
+def run (env : Environment) (view : View) : IO Result := do
+  let ctx : Core.Context := {
+    fileName := "<gate-census pins>", fileMap := default, currNamespace := `PinSites, openDecls }
+  let ((map, unresolved), _) ← (resolveAll env view).toIO ctx { env }
+  if !unresolved.isEmpty then
+    return { lines := unresolved.map (s!"error: " ++ ·), code := 1 }
+  let (bad, ok) := check env view (fun n => map.getD n n)
+  if bad.isEmpty then return { lines := #[ok] }
+  return { lines := bad.map (s!"error: " ++ ·), code := 1 }
+
+end GateCensus.PinSites

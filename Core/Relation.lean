@@ -111,6 +111,12 @@ def nuP (R : CPred) : Bool → List SRec → Val → WProp
 the variable `0` is `U(νX. C)`, read at `nuP R`. -/
 def nuEnv (C : CTy) (R : CPred) : Nat → TEnt := VTy.scons ⟨.thunk (.nu C), nuP R⟩ (tEnv none)
 
+/-- The environment of one unfolding of a system at the candidate tuple `Rs`: `Xₖ` (`k ≤ m`) is
+read at `nuP (Rs k)`, the variables above are empty.  The type it gives `Xₖ` is `1`: a body's
+leaves are polynomial, so one unfolding never reads it (`cB_nuEnvS_ty`).  `[spec §79]` -/
+def nuEnvS (m : Nat) (Rs : Nat → CPred) : Nat → TEnt := fun k =>
+  if k ≤ m then ⟨.unit, nuP (Rs k)⟩ else tEnv none (k - (m + 1))
+
 /-- A capture list as one value: right-nested pairs ending in `()`.  `[spec §68]` -/
 def tupleV : List Val → Val
   | []      => .unit
@@ -166,7 +172,9 @@ def vCE : Option (Nat → TEnt) → Bool → VTy → List SRec → LSub → Val 
 trivial unless `C` has the positive shape (`CTy.NuShape`, invariant under `CTyEq`; the rules ask
 `CTy.NuOk`, which adds that no leaf binder is free in `C`).  At `F_Σ A` the relation at the row's table is
 `effWp`: `cwp`, the greatest fixed point over segments, where the row holds `Div`, and `ewpTS`
-elsewhere.  `[spec §3, §7, §14, §19]` -/
+elsewhere.  At a system `νᵢ(X₀…Xₘ). C₀; …; Cₘ` (`m + 1`
+equations) the `i`-th component of the greatest tuple of candidates below one unfolding of every
+body (`cBSys`, `nuEnvS`), trivial unless the spine has the system's shape.  `[spec §3, §7, §14, §19, §79]` -/
 def cC : CTy → List SRec → LSub → Expr → WProp
   | .ret A, ls, δ, e => wpTS ls e (fun ls'' => vCE none true A ls'' δ)
   | .arr A C, ls, δ, e => fun ρ =>
@@ -176,8 +184,10 @@ def cC : CTy → List SRec → LSub → Expr → WProp
   | .top, _, _, _ => fun _ => True
   | .all x c C, ls, δ, e => fun ρ =>
       ∀ α, (⌜LtLife δ c α⌝ ─⋆ cC C ls (δ.extend x α) (.app e (.val .unit))) ρ
-  | .nu C, ls, δ, e => fun ρ => C.NuShape →
+  | .nuSys 0 _ C, ls, δ, e => fun ρ => C.NuShape →
       ∃ R : CPred, R.Le (fun ls' e' => cB (some (nuEnv C R)) C ls' δ e') ∧ R ls e ρ
+  | .nuSys (m + 1) i Cs, ls, δ, e => fun ρ => i ≤ m + 1 → CTy.SysShape (m + 1) Cs →
+      ∃ Rs : Nat → CPred, cBSys (some (nuEnvS (m + 1) Rs)) (m + 1) Cs Rs 0 δ ∧ Rs i ls e ρ
   | .eff n i q A B fin rc C, ls, δ, e =>
       effWp (CTy.eff n i q A B fin rc C).divAt (OpTab.ext n i
         ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
@@ -230,14 +240,24 @@ def cB : Option (Nat → TEnt) → CTy → List SRec → LSub → Expr → WProp
       ∀ v, (vCE none true A ls δ v ─⋆ cB η D ls δ (.app e (.val v))) ρ
   | η, .all x c D, ls, δ, e => fun ρ =>
       ∀ α, (⌜LtLife δ c α⌝ ─⋆ cB η D ls (δ.extend x α) (.app e (.val .unit))) ρ
-  | _, .top, _, _, _ | _, .nu _, _, _, _ =>
+  | _, .top, _, _, _ | _, .nuSys _ _ _, _, _, _ =>
       fun _ => True
+/-- Each candidate of the tuple from `j` on is below one unfolding of its body, the bodies the
+spine's of `k + 1` (`cB` at a body's two trees, strict subterms of the spine; `cBSys_iff`).
+`[spec §79]` -/
+def cBSys : Option (Nat → TEnt) → Nat → CTy → (Nat → CPred) → Nat → LSub → Prop
+  | η, 0, .amp L R, Rs, j, δ => ∀ ls e ρ, Rs j ls e ρ →
+      cB η L ls δ (.app e (.val (.inj₁ .unit))) ρ ∧ cB η R ls δ (.app e (.val (.inj₂ .unit))) ρ
+  | η, k + 1, .amp (.amp L R) D, Rs, j, δ => (∀ ls e ρ, Rs j ls e ρ →
+      cB η L ls δ (.app e (.val (.inj₁ .unit))) ρ ∧ cB η R ls δ (.app e (.val (.inj₂ .unit))) ρ) ∧
+      cBSys η k D Rs (j + 1) δ
+  | _, _, _, _, _, _ => True
 end
 
 theorem effRetE_none : ∀ (C : CTy) (δ : LSub), effRetE none C δ = effRet C δ
   | .ret _, _ => rfl
   | .eff _ _ _ _ _ _ _ C, δ => effRetE_none C δ
-  | .arr _ _, _ | .amp _ _, _ | .top, _ | .all _ _ _, _ | .nu _, _ => rfl
+  | .arr _ _, _ | .amp _ _, _ | .top, _ | .all _ _ _, _ | .nuSys _ _ _, _ => rfl
 
 /-- `𝒱⟦A⟧(ls)δ(v)`: the relation at a type read with no environment. -/
 notation "vC" => vCE none

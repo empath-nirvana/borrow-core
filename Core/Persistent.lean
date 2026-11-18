@@ -106,6 +106,68 @@ theorem vP_empty_of_persistent {A : VTy} (hA : A.Persistent) {ls : List SRec} {�
     {v : Val} {ρ : WRes} (h : vP A ls δ v ρ) : ρ = PMap.empty :=
   vCE_empty_of_persistent A (η := none) (fun _ _ _ _ _ h => h.elim) hA h
 
+/-! ### Persistence under renaming and substitution -/
+
+theorem persistent_rename (r : Nat → Nat) : ∀ A : VTy, (A.rename r).persistent = A.persistent
+  | .unit | .zero | .unk | .int _ | .opq _ | .tvar _ | .thunk _ | .code _ _ _ => rfl
+  | .tensor A B | .sum A B => by
+      simp only [VTy.rename, VTy.persistent, persistent_rename r A, persistent_rename r B]
+  | .ref _ | .imm _ _ | .mut _ _ | .fam _ | .bang _ => rfl
+  | .box _ A => by simp only [VTy.rename, VTy.persistent, persistent_rename r A]
+  | .mu A => by simp only [VTy.rename, VTy.persistent, persistent_rename _ A]
+
+theorem persistent_subst_false : ∀ (A : VTy) (σ : Nat → VTy), A.persistent = false →
+    (A.subst σ).persistent = false
+  | .unit, _, h | .zero, _, h | .unk, _, h | .int _, _, h | .tvar _, _, h | .bang _, _, h => by
+      simp [VTy.persistent] at h
+  | .opq _, _, _ | .thunk _, _, _ | .code _ _ _, _, _ | .ref _, _, _ | .imm _ _, _, _ | .mut _ _, _, _ | .fam _, _, _ =>
+      rfl
+  | .tensor A B, σ, h | .sum A B, σ, h => by
+      simp only [VTy.persistent, Bool.and_eq_false_iff] at h
+      simp only [VTy.subst, VTy.persistent, Bool.and_eq_false_iff]
+      rcases h with h | h
+      · exact .inl (persistent_subst_false A σ h)
+      · exact .inr (persistent_subst_false B σ h)
+  | .box _ A, σ, h => by
+      simp only [VTy.persistent] at h
+      simp only [VTy.subst, VTy.persistent]; exact persistent_subst_false A σ h
+  | .mu A, σ, h => by
+      simp only [VTy.persistent] at h
+      simp only [VTy.subst, VTy.persistent]; exact persistent_subst_false A _ h
+
+theorem persistent_subst_true : ∀ (A : VTy) (σ : Nat → VTy), A.persistent = true →
+    (∀ n, (σ n).persistent = true) → (A.subst σ).persistent = true
+  | .unit, _, _, _ | .zero, _, _, _ | .unk, _, _, _ | .int _, _, _, _ | .bang _, _, _, _ => rfl
+  | .tvar n, σ, _, hσ => hσ n
+  | .opq _, _, h, _ | .thunk _, _, h, _ | .ref _, _, h, _ | .imm _ _, _, h, _ | .mut _ _, _, h, _
+  | .fam _, _, h, _ => by simp [VTy.persistent] at h
+  | .tensor A B, σ, h, hσ | .sum A B, σ, h, hσ => by
+      simp only [VTy.persistent, Bool.and_eq_true] at h
+      simp only [VTy.subst, VTy.persistent, Bool.and_eq_true]
+      exact ⟨persistent_subst_true A σ h.1 hσ, persistent_subst_true B σ h.2 hσ⟩
+  | .box _ A, σ, h, hσ => by
+      simp only [VTy.persistent] at h
+      simp only [VTy.subst, VTy.persistent]; exact persistent_subst_true A σ h hσ
+  | .mu A, σ, h, hσ => by
+      simp only [VTy.persistent] at h
+      simp only [VTy.subst, VTy.persistent]
+      refine persistent_subst_true A _ h ?_
+      intro n
+      cases n with
+      | zero => rfl
+      | succ n => simp only [VTy.upS, VTy.scons, persistent_rename]; exact hσ n
+
+/-- Unrolling a `μ` keeps its persistence. -/
+theorem persistent_inst_mu (A : VTy) : (VTy.inst (.mu A) A).persistent = A.persistent := by
+  cases hA : A.persistent with
+  | false => exact persistent_subst_false A _ hA
+  | true =>
+      refine persistent_subst_true A _ hA ?_
+      intro n
+      cases n with
+      | zero => simpa [VTy.scons, VTy.persistent] using hA
+      | succ n => rfl
+
 /-! ### Flat types and flat contexts -/
 
 /-- A value type whose values are words copied as they are: `I32`, `I64`, `U8`, the floats

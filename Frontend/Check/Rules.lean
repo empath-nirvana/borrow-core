@@ -531,11 +531,11 @@ def rAllE {x : LifeVar} {b : CLife} {C : CCTy} (a : CLife) (hlt : ltB Δ a b = t
 
 /-- `nu_in M`: `M` at the unrolling of a positive `νX. C`. -/
 def rNuIn {C : CCTy} (hC : C.NuOk) (r : Res Δ T (.comp C.unroll)) : Res Δ T (.comp (.nu C)) :=
-  ⟨.nuIn i (.comp (.nu C)) C r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.nuIn i hC h⟩
+  ⟨.nuIn i (.comp (.nu C)) 0 0 C r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.nuIn i hC h⟩
 
 /-- `nu_out M`. -/
 def rNuOut {C : CCTy} (hC : C.NuOk) (r : Res Δ T (.comp (.nu C))) : Res Δ T (.comp C.unroll) :=
-  ⟨.nuOut i (.comp C.unroll) C r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.nuOut i hC h⟩
+  ⟨.nuOut i (.comp C.unroll) 0 0 C r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.nuOut i hC h⟩
 
 /-- `[α]`: a term at a judgment up to the names of its types' lifetime binders.  `[spec §3]` -/
 def rAlpha {j j' : Jdg} (hα : j.alphaB j' = true) (r : Res Δ T j) : Res Δ T j' :=

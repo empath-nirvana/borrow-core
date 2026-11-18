@@ -1,4 +1,4 @@
-import Core.NuRel
+import Core.NuSys
 import Core.EffWp
 import Core.DivWp
 
@@ -50,8 +50,10 @@ def sS : CTy → List SRec → LSub → List Val → (List SRec → Val → WPro
       BoLo.or (⌜v = .inj₁ .unit⌝ ⋆ sS C ls δ S Q) (⌜v = .inj₂ .unit⌝ ⋆ sS D ls δ S Q)
   | .all x c C, ls, δ, v :: S, Q =>
       ex fun α => ⌜v = .unit ∧ LtLife δ c α⌝ ⋆ sS C ls (δ.extend x α) S Q
-  | .nu C, ls, δ, S, Q => fun ρ =>
+  | .nuSys 0 _ C, ls, δ, S, Q => fun ρ =>
       C.NuShape ∧ sSB (some (nuEnv C (fun ls e => cC (.nu C) ls δ e))) C ls δ S Q ρ
+  | .nuSys (m + 1) i Cs, ls, δ, S, Q => fun ρ => i ≤ m + 1 ∧ Cs.SysShape (m + 1) ∧
+      sSB (some (nuEnvS (m + 1) (nuSysRel m Cs δ))) (Cs.body (m + 1) i) ls δ S Q ρ
   | _, _, _, _, _ => fun _ => False
 
 /-- One unfolding of an observation tree with no effect row is its stack semantics. -/
@@ -118,7 +120,7 @@ theorem cB_iff_stacks (η : Option (Nat → TEnt)) : ∀ (C : CTy), C.EffFree �
         intro S Q ρ₁ ρ₂ hs hc
         exact h (.unit :: S) Q ρ₁ ρ₂ ⟨α, pure_sep_mk ⟨rfl, hlt⟩ hs⟩ hc
   | .top, _, _, _, _, _
-  | .nu _, _, _, _, _, _ =>
+  | .nuSys _ _ _, _, _, _, _, _ =>
       ⟨fun _ S _ _ _ hs => by cases S <;> exact hs.elim, fun _ => trivial⟩
 
 /-- `cC` is the stack semantics, at a type with no effect row. -/
@@ -189,7 +191,15 @@ theorem cC_iff_stacks : ∀ (C : CTy), C.EffFree → ∀ (ls : List SRec) (δ : 
         intro S Q ρ₁ ρ₂ hs hc
         exact h (.unit :: S) Q ρ₁ ρ₂ ⟨α, pure_sep_mk ⟨rfl, hlt⟩ hs⟩ hc
 
-  | .nu C, hE, ls, δ, e, ρ => by
+  | .nuSys (m + 1) i Cs, hE, ls, δ, e, ρ => by
+      by_cases hS : i ≤ m + 1 ∧ Cs.SysShape (m + 1)
+      · refine (cC_nuS_unfold hS.2 hS.1 ls δ e ρ).trans
+          ((cB_iff_stacks _ _ (CTy.EffFree.body (k := m + 1) (Cs := Cs) hE i) ls δ e ρ).trans ?_)
+        exact ⟨fun h S Q ρ₁ ρ₂ hs hc => h S Q ρ₁ ρ₂ hs.2.2 hc,
+          fun h S Q ρ₁ ρ₂ hs hc => h S Q ρ₁ ρ₂ ⟨hS.1, hS.2, hs⟩ hc⟩
+      · exact ⟨fun _ _ _ _ _ hs => absurd ⟨hs.1, hs.2.1⟩ hS,
+          fun _ hi hS' => absurd ⟨hi, hS'⟩ hS⟩
+  | .nuSys 0 _ C, hE, ls, δ, e, ρ => by
       by_cases hC : C.NuShape
       · refine (cC_nu_unfold hC ls δ e ρ).trans ((cB_iff_stacks _ C hE ls δ e ρ).trans ?_)
         exact ⟨fun h S Q ρ₁ ρ₂ hs hc => h S Q ρ₁ ρ₂ hs.2 hc,
@@ -228,7 +238,7 @@ theorem cB_step (η : Option (Nat → TEnt)) : ∀ (C : CTy) {e e' : Expr},
       cB_step η C (fun μ => (h μ).plug (Kont.appL .hole _)) ls (δ.extend x α) _
         (h' α ρ₁ ρ₂ hp hc)
   | .top, _, _, _, _, _
-  | .nu _, _, _, _, _, _ => fun _ _ => trivial
+  | .nuSys _ _ _, _, _, _, _, _ => fun _ _ => trivial
 
 /-- `𝒞⟦C⟧` is closed under a pure step in front. -/
 theorem cC_step : ∀ (C : CTy) {e e' : Expr}, (∀ μ : Heap, Step1N μ e μ e') →
@@ -243,7 +253,10 @@ theorem cC_step : ∀ (C : CTy) {e e' : Expr}, (∀ μ : Heap, Step1N μ e μ e'
   | .all x _ C, _, _, h, ls, δ => fun _ h' α ρ₁ ρ₂ hp hc =>
       cC_step C (fun μ => (h μ).plug (Kont.appL .hole _)) ls (δ.extend x α) _
         (h' α ρ₁ ρ₂ hp hc)
-  | .nu C, _, _, h, ls, δ => fun ρ h' hC =>
+  | .nuSys (_ + 1) _ _, _, _, h, ls, δ => fun ρ h' hi hS =>
+      ((cC_nuS_unfold hS hi ls δ _ ρ).mpr (cB_step _ _ h ls δ ρ
+        ((cC_nuS_unfold hS hi ls δ _ ρ).mp h'))) hi hS
+  | .nuSys 0 _ C, _, _, h, ls, δ => fun ρ h' hC =>
       ((cC_nu_unfold hC ls δ _ ρ).mpr (cB_step _ C h ls δ ρ ((cC_nu_unfold hC ls δ _ ρ).mp h'))) hC
   | .eff _ _ _ _ _ _ _ _, _, _, h, ls, _ => effWp_step h ls
 
@@ -283,7 +296,7 @@ theorem cB_bind (η : Option (Nat → TEnt)) : ∀ (C : CTy) (K : Kont) (M : Exp
         (fun ls' hls w σ hσ => h ls' hls w σ hσ α PMap.empty σ ⟨rfl, hlt⟩
           (ResU.comp_empty_right σ)) ρ hρ
   | .top, _, _, _, _, _, _, _, _
-  | .nu _, _, _, _, _, _, _, _, _ => fun _ _ => trivial
+  | .nuSys _ _ _, _, _, _, _, _, _, _, _ => fun _ _ => trivial
 
 /-- **Bind at `𝒞⟦C⟧`.**  Run `M` in the hole of `K`, framing `R` through the run; the rest of
 the computation — `K` and the stack `C` is eliminated by — continues at the list `M` returns.
@@ -316,7 +329,10 @@ theorem cC_bind : ∀ (C : CTy) (K : Kont) (M : Expr) (ls : List SRec) (δ : LSu
       exact cC_bind C (.appL K .unit) M ls (δ.extend x α) P R hR
         (fun ls' hls w σ hσ => h ls' hls w σ hσ α PMap.empty σ ⟨rfl, hlt⟩
           (ResU.comp_empty_right σ)) ρ hρ
-  | .nu C, K, M, ls, δ, P, R, hR, h => fun ρ hρ hC =>
+  | .nuSys (_ + 1) _ _, K, M, ls, δ, P, R, hR, h => fun ρ hρ hi hS =>
+      ((cC_nuS_unfold hS hi ls δ _ ρ).mpr (cB_bind _ _ K M ls δ P R hR
+        (fun ls' hls w σ hσ => (cC_nuS_unfold hS hi ls' δ _ σ).mp (h ls' hls w σ hσ)) ρ hρ)) hi hS
+  | .nuSys 0 _ C, K, M, ls, δ, P, R, hR, h => fun ρ hρ hC =>
       ((cC_nu_unfold hC ls δ _ ρ).mpr (cB_bind _ C K M ls δ P R hR
         (fun ls' hls w σ hσ => (cC_nu_unfold hC ls' δ _ σ).mp (h ls' hls w σ hσ)) ρ hρ)) hC
   | .eff _ _ _ _ _ _ _ _, K, M, ls, _, P, R, hR, h =>

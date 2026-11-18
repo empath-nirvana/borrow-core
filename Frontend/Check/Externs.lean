@@ -2,6 +2,7 @@ import Frontend.Parser
 import Frontend.Print
 import Frontend.Check.Program
 import Core.Stdio
+import Core.Chain.Externs791N
 
 /-!
 # Frontend — Check — externs and standard I/O  `[spec §11]`
@@ -30,6 +31,9 @@ The standard externs, each with its type, its role, its model and its assurance 
   `IORun.expr r []` for the compiled form `r`, built with no arguments in the term, with each
   extern's host implementation for its model (`Backend.CheckedProg.runIO`): the checked wrapper
   applied to its argument `IORun.arg []`, and nothing else.
+* **The chain's end to end** (`IORun.every_runN`, `IORun.loop_every_runN`). The same run read
+  from the chain's `io_every_runN`/`io_loop_every_runN`, `goal791N` at no constants with the
+  externs given their models: `OrDiverges` of the run from `HandlerLawN` alone.  `[spec §72]`
 -/
 
 namespace Frontend.Check
@@ -548,6 +552,32 @@ theorem IORun.loop_every_run (r : IORun) (hp : r.c.pins = []) (hl : r.loops = tr
   have h := r.c.deriv hp
   rw [r.hC, ioType, hl, show r.c.t.erase = _ from r.he] at h
   exact io_loop_every_run h r.hR r.hR' r.hγ inp n hs
+
+/-- **The model run, read from the chain**: for a `main` that does not loop, the run of
+`IORun.expr` is safe, ends at the empty memory, or diverges, from `HandlerLawN`. `io_every_runN`
+(`goal791N` at no constants, the externs given their models) at the checked wrapper.
+`[spec §72]` -/
+theorem IORun.every_runN (hL : BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.HandlerLawN (ℍ := ℍ))
+    (r : IORun) (hp : r.c.pins = []) (hl : r.loops = false) (inp : List UInt8) :
+    BoCa.Fig16.LogRel.Core.OrDiverges (ℍ := ℍ) (r.expr inp) := by
+  have h := r.c.deriv hp
+  rw [r.hC, ioType, hl] at h
+  intro μ e hs
+  exact BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.io_every_runN (ℍ := ℍ) hL h r.hR r.hγ
+    (bytesVal_bytes inp) hs
+
+/-- **The model run of a program that runs until its input ends, read from the chain**: for
+every `n`, `run_io[γ] inp` observed at most `n` times is safe, ends at the empty memory, or
+diverges, from `HandlerLawN`. `io_loop_every_runN` at the checked wrapper.  `[spec §72]` -/
+theorem IORun.loop_every_runN (hL : BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.HandlerLawN (ℍ := ℍ))
+    (r : IORun) (hp : r.c.pins = []) (hl : r.loops = true) (inp : List UInt8) (n : ℕ) :
+    BoCa.Fig16.LogRel.Core.OrDiverges (ℍ := ℍ)
+      (BoCa.Fig16.LogRel.substAll r.γ (ioLoopE r.N inp n)) := by
+  have h := r.c.deriv hp
+  rw [r.hC, ioType, hl, show r.c.t.erase = _ from r.he] at h
+  intro μ e hs
+  exact BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N.io_loop_every_runN (ℍ := ℍ) hL h r.hR r.hR' r.hγ
+    inp n hs
 
 end
 

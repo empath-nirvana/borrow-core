@@ -25,7 +25,7 @@ open BoCa.Lifetime (LSub)
 theorem CTy.divAt_instT (S : VTy) : ∀ D : CTy, (D.instT S).divAt = D.divAt
   | .eff n i q A B fin _ D => by
       simp only [CTy.instT, CTy.divAt, CTy.divAt_instT S D]
-  | .ret _ | .amp _ _ | .arr _ _ | .top | .all _ _ _ | .nu _ => by
+  | .ret _ | .amp _ _ | .arr _ _ | .top | .all _ _ _ | .nuSys _ _ _ => by
       simp [CTy.instT, CTy.divAt]
 
 /-! ### Two tables -/

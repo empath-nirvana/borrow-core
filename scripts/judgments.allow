@@ -1,8 +1,8 @@
-# Typing judgments that exist today (#798). Frozen: do not add lines; fold judgments instead.
+# Typing judgments (#798): one kernel judgment, CDerivesX, and one checker judgment, TDerivesX, each
+# at a judgment index JIdx. Frozen: do not add lines; a new coordinate is a field of JIdx.
+# The other lines are the paper mechanisation's (Paper/, Support/) and experiments' own judgments.
 # Format: path name
-Core/Fundamental.lean CDerives
-Core/PinDerives.lean CDerivesP
-Core/Tied.lean CDerivesAt
+Core/Judgment.lean CDerivesX
 experiments/Affine/Affine/Elab.lean ADerives
 experiments/CBPVCore/CBPVCore/Fundamental.lean CDerives
 experiments/CBPVMu/CBPVMu/Fundamental.lean CDerives
@@ -12,11 +12,8 @@ experiments/Grades/Grades/Judgment.lean GDerives
 experiments/HandlersAsBorrows/HandlersAsBorrows/Source.lean VDerives
 experiments/HandlersAsBorrows/HandlersAsBorrows/Source.lean XDerives
 experiments/Outlives/Outlives/Derives.lean LDerives
-Frontend/Check/TDerives.lean TDerivesAt
-Frontend/Check/TDerives.lean TDerivesP
+Frontend/Check/TDerives.lean TDerivesX
 Paper/S2_Statics/Definitions.lean Derives
-scripts/pin/CDerivesP.tmpl.lean CDerivesP
-scripts/pin/TDerives.tmpl.lean TDerivesAt
-scripts/pin/TDerives.tmpl.lean TDerivesP
+scripts/pin/TDerives.tmpl.lean TDerivesX
 Support/LogicalRelation/Compatibility.lean DerivesIn
 Support/Statics/Presupposed.lean DerivesWf

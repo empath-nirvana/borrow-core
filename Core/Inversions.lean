@@ -226,66 +226,6 @@ theorem VView.eq_of_heads {T T' : VTy} (hv : VView T T') (hTb : ∀ a A, T ≠ .
 
 /-! ### Persistence is a property of the head -/
 
-theorem persistent_rename (r : Nat → Nat) : ∀ A : VTy, (A.rename r).persistent = A.persistent
-  | .unit | .zero | .unk | .int _ | .opq _ | .tvar _ | .thunk _ | .code _ _ _ => rfl
-  | .tensor A B | .sum A B => by
-      simp only [VTy.rename, VTy.persistent, persistent_rename r A, persistent_rename r B]
-  | .ref _ | .imm _ _ | .mut _ _ | .fam _ | .bang _ => rfl
-  | .box _ A => by simp only [VTy.rename, VTy.persistent, persistent_rename r A]
-  | .mu A => by simp only [VTy.rename, VTy.persistent, persistent_rename _ A]
-
-theorem persistent_subst_false : ∀ (A : VTy) (σ : Nat → VTy), A.persistent = false →
-    (A.subst σ).persistent = false
-  | .unit, _, h | .zero, _, h | .unk, _, h | .int _, _, h | .tvar _, _, h | .bang _, _, h => by
-      simp [VTy.persistent] at h
-  | .opq _, _, _ | .thunk _, _, _ | .code _ _ _, _, _ | .ref _, _, _ | .imm _ _, _, _ | .mut _ _, _, _ | .fam _, _, _ =>
-      rfl
-  | .tensor A B, σ, h | .sum A B, σ, h => by
-      simp only [VTy.persistent, Bool.and_eq_false_iff] at h
-      simp only [VTy.subst, VTy.persistent, Bool.and_eq_false_iff]
-      rcases h with h | h
-      · exact .inl (persistent_subst_false A σ h)
-      · exact .inr (persistent_subst_false B σ h)
-  | .box _ A, σ, h => by
-      simp only [VTy.persistent] at h
-      simp only [VTy.subst, VTy.persistent]; exact persistent_subst_false A σ h
-  | .mu A, σ, h => by
-      simp only [VTy.persistent] at h
-      simp only [VTy.subst, VTy.persistent]; exact persistent_subst_false A _ h
-
-theorem persistent_subst_true : ∀ (A : VTy) (σ : Nat → VTy), A.persistent = true →
-    (∀ n, (σ n).persistent = true) → (A.subst σ).persistent = true
-  | .unit, _, _, _ | .zero, _, _, _ | .unk, _, _, _ | .int _, _, _, _ | .bang _, _, _, _ => rfl
-  | .tvar n, σ, _, hσ => hσ n
-  | .opq _, _, h, _ | .thunk _, _, h, _ | .ref _, _, h, _ | .imm _ _, _, h, _ | .mut _ _, _, h, _
-  | .fam _, _, h, _ => by simp [VTy.persistent] at h
-  | .tensor A B, σ, h, hσ | .sum A B, σ, h, hσ => by
-      simp only [VTy.persistent, Bool.and_eq_true] at h
-      simp only [VTy.subst, VTy.persistent, Bool.and_eq_true]
-      exact ⟨persistent_subst_true A σ h.1 hσ, persistent_subst_true B σ h.2 hσ⟩
-  | .box _ A, σ, h, hσ => by
-      simp only [VTy.persistent] at h
-      simp only [VTy.subst, VTy.persistent]; exact persistent_subst_true A σ h hσ
-  | .mu A, σ, h, hσ => by
-      simp only [VTy.persistent] at h
-      simp only [VTy.subst, VTy.persistent]
-      refine persistent_subst_true A _ h ?_
-      intro n
-      cases n with
-      | zero => rfl
-      | succ n => simp only [VTy.upS, VTy.scons, persistent_rename]; exact hσ n
-
-/-- Unrolling a `μ` keeps its persistence. -/
-theorem persistent_inst_mu (A : VTy) : (VTy.inst (.mu A) A).persistent = A.persistent := by
-  cases hA : A.persistent with
-  | false => exact persistent_subst_false A _ hA
-  | true =>
-      refine persistent_subst_true A _ hA ?_
-      intro n
-      cases n with
-      | zero => simpa [VTy.scons, VTy.persistent] using hA
-      | succ n => rfl
-
 /-- **A type is persistent exactly when its head is.** -/
 theorem Hnf.persistent {T h : VTy} (hh : Hnf T h) : T.persistent = h.persistent := by
   induction hh with
@@ -297,14 +237,14 @@ theorem Hnf.persistent {T h : VTy} (hh : Hnf T h) : T.persistent = h.persistent 
 
 /-- One same-term step of Core's rules, at the judgements alone: a value step, `return`, its reading
 back (`ofRet`), `[sub]` with its order on rows, and `ν`'s two rules (at an `&`-tree,
-`CTy.NuOk`). -/
+`CTy.NuOk`), at every projection of a system (`CTy.SysOkAt`). -/
 inductive JS : Jdg → Jdg → Prop
   | val {A B : VTy} : VS A B → JS (.val A) (.val B)
   | ret (A : VTy) : JS (.val A) (.comp (.ret A))
   | ofRet (A : VTy) : JS (.comp (.ret A)) (.val A)
   | effSub (S S' : Row) (A : VTy) : RowLe S S' → JS (.comp (CTy.effOf S A)) (.comp (CTy.effOf S' A))
-  | nuIn (C : CTy) : C.NuOk → JS (.comp C.unroll) (.comp (.nu C))
-  | nuOut (C : CTy) : C.NuOk → JS (.comp (.nu C)) (.comp C.unroll)
+  | nuIn (C : CTy) {m i : Nat} : C.SysOkAt m i → JS (.comp (CTy.unrollS m i C)) (.comp (.nuSys m i C))
+  | nuOut (C : CTy) {m i : Nat} : C.SysOkAt m i → JS (.comp (.nuSys m i C)) (.comp (CTy.unrollS m i C))
   | alpha {C C' : CTy} : CTy.alphaB [] C C' = true → JS (.comp C) (.comp C')
 
 /-- `[α]` at the judgements alone. -/
@@ -331,8 +271,33 @@ theorem effOf_ne_all (S : Row) (Y : VTy) x b (C : CTy) : CTy.effOf S Y ≠ .all 
 theorem effOf_ne_top (S : Row) (Y : VTy) : CTy.effOf S Y ≠ .top := by
   cases S <;> simp [CTy.effOf]
 
-theorem effOf_ne_nu (S : Row) (Y : VTy) (C : CTy) : CTy.effOf S Y ≠ .nu C := by
+theorem effOf_ne_nu (S : Row) (Y : VTy) (m i : Nat) (C : CTy) : CTy.effOf S Y ≠ .nuSys m i C := by
   cases S <;> simp [CTy.effOf]
+
+/-- Each body of a system's spine is a `&`.  `[spec §79]` -/
+theorem CTy.SysShapeAt.body_amp {n : Nat} : ∀ {k : Nat} {Cs : CTy}, Cs.SysShapeAt n k → ∀ j,
+    j ≤ k → ∃ L R, Cs.body k j = .amp L R
+  | 0, .amp _ _, _, _, _ => ⟨_, _, rfl⟩
+  | _ + 1, .amp (.amp _ _) _, _, 0, _ => ⟨_, _, rfl⟩
+  | k + 1, .amp _ D, h, j + 1, hj => CTy.SysShapeAt.body_amp (k := k) (Cs := D) h.2 j (by omega)
+  | 0, .ret _, h, _, _ | 0, .arr _ _, h, _, _ | 0, .top, h, _, _ | 0, .all _ _ _, h, _, _
+  | 0, .nuSys _ _ _, h, _, _ | 0, .eff _ _ _ _ _ _ _ _, h, _, _ => h.elim
+  | _ + 1, .ret _, h, _, _ | _ + 1, .arr _ _, h, _, _ | _ + 1, .top, h, _, _
+  | _ + 1, .all _ _ _, h, _, _ | _ + 1, .nuSys _ _ _, h, _, _
+  | _ + 1, .eff _ _ _ _ _ _ _ _, h, _, _ => h.elim
+  | _ + 1, .amp (.ret _) _, h, 0, _ | _ + 1, .amp (.arr _ _) _, h, 0, _
+  | _ + 1, .amp .top _, h, 0, _ | _ + 1, .amp (.all _ _ _) _, h, 0, _
+  | _ + 1, .amp (.nuSys _ _ _) _, h, 0, _
+  | _ + 1, .amp (.eff _ _ _ _ _ _ _ _) _, h, 0, _ => h.1.elim
+
+/-- **A projection of a positive system unrolls to an `&`.**  `[spec §79]` -/
+theorem unrollS_amp : ∀ {m i : Nat} {C : CTy}, C.SysOkAt m i →
+    ∃ C₁ C₂, CTy.unrollS m i C = .amp C₁ C₂
+  | 0, 0, _, hC => unroll_amp hC
+  | 0, _ + 1, _, hC => hC.elim
+  | m + 1, i, _, hC => by
+      obtain ⟨L, R, h⟩ := CTy.SysShapeAt.body_amp hC.2.1 i hC.1
+      exact ⟨_, _, show CTy.instTL _ (CTy.body (m + 1) i _) = _ by rw [h]; rfl⟩
 
 theorem effOf_ne_amp (S : Row) (Y : VTy) (C D : CTy) : CTy.effOf S Y ≠ .amp C D := by
   cases S <;> simp [CTy.effOf]
@@ -376,11 +341,11 @@ theorem ValCls.step {T : VTy} {j j' : Jdg} (hs : JS j j') (h : ValCls T j) : Val
       exact ⟨S', _, rfl, hY⟩
   | nuIn C hC =>
       obtain ⟨S, Y, he, -⟩ := h
-      obtain ⟨C₁, C₂, hu⟩ := unroll_amp hC
+      obtain ⟨C₁, C₂, hu⟩ := unrollS_amp hC
       exact absurd (hu.symm.trans he) (effOf_ne_amp S Y C₁ C₂).symm
   | nuOut C hC =>
       obtain ⟨S, Y, he, -⟩ := h
-      exact absurd he.symm (effOf_ne_nu S Y C)
+      exact absurd he.symm (effOf_ne_nu S Y _ _ C)
   | alpha hα =>
       obtain ⟨S, Y, rfl, hY⟩ := h
       obtain ⟨S', Y', rfl, -, hY'⟩ := CTy.alphaB_effOf S hα
@@ -407,19 +372,20 @@ theorem ValCls.of_alpha {T₀ T : VTy} {j : Jdg} (hα : VTy.alphaB [] T₀ T = t
   | val Y => exact VView.of_alpha hα h
   | comp D => obtain ⟨S, Y, rfl, hY⟩ := h; exact ⟨S, Y, rfl, VView.of_alpha hα hY⟩
 
-/-- A computation type no same-term rule leaves: no row's, no `&`, no `ν`. -/
+/-- A computation type no same-term rule leaves: no row's, no `&`, no `ν` (no projection of a
+system). -/
 def Rigid (D : CTy) : Prop :=
-  (∀ S A, D ≠ CTy.effOf S A) ∧ (∀ C₁ C₂, D ≠ .amp C₁ C₂) ∧ ∀ C, D ≠ .nu C
+  (∀ S A, D ≠ CTy.effOf S A) ∧ (∀ C₁ C₂, D ≠ .amp C₁ C₂) ∧ ∀ m i C, D ≠ .nuSys m i C
 
 theorem rigid_arr (A : VTy) (C : CTy) : Rigid (.arr A C) := by
-  refine ⟨fun S Y h => effOf_ne_arr S Y A C h.symm, fun _ _ h => ?_, fun _ h => ?_⟩ <;> cases h
+  refine ⟨fun S Y h => effOf_ne_arr S Y A C h.symm, fun _ _ h => ?_, fun _ _ _ h => ?_⟩ <;> cases h
 
 theorem rigid_all (x : BoCa.Lifetime.LifeVar) (b : Lifetime.Life) (C : CTy) :
     Rigid (.all x b C) := by
-  refine ⟨fun S Y h => effOf_ne_all S Y x b C h.symm, fun _ _ h => ?_, fun _ h => ?_⟩ <;> cases h
+  refine ⟨fun S Y h => effOf_ne_all S Y x b C h.symm, fun _ _ h => ?_, fun _ _ _ h => ?_⟩ <;> cases h
 
 theorem rigid_top : Rigid .top := by
-  refine ⟨fun S Y h => effOf_ne_top S Y h.symm, fun _ _ h => ?_, fun _ h => ?_⟩ <;> cases h
+  refine ⟨fun S Y h => effOf_ne_top S Y h.symm, fun _ _ h => ?_, fun _ _ _ h => ?_⟩ <;> cases h
 
 /-- An α-equivalent of a type that is no row's is no row's. -/
 theorem alpha_not_effOf {D D' : CTy} (hα : CTy.alphaB [] D D' = true)
@@ -434,9 +400,11 @@ theorem Rigid.alpha {D D' : CTy} (hD : Rigid D) (hα : CTy.alphaB [] D D' = true
   · rintro C₁ C₂ rfl
     cases D <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
     exact ha _ _ rfl
-  · rintro C rfl
-    cases D <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
-    exact hn _ rfl
+  · rintro m i C rfl
+    cases D <;> simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, reduceCtorEq,
+      Bool.false_eq_true] at hα
+    obtain ⟨⟨rfl, rfl⟩, -⟩ := hα
+    exact hn _ _ _ rfl
 
 /-- A same-term rule leaves a rigid type only for an α-equivalent of it. -/
 theorem JS.rigid {D : CTy} {j : Jdg} (hs : JS (.comp D) j) (hD : Rigid D) :
@@ -446,9 +414,9 @@ theorem JS.rigid {D : CTy} {j : Jdg} (hs : JS (.comp D) j) (hD : Rigid D) :
   | ofRet A => exact (he [] A rfl).elim
   | effSub S S' A _ => exact (he S A rfl).elim
   | nuIn C hC =>
-      obtain ⟨C₁, C₂, hu⟩ := unroll_amp hC
+      obtain ⟨C₁, C₂, hu⟩ := unrollS_amp hC
       exact (ha C₁ C₂ hu).elim
-  | nuOut C _ => exact (hn C rfl).elim
+  | nuOut C _ => exact (hn _ _ C rfl).elim
   | alpha hα => exact ⟨_, rfl, hα⟩
 
 /-- **A rigid computation type is read at itself alone**, up to α-equivalence. -/
@@ -490,16 +458,16 @@ theorem JR.comp_val {D : CTy} {Y : VTy} (hr : JR (.comp D) (.val Y)) :
         | ofRet A => exact absurd rfl (hD' [] A)
         | effSub S S' A _ => exact absurd rfl (hD' S A)
         | nuIn C hC =>
-            refine ⟨_, rfl, fun S A h => effOf_ne_nu S A C h.symm⟩
+            refine ⟨_, rfl, fun S A h => effOf_ne_nu S A _ _ C h.symm⟩
         | nuOut C hC =>
-            obtain ⟨C₁, C₂, hu⟩ := unroll_amp hC
+            obtain ⟨C₁, C₂, hu⟩ := unrollS_amp hC
             refine ⟨_, rfl, fun S A h => ?_⟩
             rw [hu] at h
             exact effOf_ne_amp S A C₁ C₂ h.symm
         | alpha hα => exact ⟨_, rfl, alpha_not_effOf hα hD'⟩
 
 /-- An `&` or a `ν` is read at `&`s and `ν`s alone. -/
-def AmpNu (D : CTy) : Prop := (∃ C₁ C₂, D = .amp C₁ C₂) ∨ ∃ C, D = .nu C
+def AmpNu (D : CTy) : Prop := (∃ C₁ C₂, D = .amp C₁ C₂) ∨ ∃ m i C, D = .nuSys m i C
 
 theorem JR.ampNu {D : CTy} {j : Jdg} (hr : JR (.comp D) j) (hD : AmpNu D) :
     ∃ D', j = .comp D' ∧ AmpNu D' := by
@@ -508,19 +476,20 @@ theorem JR.ampNu {D : CTy} {j : Jdg} (hr : JR (.comp D) j) (hD : AmpNu D) :
   | tail _ hs ih =>
       obtain ⟨D', rfl, hD'⟩ := ih
       cases hs with
-      | ofRet A => rcases hD' with ⟨_, _, h⟩ | ⟨_, h⟩ <;> cases h
+      | ofRet A => rcases hD' with ⟨_, _, h⟩ | ⟨_, _, _, h⟩ <;> cases h
       | effSub S S' A _ =>
-          rcases hD' with ⟨_, _, h⟩ | ⟨_, h⟩
+          rcases hD' with ⟨_, _, h⟩ | ⟨_, _, _, h⟩
           · exact absurd h (effOf_ne_amp _ _ _ _)
-          · exact absurd h (effOf_ne_nu _ _ _)
-      | nuIn C hC => exact ⟨_, rfl, .inr ⟨C, rfl⟩⟩
-      | nuOut C hC => exact ⟨_, rfl, .inl (unroll_amp hC)⟩
+          · exact absurd h (effOf_ne_nu _ _ _ _ _)
+      | nuIn C hC => exact ⟨_, rfl, .inr ⟨_, _, C, rfl⟩⟩
+      | nuOut C hC => exact ⟨_, rfl, .inl (unrollS_amp hC)⟩
       | @alpha _ D'' hα =>
           refine ⟨D'', rfl, ?_⟩
-          rcases hD' with ⟨_, _, rfl⟩ | ⟨_, rfl⟩ <;> cases D'' <;>
-            simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at hα
+          rcases hD' with ⟨_, _, rfl⟩ | ⟨_, _, _, rfl⟩ <;> cases D'' <;>
+            simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, reduceCtorEq,
+              Bool.false_eq_true] at hα
           · exact .inl ⟨_, _, rfl⟩
-          · exact .inr ⟨_, rfl⟩
+          · obtain ⟨⟨rfl, rfl⟩, -⟩ := hα; exact .inr ⟨_, _, _, rfl⟩
 
 /-- An `&`-tree instantiated is an `&`. -/
 theorem instT_amp_of_nuOk {C : CTy} (hC : C.NuOk) (T : VTy) :
@@ -539,55 +508,166 @@ theorem JR.codeOut_ampNu {C : CTy} (hC : C.NuOk) {T : VTy} {D : CTy}
 
 theorem JR.codeOut_effOf {C : CTy} (hC : C.NuOk) {T : VTy} {S : Row} {Y : VTy}
     (hr : JR (.comp (C.instT T)) (.comp (CTy.effOf S Y))) : False := by
-  rcases hr.codeOut_ampNu hC with ⟨_, _, h⟩ | ⟨_, h⟩
+  rcases hr.codeOut_ampNu hC with ⟨_, _, h⟩ | ⟨_, _, _, h⟩
   · exact effOf_ne_amp _ _ _ _ h
-  · exact effOf_ne_nu _ _ _ h
+  · exact effOf_ne_nu _ _ _ _ _ h
 
 theorem JR.codeOut_rigid {C : CTy} (hC : C.NuOk) {T : VTy} {D : CTy} (hD : Rigid D)
     (hr : JR (.comp (C.instT T)) (.comp D)) : False := by
-  rcases hr.codeOut_ampNu hC with ⟨_, _, h⟩ | ⟨_, h⟩
+  rcases hr.codeOut_ampNu hC with ⟨_, _, h⟩ | ⟨_, _, _, h⟩
   · exact hD.2.1 _ _ h
-  · exact hD.2.2 _ h
+  · exact hD.2.2 _ _ _ h
+
+/-! ### Systems up to α  `[spec §79]` -/
+
+/-- α-equivalent spines have α-equivalent bodies. -/
+theorem CTy.alphaB_body : ∀ (C : CTy) {C' : CTy} (k j : Nat), CTy.alphaB [] C C' = true →
+    CTy.alphaB [] (C.body k j) (C'.body k j) = true
+  | .amp C D, C', k, j, h => by
+      cases C' with
+      | amp C' D' =>
+          cases k with
+          | zero => exact h
+          | succ k =>
+              simp only [CTy.alphaB, Bool.and_eq_true] at h
+              cases j with
+              | zero => exact h.1
+              | succ j => exact CTy.alphaB_body D k j h.2
+      | _ => simp [CTy.alphaB] at h
+  | .ret _, C', k, j, h | .arr _ _, C', k, j, h | .top, C', k, j, h | .all _ _ _, C', k, j, h
+  | .nuSys _ _ _, C', k, j, h | .eff _ _ _ _ _ _ _ _, C', k, j, h => by
+      cases k with
+      | zero => exact h
+      | succ k => cases j <;> cases C' <;> simp_all [CTy.alphaB, CTy.body]
+
+theorem CTy.not_instBinds_of_effLeafS {n : Nat} {x : Lifetime.LifeVar} : ∀ {D : CTy}, D.EffLeafS n →
+    ¬ D.InstBinds x
+  | .ret _, _, h => h
+  | .eff _ _ _ _ _ _ _ D, hD, h => CTy.not_instBinds_of_effLeafS (D := D) hD.2.2 h
+
+theorem CTy.leafBinds_of_instBindsS {n : Nat} {x : Lifetime.LifeVar} : ∀ {D : CTy}, D.NuLeafS n →
+    D.InstBinds x → D.LeafBinds x
+  | .amp C D, hD, h => h.elim (fun h => .inl (CTy.leafBinds_of_instBindsS hD.1 h))
+      (fun h => .inr (CTy.leafBinds_of_instBindsS hD.2 h))
+  | .arr _ D, hD, h => CTy.leafBinds_of_instBindsS (D := D) hD.2 h
+  | .all y _ D, hD, h => h.elim .inl (fun h => .inr (CTy.leafBinds_of_instBindsS (D := D) hD h))
+  | .eff n' i q A B fin rc D, hD, h =>
+      (CTy.not_instBinds_of_effLeafS (D := .eff n' i q A B fin rc D) hD h).elim
+
+/-- `CTy.alphaB_instT` for a simultaneous substitution. -/
+theorem CTy.alphaB_instTL {Ss Ss' : List VTy}
+    (hS : ∀ n, VTy.alphaB [] (VTy.substL Ss n) (VTy.substL Ss' n) = true) :
+    ∀ (ρ₁ : List (Lifetime.LifeVar × Lifetime.LifeVar)) (C C' : CTy),
+      (∀ p ∈ ρ₁, ∀ n, ¬ VFree p.1 (VTy.substL Ss n) ∧ ¬ VFree p.2 (VTy.substL Ss' n)) →
+      (∀ x, C.InstBinds x → ∀ n, ¬ VFree x (VTy.substL Ss n)) →
+      (∀ x', C'.InstBinds x' → ∀ n, ¬ VFree x' (VTy.substL Ss' n)) →
+      CTy.alphaB ρ₁ C C' = true → CTy.alphaB ρ₁ (C.instTL Ss) (C'.instTL Ss') = true
+  | ρ₁, .ret A, C', hρ, _, _, h => by
+      cases C' <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at h
+      exact VTy.alphaB_subst A (fun n => VTy.alphaB_lift ρ₁ (hS n) (fun p hp => hρ p hp n)) h
+  | ρ₁, .amp C D, C', hρ, hb, hb', h => by
+      cases C' with
+      | amp C' D' =>
+          simp only [CTy.alphaB, Bool.and_eq_true] at h
+          simp only [CTy.instTL, CTy.alphaB, Bool.and_eq_true]
+          exact ⟨CTy.alphaB_instTL hS ρ₁ C C' hρ (fun x h => hb x (.inl h))
+              (fun x h => hb' x (.inl h)) h.1,
+            CTy.alphaB_instTL hS ρ₁ D D' hρ (fun x h => hb x (.inr h))
+              (fun x h => hb' x (.inr h)) h.2⟩
+      | _ => simp [CTy.alphaB] at h
+  | ρ₁, .arr A C, C', hρ, hb, hb', h => by
+      cases C' with
+      | arr A' C' =>
+          simp only [CTy.alphaB, Bool.and_eq_true] at h
+          simp only [CTy.instTL, CTy.alphaB, Bool.and_eq_true]
+          exact ⟨h.1, CTy.alphaB_instTL hS ρ₁ C C' hρ hb hb' h.2⟩
+      | _ => simp [CTy.alphaB] at h
+  | ρ₁, .all x b C, C', hρ, hb, hb', h => by
+      cases C' with
+      | all x' b' C' =>
+          simp only [CTy.alphaB, Bool.and_eq_true] at h
+          simp only [CTy.instTL, CTy.alphaB, Bool.and_eq_true]
+          refine ⟨h.1, CTy.alphaB_instTL hS ((x, x') :: ρ₁) C C' ?_ (fun y h => hb y (.inr h))
+            (fun y h => hb' y (.inr h)) h.2⟩
+          intro p hp n
+          rcases List.mem_cons.mp hp with rfl | hp
+          · exact ⟨hb x (.inl rfl) n, hb' x' (.inl rfl) n⟩
+          · exact hρ p hp n
+      | _ => simp [CTy.alphaB] at h
+  | ρ₁, .eff n i q A B fin rc C, C', hρ, hb, hb', h => by
+      cases C' with
+      | eff n' i' q' A' B' fin' rc' C' =>
+          simp only [CTy.alphaB, Bool.and_eq_true] at h
+          simp only [CTy.instTL, CTy.alphaB, Bool.and_eq_true]
+          exact ⟨h.1, CTy.alphaB_instTL hS ρ₁ C C' hρ hb hb' h.2⟩
+      | _ => simp [CTy.alphaB] at h
+  | ρ₁, .top, C', _, _, _, h => by cases C' <;> simp_all [CTy.alphaB, CTy.instTL]
+  | ρ₁, .nuSys _ _ C, C', _, _, _, h => by
+      cases C' <;> simp only [CTy.alphaB, reduceCtorEq, Bool.false_eq_true] at h
+      simpa [CTy.instTL, CTy.alphaB] using h
+
+/-- No leaf binder of a positive system is free in a thunk of one of its projections. -/
+theorem sysThunks_fresh {m i : Nat} {C : CTy} (hC : C.SysOk (m + 1)) (hi : i ≤ m + 1) :
+    ∀ x, (C.body (m + 1) i).InstBinds x → ∀ n, ¬ VFree x (VTy.substL (CTy.sysThunks (m + 1) C) n) := by
+  intro x hx n
+  rw [sysThunks_getD]
+  split
+  · exact hC.2 x (CTy.leafBinds_body hi (CTy.leafBinds_of_instBindsS (hC.1.body i hi) hx))
+  · simp [VFree]
+
+/-- **Two α-equivalent positive systems unroll alike** (`CTy.alphaB_unroll` at every projection).
+`[spec §79]` -/
+theorem CTy.alphaB_unrollS : ∀ {m i : Nat} {C C' : CTy}, CTy.alphaB [] C C' = true →
+    C.SysOkAt m i → C'.SysOkAt m i →
+    CTy.alphaB [] (CTy.unrollS m i C) (CTy.unrollS m i C') = true
+  | 0, 0, _, _, h, hC, hC' => CTy.alphaB_unroll h hC hC'
+  | 0, _ + 1, _, _, _, hC, _ => hC.elim
+  | m + 1, i, C, C', h, hC, hC' => by
+      refine CTy.alphaB_instTL (fun n => ?_) [] _ _ (fun _ hp => absurd hp List.not_mem_nil)
+        (sysThunks_fresh hC.2 hC.1) (sysThunks_fresh hC'.2 hC'.1) (CTy.alphaB_body C _ _ h)
+      rw [sysThunks_getD, sysThunks_getD]
+      split <;> simp [VTy.alphaB, CTy.alphaB, h]
 
 /-- The judgements an `&` is read at: itself, and the `ν`s that unroll to it, up to
 α-equivalence.  A `ν` is kept with the positive body it was formed at, `C₀`: an α-equivalent
 body need not be positive, and two positive bodies unroll alike (`CTy.alphaB_unroll`). -/
 def AmpCls (C₁ C₂ : CTy) (j : Jdg) : Prop :=
   (∃ D₁ D₂, j = .comp (.amp D₁ D₂) ∧ CTy.alphaB [] C₁ D₁ = true ∧ CTy.alphaB [] C₂ D₂ = true) ∨
-    ∃ C C₀, j = .comp (.nu C) ∧ C₀.NuOk ∧ CTy.alphaB [] C₀ C = true ∧ ∃ D₁ D₂,
-      C₀.unroll = .amp D₁ D₂ ∧ CTy.alphaB [] C₁ D₁ = true ∧ CTy.alphaB [] C₂ D₂ = true
+    ∃ m i C C₀, j = .comp (.nuSys m i C) ∧ C₀.SysOkAt m i ∧ CTy.alphaB [] C₀ C = true ∧ ∃ D₁ D₂,
+      CTy.unrollS m i C₀ = .amp D₁ D₂ ∧ CTy.alphaB [] C₁ D₁ = true ∧ CTy.alphaB [] C₂ D₂ = true
 
 theorem AmpCls.step {C₁ C₂ : CTy} {j j' : Jdg} (hs : JS j j') (h : AmpCls C₁ C₂ j) :
     AmpCls C₁ C₂ j' := by
   cases hs with
-  | val hv => rcases h with ⟨_, _, h, -⟩ | ⟨_, _, h, -⟩ <;> cases h
-  | ret A => rcases h with ⟨_, _, h, -⟩ | ⟨_, _, h, -⟩ <;> cases h
-  | ofRet A => rcases h with ⟨_, _, h, -⟩ | ⟨_, _, h, -⟩ <;> cases h
+  | val hv => rcases h with ⟨_, _, h, -⟩ | ⟨_, _, _, _, h, -⟩ <;> cases h
+  | ret A => rcases h with ⟨_, _, h, -⟩ | ⟨_, _, _, _, h, -⟩ <;> cases h
+  | ofRet A => rcases h with ⟨_, _, h, -⟩ | ⟨_, _, _, _, h, -⟩ <;> cases h
   | effSub S S' A _ =>
-      rcases h with ⟨_, _, h, -⟩ | ⟨_, _, h, -⟩ <;> simp only [Jdg.comp.injEq] at h
+      rcases h with ⟨_, _, h, -⟩ | ⟨_, _, _, _, h, -⟩ <;> simp only [Jdg.comp.injEq] at h
       · exact absurd h (effOf_ne_amp _ _ _ _)
-      · exact absurd h (effOf_ne_nu _ _ _)
+      · exact absurd h (effOf_ne_nu _ _ _ _ _)
   | nuIn C hC =>
-      rcases h with ⟨D₁, D₂, h, h₁, h₂⟩ | ⟨_, _, h, -⟩ <;> simp only [Jdg.comp.injEq] at h
-      · exact .inr ⟨C, C, rfl, hC, CTy.alphaB_refl C, D₁, D₂, h, h₁, h₂⟩
-      · obtain ⟨D₁, D₂, hu⟩ := unroll_amp hC
+      rcases h with ⟨D₁, D₂, h, h₁, h₂⟩ | ⟨_, _, _, _, h, -⟩ <;> simp only [Jdg.comp.injEq] at h
+      · exact .inr ⟨_, _, C, C, rfl, hC, CTy.alphaB_refl C, D₁, D₂, h, h₁, h₂⟩
+      · obtain ⟨D₁, D₂, hu⟩ := unrollS_amp hC
         rw [hu] at h; cases h
-  | nuOut C hC =>
-      rcases h with ⟨_, _, h, -⟩ | ⟨C', C₀, h, hC₀, hα, D₁, D₂, hu, h₁, h₂⟩ <;>
+  | @nuOut C m i hC =>
+      rcases h with ⟨_, _, h, -⟩ | ⟨m', i', C', C₀, h, hC₀, hα, D₁, D₂, hu, h₁, h₂⟩ <;>
         simp only [Jdg.comp.injEq] at h
       · cases h
       · cases h
-        have hu' := CTy.alphaB_unroll hα hC₀ hC
+        have hu' := CTy.alphaB_unrollS hα hC₀ hC
         rw [hu] at hu'
-        cases hC' : C.unroll <;> rw [hC'] at hu' <;>
+        cases hC' : CTy.unrollS m i C <;> rw [hC'] at hu' <;>
           simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at hu'
         exact .inl ⟨_, _, rfl, CTy.alphaB_trans' h₁ hu'.1, CTy.alphaB_trans' h₂ hu'.2⟩
   | @alpha D D' hα =>
-      rcases h with ⟨D₁, D₂, h, h₁, h₂⟩ | ⟨C, C₀, h, hC₀, hα₀, hu⟩ <;>
+      rcases h with ⟨D₁, D₂, h, h₁, h₂⟩ | ⟨m, i, C, C₀, h, hC₀, hα₀, hu⟩ <;>
         simp only [Jdg.comp.injEq] at h <;> subst h <;> cases D' <;>
-        simp only [CTy.alphaB, Bool.and_eq_true, reduceCtorEq, Bool.false_eq_true] at hα
+        simp only [CTy.alphaB, Bool.and_eq_true, beq_iff_eq, reduceCtorEq, Bool.false_eq_true] at hα
       · exact .inl ⟨_, _, rfl, CTy.alphaB_trans' h₁ hα.1, CTy.alphaB_trans' h₂ hα.2⟩
-      · exact .inr ⟨_, C₀, rfl, hC₀, CTy.alphaB_trans' hα₀ hα, hu⟩
+      · obtain ⟨⟨rfl, rfl⟩, hα⟩ := hα
+        exact .inr ⟨_, _, _, C₀, rfl, hC₀, CTy.alphaB_trans' hα₀ hα, hu⟩
 
 /-- **An `&` is read at itself and at the `ν`s that unroll to it**, up to α-equivalence. -/
 theorem JR.amp {C₁ C₂ : CTy} {j : Jdg} (hr : JR (.comp (.amp C₁ C₂)) j) : AmpCls C₁ C₂ j := by
@@ -598,7 +678,7 @@ theorem JR.amp {C₁ C₂ : CTy} {j : Jdg} (hr : JR (.comp (.amp C₁ C₂)) j) 
 /-- An `&` read at an `&` is read at an α-equivalent of itself. -/
 theorem JR.amp_amp {C₁ C₂ D₁ D₂ : CTy} (hr : JR (.comp (.amp C₁ C₂)) (.comp (.amp D₁ D₂))) :
     CTy.alphaB [] C₁ D₁ = true ∧ CTy.alphaB [] C₂ D₂ = true := by
-  rcases hr.amp with ⟨_, _, h, h₁, h₂⟩ | ⟨_, _, h, -⟩
+  rcases hr.amp with ⟨_, _, h, h₁, h₂⟩ | ⟨_, _, _, _, h, -⟩
   · simp only [Jdg.comp.injEq, CTy.amp.injEq] at h
     obtain ⟨rfl, rfl⟩ := h
     exact ⟨h₁, h₂⟩
@@ -902,7 +982,7 @@ theorem qualsVal_noVar (qs : List Qual) {k : Nat} : ¬ (qualsVal qs).1.HasVar k 
 /-- **Every free variable of a typed term has a live slot.** -/
 theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ k, e.HasVar k → ∃ T, Γ[k]? = some ⟨T, true⟩ := by
-  induction h with
+  induction h using CDerives.induct with
   | var hs =>
       intro k hk; simp only [Expr.HasVar] at hk; subst hk; exact ⟨_, soloP_le hs⟩
   | @force _ _ i _ C hs _ =>
@@ -1022,8 +1102,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       · obtain ⟨T, hT⟩ := ihN (k + 1) (hasVar_fill hcl _ 0 (k + 1) (by omega) hk)
         exact ⟨T, slot_succ hT⟩
       · exact absurd hk (not_hasVar_closed hcl)
-  | withbor1U _ _ _ _ _ _ _ _ ih | withbor2U _ _ _ _ _ _ _ _ ih
-  | withbor3U _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
+  | withborUD _ _ _ _ _ _ _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
   | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih =>
       intro k hk; exact ih k (hasVar_withborUE hk)
   | foldImm => intro k hk; exact absurd hk (not_hasVar_closed (foldImmV_closed _))
@@ -1042,7 +1121,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
 /-- The term constants of `CDerives`'s conclusions, unfolded to their head constructors, so that a
 rule whose conclusion's term has another head is told apart. -/
 macro "cd_terms" : tactic => `(tactic| (try simp_all [withPair, absurdE, copy, forget, swap,
-    withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, releaseV, emptyFamV, swapV,
+    withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, releaseV, emptyFamV, swapV, sliceCopyV,
     Val.arr, withborUE, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
     BoCa.BoLo.raiseE, opArgE, awaitE, thenE, hndTerm, hndExpr, Expr.val, Val.lam, Val.prim, Val.unit,
     Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store', mintE, burnE]))
@@ -1056,7 +1135,7 @@ theorem forceE_var {C : CTy} {i : Nat} {e : Expr} (h : forceE C (.var i) = e) :
 
 /-- The same, at one hypothesis alone. -/
 macro "cd_at " h:ident : tactic => `(tactic| (simp [withPair, absurdE, copy, forget, swap,
-    withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, releaseV, emptyFamV, swapV,
+    withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, releaseV, emptyFamV, swapV, sliceCopyV,
     Val.arr, withborUE, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
     BoCa.BoLo.raiseE, opArgE, awaitE, thenE, hndTerm, hndExpr, Expr.val, Val.lam, Val.prim, Val.unit,
     Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store', mintE, burnE] at $h:ident))
@@ -1064,13 +1143,13 @@ macro "cd_at " h:ident : tactic => `(tactic| (simp [withPair, absurdE, copy, for
 /-- The primitives that have a rule of their own. -/
 def PrimRule : Prim → Prop
   | .alloc | .free | .host _ | .lit _ | .tab | .drop | .idx | .count | .countTry | .boundedFix
-  | .split | .iterate => True
+  | .split | .iterate | .sliceCopy => True
   | _ => False
 
 /-- **A primitive is typed only by its own rule.** -/
 theorem der_prim {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ p, e = .prim p → PrimRule p := by
-  induction h <;> intro p he <;> cd_terms <;> (try subst he) <;> (try trivial)
+  induction h using CDerives.induct <;> intro p he <;> cd_terms <;> (try subst he) <;> (try trivial)
   case force _ _ i _ C _ _ =>
     rcases forceE_cases C (.var i) with hf | hf <;> rw [hf] at he <;> simp at he
 
@@ -1082,7 +1161,7 @@ theorem not_der_load {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ
 (`[perform]`, `[raise]`). -/
 theorem not_der_app_prim {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ p X, e = .app (.prim p) X → ¬ PrimRule p → p ≠ .perform → p ≠ .raise → False := by
-  induction h <;> intro p X he hp hpe hpr <;> cd_terms
+  induction h using CDerives.induct <;> intro p X he hp hpe hpr <;> cd_terms
   case force _ _ i _ C _ _ =>
     rcases forceE_cases C (.var i) with hf | hf <;> rw [hf] at he <;> simp at he
   all_goals exact hp (der_prim ‹CDerives _ _ (.prim p) _› p rfl)
@@ -1107,7 +1186,7 @@ theorem VarCls.step {T : VTy} {j j' : Jdg} (hs : JS j j') (h : VarCls T j) : Var
 /-- **A variable is read at a view of its live slot's type.** -/
 theorem der_var {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ i, e = .var i → ∃ T, Γ[i]? = some ⟨T, true⟩ ∧ VarCls T j := by
-  induction h with
+  induction h using CDerives.induct with
   | var hs => intro i he; cases he; exact ⟨_, soloP_le hs, .inl (ValCls.refl _)⟩
   | @force _ _ i' T C hs hT =>
       intro i he
@@ -1152,7 +1231,7 @@ theorem der_pair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
     ∀ a b, e = .pair a b →
       (∃ Γ₁ Γ₂ A B, Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerives Δ Γ₁ a (.val A) ∧ CDerives Δ Γ₂ b (.val B) ∧
         ValCls (.tensor A B) j) ∨ Expr.pair a b = emptyFamV.1 := by
-  induction h with
+  induction h using CDerives.induct with
   | tensorI hs h₁ h₂ => intro a b he; cases he; exact .inl ⟨_, _, _, _, hs, h₁, h₂, ValCls.refl _⟩
   | sliceEmptyI => intro a b he; exact .inr he.symm
   | sliceEmptyM => intro a b he; exact .inr he.symm
@@ -1238,7 +1317,7 @@ theorem der_pair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
 /-- **`inj₁ a` is read at the views of a sum**, `a` typed in the same context. -/
 theorem der_inj₁ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ a, e = .inj₁ a → ∃ A B, CDerives Δ Γ a (.val A) ∧ ValCls (.sum A B) j := by
-  induction h with
+  induction h using CDerives.induct with
   | sumI₁ h => intro a he; cases he; exact ⟨_, _, h, ValCls.refl _⟩
   | ret _ ih =>
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he; exact ⟨A, B, ha, hc.step (JS.ret _)⟩
@@ -1286,7 +1365,7 @@ theorem der_inj₁ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
 /-- **`()` is read at `1`'s views over a consumed context, or at `⊤`.** -/
 theorem der_unit {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     e = .unit → (Ctx.DeadP Γ ∧ ValCls .unit j) ∨ JR (.comp .top) j := by
-  induction h with
+  induction h using CDerives.induct with
   | unitI hd => intro _; exact .inl ⟨hd, ValCls.refl _⟩
   | topI => intro _; exact .inr .refl
   | ret _ ih =>
@@ -1355,7 +1434,7 @@ theorem der_unit {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
 /-- **`alloc` is read at the views of `A ⊸ Ref A`.** -/
 theorem der_prim_alloc {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     e = .prim .alloc → ∃ A, ValCls (.lolli A (.ref A)) j := by
-  induction h with
+  induction h using CDerives.induct with
   | alloc => intro _; exact ⟨_, ValCls.refl _⟩
   | ret _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.ret _)⟩
   | alpha _ hα ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.ofAlpha hα)⟩
@@ -1412,7 +1491,7 @@ def AppBase (Δ : LifeCtx) (Γ : Ctx VTy) (X Y : Expr) (j₀ : Jdg) : Prop :=
 /-- **An application is typed by a rule that concludes with one, then the same-term rules.** -/
 theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ X Y, e = .app X Y → ∃ j₀, AppBase Δ Γ X Y j₀ ∧ JR j₀ j := by
-  induction h with
+  induction h using CDerives.induct with
   | lolliE hs ha hf =>
       intro X Y he; cases he
       exact ⟨_, .inl ⟨_, _, _, _, hs, ha, hf, rfl⟩, .refl⟩
@@ -1516,7 +1595,7 @@ theorem der_letpair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDer
     ∀ V M, e = .letpair V M → ∃ Γ₁ Γ₂ A B C, Ctx.SplitP Γ Γ₁ Γ₂ ∧
       CDerives Δ Γ₁ V (.val (.tensor A B)) ∧ CDerives Δ (⟨B, true⟩ :: ⟨A, true⟩ :: Γ₂) M (.comp C) ∧
       JR (.comp C) j := by
-  induction h with
+  induction h using CDerives.induct with
   | tensorE hs hV hM => intro V M he; cases he; exact ⟨_, _, _, _, _, hs, hV, hM, .refl⟩
   | ret _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, A, B, C, hs, hV, hM, hr⟩ := ih V M he
@@ -1571,7 +1650,7 @@ reach the `;`'s judgement. -/
 theorem der_seq {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ V M, e = .seq V M → ∃ Γ₁ Γ₂ C, Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerives Δ Γ₁ V (.val .unit) ∧
       CDerives Δ Γ₂ M (.comp C) ∧ JR (.comp C) j := by
-  induction h with
+  induction h using CDerives.induct with
   | unitE hs hV hM => intro V M he; cases he; exact ⟨_, _, _, hs, hV, hM, .refl⟩
   | ret _ ih =>
       intro V M he; obtain ⟨Γ₁, Γ₂, C, hs, hV, hM, hr⟩ := ih V M he
@@ -1625,7 +1704,7 @@ theorem der_seq {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
 theorem der_then {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ N D M, e = thenE N D M → ∃ Γ₁ Γ₂ A j₁ j₂, Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerives Δ Γ₁ M j₁ ∧
       CDerives Δ (⟨A, true⟩ :: Γ₂) N j₂ := by
-  induction h with
+  induction h using CDerives.induct with
   | effThen hs _ _ _ _ _ _ _ _ hM hN _ => intro N D M he; cases he; exact ⟨_, _, _, _, _, hs, hM, hN⟩
   | effThenDiv hs _ _ _ _ _ _ _ _ hM hN _ => intro N D M he; cases he; exact ⟨_, _, _, _, _, hs, hM, hN⟩
   | force => intro N D M he; rcases forceE_var he with h | h <;> simp [thenE] at h
@@ -1696,7 +1775,7 @@ theorem der_hnd {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
         H = .pair Hr (lastTuple E 0 Hw Hn) ∧
         CDerives Δ Γ₁ (.pair Hr (.pair Hw Hn))
           (.val (.tensor (retTy S A R) (.tensor (worksTy S SW R Xs E 0) (exitsTy S R Xs E 0))))) := by
-  induction h with
+  induction h using CDerives.induct with
   | effHandleV hs hd _ hc _ _ _ _ =>
       intro n Q H M he
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he
@@ -1743,9 +1822,10 @@ def ReleaseTy (T : VTy) : Prop :=
     ((∃ A, X = .bang A) ∨ (∃ a A, X = .imm a A) ∨ (∃ a A, X = .mut a A) ∨ X = .unk)) ∨
   (∃ a A, T = .bang (.thunk (.arr (.fam (.imm a A)) (.ret .unit))))
 
-/-- The unwinding constants' types: `U(src ⊸ cb ⊸ F_Σ R)`, the callback's argument a borrow. -/
+/-- The unwinding constants' types: `U(src ⊸ cb ⊸ F_Σ R)`, the callback's argument a borrow, the
+callback at a row `Σ_M` of its own.  `[spec §19, §27]` -/
 def WithborUTy (T : VTy) : Prop :=
-  ∃ src x bnd L B S R, T = withborUTy src (cbUTy x bnd L B S) S R ∧ L.persistent = false
+  ∃ src x bnd L B SM S R, T = withborUTy src (cbUTy x bnd L B SM) S R ∧ L.persistent = false
 
 /-- The other λ-constants. -/
 def OtherLam (e : Expr) : Prop :=
@@ -2185,7 +2265,7 @@ theorem LamInv.codeIB {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
 /-- **A λ-value is typed through the rule that types its body, or as a λ-constant.** -/
 theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ M, e = .lam M → LamInv Δ Γ M j := by
-  induction h with
+  induction h using CDerives.induct with
   | lam h => intro M he; cases he; exact .inl ⟨_, _, h, .inl ⟨_, rfl, CTy.alphaB_refl _⟩⟩
   | lamDead h => intro M he; cases he; exact .inr (.inl ⟨_, _, h, .inl ⟨_, rfl, CTy.alphaB_refl _⟩⟩)
   | allI _ _ _ h =>
@@ -2288,21 +2368,15 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | releaseUnk =>
       intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inr (.inr rfl))⟩))
   | arrRelease => intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inr ⟨_, _, rfl⟩))
-  | withbor1U x =>
+  | withborUD k x =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
-  | withbor2U x =>
-      intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
-  | withbor3U x =>
-      intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
+      cases k <;> exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
   | sliceBorrowMU x =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
+      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
   | sliceBorrowIU x =>
       intro M he
-      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, rfl, rfl⟩)
+      exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
   | force => intro M he; rcases forceE_var he with h | h <;> cases h
   | _ => intro M he; cd_at he
 
@@ -2442,7 +2516,7 @@ theorem not_der_load_app {Δ : LifeCtx} {Γ : Ctx VTy} {X : Expr} {j : Jdg} :
 
 /-- A term is no λ-constant, by unfolding. -/
 macro "not_const" : tactic => `(tactic| (simp only [NotConst, OtherLam, forget, copy, swap, withbor,
-    withload, withswap, sizeV, replaceV, arrLenV, swapV, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV,
+    withload, withswap, sizeV, replaceV, arrLenV, swapV, sliceCopyV, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV,
     withborUE, divFuelV, reifyV, rkV, BoCa.BoLo.hndE,
     Expr.val, Val.lam, lam2, elet, unit', v0, v1, v2, v3, load', store', thenE, ne_eq,
     bindE, hndTerm, hndExpr, Val.unit, Val.prim, Val.i32, Val.inj₁, Val.inj₂, Val.pair,
@@ -2453,7 +2527,7 @@ macro "not_const" : tactic => `(tactic| (simp only [NotConst, OtherLam, forget, 
 
 /-- A hypothesis that a term is one of the other λ-constants is refuted by unfolding. -/
 macro "not_other " h:ident : tactic => `(tactic| (simp [OtherLam, copy, swap, withbor, withload,
-    withswap, sizeV, replaceV, arrLenV, swapV, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, Expr.val,
+    withswap, sizeV, replaceV, arrLenV, swapV, sliceCopyV, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, Expr.val,
     divFuelV, reifyV, rkV, BoCa.BoLo.hndE, Val.lam, lam2, elet, unit', v0, v1, v2, v3, withborUE,
     thenE, load', store', Val.prim, mintE, burnE,
     Val.unit] at $h:ident))
@@ -2494,7 +2568,7 @@ theorem not_der_swapBody₁ {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerive
 body, it would load its cell. -/
 theorem der_swap {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     e = swap → ∃ A B, ValClsC (axSwapTy A B) j := by
-  induction h with
+  induction h using CDerives.induct with
   | swap => intro _; exact ⟨_, _, ValClsC.refl _⟩
   | codeI _ _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.codeI _ _⟩
   | codeIB _ _ _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.codeIB _ _⟩
@@ -2687,7 +2761,7 @@ theorem rigid_or_ampNu {C : CTy} (h : C.isRet = false) : Rigid C ∨ AmpNu C := 
   | all x b C => exact .inl (rigid_all x b C)
   | top => exact .inl rigid_top
   | amp C D => exact .inr (.inl ⟨C, D, rfl⟩)
-  | nu C => exact .inr (.inr ⟨C, rfl⟩)
+  | nuSys m i C => exact .inr (.inr ⟨m, i, C, rfl⟩)
 
 /-- A value class read at a value, or at a row over it. -/
 theorem ValCls.at {T₀ T : VTy} {j : Jdg} (h : ValCls T₀ j)
@@ -2820,11 +2894,11 @@ theorem RowCls.step {S : Row} {Y : VTy} {j j' : Jdg} (hs : JS j j') (h : RowCls 
       exact ⟨_, _, rfl, hle.tail (.inl hle'), hY⟩
   | nuIn C hC =>
       obtain ⟨S', Y', he, -⟩ := h
-      obtain ⟨C₁, C₂, hu⟩ := unroll_amp hC
+      obtain ⟨C₁, C₂, hu⟩ := unrollS_amp hC
       exact absurd (hu.symm.trans he) (effOf_ne_amp S' Y' C₁ C₂).symm
   | nuOut C hC =>
       obtain ⟨S', Y', he, -⟩ := h
-      exact absurd he.symm (effOf_ne_nu S' Y' C)
+      exact absurd he.symm (effOf_ne_nu S' Y' _ _ C)
   | alpha hα =>
       obtain ⟨S', Y', rfl, hle, hY⟩ := h
       obtain ⟨S'', Y'', rfl, hS, hY'⟩ := CTy.alphaB_effOf S' hα
@@ -2874,7 +2948,7 @@ theorem der_hndJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
     ∀ (n : UInt32) (Q H M : Expr),
       e = .app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair Q H))) M →
       ∃ j₀, HndBase Δ Γ n Q H M j₀ ∧ JR j₀ j := by
-  induction h with
+  induction h using CDerives.induct with
   | effHandleV hs _ _ hc _ hnS _ _ he =>
       intro n Q H M he'
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he'
@@ -3012,7 +3086,7 @@ rows below the `[then]`'s, each capturable operation of `M`'s row recording the 
 its cancel row (`ThenLe`). -/
 theorem der_thenJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ N D M, e = thenE N D M → ∃ j₀, ThenBase Δ Γ D M j₀ ∧ JR j₀ j := by
-  induction h with
+  induction h using CDerives.induct with
   | effThen hs _ _ _ hMS hDS hfin _ _ hM _ hD _ _ _ =>
       intro N D M he; cases he
       exact ⟨_, ⟨_, _, _, _, _, _, _, hs, hMS, hDS,
@@ -3085,7 +3159,7 @@ def PerfBase (n i : UInt32) (j₀ : Jdg) : Prop :=
 /-- **A `perform` is `[perform]`'s, then the same-term rules**: its row finds the operation. -/
 theorem der_performJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ n i V, e = BoCa.BoLo.performE (opArgE n i V) → ∃ j₀, PerfBase n i j₀ ∧ JR j₀ j := by
-  induction h with
+  induction h using CDerives.induct with
   | effPerform hf hna hac _ =>
       intro n i V he
       simp only [BoCa.BoLo.performE, opArgE, Expr.val, Val.prim, Val.i32, Expr.app.injEq,
@@ -3156,7 +3230,7 @@ def RaiseBase (n i : UInt32) (j₀ : Jdg) : Prop :=
 /-- **A `raise` is `[raise]`'s, then the same-term rules**: its row finds the operation. -/
 theorem der_raiseJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ n i V, e = BoCa.BoLo.raiseE (opArgE n i V) → ∃ j₀, RaiseBase n i j₀ ∧ JR j₀ j := by
-  induction h with
+  induction h using CDerives.induct with
   | effRaise hf ha hrc _ _ =>
       intro n i V he
       simp only [BoCa.BoLo.raiseE, opArgE, Expr.val, Val.prim, Val.i32, Expr.app.injEq,
@@ -3233,7 +3307,7 @@ theorem der_letJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       M ≠ .inj₁ .unit → M ≠ .inj₂ .unit →
       (∀ n, N ≠ .case (.var 0) (.var 0) (BoCa.BoLo.raiseE (opArgE n 1 (.var 0)))) →
       (∃ j₀, LetBase Δ Γ M j₀ ∧ JR j₀ j) ∨ ∃ Γ₁ A, CtxLe Γ₁ Γ ∧ CDerives Δ Γ₁ M (.val A) := by
-  induction h with
+  induction h using CDerives.induct with
   | effAwait =>
       intro N M he _ _ _ _ _ hNa
       simp only [awaitE, Expr.app.injEq, Expr.val, Val.lam, Expr.lam.injEq] at he
@@ -3479,15 +3553,15 @@ theorem kcancel_jr_cancellable {Δ : LifeCtx} {Γ Γ' : Ctx VTy} {C₁ C₂ : CT
       exact Relation.ReflTransGen.head (JS.alpha (CTy.alphaB_trans' hE h₂)) hr
     · rcases ob with _ | d <;> simp [kBoxO, VTy.alphaB] at hT
 
-/-- **`κ`'s cancel read at a row**: the cancel row is no `⊤`, and its operations, ahead of the row,
-are below the row. -/
+/-- **`κ`'s cancel read at a row**: the cancel row is no `⊤`, and its operations are below the
+row. -/
 theorem cancelTy_rowLe {S : Row} {F : CTy} {R : VTy}
-    (h : JR (.comp (cancelTy S F)) (.comp (CTy.effOf S R))) :
-    F.isTop = false ∧ RowReach (F.rowOf ++ S) S := by
+    (h : JR (.comp (cancelTy F)) (.comp (CTy.effOf S R))) :
+    F.isTop = false ∧ RowReach F.rowOf S := by
   cases hF : F.isTop
-  · rw [show cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit by simp [cancelTy, hF]] at h
+  · rw [show cancelTy F = CTy.effOf F.rowOf .unit by simp [cancelTy, hF]] at h
     exact ⟨rfl, JR.rowLe h⟩
-  · rw [show cancelTy S F = .top by simp [cancelTy, hF]] at h
+  · rw [show cancelTy F = .top by simp [cancelTy, hF]] at h
     obtain ⟨D', he, hα⟩ := JR.rigid h rigid_top
     simp only [Jdg.comp.injEq] at he
     subst he

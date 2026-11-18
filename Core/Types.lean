@@ -96,8 +96,10 @@ inductive CTy where
   | top
   /-- `∀'x ⊏ @b. C`. -/
   | all (x : LifeVar) (b : Lifetime.Life) (C : CTy)
-  /-- `νX. C`: the greatest fixed point, with `U X` the type variable `0` in `C`.  `[spec §7]` -/
-  | nu (C : CTy)
+  /-- `νᵢ(X₀…Xₘ). C₀; …; Cₘ`: the `i`-th of a system of `m + 1` codata equations, the bodies the
+  `&`-spine `Cs`.  Today's `νX. C` is the system of one equation, `CTy.nu C = nuSys 0 0 C`, with
+  `U X` the type variable `0` in `C`.  `[spec §7, §79]` -/
+  | nuSys (m i : Nat) (Cs : CTy)
   /-- One operation of an effect row: `C` extended by the operation `i` of the name `n`,
   `A ↠^q B`, with its cancel row `fin`: what cancelling a continuation captured at the operation
   may raise or perform, `⊤` when it cannot be cancelled, otherwise the operations of `fin`'s layers
@@ -107,6 +109,9 @@ inductive CTy where
 end
 
 deriving instance DecidableEq for VTy, CTy
+
+/-- `νX. C`: the system of one equation, `ν₀(X₀). C`.  `[spec §7, §79]` -/
+@[match_pattern] abbrev CTy.nu (C : CTy) : CTy := .nuSys 0 0 C
 
 /-- The value-type eliminator with `U C` a leaf, and `Code⟨N; E⟩ C` recursing into `E` only. -/
 @[elab_as_elim]
@@ -164,7 +169,7 @@ def VTy.isZero : VTy → Bool
 `wpTS` at its end.  `[spec §19]` -/
 def CTy.EffFree : CTy → Prop
   | .ret _ | .top => True
-  | .arr _ C | .all _ _ C | .nu C => C.EffFree
+  | .arr _ C | .all _ _ C | .nuSys _ _ C => C.EffFree
   | .amp C D => C.EffFree ∧ D.EffFree
   | .eff _ _ _ _ _ _ _ _ => False
 
@@ -244,7 +249,7 @@ def CFree (x : LifeVar) : CTy → Prop
   | .amp C D => CFree x C ∨ CFree x D
   | .top => False
   | .all y b C => b.mentions x = true ∨ (x ≠ y ∧ CFree x C)
-  | .nu C => CFree x C
+  | .nuSys _ _ C => CFree x C
   | .eff _ _ _ A B fin _ C => VFree x A ∨ VFree x B ∨ CFree x fin ∨ CFree x C
 end
 
@@ -284,6 +289,10 @@ def scons {α : Type} (x : α) (f : Nat → α) : Nat → α
   | n + 1 => f n
 
 def upS (σ : Nat → VTy) : Nat → VTy := scons (.tvar 0) (fun n => rename Nat.succ (σ n))
+
+/-- The simultaneous substitution of a list: variable `k` to the `k`-th, the variables above the
+list down by its length.  `[spec §79]` -/
+def substL (Ss : List VTy) (k : Nat) : VTy := Ss.getD k (.tvar (k - Ss.length))
 
 def subst (σ : Nat → VTy) : VTy → VTy
   | .unit => .unit
@@ -1243,7 +1252,7 @@ theorem not_leafBinds_of_hasAll : ∀ {C : CTy}, C.hasAll = false → ∀ x, ¬ 
       exact hb.elim (not_leafBinds_of_hasAll h.1 x) (not_leafBinds_of_hasAll h.2 x)
   | .arr _ D, h, x, hb => not_leafBinds_of_hasAll (C := D) h x hb
   | .all _ _ _, h, _, _ => by simp [hasAll] at h
-  | .ret _, _, _, hb | .top, _, _, hb | .nu _, _, _, hb | .eff _ _ _ _ _ _ _ _, _, _, hb => hb
+  | .ret _, _, _, hb | .top, _, _, hb | .nuSys _ _ _, _, _, hb | .eff _ _ _ _ _ _ _ _, _, _, hb => hb
 
 /-- A positive shape with no `∀` leaf is positive: it binds no lifetime. -/
 theorem NuOk.of_shape {C : CTy} (hS : C.NuShape) (hA : C.hasAll = false) : C.NuOk :=
@@ -1418,6 +1427,126 @@ theorem CTy.stream_unroll (A : VTy) : (CTy.streamBody A).unroll = streamUnroll A
 
 theorem CTy.iter_unroll (A R R' : VTy) : (CTy.iterBody A R R').unroll = iterUnroll A R R' :=
   CTy.iterBody_instT A R R' _
+
+/-! ### Systems of codata equations  `[spec §79]`
+
+`νᵢ(X₀…Xₘ). C₀; …; Cₘ` is `CTy.nuSys m i Cs`, the bodies the `&`-spine `Cs`; in a body `U Xₖ`
+is the type variable `k` (`k ≤ m`).  Today's `νX. C` is `nuSys 0 0 C`, and every definition below
+is today's at `m = 0` (`SysOk 0 = NuOk`, `unrollS 0 _ = unroll`). -/
+
+/-- Every `Xₖ`, `k < n`, occurs in `A` only under `⊗`, `⊕` and `[@a]`. -/
+def VTy.PolyN (n : Nat) : VTy → Prop
+  | .tensor A B => A.PolyN n ∧ B.PolyN n
+  | .sum A B => A.PolyN n ∧ B.PolyN n
+  | .box _ A => A.PolyN n
+  | .tvar _ => True
+  | A => ∀ k, k < n → ¬ A.Occ k
+
+theorem VTy.noMut_of_polyN {n : Nat} : ∀ {A : VTy}, A.PolyN n → ∀ k, k < n → A.NoMut k
+  | .tensor _ _, h, k, hk => ⟨noMut_of_polyN h.1 k hk, noMut_of_polyN h.2 k hk⟩
+  | .sum _ _, h, k, hk => ⟨noMut_of_polyN h.1 k hk, noMut_of_polyN h.2 k hk⟩
+  | .box _ A, h, k, hk => noMut_of_polyN (A := A) h k hk
+  | .tvar _, _, _, _ => trivial
+  | .unit, _, _, _ | .zero, _, _, _ | .thunk _, _, _, _ | .code _ _ _, _, _, _ | .unk, _, _, _
+  | .int _, _, _, _ | .opq _, _, _, _ => trivial
+  | .ref _, h, k, hk | .imm _ _, h, k, hk | .mut _ _, h, k, hk | .bang _, h, k, hk
+  | .fam _, h, k, hk | .mu _, h, k, hk => VTy.noMut_of_not_occ _ (h k hk)
+
+namespace CTy
+
+/-- An effectful observation over `n` variables (`EffLeaf` at `PolyN n`). -/
+def EffLeafS (n : Nat) : CTy → Prop
+  | .ret A => A.PolyN n
+  | .eff _ _ _ A B _ _ C => A.Cl 0 ∧ B.Cl 0 ∧ EffLeafS n C
+  | _ => False
+
+/-- An observation tree over `n` variables (`NuLeaf` at `PolyN n`). -/
+def NuLeafS (n : Nat) : CTy → Prop
+  | .ret A => A.PolyN n
+  | .amp C D => NuLeafS n C ∧ NuLeafS n D
+  | .eff n' i q A B fin rc C => EffLeafS n (.eff n' i q A B fin rc C)
+  | .arr A D => A.Cl 0 ∧ NuLeafS n D
+  | .all _ _ D => NuLeafS n D
+  | _ => False
+
+/-- A body over `n` variables: a `&` of two observation trees. -/
+def NuShapeS (n : Nat) : CTy → Prop
+  | .amp C D => NuLeafS n C ∧ NuLeafS n D
+  | _ => False
+
+/-- The spine of `k + 1` bodies over `n` variables. -/
+def SysShapeAt (n : Nat) : Nat → CTy → Prop
+  | 0, C => NuShapeS n C
+  | k + 1, .amp C D => NuShapeS n C ∧ SysShapeAt n k D
+  | _ + 1, _ => False
+
+/-- The shape of a system of `m + 1` equations. -/
+abbrev SysShape (m : Nat) (Cs : CTy) : Prop := SysShapeAt (m + 1) m Cs
+
+/-- `'x` is bound by a `∀` of an observation tree of some body of the spine of `k + 1`. -/
+def SysLeafBinds (x : LifeVar) : Nat → CTy → Prop
+  | 0, C => LeafBinds x C
+  | k + 1, .amp C D => LeafBinds x C ∨ SysLeafBinds x k D
+  | _ + 1, _ => False
+
+/-- **Positivity of a system**: today's `NuOk` at one equation; at `m + 1` the system's shape
+and **system-wide binder freshness**, no lifetime bound by a `∀` leaf of any body free in any
+body.  `[spec §79]` -/
+def SysOk : Nat → CTy → Prop
+  | 0, C => C.NuOk
+  | m + 1, Cs => SysShape (m + 1) Cs ∧ ∀ x, SysLeafBinds x (m + 1) Cs → ¬ CFree x Cs
+
+/-- The `j`-th body of the spine of `m + 1` bodies. -/
+def body : Nat → Nat → CTy → CTy
+  | 0, _, C => C
+  | _ + 1, 0, .amp C _ => C
+  | m + 1, j + 1, .amp _ D => body m j D
+  | _ + 1, _, _ => .top
+
+/-- `U Xₖ` for each equation `k ≤ m`: `[U ν₀, …, U νₘ]`. -/
+def sysThunks (m : Nat) (Cs : CTy) : List VTy :=
+  (List.range (m + 1)).map fun j => .thunk (.nuSys m j Cs)
+
+/-- `C[S₀/X₀, …, Sₘ/Xₘ]` at the observations of a tree: one simultaneous substitution, the
+variables above the list shifted down by its length. -/
+def instTL (Ss : List VTy) : CTy → CTy
+  | .ret A => .ret (A.subst (VTy.substL Ss))
+  | .amp C D => .amp (instTL Ss C) (instTL Ss D)
+  | .eff n i q A B fin rc C => .eff n i q A B fin rc (instTL Ss C)
+  | .arr A C => .arr A (instTL Ss C)
+  | .all x b C => .all x b (instTL Ss C)
+  | C => C
+
+/-- The unrolling of `νᵢ`: today's at one equation, `Cᵢ[U ν₀/X₀, …, U νₘ/Xₘ]` at `m + 1`. -/
+def unrollS : Nat → Nat → CTy → CTy
+  | 0, _, C => C.unroll
+  | m + 1, i, Cs => instTL (sysThunks (m + 1) Cs) (body (m + 1) i Cs)
+
+/-- The type variable `k` occurs in a leaf type of the tree `D`. -/
+def Mentions (k : Nat) : CTy → Prop
+  | .ret A => A.Occ k
+  | .amp C D => Mentions k C ∨ Mentions k D
+  | .eff _ _ _ _ _ _ _ C => Mentions k C
+  | .arr _ C | .all _ _ C => Mentions k C
+  | _ => False
+
+/-- `unfoldᵢ`'s freshness, per pair: wherever `Xₖ` occurs in `Cⱼ`, no lifetime bound by a `∀`
+leaf of `Cⱼ` is free in `Sₖ`. -/
+def SysFresh (m : Nat) (Cs : CTy) (Ss : List VTy) : Prop :=
+  ∀ j k, j ≤ m → k ≤ m → (body m j Cs).Mentions k → (body m j Cs).BindsFresh (Ss.getD k .unit)
+
+/-- The premise of `νᵢ`'s rules: today's `NuOk` at the one equation `ν₀`, and at a system of
+`m + 2` equations an index in range and the system's positivity.  `[spec §79]` -/
+def SysOkAt : Nat → Nat → CTy → Prop
+  | 0, 0, C => C.NuOk
+  | 0, _ + 1, _ => False
+  | m + 1, i, Cs => i ≤ m + 1 ∧ SysOk (m + 1) Cs
+
+theorem sysOk_zero {C : CTy} : SysOk 0 C ↔ C.NuOk := Iff.rfl
+
+theorem unrollS_zero (i : Nat) (C : CTy) : unrollS 0 i C = C.unroll := rfl
+
+end CTy
 
 /-! ### Free lifetime variables under type substitution -/
 
@@ -1653,7 +1782,7 @@ def CTy.lifeBound : CTy → Nat
   | .amp C D => max C.lifeBound D.lifeBound
   | .top => 0
   | .all x b C => max (x + 1) (max b.varBound C.lifeBound)
-  | .nu C => C.lifeBound
+  | .nuSys _ _ C => C.lifeBound
   | .eff _ _ _ A B fin _ C => max A.lifeBound (max B.lifeBound (max fin.lifeBound C.lifeBound))
 end
 
@@ -1691,7 +1820,7 @@ def CTy.applyLSub (σ : LSubst) : CTy → CTy
             (max (y + 1) (max (lsubRangeBound (lsubDrop σ y)) C.lifeBound))) :: lsubDrop σ y))
       else
         .all y (b.applySub σ) (C.applyLSub (lsubDrop σ y))
-  | .nu C => .nu (C.applyLSub σ)
+  | .nuSys m i C => .nuSys m i (C.applyLSub σ)
   | .eff n i q A B fin rc C =>
       .eff n i q (A.applyLSub σ) (B.applyLSub σ) (fin.applyLSub σ) rc (C.applyLSub σ)
 end
@@ -1739,7 +1868,7 @@ def CTy.alphaB (ρ : List (LifeVar × LifeVar)) : CTy → CTy → Bool
   | .amp C D, .amp C' D' => CTy.alphaB ρ C C' && CTy.alphaB ρ D D'
   | .top, .top => true
   | .all x b C, .all x' b' C' => lifeAlphaB ρ b b' && CTy.alphaB ((x, x') :: ρ) C C'
-  | .nu C, .nu C' => CTy.alphaB ρ C C'
+  | .nuSys m i C, .nuSys m' i' C' => m == m' && i == i' && CTy.alphaB ρ C C'
   | .eff n i q A B fin rc C, .eff n' i' q' A' B' fin' rc' C' =>
       n == n' && i == i' && decide (q = q') && rc == rc' && VTy.alphaB ρ A A' &&
         VTy.alphaB ρ B B' && CTy.alphaB ρ fin fin' && CTy.alphaB ρ C C'
@@ -1821,7 +1950,7 @@ theorem lt_cLifeBound {x : LifeVar} : ∀ {C : CTy}, CFree x C → x < C.lifeBou
           (Nat.le_trans (Nat.le_max_left _ _) (Nat.le_max_right _ _))
       · exact Nat.lt_of_lt_of_le (lt_cLifeBound h)
           (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _))
-  | .nu C, h => lt_cLifeBound (C := C) h
+  | .nuSys _ _ C, h => lt_cLifeBound (C := C) h
   | .eff _ _ _ A B fin _ C, h => by
       rcases h with h | h | h | h
       · exact Nat.lt_of_lt_of_le (lt_vLifeBound h) (Nat.le_max_left _ _)

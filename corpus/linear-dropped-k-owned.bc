@@ -1,0 +1,31 @@
+-- Linear state moved into a body whose continuation a handler drops (#1064,
+-- p16). `deadline` answers `wait` by resuming, or, past 50 ms, by dropping `k`
+-- (`(force k).2`, the continuation's consume) and raising 408. The string `b` moved into `recv` is
+-- held by the dropped continuation, so dropping `k` consumes it; `to_result`'s `inr` arm refills `b`.
+--
+-- Answer: `(inl i32[1], inr i32[408])`: `go(10)` resumes and pushes one byte; `go(80)` times out.
+-- A string the dropped continuation did not consume would leave `live 1`.
+
+include fail
+include text
+
+effect Wait { ctl wait(ms: i32) }
+
+handler deadline[A]: Wait, A -> A with Fail[i32] = {
+  return(a) = a;
+  wait(ms, k) = if ms > 50 { u <- (force k).2; raise(408) } else { k(()) }
+}
+
+fn recv(s: string, ms: i32) -> string * i32 with Wait = wait(ms); let (s, u) = push_byte(s, b'x'); len_of(s)
+
+fn go(ms: i32) -> i32 + i32 =
+  let mut b = string_new(4);
+  let mut out = 0;
+  match with to_result[i32, string * i32] { with deadline { recv(b, ms) } } {
+    inl p -> let (b2, n) = p; b = b2; out = n
+  | inr e -> b = string_new(0); out = 0 - e
+  };
+  let (b, n) = len_of(b);
+  if out < 0 { inr (0 - out) } else { inl n }
+
+main -> (i32 + i32) * (i32 + i32) = (go(10), go(80))

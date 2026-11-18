@@ -1,0 +1,4 @@
+-- SPEC §80: the local family's one checker rule dispatches to each kind's derived lemma.
+BoCa.Fig16.LogRel.Core.LocalKind.wf
+BoCa.Fig16.LogRel.Core.LocalKind.closed
+BoCa.Fig16.LogRel.Core.LocalKind.effFree

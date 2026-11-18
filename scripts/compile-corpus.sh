@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Compile and run the corpus on the old backend (`Backend/`, `--backend old`), which stays checked
 # until it is retired (N7); scripts/compile-backend2.sh runs the corpus on Backend2, the default.
-# Every corpus/*.bc, corpus/surface/*.bc, corpus/axes/*.bc,
-# corpus/aoc/*.bc and corpus/leetcode/*/*.bc with a `main` (except a file marked `-- check: parse-only`) has a golden output
+# Every corpus program (`scripts/corpus-set.sh`) with a `main` (except a file marked
+# `-- check: parse-only`; the skips are pinned in `corpus/skips.expected`) has a golden output
 # `<name>.out` beside it: the reference semantics, what `Support`'s interpreter (`bcc interp`, the
 # source stage) prints.
 # It reads `<name>.in` as standard input (the empty input if there is none), and `<name>.args`, one
@@ -76,13 +76,14 @@ usage() { echo "usage: scripts/compile-corpus.sh [--source] [--final] [--write-g
 export write=0
 export final=0
 goldens=0
+writekeys=0
 files=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --write-counts) write=1 ;;
     --write-goldens) goldens=1 ;;
     --source) export BCC_SOURCE=1 ;;
-    --write-keys) export BCC_WRITE_KEYS=1 ;;
+    --write-keys) export BCC_WRITE_KEYS=1; writekeys=1 ;;
     --final) final=1 ;;
     -*) usage ;;
     *) files+=("$1") ;;
@@ -93,10 +94,11 @@ done
 [ "${BCC_WRITE_KEYS:-0}" = 0 ] || { [ "$write" = 0 ] && [ "$goldens" = 0 ]; } || usage
 [ "$final" = 0 ] || [ "$write" = 0 ] || usage
 named=1
-[ ${#files[@]} -gt 0 ] || { named=0; files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc); }
+[ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=(); while IFS= read -r f; do [ -z "$f" ] || files+=("$f"); done <<< "$list"; }
 for f in "${files[@]}"; do [ -f "$f" ] || { echo "$f: no such file"; exit 2; }; done
 command -v wasmtime >/dev/null || [ "$goldens" = 1 ] || { echo "wasmtime is not on PATH"; exit 1; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
+export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
 . scripts/par.sh
 export bcc=.lake/build/bin/bcc
 export bccCounts=.lake/build/bin/bcc-counts
@@ -119,8 +121,8 @@ statusOf() {
 }
 # Whether file $1 is a program the corpus runs; if not, says why.
 runnable() {
-  if grep -q '^-- check: parse-only' "$1"; then echo "$1: parse-only, skipped"; return 1; fi
-  if ! grep -q '^main' "$1"; then echo "$1: no main, skipped"; return 1; fi
+  if grep -q '^-- check: parse-only' "$1"; then echo "$1: parse-only, skipped"; echo "parse-only $1" >> "$PAR_SIDE/skips"; return 1; fi
+  if ! grep -q '^main' "$1"; then echo "$1: no main, skipped"; echo "no-main $1" >> "$PAR_SIDE/skips"; return 1; fi
 }
 # --write-goldens: the golden of file $1, from the source stage.
 golden() {
@@ -146,6 +148,9 @@ golden() {
   corpusKeyLine "$f" > "$base.key"
   echo "$f: wrote $base.out$([ -s "$w/err" ] && echo ", $base.err")$([ "$rc" != 0 ] && echo ", $base.status ($rc)") and $base.key"
 }
+: > "$tmp/skips"
+# A unit's skip lines are a side file (`skips`, scripts/par.sh), gathered in $tmp.
+export PAR_COLLECT=$tmp
 if [ "$goldens" = 1 ]; then
   export -f runnable golden argsOf statusOf
   par golden "${files[@]}"
@@ -171,7 +176,7 @@ counts() {
   b=$(echo "$got" | awk '{print $12}')
   # An entry may end with a comment (`# …`), kept when the file is rewritten.
   note=$(awk -v n="$name" '$1 == n { sub(/^[^#]*/, ""); print }' "$expected" 2>/dev/null || true)
-  echo "$name $a $i $c $l $s $b${note:+ $note}" >> "$tmp/counts"
+  echo "$name $a $i $c $l $s $b${note:+ $note}" >> "$PAR_SIDE/counts"
   cnt="allocs $a, indirect $i, copies $c, loads $l, stores $s, bounds $b"
   [ "$write" = 1 ] && return 0
   want=$(awk -v n="$name" '$1 == n { sub(/#.*/, ""); print $2, $3, $4, $5, $6, $7 }' "$expected" 2>/dev/null || true)
@@ -201,12 +206,14 @@ runStage() {
 # Whether the source stage runs on program $1 (scripts/source-stage.sh): with `BCC_SOURCE=1`, or
 # when its golden is unverified. Writes its current key line (`corpusKeyLine`) to $2 when it is
 # computed, and why it runs to $3; reports an unverified golden it does not run on, and records
-# the program in $tmp/reran or $tmp/unverified.
+# the program in the side file `reran` or `unverified` (scripts/par.sh). A run of the source stage
+# is never recorded in the cache (`par_nostore`): it may write the program's key.
 withSource() {
   local f=$1 kl why
   : > "$2"; : > "$3"
   if [ "$BCC_SOURCE" = 1 ]; then
     [ "$BCC_WRITE_KEYS" = 1 ] && corpusKeyLine "$f" > "$2"
+    par_nostore
     return 0
   fi
   kl=$(corpusKeyLine "$f"); printf '%s\n' "$kl" > "$2"
@@ -214,11 +221,12 @@ withSource() {
   if [ -f "${f%.bc}.key" ]; then why="its key changed"; else why="no key"; fi
   if [ "$BCC_SOURCE" = 0 ]; then
     echo "$f: unverified ($why), not run at the source stage (scripts/compile-corpus.sh $f runs it)"
-    echo "$f ($why)" >> "$tmp/unverified"
+    echo "$f ($why)" >> "$PAR_SIDE/unverified"
     return 1
   fi
-  echo "$f ($why)" >> "$tmp/reran"
+  echo "$f ($why)" >> "$PAR_SIDE/reran"
   echo "$why" > "$3"
+  par_nostore
 }
 # --final: after program $1's WebAssembly run differs (on input $2, standard error golden $3),
 # the first of the clos and flat stages that differs from the golden, if either does.
@@ -249,13 +257,18 @@ program() {
   local old=1
   if grep -q '^-- check: old-backend-refuses' "$f"; then
     old=0; stages=""
-    if "$bcc" interp --backend old --stage flat "$f" < "$in" > /dev/null 2>&1; then
+    local refused=0
+    "$bcc" interp --backend old --stage flat "$f" < "$in" > /dev/null 2>&1 || refused=$?
+    if [ "$refused" = 0 ]; then
       echo "$f: marked old-backend-refuses, but the old backend runs it: remove the mark"; return 1
     fi
+    # A refusal ends with a status; a run ended by a signal (killed under load) is not one, and is
+    # not recorded in the cache.
+    [ "$refused" -lt 128 ] || par_nostore
   fi
   if grep -q '^-- check: no-source' "$f"; then
     local why
-    why=$(sed -n 's/^-- check: no-source: *//p' "$f" | head -1)
+    why=$(sed -n '/^-- check: no-source: */{s///p;q;}' "$f")
     note=" (no-source: not run at the source stage: ${why:-too large for the source interpreter})"
   elif withSource "$f" "$w/key" "$w/why"; then
     stages="source $stages"
@@ -285,7 +298,7 @@ program() {
   if [ "$ok" = 1 ] && [ "$BCC_WRITE_KEYS" = 1 ]; then
     case " $stages " in
       *" source "*)
-        if cp "$w/key" "$base.key" 2> /dev/null; then note="$note (key written)"; echo "$base.key" >> "$tmp/written"
+        if cp "$w/key" "$base.key" 2> /dev/null; then note="$note (key written)"; echo "$base.key" >> "$PAR_SIDE/written"
         else note="$note (key not written: $base.key is not writable)"; fi ;;
     esac
   fi
@@ -296,9 +309,11 @@ program() {
   echo "$f: $(wc -c < "$base.out" | tr -d ' ') bytes as $base.out at $(echo $stages | tr ' ' ,)$note | live 0 | $cnt"
 }
 # An input past any fixed bound: 4860 bytes, copied whole at every stage. (The source
-# interpreter takes about a minute on it, so it runs beside the corpus.)
+# interpreter takes about a minute on it, so it runs beside the corpus.) A unit of its own
+# (`par bigcat corpus/io-cat.bc`), keyed on io-cat's files.
 bigcat() {
-  local w=$tmp/bigcat st ok=1 stages="clos flat wasm"
+  set -e
+  local w=$PAR_TMP st ok=1 stages="clos flat wasm"
   [ "$final" = 0 ] || stages="wasm"
   mkdir -p "$w"
   awk 'BEGIN { for (i = 0; i < 90; i++) printf "line %02d of a long input, copied byte for byte by cat.\n", i }' \
@@ -307,6 +322,7 @@ bigcat() {
   if [ "$BCC_SOURCE" = 1 ] ||
      { [ "$BCC_SOURCE" != 0 ] && ! corpusVerified corpus/io-cat.bc "$(corpusKeyLine corpus/io-cat.bc)"; }; then
     stages="source $stages"
+    par_nostore
   fi
   for st in $stages; do
     runStage "$st" corpus/io-cat.bc "$w/big.in" || true
@@ -314,11 +330,22 @@ bigcat() {
   done
   if [ "$ok" = 1 ]; then echo "corpus/io-cat.bc: a $(wc -c < "$w/big.in" | tr -d ' ')-byte input copied whole at $(echo $stages | tr ' ' ,)"; else return 1; fi
 }
-export -f counts runStage withSource runnable program localise argsOf statusOf
+export -f counts runStage withSource runnable program localise argsOf statusOf bigcat
+# Each program's counts row, and its line in the lists of programs the source stage re-ran, left
+# unverified or wrote the key of, are side files (scripts/par.sh), gathered in $tmp in the
+# programs' order. A run that writes goldens, counts or keys, or runs the source stage on every
+# program, is not cached.
+export PAR_COLLECT=$tmp
+if [ "$write" = 0 ] && [ "$writekeys" = 0 ] && [ "${BCC_SOURCE:-}" != 1 ]; then
+  export PAR_CACHE="compile-corpus final=$final"
+fi
 bigpid=""
-case " ${files[*]} " in *" corpus/io-cat.bc "*) bigcat > "$tmp/bigcat.log" 2>&1 & bigpid=$! ;; esac
+case " ${files[*]} " in *" corpus/io-cat.bc "*) (PAR_CACHE=${PAR_CACHE:+${PAR_CACHE/compile-corpus/compile-corpus-bigcat}}; par bigcat corpus/io-cat.bc; [ "$par_failed" = 0 ]) > "$tmp/bigcat.log" 2>&1 & bigpid=$! ;; esac
 par program "${files[@]}"
 bad=$par_failed
+if [ "$named" = 0 ]; then
+  scripts/corpus-set.sh --skips compile-corpus parse-only no-main < "$tmp/skips" || bad=$((bad + 1))
+fi
 if [ -n "$bigpid" ]; then
   if wait "$bigpid"; then cat "$tmp/bigcat.log"; else cat "$tmp/bigcat.log"; bad=$((bad + 1)); fi
 fi

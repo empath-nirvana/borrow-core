@@ -1,24 +1,25 @@
 import Core.Fundamental
 
 /-!
-# Core — decision R: a derivation tied to its program's effect context  `[spec §19]`
+# Core — decision R: a derivation tied to its program's effect context  `[spec §19, §83]`
 
 An **effect context** `Ξ` gives each operation name its signature: the `i`-th operation of the
 name `n` is `(Ξ n)[i] = (q, A, B)`.  A row is **tied** to `Ξ` (`RowAt`) when every operation it
 finds is of a nonzero name with at most `2³²` operations, at the signature `Ξ` gives it.
 
-**`CDerivesAt Ξ`** is `CDerives` with the premise `RowAt Ξ` at the three rules that read an
-operation's signature off a row: `[perform]` and `[raise]` (the row the operation is found in) and
-`[handle]` (the handled row `(n)↑E ⊙ Σ`, whose qualifiers are the handler value's tags, §25).
-An operation's argument and answer are the context's up to α (`OpSig.AtEntry`, §3).
-Every other rule is `CDerives`'s verbatim, `[then]` with its finaliser's row and the cancel rows of
-§27 among them; the tie reads no cancel row (`rowAt_ofEff_fs`).  So a name has one signature across
+**`CDerivesAt Ξ`** is `CDerivesX {ties := some Ξ}` (`Core/Judgment.lean`): `CDerives` with the
+premise `RowAt Ξ` at the ten rules that read an operation's signature off a row: `iterate`,
+`divFuel`, `reify`, `[perform]`, `[await]` and `[raise]` (the row the operation is found in), and
+`[handle]`'s four forms (the handled row `(n)↑E ⊙ Σ`, whose qualifiers are the handler value's tags,
+§25). An operation's argument and answer are the context's up to α (`OpSig.AtEntry`, §3).
+Every other rule is `CDerives`'s, `[then]` with its finaliser's row and the cancel rows of §27
+among them; the tie reads no cancel row (`rowAt_ofEff_fs`).  So a name has one signature across
 a derivation: every instance of a handler site has one protocol (§19 *Names*).
 
-* `CDerivesAt.toCDerives`: a tied derivation is one of `CDerives`, so `fundamentalC` and the
-  adequacy theorems hold of it.
+* `CDerivesAt.toCDerives` (`CDerivesX.mono`): a tied derivation is one of `CDerives`, so
+  `fundamentalC` and the adequacy theorems hold of it.
 * `CDerivesAt.ofEffFree`: a derivation of a term holding no `perform`, `raise` or `hnd`
-  (`Expr.effFree`) is tied at every effect context.
+  (`Expr.effFree`) is tied at every effect context; `CDerivesX.ofEffFree`, one at every index.
 * `CDerivesAt.effThenA`, `CDerivesAt.effHandle`: `CDerives.effThenA` and `CDerives.effHandle`,
   tied.
 * At a handler the tie makes its signature `E` a prefix of `Ξ n` up to α (`sig_prefix_of_rowAt`), so the
@@ -36,22 +37,8 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-! ### Effect contexts and tied rows -/
 
-/-- An effect context: each name's signature, its operations numbered from `0`.  `[spec §19]` -/
-abbrev EffCtx := UInt32 → List (Qual × VTy × VTy)
-
-/-- An operation at an effect context's entry: its qualifier, its argument and answer the entry's
-up to the names of lifetime binders (`[α]`, SPEC §3).  `[spec §3, §19]` -/
-def OpSig.AtEntry (o : OpSig) (p : Qual × VTy × VTy) : Prop :=
-  p.1 = o.q ∧ VTy.alphaB [] p.2.1 o.A = true ∧ VTy.alphaB [] p.2.2 o.B = true
-
 theorem OpSig.AtEntry.self (o : OpSig) : o.AtEntry (o.q, o.A, o.B) :=
   ⟨rfl, VTy.alphaB_refl _, VTy.alphaB_refl _⟩
-
-/-- **A row tied to the effect context**: every operation the row finds is of a nonzero name with
-at most `2³²` operations, at the signature `Ξ` gives it up to α.  `[spec §3, §19]` -/
-def RowAt (Ξ : EffCtx) (S : Row) : Prop :=
-  ∀ n i o, Row.find S n i = some o →
-    n ≠ 0 ∧ (Ξ n).length ≤ 2 ^ 32 ∧ ∃ p, (Ξ n)[i.toNat]? = some p ∧ o.AtEntry p
 
 /-- A row tied to an effect context that gives `Div`'s name no operation does not hold `Div`. -/
 theorem Row.divB_of_rowAt {Ξ : EffCtx} {S : Row} (hAt : RowAt Ξ S) (hΞ : Ξ divEff = []) :
@@ -61,592 +48,36 @@ theorem Row.divB_of_rowAt {Ξ : EffCtx} {S : Row} (hAt : RowAt Ξ S) (hΞ : Ξ d
     rw [hΞ] at this
     simp at this
 
-/-! ### The tied judgment -/
+/-- The unwinding form of `withbor` (1) with its finaliser at the pure row: `withbor1UD` at
+`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19, §72]` -/
+theorem CDerivesAt.withbor1U {Ξ : EffCtx} {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
+    (hS : S.Unwind x) (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S)) :=
+  CDerivesX.withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS hd
 
-/-- **`CDerives` with its operations' and handlers' rows tied to `Ξ`** (decision R): the
-constructors of `CDerives` verbatim, with `RowAt Ξ` at `effPerform` and `effRaise` (on the row
-`S`) and at `effHandleV` and `effHandleVB` (on the handled row `Row.ofEff n E 0 fs ++ S`).
-`[spec §19, §28]` -/
-inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
-  | var {Δ Γ i A} (h : Ctx.SoloP Γ i A) : CDerivesAt Ξ Δ Γ (.var i) (.val A)
-  | unitI {Δ Γ} (h : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ (.val .unit) (.val .unit)
-  | tensorI {Δ Γ Γ₁ Γ₂ e₁ e₂ A B} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
-      (h₁ : CDerivesAt Ξ Δ Γ₁ e₁ (.val A)) (h₂ : CDerivesAt Ξ Δ Γ₂ e₂ (.val B)) :
-      CDerivesAt Ξ Δ Γ (.pair e₁ e₂) (.val (.tensor A B))
-  | sumI₁ {Δ Γ e A B} (h : CDerivesAt Ξ Δ Γ e (.val A)) :
-      CDerivesAt Ξ Δ Γ (.inj₁ e) (.val (.sum A B))
-  | sumI₂ {Δ Γ e A B} (h : CDerivesAt Ξ Δ Γ e (.val B)) :
-      CDerivesAt Ξ Δ Γ (.inj₂ e) (.val (.sum A B))
-  /-- `thunk M : U (F A)`, `M` under a dead binder. -/
-  | thunkF {Δ Γ M A} (h : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
-      CDerivesAt Ξ Δ Γ (.val (.lam M)) (.val (.thunk (.ret A)))
-  /-- `thunk V : U C` for a λ-value `V : C`, `C` not an `F`. -/
-  | thunkV {Δ Γ N C} (hC : C.isRet = false) (h : CDerivesAt Ξ Δ Γ (.val (.lam N)) (.comp C)) :
-      CDerivesAt Ξ Δ Γ (.val (.lam N)) (.val (.thunk C))
-  /-- `return V : F A`. -/
-  | ret {Δ Γ V A} (h : CDerivesAt Ξ Δ Γ V (.val A)) : CDerivesAt Ξ Δ Γ V (.comp (.ret A))
-  /-- `M to x. N`, written `(λx. N) M`. -/
-  | bind {Δ Γ Γ₁ Γ₂ M N A C} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
-      (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (.ret A)))
-      (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp C)) :
-      CDerivesAt Ξ Δ Γ (.app (.val (.lam N)) M) (.comp C)
-  /-- `force x`: `x ()` at `F A`, `x` itself at any other computation type; `x` at `U C` or at
-  `Code⟨N; E⟩ C` (`VTy.forceTy`).  `[spec §68]` -/
-  | force {Δ Γ i T C} (h : Ctx.SoloP Γ i T) (hT : T.forceTy = some C) :
-      CDerivesAt Ξ Δ Γ (forceE C (.var i)) (.comp C)
-  | lam {Δ Γ M A C} (h : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ) M (.comp C)) :
-      CDerivesAt Ξ Δ Γ (.val (.lam M)) (.comp (.arr A C))
-  /-- `[λ-dead]`: `λx. M : 1 ⊸ F_Σ B` with `x`'s slot dead, `M` not using it.  `[spec §26]` -/
-  | lamDead {Δ Γ M} {S : Row} {B : VTy}
-      (h : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) M (.comp (CTy.effOf S B))) :
-      CDerivesAt Ξ Δ Γ (.val (.lam M)) (.comp (.arr .unit (CTy.effOf S B)))
-  | app {Δ Γ Γ₁ Γ₂ M i A C} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
-      (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (.arr A C))) (hx : Ctx.SoloP Γ₂ i A) :
-      CDerivesAt Ξ Δ Γ (.app M (.var i)) (.comp C)
-  /-- `⟨M, N⟩ : C & D`, both components in the same context. -/
-  | withI {Δ Γ M N C D} (hM : CDerivesAt Ξ Δ (withCtx Γ) M (.comp C))
-      (hN : CDerivesAt Ξ Δ (withCtx Γ) N (.comp D)) :
-      CDerivesAt Ξ Δ Γ (withPair M N) (.comp (.amp C D))
-  | proj₁ {Δ Γ M C D} (h : CDerivesAt Ξ Δ Γ M (.comp (.amp C D))) :
-      CDerivesAt Ξ Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C)
-  | proj₂ {Δ Γ M C D} (h : CDerivesAt Ξ Δ Γ M (.comp (.amp C D))) :
-      CDerivesAt Ξ Δ Γ (.app M (.val (.inj₂ .unit))) (.comp D)
-  /-- `⟨⟩ : ⊤` at any context. -/
-  | topI {Δ Γ} : CDerivesAt Ξ Δ Γ (.val .unit) (.comp .top)
-  | unitE {Δ Γ Γ₁ Γ₂ V M C} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
-      (hV : CDerivesAt Ξ Δ Γ₁ V (.val .unit)) (hM : CDerivesAt Ξ Δ Γ₂ M (.comp C)) :
-      CDerivesAt Ξ Δ Γ (.seq V M) (.comp C)
-  | tensorE {Δ Γ Γp Γb V M A B C} (hs : Ctx.SplitP Γ Γp Γb)
-      (hV : CDerivesAt Ξ Δ Γp V (.val (.tensor A B)))
-      (hM : CDerivesAt Ξ Δ (⟨B, true⟩ :: ⟨A, true⟩ :: Γb) M (.comp C)) :
-      CDerivesAt Ξ Δ Γ (.letpair V M) (.comp C)
-  | sumE {Δ Γ Γs Γb V M₁ M₂ A B C} (hs : Ctx.SplitP Γ Γs Γb)
-      (hV : CDerivesAt Ξ Δ Γs V (.val (.sum A B)))
-      (h₁ : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γb) M₁ (.comp C))
-      (h₂ : CDerivesAt Ξ Δ (⟨B, true⟩ :: Γb) M₂ (.comp C)) :
-      CDerivesAt Ξ Δ Γ (.case V M₁ M₂) (.comp C)
-  /-- `absurd V : C` for `V : 0`, at any rest of the context. -/
-  | zeroE {Δ Γ Γ₁ Γ₂ V C} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hV : CDerivesAt Ξ Δ Γ₁ V (.val .zero)) :
-      CDerivesAt Ξ Δ Γ (absurdE V) (.comp C)
-  /-- `Λ. M : ∀'x ⊏ @b. C`, written `λ_. M`; the binder's slot is dead, at any type. -/
-  | allI {Δ Γ x b M S C} (hbx : b.mentions x = false)
-      (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
-      (hΓx : ∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty)
-      (h : CDerivesAt Ξ (Δ.extend x b) (⟨S, false⟩ :: Γ) M (.comp C)) :
-      CDerivesAt Ξ Δ Γ (.val (.lam M)) (.comp (.all x b C))
-  /-- `M [] : C[@a/'x]`. -/
-  | allE {Δ Γ M x b a C} (h : CDerivesAt Ξ Δ Γ M (.comp (.all x b C))) (hlt : Δ.EntailsLt a b) :
-      CDerivesAt Ξ Δ Γ (.app M (.val .unit)) (.comp (C.instLife x a))
-  /-- Promotion of `thunk M : U (F A)` over a flat `Γ`.  `[spec §10]` -/
-  | bangThunkF {Δ Γ M A} (hp : Ctx.FlatLive Γ)
-      (h : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
-      CDerivesAt Ξ Δ Γ (.val (.lam M)) (.val (.bang (.thunk (.ret A))))
-  /-- Promotion of a λ-value `V : C` over a flat `Γ`.  `[spec §10]` -/
-  | bangThunkV {Δ Γ N C} (hp : Ctx.FlatLive Γ) (hC : C.isRet = false)
-      (h : CDerivesAt Ξ Δ Γ (.val (.lam N)) (.comp C)) :
-      CDerivesAt Ξ Δ Γ (.val (.lam N)) (.val (.bang (.thunk C)))
-  /-- `[code-I]`: a closure `λM : U C` at its code type.  `[spec §68]` -/
-  | codeI {Δ Γ M C} (h : CDerivesAt Ξ Δ Γ (.val (.lam M)) (.val (.thunk C)))
-      (hok : Ctx.CapOK Γ (.lam M)) :
-      CDerivesAt Ξ Δ Γ (.val (.lam M))
-        (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))
-  /-- `[code-I]` under `!`, over a flat `Γ`.  `[spec §68, §10]` -/
-  | codeIB {Δ Γ M C} (hp : Ctx.FlatLive Γ)
-      (h : CDerivesAt Ξ Δ Γ (.val (.lam M)) (.val (.bang (.thunk C))))
-      (hok : Ctx.CapOK Γ (.lam M)) :
-      CDerivesAt Ξ Δ Γ (.val (.lam M))
-        (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))
-  /-- `[erase]`.  `[spec §68]` -/
-  | codeErase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.code N E C))) :
-      CDerivesAt Ξ Δ Γ e (.val (.thunk C))
-  /-- `[erase]` under `!`.  `[spec §68]` -/
-  | codeEraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.bang (.code N E C)))) :
-      CDerivesAt Ξ Δ Γ e (.val (.bang (.thunk C)))
-  /-- Dereliction. -/
-  | bangE {Δ Γ e A} (h : CDerivesAt Ξ Δ Γ e (.val (.bang A))) : CDerivesAt Ξ Δ Γ e (.val A)
-  | copyBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ copy (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A))))))
-  | releaseBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ forget (.val (.thunk (.arr (.bang A) (.ret .unit))))
-  /-- `[]I`. -/
-  | boxI {Δ Γ e a A} (h : CDerivesAt Ξ Δ Γ e (.val A)) (hΓ : CtxOutlives Δ Γ a) :
-      CDerivesAt Ξ Δ Γ e (.val (.box a A))
-  | boxE {Δ Γ e a A} (h : CDerivesAt Ξ Δ Γ e (.val (.box a A))) : CDerivesAt Ξ Δ Γ e (.val A)
-  | immSub {Δ Γ e a b A} (h : CDerivesAt Ξ Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) :
-      CDerivesAt Ξ Δ Γ e (.val (.imm a A))
-  | mutSub {Δ Γ e a b A} (h : CDerivesAt Ξ Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) :
-      CDerivesAt Ξ Δ Γ e (.val (.mut a A))
-  /-- The borrow axioms, at arbitrary value-type payloads. -/
-  | alloc {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (.prim .alloc)) (.val (.lolli A (.ref A)))
-  | free {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (.prim .free)) (.val (.lolli (.ref A) A))
-  /-- `mint : 1 ⊸ Tok`.  `[spec §11, §42]` -/
-  | tokMint {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ mintE (.val mintTy)
-  /-- `burn : Tok ⊸ 1`.  `[spec §11, §42]` -/
-  | tokBurn {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ burnE (.val burnTy)
-  | swap {Δ Γ A B} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ swap (.val (axSwapTy A B))
-  | copy {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ copy (.val (axCopyTy a A))
-  | releaseImm {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ forget (.val (axForgetImmTy a A))
-  | releaseMut {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ forget (.val (axForgetMutTy a A))
-  | releaseUnk {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ forget (.val axForgetUnkTy)
-  /-- An integer literal at its width.  `[spec §8]` -/
-  | lit {Δ Γ} (c : IntLit) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val ⟨.prim (.lit c), .prim⟩) (.val (.int c.width))
-  /-- A host operation at `!(A ⊸ F B)`, its signature in `SPEC.md` §8.  `[spec §8]` -/
-  | hostOp {Δ Γ} (op : HostOp) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (.prim (.host op))) (.val (.bang (hostSig op)))
-  /-- `array_new : !(I32 ⊗ !(I32 ⇒ A) ⇒ Array A)`, the step `tab`.  `[spec §9]` -/
-  | arrNew {Δ Γ} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (.prim .tab)) (.val (arrNewTy A))
-  /-- `array_free : !(!(A ⇒ 1) ⊗ Array A ⇒ 1)`, the step `drop`.  `[spec §9]` -/
-  | arrFree {Δ Γ} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (.prim .drop)) (.val (arrFreeTy A))
-  /-- `array_size : !(Array A ⇒ Array A ⊗ I32)`.  `[spec §9]` -/
-  | arrSize {Δ Γ} (A : VTy) (hΓ : Ctx.DeadP Γ) : CDerivesAt Ξ Δ Γ (.val sizeV) (.val (arrSizeTy A))
-  /-- `array_replace : !(Array A ⊗ (I32 ⊗ A) ⇒ Array A ⊗ (A ⊕ A))`.  `[spec §9]` -/
-  | arrReplace {Δ Γ} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val replaceV) (.val (arrReplaceTy A))
-  /-- `array_len : !(ArrayImm @a A ⇒ I32)`.  `[spec §9]` -/
-  | arrLen {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val arrLenV) (.val (arrLenTy a A))
-  /-- `array_get : !(ArrayImm @a A ⊗ I32 ⇒ Imm @a A ⊕ 1)`, the step `idx`.  `[spec §9]` -/
-  | arrGet {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (.prim .idx)) (.val (arrGetTy a A))
-  /-- `array_copy : !(ArrayImm @a A ⇒ ArrayImm @a A ⊗ ArrayImm @a A)`.  `[spec §9]` -/
-  | arrCopy {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val copyV) (.val (arrCopyTy a A))
-  /-- `array_release : !(ArrayImm @a A ⇒ 1)`.  `[spec §9]` -/
-  | arrRelease {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val releaseV) (.val (arrReleaseTy a A))
-  /-- `count_fold : !(!(I32 ⊗ S ⇒ S) ⊗ (I32 ⊗ (I32 ⊗ S)) ⇒ S)`, the step `count`: the counted
-  loop, total at every host.  `[spec §16]` -/
-  | countFold {Δ Γ} (S : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (.prim .count)) (.val (countFoldTy S))
-  /-- `count_try : !(!(I32 ⊗ S ⇒ S ⊕ E) ⊗ (I32 ⊗ (I32 ⊗ S)) ⇒ S ⊕ E)`, the step `countTry`: the
-  counted loop with an exit, total at every host.  `[spec §16]` -/
-  | countTry {Δ Γ} (S E : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (.prim .countTry)) (.val (countTryTy S E))
-  /-- `bounded_fix : !U(!U((1 ⊕ !U(A ⊸ C)) ⊗ A ⊸ C) ⊗ (I32 ⊗ A) ⊸ C)`, the step
-  `boundedFix`: the fixed point with a budget of depth, total at every host and every
-  computation type.  `[spec §20]` -/
-  | boundedFix {Δ Γ} (A : VTy) (C : CTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (.prim .boundedFix)) (.val (boundedFixTy A C))
-  /-- `iterate` at a row holding `Div`, the row tied to `Ξ`.  `[spec §14]` -/
-  | iterate {Δ Γ} (S : Row) (St B R : VTy) (hAt : RowAt Ξ S) (hS : Row.divB S = true)
-      (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (.prim .iterate)) (.val (iterTy S St B R))
-  /-- `div_fuel`, the handled row tied to `Ξ`.  `[spec §14]` -/
-  | divFuel {Δ Γ} (S : Row) (A : VTy) (hAt : RowAt Ξ (tickSig :: S)) (hS : ∀ o ∈ S, o.n ≠ divEff)
-      (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val divFuelV) (.val (divFuelTy S A))
-  /-- `reify_res`, the handled row tied to `Ξ`.  `[spec §14]` -/
-  | reify {Δ Γ} (S : Row) (B R : VTy) (res : Val) (hAt : RowAt Ξ (tickSig :: S))
-      (hS : ∀ o ∈ S, o.n ≠ divEff) (hcl : closedAt 0 res.1 = true)
-      (hres : CDerivesAt Ξ Δ [] (.val res) (.val (resTy S B R))) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (reifyV res)) (.val (reifyTy S B R))
-  /-- `slice_borrow_mut : Array A ⊸ (∀'x ⊏ ⊓Δ. [Mut 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`, the term
-  `withbor`'s: an owned array lent as a family of `mut` leaves, with no cell; its side conditions
-  non-strict.  `[spec §9, §23]` -/
-  | sliceBorrowM {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
-      (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-      CDerivesAt Ξ Δ Γ withbor (.val (sliceBorrowMTy x Δ.meetOfDom A B))
-  /-- `slice_borrow_imm : Array A ⊸ (∀'x ⊏ ⊓Δ. [Imm 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`, the term
-  `withbor`'s: an owned array lent as a family of `imm` leaves, with no cell; its side conditions
-  non-strict.  `[spec §9, §23]` -/
-  | sliceBorrowI {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A)
-      (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-      CDerivesAt Ξ Δ Γ withbor (.val (sliceBorrowITy x Δ.meetOfDom A B))
-  /-- `slice_get_mut : !([Mut @a A] ⊗ I32 ⇒ Mut @a A ⊕ 1)`, the step `idx`.  `[spec §9]` -/
-  | sliceGetM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (.prim .idx)) (.val (sliceGetMTy a A))
-  /-- `slice_len_mut : !([Mut @a A] ⇒ [Mut @a A] ⊗ I32)`.  `[spec §9]` -/
-  | sliceLenM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val sizeV) (.val (sliceLenMTy a A))
-  /-- `slice_split_imm : !([Imm @a A] ⊗ I32 ⇒ ([Imm @a A] ⊗ [Imm @a A]) ⊕ [Imm @a A])`, the step
-  `split`.  `[spec §9]` -/
-  | sliceSplitI {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (.prim .split)) (.val (sliceSplitITy a A))
-  /-- `slice_split_mut : !([Mut @a A] ⊗ I32 ⇒ ([Mut @a A] ⊗ [Mut @a A]) ⊕ [Mut @a A])`, the step
-  `split`.  `[spec §9]` -/
-  | sliceSplitM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (.prim .split)) (.val (sliceSplitMTy a A))
-  /-- `slice_empty_imm : [Imm @a A]`, the family `(0, 0)`.  `[spec §9]` -/
-  | sliceEmptyI {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val emptyFamV) (.val (.arrayImm a A))
-  /-- `slice_empty_mut : [Mut @a A]`, the family `(0, 0)`.  `[spec §9]` -/
-  | sliceEmptyM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val emptyFamV) (.val (.sliceMut a A))
-  /-- `array_empty : Array A`, the family `(0, 0)`: an owned array of no cells.  `[spec §9]` -/
-  | arrEmpty {Δ Γ} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val emptyFamV) (.val (.array A))
-  /-- `slice_replace_mut : !([Mut @a A] ⊗ (I32 ⊗ A) ⇒ [Mut @a A] ⊗ (A ⊕ A))`, `array_replace`'s
-  term.  `[spec §9]` -/
-  | sliceReplaceM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val replaceV) (.val (sliceReplaceMTy a A))
-  /-- `slice_swap_mut : !([Mut @a A] ⊗ (I32 ⊗ I32) ⇒ [Mut @a A])`.  `[spec §9]` -/
-  | sliceSwapM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val swapV) (.val (sliceSwapMTy a A))
-  | withbor1 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-      CDerivesAt Ξ Δ Γ withbor (.val (axWithbor1Ty x Δ.meetOfDom A B))
-  /-- `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition `Δ ⊢ A ⊒ @b` non-strict.
-  `[spec §23]` -/
-  | withbor2 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-      CDerivesAt Ξ Δ Γ withbor (.val (axWithbor2Ty x Δ.meetOfDom A B))
-  | withbor3 {Δ Γ a A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-      CDerivesAt Ξ Δ Γ withbor (.val (axWithbor3Ty a x Δ.meetOfDom A B))
-  | withload {Δ Γ a A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-      CDerivesAt Ξ Δ Γ withload (.val (axWithloadTy a x Δ.meetOfDom A B))
-  | withswap {Δ Γ a A B} (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ withswap (.val (axWithswapTy a A B))
-  /-- The unwinding form of `withbor` (1): `Ref A` lent as `Imm 'x A` to a callback at a row of
-  abortive operations; when it unwinds, the finaliser `d` runs on the source.  `[spec §19]` -/
-  | withbor1U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.ref A) .unit))) :
-      CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S))
-  /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition
-  non-strict.  `[spec §19, §23]` -/
-  | withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.ref A) .unit))) :
-      CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S))
-  /-- The unwinding form of `withbor` (3): `Mut @a A` reborrowed as `Mut 'x A`.  `[spec §19]` -/
-  | withbor3U {Δ Γ a A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.mut a A) .unit))) :
-      CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S))
-  /-- The unwinding form of `withload`: its own term, the source consumed by the load.
-  `[spec §19]` -/
-  | withloadU {Δ Γ a A B} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) :
-      CDerivesAt Ξ Δ Γ withload (.val (withloadUTy a x Δ.meetOfDom A B S))
-  /-- The unwinding form of `slice_borrow_mut`: an owned array lent as a family of `mut` leaves.
-  `[spec §19]` -/
-  | sliceBorrowMU {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
-      (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.array A) .unit))) :
-      CDerivesAt Ξ Δ Γ (withborUE d) (.val (sliceBorrowMUTy x Δ.meetOfDom A B S))
-  /-- The unwinding form of `slice_borrow_imm`: an owned array lent as a family of `imm` leaves.
-  `[spec §19]` -/
-  | sliceBorrowIU {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A)
-      (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-      (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.array A) .unit))) :
-      CDerivesAt Ξ Δ Γ (withborUE d) (.val (sliceBorrowIUTy x Δ.meetOfDom A B S))
-  -- Call-by-value derived forms: BoLo's application and `∀E` on arbitrary subterms, and the
-  -- reading of a computation of `F A` as a value-judged expression at `A`.
-  /-- Call-by-value application `f a`, both arbitrary, at `VTy.lolli` (`lolliE_compatX`).  `[spec §3]` -/
-  | lolliE {Δ Γ Γ₁ Γ₂ f a A B} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
-      (ha : CDerivesAt Ξ Δ Γ₁ a (.val A)) (hf : CDerivesAt Ξ Δ Γ₂ f (.val (.lolli A B))) :
-      CDerivesAt Ξ Δ Γ (.app f a) (.val B)
-  /-- Call-by-value `∀E`: `e []` for `e` at `VTy.all x b A` (`allE_compatX`).  `[spec §3]` -/
-  | allEV {Δ Γ e x b a A} (h : CDerivesAt Ξ Δ Γ e (.val (.all x b A))) (hlt : Δ.EntailsLt a b) :
-      CDerivesAt Ξ Δ Γ (.app e (.val .unit)) (.val (A.instLife x a))
-  /-- A computation of `F A` is a value-judged expression at `A`: `SemV` is `SemC` at `F A`.  `[spec §3]` -/
-  | ofRet {Δ Γ e A} (h : CDerivesAt Ξ Δ Γ e (.comp (.ret A))) : CDerivesAt Ξ Δ Γ e (.val A)
-  /-- `roll`: a value of `A[μX. A/X]` is a value of `μX. A`, at a closed `μ` whose variable is
-  outside `A`'s `Mut` payloads (`docs/scope-recursion.md` §2.2).  `[spec §6]` -/
-  | roll {Δ Γ e A} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0)
-      (h : CDerivesAt Ξ Δ Γ e (.val (VTy.inst (.mu A) A))) : CDerivesAt Ξ Δ Γ e (.val (.mu A))
-  /-- `unroll`: a value of `μX. A` is a value of `A[μX. A/X]`.  `[spec §6]` -/
-  | unroll {Δ Γ e A} (h : CDerivesAt Ξ Δ Γ e (.val (.mu A))) :
-      CDerivesAt Ξ Δ Γ e (.val (VTy.inst (.mu A) A))
-  /-- The borrowed fold, a constant:
-  `foldImm : !U(∀'y ⊏ ⊤. A_R ⊸ F R) ⊸ !U(∀'y ⊏ @c. Imm 'y (μX. T) ⊸ F R)`, for `T` built by
-  `⊗`/`⊕` from closed leaves, `Ref X` and `X` (not `X` itself), `A_R = Imm̲ 'y T` with `R` at
-  every recursive position, `R` outliving every lifetime, `'y` free in neither `μX. T` nor
-  `R`.  `[spec §6]` -/
-  | foldImm {Δ Γ} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.DeadP Γ)
-      (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R)
-      (hR : ∀ Δ' a, VOutlives Δ' a R) :
-      CDerivesAt Ξ Δ Γ (.val (foldImmV F)) (.val (.lolli (algTy F y R) (foldTy F y c R)))
-  /-- The owned fold, a constant: `foldOwn : !U(A′_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)`, for `T` of the
-  same class, `A′_R = T` with `R` at every recursive position, any `R`.  `[spec §6]` -/
-  | foldOwn {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
-      CDerivesAt Ξ Δ Γ (.val (foldOwnV F)) (.val (.lolli (algOTy F R) (foldOTy F R)))
-  /-- The general owned fold, a constant (`CDerives.foldOwnG`).  `[spec §6]` -/
-  | foldOwnG {Δ Γ} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
-      CDerivesAt Ξ Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs))
-  /-- The owned fold with reuse, a constant: `foldReuse : !U(A″_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)`,
-  for `T` of the same class, `A″_R = T` with `R` at a head `X` and `Ref 1 ⊗ R` at every `Ref X`
-  (the emptied cell and the result on its content), any `R`.  `[spec §6]` -/
-  | foldReuse {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
-      CDerivesAt Ξ Δ Γ (.val (foldReuseV F)) (.val (.lolli (algRTy F R) (foldOTy F R)))
-  /-- `νX. C` is its unrolling `C[U(νX. C)/X]` (`cC_nu_iff`), on the same term, at a positive
-  `C`.  `[spec §7]` -/
-  | nuIn {Δ Γ e C} (hC : C.NuOk) (h : CDerivesAt Ξ Δ Γ e (.comp C.unroll)) :
-      CDerivesAt Ξ Δ Γ e (.comp (.nu C))
-  | nuOut {Δ Γ e C} (hC : C.NuOk) (h : CDerivesAt Ξ Δ Γ e (.comp (.nu C))) :
-      CDerivesAt Ξ Δ Γ e (.comp C.unroll)
-  /-- Coiteration, a constant: `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)` (`Nu.lean`), at a
-  positive `C`.  `[spec §7]` -/
-  | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S))
-  /-- `[unfold-K]`: coiteration at the step's code.  `[spec §68]` -/
-  | unfoldK {Δ Γ} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S)))
-      (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val (unfoldV C)) (.val (unfoldKTy C G S))
-  /-- `[ν-out-K]`: a codata of `unfold`'s code read at its unrolling, every rest at the same code
-  type.  `[spec §68]` -/
-  | nuOutK {Δ Γ i} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S)))
-      (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
-      CDerivesAt Ξ Δ Γ (.var i) (.comp (C.instT (codeTy C G S)))
-  /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
-  | effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S')
-      (h : CDerivesAt Ξ Δ Γ e (.comp (CTy.effOf S A))) : CDerivesAt Ξ Δ Γ e (.comp (CTy.effOf S' A))
-  /-- `[perform]`: a non-abortive, unmarked operation of the row, the row tied to `Ξ`.
-  `[spec §19, §29a]` -/
-  | effPerform {Δ Γ V} {S : Row} {o : OpSig} (hAt : RowAt Ξ S) (hf : Row.find S o.n o.i = some o)
-      (hna : o.abort = false) (hac : o.rc = false) (h : CDerivesAt Ξ Δ Γ V (.val o.A)) :
-      CDerivesAt Ξ Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B))
-  /-- `[await-c]`, the row tied to `Ξ`.  `[spec §29a]` -/
-  | effAwait {Δ Γ} {S : Row} {n : UInt32} {a c : OpSig} (hAt : RowAt Ξ S) (hΓ : Ctx.Dead Γ)
-      (hfa : Row.find S n 0 = some a) (ha : a.Cancellable) (haA : a.A = .unit)
-      (hfc : Row.find S n 1 = some c) (hc : c.CancelTarget) :
-      CDerivesAt Ξ Δ Γ (awaitE n) (.comp (CTy.effOf S .unit))
-  /-- `[raise]`: an abortive, unmarked operation of the row, at any answer, its argument consuming,
-  the row tied to `Ξ`.  `[spec §19, §29a]` -/
-  | effRaise {Δ Γ V} {S : Row} {o : OpSig} {B : VTy} (hAt : RowAt Ξ S)
-      (hf : Row.find S o.n o.i = some o)
-      (ha : o.abort = true) (hrc : o.rc = false) (hd : o.A.OwnFree)
-      (h : CDerivesAt Ξ Δ Γ V (.val o.A)) :
-      CDerivesAt Ξ Δ Γ (BoCa.BoLo.raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B))
-  /-- `[let]`: `M to x. N` at a row; `N`'s context consumes at a row with weakening and is
-  persistent at an unrestricted row.  `[spec §19]` -/
-  | effLet {Δ Γ Γ₁ Γ₂ M N A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
-      (hW : S.Cancels → Γ₂.OwnFree) (hU : S.Unr → Ctx.Banged Γ₂)
-      (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf S A)))
-      (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
-      CDerivesAt Ξ Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B))
-  /-- `[then]`: `M then x. N unwind D`, `M` at `Σ_M ≤ Σ` and the finaliser at `Σ_D ≤ Σ`, each
-  capturable operation of `Σ_M` with `Σ(o).fin ≥ Σ_M(o).fin ⋈ Σ_D`: what the finaliser may raise or
-  perform when a continuation captured in `M` is cancelled is recorded in that operation's cancel
-  row.  `Γ₂` is persistent where `Σ` has an unrestricted operation at some depth of its cancel
-  rows (`Row.UnrD`), since the finaliser runs in the cancels below it, and the errors pending at the
-  finaliser are persistent where `Σ_D` has one.  `[then]` at option A, the finaliser at `F 1`, is
-  `CDerivesAt.effThenA`.  `[spec §19, §24, §27]` -/
-  | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
-      (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
-      (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-        o.finRead = true → ThenLe o.fin SD o'.fin)
-      (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
-      (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A)))
-      (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
-      (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
-      CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
-  /-- `[then]` with a finaliser whose row may hold `Div`, its body with no capturable operation
-  (`CDerives.effThenDiv`).  `[spec §27, §29a]` -/
-  | effThenDiv {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
-      (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
-      (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-        o.finRead = true → ThenLe o.fin SD o'.fin)
-      (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false)
-      (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A)))
-      (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
-      (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
-      CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
-  /-- `[handle]`: `handle_n e with H`, the handler's pair `H = (h_ret, hs)` a value form over a
-  part of the context whose live slots are persistent, `n` not in `Σ`, the handled row tied to
-  `Ξ`.  The `j`-th operation's cancel row is `fs j`, and its clause's `κ` has its cancel branch at
-  `cancelTy Σ (fs j)`.  At two variables and empty cancel rows it is `hndTerm`
-  (`CDerivesAt.effHandle`).  `[spec §19, §24, §27]` -/
-  | effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
-      {cs : Nat → Bool}
-      {n : UInt32} {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 fs cs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
-      (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
-      (hc : CDerivesAt Ξ Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))))
-      (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-      (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
-      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
-      CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
-  /-- BOXED-κ, the handled row tied to `Ξ`.  `[spec §28]` -/
-  | effHandleVB {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
-      {cs : Nat → Bool}
-      {n : UInt32} {A R : VTy} {d : Lifetime.Life} (hAt : RowAt Ξ (Row.ofEff n E 0 fs cs ++ S))
-      (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
-      (hc : CDerivesAt Ξ Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs))))
-      (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-      (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
-      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)))
-      (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs cs ++ S)) :
-      CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
-  /-- `[handle]` at clauses that resume `κ` in tail position, the handled row tied to `Ξ`.
-  `[spec §14, §19]` -/
-  | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
-      {n : UInt32} {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
-      (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
-      (hc : CDerivesAt Ξ Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
-      (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-      (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
-      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
-      CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e)
-        (.comp (CTy.effOf S R))
-  /-- `[handle-last]`, the handled row tied to `Ξ`.  `[spec §14, §19, §27, §51]` -/
-  | effHandleL {Δ Γ Γ₁ Γ₂} {Hr Hw Hn e : Expr} {S SW : Row} {E : List (Qual × VTy × VTy)}
-      {fs : Nat → CTy} {Xs : Nat → VTy} {n : UInt32} {A R : VTy}
-      (hAt : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
-      (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHw : Hw.ValFormIn Γ₁) (hHn : Hn.ValFormIn Γ₁)
-      (hc : CDerivesAt Ξ Δ Γ₁ (.pair Hr (.pair Hw Hn))
-        (.val (.tensor (retTy S A R) (.tensor (worksTy S SW R Xs E 0) (exitsTy S R Xs E 0)))))
-      (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-      (hNZ : S.NZ) (hCancel : ∀ o ∈ E, o.1 = .cancel ∨ (o.2.2.isZero && o.1 != .lin) = true)
-      (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
-      (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
-      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
-      CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (lastTuple E 0 Hw Hn)) e)
-        (.comp (CTy.effOf S R))
-  /-- `[let-poly]`: `let x = λy. b in N` for a closed λ-value, from `N` with the λ-value for `x`,
-  `x`'s slot dead.  Each occurrence of the λ-value in `N` is typed on its own, at its own row: the
-  kernel's row polymorphism, with the value restriction.  `[spec §24]` -/
-  | letPoly {Δ Γ N C} {j : Jdg} (b : Expr) (hcl : closedAt 0 (Val.lam b).1 = true)
-      (hV : CDerivesAt Ξ Δ [] (.val (.lam b)) j)
-      (hN : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C)) :
-      CDerivesAt Ξ Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C)
-  /-- `[α]`: conversion up to the names of lifetime binders.  `[spec §3]` -/
-  | alpha {Δ Γ e} {j j' : Jdg} (h : CDerivesAt Ξ Δ Γ e j) (hα : j.alphaB j' = true) :
-      CDerivesAt Ξ Δ Γ e j'
+/-- The unwinding form of `withbor` (2) with its finaliser at the pure row: `withbor2UD` at
+`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19, §23]` -/
+theorem CDerivesAt.withbor2U {Ξ : EffCtx} {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+    (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S)) :=
+  CDerivesX.withbor2U x hΓ hx hside hfree₁ hfree₂ hS hd
 
-/-- **Every tied derivation is one of `CDerives`.**  `[spec §19]` -/
+/-- The unwinding form of `withbor` (3) with its finaliser at the pure row: `withbor3UD` at
+`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19]` -/
+theorem CDerivesAt.withbor3U {Ξ : EffCtx} {Δ Γ a A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+    (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.mut a A) .unit))) :
+    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S)) :=
+  CDerivesX.withbor3U x hΓ hx hfree₁ hfree₂ hS hd
+
+/-- **Every tied derivation is one of `CDerives`**: the tie dropped (`CDerivesX.mono`).
+`[spec §19, §83]` -/
 theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
-    (h : CDerivesAt Ξ Δ Γ e j) : CDerives Δ Γ e j := by
-  induction h with
-  | var h => exact .var h
-  | unitI h => exact .unitI h
-  | tensorI hs _ _ ih1 ih2 => exact .tensorI hs ih1 ih2
-  | sumI₁ _ ih1 => exact .sumI₁ ih1
-  | sumI₂ _ ih1 => exact .sumI₂ ih1
-  | thunkF _ ih1 => exact .thunkF ih1
-  | thunkV hC _ ih1 => exact .thunkV hC ih1
-  | ret _ ih1 => exact .ret ih1
-  | bind hs _ _ ih1 ih2 => exact .bind hs ih1 ih2
-  | force h hT => exact .force h hT
-  | lam _ ih1 => exact .lam ih1
-  | lamDead _ ih1 => exact .lamDead ih1
-  | app hs _ hx ih1 => exact .app hs ih1 hx
-  | withI _ _ ih1 ih2 => exact .withI ih1 ih2
-  | proj₁ _ ih1 => exact .proj₁ ih1
-  | proj₂ _ ih1 => exact .proj₂ ih1
-  | topI => exact .topI
-  | unitE hs _ _ ih1 ih2 => exact .unitE hs ih1 ih2
-  | tensorE hs _ _ ih1 ih2 => exact .tensorE hs ih1 ih2
-  | sumE hs _ _ _ ih1 ih2 ih3 => exact .sumE hs ih1 ih2 ih3
-  | zeroE hs _ ih1 => exact .zeroE hs ih1
-  | allI hbx hΔx hΓx _ ih1 => exact .allI hbx hΔx hΓx ih1
-  | allE _ hlt ih1 => exact .allE ih1 hlt
-  | bangThunkF hp _ ih1 => exact .bangThunkF hp ih1
-  | bangThunkV hp hC _ ih1 => exact .bangThunkV hp hC ih1
-  | codeI _ hok ih1 => exact .codeI ih1 hok
-  | codeIB hp _ hok ih1 => exact .codeIB hp ih1 hok
-  | codeErase _ ih1 => exact .codeErase ih1
-  | codeEraseB _ ih1 => exact .codeEraseB ih1
-  | bangE _ ih1 => exact .bangE ih1
-  | copyBang hΓ => exact .copyBang hΓ
-  | releaseBang hΓ => exact .releaseBang hΓ
-  | boxI _ hΓ ih1 => exact .boxI ih1 hΓ
-  | boxE _ ih1 => exact .boxE ih1
-  | immSub _ hle ih1 => exact .immSub ih1 hle
-  | mutSub _ hle ih1 => exact .mutSub ih1 hle
-  | alloc hΓ => exact .alloc hΓ
-  | free hΓ => exact .free hΓ
-  | tokMint hΓ => exact .tokMint hΓ
-  | tokBurn hΓ => exact .tokBurn hΓ
-  | swap hΓ => exact .swap hΓ
-  | copy hΓ => exact .copy hΓ
-  | releaseImm hΓ => exact .releaseImm hΓ
-  | releaseMut hΓ => exact .releaseMut hΓ
-  | releaseUnk hΓ => exact .releaseUnk hΓ
-  | lit c hΓ => exact .lit c hΓ
-  | hostOp op hΓ => exact .hostOp op hΓ
-  | arrNew A hΓ => exact .arrNew A hΓ
-  | arrFree A hΓ => exact .arrFree A hΓ
-  | arrSize A hΓ => exact .arrSize A hΓ
-  | arrReplace A hΓ => exact .arrReplace A hΓ
-  | arrLen a A hΓ => exact .arrLen a A hΓ
-  | arrGet a A hΓ => exact .arrGet a A hΓ
-  | arrCopy a A hΓ => exact .arrCopy a A hΓ
-  | arrRelease a A hΓ => exact .arrRelease a A hΓ
-  | countFold S hΓ => exact .countFold S hΓ
-  | countTry S E hΓ => exact .countTry S E hΓ
-  | boundedFix A C hΓ => exact .boundedFix A C hΓ
-  | sliceBorrowM x hΓ hsideA hsideB hfree₁ hfree₂ =>
-      exact .sliceBorrowM x hΓ hsideA hsideB hfree₁ hfree₂
-  | sliceBorrowI x hΓ hsc hsideA hsideB hfree₁ hfree₂ =>
-      exact .sliceBorrowI x hΓ hsc hsideA hsideB hfree₁ hfree₂
-  | sliceGetM a A hΓ => exact .sliceGetM a A hΓ
-  | sliceLenM a A hΓ => exact .sliceLenM a A hΓ
-  | sliceSplitI a A hΓ => exact .sliceSplitI a A hΓ
-  | sliceSplitM a A hΓ => exact .sliceSplitM a A hΓ
-  | sliceEmptyI a A hΓ => exact .sliceEmptyI a A hΓ
-  | sliceEmptyM a A hΓ => exact .sliceEmptyM a A hΓ
-  | arrEmpty A hΓ => exact .arrEmpty A hΓ
-  | sliceReplaceM a A hΓ => exact .sliceReplaceM a A hΓ
-  | sliceSwapM a A hΓ => exact .sliceSwapM a A hΓ
-  | withbor1 x hΓ hx hsc₁ hfree₁ hfree₂ => exact .withbor1 x hΓ hx hsc₁ hfree₁ hfree₂
-  | withbor2 x hΓ hx hside hfree₁ hfree₂ => exact .withbor2 x hΓ hx hside hfree₁ hfree₂
-  | withbor3 x hΓ hx hfree₁ hfree₂ => exact .withbor3 x hΓ hx hfree₁ hfree₂
-  | withload x hΓ hx hfree₁ hfree₂ => exact .withload x hΓ hx hfree₁ hfree₂
-  | withswap hΓ => exact .withswap hΓ
-  | withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS _ ih1 =>
-      exact .withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS ih1
-  | withbor2U x hΓ hx hside hfree₁ hfree₂ hS _ ih1 =>
-      exact .withbor2U x hΓ hx hside hfree₁ hfree₂ hS ih1
-  | withbor3U x hΓ hx hfree₁ hfree₂ hS _ ih1 =>
-      exact .withbor3U x hΓ hx hfree₁ hfree₂ hS ih1
-  | withloadU x hΓ hx hfree₁ hfree₂ hS => exact .withloadU x hΓ hx hfree₁ hfree₂ hS
-  | sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS _ ih1 =>
-      exact .sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS ih1
-  | sliceBorrowIU x hΓ hsc hsideA hsideB hfree₁ hfree₂ hS _ ih1 =>
-      exact .sliceBorrowIU x hΓ hsc hsideA hsideB hfree₁ hfree₂ hS ih1
-  | lolliE hs _ _ ih1 ih2 => exact .lolliE hs ih1 ih2
-  | allEV _ hlt ih1 => exact .allEV ih1 hlt
-  | ofRet _ ih1 => exact .ofRet ih1
-  | roll hA hc _ ih1 => exact .roll hA hc ih1
-  | unroll _ ih1 => exact .unroll ih1
-  | foldImm F y c R hΓ hF hG hyM hyR hR => exact .foldImm F y c R hΓ hF hG hyM hyR hR
-  | foldOwn F R hΓ hF hG => exact .foldOwn F R hΓ hF hG
-  | foldOwnG B₀ Rs hΓ hB => exact .foldOwnG B₀ Rs hΓ hB
-  | foldReuse F R hΓ hF hG => exact .foldReuse F R hΓ hF hG
-  | nuIn hC _ ih1 => exact .nuIn hC ih1
-  | nuOut hC _ ih1 => exact .nuOut hC ih1
-  | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS hΓ
-  | unfoldK C G S hC hG hS hΓ => exact .unfoldK C G S hC hG hS hΓ
-  | nuOutK hC hG hS hGf h => exact .nuOutK hC hG hS hGf h
-  | effSub hle _ ih1 => exact .effSub hle ih1
-  | effPerform _ hf hna hac _ ih1 => exact .effPerform hf hna hac ih1
-  | effAwait _ hΓ hfa ha haA hfc hc => exact .effAwait hΓ hfa ha haA hfc hc
-  | effRaise _ hf ha hrc hd _ ih1 => exact .effRaise hf ha hrc hd ih1
-  | effLet hs hW hU _ _ ih1 ih2 => exact .effLet hs hW hU ih1 ih2
-  | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
-      exact .effThen hs hNZ hUq hU hMS hDS hfin hP hSD ih1 ih2 ih3
-  | effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
-      exact .effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD ih1 ih2 ih3
-  | effHandleV _ hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
-      exact .effHandleV hs hd hH ihc hn0 hnS hlen hdv ihe
-  | effHandleVB _ hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
-      exact .effHandleVB hs hd hH ihc hn0 hnS hlen hdv ihe hΓd hSd
-  | effHandleT _ hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
-      exact .effHandleT hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
-  | effHandleL _ hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
-      exact .effHandleL hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
-  | iterate S St B R _ hS hΓ => exact .iterate S St B R hS hΓ
-  | divFuel S A _ hS hΓ => exact .divFuel S A hS hΓ
-  | reify S B R res _ hS hcl _ hΓ ih => exact .reify S B R res hS hcl ih hΓ
-  | letPoly b hcl _ _ ihV ihN => exact .letPoly b hcl ihV ihN
-  | alpha _ hα ih => exact .alpha ih hα
+    (h : CDerivesAt Ξ Δ Γ e j) : CDerives Δ Γ e j :=
+  CDerivesX.mono (I := {ties := some Ξ}) (I' := {}) ⟨Or.inl rfl, fun h => h⟩ h
 
 /-- `[then]` with its finaliser at the pure row (§24, option A), tied: `effThen` at `Σ_M = Σ` and
 `Σ_D = ∅`, as `CDerives.effThenA`.  `[spec §24, §27]` -/
@@ -656,9 +87,7 @@ theorem CDerivesAt.effThenA {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row
     (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
     (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
     CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
-  .effThen (SD := []) hs hNZ hUq hU (RowLe.refl S) (RowLe.nil S)
-    (fun _ _ o _ hf hf' _ => by rw [hf] at hf'; cases hf'; exact ThenLe.nil o.fin)
-    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) rfl hM hN hD
+  CDerivesX.effThenA hs hNZ hUq hU hM hN hD
 
 /-- `[handle]` at two variables, tied: `CDerives.effHandle` with the handled row tied to `Ξ`.
 `[spec §19]` -/
@@ -669,14 +98,8 @@ theorem CDerivesAt.effHandle {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Ro
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (hdv : Row.divB (Row.ofEff n E 0 ++ S) = false)
     (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
-    CDerivesAt Ξ Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) := by
-  obtain ⟨sr, hsr, hlr⟩ := hr.live
-  obtain ⟨sc, hsc, hlc⟩ := hc.live
-  obtain ⟨sr', hsr', hlr'⟩ := hs₁.live_left hsr hlr
-  obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
-  exact .effHandleV hAt hs
-    (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E finsNil)))
-    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
+    CDerivesAt Ξ Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) :=
+  CDerivesX.effHandle hAt hs hs₁ hr hc hn0 hnS hlen hdv he
 
 /-- BOXED-κ at two variables, tied: `CDerivesAt.effHandle` with the clauses at `clausesTyB`.
 `[spec §28]` -/
@@ -919,12 +342,12 @@ macro "eff_free" : tactic => `(tactic| (simp_all only [Expr.effFree, Expr.val, V
     Val.unit, Val.inj₁, Val.inj₂, withPair, absurdE, thenE, withborUE, effFree_shift, Bool.and_eq_true,
     bne_iff_ne, ne_eq, reduceCtorEq, not_false_eq_true, and_self, and_true, true_and]))
 
-/-- **A derivation of a term with no operation is tied at every effect context**: the three rules
-that read a signature off a row type a `perform`, a `raise` or a `hnd`, and every other rule is the
-same in both judgments.  `[spec §19]` -/
+/-- **A derivation of a term with no operation is tied at every effect context**: the ten rules
+that read a signature off a row type terms `Expr.effFree` excludes (a `perform`, a `raise`, a `hnd`,
+or a constant built from them), and every other rule is the same in both judgments.  `[spec §19]` -/
 theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ e j) (he : e.effFree = true) : CDerivesAt Ξ Δ Γ e j := by
-  induction h with
+  induction h using CDerives.induct with
   | var h => exact .var h
   | unitI h => exact .unitI h
   | tensorI hs _ _ ih1 ih2 => exact .tensorI hs (ih1 (by eff_free)) (ih2 (by eff_free))
@@ -997,17 +420,14 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | arrEmpty A hΓ => exact .arrEmpty A hΓ
   | sliceReplaceM a A hΓ => exact .sliceReplaceM a A hΓ
   | sliceSwapM a A hΓ => exact .sliceSwapM a A hΓ
+  | sliceCopyM a b A hΓ hA => exact .sliceCopyM a b A hΓ hA
   | withbor1 x hΓ hx hsc₁ hfree₁ hfree₂ => exact .withbor1 x hΓ hx hsc₁ hfree₁ hfree₂
   | withbor2 x hΓ hx hside hfree₁ hfree₂ => exact .withbor2 x hΓ hx hside hfree₁ hfree₂
   | withbor3 x hΓ hx hfree₁ hfree₂ => exact .withbor3 x hΓ hx hfree₁ hfree₂
   | withload x hΓ hx hfree₁ hfree₂ => exact .withload x hΓ hx hfree₁ hfree₂
   | withswap hΓ => exact .withswap hΓ
-  | withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS _ ih1 =>
-      exact .withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS (ih1 (by eff_free))
-  | withbor2U x hΓ hx hside hfree₁ hfree₂ hS _ ih1 =>
-      exact .withbor2U x hΓ hx hside hfree₁ hfree₂ hS (ih1 (by eff_free))
-  | withbor3U x hΓ hx hfree₁ hfree₂ hS _ ih1 =>
-      exact .withbor3U x hΓ hx hfree₁ hfree₂ hS (ih1 (by eff_free))
+  | withborUD k x hΓ hx hk hfree₁ hfree₂ hS hMS hDS hSv hP _ ih1 =>
+      exact .withborUD k x hΓ hx hk hfree₁ hfree₂ hS hMS hDS hSv hP (ih1 (by eff_free))
   | withloadU x hΓ hx hfree₁ hfree₂ hS => exact .withloadU x hΓ hx hfree₁ hfree₂ hS
   | sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS _ ih1 =>
       exact .sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS (ih1 (by eff_free))
@@ -1050,6 +470,17 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
       exact .letPoly b hcl (ihV he.2)
         (ihN (by rw [effFree_shift]; exact effFree_subst N 0 (Val.lam b) he.1 he.2))
   | alpha _ hα ih => exact .alpha (ih he) hα
+
+/-- **A derivation of a term with no operation is one at every judgment index**: tied at the
+index's effect context, if any (`CDerivesAt.ofEffFree`), then `CDerivesX.mono`.  `[spec §19, §83]` -/
+theorem CDerivesX.ofEffFree {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
+    (h : CDerives Δ Γ e j) (he : e.effFree = true) : CDerivesX I Δ Γ e j := by
+  cases hI : I.ties with
+  | none =>
+      exact CDerivesX.mono (I := {}) (I' := I) ⟨Or.inl hI, fun h => absurd h Bool.false_ne_true⟩ h
+  | some Ξ =>
+      exact CDerivesX.mono (I := {ties := some Ξ}) (I' := I)
+        ⟨Or.inr hI, fun h => absurd h Bool.false_ne_true⟩ (CDerivesAt.ofEffFree h he)
 
 /-! ### Signature lists -/
 

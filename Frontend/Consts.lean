@@ -21,15 +21,17 @@ inductive ArgKind where
 inductive CKw where
   | alloc | free | swap | copy | copyBang | releaseImm | releaseMut | releaseUnk | releaseBang
   | tokMint | tokBurn
-  | withbor1 | withbor2 | withbor3 | withload | withswap
+  | withlocal | withbor1 | withbor2 | withbor3 | withload | withswap
   | foldImm | foldOwn | foldReuse | fixd | unfoldS | unfold
   | i32 | i64 | u8 | f32 | f64 | u32 | u64 | host
   | allocS | freeS | withborSMut | withborSImm | withborF2Mut | withborF2Imm
   | arrayNew | arrayEmpty | arrayFree | arraySize | arrayReplace | arrayLen | arrayGet | arrayCopy
   | arrayRelease | sliceBorrowMut | sliceBorrowImm | sliceGetMut | sliceLenMut
   | sliceSplitImm | sliceSplitMut | sliceEmptyImm | sliceEmptyMut | sliceReplaceMut | sliceSwapMut
+  | sliceCopyMut
   | countFold | countTry | boundedFix
-  | withbor1U | withbor2U | withbor3U | withloadU | sliceBorrowMutU | sliceBorrowImmU
+  | withbor1U | withbor2U | withbor3U | withloadU | sliceBorrowMutU | sliceBorrowImmU | withlocalU
+  | withlocalLoop
   deriving DecidableEq, Repr
 
 /-- A constant keyword's spelling. -/
@@ -38,6 +40,7 @@ def CKw.str : CKw → String
   | .copyBang => "copy_bang" | .releaseImm => "release_imm" | .releaseMut => "release_mut"
   | .releaseUnk => "release_unk" | .releaseBang => "release_bang"
   | .tokMint => "tok_mint" | .tokBurn => "tok_burn"
+  | .withlocal => "withlocal"
   | .withbor1 => "withbor1" | .withbor2 => "withbor2" | .withbor3 => "withbor3"
   | .withload => "withload" | .withswap => "withswap"
   | .foldImm => "fold_imm" | .foldOwn => "fold_own" | .foldReuse => "fold_reuse"
@@ -56,25 +59,29 @@ def CKw.str : CKw → String
   | .sliceSplitImm => "slice_split_imm" | .sliceSplitMut => "slice_split_mut"
   | .sliceEmptyImm => "slice_empty_imm" | .sliceEmptyMut => "slice_empty_mut"
   | .sliceReplaceMut => "slice_replace_mut" | .sliceSwapMut => "slice_swap_mut"
+  | .sliceCopyMut => "slice_copy_mut"
   | .countFold => "count_fold" | .countTry => "count_try"
   | .boundedFix => "bounded_fix"
   | .withbor1U => "withbor1u" | .withbor2U => "withbor2u" | .withbor3U => "withbor3u"
   | .withloadU => "withloadu" | .sliceBorrowMutU => "slice_borrow_mut_u"
   | .sliceBorrowImmU => "slice_borrow_imm_u"
+  | .withlocalU => "withlocalu"
+  | .withlocalLoop => "withlocal_loop"
 
 def CKw.all : List CKw :=
   [.alloc, .free, .swap, .copy, .copyBang, .releaseImm, .releaseMut, .releaseUnk, .releaseBang,
    .tokMint, .tokBurn,
-   .withbor1, .withbor2, .withbor3, .withload, .withswap,
+   .withlocal, .withbor1, .withbor2, .withbor3, .withload, .withswap,
    .foldImm, .foldOwn, .foldReuse, .fixd, .unfoldS, .unfold, .i32, .i64, .u8, .f32, .f64, .u32, .u64,
    .host,
    .allocS, .freeS, .withborSMut, .withborSImm, .withborF2Mut, .withborF2Imm,
    .arrayNew, .arrayEmpty, .arrayFree, .arraySize, .arrayReplace, .arrayLen, .arrayGet, .arrayCopy,
    .arrayRelease, .sliceBorrowMut, .sliceBorrowImm, .sliceGetMut, .sliceLenMut,
    .sliceSplitImm, .sliceSplitMut, .sliceEmptyImm, .sliceEmptyMut, .sliceReplaceMut,
-   .sliceSwapMut,
+   .sliceSwapMut, .sliceCopyMut,
    .countFold, .countTry, .boundedFix,
-   .withbor1U, .withbor2U, .withbor3U, .withloadU, .sliceBorrowMutU, .sliceBorrowImmU]
+   .withbor1U, .withbor2U, .withbor3U, .withloadU, .sliceBorrowMutU, .sliceBorrowImmU, .withlocalU,
+   .withlocalLoop]
 
 def CKw.ofString? (s : String) : Option CKw := CKw.all.find? (·.str == s)
 
@@ -88,6 +95,7 @@ def CKw.sig : CKw → List ArgKind
   | .sliceGetMut | .sliceLenMut => [life, ty]
   | .sliceSplitImm | .sliceSplitMut | .sliceEmptyImm | .sliceEmptyMut | .sliceReplaceMut
   | .sliceSwapMut => [life, ty]
+  | .sliceCopyMut => [life, life, ty]
   | .sliceBorrowMut | .sliceBorrowImm => [binder, life, ty, ty]
   | .swap | .foldOwn | .foldReuse | .fixd | .unfoldS | .countTry => [ty, ty]
   | .unfold => [cty, ty]
@@ -96,6 +104,8 @@ def CKw.sig : CKw → List ArgKind
   | .releaseUnk | .tokMint | .tokBurn => []
   | .withbor1 => [binder, ty, ty]
   | .withbor2 => [binder, life, ty, ty]
+  | .withlocal => [binder, life, ty, ty]
+  | .withlocalLoop => [binder, life, ty, ty, ty, ty]
   | .withbor3 | .withload => [life, binder, ty, ty]
   | .withswap => [life, ty, ty]
   | .foldImm => [ty, binder, life, ty]
@@ -106,7 +116,7 @@ def CKw.sig : CKw → List ArgKind
   | .withborF2Mut => [binder, binder, binder, life, ty, ty, ty]
   | .withborF2Imm => [binder, binder, binder, ty, ty, ty]
   | .withbor1U => [binder, ty, ty, row]
-  | .withbor2U | .sliceBorrowMutU | .sliceBorrowImmU => [binder, life, ty, ty, row]
+  | .withbor2U | .sliceBorrowMutU | .sliceBorrowImmU | .withlocalU => [binder, life, ty, ty, row]
   | .withbor3U | .withloadU => [life, binder, ty, ty, row]
 
 /-- A constant from its keyword and arguments; `none` when they do not fit its signature. -/
@@ -124,6 +134,7 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .releaseBang, [.ty A] => some (.releaseBang A)
   | .withbor1, [.binder x, .ty A, .ty B] => some (.withbor1 x A B)
   | .withbor2, [.binder x, .life b, .ty A, .ty B] => some (.withbor2 x b A B)
+  | .withlocal, [.binder x, .life b, .ty A, .ty B] => some (.withlocal x b A B)
   | .withbor3, [.life a, .binder x, .ty A, .ty B] => some (.withbor3 a x A B)
   | .withload, [.life a, .binder x, .ty A, .ty B] => some (.withload a x A B)
   | .withswap, [.life a, .ty A, .ty B] => some (.withswap a A B)
@@ -168,11 +179,15 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .sliceEmptyMut, [.life a, .ty A] => some (.sliceEmptyMut a A)
   | .sliceReplaceMut, [.life a, .ty A] => some (.sliceReplaceMut a A)
   | .sliceSwapMut, [.life a, .ty A] => some (.sliceSwapMut a A)
+  | .sliceCopyMut, [.life a, .life b, .ty A] => some (.sliceCopyMut a b A)
   | .countFold, [.ty S] => some (.countFold S)
   | .countTry, [.ty S, .ty E] => some (.countTry S E)
   | .boundedFix, [.ty A, .cty C] => some (.boundedFix A C)
   | .withbor1U, [.binder x, .ty A, .ty B, .row r] => some (.withbor1U x A B r)
   | .withbor2U, [.binder x, .life b, .ty A, .ty B, .row r] => some (.withbor2U x b A B r)
+  | .withlocalU, [.binder x, .life b, .ty A, .ty B, .row r] => some (.withlocalU x b A B r)
+  | .withlocalLoop, [.binder x, .life b, .ty A, .ty S, .ty B, .ty R] =>
+      some (.withlocalLoop x b A S B R)
   | .withbor3U, [.life a, .binder x, .ty A, .ty B, .row r] => some (.withbor3U a x A B r)
   | .withloadU, [.life a, .binder x, .ty A, .ty B, .row r] => some (.withloadU a x A B r)
   | .sliceBorrowMutU, [.binder x, .life b, .ty A, .ty B, .row r] =>
@@ -196,6 +211,7 @@ def Const.toArgs : Const → CKw × List Arg
   | .releaseBang A => (.releaseBang, [.ty A])
   | .withbor1 x A B => (.withbor1, [.binder x, .ty A, .ty B])
   | .withbor2 x b A B => (.withbor2, [.binder x, .life b, .ty A, .ty B])
+  | .withlocal x b A B => (.withlocal, [.binder x, .life b, .ty A, .ty B])
   | .withbor3 a x A B => (.withbor3, [.life a, .binder x, .ty A, .ty B])
   | .withload a x A B => (.withload, [.life a, .binder x, .ty A, .ty B])
   | .withswap a A B => (.withswap, [.life a, .ty A, .ty B])
@@ -240,11 +256,15 @@ def Const.toArgs : Const → CKw × List Arg
   | .sliceEmptyMut a A => (.sliceEmptyMut, [.life a, .ty A])
   | .sliceReplaceMut a A => (.sliceReplaceMut, [.life a, .ty A])
   | .sliceSwapMut a A => (.sliceSwapMut, [.life a, .ty A])
+  | .sliceCopyMut a b A => (.sliceCopyMut, [.life a, .life b, .ty A])
   | .countFold S => (.countFold, [.ty S])
   | .countTry S E => (.countTry, [.ty S, .ty E])
   | .boundedFix A C => (.boundedFix, [.ty A, .cty C])
   | .withbor1U x A B r => (.withbor1U, [.binder x, .ty A, .ty B, .row r])
   | .withbor2U x b A B r => (.withbor2U, [.binder x, .life b, .ty A, .ty B, .row r])
+  | .withlocalU x b A B r => (.withlocalU, [.binder x, .life b, .ty A, .ty B, .row r])
+  | .withlocalLoop x b A S B R =>
+      (.withlocalLoop, [.binder x, .life b, .ty A, .ty S, .ty B, .ty R])
   | .withbor3U a x A B r => (.withbor3U, [.life a, .binder x, .ty A, .ty B, .row r])
   | .withloadU a x A B r => (.withloadU, [.life a, .binder x, .ty A, .ty B, .row r])
   | .sliceBorrowMutU x b A B r => (.sliceBorrowMutU, [.binder x, .life b, .ty A, .ty B, .row r])

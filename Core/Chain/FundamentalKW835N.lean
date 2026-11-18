@@ -10,6 +10,7 @@ import Core.Chain.NuKW835N
 import Core.Chain.CountKW835N
 import Core.Chain.FamKW835N
 import Core.Chain.FamOpsKW835N
+import Core.Chain.SliceCopyKW835N
 import Core.Chain.FamImmKW835N
 import Core.Chain.MuKW835N
 import Core.Chain.FoldGKW835N
@@ -23,7 +24,7 @@ import Core.Chain.CodeRulesKW835N
 import Core.Chain.CodeNuOutKW835N
 
 /-!
-# `FundamentalN` assembled by induction on `CDerives`  `[spec §62]`
+# `fundamentalN_all` assembled by induction on `CDerives`  `[spec §62]`
 
 `docs/new-core/scope-835-tables.md` §10.13. `fundamentalN_all` is Core's `fundamentalC` at
 `SemJN`, the relation at `KW`: one case per constructor of `CDerives`, in `fundamentalC`'s order
@@ -35,7 +36,6 @@ Core's lemma with `SemV`/`SemC` read as `SemJN`.
   `handleV_compatCB`).
 * `fundamentalN_all`: every derivation is in `SemJN`, from `MissingN`. No compatibility lemma takes
   a fragment premise.
-* `fundamentalN_of`: `FundamentalN` read off it, the fragment premise unused.
 -/
 
 noncomputable section
@@ -95,7 +95,7 @@ case. -/
 theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr}
     {j : Jdg} (h : CDerives Δ Γ e j) : SemJN (ℍ := ℍ) Δ Γ e j := by
   obtain ⟨hHV, hHVB, hReify⟩ := hm
-  induction h with
+  induction h using CDerives.induct with
   | var h => exact var_compatN h
   | unitI h => exact unitI_compatN h
   | tensorI hs _ _ ih₁ ih₂ => exact tensorI_compatN hs ih₁ ih₂
@@ -168,16 +168,14 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | arrEmpty _ hΓ => exact arrEmpty_compatN hΓ
   | sliceReplaceM _ _ hΓ => exact sliceReplaceM_compatN hΓ
   | sliceSwapM _ _ hΓ => exact sliceSwapM_compatN hΓ
+  | sliceCopyM _ _ _ hΓ hA => exact sliceCopyM_compatN hΓ hA
   | withbor1 x hΓ _ hsc₁ hf₁ hf₂ => exact withbor1_compatN x hΓ hsc₁ hf₁ hf₂
   | withbor2 x hΓ _ hside hf₁ hf₂ => exact withbor2_compatN x hΓ hside hf₁ hf₂
   | withbor3 x hΓ _ hf₁ hf₂ => exact withbor3_compatN x hΓ hf₁ hf₂
   | withload x hΓ _ hf₁ hf₂ => exact withload_compatN x hΓ hf₁ hf₂
   | withswap hΓ => exact withswap_compatN hΓ
-  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS _ ihd =>
-      exact withbor1U_compatN x hΓ hsc₁ hf₁ hf₂ hS ihd
-  | withbor2U x hΓ _ hside hf₁ hf₂ hS _ ihd =>
-      exact withbor2U_compatN x hΓ hside hf₁ hf₂ hS ihd
-  | withbor3U x hΓ _ hf₁ hf₂ hS _ ihd => exact withbor3U_compatN x hΓ hf₁ hf₂ hS ihd
+  | withborUD k x hΓ _ hk hf₁ hf₂ hS hMS hDS _ hP _ ihd =>
+      exact withborUD_compatN k x hΓ hk hf₁ hf₂ hS hMS hDS hP ihd
   | withloadU x hΓ _ hf₁ hf₂ hS => exact withloadU_compatN x hΓ hf₁ hf₂ hS
   | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
       exact sliceBorrowMU_compatN x hΓ hA hB hf₁ hf₂ hS ihd
@@ -228,10 +226,6 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
       exact handleL_compatN hs hd hHr hHw hHn ihc hnS hlen hNZ hCancel hSW hSu hFin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatN (Val.lam b) hcl ihN
   | alpha _ hα ih => exact alpha_compatN hα ih
-
-/-- **`FundamentalN` from `MissingN`**: `fundamentalN_all`, the fragment premise unused. -/
-theorem fundamentalN_of (h : MissingN (ℍ := ℍ)) : FundamentalN (ℍ := ℍ) :=
-  fun _ _ _ _ hder _ => fundamentalN_all h hder
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

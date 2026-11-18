@@ -4,7 +4,7 @@ import Core.EffCancelTyped
 /-!
 # `HandlerLawN`, the named assertion for the three handler rules  `[spec §62]`
 
-`FundamentalN` is proved at every `CDerives` derivation from `MissingN` (`fundamentalN_all`):
+`fundamentalN_all` proves every `CDerives` derivation sound at `SemJN` from `MissingN`:
 every rule but `[handle]` at a value form (`effHandleV`), BOXED-κ `[handle]` (`effHandleVB`) and
 `reify` has a compatibility lemma at `cN`, the relation at `KW`. `HandlerLawN` names those three as
 one hypothesis, a `Prop` and not an axiom, in the form of `PinLaw` (`Core/PinLaw.lean`): three
@@ -75,10 +75,6 @@ structure HandlerLawN : Prop where
 /-- `HandlerLawN` says what `MissingN` says. -/
 theorem handlerLawN_iff : HandlerLawN (ℍ := ℍ) ↔ MissingN (ℍ := ℍ) :=
   ⟨fun h => ⟨h.handleV, h.handleVB, h.reify⟩, fun ⟨a, b, c⟩ => ⟨a, b, c⟩⟩
-
-/-- **`FundamentalN` from `HandlerLawN`.** -/
-theorem fundamentalN_of_handlerLaw (h : HandlerLawN (ℍ := ℍ)) : FundamentalN (ℍ := ℍ) :=
-  fundamentalN_of (handlerLawN_iff.mp h)
 
 /-! ### The continuation a clause is handed
 
@@ -243,12 +239,12 @@ theorem semJN_resumeCT {Δ : LifeCtx} (S : Row) (R : VTy) (F : CTy) :
     (.val (.bang (.thunk (.arr (.tensor .unit (kTy S R .unr .unit F)) (CTy.effOf S R)))))
   refine bangThunkV_compatN (dead_noLive .nil) rfl (lam_compatN ?_)
   refine tensorE_compatN (.left .nil) (var_compatN (.here .nil)) ?_
-  refine bind_compatN (A := .thunk (.amp (.arr .unit (CTy.effOf S R)) (cancelTy S F)))
+  refine bind_compatN (A := .thunk (.amp (.arr .unit (CTy.effOf S R)) (cancelTy F)))
     (.left (.right (.dead .nil))) (ret_compatN (bangE_compatN (var_compatN
       (.here (.cons (.cons .nil)))))) ?_
   exact app_compatN (.left (.dead (.right (.dead .nil))))
     (proj₁_compatN (force_compatN (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S R))
-      (cancelTy S F)) (.here (.cons (.cons (.cons .nil)))) rfl))
+      (cancelTy F)) (.here (.cons (.cons (.cons .nil)))) rfl))
     (.there (.there (.here (.cons .nil))))
 
 /-- The handled computation of the instance: `perform (1, (0, ()))`. -/
@@ -286,12 +282,12 @@ theorem semJN_resumeCTB {Δ : LifeCtx} (S : Row) (R : VTy) (d : Lifetime.Life) (
     (.val (.bang (.thunk (.arr (.tensor .unit (.box d (kTy S R .unr .unit F))) (CTy.effOf S R)))))
   refine bangThunkV_compatN (dead_noLive .nil) rfl (lam_compatN ?_)
   refine tensorE_compatN (.left .nil) (var_compatN (.here .nil)) ?_
-  refine bind_compatN (A := .thunk (.amp (.arr .unit (CTy.effOf S R)) (cancelTy S F)))
+  refine bind_compatN (A := .thunk (.amp (.arr .unit (CTy.effOf S R)) (cancelTy F)))
     (.left (.right (.dead .nil))) (ret_compatN (bangE_compatN (boxE_compatN (var_compatN
       (.here (.cons (.cons .nil))))))) ?_
   exact app_compatN (.left (.dead (.right (.dead .nil))))
     (proj₁_compatN (force_compatN (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S R))
-      (cancelTy S F)) (.here (.cons (.cons (.cons .nil)))) rfl))
+      (cancelTy F)) (.here (.cons (.cons (.cons .nil)))) rfl))
     (.there (.there (.here (.cons .nil))))
 
 /-- **Every premise of `HandleVBN` holds at the instance**, at the bound `⊓∅` of the empty

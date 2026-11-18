@@ -272,6 +272,7 @@ theorem Fo.head {N : List UInt32} {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ :
   | tab => cases ha with | primApp hp _ => simp [primOwn] at hp
   | idx => exact Fo.of_val _
   | split => exact Fo.of_val _
+  | sliceCopy => exact Fo.of_val _
   | drop => cases ha with | primApp hp _ => simp [primOwn] at hp
   | count => cases ha with | primApp hp _ => simp [primOwn] at hp
   | countTry => cases ha with | primApp hp _ => simp [primOwn] at hp

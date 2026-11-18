@@ -92,6 +92,9 @@ inductive Prim where
       named `n`, in cancel mode and without capturing a continuation, then runs `k ()` where the
       handler stood.  `[spec §51]` -/
   | cancelTo
+  /-- The bulk copy: `sliceCopy (dst, (di, (src, (si, len))))` writes `dst[di + k] := src[si + k]`
+      for every `k < len` when the bounds hold, and nothing otherwise.  `[spec §74]` -/
+  | sliceCopy
   deriving DecidableEq, Repr
 
 /-!

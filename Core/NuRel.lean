@@ -128,7 +128,7 @@ theorem vCE_nuEnv_at (C : CTy) {δ₀ δ : LSub} (hag : ∀ y, CFree y C → δ�
 
 theorem effTab_instT (S : VTy) (δ : LSub) : ∀ D : CTy, effTab (D.instT S) δ = effTab D δ
   | .eff n i q A B fin _ D => by simp only [CTy.instT, effTab, effTab_instT S δ D]
-  | .ret _ | .amp _ _ | .arr _ _ | .top | .all _ _ _ | .nu _ => by simp [CTy.instT, effTab]
+  | .ret _ | .amp _ _ | .arr _ _ | .top | .all _ _ _ | .nuSys _ _ _ => by simp [CTy.instT, effTab]
 
 /-- The answer of an effectful observation at `cC (νX. C)` is `𝒱⟦·⟧` at the unrolling, the
 candidate at `δ₀` and the answer read at `δ`, agreeing on the free variables of `νX. C`. -/
@@ -183,7 +183,7 @@ theorem cB_unroll (C : CTy) (δ₀ : LSub) : ∀ {D : CTy}, D.NuLeaf →
         = (∀ α, (⌜LtLife δ c α⌝ ─⋆ cC (D.instT _) ls (δ.extend x α) (.app e (.val .unit))) ρ)
       refine propext (forall_congr' fun α => ?_)
       rw [cB_unroll C δ₀ (D := D) hD (fun y hy => hfr y (Or.inr hy)) (δ.extend x α) (hag' α) ls]
-  | .top, hD, _, _, _, _ | .nu _, hD, _, _, _, _ => hD.elim
+  | .top, hD, _, _, _, _ | .nuSys _ _ _, hD, _, _, _, _ => hD.elim
 
 /-- **`νX. C` is its unrolling**: `𝒞⟦νX. C⟧ = 𝒞⟦C[U(νX. C)/X]⟧`.  `[spec §7]` -/
 theorem cC_nu_iff {C : CTy} (hC : C.NuOk) (ls : List SRec) (δ : LSub) (e : Expr) (ρ : WRes) :

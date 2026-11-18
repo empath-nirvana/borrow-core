@@ -1024,6 +1024,20 @@ theorem finDom_fill {μ : Heap} (h : FinDom μ) (ℓ : Loc) (n : ℕ) (v : Val) 
     exact List.mem_append_left _ (List.mem_range'_1.2 ⟨hr.1, hr.2⟩)
   · exact List.mem_append_right _ (hd k hk)
 
+/-- The copy step writes only cells of its destination range.  `[spec §74]` -/
+theorem finDom_copyHeap {μ : Heap} (h : FinDom μ) (ℓd : Loc) (nd di : UInt32) (ℓs : Loc)
+    (ns si len : UInt32) : FinDom (BoCa.BoLo.copyHeap μ ℓd nd di ℓs ns si len) := by
+  obtain ⟨d, hd⟩ := h
+  refine ⟨List.range' (ℓd + di.toNat) len.toNat ++ d, fun k hk => ?_⟩
+  unfold BoCa.BoLo.copyHeap at hk
+  split at hk
+  · simp only [BoCa.BoLo.Heap.copy] at hk
+    split at hk
+    · rename_i hr
+      exact List.mem_append_left _ (List.mem_range'_1.2 ⟨hr.1, hr.2⟩)
+    · exact List.mem_append_right _ (hd k hk)
+  · exact List.mem_append_right _ (hd k hk)
+
 /-- A head step keeps a memory's cells finitely many. -/
 theorem finDom_head {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ' a') (hf : FinDom μ) :
     FinDom μ' := by
@@ -1033,6 +1047,7 @@ theorem finDom_head {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ
     | exact finDom_upd hf _ _
     | exact finDom_del hf _
     | exact finDom_fill hf _ _ _
+    | exact finDom_copyHeap hf _ _ _ _ _ _ _
 
 /-- **A run keeps a memory's cells finitely many**, so every memory a run from the empty memory
 reaches has finitely many. -/
@@ -2028,8 +2043,8 @@ theorem dAt_progT {Δ : LifeCtx} : CDerivesAt Ξ₁₂ Δ [] progT (.comp (CTy.e
       (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil))) rfl)
     (by decide) (by simp [rSig]) (by simp) rfl ?_
   · refine RowLe.of_mem fun o ho => ?_
-    rw [show (finR 2).rowOf ++ [rSig 2] = [rSig 2, rSig 2] from rfl] at ho
-    simp only [List.mem_cons, List.not_mem_nil, or_false, or_self] at ho
+    rw [show (finR 2).rowOf = [rSig 2] from rfl] at ho
+    simp only [List.mem_singleton] at ho
     subst ho
     exact ⟨rSig 2, rfl, OpSig.LeF.refl _⟩
   · refine .effSub (RowLe.of_mem fun o ho => ?_) dAt_inner₂
@@ -2197,8 +2212,8 @@ theorem dAt_progTA {Δ : LifeCtx} :
       (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil))) rfl)
     (by decide) (by simp [rSigA]) (by simp) rfl ?_
   · refine RowLe.of_mem fun o ho => ?_
-    rw [show (finRA 2).rowOf ++ [rSigA 2] = [rSigA 2, rSigA 2] from rfl] at ho
-    simp only [List.mem_cons, List.not_mem_nil, or_false, or_self] at ho
+    rw [show (finRA 2).rowOf = [rSigA 2] from rfl] at ho
+    simp only [List.mem_singleton] at ho
     subst ho
     exact ⟨rSigA 2, rfl, OpSig.LeF.refl _⟩
   · refine .effSub (RowLe.of_mem fun o ho => ?_) dAt_inner₂A

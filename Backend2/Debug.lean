@@ -52,7 +52,7 @@ def hasCodeC : CTy → Bool
   | .ret A => hasCodeV A
   | .arr A C => hasCodeV A || hasCodeC C
   | .amp C D => hasCodeC C || hasCodeC D
-  | .all _ _ C | .nu C => hasCodeC C
+  | .all _ _ C | .nuSys _ _ C => hasCodeC C
   | .eff _ _ _ A B fin _ C => hasCodeV A || hasCodeV B || hasCodeC fin || hasCodeC C
   | .top => false
 end

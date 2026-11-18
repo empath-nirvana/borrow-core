@@ -1,4 +1,4 @@
-import Core.PinDerives
+import Core.Demonic
 import Core.ClauseKinds
 import Core.Closed
 
@@ -193,7 +193,7 @@ theorem mentions_withborUE (k : Nat) (d : Expr) : mentions k (withborUE d) = men
 /-- **A typed term mentions only live slots** of its context.  `[spec §55]` -/
 theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerivesP Δ Γ e j) : ∀ k, mentions k e = true → Ctx.LiveAt Γ k := by
-  induction h with
+  induction h using CDerivesP.induct with
   | var h =>
       intro k hk; simp only [mentions, beq_iff_eq] at hk; subst hk; exact h.live
   | @force _ _ i _ C h _ =>
@@ -267,8 +267,7 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
       · exact hs.liveAt_left (ihV k hk)
       · omega
       · omega
-  | withbor1U _ _ _ _ _ _ _ _ ih | withbor2U _ _ _ _ _ _ _ _ ih
-  | withbor3U _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
+  | withborUD _ _ _ _ _ _ _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
   | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih =>
       intro k hk; rw [mentions_withborUE] at hk; exact ih k hk
   | foldImm => intro k hk; rw [mentions_of_closed (foldImmV_closed _)] at hk; cases hk

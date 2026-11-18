@@ -75,9 +75,10 @@ def consumableAtB : Bool → CVTy → Bool
 /-- At a thunk `consumableAtB` does not depend on the mode. -/
 theorem consumableAtB_thunk : ∀ (b : Bool) (C : CCTy), consumableAtB b (.thunk C) = consumableAtB false (.thunk C)
   | _, .amp _ (.ret .unit) | _, .nu (.amp _ (.ret _)) | _, .nu (.ret _) | _, .nu (.arr _ _)
-  | _, .nu .top | _, .nu (.all _ _ _) | _, .nu (.nu _) | _, .nu (.eff _ _ _ _ _ _ _ _)
+  | _, .nuSys (_ + 1) _ _ | _, .nuSys 0 (_ + 1) _
+  | _, .nu .top | _, .nu (.all _ _ _) | _, .nu (.nuSys _ _ _) | _, .nu (.eff _ _ _ _ _ _ _ _)
   | _, .nu (.amp _ (.arr _ _)) | _, .nu (.amp _ (.amp _ _)) | _, .nu (.amp _ .top)
-  | _, .nu (.amp _ (.all _ _ _)) | _, .nu (.amp _ (.nu _)) | _, .nu (.amp _ (.eff _ _ _ _ _ _ _ _))
+  | _, .nu (.amp _ (.all _ _ _)) | _, .nu (.amp _ (.nuSys _ _ _)) | _, .nu (.amp _ (.eff _ _ _ _ _ _ _ _))
   | _, .ret _ | _, .arr _ _ | _, .top | _, .all _ _ _ | _, .eff _ _ _ _ _ _ _ _
   | _, .amp _ (.ret (.tensor _ _)) | _, .amp _ (.ret .zero) | _, .amp _ (.ret (.sum _ _))
   | _, .amp _ (.ret (.thunk _)) | _, .amp _ (.ret (.ref _)) | _, .amp _ (.ret (.imm _ _))
@@ -86,7 +87,7 @@ theorem consumableAtB_thunk : ∀ (b : Bool) (C : CCTy), consumableAtB b (.thunk
   | _, .amp _ (.ret (.int _)) | _, .amp _ (.ret (.fam _)) | _, .amp _ (.ret (.opq _))
   | _, .amp _ (.ret (.code _ _ _))
   | _, .amp _ (.arr _ _) | _, .amp _ (.amp _ _) | _, .amp _ .top | _, .amp _ (.all _ _ _)
-  | _, .amp _ (.nu _) | _, .amp _ (.eff _ _ _ _ _ _ _ _) => rfl
+  | _, .amp _ (.nuSys _ _ _) | _, .amp _ (.eff _ _ _ _ _ _ _ _) => rfl
 
 open BoCa.Fig16.LogRel.Core.FoldP (clB) in
 /-- At a closed type the two modes agree. -/
@@ -156,11 +157,12 @@ theorem consumableAtB_sound : ∀ (A : CVTy), consumableAtB false A = true → C
   | .thunk (.nu (.amp C (.ret R))), h => by
       simp only [consumableAtB, Bool.and_eq_true] at h
       exact .nu (CTy.nuOkB_sound _ h.1.1) (VTy.clB_sound 0 R h.1.2) (consumableAtB_sound R h.2)
+  | .thunk (.nuSys (_ + 1) _ _), h | .thunk (.nuSys 0 (_ + 1) _), h
   | .thunk (.nu (.ret _)), h | .thunk (.nu (.arr _ _)), h | .thunk (.nu .top), h
-  | .thunk (.nu (.all _ _ _)), h | .thunk (.nu (.nu _)), h
+  | .thunk (.nu (.all _ _ _)), h | .thunk (.nu (.nuSys _ _ _)), h
   | .thunk (.nu (.amp _ (.arr _ _))), h | .thunk (.nu (.amp _ (.amp _ _))), h
   | .thunk (.nu (.amp _ .top)), h | .thunk (.nu (.amp _ (.all _ _ _))), h
-  | .thunk (.nu (.amp _ (.nu _))), h => by simp [consumableAtB] at h
+  | .thunk (.nu (.amp _ (.nuSys _ _ _))), h => by simp [consumableAtB] at h
   | .thunk (.ret _), h | .thunk (.arr _ _), h | .thunk .top, h
   | .thunk (.all _ _ _), h => by simp [consumableAtB] at h
   | .thunk (.amp _ (.ret (.tensor _ _))), h | .thunk (.amp _ (.ret .zero)), h
@@ -173,7 +175,7 @@ theorem consumableAtB_sound : ∀ (A : CVTy), consumableAtB false A = true → C
   | .thunk (.amp _ (.ret (.opq _))), h | .thunk (.amp _ (.ret (.code _ _ _))), h
   | .thunk (.amp _ (.arr _ _)), h
   | .thunk (.amp _ (.amp _ _)), h | .thunk (.amp _ .top), h
-  | .thunk (.amp _ (.all _ _ _)), h | .thunk (.amp _ (.nu _)), h => by simp [consumableAtB] at h
+  | .thunk (.amp _ (.all _ _ _)), h | .thunk (.amp _ (.nuSys _ _ _)), h => by simp [consumableAtB] at h
   | .unit, _ => .unit
   | .zero, _ => .zero
   | .int _, _ => .int
@@ -264,11 +266,12 @@ theorem consumableAtB_soundA : ∀ (A : CVTy), consumableAtB true A = true → �
   | .thunk (.nu (.amp C (.ret R))), h, Bs => by
       simp only [consumableAtB, Bool.and_eq_true] at h
       exact algConsumeLeaf _ (.nu (CTy.nuOkB_sound _ h.1.1) (VTy.clB_sound 0 R h.1.2) (consumableAtB_sound R h.2)) Bs
+  | .thunk (.nuSys (_ + 1) _ _), h, _ | .thunk (.nuSys 0 (_ + 1) _), h, _
   | .thunk (.nu (.ret _)), h, _ | .thunk (.nu (.arr _ _)), h, _ | .thunk (.nu .top), h, _
-  | .thunk (.nu (.all _ _ _)), h, _ | .thunk (.nu (.nu _)), h, _
+  | .thunk (.nu (.all _ _ _)), h, _ | .thunk (.nu (.nuSys _ _ _)), h, _
   | .thunk (.nu (.amp _ (.arr _ _))), h, _ | .thunk (.nu (.amp _ (.amp _ _))), h, _
   | .thunk (.nu (.amp _ .top)), h, _ | .thunk (.nu (.amp _ (.all _ _ _))), h, _
-  | .thunk (.nu (.amp _ (.nu _))), h, _ => by simp [consumableAtB] at h
+  | .thunk (.nu (.amp _ (.nuSys _ _ _))), h, _ => by simp [consumableAtB] at h
   | .thunk (.ret _), h, _ | .thunk (.arr _ _), h, _ | .thunk .top, h, _
   | .thunk (.all _ _ _), h, _ => by simp [consumableAtB] at h
   | .thunk (.amp _ (.ret (.tensor _ _))), h, _ | .thunk (.amp _ (.ret .zero)), h, _
@@ -281,7 +284,7 @@ theorem consumableAtB_soundA : ∀ (A : CVTy), consumableAtB true A = true → �
   | .thunk (.amp _ (.ret (.opq _))), h, _ | .thunk (.amp _ (.ret (.code _ _ _))), h, _
   | .thunk (.amp _ (.arr _ _)), h, _
   | .thunk (.amp _ (.amp _ _)), h, _ | .thunk (.amp _ .top), h, _
-  | .thunk (.amp _ (.all _ _ _)), h, _ | .thunk (.amp _ (.nu _)), h, _ => by simp [consumableAtB] at h
+  | .thunk (.amp _ (.all _ _ _)), h, _ | .thunk (.amp _ (.nuSys _ _ _)), h, _ => by simp [consumableAtB] at h
   | .unit, _, Bs => algConsumeLeaf .unit .unit Bs
   | .zero, _, Bs => algConsumeLeaf .zero .zero Bs
   | .int w, _, Bs => algConsumeLeaf (.int w) .int Bs
@@ -330,11 +333,12 @@ theorem consumableAtB_complete : ∀ A : CVTy, Consumable A → consumableAtB fa
       cases h with
       | nu hC hRc h =>
           simp [consumableAtB, CTy.nuOkB_complete _ hC, VTy.clB_complete 0 R hRc, consumableAtB_complete R h]
+  | .thunk (.nuSys (_ + 1) _ _), h | .thunk (.nuSys 0 (_ + 1) _), h
   | .thunk (.nu (.ret _)), h | .thunk (.nu (.arr _ _)), h | .thunk (.nu .top), h
-  | .thunk (.nu (.all _ _ _)), h | .thunk (.nu (.nu _)), h | .thunk (.nu (.eff _ _ _ _ _ _ _ _)), h
+  | .thunk (.nu (.all _ _ _)), h | .thunk (.nu (.nuSys _ _ _)), h | .thunk (.nu (.eff _ _ _ _ _ _ _ _)), h
   | .thunk (.nu (.amp _ (.arr _ _))), h | .thunk (.nu (.amp _ (.amp _ _))), h
   | .thunk (.nu (.amp _ .top)), h | .thunk (.nu (.amp _ (.all _ _ _))), h
-  | .thunk (.nu (.amp _ (.nu _))), h | .thunk (.nu (.amp _ (.eff _ _ _ _ _ _ _ _))), h
+  | .thunk (.nu (.amp _ (.nuSys _ _ _))), h | .thunk (.nu (.amp _ (.eff _ _ _ _ _ _ _ _))), h
   | .thunk (.ret _), h | .thunk (.arr _ _), h | .thunk .top, h
   | .thunk (.all _ _ _), h | .thunk (.eff _ _ _ _ _ _ _ _), h
   | .thunk (.amp _ (.ret (.tensor _ _))), h | .thunk (.amp _ (.ret .zero)), h
@@ -347,7 +351,7 @@ theorem consumableAtB_complete : ∀ A : CVTy, Consumable A → consumableAtB fa
   | .thunk (.amp _ (.ret (.opq _))), h | .thunk (.amp _ (.ret (.code _ _ _))), h
   | .thunk (.amp _ (.arr _ _)), h
   | .thunk (.amp _ (.amp _ _)), h | .thunk (.amp _ .top), h
-  | .thunk (.amp _ (.all _ _ _)), h | .thunk (.amp _ (.nu _)), h
+  | .thunk (.amp _ (.all _ _ _)), h | .thunk (.amp _ (.nuSys _ _ _)), h
   | .thunk (.amp _ (.eff _ _ _ _ _ _ _ _)), h => by cases h
   | .unit, _ | .zero, _ | .int _, _ | .unk, _ | .bang _, _ | .imm _ _, _ | .mut _ _, _ => rfl
   | .opq _, h => by cases h
@@ -437,12 +441,13 @@ theorem consumableAtB_completeA : ∀ (A : CVTy) (Bs : Stack), AlgConsume Bs A �
       cases h₁ with
       | nu hC hRc h =>
           simp [consumableAtB, CTy.nuOkB_complete _ hC, VTy.clB_complete 0 R hRc, consumableAtB_complete R h]
+  | .thunk (.nuSys (_ + 1) _ _), _, h | .thunk (.nuSys 0 (_ + 1) _), _, h
   | .thunk (.nu (.ret _)), _, h | .thunk (.nu (.arr _ _)), _, h | .thunk (.nu .top), _, h
-  | .thunk (.nu (.all _ _ _)), _, h | .thunk (.nu (.nu _)), _, h
+  | .thunk (.nu (.all _ _ _)), _, h | .thunk (.nu (.nuSys _ _ _)), _, h
   | .thunk (.nu (.eff _ _ _ _ _ _ _ _)), _, h
   | .thunk (.nu (.amp _ (.arr _ _))), _, h | .thunk (.nu (.amp _ (.amp _ _))), _, h
   | .thunk (.nu (.amp _ .top)), _, h | .thunk (.nu (.amp _ (.all _ _ _))), _, h
-  | .thunk (.nu (.amp _ (.nu _))), _, h | .thunk (.nu (.amp _ (.eff _ _ _ _ _ _ _ _))), _, h
+  | .thunk (.nu (.amp _ (.nuSys _ _ _))), _, h | .thunk (.nu (.amp _ (.eff _ _ _ _ _ _ _ _))), _, h
   | .thunk (.ret _), _, h | .thunk (.arr _ _), _, h | .thunk .top, _, h
   | .thunk (.all _ _ _), _, h | .thunk (.eff _ _ _ _ _ _ _ _), _, h
   | .thunk (.amp _ (.ret (.tensor _ _))), _, h | .thunk (.amp _ (.ret .zero)), _, h
@@ -455,7 +460,7 @@ theorem consumableAtB_completeA : ∀ (A : CVTy) (Bs : Stack), AlgConsume Bs A �
   | .thunk (.amp _ (.ret (.opq _))), _, h
   | .thunk (.amp _ (.arr _ _)), _, h
   | .thunk (.amp _ (.amp _ _)), _, h | .thunk (.amp _ .top), _, h
-  | .thunk (.amp _ (.all _ _ _)), _, h | .thunk (.amp _ (.nu _)), _, h
+  | .thunk (.amp _ (.all _ _ _)), _, h | .thunk (.amp _ (.nuSys _ _ _)), _, h
   | .thunk (.amp _ (.eff _ _ _ _ _ _ _ _)), _, h => by
       have h₁ := h.1
       simp only [BoCa.Fig16.LogRel.Core.FoldP.resO] at h₁
@@ -603,7 +608,7 @@ def retRowOf : CCTy → CRow
   | .arr _ C => retRowOf C
   | .all _ _ C => retRowOf C
   | .amp C D => retRowOf C ++ retRowOf D
-  | .nu C => retRowOf C
+  | .nuSys _ _ C => retRowOf C
   | C => C.rowOf
 
 /-- The depth to which `needRowOf` and `thenBlame` read a derivation.  `[spec §27]` -/
@@ -692,26 +697,24 @@ def needRowOf : Nat → Bool → TExpr → CRow
             | _ => false
           if vals || isComp then J acc (needRowOf k vals c.2) else acc) []
 
-/-- The cancel row `F` whose `cancelTy S F` is the cancel branch `C` of a `κ`: `C`'s layers ahead
-of `S`'s, counted by `S`'s length (the clause's type, rebuilt at it, is then compared whole).
-`[spec §27]` -/
-def finOfBranch (S : CRow) (C : CCTy) : CCTy :=
-  let R := C.rowOf
-  BoCa.Fig16.LogRel.Core.CTy.effOf (R.take (R.length - S.length)) .unit
+/-- The cancel row `F` whose `cancelTy F` is the cancel branch `C` of a `κ`: `C`'s layers (the
+clause's type, rebuilt at it, is then compared whole).  `[spec §27]` -/
+def finOfBranch (C : CCTy) : CCTy :=
+  BoCa.Fig16.LogRel.Core.CTy.effOf C.rowOf .unit
 
 /-- The cancel row a `κ`'s type `K` is at, read back from its cancel branch (`finOfBranch`).
 `[spec §27]` -/
-def kFin (S : CRow) : CVTy → CCTy
-  | .thunk (.amp _ C) => finOfBranch S C
-  | .bang (.thunk (.amp _ C)) => finOfBranch S C
+def kFin : CVTy → CCTy
+  | .thunk (.amp _ C) => finOfBranch C
+  | .bang (.thunk (.amp _ C)) => finOfBranch C
   | _ => .ret .unit
 
 /-- The cancel row a clause's type gives its operation: `κ`'s (`kFin`), read only at a capturable
 operation (`capB`); the empty cancel row at any other.  `[spec §27]` -/
-def clauseFin (S : CRow) (c : CVTy) (e : CQual × CVTy × CVTy) : CCTy :=
+def clauseFin (c : CVTy) (e : CQual × CVTy × CVTy) : CCTy :=
   if BoCa.Fig16.LogRel.Core.capB e.1 e.2.2 then
     match c with
-    | .bang (.thunk (.arr (.tensor _ K) _)) => kFin S K
+    | .bang (.thunk (.arr (.tensor _ K) _)) => kFin K
     | _ => .ret .unit
   else .ret .unit
 
@@ -721,7 +724,7 @@ def firstClause (S : CRow) (R c : CVTy) :
     List (CQual × CVTy × CVTy) → Option ((CQual × CVTy × CVTy) × CCTy)
   | [] => none
   | e :: es =>
-    let F := clauseFin S c e
+    let F := clauseFin c e
     if tyEqV (BoCa.Fig16.LogRel.Core.clauseTy S R e F) c then some (e, F)
       else firstClause S R c es
 
@@ -756,10 +759,10 @@ def clauseCandsB : CVTy → List (CQual × CVTy × CVTy)
 
 /-- The cancel row a clause's type under BOXED-κ gives its operation, as `clauseFin`.
 `[spec §27, §28]` -/
-def clauseFinB (S : CRow) (c : CVTy) (e : CQual × CVTy × CVTy) : CCTy :=
+def clauseFinB (c : CVTy) (e : CQual × CVTy × CVTy) : CCTy :=
   if BoCa.Fig16.LogRel.Core.capB e.1 e.2.2 then
     match c with
-    | .bang (.thunk (.arr (.tensor _ (.box _ K)) _)) => kFin S K
+    | .bang (.thunk (.arr (.tensor _ (.box _ K)) _)) => kFin K
     | _ => .ret .unit
   else .ret .unit
 
@@ -769,7 +772,7 @@ def firstClauseB (S : CRow) (R : CVTy) (d : CLife) (c : CVTy) :
     List (CQual × CVTy × CVTy) → Option ((CQual × CVTy × CVTy) × CCTy)
   | [] => none
   | e :: es =>
-    let F := clauseFinB S c e
+    let F := clauseFinB c e
     if tyEqV (BoCa.Fig16.LogRel.Core.clauseTyB S R d e F) c then some (e, F)
       else firstClauseB S R d c es
 
@@ -1060,6 +1063,7 @@ def mentionsV (x : String) : Val → Bool
   | .var _ y | .clone _ y => y == x
   | .defApp .. | .unit _ | .const .. | .sugar .. => false
   | .pair _ V W | .app _ V W => mentionsV x V || mentionsV x W
+  | .constU _ _ d => mentionsV x d
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
   | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => mentionsV x V
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => mentionsC x M

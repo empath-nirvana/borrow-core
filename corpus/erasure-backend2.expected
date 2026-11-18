@@ -117,6 +117,7 @@ core-fin-nc erased handles 0 performs 0 raises 0 machines 2 suspends 2 left 0 0
 core-fin-nested erased handles 2 performs 0 raises 1 machines 1 suspends 1 left 0 0
 core-fin-op erased handles 0 performs 0 raises 0 machines 2 suspends 2 left 0 0
 core-fin-op-cap erased handles 0 performs 0 raises 0 machines 2 suspends 2 left 0 0
+core-fin-sched-own-row erased handles 0 performs 0 raises 0 machines 3 suspends 4 left 0 0
 core-fin-stored-k-fin erased handles 1 performs 0 raises 1 machines 1 suspends 2 left 0 0
 core-fin-stored-k-op erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
 core-fin-sub-row erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
@@ -127,9 +128,22 @@ core-row-capture-global erased handles 1 performs 0 raises 0 left 0 0
 core-row-generic erased handles 1 performs 0 raises 0 left 0 0
 core-row-key-tparam erased handles 1 performs 0 raises 0 left 0 0
 core-row-pipe-stop erased handles 1 performs 0 raises 1 left 0 0
+core-row-splice erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
 core-site-fresh-const erased handles 1 performs 0 raises 1 left 0 0
 core-site-generic erased handles 2 performs 2 raises 0 left 0 0
 core-unsigned erased handles 0 performs 0 raises 0 left 0 0
+core-unwind-sum-value erased handles 0 performs 0 raises 0 left 0 0
+core-withbor3u-fin erased handles 1 performs 0 raises 1 left 0 0
+core-withlocal erased handles 0 performs 0 raises 0 left 0 0
+core-withlocal-branch erased handles 0 performs 0 raises 0 left 0 0
+core-withlocal-callback erased handles 0 performs 0 raises 0 left 0 0
+core-withlocal-class erased handles 0 performs 0 raises 0 left 0 0
+core-withlocal-loop erased handles 0 performs 0 raises 0 left 0 0
+core-withlocal-nested erased handles 0 performs 0 raises 0 left 0 0
+core-withlocal-owned erased handles 0 performs 0 raises 0 left 0 0
+core-withlocal-unit erased handles 0 performs 0 raises 0 left 0 0
+core-withlocal-unwind erased handles 2 performs 0 raises 2 left 0 0
+core-withlocal-widths erased handles 0 performs 0 raises 0 left 0 0
 data-json-map-ser erased handles 2 performs 0 raises 2 left 0 0
 deep-gen-count erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
 effects-load-raise erased handles 3 performs 0 raises 6 left 0 0
@@ -150,6 +164,8 @@ fin-cancel-region erased handles 1 performs 0 raises 2 machines 1 suspends 1 lef
 fin-cancel-reraised erased handles 1 performs 0 raises 1 machines 2 suspends 1 left 0 0
 fin-cancel-tail erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
 fin-cancel-unused-site erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0
+fin-capability erased handles 1 performs 0 raises 0 left 0 0
+fin-capability-unwind erased handles 2 performs 0 raises 1 left 0 0
 fin-drop-capturing-row erased handles 2 performs 0 raises 1 machines 1 suspends 1 left 0 0
 fin-e7b erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
 fin-e7d erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0
@@ -185,6 +201,16 @@ json-drop-deep erased handles 4 performs 0 raises 7 left 0 0
 json-parse erased handles 16 performs 0 raises 46 left 0 0
 json-deep erased handles 12 performs 0 raises 42 left 0 0
 json-get erased handles 12 performs 0 raises 42 left 0 0
+kernel-at08-once erased handles 0 performs 0 raises 0 machines 1 suspends 1 left 0 0
+kernel-div-residual erased handles 0 performs 0 raises 0 left 0 0
+kernel-poly-id erased handles 1 performs 0 raises 1 left 0 0
+kernel-recursive-yield erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
+kernel-two-callees erased handles 0 performs 0 raises 0 machines 1 suspends 3 left 0 0
+kernel-two-callees-tail erased handles 1 performs 3 raises 0 left 0 0
+mut-after-unwind-exits erased handles 0 performs 0 raises 0 left 0 0
+mut-after-unwind-for-gen erased handles 0 performs 0 raises 0 machines 2 suspends 1 left 0 0
+mut-after-unwind-loop-in-n erased handles 0 performs 0 raises 0 left 0 0
+mut-cancel-unwind-region erased handles 1 performs 0 raises 0 machines 1 suspends 1 left 0 0
 parse-i64 erased handles 16 performs 0 raises 5 left 0 0
 kernel-cancel-now erased handles 0 performs 0 raises 0 machines 1 suspends 1 left 0 0
 kernel-deep-gen-plain erased handles 1 performs 1 raises 0 machines 1 suspends 2 left 0 0
@@ -209,6 +235,10 @@ leetcode/dp/0039-combination-sum-loop erased handles 2 performs 0 raises 2 left 
 lend-call-raise erased handles 7 performs 0 raises 4 left 0 0
 lend-call-record erased handles 1 performs 0 raises 1 left 0 0
 lend-tail-call erased handles 1 performs 0 raises 1 left 0 0
+linear-dropped-k-owned erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
+linear-gen-ctl-buffer erased handles 0 performs 0 raises 1 machines 3 suspends 1 left 0 0
+linear-move-in-restore erased handles 1 performs 0 raises 1 left 0 0
+linear-pipe-move-in erased handles 1 performs 0 raises 1 left 0 0
 lit-lend-raise erased handles 2 performs 0 raises 2 left 0 0
 load-for-linear erased handles 0 performs 0 raises 0 left 0 0
 mut-control-assign-raise erased handles 1 performs 0 raises 1 left 0 0
@@ -293,7 +323,7 @@ div-residual-copy erased handles 0 performs 0 raises 0 left 0 0
 div-unhandled erased handles 1 performs 0 raises 1 left 0 0
 effects-abstraction erased handles 5 performs 0 raises 4 left 0 0
 effects-borrow-raise erased handles 2 performs 0 raises 1 left 0 0
-effects-cancel-two-sites erased handles 2 performs 0 raises 1 machines 1 suspends 2 left 0 0
+effects-cancel-two-sites erased handles 4 performs 0 raises 2 machines 2 suspends 2 left 0 0
 effects-fail-list erased handles 5 performs 0 raises 2 left 0 0
 effects-fold erased handles 8 performs 0 raises 10 left 0 0
 effects-fold-sum erased handles 0 performs 0 raises 0 left 0 0
@@ -520,6 +550,8 @@ mut-after-unwind-nested erased handles 0 performs 0 raises 0 left 0 0
 mut-after-unwind-while erased handles 0 performs 0 raises 0 left 0 0
 mut-bind-arm erased handles 0 performs 0 raises 0 left 0 0
 mut-block erased handles 0 performs 0 raises 0 left 0 0
+mut-block-clause erased handles 0 performs 0 raises 0 machines 2 suspends 2 left 0 0
+mut-block-decl-name erased handles 0 performs 0 raises 0 left 0 0
 mut-block-nested erased handles 0 performs 0 raises 0 left 0 0
 mut-cancel-loop-for erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0
 mut-cancel-loop-for-value erased handles 2 performs 0 raises 2 machines 1 suspends 1 left 0 0
@@ -536,6 +568,7 @@ operator-rounds erased handles 5 performs 0 raises 5 left 0 0
 parse-int erased handles 4 performs 0 raises 7 left 0 0
 parse-recover erased handles 3 performs 0 raises 20 left 0 0
 parse-recover-gen erased handles 3 performs 0 raises 19 machines 2 suspends 4 left 0 0
+parse-recover-view erased handles 3 performs 0 raises 16 machines 2 suspends 4 left 0 0
 pipe-bracket erased handles 0 performs 0 raises 0 machines 24 suspends 12 left 0 0
 pipe-handlers erased handles 2 performs 0 raises 4 machines 8 suspends 9 left 0 0
 pipe-left-row erased handles 2 performs 2 raises 0 machines 10 suspends 5 left 0 0
@@ -576,6 +609,8 @@ reconcile-clock erased handles 0 performs 0 raises 8 machines 20 suspends 20 lef
 retry-block erased handles 2 performs 0 raises 2 left 0 0
 reverse-bytes erased handles 0 performs 0 raises 0 left 0 0
 row-site-fresh-handler erased handles 1 performs 0 raises 1 machines 1 suspends 0 left 0 0
+rq1-exampleA-mut erased handles 0 performs 0 raises 0 machines 1 suspends 1 left 0 0
+rq1-generator erased handles 0 performs 0 raises 0 machines 1 suspends 2 left 0 0
 sched-a erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
 sched-a-div erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
 sched-b erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0

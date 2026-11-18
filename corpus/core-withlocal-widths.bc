@@ -1,0 +1,45 @@
+-- [spec §80] Scalar replacement preserves bits at every numeric width, including float signed zero.
+main : F ((u8 * u8) * ((i32 * i32) * ((u32 * u32) * ((i64 * i64) * ((u64 * u64) * ((f32 * f32) * (f64 * f64))))))) =
+  n0 <- return (withlocal['l, top, u8, u8] u8[255]
+    (thunkv Fun 'l < dom. return (thunkv fun (m : mut 'l u8) ->
+      p <- return (withswap['l, u8, u8] m (thunkv fun (v : u8) -> return (u8[1], v)));
+      let (m, old) = p;
+      let () = release_mut['l, u8] m;
+      return (boxed['l] old))));
+  n1 <- return (withlocal['l, top, i32, i32] i32[4294967295]
+    (thunkv Fun 'l < dom. return (thunkv fun (m : mut 'l i32) ->
+      p <- return (withswap['l, i32, i32] m (thunkv fun (v : i32) -> return (i32[2147483648], v)));
+      let (m, old) = p;
+      let () = release_mut['l, i32] m;
+      return (boxed['l] old))));
+  n2 <- return (withlocal['l, top, u32, u32] u32[4294967295]
+    (thunkv Fun 'l < dom. return (thunkv fun (m : mut 'l u32) ->
+      p <- return (withswap['l, u32, u32] m (thunkv fun (v : u32) -> return (u32[2147483648], v)));
+      let (m, old) = p;
+      let () = release_mut['l, u32] m;
+      return (boxed['l] old))));
+  n3 <- return (withlocal['l, top, i64, i64] i64[18446744073709551615]
+    (thunkv Fun 'l < dom. return (thunkv fun (m : mut 'l i64) ->
+      p <- return (withswap['l, i64, i64] m (thunkv fun (v : i64) -> return (i64[9223372036854775808], v)));
+      let (m, old) = p;
+      let () = release_mut['l, i64] m;
+      return (boxed['l] old))));
+  n4 <- return (withlocal['l, top, u64, u64] u64[18446744073709551615]
+    (thunkv Fun 'l < dom. return (thunkv fun (m : mut 'l u64) ->
+      p <- return (withswap['l, u64, u64] m (thunkv fun (v : u64) -> return (u64[9223372036854775808], v)));
+      let (m, old) = p;
+      let () = release_mut['l, u64] m;
+      return (boxed['l] old))));
+  n5 <- return (withlocal['l, top, f32, f32] f32[2147483648]
+    (thunkv Fun 'l < dom. return (thunkv fun (m : mut 'l f32) ->
+      p <- return (withswap['l, f32, f32] m (thunkv fun (v : f32) -> return (f32[1065353216], v)));
+      let (m, old) = p;
+      let () = release_mut['l, f32] m;
+      return (boxed['l] old))));
+  n6 <- return (withlocal['l, top, f64, f64] f64[9223372036854775808]
+    (thunkv Fun 'l < dom. return (thunkv fun (m : mut 'l f64) ->
+      p <- return (withswap['l, f64, f64] m (thunkv fun (v : f64) -> return (f64[4607182418800017408], v)));
+      let (m, old) = p;
+      let () = release_mut['l, f64] m;
+      return (boxed['l] old))));
+  return (n0, (n1, (n2, (n3, (n4, (n5, n6))))))

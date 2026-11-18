@@ -116,7 +116,7 @@ def cNames : CTy → List UInt32
   | .ret A => vNames A
   | .arr A C => vNames A ++ cNames C
   | .amp C D => cNames C ++ cNames D
-  | .all _ _ C | .nu C => cNames C
+  | .all _ _ C | .nu C | .nuSys _ _ C => cNames C
   | .eff n _ _ A B fin _ C => n :: (vNames A ++ vNames B ++ cNames fin ++ cNames C)
   | .top => []
 end
@@ -271,6 +271,7 @@ def subCC : CTy → List CTy
   | .amp D E => .amp D E :: (subCC D ++ subCC E)
   | .all x b D => .all x b D :: subCC D
   | .nu D => .nu D :: subCC D
+  | .nuSys m i D => .nuSys m i D :: subCC D
   | .eff n i q A B fin rc D => .eff n i q A B fin rc D :: (subCV A ++ subCV B ++ subCC fin ++ subCC D)
   | .top => [.top]
 end
@@ -385,6 +386,51 @@ def classesOf (c : Frontend.Check.Checked) (ms : MachSet := machineOps c) (fd : 
       unless cellsOkB [B] es cls do throw s!"internal error: a capability's cell class is not closed"
       out := out ++ cls.map fun cl => (cl.root, lir cl.tys)
   return out
+
+/-- **The host types of the opaque cells** (SPEC §11): the integer type a compiled `Output`'s or
+`Clock`'s cell holds, read from the checked extern types (`Checked.ctx`, the slots `checkExterns`
+matched against Core's `mkOutputC`, `takeOutputC`, `takeClockC`; the context's slot `i` is extern
+`n − 1 − i`, as `convMain` binds them). `Output`'s is `mk_output`'s argument type, checked equal to
+the first component of `take_output`'s answer; `Clock`'s is `take_clock`'s answer, the clock's
+model (`vN_clockRep`). `Input` and `Args` have none: no checked type names their host word.
+
+TRUSTED (SPEC §11, `ExternsMeet`): that the compiled `Output` cell holds only the descriptor, not
+the model's `I32 ⊗ Bytes` (`outRep`). Assumed: the host sends each byte to the descriptor as it is
+written (`write_byte`, `write_all`), so the cell needs no byte list and `take_output` answers the
+descriptor and the empty list (`takeClosOf`). It should hold because that is the host's
+implementation of the trusted externs, which SPEC §11 states ("in compiled code the content of an
+`Input` or `Output` cell is the stream's file descriptor"); the kernel cannot check it, the host
+being outside Core. If it fails, the cell's contents are read or written at the wrong width (the
+cell itself is allocated in whole words). The host's side is `Convert.mkClosOf` and
+`Convert.takeClosOf`. `[spec §11]` -/
+def hostRepOf (c : Frontend.Check.Checked) (xs : List Frontend.Check.ExternSpec) :
+    Except String (List (Opaque × LTy)) := do
+  let ms := machineOps c
+  let n := c.ctx.length
+  let leaf (A : VTy) : Except String LTy := do
+    match ← ofV ms {} A with
+    | t@(.int _) => pure t
+    | t => throw s!"internal error: a capability cell's host type {t} is not an integer"
+  let mut outMk : Option LTy := none
+  let mut outTake : Option LTy := none
+  let mut clock : Option LTy := none
+  for (s, i) in c.ctx.zipIdx do
+    let some x := xs[n - 1 - i]? | continue
+    match x.role, s.ty with
+    | .mk .output, .bang (.thunk (.arr A (.ret (.ref (.opq .output))))) => outMk := some (← leaf A)
+    | .take .output, .bang (.thunk (.arr (.ref (.opq .output)) (.ret (.tensor A _)))) =>
+      outTake := some (← leaf A)
+    | .take .clock, .bang (.thunk (.arr (.ref (.opq .clock)) (.ret A))) => clock := some (← leaf A)
+    | .mk .output, _ | .take .output, _ | .take .clock, _ =>
+      throw s!"internal error: extern `{x.name}` is not at its checked type"
+    | _, _ => pure ()
+  let out ← match outMk, outTake with
+    | some a, some b =>
+      if a == b then pure [(Opaque.output, a)]
+      else throw s!"internal error: mk_output takes {a}, take_output answers {b}"
+    | none, none => pure []
+    | _, _ => throw "internal error: mk_output and take_output are not both externs"
+  return out ++ (clock.map fun t => (Opaque.clock, t)).toList
 
 /-- Each variable's uses in a term: whether each is the operand of a `free`. -/
 def freeUses : Nat → Tm → List (Var × Bool)
@@ -509,9 +555,9 @@ def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) :
     Except String (Prog × CState × Option Lay.Layouts) := do
   -- A program with capabilities is compiled as `run_io` (SPEC §11), the term `IORun.every_run`
   -- is about.
-  let (c, exts, arg, loops) ← match ← k.runIO with
-    | none => pure (k.main, [], none, false)
-    | some (r, xs) => pure (r.c, ← extsOf xs, some [], r.loops)
+  let (c, exts, arg, loops, xs) ← match ← k.runIO with
+    | none => pure (k.main, [], none, false, [])
+    | some (r, xs) => pure (r.c, ← extsOf xs, some [], r.loops, xs)
   let (kinds, envs) := directFacts c
   -- The program's evidence [spec §71]: the names `evNames` keeps, each with its captured
   -- slots and their LIR types. A captured type holds no row naming such a name (`directFacts`),
@@ -528,13 +574,14 @@ def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) :
   let fdSlots : Std.HashMap UInt32 (List Nat) :=
     envL.foldl (fun m (n, sl) => m.insert n (sl.map (·.1))) {}
   let classes ← classesOf c ms fd
+  let hostRep ← hostRepOf c xs
   let ctx := c.ctx.map fun s => (s.ty, s.live)
   let run (threaded stacked : Std.HashMap Nat LTy) :
       Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy ×
         Option Lay.Layouts) := do
     let (p, st) ← convertProg exts ctx c.t c.C arg loops census direct ms
       threaded stacked classes fd fdSlots
-    let p := { p with exits := c.exitsOnDivError }
+    let p := { p with exits := c.exitsOnDivError, hostRep }
     if st.done.isEmpty then return (p, st, {}, {}, none)
     -- A call in tail position whose callee's suspended computations may be the machine's own
     -- closes a loop of tail calls, and passes its outcome on (SPEC §49, `tailPass`).
@@ -575,7 +622,12 @@ when the conversion computed them. The layouts do not read the frame slots. -/
 def lirLayOf (k : Backend.CheckedProg) (census : Bool := false) :
     Except String (Prog × CState × Option Lay.Layouts) := do
   let (p, st, L) ← lirOf₀ k census
-  pure ({ p with slots := slotsOf p st.owners }, st, L)
+  let slots := slotsOf p st.owners
+  if !st.localScopes.isEmpty then
+    let placed := slots.fold (fun acc _ scope => acc.insert scope) ({} : Std.HashSet Nat)
+    unless st.localScopes.toList.all placed.contains do
+      throw "LIR: withlocal requires a frame slot; heap fallback is forbidden"
+  pure ({ p with slots, localScopes := st.localScopes }, st, L)
 
 /-- The LIR of a checked program (`lirLayOf`). -/
 def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
@@ -973,3 +1025,179 @@ main -> 1 =
 end EvNamesTests
 
 end Backend2
+
+/-!
+# Backend2 — an unwinding borrow's non-constant finaliser, lowered  `[spec §19, §47, §72]`
+
+**These tests run the lowering on terms the checker did not produce.** No program text spells an
+unwinding borrow whose finaliser is not the source's `consume` yet (the checker's `finNode`), and a
+checked program's term cannot be changed (`Checked.tied`). So each program below is checked, and
+its `withbor1u`s' finalisers are then replaced, in the typed term only, by a closure written at the
+node's context (`lamFin`); the term is converted (`convertProg`), linted (`Lint.lint`) and run on
+the LIR interpreter (`runLIR`). Where a callback aborts, the finaliser runs on the unwind
+(`genLendU`, `thenFin`), applied to the owner at a copy of the rule's context (`finCtx`); where it
+returns, the value arm consumes the copy. Each must give the output of the checked program, whose
+finaliser is the constant. The tests are in this module because they parse and check programs,
+and this module is Backend2's one contact with the frontend (`scripts/check-backend2.sh`).
+
+They cover the conversion of a borrowing constant used as a value (`constClos`, the copy carried in
+its closures' environments) and the β of a λ finaliser (`applyTo`). The kernel side, and the spine
+of a surface borrow (`convSpine`), are covered by the surface programs of #940 (G1, G3, G3b) once
+their syntax lands.
+-/
+
+namespace Backend2.ConvertTests
+open Backend2 BoCa BoCa.Fig16.LogRel.Core BoCa.Fig16.LogRel.Core.Check
+
+/-- `corpus/core-effects-borrows.bc`: two unwinding borrows whose callbacks abort. -/
+def src : String := "
+main : F ((i32 + i32) * (i32 + i32)) =
+  c <- return (alloc[i32] i32[1]);
+  r1 <- handle_with[1](
+      ((!thunkv fun (p : ref i32 * i32) -> let (r, v) = p; return (inl v)) : !U (ref i32 * i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (
+    w <- return withbor1u['x, i32, i32, [1.0 cancel i32 ~> 0]];
+    cb : U (forall 'x < dom. imm 'x i32 -o F[1.0 cancel i32 ~> 0] (box 'x i32)) <- return
+      (thunkv Fun 'x < dom. fun (m : imm 'x i32) -> abort[1.0] i32[42]);
+    force w c cb);
+  a <- return (array_new[i32] (i32[2], !thunkv fun (i : i32) -> return i));
+  r2 <- handle_with[1](
+      ((!thunkv fun (p : array i32 * i32) -> let (r, v) = p; return (inl v)) : !U (array i32 * i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (
+    w <- return slice_borrow_mut_u['x, top, i32, i32, [1.0 cancel i32 ~> 0]];
+    cb : U (forall 'x < dom. array_mut 'x i32 -o F[1.0 cancel i32 ~> 0] (box 'x i32)) <- return
+      (thunkv Fun 'x < dom. fun (m : array_mut 'x i32) -> abort[1.0] i32[43]);
+    force w a cb);
+  return (r1, r2)
+"
+
+/-- Two unwinding borrows after a persistent `n`: the first callback aborts, the second returns.
+Its first binding is `n`'s (`swapFin` relies on it). -/
+def srcN : String := "
+main : F ((i32 + i32) * (i32 + i32)) =
+  n <- return i32[5];
+  c <- return (alloc[i32] i32[1]);
+  r1 <- handle_with[1](
+      ((!thunkv fun (p : ref i32 * i32) -> let (r, v) = p; return (inl v)) : !U (ref i32 * i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (
+    w <- return withbor1u['x, i32, i32, [1.0 cancel i32 ~> 0]];
+    cb : U (forall 'x < dom. imm 'x i32 -o F[1.0 cancel i32 ~> 0] (box 'x i32)) <- return
+      (thunkv Fun 'x < dom. fun (m : imm 'x i32) -> abort[1.0] i32[42]);
+    force w c cb);
+  d <- return (alloc[i32] i32[2]);
+  r2 <- handle_with[1](
+      ((!thunkv fun (p : ref i32 * i32) -> let (r, v) = p; return (inl v)) : !U (ref i32 * i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (
+    w <- return withbor1u['x, i32, i32, [1.0 cancel i32 ~> 0]];
+    cb : U (forall 'x < dom. imm 'x i32 -o F[1.0 cancel i32 ~> 0] (box 'x i32)) <- return
+      (thunkv Fun 'x < dom. fun (m : imm 'x i32) ->
+        u <- return (release_imm['x, i32] m);
+        return (boxed['x] i32[9]));
+    force w d cb);
+  return (r1, r2)
+"
+
+/-- The golden of `src` (`corpus/core-effects-borrows.out`). -/
+def golden : String := "(inr i32[42], inr i32[43])\nlive 0\n"
+
+/-- A context of `n` slots, slot `j` (when given) to the first part, the rest to neither. -/
+def only (n : Nat) (j : Option Nat) : List (Bool × Bool) :=
+  (List.range n).map fun i => (some i == j, false)
+
+/-- A closure finaliser `U(Ref A ⊸ F 1)` at a context of `n` slots, not a constant: `λr. consume r`,
+or, with `j`, `λr. x <- return n; consume r`, `n` the slot `j` (a persistent `i32`). -/
+def lamFin (n : Nat) (A : VTy) (j : Option Nat) : TExpr :=
+  let i : TInfo := default
+  let C : CTy := .arr (.ref A) (.ret .unit)
+  let use (m : Nat) (k : Nat) : TExpr :=
+    .ret i (.comp (.ret .unit)) .unit
+      (.lolliE i (.val .unit) (.ref A) .unit ⟨(List.range m).map fun l => (l == k, false)⟩
+        (.var i (.val (.ref A)) k (.ref A))
+        (.consume i (.val (.lolli (.ref A) .unit)) (.ref A)))
+  let body : TExpr := match j with
+    | none => use (n + 1) 0
+    | some j =>
+      let i32 : VTy := .int .w32
+      .bind i (.comp (.ret .unit)) i32 (.ret .unit)
+        ⟨(false, true) :: only n (some j)⟩
+        (.ret i (.comp (.ret i32)) i32 (.var i (.val i32) (j + 1) i32))
+        (use (n + 2) 1)
+  .thunkV i (.val (.thunk C)) C (.lam i (.comp C) (.ref A) (.ret .unit) body)
+
+/-- A mask's slot `j` given to the part `left` (the first) or not, as well as where it was. -/
+def give (u : Masks) (j : Nat) (left : Bool) : Masks :=
+  ⟨u.ms.zipIdx.map fun ((a, b), i) =>
+    if i != j then (a, b) else if left then (true, b) else (a, true)⟩
+
+/-- `t` with the finaliser of each `withborUD` node at the kind `refImm` replaced by `lamFin` at its
+context, `n` the length of `t`'s context; and the number replaced. Only the nodes on the paths to
+the borrows are entered (a `bind`'s body has one slot more, `TExpr.children`). With `named`, the
+term's first binding (`srcN`'s `n`) is the slot `k`, given at each split on a path to the part that
+holds the borrow, and named by the finaliser. -/
+def swapFin (named : Bool) : Nat → Nat → Option Nat → TExpr → TExpr × Nat
+  | 0, _, _, t => (t, 0)
+  | f + 1, n, k, t => match t with
+    | .withborUD i j A B SM SD S .refImm x _ => (.withborUD i j A B SM SD S .refImm x (lamFin n A k), 1)
+    | .bind i j A C u tM tN =>
+      let kN := if named then some ((k.map (· + 1)).getD 0) else none
+      let (tM', k₁) := swapFin named f n k tM
+      let (tN', k₂) := swapFin named f (n + 1) kN tN
+      let u := match k with
+        | some s =>
+          let u := if k₁ > 0 then give u s true else u
+          if k₂ > 0 then give u s false else u
+        | none => u
+      (.bind i j A C u tM' tN', k₁ + k₂)
+    | .ret i j A t =>
+      let (t', m) := swapFin named f n k t
+      (.ret i j A t', m)
+    | .effHandleV i j S E fs cs nm A R u ks site inside tc te =>
+      let (tc', k₁) := swapFin named f n k tc
+      let (te', k₂) := swapFin named f n k te
+      let u := match k with
+        | some s =>
+          let u := if k₁ > 0 then give u s true else u
+          if k₂ > 0 then give u s false else u
+        | none => u
+      (.effHandleV i j S E fs cs nm A R u ks site inside tc' te', k₁ + k₂)
+    | t => (t, 0)
+
+/-- `s` checked, its finalisers replaced when `swap` holds (`want` of them), converted, linted and
+run on the LIR interpreter: its output, and whether the conversion lowered a finaliser term. -/
+def run (s : String) (named swap : Bool) (want : Nat) : Except String (String × Bool) := do
+  let k ← Backend.checkedOf "convert-tests.bc" s
+  let c := k.main
+  let (t, m) := if swap then swapFin named 64 c.ctx.length none c.t else (c.t, want)
+  unless m == want do throw s!"replaced {m} finalisers"
+  -- No evidence [spec §71]: every `env` name's clause is a machine, as before §71.
+  let (kinds, envs) := directFacts c
+  let direct := directOf kinds (envs.toList.map (·.1))
+  let ms := machineOps c direct
+  let (p, st) ← convertProg [] (c.ctx.map fun s => (s.ty, s.live)) t c.C none false false
+    direct ms {} {} (← classesOf c ms)
+  unless st.done.isEmpty do throw "a machine"
+  let p := { p with exits := c.exitsOnDivError, slots := slotsOf p st.owners }
+  Lint.lint p
+  let o ← runLIR p Backend.runFuel []
+  return (String.fromUTF8! o.out, st.reads.contains "withborU:finaliser term")
+
+/-- The run gives `out`, by the finaliser term's lowering exactly when `term`. -/
+def gives (r : Except String (String × Bool)) (out : String) (term : Bool) : Bool :=
+  match r with
+  | .ok (o, t) => o == out && t == term
+  | .error _ => false
+
+-- The checked program, its finaliser the constant: the golden, by the constant's expansion.
+#guard gives (run src false false 1) golden false
+-- Its finaliser a closure: the golden, by the finaliser term's lowering; the cell freed by it.
+#guard gives (run src false true 1) golden true
+
+/-- `srcN`'s output, its finalisers the constant. -/
+def goldenN : String := "(inr i32[42], inl i32[9])\nlive 0\n"
+
+#guard gives (run srcN true false 2) goldenN false
+-- Its finalisers closures naming `n`, copied at each borrow and carried in the constant's
+-- closures: the first runs on the abort, the second borrow's value arm consumes the copy.
+#guard gives (run srcN true true 2) goldenN true
+
+end Backend2.ConvertTests

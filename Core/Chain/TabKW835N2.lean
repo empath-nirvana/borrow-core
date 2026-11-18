@@ -61,24 +61,24 @@ theorem tab_lookupNNK : ∀ (F : CTy) {vr : VRel} {g : KW → KW} {δ : LSub} {x
           (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
           (finNK (ℍ := ℍ) vr g₂ fin δ) (fun f y ρ => (g₂ x₂).Owed f (g₂ y) ρ))
   | .eff m₀ i₀ q A B fin rc C, vr, g, δ, x, m, j, en, h => by
-      simp only [tabNK] at h
+      simp only [tabNK, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
       unfold extTabK at h
       split at h
       · rename_i hmj
         cases Option.some.inj h
         obtain ⟨rfl, rfl⟩ := hmj
         exact ⟨q, A, B, fin, .inl ⟨rfl, rfl, rfl, rfl⟩, rfl, fun g₂ x₂ => by
-          simp only [tabNK, extTabK, and_self, if_true]⟩
+          simp only [tabNK, extTabK, and_self, if_true, tabCK, finCK, cancelOblCK, finNK, cancelOblK]⟩
       · rename_i hmj
         obtain ⟨q', A', B', fin', hL, he, hR⟩ := tab_lookupNNK C h
         exact ⟨q', A', B', fin', .inr hL, he, fun g₂ x₂ => by
-          simp only [tabNK, extTabK, if_neg hmj]; exact hR g₂ x₂⟩
-  | .ret _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .arr _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .amp _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .top, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .nu _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
+          simp only [tabNK, extTabK, if_neg hmj, tabCK, finCK, cancelOblCK, finNK, cancelOblK]; exact hR g₂ x₂⟩
+  | .ret _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .arr _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .amp _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .top, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
 
 /-- **An entry of `tabGK` is a layer's, and every `tabGK` at the same world has the layer's entry at
 the same key, its cancel run at its own guard and claim.** -/
@@ -93,24 +93,24 @@ theorem tab_lookupGGK : ∀ (F : CTy) {R : Nat → WProp} {G : ShareG} {vr : VRe
           (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
           (finGK (ℍ := ℍ) R' G' vr g fin δ) (fun f y ρ => (g x).Owed f (g y) ρ))
   | .eff m₀ i₀ q A B fin rc C, R, G, vr, g, δ, x, m, j, en, h => by
-      simp only [tabGK] at h
+      simp only [tabGK, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
       unfold extTabK at h
       split at h
       · rename_i hmj
         cases Option.some.inj h
         obtain ⟨rfl, rfl⟩ := hmj
         exact ⟨q, A, B, fin, .inl ⟨rfl, rfl, rfl, rfl⟩, rfl, fun R' G' => by
-          simp only [tabGK, extTabK, and_self, if_true]⟩
+          simp only [tabGK, extTabK, and_self, if_true, tabCK, finCK, cancelOblCK, finGK, cancelOblGK]⟩
       · rename_i hmj
         obtain ⟨q', A', B', fin', hL, he, hR⟩ := tab_lookupGGK C h
         exact ⟨q', A', B', fin', .inr hL, he, fun R' G' => by
-          simp only [tabGK, extTabK, if_neg hmj]; exact hR R' G'⟩
-  | .ret _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
-  | .arr _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
-  | .amp _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
-  | .top, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
-  | .all _ _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
-  | .nu _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty] at h
+          simp only [tabGK, extTabK, if_neg hmj, tabCK, finCK, cancelOblCK, finGK, cancelOblGK]; exact hR R' G'⟩
+  | .ret _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
+  | .arr _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
+  | .amp _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
+  | .top, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
+  | .all _ _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
 
 /-- Two guarded twins at the same world agree but for the cancel obligations. -/
 theorem tabGK_tabGK_twin (R : Nat → WProp) (G : ShareG) (R' : Nat → WProp) (G' : ShareG)
@@ -159,7 +159,7 @@ theorem tabGK_canF {Δ : LifeCtx} {xv : LifeVar} {bnd : Lifetime.Life} {δ : LSu
   intro P' hP'
   simp only [entNK, hcap, if_true] at hP' hcn
   by_cases htop : fin = .top
-  · subst htop; simp [finGK] at hP'
+  · subst htop; simp [finGK, tabCK, finCK, cancelOblCK, tabGK, cancelOblGK] at hP'
   rw [finGK_eq _ _ _ _ htop] at hP'
   cases Option.some.inj hP'
   have hin := hcn _ (finGK_eq _ _ _ _ htop _)

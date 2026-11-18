@@ -85,6 +85,7 @@ def Row.canon (ρ τ : List (String × String)) (d : Nat) : Row → Row
   | .cons n i q A B f r => .cons n i q (A.canon ρ τ d) (B.canon ρ τ d) (f.canon ρ τ d) (r.canon ρ τ d)
   | .top => .top
   | .var x => .var x
+  | .splice x r => .splice x (r.canon ρ τ d)
 
 /-- A shape with each binder renamed by its depth. -/
 def Shape.canon (ρ τ : List (String × String)) (d : Nat) : Shape → Shape

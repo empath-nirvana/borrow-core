@@ -224,7 +224,7 @@ theorem layer_cdepth : ∀ (F : CTy) {q : Qual} {A B : VTy} {fin : CTy}, F.Layer
   | .amp _ _, _, _, _, _, h => h.elim
   | .top, _, _, _, _, h => h.elim
   | .all _ _ _, _, _, _, _, h => h.elim
-  | .nu _, _, _, _, _, h => h.elim
+  | .nuSys _ _ _, _, _, _, _, h => h.elim
 
 /-- A layer of a row meeting `CTy.SuspendC` meets its clauses. -/
 theorem layer_suspend {Δ : LifeCtx} {x : LifeVar} {bnd : Lifetime.Life} :
@@ -242,7 +242,7 @@ theorem layer_suspend {Δ : LifeCtx} {x : LifeVar} {bnd : Lifetime.Life} :
   | .amp _ _, _, _, _, _, _, h => h.elim
   | .top, _, _, _, _, _, h => h.elim
   | .all _ _ _, _, _, _, _, _, h => h.elim
-  | .nu _, _, _, _, _, _, h => h.elim
+  | .nuSys _ _ _, _, _, _, _, _, h => h.elim
 
 theorem entN_capB {q : Qual} {B : VTy} {PA PB : Nat → Val → WRes → Prop}
     {fin : Option (Nat → List SRec → Expr → WProp)}
@@ -289,7 +289,7 @@ theorem layer_ans {P : VTy → Prop} : ∀ (F : CTy), F.AnsC P →
   | .amp _ _, _, _, _, _, _, h => h.elim
   | .top, _, _, _, _, _, h => h.elim
   | .all _ _ _, _, _, _, _, _, h => h.elim
-  | .nu _, _, _, _, _, _, h => h.elim
+  | .nuSys _ _ _, _, _, _, _, _, h => h.elim
 
 /-- `Row.AnsC` is `CTy.AnsC` of the row's computation type.  `[spec §62]` -/
 theorem ansC_effOf {P : VTy → Prop} {S : Row} (hS : S.AnsC P) (R : VTy) :
@@ -303,7 +303,7 @@ theorem ansC_effOf {P : VTy → Prop} {S : Row} (hS : S.AnsC P) (R : VTy) :
 theorem ansC_mono {P P' : VTy → Prop} (hP : ∀ B, P B → P' B) : ∀ F : CTy, F.AnsC P → F.AnsC P'
   | .eff _ _ _ _ _ fin _ C, ⟨⟨hB, hfin⟩, hC⟩ =>
       ⟨⟨hP _ hB, fun hcap => ansC_mono hP fin (hfin hcap)⟩, ansC_mono hP C hC⟩
-  | .ret _, _ | .arr _ _, _ | .amp _ _, _ | .top, _ | .all _ _ _, _ | .nu _, _ => trivial
+  | .ret _, _ | .arr _ _, _ | .amp _ _, _ | .top, _ | .all _ _ _, _ | .nuSys _ _ _, _ => trivial
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

@@ -68,6 +68,7 @@ def Row.subst (σ : TySubst) : Row → Row
   | .cons n i q A B f r => .cons n i q (A.subst σ) (B.subst σ) (f.subst σ) (r.subst σ)
   | .top => .top
   | .var x => .var x
+  | .splice x r => .splice x (r.subst σ)
 
 def Shape.subst (σ : TySubst) : Shape → Shape
   | .leaf sp A => .leaf sp (A.subst σ)
@@ -89,6 +90,7 @@ def Const.subst (σ : TySubst) : Const → Const
   | .releaseBang A => .releaseBang (A.subst σ)
   | .withbor1 x A B => .withbor1 x (A.subst σ) (B.subst σ)
   | .withbor2 x b A B => .withbor2 x b (A.subst σ) (B.subst σ)
+  | .withlocal x b A B => .withlocal x b (A.subst σ) (B.subst σ)
   | .withbor3 a x A B => .withbor3 a x (A.subst σ) (B.subst σ)
   | .withload a x A B => .withload a x (A.subst σ) (B.subst σ)
   | .withswap a A B => .withswap a (A.subst σ) (B.subst σ)
@@ -124,11 +126,15 @@ def Const.subst (σ : TySubst) : Const → Const
   | .sliceEmptyMut a A => .sliceEmptyMut a (A.subst σ)
   | .sliceReplaceMut a A => .sliceReplaceMut a (A.subst σ)
   | .sliceSwapMut a A => .sliceSwapMut a (A.subst σ)
+  | .sliceCopyMut a b A => .sliceCopyMut a b (A.subst σ)
   | .countFold S => .countFold (S.subst σ)
   | .countTry S E => .countTry (S.subst σ) (E.subst σ)
   | .boundedFix A C => .boundedFix (A.subst σ) (C.subst σ)
   | .withbor1U x A B r => .withbor1U x (A.subst σ) (B.subst σ) (r.subst σ)
   | .withbor2U x b A B r => .withbor2U x b (A.subst σ) (B.subst σ) (r.subst σ)
+  | .withlocalU x b A B r => .withlocalU x b (A.subst σ) (B.subst σ) (r.subst σ)
+  | .withlocalLoop x b A S B R =>
+      .withlocalLoop x b (A.subst σ) (S.subst σ) (B.subst σ) (R.subst σ)
   | .withbor3U a x A B r => .withbor3U a x (A.subst σ) (B.subst σ) (r.subst σ)
   | .withloadU a x A B r => .withloadU a x (A.subst σ) (B.subst σ) (r.subst σ)
   | .sliceBorrowMutU x b A B r => .sliceBorrowMutU x b (A.subst σ) (B.subst σ) (r.subst σ)
@@ -169,6 +175,7 @@ def Val.subst (σ : TySubst) : Val → Val
   | .inst sp V a => .inst sp (V.subst σ) a
   | .ascribe sp V A => .ascribe sp (V.subst σ) (A.subst σ)
   | .const sp c => .const sp (c.subst σ)
+  | .constU sp c d => .constU sp (c.subst σ) (d.subst σ)
   | .shorten sp m s a V => .shorten sp m (s.subst σ) a (V.subst σ)
   | .lend sp x m => .lend sp x m
   | .sugar sp (.forSite i) => .sugar sp (.forSite { i with T := i.T.subst σ })

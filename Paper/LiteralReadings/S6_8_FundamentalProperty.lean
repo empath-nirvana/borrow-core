@@ -496,6 +496,7 @@ theorem step_beta_inv {μ μ' : Heap} {b : Expr} {v : Val} {e' : Expr}
     | tab => simp at hE
     | idx => simp at hE
     | split => simp at hE
+    | sliceCopy => simp at hE
     | drop => simp at hE
     | count => simp at hE
     | countTry => simp at hE
@@ -539,6 +540,7 @@ theorem step_load_inv {μ μ' : Heap} {ℓ : Loc} {e' : Expr}
     | tab => simp at hE
     | idx => simp at hE
     | split => simp at hE
+    | sliceCopy => simp at hE
     | drop => simp at hE
     | count => simp at hE
     | countTry => simp at hE
@@ -583,6 +585,7 @@ theorem step_store_inv {μ μ' : Heap} {ℓ : Loc} {v : Val} {e' : Expr}
     | tab => simp at hE
     | idx => simp at hE
     | split => simp at hE
+    | sliceCopy => simp at hE
     | drop => simp at hE
     | count => simp at hE
     | countTry => simp at hE

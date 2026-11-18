@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Target.Flat.Syntax
 import Target.Flat.Host
+import Backend2.LocalSlots
 import Backend2.Layout
 
 /-!
@@ -65,6 +66,10 @@ structure LState where
   next : Nat := 0
   /-- The words of the function's frame so far. -/
   frame : Nat := 0
+  /-- Offsets and byte widths of scalar checked locals, eligible for register promotion. -/
+  localSlots : List (Nat × Nat) := []
+  /-- Zero-width scoped cells have no live frame slot to end. -/
+  emptySlots : Std.HashSet Nat := {}
   helpers : Std.HashMap Helper Nat := {}
   queue : Array Helper := #[]
   /-- The locals some variable's layout places an address in (`addrKinds`), and those some
@@ -192,13 +197,13 @@ words, and the locals that hold an address (`ptrVote`, `intVote`). -/
 def inFnF (params : Nat) (act : LM α) : LM (α × Nat × Nat × List Nat) := do
   let saved ← get
   set { saved with locals := {}, next := params, frame := 0, ptrVote := {}, intVote := {},
-                   spare := [] }
+                   spare := [], localSlots := [], emptySlots := {} }
   let a ← act
   let st ← get
   let ptrs := st.ptrVote.toList.filter (!st.intVote.contains ·) |>.mergeSort (· ≤ ·)
   modify fun s => { s with locals := saved.locals, next := saved.next, frame := saved.frame,
                            ptrVote := saved.ptrVote, intVote := saved.intVote,
-                           spare := saved.spare }
+                           spare := saved.spare, localSlots := saved.localSlots, emptySlots := saved.emptySlots }
   pure (a, st.next - params, st.frame, ptrs)
 
 def inFn (params : Nat) (act : LM α) : LM (α × Nat × List Nat) := do
@@ -636,7 +641,10 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     -- fails, a store overruns the cell. A value's bytes and each type's most (`bytes`,
     -- `tyBytes`) are checked on every compile (`LayoutCheck.cellsOk`); the class is not.
     let b := (← L).clsBytes (← contents n) cls
-    if b == 0 then return ← emit d [.c64 0]
+    if b == 0 then
+      if let .allocLent scope _ := op then
+        modify fun s => { s with emptySlots := s.emptySlots.insert scope }
+      return ← emit d [.c64 0]
     let t ← fresh1
     let w := (b + 7) / 8
     let slots := (← read).slotScopes
@@ -646,6 +654,12 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let addr ← if inFrame then do
         let off := (← get).frame
         modify fun s => { s with frame := off + w }
+        if let .allocLent scope _ := op then
+          if (← read).p.localScopes.contains scope then
+            match (← L).sh (← contents n) with
+            | .int .w8 | .int .w32 | .int .u32 | .int .w64 | .int .u64 | .int .f32 | .int .f64 =>
+              modify fun s => { s with localSlots := (off, b) :: s.localSlots }
+            | _ => pure ()
         pure (Exp.slot off w)
       else pure (.alloc (.c64 w.toUInt64))
     return [.set t addr] ++ (← storeCell n (.loc t) (locs (← arg 0))) ++ (← emit d [.loc t])
@@ -655,7 +669,11 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let (s, vs) ← loadCell pn a (← wordsN (← contents pn))
     -- The owner of a scope whose cell is a frame slot (`Prog.slots`) ends the slot's life.
     let rel := if (← read).p.slots.contains (args.getD 0 0) then Stmt.unslot a else .free a
-    return s ++ [rel] ++ (← emit d (locs vs))
+    let emptyScopes := (← get).emptySlots
+    let empty := match (← read).p.slots[args.getD 0 0]? with
+      | some scope => emptyScopes.contains scope
+      | none => false
+    return s ++ (if empty then [] else [rel]) ++ (← emit d (locs vs))
   | .release => do
     return [.free (.loc ((← arg 0).headD 0))] ++ (← emit d [])
   | .swap => do
@@ -912,11 +930,16 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
       (← emit d ([.loc m] ++ locs ts))
   | .io .writeByte => do
     match ← arg 0 with
-    | [m, b] => return [.putc (.load (.loc m) 0) (.loc b)] ++ (← emit d [.loc m])
+    | [m, b] =>
+      -- [spec §11] The descriptor, read at its cell's contents node (`Prog.hostRep`).
+      let (s, fd) ← loadCell (← child (← argN 0) 0) (.loc m) 1
+      return s ++ [.putc (.loc (fd.headD 0)) (.loc b)] ++ (← emit d [.loc m])
     | _ => throw "word IR: write_byte of a non-pair"
   | .io .writeAll => do
     match ← arg 0 with
-    | [m, a, k] => return [.putv (.load (.loc m) 0) (.loc a) (.loc k)] ++ (← emit d [.loc m])
+    | [m, a, k] =>
+      let (s, fd) ← loadCell (← child (← argN 0) 0) (.loc m) 1
+      return s ++ [.putv (.loc (fd.headD 0)) (.loc a) (.loc k)] ++ (← emit d [.loc m])
     | _ => throw "word IR: write_all of a non-pair"
   | .io .readInto => do
     match ← arg 0 with
@@ -1287,12 +1310,17 @@ where
       match L.sh c', L.sh n' with
       | .clos .., .unk => return ([], [])
       | .opq, .unk => return ([], [])
+      -- [spec §11] A host-typed opaque value (`Layouts.host`), an integer node, read as `Unk`:
+      -- discarded.
+      | .int _, .unk => if L.host.contains (L.r c') then return ([], []) else pure ()
       -- `Tok`'s cell (`Ref 1`) read as `Unk`: discarded.
       | .ref _, .unk => return ([], [])
-      | _, _ =>
-        if L.triv c' && sameEnc L 256 c' n' then return ([], locs vs)
-        let ts ← fresh (L.w n')
-        return ([.call ts (← helper (.reCopy (L.r c') (L.r n'))) (locs vs)], locs ts)
+      | _, _ => pure ()
+      if L.triv c' && sameEnc L 256 c' n' then return ([], locs vs)
+      let ts ← fresh (L.w n')
+      return ([.call ts (← helper (.reCopy (L.r c') (L.r n'))) (locs vs)], locs ts)
+    -- [spec §11] A host-typed opaque value read as `Unk`: discarded.
+    if L.host.contains (L.r c) && L.sh n == .unk then return ([], [])
     match L.sh c, L.sh n with
     | .clos .., .unk => return ([], [])
     | .opq, .unk => return ([], [])
@@ -1401,19 +1429,43 @@ def paramFacts (fd : Backend2.Fn) : LM (List Backend.Flat.ParamFacts) := do
     off := off + L.w n
   return out
 
+/-- Promote only checked local slots; a surviving slot keeps its original frame offsets. -/
+def promoteLocals (body : List Stmt) : LM (List Stmt × Nat) := do
+  let st ← get
+  if st.localSlots.isEmpty then return (body, 0)
+  let (body, next) := LocalSlots.promote st.localSlots st.next body
+  let rec hasSlotE : Nat → Exp → Bool
+    | 0, _ => true
+    | f + 1, e => match e with
+      | .slot .. => true
+      | .load a _ | .load8 a | .load32 a | .alloc a | .getc a | .now a => hasSlotE f a
+      | .op _ xs => xs.any (hasSlotE f)
+      | .getv a b c => hasSlotE f a || hasSlotE f b || hasSlotE f c
+      | .gep a b => hasSlotE f a || hasSlotE f b
+      | _ => false
+  let rec hasSlotS : Nat → Stmt → Bool
+    | 0, _ => true
+    | f + 1, s => match s with
+      | .set _ e => hasSlotE f e
+      | .ite _ a b => a.any (hasSlotS f) || b.any (hasSlotS f)
+      | .switch _ cs d => cs.any (fun c => c.any (hasSlotS f)) || d.any (hasSlotS f)
+      | _ => false
+  modify fun s => { s with next, frame := if body.any (hasSlotS 1024) then s.frame else 0 }
+  return (body, next - st.next)
+
 def lowerFn (i : Nat) (fd : Backend2.Fn) : LM Backend.Flat.Fn := do
   let L ← L
   let some rn := L.fnRet[i]? | throw s!"word IR: no node of f{i}'s answer"
   let pws := fd.params.map fun x => L.w (L.node x)
   let total := pws.foldl (· + ·) 0
   let k := L.w rn
-  let (body, nloc, frame, ptrs) ← inFnF total do
+  let ((body, promotedLocals), nloc, frame, ptrs) ← inFnF total do
     let mut off := 0
     for (x, w) in fd.params.zip pws do
       bindVals x (List.range' off w)
       off := off + w
-    pure ((← lowerTm (1 <<< 22) fd.body rn (.ret k)) ++ [.trap])
-  pure { name := fd.name, params := total, results := k, locals := nloc, frame, body, ptrs,
+    promoteLocals ((← lowerTm (1 <<< 22) fd.body rn (.ret k)) ++ [.trap])
+  pure { name := fd.name, params := total, results := k, locals := nloc, frame, promotedLocals, body, ptrs,
          facts := ← paramFacts fd, inline := fd.inline }
 
 def countsReport : List Stmt :=
@@ -1522,9 +1574,9 @@ def lowerProg (p : Prog) (L : Layouts) (known : Std.HashMap Var Nat)
   let act : LM (List Backend.Flat.Fn) := do
     let fns ← p.fns.toList.zipIdx.mapM fun (fd, i) => lowerFn i fd
     let k := L.w L.mainNode
-    let (body, nloc, frame, ptrs) ← inFnF 0 do
-      pure ((← lowerTm (1 <<< 22) p.main L.mainNode (.ret k)) ++ [.trap])
-    let main : Backend.Flat.Fn := { name := "main", params := 0, results := k, locals := nloc, frame, body, ptrs }
+    let ((body, promotedLocals), nloc, frame, ptrs) ← inFnF 0 do
+      promoteLocals ((← lowerTm (1 <<< 22) p.main L.mainNode (.ret k)) ++ [.trap])
+    let main : Backend.Flat.Fn := { name := "main", params := 0, results := k, locals := nloc, frame, promotedLocals, body, ptrs }
     let entry ← entryFn fMain p.exits
     let mut gen : Array Backend.Flat.Fn := #[]
     let mut i := 0

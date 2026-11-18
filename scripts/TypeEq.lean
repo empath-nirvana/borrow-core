@@ -1,10 +1,8 @@
-import Frontend.Main
-import Backend.Cells
+import GateCensus.View
+import GateCensus.Result
 
 /-!
-# The compiler's type comparisons  (`scripts/check-type-eq.sh`)
-
-    lake env lean scripts/TypeEq.lean
+# The compiler's type comparisons  (`gate-census type-eq`, `scripts/check-type-eq.sh`)
 
 Lists every declaration of a compiled module (the import closure of `bcc` and `bcc-counts`: the
 modules of this repository outside `Core`, `Support` and `Paper`, which are the kernel and its
@@ -27,21 +25,27 @@ declarations: each one that compares types is listed itself, so its callers are 
 Output: a line `#scanned  roots` naming the compiled modules' roots, then one tab-separated line
 `module  declaration  seeds` per declaration, compiler-generated auxiliaries (`match_`, `_proof_`,
 `_unary`, …) folded into the declaration they belong to. A declaration of the file being run itself
-is listed at the module `main` (the negative tests of `scripts/check-type-eq.sh`).
+(a declaration the negative tests of `scripts/check-type-eq.sh` elaborate into the environment)
+is listed at the module `main`.
+
+The census reads the modules `bcc` and `bcc-counts` import (`imports`).
 -/
 
 open Lean Meta
 
-namespace TypeEq
+namespace GateCensus.TypeEq
+
+/-- The modules read: the import closure of `bcc` and `bcc-counts`. -/
+def imports : Array Name := #[`Frontend.Main, `Backend.Cells]
 
 /-- The kernel's types. -/
 def baseTys : List Name :=
-  [``BoCa.Fig16.LogRel.Core.VTy, ``BoCa.Fig16.LogRel.Core.CTy, ``BoCa.Fig16.LogRel.Core.OpSig]
+  [`BoCa.Fig16.LogRel.Core.VTy, `BoCa.Fig16.LogRel.Core.CTy, `BoCa.Fig16.LogRel.Core.OpSig]
 
 /-- The α tests themselves. -/
 def alphaNames : List Name :=
-  [``BoCa.Fig16.LogRel.Core.VTy.alphaB, ``BoCa.Fig16.LogRel.Core.CTy.alphaB,
-   ``BoCa.Fig16.LogRel.Core.Jdg.alphaB]
+  [`BoCa.Fig16.LogRel.Core.VTy.alphaB, `BoCa.Fig16.LogRel.Core.CTy.alphaB,
+   `BoCa.Fig16.LogRel.Core.Jdg.alphaB]
 
 /-- A name of an instance or function Lean derives for an equality: `instDecidableEq…`,
 `instBEq…`, `decEq…`. -/
@@ -68,22 +72,22 @@ def ownModule (m : Name) : IO Bool :=
 
 /-- The modules of the environment: whether each is the repository's, and whether it is compiled
 (the repository's, outside `kernelRoots`). -/
-def modules (env : Environment) : IO (Array (Bool × Bool)) :=
-  env.header.moduleNames.mapM fun m => do
-    let own ← ownModule m
+def modules (env : Environment) (view : View) : IO (Array (Bool × Bool)) :=
+  env.header.moduleNames.mapIdxM fun i m => do
+    let own := view.hasModule i && (← ownModule m)
     return (own, own && !kernelRoots.contains m.getRoot)
 
 /-- Whether the declaration `n` is of a compiled module, or of the file being run (`main`). -/
 def compiled (env : Environment) (mods : Array (Bool × Bool)) (n : Name) : Bool :=
   match env.getModuleIdxFor? n with
   | some mi => (mods[mi.toNat]!).2
-  | none => !(`TypeEq).isPrefixOf n
+  | none => true
 
 /-- Whether the declaration `n` is of the repository (a compiled module, the kernel's, or `main`). -/
 def own (env : Environment) (mods : Array (Bool × Bool)) (n : Name) : Bool :=
   match env.getModuleIdxFor? n with
   | some mi => (mods[mi.toNat]!).1
-  | none => !(`TypeEq).isPrefixOf n
+  | none => true
 
 /-- A declaration's run-time body: a computable definition that is neither a proof nor a
 proposition or type (a `Prop`- or `Type`-valued function, such as `SigsAt`, decides nothing; the
@@ -124,10 +128,11 @@ def runtimeSeeds (S : NameSet) (v : Expr) (used : Array Name) : MetaM (List Name
 /-- The seeds: the equality instances of the kernel's types and the instances built from them,
 the α tests, and every computable declaration of the kernel's modules that uses one at run time,
 to a fixed point. -/
-def seeds (env : Environment) (mods : Array (Bool × Bool)) : MetaM NameSet := do
+def seeds (env : Environment) (view : View) (mods : Array (Bool × Bool)) : MetaM NameSet := do
   -- the candidates: an equality instance anywhere, any computable declaration of the kernel's
   let mut cands : Array (Name × Expr × Expr × Array Name) := #[]
   for (n, ci) in env.constants.toList do
+    unless view.has env n do continue
     let eqi := isEqName n
     unless eqi || (own env mods n && !compiled env mods n) do continue
     let some v ← body? env n ci | continue
@@ -149,10 +154,10 @@ def seeds (env : Environment) (mods : Array (Bool × Bool)) : MetaM NameSet := d
   return S
 
 /-- The hits: `(module, declaration, seeds)`, by declaration, and the compiled modules' roots. -/
-def hits : MetaM (Array (Name × Name × List Name) × List Name) := do
+def hits (view : View) : MetaM (Array (Name × Name × List Name) × List Name) := do
   let env ← getEnv
-  let mods ← modules env
-  let S ← seeds env mods
+  let mods ← modules env view
+  let S ← seeds env view mods
   let mut out : Std.HashMap Name (Name × List Name) := {}
   for (n, ci) in env.constants.toList do
     unless compiled env mods n do continue
@@ -173,11 +178,17 @@ def hits : MetaM (Array (Name × Name × List Name) × List Name) := do
     a.1.toString < b.1.toString || (a.1 == b.1 && a.2.1.toString < b.2.1.toString)
   return (hs, roots)
 
-end TypeEq
-
-#eval show MetaM Unit from do
-  let (hs, roots) ← TypeEq.hits
-  IO.println s!"#scanned\t{" ".intercalate (roots.map toString)}"
+/-- The census: a line `#scanned  roots`, then one line `module  declaration  seeds` per hit. -/
+def run (env : Environment) (view : View) : IO Result := do
+  let missing := (baseTys ++ alphaNames).filter fun n => !(env.contains n && view.has env n)
+  unless missing.isEmpty do
+    return { lines := missing.toArray.map (s!"error: unknown constant '{·}'"), code := 1 }
+  let ((hs, roots), _) ← ((hits view).run' {} {}).toIO
+    { fileName := "<gate-census type-eq>", fileMap := default } { env }
+  let mut out := #[s!"#scanned\t{" ".intercalate (roots.map toString)}"]
   for (m, d, hs) in hs do
     let short := hs.map fun h => h.toString.replace "BoCa.Fig16.LogRel.Core." ""
-    IO.println s!"{m}\t{d}\t{", ".intercalate short}"
+    out := out.push s!"{m}\t{d}\t{", ".intercalate short}"
+  return { lines := out }
+
+end GateCensus.TypeEq

@@ -756,6 +756,9 @@ def rowV (env : Env) : Nat → Val → List Inst
   | n + 1, V => match V with
     | .app _ (.sugar _ .fin) (.pair _ V (.thunkv _ (.lam _ _ _ D))) =>
       env.union (rowV env n V) (rowC env n D)
+    -- A reborrow with its finaliser (SPEC §78): the block's and the finaliser's.
+    | .app _ (.sugar _ .lendFin) (.pair _ V (.thunkv _ (.lam _ _ _ D))) =>
+      env.union (rowV env n V) (rowC env n D)
     | .app _ (.app _ (.sugar _ (.handle h _ As nm)) P) (.thunkv _ (.lam _ _ _ M)) =>
       let inner := rowC env n M
       let inner := match env.handler? h, env.chandler? h with
@@ -992,6 +995,7 @@ def mayLoop : Nat → Comp → Bool
     | .bind _ _ _ M N | .with_ _ M N => mayLoop k M || mayLoop k N
     | .letUnit _ _ M | .letPair _ _ _ _ M | .lam _ _ _ M | .lamL _ _ _ M => mayLoop k M
     | .case _ _ _ M _ N => mayLoop k M || mayLoop k N
+    | .unwind _ _ _ M D N => mayLoop k M || mayLoop k D || mayLoop k N
     | _ => false
 
 /-- `w <- perform[n.i] (V, w)`: an operation at a `for`'s site, which threads `w`. -/
@@ -1283,6 +1287,7 @@ def Cx.givenC (cx : Cx) : Nat → Comp → List Cap
     | .letUnit _ V M | .letPair _ _ _ V M => cx.givenV n V ++ cx.givenC n M
     | .case _ V _ M _ N => cx.givenV n V ++ cx.givenC n M ++ cx.givenC n N
     | .loop _ _ _ V M N => cx.givenV n V ++ cx.givenC n M ++ cx.givenC n N
+    | .unwind _ _ _ M D N => cx.givenC n M ++ cx.givenC n D ++ cx.givenC n N
     | _ => []
 end
 
@@ -1771,7 +1776,7 @@ def withInV (env : Env) : Nat → Val → Bool
   | 0, _ => false
   | k + 1, V => match V with
     | .app _ (.app _ (.sugar _ (.handle ..)) _) _ => true
-    | .app _ (.sugar _ .fin) _ => true
+    | .app _ (.sugar _ .fin) _ | .app _ (.sugar _ .lendFin) _ => true
     | .app _ f W =>
       let pull := match headName f with
         | some x => (env.pullArgs x W).any fun (V, p) => p && (env.iterCall? V).isSome
@@ -1849,15 +1854,6 @@ def bindParams (sp : Span) (p : String) : List Ident → Comp → EM Comp
     let r ← fresh "fx_p"
     pure (.letPair sp x ⟨r, sp⟩ (.var sp p) (← bindParams sp r xs M))
 
-/-- A computation with `f` applied at each terminal reached through tail positions. -/
-def wrapTerms (f : Comp → Comp) : Comp → Comp
-  | .bind sp x A M N => .bind sp x A M (wrapTerms f N)
-  | .letUnit sp V M => .letUnit sp V (wrapTerms f M)
-  | .letPair sp x y V M => .letPair sp x y V (wrapTerms f M)
-  | .case sp V x M y N => .case sp V x (wrapTerms f M) y (wrapTerms f N)
-  | .loop sp ℓ src V M N => .loop sp ℓ src V M (wrapTerms f N)
-  | T => f T
-
 /-- `x <- return V'; N` after the bindings `bs` of `V'`'s calls. A value that is one call's answer
 binds `x` as the call's binding does: `x` is the call's answer.  `[spec §18]` -/
 def bindValue (sp : Span) (x : Ident) (A : Option VTy) (rsp : Span) (bs : List Bind) (V' : Val)
@@ -1877,7 +1873,7 @@ def handedBack : Nat → Comp → List String
   | 0, _ => []
   | k + 1, M => match M with
     | .bind _ ⟨"io_bt", _⟩ _ _ (.ret _ (.pair _ (.var _ "io_bt") W)) => names W
-    | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N => handedBack k N
+    | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N | .unwind _ _ _ _ _ N => handedBack k N
     | .case _ _ _ M _ N => (handedBack k M ++ handedBack k N).eraseDups
     | _ => []
 where
@@ -1935,15 +1931,19 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
     | .loop sp ℓ src V M N =>
       match src, cx.env.iterCall? V with
       | .each x, some (g, gs, i, f, W) =>
-        if (cx.ctl (rowC cx.env fuel M)).isEmpty && !mayLoop fuel M then
+        if (cx.ctl (rowC cx.env fuel M)).isEmpty && !mayLoop fuel M && !Fins.thenInC fuel M then
           forSite n cx cs wrap sp ℓ x g gs i f W M N
         else
           -- A body that performs a control operation would hold the continuation across it,
           -- which is not consumable (its cancel performs at the site's row), and one that loops
           -- cannot be a clause, which is total: the `for` drains the stored generator instead.
+          -- So does one that runs a `[then]` (`x <- M unwind (D); N`) in place: the clause's
+          -- continuation would be live across it, and the site's kind would not be tail.
           let (bs, V', _) ← pullSite n cx cs sp g gs i f W
-          report sp "lowering" (s!"for over {g}: its body performs a control operation or " ++
-            "loops, so it drains the stored generator")
+          report sp "lowering" (if (cx.ctl (rowC cx.env fuel M)).isEmpty && !mayLoop fuel M then
+              s!"for over {g}: its body runs an unwind region, so it drains the stored generator"
+            else s!"for over {g}: its body performs a control operation or " ++
+              "loops, so it drains the stored generator")
           chain bs (.loop sp ℓ src V' (← trC n cx [] false M) (← trC n cx cs wrap N))
       | _, _ =>
         let (bs, V') ← trV n cx cs V
@@ -2102,11 +2102,63 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
   | k + 1, cx, cs, V => match V with
     -- `with h(…) { M } finally { D }` (SPEC §42): `[then]` around the handled computation, `D`
     -- the finaliser and run again on the normal exit: `x <- with h(…) { M } unwind (D); D; x`.
+    -- When `D` uses a capability (`needC`, a threaded `mut` cell): the reborrow of it across
+    -- `with h(…) { M }`, `D` its finaliser on the source, and `D` run on the source the reborrow
+    -- pairs back,
+    -- `(p, x) <- borrow mut p { 'l, p -> with h(…) { M } } finally (fun p -> D); D; x`
+    -- (`lendFin`, SPEC §78, #940). The kernel's `[then]` gives `M` and `D` disjoint contexts, so
+    -- they cannot share the place; the unwinding reborrow is `[then]` fused with the lend.
     | .app sp (.sugar _ .fin) (.pair _ W (.thunkv _ (.lam _ _ _ D))) => do
       let r ← fresh "fx_fin"
       let u ← fresh "fx_finu"
-      goV k cx cs (.run sp (.unwind sp ⟨r, sp⟩ none (.ret sp W) D
-        (.bind sp ⟨u, sp⟩ none D (.ret sp (.var sp r)))))
+      let capsD := (cx.needC D).foldl
+        (fun acc c => if acc.any (·.var == c.var) then acc else acc ++ [c]) []
+      match capsD with
+      | [] =>
+        goV k cx cs (.run sp (.unwind sp ⟨r, sp⟩ none (.ret sp W) D
+          (.bind sp ⟨u, sp⟩ none D (.ret sp (.var sp r)))))
+      | [c] =>
+        -- A cleanup that also performs a control operation would be the finaliser at a row of
+        -- its own, `Σ_D ≠ ∅`: K-b's (#1046), not provided yet.  [spec §78]
+        if let some i := (cx.ctl (rowC cx.env fuel D)).head? then
+          let nm := if c.h.cell then c.var else c.eff
+          throw ⟨D.span, s!"this cleanup uses `{nm}`, which the body also uses, and performs an " ++
+            s!"operation of `{i.eff}`; a cleanup of a lent place that performs is not provided " ++
+            "yet (#1046)"⟩
+        let p := c.var
+        -- The reborrow's lifetime is named as the capability's, as `reborrowed`'s is: the calls in
+        -- `M` instantiate it by name, and in `D` it is the source's. A capability whose lifetime
+        -- has no name (`main`'s platform capabilities, instantiated by type) gets a fresh one.
+        let l ← if c.life.isEmpty then fresh "fx_fl" else pure c.life
+        let t ← fresh "fx_ft"
+        let pi : Ident := ⟨p, sp⟩
+        let blk : Val := .app sp (.app sp (.sugar sp (.borrow .mut l)) (.var sp p))
+          (.thunkv sp (.lam sp pi (holeTy sp) (.ret sp W)))
+        let lf : Val := .app sp (.sugar sp .lendFin)
+          (.pair sp blk (.thunkv sp (.lam sp pi (holeTy sp) D)))
+        report sp "lowering" (s!"finally: the capability of `{c.eff}` is reborrowed across the " ++
+          "`with`, the cleanup its finaliser (SPEC §78)")
+        goV k cx cs (.run sp (.bind sp ⟨t, sp⟩ none (.ret sp lf)
+          (.letPair sp pi ⟨r, sp⟩ (.var sp t) (.bind sp ⟨u, sp⟩ none D (.ret sp (.var sp r))))))
+      | c :: c' :: _ =>
+        -- A finaliser gets one source back; a lend of two places that unwinds is not a kernel
+        -- form yet.
+        let nm (c : Cap) := if c.h.cell then c.var else c.eff
+        throw ⟨D.span, s!"a `finally` using two lent places (`{nm c}`, `{nm c'}`) has no kernel " ++
+          "form yet (#1102, #1046)"⟩
+    -- The reborrow of `finally` (above): its body with the capabilities it uses rebound by name
+    -- and not handed back (the borrow is the capability's, which the reborrow pairs back), and the
+    -- finaliser likewise, at the source.  [spec §78]
+    | .app sp (.sugar fsp .lendFin)
+        (.pair psp (.app sp₁ (.app sp₂ (.sugar ksp k') P) (.thunkv tsp (.lam lsp b A M)))
+          (.thunkv dsp (.lam dlsp p Ap D))) => do
+      let (bsP, P') ← goV k cx cs P
+      let csM := cx.needC M
+      let M' ← trC k cx csM false M
+      let D' ← trC k cx (cx.needC D) false D
+      pure (bsP, .app sp (.sugar fsp .lendFin)
+        (.pair psp (.app sp₁ (.app sp₂ (.sugar ksp k') P') (.thunkv tsp (.lam lsp b A M')))
+          (.thunkv dsp (.lam dlsp p Ap D'))))
     | .app sp (.app sp₂ (.sugar ksp (.handle h l As nm)) P) (.thunkv tsp (.lam lsp b A M)) =>
       match cx.env.handler? h, cx.env.chandler? h with
       | some hs, _ => withBlk k cx cs sp sp₂ ksp hs l P tsp lsp b A M nm
@@ -3018,7 +3070,7 @@ first and hands it back first, and `op(v)` is `w <- perform[n.0] (v, w)` in it).
 assembled where the types are known (`VSugar.forSite`): `w` is then the tuple of the variables the
 body reads or assigns, and the body is the operation's clause. The body runs outside the site:
 its operations go to the sites around the `for`. -/
-def forSite : Nat → Cx → List Cap → Bool → Span → Option Ident → Ident → String → FSig → Inst →
+def forSite : Nat → Cx → List Cap → Bool → Span → LoopInfo → Ident → String → FSig → Inst →
     Val → Val → Comp → Comp → EM Comp
   | 0, _, _, _, sp, _, _, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
   | k + 1, cx, cs, wrap, sp, ℓ, x, gname, g, i, f, W, M, N => do
@@ -3546,7 +3598,7 @@ def clauseDef (env : Env) (h : HSig) (o : OpDecl) (c : Clause) : EM Decl := do
   -- The clause's answer at the operation's result type; a terminal that lends a place is bound
   -- first, since a lend cannot be in an annotated binding, and any other computation is bound
   -- at that type.
-  let body := wrapTerms (fun T =>
+  let body := Comp.mapTail (fun T =>
     let hand := Comp.ret T.span (.pair T.span (.var T.span st) (.var T.span v))
     match T with
     | .ret _ V => if V.lends then
@@ -3645,6 +3697,8 @@ def forOverParam (xs : List String) : Nat → Comp → Option Span
       if V.copyOf?.any xs.contains then forOverParam (x.name :: xs) k N else forOverParam xs k N
     | .bind _ _ _ M N | .with_ _ M N | .case _ _ _ M _ N =>
       (forOverParam xs k M).orElse fun _ => forOverParam xs k N
+    | .unwind _ _ _ M D N =>
+      ((forOverParam xs k M).orElse fun _ => forOverParam xs k D).orElse fun _ => forOverParam xs k N
     | .letUnit _ _ M | .letPair _ _ _ _ M | .lam _ _ _ M | .lamL _ _ _ M => forOverParam xs k M
     | _ => none
 

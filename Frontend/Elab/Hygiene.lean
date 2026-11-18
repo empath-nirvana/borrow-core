@@ -100,10 +100,18 @@ def _root_.Frontend.Val.hygD (defs : Ren) (glob : String → Bool) (ρ : Ren) : 
   | .inst sp V a => do pure (.inst sp (← V.hygD defs glob ρ) a)
   | .ascribe sp V A => do pure (.ascribe sp (← V.hygD defs glob ρ) A)
   | .const sp c => pure (.const sp c)
+  | .constU sp c d => do pure (.constU sp c (← d.hygD defs glob ρ))
   | .shorten sp m s a V => do pure (.shorten sp m s a (← V.hygD defs glob ρ))
   | .lend sp x m => pure (.lend sp (lookI ρ x) m)
   | .sugar sp (.forSite i) => pure (.sugar sp (.forSite { i with w := look ρ i.w }))
   | .sugar sp (.pullSite i) => pure (.sugar sp (.pullSite { i with w := look ρ i.w }))
+  -- The `let mut` variables a closure assigns (SPEC §41, rule R3) are occurrences: the mark
+  -- names them as the binders in scope are now named.  `[spec §41]`
+  | .sugar sp (.writes xs) => pure (.sugar sp (.writes (xs.map (look ρ))))
+  -- `io_like(o, V)`: `o` is an occurrence of a variable.  `[spec §60]`
+  | .sugar sp (.like o) => pure (.sugar sp (.like (look ρ o)))
+  -- Every other sugar names no variable: lifetimes (`borrow`, `handle`), a handler's name
+  -- (`handle`, `named`), constants, fields, declarations and constructors are not locals.
   | .sugar sp s => pure (.sugar sp s)
   | .mark sp k V => do pure (.mark sp k (← V.hygD defs glob ρ))
 
@@ -144,11 +152,11 @@ def _root_.Frontend.Comp.hygD (defs : Ren) (glob : String → Bool) (ρ : Ren) :
     let V' ← V.hygD defs glob ρ
     let (x', ρx) ← bind glob ρ x
     let M' ← M.hygD defs glob ρx
-    pure (.loop sp ℓ (.each x') V' M' (← N.hygD defs glob ρ))
+    pure (.loop sp { ℓ with writes := ℓ.writes.map (lookI ρ) } (.each x') V' M' (← N.hygD defs glob ρ))
   | .loop sp ℓ src V M N => do
     let V' ← V.hygD defs glob ρ
     let M' ← M.hygD defs glob ρ
-    pure (.loop sp ℓ src V' M' (← N.hygD defs glob ρ))
+    pure (.loop sp { ℓ with writes := ℓ.writes.map (lookI ρ) } src V' M' (← N.hygD defs glob ρ))
   | .perform sp n i V => do pure (.perform sp n i (← V.hygD defs glob ρ))
   | .abort sp n i V => do pure (.abort sp n i (← V.hygD defs glob ρ))
   | .handle sp n st hr hc M => do

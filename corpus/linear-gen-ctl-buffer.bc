@@ -1,0 +1,34 @@
+-- A generator whose `let mut` buffer is moved into a control handler's body each turn and restored
+-- after it (#1064, p14). `chunks_of` moves `b` into `recv`
+-- under `to_result` (standing in for a timeout), writes it back on `inl` and yields its length; on
+-- `inr` the unwind has consumed the buffer, `b` is refilled and the loop stops. The buffer lives in
+-- the generator's state across each `yield`.
+--
+-- Answer: `i32[3]`: `recv` succeeds twice (lengths 1 and 2) and raises on the third turn.
+-- A buffer the unwind did not consume would leave `live 1`.
+
+include yield
+include fail
+include text
+
+fn recv(s: string, k: i32) -> string * i32 with Fail[i32] =
+  if k < 0 { raise(k) } else { let (s, u) = push_byte(s, b'x'); len_of(s) }
+
+fn chunks_of(lim: i32) -> 1 with Yield[i32] =
+  let mut b = string_new(4);
+  let mut open = true;
+  let mut i = 0;
+  while open {
+    match recv(b, lim - i) |> to_result[i32, string * i32] {
+      inl p -> let (b2, n) = p; b = b2; yield(n)
+    | inr e -> b = string_new(0); open = false
+    };
+    i = i + 1
+  };
+  let (b, n) = len_of(b);
+  ()
+
+main -> i32 =
+  let mut a = 0;
+  for x in chunks_of(1) { a = a + x };
+  a

@@ -258,147 +258,8 @@ def timeoutProg : Expr := bindE timeoutRE timeoutUses
 /-- **Weakening** of a tied derivation by consumed slots at the end, as `CDerives.append_dead`. -/
 theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' : Ctx VTy}
     (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
-    (h : CDerivesAt Ξ Δ Γ e j) : CDerivesAt Ξ Δ (Γ ++ Γ') e j := by
-  induction h with
-  | var hs => exact .var (soloP_append h' hs)
-  | unitI hd => exact .unitI (deadP_append h' hd)
-  | tensorI hs _ _ ih₁ ih₂ => exact .tensorI (splitP_append h' hs) ih₁ ih₂
-  | sumI₁ _ ih => exact .sumI₁ ih
-  | sumI₂ _ ih => exact .sumI₂ ih
-  | thunkF _ ih => exact .thunkF ih
-  | thunkV hC _ ih => exact .thunkV hC ih
-  | ret _ ih => exact .ret ih
-  | bind hs _ _ ihM ihN => exact .bind (splitP_append h' hs) ihM ihN
-  | force hs hT => exact .force (soloP_append h' hs) hT
-  | lam _ ih => exact .lam ih
-  | lamDead _ ih => exact .lamDead ih
-  | app hs _ hx ih => exact .app (splitP_append h' hs) ih (soloP_append h' hx)
-  | withI _ _ ihM ihN => exact .withI ihM ihN
-  | proj₁ _ ih => exact .proj₁ ih
-  | proj₂ _ ih => exact .proj₂ ih
-  | topI => exact .topI
-  | unitE hs _ _ ihV ihM => exact .unitE (splitP_append h' hs) ihV ihM
-  | tensorE hs _ _ ihV ihM => exact .tensorE (splitP_append h' hs) ihV ihM
-  | sumE hs _ _ _ ihV ih₁ ih₂ => exact .sumE (splitP_append h' hs) ihV ih₁ ih₂
-  | zeroE hs _ ihV => exact .zeroE (splitP_append h' hs) ihV
-  | allI hbx hΔx hΓx _ ih => exact .allI hbx hΔx (live_append h' hΓx) ih
-  | allE _ hlt ih => exact .allE ih hlt
-  | bangThunkF hp _ ih => exact .bangThunkF (flatLive_append h' hp) ih
-  | bangThunkV hp hC _ ih => exact .bangThunkV (flatLive_append h' hp) hC ih
-  | codeI _ hok ih =>
-      obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
-      rw [← hty]; exact .codeI ih hok'
-  | codeIB hp _ hok ih =>
-      obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
-      rw [← hty]; exact .codeIB (flatLive_append h' hp) ih hok'
-  | codeErase _ ih => exact .codeErase ih
-  | codeEraseB _ ih => exact .codeEraseB ih
-  | bangE _ ih => exact .bangE ih
-  | copyBang hΓ => exact .copyBang (deadP_append h' hΓ)
-  | releaseBang hΓ => exact .releaseBang (deadP_append h' hΓ)
-  | boxI _ hΓ ih => exact .boxI ih (ctxOutlives_append h' hΓ)
-  | boxE _ ih => exact .boxE ih
-  | immSub _ hle ih => exact .immSub ih hle
-  | mutSub _ hle ih => exact .mutSub ih hle
-  | alloc hΓ => exact .alloc (deadP_append h' hΓ)
-  | free hΓ => exact .free (deadP_append h' hΓ)
-  | tokMint hΓ => exact .tokMint (deadP_append h' hΓ)
-  | tokBurn hΓ => exact .tokBurn (deadP_append h' hΓ)
-  | swap hΓ => exact .swap (deadP_append h' hΓ)
-  | copy hΓ => exact .copy (deadP_append h' hΓ)
-  | releaseImm hΓ => exact .releaseImm (deadP_append h' hΓ)
-  | releaseMut hΓ => exact .releaseMut (deadP_append h' hΓ)
-  | releaseUnk hΓ => exact .releaseUnk (deadP_append h' hΓ)
-  | lit c hΓ => exact .lit c (deadP_append h' hΓ)
-  | hostOp op hΓ => exact .hostOp op (deadP_append h' hΓ)
-  | arrNew A hΓ => exact .arrNew A (deadP_append h' hΓ)
-  | arrFree A hΓ => exact .arrFree A (deadP_append h' hΓ)
-  | arrSize A hΓ => exact .arrSize A (deadP_append h' hΓ)
-  | arrReplace A hΓ => exact .arrReplace A (deadP_append h' hΓ)
-  | arrLen a A hΓ => exact .arrLen a A (deadP_append h' hΓ)
-  | arrGet a A hΓ => exact .arrGet a A (deadP_append h' hΓ)
-  | arrCopy a A hΓ => exact .arrCopy a A (deadP_append h' hΓ)
-  | arrRelease a A hΓ => exact .arrRelease a A (deadP_append h' hΓ)
-  | countFold S hΓ => exact .countFold S (deadP_append h' hΓ)
-  | countTry S E hΓ => exact .countTry S E (deadP_append h' hΓ)
-  | boundedFix A C hΓ => exact .boundedFix A C (deadP_append h' hΓ)
-  | sliceBorrowM x hΓ hA hB hf₁ hf₂ =>
-      exact .sliceBorrowM x (deadP_append h' hΓ) hA hB hf₁ hf₂
-  | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ =>
-      exact .sliceBorrowI x (deadP_append h' hΓ) hsc hA hB hf₁ hf₂
-  | sliceGetM a A hΓ => exact .sliceGetM a A (deadP_append h' hΓ)
-  | sliceLenM a A hΓ => exact .sliceLenM a A (deadP_append h' hΓ)
-  | sliceSplitI a A hΓ => exact .sliceSplitI a A (deadP_append h' hΓ)
-  | sliceSplitM a A hΓ => exact .sliceSplitM a A (deadP_append h' hΓ)
-  | sliceEmptyI a A hΓ => exact .sliceEmptyI a A (deadP_append h' hΓ)
-  | sliceEmptyM a A hΓ => exact .sliceEmptyM a A (deadP_append h' hΓ)
-  | arrEmpty A hΓ => exact .arrEmpty A (deadP_append h' hΓ)
-  | sliceReplaceM a A hΓ => exact .sliceReplaceM a A (deadP_append h' hΓ)
-  | sliceSwapM a A hΓ => exact .sliceSwapM a A (deadP_append h' hΓ)
-  | withbor1 x hΓ hx hsc hf₁ hf₂ => exact .withbor1 x (deadP_append h' hΓ) hx hsc hf₁ hf₂
-  | withbor2 x hΓ hx hside hf₁ hf₂ =>
-      exact .withbor2 x (deadP_append h' hΓ) hx hside hf₁ hf₂
-  | withbor3 x hΓ hx hf₁ hf₂ => exact .withbor3 x (deadP_append h' hΓ) hx hf₁ hf₂
-  | withload x hΓ hx hf₁ hf₂ => exact .withload x (deadP_append h' hΓ) hx hf₁ hf₂
-  | withswap hΓ => exact .withswap (deadP_append h' hΓ)
-  | withbor1U x hΓ hx hsc hf₁ hf₂ hS _ ihd =>
-      exact .withbor1U x (deadP_append h' hΓ) hx hsc hf₁ hf₂ hS ihd
-  | withbor2U x hΓ hx hside hf₁ hf₂ hS _ ihd =>
-      exact .withbor2U x (deadP_append h' hΓ) hx hside hf₁ hf₂ hS ihd
-  | withbor3U x hΓ hx hf₁ hf₂ hS _ ihd =>
-      exact .withbor3U x (deadP_append h' hΓ) hx hf₁ hf₂ hS ihd
-  | withloadU x hΓ hx hf₁ hf₂ hS => exact .withloadU x (deadP_append h' hΓ) hx hf₁ hf₂ hS
-  | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
-      exact .sliceBorrowMU x (deadP_append h' hΓ) hA hB hf₁ hf₂ hS ihd
-  | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS _ ihd =>
-      exact .sliceBorrowIU x (deadP_append h' hΓ) hsc hA hB hf₁ hf₂ hS ihd
-  | lolliE hs _ _ iha ihf => exact .lolliE (splitP_append h' hs) iha ihf
-  | allEV _ hlt ih => exact .allEV ih hlt
-  | ofRet _ ih => exact .ofRet ih
-  | roll hA hc _ ih => exact .roll hA hc ih
-  | unroll _ ih => exact .unroll ih
-  | foldImm F y c R hΓ hF hG hyM hyR hR =>
-      exact .foldImm F y c R (deadP_append h' hΓ) hF hG hyM hyR hR
-  | foldOwn F R hΓ hF hG => exact .foldOwn F R (deadP_append h' hΓ) hF hG
-  | foldOwnG B₀ Rs hΓ hB => exact .foldOwnG B₀ Rs (deadP_append h' hΓ) hB
-  | foldReuse F R hΓ hF hG => exact .foldReuse F R (deadP_append h' hΓ) hF hG
-  | nuIn hC _ ih => exact .nuIn hC ih
-  | nuOut hC _ ih => exact .nuOut hC ih
-  | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS (deadP_append h' hΓ)
-  | unfoldK C G S hC hG hS hΓ => exact .unfoldK C G S hC hG hS (deadP_append h' hΓ)
-  | nuOutK hC hG hS hGf hs => exact .nuOutK hC hG hS hGf (soloP_append h' hs)
-  | effSub hle _ ih => exact .effSub hle ih
-  | effPerform hAt hf hna hac _ ih => exact .effPerform hAt hf hna hac ih
-  | effAwait hAt hΓ hfa ha haA hfc hc =>
-      exact .effAwait hAt (dead_append_dead hΓ h') hfa ha haA hfc hc
-  | effRaise hAt hf ha hrc hd _ ih => exact .effRaise hAt hf ha hrc hd ih
-  | effLet hs hW hU _ _ ihM ihN =>
-      exact .effLet (splitP_append h' hs)
-        (fun hw => live_append (P := fun s => s.ty.OwnFree) h' (hW hw))
-        (fun hu => banged_append h' (hU hu)) ihM ihN
-  | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
-      exact .effThen (splitP_append h' hs) hNZ hUq (fun hu => banged_append h' (hU hu))
-        hMS hDS hfin hP hSD ihM ihN ihD
-  | effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
-      exact .effThenDiv (splitP_append h' hs) hNZ hUq (fun hu => banged_append h' (hU hu))
-        hMS hDS hfin hP hSD ihM ihN ihD
-  | effHandleV hAt hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
-      exact .effHandleV hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
-        hdv ihe
-  | effHandleVB hAt hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
-      exact .effHandleVB hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
-        hdv ihe (ctxOutlives_append h' hΓd) hSd
-  | effHandleT hAt hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
-      exact .effHandleT hAt (splitP_append h' hs) (deadP_append h' hd) hHr.append hHc.append ihc
-        hn0 hnd hnS hlen hSN hLin ihe
-  | effHandleL hAt hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
-      exact .effHandleL hAt (splitP_append h' hs) (deadP_append h' hd) hHr.append hHw.append
-        hHn.append ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
-  | iterate S St B R hAt hS hΓ => exact .iterate S St B R hAt hS (deadP_append h' hΓ)
-  | divFuel S A hAt hS hΓ => exact .divFuel S A hAt hS (deadP_append h' hΓ)
-  | reify S B R res hAt hS hcl hres hΓ _ => exact .reify S B R res hAt hS hcl hres (deadP_append h' hΓ)
-  | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
-  | alpha _ hα ih => exact .alpha ih hα
+    (h : CDerivesAt Ξ Δ Γ e j) : CDerivesAt Ξ Δ (Γ ++ Γ') e j :=
+  CDerivesX.append_dead rfl h' h
 
 /-! ### Typing: calls, callbacks and one-operation handlers -/
 
@@ -475,7 +336,7 @@ theorem noUnrExn_ΞE : ΞE.NoUnrExn := by
 
 section E7
 open BoCa.Fig16.LogRel.Core.CancelIntercept (exnRow waitRow finExn find_ofEff_one find_wait
-  rowLe_append_right rowLe_dup rowLe_ofEff_cons rowLe_of_find_eq thenLe_exn dAt_timeout
+  rowLe_append_right rowLe_ofEff_cons rowLe_of_find_eq thenLe_exn dAt_timeout
   dAt_toResult dAt_raiseU dAt_bodyF)
 
 theorem rowAt_exn1 : RowAt ΞE (exnRow 1 .cancel ++ []) :=
@@ -498,7 +359,7 @@ theorem dAt_e7b {Δ : LifeCtx} :
   refine dAt_toResult ΞE_1 (by decide) (by decide) (S := []) (rowAt_nil ΞE) (by simp) ?_
   refine dAt_timeout ΞE_2 (by decide) rowAt_exn1 hn (X := boolT) (F := finExn 1 .cancel) rfl ?_ ?_
   · rw [CTy.rowOf_effOf, List.append_nil]
-    exact rowLe_dup _
+    exact RowLe.refl _
   · refine dAt_bodyF ΞE_2 (by decide) (S := exnRow 1 .cancel ++ []) (SD := exnRow 1 .cancel)
       ?_ (by simp [Row.Uniq, Row.ofEff]) ?_ (thenLe_exn 1 .cancel)
       (dAt_raiseU (.cons .nil) ΞE_1 (by decide) (by decide) .unit)
@@ -606,9 +467,9 @@ theorem dAt_e7d {Δ : LifeCtx} :
   refine dAt_timeout ΞE_2 (by decide) hSBA hnBA (X := boolT) (F := finExn2) rfl ?_ ?_
   · refine RowLe.of_mem fun o ho => ?_
     rw [CTy.rowOf_effOf] at ho
-    simp only [rowBA, Row.ofEff, List.cons_append, List.nil_append, List.mem_cons,
+    simp only [Row.ofEff, List.cons_append, List.nil_append, List.mem_cons,
       List.not_mem_nil, or_false] at ho
-    rcases ho with rfl | rfl | rfl | rfl <;>
+    rcases ho with rfl | rfl <;>
       exact ⟨_, by simp [Row.ofEff, Row.find], OpSig.LeF.refl _⟩
   -- the outer `[then]`, its finaliser `raise exn_b`
   show CDerivesAt ΞE Δ [] (thenE (.var 0) (raiseU 6) (bodyF 2 (raiseU 1))) _
@@ -682,7 +543,7 @@ theorem dAt_kResume {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
         (.here (.cons hΓ.toP))
   | cancel =>
       exact .app (.right (.left (deadSplit hΓ)))
-        (.proj₁ (.force (T := .thunk _) (C := .amp (.arr B (CTy.effOf S R)) (CTy.effOf S .unit))
+        (.proj₁ (.force (T := .thunk _) (C := .amp (.arr B (CTy.effOf S R)) (CTy.effOf [] .unit))
           (.there (.here hΓ.toP)) rfl))
         (.here (.cons hΓ.toP))
   | unr => exact absurd rfl hq
@@ -829,7 +690,7 @@ end E5
 
 section E9
 open BoCa.Fig16.LogRel.Core.CancelIntercept (exnRow finExn find_ofEff_one rowLe_ofEff_cons
-  rowLe_append_right rowLe_dup thenLe_exn dAt_toResult dAt_raiseU)
+  rowLe_append_right thenLe_exn dAt_toResult dAt_raiseU)
 
 /-- `stash`'s answer at the row `S`: a closure `U(bool ⊸ F_Σ bool)`. -/
 abbrev stashR (S : Row) : VTy := .thunk (.arr boolT (CTy.effOf S boolT))
@@ -846,10 +707,10 @@ theorem dAt_stashRet {Δ : LifeCtx} (S : Row) :
 
 /-- **`stash`'s clause** at the cancellable `bool ↠ 1` of cancel row `F`, at a row `S` with no `unr`
 operation: the closure it answers holds `k` and `x`; its cancel branch is a `[let]` of `cancel k`,
-whose `F_{F ⊕ S} 1` is read at `S`, holding `x` across it; its resume branch is a `[let]` of
+whose `F_F 1` is read at `S`, holding `x` across it; its resume branch is a `[let]` of
 `resume k ()`, applying the closure the resumed computation answers. -/
 theorem dAt_stashCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} {F : CTy}
-    (hF : F.isTop = false) (hFS : RowLe (F.rowOf ++ S) S) (hU : ¬ S.Unr) :
+    (hF : F.isTop = false) (hFS : RowLe F.rowOf S) (hU : ¬ S.Unr) :
     CDerivesAt ΞE Δ Γ (.val stashClV) (.val (clauseTy S (stashR S) (.cancel, boolT, .unit) F)) := by
   rw [Inversions.clauseTy_resuming rfl]
   refine .bangThunkV (dead_noLive hΓ) rfl
@@ -860,7 +721,7 @@ theorem dAt_stashCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
   refine .sumE (A := .unit) (B := .unit) (.left (.right (.right (.dead (deadSplit hΓ)))))
     (.var (.here (.cons (.cons (.cons hΓ.toP))))) ?_ ?_
   · -- `inl _ ⇒ cancel k; x`: `u` at `0`, `k` at `2`, `x` at `3`
-    have hct : cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit := by simp [cancelTy, hF]
+    have hct : cancelTy F = CTy.effOf F.rowOf .unit := by simp [cancelTy, hF]
     refine .effLet (A := .unit) (.right (.dead (.left (.right (.dead (deadSplit hΓ))))))
       (fun _ => fun s hs hl => ?_) (fun hS => absurd hS hU) ?_ ?_
     · simp only [List.mem_cons] at hs
@@ -873,7 +734,7 @@ theorem dAt_stashCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
       · exact dead_noLive (P := fun s => s.ty.OwnFree) hΓ s hs hl
     · refine .effSub hFS ?_
       rw [← hct]
-      exact .proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (stashR S))) (cancelTy S F))
+      exact .proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (stashR S))) (cancelTy F))
         (.there (.there (.here (.cons (.cons hΓ.toP))))) rfl)
     · exact .effSub (RowLe.nil S) (.ret (.var (.skip rfl (.skip rfl (.there (.there
         (.here (.cons hΓ.toP))))))))
@@ -893,7 +754,7 @@ theorem dAt_stashCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
         (.ret (.unitI (.weaken rfl (.cons (.cons (.weaken rfl (.cons hΓ.toP))))))) ?_
       show CDerivesAt ΞE Δ _ (.app (.app (.var 3) (.inj₁ .unit)) (.var 0)) _
       exact .app (.right (.dead (.dead (.left (.dead (.dead (deadSplit hΓ)))))))
-        (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (stashR S))) (cancelTy S F))
+        (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S (stashR S))) (cancelTy F))
           (.there (.there (.there (.here (.cons (.cons hΓ.toP)))))) rfl))
         (.here (.cons (.cons (.cons (.cons (.cons hΓ.toP))))))
     · -- `g (inr ())`
@@ -907,7 +768,7 @@ theorem dAt_stashCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
 
 /-- **`stash M` at the row `S`**, `M` at `yield`'s row of cancel row `F` before `S`. -/
 theorem dAt_stash {Δ : LifeCtx} {S : Row} (hS : RowAt ΞE S) (hnS : ∀ o ∈ S, o.n ≠ 3)
-    {F : CTy} (hF : F.isTop = false) (hFS : RowLe (F.rowOf ++ S) S) (hU : ¬ S.Unr) {M : Expr}
+    {F : CTy} (hF : F.isTop = false) (hFS : RowLe F.rowOf S) (hU : ¬ S.Unr) {M : Expr}
     (hM : CDerivesAt ΞE Δ [] M
       (.comp (CTy.effOf (Row.ofEff 3 [(.cancel, boolT, .unit)] 0 (fun _ => F) ++ S) .unit))) :
     CDerivesAt ΞE Δ [] (hndE stashH M) (.comp (CTy.effOf S (stashR S))) :=
@@ -963,7 +824,7 @@ theorem dAt_storedKFin {Δ : LifeCtx} :
     ?_ (dAt_callVar .nil (.sumI₁ (.unitI (.cons .nil))))
   refine dAt_stash rowAt_exn1 hn (F := finExn 1 .cancel) rfl ?_ hU ?_
   · rw [CTy.rowOf_effOf, List.append_nil]
-    exact rowLe_dup _
+    exact RowLe.refl _
   -- `gen then x. x unwind raise exnₒ ()` at `yield`'s row of cancel row `{exnₒ}`
   show CDerivesAt ΞE Δ [] (thenE (.var 0) (raiseU 1) gen9E) _
   refine .effThen (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := yieldRow) (SD := exnRow 1 .cancel)
@@ -1034,7 +895,7 @@ theorem dAt_tickingCl {Δ : LifeCtx} :
     (.ret (.unitI (.weaken rfl (.cons (.cons (.cons .nil)))))) ?_
   exact .app (.right (.dead (.left (.dead (.dead .nil)))))
     (.proj₁ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf (tickRow ++ []) .unit))
-      (CTy.effOf (tickRow ++ []) .unit)) (.there (.there (.here (.cons (.cons .nil))))) rfl))
+      (CTy.effOf [] .unit)) (.there (.there (.here (.cons (.cons .nil))))) rfl))
     (.here (.cons (.cons (.cons (.cons .nil)))))
 
 /-- **`deepGen` at `tick`'s row**: the handler at `tick`'s row, the yields at `yield`'s row before
@@ -1297,8 +1158,9 @@ theorem dAt_tmCl {Δ : LifeCtx} (S : Row) :
     rcases hs with rfl | rfl | rfl <;> cases hl
   · simp only [List.mem_cons, List.not_mem_nil, or_false] at hs
     rcases hs with rfl | rfl | rfl <;> cases hl
-  · exact .proj₂ (.force (T := .thunk _) (C := .amp (.arr .unit (CTy.effOf S boolT)) (CTy.effOf S .unit))
-      (.here (.weaken rfl (.cons .nil))) rfl)
+  · exact .effSub (RowLe.nil S) (.proj₂ (.force (T := .thunk _)
+      (C := .amp (.arr .unit (CTy.effOf S boolT)) (CTy.effOf [] .unit))
+      (.here (.weaken rfl (.cons .nil))) rfl))
   · exact .effSub (RowLe.nil S) (.ret (.sumI₁ (.unitI (.weaken rfl (.cons (.cons (.cons .nil)))))))
 
 /-- **`timeout` at the row `r`**, `r` without `wait`: `U(1 ⊸ F_{wait ⊙ r} bool) ⊸ F_r bool`.

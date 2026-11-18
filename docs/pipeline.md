@@ -41,7 +41,7 @@ one.
 | `scripts/check-sugar.sh` | for every `corpus/sugar/` pair, the sugared program and its hand-written core form check and erase to the same term |
 | `scripts/book-doctest.sh` | every `bc` block in `book/src/` checks and prints its `-- answer:` with `live 0` compiled (by Backend2; `--backend old` for the old backend), and interpreted when the source stage runs, or is rejected with its `-- expect:` message |
 | `scripts/check-hygiene.sh` | no `sorry`, `axiom`, `native_decide`, `partial` and the like; every declaration's axioms within the standard three |
-| `scripts/AxiomCheck.lean` | prints the axioms of the theorems `SPEC.md` names (`lake env lean scripts/AxiomCheck.lean`) |
+| `scripts/gate-census.sh` | the checks that read the Lean environment, in one compiled program (`scripts/GateCensus.lean`): every declaration's axioms, the axioms of the theorems `SPEC.md` names (`scripts/gate-census.sh axiom-report`), the type comparisons, the insertion pins |
 
 `scripts/ci-local.sh` (`make gate`) is the sanity gate, run before opening a pull request: after
 `lake build`, at once, the hygiene and axiom checks, the judgment freeze, the Backend2 fence,

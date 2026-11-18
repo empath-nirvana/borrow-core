@@ -261,12 +261,12 @@ theorem unroll {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (h : TTied p s Δ Γ
   ⟨fun hn Ξ hΞ => .unroll (h.1 hn Ξ hΞ), .unroll h.2⟩
 
 theorem nuIn {p : Pins} {s : CRow} {t : TExpr} {C : CCTy} (hC : C.NuOk)
-    (h : TTied p s Δ Γ t (.comp C.unroll)) : TTied p s Δ Γ (.nuIn i (.comp (.nu C)) C t) (.comp (.nu C)) :=
-  ⟨fun hn Ξ hΞ => .nuIn hC (h.1 hn Ξ hΞ), .nuIn hC h.2⟩
+    (h : TTied p s Δ Γ t (.comp C.unroll)) : TTied p s Δ Γ (.nuIn i (.comp (.nu C)) 0 0 C t) (.comp (.nu C)) :=
+  ⟨fun hn Ξ hΞ => .nuIn (m := 0) (i := 0) hC (h.1 hn Ξ hΞ), .nuIn (m := 0) (i := 0) hC h.2⟩
 
 theorem nuOut {p : Pins} {s : CRow} {t : TExpr} {C : CCTy} (hC : C.NuOk)
-    (h : TTied p s Δ Γ t (.comp (.nu C))) : TTied p s Δ Γ (.nuOut i (.comp C.unroll) C t) (.comp C.unroll) :=
-  ⟨fun hn Ξ hΞ => .nuOut hC (h.1 hn Ξ hΞ), .nuOut hC h.2⟩
+    (h : TTied p s Δ Γ t (.comp (.nu C))) : TTied p s Δ Γ (.nuOut i (.comp C.unroll) 0 0 C t) (.comp C.unroll) :=
+  ⟨fun hn Ξ hΞ => .nuOut (m := 0) (i := 0) hC (h.1 hn Ξ hΞ), .nuOut (m := 0) (i := 0) hC h.2⟩
 
 /-- `[α]`: the judgment up to the names of its types' lifetime binders.  `[spec §3]` -/
 theorem alpha {p : Pins} {s : CRow} {t : TExpr} {j j' : Jdg} (hα : j.alphaB j' = true)
@@ -650,6 +650,30 @@ theorem weakenΔ {p : Pins} {s : CRow} {Δ' : LifeCtx} {t : TExpr} {j : Jdg}
     (h : TTied p s Δ Γ t j) (he : ExtΔ Δ Δ' t.lifeBinders) (hd : t.domFree = true) :
     TTied p s Δ' Γ (t.reAb Δ') j :=
   ⟨fun hn Ξ hΞ => (h.1 hn Ξ hΞ).weakenΔ Δ' he hd, h.2.weakenΔ Δ' he hd⟩
+
+/-! ### The unwinding borrows with a written finaliser  `[spec §78]`
+
+At `Σ_D = ∅`, `Σ_M = Σ` (§19's forms, Entry 77's instance): the node from the derivation of the
+finaliser `td` at the rule's dead context; the node's pins and rows are `td`'s. -/
+
+section
+open BoCa.Fig16.LogRel.Core (VFree VScoped VOutlivesLe Row RowLe CTy withbor1UTyD withbor2UTyD
+  withbor3UTyD)
+
+/-- **The unwinding lend of kind `k`** at `Σ_D = ∅`, `Σ_M = Σ`.  `[spec §78]` -/
+theorem withborUFin {p : Pins} {s : CRow} {td : TExpr} {A B : CVTy} {S : CRow}
+    (k : BoCa.Fig16.LogRel.Core.LendUKind) (x : LifeVar)
+    (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) (hx : Δ.find? x = none) (hk : k.OK Δ A)
+    (h₁ : ¬ VFree x A) (h₂ : ¬ VFree x B) (hS : Row.Unwind S x)
+    (h : TTied p s Δ Γ td (.val (.thunk (.arr (k.src A) (CTy.effOf [] .unit))))) :
+    TTied p s Δ Γ (.withborUD i (.val (k.ty x Δ.meetOfDom A B S S)) A B S [] S k x td)
+      (.val (k.ty x Δ.meetOfDom A B S S)) :=
+  ⟨fun hn Ξ hΞ => .withborUD k x hΓ hx hk h₁ h₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+      (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) (h.1 hn Ξ hΞ),
+    .withborUD k x hΓ hx hk h₁ h₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+      (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) h.2⟩
+
+end
 
 end TTied
 

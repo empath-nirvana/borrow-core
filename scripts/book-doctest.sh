@@ -39,11 +39,12 @@ bcc=${BCC:-.lake/build/bin/bcc}
 [ -x "$bcc" ] || { echo "no bcc at $bcc: run \`lake build bcc\`, or set BCC"; exit 1; }
 want=()
 backend=new
+writekeys=0
 usage() { echo "usage: scripts/book-doctest.sh [--source] [--write-keys] [--backend old|new] [book/src/<file>.md[:<line>]…]"; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --source) export BCC_SOURCE=1 ;;
-    --write-keys) export BCC_WRITE_KEYS=1 ;;
+    --write-keys) export BCC_WRITE_KEYS=1; writekeys=1 ;;
     --backend) case "${2:-}" in old|new) backend=$2; shift ;; *) usage ;; esac ;;
     -*) usage ;;
     *) want+=("$1") ;;
@@ -97,7 +98,7 @@ block() {
   case "$attrs" in
     ignore) return 0 ;;
     run)
-      want=$(sed -n 's/^-- answer: //p' "$f" | head -1)
+      want=$(sed -n '/^-- answer: /{s///p;q;}' "$f")
       if [ -z "$want" ] && grep -q '^-- output:' "$f"; then want='()'; fi
       if [ -z "$want" ]; then fail "$at" "a \`bc\` block needs an \`-- answer:\` or \`-- output:\` line (or mark it \`bc,check\`)"; return 1; fi
       if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; return 1; fi
@@ -118,18 +119,19 @@ block() {
         0) src=0
            if [ "$verified" = 0 ]; then
              echo "$at: unverified, not run at the source stage (scripts/book-doctest.sh $at runs it)"
-             echo "$at" >> "$tmp/unverified"
+             echo "$at" >> "$PAR_SIDE/unverified"
            fi ;;
-        *) if [ "$verified" = 0 ]; then src=1; echo "$at" >> "$tmp/reran"
+        *) if [ "$verified" = 0 ]; then src=1; echo "$at" >> "$PAR_SIDE/reran"
            elif [ "$wasm" = 0 ]; then src=1; else src=0; fi ;;
       esac
       if [ "$src" = 1 ]; then
+        par_nostore
         got=$("$bcc" interp "$f" < "$in" 2>&1) || true
         if [ "$got" != "$expect" ]; then
           fail "$at" "interpreter output differs" "want: $(echo "$expect" | tr '\n' ' ')" "got:  $(echo "$got" | tr '\n' ' ')"; return 1
         fi
       fi
-      if [ -n "$kl" ] && { [ "$src" = 1 ] || [ "$verified" = 1 ]; }; then echo "$kl" > "$tmp/ok/$n"; fi
+      if [ -n "$kl" ] && { [ "$src" = 1 ] || [ "$verified" = 1 ]; }; then mkdir -p "$PAR_SIDE/ok"; echo "$kl" > "$PAR_SIDE/ok/$n"; fi
       if [ "$wasm" = 1 ]; then
         got=$("$bcc" run --backend "$backend" "$f" < "$in" 2>&1) || true
         if [ "$got" != "$expect" ]; then
@@ -141,7 +143,7 @@ block() {
       if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; return 1; fi
       ;;
     reject)
-      want=$(sed -n 's/^-- expect: //p' "$f" | head -1)
+      want=$(sed -n '/^-- expect: /{s///p;q;}' "$f")
       if [ -z "$want" ]; then fail "$at" "a \`bc,reject\` block needs an \`-- expect:\` line"; return 1; fi
       if ! out=$("$bcc" parse "$f" 2>&1); then fail "$at" "does not parse, so it does not test the checker" "${out#"$f:"}"; return 1; fi
       if out=$("$bcc" check "$f" 2>&1); then fail "$at" "accepted, but must be rejected"; return 1; fi
@@ -166,6 +168,13 @@ if [ ${#want[@]} -gt 0 ]; then
 fi
 total=$(wc -l < "$tmp/manifest" | tr -d ' ')
 ignored=$(awk -F'\t' '$2 == "ignore"' "$tmp/manifest" | wc -l | tr -d ' ')
+# Each block is a unit of the result cache (scripts/par.sh), keyed on its text, attributes and
+# place, and the recorded keys lines of its text; its line in the lists of blocks re-run or left
+# unverified, and its verified keys line (`ok/<n>`), are side files gathered in $tmp. A block the
+# source stage runs on is not recorded, nor is any block of a run with `--source` or
+# `--write-keys`.
+export PAR_COLLECT=$tmp PAR_CACHE_DEPS=book
+if [ "$writekeys" = 0 ] && [ "${BCC_SOURCE:-}" != 1 ]; then export PAR_CACHE="book-doctest backend=$backend wasm=$wasm"; fi
 par block $(cut -f1 "$tmp/manifest")
 bad=$par_failed
 ran=$((total - ignored - bad))

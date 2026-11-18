@@ -81,10 +81,14 @@ choice, block layout, a loop counter's representation) needs none of this.
 The proof burden of the previous language grew until it was unmaintainable
 (`docs/l-lang-kernel-and-lit.md` §2). Three rules (`docs/decisions.md` 19–21):
 
-- **No new index on `CDerives`.** Put a new coordinate in a type former or in the model.
+- **One kernel judgment and one checker judgment** (`CDerivesX`, `TDerivesX`, at a judgment
+  index `JIdx`; `CDerives`, `CDerivesAt Ξ`, `CDerivesP`, `TDerivesAt Ξ` and `TDerivesP` are
+  abbreviations at fixed indices). Never a new judgment, never a new index. A new coordinate that
+  only gates rules, the same premise across a rule's premises and its conclusion, is a field of
+  `JIdx`. Any other coordinate goes in a type former or in the model.
 - **Generalize by deleting.** A general former lands in the same change that turns the fixed
   formers it replaces into abbreviations.
-- **Do not invert `CDerives` casually.** Inversion lemmas, substitution over derivations, checker
+- **Do not invert `CDerivesX` casually.** Inversion lemmas, substitution over derivations, checker
   completeness or lowering proofs that invert typing need their cost stated in the issue or PR.
 
 Prefer computation-type formers and derived forms over new value-type formers: a `VTy` former
@@ -95,16 +99,44 @@ compatibility lemma.
 ## The gate: local CI
 
 GitHub Actions does not run for this repository (the workflow is manual-only). The gate for every
-PR is `make gate` (`scripts/ci-local.sh`), a sanity check. Run it before opening or merging a PR
-and paste its final summary into the PR body. Never report a PR as passing without it.
+PR is `make gate` (`scripts/ci-local.sh`), the per-PR gate. Run it before opening or merging a PR
+and paste its three tier lines (the `gate tier:` line, the `ci-local [tier …]:` verdict and the
+`(left to the daily run: …)` line) into the PR body. Never report a PR as passing without it.
 `make gate-full` (`scripts/ci-local.sh --full`) runs every check.
+
+The per-PR gate's steps are chosen by `scripts/gate-tier.sh` from the paths changed since the merge
+base with origin/main, never by judgement: docs (no build; spec files, judgment freeze,
+assumptions); book (the book steps); corpus (every step on the programs the change touches);
+research (the Lean checks); compiler (any other `.lean`, `lib/`: the Lean checks but the research
+archive, which the research tier and the daily run keep (it would catch the research tree no
+longer building, or its registered names' axioms changing), every program
+parsed, checked and run in WebAssembly on both backends with the source stage, the cheap whole
+steps, and renaming and `let mut` combinations when the change is in the elaborator's or the
+interpreter's import closure); scripts (that step on every program, plus the compiler set); full
+(the toolchain, the gate's own machinery, a path no rule knows, or no merge base: the full gate).
+What a tier leaves out runs in the daily full gate on main (`scripts/gate-daily.sh`, uncached),
+whose verdict goes to the coordinator on the board; a failure there is ordinary work.
+
+The gate caches results (`scripts/gate_cache.py`). Each unit of work a step has (one program in
+one step, or a whole step that is not per program) is keyed on a sha256 of everything it reads:
+`bcc`, `bcc-counts` and the `lib/` they read, or every `.lean` file and Lake's configuration; every
+file under `scripts/` and the Makefile; the tools' versions (wasmtime, the C compiler and SDK,
+Python, the OS); the `BC_*`, `BCC_*`, `CI_LOCAL_*` and locale variables; the step's mode; and the
+unit's own files (the program with its sidecars, goldens, reports and table rows). A unit whose key
+has a recorded pass in `${GATE_CACHE_DIR:-~/repos/.gate-cache}` (shared by every worktree) is
+replayed, output and side files as the run gave them, instead of run. A failure is never recorded,
+nor a unit that runs the source interpreter or writes a key, nor any unit of a writing mode or of
+`--source`. Compile scaling (it measures time) and the grep-level steps always run.
+`--no-cache` (with any mode; or `GATE_CACHE=0`; `make gate-full-nocache`) runs every unit and
+reads and writes no cache; `--record-cache` (`GATE_CACHE=record`; `make gate-full-record`, the
+daily run on main) runs every unit and records its passes. The summary line counts the units
+replayed and run. `scripts/gate_cache.py prune [--days N] [--max-mb M]` trims the store (never
+during a gate).
+`scripts/check-gate-cache.sh`, a gate step, shows that a change to each kind of input misses.
 
 Goldens are the oracle. Every corpus program has a `<name>.out` and every book `bc` block an
 `-- answer:`: the output of `Support`'s interpreter (`bcc interp`), the reference semantics.
-`make gate` checks the build, hygiene, axioms, the judgment freeze, the Backend2 fence, that every
-type comparison goes through the `[α]` helper, that the corpus parses, checks and elaborates the same
-under a renaming of its binders, and every corpus program in WebAssembly on each backend against its
-golden with `live 0`. Both gates run the interpreter itself (minutes on the largest programs)
+Every gate runs the interpreter itself (minutes on the largest programs)
 only on unverified goldens: those whose recorded key (corpus `<name>.key`, `book/keys/`) is
 missing or not the current one. The key (`bcc interp --key`, `scripts/source-stage.sh`) covers
 the elaborated term the interpreter runs, its input, and the interpreter's source
@@ -112,16 +144,14 @@ the elaborated term the interpreter runs, its input, and the interpreter's sourc
 whose term it changes, and an interpreter change reruns every program; the gate lists those it
 reran. When the interpreter reproduces a golden, the gate records its key and lists the key
 files it wrote: commit them with the change (`BCC_WRITE_KEYS=0` writes none; `make keys` records
-them explicitly). `make gate-full` adds every other check (the clos, flat, LIR and word-IR
+them explicitly). `make gate-full` runs every check (the clos, flat, LIR and word-IR
 stages, counts, native, the kernel programs, the static tables, the sugar pairs, `let mut`
-combinations, the book). `make gate-full` is required when `Paper/`, `Support/` (the interpreter
-and the machine), `Backend/`, `Target/`, `Pipeline/` or `Reference/` changed, and `make gate` says
-so then. `make verify-goldens` reruns the interpreter on every program and book block. `make
+combinations, the book) on every program. `make verify-goldens` reruns the interpreter on every program and book block. `make
 goldens` (`scripts/compile-corpus.sh --write-goldens [file…]`) writes corpus goldens and their
 keys, only ever from the interpreter.
 
-While iterating, `make gate-fast` (`scripts/ci-local.sh --changed`) runs only the sanity gate's
-steps the changes since origin/main reach: a change to no `.lean` file skips the build of the library, the
+While iterating, `make gate-fast` (`scripts/ci-local.sh --changed`) runs only the steps of
+`ci-local.sh`'s `gateSteps` set that the changes since origin/main reach: a change to no `.lean` file skips the build of the library, the
 hygiene and the axioms. It never runs the interpreter. It is for the edit loop only; `make gate`
 is the merge requirement.
 
@@ -137,8 +167,12 @@ is the merge requirement.
   reach you cannot scope to a few files. Never run it out of habit after each edit.
 - Run long commands in the background and keep working meanwhile.
 
-Start a worktree with `scripts/new-worktree.sh <branch>`: it branches from origin/main and clones
-the main checkout's `.lake` copy-on-write, so the first build is incremental, not cold. The
+Start a worktree with `scripts/new-worktree.sh <branch>`: it branches from origin/main, clones
+`.lake/build` copy-on-write from the worktree whose Lean files are closest to origin/main, and links
+`.lake/packages` to a shared read-only store for the manifest and toolchain
+(`scripts/lake-packages.sh`), so the first build is a no-op or incremental, not cold. Before changing
+`lake-manifest.json` or `lean-toolchain` in such a worktree, run `scripts/lake-packages.sh unshare`
+(`make` and the gates do it when they see the change). The
 library modules `lib/*.bc` are read when `bcc` starts, so editing them rebuilds no Lean.
 
 ## Hygiene
@@ -147,5 +181,5 @@ library modules `lib/*.bc` are read when `bcc` starts, so editing them rebuilds 
   `Paper/`, `Support/`, `Examples/` or `Core/`.
 - Every result's `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
 - `lake build` clean; `scripts/check-hygiene.sh` and the axiom check passing
-  (`lake env lean scripts/AxiomCheck.lean`).
+  (`scripts/gate-census.sh axiom-report`).
 - Comments say what the code is, not how it got here.

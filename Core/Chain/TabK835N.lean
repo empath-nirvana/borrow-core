@@ -120,82 +120,133 @@ def entNK (q : Qual) (B : VTy) (PA : Nat → Val → WRes → Prop) (PB : KW →
   wc := extF
   wk := wk
 
-/-- **The cancel run at the typed world** (`cancelOblN`): at the view and the floor of `g y`, its
-stops at `T`'s entries. -/
-def cancelOblK (g : KW → KW) (T : KW → OpTabK KW) : KW → Nat → List SRec → Expr → WProp :=
-  fun y k ls e => erwpK (ℍ := ℍ) KW.PostK (fun z => (g z).Θ.view (g z).c)
-    (fun z => cancelTabK (g z).lo (T z)) (fun _ _ _ _ _ => False) y k ls e
-
-/-- **The cancel run ending at a claim** (`cancelOblRN`). -/
-def cancelOblRK (g : KW → KW) (T : KW → OpTabK KW) (R : Nat → WProp) :
+/-- **The cancel run at a world-indexed cancel table, at the typed world**: at the view and the
+floor of `g y`, its stops at `T`'s entries, read by `ct z (g z).lo (T z)` at the world `z` the run is
+at. `cancelOblK`, `cancelOblClaimK` and `cancelOblGK` are its instances. -/
+def cancelOblCK (ct : KW → Life → OpTabK KW → TableK KW) (g : KW → KW) (T : KW → OpTabK KW) :
     KW → Nat → List SRec → Expr → WProp :=
   fun y k ls e => erwpK (ℍ := ℍ) KW.PostK (fun z => (g z).Θ.view (g z).c)
-    (fun z => cancelTabRK (g z).lo (T z) R) (fun _ _ _ _ _ => False) y k ls e
+    (fun z => ct z (g z).lo (T z)) (fun _ _ _ _ _ => False) y k ls e
 
 mutual
+/-- **The table of a row's layers at the typed world, at a world-indexed cancel table `ct`**, its
+values at `vr`, at the stop's world `x`: every entry owes its continuation at `g y` along
+`KW.Owed` from `g x`, and every capturable one's cancel run is `cancelOblCK ct`. `tabNK`,
+`tabClaimK` and `tabGK` are its instances. -/
+def tabCK (ct : KW → Life → OpTabK KW → TableK KW) (vr : VRel) (g : KW → KW) :
+    CTy → LSub → KW → OpTabK KW
+  | .eff m i q A B fin _ C, δ, x => extTabK m i
+      (entNK q B (fun k v ρ => vr A δ x.Θ k v ρ)
+        (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+        (finCK ct vr g fin δ) (fun f y ρ => (g x).Owed f (g y) ρ))
+      (tabCK ct vr g C δ x)
+  | _, _, _ => OpTabK.empty
+/-- **The cancel obligation of a cancel row at a world-indexed cancel table**: `none` at `⊤`;
+otherwise the cancel run at the row's `tabCK`. -/
+def finCK (ct : KW → Life → OpTabK KW → TableK KW) (vr : VRel) (g : KW → KW) : CTy → LSub →
+    Option (KW → Nat → List SRec → Expr → WProp)
+  | .top, _ => none
+  | .eff m i q A B fin _ C, δ => some (cancelOblCK (ℍ := ℍ) ct g (fun x => extTabK m i
+      (entNK q B (fun k v ρ => vr A δ x.Θ k v ρ)
+        (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+        (finCK ct vr g fin δ) (fun f y ρ => (g x).Owed f (g y) ρ))
+      (tabCK ct vr g C δ x)))
+  | .ret _, _ => some (cancelOblCK (ℍ := ℍ) ct g (fun _ => OpTabK.empty))
+  | .arr _ _, _ => some (cancelOblCK (ℍ := ℍ) ct g (fun _ => OpTabK.empty))
+  | .amp _ _, _ => some (cancelOblCK (ℍ := ℍ) ct g (fun _ => OpTabK.empty))
+  | .all _ _ _, _ => some (cancelOblCK (ℍ := ℍ) ct g (fun _ => OpTabK.empty))
+  | .nuSys _ _ _, _ => some (cancelOblCK (ℍ := ℍ) ct g (fun _ => OpTabK.empty))
+end
+
+/-- **The cancel run at the typed world** (`cancelOblN`): at the view and the floor of `g y`, its
+stops at `T`'s entries (`cancelOblCK` at `cancelTabK`). -/
+def cancelOblK (g : KW → KW) (T : KW → OpTabK KW) : KW → Nat → List SRec → Expr → WProp :=
+  cancelOblCK (ℍ := ℍ) (fun _ lo T => cancelTabK lo T) g T
+
+/-- **The cancel run ending at a claim read at a world** (`cancelOblRN`): at the view and the
+floor of `g z`, its stops at `T`'s entries, ending at the claim `R z` of the world `z` the cancel's
+`raise` is at (`cancelOblCK` at `cancelTabRK`). -/
+def cancelOblClaimK (g : KW → KW) (T : KW → OpTabK KW) (R : KW → Nat → WProp) :
+    KW → Nat → List SRec → Expr → WProp :=
+  cancelOblCK (ℍ := ℍ) (fun z lo T => cancelTabRK lo T (R z)) g T
+
+/-- **The cancel run ending at a claim** (`cancelOblClaimK` at a claim read alike at every world). -/
+def cancelOblRK (g : KW → KW) (T : KW → OpTabK KW) (R : Nat → WProp) :
+    KW → Nat → List SRec → Expr → WProp :=
+  cancelOblClaimK (ℍ := ℍ) g T (fun _ => R)
+
 /-- **The table of a row's layers at the typed world**, its values at `vr`, at the stop's world
 `x`: every entry owes its continuation at `g y` along `KW.Owed` from `g x`. It is
-`tabF (rdNv vr g δ) ()` (`tabF_N`). -/
-def tabNK (vr : VRel) (g : KW → KW) : CTy → LSub → KW → OpTabK KW
-  | .eff m i q A B fin _ C, δ, x => extTabK m i
-      (entNK q B (fun k v ρ => vr A δ x.Θ k v ρ)
-        (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
-        (finNK vr g fin δ) (fun f y ρ => (g x).Owed f (g y) ρ))
-      (tabNK vr g C δ x)
-  | _, _, _ => OpTabK.empty
+`tabF (rdNv vr g δ) ()` (`tabF_N`); `tabCK` at `cancelTabK`. -/
+def tabNK (vr : VRel) (g : KW → KW) : CTy → LSub → KW → OpTabK KW :=
+  tabCK (ℍ := ℍ) (fun _ lo T => cancelTabK lo T) vr g
 /-- **The cancel obligation of a cancel row at the typed world**: `none` at `⊤`; otherwise the
-cancel run at the row's `tabNK`. -/
+cancel run at the row's `tabNK` (`finCK` at `cancelTabK`). -/
 def finNK (vr : VRel) (g : KW → KW) : CTy → LSub →
-    Option (KW → Nat → List SRec → Expr → WProp)
-  | .top, _ => none
-  | .eff m i q A B fin _ C, δ => some (cancelOblK (ℍ := ℍ) g (fun x => extTabK m i
-      (entNK q B (fun k v ρ => vr A δ x.Θ k v ρ)
-        (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
-        (finNK vr g fin δ) (fun f y ρ => (g x).Owed f (g y) ρ))
-      (tabNK vr g C δ x)))
-  | .ret _, _ => some (cancelOblK (ℍ := ℍ) g (fun _ => OpTabK.empty))
-  | .arr _ _, _ => some (cancelOblK (ℍ := ℍ) g (fun _ => OpTabK.empty))
-  | .amp _ _, _ => some (cancelOblK (ℍ := ℍ) g (fun _ => OpTabK.empty))
-  | .all _ _ _, _ => some (cancelOblK (ℍ := ℍ) g (fun _ => OpTabK.empty))
-  | .nu _, _ => some (cancelOblK (ℍ := ℍ) g (fun _ => OpTabK.empty))
-end
+    Option (KW → Nat → List SRec → Expr → WProp) :=
+  finCK (ℍ := ℍ) (fun _ lo T => cancelTabK lo T) vr g
 
-mutual
-/-- **The lender's table at the typed world**: `tabNK`'s entries, every capturable one's
-cancel run ending at `R`. -/
-def tabRK (R : Nat → WProp) (vr : VRel) (g : KW → KW) : CTy → LSub → KW → OpTabK KW
-  | .eff m i q A B fin _ C, δ, x => extTabK m i
-      (entNK q B (fun k v ρ => vr A δ x.Θ k v ρ)
-        (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
-        (finRK R vr g fin δ) (fun f y ρ => (g x).Owed f (g y) ρ))
-      (tabRK R vr g C δ x)
-  | _, _, _ => OpTabK.empty
+/-- **The lender's table at the typed world**: `tabNK`'s entries, every capturable one's cancel run
+ending at the claim `R` read at the world its `raise` is at (`tabCK` at `cancelTabRK`). -/
+def tabClaimK (R : KW → Nat → WProp) (vr : VRel) (g : KW → KW) : CTy → LSub → KW → OpTabK KW :=
+  tabCK (ℍ := ℍ) (fun z lo T => cancelTabRK lo T (R z)) vr g
 /-- The lender's cancel obligation at the typed world (`finR`). -/
+def finClaimK (R : KW → Nat → WProp) (vr : VRel) (g : KW → KW) : CTy → LSub →
+    Option (KW → Nat → List SRec → Expr → WProp) :=
+  finCK (ℍ := ℍ) (fun z lo T => cancelTabRK lo T (R z)) vr g
+
+/-- **The lender's table at a claim read alike at every world** (`tabClaimK`). -/
+def tabRK (R : Nat → WProp) (vr : VRel) (g : KW → KW) : CTy → LSub → KW → OpTabK KW :=
+  tabClaimK (ℍ := ℍ) (fun _ => R) vr g
+/-- Its cancel obligation (`finClaimK`). -/
 def finRK (R : Nat → WProp) (vr : VRel) (g : KW → KW) : CTy → LSub →
-    Option (KW → Nat → List SRec → Expr → WProp)
-  | .top, _ => none
-  | .eff m i q A B fin _ C, δ => some (cancelOblRK (ℍ := ℍ) g (fun x => extTabK m i
-      (entNK q B (fun k v ρ => vr A δ x.Θ k v ρ)
-        (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
-        (finRK R vr g fin δ) (fun f y ρ => (g x).Owed f (g y) ρ))
-      (tabRK R vr g C δ x)) R)
-  | .ret _, _ => some (cancelOblRK (ℍ := ℍ) g (fun _ => OpTabK.empty) R)
-  | .arr _ _, _ => some (cancelOblRK (ℍ := ℍ) g (fun _ => OpTabK.empty) R)
-  | .amp _ _, _ => some (cancelOblRK (ℍ := ℍ) g (fun _ => OpTabK.empty) R)
-  | .all _ _ _, _ => some (cancelOblRK (ℍ := ℍ) g (fun _ => OpTabK.empty) R)
-  | .nu _, _ => some (cancelOblRK (ℍ := ℍ) g (fun _ => OpTabK.empty) R)
-end
+    Option (KW → Nat → List SRec → Expr → WProp) :=
+  finClaimK (ℍ := ℍ) (fun _ => R) vr g
 
 theorem finNK_eq (vr : VRel) (g : KW → KW) {F : CTy} (hF : F ≠ .top) (δ : LSub) :
     finNK (ℍ := ℍ) vr g F δ =
       some (cancelOblK (ℍ := ℍ) g (fun x => tabNK (ℍ := ℍ) vr g F δ x)) := by
-  cases F <;> simp_all [finNK, tabNK]
+  cases F <;> simp_all [finNK, tabNK, tabCK, finCK, cancelOblCK, cancelOblK]
 
 theorem finRK_eq (R : Nat → WProp) (vr : VRel) (g : KW → KW) {F : CTy} (hF : F ≠ .top)
     (δ : LSub) :
     finRK (ℍ := ℍ) R vr g F δ =
       some (cancelOblRK (ℍ := ℍ) g (fun x => tabRK (ℍ := ℍ) R vr g F δ x) R) := by
-  cases F <;> simp_all [finRK, tabRK]
+  cases F <;> simp_all [finRK, tabRK, finClaimK, tabClaimK, cancelOblRK, tabCK, finCK, cancelOblCK, cancelOblClaimK]
+
+/-- **An entry of `tabCK` is a layer's, and every `tabCK` at any cancel table has the layer's entry
+at the same key.** The lookup lemmas of `tabNK`, `tabRK`, `tabRWK` and `tabGK` are its instances. -/
+theorem tab_lookupCK : ∀ (F : CTy) {ct : KW → Life → OpTabK KW → TableK KW} {vr : VRel}
+    {g : KW → KW} {δ : LSub} {x : KW} {m j : UInt32} {en : OpEntK KW},
+    tabCK (ℍ := ℍ) ct vr g F δ x m j = some en → ∃ q A B fin, F.LayerOf q A B fin ∧
+      en = entNK q B (fun k v ρ => vr A δ x.Θ k v ρ)
+        (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+        (finCK (ℍ := ℍ) ct vr g fin δ) (fun f y ρ => (g x).Owed f (g y) ρ) ∧
+      ∀ (ct₂ : KW → Life → OpTabK KW → TableK KW) (g₂ : KW → KW) (δ₂ : LSub) (x₂ : KW),
+        tabCK (ℍ := ℍ) ct₂ vr g₂ F δ₂ x₂ m j =
+          some (entNK q B (fun k v ρ => vr A δ₂ x₂.Θ k v ρ)
+            (fun y k v ρ => vr B δ₂ y.Θ k v ρ ∧ ConsistentX y.c ρ)
+            (finCK (ℍ := ℍ) ct₂ vr g₂ fin δ₂)
+            (fun f y ρ => (g₂ x₂).Owed f (g₂ y) ρ))
+  | .eff m₀ i₀ q A B fin rc C, ct, vr, g, δ, x, m, j, en, h => by
+      simp only [tabCK] at h
+      unfold extTabK at h
+      split at h
+      · rename_i hmj
+        cases Option.some.inj h
+        obtain ⟨rfl, rfl⟩ := hmj
+        exact ⟨q, A, B, fin, .inl ⟨rfl, rfl, rfl, rfl⟩, rfl, fun ct₂ g₂ δ₂ x₂ => by
+          simp only [tabCK, extTabK, and_self, if_true]⟩
+      · rename_i hmj
+        obtain ⟨q', A', B', fin', hL, he, hR⟩ := tab_lookupCK C h
+        exact ⟨q', A', B', fin', .inr hL, he, fun ct₂ g₂ δ₂ x₂ => by
+          simp only [tabCK, extTabK, if_neg hmj]; exact hR ct₂ g₂ δ₂ x₂⟩
+  | .ret _, _, _, _, _, _, _, _, _, h => by simp [tabCK, OpTabK.empty] at h
+  | .arr _ _, _, _, _, _, _, _, _, _, h => by simp [tabCK, OpTabK.empty] at h
+  | .amp _ _, _, _, _, _, _, _, _, _, h => by simp [tabCK, OpTabK.empty] at h
+  | .top, _, _, _, _, _, _, _, _, h => by simp [tabCK, OpTabK.empty] at h
+  | .all _ _ _, _, _, _, _, _, _, _, _, h => by simp [tabCK, OpTabK.empty] at h
+  | .nuSys _ _ _, _, _, _, _, _, _, _, _, h => by simp [tabCK, OpTabK.empty] at h
 
 /-- **An entry of `tabNK` is a layer's, and every `tabRK` has the layer's entry at the same
 key.** -/
@@ -211,25 +262,9 @@ theorem tab_lookupNK : ∀ (F : CTy) {vr : VRel} {g : KW → KW} {δ : LSub} {x 
             (fun y k v ρ => vr B δ₂ y.Θ k v ρ ∧ ConsistentX y.c ρ)
             (finRK (ℍ := ℍ) R vr g₂ fin δ₂)
             (fun f y ρ => (g₂ x₂).Owed f (g₂ y) ρ))
-  | .eff m₀ i₀ q A B fin rc C, vr, g, δ, x, m, j, en, h => by
-      simp only [tabNK] at h
-      unfold extTabK at h
-      split at h
-      · rename_i hmj
-        cases Option.some.inj h
-        obtain ⟨rfl, rfl⟩ := hmj
-        exact ⟨q, A, B, fin, .inl ⟨rfl, rfl, rfl, rfl⟩, rfl, fun R g₂ δ₂ x₂ => by
-          simp only [tabRK, extTabK, and_self, if_true]⟩
-      · rename_i hmj
-        obtain ⟨q', A', B', fin', hL, he, hR⟩ := tab_lookupNK C h
-        exact ⟨q', A', B', fin', .inr hL, he, fun R g₂ δ₂ x₂ => by
-          simp only [tabRK, extTabK, if_neg hmj]; exact hR R g₂ δ₂ x₂⟩
-  | .ret _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .arr _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .amp _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .top, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
-  | .nu _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty] at h
+  | F, vr, g, δ, x, m, j, en, h => by
+      obtain ⟨q, A, B, fin, hL, he, hR⟩ := tab_lookupCK (ℍ := ℍ) (ct := (fun _ lo T => cancelTabK lo T)) F h
+      exact ⟨q, A, B, fin, hL, he, fun R g₂ δ₂ x₂ => hR (fun _ lo T => cancelTabRK lo T R) g₂ δ₂ x₂⟩
 
 /-- **Every entry of the lender's tables owes along `KW.Owed`** (`g = id`). -/
 theorem tabNK_wk {vr : VRel} {F : CTy} {δ : LSub} {x : KW} {m j : UInt32} {en : OpEntK KW}
@@ -323,7 +358,7 @@ theorem tabRK_canK {vr : VRel} (hv : ValRelOK vr) {Δ : LifeCtx} {xv : LifeVar} 
   intro P' hP'
   simp only [entNK, hcap, if_true] at hP' hc
   by_cases htop : fin = .top
-  · subst htop; simp [finRK] at hP'
+  · subst htop; simp [finRK, finClaimK, tabCK, finCK, cancelOblCK, tabClaimK, cancelOblClaimK] at hP'
   rw [finRK_eq _ _ _ htop] at hP'
   cases Option.some.inj hP'
   have hin := hc _ (finNK_eq _ _ htop _)

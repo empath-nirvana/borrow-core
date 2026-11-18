@@ -167,9 +167,9 @@ data is materialized, and gives codata (`&`, and the formers of §7) a home.
 
 ### Typing
 
-`CDerives Δ Γ e j`, with `j` either `val A` or `comp C`, over BoLo expressions in A-normal form:
-the CBPV formers (`thunk`, `force`, `return`, `to`, `λ`, application, `⟨·,·⟩`, projections),
-the lifetime `∀` (elimination at every `C`), the `!` rules of §2 (promotion over a flat
+`CDerives Δ Γ e j` (`CDerivesX {}`, §83), with `j` either `val A` or `comp C`, over BoLo
+expressions in A-normal form: the CBPV formers (`thunk`, `force`, `return`, `to`, `λ`,
+application, `⟨·,·⟩`, projections), the lifetime `∀` (elimination at every `C`), the `!` rules of §2 (promotion over a flat
 context, §10), `[]I` at every value type,
 `⊑Imm`/`⊑Mut`, one constant per borrow axiom of `[TR]` p. 3 at arbitrary value-type payloads,
 three call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), and conversion up to the names of
@@ -212,8 +212,9 @@ premise that types a term built from other arguments (`thunkV`'s `λN`) carries 
 between the child's erasure and that term. They project to `CDerivesAt`/`CDerivesP` at
 `t.erase` (`TDerivesAt.erase`, `TDerivesP.erase`), so a derivation fixes every field of every
 node, and every theorem below, and §19's and §29's, holds of `t.erase` as stated. The node types,
-the derivations, the projections and the erasure are generated from `CDerivesAt` and `CDerivesP`
-by `scripts/gen-pin.py`, so a rule added to `CDerives` is picked up by rerunning it.
+the derivations, the projections and the erasure are generated from the one judgment `CDerivesX`
+(§83) by `scripts/gen-pin.py`, as `TDerivesX` at the same index (`TDerivesAt Ξ` and `TDerivesP` its
+instances), so a rule added to `CDerivesX` is picked up by rerunning it.
 
 **A split's masks are fixed by its derivation.** A typed rule at a split has one premise its
 `CDerives` rule does not: the node's masks are the ones its parts' contexts have
@@ -312,7 +313,7 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
     ────────────────────────  [α]
          Δ; Γ ⊢ e : j'
 
-- **The relation.** `j ≡α j'` is `Jdg.alphaB j j' = true` (`Core/Fundamental.lean`): `VTy.alphaB`/
+- **The relation.** `j ≡α j'` is `Jdg.alphaB j j' = true` (`Core/Judgment.lean`): `VTy.alphaB`/
   `CTy.alphaB` at no binder pairs (`Core/Types.lean`). The binders are `CTy.all` alone (`VTy.all`
   is `U (∀'x ⊏ @b. F A)`); passing `∀'x ⊏ @b. C` and `∀'x' ⊏ @b'. C'` pairs `'x` with `'x'`, and
   a variable is read through the innermost pair that binds it on either side, or is free on both.
@@ -320,7 +321,7 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
   type (`OpSig.AlphaEq`, `RowAlpha`). It is an equivalence (`VTy.alphaB_refl`, `_symm`, `_trans'`,
   `Core/Alpha.lean`).
 - **Rows and the effect context.** A row is tied to the effect context `Ξ` up to α (`RowAt`,
-  `OpAt`, `Core/Tied.lean`): an operation's qualifier is `Ξ`'s and its argument and answer are
+  `Core/Judgment.lean`; `OpAt`, `Core/Tied.lean`): an operation's qualifier is `Ξ`'s and its argument and answer are
   α-equivalent to `Ξ`'s (`OpSig.AtEntry`), so an operation whose type is elaborated in two lifetime
   contexts has one signature. A handler's signature is a prefix of `Ξ`'s up to α
   (`sig_prefix_of_rowAt`); its tags are a prefix of `Ξ`'s qualifiers as before (`hndTags_of_rowAt`).
@@ -551,7 +552,8 @@ over it; a new codata shape is a new abbreviation, and a library of iterator ada
     C ::= … | νX. C          (computation types)
 
 `X` is a computation-type variable bound in `C`; it occurs only as the value type `U X`, "the
-rest of the codata". Every observation of a `νX. C` returns, possibly among other values, a
+rest of the codata". §79 generalises the former to finite systems of equations; `νX. C` is
+`ν₀(X₀). C`. Every observation of a `νX. C` returns, possibly among other values, a
 thunk of the rest.
 
 **Positivity** (`CTy.NuOk`). `C` is a `&` of two observation trees (`CTy.NuShape`), and an
@@ -1057,8 +1059,8 @@ duplication (`Copy`, flat captures only) from explicit (`Clone`); the explicit h
   chain's `bangThunkF_compatN`, `bangThunkV_compatN`) need only that the context relation holds at
   `∅`. `gSepC_persistent` (the chain's `gN_persistent`) gives it from `Flat(Γ)` through
   `flat ⇒ persistent`, slot by slot, by `vCE_empty_of_persistent` (`vN_empty_of_persistent`).
-- **Mirrors.** `CDerivesAt` (`Core/Tied.lean`) and the generated `CDerivesP`, `TDerivesAt` and
-  `TDerivesP` (`scripts/gen-pin.py`) take the same premise. The checker's promotion test
+- **Instances.** The rule is `CDerivesX`'s (§83), so `CDerivesAt` and `CDerivesP` have it, and the
+  generated `TDerivesAt` and `TDerivesP` (`scripts/gen-pin.py`) take the same premise. The checker's promotion test
   (`Frontend/Check/Rules.lean`) asks `VTy.flat` of each live slot. The inversion of a λ read at a
   `!` thunk (`LamCls`, `lam_bang`) gives a flat context, and AT06's rejection reads that the
   captured cell's type, a view of `Ref`, is not flat.
@@ -1517,7 +1519,7 @@ value types fall in three groups.
    | `μX. T`, `T` in `FShape` (§6) | `foldOwn`, whose algebra is the consume of `T[1/X]` |
    | `μX. T`, `T` in `P` (§6, §61), not in `FShape` | `foldOwnG`, whose algebra at each key is the consume of the key's body (an array key's element type) at results `1` |
    | `U(C & F 1)` | `close`: force, then the second projection |
-   | `U(νX. C & F R)`, `R` closed and consumable (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the consume of `R` |
+   | `U(νX. C & F R)`, `R` closed and consumable (`D A`, `Stream A`, `Iter A R₀ R`, `Clo^c A B`) | `close` (§7), then the consume of `R`; at a system, per projection (§79, K-M.4b) |
    These are linear. A value of one of these types that goes unused is consumed by its
    consume, which the checker inserts. Because the consume deallocates memory and, at codata,
    runs the object's `close` code, where it is inserted can be observed.
@@ -2117,7 +2119,7 @@ writes, until B2 (#563's successor) elaborates loops to it.
 it has no cancel, so closing a loop is a resume with *close*. `tick` is not abortive, so it is in
 no unwind-only row, and no borrow callback's row holds it (`Row.Unwind.divB`).
 
-**The constants** (`Core/Fundamental.lean`, each a rule of `CDerives`):
+**The constants** (`Core/Judgment.lean`, each a rule of `CDerives`):
 
     iterate   : !U(!U(S ⊸ F_Σ(B ⊕ S) & F_Σ R) ⊗ S ⊸ F_Σ(B ⊕ R))        Σ holds Div
     div_fuel  : !U(U(1 ⊸ F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)                  Div ∉ Σ
@@ -2353,7 +2355,7 @@ allocates nothing and dispatches no call (`corpus/gen-pipeline-adapters.bc`: 0, 
   `pull A B R` is `pull_[] A B R`.
 - An observation performs `Σ`: a `raise` inside `g` propagates out of the `next` that ran it, to
   the handler around the consumer. `close` is the cancel of `g`'s continuation, and the kernel
-  types that at `F_{fin ⊕ Σ} 1` (`cancelTy`, §27), so it is at `Σ` too. The pull view's clauses
+  types that at `F_{fin} 1`, the operation's own cancel row (`cancelTy`, §27, §81). The pull view's clauses
   answer at `F_Σ`.
 - `pullView` (`Frontend/Sugar.lean`) carries `F_Σ` through the view. `pullSite`
   (`Frontend/Elab/Effects.lean`) stores it. The kernel's ν rules admit effectful leaves
@@ -3310,7 +3312,7 @@ three things:
 - **The reentry rule is admissible.** It is the linearity of the state token
   (`not_borrowSpansForward`).
 - **A continuation's contraction is its capture's persistence.** A continuation may be copied only if
-  what it captures is persistent (`lam_bang_persistent`).
+  what it captures is persistent (in Core, an unrestricted stop's share is empty: `contShareN`).
 
 This entry adds handlers, control operations, unwinding and one effectful returner type to the
 kernel. Several effects run at once, each handled by its own handler, and a handler passes the
@@ -3348,14 +3350,15 @@ of three continuation types:
 | qualifier | surface | class | its one use | `κ` is |
 |---|---|---|---|---|
 | **must resume** (`lin`) | `must_resume ctl` | linear | resumed exactly once: a must-complete computation | `U((B ⊸ F_Σ R) & ⊤)` |
-| **cancellable** (`cancel`) | `ctl` | linear | resumed once, or cancelled (the cancel a consume when it is pure, `kTy_cancel_consumable_iff`) | `U((B ⊸ F_Σ R) & F_Σ 1)` |
-| **unrestricted** (`unr`) | `multi ctl` | unrestricted | resumed any number of times, or cancelled; its captures are persistent (`lam_bang_persistent`) | `!U((B ⊸ F_Σ R) & F_Σ 1)` |
+| **cancellable** (`cancel`) | `ctl` | linear | resumed once, or cancelled (the cancel a consume when it is pure, `kTy_cancel_consumable_iff`) | `U((B ⊸ F_Σ R) & F_F 1)` |
+| **unrestricted** (`unr`) | `multi ctl` | unrestricted | resumed any number of times, or cancelled; its captures are persistent (an `unr` stop's share is empty, `contShareN`) | `!U((B ⊸ F_Σ R) & F_F 1)` |
 
 **A cancel has computational content: the continuation's consume.**
 
 - To cancel `κ` is to **unwind** it: its frames finalise innermost first, and each lend in it
   ends, as §12 derives a record's consume from its fields', frame by frame.
-- `(B ⊸ F_Σ R) & F_Σ 1` is a linear type with a cancel branch, the `A & 1` encoding. The `1`
+- `(B ⊸ F_Σ R) & F_F 1` is a linear type with a cancel branch, the `A & 1` encoding. `F` is the
+  operation's cancel row (§27), and at the empty cancel row the branch is `F 1` (§81). The `1`
   branch, `cancel`, is the consume. The additive `&` makes the two branches share the one
   captured context.
 - A must-resume `κ` has no `1` branch, so it must be resumed.
@@ -3648,11 +3651,11 @@ Six rules, over `CDerives` with its context premises (§10):
     ──────────────────────────────────────────────────────────────────────── [handle]
     Δ; Γ ⊢ hnd (n, H) e : F_Σ R          (n ∉ Σ)
 
-    K_i = U((B_i ⊸ F_Σ R) & ⊤) (lin),   U((B_i ⊸ F_Σ R) & F_Σ 1) (cancel),   !U((B_i ⊸ F_Σ R) & F_Σ 1) (unr)
+    K_i = U((B_i ⊸ F_Σ R) & ⊤) (lin),   U((B_i ⊸ F_Σ R) & F_{F_i} 1) (cancel),   !U((B_i ⊸ F_Σ R) & F_{F_i} 1) (unr)
     an abortive operation's clause is !U(A_i ⊸ F_Σ R): the machine has cancelled κ
-    (§27: the cancel branch is at F_{F_i ⊕ Σ} 1, F_i the operation's cancel row)
+    (§27, §81: F_i is the operation's cancel row; the cancel branch performs F_i alone)
 
-- **As built** (`Core/Fundamental.lean`, `CDerives.eff*`; `Core/EffRules.lean`):
+- **As built** (`Core/Judgment.lean`, `CDerives.eff*`; `Core/EffRules.lean`):
   - a row is a list of operations `(n, i, q, A_i, B_i)`, and `F_Σ R` is `CTy.effOf Σ R`;
   - `[sub]` is `RowLe` (every operation of `Σ` is `Σ′`'s);
   - `[raise]`'s argument type holds no owned cell (`VTy.OwnFree`): the raise abandons it, which
@@ -3672,9 +3675,10 @@ Six rules, over `CDerives` with its context premises (§10):
 - **One signature per operation** (decision R). An *effect context* `Ξ` gives each name its
   signature, `(Ξ n)[i] = (q, A_i, B_i)`. A row is tied to `Ξ` when every operation it finds is of a
   nonzero name at `Ξ`'s signature (`RowAt`). `CDerivesAt Ξ` is `CDerives` with `RowAt Ξ` at the
-  three rules that read an operation's signature off a row: `[perform]` and `[raise]` (their row)
-  and `[handle]` (the handled row `Σ, n : E`). Every other rule is `CDerives`'s, `[sub]`, `[let]`,
-  `[then]` and the cancel rows among them (`Core/Tied.lean`).
+  rules that read an operation's signature off a row: `[perform]`, `[await-c]` and `[raise]` (their
+  row), the four `[handle]` rules (the handled row `Σ, n : E`), `iterate`, `divFuel` and `reify`.
+  Every other rule is `CDerives`'s, `[sub]`, `[let]`, `[then]` and the cancel rows among them. It is
+  `CDerivesX {ties := some Ξ}` (§83, `Core/Judgment.lean`).
   - A tied derivation is a `CDerives` derivation (`CDerivesAt.toCDerives`), and a derivation of a
     term with no `perform`, `raise` or `hnd` is tied at every effect context
     (`CDerivesAt.ofEffFree`).
@@ -3735,7 +3739,8 @@ Six rules, over `CDerives` with its context premises (§10):
   - the unwinding constant is `U(src ⊸ U(∀'x ⊏ ⊓Δ. L ⊸ F_Σ(['x] B)) ⊸ F_Σ R)`, with the pure
     form's source `src`, lend `L` and result `R`;
   - its term is `withborU d = λr. λf. (f [] r) then b. (r, b) unwind d r`, with a closed finaliser
-    `d : src ⊸ F 1` typed by a premise. The elaborator passes the source's consume `consumeE src`
+    `d : src ⊸ F 1` typed by a premise. For `withbor` 1–3 the finaliser may perform at a row of its
+    own (§78); `d : src ⊸ F 1` is the instance at the empty row. The elaborator passes the source's consume `consumeE src`
     (§12), which is `forget` at `Mut`/`Imm`;
   - `withload`'s source is consumed by its load, so nothing goes back to the lender: its unwinding
     form is `withload`'s own term at the effectful type (`withloadU`), with no finaliser. The
@@ -3761,7 +3766,7 @@ Six rules, over `CDerives` with its context premises (§10):
   is the dead region's, `K†[raise (⊥, none)]`, owed at the empty error table (`cancelOwed`): a
   finaliser lets no raise escape it (§24), so the cancel keeps no error and its `ccatch` answers
   `()`. A handler the stop passes outward is dead in that run, so the run a forwarded stop owes is
-  the inner one unchanged. So `κ`'s type stays `U((B_i ⊸ F_Σ R) & F_Σ 1)`. At an abortive
+  the inner one unchanged. So `κ`'s cancel branch performs only its operation's cancel row: `U((B_i ⊸ F_Σ R) & F_{F_i} 1)` (§81). At an abortive
   operation the continuation is abandoned, so it must hold nothing owned:
 
       Π_Σ n i ls v Φ  ≜  𝒱⟦A_i⟧(ls)δ(v) ⋆ (λρ_k. NoOwn ρ_k)
@@ -5058,7 +5063,7 @@ refused, and a closure capturing `mut 'x T` is still bounded strictly below `'x`
 The side condition of the borrows that lend a payload `mut` is `∃ @b. Δ ⊨ @b ∧ Δ ⊢ A ⊒ @b`
 (was `Δ ⊢ A ⊐ @b`), at every rule that carries one: `withbor2` and `withbor2U`, and the slice
 borrows `sliceBorrowM`, `sliceBorrowI`, `sliceBorrowMU` and `sliceBorrowIU` at both their payload
-and their result (`Core/Fundamental.lean`). The family borrows (`Family.borrowsMut`) and the
+and their result (`Core/Judgment.lean`). The family borrows (`Family.borrowsMut`) and the
 block borrows (`BlockBorrow.formerMut`) are derived from `withbor2` and take it with it.
 
 The condition reaches each proof through 6.60, as `𝒱⟦A⟧δ ⊧ [@bδ] 𝒱⟦A⟧δ` ([TR] 6.173), and the
@@ -5523,10 +5528,10 @@ cancel is invoked.
   `clausesTy S R E fs`), and
 
       K_i = U((B_i ⊸ F_Σ R) & ⊤) (lin),   U((B_i ⊸ F_Σ R) & C_i) (cancel),   !U((B_i ⊸ F_Σ R) & C_i) (unr)
-      C_i = F_{F_i ⊕ Σ} 1,   ⊤ when F_i = ⊤                                          (`cancelTy`)
+      C_i = F_{F_i} 1,   ⊤ when F_i = ⊤                                               (`cancelTy`)
 
-  `F_i ⊕ Σ` is `F_i`'s layers ahead of `Σ`'s (`F.rowOf ++ Σ`), rows being read first match. At
-  `F_i = []` it is `Σ`, so `κ`'s type is unchanged for every existing derivation. `[handle]` gains
+  The cancel performs `F_i` alone: it runs no handler frame (`Kont.dead`, §19 *Cancels*), so `Σ`
+  is not in it (§81). At `F_i = []` it is `F 1`, a cancel that performs nothing. `[handle]` gains
   no premise: D3's check is `[sub]` from `C_i` to the row of the code that invokes the cancel. A
   handler that never cancels is checked for nothing.
 - **Every other rule is unchanged**, `[let]`'s side condition included; `[perform]` and `[raise]`
@@ -5682,7 +5687,7 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
   non-empty `Σ_D`.
 - **Handlers read their operations' cancel rows.** `[handle]` passes `fs j`, the cancel row the
   handled row gives operation `j`, so a clause's `κ` has its cancel branch at
-  `cancelTy Σ (fs j) = F_{F_j ⊕ Σ} 1`. A clause that cancels `κ` then performs, at its own row,
+  `cancelTy (fs j) = F_{F_j} 1`. A clause that cancels `κ` then performs, at its own row,
   what the cancelled region's finalisers perform: D3 is `[sub]` there.
 - **Written, and checked.** A cancel row is written, in handler and ascription types; a row the
   effects pass infers (`Env.rowOf`) carries the empty cancel row. `[then]`'s `hfin` checks each.
@@ -5707,12 +5712,12 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
    row, a block's, a recursive group's, a stateful handler's state function) its cancel row, and a
    handler site's info carries its operations' (`HInfo.fins`). The typed elaboration builds the
    site's row `Row.ofEff n ops 0 fs ++ Σ` and its clauses at `clausesTy Σ R ops fs` (`κ`'s cancel
-   branch `cancelTy Σ F`). The kernel checks every one of these (`[then]`'s `ThenLe`, `[handle]`,
+   branch `cancelTy F`). The kernel checks every one of these (`[then]`'s `ThenLe`, `[handle]`,
    `[sub]`'s `finLeB` at calls); the elaborator decides nothing the kernel does not re-check.
 4. **A clause that does not use a cancellable `κ` whose cancel performs** (#953; Rust's drop
    model). The kernel's `κ` is consumable only when its cancel branch is
-   `F 1` (empty row); a consume is effect-free. When its cancel branch `cancelTy Σ F` performs
-   (the inferred cancel row `F` or the handler's outer row `Σ` is not empty), the elaboration
+   `F 1` (empty row); a consume is effect-free. When its cancel branch `cancelTy F` performs
+   (the inferred cancel row `F` is not empty), the elaboration
    cancels `κ`, `u <- (force k).2; let () = u; T` (`[&E₂]`), exactly once on each path of the
    clause that does not use `k` (`Frontend/Sugar.lean`, `cancelAtEnds`, `cancelDropped`):
    - **on finishing**, at the end of the path, after all its effects: before a terminal value
@@ -5738,7 +5743,11 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
      (`let r = for …; N`) is wrapped with the binding of its value,
      `r <- (loop …; r <- return forRes; return r) unwind (cancel k); N`, so the wrap is around the
      loop as the typed elaboration elaborates it (`boundRes?`). A head of `x <- M₁; N` or of
-     `x <- M₁ unwind (D); N` that mentions `k` is entered by the same rule.
+     `x <- M₁ unwind (D); N` that mentions `k` is entered by the same rule. A head that runs a
+     `[then]` in place (an `unwind` region in the head) is itself wrapped,
+     `… unwind (cancel k)`, in a clause that drops `k`, and every `unwind` region in such a clause
+     is a head. The wrap is a finaliser that never fires when the head can neither abort nor
+     capture.
    Exactly once: from its binding `k` is live until the first of a head's abort (its finaliser
    cancels it; nothing after runs), the end of the path (the cancel before the terminal), or a use
    the program wrote (nothing is inserted after it). `[then]`'s finaliser and rest are exclusive,
@@ -5755,9 +5764,11 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
    **The inference needs no cancel row for the inserted cancels.** A wrapped head performs no
    capturing operation of `Σ` (that is refused, below), so no cancel row is read under it, and
    *The checker*'s `[then]` takes `Σ_M`'s cancel rows from `M`'s own finalisers. **Limit:** the cancel
-   performs the cancel branch's row `F ⊕ Σ`; when a wrapped head performs a capturing operation of
-   `Σ`, that operation's cancel row would hold itself (`⊤`), which the kernel refuses (without the
-   wrap it refuses `k` live across it): refused by the elaboration, "this clause's continuation is
+   performs the cancel branch's row `F` (§81). When a wrapped head performs a capturing operation
+   `o`, `o`'s cancel row must hold `F`; when `F` itself holds `o`, that row must hold `o`'s own
+   entry, which the surface does not infer. The elaboration refuses wider than that: whenever `F`
+   is not empty and a wrapped head performs a capturing operation of `Σ` (`cancelDropped`; without
+   the wrap the kernel refuses `k` live across it), with "this clause's continuation is
    live across `Ask.ask` (1.0), an operation that captures a continuation, and its cancel performs:
    if the continuation captured at `Ask.ask` (1.0) is cancelled, this one must be cancelled with
    it, and `Ask.ask` (1.0)'s cancel row would contain itself" (`corpus/reject/fin-cancel-capturing.bc`).
@@ -5770,8 +5781,9 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
    effect's capability used in `D` is refused, "a cleanup can't yet use `c`, which the body also
    uses (the kernel's [then] splits them; see #868)" when `M` uses it too, and "a cleanup can't yet
    use `c`: a capability is threaded through the code around it, and the kernel's [then] gives the
-   cleanup a context of its own (see #868)" when only `D` does. This is the kernel question K-b
-   (Open).
+   cleanup a context of its own (see #868)" when only `D` does. These messages remain for a
+   core-level `[then]` only: a `finally` whose cleanup uses a capability the body also uses is §78's
+   reborrow (#940). Finalisers that perform wait on K-b's checker and lowering (§78).
 
 6. **Reading cancel rows back.** The typed elaboration and its inference re-read a `handle_n`'s
    row from its clauses' types with their cancel rows (`clausesReadF`, `finsOf`), as the checker
@@ -5865,9 +5877,10 @@ runs once, and every row and clause is what it was.
   the limit of *The surface*.
 - **Drop flags.** A head that uses `k` on some of its paths cancels it at the end of the others,
   inside the head, not at the end of the enclosing path as Rust's drop flags would.
-- **A cleanup that performs a cancellable operation** needs that operation's cancel row to hold
-  itself at every depth, `⊤`. Core text spells it (`cancel[top]`); the surface's inference does
-  not infer `⊤` yet, so the kernel refuses such a program, and a cleanup's operations are
+- **A cleanup that performs a cancellable operation `o`, around a computation that also performs
+  `o`,** needs `o`'s cancel row to hold an entry for `o` itself. `ThenLe` matches nested entries
+  by signature, so the finite solution puts `⊤` one level down: `o cancel[…, o cancel[top]]`. Core
+  text spells it; the surface's inference does not infer it yet, so the kernel refuses such a program, and a cleanup's operations are
   `must_resume` today.
 - **Per-occurrence cancel rows.** The union per name is the least row only when every finaliser in
   an operation's scope is relevant to it.
@@ -5891,14 +5904,15 @@ runs once, and every row and clause is what it was.
   hit: stricter only when a cancel row repeats an operation key.
 - **Answering effects in a finaliser** (a capability: `Stdout`, `Fs` #769, `Net` #597; a `fn`
   effect): the capability is a threaded `mut` borrow, and `[then]` splits the context `Γ₁ | Γ₂`,
-  so `M` and `D` cannot both hold it; R1 (§29) needs empty cancel rows (`Row.ResumeO`), and an
-  unwinding lend's finaliser `d : Ref T ⊸ 1` is closed, pure and abortive only. It does not type
-  today by any route, and #940 (a `let mut` both `M` and `D` write) has the same root. The
-  smallest change proposed is a fused `[then]` over a lend (`m : Mut @a T ∈ Γ₂`; `M` gets a
-  reborrow, `D` gets `m` back at `Σ_D`): one rule and its compatibility lemmas. Its raise path is
-  direct; its cancel path is a lend across a suspension, which needs #844 Tier 2 and #821.
+  so `M` and `D` cannot both hold it; R1 (§29) needs empty cancel rows (`Row.ResumeO`). #940 (a
+  `let mut` both `M` and `D` write) has the same root. The raise path types through the unwinding
+  lends with a finaliser at its own row, `withbor{1,2,3}UD` (§78, K-b): `M` gets a reborrow and `D`
+  gets the place back at `Σ_D`. The checker's producer for it is K-b.3. The cancel path is a lend
+  across a suspension, which needs #844 Tier 2 and #821 (§78 *Open*).
 - **An owner's finaliser that performs** (a declared value's drop that closes a socket): not a
-  consume (§42 *Not this*); Backend2's `genLendU` lowers only a constant finaliser.
+  consume (§42 *Not this*). Backend2's `genLendU` lowers a closure finaliser at `Σ_D = ∅` (#1089),
+  reading `Σ_M` and `Σ_D` from the node, and refuses a finaliser that performs, or a callback row
+  other than the borrow's, until K-b's lowering (#1046).
 - **Task codata** (`lib/async.bc`, `F (A + …) & F 1`): a task whose finalisers perform needs its
   close at `F_R 1`; it waits on the lowering of a finaliser that suspends.
 - **`[then]`'s two premises on unrestricted operations** restrict `unr` beyond §19's `[then]`
@@ -5987,9 +6001,9 @@ borrow lemma. `Core/EffBoxed.lean`:
 lemma keep their statements, over the extended judgment; adequacy stays unconditional. New:
 `stop_lemma`, `stop_sem`, `ewp_stratify`, `ewp_handleS`, `handle_compatCB`, `handleV_compatCB`.
 
-Each induction over `CDerives` and `CDerivesAt` takes the rule as a case (`Core/Closed.lean`,
-`Core/Weaken.lean`, `Core/InsertDead.lean`, `Core/Tied.lean`, `Core/RaiseNames.lean`,
-`Core/EffTier1Programs.lean`). The inversions (`Core/Inversions.lean`) read a handler's clause
+Each induction over `CDerives` and `CDerivesAt` (one over `CDerivesX` where both are covered, §83)
+takes the rule as a case (`Core/Closed.lean`, `Core/Weaken.lean`, `Core/InsertDead.lean`,
+`Core/Tied.lean`, `Core/RaiseNames.lean`). The inversions (`Core/Inversions.lean`) read a handler's clause
 tuple at `clausesTyO Σ R ob E fs`, `κ` bare (`ob = none`, `clausesTy`) or boxed (`ob = some d`,
 `clausesTyB`): `der_hnd`, `der_hndJ`'s `HndBase`, `hnd_clauses`. A boxed `κ`'s views keep the thunk
 head (`vview_kBoxO_thunk`, `kviewO`), and `κ`'s cancel branch is read the same way at either
@@ -6070,7 +6084,7 @@ use R1 keeps them unconditionally.
 
 The chain interpretation of §62 has a second named hypothesis of the same form, `HandlerLawN`
 (`Core/Chain/HandlerLawN.lean`): the compatibility lemmas of `[handle]` at a value form, BOXED-κ
-`[handle]` and `reify`, from which `FundamentalN` and plain adequacy `Goal791N` are proved (§62,
+`[handle]` and `reify`, from which `fundamentalN_all` and plain adequacy `Goal791N` are proved (§62,
 *The named assertion*).
 
 *R1 and `PinLaw` stay as stated here until surface A1 (#843, §19).*
@@ -6113,12 +6127,11 @@ A1 (#843), for §62's shapes.
   `PinLaw.loop` derives its compatibility lemma. The checker does not emit it, and that is frozen
   (T1, §19: the checker's rule until surface A1, #843, for §62's shapes).
 
-**The extended judgment.** `CDerivesP` (`Core/PinDerives.lean`) is `CDerives` with every premise
-in `CDerivesP`, plus `lendR`, `lendLoopR` and `nilDead`. It is generated from
-`Core/Fundamental.lean` by `scripts/gen-pin.py` (templates in `scripts/pin/`), so a rule added to
-`CDerives` is in it after a rerun; `python3 scripts/gen-pin.py --check` fails when the generated
-files are stale. §28's BOXED-κ (`effHandleVB`) is in it so, its case in `fundamentalC_pin`
-`handleV_compatCB`, as in `fundamentalC`.
+**The extended judgment.** `CDerivesP` is `CDerives` with every premise in `CDerivesP`, plus
+`lendR`, `lendLoopR` and `nilDead`: it is `CDerivesX {pin := true}` (§83), the three rules gated by
+`hPin : I.pin = true` in `Core/Judgment.lean`, so a rule added to `CDerivesX` is in it. §28's
+BOXED-κ (`effHandleVB`) is in it so, its case in the one Fundamental Property `fundamentalX`
+`handleV_compatCB`.
 
 **`PinLaw`** (`Core/PinLaw.lean`) is a `structure … : Prop` of two schemas: `LendFrame`, the
 relaxed `withborUV` lend's compatibility lemma at every `LendForm` (R1 is the form `ref`), and
@@ -6194,6 +6207,15 @@ carries the list `p` of the relaxed rules used, with where each is used, and is 
 (`LendFrame` at its form, or `LoopFrame`).
 The programmer writes nothing.
 
+`bcc check --proved-only` refuses a `main` whose assurance is not `unconditional` (#1125). The
+error is at the first relaxed rule in the source and names each site's hypothesis with its
+research question (#1122): R1 rests on `PinLaw.lendFrame` (`LendFrame`, RQ1), and R2 on
+`PinLaw.loopFrame` (`LoopFrame`, RQ2). No checked program rests on `HandlerLawN`: the checker emits
+no suspending-lend constant (`Const791`), and `fundamentalC_pin` reads no hypothesis but `PinLaw`,
+its handler and `reify` cases being Core's compatibility lemmas. `bcc trusted` cites Core's
+`IORun.every_run` and `IORun.loop_every_run` for `run_io`; they take no hypothesis.
+`corpus/reject/proved-only-r1.bc` checks without the flag and is refused with it.
+
 ### Lowering
 
 A cell lent across a suspension must not move while the view is held (§3.5 of
@@ -6210,9 +6232,11 @@ with the counts of `corpus/counts.expected`.
     PinLaw.stop : PinLaw → PinStop          PinLaw.loop : PinLaw → PinLoop
     pinLaw_iff : PinLaw ↔ PinStop ∧ PinLoop
 
-`fundamentalC_pin` is `fundamentalC`'s induction, case for case, with `hPin.lendFrame` at `lendR`
-(form `ref`) and `hPin.loopFrame` at `lendLoopR`, each at the induction hypothesis of its callback
-(steps), and `semC_dead` at `nilDead` (`Core/PinFundamental.lean`, generated). `PinLaw.stop` and `PinLaw.loop` follow from it;
+`fundamentalC_pin` and `fundamentalC` are instances of one induction, `fundamentalX (hLaw : I.pin =
+true → PinLaw) : CDerivesX I Δ Γ e j → SemJ Δ Γ e j` (§83, `Core/Fundamental.lean`), with
+`lendFrame` at `lendR` (form `ref`) and `loopFrame` at `lendLoopR`, each at the induction hypothesis
+of its callback (steps), and `semC_dead` at `nilDead`; at `{}` its hypothesis is vacuous.
+`CDerivesP.ofC` is `CDerivesX.mono`. `PinLaw.stop` and `PinLaw.loop` follow from it;
 `PinLaw.of_stop_loop` is the converse.
 At the checker: `checkProgram_soundP` (every checked `main` has a `CDerivesP` derivation),
 `checked_sem_pin` and `checked_runs_pin`; `checkProgram_sound`, `checkProgram_tied`,
@@ -8670,6 +8694,12 @@ variables, in the order they were declared, the construct writes too. The rule t
 each construct's parts. Writes are of resolved variables (R1), so a shadowing `let` is never taken
 for the variable it shadows.
 
+An `unwind`'s continuation is a tail position of the spine. A loop that a cancel clause wraps as a
+head hands its writes on to the rest of the clause (#1053).
+
+`bcc print` writes a loop's `let mut` writes as `writes(x, …)` before it, as it does for closures,
+so the printed program reads back. A surface body cannot write `writes(…)`.
+
 ### R3: the boundary
 
 A construct whose part runs in another frame, before the code after it (an arm, a binding's head,
@@ -8708,6 +8738,7 @@ what its parts write and has no boundary of its own.
 | `x <- M` on a `let mut` | `{x} ∪ W(M)` | — |
 | `let (x, q) = f(…, x, …)` | `{x}` | — |
 | `let p = e; N`, `x <- M; N`, `S; N` | `W(e) ∪ W(N)` | — |
+| `x <- M unwind (D); N` | `W(M) ∪ W(D) ∪ W(N)` | — : the continuation `N` is a tail position (an `unwind` writes what its parts write) |
 | `&mut x`, `&x` | `{x}` | the lend rebinds `x` (typed elaboration §5.1) |
 | `if`, `match`, `case` (a statement) | `W(arm₁) ∪ W(arm₂)` | each arm hands on `W` (`handArms`); the statement rebinds it |
 | `let p = if/match …`, `x <- M` (a head) | `W(M)` | each terminal hands on `(value, W)`; the binding takes it apart (`bindForm`) |
@@ -8826,6 +8857,8 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/name-clash.bc` | #590 (1): a program's `fn take` beside `include buf`'s | `i32[2]` (was refused) |
 | `corpus/mut-name-capture.bc` | #590 (2): a callee's `let mut tbl` beside its caller's | prints `1`, `i32[0]` (was refused) |
 | `corpus/mut-block.bc` | #586: a block that writes, at a block parameter called once, twice, and in a loop | `(i32[52], (i32[4036], i32[323]))` (was `(12, …)`) |
+| `corpus/mut-block-clause.bc` | #1068: a block writing a handler clause's `let mut`, in a resuming clause and in one that drops `k` | `(i32[4294961297], i32[4606])` (−5999 as `i32`) |
+| `corpus/mut-block-decl-name.bc` | #1068: a block writing a `let mut` named like a declaration | `i32[1202]` |
 | `corpus/mut-block-nested.bc` | a block inside a block, both writing | `(i32[13], i32[3])` |
 | `corpus/mut-run.bc` | #586: `run` that writes, bound | `(i32[52], i32[5102])` (was `12`) |
 | `corpus/fail/mut-run-nested.bc` | #586: `g(run if … { x = 5; … })`, a `run` that writes inside an argument | refused, R3 |
@@ -8849,6 +8882,20 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/div-residual-copy.bc` | a div function's residual handed back by a copy, `let j = i`, and by `let i = i` | `i32[4]` on `abc` (was refused; `let i = i` ran before R1) |
 | `corpus/loop-handler-binder.bc` | #493's handler-clause binder, from `corpus/pending/` | `i32[42]` (was refused) |
 | `corpus/generated-names.bc` | a source binder named `io_bt` | `i32[62]` (was `61`) |
+| `corpus/mut-after-unwind-while.bc` | #1053: a write in an `unwind`'s continuation inside a `while` | `i32[6]` |
+| `corpus/mut-after-unwind-if-arm.bc` | the same in an `if` arm | `i32[15]` |
+| `corpus/mut-after-unwind-let-head.bc` | the same in a binding's head | `i32[17]` |
+| `corpus/mut-after-unwind-nested.bc` | nested `unwind`s in a `while` | `i32[12]` |
+| `corpus/mut-after-unwind-if-in-while.bc` | an `unwind` in an `if` arm inside a `while` | `i32[24]` |
+| `corpus/mut-after-unwind-counter-in-n.bc` | a loop counter written in the continuation | `i32[303]` |
+| `corpus/mut-after-unwind-generator.bc` | a write in an `unwind`'s continuation inside a generator's loop | `i32[330]` |
+| `corpus/mut-after-unwind-exits.bc` | `break` and `continue` in an `unwind`'s continuation | `(i32[603], i32[9])` |
+| `corpus/mut-after-unwind-loop-in-n.bc` | a loop in the continuation | `i32[50303]` |
+| `corpus/mut-after-unwind-for-gen.bc` | an `unwind` in the body of a `for` over a generator: the stored generator is drained | `i32[3]` |
+| `corpus/mut-cancel-loop-for.bc`, `mut-cancel-loop-for-value.bc` | #1053: a `k`-dropping cancel clause around a `for` that writes, unbound and bound | `inl (inr i32[3])` |
+| `corpus/mut-cancel-unwind-region.bc` | `unwind`s whose heads do not abort, in a clause that drops `k` | `inl (inr i32[3])` |
+
+The #1053 programs (`mut-after-unwind-*`, `mut-cancel-*`) give `live 0` on every backend.
 
 `scripts/mut-combos.py` checks the rules on generated nestings (*Acceptance* below).
 `corpus/sugar/mut-heads.bc` and `mut-modify.bc` pin the elaboration beside the core written by
@@ -8919,7 +8966,7 @@ of its own:
 | a clause's continuation (§19), a layer's `call` (§20) | `ResumeK.k`, `LCall.name` | is it (`Cx.copy`; `unboxesC` for BOXED-κ) |
 | a div function's residual (§14, *The residual by name*) | the names the terminal hands back | a copy made after the last loop is the binder it copies (`termParts`) |
 
-Two more rules keep generated code and the user's apart, so that no analysis that compares names
+Three more rules keep generated code and the user's apart, so that no analysis that compares names
 can take one for the other:
 
 - **A control handler's code has names of its own.** Its clauses run in the scope of a `with`,
@@ -8931,6 +8978,11 @@ can take one for the other:
   these binders as written (`Hygiene.written`, in `unrename`).
 - **A capability variable is one per effect and slot** (`capVar`, `capLife`): `Log` and `LOG`,
   or `Log_a` and the slot `a` of `Log`, shared one variable.
+- **Every name a sugar mark carries is a reference, renamed with its binder.** A closure's
+  `writes(…)` mark (R3) names the `let mut` variables it writes. Hygiene renames those names with
+  their binders, in a handler clause, where every binder is renamed, and in a `fn`, where a
+  `let mut` is named like a declaration (#1068). Messages strip Hygiene's prefix before looking a
+  name up, so a refusal names `buf`, not `buf__q51`.
 
 A block's `let mut` capabilities key its copy by position (`m0`, `m1`, `blockKeys`), not by the
 caller's names: callers whose blocks write variables of other names share the copy
@@ -8940,10 +8992,13 @@ caller's names: callers whose blocks write variables of other names share the co
 α-equivalently, with `bcc alpha`: each binder of a surface body gets a name of its own (`{x}q{k}`,
 from the parser's record of what each name resolved to, `resolutionOf`), so no binder shadows
 another and no two variables share a name. `bcc check` must print the same up to the renaming and
-`bcc erase` the same erasure, and the same with every module of `lib/` renamed (`BCC_LIB`). On the
-corpus it finds 0 differences. Run on the build before R1 (`--bcc`, renaming with this one's
+`bcc erase` the same erasure, and the same with every module of `lib/` renamed (`BCC_LIB`). Every local goes through Hygiene under
+the renaming, so the check reaches the names sugar marks carry. On the corpus it finds 0
+differences. Run on the build before R1 (`--bcc`, renaming with this one's
 `--alpha`), it finds 19: each program of #504, #493 and #590, `T04`, `config-parse` and others
-whose meaning depended on two names coinciding.
+whose meaning depended on two names coinciding. Run on the build before #1068's fix, it finds the four R3
+block programs (`mut-block`, `mut-block-nested`, `mut-control-call-order`, `sugar/mut-block`) and
+one difference in a message only (`reject/mut-control-move`).
 
 **Justified: what is still identified by a name.**
 
@@ -8992,14 +9047,8 @@ whose meaning depended on two names coinciding.
   for a block parameter (`cbRows`) does not carry its `let mut` capabilities.
 - **`case V { … }` and `for` as expressions** are not read as `run`: `case` is printed core, and
   `for` as a value needs its loop result bound (`let r = for …`).
-- **Known wrong answers (#1053).** These programs are accepted and give a wrong answer:
-  1. a write to a `let mut` in the continuation `N` of `x <- M unwind (D); N`, where the finaliser
-     form is inside a loop, an `if` arm or a binding's head: the write is lost, and a loop whose
-     exit test reads that variable may not terminate;
-  2. a cancel clause that drops `k`, around a loop whose body can abort (the loop is wrapped as a
-     head, #868 Phase 2) and that writes a `let mut`, bound or not: the loop's writes are lost.
-
-  A redesign of `let mut` as sugar over a `State` effect is under study.
+- **Refused, not wrong:** `modify` or `run` in a clause that drops `k`.
+- **A redesign of `let mut` as a Core former `var_n`** (#1058) is parked.
 
 ---
 
@@ -9350,9 +9399,8 @@ message reads the declarations (`Data.Table`); the refusal is the kernel's.
 `finally`. That would be a consume that is not derived.
 
 **Open (#746).**
-- *I/O in a finaliser.* `[then]`'s `D` is at `F_Σ 1` beside `N` in one context: a capability the
-  effects pass threads into `D` would be consumed there and not handed back, and `[then]`'s split
-  `Γ₁ | Γ₂` admits no capability both `M` and `D` use (§27 *Open*, with #940's root).
+- *I/O in a finaliser.* A cleanup can use a capability the body also uses: §78's reborrow (#940).
+  A cleanup that performs an operation waits on K-b (§78).
 - *A written finaliser for a lend the abort crosses.* The kernel's unwinding lend takes any closed
   `d : Ref N ⊸ 1` (`d_declAcross`); the checker passes only the source's consume
   (`Frontend/Check/Consts.lean`, `finaliser`), so at a declared type the lend is refused. A
@@ -10380,10 +10428,7 @@ of another former, effect equation, machine step or `𝒱⟦·⟧` clause change
 
 **`κ`'s cancel branch.** The proof gives `κ.2` the table of the operation's own cancel row `fs j`
 (`lastTc`), which `ewp_handle_or`'s `hTc` permits: it asks only that the table be above the
-entry's cancel obligation. `κ`'s type at a clause the program writes, `cancelTy Σ F = F_{F ⊕ Σ} 1`,
-holds `Div` whenever `Σ` does, and as a finaliser it makes the cancel row of every capturable
-operation of `Σ` beneath it find that operation's own key (`kappaFinSelf`). A rule-written clause
-avoids both.
+entry's cancel obligation. `κ`'s type at a clause the program writes, `cancelTy F = F_F 1` (§81), is at that same row.
 
 ### The proof
 
@@ -11270,8 +11315,8 @@ and traverses `S`; an array is a `count` loop (§16) that moves each element out
 ### Soundness
 
 `foldOwnG_compatX` (`Core/FoldOwnG.lean`) is the rule's semantic typing, the CDerives rule
-`foldOwnG` its use (`Core/Fundamental.lean`), mirrored in `CDerivesAt` (`Core/Tied.lean`) and
-`CDerivesP` (`Core/PinDerives.lean`), with a case in each induction over them. The proof is
+`foldOwnG` its use (`Core/Judgment.lean`), a rule of `CDerivesX` and so of `CDerivesAt` and
+`CDerivesP` (§83), with a case in each induction over them. The proof is
 U0's, with the algebras taken out of the tuple: `trav_spec` is induction on the position
 `A ∈ P`, one case per former, given every key's call below the measure `(cells, value size,
 rank)` lexicographically; `hs_all` is strong induction on that measure; `fold_spec` is the fold
@@ -11491,6 +11536,25 @@ proved by `fundamentalC` over every typing rule and adequacy, at one step-indexe
 results (`total_every_run`, `Closing`, `total_open`/`total_call`/`total_subrun`) for derivations
 that use none of the new rules.
 
+### Proof maintenance: remove the unused chain fragment assembly (#840)
+
+The chain's active fundamental theorem is `fundamentalN_all : MissingN → CDerives Δ Γ e j →
+SemJN Δ Γ e j`; its constant and adequacy path uses `constNAt_all` and `goal791N`. Remove the
+unused type-former fragment predicates, `FundamentalN`/`ConstsN`, their two adapters from
+`MissingN`/`HandlerLawN`, and the closed group of fragment-dependent constant assembly lemmas.
+Do not replace a client with a theorem requiring a stronger assumption: first inventory every
+client, including references in theorem types, and verify that none provides an active
+assumption-free handler fragment. The old predicates classify context/result types, not which
+handler rules a derivation uses.
+
+Preserve the statements and assumptions of `fundamentalN_all`, `constNAt_all`, `constN_all`,
+`goal791N`, `goal791N_nil`, `goal791N_nil_externs`, and the checked frontend theorem paths.
+Preserve direct constant compatibility and concrete instances, including the assumption-free
+`constN_wl` and finaliser instances. Compare surviving theorem types and axiom footprints;
+removing unused interfaces must not add `HandlerLawN` to a retained proof. No typing rule,
+relation, machine step, accepted program or program output changes. `HandlerLawN` remains
+open as stated below; this cleanup does not discharge any field.
+
 ### Lifetimes ordered as a tree (#773)
 
 Lifetimes form a well-founded cactus. A fresh lifetime is a child of the current branch's
@@ -11586,8 +11650,10 @@ deep reborrows, and the Anti-Frame (`erwp_M_frame`, `erwp_I_frame`, `erwp_reborr
 (`HandlerLendProg`); cross-task scopes (`cerwp_scope`, `cerwp_scopeM`, which hold over any body),
 tested by programs with one child and a fixed order of events (`CrossProg`, `CrossProgM`).
 `CactusInv` (`reb-canon`) is stated, with `cactus_step`, `cactus_move` and
-`joinReady_fd`, and not yet used: the cross-task programs are proved without it. **Built over the library's typed tree world** (`Core/StepsN.lean`, `Core/TreeWp.lean`,
-`Core/TreeWpEff.lean`, `Core/TreeCactus.lean`, `Core/TreeStepKeep.lean`, `Core/TreeHeadlines.lean`).
+`joinReady_fd`, and not yet used: the cross-task programs are proved without it. **Built over the typed tree world** (`Core/StepsN.lean`, `research/tree/ResearchTree/TreeWp.lean`,
+`research/tree/ResearchTree/TreeWpEff.lean`, `research/tree/ResearchTree/TreeCactus.lean`, `research/tree/ResearchTree/TreeStepKeep.lean`, `research/tree/ResearchTree/TreeHeadlines.lean`). The tree world is a research archive (#1133):
+`research/tree/`, not in the default build (`lake build ResearchTree`), its registered names in
+`research/tree/axioms/s062.names`, checked by gate-full's `research archive` step.
 `twp` is the step-indexed relation at a world that grows: a run starts at any extension of its
 world, from the re-reading of its resource, and ends at an extension of the start, the frame
 re-read there and the start and end related by row 5.27's `↭` masked at the run's own records,
@@ -11606,7 +11672,7 @@ continuation share (`contShareT`), a Kripke wand resumed at any extension and an
 the re-readings of the stop list's records the share reads (`KeepRel`, `contShareT_resume`; the
 whole-list condition with `extFT` against it implies it, `contShareT_resume_ext`). `CactusInvT` is kept by a step, by tree growth, by moving a part
 between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactusT_move`,
-`cactusT_spawn`, `cactusT_join`). Proved at one branch (`Core/TreeHeadlines.lean`):
+`cactusT_spawn`, `cactusT_join`). Proved at one branch (`research/tree/ResearchTree/TreeHeadlines.lean`):
 - **adequacy** (`topAdequacyT`, `cerwpT_adequacy`): a closed program at `cerwpT` at the empty table,
   from the empty world, whose result holds nothing, is `OrDiverges`; derived through `cactusT_step`;
 - **R1**, a step keeps every other branch's open lend (`r1_stepKeepsFdEsc`, `stepKeepsFdEsc`):
@@ -11628,7 +11694,7 @@ between branches, by spawn and by join (`cactusT_step`, `cactusT_extend`, `cactu
   `extLT_admits_drop`, `not_extLT_drop_relevant` and `not_extLT_drop_longer` show what each clause
   admits and refuses.
 
-**Over several branches** (`Core/TreeHeap.lean`, `Core/TreeHandle.lean`, `Core/TreeSched.lean`):
+**Over several branches** (`research/tree/ResearchTree/TreeHeap.lean`, `research/tree/ResearchTree/TreeHandle.lean`, `research/tree/ResearchTree/TreeSched.lean`):
 `[handle]` without `hdv` at `cerwpT` for a scheduler at the program's top (`cerwpT_schedHandle`,
 by induction on the index), with `κ`'s cell, resume and cancel at `twp` (`twp_kappaCell`,
 `twp_kappaC_resume`, `twp_kappa_cancel`, `twp_kappaC_cancel`) and allocation, freeing, load and
@@ -11655,7 +11721,7 @@ scheduler's state is in the resumed branch's frame, and a valid frame avoids the
 from their opening, so the task may end a lend it opened. A
 stopped branch's clause knows its frame holds nothing of the branch's lends, those it opened
 during the segment included (`twp_bind_fd`, `noneAt_recMask_end`). One program is proved through
-the headline (`Core/TreeSchedProgs.lean`, `asyncProg_safe`): a scheduler that resumes a task beside
+the headline (`research/tree/ResearchTree/TreeSchedProgs.lean`, `asyncProg_safe`): a scheduler that resumes a task beside
 a state of its own, its cells owned rather than borrowed. For `pingpong-mut` the stepper each task
 runs under meets `SchedOKT` (`schedS_ok`, its answers a step-indexed fixpoint) and both tasks are
 proved; the relay that hands the borrow between them is not.
@@ -11666,8 +11732,8 @@ resume at any list keeping the re-readings of the stop list's records the share 
 (`keepRel_of_extFT`, `contShareT_resume_ext`), and a share is carried along `KeepRel`
 (`contShareT_kripke`, `KapSchedT.kripke`).
 
-**A stored continuation across another branch's run** (`Core/TreeResume.lean`,
-`Core/TreePool.lean`): a run that owns no record at its start ends at a list holding the
+**A stored continuation across another branch's run** (`research/tree/ResearchTree/TreeResume.lean`,
+`research/tree/ResearchTree/TreePool.lean`): a run that owns no record at its start ends at a list holding the
 re-reading of every record of its start list (`twp_keepsList`), so a `κ` held beside it
 (`KapAtT`: captured at its stop, share and records re-read, the records its share reads kept) is
 held at the run's end (`twp_keepsKap`) and resumed there (`KapAtT.resume`,
@@ -11683,7 +11749,7 @@ runner's lend, R2 at the stored branch (`kapStored_end_refused`) refuses the run
 location keeps the child's share, a view of the parent's lend, resumable. Record lists have
 re-readings wherever the code typing agrees on their escrows (`SRecsRR.exists_retype`).
 
-**Opening and ending a lend at `twp`** (`Core/TreeLend.lean`), each a `twp_update` instance, for a
+**Opening and ending a lend at `twp`** (`research/tree/ResearchTree/TreeLend.lean`), each a `twp_update` instance, for a
 lend of `ℓ ↦ own(())` with the empty escrow (record `lendRec ℓ`). Open (`twp_lendOpen`): the cell
 becomes the lend cell `ℓ ↦ imm({α}, (), ∅)`, the run owns the record and the list carries it
 tagged `α` (`TWNT.immFrame`; the record's frame lifetime read off the lend cell, the only view at
@@ -11707,7 +11773,7 @@ the branch's lends; there is no per-type close (decision 73). #793 keeps this ru
 may hold `own` cells, `mut` cells, a copy of a view that only the frame holds, or a view's last
 copy, and none of these may be discarded without running the branch.
 
-**The scheduler's pool** (`Core/TreeSchedPool.lean`). `PoolT` is a list of stored tasks, each a
+**The scheduler's pool** (`research/tree/ResearchTree/TreeSchedPool.lean`). `PoolT` is a list of stored tasks, each a
 continuation held at the present world (`KapAtT`) whose mask is its present records' masks, every
 two apart both ways (`NoneAt` of each other's record masks, and record locations distinct). Every
 scheduler operation keeps it: a segment (`twp_keepsPool`, from `twp_frame_keep`: the run may open,
@@ -11716,13 +11782,13 @@ end, allocate and free, those lends open when a stored task stopped included), a
 of the pool beside the resumed run and a pool again at its every end (`PoolPost`: apart both ways,
 records at distinct lent locations, so a task that parks again rejoins it).
 
-**The park stepper** (`Core/TreeSchedRelay.lean`). The stepper `HP` (`schedP_ok`) hands a parked
+**The park stepper** (`research/tree/ResearchTree/TreeSchedRelay.lean`). The stepper `HP` (`schedP_ok`) hands a parked
 task's continuation back, at the masks of the records the task owns at its stop. The loop `drive`
 (`driveV`, the Z combinator) resumes a parked task each time it parks until it answers;
 `drive_twp` keeps a pool of any length beside it, by strong induction on the index through
 `poolT_park` and `poolT_resume`. These are lemmas, not a headline.
 
-**Pool-scheduler adequacy** (`Core/TreePoolSched.lean`, over `Core/TreePoolShare.lean`). A
+**Pool-scheduler adequacy** (`research/tree/ResearchTree/TreePoolSched.lean`, over `research/tree/ResearchTree/TreePoolShare.lean`). A
 scheduler handler keeps its stopped tasks in its state as a **stack**: the state value is the
 handler with the entries, each a tag beside a continuation (`stateVal H ts`, `poolVal ts`), and its
 resource is `PoolTJ`. Each entry is held apart from the entries below it at their masks, except at
@@ -11753,7 +11819,7 @@ joiner (`poolAns_park`), resume the top with what it has collected (`poolAns_res
 (`poolAns_resumeSnd`, `poolAns_cancelSnd`, `PoolTJ.swap`), cancel the top (`poolAns_cancel`,
 `poolTJ_cancel`), or hand a finished task's copies to the nearest joiner and resume the top
 (`poolAns_depositResume`: at a joiner on top this is the join). The stack scheduler
-(`Core/TreePoolSchedProgs.lean`, `stack_schedOK`) meets `SchedOKT` at `PoolAns` for every stack, its
+(`research/tree/ResearchTree/TreePoolSchedProgs.lean`, `stack_schedOK`) meets `SchedOKT` at `PoolAns` for every stack, its
 return clause (`stackRet`, `stackRet_okAt`) the deposit-and-resume move; `stackProg_safe` is a
 closed program through the headline.
 
@@ -11765,7 +11831,7 @@ only a new clause. Each view a joiner collects is a copy of a lend of `own(())` 
 escrow (`ViewsT`); the stack reads only that its cells are `imm`, the join's end of the lend reads
 the shape. This is generalised when #791 lands lends with a non-empty escrow.
 
-**Ending a lend at its copies composed** (`Core/TreeLendJoin.lean`). Copies of a lend cell compose
+**Ending a lend at its copies composed** (`research/tree/ResearchTree/TreeLendJoin.lean`). Copies of a lend cell compose
 to `ℓ ↦ imm(S, (), ∅)`, `S` the union of their lifetime sets (`viewResS_compS`). In every world `S`
 is the lend's lifetime: a tagged record proper's frame is at its tag (`frameLife_of_tagged`, from
 `TaggedT` and `not_desc_proper`), and every cell at its location carries that lifetime and no other
@@ -11773,7 +11839,7 @@ is the lend's lifetime: a tagged record proper's frame is at its tag (`frameLife
 copies, the run owning the lend's record (its tag read from the start world's list, `RecInv`),
 through `twp_lendEnd` unchanged.
 
-**A scheduler with spawn, cancel and join** (`Core/TreePoolSpawn.lean`). `SchedOKTLe N` is
+**A scheduler with spawn, cancel and join** (`research/tree/ResearchTree/TreePoolSpawn.lean`). `SchedOKTLe N` is
 `SchedOKT` with the return clause and the clauses asked only at stops `k ≤ N`;
 `cerwpT_schedHandle_le` is `[handle]` at every index `n ≤ N` from it. A clause that runs a task
 under its own scheduler proves its stop at `k` from `SchedOKTLe` below `k`, so `∀ N, SchedOKTLe N`
@@ -11793,7 +11859,7 @@ for every stack. Limits of this scheduler: `park` exchanges the stopped task wit
 rather than queueing it; a joiner is never cancelled (`cancel` cancels only a ready top); `par`
 children hold only copies of lends (`ViewsT`); `spawn` children hold nothing.
 
-**Interleaved lends across parks** (`Core/TreePoolSpawnProgs.lean`), three closed programs
+**Interleaved lends across parks** (`research/tree/ResearchTree/TreePoolSpawnProgs.lean`), three closed programs
 `(hnd HS root) (HS, [])`, each `OrDiverges` through `poolSchedAdequacyT` with every premise
 discharged. The program text has no borrow form: each task's lend is opened and ended in the proof,
 by `twp_lendOpen` and `twp_lendEnd` (each a `twp_update` instance) around the task's own code. Each
@@ -11808,7 +11874,7 @@ own. `progCancel_safe`: the root runs `LC` (as `L`, its finaliser parking again 
 view; the finaliser parks, is resumed, and ends the lend. `progDepth3_safe`: the root spawns two
 `L`s and runs a third; three tasks hold a lend open across a park at once.
 
-**A lend shared by a tree of tasks** (`Core/TreePoolJoinProgs.lean`). `rootJ d = let a = alloc ()
+**A lend shared by a tree of tasks** (`research/tree/ResearchTree/TreePoolJoinProgs.lean`). `rootJ d = let a = alloc ()
 in let _ = par (node d, node d) in free a`, with `node 0 = λ_. park (); cancel (); ()` and
 `node (d + 1) = λ_. let _ = par (node d, node d) in ()`. The root opens a lend of `a`; every task of
 the tree holds a copy of it (`viewRes_dup`), every inner node a joiner; leaves interleave by parking
@@ -11830,7 +11896,7 @@ branch point; and if the part holds any cell at the location of a record proper 
 premise linking the cell to `α`: a part on a branch not inside `α` holding a cell there is refused
 (`fd_le_of_branch`: a view carries `α`, an `own` cell is beneath a borrow, `TWNT.noOwnUnder`, a
 `mut` cell is refused by `NoMutT`). A view there carries `α` and nothing else
-(`view_at_lender`, `lender_view_carries`). Instances (`Core/TreeBorrowEdges.lean`), built from
+(`view_at_lender`, `lender_view_carries`). Instances (`research/tree/ResearchTree/TreeBorrowEdges.lean`), built from
 the empty world by `TWNT.alloc` and `TWNT.immFrame` (`recWInv_lendStep`, `twp_lendOpen`'s update
 at the world), the second branch added by hand with `cactusT_spawn`: `lenderEdge_depth1` (a branch
 at a lend's own lifetime holding its view) and `lenderEdge_depth3` (three lends nested
@@ -11864,7 +11930,7 @@ layers (`docs/new-core/scope-782.md`):
   tree grows. A code's meaning is carried along the re-reading of a covered resource, at every
   re-typing that agrees on the locations it holds a `mut` cell at (`interp_retype`,
   `RR.exists_retype`; `Support/Model/Tree/Reread.lean`, `World/Codes.lean`).
-- **The relation's value types** (`STy`, `Core/TreeSem.lean`) are step-indexed predicates at the
+- **The relation's value types** (`STy`, `research/tree/ResearchTree/TreeSem.lean`) are step-indexed predicates at the
   tree world and the record list, each downward closed in the index and monotone along world
   extension, on the re-reading, at every list keeping the re-readings of the records of the old
   list the resource reads (`KeepRel`: records it does not read may have been ended, and records
@@ -11876,13 +11942,13 @@ layers (`docs/new-core/scope-782.md`):
   `STy.list_cons`; a map from `NoMut` bodies to monotone bodies is not built) and type variables. A value stored
   before a graft meets its type after it (`STy.reread`; at a proper extension, on a view nested
   three deep, `reread_v3`). **The computation types** (`SCmp`,
-  `Core/TreeSemC.lean`) are downward closed: `F A` (`SCmp.ret`), `⊸`, `&`, `⊤`, `∀α ⊏ c` over the
+  `research/tree/ResearchTree/TreeSemC.lean`) are downward closed: `F A` (`SCmp.ret`), `⊸`, `&`, `⊤`, `∀α ⊏ c` over the
   lifetimes below `c` in the current tree, and `ν` (greatest fixed point over candidates).
 - **`F A` is a bare run** (`SCmp.ret`), as Core's `cC (.ret A)` is a bare `wpTS` run: a
   `cerwpT` run at the world and list it is read at, owning no records, to a value of `A`. It is
   Kripke along the re-reading of its whole list (`SCmp.ret_reread`, from `cerwpT_kripke`) and not
   along `KeepRel`: a bare `cerwpT` run owning no records, the records `F A` runs at, is not
-  (`Obs.cerwpT_not_keepKripkeNil`, `Core/TreeSemObs.lean`). `cerwpT` quantifies over starts whose
+  (`Obs.cerwpT_not_keepKripkeNil`, `research/tree/ResearchTree/TreeSemObs.lean`). `cerwpT` quantifies over starts whose
   list re-reads its list whole, a resource holding a view has none at `[]` (`cerwpT_nil_of_imm`),
   and the property would make the stuck `() ()` over a lend's view a run at the lend's list owning
   no records; framed beside the lend's record (`twp_frame`), `let a = alloc () in () ()` would be
@@ -11900,7 +11966,7 @@ layers (`docs/new-core/scope-782.md`):
   `STy.thunkRet_lam`), and of a value (`STy.thunkC_val`).
   `ν` folds and unfolds at Core's body shape `F(A ⊕ U X) & F B` (`SCmp.loopBody_mono`), and is not
   empty there (`SCmp.loop_nonempty`).
-- **Continuation and task types** (`Core/TreeSemK.lean`) are thunks and boxed thunks, no new
+- **Continuation and task types** (`research/tree/ResearchTree/TreeSemK.lean`) are thunks and boxed thunks, no new
   former: a continuation is `U (B ⊸ C)` (`STy.kont`), boxed at `@d` by BOXED-κ (`STy.kontBox`),
   a task `[@d] U C` (`STy.task`). The value types read the record list because a thunk is a run,
   and a run is at a list: read at a list fixed in advance (`[]`), a thunk type holds of every
@@ -11913,7 +11979,7 @@ layers (`docs/new-core/scope-782.md`):
   in which other branches opened and ended records of their own, and resumed there at its type
   (`STy.kontBox_resume_after`): the resume is read off the carried value (`STy.kont_resume` at
   the reflexive extension), at a list whose records are covered, which a start provides
-  (`RecInv.cov_ls`). Instances (`Core/TreeSemKEx.lean`) at a proper
+  (`RecInv.cov_ls`). Instances (`research/tree/ResearchTree/TreeSemKEx.lean`) at a proper
   extension of the tree (a fresh child grafted into a chain, `dExt`, `dExt_proper`), with the
   resume list adding a record at the lifetime the extension opened and not a re-reading of the stop
   list: a lend at depth 1 (`kontBox_depth1`), and a view whose witness holds the views of its two
@@ -11981,7 +12047,7 @@ given the entries'); the typing rules and the fundamental theorem over these typ
   unrestricted operation is excluded while a borrow or owned resource is live.
   Multi-shot continuations over duplicable state are a hypothesis, not a rule.
 - **A lend's callback `∀'x ⊏ @bnd` may suspend at a row `Row.Suspend 'x @bnd`**
-  (`Core/TreeGoal791.lean`): every operation named and not unrestricted; its payload and answer
+  (`research/tree/ResearchTree/TreeGoal791.lean`): every operation named and not unrestricted; its payload and answer
   types free of `'x` and outliving `@bnd` at the constant's context (`VOutlives Δ bnd`), so their
   values lie in the stratum of every lend `α ⊏ @bnd`, what the Mut Frame asks of a stop (the
   relation's `LendOK`); and each capturable operation's cancel row meeting the same clauses
@@ -12070,6 +12136,10 @@ The top-level theorem is plain adequacy, every handler inside the program
     fundamentalN_all    : MissingN → CDerives Δ Γ e j → SemJN Δ Γ e j
     handlerLawN_iff     : HandlerLawN ↔ MissingN
 
+`goal791N_nil` (#1024, `Core/Chain/GoalNil791N.lean`) is `Goal791N`'s instance with no constants
+and no externs, without `HandlerLawN`: it covers every program with no suspending-lend constant.
+`goal791N_nil_externs` is the same over host externs closed by values that meet Core's contract.
+
 No scheduler, scheduler contract (`SchedOKN`) or restriction on handler names is quantified over:
 a program that suspends handles its operations inside itself, and those handlers are typed by
 `CDerives`'s handler rules.
@@ -12096,6 +12166,21 @@ value is posted at, and are proved (`handleT_compatN`, `handleL_compatN`).
   residual `λx. x` (`reifyN_premises_inst`); no instance of its conclusion is proved. `Goal791N`'s
   premises hold at `prog791` (`goal791N_premises_inst`): a cell lent `mut` with `withbor (2)`,
   its callback performing `wait` while it holds the borrow, `wait` handled inside the program.
+
+### The hypothesis register (#1124)
+
+`Core/Assumptions.lean` lists every named hypothesis: each closed `Prop` a theorem takes as a
+premise, and the schemas it is made of. Each entry gives its research question (#1122, or none),
+its standing (assumed, proved by a named theorem, or refuted by a named theorem) and the theorems
+that take it, and Lean checks each name and standing. The assumed entries are:
+- `HandlerLawN` ≡ `MissingN` (fields `HandleVN`, `HandleVBN`, `ReifyN`; RQ1). Its consumers are
+  the chain's `goal791N` and the kernel programs on `Const791` only;
+- `PinLaw` ≡ `PinStop ∧ PinLoop` (`lendFrame`/`LendFrame` RQ1, `loopFrame`/`LoopFrame` RQ2);
+- `WpChainCommutes` (#180);
+- `UnmentionedAbsorbed` (#746 F5).
+
+`scripts/check-assumptions.sh`, in the sanity gate, fails on a hypothesis taken as a premise that
+the register does not list, and on a registered name that is no longer defined.
 
 ### The answer's view across a lend (#844, T1.3)
 
@@ -12577,7 +12662,7 @@ conversion of a `foldOwn` or `foldReuse` node changes.
 
 The node itself, with its shape `F : FShape` (`TExpr.foldOwn`, `TExpr.foldReuse`;
 `TDerives.foldOwn`, `TDerives.foldReuse`, `Frontend/Check/TDerives.lean`; `CDerives.foldOwn`,
-`CDerives.foldReuse`, `Core/Fundamental.lean`, by `foldOwn_compatX` (`Core/FoldOwn.lean`) and
+`CDerives.foldReuse`, `Core/Judgment.lean`, by `foldOwn_compatX` (`Core/FoldOwn.lean`) and
 `foldReuse_compatX` (`Core/FoldReuse.lean`)). Its type `!U(A′_R ⊸ F R) ⊸ !U(μX. F.ty ⊸ F R)`
 (`algOTy`, `foldOTy`; `A″_R`, `algRTy`, at `foldReuse`) says:
 
@@ -12735,8 +12820,9 @@ lemmas the later units reuse, and no `VTy` former, rule or relation clause (K1�
 
 ### The rules
 
-Each is a `CDerives` rule with one compatibility lemma, mirrored into `CDerivesP` and `TDerives*`
-by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No new index and no new judgment.
+Each is a `CDerives` rule with one compatibility lemma, a rule of `CDerivesX` and so of its
+instances `CDerivesAt` and `CDerivesP` (§83), mirrored into `TDerives*` by `scripts/gen-pin.py`. No
+new index and no new judgment.
 
 | Rule | Statement | Unit |
 |---|---|---|
@@ -12759,6 +12845,8 @@ by `scripts/gen-pin.py`, and into `CDerivesAt` (`Core/Tied.lean`) by hand. No ne
 - `C.BindsFresh G` in `nuOutK`: the unrolling under a `∀'x` leaf reads the code type, which
   contains `G`, at `δ[x↦α]`, and a code-typed `G`'s environment could mention `x`. `codeTy`,
   `hCode`, `hEnv` and `unfoldKTy` are in `Core/CodeNuOut.lean`.
+- §79 generalises `unfoldK` and `nuOutK` to finite systems of ν equations, per equation (§79,
+  K-M.4a).
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
 - `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
@@ -12851,8 +12939,8 @@ proofs; every corpus and kernel program its output. The later units must preserv
 
 K3 (the four rules and the restated `force`): `fundamentalC`, `adequacyC` and `goal791N :
 HandlerLawN → Goal791N` keep their statements and cover the new rules, the chain's through
-`FundamentalKW835N`. The judgment freeze holds: no new judgment, and the rules join `CDerives`,
-mirrored by `scripts/gen-pin.py` and, into `CDerivesAt`, by hand. Every rejection theorem keeps its verdict; one that flips is
+`FundamentalKW835N`. The judgment freeze holds: no new judgment, and the rules join `CDerivesX`
+(§83), and so every instance, mirrored into the checker by `scripts/gen-pin.py`. Every rejection theorem keeps its verdict; one that flips is
 reported as an intended change.
 
 ### Open
@@ -12887,7 +12975,7 @@ reported as an intended change.
     substitution enters it.
   - `TyEq` at `code`: equal `N`, `TyEq` at `E` and `C`. `VTy.inFrag` at `code`: `E` and `C`.
     `NoThunkT` at `code` is `False`, as at `U`. `VTy.persistent`, `VOutlives`: as `U`.
-  - The step-indexed model (`Core/Chain/SI/Sem.lean`) and the tree model (`Core/TreeGoal791.lean`)
+  - The step-indexed model (`Core/Chain/SI/Sem.lean`) and the tree model (`research/tree/ResearchTree/TreeGoal791.lean`)
     read `code` as empty, as they read `μ` (#840).
   - Printing: the checker prints `Code⟨#h; E⟩ C`, `#h` a hash of `N`'s serialisation, not
     `{closure@span}` (a kernel type has no span). Backend2's `useKey` prints a type `ofV` refuses
@@ -13142,6 +13230,106 @@ probes that differ write `>|`, which main does not parse.
 
 ---
 
+## 71. Entry 70 — the new backend: a tail clause's captures passed as evidence (#960, E1)
+
+### Motivation
+
+§47 calls a tail-resumptive clause directly only when it is closed (`closedAt 0`). A `tail` clause
+that reads a value captured at its handler (a handler parameter at a `!` type, say) is otherwise a
+state machine: a suspension per `perform` and a drive at the node. Rust calls it directly with the
+closure's environment. The kernel's `[handle]` makes every captured value persistent
+(`hd : Ctx.DeadP Γ₁`), so the captures can be passed by value.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration, semantics or erasure.
+
+### Lowering (`Backend2/`)
+
+- **Direct kinds** (`Driver.directFacts`). Each operation's direct call is `closed`, `env` or `no`.
+  `env` is §47's conditions (`ks` via `classifyHandler_sound`, `cond2B` at `Checked.flows`, one
+  clause erasure, one row and signature up to `[α]`), with `closedAt 0` replaced by: the clause
+  erasure's free variables are slots of the node's context (`freeAt`); their types, as the
+  clause's typed term records them (`var`, `force`, `app`: `slotTypes`), are persistent; they
+  agree at every node up to `[α]` (`tyEqV`); and they hold no row naming a name with an `env`
+  operation. A name's evidence is the captured slots of its `env` clauses, in slot order.
+- **The names that take evidence are decided before conversion** by `evNames`, from the checked
+  conditions above. A name is excluded if its evidence would reach a machine row or a `&` or `ν`
+  component, a generated helper other than `bounded_fix`, a work whose `handle` node's outer row
+  holds a machine operation or another evidence name, a name in the outer row of a node with a
+  directly called clause, or a captured value with no LIR type. A task-variant code never takes
+  evidence; meeting one that would is an internal error.
+  Excluding a name can make new machine operations, so `evNames` repeats to a fixed point. A call
+  with no evidence in scope then cannot arise; meeting one is an internal error. Conversion runs
+  once.
+- **Evidence types** (`Types.ofC ms fd`). `F_Σ R` at a row holding names of `fd` is
+  `Ev_Σ ⊸ ⟦F_Σ R⟧` (`LCTy.ev n e k`): one parameter per captured slot, names in the row's order,
+  after the code's argument. `[sub]` drops what the smaller row lacks: a call passes what its
+  callee's type takes.
+- **LIR.** `Tm.appE f a j ev` is a closure call with evidence, and `Fn.evs` marks a function's
+  trailing evidence parameters. Evidence is passed and kept: the caller still owns it. Layout's
+  closure classes carry evidence nodes, which LayoutCheck checks; Flow links them; Lower passes
+  their words after the argument; the LIR interpreter reads them without taking them.
+- **The node.** A `handle` node of an `env` name binds the values of its captured slots, from the
+  clauses' parts of the context, as the name's evidence for its handled computation, which runs in
+  place. They are consumed with those parts after it.
+- **The `perform`** calls the work on `(v, ev)`. **The work** takes the evidence as parameters; its
+  captured slots are `dup` copies of them.
+- **Codes.** A closure's code takes its type's evidence as parameters and has only those in scope.
+  `bounded_fix`'s loop and its self-reference pass the step's evidence.
+- **`evConfined`** (`Lint`). Evidence is only an evidence argument or a `dup` copy's source, at a
+  persistent type: never in a pair, sum, closure environment, cell, consume or value. A closure
+  call passes exactly the evidence its type takes. Negative tests are in `Backend2/LintTests.lean`.
+- `UNPROVED:` the evidence in scope at a `perform` is the innermost frame's. `evConfined` keeps a
+  function's evidence parameters out of the values it builds. A node's evidence is its own
+  persistent captures, which it owns and consumes after its handled computation, so no call
+  receives evidence from a node that is no longer running. A mistake gives a wrong answer, never
+  undefined behaviour.
+
+### Facts read
+
+`ks` and `classifyHandler_sound`; `Checked.flows` and `cond2B`; the clause's erasure; the slot
+types its typed term records; persistence, which `[handle]`'s `DeadP` gives; the rows of the
+codes' types. Nothing is read from `TInfo` or `HSite`.
+
+### Programs
+
+- `corpus/loop-captured-bang.bc` (new): `0 0 0 0 0 0`, erasure `handles 2 performs 1 raises 1`,
+  no machine, native in 64 KiB.
+- `corpus/evidence-rebind.bc` (new): closure captures, three instances of one site, at most two
+  live at once: `(1, 2100)`. Stale evidence would answer `2002`.
+- `corpus/evidence-rebind-value.bc` (new): an `i32` capture, in core syntax: `(1, 2100)`.
+- `corpus/evidence-nested-site.bc` (new): two nodes of one name in one function: `2100`.
+- `corpus/evidence-outer-row.bc` (new): a name in the outer row of a node with a directly called
+  clause: `8`. The exclusion keeps that clause a machine, and its LIR is unchanged.
+- The new programs give `live 0`.
+- The machines become direct calls in `hygiene-handler-resume` (erasure from
+  `machines 1 suspends 1` to `handles 2 performs 1`), `loop-captured-bang`, `evidence-rebind`,
+  `evidence-rebind-value` and `evidence-nested-site`.
+- Counts are unchanged, except `evidence-rebind`'s `indirect`, 0 → 3 (*Open*).
+- `gen-return` and `gen-take-print` are unchanged: each name's two nodes hold different clauses.
+
+### Baseline
+
+No change to `CDerives`, `Core/`, the checker, the elaboration, the old backend or the kernel
+programs. Every corpus program's output is unchanged. With no evidence, every program's LIR is
+byte-identical.
+
+### Open
+
+- Resume entries taking fresh evidence (evidence in machines).
+- `&` and `ν` codes at evidence rows.
+- The other generated helpers.
+- A work at an outer row holding evidence names: pass Σ's evidence with the name's.
+- Several instances of one site capturing different closures share one work, whose call through
+  the evidence is indirect (`evidence-rebind`: `indirect` 0 → 3). Specialising per code type is
+  #1066 (after #855 B1, §68).
+- Captures that are not `!` closures arise only in core syntax today. A non-`!` handler parameter
+  makes the handler `tail+state` (E2).
+- E2 (`tail+state`): after K-S1–K-S3 and the proved lemma P-EV (#960, design §12).
+
+---
+
 ## 72. Entry 71 — host externs under the chain's adequacy (#963, K1)
 
 ### Motivation
@@ -13232,19 +13420,22 @@ tables and `HandlerLawN` are unchanged.
   drop `closedAt 0 d`. The finaliser stays typed at the rule's dead context, so it may name its
   persistent slots. `withborUE` shifts `d` under its binders; a closed `d` gives the same term, so
   no program changes.
-- K1.4: the kernel instance `progIO` (a lent `stdout` cell, written across a `wait`, resumed and
-  cancelled).
+- K1.4, built (#1072): the kernel instance `progIO` (`Core/Chain/IO791N.lean`). `stdout`'s cell
+  is made by `mk_output` and lent by a suspending constant whose finaliser is
+  `λr. consume (take_output r)`. The callback writes by `write_byte` on both sides of `wait`. It is
+  resumed (`progIO_res_orDiverges`) and cancelled (`progIO_can_orDiverges`, the finaliser handing
+  the cell back), both from `HandlerLawN` alone, the externs at their standard models.
 - K1.5: `IORun.every_runN` at the checked wrapper; `corpus/io-effects.bc` concluded by the
   extended `goal791N`; `bcc trusted` names it.
 
-K1.4 and K1.5 are not built; each unit's code PR marks its line *built*.
+K1.5 is not built; its code PR marks its line *built*.
 
 ### Open
 
 - **Suspending I/O answered by the platform** (the "stop" reading, scope §4.3): it needs a run
   relation with world steps and a new adequacy theorem. Out of K1 (C2).
 - **Effectful finalisers** (I/O performed on cancel through an effect, surface A4): that is K-b
-  for the lend form (approved, after K1.3), not K1.
+  for the lend form (§78), not K1.
 - **A buffer borrowed across an `await`** (#844 Tier 2, `read(sock, &mut buf).await`): the loans
   line.
 - **`HandlerLawN` on the models** (C4): `stdModel_meetsN` keeps `HandlerLawN` as a hypothesis. A
@@ -13345,6 +13536,102 @@ The surface part is not built: until it lands, the surface refuses the operators
 
 ---
 
+## 74. Entry 73 — `sliceCopyM`, a bulk copy between array regions (#1014)
+
+### Motivation
+
+A copy between two arrays' regions runs one element at a time today: `grow`, `push_str` and
+`push_lit`, and the string parse and serialise of `lib/json.bc` (#977's `citm` and `twitter`).
+This entry adds one kernel constant for the copy at persistent elements, and lowers it to one
+machine copy.
+
+### The constant
+
+Beside §9's slice constants (`sliceGetM`, `sliceReplaceM`, the splits):
+
+    sliceCopyM : !(ArrayMut @a A ⊗ (I32 ⊗ (ArrayImm @b A ⊗ (I32 ⊗ I32))) ⇒ ArrayMut @a A ⊗ (1 ⊕ 1))     A persistent
+
+- `sliceCopyM (dst, (di, (src, (si, len))))` checks the bounds once: `0 ≤ di`, `0 ≤ si`,
+  `0 ≤ len`, `di + len ≤ len dst` and `si + len ≤ len src`, on mathematical integers: a negative
+  input, or `di + len` or `si + len` past 2³¹ − 1, is out of range, never wrapped. In range it
+  writes `dst[di + k] := src[si + k]` for every `k < len`, in one machine step, and answers
+  `(dst, inr ())`. Out of range it writes nothing and answers `(dst, inl ())`; the kernel has no
+  trap, so the surface raises on `inl`, as with `array_replace`'s sum.
+- **The element type is persistent** (§10: the integer and float scalars, `U8`, `1`, `!` values,
+  which are copied bitwise): it owns no resource, so a copy is a write of equal values. Owned or
+  linear elements (a move) are not covered.
+- **No overlap, by the types.** `dst` is `Mut @a`, exclusive, and `src` an `Imm @b` view, so the two
+  ranges are disjoint: no run-time aliasing check, and no memmove.
+- An owned `Array A` destination is reached through the existing borrow (`sliceBorrowM`). A text or
+  `str` source that is an `ArrayImm U8` qualifies directly.
+
+**Machine.** The primitive `sliceCopy` has one head step, `Head.sliceCopy`, on
+`(dst, (di, (src, (si, len))))`. It reads `len` cells of `src`'s range, writes them to `dst`'s range
+in place, and allocates nothing (`Heap.copy`, `copyHeap`; `copyOk`, `copyArg`, `copyAns`;
+`Paper/S1_Syntax`, `Paper/S3_Dynamics`, `Support/Dynamics/Arrays`).
+- The bounds are tested on `toNat`, with every quantity below 2³¹, so nothing wraps.
+- In range, the step needs both ranges present in memory (`Heap.HasRange`), as `store` needs its
+  cell. Nothing out of range is touched.
+- Determinism and unique decomposition gain the case. The reference interpreter runs it
+  (`Mem.copy?`).
+
+**Typing.** One `CDerives` constant (`Γ` dead), as the other slice constants. Its compatibility
+lemma iterates `sliceReplaceM`'s over `fam`'s `sepRange`, split at `[di, di + len)`, with `src`'s
+cells read in imm mode, as `sliceGet`'s are; the chain's lemma at `erwpK`/`KW` likewise. No new
+index.
+
+### Lowering (Backend2)
+
+A word-IR statement `copy (dst, src, bytes)` after the LIR's single range test: `memory.copy` in
+Wasm (bulk memory, which wasmtime, the gate's runner, enables by default), `llvm.memcpy` natively,
+the disjointness cited at the site from the constant's types. The element layouts of `src` and
+`dst` are `A`'s, the same stride, so it is one copy of `len × stride` bytes. The flat IR's
+interpreter runs the statement as a word or byte loop with the same counts.
+
+**Counts.** A copy of `len` elements counts as the loads and stores of the element loop it
+replaces: `len ×` the element's words of each, or `len` `load8`/`store8` for `U8`. The range test
+counts as 2 bounds checks per call (against `len src` and `len dst`), not one per element, so a
+program that switches to `sliceCopyM` has fewer bounds checks.
+
+### The library (§17)
+
+`grow` (`lib/buf.bc`), `push_str` and `push_lit` (`lib/text.bc`) copy by `sliceCopyM` at persistent
+element types; an out-of-range answer raises as `array_replace`'s does. `lib/json.bc`'s string
+parse and serialise copy unescaped runs by it (#1015). An owned `array A` reaches it through the
+existing borrow.
+
+### Baseline
+
+`fundamentalC`, `adequacyC`/`adequacyD` and `fundamentalN_all`/`goal791N`, with their statements
+unchanged; every existing slice constant's compatibility lemma; §13's determinism, with the new
+case. Every corpus and kernel program keeps its output: no existing term changes. Counts are
+unchanged for a program that does not use `sliceCopyM`; a program the library switches to it keeps
+its loads and stores and has fewer bounds checks.
+
+### Programs
+
+A corpus program copying at the bounds (in range, `len = 0`, each bound one past, sums past
+2³¹ − 1), `live 0`; #977's `citm` and `twitter` for the time. The machine step's tests are in
+`Core/SliceCopyPrograms.lean`.
+
+### Units
+
+- S.1, the machine (Support): the step, determinism and decomposition, and the interpreter. Built.
+- S.2, Core: the constant's rule and compatibility lemma. Built (#1098): the rule `slice_copy_mut`
+  (`CDerives` `sliceCopyM`, `A` persistent) with `sliceCopyM_compatX`, and the core-text constant
+  `slice_copy_mut[@a, @b, A]`.
+- S.3, the chain: the compatibility lemma at `erwpK`/`KW`. Built (#1098): `sliceCopyM_compatN`.
+- The lowering (Backend2) and the library uses: backend-foreman's. Not built. The corpus program
+  follows the lowering.
+
+### Open
+
+- Owned or linear elements, a bulk move: the source cells must be left filled with a filler, as
+  `grow` does today.
+- A copy within one array (`copy_within`, overlapping): it needs memmove and a single `Mut` view.
+
+---
+
 ## 76. Entry 75 — row and site parameters for library definitions (#1051)
 
 The spelling throughout (`[A, row r, site s]`, `..r`, `f[T, row (…), site k]`) is provisional,
@@ -13377,6 +13664,11 @@ instance keys are this entry's.
 - `row r` names a row. In a type it is written `..r` inside a row: `F[s.0 cancel A ~> B, ..r] R`,
   `with Fail[E], ..r`, a cancel row `cancel[..r]`, `pull[..r] A B R` (the surface `pull_Σ`), and
   `(A => B with ..r)`.
+  - A row may **splice several row parameters, anywhere among its entries**: `F[..cr, ..sg] 1`,
+    `F[..cr, s.0 cancel[..cr] 1 ~> A, ..sg] B`, `cancel[..r1, ..r2]`.
+  - The row is the **concatenation in written order** of its written entries and each splice's
+    argument.
+  - This is core text only. At the surface, `with E, ..r` has one tail.
   - `..r` is *carried*: it is what an argument performs, resolved where the argument was written,
     as a block's operations are (§30). The callee does not serve it.
   - An effect name in the same position keeps §33's meaning: *provided*.
@@ -13414,8 +13706,26 @@ instances, resolved to what serves them at the call, as §38 resolves a row entr
   through its instances. An error inside an instance is reported with
   `` in the instance `f__rk` of `f`, used at L:C ``, and one in a pure use with
   `` in `f`, used at L:C ``.
-- Two templates' instances never share a slot: a private site is fresh, and a written entry equal to
-  one of `..r`'s is one entry (§38). One that differs is refused:
+- Two templates' instances never share a slot. A private site is fresh, and entries merge as §38
+  merges them:
+  - **Within one row argument,** repeats with the same signature are one entry (§38). So are two
+    written entries.
+  - **A written entry and a spliced one** match one for one. Each written entry absorbs at most one
+    equal spliced entry, the first in written order, wherever it stands, and the merged entry takes
+    the written entry's place. A row's length is its written entries plus its spliced ones, less
+    the matches.
+- **Repeats between splices are kept:** entries of two different splices, and of the same parameter
+  spliced twice, are never merged. A row is a list, and these repeats are significant, as a
+  duplicate label is in Koka's scoped labels (Leijen, "Extensible records with scoped labels",
+  TFP 2005). A continuation's cancel branch is `fin ++ Σ`, which the checker reads back by length
+  (`finOfBranch`, §27). So `F[..cr, ..sg]`, with an operation in both `cr` and `sg`, keeps it
+  twice.
+- **A row that keeps a repeat is refused wherever the kernel needs each operation once:** at
+  `[then]` and `unwind` (S.Uniq): `` the row `R` has an operation twice ``. So a template that
+  puts `F[..r1, ..r2]` under an `unwind`, used where `r1` and `r2` share an operation, is refused in
+  its instance, with the message's `` in the instance `f__rk` of `f`, used at L:C ``.
+- **A second signature is refused wherever one row would give `n.i` two signatures:** between a
+  written entry and a spliced one, between two splices, and within one row argument:
   `` the row argument of `f` gives `n.i` a second signature ``.
 
 **Errors at the use site.** A wrong row argument is reported where the template is used, and names
@@ -13443,6 +13753,10 @@ kernel error deep inside an instance.
   parameter elaborates to the same core, byte for byte (`bcc desugar`): its copy keys, site numbers
   and cancel rows are unchanged.
 - §38's abstraction safety: instantiation never merges slots.
+- A row with one splice at its tail and no repeated entry elaborates to the same core, byte for
+  byte. Every §76 program and reject keeps its output, its desugar, its counts and its message.
+  Splicing is in the frontend only (`Frontend/Syntax.lean`'s `Row`, the parser,
+  `Frontend/Elab/RowInst.lean`), with no kernel or checker change.
 
 ### Programs
 
@@ -13454,6 +13768,7 @@ kernel error deep inside an instance.
 | `corpus/core-site-generic.bc` | a `def` with a private `site s` (`handle_with[s]` inside), used twice, nested; the inner activation's performs go to the inner handler | `i32[2321]`, `live 0` |
 | `corpus/core-row-pipe-stop.bc` | §75's `pipe_stop` at two rows | `i32[42]`, `live 0` |
 | `corpus/core-row-key-tparam.bc` | a use whose arguments mention the caller's type parameter: the instance takes it as its own (`app__r2[T]`) | `(i32[3], inl ())`, `live 0` |
+| `corpus/core-row-splice.bc` | a plain definition with two row parameters, a cancel row `cancel[..r1]` and a clause whose continuation's cancel branch is `F[..r1, ..r2] 1` (`fin ++ Σ`), used where both rows give the same operation; the handler reads the cancel row as `r1`, so the cleanup's raise reaches the outer handler | `i32[7]`, `live 0` |
 | `corpus/core-row-capture-global.bc` | a template body naming a global type, used from a generic function with a same-named type parameter: the instance's own parameters take fresh names, so the global is not captured | `(inr (), i32[7])`, `live 0` |
 | `corpus/core-site-fresh-const.bc` | a private site's fresh name lies above a site written only in a constant's type (`unfold[…]`) and above the effects pass's sites | `i32[4]`, `live 0` |
 | `corpus/row-site-fresh-handler.bc` | a private site's fresh name beside a surface handler's site | `i32[4]`, `live 0` |
@@ -13587,6 +13902,954 @@ the old backend or a kernel program.
 - Two recursive positions on one path (binary trees, `X ⊗ [Ref X]`) keep the recursion.
 - Arrays of an `S ≠ X` holding `X` (`array (string ⊗ X)`), and inner `μ` keys.
 - Persistent `!μ` data copied or consumed by the word IR's helpers, which recurse.
+
+---
+
+## 78. Entry 77 — the unwinding lends' finaliser performs at its own row (#1046, K-b)
+
+This entry amends §19 (*Borrows*, the unwinding forms) and §27 (the finaliser's row; *The
+surface*, item 5). It serves #868 (effectful cleanup of a capability) and #940 (a `finally`'s write
+handed back).
+
+### What it adds
+
+**The unwinding lends' finaliser performs at its own row `Σ_D`.** The term is unchanged:
+
+    withborU d = λr. λf. (f [] r) then b. (r, b) unwind d r
+
+    withbor (2), unwinding:
+      d : U(Ref A ⊸ F_{Σ_D} 1)        at the rule's dead context
+      ⊢ withborU d : U(Ref A ⊸ U(∀'x ⊏ ⊓Δ. Mut 'x A ⊸ F_{Σ_M}(['x] B)) ⊸ F_Σ(Ref A ⊗ B))
+
+      Σ_M is Row.Unwind 'x;  Σ_M ≤ Σ;  Σ_D ≤ Σ;  Σ does not hold Div (so neither does Σ_D);
+      Σ_D.UnrD → Σ_M.PendPers   (hP)
+
+`withbor (1)` (`Ref A` lent as `Imm 'x A`) and `withbor (3)` (`Mut @a A` reborrowed as
+`Mut 'x A`, with `d : U(Mut @a A ⊸ F_{Σ_D} 1)`) take the same form.
+
+1. **It is `[then]` fused with the lend.**
+   - The callback is the body, at `Σ_M`, whose operations are all abortive (`Row.Unwind`, the
+     callback row of §19).
+   - The rest pairs the source with the answer.
+   - On an unwind, the finaliser gets the lend's source back and runs at `Σ_D`, and then the raise
+     continues. A raise of the finaliser supersedes it (§19, law 6). An operation of the finaliser
+     keeps the pending raise in its continuation, as `[then]`'s `[finalise]` does (§27).
+2. **The finaliser gets back the owner:** the owned cell `Ref A` for `withbor (1)` and `(2)`, and
+   the outer `Mut @a A` for `withbor (3)`. It consumes it.
+   - A capability cell is closed by `d`, possibly through an effect.
+   - A reborrowed `let mut` or `mut` capability is written through and released, and the write
+     lands in the outer cell.
+3. **Premises, against `[then]`'s.**
+   - `hfin` (`ThenLe`) is not needed: `Σ_M` has no capturable operation and no cancellable wait,
+     so no cancel runs through the finaliser.
+   - `[then]`'s `Banged Γ₂` is not needed: the lend's frame is never in a captured continuation.
+   - `hP` is kept.
+4. **The rules of §19 are instances.** At `Σ_D = ∅` and `Σ_M = Σ`, the rule is §19's
+   `withbor1U`/`withbor2U`/`withbor3U` (`.thunk (.arr src (F_∅ 1))` is `src ⊸ 1`). The three are
+   one rule, `withborUD`, at a kind `k : LendUKind` (*One rule for the three lends*, #1170);
+   `withbor1UD`/`withbor2UD`/`withbor3UD` are its theorems at the kinds `refImm`, `refMut` and
+   `reborrow a`, and the forms of §19 are theorems of the same names and statements. There is no new
+   term former, type former, `CDerives` index or machine step.
+5. **The cancel path is excluded by the types.** Every operation of `Σ_M` is abortive, so no
+   continuation is captured while the lend is live, and no cancel reaches a region holding it. The
+   finaliser runs after the lend has ended. A lend held across a suspension, with a cleanup that
+   gets it back, is not provided (*Open*), and the checker refuses it with a message that says so.
+
+**One rule for the three lends (#1170).** The kernel types `withbor (1)`, `(2)` and `(3)`'s
+unwinding forms with one rule, `withborUD`, and the checker with one typed-term node of the same
+name, both indexed by a kind `k : LendUKind` (`Core/EffBorrow.lean`): `refImm` (`Ref A` lent as
+`Imm 'x A`), `refMut` (`Ref A` lent as `Mut 'x A`) and `reborrow a` (`Mut @a A` reborrowed as
+`Mut 'x A`). The kind selects the lent source (`LendUKind.src`: `Ref A`, `Ref A`, `Mut @a A`), the
+callback's leaf (`LendUKind.leaf`), the side condition on the contents (`LendUKind.OK`: `VScoped Δ A`,
+an outliving witness, none) and the type
+`LendUKind.ty k = withborUTy (src) (cbUTy x ⊓Δ (leaf) B Σ_M) Σ (src ⊗ B)`, which is
+`withbor1UTyD`/`withbor2UTyD`/`withbor3UTyD` at the three kinds by definition. The remaining premises
+are the three rules' own and in the same order (`hΓ`, `hx`, the two freshness premises, `Σ_M`
+unwinding, `Σ_M ≤ Σ`, `Σ_D ≤ Σ`, `divB Σ = false`, `hP`, the finaliser's derivation).
+- **The old names stay.** `withbor1UD`, `withbor2UD` and `withbor3UD` are theorems of the judgment
+  and of each of its instances (`CDerives`, `CDerivesAt Ξ`, `CDerivesP`) with today's binders and
+  statements, so calls by position and by name (`(SD := [])`) are unchanged.
+- **The Fundamental Property's case** splits on the kind and applies `withbor1UD_compatX`,
+  `withbor2UD_compatX` or `withbor3UD_compatX` (`withborUD_compatX`). The chain does the same with the
+  `_compatN` lemmas (`withborUD_compatN`). No compatibility lemma changes.
+- **The term** is `withborUE d` at every kind, as before. Backend2 reads the lowering's lend
+  operation off the node's kind (`LendUKind.lendOp`: `lend imm`, `lend mut`, `relend`) and rebuilds
+  nothing. The surface constants `withbor1u`/`withbor2u`/`withbor3u` and their messages are
+  unchanged: each emits its kind.
+- The rule count of `CDerives` and of the checker's judgment each drops by two. A later kind adds a
+  constructor and a clause to each `LendUKind` function, not a rule.
+
+**The checker.**
+- **Core text:** `withbor{1,2,3}u[…] unwind (d)`. Without `unwind (d)`, the finaliser is the
+  source's consume, so all core text without it reads the same. At `Σ_D = ∅`, `d` is checked at
+  `U(src ⊸ F_∅ 1)` at the rule's context, whose live slots are persistent, and the emitted rule is
+  §19's, at `(Σ_M, Σ_D, Σ) = (S, [], S)`.
+- **Binding:** `unwind (d)` right after the brackets is the constant's. A `[then]` around such a
+  constant parenthesizes it, `x <- (return withbor3u[…]) unwind (D); N`, and the printer writes it
+  so. The form is core text only: a surface body that writes it is refused by the parser,
+  `` `unwind (d)` after an unwinding borrow is core text; in a surface body it is not written (a `finally` is elaborated to it) ``.
+- **The finaliser's row:** `d` is checked at the dead context at `U(src ⊸ F_{Σ_D} 1)`, with `Σ_D`
+  read from `d`'s derivation as `[then]`'s finaliser row is (§27 *The checker*), and `Σ = R ∪ Σ_D`.
+  The synthesis of a non-empty `Σ_D` is K-b.3's.
+- **Deciders:** the `RowLe`s, `divB` and `pendPersB` are §27's.
+- **The emitted rule:** at `Σ_D = ∅` the checker emits the rule of §19.
+- **Refused:** a callback row that is not unwind-only, with a written finaliser. The message names
+  the operation it may suspend at.
+
+**The surface** (#940, at `Σ_D = ∅`):
+- **A cleanup that uses one capability.** `with h(…) { M } finally { D }`, whose cleanup `D` uses
+  one capability `c` (a threaded `mut` cell, §18), elaborates to a reborrow of `c` across the
+  `with`, with `D` as its finaliser:
+
+      (c, x) <- withbor3u[@l, 'l, S, B, [r]] unwind (fun c -> D) c (Λ'l. fun c -> with h(…) { M });
+      D; x
+
+  - `r` is the row of the operations `M` performs. At `r = []` the reborrow is `withbor3` with no
+    finaliser, since it cannot unwind.
+  - On an unwind, `D` writes through the source and releases it, and the write lands in the
+    capability's cell.
+  - On the normal path `D` runs on the capability the reborrow hands back.
+  - The source is always the capability's `mut` cell: a reborrow, never `withbor2U` of an owner.
+- **Refused:**
+  - a cleanup that uses two capabilities:
+    `` a `finally` using two lent places (`Count`, `stdout`) has no kernel form yet (#1102, #1046) ``;
+  - a cleanup that uses a capability and performs, at the surface, since its finaliser row is
+    K-b.3's:
+    `` this cleanup uses `Count`, which the body also uses, and performs an operation of `Fail`; a cleanup of a lent place that performs is not provided yet (#1046) ``;
+  - in core text, a written finaliser that performs, by the checker:
+    `` this finaliser performs `[1.0 cancel i32 ~> 0]`; a finaliser of a lent place that performs is not provided yet (#1046) ``.
+- **A `let mut` in a `finally`** is not this entry's: `let mut` leaves the surface (#1104), and §42's
+  parse-time refusal of a `finally` that assigns a `let mut` stays.
+- **Programs** (observed, `bcc interp`, `live 0`; the three accepted programs give the same on
+  Backend2):
+
+  | Program | What | Answer |
+  |---|---|---|
+  | `corpus/fin-capability.bc` (from `reject/`) | a `finally` using a capability the body also uses, at an empty body row: a plain `withbor3` | `AB`, `inl i32[1]` |
+  | `corpus/fin-capability-unwind.bc` | the body ticks a `Count` capability (a handler's `mut` cell) and raises `500` past a `default` handler; the `with` is a reborrow of the capability whose cleanup ticks it again as the abort passes, and the tick lands in the handler's cell (`i32[2]` would mean it was lost) | `(inr i32[500], i32[3])` |
+  | `corpus/core-withbor3u-fin.bc` | core text: a cell `1`, lent; the reborrow writes `5` and aborts `42`; `d` writes `99` | `(i32[99], inr i32[42])` |
+  | `corpus/reject/finally-two-caps.bc` | a cleanup using `stdout` and a `Count` capability | the first refusal above |
+  | `corpus/reject/fin-capability-performs.bc` | a cleanup that uses a `Count` capability the body also uses, and raises through `Fail` | the second refusal above |
+  | `corpus/reject/core-withbor3u-fin-performs.bc` | core text: `d` aborts | the third refusal above |
+  | `corpus/fail/surface-withbor3u-unwind.bc` | a surface body writing `withbor3u[…] unwind (d)` | the parser's refusal (*The checker*, *Binding*) |
+
+### Baseline
+
+- `fundamentalC`, `adequacyC`/`adequacyD`, `fundamentalN_all`, `goal791N` and `handlerLawN_iff`
+  keep their statements.
+- `then_compatC`, `then_compatN`, `seq_raise_run` and `seq_raise_runK` are unchanged, and reused.
+- `withbor1U/2U/3U_compatX` and `_compatN` are restated at `(Σ_M, Σ_D, Σ)`. Their statements in §19
+  are the instance `Σ_D = ∅`, `Σ_M = Σ`.
+- The frame lemmas `ewpTS_I_frameU`, `ewpTS_M_frameU`, `ewpTS_M_antiFrameU`, `erwp_M_frameR` and
+  `erwp_I_frameR` are unchanged.
+- §72's `Const791.OKAt` and the suspending constants (`TreeGoal791`) are unchanged.
+- §13's determinism is unchanged: no machine step changes.
+- Every corpus and kernel program keeps its output. No existing term changes, and a finaliser that
+  performs nothing gives the derivation of §19.
+
+### Units
+
+- K-b.1, Core, built (#1081): `withbor{1,2,3}U` generalised in place as `withbor{1,2,3}UD`
+  (callback at `Σ_M`, result at `Σ`, finaliser at `Σ_D`; premises `Σ_M ≤ Σ`, `Σ_D ≤ Σ`,
+  `divB Σ = false` and `hP`, with `divB Σ_D = false` derived), the forms of §19 as same-named
+  theorems at `Σ_D = ∅`, `Σ_M = Σ`; `fin_runD`, `ewp_unwindD` (`ewp_unwind` with `seq_raise_run` at
+  the raise); the three compatibility lemmas restated.
+- K-b.2, the chain, built (#1081): `erwpK_unwindD`, with the callback's run at one world
+  (`cN_unwind_iff` at `Σ_M`) and the finaliser's at the `KW` worlds of `Σ` (`seq_raise_runK`); the
+  effectful `fin_claim`; the three `_compatN` restated.
+- K-b.3, the checker: `unwind (d)` in core text, the finaliser's row synthesised, the deciders, the
+  cancel-path refusal; `TExpr`/`TDerives` carry `Σ_M`. It extends the surface's #940 producer. Not
+  built.
+- K-b.4, programs, with answers from the interpreter, after K-b.3. Not built:
+  - `corpus/core-kb-close-raise.bc`: a capability written, then closed by a cleanup that raises;
+  - `corpus/core-kb-close-perform.bc`: the cleanup performs an answering operation;
+  - `corpus/core-kb-reborrow-write.bc` (#940): a reborrowed `let mut` written by an effectful
+    cleanup, read after the catch;
+  - `corpus/reject/core-kb-suspend.bc`: the body suspends while lent.
+- #940's capability part is built (#1138): a `finally` whose cleanup uses one capability, at
+  `Σ_D = ∅`, with the refusals and programs of *The surface*.
+- The three lends as one rule at `LendUKind` (#1170), after #798's steps A–D. Not built.
+- §27 item 5 lifted for a performing cleanup waits on K-b.3. The backend's check that the lend's
+  lowering takes an effectful finaliser is backend-foreman's.
+
+### Open
+
+- **A lend held across a suspension whose cleanup gets it back** (the cancel path: the body
+  performs a capturable operation or awaits while lent). It needs the cancel-row record (`Σ_D` in
+  the cancel rows of the callback's capturable operations) and the suspending constants'
+  finaliser at `Σ_D`. That is #844 Tier 2 and #821, a separate unit; refused until then.
+- **The slice lends** `sliceBorrowMU` and `sliceBorrowIU` keep a pure finaliser and stay separate
+  rules: their shape and bound premises differ in kind from the kinds of `LendUKind` (#1170). They
+  join it as kinds if they take the same generalisation, when a program needs it. `withloadU` (no
+  finaliser, its own term) stays separate too.
+- **A cleanup that uses two lent places** gets only one source back: not provided.
+- **Known gaps in #940's surface:** a cleanup using a different capability from the body's is
+  refused as used twice (#1136); a `with … finally` around a `for` over a generator fails with a
+  core type mismatch (#1137).
+- **A result row holding `Div`** is reached by `[sub]` after the application, not at the constant.
+- **Not derived:** the chain's hand-over from the lend's one-world run to the finaliser's run at the
+  `KW` worlds (K-b.2). Its obstruction has not been checked. If it fails, the entry narrows `Σ_D`
+  to operations that do not capture, rather than changing the relation.
+
+---
+
+## 79. Entry 78 — mutual codata: finite systems of ν equations (#995)
+
+This entry extends §7 (codata `νX. C`), and touches §12 (consume) and §68 (`unfoldK`, `nuOutK`).
+The user approved option M, mutual ν (#995). Code it adds is tagged `[spec §79]`, and the per-code
+rules `[spec §79, §68]`.
+
+### What it adds
+
+**Finite systems of codata equations.** A system is `νᵢ(X₀…Xₘ). C₀; …; Cₘ`: `n = m + 1` mutually
+recursive codata types, of which the `i`-th is selected. §7's `νX. C` is the case `m = 0`, by
+definition. Nothing is added to `VTy`, to the `CDerives` constructors or to `CDerives`' index. The
+five ν rules are generalised in place.
+
+1. **The former, generalised by deleting.**
+
+       C ::= … | νᵢ(X₀…Xₘ). C₀; …; Cₘ       (CTy.nuSys m i Cs, Cs = C₀ & (C₁ & … & Cₘ))
+       νX. C  ≜  ν₀(X₀). C                   (CTy.nu C := .nuSys 0 0 C)
+
+   - In each body `Cⱼ = Cs.body m j`, `U Xₖ` is the type variable `k` for `k ≤ m`, and a body's
+     outer types are shifted by `n`.
+   - The bodies are one `CTy`, a `&` spine with its length `m`, not a list, so `CTy` stays a plain,
+     non-nested mutual inductive.
+   - `CTy.nu` is an abbreviation usable as a pattern, so every type, abbreviation (`Loop`, `D`,
+     `Stream`, `Iter`, `Loop_Σ`) and program of §7 is unchanged.
+
+2. **Positivity over the system** (`SysOk m Cs`, with `NuOk C := SysOk 0 C`).
+   - Each body has §7's positive shape: a `&` of two observation trees.
+   - In each leaf result, every `U Xₖ` (`k ≤ m`) occurs only under `⊗`, `⊕` and `[@a]`
+     (`VTy.PolyAt k` for every `k ≤ m`; §7's `Poly` is `PolyAt 0`).
+   - Arguments and the operation types of `F_Σ` leaves are closed (`Cl 0`), as in §7, so no `Xₖ`
+     occurs in them.
+   - **Binder freshness over the system:** no lifetime bound by a `∀` leaf of any body is free in
+     any body. Unrolling `Cᵢ` puts every `U νⱼ` it mentions, and with it the whole system, under
+     `Cᵢ`'s `∀` leaves.
+
+3. **In and out, by simultaneous substitution.**
+
+       Γ ⊢ M : Cᵢ[U ν₀/X₀, …, U νₘ/Xₘ]         Γ ⊢ M : νᵢ(X⃗). C⃗
+       ──────────────────────────────  nuIn    ──────────────────────────────  nuOut
+       Γ ⊢ M : νᵢ(X⃗). C⃗                      Γ ⊢ M : Cᵢ[U ν₀/X₀, …, U νₘ/Xₘ]
+
+   - The premises are `SysOk m Cs` and `i ≤ m`.
+   - They are rules on the same term, as in §7.
+   - The substitution sends `Xₖ` to `U νₖ` and shifts the outer variables by `−n`. At `m = 0` it is
+     §7's `C[U(νX. C)/X]`.
+
+4. **Coiteration, one step per equation.**
+
+       unfoldᵢ : !U(S₀ ⊸ C₀[S⃗/X⃗]) ⊗ … ⊗ !U(Sₘ ⊸ Cₘ[S⃗/X⃗]) ⊸ !U(Sᵢ ⊸ νᵢ(X⃗). C⃗)
+
+   - The premises are `SysOk m Cs`, `i ≤ m`, a consumed context, and **freshness per pair**:
+     wherever `Xₖ` occurs in `Cⱼ`, `Cⱼ.BindsFresh Sₖ` (`SysFresh`).
+   - `unfoldᵢ steps s` answers an observation path of `Cᵢ` by running the same path of `stepᵢ s`.
+     It replaces each state `s′` at an `Xₖ` position by `unfoldₖ steps s′`.
+   - The recursion is the rule's, and the steps return states, never codata.
+   - At `m = 0` the type and the term are §7's `unfold`.
+   - It is sound by coinduction, with the candidate tuple `j ↦ {unfoldⱼ steps s | s ∈ 𝒱⟦Sⱼ⟧}`.
+
+5. **The per-code rules, per equation (§68).** `unfoldK` and `nuOutK` take the steps `Gs` (each
+   `Gⱼ.forceTy = some (Sⱼ ⊸ Cⱼ[S⃗/X⃗])`), and type every rest at `Xⱼ` at its own equation's code type:
+
+       Code⟨etaCode m j Cs; !G⃗ ⊗ (Sⱼ ⊗ 1)⟩ νⱼ
+
+   The other premises are §68's, per pair. At `m = 0` the codes and types are §68's.
+
+6. **The relation: a greatest fixed point over tuples.**
+   - `𝒞⟦νᵢ⟧` is the `i`-th component of the greatest tuple `R⃗` of candidates below one unfolding of
+     every body, with `U Xₖ` read at `Rₖ`. It is written in `Prop` as `∃ R⃗`.
+   - One unfolding is monotone in each component, since every `Xₖ` avoids `Mut` payloads and
+     arguments, so the tuple is a fixed point.
+   - It needs no step index in Core. In the chain each candidate carries the step index, as §7's
+     does. It is not a step-indexing question (#990 R3a).
+   - `𝒞⟦νᵢ⟧ = 𝒞⟦Cᵢ[U ν₀/X₀, …]⟧`.
+   - At `m = 0` the clause equals §7's propositionally, and §7's lemmas keep their statements.
+
+7. **Consume per projection (§12).** `U νᵢ(X⃗). C⃗` is consumable when `Cᵢ = D & F R`, with `R`
+   closed and consumable. The consume is §12's: force, `nuOut i`, the second projection (`close`),
+   then the consume of `R`.
+
+8. **Lowering** (not a kernel change; the backend's unit).
+   - The index `i` is static, in the type: no value carries a run-time tag. It reaches the layout
+     through `LCTy.nu m i`.
+   - `nuIn i` and `nuOut i` lower to nothing.
+   - `unfoldᵢ` lowers to one closure class per equation, sharing the steps' tuple. There is no
+     allocation per observation beyond the rest's closure.
+
+### Baseline
+
+- `fundamentalC`, `adequacyC`, `adequacyD`, `fundamentalN_all` and `goal791N` are re-proved with
+  the ν rules at systems. Their statements are unchanged.
+- `cC_nu_eq`, `cC_nu_unfold`, `cC_nu_iff`, `nuRel_out`, `nuRel_roll`, `cN_nu_out`, `cN_nu_roll`,
+  `cN_nu_unfold` and `cN_nu_iff` keep their statements, as the `m = 0` corollaries.
+- `unfold_compatX`, `unfoldK_compatX`, `nuOutK_compatX` and their chain forms are restated at
+  systems. Their `m = 0` instances are the statements of §7 and §68.
+- `loopBody_nuOk`, `streamBody_nuOk`, `iterBody_nuOk`, `loopEffBody_nuOk`, `CTy.loop_unroll` and
+  the other instance lemmas of §7 keep their statements. So do `d_drive`, `d_driveL`,
+  `tickProg_runs`, the `*_eval` kernel programs and the K4 instances (`CodeLoop855N`).
+- `consumeSlot_derives` and every `Consumable` instance are unchanged. `Consumable.nu` is kept as a
+  corollary.
+- Every corpus and kernel program keeps its output. No program's term changes: at `m = 0` the
+  types, the `unfold` term, the codes and the consume are §7's, §12's and §68's by definition.
+- There is no new judgment (`scripts/check-judgments.sh`), no new `CDerives` index, and no
+  inversion of `CDerives`.
+
+### Units
+
+- K-M.1, built (#1090): the former `CTy.nuSys m i Cs`, with `νX. C` the match-pattern
+  abbreviation `nuSys 0 0 C`; every match carries the system case. No rule reaches a system yet,
+  and the backends refuse one.
+- K-M.2, built (#1101): the relation at systems in Core and the chain, the `i`-th component of the
+  greatest tuple of candidates (`cC_nuS_iff`, `cN_nuS_iff`), unrolling by simultaneous
+  substitution; the same-term inversions at systems; `nuIn` and `nuOut` at every projection
+  (premise `SysOkAt m i`, target `unrollS m i C`).
+- K-M.3: `unfoldᵢ` at systems, in three slices. Not built.
+  - K-M.3a: the terms, and coiteration in Core;
+  - K-M.3b: coiteration in the chain;
+  - K-M.3c: the `unfold` rule, and the kernel instance `lexProg`, the lexer modes
+    `Normal`/`InString`: typed, evaluated, adequate, and covered by `goal791N`.
+- K-M.4, in two slices. Not built.
+  - K-M.4a: `unfoldK` and `nuOutK` per equation in both developments;
+  - K-M.4b: the checker's tests `sysOkB` and `sysFreshB`, consume per projection, and the final
+    program, `d_lexProgK`.
+
+### Open
+
+- **Lowering.** Backend-foreman's n-ary ν unit: `LCTy.nu m i`, `genUnfold` per equation, and the
+  layout's cycle over `n`. Until it lands, the backends refuse a system with an error.
+- **Surface.** There is no syntax for a system. Still to come: `protocol` declarations, a core-text
+  spelling `nu_i (X, Y). (C; D)`, and corpus programs (HTTP with a streamed body, an SMTP-like
+  server, lexer modes) on both backends.
+- **Effectful leaves in a system.** `F_Σ` leaves are covered by the general proof. The kernel
+  instance is pure, and the HTTP body at the corpus stage is the first program with them.
+- **Nested ν** is not part of this entry. No program needs it.
+- **Binder freshness over all pairs** is stricter than needed. Freshness only for the pairs
+  `(i, j)` with `Xⱼ` in `Cᵢ` would also be sound; it is left until a program needs it.
+- From §7, unchanged: other positions of `X`, lifetime-indexed iteration, and `WpChainCommutes`.
+
+---
+
+## 80. Entry 79 — plain local cells (`withlocal`, #1115)
+
+### What it adds
+
+`withlocal['l, @b, A, B] : A ⊸ (∀'l ⊏ ⊓Δ. Mut 'l A ⊸ ['l] B) ⊸ A ⊗ B`.
+The bracket bound `@b` witnesses `Δ ⊢ A ⊒ @b`; `'l` is fresh for `Δ`, `A` and `B`.
+The callback and its result use the existing plain `withbor2` premises, including its box.
+
+The term allocates a cell containing its first argument, lends the cell mutably to the
+callback, frees the cell after the callback returns, and answers the final contents paired
+with the callback's result. The owner is never passed to the callback. `free` returns the
+contents; it does not destroy them. Updating an owned payload uses the existing swap and
+consume rules, with no implicit duplication or abandonment.
+
+This is a derived constant, not a new typing rule, type former or machine step. Its callback
+has no outgoing effect row: any operation inside it must be handled there, and no suspension or
+unwind can escape the invocation. Capturing the view into an unrestricted closure and returning
+it outside the fresh lifetime are refused by the existing kernel rules.
+
+**One rule for the family (#1148).** The checker types every scoped local with one rule and one
+typed-term node, `withlocal`, indexed by a kind `k : LocalKind`. The kind selects the side
+condition (`LocalOK k`), the result type (`localTy k`), the erased core term (`localE k`), and the
+derived kernel lemma the rule projects to (`LocalKind.wf`; for `plain`, `withlocal_wf`). Plain
+`withlocal[…]` is the first kind, `plain`: its text, typing and lowering are unchanged. Backend2
+reads the kind from the node. A new kind adds a constructor and a clause to each of these
+functions in `Core/Local.lean`, not a checker rule. `CDerives` is unchanged, and the checker
+judgment's rule count does not grow.
+
+**The unwinding kind (#1128).** `unwind SM S`, core text `withlocalu['x, @b, A, B, [r]]`, has type
+`U (A ⊸ U(∀'x ⊏ @b. Mut 'x A ⊸ F_SM(['x] B)) ⊸ F_S(A ⊗ B))` (`withlocalUTy`). Its side condition is
+the plain kind's (`LocalBase`), plus `A` persistent, `SM.Unwind x` (the callback's row is abortive
+only), `RowLe SM S` and `Row.divB S = false`. Its term `withlocalUE` allocates the cell, lends it by
+`withbor2UD` (§78) with the finaliser `localFin = λr. forget (free r)`, and frees it on the value
+path. `withlocalU_wf` derives it from existing rules, so `CDerives` and the checker's rule count are
+unchanged. Backend2 keeps the cell in a frame slot on both paths. On the abort path the free is the
+slot's end and emits nothing, and the persistent contents are dropped with no release (`UNPROVED:`
+at `genLocalU`).
+
+**The loop kind (#1140).** `loop A S B R`, core text `withlocal_loop['x, @b, A, S, B, R]`, keeps
+a local cell across an uncounted loop. Its type (`withlocalLoopTy`) is
+`A ⊗ S ⊸ !(S ⊸ ∀'x ⊏ ⊓Δ. Mut 'x A ⊸ ['x](B ⊕ S)) ⊗ !(S ⊸ ∀'x ⊏ ⊓Δ. Mut 'x A ⊸ ['x]R)
+⊸ U(Loop (A ⊗ B) (A ⊗ R))`. Its term
+`withlocalLoopE` is `unfold` over the state `A ⊗ S`. Each observation lends the contents as a plain
+local (`withlocalE`) to the callback that the caller's step gives for its state: `next` finishes
+with the final contents and `B`, or goes on with the new contents and state; `close` answers the
+final contents and `R`. The rule erases to the derived lemma `withlocalLoop_wf`: `unfold`, then
+`withlocal_wf` per turn, so there is no further copy of alloc → lend → free, and no judgment or
+machine rule is added. Its side condition is `LocalBase` plus `x` free in neither `S` nor `R`. The
+kind carries its four types because the term's `unfold` reads them. Backend2 keeps the contents in
+the loop's state, a word tuple passed by value (no heap cell), and each turn lends them from a frame
+slot of that turn's function (`genLocalLoop`), so a loop makes no allocation beyond its own. Nothing
+new is `UNPROVED:`; each turn relies on `genLocal`'s frame-cell note.
+
+### Lowering
+
+The checker emits a derived typed `withlocal` node whose erasure is the construction above. Backend2
+reads that node, never a surface name or an analysis of the erased term. Its wrapper cell is a
+register or a slot in the allocating function's frame, never a heap allocation. The wrapper retains
+its declared payload type `A`, since only `Mut A`, not the owner, reaches the callback. Its width
+therefore comes from `A` itself, independently of unrelated type-changing owned cells.
+`bcc-counts --frames` reports actual frame slots; `--registers` separately counts promoted locals per
+invocation, with no target instruction. The native-facts gate accounts for both placements when
+comparing with the old backend. Unsupported placement is a compilation error. Explicit allocations
+in the payload remain explicit allocations. A supported straight-line numeric scalar callback must
+have the same allocation, dispatch, copy, load and store counts as explicit state. Address-taken
+callbacks may use a frame slot. The lowering's unproved storage simulation is marked `UNPROVED:` at
+its site.
+
+### Programs
+
+Observed, `bcc interp`, `live 0`:
+
+| Program | Answer |
+|---|---|
+| `corpus/core-withlocal.bc` | `(i32[12], i32[512])` |
+| `corpus/core-withlocal-branch.bc` | `(i32[7], i32[0])` |
+| `corpus/core-withlocal-callback.bc` | `(i32[7], i32[3])` |
+| `corpus/core-withlocal-class.bc` | `((i32[7], i32[3]), i64[9])` |
+| `corpus/core-withlocal-nested.bc` | `(i32[18], i32[15])` |
+| `corpus/core-withlocal-owned.bc` | `(i32[42], i32[7])` |
+| `corpus/core-withlocal-unit.bc` | `((), i32[17])` |
+| `corpus/core-withlocal-widths.bc` | each scalar width's two extremes, as bits (`u8` to `f64`) |
+| `corpus/core-withlocal-unwind.bc` (the unwinding kind: a scope that divides, and aborts at `d = 0` with the value it read) | `(inl (i32[36], i32[25]), inr i32[10])` |
+| `corpus/core-withlocal-loop.bc` (the loop kind: 0190's `count` shape; 3 allocations, all the runtime harness's I/O cells, as without a local) | `(i32[4], (i32[4], i32[128]))` |
+| `corpus/reject/core-withlocal-escape.bc` | refused: the view does not outlive `'l` (`boxed['l]`) |
+| `corpus/reject/core-withlocal-unrestricted.bc` | refused: `!thunk` does not promote over `mut 'l i32` |
+
+### Baseline
+
+`fundamentalC`, `adequacyC`, `adequacyD`, `fundamentalN_all` and `goal791N` keep their
+statements and assumptions: the typing lemma composes existing rules. Every existing corpus
+and kernel program keeps its answer. No existing surface form changes, and no elaborator
+state threading is introduced. There is no new index on `CDerives` and no inversion of it.
+
+### Units
+
+- #1115's plain variant, built (#1117): the derived constant (`Core/Local.lean`, `withlocal_wf`),
+  its typed node through the checker, and Backend2's frame and register placement.
+- The family's one checker rule, indexed by `LocalKind` (#1148), built (#1162).
+- The unwinding kind (#1128), built (#1167).
+- The loop kind (#1140), built (#1174).
+- A surface form, and its producer, are #1115's. Not built.
+
+### Open
+
+The later kind: a `Mut` to `Imm` reborrow for read-only stretches (#1141). Suspension and
+handler-owned state are separate work. For the loop kind: several `let mut`s in one loop (one cell
+holding a product, then a split view, or nesting), and wiring the surface `let mut` over `loop {}`
+to this constant (#1130).
+The old backend compiles the erasure; its scalar locals are not register-promoted by this entry.
+
+---
+
+## 81. Entry 80 — a captured continuation's cancel performs its operation's cancel row (#1105)
+
+### What it adds
+
+- **The rule.** The cancel branch of a captured continuation performs only its operation's cancel
+  row `F` (§27):
+
+      cancelTy F = F_F 1,   ⊤ when F = ⊤
+
+  `κ`'s type keeps `Σ` in its resume branch, `U((B ⊸ F_Σ R) & cancelTy F)` (`kTy`). At `F = []`
+  the cancel branch is `F 1`, a cancel that performs nothing. §18's table, §19's and §27's
+  `[handle]`, §15's stored generator and §51's clause read it so.
+- **Why it is sound.** `κ`'s cancel runs `ccatch (K†[raise])`. `Kont.dead` drops every handler
+  frame of every name, so no clause runs during a cancel (§19 *Cancels*), and what it performs is
+  what the cancelled region's finalisers perform, the operation's cancel row. The handle
+  compatibility lemmas already prove the cancel at that row (`ewp_handle_or`'s `T₁ ≤ Tk`), and
+  `[handle-last]` already reads `κ`'s cancel at it (`lastTc`, §51). `Σ` in the cancel branch was a
+  weakening only.
+- **What programs gain.**
+  - A continuation whose operation's cancel row is empty is consumable at any row
+    (`kTy_cancel_consumable_iff`).
+  - An operation's cancel row need not hold the operations of `Σ` a `κ` stored across it would
+    otherwise perform, so stored-`κ` schedulers and pipes whose stages perform different
+    capturable operations type: a cancel row no longer has to hold itself through a `κ` cancelled
+    in a finaliser.
+- **The checker** reads a `κ`'s cancel row back from its cancel branch whole (`finOfBranch`,
+  `kFin`, `clauseFin`), with no handler row to strip.
+- **The surface.** A clause that does not use its `κ` cancels it where the cancel branch performs,
+  that is where `F` is not empty (§27 *The surface* item 4); the handler's row no longer counts.
+- **Programs** (observed, `bcc interp`, `live 0`):
+
+  | Program | What | Answer |
+  |---|---|---|
+  | `corpus/core-fin-sched-own-row.bc` | a stored-`κ` scheduler parks a task at `3.0`, whose cleanup writes (`8.0`, must resume) after it reads input (`9.0`, capturable); the scheduler's I/O wait has the parked task's cancel as its finaliser and is timed out. The parked `κ`'s cancel is at `F[8.0] 1`, `3.0`'s cancel row, so `9.0`'s cancel row need not hold `9.0` | `inr ()` |
+
+  Every other corpus program keeps its output: 62 `κ` cancel annotations in 24 files are written
+  at the new type.
+
+### Baseline
+
+- `fundamentalC`, `adequacyC`/`adequacyD`, `fundamentalN_all` and `goal791N` keep their statements.
+- `HandlerLawN` and `MissingN` keep their text. Their content strengthens: more handlers type,
+  since `κ`'s type is more usable, so the assumption covers more of them (`Core/Assumptions.lean`).
+- Statements that change:
+  - `cancelTy` drops its row argument, and `kTy`'s cancel component with it;
+  - `cancelTy_rowLe` concludes `RowReach F.rowOf S`;
+  - `sProt_rowOf_perf` and `sFin_cases` are restated without the handler's row, and `cancelTabOf`
+    with them;
+  - the kernel programs' lemmas `d_cancelCT`, `d_timeoutCl`, `dAt_timeout`, `dAt_stashCl` and
+    `dAt_stash` take `RowLe F.rowOf S`.
+- Deleted: `tab_le_cancelTab`, `rowLe_dup`, and `KappaFinSelf` with `kappaFinSelf`, whose
+  limitation this entry removes.
+- Every corpus and kernel program gives the same output. No machine step changes.
+
+### Units
+
+- #1105, built (#1139): `cancelTy`, `kTy`, the checker's read-back, the surface's cancel
+  insertion, the restated lemmas, the corpus annotations and `core-fin-sched-own-row`.
+
+### Open
+
+- **Pipes** stay paused; this entry removes only their obstacle of a cancel row holding itself.
+
+---
+
+## 82. Entry 81 — the surface respelling (#1116)
+
+### What it adds
+
+A new spelling of today's surface: kaikai's punctuation, Koka's effect semantics as today, and
+Hylo's parameter modes where they mean a lend or move the language already has. **It is a
+respelling.** Every construct that `corpus/**` (outside `corpus/pending/`) and `lib/**` use gets a
+new spelling, and each new form maps to one existing form, with that form's meaning and kernel
+term, cited by section below. Nothing the language cannot do today is added, except `local`
+(*Local storage*), the surface form of §80's `withlocal`. There is no kernel change.
+
+**Not built.** No parser reads the new spelling yet (#1131), and the corpus is not rewritten
+(#1132). Today's surface stays the one `bcc` reads until both land.
+
+### The rules
+
+1. **Kaikai's punctuation where kaikai has the construct:** function headers `: R / E1 + E2`, `#`
+   comments, `handle { … } with …`, `->` in handler clauses, newline-separated arms and
+   statements, `import`, `as` for a named instance, and trailing brace blocks.
+2. **#1116's decided items apply where today's language has what they name:**
+   - **Hylo modes** spell the lends and moves the language has (*Modes*): `let`, the default, for a
+     shared lend of a fresh region; `inout` for a mutable lend of a fresh region; `sink` for an
+     owned move; and `&x` at a call that may change `x`.
+   - **No `let mut`** (#1104): its sites are written in the forms of #1104's templates, all of
+     which exist today (*`let mut` sites*).
+   - `Some`/`None` are today's constructors (`lib/prelude.bc`).
+   - An effect operation and a function do not share a name.
+3. **Every other name keeps its spelling.** Keywords (`while`, `loop`, `for`, `break`, `borrow`,
+   `modify`, `fold_own`, `poly`, `must_close`, …), library names, builtins and constants are
+   unchanged. A name changes only where rule 1 or 2 changes it.
+4. **Core text is not respelled.** `def`, `main : C = M`, `x <- M`, `return V`, `thunkv`,
+   `fun (x : A) ->`, `Fun 'x < @.`, the lend constants and the other kernel formers are the
+   kernel's own text (§3, §62), and are accepted in `def` bodies as written today. Builtins a
+   surface body calls (`count_fold[S]`, `array_copy['t, u8]`, `unbang`, `inl`/`inr`,
+   `roll`/`unroll`) keep their names and bracket arguments.
+
+### Lexical
+
+| Today | New | Note |
+|---|---|---|
+| `-- comment` | `# comment` | kaikai's |
+| statements separated by `;` | a newline, or `;` | `;` keeps one-line bodies legal |
+| a statement over several lines | a newline does not end a statement inside `(…)` or `[…]`, after a line ending in a binary operator, `,`, `->`, `=` or `:`, or before a line starting with `else`, `finally`, `with`, a binary operator or `.` | the layout rule of Go, Kotlin and Koka |
+| `i32[n]`, `u8[n]`, `u64[n]`; `42`, `1.5`, `b'a'`, `'c'`, `"…"` | unchanged | §8, §17, §37 |
+| names, `'a` lifetimes, `[T]` type arguments | unchanged | kaikai writes type parameters in `[…]` too |
+
+Reserved words added: `handle`, `import`, `inout`, `sink`, `as`, `local`. Operator added: `:=`.
+None is removed, since core text uses them.
+
+### The table: today's form, the new form
+
+Every row keeps today's kernel term.
+
+**Declarations**
+
+| # | Today | New | SPEC |
+|---|---|---|---|
+| D1 | `fn f[T]<'a>(x: A, …) -> B = S` | `fn f[T]<'a>(x: A, …) : B { S }`, or `… : B = e` for one expression | §3, §31 |
+| D2 | `fn f(…) -> B with E1, E2[A] = S` | `fn f(…) : B / E1 + E2[A] { S }` | §18, §38 |
+| D3 | a named row entry `with src: E` | `/ src: E` | §38 |
+| D4 | `where S: 'c` | unchanged, after the row: `fn f[S]<'c>(…) : B where S: 'c { … }` | §23 |
+| D5 | `total fn …`, `div def …` | unchanged | §14 |
+| D6 | `main -> T = S` | `fn main() : T { S }` | §11, §34 |
+| D7 | `include name` | `import name` (the same splice of `lib/name.bc`) | §11 |
+| D8 | `extern name : A` | unchanged | §11, §72 |
+| D9 | `type N[T]<'a> = A` (an alias) | unchanged | §42 |
+| D10 | `data N[T] = C1 \| C2(A, B) \| C3(f: A)` | unchanged: `data` introduces constructors, `type` stays the alias | §42 |
+| D11 | `data N = { f: A, … }` (a record) | unchanged | §42 |
+| D12 | `shape`, `block σ`, `val σ`, `fam` | unchanged | §5 |
+| D13 | `poly f[T]<'a>(x: view 'a T) -> R`, `poly f at T = e` | `poly f[T]<'a>(x: view 'a T) : R`, `poly f at T = e` | §36 |
+| D14 | `effect E[T] { fn op(x: A) -> B; ctl op2(x: A) -> B }` | `effect E[T] { op(x: A) : B; ctl op2(x: A) : B }`: an answering operation is unmarked, and `ctl` marks a control operation | §18, §38 |
+| D15 | `must_resume ctl op(…) -> B`, `multi ctl op(…) -> B`, `-> never` | `must_resume ctl op(…) : B`, `multi ctl op(…) : B`, `: never` | §18, §25 |
+| D16 | `handler h[T](p: P): E[A], A -> R with E2 = { return(x) = M; op(x, k) = N }` | `handler h[T](p: P) : E[A], (A) -> R / E2 { return(x) -> M; op(x, k) -> N }` | §18, §19 |
+| D17 | an answering handler `handler h(mut s: S): E = { op(x) = e }` | `handler h(mut s: S) : E { op(x) -> e }` | §18 |
+| D18 | lent handler state `handler h(&mut i: I): E = { … }` | `handler h(inout i: I) : E { … }` | §18, §32 |
+| D19 | the field marker `must_close(release) f: A` | unchanged | §27 |
+| D20 | `def name[P] : A = V`, `main : C = M` | unchanged (core text) | §3, §76 |
+
+Also unchanged: projections `.1`/`.2`; field reads `x.f`; hex literals `0x…`; the lifetimes
+`top`, `dom`, `/\`, `\/`, `'main`; the binders `all`, `forall`, `Fun`, `Λ`; core rows `~>`,
+`lin`/`cancel`/`unr`, `row r`, `site s`, `cancel[…]`; the capabilities `stdin`, `stdout`, `stderr`,
+`clock`, `args`; library names; every `host[op]`; the Unicode spellings (`⊸ ⊕ μ λ ∀ ⊏ ⊓ ⊔ ⊓Δ ⊤`);
+and the constants written only in `corpus/forms.bc` (`shorten_imm`, `withbor_s_*`, `withbor_f2_*`,
+the `*u` lends, `release_bang`/`release_unk`, `copy_bang`, `:>`).
+
+**Types**
+
+| # | Today | New | SPEC |
+|---|---|---|---|
+| T1 | `!(A => B)`, `!(A => B with E)` in surface signatures, also under `all 'x < @.` | `!((A) -> B)`, `!((A) -> B / E)`; `1 => B` is `(1) -> B`. Types in core text keep `=>` | §2, §33 |
+| T2 | `A => B` without `!` (a linear block type) | `(A) -> B` | §30, §33 |
+| T3 | `A * B`, `1`, `A + B`, `0`, `never`, `bool` | unchanged | §3, §42 |
+| T4 | `imm 'a T`, `mut 'a T`, `view 'a T`, `array_imm 'a A`, `array_mut 'a A`, `text 'a`, `text_mut 'a`, `box 'c A`, `ref A` | unchanged as types. Only `imm`, `mut`, `array_imm` and `array_mut` at a parameter with a fresh region are written as a mode (P1–P3) | §4, §9, §17, §23 |
+| T5 | `U`, `F`, `-o`, `&`, `mu`, `nu`, `pull`, `sized`, `loop A B`, `all 'x < @.`, `Clo[A, B]<'c>` | unchanged | §3, §7, §14, §15, §22 |
+| T6 | `i32 i64 u8 u32 u64 f32 f64`, `array A`, `string`, `buf A`, `lit`, `Option[T]` | unchanged | §8, §9, §17, §37, §73 |
+
+**Parameters, lends and places**
+
+| # | Today | New | SPEC |
+|---|---|---|---|
+| P1 | `fn f<'a>(x: imm 'a T)`, `'a` used nowhere else; the call `f(&v)` | `fn f(x: T)` (`let`); the call `f(v)` | §12, §62 |
+| P2 | `fn f<'a>(x: array_imm 'a A)`, `'a` fresh; the call `f(&v)` | `fn f(x: array A)`; the call `f(v)` | §9 |
+| P3 | `fn f<'a>(x: mut 'a T)` or `array_mut 'a A`, `'a` fresh; the call `f(&mut v)` | `fn f(x: inout T)` or `x: inout array A`; the call `f(&v)` | §9, §12 |
+| P4 | an owned parameter `x: T` of a linear type or of a type variable, in a `fn` or a `handler` | `x: sink T` (a bare `x: A` reads as a lend) | §3 |
+| P5 | a parameter of a persistent type (`i32`, `bool`, `!…`, `lit`) | `x: T`, unchanged: `let` and `sink` coincide at `!` | §2 |
+| P6 | a parameter whose region is named elsewhere (the result, another parameter, a `where`, a row) | its type unchanged, `x: imm 'a T`; the call's `&v` is `v` | §23 |
+| P7 | `&mut x` where a lend is passed (`map_insert(&mut m, k, v)`, `with h(&mut c)`) | `&x` | §12 |
+| P8 | `&x`, a shared lend at a call | `x` (the callee's mode says it is lent) | §12 |
+| P9 | `let r = &x; S`, a shared lend for the rest of the block | `borrow imm x { r -> S }` | §14 |
+| P10 | `borrow imm P { 'x, b -> S }`, `borrow mut P { … }`, `borrow mut (r1, r2) { … }` | unchanged | §4, §9 |
+| P11 | `borrow mut &mut x { 'l, b -> S }` | `borrow mut &x { 'l, b -> S }` | §12 |
+| P12 | `modify P { v -> S }`, `modify &mut x { v -> (e, r) }` | `modify P { v -> S }`, `modify &x { v -> (e, r) }` | §12, §41 |
+| P13 | `*e`, `*&mut m` | `*e`, `*&m` | §4 |
+| P14 | `clone(x)` | unchanged | §42 |
+| P15 | `x.f` read; `x.f = e` on a `for`'s `mut` leaf | unchanged; on a `let mut` record, #1104's template | §42, §60 |
+
+**Expressions and data**
+
+| # | Today | New | SPEC |
+|---|---|---|---|
+| E1 | `let p = e; N` | `let p = e`, then `N` on the next line or after `;` | §42 |
+| E2 | `x <- M; N` in a surface body | `let x = M`; `x <- return V` is `let x = V` | §3 |
+| E3 | a final `return V` in a surface body | `V` | §3 |
+| E4 | `if c { S1 } else { S2 }`, `if c { S }` | unchanged | §42 |
+| E5 | `match e { p1 -> M1 \| p2 -> M2 }` | arms one per line, or separated by `\|` on one line | §42 |
+| E6 | patterns `x _ () (p, …) C C(p) box C(p) N { f: p } n u8[n] 'c' true false inl p inr p` | unchanged | §42 |
+| E7 | `case V { inl x -> M \| inr y -> N }` | arms as E5 | §3 |
+| E8 | `C(e, …)`, `box C(e, …)`, `N { f: e, … }` | unchanged | §42 |
+| E9 | `fold_imm e { … }`, `fold_own e { … }`, `fold_reuse e { … }` | unchanged, arms as E5 | §60, §61 |
+| E10 | blocks `!{ x -> S }`, `{ () -> e }`, `{ x -> S }` | unchanged; a block that is a call's last argument may trail the call: `f(a) { x -> S }` is `f(a, { x -> S })` | §30, §33 |
+| E11 | infix `+ - * / % == != < <= > >= && \|\|`, `not` | unchanged | §8, §39 |
+| E12 | library functions (`checked_div`, `div_euclid`, `get`, `at`, `set`, `swap_at`, `map_*`, `buf_*`, `eq_lit`, …) | unchanged | `lib/` |
+| E13 | builtins `array_new[A] (n, f)`, `count_fold[S] (…)`, `count_try`, `unbang`, `roll`, `unroll`, `absurd`, `boxed['x]`, `unbox`, `copy[…]`, `release_*`, `host[op]`, `withbor*`, `withlocal`, `slice_*` | unchanged | §2–§9, §16, §80 |
+
+**Effects and handlers**
+
+| # | Today | New | SPEC |
+|---|---|---|---|
+| H1 | `with h(e) { M }` | `handle { M } with h(e)` | §18, §19 |
+| H2 | `match with h { M } { arms }` | `match handle { M } with h { arms }`. The handler after `with` is never a call with a trailing block: a `{` after it belongs to the enclosing form | §18 |
+| H3 | a named instance `with n = h(e) { M }`; `n.op(v)` | `handle { M } with h(e) as n`; `n.op(v)` | §38 |
+| H4 | `with h(…) { M } finally { D }` | `handle { M } with h(…) finally { D }` | §27 |
+| H5 | `op(v)` | unchanged | §18 |
+| H6 | `k(v)` in a clause | unchanged: the clause names its continuation | §19 |
+| H7 | `with deep { … }`, `with on_exhausted(f) { … }`, `with spawn { … }` | `handle { … } with deep`, `handle { … } with on_exhausted(f)`, `handle { … } with spawn` | §20, §30 |
+| H8 | `raise(e)`, `to_result`, `default(d)`, `map_err(f)` | unchanged | §39 |
+| H9 | `perform[n.i]`, `abort[n.i]`, `handle_with[n](…)`, `M unwind (D)` | unchanged (core text) | §19, §27 |
+
+**Loops, generators, pipes, tasks, I/O**
+
+| # | Today | New | SPEC |
+|---|---|---|---|
+| L1 | `while c { M }`, `loop { M }` | unchanged | §14 |
+| L2 | `for x in a..b { M }`; `for x in xs { M }` over `sized` data | unchanged | §16 |
+| L3 | `for x in g(e) { M }` over a `Yield[T]` generator | unchanged | §15 |
+| L4 | `break`, `break e`, `continue`, `return e` in a loop body | unchanged, with today's meaning | §14, §16 |
+| L5 | `for … { … } else { d }`, a loop's value | unchanged | §16 |
+| L6 | `yield(x)`, `effect Yield[T]` | unchanged | §15 |
+| L7 | `let g : U (pull A B R) = gen(v)` | unchanged | §15 |
+| L8 | `e \|> s`, `e >\| s` | unchanged | §33, §70 |
+| L9 | `effect Async { ctl await(); ctl log(x: i32) }`, `spawn`, `Task[A]` | `effect Async { ctl await() : 1; ctl log(x: i32) : 1 }`; sites as H1 | §30, §32 |
+| L10 | `Stdin`, `Stdout`, … and their operations, `println`, … | declared as D14; calls unchanged | §34 |
+| L11 | recursion, `bounded_fix`, `Exhausted` | unchanged | §20, §21 |
+
+### Local storage: `local`
+
+The one row beyond today's surface spelling: the explicit form of §80's `withlocal`. Its kernel
+constant is built (§80); its surface producer is #1115's, not built. No corpus program uses it.
+`let mut` does not elaborate to it.
+
+| # | Form | Meaning | SPEC |
+|---|---|---|---|
+| S1 | `local x = e` or `local x: A = e`, then the rest of the block | one `withlocal` scope over the rest of the enclosing block: `withlocal['l, @b, A, B] e (Λ'l. λx. ⟦rest⟧)`, `'l` fresh. `x` names the view `mut 'l A`, never a value | §80 |
+| S2 | `x` in an expression | a read of the contents: a `withswap` answering `(v, v)`. Persistent `A` only; a read of a linear local is the kernel's refusal | §80, §12 |
+| S3 | `x := e` | a store: a `withswap` answering `(e, ())`, `e` evaluated first. The old contents are consumed by the existing rules | §80 |
+| S4 | the end of the block | the view is released; the final contents come back with the result (`A ⊗ B`) and are consumed | §80 |
+
+Its limits are §80's: the plain variant only, so the scope's row is empty, and no unwind or
+suspension leaves it (§80 *Open*).
+
+### Modes
+
+| Mode | Means exactly | Today | Kernel |
+|---|---|---|---|
+| `x: T` (`let`) | a shared lend for the call, its region fresh | `x: imm 'a T` or `array_imm 'a A`, `'a` fresh; the caller writes `&v` | `withbor1`, or `copy` of an `imm` (§12, §62) |
+| `x: inout T` | a mutable lend for the call, its region fresh | `x: mut 'a T` or `array_mut 'a A`, `'a` fresh; the caller writes `&mut v` | `withbor2`/`withbor3` (§12, §62) |
+| `x: sink T` | an owned move | `x: T`, linear | the argument itself (§3) |
+| `&x` at a call | the call may change `x` | `&mut x` | lend sugar (§12) |
+
+- Inside the body nothing changes: an `inout` parameter is a `mut 'a T`, written with `modify`,
+  `*`, and the `slice_*` and `array_*` constants as today. Its region is anonymous unless the
+  signature names it (P6).
+- A parameter of a persistent type needs no mode, since `let` and `sink` coincide. A parameter
+  whose region is named elsewhere in the signature keeps its explicit type (P6): a mode cannot say
+  which region a result borrows from.
+- With `&` gone from shared lends (P8), a lend `at(a, i)` and a move `array_set(a, i, v)` look the
+  same at the call; the callee's mode says which, as in Hylo.
+
+### `let mut` sites
+
+`let mut` is removed (#1104), so it has no new spelling. Each site is written in the form #1104's
+migration templates give for its pattern; each of those forms exists today and has a row above:
+
+| Template | Today's form | Rows |
+|---|---|---|
+| T-value | `let x = e` shadowing; `let x = if …`; a loop's value `for … { break v } else { d }` | E1, E4, L5 |
+| T-fold | `count_fold[S] (!{ (i, s) -> … }, hi, lo, s0)`, `count_try[S, E]` | E10, E13 |
+| T-rec | a recursive `fn go(state…)`, with `Exhausted` | D1, L11 |
+| T-mutlend | `f(&mut x)`, `borrow mut a { 'x, v -> … }`, `modify` on a `mut 'a` parameter | P3, P7, P10, P12 |
+| T-lend | `modify &mut x { x -> (e, ()) }` on a plain `let` | P12: `modify &x { x -> (e, ()) }` |
+| T-gen | a generator `fn` whose locals are its state | L3, L6 |
+
+Every `let mut` pattern of the corpus has a template that checks and gives the same output, so no
+corpus program is lost. T-lend is threaded by the same elaboration as `let mut`; whether it stays
+is #1111's question.
+
+### Grammar
+
+Productions not listed are today's (§3, §42). `NL` is a newline.
+
+```
+program   ::= (decl NL)*
+decl      ::= 'import' name
+            | 'fn' name tparams? '(' params? ')' ':' type row? where? fbody
+            | 'fn' 'main' '(' ')' ':' type row? fbody
+            | 'effect' name tparams? '{' (opdecl sep)* '}'
+            | 'handler' name tparams? ('(' hparams ')')? ':' hsig row? '{' (clause sep)* '}'
+            | 'data' name tparams? '=' datadef
+            | 'type' name tparams? '=' type
+            | 'poly' name tparams? '(' params ')' ':' type
+            | 'poly' name 'at' type '=' expr
+            | 'extern' name ':' type
+            | coredecl                                    # def …, main : C = M (unchanged)
+tparams   ::= ('[' name (',' name)* ']')? ('<' lifetime (',' lifetime)* '>')?
+params    ::= param (',' param)*
+param     ::= name ':' mode? type
+mode      ::= 'inout' | 'sink'                            # absent: let
+hparams   ::= hparam (',' hparam)*
+hparam    ::= 'mut' name ':' type | name ':' mode? type
+hsig      ::= rowitem (',' '(' type ')' '->' type)?       # E[A], (A) -> R   or   E
+row       ::= '/' rowitem ('+' rowitem)*
+rowitem   ::= (name ':')? name ('[' type (',' type)* ']')?
+where     ::= 'where' name ':' lifetime (',' name ':' lifetime)*
+fbody     ::= '=' expr | block
+opdecl    ::= qual? name '(' params? ')' ':' type         # no qual: answering
+qual      ::= 'ctl' | 'must_resume' 'ctl' | 'multi' 'ctl'
+clause    ::= name '(' names? ')' '->' (expr | block)     # return(x) -> …, op(x) -> …, op(x, k) -> …
+                                                          # several statements need a block
+block     ::= '{' (stmt sep)* expr? '}'
+stmt      ::= 'let' pat (':' type)? '=' expr
+            | 'local' name (':' type)? '=' expr           # one withlocal over the rest of the block
+            | name ':=' expr                              # a store into a local
+            | expr
+sep       ::= NL | ';'
+expr      ::= today's expressions, and
+            | 'handle' block 'with' name targs? ('(' args ')')? ('as' name)? ('finally' block)?
+            | 'match' expr '{' arm (armsep arm)* '}'      # armsep ::= NL | '|'
+            | call block                                  # a trailing block is the last argument
+            | '&' place                                   # today: &mut place
+type      ::= today's types, and
+            | '(' types? ')' '->' type row?               # today: A => B with E
+```
+
+### Spelling choices
+
+| Old form | Spelling | Not taken |
+|---|---|---|
+| `data Option[T] = Some(T) \| None` | `data` for declarations with constructors; `type` stays the alias | kaikai's `type` for both |
+| `effect Stdout { fn print_byte(b: u8) }`, `ctl raise(e: E) -> never` | an answering operation is unmarked (`print_byte(b: u8) : 1`); `ctl` marks a control operation | keeping `fn`; Koka's `fun`/`ctl` |
+| `match t { None -> n \| Some(r) -> n + sum(r) }` | arms on new lines, or `\|` between arms on one line | new lines only; `;` |
+| `: Fail[E], A -> A with Fail[E2]` | `: Fail[E], (A) -> A / Fail[E2]`, read as the function type a handler is | `A -> A / …`; `on A -> …` |
+| `local`'s keyword | `local`, which names the kernel constant and reads as storage; `:=` is the store, as in kaikai | `cell`, `place` |
+
+Consequences: `handle { … } with h` puts the handler after its body, so nested handlers read
+inside out. `count_fold[S] (step, hi, lo, s0)` keeps today's order, the end before the start.
+
+### Programs
+
+Ten corpus programs are translated whole, beside today's text (#1116): `corpus/aoc/2020-08.bc`,
+`corpus/aoc/2021-06.bc`, `corpus/alpha-effect-row.bc`, `lib/fail.bc`, `corpus/async-bank.bc`,
+`corpus/async-bank-inbox.bc`, `corpus/effects-sum-gen.bc`, `corpus/data-option-block.bc`,
+`corpus/data-config.bc` and `corpus/decl-guard.bc`. Each is expressible. They are checked by hand
+only: with no parser, the translations are not run.
+
+### Baseline
+
+No kernel, checker, elaborator, backend or library change: every theorem, rule and program answer
+is unchanged. Today's surface is the one `bcc` reads.
+
+### Units
+
+- The parser for the new spelling (#1131). Not built.
+- The corpus and library rewritten in it (#1132). Not built.
+- `local`'s surface producer (#1115). Not built.
+
+### Open
+
+These are not part of the respelling.
+- **Loop state across an uncounted loop.** Its step is a `!` closure, which cannot capture a `mut`
+  view, and a lend held across turns is a lend across a stop (§14). The routes are a relaxed
+  `withlocal` variant or §14's per-turn re-lend.
+- **`iterate`** has no core-text spelling, no producer and no Backend2 rule.
+- **The loop-state spelling** (`loop_with`, Futhark's `loop`, `for` over `withlocal`) and whether
+  T-lend stays (#1111).
+- **Rebinding** beyond a shadowing `let`.
+- **`let mut` as kaikai's `var x := e` / `x := e`**: the removal stands (#1104).
+- **Views as values and named regions** beyond `imm 'a`, `mut 'a` and `view 'a`.
+- **Borrow extent**, lexical or until last use.
+- **Pipes:** kaikai's `|`, `||`, `|?`, `|!`, and §75's connector (#1103).
+- **A handler short form** beyond today's answering handlers.
+- **Absence and failure** (`Option` answers and an absence effect).
+- **Capability threading** (#1111).
+- **The `set` mode** (the kernel has no uninitialised places, #639) and **`subscript … yield`** (no
+  user-written lend projection).
+- **`&x` as a write to a plain `let` value**, T-lend's form (#1111).
+- **Exits as effects** (`Return`, `Break`, `Continue`), and a producer for `[handle-last]`.
+- **New forms:** `#{…}` interpolation, match guards, array literals and `xs[i]`, operators at
+  `u32`/`u64`, `{ r with f = e }`, effect-qualified calls (`Log.log(…)`), row aliases, inclusive
+  ranges `[a..b]`.
+- **`box resume`**, a written BOXED-κ marker; drivers recognised by type.
+- **Kernel pieces:** field lends of record values; `withlocal`'s effect-row variants; a kernel form
+  for handler-local state; shared borrows across tasks' waits (#821); a `finally` writing places;
+  two index lends into one array; array literals of linear elements.
+
+---
+
+## 83. Entry 82 — one typing judgment: `CDerivesX` at a judgment index (#798)
+
+### What it adds
+
+The kernel's typing judgments become one inductive, `CDerivesX I Δ Γ e j` (`Core/Judgment.lean`),
+each rule written once, at a **judgment index** `I : JIdx`. The judgments the kernel has today are
+its instances: abbreviations that keep their names, their rules and every statement over them.
+
+    structure JIdx where
+      ties : Option EffCtx := none   -- RowAt Ξ at the rules that read a signature off a row
+      pin  : Bool := false           -- the relaxed rules of §29
+    abbrev CDerives        := CDerivesX {}
+    abbrev CDerivesAt (Ξ)  := CDerivesX {ties := some Ξ}
+    abbrev CDerivesP       := CDerivesX {pin := true}
+
+- **The fields.** A field is a gating premise of the rules it gates.
+  - `ties`: at `some Ξ`, ten rules take `hAt : I.RowOK S`, which is `RowAt Ξ S` (§19, decision
+    R). These are the rules that read an operation's signature off a row: `iterate`, `divFuel`,
+    `reify`, `effPerform`, `effAwait`, `effRaise`, `effHandleV`, `effHandleVB`, `effHandleT`,
+    `effHandleL`. At `none` the premise is `True`.
+  - `pin`: `lendR`, `lendLoopR` and `nilDead` (§29) take `hPin : I.pin = true`. Every other rule
+    is the same at every index.
+  - `I ≤ I'` holds field by field. A tie may be dropped (`some Ξ ≤ none`), and the relaxed rules
+    may be enabled (`false ≤ true`). `CDerivesX.mono` states that a derivation at `I` is one at
+    every `I' ≥ I`.
+- **The freeze.** `JIdx` is a **parameter** of the one inductive, not an index on `CDerives`.
+  - A field is a premise uniform across a rule's premises and its conclusion: a derivation never
+    changes index, and elimination stays non-dependent.
+  - A coordinate that a rule switches would be an index, and is not admitted.
+  - A new field is a new judgment, and is decided as one: by decision 19 (`docs/decisions.md`)
+    and review. `scripts/check-judgments.sh` sees only a new inductive, not a new field.
+    `CDerives` itself carries no index.
+- **Generated per instance** (`Core/JudgmentElim.lean`, by `scripts/gen-pin.py`):
+  - each rule under the instance's name, at the instance's premises: `CDerives.effPerform`
+    without `hAt`, `CDerivesAt.effPerform` with `RowAt Ξ S`, `CDerivesP.lendR` without `hPin`;
+  - the instance's eliminator, with the instance's own cases (`induction h using
+    CDerives.induct`). A rule whose field is off at the instance is refuted, so it is no case.
+- **A, `ties`.**
+  - `CDerives` and `CDerivesAt` become abbreviations of `CDerivesX`, and `Core/Tied.lean`'s
+    hand-written copy of the rules goes.
+  - `scripts/gen-pin.py` reads its rules from `CDerivesX`.
+  - `CDerivesAt.toCDerives` is an instance of `mono`.
+  - The `CDerives`/`CDerivesAt` pairs `insert_dead` and `append_dead` are one induction each.
+- **B, `pin`.**
+  - The three relaxed rules and their definitions (`NoThunkT`, `Row.ResumeO`, `Row.ResumeOC`,
+    `lendCb`, `lendLoopApp`, …) move to `Core/Judgment.lean`.
+  - `CDerivesP` becomes an abbreviation and is no longer generated.
+  - `PinLaw` (`Core/PinLaw.lean`) is stated before the Fundamental Property, which becomes one
+    theorem:
+
+        fundamentalX (hLaw : I.pin = true → PinLaw) : CDerivesX I Δ Γ e j → SemJ Δ Γ e j
+
+    `fundamentalC` is `fundamentalX` at `{}`, where its hypothesis is vacuous; `fundamentalC_pin
+    hPin` is it at `{pin := true}`; `CDerivesP.ofC` is `mono`. `Core/PinFundamental.lean` is
+    written by hand and holds the corollaries under `PinLaw`.
+  - The merged `insert_dead` and `append_dead` take `I.pin = false`, since R1 and R2 conclude at
+    `r : Ref T` alone.
+- **C, the checker.**
+  - `TDerivesX I` is generated from `CDerivesX`, with `TDerivesAt Ξ` and `TDerivesP` its
+    abbreviations.
+  - There is one `erase`, one `weaken` and one `weakenΔ`, and `TDerivesAt.toP` is an instance of
+    `TDerivesX.mono`.
+- **D, the rule.** The gate and `CLAUDE.md` say "one judgment; a new coordinate is a field", and
+  `scripts/judgments.allow` lists `CDerivesX` and `TDerivesX` for the kernel and the checker.
+
+### Baseline
+
+- **Every registered statement keeps its type** (`scripts/axioms/*.names`), through the
+  abbreviations, or as an instance of the general lemma. Each step checks this by the snapshot
+  method: every registered name's type and `#print axioms` before and after, with any change
+  listed.
+- **`fundamentalC`, `adequacyC`/`adequacyD` and `goal791N_nil`** keep their statements and take
+  no hypothesis. `fundamentalN_all` and `goal791N` keep theirs.
+- **The `PinLaw` theorems.** `fundamentalC_pin`, `adequacyC_pin`, `adequacyD_pin`,
+  `adequacyD_pin_safe`, `total_open_pin`, `PinLaw.stop`, `PinLaw.loop` and `pinLaw_iff` keep
+  their statements under `PinLaw`. `PinLaw`, `LendFrame`, `LoopFrame`, `PinStop` and `PinLoop`
+  keep their text. The register (`Core/Assumptions.lean`) lists `fundamentalX` as taking
+  `PinLaw` at `I.pin = true`.
+- **Axioms.** Every result's axioms stay within `propext`, `Classical.choice` and `Quot.sound`. A
+  changed axiom line inside those is listed, with its reason.
+- **Rules.** No rule is added or removed, and no rule's premises change at any instance. Each keeps
+  its one compatibility lemma.
+- **Names.** The constructor names that `scripts/PinSites.lean` and `scripts/axioms/s051.names`
+  cite resolve, as generated rules of the instance.
+- **No other change.** No relation, machine step, checker output or backend changes. Every corpus
+  and kernel program gives the same output.
+
+### Units
+
+**Status by step.** This entry states the whole target, ahead of steps B to D. Each step makes
+true the clauses it names:
+
+- **A** (`ties`): built, landed as #1178. True with A: `CDerivesX` and `JIdx`, `CDerives` and
+  `CDerivesAt` as instances, the generated rules and eliminators, `mono`, one `insert_dead` and
+  one `append_dead`; §3 *Typing*, §10, §19's `CDerivesAt Ξ`, §28's induction list, §61, §68.
+- **B** (`pin`; one `fundamentalX`): code to follow. True with B: `CDerivesP` as
+  `CDerivesX {pin := true}` and the relaxed rules gated by `hPin` (§29 *The extended
+  judgment*); `fundamentalX`, with `fundamentalC` and `fundamentalC_pin` its instances, and
+  `CDerivesP.ofC` as `mono` (§29 *Theorems*); `Core/PinFundamental.lean` written by hand.
+- **C** (`TDerivesX`): code to follow. True with C: §3's typed term generated as `TDerivesX`,
+  with `TDerivesAt Ξ` and `TDerivesP` its instances.
+- **D** (the gate's and `CLAUDE.md`'s wording): code to follow.
+
+They land in that order.
+
+### Open
+
+- **`general`**: a third field, for the rules whose soundness is `HandlerLawN` (L2(a)). Its
+  default is `true`, so that `CDerives` stays this judgment.
+- **Providers (#778)**, as a field.
+- **The checker's `TTied` conjunction** (two derivations per node), folded into one derivation
+  with ties as a predicate field.
+- **The derived rules stated per instance** (`effThenA`, `effHandle`, `withbor1U`, …), as one each
+  over `I`.
 
 ---
 

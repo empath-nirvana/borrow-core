@@ -371,6 +371,7 @@ def ofC (ms : MachSet) (fd : EvSet) : CTy → Except String LCTy
     if let (n, _) :: _ := c.stripEv.1 then
       throw (evInternal n "a `ν`'s observation")
     return .nu c
+  | .nuSys _ _ _ => throw "LIR: a system of codata equations (mutual ν) is not lowered  [spec §79]"
   | C@(.eff n i q A B fin _ C') => do
     -- `F_Σ R`: `R`, `R ⊕ P` with the payload of `Σ`'s abortive operations (SPEC §47), or the
     -- outcome at its machine operations (SPEC §49); its evidence first [spec §71].

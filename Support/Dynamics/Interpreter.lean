@@ -42,6 +42,16 @@ def Mem.free (μ : Mem) (ℓ : Loc) : Mem :=
 def Mem.set (μ : Mem) (ℓ : Loc) (v : Val) : Mem :=
   { μ with cells := μ.cells.map fun c => if c.1 = ℓ then (ℓ, v) else c }
 
+/-- `μ[d+k ↦ μ(s+k) | k < n]`, every cell read before any is written, or `none` when a cell of
+either range is missing: the write of `sliceCopy`, `Heap.copy`'s counterpart.  `[spec §74]` -/
+def Mem.copy? (μ : Mem) (d s n : Nat) : Option Mem :=
+  match (List.range n).mapM (fun k => μ.get? (s + k)) with
+  | none => none
+  | some vs =>
+    if (List.range n).all (fun k => (μ.get? (d + k)).isSome) then
+      some ((List.range n).zip vs |>.foldl (fun m (k, v) => m.set (d + k) v) μ)
+    else none
+
 /-- Non-empty memory at the end of a run is a leak — the bug in Fig. 2b. -/
 def Mem.leaked (μ : Mem) : Bool := !μ.cells.isEmpty
 
@@ -106,6 +116,14 @@ def delta (H : Host) (μ : Mem) : Expr → Val → Step
       .next μ (idxAns ℓ n i).val
   | .prim .split, ⟨.pair (.pair (.loc ℓ) (.prim (.lit (.i32 n)))) (.prim (.lit (.i32 i))), _⟩ =>
       .next μ (splitAns ℓ n i).val
+  | .prim .sliceCopy, ⟨.pair (.pair (.loc ℓd) (.prim (.lit (.i32 nd))))
+        (.pair (.prim (.lit (.i32 di))) (.pair (.pair (.loc ℓs) (.prim (.lit (.i32 ns))))
+          (.pair (.prim (.lit (.i32 si))) (.prim (.lit (.i32 len)))))), _⟩ =>
+      if copyOk nd di ns si len then
+        match μ.copy? (ℓd + di.toNat) (ℓs + si.toNat) len.toNat with
+        | some μ' => .next μ' (copyAns ℓd nd di ns si len).val
+        | none => .stuck .useAfterFree
+      else .next μ (copyAns ℓd nd di ns si len).val
   | .prim .drop, ⟨.pair f (.pair (.loc ℓ) (.prim (.lit (.i32 n)))), h⟩ =>
       .next μ (dropFill ⟨f, h.pair_left⟩ ℓ 0 n.toNat)
   | .prim .count, ⟨.pair f (.pair (.prim (.lit (.i32 n))) (.pair (.prim (.lit (.i32 i))) s)), h⟩ =>
@@ -153,7 +171,7 @@ theorem isVal_of_isValB : ∀ e : Expr, isValB e = true → IsVal e
   | .app (.prim (.host _)) _, h | .app (.prim (.lit _)) _, h | .app (.prim .tab) _, h
   | .app (.prim .idx) _, h | .app (.prim .split) _, h | .app (.prim .drop) _, h
   | .app (.prim .count) _, h | .app (.prim .countTry) _, h | .app (.prim .boundedFix) _, h
-  | .app (.prim .iterate) _, h
+  | .app (.prim .iterate) _, h | .app (.prim .sliceCopy) _, h
   | .app (.prim .perform) _, h
   | .app (.prim .raise) _, h | .app (.prim .hnd) _, h | .app (.prim .ubind) _, h
   | .app (.prim .ccatch) _, h | .app (.prim .cfin) _, h

@@ -78,6 +78,7 @@ def Row.respan (sp : Span) : Row → Row
   | .cons n i q A B f r => .cons n i q (A.respan sp) (B.respan sp) (f.respan sp) (r.respan sp)
   | .top => .top
   | .var x => .var x
+  | .splice x r => .splice x (r.respan sp)
 
 def Shape.respan (sp : Span) : Shape → Shape
   | .leaf _ A => .leaf sp (A.respan sp)
@@ -99,6 +100,7 @@ def Const.respan (sp : Span) : Const → Const
   | .releaseBang A => .releaseBang (A.respan sp)
   | .withbor1 x A B => .withbor1 (x.respan sp) (A.respan sp) (B.respan sp)
   | .withbor2 x b A B => .withbor2 (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp)
+  | .withlocal x b A B => .withlocal (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp)
   | .withbor3 a x A B => .withbor3 (a.respan sp) (x.respan sp) (A.respan sp) (B.respan sp)
   | .withload a x A B => .withload (a.respan sp) (x.respan sp) (A.respan sp) (B.respan sp)
   | .withswap a A B => .withswap (a.respan sp) (A.respan sp) (B.respan sp)
@@ -137,12 +139,18 @@ def Const.respan (sp : Span) : Const → Const
   | .sliceEmptyMut a A => .sliceEmptyMut (a.respan sp) (A.respan sp)
   | .sliceReplaceMut a A => .sliceReplaceMut (a.respan sp) (A.respan sp)
   | .sliceSwapMut a A => .sliceSwapMut (a.respan sp) (A.respan sp)
+  | .sliceCopyMut a b A => .sliceCopyMut (a.respan sp) (b.respan sp) (A.respan sp)
   | .countFold S => .countFold (S.respan sp)
   | .countTry S E => .countTry (S.respan sp) (E.respan sp)
   | .boundedFix A C => .boundedFix (A.respan sp) (C.respan sp)
   | .withbor1U x A B r => .withbor1U (x.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
   | .withbor2U x b A B r =>
       .withbor2U (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
+  | .withlocalU x b A B r =>
+      .withlocalU (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
+  | .withlocalLoop x b A S B R =>
+      .withlocalLoop (x.respan sp) (b.respan sp) (A.respan sp) (S.respan sp) (B.respan sp)
+        (R.respan sp)
   | .withbor3U a x A B r =>
       .withbor3U (a.respan sp) (x.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
   | .withloadU a x A B r =>
@@ -176,6 +184,7 @@ def Val.respan (sp : Span) : Val → Val
   | .inst _ V a => .inst sp (V.respan sp) (a.respan sp)
   | .ascribe _ V A => .ascribe sp (V.respan sp) (A.respan sp)
   | .const _ c => .const sp (c.respan sp)
+  | .constU _ c d => .constU sp (c.respan sp) (d.respan sp)
   | .shorten _ m σ a V => .shorten sp m (σ.respan sp) (a.respan sp) (V.respan sp)
   | .lend _ x m => .lend sp (x.respan sp) m
   | .sugar _ s => .sugar sp s
@@ -200,7 +209,7 @@ def Comp.respan (sp : Span) : Comp → Comp
   | .nuOut _ M => .nuOut sp (M.respan sp)
   | .ascribe _ M C => .ascribe sp (M.respan sp) (C.respan sp)
   | .loop _ ℓ src V M N =>
-    .loop sp (ℓ.map (·.respan sp)) (src.respan sp) (V.respan sp) (M.respan sp) (N.respan sp)
+    .loop sp { label := ℓ.label.map (·.respan sp), writes := ℓ.writes.map (·.respan sp) } (src.respan sp) (V.respan sp) (M.respan sp) (N.respan sp)
   | .perform _ n i V => .perform sp n i (V.respan sp)
   | .abort _ n i V => .abort sp n i (V.respan sp)
   | .handle _ n st hr hc M =>

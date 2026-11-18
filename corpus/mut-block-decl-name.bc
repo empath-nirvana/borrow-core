@@ -1,0 +1,9 @@
+-- A block given at a block parameter assigns an enclosing `let mut` that has a declaration's name
+-- (#1068): the local is renamed apart from the declaration, and `ap`'s copy passes the local at
+-- each call of the block (SPEC §41, rule R3).
+--
+-- Answer: i32[1202].
+fn ap(f: !(i32 => i32)) -> i32 = f(1) * 10 + f(2)
+fn tick() -> i32 = 0
+fn count() -> i32 = let mut tick = 0; let t = ap(!{ u -> tick = tick + 1; tick }); t * 100 + tick
+main -> i32 = count()

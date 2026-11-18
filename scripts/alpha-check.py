@@ -11,9 +11,11 @@ difference.
 
 Two passes:
 
-* `program`: each program renamed, the library as it is. The check's positions and names are
-  mapped back through the renaming: a column on a renamed line, a name `{x}q{k}` to `x`, and a
-  generated name that carries a position (`io_lb12_5_0`).
+* `program`: each program renamed, the library as it is. Its binders are named `{x}__q{k}`, which
+  Hygiene renames again (`hygName`), so the renamed program's locals all take Hygiene's path. The
+  check's positions and names are mapped back through the renaming: a column on a renamed line, a
+  name `{x}__q{k}` (with Hygiene's `hy{n}[c{h}]_` prefix stripped) to `x`, and a generated name
+  that carries a position (`io_lb12_5_0`).
 * `library`: every module of `lib/` renamed (`BCC_LIB`), each program as it is. A message from a
   module's code is printed at the module's position under the program's name, so columns are
   compared only up to the line; names are mapped back as above, and the original's renamed
@@ -24,21 +26,47 @@ under `corpus/` (and the probes under `docs/expressiveness-probes/` with `--prob
 named. It fails on any difference, and prints each. `--alpha` renames with another build than the
 one checked, to run the check on a build that has no `bcc alpha`.
 """
-import argparse, os, re, shutil, subprocess, sys, tempfile
+import argparse, os, re, shutil, subprocess, sys, tempfile, threading
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import slotpool  # noqa: E402  (the machine-wide job pool, scripts/slot)
+
+
+# Per program (thread): whether a run ended other than a deterministic run ends (a signal), or the
+# renaming failed, so that the result cache does not record it.
+UNSURE = threading.local()
+
+_runs = {}
 
 
 def run(bcc, args, env=None):
-    p = subprocess.run([bcc] + args, capture_output=True, text=True, env=env, cwd=ROOT)
-    return p.returncode, p.stdout + p.stderr
+    """`bcc args` under env: its status and output. A run in this process's own environment is
+    made once: `compare` checks and erases the original program in both passes, the same command
+    on the same file, and the second reads the first's result. The memo is keyed by the command
+    line, so a file must not change while the run lasts (each program and each renamed copy is
+    written once, before it is read)."""
+    k = (bcc, tuple(args)) if env is None else None
+    if k is not None and k in _runs:
+        return _runs[k]
+    with slotpool.held():
+        p = subprocess.run([bcc] + args, capture_output=True, text=True, env=env, cwd=ROOT)
+    if p.returncode < 0:
+        UNSURE.flag = True
+    r = p.returncode, p.stdout + p.stderr
+    # A run that ended by a signal is not kept: the next asks again.
+    if k is not None and p.returncode >= 0:
+        _runs[k] = r
+    return r
 
 
 def renaming(bcc, f):
     """`bcc alpha --map f`: [(line, col, written, new, variable)], or None when it does not parse."""
     rc, out = run(bcc, ["alpha", "--map", f])
     if rc != 0:
+        UNSURE.flag = True
         return None
     edits = []
     for l in out.splitlines():
@@ -48,6 +76,23 @@ def renaming(bcc, f):
 
 
 WORD = re.compile(r"[A-Za-z0-9_']+")
+# A name Hygiene gave a local, `hy{n}_{x}` (`hy{n}c{h}_{x}` in a control handler's code): `x`. Its
+# number counts the renamings of the declaration, which differ between the two programs.
+HY = re.compile(r"\bhy\d+(?:c[A-Za-z0-9]+)?_")
+
+
+def hygName(x, x2):
+    """The program pass's name for a binder `bcc alpha` names `{x}q{k}`: `{x}__q{k}`. A local whose
+    name has `__` is renamed by Hygiene (`Frontend/Elab/Hygiene.lean`, `isGlobal`), so every binder
+    of the renamed program goes through Hygiene's renaming, which the original's mostly do not: a
+    name the elaboration carries that Hygiene leaves stale (a closure's `writes(…)`, #1068) shows
+    up as a difference."""
+    return x2 if x2 == x else x + "__" + x2[len(x):]
+
+
+def unhyg(x, x2):
+    """`bcc alpha`'s name for the binder `hygName` names `x2`."""
+    return x + x2[len(x) + 2:]
 POS = re.compile(r"(?<![\w.])(\d+):(\d+)")
 GEN = re.compile(r"\b(io_[a-z]+)(\d+)_(\d+)")
 
@@ -85,6 +130,7 @@ class Back:
         elif not self.cols:
             s = POS.sub(lambda m: f"{m.group(1)}:_", s)
             s = GEN.sub(lambda m: f"{m.group(1)}{m.group(2)}__", s)
+        s = HY.sub("", s)
         return WORD.sub(lambda m: self.names.get(m.group(0), m.group(0)), s)
 
 
@@ -133,10 +179,11 @@ def compare(bcc, f, g, back, envG=None, backF=None):
 
 
 def programs(probes):
-    out = []
-    dirs = ["corpus"] + (["docs/expressiveness-probes"] if probes else [])
-    for d in dirs:
-        for r, _, fs in os.walk(os.path.join(ROOT, d)):
+    """Every corpus file (`scripts/corpus-set.sh all`), and the probes with `--probes`."""
+    out = subprocess.run([os.path.join(ROOT, "scripts/corpus-set.sh"), "all"], capture_output=True,
+                         text=True, check=True, cwd=ROOT).stdout.split()
+    if probes:
+        for r, _, fs in os.walk(os.path.join(ROOT, "docs/expressiveness-probes")):
             out += [os.path.relpath(os.path.join(r, x), ROOT) for x in fs if x.endswith(".bc")]
     return sorted(out)
 
@@ -151,6 +198,21 @@ def main():
     a = ap.parse_args()
     files = a.files or programs(a.probes)
     ab = a.alpha or a.bcc
+
+    # Each program is a unit of the result cache (scripts/gate_cache.py): a recorded pass is
+    # skipped when the program, the binaries (`--bcc`, `--alpha`), the library, scripts/ and the
+    # tools are as they were.
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    import gate_cache
+    units = gate_cache.Units("alpha-check", bins=[a.bcc, ab])
+    keys = {f: units.key(f) for f in files}
+    todo = [f for f in files if not units.hit(keys[f])]
+    units.replayed, units.ran = len(files) - len(todo), len(todo)
+    if not todo:
+        units.done()
+        print(f"alpha-check: {len(files)} program(s), 0 difference(s)")
+        sys.exit(0)
     tmp = tempfile.mkdtemp(prefix="alpha-")
 
     # The library renamed, and each module's renaming read backwards (names only).
@@ -174,12 +236,18 @@ def main():
 
     def one(i_f):
         i, f = i_f
+        UNSURE.flag = False
         diffs = []
         edits = renaming(ab, f)
         if edits is not None:
+            edits = [(l, c, x, hygName(x, x2), v) for (l, c, x, x2, v) in edits]
             g = os.path.join(tmp, f"p{i}", os.path.basename(f))
             os.makedirs(os.path.dirname(g))
-            open(g, "w").write(run(ab, ["alpha", f])[1])
+            out = run(ab, ["alpha", f])[1]
+            for (x, x2) in {(x, x2) for (_, _, x, x2, _) in edits}:
+                if x2 != x:
+                    out = re.sub(r"(?<![\w'])" + re.escape(unhyg(x, x2)) + r"(?![\w'])", x2, out)
+            open(g, "w").write(out)
             diffs += ["program pass: " + d for d in compare(a.bcc, f, g, Back(edits))]
         # The library pass: the original's messages from module code name renamed binders as the
         # module writes them (`x1`), the renamed library's as `{x}q{k}`: both to `x`.
@@ -188,17 +256,20 @@ def main():
         own = set(WORD.findall(open(os.path.join(ROOT, f)).read()))
         rf = Back([], {v: x for v, x in libVars.items() if v not in own}, cols=False)
         diffs += ["library pass: " + d for d in compare(a.bcc, f, f, back, envLib, rf)]
-        return f, diffs
+        return f, diffs, UNSURE.flag
 
     bad = 0
     with ThreadPoolExecutor(a.jobs) as ex:
-        for f, diffs in ex.map(one, enumerate(files)):
+        for f, diffs, unsure in ex.map(one, enumerate(todo)):
             if diffs:
                 bad += 1
                 print(f"{f}: differs under renaming")
                 for d in diffs:
                     print("  " + d.replace("\n", "\n  "))
+            elif not unsure:
+                units.pass_(f, keys[f])
     shutil.rmtree(tmp, ignore_errors=True)
+    units.done()
     print(f"alpha-check: {len(files)} program(s), {bad} difference(s)")
     sys.exit(1 if bad else 0)
 

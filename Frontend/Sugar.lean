@@ -29,7 +29,7 @@ annotated first (`Frontend.Elab.fillProgram`), and each decision below reads tho
   that performs an effect of the system interface gets the capability's extern too (SPEC §34,
   `Elab.Effects.platformMain`). `main : F A` becomes `main : F (Caps * A)`: each terminal `return V` of its body
   becomes `return (caps, V)`, and any other terminal `T` becomes `r <- T; return (caps, r)`,
-  with the capabilities read by name where the path ends (`wrapTail`).
+  with the capabilities read by name where the path ends (`Comp.mapTail`).
 * **`for x in V { M }; N`**, `V` an iterator made from a capability, in any function or `main`
   becomes a loop by `unfold` over the state (iterator, other capabilities, threaded variables at
   their inferred types), and makes the function div (§14): a state of the body's one state
@@ -125,6 +125,7 @@ def _root_.Frontend.Val.elab (lend : Bool) : Val → Except Error Val
   | .bangThunkv sp M => return .bangThunkv sp (← M.elab false)
   | .run sp M => return .run sp (← M.elab lend)
   | .mark sp k V => return .mark sp k (← V.elab lend)
+  | .constU sp c d => return .constU sp c (← d.elab false)
   | V@(.var ..) | V@(.clone ..) | V@(.defApp ..) | V@(.unit ..) | V@(.const ..) | V@(.sugar ..) => pure V
 
 /-- Elaborate `&c` in a computation: in `x <- M; N`, one `&c` in `M` becomes
@@ -246,17 +247,6 @@ def _root_.Frontend.Comp.fill (hv : String → Option Val) (hc : String → Opti
   M.fillS hv hc fun _ => none
 
 /-! ### Ambient capabilities in `main` -/
-
-/-- Apply `f` to every terminal computation reached through tail positions: the body of a bind
-or a `let`, both arms of a `case`, and what follows a `for`. -/
-def wrapTail (f : Comp → Comp) : Comp → Comp
-  | .bind sp x A M N => .bind sp x A M (wrapTail f N)
-  | .letUnit sp V M => .letUnit sp V (wrapTail f M)
-  | .letPair sp x y V M => .letPair sp x y V (wrapTail f M)
-  | .case sp V x M y N => .case sp V x (wrapTail f M) y (wrapTail f N)
-  | .loop sp ℓ src V M N => .loop sp ℓ src V M (wrapTail f N)
-  | .unwind sp x A M D N => .unwind sp x A M D (wrapTail f N)
-  | T => f T
 
 /-- A right-nested tuple of variables (`()` when empty). -/
 def tupleVal (sp : Span) : List String → Val
@@ -484,7 +474,7 @@ def headLoops (c : TCx) (exp : Option CVTy) : Comp → Option (Span × String)
 /-- Where a body loops, on its spine: a `for`, or a call run in direct style. `B` is the body's
 result type. -/
 def loopsAt (c : TCx) (B : Option CVTy) : Comp → Option (Span × String)
-  | .bind _ x A M N =>
+  | .bind _ x A M N | .unwind _ x A M _ N =>
     (headLoops c (A.bind c.elabV) M).orElse fun _ => loopsAt (c.push x.name (bindTy c A M)) B N
   | .letUnit _ V M =>
     ((callIn c divFuel (some .unit) V).map fun (sp, f) => callMsg sp f).orElse fun _ =>
@@ -559,7 +549,7 @@ def termParts (parts : List CVTy) (ρ : List (String × String)) :
     | some y => termParts parts ((x.name, (ρ.lookup y).getD y) :: ρ) N
     | none => termParts parts ρ N
   | .loop _ _ _ _ _ N => termParts parts [] N
-  | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N => termParts parts ρ N
+  | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N | .unwind _ _ _ _ _ N => termParts parts ρ N
   | .case _ _ _ M _ N => (termParts parts ρ M).orElse fun _ => termParts parts ρ N
   | .ret _ (.app _ (.sugar _ .retE) V) | .ret _ V =>
     ((parts.zip (alignV parts V)).filter (strictlyLinear ·.1)).mapM fun (A, v) =>
@@ -730,14 +720,16 @@ def _root_.Frontend.Comp.isExit : Comp → Bool
 
 /-- A `break` on the spine outside every loop. -/
 def _root_.Frontend.Comp.spineBreak : Comp → Option Span
-  | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N => N.spineBreak
+  | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N
+  | .unwind _ _ _ _ _ N => N.spineBreak
   | .case _ _ _ M _ N => M.spineBreak.orElse fun _ => N.spineBreak
   | .ret sp (.sugar _ .brk) | .ret sp (.app _ (.sugar _ .brk) _) => some sp
   | _ => none
 
 /-- The `break`s on the spine outside every inner loop, with their values. -/
 def _root_.Frontend.Comp.spineBreaks : Comp → List (Span × Option Val)
-  | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N => N.spineBreaks
+  | .bind _ _ _ _ N | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N
+  | .unwind _ _ _ _ _ N => N.spineBreaks
   | .case _ _ _ M _ N => M.spineBreaks ++ N.spineBreaks
   | .ret sp (.sugar _ .brk) => [(sp, none)]
   | .ret sp (.app _ (.sugar _ .brk) e) => [(sp, some e)]
@@ -807,11 +799,18 @@ def normExits : Nat → Comp → Except Error Comp
       normExits n (.letPair lsp y z V (.bind sp x A M₁ N))
     | .letUnit lsp V M₁ => normExits n (.letUnit lsp V (.bind sp x A M₁ N))
     | .loop fsp ℓ src V M₁ M₂ => normExits n (.loop fsp ℓ src V M₁ (.bind sp x A M₂ N))
+    | .unwind usp y B M₁ D M₂ =>
+      capture [y]
+      normExits n (.unwind usp y B M₁ D (.bind sp x A M₂ N))
     | _ => pure (.bind sp x A M (← normExits n N))
   | n + 1, .letUnit sp V M => do pure (.letUnit sp V (← normExits n M))
   | n + 1, .letPair sp x y V M => do pure (.letPair sp x y V (← normExits n M))
   | n + 1, .case sp V x M y N => do pure (.case sp V x (← normExits n M) y (← normExits n N))
   | n + 1, .loop sp ℓ src V M N => do pure (.loop sp ℓ src V M (← normExits n N))
+  | n + 1, .unwind sp x A M D N => do
+    -- The head and the finaliser are not on the spine; the continuation is (`Comp.mapTail`).
+    if M.hasExit || D.hasExit then throw (exitOffSpine ((M.exitAt.orElse fun _ => D.exitAt).getD M.span))
+    pure (.unwind sp x A M D (← normExits n N))
   | _, T => pure T
 
 /-! #### Elaborating a div body -/
@@ -841,13 +840,21 @@ return (thunkv nu_in < return (inl io_v), {close} >)"
 def latest (env : List (String × Option CVTy)) : List (String × Option CVTy) :=
   env.reverse.foldl (fun acc (y, T) => (acc.filter (·.1 != y)) ++ [(y, T)]) []
 
-/-- A computation binds `y` on its spine. -/
+/-- A computation binds `y` on its spine.
+
+UNPROVED: a loop's writes are rebuilt here from its body's bindings, not read from the parser's
+record (`LoopInfo.writes`), since core text and the elaboration's templates write loops with no
+record (their loops pass variables on by rebinding them, SPEC §41 R1's exception). Why it should
+hold: R1 gives every binder of a surface body a name of its own, so a binder of a `let mut`'s name
+on the spine is an assignment of it. What breaks if not: a variable taken for written that is not
+is threaded needlessly (harmless); one written and missed is not handed on, a lost write. -/
 def _root_.Frontend.Comp.rebindsN (y : String) : Comp → Bool
   | .bind _ x _ M N => x.name == y || M.rebindsN y || N.rebindsN y
   | .letUnit _ _ M => M.rebindsN y
   | .letPair _ a b _ M => a.name == y || b.name == y || M.rebindsN y
   | .case _ _ _ M _ N => M.rebindsN y || N.rebindsN y
   | .loop _ _ _ _ M N => M.rebindsN y || N.rebindsN y
+  | .unwind _ x _ M _ N => x.name == y || M.rebindsN y || N.rebindsN y
   | _ => false
 
 /-- A computation binds `y` on its spine: a `let mut` variable assigned in it. The wildcard `_`
@@ -1154,7 +1161,7 @@ def thenGo (T K : Comp) : Comp := match T with
 /-- `M` with each terminal that goes on (the end of a loop's body, or a `break`) also naming
 `needs`: what a point inside the loop must carry for the loop's next iteration. -/
 def augment (needs : List String) (M : Comp) : Comp :=
-  if needs.isEmpty then M else wrapTail (fun
+  if needs.isEmpty then M else Comp.mapTail (fun
     | T@(.ret _ (.app _ (.sugar _ .retE) _)) => T
     | T => thenGo T (.ret T.span (tupleVal T.span needs))) M
 
@@ -1350,6 +1357,13 @@ def mWalk (m : MCx) : Nat → TCx → Comp → MM Comp
     let (Ax, Ay) := sumTys c V
     return .case sp V x (← mWalk m n (c.push x.name Ax) M) y (← mWalk m n (c.push y.name Ay) N)
   | n + 1, c, .loop sp _ src V M N => mLoop m n c sp src V M N
+  | n + 1, c, .unwind sp x A M D N => do
+    -- `x <- M unwind (D); N`: `M` and `D` run within the observation, and `N`, `M`'s
+    -- continuation once it answers (`[then]`), is on the spine (`Comp.mapTail`): the code after
+    -- it is walked inside it, so what it binds reaches the move at its end.  `[spec §41]`
+    if M.hasExit || D.hasExit then
+      throw (exitOffSpine ((M.exitAt.orElse fun _ => D.exitAt).getD M.span))
+    pure (.unwind sp x A M D (← mWalk m n (c.push x.name (bindTy c A M)) N))
   | _ + 1, _, .ret sp (.app _ (.sugar _ .retE) v) => do
     if v.hasExit then throw (exitOffSpine (v.exitAt.getD v.span))
     -- `return e` from inside loops: every loop it leaves closes its source, and the body finishes.
@@ -1598,7 +1612,7 @@ return (thunkv nu_in < {obs} >)"
   -- A move from the code before the first point is the machine at the point's state, written
   -- `io_mk V` until the state's type is known.
   let mk ← template sp "a div body's state machine" (atState "io_hole_m")
-  let pre := pre.map (wrapTail fun
+  let pre := pre.map (Comp.mapTail fun
     | .ret _ (.app _ (.unbang _ (.var _ "io_mk")) V) =>
       mk.fill (fun v => if v == "io_hole_m" then some V else none) (fun _ => none)
     | T => T)
@@ -1657,7 +1671,7 @@ def ambientMain (c : TCx) (cs : List String) (sp : Span) (C : CTy) (M : Comp) :
     | .ret _ A => pure A
     | _ => throw ⟨C.span, "a `main` that uses the capabilities ambiently has type `F A`"⟩
   let capsV := tupleVal sp cs
-  let M' := wrapTail (fun
+  let M' := Comp.mapTail (fun
       | .ret sp V => if V.takeLends.2.isEmpty then .ret sp (.pair sp capsV V)
           else .bind sp ⟨"io_r", sp⟩ none (.ret sp V) (.ret sp (.pair sp capsV (.var sp "io_r")))
       | T => .bind T.span ⟨"io_r", T.span⟩ none T
@@ -2244,7 +2258,7 @@ that what it computes from the borrow is not inside the box (`boxI`'s context ou
 terminal that never returns, `abort[n.i] V` or `absurd V`, has no value to box and checks at the
 boxed result type as it is: boxing its `0` would type the path at `['x] 0`. -/
 def boxTail (x : String) (S : Comp) : Comp :=
-  wrapTail (fun
+  Comp.mapTail (fun
     | .ret sp V@(.var ..) | .ret sp V@(.clone ..) | .ret sp V@(.unit _) => .ret sp (.boxed sp (.var sp x) V)
     | T@(.abort ..) | T@(.absurd ..) => T
     | T => .bind T.span ⟨"io_bx", T.span⟩ none T
@@ -2268,7 +2282,7 @@ def mainLife (sp : Span) (C : CTy) (caps : List String) (M : Comp) : Except Erro
     | c :: cs => .tensor sp (capTy sp c) (tupTy cs)
   let B' := if caps.isEmpty then B else .tensor sp B (tupTy caps)
   let M := if caps.isEmpty then M else
-    wrapTail (fun T => .bind T.span ⟨"io_bt", T.span⟩ none T
+    Comp.mapTail (fun T => .bind T.span ⟨"io_bt", T.span⟩ none T
       (.ret T.span (.pair T.span (.var T.span "io_bt") (tupleVal T.span caps)))) M
   let cb : Val := .thunkv sp (.lamL sp x (.dom sp) (.ret sp (.thunkv sp
     (.lam sp ⟨"io_mainb", sp⟩ (.mut sp (.var sp "main") one) (boxTail "main" M)))))
@@ -2292,14 +2306,14 @@ def mainLife (sp : Span) (C : CTy) (caps : List String) (M : Comp) : Except Erro
 
 /-- The body `S` of `modify` returning the new content alone, with `()` for the result. -/
 def unitTail (S : Comp) : Comp :=
-  wrapTail (fun
+  Comp.mapTail (fun
     | .ret sp V => .ret sp (.pair sp V (.unit sp))
     | T => .bind T.span ⟨"io_mv", T.span⟩ none T
         (.ret T.span (.pair T.span (.var T.span "io_mv") (.unit T.span)))) S
 
 /-- `handBackResult` at a terminal that hands back a bound value. -/
 def handBackTerm (withResult : Bool) (S : Comp) : Comp :=
-  wrapTail (fun
+  Comp.mapTail (fun
     | .ret sp (.pair psp (.var vsp "io_bt") Wt) =>
       if withResult then
         .letPair sp ⟨"io_bn", sp⟩ ⟨"io_br", sp⟩ (.var vsp "io_bt")
@@ -2864,7 +2878,7 @@ def phShiftC (k : Nat) : CCTy → CCTy
   | .ret A => .ret (phShiftV k A)
   | .arr A C => .arr (phShiftV k A) (phShiftC k C)
   | .amp C D => .amp (phShiftC k C) (phShiftC k D)
-  | .nu C => .nu (phShiftC k C)
+  | .nuSys m i C => .nuSys m i (phShiftC k C)
   | .all v b C => .all v b (phShiftC k C)
   | .top => .top
   | .eff n i q A B fin rc C =>
@@ -3275,7 +3289,15 @@ inside a scheme (a buffer's, a literal's: `run` of the code around the lend, asc
 is that scheme as a computation, its lend in the unwinding form (`unwindingM?`), ascribed the
 same type. -/
 def unwindingC? (sp : Span) : Val → Option Comp
-  | .app _ (.app _ (.const ksp C) P) cb => match C with
+  | .app _ (.app _ K P) cb =>
+    -- The constant, with its written finaliser when it has one (SPEC §78).
+    let kc : Option Const := match K with
+      | .const _ C | .constU _ C _ => some C
+      | _ => none
+    match kc with
+    | none => none
+    | some C =>
+    match C with
     | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU .. | .sliceBorrowMutU ..
     | .sliceBorrowImmU .. =>
       let sfx := s!"{sp.start.line}_{sp.start.col}"
@@ -3296,7 +3318,7 @@ def unwindingC? (sp : Span) : Val → Option Comp
       let cb := match cb with
         | .thunkv tsp (.lamL lsp xi b (.ret _ (.thunkv _ L))) => Val.thunkv tsp (.lamL lsp xi b L)
         | cb => cb
-      some (.bind sp k none (.ret sp (.const ksp C)) (.bind sp p none (.ret sp P)
+      some (.bind sp k none (.ret sp K) (.bind sp p none (.ret sp P)
         (.bind sp f cbTy (.ret sp cb) (.app sp (.app sp (.force sp k) p) f))))
     | _ => none
   -- A marked scheme's unwinding form is not marked: a mark fixes the shape of the pure scheme
@@ -3700,6 +3722,45 @@ def armRows (cx cy : TCx) (sp : Span) (M N : Comp) : Except Error (Option CCTy) 
     else pure none
   | _, _ => pure none
 
+/-- A reborrow with a finaliser (`finally`, SPEC §78, #940), `blk` the reborrow of the place `p`
+and `D` the finaliser, elaborated by `sc` and `sv` (`surfC`, `surfV`): at a body that performs
+operations of the row, the reborrow in its unwinding form with the written finaliser,
+`withbor3u[…] unwind (fun p -> D)`, `D` elaborated at the source's type and the empty row. At a
+body that performs none the block does not unwind: the plain reborrow (`D` runs after it, on the
+source it pairs back, in the term already). The kernel checks the reborrow, the row and the
+finaliser.  [spec §78] -/
+def lendFinC (c : TCx) (exp : Option CCTy) (sp : Span) (V blk : Val) (dtsp dsp : Span) (p : Ident)
+    (D : Comp) (sc : TCx → Option CCTy → Comp → DM Comp) (sv : TCx → Option CVTy → Val → DM Val) :
+    DM Comp := do
+  let some B := borrowBlock? blk
+    | throw ⟨V.span, "internal error: a `finally`'s reborrow is not a borrow block"⟩
+  let r := match c.E.row with
+    | some S =>
+      let used := (opsC c divFuel B).map (·.1)
+      S.filter fun o => used.contains o.n.toNat
+    | none => []
+  if r.isEmpty then return ← sc c exp (.ret sp blk)
+  let saved := (← get).cbRow
+  modify fun st => { st with cbRow := some r }
+  let blk' ← sv c none blk
+  modify fun st => { st with cbRow := saved }
+  match blk' with
+  | .app a₁ (.app a₂ (.const ksp C@(.withbor3U la _ As _ _)) P') cb' =>
+    let some T := c.tyV P'
+      | throw ⟨V.span, "internal error: the type of a `finally`'s reborrowed place"⟩
+    -- At the empty row: the effects pass refuses a cleanup that performs (#1046).
+    let cD := ({ c with E := { c.E with row := some [] } } : TCx).push p.name (some T)
+    let D' ← sc cD (some (Frontend.Check.effOf [] .unit)) D
+    let d : Val := .thunkv dtsp (.lam dsp p (.mut ksp la As) D')
+    match unwindingC? sp (.app a₁ (.app a₂ (.constU ksp C d) P') cb') with
+    | some M' => return M'
+    | none => throw ⟨V.span, "internal error: a `finally`'s reborrow in its unwinding form"⟩
+  | _ => throw ⟨V.span, "internal error: a `finally`'s place is not a `mut` borrow, so it has " ++
+      "no reborrow (SPEC §78)"⟩
+
+-- The heartbeat budget of the `surfV`/`surfC` mutual block: compiling its matches over every
+-- surface form takes more than the default, as the machine's block above does.
+set_option maxHeartbeats 400000 in
 mutual
 /-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/
 def surfV : Nat → TCx → Option CVTy → Val → DM Val
@@ -4507,6 +4568,9 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .ret sp V => do
       if let some (i, P, R, cls, B) := hndCtl? V then return ← hndCtlC n c sp i P R cls B
       if let .app _ (.sugar _ (.pullSite i)) call := V then return ← pullView n c sp i call
+      -- A reborrow with a finaliser (`finally`, SPEC §78, #940): `lendFinC`.
+      if let .app _ (.sugar _ .lendFin) (.pair _ blk (.thunkv dtsp (.lam dsp p _ D))) := V then
+        return ← lendFinC c exp sp V blk dtsp dsp p D (surfC n) (surfV n)
       if let some B := borrowBlock? V then
         if let some S := c.E.row then
           -- A borrow block whose body performs operations: the unwinding form of its borrow, at
@@ -4813,7 +4877,7 @@ def siteAtCall (c : TCx) (sp : Span) (g : String) (r : SiteRec) : DM SiteRec := 
     pure (r.mapTy (·.subst σ))
 
 /-- A clause that does not use its `κ` on some path, at an operation whose cancel branch
-`cancelTy S F` performs (its cancel row `F` or the handler's row `S` is not empty), cancels it
+`cancelTy F` performs (its cancel row `F` is not empty), cancels it
 exactly once on that path (`Fins.cancelAtEnds`): at the end of the path, and on the way out of an
 abort or a cancel through a head whose row (`Fins.opsOf`, the functions' rows by their types)
 holds an abortive
@@ -4823,7 +4887,7 @@ computation, which the elaboration writes and the kernel types. The clause's bod
 its argument `p` apart, `let (a, k) = p; M`. A boxed `κ` (BOXED-κ) is left as written. A clause
 whose heads can neither abort nor capture, and that uses `κ` on every path, is left as it is.
 
-The finaliser of an inserted `unwind (cancel k)` performs the cancel branch's row `F ⊕ S`, and runs
+The finaliser of an inserted `unwind (cancel k)` performs the cancel branch's row `F`, and runs
 when a continuation the head captures is cancelled: a capturing operation of `S` that the head
 performs would need its cancel row to hold itself (`⊤`, SPEC §27 *Open*), which the kernel
 refuses; such a clause is refused here, naming the operation.  `[spec §12, §27]` -/
@@ -4832,13 +4896,15 @@ def cancelDropped (S : Frontend.Check.CRow) (F : CCTy) (q : Frontend.Check.CQual
     (opName : Nat → Nat → String) (M : Comp) : Except Error Comp :=
   match M with
   | .letPair sp a k (.var vsp p') N =>
-    if boxK || p' != p || !BoCa.Fig16.LogRel.Core.capB q B || F.isTop || (F.rowOf ++ S).isEmpty
+    if boxK || p' != p || !BoCa.Fig16.LogRel.Core.capB q B || F.isTop || F.rowOf.isEmpty
     then pure M
     else
       let headOps (M₁ : Comp) : List Frontend.Check.COpSig :=
         S.filter fun o => (Elab.Fins.opsOf rowOf M₁).contains (o.n.toNat, o.i.toNat)
+      -- A head that can abort or capture, or that runs a `[then]` in place (`thenInC`).
       let wrapHead (M₁ : Comp) : Bool :=
-        (headOps M₁).any fun o => o.abort || BoCa.Fig16.LogRel.Core.capB o.q o.B
+        (headOps M₁).any (fun o => o.abort || BoCa.Fig16.LogRel.Core.capB o.q o.B) ||
+          Elab.Fins.thenInC 100000 M₁
       let N' := Elab.Fins.cancelAtEnds wrapHead sp k stateful 100000 N
       let captured := (Elab.Fins.cancelHeads k.name 100000 N').findSome? fun M₁ =>
         (headOps M₁).find? fun o => BoCa.Fig16.LogRel.Core.capB o.q o.B
@@ -4881,7 +4947,7 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
       pure (coreQual q, ← need sp "an operation's type" (c.elabV A),
         ← need sp "an operation's type" (c.elabV B))
     -- Each operation's cancel row, as inferred (`HInfo.fins`, SPEC §27): the row its `κ`'s cancel
-    -- branch performs ahead of `S` (`cancelTy`).  `[spec §27]`
+    -- branch performs (`cancelTy`).  `[spec §27]`
     let finsC ← i.fins.mapM fun r => do
       match c.elabV (.thunk sp (.eff sp r (.unit sp))) with
       | some (.thunk C) => pure C
@@ -5347,7 +5413,7 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
     let exitV (tsp : Span) (o : Val) : Val := .inr tsp (.pair tsp (tupleVal tsp wsN) o)
     let go (tsp : Span) : Val := if fold then st tsp else .inl tsp (st tsp)
     let brk (tsp : Span) (e : Val) : Val := if hasRet then .inr tsp (.inl tsp e) else .inr tsp e
-    let body := wrapTail (fun
+    let body := Comp.mapTail (fun
       | .ret tsp (.sugar _ .brk) => .ret tsp (exitV tsp (brk tsp (.unit tsp)))
       | .ret tsp (.app _ (.sugar _ .brk) e) => .ret tsp (exitV tsp (brk tsp e))
       | .ret tsp (.sugar _ .cont) => .ret tsp (go tsp)
@@ -5616,7 +5682,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
       .bind tsp ⟨s!"io_wv{sfx}", tsp⟩ none (.ret tsp (tupleVal tsp wsN))
         (.app tsp (.proj tsp true (.force tsp ⟨s!"io_k{sfx}", tsp⟩)) ⟨s!"io_wv{sfx}", tsp⟩)
     let brk (tsp : Span) (e : Val) : Val := if hasRet then .inl tsp e else e
-    let body := wrapTail (fun
+    let body := Comp.mapTail (fun
       | .ret tsp (.sugar _ .brk) => leave tsp (brk tsp (.unit tsp))
       | .ret tsp (.app _ (.sugar _ .brk) e) => leave tsp (brk tsp e)
       | .ret tsp (.sugar _ .cont) => resume tsp
@@ -5716,7 +5782,7 @@ def pullView : Nat → TCx → Span → ItInfo → Val → DM Comp
     let Tc := yo.A
     -- What its observations perform besides what it yields (SPEC §15): the stored
     -- generator is `pull_Σ`, its clauses answer at `F_Σ`, and its `close`, the cancel of the
-    -- continuation, is at `cancelTy Σ fin`.  `[spec §15]`
+    -- continuation, is at `cancelTy fin`.  `[spec §15]`
     let rest := row.filter (·.n.toNat != i.n)
     let ppC (C : CCTy) : DM String := do
       match ← (c.surface sp (.thunk C) : Except Error VTy) with
@@ -5726,7 +5792,7 @@ def pullView : Nat → TCx → Span → ItInfo → Val → DM Comp
       | .thunk _ (.eff _ r _) => pure r.pp
       | _ => pure ""
     let Fr (A : String) : String := if rest.isEmpty then s!"F ({A})" else s!"F[{rowS}] ({A})"
-    let Kc ← ppC (BoCa.Fig16.LogRel.Core.cancelTy rest yo.fin)
+    let Kc ← ppC (BoCa.Fig16.LogRel.Core.cancelTy yo.fin)
     let Pt ← ppC (Frontend.Check.pullRowTy rest Tc Bg .unit)
     let Tt ← pp Tc
     let Bt ← pp Bg
@@ -6360,6 +6426,7 @@ def specV : Nat → TCx → Val → DM Val
     | .bangThunkv sp M => do pure (.bangThunkv sp (← specC n c M))
     | .run sp M => do pure (.run sp (← specC n c M))
     | .mark sp k V => do pure (.mark sp k (← specV n c V))
+    | .constU sp k d => do pure (.constU sp k (← specV n c d))
     | V => pure V
 
 /-- A computation with its calls of higher-order functions specialized. -/

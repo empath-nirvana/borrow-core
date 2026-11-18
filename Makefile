@@ -15,7 +15,7 @@ ifeq (run,$(firstword $(MAKECMDGOALS)))
   $(eval $(RUN_ARGS):;@:)
 endif
 
-.PHONY: bcc run tools gate gate-full gate-fast goldens keys verify-goldens bench
+.PHONY: bcc run tools gate gate-full gate-full-nocache gate-full-record gate-warm-final gate-fast gate-daily goldens keys verify-goldens bench
 
 # Build the `bcc` compiler.
 bcc: $(CACHE_STAMP) | tools
@@ -27,20 +27,41 @@ bcc: $(CACHE_STAMP) | tools
 run: bcc
 	$(BCC) run $(RUN_ARGS)
 
-# The sanity gate (scripts/ci-local.sh): the build, hygiene and axioms, the judgment freeze and
-# the Backend2 fence, the type-equality census, the corpus parsed, checked and renamed, and every corpus program run in WebAssembly by
-# each backend against its golden with `live 0` (Backend2, the default, and the old backend until
-# N7); the source stage only on unverified goldens (scripts/source-stage.sh: no recorded key, or
-# not the current one).
+# The per-PR gate (scripts/ci-local.sh): the steps the change's tier names (scripts/gate-tier.sh,
+# from the paths changed since the merge base with origin/main), each on every program or on the
+# programs the change touches, with the result cache. It prints the tier at the top and with its
+# verdict; what it leaves out runs in the daily full gate on main (scripts/gate-daily.sh).
 gate: | tools
 	scripts/ci-local.sh
 
 # The full gate: every check (every compiled stage, counts, native, the static tables, the
 # generated and renamed programs, the book), the source stage on the unverified goldens of the
-# corpus and the book. Required when Paper/, Support/, Target/, Pipeline/, Reference/ or Backend/
-# changed.
+# corpus and the book, with the result cache. Run by `make gate` itself when the tier is `full`.
 gate-full: | tools
 	scripts/ci-local.sh --full
+
+# The full gate with every unit run, the result cache (scripts/gate_cache.py) neither read nor
+# written.
+gate-full-nocache: | tools
+	scripts/ci-local.sh --full --no-cache
+
+# The full gate with every unit run and its passes recorded, none replayed: the daily run on main,
+# which re-establishes every result and fills the result cache for that day's main.
+gate-full-record: | tools
+	scripts/ci-local.sh --full --record-cache
+
+# The corpus at the final target (`--final`, what the per-PR gate's compiler and scripts tiers run
+# on every program), its passes recorded and none replayed. The daily run on main runs it after its
+# full gate, so that a PR's gate finds these units recorded for current main.
+gate-warm-final: | tools
+	GATE_CACHE=record scripts/compile-backend2.sh --final
+	GATE_CACHE=record scripts/compile-corpus.sh --final
+
+# The daily full gate on main (scripts/gate-daily.sh): `make gate-full` without the result cache
+# on origin/main in a checkout of its own, its verdict posted to the board for the coordinator.
+# Does nothing when origin/main already has a verdict. Run by launchd (scripts/gate-daily.plist).
+gate-daily:
+	scripts/gate-daily.sh
 
 # Re-verify every golden: the source stage on every corpus program and book block (with each
 # compiled to WebAssembly), whatever its key. Writes no key.
@@ -70,11 +91,13 @@ keys: | tools
 	scripts/compile-corpus.sh --final --write-keys
 	scripts/book-doctest.sh --write-keys
 
-# The required tools are on PATH.
+# The required tools are on PATH, and shared packages follow the manifest and toolchain
+# (scripts/lake-packages.sh).
 tools:
 	@command -v lean >/dev/null || { echo "lean not found: run 'brew bundle', and add ~/.elan/bin to PATH"; exit 1; }
 	@command -v lake >/dev/null || { echo "lake not found: run 'brew bundle', and add ~/.elan/bin to PATH"; exit 1; }
 	@command -v wasmtime >/dev/null || { echo "wasmtime not found: run 'brew bundle'"; exit 1; }
+	@scripts/lake-packages.sh check
 
 # Resolve dependencies and fetch prebuilt Mathlib, again only when the pins change.
 $(CACHE_STAMP): lake-manifest.json lean-toolchain | tools

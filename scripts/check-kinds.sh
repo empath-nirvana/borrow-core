@@ -20,13 +20,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
+export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
 bcc=.lake/build/bin/bcc
 counts=.lake/build/bin/bcc-counts
 row() {
   local f=$1 k l
-  k=$("$bcc" kinds "$f" 2>/dev/null) || return 0
+  k=$("$bcc" kinds "$f" 2>/dev/null) || { echo "$f: FAILS: bcc kinds"; return 1; }
   [ -n "$k" ] || return 0
-  l=$("$counts" --lowering "$f" 2>&1) || l="error: $l"
+  # A failed tool's message is a row; it is never recorded in the cache (a run killed under load).
+  l=$("$counts" --lowering "$f" 2>&1) || { par_nostore; l="error: $l"; }
   awk -v f="$f" '
     FNR == NR {
       if ($0 ~ /^error/) { err = $0; next }
@@ -63,23 +65,39 @@ row() {
     }' <(printf '%s\n' "$l") <(printf '%s\n' "$k")
 }
 . scripts/par.sh
+# Each program's rows are a unit of the result cache (scripts/par.sh), except when the table is
+# written.
+[ "${1:-}" = "--write" ] || export PAR_CACHE=check-kinds
 export bcc counts
 export -f row
-# The working tree's corpus, as the other gate steps read it: a program not yet committed is in
-# the table too.
+# The working tree's corpus programs and sugar files (`scripts/corpus-set.sh programs sugar`), as
+# the other gate steps read them: a program not yet committed is in the table too. A file marked
+# `-- check: parse-only` is skipped, as pinned in `corpus/skips.expected`.
+list=$(scripts/corpus-set.sh programs sugar | sort)
+fs=()
+skips=$(mktemp)
+all=(); while IFS= read -r f; do [ -z "$f" ] || all+=("$f"); done <<< "$list"
+for f in "${all[@]}"; do
+  if grep -q '^-- check: parse-only' "$f"; then echo "parse-only $f" >> "$skips"; else fs+=("$f"); fi
+done
+skipped=$(scripts/corpus-set.sh --skips check-kinds parse-only < "$skips") || { rm -f "$skips"; echo "$skipped"; exit 1; }
+rm -f "$skips"
+echo "$skipped"
+# The table; a file the tool fails on is a line `<file>: FAILS: <tool>`, which fails the step.
 table() {
-  local fs=()
-  while read -r f; do
-    grep -q '^-- check: parse-only' "$f" || fs+=("$f")
-  done < <(find corpus -name '*.bc' -type f | grep -v '^corpus/\(reject\|pending\|fail\)/' | sort)
-  par row "${fs[@]}"
+  local t; t=$(mktemp)
+  par row "${fs[@]}" > "$t"
+  if grep ': FAILS: ' "$t" >&2; then rm -f "$t"; echo "check-kinds: the table could not be made for the files above" >&2; return 1; fi
+  cat "$t"; rm -f "$t"
 }
 if [ "${1:-}" = "--write" ]; then
-  table > corpus/kinds.expected
+  t=$(mktemp); table > "$t"; cat "$t" > corpus/kinds.expected; rm -f "$t"
   echo "corpus/kinds.expected: $(wc -l < corpus/kinds.expected) operations, $(grep -c '; disagree$' corpus/kinds.expected || true) disagreements"
   exit 0
 fi
-if ! diff -u corpus/kinds.expected <(table); then
+got=$(mktemp); trap 'rm -f "$got"' EXIT
+table > "$got"
+if ! diff -u corpus/kinds.expected "$got"; then
   echo "check-kinds: the clause kinds or the backend's lowering changed (corpus/kinds.expected)"
   exit 1
 fi

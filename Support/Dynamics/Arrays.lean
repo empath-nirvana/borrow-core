@@ -15,6 +15,9 @@ location and a length `n : I32`; its `i`-th leaf is the location `ℓ + i`.
   (unsigned), else `inj₂ (ℓ, n)`. The machine subtracts, so every host splits alike.
 - `drop (f, (ℓ, n))` continues as `dropFill`, which frees each cell in index order and hands its
   contents to `f`.
+- `sliceCopy (dst, (di, (src, (si, len))))` checks `copyOk` and answers `copyAns`: the
+  destination, with `inj₂ ()` when it copied the range and `inj₁ ()` when it wrote nothing. The
+  write is the machine's (`Heap.copy`, `Paper/S3_Dynamics/Definitions.lean`).
 
 `len(c)` is `c` when `c < 2³¹` and `0` otherwise, so a negative length is the empty array.
 -/
@@ -118,5 +121,24 @@ def idxAns (ℓ : Loc) (n i : UInt32) : Val :=
     unsigned; else the family back.  `[spec §9]` -/
 def splitAns (ℓ : Loc) (n i : UInt32) : Val :=
   if i ≤ n then .inj₁ (.pair (Val.arr ℓ i) (Val.arr (ℓ + i.toNat) (n - i))) else .inj₂ (Val.arr ℓ n)
+
+/-- The bounds of `sliceCopy (dst, (di, (src, (si, len))))`, `dst` of length `nd` and `src` of
+    length `ns`, on mathematical integers: `0 ≤ di`, `0 ≤ si`, `0 ≤ len`, `di + len ≤ nd` and
+    `si + len ≤ ns`, with `di + len` and `si + len` at most `2³¹ − 1`. An `i32` is non-negative
+    when its bits are below `2³¹`, and nothing wraps: the sums are of naturals.  `[spec §74]` -/
+def copyOk (nd di ns si len : UInt32) : Bool :=
+  decide (di.toNat < 2 ^ 31) && decide (si.toNat < 2 ^ 31) && decide (len.toNat < 2 ^ 31) &&
+  decide (di.toNat + len.toNat < 2 ^ 31) && decide (si.toNat + len.toNat < 2 ^ 31) &&
+  decide (di.toNat + len.toNat ≤ nd.toNat) && decide (si.toNat + len.toNat ≤ ns.toNat)
+
+/-- The argument `(dst, (di, (src, (si, len))))` of `sliceCopy`, `dst` the array `(ℓd, nd)` and
+    `src` the array `(ℓs, ns)`.  `[spec §74]` -/
+def copyArg (ℓd : Loc) (nd di : UInt32) (ℓs : Loc) (ns si len : UInt32) : Val :=
+  .pair (Val.arr ℓd nd) (.pair (.i32 di) (.pair (Val.arr ℓs ns) (.pair (.i32 si) (.i32 len))))
+
+/-- The answer of `sliceCopy`: the destination back, with `inj₂ ()` in range and `inj₁ ()`
+    otherwise.  `[spec §74]` -/
+def copyAns (ℓd : Loc) (nd di ns si len : UInt32) : Val :=
+  .pair (Val.arr ℓd nd) (if copyOk nd di ns si len then .inj₂ .unit else .inj₁ .unit)
 
 end BoCa

@@ -205,6 +205,10 @@ inductive Row where
   /-- `..r`: the row parameter `r` as a row's tail, substituted by `Frontend.Elab.RowInst` before
   checking.  `[spec §76]` -/
   | var (x : String)
+  /-- `..r, …`: the row parameter `r` spliced ahead of more entries, the row their concatenation
+  in written order (`F[..cr, ..sg]`); substituted by `Frontend.Elab.RowInst` before checking.
+  `[spec §76]` -/
+  | splice (x : String) (rest : Row)
 
 /-- Shapes `σ ::= leaf A | node σ σ | Name` (syntax-core §5). -/
 inductive Shape where
@@ -316,6 +320,7 @@ inductive Const where
   | releaseBang (A : VTy)
   | withbor1 (x : Ident) (A B : VTy)
   | withbor2 (x : Ident) (b : Life) (A B : VTy)
+  | withlocal (x : Ident) (b : Life) (A B : VTy)
   | withbor3 (a : Life) (x : Ident) (A B : VTy)
   | withload (a : Life) (x : Ident) (A B : VTy)
   | withswap (a : Life) (A B : VTy)
@@ -367,6 +372,9 @@ inductive Const where
   | sliceEmptyMut (a : Life) (A : VTy)
   | sliceReplaceMut (a : Life) (A : VTy)
   | sliceSwapMut (a : Life) (A : VTy)
+  /-- `slice_copy_mut[@a, @b, A]`: the bulk copy of SPEC §74 from an `imm` family into a `mut`
+      one, at a persistent `A`. -/
+  | sliceCopyMut (a b : Life) (A : VTy)
   /-- `count_fold[S]`: the counted loop of SPEC §16. -/
   | countFold (S : VTy)
   /-- `count_try[S, E]`: the counted loop with an exit of SPEC §16. -/
@@ -379,6 +387,10 @@ inductive Const where
   `slice_borrow_imm_u['x, @b, A, B, [r]]`.  `[spec §19]` -/
   | withbor1U (x : Ident) (A B : VTy) (r : Row)
   | withbor2U (x : Ident) (b : Life) (A B : VTy) (r : Row)
+  /-- `withlocalu['x, @b, A, B, [r]]`: the unwinding local of SPEC §80. -/
+  | withlocalU (x : Ident) (b : Life) (A B : VTy) (r : Row)
+  /-- `withlocal_loop['x, @b, A, S, B, R]`: the loop local of SPEC §80. -/
+  | withlocalLoop (x : Ident) (b : Life) (A S B R : VTy)
   | withbor3U (a : Life) (x : Ident) (A B : VTy) (r : Row)
   | withloadU (a : Life) (x : Ident) (A B : VTy) (r : Row)
   | sliceBorrowMutU (x : Ident) (b : Life) (A B : VTy) (r : Row)
@@ -589,6 +601,11 @@ inductive VSugar where
   /-- `with h(…) { M } finally { D }` (SPEC §42), applied to `(with h(…) { M }, thunkv fun _ -> D)`:
   `[then]` around the handled computation, elaborated by `Frontend.Elab.Effects` next to `with`. -/
   | fin
+  /-- A borrow block with a finaliser (SPEC §78, #940), applied to `(blk, thunkv fun p -> D)`, `blk`
+  a `borrow mut` reborrow of the capability `p`: the reborrow, `D` its finaliser on the source when
+  the block unwinds. Written by `Frontend.Elab.Effects` for `finally`, elaborated where the types
+  are known (`Frontend.Sugar`) to `withbor3u[…] unwind (fun p -> D)`.  [spec §78] -/
+  | lendFin
   /-- A handler site of a control effect (SPEC §19), resolved by `Frontend.Elab.Effects` and
   assembled with its clauses where the types are known (`Frontend.Sugar`): applied to the
   handler's arguments, its return clause, the tuple of its operation clauses and the thunk of its
@@ -694,6 +711,20 @@ inductive SchemeMark where
   | litView
   deriving DecidableEq, Repr, Inhabited
 
+/-- What the parser records of a loop: the label `'ℓ:` written before it, and the enclosing `let mut`
+variables its body writes (SPEC §41, R2), in the order they were declared. A pass that moves the
+loop into a head of its own, apart from what follows it, hands these on from the head
+(`Elab.Fins`, a loop as the head of a cancel clause's path), as R3 has every frame do.
+`[spec §41]` -/
+structure LoopInfo where
+  label : Option Ident := none
+  writes : List Ident := []
+  deriving DecidableEq, Repr, Inhabited
+
+/-- `info` without spans. -/
+def LoopInfo.strip (i : LoopInfo) : LoopInfo :=
+  { label := i.label.map Ident.strip, writes := i.writes.map Ident.strip }
+
 mutual
 /-- Value-judged expressions (syntax-core §6.1), checked at a value type. -/
 inductive Val where
@@ -733,6 +764,9 @@ inductive Val where
   /-- `(V : A)`. -/
   | ascribe (sp : Span) (V : Val) (A : VTy)
   | const (sp : Span) (c : Const)
+  /-- `withbor{1,2,3}u[…] unwind (d)`: an unwinding borrow with the written finaliser `d`
+  (SPEC §78). -/
+  | constU (sp : Span) (c : Const) (d : Val)
   /-- `shorten_mut[σ, @a] V` / `shorten_imm[σ, @a] V`. -/
   | shorten (sp : Span) (m : Mode) (σ : Shape) (a : Life) (V : Val)
   /-- `&mut x` (`mut`) or `&x` (`imm`): lend the place `x` to one call, which hands it back,
@@ -779,9 +813,9 @@ inductive Comp where
   /-- `(M : C)`. -/
   | ascribe (sp : Span) (M : Comp) (C : CTy)
   /-- A loop, `for x in V { M }; N`, `while V { M }; N` or `loop { M }; N` by its source `src`,
-  labelled `ℓ` when the program writes `'ℓ:` before it (`docs/loops.md` §2.1, §2.8). An exit
+  with what the parser records of it, `ℓ` (`LoopInfo`): labelled `ℓ.label` when the program writes `'ℓ:` before it (`docs/loops.md` §2.1, §2.8). An exit
   names the innermost loop. Elaborated away before checking (SPEC §14, §16). -/
-  | loop (sp : Span) (ℓ : Option Ident) (src : LoopSrc) (V : Val) (M N : Comp)
+  | loop (sp : Span) (ℓ : LoopInfo) (src : LoopSrc) (V : Val) (M N : Comp)
   /-- `perform[n.i] V`: the non-abortive operation `i` of the name `n` of the current row
   (`[perform]`).  `[spec §19]` -/
   | perform (sp : Span) (n i : Nat) (V : Val)
@@ -982,6 +1016,7 @@ def Row.strip : Row → Row
   | .cons n i q A B f r => .cons n i q A.strip B.strip f.strip r.strip
   | .top => .top
   | .var x => .var x
+  | .splice x r => .splice x r.strip
 
 def Shape.strip : Shape → Shape
   | .leaf _ A => .leaf .none A.strip
@@ -1003,6 +1038,7 @@ def Const.strip : Const → Const
   | .releaseBang A => .releaseBang A.strip
   | .withbor1 x A B => .withbor1 x.strip A.strip B.strip
   | .withbor2 x b A B => .withbor2 x.strip b.strip A.strip B.strip
+  | .withlocal x b A B => .withlocal x.strip b.strip A.strip B.strip
   | .withbor3 a x A B => .withbor3 a.strip x.strip A.strip B.strip
   | .withload a x A B => .withload a.strip x.strip A.strip B.strip
   | .withswap a A B => .withswap a.strip A.strip B.strip
@@ -1039,11 +1075,14 @@ def Const.strip : Const → Const
   | .sliceEmptyMut a A => .sliceEmptyMut a.strip A.strip
   | .sliceReplaceMut a A => .sliceReplaceMut a.strip A.strip
   | .sliceSwapMut a A => .sliceSwapMut a.strip A.strip
+  | .sliceCopyMut a b A => .sliceCopyMut a.strip b.strip A.strip
   | .countFold S => .countFold S.strip
   | .countTry S E => .countTry S.strip E.strip
   | .boundedFix A C => .boundedFix A.strip C.strip
   | .withbor1U x A B r => .withbor1U x.strip A.strip B.strip r.strip
   | .withbor2U x b A B r => .withbor2U x.strip b.strip A.strip B.strip r.strip
+  | .withlocalU x b A B r => .withlocalU x.strip b.strip A.strip B.strip r.strip
+  | .withlocalLoop x b A S B R => .withlocalLoop x.strip b.strip A.strip S.strip B.strip R.strip
   | .withbor3U a x A B r => .withbor3U a.strip x.strip A.strip B.strip r.strip
   | .withloadU a x A B r => .withloadU a.strip x.strip A.strip B.strip r.strip
   | .sliceBorrowMutU x b A B r => .sliceBorrowMutU x.strip b.strip A.strip B.strip r.strip
@@ -1090,6 +1129,7 @@ def Val.strip : Val → Val
   | .inst _ V a => .inst .none V.strip a.strip
   | .ascribe _ V A => .ascribe .none V.strip A.strip
   | .const _ c => .const .none c.strip
+  | .constU _ c d => .constU .none c.strip d.strip
   | .shorten _ m σ a V => .shorten .none m σ.strip a.strip V.strip
   | .lend _ x m => .lend .none x.strip m
   | .sugar _ s => .sugar .none s.strip
@@ -1113,7 +1153,7 @@ def Comp.strip : Comp → Comp
   | .nuIn _ M => .nuIn .none M.strip
   | .nuOut _ M => .nuOut .none M.strip
   | .ascribe _ M C => .ascribe .none M.strip C.strip
-  | .loop _ ℓ src V M N => .loop .none (ℓ.map Ident.strip) src.strip V.strip M.strip N.strip
+  | .loop _ ℓ src V M N => .loop .none ℓ.strip src.strip V.strip M.strip N.strip
   | .perform _ n i V => .perform .none n i V.strip
   | .abort _ n i V => .abort .none n i V.strip
   | .handle _ n st hr hc M => .handle .none n (st.map SiteRec.strip) hr.strip hc.strip M.strip
@@ -1165,8 +1205,8 @@ def Val.span : Val → Span
   | .var sp _ | .clone sp _ | .defApp sp _ _ | .unit sp | .pair sp _ _ | .inl sp _ | .inr sp _
   | .thunk sp _ | .thunkv sp _ | .bangThunk sp _ | .bangThunkv sp _ | .unbang sp _
   | .boxed sp _ _ | .unbox sp _ | .sub sp _ _ | .roll sp _ | .unroll sp _ | .run sp _
-  | .app sp _ _ | .inst sp _ _ | .ascribe sp _ _ | .const sp _ | .shorten sp _ _ _ _
-  | .lend sp _ _ | .sugar sp _ | .mark sp _ _ => sp
+  | .app sp _ _ | .inst sp _ _ | .ascribe sp _ _ | .const sp _ | .constU sp _ _
+  | .shorten sp _ _ _ _ | .lend sp _ _ | .sugar sp _ | .mark sp _ _ => sp
 
 /-- The span of a computation. -/
 def Comp.span : Comp → Span
@@ -1236,6 +1276,23 @@ def Comp.anySugar (p : VSugar → Bool) : Comp → Bool
   | .withbor2r _ _ _ _ _ _ _ _ M => M.anySugar p
   | .force .. | .top _ => false
 end
+
+/-- `M` with `f` applied at each terminal of its spine: the tail positions, where the code after
+`M` would go. They are the rest of a bind or a `let`, both arms of a `case`, what follows a loop,
+and the continuation `N` of `x <- M₁ unwind (D); N`: by `[then]`, `ubind (N, D) v ↦ N v`, `N`
+runs in `M₁`'s continuation once `M₁` answers, outside the region `D` finalises, so the code after
+the form is the code after `N`. This is the one definition of the spine that every pass placing
+code at a body's terminals uses: a frame's hand-on of what it writes (SPEC §41, R3), a loop's turn
+handing on its state, a borrow block's result. A pass that walks the spine with a context of its
+own has a case for each of these forms, the `unwind`'s `N` among them.  `[spec §41]` -/
+def Comp.mapTail (f : Comp → Comp) : Comp → Comp
+  | .bind sp x A M N => .bind sp x A M (N.mapTail f)
+  | .letUnit sp V M => .letUnit sp V (M.mapTail f)
+  | .letPair sp x y V M => .letPair sp x y V (M.mapTail f)
+  | .case sp V x M y N => .case sp V x (M.mapTail f) y (N.mapTail f)
+  | .loop sp ℓ src V M N => .loop sp ℓ src V M (N.mapTail f)
+  | .unwind sp x A M D N => .unwind sp x A M D (N.mapTail f)
+  | T => f T
 
 /-- The variable a value copies, up to an ascription or a clone: `a`, `(a : T)`, `clone a`. A
 binding `x <- return V` of such a value is a copy: what the elaboration identifies by a binder

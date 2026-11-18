@@ -43,11 +43,11 @@ def driveE : ℕ → Expr
 
 theorem CDerives.loopOut {Δ Γ e A B} (h : CDerives Δ Γ e (.comp (.loop A B))) :
     CDerives Δ Γ e (.comp (loopUnroll A B)) := by
-  rw [← CTy.loop_unroll]; exact .nuOut (CTy.loopBody_nuOk A B) h
+  rw [← CTy.loop_unroll]; exact .nuOut (m := 0) (i := 0) (CTy.loopBody_nuOk A B) h
 
 theorem CDerives.loopIn {Δ Γ e A B} (h : CDerives Δ Γ e (.comp (loopUnroll A B))) :
     CDerives Δ Γ e (.comp (.loop A B)) :=
-  .nuIn (CTy.loopBody_nuOk A B) (by rw [CTy.loop_unroll]; exact h)
+  .nuIn (m := 0) (i := 0) (CTy.loopBody_nuOk A B) (by rw [CTy.unrollS_zero, CTy.loop_unroll]; exact h)
 
 /-- `d : U(Loop A B) ⊢ driveE n : F(A ⊕ B)`: observe at most `n` times, and close with the
 residual `B` if the loop has not finished.  `[spec §7, §11]` -/

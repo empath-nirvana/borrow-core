@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Type-check the corpus with `bcc check`. Every `corpus/*.bc`, `corpus/surface/*.bc`,
-# `corpus/axes/*.bc`, `corpus/aoc/*.bc` and `corpus/leetcode/*/*.bc` must check, except a file marked `-- check: parse-only`
-# (it is for the parser); every `corpus/reject/*.bc` must parse and be rejected by the checker
+# Type-check the corpus with `bcc check`. Every corpus program (`scripts/corpus-set.sh`) must check,
+# except a file marked `-- check: parse-only` (it is for the parser; the skips are pinned in
+# `corpus/skips.expected`); every `corpus/reject/` file must parse and be rejected by the checker
 # with the message on its `-- expect:` line (`line:col: message`), continued by any `-- expect| `
-# lines for a message of several lines. A message at a position inside an included library module
-# names the module's file instead (`lib/m.bc:line:col: message`, #883).
+# lines for a message of several lines. A reject marked `-- check: proved-only` must check, and be
+# rejected by `bcc check --proved-only` (SPEC §29). A message at a position inside an included
+# library module names the module's file instead (`lib/m.bc:line:col: message`, #883).
 #
 # Reports. For every corpus/reports/<name>.txt, the effects lines `bcc check corpus/<name>.bc` prints
 # (`effect`, `row`, `lowering`, `call`: SPEC §18) must be exactly that file: the rows, the lowering
@@ -33,13 +34,19 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc >/dev/null
+export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
 . scripts/par.sh
 export bcc=.lake/build/bin/bcc
+# A unit's skip lines are a side file (`skips`, scripts/par.sh), gathered in $skipdir.
+export skipdir; skipdir=$(mktemp -d)
+trap 'rm -rf "$skipdir"' EXIT
+export PAR_COLLECT=$skipdir
+: > "$skipdir/skips"
 bad=0
 checks() {
   local f=$1 out
   if grep -q '^-- check: parse-only' "$f"; then
-    echo "$f: parse-only, skipped"; return 0
+    echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0
   fi
   if out=$("$bcc" check "$f" 2>&1); then
     echo "$f: checks"
@@ -48,11 +55,14 @@ checks() {
   fi
 }
 rejects() {
-  local f=$1 want out
+  local f=$1 want out flag
   want=$(sed -n 's/^-- expect: //p; s/^-- expect| //p' "$f")
+  flag=; grep -q '^-- check: proved-only' "$f" && flag=--proved-only
   if ! "$bcc" parse "$f" >/dev/null 2>&1; then
     echo "$f: does not parse, so it does not test the checker"; return 1
-  elif out=$("$bcc" check "$f" 2>&1); then
+  elif [ -n "$flag" ] && ! out=$("$bcc" check "$f" 2>&1); then
+    echo "$f: rejected without --proved-only, but must check"; echo "  $out"; return 1
+  elif out=$("$bcc" check $flag "$f" 2>&1); then
     echo "$f: accepted, but must be rejected"; return 1
   elif [ "$out" != "$f:$want" ] && { [ "${want#lib/}" = "$want" ] || [ "$out" != "$want" ]; }; then
     echo "$f: wrong error"; echo "  want: $want"; echo "  got:  ${out#"$f:"}"; return 1
@@ -84,7 +94,7 @@ copies() {
 # A pending program: exit 0 if it fails as recorded, 1 if not.
 pending() {
   local f=$1 issue want out
-  issue=$(sed -n 's/^-- pending: //p' "$f" | head -1)
+  issue=$(sed -n '/^-- pending: /{s///p;q;}' "$f")
   want=$(sed -n 's/^-- now: //p; s/^-- now| //p' "$f")
   if [ -z "$issue" ] || [ -z "$want" ]; then
     echo "$f: needs a \`-- pending:\` line and a \`-- now:\` line"; return 1
@@ -98,6 +108,9 @@ pending() {
   fi
 }
 export -f checks rejects reports trusted copies pending
+# Each program, reject, reports file and pending program is a unit of the result cache
+# (scripts/par.sh, scripts/gate_cache.py).
+export PAR_CACHE=check-corpus
 if [ $# -gt 0 ]; then
   for f in "$@"; do [ -f "$f" ] || { echo "$f: no such file"; exit 2; }; done
   for f in "$@"; do
@@ -116,13 +129,19 @@ if [ $# -gt 0 ]; then
   [ "$bad" -eq 0 ]
   exit
 fi
-par checks corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc; bad=$((bad + par_failed))
+list=$(scripts/corpus-set.sh)
+progs=(); while IFS= read -r f; do [ -z "$f" ] || progs+=("$f"); done <<< "$list"
+list=$(scripts/corpus-set.sh reject)
+rejectFiles=(); while IFS= read -r f; do [ -z "$f" ] || rejectFiles+=("$f"); done <<< "$list"
+list=$(scripts/corpus-set.sh pending)
+pend=(); while IFS= read -r f; do [ -z "$f" ] || pend+=("$f"); done <<< "$list"
+par checks "${progs[@]}"; bad=$((bad + par_failed))
+scripts/corpus-set.sh --skips check-corpus parse-only < "$skipdir/skips" || bad=$((bad + 1))
 shopt -s nullglob
-par rejects corpus/reject/*.bc; bad=$((bad + par_failed))
+par rejects ${rejectFiles[@]+"${rejectFiles[@]}"}; bad=$((bad + par_failed))
 par reports corpus/reports/*.txt; bad=$((bad + par_failed))
 par trusted corpus/trusted/*.txt; bad=$((bad + par_failed))
 par copies corpus/copies/*.txt; bad=$((bad + par_failed))
-pend=(corpus/pending/*.bc)
 par pending ${pend[@]+"${pend[@]}"}; bad=$((bad + par_failed))
 echo "$(( ${#pend[@]} - par_failed )) pending program(s), expected failures."
 echo "$bad failure(s)."

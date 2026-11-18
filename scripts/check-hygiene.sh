@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # No `sorry`, `axiom`, `native_decide`, `implemented_by`, `opaque`, `partial`,
 # `unsafe` in Paper/, Support/, Examples/, Core/, Frontend/, Target/, Pipeline/, Reference/, Backend/
-# and Backend2/,
-# outside comments; then every declaration's axioms.
+# and Backend2/, and in the tree archive research/tree/,
+# outside comments; that CrossCheck's corpus files are in its build trace; then every
+# declaration's axioms.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# One unit of the result cache (scripts/gate_cache.py `step`): a recorded pass is replayed when
+# the Lean sources, Lake's configuration, scripts/, the tools and lib/prelude.bc are as they were.
+[ "${GATE_CACHE_INNER:-}" = hygiene ] || exec python3 scripts/gate_cache.py step hygiene lean --files lib/prelude.bc -- scripts/check-hygiene.sh "$@"
 python3 - <<'PY'
 import re, pathlib, sys
 BAD = re.compile(r"\b(sorry|axiom|native_decide|implemented_by|opaque|partial|unsafe)\b")
@@ -12,6 +16,7 @@ hits = 0
 files = []
 for d in ("Paper", "Support", "Examples", "Core", "Frontend", "Target", "Pipeline", "Reference", "Backend", "Backend2"):
     files += sorted(pathlib.Path(d).glob("**/*.lean")) + [pathlib.Path(d + ".lean")]
+files += sorted(pathlib.Path("research/tree/ResearchTree").glob("**/*.lean")) + [pathlib.Path("research/tree/ResearchTree.lean")]  # the tree archive (#1133)
 for p in files:
     src = p.read_text(encoding="utf-8")
     out, i, depth = [], 0, 0
@@ -35,6 +40,12 @@ if grep -rhE '^import ' Frontend Frontend.lean Target Target.lean Pipeline Pipel
     | grep -vE '^import +(Frontend|Target|Pipeline|Reference|Backend|Backend2|Support|Paper|Examples|Core|Std)([. ]|$)'; then
   echo "Frontend/, Target/, Pipeline/, Reference/, Backend/ or Backend2/ imports a module outside the library."; exit 1
 fi
+# The library and the compiler never import the tree archive (research/tree, #1133).
+if grep -rlE '^import +ResearchTree([. ]|$)' Paper Support Examples Core Frontend Target Pipeline Reference \
+    Backend Backend2 Paper.lean Support.lean Examples.lean Core.lean Frontend.lean Target.lean Pipeline.lean \
+    Reference.lean Backend.lean Backend2.lean; then
+  echo "A module of the library or the compiler imports the tree archive (ResearchTree)."; exit 1
+fi
 # The prelude declares no `type` abbreviation: the data table reads none from it
 # (`Parser.tableOf`, SPEC §61), so one would not be opened around a recursive declaration.
 if grep -nE '^type ' lib/prelude.bc; then
@@ -43,4 +54,22 @@ fi
 # The extended judgment of SPEC §29 and the typed term of SPEC §3 are generated from `CDerives`:
 # they must be up to date.
 python3 scripts/gen-pin.py --check
-lake env lean --run scripts/CheckAxioms.lean
+# The corpus files CrossCheck reads at elaboration are in its build trace.
+scripts/check-crosscheck-trace.sh
+# Every declaration's axioms (`gate-census axioms`), then the census's negative test in the same
+# run: declarations that reach an axiom outside the three (scripts/census-neg/axioms.lean),
+# elaborated into the environment, must each be reported.
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+mkdir "$tmp/c"
+scripts/gate-census.sh --out "$tmp/c" axioms axioms+scripts/census-neg/axioms.lean
+cat "$tmp/c/axioms.out"
+[ "$(cat "$tmp/c/axioms.status")" = 0 ] || exit 1
+if [ "$(cat "$tmp/c/axioms-neg.status")" = 0 ]; then
+  echo "check-hygiene: the axioms census's negative test passed"; cat "$tmp/c/axioms-neg.out"; exit 1
+fi
+for want in "Core.negThm depends on axiom Core.negAxiom" "Core.negSorry depends on axiom sorryAx"; do
+  if ! grep -qxF "$want" "$tmp/c/axioms-neg.out"; then
+    echo "check-hygiene: the axioms census's negative test lacks: $want"; cat "$tmp/c/axioms-neg.out"; exit 1
+  fi
+done

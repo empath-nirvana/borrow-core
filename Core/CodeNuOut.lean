@@ -196,7 +196,7 @@ theorem cB_unrollK (C : CTy) (G S : VTy) (δ₀ : LSub) : ∀ {D : CTy}, D.NuLea
       refine propext (forall_congr' fun α => ?_)
       rw [cB_unrollK C G S δ₀ (D := D) hD (fun y hy => hfr y (Or.inr hy)) (δ.extend x α)
         (hag' α) ls]
-  | .top, hD, _, _, _, _ | .nu _, hD, _, _, _, _ => hD.elim
+  | .top, hD, _, _, _, _ | .nuSys _ _ _, hD, _, _, _, _ => hD.elim
 
 /-! ### `nuOutK` -/
 

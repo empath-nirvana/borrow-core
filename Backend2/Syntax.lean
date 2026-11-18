@@ -329,12 +329,18 @@ structure Prog where
   /-- The lend scopes whose cell is a frame slot (`Op.allocLent`), and each one's owner, the
   variable its `free` releases (`Backend2/Driver.lean`, `slotsOf`). -/
   slots : Std.HashMap Var Nat := {}
+  /-- Scopes of checked plain local cells, all required to be frame slots. `[spec §80]` -/
+  localScopes : Std.HashSet Nat := {}
   /-- `main` is served `Fail[DivError]` by the platform's handler (`Checked.exitsOnDivError`,
   SPEC §39): its value is `inl v`, whose `v` is reported, or `inr ()`, the exit status `1`. -/
   exits : Bool := false
   /-- The functions that consume a leaf of a `consume` node's consume (`Convert.leafConsume`): the only
   functions where `Lint` admits a `consume` at the rule `consume`. -/
   consumeFns : Std.HashSet Nat := {}
+  /-- **The host types of the opaque cells** (`Backend2/Driver.lean`, `hostRepOf`): each opaque
+  kind whose compiled cell holds an integer, and that integer's type, read from the checked extern
+  types (`Checked.ctx`). A kind not listed is laid out as `.opq`.  `[spec §11]` -/
+  hostRep : List (BoCa.Fig16.LogRel.Core.Opaque × LTy) := []
   deriving Inhabited
 
 end Backend2

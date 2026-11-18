@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Backend2 (`Backend2/`, docs/n1-plan.md), the default backend, on the corpus, by `bcc`'s and
-# `bcc-counts`' default spellings (no `--backend`), so that the default is what is checked. Every corpus program with a golden
-# (as scripts/compile-corpus.sh runs them) is converted to the LIR and linted (`bcc lir --lint`). A
-# program outside the new backend's fragment (it has an effect node: N2 and later) is listed and
-# skipped. Every other is run at the LIR interpreter (`--stage lir`), the word IR's interpreter
-# (`--stage flat`) and in Wasm (`bcc run`), and natively when there is a C compiler
+# `bcc-counts`' default spellings (no `--backend`), so that the default is what is checked.
+# Every corpus program (`scripts/corpus-set.sh`) with a `main`, not marked `-- check: parse-only`
+# (as scripts/compile-corpus.sh runs them), must have a golden; it is converted to the LIR and
+# linted (`bcc lir --lint`). A program outside the new backend's fragment (it has an effect node:
+# N2 and later) is listed and skipped. Every skip is printed, and with no file named the skips
+# must be those pinned in `corpus/skips.expected`. Every other program is run at the LIR
+# interpreter (`--stage lir`), the word IR's interpreter (`--stage flat`) and in Wasm (`bcc run`), and natively when there is a C compiler
 # (`bcc run --native`); each must print the golden standard output and error and end
 # with the golden status. Its counts (`bcc-counts`) must be at most its entry in
 # `corpus/counts-backend2.expected` (`name allocs indirect copies loads stores bounds`), the new
@@ -40,9 +42,10 @@ while [ $# -gt 0 ]; do
   shift
 done
 named=1
-[ ${#files[@]} -gt 0 ] || { named=0; files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc); }
+[ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=(); while IFS= read -r f; do [ -z "$f" ] || files+=("$f"); done <<< "$list"; }
 command -v wasmtime >/dev/null || { echo "wasmtime is not on PATH"; exit 1; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
+export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
 . scripts/par.sh
 export bcc=.lake/build/bin/bcc
 export bccCounts=.lake/build/bin/bcc-counts
@@ -53,6 +56,7 @@ export native=0
 if "$bcc" cc >/dev/null 2>&1; then native=1; fi
 export tmp; tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+: > "$tmp/skips"
 
 argsOf() {
   args=()
@@ -81,12 +85,15 @@ localise() {
 # One program: linted, run at every stage, counted.
 program() {
   local f=$1 w=${PAR_TMP:-$tmp} base in err st rc name got a i c l s b want wa wi wc wl ws wb oldc note
-  grep -q '^-- check: parse-only' "$f" && return 0
-  grep -q '^main' "$f" || return 0
+  if grep -q '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0; fi
+  if ! grep -q '^main' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$PAR_SIDE/skips"; return 0; fi
   base=${f%.bc}
-  [ -f "$base.out" ] || return 0
+  if [ ! -f "$base.out" ]; then
+    echo "$f: no golden $base.out: write it from the source stage with \`scripts/compile-corpus.sh --write-goldens $f\`"
+    return 1
+  fi
   if ! "$bcc" lir --lint "$f" > "$w/lint" 2>&1; then
-    if grep -q 'outside the pure fragment' "$w/lint"; then echo "$f: outside the new backend's fragment"; : > "$tmp/out.$RANDOM$RANDOM"; return 0; fi
+    if grep -q 'outside the pure fragment' "$w/lint"; then echo "$f: outside the new backend's fragment"; echo "$f" >> "$PAR_SIDE/outside"; echo "outside-fragment $f" >> "$PAR_SIDE/skips"; return 0; fi
     echo "$f: lint: $(head -3 "$w/lint")"; return 1
   fi
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
@@ -98,7 +105,7 @@ program() {
     rc=0
     case "$st" in
       wasm) "$bcc" run "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$? ;;
-      native) "$bcc" run --native "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$? ;;
+      native) rc=$(native_result "$NATIVE_RUNS" "$f" "$w") ;;
       *) "$bcc" interp --stage "$st" "$f" -- "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$? ;;
     esac
     if [ "$rc" != "$(statusOf "$f")" ] || ! cmp -s "$w/out" "$base.out" || ! cmp -s "$w/err" "$err"; then
@@ -107,7 +114,7 @@ program() {
       return 1
     fi
   done
-  if [ "$final" = 1 ]; then echo "$f: ok at wasm"; echo "$f" > "$tmp/counts.$$.$RANDOM"; return 0; fi
+  if [ "$final" = 1 ]; then echo "$f: ok at wasm"; echo "$f" >> "$PAR_SIDE/counts"; return 0; fi
   name=${f#corpus/}; name=${name%.bc}
   local er wer
   er=$("$bcc" lir --erasure "$f" 2>&1)
@@ -115,7 +122,7 @@ program() {
     "erased "*" left 0 0") ;;
     *) echo "$f: the effect erasure's postcondition: $er"; return 1 ;;
   esac
-  echo "$name $er" >> "$tmp/erasure.$$.$RANDOM"
+  echo "$name $er" >> "$PAR_SIDE/erasure"
   if [ "$write" != 1 ]; then
     wer=$(awk -v n="$name" '$1 == n { $1 = ""; sub(/^ /, ""); print }' "$erasure" 2>/dev/null || true)
     if [ "$wer" != "$er" ]; then echo "$f: erasure \"$er\", pinned \"$wer\" ($erasure)"; return 1; fi
@@ -127,7 +134,7 @@ program() {
   oldc=$(awk -v n="$name" '$1 == n { print $2, $3, $4 }' "$old" 2>/dev/null || true)
   note=$(awk -v n="$name" '$1 == n { sub(/^[^#]*/, ""); print }' "$expected" 2>/dev/null || true)
   echo "$name $a $i $c $l $s $b${note:+ $note}" > "$w/count"
-  cat "$w/count" >> "$tmp/counts.$$.$RANDOM"
+  cat "$w/count" >> "$PAR_SIDE/counts"
   [ "$write" = 1 ] && { echo "$f: ok (allocs $a indirect $i copies $c; old $oldc)"; return 0; }
   want=$(awk -v n="$name" '$1 == n { sub(/#.*/, ""); print $2, $3, $4, $5, $6, $7 }' "$expected" 2>/dev/null || true)
   if [ -z "$want" ]; then echo "$f: no entry in $expected (allocs $a indirect $i copies $c loads $l stores $s bounds $b)"; return 1; fi
@@ -140,21 +147,37 @@ program() {
   echo "$f: ok (allocs $a indirect $i copies $c; old $oldc)"
 }
 export -f program localise argsOf statusOf
+# Each program's counts and erasure rows, and the programs outside the fragment, are side files
+# (scripts/par.sh), gathered in $tmp in the programs' order. A run that writes the tables is not
+# cached.
+export PAR_COLLECT=$tmp
+# The native stage reads Backend2's native runs, made once for this step and compile-native.sh
+# (scripts/native-run.sh).
+. scripts/native-run.sh
+export NATIVE_RUNS=$tmp/native-runs
+[ "$native" = 1 ] && [ "$final" = 0 ] && native_runs "$NATIVE_RUNS" "${files[@]}"
+[ "$write" = 1 ] || export PAR_CACHE="compile-backend2 final=$final native=$native"
+# A unit runs a native executable (its native stage) unless --final or there is no C compiler.
+if [ "$final" = 0 ] && [ "$native" = 1 ]; then export PAR_CACHE_NATIVE=1; fi
 par program "${files[@]}"
+skipbad=0
+if [ "$named" = 0 ]; then
+  scripts/corpus-set.sh --skips compile-backend2 parse-only no-main outside-fragment < "$tmp/skips" || skipbad=1
+fi
 # --write-counts: the run's rows replace the rows of their programs in place (scripts/merge-rows.awk)
 # and a new program's row is inserted; the other rows, the order and the comments are kept. With
 # no file named, the rows of programs this run did not count are dropped.
 if [ "$write" = 1 ]; then
   [ -s "$expected" ] || echo "# The new backend's counts per run (scripts/compile-backend2.sh, bcc-counts --backend new): name allocs indirect copies loads stores bounds." > "$expected"
-  cat "$tmp"/counts.* 2>/dev/null | sort > "$tmp/new"
+  cat "$tmp/counts" 2>/dev/null | sort > "$tmp/new"
   awk -v keep="$named" -f scripts/merge-rows.awk "$tmp/new" "$expected" > "$tmp/merged"
   mv "$tmp/merged" "$expected"
   echo "wrote $expected"
   [ -s "$erasure" ] || echo "# The effect erasure per program the new backend compiles (scripts/compile-backend2.sh, bcc lir --erasure; SPEC §47, §49): name, the handle, perform and raise nodes erased, the handle nodes compiled as drives and the performs as suspensions of state machines (machines, suspends), and the handle nodes left (stored-continuation sites, other)." > "$erasure"
-  cat "$tmp"/erasure.* 2>/dev/null | sort > "$tmp/newe"
+  cat "$tmp/erasure" 2>/dev/null | sort > "$tmp/newe"
   awk -v keep="$named" -f scripts/merge-rows.awk "$tmp/newe" "$erasure" > "$tmp/merged"
   mv "$tmp/merged" "$erasure"
   echo "wrote $erasure"
 fi
-echo "Backend2: $(cat "$tmp"/counts.* 2>/dev/null | wc -l | tr -d ' ') program(s) at their goldens, $(ls "$tmp"/out.* 2>/dev/null | wc -l | tr -d ' ') outside its fragment; $par_failed failure(s)."
-[ "$par_failed" -eq 0 ]
+echo "Backend2: $(cat "$tmp/counts" 2>/dev/null | wc -l | tr -d ' ') program(s) at their goldens, $(cat "$tmp/outside" 2>/dev/null | wc -l | tr -d ' ') outside its fragment; $par_failed failure(s)."
+[ "$par_failed" -eq 0 ] && [ "$skipbad" = 0 ]
