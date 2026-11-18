@@ -498,6 +498,14 @@ def respell_deps(p):
     return [f"arg {p}"] + files_lines("file", [p, respell_twin(p)])
 
 
+def respell_lib_deps(p):
+    """A user of a respelled library module (scripts/check-respell.sh): the program and every twin
+    of a library module (today's library is lib/ with those in place of their respellings)."""
+    d = "corpus/.respell-old/lib"
+    twins = [os.path.join(d, f) for f in listing(d) if f.endswith(".bc")]
+    return [f"arg {p}"] + files_lines("file", [p] + twins)
+
+
 _keylines = None
 
 
@@ -549,6 +557,8 @@ def unit_deps(mode, arg):
         return book_deps(arg)
     if mode == "respell":
         return respell_deps(arg)
+    if mode == "respell-lib":
+        return respell_lib_deps(arg)
     if mode.startswith("files:"):
         fs = sorted(set(mode[len("files:"):].split()))
         return [f"arg {arg}"] + files_lines("file", fs)

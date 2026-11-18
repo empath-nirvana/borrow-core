@@ -11,9 +11,10 @@
 #     (`sigs`: positions blanked);
 #   * a refusal (a reject, fail or pending file, or any file whose check fails): both fail, with
 #     the same message up to positions (`msg`: the positions move with the spelling);
-#   * a file with no `main` (a library module): `bcc print` of the two (the declarations read, as
-#     core text, with no positions) is byte-identical; its terms are compared again in every
-#     program that imports it.
+#   * a corpus file with no `main`: `bcc print` of the two (the declarations read, as core text,
+#     with no positions) is byte-identical;
+#   * a library module `lib/m.bc`: judged by its users (below), not by `bcc print`, which does not
+#     see what a generic function's body lends where it is instantiated.
 #
 # It also fails when a file in the new spelling has no twin, or a twin has no file in the new
 # spelling.
@@ -60,6 +61,7 @@ pair() {
   old=$(twin "$f")
   if [ ! -f "$old" ]; then echo "$f: in the new spelling, but has no twin $old"; return 1; fi
   if isNew "$old"; then echo "$old: a twin in the new spelling"; return 1; fi
+  case "$f" in lib/*) echo "$f: a library module, judged by the programs that use it (below)"; return 0 ;; esac
   "$bcc" erase "$old" > "$tmp/o" 2> "$tmp/oe" || ro=$?
   "$bcc" erase "$f" > "$tmp/n" 2> "$tmp/ne" || rn=$?
   if [ "$ro" = 0 ] && [ "$rn" = 0 ]; then
@@ -112,5 +114,81 @@ fi
 export PAR_CACHE=check-respell PAR_CACHE_DEPS=respell
 par pair ${news[@]+"${news[@]}"}
 bad=$((par_failed + orphans))
-echo "${#news[@]} pair(s); $bad failure(s)."
+
+# A library module in the new spelling is judged by its users: every corpus program whose
+# imports reach it (`io`, `div` and `prelude` every program reaches) is erased over today's
+# library, `oldlib` (lib/ with each respelled module replaced by its twin), and over lib/, and the
+# two must be identical (refusals: as `msg`). This sees what `bcc print` of the module alone does
+# not: a generic function's body is elaborated only where it is instantiated. A module no program
+# reaches fails as uncovered, unless `uncovered` below names it with the reason.
+uncovered=()
+mods=()
+for f in ${news[@]+"${news[@]}"}; do case "$f" in lib/*) m=${f#lib/}; mods+=("${m%.bc}") ;; esac; done
+users=0
+if [ ${#mods[@]} -gt 0 ]; then
+  oldlib=$PWD/.lake/respell-old-lib
+  rm -rf "$oldlib"; mkdir -p "$oldlib"
+  cp lib/*.bc "$oldlib"/
+  cp corpus/.respell-old/lib/*.bc "$oldlib"/
+  export oldlib
+  # The programs: corpus files with a `main` outside the twins, and which modules they reach.
+  progs=$(find corpus -path corpus/.respell-old -prune -o -name '*.bc' -type f -print | sort |
+    while IFS= read -r f; do grepq -E '^(main|fn main\()' "$f" && echo "$f"; done || true)
+  reach=$(printf '%s\n' "$progs" | python3 -I -c '
+import re, sys
+mods = set(sys.argv[1:])
+imp = re.compile(r"^(?:include|import)\s+([A-Za-z_][A-Za-z0-9_]*)", re.M)
+def imports(path):
+    try:
+        return imp.findall(open(path, encoding="utf-8", errors="surrogateescape").read())
+    except OSError:
+        return []
+lib = {}
+def closure(start):
+    seen, todo = set(), list(start)
+    while todo:
+        m = todo.pop()
+        if m in seen:
+            continue
+        seen.add(m)
+        if m not in lib:
+            lib[m] = imports(f"lib/{m}.bc")
+        todo += lib[m]
+    return seen
+for p in sys.stdin.read().split():
+    hit = sorted(closure(["io", "div", "prelude"] + imports(p)) & mods)
+    if hit:
+        print(p, " ".join(hit))
+' "${mods[@]}")
+  for m in "${mods[@]}"; do
+    if ! printf '%s\n' "$reach" | grepq -E " $m( |\$)"; then
+      ok=0; for u in ${uncovered[@]+"${uncovered[@]}"}; do [ "${u%%:*}" = "$m" ] && ok=1; done
+      if [ "$ok" = 0 ]; then echo "lib/$m.bc: no corpus program uses it, so nothing judges its respelling"; bad=$((bad + 1)); fi
+    fi
+  done
+  user() {
+    set -e
+    local f=$1 tmp=$PAR_TMP ro=0 rn=0
+    BCC_LIB=$oldlib "$bcc" erase "$f" > "$tmp/o" 2> "$tmp/oe" || ro=$?
+    "$bcc" erase "$f" > "$tmp/n" 2> "$tmp/ne" || rn=$?
+    if [ "$ro" = 0 ] && [ "$rn" = 0 ]; then
+      if cmp -s "$tmp/o" "$tmp/n"; then echo "$f: erases the same over today's library and lib/"; return 0; fi
+      echo "$f: its erasure over lib/ differs from its erasure over today's library"; return 1
+    fi
+    if [ "$ro" != 0 ] && [ "$rn" != 0 ]; then
+      msg < "$tmp/oe" > "$tmp/om"; msg < "$tmp/ne" > "$tmp/nm"
+      if cmp -s "$tmp/om" "$tmp/nm"; then echo "$f: refused the same over today's library and lib/"; return 0; fi
+    fi
+    echo "$f: over today's library and over lib/ it is not the same:"
+    sed 's/^/  /' "$tmp/oe" "$tmp/ne"; return 1
+  }
+  export -f user
+  us=()
+  while IFS=' ' read -r p _; do [ -n "$p" ] && us+=("$p"); done <<< "$reach"
+  # Each user is a unit of the result cache, keyed on the program and every twin of lib/.
+  export PAR_CACHE=check-respell-lib PAR_CACHE_DEPS=respell-lib
+  par user ${us[@]+"${us[@]}"}
+  bad=$((bad + par_failed)); users=${#us[@]}
+fi
+echo "${#news[@]} pair(s), ${#mods[@]} library module(s) judged by $users program(s); $bad failure(s)."
 [ "$bad" -eq 0 ]
