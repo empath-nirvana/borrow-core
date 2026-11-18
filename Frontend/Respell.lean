@@ -112,6 +112,20 @@ def depthOf (t : Tok) : Int := match t with
   | .sym ")" | .sym "]" | .sym "}" => -1
   | _ => 0
 
+/-- For each token, whether the innermost bracket around it is `(…)` or `[…]`, where a newline
+does not end a statement (§82 *Lexical*); a block `{…}` inside them is statements again. -/
+def Src.parenAt (s : Src) : Array Bool := Id.run do
+  let mut stack : List Bool := []
+  let mut out : Array Bool := #[]
+  for k in [0:s.toks.size] do
+    out := out.push (stack.head?.getD false)
+    match s.tok k with
+    | .sym "(" | .sym "[" => stack := true :: stack
+    | .sym "{" => stack := false :: stack
+    | .sym ")" | .sym "]" | .sym "}" => stack := stack.drop 1
+    | _ => pure ()
+  pure out
+
 /-- The index of the token closing the bracket opened at `i` (within `[i, hi)`). -/
 def Src.closing (s : Src) (i hi : Nat) : Option Nat := Id.run do
   let mut d : Int := 0
@@ -168,8 +182,9 @@ def rowRespell (S : Src) (w e : Nat) : RM Unit := do
 /-- A `;` at `i` that ends a statement or a declaration's item: dropped when a new line follows
 and the line after it plainly starts a new statement (the layout rule, Q10). `rets` are the
 `return`s the respelling drops (E3): the statement then starts with the token after it. -/
-def dropSemi (S : Src) (rets : List Nat) (i : Nat) : RM Unit := do
+def dropSemi (S : Src) (paren : Array Bool) (rets : List Nat) (i : Nat) : RM Unit := do
   unless S.tok i == .sym ";" do return
+  if paren[i]?.getD false then return
   let next := if rets.contains (i + 1) then i + 2 else i + 1
   if S.line (i + 1) > S.line i && startsPlain (S.tok next) && !endsOpen (S.tok (i - 1)) then
     repl (S.ts i) (S.te i) ""
@@ -322,6 +337,7 @@ def rewrite (S : Src) (evs : Array Ev) (sigs : List (String × List VTy)) (tbl :
     | _ => pure ()
   let loopSrcs := evs.toList.filterMap fun | .loopSrc a b => some (a, b) | _ => none
   let rets := evs.toList.filterMap fun | .ret i => some i | _ => none
+  let paren := S.parenAt
   let mut stmts : List (Nat × Nat) := []
   -- P9 first, so that the lend it takes is not rewritten again.
   for e in evs do
@@ -355,7 +371,7 @@ def rewrite (S : Src) (evs : Array Ev) (sigs : List (String × List VTy)) (tbl :
       match arrow with
       | some a => replTok S a ":"
       | none => closeAt (S.te rp) " : 1"
-    | .declSep i => dropSemi S rets i
+    | .declSep i => dropSemi S paren rets i
     | .hLent amp =>
       if S.tok (amp + 1) == .kw "mut" && S.tok (amp + 3) == .sym ":" then
         repl (S.ts amp) (S.ts (amp + 2)) ""
@@ -375,7 +391,7 @@ def rewrite (S : Src) (evs : Array Ev) (sigs : List (String × List VTy)) (tbl :
           closeAfter S (b - 1) (indentOf S eq)
     | .arrow a i => arrowRespell S a i
     | .rowed w c => rowRespell S w c
-    | .seq i => dropSemi S rets i
+    | .seq i => dropSemi S paren rets i
     | .stmt a b => stmts := (a, b) :: stmts
     | .bind x arrow asg =>
       -- `let` never assigns: an assignment `x <- M` of a `var` is `x = M`.
@@ -409,7 +425,7 @@ def rewrite (S : Src) (evs : Array Ev) (sigs : List (String × List VTy)) (tbl :
   -- The layout rule (Q10): a statement broken across lines where a new line would end it is
   -- joined onto one line, or marked when a comment is in the break.
   let sts := stmts.eraseDups
-  for (a, b) in sts do
+  for (a, b) in sts.filter (fun (a, _) => !(paren[a]?.getD false)) do
     -- A break inside a statement of its own (a nested body's) is that statement's.
     let inner := sts.filter fun (c, e) => a ≤ c && e ≤ b && (c, e) != (a, b)
     let within (k : Nat) : Bool := inner.any fun (c, e) => c ≤ k && k < e
