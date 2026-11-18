@@ -45,7 +45,7 @@ export PAR_COLLECT=$skipdir
 bad=0
 checks() {
   local f=$1 out
-  if grep -q '^-- check: parse-only' "$f"; then
+  if grep -qE '^(--|#) check: parse-only' "$f"; then
     echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0
   fi
   if out=$("$bcc" check "$f" 2>&1); then
@@ -56,8 +56,8 @@ checks() {
 }
 rejects() {
   local f=$1 want out flag
-  want=$(sed -n 's/^-- expect: //p; s/^-- expect| //p' "$f")
-  flag=; grep -q '^-- check: proved-only' "$f" && flag=--proved-only
+  want=$(sed -nE 's/^(--|#) expect: //p; s/^(--|#) expect\| //p' "$f")
+  flag=; grep -qE '^(--|#) check: proved-only' "$f" && flag=--proved-only
   if ! "$bcc" parse "$f" >/dev/null 2>&1; then
     echo "$f: does not parse, so it does not test the checker"; return 1
   elif [ -n "$flag" ] && ! out=$("$bcc" check "$f" 2>&1); then
@@ -94,8 +94,8 @@ copies() {
 # A pending program: exit 0 if it fails as recorded, 1 if not.
 pending() {
   local f=$1 issue want out
-  issue=$(sed -n '/^-- pending: /{s///p;q;}' "$f")
-  want=$(sed -n 's/^-- now: //p; s/^-- now| //p' "$f")
+  issue=$(sed -nE '/^(--|#) pending: /{s///p;q;}' "$f")
+  want=$(sed -nE 's/^(--|#) now: //p; s/^(--|#) now\| //p' "$f")
   if [ -z "$issue" ] || [ -z "$want" ]; then
     echo "$f: needs a \`-- pending:\` line and a \`-- now:\` line"; return 1
   elif out=$("$bcc" check "$f" 2>&1); then
