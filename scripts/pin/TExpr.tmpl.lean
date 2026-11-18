@@ -784,6 +784,16 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => isLam_eq t
   | .use _ _ _ _ _ _ t => isLam_eq t
 
+/-! ### The nodes of derived rules
+
+A rule's former name, now a derived rule (`Core/Judgment.lean`), keeps its node's name as an
+abbreviation of the folded rule's node, so that statements over the node keep their type. -/
+
+/-- `[then]` at a terminating finaliser: `effThenF`'s node.  `[spec §29a]` -/
+@[match_pattern] abbrev TExpr.effThen (info : TInfo) (jdg : Jdg) (A B : VTy) (S SM SD : Row) (u : Masks)
+    (tM tN tD : TExpr) : TExpr :=
+  .effThenF info jdg A B S SM SD u tM tN tD
+
 theorem TExpr.isLam_sound (t : TExpr) (h : t.isLam = true) : ∃ N, t.erase = .val (.lam N) := by
   rw [isLam_eq] at h
   match he : t.erase, h with

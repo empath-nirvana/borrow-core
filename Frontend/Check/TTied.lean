@@ -315,7 +315,7 @@ theorem effThenA (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ
     (hN : TTied p₂ s₂ Δ (⟨A, true⟩ :: Γ₂) tN (.comp (effOf S B)))
     (hD : TTied p₃ s₃ Δ (⟨.unit, false⟩ :: Γ₂) tD (.comp (.ret .unit))) :
     TTied (p₁ ++ (p₂ ++ p₃)) (s₁ ∪ (s₂ ∪ s₃)) Δ Γ
-      (.effThenF i (.comp (effOf S B)) A B S S [] u tM tN tD) (.comp (effOf S B)) :=
+      (.effThen i (.comp (effOf S B)) A B S S [] u tM tN tD) (.comp (effOf S B)) :=
   have hfin : ∀ n k o o', BoCa.Fig16.LogRel.Core.Row.find S n k = some o →
       BoCa.Fig16.LogRel.Core.Row.find S n k = some o' →
       o.finRead = true →
@@ -346,7 +346,7 @@ theorem effThen (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ�
     (hN : TTied p₂ s₂ Δ (⟨A, true⟩ :: Γ₂) tN (.comp (effOf S B)))
     (hD : TTied p₃ s₃ Δ (⟨.unit, false⟩ :: Γ₂) tD (.comp (effOf SD .unit))) :
     TTied (p₁ ++ (p₂ ++ p₃)) (s₁ ∪ (s₂ ∪ s₃)) Δ Γ
-      (.effThenF i (.comp (effOf S B)) A B S SM SD u tM tN tD) (.comp (effOf S B)) :=
+      (.effThen i (.comp (effOf S B)) A B S SM SD u tM tN tD) (.comp (effOf S B)) :=
   ⟨fun hn Ξ h => .effThenF hs hm hcv hNZ hUq hU hMS
       hDS hfin hP (.inl hSD) (hM.1 (nilL hn) Ξ (sigsAt_union_left h))
       (hN.1 (nilL (nilR hn)) Ξ (sigsAt_union_left (sigsAt_union_right h)))
