@@ -4,8 +4,7 @@ import GateCensus.Result
 /-!
 # Every declaration's axioms  (`gate-census axioms`, hygiene)
 
-`#print axioms` for every declaration of `Paper.*`, `Support.*`, `Examples.*`, `Core.*`,
-`Frontend.*`, `Target.*`, `Pipeline.*`, `Reference.*` and `Backend.*` at once, and of the
+`#print axioms` for every declaration of the libraries `imports` lists, at once, and of the
 declarations of no module (those the negative test of `scripts/check-hygiene.sh` elaborates into
 the environment): for each, the axioms its type and value reach, transitively. Fails unless every
 one is among `propext`, `Classical.choice` and `Quot.sound`.
@@ -21,7 +20,8 @@ open Lean
 
 namespace GateCensus.Axioms
 
-/-- The modules read. -/
+/-- The libraries whose declarations are checked: the census imports each, and walks every
+module under each. -/
 def imports : Array Name :=
   #[`Paper, `Support, `Examples, `Core, `Frontend, `Target, `Pipeline, `Reference, `Backend]
 
@@ -42,9 +42,7 @@ def run (env : Environment) (view : View) : Result := Id.run do
   for h : i in [0:env.header.moduleNames.size] do
     let mod := env.header.moduleNames[i]
     unless view.hasModule i do continue
-    unless (`Paper).isPrefixOf mod || (`Support).isPrefixOf mod || (`Examples).isPrefixOf mod ||
-        (`Core).isPrefixOf mod || (`Frontend).isPrefixOf mod || (`Target).isPrefixOf mod ||
-        (`Pipeline).isPrefixOf mod || (`Reference).isPrefixOf mod || (`Backend).isPrefixOf mod do continue
+    unless imports.any (·.isPrefixOf mod) do continue
     for n in env.header.moduleData[i]!.constNames do
       unless listed.contains n do
         listed := listed.insert n
