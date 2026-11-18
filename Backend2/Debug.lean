@@ -26,13 +26,13 @@ def texprNames : Array String := ctorNames2% TExpr
 
 def ruleName (t : TExpr) : String := texprNames[t.ctorIdx]!
 
-def ppJ (j : Jdg) (ms : MachSet := {}) : String :=
-  match ofJ ms j with
+def ppJ (j : Jdg) (ms : MachSet := {}) (fd : EvSet := {}) : String :=
+  match ofJ ms fd j with
   | .ok (.inl a) => a.pp
   | .ok (.inr k) => "{" ++ k.pp ++ "}"
   | .error e => s!"<{e}>"
 
-def ppVT (A : VTy) (ms : MachSet := {}) : String := match ofV ms A with
+def ppVT (A : VTy) (ms : MachSet := {}) (fd : EvSet := {}) : String := match ofV ms fd A with
   | .ok a => a.pp
   | .error e => s!"<{e}>"
 
@@ -60,8 +60,8 @@ end
 /-- A type in a `use` key (`useKey`): as `ppVT` prints it; a type holding a per-code closure type
 `Code⟨N; E⟩ C` is its exact serialisation, the code `N` in full, so that two codes are two keys.
 `[spec §68]` -/
-def keyVT (A : VTy) (ms : MachSet := {}) : String :=
-  if hasCodeV A then "exact:" ++ reprStr A else ppVT A ms
+def keyVT (A : VTy) (ms : MachSet := {}) (fd : EvSet := {}) : String :=
+  if hasCodeV A then "exact:" ++ reprStr A else ppVT A ms fd
 
 def ppMasks (m : Masks) : String :=
   String.ofList (m.ms.map fun (a, b) => match a, b with
