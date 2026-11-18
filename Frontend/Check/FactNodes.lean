@@ -84,12 +84,13 @@ def lendKindB (m : Bool) : TExpr → Bool
 
 /-- `return` of `array_new` applied. -/
 def tabT : TExpr → Bool
-  | .ret _ _ _ (.lolliE _ _ _ _ _ _ (.bangE _ _ _ (.constK _ _ (.arrNew ..)))) => true
+  | .ret _ _ _ (.lolliE _ _ _ _ _ _ (.bangE _ _ _ (.constK _ _ k))) => (k matches .arrNew _)
   | _ => false
 
 /-- `return` of `slice_borrow_imm` applied to the variable `0` and a callback. -/
 def immLendT : TExpr → Bool
-  | .ret _ _ _ (.lolliE _ _ _ _ _ _ (.lolliE _ _ _ _ _ x (.constK _ _ (.sliceBorrowI ..)))) => x.isVarT 0
+  | .ret _ _ _ (.lolliE _ _ _ _ _ _ (.lolliE _ _ _ _ _ x (.constK _ _ k))) =>
+    (k matches .sliceBorrowI ..) && x.isVarT 0
   | _ => false
 
 /-- The consume applied to the variable `1`. -/

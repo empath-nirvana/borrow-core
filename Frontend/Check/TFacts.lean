@@ -169,8 +169,8 @@ theorem TDerivesAt.withbor2_witness_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx 
         (.val (axWithbor2Ty x Δ.meetOfDom A B)) ∧
       TDerivesAt Ξ Δ Γ (.constK i (.val (axWithbor2Ty x Δ.meetOfDom A B)) (.withbor2 A B x))
         (.val (axWithbor2Ty x Δ.meetOfDom A B)) :=
-  ⟨.constK _ (rowAt_nil Ξ) ⟨hx, ⟨b₁, h₁⟩, hfree₁, hfree₂⟩ hΓ,
-    .constK _ (rowAt_nil Ξ) ⟨hx, ⟨b₂, h₂⟩, hfree₁, hfree₂⟩ hΓ⟩
+  ⟨.constK (.withbor2 A B x) (rowAt_nil Ξ) ⟨hx, ⟨b₁, h₁⟩, hfree₁, hfree₂⟩ hΓ,
+    .constK (.withbor2 A B x) (rowAt_nil Ξ) ⟨hx, ⟨b₂, h₂⟩, hfree₁, hfree₂⟩ hΓ⟩
 
 /-- **The clause kinds are the checker's, not the derivation's**: a typed derivation of a
 `handle` node is one at any kinds. -/

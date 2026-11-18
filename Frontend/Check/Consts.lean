@@ -88,10 +88,12 @@ def cDead {A : CVTy} (mk : Jdg → TExpr)
     Except Error (Σ B : CVTy, Res Δ T (.val B)) :=
   pure ⟨A, mk (.val A), [], [], (Fam.dead T).map fun _ hd => TTied.ofAt (h hd)⟩
 
-/-- A kernel constant (`ConstKind`), its side condition established: its node at its type at
-`⊓Δ`, by `constK` at every consumed context, which ties no row. -/
-def cConst (sp : Span) (k : ConstKind) (hk : k.OK Δ) : Except Error (Σ B : CVTy, Res Δ T (.val B)) :=
-  cDead (A := k.ty Δ.meetOfDom) (fun j => .constK (at_ sp) j k) fun hd Ξ => .constK k (rowAt_nil Ξ) hk hd
+/-- A kernel constant (`ConstKind`) that ties no row, its side condition established: its node at
+its type at `⊓Δ`, by `constK` at every consumed context. -/
+def cConst (sp : Span) (k : ConstKind) (hk : k.OK Δ) (hr : k.row = [] := by rfl) :
+    Except Error (Σ B : CVTy, Res Δ T (.val B)) :=
+  cDead (A := k.ty Δ.meetOfDom) (fun j => .constK (at_ sp) j k) fun hd Ξ =>
+    .constK k (by rw [hr]; exact rowAt_nil Ξ) hk hd
 
 /-- A constant whose rule is stated at `Ctx.Dead`: every slot dead. -/
 def cDeadStrict {A : CVTy} (mk : Jdg → TExpr)
