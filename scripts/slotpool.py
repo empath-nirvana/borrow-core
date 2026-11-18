@@ -20,9 +20,13 @@ def _size():
     if os.environ.get("SLOT_OFF") == "1" or os.environ.get("SLOT_HELD"):
         return None
     try:
-        n, m = subprocess.run([SLOT, "-s"], capture_output=True, text=True, check=True).stdout.split()
+        n, m = subprocess.run([SLOT, "-s"], capture_output=True, text=True, check=True).stdout.split()[:2]
         return int(n), int(m)
-    except (OSError, subprocess.CalledProcessError, ValueError):
+    except OSError as e:
+        if e.errno in (23, 24):  # ENFILE, EMFILE: out of file handles, said loudly, not "pool off"
+            raise
+        return None
+    except (subprocess.CalledProcessError, ValueError):
         return None
 
 

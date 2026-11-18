@@ -267,13 +267,16 @@ echo "ci-local plan: build $planBuild; steps: ${planSteps:-none}"
 pool=""
 if [ "${SLOT_OFF:-}" = 1 ]; then echo "ci-local: job pool off (SLOT_OFF=1)"
 elif size=$(scripts/slot -s 2>&1); then
-  read -r poolN poolM <<< "$size"; pool=scripts/slot
-  echo "ci-local: job pool on ($poolN CPU slots, $poolM GB, shared by every gate on the machine)"
+  read -r poolN poolM poolL <<< "$size"; pool=scripts/slot
+  echo "ci-local: job pool on ($poolN CPU slots, $poolM GB, $poolL library tokens, shared by every gate on the machine)"
 else
   export SLOT_OFF=1; echo "ci-local: job pool off (scripts/slot -s: ${size:-no answer})"
 fi
-# slotted CPU MEM CMD…: CMD in the pool, or CMD itself when the pool is off.
-slotted() { local c=$1 m=$2; shift 2; if [ -n "$pool" ]; then "$pool" -c "$c" -m "$m" -- "$@"; else "$@"; fi; }
+# slotted CPU MEM [-l LEAN] CMD…: CMD in the pool, or CMD itself when the pool is off. A process
+# that maps the library's .olean files (a building `lake build`, gate-census) takes a library token
+# (scripts/slot -l), of which the machine has a few.
+slotted() { local c=$1 m=$2 l=0; shift 2; [ "${1:-}" != -l ] || { l=$2; shift 2; }
+  if [ -n "$pool" ]; then "$pool" -c "$c" -m "$m" -l "$l" -- "$@"; else "$@"; fi; }
 # The build: nothing when Lake finds every target up to date (`--no-build`, exit 3 when one is
 # not); otherwise the build itself, holding the whole CPU pool (Lake starts a Lean process per
 # core and has no job limit).
@@ -287,8 +290,13 @@ build() {
   # gate30 verification's results.md, T6b: vm_stat anonymous + wired + compressor pages). Its summed
   # RSS (61.5 GB) is not the measure: it counts the mapped .oleans once per Lean process, though
   # they share their pages.
-  slotted 999 16 lake build "$@"
+  slotted 999 16 -l 1 lake build "$@"
 }
+# The machine's file handles (scripts/exhausted.sh): a gate does not start while the vnode table is
+# full, which would fail its steps here and there with ENFILE; it waits a bounded time, or fails in
+# one line.
+. scripts/exhausted.sh
+vnode_preflight || exit 1
 if [ "$tiered" = 1 ] && [ "$tierBuild" = none ]; then echo "==> build: none (no step of this tier reads the build)"
 elif [ "$tiered" = 1 ] && [ "$tierBuild" = bins ]; then step "build (bcc, bcc-counts)" build bcc bcc-counts gate-census
 elif [ "$all" = 1 ]; then step "build" build
@@ -341,10 +349,14 @@ for ((i = 0; i < ${#steps[@]}; i += 2)); do
     step "$name" ${pre[@]+"${pre[@]}"} $cmd
   fi
 done
+# A step that ran out of file handles says so in its output, in a tool's words
+# (scripts/exhausted.sh): such a step's failures are the machine's, not verdicts on the tree.
+exhaustedSteps=()
 for ((k = 0; k < ${#names[@]}; k++)); do
   printf '==> %s\n' "${names[k]}"
   if wait "${pids[k]}"; then rc=0; else rc=1; fi
   cat "$out/$k.log"
+  if exhausted "$out/$k.log"; then exhaustedSteps+=("${names[k]}"); fi
   t=$(cat "$out/$k.time" 2>/dev/null || echo "?")
   if [ "$rc" = 0 ]; then printf '    ok: %s (%ss)\n' "${names[k]}" "$t"; else printf '    FAILED: %s (%ss)\n' "${names[k]}" "$t"; fail=1; fi
 done
@@ -364,6 +376,10 @@ tag="ci-local"; [ "$changed" = 1 ] && tag="ci-local --changed"; [ "$full" = 1 ] 
 if [ "${GATE_CACHE:-1}" = 0 ]; then cache="cache off${cachenote:-}"
 else cache=$(awk '{ r += $1; n += $2; f += $3 } END { printf "cache: %d unit(s) replayed, %d run", r, n; if (f) printf "; WARNING: %d pass(es) could not be recorded (store not writable)", f }' "$GATE_CACHE_STATS"); fi
 if [ -n "$pool" ]; then cache="$cache; job pool $poolN/$poolM GB"; else cache="$cache; job pool off"; fi
+if [ ${#exhaustedSteps[@]} -gt 0 ]; then
+  fail=1
+  echo "ci-local: the machine ran out of file handles during this gate (in: $(IFS=,; echo "${exhaustedSteps[*]}" | sed 's/,/, /g')): rerun when it is quieter; those steps' failures are not verdicts on the tree"
+fi
 if [ "$fail" -eq 0 ]; then echo "$tag: ALL PASSED ($((SECONDS - start))s; $cache)"; else echo "$tag: FAILURES (see above) ($((SECONDS - start))s; $cache)"; fi
 [ "$changed" = 1 ] && echo "(--changed is for iteration only: the sanity gate, scripts/ci-local.sh, runs before a PR)"
 if [ -n "$tierLine" ]; then echo "$tierLine"; echo "($tierLeft)"

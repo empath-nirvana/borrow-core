@@ -9,7 +9,9 @@
 #                    perl) the pool is off and $JOBS run at once, as without it.
 #
 # FN runs under `set -uo pipefail`, in a subshell of its own (a FN that sets `-e` ends only itself). FN, and every variable and function it uses, must be exported (`export -f`, `export`). Each run
-# gets a scratch directory of its own in `$PAR_TMP`.
+# gets a scratch directory of its own in `$PAR_TMP`, removed as soon as the run ends (only its
+# output, status and side files are kept until the call ends), so a call holds a few files per
+# job, not every job's scratch.
 #
 # Side files. A run hands files back to its script by writing them under `$PAR_SIDE`; after every
 # run has ended, each run's files are appended, in the order the files were given, to the file of
@@ -54,7 +56,7 @@ par() {
       mkdir "$PAR_DIR/$1.d"; mkdir -p "$PAR_DIR/$1.side"
       par_nostore() { : > "$PAR_NOSTORE"; }; export -f par_nostore
       (PAR_TMP="$PAR_DIR/$1.d" PAR_SIDE="$PAR_DIR/$1.side" PAR_NOSTORE="$PAR_DIR/$1.nostore" '"$fn"' "$2") > "$PAR_DIR/$1.out" 2>&1
-      echo $? > "$PAR_DIR/$1.rc"' _ < "$dir/run" || true
+      echo $? > "$PAR_DIR/$1.rc"; rm -rf "$PAR_DIR/$1.d"' _ < "$dir/run" || true
   python3 "$PAR_HOME/gate_cache.py" par-finish "$dir" "$fn"
   par_failed=$(cat "$dir/failed" 2>/dev/null || echo $#)
   rm -rf "$dir"
