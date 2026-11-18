@@ -137,8 +137,13 @@ def walk(d, prune=(".git", ".lake", "__pycache__")):
     """Every file under directory d (relative to ROOT), sorted."""
     out = []
     top = os.path.join(ROOT, d)
+    # Each directory's stat is noted before it is listed (the top here, each subdirectory as its
+    # parent yields it), so a fingerprint sees a file added or removed (scripts/par_unit.py).
+    note_stat(top)
     for r, ds, fs in os.walk(top):
         ds[:] = sorted(x for x in ds if x not in prune)
+        for x in ds:
+            note_stat(os.path.join(r, x))
         for f in fs:
             if f.endswith(".pyc"):
                 continue
@@ -241,7 +246,10 @@ def class_lines(cls, extra=()):
             libs.add(os.path.realpath(lib_of(b)))
         lines += [f"bin {h}" for h in sorted(shas)]
         for l in sorted(libs):
-            for r, _, fs in os.walk(l):
+            note_stat(l)
+            for r, ds, fs in os.walk(l):
+                for x in ds:
+                    note_stat(os.path.join(r, x))
                 for f in sorted(fs):
                     p = os.path.join(r, f)
                     lines.append(f"lib {os.path.relpath(p, l)} {sha_file(p)}")

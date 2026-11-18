@@ -14,6 +14,14 @@ when this process exits, however it exits), from before it starts until its pass
     (DIR/base.files and DIR/I.files), taken now, is the one `par-start` took before reading them:
     par_finish's recheck, made per job. par_finish skips the jobs stored here (DIR/I.stored).
 
+Why the fingerprint at job end is at least as strong as hashing the inputs again: any write to a
+file's contents advances its ctime (the kernel sets it; no system call sets it back, unlike
+mtime), a file replaced by rename has another inode, and an entry added or removed advances its
+directory's ctime; every file and directory a key reads has its stat noted before it is read. So
+equal fingerprints mean no input was written between the key's read and the job's end: the job read
+what the key hashed. A rehash shows only that the end state equals the hashed one, and misses a
+change made and undone while the job ran.
+
 The job takes its slot of the job pool after the lock (CMD starts with scripts/slot), so a job
 waiting on another gate's unit holds no slot. Locks are taken only by jobs that start, so a
 waiting job waits only on a running one. The job's peak memory is recorded as the unit's weight
