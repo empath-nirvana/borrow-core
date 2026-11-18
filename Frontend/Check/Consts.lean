@@ -58,7 +58,7 @@ open BoCa.Fig16.LogRel.Core (fixDTy unfoldSTy unfoldTy ConstKind) in
 /-- `fixD` (`CDerives.fixD`): the `unfold` constant at the delay type's body, at its type `fixDTy`. -/
 theorem tFixD {Ξ : BoCa.Fig16.LogRel.Core.EffCtx} {Δ : LifeCtx} {Γ : Ctx CVTy} {i : TInfo} {A S : CVTy}
     (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (.constK i (.val (fixDTy A S)) (.unfoldN (BoCa.Fig16.LogRel.Core.CTy.delayBody A) S))
+    TDerivesAt Ξ Δ Γ (.unfoldN i (.val (fixDTy A S)) (BoCa.Fig16.LogRel.Core.CTy.delayBody A) S)
       (.val (fixDTy A S)) := by
   have h := TDerivesAt.constK (Ξ := Ξ) (Δ := Δ) (info := i)
     (.unfoldN (BoCa.Fig16.LogRel.Core.CTy.delayBody A) S) (BoCa.Fig16.LogRel.Core.rowAt_nil Ξ)
@@ -70,7 +70,7 @@ open BoCa.Fig16.LogRel.Core (fixDTy unfoldSTy unfoldTy ConstKind) in
 /-- `unfoldS` (`CDerives.unfoldS`): the `unfold` constant at the stream type's body, at `unfoldSTy`. -/
 theorem tUnfoldS {Ξ : BoCa.Fig16.LogRel.Core.EffCtx} {Δ : LifeCtx} {Γ : Ctx CVTy} {i : TInfo} {A S : CVTy}
     (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (.constK i (.val (unfoldSTy A S)) (.unfoldN (BoCa.Fig16.LogRel.Core.CTy.streamBody A) S))
+    TDerivesAt Ξ Δ Γ (.unfoldN i (.val (unfoldSTy A S)) (BoCa.Fig16.LogRel.Core.CTy.streamBody A) S)
       (.val (unfoldSTy A S)) := by
   have h := TDerivesAt.constK (Ξ := Ξ) (Δ := Δ) (info := i)
     (.unfoldN (BoCa.Fig16.LogRel.Core.CTy.streamBody A) S) (BoCa.Fig16.LogRel.Core.rowAt_nil Ξ)

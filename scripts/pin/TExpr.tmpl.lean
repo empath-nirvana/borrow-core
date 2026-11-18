@@ -784,6 +784,39 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => isLam_eq t
   | .use _ _ _ _ _ _ t => isLam_eq t
 
+/-! ### The constants' former nodes
+
+A constant whose node a statement names keeps that node's name as an abbreviation of the `constK`
+node at its kind (`ConstKind`, `Core/ConstKind.lean`), so that the statement keeps its type. -/
+
+/-- `()`'s node.  `[spec §3]` -/
+@[match_pattern] abbrev TExpr.unitI (info : TInfo) (jdg : Jdg) : TExpr := .constK info jdg .unitI
+
+/-- `copy`'s node at `Imm @a A`.  `[spec §12]` -/
+@[match_pattern] abbrev TExpr.copy (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) : TExpr :=
+  .constK info jdg (.copy a A)
+
+/-- `array_copy`'s node.  `[spec §9]` -/
+@[match_pattern] abbrev TExpr.arrCopy (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) :
+    TExpr :=
+  .constK info jdg (.arrCopy a A)
+
+/-- `iterate`'s node.  `[spec §14]` -/
+@[match_pattern] abbrev TExpr.iterate (info : TInfo) (jdg : Jdg) (S : Row) (St B R : VTy) : TExpr :=
+  .constK info jdg (.iterate S St B R)
+
+/-- `div_fuel`'s node.  `[spec §14]` -/
+@[match_pattern] abbrev TExpr.divFuel (info : TInfo) (jdg : Jdg) (S : Row) (A : VTy) : TExpr :=
+  .constK info jdg (.divFuel S A)
+
+/-- `withbor` (2)'s node.  `[spec §23]` -/
+@[match_pattern] abbrev TExpr.withbor2 (info : TInfo) (jdg : Jdg) (A B : VTy) (x : LifeVar) : TExpr :=
+  .constK info jdg (.withbor2 A B x)
+
+/-- `unfold`'s node.  `[spec §7]` -/
+@[match_pattern] abbrev TExpr.unfoldN (info : TInfo) (jdg : Jdg) (C : CTy) (S : VTy) : TExpr :=
+  .constK info jdg (.unfoldN C S)
+
 theorem TExpr.isLam_sound (t : TExpr) (h : t.isLam = true) : ∃ N, t.erase = .val (.lam N) := by
   rw [isLam_eq] at h
   match he : t.erase, h with

@@ -174,7 +174,7 @@ copy of `Imm @a A`, a `DerivedCopy` type. The checker inserts a copy only as thi
 declared type, whatever decides where it goes.  `[spec §12]` -/
 theorem _root_.BoCa.Fig16.LogRel.Core.Check.TDerivesP.copy_at {Δ : LifeCtx} {Γ : BoCa.Ctx CVTy}
     {i : TInfo} {j : BoCa.Fig16.LogRel.Core.Jdg} {a : Lifetime.Life} {A : CVTy}
-    {j' : BoCa.Fig16.LogRel.Core.Jdg} (h : TDerivesP Δ Γ (.constK i j (.copy a A)) j') :
+    {j' : BoCa.Fig16.LogRel.Core.Jdg} (h : TDerivesP Δ Γ (.copy i j a A) j') :
     j' = .val (BoCa.Fig16.LogRel.Core.axCopyTy a A) ∧ DerivedCopy (.imm a A) := by
   cases h
   exact ⟨rfl, .imm a A⟩
@@ -183,7 +183,7 @@ theorem _root_.BoCa.Fig16.LogRel.Core.Check.TDerivesP.copy_at {Δ : LifeCtx} {Γ
 `arrCopyTy a A`, the copy of `[Imm @a A]`, a `DerivedCopy` type.  `[spec §9, §12]` -/
 theorem _root_.BoCa.Fig16.LogRel.Core.Check.TDerivesP.arrCopy_at {Δ : LifeCtx}
     {Γ : BoCa.Ctx CVTy} {i : TInfo} {j : BoCa.Fig16.LogRel.Core.Jdg} {a : Lifetime.Life} {A : CVTy}
-    {j' : BoCa.Fig16.LogRel.Core.Jdg} (h : TDerivesP Δ Γ (.constK i j (.arrCopy a A)) j') :
+    {j' : BoCa.Fig16.LogRel.Core.Jdg} (h : TDerivesP Δ Γ (.arrCopy i j a A) j') :
     j' = .val (BoCa.Fig16.LogRel.Core.arrCopyTy a A) ∧ DerivedCopy (.fam (.imm a A)) := by
   cases h
   exact ⟨rfl, .arrImm a A⟩
