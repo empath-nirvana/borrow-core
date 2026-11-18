@@ -8,7 +8,8 @@
 # or through a kernel declaration that does; each one must be the helper or in
 # scripts/type-eq.allow, with its reason. Then the script's own negative tests: the
 # same check, with declarations added that a correct check refuses, must fail with each one named
-# (the same `gate-census` run, on the environment with them elaborated into it):
+# (scripts/census-neg/type-eq.lean; the same `gate-census` run, on the environment with them
+# elaborated into it):
 #
 #   * `Frontend.Check.negBeq`, a `==` of two value types;
 #   * `Frontend.Check.negDecide`, a `decide (C = D)` of two computation types;
@@ -59,23 +60,8 @@ check() {
   fi
 }
 
-cat > "$tmp/Neg.lean" <<'LEAN'
-def Frontend.Check.negBeq (A B : Frontend.Check.CVTy) : Bool := A == B
-def Frontend.Check.negDecide (C D : Frontend.Check.CCTy) : Bool := decide (C = D)
-def Frontend.Check.negFind (S : Frontend.Check.CRow) (o : Frontend.Check.COpSig) : Bool :=
-  (S.find? (· == o)).isSome
-def Frontend.Check.negAlpha (A B : Frontend.Check.CVTy) : Bool :=
-  BoCa.Fig16.LogRel.Core.VTy.alphaB [] A B
-def Frontend.Sugar.negElab (A B : Frontend.Check.CVTy) : Bool := decide (A = B)
-def Frontend.Check.negViaCore (ks : List BoCa.Fig16.LogRel.Core.FoldP.Bnd)
-    (k : BoCa.Fig16.LogRel.Core.FoldP.Bnd) : BoCa.Expr :=
-  BoCa.Fig16.LogRel.Core.FoldP.callE ks k
-def Backend2.negHandle (g h : Backend2.HNode) : Bool :=
-  decide (BoCa.Fig16.LogRel.Core.CTy.effOf g.S .unit = BoCa.Fig16.LogRel.Core.CTy.effOf h.S .unit) &&
-    decide (g.E = h.E)
-LEAN
 mkdir "$tmp/c"
-scripts/gate-census.sh --out "$tmp/c" type-eq "type-eq+$tmp/Neg.lean"
+scripts/gate-census.sh --out "$tmp/c" type-eq type-eq+scripts/census-neg/type-eq.lean
 if ! check type-eq; then
   echo "check-type-eq: route these through tyEqV/tyEqC/tyEqEnts or convVal/convComp, or add them"
   echo "to scripts/type-eq.allow with the reason the exact comparison is right"

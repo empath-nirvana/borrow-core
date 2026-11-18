@@ -57,17 +57,12 @@ python3 scripts/gen-pin.py --check
 # The corpus files CrossCheck reads at elaboration are in its build trace.
 scripts/check-crosscheck-trace.sh
 # Every declaration's axioms (`gate-census axioms`), then the census's negative test in the same
-# run: declarations that reach an axiom outside the three, elaborated into the environment, must
-# each be reported.
+# run: declarations that reach an axiom outside the three (scripts/census-neg/axioms.lean),
+# elaborated into the environment, must each be reported.
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-cat > "$tmp/Neg.lean" <<'LEAN'
-axiom Core.negAxiom : False
-theorem Core.negThm : 1 = 2 := Core.negAxiom.elim
-def Core.negSorry : Nat := sorry
-LEAN
 mkdir "$tmp/c"
-scripts/gate-census.sh --out "$tmp/c" axioms "axioms+$tmp/Neg.lean"
+scripts/gate-census.sh --out "$tmp/c" axioms axioms+scripts/census-neg/axioms.lean
 cat "$tmp/c/axioms.out"
 [ "$(cat "$tmp/c/axioms.status")" = 0 ] || exit 1
 if [ "$(cat "$tmp/c/axioms-neg.status")" = 0 ]; then

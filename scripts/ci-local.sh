@@ -221,6 +221,17 @@ if [ "$built" = 0 ] && [ "${GATE_CACHE:-1}" != 0 ]; then
   python3 scripts/gate_cache.py tools > "$out/tools" && export GATE_CACHE_TOOLS_FILE=$out/tools
 fi
 
+# The censuses that read the Lean environment: one `gate-census` process for every step that asks
+# (scripts/gate-census.sh), started by the first step that runs one. The research archive's runs
+# on its own, after that step builds the archive.
+if [ "$built" = 0 ]; then
+  export GATE_CENSUS_DIR="$out/census" GATE_CENSUS_ALL=""
+  wanted "hygiene + axioms" && GATE_CENSUS_ALL+=" axioms axioms+scripts/census-neg/axioms.lean"
+  wanted "axiom report" && GATE_CENSUS_ALL+=" axiom-report"
+  wanted "type equality" && GATE_CENSUS_ALL+=" type-eq type-eq+scripts/census-neg/type-eq.lean"
+  wanted "insertion pins" && GATE_CENSUS_ALL+=" pins pins+scripts/census-neg/pins.lean"
+fi
+
 if wanted "compile scaling"; then step "compile scaling" scripts/compile-scaling.sh --guard; fi
 
 mdbook=1; command -v mdbook >/dev/null || mdbook=0
