@@ -70,6 +70,9 @@ expect "scripts/corpus-set.sh" full
 expect "scripts/slot" full
 expect "scripts/GateCensus/View.lean" scripts +"type equality" +"hygiene + axioms" @all
 expect "scripts/census-neg/pins.lean" scripts +"insertion pins" @all
+expect "scripts/census-neg/axioms.lean" scripts +"hygiene + axioms" @all
+expect "scripts/census-neg/type-eq.lean" scripts +"type equality" -"insertion pins" @all
+expect "scripts/census-neg/new.lean" scripts +"hygiene + axioms" +"type equality" +"insertion pins" @all
 expect "scripts/native-run.sh" scripts +"native" +"corpus (Backend2)" @bins
 expect "scripts/check-crosscheck-trace.sh" scripts +"hygiene + axioms" @all
 expect "corpus/aoc/new.py" full ="unrecognised, so full: corpus/aoc/new.py"

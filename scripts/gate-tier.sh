@@ -142,7 +142,10 @@ STEP_SCRIPTS = {
     "gate-census.sh": ["hygiene + axioms", "type equality", "axiom report", "insertion pins", "research archive"],
     "GateCensus.lean": ["hygiene + axioms", "type equality", "axiom report", "insertion pins", "research archive"],
     "GateCensus/": ["hygiene + axioms", "type equality", "axiom report", "insertion pins", "research archive"],
-    "census-neg/": ["type equality", "axiom report", "insertion pins"],
+    "census-neg/axioms.lean": ["hygiene + axioms"],
+    "census-neg/type-eq.lean": ["type equality"],
+    "census-neg/pins.lean": ["insertion pins"],
+    "census-neg/": ["hygiene + axioms", "type equality", "axiom report", "insertion pins"],
 }
 MACHINERY = {"ci-local.sh", "par.sh", "gate_cache.py", "gate-tier.sh", "source-stage.sh", "interp-digest.sh",
              "corpus-set.sh", "par_unit.py", "slot", "slotpool.py"}
@@ -245,7 +248,8 @@ for p in paths:
         elif name.startswith("__pycache__/"):
             c = "docs"
         else:
-            key = next((d for d in ("pin/", "GateCensus/", "census-neg/") if name.startswith(d)), name)
+            key = name if name in STEP_SCRIPTS else \
+                next((d for d in ("pin/", "GateCensus/", "census-neg/") if name.startswith(d)), name)
             if key in STEP_SCRIPTS:
                 c = "scripts"
                 step_all.update(STEP_SCRIPTS[key])
