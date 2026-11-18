@@ -26,6 +26,7 @@
 # is recorded, unless it calls `par_nostore` (it ran the source interpreter, or wrote a file of
 # the tree). `GATE_CACHE=0` neither reads nor writes the cache.
 unset PAR_CACHE PAR_CACHE_DEPS PAR_CACHE_NATIVE PAR_COLLECT
+. "$(dirname "${BASH_SOURCE[0]}")/grepq.sh"
 PAR_HOME=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}
 export JOBS PAR_HOME

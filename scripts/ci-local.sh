@@ -317,7 +317,8 @@ if [ "$built" != 0 ] && [ "${GATE_CACHE:-1}" != 0 ]; then export GATE_CACHE=0; c
 # The tools in every cache key, found once for the whole gate after the build (they do not change
 # during it).
 if [ "$built" = 0 ] && [ "${GATE_CACHE:-1}" != 0 ]; then
-  python3 scripts/gate_cache.py tools > "$out/tools" && export GATE_CACHE_TOOLS_FILE=$out/tools
+  if python3 scripts/gate_cache.py tools > "$out/tools" 2> "$out/tools.err"; then export GATE_CACHE_TOOLS_FILE=$out/tools
+  else echo "ci-local: $(cat "$out/tools.err") (no shared tools line: each step probes the tools itself)"; fi
 fi
 
 # The censuses that read the Lean environment: one `gate-census` process for every step that asks
