@@ -31,12 +31,13 @@ twin() { case "$1" in corpus/*) echo "corpus/.respell-old/${1#corpus/}" ;; lib/*
 spelt() { local r=${1#corpus/.respell-old/}; case "$r" in lib/*) echo "$r" ;; *) echo "corpus/$r" ;; esac; }
 isNew() { [ "$(head -n 1 "$1")" = "$pragma" ]; }
 export -f twin spelt isNew
-# The message of a refusal, without the file and position it is reported at and with every
-# position it quotes blanked (the respelling moves lines and columns: the pragma line, braces
-# round an arm). With `new`, the line in a generated name `io_l<k><L>_<n>` is shifted back by the
-# pragma line.
+# The message of a refusal, without the file and position it is reported at, with every position
+# it quotes blanked (the respelling moves lines, by the pragma line, and columns, by braces added
+# round an arm) and every lifetime name blanked (a mode drops a written lifetime, and the parser
+# names it `'io_lf<n>`: answers B5). With `new`, the line in a generated name `io_l<k><L>_<n>` is
+# mapped back by the pragma line.
 msg() {
-  sed -E '1s/^[^:]*:[0-9]+:[0-9]+: //; 1s/^[^:]*: no `main`$/no `main`/' | perl -pe 's/\b\d+:\d+\b/L:C/g' |
+  sed -E '1s/^[^:]*:[0-9]+:[0-9]+: //; 1s/^[^:]*: no `main`$/no `main`/' | perl -pe "s/\\b\\d+:\\d+\\b/L:C/g; s/'[a-z][A-Za-z0-9_]*/'_/g" |
     if [ "${1:-}" = new ]; then perl -pe 's/\b(io_l[a-z]+)(\d+)_/$1.($2-1)."_"/ge'; else cat; fi
 }
 export -f msg
