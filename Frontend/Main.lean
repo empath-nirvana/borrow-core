@@ -187,7 +187,7 @@ def parseInterpArgs : List String → InterpArgs → Option InterpArgs
 /-- Print `file` with its I/O sugar elaborated. -/
 def desugar (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
-  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  match Frontend.Elab.parseLent src with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
   | .ok p => match Frontend.Elab.elaborate p with
     | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
@@ -234,7 +234,7 @@ def trusted (file : String) : IO UInt32 := do
 /-- Each `handle` node of `file`'s checked terms, with its clauses' kinds (SPEC §19). -/
 def kinds (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
-  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  match Frontend.Elab.parseLent src with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
   | .ok p =>
     match Check.checkProgram p with
@@ -260,7 +260,7 @@ holds for its clauses over those names at `main`'s flow record (`Checked.flows`,
 whether `main` holds a handler whose name is not a literal. -/
 def handled (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
-  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  match Frontend.Elab.parseLent src with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
   | .ok p =>
     match Check.checkProgram p with
@@ -301,7 +301,7 @@ def copies (file : String) : IO UInt32 := do
 clause kinds: `sp: handle n: kind eff[args] by handler (as slot), state (x: A, …); kinds`. -/
 def sites (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
-  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  match Frontend.Elab.parseLent src with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
   | .ok p =>
     match Check.checkProgram p with
@@ -605,7 +605,7 @@ first relaxed rule, naming each site's hypothesis and research question (`Pins.u
 `[spec §29]` -/
 def checkCmd (provedOnly : Bool) (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
-  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  match Frontend.Elab.parseLent src with
   | .error e =>
     IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc)
     return 1

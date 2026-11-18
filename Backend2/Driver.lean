@@ -524,7 +524,7 @@ def watTimed (file src : String) : IO (Except String String) := do
   let stage {α} := @Backend.timed α (some tot)
   let go : ExceptT String IO String := do
     let p₀ ← ExceptT.mk <| stage "parse" (fun (p : Frontend.Program) => s!"{p.decls.length} declarations")
-      fun _ => match Frontend.parseProgram src (lib := Frontend.Sugar.libSrc) with
+      fun _ => match Frontend.Elab.parseLent src with
         | .ok p => pure p
         | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
     let r ← ExceptT.mk <| stage "check" (fun _ => "") fun _ =>

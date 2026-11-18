@@ -347,9 +347,6 @@ inserted, and everything after it (the borrow chosen by the place's type, the re
 is today's, which the checker checks. A place is a variable in scope whose type is known and is
 not itself a borrow; any other argument is left as written. -/
 
-/-- Whether bare places are lent by the callee's parameter type (SPEC §82 P8). -/
-initialize autoLendOn : Bool ← do pure ((← IO.getEnv "BCC_AUTOLEND").isSome)
-
 /-- The argument `W` at the parameter type `P` of a callee with lifetime parameters `vs`, each bare
 place at a shared-borrow parameter of the callee's own lifetime made a lend.  `[spec §82]` -/
 def autoLendArgs (c : TCx) (vs : List BoCa.Lifetime.LifeVar) : CVTy → Val → Val
@@ -395,13 +392,6 @@ def autoLendComp (c : TCx) : Nat → Nat → Val → Val
 def autoLendName : Val → Option String
   | .var _ h | .clone _ h | .unbang _ (.var _ h) | .defApp _ h _ => some h
   | _ => none
-
-/-- The div functions taking a shared borrow that take the owner instead (`LoopLend.lentDef`),
-as the elaboration records them: name, component, number of components.  `[spec §82]` -/
-def autoLentDefs (os : List (Span × String)) : List (String × Nat × Nat) :=
-  os.filterMap fun (_, w) => match w.splitOn ":" with
-    | ["lentdef", n, i, k] => some (n, i.toNat!, k.toNat!)
-    | _ => none
 
 /-- A function type `!(all 'a < b. … P => Q)` (or without `!`): its lifetime parameters and its
 parameter type.  `[spec §82]` -/
@@ -691,6 +681,15 @@ inductive Origin where
   /-- The `def` `x` is the instance of the template `f` made for its use at the span recorded
   (SPEC §76): a message from its body names both.  `[spec §76]` -/
   | rowInst (x f : String)
+  /-- The texts (by `Pos.file`) whose calls lend a bare place at a shared-borrow parameter
+  (SPEC §82 P8), recorded first: this elaboration finds the places to lend.  `[spec §82]` -/
+  | autoLendIn (files : List String)
+  /-- A bare place lent at a call (SPEC §82 P8), its position read as `&x` by the next parse.
+  `[spec §82]` -/
+  | autoLent
+  /-- The div function `f` takes the owner where it declares a shared borrow, the component `i`
+  of `n` of its parameter (`LoopLend.lentDef`): its calls lend a bare place there.  `[spec §82]` -/
+  | lentDef (f : String) (i n : Nat)
   deriving BEq, Inhabited
 
 /-- Where generated code came from, and what the elaboration reports: per span, its origins. -/
@@ -706,15 +705,26 @@ def note (sp : Span) (what : String) : SM Unit := modify (· ++ [(sp, .sugar wha
 `[spec §82]` -/
 def noteAutoLendsS (W W' : Val) : SM Unit :=
   for sp in autoLentSpans W W' do
-    modify (· ++ [(sp, .sugar "autolend")])
+    modify (· ++ [(sp, .autoLent)])
+
+/-- Whether a call at `sp` lends bare places: its text is one the elaboration finds lends in,
+recorded first (`Origin.autoLendIn`).  `[spec §82]` -/
+def autoLendAt (os : Origins) (sp : Span) : Bool := match os.head? with
+  | some (_, .autoLendIn fs) => fs.contains sp.start.file
+  | _ => false
+
+/-- The div functions recorded as taking the owner where they declare a shared borrow.
+`[spec §82]` -/
+def lentDefsOf (os : Origins) : List (String × Nat × Nat) :=
+  os.filterMap fun | (_, .lentDef f i n) => some (f, i, n) | _ => none
 
 /-- A computation whose head is a call `f W` of a callee of known type, with its lends inserted
 (`autoLendArgs`) and recorded.  `[spec §82]` -/
 def autoLendHeadS (c : TCx) : Comp → SM Comp
   | M@(.ret sp (.app fsp f W)) => do
-    if !autoLendOn then return M
-    let lds := autoLentDefs ((← get).filterMap fun | (sp, .sugar w) => some (sp, w) | _ => none)
-    if let some (_, i, k) := (autoLendName f).bind fun h => lds.find? (·.1 == h) then
+    let os ← get
+    if !autoLendAt os fsp then return M
+    if let some (_, i, k) := (autoLendName f).bind fun h => (lentDefsOf os).find? (·.1 == h) then
       let W' := autoLendComp c i k W
       noteAutoLendsS W W'
       return .ret sp (.app fsp f W')
@@ -3260,7 +3270,6 @@ def autoLendSig (c : TCx) (templates : List Decl) (f : Val) : Option Sig :=
 `[spec §82]` -/
 def autoLendCall (c : TCx) (templates : List Decl) (f W : Val)
     (lds : List (String × Nat × Nat) := []) : Val :=
-  if !autoLendOn then W else
   if let some (_, i, k) := (autoLendName f).bind fun h => lds.find? (·.1 == h) then
     autoLendComp c i k W else
   match autoLendSig c templates f with
@@ -4520,10 +4529,9 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
     | .app sp f W => do
       -- A bare place at a call's shared-borrow parameter is lent there.  `[spec §82]`
       let tmpls := (← get).templates
-      let lds := autoLentDefs ((← liftM (m := SM) get).filterMap fun
-        | (sp, .sugar w) => some (sp, w) | _ => none)
+      let os ← liftM (m := SM) get
       let W₀ := W
-      let W := autoLendCall c tmpls f W lds
+      let W := if autoLendAt os sp then autoLendCall c tmpls f W (lentDefsOf os) else W
       noteAutoLends W₀ W
       -- `checked_div(a, b)`, `checked_rem(a, b)` (SPEC §39).
       if let (some o, .pair psp a b) := (Elab.Instances.checkedOp? c f, W) then
@@ -4727,10 +4735,9 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       | none => c
     -- A bare place at a call's shared-borrow parameter is lent there.  `[spec §82]`
     let tmpls := (← get).templates
-    let lds := autoLentDefs ((← liftM (m := SM) get).filterMap fun
-      | (sp, .sugar w) => some (sp, w) | _ => none)
+    let os ← liftM (m := SM) get
     let M₀ := M
-    let M := if autoLendOn then autoLendC c tmpls lds M else M
+    let M := if autoLendAt os M.span then autoLendC c tmpls (lentDefsOf os) M else M
     match M₀, M with
     | .ret _ (.app _ _ W), .ret _ (.app _ _ W') | .bind _ _ _ (.ret _ (.app _ _ W)) _,
       .bind _ _ _ (.ret _ (.app _ _ W')) _ => noteAutoLends W W'
@@ -6519,7 +6526,7 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
       if let .def_ dsp dn [] (.bang _ (.all _ y _ (.lolli _ P _))) _ _ := d₀ then
         let ps := Frontend.Elab.LoopLend.spineTy P
         if let some i := ps.findIdx? (fun | .imm _ (.var _ a) _ => a == y.name | _ => false) then
-          modify (· ++ [(dsp, .sugar s!"lentdef:{dn.name}:{i}:{ps.length}")])
+          modify (· ++ [(dsp, .lentDef dn.name i ps.length)])
     let (d, st) ← (surfDecl fuel d).run st
     -- A binding inference did not type, left to the checker at a call whose parameter the other
     -- arguments determine: its type, solved from that use now that the call is at its instance's
@@ -6855,12 +6862,23 @@ def polyDecls (ds : List Decl) : Except Error (List Decl × PolyTab × List (Dec
     | d => out := out ++ [d]
   pure (out, tab, pairs)
 
+/-- How an elaboration treats bare places at shared-borrow parameters (SPEC §82 P8): the texts
+(by `Pos.file`) whose calls lend them, the positions already read as `&x` in each library text, and
+whether the elaboration only finds the places (`find`).  `[spec §82]` -/
+structure AutoLend where
+  texts : List String := []
+  lendAt : List Pos := []
+  find : Bool := false
+
 /-- The program with its sugar elaborated and the number of library declarations it begins with,
-recording the origins of generated code.  `[spec §11, §14]` -/
-def elaborateS (p : Program) : SM (Program × Nat) := do
+recording the origins of generated code.  `[spec §11, §14, §82]` -/
+def elaborateS (p : Program) (al : AutoLend := {}) : SM (Program × Nat) := do
+  -- The texts whose calls lend bare places, recorded first (SPEC §82 P8).  `[spec §82]`
+  unless al.texts.isEmpty do modify (· ++ [(Span.none, .autoLendIn al.texts)])
   let libRaw (m : String) : Except Error (List Decl) :=
     match library m with
-    | some (.ok src) => match parseProgram src (lib := libSrc) (file := m) with
+    | some (.ok src) => match parseProgram src (lib := libSrc) (file := m)
+        (lendAt := al.lendAt.filter (·.file == m)) with
       -- A module's `data` declarations are the program's (`dataDecls`).
       | .ok l => pure (l.decls.filter fun | .data .. => false | _ => true)
       | .error e => throw e
@@ -7055,6 +7073,8 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
     | d => p₀.decls.contains d
   let ioN := if ioFirst || fxr.withDivLib || fxr.withPlatform then (rest.takeWhile (!own ·)).length
     else 0
+  -- Finding the places to lend needs only the elaboration above (SPEC §82).
+  if al.find then return (⟨lib ++ rest ++ exts ++ mains⟩, lib.length + ioN)
   let decls ← (lib ++ rest ++ exts ++ mains).mapM fun
     | .def_ sp n ps A V mk => return .def_ sp n ps A (← V.elab false) mk
     | .main sp C M => return .main sp C (← M.elab false)
@@ -7069,8 +7089,8 @@ structure Sugared where
   origins : Origins
 
 /-- The program with its sugar elaborated, with the origins of its generated code. -/
-def elaborateO (p : Program) : Except Error Sugared := do
-  let ((q, n), os) ← (elaborateS p).run []
+def elaborateO (p : Program) (al : AutoLend := {}) : Except Error Sugared := do
+  let ((q, n), os) ← (elaborateS p al).run []
   pure ⟨q, n, os⟩
 
 /-- The program with its sugar elaborated, and the number of library declarations it begins

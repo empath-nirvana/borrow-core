@@ -41,22 +41,9 @@ structure CheckedProg where
 
 /-- Parse and check `src`; a `main` with externs must be a standard I/O program (SPEC §11). -/
 def checkedOf (file src : String) : Except String CheckedProg := do
-  let p₀ ← match Frontend.parseProgram src (lib := Frontend.Sugar.libSrc) with
+  let p₀ ← match Frontend.Elab.parseLent src with
     | .ok p => pure p
     | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
-  -- The bare places the typed elaboration lends (SPEC §82 P8), read as `&x` by a second parse.
-  -- `[spec §82]`
-  let p₀ ← if !Frontend.Sugar.autoLendOn then pure p₀ else
-    match Frontend.Elab.elaborate p₀ with
-    | .ok el =>
-      let lentAt := el.origins.filterMap fun
-        | (sp, .sugar "autolend") => if sp.start.file == "" then some sp.start else none
-        | _ => none
-      if lentAt.isEmpty then pure p₀ else
-      match Frontend.parseProgram src (lib := Frontend.Sugar.libSrc) (lendAt := lentAt) with
-      | .ok p => pure p
-      | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
-    | .error _ => pure p₀
   let r ← match Frontend.Check.checkProgram p₀ with
     | .ok r => pure r
     | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
@@ -200,7 +187,7 @@ def typingReport (c : Frontend.Check.Checked) (loops : Option Bool := none) : St
 
 /-- The program's trusted boundaries (`bcc trusted`).  `[spec §11, §29]` -/
 def trusted (file src : String) : Except String String := do
-  let p ← match Frontend.parseProgram src (lib := Frontend.Sugar.libSrc) with
+  let p ← match Frontend.Elab.parseLent src with
     | .ok p => pure p
     | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
   let r ← match Frontend.Check.checkProgram p with
