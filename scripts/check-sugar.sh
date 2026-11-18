@@ -13,8 +13,10 @@ cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc >/dev/null
 . scripts/par.sh
 export bcc=.lake/build/bin/bcc
-# A sugared file and its core form.
+# A sugared file and its core form. Under `set -e`, as the script's own loop ran: a command that
+# fails ends the pair as failed.
 pair() {
+  set -e
   local f=$1 tmp=$PAR_TMP core named
   core=${f%.bc}.core.bc
   named=$(sed -n '1s/^-- core: //p' "$f")
@@ -29,8 +31,9 @@ pair() {
   elif ! cmp -s "$tmp/c" "$tmp/d"; then echo "$core: has sugar left"; return 1
   else echo "$f: erases as $core"; fi
 }
-# A lowering and the program it lowers.
+# A lowering and the program it lowers (under `set -e`, as `pair`).
 lowered() {
+  set -e
   local f=$1 tmp=$PAR_TMP prog
   prog=$(sed -n '1s/^-- lowers: //p' "$f")
   if [ -z "$prog" ] || [ ! -f "$prog" ]; then echo "$f: no \`-- lowers: <program>\` line"; return 1; fi

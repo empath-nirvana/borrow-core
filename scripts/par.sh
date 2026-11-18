@@ -4,7 +4,7 @@
 #                    in its own shell; prints each one's output in the order the files were given;
 #                    and sets `par_failed` to the number whose FN returned non-zero.
 #
-# FN runs under `set -uo pipefail`. FN, and every variable and function it uses, must be exported (`export -f`, `export`). Each run
+# FN runs under `set -uo pipefail`, in a subshell of its own (a FN that sets `-e` ends only itself). FN, and every variable and function it uses, must be exported (`export -f`, `export`). Each run
 # gets a scratch directory of its own in `$PAR_TMP`.
 #
 # Side files. A run hands files back to its script by writing them under `$PAR_SIDE`; after every
@@ -35,8 +35,8 @@ par() {
       set -uo pipefail
       mkdir "$PAR_DIR/$1.d"; mkdir -p "$PAR_DIR/$1.side"
       par_nostore() { : > "$PAR_NOSTORE"; }; export -f par_nostore
-      PAR_TMP="$PAR_DIR/$1.d" PAR_SIDE="$PAR_DIR/$1.side" PAR_NOSTORE="$PAR_DIR/$1.nostore" '"$fn"' "$2" > "$PAR_DIR/$1.out" 2>&1
-      echo $? > "$PAR_DIR/$1.rc"' _ < "$dir/run"
+      (PAR_TMP="$PAR_DIR/$1.d" PAR_SIDE="$PAR_DIR/$1.side" PAR_NOSTORE="$PAR_DIR/$1.nostore" '"$fn"' "$2") > "$PAR_DIR/$1.out" 2>&1
+      echo $? > "$PAR_DIR/$1.rc"' _ < "$dir/run" || true
   python3 "$PAR_HOME/gate_cache.py" par-finish "$dir" "$fn"
   par_failed=$(cat "$dir/failed" 2>/dev/null || echo $#)
   rm -rf "$dir"

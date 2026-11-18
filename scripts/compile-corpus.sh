@@ -303,6 +303,7 @@ program() {
 # interpreter takes about a minute on it, so it runs beside the corpus.) A unit of its own
 # (`par bigcat corpus/io-cat.bc`), keyed on io-cat's files.
 bigcat() {
+  set -e
   local w=$PAR_TMP st ok=1 stages="clos flat wasm"
   [ "$final" = 0 ] || stages="wasm"
   mkdir -p "$w"

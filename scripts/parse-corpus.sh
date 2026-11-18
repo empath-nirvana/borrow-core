@@ -10,6 +10,7 @@ cd "$(dirname "$0")/.."
 export bcc=.lake/build/bin/bcc
 parses() { "$bcc" parse "$1"; }
 fails() {
+  set -e
   local f=$1 want out
   want=$(sed -n '/^-- expect: /{s///p;q;}' "$f")
   if out=$("$bcc" parse "$f" 2>&1); then
