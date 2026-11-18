@@ -374,6 +374,11 @@ def sugar_deps(p):
     try:
         with open(os.path.join(ROOT, p), encoding="utf-8", errors="surrogateescape") as fh:
             first = fh.readline().rstrip("\n")
+            # A text in the new spelling (SPEC §82): its pragma first, and `#` comments.
+            if first.startswith("#! "):
+                first = fh.readline().rstrip("\n")
+            if first.startswith("# "):
+                first = "-- " + first[2:]
     except OSError:
         pass
     files = [p]
@@ -385,6 +390,17 @@ def sugar_deps(p):
     else:
         files.append(p[:-3] + ".core.bc")
     return lines + files_lines("file", files)
+
+
+def respell_twin(p):
+    """The twin of a file in the new spelling (scripts/check-respell.sh): its text in today's
+    spelling, at `corpus/.respell-old/<path>`."""
+    return "corpus/.respell-old/" + (p[len("corpus/"):] if p.startswith("corpus/") else p)
+
+
+def respell_deps(p):
+    """A respelling pair (scripts/check-respell.sh): the file in the new spelling and its twin."""
+    return [f"arg {p}"] + files_lines("file", [p, respell_twin(p)])
 
 
 _keylines = None
@@ -430,6 +446,8 @@ def unit_deps(mode, arg):
         return sugar_deps(arg)
     if mode == "book":
         return book_deps(arg)
+    if mode == "respell":
+        return respell_deps(arg)
     if mode.startswith("files:"):
         fs = sorted(set(mode[len("files:"):].split()))
         return [f"arg {arg}"] + files_lines("file", fs)
