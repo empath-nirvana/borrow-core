@@ -89,9 +89,13 @@ def main():
     # beside other gates, never a verdict; the pool keeps 1/4 of the RAM outside its bound.
     if len(cmd) > 3 and cmd[1] == "-m" and os.path.basename(cmd[0]) == "slot":
         cmd[2] = weights[i]
-    os.makedirs(os.path.dirname(e), exist_ok=True)
-    lock = os.open(e + ".lock", os.O_RDWR | os.O_CREAT)
-    fcntl.flock(lock, fcntl.LOCK_EX)
+    # A store that cannot be written (no lock file) shares nothing: the job runs, and its pass is
+    # not recorded (put says so).
+    try:
+        os.makedirs(os.path.dirname(e), exist_ok=True)
+        fcntl.flock(os.open(e + ".lock", os.O_RDWR | os.O_CREAT), fcntl.LOCK_EX)
+    except OSError:
+        pass
     if gc.reading():
         got = gc.get(e)
         if got is not None:
