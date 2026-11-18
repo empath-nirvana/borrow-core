@@ -35,8 +35,9 @@ sidecar, a table row, never from a read that failed. Enforced:
   * a gate script asks whether a file has a line only through `grepq` (scripts/grepq.sh), which
     ends the unit with status 2 when grep cannot read the file, so a read error can never be
     taken for "no `main`" and recorded as "skipped";
-  * a pass whose output or side files say a tool ran out of file handles (`EXHAUSTED`) is never
-    recorded (`put`, through which every caller stores);
+  * a pass whose output or side files say a tool ran out of file handles (`EXHAUSTED`), or of a
+    process, memory or disk (`RESOURCE`), is never recorded (`put`, through which every caller
+    stores);
   * an input that cannot be read keys as `unreadable`, so no recorded pass matches it;
   * a unit that swallows a tool's failure on purpose calls `par_nostore` (or for a whole step
     touches `$GATE_CACHE_NOSTORE`), as does one that ran the source interpreter or wrote a key.
@@ -481,14 +482,29 @@ def exhausted(data):
     return EXHAUSTED.search(data) is not None
 
 
-def exhausted_files(paths):
+# How a tool says it could not get another system resource: EAGAIN ("Resource temporarily
+# unavailable": no process to fork, a full pipe), ENOMEM ("Cannot allocate memory"), ENOSPC ("No
+# space left on device"). Like `EXHAUSTED`, output that says so is the machine's, never a result:
+# a pass that shows it is never recorded (`put`). Unlike it, it is not the gate's "out of file
+# handles" line: the unit's own verdict stands.
+RESOURCE = re.compile(rb"resource temporarily unavailable|cannot allocate memory|no space left on device", re.I)
+
+
+def resource_short(data):
+    """Whether output (bytes or str) says a tool ran short of a process, memory or disk."""
+    if isinstance(data, str):
+        data = data.encode("utf-8", "surrogateescape")
+    return RESOURCE.search(data) is not None
+
+
+def exhausted_files(paths, test=None):
     """Whether any of the files (or any file under the directories) says so."""
     for p in paths:
         fs = [p] if not os.path.isdir(p) else [os.path.join(r, f) for r, _, n in os.walk(p) for f in n]
         for f in fs:
             try:
                 with open(f, "rb") as fh:
-                    if exhausted(fh.read()):
+                    if (test or exhausted)(fh.read()):
                         return True
             except OSError:
                 pass
@@ -500,9 +516,11 @@ def put(step, key, out_file, side_dir=None, unit=None):
     name and renamed. A store that cannot be written is said once per process, loudly. A pass whose
     output or side files say a tool ran out of file handles (`exhausted`) is never recorded: its
     outcome may be the machine's (a skip decided by a `grep` that could not open its file), not the
-    tree's; every caller stores through here (par_finish, scripts/par_unit.py, step, Units)."""
+    tree's; every caller stores through here (par_finish, scripts/par_unit.py, step, Units). Nor
+    is one that says a tool ran short of a process, memory or disk (`resource_short`)."""
     global _put_failed
-    if exhausted_files([out_file] + ([side_dir] if side_dir else [])):
+    files = [out_file] + ([side_dir] if side_dir else [])
+    if exhausted_files(files) or exhausted_files(files, resource_short):
         return
     final = entry(step, key)
     if os.path.isdir(final):

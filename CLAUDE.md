@@ -130,7 +130,8 @@ nor a unit that runs the source interpreter or writes a key, nor any unit of a w
 branch, a skip above all, from content in its key, never from a read that failed: a gate script
 asks whether a file has a line only through `grepq` (`scripts/grepq.sh`: a read error fails the
 unit), and a pass whose output says a tool ran out of file handles ("Too many open files",
-"file table overflow") is never recorded. `scripts/gate_cache.py forget [--step S] [--unit U]
+"file table overflow"), processes, memory or disk ("Resource temporarily unavailable", "Cannot
+allocate memory", "No space left on device") is never recorded. `scripts/gate_cache.py forget [--step S] [--unit U]
 [--born FROM TO] [--grep TEXT] [--dry-run]` removes matching entries safely, during a gate too. Compile scaling (it measures time) and the grep-level steps always run.
 `--no-cache` (with any mode; or `GATE_CACHE=0`; `make gate-full-nocache`) runs every unit and
 reads and writes no cache; `--record-cache` (`GATE_CACHE=record`; `make gate-full-record`, the

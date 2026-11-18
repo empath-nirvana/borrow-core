@@ -387,11 +387,20 @@ if "$w/.lake/build/bin/bcc" cc > /dev/null 2>&1; then
   readerr mode compile-native.sh "$p0f"
 fi
 
-# A pass whose output says a tool ran out of file handles is not recorded (scripts/gate_cache.py
-# `EXHAUSTED`): a par unit and a whole step, each exiting 0, for each of the incident's two messages.
+# A pass whose output says a tool ran out of file handles (scripts/gate_cache.py `EXHAUSTED`: the
+# incident's two messages) or of a process, memory or disk (`RESOURCE`) is not recorded: a par unit
+# and a whole step, each exiting 0, for each message.
 res1='Too many open'' files in system'
 res2='file table'' overflow'
-for msg in "$res1" "$res2"; do
+res3='Resource temporarily'' unavailable'
+res4='Cannot allocate'' memory'
+res5='No space left'' on device'
+# No golden or tree file the units print says the process, memory or disk words (else a passing
+# unit that prints its program's output would never be recorded).
+if g=$(grep -rlIiE "resource temporarily unavail""able|cannot allocate mem""ory|no space left on dev""ice" corpus book/src lib 2>/dev/null) && [ -n "$g" ]; then
+  echo "check-gate-cache: a golden or library file holds the out-of-resource words: $g"; bad=1
+else echo "check-gate-cache: no golden or library file holds the out-of-resource words"; fi
+for msg in "$res1" "$res2" "$res3" "$res4" "$res5"; do
   st=$t/store-res-$RANDOM rc=0
   (cd "$w" && PAR_CACHE=res-probe GATE_CACHE_DIR=$st bash -c '. scripts/par.sh; probe() { echo "grep: $1: '"$msg"'"; }; export -f probe; par probe corpus/x.bc; exit "$par_failed"') > "$t/out" 2>&1 || rc=$?
   mkdir -p "$st"
@@ -400,8 +409,8 @@ for msg in "$res1" "$res2"; do
   (cd "$w" && GATE_CACHE_DIR=$st python3 scripts/gate_cache.py step res-step bcc -- sh -c "echo 'sh: $msg'") > /dev/null 2>&1 || rc2=$?
   n2=$(find "$st" -name unit | wc -l | tr -d ' ')
   if [ "$n" = 0 ] && [ "$n2" = 0 ]; then
-    echo "check-gate-cache: out of handles in a unit's output (message ${#msg} characters long): neither the unit nor the step is recorded"
-  else echo "check-gate-cache: out of handles in a unit's output: par exit $rc, $n recorded; step exit $rc2, $n2 recorded"; bad=1; fi
+    echo "check-gate-cache: out of a resource in a unit's output (message ${#msg} characters long): neither the unit nor the step is recorded"
+  else echo "check-gate-cache: out of a resource in a unit's output: par exit $rc, $n recorded; step exit $rc2, $n2 recorded"; bad=1; fi
 done
 
 # forget: by unit, and by step, removes exactly those entries.
