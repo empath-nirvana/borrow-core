@@ -39,13 +39,25 @@ import slotpool  # noqa: E402  (the machine-wide job pool, scripts/slot)
 # renaming failed, so that the result cache does not record it.
 UNSURE = threading.local()
 
+_runs = {}
+
 
 def run(bcc, args, env=None):
+    """`bcc args` under env: its status and output. A run in this process's own environment is
+    made once: `compare` checks and erases the original program in both passes, the same command
+    on the same file, and the second reads the first's result."""
+    k = (bcc, tuple(args)) if env is None else None
+    if k is not None and k in _runs:
+        return _runs[k]
     with slotpool.held():
         p = subprocess.run([bcc] + args, capture_output=True, text=True, env=env, cwd=ROOT)
     if p.returncode < 0:
         UNSURE.flag = True
-    return p.returncode, p.stdout + p.stderr
+    r = p.returncode, p.stdout + p.stderr
+    # A run that ended by a signal is not kept: the next asks again.
+    if k is not None and p.returncode >= 0:
+        _runs[k] = r
+    return r
 
 
 def renaming(bcc, f):
