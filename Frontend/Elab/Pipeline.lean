@@ -79,12 +79,14 @@ def libLends (p : Program) : Except Error (List Pos) := do
 /-- Parse a program's source. In the new spelling, its bare places at shared-borrow parameters are
 read as lends: found by elaboration and the source parsed again, until no new one is found
 (`lendRounds`). A source with none is parsed once. An elaboration that fails while finding
-them is the last one, and its error is the program's. `nd` reads the text as the new spelling's
-whatever its first line says, and `rounds` replaces `lendRounds`.  `[spec §82]` -/
+them is the last one, and its error is the program's. `nd` is the text's spelling (its first
+line, or the driver's); `lends`, whether its calls lend bare places (the new spelling's, or a test
+of today's text); `rounds` replaces `lendRounds`.  `[spec §82]` -/
 def parseLent (src : String) (lib : String → Option String := Sugar.libSrc)
-    (nd : Option Bool := none) (rounds : Option Nat := none) : Except Error Program := do
-  let p ← parseProgram src (lib := lib)
-  if !nd.getD (isNewDialect src) then return p
+    (nd : Bool := isNewDialect src) (lends : Bool := nd) (rounds : Option Nat := none) :
+    Except Error Program := do
+  let p ← parseProgram src (lib := lib) (nd := nd)
+  if !lends then return p
   let texts := "" :: newLibTexts
   let mut p := p
   let mut acc : List Pos := []
@@ -95,7 +97,7 @@ def parseLent (src : String) (lib : String → Option String := Sugar.libSrc)
     if new.isEmpty then return p
     acc := acc ++ new
     if new.any (·.file == "") then
-      p ← parseProgram src (lib := lib) (lendAt := acc.filter (·.file == ""))
+      p ← parseProgram src (lib := lib) (lendAt := acc.filter (·.file == "")) (nd := nd)
   throw (lendRoundsError n)
 
 /-- Elaborate a parsed program for the checker. The library texts in the new spelling are read
