@@ -248,6 +248,12 @@ inductive Tm where
   | app0 (f : Var)
   /-- Observe component `j` of the closure `f` (an `amp` code). -/
   | sel (f : Var) (j : Nat)
+  /-- **A closure call with evidence** [spec §71]: the closure `f` called on `a` (a
+  `lam` code), run (`unit`, `a` none) or observed at `j` (`amp`), its function given after its
+  argument the evidence `ev`, one variable per evidence parameter its closure type takes
+  (`LCTy.ev`). The evidence is passed, not consumed: it stays owned where it is (`Lint`'s
+  `evConfined`). -/
+  | appE (f : Var) (a : Option Var) (j : Nat) (ev : List Var)
   /-- Call the function `fn` directly on `args`. -/
   | call (fn : Nat) (args : List Var)
   | prim (op : Op) (args : List Var)
@@ -294,6 +300,10 @@ structure Fn where
   joins, resumes, cancels and finalisers, the stack machine's functions, the helpers) leaves it
   empty, and a missing bit is a cleared one: such a function carries no borrow fact. -/
   lendEncl : List Bool := []
+  /-- **The evidence parameters** [spec §71]: the last `evs` of `params`, each a
+  value the caller passes and keeps. The function reads one only by copying it (`copy` at `dup`)
+  or passes it on as evidence (`Lint`'s `evConfined`); it never consumes one. -/
+  evs : Nat := 0
   /-- **The function's body is at the empty row** (SPEC §50): it is the code of a source `λ`,
   thunk or `&` component whose computation type is `F B`, with no operation and so no `Div`
   (`Convert.mkClos`/`mkAmp`, from the checked term's type). The kernel's `total_open` then says it
