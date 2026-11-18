@@ -490,7 +490,7 @@ def sepNext : P Bool := do
   if ← isSym ";" then return true
   unless ← layoutHere do return false
   let t ← peek
-  if t.tok == .sym "}" || t.tok == .eof then return false
+  if t.tok == .sym "}" || t.tok == .eof || t.tok == .sym "." then return false
   nlBefore
 
 /-- The separator `sepNext` found: a `;` is read, a newline needs nothing.  `[spec §82]` -/
@@ -506,7 +506,8 @@ def expectSep : P Unit := do
 /-- Where the layout rule applies, a newline comes next: the expression before it ends there
 (juxtaposition and suffixes do not cross a line).  `[spec §82]` -/
 def lineEnds : P Bool := do
-  if ← layoutHere then nlBefore else pure false
+  -- A line starting with `.` (`.f`, `.1`) continues the statement (§82 *Lexical*).
+  if (← layoutHere) && !(← isSym ".") then nlBefore else pure false
 
 /-- `p` read with the flag `inParen` set to `b`, restored after.  `[spec §82]` -/
 def withInParen {α} (b : Bool) (p : P α) : P α := do
@@ -1992,7 +1993,9 @@ def fieldSuffixes : Nat → Pos → Val → P Val
   | n + 1, st, V => do
     let t ← peek
     let t1 ← peekAt 1
-    unless t.tok == .sym "." && !t.spaced && !t1.spaced do return V
+    -- In the new spelling's layout a `.f` may start the next line (§82 *Lexical*).
+    let lineLead := (← layoutHere) && (← nlBefore)
+    unless t.tok == .sym "." && (!t.spaced || lineLead) && !t1.spaced do return V
     if t1.tok == .sym "{" then
       discard bump; discard bump
       let x ← fieldName
@@ -2453,6 +2456,12 @@ def valSuffixes : Nat → Pos → Val → P Val
     -- In the new spelling's layout a spine ends at a newline (§82 *Lexical*).
     if ← lineEnds then return V
     let t ← peek
+    -- A field `.f` at the start of the next line (§82 *Lexical*).
+    if t.tok == .sym "." && (← layoutHere) && (← nlBefore) then
+      let i := (← get).pos
+      let V ← fieldSuffixes n st V
+      if (← get).pos == i then return V
+      return ← valSuffixes n st V
     if t.tok == .sym "[" then
       discard bump
       let a ← life n
