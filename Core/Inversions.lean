@@ -2313,9 +2313,15 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       | copy => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inl rfl) _)
       | arrCopy => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inl rfl) _)
       | swap => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inl rfl)) _)
-      | sliceBorrowM | sliceBorrowI | withbor1 | withbor2 | withbor3 => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inl rfl))) _)
-      | withload | withloadU => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inl rfl)))) _)
-      | withswap => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inl rfl))))) _)
+      | sliceBorrowM | sliceBorrowI | withbor1 | withbor2 | withbor3 =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inl rfl))) _)
+      | withload | withloadU =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inl rfl)))) _)
+      | withswap =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inl rfl))))) _)
       | arrSize | sliceLenM =>
         intro M he
         exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inl rfl)))))) _)
@@ -2365,12 +2371,18 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
             (.inr (.inr (.inr (.inr (.inl ⟨_, rfl⟩)))))))))))))))) _)
       | tokMint => intro M he; exact LamInv.ofAx (he ▸ lamAx_other otherLam_mint _)
       | tokBurn => intro M he; exact LamInv.ofAx (he ▸ lamAx_other otherLam_burn _)
-      | releaseBang => intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inl ⟨_, rfl⟩⟩))
-      | releaseImm => intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inl ⟨_, _, rfl⟩)⟩))
+      | releaseBang =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inl ⟨_, rfl⟩⟩))
+      | releaseImm =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inl ⟨_, _, rfl⟩)⟩))
       | releaseMut =>
         intro M he
         exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inr (.inl ⟨_, _, rfl⟩))⟩))
-      | releaseUnk => intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inr (.inr rfl))⟩))
+      | releaseUnk =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inr (.inr rfl))⟩))
       | arrRelease => intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inr ⟨_, _, rfl⟩))
       | _ => intro M he; cd_at he
   | reify =>

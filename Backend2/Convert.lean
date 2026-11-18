@@ -2855,20 +2855,27 @@ def litCode : CM Nat := do
   modify fun s => { s with lits := some c }
   return c
 
+/-- The number of arguments a constant takes before its operation runs; `none` at a constant
+lowered as a leaf or a loop. -/
+def constKArity : ConstKind → Option Nat
+  | .alloc .. | .free .. | .copy .. | .releaseImm .. | .releaseMut .. | .releaseUnk ..
+  | .hostOp .. | .tokMint .. | .tokBurn .. | .arrNew .. | .arrFree .. | .arrSize ..
+  | .arrReplace .. | .arrLen .. | .arrGet .. | .arrCopy .. | .arrRelease .. | .countFold ..
+  | .countTry .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI .. | .sliceSplitM ..
+  | .sliceReplaceM .. | .sliceSwapM .. | .foldImm .. | .foldOwn .. | .foldOwnG .. | .foldReuse ..
+  | .unfoldN .. | .boundedFix .. => some 1
+  | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
+  | .sliceBorrowM .. | .sliceBorrowI .. | .withloadU .. => some 2
+  | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. => some 0
+  | _ => none
+
 /-- The number of arguments a constant takes before its operation runs; `none` at a node that is
 not a constant. -/
 def constArity : TExpr → Option Nat
-  | .constK _ _ (.alloc ..) | .constK _ _ (.free ..) | .constK _ _ (.copy ..) | .constK _ _ (.releaseImm ..) | .constK _ _ (.releaseMut ..) | .constK _ _ (.releaseUnk ..) | .constK _ _ (.hostOp ..)
-  | .constK _ _ (.tokMint ..) | .constK _ _ (.tokBurn ..)
-  | .constK _ _ (.arrNew ..) | .constK _ _ (.arrFree ..) | .constK _ _ (.arrSize ..) | .constK _ _ (.arrReplace ..) | .constK _ _ (.arrLen ..) | .constK _ _ (.arrGet ..) | .constK _ _ (.arrCopy ..)
-  | .constK _ _ (.arrRelease ..) | .constK _ _ (.countFold ..) | .constK _ _ (.countTry ..) | .constK _ _ (.sliceGetM ..) | .constK _ _ (.sliceLenM ..) | .constK _ _ (.sliceSplitI ..)
-  | .constK _ _ (.sliceSplitM ..) | .constK _ _ (.sliceReplaceM ..) | .constK _ _ (.sliceSwapM ..) | .consume .. | .constK _ _ (.foldImm ..) | .constK _ _ (.foldOwn ..)
-  | .constK _ _ (.foldOwnG ..) | .constK _ _ (.foldReuse ..) | .constK _ _ (.unfoldN ..) | .allocS .. | .freeS .. | .constK _ _ (.boundedFix ..) => some 1
-  | .withlocal .. | .constK _ _ (.swap ..) | .constK _ _ (.withbor1 ..) | .constK _ _ (.withbor2 ..) | .constK _ _ (.withbor3 ..) | .constK _ _ (.withload ..) | .constK _ _ (.withswap ..)
-  | .constK _ _ (.sliceBorrowM ..) | .constK _ _ (.sliceBorrowI ..) | .withborSM .. | .withborSI .. | .withborF2M ..
-  | .withborF2I .. | .withborUD .. | .constK _ _ (.withloadU ..)
-  | .sliceBorrowMU .. | .sliceBorrowIU .. => some 2
-  | .constK _ _ (.sliceEmptyI ..) | .constK _ _ (.sliceEmptyM ..) | .constK _ _ (.arrEmpty ..) => some 0
+  | .constK _ _ k => constKArity k
+  | .consume .. | .allocS .. | .freeS .. => some 1
+  | .withlocal .. | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I ..
+  | .withborUD .. | .sliceBorrowMU .. | .sliceBorrowIU .. => some 2
   | _ => none
 
 /-- The nodes whose value is their child's: `ret`, a thunk of a λ-value, dereliction, the lifetime
@@ -4261,8 +4268,11 @@ def convSpine (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
 where
   cbConst : TExpr → Bool
     | .withlocal _ _ (.loop ..) _ _ _ => false
-    | .withlocal .. | .constK _ _ (.withbor1 ..) | .constK _ _ (.withbor2 ..) | .constK _ _ (.withbor3 ..) | .constK _ _ (.withload ..) | .constK _ _ (.withswap ..) | .constK _ _ (.sliceBorrowM ..)
-    | .constK _ _ (.sliceBorrowI ..) | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I ..
+    | .withlocal .. | .constK _ _ (.withbor1 ..) | .constK _ _ (.withbor2 ..)
+    | .constK _ _ (.withbor3 ..) | .constK _ _ (.withload ..) | .constK _ _ (.withswap ..)
+    | .constK _ _ (.sliceBorrowM ..)
+    | .constK _ _ (.sliceBorrowI ..) | .withborSM .. | .withborSI .. | .withborF2M ..
+    | .withborF2I ..
     | .withborUD .. | .constK _ _ (.withloadU ..) | .sliceBorrowMU ..
     | .sliceBorrowIU .. => true
     | _ => false
@@ -4521,8 +4531,10 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) (dctx : Optio
   | .constK _ _ (.free ..), [x] | .constK _ _ (.tokBurn ..), [x] => return .prim .free [x]
   | .constK _ _ (.tokMint ..), [v] => return .prim (.alloc (← classOf .unit)) [v]
   | .constK _ _ (.swap ..), [x, v] => return .prim .swap [x, v]
-  | .constK _ _ (.copy ..), [x] | .constK _ _ (.arrCopy ..), [x] => dup .const x fun x x' => pure (.pair x x')
-  | .constK _ _ (.releaseImm ..), [x] | .constK _ _ (.releaseMut ..), [x] | .constK _ _ (.releaseUnk ..), [x] | .constK _ _ (.arrRelease ..), [x] =>
+  | .constK _ _ (.copy ..), [x] | .constK _ _ (.arrCopy ..), [x] =>
+    dup .const x fun x x' => pure (.pair x x')
+  | .constK _ _ (.releaseImm ..), [x] | .constK _ _ (.releaseMut ..), [x]
+  | .constK _ _ (.releaseUnk ..), [x] | .constK _ _ (.arrRelease ..), [x] =>
     return .consume .release x .unit
   | .consume _ _ A, [x] => do readFact "consume:type"; genConsume 64 A x
   | .constK _ _ (.hostOp op), [x] => return .prim (.host op) [x]
@@ -4546,7 +4558,8 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) (dctx : Optio
     letpairM p fun v i => pure (.prim (.idx (!inRange)) [v, i])
   | .constK _ _ (.sliceSplitI ..), [p] | .constK _ _ (.sliceSplitM ..), [p] =>
     letpairM p fun v i => pure (.prim (.split true) [v, i])
-  | .constK _ _ (.sliceEmptyI ..), [] | .constK _ _ (.sliceEmptyM ..), [] | .constK _ _ (.arrEmpty ..), [] => return .prim .emptyFam []
+  | .constK _ _ (.sliceEmptyI ..), [] | .constK _ _ (.sliceEmptyM ..), []
+  | .constK _ _ (.arrEmpty ..), [] => return .prim .emptyFam []
   | .constK _ _ (.sliceSwapM ..), [p] =>
     letpairM p fun v r => letpairM r fun i k => pure (.prim .swapSlots [v, i, k])
   | .constK _ j (.countFold _), [p] => do
@@ -4563,8 +4576,10 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) (dctx : Optio
     let .pair sT _ := pT.peel | throw "LIR: bounded_fix's argument"
     readFact "boundedFix:budget"
     genFix sT p
-  | .constK _ _ (.withbor1 ..), [x, cb] | .constK _ _ (.sliceBorrowI ..), [x, cb] => genLend (.lend false) x (← tyOf cb) (callCb cb)
-  | .constK _ _ (.withbor2 ..), [x, cb] | .constK _ _ (.sliceBorrowM ..), [x, cb] => genLend (.lend true) x (← tyOf cb) (callCb cb)
+  | .constK _ _ (.withbor1 ..), [x, cb] | .constK _ _ (.sliceBorrowI ..), [x, cb] =>
+    genLend (.lend false) x (← tyOf cb) (callCb cb)
+  | .constK _ _ (.withbor2 ..), [x, cb] | .constK _ _ (.sliceBorrowM ..), [x, cb] =>
+    genLend (.lend true) x (← tyOf cb) (callCb cb)
   | .constK _ _ (.withbor3 ..), [m, cb] => genLend .relend m (← tyOf cb) (callCb cb)
   | .withlocal _ _ (.loop A S B R) _ _ _, [v, st] => genLocalLoop A S B R v st
   | .withlocal _ _ k A _ _, [x, cb] => genLocalKind k A x (← tyOf cb) (callCb cb)

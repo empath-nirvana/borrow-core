@@ -610,7 +610,8 @@ theorem CDerivesX.withbor2UD {I : JIdx} {Δ Γ A B d} {SM SD S : Row} (x : LifeV
 
 /-- The unwinding form of `withbor` (3): `Mut @a A` reborrowed as `Mut 'x A` (`withborUD` at
 `reborrow a`).  `[spec §19, §27, §78]` -/
-theorem CDerivesX.withbor3UD {I : JIdx} {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+theorem CDerivesX.withbor3UD {I : JIdx} {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar)
+    (hΓ : Ctx.DeadP Γ) 
     (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
     (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false)
     (hP : SD.UnrD → SM.PendPers)
@@ -745,28 +746,34 @@ theorem CDerivesX.boundedFix {I : JIdx} {Δ Γ} (A : VTy) (C : CTy) (hΓ : Ctx.D
 
 /-- `iterate : !U(!U(S ⊸ F_Σ(B ⊕ S) & F_Σ R) ⊗ S ⊸ F_Σ(B ⊕ R))` at a row holding `Div`, the
 step `iterate`: the loop that ticks at each back edge.  `[spec §14]` -/
-theorem CDerivesX.iterate {I : JIdx} {Δ Γ} (S : Row) (St B R : VTy) (hAt : I.RowOK S) (hS : Row.divB S = true) (hΓ : Ctx.DeadP Γ) :
+theorem CDerivesX.iterate {I : JIdx} {Δ Γ} (S : Row) (St B R : VTy) (hAt : I.RowOK S)
+    (hS : Row.divB S = true) (hΓ : Ctx.DeadP Γ) :
     CDerivesX I Δ Γ (.val (.prim .iterate)) (.val (iterTy S St B R)) :=
   .constK (.iterate S St B R) hAt hS hΓ
 
 /-- `div_fuel : !U(U(1 ⊸ F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)`, `Σ` without `Div`'s name: the handler of
 `Div` that answers *next* to the first ticks, as many as the budget, and *close* after.
 `[spec §14]` -/
-theorem CDerivesX.divFuel {I : JIdx} {Δ Γ} (S : Row) (A : VTy) (hAt : I.RowOK (tickSig :: S)) (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
+theorem CDerivesX.divFuel {I : JIdx} {Δ Γ} (S : Row) (A : VTy) (hAt : I.RowOK (tickSig :: S))
+    (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
     CDerivesX I Δ Γ (.val divFuelV) (.val (divFuelTy S A)) :=
   .constK (.divFuel S A) hAt hS hΓ
 
 /-- `slice_borrow_mut : Array A ⊸ (∀'x ⊏ ⊓Δ. [Mut 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`, the term
 `withbor`'s: an owned array lent as a family of `mut` leaves, with no cell; its side conditions
 non-strict.  `[spec §9, §23]` -/
-theorem CDerivesX.sliceBorrowM {I : JIdx} {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
+theorem CDerivesX.sliceBorrowM {I : JIdx} {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+    (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
     CDerivesX I Δ Γ BoCa.withbor (.val (sliceBorrowMTy x Δ.meetOfDom A B)) :=
   .constK (.sliceBorrowM A B x) (JIdx.rowOK_nil I) ⟨hsideA, hsideB, hfree₁, hfree₂⟩ hΓ
 
 /-- `slice_borrow_imm : Array A ⊸ (∀'x ⊏ ⊓Δ. [Imm 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`, the term
 `withbor`'s: an owned array lent as a family of `imm` leaves, with no cell; its side conditions
 non-strict.  `[spec §9, §23]` -/
-theorem CDerivesX.sliceBorrowI {I : JIdx} {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
+theorem CDerivesX.sliceBorrowI {I : JIdx} {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hsc : VScoped Δ A) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+    (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
     CDerivesX I Δ Γ BoCa.withbor (.val (sliceBorrowITy x Δ.meetOfDom A B)) :=
   .constK (.sliceBorrowI A B x) (JIdx.rowOK_nil I) ⟨hsc, hsideA, hsideB, hfree₁, hfree₂⟩ hΓ
 
@@ -820,25 +827,31 @@ theorem CDerivesX.sliceSwapM {I : JIdx} {Δ Γ} (a : Lifetime.Life) (A : VTy) (h
 
 /-- `slice_copy_mut : !([Mut @a A] ⊗ (I32 ⊗ ([Imm @b A] ⊗ (I32 ⊗ I32))) ⇒ [Mut @a A] ⊗ (1 ⊕ 1))`,
 `A` persistent, the step `sliceCopy`.  `[spec §74]` -/
-theorem CDerivesX.sliceCopyM {I : JIdx} {Δ Γ} (a b : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) (hA : A.Persistent) :
+theorem CDerivesX.sliceCopyM {I : JIdx} {Δ Γ} (a b : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ)
+    (hA : A.Persistent) :
     CDerivesX I Δ Γ (.val sliceCopyV) (.val (sliceCopyMTy a b A)) :=
   .constK (.sliceCopyM a b A) (JIdx.rowOK_nil I) hA hΓ
 
-theorem CDerivesX.withbor1 {I : JIdx} {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
+theorem CDerivesX.withbor1 {I : JIdx} {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
     CDerivesX I Δ Γ BoCa.withbor (.val (axWithbor1Ty x Δ.meetOfDom A B)) :=
   .constK (.withbor1 A B x) (JIdx.rowOK_nil I) ⟨hx, hsc₁, hfree₁, hfree₂⟩ hΓ
 
 /-- `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition `Δ ⊢ A ⊒ @b` non-strict.
 `[spec §23]` -/
-theorem CDerivesX.withbor2 {I : JIdx} {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
+theorem CDerivesX.withbor2 {I : JIdx} {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A)
+    (hfree₂ : ¬ VFree x B) :
     CDerivesX I Δ Γ BoCa.withbor (.val (axWithbor2Ty x Δ.meetOfDom A B)) :=
   .constK (.withbor2 A B x) (JIdx.rowOK_nil I) ⟨hx, hside, hfree₁, hfree₂⟩ hΓ
 
-theorem CDerivesX.withbor3 {I : JIdx} {Δ Γ a A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
+theorem CDerivesX.withbor3 {I : JIdx} {Δ Γ a A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
     CDerivesX I Δ Γ BoCa.withbor (.val (axWithbor3Ty a x Δ.meetOfDom A B)) :=
   .constK (.withbor3 a A B x) (JIdx.rowOK_nil I) ⟨hx, hfree₁, hfree₂⟩ hΓ
 
-theorem CDerivesX.withload {I : JIdx} {Δ Γ a A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
+theorem CDerivesX.withload {I : JIdx} {Δ Γ a A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
     CDerivesX I Δ Γ BoCa.withload (.val (axWithloadTy a x Δ.meetOfDom A B)) :=
   .constK (.withload a A B x) (JIdx.rowOK_nil I) ⟨hx, hfree₁, hfree₂⟩ hΓ
 
@@ -848,7 +861,8 @@ theorem CDerivesX.withswap {I : JIdx} {Δ Γ a A B} (hΓ : Ctx.DeadP Γ) :
 
 /-- The unwinding form of `withload`: its own term, the source consumed by the load.
 `[spec §19]` -/
-theorem CDerivesX.withloadU {I : JIdx} {Δ Γ a A B} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) :
+theorem CDerivesX.withloadU {I : JIdx} {Δ Γ a A B} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) :
     CDerivesX I Δ Γ BoCa.withload (.val (withloadUTy a x Δ.meetOfDom A B S)) :=
   .constK (.withloadU a A B S x) (JIdx.rowOK_nil I) ⟨hx, hfree₁, hfree₂, hS⟩ hΓ
 
@@ -857,40 +871,47 @@ theorem CDerivesX.withloadU {I : JIdx} {Δ Γ a A B} {S : Row} (x : LifeVar) (h�
 `⊗`/`⊕` from closed leaves, `Ref X` and `X` (not `X` itself), `A_R = Imm̲ 'y T` with `R` at
 every recursive position, `R` outliving every lifetime, `'y` free in neither `μX. T` nor
 `R`.  `[spec §6]` -/
-theorem CDerivesX.foldImm {I : JIdx} {Δ Γ} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ' a, VOutlives Δ' a R) :
+theorem CDerivesX.foldImm {I : JIdx} {Δ Γ} (F : FShape) (y : LifeVar) (c : Lifetime.Life)
+    (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty))
+    (hyR : ¬ VFree y R) (hR : ∀ Δ' a, VOutlives Δ' a R) :
     CDerivesX I Δ Γ (.val (foldImmV F)) (.val (.lolli (algTy F y R) (foldTy F y c R))) :=
   .constK (.foldImm F y c R) (JIdx.rowOK_nil I) ⟨hF, hG, hyM, hyR, hR⟩ hΓ
 
 /-- The owned fold, a constant: `foldOwn : !U(A′_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)`, for `T` of the
 same class, `A′_R = T` with `R` at every recursive position, any `R`.  `[spec §6]` -/
-theorem CDerivesX.foldOwn {I : JIdx} {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
+theorem CDerivesX.foldOwn {I : JIdx} {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF)
+    (hG : F.Guarded) :
     CDerivesX I Δ Γ (.val (foldOwnV F)) (.val (.lolli (algOTy F R) (foldOTy F R))) :=
   .constK (.foldOwn F R) (JIdx.rowOK_nil I) ⟨hF, hG⟩ hΓ
 
 /-- The owned fold with reuse, a constant: `foldReuse : !U(A″_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)`,
 for `T` of the same class, `A″_R = T` with `R` at a head `X` and `Ref 1 ⊗ R` at every `Ref X`
 (the emptied cell and the result on its content), any `R`.  `[spec §6]` -/
-theorem CDerivesX.foldReuse {I : JIdx} {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
+theorem CDerivesX.foldReuse {I : JIdx} {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF)
+    (hG : F.Guarded) :
     CDerivesX I Δ Γ (.val (foldReuseV F)) (.val (.lolli (algRTy F R) (foldOTy F R))) :=
   .constK (.foldReuse F R) (JIdx.rowOK_nil I) ⟨hF, hG⟩ hΓ
 
 /-- The general owned fold, a constant: `foldOwnG : Algs ⊸ !U(μX. T ⊸ F R₀)`, for `T` of the
 class `P`, the tuple `Algs` holding one algebra per key of `μX. T` at the results `Rs`
 (`FoldOwnG.lean`).  `[spec §6]` -/
-theorem CDerivesX.foldOwnG {I : JIdx} {Δ Γ} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
+theorem CDerivesX.foldOwnG {I : JIdx} {Δ Γ} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ)
+    (hB : FoldP.PBody B₀) :
     CDerivesX I Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs)) :=
   .constK (.foldOwnG B₀ Rs) (JIdx.rowOK_nil I) hB hΓ
 
 /-- Coiteration, a constant: `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)` (`Nu.lean`), at a
 positive `C`.  `[spec §7]` -/
-theorem CDerivesX.unfoldN {I : JIdx} {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
+theorem CDerivesX.unfoldN {I : JIdx} {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S)
+    (hΓ : Ctx.DeadP Γ) :
     CDerivesX I Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S)) :=
   .constK (.unfoldN C S) (JIdx.rowOK_nil I) ⟨hC, hS⟩ hΓ
 
 /-- `[unfold-K]`: coiteration at the step's code, a constant: `unfold : !G ⊸ !Code⟨hCode C;
 !G ⊗ 1⟩ (S ⊸ F Code⟨etaCode C; !G ⊗ (S ⊗ 1)⟩ (νX. C))`, `G` forced at `S ⊸ C[S/X]`
 (`U(S ⊸ C[S/X])` or a code type of it).  `[spec §68]` -/
-theorem CDerivesX.unfoldK {I : JIdx} {Δ Γ} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
+theorem CDerivesX.unfoldK {I : JIdx} {Δ Γ} (C : CTy) (G S : VTy) (hC : C.NuOk)
+    (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
     CDerivesX I Δ Γ (.val (unfoldV C)) (.val (unfoldKTy C G S)) :=
   .constK (.unfoldK C G S) (JIdx.rowOK_nil I) ⟨hC, hG, hS⟩ hΓ
 
