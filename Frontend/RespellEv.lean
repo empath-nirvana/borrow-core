@@ -89,6 +89,8 @@ structure St where
   a `fn`, `poly`, `effect`, `handler` or `main ->` header. -/
   t1 : Bool := false
   evs : Array Ev := #[]
+  /-- The first token of the binding whose head is being read (`x <- M`). -/
+  stmt₀ : Nat := 0
   deriving Inhabited
 
 end Frontend.Respell
