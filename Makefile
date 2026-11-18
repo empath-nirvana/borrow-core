@@ -15,7 +15,7 @@ ifeq (run,$(firstword $(MAKECMDGOALS)))
   $(eval $(RUN_ARGS):;@:)
 endif
 
-.PHONY: bcc run tools gate gate-full gate-fast goldens keys verify-goldens bench
+.PHONY: bcc run tools gate gate-full gate-fast gate-daily goldens keys verify-goldens bench
 
 # Build the `bcc` compiler.
 bcc: $(CACHE_STAMP) | tools
@@ -41,6 +41,12 @@ gate: | tools
 # changed.
 gate-full: | tools
 	scripts/ci-local.sh --full
+
+# The daily full gate on main (scripts/gate-daily.sh): `make gate-full` without the result cache
+# on origin/main in a checkout of its own, its verdict posted to the board for the coordinator.
+# Does nothing when origin/main already has a verdict. Run by launchd (scripts/gate-daily.plist).
+gate-daily:
+	scripts/gate-daily.sh
 
 # Re-verify every golden: the source stage on every corpus program and book block (with each
 # compiled to WebAssembly), whatever its key. Writes no key.
