@@ -24,9 +24,11 @@ bcc=.lake/build/bin/bcc
 counts=.lake/build/bin/bcc-counts
 row() {
   local f=$1 k l
-  k=$("$bcc" kinds "$f" 2>/dev/null) || return 0
+  # A program that does not check has no rows; a failed tool is never recorded in the cache (it
+  # may be a run killed under load), so it runs again.
+  k=$("$bcc" kinds "$f" 2>/dev/null) || { par_nostore; return 0; }
   [ -n "$k" ] || return 0
-  l=$("$counts" --lowering "$f" 2>&1) || l="error: $l"
+  l=$("$counts" --lowering "$f" 2>&1) || { par_nostore; l="error: $l"; }
   awk -v f="$f" '
     FNR == NR {
       if ($0 ~ /^error/) { err = $0; next }

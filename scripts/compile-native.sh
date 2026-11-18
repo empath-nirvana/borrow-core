@@ -89,8 +89,9 @@ serial() {
   set -e
   local bad=0 tmp=$PAR_TMP name want out rc wdir ccmd cflags f n weak
   for name in $("$bcc" kernel list); do
-    want=$("$bcc" kernel interp --stage flat "$name" 2>&1) || true
-    out=$("$bcc" kernel run --native "$name" 2>&1) || true
+    # A failed run is compared as its output, and never recorded in the cache (`par_nostore`).
+    want=$("$bcc" kernel interp --stage flat "$name" 2>&1) || par_nostore
+    out=$("$bcc" kernel run --native "$name" 2>&1) || par_nostore
     if [ "$out" = "$want" ]; then echo "kernel $name: native as flat"
     else echo "kernel $name: native differs: $out (flat: $want)"; bad=$((bad + 1)); fi
   done
@@ -121,8 +122,8 @@ serial() {
   # and corpus/deep-list.bc (lists of 50000 built and summed by loops, folded by pointer reversal,
   # SPEC §67 on Backend2), on the backend `--backend` selects.
   "$bcc" tailcalls 100000000 || bad=$((bad + 1))
-  want=$("$bcc" kernel interp --stage flat loop-tail 2>&1) || true
-  out=$(BC_STACK=65536 "$bcc" kernel run --native loop-tail 2>&1) || true
+  want=$("$bcc" kernel interp --stage flat loop-tail 2>&1) || par_nostore
+  out=$(BC_STACK=65536 "$bcc" kernel run --native loop-tail 2>&1) || par_nostore
   if [ "$out" = "$want" ]; then echo "kernel loop-tail: native in a stack of 64 KiB"
   else echo "kernel loop-tail: native in a stack of 64 KiB fails: $out"; bad=$((bad + 1)); fi
   if BC_STACK=65536 "$bcc" run --backend "$backend" --native corpus/deep-list.bc < /dev/null > "$tmp/out" 2> "$tmp/err" &&

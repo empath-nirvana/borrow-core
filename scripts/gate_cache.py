@@ -37,7 +37,7 @@ renamed, so a reader sees a whole entry or none. `GATE_CACHE=0` reads and writes
     gate_cache.py step ID CLASS [--files F…] -- CMD…   a whole step, run or replayed
     gate_cache.py step-key ID CLASS [--files F…] -- CMD…   the key `step` would use
     gate_cache.py prune [--days N] [--max-mb M]   remove old entries (never during a gate)
-    gate_cache.py tools                  the tools line (ci-local exports it as GATE_CACHE_TOOLS)
+    gate_cache.py tools                  the tools line (ci-local writes it to GATE_CACHE_TOOLS_FILE)
 """
 import hashlib, os, re, shutil, subprocess, sys, tempfile
 
@@ -46,14 +46,27 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VERSION = "gate-cache 1"
 
 
+MODES = ("1", "0", "record")
+
+
+def mode():
+    """`GATE_CACHE`: `1` (the default: replay and record), `0` (neither) or `record` (record, replay
+    nothing). Any other value is an error."""
+    m = os.environ.get("GATE_CACHE", "1") or "1"
+    if m not in MODES:
+        sys.stderr.write(f"gate_cache: GATE_CACHE={m}: not one of 1, 0, record\n")
+        sys.exit(2)
+    return m
+
+
 def enabled():
     """Whether passes are recorded: `GATE_CACHE` is not `0`."""
-    return os.environ.get("GATE_CACHE", "1") != "0"
+    return mode() != "0"
 
 
 def reading():
     """Whether recorded passes are replayed: `GATE_CACHE` is neither `0` nor `record`."""
-    return os.environ.get("GATE_CACHE", "1") not in ("0", "record")
+    return mode() == "1"
 
 
 def store_dir():
@@ -61,11 +74,42 @@ def store_dir():
 
 
 _hashes = {}
+# Each file's (size, mtime, ctime, inode) when it was hashed, and the files a key computed under
+# `recording` read: the recheck after a run compares these too, so a file changed and changed
+# back while the unit ran (its content the same, its ctime not) is seen.
+_stats = {}
+_rec = None
+
+
+def note_stat(ap):
+    if _rec is not None:
+        _rec.add(ap)
+    if ap not in _stats:
+        try:
+            st = os.stat(ap)
+            _stats[ap] = (st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_ino)
+        except OSError:
+            _stats[ap] = None
+
+
+def recording(fn):
+    """fn's value, and the files and directories it read through sha_file and listing."""
+    global _rec
+    old, _rec = _rec, set()
+    try:
+        return fn(), _rec
+    finally:
+        _rec = old
+
+
+def fingerprint(files):
+    return digest([f"{p} {_stats.get(p)}" for p in sorted(files)])
 
 
 def sha_file(p):
     """The sha256 of file p's bytes, or `absent`."""
     ap = os.path.abspath(p)
+    note_stat(ap)
     if ap in _hashes:
         return _hashes[ap]
     try:
@@ -97,6 +141,7 @@ def forget():
     """Drop every file hash and listing read so far, to compute a key again."""
     global _tables, _keylines
     _hashes.clear()
+    _stats.clear()
     _listings.clear()
     _tables = _keylines = None
 
@@ -107,9 +152,10 @@ def files_lines(tag, paths):
 
 def tools_line():
     """`uname -sm`, Python, wasmtime and the C compiler `bcc cc` names, with their versions."""
-    env = os.environ.get("GATE_CACHE_TOOLS")
-    if env:
-        return env
+    f = os.environ.get("GATE_CACHE_TOOLS_FILE")
+    if f and os.path.isfile(f):
+        with open(f) as fh:
+            return fh.read().strip()
     import resource
     parts = [" ".join(os.uname()[i] for i in (0, 2, 4)), "python " + sys.version.split()[0],
              "stack " + " ".join(str(x) for x in resource.getrlimit(resource.RLIMIT_STACK))]
@@ -352,64 +398,118 @@ def entry(step, key):
     return os.path.join(store_dir(), re.sub(r"[^A-Za-z0-9_.-]+", "_", step), key)
 
 
+_put_failed = 0
+
+
 def put(step, key, out_file, side_dir=None):
-    """Record a pass: `out` and `side/`, written under a temporary name and renamed."""
+    """Record a pass: `out` and `side/` (always present, maybe empty), written under a temporary
+    name and renamed. A store that cannot be written is said once per process, loudly."""
+    global _put_failed
     final = entry(step, key)
     if os.path.isdir(final):
-        return
-    parent = os.path.dirname(final)
-    os.makedirs(parent, exist_ok=True)
-    t = tempfile.mkdtemp(prefix=".tmp.", dir=parent)
+        if get(final) is not None:
+            return
+        drop(final)  # not whole (damaged, or from an older version): replaced
+    t = None
     try:
+        parent = os.path.dirname(final)
+        os.makedirs(parent, exist_ok=True)
+        t = tempfile.mkdtemp(prefix=".tmp.", dir=parent)
         shutil.copyfile(out_file, os.path.join(t, "out"))
         if side_dir and os.path.isdir(side_dir):
             shutil.copytree(side_dir, os.path.join(t, "side"))
+        else:
+            os.mkdir(os.path.join(t, "side"))
         os.rename(t, final)
+    except OSError as e:
+        if t:
+            shutil.rmtree(t, ignore_errors=True)
+        if os.path.isdir(final):
+            return
+        if not _put_failed:
+            sys.stdout.flush()
+            print(f"gate-cache: WARNING: cannot record in {store_dir()} ({e}): passes are not recorded")
+            sys.stdout.flush()
+        _put_failed += 1
+
+
+def get(e):
+    """An entry's `out` bytes and its `side/` directory, or None when it is not whole (being
+    pruned, or written by an older version without `side/`): then the unit is a miss."""
+    try:
+        with open(os.path.join(e, "out"), "rb") as fh:
+            data = fh.read()
+        side = os.path.join(e, "side")
+        if not os.path.isdir(side):
+            return None
+        return data, side
     except OSError:
-        shutil.rmtree(t, ignore_errors=True)
+        return None
 
 
 def stat(replayed, ran):
+    """Add to the gate's counts (`GATE_CACHE_STATS`): units replayed, run, and failed records."""
     s = os.environ.get("GATE_CACHE_STATS")
-    if s and (replayed or ran):
+    if s and (replayed or ran or _put_failed):
         with open(s, "a") as fh:
-            fh.write(f"{replayed} {ran}\n")
+            fh.write(f"{replayed} {ran} {_put_failed}\n")
 
 
 # --- par --------------------------------------------------------------------------------------
 
+def read_jobs(d):
+    with open(os.path.join(d, "jobs"), encoding="utf-8", errors="surrogateescape") as fh:
+        ws = fh.read().split("\n")
+    return [(ws[k], ws[k + 1]) for k in range(0, len(ws) - 1, 2)]
+
+
+class ParKeys:
+    """The keys of one `par` call's units, and the fingerprint (`fingerprint`) of the files each
+    read: the base once, then each unit's own files."""
+
+    def __init__(self, fn):
+        self.spec = os.environ.get("PAR_CACHE", "")
+        self.mode = os.environ.get("PAR_CACHE_DEPS", "corpus")
+        self.step = self.spec.split()[0]
+        self.base, self.base_files = recording(
+            lambda: base_lines(self.spec, "bcc") + [f"fn {fn}", f"deps {self.mode}"])
+
+    def of(self, arg):
+        deps, files = recording(lambda: unit_deps(self.mode, arg))
+        return digest(self.base + deps), fingerprint(self.base_files | files)
+
+
 def par_start(d, fn):
     """Read DIR/jobs (`i` and `arg`, a line each); for each hit, write DIR/i.out, DIR/i.rc and
     DIR/i.side as the run would have; print the misses (`i` and `arg`, a line each) for xargs."""
-    with open(os.path.join(d, "jobs"), encoding="utf-8", errors="surrogateescape") as fh:
-        ws = fh.read().split("\n")
-    jobs = [(ws[k], ws[k + 1]) for k in range(0, len(ws) - 1, 2)]
-    spec = os.environ.get("PAR_CACHE", "")
-    if not spec or not enabled():
+    jobs = read_jobs(d)
+    if not os.environ.get("PAR_CACHE") or not enabled():
         for i, a in jobs:
             sys.stdout.write(f"{i}\n{a}\n")
         return
-    mode = os.environ.get("PAR_CACHE_DEPS", "corpus")
-    step = spec.split()[0]
     tools = tools_line()
     with open(os.path.join(d, "tools"), "w") as fh:
         fh.write(tools)
-    os.environ["GATE_CACHE_TOOLS"] = tools
-    base = base_lines(spec, "bcc") + [f"fn {fn}", f"deps {mode}"]
+    os.environ["GATE_CACHE_TOOLS_FILE"] = os.path.join(d, "tools")
+    pk = ParKeys(fn)
     keys = []
     for i, a in jobs:
-        k = digest(base + unit_deps(mode, a))
-        keys.append(f"{i} {k}")
-        e = entry(step, k)
-        if reading() and os.path.isdir(e):
+        k, fp = pk.of(a)
+        keys.append(f"{i} {k} {fp}")
+        got = get(entry(pk.step, k)) if reading() else None
+        if got:
+            data, side = got
             try:
-                os.utime(e)
-                shutil.copyfile(os.path.join(e, "out"), os.path.join(d, f"{i}.out"))
-                if os.path.isdir(os.path.join(e, "side")):
-                    shutil.copytree(os.path.join(e, "side"), os.path.join(d, f"{i}.side"), dirs_exist_ok=True)
+                shutil.copytree(side, os.path.join(d, f"{i}.side"), dirs_exist_ok=True)
+                with open(os.path.join(d, f"{i}.out"), "wb") as fh:
+                    fh.write(data)
                 with open(os.path.join(d, f"{i}.rc"), "w") as fh:
                     fh.write("0\n")
                 with open(os.path.join(d, f"{i}.hit"), "w"):
+                    pass
+                try:
+                    os.utime(entry(pk.step, k))
+                except OSError:
                     pass
                 continue
             except OSError:
@@ -419,7 +519,6 @@ def par_start(d, fn):
                     except OSError:
                         pass
                 shutil.rmtree(os.path.join(d, f"{i}.side"), ignore_errors=True)
-                os.makedirs(os.path.join(d, f"{i}.side"), exist_ok=True)
         sys.stdout.write(f"{i}\n{a}\n")
     with open(os.path.join(d, "keys"), "w") as fh:
         fh.write("\n".join(keys) + "\n")
@@ -437,34 +536,23 @@ def append_tree(src, dst):
 
 
 def par_finish(d, fn):
-    """Store each miss that passed, did not mark itself `nostore` and whose key, computed again
-    now, is the one it ran under (no input changed while it ran); append each job's side files to
-    $PAR_COLLECT in job order; print each job's output in order; write the number of jobs that
-    failed to DIR/failed."""
-    with open(os.path.join(d, "jobs"), encoding="utf-8", errors="surrogateescape") as fh:
-        ws = fh.read().split("\n")
-    n = len(ws) // 2
+    """Store each miss that passed, did not mark itself `nostore`, and whose key and fingerprint,
+    computed again now, are those it ran under (no input changed while it ran, even and back);
+    append each job's side files to $PAR_COLLECT in job order; print each job's output in order;
+    write the number of jobs that failed to DIR/failed."""
+    jobs = read_jobs(d)
     keys = {}
     kp = os.path.join(d, "keys")
     if os.path.exists(kp):
         for l in open(kp):
             w = l.split()
-            if len(w) == 2:
-                keys[w[0]] = w[1]
-    spec = os.environ.get("PAR_CACHE", "")
-    step = spec.split()[0] if spec else ""
+            if len(w) == 3:
+                keys[w[0]] = (w[1], w[2])
     collect = os.environ.get("PAR_COLLECT", "")
-    base = None
-    if keys and enabled():
-        try:
-            os.environ.setdefault("GATE_CACHE_TOOLS", open(os.path.join(d, "tools")).read())
-        except OSError:
-            pass
-    args = {ws[k]: ws[k + 1] for k in range(0, 2 * n - 1, 2)}
     failed = replayed = ran = 0
+    pk = None
     out = sys.stdout.buffer
-    for j in range(1, n + 1):
-        i = str(j)
+    for j, (i, a) in enumerate(jobs, 1):
         o = os.path.join(d, f"{i}.out")
         try:
             rc = open(os.path.join(d, f"{i}.rc")).read().strip()
@@ -478,11 +566,11 @@ def par_finish(d, fn):
             else:
                 ran += 1
                 if rc == "0" and i in keys and not os.path.exists(os.path.join(d, f"{i}.nostore")):
-                    mode = os.environ.get("PAR_CACHE_DEPS", "corpus")
-                    if base is None:
-                        base = base_lines(spec, "bcc") + [f"fn {fn}", f"deps {mode}"]
-                    if digest(base + unit_deps(mode, args[i])) == keys[i]:
-                        put(step, keys[i], o, side)
+                    if pk is None:
+                        os.environ["GATE_CACHE_TOOLS_FILE"] = os.path.join(d, "tools")
+                        pk = ParKeys(fn)
+                    if pk.of(a) == keys[i]:
+                        put(pk.step, keys[i][0], o, side)
         if collect and os.path.isdir(side):
             append_tree(side, collect)
         try:
@@ -501,7 +589,7 @@ def par_finish(d, fn):
 # --- a whole step -----------------------------------------------------------------------------
 
 def step_args(argv):
-    """`ID CLASS [--files F…] -- CMD…`: the step's id, its key, and CMD."""
+    """`ID CLASS [--files F…] -- CMD…`: the step's id, its key and fingerprint, and CMD."""
     sid, cls = argv[0], argv[1]
     rest = argv[2:]
     files = []
@@ -513,15 +601,18 @@ def step_args(argv):
         raise SystemExit("usage: gate_cache.py step ID CLASS [--files F…] -- CMD…")
     cmd = rest[1:]
     if not enabled():
-        return sid, None, cmd
-    paths = []
-    for f in files:
-        if os.path.isdir(os.path.join(ROOT, f)):
-            paths += walk(f)
-        else:
-            paths.append(f)
-    lines = base_lines(sid, cls) + [f"cmd {' '.join(cmd)}"] + files_lines("file", sorted(set(paths)))
-    return sid, digest(lines), cmd
+        return sid, None, None, cmd
+
+    def lines():
+        paths = []
+        for f in files:
+            if os.path.isdir(os.path.join(ROOT, f)):
+                paths += walk(f)
+            else:
+                paths.append(f)
+        return base_lines(sid, cls) + [f"cmd {' '.join(cmd)}"] + files_lines("file", sorted(set(paths)))
+    ls, read = recording(lines)
+    return sid, digest(ls), fingerprint(read), cmd
 
 
 def step(argv):
@@ -530,19 +621,19 @@ def step(argv):
     key covers the class's inputs (`bcc`: the binaries and the library; `lean`: the Lean sources
     and the Lake configuration), scripts/, the tools, the environment, CMD and the files (or every
     file under the directories) named."""
-    sid, key, cmd = step_args(argv)
+    sid, key, fp, cmd = step_args(argv)
     env = dict(os.environ, GATE_CACHE_INNER=sid)
     if key is None:
         os.chdir(ROOT)
         os.execvpe(cmd[0], cmd, env)
     e = entry(sid, key)
-    if reading() and os.path.isdir(e):
+    got = get(e) if reading() else None
+    if got:
         try:
             os.utime(e)
         except OSError:
             pass
-        with open(os.path.join(e, "out"), "rb") as fh:
-            shutil.copyfileobj(fh, sys.stdout.buffer)
+        sys.stdout.buffer.write(got[0])
         sys.stdout.flush()
         stat(1, 0)
         return 0
@@ -557,11 +648,11 @@ def step(argv):
                 sys.stdout.buffer.write(chunk)
                 sys.stdout.flush()
             rc = p.wait()
-        stat(0, 1)
         if rc == 0 and not os.path.exists(env["GATE_CACHE_NOSTORE"]):
             forget()
-            if step_args(argv)[1] == key:
+            if step_args(argv)[1:3] == (key, fp):
                 put(sid, key, log)
+        stat(0, 1)
         return rc
     finally:
         shutil.rmtree(t, ignore_errors=True)
@@ -586,42 +677,60 @@ class Units:
         self.on = enabled()
         self.step = spec.split()[0]
         self.args = (spec, cls, bins, mode)
-        self.base = base_lines(spec, cls, bins) + [f"deps {mode}"] if self.on else []
         self.mode = mode
         self.replayed = self.ran = 0
         self.passed = []
+        if self.on:
+            self.base, self.base_files = recording(lambda: base_lines(spec, cls, bins) + [f"deps {mode}"])
 
     def key(self, arg):
-        return digest(self.base + unit_deps(self.mode, arg)) if self.on else None
+        """The unit's key and fingerprint, or None when the cache is off."""
+        if not self.on:
+            return None
+        deps, files = recording(lambda: unit_deps(self.mode, arg))
+        return digest(self.base + deps), fingerprint(self.base_files | files)
 
     def hit(self, key):
-        return self.on and reading() and key is not None and os.path.isdir(entry(self.step, key))
+        return self.on and reading() and key is not None and get(entry(self.step, key[0])) is not None
 
     def pass_(self, arg, key, text=""):
         if self.on and key is not None:
             self.passed.append((arg, key, text))
 
     def done(self):
-        """Record the passes whose key, computed again now, is the one they ran under."""
+        """Record the passes whose key and fingerprint, computed again now, are those they ran
+        under."""
         if not self.on:
             return
+        if self.passed:
+            forget()
+            spec, cls, bins, mode = self.args
+            self.base, self.base_files = recording(lambda: base_lines(spec, cls, bins) + [f"deps {mode}"])
+            t = tempfile.mkdtemp(prefix="gate-cache-")
+            try:
+                for arg, key, text in self.passed:
+                    if self.key(arg) != key:
+                        continue
+                    o = os.path.join(t, "out")
+                    with open(o, "w") as fh:
+                        fh.write(text)
+                    put(self.step, key[0], o)
+            finally:
+                shutil.rmtree(t, ignore_errors=True)
         stat(self.replayed, self.ran)
-        if not self.passed:
-            return
-        forget()
-        spec, cls, bins, mode = self.args
-        base = base_lines(spec, cls, bins) + [f"deps {mode}"]
-        t = tempfile.mkdtemp(prefix="gate-cache-")
+
+
+def drop(p):
+    """Remove entry p: renamed to a temporary name first (atomic), so a gate reading it sees the
+    whole entry or none (a miss), never a part."""
+    if not os.path.basename(p).startswith(".tmp."):
+        t = os.path.join(os.path.dirname(p), ".tmp.prune." + os.path.basename(p))
         try:
-            for arg, key, text in self.passed:
-                if digest(base + unit_deps(mode, arg)) != key:
-                    continue
-                o = os.path.join(t, "out")
-                with open(o, "w") as fh:
-                    fh.write(text)
-                put(self.step, key, o)
-        finally:
-            shutil.rmtree(t, ignore_errors=True)
+            os.rename(p, t)
+        except OSError:
+            return
+        p = t
+    shutil.rmtree(p, ignore_errors=True)
 
 
 def prune(argv):
@@ -662,7 +771,7 @@ def prune(argv):
         # A temporary entry an hour old is left over from an interrupted write; a younger one may
         # be another gate's write in progress.
         if now - m > (3600 if tmp else days * 86400):
-            shutil.rmtree(p, ignore_errors=True); removed += 1; freed += size
+            drop(p); removed += 1; freed += size
         else:
             keep.append((m, size, p))
     total = sum(sz for _, sz, _ in keep)
@@ -672,7 +781,7 @@ def prune(argv):
                 break
             if os.path.basename(p).startswith(".tmp."):
                 continue
-            shutil.rmtree(p, ignore_errors=True); removed += 1; freed += size; total -= size
+            drop(p); removed += 1; freed += size; total -= size
     print(f"gate_cache: removed {removed} entr{'y' if removed == 1 else 'ies'} ({freed / 1048576:.1f} MiB); {total / 1048576:.1f} MiB left in {root}")
 
 
@@ -689,8 +798,8 @@ def main():
         return step(a[1:])
     elif a[0] == "unit-key":
         # The key of one `par` unit: `unit-key FN ARG`, with PAR_CACHE and PAR_CACHE_DEPS set.
-        spec, mode = os.environ["PAR_CACHE"], os.environ.get("PAR_CACHE_DEPS", "corpus")
-        print(digest(base_lines(spec, "bcc") + [f"fn {a[1]}", f"deps {mode}"] + unit_deps(mode, a[2])))
+        spec, m = os.environ["PAR_CACHE"], os.environ.get("PAR_CACHE_DEPS", "corpus")
+        print(digest(base_lines(spec, "bcc") + [f"fn {a[1]}", f"deps {m}"] + unit_deps(m, a[2])))
     elif a[0] == "step-key":
         print(step_args(a[1:])[1])
     elif a[0] == "prune":

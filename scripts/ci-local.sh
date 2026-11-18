@@ -91,6 +91,9 @@ for a in "$@"; do
     *) usage ;;
   esac
 done
+case "${GATE_CACHE:-1}" in 1|0|record) ;; *) echo "ci-local: GATE_CACHE=$GATE_CACHE: not one of 1, 0, record"; exit 2 ;; esac
+# The tools line is this gate's own (below); one left in the environment is not used.
+unset GATE_CACHE_TOOLS_FILE
 case "$mode" in
   --changed) changed=1; export BCC_SOURCE=0 ;;
   --full) full=1 ;;
@@ -211,7 +214,7 @@ built=$fail
 # The tools in every cache key, found once for the whole gate after the build (they do not change
 # during it).
 if [ "$built" = 0 ] && [ "${GATE_CACHE:-1}" != 0 ]; then
-  GATE_CACHE_TOOLS=$(python3 scripts/gate_cache.py tools) && export GATE_CACHE_TOOLS
+  python3 scripts/gate_cache.py tools > "$out/tools" && export GATE_CACHE_TOOLS_FILE=$out/tools
 fi
 
 if wanted "compile scaling"; then step "compile scaling" scripts/compile-scaling.sh --guard; fi
@@ -250,7 +253,7 @@ tag="ci-local"; [ "$changed" = 1 ] && tag="ci-local --changed"; [ "$full" = 1 ] 
 [ "${GATE_CACHE:-1}" = 0 ] && tag="$tag --no-cache"
 [ "${GATE_CACHE:-1}" = record ] && tag="$tag --record-cache"
 if [ "${GATE_CACHE:-1}" = 0 ]; then cache="cache off"
-else cache=$(awk '{ r += $1; n += $2 } END { printf "cache: %d unit(s) replayed, %d run", r, n }' "$GATE_CACHE_STATS"); fi
+else cache=$(awk '{ r += $1; n += $2; f += $3 } END { printf "cache: %d unit(s) replayed, %d run", r, n; if (f) printf "; WARNING: %d pass(es) could not be recorded (store not writable)", f }' "$GATE_CACHE_STATS"); fi
 if [ "$fail" -eq 0 ]; then echo "$tag: ALL PASSED ($((SECONDS - start))s; $cache)"; else echo "$tag: FAILURES (see above) ($((SECONDS - start))s; $cache)"; fi
 [ "$changed" = 1 ] && echo "(--changed is for iteration only: the sanity gate, scripts/ci-local.sh, runs before a PR)"
 [ "$full" = 0 ] && echo "(the sanity gate: \`make gate-full\` runs every check; \`make verify-goldens\` re-verifies every golden)"

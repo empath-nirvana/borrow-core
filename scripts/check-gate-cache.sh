@@ -15,7 +15,10 @@
 # golden changed so that it differs) runs, fails, and fails again on the next run: no failure is
 # recorded. A whole step's key (`gate_cache.py step-key`) changes with a `.lean` file, a new
 # `.lean` file, the lakefile, the manifest and the toolchain, and with a file it names; a unit
-# whose input changes while it runs is not recorded. The tree's own files are only read.
+# whose input changes while it runs is not recorded. par records neither a unit that calls
+# `par_nostore` nor one whose input changed, even and back, while it ran; an entry without its side
+# files is a miss; an unknown `GATE_CACHE` is refused; an unwritable store is reported. The tree's
+# own files are only read.
 #
 #     scripts/check-gate-cache.sh
 set -euo pipefail
@@ -37,7 +40,7 @@ progs=(io-args ascii-upper)
 for p in "${progs[@]}"; do cp corpus/"$p".* "$w/corpus/"; done
 for b in bcc bcc-counts; do cp -c .lake/build/bin/$b "$w/.lake/build/bin/$b" 2>/dev/null || cp .lake/build/bin/$b "$w/.lake/build/bin/$b"; done
 files=(); for p in "${progs[@]}"; do files+=("corpus/$p.bc"); done
-unset GATE_CACHE GATE_CACHE_TOOLS GATE_CACHE_INNER GATE_CACHE_STATS PAR_CACHE PAR_CACHE_DEPS PAR_COLLECT
+unset GATE_CACHE GATE_CACHE_TOOLS_FILE GATE_CACHE_INNER GATE_CACHE_STATS PAR_CACHE PAR_CACHE_DEPS PAR_COLLECT
 for v in $(env | sed -n 's/^\(BC_[A-Za-z0-9_]*\|BCC_[A-Za-z0-9_]*\|CI_LOCAL_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$v"; done
 export GATE_CACHE_DIR=$t/store CI_LOCAL_BUILT=1
 bad=0
@@ -173,7 +176,7 @@ if [ "$(key)" = "$(cd "$w2" && python3 scripts/gate_cache.py step-key probe lean
 else echo "check-gate-cache: a whole step's key in another directory: differs"; bad=1; fi
 
 # One unit's key (`gate_cache.py unit-key`) misses on each of the inputs below.
-GATE_CACHE_TOOLS=$(cd "$w" && python3 scripts/gate_cache.py tools); export GATE_CACHE_TOOLS
+(cd "$w" && python3 scripts/gate_cache.py tools) > "$t/tools"; export GATE_CACHE_TOOLS_FILE=$t/tools
 ukey() { (cd "$w" && PAR_CACHE=probe python3 scripts/gate_cache.py unit-key fn "$1"); }
 # miss WHAT ARG CMD…: ARG's unit key before and after CMD differ.
 miss() {
@@ -221,11 +224,65 @@ else echo "check-gate-cache: a whole step's key: a file a .lean source names: ch
 if command -v xcrun > /dev/null; then
   printf '#!/bin/sh\n[ "$1 $2" = "clang --version" ] && { echo "clang 0.0.0-stub"; exit 0; }\nexec "%s" "$@"\n' "$(command -v xcrun)" > "$t/bin/xcrun"
   chmod +x "$t/bin/xcrun"
-  unset GATE_CACHE_TOOLS
+  unset GATE_CACHE_TOOLS_FILE
   k1=$(ukey "$p0")
   if [ "$(PATH="$t/bin:$PATH" ukey "$p0")" = "$k1" ]; then echo "check-gate-cache: a unit's key: the C compiler's version: unchanged"; bad=1
   else echo "check-gate-cache: a unit's key: the C compiler's version: changed"; fi
 fi
+
+# par itself: a unit that calls par_nostore, one whose input changes while it runs, and one whose
+# input changes and changes back (same content, a new ctime) are not recorded; a plain one is. An
+# entry without its side files is a miss.
+cat > "$t/par-probe.sh" <<'PROBE'
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$1"; shift
+. scripts/par.sh
+probe() {
+  case "$1" in
+    *nostore*) par_nostore ;;
+    *change*) echo x >> "${1%.bc}.extra" ;;
+    *back*) cp -p "$1" "$PAR_TMP/c"; echo y >> "$1"; sleep 1; cat "$PAR_TMP/c" > "$1" ;;
+  esac
+  echo "ran $1"
+}
+export -f probe
+export PAR_CACHE=par-probe
+par probe "$@"
+[ "$par_failed" = 0 ]
+PROBE
+chmod +x "$t/par-probe.sh"
+for n in plain nostore change back; do echo "main = 1" > "$w/corpus/p-$n.bc"; done
+pp=(corpus/p-plain.bc corpus/p-nostore.bc corpus/p-change.bc corpus/p-back.bc)
+# pexpect WHAT REPLAYED RAN: one run of the probe.
+pexpect() {
+  : > "$t/stats"; rc=0
+  GATE_CACHE_STATS=$t/stats "$t/par-probe.sh" "$w" "${pp[@]}" > "$t/out" 2>&1 || rc=$?
+  local r n; r=$(awk '{ s += $1 } END { print s + 0 }' "$t/stats"); n=$(awk '{ s += $2 } END { print s + 0 }' "$t/stats")
+  if [ "$r $n $rc" = "$2 $3 0" ]; then echo "check-gate-cache: par: $1: $r replayed, $n run"
+  else echo "check-gate-cache: par: $1: $r replayed, $n run, exit $rc; expected $2 replayed, $3 run, exit 0"; sed 's/^/  /' "$t/out"; bad=1; fi
+}
+pexpect "first run" 0 4
+rm -f "$w/corpus/p-change.extra"
+pexpect "nostore, changed and changed-back units run again; the plain one replays" 1 3
+rm -f "$w/corpus/p-change.extra"
+find "$GATE_CACHE_DIR/par-probe" -mindepth 2 -maxdepth 2 -name side -exec rm -r {} +
+pexpect "an entry without its side files is a miss" 0 4
+rm -f "$w/corpus/p-change.extra"
+pexpect "recorded again" 1 3
+
+# The switches' values: anything but 1, 0 and record is an error.
+if GATE_CACHE=off "$t/par-probe.sh" "$w" corpus/p-plain.bc > "$t/out" 2>&1; then
+  echo "check-gate-cache: GATE_CACHE=off is not refused"; bad=1
+else echo "check-gate-cache: GATE_CACHE=off is refused: $(grep -m1 'GATE_CACHE=off' "$t/out")"; fi
+# A store that cannot be written is said, in the step's output and in the counts.
+mkdir -p "$t/ro"; chmod 555 "$t/ro"
+: > "$t/stats"
+GATE_CACHE_DIR=$t/ro/store GATE_CACHE_STATS=$t/stats "$t/par-probe.sh" "$w" corpus/p-plain.bc > "$t/out" 2>&1 || true
+chmod 755 "$t/ro"
+if grep -q 'WARNING: cannot record' "$t/out" && [ "$(awk '{ s += $3 } END { print s + 0 }' "$t/stats")" -gt 0 ]; then
+  echo "check-gate-cache: an unwritable store is reported: $(grep -m1 WARNING "$t/out")"
+else echo "check-gate-cache: an unwritable store is not reported"; sed 's/^/  /' "$t/out"; bad=1; fi
 
 [ "$bad" = 0 ] && echo "check-gate-cache: every change of an input misses, and no failure is recorded"
 exit "$bad"

@@ -15,7 +15,9 @@ cd "$(dirname "$0")/.."
 counts=.lake/build/bin/bcc-counts
 row() {
   local f=$1 r
-  r=$("$counts" --cells "$f" 2>/dev/null) || return 0
+  # A program whose classes cannot be read has no row; a failure is never recorded in the cache
+  # (it may be a run killed under load), so it runs again.
+  r=$("$counts" --cells "$f" 2>/dev/null) || { par_nostore; return 0; }
   [ -z "$r" ] || printf '%s: %s\n' "$f" "$r"
 }
 . scripts/par.sh

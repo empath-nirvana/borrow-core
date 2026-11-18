@@ -253,9 +253,14 @@ program() {
   local old=1
   if grep -q '^-- check: old-backend-refuses' "$f"; then
     old=0; stages=""
-    if "$bcc" interp --backend old --stage flat "$f" < "$in" > /dev/null 2>&1; then
+    local refused=0
+    "$bcc" interp --backend old --stage flat "$f" < "$in" > /dev/null 2>&1 || refused=$?
+    if [ "$refused" = 0 ]; then
       echo "$f: marked old-backend-refuses, but the old backend runs it: remove the mark"; return 1
     fi
+    # A refusal ends with a status; a run ended by a signal (killed under load) is not one, and is
+    # not recorded in the cache.
+    [ "$refused" -lt 128 ] || par_nostore
   fi
   if grep -q '^-- check: no-source' "$f"; then
     local why
