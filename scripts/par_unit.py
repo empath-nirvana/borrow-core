@@ -120,7 +120,7 @@ def main():
         for p in files:
             gc.note_stat(p)
         if gc.fingerprint(files) == fp:
-            gc.put(step, key, os.path.join(d, f"{i}.out"), os.path.join(d, f"{i}.side"))
+            gc.put(step, key, os.path.join(d, f"{i}.out"), os.path.join(d, f"{i}.side"), unit=arg)
             if gc.get(e) is not None:
                 open(os.path.join(d, f"{i}.stored"), "w").close()
             gc.stat(0, 0)

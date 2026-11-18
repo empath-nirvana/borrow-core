@@ -9,7 +9,9 @@
 #                    perl) the pool is off and $JOBS run at once, as without it.
 #
 # FN runs under `set -uo pipefail`, in a subshell of its own (a FN that sets `-e` ends only itself). FN, and every variable and function it uses, must be exported (`export -f`, `export`). Each run
-# gets a scratch directory of its own in `$PAR_TMP`.
+# gets a scratch directory of its own in `$PAR_TMP`, removed as soon as the run ends (only its
+# output, status and side files are kept until the call ends), so a call holds a few files per
+# job, not every job's scratch.
 #
 # Side files. A run hands files back to its script by writing them under `$PAR_SIDE`; after every
 # run has ended, each run's files are appended, in the order the files were given, to the file of
@@ -24,12 +26,21 @@
 # is recorded, unless it calls `par_nostore` (it ran the source interpreter, or wrote a file of
 # the tree). `GATE_CACHE=0` neither reads nor writes the cache.
 unset PAR_CACHE PAR_CACHE_DEPS PAR_CACHE_NATIVE PAR_COLLECT
+. "$(dirname "${BASH_SOURCE[0]}")/grepq.sh"
 PAR_HOME=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}
 export JOBS PAR_HOME
-# The job pool is on when scripts/slot answers (`slot -s`), as ci-local and scripts/slotpool.py
-# decide; otherwise SLOT_OFF=1, for every job.
-if [ "${SLOT_OFF:-}" != 1 ] && ! "$PAR_HOME/slot" -s >/dev/null 2>&1; then export SLOT_OFF=1; fi
+# The job pool is off with SLOT_OFF=1 or without perl, for every job. With perl, a pool that does
+# not answer (`slot -s`: under ENFILE perl cannot even load its modules) makes every call fail,
+# saying why (`par_pool_error`), as ci-local stops the gate and scripts/slotpool.py raises: jobs
+# never run outside the pool unannounced.
+par_pool_error=""
+if [ "${SLOT_OFF:-}" != 1 ]; then
+  if ! command -v perl >/dev/null; then export SLOT_OFF=1
+  elif ! par_pool_out=$("$PAR_HOME/slot" -s 2>&1); then
+    par_pool_error="par: the job pool does not answer (scripts/slot -s: $(printf '%s' "$par_pool_out" | head -1))"
+  fi
+fi
 # The job pool's prefix for each job's shell, or none when the pool is off. A job (FN) holds its
 # slot while it runs, so it must not call `par` with `PAR_CACHE` set: a nested cached unit could
 # wait on another gate's entry lock (scripts/par_unit.py) while holding a slot.
@@ -39,6 +50,7 @@ par_slot() {
 par() {
   local fn=$1; shift
   local dir i f
+  [ -z "$par_pool_error" ] || { echo "$par_pool_error"; par_failed=$#; return 0; }
   dir=$(mktemp -d)
   par_failed=0
   [ $# -gt 0 ] || { rm -rf "$dir"; return 0; }
@@ -54,7 +66,7 @@ par() {
       mkdir "$PAR_DIR/$1.d"; mkdir -p "$PAR_DIR/$1.side"
       par_nostore() { : > "$PAR_NOSTORE"; }; export -f par_nostore
       (PAR_TMP="$PAR_DIR/$1.d" PAR_SIDE="$PAR_DIR/$1.side" PAR_NOSTORE="$PAR_DIR/$1.nostore" '"$fn"' "$2") > "$PAR_DIR/$1.out" 2>&1
-      echo $? > "$PAR_DIR/$1.rc"' _ < "$dir/run" || true
+      echo $? > "$PAR_DIR/$1.rc"; rm -rf "$PAR_DIR/$1.d"' _ < "$dir/run" || true
   python3 "$PAR_HOME/gate_cache.py" par-finish "$dir" "$fn"
   par_failed=$(cat "$dir/failed" 2>/dev/null || echo $#)
   rm -rf "$dir"

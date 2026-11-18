@@ -80,7 +80,7 @@ fs=()
 skips=$(mktemp)
 all=(); while IFS= read -r f; do [ -z "$f" ] || all+=("$f"); done <<< "$list"
 for f in "${all[@]}"; do
-  if grep -qE '^(--|#) check: parse-only' "$f"; then echo "parse-only $f" >> "$skips"; else fs+=("$f"); fi
+  if grepq -E '^(--|#) check: parse-only' "$f"; then echo "parse-only $f" >> "$skips"; else fs+=("$f"); fi
 done
 skipped=$(scripts/corpus-set.sh --skips check-handled parse-only < "$skips") || { rm -f "$skips"; echo "$skipped"; exit 1; }
 rm -f "$skips"

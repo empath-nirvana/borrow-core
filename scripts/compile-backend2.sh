@@ -85,15 +85,15 @@ localise() {
 # One program: linted, run at every stage, counted.
 program() {
   local f=$1 w=${PAR_TMP:-$tmp} base in err st rc name got a i c l s b want wa wi wc wl ws wb oldc note
-  if grep -qE '^(--|#) check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0; fi
-  if ! grep -qE '^(main|fn main\()' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$PAR_SIDE/skips"; return 0; fi
+  if grepq -E '^(--|#) check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0; fi
+  if ! grepq -E '^(main|fn main\()' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$PAR_SIDE/skips"; return 0; fi
   base=${f%.bc}
   if [ ! -f "$base.out" ]; then
     echo "$f: no golden $base.out: write it from the source stage with \`scripts/compile-corpus.sh --write-goldens $f\`"
     return 1
   fi
   if ! "$bcc" lir --lint "$f" > "$w/lint" 2>&1; then
-    if grep -q 'outside the pure fragment' "$w/lint"; then echo "$f: outside the new backend's fragment"; echo "$f" >> "$PAR_SIDE/outside"; echo "outside-fragment $f" >> "$PAR_SIDE/skips"; return 0; fi
+    if grepq 'outside the pure fragment' "$w/lint"; then echo "$f: outside the new backend's fragment"; echo "$f" >> "$PAR_SIDE/outside"; echo "outside-fragment $f" >> "$PAR_SIDE/skips"; return 0; fi
     echo "$f: lint: $(head -3 "$w/lint")"; return 1
   fi
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
@@ -124,19 +124,19 @@ program() {
   esac
   echo "$name $er" >> "$PAR_SIDE/erasure"
   if [ "$write" != 1 ]; then
-    wer=$(awk -v n="$name" '$1 == n { $1 = ""; sub(/^ /, ""); print }' "$erasure" 2>/dev/null || true)
+    wer=""; if [ -e "$erasure" ]; then wer=$(awk -v n="$name" '$1 == n { $1 = ""; sub(/^ /, ""); print }' "$erasure") || { echo "$f: cannot read $erasure" >&2; return 2; }; fi
     if [ "$wer" != "$er" ]; then echo "$f: erasure \"$er\", pinned \"$wer\" ($erasure)"; return 1; fi
   fi
   if ! got=$("$bccCounts" "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>&1); then
     echo "$f: counts: $got"; return 1
   fi
   read -r _ a _ i _ c _ l _ s _ b <<< "$got"
-  oldc=$(awk -v n="$name" '$1 == n { print $2, $3, $4 }' "$old" 2>/dev/null || true)
-  note=$(awk -v n="$name" '$1 == n { sub(/^[^#]*/, ""); print }' "$expected" 2>/dev/null || true)
+  oldc=""; if [ -e "$old" ]; then oldc=$(awk -v n="$name" '$1 == n { print $2, $3, $4 }' "$old") || { echo "$f: cannot read $old" >&2; return 2; }; fi
+  note=""; if [ -e "$expected" ]; then note=$(awk -v n="$name" '$1 == n { sub(/^[^#]*/, ""); print }' "$expected") || { echo "$f: cannot read $expected" >&2; return 2; }; fi
   echo "$name $a $i $c $l $s $b${note:+ $note}" > "$w/count"
   cat "$w/count" >> "$PAR_SIDE/counts"
   [ "$write" = 1 ] && { echo "$f: ok (allocs $a indirect $i copies $c; old $oldc)"; return 0; }
-  want=$(awk -v n="$name" '$1 == n { sub(/#.*/, ""); print $2, $3, $4, $5, $6, $7 }' "$expected" 2>/dev/null || true)
+  want=""; if [ -e "$expected" ]; then want=$(awk -v n="$name" '$1 == n { sub(/#.*/, ""); print $2, $3, $4, $5, $6, $7 }' "$expected") || { echo "$f: cannot read $expected" >&2; return 2; }; fi
   if [ -z "$want" ]; then echo "$f: no entry in $expected (allocs $a indirect $i copies $c loads $l stores $s bounds $b)"; return 1; fi
   read -r wa wi wc wl ws wb <<< "$want"
   if [ "$a" -gt "$wa" ] || [ "$i" -gt "$wi" ] || [ "$c" -gt "$wc" ] ||
