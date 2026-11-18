@@ -1,0 +1,15 @@
+-- Shared lends and `*` (typed elaboration §5.1, §5.8). `get(&r)` borrows the cell `r` `imm` for
+-- the call (`withbor1`), since `get`'s parameter is an `imm` borrow, and hands it back to `r`;
+-- `*b` reads an `imm` borrow through `withload`; `*r` borrows the cell `r` around the read.
+-- `surface-lend.core.bc` is the program written by hand in core.
+-- Answer: (i32[82], i32[41]).
+
+-- The number an `imm` borrow holds.
+def get : !(all 'a < top. imm 'a i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (b : imm 'a i32) -> return *b)
+
+main -> i32 * i32 =
+  let r = alloc(41);
+  let x = get(&r);
+  let y = *r;
+  (x + y, free(r))

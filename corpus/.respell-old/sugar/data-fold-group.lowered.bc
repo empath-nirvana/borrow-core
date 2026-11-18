@@ -1,0 +1,65 @@
+-- lowers: corpus/data-fold-group.bc
+-- `corpus/data-fold-group.bc` with its declarations and fold blocks written out by SPEC §42's
+-- rules, in the surface: `Expr` the group's `mu`, `Bind` its block of cells with `Expr` named, and
+-- each fold the kernel's at `Expr`'s shape, applied to the algebra at `A_R` or `A′_R`, its arms a
+-- `case` on the unrolled shape. `Bind`'s `value` and `body` are recursive positions, so the
+-- algebra has the fold's results there; its `name` is a cell, a view in `fold_imm`, freed by
+-- `box` in `fold_own`.
+
+type Expr = mu X. i32 + ((ref X * ref X) + (ref i32 * (ref X * ref X)))
+
+type Bind = ref i32 * (ref Expr * ref Expr)
+
+shape Expr_Add = node (leaf Expr) (leaf Expr)
+
+shape Bind_Bind = node (leaf i32) (node (leaf Expr) (leaf Expr))
+
+fn size<'a>(e: imm 'a Expr) -> i32 =
+  (unbang fold_imm[i32 + ((ref X * ref X) + (ref i32 * (ref X * ref X))), 'y, top, i32] (!thunkv Fun 'y < top.
+    return (thunkv fun (x : i32 + ((i32 * i32) + (imm 'y i32 * (i32 * i32)))) ->
+      case x {
+        inl cn -> 1
+      | inr y ->
+          case y {
+            inl p ->
+              let (ca, cb) = p;
+              let a = ca;
+              let b = cb;
+              a + b + 1
+          | inr q ->
+              let (cn, rest) = q;
+              let (cv, cb) = rest;
+              let n = cn;
+              let v = cv;
+              let b = cb;
+              *n + v + b
+          }
+      }))) ['a] e
+
+fn eval(e: Expr) -> i32 =
+  (unbang fold_own[i32 + ((ref X * ref X) + (ref i32 * (ref X * ref X))), i32] (!thunkv fun (x : i32 + ((i32 * i32) + (ref i32 * (i32 * i32)))) ->
+    case x {
+      inl cn -> let n = cn; n
+    | inr y ->
+        case y {
+          inl p ->
+            let (ca, cb) = p;
+            let a = ca;
+            let b = cb;
+            a + b
+        | inr q ->
+            let (cn, rest) = q;
+            let (cv, cb) = rest;
+            let n = free(cn);
+            let v = cv;
+            let b = cb;
+            n + v + b
+        }
+    })) e
+
+main -> i32 =
+  let e = (roll (inr (inr (alloc_s[Bind_Bind] (10, (
+    (roll (inr (inl (alloc_s[Expr_Add] ((roll (inl 1) : Expr), (roll (inl 2) : Expr))))) : Expr),
+    (roll (inl 4) : Expr)))))) : Expr);
+  let s = size(&e);
+  eval(e) * 100 + s

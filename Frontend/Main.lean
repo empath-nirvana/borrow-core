@@ -785,7 +785,12 @@ def main (argv : List String) : IO UInt32 := do
     if cmd != "parse" && cmd != "print" then
       IO.eprintln s!"unknown command `{cmd}`"; return 2
     let src ← readSource file
-    match parseProgram src (lib := Frontend.Sugar.libSrc) with
+    -- `print` of a text in the new spelling prints the parse its calls' lends are read in
+    -- (SPEC §82 P8, `Frontend.Elab.parseLent`); `parse`, and any text in today's spelling, one
+    -- plain parse.  `[spec §82]`
+    let parsed := if cmd == "print" && isNewDialect src then (·.1) <$> Frontend.Elab.parseLent src
+      else parseProgram src (lib := Frontend.Sugar.libSrc)
+    match parsed with
     | .error e =>
       IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc)
       return 1

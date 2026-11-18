@@ -1,548 +1,593 @@
--- The text library (`docs/strings-slices-design.md` §2.2, §4.2, §5.7): `string` is `buf u8`, a
--- growable byte buffer; `text 'a` and `text_mut 'a` are `array_imm 'a u8` and `array_mut 'a u8`,
--- shared and exclusive views; `lit`, a string literal `"…"`, is `i32 * !(i32 => u8)`, its length
--- and its bytes, persistent data that no one owns. Text is UTF-8. The invariant is kept by the
--- functions that build text from bytes (`str_from_utf8`, `from_utf8` validate, and every append
--- writes whole characters); the types are abbreviations of the byte types, so it is not yet
--- enforced (stage T2). Every function is safe on any bytes: a character that does not decode is
--- U+FFFD.
---
--- A view is lent from a string by `borrow imm s { v -> … }` (its initialised prefix, no cell),
--- and from a literal by `borrow imm "…" { v -> … }` (the literal's bytes, read-only data in the
--- compiled program). A sub-view (`split_at`, `split_once`, `trim`, a line) is at the view's own
--- lifetime and costs no allocation. `include text` puts the library in scope, with `buf` and
--- `slice`.
---
--- A search that can find nothing answers a sum; a validation or a parse that can fail raises its
--- error (`Fail`, `lib/fail.bc`), which a caller handles with a handler of `Fail` (`with
--- to_result { … }`, `with default(d) { … }`, `with map_err(f) { … }`). A character
--- is an `i32` scalar value. Loops are counted over a view's length, so every function here is
--- total.
+#! dialect 82
+# The text library (`docs/strings-slices-design.md` §2.2, §4.2, §5.7): `string` is `buf u8`, a
+# growable byte buffer; `text 'a` and `text_mut 'a` are `array_imm 'a u8` and `array_mut 'a u8`,
+# shared and exclusive views; `lit`, a string literal `"…"`, is `i32 * !(i32 => u8)`, its length
+# and its bytes, persistent data that no one owns. Text is UTF-8. The invariant is kept by the
+# functions that build text from bytes (`str_from_utf8`, `from_utf8` validate, and every append
+# writes whole characters); the types are abbreviations of the byte types, so it is not yet
+# enforced (stage T2). Every function is safe on any bytes: a character that does not decode is
+# U+FFFD.
+#
+# A view is lent from a string by `borrow imm s { v -> … }` (its initialised prefix, no cell),
+# and from a literal by `borrow imm "…" { v -> … }` (the literal's bytes, read-only data in the
+# compiled program). A sub-view (`split_at`, `split_once`, `trim`, a line) is at the view's own
+# lifetime and costs no allocation. `include text` puts the library in scope, with `buf` and
+# `slice`.
+#
+# A search that can find nothing answers a sum; a validation or a parse that can fail raises its
+# error (`Fail`, `lib/fail.bc`), which a caller handles with a handler of `Fail` (`with
+# to_result { … }`, `with default(d) { … }`, `with map_err(f) { … }`). A character
+# is an `i32` scalar value. Loops are counted over a view's length, so every function here is
+# total.
 
-include buf
-include slice
-include fail
+import buf
+import slice
+import fail
 
--- ### Building
+# ### Building
 
--- An empty string of capacity `cap`: `box string(cap)`.
-fn string_new(cap: i32) -> string = buf_new[u8](cap)
+# An empty string of capacity `cap`: `box string(cap)`.
+fn string_new(cap: i32) : string = buf_new[u8](cap)
 
--- Length 0, the capacity kept. The unused bytes of a string need no filler.
-fn clear_str(s: string) -> string = let (a, n) = s; (a, 0)
+# Length 0, the capacity kept. The unused bytes of a string need no filler.
+fn clear_str(s: sink string) : string { let (a, n) = s; (a, 0)
+}
 
--- The bytes of `t` appended: the string grows once, to fit. Allocates when it grows (`reserve`).
-fn push_str<'a>(s: string, t: text 'a) -> string * 1 =
-  let (t, u) = array_copy['a, u8] t;
-  let m = len(u);
-  let (a, n) = reserve(s, m);
+# The bytes of `t` appended: the string grows once, to fit. Allocates when it grows (`reserve`).
+fn push_str<'a>(s: sink string, t: text 'a) : string * 1 {
+  let (t, u) = array_copy['a, u8] t
+  let m = len(u)
+  let (a, n) = reserve(s, m)
   let (a, (t, _)) = count_fold[array u8 * (text 'a * i32)](
     !{ (i, (a, (t, n))) ->
-      let (t, w) = array_copy['a, u8] t;
+      let (t, w) = array_copy['a, u8] t
       let (a, _) = array_replace[u8] (a, n + i, at(w, i, 0));
       (a, (t, n)) },
-    m, 0, (a, (t, n)));
+    m, 0, (a, (t, n)))
   array_release['a, u8](t);
   ((a, n + m), ())
+}
 
--- The bytes of a literal appended. Allocates when the string grows (`reserve`).
-fn push_lit(s: string, l: lit) -> string * 1 =
-  let (m, f) = l;
-  let (a, n) = reserve(s, m);
+# The bytes of a literal appended. Allocates when the string grows (`reserve`).
+fn push_lit(s: sink string, l: lit) : string * 1 {
+  let (m, f) = l
+  let (a, n) = reserve(s, m)
   let (a, _) = count_fold[array u8 * (i32 * !(i32 => u8))](
     !{ (i, (a, (n, f))) -> let (a, _) = array_replace[u8] (a, n + i, f(i)); (a, (n, f)) },
     m, 0, (a, (n, f)));
   ((a, n + m), ())
+}
 
--- A byte appended. Allocates when the string grows (`push`).
-fn push_byte(s: string, x: u8) -> string * 1 = push(s, x)
+# A byte appended. Allocates when the string grows (`push`).
+fn push_byte(s: sink string, x: u8) : string * 1 = push(s, x)
 
--- The character `c` (a scalar value) appended as UTF-8, one to four bytes; allocates when the
--- string grows (`push`). A surrogate, or a value past U+10FFFF, is appended as U+FFFD.
-fn push_char(s: string, c: i32) -> string * 1 =
-  let c = if host[lt_u32](c, 1114112) && not(55296 <= c && c < 57344) { c } else { 65533 };
-  let b = host[and32](c, 63);
+# The character `c` (a scalar value) appended as UTF-8, one to four bytes; allocates when the
+# string grows (`push`). A surrogate, or a value past U+10FFFF, is appended as U+FFFD.
+fn push_char(s: sink string, c: i32) : string * 1 {
+  let c = if host[lt_u32](c, 1114112) && not(55296 <= c && c < 57344) { c } else { 65533 }
+  let b = host[and32](c, 63)
   if host[lt_u32](c, 128) { push(s, to_u8(c)) }
   else { if host[lt_u32](c, 2048) {
-    let (s, _) = push(s, to_u8(192 + host[shr_u32](c, 6)));
+    let (s, _) = push(s, to_u8(192 + host[shr_u32](c, 6)))
     push(s, to_u8(128 + b)) }
   else { if host[lt_u32](c, 65536) {
-    let (s, _) = push(s, to_u8(224 + host[shr_u32](c, 12)));
-    let (s, _) = push(s, to_u8(128 + host[and32](host[shr_u32](c, 6), 63)));
+    let (s, _) = push(s, to_u8(224 + host[shr_u32](c, 12)))
+    let (s, _) = push(s, to_u8(128 + host[and32](host[shr_u32](c, 6), 63)))
     push(s, to_u8(128 + b)) }
   else {
-    let (s, _) = push(s, to_u8(240 + host[shr_u32](c, 18)));
-    let (s, _) = push(s, to_u8(128 + host[and32](host[shr_u32](c, 12), 63)));
-    let (s, _) = push(s, to_u8(128 + host[and32](host[shr_u32](c, 6), 63)));
+    let (s, _) = push(s, to_u8(240 + host[shr_u32](c, 18)))
+    let (s, _) = push(s, to_u8(128 + host[and32](host[shr_u32](c, 12), 63)))
+    let (s, _) = push(s, to_u8(128 + host[and32](host[shr_u32](c, 6), 63)))
     push(s, to_u8(128 + b)) } } }
+}
 
--- One decimal digit step: `d` runs over 10^9, 10^8, …, 1; the digit `n / d` is appended once a
--- nonzero digit has been, or at `d = 1`.
-fn dec_step(k: i32, st: string * (i32 * (i32 * bool))) -> string * (i32 * (i32 * bool)) =
-  let (s, (n, (d, started))) = st;
-  let q = match host[div_u32](n, d) { inl x -> x | inr u -> 0 };
-  let show = started || q != 0 || d == 1;
-  let s = if show { let (s, _) = push(s, to_u8(q + 48)); s } else { s };
+# One decimal digit step: `d` runs over 10^9, 10^8, …, 1; the digit `n / d` is appended once a
+# nonzero digit has been, or at `d = 1`.
+fn dec_step(k: i32, st: sink string * (i32 * (i32 * bool))) : string * (i32 * (i32 * bool)) {
+  let (s, (n, (d, started))) = st
+  let q = match host[div_u32](n, d) { inl x -> x | inr u -> 0 }
+  let show = started || q != 0 || d == 1
+  let s = if show { let (s, _) = push(s, to_u8(q + 48)); s } else { s }
   let d2 = match host[div_u32](d, 10) { inl x -> x | inr u -> 1 };
   (s, (n - q * d, (d2, show)))
+}
 
--- `x` in decimal, with a `-` when it is negative. Allocates when the string grows (`push`).
-fn push_dec(s: string, x: i32) -> string * 1 =
-  let (s, n) = if x < 0 { let (s, _) = push(s, b'-'); (s, 0 - x) } else { (s, x) };
+# `x` in decimal, with a `-` when it is negative. Allocates when the string grows (`push`).
+fn push_dec(s: sink string, x: i32) : string * 1 {
+  let (s, n) = if x < 0 { let (s, _) = push(s, b'-'); (s, 0 - x) } else { (s, x) }
   let (s, _) = count_fold[string * (i32 * (i32 * bool))](
     !{ (k, st) -> dec_step(k, st) }, 10, 0, (s, (n, (1000000000, false))));
   (s, ())
+}
 
--- `x` in decimal, with a `-` when it is negative: the same digits as `dec64_each` (`lib/io.bc`),
--- appended. Nineteen steps cover the digits of the magnitude, which is read unsigned so that
--- `-2^63` has one. Allocates when the string grows (`push`). `[spec §17]`
-fn push_i64(s: string, x: i64) -> string * 1 =
-  let mut s = s;
-  let mut n = x;
-  if x < i64[0] { push_byte(&mut s, b'-'); n = i64[0] - x } else { () };
-  let mut d = i64[1000000000000000000];
-  let mut started = false;
+# `x` in decimal, with a `-` when it is negative: the same digits as `dec64_each` (`lib/io.bc`),
+# appended. Nineteen steps cover the digits of the magnitude, which is read unsigned so that
+# `-2^63` has one. Allocates when the string grows (`push`). `[spec §17]`
+fn push_i64(s: sink string, x: i64) : string * 1 {
+  var s = s
+  var n = x
+  if x < i64[0] { push_byte(&s, b'-'); n = i64[0] - x } else { () }
+  var d = i64[1000000000000000000]
+  var started = false
   for _ in 0..19 {
-    let q = match host[div_u64](n, d) { inl y -> y | inr u -> i64[0] };
-    if started || q != i64[0] || d == i64[1] { push_byte(&mut s, to_u8(host[wrap](q) + 48)); started = true }
-    else { () };
-    n = n - q * d;
-    let d2 = match host[div_u64](d, i64[10]) { inl y -> y | inr u -> i64[1] };
+    let q = match host[div_u64](n, d) { inl y -> y | inr u -> i64[0] }
+    if started || q != i64[0] || d == i64[1] { push_byte(&s, to_u8(host[wrap](q) + 48)); started = true }
+    else { () }
+    n = n - q * d
+    let d2 = match host[div_u64](d, i64[10]) { inl y -> y | inr u -> i64[1] }
     d = d2
   };
   (s, ())
+}
 
--- A copy of `t` as a new string of capacity its length. Allocates: the string.
-fn to_string<'a>(t: text 'a) -> string =
-  let (t, u) = array_copy['a, u8] t;
-  let s = string_new(len(u));
-  let (s, _) = push_str(s, t);
+# A copy of `t` as a new string of capacity its length. Allocates: the string.
+fn to_string<'a>(t: text 'a) : string {
+  let (t, u) = array_copy['a, u8] t
+  let s = string_new(len(u))
+  let (s, _) = push_str(s, t)
   s
+}
 
--- A literal as a new string. Allocates: the string.
-fn string_of_lit(l: lit) -> string =
-  let (m, f) = l;
-  let s = string_new(m);
-  let (s, _) = push_lit(s, (m, f));
+# A literal as a new string. Allocates: the string.
+fn string_of_lit(l: lit) : string {
+  let (m, f) = l
+  let s = string_new(m)
+  let (s, _) = push_lit(s, (m, f))
   s
+}
 
--- ### Literals
+# ### Literals
 
--- A literal's length in bytes.
-fn lit_len(l: lit) -> i32 = let (m, f) = l; m
+# A literal's length in bytes.
+fn lit_len(l: lit) : i32 { let (m, f) = l; m
+}
 
--- Whether `t` has the bytes of the literal `l`.
-fn eq_lit<'a>(t: text 'a, l: lit) -> bool =
-  let (m, f) = l;
-  let (t, u) = array_copy['a, u8] t;
+# Whether `t` has the bytes of the literal `l`.
+fn eq_lit<'a>(t: text 'a, l: lit) : bool {
+  let (m, f) = l
+  let (t, u) = array_copy['a, u8] t
   if len(u) == m {
     let (t, (_, r)) = count_fold[text 'a * (!(i32 => u8) * bool)](
       !{ (i, (t, (f, r))) ->
-        let (t, w) = array_copy['a, u8] t;
+        let (t, w) = array_copy['a, u8] t
         let same = at(w, i, 0) == f(i);
         (t, (f, r && same)) },
-      m, 0, (t, (f, true)));
-    array_release['a, u8](t);
+      m, 0, (t, (f, true)))
+    array_release['a, u8](t)
     r
   } else { array_release['a, u8](t); false }
+}
 
--- ### UTF-8
+# ### UTF-8
 
--- A continuation byte, `10xxxxxx`.
-fn is_cont(b: u8) -> bool = 128 <= b && b < 192
+# A continuation byte, `10xxxxxx`.
+fn is_cont(b: u8) : bool = 128 <= b && b < 192
 
--- The length of the valid UTF-8 sequence at byte `i` of `t`, or 0 if none starts there: the lead
--- byte, and the ranges the Unicode standard gives its continuation bytes (no overlong form, no
--- surrogate, nothing past U+10FFFF).
-fn seq_len<'a>(t: text 'a, i: i32) -> i32 =
-  let (t, u) = array_copy['a, u8] t;
-  let (t, w) = array_copy['a, u8] t;
-  let b0 = at(u, i, 0);
-  let b1 = at(w, i + 1, 0);
-  let (t, x) = array_copy['a, u8] t;
-  let b2 = at(x, i + 2, 0);
-  let b3 = at(t, i + 3, 0);
-  let lo1 : u8 = if b0 == 224 { 160 } else { if b0 == 240 { 144 } else { 128 } };
-  let hi1 : u8 = if b0 == 237 { 159 } else { if b0 == 244 { 143 } else { 191 } };
-  let ok1 = lo1 <= b1 && b1 <= hi1;
+# The length of the valid UTF-8 sequence at byte `i` of `t`, or 0 if none starts there: the lead
+# byte, and the ranges the Unicode standard gives its continuation bytes (no overlong form, no
+# surrogate, nothing past U+10FFFF).
+fn seq_len<'a>(t: text 'a, i: i32) : i32 {
+  let (t, u) = array_copy['a, u8] t
+  let (t, w) = array_copy['a, u8] t
+  let b0 = at(u, i, 0)
+  let b1 = at(w, i + 1, 0)
+  let (t, x) = array_copy['a, u8] t
+  let b2 = at(x, i + 2, 0)
+  let b3 = at(t, i + 3, 0)
+  let lo1 : u8 = if b0 == 224 { 160 } else { if b0 == 240 { 144 } else { 128 } }
+  let hi1 : u8 = if b0 == 237 { 159 } else { if b0 == 244 { 143 } else { 191 } }
+  let ok1 = lo1 <= b1 && b1 <= hi1
   if b0 < 128 { 1 }
   else { if b0 < 194 { 0 }
   else { if b0 < 224 { if is_cont(b1) { 2 } else { 0 } }
   else { if b0 < 240 { if ok1 && is_cont(b2) { 3 } else { 0 } }
   else { if b0 < 245 { if ok1 && is_cont(b2) && is_cont(b3) { 4 } else { 0 } }
   else { 0 } } } } }
+}
 
--- The index of the first byte that does not start a valid sequence, or `inr ()` when all of `t`
--- is UTF-8. The state is the view, the index of the next sequence, and what was found.
-fn utf8_error<'a>(t: text 'a) -> i32 + 1 =
-  let (t, u) = array_copy['a, u8] t;
+# The index of the first byte that does not start a valid sequence, or `inr ()` when all of `t`
+# is UTF-8. The state is the view, the index of the next sequence, and what was found.
+fn utf8_error<'a>(t: text 'a) : i32 + 1 {
+  let (t, u) = array_copy['a, u8] t
   let (t, (_, r)) = count_fold[text 'a * (i32 * (i32 + 1))](
     !{ (i, (t, (next, r))) ->
       match r {
         inl e -> (t, (next, inl e))
       | inr u ->
           if i == next {
-            let (t, w) = array_copy['a, u8] t;
-            let k = seq_len(w, i);
+            let (t, w) = array_copy['a, u8] t
+            let k = seq_len(w, i)
             if k == 0 { (t, (next, inl i)) } else { (t, (next + k, inr ())) }
           } else { (t, (next, inr ())) }
       } },
-    len(u), 0, (t, (0, inr ())));
-  array_release['a, u8](t);
+    len(u), 0, (t, (0, inr ())))
+  array_release['a, u8](t)
   r
+}
 
--- The bytes as text, if they are UTF-8; else it raises the index of the first byte that is not.
--- No copy.
-fn str_from_utf8<'a>(v: array_imm 'a u8) -> text 'a with Fail[i32] =
-  let (v, w) = array_copy['a, u8] v;
-  match utf8_error(w) { inl e -> array_release['a, u8](v); raise(e) | inr u -> v }
+# The bytes as text, if they are UTF-8; else it raises the index of the first byte that is not.
+# No copy.
+fn str_from_utf8<'a>(v: array_imm 'a u8) : text 'a / Fail[i32] {
+  let (v, w) = array_copy['a, u8] v
+  match utf8_error(w) { inl e -> { array_release['a, u8](v); raise(e) } | inr u -> v }
+}
 
--- A buffer of bytes as a string, in place, if they are UTF-8; else it raises the index of the
--- first byte that is not, and the buffer is consumed (an error holds nothing owned, SPEC §19).
--- Provisional: the error should hand the buffer back once an abortive operation's payload may
--- be linear (#215).
-fn from_utf8(b: buf u8) -> string with Fail[i32] =
-  let r = borrow imm b { v -> match utf8_error(v) { inl e -> e | inr u -> 0 - 1 } };
+# A buffer of bytes as a string, in place, if they are UTF-8; else it raises the index of the
+# first byte that is not, and the buffer is consumed (an error holds nothing owned, SPEC §19).
+# Provisional: the error should hand the buffer back once an abortive operation's payload may
+# be linear (#215).
+fn from_utf8(b: sink buf u8) : string / Fail[i32] {
+  let r = borrow imm b { v -> match utf8_error(v) { inl e -> e | inr u -> 0 - 1 } }
   if r < 0 { b } else { raise(r) }
+}
 
--- The scalar value at byte `i` and the length of its sequence; a byte that does not start a valid
--- sequence is U+FFFD, of length 1.
-fn char_at<'a>(t: text 'a, i: i32) -> i32 * i32 =
-  let (t, u) = array_copy['a, u8] t;
-  let k = seq_len(u, i);
-  let (t, w) = array_copy['a, u8] t;
-  let b0 = to_i32(at(w, i, 0));
-  let (t, x) = array_copy['a, u8] t;
-  let b1 = host[and32](to_i32(at(x, i + 1, 0)), 63);
-  let (t, y) = array_copy['a, u8] t;
-  let b2 = host[and32](to_i32(at(y, i + 2, 0)), 63);
-  let b3 = host[and32](to_i32(at(t, i + 3, 0)), 63);
+# The scalar value at byte `i` and the length of its sequence; a byte that does not start a valid
+# sequence is U+FFFD, of length 1.
+fn char_at<'a>(t: text 'a, i: i32) : i32 * i32 {
+  let (t, u) = array_copy['a, u8] t
+  let k = seq_len(u, i)
+  let (t, w) = array_copy['a, u8] t
+  let b0 = to_i32(at(w, i, 0))
+  let (t, x) = array_copy['a, u8] t
+  let b1 = host[and32](to_i32(at(x, i + 1, 0)), 63)
+  let (t, y) = array_copy['a, u8] t
+  let b2 = host[and32](to_i32(at(y, i + 2, 0)), 63)
+  let b3 = host[and32](to_i32(at(t, i + 3, 0)), 63)
   if k == 1 { (b0, 1) }
   else { if k == 2 { (host[and32](b0, 31) * 64 + b1, 2) }
   else { if k == 3 { (host[and32](b0, 15) * 4096 + b1 * 64 + b2, 3) }
   else { if k == 4 { (host[and32](b0, 7) * 262144 + b1 * 4096 + b2 * 64 + b3, 4) }
   else { (65533, 1) } } } }
+}
 
--- The number of characters: the bytes that are not continuation bytes.
-fn count_chars<'a>(t: text 'a) -> i32 =
-  let (t, u) = array_copy['a, u8] t;
+# The number of characters: the bytes that are not continuation bytes.
+fn count_chars<'a>(t: text 'a) : i32 {
+  let (t, u) = array_copy['a, u8] t
   let (t, n) = count_fold[text 'a * i32](
     !{ (i, (t, n)) ->
-      let (t, w) = array_copy['a, u8] t;
+      let (t, w) = array_copy['a, u8] t
       let n = if is_cont(at(w, i, 0)) { n } else { n + 1 };
       (t, n) },
-    len(u), 0, (t, 0));
-  array_release['a, u8](t);
+    len(u), 0, (t, 0))
+  array_release['a, u8](t)
   n
+}
 
--- The first character and the rest of the view, or `inr ()` for the empty view.
-fn split_char<'a>(t: text 'a) -> i32 * text 'a + 1 =
-  let (t, u) = array_copy['a, u8] t;
+# The first character and the rest of the view, or `inr ()` for the empty view.
+fn split_char<'a>(t: text 'a) : i32 * text 'a + 1 {
+  let (t, u) = array_copy['a, u8] t
   if len(u) == 0 { array_release['a, u8](t); inr () } else {
-    let (t, w) = array_copy['a, u8] t;
-    let (c, k) = char_at(w, 0);
+    let (t, w) = array_copy['a, u8] t
+    let (c, k) = char_at(w, 0)
     match split_at(t, k) {
-      inl (h, r) -> array_release['a, u8](h); inl (c, r)
-    | inr r -> array_release['a, u8](r); inr ()
+      inl (h, r) -> { array_release['a, u8](h); inl (c, r) }
+    | inr r -> { array_release['a, u8](r); inr () }
     }
   }
+}
 
--- The characters of a view, as scalar values: codata whose state is the rest of the view. Each
--- observation decodes one character; a view of `n` bytes finishes within `n + 1` observations.
-fn chars<'a>(t: text 'a) -> U (iter i32 1 1) =
-  f <- return (unbang (unfold[iter i32 1 1, text 'a]
-    (!thunkv fun (v : text 'a) -> < split_char(v), array_release['a, u8](v) >)));
+# The characters of a view, as scalar values: codata whose state is the rest of the view. Each
+# observation decodes one character; a view of `n` bytes finishes within `n + 1` observations.
+fn chars<'a>(t: text 'a) : U (iter i32 1 1) {
+  let f = (unbang (unfold[iter i32 1 1, text 'a]
+    (!thunkv fun (v : text 'a) -> < split_char(v), array_release['a, u8](v) >)))
   thunkv nu_in < (nu_out (force f t)).1, (nu_out (force f t)).2 >
+}
 
--- ### Splitting and searching
+# ### Splitting and searching
 
--- The view before the first `sep` and the view after it, both sub-views of `t`; or `t` itself
--- when there is no `sep`.
-fn split_once<'a>(t: text 'a, sep: u8) -> text 'a * text 'a + text 'a =
-  let (t, u) = array_copy['a, u8] t;
+# The view before the first `sep` and the view after it, both sub-views of `t`; or `t` itself
+# when there is no `sep`.
+fn split_once<'a>(t: text 'a, sep: u8) : text 'a * text 'a + text 'a {
+  let (t, u) = array_copy['a, u8] t
   match find(u, sep, eq_u8) {
     inl k -> match split_at(t, k) {
                inl (h, r) -> match split_at(r, 1) {
-                               inl (s, r) -> array_release['a, u8](s); inl (h, r)
+                               inl (s, r) -> { array_release['a, u8](s); inl (h, r) }
                              | inr r -> inl (h, r) }
              | inr t -> inr t }
   | inr u -> inr t
   }
+}
 
--- The first line of `t` and the rest after its newline, or `inr ()` for the empty view. A last
--- line without a newline is a line.
-fn next_line<'a>(t: text 'a) -> text 'a * text 'a + 1 =
-  let (t, u) = array_copy['a, u8] t;
+# The first line of `t` and the rest after its newline, or `inr ()` for the empty view. A last
+# line without a newline is a line.
+fn next_line<'a>(t: text 'a) : text 'a * text 'a + 1 {
+  let (t, u) = array_copy['a, u8] t
   if len(u) == 0 { array_release['a, u8](t); inr () } else {
     match split_once(t, b'\n') {
       inl (l, r) -> inl (l, r)
     | inr t -> inl (t, slice_empty_imm['a, u8])
     }
   }
+}
 
--- The lines of a view, each a sub-view with no newline: codata whose state is the rest of the
--- view. Nothing is copied and nothing allocated per line; a view of `n` bytes finishes within
--- `n + 1` observations.
-fn lines<'a>(t: text 'a) -> U (iter (text 'a) 1 1) =
-  f <- return (unbang (unfold[iter (text 'a) 1 1, text 'a]
-    (!thunkv fun (v : text 'a) -> < next_line(v), array_release['a, u8](v) >)));
+# The lines of a view, each a sub-view with no newline: codata whose state is the rest of the
+# view. Nothing is copied and nothing allocated per line; a view of `n` bytes finishes within
+# `n + 1` observations.
+fn lines<'a>(t: text 'a) : U (iter (text 'a) 1 1) {
+  let f = (unbang (unfold[iter (text 'a) 1 1, text 'a]
+    (!thunkv fun (v : text 'a) -> < next_line(v), array_release['a, u8](v) >)))
   thunkv nu_in < (nu_out (force f t)).1, (nu_out (force f t)).2 >
+}
 
--- The lines of `t` folded into a state by `f`, in order: a counted loop over the view's length,
--- each step splitting off the next line, a sub-view (`next_line`); nothing is allocated.
-fn fold_lines[S]<'a>(t: text 'a, f: !(text 'a * S => S), s: S) -> S =
-  let (t, u) = array_copy['a, u8] t;
+# The lines of `t` folded into a state by `f`, in order: a counted loop over the view's length,
+# each step splitting off the next line, a sub-view (`next_line`); nothing is allocated.
+fn fold_lines[S]<'a>(t: text 'a, f: !((text 'a * S) -> S), s: sink S) : S {
+  let (t, u) = array_copy['a, u8] t
   let (_, (_, s)) = count_fold[text 'a * (!(text 'a * S => S) * S)](
     !{ (i, (t, (f, s))) ->
       match next_line(t) {
         inl (l, r) -> (r, (f, f(l, s)))
       | inr u -> (slice_empty_imm['a, u8], (f, s))
       } },
-    len(u) + 1, 0, (t, (f, s)));
+    len(u) + 1, 0, (t, (f, s)))
   s
+}
 
--- Space, tab, carriage return or newline.
-fn is_space(b: u8) -> bool = b == 32 || b == 9 || b == 13 || b == 10
+# Space, tab, carriage return or newline.
+fn is_space(b: u8) : bool = b == 32 || b == 9 || b == 13 || b == 10
 
--- The number of leading bytes of `t` that `p` holds of.
-fn prefix_len<'a>(t: text 'a, p: !(u8 => bool)) -> i32 =
-  let (t, u) = array_copy['a, u8] t;
+# The number of leading bytes of `t` that `p` holds of.
+fn prefix_len<'a>(t: text 'a, p: !((u8) -> bool)) : i32 {
+  let (t, u) = array_copy['a, u8] t
   let (t, (_, (k, _))) = count_fold[text 'a * (!(u8 => bool) * (i32 * bool))](
     !{ (i, (t, (p, (k, go)))) ->
-      let (t, w) = array_copy['a, u8] t;
-      let holds = p(at(w, i, 0));
+      let (t, w) = array_copy['a, u8] t
+      let holds = p(at(w, i, 0))
       if go && holds { (t, (p, (k + 1, true))) } else { (t, (p, (k, false))) } },
-    len(u), 0, (t, (p, (0, true))));
-  array_release['a, u8](t);
+    len(u), 0, (t, (p, (0, true))))
+  array_release['a, u8](t)
   k
+}
 
--- The number of trailing bytes of `t` that `p` holds of.
-fn suffix_len<'a>(t: text 'a, p: !(u8 => bool)) -> i32 =
-  let (t, u) = array_copy['a, u8] t;
-  let n = len(u);
+# The number of trailing bytes of `t` that `p` holds of.
+fn suffix_len<'a>(t: text 'a, p: !((u8) -> bool)) : i32 {
+  let (t, u) = array_copy['a, u8] t
+  let n = len(u)
   let (t, (_, (_, (k, _)))) = count_fold[text 'a * (!(u8 => bool) * (i32 * (i32 * bool)))](
     !{ (i, (t, (p, (n, (k, go))))) ->
-      let (t, w) = array_copy['a, u8] t;
-      let holds = p(at(w, n - 1 - i, 0));
+      let (t, w) = array_copy['a, u8] t
+      let holds = p(at(w, n - 1 - i, 0))
       if go && holds { (t, (p, (n, (k + 1, true)))) }
       else { (t, (p, (n, (k, false)))) } },
-    n, 0, (t, (p, (n, (0, true)))));
-  array_release['a, u8](t);
+    n, 0, (t, (p, (n, (0, true)))))
+  array_release['a, u8](t)
   k
+}
 
--- `t` without its leading bytes that `p` holds of: a sub-view.
-fn skip_while<'a>(t: text 'a, p: !(u8 => bool)) -> text 'a =
-  let (t, u) = array_copy['a, u8] t;
+# `t` without its leading bytes that `p` holds of: a sub-view.
+fn skip_while<'a>(t: text 'a, p: !((u8) -> bool)) : text 'a {
+  let (t, u) = array_copy['a, u8] t
   match split_at(t, prefix_len(u, p)) {
-    inl (h, r) -> array_release['a, u8](h); r
+    inl (h, r) -> { array_release['a, u8](h); r }
   | inr t -> t
   }
+}
 
--- `t` without its trailing bytes that `p` holds of: a sub-view.
-fn rskip_while<'a>(t: text 'a, p: !(u8 => bool)) -> text 'a =
-  let (t, u) = array_copy['a, u8] t;
-  let (t, w) = array_copy['a, u8] t;
+# `t` without its trailing bytes that `p` holds of: a sub-view.
+fn rskip_while<'a>(t: text 'a, p: !((u8) -> bool)) : text 'a {
+  let (t, u) = array_copy['a, u8] t
+  let (t, w) = array_copy['a, u8] t
   match split_at(t, len(u) - suffix_len(w, p)) {
-    inl (h, r) -> array_release['a, u8](r); h
+    inl (h, r) -> { array_release['a, u8](r); h }
   | inr t -> t
   }
+}
 
--- `t` without leading and trailing white space: a sub-view.
-fn trim<'a>(t: text 'a) -> text 'a =
-  let s = skip_while(t, is_space);
+# `t` without leading and trailing white space: a sub-view.
+fn trim<'a>(t: text 'a) : text 'a {
+  let s = skip_while(t, is_space)
   rskip_while(s, is_space)
+}
 
--- The index of the first occurrence of `p` in `t`, or `inr ()`; the empty `p` is at 0.
-fn find_str<'a, 'b>(t: text 'a, p: text 'b) -> i32 + 1 =
-  let (t, u) = array_copy['a, u8] t;
-  let (p, q) = array_copy['b, u8] p;
-  let n = len(u);
-  let m = len(q);
-  let starts = if m <= n { n - m + 1 } else { 0 };
+# The index of the first occurrence of `p` in `t`, or `inr ()`; the empty `p` is at 0.
+fn find_str<'a, 'b>(t: text 'a, p: text 'b) : i32 + 1 {
+  let (t, u) = array_copy['a, u8] t
+  let (p, q) = array_copy['b, u8] p
+  let n = len(u)
+  let m = len(q)
+  let starts = if m <= n { n - m + 1 } else { 0 }
   let (t, (p, r)) = count_fold[text 'a * (text 'b * (i32 + 1))](
     !{ (i, (t, (p, r))) ->
       match r {
         inl k -> (t, (p, inl k))
-      | inr u ->
-          let (t, w) = array_copy['a, u8] t;
-          let (p, x) = array_copy['b, u8] p;
+      | inr u -> {
+          let (t, w) = array_copy['a, u8] t
+          let (p, x) = array_copy['b, u8] p
           match split_at(w, i) {
-            inl (h, rest) -> array_release['a, u8](h);
+            inl (h, rest) -> { array_release['a, u8](h)
                              if starts_with(rest, x, eq_u8) { (t, (p, inl i)) } else { (t, (p, inr ())) }
-          | inr w -> array_release['a, u8](w); array_release['b, u8](x); (t, (p, inr ()))
+            }
+          | inr w -> { array_release['a, u8](w); array_release['b, u8](x); (t, (p, inr ())) }
           }
+      }
       } },
-    starts, 0, (t, (p, inr ())));
-  array_release['a, u8](t);
-  array_release['b, u8](p);
+    starts, 0, (t, (p, inr ())))
+  array_release['a, u8](t)
+  array_release['b, u8](p)
   r
+}
 
--- ### Parsing
+# ### Parsing
 
--- `a + b`; it raises `()` when that overflows `i32`.
-fn add_checked(a: i32, b: i32) -> i32 with Fail[1] =
-  let s = host[extend_s](a) + host[extend_s](b);
-  let lo : i64 = 0 - 2147483648;
+# `a + b`; it raises `()` when that overflows `i32`.
+fn add_checked(a: i32, b: i32) : i32 / Fail[1] {
+  let s = host[extend_s](a) + host[extend_s](b)
+  let lo : i64 = 0 - 2147483648
   if lo <= s && s <= 2147483647 { host[wrap](s) } else { raise(()) }
+}
 
--- `a * b`; it raises `()` when that overflows `i32`.
-fn mul_checked(a: i32, b: i32) -> i32 with Fail[1] =
-  let s = host[extend_s](a) * host[extend_s](b);
-  let lo : i64 = 0 - 2147483648;
+# `a * b`; it raises `()` when that overflows `i32`.
+fn mul_checked(a: i32, b: i32) : i32 / Fail[1] {
+  let s = host[extend_s](a) * host[extend_s](b)
+  let lo : i64 = 0 - 2147483648
   if lo <= s && s <= 2147483647 { host[wrap](s) } else { raise(()) }
+}
 
--- A parse error: `inl ()` for no digits, `inr (inl b)` for the byte `b` that is not a digit,
--- `inr (inr ())` for a value past the width (`i32` for `parse_i32`, `i64` for `parse_i64`).
+# A parse error: `inl ()` for no digits, `inr (inl b)` for the byte `b` that is not a digit,
+# `inr (inr ())` for a value past the width (`i32` for `parse_i32`, `i64` for `parse_i64`).
 type ParseError = 1 + (u8 + 1)
 
--- A decimal integer, with an optional leading `-`; it raises a `ParseError`. The digits are a
--- counted loop over the view (`for`, SPEC §16), and an overflow of `mul_checked` or `add_checked`
--- is raised as the parse's own error (`map_err`).
-fn parse_i32<'a>(t: text 'a) -> i32 with Fail[ParseError] =
-  let (t, u) = array_copy['a, u8] t;
-  let neg = at(u, 0, 0) == b'-';
-  let t = if neg { match split_at(t, 1) { inl (h, r) -> array_release['a, u8](h); r | inr t -> t } }
-    else { t };
-  let (t, w) = array_copy['a, u8] t;
+# A decimal integer, with an optional leading `-`; it raises a `ParseError`. The digits are a
+# counted loop over the view (`for`, SPEC §16), and an overflow of `mul_checked` or `add_checked`
+# is raised as the parse's own error (`map_err`).
+fn parse_i32<'a>(t: text 'a) : i32 / Fail[ParseError] {
+  let (t, u) = array_copy['a, u8] t
+  let neg = at(u, 0, 0) == b'-'
+  let t = if neg { match split_at(t, 1) { inl (h, r) -> { array_release['a, u8](h); r } | inr t -> t } }
+    else { t }
+  let (t, w) = array_copy['a, u8] t
   if len(w) == 0 { array_release['a, u8](t); raise(inl ()) } else {
-    let mut n = 0;
+    var n = 0
     for x in t {
-      let d = *x;
-      if d < b'0' || b'9' < d { raise(inr (inl d)) } else { () };
-      let m = with map_err(!{ u -> inr (inr ()) }) { mul_checked(n, 10) };
-      n = with map_err(!{ u -> inr (inr ()) }) { add_checked(m, to_i32(d) - 48) }
-    };
+      let d = *x
+      if d < b'0' || b'9' < d { raise(inr (inl d)) } else { () }
+      let m = handle { mul_checked(n, 10) } with map_err(!{ u -> inr (inr ()) })
+      n = handle { add_checked(m, to_i32(d) - 48) } with map_err(!{ u -> inr (inr ()) })
+    }
     if neg { 0 - n } else { n }
   }
+}
 
--- The same at `i64`: a decimal integer, with an optional leading `-`, from `-2^63` to `2^63 - 1`;
--- a value past them raises `inr (inr ())`, never wraps. The magnitude is built negative (`n` goes
--- down from 0), so `-2^63`, whose magnitude `i64` has no positive form for, is read exactly; each
--- step is checked before it is taken: `n * 10 - d` stays at or above `-2^63` exactly when
--- `n > m` or `n == m` and `d <= 8`, with `m = -922337203685477580` (`-2^63 / 10`, truncated).
--- `[spec §17]`
-fn parse_i64<'a>(t: text 'a) -> i64 with Fail[ParseError] =
-  let (t, u) = array_copy['a, u8] t;
-  let neg = at(u, 0, 0) == b'-';
-  let t = if neg { match split_at(t, 1) { inl (h, r) -> array_release['a, u8](h); r | inr t -> t } }
-    else { t };
-  let (t, w) = array_copy['a, u8] t;
+# The same at `i64`: a decimal integer, with an optional leading `-`, from `-2^63` to `2^63 - 1`;
+# a value past them raises `inr (inr ())`, never wraps. The magnitude is built negative (`n` goes
+# down from 0), so `-2^63`, whose magnitude `i64` has no positive form for, is read exactly; each
+# step is checked before it is taken: `n * 10 - d` stays at or above `-2^63` exactly when
+# `n > m` or `n == m` and `d <= 8`, with `m = -922337203685477580` (`-2^63 / 10`, truncated).
+# `[spec §17]`
+fn parse_i64<'a>(t: text 'a) : i64 / Fail[ParseError] {
+  let (t, u) = array_copy['a, u8] t
+  let neg = at(u, 0, 0) == b'-'
+  let t = if neg { match split_at(t, 1) { inl (h, r) -> { array_release['a, u8](h); r } | inr t -> t } }
+    else { t }
+  let (t, w) = array_copy['a, u8] t
   if len(w) == 0 { array_release['a, u8](t); raise(inl ()) } else {
-    let m = i64[0] - i64[922337203685477580];
-    let mut n = i64[0];
+    let m = i64[0] - i64[922337203685477580]
+    var n = i64[0]
     for x in t {
-      let b = *x;
-      if b < b'0' || b'9' < b { raise(inr (inl b)) } else { () };
-      let d = host[extend_u](to_i32(b) - 48);
-      if n < m || (n == m && i64[8] < d) { raise(inr (inr ())) } else { () };
+      let b = *x
+      if b < b'0' || b'9' < b { raise(inr (inl b)) } else { () }
+      let d = host[extend_u](to_i32(b) - 48)
+      if n < m || (n == m && i64[8] < d) { raise(inr (inr ())) } else { () }
       n = n * i64[10] - d
-    };
+    }
     if neg { n }
     else if n == m * i64[10] - i64[8] { raise(inr (inr ())) }
     else { i64[0] - n }
   }
+}
 
--- The integers written in `t`, in order, folded into a state by `f`: each is a run of decimal
--- digits, negative when a `-` comes just before it, and every other byte separates them, so
--- `3-7` holds 3 and −7, and `x=12,y=-4` holds 12 and −4. A counted loop over the view's length;
--- a run past the width wraps. `[spec §17]`
-fn fold_i32s[S]<'a>(t: text 'a, f: !(i32 * S => S), s: S) -> S =
-  let (t, u) = array_copy['a, u8] t;
+# The integers written in `t`, in order, folded into a state by `f`: each is a run of decimal
+# digits, negative when a `-` comes just before it, and every other byte separates them, so
+# `3-7` holds 3 and −7, and `x=12,y=-4` holds 12 and −4. A counted loop over the view's length;
+# a run past the width wraps. `[spec §17]`
+fn fold_i32s[S]<'a>(t: text 'a, f: !((i32 * S) -> S), s: sink S) : S {
+  let (t, u) = array_copy['a, u8] t
   let (_, (_, (s, (n, (neg, (go, _)))))) =
     count_fold[text 'a * (!(i32 * S => S) * (S * (i32 * (bool * (bool * u8)))))](
     !{ (i, (t, (f, (s, (n, (neg, (go, prev))))))) ->
-      let (t, w) = array_copy['a, u8] t;
-      let b = at(w, i, 0);
+      let (t, w) = array_copy['a, u8] t
+      let b = at(w, i, 0)
       if b'0' <= b && b <= b'9' {
-        let d = to_i32(b) - 48;
+        let d = to_i32(b) - 48
         if go { (t, (f, (s, (n * 10 + d, (neg, (true, b)))))) }
         else { let minus = prev == b'-'; (t, (f, (s, (d, (minus, (true, b)))))) }
       } else {
         if go { let x = if neg { 0 - n } else { n }; (t, (f, (f(x, s), (n, (neg, (false, b))))))
         } else { (t, (f, (s, (n, (neg, (false, b)))))) }
       } },
-    len(u), 0, (t, (f, (s, (0, (false, (false, 0)))))));
+    len(u), 0, (t, (f, (s, (0, (false, (false, 0)))))))
   if go { let x = if neg { 0 - n } else { n }; f(x, s) } else { s }
+}
 
--- The same at `i64`.
-fn fold_i64s[S]<'a>(t: text 'a, f: !(i64 * S => S), s: S) -> S =
-  let (t, u) = array_copy['a, u8] t;
+# The same at `i64`.
+fn fold_i64s[S]<'a>(t: text 'a, f: !((i64 * S) -> S), s: sink S) : S {
+  let (t, u) = array_copy['a, u8] t
   let (_, (_, (s, (n, (neg, (go, _)))))) =
     count_fold[text 'a * (!(i64 * S => S) * (S * (i64 * (bool * (bool * u8)))))](
     !{ (i, (t, (f, (s, (n, (neg, (go, prev))))))) ->
-      let (t, w) = array_copy['a, u8] t;
-      let b = at(w, i, 0);
+      let (t, w) = array_copy['a, u8] t
+      let b = at(w, i, 0)
       if b'0' <= b && b <= b'9' {
-        let d = host[extend_u](to_i32(b) - 48);
+        let d = host[extend_u](to_i32(b) - 48)
         if go { (t, (f, (s, (n * 10 + d, (neg, (true, b)))))) }
         else { let minus = prev == b'-'; (t, (f, (s, (d, (minus, (true, b)))))) }
       } else {
         if go { let x = if neg { 0 - n } else { n }; (t, (f, (f(x, s), (n, (neg, (false, b))))))
         } else { (t, (f, (s, (n, (neg, (false, b)))))) }
       } },
-    len(u), 0, (t, (f, (s, (i64[0], (false, (false, 0)))))));
+    len(u), 0, (t, (f, (s, (i64[0], (false, (false, 0)))))))
   if go { let x = if neg { 0 - n } else { n }; f(x, s) } else { s }
+}
 
--- ### Buffers of views
+# ### Buffers of views
 
--- A copy of the view at `i` of a buffer of views, which keeps it: taken out (`take`), copied
--- (`array_copy`) and put back. The empty view past the length.
-fn view_at<'a>(b: buf (text 'a), i: i32) -> buf (text 'a) * text 'a =
-  let (a, n) = b;
-  let (a, o) = array_replace[text 'a] (a, i, slice_empty_imm['a, u8]);
+# A copy of the view at `i` of a buffer of views, which keeps it: taken out (`take`), copied
+# (`array_copy`) and put back. The empty view past the length.
+fn view_at<'a>(b: sink buf (text 'a), i: i32) : buf (text 'a) * text 'a {
+  let (a, n) = b
+  let (a, o) = array_replace[text 'a] (a, i, slice_empty_imm['a, u8])
   match o {
-    inl x -> let (x, y) = array_copy['a, u8] x;
+    inl x -> { let (x, y) = array_copy['a, u8] x
              let (a, _) = array_replace[text 'a] (a, i, x);
              ((a, n), y)
+    }
   | inr e -> ((a, n), e)
   }
+}
 
--- The views at `i` and `j` exchanged.
-fn swap_views<'a>(b: buf (text 'a), i: i32, j: i32) -> buf (text 'a) =
-  let (a, n) = b;
-  let (a, x) = array_replace[text 'a] (a, i, slice_empty_imm['a, u8]);
+# The views at `i` and `j` exchanged.
+fn swap_views<'a>(b: sink buf (text 'a), i: i32, j: i32) : buf (text 'a) {
+  let (a, n) = b
+  let (a, x) = array_replace[text 'a] (a, i, slice_empty_imm['a, u8])
   match x {
-    inl x -> let (a, y) = array_replace[text 'a] (a, j, x);
-             match y { inl y -> let (a, _) = array_replace[text 'a] (a, i, y); (a, n)
-                     | inr y -> let (a, _) = array_replace[text 'a] (a, i, y); (a, n) }
+    inl x -> { let (a, y) = array_replace[text 'a] (a, j, x)
+             match y { inl y -> { let (a, _) = array_replace[text 'a] (a, i, y); (a, n) }
+                     | inr y -> { let (a, _) = array_replace[text 'a] (a, i, y); (a, n) } }
+    }
   | inr x -> (a, n)
   }
+}
 
--- The views of a buffer in byte order (`cmp` of `u8`), in place: an insertion sort, stable. It
--- works on the owned buffer (`array_replace`), with no borrow of it.
-fn sort_views<'a>(b: buf (text 'a)) -> buf (text 'a) =
-  let (b, n) = len_of(b);
+# The views of a buffer in byte order (`cmp` of `u8`), in place: an insertion sort, stable. It
+# works on the owned buffer (`array_replace`), with no borrow of it.
+fn sort_views<'a>(b: sink buf (text 'a)) : buf (text 'a) {
+  let (b, n) = len_of(b)
   count_fold[buf (text 'a)](
     !{ (i, b) ->
       let (b, _) = count_fold[buf (text 'a) * (i32 * bool)](
         !{ (k, (b, (i, go))) ->
           if go {
-            let j = i - k;
-            let (b, x) = view_at(b, j - 1);
-            let (b, y) = view_at(b, j);
+            let j = i - k
+            let (b, x) = view_at(b, j - 1)
+            let (b, y) = view_at(b, j)
             if 0 < cmp(x, y, cmp_u8) { (swap_views(b, j - 1, j), (i, true)) } else { (b, (i, false)) }
           } else { (b, (i, go)) } },
-        i, 0, (b, (i, true)));
+        i, 0, (b, (i, true)))
       b },
     n, 1, b)
+}
 
--- ### In place
+# ### In place
 
--- `a`–`z` to `A`–`Z`, in place. Every other byte, and so every multi-byte sequence, is kept: the
--- result is UTF-8 when `v` is.
-fn make_ascii_uppercase<'a>(v: text_mut 'a) -> text_mut 'a =
-  let (v, n) = len_mut(v);
+# `a`–`z` to `A`–`Z`, in place. Every other byte, and so every multi-byte sequence, is kept: the
+# result is UTF-8 when `v` is.
+fn make_ascii_uppercase<'a>(v: text_mut 'a) : text_mut 'a {
+  let (v, n) = len_mut(v)
   count_fold[text_mut 'a](
     !{ (i, v) ->
-      let (v, c) = peek(v, i, 0);
+      let (v, c) = peek(v, i, 0)
       if b'a' <= c && c <= b'z' { set(v, i, c - 32) } else { v } },
     n, 0, v)
+}
 
--- `A`–`Z` to `a`–`z`, in place.
-fn make_ascii_lowercase<'a>(v: text_mut 'a) -> text_mut 'a =
-  let (v, n) = len_mut(v);
+# `A`–`Z` to `a`–`z`, in place.
+fn make_ascii_lowercase<'a>(v: text_mut 'a) : text_mut 'a {
+  let (v, n) = len_mut(v)
   count_fold[text_mut 'a](
     !{ (i, v) ->
-      let (v, c) = peek(v, i, 0);
+      let (v, c) = peek(v, i, 0)
       if b'A' <= c && c <= b'Z' { set(v, i, c + 32) } else { v } },
     n, 0, v)
+}

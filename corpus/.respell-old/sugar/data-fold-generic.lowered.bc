@@ -1,0 +1,36 @@
+-- lowers: corpus/data-fold-generic.bc
+-- `corpus/data-fold-generic.bc` with its declaration and fold blocks written out by SPEC §42's
+-- rules, in the surface: each fold the kernel's at `List[T]`'s shape, `T` the generic function's
+-- parameter, applied to the algebra at `A_R` or `A′_R`, its arms a `case` on the unrolled shape.
+
+type List[T] = mu X. 1 + (ref T * ref X)
+
+fn len[T]<'a>(l: imm 'a List[T]) -> i32 =
+  (unbang fold_imm[1 + ref T * ref X, 'y, top, i32] (!thunkv Fun 'y < top.
+    return (thunkv fun (x : 1 + imm 'y T * i32) ->
+      case x {
+        inl e -> let () = e; 0
+      | inr b ->
+          let (ch, ct) = b;
+          let t = ct;
+          1 + t
+      }))) ['a] l
+
+fn tot(l: List[i32]) -> i32 =
+  (unbang fold_own[1 + ref i32 * ref X, i32] (!thunkv fun (x : 1 + ref i32 * i32) ->
+    case x {
+      inl e -> let () = e; 0
+    | inr b ->
+        let (ch, ct) = b;
+        let h = free(ch);
+        let t = ct;
+        h + t
+    })) l
+
+fn cons(x: i32, l: List[i32]) -> List[i32] = roll (inr (alloc(x), alloc(l)))
+
+main -> i32 =
+  let nil : List[i32] = roll (inl ());
+  let l = cons(1, cons(2, nil));
+  let n = len(&l);
+  tot(l) * 10 + n
