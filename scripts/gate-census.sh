@@ -6,8 +6,9 @@
 #     scripts/gate-census.sh CENSUS[+FILE]
 #     scripts/gate-census.sh --out DIR CENSUS[+FILE]...
 #
-# One run for the whole gate. When `GATE_CENSUS_DIR` is set (scripts/ci-local.sh sets it, with
-# `GATE_CENSUS_ALL`, the censuses the steps of this gate ask for), the first call runs every census
+# One run for the whole gate. When `GATE_CENSUS_DIR` is set and holds the gate's token
+# (scripts/ci-local.sh sets both, with `GATE_CENSUS_TOKEN` and `GATE_CENSUS_ALL`, the censuses the
+# steps of this gate ask for; a directory without the token is not read), the first call runs every census
 # of `GATE_CENSUS_ALL` in one `gate-census --out "$GATE_CENSUS_DIR"` process, holding a lock on
 # that directory; every call, that one included, then hands back the results it asked for from
 # there. A census not in `GATE_CENSUS_ALL`, or one that run did not write, runs here, as when
@@ -17,12 +18,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build gate-census >/dev/null
 census=(lake env .lake/build/bin/gate-census)
-[ -n "${GATE_CENSUS_DIR:-}" ] || exec "${census[@]}" "$@"
+if [ -z "${GATE_CENSUS_DIR:-}" ] || [ -z "${GATE_CENSUS_TOKEN:-}" ] ||
+    [ "$(cat "$GATE_CENSUS_DIR/token" 2>/dev/null)" != "$GATE_CENSUS_TOKEN" ]; then
+  exec "${census[@]}" "$@"
+fi
 
 out=""
 [ "${1:-}" != --out ] || { out=$2; shift 2; }
 dir=$GATE_CENSUS_DIR
-mkdir -p "$dir"
 # The shared run, once: the first caller runs it holding the lock, the others wait for it and
 # find it done. perl's flock (macOS has no flock(1)): the lock goes with the process however it
 # ends.

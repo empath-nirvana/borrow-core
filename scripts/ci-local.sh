@@ -224,8 +224,11 @@ fi
 # The censuses that read the Lean environment: one `gate-census` process for every step that asks
 # (scripts/gate-census.sh), started by the first step that runs one. The research archive's runs
 # on its own, after that step builds the archive.
+# The directory is this gate's: it holds this gate's token, and gate-census.sh reads no other.
+unset GATE_CENSUS_DIR GATE_CENSUS_ALL GATE_CENSUS_TOKEN
 if [ "$built" = 0 ]; then
-  export GATE_CENSUS_DIR="$out/census" GATE_CENSUS_ALL=""
+  export GATE_CENSUS_DIR="$out/census" GATE_CENSUS_ALL="" GATE_CENSUS_TOKEN="$$.$RANDOM.$SECONDS"
+  mkdir -p "$GATE_CENSUS_DIR" && echo "$GATE_CENSUS_TOKEN" > "$GATE_CENSUS_DIR/token"
   wanted "hygiene + axioms" && GATE_CENSUS_ALL+=" axioms axioms+scripts/census-neg/axioms.lean"
   wanted "axiom report" && GATE_CENSUS_ALL+=" axiom-report"
   wanted "type equality" && GATE_CENSUS_ALL+=" type-eq type-eq+scripts/census-neg/type-eq.lean"

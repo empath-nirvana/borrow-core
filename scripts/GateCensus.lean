@@ -70,6 +70,18 @@ def parseJob (arg : String) : Except String Job := do
     | throw s!"unknown census {name} (one of {", ".intercalate (censuses.map (·.name))})"
   return ⟨c, file?⟩
 
+/-- The declarations of no module (a negative test's) whose type or value names a constant outside
+`view`, each with those constants. The negative test's file is elaborated on the environment of
+every census of the run, not on its census's imports alone as when it was a file of its own; a
+term that names only constants of the census's view is what elaboration on those imports gives
+(an instance, notation or default from another module would appear in the term), so a test
+whose term names any other constant stops the census instead. -/
+def outsideView (env : Environment) (view : View) : Array String :=
+  env.constants.foldStage2 (fun (acc : Array String) n ci =>
+    let used := ci.type.getUsedConstants ++ (ci.value?.map (·.getUsedConstants)).getD #[]
+    let out := used.filter (!view.has env ·)
+    if out.isEmpty then acc else acc.push s!"{n}: {out.toList}") #[]
+
 /-- The environment with the declarations of `file` (a Lean file with no `import` lines)
 elaborated into it, or the messages that stopped it. -/
 def addDecls (env : Environment) (file : System.FilePath) : IO (Except String Environment) := do
@@ -126,6 +138,11 @@ unsafe def main (args : List String) : IO UInt32 := do
       tasks := tasks.push (j, .pure (.ok { lines := #[s!"gate-census: {j.file?.get!} failed to elaborate:", msg], code := 2 }))
     | .ok env' =>
       let view := View.ofRoots env' j.census.imports
+      let out := outsideView env' view
+      unless out.isEmpty do
+        tasks := tasks.push (j, .pure (.ok { code := 2, lines :=
+          #[s!"gate-census: {j.file?.get!} names constants outside the census's imports:"] ++ out }))
+        continue
       tasks := tasks.push (j, ← IO.asTask do
         let t ← IO.monoMsNow
         let r ← j.census.run env' view
