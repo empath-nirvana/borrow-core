@@ -6341,7 +6341,8 @@ its lend schema's row widened (§29).
     `false` it applies `then_compatC`, at `true` `then_compatC_div` with `hcap` from `hF`. The chain
     does the same with `then_compatN` and `thenDiv_compatN`. No compatibility lemma changes.
   - **The typed term** has one node, `effThenF`. The checker emits it at the left disjunct, where it
-    emitted `effThen`. Backend2 reads the one node.
+    emitted `effThen` (it never built `effThenDiv`'s node). `TExpr.effThen` stays as an abbreviation
+    of the `effThenF` node, so statements over it keep their type. Backend2 reads the one node.
   - The rule count of `CDerives` and of the checker's judgment each drops by one.
   - **Status:** the fold (#1170, unit 1170-SMALL), after #798. Not built.
 - **A value that is not consumable is closed on every exit, the cancel included.** No new premise:
