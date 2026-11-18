@@ -141,8 +141,12 @@ is the merge requirement.
   reach you cannot scope to a few files. Never run it out of habit after each edit.
 - Run long commands in the background and keep working meanwhile.
 
-Start a worktree with `scripts/new-worktree.sh <branch>`: it branches from origin/main and clones
-the main checkout's `.lake` copy-on-write, so the first build is incremental, not cold. The
+Start a worktree with `scripts/new-worktree.sh <branch>`: it branches from origin/main, clones
+`.lake/build` copy-on-write from the worktree whose Lean files are closest to origin/main, and links
+`.lake/packages` to a shared read-only store for the manifest and toolchain
+(`scripts/lake-packages.sh`), so the first build is a no-op or incremental, not cold. Before changing
+`lake-manifest.json` or `lean-toolchain` in such a worktree, run `scripts/lake-packages.sh unshare`
+(`make` and the gates do it when they see the change). The
 library modules `lib/*.bc` are read when `bcc` starts, so editing them rebuilds no Lean.
 
 ## Hygiene

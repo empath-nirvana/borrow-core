@@ -76,11 +76,13 @@ keys: | tools
 	scripts/compile-corpus.sh --final --write-keys
 	scripts/book-doctest.sh --write-keys
 
-# The required tools are on PATH.
+# The required tools are on PATH, and shared packages follow the manifest and toolchain
+# (scripts/lake-packages.sh).
 tools:
 	@command -v lean >/dev/null || { echo "lean not found: run 'brew bundle', and add ~/.elan/bin to PATH"; exit 1; }
 	@command -v lake >/dev/null || { echo "lake not found: run 'brew bundle', and add ~/.elan/bin to PATH"; exit 1; }
 	@command -v wasmtime >/dev/null || { echo "wasmtime not found: run 'brew bundle'"; exit 1; }
+	@scripts/lake-packages.sh check
 
 # Resolve dependencies and fetch prebuilt Mathlib, again only when the pins change.
 $(CACHE_STAMP): lake-manifest.json lean-toolchain | tools
