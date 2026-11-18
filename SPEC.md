@@ -14669,7 +14669,8 @@ comment, and `--` is not a comment.
 by newlines, P7–P9) hold in *surface bodies*: the bodies of `fn` and `fn main`, handler clauses
 and `poly … at`. A `def` body and a `main : C = M` body are core text (rule 4), read exactly as
 today, with `;`, `|` between arms, `x <- M`, `&x` and `&mut x` as lends, `with`, and `=>`; in a
-new-spelling text only their comments change. The core values and builtins inside a surface body
+new-spelling text only their comments change, and a `let mut` in them is written `var`, as
+everywhere in that text. The core values and builtins inside a surface body
 (`thunkv`, `fun (x : A) ->`, `unbang`, bracket arguments, `<M, N>`) are written as today.
 
 **The layout rule.** In a surface body, where the innermost open bracket is not `(` or `[`:
