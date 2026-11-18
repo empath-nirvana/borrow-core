@@ -19,7 +19,9 @@
 # `par_nostore` nor one whose input changed, even and back, while it ran; an entry without its side
 # files, or whose files do not match its checksum, is a miss; stale binaries (no build in this
 # invocation) are never looked up; an unknown `GATE_CACHE` is refused; an unwritable store is reported. The tree's
-# own files are only read. A Lean-class step beside a write into book/book is recorded; one
+# own files are only read. A program made unreadable, or a `grep` that exits 2, fails the corpus
+# scripts' units at their skip tests and records nothing; a unit or step whose output says a tool
+# ran out of file handles records nothing; `forget` removes one unit's entry. A Lean-class step beside a write into book/book is recorded; one
 # during which a `.lean` file appears and disappears is not.
 #
 #     scripts/check-gate-cache.sh
@@ -253,6 +255,7 @@ for d in reports trusted copies; do
   miss "its corpus/$d file" "$p0" eval "echo x > '$w/corpus/$d/${progs[0]}.txt'"
   miss "corpus/$d's program" "corpus/$d/${progs[0]}.txt" eval "echo '-- x' >> '$w/$p0'"
 done
+rm -f "$w/corpus/reports/${progs[0]}.txt" "$w/corpus/trusted/${progs[0]}.txt" "$w/corpus/copies/${progs[0]}.txt"
 mkdir -p "$w/corpus/sugar"
 printf -- '-- core: other.core.bc\n' > "$w/corpus/sugar/s.bc"; echo x > "$w/corpus/sugar/other.core.bc"
 printf -- '-- lowers: %s\n' "$p0" > "$w/corpus/sugar/l.lowered.bc"
@@ -346,6 +349,72 @@ chmod 755 "$t/ro"
 if grep -q 'WARNING: cannot record' "$t/out" && [ "$(awk '{ s += $3 } END { print s + 0 }' "$t/stats")" -gt 0 ]; then
   echo "check-gate-cache: an unwritable store is reported: $(grep -m1 WARNING "$t/out")"
 else echo "check-gate-cache: an unwritable store is not reported"; sed 's/^/  /' "$t/out"; bad=1; fi
+
+# A read that fails is an error, never "no match": with a program unreadable (mode 000 on the
+# copy), or with a `grep` first on PATH that exits 2, each corpus script fails the unit at its skip
+# test (scripts/grepq.sh) and records nothing for it; readable again, the unit passes and is
+# recorded. Each script runs on a store of its own, so the unit cannot be replayed.
+cat > "$t/bin/grep" <<'STUB'
+#!/bin/sh
+exit 2
+STUB
+chmod +x "$t/bin/grep"
+p0f=corpus/${progs[0]}.bc
+# readerr WHAT SCRIPT ARG…: SCRIPT on the copy, broken (WHAT: mode or grep), then repaired.
+readerr() {
+  local what=$1 sc=$2 st=$t/store-read-$RANDOM rc=0 ok=1; shift 2
+  if [ "$what" = mode ]; then chmod 000 "$w/$p0f"; fi
+  (cd "$w" && if [ "$what" = grep ]; then PATH="$t/bin:$PATH"; fi; GATE_CACHE_DIR=$st "scripts/$sc" "$@") > "$t/out" 2>&1 || rc=$?
+  chmod 644 "$w/$p0f"
+  if [ "$rc" = 0 ]; then ok=0; fi
+  if grep -rqxF "$p0f" "$st" --include=unit 2>/dev/null; then ok=0; fi
+  # Readable: it passes; recorded by the second run at the latest (a first run that ran the source
+  # stage, which the copy's interpreter digest asks for, records nothing and writes the key).
+  rc=0
+  (cd "$w" && GATE_CACHE_DIR=$st "scripts/$sc" "$@") > "$t/out2" 2>&1 || rc=$?
+  (cd "$w" && GATE_CACHE_DIR=$st "scripts/$sc" "$@") >> "$t/out2" 2>&1 || rc=$?
+  if [ "$rc" != 0 ] || ! grep -rqxF "$p0f" "$st" --include=unit; then ok=0; fi
+  if [ "$ok" = 1 ]; then echo "check-gate-cache: $sc, unreadable ($what): the unit fails, nothing recorded; readable: passes, recorded"
+  else echo "check-gate-cache: $sc, unreadable ($what): not as expected"; sed 's/^/  /' "$t/out" "$t/out2" | tail -20; bad=1; fi
+}
+for how in mode grep; do
+  readerr $how compile-backend2.sh --final "$p0f"
+  readerr $how compile-corpus.sh --final "$p0f"
+  readerr $how check-corpus.sh "$p0f"
+done
+if "$w/.lake/build/bin/bcc" cc > /dev/null 2>&1; then
+  readerr mode native-facts.sh "$p0f"
+  readerr mode compile-native.sh "$p0f"
+fi
+
+# A pass whose output says a tool ran out of file handles is not recorded (scripts/gate_cache.py
+# `EXHAUSTED`): a par unit and a whole step, each exiting 0, for each of the incident's two messages.
+res1='Too many open'' files in system'
+res2='file table'' overflow'
+for msg in "$res1" "$res2"; do
+  st=$t/store-res-$RANDOM rc=0
+  (cd "$w" && PAR_CACHE=res-probe GATE_CACHE_DIR=$st bash -c '. scripts/par.sh; probe() { echo "grep: $1: '"$msg"'"; }; export -f probe; par probe corpus/x.bc; exit "$par_failed"') > "$t/out" 2>&1 || rc=$?
+  mkdir -p "$st"
+  n=$(find "$st" -name unit | wc -l | tr -d ' ')
+  rc2=0
+  (cd "$w" && GATE_CACHE_DIR=$st python3 scripts/gate_cache.py step res-step bcc -- sh -c "echo 'sh: $msg'") > /dev/null 2>&1 || rc2=$?
+  n2=$(find "$st" -name unit | wc -l | tr -d ' ')
+  if [ "$n" = 0 ] && [ "$n2" = 0 ]; then
+    echo "check-gate-cache: out of handles in a unit's output (message ${#msg} characters long): neither the unit nor the step is recorded"
+  else echo "check-gate-cache: out of handles in a unit's output: par exit $rc, $n recorded; step exit $rc2, $n2 recorded"; bad=1; fi
+done
+
+# forget: by unit, and by step, removes exactly those entries.
+st=$t/store-forget
+cp "corpus/${progs[1]}.out" "$w/corpus/${progs[1]}.out"  # undo the `files:` case above
+(cd "$w" && GATE_CACHE_DIR=$st scripts/compile-backend2.sh --final "${files[@]}") > "$t/out" 2>&1 || { echo "check-gate-cache: forget: the run to fill a store failed"; sed 's/^/  /' "$t/out"; bad=1; }
+mkdir -p "$st"
+before=$(find "$st" -name unit | wc -l | tr -d ' ')
+(cd "$w" && GATE_CACHE_DIR=$st python3 scripts/gate_cache.py forget --step compile-backend2 --unit "$p0f") > /dev/null
+after=$(find "$st" -name unit | wc -l | tr -d ' ')
+left=$( (grep -rlxF "$p0f" "$st" --include=unit || true) | wc -l | tr -d ' ')
+if [ "$before" = 2 ] && [ "$after" = 1 ] && [ "$left" = 0 ]; then echo "check-gate-cache: forget --step --unit removes that unit's entry only"
+else echo "check-gate-cache: forget --step --unit: $before entries before, $after after, $left of the unit left"; bad=1; fi
 
 [ "$bad" = 0 ] && echo "check-gate-cache: every change of an input misses, and no failure is recorded"
 exit "$bad"

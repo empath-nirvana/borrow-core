@@ -126,7 +126,12 @@ unit's own files (the program with its sidecars, goldens, reports and table rows
 has a recorded pass in `${GATE_CACHE_DIR:-~/repos/.gate-cache}` (shared by every worktree) is
 replayed, output and side files as the run gave them, instead of run. A failure is never recorded,
 nor a unit that runs the source interpreter or writes a key, nor any unit of a writing mode or of
-`--source`. Compile scaling (it measures time) and the grep-level steps always run.
+`--source`. A unit's result is stored only if it ran without a tool or I/O error and decided every
+branch, a skip above all, from content in its key, never from a read that failed: a gate script
+asks whether a file has a line only through `grepq` (`scripts/grepq.sh`: a read error fails the
+unit), and a pass whose output says a tool ran out of file handles ("Too many open files",
+"file table overflow") is never recorded. `scripts/gate_cache.py forget [--step S] [--unit U]
+[--born FROM TO] [--grep TEXT] [--dry-run]` removes matching entries safely, during a gate too. Compile scaling (it measures time) and the grep-level steps always run.
 `--no-cache` (with any mode; or `GATE_CACHE=0`; `make gate-full-nocache`) runs every unit and
 reads and writes no cache; `--record-cache` (`GATE_CACHE=record`; `make gate-full-record`, the
 daily run on main) runs every unit and records its passes. The summary line counts the units

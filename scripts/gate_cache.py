@@ -26,9 +26,22 @@ sha256 over everything it reads:
 
 The store is `${GATE_CACHE_DIR:-$HOME/repos/.gate-cache}/<step>/<key>/`, shared by every worktree:
 `out` (the unit's standard output and error) and `side/` (the files the unit hands back to its
-script, scripts/par.sh's `$PAR_SIDE`). Only passes are stored; a unit that marks itself
-(`par_nostore`, or `$GATE_CACHE_NOSTORE` for a whole step) is not, as one that ran the source
-interpreter or wrote a key. An entry is written under a temporary name in the same directory and
+script, scripts/par.sh's `$PAR_SIDE`), and `unit` (what the unit was).
+
+What is stored. A unit's result is stored only if the unit passed, ran without a tool or I/O
+error, and decided every branch (a skip above all) from content in its key: the program's text, a
+sidecar, a table row, never from a read that failed. Enforced:
+  * a failed unit (status not 0) is never stored;
+  * a gate script asks whether a file has a line only through `grepq` (scripts/grepq.sh), which
+    ends the unit with status 2 when grep cannot read the file, so a read error can never be
+    taken for "no `main`" and recorded as "skipped";
+  * a pass whose output or side files say a tool ran out of file handles (`EXHAUSTED`) is never
+    recorded (`put`, through which every caller stores);
+  * an input that cannot be read keys as `unreadable`, so no recorded pass matches it;
+  * a unit that swallows a tool's failure on purpose calls `par_nostore` (or for a whole step
+    touches `$GATE_CACHE_NOSTORE`), as does one that ran the source interpreter or wrote a key.
+The rest rests on the scripts' sweep (each tool failure fails the unit, is compared, or calls
+par_nostore): see the gate scripts' comments and CLAUDE.md, "The gate". An entry is written under a temporary name in the same directory and
 renamed, so a reader sees a whole entry or none. `GATE_CACHE=0` reads and writes nothing;
 `GATE_CACHE=record` runs every unit and records its passes (the daily uncached run on main).
 
@@ -37,6 +50,8 @@ renamed, so a reader sees a whole entry or none. `GATE_CACHE=0` reads and writes
     gate_cache.py step ID CLASS [--files F…] -- CMD…   a whole step, run or replayed
     gate_cache.py step-key ID CLASS [--files F…] -- CMD…   the key `step` would use
     gate_cache.py prune [--days N] [--max-mb M]   remove old entries (never during a gate)
+    gate_cache.py forget [--step S]… [--unit U]… [--born FROM TO] [--grep TEXT]… [--dry-run]
+                                         remove the entries that match (safe during a gate)
     gate_cache.py tools                  the tools line (ci-local writes it to GATE_CACHE_TOOLS_FILE)
     gate_cache.py exhausted FILE…        exit 0 when a FILE says a tool ran out of file handles
 """
@@ -130,6 +145,9 @@ def sha_file(p):
         d = h.hexdigest()
     except (FileNotFoundError, IsADirectoryError, NotADirectoryError):
         d = "absent"
+    except OSError as e:
+        # Unreadable: a key no pass has (the unit itself then fails reading it, scripts/grepq.sh).
+        d = f"unreadable {e.errno}"
     _hashes[ap] = d
     return d
 
@@ -477,7 +495,7 @@ def exhausted_files(paths):
     return False
 
 
-def put(step, key, out_file, side_dir=None):
+def put(step, key, out_file, side_dir=None, unit=None):
     """Record a pass: `out` and `side/` (always present, maybe empty), written under a temporary
     name and renamed. A store that cannot be written is said once per process, loudly. A pass whose
     output or side files say a tool ran out of file handles (`exhausted`) is never recorded: its
@@ -501,6 +519,10 @@ def put(step, key, out_file, side_dir=None):
             shutil.copytree(side_dir, os.path.join(t, "side"))
         else:
             os.mkdir(os.path.join(t, "side"))
+        if unit is not None:
+            # What the unit was (a par job's argument, a whole step's command): for `forget --unit`.
+            with open(os.path.join(t, "unit"), "w") as fh:
+                fh.write(unit + "\n")
         with open(os.path.join(t, "sum"), "w") as fh:
             fh.write(entry_sum(t) + "\n")
         os.rename(t, final)
@@ -705,7 +727,7 @@ def par_finish(d, fn):
                         os.environ["GATE_CACHE_TOOLS_FILE"] = os.path.join(d, "tools")
                         pk = ParKeys(fn)
                     if pk.of(a) == keys[i]:
-                        put(pk.step, keys[i][0], o, side)
+                        put(pk.step, keys[i][0], o, side, unit=a)
         if collect and os.path.isdir(side):
             append_tree(side, collect)
         try:
@@ -786,7 +808,7 @@ def step(argv):
         if rc == 0 and not os.path.exists(env["GATE_CACHE_NOSTORE"]):
             forget()
             if step_args(argv)[1:3] == (key, fp):
-                put(sid, key, log)
+                put(sid, key, log, unit=" ".join(cmd))
         stat(0, 1)
         return rc
     finally:
@@ -849,7 +871,7 @@ class Units:
                     o = os.path.join(t, "out")
                     with open(o, "w") as fh:
                         fh.write(text)
-                    put(self.step, key[0], o)
+                    put(self.step, key[0], o, unit=arg)
             finally:
                 shutil.rmtree(t, ignore_errors=True)
         stat(self.replayed, self.ran)
@@ -866,6 +888,77 @@ def drop(p):
             return
         p = t
     shutil.rmtree(p, ignore_errors=True)
+
+
+def forget_entries(argv):
+    """`forget [--step S]… [--unit U]… [--born FROM TO] [--grep TEXT]… [--dry-run]`: remove the
+    entries that match every option given (at least one): of step S (its directory name: S as
+    `PAR_CACHE` names it, or a whole step's id); of unit U (a program's path, a block number, a
+    whole step's command), read from the entry's `unit` file, or for an entry written without one,
+    U appearing in its `out`; created between FROM and TO (ISO times, `2026-11-18T12:50`; an
+    entry's creation is its directory's birth time, which a replay does not change, unlike its
+    mtime); whose `out` or side files contain TEXT. Each is renamed before it is deleted (`drop`),
+    so a gate replaying it meanwhile sees the whole entry or a miss; a removed entry is a unit run
+    again, nothing else. Safe during a gate. Prints what it removes."""
+    import datetime
+    steps, units, greps = [], [], []
+    born = None
+    dry = False
+    k = 0
+    try:
+        while k < len(argv):
+            o = argv[k]
+            if o == "--step":
+                steps.append(re.sub(r"[^A-Za-z0-9_.-]+", "_", argv[k + 1])); k += 2
+            elif o == "--unit":
+                units.append(argv[k + 1]); k += 2
+            elif o == "--born":
+                born = tuple(datetime.datetime.fromisoformat(x).timestamp() for x in argv[k + 1:k + 3]); k += 3
+            elif o == "--grep":
+                greps.append(argv[k + 1].encode()); k += 2
+            elif o == "--dry-run":
+                dry = True; k += 1
+            else:
+                raise ValueError(o)
+        if not (steps or units or born or greps):
+            raise ValueError("no condition")
+    except (ValueError, IndexError) as e:
+        raise SystemExit(f"usage: gate_cache.py forget [--step S]… [--unit U]… [--born FROM TO] [--grep TEXT]… [--dry-run] ({e})")
+    root = store_dir()
+    n = 0
+    for st in sorted(os.listdir(root) if os.path.isdir(root) else []):
+        sd = os.path.join(root, st)
+        if not os.path.isdir(sd) or (steps and st not in steps):
+            continue
+        for e in sorted(os.listdir(sd)):
+            p = os.path.join(sd, e)
+            if e.startswith(".tmp.") or e.endswith(".lock") or not os.path.isdir(p):
+                continue
+            try:
+                if born and not (born[0] <= os.stat(p).st_birthtime <= born[1]):
+                    continue
+                out = open(os.path.join(p, "out"), "rb").read()
+                if units:
+                    u = os.path.join(p, "unit")
+                    if os.path.exists(u):
+                        if open(u).read().strip() not in units:
+                            continue
+                    elif not any(x.encode() in out for x in units):
+                        continue
+                if greps:
+                    blob = out
+                    for r, _, fs in os.walk(os.path.join(p, "side")):
+                        for f in fs:
+                            blob += open(os.path.join(r, f), "rb").read()
+                    if not all(g in blob for g in greps):
+                        continue
+            except OSError:
+                continue
+            print(f"{'would remove' if dry else 'removed'} {st}/{e}: {out.decode(errors='replace').strip().splitlines()[-1:] or ['']}")
+            if not dry:
+                drop(p)
+            n += 1
+    print(f"gate_cache: {'would remove' if dry else 'removed'} {n} entr{'y' if n == 1 else 'ies'} from {root}")
 
 
 def prune(argv):
@@ -954,6 +1047,8 @@ def main():
         print(step_args(a[1:])[1])
     elif a[0] == "prune":
         prune(a[1:])
+    elif a[0] == "forget":
+        forget_entries(a[1:])
     elif a[0] == "tools":
         print(tools_line())
     elif a[0] == "exhausted":
