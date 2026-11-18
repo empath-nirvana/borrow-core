@@ -27,9 +27,13 @@ def texprNames : Array String := ctorNames2% TExpr
 /-- The same-term steps' names, by `ctorIdx`: a `conv` node is named by its step. -/
 def convNames : Array String := ctorNames2% BoCa.Fig16.LogRel.Core.ConvKind
 
-def ruleName (t : TExpr) : String := match t with
-  | .conv _ _ _ _ k _ => convNames[k.ctorIdx]!
-  | _ => texprNames[t.ctorIdx]!
+/-- A node's rule; a `conv` node's is its step's (`convNames`). The `conv` node is read by its
+`ctorIdx` (`7`, which `TExpr.conv.elim`'s premise checks) rather than by a `match` with a
+catch-all, which would add `propext` to this definition's axioms. -/
+def ruleName (t : TExpr) : String :=
+  if h : t.ctorIdx = 7 then
+    TExpr.conv.elim (motive := fun _ => String) t h fun _ _ _ _ k _ => convNames[k.ctorIdx]!
+  else texprNames[t.ctorIdx]!
 
 def ppJ (j : Jdg) (ms : MachSet := {}) : String :=
   match ofJ ms j with

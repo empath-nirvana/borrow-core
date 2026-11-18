@@ -286,6 +286,12 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
 
 /-! ### Absorption -/
 
+/-- A same-term step's absorption over its premise's: at `[]I` (`ConvKind.outl?`) every absorbed
+slot must outlive the box's lifetime. -/
+def AbsF.outlO (Δ : LifeCtx) : Option Lifetime.Life → Option AbsF → Option AbsF
+  | some a, f => AbsF.withO (.atom (.outl Δ a)) f
+  | none, f => f
+
 /-- **A body's absorption**: when an unused live slot of a type can be given to its derivation,
 under `Δ`. -/
 def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
@@ -296,9 +302,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .effPerform _ _ _ _ t | .effRaise _ _ _ _ _ t | .litFn _ _ _ t | .divLit _ _ _ _ t
   | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t
   | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => t.absF Δ
-  | .conv _ _ _ _ k t => match k.outl? with
-    | some a => AbsF.withO (.atom (.outl Δ a)) (t.absF Δ)
-    | none => t.absF Δ
+  | .conv _ _ _ _ k t => AbsF.outlO Δ k.outl? (t.absF Δ)
   | .bind _ _ _ _ _ t₁ t₂ | .unitE _ _ _ _ t₁ t₂ | .tensorE _ _ _ _ _ _ t₁ t₂
   | .lolliE _ _ _ _ _ t₁ t₂ => AbsF.orO (t₁.absF Δ) (t₂.absF Δ)
   | .app _ _ _ _ _ _ tM => AbsF.orO (tM.absF Δ) (some (.atom .pers))

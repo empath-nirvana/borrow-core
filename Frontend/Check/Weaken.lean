@@ -315,16 +315,18 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.thunkV hC d (by rw [e, q]; rfl), e⟩
-  | conv _ _ hJ ih =>
+  | conv k _ hJ ih =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       simp only [TExpr.absF] at hf
-      split at hf
-      · rename_i a ha
+      cases ha : k.outl? with
+      | some a =>
+        rw [ha] at hf
         obtain ⟨f', hf', ho, hp'⟩ := live_withO hf hp
         obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
         refine ⟨.conv _ d (hJ.mono (fun a' ha' h => ?_) (fun _ _ => id)), e⟩
         rw [ha] at ha'; cases ha'; exact ctxOutlives_ins (live_atom ho) h
-      · rename_i ha
+      | none =>
+        rw [ha] at hf
         obtain ⟨d, e⟩ := ih Γa Γb Γp f rfl hf hp
         exact ⟨.conv _ d (hJ.mono (fun a' ha' => by rw [ha] at ha'; cases ha') (fun _ _ => id)), e⟩
   | bind hs hm hcv _ _ ihM ihN =>
