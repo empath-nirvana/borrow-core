@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- The launchd agent of the daily full gate on main (scripts/gate-daily.sh, which says how to
-     install and remove it). @HOME@ is replaced by the home directory on install. It runs at 04:00
+     install and remove it). @HOME@ is replaced by the home directory on install. LANG is the
+     agents' locale: the result cache keys on it, so passes recorded here match agents' runs. It runs at 04:00
      and at login; the script does nothing when origin/main already has a verdict or a run was
      made that day. -->
 <plist version="1.0">
@@ -17,6 +18,8 @@
   <string>@HOME@/repos/borrow-core-daily</string>
   <key>EnvironmentVariables</key>
   <dict>
+    <key>LANG</key>
+    <string>en_US.UTF-8</string>
     <key>PATH</key>
     <string>@HOME@/.elan/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>

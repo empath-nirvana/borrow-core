@@ -13,8 +13,8 @@
 #      copy-on-write from $GATE_DAILY_LAKE_FROM (default: the checkout this script is in), and
 #      marked as the daily checkout. A directory without the mark is refused, so the run never
 #      resets an agent's worktree.
-#   3. Fetches, and stops (exit 0) if origin/main's commit already has a verdict in
-#      $out/verdicts.tsv, or if a run was recorded today (so a run at login after a 04:00 run on
+#   3. Fetches, and stops (exit 0) if origin/main's commit already has a PASS or FAIL verdict in
+#      $out/verdicts.tsv (a TIMEOUT does not count), or if a run was recorded today (so a run at login after a 04:00 run on
 #      an older commit does not gate during the working day). `--force` skips both.
 #   4. Resets the checkout to origin/main, detached (`reset --hard`, `clean -fd`; ignored files
 #      such as `.lake` stay, so the Lean build is incremental over yesterday's).
@@ -28,7 +28,8 @@
 #      printed, written at the top of the log and named in the board note.
 #   6. Writes the log ($out/<date>-<commit>.log; kept whatever the verdict) and one line in
 #      $out/verdicts.tsv: date, commit, verdict (PASS, FAIL or TIMEOUT), failing steps, wall
-#      seconds, CPU seconds, log. A FAIL or TIMEOUT log ends with the merges since the last
+#      seconds, CPU seconds, log. The verdict is the gate's own exit status (and its `ALL PASSED`
+#      line), recorded beside the log, not that of the wrappers around it. A FAIL or TIMEOUT log ends with the merges since the last
 #      passing run (`git log --merges --oneline <last-pass>..<commit>`).
 #   7. Posts a board note to the coordinator (`board note verdict --to coordinator --unit
 #      $GATE_DAILY_UNIT --file <log>`): on a pass one line; on a failure the failing steps and the
@@ -135,8 +136,8 @@ commit=$(git -C "$dir" rev-parse origin/main) || cannot "no origin/main in $dir"
 short=${commit:0:8}
 today=$(date +%F)
 if [ "$force" = 0 ] && [ -f "$verdicts" ]; then
-  if awk -F'\t' -v c="$commit" '$2 == c { f = 1 } END { exit !f }' "$verdicts"; then
-    say "origin/main $short already has a verdict: $(awk -F'\t' -v c="$commit" '$2 == c { v = $3 } END { print v }' "$verdicts")"; exit 0
+  if awk -F'\t' -v c="$commit" '$2 == c && ($3 == "PASS" || $3 == "FAIL") { f = 1 } END { exit !f }' "$verdicts"; then
+    say "origin/main $short already has a verdict: $(awk -F'\t' -v c="$commit" '$2 == c && ($3 == "PASS" || $3 == "FAIL") { v = $3 } END { print v }' "$verdicts")"; exit 0
   fi
   if awk -F'\t' -v d="$today" 'substr($1, 1, 10) == d { f = 1 } END { exit !f }' "$verdicts"; then
     say "a daily run was already made today ($today); origin/main $short waits for tomorrow's"; exit 0
@@ -171,9 +172,14 @@ started=$(date +%s)
   echo "gate-daily: GATE_CACHE=$mode: $why"
   (cd "$dir" && GATE_CACHE=$mode GATE_MEASURE_DIR=$out/measure \
      /usr/bin/time -p -o "$stem.time" timeout --kill-after=120 "$limit" caffeinate -i \
-     ${measure[@]+"${measure[@]}"} bash -c "$gatecmd")
+     ${measure[@]+"${measure[@]}"} bash -c 'bash -c "$1"; r=$?; echo $r > "$2"; exit $r' _ "$gatecmd" "$stem.rc")
 } > "$log" 2>&1
 rc=$?
+# The gate's own exit status, written beside the log, so a failure of the sampler or of the
+# wrappers around the gate cannot change the verdict. Missing when the time limit stopped it.
+grc=$(cat "$stem.rc" 2>/dev/null || true)
+rm -f "$stem.rc"
+[ -z "$grc" ] || [ "$grc" = "$rc" ] || echo "gate-daily: the gate exited $grc, the wrappers around it $rc" >> "$log"
 wall=$(( $(date +%s) - started ))
 cpu=$(awk '/^(user|sys) / { s += $2 } END { printf "%.0f", s }' "$stem.time" 2>/dev/null)
 rm -f "$stem.time"
@@ -183,8 +189,9 @@ mfile=$out/measure/daily-$(basename "$stem").txt
 # 6. The verdict.
 steps=$(sed -n 's/^    FAILED: \(.*\) ([0-9?]*s)$/\1/p' "$log" | paste -sd ',' - | sed 's/,/, /g')
 if [ "$rc" = 124 ] || [ "$rc" = 137 ]; then verdict=TIMEOUT; steps=${steps:-"none failed before the limit"}
-elif [ "$rc" = 0 ] && grep -q 'ALL PASSED' "$log"; then verdict=PASS
-else verdict=FAIL; steps=${steps:-"no step failed; the gate exited $rc (see the log)"}
+elif [ -z "$grc" ]; then verdict=FAIL; steps=${steps:-"the gate's exit status was not recorded; the wrappers exited $rc (see the log)"}
+elif [ "$grc" = 0 ] && grep -q 'ALL PASSED' "$log"; then verdict=PASS
+else verdict=FAIL; steps=${steps:-"no step failed; the gate exited $grc (see the log)"}
 fi
 lastpass=$( [ -f "$verdicts" ] && awk -F'\t' '$3 == "PASS" { c = $2 } END { print c }' "$verdicts")
 printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date '+%FT%T%z')" "$commit" "$verdict" "${steps:--}" "$wall" "${cpu:-?}" "$log" >> "$verdicts"
