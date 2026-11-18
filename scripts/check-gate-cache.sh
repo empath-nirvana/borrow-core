@@ -130,10 +130,11 @@ PATH="$t/bin:$PATH" expect "a tool's version (wasmtime)" 0 2 0 --final
 expect "a tool's version, undone" 2 0 0 --final
 BC_GATE_CACHE_PROBE=1 expect "an environment variable (BC_*)" 0 2 0 --final
 BCC_GATE_CACHE_PROBE=1 expect "an environment variable (BCC_*)" 0 2 0 --final
-# Without --final the step also runs each program natively, as a unit of its own shared with
-# compile-native.sh (scripts/native-run.sh): two units per program.
-expect "the mode (--final dropped)" 0 4 0
-expect "the mode, again" 4 0 0
+# Without --final the step also runs each program natively when there is a C compiler (`bcc cc`),
+# as a unit of its own shared with compile-native.sh (scripts/native-run.sh): two units per program.
+units=2; .lake/build/bin/bcc cc > /dev/null 2>&1 && units=4
+expect "the mode (--final dropped)" 0 "$units" 0
+expect "the mode, again" "$units" 0 0
 expect "the mode --final, again" 2 0 0 --final
 
 # Stale binaries are never looked up: with no build in this invocation (no CI_LOCAL_BUILT), the
