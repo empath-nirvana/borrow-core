@@ -43,8 +43,8 @@ holds `Div` Core takes the greatest fixed point over segments (`cwp`, `Core/DivD
 So a computation with no final configuration is in `erwp` at every index, whatever the table
 and the postcondition (`erwp_of_noFinal`), and no fixed point needs to be added to admit it. The
 chain's `F_Σ R` is `erwp` at the row's table at every row (`cN_effOf`), whether or not the row
-holds `Div` (`cN_effOf_divB`). Core's split on `Row.divB` is a split between `CDerives`
-constructors (`effThen`, `effThenDiv`) and between `effWp`'s branches. The first is kept as
+holds `Div` (`cN_effOf_divB`). Core's split on `Row.divB` is a split between the sides
+of `effThenF`'s finaliser premise (`effThen`, `effThenDiv`) and between `effWp`'s branches. The first is kept as
 printed. Under the second, both branches go to `erwp`.
 -/
 

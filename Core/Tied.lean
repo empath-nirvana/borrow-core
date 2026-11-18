@@ -453,11 +453,8 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
       Val.prim] at he
   | effRaise => simp [BoCa.BoLo.raiseE, Expr.effFree, Expr.val, Val.prim] at he
   | effLet hs hW hU _ _ ih1 ih2 => exact .effLet hs hW hU (ih1 (by eff_free)) (ih2 (by eff_free))
-  | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
-      exact .effThen hs hNZ hUq hU hMS hDS hfin hP hSD (ih1 (by eff_free)) (ih2 (by eff_free))
-        (ih3 (by eff_free))
-  | effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
-      exact .effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD (ih1 (by eff_free)) (ih2 (by eff_free))
+  | effThenF hs hNZ hUq hU hMS hDS hfin hP hF _ _ _ ih1 ih2 ih3 =>
+      exact .effThenF hs hNZ hUq hU hMS hDS hfin hP hF (ih1 (by eff_free)) (ih2 (by eff_free))
         (ih3 (by eff_free))
   | effHandleV | effHandleVB | effHandleT | effHandleL =>
       simp [hndExpr, Expr.effFree, Expr.val, Val.prim] at he

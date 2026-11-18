@@ -284,8 +284,7 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
       intro k hk
       simp [BoCa.BoLo.performE, BoCa.BoLo.raiseE, opArgE, mentions, Expr.val, Val.prim, Val.i32] at hk
       exact ih k hk
-  | effThen hs _ _ _ _ _ _ _ _ _ _ _ ihM ihN ihD
-  | effThenDiv hs _ _ _ _ _ _ _ _ _ _ _ ihM ihN ihD =>
+  | effThenF hs _ _ _ _ _ _ _ _ _ _ _ ihM ihN ihD =>
       intro k hk
       simp only [thenE, mentions, Expr.val, Val.prim, Val.lam, Bool.false_or,
         Bool.or_eq_true] at hk
