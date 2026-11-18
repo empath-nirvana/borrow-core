@@ -24,7 +24,8 @@
 #      process group is stopped, and the verdict is TIMEOUT), and under the gate30 sampler when
 #      it is present. The result cache is never read: `GATE_CACHE=record` when the checked-out
 #      scripts/gate_cache.py knows that mode (run every unit, record the passes, so current main
-#      warms the machine-wide cache), else `GATE_CACHE=0`.
+#      warms the machine-wide cache), else `GATE_CACHE=0`; the mode and the reason for it are
+#      printed, written at the top of the log and named in the board note.
 #   6. Writes the log ($out/<date>-<commit>.log; kept whatever the verdict) and one line in
 #      $out/verdicts.tsv: date, commit, verdict (PASS, FAIL or TIMEOUT), failing steps, wall
 #      seconds, CPU seconds, log. A FAIL or TIMEOUT log ends with the merges since the last
@@ -147,8 +148,14 @@ git -C "$dir" reset -q --hard && git -C "$dir" clean -fdq && git -C "$dir" check
   cannot "checking out $short in $dir failed"
 
 # 5. Run the gate.
-mode=0
-grep -q 'GATE_CACHE=record' "$dir/scripts/gate_cache.py" 2>/dev/null && mode=record
+if grep -q 'GATE_CACHE=record' "$dir/scripts/gate_cache.py" 2>/dev/null; then
+  mode=record; why="scripts/gate_cache.py names GATE_CACHE=record: every unit runs, passes are recorded"
+elif [ -f "$dir/scripts/gate_cache.py" ]; then
+  mode=0; why="scripts/gate_cache.py does not name GATE_CACHE=record: the cache is neither read nor written"
+else
+  mode=0; why="no scripts/gate_cache.py: the gate has no result cache"
+fi
+say "GATE_CACHE=$mode ($why)"
 stem=$out/$(date +%Y%m%d-%H%M%S)-$short
 log=$stem.log
 measure=()
@@ -161,6 +168,7 @@ started=$(date +%s)
 {
   echo "gate-daily: origin/main $commit in $dir, GATE_CACHE=$mode, limit $limit, started $(date '+%F %T %z')"
   echo "gate-daily: command: $gatecmd"
+  echo "gate-daily: GATE_CACHE=$mode: $why"
   (cd "$dir" && GATE_CACHE=$mode GATE_MEASURE_DIR=$out/measure \
      /usr/bin/time -p -o "$stem.time" timeout --kill-after=120 "$limit" caffeinate -i \
      ${measure[@]+"${measure[@]}"} bash -c "$gatecmd")
@@ -198,5 +206,5 @@ fi
 { echo; echo "gate-daily: $verdict on $short; failing: $steps"; echo "gate-daily: $since:"; echo "$merges"; } >> "$log"
 prs=$(echo "$merges" | grep -o 'pull request #[0-9]*' | sed 's/pull request //' | paste -sd ' ' -)
 say "$verdict: $steps"
-note "daily gate-full on main $short: $verdict. Failing: $steps. $since: ${prs:-none}. Log: $log" "$log"
+note "daily gate-full on main $short: $verdict (GATE_CACHE=$mode). Failing: $steps. $since: ${prs:-none}. Log: $log" "$log"
 exit 1
