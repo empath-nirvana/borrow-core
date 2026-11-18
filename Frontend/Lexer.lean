@@ -296,10 +296,11 @@ def lexGo (nd : Bool) : Nat → List Char → Pos → Bool → Array Token → E
       else .error ⟨⟨pos, advance pos 1⟩, s!"unexpected character `{c}`"⟩
 
 /-- The tokens of a source text, ending with `eof`; `file` the library module it is (`""` for the
-program), which each position carries. The text's first line chooses its spelling
-(`isNewDialect`).  `[spec §42, §82]` -/
-def lex (src : String) (file : String := "") : Except Error (Array Token) :=
+program), which each position carries; `nd`, whether it is in the new spelling, by default what
+its first line says (`isNewDialect`).  `[spec §42, §82]` -/
+def lex (src : String) (file : String := "") (nd : Bool := isNewDialect src) :
+    Except Error (Array Token) :=
   let cs := src.toList
-  lexGo (isNewDialect src) (cs.length + 1) cs ⟨1, 1, file⟩ true #[]
+  lexGo nd (cs.length + 1) cs ⟨1, 1, file⟩ true #[]
 
 end Frontend

@@ -196,6 +196,9 @@ structure PState where
   /-- The variables the borrow block just read hands back beside its result: the `let mut`
   variables it assigns and the places it lends (`borrowBlock`). -/
   blockThreads : List String := []
+  /-- The positions of the bare places the typed elaboration lends (SPEC §82 P8): a name read
+  at one of them is read as `&x`.  `[spec §82]` -/
+  lendAt : List Pos := []
   /-- Resolution (SPEC §41, rule R1): on for a program's source, off for the elaborator's
   templates, whose rebindings are threading it generated. -/
   resolve : Bool := false
@@ -2556,6 +2559,10 @@ def valAtom : Nat → P Val
         if (← get).lent.contains y then
           notePlaceWrite y
           return lentRead t.span y
+        -- A bare place the typed elaboration lends, read as `&x` (SPEC §82 P8).  `[spec §82]`
+        if (← get).lendAt.contains t.span.start then
+          notePlaceWrite y
+          return .lend t.span ⟨y, t.span⟩ .imm
         pure (.var t.span y)
     | .int k => discard bump; pure (.sugar t.span (.lit k))
     | .flt x => discard bump; let (m, e) := decOfText x; pure (.sugar t.span (.flit m e))
@@ -4193,9 +4200,10 @@ def decls (n : Nat) : Nat → List Decl → P (List Decl)
 each name is resolved to its binder (SPEC §41, rule R1), and no fresh binder is named as a name
 of the source. -/
 def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data : Data.Table := {})
-    (internal : Bool := false) (file : String := "") :
+    (internal : Bool := false) (file : String := "") (lendAt : List Pos := [])
+    (nd : Bool := isNewDialect src) :
     Except Error (α × PState) := do
-  let toks ← lex src file
+  let toks ← lex src file nd
   let fuel := fuelPerToken * (toks.size + 1)
   let go : P α := do
     let a ← p fuel
@@ -4204,8 +4212,7 @@ def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data
   let taken := if resolve then toks.toList.filterMap (fun t => match t.tok with
     | .ident s => some s
     | _ => none) |>.eraseDups else []
-  go.run { toks, pos := 0, lastStop := ⟨1, 1, file⟩, resolve, taken, data, internal,
-           nd := isNewDialect src }
+  go.run { toks, pos := 0, lastStop := ⟨1, 1, file⟩, resolve, taken, data, internal, lendAt, nd }
 
 /-- The table of the tokens `toks`: the `data` declarations (SPEC §42) and the `type`
 abbreviations (SPEC §61) written in them, each read where it is: a declaration is in scope in its
@@ -4287,11 +4294,12 @@ def dataOf (lib : String → Option String) (src : String) (file : String := "")
 (`resolve`) unless it is code the elaborator generated. -/
 def parseProgram (src : String) (resolve : Bool := true)
     (lib : String → Option String := fun _ => none) (internal : Bool := false)
-    (file : String := "") : Except Error Program := do
+    (file : String := "") (lendAt : List Pos := []) : Except Error Program := do
   -- The `data` declarations in scope (SPEC §42): the prelude's, the included modules', the
   -- program's own. `file` is the library module `src` is (`""` for the program), which its
   -- positions carry (#883).
   let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src file) internal file
+    lendAt
   let mains := ds.filter fun | .main .. => true | _ => false
   match mains with
   | _ :: .main sp _ _ :: _ => .error ⟨sp, "a program has at most one `main`"⟩
