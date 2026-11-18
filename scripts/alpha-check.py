@@ -30,18 +30,36 @@ import argparse, os, re, shutil, subprocess, sys, tempfile, threading
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import slotpool  # noqa: E402  (the machine-wide job pool, scripts/slot)
 
 
 # Per program (thread): whether a run ended other than a deterministic run ends (a signal), or the
 # renaming failed, so that the result cache does not record it.
 UNSURE = threading.local()
 
+_runs = {}
+
 
 def run(bcc, args, env=None):
-    p = subprocess.run([bcc] + args, capture_output=True, text=True, env=env, cwd=ROOT)
+    """`bcc args` under env: its status and output. A run in this process's own environment is
+    made once: `compare` checks and erases the original program in both passes, the same command
+    on the same file, and the second reads the first's result. The memo is keyed by the command
+    line, so a file must not change while the run lasts (each program and each renamed copy is
+    written once, before it is read)."""
+    k = (bcc, tuple(args)) if env is None else None
+    if k is not None and k in _runs:
+        return _runs[k]
+    with slotpool.held():
+        p = subprocess.run([bcc] + args, capture_output=True, text=True, env=env, cwd=ROOT)
     if p.returncode < 0:
         UNSURE.flag = True
-    return p.returncode, p.stdout + p.stderr
+    r = p.returncode, p.stdout + p.stderr
+    # A run that ended by a signal is not kept: the next asks again.
+    if k is not None and p.returncode >= 0:
+        _runs[k] = r
+    return r
 
 
 def renaming(bcc, f):

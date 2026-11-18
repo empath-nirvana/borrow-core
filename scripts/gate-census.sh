@@ -17,7 +17,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build gate-census >/dev/null
+# One Lean process: one CPU slot and 8 GB of the machine-wide job pool (scripts/slot; measured peak
+# RSS of one run of every census, 7.7 GB, most of it the mapped .oleans).
 census=(lake env .lake/build/bin/gate-census)
+if [ "${SLOT_OFF:-}" != 1 ] && command -v perl >/dev/null; then census=(scripts/slot -m 8 -- "${census[@]}"); fi
 if [ -z "${GATE_CENSUS_DIR:-}" ] || [ -z "${GATE_CENSUS_TOKEN:-}" ] ||
     [ "$(cat "$GATE_CENSUS_DIR/token" 2>/dev/null)" != "$GATE_CENSUS_TOKEN" ]; then
   exec "${census[@]}" "$@"

@@ -46,18 +46,18 @@ lowered() {
   else echo "$prog: erases as $f"; fi
 }
 export -f pair lowered
-# Each pair is a unit of the result cache (scripts/par.sh), keyed on both files; run one at a time,
-# in order.
+# Each pair is a unit of the result cache (scripts/par.sh), keyed on both files, in a slot of the
+# job pool; reported in order.
 export PAR_CACHE=check-sugar PAR_CACHE_DEPS=sugar
 sugared=()
 for f in corpus/sugar/*.bc; do
   case "$f" in *.core.bc|*.lowered.bc) ;; *) sugared+=("$f") ;; esac
 done
-JOBS=1 par pair ${sugared[@]+"${sugared[@]}"}
+par pair ${sugared[@]+"${sugared[@]}"}
 bad=$par_failed
 shopt -s nullglob
 low=(corpus/sugar/*.lowered.bc)
-JOBS=1 par lowered ${low[@]+"${low[@]}"}
+par lowered ${low[@]+"${low[@]}"}
 bad=$((bad + par_failed))
 echo "$bad failure(s)."
 [ "$bad" -eq 0 ]

@@ -21,6 +21,9 @@ and fails on any difference or refusal.
 """
 import argparse, os, random, subprocess, sys, tempfile
 from concurrent.futures import ThreadPoolExecutor
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import slotpool  # noqa: E402  (the machine-wide job pool, scripts/slot)
 
 HEAD = '''effect State[T] { must_resume ctl get() -> T; must_resume ctl put(v: T) }
 
@@ -603,7 +606,8 @@ class Eval:
 
 
 def run(bcc, path):
-    p = subprocess.run([bcc, 'interp', path], capture_output=True, text=True, timeout=300)
+    with slotpool.held():
+        p = subprocess.run([bcc, 'interp', path], capture_output=True, text=True, timeout=300)
     if p.returncode != 0:
         out = (p.stdout + p.stderr).strip()
         return None, out.splitlines()[0] if out else 'failed'

@@ -71,7 +71,8 @@ program() {
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
   err=/dev/null; [ -f "$base.err" ] && err="$base.err"
   argsOf "$f"
-  "$bcc" run --backend "$backend" --native "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$?
+  if [ "$backend" = new ]; then rc=$(native_result "$NATIVE_RUNS" "$f" "$w")
+  else "$bcc" run --backend "$backend" --native "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$?; fi
   if [ "$rc" != "$(statusOf "$f")" ]; then
     echo "$f: native exits with $rc, not $(statusOf "$f"): $(head -3 "$w/err")"; return 1
   fi
@@ -87,11 +88,16 @@ program() {
   echo "$f: native as $base.out | $got"
 }
 export -f program argsOf statusOf
+# Backend2's native runs, made once for this step and compile-backend2.sh (scripts/native-run.sh).
+. scripts/native-run.sh
+NATIVE_RUNS=$(mktemp -d); export NATIVE_RUNS
+trap 'rm -rf "$NATIVE_RUNS"' EXIT
+[ "$backend" = new ] && native_runs "$NATIVE_RUNS" "${files[@]}"
 # Each program is a unit of the result cache (scripts/par.sh; the C compiler is among its tools).
 # Its skip lines are a side file (`skips`), gathered in $skipdir.
 export PAR_CACHE="compile-native backend=$backend"
 skipdir=$(mktemp -d)
-trap 'rm -rf "$skipdir"' EXIT
+trap 'rm -rf "$skipdir" "$NATIVE_RUNS"' EXIT
 export PAR_COLLECT=$skipdir
 : > "$skipdir/skips"
 par program "${files[@]}"
@@ -100,70 +106,81 @@ if [ "$named" = 0 ]; then
   scripts/corpus-set.sh --skips compile-native parse-only no-main < "$skipdir/skips" || bad=$((bad + 1))
 fi
 
-# The checks after the corpus, one after another, when no file is named: one unit of the result
-# cache (scripts/par.sh), keyed on the corpus files they read and on Lake's configuration (they run
-# `lake env`). It counts its failures in the side file `serialbad`.
+# The checks after the corpus, when no file is named: one unit of the result cache each
+# (scripts/par.sh), keyed on the corpus files they read and on Lake's configuration (they run
+# `lake env`), run as `par` jobs in slots of the job pool and reported in this order. Each counts
+# its failures in the side file `serialbad` (a line each).
 serial() {
   set -e
-  local bad=0 tmp=$PAR_TMP name want out rc wdir ccmd cflags f n weak
-  for name in $("$bcc" kernel list); do
-    # A failed run is compared as its output, and never recorded in the cache (`par_nostore`).
-    want=$("$bcc" kernel interp --stage flat "$name" 2>&1) || par_nostore
-    out=$("$bcc" kernel run --native "$name" 2>&1) || par_nostore
-    if [ "$out" = "$want" ]; then echo "kernel $name: native as flat"
-    else echo "kernel $name: native differs: $out (flat: $want)"; bad=$((bad + 1)); fi
-  done
-
-  "$bcc" hostops flat > "$tmp/flat" || { echo "hostops: the flat IR fails"; bad=$((bad + 1)); }
-  "$bcc" hostops native > "$tmp/native" || { echo "hostops: native fails"; bad=$((bad + 1)); }
-  if cmp -s "$tmp/flat" "$tmp/native"; then
-    echo "hostops: $(grep -c '^==' "$tmp/flat") operations, $(grep -vc '^==' "$tmp/flat") cases, native as the Lean host"
-  else
-    echo "hostops: native differs from the Lean host:"
-    diff "$tmp/flat" "$tmp/native" | head -10 | sed 's/^/  /' || true
-    bad=$((bad + 1))
-  fi
-
-  # Under `lake env` (as `lake exe bcc run --native` runs), PATH starts with the Lean toolchain's
-  # bin, whose clang has no C headers: the build must not take it.
-  rc=0
-  lake env "$bcc" run --backend "$backend" --native corpus/div-unhandled.bc > "$tmp/out" 2> "$tmp/err" || rc=$?
-  if [ "$rc" = 1 ] && cmp -s "$tmp/out" corpus/div-unhandled.out; then
-    echo "corpus/div-unhandled.bc: native under lake env's PATH"
-  else
-    echo "corpus/div-unhandled.bc: native under lake env's PATH fails ($rc): $(head -3 "$tmp/err")"; bad=$((bad + 1))
-  fi
-
+  local part=$1 bad=0 tmp=$PAR_TMP name want out rc wdir ccmd cflags f n weak
+  case "$part" in
+  kernels)
+    for name in $("$bcc" kernel list); do
+      # A failed run is compared as its output, and never recorded in the cache (`par_nostore`).
+      want=$("$bcc" kernel interp --stage flat "$name" 2>&1) || par_nostore
+      out=$("$bcc" kernel run --native "$name" 2>&1) || par_nostore
+      if [ "$out" = "$want" ]; then echo "kernel $name: native as flat"
+      else echo "kernel $name: native differs: $out (flat: $want)"; bad=$((bad + 1)); fi
+    done
+    ;;
+  hostops)
+    "$bcc" hostops flat > "$tmp/flat" || { echo "hostops: the flat IR fails"; bad=$((bad + 1)); }
+    "$bcc" hostops native > "$tmp/native" || { echo "hostops: native fails"; bad=$((bad + 1)); }
+    if cmp -s "$tmp/flat" "$tmp/native"; then
+      echo "hostops: $(grep -c '^==' "$tmp/flat") operations, $(grep -vc '^==' "$tmp/flat") cases, native as the Lean host"
+    else
+      echo "hostops: native differs from the Lean host:"
+      diff "$tmp/flat" "$tmp/native" | head -10 | sed 's/^/  /' || true
+      bad=$((bad + 1))
+    fi
+    ;;
+  lake-env)
+    # Under `lake env` (as `lake exe bcc run --native` runs), PATH starts with the Lean toolchain's
+    # bin, whose clang has no C headers: the build must not take it.
+    rc=0
+    lake env "$bcc" run --backend "$backend" --native corpus/div-unhandled.bc > "$tmp/out" 2> "$tmp/err" || rc=$?
+    if [ "$rc" = 1 ] && cmp -s "$tmp/out" corpus/div-unhandled.out; then
+      echo "corpus/div-unhandled.bc: native under lake env's PATH"
+    else
+      echo "corpus/div-unhandled.bc: native under lake env's PATH fails ($rc): $(head -3 "$tmp/err")"; bad=$((bad + 1))
+    fi
+    ;;
   # Constant stack: loops of tail calls on a stack of 64 KiB (`BC_STACK`), where a frame per call
   # would last a few thousand calls: a generated loop of 10^8 turns (`bcc tailcalls`), the kernel
   # program loop-tail (10^5 operations, each a turn of a loop of tail calls through a handler),
   # and corpus/deep-list.bc (lists of 50000 built and summed by loops, folded by pointer reversal,
   # SPEC §67 on Backend2), on the backend `--backend` selects.
-  "$bcc" tailcalls 100000000 || bad=$((bad + 1))
-  want=$("$bcc" kernel interp --stage flat loop-tail 2>&1) || par_nostore
-  out=$(BC_STACK=65536 "$bcc" kernel run --native loop-tail 2>&1) || par_nostore
-  if [ "$out" = "$want" ]; then echo "kernel loop-tail: native in a stack of 64 KiB"
-  else echo "kernel loop-tail: native in a stack of 64 KiB fails: $out"; bad=$((bad + 1)); fi
-  if BC_STACK=65536 "$bcc" run --backend "$backend" --native corpus/deep-list.bc < /dev/null > "$tmp/out" 2> "$tmp/err" &&
-      cmp -s "$tmp/out" corpus/deep-list.out; then
-    echo "corpus/deep-list.bc: native in a stack of 64 KiB ($backend)"
-  else
-    echo "corpus/deep-list.bc: native in a stack of 64 KiB fails: $(head -3 "$tmp/err")"; bad=$((bad + 1))
-  fi
+  tailcalls)
+    "$bcc" tailcalls 100000000 || bad=$((bad + 1))
+    ;;
+  loop-tail)
+    want=$("$bcc" kernel interp --stage flat loop-tail 2>&1) || par_nostore
+    out=$(BC_STACK=65536 "$bcc" kernel run --native loop-tail 2>&1) || par_nostore
+    if [ "$out" = "$want" ]; then echo "kernel loop-tail: native in a stack of 64 KiB"
+    else echo "kernel loop-tail: native in a stack of 64 KiB fails: $out"; bad=$((bad + 1)); fi
+    ;;
+  deep-list)
+    if BC_STACK=65536 "$bcc" run --backend "$backend" --native corpus/deep-list.bc < /dev/null > "$tmp/out" 2> "$tmp/err" &&
+        cmp -s "$tmp/out" corpus/deep-list.out; then
+      echo "corpus/deep-list.bc: native in a stack of 64 KiB ($backend)"
+    else
+      echo "corpus/deep-list.bc: native in a stack of 64 KiB fails: $(head -3 "$tmp/err")"; bad=$((bad + 1))
+    fi
+    ;;
   # A Json 10^6 levels deep freed by the in-place consume (SPEC §77) in a stack of 16 KiB: its
   # answer is the depth, and `live 0`.
-  if [ "$backend" = new ]; then
+  json-drop-deep)
     if BC_STACK=16384 "$bcc" run --backend new --native corpus/json-drop-deep.bc 1000000 < /dev/null > "$tmp/out" 2> "$tmp/err" &&
         [ "$(cat "$tmp/out")" = "$(printf 'built\ni32[1000000]\nlive 0')" ]; then
       echo "corpus/json-drop-deep.bc: 10^6 levels native in a stack of 16 KiB"
     else
       echo "corpus/json-drop-deep.bc: 10^6 levels native in a stack of 16 KiB fails: $(head -3 "$tmp/out") $(head -3 "$tmp/err")"; bad=$((bad + 1))
     fi
-  fi
+    ;;
   # No weak imports (macOS): a native program is built pinned to the oldest supported OS
   # (`Pipeline/Driver.lean`, `macosMinVersion`), so an API that OS lacks is a build error. A weak
   # import would be null at run time on that OS. One program of each shape the runtime serves.
-  if [ "$(uname)" = Darwin ]; then
+  weak)
     wdir=$tmp/weak; mkdir -p "$wdir"
     "$bcc" cc --runtime > "$wdir/runtime.c"
     read -r -a ccmd <<< "$("$bcc" cc)"; read -r -a cflags <<< "$("$bcc" cc --flags)"
@@ -178,17 +195,23 @@ serial() {
         echo "$f: native build for the weak-import check fails: $(head -3 "$wdir/$n.err")"; bad=$((bad + 1))
       fi
     done
-  fi
+    ;;
+  esac
   echo "$bad" > "$PAR_SIDE/serialbad"
   [ "$bad" = 0 ]
 }
 if [ "$named" = 0 ]; then
   tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp" "$skipdir"' EXIT
+  trap 'rm -rf "$tmp" "$skipdir" "$NATIVE_RUNS"' EXIT
   export -f serial
   export PAR_COLLECT=$tmp PAR_CACHE_DEPS="files:$(echo corpus/{div-unhandled,deep-list,json-drop-deep,io-cat,io-task,async-borrow,float-arith}.* lean-toolchain lakefile.toml lake-manifest.json)"
-  PAR_CACHE=${PAR_CACHE:+compile-native-serial backend=$backend} JOBS=1 par serial corpus/div-unhandled.bc
-  bad=$((bad + $(cat "$tmp/serialbad" 2>/dev/null || echo 1)))
+  parts=(kernels hostops lake-env tailcalls loop-tail deep-list)
+  [ "$backend" = new ] && parts+=(json-drop-deep)
+  [ "$(uname)" = Darwin ] && parts+=(weak)
+  PAR_CACHE=${PAR_CACHE:+compile-native-serial backend=$backend} par serial "${parts[@]}"
+  # A part that stopped before counting (a command failed under `set -e`) counts one failure.
+  counted=$(grep -c . "$tmp/serialbad" 2>/dev/null || true)
+  bad=$((bad + $(awk '{ s += $1 } END { print s + 0 }' "$tmp/serialbad" 2>/dev/null || echo 0) + ${#parts[@]} - ${counted:-0}))
 fi
 echo "$bad failure(s)."
 [ "$bad" -eq 0 ]

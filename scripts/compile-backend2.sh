@@ -105,7 +105,7 @@ program() {
     rc=0
     case "$st" in
       wasm) "$bcc" run "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$? ;;
-      native) "$bcc" run --native "$f" "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$? ;;
+      native) rc=$(native_result "$NATIVE_RUNS" "$f" "$w") ;;
       *) "$bcc" interp --stage "$st" "$f" -- "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$? ;;
     esac
     if [ "$rc" != "$(statusOf "$f")" ] || ! cmp -s "$w/out" "$base.out" || ! cmp -s "$w/err" "$err"; then
@@ -151,6 +151,11 @@ export -f program localise argsOf statusOf
 # (scripts/par.sh), gathered in $tmp in the programs' order. A run that writes the tables is not
 # cached.
 export PAR_COLLECT=$tmp
+# The native stage reads Backend2's native runs, made once for this step and compile-native.sh
+# (scripts/native-run.sh).
+. scripts/native-run.sh
+export NATIVE_RUNS=$tmp/native-runs
+[ "$native" = 1 ] && [ "$final" = 0 ] && native_runs "$NATIVE_RUNS" "${files[@]}"
 [ "$write" = 1 ] || export PAR_CACHE="compile-backend2 final=$final native=$native"
 par program "${files[@]}"
 skipbad=0
