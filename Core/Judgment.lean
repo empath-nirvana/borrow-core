@@ -210,6 +210,119 @@ def Jdg.alphaB : Jdg → Jdg → Bool
   | .comp C, .comp C' => CTy.alphaB [] C C'
   | _, _ => false
 
+/-- **The same-term rules** (`[conv]`): which one, with the data its typed node holds.  Each
+concludes with its premise's term; `JConv` gives its judgments and side premises.  `[spec §3]` -/
+inductive ConvKind where
+  /-- `return V : F A`. -/
+  | ret (A : VTy)
+  /-- A computation of `F A` read back as a value of `A`. -/
+  | ofRet (A : VTy)
+  /-- Dereliction. -/
+  | bangE (A : VTy)
+  /-- `[]I`. -/
+  | boxI (a : Lifetime.Life) (A : VTy)
+  /-- `[]E`. -/
+  | boxE (a : Lifetime.Life) (A : VTy)
+  /-- `⊑` at `Imm`. -/
+  | immSub (a b : Lifetime.Life) (A : VTy)
+  /-- `⊑` at `Mut`. -/
+  | mutSub (a b : Lifetime.Life) (A : VTy)
+  /-- `[erase]`. -/
+  | codeErase (C : CTy) (E : VTy)
+  /-- `[erase]` under `!`. -/
+  | codeEraseB (C : CTy) (E : VTy)
+  /-- `roll`. -/
+  | roll (A : VTy)
+  /-- `unroll`. -/
+  | unroll (A : VTy)
+  /-- `ν`'s unrolling read as the `ν`. -/
+  | nuIn (m i : Nat) (C : CTy)
+  /-- A `ν` read as its unrolling. -/
+  | nuOut (m i : Nat) (C : CTy)
+  /-- `[sub]`. -/
+  | effSub (S S' : Row) (A : VTy)
+  /-- `[α]`. -/
+  | alpha
+  deriving Inhabited
+
+/-- **One same-term step**, with its side premises: a term at the first judgment is at the second
+(the rule `conv`).  One case per same-term rule, each with exactly that rule's premises.
+`[spec §3, §6, §7, §19, §68, §79]` -/
+inductive JConv (Δ : LifeCtx) (Γ : Ctx VTy) : ConvKind → Jdg → Jdg → Prop
+  /-- `return V : F A`. -/
+  | ret {A : VTy} : JConv Δ Γ (.ret A) (.val A) (.comp (.ret A))
+  /-- A computation of `F A` is a value-judged expression at `A`: `SemV` is `SemC` at `F A`.
+  `[spec §3]` -/
+  | ofRet {A : VTy} : JConv Δ Γ (.ofRet A) (.comp (.ret A)) (.val A)
+  /-- Dereliction. -/
+  | bangE {A : VTy} : JConv Δ Γ (.bangE A) (.val (.bang A)) (.val A)
+  /-- `[]I`, at a context that outlives `a`. -/
+  | boxI {a : Lifetime.Life} {A : VTy} (hΓ : CtxOutlives Δ Γ a) :
+      JConv Δ Γ (.boxI a A) (.val A) (.val (.box a A))
+  /-- `[]E`. -/
+  | boxE {a : Lifetime.Life} {A : VTy} : JConv Δ Γ (.boxE a A) (.val (.box a A)) (.val A)
+  /-- `⊑` at `Imm`: a borrow at `b` is one at every `a ⊑ b`. -/
+  | immSub {a b : Lifetime.Life} {A : VTy} (hle : Δ.EntailsLe a b) :
+      JConv Δ Γ (.immSub a b A) (.val (.imm b A)) (.val (.imm a A))
+  /-- `⊑` at `Mut`. -/
+  | mutSub {a b : Lifetime.Life} {A : VTy} (hle : Δ.EntailsLe a b) :
+      JConv Δ Γ (.mutSub a b A) (.val (.mut b A)) (.val (.mut a A))
+  /-- `[erase]` (§68's `erase`): a code type read at `U C`.  `[spec §68]` -/
+  | codeErase {C : CTy} {N : Expr} {E : VTy} :
+      JConv Δ Γ (.codeErase C E) (.val (.code N E C)) (.val (.thunk C))
+  /-- `[erase]` under `!`.  `[spec §68]` -/
+  | codeEraseB {C : CTy} {N : Expr} {E : VTy} :
+      JConv Δ Γ (.codeEraseB C E) (.val (.bang (.code N E C))) (.val (.bang (.thunk C)))
+  /-- `roll`: a value of `A[μX. A/X]` is a value of `μX. A`, at a closed `μ` whose variable is
+  outside `A`'s `Mut` payloads (`docs/scope-recursion.md` §2.2).  `[spec §6]` -/
+  | roll {A : VTy} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0) :
+      JConv Δ Γ (.roll A) (.val (VTy.inst (.mu A) A)) (.val (.mu A))
+  /-- `unroll`: a value of `μX. A` is a value of `A[μX. A/X]`.  `[spec §6]` -/
+  | unroll {A : VTy} : JConv Δ Γ (.unroll A) (.val (.mu A)) (.val (VTy.inst (.mu A) A))
+  /-- `νᵢ` is its unrolling `Cᵢ[U ν₀/X₀, …]` (`cC_nuS_iff`; at one equation `C[U(νX. C)/X]`,
+  `cC_nu_iff`), at a positive system (`CTy.SysOkAt`, today's `NuOk` at `νX. C`).
+  `[spec §7, §79]` -/
+  | nuIn {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) :
+      JConv Δ Γ (.nuIn m i C) (.comp (CTy.unrollS m i C)) (.comp (.nuSys m i C))
+  /-- The converse of `nuIn`.  `[spec §7, §79]` -/
+  | nuOut {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) :
+      JConv Δ Γ (.nuOut m i C) (.comp (.nuSys m i C)) (.comp (CTy.unrollS m i C))
+  /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
+  | effSub {S S' : Row} {A : VTy} (hle : RowLe S S') :
+      JConv Δ Γ (.effSub S S' A) (.comp (CTy.effOf S A)) (.comp (CTy.effOf S' A))
+  /-- **Conversion** `[α]`: judgments equal up to the names of their types' lifetime binders
+  (`Jdg.alphaB`).  `[spec §3]` -/
+  | alpha {j j' : Jdg} (hα : j.alphaB j' = true) : JConv Δ Γ .alpha j j'
+
+/-- The lifetime a step's side premise asks the context to outlive: `[]I`'s, the one step whose
+premise reads `Γ`.  `[spec §3]` -/
+def ConvKind.outl? : ConvKind → Option Lifetime.Life
+  | .boxI a _ => some a
+  | _ => none
+
+/-- A step's side premises read at another context: only `[]I`'s outlives (at `k.outl?`) and
+`⊑`'s entailment read `Δ` or `Γ`.  `[spec §3]` -/
+theorem JConv.mono {Δ Δ' : LifeCtx} {Γ Γ' : Ctx VTy} {k : ConvKind} {j j' : Jdg}
+    (hΓ : ∀ a, k.outl? = some a → CtxOutlives Δ Γ a → CtxOutlives Δ' Γ' a)
+    (hΔ : ∀ a b, Δ.EntailsLe a b → Δ'.EntailsLe a b) (hc : JConv Δ Γ k j j') :
+    JConv Δ' Γ' k j j' := by
+  cases hc with
+  | boxI h => exact .boxI (hΓ _ rfl h)
+  | immSub h => exact .immSub (hΔ _ _ h)
+  | mutSub h => exact .mutSub (hΔ _ _ h)
+  | ret => exact .ret
+  | ofRet => exact .ofRet
+  | bangE => exact .bangE
+  | boxE => exact .boxE
+  | codeErase => exact .codeErase
+  | codeEraseB => exact .codeEraseB
+  | roll hA hc => exact .roll hA hc
+  | unroll => exact .unroll
+  | nuIn hC => exact .nuIn hC
+  | nuOut hC => exact .nuOut hC
+  | effSub hle => exact .effSub hle
+  | alpha hα => exact .alpha hα
+
 /-- The CBPV typing judgment.  Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and
 `Ctx.SoloP`: a live slot of persistent type may be duplicated and consumed.  `[spec §3, §10, §83]` -/
 inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
@@ -228,8 +341,11 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   /-- `thunk V : U C` for a λ-value `V : C`, `C` not an `F`. -/
   | thunkV {Δ Γ N C} (hC : C.isRet = false) (h : CDerivesX I Δ Γ (.val (.lam N)) (.comp C)) :
       CDerivesX I Δ Γ (.val (.lam N)) (.val (.thunk C))
-  /-- `return V : F A`. -/
-  | ret {Δ Γ V A} (h : CDerivesX I Δ Γ V (.val A)) : CDerivesX I Δ Γ V (.comp (.ret A))
+  /-- **`[conv]`, the same-term rules**: a term at `j` is at `j'` by one step of `JConv` (`return`,
+  `ofRet`, `!E`, `[]I`, `[]E`, `⊑`, `[erase]`, `roll`/`unroll`, `ν`'s two rules, `[sub]`, `[α]`).
+  `[spec §3]` -/
+  | conv {Δ Γ e} {j j' : Jdg} (k : ConvKind) (h : CDerivesX I Δ Γ e j) (hc : JConv Δ Γ k j j') :
+      CDerivesX I Δ Γ e j'
   /-- `M to x. N`, written `(λx. N) M`. -/
   | bind {Δ Γ Γ₁ Γ₂ M N A C} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hM : CDerivesX I Δ Γ₁ M (.comp (.ret A))) (hN : CDerivesX I Δ (⟨A, true⟩ :: Γ₂) N (.comp C)) :
@@ -301,26 +417,10 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
       (hok : Ctx.CapOK Γ (.lam M)) :
       CDerivesX I Δ Γ (.val (.lam M))
         (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))
-  /-- `[erase]` (§68's `erase`): a code type read at `U C`, on the same term.  `[spec §68]` -/
-  | codeErase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesX I Δ Γ e (.val (.code N E C))) :
-      CDerivesX I Δ Γ e (.val (.thunk C))
-  /-- `[erase]` under `!`.  `[spec §68]` -/
-  | codeEraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesX I Δ Γ e (.val (.bang (.code N E C)))) :
-      CDerivesX I Δ Γ e (.val (.bang (.thunk C)))
-  /-- Dereliction. -/
-  | bangE {Δ Γ e A} (h : CDerivesX I Δ Γ e (.val (.bang A))) : CDerivesX I Δ Γ e (.val A)
   | copyBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
       CDerivesX I Δ Γ copy (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A))))))
   | releaseBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
       CDerivesX I Δ Γ forget (.val (.thunk (.arr (.bang A) (.ret .unit))))
-  /-- `[]I`. -/
-  | boxI {Δ Γ e a A} (h : CDerivesX I Δ Γ e (.val A)) (hΓ : CtxOutlives Δ Γ a) :
-      CDerivesX I Δ Γ e (.val (.box a A))
-  | boxE {Δ Γ e a A} (h : CDerivesX I Δ Γ e (.val (.box a A))) : CDerivesX I Δ Γ e (.val A)
-  | immSub {Δ Γ e a b A} (h : CDerivesX I Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) :
-      CDerivesX I Δ Γ e (.val (.imm a A))
-  | mutSub {Δ Γ e a b A} (h : CDerivesX I Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) :
-      CDerivesX I Δ Γ e (.val (.mut a A))
   /-- The borrow axioms, at arbitrary value-type payloads. -/
   | alloc {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
       CDerivesX I Δ Γ (.val (.prim .alloc)) (.val (.lolli A (.ref A)))
@@ -501,15 +601,6 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   /-- Call-by-value `∀E`: `e []` for `e` at `VTy.all x b A` (`allE_compatX`).  `[spec §3]` -/
   | allEV {Δ Γ e x b a A} (h : CDerivesX I Δ Γ e (.val (.all x b A))) (hlt : Δ.EntailsLt a b) :
       CDerivesX I Δ Γ (.app e (.val .unit)) (.val (A.instLife x a))
-  /-- A computation of `F A` is a value-judged expression at `A`: `SemV` is `SemC` at `F A`.  `[spec §3]` -/
-  | ofRet {Δ Γ e A} (h : CDerivesX I Δ Γ e (.comp (.ret A))) : CDerivesX I Δ Γ e (.val A)
-  /-- `roll`: a value of `A[μX. A/X]` is a value of `μX. A`, at a closed `μ` whose variable is
-  outside `A`'s `Mut` payloads (`docs/scope-recursion.md` §2.2).  `[spec §6]` -/
-  | roll {Δ Γ e A} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0)
-      (h : CDerivesX I Δ Γ e (.val (VTy.inst (.mu A) A))) : CDerivesX I Δ Γ e (.val (.mu A))
-  /-- `unroll`: a value of `μX. A` is a value of `A[μX. A/X]`.  `[spec §6]` -/
-  | unroll {Δ Γ e A} (h : CDerivesX I Δ Γ e (.val (.mu A))) :
-      CDerivesX I Δ Γ e (.val (VTy.inst (.mu A) A))
   /-- The borrowed fold, a constant:
   `foldImm : !U(∀'y ⊏ ⊤. A_R ⊸ F R) ⊸ !U(∀'y ⊏ @c. Imm 'y (μX. T) ⊸ F R)`, for `T` built by
   `⊗`/`⊕` from closed leaves, `Ref X` and `X` (not `X` itself), `A_R = Imm̲ 'y T` with `R` at
@@ -533,13 +624,6 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   (`FoldOwnG.lean`).  `[spec §6]` -/
   | foldOwnG {Δ Γ} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
       CDerivesX I Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs))
-  /-- `νᵢ` is its unrolling `Cᵢ[U ν₀/X₀, …]` (`cC_nuS_iff`; at one equation `C[U(νX. C)/X]`,
-  `cC_nu_iff`), on the same term, at a positive system (`CTy.SysOkAt`, today's `NuOk` at
-  `νX. C`).  `[spec §7, §79]` -/
-  | nuIn {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesX I Δ Γ e (.comp (CTy.unrollS m i C))) :
-      CDerivesX I Δ Γ e (.comp (.nuSys m i C))
-  | nuOut {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesX I Δ Γ e (.comp (.nuSys m i C))) :
-      CDerivesX I Δ Γ e (.comp (CTy.unrollS m i C))
   /-- Coiteration, a constant: `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)` (`Nu.lean`), at a
   positive `C`.  `[spec §7]` -/
   | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
@@ -556,9 +640,6 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   | nuOutK {Δ Γ i} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S)))
       (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
       CDerivesX I Δ Γ (.var i) (.comp (C.instT (codeTy C G S)))
-  /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
-  | effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S')
-      (h : CDerivesX I Δ Γ e (.comp (CTy.effOf S A))) : CDerivesX I Δ Γ e (.comp (CTy.effOf S' A))
   /-- `[perform]`: a non-abortive, unmarked operation of the row: a marked one is performed only
   by `[await-c]`.  `[spec §19, §29a]` -/
   | effPerform {Δ Γ V} {S : Row} {o : OpSig}
@@ -695,11 +776,6 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
       (hV : CDerivesX I Δ [] (.val (.lam b)) j)
       (hN : CDerivesX I Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C)) :
       CDerivesX I Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C)
-  /-- **Conversion** `[α]`: a term at a judgment is at every judgment equal to it up to the names
-  of its types' lifetime binders (`Jdg.alphaB`).  Its compatibility lemma is `alpha_compatJ`, from
-  `cC_tyEq`.  `[spec §3]` -/
-  | alpha {Δ Γ e} {j j' : Jdg} (h : CDerivesX I Δ Γ e j) (hα : j.alphaB j' = true) :
-      CDerivesX I Δ Γ e j'
   /-- **R1, the relaxed lend.** `r : Ref T ⊢ withborU d r (Λ. λm. M) : F_Σ (Ref T ⊗ B)`, the
   callback `M` at a row `Σ` of resuming operations and the cancel path's cancellable wait and cancel
   target (`Row.ResumeOC`), typed in `CDerivesP` with the
@@ -784,6 +860,86 @@ theorem CDerivesX.withbor3UD {I : JIdx} {Δ Γ a A B d} {SM SD S : Row} (x : Lif
     (hd : CDerivesX I Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
     CDerivesX I Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) :=
   .withborUD (.reborrow a) x hΓ hx trivial hfree₁ hfree₂ hS hMS hDS hSv hP hd
+
+/-! ### Derived rules: the same-term rules, the kinds of `conv`
+
+`scripts/gen-pin.py` gives each its instances' names (`CDerives.ret`, …), as it does the rules. -/
+
+/-- `return V : F A`. -/
+theorem CDerivesX.ret {I : JIdx} {Δ Γ V A} (h : CDerivesX I Δ Γ V (.val A)) : CDerivesX I Δ Γ V (.comp (.ret A)) :=
+  .conv _ h .ret
+
+/-- A computation of `F A` is a value-judged expression at `A`: `SemV` is `SemC` at `F A`.  `[spec §3]` -/
+theorem CDerivesX.ofRet {I : JIdx} {Δ Γ e A} (h : CDerivesX I Δ Γ e (.comp (.ret A))) : CDerivesX I Δ Γ e (.val A) :=
+  .conv _ h .ofRet
+
+/-- Dereliction. -/
+theorem CDerivesX.bangE {I : JIdx} {Δ Γ e A} (h : CDerivesX I Δ Γ e (.val (.bang A))) : CDerivesX I Δ Γ e (.val A) :=
+  .conv _ h .bangE
+
+/-- `[]I`. -/
+theorem CDerivesX.boxI {I : JIdx} {Δ Γ e a A} (h : CDerivesX I Δ Γ e (.val A)) (hΓ : CtxOutlives Δ Γ a) :
+    CDerivesX I Δ Γ e (.val (.box a A)) :=
+  .conv _ h (.boxI hΓ)
+
+/-- `[]E`. -/
+theorem CDerivesX.boxE {I : JIdx} {Δ Γ e a A} (h : CDerivesX I Δ Γ e (.val (.box a A))) : CDerivesX I Δ Γ e (.val A) :=
+  .conv _ h .boxE
+
+/-- `⊑` at `Imm`. -/
+theorem CDerivesX.immSub {I : JIdx} {Δ Γ e a b A} (h : CDerivesX I Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) :
+    CDerivesX I Δ Γ e (.val (.imm a A)) :=
+  .conv _ h (.immSub hle)
+
+/-- `⊑` at `Mut`. -/
+theorem CDerivesX.mutSub {I : JIdx} {Δ Γ e a b A} (h : CDerivesX I Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) :
+    CDerivesX I Δ Γ e (.val (.mut a A)) :=
+  .conv _ h (.mutSub hle)
+
+/-- `[erase]` (§68's `erase`): a code type read at `U C`, on the same term.  `[spec §68]` -/
+theorem CDerivesX.codeErase {I : JIdx} {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesX I Δ Γ e (.val (.code N E C))) :
+    CDerivesX I Δ Γ e (.val (.thunk C)) :=
+  .conv _ h .codeErase
+
+/-- `[erase]` under `!`.  `[spec §68]` -/
+theorem CDerivesX.codeEraseB {I : JIdx} {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesX I Δ Γ e (.val (.bang (.code N E C)))) :
+    CDerivesX I Δ Γ e (.val (.bang (.thunk C))) :=
+  .conv _ h .codeEraseB
+
+/-- `roll`: a value of `A[μX. A/X]` is a value of `μX. A`, at a closed `μ` whose variable is
+outside `A`'s `Mut` payloads (`docs/scope-recursion.md` §2.2).  `[spec §6]` -/
+theorem CDerivesX.roll {I : JIdx} {Δ Γ e A} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0)
+    (h : CDerivesX I Δ Γ e (.val (VTy.inst (.mu A) A))) : CDerivesX I Δ Γ e (.val (.mu A)) :=
+  .conv _ h (.roll hA hc)
+
+/-- `unroll`: a value of `μX. A` is a value of `A[μX. A/X]`.  `[spec §6]` -/
+theorem CDerivesX.unroll {I : JIdx} {Δ Γ e A} (h : CDerivesX I Δ Γ e (.val (.mu A))) :
+    CDerivesX I Δ Γ e (.val (VTy.inst (.mu A) A)) :=
+  .conv _ h .unroll
+
+/-- `νᵢ` is its unrolling `Cᵢ[U ν₀/X₀, …]` (`cC_nuS_iff`; at one equation `C[U(νX. C)/X]`,
+`cC_nu_iff`), on the same term, at a positive system (`CTy.SysOkAt`, today's `NuOk` at
+`νX. C`).  `[spec §7, §79]` -/
+theorem CDerivesX.nuIn {I : JIdx} {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesX I Δ Γ e (.comp (CTy.unrollS m i C))) :
+    CDerivesX I Δ Γ e (.comp (.nuSys m i C)) :=
+  .conv _ h (.nuIn hC)
+
+/-- The converse of `nuIn`.  `[spec §7, §79]` -/
+theorem CDerivesX.nuOut {I : JIdx} {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesX I Δ Γ e (.comp (.nuSys m i C))) :
+    CDerivesX I Δ Γ e (.comp (CTy.unrollS m i C)) :=
+  .conv _ h (.nuOut hC)
+
+/-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
+theorem CDerivesX.effSub {I : JIdx} {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S')
+    (h : CDerivesX I Δ Γ e (.comp (CTy.effOf S A))) : CDerivesX I Δ Γ e (.comp (CTy.effOf S' A)) :=
+  .conv _ h (.effSub hle)
+
+/-- **Conversion** `[α]`: a term at a judgment is at every judgment equal to it up to the names
+of its types' lifetime binders (`Jdg.alphaB`).  Its compatibility lemma is `alpha_compatJ`, from
+`cC_tyEq`.  `[spec §3]` -/
+theorem CDerivesX.alpha {I : JIdx} {Δ Γ e} {j j' : Jdg} (h : CDerivesX I Δ Γ e j) (hα : j.alphaB j' = true) :
+    CDerivesX I Δ Γ e j' :=
+  .conv _ h (.alpha hα)
 
 /-- The kernel's typing judgment: `CDerivesX` with no tie.  `[spec §3, §10, §83]` -/
 abbrev CDerives := CDerivesX {}

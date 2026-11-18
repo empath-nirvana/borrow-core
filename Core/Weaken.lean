@@ -83,7 +83,7 @@ theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (
   | sumI₂ _ ih => exact .sumI₂ ih
   | thunkF _ ih => exact .thunkF ih
   | thunkV hC _ ih => exact .thunkV hC ih
-  | ret _ ih => exact .ret ih
+  | conv _ _ hc ih => exact .conv _ ih (hc.mono (fun _ _ => ctxOutlives_append h') (fun _ _ => id))
   | bind hs _ _ ihM ihN => exact .bind (splitP_append h' hs) ihM ihN
   | force hs hT => exact .force (soloP_append h' hs) hT
   | lam _ ih => exact .lam ih
@@ -107,15 +107,8 @@ theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (
   | codeIB hp _ hok ih =>
       obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
       rw [← hty]; exact .codeIB (flatLive_append h' hp) ih hok'
-  | codeErase _ ih => exact .codeErase ih
-  | codeEraseB _ ih => exact .codeEraseB ih
-  | bangE _ ih => exact .bangE ih
   | copyBang hΓ => exact .copyBang (deadP_append h' hΓ)
   | releaseBang hΓ => exact .releaseBang (deadP_append h' hΓ)
-  | boxI _ hΓ ih => exact .boxI ih (ctxOutlives_append h' hΓ)
-  | boxE _ ih => exact .boxE ih
-  | immSub _ hle ih => exact .immSub ih hle
-  | mutSub _ hle ih => exact .mutSub ih hle
   | alloc hΓ => exact .alloc (deadP_append h' hΓ)
   | free hΓ => exact .free (deadP_append h' hΓ)
   | tokMint hΓ => exact .tokMint (deadP_append h' hΓ)
@@ -167,20 +160,14 @@ theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (
       exact .sliceBorrowIU x (deadP_append h' hΓ) hsc hA hB hf₁ hf₂ hS ihd
   | lolliE hs _ _ iha ihf => exact .lolliE (splitP_append h' hs) iha ihf
   | allEV _ hlt ih => exact .allEV ih hlt
-  | ofRet _ ih => exact .ofRet ih
-  | roll hA hc _ ih => exact .roll hA hc ih
-  | unroll _ ih => exact .unroll ih
   | foldImm F y c R hΓ hF hG hyM hyR hR =>
       exact .foldImm F y c R (deadP_append h' hΓ) hF hG hyM hyR hR
   | foldOwn F R hΓ hF hG => exact .foldOwn F R (deadP_append h' hΓ) hF hG
   | foldOwnG B₀ Rs hΓ hB => exact .foldOwnG B₀ Rs (deadP_append h' hΓ) hB
   | foldReuse F R hΓ hF hG => exact .foldReuse F R (deadP_append h' hΓ) hF hG
-  | nuIn hC _ ih => exact .nuIn hC ih
-  | nuOut hC _ ih => exact .nuOut hC ih
   | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS (deadP_append h' hΓ)
   | unfoldK C G S hC hG hS hΓ => exact .unfoldK C G S hC hG hS (deadP_append h' hΓ)
   | nuOutK hC hG hS hGf hs => exact .nuOutK hC hG hS hGf (soloP_append h' hs)
-  | effSub hle _ ih => exact .effSub hle ih
   | effPerform hAt hf hna hac _ ih => exact .effPerform hAt hf hna hac ih
   | effAwait hAt hΓ hfa ha haA hfc hc =>
       exact .effAwait hAt (dead_append_dead hΓ h') hfa ha haA hfc hc
@@ -211,7 +198,6 @@ theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (
   | divFuel S A hAt hS hΓ => exact .divFuel S A hAt hS (deadP_append h' hΓ)
   | reify S B R res hAt hS hcl hres hΓ _ => exact .reify S B R res hAt hS hcl hres (deadP_append h' hΓ)
   | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
-  | alpha _ hα ih => exact .alpha ih hα
   | lendR hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true
   | lendLoopR hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true
   | nilDead hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true

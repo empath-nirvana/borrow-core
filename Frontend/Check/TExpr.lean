@@ -654,7 +654,7 @@ inductive TExpr where
   | sumI₂ (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (t : TExpr)
   | thunkF (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
   | thunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
-  | ret (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
+  | conv (info : TInfo) (jdg : Jdg) (j : Jdg) (j' : Jdg) (k : ConvKind) (t : TExpr)
   | bind (info : TInfo) (jdg : Jdg) (A : VTy) (C : CTy) (u : Masks) (tM tN : TExpr)
   | force (info : TInfo) (jdg : Jdg) (i : Nat) (T : VTy) (C : CTy)
   | lam (info : TInfo) (jdg : Jdg) (A : VTy) (C : CTy) (t : TExpr)
@@ -674,15 +674,8 @@ inductive TExpr where
   | bangThunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
   | codeI (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
   | codeIB (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
-  | codeErase (info : TInfo) (jdg : Jdg) (C : CTy) (E : VTy) (t : TExpr)
-  | codeEraseB (info : TInfo) (jdg : Jdg) (C : CTy) (E : VTy) (t : TExpr)
-  | bangE (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
   | copyBang (info : TInfo) (jdg : Jdg) (A : VTy)
   | releaseBang (info : TInfo) (jdg : Jdg) (A : VTy)
-  | boxI (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (t : TExpr)
-  | boxE (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) (t : TExpr)
-  | immSub (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (b : Lifetime.Life) (A : VTy) (t : TExpr)
-  | mutSub (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (b : Lifetime.Life) (A : VTy) (t : TExpr)
   | alloc (info : TInfo) (jdg : Jdg) (A : VTy)
   | free (info : TInfo) (jdg : Jdg) (A : VTy)
   | tokMint (info : TInfo) (jdg : Jdg)
@@ -731,19 +724,13 @@ inductive TExpr where
   | sliceBorrowIU (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (x : LifeVar) (td : TExpr)
   | lolliE (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (u : Masks) (ta tf : TExpr)
   | allEV (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (a : Lifetime.Life) (A : VTy) (t : TExpr)
-  | ofRet (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
-  | roll (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
-  | unroll (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
   | foldImm (info : TInfo) (jdg : Jdg) (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy)
   | foldOwn (info : TInfo) (jdg : Jdg) (F : FShape) (R : VTy)
   | foldReuse (info : TInfo) (jdg : Jdg) (F : FShape) (R : VTy)
   | foldOwnG (info : TInfo) (jdg : Jdg) (B₀ : VTy)
-  | nuIn (info : TInfo) (jdg : Jdg) (m : Nat) (i : Nat) (C : CTy) (t : TExpr)
-  | nuOut (info : TInfo) (jdg : Jdg) (m : Nat) (i : Nat) (C : CTy) (t : TExpr)
   | unfoldN (info : TInfo) (jdg : Jdg) (C : CTy) (S : VTy)
   | unfoldK (info : TInfo) (jdg : Jdg) (C : CTy) (G : VTy) (S : VTy)
   | nuOutK (info : TInfo) (jdg : Jdg) (i : Nat) (C : CTy) (G : VTy) (S : VTy)
-  | effSub (info : TInfo) (jdg : Jdg) (S : Row) (S' : Row) (A : VTy) (t : TExpr)
   | effPerform (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (t : TExpr)
   | effAwait (info : TInfo) (jdg : Jdg) (S : Row) (n : UInt32) (a : OpSig) (c : OpSig)
   | effRaise (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (B : VTy) (t : TExpr)
@@ -755,7 +742,6 @@ inductive TExpr where
   | effHandleT (info : TInfo) (jdg : Jdg) (S : Row) (SN : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
   | effHandleL (info : TInfo) (jdg : Jdg) (S : Row) (SW : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (Xs : Nat → VTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
   | letPoly (info : TInfo) (jdg : Jdg) (C : CTy) (j : Jdg) (tV tN : TExpr)
-  | alpha (info : TInfo) (jdg : Jdg) (j : Jdg) (j' : Jdg) (t : TExpr)
   | lendR (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (B : VTy) (S : Row) (td tM : TExpr)
   | lendLoopR (info : TInfo) (jdg : Jdg) (x : LifeVar) (A : VTy) (S : VTy) (B : VTy) (R : VTy) (tN tK ts0 : TExpr)
   | nilDead (info : TInfo) (jdg : Jdg) (j : Jdg) (t : TExpr)
@@ -821,7 +807,7 @@ def TExpr.erase : TExpr → Expr
   | .sumI₂ _ _ _ _ t => (.inj₂ (t.erase))
   | .thunkF _ _ _ t => (.val (.lam (t.erase)))
   | .thunkV _ _ _ t => t.erase
-  | .ret _ _ _ t => t.erase
+  | .conv _ _ _ _ _ t => t.erase
   | .bind _ _ _ _ _ tM tN => (.app (.val (.lam (tN.erase))) (tM.erase))
   | .force _ _ i _ C => (forceE C (.var i))
   | .lam _ _ _ _ t => (.val (.lam (t.erase)))
@@ -841,15 +827,8 @@ def TExpr.erase : TExpr → Expr
   | .bangThunkV _ _ _ t => t.erase
   | .codeI _ _ _ t => t.erase
   | .codeIB _ _ _ t => t.erase
-  | .codeErase _ _ _ _ t => t.erase
-  | .codeEraseB _ _ _ _ t => t.erase
-  | .bangE _ _ _ t => t.erase
   | .copyBang _ _ _ => BoCa.copy
   | .releaseBang _ _ _ => forget
-  | .boxI _ _ _ _ t => t.erase
-  | .boxE _ _ _ _ t => t.erase
-  | .immSub _ _ _ _ _ t => t.erase
-  | .mutSub _ _ _ _ _ t => t.erase
   | .alloc _ _ _ => (.val (.prim .alloc))
   | .free _ _ _ => (.val (.prim .free))
   | .tokMint _ _ => mintE
@@ -898,19 +877,13 @@ def TExpr.erase : TExpr → Expr
   | .sliceBorrowIU _ _ _ _ _ _ td => (withborUE (td.erase))
   | .lolliE _ _ _ _ _ ta tf => (.app (tf.erase) (ta.erase))
   | .allEV _ _ _ _ _ _ t => (.app (t.erase) (.val .unit))
-  | .ofRet _ _ _ t => t.erase
-  | .roll _ _ _ t => t.erase
-  | .unroll _ _ _ t => t.erase
   | .foldImm _ _ F _ _ _ => (.val (foldImmV F))
   | .foldOwn _ _ F _ => (.val (foldOwnV F))
   | .foldReuse _ _ F _ => (.val (foldReuseV F))
   | .foldOwnG _ _ B₀ => (.val (FoldP.foldOwnGV B₀))
-  | .nuIn _ _ _ _ _ t => t.erase
-  | .nuOut _ _ _ _ _ t => t.erase
   | .unfoldN _ _ C _ => (.val (unfoldV C))
   | .unfoldK _ _ C _ _ => (.val (unfoldV C))
   | .nuOutK _ _ i _ _ _ => (.var i)
-  | .effSub _ _ _ _ _ t => t.erase
   | .effPerform _ _ _ o t => (BoCa.BoLo.performE (opArgE o.n o.i (t.erase)))
   | .effAwait _ _ _ n _ _ => (awaitE n)
   | .effRaise _ _ _ o _ t => (BoCa.BoLo.raiseE (opArgE o.n o.i (t.erase)))
@@ -922,7 +895,6 @@ def TExpr.erase : TExpr → Expr
   | .effHandleT _ _ _ _ E _ n _ _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (.pair (Expr.pairL (tc.erase)) (tailTuple E 0 (Expr.pairR (tc.erase)))) (te.erase))
   | .effHandleL _ _ _ _ E _ _ n _ _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (.pair (Expr.pairL (tc.erase)) (lastTuple E 0 (Expr.pairL (Expr.pairR (tc.erase))) (Expr.pairR (Expr.pairR (tc.erase))))) (te.erase))
   | .letPoly _ _ _ _ tV tN => (.app (.val (.lam (Expr.letBody (tN.erase) (tV.erase)))) (.val (.lam (Expr.lamBody (tV.erase)))))
-  | .alpha _ _ _ _ t => t.erase
   | .lendR _ _ _ _ _ _ _ td tM => (.app (.app (.val (withborUV (td.erase))) (.var 0)) (.val (lendCb (tM.erase))))
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase))
   | .nilDead _ _ _ t => t.erase
@@ -946,7 +918,7 @@ def TExpr.info : TExpr → TInfo
   | .sumI₂ i _ _ _ _ => i
   | .thunkF i _ _ _ => i
   | .thunkV i _ _ _ => i
-  | .ret i _ _ _ => i
+  | .conv i _ _ _ _ _ => i
   | .bind i _ _ _ _ _ _ => i
   | .force i _ _ _ _ => i
   | .lam i _ _ _ _ => i
@@ -966,15 +938,8 @@ def TExpr.info : TExpr → TInfo
   | .bangThunkV i _ _ _ => i
   | .codeI i _ _ _ => i
   | .codeIB i _ _ _ => i
-  | .codeErase i _ _ _ _ => i
-  | .codeEraseB i _ _ _ _ => i
-  | .bangE i _ _ _ => i
   | .copyBang i _ _ => i
   | .releaseBang i _ _ => i
-  | .boxI i _ _ _ _ => i
-  | .boxE i _ _ _ _ => i
-  | .immSub i _ _ _ _ _ => i
-  | .mutSub i _ _ _ _ _ => i
   | .alloc i _ _ => i
   | .free i _ _ => i
   | .tokMint i _ => i
@@ -1023,19 +988,13 @@ def TExpr.info : TExpr → TInfo
   | .sliceBorrowIU i _ _ _ _ _ _ => i
   | .lolliE i _ _ _ _ _ _ => i
   | .allEV i _ _ _ _ _ _ => i
-  | .ofRet i _ _ _ => i
-  | .roll i _ _ _ => i
-  | .unroll i _ _ _ => i
   | .foldImm i _ _ _ _ _ => i
   | .foldOwn i _ _ _ => i
   | .foldReuse i _ _ _ => i
   | .foldOwnG i _ _ => i
-  | .nuIn i _ _ _ _ _ => i
-  | .nuOut i _ _ _ _ _ => i
   | .unfoldN i _ _ _ => i
   | .unfoldK i _ _ _ _ => i
   | .nuOutK i _ _ _ _ _ => i
-  | .effSub i _ _ _ _ _ => i
   | .effPerform i _ _ _ _ => i
   | .effAwait i _ _ _ _ _ => i
   | .effRaise i _ _ _ _ _ => i
@@ -1047,7 +1006,6 @@ def TExpr.info : TExpr → TInfo
   | .effHandleT i _ _ _ _ _ _ _ _ _ _ _ _ _ => i
   | .effHandleL i _ _ _ _ _ _ _ _ _ _ _ _ _ _ => i
   | .letPoly i _ _ _ _ _ => i
-  | .alpha i _ _ _ _ => i
   | .lendR i _ _ _ _ _ _ _ _ => i
   | .lendLoopR i _ _ _ _ _ _ _ _ _ => i
   | .nilDead i _ _ _ => i
@@ -1067,7 +1025,7 @@ def TExpr.jdg : TExpr → Jdg
   | .sumI₂ _ j _ _ _ => j
   | .thunkF _ j _ _ => j
   | .thunkV _ j _ _ => j
-  | .ret _ j _ _ => j
+  | .conv _ j _ _ _ _ => j
   | .bind _ j _ _ _ _ _ => j
   | .force _ j _ _ _ => j
   | .lam _ j _ _ _ => j
@@ -1087,15 +1045,8 @@ def TExpr.jdg : TExpr → Jdg
   | .bangThunkV _ j _ _ => j
   | .codeI _ j _ _ => j
   | .codeIB _ j _ _ => j
-  | .codeErase _ j _ _ _ => j
-  | .codeEraseB _ j _ _ _ => j
-  | .bangE _ j _ _ => j
   | .copyBang _ j _ => j
   | .releaseBang _ j _ => j
-  | .boxI _ j _ _ _ => j
-  | .boxE _ j _ _ _ => j
-  | .immSub _ j _ _ _ _ => j
-  | .mutSub _ j _ _ _ _ => j
   | .alloc _ j _ => j
   | .free _ j _ => j
   | .tokMint _ j => j
@@ -1144,19 +1095,13 @@ def TExpr.jdg : TExpr → Jdg
   | .sliceBorrowIU _ j _ _ _ _ _ => j
   | .lolliE _ j _ _ _ _ _ => j
   | .allEV _ j _ _ _ _ _ => j
-  | .ofRet _ j _ _ => j
-  | .roll _ j _ _ => j
-  | .unroll _ j _ _ => j
   | .foldImm _ j _ _ _ _ => j
   | .foldOwn _ j _ _ => j
   | .foldReuse _ j _ _ => j
   | .foldOwnG _ j _ => j
-  | .nuIn _ j _ _ _ _ => j
-  | .nuOut _ j _ _ _ _ => j
   | .unfoldN _ j _ _ => j
   | .unfoldK _ j _ _ _ => j
   | .nuOutK _ j _ _ _ _ => j
-  | .effSub _ j _ _ _ _ => j
   | .effPerform _ j _ _ _ => j
   | .effAwait _ j _ _ _ _ => j
   | .effRaise _ j _ _ _ _ => j
@@ -1168,7 +1113,6 @@ def TExpr.jdg : TExpr → Jdg
   | .effHandleT _ j _ _ _ _ _ _ _ _ _ _ _ _ => j
   | .effHandleL _ j _ _ _ _ _ _ _ _ _ _ _ _ _ => j
   | .letPoly _ j _ _ _ _ => j
-  | .alpha _ j _ _ _ => j
   | .lendR _ j _ _ _ _ _ _ _ => j
   | .lendLoopR _ j _ _ _ _ _ _ _ _ => j
   | .nilDead _ j _ _ => j
@@ -1196,7 +1140,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .sumI₂ _ _ _ _ t => [(.push 0, t)]
   | .thunkF _ _ _ t => [(.push 1, t)]
   | .thunkV _ _ _ t => [(.push 0, t)]
-  | .ret _ _ _ t => [(.push 0, t)]
+  | .conv _ _ _ _ _ t => [(.push 0, t)]
   | .bind _ _ _ _ _ tM tN => [(.push 0, tM), (.push 1, tN)]
   | .force _ _ _ _ _ => []
   | .lam _ _ _ _ t => [(.push 1, t)]
@@ -1216,15 +1160,8 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .bangThunkV _ _ _ t => [(.push 0, t)]
   | .codeI _ _ _ t => [(.push 0, t)]
   | .codeIB _ _ _ t => [(.push 0, t)]
-  | .codeErase _ _ _ _ t => [(.push 0, t)]
-  | .codeEraseB _ _ _ _ t => [(.push 0, t)]
-  | .bangE _ _ _ t => [(.push 0, t)]
   | .copyBang _ _ _ => []
   | .releaseBang _ _ _ => []
-  | .boxI _ _ _ _ t => [(.push 0, t)]
-  | .boxE _ _ _ _ t => [(.push 0, t)]
-  | .immSub _ _ _ _ _ t => [(.push 0, t)]
-  | .mutSub _ _ _ _ _ t => [(.push 0, t)]
   | .alloc _ _ _ => []
   | .free _ _ _ => []
   | .tokMint _ _ => []
@@ -1273,19 +1210,13 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .sliceBorrowIU _ _ _ _ _ _ td => [(.push 0, td)]
   | .lolliE _ _ _ _ _ ta tf => [(.push 0, ta), (.push 0, tf)]
   | .allEV _ _ _ _ _ _ t => [(.push 0, t)]
-  | .ofRet _ _ _ t => [(.push 0, t)]
-  | .roll _ _ _ t => [(.push 0, t)]
-  | .unroll _ _ _ t => [(.push 0, t)]
   | .foldImm _ _ _ _ _ _ => []
   | .foldOwn _ _ _ _ => []
   | .foldReuse _ _ _ _ => []
   | .foldOwnG _ _ _ => []
-  | .nuIn _ _ _ _ _ t => [(.push 0, t)]
-  | .nuOut _ _ _ _ _ t => [(.push 0, t)]
   | .unfoldN _ _ _ _ => []
   | .unfoldK _ _ _ _ _ => []
   | .nuOutK _ _ _ _ _ _ => []
-  | .effSub _ _ _ _ _ t => [(.push 0, t)]
   | .effPerform _ _ _ _ t => [(.push 0, t)]
   | .effAwait _ _ _ _ _ _ => []
   | .effRaise _ _ _ _ _ t => [(.push 0, t)]
@@ -1297,7 +1228,6 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .effHandleT _ _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
   | .effHandleL _ _ _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
   | .letPoly _ _ _ _ tV tN => [(.fresh 0, tV), (.push 1, tN)]
-  | .alpha _ _ _ _ t => [(.push 0, t)]
   | .lendR _ _ _ _ _ _ _ td tM => [(.fresh 0, td), (.fresh 1, tM)]
   | .lendLoopR _ _ _ _ _ _ _ tN tK ts0 => [(.fresh 1, tN), (.fresh 1, tK), (.fresh 0, ts0)]
   | .nilDead _ _ _ t => [(.fresh 0, t)]
@@ -1338,7 +1268,7 @@ def TExpr.isLam : TExpr → Bool
   | .sumI₂ _ _ _ _ _ => false
   | .thunkF _ _ _ _ => true
   | .thunkV _ _ _ t => t.isLam
-  | .ret _ _ _ t => t.isLam
+  | .conv _ _ _ _ _ t => t.isLam
   | .bind _ _ _ _ _ _ _ => false
   | .force _ _ i _ C => (((forceE C (.var i)) : Expr) matches .lam _)
   | .lam _ _ _ _ _ => true
@@ -1358,15 +1288,8 @@ def TExpr.isLam : TExpr → Bool
   | .bangThunkV _ _ _ t => t.isLam
   | .codeI _ _ _ t => t.isLam
   | .codeIB _ _ _ t => t.isLam
-  | .codeErase _ _ _ _ t => t.isLam
-  | .codeEraseB _ _ _ _ t => t.isLam
-  | .bangE _ _ _ t => t.isLam
   | .copyBang _ _ _ => ((BoCa.copy : Expr) matches .lam _)
   | .releaseBang _ _ _ => ((forget : Expr) matches .lam _)
-  | .boxI _ _ _ _ t => t.isLam
-  | .boxE _ _ _ _ t => t.isLam
-  | .immSub _ _ _ _ _ t => t.isLam
-  | .mutSub _ _ _ _ _ t => t.isLam
   | .alloc _ _ _ => false
   | .free _ _ _ => false
   | .tokMint _ _ => ((mintE : Expr) matches .lam _)
@@ -1415,19 +1338,13 @@ def TExpr.isLam : TExpr → Bool
   | .sliceBorrowIU _ _ _ _ _ _ td => (((withborUE (td.erase)) : Expr) matches .lam _)
   | .lolliE _ _ _ _ _ _ _ => false
   | .allEV _ _ _ _ _ _ _ => false
-  | .ofRet _ _ _ t => t.isLam
-  | .roll _ _ _ t => t.isLam
-  | .unroll _ _ _ t => t.isLam
   | .foldImm _ _ F _ _ _ => (((.val (foldImmV F)) : Expr) matches .lam _)
   | .foldOwn _ _ F _ => (((.val (foldOwnV F)) : Expr) matches .lam _)
   | .foldReuse _ _ F _ => (((.val (foldReuseV F)) : Expr) matches .lam _)
   | .foldOwnG _ _ B₀ => (((.val (FoldP.foldOwnGV B₀)) : Expr) matches .lam _)
-  | .nuIn _ _ _ _ _ t => t.isLam
-  | .nuOut _ _ _ _ _ t => t.isLam
   | .unfoldN _ _ C _ => (((.val (unfoldV C)) : Expr) matches .lam _)
   | .unfoldK _ _ C _ _ => (((.val (unfoldV C)) : Expr) matches .lam _)
   | .nuOutK _ _ _ _ _ _ => false
-  | .effSub _ _ _ _ _ t => t.isLam
   | .effPerform _ _ _ o t => (((BoCa.BoLo.performE (opArgE o.n o.i (t.erase))) : Expr) matches .lam _)
   | .effAwait _ _ _ n _ _ => (((awaitE n) : Expr) matches .lam _)
   | .effRaise _ _ _ o _ t => (((BoCa.BoLo.raiseE (opArgE o.n o.i (t.erase))) : Expr) matches .lam _)
@@ -1439,7 +1356,6 @@ def TExpr.isLam : TExpr → Bool
   | .effHandleT _ _ _ _ E _ n _ _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (.pair (Expr.pairL (tc.erase)) (tailTuple E 0 (Expr.pairR (tc.erase)))) (te.erase)) : Expr) matches .lam _)
   | .effHandleL _ _ _ _ E _ _ n _ _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (.pair (Expr.pairL (tc.erase)) (lastTuple E 0 (Expr.pairL (Expr.pairR (tc.erase))) (Expr.pairR (Expr.pairR (tc.erase))))) (te.erase)) : Expr) matches .lam _)
   | .letPoly _ _ _ _ _ _ => false
-  | .alpha _ _ _ _ t => t.isLam
   | .lendR _ _ _ _ _ _ _ _ _ => false
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (((lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase)) : Expr) matches .lam _)
   | .nilDead _ _ _ t => t.isLam
@@ -1463,7 +1379,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .sumI₂ _ _ _ _ _ => rfl
   | .thunkF _ _ _ _ => rfl
   | .thunkV _ _ _ t => isLam_eq t
-  | .ret _ _ _ t => isLam_eq t
+  | .conv _ _ _ _ _ t => isLam_eq t
   | .bind _ _ _ _ _ _ _ => rfl
   | .force _ _ _ _ _ => rfl
   | .lam _ _ _ _ _ => rfl
@@ -1483,15 +1399,8 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .bangThunkV _ _ _ t => isLam_eq t
   | .codeI _ _ _ t => isLam_eq t
   | .codeIB _ _ _ t => isLam_eq t
-  | .codeErase _ _ _ _ t => isLam_eq t
-  | .codeEraseB _ _ _ _ t => isLam_eq t
-  | .bangE _ _ _ t => isLam_eq t
   | .copyBang _ _ _ => rfl
   | .releaseBang _ _ _ => rfl
-  | .boxI _ _ _ _ t => isLam_eq t
-  | .boxE _ _ _ _ t => isLam_eq t
-  | .immSub _ _ _ _ _ t => isLam_eq t
-  | .mutSub _ _ _ _ _ t => isLam_eq t
   | .alloc _ _ _ => rfl
   | .free _ _ _ => rfl
   | .tokMint _ _ => rfl
@@ -1540,19 +1449,13 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .sliceBorrowIU _ _ _ _ _ _ _ => rfl
   | .lolliE _ _ _ _ _ _ _ => rfl
   | .allEV _ _ _ _ _ _ _ => rfl
-  | .ofRet _ _ _ t => isLam_eq t
-  | .roll _ _ _ t => isLam_eq t
-  | .unroll _ _ _ t => isLam_eq t
   | .foldImm _ _ _ _ _ _ => rfl
   | .foldOwn _ _ _ _ => rfl
   | .foldReuse _ _ _ _ => rfl
   | .foldOwnG _ _ _ => rfl
-  | .nuIn _ _ _ _ _ t => isLam_eq t
-  | .nuOut _ _ _ _ _ t => isLam_eq t
   | .unfoldN _ _ _ _ => rfl
   | .unfoldK _ _ _ _ _ => rfl
   | .nuOutK _ _ _ _ _ _ => rfl
-  | .effSub _ _ _ _ _ t => isLam_eq t
   | .effPerform _ _ _ _ _ => rfl
   | .effAwait _ _ _ _ _ _ => rfl
   | .effRaise _ _ _ _ _ _ => rfl
@@ -1564,7 +1467,6 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
   | .effHandleL _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
   | .letPoly _ _ _ _ _ _ => rfl
-  | .alpha _ _ _ _ t => isLam_eq t
   | .lendR _ _ _ _ _ _ _ _ _ => rfl
   | .lendLoopR _ _ _ _ _ _ _ _ _ _ => rfl
   | .nilDead _ _ _ t => isLam_eq t

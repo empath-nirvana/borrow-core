@@ -24,7 +24,12 @@ open BoCa BoCa.Fig16.LogRel.Core BoCa.Fig16.LogRel.Core.Check
 /-- The rule of each `TExpr` constructor, by `ctorIdx`. -/
 def texprNames : Array String := ctorNames2% TExpr
 
-def ruleName (t : TExpr) : String := texprNames[t.ctorIdx]!
+/-- The same-term steps' names, by `ctorIdx`: a `conv` node is named by its step. -/
+def convNames : Array String := ctorNames2% BoCa.Fig16.LogRel.Core.ConvKind
+
+def ruleName (t : TExpr) : String := match t with
+  | .conv _ _ _ _ k _ => convNames[k.ctorIdx]!
+  | _ => texprNames[t.ctorIdx]!
 
 def ppJ (j : Jdg) (ms : MachSet := {}) : String :=
   match ofJ ms j with

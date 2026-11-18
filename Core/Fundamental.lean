@@ -449,6 +449,26 @@ theorem alpha_compatJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} :
   | .comp _, .comp _, hα, h => alpha_compatC hα h
   | .val _, .comp _, hα, _ | .comp _, .val _, hα, _ => by simp [Jdg.alphaB] at hα
 
+/-- **`[conv]` is sound**: each same-term step by its own compatibility lemma.  `[spec §3]` -/
+theorem conv_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {k : ConvKind} {j j' : Jdg}
+    (hc : JConv Δ Γ k j j') (h : SemJ (ℍ := ℍ) Δ Γ e j) : SemJ (ℍ := ℍ) Δ Γ e j' := by
+  cases hc with
+  | ret => exact ret_compatC h
+  | ofRet => exact h
+  | bangE => exact bangE_compatC h
+  | boxI hΓ => exact boxI_compatC h hΓ
+  | boxE => exact boxE_compatC h
+  | immSub hle => exact immSub_compatC h hle
+  | mutSub hle => exact mutSub_compatC h hle
+  | codeErase => exact codeErase_compatC h
+  | codeEraseB => exact codeEraseB_compatC h
+  | roll hA hc => exact roll_compatX hA hc h
+  | unroll => exact unroll_compatX h
+  | nuIn hC => exact nuIn_compatX hC h
+  | nuOut hC => exact nuOut_compatX hC h
+  | effSub hle => exact sub_compatC hle h
+  | alpha hα => exact alpha_compatJ hα h
+
 /-- **The Fundamental Property at every judgment index** (SPEC §83): every derivation is sound,
 outright when the relaxed rules are off, and under `PinLaw` when they are on (R1's case is
 `PinLaw.lendFrame` at the form `ref`, R2's `PinLaw.loopFrame`, each at the induction hypotheses of
@@ -463,7 +483,7 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
   | sumI₂ _ ih => exact sumI₂_compatC ih
   | thunkF _ ih => exact thunkF_compatC ih
   | thunkV hC _ ih => exact thunkV_compatC hC ih
-  | ret _ ih => exact ret_compatC ih
+  | conv _ _ hc ih => exact conv_compatX hc ih
   | bind hs _ _ ihM ihN => exact bind_compatC hs ihM ihN
   | force h hT => exact force_compatC h hT
   | lam _ ih => exact lam_compatC ih
@@ -484,15 +504,8 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
   | bangThunkV hp hC _ ih => exact bangThunkV_compatC hp hC ih
   | codeI _ hok ih => exact codeI_compatC ih hok
   | codeIB hp _ hok ih => exact codeIB_compatC hp ih hok
-  | codeErase _ ih => exact codeErase_compatC ih
-  | codeEraseB _ ih => exact codeEraseB_compatC ih
-  | bangE _ ih => exact bangE_compatC ih
   | copyBang hΓ => exact copyBang_compatC hΓ
   | releaseBang hΓ => exact releaseBang_compatC hΓ
-  | boxI _ hΓ ih => exact boxI_compatC ih hΓ
-  | boxE _ ih => exact boxE_compatC ih
-  | immSub _ hle ih => exact immSub_compatC ih hle
-  | mutSub _ hle ih => exact mutSub_compatC ih hle
   | alloc hΓ => exact alloc_compatX hΓ
   | free hΓ => exact free_compatX hΓ
   | tokMint hΓ => exact tokMint_compatX hΓ
@@ -544,19 +557,13 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
       exact sliceBorrowIU_compatX x hΓ hsc hA hB hf₁ hf₂ hS ihd
   | lolliE hs _ _ iha ihf => exact lolliE_compatX hs iha ihf
   | allEV _ hlt ih => exact allE_compatX ih hlt
-  | ofRet _ ih => exact ih
-  | roll hA hc _ ih => exact roll_compatX hA hc ih
-  | unroll _ ih => exact unroll_compatX ih
   | foldImm F y c R hΓ hF hG hyM hyR hR => exact foldImm_compatX F hF hG y c R hΓ hyM hyR hR
   | foldOwn F R hΓ hF hG => exact foldOwn_compatX F hF hG R hΓ
   | foldReuse F R hΓ hF hG => exact foldReuse_compatX F hF hG R hΓ
   | foldOwnG B₀ Rs hΓ hB => exact FoldP.foldOwnG_compatX B₀ hB Rs hΓ
-  | nuIn hC _ ih => exact nuIn_compatX hC ih
-  | nuOut hC _ ih => exact nuOut_compatX hC ih
   | unfoldN C S hC hS hΓ => exact unfold_compatX hC S hS hΓ
   | unfoldK C G S hC hG hS hΓ => exact unfoldK_compatX hC hG hS hΓ
   | nuOutK hC hG hS hGf h => exact nuOutK_compatX hC hG hS hGf h
-  | effSub hle _ ih => exact sub_compatC hle ih
   | effPerform _ hf hna _ _ ih => exact perform_compatC hf hna ih
   | effAwait _ hΓ hfa ha haA hfc hc => exact semC_dead .nil hΓ (await_compatC hfa ha haA hfc hc)
   | effRaise _ hf ha _ hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_ownFree hd h) ih
@@ -581,7 +588,6 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
   | effHandleL _ hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
       exact handleL_compatC hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN
-  | alpha _ hα ih => exact alpha_compatJ hα ih
   | lendR hPin hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc _ hM ihd ihM =>
       exact (hLaw hPin).lendFrame _ _ _ _ _ _ _ _ _ _ (.ref hT hside)
         hb hx hbx hΔx hB hBn hS hM1 hcb hdc ihd (hM.mono (JIdx.le_pin _)) ihM
