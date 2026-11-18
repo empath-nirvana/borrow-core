@@ -23,33 +23,47 @@ cd "$(dirname "$0")/.."
 [ "${GATE_CACHE_INNER:-}" = backend2-fence ] || exec python3 scripts/gate_cache.py step backend2-fence lean -- scripts/check-backend2.sh "$@"
 fail=0
 
-# The repository modules a module imports.
-imports() { sed -n 's/^import \([A-Za-z0-9_.]*\).*/\1/p' "$1"; }
-fileOf() { echo "${1//.//}.lean"; }
+# The fences, in one process: each module's transitive imports within the repository, breadth
+# first from it (each file's `import` lines read once), and a message for each import outside its
+# fence, in the order the walk meets them. The module lists are the shell's (its glob and sort
+# order).
+fences() {
+  python3 - "$@" <<'PY'
+import os, re, sys
+IMPORT = re.compile(r"^import ([A-Za-z0-9_.]*)", re.M)
+OLD = re.compile(r"Backend(\..*)?")
+FRONT = re.compile(r"(Frontend\.Elab(\..*)?|Frontend\.Sugar|Frontend\.Parser)")
+cache = {}
+def imports(f):
+    if f not in cache:
+        with open(f, encoding="utf-8", errors="surrogateescape") as fh:
+            cache[f] = [i for i in IMPORT.findall(fh.read()) if i]
+    return cache[f]
+fail = 0
+mode, mods = sys.argv[1], sys.argv[2:]
+for m in mods:
+    seen = set()
+    todo = imports(m)
+    while todo:
+        nxt = []
+        for i in todo:
+            if i in seen:
+                continue
+            seen.add(i)
+            if mode == "backend2":
+                if OLD.fullmatch(i) or (m != "Backend2/Driver.lean" and FRONT.fullmatch(i)):
+                    print(f"check-backend2: {m} imports {i} (through its imports): outside the fence"); fail = 1
+            elif OLD.fullmatch(i):
+                print(f"check-backend2: {m} imports {i} (through its imports): Reference/ must not reach Backend/"); fail = 1
+            f = i.replace(".", "/") + ".lean"
+            if os.path.isfile(f):
+                nxt += imports(f)
+        todo = nxt
+sys.exit(fail)
+PY
+}
 
-oldBackend='^Backend(\..*)?$'
-frontend='^(Frontend\.Elab(\..*)?|Frontend\.Sugar|Frontend\.Parser)$'
-
-for m in Backend2/*.lean; do
-  # The transitive imports within the repository, breadth first.
-  seen=" "
-  todo=$(imports "$m")
-  while [ -n "$todo" ]; do
-    next=""
-    for i in $todo; do
-      case "$seen" in *" $i "*) continue ;; esac
-      seen="$seen$i "
-      if [[ "$i" =~ $oldBackend ]] ||
-         { [ "$m" != Backend2/Driver.lean ] && [[ "$i" =~ $frontend ]]; }; then
-        echo "check-backend2: $m imports $i (through its imports): outside the fence"
-        fail=1
-      fi
-      f=$(fileOf "$i")
-      [ -f "$f" ] && next="$next $(imports "$f")"
-    done
-    todo=$next
-  done
-done
+fences backend2 Backend2/*.lean || fail=1
 
 # The ban list: the erasure, the untyped term, and the passes §3.6 deletes.
 ban='TExpr\.erase|\.erase *$|\.erase *[])},]|\.main\.e\b|BoCa\.Expr|\bExpr\.(app|lam|val|var|pair|case|letpair|seq|inj)|isSwap|travShape|foldShape|fixBody|fixValue|litTable|litView\?|litTree|plan2|markScoped|markLitViews|markUbinds|polyLet|polySelect|collapse\?|tailClause|clausesAt|SFacts|UFacts|crossedScopes|unif'
@@ -59,24 +73,7 @@ if grep -nEi "$ban" Backend2/*.lean | grep -v '^Backend2/Driver.lean:' | grep -v
 fi
 
 # The reference run's fence: no module of Reference/ reaches the old backend.
-for m in Reference.lean $(find Reference -name '*.lean' | sort); do
-  seen=" "
-  todo=$(imports "$m")
-  while [ -n "$todo" ]; do
-    next=""
-    for i in $todo; do
-      case "$seen" in *" $i "*) continue ;; esac
-      seen="$seen$i "
-      if [[ "$i" =~ $oldBackend ]]; then
-        echo "check-backend2: $m imports $i (through its imports): Reference/ must not reach Backend/"
-        fail=1
-      fi
-      f=$(fileOf "$i")
-      [ -f "$f" ] && next="$next $(imports "$f")"
-    done
-    todo=$next
-  done
-done
+fences reference Reference.lean $(find Reference -name '*.lean' | sort) || fail=1
 
 [ $fail = 0 ] && echo "check-backend2: the fences (Backend2/, Reference/) and the ban list hold"
 exit $fail

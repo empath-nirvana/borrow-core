@@ -282,10 +282,12 @@ build() {
   [ -n "$pool" ] || { lake build "$@"; return; }
   lake build --no-build "$@" || rc=$?
   [ "$rc" = 3 ] || return "$rc"
-  # UNPROVED: a build's memory is under 24 GB (14 Lean processes, each at most ~1.7 GB beside the
-  # shared .oleans). Assumed from per-module peaks, not measured on a full rebuild; if a build
-  # needs more, the gates beside it may run short of memory (swap, never a wrong verdict).
-  slotted 999 24 lake build "$@"
+  # Its memory tokens bound the physical memory it adds: 16 GB, twice the 7.7 GB rise measured on
+  # the largest rebuild (an edit to Core/Judgment.lean: 346 modules, 15 processes, 525 s; the
+  # gate30 verification's results.md, T6b: vm_stat anonymous + wired + compressor pages). Its summed
+  # RSS (61.5 GB) is not the measure: it counts the mapped .oleans once per Lean process, though
+  # they share their pages.
+  slotted 999 16 lake build "$@"
 }
 if [ "$tiered" = 1 ] && [ "$tierBuild" = none ]; then echo "==> build: none (no step of this tier reads the build)"
 elif [ "$tiered" = 1 ] && [ "$tierBuild" = bins ]; then step "build (bcc, bcc-counts)" build bcc bcc-counts gate-census
