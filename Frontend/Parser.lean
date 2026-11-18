@@ -2057,7 +2057,9 @@ def foldBlock : Nat → P Val
       decl₀ := match ns.toList with
         | m :: ps => some (m, ps)
         | [] => none
+    let iv ← rsAt
     let V ← val n
+    rsNoteS (.loopSrc iv (← rsAt))
     expectSym "{"
     if ← isSym "|" then discard bump
     let reuse₀ := (← get).reuseArm
@@ -2186,7 +2188,7 @@ def withBlock : Nat → P Val
           vs := vs.push (← val n)
           if ← isSym "," then discard bump
         expectSym ")"
-        rsNoteS (.callArgs ia (← rsAt))
+        rsNoteS (.callArgs ia (← rsAt) none)
         let sp ← spanFrom psp
         pure (vs.toList.foldr (fun v acc => match acc with
           | none => some v
@@ -2313,7 +2315,13 @@ def valSuffixes : Nat → Pos → Val → P Val
     else if startsValAtom t.tok && !(← dataStart) then
       let ia ← rsAt
       let W ← valAtom n
-      rsNoteS (.callArgs ia (← rsAt))
+      -- The callee, when it is a declaration (no variable in scope): what `bcc respell` reads
+      -- its parameters from.  [spec §82]
+      let sc := (← get).scope
+      let callee := match V with
+        | .var _ f | .defApp _ f _ => if sc.any (·.2.1 == f) then none else some f
+        | _ => none
+      rsNoteS (.callArgs ia (← rsAt) callee)
       valSuffixes n st (.app (← spanFrom st) V W)
     else pure V
 
@@ -2522,7 +2530,6 @@ def compG : Nat → Bool → P Comp
     let t1 ← peekAt 1
     match t.tok, t1.tok with
     | .ident x, .sym "<-" =>
-      rsNoteS (.bind i₀ (i₀ + 1))
       discard bump; discard bump
       let (M, xs) ← frame (compG n true)
       -- `x <- M unwind (D); N` (SPEC §19).
@@ -2530,20 +2537,24 @@ def compG : Nat → Bool → P Comp
       rsSeq i₀
       expectSym ";"
       withScope do
+      rsNoteS (.bind i₀ (i₀ + 1) (← mutOf? x).isSome)
       let x ← bindOrAssign ⟨x, t.span⟩
       let N ← comp n
       let sp ← spanFrom st
       bindForm sp n x none M D N xs
     | .ident x, .sym ":" =>
       discard bump; discard bump
+      rsT1 (← get).surf
       let A ← vty n
-      rsNoteS (.bind i₀ (← rsAt))
+      rsT1 false
+      let ia ← rsAt
       expectSym "<-"
       let (M, xs) ← frame (compG n true)
       let D ← unwindOf n
       rsSeq i₀
       expectSym ";"
       withScope do
+      rsNoteS (.bind i₀ ia (← mutOf? x).isSome)
       let x ← bindOrAssign ⟨x, t.span⟩
       let N ← comp n
       let sp ← spanFrom st
@@ -2646,7 +2657,9 @@ def compG : Nat → Bool → P Comp
         if isMut then if let .var x := p then modify fun s => { s with muts := x.name :: s.muts }
         pure p
       withScope do
+      rsT1 (← get).surf
       let A ← if ← isSym ":" then do discard bump; pure (some (← vty n)) else pure none
+      rsT1 false
       expectSym "="
       loopWritesPre
       -- `let r = 'ℓ: for …`: the label, before the `for`.
@@ -2826,7 +2839,7 @@ def statement : Nat → Pos → Bool → P Comp
         if ← isSym "(" then
           let ia ← rsAt
           let V ← valAtom n
-          rsNoteS (.callArgs ia (← rsAt))
+          rsNoteS (.callArgs ia (← rsAt) none)
           let sp ← spanFrom st
           let a ← freshName "io_a"
           pure (Comp.bind sp ⟨a, sp⟩ none (.ret sp V)
@@ -3315,7 +3328,9 @@ def decl (n : Nat) : P Decl := do
     expectSym "="
     unless rs.isEmpty && ss.isEmpty || lps.isEmpty do
       failAt x.span s!"`{x.name}` has row or site parameters, and takes no lifetime parameters (SPEC §76)"
+    rsT1 true
     let A ← withGenParams rs ss (vty n)
+    rsT1 false
     let sp ← spanFrom st
     pure (genDecl sp rs ss (.type sp x tps lps A))
   | .kw "shape" =>
@@ -3378,6 +3393,7 @@ def decl (n : Nat) : P Decl := do
     expectSym "("
     let ps ← if ← isSym ")" then pure [] else params n
     expectSym ")"
+    rsNote (.sig x.name (ps.map (·.2)))
     rsNote (.polyFam (← rsAt))
     expectSym "->"
     let T ← rty n
@@ -3400,7 +3416,9 @@ def decl (n : Nat) : P Decl := do
   | .ident "data" =>
     unless (match (← peekAt 1).tok with | .uident _ => true | _ => false) do
       expected "a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`)"
+    rsT1 true
     let d ← dataDecl n
+    rsT1 false
     pure (.data (← spanFrom st) d)
   | .kw "effect" =>
     -- `effect E[T, …] { fn op(x: A, …) -> B; ctl op(…) -> B; … }` (SPEC §18, §19); `-> B` left
@@ -3486,8 +3504,9 @@ def decl (n : Nat) : P Decl := do
           let ix ← rsAt
           let x ← ident "a parameter name"
           expectSym ":"
-          ps := ps.push (x, ← vty n)
-          rsNote (.param ix (← rsAt))
+          let A ← vty n
+          ps := ps.push (x, A)
+          rsNote (.hParam ix (← rsAt) A)
         if ← isSym "," then discard bump
       expectSym ")"
     expectSym ":"
@@ -3636,11 +3655,14 @@ where
       return ← defRest st (.template mk)
     let x ← ident "a `fn` name"
     let tps ← typeParams
+    let il ← rsAt
     let lives ← lifeParams
+    rsNote (.fnLives il (← rsAt))
     rsT1 true
     expectSym "("
     let ps ← if ← isSym ")" then pure [] else params n
     expectSym ")"
+    rsNote (.sig x.name (ps.map (·.2)))
     let ia ← rsAt
     expectSym "->"
     let T ← rty n
@@ -3755,7 +3777,7 @@ where
       let x ← ident "a parameter name"
       expectSym ":"
       let A ← vty n
-      rsNote (.param ix (← rsAt))
+      rsNote (.param ix (← rsAt) A)
       if ← isSym "," then
         discard bump
         return (x, A) :: (← params m)

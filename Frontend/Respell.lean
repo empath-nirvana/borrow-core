@@ -232,10 +232,92 @@ def argComps (S : Src) (a b : Nat) : List (Nat × Nat) :=
     starts.zip stops
   else [(a, b)]
 
-/-- The edits of the events `evs` of a parse of `S`. -/
-def rewrite (S : Src) (evs : Array Ev) : RM Unit := do
-  let calls := evs.toList.filterMap fun | .callArgs a b => some (a, b) | _ => none
-  let callComps := calls.flatMap fun (a, b) => argComps S a b
+/-! ### Parameter modes (P1–P6, A2) -/
+
+/-- Whether a parameter of type `A` is by value (answers A2): after its aliases are expanded, a
+scalar, `bool`, `lit`, `1`, `0`, `never`, a `!` type, or a product or sum of these. `bool` and
+`lit` are read as `1 + 1` and `i32 * !(i32 => u8)` already. `fuel` bounds alias expansion. -/
+def byValue (tbl : Data.Table) : Nat → VTy → Bool
+  | 0, _ => false
+  | _ + 1, .unit _ | _ + 1, .zero _ | _ + 1, .int _ _ | _ + 1, .bang _ _ => true
+  | f + 1, .tensor _ A B | f + 1, .sum _ A B => byValue tbl f A && byValue tbl f B
+  | f + 1, .name _ n => match tbl.abbrevs.reverse.find? (·.name == n) with
+    | some ab => ab.tps.isEmpty && ab.lps.isEmpty && byValue tbl f ab.body
+    | none => false
+  | _, _ => false
+
+/-- The heads of a parameter's type that are written as they are: a borrow former. -/
+def borrowHead (t : Tok) : Bool := match t with
+  | .kw "imm" | .kw "mut" | .kw "view" | .kw "array_imm" | .kw "array_mut" => true
+  | .ident "text" | .ident "text_mut" => true
+  | _ => false
+
+/-- The written lifetime parameters `<…>` in `[a, b)`: each binder's name and token range. -/
+def binders (S : Src) (a b : Nat) : List (String × Nat × Nat) :=
+  if b ≤ a + 2 then [] else
+  let cs := S.atDepth0 (a + 1) (b - 1) (· == .sym ",")
+  let starts := (a + 1) :: cs.map (· + 1)
+  let stops := cs ++ [b - 1]
+  (starts.zip stops).filterMap fun (x, y) => match S.tok x with
+    | .life l => some (l, x, y)
+    | _ => none
+
+/-- A `fn` header's parameters in the new spelling (P1–P6): a fresh shared or mutable borrow is a
+mode, `x: T`, `x: array A`, `x: inout T`, `x: inout array A`, its lifetime dropped from `<…>`; an
+owned parameter not by value is `x: sink T`; the rest are as written. A lifetime is fresh when the
+declaration (`[lv.1, e)`) names it only at its binder, which has no bound, and at this parameter;
+a shared or mutable borrow of a by-value type keeps its explicit type, as bare it reads by value
+(P5). -/
+def fnModes (S : Src) (tbl : Data.Table) (lv : Nat × Nat) (ps : List (Nat × Nat × VTy)) (e : Nat) :
+    RM Unit := do
+  let bs := binders S lv.1 lv.2
+  let uses (l : String) : Nat := ((List.range (e - lv.1)).filter fun k => S.tok (lv.1 + k) == .life l).length
+  let mut dropped : List String := []
+  for (n, _, A) in ps do
+    let t := n + 2
+    let fresh := match S.tok (t + 1) with
+      | .life l => (bs.any fun (b, x, y) => b == l && y == x + 1) && uses l == 2
+      | _ => false
+    let base := match A with
+      | .imm _ _ B | .mut _ _ B | .arrayImm _ _ B | .arrayMut _ _ B => some B
+      | _ => none
+    match S.tok t, base, S.tok (t + 1) with
+    | .kw k, some B, .life l =>
+      if fresh && ["imm", "mut", "array_imm", "array_mut"].contains k &&
+          !((k == "imm" || k == "mut") && byValue tbl 16 B) then
+        let mode := match k with
+          | "imm" => "" | "array_imm" => "array " | "mut" => "inout " | _ => "inout array "
+        repl (S.ts t) (S.ts (t + 2)) mode
+        dropped := l :: dropped
+    | tk, _, _ =>
+      unless borrowHead tk || byValue tbl 16 A do openAt (S.ts t) "sink "
+  unless dropped.isEmpty do
+    let kept := bs.filter fun (b, _, _) => !dropped.contains b
+    let txt := if kept.isEmpty then "" else
+      "<" ++ ", ".intercalate (kept.map fun (_, x, y) => S.text (S.ts x) (S.te (y - 1))) ++ ">"
+    repl (S.ts lv.1) (S.te (lv.2 - 1)) txt
+
+/-- The edits of the events `evs` of a parse of `S`; `sigs` the parameters of each `fn` and `poly`
+family the program may call, by name; `tbl` its `data` and `type` table. -/
+def rewrite (S : Src) (evs : Array Ev) (sigs : List (String × List VTy)) (tbl : Data.Table) :
+    RM Unit := do
+  let calls := evs.toList.filterMap fun | .callArgs a b c => some (a, b, c) | _ => none
+  -- Each argument of a call, with the callee's parameter type there when it is known.
+  let callComps := calls.flatMap fun (a, b, c) =>
+    let ps := (c.bind fun f => sigs.lookup f).getD []
+    (argComps S a b).zipIdx.map fun (r, i) => (r, ps[i]?)
+  -- `fn` headers: their lifetime parameters and parameters, until the header ends.
+  let mut lv : Nat × Nat := (0, 0)
+  let mut ps : Array (Nat × Nat × VTy) := #[]
+  for e in evs do
+    match e with
+    | .fnLives a b => lv := (a, b); ps := #[]
+    | .param n t A => ps := ps.push (n, t, A)
+    | .fnHead _ _ _ _ bodyEnd => fnModes S tbl lv ps.toList bodyEnd; ps := #[]
+    | .polyFam _ | .opDecl .. => ps := #[]
+    | .hParam n _ A =>
+      unless borrowHead (S.tok (n + 2)) || byValue tbl 16 A do openAt (S.ts (n + 2)) "sink "
+    | _ => pure ()
   let loopSrcs := evs.toList.filterMap fun | .loopSrc a b => some (a, b) | _ => none
   let mut stmts : List (Nat × Nat) := []
   -- P9 first, so that the lend it takes is not rewritten again.
@@ -292,15 +374,24 @@ def rewrite (S : Src) (evs : Array Ev) : RM Unit := do
     | .rowed w c => rowRespell S w c
     | .seq i => dropSemi S i
     | .stmt a b => stmts := (a, b) :: stmts
-    | .bind x arrow =>
-      openAt (S.ts x) "let "
-      replTok S arrow "="
+    | .bind x arrow asg =>
+      -- `let` never assigns: an assignment `x <- M` of a `var` is `x = M`.
+      if asg then
+        if arrow == x + 1 then replTok S arrow "=" else mark (S.ts x) "an assignment `x : A <- M`"
+      else
+        openAt (S.ts x) "let "
+        replTok S arrow "="
     | .ret i => delTok S i
     | .letMut i => repl (S.ts i) (S.te (i + 1)) "var"
     | .lend a b m =>
       if (← get).doneLends.contains a then pure ()
-      else if callComps.contains (a, b) then
-        if m then delTok S (a + 1) else delTok S a
+      else if let some (_, P) := callComps.find? (·.1 == (a, b)) then
+        -- A shared lend at a parameter that is no shared borrow (a capability lent, §11) is
+        -- `&x`: today's `&mut x` there is the same term (route.md §5).
+        let shared := match P with
+          | some (.imm ..) | some (.arrayImm ..) | none => true
+          | some _ => false
+        if m then delTok S (a + 1) else if shared then delTok S a
       else if loopSrcs.contains (a, b) then pure ()
       else if m then delTok S (a + 1)
       else mark (S.ts a) "a shared lend `&x` outside a call (P8)"
@@ -372,6 +463,28 @@ def render (S : Src) (es : Array Edit) : Nat → Nat → Nat → Bool → String
       cur := e.b
     out ++ S.text cur b
 
+/-- The parameter types of each `fn` and `poly` family the events declare. -/
+def sigsOf (evs : Array Ev) : List (String × List VTy) :=
+  evs.toList.filterMap fun | .sig f ps => some (f, ps) | _ => none
+
+/-- The signatures of the library modules `ms` and those they include, each read once (`seen`). -/
+def modSigs (lib : String → Option String) : Nat → List String → List String → List (String × List VTy)
+  | 0, _, _ => []
+  | _ + 1, [], _ => []
+  | k + 1, m :: ms, seen =>
+    if seen.contains m then modSigs lib k ms seen else
+    match lib m with
+    | none => modSigs lib k ms (m :: seen)
+    | some msrc =>
+      let own := match runPS (fun n => decls n n []) msrc true (dataOf lib msrc) (file := m)
+          (respell := true) with
+        | .ok (_, st) => sigsOf st.rs.evs
+        | .error _ => []
+      let incs := match lex msrc m with
+        | .ok ts => includesIn ts
+        | .error _ => []
+      modSigs lib k (incs ++ ms) (m :: seen) ++ own
+
 /-- The new spelling of the program `src` (today's), `lib` giving the library modules: its text,
 with the pragma first, and each mark's line and form.  `[spec §82]` -/
 def respell (src : String) (lib : String → Option String := fun _ => none) :
@@ -379,7 +492,8 @@ def respell (src : String) (lib : String → Option String := fun _ => none) :
   let toks ← lex src
   let (_, st) ← runPS (fun n => decls n n []) src true (dataOf lib src) (respell := true)
   let S := Src.ofString src toks
-  let ((), w) := (do comments S; rewrite S st.rs.evs : RM Unit).run {}
+  let sigs := sigsOf st.rs.evs ++ modSigs lib 64 ("prelude" :: includesIn toks) []
+  let ((), w) := (do comments S; rewrite S st.rs.evs sigs st.data : RM Unit).run {}
   let marks := w.marks.toList
   let ((), w) := (do
       for (o, f) in marks do closeAt (S.eol o) s!"  #?respell: {f}" : RM Unit).run w

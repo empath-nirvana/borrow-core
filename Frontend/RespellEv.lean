@@ -1,3 +1,4 @@
+import Frontend.Syntax
 /-!
 # Frontend — what the respelling records during a parse
 
@@ -38,8 +39,16 @@ inductive Ev where
   | hEq (eq : Nat)
   /-- A handler clause `op(x) = M` (D16): its `=`, and its body's range. -/
   | clause (eq : Nat) (a b : Nat)
-  /-- A parameter of a `fn` (P1–P5): the name's token and the end of its type. -/
-  | param (name : Nat) (tyEnd : Nat)
+  /-- A `fn`'s lifetime parameters `<…>` (P1–P3): their range, empty when it has none. -/
+  | fnLives (a b : Nat)
+  /-- A parameter of a `fn`, a `poly` family or an operation (P1–P5): the name's token, the end of
+  its type, and the type. -/
+  | param (name : Nat) (tyEnd : Nat) (ty : VTy)
+  /-- A parameter of a handler (P4, P5): as `param`. -/
+  | hParam (name : Nat) (tyEnd : Nat) (ty : VTy)
+  /-- The parameters of the `fn` or `poly` family named `f`, by their types (P8: what a call lends
+  to). -/
+  | sig (f : String) (ps : List VTy)
   /-- An arrow type `A => B` (T1, T2): the start of `A` and the `=>`. -/
   | arrow (a : Nat) (i : Nat)
   /-- A function type with a row `(A => B with E, …)` (T1): the `with` and the closing `)`. -/
@@ -48,8 +57,9 @@ inductive Ev where
   | seq (i : Nat)
   /-- A statement of a surface body: its range, `;` not included. -/
   | stmt (a b : Nat)
-  /-- `x <- M` or `x : A <- M` in a surface body (E2): the name's token and the `<-`. -/
-  | bind (x : Nat) (arrow : Nat)
+  /-- `x <- M` or `x : A <- M` in a surface body (E2): the name's token, the `<-`, and whether it
+  assigns a `let mut` variable (R2) rather than binding a name. -/
+  | bind (x : Nat) (arrow : Nat) (assigns : Bool)
   /-- A `return V` of a surface body that is a binding's head or the body's last statement
   (E2, E3): its `return`. -/
   | ret (i : Nat)
@@ -57,9 +67,10 @@ inductive Ev where
   | letMut (i : Nat)
   /-- A lend `&x` or `&mut x` in a surface body (P7, P8): its range and mode. -/
   | lend (a b : Nat) (isMut : Bool)
-  /-- A call's or a handler's arguments: their range (P7, P8). -/
-  | callArgs (a b : Nat)
-  /-- A loop's source: its range (A3: kept as written). -/
+  /-- A call's or a handler's arguments: their range, and the callee when it is a declaration of
+  the program or a library module, by name (P7, P8). -/
+  | callArgs (a b : Nat) (callee : Option String)
+  /-- A loop's source, or a fold's scrutinee: its range (A3: kept as written). -/
   | loopSrc (a b : Nat)
   /-- `let r = &x; S` (P9): the `let`, the `;`, and the end of `S`. -/
   | letRef (letTok : Nat) (semi : Nat) (restEnd : Nat)
