@@ -11,7 +11,10 @@
 #   * a par job that runs out of descriptors fails, and its output says so;
 #   * the vnode preflight passes a table with room or with free vnodes, waits on a full one, and
 #     fails in one line when it stays full;
-#   * library tokens: with two, a third holder waits until one ends.
+#   * library tokens: with two, a third holder waits until one ends;
+#   * the result cache never records a pass whose output says a tool ran out of handles (a par
+#     unit, a whole step), and records the same unit without those words; no golden output of the
+#     corpus, the book or the library holds those words, so no program's passing unit is refused.
 #
 #     scripts/check-exhausted.sh
 set -uo pipefail
@@ -84,5 +87,36 @@ if [ "$(head -1 "$t/order")" != third ] && [ "$(wc -l < "$t/order" | tr -d ' ')"
   ok "library tokens: with 2, the third holder ran after one ended ($(tr '\n' ' ' < "$t/order"))"
 else no "library tokens: $(tr '\n' ' ' < "$t/order")"; fi
 
-[ "$bad" = 0 ] && echo "check-exhausted: out-of-handles is said and fails, and the library tokens bound their holders"
+# The result cache: never recorded when the output says so; recorded otherwise.
+cat > "$t/cprobe.sh" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+. "$PAR_HOME/par.sh"
+unit() { echo "$1: $WORDS"; }
+export -f unit
+export PAR_CACHE=check-exhausted-probe PAR_CACHE_DEPS="files:lean-toolchain"
+par unit one
+SH
+chmod +x "$t/cprobe.sh"
+crun() { : > "$t/stats"; GATE_CACHE_DIR=$t/store GATE_CACHE_STATS=$t/stats GATE_CACHE_BUILT=1 PAR_HOME=$PWD/scripts \
+  WORDS="$1" "$t/cprobe.sh" > /dev/null 2>&1; awk '{ r += $1; n += $2 } END { print r + 0, n + 0 }' "$t/stats"; }
+w="/usr/bin/grep: Too many open files in system"
+a=$(crun "$w"); b=$(crun "$w")
+[ "$a" = "0 1" ] && [ "$b" = "0 1" ] && ok "cache: a par unit whose output ran out of handles is run again, never replayed" ||
+  no "cache: exhausted par unit: first $a, then $b (replayed run)"
+a=$(crun "fine"); b=$(crun "fine")
+[ "$a" = "0 1" ] && [ "$b" = "1 0" ] && ok "cache: the same unit without those words is recorded and replayed" ||
+  no "cache: ordinary par unit: first $a, then $b"
+srun() { GATE_CACHE_DIR=$t/store GATE_CACHE_STATS=$t/stats python3 scripts/gate_cache.py step check-exhausted-step lean \
+  -- sh -c "echo '$1'" > /dev/null 2>&1; }
+: > "$t/stats"; srun "$w"; srun "$w"
+[ "$(awk '{ n += $2 } END { print n + 0 }' "$t/stats")" = 2 ] && ok "cache: a whole step whose output ran out of handles runs every time" ||
+  no "cache: exhausted whole step: $(cat "$t/stats" | tr '\n' ' ')"
+# No golden says those words (else a passing unit that prints its program's output would never
+# be recorded, and a gate would name the step as out of handles).
+if g=$(grep -rlIiE 'too many open files|file table overflow' corpus book/src lib 2>/dev/null) && [ -n "$g" ]; then
+  no "a golden holds the out-of-handles words: $g"
+else ok "no golden output holds the out-of-handles words"; fi
+
+[ "$bad" = 0 ] && echo "check-exhausted: out-of-handles is said and fails, is never recorded, and the library tokens bound their holders"
 exit "$bad"

@@ -446,10 +446,44 @@ def entry(step, key):
 _put_failed = 0
 
 
+# How a tool says the machine or the process ran out of file handles: ENFILE (the system's vnode or
+# file table: "Too many open files in system"; Lean's "resource exhausted (error code: 4294967273,
+# file table overflow)") and EMFILE ("Too many open files"). Output that says so is the machine's
+# failure, never a result: it is never recorded, and the gate names the step (scripts/exhausted.sh,
+# scripts/ci-local.sh).
+EXHAUSTED = re.compile(rb"too many open files|file table overflow", re.I)
+
+
+def exhausted(data):
+    """Whether output (bytes or str) says a tool ran out of file handles."""
+    if isinstance(data, str):
+        data = data.encode("utf-8", "surrogateescape")
+    return EXHAUSTED.search(data) is not None
+
+
+def exhausted_files(paths):
+    """Whether any of the files (or any file under the directories) says so."""
+    for p in paths:
+        fs = [p] if not os.path.isdir(p) else [os.path.join(r, f) for r, _, n in os.walk(p) for f in n]
+        for f in fs:
+            try:
+                with open(f, "rb") as fh:
+                    if exhausted(fh.read()):
+                        return True
+            except OSError:
+                pass
+    return False
+
+
 def put(step, key, out_file, side_dir=None):
     """Record a pass: `out` and `side/` (always present, maybe empty), written under a temporary
-    name and renamed. A store that cannot be written is said once per process, loudly."""
+    name and renamed. A store that cannot be written is said once per process, loudly. A pass whose
+    output or side files say a tool ran out of file handles (`exhausted`) is never recorded: its
+    outcome may be the machine's (a skip decided by a `grep` that could not open its file), not the
+    tree's; every caller stores through here (par_finish, scripts/par_unit.py, step, Units)."""
     global _put_failed
+    if exhausted_files([out_file] + ([side_dir] if side_dir else [])):
+        return
     final = entry(step, key)
     if os.path.isdir(final):
         if get(final) is not None:
@@ -897,35 +931,6 @@ def prune(argv):
                 except OSError:
                     pass
     print(f"gate_cache: removed {removed} entr{'y' if removed == 1 else 'ies'} ({freed / 1048576:.1f} MiB); {total / 1048576:.1f} MiB left in {root}")
-
-
-# How a tool says the machine or the process ran out of file handles: ENFILE (the system's vnode or
-# file table: "Too many open files in system"; Lean's "resource exhausted (error code: 4294967273,
-# file table overflow)") and EMFILE ("Too many open files"). Output that says so is the machine's
-# failure, never a result: it is never recorded, and the gate names the step (scripts/exhausted.sh,
-# scripts/ci-local.sh).
-EXHAUSTED = re.compile(rb"too many open files|file table overflow", re.I)
-
-
-def exhausted(data):
-    """Whether output (bytes or str) says a tool ran out of file handles."""
-    if isinstance(data, str):
-        data = data.encode("utf-8", "surrogateescape")
-    return EXHAUSTED.search(data) is not None
-
-
-def exhausted_files(paths):
-    """Whether any of the files (or any file under the directories) says so."""
-    for p in paths:
-        fs = [p] if not os.path.isdir(p) else [os.path.join(r, f) for r, _, n in os.walk(p) for f in n]
-        for f in fs:
-            try:
-                with open(f, "rb") as fh:
-                    if exhausted(fh.read()):
-                        return True
-            except OSError:
-                pass
-    return False
 
 
 def main():

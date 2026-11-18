@@ -179,11 +179,12 @@ steps=(
   "book build"       "mdbook build book"
   "result cache"     "scripts/check-gate-cache.sh"
   "gate tiers"       "scripts/check-gate-tier.sh"
+  "handle exhaustion" "scripts/check-exhausted.sh"
 )
 # The sanity gate's steps (`make gate`, `--changed`). The corpus runs named `final` are its own:
 # the full gate runs the corpus at every stage instead.
 gateSteps=("hygiene + axioms" "spec files" "judgment freeze" "assumptions" "axiom report" "type equality" "parse corpus"
-  "check corpus" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)" "backend2 fence" "result cache" "gate tiers")
+  "check corpus" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)" "backend2 fence" "result cache" "gate tiers" "handle exhaustion")
 if [ "$full" = 1 ]; then
   everyStep=("compile scaling")
   for ((i = 0; i < ${#steps[@]}; i += 2)); do
@@ -225,6 +226,7 @@ if [ "$changed" = 1 ]; then
         scripts/check-backend2.sh) add "backend2 fence" ;;
         scripts/check-gate-cache.sh) add "result cache" ;;
         scripts/gate-tier.sh|scripts/check-gate-tier.sh) add "gate tiers" ;;
+        scripts/exhausted.sh|scripts/check-exhausted.sh|scripts/slot|scripts/slotpool.py) add "handle exhaustion" ;;
         scripts/check-assumptions.sh) add "assumptions" ;;
         scripts/check-type-eq.sh|scripts/type-eq.allow|scripts/gate-census.sh) add "type equality" ;;
         scripts/alpha-check.py) add "renaming" ;;
