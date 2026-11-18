@@ -1,0 +1,7 @@
+# The corpus programs a step does not run, each with its reason: `parse-only` (marked
+# `-- check: parse-only`, for the parser), `no-main` (a library, no `main`), `outside-fragment` (the
+# new backend refuses it as outside its fragment). Each step compares the skips it made with the
+# lines of the reasons it names (scripts/corpus-set.sh --skips), so a new skip fails the step until
+# it is listed here.
+no-main corpus/13-1-library.bc
+parse-only corpus/forms.bc

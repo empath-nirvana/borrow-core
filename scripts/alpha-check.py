@@ -153,10 +153,11 @@ def compare(bcc, f, g, back, envG=None, backF=None):
 
 
 def programs(probes):
-    out = []
-    dirs = ["corpus"] + (["docs/expressiveness-probes"] if probes else [])
-    for d in dirs:
-        for r, _, fs in os.walk(os.path.join(ROOT, d)):
+    """Every corpus file (`scripts/corpus-set.sh all`), and the probes with `--probes`."""
+    out = subprocess.run([os.path.join(ROOT, "scripts/corpus-set.sh"), "all"], capture_output=True,
+                         text=True, check=True, cwd=ROOT).stdout.split()
+    if probes:
+        for r, _, fs in os.walk(os.path.join(ROOT, "docs/expressiveness-probes")):
             out += [os.path.relpath(os.path.join(r, x), ROOT) for x in fs if x.endswith(".bc")]
     return sorted(out)
 

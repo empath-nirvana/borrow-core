@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# The new backend's native facts (SPEC §50), on the corpus. For every corpus program in the new
-# backend's fragment (as scripts/compile-backend2.sh runs them):
+# The new backend's native facts (SPEC §50), on the corpus. For every corpus program
+# (`scripts/corpus-set.sh`) in the new backend's fragment, as scripts/compile-backend2.sh runs them
+# (each skip printed, and with no file named pinned in `corpus/skips.expected`; a program with no
+# golden fails):
 #
 #   * the differential run: the program built with its parameters' facts left out
 #     (`bcc run --backend new --native --no-facts`) prints the golden standard output and error and
@@ -27,7 +29,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 files=("$@")
-[ ${#files[@]} -gt 0 ] || files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc)
+named=1
+[ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=($list); }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
 export bcc=.lake/build/bin/bcc
 export bccCounts=.lake/build/bin/bcc-counts
@@ -36,6 +39,7 @@ export cc
 . scripts/par.sh
 export tmp; tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+: > "$tmp/skips"
 
 argsOf() {
   args=()
@@ -50,12 +54,17 @@ statusOf() {
 
 program() {
   local f=$1 w=${PAR_TMP:-$tmp} base in err rc fns fn left old new sigs
-  grep -q '^-- check: parse-only' "$f" && return 0
-  grep -q '^main' "$f" || return 0
+  if grep -q '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$tmp/skips"; return 0; fi
+  if ! grep -q '^main' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$tmp/skips"; return 0; fi
   base=${f%.bc}
-  [ -f "$base.out" ] || return 0
+  if [ ! -f "$base.out" ]; then
+    echo "$f: no golden $base.out: write it from the source stage with \`scripts/compile-corpus.sh --write-goldens $f\`"
+    return 1
+  fi
   if ! "$bcc" compile --backend new --target native "$f" -o "$w/on.ll" > "$w/log" 2>&1; then
-    grep -q 'outside the pure fragment' "$w/log" && return 0
+    if grep -q 'outside the pure fragment' "$w/log"; then
+      echo "$f: outside the new backend's fragment, skipped"; echo "outside-fragment $f" >> "$tmp/skips"; return 0
+    fi
     echo "$f: $(head -3 "$w/log")"; return 1
   fi
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
@@ -168,5 +177,9 @@ program() {
 }
 export -f program argsOf statusOf
 par program "${files[@]}"
+skipbad=0
+if [ "$named" = 0 ]; then
+  scripts/corpus-set.sh --skips native-facts parse-only no-main outside-fragment < "$tmp/skips" || skipbad=1
+fi
 echo "native facts: $par_failed failure(s)."
-[ "$par_failed" -eq 0 ]
+[ "$par_failed" -eq 0 ] && [ "$skipbad" = 0 ]

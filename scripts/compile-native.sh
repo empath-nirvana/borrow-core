@@ -6,7 +6,9 @@
 # that builds LLVM IR (`bcc cc`); without one the script says so and passes, as the gate does for
 # mdbook.
 #
-#   * Every corpus program (the programs scripts/compile-corpus.sh runs) is built with
+#   * Every corpus program (the programs scripts/compile-corpus.sh runs: `scripts/corpus-set.sh`
+#     less those marked `-- check: parse-only` and those with no `main`, each skip printed and,
+#     with no file named, pinned in `corpus/skips.expected`; one with no golden fails) is built with
 #     `bcc run --native` and run on `<name>.in` with `<name>.args`: its standard output, standard
 #     error and exit status must be the golden `<name>.out`, `<name>.err` and `<name>.status`,
 #     which scripts/compile-corpus.sh checks the flat IR against, so native agrees with the flat
@@ -38,7 +40,7 @@ if [ "${1:-}" = --backend ]; then
 fi
 named=1
 files=("$@")
-[ ${#files[@]} -gt 0 ] || { named=0; files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc); }
+[ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=($list); }
 for f in "${files[@]}"; do [ -f "$f" ] || { echo "$f: no such file"; exit 2; }; done
 
 argsOf() {
@@ -54,10 +56,17 @@ statusOf() {
 # One corpus program, built natively and run, then counted.
 program() {
   local f=$1 w=$PAR_TMP base in err rc=0 got
-  if grep -q '^-- check: parse-only' "$f" || ! grep -q '^main' "$f"; then return 0; fi
+  if grep -q '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$skips"; return 0; fi
+  if ! grep -q '^main' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$skips"; return 0; fi
   # The old backend refuses it at compile time (scripts/compile-corpus.sh).
-  if [ "$backend" = old ] && grep -q '^-- check: old-backend-refuses' "$f"; then return 0; fi
+  if [ "$backend" = old ] && grep -q '^-- check: old-backend-refuses' "$f"; then
+    echo "$f: the old backend refuses it, skipped"; return 0
+  fi
   base=${f%.bc}
+  if [ ! -f "$base.out" ]; then
+    echo "$f: no golden $base.out: write it from the source stage with \`scripts/compile-corpus.sh --write-goldens $f\`"
+    return 1
+  fi
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
   err=/dev/null; [ -f "$base.err" ] && err="$base.err"
   argsOf "$f"
@@ -77,8 +86,13 @@ program() {
   echo "$f: native as $base.out | $got"
 }
 export -f program argsOf statusOf
+export skips; skips=$(mktemp)
+trap 'rm -f "$skips"' EXIT
 par program "${files[@]}"
 bad=$par_failed
+if [ "$named" = 0 ]; then
+  scripts/corpus-set.sh --skips compile-native parse-only no-main < "$skips" || bad=$((bad + 1))
+fi
 
 if [ "$named" = 0 ]; then
   for name in $("$bcc" kernel list); do
@@ -89,7 +103,7 @@ if [ "$named" = 0 ]; then
   done
 
   tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' EXIT
+  trap 'rm -rf "$tmp" "$skips"' EXIT
   "$bcc" hostops flat > "$tmp/flat" || { echo "hostops: the flat IR fails"; bad=$((bad + 1)); }
   "$bcc" hostops native > "$tmp/native" || { echo "hostops: native fails"; bad=$((bad + 1)); }
   if cmp -s "$tmp/flat" "$tmp/native"; then

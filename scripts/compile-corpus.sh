@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Compile and run the corpus on the old backend (`Backend/`, `--backend old`), which stays checked
 # until it is retired (N7); scripts/compile-backend2.sh runs the corpus on Backend2, the default.
-# Every corpus/*.bc, corpus/surface/*.bc, corpus/axes/*.bc,
-# corpus/aoc/*.bc and corpus/leetcode/*/*.bc with a `main` (except a file marked `-- check: parse-only`) has a golden output
+# Every corpus program (`scripts/corpus-set.sh`) with a `main` (except a file marked
+# `-- check: parse-only`; the skips are pinned in `corpus/skips.expected`) has a golden output
 # `<name>.out` beside it: the reference semantics, what `Support`'s interpreter (`bcc interp`, the
 # source stage) prints.
 # It reads `<name>.in` as standard input (the empty input if there is none), and `<name>.args`, one
@@ -93,7 +93,7 @@ done
 [ "${BCC_WRITE_KEYS:-0}" = 0 ] || { [ "$write" = 0 ] && [ "$goldens" = 0 ]; } || usage
 [ "$final" = 0 ] || [ "$write" = 0 ] || usage
 named=1
-[ ${#files[@]} -gt 0 ] || { named=0; files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc); }
+[ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=($list); }
 for f in "${files[@]}"; do [ -f "$f" ] || { echo "$f: no such file"; exit 2; }; done
 command -v wasmtime >/dev/null || [ "$goldens" = 1 ] || { echo "wasmtime is not on PATH"; exit 1; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
@@ -119,8 +119,8 @@ statusOf() {
 }
 # Whether file $1 is a program the corpus runs; if not, says why.
 runnable() {
-  if grep -q '^-- check: parse-only' "$1"; then echo "$1: parse-only, skipped"; return 1; fi
-  if ! grep -q '^main' "$1"; then echo "$1: no main, skipped"; return 1; fi
+  if grep -q '^-- check: parse-only' "$1"; then echo "$1: parse-only, skipped"; echo "parse-only $1" >> "$tmp/skips"; return 1; fi
+  if ! grep -q '^main' "$1"; then echo "$1: no main, skipped"; echo "no-main $1" >> "$tmp/skips"; return 1; fi
 }
 # --write-goldens: the golden of file $1, from the source stage.
 golden() {
@@ -146,6 +146,7 @@ golden() {
   corpusKeyLine "$f" > "$base.key"
   echo "$f: wrote $base.out$([ -s "$w/err" ] && echo ", $base.err")$([ "$rc" != 0 ] && echo ", $base.status ($rc)") and $base.key"
 }
+: > "$tmp/skips"
 if [ "$goldens" = 1 ]; then
   export -f runnable golden argsOf statusOf
   par golden "${files[@]}"
@@ -319,6 +320,9 @@ bigpid=""
 case " ${files[*]} " in *" corpus/io-cat.bc "*) bigcat > "$tmp/bigcat.log" 2>&1 & bigpid=$! ;; esac
 par program "${files[@]}"
 bad=$par_failed
+if [ "$named" = 0 ]; then
+  scripts/corpus-set.sh --skips compile-corpus parse-only no-main < "$tmp/skips" || bad=$((bad + 1))
+fi
 if [ -n "$bigpid" ]; then
   if wait "$bigpid"; then cat "$tmp/bigcat.log"; else cat "$tmp/bigcat.log"; bad=$((bad + 1)); fi
 fi
