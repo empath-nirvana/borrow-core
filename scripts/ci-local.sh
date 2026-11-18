@@ -192,7 +192,7 @@ if [ "$changed" = 1 ]; then
         scripts/check-backend2.sh) add "backend2 fence" ;;
         scripts/check-gate-cache.sh) add "result cache" ;;
         scripts/check-assumptions.sh) add "assumptions" ;;
-        scripts/check-type-eq.sh|scripts/type-eq.allow) add "type equality" ;;
+        scripts/check-type-eq.sh|scripts/type-eq.allow|scripts/gate-census.sh) add "type equality" ;;
         scripts/alpha-check.py) add "renaming" ;;
         SPEC.md|docs/changelog/*|docs/status/*|scripts/changelog.sh|scripts/status.sh|scripts/check-spec-files.sh) add "spec files" ;;
       esac
