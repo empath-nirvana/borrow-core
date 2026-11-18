@@ -5,6 +5,9 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 bad=0
+# has GREP-ARGS…: grep in the plan held in $p (a here-string, not a pipe: under pipefail an early
+# `grep -q` exit can fail the writer with SIGPIPE and turn a match into a miss).
+has() { grep "$@" <<< "$p"; }
 # plan PATHS…: the plan for those changed paths.
 plan() { printf '%s\n' "$@" | scripts/gate-tier.sh --plan --paths --base 0000000000000000; }
 # expect "PATHS" TIER [+STEP (every program)] [~STEP (named files)] [-STEP (left out)] [=TEXT (in the tier line)]
@@ -17,17 +20,17 @@ expect() {
   got=$(printf '%s\n' "$p" | sed -n 's/^tier //p')
   [ "$got" = "$tier" ] || { echo "FAIL [$paths]: tier $got, want $tier"; bad=$((bad + 1)); return; }
   # Hygiene reads CrossCheck's build (check-crosscheck-trace.sh): it never runs without the whole build.
-  if printf '%s\n' "$p" | grep -qx 'run hygiene + axioms' && ! printf '%s\n' "$p" | grep -qx 'build all'; then
+  if has -qx 'run hygiene + axioms' && ! has -qx 'build all'; then
     echo "FAIL [$paths]: hygiene runs without the whole build"; bad=$((bad + 1))
   fi
   for e in "$@"; do
     s=${e:1}
     case "$e" in
-      +*) printf '%s\n' "$p" | grep -qxF "run $s" || { echo "FAIL [$paths]: $s not on every program"; bad=$((bad + 1)); } ;;
-      ~*) printf '%s\n' "$p" | grep -q "^run $s	" || { echo "FAIL [$paths]: $s not on named files"; bad=$((bad + 1)); } ;;
-      -*) ! printf '%s\n' "$p" | grep -q "^run $s\(	\|$\)" || { echo "FAIL [$paths]: $s runs"; bad=$((bad + 1)); } ;;
-      @*) printf '%s\n' "$p" | grep -qx "build $s" || { echo "FAIL [$paths]: build is not $s"; bad=$((bad + 1)); } ;;
-      =*) printf '%s\n' "$p" | grep '^line ' | grep -qF "$s" || { echo "FAIL [$paths]: line lacks '$s'"; bad=$((bad + 1)); } ;;
+      +*) has -qxF "run $s" || { echo "FAIL [$paths]: $s not on every program"; bad=$((bad + 1)); } ;;
+      ~*) has -q "^run $s	" || { echo "FAIL [$paths]: $s not on named files"; bad=$((bad + 1)); } ;;
+      -*) ! has -q "^run $s\(	\|$\)" || { echo "FAIL [$paths]: $s runs"; bad=$((bad + 1)); } ;;
+      @*) has -qx "build $s" || { echo "FAIL [$paths]: build is not $s"; bad=$((bad + 1)); } ;;
+      =*) has '^line ' | grep -F "$s" > /dev/null || { echo "FAIL [$paths]: line lacks '$s'"; bad=$((bad + 1)); } ;;
     esac
   done
   echo "ok: [$paths] -> $tier"
@@ -97,10 +100,10 @@ cp scripts/gate-tier.sh scripts/corpus-set.sh "$t/scripts/"
 echo 'main = 1' > "$t/corpus/leetcode/deep/one/x.bc"; echo x > "$t/corpus/fail/y.bc"
 p=$(cd "$t" && printf '%s\n' corpus/leetcode/deep/one/x.bc corpus/fail/y.bc | scripts/gate-tier.sh --plan --paths --base 0)
 rm -rf "$t"
-if printf '%s\n' "$p" | grep -q "^run corpus (Backend2)	corpus/leetcode/deep/one/x.bc$" &&
-   printf '%s\n' "$p" | grep -q "^run parse corpus	corpus/fail/y.bc	corpus/leetcode/deep/one/x.bc$"; then
+if has -q "^run corpus (Backend2)	corpus/leetcode/deep/one/x.bc$" &&
+   has -q "^run parse corpus	corpus/fail/y.bc	corpus/leetcode/deep/one/x.bc$"; then
   echo "ok: a nested program runs in every program step; a fail/ file is parsed"
-else echo "FAIL: nested program: $(printf '%s\n' "$p" | grep '^run ')"; bad=$((bad + 1)); fi
+else echo "FAIL: nested program: $(has '^run ')"; bad=$((bad + 1)); fi
 
 # No base: a checkout whose origin cannot be fetched.
 t=$(mktemp -d)
@@ -109,9 +112,9 @@ mkdir "$t/scripts" && cp scripts/gate-tier.sh "$t/scripts/"
   git remote add origin "$t/nowhere")
 p=$(unset CI_LOCAL_BASE; "$t/scripts/gate-tier.sh" --plan)
 rm -rf "$t"
-if printf '%s\n' "$p" | grep -qx 'tier full' && printf '%s\n' "$p" | grep -q '^line .*no base: origin could not be fetched'; then
+if has -qx 'tier full' && has -q '^line .*no base: origin could not be fetched'; then
   echo "ok: no fetchable origin -> full"
-else echo "FAIL: no fetchable origin: $(printf '%s\n' "$p" | grep -E '^(tier|line) ')"; bad=$((bad + 1)); fi
+else echo "FAIL: no fetchable origin: $(has -E '^(tier|line) ')"; bad=$((bad + 1)); fi
 
 echo "$bad failure(s)."
 [ "$bad" -eq 0 ]
