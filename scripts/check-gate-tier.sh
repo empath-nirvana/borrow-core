@@ -57,6 +57,7 @@ expect "docs/x.md" docs @none
 expect "corpus/int-slash.bc" corpus @bins
 expect "Core/Judgment.lean" compiler @all
 expect "scripts/falsify.sh" docs -"check corpus"
+expect "scripts/gate-daily.sh scripts/gate-daily.plist" docs @none -"check corpus"
 expect "scripts/par.sh" full +"native" +"renaming"
 expect "lakefile.toml" full +"corpus (Backend2)"
 expect "Makefile docs/x.md" full +"cell classes"
