@@ -37,7 +37,8 @@ scripts/slot -s > /dev/null
 # All descriptors but two taken before slot starts: perl loads its modules through those left,
 # the door takes one, and the first token cannot be opened.
 out=$( (ulimit -n 9; exec 3<scripts/slot 4<scripts/slot 5<scripts/slot 6<scripts/slot; scripts/slot -- echo ran) 2>&1 ); rc=$?
-if [ "$rc" = 125 ] && [ "${out#*ran}" = "$out" ] && printf '%s\n' "$out" | grep -Eqi "$exhaustedRe"; then
+printf '%s\n' "$out" > "$t/log"
+if [ "$rc" = 125 ] && [ "${out#*ran}" = "$out" ] && exhausted "$t/log"; then
   ok "slot without descriptors fails (125) and says so: $(printf '%s' "$out" | head -1)"
 else no "slot without descriptors: exit $rc, output: $out"; fi
 

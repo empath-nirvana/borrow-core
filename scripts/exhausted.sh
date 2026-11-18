@@ -1,12 +1,10 @@
-# Sourced by scripts/ci-local.sh and scripts/check-exhausted.sh: how a tool says the machine (or
-# the process) ran out of file handles. ENFILE (the system's vnode or file table: `Too many open
-# files in system`, Lean's `resource exhausted (error code: 4294967273, file table overflow)`)
-# and EMFILE (the process's descriptors: `Too many open files`). A step whose output says so
-# failed for the machine, not for the tree.
+# Sourced by scripts/ci-local.sh and scripts/check-exhausted.sh.
 #
-#   exhausted FILE…   whether any FILE holds such a line
-exhaustedRe='too many open files|file table overflow'
-exhausted() { grep -Eqi "$exhaustedRe" "$@" 2>/dev/null; }
+#   exhausted FILE…   whether any FILE says a tool ran out of file handles (ENFILE: the system's
+#                     vnode or file table; EMFILE: the process's descriptors), by the one pattern
+#                     the result cache also reads (scripts/gate_cache.py `EXHAUSTED`): a step whose
+#                     output says so failed for the machine, not for the tree.
+exhausted() { python3 "$(dirname "${BASH_SOURCE[0]}")/gate_cache.py" exhausted "$@"; }
 
 # vnodes_free: whether the machine's vnode table has room. Full means `kern.num_vnodes` at
 # `kern.maxvnodes` and `kern.free_vnodes` under $GATE_VNODE_MIN (default 2000) at every one of 10

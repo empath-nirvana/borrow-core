@@ -38,6 +38,7 @@ renamed, so a reader sees a whole entry or none. `GATE_CACHE=0` reads and writes
     gate_cache.py step-key ID CLASS [--files F…] -- CMD…   the key `step` would use
     gate_cache.py prune [--days N] [--max-mb M]   remove old entries (never during a gate)
     gate_cache.py tools                  the tools line (ci-local writes it to GATE_CACHE_TOOLS_FILE)
+    gate_cache.py exhausted FILE…        exit 0 when a FILE says a tool ran out of file handles
 """
 import hashlib, os, re, shutil, subprocess, sys, tempfile
 
@@ -898,6 +899,35 @@ def prune(argv):
     print(f"gate_cache: removed {removed} entr{'y' if removed == 1 else 'ies'} ({freed / 1048576:.1f} MiB); {total / 1048576:.1f} MiB left in {root}")
 
 
+# How a tool says the machine or the process ran out of file handles: ENFILE (the system's vnode or
+# file table: "Too many open files in system"; Lean's "resource exhausted (error code: 4294967273,
+# file table overflow)") and EMFILE ("Too many open files"). Output that says so is the machine's
+# failure, never a result: it is never recorded, and the gate names the step (scripts/exhausted.sh,
+# scripts/ci-local.sh).
+EXHAUSTED = re.compile(rb"too many open files|file table overflow", re.I)
+
+
+def exhausted(data):
+    """Whether output (bytes or str) says a tool ran out of file handles."""
+    if isinstance(data, str):
+        data = data.encode("utf-8", "surrogateescape")
+    return EXHAUSTED.search(data) is not None
+
+
+def exhausted_files(paths):
+    """Whether any of the files (or any file under the directories) says so."""
+    for p in paths:
+        fs = [p] if not os.path.isdir(p) else [os.path.join(r, f) for r, _, n in os.walk(p) for f in n]
+        for f in fs:
+            try:
+                with open(f, "rb") as fh:
+                    if exhausted(fh.read()):
+                        return True
+            except OSError:
+                pass
+    return False
+
+
 def main():
     a = sys.argv[1:]
     if not a:
@@ -919,6 +949,9 @@ def main():
         prune(a[1:])
     elif a[0] == "tools":
         print(tools_line())
+    elif a[0] == "exhausted":
+        # `exhausted FILE…`: exit 0 when a file says a tool ran out of file handles.
+        return 0 if exhausted_files(a[1:]) else 1
     elif a[0] == "key-lines":
         # Debugging: the lines a whole step's key is the hash of.
         print("\n".join(base_lines(a[1], a[2])))
