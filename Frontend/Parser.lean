@@ -2898,7 +2898,7 @@ def compG : Nat → Bool → P Comp
         modify fun s => { s with fresh }
         return M
       let isMut ← if isVar then pure true
-        else if ← isKw "mut" then do rsNoteS (.letMut i₀); discard bump; pure true else pure false
+        else if ← isKw "mut" then do rsNote (.letMut i₀); discard bump; pure true else pure false
       let p ← pat n
       if isMut then
         match p with
