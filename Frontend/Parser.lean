@@ -4285,25 +4285,34 @@ def tableOf (lib : String → Option String) (incs : List String) (own : Data.Ta
 
 /-- The `data` declarations and the `type` abbreviations in scope in the source `src` (SPEC §42,
 §61), `lib` giving a module's source (`tableOf`). -/
-def dataOf (lib : String → Option String) (src : String) (file : String := "") : Data.Table :=
-  match lex src file with
-  | .ok toks => tableOf lib (includesIn toks) (dataIn toks (isNewDialect src))
+def dataOf (lib : String → Option String) (src : String) (file : String := "")
+    (nd : Bool := isNewDialect src) : Data.Table :=
+  match lex src file nd with
+  | .ok toks => tableOf lib (includesIn toks) (dataIn toks nd)
   | .error _ => {}
 
 /-- The declarations of a source file. At most one `main` is accepted. Its names are resolved
-(`resolve`) unless it is code the elaborator generated. -/
+(`resolve`) unless it is code the elaborator generated. `nd`: the text is in the new spelling (SPEC §82), by default what its
+first line says (`isNewDialect`). -/
 def parseProgram (src : String) (resolve : Bool := true)
     (lib : String → Option String := fun _ => none) (internal : Bool := false)
-    (file : String := "") (lendAt : List Pos := []) : Except Error Program := do
+    (file : String := "") (lendAt : List Pos := []) (nd : Bool := isNewDialect src) :
+    Except Error Program := do
   -- The `data` declarations in scope (SPEC §42): the prelude's, the included modules', the
   -- program's own. `file` is the library module `src` is (`""` for the program), which its
   -- positions carry (#883).
-  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src file) internal file
-    lendAt
+  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src file nd) internal file
+    lendAt nd
   let mains := ds.filter fun | .main .. => true | _ => false
   match mains with
   | _ :: .main sp _ _ :: _ => .error ⟨sp, "a program has at most one `main`"⟩
   | _ => pure ⟨ds⟩
+
+/-- Whether the text a position is in is in the new spelling (SPEC §82): `nd`, the program's, for
+a position of the program (`file` `""`), and a library module's own, by its first line,
+otherwise.  `[spec §82]` -/
+def ndOfFile (nd : Bool) (lib : String → Option String) (file : String) : Bool :=
+  if file == "" then nd else ((lib file).map isNewDialect).getD false
 
 def parseVal (src : String) : Except Error Val := runP val src
 def parseComp (src : String) : Except Error Comp := runP comp src
@@ -4312,22 +4321,23 @@ def parseCTy (src : String) : Except Error CTy := runP cty src
 
 /-- The binders resolution renamed in `src` (SPEC §41, rule R1), each with the name the source
 writes it with. -/
-def renamesOf (src : String) (lib : String → Option String := fun _ => none) :
-    List (String × String) :=
-  match runPS (fun n => decls n n []) src true (dataOf lib src) with
+def renamesOf (src : String) (lib : String → Option String := fun _ => none)
+    (nd : Bool := isNewDialect src) : List (String × String) :=
+  match runPS (fun n => decls n n []) src true (dataOf lib src "" nd) (nd := nd) with
   | .ok (_, s) => s.renamed
   | .error _ => []
 
 /-- Each name of `src` that resolution resolved to a variable (SPEC §41, rule R1): where it is
 written, as written, the variable, and the number of its binder, in the order of the source. -/
-def resolutionOf (src : String) (lib : String → Option String := fun _ => none) :
-    Except Error (List (Pos × String × String × Nat)) := do
-  let (_, s) ← runPS (fun n => decls n n []) src true (dataOf lib src)
+def resolutionOf (src : String) (lib : String → Option String := fun _ => none)
+    (nd : Bool := isNewDialect src) : Except Error (List (Pos × String × String × Nat)) := do
+  let (_, s) ← runPS (fun n => decls n n []) src true (dataOf lib src "" nd) (nd := nd)
   pure s.occs.reverse
 
 /-- Where the source `src` writes a record's field by its name alone (`PState.shorthands`). -/
-def shorthandsOf (src : String) (lib : String → Option String := fun _ => none) : List Pos :=
-  match runPS (fun n => decls n n []) src true (dataOf lib src) with
+def shorthandsOf (src : String) (lib : String → Option String := fun _ => none)
+    (nd : Bool := isNewDialect src) : List Pos :=
+  match runPS (fun n => decls n n []) src true (dataOf lib src "" nd) (nd := nd) with
   | .ok (_, s) => s.shorthands
   | .error _ => []
 
@@ -4382,9 +4392,9 @@ def unmark (src : String) (msg : String) (lib : String → Option String := fun 
 
 /-- An error about the program `src`, rendered with each renamed binder named as the source writes
 it (`unrename`), and each span marker as its source text (`unmark`). -/
-def Error.renderIn (src : String) (e : Error) (lib : String → Option String := fun _ => none) :
-    String :=
-  let renames := renamesOf src lib ++ (match lib e.span.start.file with
+def Error.renderIn (src : String) (e : Error) (lib : String → Option String := fun _ => none)
+    (nd : Bool := isNewDialect src) : String :=
+  let renames := renamesOf src lib nd ++ (match lib e.span.start.file with
     | some msrc => if e.span.start.file == "" then [] else renamesOf msrc lib
     | none => [])
   { e with msg := unmark src (unrename renames e.msg) lib }.render
@@ -4396,8 +4406,8 @@ def Pos.fileIn (file : String) (p : Pos) : String :=
 
 /-- An error about the program `file`, whose source is `src`, rendered as `path:line:col: message`,
 the path the file the error's position is in (`Pos.fileIn`).  `[spec §42]` -/
-def Error.renderAt (file src : String) (e : Error) (lib : String → Option String := fun _ => none) :
-    String :=
-  s!"{e.span.start.fileIn file}:{e.renderIn src lib}"
+def Error.renderAt (file src : String) (e : Error) (lib : String → Option String := fun _ => none)
+    (nd : Bool := isNewDialect src) : String :=
+  s!"{e.span.start.fileIn file}:{e.renderIn src lib nd}"
 
 end Frontend
