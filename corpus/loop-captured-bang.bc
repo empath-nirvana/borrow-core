@@ -1,0 +1,25 @@
+-- A loop of tail calls through a handler whose tail-resumptive clause captures a persistent value
+-- bound outside the handler: `go` calls itself in tail position, and each turn performs `yld`,
+-- whose clause reads `c`, a parameter of `pass` at a `!` type, then resumes in tail position. The
+-- clause is the one static clause of `yld`, and `c` is persistent, so each `yld` is a direct call
+-- of the clause with `c` passed as `Y`'s evidence (SPEC §47, *Evidence*): no state machine, no
+-- suspension and no indirect call, and the loop, the clause and the resume run in constant
+-- stack.
+--
+-- 9000 turns: a recursion is driven by `bounded`, whose budget (`recBudget`, 10000) counts every
+-- call of the group, tail calls too.
+--
+-- Answer: inl (); `live 0`. `exhausted_to_option` puts `go`'s () in `inl`, and a spent budget
+-- would answer `inr ()`. A suspension that was not freed would leave objects live.
+
+include rec
+
+effect Y { must_resume ctl yld() }
+
+handler pass[A](c: !(1 => i32)): Y, A -> A = { return(a) = a; yld(k) = { let _ = c(()); k(()) } }
+
+fn go(n: i32) -> 1 = if n == 0 { () } else { yld(); go(n - 1) }
+
+main -> 1 + 1 =
+  let c: !(1 => i32) = !{ u -> 7 };
+  with exhausted_to_option[1] { with pass[1](c) { go(9000) } }
