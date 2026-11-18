@@ -1,5 +1,6 @@
 # Typing judgments (#798): one kernel judgment, CDerivesX, and one checker judgment, TDerivesX, each
-# at a judgment index JIdx. Frozen: do not add lines; a new coordinate is a field of JIdx.
+# at a judgment index JIdx. Frozen: do not add lines; a coordinate that only gates rules is a field
+# of JIdx, any other goes in a type former or in the model.
 # The other lines are the paper mechanisation's (Paper/, Support/) and experiments' own judgments.
 # Format: path name
 Core/Judgment.lean CDerivesX
