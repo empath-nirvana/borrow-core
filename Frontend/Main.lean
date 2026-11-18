@@ -189,7 +189,7 @@ def desugar (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match Frontend.Elab.parseLent src with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
-  | .ok p => match Frontend.Elab.elaborate p with
+  | .ok (_, el) => match el with
     | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
     | .ok el => IO.print el.prog.pp; return 0
 
@@ -236,8 +236,8 @@ def kinds (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match Frontend.Elab.parseLent src with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
-  | .ok p =>
-    match Check.checkProgram p with
+  | .ok (p, el) =>
+    match Check.checkProgramWith p (fun _ => el) with
     | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
     | .ok r =>
       for h in r.handles do
@@ -262,8 +262,8 @@ def handled (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match Frontend.Elab.parseLent src with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
-  | .ok p =>
-    match Check.checkProgram p with
+  | .ok (p, el) =>
+    match Check.checkProgramWith p (fun _ => el) with
     | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
     | .ok r =>
       let some c := r.main | return 0
@@ -303,8 +303,8 @@ def sites (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match Frontend.Elab.parseLent src with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
-  | .ok p =>
-    match Check.checkProgram p with
+  | .ok (p, el) =>
+    match Check.checkProgramWith p (fun _ => el) with
     | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
     | .ok r =>
       for h in r.handles do
@@ -609,8 +609,8 @@ def checkCmd (provedOnly : Bool) (file : String) : IO UInt32 := do
   | .error e =>
     IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc)
     return 1
-  | .ok p =>
-    match Check.checkProgram p with
+  | .ok (p, el) =>
+    match Check.checkProgramWith p (fun _ => el) with
     | .error e =>
       IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc)
       return 1

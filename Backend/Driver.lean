@@ -151,12 +151,14 @@ def compileWatTimed (file src : String) : IO (Except String String) := do
   let stage {α} := @timed α (some tot)
   let analysis {α} := @timed α none
   let go : ExceptT String IO String := do
-    let p₀ ← ExceptT.mk <| stage "parse" (fun (p : Frontend.Program) => s!"{p.decls.length} declarations")
+    let p₀ ← ExceptT.mk <| stage "parse"
+        (fun (p : Frontend.Program × Except Frontend.Error Frontend.Elab.Elaborated) =>
+          s!"{p.1.decls.length} declarations")
       fun _ => match Frontend.Elab.parseLent src with
         | .ok p => pure p
         | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
     let r ← ExceptT.mk <| stage "check" (fun _ => "") fun _ =>
-      match Frontend.Check.checkProgram p₀ with
+      match Frontend.Check.checkProgramWith p₀.1 (fun _ => p₀.2) with
         | .ok r => pure r
         | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
     let some c := r.main | throw s!"{file}: no `main`"

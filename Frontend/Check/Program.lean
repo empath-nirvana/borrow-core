@@ -385,16 +385,21 @@ are not reported. An error in code generated for a sugar names the sugar
 recursive data implicitly (`Frontend.Check.implicitCopy`, on the typed terms the check returns):
 such a use is written `clone(x)`.
 
-Everything after the elaboration is `checkElaborated`. -/
-def checkProgram (p : Program) : Except Error Report := do
+Everything after the elaboration is `checkElaborated`. The elaboration is `elabP`'s.  `[spec §82]` -/
+def checkProgramWith (p : Program)
+    (elabP : Program → Except Error Frontend.Elab.Elaborated := Frontend.Elab.elaborate) :
+    Except Error Report := do
   if let some e := reservedDecl? p.decls then throw e
-  let el ← Frontend.Elab.elaborate p
+  let el ← elabP p
   if let some e := reservedDecl? el.prog.decls then throw e
   let r ← checkElaborated el false
   match ← discardEntry el r with
   | some el' => (checkElaborated el' false).mapError fun e =>
       { e with msg := e.msg.replace s!"`{mainResult}`" "`main`'s result" }
   | none => pure r
+
+/-- `checkProgramWith` at the elaboration `Frontend.Elab.elaborate`.  `[spec §82]` -/
+def checkProgram (p : Program) : Except Error Report := checkProgramWith p
 
 
 /-! ### Soundness -/
