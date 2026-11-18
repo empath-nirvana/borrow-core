@@ -235,9 +235,11 @@ _tools = None
 
 
 def tools_line():
-    """`uname -sm`, Python, wasmtime and the C compiler `bcc cc` names, with their versions. A probe
-    that cannot run, or exits non-zero, makes every key that holds the line unsure (`tool:<name>`
-    in `_bad`, noted wherever the line is read)."""
+    """`uname -sm`, Python, wasmtime and the C compiler `bcc cc` names, with their versions. A
+    probe's exit status is part of its value (`bcc cc` exits non-zero on a machine without a C
+    compiler, a normal state). A probe that cannot run (OSError, timeout), or whose output says it
+    ran out of a resource (`EXHAUSTED`, `RESOURCE`), makes every key that holds the line unsure
+    (`tool:<name>` in `_bad`, noted wherever the line is read)."""
     global _tools
     if _tools is not None:
         if _rec is not None:
@@ -261,9 +263,10 @@ def tools_line():
     def out(cmd):
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT, timeout=120)
-            if p.returncode != 0:
+            text = (p.stdout + p.stderr).strip()
+            if exhausted(text) or resource_short(text):
                 bad.add(f"tool:{os.path.basename(cmd[0])}")
-            return f"{p.returncode} {(p.stdout + p.stderr).strip()}"
+            return f"{p.returncode} {text}"
         except (OSError, subprocess.TimeoutExpired) as e:
             bad.add(f"tool:{os.path.basename(cmd[0])}")
             return f"error {e}"
@@ -1174,7 +1177,11 @@ def main():
         # Exit 3 when a probe failed: ci-local then keeps no tools file, and each key computes
         # (and judges) the line itself.
         print(tools_line())
-        return 3 if _tools[1] else 0
+        if _tools[1]:
+            sys.stderr.write(f"gate_cache: a tool probe could not run ({', '.join(sorted(_tools[1]))}): "
+                             "the keys that hold the tools line are unsure until it runs\n")
+            return 3
+        return 0
     elif a[0] == "exhausted":
         # `exhausted FILE…`: exit 0 when a file says a tool ran out of file handles.
         return 0 if exhausted_files(a[1:]) else 1
