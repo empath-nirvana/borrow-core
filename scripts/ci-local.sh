@@ -3,7 +3,8 @@
 # skipped with a notice if absent), and so is a C compiler for the native target
 # (scripts/compile-native.sh says so and passes).
 #
-#     scripts/ci-local.sh             the sanity gate (`make gate`): run before opening a PR
+#     scripts/ci-local.sh             the per-PR gate (`make gate`): the steps the change's tier
+#                                     names (scripts/gate-tier.sh), run before opening a PR
 #     scripts/ci-local.sh --full      the full gate (`make gate-full`): every step
 #     scripts/ci-local.sh --source    the full gate, and the source stage on every program and
 #                                     book block, re-verifying every golden
@@ -12,6 +13,9 @@
 #     … --no-cache                    with any of the above: run every unit, neither reading nor
 #                                     writing the result cache (`make gate-full-nocache`; also
 #                                     `GATE_CACHE=0`)
+#     … --plan                        with any of the above: print the tier, the build and each
+#                                     step's command, and run nothing (every gate prints the tier
+#                                     and the step list before it builds)
 #     … --record-cache                with any of the above: run every unit and record its passes,
 #                                     reading none (`make gate-full-record`, the daily run on main;
 #                                     also `GATE_CACHE=record`)
@@ -31,7 +35,16 @@
 # counts the units replayed and run. scripts/check-gate-cache.sh shows that a change to each kind
 # of input misses.
 #
-# The sanity gate (`gateSteps` below) checks that the library builds; hygiene (no forbidden
+# The per-PR gate (no mode; `make gate`). scripts/gate-tier.sh reads the paths changed since the
+# merge base with origin/main (after a fetch; or `CI_LOCAL_BASE`) and names a tier (docs, book,
+# corpus, research, scripts, compiler, full) and, for each step, whether it runs on every program,
+# on the programs the change touches, or not at all; it prints one line saying so, which the gate
+# prints first and again with its verdict, followed by what it left to the daily full gate on main
+# (scripts/gate-daily.sh). A `full` tier (the toolchain, the gate's own machinery, a path no rule
+# knows, or no merge base) is the full gate. scripts/check-gate-tier.sh (`gate tiers`) tests the
+# tiers.
+#
+# The sanity gate (`gateSteps` below; now the set `--changed` draws from) checks that the library builds; hygiene (no forbidden
 # keyword, every declaration's axioms within propext, Classical.choice and Quot.sound) and the
 # axioms of the theorems SPEC.md names (listed in `scripts/axioms/*.names`, read by
 # `gate-census axiom-report`); the typing-judgment freeze, the hypothesis register (`assumptions`:
@@ -55,12 +68,10 @@
 # a step runs is checked against the golden. The interpreter itself is slow (minutes on the largest
 # programs), so by default it runs only where a golden is unverified: where no key is recorded
 # for it, or the recorded key is not the current one, a key covering the elaborated term the
-# interpreter runs, its input and the interpreter's source (scripts/source-stage.sh). The sanity
-# and full gates both follow this rule; with `--source`, it runs on every program and book block,
-# and every golden is re-verified. The full gate is required when Paper/, Support/ (the
-# interpreter and the machine), Target/, Pipeline/, Reference/ or Backend/ changed since the merge
-# base; the sanity gate says so when they have. `--changed` never runs the interpreter: it lists
-# the unverified programs instead.
+# interpreter runs, its input and the interpreter's source (scripts/source-stage.sh). Every gate
+# follows this rule; with `--source`, it runs on every program and book block,
+# and every golden is re-verified. `--changed` never runs the interpreter: it lists the unverified
+# programs instead.
 #
 # A gate builds everything (`lake build`), then (the full gate) runs the compile-time guard alone
 # (it measures time), then every other step at once, each one's output printed in order as it
@@ -81,12 +92,15 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 changed=0
 full=0
+tiered=0
 mode=""
-usage() { echo "usage: scripts/ci-local.sh [--full | --source | --changed] [--no-cache | --record-cache]"; exit 2; }
+usage() { echo "usage: scripts/ci-local.sh [--full | --source | --changed] [--no-cache | --record-cache] [--plan]"; exit 2; }
+planOnly=0
 for a in "$@"; do
   case "$a" in
     --no-cache) export GATE_CACHE=0 ;;
     --record-cache) export GATE_CACHE=record ;;
+    --plan) planOnly=1 ;;
     --changed|--full|--source) [ -z "$mode" ] || usage; mode=$a ;;
     *) usage ;;
   esac
@@ -95,13 +109,28 @@ case "${GATE_CACHE:-1}" in 1|0|record) ;; *) echo "ci-local: GATE_CACHE=$GATE_CA
 # The tools line is this gate's own (below); one left in the environment is not used.
 unset GATE_CACHE_TOOLS_FILE GATE_CACHE_BUILT
 case "$mode" in
+  "") tiered=1 ;;
   --changed) changed=1; export BCC_SOURCE=0 ;;
   --full) full=1 ;;
   --source) full=1; export BCC_SOURCE=1 ;;
 esac
+# The per-PR gate: the tier of the change (scripts/gate-tier.sh) names the steps, each on every
+# program or on the programs the change touches. A `full` tier is the full gate.
+tierLine="" tierLeft="" tierPlan=""
+if [ "$tiered" = 1 ]; then
+  tierPlan=$(scripts/gate-tier.sh --plan) || { echo "ci-local: scripts/gate-tier.sh failed"; exit 1; }
+  tierLine=$(printf '%s\n' "$tierPlan" | sed -n 's/^line //p')
+  tierLeft=$(printf '%s\n' "$tierPlan" | sed -n 's/^left //p')
+  tierName=$(printf '%s\n' "$tierPlan" | sed -n 's/^tier //p')
+  tierBuild=$(printf '%s\n' "$tierPlan" | sed -n 's/^build //p')
+  echo "$tierLine"
+  [ "$tierName" != full ] || { tiered=0; full=1; }
+fi
+# The files a tiered step runs on (none: every program), from the plan's `run <step>\t<file>…`.
+tierFiles() { printf '%s\n' "$tierPlan" | awk -F'\t' -v s="run $1" '$1 == s { for (i = 2; i <= NF; i++) printf "%s ", $i }'; }
 # A change that reaches the reference semantics or the compiler needs the full gate.
 reach=""
-if [ "$full" = 0 ] && base=${CI_LOCAL_BASE:-$(git merge-base origin/main HEAD 2>/dev/null)}; then
+if [ "$full" = 0 ] && [ "$tiered" = 0 ] && base=${CI_LOCAL_BASE:-$(git merge-base origin/main HEAD 2>/dev/null)}; then
   reach=$({ git diff --name-only "$base"; git ls-files --others --exclude-standard; } | grep -E '^(Paper|Support|Target|Pipeline|Reference|Backend)/' | head -1 || true)
   [ -z "$reach" ] || echo "ci-local: $reach (and perhaps more of Paper/, Support/, Target/, Pipeline/, Reference/, Backend/) changed since $(git rev-parse --short "$base"): \`make gate-full\` is required as well"
 fi
@@ -149,16 +178,20 @@ steps=(
   "book doc-tests"   "scripts/book-doctest.sh"
   "book build"       "mdbook build book"
   "result cache"     "scripts/check-gate-cache.sh"
+  "gate tiers"       "scripts/check-gate-tier.sh"
 )
 # The sanity gate's steps (`make gate`, `--changed`). The corpus runs named `final` are its own:
 # the full gate runs the corpus at every stage instead.
 gateSteps=("hygiene + axioms" "spec files" "judgment freeze" "assumptions" "axiom report" "type equality" "parse corpus"
-  "check corpus" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)" "backend2 fence" "result cache")
+  "check corpus" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)" "backend2 fence" "result cache" "gate tiers")
 if [ "$full" = 1 ]; then
   everyStep=("compile scaling")
   for ((i = 0; i < ${#steps[@]}; i += 2)); do
     case "${steps[i]}" in *"final)") ;; *) everyStep+=("${steps[i]}") ;; esac
   done
+elif [ "$tiered" = 1 ]; then
+  everyStep=()
+  while IFS= read -r l; do everyStep+=("$l"); done < <(printf '%s\n' "$tierPlan" | awk -F'\t' '/^run / { print substr($1, 5) }')
 else
   everyStep=("${gateSteps[@]}")
 fi
@@ -191,6 +224,7 @@ if [ "$changed" = 1 ]; then
         scripts/compile-backend2.sh) add "corpus (Backend2, final)" "result cache" ;;
         scripts/check-backend2.sh) add "backend2 fence" ;;
         scripts/check-gate-cache.sh) add "result cache" ;;
+        scripts/gate-tier.sh|scripts/check-gate-tier.sh) add "gate tiers" ;;
         scripts/check-assumptions.sh) add "assumptions" ;;
         scripts/check-type-eq.sh|scripts/type-eq.allow|scripts/gate-census.sh) add "type equality" ;;
         scripts/alpha-check.py) add "renaming" ;;
@@ -208,6 +242,22 @@ wanted() {
   case "$run" in *"|$1|"*) return 0 ;; *) return 1 ;; esac
 }
 
+# The plan, before anything is built or run: the build and every step (with its files when it runs
+# on some programs only). `--plan` prints each step's command and stops there.
+planBuild=${tierBuild:-$([ "$all" = 1 ] && echo all || echo bins)}
+planSteps=""
+wanted "compile scaling" && planSteps="compile scaling"
+for ((i = 0; i < ${#steps[@]}; i += 2)); do
+  wanted "${steps[i]}" || continue
+  n=0; [ "$tiered" = 0 ] || n=$(tierFiles "${steps[i]}" | wc -w | tr -d ' ')
+  planSteps="$planSteps${planSteps:+, }${steps[i]}$([ "$n" = 0 ] || echo " ($n file(s))")"
+  if [ "$planOnly" = 1 ]; then
+    c=${steps[i + 1]}; [ "$tiered" = 0 ] || c="$c $(tierFiles "${steps[i]}")"
+    echo "  ${steps[i]}: $c"
+  fi
+done
+echo "ci-local plan: build $planBuild; steps: ${planSteps:-none}"
+[ "$planOnly" = 0 ] || exit 0
 # The machine-wide job pool (scripts/slot), shared by every gate on the machine: each `par` job,
 # each subprocess of the Python pools and `gate-census` take their slots there; the serial steps
 # below take one; the build and the compile-time guard take the whole CPU pool. `SLOT_OFF=1`
@@ -237,10 +287,13 @@ build() {
   # needs more, the gates beside it may run short of memory (swap, never a wrong verdict).
   slotted 999 24 lake build "$@"
 }
-if [ "$all" = 1 ]; then step "build" build
+if [ "$tiered" = 1 ] && [ "$tierBuild" = none ]; then echo "==> build: none (no step of this tier reads the build)"
+elif [ "$tiered" = 1 ] && [ "$tierBuild" = bins ]; then step "build (bcc, bcc-counts)" build bcc bcc-counts gate-census
+elif [ "$all" = 1 ]; then step "build" build
 else step "build (bcc, bcc-counts)" build bcc bcc-counts gate-census; fi
 built=$fail
-[ "$built" = 0 ] && export CI_LOCAL_BUILT=1
+# CI_LOCAL_BUILT says this invocation built the binaries; a tier that builds nothing does not say it.
+[ "$built" = 0 ] && { [ "$tiered" = 1 ] && [ "$tierBuild" = none ] || export CI_LOCAL_BUILT=1; }
 # When the build fails, the steps run one after another, each trying its own build, with the cache
 # off: the binaries left in .lake are not this tree's, and nothing is replayed or recorded.
 if [ "$built" != 0 ] && [ "${GATE_CACHE:-1}" != 0 ]; then export GATE_CACHE=0; cachenote=" (the build failed)"; fi
@@ -274,6 +327,7 @@ names=(); pids=()
 for ((i = 0; i < ${#steps[@]}; i += 2)); do
   name=${steps[i]}; cmd=${steps[i + 1]}
   wanted "$name" || continue
+  [ "$tiered" = 0 ] || cmd="$cmd $(tierFiles "$name")"
   if [ "$name" = "book build" ] && [ "$mdbook" = 0 ]; then continue; fi
   if [ "$built" = 0 ]; then
     k=${#names[@]}
@@ -302,6 +356,7 @@ fi
 echo
 tag="ci-local"; [ "$changed" = 1 ] && tag="ci-local --changed"; [ "$full" = 1 ] && tag="ci-local --full"
 [ "${BCC_SOURCE:-}" = 1 ] && [ "$full" = 1 ] && tag="ci-local --source"
+[ -z "$tierLine" ] || tag="ci-local [tier $tierName$(printf '%s' "$tierLine" | sed -n 's/^gate tier: [a-z]* (\(cut [^)]*\)).*/, \1/p')]"
 [ "${GATE_CACHE:-1}" = 0 ] && [ -z "${cachenote:-}" ] && tag="$tag --no-cache"
 [ "${GATE_CACHE:-1}" = record ] && tag="$tag --record-cache"
 if [ "${GATE_CACHE:-1}" = 0 ]; then cache="cache off${cachenote:-}"
@@ -309,6 +364,7 @@ else cache=$(awk '{ r += $1; n += $2; f += $3 } END { printf "cache: %d unit(s) 
 if [ -n "$pool" ]; then cache="$cache; job pool $poolN/$poolM GB"; else cache="$cache; job pool off"; fi
 if [ "$fail" -eq 0 ]; then echo "$tag: ALL PASSED ($((SECONDS - start))s; $cache)"; else echo "$tag: FAILURES (see above) ($((SECONDS - start))s; $cache)"; fi
 [ "$changed" = 1 ] && echo "(--changed is for iteration only: the sanity gate, scripts/ci-local.sh, runs before a PR)"
-[ "$full" = 0 ] && echo "(the sanity gate: \`make gate-full\` runs every check; \`make verify-goldens\` re-verifies every golden)"
+if [ -n "$tierLine" ]; then echo "$tierLine"; echo "($tierLeft)"
+elif [ "$full" = 0 ]; then echo "(the sanity gate: \`make gate-full\` runs every check; \`make verify-goldens\` re-verifies every golden)"; fi
 [ -z "$reach" ] || echo "($reach changed: \`make gate-full\` is required as well)"
 exit "$fail"

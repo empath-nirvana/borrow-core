@@ -27,18 +27,16 @@ bcc: $(CACHE_STAMP) | tools
 run: bcc
 	$(BCC) run $(RUN_ARGS)
 
-# The sanity gate (scripts/ci-local.sh): the build, hygiene and axioms, the judgment freeze and
-# the Backend2 fence, the type-equality census, the corpus parsed, checked and renamed, and every corpus program run in WebAssembly by
-# each backend against its golden with `live 0` (Backend2, the default, and the old backend until
-# N7); the source stage only on unverified goldens (scripts/source-stage.sh: no recorded key, or
-# not the current one).
+# The per-PR gate (scripts/ci-local.sh): the steps the change's tier names (scripts/gate-tier.sh,
+# from the paths changed since the merge base with origin/main), each on every program or on the
+# programs the change touches, with the result cache. It prints the tier at the top and with its
+# verdict; what it leaves out runs in the daily full gate on main (scripts/gate-daily.sh).
 gate: | tools
 	scripts/ci-local.sh
 
 # The full gate: every check (every compiled stage, counts, native, the static tables, the
 # generated and renamed programs, the book), the source stage on the unverified goldens of the
-# corpus and the book. Required when Paper/, Support/, Target/, Pipeline/, Reference/ or Backend/
-# changed.
+# corpus and the book, with the result cache. Run by `make gate` itself when the tier is `full`.
 gate-full: | tools
 	scripts/ci-local.sh --full
 

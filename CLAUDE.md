@@ -99,9 +99,21 @@ compatibility lemma.
 ## The gate: local CI
 
 GitHub Actions does not run for this repository (the workflow is manual-only). The gate for every
-PR is `make gate` (`scripts/ci-local.sh`), a sanity check. Run it before opening or merging a PR
-and paste its final summary into the PR body. Never report a PR as passing without it.
+PR is `make gate` (`scripts/ci-local.sh`), the per-PR gate. Run it before opening or merging a PR
+and paste its three tier lines (the `gate tier:` line, the `ci-local [tier …]:` verdict and the
+`(left to the daily run: …)` line) into the PR body. Never report a PR as passing without it.
 `make gate-full` (`scripts/ci-local.sh --full`) runs every check.
+
+The per-PR gate's steps are chosen by `scripts/gate-tier.sh` from the paths changed since the merge
+base with origin/main, never by judgement: docs (no build; spec files, judgment freeze,
+assumptions); book (the book steps); corpus (every step on the programs the change touches);
+research (the Lean checks); compiler (any other `.lean`, `lib/`: the Lean checks, every program
+parsed, checked and run in WebAssembly on both backends with the source stage, the cheap whole
+steps, and renaming and `let mut` combinations when the change is in the elaborator's or the
+interpreter's import closure); scripts (that step on every program, plus the compiler set); full
+(the toolchain, the gate's own machinery, a path no rule knows, or no merge base: the full gate).
+What a tier leaves out runs in the daily full gate on main (`scripts/gate-daily.sh`, uncached),
+whose verdict goes to the coordinator on the board; a failure there is ordinary work.
 
 The gate caches results (`scripts/gate_cache.py`). Each unit of work a step has (one program in
 one step, or a whole step that is not per program) is keyed on a sha256 of everything it reads:
@@ -122,10 +134,7 @@ during a gate).
 
 Goldens are the oracle. Every corpus program has a `<name>.out` and every book `bc` block an
 `-- answer:`: the output of `Support`'s interpreter (`bcc interp`), the reference semantics.
-`make gate` checks the build, hygiene, axioms, the judgment freeze, the Backend2 fence, that every
-type comparison goes through the `[α]` helper, that the corpus parses, checks and elaborates the same
-under a renaming of its binders, and every corpus program in WebAssembly on each backend against its
-golden with `live 0`. Both gates run the interpreter itself (minutes on the largest programs)
+Every gate runs the interpreter itself (minutes on the largest programs)
 only on unverified goldens: those whose recorded key (corpus `<name>.key`, `book/keys/`) is
 missing or not the current one. The key (`bcc interp --key`, `scripts/source-stage.sh`) covers
 the elaborated term the interpreter runs, its input, and the interpreter's source
@@ -133,16 +142,14 @@ the elaborated term the interpreter runs, its input, and the interpreter's sourc
 whose term it changes, and an interpreter change reruns every program; the gate lists those it
 reran. When the interpreter reproduces a golden, the gate records its key and lists the key
 files it wrote: commit them with the change (`BCC_WRITE_KEYS=0` writes none; `make keys` records
-them explicitly). `make gate-full` adds every other check (the clos, flat, LIR and word-IR
+them explicitly). `make gate-full` runs every check (the clos, flat, LIR and word-IR
 stages, counts, native, the kernel programs, the static tables, the sugar pairs, `let mut`
-combinations, the book). `make gate-full` is required when `Paper/`, `Support/` (the interpreter
-and the machine), `Backend/`, `Target/`, `Pipeline/` or `Reference/` changed, and `make gate` says
-so then. `make verify-goldens` reruns the interpreter on every program and book block. `make
+combinations, the book) on every program. `make verify-goldens` reruns the interpreter on every program and book block. `make
 goldens` (`scripts/compile-corpus.sh --write-goldens [file…]`) writes corpus goldens and their
 keys, only ever from the interpreter.
 
-While iterating, `make gate-fast` (`scripts/ci-local.sh --changed`) runs only the sanity gate's
-steps the changes since origin/main reach: a change to no `.lean` file skips the build of the library, the
+While iterating, `make gate-fast` (`scripts/ci-local.sh --changed`) runs only the steps of
+`ci-local.sh`'s `gateSteps` set that the changes since origin/main reach: a change to no `.lean` file skips the build of the library, the
 hygiene and the axioms. It never runs the interpreter. It is for the edit loop only; `make gate`
 is the merge requirement.
 
