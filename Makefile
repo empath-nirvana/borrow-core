@@ -15,7 +15,7 @@ ifeq (run,$(firstword $(MAKECMDGOALS)))
   $(eval $(RUN_ARGS):;@:)
 endif
 
-.PHONY: bcc run tools gate gate-full gate-full-nocache gate-full-record gate-fast goldens keys verify-goldens bench
+.PHONY: bcc run tools gate gate-full gate-full-nocache gate-full-record gate-fast gate-daily goldens keys verify-goldens bench
 
 # Build the `bcc` compiler.
 bcc: $(CACHE_STAMP) | tools
@@ -52,6 +52,12 @@ gate-full-nocache: | tools
 gate-full-record: | tools
 	scripts/ci-local.sh --full --record-cache
 
+# The daily full gate on main (scripts/gate-daily.sh): `make gate-full` without the result cache
+# on origin/main in a checkout of its own, its verdict posted to the board for the coordinator.
+# Does nothing when origin/main already has a verdict. Run by launchd (scripts/gate-daily.plist).
+gate-daily:
+	scripts/gate-daily.sh
+
 # Re-verify every golden: the source stage on every corpus program and book block (with each
 # compiled to WebAssembly), whatever its key. Writes no key.
 verify-goldens: | tools
@@ -80,11 +86,13 @@ keys: | tools
 	scripts/compile-corpus.sh --final --write-keys
 	scripts/book-doctest.sh --write-keys
 
-# The required tools are on PATH.
+# The required tools are on PATH, and shared packages follow the manifest and toolchain
+# (scripts/lake-packages.sh).
 tools:
 	@command -v lean >/dev/null || { echo "lean not found: run 'brew bundle', and add ~/.elan/bin to PATH"; exit 1; }
 	@command -v lake >/dev/null || { echo "lake not found: run 'brew bundle', and add ~/.elan/bin to PATH"; exit 1; }
 	@command -v wasmtime >/dev/null || { echo "wasmtime not found: run 'brew bundle'"; exit 1; }
+	@scripts/lake-packages.sh check
 
 # Resolve dependencies and fetch prebuilt Mathlib, again only when the pins change.
 $(CACHE_STAMP): lake-manifest.json lean-toolchain | tools

@@ -105,6 +105,7 @@ if [ "$full" = 0 ] && base=${CI_LOCAL_BASE:-$(git merge-base origin/main HEAD 2>
   reach=$({ git diff --name-only "$base"; git ls-files --others --exclude-standard; } | grep -E '^(Paper|Support|Target|Pipeline|Reference|Backend)/' | head -1 || true)
   [ -z "$reach" ] || echo "ci-local: $reach (and perhaps more of Paper/, Support/, Target/, Pipeline/, Reference/, Backend/) changed since $(git rev-parse --short "$base"): \`make gate-full\` is required as well"
 fi
+scripts/lake-packages.sh check
 start=$SECONDS
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
