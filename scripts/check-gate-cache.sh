@@ -74,9 +74,11 @@ change() {
   local had=0; [ -e "$f" ] && { had=1; cp -p "$f" "$t/saved"; }
   "$@" "$f"
   expect "$what" 1 1 - --final
-  if [ "$had" = 1 ]; then cp -p "$t/saved" "$f"; else rm -f "$f"; fi
+  if [ "$had" = 1 ]; then restore "$f"; else rm -f "$f"; fi
   expect "$what, undone" 2 0 0 --final
 }
+# restore FILE: the saved copy put back as a new file moved over FILE (never rewritten in place).
+restore() { cp -p "$t/saved" "$1.new"; mv "$1.new" "$1"; }
 append() { printf '%s\n' "${APPEND:--- a comment}" >> "$1"; }
 
 expect "first run" 0 2 0 --final
@@ -111,12 +113,14 @@ every() {
   cp -p "$f" "$t/saved"
   "$@" "$f"
   expect "$what" 0 2 0 --final
-  cp -p "$t/saved" "$f"
+  restore "$f"
   expect "$what, undone" 2 0 0 --final
 }
 every "a library module" lib/prelude.bc append
 APPEND="# a comment" every "a script" scripts/par.sh append
-byte() { printf '\0' >> "$1"; }
+# A binary that has run is never rewritten in place (macOS kills a process whose validated
+# executable changed under it): a byte is appended to a copy, which is moved over it.
+byte() { cp -p "$1" "$1.new"; printf '\0' >> "$1.new"; mv "$1.new" "$1"; }
 every "the binary bcc names" .lake/build/bin/bcc byte
 # A tool's version: a wasmtime first on PATH that reports another version and runs the real one.
 real=$(command -v wasmtime)
