@@ -45,8 +45,9 @@ the new spelling too, finding nothing new when the rounds have converged. -/
 def newLibTexts : List String :=
   Sugar.libNames.filter fun m => (Sugar.libSrc m).any isNewDialect
 
-/-- The rounds of finding places to lend before the last parse.  `[spec §82]` -/
-def lendRounds : Nat := 8
+/-- A bound on the rounds of finding places to lend in the texts `srcs`: each round that does not
+stop finds a new position, and a position is a character of a text.  `[spec §82]` -/
+def lendRounds (srcs : List String) : Nat := srcs.foldl (· + ·.length) 1
 
 /-- The positions an elaboration of `p` lends at, in the texts `texts`, with the library positions
 `libAt` read as `&x`.  `[spec §82]` -/
@@ -56,13 +57,13 @@ def lentPositions (p : Program) (texts : List String) (libAt : List Pos) :
   pure (s.origins.filterMap fun | (sp, .autoLent) => some sp.start | _ => none).eraseDups
 
 /-- The positions to lend at in the library texts in the new spelling, found to the round that
-finds none new (at most `lendRounds`), or to one that fails, which the program's own elaboration
+finds none new (`lendRounds`), or to one that fails, which the program's own elaboration
 then reports.  `[spec §82]` -/
 def libLends (p : Program) : List Pos := Id.run do
   let texts := newLibTexts
   if texts.isEmpty then return []
   let mut acc : List Pos := []
-  for _ in [0:lendRounds] do
+  for _ in [0:lendRounds (texts.filterMap Sugar.libSrc)] do
     let .ok ps := lentPositions p texts acc | return acc
     let new := ps.filter fun q => q.file != "" && !acc.contains q
     if new.isEmpty then return acc
@@ -70,8 +71,8 @@ def libLends (p : Program) : List Pos := Id.run do
   return acc
 
 /-- Parse a program's source. In the new spelling, its bare places at shared-borrow parameters are
-read as lends: found by elaboration and the source parsed again, until no new one is found (at
-most `lendRounds`). A source with none is parsed once. An elaboration that fails while finding
+read as lends: found by elaboration and the source parsed again, until no new one is found
+(`lendRounds`). A source with none is parsed once. An elaboration that fails while finding
 them is the last one, and its error is the program's.  `[spec §82]` -/
 def parseLent (src : String) (lib : String → Option String := Sugar.libSrc) :
     Except Error Program := do
@@ -80,7 +81,7 @@ def parseLent (src : String) (lib : String → Option String := Sugar.libSrc) :
   let texts := "" :: newLibTexts
   let mut p := p
   let mut acc : List Pos := []
-  for _ in [0:lendRounds] do
+  for _ in [0:lendRounds (src :: texts.filterMap Sugar.libSrc)] do
     let ps ← lentPositions p texts (acc.filter (·.file != ""))
     let new := ps.filter (!acc.contains ·)
     if new.isEmpty then return p
