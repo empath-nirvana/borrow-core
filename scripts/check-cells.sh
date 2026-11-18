@@ -15,9 +15,7 @@ cd "$(dirname "$0")/.."
 counts=.lake/build/bin/bcc-counts
 row() {
   local f=$1 r
-  # A program whose classes cannot be read has no row; a failure is never recorded in the cache
-  # (it may be a run killed under load), so it runs again.
-  r=$("$counts" --cells "$f" 2>/dev/null) || { par_nostore; return 0; }
+  r=$("$counts" --cells "$f" 2>/dev/null) || { echo "$f: FAILS: bcc-counts --cells"; return 1; }
   [ -z "$r" ] || printf '%s: %s\n' "$f" "$r"
 }
 . scripts/par.sh
@@ -26,18 +24,34 @@ row() {
 [ "${1:-}" = "--write" ] || export PAR_CACHE=check-cells
 export counts
 export -f row
-# The working tree's corpus, as the other gate steps read it: a program not yet committed is in
-# the table too.
+# The working tree's corpus programs and sugar files (`scripts/corpus-set.sh programs sugar`), as
+# the other gate steps read them: a program not yet committed is in the table too. A file marked
+# `-- check: parse-only`, one with no `main`, and one marked `-- check: old-backend-refuses` (the
+# layout side is the old backend's, which does not lower it) are skipped, as pinned in
+# `corpus/skips.expected`.
+list=$(scripts/corpus-set.sh programs sugar | sort)
+fs=()
+skips=$(mktemp)
+all=(); while IFS= read -r f; do [ -z "$f" ] || all+=("$f"); done <<< "$list"
+for f in "${all[@]}"; do
+  if grep -q '^-- check: parse-only' "$f"; then echo "parse-only $f" >> "$skips"
+  elif ! grep -q '^main' "$f"; then echo "no-main $f" >> "$skips"
+  elif grep -q '^-- check: old-backend-refuses' "$f"; then echo "old-backend-refuses $f" >> "$skips"
+  else fs+=("$f"); fi
+done
+skipped=$(scripts/corpus-set.sh --skips check-cells parse-only no-main old-backend-refuses < "$skips") || { rm -f "$skips"; echo "$skipped"; exit 1; }
+rm -f "$skips"
+echo "$skipped"
+# The table; a file the tool fails on is a line `<file>: FAILS: <tool>`, which fails the step.
 table() {
-  local fs=()
-  while read -r f; do
-    grep -q '^-- check: parse-only' "$f" || fs+=("$f")
-  done < <(find corpus -name '*.bc' -type f | grep -v '^corpus/\(reject\|pending\|fail\)/' | sort)
-  par row "${fs[@]}"
+  local t; t=$(mktemp)
+  par row "${fs[@]}" > "$t"
+  if grep ': FAILS: ' "$t" >&2; then rm -f "$t"; echo "check-cells: the table could not be made for the files above" >&2; return 1; fi
+  cat "$t"; rm -f "$t"
 }
 summary() { echo "$(wc -l < "$1" | tr -d ' ') programs, $(grep -c '; disagree$' "$1" || true) disagreements"; }
 if [ "${1:-}" = "--write" ]; then
-  table > corpus/cells.expected
+  t=$(mktemp); table > "$t"; cat "$t" > corpus/cells.expected; rm -f "$t"
   echo "corpus/cells.expected: $(summary corpus/cells.expected)"
   exit 0
 fi

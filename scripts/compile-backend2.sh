@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Backend2 (`Backend2/`, docs/n1-plan.md), the default backend, on the corpus, by `bcc`'s and
-# `bcc-counts`' default spellings (no `--backend`), so that the default is what is checked. Every corpus program with a golden
-# (as scripts/compile-corpus.sh runs them) is converted to the LIR and linted (`bcc lir --lint`). A
-# program outside the new backend's fragment (it has an effect node: N2 and later) is listed and
-# skipped. Every other is run at the LIR interpreter (`--stage lir`), the word IR's interpreter
-# (`--stage flat`) and in Wasm (`bcc run`), and natively when there is a C compiler
+# `bcc-counts`' default spellings (no `--backend`), so that the default is what is checked.
+# Every corpus program (`scripts/corpus-set.sh`) with a `main`, not marked `-- check: parse-only`
+# (as scripts/compile-corpus.sh runs them), must have a golden; it is converted to the LIR and
+# linted (`bcc lir --lint`). A program outside the new backend's fragment (it has an effect node:
+# N2 and later) is listed and skipped. Every skip is printed, and with no file named the skips
+# must be those pinned in `corpus/skips.expected`. Every other program is run at the LIR
+# interpreter (`--stage lir`), the word IR's interpreter (`--stage flat`) and in Wasm (`bcc run`), and natively when there is a C compiler
 # (`bcc run --native`); each must print the golden standard output and error and end
 # with the golden status. Its counts (`bcc-counts`) must be at most its entry in
 # `corpus/counts-backend2.expected` (`name allocs indirect copies loads stores bounds`), the new
@@ -40,7 +42,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 named=1
-[ ${#files[@]} -gt 0 ] || { named=0; files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc); }
+[ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=(); while IFS= read -r f; do [ -z "$f" ] || files+=("$f"); done <<< "$list"; }
 command -v wasmtime >/dev/null || { echo "wasmtime is not on PATH"; exit 1; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
 . scripts/par.sh
@@ -53,6 +55,7 @@ export native=0
 if "$bcc" cc >/dev/null 2>&1; then native=1; fi
 export tmp; tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+: > "$tmp/skips"
 
 argsOf() {
   args=()
@@ -81,12 +84,15 @@ localise() {
 # One program: linted, run at every stage, counted.
 program() {
   local f=$1 w=${PAR_TMP:-$tmp} base in err st rc name got a i c l s b want wa wi wc wl ws wb oldc note
-  grep -q '^-- check: parse-only' "$f" && return 0
-  grep -q '^main' "$f" || return 0
+  if grep -q '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0; fi
+  if ! grep -q '^main' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$PAR_SIDE/skips"; return 0; fi
   base=${f%.bc}
-  [ -f "$base.out" ] || return 0
+  if [ ! -f "$base.out" ]; then
+    echo "$f: no golden $base.out: write it from the source stage with \`scripts/compile-corpus.sh --write-goldens $f\`"
+    return 1
+  fi
   if ! "$bcc" lir --lint "$f" > "$w/lint" 2>&1; then
-    if grep -q 'outside the pure fragment' "$w/lint"; then echo "$f: outside the new backend's fragment"; echo "$f" >> "$PAR_SIDE/outside"; return 0; fi
+    if grep -q 'outside the pure fragment' "$w/lint"; then echo "$f: outside the new backend's fragment"; echo "$f" >> "$PAR_SIDE/outside"; echo "outside-fragment $f" >> "$PAR_SIDE/skips"; return 0; fi
     echo "$f: lint: $(head -3 "$w/lint")"; return 1
   fi
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
@@ -146,6 +152,10 @@ export -f program localise argsOf statusOf
 export PAR_COLLECT=$tmp
 [ "$write" = 1 ] || export PAR_CACHE="compile-backend2 final=$final native=$native"
 par program "${files[@]}"
+skipbad=0
+if [ "$named" = 0 ]; then
+  scripts/corpus-set.sh --skips compile-backend2 parse-only no-main outside-fragment < "$tmp/skips" || skipbad=1
+fi
 # --write-counts: the run's rows replace the rows of their programs in place (scripts/merge-rows.awk)
 # and a new program's row is inserted; the other rows, the order and the comments are kept. With
 # no file named, the rows of programs this run did not count are dropped.
@@ -162,4 +172,4 @@ if [ "$write" = 1 ]; then
   echo "wrote $erasure"
 fi
 echo "Backend2: $(cat "$tmp/counts" 2>/dev/null | wc -l | tr -d ' ') program(s) at their goldens, $(cat "$tmp/outside" 2>/dev/null | wc -l | tr -d ' ') outside its fragment; $par_failed failure(s)."
-[ "$par_failed" -eq 0 ]
+[ "$par_failed" -eq 0 ] && [ "$skipbad" = 0 ]

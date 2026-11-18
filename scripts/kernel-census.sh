@@ -10,7 +10,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 lake build kernel-census >/dev/null
 if [ $# -eq 0 ]; then
-  set -- corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc
+  list=$(scripts/corpus-set.sh)
+  progs=(); while IFS= read -r f; do [ -z "$f" ] || progs+=("$f"); done <<< "$list"
+  set -- "${progs[@]}"
 fi
 files=()
 for f in "$@"; do grep -q '^-- check: parse-only' "$f" || files+=("$f"); done

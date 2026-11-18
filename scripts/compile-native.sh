@@ -6,7 +6,9 @@
 # that builds LLVM IR (`bcc cc`); without one the script says so and passes, as the gate does for
 # mdbook.
 #
-#   * Every corpus program (the programs scripts/compile-corpus.sh runs) is built with
+#   * Every corpus program (the programs scripts/compile-corpus.sh runs: `scripts/corpus-set.sh`
+#     less those marked `-- check: parse-only` and those with no `main`, each skip printed and,
+#     with no file named, pinned in `corpus/skips.expected`; one with no golden fails) is built with
 #     `bcc run --native` and run on `<name>.in` with `<name>.args`: its standard output, standard
 #     error and exit status must be the golden `<name>.out`, `<name>.err` and `<name>.status`,
 #     which scripts/compile-corpus.sh checks the flat IR against, so native agrees with the flat
@@ -38,7 +40,7 @@ if [ "${1:-}" = --backend ]; then
 fi
 named=1
 files=("$@")
-[ ${#files[@]} -gt 0 ] || { named=0; files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc); }
+[ ${#files[@]} -gt 0 ] || { named=0; list=$(scripts/corpus-set.sh); files=(); while IFS= read -r f; do [ -z "$f" ] || files+=("$f"); done <<< "$list"; }
 for f in "${files[@]}"; do [ -f "$f" ] || { echo "$f: no such file"; exit 2; }; done
 
 argsOf() {
@@ -54,10 +56,17 @@ statusOf() {
 # One corpus program, built natively and run, then counted.
 program() {
   local f=$1 w=$PAR_TMP base in err rc=0 got
-  if grep -q '^-- check: parse-only' "$f" || ! grep -q '^main' "$f"; then return 0; fi
+  if grep -q '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0; fi
+  if ! grep -q '^main' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$PAR_SIDE/skips"; return 0; fi
   # The old backend refuses it at compile time (scripts/compile-corpus.sh).
-  if [ "$backend" = old ] && grep -q '^-- check: old-backend-refuses' "$f"; then return 0; fi
+  if [ "$backend" = old ] && grep -q '^-- check: old-backend-refuses' "$f"; then
+    echo "$f: the old backend refuses it, skipped"; return 0
+  fi
   base=${f%.bc}
+  if [ ! -f "$base.out" ]; then
+    echo "$f: no golden $base.out: write it from the source stage with \`scripts/compile-corpus.sh --write-goldens $f\`"
+    return 1
+  fi
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
   err=/dev/null; [ -f "$base.err" ] && err="$base.err"
   argsOf "$f"
@@ -78,9 +87,17 @@ program() {
 }
 export -f program argsOf statusOf
 # Each program is a unit of the result cache (scripts/par.sh; the C compiler is among its tools).
+# Its skip lines are a side file (`skips`), gathered in $skipdir.
 export PAR_CACHE="compile-native backend=$backend"
+skipdir=$(mktemp -d)
+trap 'rm -rf "$skipdir"' EXIT
+export PAR_COLLECT=$skipdir
+: > "$skipdir/skips"
 par program "${files[@]}"
 bad=$par_failed
+if [ "$named" = 0 ]; then
+  scripts/corpus-set.sh --skips compile-native parse-only no-main < "$skipdir/skips" || bad=$((bad + 1))
+fi
 
 # The checks after the corpus, one after another, when no file is named: one unit of the result
 # cache (scripts/par.sh), keyed on the corpus files they read and on Lake's configuration (they run
@@ -166,7 +183,7 @@ serial() {
 }
 if [ "$named" = 0 ]; then
   tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' EXIT
+  trap 'rm -rf "$tmp" "$skipdir"' EXIT
   export -f serial
   export PAR_COLLECT=$tmp PAR_CACHE_DEPS="files:$(echo corpus/{div-unhandled,deep-list,json-drop-deep,io-cat,io-task,async-borrow,float-arith}.* lean-toolchain lakefile.toml lake-manifest.json)"
   PAR_CACHE=${PAR_CACHE:+compile-native-serial backend=$backend} JOBS=1 par serial corpus/div-unhandled.bc

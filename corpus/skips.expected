@@ -1,0 +1,26 @@
+# The corpus programs a step does not run, each with its reason: `parse-only` (marked
+# `-- check: parse-only`, for the parser), `no-main` (a library, no `main`), `outside-fragment`
+# (the new backend refuses it as outside its fragment), `old-backend-refuses` (marked
+# `-- check: old-backend-refuses`; a step whose tool is the old backend's skips it). Each step
+# compares the skips it made with the lines of the reasons it names (scripts/corpus-set.sh
+# --skips), so a new skip fails the step until it is listed here.
+no-main corpus/13-1-library.bc
+old-backend-refuses corpus/cancel-suspend-cancel.bc
+old-backend-refuses corpus/cancel-suspend-keep-earlier.bc
+old-backend-refuses corpus/cancel-suspend-nested.bc
+old-backend-refuses corpus/cancel-suspend-unwind-cancel.bc
+old-backend-refuses corpus/cancel-suspend-unwind.bc
+old-backend-refuses corpus/core-fin-cancel-reentered-op.bc
+old-backend-refuses corpus/core-fin-cancellable.bc
+old-backend-refuses corpus/core-fin-consume.bc
+old-backend-refuses corpus/core-fin-keep-unr.bc
+old-backend-refuses corpus/core-fin-keep.bc
+old-backend-refuses corpus/core-fin-nc.bc
+old-backend-refuses corpus/core-fin-op-cap.bc
+old-backend-refuses corpus/core-fin-op.bc
+old-backend-refuses corpus/core-fin-sched-own-row.bc
+old-backend-refuses corpus/core-fin-stored-k-op.bc
+old-backend-refuses corpus/core-pipe-close.bc
+old-backend-refuses corpus/decl-handler-state.bc
+old-backend-refuses corpus/gen-raise-op-terminal.bc
+parse-only corpus/forms.bc

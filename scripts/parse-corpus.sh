@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Parse the corpus with `bcc parse`. Every `corpus/*.bc`, `corpus/surface/*.bc`,
-# `corpus/axes/*.bc`, `corpus/aoc/*.bc` and `corpus/leetcode/*/*.bc` must parse and survive the print/re-parse round trip; every
-# `corpus/fail/*.bc` must be rejected with the message on its `-- expect:` line.
+# Parse the corpus with `bcc parse`. Every corpus program (`scripts/corpus-set.sh`) must parse and
+# survive the print/re-parse round trip; every `corpus/fail/` file must be rejected with the
+# message on its `-- expect:` line.
 # (`corpus/pending/` is checked by `check-corpus.sh`.)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -24,9 +24,13 @@ fails() {
 export -f parses fails
 # Each file is a unit of the result cache (scripts/par.sh), run one at a time, in order.
 export PAR_CACHE=parse-corpus
-JOBS=1 par parses corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc
+list=$(scripts/corpus-set.sh)
+progs=(); while IFS= read -r f; do [ -z "$f" ] || progs+=("$f"); done <<< "$list"
+list=$(scripts/corpus-set.sh fail)
+fails=(); while IFS= read -r f; do [ -z "$f" ] || fails+=("$f"); done <<< "$list"
+JOBS=1 par parses "${progs[@]}"
 bad=$par_failed
-JOBS=1 par fails corpus/fail/*.bc
+JOBS=1 par fails ${fails[@]+"${fails[@]}"}
 bad=$((bad + par_failed))
 echo "$bad failure(s)."
 [ "$bad" -eq 0 ]

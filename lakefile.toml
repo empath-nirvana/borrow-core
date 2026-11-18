@@ -18,8 +18,38 @@ name = "Examples"
 [[lean_lib]]
 name = "Core"
 
+# `Frontend.Check.CrossCheck` belongs to the `CrossCheck` library below, which must stay after this
+# one (scripts/check-crosscheck-trace.sh).
 [[lean_lib]]
 name = "Frontend"
+
+# `Frontend.Check.CrossCheck` reads four corpus files at elaboration (`bcc_program%`). Its own
+# library, declared after `Frontend` (Lake resolves a module to the last library that claims
+# it), puts those files in its trace, so an edit to one rebuilds it.
+[[lean_lib]]
+name = "CrossCheck"
+roots = ["Frontend.Check.CrossCheck"]
+needs = ["crossCheckLibrary", "crossCheckSumProg", "crossCheckCountDown", "crossCheckDeclTxn"]
+
+[[input_file]]
+name = "crossCheckLibrary"
+path = "corpus/13-1-library.bc"
+text = true
+
+[[input_file]]
+name = "crossCheckSumProg"
+path = "corpus/sum-prog-exact.bc"
+text = true
+
+[[input_file]]
+name = "crossCheckCountDown"
+path = "corpus/count-down-exact.bc"
+text = true
+
+[[input_file]]
+name = "crossCheckDeclTxn"
+path = "corpus/decl-txn.bc"
+text = true
 
 # The word IR, its interpreter, the Wasm and native emitters and their runtimes, and the
 # observable values every stage prints.
