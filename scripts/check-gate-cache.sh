@@ -26,11 +26,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
 export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
-# Itself one unit of the result cache (scripts/gate_cache.py `step`): a recorded pass is replayed
-# when the binaries, the library, the Lean sources, Lake's configuration, scripts/, the tools and
-# the files it copies are as they were.
-[ "${GATE_CACHE_INNER:-}" = check-gate-cache ] || exec python3 scripts/gate_cache.py step check-gate-cache bcc,lean \
-  --files corpus/io-args.* corpus/ascii-upper.* corpus/*.expected -- scripts/check-gate-cache.sh "$@"
+# Itself one unit of the result cache (scripts/gate_cache.py `step`), of class `bcc`, not `lean`:
+# it exercises scripts/ (gate_cache.py, par.sh, compile-backend2.sh) on copies of the binaries,
+# the library and a few corpus files, and reads Lean sources only as data, the four it copies to
+# show a whole step's key changing (named below). So a recorded pass is replayed when the binaries,
+# the library, scripts/, the tools and the files it copies are as they were; an edit to any other
+# `.lean` file (a proof) does not rerun it.
+[ "${GATE_CACHE_INNER:-}" = check-gate-cache ] || exec python3 scripts/gate_cache.py step check-gate-cache bcc \
+  --files corpus/io-args.* corpus/ascii-upper.* corpus/*.expected lakefile.toml lake-manifest.json lean-toolchain Core/Judgment.lean \
+  -- scripts/check-gate-cache.sh "$@"
 [ -x .lake/build/bin/bcc ] && [ -x .lake/build/bin/bcc-counts ] || { echo "check-gate-cache: build bcc and bcc-counts first"; exit 1; }
 command -v wasmtime >/dev/null || { echo "check-gate-cache: wasmtime is not on PATH"; exit 1; }
 t=$(mktemp -d)
