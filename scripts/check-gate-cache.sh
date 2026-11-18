@@ -413,6 +413,75 @@ for msg in "$res1" "$res2" "$res3" "$res4" "$res5"; do
   else echo "check-gate-cache: out of a resource in a unit's output: par exit $rc, $n recorded; step exit $rc2, $n2 recorded"; bad=1; fi
 done
 
+# Key computation never shrinks or substitutes on an error: a read on the key path that fails
+# other than "not found" makes the unit's key unsure, so the unit runs, is not replayed and is not
+# recorded, though it passes. The failures are injected into the key's Python only (a
+# sitecustomize on PYTHONPATH that raises OSError 23, ENFILE, from open, os.listdir, os.scandir
+# or a tool probe for paths holding a given text); the unit's own reads (bash) succeed.
+mkdir -p "$t/fault"
+cat > "$t/fault/sitecustomize.py" <<'PY'
+import builtins, errno, os, subprocess
+def _hit(var, p):
+    v = os.environ.get(var)
+    return bool(v) and v in os.fspath(p)
+def _err(p):
+    return OSError(errno.ENFILE, "injected", os.fspath(p))
+_open, _listdir, _scandir, _run = builtins.open, os.listdir, os.scandir, subprocess.run
+def open(f, mode="r", *a, **k):
+    if isinstance(f, (str, bytes, os.PathLike)) and "r" in mode and _hit("FAULT_OPEN", f):
+        raise _err(f)
+    return _open(f, mode, *a, **k)
+def listdir(p="."):
+    if _hit("FAULT_LIST", p):
+        raise _err(p)
+    return _listdir(p)
+def scandir(p="."):
+    if _hit("FAULT_LIST", p):
+        raise _err(p)
+    return _scandir(p)
+def run(cmd, *a, **k):
+    if os.environ.get("FAULT_TOOL") and os.path.basename(str(cmd[0])) == os.environ["FAULT_TOOL"]:
+        raise _err(cmd[0])
+    return _run(cmd, *a, **k)
+builtins.open, os.listdir, os.scandir, subprocess.run = open, listdir, scandir, run
+PY
+# fault WHAT VAR=VALUE…: compile-backend2 --final on the first program, twice, with the failure
+# injected at key time; it must pass both times, be replayed neither time, and record nothing.
+fault() {
+  local what=$1 st=$t/store-fault-$RANDOM r1=0 r2=0; shift
+  (cd "$w" && env "$@" PYTHONPATH="$t/fault" GATE_CACHE_STATS=$t/fs GATE_CACHE_DIR=$st scripts/compile-backend2.sh --final "$p0f") > "$t/out" 2>&1 || r1=$?
+  : > "$t/fs"
+  (cd "$w" && env "$@" PYTHONPATH="$t/fault" GATE_CACHE_STATS=$t/fs GATE_CACHE_DIR=$st scripts/compile-backend2.sh --final "$p0f") >> "$t/out" 2>&1 || r2=$?
+  local rep; rep=$(awk '{ s += $1 } END { print s + 0 }' "$t/fs")
+  if [ "$r1$r2" = 00 ] && [ "$rep" = 0 ] && [ -z "$(find "$st" -name unit 2>/dev/null)" ]; then
+    echo "check-gate-cache: a failed key read ($what): the unit runs and passes, is not replayed, records nothing"
+  else echo "check-gate-cache: a failed key read ($what): exits $r1 $r2, $rep replayed, recorded $(find "$st" -name unit 2>/dev/null | wc -l | tr -d ' ')"; sed 's/^/  /' "$t/out" | tail -8; bad=1; fi
+}
+unset GATE_CACHE_TOOLS_FILE
+fault "a sidecar's bytes" FAULT_OPEN="${p0f%.bc}.out"
+fault "the program's directory listing" FAULT_LIST="$w/corpus"
+fault "a script's bytes (the base)" FAULT_OPEN="$w/scripts/par.sh"
+fault "the library's walk" FAULT_LIST="$w/lib"
+fault "a table" FAULT_OPEN="corpus/counts-backend2.expected"
+fault "a tool's version (wasmtime)" FAULT_TOOL=wasmtime
+# The same through the tree itself: a sidecar the unit does not read made unreadable (mode 000 on
+# the copy's .key), and the program's directory made unlistable (mode 300 on a subdirectory).
+chmod 000 "$w/${p0f%.bc}.key"
+fault "an unreadable sidecar the unit does not read (.key, mode 000)"
+chmod 644 "$w/${p0f%.bc}.key"
+mkdir -p "$w/corpus/sub"; cp "$w/${p0f%.bc}".* "$w/corpus/sub/"
+chmod 300 "$w/corpus/sub"
+p0save=$p0f; p0f=corpus/sub/${progs[0]}.bc
+fault "an unlistable program directory (mode 300)"
+p0f=$p0save; chmod 755 "$w/corpus/sub"
+# A whole step whose key read fails runs uncached: run twice, never replayed, nothing recorded.
+st=$t/store-fault-step
+for k in 1 2; do : > "$t/fs"; (cd "$w" && FAULT_LIST="/Core" PYTHONPATH="$t/fault" GATE_CACHE_STATS=$t/fs GATE_CACHE_DIR=$st python3 scripts/gate_cache.py step fault-step lean -- true) > /dev/null 2>&1; done
+if [ ! -s "$t/fs" ] && [ -z "$(find "$st" -name out 2>/dev/null)" ]; then
+  echo "check-gate-cache: a failed key read of a whole step (a Lean directory's listing): it runs uncached, records nothing"
+else echo "check-gate-cache: a failed key read of a whole step: $(cat "$t/fs") recorded $(find "$st" -name out 2>/dev/null | wc -l | tr -d ' ')"; bad=1; fi
+export GATE_CACHE_TOOLS_FILE=$t/tools
+
 # forget: by unit, and by step, removes exactly those entries.
 st=$t/store-forget
 cp "corpus/${progs[1]}.out" "$w/corpus/${progs[1]}.out"  # undo the `files:` case above

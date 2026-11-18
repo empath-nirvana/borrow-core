@@ -38,7 +38,11 @@ sidecar, a table row, never from a read that failed. Enforced:
   * a pass whose output or side files say a tool ran out of file handles (`EXHAUSTED`), or of a
     process, memory or disk (`RESOURCE`), is never recorded (`put`, through which every caller
     stores);
-  * an input that cannot be read keys as `unreadable`, so no recorded pass matches it;
+  * key computation never shrinks or substitutes on an error: a read on the key path (a file, a
+    stat, a directory listing, a walk, a table, a book block, a tool probe) that fails other than
+    "not found" makes the unit's key unsure (`_bad`), and the unit runs with no lookup and no
+    store (par-start gives it no key line and no entry for scripts/par_unit.py; `step` and
+    `Units` run it uncached);
   * a unit that swallows a tool's failure on purpose calls `par_nostore` (or for a whole step
     touches `$GATE_CACHE_NOSTORE`), as does one that ran the source interpreter or wrote a key.
 The rest rests on the scripts' sweep (each tool failure fails the unit, is compared, or calls
@@ -104,6 +108,25 @@ _hashes = {}
 # back while the unit ran (its content the same, its ctime not) is seen.
 _stats = {}
 _rec = None
+# Key computation never shrinks or substitutes on an error. Every read on the key path (a file's
+# bytes or stat, a directory's listing, a walk, a table, a book block, a tool's version) that
+# fails other than "not found" (where absence is a state of the tree: a sidecar that is not there)
+# names its path here; a key whose reads include one is *unsure*: its unit runs, and is neither
+# looked up nor recorded (ParKeys.of, step_args, Units.key). Reads that touch no path (the tools)
+# name a pseudo-path `tool:<name>`.
+_bad = set()
+ABSENT = (FileNotFoundError, NotADirectoryError)
+
+
+def key_error(path):
+    """A read on the key path failed (not "not found"): the keys that read path are unsure."""
+    _bad.add(path)
+    if _rec is not None:
+        _rec.add(path)
+
+
+def unsure(paths):
+    return bool(_bad & set(paths))
 
 
 def note_stat(ap):
@@ -113,8 +136,11 @@ def note_stat(ap):
         try:
             st = os.stat(ap)
             _stats[ap] = (st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_ino)
+        except ABSENT:
+            _stats[ap] = None
         except OSError:
             _stats[ap] = None
+            key_error(ap)
 
 
 def recording(fn):
@@ -147,8 +173,10 @@ def sha_file(p):
     except (FileNotFoundError, IsADirectoryError, NotADirectoryError):
         d = "absent"
     except OSError as e:
-        # Unreadable: a key no pass has (the unit itself then fails reading it, scripts/grepq.sh).
+        # Unreadable: the key is unsure (`key_error`); the unit itself then fails reading it
+        # (scripts/grepq.sh), or passes and is not recorded.
         d = f"unreadable {e.errno}"
+        key_error(ap)
     _hashes[ap] = d
     return d
 
@@ -173,7 +201,12 @@ def walk(d, prune=(".git", ".lake", "__pycache__")):
     # Each directory's stat is noted before it is listed (the top here, each subdirectory as its
     # parent yields it), so a fingerprint sees a file added or removed (scripts/par_unit.py).
     note_stat(top)
-    for r, ds, fs in os.walk(top):
+    def onerror(e):
+        if not isinstance(e, ABSENT) or os.path.normpath(e.filename or "") != os.path.normpath(top):
+            key_error(e.filename or top)
+        elif _rec is not None:
+            _rec.add(top)
+    for r, ds, fs in os.walk(top, onerror=onerror):
         ds[:] = sorted(x for x in ds if x not in prune and os.path.normpath(os.path.join(r, x)) not in generated)
         for x in ds:
             note_stat(os.path.join(r, x))
@@ -186,30 +219,53 @@ def walk(d, prune=(".git", ".lake", "__pycache__")):
 
 def forget():
     """Drop every file hash and listing read so far, to compute a key again."""
-    global _tables, _keylines
+    global _tables, _keylines, _tools
     _hashes.clear()
     _stats.clear()
     _listings.clear()
-    _tables = _keylines = None
+    _bad.clear()
+    _tables = _keylines = _tools = None
 
 
 def files_lines(tag, paths):
     return [f"{tag} {p} {sha_file(os.path.join(ROOT, p))}" for p in paths]
 
 
+_tools = None
+
+
 def tools_line():
-    """`uname -sm`, Python, wasmtime and the C compiler `bcc cc` names, with their versions."""
+    """`uname -sm`, Python, wasmtime and the C compiler `bcc cc` names, with their versions. A probe
+    that cannot run, or exits non-zero, makes every key that holds the line unsure (`tool:<name>`
+    in `_bad`, noted wherever the line is read)."""
+    global _tools
+    if _tools is not None:
+        if _rec is not None:
+            _rec.update(_tools[1])
+        return _tools[0]
     f = os.environ.get("GATE_CACHE_TOOLS_FILE")
-    if f and os.path.isfile(f):
-        with open(f) as fh:
-            return fh.read().strip()
+    if f:
+        try:
+            with open(f) as fh:
+                _tools = (fh.read().strip(), set())
+                return _tools[0]
+        except FileNotFoundError:
+            pass
+        except OSError:
+            key_error(f)
+            _tools = ("unreadable", {f})
+            return _tools[0]
+    bad = set()
     parts = [" ".join(os.uname()[i] for i in (0, 2, 4)), "python " + sys.version.split()[0]]
 
     def out(cmd):
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT, timeout=120)
+            if p.returncode != 0:
+                bad.add(f"tool:{os.path.basename(cmd[0])}")
             return f"{p.returncode} {(p.stdout + p.stderr).strip()}"
         except (OSError, subprocess.TimeoutExpired) as e:
+            bad.add(f"tool:{os.path.basename(cmd[0])}")
             return f"error {e}"
 
     w = shutil.which("wasmtime")
@@ -224,7 +280,10 @@ def tools_line():
     if shutil.which("xcrun"):
         for a in (["--show-sdk-path"], ["--show-sdk-version"], ["ld", "-v"], ["-f", "nm"]):
             parts.append(f"xcrun {' '.join(a)} {out(['xcrun'] + a)}")
-    return " | ".join(parts).replace("\n", " ")
+    for b in bad:
+        key_error(b)
+    _tools = (" | ".join(parts).replace("\n", " "), bad)
+    return _tools[0]
 
 
 ENV_SKIP = {"CI_LOCAL_BUILT", "CI_LOCAL_BASE"}
@@ -278,7 +337,7 @@ def class_lines(cls, extra=()):
         lines += [f"bin {h}" for h in sorted(shas)]
         for l in sorted(libs):
             note_stat(l)
-            for r, ds, fs in os.walk(l):
+            for r, ds, fs in os.walk(l, onerror=lambda e: key_error(e.filename or l)):
                 for x in ds:
                     note_stat(os.path.join(r, x))
                 for f in sorted(fs):
@@ -291,8 +350,11 @@ def class_lines(cls, extra=()):
         # `bcc_program% "corpus/…"` in Frontend/Check/CrossCheck.lean): Lake does not trace it.
         named = set()
         for p in lean:
-            with open(os.path.join(ROOT, p), encoding="utf-8", errors="surrogateescape") as fh:
-                named.update(NAMED.findall(fh.read()))
+            try:
+                with open(os.path.join(ROOT, p), encoding="utf-8", errors="surrogateescape") as fh:
+                    named.update(NAMED.findall(fh.read()))
+            except OSError:
+                key_error(os.path.join(ROOT, p))
         lines += files_lines("named", sorted(f for f in named if os.path.isfile(os.path.join(ROOT, f))))
         lines += files_lines("config", ["lakefile.toml", "lake-manifest.json", "lean-toolchain"])
     return lines
@@ -329,8 +391,13 @@ def listing(d):
     if d not in _listings:
         try:
             _listings[d] = sorted(os.listdir(os.path.join(ROOT, d)))
+        except ABSENT:
+            _listings[d] = []
         except OSError:
             _listings[d] = []
+            key_error(os.path.join(ROOT, d))
+    elif os.path.join(ROOT, d) in _bad and _rec is not None:
+        _rec.add(os.path.join(ROOT, d))
     return _listings[d]
 
 
@@ -346,11 +413,14 @@ def tables():
             if not t.endswith(".expected"):
                 continue
             rows = {}
-            with open(os.path.join(ROOT, "corpus", t), encoding="utf-8", errors="surrogateescape") as fh:
-                for line in fh:
-                    w = line.split(None, 1)
-                    if w:
-                        rows.setdefault(w[0], []).append(line.rstrip("\n"))
+            try:
+                with open(os.path.join(ROOT, "corpus", t), encoding="utf-8", errors="surrogateescape") as fh:
+                    for line in fh:
+                        w = line.split(None, 1)
+                        if w:
+                            rows.setdefault(w[0], []).append(line.rstrip("\n"))
+            except OSError:
+                key_error(os.path.join(ROOT, "corpus", t))
             _tables[t] = rows
     return _tables
 
@@ -394,8 +464,10 @@ def sugar_deps(p):
     try:
         with open(os.path.join(ROOT, p), encoding="utf-8", errors="surrogateescape") as fh:
             first = fh.readline().rstrip("\n")
-    except OSError:
+    except ABSENT:
         pass
+    except OSError:
+        key_error(os.path.join(ROOT, p))
     files = [p]
     if p.endswith(".lowered.bc"):
         if first.startswith("-- lowers: "):
@@ -418,15 +490,18 @@ def book_deps(n):
     note_stat(os.path.join(tmp, "manifest"))
     note_stat(os.path.join(tmp, f"{n}.bc"))
     attrs, md, line = "", "", ""
-    with open(os.path.join(tmp, "manifest"), encoding="utf-8", errors="surrogateescape") as fh:
-        for l in fh:
-            w = l.rstrip("\n").split("\t")
-            if w[0] == n:
-                attrs, md, line = w[1], w[2], w[3]
-                break
-    f = os.path.join(tmp, f"{n}.bc")
-    with open(f, "rb") as fh:
-        text = fh.read()
+    text = b""
+    try:
+        with open(os.path.join(tmp, "manifest"), encoding="utf-8", errors="surrogateescape") as fh:
+            for l in fh:
+                w = l.rstrip("\n").split("\t")
+                if w[0] == n:
+                    attrs, md, line = w[1], w[2], w[3]
+                    break
+        with open(os.path.join(tmp, f"{n}.bc"), "rb") as fh:
+            text = fh.read()
+    except OSError as e:
+        key_error(e.filename or os.path.join(tmp, "manifest"))
     bh = hashlib.sha256(attrs.encode() + b"\n" + text).hexdigest()
     keyfiles = walk("book/keys")
     note_stat(os.path.join(ROOT, "book/keys"))
@@ -435,9 +510,12 @@ def book_deps(n):
     if _keylines is None:
         _keylines = {}
         for p in keyfiles:
-            with open(os.path.join(ROOT, p), encoding="utf-8", errors="surrogateescape") as fh:
-                for l in fh:
-                    _keylines.setdefault(l.split(" ", 1)[0], []).append(l.rstrip("\n"))
+            try:
+                with open(os.path.join(ROOT, p), encoding="utf-8", errors="surrogateescape") as fh:
+                    for l in fh:
+                        _keylines.setdefault(l.split(" ", 1)[0], []).append(l.rstrip("\n"))
+            except OSError:
+                key_error(os.path.join(ROOT, p))
     # The job index too: the block's verified keys line is replayed as the side file `ok/<n>`.
     lines = [f"arg {n}", f"block {attrs}\t{md}\t{line}", f"text {hashlib.sha256(text).hexdigest()}"]
     return lines + [f"key {l}" for l in sorted(_keylines.get(bh, []))]
@@ -500,14 +578,20 @@ def resource_short(data):
 def exhausted_files(paths, test=None):
     """Whether any of the files (or any file under the directories) says so."""
     for p in paths:
-        fs = [p] if not os.path.isdir(p) else [os.path.join(r, f) for r, _, n in os.walk(p) for f in n]
+        errs = []
+        fs = [p] if not os.path.isdir(p) else \
+            [os.path.join(r, f) for r, _, n in os.walk(p, onerror=errs.append) for f in n]
+        if errs:
+            return True  # a side directory that cannot be listed cannot be shown clean: not recorded
         for f in fs:
             try:
                 with open(f, "rb") as fh:
                     if (test or exhausted)(fh.read()):
                         return True
-            except OSError:
+            except FileNotFoundError:
                 pass
+            except OSError:
+                return True  # an output that cannot be read cannot be shown clean: not recorded
     return False
 
 
@@ -637,8 +721,11 @@ class ParKeys:
             lambda: base_lines(self.spec, "bcc") + [f"fn {fn}", f"deps {self.mode}"])
 
     def of(self, arg):
+        """The unit's key and fingerprint; None when it is unsure (a read on its key path failed)."""
         deps, files = recording(lambda: unit_deps(self.mode, arg))
         self.files = files
+        if unsure(self.base_files | files):
+            return None
         return digest(self.base + deps), fingerprint(self.base_files | files)
 
 
@@ -651,13 +738,20 @@ def par_start(d, fn):
             sys.stdout.write(f"{i}\n{a}\n")
         return
     tools = tools_line()
-    with open(os.path.join(d, "tools"), "w") as fh:
-        fh.write(tools)
-    os.environ["GATE_CACHE_TOOLS_FILE"] = os.path.join(d, "tools")
+    if not _tools[1]:
+        with open(os.path.join(d, "tools"), "w") as fh:
+            fh.write(tools)
+        os.environ["GATE_CACHE_TOOLS_FILE"] = os.path.join(d, "tools")
     pk = ParKeys(fn)
     keys, misses = [], []
     for i, a in jobs:
-        k, fp = pk.of(a)
+        kf = pk.of(a)
+        if kf is None:
+            # Unsure: the unit runs, with no lookup and no store (no key line, no entry for
+            # scripts/par_unit.py).
+            sys.stdout.write(f"{i}\n{a}\n")
+            continue
+        k, fp = kf
         keys.append(f"{i} {k} {fp}")
         got = get(entry(pk.step, k)) if reading() else None
         if got:
@@ -787,6 +881,9 @@ def step_args(argv):
                 paths.append(f)
         return base_lines(sid, cls) + [f"cmd {' '.join(cmd)}"] + files_lines("file", sorted(set(paths)))
     ls, read = recording(lines)
+    if unsure(read):
+        # A read on the key path failed: the step runs, with no lookup and no store.
+        return sid, None, None, cmd
     return sid, digest(ls), fingerprint(read), cmd
 
 
@@ -863,6 +960,8 @@ class Units:
         if not self.on:
             return None
         deps, files = recording(lambda: unit_deps(self.mode, arg))
+        if unsure(self.base_files | files):
+            return None
         return digest(self.base + deps), fingerprint(self.base_files | files)
 
     def hit(self, key):
@@ -953,7 +1052,11 @@ def forget_entries(argv):
             if e.startswith(".tmp.") or e.endswith(".lock") or not os.path.isdir(p):
                 continue
             try:
-                if born and not (born[0] <= os.stat(p).st_birthtime <= born[1]):
+                st_ = os.stat(p)
+                # Birth time (macOS, BSD); where there is none, the modification time, which a
+                # replay renews, so the window then also takes entries replayed in it.
+                t = getattr(st_, "st_birthtime", None) or st_.st_mtime
+                if born and not (born[0] <= t <= born[1]):
                     continue
                 out = open(os.path.join(p, "out"), "rb").read()
                 if units:
@@ -1068,7 +1171,10 @@ def main():
     elif a[0] == "forget":
         forget_entries(a[1:])
     elif a[0] == "tools":
+        # Exit 3 when a probe failed: ci-local then keeps no tools file, and each key computes
+        # (and judges) the line itself.
         print(tools_line())
+        return 3 if _tools[1] else 0
     elif a[0] == "exhausted":
         # `exhausted FILE…`: exit 0 when a file says a tool ran out of file handles.
         return 0 if exhausted_files(a[1:]) else 1
