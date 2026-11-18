@@ -1,14 +1,21 @@
 #!/usr/bin/perl
 # The machine-wide pool of job slots that every gate on the machine shares.
 #
-#     scripts/slot [-c CPU] [-m MEM] -- COMMAND ARG...   COMMAND, holding its share of the pool
-#     scripts/slot -s                                     the pool's size: `N M`
+#     scripts/slot [-c CPU] [-m MEM] [-l LEAN] -- COMMAND ARG...   COMMAND, holding its share
+#     scripts/slot -s                                                the pool's size: `N M L`
 #
-# COMMAND runs holding CPU slots (default 1) and MEM memory tokens (GB, default 1) of the pool in
-# $SLOT_DIR (default ~/repos/.gate-slots). The pool's size is the pool's, in its file `size`
-# (`N M`), written once by its first user: $SLOT_N cpu slots (default the core count) and
-# $SLOT_MEM memory tokens (default 3/4 of the RAM, in GB). A request larger than the pool takes
-# the whole pool.
+# COMMAND runs holding CPU slots (default 1), MEM memory tokens (GB, default 1) and LEAN library
+# tokens (default 0) of the pool in $SLOT_DIR (default ~/repos/.gate-slots). The pool's size is
+# the pool's, in its file `size` (`N M L`), written once by its first user: $SLOT_N cpu slots
+# (default the core count), $SLOT_MEM memory tokens (default 3/4 of the RAM, in GB) and $SLOT_LEAN
+# library tokens (default 2). A request larger than the pool takes the whole pool.
+#
+# A library token is held by a process that maps the library's .olean files (a Lean process that
+# imports it: gate-census; a `lake build` that builds). Each such process pins the vnodes of its
+# worktree's ~8,000 Mathlib and library files (a worktree's .lake is its own copy), and the
+# machine's vnode table (kern.maxvnodes) is what runs out (gate30 fd.md), so the pool lets only L
+# of them run at once across every gate on the machine. `lake env` and `lake build --no-build`
+# map only the toolchain's files, shared by every process, and take none.
 #
 # A token is an flock(2) lock on a file of the pool (`cpu.<i>`, `mem.<i>`). The kernel drops it
 # when the last process holding the file open exits, however it exits: a dead holder frees its
@@ -31,12 +38,13 @@
 use strict; use warnings; no warnings "exec";
 use Fcntl qw(:flock F_GETFD F_SETFD FD_CLOEXEC O_RDWR O_CREAT);
 use Time::HiRes qw(usleep);
-my $usage = "usage: slot [-c CPU] [-m MEM] -- COMMAND ARG...  |  slot -s\n";
+my $usage = "usage: slot [-c CPU] [-m MEM] [-l LEAN] -- COMMAND ARG...  |  slot -s\n";
 sub fail { print STDERR "slot: $_[0]\n"; exit 125 }
-my ($cpu, $mem, $show) = (1, 1, 0);
+my ($cpu, $mem, $lean, $show) = (1, 1, 0, 0);
 while (@ARGV && $ARGV[0] ne '--') {
   my $o = shift @ARGV;
   if ($o eq '-c') { $cpu = shift @ARGV } elsif ($o eq '-m') { $mem = shift @ARGV }
+  elsif ($o eq '-l') { $lean = shift @ARGV }
   elsif ($o eq '-s') { $show = 1 } else { print STDERR $usage; exit 2 }
 }
 shift @ARGV if @ARGV;
@@ -50,18 +58,26 @@ sub opn { my $f; sysopen($f, "$dir/$_[0]", O_RDWR | O_CREAT) or fail("$dir/$_[0]
 my $door = opn("door");
 flock($door, LOCK_EX) or fail("door: $!");
 my ($n, $m);
-if (open(my $s, '<', "$dir/size")) { ($n, $m) = split ' ', (scalar <$s> // '') }
+my $l;
+if (open(my $s, '<', "$dir/size")) { ($n, $m, $l) = split ' ', (scalar <$s> // '') }
 unless ($n && $m) {
+  no warnings 'uninitialized';
   $n = $ENV{SLOT_N} // `sysctl -n hw.ncpu` + 0;
   $m = $ENV{SLOT_MEM} // int((`sysctl -n hw.memsize` + 0) / 2**30 * 3 / 4);
-  open(my $s, '>', "$dir/size.tmp") or fail("$dir/size.tmp: $!");
-  print $s "$n $m\n"; close $s; rename("$dir/size.tmp", "$dir/size") or fail("$dir/size: $!");
+  # sysctl that cannot run (no descriptor for its pipe) is the job's failure, never a pool of 0.
+  $n > 0 && $m > 0 or fail("cannot size the pool (sysctl: $!)");
 }
-if ($show) { print "$n $m\n"; exit 0 }
-$cpu = $n if $cpu > $n; $mem = $m if $mem > $m;
+# A pool sized before library tokens existed (`N M`) gains them here, once.
+unless ($l && $l > 0) {
+  $l = $ENV{SLOT_LEAN} // 2;
+  open(my $s, '>', "$dir/size.tmp") or fail("$dir/size.tmp: $!");
+  print $s "$n $m $l\n"; close $s; rename("$dir/size.tmp", "$dir/size") or fail("$dir/size: $!");
+}
+if ($show) { print "$n $m $l\n"; exit 0 }
+$cpu = $n if $cpu > $n; $mem = $m if $mem > $m; $lean = $l if $lean > $l;
 my @held;
-for my $kind (['cpu', $n, $cpu], ['mem', $m, $mem]) {
-  my ($name, $total, $want) = @$kind;
+sub take {
+  my ($name, $total, $want) = @_;
   my ($got, $start, $sleep) = (0, int(rand($total)), 2000);
   while ($got < $want) {
     for my $k (0 .. $total - 1) {
@@ -72,7 +88,13 @@ for my $kind (['cpu', $n, $cpu], ['mem', $m, $mem]) {
     if ($got < $want) { usleep($sleep); $sleep = $sleep < 50000 ? $sleep * 2 : 50000 }
   }
 }
+# Library tokens first, outside the door: a library holder may run for minutes (a build), and a
+# waiter for one must not keep every other request behind the door meanwhile. A holder of a
+# library token then waits at the door like any request, so no wait closes a cycle.
+if ($lean > 0) { close $door; take('lean', $l, $lean); flock($door = opn("door"), LOCK_EX) or fail("door: $!") }
+take('cpu', $n, $cpu);
+take('mem', $m, $mem);
 close $door;
 for my $f (@held) { fcntl($f, F_SETFD, fcntl($f, F_GETFD, 0) & ~FD_CLOEXEC) or fail("fcntl: $!") }
-$ENV{SLOT_HELD} = "$cpu $mem";
+$ENV{SLOT_HELD} = "$cpu $mem $lean";
 exec { $ARGV[0] } @ARGV or fail("cannot run $ARGV[0]: $!");

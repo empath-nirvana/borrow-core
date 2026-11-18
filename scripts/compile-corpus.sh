@@ -121,22 +121,22 @@ statusOf() {
 }
 # Whether file $1 is a program the corpus runs; if not, says why.
 runnable() {
-  if grep -qE '^(--|#) check: parse-only' "$1"; then echo "$1: parse-only, skipped"; echo "parse-only $1" >> "$PAR_SIDE/skips"; return 1; fi
-  if ! grep -qE '^(main|fn main\()' "$1"; then echo "$1: no main, skipped"; echo "no-main $1" >> "$PAR_SIDE/skips"; return 1; fi
+  if grepq -E '^(--|#) check: parse-only' "$1"; then echo "$1: parse-only, skipped"; echo "parse-only $1" >> "$PAR_SIDE/skips"; return 1; fi
+  if ! grepq -E '^(main|fn main\()' "$1"; then echo "$1: no main, skipped"; echo "no-main $1" >> "$PAR_SIDE/skips"; return 1; fi
 }
 # --write-goldens: the golden of file $1, from the source stage.
 golden() {
   local f=$1 w=${PAR_TMP:-$tmp} base in
   runnable "$f" || return 0
   base=${f%.bc}
-  if grep -qE '^(--|#) check: no-source' "$f"; then
+  if grepq -E '^(--|#) check: no-source' "$f"; then
     echo "$f: no-source: $base.out is written by hand, kept"; return 0
   fi
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
   argsOf "$f"
   local rc=0
   "$bcc" interp "$f" -- "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$?
-  if [ "$rc" != 0 ] && ! grep -q '^live ' "$w/out"; then
+  if [ "$rc" != 0 ] && ! grepq '^live ' "$w/out"; then
     echo "$f: the source interpreter fails, golden not written: $(head -3 "$w/err")"; return 1
   fi
   if [ "$(tail -1 "$w/out")" != "live 0" ]; then
@@ -175,11 +175,11 @@ counts() {
   l=$(echo "$got" | awk '{print $8}'); s=$(echo "$got" | awk '{print $10}')
   b=$(echo "$got" | awk '{print $12}')
   # An entry may end with a comment (`# …`), kept when the file is rewritten.
-  note=$(awk -v n="$name" '$1 == n { sub(/^[^#]*/, ""); print }' "$expected" 2>/dev/null || true)
+  note=""; if [ -e "$expected" ]; then note=$(awk -v n="$name" '$1 == n { sub(/^[^#]*/, ""); print }' "$expected") || { echo "$1: cannot read $expected" >&2; return 2; }; fi
   echo "$name $a $i $c $l $s $b${note:+ $note}" >> "$PAR_SIDE/counts"
   cnt="allocs $a, indirect $i, copies $c, loads $l, stores $s, bounds $b"
   [ "$write" = 1 ] && return 0
-  want=$(awk -v n="$name" '$1 == n { sub(/#.*/, ""); print $2, $3, $4, $5, $6, $7 }' "$expected" 2>/dev/null || true)
+  want=""; if [ -e "$expected" ]; then want=$(awk -v n="$name" '$1 == n { sub(/#.*/, ""); print $2, $3, $4, $5, $6, $7 }' "$expected") || { echo "$1: cannot read $expected" >&2; return 2; }; fi
   if [ -z "$want" ]; then echo "$1: no entry in $expected ($cnt)"; return 1; fi
   read -r wa wi wc wl ws wb <<< "$want"
   if [ -z "$wc" ]; then echo "$1: $expected's entry has no copies column"; return 1; fi
@@ -255,10 +255,13 @@ program() {
   stages="clos flat wasm"
   [ "$final" = 0 ] || stages="wasm"
   local old=1
-  if grep -qE '^(--|#) check: old-backend-refuses' "$f"; then
+  if grepq -E '^(--|#) check: old-backend-refuses' "$f"; then
     old=0; stages=""
     local refused=0
-    "$bcc" interp --backend old --stage flat "$f" < "$in" > /dev/null 2>&1 || refused=$?
+    "$bcc" interp --backend old --stage flat "$f" < "$in" > /dev/null 2> "$w/refused" || refused=$?
+    # A refusal is the old backend's message; a run that could not start or ran short of a
+    # resource is not one: its message is the unit's output (and fails it, scripts/gate_cache.py).
+    [ "$refused" = 0 ] || [ "$refused" -ge 128 ] || grep -iE 'too many open files|file table overflow|resource temporarily|cannot allocate|no space left' "$w/refused" || true
     if [ "$refused" = 0 ]; then
       echo "$f: marked old-backend-refuses, but the old backend runs it: remove the mark"; return 1
     fi
@@ -266,7 +269,7 @@ program() {
     # not recorded in the cache.
     [ "$refused" -lt 128 ] || par_nostore
   fi
-  if grep -qE '^(--|#) check: no-source' "$f"; then
+  if grepq -E '^(--|#) check: no-source' "$f"; then
     local why
     why=$(sed -nE '/^(--|#) check: no-source: */{s///p;q;}' "$f")
     note=" (no-source: not run at the source stage: ${why:-too large for the source interpreter})"

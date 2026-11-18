@@ -99,7 +99,7 @@ block() {
     ignore) return 0 ;;
     run)
       want=$(sed -nE '/^(--|#) answer: /{s///p;q;}' "$f")
-      if [ -z "$want" ] && grep -qE '^(--|#) output:' "$f"; then want='()'; fi
+      if [ -z "$want" ] && grepq -E '^(--|#) output:' "$f"; then want='()'; fi
       if [ -z "$want" ]; then fail "$at" "a \`bc\` block needs an \`-- answer:\` or \`-- output:\` line (or mark it \`bc,check\`)"; return 1; fi
       if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; return 1; fi
       in="$tmp/$n.in"; : > "$in"
@@ -112,7 +112,7 @@ block() {
       kl=""; verified=0
       if [ "$BCC_SOURCE" != 1 ] || [ "$BCC_WRITE_KEYS" = 1 ]; then
         kl="$(blockHash "$attrs" "$f") $(sourceKey "$f" "$in")"
-        grep -qxF "$kl" "$tmp/verified" && verified=1
+        grepq -xF "$kl" "$tmp/verified" && verified=1
       fi
       case "$BCC_SOURCE" in
         1) src=1 ;;

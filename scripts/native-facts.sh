@@ -55,15 +55,15 @@ statusOf() {
 
 program() {
   local f=$1 w=${PAR_TMP:-$tmp} base in err rc fns fn left old new sigs
-  if grep -qE '^(--|#) check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0; fi
-  if ! grep -qE '^(main|fn main\()' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$PAR_SIDE/skips"; return 0; fi
+  if grepq -E '^(--|#) check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0; fi
+  if ! grepq -E '^(main|fn main\()' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$PAR_SIDE/skips"; return 0; fi
   base=${f%.bc}
   if [ ! -f "$base.out" ]; then
     echo "$f: no golden $base.out: write it from the source stage with \`scripts/compile-corpus.sh --write-goldens $f\`"
     return 1
   fi
   if ! "$bcc" compile --backend new --target native "$f" -o "$w/on.ll" > "$w/log" 2>&1; then
-    if grep -q 'outside the pure fragment' "$w/log"; then
+    if grepq 'outside the pure fragment' "$w/log"; then
       echo "$f: outside the new backend's fragment, skipped"; echo "outside-fragment $f" >> "$PAR_SIDE/skips"; return 0
     fi
     echo "$f: $(head -3 "$w/log")"; return 1
@@ -83,7 +83,7 @@ program() {
     $cc -O2 -S -emit-llvm -w "$w/on.ll" -o "$w/opt.ll" 2>/dev/null || par_nostore
     left=""
     for fn in $fns; do
-      grep -q "call .*@$fn(" "$w/opt.ll" && left="$left $fn"
+      grepq "call .*@$fn(" "$w/opt.ll" && left="$left $fn"
     done
     if [ -n "$left" ]; then echo "$f: alwaysinline, but called after -O2:$left"; return 1; fi
   fi
@@ -93,8 +93,8 @@ program() {
   # A program the old backend refuses (`-- check: old-backend-refuses`) has no old count to compare.
   # (A failed tool here is never recorded in the cache: `par_nostore`.)
   sites=""
-  if ! grep -qE '^(--|#) check: old-backend-refuses' "$f"; then sites=$("$bccCounts" --sites "$f" 2>/dev/null) || par_nostore; fi
-  if ! grep -qE '^(--|#) check: old-backend-refuses' "$f" && [ "$(printf '%s\n' "$sites" | sed -n 's/.*scoped-cells framed \([0-9]*\).*/\1/p')" != 0 ]; then
+  if ! grepq -E '^(--|#) check: old-backend-refuses' "$f"; then sites=$("$bccCounts" --sites "$f" 2>/dev/null) || par_nostore; fi
+  if ! grepq -E '^(--|#) check: old-backend-refuses' "$f" && [ "$(printf '%s\n' "$sites" | sed -n 's/.*scoped-cells framed \([0-9]*\).*/\1/p')" != 0 ]; then
     old=$("$bccCounts" --backend old --frames "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>/dev/null | sed -n 's/^slots //p')
     new=$("$bccCounts" --backend new --frames "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>/dev/null | sed -n 's/^slots //p')
     if [ -z "$old" ] || [ -z "$new" ]; then echo "$f: no frame slot counts (old '$old', new '$new')"; return 1; fi
@@ -125,7 +125,7 @@ program() {
     if ! grep -q "mut i32" <<< "$sigs" || ! grep -q "ref i32" <<< "$sigs"; then
       echo "$f: the regression's \`$pair\` no longer takes a mut borrow beside its owner"; return 1
     fi
-    if grep -q "($pair)\$" "$w/facted"; then echo "$f: \`$pair\` has a borrow fact"; return 1; fi
+    if grepq "($pair)\$" "$w/facted"; then echo "$f: \`$pair\` has a borrow fact"; return 1; fi
   fi
   # The `willreturn` class: read off the word IR (`bcc trusted`'s `CallRelated and HostStack` lines), every one a
   # source function, and exactly the functions the emitted IR marks. Each marked function calls no

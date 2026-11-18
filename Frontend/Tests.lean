@@ -166,11 +166,38 @@ theorem nd_hazards : sameProgram
      "  let b = match 1 {\n    0 -> 5\n    | k -> k\n  }\n  let c = if f(a) { 1 } else { 2 }\n  &a\n}")
     = true := by decide +kernel
 
+-- A line starting with `.` continues the statement before it.
+theorem nd_dot : sameProgram "data P = { f: i32 }\nmain -> i32 = let q = P { f: 1 }; let y = q.f; y"
+    "data P = { f: i32 }\nfn main() : i32 {\n  let q = P { f: 1 }\n  let y = q\n    .f\n  y\n}" = true
+    := by decide +kernel
+
 -- An arm's `-> { S }` is its statements, `-> ({ S })` the block value.
 theorem nd_block_arm : sameProgram "main -> i32 = match 1 { _ -> { 5 } }"
     "fn main() : i32 = match 1 { _ -> ({ 5 }) }" = true ∧
     sameProgram "main -> i32 = match 1 { _ -> let x = 5; x }"
     "fn main() : i32 = match 1 { _ -> { let x = 5; x } }" = true := by decide +kernel
+
+-- A body without braces ends at a newline at its own nesting, also inside a `fun` it ends with:
+-- an arm's, a clause's and a `= e` body.
+theorem nd_one_expr : sameProgram
+    ("effect E { fn op() -> i32; fn op2() -> i32 }\n" ++
+     "handler h(mut s: i32): E = { op() = (!thunkv fun (x : i32) -> return x); op2() = s }\n" ++
+     "fn g() -> i32 = !thunkv fun (x : i32) -> return x\n" ++
+     "main -> i32 = match 1 { 0 -> !thunkv fun (x : i32) -> return x | k -> k }")
+    ("effect E { op() : i32; op2() : i32 }\n" ++
+     "handler h(mut s: i32) : E {\n  op() -> !thunkv fun (x : i32) -> return x\n  op2() -> s\n}\n" ++
+     "fn g() : i32 = !thunkv fun (x : i32) -> return x\n" ++
+     "fn main() : i32 = match 1 {\n  0 -> !thunkv fun (x : i32) -> return x\n  k -> k\n}")
+    = true := by decide +kernel
+
+-- Inside `(…)` a newline does not end a statement; a block `{ … }` there (of `if`, `match`, a
+-- closure) has the layout rule again.
+theorem nd_paren_block : sameProgram
+    ("main -> i32 = let a = f(1,\n 2); f(if c { let a = 1; a } else { 2 }, " ++
+     "match 1 { 0 -> 1 | k -> k }, { y -> let z = y; z })")
+    ("fn main() : i32 {\n  let a = f(1,\n    2)\n  f(if c {\n    let a = 1\n    a\n  } else { 2 }, " ++
+     "match 1 {\n    0 -> 1\n    k -> k\n  }, { y ->\n    let z = y\n    z\n  })\n}")
+    = true := by decide +kernel
 
 /-- The new-spelling text `nw` is refused with the message `msg`. -/
 def ndRejectsWith (nw msg : String) : Bool :=
@@ -184,7 +211,6 @@ theorem nd_refused :
     ndRejects "fn main() : i32 = let mut x = 1; x" = true ∧
     ndRejects "fn main() : i32 = modify &mut x { v -> v }" = true ∧
     ndRejects "main -> i32 = 1" = true ∧
-    ndRejects "fn main() : i32 {\n  let p = q\n  .f\n}" = true ∧
     ndRejectsWith "fn main() : i32 = modify &mut x { v -> v }"
       "`&mut x` is written `&x` in the new spelling (SPEC §82 P7)" = true ∧
     ndRejectsWith "fn main() : i32 {\n  x <- return 1\n  x\n}"

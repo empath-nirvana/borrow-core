@@ -180,11 +180,12 @@ steps=(
   "book build"       "mdbook build book"
   "result cache"     "scripts/check-gate-cache.sh"
   "gate tiers"       "scripts/check-gate-tier.sh"
+  "handle exhaustion" "scripts/check-exhausted.sh"
 )
 # The sanity gate's steps (`make gate`, `--changed`). The corpus runs named `final` are its own:
 # the full gate runs the corpus at every stage instead.
 gateSteps=("hygiene + axioms" "spec files" "judgment freeze" "assumptions" "axiom report" "type equality" "parse corpus"
-  "check corpus" "respell pairs" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)" "backend2 fence" "result cache" "gate tiers")
+  "check corpus" "respell pairs" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)" "backend2 fence" "result cache" "gate tiers" "handle exhaustion")
 if [ "$full" = 1 ]; then
   everyStep=("compile scaling")
   for ((i = 0; i < ${#steps[@]}; i += 2)); do
@@ -227,6 +228,7 @@ if [ "$changed" = 1 ]; then
         scripts/check-backend2.sh) add "backend2 fence" ;;
         scripts/check-gate-cache.sh) add "result cache" ;;
         scripts/gate-tier.sh|scripts/check-gate-tier.sh) add "gate tiers" ;;
+        scripts/exhausted.sh|scripts/check-exhausted.sh|scripts/slot|scripts/slotpool.py) add "handle exhaustion" ;;
         scripts/check-assumptions.sh) add "assumptions" ;;
         scripts/check-type-eq.sh|scripts/type-eq.allow|scripts/gate-census.sh) add "type equality" ;;
         scripts/alpha-check.py) add "renaming" ;;
@@ -264,18 +266,27 @@ echo "ci-local plan: build $planBuild; steps: ${planSteps:-none}"
 # each subprocess of the Python pools and `gate-census` take their slots there; the serial steps
 # below take one; the build and the compile-time guard take the whole CPU pool. `SLOT_OFF=1`
 # turns it off.
-# The pool is on when scripts/slot answers; otherwise SLOT_OFF=1 for every step (scripts/par.sh
-# and scripts/slotpool.py decide the same way when run alone).
+# The pool is off with SLOT_OFF=1 or without perl, for every step. With perl, a pool that does not
+# answer (`slot -s`: under ENFILE perl cannot even load its modules) stops the gate in one line
+# (exit 75 when the machine ran out of file handles), as scripts/par.sh and scripts/slotpool.py
+# stop their calls: it never runs unbounded.
+. scripts/exhausted.sh
 pool=""
 if [ "${SLOT_OFF:-}" = 1 ]; then echo "ci-local: job pool off (SLOT_OFF=1)"
+elif ! command -v perl >/dev/null; then export SLOT_OFF=1; echo "ci-local: job pool off (no perl)"
 elif size=$(scripts/slot -s 2>&1); then
-  read -r poolN poolM <<< "$size"; pool=scripts/slot
-  echo "ci-local: job pool on ($poolN CPU slots, $poolM GB, shared by every gate on the machine)"
+  read -r poolN poolM poolL <<< "$size"; pool=scripts/slot
+  echo "ci-local: job pool on ($poolN CPU slots, $poolM GB, $poolL library tokens, shared by every gate on the machine)"
 else
-  export SLOT_OFF=1; echo "ci-local: job pool off (scripts/slot -s: ${size:-no answer})"
+  echo "ci-local: the job pool does not answer (scripts/slot -s: $(printf '%s' "$size" | head -1)): the gate does not start"
+  if exhausted <(printf '%s\n' "$size"); then exit 75; fi
+  exit 1
 fi
-# slotted CPU MEM CMD…: CMD in the pool, or CMD itself when the pool is off.
-slotted() { local c=$1 m=$2; shift 2; if [ -n "$pool" ]; then "$pool" -c "$c" -m "$m" -- "$@"; else "$@"; fi; }
+# slotted CPU MEM [-l LEAN] CMD…: CMD in the pool, or CMD itself when the pool is off. A process
+# that maps the library's .olean files (a building `lake build`, gate-census) takes a library token
+# (scripts/slot -l), of which the machine has a few.
+slotted() { local c=$1 m=$2 l=0; shift 2; [ "${1:-}" != -l ] || { l=$2; shift 2; }
+  if [ -n "$pool" ]; then "$pool" -c "$c" -m "$m" -l "$l" -- "$@"; else "$@"; fi; }
 # The build: nothing when Lake finds every target up to date (`--no-build`, exit 3 when one is
 # not); otherwise the build itself, holding the whole CPU pool (Lake starts a Lean process per
 # core and has no job limit).
@@ -289,8 +300,12 @@ build() {
   # gate30 verification's results.md, T6b: vm_stat anonymous + wired + compressor pages). Its summed
   # RSS (61.5 GB) is not the measure: it counts the mapped .oleans once per Lean process, though
   # they share their pages.
-  slotted 999 16 lake build "$@"
+  slotted 999 16 -l 1 lake build "$@"
 }
+# The machine's file handles (scripts/exhausted.sh): a gate does not start while the vnode table is
+# full, which would fail its steps here and there with ENFILE; it waits a bounded time, or fails in
+# one line with exit status 75 (no verdict on the tree).
+vnode_preflight || exit 75
 if [ "$tiered" = 1 ] && [ "$tierBuild" = none ]; then echo "==> build: none (no step of this tier reads the build)"
 elif [ "$tiered" = 1 ] && [ "$tierBuild" = bins ]; then step "build (bcc, bcc-counts)" build bcc bcc-counts gate-census
 elif [ "$all" = 1 ]; then step "build" build
@@ -304,7 +319,8 @@ if [ "$built" != 0 ] && [ "${GATE_CACHE:-1}" != 0 ]; then export GATE_CACHE=0; c
 # The tools in every cache key, found once for the whole gate after the build (they do not change
 # during it).
 if [ "$built" = 0 ] && [ "${GATE_CACHE:-1}" != 0 ]; then
-  python3 scripts/gate_cache.py tools > "$out/tools" && export GATE_CACHE_TOOLS_FILE=$out/tools
+  if python3 scripts/gate_cache.py tools > "$out/tools" 2> "$out/tools.err"; then export GATE_CACHE_TOOLS_FILE=$out/tools
+  else echo "ci-local: $(cat "$out/tools.err") (no shared tools line: each step probes the tools itself)"; fi
 fi
 
 # The censuses that read the Lean environment: one `gate-census` process for every step that asks
@@ -343,10 +359,14 @@ for ((i = 0; i < ${#steps[@]}; i += 2)); do
     step "$name" ${pre[@]+"${pre[@]}"} $cmd
   fi
 done
+# A step that ran out of file handles says so in its output, in a tool's words
+# (scripts/exhausted.sh): such a step's failures are the machine's, not verdicts on the tree.
+exhaustedSteps=()
 for ((k = 0; k < ${#names[@]}; k++)); do
   printf '==> %s\n' "${names[k]}"
   if wait "${pids[k]}"; then rc=0; else rc=1; fi
   cat "$out/$k.log"
+  if exhausted "$out/$k.log"; then exhaustedSteps+=("${names[k]}"); fi
   t=$(cat "$out/$k.time" 2>/dev/null || echo "?")
   if [ "$rc" = 0 ]; then printf '    ok: %s (%ss)\n' "${names[k]}" "$t"; else printf '    FAILED: %s (%ss)\n' "${names[k]}" "$t"; fail=1; fi
 done
@@ -366,9 +386,16 @@ tag="ci-local"; [ "$changed" = 1 ] && tag="ci-local --changed"; [ "$full" = 1 ] 
 if [ "${GATE_CACHE:-1}" = 0 ]; then cache="cache off${cachenote:-}"
 else cache=$(awk '{ r += $1; n += $2; f += $3 } END { printf "cache: %d unit(s) replayed, %d run", r, n; if (f) printf "; WARNING: %d pass(es) could not be recorded (store not writable)", f }' "$GATE_CACHE_STATS"); fi
 if [ -n "$pool" ]; then cache="$cache; job pool $poolN/$poolM GB"; else cache="$cache; job pool off"; fi
+if [ ${#exhaustedSteps[@]} -gt 0 ]; then
+  fail=1
+  echo "ci-local: the machine ran out of file handles during this gate (in: $(IFS=,; echo "${exhaustedSteps[*]}" | sed 's/,/, /g')): rerun when it is quieter; those steps' failures are not verdicts on the tree"
+fi
 if [ "$fail" -eq 0 ]; then echo "$tag: ALL PASSED ($((SECONDS - start))s; $cache)"; else echo "$tag: FAILURES (see above) ($((SECONDS - start))s; $cache)"; fi
 [ "$changed" = 1 ] && echo "(--changed is for iteration only: the sanity gate, scripts/ci-local.sh, runs before a PR)"
 if [ -n "$tierLine" ]; then echo "$tierLine"; echo "($tierLeft)"
 elif [ "$full" = 0 ]; then echo "(the sanity gate: \`make gate-full\` runs every check; \`make verify-goldens\` re-verifies every golden)"; fi
 [ -z "$reach" ] || echo "($reach changed: \`make gate-full\` is required as well)"
+# Exit status 75 (EX_TEMPFAIL): the machine ran out of file handles, so the run is no verdict on
+# the tree (scripts/gate-daily.sh records it like a timeout, and gates the commit again).
+[ ${#exhaustedSteps[@]} -eq 0 ] || exit 75
 exit "$fail"

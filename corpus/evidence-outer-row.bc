@@ -1,0 +1,23 @@
+-- A tail-resumptive clause that captures a closure (`pass`'s `yld`, its `c` a candidate for
+-- evidence, SPEC §71) beside another name's tail clause that performs it: `zh`'s `z` is closed,
+-- resumes in tail position, and its work would run at `zh`'s outer row, which holds `Y`. A direct
+-- work has no evidence in scope, so an outer row's evidence names are excluded wherever a node's
+-- clause is direct (`evNames`, `evExcludedNode`). Here `z`'s condition 2 fails at `Y` (the flow
+-- record holds it), so `z` is a machine operation, and so is `yld`, its row holding `z`: the
+-- program compiles as without evidence.
+--
+-- Answer: i32[8]: `z` performs `yld`, whose clause runs `c` (7) and resumes; `z` resumes; the
+-- body answers 1, and `main` adds `c(())` once more.
+
+effect Y { must_resume ctl yld() }
+
+effect Z { ctl z() }
+
+handler pass[A](c: !(1 => i32)): Y, A -> A = { return(a) = a; yld(k) = { let _ = c(()); k(()) } }
+
+handler zh[A]: Z, A -> A with Y = { return(a) = a; z(k) = { yld(); k(()) } }
+
+main -> i32 =
+  let c: !(1 => i32) = !{ u -> 7 };
+  let r = with pass[i32](c) { with zh[i32] { z(); 1 } };
+  r + c(())

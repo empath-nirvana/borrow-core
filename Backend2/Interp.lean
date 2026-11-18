@@ -605,7 +605,16 @@ def callEntry (p : Prog) (t : Tm) : IM (Option (LV ⊕ (Nat × List LV))) := mat
     return some (.inr (← closEntry p vg (some va) 0))
   | .app0 g => do return some (.inr (← closEntry p (← takeV g) none 0))
   | .sel g j => do return some (.inr (← closEntry p (← takeV g) none j))
-  | .call fn as => do return some (.inr (fn, ← takeAll as))
+  -- Evidence [spec §71] is passed and kept: read, not taken.
+  | .appE g a j ev => do
+    let vg ← takeV g
+    let va ← a.mapM takeV
+    let (fn, args) ← closEntry p vg va j
+    return some (.inr (fn, args ++ (← ev.mapM peekV)))
+  | .call fn as => do
+    let k := as.length - ((p.fns[fn]?).map (·.evs)).getD 0
+    let vs ← takeAll (as.take k)
+    return some (.inr (fn, vs ++ (← (as.drop k).mapM peekV)))
   | .prim (.tab fi) [g, n] => do
     let vg ← takeV g
     let .int k ← takeV n | bad "tab of a non-integer"
@@ -755,7 +764,8 @@ def eval (p : Prog) : Nat → LTy → Tm → IM LV
       pure (.pair va vb)
     | .inj r a => return .inj r (← takeV a)
     | .clos c env => return .clos c (← takeAll env)
-    | .app .. | .app0 .. | .sel .. | .call .. | .prim (.tab _) [_, _] | .prim (.tabLit _) [_, _] => do
+    | .app .. | .app0 .. | .sel .. | .appE .. | .call .. | .prim (.tab _) [_, _]
+    | .prim (.tabLit _) [_, _] => do
       match ← callEntry p t with
       | some (.inl v) => pure v
       | some (.inr (fn, args)) => callFn p f fn args
@@ -780,7 +790,8 @@ def callFn (p : Prog) (fuel : Nat) (fn : Nat) (args : List LV) : IM LV := do
   let saved := (← get).frame
   modify fun s => { s with frame := entryFrame d args }
   let r ← eval p fuel d.ret d.body
-  let rest := (← get).frame
+  -- The evidence parameters are the caller's, kept there (`Fn.evs`): not consumed here.
+  let rest := (d.params.drop (d.params.length - d.evs)).foldl (·.erase ·) (← get).frame
   if !rest.isEmpty then
     bad s!"f{fn} ({d.name}) returns with {rest.toList.map (s!"x{·.1}")} unconsumed"
   let mem := (← get).mem
