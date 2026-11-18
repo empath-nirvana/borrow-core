@@ -2115,7 +2115,9 @@ def dataValue : Nat → Pos → Ident → Bool → P Val
     let t1 ← peek
     let t2 ← peekAt 1
     let t3 ← peekAt 2
-    let isRec := t1.tok == .sym "{" && (tab.decl? c.name).isSome && (match t2.tok, t3.tok with
+    -- In the new spelling's layout a constructor's arguments are on its line.
+    let ends ← lineEnds
+    let isRec := !ends && t1.tok == .sym "{" && (tab.decl? c.name).isSome && (match t2.tok, t3.tok with
       | .ident _, .sym ":" | .ident _, .sym "," | .ident _, .sym "}" => true
       | _, _ => false)
     let angle := (← get).angle
@@ -2139,7 +2141,7 @@ def dataValue : Nat → Pos → Ident → Bool → P Val
         liftE (Data.recordVal tab sp c.name boxed fs.toList (fun f => (vars.lookup f).getD f)
           (← get).reuseArm)
       else do
-        let args ← if ← isSym "(" then do
+        let args ← if !ends && (← isSym "(") then do
             discard bump
             let mut vs : Array Val := #[]
             for _ in [0:n] do
@@ -2287,13 +2289,14 @@ def withBlock : Nat → P Val
     -- `h[A, …](e, …)`: written type arguments, then the arguments (none: `()`).
     let handlerArgs : P (Ident × List VTy × Val) := do
       let h ← ident "a handler name"
-      let As ← if ← isSym "[" then do
+      -- In the new spelling's layout the handler's arguments are on its line.
+      let As ← if (← isSym "[") && !(← lineEnds) then do
           discard bump
           let As ← tyList n (fuelPerToken * ((← get).toks.size + 1))
           expectSym "]"
           pure As
         else pure []
-      let place ← if ← isSym "(" then do
+      let place ← if (← isSym "(") && !(← lineEnds) then do
           let psp ← startPos
           discard bump
           let mut vs : Array Val := #[]
