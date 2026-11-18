@@ -212,14 +212,11 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | effRaise hf ha _ hd _ ih =>
       exact raise_compatN hf ha (fun _ _ _ _ _ h => vN_noOwn_of_ownFree hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatN hs hW hU ihM ihN
-  | effThen hs hNZ _ hU hMS hDS hfin hP _ _ _ _ ihM ihN ihD =>
-      exact then_compatN hs hNZ hU hMS hDS
-        (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc)) hP ihM ihN ihD
-  | @effThenDiv _ _ _ _ _ _ _ _ _ _ SM SD hs hNZ _ hU hMS hDS hfin hP hcap _ _ _ ihM ihN ihD =>
+  | @effThenF _ _ _ _ _ _ _ _ _ _ SM SD hs hNZ _ hU hMS hDS hfin hP hF _ _ _ ihM ihN ihD =>
       cases hSD : Row.divB SD
       · exact then_compatN hs hNZ hU hMS hDS
           (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc)) hP ihM ihN ihD
-      · exact thenDiv_compatN hs hNZ hU hMS hDS hP hcap ihM ihN ihD
+      · exact thenDiv_compatN hs hNZ hU hMS hDS hP (hF.resolve_left (by simp [hSD])) ihM ihN ihD
   | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       exact hHV hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
         (semJN_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe)

@@ -176,12 +176,9 @@ theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (
       exact .effLet (splitP_append h' hs)
         (fun hw => live_append (P := fun s => s.ty.OwnFree) h' (hW hw))
         (fun hu => banged_append h' (hU hu)) ihM ihN
-  | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
-      exact .effThen (splitP_append h' hs) hNZ hUq (fun hu => banged_append h' (hU hu))
-        hMS hDS hfin hP hSD ihM ihN ihD
-  | effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
-      exact .effThenDiv (splitP_append h' hs) hNZ hUq (fun hu => banged_append h' (hU hu))
-        hMS hDS hfin hP hSD ihM ihN ihD
+  | effThenF hs hNZ hUq hU hMS hDS hfin hP hF _ _ _ ihM ihN ihD =>
+      exact .effThenF (splitP_append h' hs) hNZ hUq (fun hu => banged_append h' (hU hu))
+        hMS hDS hfin hP hF ihM ihN ihD
   | effHandleV hAt hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       exact .effHandleV hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
         hdv ihe

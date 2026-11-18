@@ -379,13 +379,9 @@ theorem CDerives.effLet {Δ Γ Γ₁ Γ₂ M N A B} {S : Row} (hs : Ctx.SplitP �
     CDerives Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B)) :=
   (CDerivesX.effLet (I := {}) hs hW hU hM hN)
 
-theorem CDerives.effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false) (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+theorem CDerives.effThenF {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hF : Row.divB SD = false ∨ ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
     CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
-  (CDerivesX.effThen (I := {}) hs hNZ hUq hU hMS hDS hfin hP hSD hM hN hD)
-
-theorem CDerives.effThenDiv {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
-    CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
-  (CDerivesX.effThenDiv (I := {}) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD)
+  (CDerivesX.effThenF (I := {}) hs hNZ hUq hU hMS hDS hfin hP hF hM hN hD)
 
 theorem CDerives.effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {cs : Nat → Bool} {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁) (hc : CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs)))) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false) (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
     CDerives Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R)) :=
@@ -478,6 +474,38 @@ theorem CDerives.effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S') (h :
 theorem CDerives.alpha {Δ Γ e} {j j' : Jdg} (h : CDerives Δ Γ e j) (hα : j.alphaB j' = true) :
     CDerives Δ Γ e j' :=
   (CDerivesX.alpha (I := {}) h hα)
+
+theorem CDerives.effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false) (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+    CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+  (CDerivesX.effThen (I := {}) hs hNZ hUq hU hMS hDS hfin hP hSD hM hN hD)
+
+theorem CDerives.effThenDiv {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+    CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+  (CDerivesX.effThenDiv (I := {}) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD)
+
+theorem CDerives.effThenA {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf S A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
+    CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+  (CDerivesX.effThenA (I := {}) hs hNZ hUq hU hM hN hD)
+
+theorem CDerives.effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)} {n : UInt32} {A R : VTy} {ir ic : Nat} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc) (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E)) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 ++ S) = false) (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
+    CDerives Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) :=
+  (CDerivesX.effHandle (I := {}) trivial hs hs₁ hr hc hn0 hnS hlen hdv he)
+
+theorem CDerives.effHandleCs {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)} (fs : Nat → CTy) (cs : Nat → Bool) {n : UInt32} {A R : VTy} {ir ic : Nat} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc) (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E fs)) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false) (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
+    CDerives Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) :=
+  (CDerivesX.effHandleCs (I := {}) fs cs trivial hs hs₁ hr hc hn0 hnS hlen hdv he)
+
+theorem CDerives.withbor1U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    CDerives Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S)) :=
+  (CDerivesX.withbor1U (I := {}) x hΓ hx hsc₁ hfree₁ hfree₂ hS hd)
+
+theorem CDerives.withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    CDerives Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S)) :=
+  (CDerivesX.withbor2U (I := {}) x hΓ hx hside hfree₁ hfree₂ hS hd)
+
+theorem CDerives.withbor3U {Δ Γ a A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : CDerives Δ Γ d (.val (.lolli (.mut a A) .unit))) :
+    CDerives Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S)) :=
+  (CDerivesX.withbor3U (I := {}) x hΓ hx hfree₁ hfree₂ hS hd)
 
 theorem CDerivesAt.var {Ξ : EffCtx} {Δ Γ i A} (h : Ctx.SoloP Γ i A) :
     CDerivesAt Ξ Δ Γ (.var i) (.val A) :=
@@ -831,13 +859,9 @@ theorem CDerivesAt.effLet {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N A B} {S : Row} (h
     CDerivesAt Ξ Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B)) :=
   (CDerivesX.effLet (I := {ties := some Ξ}) hs hW hU hM hN)
 
-theorem CDerivesAt.effThen {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false) (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+theorem CDerivesAt.effThenF {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hF : Row.divB SD = false ∨ ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
     CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
-  (CDerivesX.effThen (I := {ties := some Ξ}) hs hNZ hUq hU hMS hDS hfin hP hSD hM hN hD)
-
-theorem CDerivesAt.effThenDiv {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
-    CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
-  (CDerivesX.effThenDiv (I := {ties := some Ξ}) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD)
+  (CDerivesX.effThenF (I := {ties := some Ξ}) hs hNZ hUq hU hMS hDS hfin hP hF hM hN hD)
 
 theorem CDerivesAt.effHandleV {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {cs : Nat → Bool} {n : UInt32} {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 fs cs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁) (hc : CDerivesAt Ξ Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs)))) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false) (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
     CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R)) :=
@@ -930,6 +954,38 @@ theorem CDerivesAt.effSub {Ξ : EffCtx} {Δ Γ e} {S S' : Row} {A : VTy} (hle : 
 theorem CDerivesAt.alpha {Ξ : EffCtx} {Δ Γ e} {j j' : Jdg} (h : CDerivesAt Ξ Δ Γ e j) (hα : j.alphaB j' = true) :
     CDerivesAt Ξ Δ Γ e j' :=
   (CDerivesX.alpha (I := {ties := some Ξ}) h hα)
+
+theorem CDerivesAt.effThen {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false) (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+    CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+  (CDerivesX.effThen (I := {ties := some Ξ}) hs hNZ hUq hU hMS hDS hfin hP hSD hM hN hD)
+
+theorem CDerivesAt.effThenDiv {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+    CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+  (CDerivesX.effThenDiv (I := {ties := some Ξ}) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD)
+
+theorem CDerivesAt.effThenA {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf S A))) (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
+    CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+  (CDerivesX.effThenA (I := {ties := some Ξ}) hs hNZ hUq hU hM hN hD)
+
+theorem CDerivesAt.effHandle {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)} {n : UInt32} {A R : VTy} {ir ic : Nat} (hAt : RowAt Ξ (Row.ofEff n E 0 ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc) (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E)) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 ++ S) = false) (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
+    CDerivesAt Ξ Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) :=
+  (CDerivesX.effHandle (I := {ties := some Ξ}) hAt hs hs₁ hr hc hn0 hnS hlen hdv he)
+
+theorem CDerivesAt.effHandleCs {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)} (fs : Nat → CTy) (cs : Nat → Bool) {n : UInt32} {A R : VTy} {ir ic : Nat} (hAt : RowAt Ξ (Row.ofEff n E 0 fs cs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc) (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E fs)) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false) (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
+    CDerivesAt Ξ Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) :=
+  (CDerivesX.effHandleCs (I := {ties := some Ξ}) fs cs hAt hs hs₁ hr hc hn0 hnS hlen hdv he)
+
+theorem CDerivesAt.withbor1U {Ξ : EffCtx} {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S)) :=
+  (CDerivesX.withbor1U (I := {ties := some Ξ}) x hΓ hx hsc₁ hfree₁ hfree₂ hS hd)
+
+theorem CDerivesAt.withbor2U {Ξ : EffCtx} {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S)) :=
+  (CDerivesX.withbor2U (I := {ties := some Ξ}) x hΓ hx hside hfree₁ hfree₂ hS hd)
+
+theorem CDerivesAt.withbor3U {Ξ : EffCtx} {Δ Γ a A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.mut a A) .unit))) :
+    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S)) :=
+  (CDerivesX.withbor3U (I := {ties := some Ξ}) x hΓ hx hfree₁ hfree₂ hS hd)
 
 theorem CDerivesP.var {Δ Γ i A} (h : Ctx.SoloP Γ i A) :
     CDerivesP Δ Γ (.var i) (.val A) :=
@@ -1283,13 +1339,9 @@ theorem CDerivesP.effLet {Δ Γ Γ₁ Γ₂ M N A B} {S : Row} (hs : Ctx.SplitP 
     CDerivesP Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B)) :=
   (CDerivesX.effLet (I := {pin := true}) hs hW hU hM hN)
 
-theorem CDerivesP.effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false) (hM : CDerivesP Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesP Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+theorem CDerivesP.effThenF {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hF : Row.divB SD = false ∨ ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerivesP Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesP Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
     CDerivesP Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
-  (CDerivesX.effThen (I := {pin := true}) hs hNZ hUq hU hMS hDS hfin hP hSD hM hN hD)
-
-theorem CDerivesP.effThenDiv {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerivesP Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesP Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
-    CDerivesP Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
-  (CDerivesX.effThenDiv (I := {pin := true}) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD)
+  (CDerivesX.effThenF (I := {pin := true}) hs hNZ hUq hU hMS hDS hfin hP hF hM hN hD)
 
 theorem CDerivesP.effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {cs : Nat → Bool} {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁) (hc : CDerivesP Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs)))) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false) (he : CDerivesP Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
     CDerivesP Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R)) :=
@@ -1394,6 +1446,38 @@ theorem CDerivesP.effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S') (h 
 theorem CDerivesP.alpha {Δ Γ e} {j j' : Jdg} (h : CDerivesP Δ Γ e j) (hα : j.alphaB j' = true) :
     CDerivesP Δ Γ e j' :=
   (CDerivesX.alpha (I := {pin := true}) h hα)
+
+theorem CDerivesP.effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false) (hM : CDerivesP Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesP Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+    CDerivesP Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+  (CDerivesX.effThen (I := {pin := true}) hs hNZ hUq hU hMS hDS hfin hP hSD hM hN hD)
+
+theorem CDerivesP.effThenDiv {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerivesP Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesP Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+    CDerivesP Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+  (CDerivesX.effThenDiv (I := {pin := true}) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD)
+
+theorem CDerivesP.effThenA {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hM : CDerivesP Δ Γ₁ M (.comp (CTy.effOf S A))) (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesP Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
+    CDerivesP Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+  (CDerivesX.effThenA (I := {pin := true}) hs hNZ hUq hU hM hN hD)
+
+theorem CDerivesP.effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)} {n : UInt32} {A R : VTy} {ir ic : Nat} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc) (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E)) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 ++ S) = false) (he : CDerivesP Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
+    CDerivesP Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) :=
+  (CDerivesX.effHandle (I := {pin := true}) trivial hs hs₁ hr hc hn0 hnS hlen hdv he)
+
+theorem CDerivesP.effHandleCs {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)} (fs : Nat → CTy) (cs : Nat → Bool) {n : UInt32} {A R : VTy} {ir ic : Nat} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc) (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E fs)) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false) (he : CDerivesP Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
+    CDerivesP Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) :=
+  (CDerivesX.effHandleCs (I := {pin := true}) fs cs trivial hs hs₁ hr hc hn0 hnS hlen hdv he)
+
+theorem CDerivesP.withbor1U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : CDerivesP Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    CDerivesP Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S)) :=
+  (CDerivesX.withbor1U (I := {pin := true}) x hΓ hx hsc₁ hfree₁ hfree₂ hS hd)
+
+theorem CDerivesP.withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : CDerivesP Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    CDerivesP Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S)) :=
+  (CDerivesX.withbor2U (I := {pin := true}) x hΓ hx hside hfree₁ hfree₂ hS hd)
+
+theorem CDerivesP.withbor3U {Δ Γ a A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : CDerivesP Δ Γ d (.val (.lolli (.mut a A) .unit))) :
+    CDerivesP Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S)) :=
+  (CDerivesX.withbor3U (I := {pin := true}) x hΓ hx hfree₁ hfree₂ hS hd)
 
 /-! ### The eliminators -/
 
@@ -1576,10 +1660,8 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
       motive Δ Γ (BoCa.BoLo.raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B)) (CDerivesX.effRaise (I := {}) (Δ := Δ) (Γ := Γ) (V := V) (S := S) (o := o) (B := B) trivial hf ha hrc hd h))
     (effLet : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {A : VTy} {B : VTy} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hW : S.Cancels → Γ₂.OwnFree) (hU : S.Unr → Ctx.Banged Γ₂) (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf S A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hM_ih : motive Δ Γ₁ M (.comp (CTy.effOf S A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)) hN),
       motive Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B)) (CDerivesX.effLet (I := {}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (A := A) (B := B) (S := S) hs hW hU hM hN))
-    (effThen : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {D : Expr} {A : VTy} {B : VTy} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false) (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) (hM_ih : motive Δ Γ₁ M (.comp (CTy.effOf SM A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)) hN) (hD_ih : motive Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit)) hD),
-      motive Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) (CDerivesX.effThen (I := {}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (D := D) (A := A) (B := B) (S := S) (SM := SM) (SD := SD) hs hNZ hUq hU hMS hDS hfin hP hSD hM hN hD))
-    (effThenDiv : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {D : Expr} {A : VTy} {B : VTy} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) (hM_ih : motive Δ Γ₁ M (.comp (CTy.effOf SM A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)) hN) (hD_ih : motive Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit)) hD),
-      motive Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) (CDerivesX.effThenDiv (I := {}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (D := D) (A := A) (B := B) (S := S) (SM := SM) (SD := SD) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD))
+    (effThenF : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {D : Expr} {A : VTy} {B : VTy} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hF : Row.divB SD = false ∨ ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) (hM_ih : motive Δ Γ₁ M (.comp (CTy.effOf SM A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)) hN) (hD_ih : motive Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit)) hD),
+      motive Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) (CDerivesX.effThenF (I := {}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (D := D) (A := A) (B := B) (S := S) (SM := SM) (SD := SD) hs hNZ hUq hU hMS hDS hfin hP hF hM hN hD))
     (effHandleV : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {H : Expr} {e : Expr} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {cs : Nat → Bool} {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁) (hc : CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs)))) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false) (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) (hc_ih : motive Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))) hc) (he_ih : motive Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)) he),
       motive Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R)) (CDerivesX.effHandleV (I := {}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (H := H) (e := e) (S := S) (E := E) (fs := fs) (cs := cs) (n := n) (A := A) (R := R) trivial hs hd hH hc hn0 hnS hlen hdv he))
     (effHandleVB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {H : Expr} {e : Expr} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {cs : Nat → Bool} {n : UInt32} {A R : VTy} {d : Lifetime.Life} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁) (hc : CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs)))) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false) (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs cs ++ S)) (hc_ih : motive Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs))) hc) (he_ih : motive Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)) he),
@@ -1680,8 +1762,7 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
   | effAwait a0 a1 a2 a3 a4 a5 a6 => exact effAwait a1 a2 a3 a4 a5 a6
   | effRaise a0 a1 a2 a3 a4 a5 ih0 => exact effRaise a1 a2 a3 a4 a5 ih0
   | effLet a0 a1 a2 a3 a4 ih0 ih1 => exact effLet a0 a1 a2 a3 a4 ih0 ih1
-  | effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2
-  | effThenDiv a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact effThenDiv a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2
+  | effThenF a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact effThenF a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2
   | effHandleV a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 ih1 => exact effHandleV a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 ih1
   | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 => exact effHandleVB a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1
   | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 => exact effHandleT a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1
@@ -1870,10 +1951,8 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
       motive Δ Γ (BoCa.BoLo.raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B)) (CDerivesX.effRaise (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (V := V) (S := S) (o := o) (B := B) hAt hf ha hrc hd h))
     (effLet : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {A : VTy} {B : VTy} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hW : S.Cancels → Γ₂.OwnFree) (hU : S.Unr → Ctx.Banged Γ₂) (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf S A))) (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hM_ih : motive Δ Γ₁ M (.comp (CTy.effOf S A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)) hN),
       motive Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B)) (CDerivesX.effLet (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (A := A) (B := B) (S := S) hs hW hU hM hN))
-    (effThen : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {D : Expr} {A : VTy} {B : VTy} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false) (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) (hM_ih : motive Δ Γ₁ M (.comp (CTy.effOf SM A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)) hN) (hD_ih : motive Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit)) hD),
-      motive Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) (CDerivesX.effThen (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (D := D) (A := A) (B := B) (S := S) (SM := SM) (SD := SD) hs hNZ hUq hU hMS hDS hfin hP hSD hM hN hD))
-    (effThenDiv : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {D : Expr} {A : VTy} {B : VTy} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) (hM_ih : motive Δ Γ₁ M (.comp (CTy.effOf SM A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)) hN) (hD_ih : motive Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit)) hD),
-      motive Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) (CDerivesX.effThenDiv (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (D := D) (A := A) (B := B) (S := S) (SM := SM) (SD := SD) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD))
+    (effThenF : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {D : Expr} {A : VTy} {B : VTy} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hF : Row.divB SD = false ∨ ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) (hM_ih : motive Δ Γ₁ M (.comp (CTy.effOf SM A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)) hN) (hD_ih : motive Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit)) hD),
+      motive Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) (CDerivesX.effThenF (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (D := D) (A := A) (B := B) (S := S) (SM := SM) (SD := SD) hs hNZ hUq hU hMS hDS hfin hP hF hM hN hD))
     (effHandleV : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {H : Expr} {e : Expr} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {cs : Nat → Bool} {n : UInt32} {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 fs cs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁) (hc : CDerivesAt Ξ Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs)))) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false) (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) (hc_ih : motive Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))) hc) (he_ih : motive Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)) he),
       motive Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R)) (CDerivesX.effHandleV (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (H := H) (e := e) (S := S) (E := E) (fs := fs) (cs := cs) (n := n) (A := A) (R := R) hAt hs hd hH hc hn0 hnS hlen hdv he))
     (effHandleVB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {H : Expr} {e : Expr} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {cs : Nat → Bool} {n : UInt32} {A R : VTy} {d : Lifetime.Life} (hAt : RowAt Ξ (Row.ofEff n E 0 fs cs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁) (hc : CDerivesAt Ξ Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs)))) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false) (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs cs ++ S)) (hc_ih : motive Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs))) hc) (he_ih : motive Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)) he),
@@ -1974,8 +2053,7 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
   | effAwait a0 a1 a2 a3 a4 a5 a6 => exact effAwait a0 a1 a2 a3 a4 a5 a6
   | effRaise a0 a1 a2 a3 a4 a5 ih0 => exact effRaise a0 a1 a2 a3 a4 a5 ih0
   | effLet a0 a1 a2 a3 a4 ih0 ih1 => exact effLet a0 a1 a2 a3 a4 ih0 ih1
-  | effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2
-  | effThenDiv a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact effThenDiv a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2
+  | effThenF a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact effThenF a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2
   | effHandleV a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 ih1 => exact effHandleV a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 ih1
   | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 => exact effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1
   | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 => exact effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1
@@ -2164,10 +2242,8 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
       motive Δ Γ (BoCa.BoLo.raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B)) (CDerivesX.effRaise (I := {pin := true}) (Δ := Δ) (Γ := Γ) (V := V) (S := S) (o := o) (B := B) trivial hf ha hrc hd h))
     (effLet : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {A : VTy} {B : VTy} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hW : S.Cancels → Γ₂.OwnFree) (hU : S.Unr → Ctx.Banged Γ₂) (hM : CDerivesP Δ Γ₁ M (.comp (CTy.effOf S A))) (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hM_ih : motive Δ Γ₁ M (.comp (CTy.effOf S A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)) hN),
       motive Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B)) (CDerivesX.effLet (I := {pin := true}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (A := A) (B := B) (S := S) hs hW hU hM hN))
-    (effThen : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {D : Expr} {A : VTy} {B : VTy} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false) (hM : CDerivesP Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesP Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) (hM_ih : motive Δ Γ₁ M (.comp (CTy.effOf SM A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)) hN) (hD_ih : motive Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit)) hD),
-      motive Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) (CDerivesX.effThen (I := {pin := true}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (D := D) (A := A) (B := B) (S := S) (SM := SM) (SD := SD) hs hNZ hUq hU hMS hDS hfin hP hSD hM hN hD))
-    (effThenDiv : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {D : Expr} {A : VTy} {B : VTy} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerivesP Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesP Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) (hM_ih : motive Δ Γ₁ M (.comp (CTy.effOf SM A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)) hN) (hD_ih : motive Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit)) hD),
-      motive Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) (CDerivesX.effThenDiv (I := {pin := true}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (D := D) (A := A) (B := B) (S := S) (SM := SM) (SD := SD) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD))
+    (effThenF : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {D : Expr} {A : VTy} {B : VTy} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hF : Row.divB SD = false ∨ ∀ o ∈ SM, capB o.q o.B = false) (hM : CDerivesP Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesP Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) (hM_ih : motive Δ Γ₁ M (.comp (CTy.effOf SM A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)) hN) (hD_ih : motive Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit)) hD),
+      motive Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) (CDerivesX.effThenF (I := {pin := true}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (D := D) (A := A) (B := B) (S := S) (SM := SM) (SD := SD) hs hNZ hUq hU hMS hDS hfin hP hF hM hN hD))
     (effHandleV : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {H : Expr} {e : Expr} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {cs : Nat → Bool} {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁) (hc : CDerivesP Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs)))) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false) (he : CDerivesP Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) (hc_ih : motive Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))) hc) (he_ih : motive Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)) he),
       motive Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R)) (CDerivesX.effHandleV (I := {pin := true}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (H := H) (e := e) (S := S) (E := E) (fs := fs) (cs := cs) (n := n) (A := A) (R := R) trivial hs hd hH hc hn0 hnS hlen hdv he))
     (effHandleVB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {H : Expr} {e : Expr} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {cs : Nat → Bool} {n : UInt32} {A R : VTy} {d : Lifetime.Life} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁) (hc : CDerivesP Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs)))) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false) (he : CDerivesP Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs cs ++ S)) (hc_ih : motive Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs))) hc) (he_ih : motive Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)) he),
@@ -2274,8 +2350,7 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
   | effAwait a0 a1 a2 a3 a4 a5 a6 => exact effAwait a1 a2 a3 a4 a5 a6
   | effRaise a0 a1 a2 a3 a4 a5 ih0 => exact effRaise a1 a2 a3 a4 a5 ih0
   | effLet a0 a1 a2 a3 a4 ih0 ih1 => exact effLet a0 a1 a2 a3 a4 ih0 ih1
-  | effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2
-  | effThenDiv a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact effThenDiv a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2
+  | effThenF a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact effThenF a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2
   | effHandleV a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 ih1 => exact effHandleV a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 ih1
   | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 => exact effHandleVB a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1
   | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 => exact effHandleT a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1
@@ -2380,8 +2455,7 @@ theorem CDerivesX.mono {I I' : JIdx} (hI : I ≤ I') {Δ : LifeCtx} {Γ : Ctx VT
   | effAwait a0 a1 a2 a3 a4 a5 a6 => exact CDerivesX.effAwait (hI.rowOK a0) a1 a2 a3 a4 a5 a6
   | effRaise a0 a1 a2 a3 a4 a5 ih0 => exact CDerivesX.effRaise (hI.rowOK a0) a1 a2 a3 a4 ih0
   | effLet a0 a1 a2 a3 a4 ih0 ih1 => exact CDerivesX.effLet a0 a1 a2 ih0 ih1
-  | effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact CDerivesX.effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 ih1 ih2
-  | effThenDiv a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact CDerivesX.effThenDiv a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 ih1 ih2
+  | effThenF a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact CDerivesX.effThenF a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 ih1 ih2
   | effHandleV a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 ih1 => exact CDerivesX.effHandleV (hI.rowOK a0) a1 a2 a3 ih0 a5 a6 a7 a8 ih1
   | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 => exact CDerivesX.effHandleVB (hI.rowOK a0) a1 a2 a3 ih0 a5 a6 a7 a8 ih1 a10 a11
   | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 => exact CDerivesX.effHandleT (hI.rowOK a0) a1 a2 a3 a4 ih0 a6 a7 a8 a9 a10 a11 ih1

@@ -1003,7 +1003,7 @@ if [r.name for r in xrules if not r.pin] != [n for n, _ in ctors]:
 # `Core/Judgment.lean` (a rule's former name, now a kind of a folded rule). Each instance gets them
 # under its own name, as it gets the rules.
 DERIVED_RULES = [XRule(m.group(1), m.group(2)) for m in re.finditer(
-    r"^theorem CDerivesX\.(\w+) \{I : JIdx\} (.*?) :=\n", judg_src, re.S | re.M)]
+    r"^theorem CDerivesX\.(\w+) \{I : JIdx\} (.*?) :=(?: by)?\n", judg_src, re.S | re.M)]
 jel = (TMPL / "JudgmentElim.tmpl.lean").read_text()
 jel = jel.replace("--@ALIASES@", "\n\n".join(alias(r, inst) for inst in INSTANCES
                                                 for r in xrules + DERIVED_RULES

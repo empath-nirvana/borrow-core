@@ -227,7 +227,7 @@ theorem relT_reAb (Δr : LifeCtx) (t : TExpr) : ∀ k, relT k (t.reAb Δr) = rel
   case unitE _ _ _ u tV tM ihV ihM | tensorI _ _ _ _ u tV tM ihV ihM => intro k; simp only [TExpr.reAb, relT, ihV k, ihM k]
   case sumE _ _ _ _ _ u tV t₁ t₂ _ ih₁ ih₂ => intro k; simp only [TExpr.reAb, relT, ih₁ (k + 1), ih₂ (k + 1)]
   case tensorE _ _ _ _ _ u tV tM _ ihM => intro k; simp only [TExpr.reAb, relT, ihM (k + 2)]
-  case effThen _ _ _ _ _ _ _ u tM tN tD ihM ihN ihD =>
+  case effThenF _ _ _ _ _ _ _ u tM tN tD ihM ihN ihD =>
     intro k; simp only [TExpr.reAb, relT, ihM k, ihN (k + 1), ihD (k + 1)]
   all_goals intro k; rfl
 

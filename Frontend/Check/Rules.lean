@@ -598,7 +598,7 @@ def rEffThen {S SD : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN pD : 
       (S.UnrD → Ctx.Banged (mkCtx T L))))
     (h : overlapOK T rM.F.u F.u = true) : Res Δ T (.comp (effOf S B)) :=
   have hl : rM.F.u.length = F.u.length := rM.F.hu.trans F.hu.symm
-  ⟨.effThen i (.comp (effOf S B)) A B S S SD (Masks.of rM.F.u F.u) rM.t tN tD, rM.sigs ∪ᵣ (sN ∪ᵣ sD),
+  ⟨.effThenF i (.comp (effOf S B)) A B S S SD (Masks.of rM.F.u F.u) rM.t tN tD, rM.sigs ∪ᵣ (sN ∪ᵣ sD),
     rM.pins ++ (pN ++ pD), (rM.F.split F h).map
     fun _ ⟨_, _, hs, hm, h₁, ⟨hN, hD⟩, hU⟩ => by
       have hcv := (⟨rM.covers.of₁ hl, (F.covers fun _ h => h.1.1.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl,
@@ -622,7 +622,7 @@ def rEffThenD {S SM SD : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN p
       (S.UnrD → Ctx.Banged (mkCtx T L))))
     (h : overlapOK T rM.F.u F.u = true) : Res Δ T (.comp (effOf S B)) :=
   have hl : rM.F.u.length = F.u.length := rM.F.hu.trans F.hu.symm
-  ⟨.effThen i (.comp (effOf S B)) A B S SM SD (Masks.of rM.F.u F.u) rM.t tN tD, rM.sigs ∪ᵣ (sN ∪ᵣ sD),
+  ⟨.effThenF i (.comp (effOf S B)) A B S SM SD (Masks.of rM.F.u F.u) rM.t tN tD, rM.sigs ∪ᵣ (sN ∪ᵣ sD),
     rM.pins ++ (pN ++ pD), (rM.F.split F h).map
     fun _ ⟨_, _, hs, hm, h₁, ⟨hN, hD⟩, hU⟩ => TTied.effThen i _ hs hm.rel_of
       ⟨rM.covers.of₁ hl, (F.covers fun _ h => h.1.1.covers fun _ hl => liveAt_mkCtx₁ hl).of₂ hl,

@@ -153,7 +153,7 @@ def relT (k : Nat) : TExpr → Bool
     | _ => false
   | .sumE _ _ _ _ _ u _ t₁ t₂ => u.at k == (false, true) && relT (k + 1) t₁ && relT (k + 1) t₂
   | .tensorE _ _ _ _ _ u _ tM => u.at k == (false, true) && relT (k + 2) tM
-  | .effThen _ _ _ _ _ _ _ u tM tN tD =>
+  | .effThenF _ _ _ _ _ _ _ u tM tN tD =>
     match u.at k with
     | (true, false) => relT k tM
     | (false, true) => relT (k + 1) tN && relT (k + 1) tD
@@ -300,7 +300,7 @@ theorem relT_shift (d : Nat) (t : TExpr) : ∀ k c, k < c → relT k (t.shift d 
       ih₂ (k + 1) (c + 1) (by omega)]
   case tensorE _ _ _ _ _ u tV tM _ ihM =>
     intro k c h; simp only [TExpr.shift, relT, Masks.at_ins h, ihM (k + 2) (c + 2) (by omega)]
-  case effThen _ _ _ _ _ _ _ u tM tN tD ihM ihN ihD =>
+  case effThenF _ _ _ _ _ _ _ u tM tN tD ihM ihN ihD =>
     intro k c h
     simp only [TExpr.shift, relT, Masks.at_ins h, ihM k c h, ihN (k + 1) (c + 1) (by omega),
       ihD (k + 1) (c + 1) (by omega)]

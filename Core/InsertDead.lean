@@ -532,22 +532,14 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN
       exact .effLet hs' (fun hw => live_insert hd (P := fun s => s.ty.OwnFree) (hW hw))
         (fun hu => live_insert hd (hU hu)) eM eN
-  | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
+  | effThenF hs hNZ hUq hU hMS hDS hfin hP hF _ _ _ ihM ihN ihD =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have eM := ihM Γa₁ Γb₁ rfl
       have eN := ihN (_ :: Γa₂) Γb₂ rfl
       have eD := ihD (_ :: Γa₂) Γb₂ rfl
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN eD
-      exact .effThen hs' hNZ hUq (fun hu => live_insert hd (hU hu)) hMS hDS hfin hP hSD eM eN eD
-  | effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
-      intro Γa Γb hΓ; subst hΓ
-      obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
-      have eM := ihM Γa₁ Γb₁ rfl
-      have eN := ihN (_ :: Γa₂) Γb₂ rfl
-      have eD := ihD (_ :: Γa₂) Γb₂ rfl
-      rw [h₁] at eM; rw [List.length_cons, h₂] at eN eD
-      exact .effThenDiv hs' hNZ hUq (fun hu => live_insert hd (hU hu)) hMS hDS hfin hP hSD eM eN eD
+      exact .effThenF hs' hNZ hUq (fun hu => live_insert hd (hU hu)) hMS hDS hfin hP hF eM eN eD
   | effHandleV hAt hs hdd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
