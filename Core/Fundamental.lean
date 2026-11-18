@@ -566,13 +566,15 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
       · exact then_compatC hs hNZ hU hMS hDS
           (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc)) hP hSD ihM ihN ihD
       · exact then_compatC_div hs hNZ hU hMS hDS hP (hF.resolve_left (by simp [hSD])) hSD ihM ihN ihD
-  | effHandleV _ hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
-      exact handleV_compatC hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
-        (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe)
-  | effHandleVB _ hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
-      exact handleV_compatCB hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
-        (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe) hΓd
-        (Row.ansOutlives_ofEff_rc hSd)
+  | @effHandleVO _ _ _ _ _ _ _ _ _ _ _ _ _ d? _ hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+      cases d? with
+      | none =>
+        exact handleV_compatC hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
+          (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe)
+      | some d =>
+        exact handleV_compatCB hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
+          (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe) (hΓd d rfl)
+          (Row.ansOutlives_ofEff_rc (hSd d rfl))
   | effHandleT _ hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
       exact handleT_compatC hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
   | effHandleL _ hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>

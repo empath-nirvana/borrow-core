@@ -246,7 +246,7 @@ NAME_TY = {"A": "VTy", "B": "VTy", "R": "VTy", "S": "VTy", "T": "VTy", "C": "CTy
            "a": "Lifetime.Life", "b": "Lifetime.Life", "x": "LifeVar", "y": "LifeVar",
            "i": "Nat", "j": "Jdg"}
 EXPR_NAMES = {"e", "e₁", "e₂", "M", "N", "V", "H", "f", "d", "M₁", "M₂", "K", "s0"}
-DATA_TY = {"LendUKind", "VTy", "CTy", "Row", "LifeVar", "Lifetime.Life", "IntLit", "HostOp", "FShape", "Expr",
+DATA_TY = {"LendUKind", "Option Lifetime.Life", "VTy", "CTy", "Row", "LifeVar", "Lifetime.Life", "IntLit", "HostOp", "FShape", "Expr",
            "Jdg", "OpSig", "UInt32", "Nat", "List (Qual × VTy × VTy)", "Nat → CTy", "Val"}
 TOKEN = r"[^\s()\[\]{}⟨⟩,.:]+"
 # erasures that are a `λ` whatever the children's (`withPair M N = λs. case s {…}`)
@@ -275,17 +275,14 @@ def idents(text):
 # node (`Frontend/Check/TFacts.lean`). At `[handle]`, each operation's qualifier and its clause's
 # kind (SPEC §19, *Clause kinds*), what the elaboration of effects records of the site (`HSite`),
 # and the frames the handled computation holds (`inside`, `Core/HandledNames.lean`).
-EXTRA = {"effHandleV": [("ks", "List ClauseKinds.HKind"), ("site", "Option HSite"),
-                        ("inside", "ClauseKinds.HIn")],
-         "effHandleVB": [("ks", "List ClauseKinds.HKind"), ("site", "Option HSite"),
+EXTRA = {"effHandleVO": [("ks", "List ClauseKinds.HKind"), ("site", "Option HSite"),
                          ("inside", "ClauseKinds.HIn")],
          "effHandleT": [("site", "Option HSite"), ("inside", "ClauseKinds.HIn")],
          "effHandleL": [("site", "Option HSite"), ("inside", "ClauseKinds.HIn")]}
 
 # Premises the typed rule adds to its rule's, which pin a field of `EXTRA` to the node's children:
 # `inside` is the handled computation's frames. The projection to `CDerives` consumes them.
-EXTRA_PREM = {r: [("hins", "inside = Expr.hin e")] for r in ("effHandleV", "effHandleVB", "effHandleT",
-                                                         "effHandleL")}
+EXTRA_PREM = {r: [("hins", "inside = Expr.hin e")] for r in ("effHandleVO", "effHandleT", "effHandleL")}
 
 
 # Rule arguments that are terms but are determined by an equation on a child's erasure: the node
@@ -749,6 +746,8 @@ MONO = [
      "(ExtΔ.avoid he (by simp [TExpr.lifeBinders]) {a})"),
     (r"^CtxOutlives Δ ", "(LeΔ.ctxOutlives he.1 {a})"),
     (r"^Row\.AnsOutlives Δ ", "(LeΔ.ansOutlives he.1 {a})"),
+    (r"^∀ d ∈ d\?, CtxOutlives Δ ", "(fun d h => LeΔ.ctxOutlives he.1 ({a} d h))"),
+    (r"^∀ d ∈ d\?, Row\.AnsOutlives Δ ", "(fun d h => LeΔ.ansOutlives he.1 ({a} d h))"),
 ]
 
 

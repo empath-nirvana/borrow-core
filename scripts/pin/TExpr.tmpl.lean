@@ -794,6 +794,18 @@ abbreviation of the folded rule's node, so that statements over the node keep th
     (tM tN tD : TExpr) : TExpr :=
   .effThenF info jdg A B S SM SD u tM tN tD
 
+/-- `[handle]` at a value form, `κ` plain: `effHandleVO`'s node at `none`.  `[spec §19]` -/
+@[match_pattern] abbrev TExpr.effHandleV (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy))
+    (fs : Nat → CTy) (cs : Nat → Bool) (n : UInt32) (A R : VTy) (u : Masks) (ks : List ClauseKinds.HKind)
+    (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr) : TExpr :=
+  .effHandleVO info jdg S E fs cs n A R none u ks site inside tc te
+
+/-- BOXED-κ `[handle]`: `effHandleVO`'s node at `some d`.  `[spec §28]` -/
+@[match_pattern] abbrev TExpr.effHandleVB (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy))
+    (fs : Nat → CTy) (cs : Nat → Bool) (n : UInt32) (A R : VTy) (d : Lifetime.Life) (u : Masks)
+    (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr) : TExpr :=
+  .effHandleVO info jdg S E fs cs n A R (some d) u ks site inside tc te
+
 theorem TExpr.isLam_sound (t : TExpr) (h : t.isLam = true) : ∃ N, t.erase = .val (.lam N) := by
   rw [isLam_eq] at h
   match he : t.erase, h with

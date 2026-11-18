@@ -456,7 +456,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | effThenF hs hNZ hUq hU hMS hDS hfin hP hF _ _ _ ih1 ih2 ih3 =>
       exact .effThenF hs hNZ hUq hU hMS hDS hfin hP hF (ih1 (by eff_free)) (ih2 (by eff_free))
         (ih3 (by eff_free))
-  | effHandleV | effHandleVB | effHandleT | effHandleL =>
+  | effHandleVO | effHandleT | effHandleL =>
       simp [hndExpr, Expr.effFree, Expr.val, Val.prim] at he
   | iterate => simp [Expr.effFree, Expr.val, Val.prim] at he
   | divFuel => simp [divFuelV, fuelH, BoCa.BoLo.hndVal, BoCa.BoLo.hndE, Expr.effFree, Expr.val, Val.prim,

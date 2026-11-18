@@ -3398,10 +3398,8 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       let dTm ← conv fuel (none :: c₂) tD
       let fin ← thenFin d dTm pm pd ps e
       return pre (.letv m (← conv fuel c₁ tM) (.case m x (← conv fuel (some x :: c₂) tN) e fin))
-  | .effHandleV _ _ S E fs _ n A R u ks site _ tc te =>
-    convHandle fuel ctx S E fs n A R u ks site tc te
-  | .effHandleVB _ _ S E fs _ n A R _ u ks site _ tc te =>
-    convHandle fuel ctx S E fs n A R u ks site tc te (boxed := true)
+  | .effHandleVO _ _ S E fs _ n A R d? u ks site _ tc te =>
+    convHandle fuel ctx S E fs n A R u ks site tc te (boxed := d?.isSome)
   | .bind _ _ A _ u tM tN => convBind fuel ctx A u tM tN
   | .force _ j i _ C => do
     match ctx[i]? with
@@ -4641,8 +4639,7 @@ def prepWorks (fuel : Nat) (depth : Nat) (t : TExpr) : CM Unit := do
   | fuel + 1 =>
   let here : Option (Row × List (Qual × VTy × VTy) × UInt32 × List ClauseKinds.HKind × TExpr) :=
     match t with
-    | .effHandleV _ _ S E _ _ n _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
-    | .effHandleVB _ _ S E _ _ n _ _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
+    | .effHandleVO _ _ S E _ _ n _ _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
     | _ => none
   if let some (S, E, n, ks, .tensorI _ _ _ _ _ _ tCs) := here then
     let direct := (← get).direct.getD n []
