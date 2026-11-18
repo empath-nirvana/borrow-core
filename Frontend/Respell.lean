@@ -88,7 +88,7 @@ def binops : List String :=
 
 /-- A token a line may end with and the statement go on (the layout rule of SPEC §82). -/
 def endsOpen (t : Tok) : Bool := match t with
-  | .sym s => binops.contains s || [",", "->", "=", ":", "<-", "(", "[", "{"].contains s
+  | .sym s => binops.contains s || [",", "->", "=", ":", "<-", "(", "[", "{", ";"].contains s
   | .kw "in" => true
   | _ => false
 
@@ -166,10 +166,12 @@ def rowRespell (S : Src) (w e : Nat) : RM Unit := do
   for k in S.atDepth0 (w + 1) e (· == .sym ",") do replTok S k " +"
 
 /-- A `;` at `i` that ends a statement or a declaration's item: dropped when a new line follows
-and the line after it plainly starts a new statement (the layout rule, Q10). -/
-def dropSemi (S : Src) (i : Nat) : RM Unit := do
+and the line after it plainly starts a new statement (the layout rule, Q10). `rets` are the
+`return`s the respelling drops (E3): the statement then starts with the token after it. -/
+def dropSemi (S : Src) (rets : List Nat) (i : Nat) : RM Unit := do
   unless S.tok i == .sym ";" do return
-  if S.line (i + 1) > S.line i && startsPlain (S.tok (i + 1)) && !endsOpen (S.tok (i - 1)) then
+  let next := if rets.contains (i + 1) then i + 2 else i + 1
+  if S.line (i + 1) > S.line i && startsPlain (S.tok next) && !endsOpen (S.tok (i - 1)) then
     repl (S.ts i) (S.te i) ""
 
 /-- The close of a block that wraps the tokens up to `last`: on its own line when the next token
@@ -290,7 +292,7 @@ def fnModes (S : Src) (tbl : Data.Table) (lv : Nat × Nat) (ps : List (Nat × Na
         repl (S.ts t) (S.ts (t + 2)) mode
         dropped := l :: dropped
     | tk, _, _ =>
-      unless borrowHead tk || byValue tbl 16 A do openAt (S.ts t) "sink "
+      unless borrowHead tk || byValue tbl 16 A do replTok S (n + 1) ": sink"
   unless dropped.isEmpty do
     let kept := bs.filter fun (b, _, _) => !dropped.contains b
     let txt := if kept.isEmpty then "" else
@@ -316,9 +318,10 @@ def rewrite (S : Src) (evs : Array Ev) (sigs : List (String × List VTy)) (tbl :
     | .fnHead _ _ _ _ bodyEnd => fnModes S tbl lv ps.toList bodyEnd; ps := #[]
     | .polyFam _ | .opDecl .. => ps := #[]
     | .hParam n _ A =>
-      unless borrowHead (S.tok (n + 2)) || byValue tbl 16 A do openAt (S.ts (n + 2)) "sink "
+      unless borrowHead (S.tok (n + 2)) || byValue tbl 16 A do replTok S (n + 1) ": sink"
     | _ => pure ()
   let loopSrcs := evs.toList.filterMap fun | .loopSrc a b => some (a, b) | _ => none
+  let rets := evs.toList.filterMap fun | .ret i => some i | _ => none
   let mut stmts : List (Nat × Nat) := []
   -- P9 first, so that the lend it takes is not rewritten again.
   for e in evs do
@@ -352,7 +355,7 @@ def rewrite (S : Src) (evs : Array Ev) (sigs : List (String × List VTy)) (tbl :
       match arrow with
       | some a => replTok S a ":"
       | none => closeAt (S.te rp) " : 1"
-    | .declSep i => dropSemi S i
+    | .declSep i => dropSemi S rets i
     | .hLent amp =>
       if S.tok (amp + 1) == .kw "mut" && S.tok (amp + 3) == .sym ":" then
         repl (S.ts amp) (S.ts (amp + 2)) ""
@@ -372,7 +375,7 @@ def rewrite (S : Src) (evs : Array Ev) (sigs : List (String × List VTy)) (tbl :
           closeAfter S (b - 1) (indentOf S eq)
     | .arrow a i => arrowRespell S a i
     | .rowed w c => rowRespell S w c
-    | .seq i => dropSemi S i
+    | .seq i => dropSemi S rets i
     | .stmt a b => stmts := (a, b) :: stmts
     | .bind x arrow asg =>
       -- `let` never assigns: an assignment `x <- M` of a `var` is `x = M`.
@@ -405,11 +408,16 @@ def rewrite (S : Src) (evs : Array Ev) (sigs : List (String × List VTy)) (tbl :
     | _ => pure ()
   -- The layout rule (Q10): a statement broken across lines where a new line would end it is
   -- joined onto one line, or marked when a comment is in the break.
-  for (a, b) in stmts.eraseDups do
+  let sts := stmts.eraseDups
+  for (a, b) in sts do
+    -- A break inside a statement of its own (a nested body's) is that statement's.
+    let inner := sts.filter fun (c, e) => a ≤ c && e ≤ b && (c, e) != (a, b)
+    let within (k : Nat) : Bool := inner.any fun (c, e) => c ≤ k && k < e
     let mut d : Int := 0
     for k in [a:b - 1] do
       d := d + depthOf (S.tok k)
-      if d == 0 && S.line (k + 1) > S.line k && !endsOpen (S.tok k) && !startsOpen (S.tok (k + 1)) then
+      if d == 0 && S.line (k + 1) > S.line k && !endsOpen (S.tok k) && !startsOpen (S.tok (k + 1))
+          && !within k && !within (k + 1) then
         if (S.cs.extract (S.te k) (S.ts (k + 1))).all (fun c => c == ' ' || c == '\n' || c == '\t') then
           repl (S.te k) (S.ts (k + 1)) " "
         else mark (S.ts k) "a statement broken across lines (layout rule)"
