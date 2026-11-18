@@ -10,6 +10,10 @@ import Backend2.Driver
 /-!
 # Frontend — `bcc`
 
+    lake exe bcc --dialect 82 <command> …
+                                any command, a program text with no first-line pragma read in
+                                the new spelling (SPEC §82); a pragma always wins, and library
+                                texts are read by their own
     lake exe bcc parse <file>   parse, and check that printing and re-parsing gives the same AST
     lake exe bcc print <file>   parse and print in the canonical ASCII spelling
     lake exe bcc check <file>   parse and type-check: print each declaration's type, or the error
@@ -81,6 +85,18 @@ usage. A successful `check` has built a `CDerivesP` derivation of `main`'s erasu
 
 open Frontend
 
+/-- `bcc --dialect 82 …`: a program text with no pragma is read in the new spelling (SPEC §82).
+`[spec §82]` -/
+initialize dialectOption : IO.Ref Bool ← IO.mkRef false
+
+/-- The program text of `file`: as written, or marked as the new spelling (`dialectMark`) when
+`--dialect 82` is given and the text has no pragma. A pragma always wins; library texts are read
+by their own pragma.  `[spec §82]` -/
+def readSource (file : String) : IO String := do
+  let src ← IO.FS.readFile file
+  if (← dialectOption.get) && !isNewDialect src then pure (String.singleton dialectMark ++ src)
+  else pure src
+
 /-- All of standard input, read in at most `fuel` chunks of 64 KiB. -/
 def readAll (h : IO.FS.Stream) : Nat → ByteArray → IO ByteArray
   | 0, _ => throw (IO.userError "standard input is too long")
@@ -106,7 +122,7 @@ def interpAt (old : Bool) (stage file : String) (k : Except String Backend.Check
 /-- Write a stage's output on `file` (`interpAt`): the program's standard output and the report,
 and its standard error. -/
 def interp (old : Bool) (stage file : String) (args : List String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   let k := Backend.checkedOf file src
   let input ← if Backend.readsInput k then readAll (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
@@ -125,7 +141,7 @@ def interp (old : Bool) (stage file : String) (args : List String) : IO UInt32 :
 /-- Print the key of the source stage on `file` (`Backend.Key.key`) with the interpreter digest
 `digest`, read standard input and the arguments as `interp` does, and run nothing. -/
 def interpKey (digest file : String) (args : List String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   let k := Backend.checkedOf file src
   let input ← if Backend.readsInput k then readAll (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
@@ -135,7 +151,7 @@ def interpKey (digest file : String) (args : List String) : IO UInt32 := do
 /-- Write the falsifier's output on `file` (`Backend.interpChecked`): as `interp`, and its
 statistics with `stats`. A check that fails is an error. -/
 def interpChecked (mode file : String) (stats : Bool) (args : List String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   let k := Backend.checkedOf file src
   let input ← if Backend.readsInput k then readAll (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
@@ -187,7 +203,7 @@ def parseInterpArgs : List String → InterpArgs → Option InterpArgs
 
 /-- Print `file` with its I/O sugar elaborated. -/
 def desugar (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   match parseProgram src (lib := Frontend.Sugar.libSrc) with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
   | .ok p => match Frontend.Elab.elaborate p with
@@ -207,14 +223,14 @@ def respellCmd (file : String) : IO UInt32 := do
 
 /-- Print the erasure of `file`'s checked `main`. -/
 def erase (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   match Backend.checkedOf file src with
   | .error e => IO.eprintln e; return 1
   | .ok k => IO.println (reprStr k.main.e); return 0
 
 /-- Print `file`'s checked `main` as its typed term (`Backend2/Debug.lean`). -/
 def typedDump (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   match Backend.checkedOf file src with
   | .error e => IO.eprintln e; return 1
   | .ok k =>
@@ -223,7 +239,7 @@ def typedDump (file : String) : IO UInt32 := do
 
 /-- Print `file`'s LIR (`Backend2/`). -/
 def lirDump (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   match Backend.checkedOf file src >>= Backend2.lirOf with
   | .error e => IO.eprintln e; return 1
   | .ok (p, _) =>
@@ -232,7 +248,7 @@ def lirDump (file : String) : IO UInt32 := do
 
 /-- Print `file`'s trusted boundaries. -/
 def trusted (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   let backend := match Backend.checkedOf file src with
     | .ok k => Backend2.trustedReport k
     | .error _ => []
@@ -245,7 +261,7 @@ def trusted (file : String) : IO UInt32 := do
 
 /-- Each `handle` node of `file`'s checked terms, with its clauses' kinds (SPEC §19). -/
 def kinds (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   match parseProgram src (lib := Frontend.Sugar.libSrc) with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
   | .ok p =>
@@ -271,7 +287,7 @@ holds for its clauses over those names at `main`'s flow record (`Checked.flows`,
 `sp: handle n: inside …; row […]; ops …; names …; condition 2 …`, after the flow record and
 whether `main` holds a handler whose name is not a literal. -/
 def handled (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   match parseProgram src (lib := Frontend.Sugar.libSrc) with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
   | .ok p =>
@@ -298,7 +314,7 @@ def handled (file : String) : IO UInt32 := do
 source, the variable copied and its type, in the order of the typed term (a `def`'s body once per
 use). -/
 def copies (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   match Backend.checkedOf file src with
   | .error e => IO.eprintln e; return 1
   | .ok k =>
@@ -312,7 +328,7 @@ def copies (file : String) : IO UInt32 := do
 /-- What the elaboration of effects records of each `handle` node's site (`HSite`), with the
 clause kinds: `sp: handle n: kind eff[args] by handler (as slot), state (x: A, …); kinds`. -/
 def sites (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   match parseProgram src (lib := Frontend.Sugar.libSrc) with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
   | .ok p =>
@@ -336,14 +352,14 @@ def sites (file : String) : IO UInt32 := do
 
 /-- Write `file`'s WAT to `out`. -/
 def compile (file out : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   match Backend.compileWat file src with
   | .ok wat => IO.FS.writeFile out wat; return 0
   | .error e => IO.eprintln e; return 1
 
 /-- Write `file`'s WAT to `out`, writing each stage's time to standard error. -/
 def compileTimed (file out : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   match ← Backend.compileWatTimed file src with
   | .ok wat => IO.FS.writeFile out wat; return 0
   | .error e => IO.eprintln e; return 1
@@ -351,7 +367,7 @@ def compileTimed (file out : String) : IO UInt32 := do
 /-- Compile `file` and run it under `wasmtime` (with tail calls), with this process's standard
 input, output and error. -/
 def run (file : String) (args : List String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   match Backend.compileWat file src with
   | .error e => IO.eprintln e; return 1
   | .ok wat =>
@@ -367,7 +383,7 @@ def run (file : String) (args : List String) : IO UInt32 := do
 
 /-- The new backend's WAT or LLVM IR of `file` (`Backend2/`, `docs/n1-plan.md`). -/
 def compile2 (native : Bool) (file : String) (facts : Bool := true) : IO (Except String String) := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   return do
     let k ← Backend.checkedOf file src
     if native then Backend2.llOf k (facts := facts) else Backend2.watOf k
@@ -389,7 +405,7 @@ def run2 (file : String) (args : List String) : IO UInt32 := do
 
 /-- Write `file`'s LLVM IR to `out`.  `[spec §40]` -/
 def compileNative (file out : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   match Backend.compileLL file src with
   | .ok ll => IO.FS.writeFile out ll; return 0
   | .error e => IO.eprintln e; return 1
@@ -413,7 +429,7 @@ def runLL (ll : Except String String) (args : List String) : IO UInt32 := do
 
 /-- Compile `file` natively and run it. -/
 def runNative (file : String) (args : List String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   runLL (Backend.compileLL file src) args
 
 /-- `bcc hostops flat|native`: every host operation on a table of operands, at the flat-IR
@@ -552,7 +568,9 @@ are `src`'s up to the renaming (`scripts/alpha-check.py`). With the renaming, ea
 `line col written new variable`, the variable the name resolves to in `src`. -/
 def alphaRename (src : String) :
     Except Error (String × List (Nat × Nat × String × String × String)) := do
-  let lines := (src.splitOn "\n").toArray
+  -- The driver's dialect mark is no column of the text; the renamed text keeps it.
+  let mark := if src.startsWith (String.singleton dialectMark) then String.singleton dialectMark else ""
+  let lines := ((unmarkDialect src).splitOn "\n").toArray
   -- A binder the parser generates at a written construct (`with`'s callback) is not written.
   let writtenAt (p : Pos) (x : String) : Bool :=
     p.line ≥ 1 && p.line ≤ lines.size &&
@@ -586,11 +604,11 @@ def alphaRename (src : String) :
       throw ⟨Span.none, s!"alpha: `{x}` is not written at {l}:{c}"⟩
     let x' := if short.contains ⟨l, c, ""⟩ && x' != x then s!"{x}: {x'}" else x'
     out := out.set! (l - 1) (String.ofList (cs.take (c - 1) ++ x'.toList ++ cs.drop (c - 1 + x.length)))
-  pure ("\n".intercalate out.toList, edits)
+  pure (mark ++ "\n".intercalate out.toList, edits)
 
 /-- Print `file` α-renamed (`alphaRename`), or with `map` its renaming. -/
 def alpha (map : Bool) (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   match alphaRename src with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
   | .ok (out, edits) =>
@@ -616,7 +634,7 @@ assurance. With `provedOnly`, a `main` whose assurance is not `unconditional` is
 first relaxed rule, naming each site's hypothesis and research question (`Pins.unproved`).
 `[spec §29]` -/
 def checkCmd (provedOnly : Bool) (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
+  let src ← readSource file
   match parseProgram src (lib := Frontend.Sugar.libSrc) with
   | .error e =>
     IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc)
@@ -650,7 +668,7 @@ parameters' attributes left out, SPEC §50). -/
 def compileCmd (old : Bool) : List String → IO UInt32
   | ["--timings", file, "-o", out] => do
     if old then return ← compileTimed file out
-    match ← Backend2.watTimed file (← IO.FS.readFile file) with
+    match ← Backend2.watTimed file (← readSource file) with
     | .ok wat => IO.FS.writeFile out wat; return 0
     | .error e => IO.eprintln e; return 1
   | [file, "-o", out] | ["--target", "wasm", file, "-o", out] => do
@@ -688,6 +706,10 @@ def runCmd (old : Bool) : List String → IO UInt32
     IO.eprintln "usage: bcc run [--backend old|new] [--native [--no-facts]] <file> [arg…]"; return 2
 
 def main (argv : List String) : IO UInt32 := do
+  -- `--dialect 82` before the command: the program text's default spelling (SPEC §82).
+  let argv ← match argv with
+    | "--dialect" :: "82" :: rest => do dialectOption.set true; pure rest
+    | argv => pure argv
   match argv with
   | "kernel" :: args => kernel args
   | "compile" :: rest => let (old, rest) := backendOf rest; compileCmd old rest
@@ -729,28 +751,28 @@ def main (argv : List String) : IO UInt32 := do
   | ["lir", "--typed", file] => typedDump file
   | ["lir", file] => lirDump file
   | ["lir", "--erasure", file] => do
-    let src ← IO.FS.readFile file
+    let src ← readSource file
     match Backend.checkedOf file src with
     | .error e => IO.eprintln e; return 1
     | .ok k => IO.println (Backend2.erasureLine k); return 0
   | ["lir", "--lint", file] => do
-    let src ← IO.FS.readFile file
+    let src ← readSource file
     match Backend.checkedOf file src >>= Backend2.lintOf with
     | .error e => IO.eprintln e; return 1
     | .ok () => IO.println "lint: ok"; return 0
   | ["lir", "--frames", file] => do
-    let src ← IO.FS.readFile file
+    let src ← readSource file
     match Backend.checkedOf file src >>= Backend2.framesLine with
     | .error e => IO.eprintln e; return 1
     | .ok l => IO.println l; return 0
   | ["lir", "--layout-reject", file] => do
-    let src ← IO.FS.readFile file
+    let src ← readSource file
     match Backend.checkedOf file src >>= Backend2.rejectReport with
     | .error e => IO.eprintln e; return 1
     | .ok ls => for l in ls do IO.println l
                 return 0
   | ["lir", "--layout", file] => do
-    let src ← IO.FS.readFile file
+    let src ← readSource file
     match Backend.checkedOf file src >>= Backend2.layoutReport with
     | .error e => IO.eprintln e; return 1
     | .ok ls => for l in ls do IO.println l
@@ -762,7 +784,7 @@ def main (argv : List String) : IO UInt32 := do
   | [cmd, file] =>
     if cmd != "parse" && cmd != "print" then
       IO.eprintln s!"unknown command `{cmd}`"; return 2
-    let src ← IO.FS.readFile file
+    let src ← readSource file
     match parseProgram src (lib := Frontend.Sugar.libSrc) with
     | .error e =>
       IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc)

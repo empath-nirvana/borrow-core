@@ -89,9 +89,20 @@ def newKeywords : List String := ["handle", "import", "inout", "sink", "as", "lo
 spelling it is itself a `#` comment.  `[spec §82]` -/
 def dialectPragma : String := "#! dialect 82"
 
+/-- The mark `bcc --dialect 82` puts before a program text with no pragma, so that it is read in
+the new spelling (SPEC §82): a private-use character no source writes, which takes no column.
+`[spec §82]` -/
+def dialectMark : Char := '\uE082'
+
+/-- `src` without `dialectMark`, the text as written.  `[spec §82]` -/
+def unmarkDialect (src : String) : String :=
+  if src.startsWith (String.singleton dialectMark) then String.ofList (src.toList.drop 1) else src
+
 /-- Whether the source text `src` is written in the new spelling: its first line is
-`dialectPragma`. Every other text is in today's spelling.  `[spec §82]` -/
+`dialectPragma`, or the driver marked it (`dialectMark`). Every other text is in today's
+spelling.  `[spec §82]` -/
 def isNewDialect (src : String) : Bool :=
+  src.startsWith (String.singleton dialectMark) ||
   src.startsWith dialectPragma &&
     (match src.toList.drop dialectPragma.length with
      | [] | '\n' :: _ | '\r' :: '\n' :: _ => true
@@ -296,10 +307,11 @@ def lexGo (nd : Bool) : Nat → List Char → Pos → Bool → Array Token → E
       else .error ⟨⟨pos, advance pos 1⟩, s!"unexpected character `{c}`"⟩
 
 /-- The tokens of a source text, ending with `eof`; `file` the library module it is (`""` for the
-program), which each position carries. The text's first line chooses its spelling
-(`isNewDialect`).  `[spec §42, §82]` -/
-def lex (src : String) (file : String := "") : Except Error (Array Token) :=
-  let cs := src.toList
-  lexGo (isNewDialect src) (cs.length + 1) cs ⟨1, 1, file⟩ true #[]
+program), which each position carries; `nd`, whether it is in the new spelling, by default what
+its first line says (`isNewDialect`).  `[spec §42, §82]` -/
+def lex (src : String) (file : String := "") (nd : Bool := isNewDialect src) :
+    Except Error (Array Token) :=
+  let cs := (unmarkDialect src).toList
+  lexGo nd (cs.length + 1) cs ⟨1, 1, file⟩ true #[]
 
 end Frontend
