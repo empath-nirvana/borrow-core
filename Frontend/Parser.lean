@@ -253,7 +253,7 @@ structure PState where
   trailing block (§82 E10).  `[spec §82]` -/
   noTrail : Bool := false
   /-- New spelling: the next value is a loop's source, where `&a` and `&mut a` keep today's
-  meaning (answers A3).  `[spec §82]` -/
+  meaning (§82 *Lends that are not P8*).  `[spec §82]` -/
   loopSrc : Bool := false
   /-- For each token, whether the innermost bracket open before it is `(` or `[` (not `{`):
   there a newline does not end a statement (§82 *The layout rule*), and a block `{ … }` has the
@@ -480,7 +480,7 @@ def expectSym (s : String) : P Unit := do
 /-! ### The layout rule of the new spelling (SPEC §82 *Lexical*) -/
 
 /-- In a surface body of a text in the new spelling, where a newline ends a statement, an arm
-and a clause (answers Q4, Q9). Core text keeps today's rules.  `[spec §82]` -/
+and a clause (§82 *Surface bodies and core text*). Core text keeps today's rules.  `[spec §82]` -/
 def layout : P Bool := return (← get).nd && (← get).surf
 
 /-- Where the layout rule ends a statement at a newline: in `layout`, outside `(…)`.
@@ -2234,7 +2234,7 @@ def foldBlock : Nat → P Val
       decl₀ := match ns.toList with
         | m :: ps => some (m, ps)
         | [] => none
-    -- The scrutinee keeps today's `&` (answers A3), as a loop's source does.
+    -- The scrutinee keeps today's `&` (§82 *Lends that are not P8*), as a loop's source does.
     let V ← loopHead n
     expectSym "{"
     if ← isSym "|" then discard bump
@@ -2547,7 +2547,7 @@ def valAtom : Nat → P Val
   | n + 1 => do
     let st ← startPos
     let t ← peek
-    -- A loop's source: its first atom keeps today's `&` (answers A3).  [spec §82]
+    -- A loop's source: its first atom keeps today's `&` (§82 *Lends that are not P8*).  [spec §82]
     let src := (← get).loopSrc
     if src then modify fun s => { s with loopSrc := false }
     match t.tok with
@@ -2698,7 +2698,7 @@ def valAtom : Nat → P Val
       discard bump
       -- In a surface body of the new spelling `&x` is a mutable lend and `&mut x` is not
       -- written (§82 P7, P11–P13), except at a loop's source, which keeps today's spelling
-      -- (answers A3).  [spec §82]
+      -- (§82 *Lends that are not P8*).  [spec §82]
       let m ← if (← layout) && !src then do
           if ← isKw "mut" then
             failAt (← peek).span "`&mut x` is written `&x` in the new spelling (SPEC §82 P7)"
@@ -2764,7 +2764,7 @@ def bindRest : Nat → Pos → Ident → Option VTy → Bool → P Comp
     bindForm sp n x A M D N xs
 
 /-- The source of a `for` loop or a fold's scrutinee: no trailing block in it, and in the new
-spelling its first atom keeps today's `&` (answers A3).  `[spec §82]` -/
+spelling its first atom keeps today's `&` (§82 *Lends that are not P8*).  `[spec §82]` -/
 def loopHead : Nat → P Val
   | 0 => outOfFuel
   | n + 1 => withNoTrail true do
@@ -2775,7 +2775,7 @@ def loopHead : Nat → P Val
 
 /-- The body of an arm (of `match`, `case`, a fold) where the new spelling's layout applies: a
 block `{ S }`, its statements, or one expression; a block that is a closure `{ p -> S }` is an
-expression (§82 E5, answers A7). Elsewhere today's: the statements up to the next arm.
+expression (§82 E5, *Arm and clause bodies*). Elsewhere today's: the statements up to the next arm.
 `[spec §82]` -/
 def armComp : Nat → P Comp
   | 0 => outOfFuel
@@ -2818,7 +2818,7 @@ def compG : Nat → Bool → P Comp
       bindRest n st ⟨x, t.span⟩ (some A) true
     | .ident x₀, .sym "=" =>
       -- New spelling: `x = M` for a computation `M` is today's assigning `x <- M` (§82 E2,
-      -- ruling 11-18 #1).  [spec §82]
+      -- *Statements*: `let` never assigns).  [spec §82]
       let compRhs := match (← peekAt 2).tok, (← peekAt 3).tok with
         | .kw "match", _ | .kw "if", _ => false
         | .ident _, .sym "!" => true
@@ -2882,8 +2882,8 @@ def compG : Nat → Bool → P Comp
       loopC n st (some ⟨l, t.span⟩) ab
     | .kw "let", _ | .kw "var", _ =>
       discard bump
-      -- `var x = e` is `let mut x = e` (the transitional row of the new spelling, DECISIONS
-      -- 1a), which the new spelling does not write.  [spec §82]
+      -- `var x = e` is `let mut x = e` (the transitional row V1 of
+      -- §82 *`let mut` sites*), which the new spelling does not write.  [spec §82]
       let isVar := t.tok == .kw "var"
       if (← get).nd && !isVar && (← isKw "mut") then
         failAt (← peek).span "`let mut x = e` is written `var x = e` in the new spelling (SPEC §82)"
@@ -2957,7 +2957,7 @@ def compG : Nat → Bool → P Comp
         let sp ← spanFrom st
         return .loop sp { label := ℓ, writes := ws } (.each x) V M (.bind sp r A (.ret sp (forResOf sp els)) N)
       -- New spelling: `let x = M` for a computation `M` is today's `x <- M` (§82 E2), and so is
-      -- `let x = e unwind (D)` (answers Q3).  [spec §82]
+      -- `let x = e unwind (D)` (§82 *Statements*).  [spec §82]
       let bindVar? : Option Ident := match p with
         | .var x => some x
         | .wild sp => some ⟨"_", sp⟩
@@ -3516,7 +3516,7 @@ def tySpine : VTy → Option (String × List VTy × List Life)
   | .lapp _ F a => (tySpine F).map fun (n, As, ls) => (n, As, ls ++ [a])
   | _ => none
 
-/-- Whether a parameter of the type `A` is by value in the new spelling (answers A2): after its
+/-- Whether a parameter of the type `A` is by value in the new spelling (§82 *By value*): after its
 abbreviations are expanded, `A` is a scalar, `bool`, `lit`, `1`, `0`, `never`, `!X`, or a product
 or sum of these. A type variable, a `data` type, an array, `string`, a function type and any other
 type is not.  `[spec §82]` -/
@@ -3534,7 +3534,7 @@ def byValue (t : Data.Table) : Nat → VTy → Bool
 /-- The lifetime parameters of a `fn` whose header writes `lives` and whose parameters `ps` each
 give their type's written lifetimes and, for a mode, the fresh lifetime of its region (§82 P1–P3):
 the written ones in their order, each fresh one before the first written one that does not occur
-in an earlier parameter than its own (route.md §4).  `[spec §82]` -/
+in an earlier parameter than its own (§82 *A `fn` header, exactly*).  `[spec §82]` -/
 def placeFresh (lives : List (Ident × Life)) (ps : List (Option Ident × List String)) :
     List (Ident × Life) :=
   let written := lives.map (·.1.name)
@@ -3693,7 +3693,7 @@ def decl (n : Nat) : P Decl := do
       let H ← vty n
       let V ← if printed then do expectSym "="; val n
         else if (← get).nd then do
-          -- `poly f at T = e` or `poly f at T { S }` (§82 D13, answers A6).  [spec §82]
+          -- `poly f at T = e` or `poly f at T { S }` (§82 D13, *Arm and clause bodies*).  [spec §82]
           let M ← fnBody (modify fun s => { s with muts := [], assigned := [] })
           pure (Val.thunk M.span M)
         else do
@@ -3825,8 +3825,8 @@ def decl (n : Nat) : P Decl := do
         else
           let x ← ident "a parameter name"
           expectSym ":"
-          -- In the new spelling `s: inout S` is today's lent state `&mut s: S` (§82 D18, answers
-          -- A4), and `p: sink P` today's owned `p: P` (P4); a bare `p: P` is as written.
+          -- In the new spelling `s: inout S` is today's lent state `&mut s: S` (§82 D18,
+          -- *Handler and operation parameters*), and `p: sink P` today's owned `p: P` (P4); a bare `p: P` is as written.
           -- [spec §82]
           if (← get).nd && (← isKw "inout") then
             discard bump
@@ -3879,7 +3879,7 @@ def decl (n : Nat) : P Decl := do
         if ← isSym "," then discard bump
       expectSym ")"
       -- `op(x) -> e` in the new spelling (§82 D16); a body that is a closure `{ p -> S }` is an
-      -- expression (answers A7).  [spec §82]
+      -- expression (§82 *Arm and clause bodies*).  [spec §82]
       let nd := (← get).nd
       expectSym (if nd then "->" else "=")
       modify fun s => { s with muts := mutPs, assigned := [], surf := true, scope := pScope }
