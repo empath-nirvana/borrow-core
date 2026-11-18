@@ -49,6 +49,11 @@ def newLibTexts : List String :=
 stop finds a new position, and a position is a character of a text.  `[spec §82]` -/
 def lendRounds (srcs : List String) : Nat := srcs.foldl (· + ·.length) 1
 
+/-- The error of rounds that did not settle within `lendRounds`: not expected, since each round
+finds a new position, and reported rather than taken as settled.  `[spec §82]` -/
+def lendRoundsError (n : Nat) : Error :=
+  ⟨Span.none, s!"finding the places a call lends (SPEC §82 P8) did not settle in {n} rounds"⟩
+
 /-- The positions an elaboration of `p` lends at, in the texts `texts`, with the library positions
 `libAt` read as `&x`.  `[spec §82]` -/
 def lentPositions (p : Program) (texts : List String) (libAt : List Pos) :
@@ -59,41 +64,44 @@ def lentPositions (p : Program) (texts : List String) (libAt : List Pos) :
 /-- The positions to lend at in the library texts in the new spelling, found to the round that
 finds none new (`lendRounds`), or to one that fails, which the program's own elaboration
 then reports.  `[spec §82]` -/
-def libLends (p : Program) : List Pos := Id.run do
+def libLends (p : Program) : Except Error (List Pos) := do
   let texts := newLibTexts
   if texts.isEmpty then return []
+  let n := lendRounds (texts.filterMap Sugar.libSrc)
   let mut acc : List Pos := []
-  for _ in [0:lendRounds (texts.filterMap Sugar.libSrc)] do
+  for _ in [0:n] do
     let .ok ps := lentPositions p texts acc | return acc
     let new := ps.filter fun q => q.file != "" && !acc.contains q
     if new.isEmpty then return acc
     acc := acc ++ new
-  return acc
+  throw (lendRoundsError n)
 
 /-- Parse a program's source. In the new spelling, its bare places at shared-borrow parameters are
 read as lends: found by elaboration and the source parsed again, until no new one is found
 (`lendRounds`). A source with none is parsed once. An elaboration that fails while finding
-them is the last one, and its error is the program's.  `[spec §82]` -/
-def parseLent (src : String) (lib : String → Option String := Sugar.libSrc) :
-    Except Error Program := do
+them is the last one, and its error is the program's. `nd` reads the text as the new spelling's
+whatever its first line says, and `rounds` replaces `lendRounds`.  `[spec §82]` -/
+def parseLent (src : String) (lib : String → Option String := Sugar.libSrc)
+    (nd : Option Bool := none) (rounds : Option Nat := none) : Except Error Program := do
   let p ← parseProgram src (lib := lib)
-  if !isNewDialect src then return p
+  if !nd.getD (isNewDialect src) then return p
   let texts := "" :: newLibTexts
   let mut p := p
   let mut acc : List Pos := []
-  for _ in [0:lendRounds (src :: texts.filterMap Sugar.libSrc)] do
+  let n := rounds.getD (lendRounds (src :: texts.filterMap Sugar.libSrc))
+  for _ in [0:n] do
     let ps ← lentPositions p texts (acc.filter (·.file != ""))
     let new := ps.filter (!acc.contains ·)
     if new.isEmpty then return p
     acc := acc ++ new
     if new.any (·.file == "") then
       p ← parseProgram src (lib := lib) (lendAt := acc.filter (·.file == ""))
-  return p
+  throw (lendRoundsError n)
 
 /-- Elaborate a parsed program for the checker. The library texts in the new spelling are read
 with their lends (`libLends`).  `[spec §82]` -/
 def elaborate (p : Program) : Except Error Elaborated := do
-  let s ← Sugar.elaborateO p { texts := newLibTexts, lendAt := libLends p }
+  let s ← Sugar.elaborateO p { texts := newLibTexts, lendAt := ← libLends p }
   let keys := s.origins.filterMap fun | (_, .defKey k) => some k | _ => none
   pure ⟨s.prog, s.lib, s.origins, keys⟩
 
