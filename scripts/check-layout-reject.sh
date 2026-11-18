@@ -64,6 +64,7 @@ fail=0
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 : > "$tmp/all"
+: > "$tmp/seen"
 for f in "${progs[@]}"; do
   if [ ! -f "$f" ]; then echo "$f: missing"; fail=1; continue; fi
   if ! "$bcc" lir --layout-reject "$f" > "$tmp/out" 2>&1; then
@@ -76,10 +77,12 @@ for f in "${progs[@]}"; do
     echo "$f: a perturbation the checks let through (above)"; fail=1
   fi
   grep '^refused:' "$tmp/out" >> "$tmp/all"
+  sed -En "s/^(refused|n\/a|ACCEPTED): ([^:]*).*/\2/p" "$tmp/out" >> "$tmp/seen"
   echo "$f: $(grep -c '^refused:' "$tmp/out") refused, $(grep -c '^n/a:' "$tmp/out") not applicable"
 done
-# Every perturbation is one of the table's, and is refused somewhere by its family's refusal.
-sed -En "s/^(refused|n\/a|ACCEPTED): ([^:]*).*/\2/p" "$tmp/out" | sort -u > "$tmp/names"
+# Every perturbation any program names is one of the table's, and is refused somewhere by its
+# family's refusal.
+sort -u "$tmp/seen" > "$tmp/names"
 printf '%s\n' "${families[@]}" | cut -d'|' -f1 | sort -u > "$tmp/known"
 if ! cmp -s "$tmp/names" "$tmp/known"; then
   echo "the perturbations and the table differ:"; diff "$tmp/known" "$tmp/names" || true; fail=1
