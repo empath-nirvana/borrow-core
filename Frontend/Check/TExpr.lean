@@ -748,8 +748,7 @@ inductive TExpr where
   | effAwait (info : TInfo) (jdg : Jdg) (S : Row) (n : UInt32) (a : OpSig) (c : OpSig)
   | effRaise (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (B : VTy) (t : TExpr)
   | effLet (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (u : Masks) (tM tN : TExpr)
-  | effThen (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (SM : Row) (SD : Row) (u : Masks) (tM tN tD : TExpr)
-  | effThenDiv (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (SM : Row) (SD : Row) (u : Masks) (tM tN tD : TExpr)
+  | effThenF (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (SM : Row) (SD : Row) (u : Masks) (tM tN tD : TExpr)
   | effHandleV (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (cs : Nat → Bool) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
   | effHandleVB (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (cs : Nat → Bool) (n : UInt32) (A : VTy) (R : VTy) (d : Lifetime.Life) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
   | effHandleT (info : TInfo) (jdg : Jdg) (S : Row) (SN : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
@@ -915,8 +914,7 @@ def TExpr.erase : TExpr → Expr
   | .effAwait _ _ _ n _ _ => (awaitE n)
   | .effRaise _ _ _ o _ t => (BoCa.BoLo.raiseE (opArgE o.n o.i (t.erase)))
   | .effLet _ _ _ _ _ _ tM tN => (.app (.val (.lam (tN.erase))) (tM.erase))
-  | .effThen _ _ _ _ _ _ _ _ tM tN tD => (thenE (tN.erase) (tD.erase) (tM.erase))
-  | .effThenDiv _ _ _ _ _ _ _ _ tM tN tD => (thenE (tN.erase) (tD.erase) (tM.erase))
+  | .effThenF _ _ _ _ _ _ _ _ tM tN tD => (thenE (tN.erase) (tD.erase) (tM.erase))
   | .effHandleV _ _ _ E _ _ n _ _ _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (tc.erase) (te.erase))
   | .effHandleVB _ _ _ E _ _ n _ _ _ _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (tc.erase) (te.erase))
   | .effHandleT _ _ _ _ E _ n _ _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (.pair (Expr.pairL (tc.erase)) (tailTuple E 0 (Expr.pairR (tc.erase)))) (te.erase))
@@ -1040,8 +1038,7 @@ def TExpr.info : TExpr → TInfo
   | .effAwait i _ _ _ _ _ => i
   | .effRaise i _ _ _ _ _ => i
   | .effLet i _ _ _ _ _ _ _ => i
-  | .effThen i _ _ _ _ _ _ _ _ _ _ => i
-  | .effThenDiv i _ _ _ _ _ _ _ _ _ _ => i
+  | .effThenF i _ _ _ _ _ _ _ _ _ _ => i
   | .effHandleV i _ _ _ _ _ _ _ _ _ _ _ _ _ _ => i
   | .effHandleVB i _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => i
   | .effHandleT i _ _ _ _ _ _ _ _ _ _ _ _ _ => i
@@ -1161,8 +1158,7 @@ def TExpr.jdg : TExpr → Jdg
   | .effAwait _ j _ _ _ _ => j
   | .effRaise _ j _ _ _ _ => j
   | .effLet _ j _ _ _ _ _ _ => j
-  | .effThen _ j _ _ _ _ _ _ _ _ _ => j
-  | .effThenDiv _ j _ _ _ _ _ _ _ _ _ => j
+  | .effThenF _ j _ _ _ _ _ _ _ _ _ => j
   | .effHandleV _ j _ _ _ _ _ _ _ _ _ _ _ _ _ => j
   | .effHandleVB _ j _ _ _ _ _ _ _ _ _ _ _ _ _ _ => j
   | .effHandleT _ j _ _ _ _ _ _ _ _ _ _ _ _ => j
@@ -1290,8 +1286,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .effAwait _ _ _ _ _ _ => []
   | .effRaise _ _ _ _ _ t => [(.push 0, t)]
   | .effLet _ _ _ _ _ _ tM tN => [(.push 0, tM), (.push 1, tN)]
-  | .effThen _ _ _ _ _ _ _ _ tM tN tD => [(.push 0, tM), (.push 1, tN), (.push 1, tD)]
-  | .effThenDiv _ _ _ _ _ _ _ _ tM tN tD => [(.push 0, tM), (.push 1, tN), (.push 1, tD)]
+  | .effThenF _ _ _ _ _ _ _ _ tM tN tD => [(.push 0, tM), (.push 1, tN), (.push 1, tD)]
   | .effHandleV _ _ _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
   | .effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
   | .effHandleT _ _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
@@ -1319,8 +1314,7 @@ def TExpr.masks? : TExpr → Option Masks
   | .zeroE _ _ _ u _ => some u
   | .lolliE _ _ _ _ u _ _ => some u
   | .effLet _ _ _ _ _ u _ _ => some u
-  | .effThen _ _ _ _ _ _ _ u _ _ _ => some u
-  | .effThenDiv _ _ _ _ _ _ _ u _ _ _ => some u
+  | .effThenF _ _ _ _ _ _ _ u _ _ _ => some u
   | .effHandleV _ _ _ _ _ _ _ _ _ u _ _ _ _ _ => some u
   | .effHandleVB _ _ _ _ _ _ _ _ _ _ u _ _ _ _ _ => some u
   | .effHandleT _ _ _ _ _ _ _ _ _ u _ _ _ _ => some u
@@ -1432,8 +1426,7 @@ def TExpr.isLam : TExpr → Bool
   | .effAwait _ _ _ n _ _ => (((awaitE n) : Expr) matches .lam _)
   | .effRaise _ _ _ o _ t => (((BoCa.BoLo.raiseE (opArgE o.n o.i (t.erase))) : Expr) matches .lam _)
   | .effLet _ _ _ _ _ _ _ _ => false
-  | .effThen _ _ _ _ _ _ _ _ tM tN tD => (((thenE (tN.erase) (tD.erase) (tM.erase)) : Expr) matches .lam _)
-  | .effThenDiv _ _ _ _ _ _ _ _ tM tN tD => (((thenE (tN.erase) (tD.erase) (tM.erase)) : Expr) matches .lam _)
+  | .effThenF _ _ _ _ _ _ _ _ tM tN tD => (((thenE (tN.erase) (tD.erase) (tM.erase)) : Expr) matches .lam _)
   | .effHandleV _ _ _ E _ _ n _ _ _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (tc.erase) (te.erase)) : Expr) matches .lam _)
   | .effHandleVB _ _ _ E _ _ n _ _ _ _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (tc.erase) (te.erase)) : Expr) matches .lam _)
   | .effHandleT _ _ _ _ E _ n _ _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (.pair (Expr.pairL (tc.erase)) (tailTuple E 0 (Expr.pairR (tc.erase)))) (te.erase)) : Expr) matches .lam _)
@@ -1557,8 +1550,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .effAwait _ _ _ _ _ _ => rfl
   | .effRaise _ _ _ _ _ _ => rfl
   | .effLet _ _ _ _ _ _ _ _ => rfl
-  | .effThen _ _ _ _ _ _ _ _ _ _ _ => rfl
-  | .effThenDiv _ _ _ _ _ _ _ _ _ _ _ => rfl
+  | .effThenF _ _ _ _ _ _ _ _ _ _ _ => rfl
   | .effHandleV _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
   | .effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
   | .effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
@@ -1574,6 +1566,16 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => isLam_eq t
   | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => isLam_eq t
   | .use _ _ _ _ _ _ t => isLam_eq t
+
+/-! ### The nodes of derived rules
+
+A rule's former name, now a derived rule (`Core/Judgment.lean`), keeps its node's name as an
+abbreviation of the folded rule's node, so that statements over the node keep their type. -/
+
+/-- `[then]` at a terminating finaliser: `effThenF`'s node.  `[spec §29a]` -/
+@[match_pattern] abbrev TExpr.effThen (info : TInfo) (jdg : Jdg) (A B : VTy) (S SM SD : Row) (u : Masks)
+    (tM tN tD : TExpr) : TExpr :=
+  .effThenF info jdg A B S SM SD u tM tN tD
 
 theorem TExpr.isLam_sound (t : TExpr) (h : t.isLam = true) : ∃ N, t.erase = .val (.lam N) := by
   rw [isLam_eq] at h
