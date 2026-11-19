@@ -1,7 +1,7 @@
 # Async tasks
 
 Async is just another effect. `await()` is an ordinary operation, a task is a computation paused
-at one, and a scheduler is a handler. The one in `include async` is written in the language
+at one, and a scheduler is a handler. The one in `import async` is written in the language
 itself, with no runtime support. A function that awaits is an ordinary function with `Async` in
 its row. There's no `async` keyword, and the same function runs inside a task or outside one.
 Tasks compile to state machines, as Rust's `async fn`s do, with no garbage collector and no
@@ -11,7 +11,7 @@ The library's scheduler is cooperative and single-threaded.
 
 ## Spawning and running tasks
 
-`include async` gives you:
+`import async` gives you:
 
 | name | what it is |
 |---|---|

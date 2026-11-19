@@ -29,7 +29,7 @@ fn main() : 1 {
 # output: 12
 ```
 
-Inside a clause, the state (`n` here) behaves like a `let mut` variable, and the clause's value
+Inside a clause, the state (`n` here) behaves like a `var` variable, and the clause's value
 is the operation's answer. An operation that answers straight away compiles to a direct call of
 its clause.
 

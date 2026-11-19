@@ -6,7 +6,7 @@ book lists what isn't built yet.
 
 ## What works today
 
-- **Ownership and borrows**: `imm` and `mut` borrows, `&x` and `&mut x`, borrow blocks, `let mut`
+- **Ownership and borrows**: `imm` and `mut` borrows, `&x` and `&mut x`, borrow blocks, `var`
   ([Ownership and borrows](guide/ownership.md))
 - **Functions and closures**, reusable and one-shot
   ([Functions as values](guide/basics.md#functions-as-values))

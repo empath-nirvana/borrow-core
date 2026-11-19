@@ -1,7 +1,7 @@
 # Standard library
 
-The library is ordinary borrow-core code in `lib/`, checked with your program. `include name`
-brings one module into scope, together with the modules it includes itself; only what a program
+The library is ordinary borrow-core code in `lib/`, checked with your program. `import name`
+brings one module into scope, together with the modules it imports itself; only what a program
 calls is compiled. This page lists each module's user-facing names, and the guide chapter linked
 from each section teaches them.
 
@@ -44,7 +44,7 @@ rebound with `let`: `let b = truncate(b, 1);`, `let v = set(v, 0, x);`.
 
 ## The prelude
 
-In scope in every program, with no `include`.
+In scope in every program, with no `import`.
 
 | name | signature | |
 |---|---|---|
@@ -73,7 +73,7 @@ The `Fail` effect and its handlers. [Errors](guide/errors.md) teaches them.
 ## arith
 
 Euclidean division, and the names of division's error. `/` and `%` raise `Fail[DivError]` with no
-`include`; `include arith` adds the rest. [Division](guide/errors.md#division) teaches them.
+`import`; `import arith` adds the rest. [Division](guide/errors.md#division) teaches them.
 
 | name | signature | |
 |---|---|---|

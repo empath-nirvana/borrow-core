@@ -51,9 +51,9 @@ squares below 4: 14
 live 0
 ```
 
-`fn` declares a function, and `main` is where the program starts. `include textio` brings in
+`fn` declares a function, and `main` is where the program starts. `import textio` brings in
 the text and I/O library: `print_lit` writes a string literal, `print_dec` a number in decimal,
-and `print_byte` one byte. `main -> 1` says that `main` returns nothing interesting: `1` is the
+and `print_byte` one byte. `fn main() : 1` says that `main` returns nothing interesting: `1` is the
 unit type, whose one value is `()`.
 
 The last two lines come from `bcc`, not from the program. `()` is the value `main` returned, and

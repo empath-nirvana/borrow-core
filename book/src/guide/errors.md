@@ -7,7 +7,7 @@ handlers are ordinary handlers ([Effects and handlers](effects.md) has the gener
 
 ## Raising and handling
 
-`include fail` declares the effect and three handlers:
+`import fail` declares the effect and three handlers:
 
 | handler | answers |
 |---|---|
@@ -120,7 +120,7 @@ the empty type `never`), so the handler's clause receives only the error.
 A function may raise errors of several types: `Fail[i32]` and `Fail[ParseError]` are two
 *instances* of `Fail`, each handled by the innermost handler of its own instance, whatever the
 order of the handlers. The library's parsers raise their own error types: `parse_i32` raises a
-`ParseError` (`include text`), which says why the text isn't a number: `inl ()` when it has no
+`ParseError` (`import text`), which says why the text isn't a number: `inl ()` when it has no
 digits, `inr (inl b)` for a byte `b` that isn't a digit, and `inr (inr ())` for a number too large
 for an `i32`.
 
@@ -166,7 +166,7 @@ Dividing by zero, or `MIN / -1` at a signed width, raises `Fail[DivError]`. Its 
 `map_err` handle it, and a function can raise its own `Fail[E]` and divide too. Dividing by a
 nonzero literal can't fail and needs no handler. `checked_div` and `checked_rem` return an
 `Option`-like sum instead. The Euclidean forms, `div_euclid` and `rem_euclid`, come with
-`include arith` ([arith](../stdlib.md#arith)).
+`import arith` ([arith](../stdlib.md#arith)).
 
 ```bc
 import textio

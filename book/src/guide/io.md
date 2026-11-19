@@ -21,8 +21,8 @@ serve the same effect with a handler of its own, say a fake stdout that collects
 
 The operations work on bytes and byte views. Text and numbers are library code on top:
 
-- `include io` adds `print_dec`, `print_dec64`, `eprint_dec` and `ns_of_ms`;
-- `include textio` adds `print_lit("…")`, `print_str(t)` for a text view, `eprint_lit`,
+- `import io` adds `print_dec`, `print_dec64`, `eprint_dec` and `ns_of_ms`;
+- `import textio` adds `print_lit("…")`, `print_str(t)` for a text view, `eprint_lit`,
   `read_input()` (the whole input as a string), `next_arg(s)` (the next argument appended to a
   string, and whether there was one) and `print_string(s)`, which prints an owned string and
   hands it back so you can keep using it.

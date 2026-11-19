@@ -42,7 +42,7 @@ fn main() : 1 {
   the loop gives the value when the source ends without a `break`.
 - `continue` goes on to the next element.
 - `return e` returns from the enclosing function.
-- A `let mut` variable assigned in the body is carried from one turn to the next and is there
+- A `var` variable assigned in the body is carried from one turn to the next and is there
   after the loop.
 
 Over an array of records lent `&mut`, a field is assigned directly:
@@ -124,7 +124,7 @@ two colours.
 ## Generators
 
 A generator is a function that yields a sequence of values and then returns. Yielding is an
-ordinary effect, `Yield[T]`, from the library (`include yield`), with one operation,
+ordinary effect, `Yield[T]`, from the library (`import yield`), with one operation,
 `yield(x: T)`. A `for` over a call of such a function handles the effect: its body runs at each
 `yield`, with the yielded value. `for x in lo..hi` is a counted loop rather than a generator, so
 the examples below write a small `range` generator where they need one.
@@ -265,7 +265,7 @@ fn main() : 1 {
 # output: 5
 ```
 
-`include adapters` gives you the usual ones (`map`, `filter`, `take`, `skip`, `enumerate`,
+`import adapters` gives you the usual ones (`map`, `filter`, `take`, `skip`, `enumerate`,
 `chain`, `flat_map`, `take_until`, `scan`, `zip`, `chunks`, `lines`, `batch`), all generic
 generators over stored generators, so a pipeline is just calls:
 

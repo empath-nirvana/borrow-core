@@ -154,7 +154,7 @@ object does: `data Json = Null | Num(i32) | Obj(Map[string, Json])`
 A function that calls itself runs with a budget of depth, 10000 levels, instead of an unbounded
 stack. When the budget runs out the recursion raises an error, `Exhausted`, which unwinds every
 level, freeing what each held, like any other [error](errors.md). The compiler checks that
-something handles it, and `include rec` has the two handlers:
+something handles it, and `import rec` has the two handlers:
 
 - `with on_exhausted(f) { … }` answers `f(())` if the budget runs out, so `f` is a closure that
   ignores its argument: `!{ u -> 0 - 1 }` answers −1;
@@ -205,7 +205,7 @@ fn main() : 1 {
 # output: 14
 ```
 
-`include list` has a ready-made generic `List[A]` with `nil()`, `cons(x, xs)`, `map`, `filter`
+`import list` has a ready-made generic `List[A]` with `nil()`, `cons(x, xs)`, `map`, `filter`
 and `fold`.
 
 ### Layers
@@ -252,7 +252,7 @@ shape gives tracing or a step limit. Effects and handlers (`effect`, `handler`,
   `borrow mut a { v -> … }` as a mutable one, `array_mut 'a A`;
 - a `for` over a view visits each element's borrow, read with `*p`.
 
-`include slice` has the view operations, as Rust's slice methods: `len`, `get`, `set`,
+`import slice` has the view operations, as Rust's slice methods: `len`, `get`, `set`,
 `swap_at`, `split_at`, `reverse`, `fill`, `find`, `binary_search`, `sort`, and their `_mut`
 forms.
 
@@ -291,12 +291,12 @@ quicksort sorts each half in place with no allocation per element.
 
 ## Buffers and strings
 
-`buf A` is a growable array, `include buf`, and `Vec[T]` is the prelude's name for one:
+`buf A` is a growable array, `import buf`, and `Vec[T]` is the prelude's name for one:
 `data Vec[T] = Vec(buf T)`, and every buffer function works on a `Vec`. `box buf[A](cap)`
 allocates one with room for `cap` elements (`box buf[A](0)` allocates nothing until the first
 push), `push(&mut v, x)` appends, `pop(&mut v)` takes the last as an `Option`, `take(&mut v, i)`
 moves element `i` out, and `len_of(&v)` is the length. A buffer lends its elements as a view, as an
-array does, so `get`, `set` and the rest of `include slice` index it:
+array does, so `get`, `set` and the rest of `import slice` index it:
 
 ```bc
 import textio
@@ -326,8 +326,8 @@ A buffer's spare capacity holds placeholder elements, so its element type must h
 views, arrays, buffers, and data built from them do, but a heap cell `ref A` doesn't, and
 `buf[ref i32]` is refused.
 
-`string` is a buffer of UTF-8 bytes, and `text 'a` a view of some (`include textio`, which brings
-`include text` and the I/O helpers). `box string(cap)` makes one; `push_lit(&mut s, "…")`,
+`string` is a buffer of UTF-8 bytes, and `text 'a` a view of some (`import textio`, which brings
+`import text` and the I/O helpers). `box string(cap)` makes one; `push_lit(&mut s, "…")`,
 `push_dec(&mut s, n)` and `push_char(&mut s, 'c')` append. A string literal `"…"` is data the
 program owns no copy of. Text views are cut without copying (`split_once`, `trim`, `next_line`,
 `fold_lines`), `eq_lit(t, "…")` compares one with a literal, and `parse_i32` reads a number,
@@ -433,7 +433,7 @@ would be a case at every pair of `i32`s.
 
 ### Equality, hashing and order
 
-`include key` declares the families a map uses: `equal`, `hash` and `order`, each taking its
+`import key` declares the families a map uses: `equal`, `hash` and `order`, each taking its
 operands as views so that a key is read where it is stored. They have cases at the integers,
 `1`, tuples, sums, arrays and buffers (so `bool`, `string` and `text` are covered), compared
 structurally. `==` and `equal` are separate families: a float has `==`, IEEE 754's, and no
@@ -441,7 +441,7 @@ structurally. `==` and `equal` are separate families: a float has `==`, IEEE 754
 
 ## Maps and sets
 
-`include map` is a hash map, `Map[K, V]`, and a set, `Set[K]`. A map is a value: it is lent to
+`import map` is a hash map, `Map[K, V]`, and a set, `Set[K]`. A map is a value: it is lent to
 each operation, and an operation that changes it takes it `&mut`. [map](../stdlib.md#map) in
 the standard library lists every operation.
 

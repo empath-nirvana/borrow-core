@@ -21,8 +21,8 @@ fn main() : 1 {
 # output: 40
 ```
 
-`fn name(params) -> T = e` declares a function. Every parameter has its type written, and so does
-the result. `main -> 1` returns nothing interesting: `1` is the unit type, whose one value is
+`fn name(params) : T = e` declares a function. Every parameter has its type written, and so does
+the result. `fn main() : 1` returns nothing interesting: `1` is the unit type, whose one value is
 `()`. A function calls the functions declared before it; functions that call themselves or each
 other are in [Recursion](data.md#recursion).
 
@@ -52,7 +52,7 @@ level with `def`: `def max_depth : i32 = 64`.
 
 ## Mutable variables and loops
 
-`let mut x = e;` declares a variable that can be assigned, `x = e;`. `while c { … }` repeats its
+`var x = e` declares a variable that can be assigned, `x = e`. `while c { … }` repeats its
 body while `c` is true, and `if c { … } else { … }` chooses one branch; both branches have the
 same type. An `if` whose body is a statement needs no `else`: `if x > max { max = x }`.
 
@@ -154,7 +154,7 @@ keeps an `i64`'s low 32 bits.
 
 A literal with a fraction or an exponent is a float, an `f64` unless an `f32` is expected. `+ - * /`
 and the comparisons work at floats as IEEE 754 defines them: a NaN compares unequal to
-everything, itself included. `include float` brings the rest: `sqrt_f64`, `abs_f64`, `floor_f64`,
+everything, itself included. `import float` brings the rest: `sqrt_f64`, `abs_f64`, `floor_f64`,
 `round_f64`, conversions such as `f64_of_i32` and `i32_of_f64_sat`, and `print_f64`, which prints
 the shortest decimal that reads back as the same float.
 
@@ -174,7 +174,7 @@ fn main() : 1 {
 # output: 50
 ```
 
-A float has no hash or total order of its own, so it can't be a map key directly; `include float`
+A float has no hash or total order of its own, so it can't be a map key directly; `import float`
 has `total_cmp_f64` and `ord_f64` for when you need one.
 
 ## Records and variants
