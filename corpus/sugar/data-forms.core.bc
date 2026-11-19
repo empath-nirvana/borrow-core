@@ -1,9 +1,10 @@
--- `data-forms.bc` written by hand in core, by SPEC §42's rules: the declarations are their `type`
--- and `shape` declarations (D1, D3); `box Node(…)` the block allocated whole and injected and
--- rolled (E2); the `box` pattern a `case` on the unrolled tree whose block's cells are freed (M1);
--- the record literal its values bound in the written order, then the pair in the declaration's
--- (E4); a field read of a persistent record its projection (E5); the match over two columns a
--- `case` on the state, then an `==` test of the integer (M2).
+#! dialect 82
+# `data-forms.bc` written by hand in core, by SPEC §42's rules: the declarations are their `type`
+# and `shape` declarations (D1, D3); `box Node(…)` the block allocated whole and injected and
+# rolled (E2); the `box` pattern a `case` on the unrolled tree whose block's cells are freed (M1);
+# the record literal its values bound in the written order, then the pair in the declaration's
+# (E4); a field read of a persistent record its projection (E5); the match over two columns a
+# `case` on the state, then an `==` test of the integer (M2).
 type Tree = mu X. 1 + (ref X * (ref i32 * ref X))
 
 shape Tree_Node = node (leaf Tree) (node (leaf i32) (leaf Tree))

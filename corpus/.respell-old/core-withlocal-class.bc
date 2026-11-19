@@ -1,0 +1,14 @@
+-- [spec §80] An unrelated type-changing owner must not widen a local's fixed payload class.
+main : F ((i32 * i32) * i64) =
+  c <- return (alloc[i32] i32[0]);
+  p <- return (swap[i32, i64] c i64[9]);
+  let (c, old) = p;
+  wide <- return (free[i64] c);
+  q <- return (withlocal['l, top, i32, i32] i32[3]
+    (thunkv Fun 'l < dom. return (thunkv fun (m : mut 'l i32) ->
+      p <- return (withswap['l, i32, i32] m (thunkv fun (v : i32) ->
+        return ((unbang host[add32]) (v, i32[4]), v)));
+      let (m, old) = p;
+      let () = release_mut['l, i32] m;
+      return (boxed['l] old))));
+  return (q, wide)

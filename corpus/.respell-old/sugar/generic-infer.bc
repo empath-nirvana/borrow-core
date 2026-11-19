@@ -1,0 +1,16 @@
+-- A type argument inferred (typed elaboration §7, generic functions): `last(v, 0)` names neither
+-- the element type nor the lifetime of `last[A]<'a>`; both are read off the type of `v`,
+-- `array_imm 'x u8`, by matching it against the parameter's type `array_imm 'a A`. The literal
+-- `0` is then a `u8`, the type the other argument determined. `generic-infer.core.bc` writes
+-- the type argument, the lifetime and `unbang`.
+-- Answer: 67.
+fn tab(i: i32) -> u8 = host[wrap8] (host[add32] (i, i32[65]))
+
+fn last[A]<'a>(v: array_imm 'a A, d: A) -> A =
+  let (v, w) = array_copy['a, A](v);
+  match array_get['a, A](v, host[sub32] (array_len['a, A](w), i32[1])) { inl g -> *g | inr u -> d }
+
+main -> i32 =
+  let a = array_new[u8] (i32[3], tab);
+  let b = borrow imm a { 'x, v -> last(v, 0) };
+  host[extend8_u] (b)

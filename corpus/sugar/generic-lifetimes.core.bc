@@ -1,5 +1,6 @@
--- `generic-lifetimes.bc` written by hand in core: each lifetime parameter an `all` around the
--- function and a `Fun` around its body, the call `(unbang lens) ['x] ['y] (v, w)`.
+#! dialect 82
+# `generic-lifetimes.bc` written by hand in core: each lifetime parameter an `all` around the
+# function and a `Fun` around its body, the call `(unbang lens) ['x] ['y] (v, w)`.
 def one : !(i32 => i32) =
   !thunkv fun (i : i32) ->
     return i32[1]

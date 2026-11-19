@@ -1,8 +1,9 @@
--- `for-count.bc` written by hand in core: each loop is `count_fold`, its step having no exit.
--- The outer count starts at the literal `0`, so the machine's counter is the element, counted
--- from `0` to `n`; the inner count starts at `i`, so it is counted from index 0 over its length
--- `n − i`, its element the start plus the index, the start in its state. The state is the
--- variables the body reads or assigns; after each loop they are bound again from its last state.
+#! dialect 82
+# `for-count.bc` written by hand in core: each loop is `count_fold`, its step having no exit.
+# The outer count starts at the literal `0`, so the machine's counter is the element, counted
+# from `0` to `n`; the inner count starts at `i`, so it is counted from index 0 over its length
+# `n − i`, its element the start plus the index, the start in its state. The state is the
+# variables the body reads or assigns; after each loop they are bound again from its last state.
 total def tri : !(i32 => i32) =
   !thunkv fun (n : i32) ->
     acc <- return i32[0];

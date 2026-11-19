@@ -1,0 +1,19 @@
+-- `surface-lend.bc` written by hand in core: each lend a `withbor1` whose result rebinds `r`, and
+-- each read a `withload` at the identity.
+def get : !(all 'a < top. imm 'a i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (b : imm 'a i32) ->
+    return (withload['a, 'y, i32, i32] b (thunkv Fun 'y < dom. return (thunkv fun (v : view 'y i32) ->
+      return (boxed['y] v)))))
+
+main : F (i32 * i32) =
+  r <- return (alloc[i32] i32[41]);
+  q1 <- return (withbor1['l, i32, i32] r (thunkv Fun 'l < dom. return (thunkv fun (m : imm 'l i32) ->
+          k <- return ((unbang get) ['l] m);
+          return (boxed['l] k))));
+  let (r, x) = q1;
+  q2 <- return (withbor1['l, i32, i32] r (thunkv Fun 'l < dom. return (thunkv fun (m : imm 'l i32) ->
+          k <- return (withload['l, 'y, i32, i32] m (thunkv Fun 'y < dom. return (thunkv fun (v : view 'y i32) ->
+                 return (boxed['y] v))));
+          return (boxed['l] k))));
+  let (r, y) = q2;
+  return ((unbang host[add32]) (x, y), free[i32] r)

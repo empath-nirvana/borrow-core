@@ -323,12 +323,12 @@ theorem effThenA (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ
     fun _ _ o _ hf hf' _ => by rw [hf] at hf'; cases hf'; exact BoCa.Fig16.LogRel.Core.ThenLe.nil o.fin
   have hP : BoCa.Fig16.LogRel.Core.Row.UnrD [] → S.PendPers :=
     fun ⟨_, h, _⟩ => absurd h List.not_mem_nil
-  ⟨fun hn Ξ h => .effThen hs hm hcv hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
-      (BoCa.Fig16.LogRel.Core.RowLe.nil S) hfin hP rfl (hM.1 (nilL hn) Ξ (sigsAt_union_left h))
+  ⟨fun hn Ξ h => .effThenF hs hm hcv hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
+      (BoCa.Fig16.LogRel.Core.RowLe.nil S) hfin hP (.inl rfl) (hM.1 (nilL hn) Ξ (sigsAt_union_left h))
       (hN.1 (nilL (nilR hn)) Ξ (sigsAt_union_left (sigsAt_union_right h)))
       (hD.1 (nilR (nilR hn)) Ξ (sigsAt_union_right (sigsAt_union_right h))),
-    .effThen hs hm hcv hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
-      (BoCa.Fig16.LogRel.Core.RowLe.nil S) hfin hP rfl hM.2 hN.2 hD.2⟩
+    .effThenF hs hm hcv hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
+      (BoCa.Fig16.LogRel.Core.RowLe.nil S) hfin hP (.inl rfl) hM.2 hN.2 hD.2⟩
 
 /-- `[then]` with `M` at its own row `Σ_M ≤ Σ` and the finaliser at its own row `Σ_D ≤ Σ`: each
 cancel row `F` of `Σ_M` read holds `F ⋈ Σ_D` (`ThenLe`), and a finaliser that may meet an
@@ -347,12 +347,12 @@ theorem effThen (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ�
     (hD : TTied p₃ s₃ Δ (⟨.unit, false⟩ :: Γ₂) tD (.comp (effOf SD .unit))) :
     TTied (p₁ ++ (p₂ ++ p₃)) (s₁ ∪ (s₂ ∪ s₃)) Δ Γ
       (.effThen i (.comp (effOf S B)) A B S SM SD u tM tN tD) (.comp (effOf S B)) :=
-  ⟨fun hn Ξ h => .effThen hs hm hcv hNZ hUq hU hMS
-      hDS hfin hP hSD (hM.1 (nilL hn) Ξ (sigsAt_union_left h))
+  ⟨fun hn Ξ h => .effThenF hs hm hcv hNZ hUq hU hMS
+      hDS hfin hP (.inl hSD) (hM.1 (nilL hn) Ξ (sigsAt_union_left h))
       (hN.1 (nilL (nilR hn)) Ξ (sigsAt_union_left (sigsAt_union_right h)))
       (hD.1 (nilR (nilR hn)) Ξ (sigsAt_union_right (sigsAt_union_right h))),
-    .effThen hs hm hcv hNZ hUq hU hMS
-      hDS hfin hP hSD hM.2 hN.2 hD.2⟩
+    .effThenF hs hm hcv hNZ hUq hU hMS
+      hDS hfin hP (.inl hSD) hM.2 hN.2 hD.2⟩
 
 /-- `[handle]` reads its handled row, as `CDerivesAt.effHandleV`: the handler's pair `tc` a value
 form over a part `Γ₁` of the context whose live slots are persistent, the handled operations at

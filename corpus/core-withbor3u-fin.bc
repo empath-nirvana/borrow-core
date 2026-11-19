@@ -1,11 +1,12 @@
--- `withbor3u[…] unwind (d)` in core text (SPEC §78, §19): an unwinding reborrow with a written
--- finaliser at `Σ_D = ∅`. The cell `c` is lent (`withbor2`) as `m`; `m` is reborrowed around a
--- body that writes `5` through the reborrow and aborts with `42`. The finaliser `d` gets the source
--- `m` back as the abort passes and writes `99` through it; the handler answers `inr 42`, and the
--- cell, handed back by the outer lend, holds `99`.
---
--- Answer: `(i32[99], inr i32[42])`, and `live 0`. With the consume as its finaliser (no
--- `unwind (d)`) the cell would hold `5`.
+#! dialect 82
+# `withbor3u[…] unwind (d)` in core text (SPEC §78, §19): an unwinding reborrow with a written
+# finaliser at `Σ_D = ∅`. The cell `c` is lent (`withbor2`) as `m`; `m` is reborrowed around a
+# body that writes `5` through the reborrow and aborts with `42`. The finaliser `d` gets the source
+# `m` back as the abort passes and writes `99` through it; the handler answers `inr 42`, and the
+# cell, handed back by the outer lend, holds `99`.
+#
+# Answer: `(i32[99], inr i32[42])`, and `live 0`. With the consume as its finaliser (no
+# `unwind (d)`) the cell would hold `5`.
 
 main : F (i32 * (0 + i32)) =
   c <- return (alloc[i32] i32[1]);

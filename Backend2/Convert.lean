@@ -3327,7 +3327,7 @@ def joinWith (c₂ : Ctx) (A : VTy) (args : List Var) (body : Ctx → List Var �
 /-- The computation nodes a machine's conversion takes apart with its continuation (`convK`):
 at an outcome, each is converted inside a machine.  `[spec §49]` -/
 def machNode : TExpr → Bool
-  | .effLet .. | .effThen .. | .bind .. | .sumE .. | .tensorE .. | .unitE .. | .zeroE .. | .effSub ..
+  | .effLet .. | .effThenF .. | .bind .. | .sumE .. | .tensorE .. | .unitE .. | .zeroE .. | .effSub ..
   | .effRaise .. | .effPerform .. | .nilDead .. | .lendR .. => true
   | .lendScope _ _ _ t | .alpha _ _ _ _ t => machNode t
   | _ => false
@@ -3531,7 +3531,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => do
       let r ← fresh (resTy bT ph)
       return .letv r (.call fi (v :: evIn)) (← coerceRes bT ph p r)
-  | .effThen _ _ A _ S SM SD u tM tN tD => do
+  | .effThenF _ _ A _ S SM SD u tM tN tD => do
     -- `M then x. N unwind D`: `N` on a value; on an abort the finaliser `D`, then the abort, or
     -- the finaliser's own, handed on (`then_ret`, `then_fin`, `unwind_prefix`).  [spec §47]
     readFact "effThen:rows"
@@ -3742,7 +3742,7 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     let fn ← joinFn fuel c₂ A tN K args
     let own := live c₂
     return pre (← convK fuel c₁ tM (.letF fn own.length (some .letAbort) :: K) (own ++ args))
-  | .effThen _ _ A _ _ _ SD u tM tN tD => do
+  | .effThenF _ _ A _ _ _ SD u tM tN tD => do
     readFact "effThen:machine join"
     let (pre, c₁, c₂) ← splitCtx ctx u "effThen"
     let fn ← joinFn fuel c₂ A tN K args

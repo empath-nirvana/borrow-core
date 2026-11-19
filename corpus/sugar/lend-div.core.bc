@@ -1,7 +1,8 @@
--- `lend-div.bc` in core, as `bcc desugar` prints it. `total_at` takes the owner and hands it back
--- first; its loop's state holds the owner, and each step borrows it around the body. `main` calls
--- it twice in direct style, each call a state of `main`'s machine (SPEC §15) holding its loop; the
--- second call is the borrow block's, whose borrow passed to `total_at` is the place lent instead.
+#! dialect 82
+# `lend-div.bc` in core, as `bcc desugar` prints it. `total_at` takes the owner and hands it back
+# first; its loop's state holds the owner, and each step borrows it around the body. `main` calls
+# it twice in direct style, each call a state of `main`'s machine (SPEC §15) holding its loop; the
+# second call is the borrow block's, whose borrow passed to `total_at` is the place lent instead.
 
 def get : !(all 'a < top. imm 'a array i32 * i32 => i32) =
   !thunkv Fun 'a < top.

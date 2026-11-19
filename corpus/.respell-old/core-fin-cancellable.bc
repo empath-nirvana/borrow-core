@@ -1,0 +1,24 @@
+-- check: old-backend-refuses
+-- SPEC §27 in the core text: a finaliser that performs a CANCELLABLE operation, handled outside.
+-- `abort[1.0]` unwinds through a finaliser that performs `4.0`, a capturable operation
+-- (`4.0 cancel 1 ~> 1`, not must-resume) of handler 4, outside handler 1. Handler 4 resumes it and
+-- counts the resume. `[then]` is at `M`'s own row `Σ_M = [1.0]` (what `abort[1.0]` performs), not
+-- the site's row `[1.0, 4.0]`: with `Σ_M` the whole site row, `4.0`'s own cancel row (empty) would
+-- have to hold `4.0`, and the program was refused. After the resume the unwind goes on to
+-- handler 1, which answers `inr ()`; handler 4's resume adds 1.
+--
+-- Answer: (inr (), i32[1]), and `live 0`. A wrong implementation that skips the finaliser on an
+-- unwind answers `(inr (), i32[0])`; one that loses the unwind after the finaliser's resume
+-- answers with `inl` or a different count.
+
+main : F ((1 + 1) * i32) =
+  handle_with[4](
+      ((!thunkv fun (v : 1 + 1) -> return (v, i32[0])) : !U (1 + 1 -o F ((1 + 1) * i32))),
+      (((!thunkv fun (p : 1 * U ((1 -o F ((1 + 1) * i32)) & F 1)) ->
+          let (u, k) = p; r <- (force k).1 u; let (a, c) = r; return (a, c + i32[1])), ())
+        : !U (1 * U ((1 -o F ((1 + 1) * i32)) & F 1) -o F ((1 + 1) * i32)) * 1)) (
+    handle_with[1](
+        ((!thunkv fun (v : 0) -> return (inl ())) : !U (0 -o F[4.0 cancel 1 ~> 1] (1 + 1))),
+        (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F[4.0 cancel 1 ~> 1] (1 + 1)) * 1)) (
+      x <- abort[1.0] () unwind (perform[4.0] ());
+      return x))

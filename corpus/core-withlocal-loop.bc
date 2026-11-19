@@ -1,11 +1,12 @@
--- [spec §80] A local cell across an uncounted loop (`withlocal_loop`), in the shape of
--- `leetcode/binary/0190-reverse-bits.bc`'s `cases`: `count` is the local, and the loop's state is
--- the position with a checksum of the case values (standing in for their printing). Each turn
--- reads the case at the position: a case bumps `count` through the turn's `Mut` view and moves
--- on; the end of the input breaks with the state. The runtime drives the loop turn by turn; the
--- steps see a view of the cell, never the cell or its contents.
---
--- Answer: (i32[4], (i32[4], i32[128])), and `live 0`.
+#! dialect 82
+# [spec §80] A local cell across an uncounted loop (`withlocal_loop`), in the shape of
+# `leetcode/binary/0190-reverse-bits.bc`'s `cases`: `count` is the local, and the loop's state is
+# the position with a checksum of the case values (standing in for their printing). Each turn
+# reads the case at the position: a case bumps `count` through the turn's `Mut` view and moves
+# on; the end of the input breaks with the state. The runtime drives the loop turn by turn; the
+# steps see a view of the cell, never the cell or its contents.
+#
+# Answer: (i32[4], (i32[4], i32[128])), and `live 0`.
 
 def case_at : i32 => (i32 * i32) + 1 =
   thunkv fun (pos : i32) ->

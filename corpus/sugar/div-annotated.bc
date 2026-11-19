@@ -1,7 +1,8 @@
--- core: div-infer.core.bc
--- The markers (SPEC §14) change nothing that is elaborated: this is `div-infer.bc` with
--- `two_lines` marked `div` (never needed, since it is inferred) and `getb` marked `total` (which
--- the elaborator checks). It erases as the same hand-written core form, `div-infer.core.bc`.
+#! dialect 82
+# core: div-infer.core.bc
+# The markers (SPEC §14) change nothing that is elaborated: this is `div-infer.bc` with
+# `two_lines` marked `div` (never needed, since it is inferred) and `getb` marked `total` (which
+# the elaborator checks). It erases as the same hand-written core form, `div-infer.core.bc`.
 extern stdin : ref input
 extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (u8 + 1))
 
@@ -15,7 +16,7 @@ total def getb : In => In * (u8 + 1) =
          let (m2, b) = r;
          return (boxed['x] b))))
 
--- One step of `line_length`: the next byte, and whether the line goes on.
+# One step of `line_length`: the next byte, and whether the line goes on.
 def ll_step : !U (In * i32 -o F ((In * i32) + (In * i32)) & F (In * 1)) =
   !thunkv fun (s : In * i32) ->
     < let (c, n) = s;
@@ -32,7 +33,7 @@ def ll_step : !U (In * i32 -o F ((In * i32) + (In * i32)) & F (In * 1)) =
       let (c, n) = s;
       return (c, ()) >
 
--- A loop written in core: its type says it is div.
+# A loop written in core: its type says it is div.
 def line_length : In => U (loop (In * i32) (In * 1)) =
   thunkv fun (c : In) ->
     f <- return (unbang (unfold[loop (In * i32) (In * 1), In * i32] ll_step));

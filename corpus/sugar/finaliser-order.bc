@@ -1,8 +1,9 @@
--- The order of the consume glue's consumes (SPEC §12, §19): two owned cells, `c` bound before `d`,
--- are live across a call that may abort. The checker binds the call by `[then]` with a finaliser
--- it inserts, which consumes them in reverse binding order, `d` first, as the consumes at the end
--- of a path do. `finaliser-order.core.bc` writes that finaliser out, `d`'s consume first; the two
--- checked `main`s erase to the same term.
+#! dialect 82
+# The order of the consume glue's consumes (SPEC §12, §19): two owned cells, `c` bound before `d`,
+# are live across a call that may abort. The checker binds the call by `[then]` with a finaliser
+# it inserts, which consumes them in reverse binding order, `d` first, as the consumes at the end
+# of a path do. `finaliser-order.core.bc` writes that finaliser out, `d`'s consume first; the two
+# checked `main`s erase to the same term.
 def plus : i32 * i32 => i32 = unbang host[add32]
 
 def check : !U (i32 -o F[1.0 cancel i32 ~> 0] i32) =

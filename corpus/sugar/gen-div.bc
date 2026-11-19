@@ -1,13 +1,14 @@
--- A call of a div function in direct style inside a generator: `collatz` is a loop (its type says
--- so), and `steps` calls it in direct style. The generator's body is a div body at the row of
--- `Yield`: the loop runs inside it, held in a state of its machine (SPEC §14), one turn per
--- observation; when it finishes, the rest of the body runs with its result.
--- `gen-div.core.bc` is its elaboration in core, as `bcc desugar` prints it.
--- Answer: i32[111], the Collatz steps from 27.
+#! dialect 82
+# A call of a div function in direct style inside a generator: `collatz` is a loop (its type says
+# so), and `steps` calls it in direct style. The generator's body is a div body at the row of
+# `Yield`: the loop runs inside it, held in a state of its machine (SPEC §14), one turn per
+# observation; when it finishes, the rest of the body runs with its result.
+# `gen-div.core.bc` is its elaboration in core, as `bcc desugar` prints it.
+# Answer: i32[111], the Collatz steps from 27.
 
-include yield
+import yield
 
--- One step from `(n, k)`: `k` steps so far.
+# One step from `(n, k)`: `k` steps so far.
 def collatz_step : !U (i32 * i32 -o F (i32 + (i32 * i32)) & F 1) =
   !thunkv fun (s : i32 * i32) ->
     < let (n, k) = s;
@@ -30,12 +31,14 @@ def collatz : i32 => U (loop i32 1) =
     s0 : i32 * i32 <- return (n, i32[0]);
     return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
 
-fn steps(n: i32) -> 1 with Yield[i32] =
-  let k = collatz(n);
+fn steps(n: i32) : 1 / Yield[i32] {
+  let k = collatz(n)
   yield(k);
   ()
+}
 
-main -> i32 =
-  let mut acc = 0;
-  for k in steps(27) { acc = acc + k };
+fn main() : i32 {
+  var acc = 0
+  for k in steps(27) { acc = acc + k }
   acc
+}

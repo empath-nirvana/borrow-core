@@ -1,18 +1,19 @@
--- wc (SPEC §11, §14): lines, words and bytes of the input, written as `lines words bytes`. A
--- word starts at a byte that is not a space, tab or newline after one that is. `count` loops over
--- the input and hands the counts back with the capability; its loop threads the counts, which
--- are bound with their types before it. `count` is div (it has a `for`) and so is `main`, which
--- calls it and then writes the counts with `put_dec` (the I/O library). The counts are also
--- `main`'s result.
---
--- Answer: `3 10 50` for the input, as `wc` counts it: the last line has no newline, and the
--- second starts with two spaces and has a tab. `(i32[3], (i32[10], i32[50]))` is the result.
+#! dialect 82
+# wc (SPEC §11, §14): lines, words and bytes of the input, written as `lines words bytes`. A
+# word starts at a byte that is not a space, tab or newline after one that is. `count` loops over
+# the input and hands the counts back with the capability; its loop threads the counts, which
+# are bound with their types before it. `count` is div (it has a `for`) and so is `main`, which
+# calls it and then writes the counts with `put_dec` (the I/O library). The counts are also
+# `main`'s result.
+#
+# Answer: `3 10 50` for the input, as `wc` counts it: the last line has no newline, and the
+# second starts with two spaces and has a tab. `(i32[3], (i32[10], i32[50]))` is the result.
 
 type B = 1 + 1
 
 def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, i32[1]))
 
--- Space, tab or newline.
+# Space, tab or newline.
 def is_space : u8 => B =
   thunkv fun (b : u8) ->
     case (unbang host[eq32]) ((unbang host[extend8_u]) b, i32[32]) {
