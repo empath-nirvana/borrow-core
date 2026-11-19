@@ -210,6 +210,12 @@ def Jdg.alphaB : Jdg → Jdg → Bool
   | .comp C, .comp C' => CTy.alphaB [] C C'
   | _, _ => false
 
+/-- `!X` at `true`, `X` at `false`: the type of a value rule and of its promotion over a flat
+context (`CDerivesX.thunkFb`, `thunkVb`, `codeIb`).  `[spec §10]` -/
+def VTy.bangIf : Bool → VTy → VTy
+  | true, X => .bang X
+  | false, X => X
+
 /-- **The same-term rules** (`[conv]`): which one, with the data its typed node holds.  Each
 concludes with its premise's term; `JConv` gives its judgments and side premises.  `[spec §3]` -/
 inductive ConvKind where
@@ -335,12 +341,20 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
       CDerivesX I Δ Γ (.inj₁ e) (.val (.sum A B))
   | sumI₂ {Δ Γ e A B} (h : CDerivesX I Δ Γ e (.val B)) :
       CDerivesX I Δ Γ (.inj₂ e) (.val (.sum A B))
-  /-- `thunk M : U (F A)`, `M` under a dead binder. -/
-  | thunkF {Δ Γ M A} (h : CDerivesX I Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
-      CDerivesX I Δ Γ (.val (.lam M)) (.val (.thunk (.ret A)))
-  /-- `thunk V : U C` for a λ-value `V : C`, `C` not an `F`. -/
-  | thunkV {Δ Γ N C} (hC : C.isRet = false) (h : CDerivesX I Δ Γ (.val (.lam N)) (.comp C)) :
-      CDerivesX I Δ Γ (.val (.lam N)) (.val (.thunk C))
+  /-- `thunk M : U (F A)`, `M` under a dead binder; at `b = true` its promotion `! U (F A)` over a
+  flat `Γ` (`VTy.bangIf`).  At `false` it is `CDerivesX.thunkF`, at `true`
+  `CDerivesX.bangThunkF`.  `[spec §10]` -/
+  | thunkFb {Δ Γ M A T} (b : Bool) (hp : b = true → Ctx.FlatLive Γ)
+      (h : CDerivesX I Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)))
+      (hT : T = VTy.bangIf b (.thunk (.ret A))) :
+      CDerivesX I Δ Γ (.val (.lam M)) (.val T)
+  /-- `thunk V : U C` for a λ-value `V : C`, `C` not an `F`; at `b = true` its promotion `! U C`
+  over a flat `Γ`.  At `false` it is `CDerivesX.thunkV`, at `true` `CDerivesX.bangThunkV`.
+  `[spec §10]` -/
+  | thunkVb {Δ Γ N C T} (b : Bool) (hp : b = true → Ctx.FlatLive Γ) (hC : C.isRet = false)
+      (h : CDerivesX I Δ Γ (.val (.lam N)) (.comp C))
+      (hT : T = VTy.bangIf b (.thunk C)) :
+      CDerivesX I Δ Γ (.val (.lam N)) (.val T)
   /-- **`[conv]`, the same-term rules**: a term at `j` is at `j'` by one step of `JConv` (`return`,
   `ofRet`, `!E`, `[]I`, `[]E`, `⊑`, `[erase]`, `roll`/`unroll`, `ν`'s two rules, `[sub]`, `[α]`).
   `[spec §3]` -/
@@ -397,26 +411,16 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   /-- `M [] : C[@a/'x]`. -/
   | allE {Δ Γ M x b a C} (h : CDerivesX I Δ Γ M (.comp (.all x b C))) (hlt : Δ.EntailsLt a b) :
       CDerivesX I Δ Γ (.app M (.val .unit)) (.comp (C.instLife x a))
-  /-- Promotion of `thunk M : U (F A)` over a flat `Γ`.  `[spec §10]` -/
-  | bangThunkF {Δ Γ M A} (hp : Ctx.FlatLive Γ)
-      (h : CDerivesX I Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
-      CDerivesX I Δ Γ (.val (.lam M)) (.val (.bang (.thunk (.ret A))))
-  /-- Promotion of a λ-value `V : C` over a flat `Γ`.  `[spec §10]` -/
-  | bangThunkV {Δ Γ N C} (hp : Ctx.FlatLive Γ) (hC : C.isRet = false)
-      (h : CDerivesX I Δ Γ (.val (.lam N)) (.comp C)) :
-      CDerivesX I Δ Γ (.val (.lam N)) (.val (.bang (.thunk C)))
   /-- `[code-I]`: a closure `λM : U C` at its code type, `capNorm (λM)` with the environment
   type `Γ.capTy (λM)`, every captured slot live and every other live slot persistent
-  (`Ctx.CapOK`), the environment type closed.  `[spec §68]` -/
-  | codeI {Δ Γ M C} (h : CDerivesX I Δ Γ (.val (.lam M)) (.val (.thunk C)))
-      (hok : Ctx.CapOK Γ (.lam M)) :
-      CDerivesX I Δ Γ (.val (.lam M))
-        (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))
-  /-- `[code-I]` under `!`, over a flat `Γ`.  `[spec §68, §10]` -/
-  | codeIB {Δ Γ M C} (hp : Ctx.FlatLive Γ) (h : CDerivesX I Δ Γ (.val (.lam M)) (.val (.bang (.thunk C))))
-      (hok : Ctx.CapOK Γ (.lam M)) :
-      CDerivesX I Δ Γ (.val (.lam M))
-        (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)))
+  (`Ctx.CapOK`), the environment type closed; at `b = true` under `!`, over a flat `Γ`
+  (`VTy.bangIf`).  At `false` it is `CDerivesX.codeI`, at `true` `CDerivesX.codeIB`.
+  `[spec §68, §10]` -/
+  | codeIb {Δ Γ M C T} (b : Bool) (hp : b = true → Ctx.FlatLive Γ)
+      (h : CDerivesX I Δ Γ (.val (.lam M)) (.val (VTy.bangIf b (.thunk C))))
+      (hok : Ctx.CapOK Γ (.lam M))
+      (hT : T = VTy.bangIf b (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)) :
+      CDerivesX I Δ Γ (.val (.lam M)) (.val T)
   | copyBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
       CDerivesX I Δ Γ copy (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A))))))
   | releaseBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
@@ -1032,6 +1036,45 @@ theorem CDerivesX.withbor3U {I : JIdx} {Δ Γ a A B d} {S : Row} (x : LifeVar) (
     CDerivesX I Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S)) :=
   .withbor3UD (SD := []) x hΓ hx hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
     (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
+
+/-! ### Derived rules: the value rules and their promotions, the two values of `thunkFb`'s,
+`thunkVb`'s and `codeIb`'s tag -/
+
+/-- `thunk M : U (F A)`, `M` under a dead binder (`thunkFb` at `false`).  `[spec §10]` -/
+theorem CDerivesX.thunkF {I : JIdx} {Δ Γ M A} (h : CDerivesX I Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
+    CDerivesX I Δ Γ (.val (.lam M)) (.val (.thunk (.ret A))) :=
+  .thunkFb false (fun h => nomatch h) h rfl
+
+/-- `thunk V : U C` for a λ-value `V : C`, `C` not an `F` (`thunkVb` at `false`).  `[spec §10]` -/
+theorem CDerivesX.thunkV {I : JIdx} {Δ Γ N C} (hC : C.isRet = false) (h : CDerivesX I Δ Γ (.val (.lam N)) (.comp C)) :
+    CDerivesX I Δ Γ (.val (.lam N)) (.val (.thunk C)) :=
+  .thunkVb false (fun h => nomatch h) hC h rfl
+
+/-- Promotion of `thunk M : U (F A)` over a flat `Γ` (`thunkFb` at `true`).  `[spec §10]` -/
+theorem CDerivesX.bangThunkF {I : JIdx} {Δ Γ M A} (hp : Ctx.FlatLive Γ)
+    (h : CDerivesX I Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
+    CDerivesX I Δ Γ (.val (.lam M)) (.val (.bang (.thunk (.ret A)))) :=
+  .thunkFb true (fun _ => hp) h rfl
+
+/-- Promotion of a λ-value `V : C` over a flat `Γ` (`thunkVb` at `true`).  `[spec §10]` -/
+theorem CDerivesX.bangThunkV {I : JIdx} {Δ Γ N C} (hp : Ctx.FlatLive Γ) (hC : C.isRet = false)
+    (h : CDerivesX I Δ Γ (.val (.lam N)) (.comp C)) :
+    CDerivesX I Δ Γ (.val (.lam N)) (.val (.bang (.thunk C))) :=
+  .thunkVb true (fun _ => hp) hC h rfl
+
+/-- `[code-I]`: a closure `λM : U C` at its code type (`codeIb` at `false`).  `[spec §68]` -/
+theorem CDerivesX.codeI {I : JIdx} {Δ Γ M C} (h : CDerivesX I Δ Γ (.val (.lam M)) (.val (.thunk C)))
+    (hok : Ctx.CapOK Γ (.lam M)) :
+    CDerivesX I Δ Γ (.val (.lam M))
+      (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)) :=
+  .codeIb false (fun h => nomatch h) h hok rfl
+
+/-- `[code-I]` under `!`, over a flat `Γ` (`codeIb` at `true`).  `[spec §68, §10]` -/
+theorem CDerivesX.codeIB {I : JIdx} {Δ Γ M C} (hp : Ctx.FlatLive Γ) (h : CDerivesX I Δ Γ (.val (.lam M)) (.val (.bang (.thunk C))))
+    (hok : Ctx.CapOK Γ (.lam M)) :
+    CDerivesX I Δ Γ (.val (.lam M))
+      (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))) :=
+  .codeIb true (fun _ => hp) h hok rfl
 
 /-- The kernel's typing judgment: `CDerivesX` with no tie.  `[spec §3, §10, §83]` -/
 abbrev CDerives := CDerivesX {}

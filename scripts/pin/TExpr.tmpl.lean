@@ -701,6 +701,22 @@ inductive TExpr where
   | use (info : TInfo) (jdg : Jdg) (name : String) (decl : Nat) (targs : List VTy) (ab : Option AbsF)
       (t : TExpr)
 
+/-- `thunkFb`'s node at `false`, at `U (F A)`. -/
+@[match_pattern] abbrev TExpr.thunkF (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr) : TExpr :=
+  .thunkFb info jdg A (.thunk (.ret A)) false t
+
+/-- `thunkVb`'s node at `false`, at `U C`. -/
+@[match_pattern] abbrev TExpr.thunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr) : TExpr :=
+  .thunkVb info jdg C (.thunk C) false t
+
+/-- `thunkFb`'s node at `true`, at `! U (F A)`. -/
+@[match_pattern] abbrev TExpr.bangThunkF (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr) : TExpr :=
+  .thunkFb info jdg A (.bang (.thunk (.ret A))) true t
+
+/-- `thunkVb`'s node at `true`, at `! U C`. -/
+@[match_pattern] abbrev TExpr.bangThunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr) : TExpr :=
+  .thunkVb info jdg C (.bang (.thunk C)) true t
+
 /-- **The erasure**: the term the node's rule concludes with. -/
 def TExpr.erase : TExpr → Expr
 --@ERASE_CASES@

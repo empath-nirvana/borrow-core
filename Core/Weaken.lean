@@ -81,8 +81,8 @@ theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (
   | tensorI hs _ _ ih₁ ih₂ => exact .tensorI (splitP_append h' hs) ih₁ ih₂
   | sumI₁ _ ih => exact .sumI₁ ih
   | sumI₂ _ ih => exact .sumI₂ ih
-  | thunkF _ ih => exact .thunkF ih
-  | thunkV hC _ ih => exact .thunkV hC ih
+  | thunkFb b hp _ hT ih => exact .thunkFb b (fun h => flatLive_append h' (hp h)) ih hT
+  | thunkVb b hp hC _ hT ih => exact .thunkVb b (fun h => flatLive_append h' (hp h)) hC ih hT
   | conv _ _ hc ih => exact .conv _ ih (hc.mono (fun _ _ => ctxOutlives_append h') (fun _ _ => id))
   | bind hs _ _ ihM ihN => exact .bind (splitP_append h' hs) ihM ihN
   | force hs hT => exact .force (soloP_append h' hs) hT
@@ -99,14 +99,9 @@ theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (
   | zeroE hs _ ihV => exact .zeroE (splitP_append h' hs) ihV
   | allI hbx hΔx hΓx _ ih => exact .allI hbx hΔx (live_append h' hΓx) ih
   | allE _ hlt ih => exact .allE ih hlt
-  | bangThunkF hp _ ih => exact .bangThunkF (flatLive_append h' hp) ih
-  | bangThunkV hp hC _ ih => exact .bangThunkV (flatLive_append h' hp) hC ih
-  | codeI _ hok ih =>
+  | codeIb b hp _ hok hT ih =>
       obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
-      rw [← hty]; exact .codeI ih hok'
-  | codeIB hp _ hok ih =>
-      obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
-      rw [← hty]; exact .codeIB (flatLive_append h' hp) ih hok'
+      exact .codeIb b (fun h => flatLive_append h' (hp h)) ih hok' (by rw [hty]; exact hT)
   | copyBang hΓ => exact .copyBang (deadP_append h' hΓ)
   | releaseBang hΓ => exact .releaseBang (deadP_append h' hΓ)
   | alloc hΓ => exact .alloc (deadP_append h' hΓ)

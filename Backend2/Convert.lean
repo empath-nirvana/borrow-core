@@ -3004,11 +3004,11 @@ def transparent? : TExpr → Option TExpr
   | .conv _ _ _ _ k t => match k with
     | .roll _ | .unroll _ | .effSub .. => none
     | _ => some t
-  | .thunkV _ _ _ t | .bangThunkV _ _ _ t => some t
+  | .thunkVb _ _ _ _ _ t => some t
   -- The derived nodes over a term the conversion reads as it reads the term (SPEC §57).
   | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => some t
   -- `[code-I]` (SPEC §68): the same value at another type; the machine's identity.
-  | .codeI _ _ _ t | .codeIB _ _ _ t => some t
+  | .codeIb _ _ _ _ _ t => some t
   | _ => none
 
 /-- A function position's head through transparent nodes, and through a `use` whose body is a
@@ -3443,9 +3443,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | .sumI₂ _ j _ _ c => do
     let .sum _ bT := (← repJ j).peel | throw "LIR: an injection at a non-sum"
     bindTm (← conv fuel ctx c) bT fun a => pure (.inj true a)
-  | .thunkF _ j _ c | .bangThunkF _ j _ c => do
+  | .thunkFb _ j _ _ _ c => do
     let .thunk k := (← repJ j).peel | throw "LIR: a thunk at a non-closure type"
-    -- A thunk's body is at `F A` (`thunkF`, `bangThunkF`): the empty row.  [spec §50]
+    -- A thunk's body is at `F A` (`thunkFb`): the empty row.  [spec §50]
     mkClos "thunk" ctx k none (← repK k) (fun ctx' => convBody fuel (none :: ctx') c) (source := true)
       (emptyRow := true)
   | .lam _ j A C c => do
@@ -4292,7 +4292,7 @@ def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
     (o : Qual × VTy × VTy) (c : TExpr) : CM Unit := do
   if (← get).works.contains (n, j) then return
   match c.unUse with
-  | .bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => do
+  | .thunkVb _ _ _ _ true (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => do
     readFact "effHandleV:tail work"
     let x ← fresh (← vty o.2.1)
     let kv ← fresh .unit

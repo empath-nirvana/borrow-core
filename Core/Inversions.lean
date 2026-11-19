@@ -1021,9 +1021,9 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       · obtain ⟨T, hT⟩ := ihf k hk; exact ⟨T, splitP_le_right hs k T hT⟩
       · obtain ⟨T, hT⟩ := iha k hk; exact ⟨T, splitP_le_left hs k T hT⟩
   | sumI₁ _ ih | sumI₂ _ ih => exact ih
-  | thunkF _ ih | lam _ ih | lamDead _ ih | allI _ _ _ _ ih | bangThunkF _ _ ih =>
+  | thunkFb _ _ _ _ ih | lam _ ih | lamDead _ ih | allI _ _ _ _ ih =>
       intro k hk; obtain ⟨T, hT⟩ := ih (k + 1) hk; exact ⟨T, slot_succ hT⟩
-  | thunkV _ _ ih | conv _ _ _ ih | bangThunkV _ _ _ ih => exact ih
+  | thunkVb _ _ _ _ _ ih | conv _ _ _ ih => exact ih
   | proj₁ _ ih | proj₂ _ ih | allE _ _ ih | allEV _ _ ih =>
       intro k hk
       rcases hk with hk | hk
@@ -1124,7 +1124,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | unfoldK => intro k hk; exact absurd hk (not_hasVar_closed (unfoldV_closed _))
   | nuOutK _ _ _ _ hs =>
       intro k hk; simp only [Expr.HasVar] at hk; subst hk; exact ⟨_, soloP_le hs⟩
-  | codeI _ _ ih | codeIB _ _ _ ih => exact ih
+  | codeIb _ _ _ _ _ ih => exact ih
   | _ => intro k hk; exact absurd hk (not_hasVar_closed (by rfl))
 
 /-! ### Inversions -/
@@ -1948,14 +1948,14 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | allI _ _ _ h =>
       intro M he; cases he
       exact .inr (.inr (.inl ⟨_, _, _, _, _, h, .inl ⟨_, rfl, CTy.alphaB_refl _⟩⟩))
-  | thunkF h => intro M he; cases he; exact .inr (.inr (.inr (.inl ⟨_, h, .inl (ValCls.refl _)⟩)))
-  | bangThunkF hp h =>
-      intro M he; cases he
-      exact .inr (.inr (.inr (.inl ⟨_, h, .inr (.inl ⟨hp, ValCls.refl _⟩)⟩)))
-  | thunkV hC _ ih => intro M he; exact (ih M he).thunkV hC
-  | bangThunkV hp hC _ ih => intro M he; exact (ih M he).bangThunkV hC hp
-  | codeI _ _ ih => intro M he; exact (ih M he).codeI _ _
-  | codeIB _ _ _ ih => intro M he; exact (ih M he).codeIB _ _
+  | thunkFb b hp h hT =>
+      intro M he; cases he; subst hT; cases b
+      · exact .inr (.inr (.inr (.inl ⟨_, h, .inl (ValCls.refl _)⟩)))
+      · exact .inr (.inr (.inr (.inl ⟨_, h, .inr (.inl ⟨hp rfl, ValCls.refl _⟩)⟩)))
+  | thunkVb b hp hC _ hT ih =>
+      intro M he; subst hT; cases b; exacts [(ih M he).thunkV hC, (ih M he).bangThunkV hC (hp rfl)]
+  | codeIb b _ _ _ hT ih =>
+      intro M he; subst hT; cases b; exacts [(ih M he).codeI _ _, (ih M he).codeIB _ _]
   | conv _ _ hJ ih => intro M he; exact (ih M he).step hJ.toJS
   | withI => intro M he; exact .inr (.inr (.inr (.inr (.inl ⟨_, _, he.symm⟩))))
   | copyBang => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inl rfl) _)
@@ -2233,16 +2233,14 @@ theorem der_swap {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
     e = swap → ∃ A B, ValClsC (axSwapTy A B) j := by
   induction h using CDerives.induct with
   | swap => intro _; exact ⟨_, _, ValClsC.refl _⟩
-  | codeI _ _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.codeI _ _⟩
-  | codeIB _ _ _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.codeIB _ _⟩
+  | codeIb b _ _ _ hT ih =>
+      intro he; subst hT; cases b <;> obtain ⟨A, B, hc⟩ := ih he
+      exacts [⟨A, B, hc.codeI _ _⟩, ⟨A, B, hc.codeIB _ _⟩]
   | lam h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
   | lamDead h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
   | allI _ _ _ h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
-  | thunkF h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
-  | bangThunkF _ h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
-  | thunkV hC _ ih =>
-      intro he; obtain ⟨A, B, hc⟩ := ih he; rw [hc.comp_isRet] at hC; cases hC
-  | bangThunkV _ hC _ ih =>
+  | thunkFb _ _ h _ => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
+  | thunkVb _ _ hC _ _ ih =>
       intro he; obtain ⟨A, B, hc⟩ := ih he; rw [hc.comp_isRet] at hC; cases hC
   | conv _ _ hJ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step hJ.toJS⟩
   | force => intro he; rcases forceE_var he with h | h <;> cases h

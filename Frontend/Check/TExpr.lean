@@ -652,8 +652,8 @@ inductive TExpr where
   | tensorI (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (u : Masks) (t₁ t₂ : TExpr)
   | sumI₁ (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (t : TExpr)
   | sumI₂ (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (t : TExpr)
-  | thunkF (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
-  | thunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
+  | thunkFb (info : TInfo) (jdg : Jdg) (A : VTy) (T : VTy) (b : Bool) (t : TExpr)
+  | thunkVb (info : TInfo) (jdg : Jdg) (C : CTy) (T : VTy) (b : Bool) (t : TExpr)
   | conv (info : TInfo) (jdg : Jdg) (j : Jdg) (j' : Jdg) (k : ConvKind) (t : TExpr)
   | bind (info : TInfo) (jdg : Jdg) (A : VTy) (C : CTy) (u : Masks) (tM tN : TExpr)
   | force (info : TInfo) (jdg : Jdg) (i : Nat) (T : VTy) (C : CTy)
@@ -670,10 +670,7 @@ inductive TExpr where
   | zeroE (info : TInfo) (jdg : Jdg) (C : CTy) (u : Masks) (tV : TExpr)
   | allI (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (S : VTy) (C : CTy) (t : TExpr)
   | allE (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (a : Lifetime.Life) (C : CTy) (t : TExpr)
-  | bangThunkF (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
-  | bangThunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
-  | codeI (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
-  | codeIB (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
+  | codeIb (info : TInfo) (jdg : Jdg) (C : CTy) (T : VTy) (b : Bool) (t : TExpr)
   | copyBang (info : TInfo) (jdg : Jdg) (A : VTy)
   | releaseBang (info : TInfo) (jdg : Jdg) (A : VTy)
   | alloc (info : TInfo) (jdg : Jdg) (A : VTy)
@@ -797,6 +794,22 @@ inductive TExpr where
   | use (info : TInfo) (jdg : Jdg) (name : String) (decl : Nat) (targs : List VTy) (ab : Option AbsF)
       (t : TExpr)
 
+/-- `thunkFb`'s node at `false`, at `U (F A)`. -/
+@[match_pattern] abbrev TExpr.thunkF (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr) : TExpr :=
+  .thunkFb info jdg A (.thunk (.ret A)) false t
+
+/-- `thunkVb`'s node at `false`, at `U C`. -/
+@[match_pattern] abbrev TExpr.thunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr) : TExpr :=
+  .thunkVb info jdg C (.thunk C) false t
+
+/-- `thunkFb`'s node at `true`, at `! U (F A)`. -/
+@[match_pattern] abbrev TExpr.bangThunkF (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr) : TExpr :=
+  .thunkFb info jdg A (.bang (.thunk (.ret A))) true t
+
+/-- `thunkVb`'s node at `true`, at `! U C`. -/
+@[match_pattern] abbrev TExpr.bangThunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr) : TExpr :=
+  .thunkVb info jdg C (.bang (.thunk C)) true t
+
 /-- **The erasure**: the term the node's rule concludes with. -/
 def TExpr.erase : TExpr → Expr
   | .var _ _ i _ => (.var i)
@@ -804,8 +817,8 @@ def TExpr.erase : TExpr → Expr
   | .tensorI _ _ _ _ _ t₁ t₂ => (.pair (t₁.erase) (t₂.erase))
   | .sumI₁ _ _ _ _ t => (.inj₁ (t.erase))
   | .sumI₂ _ _ _ _ t => (.inj₂ (t.erase))
-  | .thunkF _ _ _ t => (.val (.lam (t.erase)))
-  | .thunkV _ _ _ t => t.erase
+  | .thunkFb _ _ _ _ _ t => (.val (.lam (t.erase)))
+  | .thunkVb _ _ _ _ _ t => t.erase
   | .conv _ _ _ _ _ t => t.erase
   | .bind _ _ _ _ _ tM tN => (.app (.val (.lam (tN.erase))) (tM.erase))
   | .force _ _ i _ C => (forceE C (.var i))
@@ -822,10 +835,7 @@ def TExpr.erase : TExpr → Expr
   | .zeroE _ _ _ _ tV => (absurdE (tV.erase))
   | .allI _ _ _ _ _ _ t => (.val (.lam (t.erase)))
   | .allE _ _ _ _ _ _ t => (.app (t.erase) (.val .unit))
-  | .bangThunkF _ _ _ t => (.val (.lam (t.erase)))
-  | .bangThunkV _ _ _ t => t.erase
-  | .codeI _ _ _ t => t.erase
-  | .codeIB _ _ _ t => t.erase
+  | .codeIb _ _ _ _ _ t => t.erase
   | .copyBang _ _ _ => BoCa.copy
   | .releaseBang _ _ _ => forget
   | .alloc _ _ _ => (.val (.prim .alloc))
@@ -914,8 +924,8 @@ def TExpr.info : TExpr → TInfo
   | .tensorI i _ _ _ _ _ _ => i
   | .sumI₁ i _ _ _ _ => i
   | .sumI₂ i _ _ _ _ => i
-  | .thunkF i _ _ _ => i
-  | .thunkV i _ _ _ => i
+  | .thunkFb i _ _ _ _ _ => i
+  | .thunkVb i _ _ _ _ _ => i
   | .conv i _ _ _ _ _ => i
   | .bind i _ _ _ _ _ _ => i
   | .force i _ _ _ _ => i
@@ -932,10 +942,7 @@ def TExpr.info : TExpr → TInfo
   | .zeroE i _ _ _ _ => i
   | .allI i _ _ _ _ _ _ => i
   | .allE i _ _ _ _ _ _ => i
-  | .bangThunkF i _ _ _ => i
-  | .bangThunkV i _ _ _ => i
-  | .codeI i _ _ _ => i
-  | .codeIB i _ _ _ => i
+  | .codeIb i _ _ _ _ _ => i
   | .copyBang i _ _ => i
   | .releaseBang i _ _ => i
   | .alloc i _ _ => i
@@ -1020,8 +1027,8 @@ def TExpr.jdg : TExpr → Jdg
   | .tensorI _ j _ _ _ _ _ => j
   | .sumI₁ _ j _ _ _ => j
   | .sumI₂ _ j _ _ _ => j
-  | .thunkF _ j _ _ => j
-  | .thunkV _ j _ _ => j
+  | .thunkFb _ j _ _ _ _ => j
+  | .thunkVb _ j _ _ _ _ => j
   | .conv _ j _ _ _ _ => j
   | .bind _ j _ _ _ _ _ => j
   | .force _ j _ _ _ => j
@@ -1038,10 +1045,7 @@ def TExpr.jdg : TExpr → Jdg
   | .zeroE _ j _ _ _ => j
   | .allI _ j _ _ _ _ _ => j
   | .allE _ j _ _ _ _ _ => j
-  | .bangThunkF _ j _ _ => j
-  | .bangThunkV _ j _ _ => j
-  | .codeI _ j _ _ => j
-  | .codeIB _ j _ _ => j
+  | .codeIb _ j _ _ _ _ => j
   | .copyBang _ j _ => j
   | .releaseBang _ j _ => j
   | .alloc _ j _ => j
@@ -1134,8 +1138,8 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .tensorI _ _ _ _ _ t₁ t₂ => [(.push 0, t₁), (.push 0, t₂)]
   | .sumI₁ _ _ _ _ t => [(.push 0, t)]
   | .sumI₂ _ _ _ _ t => [(.push 0, t)]
-  | .thunkF _ _ _ t => [(.push 1, t)]
-  | .thunkV _ _ _ t => [(.push 0, t)]
+  | .thunkFb _ _ _ _ _ t => [(.push 1, t)]
+  | .thunkVb _ _ _ _ _ t => [(.push 0, t)]
   | .conv _ _ _ _ _ t => [(.push 0, t)]
   | .bind _ _ _ _ _ tM tN => [(.push 0, tM), (.push 1, tN)]
   | .force _ _ _ _ _ => []
@@ -1152,10 +1156,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .zeroE _ _ _ _ tV => [(.push 0, tV)]
   | .allI _ _ _ _ _ _ t => [(.push 1, t)]
   | .allE _ _ _ _ _ _ t => [(.push 0, t)]
-  | .bangThunkF _ _ _ t => [(.push 1, t)]
-  | .bangThunkV _ _ _ t => [(.push 0, t)]
-  | .codeI _ _ _ t => [(.push 0, t)]
-  | .codeIB _ _ _ t => [(.push 0, t)]
+  | .codeIb _ _ _ _ _ t => [(.push 0, t)]
   | .copyBang _ _ _ => []
   | .releaseBang _ _ _ => []
   | .alloc _ _ _ => []
@@ -1260,8 +1261,8 @@ def TExpr.isLam : TExpr → Bool
   | .tensorI _ _ _ _ _ _ _ => false
   | .sumI₁ _ _ _ _ _ => false
   | .sumI₂ _ _ _ _ _ => false
-  | .thunkF _ _ _ _ => true
-  | .thunkV _ _ _ t => t.isLam
+  | .thunkFb _ _ _ _ _ _ => true
+  | .thunkVb _ _ _ _ _ t => t.isLam
   | .conv _ _ _ _ _ t => t.isLam
   | .bind _ _ _ _ _ _ _ => false
   | .force _ _ i _ C => (((forceE C (.var i)) : Expr) matches .lam _)
@@ -1278,10 +1279,7 @@ def TExpr.isLam : TExpr → Bool
   | .zeroE _ _ _ _ tV => (((absurdE (tV.erase)) : Expr) matches .lam _)
   | .allI _ _ _ _ _ _ _ => true
   | .allE _ _ _ _ _ _ _ => false
-  | .bangThunkF _ _ _ _ => true
-  | .bangThunkV _ _ _ t => t.isLam
-  | .codeI _ _ _ t => t.isLam
-  | .codeIB _ _ _ t => t.isLam
+  | .codeIb _ _ _ _ _ t => t.isLam
   | .copyBang _ _ _ => ((BoCa.copy : Expr) matches .lam _)
   | .releaseBang _ _ _ => ((forget : Expr) matches .lam _)
   | .alloc _ _ _ => false
@@ -1370,8 +1368,8 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .tensorI _ _ _ _ _ _ _ => rfl
   | .sumI₁ _ _ _ _ _ => rfl
   | .sumI₂ _ _ _ _ _ => rfl
-  | .thunkF _ _ _ _ => rfl
-  | .thunkV _ _ _ t => isLam_eq t
+  | .thunkFb _ _ _ _ _ _ => rfl
+  | .thunkVb _ _ _ _ _ t => isLam_eq t
   | .conv _ _ _ _ _ t => isLam_eq t
   | .bind _ _ _ _ _ _ _ => rfl
   | .force _ _ _ _ _ => rfl
@@ -1388,10 +1386,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .zeroE _ _ _ _ _ => rfl
   | .allI _ _ _ _ _ _ _ => rfl
   | .allE _ _ _ _ _ _ _ => rfl
-  | .bangThunkF _ _ _ _ => rfl
-  | .bangThunkV _ _ _ t => isLam_eq t
-  | .codeI _ _ _ t => isLam_eq t
-  | .codeIB _ _ _ t => isLam_eq t
+  | .codeIb _ _ _ _ _ t => isLam_eq t
   | .copyBang _ _ _ => rfl
   | .releaseBang _ _ _ => rfl
   | .alloc _ _ _ => rfl

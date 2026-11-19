@@ -236,12 +236,14 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       exact .tensorI hs' e₁ e₂
   | sumI₁ _ ih => intro Γa Γb hΓ; exact .sumI₁ (ih Γa Γb hΓ)
   | sumI₂ _ ih => intro Γa Γb hΓ; exact .sumI₂ (ih Γa Γb hΓ)
-  | thunkF _ ih =>
+  | thunkFb b hp _ hT ih =>
       intro Γa Γb hΓ; subst hΓ
       have e' := ih (_ :: Γa) Γb rfl
       rw [List.length_cons] at e'
-      exact .thunkF e'
-  | thunkV hC _ ih => intro Γa Γb hΓ; exact .thunkV hC (ih Γa Γb hΓ)
+      exact .thunkFb b (fun h => live_insert hd (hp h)) e' hT
+  | thunkVb b hp hC _ hT ih =>
+      intro Γa Γb hΓ; subst hΓ
+      exact .thunkVb b (fun h => live_insert hd (hp h)) hC (ih Γa Γb rfl) hT
   | conv _ _ hc ih =>
       intro Γa Γb hΓ'; subst hΓ'
       exact .conv _ (ih Γa Γb rfl) (hc.mono (fun _ _ ho => ⟨ho.1, live_insert hd ho.2⟩) (fun _ _ => id))
@@ -316,35 +318,14 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       rw [List.length_cons] at e'
       exact .allI hbx hΔx (live_insert hd hΓx) e'
   | allE _ hlt ih => intro Γa Γb hΓ; exact .allE (ih Γa Γb hΓ) hlt
-  | bangThunkF hp _ ih =>
-      intro Γa Γb hΓ; subst hΓ
-      have e' := ih (_ :: Γa) Γb rfl
-      rw [List.length_cons] at e'
-      exact .bangThunkF (live_insert hd hp) e'
-  | bangThunkV hp hC _ ih =>
-      intro Γa Γb hΓ; subst hΓ
-      exact .bangThunkV (live_insert hd hp) hC (ih Γa Γb rfl)
-  | @codeI _ _ M C _ hok ih =>
+  | @codeIb _ _ M C _ b hp _ hok hT ih =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨hok', hty⟩ := Ctx.CapOK.insert (Γa := Γa) (dead_not_live hd) hok
       have hcn : Expr.capNorm (.lam (Expr.shift Γd.length (Γa.length + 1) M)) =
           Expr.capNorm (.lam M) := Expr.capNorm_shift Γd.length Γa.length (.lam M)
       have hty' : Ctx.capTy (Γa ++ Γd ++ Γb) (.lam (Expr.shift Γd.length (Γa.length + 1) M)) =
           Ctx.capTy (Γa ++ Γb) (.lam M) := hty
-      have h' := CDerivesX.codeI (M := Expr.shift Γd.length (Γa.length + 1) M) (ih Γa Γb rfl) hok'
-      rw [hcn, hty'] at h'
-      exact h'
-  | @codeIB _ _ M C hp _ hok ih =>
-      intro Γa Γb hΓ; subst hΓ
-      obtain ⟨hok', hty⟩ := Ctx.CapOK.insert (Γa := Γa) (dead_not_live hd) hok
-      have hcn : Expr.capNorm (.lam (Expr.shift Γd.length (Γa.length + 1) M)) =
-          Expr.capNorm (.lam M) := Expr.capNorm_shift Γd.length Γa.length (.lam M)
-      have hty' : Ctx.capTy (Γa ++ Γd ++ Γb) (.lam (Expr.shift Γd.length (Γa.length + 1) M)) =
-          Ctx.capTy (Γa ++ Γb) (.lam M) := hty
-      have h' := CDerivesX.codeIB (M := Expr.shift Γd.length (Γa.length + 1) M) (live_insert hd hp)
-        (ih Γa Γb rfl) hok'
-      rw [hcn, hty'] at h'
-      exact h'
+      exact .codeIb b (fun h => live_insert hd (hp h)) (ih Γa Γb rfl) hok' (by rw [hcn, hty']; exact hT)
   | copyBang hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.copy) (by rfl)]; exact .copyBang (deadP_insert hd Γa hΓ)
