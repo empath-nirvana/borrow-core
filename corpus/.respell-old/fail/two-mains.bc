@@ -1,3 +1,0 @@
--- expect: 3:1: a program has at most one `main`
-main : F 1 = return ()
-main : F 1 = return ()

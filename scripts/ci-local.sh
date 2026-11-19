@@ -173,7 +173,6 @@ steps=(
   "native facts"     "scripts/native-facts.sh"
   "native"           "scripts/compile-native.sh"
   "sugar pairs"      "scripts/check-sugar.sh"
-  "respell pairs"    "scripts/check-respell.sh"
   "let mut combos"   "scripts/mut-combos.py --gate --count 400"
   "renaming"         "scripts/alpha-check.py"
   "book doc-tests"   "scripts/book-doctest.sh"
@@ -185,7 +184,7 @@ steps=(
 # The sanity gate's steps (`make gate`, `--changed`). The corpus runs named `final` are its own:
 # the full gate runs the corpus at every stage instead.
 gateSteps=("hygiene + axioms" "spec files" "judgment freeze" "assumptions" "axiom report" "type equality" "parse corpus"
-  "check corpus" "respell pairs" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)" "backend2 fence" "result cache" "gate tiers" "handle exhaustion")
+  "check corpus" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)" "backend2 fence" "result cache" "gate tiers" "handle exhaustion")
 if [ "$full" = 1 ]; then
   everyStep=("compile scaling")
   for ((i = 0; i < ${#steps[@]}; i += 2)); do
@@ -215,14 +214,13 @@ if [ "$changed" = 1 ]; then
   done
   if [ "$lean" = 0 ]; then
     all=0
-    corpus=("parse corpus" "check corpus" "respell pairs" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)")
+    corpus=("parse corpus" "check corpus" "renaming" "corpus (Backend2, final)" "corpus (old backend, final)")
     for f in $files; do
       case "$f" in
         corpus/*|lib/*|scripts/corpus-set.sh) add "${corpus[@]}" ;;
         scripts/ci-local.sh|scripts/par.sh|scripts/gate_cache.py) add "${everyStep[@]}" ;;
         scripts/parse-corpus.sh) add "parse corpus" ;;
         scripts/check-corpus.sh) add "check corpus" ;;
-        scripts/check-respell.sh) add "respell pairs" ;;
         scripts/compile-corpus.sh|scripts/source-stage.sh|scripts/interp-digest.sh) add "corpus (old backend, final)" ;;
         scripts/compile-backend2.sh) add "corpus (Backend2, final)" "result cache" ;;
         scripts/check-backend2.sh) add "backend2 fence" ;;

@@ -1,5 +1,4 @@
 import Frontend.Parser
-import Frontend.Respell
 import Frontend.Print
 import Frontend.Check.Program
 import Frontend.Check.Handled
@@ -209,17 +208,6 @@ def desugar (file : String) : IO UInt32 := do
   | .ok (_, el) => match el with
     | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
     | .ok el => IO.print el.prog.pp; return 0
-
-/-- Print `file`, written in today's spelling, in SPEC §82's (`Frontend.Respell`): exit 1 when a
-construct is left marked `#?respell:`, each mark reported on stderr.  `[spec §82]` -/
-def respellCmd (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
-  match Frontend.Respell.respell src Frontend.Sugar.libSrc with
-  | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 2
-  | .ok (out, marks) =>
-    IO.print out
-    for (l, f) in marks do IO.eprintln s!"{file}:{l}: #?respell: {f}"
-    return (if marks.isEmpty then 0 else 1)
 
 /-- Print the erasure of `file`'s checked `main`. -/
 def erase (file : String) : IO UInt32 := do
@@ -746,8 +734,6 @@ def main (argv : List String) : IO UInt32 := do
   | ["copies", file] => copies file
   | ["desugar", file] => desugar file
   | ["erase", file] => erase file
-  | ["respell", "--pragma"] => IO.println Frontend.Respell.pragma; return 0
-  | ["respell", file] => respellCmd file
   | ["lir", "--typed", file] => typedDump file
   | ["lir", file] => lirDump file
   | ["lir", "--erasure", file] => do

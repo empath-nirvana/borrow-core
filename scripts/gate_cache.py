@@ -487,25 +487,6 @@ def sugar_deps(p):
     return lines + files_lines("file", files)
 
 
-def respell_twin(p):
-    """The twin of a file in the new spelling (scripts/check-respell.sh): its text in today's
-    spelling, at `corpus/.respell-old/<path>`."""
-    return "corpus/.respell-old/" + (p[len("corpus/"):] if p.startswith("corpus/") else p)
-
-
-def respell_deps(p):
-    """A respelling pair (scripts/check-respell.sh): the file in the new spelling and its twin."""
-    return [f"arg {p}"] + files_lines("file", [p, respell_twin(p)])
-
-
-def respell_lib_deps(p):
-    """A user of a respelled library module (scripts/check-respell.sh): the program and every twin
-    of a library module (today's library is lib/ with those in place of their respellings)."""
-    d = "corpus/.respell-old/lib"
-    twins = [os.path.join(d, f) for f in listing(d) if f.endswith(".bc")]
-    return [f"arg {p}"] + files_lines("file", [p] + twins)
-
-
 _keylines = None
 
 
@@ -555,10 +536,6 @@ def unit_deps(mode, arg):
         return sugar_deps(arg)
     if mode == "book":
         return book_deps(arg)
-    if mode == "respell":
-        return respell_deps(arg)
-    if mode == "respell-lib":
-        return respell_lib_deps(arg)
     if mode.startswith("files:"):
         fs = sorted(set(mode[len("files:"):].split()))
         return [f"arg {arg}"] + files_lines("file", fs)

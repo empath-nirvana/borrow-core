@@ -1,5 +1,0 @@
--- expect: 5:53: `unwind (d)` after an unwinding borrow is core text; in a surface body it is not written (a `finally` is elaborated to it)
--- `withbor3u[…] unwind (d)` is core text (SPEC §78): a surface `finally` is elaborated to it, and a
--- surface body does not write it.
-
-main -> i32 = let w = withbor3u['a, 'x, i32, 1, []] unwind (()); 0

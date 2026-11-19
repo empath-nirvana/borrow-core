@@ -1,8 +1,0 @@
--- `let mut` writes in the continuation of `x <- M unwind (N)` inside a `while` body: the loop
--- adds each `x` (1, 2, 3) to `t`. Probe u1 of #1053 (c10h of the pipes L1 review).
-fn go() -> i32 =
-  let mut i = 0;
-  let mut t = 0;
-  while i < 3 { i = i + 1; x <- (i + 0) unwind (()); t = t + x };
-  t
-main -> i32 = go()

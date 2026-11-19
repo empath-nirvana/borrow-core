@@ -60,9 +60,7 @@ for c in "$@"; do
   esac
 done
 classes=" $* "
-# `corpus/.respell-old/` holds the twins in today's spelling of the files respelled (SPEC §82,
-# scripts/check-respell.sh): not programs of the corpus.
-find corpus -path corpus/.respell-old -prune -o -name '*.bc' -type f -print | sort | while IFS= read -r f; do
+find corpus -name '*.bc' -type f | sort | while IFS= read -r f; do
   case "$f" in
     corpus/reject/*) c=reject ;; corpus/pending/*) c=pending ;;
     corpus/fail/*) c=fail ;; corpus/sugar/*) c=sugar ;;

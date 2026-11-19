@@ -1,7 +1,0 @@
--- A `let mut` write in the continuation of an `unwind` in an `if` arm used as a statement, with
--- no loop: the arm adds 5 to `t`. Probe u2 of #1053.
-fn go(b: bool) -> i32 =
-  let mut t = 0;
-  if b { x <- (5 + 0) unwind (()); t = t + x } else { t = 1 };
-  t + 10
-main -> i32 = go(true)

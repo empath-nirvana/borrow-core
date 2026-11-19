@@ -3,7 +3,6 @@ import Frontend.Consts
 import Frontend.FloatLit
 import Frontend.Elab.Hygiene
 import Frontend.Elab.Data
-import Frontend.RespellEv
 /-!
 # Frontend — Parser
 
@@ -244,9 +243,6 @@ structure PState where
   what `..r` and a site name may name.  `[spec §76]` -/
   rowPs : List String := []
   sitePs : List String := []
-  /-- What `bcc respell` records while the source is read (`Respell.Ev`); never read by the
-  parse, and nothing is recorded unless it is on.  `[spec §82]` -/
-  rs : Respell.St := {}
   /-- The text is written in the new spelling (SPEC §82, `isNewDialect`).  `[spec §82]` -/
   nd : Bool := false
   /-- New spelling: the next statement is an arm's or a clause's body written without a block,
@@ -451,36 +447,6 @@ def peekAt (k : Nat) : P Token := do
   pure (s.toks[s.pos + k]?.getD (s.toks.back?.getD default))
 
 def peek : P Token := peekAt 0
-
-/-- The index of the next token, as `Respell.Ev` records it.  `[spec §82]` -/
-def rsAt : P Nat := return (← get).pos
-
-/-- Record what `bcc respell` rewrites here (`Respell.Ev`); nothing unless it is on.
-`[spec §82]` -/
-def rsNote (e : Respell.Ev) : P Unit := do
-  if (← get).rs.on then modify fun s => { s with rs := { s.rs with evs := s.rs.evs.push e } }
-
-/-- `rsNote` in a surface body only.  `[spec §82]` -/
-def rsNoteS (e : Respell.Ev) : P Unit := do
-  if (← get).surf then rsNote e
-
-/-- `rsNote` of a type read in a header whose arrows are respelled (`Respell.St.t1`).
-`[spec §82]` -/
-def rsNoteT1 (e : Respell.Ev) : P Unit := do
-  if (← get).rs.t1 then rsNote e
-
-/-- Whether the types read from here are in a header whose arrows are respelled.  `[spec §82]` -/
-def rsT1 (b : Bool) : P Unit := modify fun s => { s with rs := { s.rs with t1 := b } }
-
-/-- The statement a binding's head begins at, for `bindRest`'s `rsSeq`.  `[spec §82]` -/
-def rsStmt (i₀ : Nat) : P Unit := modify fun s => { s with rs := { s.rs with stmt₀ := i₀ } }
-
-/-- The statement of a surface body from the token `i₀`, ended by the `;` that comes next
-(`Respell.Ev.stmt`, `Respell.Ev.seq`).  `[spec §82]` -/
-def rsSeq (i₀ : Nat) : P Unit := do
-  let i ← rsAt
-  rsNoteS (.stmt i₀ i)
-  rsNoteS (.seq i)
 
 def bump : P Token := do
   let t ← peek
@@ -768,14 +734,12 @@ def rtyArrow : Nat → P RTy
   | 0 => outOfFuel
   | n + 1 => do
     let st ← startPos
-    let ia ← rsAt
     let A ← rtyAmp n
     if ← isSym "-o" then
       discard bump
       let C ← rty n
       pure (.arr (← spanFrom st) A C)
     else if ← isSym "=>" then
-      rsNoteT1 (.arrow ia (← rsAt))
       discard bump
       let B ← rty n
       pure (.lolli (← spanFrom st) A B)
@@ -995,7 +959,6 @@ def rtyAtom : Nat → P RTy
       let A ← rty n
       -- `(A => B with E₁, E₂[T, …])`: a function type with a provided row (SPEC §33).
       if ← isKw "with" then
-        let iw ← rsAt
         discard bump
         let mut es : Array (Ident × List VTy) := #[]
         repeat
@@ -1009,7 +972,6 @@ def rtyAtom : Nat → P RTy
             expectSym "]"
           es := es.push (e, As.toList)
           if ← isSym "," then discard bump else break
-        rsNoteT1 (.rowed iw (← rsAt))
         expectSym ")"
         return .rowed (← spanFrom st) A es.toList
       expectSym ")"
@@ -2273,9 +2235,7 @@ def foldBlock : Nat → P Val
         | m :: ps => some (m, ps)
         | [] => none
     -- The scrutinee keeps today's `&` (§82 *Lends that are not P8*), as a loop's source does.
-    let iv ← rsAt
     let V ← loopHead n
-    rsNoteS (.loopSrc iv (← rsAt))
     expectSym "{"
     if ← isSym "|" then discard bump
     let reuse₀ := (← get).reuseArm
@@ -2285,12 +2245,10 @@ def foldBlock : Nat → P Val
     for _ in [0:n] do
       let p ← mpat n
       expectSym "->"
-      let ia ← rsAt
       let (p, M, a) ← withScope do
         let p ← bindMPatNames n p
         let (M, a) ← frame (armComp n)
         pure (p, M, a)
-      rsNoteS (.arm ia (← rsAt))
       arms := arms.push (p, M)
       writes := writes ++ a
       -- In the new spelling's layout the arms are separated by `|` or a newline (§82 E9).
@@ -2378,11 +2336,9 @@ def withBlock : Nat → P Val
   | n + 1 => do
     inClosure do
     let st ← startPos
-    let iw ← rsAt
     let t ← bump
     -- `h[A, …](e, …)`: written type arguments, then the arguments (none: `()`).
-    let handlerArgs : P (Nat × Ident × List VTy × Val) := do
-      let ih ← rsAt
+    let handlerArgs : P (Ident × List VTy × Val) := do
       let h ← ident "a handler name"
       -- In the new spelling's layout the handler's arguments are on its line.
       let As ← if (← isSym "[") && !(← lineEnds) then do
@@ -2393,7 +2349,6 @@ def withBlock : Nat → P Val
         else pure []
       let place ← if (← isSym "(") && !(← lineEnds) then do
           let psp ← startPos
-          let ia ← rsAt
           discard bump
           let mut vs : Array Val := #[]
           for _ in [0:n] do
@@ -2401,14 +2356,13 @@ def withBlock : Nat → P Val
             vs := vs.push (← withNoTrail false (val n))
             if ← isSym "," then discard bump
           expectSym ")"
-          rsNoteS (.callArgs ia (← rsAt) none)
           let sp ← spanFrom psp
           pure (vs.toList.foldr (fun v acc => match acc with
             | none => some v
             | some w => some (Val.pair sp v w)) none |>.getD (Val.unit sp))
         else pure (Val.unit t.span)
-      pure (ih, h, As, place)
-    let (nm, ih, h, As, place, after) ← if t.tok == .kw "handle" then do
+      pure (h, As, place)
+    let (nm, h, As, place, after) ← if t.tok == .kw "handle" then do
         -- `handle { S } with h(e) as n` (§82 H1, H3): the handler and its arguments are read
         -- first, in the scope outside the body, as `with` reads them, and then the body.
         -- [spec §82]
@@ -2417,14 +2371,14 @@ def withBlock : Nat → P Val
         let some j := matchingBrace (← get).toks i | expected "a block `{ … }` closed by `}`"
         seek (j + 1)
         expectKw "with"
-        let (ih, h, As, place) ← handlerArgs
+        let (h, As, place) ← handlerArgs
         let nm ← if ← isKw "as" then do
             discard bump
             pure (some (← ident "the handler's name").name)
           else pure none
         let after := (← get).pos
         seek i
-        pure (nm, ih, h, As, place, some after)
+        pure (nm, h, As, place, some after)
       else do
         -- `with n = h(…) { S }`: the handler named `n` (SPEC §38).
         let nm ← if (← peekAt 1).tok == .sym "=" then do
@@ -2432,9 +2386,8 @@ def withBlock : Nat → P Val
             expectSym "="
             pure (some n.name)
           else pure none
-        let (ih, h, As, place) ← handlerArgs
-        pure (nm, ih, h, As, place, none)
-    let ilb ← rsAt
+        let (h, As, place) ← handlerArgs
+        pure (nm, h, As, place, none)
     let core := (← peekAt 1).tok matches .life _
     expectSym "{"
     let s₀ ← get
@@ -2490,9 +2443,6 @@ def withBlock : Nat → P Val
       -- The lends write the places, as `&mut x` does (SPEC §41, R2).
       for (x, _) in ys do notePlaceWrite x
       pure (x, b, M, thr, ys)
-    -- `with h(e) { M }` as `bcc respell` reads it (H1–H4, H7), unless it is the printed form.
-    -- [spec §82]
-    unless core do rsNoteS (.withBlk iw (if nm.isSome then some (iw + 1) else none) ih ilb ilb ((← rsAt) - 1))
     -- `handle { S } with h(…)`: past the handler, where a `finally` may follow (§82 H4).
     if let some a := after then seek a
     -- What is left to hand back is the capabilities, which `with` refuses (`Effects.withCtl`):
@@ -2565,13 +2515,6 @@ def valSuffixes : Nat → Pos → Val → P Val
     else if startsValAtom t.tok && !(← dataStart) then
       let i := (← get).pos
       let W ← valAtom n
-      -- The callee, when it is a declaration (no variable in scope): what `bcc respell` reads
-      -- its parameters from.  [spec §82]
-      let sc := (← get).scope
-      let callee := match V with
-        | .var _ f | .defApp _ f _ => if sc.any (·.2.1 == f) then none else some f
-        | _ => none
-      rsNoteS (.callArgs i (← rsAt) callee)
       let W ← if t.tok == .sym "(" then trailing n i W else pure W
       valSuffixes n st (.app (← spanFrom st) V W)
     else pure V
@@ -2753,7 +2696,6 @@ def valAtom : Nat → P Val
       -- `(V).f`: a field of `V` (SPEC §42).
       fieldSuffixes n st r
     | .sym "&" =>
-      let ia ← rsAt
       discard bump
       -- In a surface body of the new spelling `&x` is a mutable lend and `&mut x` is not
       -- written (§82 P7, P11–P13), except at a loop's source, which keeps today's spelling
@@ -2764,7 +2706,6 @@ def valAtom : Nat → P Val
           pure Mode.mut
         else if ← isKw "mut" then do discard bump; pure Mode.mut else pure Mode.imm
       let x ← lookIdent (← ident "the name of a place")
-      rsNoteS (.lend ia (← rsAt) (m == .mut))
       -- A lend rebinds its place: a write of a `let mut` place (SPEC §41, rule R2).
       notePlaceWrite x.name
       pure (.lend (← spanFrom st) x m)
@@ -2813,11 +2754,9 @@ In the new spelling it is `let x = M`, a new binder, or `x = M`, an assignment (
 def bindRest : Nat → Pos → Ident → Option VTy → Bool → P Comp
   | 0, _, _, _, _ => outOfFuel
   | n + 1, st, x, A, assign => do
-    let i₀ := (← get).rs.stmt₀
     let (M, xs) ← frame (compG n true)
     -- `x <- M unwind (D); N` (SPEC §19).
     let D ← unwindOf n
-    rsSeq i₀
     expectSep
     withScope do
     let x ← if assign then bindOrAssign x else bindName x
@@ -2859,7 +2798,6 @@ def compG : Nat → Bool → P Comp
   | n + 1, head => do
     let st ← startPos
     loopWritesPre
-    let i₀ ← rsAt
     let t ← peek
     let t1 ← peekAt 1
     -- An arm's body written without a block is one statement (§82 E5): a statement, a loop and
@@ -2873,18 +2811,11 @@ def compG : Nat → Bool → P Comp
     match t.tok, t1.tok with
     | .ident x, .sym "<-" =>
       discard bump; discard bump
-      rsNoteS (.bind i₀ (i₀ + 1) (← mutOf? x).isSome)
-      rsStmt i₀
       bindRest n st ⟨x, t.span⟩ none true
     | .ident x, .sym ":" =>
       discard bump; discard bump
-      rsT1 (← get).surf
       let A ← vty n
-      rsT1 false
-      let ia ← rsAt
       expectSym "<-"
-      rsNoteS (.bind i₀ ia (← mutOf? x).isSome)
-      rsStmt i₀
       bindRest n st ⟨x, t.span⟩ (some A) true
     | .ident x₀, .sym "=" =>
       -- New spelling: `x = M` for a computation `M` is today's assigning `x <- M` (§82 E2,
@@ -2918,8 +2849,8 @@ def compG : Nat → Bool → P Comp
         let MV : Val := .app msp (.app msp (.sugar t.span (.borrow .modify "")) (.var t.span x))
           (.thunkv msp (.lam msp ⟨o, msp⟩ (holeTy msp)
             (.ret msp (.pair msp (.var msp tv) (.unit msp)))))
-        let N ← if !head && !ab && (← sepNext) then do rsSeq i₀; eatSep; comp n
-          else do rsNoteS (.stmt i₀ (← rsAt)); pure (.ret msp (.unit msp))
+        let N ← if !head && !ab && (← sepNext) then do eatSep; comp n
+          else pure (.ret msp (.unit msp))
         let sp ← spanFrom st
         modify fun s => { s with blockThreads := [], joined := [] }
         let K ← letVal sp n (.wild t.span) none MV N []
@@ -2932,7 +2863,6 @@ def compG : Nat → Bool → P Comp
       checkRun V
       let isFrame := V.rebinds.isSome || (!thr.isEmpty && V.handsBack)
       if !head && !ab && (← sepNext) then
-        rsSeq i₀
         eatSep
         let N ← comp n
         let sp ← spanFrom st
@@ -2940,7 +2870,6 @@ def compG : Nat → Bool → P Comp
         if isFrame then return ← letVal sp n (.var ⟨x, t.span⟩) none V N thr
         pure (.bind sp ⟨x, t.span⟩ none (.ret V.span V) N)
       else
-        rsNoteS (.stmt i₀ (← rsAt))
         let sp ← spanFrom st
         if isFrame then return ← letVal sp n (.var ⟨x, t.span⟩) none V (.ret sp (.unit sp)) thr
         pure (.bind sp ⟨x, t.span⟩ none (.ret V.span V) (.ret sp (.unit sp)))
@@ -2964,7 +2893,6 @@ def compG : Nat → Bool → P Comp
         let q ← mpat n
         expectSym "="
         let V ← val n
-        rsSeq i₀
         expectSep
         let (q, N) ← withScope do
           let q ← bindMPatNames n q
@@ -2973,7 +2901,7 @@ def compG : Nat → Bool → P Comp
         modify fun s => { s with fresh }
         return M
       let isMut ← if isVar then pure true
-        else if ← isKw "mut" then do rsNote (.letMut i₀); discard bump; pure true else pure false
+        else if ← isKw "mut" then do discard bump; pure true else pure false
       let p ← pat n
       if isMut then
         match p with
@@ -3000,9 +2928,7 @@ def compG : Nat → Bool → P Comp
         if isMut then if let .var x := p then modify fun s => { s with muts := x.name :: s.muts }
         pure p
       withScope do
-      rsT1 (← get).surf
       let A ← if ← isSym ":" then do discard bump; pure (some (← vty n)) else pure none
-      rsT1 false
       expectSym "="
       loopWritesPre
       -- `let r = 'ℓ: for …`: the label, before the `for`.
@@ -3017,16 +2943,13 @@ def compG : Nat → Bool → P Comp
         discard bump
         let x ← ident
         expectKw "in"
-        let iv ← rsAt
         let V ← loopHead n
-        rsNoteS (.loopSrc iv (← rsAt))
         expectSym "{"
         let ((x, M), ws) ← loopWrites x.span (withScope do
           let x ← bindName x
           pure (x, ← withLoop (comp n)))
         expectSym "}"
         let els ← forElse n
-        rsSeq i₀
         expectSep
         let r ← match ← bindP with
           | .var r => pure r
@@ -3048,7 +2971,6 @@ def compG : Nat → Bool → P Comp
         if let some x := bindVar? then return ← bindRest n st x A false
       if (← peek).tok == .kw "match" || (← peek).tok == .kw "if" then
         let (M, xs) ← frame (compPrefix n)
-        rsSeq i₀
         expectSep
         let p ← bindP
         let N ← comp n
@@ -3094,13 +3016,9 @@ def compG : Nat → Bool → P Comp
         | _, V => pure V
       let thr := (← get).blockThreads
       checkRun V
-      let iSemi ← rsAt
-      rsSeq i₀
       expectSep
       let p ← bindP (some V)
       let N ← comp n
-      -- `let r = &x; S` (P9), when `bcc respell` reads it.  [spec §82]
-      if let (.var _, .lend ..) := (p, V) then rsNoteS (.letRef i₀ iSemi (← rsAt))
       letVal (← spanFrom st) n p A V N thr
     | .kw "fun", _ =>
       discard bump
@@ -3186,7 +3104,6 @@ def fieldUpdate : Nat → P (Option Val)
 def statement : Nat → Pos → Bool → Bool → P Comp
   | 0, _, _, _ => outOfFuel
   | n + 1, st, head, ab => do
-    let i₀ ← rsAt
     let t ← peek
     let t1 ← peekAt 1
     modify fun s => { s with joined := [], blockThreads := [], pendingRun := none }
@@ -3202,19 +3119,12 @@ def statement : Nat → Pos → Bool → Bool → P Comp
           pure (Comp.ret sp (.app sp (.sugar t.span .retE) V), none)
         else
           let M ← compPrefix n
-          -- A `return V` that a binding's head or the body's last statement writes (E2, E3),
-          -- when `V` written alone would read the same.  [spec §82]
-          if let .ret _ V := M then
-            if V.rebinds.isNone && !(V matches .run ..) && (head || !(← isSym ";")) then
-              rsNoteS (.ret i₀)
           pure (M, none)
       | .ident f₀, .sym "!" =>
         discard bump; discard bump
         let f ← lookName f₀ t.span
         if ← isSym "(" then
-          let ia ← rsAt
           let V ← valAtom n
-          rsNoteS (.callArgs ia (← rsAt) none)
           let sp ← spanFrom st
           let a ← freshName "io_a"
           pure (Comp.bind sp ⟨a, sp⟩ none (.ret sp V)
@@ -3249,9 +3159,7 @@ def statement : Nat → Pos → Bool → Bool → P Comp
     match S with
     | .ret _ V => checkRun V
     | _ => pure ()
-    rsNoteS (.stmt i₀ (← rsAt))
     if !head && !ab && (← sepNext) then
-      rsNoteS (.seq (← rsAt))
       eatSep
       let N ← comp n
       let sp ← spanFrom st
@@ -3404,16 +3312,13 @@ def forElse : Nat → P (Option Comp)
 def loopC : Nat → Pos → Option Ident → Bool → P Comp
   | 0, _, _, _ => outOfFuel
   | n + 1, st, ℓ, ab => do
-    let i₀ ← rsAt
     let t ← peek
     match t.tok with
     | .kw "for" =>
       discard bump
       let x ← ident
       expectKw "in"
-      let iv ← rsAt
       let V ← loopHead n
-      rsNoteS (.loopSrc iv (← rsAt))
       expectSym "{"
       let ((x, M), ws) ← loopWrites t.span (withScope do
         let x ← bindName x
@@ -3426,9 +3331,7 @@ def loopC : Nat → Pos → Option Ident → Bool → P Comp
       -- A `for` last in a body is a statement: what follows it is `()`, or, with `else`, the
       -- loop's value.
       let r ← if els.isSome then freshName "io_fr" else pure ""
-      rsNoteS (.stmt i₀ (← rsAt))
       if !ab && (← sepNext) then
-        rsNoteS (.seq (← rsAt))
         eatSep
         let N ← comp n
         let sp ← spanFrom st
@@ -3447,8 +3350,8 @@ def loopC : Nat → Pos → Option Ident → Bool → P Comp
       let (M, ws) ← loopWrites t.span (withLoop (comp n))
       expectSym "}"
       -- Last in a body, what follows it is `()`.
-      let N ← if !ab && (← sepNext) then do rsSeq i₀; eatSep; comp n
-        else do rsNoteS (.stmt i₀ (← rsAt)); pure (.ret t.span (.unit t.span))
+      let N ← if !ab && (← sepNext) then do eatSep; comp n
+        else pure (.ret t.span (.unit t.span))
       let sp ← spanFrom st
       pure (.loop sp { label := ℓ, writes := ws } .while_ c M N)
     | .kw "loop" =>
@@ -3457,8 +3360,8 @@ def loopC : Nat → Pos → Option Ident → Bool → P Comp
       expectSym "{"
       let (M, ws) ← loopWrites t.span (withLoop (comp n))
       expectSym "}"
-      let N ← if !ab && (← sepNext) then do rsSeq i₀; eatSep; comp n
-        else do rsNoteS (.stmt i₀ (← rsAt)); pure (.ret t.span (.unit t.span))
+      let N ← if !ab && (← sepNext) then do eatSep; comp n
+        else pure (.ret t.span (.unit t.span))
       let sp ← spanFrom st
       pure (.loop sp { label := ℓ, writes := ws } .forever (.unit t.span) M N)
     | _ => expected "`for`, `while` or `loop`"
@@ -3497,23 +3400,19 @@ def compAtom : Nat → P Comp
       expectKw "inl"
       let x ← ident
       expectSym "->"
-      let ia ← rsAt
       let (x, M, a₁) ← withScope do
         let x ← bindName x
         let (M, a) ← frame (armComp n)
         pure (x, M, a)
-      rsNoteS (.arm ia (← rsAt))
       -- In the new spelling's layout the arms are separated by `|` or a newline (§82 E7).
       unless ← armSep do expectSym "|"
       expectKw "inr"
       let y ← ident
       expectSym "->"
-      let ib ← rsAt
       let (y, N, a₂) ← withScope do
         let y ← bindName y
         let (N, a) ← frame (armComp n)
         pure (y, N, a)
-      rsNoteS (.arm ib (← rsAt))
       expectSym "}"
       -- In the order the variables were declared.
       modify fun s => { s with joined := (outer.filter (a₁ ++ a₂).contains).reverse }
@@ -3529,12 +3428,10 @@ def compAtom : Nat → P Comp
       for _ in [0:n] do
         let p ← mpat n
         expectSym "->"
-        let ia ← rsAt
         let (p, M, a) ← withScope do
           let p ← bindMPatNames n p
           let (M, a) ← frame (armComp n)
           pure (p, M, a)
-        rsNoteS (.arm ia (← rsAt))
         arms := arms.push (p, M)
         as_ := as_ ++ a
         -- In the new spelling's layout the arms are separated by `|` or a newline (§82 E5).
@@ -3757,9 +3654,7 @@ def decl (n : Nat) : P Decl := do
     expectSym "="
     unless rs.isEmpty && ss.isEmpty || lps.isEmpty do
       failAt x.span s!"`{x.name}` has row or site parameters, and takes no lifetime parameters (SPEC §76)"
-    rsT1 true
     let A ← withGenParams rs ss (vty n)
-    rsT1 false
     let sp ← spanFrom st
     pure (genDecl sp rs ss (.type sp x tps lps A))
   | .kw "shape" =>
@@ -3819,11 +3714,9 @@ def decl (n : Nat) : P Decl := do
           let M ← fnBody (modify fun s => { s with muts := [], assigned := [] })
           pure (Val.thunk M.span M)
         else do
-        let ie ← rsAt
         expectSym "="
         modify fun s => { s with muts := [], assigned := [], surf := true }
         let M ← comp n
-        rsNote (.polyAt ie (← rsAt))
         modify fun s => { s with surf := false }
         pure (Val.thunk M.span M)
       return .poly (← spanFrom st) x tps (lives.map (·.1)) (some H) (.unit x.span) V
@@ -3835,16 +3728,12 @@ def decl (n : Nat) : P Decl := do
       return .poly (← spanFrom st) x tps [] none A V
     unless tps.length == 1 do
       failAt x.span s!"a `poly` family has one type parameter, the type its case is chosen by: `poly {x.name}[T](…) -> B`"
-    rsT1 true
     expectSym "("
     let ps ← if ← isSym ")" then pure [] else params n
     expectSym ")"
-    rsNote (.sig x.name (ps.map (·.2)))
-    rsNote (.polyFam (← rsAt))
     -- `poly f[T](…) : R` in the new spelling (§82 D13).
     expectSym (if (← get).nd then ":" else "->")
     let T ← rty n
-    rsT1 false
     let sp ← spanFrom st
     let A := tupleTy sp (ps.map (·.2))
     let pn ← paramVar (ps.map (·.1))
@@ -3859,16 +3748,13 @@ def decl (n : Nat) : P Decl := do
     -- `import m` in the new spelling, `include m` in today's (§82 D7).  [spec §82]
     if (t.tok == .kw "include") == (← get).nd then
       expected "a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`)"
-    rsNote (.include (← rsAt))
     discard bump
     let x ← ident "the name of a library module"
     pure (.include (← spanFrom st) x)
   | .ident "data" =>
     unless (match (← peekAt 1).tok with | .uident _ => true | _ => false) do
       expected "a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`)"
-    rsT1 true
     let d ← dataDecl n
-    rsT1 false
     pure (.data (← spanFrom st) d)
   | .kw "effect" =>
     -- `effect E[T, …] { fn op(x: A, …) -> B; ctl op(…) -> B; … }` (SPEC §18, §19); `-> B` left
@@ -3883,10 +3769,8 @@ def decl (n : Nat) : P Decl := do
       else pure []
     expectSym "{"
     let mut ops : Array OpDecl := #[]
-    rsT1 true
     for _ in [0:n] do
       if ← isSym "}" then break
-      let ifn ← rsAt
       let nd := (← get).nd
       -- In the new spelling an answering operation is unmarked and `ctl` marks a control one
       -- (§82 D14, D15).  [spec §82]
@@ -3914,14 +3798,11 @@ def decl (n : Nat) : P Decl := do
       expectSym "("
       let ps ← if ← isSym ")" then pure [] else params n
       expectSym ")"
-      let ia ← rsAt
       let hasB ← isSym "->"
       let B ← if nd then do expectSym ":"; vty n
         else if hasB then do discard bump; vty n else pure (VTy.unit o.span)
-      rsNote (.opDecl (if kind == OpKind.fn then some ifn else none) (if hasB then some ia else none) (ia - 1))
       ops := ops.push ⟨o, ps, B, kind, lps⟩
-      if ← isSym ";" then do rsNote (.declSep (← rsAt)); discard bump
-    rsT1 false
+      if ← isSym ";" then discard bump
     expectSym "}"
     pure (.effect (← spanFrom st) x tps ops.toList)
   | .kw "handler" =>
@@ -3944,14 +3825,12 @@ def decl (n : Nat) : P Decl := do
     let mut ps : Array (Ident × VTy) := #[]
     let mut mutPs : List String := []
     let mut lent := false
-    rsT1 true
     if ← isSym "(" then
       discard bump
       for _ in [0:n] do
         if ← isSym ")" then break
         -- `&mut s: S`: an answering handler whose clauses are given the state lent (SPEC §34).
         if !(← get).nd && (← isSym "&") then
-          rsNote (.hLent (← rsAt))
           discard bump
           unless ← isKw "mut" do expected "`mut` after `&` (a handler's lent state, `&mut s: S`)"
           lent := true
@@ -3962,7 +3841,6 @@ def decl (n : Nat) : P Decl := do
           expectSym ":"
           ps := ps.push (x, ← vty n)
         else
-          let ix ← rsAt
           let x ← ident "a parameter name"
           expectSym ":"
           -- In the new spelling `s: inout S` is today's lent state `&mut s: S` (§82 D18,
@@ -3975,7 +3853,6 @@ def decl (n : Nat) : P Decl := do
           else if (← get).nd && (← isKw "sink") then discard bump
           let A ← vty n
           ps := ps.push (x, A)
-          rsNote (.hParam ix (← rsAt) A)
         if ← isSym "," then discard bump
       expectSym ")"
     expectSym ":"
@@ -3991,21 +3868,15 @@ def decl (n : Nat) : P Decl := do
         -- `E[A], (A) -> R` in the new spelling (§82 D16).  [spec §82]
         let nd := (← get).nd
         if nd then expectSym "("
-        let ia ← rsAt
         let A ← vty n
-        rsNote (.hSig ia (← rsAt))
         if nd then expectSym ")"
         expectSym "->"
         let R ← vty n
         pure (some (A, R))
       else pure none
-    let iw ← rsAt
     let row ← if !(← get).nd && (← isKw "with") then do discard bump; rowList "," n
       else if (← get).nd && (← isSym "/") then do discard bump; rowList "+" n
       else pure []
-    if (← rsAt) != iw then rsNote (.hRow iw (← rsAt))
-    rsT1 false
-    rsNote (.hEq (← rsAt))
     unless (← get).nd do expectSym "="
     expectSym "{"
     -- The handler's parameters: one binder each, in scope in every clause.
@@ -4026,7 +3897,6 @@ def decl (n : Nat) : P Decl := do
         xs := xs.push (← ident "a parameter name")
         if ← isSym "," then discard bump
       expectSym ")"
-      let ie ← rsAt
       -- `op(x) -> e` in the new spelling (§82 D16); a body that is a closure `{ p -> S }` is an
       -- expression (§82 *Arm and clause bodies*).  [spec §82]
       let nd := (← get).nd
@@ -4039,13 +3909,12 @@ def decl (n : Nat) : P Decl := do
           expectSym "}"
           pure M
         else oneExpr (compG n true)
-      rsNote (.clause ie (ie + 1) (← rsAt))
       modify fun s => { s with muts := [], assigned := [], surf := false, scope := [] }
       if isRet then
         let some x := xs[0]? | failAt o.span "`return(x) = M`: the return clause binds the body's value"
         ret := some (x, M)
       else cs := cs.push ⟨o, xs.toList, M⟩
-      if ← isSym ";" then do rsNote (.declSep (← rsAt)); discard bump
+      if ← isSym ";" then discard bump
     expectSym "}"
     modify fun s => { s with surf := false, scope := [] }
     let sp ← spanFrom st
@@ -4073,24 +3942,19 @@ def decl (n : Nat) : P Decl := do
     let A ← vty n
     pure (.extern (← spanFrom st) x A)
   | .kw "main" =>
-    let im ← rsAt
     discard bump
     -- `main -> T = S` (draft 0): the result is `F T` when `T` is a value type. The new spelling
     -- writes it `fn main() : T { S }` (§82 D6).
     if !(← get).nd && (← isSym "->") then
       discard bump
-      rsT1 true
       let T ← rty n
-      rsT1 false
       let C ← match T.toV with
         | .ok A => pure (CTy.ret A.span A)
         | .error _ => liftSort T.toC
-      let ie ← rsAt
       expectSym "="
       -- Each declaration's `let mut` variables are its own.
       modify fun s => { s with surf := true, muts := [], assigned := [], scope := [] }
       let M ← comp n
-      rsNote (.mainHead im (im + 1) ie (← rsAt))
       modify fun s => { s with surf := false }
       return .main (← spanFrom st) C M
     expectSym ":"
@@ -4134,10 +3998,7 @@ where
       return ← defRest st (.template mk)
     let x ← ident "a `fn` name"
     let tps ← typeParams
-    let il ← rsAt
     let lives₀ ← lifeParams
-    rsNote (.fnLives il (← rsAt))
-    rsT1 true
     expectSym "("
     -- In the new spelling a parameter has a mode (§82 P1–P5), whose fresh lifetimes join the
     -- written ones.
@@ -4148,23 +4009,17 @@ where
         let ps ← if ← isSym ")" then pure [] else params n
         pure (ps, lives₀)
     expectSym ")"
-    rsNote (.sig x.name (ps.map (·.2)))
     let nd := (← get).nd
-    let ia ← rsAt
     -- `fn f(…) : B / E₁ + E₂[A] { S }` in the new spelling (§82 D1–D3).
     expectSym (if nd then ":" else "->")
     let T ← rty n
-    rsT1 false
-    let iw ← rsAt
     -- `with E₁, E₂[A]`: a written row (SPEC §18); `/ E₁ + E₂[A]` in the new spelling.
     let nes ← if !nd && (← isKw "with") then do discard bump; namedRowList "," n
       else if nd && (← isSym "/") then do discard bump; namedRowList "+" n
       else pure []
-    let ir ← rsAt
     let es := nes.map (·.2)
     let ns := if nes.all (·.1.isNone) then [] else nes.map (·.1)
     let bs ← whereBounds tps (lives₀.map (·.1.name))
-    let ie ← rsAt
     let M ← if nd then
         fnBody do
           modify fun s => { s with muts := [], assigned := [], scope := [] }
@@ -4174,7 +4029,6 @@ where
         modify fun s => { s with muts := [], assigned := [], surf := true, scope := [] }
         for x in ps.map (·.1) do pushBinder x x.name
         comp n
-    rsNote (.fnHead ia (if ir != iw then some iw else none) ir ie (← rsAt))
     modify fun s => { s with surf := false, scope := [] }
     let sp ← spanFrom st
     let A := tupleTy sp (ps.map (·.2))
@@ -4285,11 +4139,9 @@ where
   params : Nat → P (List (Ident × VTy))
     | 0 => outOfFuel
     | m + 1 => do
-      let ix ← rsAt
       let x ← ident "a parameter name"
       expectSym ":"
       let A ← vty n
-      rsNote (.param ix (← rsAt) A)
       if ← isSym "," then
         discard bump
         return (x, A) :: (← params m)
@@ -4424,7 +4276,7 @@ each name is resolved to its binder (SPEC §41, rule R1), and no fresh binder is
 of the source. -/
 def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data : Data.Table := {})
     (internal : Bool := false) (file : String := "") (lendAt : List Pos := [])
-    (nd : Bool := isNewDialect src) (respell : Bool := false) :
+    (nd : Bool := isNewDialect src) :
     Except Error (α × PState) := do
   let toks ← lex src file nd
   let fuel := fuelPerToken * (toks.size + 1)
@@ -4437,7 +4289,7 @@ def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data
     | _ => none) |>.eraseDups else []
   let parenAt := if nd then parenNesting toks else #[]
   go.run { toks, pos := 0, lastStop := ⟨1, 1, file⟩, resolve, taken, data, internal, lendAt, nd,
-           parenAt := parenAt, rs := { on := respell } }
+           parenAt := parenAt }
 
 /-- The table of the tokens `toks`: the `data` declarations (SPEC §42) and the `type`
 abbreviations (SPEC §61) written in them, each read where it is: a declaration is in scope in its
