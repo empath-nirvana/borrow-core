@@ -105,15 +105,13 @@ def elaborate (p : Program) : Except Error Elaborated := do
   (← lendLoop (fun _ => pure p) [] false (fun _ => lendRounds libTexts)).2
 
 /-- Parse and elaborate a program's source: the parse (an error, thrown) and the elaboration (an
-error, returned, so that a check of the parse comes first). A text in the new spelling lends its
-bare places (`lendLoop`); a text whose elaboration lends at no position, as one in today's
-spelling that uses no library call lending one, is parsed and elaborated once. `nd` is the text's
-spelling (its first line, or the driver's); `lends`, whether its calls lend bare places (the new
-spelling's, or a test of today's text); `rounds` replaces `lendRounds`.  `[spec §82]` -/
+error, returned, so that a check of the parse comes first). A program lends its bare places
+(`lendLoop`); one whose elaboration lends at no position is parsed and elaborated once. `lends`,
+whether its calls lend bare places; `rounds` replaces `lendRounds`.  `[spec §82]` -/
 def parseLent (src : String) (lib : String → Option String := Sugar.libSrc)
-    (nd : Bool := isNewDialect src) (lends : Bool := nd) (rounds : Option Nat := none) :
+    (lends : Bool := true) (rounds : Option Nat := none) :
     Except Error (Program × Except Error Elaborated) :=
-  lendLoop (fun ps => parseProgram src (lib := lib) (lendAt := ps) (nd := nd))
+  lendLoop (fun ps => parseProgram src (lib := lib) (lendAt := ps))
     (if lends then [""] else []) lends (fun _ => rounds.getD (lendRounds (src :: libTexts)))
 
 /-! ### Errors -/

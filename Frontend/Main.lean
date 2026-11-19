@@ -84,17 +84,8 @@ usage. A successful `check` has built a `CDerivesP` derivation of `main`'s erasu
 
 open Frontend
 
-/-- `bcc --dialect 82 …`: a program text with no pragma is read in the new spelling (SPEC §82).
-`[spec §82]` -/
-initialize dialectOption : IO.Ref Bool ← IO.mkRef false
-
-/-- The program text of `file`: as written, or marked as the new spelling (`dialectMark`) when
-`--dialect 82` is given and the text has no pragma. A pragma always wins; library texts are read
-by their own pragma.  `[spec §82]` -/
-def readSource (file : String) : IO String := do
-  let src ← IO.FS.readFile file
-  if (← dialectOption.get) && !isNewDialect src then pure (String.singleton dialectMark ++ src)
-  else pure src
+/-- The program text of `file`. -/
+def readSource (file : String) : IO String := IO.FS.readFile file
 
 /-- All of standard input, read in at most `fuel` chunks of 64 KiB. -/
 def readAll (h : IO.FS.Stream) : Nat → ByteArray → IO ByteArray
@@ -556,9 +547,7 @@ are `src`'s up to the renaming (`scripts/alpha-check.py`). With the renaming, ea
 `line col written new variable`, the variable the name resolves to in `src`. -/
 def alphaRename (src : String) :
     Except Error (String × List (Nat × Nat × String × String × String)) := do
-  -- The driver's dialect mark is no column of the text; the renamed text keeps it.
-  let mark := if src.startsWith (String.singleton dialectMark) then String.singleton dialectMark else ""
-  let lines := ((unmarkDialect src).splitOn "\n").toArray
+  let lines := (src.splitOn "\n").toArray
   -- A binder the parser generates at a written construct (`with`'s callback) is not written.
   let writtenAt (p : Pos) (x : String) : Bool :=
     p.line ≥ 1 && p.line ≤ lines.size &&
@@ -592,7 +581,7 @@ def alphaRename (src : String) :
       throw ⟨Span.none, s!"alpha: `{x}` is not written at {l}:{c}"⟩
     let x' := if short.contains ⟨l, c, ""⟩ && x' != x then s!"{x}: {x'}" else x'
     out := out.set! (l - 1) (String.ofList (cs.take (c - 1) ++ x'.toList ++ cs.drop (c - 1 + x.length)))
-  pure (mark ++ "\n".intercalate out.toList, edits)
+  pure ("\n".intercalate out.toList, edits)
 
 /-- Print `file` α-renamed (`alphaRename`), or with `map` its renaming. -/
 def alpha (map : Bool) (file : String) : IO UInt32 := do
@@ -694,10 +683,6 @@ def runCmd (old : Bool) : List String → IO UInt32
     IO.eprintln "usage: bcc run [--backend old|new] [--native [--no-facts]] <file> [arg…]"; return 2
 
 def main (argv : List String) : IO UInt32 := do
-  -- `--dialect 82` before the command: the program text's default spelling (SPEC §82).
-  let argv ← match argv with
-    | "--dialect" :: "82" :: rest => do dialectOption.set true; pure rest
-    | argv => pure argv
   match argv with
   | "kernel" :: args => kernel args
   | "compile" :: rest => let (old, rest) := backendOf rest; compileCmd old rest
@@ -774,7 +759,7 @@ def main (argv : List String) : IO UInt32 := do
     -- `print` of a text in the new spelling prints the parse its calls' lends are read in
     -- (SPEC §82 P8, `Frontend.Elab.parseLent`); `parse`, and any text in today's spelling, one
     -- plain parse.  `[spec §82]`
-    let parsed := if cmd == "print" && isNewDialect src then (·.1) <$> Frontend.Elab.parseLent src
+    let parsed := if cmd == "print" then (·.1) <$> Frontend.Elab.parseLent src
       else parseProgram src (lib := Frontend.Sugar.libSrc)
     match parsed with
     | .error e =>

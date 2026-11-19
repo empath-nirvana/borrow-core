@@ -37,10 +37,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 bcc=${BCC:-.lake/build/bin/bcc}
 [ -x "$bcc" ] || { echo "no bcc at $bcc: run \`lake build bcc\`, or set BCC"; exit 1; }
-# The book's blocks are in the new spelling (SPEC §82) and carry no pragma: every block is read with
-# `bcc --dialect 82`, which sets the spelling of a text with no pragma. `sourceKey`
-# (scripts/source-stage.sh) passes it too.
-export dialect="--dialect 82"
 want=()
 backend=new
 writekeys=0
@@ -105,7 +101,7 @@ block() {
       want=$(sed -nE '/^(--|#) answer: /{s///p;q;}' "$f")
       if [ -z "$want" ] && grepq -E '^(--|#) output:' "$f"; then want='()'; fi
       if [ -z "$want" ]; then fail "$at" "a \`bc\` block needs an \`-- answer:\` or \`-- output:\` line (or mark it \`bc,check\`)"; return 1; fi
-      if ! out=$("$bcc" $dialect check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; return 1; fi
+      if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; return 1; fi
       in="$tmp/$n.in"; : > "$in"
       sed -nE 's/^(--|#) stdin: ?//p' "$f" | while IFS= read -r l; do printf '%s\n' "$l"; done > "$in"
       outl=$(sed -nE 's/^(--|#) output: ?//p' "$f" | while IFS= read -r l; do printf '%s\n' "$l"; done)
@@ -130,27 +126,27 @@ block() {
       esac
       if [ "$src" = 1 ]; then
         par_nostore
-        got=$("$bcc" $dialect interp "$f" < "$in" 2>&1) || true
+        got=$("$bcc" interp "$f" < "$in" 2>&1) || true
         if [ "$got" != "$expect" ]; then
           fail "$at" "interpreter output differs" "want: $(echo "$expect" | tr '\n' ' ')" "got:  $(echo "$got" | tr '\n' ' ')"; return 1
         fi
       fi
       if [ -n "$kl" ] && { [ "$src" = 1 ] || [ "$verified" = 1 ]; }; then mkdir -p "$PAR_SIDE/ok"; echo "$kl" > "$PAR_SIDE/ok/$n"; fi
       if [ "$wasm" = 1 ]; then
-        got=$("$bcc" $dialect run --backend "$backend" "$f" < "$in" 2>&1) || true
+        got=$("$bcc" run --backend "$backend" "$f" < "$in" 2>&1) || true
         if [ "$got" != "$expect" ]; then
           fail "$at" "compiled output differs" "want: $(echo "$expect" | tr '\n' ' ')" "got:  $(echo "$got" | tr '\n' ' ')"; return 1
         fi
       fi
       ;;
     check)
-      if ! out=$("$bcc" $dialect check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; return 1; fi
+      if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; return 1; fi
       ;;
     reject)
       want=$(sed -nE '/^(--|#) expect: /{s///p;q;}' "$f")
       if [ -z "$want" ]; then fail "$at" "a \`bc,reject\` block needs an \`-- expect:\` line"; return 1; fi
-      if ! out=$("$bcc" $dialect parse "$f" 2>&1); then fail "$at" "does not parse, so it does not test the checker" "${out#"$f:"}"; return 1; fi
-      if out=$("$bcc" $dialect check "$f" 2>&1); then fail "$at" "accepted, but must be rejected"; return 1; fi
+      if ! out=$("$bcc" parse "$f" 2>&1); then fail "$at" "does not parse, so it does not test the checker" "${out#"$f:"}"; return 1; fi
+      if out=$("$bcc" check "$f" 2>&1); then fail "$at" "accepted, but must be rejected"; return 1; fi
       if [ "$out" != "$f:$want" ]; then fail "$at" "wrong error" "want: $want" "got:  ${out#"$f:"}"; return 1; fi
       ;;
     *) fail "$at" "unknown attributes \`bc,$attrs\` (use bc, bc,check, bc,reject or bc,ignore)"; return 1 ;;

@@ -3,7 +3,7 @@ import Frontend.Syntax
 # Frontend — Lexer
 
 Tokens of syntax-core §2: lower-case names, upper-case names, lifetime variables `'x`,
-integer literals (decimal and `0x` hexadecimal), keywords and symbols, with `--` comments
+integer literals (decimal and `0x` hexadecimal), keywords and symbols, with `#` comments
 skipped. Every Unicode spelling of the table in §2 is read as its ASCII spelling, so the parser
 sees one spelling of each token.
 
@@ -80,33 +80,10 @@ def keywords : List String :=
     "withbor1u", "withbor2u", "withbor3u", "withloadu", "slice_borrow_mut_u", "slice_borrow_imm_u",
     "withlocalu", "withlocal_loop" ]
 
-/-- The words the new spelling reserves besides `keywords` (SPEC §82 *Lexical*), reserved only in
-a text of the new dialect: `local` and `:=` are reserved for §82's local storage, which nothing
-reads yet; `var` is the transitional spelling of `let mut`.  `[spec §82]` -/
-def newKeywords : List String := ["handle", "import", "inout", "sink", "as", "local", "var"]
-
-/-- The first line that marks a source text as written in the new spelling (SPEC §82). In that
-spelling it is itself a `#` comment.  `[spec §82]` -/
-def dialectPragma : String := "#! dialect 82"
-
-/-- The mark `bcc --dialect 82` puts before a program text with no pragma, so that it is read in
-the new spelling (SPEC §82): a private-use character no source writes, which takes no column.
+/-- The words reserved besides `keywords` (SPEC §82 *Lexical*): `local` and `:=` are reserved for
+§82's local storage, which nothing reads yet; `var` is the transitional spelling of `let mut`.
 `[spec §82]` -/
-def dialectMark : Char := '\uE082'
-
-/-- `src` without `dialectMark`, the text as written.  `[spec §82]` -/
-def unmarkDialect (src : String) : String :=
-  if src.startsWith (String.singleton dialectMark) then String.ofList (src.toList.drop 1) else src
-
-/-- Whether the source text `src` is written in the new spelling: its first line is
-`dialectPragma`, or the driver marked it (`dialectMark`). Every other text is in today's
-spelling.  `[spec §82]` -/
-def isNewDialect (src : String) : Bool :=
-  src.startsWith (String.singleton dialectMark) ||
-  src.startsWith dialectPragma &&
-    (match src.toList.drop dialectPragma.length with
-     | [] | '\n' :: _ | '\r' :: '\n' :: _ => true
-     | _ => false)
+def newKeywords : List String := ["handle", "import", "inout", "sink", "as", "local", "var"]
 
 /-- The reserved upper-case words. -/
 def upperKeywords : List String := ["U", "F", "Fun"]
@@ -192,42 +169,36 @@ def lexStr : Nat → List Char → List Nat → Option (List Nat × Nat × List 
 
 /-- The lexer loop. `pos` is the position of the head of `cs`; `spaced` records whether
     whitespace was skipped since the last token. A byte literal `b'c'` is read as the tokens of
-    `u8[n]`, `n` the ASCII code of `c` (strings S1, `docs/decisions.md` 43). With `nd`, the text
-    is in the new spelling (SPEC §82): a comment is `#` to the end of the line, `--` is two
-    tokens, `newKeywords` are reserved, and `:=` is a token. -/
-def lexGo (nd : Bool) : Nat → List Char → Pos → Bool → Array Token → Except Error (Array Token)
+    `u8[n]`, `n` the ASCII code of `c` (strings S1, `docs/decisions.md` 43). A comment is `#` to
+    the end of the line, and `:=` is a token (SPEC §82 *Lexical*). -/
+def lexGo : Nat → List Char → Pos → Bool → Array Token → Except Error (Array Token)
   | 0, _, pos, _, _ => .error ⟨⟨pos, pos⟩, "lexer ran out of fuel"⟩
   | fuel + 1, cs, pos, spaced, acc =>
     let push (t : Tok) (n : Nat) (rest : List Char) :=
       let stop := advance pos n
-      lexGo nd fuel rest stop false (acc.push ⟨t, ⟨pos, stop⟩, spaced⟩)
+      lexGo fuel rest stop false (acc.push ⟨t, ⟨pos, stop⟩, spaced⟩)
     match cs with
     | [] => .ok (acc.push ⟨.eof, ⟨pos, pos⟩, spaced⟩)
-    | '\n' :: r => lexGo nd fuel r ⟨pos.line + 1, 1, pos.file⟩ true acc
-    | '-' :: '-' :: r =>
-      if nd then push (.sym "-") 1 ('-' :: r) else
-      let (skipped, rest) := spanChars (· ≠ '\n') r
-      lexGo nd fuel rest (advance pos (skipped.length + 2)) true acc
+    | '\n' :: r => lexGo fuel r ⟨pos.line + 1, 1, pos.file⟩ true acc
     | '#' :: r =>
-      if !nd then .error ⟨⟨pos, advance pos 1⟩, "unexpected character `#`"⟩ else
       let (skipped, rest) := spanChars (· ≠ '\n') r
-      lexGo nd fuel rest (advance pos (skipped.length + 1)) true acc
+      lexGo fuel rest (advance pos (skipped.length + 1)) true acc
     | ':' :: '=' :: r =>
-      if nd then push (.sym ":=") 2 r else push (.sym ":") 1 ('=' :: r)
+      push (.sym ":=") 2 r
     | '⊓' :: 'Δ' :: r => push (.kw "dom") 2 r
     | 'b' :: '\'' :: '\\' :: e :: '\'' :: r =>
       match byteEscape e with
       | some n =>
         let stop := advance pos 5
         let sp : Span := ⟨pos, stop⟩
-        lexGo nd fuel r stop false (acc.push ⟨.kw "u8", sp, spaced⟩ |>.push ⟨.sym "[", sp, false⟩
+        lexGo fuel r stop false (acc.push ⟨.kw "u8", sp, spaced⟩ |>.push ⟨.sym "[", sp, false⟩
           |>.push ⟨.int n, sp, false⟩ |>.push ⟨.sym "]", sp, false⟩)
       | none => .error ⟨⟨pos, advance pos 5⟩, s!"unknown escape `\\{e}` in a byte literal"⟩
     | 'b' :: '\'' :: c :: '\'' :: r =>
       if c.toNat < 128 && c.toNat ≥ 32 && c != '\\' && c != '\'' then
         let stop := advance pos 4
         let sp : Span := ⟨pos, stop⟩
-        lexGo nd fuel r stop false (acc.push ⟨.kw "u8", sp, spaced⟩ |>.push ⟨.sym "[", sp, false⟩
+        lexGo fuel r stop false (acc.push ⟨.kw "u8", sp, spaced⟩ |>.push ⟨.sym "[", sp, false⟩
           |>.push ⟨.int c.toNat, sp, false⟩ |>.push ⟨.sym "]", sp, false⟩)
       else .error ⟨⟨pos, advance pos 4⟩, "a byte literal `b'c'` holds a printable ASCII character"⟩
     | 'I' :: 'm' :: 'm' :: '̲' :: r => push (.kw "view") 4 r
@@ -238,14 +209,14 @@ def lexGo (nd : Bool) : Nat → List Char → Pos → Bool → Array Token → E
       | some n =>
         let stop := advance pos 4
         let sp : Span := ⟨pos, stop⟩
-        lexGo nd fuel r stop false (acc.push ⟨.kw "i32", sp, spaced⟩ |>.push ⟨.sym "[", sp, false⟩
+        lexGo fuel r stop false (acc.push ⟨.kw "i32", sp, spaced⟩ |>.push ⟨.sym "[", sp, false⟩
           |>.push ⟨.int n, sp, false⟩ |>.push ⟨.sym "]", sp, false⟩)
       | none => .error ⟨⟨pos, advance pos 4⟩, s!"unknown escape `\\{e}` in a character literal"⟩
     | '\'' :: c :: '\'' :: r =>
       if c != '\\' && c != '\'' && c.toNat ≥ 32 then
         let stop := advance pos 3
         let sp : Span := ⟨pos, stop⟩
-        lexGo nd fuel r stop false (acc.push ⟨.kw "i32", sp, spaced⟩ |>.push ⟨.sym "[", sp, false⟩
+        lexGo fuel r stop false (acc.push ⟨.kw "i32", sp, spaced⟩ |>.push ⟨.sym "[", sp, false⟩
           |>.push ⟨.int c.toNat, sp, false⟩ |>.push ⟨.sym "]", sp, false⟩)
       else .error ⟨⟨pos, advance pos 3⟩, "a character literal `'c'` holds one character"⟩
     | '"' :: r =>
@@ -254,7 +225,7 @@ def lexGo (nd : Bool) : Nat → List Char → Pos → Bool → Array Token → E
       | none => .error ⟨⟨pos, advance pos 1⟩,
           "a string literal ends with `\"` on its line; its escapes are `\\n`, `\\t`, `\\r`, `\\0`, `\\\\`, `\\\"` and `\\xNN`"⟩
     | c :: r =>
-      if c == ' ' || c == '\t' || c == '\r' then lexGo nd fuel r (advance pos 1) true acc
+      if c == ' ' || c == '\t' || c == '\r' then lexGo fuel r (advance pos 1) true acc
       else match r, twoCharSyms.find? (fun (a, b, _) => a == c && r.head? == some b) with
       | _ :: r', some (_, _, s) => push (.sym s) 2 r'
       | _, _ =>
@@ -274,7 +245,7 @@ def lexGo (nd : Bool) : Nat → List Char → Pos → Bool → Array Token → E
         let (rest, r') :=
           spanChars (fun e => isLower e || isUpper e || isDigit e || e == '_' || e == '\'') r
         let s := String.ofList (c :: rest)
-        push (if keywords.contains s || (nd && newKeywords.contains s) then .kw s else .ident s) (rest.length + 1) r'
+        push (if keywords.contains s || newKeywords.contains s then .kw s else .ident s) (rest.length + 1) r'
       else if isUpper c then
         let (rest, r') := spanChars (fun e => isLower e || isUpper e || isDigit e || e == '_') r
         let s := String.ofList (c :: rest)
@@ -307,11 +278,10 @@ def lexGo (nd : Bool) : Nat → List Char → Pos → Bool → Array Token → E
       else .error ⟨⟨pos, advance pos 1⟩, s!"unexpected character `{c}`"⟩
 
 /-- The tokens of a source text, ending with `eof`; `file` the library module it is (`""` for the
-program), which each position carries; `nd`, whether it is in the new spelling, by default what
-its first line says (`isNewDialect`).  `[spec §42, §82]` -/
-def lex (src : String) (file : String := "") (nd : Bool := isNewDialect src) :
+program), which each position carries.  `[spec §42]` -/
+def lex (src : String) (file : String := "") :
     Except Error (Array Token) :=
-  let cs := (unmarkDialect src).toList
-  lexGo nd (cs.length + 1) cs ⟨1, 1, file⟩ true #[]
+  let cs := src.toList
+  lexGo (cs.length + 1) cs ⟨1, 1, file⟩ true #[]
 
 end Frontend

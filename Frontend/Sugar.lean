@@ -709,12 +709,11 @@ def noteAutoLendsS (W W' : Val) : SM Unit :=
     modify (· ++ [(sp, .autoLent)])
 
 /-- Whether a call at `sp` lends bare places: its text is one the elaboration finds lends in,
-recorded first (`Origin.autoLendIn`), or a library text in the new spelling when those are
-included. A library text is read only for a call in it.  `[spec §82]` -/
+recorded first (`Origin.autoLendIn`), or a library text when those are included. A library text is read only for a call in it.  `[spec §82]` -/
 def autoLendAt (os : Origins) (sp : Span) : Bool := match os.head? with
   | some (_, .autoLendIn fs libs) =>
     let f := sp.start.file
-    fs.contains f || (libs && f != "" && (libSrc f).any isNewDialect)
+    fs.contains f || (libs && f != "" && (libSrc f).isSome)
   | _ => false
 
 /-- The div functions recorded as taking the owner where they declare a shared borrow.
@@ -6008,8 +6007,8 @@ return (thunkv nu_in < (nu_out (force io_pf{sfx} io_pq{sfx})).1, (nu_out (force 
       pure s!"io_pl{sfx} <- force io_hole_call;
 io_ps{sfx} : {St} <- return (inl io_pl{sfx});
 io_pf{sfx} <- return (unbang (unfold[{Pt}, {St}] (!thunkv fun (io_pa{sfx} : {St}) ->
-  < -- One turn of the generator's loop, handled: one handler site, so that the continuation it
-    -- keeps is of one code.
+  < # One turn of the generator's loop, handled: one handler site, so that the continuation it
+    # keeps is of one code.
     io_pob{sfx} : !U ({Lg} -o {Fr R}) <- return (!thunkv fun (io_pl{sfx} : {Lg}) ->
       handle_with[{i.n}](((!thunkv fun (io_pv{sfx} : ({Bt}) + {Lg}) -> return (inr io_pv{sfx})) :
           !U ((({Bt}) + {Lg}) -o {Fr R})),
@@ -6020,8 +6019,8 @@ io_pf{sfx} <- return (unbang (unfold[{Pt}, {St}] (!thunkv fun (io_pa{sfx} : {St}
     io_po{sfx} : {R} <- case io_pa{sfx} \{
         inl io_pg{sfx} -> return ((unbang io_pob{sfx}) io_pg{sfx})
       | inr io_pq{sfx} ->
-          -- The rest after the operation: when it ends the turn, the next turn runs at once, so
-          -- that an observation that performs it once per turn gives an element each time.
+          # The rest after the operation: when it ends the turn, the next turn runs at once, so
+          # that an observation that performs it once per turn gives an element each time.
           io_pr{sfx} <- (nu_out (force io_pq{sfx})).1;
           case io_pr{sfx} \{
             inl io_py{sfx} -> return (inl io_py{sfx})

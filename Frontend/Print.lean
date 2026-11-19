@@ -444,11 +444,11 @@ def Decl.pp (d : Decl) (extra : List String := []) : String := match d with
     mk ++ "def " ++ n.name ++ params ++ bounds ++ " : " ++ A.pp ++ " =" ++ nl 2 ++ V.pp 0 2
   | .extern _ n A => "extern " ++ n.name ++ " : " ++ A.pp
   | .main _ C M => "main : " ++ C.pp ++ " =" ++ nl 2 ++ M.pp 0 2
-  | .include _ n => "include " ++ n.name
+  | .include _ n => "import " ++ n.name
   | .effect _ n tps ops =>
     let op (o : OpDecl) : String :=
       (match o.kind with
-        | .fn => "fn "
+        | .fn => ""
         | .ctl .lin => "must_resume ctl "
         | .ctl .cancel => "ctl "
         | .ctl .unr => "multi ctl ") ++
@@ -456,14 +456,15 @@ def Decl.pp (d : Decl) (extra : List String := []) : String := match d with
         (if o.lives.isEmpty then "" else "<" ++ ", ".intercalate (o.lives.map fun (a, b) =>
           (Life.var a.span a.name).pp ++ (match b with | .top _ => "" | b => " < " ++ b.pp)) ++ ">") ++
         "(" ++ ", ".intercalate (o.params.map fun (x, A) => x.name ++ ": " ++ A.pp) ++
-        ") -> " ++ o.res.pp
+        ") : " ++ o.res.pp
     "effect " ++ n.name ++ (if tps.isEmpty then "" else "[" ++ ", ".intercalate (tps.map (·.name)) ++ "]") ++
       " {" ++ String.join (ops.map fun o => nl 2 ++ op o ++ ";") ++ nl 0 ++ "}"
   | .handler _ n st S e cs l =>
     let cl (c : Clause) : String :=
-      c.name.name ++ "(" ++ ", ".intercalate (c.params.map (·.name)) ++ ") = {" ++ nl 4 ++
+      c.name.name ++ "(" ++ ", ".intercalate (c.params.map (·.name)) ++ ") -> {" ++ nl 4 ++
         c.body.pp 0 4 .clause ++ nl 2 ++ "}"
-    "handler " ++ n.name ++ (if l then "(&mut " else "(mut ") ++ st.name ++ ": " ++ S.pp ++ "): " ++ e.name ++ " = {" ++
+    "handler " ++ n.name ++ (if l then "(" ++ st.name ++ ": inout " else "(mut " ++ st.name ++ ": ") ++
+      S.pp ++ ") : " ++ e.name ++ " {" ++
       String.join (cs.map fun c => nl 2 ++ cl c ++ ";") ++ nl 0 ++ "}"
   | .poly _ n tps lps H A V => Decl.ppPoly n tps lps H A V
   | .data _ d =>
@@ -484,7 +485,7 @@ def Decl.pp (d : Decl) (extra : List String := []) : String := match d with
     let tys (As : List VTy) : String :=
       if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]"
     let cl (x : String) (xs : List Ident) (M : Comp) : String :=
-      x ++ "(" ++ ", ".intercalate (xs.map (·.name)) ++ ") = {" ++ nl 4 ++ M.pp 0 4 .clause ++ nl 2 ++ "}"
+      x ++ "(" ++ ", ".intercalate (xs.map (·.name)) ++ ") -> {" ++ nl 4 ++ M.pp 0 4 .clause ++ nl 2 ++ "}"
     let (rx, rA, rM) := h.ret
     "handler " ++ h.name.name ++
       (if h.tps.isEmpty then "" else "[" ++ ", ".intercalate (h.tps.map (·.name)) ++ "]") ++
@@ -493,9 +494,9 @@ def Decl.pp (d : Decl) (extra : List String := []) : String := match d with
       (if h.params.isEmpty then "" else
         "(" ++ ", ".intercalate (h.params.map fun (x, A) =>
           (if h.mutPs.contains x.name then "mut " else "") ++ x.name ++ ": " ++ A.pp) ++ ")") ++
-      ": " ++ h.eff.name ++ tys h.effArgs ++ ", " ++ rA.pp ++ " -> " ++ h.res.pp ++
-      (if h.row.isEmpty then "" else " with " ++ ", ".intercalate (h.row.map fun (e, As) => e.name ++ tys As)) ++
-      " = {" ++ nl 2 ++ cl "return" [rx] rM ++ ";" ++
+      " : " ++ h.eff.name ++ tys h.effArgs ++ ", (" ++ rA.pp ++ ") -> " ++ h.res.pp ++
+      (if h.row.isEmpty then "" else " / " ++ " + ".intercalate (h.row.map fun (e, As) => e.name ++ tys As)) ++
+      " {" ++ nl 2 ++ cl "return" [rx] rM ++ ";" ++
       String.join (h.clauses.map fun c => nl 2 ++ cl c.name.name c.params c.body ++ ";") ++ nl 0 ++ "}"
 
   -- `[spec §76]`

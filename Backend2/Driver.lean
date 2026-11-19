@@ -1013,11 +1013,12 @@ def evNamesOf (src : String) : Option (List UInt32 × List UInt32) := do
   pure (evNames c kinds envs, envs.toList.map (·.1))
 
 /-- `yld`'s clause reads `c`, a `!` parameter of its handler: an `env` name, kept. -/
-def directSrc : String := "effect Y { ctl yld() }
-handler pass[A](c: !(1 => i32)): Y, A -> A = { return(a) = a; yld(k) = { let _ = c(()); k(()) } }
-main -> 1 =
-  let c: !(1 => i32) = !{ u -> 7 };
-  with pass[1](c) { yld() }
+def directSrc : String := "effect Y { ctl yld() : 1 }
+handler pass[A](c: !((1) -> i32)): Y, (A) -> A { return(a) -> a; yld(k) -> { let _ = c(()); k(()) } }
+fn main() : 1 {
+  let c: !((1) -> i32) = !{ u -> 7 };
+  handle { yld() } with pass[1](c)
+}
 "
 
 #guard match evNamesOf directSrc with

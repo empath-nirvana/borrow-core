@@ -243,8 +243,6 @@ structure PState where
   what `..r` and a site name may name.  `[spec §76]` -/
   rowPs : List String := []
   sitePs : List String := []
-  /-- The text is written in the new spelling (SPEC §82, `isNewDialect`).  `[spec §82]` -/
-  nd : Bool := false
   /-- New spelling: the next statement is an arm's or a clause's body written without a block,
   one expression, which a newline or `;` does not continue.  `[spec §82]` -/
   armBody : Bool := false
@@ -477,17 +475,19 @@ def isKw (s : String) : P Bool := return (← peek).tok == .kw s
 def expectSym (s : String) : P Unit := do
   if ← isSym s then discard bump else expected s!"`{s}`"
 
-/-! ### The layout rule of the new spelling (SPEC §82 *Lexical*) -/
+/-! ### The layout rule (SPEC §82 *Lexical*) -/
 
-/-- In a surface body of a text in the new spelling, where a newline ends a statement, an arm
-and a clause (§82 *Surface bodies and core text*). Core text keeps today's rules.  `[spec §82]` -/
-def layout : P Bool := return (← get).nd && (← get).surf
+/-- In a surface body, where a newline ends a statement, an arm and a clause (§82 *Surface bodies
+and core text*). Core text keeps `;`, and so does the text the elaboration writes and reads back
+(`internal`: its templates and a printed program), whose surface bodies (a printed handler's
+clauses) are `;`-separated and write `x <- M`, as core text does.  `[spec §82]` -/
+def layout : P Bool := return (← get).surf && !(← get).internal
 
 /-- Where the layout rule ends a statement at a newline: in `layout`, outside `(…)`.
 `[spec §82]` -/
 def layoutHere : P Bool := do
   let s ← get
-  return s.nd && s.surf && !(s.parenAt[s.pos]?.getD false)
+  return s.surf && !s.internal && !(s.parenAt[s.pos]?.getD false)
 
 /-- A newline comes between the last token read and the next.  `[spec §82]` -/
 def nlBefore : P Bool := return (← peek).span.start.line > (← get).lastStop.line
@@ -977,7 +977,7 @@ def rtyAtom : Nat → P RTy
       expectSym ")"
       -- `(A) -> B` and `(A) -> B / E₁ + E₂[T]` in the new spelling: today's `A => B` and
       -- `(A => B with E₁, E₂[T])` (§82 T1, T2).  [spec §82]
-      if (← get).nd && (← isSym "->") then
+      if ← isSym "->" then
         discard bump
         let B ← rty n
         let F := RTy.lolli (← spanFrom st) A B
@@ -2886,7 +2886,7 @@ def compG : Nat → Bool → P Comp
       -- `var x = e` is `let mut x = e` (the transitional row V1 of
       -- §82 *`let mut` sites*), which the new spelling does not write.  [spec §82]
       let isVar := t.tok == .kw "var"
-      if (← get).nd && !isVar && (← isKw "mut") then
+      if !isVar && (← isKw "mut") then
         failAt (← peek).span "`let mut x = e` is written `var x = e` in the new spelling (SPEC §82)"
       -- `let C(p, …) = e; N`: a constructor pattern, a match of one arm (SPEC §42, M3).
       if !isVar && (match (← peek).tok with | .uident _ | .kw "box" => true | _ => false) then
@@ -3673,7 +3673,7 @@ def decl (n : Nat) : P Decl := do
   | .kw "fn" =>
     discard bump
     -- `fn main() : T { S }` (§82 D6): today's `main -> T = S`.  [spec §82]
-    if (← get).nd && (← isKw "main") then
+    if ← isKw "main" then
       discard bump
       expectSym "("
       expectSym ")"
@@ -3709,16 +3709,10 @@ def decl (n : Nat) : P Decl := do
       discard bump
       let H ← vty n
       let V ← if printed then do expectSym "="; val n
-        else if (← get).nd then do
+        else do
           -- `poly f at T = e` or `poly f at T { S }` (§82 D13, *Arm and clause bodies*).  [spec §82]
           let M ← fnBody (modify fun s => { s with muts := [], assigned := [] })
           pure (Val.thunk M.span M)
-        else do
-        expectSym "="
-        modify fun s => { s with muts := [], assigned := [], surf := true }
-        let M ← comp n
-        modify fun s => { s with surf := false }
-        pure (Val.thunk M.span M)
       return .poly (← spanFrom st) x tps (lives.map (·.1)) (some H) (.unit x.span) V
     if printed then
       expectSym ":"
@@ -3732,7 +3726,7 @@ def decl (n : Nat) : P Decl := do
     let ps ← if ← isSym ")" then pure [] else params n
     expectSym ")"
     -- `poly f[T](…) : R` in the new spelling (§82 D13).
-    expectSym (if (← get).nd then ":" else "->")
+    expectSym ":"
     let T ← rty n
     let sp ← spanFrom st
     let A := tupleTy sp (ps.map (·.2))
@@ -3746,7 +3740,7 @@ def decl (n : Nat) : P Decl := do
     pure (.poly sp x tps [] none ty V)
   | .kw "include" | .kw "import" =>
     -- `import m` in the new spelling, `include m` in today's (§82 D7).  [spec §82]
-    if (t.tok == .kw "include") == (← get).nd then
+    if t.tok == .kw "include" then
       expected "a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`)"
     discard bump
     let x ← ident "the name of a library module"
@@ -3771,17 +3765,15 @@ def decl (n : Nat) : P Decl := do
     let mut ops : Array OpDecl := #[]
     for _ in [0:n] do
       if ← isSym "}" then break
-      let nd := (← get).nd
-      -- In the new spelling an answering operation is unmarked and `ctl` marks a control one
+      -- An answering operation is unmarked and `ctl` marks a control one
       -- (§82 D14, D15).  [spec §82]
       let qualified := match (← peek).tok, (← peekAt 1).tok with
         | .ident "ctl", .ident _ | .ident "must_resume", .ident "ctl"
         | .ident "multi", .ident "ctl" => true
         | _, _ => false
-      let kind ← if nd && !qualified then
+      let kind ← if !qualified then
           if ← isKw "fn" then expected "an operation (`op(…) : B`, `ctl op(…) : B`)"
           pure OpKind.fn
-        else if !nd && (← isKw "fn") then do discard bump; pure OpKind.fn
         else do
           let q ← match (← peek).tok with
               | .ident "must_resume" => do discard bump; pure Qual.lin
@@ -3798,9 +3790,8 @@ def decl (n : Nat) : P Decl := do
       expectSym "("
       let ps ← if ← isSym ")" then pure [] else params n
       expectSym ")"
-      let hasB ← isSym "->"
-      let B ← if nd then do expectSym ":"; vty n
-        else if hasB then do discard bump; vty n else pure (VTy.unit o.span)
+      expectSym ":"
+      let B ← vty n
       ops := ops.push ⟨o, ps, B, kind, lps⟩
       if ← isSym ";" then discard bump
     expectSym "}"
@@ -3830,10 +3821,6 @@ def decl (n : Nat) : P Decl := do
       for _ in [0:n] do
         if ← isSym ")" then break
         -- `&mut s: S`: an answering handler whose clauses are given the state lent (SPEC §34).
-        if !(← get).nd && (← isSym "&") then
-          discard bump
-          unless ← isKw "mut" do expected "`mut` after `&` (a handler's lent state, `&mut s: S`)"
-          lent := true
         if ← isKw "mut" then
           discard bump
           let x ← ident "a parameter name"
@@ -3846,11 +3833,11 @@ def decl (n : Nat) : P Decl := do
           -- In the new spelling `s: inout S` is today's lent state `&mut s: S` (§82 D18,
           -- *Handler and operation parameters*), and `p: sink P` today's owned `p: P` (P4); a bare `p: P` is as written.
           -- [spec §82]
-          if (← get).nd && (← isKw "inout") then
+          if ← isKw "inout" then
             discard bump
             lent := true
             mutPs := mutPs ++ [x.name]
-          else if (← get).nd && (← isKw "sink") then discard bump
+          else if ← isKw "sink" then discard bump
           let A ← vty n
           ps := ps.push (x, A)
         if ← isSym "," then discard bump
@@ -3866,18 +3853,15 @@ def decl (n : Nat) : P Decl := do
     let sig ← if ← isSym "," then do
         discard bump
         -- `E[A], (A) -> R` in the new spelling (§82 D16).  [spec §82]
-        let nd := (← get).nd
-        if nd then expectSym "("
+        expectSym "("
         let A ← vty n
-        if nd then expectSym ")"
+        expectSym ")"
         expectSym "->"
         let R ← vty n
         pure (some (A, R))
       else pure none
-    let row ← if !(← get).nd && (← isKw "with") then do discard bump; rowList "," n
-      else if (← get).nd && (← isSym "/") then do discard bump; rowList "+" n
+    let row ← if ← isSym "/" then do discard bump; rowList "+" n
       else pure []
-    unless (← get).nd do expectSym "="
     expectSym "{"
     -- The handler's parameters: one binder each, in scope in every clause.
     modify fun s => { s with surf := true, scope := [] }
@@ -3899,11 +3883,10 @@ def decl (n : Nat) : P Decl := do
       expectSym ")"
       -- `op(x) -> e` in the new spelling (§82 D16); a body that is a closure `{ p -> S }` is an
       -- expression (§82 *Arm and clause bodies*).  [spec §82]
-      let nd := (← get).nd
-      expectSym (if nd then "->" else "=")
+      expectSym "->"
       modify fun s => { s with muts := mutPs, assigned := [], surf := true, scope := pScope }
       for x in xs.toList do pushBinder x x.name
-      let M ← if (← isSym "{") && !(nd && (← closureNext)) then do
+      let M ← if (← isSym "{") && !(← closureNext) then do
           discard bump
           let M ← comp n
           expectSym "}"
@@ -3943,20 +3926,7 @@ def decl (n : Nat) : P Decl := do
     pure (.extern (← spanFrom st) x A)
   | .kw "main" =>
     discard bump
-    -- `main -> T = S` (draft 0): the result is `F T` when `T` is a value type. The new spelling
-    -- writes it `fn main() : T { S }` (§82 D6).
-    if !(← get).nd && (← isSym "->") then
-      discard bump
-      let T ← rty n
-      let C ← match T.toV with
-        | .ok A => pure (CTy.ret A.span A)
-        | .error _ => liftSort T.toC
-      expectSym "="
-      -- Each declaration's `let mut` variables are its own.
-      modify fun s => { s with surf := true, muts := [], assigned := [], scope := [] }
-      let M ← comp n
-      modify fun s => { s with surf := false }
-      return .main (← spanFrom st) C M
+    -- `main : C = M`, core text (§82 D20); a program's entry is `fn main() : T { S }` (D6).
     expectSym ":"
     let C ← cty n
     expectSym "="
@@ -4002,33 +3972,22 @@ where
     expectSym "("
     -- In the new spelling a parameter has a mode (§82 P1–P5), whose fresh lifetimes join the
     -- written ones.
-    let (ps, lives) ← if (← get).nd then do
+    let (ps, lives) ← do
         let mps ← if ← isSym ")" then pure [] else modeParams (lives₀.map (·.1.name)) n 0
         pure (mps.map (fun (x, A, _) => (x, A)), placeFresh lives₀ (mps.map (·.2.2)))
-      else do
-        let ps ← if ← isSym ")" then pure [] else params n
-        pure (ps, lives₀)
     expectSym ")"
-    let nd := (← get).nd
-    -- `fn f(…) : B / E₁ + E₂[A] { S }` in the new spelling (§82 D1–D3).
-    expectSym (if nd then ":" else "->")
+    -- `fn f(…) : B / E₁ + E₂[A] { S }` (§82 D1–D3).
+    expectSym ":"
     let T ← rty n
-    -- `with E₁, E₂[A]`: a written row (SPEC §18); `/ E₁ + E₂[A]` in the new spelling.
-    let nes ← if !nd && (← isKw "with") then do discard bump; namedRowList "," n
-      else if nd && (← isSym "/") then do discard bump; namedRowList "+" n
+    -- `/ E₁ + E₂[A]`: a written row (SPEC §18).
+    let nes ← if ← isSym "/" then do discard bump; namedRowList "+" n
       else pure []
     let es := nes.map (·.2)
     let ns := if nes.all (·.1.isNone) then [] else nes.map (·.1)
     let bs ← whereBounds tps (lives₀.map (·.1.name))
-    let M ← if nd then
-        fnBody do
+    let M ← fnBody do
           modify fun s => { s with muts := [], assigned := [], scope := [] }
           for x in ps.map (·.1) do pushBinder x x.name
-      else do
-        expectSym "="
-        modify fun s => { s with muts := [], assigned := [], surf := true, scope := [] }
-        for x in ps.map (·.1) do pushBinder x x.name
-        comp n
     modify fun s => { s with surf := false, scope := [] }
     let sp ← spanFrom st
     let A := tupleTy sp (ps.map (·.2))
@@ -4275,10 +4234,9 @@ def decls (n : Nat) : Nat → List Decl → P (List Decl)
 each name is resolved to its binder (SPEC §41, rule R1), and no fresh binder is named as a name
 of the source. -/
 def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data : Data.Table := {})
-    (internal : Bool := false) (file : String := "") (lendAt : List Pos := [])
-    (nd : Bool := isNewDialect src) :
+    (internal : Bool := false) (file : String := "") (lendAt : List Pos := []) :
     Except Error (α × PState) := do
-  let toks ← lex src file nd
+  let toks ← lex src file
   let fuel := fuelPerToken * (toks.size + 1)
   let go : P α := do
     let a ← p fuel
@@ -4287,32 +4245,31 @@ def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data
   let taken := if resolve then toks.toList.filterMap (fun t => match t.tok with
     | .ident s => some s
     | _ => none) |>.eraseDups else []
-  let parenAt := if nd then parenNesting toks else #[]
-  go.run { toks, pos := 0, lastStop := ⟨1, 1, file⟩, resolve, taken, data, internal, lendAt, nd,
-           parenAt := parenAt }
+  go.run { toks, pos := 0, lastStop := ⟨1, 1, file⟩, resolve, taken, data, internal, lendAt,
+           parenAt := parenNesting toks }
 
 /-- The table of the tokens `toks`: the `data` declarations (SPEC §42) and the `type`
 abbreviations (SPEC §61) written in them, each read where it is: a declaration is in scope in its
 whole module. A declaration that does not read is left to the parse proper, which reports it.
-`nd`: the tokens are of a text in the new spelling (SPEC §82).  `[spec §42, §61, §82]` -/
-def dataIn (toks : Array Token) (nd : Bool := false) : Data.Table := Id.run do
+`[spec §42, §61]` -/
+def dataIn (toks : Array Token) : Data.Table := Id.run do
   let fuel := fuelPerToken * (toks.size + 1)
   let start : Pos := ⟨1, 1, (toks[0]?.map (·.span.start.file)).getD ""⟩
-  let parenAt := if nd then parenNesting toks else #[]
+  let parenAt := parenNesting toks
   let mut out : Data.Table := {}
   for i in [0:toks.size] do
     let named := match toks[i + 1]?.map Token.tok with | some (Tok.uident _) => true | _ => false
     if named && toks[i]!.tok == .ident "data" then
-      match (dataDecl fuel).run { toks, pos := i, lastStop := start, nd, parenAt } with
+      match (dataDecl fuel).run { toks, pos := i, lastStop := start, parenAt } with
       | .ok (d, _) => out := { out with decls := out.decls ++ [d] }
       | .error _ => pure ()
     else if named && toks[i]!.tok == .kw "type" then
-      match (decl fuel).run { toks, pos := i, lastStop := start, nd, parenAt } with
+      match (decl fuel).run { toks, pos := i, lastStop := start, parenAt } with
       | .ok (d, _) => out := { out with abbrevs := out.abbrevs ++ (Data.Abbrev.ofDecl? d).toList }
       | .error _ => pure ()
     else if toks[i]!.tok == .kw "handler" then
       -- A control handler, whose `with` lends what its body writes (SPEC §41, R3).  [spec §41]
-      match (decl fuel).run { toks, pos := i, lastStop := start, nd, parenAt } with
+      match (decl fuel).run { toks, pos := i, lastStop := start, parenAt } with
       | .ok (.chandler _ ch, _) => out := { out with ctl := out.ctl ++ [ch.name.name] }
       | _ => pure ()
   out
@@ -4334,11 +4291,11 @@ def dataOfModules (lib : String → Option String) : Nat → List String → Lis
   | _ + 1, [], seen => ({}, seen)
   | k + 1, m :: ms, seen =>
     if seen.contains m then dataOfModules lib k ms seen else
-    match (lib m).map (fun src => (lex src m, isNewDialect src)) with
-    | some (.ok toks, nd) =>
+    match (lib m).map (fun src => lex src m) with
+    | some (.ok toks) =>
       let (inner, seen) := dataOfModules lib k (includesIn toks) (m :: seen)
       let (rest, seen) := dataOfModules lib k ms seen
-      (inner ++ dataIn toks nd ++ rest, seen)
+      (inner ++ dataIn toks ++ rest, seen)
     | _ => dataOfModules lib k ms (m :: seen)
 
 def runP {α} (p : Nat → P α) (src : String) (resolve : Bool := false) : Except Error α :=
@@ -4363,34 +4320,26 @@ def tableOf (lib : String → Option String) (incs : List String) (own : Data.Ta
 
 /-- The `data` declarations and the `type` abbreviations in scope in the source `src` (SPEC §42,
 §61), `lib` giving a module's source (`tableOf`). -/
-def dataOf (lib : String → Option String) (src : String) (file : String := "")
-    (nd : Bool := isNewDialect src) : Data.Table :=
-  match lex src file nd with
-  | .ok toks => tableOf lib (includesIn toks) (dataIn toks nd)
+def dataOf (lib : String → Option String) (src : String) (file : String := "") : Data.Table :=
+  match lex src file with
+  | .ok toks => tableOf lib (includesIn toks) (dataIn toks)
   | .error _ => {}
 
 /-- The declarations of a source file. At most one `main` is accepted. Its names are resolved
-(`resolve`) unless it is code the elaborator generated. `nd`: the text is in the new spelling (SPEC §82), by default what its
-first line says (`isNewDialect`). -/
+(`resolve`) unless it is code the elaborator generated. -/
 def parseProgram (src : String) (resolve : Bool := true)
     (lib : String → Option String := fun _ => none) (internal : Bool := false)
-    (file : String := "") (lendAt : List Pos := []) (nd : Bool := isNewDialect src) :
+    (file : String := "") (lendAt : List Pos := []) :
     Except Error Program := do
   -- The `data` declarations in scope (SPEC §42): the prelude's, the included modules', the
   -- program's own. `file` is the library module `src` is (`""` for the program), which its
   -- positions carry (#883).
-  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src file nd) internal file
-    lendAt nd
+  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src file) internal file
+    lendAt
   let mains := ds.filter fun | .main .. => true | _ => false
   match mains with
   | _ :: .main sp _ _ :: _ => .error ⟨sp, "a program has at most one `main`"⟩
   | _ => pure ⟨ds⟩
-
-/-- Whether the text a position is in is in the new spelling (SPEC §82): `nd`, the program's, for
-a position of the program (`file` `""`), and a library module's own, by its first line,
-otherwise.  `[spec §82]` -/
-def ndOfFile (nd : Bool) (lib : String → Option String) (file : String) : Bool :=
-  if file == "" then nd else ((lib file).map isNewDialect).getD false
 
 def parseVal (src : String) : Except Error Val := runP val src
 def parseComp (src : String) : Except Error Comp := runP comp src
@@ -4400,22 +4349,22 @@ def parseCTy (src : String) : Except Error CTy := runP cty src
 /-- The binders resolution renamed in `src` (SPEC §41, rule R1), each with the name the source
 writes it with. -/
 def renamesOf (src : String) (lib : String → Option String := fun _ => none)
-    (nd : Bool := isNewDialect src) : List (String × String) :=
-  match runPS (fun n => decls n n []) src true (dataOf lib src "" nd) (nd := nd) with
+    : List (String × String) :=
+  match runPS (fun n => decls n n []) src true (dataOf lib src "") with
   | .ok (_, s) => s.renamed
   | .error _ => []
 
 /-- Each name of `src` that resolution resolved to a variable (SPEC §41, rule R1): where it is
 written, as written, the variable, and the number of its binder, in the order of the source. -/
 def resolutionOf (src : String) (lib : String → Option String := fun _ => none)
-    (nd : Bool := isNewDialect src) : Except Error (List (Pos × String × String × Nat)) := do
-  let (_, s) ← runPS (fun n => decls n n []) src true (dataOf lib src "" nd) (nd := nd)
+    : Except Error (List (Pos × String × String × Nat)) := do
+  let (_, s) ← runPS (fun n => decls n n []) src true (dataOf lib src "")
   pure s.occs.reverse
 
 /-- Where the source `src` writes a record's field by its name alone (`PState.shorthands`). -/
 def shorthandsOf (src : String) (lib : String → Option String := fun _ => none)
-    (nd : Bool := isNewDialect src) : List Pos :=
-  match runPS (fun n => decls n n []) src true (dataOf lib src "" nd) (nd := nd) with
+    : List Pos :=
+  match runPS (fun n => decls n n []) src true (dataOf lib src "") with
   | .ok (_, s) => s.shorthands
   | .error _ => []
 
@@ -4437,7 +4386,7 @@ def unrename (rs : List (String × String)) (s : String) : String :=
 
 /-- The source text of the span `sp` of `src` (lines and columns from 1). -/
 def srcText (src : String) (sp : Span) : String :=
-  let ls := (unmarkDialect src).splitOn "\n"
+  let ls := src.splitOn "\n"
   if sp.start.line == sp.stop.line then
     let l := (ls[sp.start.line - 1]?).getD ""
     String.ofList ((l.toList.drop (sp.start.col - 1)).take (sp.stop.col - sp.start.col))
@@ -4470,9 +4419,9 @@ def unmark (src : String) (msg : String) (lib : String → Option String := fun 
 
 /-- An error about the program `src`, rendered with each renamed binder named as the source writes
 it (`unrename`), and each span marker as its source text (`unmark`). -/
-def Error.renderIn (src : String) (e : Error) (lib : String → Option String := fun _ => none)
-    (nd : Bool := isNewDialect src) : String :=
-  let renames := renamesOf src lib nd ++ (match lib e.span.start.file with
+def Error.renderIn (src : String) (e : Error) (lib : String → Option String := fun _ => none) :
+    String :=
+  let renames := renamesOf src lib ++ (match lib e.span.start.file with
     | some msrc => if e.span.start.file == "" then [] else renamesOf msrc lib
     | none => [])
   { e with msg := unmark src (unrename renames e.msg) lib }.render
@@ -4484,8 +4433,8 @@ def Pos.fileIn (file : String) (p : Pos) : String :=
 
 /-- An error about the program `file`, whose source is `src`, rendered as `path:line:col: message`,
 the path the file the error's position is in (`Pos.fileIn`).  `[spec §42]` -/
-def Error.renderAt (file src : String) (e : Error) (lib : String → Option String := fun _ => none)
-    (nd : Bool := isNewDialect src) : String :=
-  s!"{e.span.start.fileIn file}:{e.renderIn src lib nd}"
+def Error.renderAt (file src : String) (e : Error) (lib : String → Option String := fun _ => none) :
+    String :=
+  s!"{e.span.start.fileIn file}:{e.renderIn src lib}"
 
 end Frontend
