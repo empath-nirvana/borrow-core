@@ -447,7 +447,11 @@ typed-term node of the same name, both indexed by a kind `k : ConvKind` (`Core/J
   `alpha_compatJ`, …; at `ofRet` the premise's own meaning). The chain does the same with the
   `_compatN` lemmas (`conv_compatN`). No compatibility lemma changes.
 - **The typed term** has one node `conv` holding the kind and the two judgments. Backend2 reads which
-  conversion a node is off its kind (`effSub`'s rows, `roll`, `codeErase`, …) and rebuilds nothing.
+  conversion a node is off its kind (`effSub`'s rows, `roll`, `codeErase`, …) and rebuilds nothing;
+  it names a `conv` node by its kind, so its fact keys and messages are unchanged. The former nodes
+  `ret`, `ofRet`, `bangE`, `boxI`, `boxE`, `immSub`, `mutSub`, `roll`, `unroll`, `nuIn`, `nuOut`,
+  `effSub` and `alpha` stay as abbreviations of the `conv` node at their kind, so statements over
+  them keep their type; `codeErase` and `codeEraseB`, which no statement names, have none.
 - The rule count of `CDerives` and of the checker's judgment each drops by 14. A later conversion
   adds a kind and a case of `JConv`, not a rule.
 - **Status:** the fold (#1170, unit 1170-CONV), after #798. Not built.
