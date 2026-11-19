@@ -212,11 +212,8 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
       · exact hs.liveAt_right (ihf k hk)
       · exact hs.liveAt_left (iha k hk)
   | sumI₁ _ ih | sumI₂ _ ih => intro k hk; exact ih k (by simpa [mentions] using hk)
-  | thunkV _ _ ih | ret _ ih | bangE _ ih | boxI _ _ ih | boxE _ ih | immSub _ _ ih
-  | mutSub _ _ ih | ofRet _ ih | roll _ _ _ ih | unroll _ ih | nuIn _ _ ih | nuOut _ _ ih
-  | effSub _ _ ih | bangThunkV _ _ _ ih | alpha _ _ ih | codeI _ _ ih | codeIB _ _ _ ih
-  | codeErase _ ih | codeEraseB _ ih => exact ih
-  | thunkF _ ih | lamDead _ ih | allI _ _ _ _ ih | bangThunkF _ _ ih =>
+  | thunkVb _ _ _ _ _ ih | conv _ _ _ ih | codeIb _ _ _ _ _ ih => exact ih
+  | thunkFb _ _ _ _ ih | lamDead _ ih | allI _ _ _ _ ih =>
       intro k hk
       exact Ctx.liveAt_cons_succ.mp (ih (k + 1) (by simpa [mentions, Expr.val, Val.lam] using hk))
   | lam _ ih =>
@@ -270,15 +267,9 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
   | withborUD _ _ _ _ _ _ _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
   | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih =>
       intro k hk; rw [mentions_withborUE] at hk; exact ih k hk
-  | foldImm => intro k hk; rw [mentions_of_closed (foldImmV_closed _)] at hk; cases hk
-  | foldOwn => intro k hk; rw [mentions_of_closed (foldOwnV_closed _)] at hk; cases hk
-  | foldOwnG => intro k hk; rw [mentions_of_closed (FoldP.foldOwnGV_closed _)] at hk; cases hk
-  | foldReuse => intro k hk; rw [mentions_of_closed (foldReuseV_closed _)] at hk; cases hk
-  | unfoldN => intro k hk; rw [mentions_of_closed (unfoldV_closed _)] at hk; cases hk
-  | unfoldK => intro k hk; rw [mentions_of_closed (unfoldV_closed _)] at hk; cases hk
+  | constK c _ _ => intro k hk; rw [mentions_of_closed c.closed] at hk; cases hk
   | nuOutK _ _ _ _ h =>
       intro k hk; simp only [mentions, beq_iff_eq] at hk; subst hk; exact h.live
-  | divFuel => intro k hk; rw [mentions_of_closed divFuelV_closed] at hk; cases hk
   | reify _ _ _ _ _ hcl => intro k hk; rw [mentions_of_closed (reifyV_closed hcl)] at hk; cases hk
   | effPerform _ _ _ _ ih | effRaise _ _ _ _ _ ih =>
       intro k hk

@@ -175,6 +175,51 @@ context, §10), `[]I` at every value type,
 three call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), and conversion up to the names of
 lifetime binders (`[α]`, *Lifetime binders and `[α]`* below). No new machine rules.
 
+**The constants are one rule (#1170).** A *constant* is a closed term typed at a consumed context
+under side conditions that read no derivation: `()`, the borrow axioms, the `!` axioms of §2 and
+every primitive the later entries add. The kernel types all of them with one rule, `constK`, and
+the checker with one typed-term node of the same name, both indexed by a kind `k : ConstKind`
+(`Core/ConstKind.lean`):
+
+    k.OK Δ    I.RowOK k.row    DeadP Γ
+    ─────────────────────────────────── [const]
+    Δ; Γ ⊢ k.E : k.ty ⊓Δ
+
+- **The kinds** are the 51 constants, each carrying the data its term and type are read at, and
+  each stated in its entry: `unitI`; `copyBang`, `releaseBang` (§2); `alloc`, `free`, `swap`,
+  `copy`, `releaseImm`, `releaseMut`, `releaseUnk`, `withbor1`, `withbor2`, `withbor3`, `withload`,
+  `withswap` (the borrow axioms, §3, §5, §9, §23); `foldImm`, `foldOwn`, `foldReuse`, `foldOwnG`
+  (§6, §61); `unfoldN` (§7); `lit`, `hostOp` (§8, §73); `arrNew`, `arrFree`, `arrSize`,
+  `arrReplace`, `arrLen`, `arrGet`, `arrCopy`, `arrRelease`, `arrEmpty`, `sliceBorrowM`,
+  `sliceBorrowI`, `sliceGetM`, `sliceLenM`, `sliceSplitI`, `sliceSplitM`, `sliceEmptyI`,
+  `sliceEmptyM`, `sliceReplaceM`, `sliceSwapM` (§9, §61); `tokMint`, `tokBurn` (§11); `iterate`,
+  `divFuel` (§14); `countFold`, `countTry` (§16); `withloadU` (§19); `boundedFix` (§20); `unfoldK`
+  (§68); `sliceCopyM` (§74).
+- **The kind's functions.** `ConstKind.E` is the constant's term and `ConstKind.ty` its type at
+  `⊓Δ` (only the lends read `⊓Δ`), each as its entry states it. `ConstKind.OK` is the constant's
+  side condition, the conjunction of its former premises other than `DeadP Γ` (`True` where there
+  were none). `ConstKind.row` is the row the rule ties where the index ties rows (§83): `Σ` at
+  `iterate`, `tick, Σ` at `divFuel`, and `[]` at every other kind, which every effect context ties.
+  `ConstKind.domFree` is false at the seven lends whose type or side condition reads `Δ`
+  (`withbor1`/`2`/`3`, `withload`, `withloadU`, `sliceBorrowM`/`I`), so the checker's weakening of
+  `Δ` treats exactly the constants it treated before as reading it.
+- **The old names stay.** Each constant's former rule (`CDerives.alloc`, `CDerives.countFold S`,
+  …) is a theorem of the judgment and of each of its instances (`CDerives`, `CDerivesAt Ξ`,
+  `CDerivesP`) with today's binders and statement, so calls by position and by name are unchanged.
+  Derivability is exactly the same: a `constK` derivation at a kind is one of the former rule.
+- **The Fundamental Property's case** applies `constK_compatX`, which splits on the kind and applies
+  the constant's unchanged compatibility lemma (`alloc_compatX`, `countFold_compatX`, …). The chain
+  does the same with the `_compatN` lemmas (`constK_compatN`). No compatibility lemma changes.
+- **The typed term** has one node `constK` holding the kind. Backend2 lowers each constant as before,
+  reading which one it is off the node's kind, and rebuilds nothing. The surface constants and
+  their messages are unchanged: each emits its kind. The former nodes that statements name (`unitI`,
+  `copy`, `arrCopy`, `iterate`, `divFuel`, `withbor2`, `unfoldN`) stay as abbreviations of the
+  `constK` node at their kind, so those statements keep their type; the other 44 have none.
+  `TExpr.domFree` at the node is `k.domFree`.
+- The rule count of `CDerives` and of the checker's judgment each drops by 50. A later constant
+  adds a kind and a clause to each `ConstKind` function, not a rule.
+- **Status:** the fold (#1170, unit 1170-Z), after #798. Not built.
+
 ### Semantics
 
 The typed world of §1, re-typed at `VTy`/`CTy`: `vC`, `cC`, `SemV`, `SemC`. `U C` is a leaf of the
@@ -193,7 +238,7 @@ The checker returns a **typed term** `t : TExpr` with its derivation, not an era
   and cancel rows, constants' type arguments;
 - at a split (`Ctx.SplitP`), the use masks of its two parts (`Masks`), as the checker computed
   them;
-- at `[handle]` (`effHandleV`, `effHandleVB`), each operation's qualifier and the kind of its
+- at `[handle]` (`effHandleVO`, §28), each operation's qualifier and the kind of its
   clause, as the checker classifies it (`ks`, §19 *Clause kinds*), and at every `handle` node the
   site as the elaboration of effects records it (`site`, §19 *Handler sites*) and the frames its
   handled computation holds (`inside`, §19 *The clause's names in the continuation*), which the
@@ -208,7 +253,7 @@ The checker returns a **typed term** `t : TExpr` with its derivation, not an era
 checked term is `Checked.e := t.erase`: the term the backend compiles is the term the derivation
 types, by definition. `TDerivesAt Ξ Δ Γ t j` and `TDerivesP Δ Γ t j` are `CDerivesAt Ξ` (§19,
 decision R) and `CDerivesP` (§29) with each premise at a child and the conclusion at the node; a
-premise that types a term built from other arguments (`thunkV`'s `λN`) carries the equation
+premise that types a term built from other arguments (`thunkVb`'s `λN`) carries the equation
 between the child's erasure and that term. They project to `CDerivesAt`/`CDerivesP` at
 `t.erase` (`TDerivesAt.erase`, `TDerivesP.erase`), so a derivation fixes every field of every
 node, and every theorem below, and §19's and §29's, holds of `t.erase` as stated. The node types,
@@ -417,6 +462,45 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
 arguments, or a copy's function and keys (the handlers and sites that serve its effects, its
 blocks'). Copies whose keys differ only in their sites' names have one `body`.
 
+**The conversions are one rule (#1170).** A *conversion* types a term at a new judgment from a
+derivation of the same term: `return` at `F A` (`ret`) and back (`ofRet`), `!E` (`bangE`), `[]I`
+and its elimination (`boxI`, `boxE`), `⊑Imm`/`⊑Mut` (`immSub`, `mutSub`), the code erasures of §68
+(`codeErase`, `codeEraseB`), `roll`/`unroll` (§6), `nuIn`/`nuOut` (§7), `[sub]` (§19, `effSub`)
+and `[α]` (`alpha`). The kernel types all 15 with one rule, `conv`, and the checker with one
+typed-term node of the same name, both indexed by a kind `k : ConvKind` (`Core/Judgment.lean`):
+
+    Δ; Γ ⊢ e : j    JConv Δ Γ k j j′
+    ──────────────────────────────── [conv]
+    Δ; Γ ⊢ e : j′
+
+- **The kind** carries the former node's data (`ret A`, `boxI a A`, `immSub a b A`,
+  `effSub Σ Σ′ A`, `nuIn m i C`, …; `alpha` none). **`JConv Δ Γ k j j′`** has one case per kind,
+  which fixes `j` and `j′` from the kind's data exactly as the former rule's premise and conclusion,
+  and holds exactly the former rule's side premises: `CtxOutlives Δ Γ a` at `boxI`,
+  `Δ.EntailsLe a b` at `immSub`/`mutSub`, `NoMut` and `Cl` at `roll`, `SysOkAt` at `nuIn`/`nuOut`,
+  `RowLe` at `effSub`, `Jdg.alphaB j j′` at `alpha`, none at the others. The conclusion's judgment
+  is the variable `j′`, so a derivation at a concrete judgment still splits by its rules.
+- **The inversions' relations stay.** `JS`/`VS` (`Core/Inversions.lean`) keep their cases and stay
+  without side premises; `JConv.toJS` maps a conversion to its step, and every inversion takes the
+  `conv` case through it.
+- **The old names stay.** Each former rule (`CDerives.ret`, `CDerives.boxI`, `CDerives.effSub`, …)
+  is a theorem of the judgment and of each of its instances (`CDerives`, `CDerivesAt Ξ`,
+  `CDerivesP`) with today's binders and statement, so calls by position and by name are unchanged.
+  Derivability is exactly the same.
+- **The Fundamental Property's case** applies `conv_compatX`, which splits on `JConv` and applies the
+  former rule's unchanged compatibility lemma (`ret_compatC`, `boxI_compatC`, `sub_compatC`,
+  `alpha_compatJ`, …; at `ofRet` the premise's own meaning). The chain does the same with the
+  `_compatN` lemmas (`conv_compatN`). No compatibility lemma changes.
+- **The typed term** has one node `conv` holding the kind and the two judgments. Backend2 reads which
+  conversion a node is off its kind (`effSub`'s rows, `roll`, `codeErase`, …) and rebuilds nothing;
+  it names a `conv` node by its kind, so its fact keys and messages are unchanged. The former nodes
+  `ret`, `ofRet`, `bangE`, `boxI`, `boxE`, `immSub`, `mutSub`, `roll`, `unroll`, `nuIn`, `nuOut`,
+  `effSub` and `alpha` stay as abbreviations of the `conv` node at their kind, so statements over
+  them keep their type; `codeErase` and `codeEraseB`, which no statement names, have none.
+- The rule count of `CDerives` and of the checker's judgment each drops by 14. A later conversion
+  adds a kind and a case of `JConv`, not a rule.
+- **Status:** the fold (#1170, unit 1170-CONV), after #798. Not built.
+
 ### Baseline, restated
 
 - **Fundamental Property** — `CDerives Δ Γ e j → SemV`/`SemC` (`fundamentalC`).
@@ -509,7 +593,7 @@ under `Mut`. `U C` is a leaf for type variables.
 
 ### Typing
 
-`roll`/`unroll` on the same term (no machine step). `Imm̲` at `μ` substitutes the closed `μ` type
+`roll`/`unroll` on the same term (no machine step; kinds of the conversion rule `conv`, §3). `Imm̲` at `μ` substitutes the closed `μ` type
 for `X` under `Ref`, `Imm`, `Mut`, `!` and keeps `X` at head positions.
 
 ### Folds
@@ -585,7 +669,8 @@ binder, and the rules carry it through `NuOk`.
     ──────────────────────  nuIn     ──────────────────────  nuOut
     Γ ⊢ M : νX. C                    Γ ⊢ M : C[U(νX. C)/X]
 
-on the same term, at a positive `C`. Observing a `νX. C` is `nuOut` followed by the projections
+on the same term, at a positive `C` (kinds of the conversion rule `conv`, §3). Observing a
+`νX. C` is `nuOut` followed by the projections
 of the unrolling.
 
 **Coiteration.** At every positive `C` and every state type `S` that mentions no lifetime
@@ -1038,7 +1123,7 @@ A value type is **flat** when it is persistent and holds no recursive data (`VTy
 
 `!Γ` (`Ctx.Banged`, every live slot at a type `!A`) implies it (`Ctx.Banged.flatLive`), since `!A`
 is flat. The premise of Core's two promotion rules, which §3 takes from §2's `!I-λ` and `!I-Λ`, is
-`Flat(Γ)`:
+`Flat(Γ)` (each is its value rule's rule at the promotion tag `true`, below):
 
     Flat(Γ)    Δ; _ : 1 (dead), Γ ⊢ M : F A
     ───────────────────────────────────────  !thunk     (bangThunkF)
@@ -1064,6 +1149,37 @@ duplication (`Copy`, flat captures only) from explicit (`Clone`); the explicit h
   (`Frontend/Check/Rules.lean`) asks `VTy.flat` of each live slot. The inversion of a λ read at a
   `!` thunk (`LamCls`, `lam_bang`) gives a flat context, and AT06's rejection reads that the
   captured cell's type, a view of `Ref`, is not flat.
+- **A value rule and its promotion are one rule (#1170).** The kernel types `thunk` at `U (F A)`
+  and its promotion `!thunk`, `thunk` at `U C` and `!thunkv`, and `[code-I]` and its form under `!`
+  (§68), with three rules over a promotion tag `b : Bool`, and the checker with one typed-term
+  node each of the same name:
+
+  | rule | at `b = false` | at `b = true` |
+  |---|---|---|
+  | `thunkFb` | `thunkF` | `bangThunkF` |
+  | `thunkVb` | `thunkV` | `bangThunkV` |
+  | `codeIb` | `codeI` | `codeIB` |
+
+  - **The type.** `VTy.bangIf b X` is `!X` at `true` and `X` at `false` (a definition, not a
+    type former). Each rule takes the tag, the premise `b = true → Flat(Γ)`, the former rule's
+    other premises in the same order, and an equation `T = VTy.bangIf b X`, where `X` is the former
+    rule's type (`U (F A)`, `U C`, `Code⟨capNorm (λM); Γ.capTy (λM)⟩ C`). It concludes at `T`.
+    `codeIb`'s premise on `λM` is at `VTy.bangIf b (U C)`. With `T` a variable, a derivation at a
+    concrete type still splits by its rules. At `false` the flatness premise is vacuous, and at
+    `true` it is `Flat(Γ)`, so derivability is exactly the same.
+  - **The old names stay.** `thunkF`, `bangThunkF`, `thunkV`, `bangThunkV`, `codeI` and `codeIB`
+    are theorems of the judgment and of each of its instances (`CDerives`, `CDerivesAt Ξ`,
+    `CDerivesP`) at the tag's two values, with today's binders and statements.
+  - **The Fundamental Property's case** splits on the tag and applies the former rule's unchanged
+    compatibility lemma (`thunkF_compatC`/`bangThunkF_compatC`, `thunkV_compatC`/
+    `bangThunkV_compatC`, `codeI_compatC`/`codeIB_compatC`). The chain does the same with the
+    `_compatN` lemmas. No compatibility lemma changes.
+  - **The typed term** has the three nodes `thunkFb`, `thunkVb` and `codeIb`, which hold the tag.
+    `thunkF`, `thunkV`, `bangThunkF` and `bangThunkV` stay as abbreviations of their node at their
+    tag, so statements over them keep their type. `codeI` and `codeIB`, which no statement names,
+    have none.
+  - The rule count of `CDerives` and of the checker's judgment each drops by three.
+  - **Status:** the fold (#1170, PR #1209), after #798. Not built.
 - **Where `!Γ` stays.** `[let]` and `[then]` at a row with an unrestricted operation (§19), and
   `Count`, `Inversions` (`banged_slot`), `Weaken` and `Embedding`, keep `!Γ`.
 - **Backend.** A captured flat value is copied into a `!` closure's environment as a `!` value is,
@@ -3657,7 +3773,8 @@ Six rules, over `CDerives` with its context premises (§10):
 
 - **As built** (`Core/Judgment.lean`, `CDerives.eff*`; `Core/EffRules.lean`):
   - a row is a list of operations `(n, i, q, A_i, B_i)`, and `F_Σ R` is `CTy.effOf Σ R`;
-  - `[sub]` is `RowLe` (every operation of `Σ` is `Σ′`'s);
+  - `[sub]` is `RowLe` (every operation of `Σ` is `Σ′`'s), a kind of the conversion rule `conv`
+    (§3);
   - `[raise]`'s argument type holds no owned cell (`VTy.OwnFree`): the raise abandons it, which
     is not a consume;
   - `[then]` asks `Σ`'s names to be nonzero and its keys unique, and `!Γ₂` at an unrestricted
@@ -4496,7 +4613,7 @@ up (§16), so the step is the same at every host. The step decides what a spent 
 
 - **As built.** The primitive `Prim.boundedFix` and its head step `Head.boundedFix`
   (`Paper/S1_Syntax`, `Paper/S3_Dynamics`; `boundedFixNext`, `fixSelf` in
-  `Support/Dynamics/Arrays.lean`), the interpreter's step, the `CDerives` rule `boundedFix`, its
+  `Support/Dynamics/Arrays.lean`), the interpreter's step, the `CDerives` constant `boundedFix` (a kind of `constK`, §3), its
   soundness `boundedFix_compatX` (`Core/BoundedFix.lean`), and the checker's constant
   `bounded_fix[A, C]`.
 - **The proof** is the induction on the budget at every `Σ`: the self-reference at `k` is valid
@@ -8126,7 +8243,7 @@ its big-integer library (#509).
 ### Baseline
 
 The Fundamental Property and adequacy hold unchanged: `CDerives.lit` and `CDerives.hostOp` are the
-rules they were, at more literals and operations, and `host_call_sound` covers the new operations
+constants they were (kinds of `constK`, §3), at more literals and operations, and `host_call_sound` covers the new operations
 at every host. No new rule, index or former. Every existing corpus and kernel program keeps its
 output, goldens, `corpus/kernel-counts.expected` and counts. The lexer reads `n.i`, an operation
 of a row, as a float literal's text, and the parser reads it back (`nDotI?`), so every row is read
@@ -9861,7 +9978,7 @@ No change: no type, rule, term, typing, elaboration or semantics.
   join (`catch_abort`; frames that catch nothing of its name are passed, `abort_absorbs`).
 - **`[let]` at a row** (`effLet`): `N` on `inl`, the abort handed on and `N`'s context consumed
   (`effLet`'s `hW`: it holds no own cell), the branch per call of §19 (`abort_to`, `abort_passes`).
-- **`[sub]`** (`effSub`): the payload of `Σ` re-injected at `Σ'`'s summands (`RowLe`).
+- **`[sub]`** (the `conv` node at `effSub`): the payload of `Σ` re-injected at `Σ'`'s summands (`RowLe`).
 - **`[then]`** (`effThenF`): `N` on a value; on an abort the finaliser `D`, then the abort, or the
   finaliser's own, which supersedes it, handed on (`then_ret`, `then_fin`, `unwind_prefix`).
 - **The unwinding borrows** (`withbor1U`, `withbor2U`, `withbor3U`, `withloadU`, `sliceBorrowMU`,
@@ -11438,8 +11555,9 @@ the first summand that has one at `⊕`, the empty view at a borrowed family, **
 at an owned one, the constant function at `!(A ⇒ B)`, and at `μB` the filler of `B` with the
 `μ`'s own variable having none (the least fixed point's first approximant), rolled. The empty
 array is the constant `array_empty[A] : Array A` (§9), the empty family `(0, 0)` that
-`famEmpty_compatX` already types at every leaf, here at `Ref A`: the CDerives rule `arrEmpty`
-(and `CDerivesAt`'s, `CDerivesP`'s, the typed term's), whose soundness is `arrEmpty_compatX`.
+`famEmpty_compatX` already types at every leaf, here at `Ref A`: the CDerives constant `arrEmpty`
+(a kind of `constK`, §3, in every instance and in the typed term), whose soundness is
+`arrEmpty_compatX`.
 `array_new` at length 0 needs a function to an element, so an element type whose only finite
 values are built from empty arrays (`data Tree = Tree(i32, Vec[Tree])`, `μX. Array X`) had no
 closed term without it. So `Json`'s filler is `Num(0)` whichever constructor is first, the rose
@@ -12700,10 +12818,11 @@ conversion of a `foldOwn` or `foldReuse` node changes.
 
 ### The fact
 
-The node itself, with its shape `F : FShape` (`TExpr.foldOwn`, `TExpr.foldReuse`;
-`TDerives.foldOwn`, `TDerives.foldReuse`, `Frontend/Check/TDerives.lean`; `CDerives.foldOwn`,
-`CDerives.foldReuse`, `Core/Judgment.lean`, by `foldOwn_compatX` (`Core/FoldOwn.lean`) and
-`foldReuse_compatX` (`Core/FoldReuse.lean`)). Its type `!U(A′_R ⊸ F R) ⊸ !U(μX. F.ty ⊸ F R)`
+The node itself, with its shape `F : FShape`: the constants' node `constK` at the kind
+`foldOwn F R` or `foldReuse F R` (§3; `TExpr.constK`, `TDerivesX.constK`,
+`Frontend/Check/TDerives.lean`; `CDerives.foldOwn`, `CDerives.foldReuse`, theorems in
+`Core/Judgment.lean`, by `foldOwn_compatX` (`Core/FoldOwn.lean`) and `foldReuse_compatX`
+(`Core/FoldReuse.lean`)). Its type `!U(A′_R ⊸ F R) ⊸ !U(μX. F.ty ⊸ F R)`
 (`algOTy`, `foldOTy`; `A″_R`, `algRTy`, at `foldReuse`) says:
 
 - the fold consumes the structure: `μX. F.ty` is taken by `⊸` and given back nowhere, so every
@@ -12861,13 +12980,14 @@ lemmas the later units reuse, and no `VTy` former, rule or relation clause (K1�
 ### The rules
 
 Each is a `CDerives` rule with one compatibility lemma, a rule of `CDerivesX` and so of its
-instances `CDerivesAt` and `CDerivesP` (§83), mirrored into `TDerives*` by `scripts/gen-pin.py`. No
-new index and no new judgment.
+instances `CDerivesAt` and `CDerivesP` (§83), mirrored into `TDerives*` by `scripts/gen-pin.py`;
+`unfoldK` is a kind of the constants' rule `constK` (§3), and its name a theorem of the same
+statement. No new index and no new judgment.
 
 | Rule | Statement | Unit |
 |---|---|---|
-| `codeI` | `Γ ⊢ λM : U C` and `Γ.CapOK (λM)` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
-| `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C`; its premise on the context is `Flat(Γ)` (`Ctx.FlatLive`, §10), as promotion's | K3 |
+| `codeI` | `Γ ⊢ λM : U C` and `Γ.CapOK (λM)` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` (the rule `codeIb` at `false`, §10) | K3 |
+| `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C`; its premise on the context is `Flat(Γ)` (`Ctx.FlatLive`, §10), as promotion's (`codeIb` at `true`) | K3 |
 | `codeErase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
 | `codeEraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
 | `force` (restated) | `Ctx.SoloP Γ i T`, `T.forceTy = some C` (`T` is `U C` or `Code⟨N; E⟩ C`) ⟹ `forceE C (.var i) : C` | K3 |
@@ -12889,8 +13009,9 @@ new index and no new judgment.
   K-M.4a).
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
-- `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
-  which Backend2 reads (B4). In the machine it is the identity.
+- `codeErase` is not subsumption: it is a conversion on the same term (a kind of the rule `conv`,
+  §3), so the typed term has a `conv` node for it at the kind `codeErase`, which Backend2 reads
+  (B4). In the machine it is the identity.
 - `eraseD` (covariant erasure inside `C`, K6) is not in this entry.
 - **The inversion's cost** (CLAUDE.md, *Do not invert `CDerives` casually*). `codeI` types the
   term `λM` at a new type, and `codeErase`/`codeEraseB` add a view step from a code type to `U`.
@@ -12915,7 +13036,7 @@ new index and no new judgment.
 - **C3, silently at a join.** Two different codes joined (`if`/`match` arms) with no expected type
   are erased to `U C`; S1's census counts these sites.
 - Wherever the expected type is `U C` (parameters written `dyn`, data fields, arrays, `Ref`
-  contents, handler arguments and state), `convVal` inserts the `codeErase` node.
+  contents, handler arguments and state), `convVal` inserts the `conv` node at `codeErase`.
 - **The growing-instantiation guard.** A template whose instantiation reaches itself at a type
   argument containing the previous one is instantiated at the argument's erasure, with a note
   (scope §4.4). It is load-bearing: without it nested `Code⟨…⟩` inside `E` grows without bound.
@@ -14121,7 +14242,7 @@ unwinding, `Σ_M ≤ Σ`, `Σ_D ≤ Σ`, `divB Σ = false`, `hP`, the finaliser'
 - **The slice lends** `sliceBorrowMU` and `sliceBorrowIU` keep a pure finaliser and stay separate
   rules: their shape and bound premises differ in kind from the kinds of `LendUKind` (#1170). They
   join it as kinds if they take the same generalisation, when a program needs it. `withloadU` (no
-  finaliser, its own term) stays separate too.
+  finaliser, its own term) is not a kind of `LendUKind`: it is a constant, a kind of `constK` (§3).
 - **A cleanup that uses two lent places** gets only one source back: not provided.
 - **Known gaps in #940's surface:** a cleanup using a different capability from the body's is
   refused as used twice (#1136); a `with … finally` around a `for` over a generator fails with a
@@ -14940,10 +15061,11 @@ its instances: abbreviations that keep their names, their rules and every statem
     abbrev CDerivesP       := CDerivesX {pin := true}
 
 - **The fields.** A field is a gating premise of the rules it gates.
-  - `ties`: at `some Ξ`, nine rules take `hAt : I.RowOK S`, which is `RowAt Ξ S` (§19, decision
-    R). These are the rules that read an operation's signature off a row: `iterate`, `divFuel`,
-    `reify`, `effPerform`, `effAwait`, `effRaise`, `effHandleVO` (§28), `effHandleT`,
-    `effHandleL`. At `none` the premise is `True`.
+  - `ties`: at `some Ξ`, the rules that read an operation's signature off a row take
+    `hAt : I.RowOK S`, which is `RowAt Ξ S` (§19, decision R): `reify`, `effPerform`, `effAwait`,
+    `effRaise`, `effHandleVO` (§28), `effHandleT`, `effHandleL`, and the constants' rule
+    `constK` at its kind's row (§3), which is `iterate`'s and `divFuel`'s row and `[]` at every other
+    kind. At `none` the premise is `True`.
   - `pin`: `lendR`, `lendLoopR` and `nilDead` (§29) take `hPin : I.pin = true`. Every other rule
     is the same at every index.
   - `I ≤ I'` holds field by field. A tie may be dropped (`some Ξ ≤ none`), and the relaxed rules
