@@ -160,6 +160,11 @@ theorem nd_modes : sameProgram
     ("fn h<'io_lf0, 'io_lf1>(a: array_imm 'io_lf0 i32, b: array_mut 'io_lf1 i32) -> i32 = 0\n" ++
      "fn k<'io_lf0>(a: array_imm 'io_lf0 i32) -> i32 = 0")
     "fn h(a: array i32, b: inout array i32) : i32 = 0\nfn k(a: array i32) : i32 = 0"
+    = true ∧
+    -- A fresh lifetime is named apart from the header's written ones: `'io_lf0` written, the
+    -- fresh one is `'io_lf1`.
+    sameProgram "fn f<'io_lf1, 'io_lf0>(a: array_imm 'io_lf1 i32, r: imm 'io_lf0 i32) -> i32 = 0"
+    "fn f<'io_lf0>(a: array i32, r: imm 'io_lf0 i32) : i32 = 0"
     = true := by decide +kernel
 
 -- Hazards of the layout rule: a line that starts with `&` begins a statement, a line-leading `|`
