@@ -343,7 +343,7 @@ copyable `A`. [Arrays](guide/data.md#arrays) teaches them.
 |---|---|---|
 | `eq_u8`, `eq_i32` | `eq_i32(x: i32, y: i32) : bool` | element equality, to pass to a search |
 | `cmp_u8`, `cmp_i32` | `cmp_i32(x: i32, y: i32) : i32` | element order, `-1`, `0` or `1` (`u8` unsigned) |
-| `len` | `len[A](v: array A) : i32` | the length |
+| `len` | `len[A]<'a>(v: array_imm 'a A) : i32` | the length |
 | `len_mut` | `len_mut[A]<'a>(v: array_mut 'a A) : array_mut 'a A * i32` | the length of an exclusive view |
 | `at` | `at[A](v: array A, i: i32, d: sink A) : A` | a copy of element `i`, or `d` |
 | `get` | `get[A]<'a>(v: array_imm 'a A, i: i32) : imm 'a A + 1` | element `i`, lent |
@@ -353,7 +353,7 @@ copyable `A`. [Arrays](guide/data.md#arrays) teaches them.
 | `set` | `set[A]<'a>(v: array_mut 'a A, i: i32, x: sink A) : array_mut 'a A` | `x` in slot `i` |
 | `replace` | `replace[A]<'a>(v: array_mut 'a A, i: i32, x: sink A) : array_mut 'a A * (A + A)` | `x` in slot `i`; `inl` the old element, or `inr x` |
 | `swap_at` | `swap_at[A]<'a>(v: array_mut 'a A, i: i32, j: i32) : array_mut 'a A` | slots `i` and `j` exchanged |
-| `discard_mut` | `discard_mut[A](v: inout array A) : 1` | the view given up |
+| `discard_mut` | `discard_mut[A]<'a>(v: array_mut 'a A) : 1` | the view given up |
 | `empty`, `empty_mut` | `empty[A]<'a>() : array_imm 'a A` | an empty view |
 | `split_at` | `split_at[A]<'a>(v: array_imm 'a A, i: i32) : array_imm 'a A * array_imm 'a A + array_imm 'a A` | the first `i` and the rest, or `inr v` past the end |
 | `split_at_mut` | the same over `array_mut` | |
@@ -361,14 +361,14 @@ copyable `A`. [Arrays](guide/data.md#arrays) teaches them.
 | `split_first_mut`, `split_last_mut` | the same over `array_mut` | |
 | `reverse` | `reverse[A]<'a>(v: array_mut 'a A) : array_mut 'a A` | reversed in place |
 | `fill` | `fill[A]<'a>(v: array_mut 'a A, x: sink A) : array_mut 'a A` | `x` in every slot |
-| `copy_from` | `copy_from[A]<'a>(dst: array_mut 'a A, src: array A) : array_mut 'a A` | `src` copied in, as far as the shorter |
+| `copy_from` | `copy_from[A]<'a, 'b>(dst: array_mut 'a A, src: array_imm 'b A) : array_mut 'a A` | `src` copied in, as far as the shorter |
 | `sort` | `sort[A]<'a>(v: array_mut 'a A, c: !((A * A) -> i32), d: sink A) : array_mut 'a A` | sorted by `c`, stably; `d` is any element |
-| `find` | `find[A](v: array A, x: sink A, eq: !((A * A) -> bool)) : i32 + 1` | the index of the first element equal to `x` |
+| `find` | `find[A]<'a>(v: array_imm 'a A, x: sink A, eq: !((A * A) -> bool)) : i32 + 1` | the index of the first element equal to `x` |
 | `contains` | `contains[A](v: array A, x: sink A, eq: !((A * A) -> bool)) : bool` | whether an element equals `x` |
-| `binary_search` | `binary_search[A](v: array A, x: sink A, c: !((A * A) -> i32)) : i32 + i32` | in a sorted view, `inl` an index of `x`, or `inr` where it would go |
-| `cmp` | `cmp[A](v: array A, w: array A, c: !((A * A) -> i32)) : i32` | lexicographic order |
-| `eq` | `eq[A](v: array A, w: array A, e: !((A * A) -> bool)) : bool` | the same elements |
-| `starts_with`, `ends_with` | `starts_with[A](v: array A, p: array A, e: !((A * A) -> bool)) : bool` | |
+| `binary_search` | `binary_search[A]<'a>(v: array_imm 'a A, x: sink A, c: !((A * A) -> i32)) : i32 + i32` | in a sorted view, `inl` an index of `x`, or `inr` where it would go |
+| `cmp` | `cmp[A]<'a, 'b>(v: array_imm 'a A, w: array_imm 'b A, c: !((A * A) -> i32)) : i32` | lexicographic order |
+| `eq` | `eq[A]<'a, 'b>(v: array_imm 'a A, w: array_imm 'b A, e: !((A * A) -> bool)) : bool` | the same elements |
+| `starts_with`, `ends_with` | `starts_with[A]<'a, 'b>(v: array_imm 'a A, p: array_imm 'b A, e: !((A * A) -> bool)) : bool` | |
 
 ```bc
 import textio
