@@ -212,7 +212,10 @@ the checker with one typed-term node of the same name, both indexed by a kind `k
   does the same with the `_compatN` lemmas (`constK_compatN`). No compatibility lemma changes.
 - **The typed term** has one node `constK` holding the kind. Backend2 lowers each constant as before,
   reading which one it is off the node's kind, and rebuilds nothing. The surface constants and
-  their messages are unchanged: each emits its kind.
+  their messages are unchanged: each emits its kind. The former nodes that statements name (`unitI`,
+  `copy`, `arrCopy`, `iterate`, `divFuel`, `withbor2`, `unfoldN`) stay as abbreviations of the
+  `constK` node at their kind, so those statements keep their type; the other 44 have none.
+  `TExpr.domFree` at the node is `k.domFree`.
 - The rule count of `CDerives` and of the checker's judgment each drops by 50. A later constant
   adds a kind and a clause to each `ConstKind` function, not a rule.
 - **Status:** the fold (#1170, unit 1170-Z), after #798. Not built.
