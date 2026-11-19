@@ -1,0 +1,47 @@
+-- pending: SPEC §31 Open D1 (lib/async's list map/filter clash with the adapters'), SPEC §21 Open (a task whose loop is a for over a generator, under spawn)
+-- now: 35:4: `sensor` performs `Exhausted`, which its written row does not list
+-- Asynchronous stream processing: each task consumes a stream of readings from a generator,
+-- through `lib/adapters.bc`'s `filter` and `map`, and awaits after each element it processes,
+-- as a task sharing a thread would. Two such tasks run under `lib/async.bc`'s scheduler, each
+-- over its own sensor's readings, and answer the sum of what they processed.
+--
+-- Exercises: a `for` over a generator pipeline inside a task, whose body awaits; generic
+-- adapters at the element type `i32`; `spawn` and `run_until_empty`.
+--
+-- Blocked by, in order: (1) `lib/async.bc` includes `lib/list.bc`, whose recursive `map` and
+-- `filter` share their names with the adapters', so a call of either is not provided (SPEC §31
+-- *Open*, D1). Here the message is misleading: "`sensor` performs `Exhausted`" (a program without
+-- `spawn` gets the right one, "`filter` is recursive and another function is named `filter`
+-- too"). (2) With the pipeline written as one `for` over `readings`, the task's loop is a `for`
+-- over a generator, a div loop, which `spawn` cannot wrap (SPEC §21 *Open*); that message is
+-- "this argument of `push` has type `i32 * (…)`, which is not `array A * i32`": the call falls
+-- back to `lib/buf.bc`'s `push`.
+--
+-- Once it lands: `[60, 160]`: sensor 1 reads 1..6, keeps the even readings 2, 4 and 6, and
+-- sums them scaled by 5; sensor 2 reads 11..16 and keeps 12, 14 (and 16 is over its cap of 15).
+
+include async
+include adapters
+
+fn readings(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn even(x: i32) -> bool = host[and32](x, 1) == 0
+
+fn scaled(x: i32) -> i32 = x * 5
+
+fn sensor(lo: i32, hi: i32, cap: i32) -> i32 with Async =
+  let mut sum = 0;
+  for x in map(filter(readings(lo, hi), even), scaled) {
+    if x <= cap * 5 { sum = sum + x } else { () };
+    await()
+  };
+  sum
+
+main -> List[i32] =
+  let q = queue[i32]();
+  let q = push(q, with spawn { sensor(1, 7, 100) });
+  let q = push(q, with spawn { sensor(11, 17, 15) });
+  run_until_empty(q)

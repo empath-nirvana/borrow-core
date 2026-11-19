@@ -1,4 +1,5 @@
--- [spec §80] A closure cannot carry the local's fresh mutable borrow out of its scope.
+#! dialect 82
+# [spec §80] A closure cannot carry the local's fresh mutable borrow out of its scope.
 main : F (i32 * 1) =
   q <- return (withlocal['l, top, i32, U (1 -o F 1)] i32[0]
     (thunkv Fun 'l < dom. return (thunkv fun (m : mut 'l i32) ->
@@ -10,4 +11,4 @@ main : F (i32 * 1) =
   r <- force f u;
   return (v, r)
 
--- expect: 5:15: `boxed['l]`: `m`, of type `mut 'l i32`, is used inside, and it cannot be shown to outlive `'l`
+# expect: 6:15: `boxed['l]`: `m`, of type `mut 'l i32`, is used inside, and it cannot be shown to outlive `'l`

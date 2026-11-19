@@ -1,0 +1,13 @@
+-- A block written without `box` in a `fold_reuse` arm whose fields are not cells (SPEC §60, F2):
+-- there it is the block reassembled from its cells, and an `i32` is not one, so the refusal is
+-- E3's, with the reassembly named.
+-- expect: 9:17: `Cons` builds a block, one cell per field, and this has type `i32`: allocate it with `box Cons(…)`, or reassemble it from the emptied cells of the `fold_reuse` arm
+data List = Nil | Cons(head: i32, tail: List)
+
+fn seed(l: List) -> List =
+  fold_reuse l {
+    Nil -> Cons(5, Nil)
+  | Cons(c, (d, t)) -> let (d, ()) = swap(d, t); Cons(c, d)
+  }
+
+main -> i32 = 0

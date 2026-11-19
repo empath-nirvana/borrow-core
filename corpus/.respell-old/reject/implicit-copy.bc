@@ -1,0 +1,19 @@
+-- A persistent list named again after `match unroll l` took it apart: the compiled program would
+-- copy the whole list for the match, an allocation no one wrote. The use that copies is reported,
+-- with the use after it; `corpus/clone-reuse.bc` writes it `clone(l)`.
+type List = mu X. 1 + (i32 * X)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr (x, t)
+
+fn len_alg(r: 1 + i32 * i32) -> i32 = match r { inl u -> 0 | inr (x, n) -> n + 1 }
+def len : !(List => i32) = fold_own[1 + i32 * X, i32] len_alg
+
+fn head_len(l: List) -> i32 * i32 =
+  match unroll l {
+    inl u -> (0, 0)
+  | inr (x, t) -> let n = len(l); (x * n, n)
+  }
+
+main -> i32 * i32 = head_len(cons(5, cons(6, cons(7, nil))))
+-- expect: 13:16: `l` is used again at 15:31, so this use copies it, and its type `mu X. 1 + i32 * X` holds recursive data: the copy allocates every node. Write `clone(l)` to copy it here, or do not use `l` after this

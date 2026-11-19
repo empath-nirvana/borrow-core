@@ -1,0 +1,23 @@
+-- expect: 17:13: the clauses box `κ` at `('r /\ 'main /\ top)`, so the handled computation's context must outlive it: `k`, of type `imm 'r i32`, is used inside, and it cannot be shown to outlive `('r /\ 'main /\ top)`
+-- A task that captures an outer borrow, spawned with no scope below it (SPEC §32): `spawn_in`'s
+-- bound is the meet of the lifetimes in scope, here `'r` itself, and BOXED-κ's context premise
+-- asks the task's captures to outlive it strictly, `imm 'r i32 ⊐ 'r` (SPEC §23: the `Imm` rule is
+-- strict). `corpus/async-scoped.bc` opens a scope below `'r` for the tasks.
+include async
+
+fn reader<'r>(k: imm 'r i32) -> i32 with Async =
+  let (k1, k2) = copy['r, i32] k;
+  let a = *k1;
+  await();
+  a + *k2
+
+main -> i32 =
+  let cfg = alloc(42);
+  let v = borrow imm cfg { 'r, k ->
+    let t = with spawn_in { reader(k) };
+    match resume_in(t) {
+      inl v -> v
+    | inr t2 -> match resume_in(t2) { inl v -> v | inr t3 -> cancel_in(t3); 0 }
+    } };
+  let _ = free(cfg);
+  v

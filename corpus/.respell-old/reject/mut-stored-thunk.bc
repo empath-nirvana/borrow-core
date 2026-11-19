@@ -1,0 +1,9 @@
+-- expect: 7:11: this closure assigns `x`, a `let mut` variable of the body it is written in, and is not given at a block parameter of a call, which would pass it in and back out at each call: a closure that assigns is called where it is given (SPEC §41, rule R3)
+-- A block that assigns an enclosing `let mut`, stored and forced later (#586): its assignment
+-- could not be handed back where it is forced, so it is refused by name (SPEC §41, rule R3).
+fn g(v: i32) -> i32 = v
+main -> i32 =
+  let mut x = 1;
+  let t = { x = 5; 2 };
+  a <- t!;
+  x * 10 + a

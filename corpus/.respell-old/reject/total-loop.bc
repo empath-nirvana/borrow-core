@@ -1,0 +1,8 @@
+-- expect: 5:3: `spin` is declared `total`, but it has a `loop` (SPEC §14)
+-- A function declared `total` must not loop: a `loop` is div. The message names the `loop`.
+total fn spin(n: i32) -> i32 =
+  let mut i = 0;
+  loop { if i < n { i = i + 1 } else { break } };
+  i
+
+main -> i32 = spin(3)

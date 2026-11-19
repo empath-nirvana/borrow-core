@@ -1,6 +1,7 @@
--- A written finaliser that performs (SPEC §78): `d` aborts, so it is at `Σ_D = {1.0}`, not the
--- empty row. A finaliser that performs is K-b's (#1046), not provided yet: refused.
--- expect: 13:17: this finaliser performs `[1.0 cancel i32 ~> 0]`; a finaliser of a lent place that performs is not provided yet (#1046)
+#! dialect 82
+# A written finaliser that performs (SPEC §78): `d` aborts, so it is at `Σ_D = {1.0}`, not the
+# empty row. A finaliser that performs is K-b's (#1046), not provided yet: refused.
+# expect: 14:17: this finaliser performs `[1.0 cancel i32 ~> 0]`; a finaliser of a lent place that performs is not provided yet (#1046)
 
 main : F (i32 * (0 + i32)) =
   c <- return (alloc[i32] i32[1]);

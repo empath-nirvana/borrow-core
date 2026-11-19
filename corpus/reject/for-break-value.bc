@@ -1,14 +1,17 @@
--- expect: 13:34: `break e` gives the value of a `for` whose value is bound: `let r = for x in … { … }; …`
--- `break e` gives a value to the loop it leaves; a `for` that is a statement has none to give.
+#! dialect 82
+# expect: 15:34: `break e` gives the value of a `for` whose value is bound: `let r = for x in … { … }; …`
+# `break e` gives a value to the loop it leaves; a `for` that is a statement has none to give.
 
-include yield
+import yield
 
-fn upto(n: i32) -> i32 with Yield[i32] =
-  let mut i = 0;
-  while i < n { yield(i); i = i + 1 };
+fn upto(n: i32) : i32 / Yield[i32] {
+  var i = 0
+  while i < n { yield(i); i = i + 1 }
   n
+}
 
-main -> i32 =
-  let mut acc = 0;
-  for x in upto(5) { if x == 3 { break 7 } else { acc = acc + x } };
+fn main() : i32 {
+  var acc = 0
+  for x in upto(5) { if x == 3 { break 7 } else { acc = acc + x } }
   acc
+}

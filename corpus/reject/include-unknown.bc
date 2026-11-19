@@ -1,5 +1,6 @@
--- expect: 3:1: no library module `strings`: the modules are io, div, prelude, lend, adapters, slice, buf, text, textio, iters, fail, yield, rec, clo, async, list, sys, wasi, key, map, float, arith, json
--- `include` names a module of `lib/`, embedded in the compiler.
-include strings
+#! dialect 82
+# expect: 4:1: no library module `strings`: the modules are io, div, prelude, lend, adapters, slice, buf, text, textio, iters, fail, yield, rec, clo, async, list, sys, wasi, key, map, float, arith, json
+# `include` names a module of `lib/`, embedded in the compiler.
+import strings
 
-main -> i32 = 0
+fn main() : i32 = 0

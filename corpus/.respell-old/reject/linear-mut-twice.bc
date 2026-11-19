@@ -1,0 +1,11 @@
+-- A `mut` borrow is linear with no derived copy: a second use is refused at the split, as for an
+-- owned value. An `imm` borrow's second use is its derived copy (`corpus/imm-copy.bc`).
+fn bump<'a>(r: mut 'a i32) -> i32 * mut 'a i32 = (1, r)
+
+fn twice<'a>(r: mut 'a i32) -> i32 =
+  let (a, r1) = bump(r);
+  let (b, r2) = bump(r);
+  a + b
+
+main -> i32 = 0
+-- expect: 6:3: `r` is used twice here, and its type `mut 'a i32` is linear

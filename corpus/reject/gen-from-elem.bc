@@ -1,19 +1,23 @@
--- expect: 13:3: `wide` performs `Yield[i64]`, but the handler of `Yield` in scope is at `Yield[i32]`
--- A generator that calls another passes on what it yields: the callee's `yield` reaches the
--- handler the caller's reaches, at one type. `narrow` yields `i32`, and `wide` `i64`.
+#! dialect 82
+# expect: 15:3: `wide` performs `Yield[i64]`, but the handler of `Yield` in scope is at `Yield[i32]`
+# A generator that calls another passes on what it yields: the callee's `yield` reaches the
+# handler the caller's reaches, at one type. `narrow` yields `i32`, and `wide` `i64`.
 
-include yield
+import yield
 
-fn wide() -> 1 with Yield[i64] =
-  let x : i64 = 1;
+fn wide() : 1 / Yield[i64] {
+  let x : i64 = 1
   yield(x);
   ()
+}
 
-fn narrow() -> 1 with Yield[i32] =
+fn narrow() : 1 / Yield[i32] {
   wide();
   ()
+}
 
-main -> i32 =
-  let mut a = 0;
-  for x in narrow() { a = a + x };
+fn main() : i32 {
+  var a = 0
+  for x in narrow() { a = a + x }
   a
+}

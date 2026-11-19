@@ -1,0 +1,11 @@
+-- A program that declares a harness extern (SPEC §11): its own `mk_output` would make a second
+-- owned capability beside the one `run_io` makes. Only `run_io` declares the harness.
+-- expect: 5:8: `mk_output` is the I/O harness's: only `run_io` makes and takes back the capabilities (SPEC §11)
+extern stdout : ref output
+extern mk_output : !(i32 => ref output)
+extern take_output : !(ref output => i32 * (mu X. 1 + (u8 * X)))
+
+main : F (ref output * (i32 * (mu X. 1 + (u8 * X)))) =
+  o <- return ((unbang mk_output) i32[1]);
+  r <- return ((unbang take_output) o);
+  return (stdout, r)

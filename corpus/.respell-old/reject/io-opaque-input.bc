@@ -1,0 +1,10 @@
+-- expect: 7:8: `case V` needs a `+` type, but `V : input`
+extern stdin : ref input
+
+-- The content of an input is opaque: it cannot be inspected.
+main : F (ref input * 1) =
+  x <- return (free[input] stdin);
+  case x {
+    inl u -> return (alloc[input] x, ())
+  | inr u -> return (alloc[input] x, ())
+  }

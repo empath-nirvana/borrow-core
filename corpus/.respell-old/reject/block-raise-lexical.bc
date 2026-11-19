@@ -1,0 +1,8 @@
+-- A plain block's `raise` is not caught by the callee (SPEC §30, §33): `pass` runs its block under
+-- its own `to_result`, but its parameter provides nothing, so the block's operations go to the
+-- handlers where it is written, and `main` has none. Written `f: !(1 => i32 with Fail[i32])`, the
+-- callee would serve it (`corpus/comp-param.bc`).
+-- expect: 8:26: this block performs `Fail`, but no handler of `Fail` is in scope here
+include fail
+fn pass(f: !(1 => i32)) -> i32 + i32 = with to_result[i32, i32] { f(()) }
+main -> i32 + i32 = pass(!{ u -> raise(8) })

@@ -1,6 +1,7 @@
--- A borrow escaping its lifetime: the callback returns a closure that captures its borrow
--- `b : imm 'x B`, to be called after the borrow has ended. `boxed['x]` needs everything it
--- captures to outlive `'x`, and `b` does not.
+#! dialect 82
+# A borrow escaping its lifetime: the callback returns a closure that captures its borrow
+# `b : imm 'x B`, to be called after the borrow has ended. `boxed['x]` needs everything it
+# captures to outlive `'x`, and `b` does not.
 type B = 1 + 1
 
 main : F 1 =
@@ -13,4 +14,4 @@ main : F 1 =
   let () = y;
   x <- return (free[B] r2);
   return ()
--- expect: 10:21: `boxed['x]`: `b`, of type `imm 'x (1 + 1)`, is used inside, and it cannot be shown to outlive `'x`
+# expect: 11:21: `boxed['x]`: `b`, of type `imm 'x (1 + 1)`, is used inside, and it cannot be shown to outlive `'x`

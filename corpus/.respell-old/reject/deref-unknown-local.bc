@@ -1,0 +1,11 @@
+-- expect: 9:44: `*` reads an `imm` borrow or a cell, but the type of `key` is not known here
+-- SPEC §15 *A local whose type is not known* (#686, #849): a `match` over `imm 'a Tree` binds
+-- `key` without a type the elaboration knows (a partial walk of `mu` under `imm` is not provided,
+-- E5). `*key` reports that `key`'s type is not known, naming it, rather than a type `1` it does
+-- not have.
+data Tree = Leaf | Node(left: Tree, key: i32, right: Tree)
+
+fn root_key<'a>(t: imm 'a Tree) -> i32 =
+  match t { Leaf -> 0 | Node(l, key, r) -> *key }
+
+main -> i32 = let t = box Node(Leaf, 3, Leaf); let v = root_key(&t); v

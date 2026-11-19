@@ -1,0 +1,8 @@
+-- expect: 6:6: the recursive type occurs under `Q`, which is recursive itself: its `mu` would mention the enclosing recursive type, and a `mu` must be closed (B14, U3)
+-- An abbreviation that is recursive through another (SPEC §61 Open, U3): `Q[A]` names `L[A]`,
+-- a `mu`, so `Q` is recursive itself, and refused under the name the declaration writes.
+type L[A] = mu X. 1 + (A * X)
+type Q[A] = i32 * L[A]
+data T = Leaf(i32) | Node(Q[T])
+
+main -> i32 = 0

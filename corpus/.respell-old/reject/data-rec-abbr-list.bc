@@ -1,0 +1,7 @@
+-- expect: 5:6: the recursive type occurs under `List`, which is recursive itself: its `mu` would mention the enclosing recursive type, and a `mu` must be closed (B14, U3)
+-- A recursive `type` abbreviation around the recursive type (SPEC §61 Open, U3): `List[T]` is
+-- `mu X. 1 + (T * X)`, whose `mu` would mention `T`'s own variable, and a `mu` must be closed.
+include list
+data T = Leaf(i32) | Node(List[T])
+
+main -> i32 = 0

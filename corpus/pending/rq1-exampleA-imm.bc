@@ -1,45 +1,47 @@
--- pending: RQ1 (#838; register #1122): an `imm` borrow held across a resuming operation (SPEC §29, R1's surface, OQ-2)
--- now: 39:13: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a borrow held across a suspension is not supported yet; planned: surface A1). End the borrow before the operation, or move the value into the code that suspends and have it handed back
--- Goal program for RQ1 (#1122): to check under PinLaw (an accepted assumption); see the register.
--- OBEff's Example A (Chen, Tanabe, Sekiyama, PPL 2026, §3.2 and §4.2.4) as the paper writes it: a
--- shared borrow `&*x` made inside the handled block, `op` performed under it, and `κ` reading
--- through it after the resume. The handler, the cells and the lend `β` of `c2` beside the parked
--- `κ` are `corpus/rq1-exampleA-mut.bc`'s. It differs from that program in the borrow's mode and
--- what follows from it: the block is `imm`, so `κ` reads `*b` and the handled block answers it
--- beside the cell, instead of `κ` writing through the borrow.
---
--- Blocked by OQ-2 alone: R1 lends `mut` only, and an `imm` block whose body resumes is refused as
--- before (§15 *Self-reference*). The same program with `op` performed before the block checks
--- with `assurance: unconditional` and answers the same.
---
--- Once it lands: (i32[1], i32[1012]): `c` is unchanged; `κ` answers `*b`, 1, to which the clause
--- adds 1000 + 11 (`op`'s argument, `*b + 10`), the value `c2` held when the clause freed it.
--- `live 0`.
+#! dialect 82
+# pending: RQ1 (#838; register #1122): an `imm` borrow held across a resuming operation (SPEC §29, R1's surface, OQ-2)
+# now: 40:13: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a borrow held across a suspension is not supported yet; planned: surface A1). End the borrow before the operation, or move the value into the code that suspends and have it handed back
+# Goal program for RQ1 (#1122): to check under PinLaw (an accepted assumption); see the register.
+# OBEff's Example A (Chen, Tanabe, Sekiyama, PPL 2026, §3.2 and §4.2.4) as the paper writes it: a
+# shared borrow `&*x` made inside the handled block, `op` performed under it, and `κ` reading
+# through it after the resume. The handler, the cells and the lend `β` of `c2` beside the parked
+# `κ` are `corpus/rq1-exampleA-mut.bc`'s. It differs from that program in the borrow's mode and
+# what follows from it: the block is `imm`, so `κ` reads `*b` and the handled block answers it
+# beside the cell, instead of `κ` writing through the borrow.
+#
+# Blocked by OQ-2 alone: R1 lends `mut` only, and an `imm` block whose body resumes is refused as
+# before (§15 *Self-reference*). The same program with `op` performed before the block checks
+# with `assurance: unconditional` and answers the same.
+#
+# Once it lands: (i32[1], i32[1012]): `c` is unchanged; `κ` answers `*b`, 1, to which the clause
+# adds 1000 + 11 (`op`'s argument, `*b + 10`), the value `c2` held when the clause freed it.
+# `live 0`.
 
-effect Op { ctl op(x: i32) }
+effect Op { ctl op(x: i32) : 1 }
 
-handler h: Op, ref i32 * i32 -> ref i32 * i32 = {
-  return(r) = r;
-  op(x, k) = {
-    let parked = (k, x);
-    let c2 = alloc(1000);
-    borrow mut c2 { m2 -> modify m2 { v -> v + x } };
-    let w = free(c2);
-    let (k2, y) = parked;
-    let u = ();
-    r <- (force k2).1 u;
+handler h: Op, (ref i32 * i32) -> ref i32 * i32 {
+  return(r) -> r
+  op(x, k) -> {
+    let parked = (k, x)
+    let c2 = alloc(1000)
+    borrow mut c2 { m2 -> modify m2 { v -> v + x } }
+    let w = free(c2)
+    let (k2, y) = parked
+    let u = ()
+    let r = (force k2).1 u
     let (c, n) = r;
     (c, n + w)
   }
 }
 
-main -> i32 * i32 =
-  let c = alloc(1);
-  let (c, w) = with h {
+fn main() : i32 * i32 {
+  let c = alloc(1)
+  let (c, w) = handle {
     let r = borrow imm c { 'x, b ->
       op(*b + 10);
       *b
     };
     (c, r)
-  };
+  } with h;
   (free(c), w)
+}

@@ -1,6 +1,7 @@
--- SPEC §76: a template used without its row arguments: they are written at each use, and
--- reading them off the call is not built in slice 1.
--- expect: 11:29: `idk` is used without its arguments: its row and site arguments are written at each use, `idk[…, row (…)]`; reading them off the call is not built in slice 1 (SPEC §76)
+#! dialect 82
+# SPEC §76: a template used without its row arguments: they are written at each use, and
+# reading them off the call is not built in slice 1.
+# expect: 12:29: `idk` is used without its arguments: its row and site arguments are written at each use, `idk[…, row (…)]`; reading them off the call is not built in slice 1 (SPEC §76)
 
 def idk[row r] : !U (U (F[..r] 1) -o F[..r] 1) =
   !thunkv fun (k : U (F[..r] 1)) -> force k

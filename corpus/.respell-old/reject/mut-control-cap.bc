@@ -1,0 +1,11 @@
+-- expect: 10:11: the body of `with to_result` takes `stdout` and would hand it back, but a control handler's body may be abandoned: pass a capability outside the handler, or perform its effect inside (SPEC §41, R3)
+-- A control handler's body that assigns a `let mut` and passes on a capability (SPEC §41, R3):
+-- `c` is lent around the handler as any variable the body writes, and `stdout`, a cell `putb`
+-- takes and hands back, is not, so the body would hand it back and is refused. The message names
+-- the capability only.
+include fail
+fn half(n: i32) -> i32 with Fail[i32] = if n < 0 { raise(n) } else { n }
+main -> (i32 + i32) * i32 =
+  let mut c = 0;
+  let r = with to_result { c = 5; let u = putb(&mut stdout, 65); half(c) };
+  (r, c)

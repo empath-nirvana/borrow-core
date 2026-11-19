@@ -1,26 +1,28 @@
--- expect: 20:11: this borrow block's result has type `(imm 'x array i32 * i32) * i32`, which has the block's lifetime `'x`: nothing borrowed at `'x` outlives the block. When the body loops, each step borrows the place again, so the loop cannot keep what is borrowed before it (SPEC §14, borrow scopes over loops). Copy the value out of the borrow before the loop, or end the borrow inside each step; when the borrow is a handler's capability, use a counted `for`, or keep the state in the loop's variables
--- A borrow block over a loop whose loop keeps something borrowed before it (SPEC §14, borrow
--- scopes over loops). The block is lent per observation: the stretch before the loop borrows the
--- table for itself, and hands on to the loop what it binds, here `q`, a pair that holds the
--- borrow. Nothing borrowed at `'x` outlives that stretch's borrow, so the loop cannot hold it
--- between steps; the loop must use `b` (or a copy of it, `let b2 = b`), which each step borrows
--- again.
+#! dialect 82
+# expect: 21:11: this borrow block's result has type `(imm 'x array i32 * i32) * i32`, which has the block's lifetime `'x`: nothing borrowed at `'x` outlives the block. When the body loops, each step borrows the place again, so the loop cannot keep what is borrowed before it (SPEC §14, borrow scopes over loops). Copy the value out of the borrow before the loop, or end the borrow inside each step; when the borrow is a handler's capability, use a counted `for`, or keep the state in the loop's variables
+# A borrow block over a loop whose loop keeps something borrowed before it (SPEC §14, borrow
+# scopes over loops). The block is lent per observation: the stretch before the loop borrows the
+# table for itself, and hands on to the loop what it binds, here `q`, a pair that holds the
+# borrow. Nothing borrowed at `'x` outlives that stretch's borrow, so the loop cannot hold it
+# between steps; the loop must use `b` (or a copy of it, `let b2 = b`), which each step borrows
+# again.
 
-fn tab(i: i32) -> i32 = i * 10
+fn tab(i: i32) : i32 = i * 10
 
--- The entry at `i`, or 0 out of range.
+# The entry at `i`, or 0 out of range.
 def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
   !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
     let (b, i) = p;
     withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
       match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
 
-main -> i32 =
-  let t = alloc(array_new[i32] (10, tab));
+fn main() : i32 {
+  let t = alloc(array_new[i32] (10, tab))
   let n = borrow imm t { 'x, b ->
-    let q = (b, 3);
-    let mut acc = 0;
-    for c in bytes(&mut stdin) { acc = acc + get(q) };
+    let q = (b, 3)
+    var acc = 0
+    for c in bytes(&stdin) { acc = acc + get(q) }
     acc
-  };
+  }
   n
+}

@@ -1,0 +1,11 @@
+-- expect: 7:3: the loop threads `f`, whose type is not determined: ascribe it
+-- The loop threads `f`, whose type nothing determines: `inl ()` is `1 + ?`, and no use of `f`
+-- says what `?` is. (A use that did, such as passing `f` to a function, would give it a type:
+-- `corpus/sugar/inject.bc`.)
+main : F 1 =
+  f <- return (inl ());
+  for b in bytes stdin {
+    f <- return f;
+    return ()
+  };
+  return ()

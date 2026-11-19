@@ -1,0 +1,9 @@
+-- SPEC §76: a wrong row argument, reported at the use, naming the template. `tick[row r]`
+-- performs `4.0` itself, so its row argument must give `4.0`; the use at the empty row gives
+-- none. The elaboration refuses the use before it makes the instance.
+-- expect: 9:40: `tick` used at row (), but `tick`'s body performs `4.0` outside it
+
+def tick[row r] : !U (1 -o F[..r] i32) =
+  !thunkv fun (u : 1) -> let () = u; perform[4.0] ()
+
+main : F i32 = u <- return (); (unbang tick[row ()]) u

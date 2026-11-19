@@ -1,0 +1,15 @@
+-- A named entry of a row with no handler of its name where the function is called (SPEC §38):
+-- `sync`'s entries `src` and `dst` are served by the handlers named so, `with src = h(…)`; two
+-- handlers without names cannot serve them.
+-- expect: 14:5: `sync` performs `Log` at the handler named `src`, but no handler of `Log` named `src` is in scope here
+effect Log { fn note(x: i32) }
+handler count(mut n: i32): Log = { note(x) = { n = n + x; () } }
+
+fn sync() -> i32 with src: Log, dst: Log = src.note(1); dst.note(2); 0
+
+main -> i32 * (i32 * i32) =
+  let a = alloc(0);
+  let b = alloc(0);
+  let r = with count(&mut a) { with count(&mut b) {
+    sync() } };
+  (r, (free(a), free(b)))

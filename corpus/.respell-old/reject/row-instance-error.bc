@@ -1,0 +1,9 @@
+-- SPEC §76: an error the checker finds inside an instance names the instance, its template and
+-- the use it was made for. `tick[row r]` calls `g`, which raises `4.0`; at the row `5.0` the
+-- instance does not have it, which the pre-check (direct operations only) does not see.
+-- expect: 8:26: type mismatch: expected `F[5.0 cancel i32 ~> 0] 1`, but this has type `F[4.0 cancel i32 ~> 0] 1`: its row `[4.0 cancel i32 ~> 0]` is not within `[5.0 cancel i32 ~> 0]`
+-- expect|   in the instance `tick__r1` of `tick`, used at 9:59
+def g : !U (1 -o F[4.0 cancel i32 ~> 0] 1) = !thunkv fun (u : 1) -> let () = u; abort[4.0] i32[1]
+def tick[row r] : !U (1 -o F[..r] 1) =
+  !thunkv fun (u : 1) -> (unbang g) u
+main : F[5.0 cancel i32 ~> 0] 1 = u <- return (); (unbang tick[row (5.0 cancel i32 ~> 0)]) u
