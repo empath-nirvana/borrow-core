@@ -386,10 +386,10 @@ theorem effHandle (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKin
       (.effHandleV i (.comp (effOf S R)) S E fs BoCa.Fig16.LogRel.Core.rcsNil n A R u ks site
         te.erase.hin tc te)
       (.comp (effOf S R)) :=
-  ⟨fun hn Ξ h => .effHandleV (rowAt_of_union_left h) hs hm hcv hd hH
+  ⟨fun hn Ξ h => .effHandleVO (rowAt_of_union_left h) hs hm hcv hd hH
       (hc.1 (nilL hn) Ξ (sigsAt_union_left (sigsAt_union_right h))) hn0 hnS hlen hdv
-      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) rfl,
-    .effHandleV hs hm hcv hd hH hc.2 hn0 hnS hlen hdv he.2 rfl⟩
+      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) nofun nofun rfl,
+    .effHandleVO hs hm hcv hd hH hc.2 hn0 hnS hlen hdv he.2 nofun nofun rfl⟩
 
 /-- BOXED-κ reads its handled row, as `CDerivesAt.effHandleB`, the handled operations at their
 cancel rows `fs`.  `[spec §27, §28]` -/
@@ -410,10 +410,13 @@ theorem effHandleB (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKi
       (.effHandleVB i (.comp (effOf S R)) S E fs BoCa.Fig16.LogRel.Core.rcsNil n A R d u ks site
         te.erase.hin tc te)
       (.comp (effOf S R)) :=
-  ⟨fun hn Ξ h => .effHandleVB (rowAt_of_union_left h) hs hm hcv hd hH
+  have hΓd' : ∀ d' ∈ some d, CtxOutlives Δ Γ₂ d' := fun _ h => Option.some_inj.mp h ▸ hΓd
+  have hSd' : ∀ d' ∈ some d, BoCa.Fig16.LogRel.Core.Row.AnsOutlives Δ d'
+      (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) := fun _ h => Option.some_inj.mp h ▸ hSd
+  ⟨fun hn Ξ h => .effHandleVO (rowAt_of_union_left h) hs hm hcv hd hH
       (hc.1 (nilL hn) Ξ (sigsAt_union_left (sigsAt_union_right h))) hn0 hnS hlen hdv
-      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) hΓd hSd rfl,
-    .effHandleVB hs hm hcv hd hH hc.2 hn0 hnS hlen hdv he.2 hΓd hSd rfl⟩
+      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) hΓd' hSd' rfl,
+    .effHandleVO hs hm hcv hd hH hc.2 hn0 hnS hlen hdv he.2 hΓd' hSd' rfl⟩
 
 /-- `iterate` reads its row, which holds `Div`.  `[spec §14]` -/
 theorem iterate (S : CRow) (St B R : CVTy) (hS : BoCa.Fig16.LogRel.Core.Row.divB S = true)

@@ -55,7 +55,7 @@ structure HNode where
   S : Row
   ks : List ClauseKinds.HKind
   H : Expr
-  /-- The node is `effHandleVB`: its clauses receive `κ` boxed (BOXED-κ, SPEC §28). -/
+  /-- The node is `effHandleVO` at `some d`: its clauses receive `κ` boxed (BOXED-κ, SPEC §28). -/
   boxed : Bool := false
   /-- Each operation's cancel row, as its clause's `κ` reads it (`cancelTy`). -/
   fs : Nat → CTy := fun _ => .ret .unit
@@ -67,8 +67,7 @@ def hnodes : Nat → TExpr → List HNode
   | 0, _ => []
   | f + 1, t =>
     let here : List HNode := match t with
-      | .effHandleV _ _ S E fs _ n _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, false, fs, some tc⟩]
-      | .effHandleVB _ _ S E fs _ n _ _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, true, fs, some tc⟩]
+      | .effHandleVO _ _ S E fs _ n _ _ d? _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, d?.isSome, fs, some tc⟩]
       | _ => []
     here ++ t.children.flatMap fun (_, c) => hnodes f c
 
@@ -1153,7 +1152,7 @@ def swapFin (named : Bool) : Nat → Nat → Option Nat → TExpr → TExpr × N
     | .conv i j j₀ j' (.ret A) t =>
       let (t', m) := swapFin named f n k t
       (.conv i j j₀ j' (.ret A) t', m)
-    | .effHandleV i j S E fs cs nm A R u ks site inside tc te =>
+    | .effHandleVO i j S E fs cs nm A R none u ks site inside tc te =>
       let (tc', k₁) := swapFin named f n k tc
       let (te', k₂) := swapFin named f n k te
       let u := match k with
@@ -1161,7 +1160,7 @@ def swapFin (named : Bool) : Nat → Nat → Option Nat → TExpr → TExpr × N
           let u := if k₁ > 0 then give u s true else u
           if k₂ > 0 then give u s false else u
         | none => u
-      (.effHandleV i j S E fs cs nm A R u ks site inside tc' te', k₁ + k₂)
+      (.effHandleVO i j S E fs cs nm A R none u ks site inside tc' te', k₁ + k₂)
     | t => (t, 0)
 
 /-- `s` checked, its finalisers replaced when `swap` holds (`want` of them), converted, linted and

@@ -193,10 +193,8 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
       .effThenF i j A B S SM SD (u.ins d c) (tM.shift d c) (tN.shift d (c + 1))
         (tD.shift d (c + 1))
   | t@(.effAwait ..) => t
-  | .effHandleV i j S E fs cs n A R u ks st ins tc te =>
-      .effHandleV i j S E fs cs n A R (u.ins d c) ks st ins (tc.shift d c) (te.shift d c)
-  | .effHandleVB i j S E fs cs n A R a u ks st ins tc te =>
-      .effHandleVB i j S E fs cs n A R a (u.ins d c) ks st ins (tc.shift d c) (te.shift d c)
+  | .effHandleVO i j S E fs cs n A R a u ks st ins tc te =>
+      .effHandleVO i j S E fs cs n A R a (u.ins d c) ks st ins (tc.shift d c) (te.shift d c)
   | .effHandleT i j S SN E fs n A R u st ins tc te =>
       .effHandleT i j S SN E fs n A R (u.ins d c) st ins (tc.shift d c) (te.shift d c)
   | .effHandleL i j S SW E fs Xs n A R u st ins tc te =>
@@ -292,6 +290,7 @@ where
 theorem TExpr.absF_shift (d : Nat) : ∀ (t : TExpr) (c : Nat) (Δ : LifeCtx),
     (t.shift d c).absF Δ = t.absF Δ := by
   intro t
-  induction t <;> intro c Δ <;> simp only [TExpr.shift, TExpr.absF, *]
+  induction t <;> intro c Δ <;> (try cases ‹Option Lifetime.Life›) <;>
+    simp only [TExpr.shift, TExpr.absF, *]
 
 end BoCa.Fig16.LogRel.Core.Check

@@ -682,8 +682,7 @@ def needRowOf : Nat → Bool → TExpr → CRow
     | .effRaise _ _ _ o _ t' => J [{ o with fin := .ret .unit }] (needRowOf k vals t')
     | .conv _ _ _ _ (.effSub ..) t' => needRowOf k vals t'
     | .effThenF _ _ _ _ _ _ _ _ tM tN tD => atThen tM tN tD
-    | .effHandleV _ _ _ _ _ _ n _ _ _ _ _ _ tc te => inner n tc te
-    | .effHandleVB _ _ _ _ _ _ n _ _ _ _ _ _ _ tc te => inner n tc te
+    | .effHandleVO _ _ _ _ _ _ n _ _ _ _ _ _ _ tc te => inner n tc te
     | .effHandleT _ _ _ _ _ _ n _ _ _ _ _ tc te => inner n tc te
     | .effHandleL _ _ _ _ _ _ _ n _ _ _ _ _ tc te => inner n tc te
     | t => match t.children with

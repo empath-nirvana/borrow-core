@@ -379,7 +379,7 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       have eD := ihD (_ :: Γa₂) Γb₂ rfl
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN eD
       exact .effThenF hs' hNZ hUq (fun hu => live_insert hd (hU hu)) hMS hDS hfin hP hF eM eN eD
-  | effHandleV hAt hs hdd hH _ hn0 hnS hlen hdv _ ihc ihe =>
+  | effHandleVO hAt hs hdd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -387,17 +387,8 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       have hH' := valFormIn_insert (Γd := Γd) Γa₁ hH
       rw [h₁] at ec hH'; rw [h₂] at ee
       rw [shift_hndExpr]
-      exact .effHandleV hAt hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee
-  | effHandleVB hAt hs hdd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
-      intro Γa Γb hΓ; subst hΓ
-      obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
-      have ec := ihc Γa₁ Γb₁ rfl
-      have ee := ihe Γa₂ Γb₂ rfl
-      have hH' := valFormIn_insert (Γd := Γd) Γa₁ hH
-      rw [h₁] at ec hH'; rw [h₂] at ee
-      rw [shift_hndExpr]
-      exact .effHandleVB hAt hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee
-        ⟨hΓd.1, live_insert hd hΓd.2⟩ hSd
+      exact .effHandleVO hAt hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee
+        (fun d h => ⟨(hΓd d h).1, live_insert hd (hΓd d h).2⟩) hSd
   | effHandleT hAt hs hdd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
