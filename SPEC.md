@@ -208,7 +208,7 @@ The checker returns a **typed term** `t : TExpr` with its derivation, not an era
 checked term is `Checked.e := t.erase`: the term the backend compiles is the term the derivation
 types, by definition. `TDerivesAt Ξ Δ Γ t j` and `TDerivesP Δ Γ t j` are `CDerivesAt Ξ` (§19,
 decision R) and `CDerivesP` (§29) with each premise at a child and the conclusion at the node; a
-premise that types a term built from other arguments (`thunkV`'s `λN`) carries the equation
+premise that types a term built from other arguments (`thunkVb`'s `λN`) carries the equation
 between the child's erasure and that term. They project to `CDerivesAt`/`CDerivesP` at
 `t.erase` (`TDerivesAt.erase`, `TDerivesP.erase`), so a derivation fixes every field of every
 node, and every theorem below, and §19's and §29's, holds of `t.erase` as stated. The node types,
@@ -1078,7 +1078,7 @@ A value type is **flat** when it is persistent and holds no recursive data (`VTy
 
 `!Γ` (`Ctx.Banged`, every live slot at a type `!A`) implies it (`Ctx.Banged.flatLive`), since `!A`
 is flat. The premise of Core's two promotion rules, which §3 takes from §2's `!I-λ` and `!I-Λ`, is
-`Flat(Γ)`:
+`Flat(Γ)` (each is its value rule's rule at the promotion tag `true`, below):
 
     Flat(Γ)    Δ; _ : 1 (dead), Γ ⊢ M : F A
     ───────────────────────────────────────  !thunk     (bangThunkF)
@@ -1104,6 +1104,37 @@ duplication (`Copy`, flat captures only) from explicit (`Clone`); the explicit h
   (`Frontend/Check/Rules.lean`) asks `VTy.flat` of each live slot. The inversion of a λ read at a
   `!` thunk (`LamCls`, `lam_bang`) gives a flat context, and AT06's rejection reads that the
   captured cell's type, a view of `Ref`, is not flat.
+- **A value rule and its promotion are one rule (#1170).** The kernel types `thunk` at `U (F A)`
+  and its promotion `!thunk`, `thunk` at `U C` and `!thunkv`, and `[code-I]` and its form under `!`
+  (§68), with three rules over a promotion tag `b : Bool`, and the checker with one typed-term
+  node each of the same name:
+
+  | rule | at `b = false` | at `b = true` |
+  |---|---|---|
+  | `thunkFb` | `thunkF` | `bangThunkF` |
+  | `thunkVb` | `thunkV` | `bangThunkV` |
+  | `codeIb` | `codeI` | `codeIB` |
+
+  - **The type.** `VTy.bangIf b X` is `!X` at `true` and `X` at `false` (a definition, not a
+    type former). Each rule takes the tag, the premise `b = true → Flat(Γ)`, the former rule's
+    other premises in the same order, and an equation `T = VTy.bangIf b X`, where `X` is the former
+    rule's type (`U (F A)`, `U C`, `Code⟨capNorm (λM); Γ.capTy (λM)⟩ C`). It concludes at `T`.
+    `codeIb`'s premise on `λM` is at `VTy.bangIf b (U C)`. With `T` a variable, a derivation at a
+    concrete type still splits by its rules. At `false` the flatness premise is vacuous, and at
+    `true` it is `Flat(Γ)`, so derivability is exactly the same.
+  - **The old names stay.** `thunkF`, `bangThunkF`, `thunkV`, `bangThunkV`, `codeI` and `codeIB`
+    are theorems of the judgment and of each of its instances (`CDerives`, `CDerivesAt Ξ`,
+    `CDerivesP`) at the tag's two values, with today's binders and statements.
+  - **The Fundamental Property's case** splits on the tag and applies the former rule's unchanged
+    compatibility lemma (`thunkF_compatC`/`bangThunkF_compatC`, `thunkV_compatC`/
+    `bangThunkV_compatC`, `codeI_compatC`/`codeIB_compatC`). The chain does the same with the
+    `_compatN` lemmas. No compatibility lemma changes.
+  - **The typed term** has the three nodes `thunkFb`, `thunkVb` and `codeIb`, which hold the tag.
+    `thunkF`, `thunkV`, `bangThunkF` and `bangThunkV` stay as abbreviations of their node at their
+    tag, so statements over them keep their type. `codeI` and `codeIB`, which no statement names,
+    have none.
+  - The rule count of `CDerives` and of the checker's judgment each drops by three.
+  - **Status:** the fold (#1170, PR #1209), after #798. Not built.
 - **Where `!Γ` stays.** `[let]` and `[then]` at a row with an unrestricted operation (§19), and
   `Count`, `Inversions` (`banged_slot`), `Weaken` and `Embedding`, keep `!Γ`.
 - **Backend.** A captured flat value is copied into a `!` closure's environment as a `!` value is,
@@ -12886,8 +12917,8 @@ new index and no new judgment.
 
 | Rule | Statement | Unit |
 |---|---|---|
-| `codeI` | `Γ ⊢ λM : U C` and `Γ.CapOK (λM)` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
-| `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C`; its premise on the context is `Flat(Γ)` (`Ctx.FlatLive`, §10), as promotion's | K3 |
+| `codeI` | `Γ ⊢ λM : U C` and `Γ.CapOK (λM)` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` (the rule `codeIb` at `false`, §10) | K3 |
+| `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C`; its premise on the context is `Flat(Γ)` (`Ctx.FlatLive`, §10), as promotion's (`codeIb` at `true`) | K3 |
 | `codeErase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
 | `codeEraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
 | `force` (restated) | `Ctx.SoloP Γ i T`, `T.forceTy = some C` (`T` is `U C` or `Code⟨N; E⟩ C`) ⟹ `forceE C (.var i) : C` | K3 |
