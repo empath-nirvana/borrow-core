@@ -236,13 +236,17 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       exact .tensorI hs' e₁ e₂
   | sumI₁ _ ih => intro Γa Γb hΓ; exact .sumI₁ (ih Γa Γb hΓ)
   | sumI₂ _ ih => intro Γa Γb hΓ; exact .sumI₂ (ih Γa Γb hΓ)
-  | thunkF _ ih =>
+  | thunkFb b hp _ hT ih =>
       intro Γa Γb hΓ; subst hΓ
       have e' := ih (_ :: Γa) Γb rfl
       rw [List.length_cons] at e'
-      exact .thunkF e'
-  | thunkV hC _ ih => intro Γa Γb hΓ; exact .thunkV hC (ih Γa Γb hΓ)
-  | ret _ ih => intro Γa Γb hΓ; exact .ret (ih Γa Γb hΓ)
+      exact .thunkFb b (fun h => live_insert hd (hp h)) e' hT
+  | thunkVb b hp hC _ hT ih =>
+      intro Γa Γb hΓ; subst hΓ
+      exact .thunkVb b (fun h => live_insert hd (hp h)) hC (ih Γa Γb rfl) hT
+  | conv _ _ hc ih =>
+      intro Γa Γb hΓ'; subst hΓ'
+      exact .conv _ (ih Γa Γb rfl) (hc.mono (fun _ _ ho => ⟨ho.1, live_insert hd ho.2⟩) (fun _ _ => id))
   | bind hs _ _ ihM ihN =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
@@ -314,44 +318,14 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       rw [List.length_cons] at e'
       exact .allI hbx hΔx (live_insert hd hΓx) e'
   | allE _ hlt ih => intro Γa Γb hΓ; exact .allE (ih Γa Γb hΓ) hlt
-  | bangThunkF hp _ ih =>
-      intro Γa Γb hΓ; subst hΓ
-      have e' := ih (_ :: Γa) Γb rfl
-      rw [List.length_cons] at e'
-      exact .bangThunkF (live_insert hd hp) e'
-  | bangThunkV hp hC _ ih =>
-      intro Γa Γb hΓ; subst hΓ
-      exact .bangThunkV (live_insert hd hp) hC (ih Γa Γb rfl)
-  | @codeI _ _ M C _ hok ih =>
+  | @codeIb _ _ M C _ b hp _ hok hT ih =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨hok', hty⟩ := Ctx.CapOK.insert (Γa := Γa) (dead_not_live hd) hok
       have hcn : Expr.capNorm (.lam (Expr.shift Γd.length (Γa.length + 1) M)) =
           Expr.capNorm (.lam M) := Expr.capNorm_shift Γd.length Γa.length (.lam M)
       have hty' : Ctx.capTy (Γa ++ Γd ++ Γb) (.lam (Expr.shift Γd.length (Γa.length + 1) M)) =
           Ctx.capTy (Γa ++ Γb) (.lam M) := hty
-      have h' := CDerivesX.codeI (M := Expr.shift Γd.length (Γa.length + 1) M) (ih Γa Γb rfl) hok'
-      rw [hcn, hty'] at h'
-      exact h'
-  | @codeIB _ _ M C hp _ hok ih =>
-      intro Γa Γb hΓ; subst hΓ
-      obtain ⟨hok', hty⟩ := Ctx.CapOK.insert (Γa := Γa) (dead_not_live hd) hok
-      have hcn : Expr.capNorm (.lam (Expr.shift Γd.length (Γa.length + 1) M)) =
-          Expr.capNorm (.lam M) := Expr.capNorm_shift Γd.length Γa.length (.lam M)
-      have hty' : Ctx.capTy (Γa ++ Γd ++ Γb) (.lam (Expr.shift Γd.length (Γa.length + 1) M)) =
-          Ctx.capTy (Γa ++ Γb) (.lam M) := hty
-      have h' := CDerivesX.codeIB (M := Expr.shift Γd.length (Γa.length + 1) M) (live_insert hd hp)
-        (ih Γa Γb rfl) hok'
-      rw [hcn, hty'] at h'
-      exact h'
-  | codeErase _ ih => intro Γa Γb hΓ; exact .codeErase (ih Γa Γb hΓ)
-  | codeEraseB _ ih => intro Γa Γb hΓ; exact .codeEraseB (ih Γa Γb hΓ)
-  | bangE _ ih => intro Γa Γb hΓ; exact .bangE (ih Γa Γb hΓ)
-  | boxI _ hΓ ih =>
-      intro Γa Γb hΓ'; subst hΓ'
-      exact .boxI (ih Γa Γb rfl) ⟨hΓ.1, live_insert hd hΓ.2⟩
-  | boxE _ ih => intro Γa Γb hΓ; exact .boxE (ih Γa Γb hΓ)
-  | immSub _ hle ih => intro Γa Γb hΓ; exact .immSub (ih Γa Γb hΓ) hle
-  | mutSub _ hle ih => intro Γa Γb hΓ; exact .mutSub (ih Γa Γb hΓ) hle
+      exact .codeIb b (fun h => live_insert hd (hp h)) (ih Γa Γb rfl) hok' (by rw [hcn, hty']; exact hT)
   | reify S B R res hAt hS hcl hres hΓ _ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (reifyV_closed hcl)]
@@ -379,15 +353,9 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       rw [h₁] at ea; rw [h₂] at ef
       exact .lolliE hs' ea ef
   | allEV _ hlt ih => intro Γa Γb hΓ; exact .allEV (ih Γa Γb hΓ) hlt
-  | ofRet _ ih => intro Γa Γb hΓ; exact .ofRet (ih Γa Γb hΓ)
-  | roll hA hc _ ih => intro Γa Γb hΓ; exact .roll hA hc (ih Γa Γb hΓ)
-  | unroll _ ih => intro Γa Γb hΓ; exact .unroll (ih Γa Γb hΓ)
-  | nuIn hC _ ih => intro Γa Γb hΓ; exact .nuIn hC (ih Γa Γb hΓ)
-  | nuOut hC _ ih => intro Γa Γb hΓ; exact .nuOut hC (ih Γa Γb hΓ)
   | nuOutK hC hG hS hGf hs =>
       intro Γa Γb hΓ; subst hΓ
       rw [var_shift]; exact .nuOutK hC hG hS hGf (soloP_insert hd Γa hs)
-  | effSub hle _ ih => intro Γa Γb hΓ; exact .effSub hle (ih Γa Γb hΓ)
   | effPerform hAt hf hna hac _ ih => intro Γa Γb hΓ; exact .effPerform hAt hf hna hac (ih Γa Γb hΓ)
   | effAwait hAt hΓ hfa ha haA hfc hc =>
       intro Γa Γb hΓ'; subst hΓ'
@@ -403,22 +371,14 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN
       exact .effLet hs' (fun hw => live_insert hd (P := fun s => s.ty.OwnFree) (hW hw))
         (fun hu => live_insert hd (hU hu)) eM eN
-  | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
+  | effThenF hs hNZ hUq hU hMS hDS hfin hP hF _ _ _ ihM ihN ihD =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have eM := ihM Γa₁ Γb₁ rfl
       have eN := ihN (_ :: Γa₂) Γb₂ rfl
       have eD := ihD (_ :: Γa₂) Γb₂ rfl
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN eD
-      exact .effThen hs' hNZ hUq (fun hu => live_insert hd (hU hu)) hMS hDS hfin hP hSD eM eN eD
-  | effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
-      intro Γa Γb hΓ; subst hΓ
-      obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
-      have eM := ihM Γa₁ Γb₁ rfl
-      have eN := ihN (_ :: Γa₂) Γb₂ rfl
-      have eD := ihD (_ :: Γa₂) Γb₂ rfl
-      rw [h₁] at eM; rw [List.length_cons, h₂] at eN eD
-      exact .effThenDiv hs' hNZ hUq (fun hu => live_insert hd (hU hu)) hMS hDS hfin hP hSD eM eN eD
+      exact .effThenF hs' hNZ hUq (fun hu => live_insert hd (hU hu)) hMS hDS hfin hP hF eM eN eD
   | effHandleV hAt hs hdd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
@@ -472,7 +432,6 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
         (Expr.app (Expr.lam (N.shift _ (Γa.length + 1))) ((Expr.lam b).shift _ _)) _
       rw [hb]
       exact .letPoly b hcl hV eN
-  | alpha _ hα ih => intro Γa Γb hΓ; exact .alpha (ih Γa Γb hΓ) hα
   | lendR hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true
   | lendLoopR hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true
   | nilDead hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true

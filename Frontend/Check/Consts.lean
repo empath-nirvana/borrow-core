@@ -176,35 +176,45 @@ def plainShape (sp : Span) (s : CShape) : Except Error (PLift (s.plain = true)) 
 
 /-! ### Constants -/
 
-/-- The unwinding borrows: each at a consumed context, its finaliser the consume of its
-source.  `[spec §19]` -/
-def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
-    Const → Except Error (Σ A : CVTy, Res Δ T (.val A))
+/-- An unwinding lend's parts: its kind, its contents `A` and payload `B`, its row, and the kind's
+side condition on `A`, decided when run.  `[spec §78]` -/
+def lendUParts (E : Env) (Δ : LifeCtx) (sp : Span) : Const →
+    Except Error (Σ k : BoCa.Fig16.LogRel.Core.LendUKind, Σ A : CVTy,
+      CVTy × CRow × Except Error (PLift (k.OK Δ A)))
   | .withbor1U _ A B r => do
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
       let S ← E.elabRow Δ sp r
-      let x := Δ.freshVar
-      let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
-      let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
-      let ⟨hS⟩ ← unwindRow sp x S
-      let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
-      (cDeadStrict (fun j => .withborUD (at_ sp) j A B S [] S .refImm x (finNode sp (.ref A))) fun hd _ =>
-        .withborUD .refImm x hd.toP hx (scopedB_sound hsc) h₁ h₂ hS (BoCa.Fig16.LogRel.Core.RowLe.refl S) (BoCa.Fig16.LogRel.Core.RowLe.nil S) hS.divB
-          (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil)
-          (.consume hdt hdc hde hd))
+      pure ⟨.refImm, A, B, S, do
+        let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
+        pure ⟨scopedB_sound hsc⟩⟩
   | .withbor2U _ b A B r => do
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
       let S ← E.elabRow Δ sp r
+      pure ⟨.refMut, A, B, S, outlivesWitness sp b A⟩
+  | .withbor3U a _ A B r => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      let B ← E.elabV Δ B
+      let S ← E.elabRow Δ sp r
+      pure ⟨.reborrow a, A, B, S, pure ⟨trivial⟩⟩
+  | _ => err sp "not an unwinding lend"
+
+/-- The unwinding borrows: each at a consumed context, its finaliser the consume of its
+source.  `[spec §19]` -/
+def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
+    Const → Except Error (Σ A : CVTy, Res Δ T (.val A))
+  | c@(.withbor1U ..) | c@(.withbor2U ..) | c@(.withbor3U ..) => do
+      let ⟨k, A, B, S, side⟩ ← lendUParts E Δ sp c
       let x := Δ.freshVar
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
-      let ⟨hside⟩ ← outlivesWitness sp b A
+      let ⟨hk⟩ ← side
       let ⟨hS⟩ ← unwindRow sp x S
-      let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
-      (cDeadStrict (fun j => .withborUD (at_ sp) j A B S [] S .refMut x (finNode sp (.ref A))) fun hd _ =>
-        .withborUD .refMut x hd.toP hx hside h₁ h₂ hS (BoCa.Fig16.LogRel.Core.RowLe.refl S) (BoCa.Fig16.LogRel.Core.RowLe.nil S) hS.divB
+      let ⟨hdt, hdc, hde⟩ ← finaliser sp (k.src A)
+      (cDeadStrict (fun j => .withborUD (at_ sp) j A B S [] S k x (finNode sp (k.src A))) fun hd _ =>
+        .withborUD k x hd.toP hx hk h₁ h₂ hS (BoCa.Fig16.LogRel.Core.RowLe.refl S) (BoCa.Fig16.LogRel.Core.RowLe.nil S) hS.divB
           (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil)
           (.consume hdt hdc hde hd))
   | .withlocalU _ b A B r => do
@@ -221,20 +231,6 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       (cDeadStrict (fun j => .withlocal (at_ sp) j (.unwind S S) A B x) fun hd _ =>
         .withlocal (.unwind S S) x hd
           ⟨⟨hx, hside, h₁, h₂⟩, hP, hS, BoCa.Fig16.LogRel.Core.RowLe.refl S, hS.divB⟩)
-  | .withbor3U a _ A B r => do
-      let a ← E.elabL Δ a
-      let A ← E.elabV Δ A
-      let B ← E.elabV Δ B
-      let S ← E.elabRow Δ sp r
-      let x := Δ.freshVar
-      let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
-      let ⟨hS⟩ ← unwindRow sp x S
-      let ⟨hdt, hdc, hde⟩ ← finaliser sp (.mut a A)
-      (cDeadStrict (fun j => .withborUD (at_ sp) j A B S [] S (.reborrow a) x (finNode sp (.mut a A)))
-          fun hd _ =>
-        .withborUD (.reborrow a) x hd.toP hx trivial h₁ h₂ hS (BoCa.Fig16.LogRel.Core.RowLe.refl S) (BoCa.Fig16.LogRel.Core.RowLe.nil S) hS.divB
-          (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil)
-          (.consume hdt hdc hde hd))
   | .withloadU a _ A B r => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
@@ -300,46 +296,16 @@ def synConstFin (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp dsp : Span) :
     Const → Except Error (Σ src : CVTy, CRow ×
       (Res Δ T (.val (.thunk (.arr src (effOf [] .unit)))) →
         Except Error (Σ A : CVTy, Res Δ T (.val A))))
-  | .withbor1U _ A B r => do
-      let A ← E.elabV Δ A
-      let B ← E.elabV Δ B
-      let S ← E.elabRow Δ sp r
+  | c@(.withbor1U ..) | c@(.withbor2U ..) | c@(.withbor3U ..) => do
+      let ⟨k, A, B, S, side⟩ ← lendUParts E Δ sp c
       let x := Δ.freshVar
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
-      let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
+      let ⟨hk⟩ ← side
       let ⟨hS⟩ ← unwindRow sp x S
-      pure ⟨.ref A, S, fun rd =>
+      pure ⟨k.src A, S, fun rd =>
         finRes dsp (fun td => .withborUD (at_ sp)
-            (.val (BoCa.Fig16.LogRel.Core.LendUKind.refImm.ty x Δ.meetOfDom A B S S)) A B S [] S
-            .refImm x td) rd
-          fun hΓ h => TTied.withborUFin (at_ sp) .refImm x hΓ hx (scopedB_sound hsc) h₁ h₂ hS h⟩
-  | .withbor2U _ b A B r => do
-      let b ← E.elabL Δ b
-      let A ← E.elabV Δ A
-      let B ← E.elabV Δ B
-      let S ← E.elabRow Δ sp r
-      let x := Δ.freshVar
-      let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
-      let ⟨hside⟩ ← outlivesWitness sp b A
-      let ⟨hS⟩ ← unwindRow sp x S
-      pure ⟨.ref A, S, fun rd =>
-        finRes dsp (fun td => .withborUD (at_ sp)
-            (.val (BoCa.Fig16.LogRel.Core.LendUKind.refMut.ty x Δ.meetOfDom A B S S)) A B S [] S
-            .refMut x td) rd
-          fun hΓ h => TTied.withborUFin (at_ sp) .refMut x hΓ hx hside h₁ h₂ hS h⟩
-  | .withbor3U a _ A B r => do
-      let a ← E.elabL Δ a
-      let A ← E.elabV Δ A
-      let B ← E.elabV Δ B
-      let S ← E.elabRow Δ sp r
-      let x := Δ.freshVar
-      let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
-      let ⟨hS⟩ ← unwindRow sp x S
-      pure ⟨.mut a A, S, fun rd =>
-        finRes dsp (fun td => .withborUD (at_ sp)
-            (.val ((BoCa.Fig16.LogRel.Core.LendUKind.reborrow a).ty x Δ.meetOfDom A B S S)) A B S []
-            S (.reborrow a) x td) rd
-          fun hΓ h => TTied.withborUFin (at_ sp) (.reborrow a) x hΓ hx trivial h₁ h₂ hS h⟩
+            (.val (k.ty x Δ.meetOfDom A B S S)) A B S [] S k x td) rd
+          fun hΓ h => TTied.withborUFin (at_ sp) k x hΓ hx hk h₁ h₂ hS h⟩
   | _ => err sp "`unwind (d)` is the finaliser of `withbor1u`, `withbor2u` or `withbor3u` only"
 
 /-- The type and derivations of a constant or derived form (syntax-core §8, §8a, §9). -/
@@ -661,15 +627,17 @@ def shortenIt {A : CVTy} (_E : Env) (T : List CVTy) (sp : Span) (m : Mode) (s : 
     match convVal (at_ sp) (s.famTy mutM b) ⟨A, r⟩ with
     | some r =>
       pure ⟨_, shortenAt (M := mutM)
-        (leaf := fun i a b A t => .mutSub i (.val (.mut a A)) a b A t) (at_ sp) r
-        (fun h' hle' => TTied.mutSub _ h' hle') (leB_sound hle)⟩
+        (leaf := fun i a b A t => .conv i (.val (.mut a A)) (.val (.mut b A)) (.val (.mut a A))
+          (.mutSub a b A) t) (at_ sp) r
+        (fun h' hle' => TTied.conv _ (.mutSub hle') h') (leB_sound hle)⟩
     | none => err sp s!"`shorten_mut` needs `fam mut @ σ`, but the operand has type `{ppVTy A}`"
   | .imm =>
     match convVal (at_ sp) (s.famTy immM b) ⟨A, r⟩ with
     | some r =>
       pure ⟨_, shortenAt (M := immM)
-        (leaf := fun i a b A t => .immSub i (.val (.imm a A)) a b A t) (at_ sp) r
-        (fun h' hle' => TTied.immSub _ h' hle') (leB_sound hle)⟩
+        (leaf := fun i a b A t => .conv i (.val (.imm a A)) (.val (.imm b A)) (.val (.imm a A))
+          (.immSub a b A) t) (at_ sp) r
+        (fun h' hle' => TTied.conv _ (.immSub hle') h') (leB_sound hle)⟩
     | none => err sp s!"`shorten_imm` needs `fam imm @ σ`, but the operand has type `{ppVTy A}`"
 
 end

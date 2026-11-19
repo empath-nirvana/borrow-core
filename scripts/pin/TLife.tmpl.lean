@@ -80,6 +80,10 @@ theorem LeΔ.ansOutlives {Δ Δ' : LifeCtx} (h : LeΔ Δ Δ') {d : Lifetime.Life
     (ho : Row.AnsOutlives Δ d S) : Row.AnsOutlives Δ' d S :=
   fun o hoS ha => h.vOutlives (ho o hoS ha)
 
+theorem LeΔ.jconv {Δ Δ' : LifeCtx} (h : LeΔ Δ Δ') {Γ : Ctx VTy} {k : ConvKind} {j j' : Jdg}
+    (hc : JConv Δ Γ k j j') : JConv Δ' Γ k j j' :=
+  hc.mono (fun _ _ => h.ctxOutlives) (fun _ _ => h.entailsLe)
+
 theorem ExtΔ.sub {Δ Δ' : LifeCtx} {B B' : List LifeVar} (h : ExtΔ Δ Δ' B)
     (hB : ∀ z ∈ B', z ∈ B) : ExtΔ Δ Δ' B' :=
   ⟨h.1, fun y u hy => (h.2 y u hy).imp id fun hm x hx => hm x (hB x hx)⟩
@@ -200,13 +204,13 @@ theorem TExpr.isUnfoldN_reAb (Δr : LifeCtx) (t : TExpr) : (t.reAb Δr).isUnfold
   cases t <;> rfl
 
 theorem retLendT_reAb (Δr : LifeCtx) (t : TExpr) : retLendT (t.reAb Δr) = retLendT t := by
-  cases t <;> simp only [TExpr.reAb, retLendT, TExpr.isLendCell_reAb]
+  cases t <;> (try cases ‹ConvKind›) <;> simp only [TExpr.reAb, retLendT, TExpr.isLendCell_reAb]
 
 theorem pairOf0T_reAb (Δr : LifeCtx) (t : TExpr) : pairOf0T (t.reAb Δr) = pairOf0T t := by
   cases t <;> simp only [TExpr.reAb, pairOf0T, TExpr.isVarT_reAb]
 
 theorem lendScopeT_reAb (Δr : LifeCtx) (t : TExpr) : lendScopeT (t.reAb Δr) = lendScopeT t := by
-  cases t <;> simp only [TExpr.reAb, lendScopeT, TExpr.isLendCell_reAb, retLendT_reAb, pairOf0T_reAb]
+  cases t <;> (try cases ‹ConvKind›) <;> simp only [TExpr.reAb, lendScopeT, TExpr.isLendCell_reAb, retLendT_reAb, pairOf0T_reAb]
 
 theorem TExpr.isRelease_reAb (Δr : LifeCtx) (t : TExpr) : (t.reAb Δr).isRelease = t.isRelease := by
   cases t <;> rfl
@@ -215,15 +219,15 @@ theorem relT_reAb (Δr : LifeCtx) (t : TExpr) : ∀ k, relT k (t.reAb Δr) = rel
   induction t
   case lolliE _ _ _ _ _ ta tf _ _ =>
     intro k; simp only [TExpr.reAb, relT, TExpr.isVarT_reAb, TExpr.isRelease_reAb]
-  case ret _ _ _ t ih | ofRet _ _ _ t ih | effSub _ _ _ _ _ t ih | lendScope _ _ _ t ih
-    | sumI₁ _ _ _ _ t ih | sumI₂ _ _ _ _ t ih | alpha _ _ _ _ t ih =>
+  case conv _ _ _ _ c t ih => intro k; cases c <;> simp only [TExpr.reAb, relT, ih k]
+  case lendScope _ _ _ t ih | sumI₁ _ _ _ _ t ih | sumI₂ _ _ _ _ t ih =>
     intro k; simp only [TExpr.reAb, relT, ih k]
   case bind _ _ _ _ u tM tN ihM ihN | effLet _ _ _ _ _ u tM tN ihM ihN =>
     intro k; simp only [TExpr.reAb, relT, ihM k, ihN (k + 1)]
   case unitE _ _ _ u tV tM ihV ihM | tensorI _ _ _ _ u tV tM ihV ihM => intro k; simp only [TExpr.reAb, relT, ihV k, ihM k]
   case sumE _ _ _ _ _ u tV t₁ t₂ _ ih₁ ih₂ => intro k; simp only [TExpr.reAb, relT, ih₁ (k + 1), ih₂ (k + 1)]
   case tensorE _ _ _ _ _ u tV tM _ ihM => intro k; simp only [TExpr.reAb, relT, ihM (k + 2)]
-  case effThen _ _ _ _ _ _ _ u tM tN tD ihM ihN ihD =>
+  case effThenF _ _ _ _ _ _ _ u tM tN tD ihM ihN ihD =>
     intro k; simp only [TExpr.reAb, relT, ihM k, ihN (k + 1), ihD (k + 1)]
   all_goals intro k; rfl
 
@@ -252,17 +256,21 @@ theorem litBodyT_reAb (Δr : LifeCtx) (t : TExpr) : litBodyT (t.reAb Δr) = litB
         | unitE _ _ _ _ tD _ =>
           have hA : tabT (tA.reAb Δr) = tabT tA := by
             cases tA with
-            | ret _ _ _ t =>
+            | conv _ _ _ _ c t =>
+              cases c <;> try rfl
               cases t with
               | lolliE _ _ _ _ _ _ tf =>
                 cases tf with
-                | bangE _ _ _ t => cases t <;> rfl
+                | conv _ _ _ _ c t =>
+                  cases c <;> try rfl
+                  cases t <;> rfl
                 | _ => rfl
               | _ => rfl
             | _ => rfl
           have hL : immLendT (tL.reAb Δr) = immLendT tL := by
             cases tL with
-            | ret _ _ _ t =>
+            | conv _ _ _ _ c t =>
+              cases c <;> try rfl
               cases t with
               | lolliE _ _ _ _ _ _ tf =>
                 cases tf with
@@ -282,7 +290,8 @@ theorem litBodyT_reAb (Δr : LifeCtx) (t : TExpr) : litBodyT (t.reAb Δr) = litB
 
 theorem litViewT_reAb (Δr : LifeCtx) (t : TExpr) : litViewT (t.reAb Δr) = litViewT t := by
   cases t with
-  | ofRet _ _ _ t =>
+  | conv _ _ _ _ c t =>
+    cases c <;> try rfl
     cases t with
     | bind _ _ _ _ _ _ tN =>
       cases tN with
@@ -293,7 +302,7 @@ theorem litViewT_reAb (Δr : LifeCtx) (t : TExpr) : litViewT (t.reAb Δr) = litV
   | _ => rfl
 
 theorem unfoldAppT_reAb (t : TExpr) : ∀ Δr, unfoldAppT (t.reAb Δr) = unfoldAppT t := by
-  induction t <;> intro Δr <;> simp_all [TExpr.reAb, unfoldAppT, TExpr.isUnfoldN_reAb]
+  induction t <;> intro Δr <;> (try cases ‹ConvKind›) <;> simp_all [TExpr.reAb, unfoldAppT, TExpr.isUnfoldN_reAb]
 
 /-- **A typed derivation at a larger lifetime context**, at every index.  `[spec §3, §10, §83]` -/
 theorem TDerivesX.weakenΔ {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}

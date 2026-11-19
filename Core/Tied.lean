@@ -20,8 +20,9 @@ a derivation: every instance of a handler site has one protocol (§19 *Names*).
   `fundamentalC` and the adequacy theorems hold of it.
 * `CDerivesAt.ofEffFree`: a derivation of a term holding no `perform`, `raise` or `hnd`
   (`Expr.effFree`) is tied at every effect context; `CDerivesX.ofEffFree`, one at every index.
-* `CDerivesAt.effThenA`, `CDerivesAt.effHandle`: `CDerives.effThenA` and `CDerives.effHandle`,
-  tied.
+* `CDerivesAt.effThenA`, `CDerivesAt.effHandle`: `CDerivesX.effThenA` and `CDerivesX.effHandle`
+  (`Core/Judgment.lean`) at the tie, generated as every derived rule's instances are
+  (`Core/JudgmentElim.lean`).
 * At a handler the tie makes its signature `E` a prefix of `Ξ n` up to α (`sig_prefix_of_rowAt`), so the
   handler value's tags are a prefix of `Ξ`'s qualifiers of `n` (`hndTags_of_rowAt`).
 * `SigsAt Ξ S`: every entry of the list `S` is at `Ξ`'s signature; it ties every row whose
@@ -48,58 +49,11 @@ theorem Row.divB_of_rowAt {Ξ : EffCtx} {S : Row} (hAt : RowAt Ξ S) (hΞ : Ξ d
     rw [hΞ] at this
     simp at this
 
-/-- The unwinding form of `withbor` (1) with its finaliser at the pure row: `withbor1UD` at
-`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19, §72]` -/
-theorem CDerivesAt.withbor1U {Ξ : EffCtx} {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
-    (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
-    (hS : S.Unwind x) (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.ref A) .unit))) :
-    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S)) :=
-  CDerivesX.withbor1U x hΓ hx hsc₁ hfree₁ hfree₂ hS hd
-
-/-- The unwinding form of `withbor` (2) with its finaliser at the pure row: `withbor2UD` at
-`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19, §23]` -/
-theorem CDerivesAt.withbor2U {Ξ : EffCtx} {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
-    (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-    (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.ref A) .unit))) :
-    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S)) :=
-  CDerivesX.withbor2U x hΓ hx hside hfree₁ hfree₂ hS hd
-
-/-- The unwinding form of `withbor` (3) with its finaliser at the pure row: `withbor3UD` at
-`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19]` -/
-theorem CDerivesAt.withbor3U {Ξ : EffCtx} {Δ Γ a A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
-    (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
-    (hd : CDerivesAt Ξ Δ Γ d (.val (.lolli (.mut a A) .unit))) :
-    CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S)) :=
-  CDerivesX.withbor3U x hΓ hx hfree₁ hfree₂ hS hd
-
 /-- **Every tied derivation is one of `CDerives`**: the tie dropped (`CDerivesX.mono`).
 `[spec §19, §83]` -/
 theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerivesAt Ξ Δ Γ e j) : CDerives Δ Γ e j :=
   CDerivesX.mono (I := {ties := some Ξ}) (I' := {}) ⟨Or.inl rfl, fun h => h⟩ h
-
-/-- `[then]` with its finaliser at the pure row (§24, option A), tied: `effThen` at `Σ_M = Σ` and
-`Σ_D = ∅`, as `CDerives.effThenA`.  `[spec §24, §27]` -/
-theorem CDerivesAt.effThenA {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row}
-    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂)
-    (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf S A)))
-    (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
-    (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
-    CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
-  CDerivesX.effThenA hs hNZ hUq hU hM hN hD
-
-/-- `[handle]` at two variables, tied: `CDerives.effHandle` with the handled row tied to `Ξ`.
-`[spec §19]` -/
-theorem CDerivesAt.effHandle {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row}
-    {E : List (Qual × VTy × VTy)} {n : UInt32} {A R : VTy} {ir ic : Nat}
-    (hAt : RowAt Ξ (Row.ofEff n E 0 ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc)
-    (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
-    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-    (hdv : Row.divB (Row.ofEff n E 0 ++ S) = false)
-    (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
-    CDerivesAt Ξ Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) :=
-  CDerivesX.effHandle hAt hs hs₁ hr hc hn0 hnS hlen hdv he
 
 /-- BOXED-κ at two variables, tied: `CDerivesAt.effHandle` with the clauses at `clausesTyB`.
 `[spec §28]` -/
@@ -362,9 +316,9 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | tensorI hs _ _ ih1 ih2 => exact .tensorI hs (ih1 (by eff_free)) (ih2 (by eff_free))
   | sumI₁ _ ih1 => exact .sumI₁ (ih1 (by eff_free))
   | sumI₂ _ ih1 => exact .sumI₂ (ih1 (by eff_free))
-  | thunkF _ ih1 => exact .thunkF (ih1 (by eff_free))
-  | thunkV hC _ ih1 => exact .thunkV hC (ih1 he)
-  | ret _ ih1 => exact .ret (ih1 he)
+  | thunkFb b hp _ hT ih1 => exact .thunkFb b hp (ih1 (by eff_free)) hT
+  | thunkVb b hp hC _ hT ih1 => exact .thunkVb b hp hC (ih1 he) hT
+  | conv _ _ hc ih1 => exact .conv _ (ih1 he) hc
   | bind hs _ _ ih1 ih2 => exact .bind hs (ih1 (by eff_free)) (ih2 (by eff_free))
   | force h hT => exact .force h hT
   | lam _ ih1 => exact .lam (ih1 (by eff_free))
@@ -381,17 +335,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | zeroE hs _ ih1 => exact .zeroE hs (ih1 (by eff_free))
   | allI hbx hΔx hΓx _ ih1 => exact .allI hbx hΔx hΓx (ih1 (by eff_free))
   | allE _ hlt ih1 => exact .allE (ih1 (by eff_free)) hlt
-  | bangThunkF hp _ ih1 => exact .bangThunkF hp (ih1 (by eff_free))
-  | bangThunkV hp hC _ ih1 => exact .bangThunkV hp hC (ih1 he)
-  | codeI _ hok ih1 => exact .codeI (ih1 he) hok
-  | codeIB hp _ hok ih1 => exact .codeIB hp (ih1 he) hok
-  | codeErase _ ih1 => exact .codeErase (ih1 he)
-  | codeEraseB _ ih1 => exact .codeEraseB (ih1 he)
-  | bangE _ ih1 => exact .bangE (ih1 he)
-  | boxI _ hΓ ih1 => exact .boxI (ih1 he) hΓ
-  | boxE _ ih1 => exact .boxE (ih1 he)
-  | immSub _ hle ih1 => exact .immSub (ih1 he) hle
-  | mutSub _ hle ih1 => exact .mutSub (ih1 he) hle
+  | codeIb b hp _ hok hT ih1 => exact .codeIb b hp (ih1 he) hok hT
   | withborUD k x hΓ hx hk hfree₁ hfree₂ hS hMS hDS hSv hP _ ih1 =>
       exact .withborUD k x hΓ hx hk hfree₁ hfree₂ hS hMS hDS hSv hP (ih1 (by eff_free))
   | sliceBorrowMU x hΓ hsideA hsideB hfree₁ hfree₂ hS _ ih1 =>
@@ -400,23 +344,14 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
       exact .sliceBorrowIU x hΓ hsc hsideA hsideB hfree₁ hfree₂ hS (ih1 (by eff_free))
   | lolliE hs _ _ ih1 ih2 => exact .lolliE hs (ih1 (by eff_free)) (ih2 (by eff_free))
   | allEV _ hlt ih1 => exact .allEV (ih1 (by eff_free)) hlt
-  | ofRet _ ih1 => exact .ofRet (ih1 he)
-  | roll hA hc _ ih1 => exact .roll hA hc (ih1 he)
-  | unroll _ ih1 => exact .unroll (ih1 he)
-  | nuIn hC _ ih1 => exact .nuIn hC (ih1 he)
-  | nuOut hC _ ih1 => exact .nuOut hC (ih1 he)
   | nuOutK hC hG hS hGf h => exact .nuOutK hC hG hS hGf h
-  | effSub hle _ ih1 => exact .effSub hle (ih1 he)
   | effPerform => simp [BoCa.BoLo.performE, Expr.effFree, Expr.val, Val.prim] at he
   | effAwait => simp [awaitE, BoCa.BoLo.performE, BoCa.BoLo.raiseE, Expr.effFree, Expr.val,
       Val.prim] at he
   | effRaise => simp [BoCa.BoLo.raiseE, Expr.effFree, Expr.val, Val.prim] at he
   | effLet hs hW hU _ _ ih1 ih2 => exact .effLet hs hW hU (ih1 (by eff_free)) (ih2 (by eff_free))
-  | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
-      exact .effThen hs hNZ hUq hU hMS hDS hfin hP hSD (ih1 (by eff_free)) (ih2 (by eff_free))
-        (ih3 (by eff_free))
-  | effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
-      exact .effThenDiv hs hNZ hUq hU hMS hDS hfin hP hSD (ih1 (by eff_free)) (ih2 (by eff_free))
+  | effThenF hs hNZ hUq hU hMS hDS hfin hP hF _ _ _ ih1 ih2 ih3 =>
+      exact .effThenF hs hNZ hUq hU hMS hDS hfin hP hF (ih1 (by eff_free)) (ih2 (by eff_free))
         (ih3 (by eff_free))
   | effHandleV | effHandleVB | effHandleT | effHandleL =>
       simp [hndExpr, Expr.effFree, Expr.val, Val.prim] at he
@@ -425,7 +360,6 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
       simp only [Expr.effFree, Expr.val, Val.lam, Bool.and_eq_true] at he
       exact .letPoly b hcl (ihV he.2)
         (ihN (by rw [effFree_shift]; exact effFree_subst N 0 (Val.lam b) he.1 he.2))
-  | alpha _ hα ih => exact .alpha (ih he) hα
 
 /-- **A derivation of a term with no operation is one at every judgment index**: tied at the
 index's effect context, if any (`CDerivesAt.ofEffFree`), then `CDerivesX.mono`.  `[spec §19, §83]` -/

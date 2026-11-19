@@ -18,13 +18,29 @@ elab "ctorNames2% " id:ident : term => do
     | c => c.toString
   return toExpr names.toArray
 
+open Lean Elab Term Meta in
+/-- A constructor's `ctorIdx`, as a literal. -/
+elab "ctorIdx% " id:ident : term => do
+  let n ← realizeGlobalConstNoOverloadWithInfo id
+  let some (.ctorInfo c) := (← getEnv).find? n | throwError "{n} is not a constructor"
+  return toExpr c.cidx
+
 namespace Backend2
 open BoCa BoCa.Fig16.LogRel.Core BoCa.Fig16.LogRel.Core.Check
 
 /-- The rule of each `TExpr` constructor, by `ctorIdx`. -/
 def texprNames : Array String := ctorNames2% TExpr
 
-def ruleName (t : TExpr) : String := texprNames[t.ctorIdx]!
+/-- The same-term steps' names, by `ctorIdx`: a `conv` node is named by its step. -/
+def convNames : Array String := ctorNames2% BoCa.Fig16.LogRel.Core.ConvKind
+
+/-- A node's rule; a `conv` node's is its step's (`convNames`). The `conv` node is read by its
+`ctorIdx` (`ctorIdx% TExpr.conv`, which `TExpr.conv.elim`'s premise checks) rather than by a
+`match` with a catch-all, which would add `propext` to this definition's axioms. -/
+def ruleName (t : TExpr) : String :=
+  if h : t.ctorIdx = ctorIdx% TExpr.conv then
+    TExpr.conv.elim (motive := fun _ => String) t h fun _ _ _ _ k _ => convNames[k.ctorIdx]!
+  else texprNames[t.ctorIdx]!
 
 def ppJ (j : Jdg) (ms : MachSet := {}) (fd : EvSet := {}) : String :=
   match ofJ ms fd j with
