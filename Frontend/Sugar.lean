@@ -682,8 +682,9 @@ inductive Origin where
   (SPEC §76): a message from its body names both.  `[spec §76]` -/
   | rowInst (x f : String)
   /-- The texts (by `Pos.file`) whose calls lend a bare place at a shared-borrow parameter
-  (SPEC §82 P8), recorded first: this elaboration finds the places to lend.  `[spec §82]` -/
-  | autoLendIn (files : List String)
+  (SPEC §82 P8), and with `libs` every library text in the new spelling, recorded first: this
+  elaboration finds the places to lend.  `[spec §82]` -/
+  | autoLendIn (files : List String) (libs : Bool)
   /-- A bare place lent at a call (SPEC §82 P8), its position read as `&x` by the next parse.
   `[spec §82]` -/
   | autoLent
@@ -708,9 +709,12 @@ def noteAutoLendsS (W W' : Val) : SM Unit :=
     modify (· ++ [(sp, .autoLent)])
 
 /-- Whether a call at `sp` lends bare places: its text is one the elaboration finds lends in,
-recorded first (`Origin.autoLendIn`).  `[spec §82]` -/
+recorded first (`Origin.autoLendIn`), or a library text in the new spelling when those are
+included. A library text is read only for a call in it.  `[spec §82]` -/
 def autoLendAt (os : Origins) (sp : Span) : Bool := match os.head? with
-  | some (_, .autoLendIn fs) => fs.contains sp.start.file
+  | some (_, .autoLendIn fs libs) =>
+    let f := sp.start.file
+    fs.contains f || (libs && f != "" && (libSrc f).any isNewDialect)
   | _ => false
 
 /-- The div functions recorded as taking the owner where they declare a shared borrow.
@@ -6705,8 +6709,10 @@ def usesName (n : String) (p : Program) : Bool :=
     !(p.decls.any fun | .def_ _ m _ _ _ _ | .gen _ _ _ (.def_ _ m _ _ _ _) => m.name == n | _ => false)
 
 /-- The declarations `ds` with each `include m` replaced by the module's declarations, at most
-once each, a module's own `include`s first; `inc` the modules included so far. -/
-def expandIncludes : Nat → List Decl → List Decl × List String →
+once each, a module's own `include`s first; `inc` the modules included so far. A module is parsed
+with its positions in `lendAt` read as `&x` (SPEC §82 P8, as `elaborateS`'s `libRaw`).
+`[spec §42, §82]` -/
+def expandIncludes (lendAt : List Pos := []) : Nat → List Decl → List Decl × List String →
     Except Error (List Decl × List String)
   | fuel, ds, st => ds.foldlM (init := st) fun (acc, inc) d =>
     match d with
@@ -6716,12 +6722,13 @@ def expandIncludes : Nat → List Decl → List Decl × List String →
       | some (.error e) => throw ⟨sp, e⟩
       | some (.ok src) => do
         -- The module's positions name it (#883).  [spec §42]
-        let l ← match parseProgram src (lib := libSrc) (file := m.name) with
+        let l ← match parseProgram src (lib := libSrc) (file := m.name)
+            (lendAt := lendAt.filter (·.file == m.name)) with
           | .ok l => pure l.decls
           | .error e => throw e
         match fuel with
         | 0 => throw ⟨sp, s!"the modules include each other: `{m.name}`"⟩
-        | fuel + 1 => expandIncludes fuel l (acc, m.name :: inc)
+        | fuel + 1 => expandIncludes lendAt fuel l (acc, m.name :: inc)
       | none => throw ⟨sp, s!"no library module `{m.name}`: the modules are " ++
           ", ".intercalate libNames⟩
     | d => pure (acc ++ [d], inc)
@@ -6863,10 +6870,12 @@ def polyDecls (ds : List Decl) : Except Error (List Decl × PolyTab × List (Dec
   pure (out, tab, pairs)
 
 /-- How an elaboration treats bare places at shared-borrow parameters (SPEC §82 P8): the texts
-(by `Pos.file`) whose calls lend them, the positions already read as `&x` in each library text, and
-whether the elaboration only finds the places (`find`).  `[spec §82]` -/
+(by `Pos.file`) whose calls lend them, whether the library texts in the new spelling do too
+(`libs`), the positions already read as `&x` in each library text, and whether the elaboration
+only finds the places (`find`).  `[spec §82]` -/
 structure AutoLend where
   texts : List String := []
+  libs : Bool := false
   lendAt : List Pos := []
   find : Bool := false
 
@@ -6874,7 +6883,8 @@ structure AutoLend where
 recording the origins of generated code.  `[spec §11, §14, §82]` -/
 def elaborateS (p : Program) (al : AutoLend := {}) : SM (Program × Nat) := do
   -- The texts whose calls lend bare places, recorded first (SPEC §82 P8).  `[spec §82]`
-  unless al.texts.isEmpty do modify (· ++ [(Span.none, .autoLendIn al.texts)])
+  unless al.texts.isEmpty && !al.libs do
+    modify (· ++ [(Span.none, .autoLendIn al.texts al.libs)])
   let libRaw (m : String) : Except Error (List Decl) :=
     match library m with
     | some (.ok src) => match parseProgram src (lib := libSrc) (file := m)
@@ -6897,9 +6907,9 @@ def elaborateS (p : Program) (al : AutoLend := {}) : SM (Program × Nat) := do
   -- as if it were included: its helpers are written over the platform's handlers, so the effects
   -- are elaborated with the program (SPEC §34).
   let ioFirst := mayIO && !p.decls.any (fun | .include _ m => m.name == "io" | _ => false)
-  let (ioDecls, incl₀) ← (if ioFirst then expandIncludes libNames.length
+  let (ioDecls, incl₀) ← (if ioFirst then expandIncludes al.lendAt libNames.length
       [Decl.include Span.none ⟨"io", Span.none⟩] ([], []) else pure ([], []) : Except Error _)
-  let (decls₀, incl) ← expandIncludes libNames.length p.decls (ioDecls, incl₀)
+  let (decls₀, incl) ← expandIncludes al.lendAt libNames.length p.decls (ioDecls, incl₀)
   -- `data` declarations (SPEC §42): `type` and `shape` declarations, in place. Their fields
   -- marked `must_close` are recorded for the checker's messages.
   for d in decls₀ do
@@ -6946,11 +6956,11 @@ def elaborateS (p : Program) (al : AutoLend := {}) : SM (Program × Nat) := do
   -- The module with what it includes, whether or not the program includes that too: the effects
   -- pass puts them first, ahead of the program's copies of them.
   let (divDecls, inclD) ← (if mayFail && !incl.contains "arith" then expandIncludes
-      libNames.length [Decl.include Span.none ⟨"arith", Span.none⟩] ([], [])
+      al.lendAt libNames.length [Decl.include Span.none ⟨"arith", Span.none⟩] ([], [])
       else pure ([], []) : Except Error _)
   let inclD := incl ++ inclD
   let (wasiDecls, _) ← (if (mayFail || incl.contains "arith") && !incl.contains "wasi" then
-      expandIncludes libNames.length [Decl.include Span.none ⟨"wasi", Span.none⟩] ([], inclD)
+      expandIncludes al.lendAt libNames.length [Decl.include Span.none ⟨"wasi", Span.none⟩] ([], inclD)
       else pure ([], inclD) : Except Error _)
   -- The capabilities are passed and handed back by name (SPEC §11): a local so named is one.
   let gs := divNames ++ ((divDecls ++ wasiDecls ++ decls₀ ++ implicitLibs).flatMap
@@ -6969,8 +6979,9 @@ def elaborateS (p : Program) (al : AutoLend := {}) : SM (Program × Nat) := do
     | _ => none
   -- The I/O library's declarations, with the system interface's and the platform's (SPEC §34):
   -- not reported, however the program brings them in.
-  let (ioRef, _) ← (if incl.contains "io" || incl.contains "sys" then expandIncludes libNames.length
-    [Decl.include Span.none ⟨"io", Span.none⟩] ([], []) else pure ([], []) : Except Error _)
+  let (ioRef, _) ← (if incl.contains "io" || incl.contains "sys" then
+    expandIncludes al.lendAt libNames.length
+      [Decl.include Span.none ⟨"io", Span.none⟩] ([], []) else pure ([], []) : Except Error _)
   let ioRef := ioRef.map hyg
   let hide := decls₀.filter (fun d => ioRef.contains d) ++ divDecls ++ wasiDecls
   let fxr ← (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls : Except Error _)

@@ -1003,10 +1003,11 @@ def ms2 : MachSet := ({} : MachSet).insert (2, 0)
 #guard evExcludedNode [5] {} 7 [{ n := 5, i := 0, q := .lin, A := .unit, B := .unit }] true == [5]
 #guard evExcludedNode [5] {} 7 [{ n := 5, i := 0, q := .lin, A := .unit, B := .unit }] false == []
 
-/-- The evidence names of a program (`evNames` on its checked `main`), and its `env` names. -/
+/-- The evidence names of a program (`evNames` on its checked `main`), and its `env` names. The
+program is read as `bcc check` reads it (`Frontend.Elab.parseLent`, SPEC §82).  `[spec §82]` -/
 def evNamesOf (src : String) : Option (List UInt32 × List UInt32) := do
-  let p ← (Frontend.parseProgram src (lib := Frontend.Sugar.libSrc)).toOption
-  let r ← (Frontend.Check.checkProgram p).toOption
+  let (p, el) ← (Frontend.Elab.parseLent src).toOption
+  let r ← (Frontend.Check.checkProgramWith p (fun _ => el)).toOption
   let c ← r.main
   let (kinds, envs) := directFacts c
   pure (evNames c kinds envs, envs.toList.map (·.1))
