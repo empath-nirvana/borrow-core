@@ -98,13 +98,13 @@ block() {
   case "$attrs" in
     ignore) return 0 ;;
     run)
-      want=$(sed -n '/^-- answer: /{s///p;q;}' "$f")
-      if [ -z "$want" ] && grepq '^-- output:' "$f"; then want='()'; fi
+      want=$(sed -nE '/^(--|#) answer: /{s///p;q;}' "$f")
+      if [ -z "$want" ] && grepq -E '^(--|#) output:' "$f"; then want='()'; fi
       if [ -z "$want" ]; then fail "$at" "a \`bc\` block needs an \`-- answer:\` or \`-- output:\` line (or mark it \`bc,check\`)"; return 1; fi
       if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; return 1; fi
       in="$tmp/$n.in"; : > "$in"
-      sed -n 's/^-- stdin: \{0,1\}//p' "$f" | while IFS= read -r l; do printf '%s\n' "$l"; done > "$in"
-      outl=$(sed -n 's/^-- output: \{0,1\}//p' "$f" | while IFS= read -r l; do printf '%s\n' "$l"; done)
+      sed -nE 's/^(--|#) stdin: ?//p' "$f" | while IFS= read -r l; do printf '%s\n' "$l"; done > "$in"
+      outl=$(sed -nE 's/^(--|#) output: ?//p' "$f" | while IFS= read -r l; do printf '%s\n' "$l"; done)
       if [ -n "$outl" ]; then expect=$(printf '%s\n%s\nlive 0' "$outl" "$want")
       else expect=$(printf '%s\nlive 0' "$want"); fi
       # The source stage: on every block, on none, or on an unverified one. `kl` is the block's
@@ -143,7 +143,7 @@ block() {
       if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; return 1; fi
       ;;
     reject)
-      want=$(sed -n '/^-- expect: /{s///p;q;}' "$f")
+      want=$(sed -nE '/^(--|#) expect: /{s///p;q;}' "$f")
       if [ -z "$want" ]; then fail "$at" "a \`bc,reject\` block needs an \`-- expect:\` line"; return 1; fi
       if ! out=$("$bcc" parse "$f" 2>&1); then fail "$at" "does not parse, so it does not test the checker" "${out#"$f:"}"; return 1; fi
       if out=$("$bcc" check "$f" 2>&1); then fail "$at" "accepted, but must be rejected"; return 1; fi

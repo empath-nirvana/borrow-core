@@ -1,7 +1,8 @@
--- `div-nested.bc` in core (SPEC §14), as `bcc desugar` prints it. Each nested call of
--- `line_length` is bound before the application it is an argument of, in evaluation order, and is
--- a state of the body's machine (SPEC §15) holding its loop; `inc` of its result is bound after
--- it.
+#! dialect 82
+# `div-nested.bc` in core (SPEC §14), as `bcc desugar` prints it. Each nested call of
+# `line_length` is bound before the application it is an argument of, in evaluation order, and is
+# a state of the body's machine (SPEC §15) holding its loop; `inc` of its result is bound after
+# it.
 
 extern stdin : ref input
 

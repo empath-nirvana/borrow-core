@@ -1,8 +1,9 @@
--- `lend-block.bc` in core, as `bcc desugar` prints it: the borrow block over the loop, lent per
--- observation. The stretch before the loop is a `withbor1` of `t` that hands on `first` and `acc`;
--- the loop is the state of `main`'s machine (SPEC §15) that holds the iterator, `t` and the
--- threaded variables, whose code borrows `t` around the body; the stretch after the loop borrows
--- `t` in the loop's last step.
+#! dialect 82
+# `lend-block.bc` in core, as `bcc desugar` prints it: the borrow block over the loop, lent per
+# observation. The stretch before the loop is a `withbor1` of `t` that hands on `first` and `acc`;
+# the loop is the state of `main`'s machine (SPEC §15) that holds the iterator, `t` and the
+# threaded variables, whose code borrows `t` around the body; the stretch after the loop borrows
+# `t` in the loop's last step.
 
 def get : !(all 'a < top. imm 'a array i32 * i32 => i32) =
   !thunkv Fun 'a < top.

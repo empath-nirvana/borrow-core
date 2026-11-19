@@ -1,5 +1,6 @@
--- `surface-fn.bc` written by hand in core: each `fn` a persistent `def` whose parameter is the
--- tuple of its parameters, each call `(unbang f) V`, each `let` a binding.
+#! dialect 82
+# `surface-fn.bc` written by hand in core: each `fn` a persistent `def` whose parameter is the
+# tuple of its parameters, each call `(unbang f) V`, each `let` a binding.
 def add3 : !(i32 * (i32 * i32) => i32) =
   !thunkv fun (p : i32 * (i32 * i32)) ->
     let (a, q) = p;

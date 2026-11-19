@@ -1,22 +1,25 @@
--- `return` inside a generator's loop, not in tail position. `upto` yields `0, 1, …` up to `n`
--- and returns `n`, or `return`s early with `i` when it reaches `stop`. The `if`'s `else` arm goes
--- on, so what follows the `if` is moved into it and the `return` is a terminal of the loop's
--- body, which finishes the generator's machine with `i` at once.
--- `gen-return.core.bc` is its elaboration in core, as `bcc desugar` prints it.
--- Answer: i32[6], 0 + 1 + 2 + 3 before `stop` returns at 4.
+#! dialect 82
+# `return` inside a generator's loop, not in tail position. `upto` yields `0, 1, …` up to `n`
+# and returns `n`, or `return`s early with `i` when it reaches `stop`. The `if`'s `else` arm goes
+# on, so what follows the `if` is moved into it and the `return` is a terminal of the loop's
+# body, which finishes the generator's machine with `i` at once.
+# `gen-return.core.bc` is its elaboration in core, as `bcc desugar` prints it.
+# Answer: i32[6], 0 + 1 + 2 + 3 before `stop` returns at 4.
 
-include yield
+import yield
 
-fn upto(n: i32, stop: i32) -> i32 with Yield[i32] =
-  let mut i = 0;
+fn upto(n: i32, stop: i32) : i32 / Yield[i32] {
+  var i = 0
   while i < n {
-    if i == stop { return i } else { () };
-    yield(i);
+    if i == stop { return i } else { () }
+    yield(i)
     i = i + 1
-  };
+  }
   n
+}
 
-main -> i32 =
-  let mut acc = 0;
-  for x in upto(10, 4) { acc = acc + x };
+fn main() : i32 {
+  var acc = 0
+  for x in upto(10, 4) { acc = acc + x }
   acc
+}

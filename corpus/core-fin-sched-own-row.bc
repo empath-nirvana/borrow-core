@@ -1,14 +1,15 @@
--- check: old-backend-refuses
--- SPEC §27, `κ`'s cancel at its operation's cancel row alone (`cancelTy F = F_F 1`): a stored-`κ`
--- scheduler (handler 3) parks a task at `3.0`. The task first reads input (`9.0`, I/O, capturable
--- and cancellable) and its cleanup writes (`8.0`, must-resume). The scheduler then waits on I/O
--- (`9.0 (inr ())`) with the parked task's cancel as the wait's finaliser; the I/O handler times
--- the wait out (cancels its `κ`), which cancels the parked task, whose cleanup performs `8.0` at
--- handler 8.
---   IO = 9.0 cancel[8.0 lin 1 ~> 1] 1 + 1 ~> i32      W = 8.0 lin 1 ~> 1
--- The parked `κ`'s cancel is at `F[W] 1`, the cancel row of `3.0`, not `F[W, IO, W] 1`: so the
--- cancel row of `9.0` need not hold `9.0` itself.
--- Answer: inr (), the cleanup ran, and `live 0`.
+#! dialect 82
+# check: old-backend-refuses
+# SPEC §27, `κ`'s cancel at its operation's cancel row alone (`cancelTy F = F_F 1`): a stored-`κ`
+# scheduler (handler 3) parks a task at `3.0`. The task first reads input (`9.0`, I/O, capturable
+# and cancellable) and its cleanup writes (`8.0`, must-resume). The scheduler then waits on I/O
+# (`9.0 (inr ())`) with the parked task's cancel as the wait's finaliser; the I/O handler times
+# the wait out (cancels its `κ`), which cancels the parked task, whose cleanup performs `8.0` at
+# handler 8.
+#   IO = 9.0 cancel[8.0 lin 1 ~> 1] 1 + 1 ~> i32      W = 8.0 lin 1 ~> 1
+# The parked `κ`'s cancel is at `F[W] 1`, the cancel row of `3.0`, not `F[W, IO, W] 1`: so the
+# cancel row of `9.0` need not hold `9.0` itself.
+# Answer: inr (), the cleanup ran, and `live 0`.
 
 main : F ((i32 + 1) + 1) =
   handle_with[8](

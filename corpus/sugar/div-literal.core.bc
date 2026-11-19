@@ -1,5 +1,6 @@
--- `div-literal.bc` written by hand in core: each division the host's operation on its operands,
--- whose `inr` arm, where Wasm traps, is never taken at a nonzero divisor.
+#! dialect 82
+# `div-literal.bc` written by hand in core: each division the host's operation on its operands,
+# whose `inr` arm, where Wasm traps, is never taken at a nonzero divisor.
 def f : !(i32 => i32) =
   !thunkv fun (a : i32) ->
     return (unbang host[sub32]) ((unbang host[add32]) ((unbang host[add32])

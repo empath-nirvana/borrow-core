@@ -1,0 +1,19 @@
+-- SPEC §27 in the core text, the twin of the kernel program `e8b` (`bcc kernel interp e8b`, E8b):
+-- `abort[1.0]` unwinds through a finaliser that raises `2.0`. The finaliser performs, so the
+-- `[then]` is at its own row (no operation of the row captures a continuation, so no cancel row is
+-- read). A raise during an unwind supersedes the pending one: handler 2 catches `2.0`, and handler
+-- 1 wraps its answer.
+--
+-- Answer: inl (inr ()), and `live 0`. A wrong implementation that keeps the pending `1.0` instead
+-- answers `inr ()`.
+
+-- probe: E8b in the core text: an unwind through a finaliser whose raise supersedes the pending one
+main : F ((0 + 1) + 1) =
+  handle_with[1](
+      ((!thunkv fun (v : 0 + 1) -> return (inl v)) : !U (0 + 1 -o F ((0 + 1) + 1))),
+      (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F ((0 + 1) + 1)) * 1)) (
+    handle_with[2](
+        ((!thunkv fun (v : 0) -> return (inl v)) : !U (0 -o F[1.0 cancel 1 ~> 0] (0 + 1))),
+        (((!thunkv fun (e : 1) -> return (inr e)), ()) : !U (1 -o F[1.0 cancel 1 ~> 0] (0 + 1)) * 1)) (
+      x <- abort[1.0] () unwind (abort[2.0] ());
+      return x))

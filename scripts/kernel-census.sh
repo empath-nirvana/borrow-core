@@ -15,5 +15,5 @@ if [ $# -eq 0 ]; then
   set -- "${progs[@]}"
 fi
 files=()
-for f in "$@"; do grep -q '^-- check: parse-only' "$f" || files+=("$f"); done
+for f in "$@"; do grep -qE '^(--|#) check: parse-only' "$f" || files+=("$f"); done
 exec .lake/build/bin/kernel-census "${files[@]}"

@@ -1,17 +1,18 @@
--- countDownProg (Core/DelayPrograms.lean: progD, countDownStep), from the corpus review's
--- 3-countDownProg, in draft 1, over i32. The state is (n, acc); each step appends the digit n
--- to acc and decrements n. The delay from (3, 0) is driven to its end; a second, from (5, 0),
--- is driven twice and then closed.
---
--- Answer: (inl i32[321], inr ()). The digits of 321 record every step, in order: a step
--- skipped or run twice, a state not threaded from one step to the next, or a loop that stops
--- one step early or late gives a different number or `inr ()`. The second component is the
--- close; `live 0` checks that it runs.
+#! dialect 82
+# countDownProg (Core/DelayPrograms.lean: progD, countDownStep), from the corpus review's
+# 3-countDownProg, in draft 1, over i32. The state is (n, acc); each step appends the digit n
+# to acc and decrements n. The delay from (3, 0) is driven to its end; a second, from (5, 0),
+# is driven twice and then closed.
+#
+# Answer: (inl i32[321], inr ()). The digits of 321 record every step, in order: a step
+# skipped or run twice, a state not threaded from one step to the next, or a loop that stops
+# one step early or late gives a different number or `inr ()`. The second component is the
+# close; `live 0` checks that it runs.
 
 def ten : i32 => i32 = thunkv fun (a : i32) -> return ((unbang host[mul32]) (a, i32[10]))
 
--- The step: `now acc` at n = 0, else `later (n - 1, 10 acc + n)`; close has nothing to free.
--- Both components of `<,>` consume s (withI gives each the whole context).
+# The step: `now acc` at n = 0, else `later (n - 1, 10 acc + n)`; close has nothing to free.
+# Both components of `<,>` consume s (withI gives each the whole context).
 def cd_step : !U (i32 * i32 -o F (i32 + i32 * i32) & F 1) =
   !thunkv fun (s : i32 * i32) ->
     < let (n, acc) = s;
@@ -26,7 +27,7 @@ def cd_step : !U (i32 * i32 -o F (i32 + i32 * i32) & F 1) =
 main : F ((i32 + 1) * (i32 + 1)) =
   f <- return (unbang (fixd[i32, i32 * i32] cd_step));
   s0 : i32 * i32 <- return (i32[3], i32[0]);
-  -- `thunkv (force f s0)` is rejected (section 6.4): eta-expand through the unrolling.
+  # `thunkv (force f s0)` is rejected (section 6.4): eta-expand through the unrolling.
   d0 <- return (thunkv delay_in < (delay_out (force f s0)).1, (delay_out (force f s0)).2 >);
   a : i32 + 1 <-
     (o1 <- (delay_out (force d0)).1;

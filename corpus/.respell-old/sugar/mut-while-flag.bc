@@ -1,0 +1,9 @@
+-- A `while` with a counter and a flag. `mut-while-flag.core.bc` is its elaboration, written by
+-- hand, one loop whose state is the two variables, each turn answering them on or finishing with
+-- them.
+-- Answer: (i32[5], inr ()).
+main -> i32 * bool =
+  let mut i = 0;
+  let mut found = false;
+  while i < 10 && not(found) { if i * i > 20 { found = true } else { i = i + 1 } };
+  (i, found)

@@ -1,16 +1,17 @@
--- SPEC §15 in the core text, written by hand: a stored generator. `fib` loops and performs `yield`
--- at the site 1 (`1.0 cancel i32 ~> 1`); `pull` handles each observation of `fib`'s loop with a
--- clause that does not resume: it answers the element with the continuation as the rest, a
--- `nu` value whose next observation resumes it and whose `close` cancels it. The stored generator
--- is the `unfold` over `fib`'s loop or such a rest. `take` drains it and performs `yield` at the
--- site 2, handled by `main`'s loop, threading `acc` (`2.0 cancel i32 * i32 ~> i32`).
---
--- Answer: i32[88], the sum of the first ten Fibonacci numbers.
+#! dialect 82
+# SPEC §15 in the core text, written by hand: a stored generator. `fib` loops and performs `yield`
+# at the site 1 (`1.0 cancel i32 ~> 1`); `pull` handles each observation of `fib`'s loop with a
+# clause that does not resume: it answers the element with the continuation as the rest, a
+# `nu` value whose next observation resumes it and whose `close` cancels it. The stored generator
+# is the `unfold` over `fib`'s loop or such a rest. `take` drains it and performs `yield` at the
+# site 2, handled by `main`'s loop, threading `acc` (`2.0 cancel i32 * i32 ~> i32`).
+#
+# Answer: i32[88], the sum of the first ten Fibonacci numbers.
 
 def plus : i32 * i32 => i32 = unbang host[add32]
 def lt : i32 * i32 => 1 + 1 = unbang host[lt_s32]
 
--- fib's loop: state (a, b).
+# fib's loop: state (a, b).
 def fib_step : !U (i32 * i32 -o F[1.0 cancel i32 ~> 1] (1 + i32 * i32) & F[1.0 cancel i32 ~> 1] 1) =
   !thunkv fun (s : i32 * i32) ->
     < let (a, b) = s;
@@ -25,8 +26,8 @@ def fib : !U (1 -o F (U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i
     s <- return (i32[0], i32[1]);
     return (thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >)
 
--- The rest of a suspended observation: Q = nu Y. F(i32 * U Y + (1 + U FibL)) & F 1.
--- The pull view: P = gen i32 1 1, over the state U FibL + U Q.
+# The rest of a suspended observation: Q = nu Y. F(i32 * U Y + (1 + U FibL)) & F 1.
+# The pull view: P = gen i32 1 1, over the state U FibL + U Q.
 def pull_hr : !U (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) -o
     F (i32 * U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1)
        + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1)))) =
@@ -77,7 +78,7 @@ def pull : !U (U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1
     s : U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1) + U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 cancel i32 ~> 1] (1 + U X) & F[1.0 cancel i32 ~> 1] 1))) & F 1) <- return (inl l);
     return (thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >)
 
--- take(n, it): loops, draining the pull view, and yields at site 2 threading w.
+# take(n, it): loops, draining the pull view, and yields at site 2 threading w.
 def take_step : !U (i32 * (i32 * (i32 * U (pull i32 1 1))) -o
     F[2.0 cancel i32 * i32 ~> i32] (i32 + i32 * (i32 * (i32 * U (pull i32 1 1)))) & F[2.0 cancel i32 * i32 ~> i32] i32) =
   !thunkv fun (s : i32 * (i32 * (i32 * U (pull i32 1 1)))) ->
@@ -109,7 +110,7 @@ def take : !U (i32 * (i32 * U (pull i32 1 1)) -o F (U (nu X. F[2.0 cancel i32 * 
     s <- return (w, (n, (i32[0], it)));
     return (thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >)
 
--- main: acc <- 0; for x in take(10, fib()) { acc = acc + x }; acc
+# main: acc <- 0; for x in take(10, fib()) { acc = acc + x }; acc
 def m_hr : !U (i32 + U (nu X. F[2.0 cancel i32 * i32 ~> i32] (i32 + U X) & F[2.0 cancel i32 * i32 ~> i32] i32)
     -o F (i32 + U (nu X. F[2.0 cancel i32 * i32 ~> i32] (i32 + U X) & F[2.0 cancel i32 * i32 ~> i32] i32))) =
   !thunkv fun (v : i32 + U (nu X. F[2.0 cancel i32 * i32 ~> i32] (i32 + U X) & F[2.0 cancel i32 * i32 ~> i32] i32)) -> return v

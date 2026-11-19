@@ -1,9 +1,10 @@
--- A div helper that returns to `main` (SPEC §14). `count_lines` loops over its input to the end
--- and hands the capability back with the count; `main` then writes the count. Nothing is marked:
--- `count_lines` has a `for`, so it is div, and `main` calls it, so `main` is too. The call is
--- direct style: `main` continues when the loop finishes.
---
--- Answer: `4` and the result `i32[4]`, the four newlines of the input.
+#! dialect 82
+# A div helper that returns to `main` (SPEC §14). `count_lines` loops over its input to the end
+# and hands the capability back with the count; `main` then writes the count. Nothing is marked:
+# `count_lines` has a `for`, so it is div, and `main` calls it, so `main` is too. The call is
+# direct style: `main` continues when the loop finishes.
+#
+# Answer: `4` and the result `i32[4]`, the four newlines of the input.
 
 def count_lines : In => In * i32 =
   thunkv fun (c : In) ->

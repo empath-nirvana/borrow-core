@@ -1,0 +1,10 @@
+-- SPEC §27 in the core text, checked, not run: `main` returns `()` and does not call `f`: two
+-- nested finalisers that both perform capturable operations. `Σ_M` of the outer `[then]` is the row
+-- its head's derivation needs: `1.0`'s cancel row is `{5.0⟨∅⟩}` (`thenJoin` of the inner
+-- finaliser's row), not the site's `{5.0⟨{4.0}⟩, 4.0}`, whose nested `[4.0]` would have to hold
+-- `4.0`.
+
+def f : !U (1 -o F[1.0 unr[5.0 unr[4.0 unr 1 ~> 1] 1 ~> 1, 4.0 unr 1 ~> 1] 1 ~> 1, 5.0 unr[4.0 unr 1 ~> 1] 1 ~> 1, 4.0 unr 1 ~> 1] 1) =
+  !thunkv fun (u : 1) -> y <- (x <- perform[1.0] u unwind (perform[5.0] ()); return x) unwind (perform[4.0] ()); return y
+
+main : F 1 = return ()

@@ -1,4 +1,5 @@
--- [spec §80] Distinct nested locals, asymmetric writes: final outer 18, inner 15.
+#! dialect 82
+# [spec §80] Distinct nested locals, asymmetric writes: final outer 18, inner 15.
 main : F (i32 * i32) =
   q <- return (withlocal['x, top, i32, i32] i32[1]
     (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x i32) ->
