@@ -124,9 +124,9 @@ if [ ${#files[@]} -eq 0 ]; then
   list=$(scripts/corpus-set.sh)
   progs=(); while IFS= read -r f; do [ -z "$f" ] || progs+=("$f"); done <<< "$list"
   for f in "${progs[@]}"; do
-    grep -q '^-- check: parse-only' "$f" && continue
-    grep -q '^-- check: no-source' "$f" && { echo "$f: no-source, skipped"; continue; }
-    grep -q '^main' "$f" || continue
+    grep -qE '^(--|#) check: parse-only' "$f" && continue
+    grep -qE '^(--|#) check: no-source' "$f" && { echo "$f: no-source, skipped"; continue; }
+    grep -qE '^(main|fn main\()' "$f" || continue
     files+=("$f")
   done
   for f in experiments/AsyncCap/bc/*.bc experiments/AsyncCap/bc/accept/*.bc; do

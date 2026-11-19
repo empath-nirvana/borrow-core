@@ -1,13 +1,14 @@
--- A div helper whose residual comes from its type (SPEC §14, docs/typed-elaboration.md §2.4).
--- `count` loops over the input and hands back the capability with the count. Its result
--- `Src * i32` holds `Src`, a name this program gives `ref input`: `Src` is not consumable, so a
--- loop closed early must hand it back, and the residual is `Src * 1`. The residual is read off
--- the type, not recognized by the names `In`, `Out`, `ref input` or `ref output`.
--- `residual-alias.core.bc` is its elaboration in core, as `bcc desugar` prints it.
+#! dialect 82
+# A div helper whose residual comes from its type (SPEC §14, docs/typed-elaboration.md §2.4).
+# `count` loops over the input and hands back the capability with the count. Its result
+# `Src * i32` holds `Src`, a name this program gives `ref input`: `Src` is not consumable, so a
+# loop closed early must hand it back, and the residual is `Src * 1`. The residual is read off
+# the type, not recognized by the names `In`, `Out`, `ref input` or `ref output`.
+# `residual-alias.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 extern stdin : ref input
 extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (u8 + 1))
 
--- The input under a name of this program's own.
+# The input under a name of this program's own.
 type Src = ref input
 
 def getb : Src => Src * (u8 + 1) =
@@ -18,7 +19,7 @@ def getb : Src => Src * (u8 + 1) =
          let (m2, b) = r;
          return (boxed['x] b))))
 
--- The input as a stream of bytes, finishing (or closed) with the capability.
+# The input as a stream of bytes, finishing (or closed) with the capability.
 def src_step : !U (Src -o F (u8 * Src + Src) & F Src) =
   !thunkv fun (c : Src) ->
     < q <- return (getb c);

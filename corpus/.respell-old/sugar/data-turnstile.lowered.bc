@@ -1,0 +1,37 @@
+-- lowers: corpus/data-turnstile.bc
+-- `corpus/data-turnstile.bc` (T07) with its variant and matches written out by SPEC §42's rules,
+-- in the surface: `State` the sum `1 + 1` (D1), `Locked` and `Open` its ascribed injections (E1),
+-- and the match over the state and the byte a `case` on the state whose arms test the byte by
+-- `==`, the wildcard's arm last (M2).
+include textio
+include text
+
+type State = 1 + 1
+
+fn show(s: State) -> 1 = case s { inl a -> let () = a; print_lit("Locked") | inr b -> let () = b; print_lit("Open") }
+
+main -> i32 =
+  let mut st = (inl () : State);
+  let mut passed = 0;
+  let mut rejected = 0;
+  let mut wasted = 0;
+  let (evs, k) = string_of_lit("cpppccpcp");
+  for p in &evs {
+    let e = *p;
+    let next = match st {
+      inl l -> let () = l;
+        if e == b'c' { (inr () : State) } else { rejected = rejected + 1; (inl () : State) }
+    | inr o -> let () = o;
+        if e == b'p' { passed = passed + 1; (inl () : State) } else { wasted = wasted + 1; (inr () : State) }
+    };
+    st = next
+  };
+  show(st);
+  print_byte(b' ');
+  print_dec(passed);
+  print_byte(b' ');
+  print_dec(rejected);
+  print_byte(b' ');
+  print_dec(wasted);
+  print_byte(b'\n');
+  0

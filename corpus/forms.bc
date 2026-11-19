@@ -1,7 +1,8 @@
--- Syntax coverage: every form of sections 3-10 that the programs above do not use, in both
--- spellings where section 2 gives two. This file is for the parser; its declarations are not
--- all meant to type-check.
--- check: parse-only
+#! dialect 82
+# Syntax coverage: every form of sections 3-10 that the programs above do not use, in both
+# spellings where section 2 gives two. This file is for the parser; its declarations are not
+# all meant to type-check.
+# check: parse-only
 
 type Nat = μX. 1 ⊕ X
 type Cell = mu X. 1 + ref X
@@ -12,7 +13,7 @@ type Poly = U (∀'x ⊏ top. Nat -o forall 'y < 'x. delay Nat)
 type Strs = U (stream Nat) * U (str 1) * U (∀'z ⊏ ⊤. ⊤)
 type Codata = U (nu X. F (Nat * U X + 1) & F Nat & F 1) * U (iter Nat 1 (ref Nat))
 type Blocks = block (node (leaf Nat) (leaf (ref Nat))) * val Pair * fam imm top Pair
-type Arrows = all 'y < top. Nat => Nat => 0
+type Arrows = all 'y < top. (Nat) -> (Nat) -> 0
 shape Pair = node (leaf Nat) (leaf Nat)
 
 extern world : !(1 => 1)

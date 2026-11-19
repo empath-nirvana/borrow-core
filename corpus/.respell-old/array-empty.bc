@@ -1,0 +1,18 @@
+-- A negative length (SPEC §9): `array_new` at i32[0xFFFFFFFF], which is -1 as a signed
+-- integer, makes the empty array rather than 4294967295 cells. `array_size` reads the length,
+-- and index 0 is out of range. The tabulator is never called.
+--
+-- Answer: (i32[0], inr i32[5]). A length read as unsigned would try to allocate 2^32 - 1 cells;
+-- a bounds check that lets index 0 through gives `inl`.
+
+type A = array i32
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return i
+
+main : F (i32 * (i32 + i32)) =
+  a <- return ((unbang array_new[i32]) (i32[0xFFFFFFFF], tab));
+  q <- return ((unbang array_size[i32]) a);
+  let (a1, n) = q;
+  q2 <- return ((unbang array_replace[i32]) (a1, (i32[0], i32[5])));
+  let (a2, o) = q2;
+  return (n, o)

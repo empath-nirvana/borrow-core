@@ -1,0 +1,67 @@
+-- check: no-source
+-- A list of 50000 elements, deeper than a native stack frame per element allows (#50). It is
+-- built by a loop, summed by a loop (a left fold: the state is the rest of the list and the sum
+-- so far), built again, and summed by `fold_own` (a right fold over owned data). The loops run in
+-- constant stack because every observation returns before the next; `fold_own` runs in constant
+-- stack by pointer reversal (Backend/README.md, Stack). Compiled with a native stack frame per
+-- element, `fold_own` exhausts wasmtime's stack at 10000 elements.
+--
+-- The source interpreter is too slow at this size, so the program is not run at the source stage
+-- (`-- check: no-source`, scripts/compile-corpus.sh); its golden output is the closed form.
+--
+-- Answer: (i32[1250025000], i32[1250025000]): 1 + 2 + … + 50000, by each fold. A fold that
+-- skips an element, or counts one twice, is off by that element.
+
+type List = mu X. 1 + (i32 * X)
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+-- Build [1, 2, …, n]: the state is the count left and the list so far.
+def build_step : !U (i32 * List -o F (List + i32 * List) & F 1) =
+  !thunkv fun (s : i32 * List) ->
+    < let (k, l) = s;
+      case (unbang host[eqz32]) k {
+        inl u -> return (inr ((unbang host[sub32]) (k, i32[1]), (roll (inr (k, l)) : List)))
+      | inr u -> return (inl l)
+      },
+      let (k, l) = s;
+      return () >
+
+def build : i32 => U (loop List 1) =
+  thunkv fun (n : i32) ->
+    f <- return (unbang (unfold[loop List 1, i32 * List] build_step));
+    s0 : i32 * List <- return (n, (roll (inl ()) : List));
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- The left fold: the state is the rest of the list and the sum so far.
+def sum_step : !U (List * i32 -o F (i32 + List * i32) & F 1) =
+  !thunkv fun (s : List * i32) ->
+    < let (l, acc) = s;
+      case (unroll l) {
+        inl u -> return (inl acc)
+      | inr p -> let (x, t) = p; return (inr (t, plus (acc, x)))
+      },
+      let (l, acc) = s;
+      return () >
+
+def sum_loop : List => U (loop i32 1) =
+  thunkv fun (l : List) ->
+    f <- return (unbang (unfold[loop i32 1, List * i32] sum_step));
+    s0 : List * i32 <- return (l, i32[0]);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- The right fold.
+def sum_alg : !(1 + (i32 * i32) => i32) =
+  !thunkv fun (r : 1 + (i32 * i32)) ->
+    case r {
+      inl u -> return i32[0]
+    | inr p -> return (plus p)
+    }
+
+def sum_own : List => i32 = unbang (fold_own[1 + (i32 * X), i32] sum_alg)
+
+main : F (i32 * i32) =
+  l1 <- return (build i32[50000]);
+  s1 <- return (sum_loop l1);
+  l2 <- return (build i32[50000]);
+  return (s1, sum_own l2)

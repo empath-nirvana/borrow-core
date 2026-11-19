@@ -1,0 +1,58 @@
+-- check: old-backend-refuses
+-- SPEC §27 in the core text: two stages' stored continuations closed in one cancel region. Each
+-- stage waits at its `next` (site 3) holding a cell, which its cleanup frees. `close2` performs
+-- `5.0` under two finaliser frames, the inner cancelling the downstream stage and the outer the
+-- upstream one, and the handler of `5` cancels that continuation: both stages' cancels run under
+-- the one cancel, downstream first, so a cleanup's error would be kept by `[cfin-raise]` and the
+-- first one re-raised at the canceller.
+--
+-- Answer: i32[0], and `live 0`: both stages' cells are freed by their cleanups.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+-- The downstream stage, one observation: it owns a cell across its `next` (site 3); its cleanup
+-- frees the cell.
+def down_obs : !U (1 -o F[3.0 cancel 1 ~> i32] i32) =
+  !thunkv fun (u : 1) ->
+    c <- return (alloc[i32] i32[5]);
+    a <- perform[3.0] () unwind (z <- return (free[i32] c); return ());
+    z <- return (free[i32] c);
+    return (plus (a, z))
+
+def d_hr : !U (i32 -o F (i32 + U (nu X. (i32 -o F (i32 + U X)) & F 1))) =
+  !thunkv fun (v : i32) -> return (inl v)
+def d_hc : !U (1 * U ((i32 -o F (i32 + U (nu X. (i32 -o F (i32 + U X)) & F 1))) & F 1) -o F (i32 + U (nu X. (i32 -o F (i32 + U X)) & F 1))) * 1 =
+  (!thunkv fun (p : 1 * U ((i32 -o F (i32 + U (nu X. (i32 -o F (i32 + U X)) & F 1))) & F 1)) ->
+     let (u, k) = p; let () = u;
+     return (inr (thunkv nu_in < fun (y : i32) -> (force k).1 y, (force k).2 >)), ())
+
+def c_hr : !U (1 -o F 1) = !thunkv fun (v : 1) -> return v
+def c_hc : !U (1 * U ((1 -o F 1) & F 1) -o F 1) * 1 =
+  (!thunkv fun (p : 1 * U ((1 -o F 1) & F 1)) -> let (u, k) = p; let () = u; (force k).2, ())
+
+-- close2(kd, ku): one cancel region over both stages, downstream first.
+def close2 : !U (U (nu X. (i32 -o F (i32 + U X)) & F 1) * U (nu X. (i32 -o F (i32 + U X)) & F 1) -o F 1) =
+  !thunkv fun (q : U (nu X. (i32 -o F (i32 + U X)) & F 1) * U (nu X. (i32 -o F (i32 + U X)) & F 1)) ->
+    let (kd, ku) = q;
+    handle_with[5](c_hr, c_hc) (
+      a <- (b <- perform[5.0] () unwind ((nu_out (force kd)).2); (nu_out (force kd)).2)
+        unwind ((nu_out (force ku)).2);
+      (nu_out (force ku)).2)
+
+main : F i32 =
+  df <- return (unbang down_obs);
+  d <- handle_with[3](d_hr, d_hc) (u0 <- return (); force df u0);
+  case d {
+    inl v -> return v
+  | inr kd ->
+      df2 <- return (unbang down_obs);
+      e <- handle_with[3](d_hr, d_hc) (u1 <- return (); force df2 u1) unwind ((nu_out (force kd)).2);
+      case e {
+        inl v -> u <- (nu_out (force kd)).2; return v
+      | inr ku ->
+          c2 <- return (unbang close2);
+          a <- return (kd, ku);
+          u <- force c2 a;
+          return i32[0]
+      }
+  }

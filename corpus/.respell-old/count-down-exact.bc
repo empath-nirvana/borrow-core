@@ -1,0 +1,79 @@
+-- countDownProg (Core/DelayPrograms.lean:228) transcribed: `progD (3, 0) countDownStep 10`, the
+-- step `countDownStep` (`countDownNext`, `countDownClose`) and the driver `driveE 10` written out.
+-- It erases to `countDownProg` exactly (Frontend/Check/CrossCheck.lean). Unlike count-down.bc,
+-- `close` frees with `let () = free_nat n; …`, as `countDownClose` does.
+
+type Nat = mu X. 1 + X
+
+def free_l_alg : !(1 + 1 => 1) =
+  !thunkv fun (r : 1 + 1) -> case r { inl u -> return u | inr u -> return u }
+
+def free_nat : Nat => 1 = unbang (fold_own[1 + X, 1] free_l_alg)
+
+def cd_step : !U (Nat * Nat -o F (Nat + Nat * Nat) & F 1) =
+  !thunkv fun (s : Nat * Nat) ->
+    < let (n, acc) = s;
+      case unroll n {
+        inl u -> let () = u; return (inl acc)
+      | inr m -> return (inr (m, roll (inr acc)))
+      },
+      let (n, acc) = s;
+      let () = free_nat n;
+      return (free_nat acc) >
+
+main : F (Nat + 1) =
+  s0 : Nat * Nat <- return (roll (inr (roll (inr (roll (inr (roll (inl ()))))))), roll (inl ()));
+  f <- return (unbang (fixd[Nat, Nat * Nat] cd_step));
+  d0 <- return (thunkv delay_in < (delay_out (force f s0)).1, (delay_out (force f s0)).2 >);
+  o1 <- (delay_out (force d0)).1;
+  case o1 {
+    inl a -> return (inl a)
+  | inr d1 ->
+      o2 <- (delay_out (force d1)).1;
+      case o2 {
+        inl a -> return (inl a)
+      | inr d2 ->
+          o3 <- (delay_out (force d2)).1;
+          case o3 {
+            inl a -> return (inl a)
+          | inr d3 ->
+              o4 <- (delay_out (force d3)).1;
+              case o4 {
+                inl a -> return (inl a)
+              | inr d4 ->
+                  o5 <- (delay_out (force d4)).1;
+                  case o5 {
+                    inl a -> return (inl a)
+                  | inr d5 ->
+                      o6 <- (delay_out (force d5)).1;
+                      case o6 {
+                        inl a -> return (inl a)
+                      | inr d6 ->
+                          o7 <- (delay_out (force d6)).1;
+                          case o7 {
+                            inl a -> return (inl a)
+                          | inr d7 ->
+                              o8 <- (delay_out (force d7)).1;
+                              case o8 {
+                                inl a -> return (inl a)
+                              | inr d8 ->
+                                  o9 <- (delay_out (force d8)).1;
+                                  case o9 {
+                                    inl a -> return (inl a)
+                                  | inr d9 ->
+                                      o10 <- (delay_out (force d9)).1;
+                                      case o10 {
+                                        inl a -> return (inl a)
+                                      | inr d10 ->
+                                          u <- (delay_out (force d10)).2;
+                                          return (inr u)
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+      }
+  }

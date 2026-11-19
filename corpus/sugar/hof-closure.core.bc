@@ -1,6 +1,7 @@
--- `hof-closure.bc` in core, as `bcc desugar` prints it: the closure is a div function body, a
--- state machine (SPEC §15) whose state holds `once`'s loop, and `twice` is called at its copy for
--- div callbacks, whose two calls are two states.
+#! dialect 82
+# `hof-closure.bc` in core, as `bcc desugar` prints it: the closure is a div function body, a
+# state machine (SPEC §15) whose state holds `once`'s loop, and `twice` is called at its copy for
+# div callbacks, whose two calls are two states.
 
 def div_bind_step[A, B, R1, R] : !U (U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R -o F (B + U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R) & F R) =
   !thunkv fun (s : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R) ->

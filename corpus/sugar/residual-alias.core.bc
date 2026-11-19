@@ -1,6 +1,7 @@
--- `residual-alias.bc` in core (SPEC §14), as `bcc desugar` prints it. `count` returns a loop
--- whose residual is `Src * 1`: closed early, it closes the stream and hands back the capability
--- the stream hands back. Its one state holds the stream and the count.
+#! dialect 82
+# `residual-alias.bc` in core (SPEC §14), as `bcc desugar` prints it. `count` returns a loop
+# whose residual is `Src * 1`: closed early, it closes the stream and hands back the capability
+# the stream hands back. Its one state holds the stream and the count.
 
 extern stdin : ref input
 

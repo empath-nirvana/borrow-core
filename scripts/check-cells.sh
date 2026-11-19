@@ -35,9 +35,9 @@ fs=()
 skips=$(mktemp)
 all=(); while IFS= read -r f; do [ -z "$f" ] || all+=("$f"); done <<< "$list"
 for f in "${all[@]}"; do
-  if grepq '^-- check: parse-only' "$f"; then echo "parse-only $f" >> "$skips"
-  elif ! grepq '^main' "$f"; then echo "no-main $f" >> "$skips"
-  elif grepq '^-- check: old-backend-refuses' "$f"; then echo "old-backend-refuses $f" >> "$skips"
+  if grepq -E '^(--|#) check: parse-only' "$f"; then echo "parse-only $f" >> "$skips"
+  elif ! grepq -E '^(main|fn main\()' "$f"; then echo "no-main $f" >> "$skips"
+  elif grepq -E '^(--|#) check: old-backend-refuses' "$f"; then echo "old-backend-refuses $f" >> "$skips"
   else fs+=("$f"); fi
 done
 skipped=$(scripts/corpus-set.sh --skips check-cells parse-only no-main old-backend-refuses < "$skips") || { rm -f "$skips"; echo "$skipped"; exit 1; }

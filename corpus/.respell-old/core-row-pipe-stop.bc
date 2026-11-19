@@ -1,0 +1,63 @@
+-- SPEC §76, §75 Part B: pipes L1's `pipe_stop` (lib/pipe.bc at 5a5bbaeb, its commented
+-- signature) as a core-text template over the chain's row `sg`, the stages' cleanup row `cr`,
+-- and a stage's sites `y` (its `Yield[B]`) and `s` (its `Stream[A, K]`); a last stage, so no
+-- forwarded site. `pipe_stop` cancels a stored rest, closes a loop not yet run, and is `()` at
+-- `Ended`. The rests' event types are parameters `EN`, `EY`: `pipe_stop` never resumes them.
+--
+-- It is used at two rows: at `sg = cr = ()` on a loop not yet run and on an ended stage, and at
+-- `sg = cr = (9.0 cancel i32 ~> 0)` on a loop whose close raises `9.0` with 42, which the
+-- handler at 9 answers.
+--
+-- Answer: i32[42].
+
+type PipeState[L, KN, KY, K] = L + (KN + (KY + K))
+
+type Loop[A, K, B, R, row sg, row cr, site y, site s] =
+  U (nu X. F[y.0 cancel[..cr] B ~> 1, s.0 cancel[..cr] 1 ~> A + K, s.1 cancel[..cr] 1 ~> K, ..sg]
+      (R + U X) & F[..cr] 1)
+
+type RestN[A, K, E, row sg, row cr] = U (nu X. (A + K -o F[..sg] E) & F[..cr] 1)
+
+type RestY[E, row sg, row cr] = U (nu X. (1 -o F[..sg] E) & F[..cr] 1)
+
+def pipe_stop[A, K, B, R, EN, EY, row sg, row cr, site y, site s] :
+    !U (PipeState[Loop[A, K, B, R, row (..sg), row (..cr), site y, site s],
+                  RestN[A, K, EN, row (..sg), row (..cr)], RestY[EY, row (..sg), row (..cr)], R]
+        -o F[..cr] 1) =
+  !thunkv fun (st : PipeState[Loop[A, K, B, R, row (..sg), row (..cr), site y, site s],
+                  RestN[A, K, EN, row (..sg), row (..cr)], RestY[EY, row (..sg), row (..cr)], R]) ->
+    case st {
+      inl l -> (nu_out (force l)).2
+    | inr r1 -> case r1 {
+        inl kn -> (nu_out (force kn)).2
+      | inr r2 -> case r2 {
+          inl ky -> (nu_out (force ky)).2
+        | inr r -> return ()
+        }
+      }
+    }
+
+def st1 : PipeState[Loop[i32, 1, i32, i32, row (), row (), site 5, site 6],
+                    RestN[i32, 1, 1, row (), row ()], RestY[1, row (), row ()], i32] =
+  inl (thunkv nu_in < return (inl i32[0]), return () >)
+
+def st2 : PipeState[Loop[i32, 1, i32, i32, row (), row (), site 5, site 6],
+                    RestN[i32, 1, 1, row (), row ()], RestY[1, row (), row ()], i32] =
+  inr (inr (inr i32[7]))
+
+def st3 : PipeState[Loop[i32, 1, i32, i32, row (9.0 cancel i32 ~> 0), row (9.0 cancel i32 ~> 0),
+                         site 5, site 6],
+                    RestN[i32, 1, 1, row (9.0 cancel i32 ~> 0), row (9.0 cancel i32 ~> 0)],
+                    RestY[1, row (9.0 cancel i32 ~> 0), row (9.0 cancel i32 ~> 0)], i32] =
+  inl (thunkv nu_in < return (inl i32[0]), abort[9.0] i32[42] >)
+
+main : F i32 =
+  u1 <- (unbang pipe_stop[i32, 1, i32, i32, 1, 1, row (), row (), site 5, site 6]) st1;
+  let () = u1;
+  u2 <- (unbang pipe_stop[i32, 1, i32, i32, 1, 1, row (), row (), site 5, site 6]) st2;
+  let () = u2;
+  handle_with[9](
+      ((!thunkv fun (v : 1) -> return i32[0]) : !U (1 -o F i32)),
+      (((!thunkv fun (x : i32) -> return x), ()) : !U (i32 -o F i32) * 1)) (
+    (unbang pipe_stop[i32, 1, i32, i32, 1, 1, row (9.0 cancel i32 ~> 0), row (9.0 cancel i32 ~> 0),
+                      site 5, site 6]) st3)

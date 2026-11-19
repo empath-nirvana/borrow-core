@@ -1,0 +1,9 @@
+-- SPEC §27 in the core text, checked, not run: `main` returns `()` and does not call `f`. the
+-- finaliser performs the capturable `4.0`, which `D` needs at the empty cancel row; the site gives
+-- `4.0` the cancel row `[3.0]`. `Σ_D` is `D`'s own row (`needRowOf`), `[4.0⟨∅⟩]`, so `PendLe` at
+-- `1.0`'s cancel row `[4.0⟨∅⟩]` holds.
+
+def f : !U (1 -o F[1.0 unr[4.0 unr 1 ~> 1] 1 ~> 1, 4.0 unr[3.0 cancel 1 ~> 0] 1 ~> 1, 3.0 cancel 1 ~> 0] 1) =
+  !thunkv fun (u : 1) -> x <- perform[1.0] u unwind (perform[4.0] ()); return x
+
+main : F 1 = return ()

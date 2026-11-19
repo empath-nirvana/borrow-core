@@ -1,0 +1,32 @@
+-- `surface-bool.bc` written by hand in core: the prelude's declarations, `&&` and `||` as `case`s,
+-- and each `if` a `case` whose `inr` arm is the true one.
+def true : 1 + 1 = inr ()
+
+def false : 1 + 1 = inl ()
+
+def not : !(1 + 1 => 1 + 1) =
+  !thunkv fun (b : 1 + 1) ->
+    case b {
+      inl u -> return true
+    | inr u -> return false
+    }
+
+def between : !(i32 * (i32 * i32) => 1 + 1) =
+  !thunkv fun (p : i32 * (i32 * i32)) ->
+    let (x, q) = p;
+    let (lo, hi) = q;
+    return (run (case (unbang host[le_s32]) (lo, x) {
+      inl s -> return (inl () : 1 + 1)
+    | inr s -> return ((unbang host[lt_s32]) (x, hi))
+    }))
+
+main : F (i32 * (1 + 1)) =
+  b <- return (run (case (unbang between) (i32[5], (i32[1], i32[10])) {
+         inl s -> return false
+       | inr s -> return (inr () : 1 + 1)
+       }));
+  n <- case (unbang not) b {
+         inl e -> case b { inl e2 -> return i32[2] | inr t2 -> return i32[1] }
+       | inr t -> return i32[0]
+       };
+  return (n, true)

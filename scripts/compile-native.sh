@@ -57,10 +57,10 @@ statusOf() {
 # One corpus program, built natively and run, then counted.
 program() {
   local f=$1 w=$PAR_TMP base in err rc=0 got
-  if grepq '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0; fi
-  if ! grepq '^main' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$PAR_SIDE/skips"; return 0; fi
+  if grepq -E '^(--|#) check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0; fi
+  if ! grepq -E '^(main|fn main\()' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$PAR_SIDE/skips"; return 0; fi
   # The old backend refuses it at compile time (scripts/compile-corpus.sh).
-  if [ "$backend" = old ] && grepq '^-- check: old-backend-refuses' "$f"; then
+  if [ "$backend" = old ] && grepq -E '^(--|#) check: old-backend-refuses' "$f"; then
     echo "$f: the old backend refuses it, skipped"; return 0
   fi
   base=${f%.bc}

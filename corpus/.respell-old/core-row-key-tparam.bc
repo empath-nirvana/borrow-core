@@ -1,0 +1,33 @@
+-- SPEC §76: an instance's key holds the type parameters of the code it is used in. `app[T, row …]`
+-- is used in `h`, where `T` is the global type `T = i32`, and in `g[T]`, where `T` is `g`'s
+-- parameter: two instances, `app__r1` at `i32` and `app__r2[T__p]`, which `g` passes its `T`.
+--
+-- Answer: (i32[3], inl ()).
+
+type T = i32
+
+def app[A, row r] : !U (U (A -o F[..r] A) * A -o F[..r] A) =
+  !thunkv fun (p : U (A -o F[..r] A) * A) -> let (k, x) = p; (force k) x
+
+def h : !U (T -o F[4.0 cancel i32 ~> 0] T) =
+  !thunkv fun (x : T) ->
+    p : U (T -o F[4.0 cancel i32 ~> 0] T) * T <- return (thunkv fun (y : T) -> return y, x);
+    f <- return (unbang app[T, row (4.0 cancel i32 ~> 0)]);
+    (force f) p
+
+def g[T] : !U (T -o F[4.0 cancel i32 ~> 0] T) =
+  !thunkv fun (x : T) ->
+    p : U (T -o F[4.0 cancel i32 ~> 0] T) * T <- return (thunkv fun (y : T) -> return y, x);
+    f <- return (unbang app[T, row (4.0 cancel i32 ~> 0)]);
+    (force f) p
+
+main : F (i32 * (1 + 1)) =
+  handle_with[4](
+      ((!thunkv fun (v : i32 * (1 + 1)) -> return v) : !U (i32 * (1 + 1) -o F (i32 * (1 + 1)))),
+      (((!thunkv fun (e : i32) -> return (e, inr ())), ()) : !U (i32 -o F (i32 * (1 + 1))) * 1)) (
+    x <- return i32[3];
+    a <- (unbang h) x;
+    y : 1 + 1 <- return (inl ());
+    gb <- return (unbang g[1 + 1]);
+    b <- (force gb) y;
+    return (a, b))
