@@ -1,0 +1,69 @@
+-- Advent of Code 2024, day 2, ported from `src/year2024/day02.rs` of
+-- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
+-- `corpus/aoc/LICENSE.md`.
+--
+-- The puzzle: each line is a report, a list of levels. A report is safe when its levels all rise
+-- or all fall, by 1 to 3 at each step. Part 1 counts the safe reports, part 2 those that are safe
+-- once at most one level is left out.
+--
+-- The port reads each line's numbers (`fold_i32s`) into one buffer, cleared and reused from line
+-- to line, and scores it in one pass: each step counts as its direction when it is safe and 0
+-- when not, so the score is `±(n − 1)` exactly for a safe report. Leaving out a level adjusts
+-- the score by the two steps it takes away and the one across it, so part 2 is a second pass with
+-- no new report. Parsing numbers and lines, and array reads by index.
+--
+-- Answer on `2024-02.in` (`corpus/aoc/gen.py`), as the Rust solution gives: `28` and `41`, one per
+-- line, then `(i32[28], i32[41])`.
+
+include textio
+
+-- The step from `a` to `b`, as its direction (`1`, `-1`) when it is safe, and `0` when it is not.
+fn delta(a: i32, b: i32) -> i32 =
+  let d = b - a;
+  if d < 0 - 3 || 3 < d { 0 } else { if d < 0 { 0 - 1 } else { if 0 < d { 1 } else { 0 } } }
+
+fn abs(x: i32) -> i32 = if x < 0 { 0 - x } else { x }
+
+-- A report of `n` levels: whether it is safe (part 1), and whether it is safe once at most one
+-- level is left out (part 2). Its score is the sum of the steps' directions: `±(n − 1)` exactly
+-- when every step is safe and all go one way. Leaving out level `i` takes away its two steps and
+-- adds the step across it.
+fn check(a: array i32, n: i32) -> array i32 * (i32 * i32) =
+  let mut score = 0;
+  for i in 1..n {
+    let x = at(&a, i - 1, 0);
+    let y = at(&a, i, 0);
+    score = score + delta(x, y)
+  };
+  if abs(score) == n - 1 { (a, (1, 1)) } else {
+    let mut fixed = 0;
+    for i in 0..n {
+      let p = at(&a, i - 1, 0);
+      let x = at(&a, i, 0);
+      let q = at(&a, i + 1, 0);
+      let mut s = score;
+      if 0 < i { s = s - delta(p, x) } else { () };
+      if i < n - 1 { s = s - delta(x, q) } else { () };
+      if 0 < i && i < n - 1 { s = s + delta(p, q) } else { () };
+      if abs(s) == n - 2 { fixed = 1; break } else { () }
+    };
+    (a, (0, fixed))
+  }
+
+-- One report: its levels read into the buffer, which is reused, and checked.
+fn report<'t>(l: text 't, st: buf i32 * (i32 * i32)) -> buf i32 * (i32 * i32) =
+  let (b, (safe, fixed)) = st;
+  let b = fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, clear(b));
+  let (a, n) = b;
+  let (a, (s, f)) = check(a, n);
+  ((a, n), (safe + s, fixed + f))
+
+main -> i32 * i32 =
+  let s = read_input();
+  let r = borrow imm s { 't, t ->
+    let (_, r) = fold_lines(t, !{ (l, st) -> report(l, st) }, (box buf[i32](16), (0, 0)));
+    r };
+  let (p1, p2) = r;
+  print_dec(p1); print_byte(b'\n');
+  print_dec(p2); print_byte(b'\n');
+  r

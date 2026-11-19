@@ -1,0 +1,61 @@
+-- Axes: codata × effects, the independence case (the strict account's §6, test case 1). One
+-- consumer of iterators, written once, runs a pure iterator and an iterator that writes output.
+--
+-- `take2[R, Q]` observes an `iter i32 R Q` twice and returns the sum with the rest (or the
+-- result, if it finished). Its code only observes: `next` is the same observation whatever the
+-- iterator does when observed, so nothing in `take2` mentions an effect, and it is instantiated
+-- at `range`, whose steps are pure, and at `ticks`, whose steps write to standard output (its
+-- state owns the capability). The effect lives in the step and happens at the observation. What
+-- the core cannot do is abstract over the effect in a type: there is no variable over
+-- computation types (SPEC §14), so `take2` is generic in the value types `R` and `Q` only.
+--
+-- Answer: the lines `1` and `2` (the two observations of `ticks`), and (i32[21], i32[3]):
+-- 10 + 11 from `range(10, 20)`, and 1 + 2 from `ticks`. An observation run twice prints a line
+-- twice; a `take2` that closed the iterator instead of returning the rest does not hand the
+-- capability back and does not check.
+
+def take2[R, Q] : U (iter i32 R Q) => i32 * (U (iter i32 R Q) + R) =
+  thunkv fun (it : U (iter i32 R Q)) ->
+    a <- (nu_out (force it)).1;
+    match a {
+      inl (x, it) ->
+        b <- (nu_out (force it)).1;
+        match b { inl (y, it) -> (x + y, inl it) | inr r -> (x, inr r) }
+    | inr r -> (0, inr r)
+    }
+
+-- Pure: the numbers from `i` to `n`, finishing with `n + 1`.
+def range_step : !U (i32 * i32 -o F (i32 * (i32 * i32) + i32) & F 1) =
+  !thunkv fun (s : i32 * i32) ->
+    < let (i, n) = s; if n < i { inr i } else { inl (i, (i + 1, n)) },
+      let (i, n) = s; () >
+
+fn range(i: i32, n: i32) -> U (iter i32 i32 1) =
+  let f = unbang (unfold[iter i32 i32 1, i32 * i32] range_step);
+  let s = (i, n);
+  thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >
+
+-- Effectful: each observation writes the counter and a newline.
+type St = Out * i32
+
+def tick_step : !U (St -o F (i32 * St + Out) & F Out) =
+  !thunkv fun (s : St) ->
+    < let (o, i) = s;
+      let (o, _) = put_dec(o, i);
+      let (o, _) = putb(o, 10);
+      inl (i, (o, i + 1)),
+      let (o, i) = s;
+      o >
+
+fn ticks(o: Out) -> U (iter i32 Out Out) =
+  let f = unbang (unfold[iter i32 Out Out, St] tick_step);
+  let s = (o, 1);
+  thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >
+
+main -> i32 * i32 =
+  let (a, _) = take2[i32, 1] (range(10, 20));
+  let (b, rest) = take2[Out, Out] (ticks(stdout));
+  match rest {
+    inl it -> stdout <- (nu_out (force it)).2; (a, b)
+  | inr stdout -> (a, b)
+  }

@@ -1,0 +1,14 @@
+-- `corpus/family-swap.bc` in draft 0's surface (typed elaboration, stage 5): two cells borrowed
+-- `mut` as one family, and swapped. The borrow block's lifetime, its type arguments and the
+-- family's internal lifetimes are elaborated; the block and each `modify` rebind the places they
+-- borrow; `modify`'s body returns the new content alone, and its result `()` is elided.
+--
+-- Answer: (i32[500], i32[9]), as `corpus/family-swap.bc`.
+
+main -> i32 * i32 =
+  let ra = alloc(9);
+  let rb = alloc(500);
+  borrow mut (ra, rb) { (ma, mb) ->
+    modify ma { x -> let y = modify mb { y -> (x, y) }; y }
+  };
+  (free(ra), free(rb))

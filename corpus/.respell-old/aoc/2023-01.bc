@@ -1,0 +1,75 @@
+-- Advent of Code 2023, day 1, ported from `src/year2023/day01.rs` of
+-- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
+-- `corpus/aoc/LICENSE.md`.
+--
+-- The puzzle: each line hides a two-digit number, its first digit then its last. Part 1 reads only
+-- the digits `1`–`9`; part 2 also reads the digits spelled out (`one` … `nine`), which may overlap
+-- (`twone` begins with 2 and ends with 1). The answers are the sums over the lines.
+--
+-- The port walks each line's suffixes, a sub-view advanced a byte at a time, and asks which digit
+-- each begins with (`digit_at`): a written one for both parts, a spelled one for part 2, compared
+-- against the literals' bytes (`eq_lit`). String processing over views, with no copy.
+--
+-- Answer on `2023-01.in` (`corpus/aoc/gen.py`), as the Rust solution gives: `3219` and `3378`,
+-- one per line, then `(i32[3219], i32[3378])`.
+
+include textio
+
+-- The name of the digit `k`, 1 to 9.
+fn name(k: i32) -> lit =
+  if k == 1 { "one" } else { if k == 2 { "two" } else { if k == 3 { "three" }
+  else { if k == 4 { "four" } else { if k == 5 { "five" } else { if k == 6 { "six" }
+  else { if k == 7 { "seven" } else { if k == 8 { "eight" } else { "nine" } } } } } } } }
+
+-- Whether `t` begins with the bytes of `l`.
+fn starts_lit<'a>(t: text 'a, l: lit) -> bool =
+  match split_at(t, lit_len(l)) {
+    inl (h, r) -> eq_lit(h, l)
+  | inr t -> false
+  }
+
+-- The digit that begins `t`: written (part 1 and 2), or spelled (part 2 only); 0 for none.
+fn digit_at<'a>(t: text 'a) -> i32 * i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let b = at(u, 0, 0);
+  if b'0' <= b && b <= b'9' { (to_i32(b) - 48, to_i32(b) - 48) } else {
+    let mut d = 0;
+    let mut t = t;
+    for k in 1..10 {
+      let (t2, w) = array_copy['a, u8] t;
+      t = t2;
+      let here = starts_lit(w, name(k));
+      if d == 0 && here { d = k } else { () }
+    };
+    (0, d)
+  }
+
+-- The calibration values of a line, by part: its first digit and its last, as a two-digit
+-- number. `rest` is the line from byte `i` on.
+fn calibrate<'a>(t: text 'a) -> i32 * i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let mut rest = t;
+  let mut f1 = 0;
+  let mut f2 = 0;
+  let mut l1 = 0;
+  let mut l2 = 0;
+  for i in 0..len(u) {
+    let (r, w) = array_copy['a, u8] rest;
+    let (d1, d2) = digit_at(w);
+    if f1 == 0 { f1 = d1 } else { () };
+    if f2 == 0 { f2 = d2 } else { () };
+    if d1 != 0 { l1 = d1 } else { () };
+    if d2 != 0 { l2 = d2 } else { () };
+    let r = match split_at(r, 1) { inl (h, r) -> r | inr r -> r };
+    rest = r
+  };
+  (10 * f1 + l1, 10 * f2 + l2)
+
+main -> i32 * i32 =
+  let s = read_input();
+  let r = borrow imm s { 't, t ->
+    fold_lines(t, !{ (l, (p1, p2)) -> let (a, b) = calibrate(l); (p1 + a, p2 + b) }, (0, 0)) };
+  let (p1, p2) = r;
+  print_dec(p1); print_byte(b'\n');
+  print_dec(p2); print_byte(b'\n');
+  r

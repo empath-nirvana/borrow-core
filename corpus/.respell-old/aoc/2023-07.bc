@@ -1,0 +1,91 @@
+-- Advent of Code 2023, day 7, ported from `src/year2023/day07.rs` of
+-- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
+-- `corpus/aoc/LICENSE.md`.
+--
+-- The puzzle: each line is a hand of five cards and a bid. Hands are ordered by type (five of a
+-- kind, four, full house, …) and then card by card; the winnings are each bid times its hand's
+-- rank. In part 2 a `J` is a joker: it counts as whatever makes the best type, and ranks lowest.
+--
+-- The port, as the Rust, packs a hand into one `i64` key, four bits a field: the counts of its
+-- ranks from the commonest down (the jokers added to the commonest), then its five ranks. The
+-- hands are sorted by the key in a buffer (`sort`, with the order as an argument). String
+-- processing, sorting with a key, and 64-bit arithmetic.
+--
+-- The joker's rank is threaded through the fold of the lines: a closure cannot capture the `i32`
+-- (#9).
+--
+-- Answer on `2023-07.in` (`corpus/aoc/gen.py`), as the Rust solution gives: `2790243` and
+-- `2802510`, one per line, then `(i64[2790243], i64[2802510])`.
+
+include textio
+
+-- A card's rank, 2 to 14; the jack ranks `j`: 11 in part 1, and 1 in part 2, where it is a joker.
+fn rank(b: u8, j: i32) -> i32 =
+  if b == b'A' { 14 } else { if b == b'K' { 13 } else { if b == b'Q' { 12 } else {
+  if b == b'J' { j } else { if b == b'T' { 10 } else { to_i32(b) - 48 } } } } }
+
+fn desc(x: i32, y: i32) -> i32 = cmp_i32(y, x)
+
+-- Every count 0.
+fn fill_zero(a: array i32) -> array i32 =
+  let mut a = a;
+  borrow mut a { 'x, v -> let v = fill(v, 0); () };
+  a
+
+-- A hand's sort key, four bits a field: how many cards it has of its commonest rank, of its next,
+-- … (five fields, the jokers added to the first), then the ranks of its five cards in order. A
+-- stronger type has a larger first field or an equal one and a larger second, so the key orders
+-- hands by type and then card by card. The ranks are counted in `freq`, reused from hand to hand.
+fn key<'t>(cards: text 't, j: i32, freq: array i32) -> array i32 * i64 =
+  let mut freq = fill_zero(freq);
+  let mut ranks = i64[0];
+  for p in cards {
+    let r = rank(*p, j);
+    let old = at(&freq, r, 0);
+    freq = array_set(freq, r, old + 1);
+    ranks = ranks * 16 + host[extend_s](r)
+  };
+  let jokers = at(&freq, 1, 0);
+  freq = array_set(freq, 1, 0);
+  borrow mut freq { 'x, v -> let v = sort(v, desc, 0); () };
+  let most = at(&freq, 0, 0);
+  freq = array_set(freq, 0, most + jokers);
+  let mut k = i64[0];
+  for i in 0..5 { let f = at(&freq, i, 0); k = k * 16 + host[extend_s](f) };
+  (freq, k * 1048576 + ranks)
+
+fn cmp_hand(x: i64 * i32, y: i64 * i32) -> i32 =
+  let (a, _) = x;
+  let (b, _) = y;
+  if a < b { 0 - 1 } else { if b < a { 1 } else { 0 } }
+
+-- The total winnings: each bid times the rank of its hand, the weakest hand ranked 1.
+fn winnings<'t>(t: text 't, j: i32) -> i64 =
+  let ((hands, _), _) = fold_lines(t, !{ (l, ((hs, freq), j)) ->
+    match split_at(l, 5) {
+      inl (cards, rest) ->
+        let bid = fold_i32s(rest, !{ (x, b) -> x }, 0);
+        let (freq, k) = key(cards, j, freq);
+        let (hs, _) = push(hs, (k, bid));
+        ((hs, freq), j)
+    | inr l -> ((hs, freq), j)
+    } }, ((box buf[i64 * i32](64), array_new[i32] (15, !{ i -> 0 })), j));
+  let mut hands = hands;
+  borrow mut hands { 'x, v -> let v = sort(v, cmp_hand, (i64[0], 0)); () };
+  let (a, n) = hands;
+  let mut sum = i64[0];
+  for i in 0..n {
+    let (_, bid) = at(&a, i, (i64[0], 0));
+    sum = sum + host[extend_s]((i + 1) * bid)
+  };
+  sum
+
+main -> i64 * i64 =
+  let s = read_input();
+  let r = borrow imm s { 't, t ->
+    let (t, u) = array_copy['t, u8] t;
+    (winnings(t, 11), winnings(u, 1)) };
+  let (p1, p2) = r;
+  print_dec64(p1); print_byte(b'\n');
+  print_dec64(p2); print_byte(b'\n');
+  r
