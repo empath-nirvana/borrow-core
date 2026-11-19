@@ -987,6 +987,16 @@ theorem ext_empty' (ls ls' : List SRec) : Ext ls ls' PMap.empty :=
 /-- The payload expression `(n, (i, V))`. -/
 def opArgE (n i : UInt32) (V : Expr) : Expr := .pair (.val (Val.i32 n)) (.pair (.val (Val.i32 i)) V)
 
+/-- The primitive of an operation by its abort flag: `perform` at `false`, `raise` at `true`.
+`[spec §19]` -/
+def opPrim : Bool → Prim
+  | false => .perform
+  | true => .raise
+
+@[simp] theorem opPrim_eq_iff {ab : Bool} {p : Prim} :
+    opPrim ab = p ↔ (ab = false ∧ p = .perform) ∨ (ab = true ∧ p = .raise) := by
+  cases ab <;> simp [opPrim, eq_comm]
+
 /-- `await_n ≜ perform_n (0, ()) to r. case r {inl u. return u | inr u. raise_n (1, u)}`: the
 only form in which a cancellable wait is performed (`[await-c]`).  `[spec §29a]` -/
 def awaitE (n : UInt32) : Expr :=

@@ -111,10 +111,9 @@ theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (
   | lolliE hs _ _ iha ihf => exact .lolliE (splitP_append h' hs) iha ihf
   | allEV _ hlt ih => exact .allEV ih hlt
   | nuOutK hC hG hS hGf hs => exact .nuOutK hC hG hS hGf (soloP_append h' hs)
-  | effPerform hAt hf hna hac _ ih => exact .effPerform hAt hf hna hac ih
+  | effOp hAt hf hab hrc hB hd _ ih => exact .effOp hAt hf hab hrc hB hd ih
   | effAwait hAt hΓ hfa ha haA hfc hc =>
       exact .effAwait hAt (dead_append_dead hΓ h') hfa ha haA hfc hc
-  | effRaise hAt hf ha hrc hd _ ih => exact .effRaise hAt hf ha hrc hd ih
   | effLet hs hW hU _ _ ihM ihN =>
       exact .effLet (splitP_append h' hs)
         (fun hw => live_append (P := fun s => s.ty.OwnFree) h' (hW hw))
@@ -122,12 +121,9 @@ theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (
   | effThenF hs hNZ hUq hU hMS hDS hfin hP hF _ _ _ ihM ihN ihD =>
       exact .effThenF (splitP_append h' hs) hNZ hUq (fun hu => banged_append h' (hU hu))
         hMS hDS hfin hP hF ihM ihN ihD
-  | effHandleV hAt hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
-      exact .effHandleV hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
-        hdv ihe
-  | effHandleVB hAt hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
-      exact .effHandleVB hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
-        hdv ihe (ctxOutlives_append h' hΓd) hSd
+  | effHandleVO hAt hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+      exact .effHandleVO hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
+        hdv ihe (fun d h => ctxOutlives_append h' (hΓd d h)) hSd
   | effHandleT hAt hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
       exact .effHandleT hAt (splitP_append h' hs) (deadP_append h' hd) hHr.append hHc.append ihc
         hn0 hnd hnS hlen hSN hLin ihe

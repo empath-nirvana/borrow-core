@@ -216,27 +216,30 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | lolliE hs _ _ iha ihf => exact lolliE_compatN hs iha ihf
   | allEV _ hlt ih => exact allEV_compatN ih hlt
   | nuOutK hC hG hS hGf h => exact nuOutK_compatN hC hG hS hGf h
-  | effPerform hf hna _ _ ih => exact perform_compatN hf hna ih
+  | @effOp _ _ _ _ _ _ ab hf hab _ hB hd _ ih =>
+      cases ab
+      · obtain rfl := hB rfl; exact perform_compatN hf hab ih
+      · exact raise_compatN hf hab (fun _ _ _ _ _ h => vN_noOwn_of_ownFree (hd rfl) h) ih
   | effAwait hΓ hfa ha haA hfc hc =>
       exact semJN_dead .nil hΓ (fun γ γ' => by
           rw [show substAll γ (awaitE _) = _ from psub_closedAt _ γ awaitE_closed le_rfl,
             show substAll γ' (awaitE _) = _ from psub_closedAt _ γ' awaitE_closed le_rfl])
         (await_compatN hfa ha haA hfc hc)
-  | effRaise hf ha _ hd _ ih =>
-      exact raise_compatN hf ha (fun _ _ _ _ _ h => vN_noOwn_of_ownFree hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatN hs hW hU ihM ihN
   | @effThenF _ _ _ _ _ _ _ _ _ _ SM SD hs hNZ _ hU hMS hDS hfin hP hF _ _ _ ihM ihN ihD =>
       cases hSD : Row.divB SD
       · exact then_compatN hs hNZ hU hMS hDS
           (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc)) hP ihM ihN ihD
       · exact thenDiv_compatN hs hNZ hU hMS hDS hP (hF.resolve_left (by simp [hSD])) ihM ihN ihD
-  | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
-      exact hHV hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
-        (semJN_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe)
-  | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
-      exact hHVB hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
-        (semJN_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe) hΓd
-        (Row.ansOutlives_ofEff_rc hSd)
+  | @effHandleVO _ _ _ _ _ _ _ _ _ _ _ _ _ d? hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+      cases d? with
+      | none =>
+        exact hHV hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
+          (semJN_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe)
+      | some d =>
+        exact hHVB hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
+          (semJN_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe) (hΓd d rfl)
+          (Row.ansOutlives_ofEff_rc (hSd d rfl))
   | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
       exact handleT_compatN hs hd hHr hHc ihc hnS hlen hSN hLin ihe
   | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>

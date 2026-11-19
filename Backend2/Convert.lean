@@ -3337,7 +3337,7 @@ at an outcome, each is converted inside a machine.  `[spec §49]` -/
 def machNode : TExpr → Bool
   | .effLet .. | .effThenF .. | .bind .. | .sumE .. | .tensorE .. | .unitE .. | .zeroE ..
   | .conv _ _ _ _ (.effSub ..) _
-  | .effRaise .. | .effPerform .. | .nilDead .. | .lendR .. => true
+  | .effOp .. | .nilDead .. | .lendR .. => true
   | .lendScope _ _ _ t | .conv _ _ _ _ .alpha t => machNode t
   | _ => false
 
@@ -3501,7 +3501,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let p ← rowPay S; let q ← rowPay S'
     let a ← vty A
     bindTm (← conv fuel ctx c) (resTy a p) fun r => coerceRes a p q r
-  | .effRaise _ _ S o _ c => do
+  | .effOp _ _ S o _ true c => do
     -- `raise`: the abort at its operation's summand, handed to the handler's join (`catch_abort`,
     -- `abort_absorbs`).  [spec §47]
     readFact "effRaise:op"
@@ -3509,7 +3509,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let p ← rowPay S
     let some j := payIdx p (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay p j v fun w => pure (.inj true w)
-  | .effPerform _ _ S o c => do
+  | .effOp _ _ S o _ false c => do
     -- `perform` of a tail-resumptive clause: a direct call of the clause's work (`tail_resumes`,
     -- `TailResumesAt.subst_kappa`, `tail_clause_names`, `Checked.unhandledNames`).  [spec §47]
     if (← get).mach.contains (o.n, o.i) then
@@ -3555,10 +3555,8 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       let dTm ← conv fuel (none :: c₂) tD
       let fin ← thenFin d dTm pm pd ps e
       return pre (.letv m (← conv fuel c₁ tM) (.case m x (← conv fuel (some x :: c₂) tN) e fin))
-  | .effHandleV _ _ S E fs _ n A R u ks site _ tc te =>
-    convHandle fuel ctx S E fs n A R u ks site tc te
-  | .effHandleVB _ _ S E fs _ n A R _ u ks site _ tc te =>
-    convHandle fuel ctx S E fs n A R u ks site tc te (boxed := true)
+  | .effHandleVO _ _ S E fs _ n A R d? u ks site _ tc te =>
+    convHandle fuel ctx S E fs n A R u ks site tc te (boxed := d?.isSome)
   | .bind _ _ A _ u tM tN => convBind fuel ctx A u tM tN
   | .force _ j i _ C => do
     match ctx[i]? with
@@ -3806,13 +3804,13 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     readFact "effSub:rows"
     convK fuel ctx c K args
   | .conv _ _ _ _ .alpha c => convK fuel ctx c K args
-  | .effRaise _ _ _ o _ c => do
+  | .effOp _ _ _ o _ true c => do
     readFact "effRaise:op"
     modify fun st => { st with erased := st.erased.insert "raise" (st.erased.getD "raise" 0 + 1) }
     let F ← curMach
     let some j := payIdx F.pay (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay F.pay j v fun e => abortK F K args e
-  | .effPerform _ _ _ o c => do
+  | .effOp _ _ _ o _ false c => do
     if (← get).mach.contains (o.n, o.i) then
       readFact "effPerform:machine"
       bindTm (← conv fuel ctx c) (← vty o.A) fun v => performK K args (o.n, o.i) v
@@ -4845,8 +4843,7 @@ def prepWorks (fuel : Nat) (depth : Nat) (t : TExpr) : CM Unit := do
   | fuel + 1 =>
   let here : Option (Row × List (Qual × VTy × VTy) × UInt32 × List ClauseKinds.HKind × TExpr) :=
     match t with
-    | .effHandleV _ _ S E _ _ n _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
-    | .effHandleVB _ _ S E _ _ n _ _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
+    | .effHandleVO _ _ S E _ _ n _ _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
     | _ => none
   if let some (S, E, n, ks, .tensorI _ _ _ _ _ _ tCs) := here then
     let direct := (← get).direct.getD n []

@@ -271,9 +271,9 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
   | nuOutK _ _ _ _ h =>
       intro k hk; simp only [mentions, beq_iff_eq] at hk; subst hk; exact h.live
   | reify _ _ _ _ _ hcl => intro k hk; rw [mentions_of_closed (reifyV_closed hcl)] at hk; cases hk
-  | effPerform _ _ _ _ ih | effRaise _ _ _ _ _ ih =>
+  | effOp _ _ _ _ _ _ ih =>
       intro k hk
-      simp [BoCa.BoLo.performE, BoCa.BoLo.raiseE, opArgE, mentions, Expr.val, Val.prim, Val.i32] at hk
+      simp [opArgE, mentions, Expr.val, Val.prim, Val.i32] at hk
       exact ih k hk
   | effThenF hs _ _ _ _ _ _ _ _ _ _ _ ihM ihN ihD =>
       intro k hk
@@ -283,7 +283,7 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
       · exact hs.liveAt_right (Ctx.liveAt_cons_succ.mp (ihN _ hk))
       · exact hs.liveAt_right (Ctx.liveAt_cons_succ.mp (ihD _ hk))
       · exact hs.liveAt_left (ihM k hk)
-  | effHandleV hs _ _ _ _ _ _ _ _ ihc ihe | effHandleVB hs _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleVO hs _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       intro k hk
       simp only [hndExpr, mentions, Expr.val, Val.prim, Val.i32, Bool.false_or,
         Bool.or_eq_true, mentions_of_closed (closedAt_qualsVal 0 _)] at hk

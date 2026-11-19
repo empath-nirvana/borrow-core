@@ -288,6 +288,13 @@ def clausesTyB (S : Row) (R : VTy) (d : Lifetime.Life) (E : List (Qual × VTy ×
   | [] => .unit
   | o :: E => .tensor (clauseTyB S R d o (fs 0)) (clausesTyB S R d E (fun j => fs (j + 1)))
 
+/-- The clauses' type with each capturing clause's `κ` bare (`none`: `[handle]`) or boxed at `@d`
+(`some d`: BOXED-κ, `[spec §28]`): the clauses' type `effHandleVO` reads. -/
+def Inversions.clausesTyO (S : Row) (R : VTy) :
+    Option Lifetime.Life → List (Qual × VTy × VTy) → (Nat → CTy) → VTy
+  | none, E, fs => clausesTy S R E fs
+  | some d, E, fs => clausesTyB S R d E fs
+
 theorem clausesTyB_at {S : Row} {R : VTy} {d : Lifetime.Life} {ls : List SRec} {δ : LSub} :
     ∀ (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) {hs : Val} {ρ : WRes},
       vC true (clausesTyB S R d E fs) ls δ hs ρ →

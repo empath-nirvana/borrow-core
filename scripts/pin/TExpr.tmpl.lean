@@ -701,22 +701,6 @@ inductive TExpr where
   | use (info : TInfo) (jdg : Jdg) (name : String) (decl : Nat) (targs : List VTy) (ab : Option AbsF)
       (t : TExpr)
 
-/-- `thunkFb`'s node at `false`, at `U (F A)`. -/
-@[match_pattern] abbrev TExpr.thunkF (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr) : TExpr :=
-  .thunkFb info jdg A (.thunk (.ret A)) false t
-
-/-- `thunkVb`'s node at `false`, at `U C`. -/
-@[match_pattern] abbrev TExpr.thunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr) : TExpr :=
-  .thunkVb info jdg C (.thunk C) false t
-
-/-- `thunkFb`'s node at `true`, at `! U (F A)`. -/
-@[match_pattern] abbrev TExpr.bangThunkF (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr) : TExpr :=
-  .thunkFb info jdg A (.bang (.thunk (.ret A))) true t
-
-/-- `thunkVb`'s node at `true`, at `! U C`. -/
-@[match_pattern] abbrev TExpr.bangThunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr) : TExpr :=
-  .thunkVb info jdg C (.bang (.thunk C)) true t
-
 /-- **The erasure**: the term the node's rule concludes with. -/
 def TExpr.erase : TExpr → Expr
 --@ERASE_CASES@
@@ -810,6 +794,43 @@ node that now carries it, so that statements over the node keep their type. -/
 @[match_pattern] abbrev TExpr.effThen (info : TInfo) (jdg : Jdg) (A B : VTy) (S SM SD : Row) (u : Masks)
     (tM tN tD : TExpr) : TExpr :=
   .effThenF info jdg A B S SM SD u tM tN tD
+
+/-- `[handle]` at a value form, `κ` plain: `effHandleVO`'s node at `none`.  `[spec §19]` -/
+@[match_pattern] abbrev TExpr.effHandleV (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy))
+    (fs : Nat → CTy) (cs : Nat → Bool) (n : UInt32) (A R : VTy) (u : Masks) (ks : List ClauseKinds.HKind)
+    (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr) : TExpr :=
+  .effHandleVO info jdg S E fs cs n A R none u ks site inside tc te
+
+/-- BOXED-κ `[handle]`: `effHandleVO`'s node at `some d`.  `[spec §28]` -/
+@[match_pattern] abbrev TExpr.effHandleVB (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy))
+    (fs : Nat → CTy) (cs : Nat → Bool) (n : UInt32) (A R : VTy) (d : Lifetime.Life) (u : Masks)
+    (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr) : TExpr :=
+  .effHandleVO info jdg S E fs cs n A R (some d) u ks site inside tc te
+
+/-- `[perform]`: `effOp`'s node at `ab = false`, its answer the operation's.  `[spec §19]` -/
+abbrev TExpr.effPerform (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (t : TExpr) : TExpr :=
+  .effOp info jdg S o o.B false t
+
+/-- `[raise]`: `effOp`'s node at `ab = true`.  `[spec §19]` -/
+abbrev TExpr.effRaise (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (B : VTy)
+    (t : TExpr) : TExpr :=
+  .effOp info jdg S o B true t
+
+/-- `thunkFb`'s node at `false`, at `U (F A)`. -/
+@[match_pattern] abbrev TExpr.thunkF (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr) : TExpr :=
+  .thunkFb info jdg A (.thunk (.ret A)) false t
+
+/-- `thunkVb`'s node at `false`, at `U C`. -/
+@[match_pattern] abbrev TExpr.thunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr) : TExpr :=
+  .thunkVb info jdg C (.thunk C) false t
+
+/-- `thunkFb`'s node at `true`, at `! U (F A)`. -/
+@[match_pattern] abbrev TExpr.bangThunkF (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr) : TExpr :=
+  .thunkFb info jdg A (.bang (.thunk (.ret A))) true t
+
+/-- `thunkVb`'s node at `true`, at `! U C`. -/
+@[match_pattern] abbrev TExpr.bangThunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr) : TExpr :=
+  .thunkVb info jdg C (.bang (.thunk C)) true t
 
 /-- `return`'s node.  `[spec §3]` -/
 @[match_pattern] abbrev TExpr.ret (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr) : TExpr :=

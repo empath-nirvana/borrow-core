@@ -388,22 +388,26 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
   | lolliE hs _ _ iha ihf => exact lolliE_compatX hs iha ihf
   | allEV _ hlt ih => exact allE_compatX ih hlt
   | nuOutK hC hG hS hGf h => exact nuOutK_compatX hC hG hS hGf h
-  | effPerform _ hf hna _ _ ih => exact perform_compatC hf hna ih
+  | @effOp _ _ _ _ _ _ ab _ hf hab _ hB hd _ ih =>
+      cases ab
+      · obtain rfl := hB rfl; exact perform_compatC hf hab ih
+      · exact raise_compatC hf hab (fun _ _ _ _ h => vC_noOwn_of_ownFree (hd rfl) h) ih
   | effAwait _ hΓ hfa ha haA hfc hc => exact semC_dead .nil hΓ (await_compatC hfa ha haA hfc hc)
-  | effRaise _ hf ha _ hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_ownFree hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatC hs hW hU ihM ihN
   | @effThenF _ _ _ _ _ _ _ _ _ _ SM SD hs hNZ _ hU hMS hDS hfin hP hF _ _ _ ihM ihN ihD =>
       cases hSD : Row.divB SD
       · exact then_compatC hs hNZ hU hMS hDS
           (fun n i o o' h₁ h₂ hc => hfin n i o o' h₁ h₂ (OpSig.finRead_of_capB hc)) hP hSD ihM ihN ihD
       · exact then_compatC_div hs hNZ hU hMS hDS hP (hF.resolve_left (by simp [hSD])) hSD ihM ihN ihD
-  | effHandleV _ hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
-      exact handleV_compatC hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
-        (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe)
-  | effHandleVB _ hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
-      exact handleV_compatCB hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
-        (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe) hΓd
-        (Row.ansOutlives_ofEff_rc hSd)
+  | @effHandleVO _ _ _ _ _ _ _ _ _ _ _ _ _ d? _ hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+      cases d? with
+      | none =>
+        exact handleV_compatC hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
+          (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe)
+      | some d =>
+        exact handleV_compatCB hs hd hH ihc hn0 hnS hlen (by rwa [Row.divB_ofEff_rc] at hdv)
+          (semC_effOf_rc (Row.unmark_ofEff_append _ _ _ _ _ _) ihe) (hΓd d rfl)
+          (Row.ansOutlives_ofEff_rc (hSd d rfl))
   | effHandleT _ hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
       exact handleT_compatC hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
   | effHandleL _ hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>

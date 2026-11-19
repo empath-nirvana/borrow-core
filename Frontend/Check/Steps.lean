@@ -677,13 +677,11 @@ def needRowOf : Nat → Bool → TExpr → CRow
         else o
       J (J rM (needRowOf k vals tN)) rD
     match t with
-    | .effPerform _ _ _ o t' => J [{ o with fin := .ret .unit }] (needRowOf k vals t')
+    | .effOp _ _ _ o _ _ t' => J [{ o with fin := .ret .unit }] (needRowOf k vals t')
     | .effAwait _ _ _ _ a c => [a, c]
-    | .effRaise _ _ _ o _ t' => J [{ o with fin := .ret .unit }] (needRowOf k vals t')
     | .conv _ _ _ _ (.effSub ..) t' => needRowOf k vals t'
     | .effThenF _ _ _ _ _ _ _ _ tM tN tD => atThen tM tN tD
-    | .effHandleV _ _ _ _ _ _ n _ _ _ _ _ _ tc te => inner n tc te
-    | .effHandleVB _ _ _ _ _ _ n _ _ _ _ _ _ _ tc te => inner n tc te
+    | .effHandleVO _ _ _ _ _ _ n _ _ _ _ _ _ _ tc te => inner n tc te
     | .effHandleT _ _ _ _ _ _ n _ _ _ _ _ tc te => inner n tc te
     | .effHandleL _ _ _ _ _ _ _ n _ _ _ _ _ tc te => inner n tc te
     | t => match t.children with

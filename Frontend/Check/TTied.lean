@@ -299,16 +299,18 @@ theorem effPerform {p : Pins} {s : CRow} {t : TExpr} {S : CRow} {o : COpSig}
     (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o) (hna : o.abort = false)
     (hac : o.rc = false) (h : TTied p s Δ Γ t (.val o.A)) :
     TTied p (S ∪ s) Δ Γ (.effPerform i (.comp (effOf S o.B)) S o t) (.comp (effOf S o.B)) :=
-  ⟨fun hn Ξ hΞ => .effPerform (rowAt_of_union_left hΞ) hf hna hac (h.1 hn Ξ (sigsAt_union_right hΞ)),
-    .effPerform hf hna hac h.2⟩
+  ⟨fun hn Ξ hΞ => .effOp (rowAt_of_union_left hΞ) hf hna hac (fun _ => rfl) nofun
+      (h.1 hn Ξ (sigsAt_union_right hΞ)),
+    .effOp hf hna hac (fun _ => rfl) nofun h.2⟩
 
 /-- `[raise]` reads its row. -/
 theorem effRaise {p : Pins} {s : CRow} {t : TExpr} {S : CRow} {o : COpSig} {B : CVTy}
     (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o) (ha : o.abort = true)
     (hrc : o.rc = false) (hd : o.A.OwnFree) (h : TTied p s Δ Γ t (.val o.A)) :
     TTied p (S ∪ s) Δ Γ (.effRaise i (.comp (effOf S B)) S o B t) (.comp (effOf S B)) :=
-  ⟨fun hn Ξ hΞ => .effRaise (rowAt_of_union_left hΞ) hf ha hrc hd (h.1 hn Ξ (sigsAt_union_right hΞ)),
-    .effRaise hf ha hrc hd h.2⟩
+  ⟨fun hn Ξ hΞ => .effOp (rowAt_of_union_left hΞ) hf ha hrc nofun (fun _ => hd)
+      (h.1 hn Ξ (sigsAt_union_right hΞ)),
+    .effOp hf ha hrc nofun (fun _ => hd) h.2⟩
 
 theorem effLet (u : Masks) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tM tN : TExpr} {A B : CVTy}
     {S : CRow} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
@@ -386,10 +388,10 @@ theorem effHandle (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKin
       (.effHandleV i (.comp (effOf S R)) S E fs BoCa.Fig16.LogRel.Core.rcsNil n A R u ks site
         te.erase.hin tc te)
       (.comp (effOf S R)) :=
-  ⟨fun hn Ξ h => .effHandleV (rowAt_of_union_left h) hs hm hcv hd hH
+  ⟨fun hn Ξ h => .effHandleVO (rowAt_of_union_left h) hs hm hcv hd hH
       (hc.1 (nilL hn) Ξ (sigsAt_union_left (sigsAt_union_right h))) hn0 hnS hlen hdv
-      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) rfl,
-    .effHandleV hs hm hcv hd hH hc.2 hn0 hnS hlen hdv he.2 rfl⟩
+      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) nofun nofun rfl,
+    .effHandleVO hs hm hcv hd hH hc.2 hn0 hnS hlen hdv he.2 nofun nofun rfl⟩
 
 /-- BOXED-κ reads its handled row, as `CDerivesAt.effHandleB`, the handled operations at their
 cancel rows `fs`.  `[spec §27, §28]` -/
@@ -410,10 +412,13 @@ theorem effHandleB (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKi
       (.effHandleVB i (.comp (effOf S R)) S E fs BoCa.Fig16.LogRel.Core.rcsNil n A R d u ks site
         te.erase.hin tc te)
       (.comp (effOf S R)) :=
-  ⟨fun hn Ξ h => .effHandleVB (rowAt_of_union_left h) hs hm hcv hd hH
+  have hΓd' : ∀ d' ∈ some d, CtxOutlives Δ Γ₂ d' := fun _ h => Option.some_inj.mp h ▸ hΓd
+  have hSd' : ∀ d' ∈ some d, BoCa.Fig16.LogRel.Core.Row.AnsOutlives Δ d'
+      (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) := fun _ h => Option.some_inj.mp h ▸ hSd
+  ⟨fun hn Ξ h => .effHandleVO (rowAt_of_union_left h) hs hm hcv hd hH
       (hc.1 (nilL hn) Ξ (sigsAt_union_left (sigsAt_union_right h))) hn0 hnS hlen hdv
-      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) hΓd hSd rfl,
-    .effHandleVB hs hm hcv hd hH hc.2 hn0 hnS hlen hdv he.2 hΓd hSd rfl⟩
+      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) hΓd' hSd' rfl,
+    .effHandleVO hs hm hcv hd hH hc.2 hn0 hnS hlen hdv he.2 hΓd' hSd' rfl⟩
 
 /-- `iterate` reads its row, which holds `Div`.  `[spec §14]` -/
 theorem iterate (S : CRow) (St B R : CVTy) (hS : BoCa.Fig16.LogRel.Core.Row.divB S = true)

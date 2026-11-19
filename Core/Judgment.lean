@@ -477,12 +477,16 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   | nuOutK {Δ Γ i} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S)))
       (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
       CDerivesX I Δ Γ (.var i) (.comp (C.instT (codeTy C G S)))
-  /-- `[perform]`: a non-abortive, unmarked operation of the row: a marked one is performed only
-  by `[await-c]`.  `[spec §19, §29a]` -/
-  | effPerform {Δ Γ V} {S : Row} {o : OpSig}
+  /-- `[perform]` and `[raise]`: an unmarked operation of the row, at the primitive its abort flag
+  `ab` names (`opPrim`): a marked one is performed or raised only by `[await-c]`.  Non-abortive
+  (`perform`), the answer is the operation's; abortive (`raise`), any answer, the argument
+  consuming.  At `ab = false` it is `CDerivesX.effPerform`, at `true` `CDerivesX.effRaise`.
+  `[spec §19, §29a]` -/
+  | effOp {Δ Γ V} {S : Row} {o : OpSig} {B : VTy} {ab : Bool}
       (hAt : I.RowOK S) (hf : Row.find S o.n o.i = some o)
-      (hna : o.abort = false) (hac : o.rc = false) (h : CDerivesX I Δ Γ V (.val o.A)) :
-      CDerivesX I Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B))
+      (hab : o.abort = ab) (hrc : o.rc = false) (hB : ab = false → B = o.B)
+      (hd : ab = true → o.A.OwnFree) (h : CDerivesX I Δ Γ V (.val o.A)) :
+      CDerivesX I Δ Γ (.app (.val (.prim (opPrim ab))) (opArgE o.n o.i V)) (.comp (CTy.effOf S B))
   /-- `[await-c]`: a cancellable wait `a` (`OpSig.Cancellable`) is performed only as `await_n`,
   which raises the cancel target `c` at the same name, operation `1`, on the answer `inr ()`: a
   cancel, a resume with `inr ()`, is not a value the body may ignore.  `[spec §29a]` -/
@@ -491,12 +495,6 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
       (hfa : Row.find S n 0 = some a) (ha : a.Cancellable) (haA : a.A = .unit)
       (hfc : Row.find S n 1 = some c) (hc : c.CancelTarget) :
       CDerivesX I Δ Γ (awaitE n) (.comp (CTy.effOf S .unit))
-  /-- `[raise]`: an abortive, unmarked operation of the row, at any answer, its argument consuming:
-  a marked one, a cancel target, is raised only by `[await-c]`.  `[spec §19, §29a]` -/
-  | effRaise {Δ Γ V} {S : Row} {o : OpSig} {B : VTy}
-      (hAt : I.RowOK S) (hf : Row.find S o.n o.i = some o)
-      (ha : o.abort = true) (hrc : o.rc = false) (hd : o.A.OwnFree) (h : CDerivesX I Δ Γ V (.val o.A)) :
-      CDerivesX I Δ Γ (BoCa.BoLo.raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B))
   /-- `[let]`: `M to x. N` at a row; `N`'s context consumes at a row with weakening and is
   persistent at an unrestricted row.  `[spec §19]` -/
   | effLet {Δ Γ Γ₁ Γ₂ M N A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
@@ -530,31 +528,23 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   cancel row is `fs j`, and its clause's `κ` has its cancel branch at `cancelTy (fs j)`.  The
   handled row does not hold `Div`: a handler of `Div`, or of another name around a computation
   that ticks, is `effHandleT` (decision 68).  The `j`-th operation's marker is `cs j`
-  (`OpSig.rc`), which only the typing reads.  At two variables, empty cancel rows and no markers it is
-  `hndTerm` (`CDerives.effHandle`).  `[spec §14, §19, §24, §27, §29a]` -/
-  | effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+  (`OpSig.rc`), which only the typing reads.  At `d? = some d` it is BOXED-κ: the capturing
+  clauses receive their continuation boxed, `κ : [@d] K` (`Inversions.clausesTyO`), and the handled
+  computation's context outlives `@d` (`hΓd`), and so does the answer type of every non-abortive
+  operation of its row, handled or forwarded (`hSd`).  At `none` it is `CDerivesX.effHandleV`, at
+  `some d` `CDerivesX.effHandleVB`; at two variables, empty cancel rows and no markers it is
+  `hndTerm` (`CDerives.effHandle`).  `[spec §14, §19, §24, §27, §28, §29a]` -/
+  | effHandleVO {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
       {cs : Nat → Bool}
-      {n : UInt32} {A R : VTy}
-      (hAt : I.RowOK (Row.ofEff n E 0 fs cs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
-      (hc : CDerivesX I Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))))
-      (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-      (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
-      (he : CDerivesX I Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
-      CDerivesX I Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
-  /-- BOXED-κ: `[handle]` whose capturing clauses receive their continuation boxed, `κ : [@d] K`
-  (the clauses at `clausesTyB Σ R d E fs`). The handled computation's context outlives `@d`, and
-  so does the answer type of every non-abortive operation of its row, handled or forwarded.
-  `[spec §28]` -/
-  | effHandleVB {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
-      {cs : Nat → Bool}
-      {n : UInt32} {A R : VTy} {d : Lifetime.Life}
+      {n : UInt32} {A R : VTy} {d? : Option Lifetime.Life}
       (hAt : I.RowOK (Row.ofEff n E 0 fs cs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
       (hH : H.ValFormIn Γ₁)
-      (hc : CDerivesX I Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs))))
+      (hc : CDerivesX I Δ Γ₁ H (.val (.tensor (retTy S A R) (Inversions.clausesTyO S R d? E fs))))
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
       (he : CDerivesX I Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)))
-      (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs cs ++ S)) :
+      (hΓd : ∀ d ∈ d?, CtxOutlives Δ Γ₂ d)
+      (hSd : ∀ d ∈ d?, Row.AnsOutlives Δ d (Row.ofEff n E 0 fs cs ++ S)) :
       CDerivesX I Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
   /-- `[handle]` at clauses that resume `κ` in tail position: `handle_n e with (h_ret, gs)`, the
   clauses written out from a tuple `gs` of answering functions (`tailTuple`), each at a row `Σ_N`
@@ -1087,6 +1077,57 @@ theorem CDerivesX.effThenDiv {I : JIdx} {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD :
     (hD : CDerivesX I Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
     CDerivesX I Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
   .effThenF hs hNZ hUq hU hMS hDS hfin hP (.inr hcap) hM hN hD
+
+/-! ### Derived rules: `[perform]` and `[raise]`, the two sides of `effOp`'s abort flag -/
+
+/-- `[perform]`: a non-abortive, unmarked operation of the row (`effOp` at `ab = false`): a marked
+one is performed only by `[await-c]`.  `[spec §19, §29a]` -/
+theorem CDerivesX.effPerform {I : JIdx} {Δ Γ V} {S : Row} {o : OpSig}
+    (hAt : I.RowOK S) (hf : Row.find S o.n o.i = some o)
+    (hna : o.abort = false) (hac : o.rc = false) (h : CDerivesX I Δ Γ V (.val o.A)) :
+    CDerivesX I Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B)) :=
+  .effOp (ab := false) hAt hf hna hac (fun _ => rfl) nofun h
+
+/-- `[raise]`: an abortive, unmarked operation of the row, at any answer, its argument consuming
+(`effOp` at `ab = true`): a marked one, a cancel target, is raised only by `[await-c]`.
+`[spec §19, §29a]` -/
+theorem CDerivesX.effRaise {I : JIdx} {Δ Γ V} {S : Row} {o : OpSig} {B : VTy}
+    (hAt : I.RowOK S) (hf : Row.find S o.n o.i = some o)
+    (ha : o.abort = true) (hrc : o.rc = false) (hd : o.A.OwnFree) (h : CDerivesX I Δ Γ V (.val o.A)) :
+    CDerivesX I Δ Γ (BoCa.BoLo.raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B)) :=
+  .effOp (ab := true) hAt hf ha hrc nofun (fun _ => hd) h
+
+/-! ### Derived rules: `[handle]` at a value form, its continuation plain or boxed, the two
+sides of `effHandleVO`'s `d?` -/
+
+/-- `[handle]` at a value form, `κ` plain (`effHandleVO` at `d? = none`).
+`[spec §14, §19, §24, §27, §29a]` -/
+theorem CDerivesX.effHandleV {I : JIdx} {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+    {cs : Nat → Bool}
+    {n : UInt32} {A R : VTy}
+    (hAt : I.RowOK (Row.ofEff n E 0 fs cs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
+    (hc : CDerivesX I Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))))
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
+    (he : CDerivesX I Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
+    CDerivesX I Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R)) :=
+  .effHandleVO (d? := none) hAt hs hd hH hc hn0 hnS hlen hdv he nofun nofun
+
+/-- BOXED-κ: `[handle]` whose capturing clauses receive their continuation boxed, `κ : [@d] K`
+(`effHandleVO` at `d? = some d`).  `[spec §28]` -/
+theorem CDerivesX.effHandleVB {I : JIdx} {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+    {cs : Nat → Bool}
+    {n : UInt32} {A R : VTy} {d : Lifetime.Life}
+    (hAt : I.RowOK (Row.ofEff n E 0 fs cs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
+    (hH : H.ValFormIn Γ₁)
+    (hc : CDerivesX I Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs))))
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
+    (he : CDerivesX I Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A)))
+    (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs cs ++ S)) :
+    CDerivesX I Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R)) :=
+  .effHandleVO (d? := some d) hAt hs hd hH hc hn0 hnS hlen hdv he
+    (fun _ h => Option.some_inj.mp h ▸ hΓd) (fun _ h => Option.some_inj.mp h ▸ hSd)
 
 /-! ### Derived rules at the pure row: `[then]`, `[handle]` at two variables, the unwinding lends -/
 

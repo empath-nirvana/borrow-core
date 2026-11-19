@@ -474,16 +474,11 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       exact ⟨.nuOutK hC hG hS hGf (soloP_ins (live_eval_atom hf hp) Γa hs), (var_shift _ _ _).symm⟩
   | effAwait => intro _ _ _ _ _ hf; simp [TExpr.absF] at hf
-  | effPerform hAt hf₀ hna hac _ ih =>
+  | effOp hAt hf₀ hab hrc hB hd _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.effPerform hAt hf₀ hna hac d, by
-        simp only [TExpr.shift, TExpr.erase, BoCa.BoLo.performE, opArgE, Expr.shift, e]; rfl⟩
-  | effRaise hAt hf₀ ha hrc hd _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.effRaise hAt hf₀ ha hrc hd d, by
-        simp only [TExpr.shift, TExpr.erase, BoCa.BoLo.raiseE, opArgE, Expr.shift, e]; rfl⟩
+      exact ⟨.effOp hAt hf₀ hab hrc hB hd d, by
+        simp only [TExpr.shift, TExpr.erase, opArgE, Expr.shift, e]; rfl⟩
   | effLet hs hm hcv hW hU _ _ ihM ihN =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
@@ -512,7 +507,10 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
           hMS hDS hfin hP hF dM dN dD, by
         simp only [TExpr.shift, TExpr.erase, thenE, Expr.shift, Expr.val, Val.lam, Val.prim, eM,
           eN, eD]⟩
-  | effHandleV hAt hs hm hcv hdd hH _ hn0 hnS hlen hdv _ hins ihc ihe =>
+  | @effHandleVO _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ d? hAt hs hm hcv hdd hH _ hn0 hnS hlen hdv _ hΓd hSd hins
+      ihc ihe =>
+    cases d? with
+    | none =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, Γp₁, Γp₂, rfl, rfl, ha₁, ha₂, hl₁, hl₂, q₁, q₂, hs', pm⟩ :=
@@ -523,10 +521,10 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       have hH' := valFormIn_insert (Γd := Γp₁) Γa₁ hH
       rw [← ec] at hH'
       rw [ha₁, hl₁] at dc ec hH'; rw [ha₂, hl₂] at de ee
-      exact ⟨.effHandleV hAt hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [ec]; rfl), hcv.2.ins₂ (by rw [ee]; rfl)⟩ (deadP_ins (live_atom hpe) Γa₁ hdd) hH' dc hn0 hnS hlen hdv de
-        (by rw [ee, ClauseKinds.hin_shift]; exact hins), by
+      exact ⟨.effHandleVO hAt hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [ec]; rfl), hcv.2.ins₂ (by rw [ee]; rfl)⟩ (deadP_ins (live_atom hpe) Γa₁ hdd) hH' dc hn0 hnS hlen hdv de
+        nofun nofun (by rw [ee, ClauseKinds.hin_shift]; exact hins), by
         rw [TExpr.shift, TExpr.erase, TExpr.erase, shift_hndExpr, ec, ee]⟩
-  | effHandleVB hAt hs hm hcv hdd hH _ hn0 hnS hlen hdv _ hΓd hSd hins ihc ihe =>
+    | some d =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, Γp₁, Γp₂, rfl, rfl, ha₁, ha₂, hl₁, hl₂, q₁, q₂, hs', pm⟩ :=
@@ -538,8 +536,9 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       have hH' := valFormIn_insert (Γd := Γp₁) Γa₁ hH
       rw [← ec] at hH'
       rw [ha₁, hl₁] at dc ec hH'; rw [ha₂, hl₂] at de ee
-      exact ⟨.effHandleVB hAt hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [ec]; rfl), hcv.2.ins₂ (by rw [ee]; rfl)⟩ (deadP_ins (live_atom hpe) Γa₁ hdd) hH' dc hn0 hnS hlen hdv de
-        (ctxOutlives_ins (live_atom ho) hΓd) hSd (by rw [ee, ClauseKinds.hin_shift]; exact hins), by
+      have hΓd' := ctxOutlives_ins (live_atom ho) (hΓd d rfl)
+      exact ⟨.effHandleVO hAt hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [ec]; rfl), hcv.2.ins₂ (by rw [ee]; rfl)⟩ (deadP_ins (live_atom hpe) Γa₁ hdd) hH' dc hn0 hnS hlen hdv de
+        (fun _ h => Option.some_inj.mp h ▸ hΓd') hSd (by rw [ee, ClauseKinds.hin_shift]; exact hins), by
         rw [TExpr.shift, TExpr.erase, TExpr.erase, shift_hndExpr, ec, ee]⟩
   | reify S B R res hAt hS hcl hres qres hΓ _ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'

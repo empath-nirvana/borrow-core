@@ -185,18 +185,15 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .sliceBorrowIU i j A B S x td => .sliceBorrowIU i j A B S x (td.shift d c)
   | .lolliE i j A B u ta tf => .lolliE i j A B (u.ins d c) (ta.shift d c) (tf.shift d c)
   | .allEV i j x b a A t => .allEV i j x b a A (t.shift d c)
-  | .effPerform i j S o t => .effPerform i j S o (t.shift d c)
-  | .effRaise i j S o B t => .effRaise i j S o B (t.shift d c)
+  | .effOp i j S o B ab t => .effOp i j S o B ab (t.shift d c)
   | .effLet i j A B S u tM tN =>
       .effLet i j A B S (u.ins d c) (tM.shift d c) (tN.shift d (c + 1))
   | .effThenF i j A B S SM SD u tM tN tD =>
       .effThenF i j A B S SM SD (u.ins d c) (tM.shift d c) (tN.shift d (c + 1))
         (tD.shift d (c + 1))
   | t@(.effAwait ..) => t
-  | .effHandleV i j S E fs cs n A R u ks st ins tc te =>
-      .effHandleV i j S E fs cs n A R (u.ins d c) ks st ins (tc.shift d c) (te.shift d c)
-  | .effHandleVB i j S E fs cs n A R a u ks st ins tc te =>
-      .effHandleVB i j S E fs cs n A R a (u.ins d c) ks st ins (tc.shift d c) (te.shift d c)
+  | .effHandleVO i j S E fs cs n A R a u ks st ins tc te =>
+      .effHandleVO i j S E fs cs n A R a (u.ins d c) ks st ins (tc.shift d c) (te.shift d c)
   | .effHandleT i j S SN E fs n A R u st ins tc te =>
       .effHandleT i j S SN E fs n A R (u.ins d c) st ins (tc.shift d c) (te.shift d c)
   | .effHandleL i j S SW E fs Xs n A R u st ins tc te =>
@@ -243,7 +240,7 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .sumI₁ _ _ _ _ t | .sumI₂ _ _ _ _ t
   | .lam _ _ _ _ t | .lamDead _ _ _ _ t | .proj₁ _ _ _ _ t | .proj₂ _ _ _ _ t
   | .allE _ _ _ _ _ _ t | .allEV _ _ _ _ _ _ t
-  | .effPerform _ _ _ _ t | .effRaise _ _ _ _ _ t | .litFn _ _ _ t | .divLit _ _ _ _ t
+  | .effOp _ _ _ _ _ _ t | .litFn _ _ _ t | .divLit _ _ _ _ t
   | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t
   | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => t.absF Δ
   | .conv _ _ _ _ k t => AbsF.outlO Δ k.outl? (t.absF Δ)
@@ -292,6 +289,7 @@ where
 theorem TExpr.absF_shift (d : Nat) : ∀ (t : TExpr) (c : Nat) (Δ : LifeCtx),
     (t.shift d c).absF Δ = t.absF Δ := by
   intro t
-  induction t <;> intro c Δ <;> simp only [TExpr.shift, TExpr.absF, *]
+  induction t <;> intro c Δ <;> (try cases ‹Option Lifetime.Life›) <;>
+    simp only [TExpr.shift, TExpr.absF, *]
 
 end BoCa.Fig16.LogRel.Core.Check
