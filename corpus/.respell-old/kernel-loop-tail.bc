@@ -1,0 +1,24 @@
+-- A loop of tail calls through a handler, the twin of the kernel program `loop-tail`
+-- (Backend/Kernel.lean, `Shapes.loopTail`): `go` calls itself in tail position, and each turn
+-- performs `yld`, whose clause resumes in tail position, so `yld` is a direct call of the clause,
+-- no continuation is built, and the loop runs in constant stack. It is for the constant-stack
+-- check of `scripts/compile-native.sh` (native, in a stack of 64 KiB).
+--
+-- 9000 turns, where the kernel's loop has 100000: a recursion is driven by `bounded`, whose
+-- budget (`recBudget`, 10000) counts every call of the group, tail calls too, so 10^5 turns are
+-- not expressible at the surface yet. A frame of at least 16 bytes per turn would still take
+-- over 144 KiB, past the 64 KiB stack.
+--
+-- Answer: inl (); `live 0`. The kernel's answer is (): `exhausted_to_option` puts it in `inl`,
+-- and a spent budget would answer `inr ()`. A lowering that built a continuation per turn without
+-- freeing it would leave objects live; one that grew the stack per turn would overflow.
+
+include rec
+
+effect Y { must_resume ctl yld() }
+
+handler pass[A]: Y, A -> A = { return(a) = a; yld(k) = k(()) }
+
+fn go(n: i32) -> 1 = if n == 0 { () } else { yld(); go(n - 1) }
+
+main -> 1 + 1 = with exhausted_to_option[1] { with pass[1] { go(9000) } }

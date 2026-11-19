@@ -1,15 +1,17 @@
--- A cleanup that uses a capability the body also uses (SPEC §42, §78; #868, #940): `work` writes on
--- `stdout`, and so does the `finally`. A capability is a threaded `mut` cell, and the kernel's
--- `[then]` gives the body and the cleanup disjoint contexts, so the `with` is elaborated as a
--- reborrow of `stdout` across it instead, the cleanup its finaliser. Here the body raises nothing
--- that leaves the `with` (`to_result` catches it), so the reborrow does not unwind and the cleanup
--- runs once, on the `stdout` the reborrow hands back.
---
--- Answer: prints `AB`, answers `inl i32[1]`, and `live 0`.
+#! dialect 82
+# A cleanup that uses a capability the body also uses (SPEC §42, §78; #868, #940): `work` writes on
+# `stdout`, and so does the `finally`. A capability is a threaded `mut` cell, and the kernel's
+# `[then]` gives the body and the cleanup disjoint contexts, so the `with` is elaborated as a
+# reborrow of `stdout` across it instead, the cleanup its finaliser. Here the body raises nothing
+# that leaves the `with` (`to_result` catches it), so the reborrow does not unwind and the cleanup
+# runs once, on the `stdout` the reborrow hands back.
+#
+# Answer: prints `AB`, answers `inl i32[1]`, and `live 0`.
 
-include io
-include fail
+import io
+import fail
 
-fn work() -> i32 with Stdout = print_byte(to_u8(65)); 1
+fn work() : i32 / Stdout { print_byte(to_u8(65)); 1
+}
 
-main -> i32 + u8 = with to_result[u8, i32] { work() } finally { print_byte(to_u8(66)); () }
+fn main() : i32 + u8 = handle { work() } with to_result[u8, i32] finally { print_byte(to_u8(66)); () }

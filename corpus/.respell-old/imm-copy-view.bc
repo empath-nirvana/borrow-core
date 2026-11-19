@@ -1,0 +1,17 @@
+-- An `array_imm` view is linear with a derived copy, the kernel's `array_copy` (SPEC §9, §12): a
+-- second use of it is a copy the checker inserts. `corpus/copies/imm-copy-view.txt` pins it; a
+-- `mut` view used twice is refused (`corpus/reject/double-use-in-callee.bc`).
+
+include slice
+
+fn survey<'a>(v: array_imm 'a i32) -> i32 =
+  let n = len(v);
+  let m = len(v);
+  n + m
+
+fn data(i: i32) -> i32 = i
+
+main -> i32 =
+  let mut a = array_new[i32] (3, data);
+  let s0 = borrow imm a { 'x, v -> survey(v) };
+  s0

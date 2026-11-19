@@ -1,0 +1,40 @@
+-- The prelude's `Option` and `Vec` (SPEC §42): `Option[T]` is `T + 1`, so `pop`'s answer is one;
+-- `Vec[T]` is a buffer, so the buffer library's functions take it. Generic declarations, `List[T]`
+-- (a block per cell) and the record `Pair[A, B]`, at `i32`.
+--
+-- Answer: i32[30]: 4 + 3 popped, 10 from `Some(5 * 2)`, 1 + 2 summed, and 3 + 7 from the pair.
+include buf
+include rec
+
+data List[T] = Nil | Cons(head: T, tail: List[T])
+
+data Pair[A, B] = { fst: A, snd: B }
+
+fn sum_all(v: Vec[i32]) -> i32 =
+  let mut v = v;
+  let mut s = 0;
+  for _ in 0..10 {
+    match pop(&mut v) {
+      Some(x) -> s = s + x
+    | None -> ()
+    }
+  };
+  s
+
+fn doubled(v: Vec[i32], n: i32) -> Option[i32] * Vec[i32] =
+  if n == 0 { (None, v) } else { (Some(n * 2), v) }
+
+fn sum(l: List[i32]) -> i32 = match l { Nil -> 0 | box Cons(h, t) -> h + sum(t) }
+
+fn cons(x: i32, l: List[i32]) -> List[i32] = box Cons(x, l)
+
+main -> i32 =
+  let mut v : Vec[i32] = buf_new[i32](4);
+  push(&mut v, 3);
+  push(&mut v, 4);
+  let (o, v) = doubled(v, 5);
+  let k = match o { Some(x) -> x | None -> 0 };
+  let nil : List[i32] = Nil;
+  let l = with on_exhausted(!{ u -> 0 - 1 }) { sum(cons(1, cons(2, nil))) };
+  let p = Pair { fst: 3, snd: 7 };
+  sum_all(v) + k + l + p.fst + p.snd

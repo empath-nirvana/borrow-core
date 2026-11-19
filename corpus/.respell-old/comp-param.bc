@@ -1,0 +1,30 @@
+-- Who handles a callback's effect is decided by the callee's parameter type (SPEC §33), never by
+-- how the argument is written:
+--
+-- * `guard`'s parameter is a computation parameter that provides `Fail[i32]`: `guard` serves the
+--   argument's `raise`, with its own `to_result` (the port of `f`);
+-- * `pass`'s parameter is a plain block parameter (SPEC §30): its block's `raise` goes to the
+--   handler where the block is written, and passes `pass`'s `to_result`.
+--
+-- Each is given a block, `!{ u -> raise(…) }`, and a function named, `boom`, which is the block
+-- `!{ u -> boom(u) }`: the two are one argument (`bcc check` reports `boom`'s call in the block,
+-- at the port of `guard` or at the site of `main`'s `to_result`).
+--
+-- Answer: `((inr i32[7], inr i32[7]), (inr i32[8], inr i32[7]))`: `guard` answers the error
+-- `inr 7` itself; `pass`'s handler answers nothing, and `main`'s `to_result` answers the error
+-- (`inr 8`, `inr 7`), not `inl (inr …)`.
+
+include fail
+
+fn boom(u: 1) -> i32 with Fail[i32] = raise(7)
+
+fn guard(f: !(1 => i32 with Fail[i32])) -> i32 + i32 = with to_result[i32, i32] { f(()) }
+
+fn pass(f: !(1 => i32)) -> i32 + i32 = with to_result[i32, i32] { f(()) }
+
+main -> ((i32 + i32) * (i32 + i32)) * (((i32 + i32) + i32) * ((i32 + i32) + i32)) =
+  let a = guard(!{ u -> raise(7) });
+  let b = guard(boom);
+  let c = with to_result[i32, i32 + i32] { pass(!{ u -> raise(8) }) };
+  let d = with to_result[i32, i32 + i32] { pass(boom) };
+  ((a, b), (c, d))

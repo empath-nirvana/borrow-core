@@ -1,0 +1,12 @@
+-- A lent cell's owner returned in one arm and freed in the other (#712, `t4`): the cell is not
+-- released on every path of the code after the lend (`TExpr.lendScope`'s `rel` is false), so it
+-- is on the heap, not in the frame of the function that lends it.
+--
+-- Answer: i32[5].
+fn app(f: !(i32 + i32 => ref i32), b: i32 + i32) -> ref i32 = f(b)
+
+main -> i32 =
+  let c = app(!{ b ->
+    let (c, r) = borrow mut alloc(5) { 'x, m -> 1 };
+    match b { inl z -> c | inr z -> let k = free(c); alloc(k + r) } }, inl 0);
+  free(c)

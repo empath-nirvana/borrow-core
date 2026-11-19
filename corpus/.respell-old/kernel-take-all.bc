@@ -1,0 +1,27 @@
+-- SPEC §19's program 5 at n = 5, the twin of the kernel program `take-all` (Backend/Kernel.lean,
+-- `takeProg 5`): a generator (§15) that owns a cell and yields three times, under a consumer that
+-- would stop it after five elements. It runs to the end and frees its own cell; no cancel runs.
+-- `capture-take-hand.bc` is the same program at n = 1, the twin of `take`, where the stop cancels
+-- the generator and its finaliser frees the cell.
+--
+-- Answer: inl (), the producer finished, with the cell freed (`live 0`). A consumer that stopped
+-- early answers `inr ()`; a generator that ran to the end without its `free` leaves the cell live.
+
+include yield
+
+fn producer() -> 1 with Yield[1] =
+  let v: 1 + 1 = inl ();
+  let c = alloc(v);
+  yield(());
+  yield(());
+  yield(());
+  let _ = free(c);
+  ()
+
+main -> 1 + 1 =
+  let mut n = 5;
+  let mut stopped: 1 + 1 = inl ();
+  for x in producer() {
+    if n == 0 { stopped = (inr () : 1 + 1); break } else { n = n - 1 }
+  };
+  stopped

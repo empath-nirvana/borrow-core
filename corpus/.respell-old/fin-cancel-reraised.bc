@@ -1,0 +1,18 @@
+-- SPEC §27 at the surface, the twin of the kernel program `cancel-reraised` (`bcc kernel interp
+-- cancel-reraised`, Core's `cancelKeptT`; its core text is `corpus/core-fin-cancel-reraised.bc`):
+-- `canc`'s clause drops `k`, so the elaboration cancels it (its cancel performs, #953); the cleanup
+-- raises `ex3` during the cancel. The cancel row of `op1` holds `ex3`. The error is kept, re-raised
+-- at the canceller (`canc`'s clause), and caught by `catch3`.
+--
+-- Answer: inr (), and `live 0`. A wrong implementation that drops the error raised during a
+-- cancel answers `inl ()`.
+
+effect Ex3 { ctl ex3() -> never }
+effect Ex2 { ctl ex2() -> never }
+effect Op1 { ctl op1() }
+
+handler catch3: Ex3, 1 -> 1 + 1 = { return(v) = inl v; ex3() = inr () }
+handler canc: Op1, 1 -> 1 = { return(v) = v; op1(k) = () }
+handler h2: Ex2, 1 -> 1 = { return(v) = v; ex2() = () }
+
+main -> 1 + 1 = with catch3 { with canc { with h2 { x <- op1() unwind (ex3()); x } } }

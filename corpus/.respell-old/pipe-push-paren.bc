@@ -1,0 +1,25 @@
+-- A parenthesised chain at a `|>` edge is a stage, as §33 reads it (SPEC §70): only a `>|` edge
+-- splices a chain into the one it is piped from, so `|>` keeps decision 50's reading even where
+-- every stage takes a stored generator first. `range(0, 3) |> (sum(range(0, 2)) |> g(5))` is
+-- `range(0, 3) |> g(sum(range(0, 2)), 5)`, that is `g(range(0, 3), sum(range(0, 2)), 5)`.
+--
+-- Answer: `i32[315]`: `g` sums 0 + 1 + 2 into 3, then `3 * 100 + 1 * 10 + 5`.
+
+include yield
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn sum(it: U (pull i32 1 1)) -> i32 =
+  let mut s = 0;
+  for x in it { s = s + x };
+  s
+
+fn g(it: U (pull i32 1 1), x: i32, z: i32) -> i32 =
+  let mut s = 0;
+  for y in it { s = s + y };
+  s * 100 + x * 10 + z
+
+main -> i32 = range(0, 3) |> (sum(range(0, 2)) |> g(5))

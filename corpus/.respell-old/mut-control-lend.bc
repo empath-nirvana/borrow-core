@@ -1,0 +1,26 @@
+-- A `let mut` string buffer filled inside `with on_exhausted { … }` by a bounded recursion that is
+-- lent the buffer `&mut` (SPEC §41, R3; §20), the shape J1's parsers have. The handler's body may
+-- be abandoned, so `buf` is lent around the handler site (`borrow mut &mut buf { 'l, buf -> … }`,
+-- a cell scoped to the site), and in the body `&mut buf` is a reborrow of that borrow for the call
+-- (`withbor3U`, the unwinding form, since `fill` may perform `Exhausted`). The body also reads the
+-- buffer's length through the borrow with `modify`. After the `with`, `buf` is the filled buffer,
+-- and is used again.
+--
+-- Answer: `(i32[3], (i32[3], i32[4]))`: three bytes pushed by `fill`, the length `3` read inside
+-- the body, and `4` after one more push outside; `live 0`.
+include rec
+include text
+
+fn fill<'a>(m: mut 'a string, n: i32) -> i32 =
+  if n == 0 { 0 } else { modify m { s -> let (s, u) = push_byte(s, b'x'); (s, ()) }; 1 + fill(m, n - 1) }
+
+main -> i32 * (i32 * i32) =
+  let mut buf = string_new(4);
+  let (r, k) = with on_exhausted(!{ u -> (0 - 1, 0) }) {
+    let r = fill(&mut buf, 3);
+    let k = modify buf { s -> len_of(s) };
+    (r, k)
+  };
+  let (buf, u) = push_byte(buf, b'!');
+  let (a, n) = buf;
+  (r, (k, n))

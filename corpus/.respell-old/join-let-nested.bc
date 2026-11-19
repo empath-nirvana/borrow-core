@@ -1,0 +1,32 @@
+-- Joins through nested heads: arms assigning different sets of `let mut` variables, an `if` that
+-- heads a `let` inside an arm of another, an `if` in tail position of an arm, and a tuple
+-- pattern bound beside the handed-on variables (#581).
+--
+-- Answer: `(i32[5120], (i32[1630], (i32[1804], (i32[512163184], i32[523]))))`:
+-- * `inner(b, c)`: the inner `let` hands `x` or `y` on in the outer arm, and the outer `let`
+--   hands both on: `(true, true)` 5120, `(true, false)` 1630, `(false, _)` 1804;
+-- * `tail(b, c)`: the inner `if` is the outer arm's value: 512, 163 and 184, as one number;
+-- * `pair()`: `let (a, b) = if …`, 5 * 100 + 2 * 10 + 3.
+-- Without the joins every variable stays 1 after its binding:
+-- `(i32[1120], (i32[1130], (i32[1104], (i32[112113114], i32[123]))))`.
+
+fn inner(b: bool, c: bool) -> i32 =
+  let mut x = 1;
+  let mut y = 1;
+  let a = if b { let t = if c { x = 5; 2 } else { y = 6; 3 }; t * 10 } else { y = 8; 4 };
+  x * 1000 + y * 100 + a
+
+fn tail(b: bool, c: bool) -> i32 =
+  let mut x = 1;
+  let mut y = 1;
+  let a = if b { if c { x = 5; 2 } else { y = 6; 3 } } else { y = 8; 4 };
+  x * 100 + y * 10 + a
+
+fn pair() -> i32 =
+  let mut x = 1;
+  let (a, b) = if x == 1 { x = 5; (2, 3) } else { (3, 4) };
+  x * 100 + a * 10 + b
+
+main -> i32 * (i32 * (i32 * (i32 * i32))) =
+  (inner(true, true), (inner(true, false), (inner(false, true),
+    (tail(true, true) * 1000000 + tail(true, false) * 1000 + tail(false, true), pair()))))

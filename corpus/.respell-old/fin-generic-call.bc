@@ -1,0 +1,22 @@
+-- A dropped continuation cancelled on an abort out of a call of a generic function (SPEC §27;
+-- #953 re-review M1): `tm`'s clause calls `checkg[i32](7, 1)`, which raises `7`. Whether the head is
+-- wrapped in `unwind (cancel k)` is read from the row the effects pass wrote in the copy's type
+-- (`checkg`'s copy for this site), the one fact the inference and the typed elaboration both read.
+-- The abort cancels `k` on the way out, and the cleanup's raise `3` supersedes `7`.
+--
+-- Answer: inr i32[3], and `live 0`. A head left unwrapped is refused (`k` live across an abort).
+
+include fail
+
+effect Wait { ctl wait() }
+
+fn checkg[T](e: i32, t: T) -> T with Fail[i32] = let r = raise(e); t
+
+fn work() -> i32 with Wait, Fail[i32] = x <- wait() unwind (let r = raise((3 : i32)); ()); 5
+
+handler tm: Wait, i32 -> i32 + 1 with Fail[i32] = {
+  return(x) = inl x;
+  wait(k) = { let y = checkg[i32](7, 1); inr () }
+}
+
+main -> (i32 + 1) + i32 = with to_result[i32, i32 + 1] { with tm { work() } }

@@ -1,0 +1,67 @@
+-- A tail call whose arguments are not all bound by bindings that perform nothing (SPEC §12, §15):
+-- `h`'s path ends in a `with` of a handler with a state, whose result the call that hands it back
+-- takes. An unused stored generator over a row there is not closed before that call (the
+-- handler's result would be live across a close that may raise): it is closed at scope end,
+-- after the call, which is then not a tail call, Rust's ordinary drop order. `b`'s cleanup raises
+-- `fb` when positive.
+--
+-- Answer: `((inl (i32[13], i32[1]), i32[1]), (inr i32[9], i32[1]))`: 10 + 1 + 2 with one `note`
+-- and one `tick`; the close's error 9 after both. `live 0`.
+
+include adapters
+include fail
+include rec
+type Bytes = mu X. 1 + (i32 * X)
+def nil : Bytes = roll inl ()
+fn cons(b: i32, t: Bytes) -> Bytes = roll inr (b, t)
+
+
+fn own_src(l: Bytes, bad: i32) -> 1 with Yield[i32], Fail[i32] =
+  let mut l = l;
+  while true {
+    match unroll l {
+      inl u -> break
+    | inr (b, t) -> l = t; if b == bad { raise(b) } else { () }; yield(b)
+    }
+  };
+  ()
+
+
+fn rsrc(l: Bytes, fb: i32) -> 1 with Yield[i32], Fail[i32] =
+  match unroll l {
+    inl u -> ()
+  | inr (b, t) ->
+      u <- yield(b) unwind (if fb > 0 { let r = raise(fb); () } else { () });
+      match unroll t { inl u -> () | inr (c, t2) -> yield(c) }
+  }
+
+
+fn drain(it: U (pull i32 1 1), acc: i32) -> i32 with Exhausted =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> drain(it, acc + x)
+  | inr d -> match d { inl u -> acc | inr it -> drain(it, acc) }
+  }
+
+
+effect Tick { must_resume ctl tick() }
+handler count[A](mut n: i32): Tick, A -> A * i32 = {
+  return(a) = (a, n);
+  tick(k) = { n = n + 1; k(()) }
+}
+
+-- the path ends in a handler site whose body does work; b unread after one pull
+effect Note { must_resume ctl note() }
+handler cnt2[A](mut n: i32): Note, A -> A * i32 = {
+  return(a) = (a, n);
+  note(k) = { n = n + 1; k(()) }
+}
+fn h(a: U (pull i32 1 1), b: U (pull i32 1 1), e: i32) -> i32 * i32 with Exhausted, Tick =
+  o <- (nu_out (force b)).1;
+  match o {
+    inl (x, b2) -> with cnt2(0) { tick(); note(); drain(a, x) }
+  | inr d -> match d { inl u -> (e, 0) | inr b2 -> (e, 0) }
+  }
+fn t(fb: i32) -> ((i32 * i32) + i32) * i32 =
+  with count(0) { with on_exhausted(!{ u -> inr 0 }) { with to_result { h(own_src(cons(1, cons(2, nil)), 0), rsrc(cons(10, cons(20, nil)), fb), 100) } } }
+main -> (((i32 * i32) + i32) * i32) * (((i32 * i32) + i32) * i32) = (t(0), t(9))

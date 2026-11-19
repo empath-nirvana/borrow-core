@@ -1,0 +1,28 @@
+-- An abbreviation opened around the recursive type where it holds it bare (SPEC §42, §61):
+-- `Pair[T]` is `T * T`, so `Node`'s field holds `T` other than under a cell or an array, and
+-- `Node` is a block, built with `box` and matched with `box`, one cell per field. `T` elaborates
+-- to `mu X. i32 + ref (X * X)`.
+--
+-- Answer: i32[15], the leaves 1 + 2 + 3 + 4 + 5 of `full` summed; `live 0`: `sum` frees each
+-- block it takes apart, and `spare`, never read, is consumed implicitly. An implementation that
+-- does not open `Pair` refuses the declaration (the recursive type under an abbreviation whose
+-- structure it does not know); one that opens it but reads `Node` as no block refuses
+-- `box Node(…)` and the `box` pattern.
+include rec
+
+type Pair[A] = A * A
+
+data T = Leaf(i32) | Node(Pair[T])
+
+fn sum(t: T) -> i32 = match t {
+    Leaf(n) -> n
+  | box Node((a, b)) -> sum(a) + sum(b)
+  }
+
+fn pair(a: T, b: T) -> T = box Node((a, b))
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let full = pair(pair(Leaf(1), Leaf(2)), pair(Leaf(3), pair(Leaf(4), Leaf(5))));
+  let spare = pair(Leaf(10), pair(Leaf(20), Leaf(30)));
+  sum(full)
+}

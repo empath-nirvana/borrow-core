@@ -1,0 +1,14 @@
+-- An `unwind` in the body of a `for` over a generator, with a `let mut` write after it (#1053):
+-- a body that runs an unwind region in place is not the site's clause (the clause's continuation
+-- would be live across the region), so the `for` drains the stored generator, and the write in the
+-- region's continuation reaches the next turn. `t` is 0 + 1 + 2.
+include yield
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+fn go() -> i32 =
+  let mut t = 0;
+  for y in range(0, 3) { x <- (y + 0) unwind (()); t = t + x };
+  t
+main -> i32 = go()

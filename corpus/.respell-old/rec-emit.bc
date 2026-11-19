@@ -1,0 +1,23 @@
+-- A recursion that performs an operation whose clause resumes and then works on the answer
+-- (SPEC §20, §19): `emit` is handled by `summed`, whose clause resumes the rest of the recursion,
+-- `k(())`, and adds its own value to what that answers. The recursion's call of itself is a direct
+-- call of the self-reference, so the continuation captured at `emit` is the recursion's own frames,
+-- resumed in the middle of the recursion.
+--
+-- Answer: i32[165]: 5 + 4 + 3 + 2 + 1 + 0 emitted on the way down and 10 * (1 + 2 + 3 + 4 + 5) on
+-- the way up. A clause that did not resume gives 5.
+
+include rec
+
+effect Emit { ctl emit(x: i32) }
+
+handler summed: Emit, 1 -> i32 = {
+  return(u) = 0;
+  emit(v, k) = v + k(())
+}
+
+fn walk(n: i32) -> 1 with Emit, Exhausted =
+  emit(n);
+  if n == 0 { () } else { walk(n - 1); emit(n * 10) }
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) { with summed { walk(5) } }

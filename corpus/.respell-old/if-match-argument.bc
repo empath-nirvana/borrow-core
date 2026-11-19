@@ -1,0 +1,17 @@
+-- An `if` or a `match` where a value is expected (#882): a call argument, an operand, the right
+-- side of an assignment. Each is read as `run` of it (SPEC §41, the rule table), the value form a
+-- written `run` is, so the kernel checks it as it checks `run`. One that assigns an enclosing
+-- `let mut` inside an expression is still refused (`corpus/fail/mut-if-argument.bc`).
+--
+-- Answer: `i32[613]`: `twice(1)` is 2, the `match` gives the rectangle's area 6, so the sum is
+-- `2 + (1 + 6 * 100)` = 603, and `m` is 10. Grouping `1 + match … * 100` as `(1 + match …) * 100`
+-- would give 712; taking an `else` arm changes the 2 to 4 or the 10 to 20.
+data Shape = Sq(i32) | Rect(i32, i32)
+fn twice(x: i32) -> i32 = x * 2
+fn add(x: i32, y: i32) -> i32 = x + y
+main -> i32 =
+  let b = true;
+  let s = Rect(2, 3);
+  let mut m = 0;
+  m = if b { 10 } else { 20 };
+  add(twice(if b { 1 } else { 2 }), 1 + match s { Sq(k) -> k | Rect(w, h) -> w * h } * 100) + m

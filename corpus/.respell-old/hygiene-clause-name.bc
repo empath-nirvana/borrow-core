@@ -1,0 +1,9 @@
+-- Hygiene (#481): an operation of an answering handler is a call of its clause, a declaration
+-- the elaboration names `count__tick`. A local the program names so is its own.
+--
+-- Answer: i32[46]: `tick()` answers 6 (the state 5, ticked) and the local answers 40.
+effect Count { fn tick() -> i32 }
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+main -> i32 =
+  let count__tick: !(1 => i32) = !{ u -> 40 };
+  with count(5) { tick() + count__tick(()) }

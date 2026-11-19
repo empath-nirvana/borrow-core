@@ -1,0 +1,30 @@
+-- A call in tail position that lends a place (#892) is `let r = f(&p); r` (SPEC §11 *Sugar*, §18):
+-- the place rebound from what the call hands back, the call's answer returned. In `first_or`, the
+-- tail call performs `Fail` inside `default`'s body, so the borrow is its unwinding form
+-- (`lendEffCall`), as for the same call in a head; in `peek` and `bump` the call performs nothing.
+--
+-- Answer: `(i32[4294967295], (i32[7], i32[12]))`: `get_or_fail` raises at `inl 7`, so `default`
+-- gives -1 (printed unsigned); `peek` reads 7 through the borrow; `bump` adds 5 to it, the lend
+-- among two arguments. Refused before, as "the lend in this call of `get_or_fail__n1` is not at a
+-- borrow parameter" and "`&x` lends a place to one call: it may appear only in the head"; raising
+-- on `inr ()` instead would give 7 first.
+include rec
+include fail
+
+fn get_or_fail<'a>(g: imm 'a (i32 + 1)) -> i32 with Fail[1] =
+  raise[Fail[1]](())
+
+fn read<'a>(g: imm 'a (i32 + 1)) -> i32 = match *g { inl v -> v | inr u -> 0 }
+
+fn first_or() -> i32 = with default(0 - 1) {
+  let mut x : i32 + 1 = inl 7;
+  get_or_fail(&x)
+}
+
+fn peek() -> i32 = let x : i32 + 1 = inl 7; read(&x)
+
+fn plus<'a>(g: imm 'a (i32 + 1), k: i32) -> i32 = read(g) + k
+
+fn bump() -> i32 = let x : i32 + 1 = inl 7; plus(&x, 5)
+
+main -> i32 * (i32 * i32) = (first_or(), (peek(), bump()))

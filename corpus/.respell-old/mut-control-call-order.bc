@@ -1,0 +1,24 @@
+-- Every call in an expression that reads a variable lent for a control handler's body runs in its
+-- turn (SPEC §41, R3). In `with to_result`'s body, `c` is the borrow lent around the handler. A
+-- closure given at a block parameter may write it: `apply(!{ u -> c = c + 7; 0 }) * 100 + c`
+-- calls `apply` before it reads `c`, and `c * 100 + apply(…)` reads it before. The expression is
+-- put in A-normal form: every read and every call bound in source order, whatever the call's
+-- arguments are, so no call is moved past a read.
+--
+-- Answer: `(inr i32[115], (i32[8], i32[15]))`: `apply` then the read (`0 * 100 + 8 = 8`, a stale
+-- read would give `1`); then `8 * 100 + 15 = 815`, read before the call, raised as `815 - 700`;
+-- `c = 1 + 7 + 7`; `live 0`.
+include fail
+
+fn apply(f: !(i32 => i32)) -> i32 = f(1)
+fn chk(n: i32) -> i32 with Fail[i32] = if n > 100 { raise(n - 700) } else { n }
+
+main -> (i32 + i32) * (i32 * i32) =
+  let mut c = 1;
+  let mut d = 0;
+  let r = with to_result {
+    d = apply(!{ u -> c = c + 7; 0 }) * 100 + c;
+    let v = chk(c * 100 + apply(!{ u -> c = c + 7; c }));
+    v
+  };
+  (r, (d, c))

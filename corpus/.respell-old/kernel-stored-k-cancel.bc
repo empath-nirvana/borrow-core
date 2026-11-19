@@ -1,0 +1,19 @@
+-- E9b, a stored continuation cancelled, the twin of the kernel program `stored-k-cancel`
+-- (Backend/Kernel.lean, `storedKCancel`; SPEC §19 Programs): `stash`'s clause answers a one-shot
+-- closure that holds the cancellable continuation `k`, and `main` calls it with `false` after
+-- `stash` has returned. That arm does not resume `k`, so the closure cancels it, and answers the
+-- element the generator yielded. `kernel-stored-k-resume` calls it with `true`.
+--
+-- Answer: inr () (true), the first element; `live 0`. A closure that resumed instead would run the
+-- generator on, to `inl ()`.
+
+effect Y { ctl yld(x: bool) }
+
+handler stash: Y, 1 -> (bool => bool) = {
+  return(u) = ({ c -> false } : bool => bool);
+  yld(x, k) = ({ c -> if c { let g = k(()); g(true) } else { x } } : bool => bool)
+}
+
+fn gen() -> 1 with Y = yld(true); yld(false)
+
+main -> bool = let g = with stash { gen() }; g(false)

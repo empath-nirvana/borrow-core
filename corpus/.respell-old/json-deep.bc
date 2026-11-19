@@ -1,0 +1,28 @@
+-- A JSON document nested past the recursion budget (SPEC §36 *JSON*, §20): 12000 `[`. The
+-- parser's `json_value`, `json_elements` and `json_members` are one recursive group under
+-- `bounded`, whose budget of depth is 10000, so `json_parse` performs `Exhausted` before it
+-- reaches the end of the input (where it would raise error 2, an array not closed). Every frame
+-- owns the vector it was building; the unwind consumes each one.
+--
+-- Answer: the line `exhausted`, then `inr ()` and `live 0`. A recursion that does not perform `Exhausted` at its budget
+-- answers `inl (inr (i32[2], i32[12000]))`; a frame whose vector is not consumed on the unwind
+-- shows in `live`.
+
+include json
+
+-- `n` copies of `[`.
+fn nested(n: i32) -> string =
+  let mut s = string_new(n);
+  for _ in 0..n { push_byte(&mut s, b'[') };
+  s
+
+main -> (1 + JsonError) + 1 =
+  let s = nested(12000);
+  let r = borrow imm s { 't, t ->
+    with exhausted_to_option {
+      with to_result { let j = json_parse(t); () } } };
+  match r {
+    inr u -> print_lit("exhausted\n")
+  | inl x -> print_lit("parsed or raised\n")
+  };
+  r

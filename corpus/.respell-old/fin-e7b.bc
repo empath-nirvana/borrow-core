@@ -1,0 +1,17 @@
+-- SPEC §27 at the surface, the twin of the kernel program `e7b` (`bcc kernel interp e7b`, E7b; its
+-- core text is `corpus/core-fin-e7b.bc`): `timeout` cancels a body suspended at `wait`, whose
+-- cleanup `unwind (raise(()))` raises to `to_result` outside the `timeout`. The cleanup performs, so
+-- the `[then]` is at its own row, and the cancel row of `wait` holds `raise` (inferred,
+-- `Frontend/Elab/Fins.lean`). The error raised during the cancel is kept and re-raised at the
+-- canceller, where `to_result` catches it.
+--
+-- Answer: inr (), and `live 0`. A wrong implementation that skips the cleanup on a cancel, or
+-- drops the error it raises, answers `inl (inr ())` (the `timeout`'s own answer).
+
+include fail
+
+effect Wait { ctl wait() }
+
+handler timeout[A]: Wait, A -> A + 1 = { return(x) = inl x; wait(k) = inr () }
+
+main -> (1 + 1) + 1 = with to_result[1, 1 + 1] { with timeout[1] { x <- wait() unwind (raise(())); x } }

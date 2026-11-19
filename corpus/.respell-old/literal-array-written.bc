@@ -1,0 +1,16 @@
+-- An array tabulated from a literal and written is not the literal's bytes (#712, `t13`): only
+-- the elaborator's literal view (`TExpr.litView`) may share the literal's data, and a later
+-- array of the same literal still reads its bytes.
+--
+-- Answer: u8[104] (`h`).
+main -> u8 =
+  let (n, t) = "hello";
+  let a = (unbang array_new[u8]) (n, t);
+  let s : i32 + i32 = inl 0;
+  let k = match s {
+    inl z ->
+      let (a, o) = (unbang array_replace[u8]) (a, (i32[0], b'y'));
+      0
+  | inr z -> 3 };
+  let b = (unbang array_new[u8]) (n, t);
+  borrow imm b { 'x, v -> match array_get['x, u8] (v, 0) { inl g -> *g | inr _ -> b'?' } }

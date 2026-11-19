@@ -1,38 +1,42 @@
--- Closing a stored generator early frees its state. `elems` owns a list and yields its elements;
--- its state between observations is the rest of the list. `take(2, …)` stops after two elements
--- and closes it: `close` consumes the state, so the two nodes still in it are freed by the list's
--- consume (SPEC §12) and nothing is left live. The `break` arm does not name `l`: nothing after
--- the loop reads it, so the loop does not hand it on, and the list `unroll` took apart is not
--- copied (`copies 0`).
---
--- Answer: i32[3], 1 + 2, and `live 0`. A `close` that forgot the state leaves objects live; a
--- `take` that ran one more step gives 6.
+#! dialect 82
+# Closing a stored generator early frees its state. `elems` owns a list and yields its elements;
+# its state between observations is the rest of the list. `take(2, …)` stops after two elements
+# and closes it: `close` consumes the state, so the two nodes still in it are freed by the list's
+# consume (SPEC §12) and nothing is left live. The `break` arm does not name `l`: nothing after
+# the loop reads it, so the loop does not hand it on, and the list `unroll` took apart is not
+# copied (`copies 0`).
+#
+# Answer: i32[3], 1 + 2, and `live 0`. A `close` that forgot the state leaves objects live; a
+# `take` that ran one more step gives 6.
 
-include yield
+import yield
 
 type List = mu X. 1 + (i32 * X)
 
 def nil : List = roll inl ()
-fn cons(x: i32, t: List) -> List = roll inr (x, t)
+fn cons(x: i32, t: sink List) : List = roll inr (x, t)
 
-fn elems(l: List) -> 1 with Yield[i32] =
-  let mut l = l;
+fn elems(l: sink List) : 1 / Yield[i32] {
+  var l = l
   while true {
     match unroll l {
       inl u -> break
-    | inr (x, t) -> l = t; yield(x)
+    | inr (x, t) -> { l = t; yield(x) }
     }
   };
   ()
+}
 
-fn take(n: i32, it: U (pull i32 1 1)) -> 1 with Yield[i32] =
-  let mut i = 0;
+fn take(n: i32, it: sink U (pull i32 1 1)) : 1 / Yield[i32] {
+  var i = 0
   for x in it {
     if i < n { yield(x); i = i + 1 } else { break }
   };
   ()
+}
 
-main -> i32 =
-  let mut acc = 0;
-  for x in take(2, elems(cons(1, cons(2, cons(3, cons(4, nil)))))) { acc = acc + x };
+fn main() : i32 {
+  var acc = 0
+  for x in take(2, elems(cons(1, cons(2, cons(3, cons(4, nil)))))) { acc = acc + x }
   acc
+}

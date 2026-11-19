@@ -1,8 +1,10 @@
--- Two nested `unwind`s in a `while` body, the inner one's continuation writing `t`: the loop adds
--- 2 * i for i = 1, 2, 3. Probe u11 of #1053.
-fn go() -> i32 =
-  let mut i = 0;
-  let mut t = 0;
-  while i < 3 { i = i + 1; x <- (i + 0) unwind (()); y <- (x + x) unwind (()); t = t + y };
+#! dialect 82
+# Two nested `unwind`s in a `while` body, the inner one's continuation writing `t`: the loop adds
+# 2 * i for i = 1, 2, 3. Probe u11 of #1053.
+fn go() : i32 {
+  var i = 0
+  var t = 0
+  while i < 3 { i = i + 1; let x = (i + 0) unwind (()); let y = (x + x) unwind (()); t = t + y }
   t
-main -> i32 = go()
+}
+fn main() : i32 = go()

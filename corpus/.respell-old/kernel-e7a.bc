@@ -1,0 +1,16 @@
+-- E7a, abandoning a suspension, the twin of the kernel program `e7a` (Backend/Kernel.lean,
+-- `Core/EffTier1Programs.lean`; SPEC §19 Programs, §27): `timeout`'s clause does not resume the
+-- body suspended at its cancellable `wait`, so the body is cancelled under a finaliser frame. The
+-- kernel's finaliser is `()`; here it is the consume of the cell the body owns, the surface's
+-- finaliser, which frees it. The `free(c)` after the `wait` never runs.
+--
+-- Answer: inr (), the timeout; `live 0`. A body that was resumed answers `inl (inr ())`; a cancel
+-- that skipped the finaliser leaves the cell live.
+
+effect Wait { ctl wait() }
+
+handler timeout[A]: Wait, A -> A + 1 = { return(x) = inl x; wait(k) = inr () }
+
+fn body() -> bool with Wait = let c: ref bool = alloc(true); wait(); free(c)
+
+main -> bool + 1 = with timeout[bool] { body() }

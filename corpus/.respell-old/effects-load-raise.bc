@@ -1,0 +1,74 @@
+-- An abort inside a load (SPEC §19, §36): `grandchild` reads a tree's first grandchild through
+-- three nested loads (`borrow imm *g { 'y, v -> … }`), and raises `Fail` inside the outer two at
+-- a node with no children. The handler is outside the loads, in `try_grandchild`. A load whose
+-- body performs an abortive operation is the unwinding form of `withload` (`withloadU`): its
+-- source is the `imm` borrow, consumed by the load, so nothing goes back and the lent place is left
+-- as it was. Each tree is lent to `try_grandchild` and then consumed by `sum`, so a place an
+-- unwind had freed would be freed twice, and one it had leaked would be left live.
+--
+-- Answer: `(inr i32[1], (inl i32[5], i32[51]))`: `10 [1, 2 [3]]` raises at its first child `1`;
+-- `20 [4 [5], 6]` reads `5`; the sums are 16 and 35. `live 0`.
+include rec
+include fail
+include slice
+
+data Tree = Tree(i32, Vec[Tree])
+
+fn tip(n: i32) -> Tree = Tree(n, Vec(box buf[Tree](0)))
+
+-- `t` added as the last child of `p`.
+fn adopt(p: Tree, t: Tree) -> Tree =
+  match p { Tree(n, Vec(b)) -> let (b, _) = push(b, t); Tree(n, Vec(b)) }
+
+-- The value of the first child's first child, each node read through a load nested in its
+-- parent's; `Fail` with the node's value at a node with no children.
+fn grandchild<'a>(t: imm 'a Tree) -> i32 with Fail[i32] =
+  let r = borrow imm *t { 'y, v -> match v {
+    Tree(n, Vec(b)) ->
+      let (a, k) = b;
+      if k == 0 { raise(n) } else {
+        match get(a, 0) {
+          inl c ->
+            let s = borrow imm *c { 'z, w -> match w {
+              Tree(m, Vec(d)) ->
+                let (e, j) = d;
+                if j == 0 { raise(m) } else {
+                  match get(e, 0) {
+                    inl g -> let q = borrow imm *g { 'u, x -> match x { Tree(p, _) -> p } }; q
+                  | inr u -> raise(m)
+                  }
+                }
+            } };
+            s
+        | inr u -> raise(n)
+        }
+      }
+  } };
+  r
+
+-- `grandchild`, its `Fail` caught outside the loads.
+fn try_grandchild<'a>(t: imm 'a Tree) -> i32 + i32 = with to_result { grandchild(t) }
+
+-- The sum of the values, consuming the tree.
+fn sum(t: Tree) -> i32 =
+  match t {
+    Tree(v, Vec(b)) ->
+      let (b, n) = len_of(b);
+      let mut b = b;
+      let mut s = v;
+      for i in 0..n {
+        let (b2, o) = take(b, i);
+        b = b2;
+        let r = match o { inl x -> sum(x) | inr u -> 0 };
+        s = s + r
+      };
+      s
+  }
+
+main -> (i32 + i32) * ((i32 + i32) * i32) =
+  let mut t = adopt(adopt(tip(10), tip(1)), adopt(tip(2), tip(3)));
+  let x = try_grandchild(&t);
+  let mut w = adopt(tip(20), adopt(adopt(tip(4), tip(5)), tip(6)));
+  let y = try_grandchild(&w);
+  let s = with on_exhausted(!{ e -> 0 - 1 }) { sum(t) + sum(w) };
+  (x, (y, s))

@@ -1,0 +1,23 @@
+-- `add_all(n, l)`: map a list with a persistent closure that captures the integer `n` (#9, #886).
+--
+-- Axes: coeffects × data. `!` is the exponential; a value that holds no resource, such as an
+-- `i32`, is persistent (SPEC §10) and is copied freely, but it is not of a `!` type. Promotion
+-- (`!thunk`) asks every live slot of its context to be persistent (`Ctx.FlatLive`), not `!`,
+-- so `!{ r -> … cons(x + n, t) … }`, a fold's algebra, captures `n : i32` as it is.
+--
+-- Answer: i32[131211], and `live 0`: [1, 2, 3] plus 10 is [11, 12, 13], read as base-100 digits,
+-- head last. An algebra that read `n` at the wrong slot or added it twice changes a digit.
+
+type List = mu X. 1 + (i32 * X)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr (x, t)
+
+fn add_all(n: i32, l: List) -> List =
+  (unbang (fold_own[1 + i32 * X, List] (!{ r -> match r { inl _ -> nil | inr (x, t) -> cons(x + n, t) } }))) l
+
+fn digits(l: List) -> i32 =
+  (unbang (fold_own[1 + i32 * X, i32] (!{ r -> match r { inl _ -> 0 | inr (x, t) -> x + t * 100 } }))) l
+
+main -> i32 = digits(add_all(10, cons(1, cons(2, cons(3, nil)))))
+-- now: 28:41: `!thunk` promotes only over `!` types, but `n`, of type `i32`, is used inside

@@ -1,0 +1,51 @@
+-- A stored generator over a row passed on (SPEC §15). `outer` and `first` take a stored generator
+-- and pass it to `drain`; given one over the row of `Fail`, each is a copy at that row, and so is
+-- the `drain` it calls, the parameter at the copy's row. `first` passes it on in one arm and drops
+-- it in the other, where it is closed at its row.
+--
+-- Answer: `(inl i32[106], (inr i32[2], (inl i32[7], inr i32[2])))`: 100 + 1 + 2 + 3; the error 2
+-- through `outer`; 7, the source closed unread; the error 2 through `first`. `live 0`. A copy of
+-- `drain` not at the row is refused by the checker.
+
+include adapters
+include fail
+include rec
+
+type Bytes = mu X. 1 + (i32 * X)
+
+def nil : Bytes = roll inl ()
+fn cons(b: i32, t: Bytes) -> Bytes = roll inr (b, t)
+
+fn drain(it: U (pull i32 1 1), acc: i32) -> i32 with Exhausted =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> drain(it, acc + x)
+  | inr d -> match d { inl u -> acc | inr it -> drain(it, acc) }
+  }
+
+-- `own_src(l, bad)` owns a list and yields its elements, raising `bad` when it reaches it.
+fn own_src(l: Bytes, bad: i32) -> 1 with Yield[i32], Fail[i32] =
+  let mut l = l;
+  while true {
+    match unroll l {
+      inl u -> break
+    | inr (b, t) -> l = t; if b == bad { raise(b) } else { () }; yield(b)
+    }
+  };
+  ()
+
+fn outer(it: U (pull i32 1 1)) -> i32 with Exhausted = drain(it, 100)
+
+fn first(it: U (pull i32 1 1), stop: bool) -> i32 with Exhausted =
+  if stop { 7 } else { drain(it, 0) }
+
+fn c(bad: i32) -> i32 + i32 =
+  let l1 = cons(1, cons(2, cons(3, nil)));
+  with on_exhausted(!{ u -> inr 0 }) { with to_result { outer(own_src(l1, bad)) } }
+
+fn d(bad: i32, stop: bool) -> i32 + i32 =
+  let l1 = cons(1, cons(2, cons(3, nil)));
+  with on_exhausted(!{ u -> inr 0 }) { with to_result { first(own_src(l1, bad), stop) } }
+
+main -> (i32 + i32) * ((i32 + i32) * ((i32 + i32) * (i32 + i32))) =
+  (c(0), (c(2), (d(2, true), d(2, false))))

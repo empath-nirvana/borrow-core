@@ -1,0 +1,25 @@
+-- A copy of a thing the elaboration gives a meaning of its own is that thing: a thing is
+-- identified by its binder, followed through its copies, never by its name (SPEC §41, #617).
+-- `apply` calls a copy of its block parameter, given an effectful block (SPEC §30); `two`'s
+-- clause resumes a copy of its continuation (SPEC §19); `ask_twice` passes its block parameter
+-- through two copies before calling it.
+--
+-- Answer: (i32[4294967291], (i32[103], i32[22])): the block raises 5, caught as -5; the body
+-- answers 2 + 1 and the return clause adds 100; 10 + 12.
+effect Fail { ctl raise(x: i32) }
+
+handler catch: Fail, i32 -> i32 = { return(x) = x; raise(x, k) = 0 - x }
+
+effect Ask { ctl ask() -> i32 }
+
+handler two(base: i32): Ask, i32 -> i32 = { return(x) = x + base; ask(k) = { let k2 = k; k2(2) } }
+
+fn apply(f: !(i32 => i32), x: i32) -> i32 = let g = f; g(x)
+
+fn ask_twice(f: !(i32 => i32)) -> i32 = let g = f; let h = g; h(10) + h(12)
+
+main -> i32 * (i32 * i32) =
+  let a = with catch { apply(!{ y -> if y > 2 { raise(y); 0 } else { y } }, 5) };
+  let b = with two(100) { ask() + 1 };
+  let c = with catch { ask_twice(!{ y -> if y > 20 { raise(y); 0 } else { y } }) };
+  (a, (b, c))

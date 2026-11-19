@@ -1,0 +1,15 @@
+-- A block that uses an answering capability (SPEC §32): `tick` is a call on the state of the
+-- `count` handler, a capability lent to the body of the `with`. The block takes the capability
+-- first and hands it back first, and `twice`'s copy for it, `twice__b0count`, takes it with its
+-- arguments and passes it at each call of the block. The block's `tick` is the handler's where the
+-- block is written.
+--
+-- Answer: `i32[6]`: (1 + 1) + (2 + 2), the counter at 1 and 2; `live 0`. A copy that lost the
+-- state's update between the calls gives 5.
+effect Count { fn tick() -> i32 }
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+fn twice(f: !(i32 => i32)) -> i32 = f(1) + f(2)
+
+main -> i32 =
+  with count(0) { twice(!{ x -> x + tick() }) }

@@ -1,0 +1,45 @@
+-- `map_drain(m)` of `lib/map.bc` (SPEC §36): the map consumed by a `for`, each entry taken out of
+-- its slot in slot order as an owned `(K, V)` pair. At `Map[i32, string]` each value is a buffer
+-- the loop owns: it is read and consumed by the body. The first map is drained to its end; the
+-- second loop stops at its second entry (`break`), and what is left in the table, three buffers
+-- among it, is consumed with the iterator's state (`live 0`).
+--
+-- Answer: `i32[91625]`, as `sum · 1000 + seen · 100 + taken · 10 + first`. The first drain sums
+-- `key · len(value)` over the keys 1 … 6, each valued by a string of its key's length (a growth on
+-- the way): `1 + 4 + 9 + 16 + 25 + 36 = 91`, and sees the 6 entries. The second takes 2 of 5
+-- entries and stops, its first key 5 (slot order at `i32` keys). A drain that skips or repeats a
+-- slot changes the sum or the count; one that does not consume what a `break` leaves (or that
+-- leaves a taken value in its slot as well) leaves `live` above 0.
+include text
+include map
+
+-- The string of `n` bytes `x`.
+fn bytes(n: i32) -> string =
+  let mut s = string_new(n);
+  for _ in 0..n { let (t, _) = push_byte(s, b'x'); s = t };
+  s
+
+fn full(n: i32) -> Map[i32, string] =
+  let mut m = map_new[i32, string](2);
+  for i in 1..n + 1 { let o = map_insert(&mut m, i, bytes(i)); () };
+  m
+
+main -> i32 =
+  let mut sum = 0;
+  let mut seen = 0;
+  for e in map_drain(full(6)) {
+    let (k, v) = e;
+    let (v, n) = len_of(v);
+    sum = sum + k * n;
+    seen = seen + 1
+  };
+  let mut taken = 0;
+  let mut first = 0;
+  for e in map_drain(full(5)) {
+    let (k, v) = e;
+    let (v, n) = len_of(v);
+    if taken == 0 { first = k } else { () };
+    taken = taken + 1;
+    if taken == 2 { break } else { () }
+  };
+  sum * 1000 + seen * 100 + taken * 10 + first

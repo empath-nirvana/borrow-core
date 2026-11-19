@@ -1,0 +1,19 @@
+-- A recursion through a resumption point, the twin of the kernel program `recursive-yield`
+-- (Backend/Kernel.lean, `Shapes.recYield`): `walk` calls itself and then performs `yld`, whose
+-- clause resumes `k` and then answers `()`, so the resume is not in tail position and each `yld`
+-- suspends `walk` at every level of the recursion below it; the 20 levels unwind through 20
+-- suspensions. `corpus/rec-yield.bc` yields into a `for`, whose body is a direct call.
+--
+-- Answer: inl (); `live 0`. The kernel's answer is (): `exhausted_to_option` puts it in `inl`, and
+-- a spent budget would answer `inr ()`. A level whose continuation was not resumed would stop the
+-- walk early; one whose suspension was not freed would leave objects live.
+
+include rec
+
+effect Y { ctl yld() }
+
+handler h[R]: Y, R -> 1 = { return(a) = (); yld(k) = { k(()); () } }
+
+fn walk(n: i32) -> 1 with Y, Exhausted = if n == 0 { () } else { walk(n - 1); yld() }
+
+main -> 1 + 1 = with exhausted_to_option[1] { with h[1] { walk(20) } }

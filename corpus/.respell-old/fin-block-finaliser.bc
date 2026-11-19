@@ -1,0 +1,18 @@
+-- A finaliser inside an effectful block (SPEC §27, §30): the block passed to `timeout` waits under
+-- `x <- wait() unwind (raise 3)`, and `timeout` handles its `Wait` at a site of its own copy. The
+-- block runs at its own row, the sites it is called at, so the cancel row of that `wait` holds the
+-- raise (inferred, `Frontend/Elab/Fins.lean`); `tm` cancels it, the cleanup's error is kept,
+-- re-raised at the canceller, and `to_result` catches it, as for the same code in a named function.
+--
+-- Answer: inr i32[3], and `live 0`.
+
+include fail
+
+effect Wait { ctl wait() }
+
+handler tm[A]: Wait, A -> A + 1 = { return(x) = inl x; wait(k) = inr () }
+
+fn timeout(b: !(1 => i32 with Wait, Fail[i32])) -> (i32 + 1) with Fail[i32] = with tm[i32] { b(()) }
+
+main -> (i32 + 1) + i32 =
+  with to_result[i32, i32 + 1] { timeout(!{ u -> x <- wait() unwind (raise((3 : i32))); 5 }) }

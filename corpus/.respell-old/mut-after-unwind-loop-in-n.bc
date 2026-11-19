@@ -1,0 +1,10 @@
+-- A `while` in the continuation of an `unwind` (#1053): the continuation `N` of
+-- `x <- M unwind (D); N` is on the body's spine, so a loop in it is a loop of the body's machine.
+-- The loop adds 0 + 1 + 2 to `t`: `x * 10000 + t * 100 + i` is 5 * 10000 + 3 * 100 + 3.
+fn go() -> i32 =
+  let mut i = 0;
+  let mut t = 0;
+  x <- (5 + 0) unwind (());
+  while i < 3 { t = t + i; i = i + 1 };
+  x * 10000 + t * 100 + i
+main -> i32 = go()

@@ -1,0 +1,26 @@
+-- A cleanup that uses a capability the body also uses, on the unwind (SPEC §42, §78; #868, #940):
+-- `Count` is an answering effect whose handler keeps its state in a cell, so its capability is a
+-- threaded `mut` cell. `work` ticks it and raises `500`, which `default[u8, …]` does not handle, so
+-- the abort leaves the inner `with`. The `with` is a reborrow of the capability across it,
+-- `withbor3u[…] unwind (d)`, the cleanup `d`: it ticks through the reborrow's source as the abort
+-- passes, and the tick lands in the handler's cell. `to_result` catches `500`, and the last tick
+-- reads the count.
+--
+-- Answer: `(inr i32[500], i32[3])` (ticks: `work`, the cleanup, the last), and `live 0`. A
+-- cleanup whose write were lost would answer `(inr i32[500], i32[2])`.
+
+include fail
+
+effect Count { fn tick() -> i32 }
+
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+fn work(x: i32) -> i32 with Count, Fail[i32] = let t = tick(); if x > 100 { raise(x) } else { x * 6 }
+
+main -> (i32 + i32) * i32 =
+  with count(0) {
+    let r = with to_result[i32, i32] {
+      with default[u8, i32](0) { work(500) } finally { let t = tick(); () }
+    };
+    (r, tick())
+  }

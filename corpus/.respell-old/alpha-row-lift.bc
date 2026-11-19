@@ -1,0 +1,35 @@
+-- SPEC §3, §19 (#808): a row lifted by `[sub]` then `[α]` at an effectful binding. `inner` is at
+-- the row of `Ask`, its operation's argument `!(all 'x < top. imm 'x i32 => i32)` elaborated in
+-- `inner`'s lifetime context (after `'d`, `'e`); `step` binds `inner`'s call at its own row, the
+-- same operation's argument elaborated after `'c` alone, so the binders' names differ. The bound
+-- head is carried to `step`'s row by `[sub]` (`liftRow`), the row read at the head's names, then
+-- `[α]`.
+--
+-- Answer: see `alpha-row-lift.out`: `ask` answers 5, so `inner` answers 5 + 3 + 10 = 18 and
+-- `step` 118; `live 0`.
+
+effect Ask { ctl ask(g: !(all 'x < top. imm 'x i32 => i32)) -> i32 }
+handler answer: Ask, i32 -> i32 = {
+  return(a) = a;
+  ask(g, k) = k(i32[5])
+}
+
+def read : !(all 'z < top. imm 'z i32 => i32) =
+  !thunkv Fun 'z < top. return (thunkv fun (v : imm 'z i32) ->
+    w <- return (*v);
+    return (release_imm['z, i32] v);
+    return (w + i32[1]))
+
+fn inner<'d, 'e>(n: box 'd i32, o: box 'e i32) -> i32 with Ask =
+  m <- return (unbox n);
+  p <- return (unbox o);
+  r <- ask(read);
+  return (r + m + p)
+
+fn step<'c>(n: box 'c i32) -> i32 with Ask =
+  m <- return (unbox n);
+  r <- inner(boxed['c] m, boxed['c] i32[10]);
+  return (r + i32[100])
+
+main -> i32 =
+  with answer { step(boxed['main] i32[3]) }

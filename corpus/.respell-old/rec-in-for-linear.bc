@@ -1,0 +1,25 @@
+-- A recursive call inside a counted `for` whose loop threads an array (#492). The call's budget
+-- `case` sits inside the `for`'s per-iteration handler, whose body is owed the array (SPEC §12
+-- *Handled bodies*), so the budget's abort arm consumes it.
+--
+-- Answer: `i32[5]`, `live 0`.
+
+include buf
+include rec
+
+fn down(a: array i32, k: i32) -> array i32 * i32 =
+  if k <= 0 { (a, 0) } else {
+    let mut a = a;
+    let mut d = 0;
+    for i in 0..1 {
+      let (b, r) = down(a, k - 1);
+      a = b;
+      d = r + 1
+    };
+    (a, d)
+  }
+
+main -> i32 = with on_exhausted(!{ u -> 0 }) {
+  let (_, d) = down(array_new[i32] (1, !{ i -> 0 }), 5);
+  d
+}

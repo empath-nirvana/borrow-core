@@ -1,0 +1,34 @@
+-- An async task writes to standard output (SPEC §34). `ticker` writes a letter and awaits, three
+-- times; it is given `Stdout` by its row, as any function is, and nothing in it says it runs as a
+-- task. `main` spawns it beside a task that only awaits, inside a borrow block whose lifetime
+-- bounds the tasks (`spawn_in`, SPEC §32), and runs them round robin. The task is given the
+-- capability: the block lends `main`'s `stdout` for the tasks it bounds, and the task holds the
+-- borrow across its `await`s until it ends, so that its writes go to standard output wherever it
+-- is resumed. `main` writes before and after the block.
+--
+-- Answer: `<abc>` and a newline, then `[3, 2]`: the ticker's letters come out as it is resumed,
+-- between `main`'s brackets.
+
+include async
+include io
+
+fn ticker(n: i32) -> i32 with Async, Stdout =
+  for i in 0..n { print_byte(to_u8(97 + i)); await() };
+  n
+
+fn quiet(n: i32) -> i32 with Async =
+  for i in 0..n { await() };
+  n
+
+main -> List[i32] =
+  print_byte(b'<');
+  let d = alloc(());
+  let v = borrow mut d { 'd, e ->
+    let q = queue_in[i32]();
+    let q = push_in(q, with spawn_in { ticker(3) });
+    let q = push_in(q, with spawn_in { quiet(2) });
+    with on_exhausted(!{ u -> nil() }) { run_in(q, 5) } };
+  let _ = free(d);
+  print_byte(b'>');
+  print_byte(b'\n');
+  v

@@ -1,0 +1,35 @@
+-- A recursion with a capability and lifetime parameters (SPEC §21, §31). `weave` takes the head
+-- of one borrowed view, notes it on `Log` (an answering effect whose handler's state is a cell lent
+-- by `with tally(&mut c)`), and calls itself with the two views swapped: its `'a` is instantiated
+-- at the other view's lifetime at each level, and its `'b` at this one's. The capability's
+-- lifetime is the generator's, outside the fixed point, and stays the same through the whole
+-- recursion; the group's own `'a` and `'b` are quantified in its fixed-point record, and each call
+-- instantiates them afresh. At the group's own `'a` and `'b` the swapped call would be a type error
+-- at its argument.
+--
+-- Answer: `(i32[140], i32[1234567])`: the views `1, 3, 5, 7` and `2, 4, 6` woven,
+-- `1·1 + 2·2 + … + 7·7`, and the notes in order, `1, 2, …, 7`, each a digit of the cell.
+
+include rec
+include slice
+
+effect Log { fn note(x: i32) }
+
+handler tally(mut n: i32): Log = { note(x) = { n = n * 10 + x; () } }
+
+fn weave<'a, 'b>(x: array_imm 'a i32, y: array_imm 'b i32, k: i32) -> i32 =
+  match split_first(x) {
+    inl (h, t) -> note(*h); k * *h + weave(y, t, k + 1)
+  | inr u -> 0
+  }
+
+fn odd(i: i32) -> i32 = 2 * i + 1
+fn even(i: i32) -> i32 = 2 * i + 2
+
+main -> i32 * i32 =
+  let c = alloc(0);
+  let r = with tally(&mut c) { with on_exhausted(!{ u -> 0 - 1 }) {
+    let mut a = array_new[i32] (4, odd);
+    let mut b = array_new[i32] (3, even);
+    borrow imm a { 'x, v -> borrow imm b { 'y, w -> weave(v, w, 1) } } } };
+  (r, free(c))

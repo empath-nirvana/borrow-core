@@ -1,0 +1,32 @@
+-- Layers (SPEC §20): a layer is a transformer of a recursion's generator, applied before the
+-- fixed point is taken (Cook and Palsberg's mixins). `counted` runs around each call a recursion
+-- makes of itself, its `call(a)` the call: it ticks `Count` first. `sum` knows nothing of it; under
+-- `with counted { … }` the recursions called are the fixed points of their generators transformed
+-- by `counted`. The counter's capability is the environment, passed down with the argument. Two
+-- layers compose: `with traced { with counted { … } }`, `counted` the inner, first around a call.
+--
+-- Answer: (i32[15], (i32[15], (i32[10], i32[5]))): `sum(5)` makes 5 calls of itself, counted;
+-- under both layers 5 more are counted, and `traced` notes each of them. A layer applied to the
+-- outer call too would count 6 each time.
+
+include rec
+
+effect Count { fn tick() -> i32 }
+effect Log { fn note(x: i32) }
+
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+handler tally(mut n: i32): Log = { note(x) = { n = n + x; () } }
+
+fn counted[A, B](call: !(A => B), a: A) -> B = tick(); call(a)
+
+fn traced[A, B](call: !(A => B), a: A) -> B = note(1); call(a)
+
+fn sum(n: i32) -> i32 = if n == 0 { 0 } else { n + sum(n - 1) }
+
+main -> i32 * (i32 * (i32 * i32)) =
+  let c = alloc(0);
+  let l = alloc(0);
+  let a = with count(&mut c) { with counted { with on_exhausted(!{ u -> 0 - 1 }) { sum(5) } } };
+  let b = with tally(&mut l) { with count(&mut c) { with traced { with counted {
+    with on_exhausted(!{ u -> 0 - 1 }) { sum(5) } } } } };
+  (a, (b, (free(c), free(l))))

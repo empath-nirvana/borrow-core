@@ -1,0 +1,23 @@
+-- Loops over generators inside loops. The body of a `for` over a generator is the clause of its
+-- handler, one total step at each `yield`; a body that loops cannot be one, so the outer `for`
+-- observes the generator stored instead (SPEC §15), a loop of `main`'s machine whose turns run
+-- the inner loops. A `while` around a `for` over a generator is a loop of the same machine.
+--
+-- Answer: i32[36]: the first loops add 10 for each `y < x` with `x < 3` (0 + 1 + 2 times, 30),
+-- the second adds 1 for each `z < 2`, three times (6). A `while` that ran its body once gives 32.
+
+include yield
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+main -> i32 =
+  let mut acc = 0;
+  for x in range(0, 3) {
+    for y in range(0, x) { acc = acc + 10 }
+  };
+  let mut n = 0;
+  while n < 3 { for z in range(0, 2) { acc = acc + 1 }; n = n + 1 };
+  acc

@@ -1,0 +1,28 @@
+-- SPEC §15 *A local whose type is not known* (#849): a local whose type is `1` is known, and
+-- stays so: only a local inference does not type is not known. `u = ()` and `r = tick(3)` have
+-- type `1`; passed to generic functions they determine `A = 1` themselves (`cons(r, nil())`, with
+-- nothing else to determine it), or are checked at it (`array_set(b, 0, u)`).
+--
+-- Answer: `i32[23]`: the list of `1`s has two elements (`2 · 10`) and the array of `1`s three.
+-- A fix that read every `1` as not known would refuse `cons(r, nil())` as not determined.
+
+include buf
+include list
+
+fn tick(n: i32) -> 1 = ()
+
+fn unit_of(i: i32) -> 1 = ()
+
+fn put(b: array 1) -> array 1 =
+  let u = ();
+  array_set(b, 0, u)
+
+main -> i32 =
+  let r = tick(3);
+  let l = cons(r, nil());
+  let u = ();
+  let l = cons(u, l);
+  let n = with on_exhausted(!{ e -> 0 }) { fold(l, 0, !{ (acc, x) -> acc + 1 }) };
+  let b = put(array_tab(3, unit_of));
+  let (b, s) = array_size[1](b);
+  n * 10 + s

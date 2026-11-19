@@ -1,0 +1,18 @@
+-- A `let mut` record lent by `&` in the arguments of a call that may raise (SPEC §18): `chk` may
+-- raise `Fail`, and `&t` lends `t` to the call through a cell scoped to it, by the unwinding form
+-- `withbor1U`. The raise leaves the lend: the lend ends, and its finaliser consumes the cell and
+-- the record in it (consumable, SPEC §42).
+--
+-- Answer: `inr i32[7]`, `chk`'s raise of the record's `id`; `live 0`.
+include fail
+
+data P = { id: i32, log: i32 }
+
+fn chk<'a>(t: imm 'a P) -> i32 with Fail[i32] = if t.id > 3 { raise(t.id) } else { t.id }
+
+main -> i32 + i32 =
+  with to_result[i32, i32] {
+    let mut t = P { id: 7, log: 5 };
+    let r = chk(&t);
+    r
+  }

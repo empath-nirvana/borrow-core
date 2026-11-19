@@ -1,0 +1,18 @@
+-- A block given at a block parameter assigns an enclosing `let mut` (#586): it takes `x` and hands
+-- it back, and `ap`'s copy for it passes `x` at each call of the block (SPEC §41, rule R3).
+--
+-- Answer: (i32[52], (i32[4036], i32[323])).
+fn ap(f: !(i32 => i32)) -> i32 = f(1)
+fn ap2(f: !(i32 => i32)) -> i32 = f(1) * 10 + f(2)
+fn sum_to(f: !(i32 => i32), n: i32) -> i32 =
+  let mut s = 0;
+  for i in 0..n { s = s + f(i) };
+  s
+main -> i32 * (i32 * i32) =
+  let mut x = 1;
+  let a = ap(!{ u -> x = 5; u + 1 });
+  let mut p = 1;
+  let mut q = 2;
+  let t = ap2(!{ u -> p = p + u; if u == 2 { q = q * 10 } else { () }; u + p });
+  let w = sum_to(!{ v -> q = q + v; v }, 3);
+  (x * 10 + a, (p * 1000 + t, q + w * 100))

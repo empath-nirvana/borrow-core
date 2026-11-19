@@ -1,0 +1,23 @@
+-- A dropped continuation cancelled on an abort out of a region of the clause's own (SPEC §27;
+-- #953): `tm`'s clause runs `check(7)` under its own `unwind`, which raises `7` while `k` is live.
+-- The region is a head of the clause's path as a whole: its own finaliser runs first, then `k`'s
+-- cancel on the way out; the cleanup's raise `3` during that unwind supersedes `7`, and
+-- `to_result` catches it.
+--
+-- Answer: inr i32[3], and `live 0`. A continuation left uncancelled on the abort would answer
+-- `inr i32[7]`.
+
+include fail
+
+effect Wait { ctl wait() }
+
+fn check(e: i32) -> i32 with Fail[i32] = raise(e)
+
+handler tm[A]: Wait, A -> A + 1 with Fail[i32] = {
+  return(x) = inl x;
+  wait(k) = { y <- check(7) unwind (()); inr () }
+}
+
+fn work() -> i32 with Wait, Fail[i32] = x <- wait() unwind (let r = raise((3 : i32)); ()); 5
+
+main -> (i32 + 1) + i32 = with to_result[i32, i32 + 1] { with tm[i32] { work() } }

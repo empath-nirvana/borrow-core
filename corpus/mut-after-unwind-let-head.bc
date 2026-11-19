@@ -1,7 +1,9 @@
--- A `let mut` write in the continuation of an `unwind` inside the head of a `let` (an `if` whose
--- arm writes `t` and then gives 2): `t + r + 10` is 5 + 2 + 10. Probe u4 of #1053.
-fn go(b: bool) -> i32 =
-  let mut t = 0;
-  let r = if b { x <- (5 + 0) unwind (()); t = t + x; 2 } else { 0 };
+#! dialect 82
+# A `let mut` write in the continuation of an `unwind` inside the head of a `let` (an `if` whose
+# arm writes `t` and then gives 2): `t + r + 10` is 5 + 2 + 10. Probe u4 of #1053.
+fn go(b: bool) : i32 {
+  var t = 0
+  let r = if b { let x = (5 + 0) unwind (()); t = t + x; 2 } else { 0 }
   t + r + 10
-main -> i32 = go(true)
+}
+fn main() : i32 = go(true)

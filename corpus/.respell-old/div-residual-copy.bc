@@ -1,0 +1,24 @@
+-- A div function's residual named by a copy (SPEC §14, *The residual by name*; SPEC §41, #617):
+-- `count` loops over its input and hands it back as `j`, a copy of `i` made after the loop, and
+-- `count2` as `i`, a binder of its own that shadows the parameter (R1). The loop's states hold the
+-- input as the parameter; `j` and the new `i` are copies of it: the residual is identified by
+-- its binder, followed through its copies.
+--
+-- Answer: i32[4] on the input `abc` and its newline: `count` reads the four bytes, `count2` none.
+fn count(i: ref input) -> ref input * i32 =
+  let mut n = 0;
+  for b in bytes(&mut i) { n = n + 1 };
+  let j = i;
+  (j, n)
+
+fn count2(i: ref input) -> ref input * i32 =
+  let mut n = 0;
+  for b in bytes(&mut i) { n = n + 1 };
+  let i = i;
+  (i, n)
+
+main -> i32 =
+  let (s, n) = count(stdin);
+  let (s, m) = count2(s);
+  let stdin = s;
+  n + m

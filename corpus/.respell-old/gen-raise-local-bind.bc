@@ -1,0 +1,54 @@
+-- A stored generator over a row bound with a written type, and passed on in a recursion
+-- (SPEC §15): `let g : U (pull i32 1 1) = own_src(…)` is at `own_src`'s row, and `lp` passes it
+-- on as its second parameter, 9000 levels deep; each level's previous `b` is unused and closed
+-- just before the tail call, as `become` drops, so the recursion runs in constant space.
+--
+-- Answer: `(inl i32[3], inl i32[3])`: 1 + 2 at depth 3 and at depth 9000. `live 0`.
+
+include adapters
+include fail
+include rec
+type Bytes = mu X. 1 + (i32 * X)
+def nil : Bytes = roll inl ()
+fn cons(b: i32, t: Bytes) -> Bytes = roll inr (b, t)
+
+
+fn own_src(l: Bytes, bad: i32) -> 1 with Yield[i32], Fail[i32] =
+  let mut l = l;
+  while true {
+    match unroll l {
+      inl u -> break
+    | inr (b, t) -> l = t; if b == bad { raise(b) } else { () }; yield(b)
+    }
+  };
+  ()
+
+
+fn rsrc(l: Bytes, fb: i32) -> 1 with Yield[i32], Fail[i32] =
+  match unroll l {
+    inl u -> ()
+  | inr (b, t) ->
+      u <- yield(b) unwind (if fb > 0 { let r = raise(fb); () } else { () });
+      match unroll t { inl u -> () | inr (c, t2) -> yield(c) }
+  }
+
+
+fn drain(it: U (pull i32 1 1), acc: i32) -> i32 with Exhausted =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> drain(it, acc + x)
+  | inr d -> match d { inl u -> acc | inr it -> drain(it, acc) }
+  }
+
+
+effect Tick { must_resume ctl tick() }
+handler count[A](mut n: i32): Tick, A -> A * i32 = {
+  return(a) = (a, n);
+  tick(k) = { n = n + 1; k(()) }
+}
+
+fn lp(a: U (pull i32 1 1), b: U (pull i32 1 1), n: i32) -> i32 with Exhausted, Fail[i32] =
+  if n == 0 { drain(a, 0) } else { let g : U (pull i32 1 1) = own_src(cons(n, nil), 0); lp(a, g, n - 1) }
+fn t(n: i32) -> i32 + i32 =
+  with on_exhausted(!{ u -> inr 0 }) { with to_result { lp(own_src(cons(1, cons(2, nil)), 0), own_src(cons(5, nil), 0), n) } }
+main -> (i32 + i32) * (i32 + i32) = (t(3), t(9000))

@@ -1,11 +1,12 @@
--- Tasks over borrowed trees (#683): `main` owns an array of trees (`mu X. 1 + (ref X * (i32 *
--- ref X))`) and lends them `imm`; each task holds one tree's root as a leaf view across its
--- `await`s, with the path it has walked, and each resume walks the path again from the root. A
--- tree's `ref` child read through the shared borrow is a pointer whose layout node a cell and its
--- borrows share, so its former is not its mode: the closure classes' check relates the reading to
--- the cell's contents at any pointer former (`Backend2/LayoutCheck.lean`, `reCompat`).
---
--- Answer: n = 200 keys, 3 tasks: i64[297900].
+#! dialect 82
+# Tasks over borrowed trees (#683): `main` owns an array of trees (`mu X. 1 + (ref X * (i32 *
+# ref X))`) and lends them `imm`; each task holds one tree's root as a leaf view across its
+# `await`s, with the path it has walked, and each resume walks the path again from the root. A
+# tree's `ref` child read through the shared borrow is a pointer whose layout node a cell and its
+# borrows share, so its former is not its mode: the closure classes' check relates the reading to
+# the cell's contents at any pointer former (`Backend2/LayoutCheck.lean`, `reCompat`).
+#
+# Answer: n = 200 keys, 3 tasks: i64[297900].
 
 type Tree = mu X. 1 + (ref X * (i32 * ref X))
 
@@ -24,7 +25,7 @@ def mid : !(i32 * i32 => i32) =
         };
       return (unbang host[add32]) (lo, h2)
 
--- The balanced search tree of the keys `[lo, hi)`; `inr ()` at the budget's end.
+# The balanced search tree of the keys `[lo, hi)`; `inr ()` at the budget's end.
 def build_step : !U ((1 + !U (1 -o i32 * i32 -o F (Tree + 1))) * 1 -o i32 * i32 -o F (Tree + 1)) =
   !thunkv fun (sp0 : (1 + !U (1 -o i32 * i32 -o F (Tree + 1))) * 1) ->
       let (self, u) = sp0;
@@ -61,7 +62,7 @@ def build : !U (i32 * i32 -o F (Tree + 1)) =
       ba <- return (st, (i32[10000], ()));
       force bf ba p
 
--- `x` at slot `i` of the path.
+# `x` at slot `i` of the path.
 def put : !(array i32 * (i32 * i32) => array i32) =
   !thunkv fun (p : array i32 * (i32 * i32)) ->
       let (a, q) = p;
@@ -70,7 +71,7 @@ def put : !(array i32 * (i32 * i32) => array i32) =
       let (a, d) = t;
       return a
 
--- Slot `i` of the path (taken out and put back).
+# Slot `i` of the path (taken out and put back).
 def dir : !(array i32 * i32 => array i32 * i32) =
   !thunkv fun (p : array i32 * i32) ->
       let (a, i) = p;
@@ -81,14 +82,14 @@ def dir : !(array i32 * i32 => array i32 * i32) =
       | inr v -> return (a2, i32[0])
       }
 
--- The walk's mode at a node of depth `i`: following the path (`Follow i`); entered as the right
--- child of the current node (`Right (i, k)`, `k` its parent's key); entered as a left child while
--- descending to the leftmost node (`Left (i, k)`).
+# The walk's mode at a node of depth `i`: following the path (`Follow i`); entered as the right
+# child of the current node (`Right (i, k)`, `k` its parent's key); entered as a left child while
+# descending to the leftmost node (`Left (i, k)`).
 type Mode = i32 + ((i32 * i32) + (i32 * i32))
--- The walk's data: the path, the current node's depth `d`, the deepest ancestor on the path that
--- the path leaves to the left (its depth, `-1` for none, and its key), and the mode.
+# The walk's data: the path, the current node's depth `d`, the deepest ancestor on the path that
+# the path leaves to the left (its depth, `-1` for none, and its key), and the mode.
 type W = array i32 * (i32 * ((i32 * i32) * Mode))
--- The walk's answer: the path, and the successor's depth and key, or none (`inr ()`).
+# The walk's answer: the path, and the successor's depth and key, or none (`inr ()`).
 type R = array i32 * ((i32 * i32) + 1)
 
 def nav_step : !U ((1 + !U (1 -o (forall 'a < top. imm 'a Tree * W -o F (box 'a (R + 1))))) * 1 -o (forall 'a < top. imm 'a Tree * W -o F (box 'a (R + 1)))) =
@@ -174,145 +175,158 @@ def nav : !U (forall 'a < top. imm 'a Tree * W -o F (box 'a (R + 1))) =
         ba <- return (st, (i32[10000], ()));
         force bf ba ['a] bw
 
--- One step: the root's borrow copied, the successor found from the root.
-fn advance_at<'l>(b: imm 'l Tree, w: W) -> imm 'l Tree * (R + 1) =
-  q <- return (copy['l, Tree] b);
-  let (b1, b2) = q;
-  nv <- return unbang nav;
-  bw <- return (b1, w);
-  o <- force nv ['l] bw;
-  return (b2, unbox o)
+# One step: the root's borrow copied, the successor found from the root.
+fn advance_at<'l>(b: imm 'l Tree, w: sink W) : imm 'l Tree * (R + 1) {
+  let q = (copy['l, Tree] b)
+  let (b1, b2) = q
+  let nv = unbang nav
+  let bw = (b1, w)
+  let o = force nv ['l] bw;
+  (b2, unbox o)
+}
 
--- The task at its `await`: the root's borrow, the path, the current depth and key, `r`, the sum.
+# The task at its `await`: the root's borrow, the path, the current depth and key, `r`, the sum.
 type St<'l> = imm 'l Tree * (array i32 * (i32 * (i32 * (i32 * i64))))
 
--- After a step: suspended at the next node's `await`, or finished with the sum.
-fn settle_at<'l>(cr: imm 'l Tree * (R + 1), r: i32, s: i64) -> i64 + St<'l> =
-  let (c, o) = cr;
+# After a step: suspended at the next node's `await`, or finished with the sum.
+fn settle_at<'l>(cr: imm 'l Tree * (R + 1), r: i32, s: i64) : i64 + St<'l> {
+  let (c, o) = cr
   match o {
-    inl pr -> let (path, nx) = pr;
+    inl pr -> { let (path, nx) = pr
       match nx {
-        inl dk -> let (d, k) = dk; inr (c, (path, (d, (k, (r, s)))))
+        inl dk -> { let (d, k) = dk; inr (c, (path, (d, (k, (r, s))))) }
       | inr none -> inl s
       }
+    }
   | inr x -> inl (i64[0] - i64[1])
   }
+}
 
--- `κ`'s resume: the node's value added, then the next node's `await`.
-fn adv_at<'l>(k: St<'l>) -> i64 + St<'l> =
-  let (c, (path, (d, (key, (r, s))))) = k;
-  let s2 = s + host[extend_s](value(key, r));
-  let w = (path, (d, ((0 - 1, 0), (inl 0 : Mode))));
+# `κ`'s resume: the node's value added, then the next node's `await`.
+fn adv_at<'l>(k: sink St<'l>) : i64 + St<'l> {
+  let (c, (path, (d, (key, (r, s))))) = k
+  let s2 = s + host[extend_s](value(key, r))
+  let w = (path, (d, ((0 - 1, 0), (inl 0 : Mode))))
   settle_at(advance_at(c, w), r, s2)
+}
 
--- The task's first segment: the walk to its first node's `await`.
-fn start_at<'l>(b: imm 'l Tree, r: i32) -> i64 + St<'l> =
-  let path = array_new[i32] (64, !{ i -> 0 });
-  let w = (path, (0, ((0 - 1, 0), (inr (inr (0, 0)) : Mode))));
+# The task's first segment: the walk to its first node's `await`.
+fn start_at<'l>(b: imm 'l Tree, r: i32) : i64 + St<'l> {
+  let path = array_new[i32] (64, !{ i -> 0 })
+  let w = (path, (0, ((0 - 1, 0), (inr (inr (0, 0)) : Mode))))
   settle_at(advance_at(b, w), r, i64[0])
+}
 
-fn buildt(n: i32) -> Tree =
-  bd <- return unbang build;
-  ba <- return (i32[0], n);
-  t <- force bd ba;
-  case t { inl tr -> return tr | inr x -> return (roll inl () : Tree) }
+fn buildt(n: i32) : Tree {
+  let bd = unbang build
+  let ba = (i32[0], n)
+  let t = force bd ba
+  case t { inl tr -> tr | inr x -> (roll inl () : Tree) }
+}
 
--- A task bounded by `'d`: `lib/async.bc`'s `TaskIn`.
+# A task bounded by `'d`: `lib/async.bc`'s `TaskIn`.
 type TaskAt[A]<'d> = box 'd U (nu X. F (A + box 'd U X) & F 1)
 type SlotAt[A]<'d> = 1 + (A + TaskAt[A]<'d>)
 
-fn resume_at[A]<'d>(t: TaskAt[A]<'d>) -> A + TaskAt[A]<'d> = g <- return (unbox t); (nu_out (force g)).1
+fn resume_at[A]<'d>(t: sink TaskAt[A]<'d>) : A + TaskAt[A]<'d> { let g = (unbox t); (nu_out (force g)).1
+}
 
-fn cancel_at[A]<'d>(t: TaskAt[A]<'d>) -> 1 = g <- return (unbox t); (nu_out (force g)).2
+fn cancel_at[A]<'d>(t: sink TaskAt[A]<'d>) : 1 { let g = (unbox t); (nu_out (force g)).2
+}
 
--- One round in place over the slots, as `lib/async.bc`'s `round`.
-fn round_at[A]<'d>(n: i32, xs: array SlotAt[A]<'d>) -> array SlotAt[A]<'d> * bool =
-  let mut a = xs;
-  let mut pending = false;
+# One round in place over the slots, as `lib/async.bc`'s `round`.
+fn round_at[A]<'d>(n: i32, xs: sink array SlotAt[A]<'d>) : array SlotAt[A]<'d> * bool {
+  var a = xs
+  var pending = false
   for i in 0..n {
-    let (b, s) = array_replace[SlotAt[A]<'d>] (a, i, inl ());
+    let (b, s) = array_replace[SlotAt[A]<'d>] (a, i, inl ())
     match s {
       inl o -> match o {
-        inl u -> a = b
+        inl u -> { a = b }
       | inr e -> match e {
-          inl v -> let (c, _) = array_replace[SlotAt[A]<'d>] (b, i, inr (inl v)); a = c
+          inl v -> { let (c, _) = array_replace[SlotAt[A]<'d>] (b, i, inr (inl v)); a = c }
         | inr t -> match resume_at(t) {
-            inl v -> let (c, _) = array_replace[SlotAt[A]<'d>] (b, i, inr (inl v)); a = c
-          | inr t2 ->
-              pending = true;
+            inl v -> { let (c, _) = array_replace[SlotAt[A]<'d>] (b, i, inr (inl v)); a = c }
+          | inr t2 -> {
+              pending = true
               let (c, _) = array_replace[SlotAt[A]<'d>] (b, i, inr (inr t2)); a = c
+          }
           }
         }
       }
-    | inr x -> a = b
+    | inr x -> { a = b }
     }
   };
   (a, pending)
+}
 
--- The sum of the slots' values; a task still pending is cancelled.
-fn total_at<'d>(n: i32, xs: array SlotAt[i64]<'d>) -> i64 =
-  let mut a = xs;
-  let mut acc = i64[0];
+# The sum of the slots' values; a task still pending is cancelled.
+fn total_at<'d>(n: i32, xs: sink array SlotAt[i64]<'d>) : i64 {
+  var a = xs
+  var acc = i64[0]
   for i in 0..n {
-    let (b, s) = array_replace[SlotAt[i64]<'d>] (a, i, inl ());
-    a = b;
+    let (b, s) = array_replace[SlotAt[i64]<'d>] (a, i, inl ())
+    a = b
     match s {
       inl o -> match o {
         inl u -> ()
-      | inr e -> match e { inl v -> acc = acc + v | inr t -> cancel_at(t); () }
+      | inr e -> match e { inl v -> { acc = acc + v } | inr t -> { cancel_at(t); () } }
       }
     | inr x -> ()
     }
-  };
+  }
   acc
+}
 
--- Run the slots for `rounds` rounds (a counted loop, so it stays inside the lends), then sum.
-fn run_at<'d>(n: i32, rounds: i32, xs: array SlotAt[i64]<'d>) -> i64 =
-  let mut slots = xs;
-  let mut more = true;
+# Run the slots for `rounds` rounds (a counted loop, so it stays inside the lends), then sum.
+fn run_at<'d>(n: i32, rounds: i32, xs: sink array SlotAt[i64]<'d>) : i64 {
+  var slots = xs
+  var more = true
   for _ in 0..rounds {
     if more { let (b, p) = round_at(n, slots); slots = b; more = p } else { () }
-  };
+  }
   total_at(n, slots)
+}
 
-main -> i64 =
-  let n = 200;
-  let tasks = 3;
-  let mut trees = array_new[Tree] (tasks, !{ i -> roll inl () });
+fn main() : i64 {
+  let n = 200
+  let tasks = 3
+  var trees = array_new[Tree] (tasks, !{ i -> roll inl () })
   for t in 0..tasks {
-    let (a, old) = array_replace[Tree] (trees, t, buildt(n));
+    let (a, old) = array_replace[Tree] (trees, t, buildt(n))
     trees = a
-  };
-  let d = alloc(());
+  }
+  let d = alloc(())
   let (d, tot) = borrow imm trees { 'l, v ->
     let tt = borrow mut d { 'd, e ->
-      f <- return unfold[nu X. F (i64 + box 'd U X) & F 1, St<'l>] (!thunkv fun (s : St<'l>) ->
-            < o <- return adv_at(s);
+      let f = unfold[nu X. F (i64 + box 'd U X) & F 1, St<'l>] (!thunkv fun (s : St<'l>) ->
+            < let o = adv_at(s);
               case o {
-                inl x -> return (inl x : i64 + box 'd St<'l>)
-              | inr s2 -> return (inr boxed['d] s2 : i64 + box 'd St<'l>)
+                inl x -> (inl x : i64 + box 'd St<'l>)
+              | inr s2 -> (inr boxed['d] s2 : i64 + box 'd St<'l>)
               },
-              return () >);
-      let mut slots = array_new[SlotAt[i64]<'d>] (tasks, !{ i -> inl () });
-      let mut v = v;
+              () >)
+      var slots = array_new[SlotAt[i64]<'d>] (tasks, !{ i -> inl () })
+      var v = v
       for t in 0..tasks {
-        let (v1, v2) = array_copy['l, Tree] v;
-        v = v1;
+        let (v1, v2) = array_copy['l, Tree] v
+        v = v1
         let sl = match array_get['l, Tree] (v2, t) {
             inl g -> match start_at(g, t) {
                 inl x -> (inr (inl x) : SlotAt[i64]<'d>)
               | inr s0 ->
-                  (inr (inr boxed['d] (thunkv nu_in < fu <- return unbang f; (nu_out force fu s0).1,
-                      fu <- return unbang f; (nu_out force fu s0).2 >)) : SlotAt[i64]<'d>)
+                  (inr (inr boxed['d] (thunkv nu_in < let fu = unbang f; (nu_out force fu s0).1,
+                      let fu = unbang f; (nu_out force fu s0).2 >)) : SlotAt[i64]<'d>)
               }
           | inr u -> (inr (inl i64[0]) : SlotAt[i64]<'d>)
-          };
-        let (b, _) = array_replace[SlotAt[i64]<'d>] (slots, t, sl);
+          }
+        let (b, _) = array_replace[SlotAt[i64]<'d>] (slots, t, sl)
         slots = b
-      };
-      let _ = array_release['l, Tree] v;
+      }
+      let _ = array_release['l, Tree] v
       run_at(tasks, n + 2, slots) };
-    (d, tt) };
-  let _ = free(d);
-  let _ = trees;
+    (d, tt) }
+  let _ = free(d)
+  let _ = trees
   tot
+}

@@ -1,0 +1,32 @@
+-- SPEC §12 *Handled bodies* (#848, #492): a recursive call inside a `for` that threads an owned
+-- string. The call elaborates to a `case` on the budget, one arm the budget's abort and the other
+-- the call on `s`, inside the loop's per-iteration handler: the handled body is owed `s`, so the
+-- abort arm consumes it.
+--
+-- `f(4)` calls `f(0)` … `f(3)` and pushes `4`: lengths 1, 2, 4, 8, 16. `d(50)` recurses 50 deep
+-- through a `for` of one turn and pushes one byte a level: length 51. `d(20000)` runs out of the
+-- recursion budget (10000), and every level's string is freed as the abort leaves it: `-1`.
+-- Answer: `i32[160509]` ((16 · 1000 + 51) · 10 − 1) and `live 0`.
+
+include rec
+include text
+
+fn f(n: i32, s: string) -> string with Exhausted =
+  let mut s = s;
+  for i in 0..n { s = f(i, s) };
+  let (s, _) = push_dec(s, n);
+  s
+
+fn d(n: i32, s: string) -> string with Exhausted =
+  let mut s = s;
+  for i in 0..1 { if n > 0 { s = d(n - 1, s) } else { () } };
+  let (s, _) = push_byte(s, 120);
+  s
+
+fn size(s: string) -> i32 = let (s, n) = len_of[u8](s); n
+
+main -> i32 =
+  let a = with on_exhausted(!{ u -> 0 - 1 }) { size(f(4, string_new(1))) };
+  let b = with on_exhausted(!{ u -> 0 - 1 }) { size(d(50, string_new(1))) };
+  let c = with on_exhausted(!{ u -> 0 - 1 }) { size(d(20000, string_new(1))) };
+  (a * 1000 + b) * 10 + c

@@ -1,0 +1,86 @@
+-- Conversions between floats and integers (SPEC §37). A float to an integer truncates toward
+-- zero, and is partial where Wasm traps: a NaN, an infinity, or an integer part out of range
+-- answers `inr ()`, printed `none`. The `_sat` forms are total: a NaN is `0`, and out of range is
+-- the least or greatest integer. An integer to a float is total and correctly rounded, and so is
+-- `f64` to `f32`; `f32` to `f64` is exact.
+--
+-- Each line is a float, then its `i32` (partial, then saturating), its unsigned `i32` (`host[…_u]`,
+-- partial then saturating, printed as unsigned) and its `i64` (partial, then saturating):
+--
+--     2.9 2 2 2 2 2 2
+--     -2.9 -2 -2 none 0 -2 -2                         an unsigned integer has no −2
+--     -0.9 0 0 0 0 0 0                                −0.9 truncates to 0, in range unsigned
+--     2147483647.9 2147483647 2147483647 2147483647 2147483647 2147483647 2147483647
+--     2147483648.0 none 2147483647 2147483648 2147483648 2147483648 2147483648
+--     -2147483648.9 -2147483648 -2147483648 none 0 -2147483648 -2147483648
+--     -2147483649.0 none -2147483648 none 0 -2147483649 -2147483649
+--     4294967296.0 none 2147483647 none 4294967295 4294967296 4294967296
+--     1e19 none 2147483647 none 4294967295 none 9223372036854775807
+--     -1e19 none -2147483648 none 0 none -9223372036854775808
+--     inf none 2147483647 none 4294967295 none 9223372036854775807
+--     -inf none -2147483648 none 0 none -9223372036854775808
+--     NaN none 0 none 0 none 0
+--
+-- Then, on one line, the conversions to floats: `9007199254740993` (2^53 + 1) as `f64` is
+-- `9007199254740992.0` (ties to even), and `16777217` as `f32` `16777216.0`; `-1` read unsigned
+-- as an `f32` is `4294967300.0` (2^32 − 1 rounds to 2^32); `0.1` demoted to `f32` is `0.1` and
+-- promoted back `0.10000000149011612`. `main` answers the number of float lines, 13. A
+-- truncation that rounded, a range test off by one at a bound, or a saturating form that
+-- trapped prints a different line.
+--
+-- The lines are printed by one call of `line`, over the table: every call of a function is
+-- compiled as a copy of its body (Backend README).
+
+include float
+
+fn opt32(o: i32 + 1) -> 1 = match o { inl n -> print_signed(n) | inr _ -> print_lit("none") }
+
+fn print_signed(n: i32) -> 1 = print_dec64(host[extend_s](n))
+
+-- An `i32` read unsigned, in decimal.
+fn print_u32(n: i32) -> 1 = print_dec64(host[extend_u](n))
+
+fn optu(o: i32 + 1) -> 1 = match o { inl n -> print_u32(n) | inr _ -> print_lit("none") }
+
+fn opt64(o: i64 + 1) -> 1 = match o { inl n -> print_dec64(n) | inr _ -> print_lit("none") }
+
+fn sp() -> 1 = print_byte(b' ')
+
+fn line(x: f64) -> 1 =
+  print_f64(x); sp();
+  opt32(i32_of_f64(x)); sp(); print_signed(i32_of_f64_sat(x)); sp();
+  optu(host[i32_trunc_f64_u](x)); sp(); print_u32(host[i32_trunc_sat_f64_u](x)); sp();
+  opt64(i64_of_f64(x)); sp(); print_dec64(i64_of_f64_sat(x));
+  print_byte(b'\n')
+
+-- The floats of the table.
+fn value(i: i32) -> f64 =
+  let inf = 1.0 / 0.0;
+  if i == 0 { 2.9 } else { if i == 1 { 0.0 - 2.9 } else { if i == 2 { 0.0 - 0.9 }
+  else { if i == 3 { 2147483647.9 } else { if i == 4 { 2147483648.0 }
+  else { if i == 5 { 0.0 - 2147483648.9 } else { if i == 6 { 0.0 - 2147483649.0 }
+  else { if i == 7 { 4294967296.0 } else { if i == 8 { 1.0e19 } else { if i == 9 { 0.0 - 1.0e19 }
+  else { if i == 10 { inf } else { if i == 11 { 0.0 - inf } else { 0.0 / 0.0 } } } } } } } } } } } }
+
+main -> i32 =
+  for i in 0..13 { line(value(i)) };
+  let big: i64 = 9007199254740993;
+  let m1: i32 = 0 - 1;
+  let t = f32_of_f64(0.1);
+  -- The integer-to-float results, then the `f32` ones and the promotion, each printed at one place.
+  let ds = (f64_of_i64(big), f64_of_f32(t));
+  let fs = (f32_of_i32(16777217), (host[f32_convert_i32_u](m1), t));
+  for k in 0..5 {
+    if 0 < k { sp() } else { () };
+    if k == 0 || k == 4 {
+      let (d0, d1) = ds;
+      let d = if k == 0 { d0 } else { d1 };
+      print_f64(d)
+    } else {
+      let (f0, (f1, f2)) = fs;
+      let f = if k == 1 { f0 } else { if k == 2 { f1 } else { f2 } };
+      print_f32(f)
+    }
+  };
+  print_byte(b'\n');
+  13

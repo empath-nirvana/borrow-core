@@ -1,0 +1,20 @@
+-- The counted loop with an exit (SPEC §16): `count_try[S, E] (f, n, i, s)` runs `f` at
+-- `i, …, n − 1` while it answers `inl` of the next state, and answers the first `inr e` it gives;
+-- at the bound it answers `inl` of the last state. The counter is the machine's, as
+-- `count_fold`'s, so the loop is total at every host and allocates nothing.
+--
+-- Answer: (inr i32[8], (inl i32[50], (inr i32[21], inl i32[7]))): the first `i` whose square is
+-- over 50 is 8; below 5 there is none, and the state comes back; the running sum 0 + 1 + … + 6
+-- is the first over 20; and a negative bound runs nothing.
+
+fn over(i: i32, lim: i32) -> i32 + i32 = if i * i > lim { inr i } else { inl lim }
+
+fn sum_to(i: i32, acc: i32) -> i32 + i32 =
+  let a = acc + i;
+  if a > 20 { inr a } else { inl a }
+
+total fn first_square_over(n: i32, lim: i32) -> i32 + i32 = count_try[i32, i32] (over, n, 0, lim)
+
+main -> (i32 + i32) * ((i32 + i32) * ((i32 + i32) * (i32 + i32))) =
+  (first_square_over(100, 50), first_square_over(5, 50), count_try[i32, i32] (sum_to, 100, 0, 0),
+   count_try[i32, i32] (sum_to, 0 - 1, 0, 7))

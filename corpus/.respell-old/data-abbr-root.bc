@@ -1,0 +1,54 @@
+-- Recursion through an abbreviation whose body names the declaration itself (SPEC §42, §61):
+-- `JMap` is `Map[string, Json]`, declared before `Json`, and `Obj(JMap)` reaches `Json` through
+-- it. The group is read through the abbreviation's body, so `Json` is recursive; `JMap` is opened
+-- at the field, so `Json` elaborates to the `mu` of `corpus/data-json-map.bc`, and `Obj` is not a
+-- block. `type JMap` is placed after `Json`'s declaration, whose type it names.
+--
+-- Answer: i32[83]. `sum` adds the numbers under "a" and "b", recursively: 3 + (4 + 1) = 8 in
+-- `outer`; `keys`, given `dropped`, a `JMap`, finds its 3 keys; 8 * 10 + 3. `live 0`: what `sum`
+-- leaves in each map (the key "z", an object of two numbers among them), the map `keys` leaves, an
+-- object among its values, and `unused`, never read, are consumed implicitly. An implementation
+-- that reads the group off the fields' names alone sees no recursion and refuses `JMap` as naming
+-- an unknown type; one that keeps `type JMap` where it is written names `Json` before it is
+-- declared.
+include rec
+include buf
+include text
+include map
+
+type JMap = Map[string, Json]
+
+data Json = Null | Num(i32) | Obj(JMap)
+
+-- The numbers under "a" and "b", recursively, consuming the value.
+fn sum(j: Json) -> i32 = match j {
+    Null -> 0
+  | Num(n) -> n
+  | Obj(m) ->
+      let (m, a) = map_remove(m, string_of_lit("a"));
+      let (m, b) = map_remove(m, string_of_lit("b"));
+      let sa = match a { inl x -> sum(x) | inr u -> 0 };
+      let sb = match b { inl x -> sum(x) | inr u -> 0 };
+      sa + sb
+  }
+
+-- The number of keys of an object's map.
+fn keys(m: JMap) -> i32 = let (m, n) = map_len(m); n
+
+-- `{ "a": x, "b": y, "z": z }`.
+fn obj(x: Json, y: Json, z: Json) -> JMap =
+  let m = map_new[string, Json](4);
+  let (m, _) = map_insert(m, string_of_lit("a"), x);
+  let (m, _) = map_insert(m, string_of_lit("b"), y);
+  let (m, _) = map_insert(m, string_of_lit("z"), z);
+  m
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let inner = Obj(obj(Num(4), Num(1), Obj(obj(Num(1000), Num(1000), Null))));
+  let outer = Obj(obj(Num(3), inner, Num(100)));
+  let dropped = obj(Obj(obj(Num(1), Num(2), Null)), Num(5), Null);
+  let unused = Obj(obj(Num(7), Obj(obj(Num(8), Null, Null)), Null));
+  let s = sum(outer);
+  let k = keys(dropped);
+  s * 10 + k
+}

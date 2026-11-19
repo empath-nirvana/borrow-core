@@ -1,0 +1,37 @@
+-- Scoped cells in a task that suspends (SPEC §35): `task` lends its `let mut x` to calls (`&x`,
+-- `&mut x`), `modify`s it, and gives a handler its state as a value, between two `await`s. Each
+-- of those cells is scoped to its borrow, and no `await` lies inside a borrow (typing refuses a
+-- resuming operation across a lend: a continuation held across a lend is T1, #172), so each cell
+-- is a slot of the frame of the code that runs it: the task's code before its first `await`, and
+-- its resume code after each, which is called afresh at each resumption and has a frame of its
+-- own. Nothing of the frame is held in the suspended state. `bcc-counts --sites` reports every
+-- scoped cell framed and none allocated; the flat-IR interpreter checks every access to a slot
+-- against its scope and its frame's call.
+--
+-- Answer: `inr (i32[45], inr (i32[67], inl ()))`, the list [45, 67]: for `n = 1`, `a = 1`,
+-- `old = 1`, `x` becomes 2 and then 20, `b = 20`, `c = 3`, `d = 20`; for `n = 2`, 2, 2, 30, 3
+-- and 30; `live 0`.
+include async
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n + x; () } }
+
+fn get<'a>(m: imm 'a i32) -> i32 = *m
+fn add<'a>(m: mut 'a i32, k: i32) -> i32 = modify m { x -> (x + k, x) }
+
+fn task(n: i32) -> i32 with Async =
+  let mut x = n;
+  let a = get(&x);
+  let old = add(&mut x, 1);
+  await();
+  modify &mut x { v -> v * 10 };
+  let b = get(&x);
+  let c = with tally(b) { note(a); 3 };
+  await();
+  let d = get(&x);
+  a + b + c + old + d
+
+main -> List[i32] =
+  let q = queue[i32]();
+  let q = push(q, with spawn { task(1) });
+  let q = push(q, with spawn { task(2) });
+  run_until_empty(q)

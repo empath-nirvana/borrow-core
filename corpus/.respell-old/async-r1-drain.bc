@@ -1,0 +1,29 @@
+-- SPEC §29, R1: the generator of `corpus/async-r1-generator.bc`, drained by a `for` over the
+-- stored generator. `main` returns that `for` as a loop (div, SPEC §14), and the runtime drives
+-- it: one observation per element, the generator suspended inside its borrow between them.
+--
+-- `assurance: PinLaw (R1 at 12:3)`.
+--
+-- Answer: i32[11], 5 + 6; `live 0`.
+include yield
+
+fn selfref() -> 1 with Yield[i32] =
+  let c = alloc(5);
+  borrow mut c { m ->
+    let a = modify m { v -> (v, v) };
+    yield(a);
+    modify m { v -> v + 1 };
+    let b = modify m { v -> (v, v) };
+    yield(b);
+    ()
+  };
+  let _ = free(c);
+  ()
+
+fn sum_all(it: U (pull i32 1 1)) -> i32 =
+  let mut acc = 0;
+  for x in it { acc = acc + x };
+  acc
+
+main -> i32 =
+  sum_all(selfref())

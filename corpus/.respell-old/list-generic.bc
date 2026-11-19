@@ -1,0 +1,29 @@
+-- Generic recursive functions over a generic list (SPEC §15, §20; #477): `map`, `filter` and
+-- `fold` of `lib/list.bc`, each a template that calls itself. A recursive group generic in types
+-- is the fixed point of its generator as any group is (SPEC §21); its generator and its copies are
+-- templates in the group's type parameters, so each use at new types makes an instance of each.
+-- Here `map` is used at three pairs of types (`i32 → bool`, `i32 → i32 * bool`, `List[i32] →
+-- List[i32]`), `filter` at `i32` and `bool`, and `fold` at `i32` and `List[i32]`; every block is pure.
+-- `nil()` in `cons(7, nil())` takes its type from `cons`'s parameter, with what `7` determined.
+-- The start of the fold that reverses is written `nil[i32]()`: its type is the fold's `B`, which
+-- only the block's result would determine, and inference does not look into a block's body.
+--
+-- Answer: `[true, false, true]`, `[2, 3]`, `[true]`, `15`, `[(14, true)]`, `[[0, 1, 2], [0, 3]]` and `[3, 1]` (a list reversed by a fold). A map that applied its block to the
+-- wrong element, or a filter that kept the wrong ones, gives other lists.
+
+include list
+
+fn pos(x: i32) -> bool = x > 0
+
+main -> List[bool] * (List[i32] * (List[bool] * (i32 * (List[i32 * bool] * (List[List[i32]] * List[i32]))))) =
+  with on_exhausted(!{ u -> (nil(), (nil(), (nil(), (0, (nil(), (nil(), nil())))))) }) {
+    let xs = cons(3, cons(0 - 1, cons(4, nil())));
+    let bs = map(xs, !{ x -> x > 1 });
+    let ys = filter(cons(1, cons(2, cons(3, nil()))), !{ x -> x > 1 });
+    let ts = filter(cons(true, cons(false, nil())), !{ b -> b });
+    let s = fold(cons(4, cons(5, cons(6, nil()))), 0, !{ (a, x) -> a + x });
+    let ps = map(cons(7, nil()), !{ x -> (x * 2, pos(x)) });
+    let ls = map(cons(cons(1, cons(2, nil())), cons(cons(3, nil()), nil())), !{ l -> cons(0, l) });
+    let rs = fold(cons(1, cons(3, nil())), nil[i32](), !{ (acc, x) -> cons(x, acc) });
+    (bs, (ys, (ts, (s, (ps, (ls, rs))))))
+  }

@@ -1,0 +1,16 @@
+-- An `unwind` in a generator's `while` body (no `yield` in its head), with `let mut` writes after it;
+-- the consumer sums what is yielded, `i * 100 + t` at each step: 0, 110, 220. Probe u10 of #1053,
+-- which never ends on main because `i` is only incremented after the `unwind`; here a counter `n`,
+-- incremented before it, bounds the loop to 3 iterations.
+include yield
+fn src(k: i32) -> 1 with Yield[i32] =
+  let mut n = 0;
+  let mut i = 0;
+  let mut t = 0;
+  while n < k { n = n + 1; yield(i * 100 + t); x <- (10 + 0) unwind (()); t = t + x; i = i + 1 };
+  ()
+fn go() -> i32 =
+  let mut s = 0;
+  for y in src(3) { s = s + y };
+  s
+main -> i32 = go()

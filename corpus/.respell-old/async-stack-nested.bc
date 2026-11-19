@@ -1,0 +1,48 @@
+-- SPEC §52 stress: tasks run inside a task. `outer` is a recursive task that, at each level, spawns
+-- a recursive inner task (its own stack, made current around its runs) and resumes it to its end
+-- by hand between its own `await`s, so two stacks are switched in and out at different depths.
+-- `main` runs two outers round robin.
+--
+-- Answer: the list [70, 36]: `outer(4)` sums `inner(k)` for k = 1 .. 4 (each counting its 2k levels,
+-- 2 + 4 + 6 + 8 = 20) and its own levels (4 · 10 = 40) plus 10 for the base; `outer(2)` likewise
+-- (2 + 4 + 2 · 10 + 10 = 36). `live 0`.
+
+include rec
+include async
+
+fn ilevels(n: i32) -> i32 with Async, Exhausted =
+  if n < 1 { 0 } else { await(); let r = ilevels(n - 1); await(); r + 2 }
+
+fn inner(n: i32) -> i32 with Async = with on_exhausted(!{ u -> 0 - 1 }) { ilevels(n) }
+
+-- A task of `inner(n)`, spawned in a function of its own (a `with spawn` at the row of a recursion,
+-- which holds `Exhausted`, is refused, as `corpus/async-race.bc` notes).
+fn spawn_inner(n: i32) -> Task[i32] = with spawn { inner(n) }
+
+-- Run a task to its end by resuming it at most `fuel` times; `0 - 1` when it does not end.
+fn drive(t: Task[i32], fuel: i32) -> i32 =
+  let mut cur = (inr t : i32 + Task[i32]);
+  for _ in 0..fuel {
+    match cur {
+      inl v -> cur = (inl v : i32 + Task[i32])
+    | inr t1 -> cur = resume(t1)
+    }
+  };
+  match cur { inl v -> v | inr t2 -> cancel(t2); 0 - 1 }
+
+fn olevels(n: i32) -> i32 with Async, Exhausted =
+  if n < 1 { 10 } else {
+    await();
+    let r = olevels(n - 1);
+    let x = drive(spawn_inner(n), 100);
+    await();
+    r + x + 10
+  }
+
+fn outer(n: i32) -> i32 with Async = with on_exhausted(!{ u -> 0 - 1 }) { olevels(n) }
+
+main -> List[i32] =
+  let q = queue[i32]();
+  let q = push(q, with spawn { outer(4) });
+  let q = push(q, with spawn { outer(2) });
+  run_until_empty(q)

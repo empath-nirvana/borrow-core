@@ -1,0 +1,22 @@
+-- A handler site in a clause whose body raises to it, as a head of the clause's path (SPEC §27;
+-- #953 re-review F1, `q06`): `with to_result[i32, i32] { check(7) }` catches its own raise, and the
+-- clause answers `inr ()` without its continuation. The site is typed at the clause's row, which
+-- holds `Fail`, so the head is wrapped in `unwind (cancel k)`; no abort leaves it, and `k` is
+-- cancelled at the end: the body's cleanup raises `3`, which `to_result` outside catches.
+--
+-- Answer: inr i32[3], and `live 0`.
+
+include fail
+
+effect Wait { ctl wait() }
+
+fn check(e: i32) -> i32 with Fail[i32] = raise(e)
+
+fn work() -> i32 with Wait, Fail[i32] = x <- wait() unwind (let r = raise((3 : i32)); ()); 5
+
+handler tm: Wait, i32 -> i32 + 1 with Fail[i32] = {
+  return(x) = inl x;
+  wait(k) = { let y = with to_result[i32, i32] { check(7) }; inr () }
+}
+
+main -> (i32 + 1) + i32 = with to_result[i32, i32 + 1] { with tm { work() } }

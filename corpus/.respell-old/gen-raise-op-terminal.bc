@@ -1,0 +1,69 @@
+-- A path that ends in an operation (SPEC §12, §15): an unused stored generator over a row is
+-- closed at scope end, after the operation, as Rust drops after the last expression (`x <- T;
+-- close; return x`). `h` ends in a value after a `tick`, `h2` in the `tick` itself; `b`'s cleanup
+-- raises `fb` when positive, after the `tick` is counted in both.
+--
+-- Answer: `(((inl i32[113], i32[1]), (inl (), i32[1])), ((inr i32[9], i32[1]), (inr i32[9], i32[1])))`.
+-- `live 0`. A close before the operation gives `i32[0]` in `h2`'s case with `fb = 9`.
+--
+-- check: old-backend-refuses (#1033)
+
+include adapters
+include fail
+include rec
+type Bytes = mu X. 1 + (i32 * X)
+def nil : Bytes = roll inl ()
+fn cons(b: i32, t: Bytes) -> Bytes = roll inr (b, t)
+
+
+fn own_src(l: Bytes, bad: i32) -> 1 with Yield[i32], Fail[i32] =
+  let mut l = l;
+  while true {
+    match unroll l {
+      inl u -> break
+    | inr (b, t) -> l = t; if b == bad { raise(b) } else { () }; yield(b)
+    }
+  };
+  ()
+
+
+fn rsrc(l: Bytes, fb: i32) -> 1 with Yield[i32], Fail[i32] =
+  match unroll l {
+    inl u -> ()
+  | inr (b, t) ->
+      u <- yield(b) unwind (if fb > 0 { let r = raise(fb); () } else { () });
+      match unroll t { inl u -> () | inr (c, t2) -> yield(c) }
+  }
+
+
+fn drain(it: U (pull i32 1 1), acc: i32) -> i32 with Exhausted =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> drain(it, acc + x)
+  | inr d -> match d { inl u -> acc | inr it -> drain(it, acc) }
+  }
+
+
+effect Tick { must_resume ctl tick() }
+handler count[A](mut n: i32): Tick, A -> A * i32 = {
+  return(a) = (a, n);
+  tick(k) = { n = n + 1; k(()) }
+}
+
+-- b read once (its cleanup armed), then never used; the path ends in an operation / a ret
+fn h(a: U (pull i32 1 1), b: U (pull i32 1 1), e: i32) -> i32 with Exhausted, Tick =
+  o <- (nu_out (force b)).1;
+  match o {
+    inl (x, b2) -> let y = drain(a, e + x); tick(); y
+  | inr d -> match d { inl u -> drain(a, e) | inr b2 -> drain(a, e) }
+  }
+fn h2(a: U (pull i32 1 1), b: U (pull i32 1 1), e: i32) -> 1 with Exhausted, Tick =
+  o <- (nu_out (force b)).1;
+  match o {
+    inl (x, b2) -> let y = drain(a, e + x); tick()
+  | inr d -> match d { inl u -> () | inr b2 -> () }
+  }
+fn t(fb: i32) -> ((i32 + i32) * i32) * ((1 + i32) * i32) =
+  (with count(0) { with on_exhausted(!{ u -> inr 0 }) { with to_result { h(own_src(cons(1, cons(2, nil)), 0), rsrc(cons(10, cons(20, nil)), fb), 100) } } },
+   with count(0) { with on_exhausted(!{ u -> inr 0 }) { with to_result { h2(own_src(cons(1, cons(2, nil)), 0), rsrc(cons(10, cons(20, nil)), fb), 100) } } })
+main -> (((i32 + i32) * i32) * ((1 + i32) * i32)) * (((i32 + i32) * i32) * ((1 + i32) * i32)) = (t(0), t(9))
