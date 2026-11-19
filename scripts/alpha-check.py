@@ -134,29 +134,44 @@ class Back:
         return WORD.sub(lambda m: self.names.get(m.group(0), m.group(0)), s)
 
 
-def same(cf, cg, back, backF):
-    """The original's lines `cf` and the renamed program's `cg` agree up to the renaming. A
+def sameLine(a, b, back, backF):
+    """The original's line `a` and the renamed program's `b` agree up to the renaming. A
     position may also agree as it is: a position in a module's code is printed under the
     program's name, where the program's renaming does not apply."""
+    a = backF.text(a)
+    if a == back.text(b):
+        return True
+    # Position by position: the text between positions up to the renaming, each position
+    # mapped back or as it is.
+    pa, pb = POS.split(a), POS.split(back.text(b, cols=False))
+    if len(pa) != len(pb):
+        return False
+    for i in range(0, len(pa), 3):
+        if pa[i] != pb[i]:
+            return False
+    for i in range(1, len(pa), 3):
+        l, c = int(pb[i]), int(pb[i + 1])
+        if pa[i] != pb[i] or pa[i + 1] not in (str(c), back.col(l, c)):
+            return False
+    return True
+
+
+def same(cf, cg, back, backF):
+    """The original's lines `cf` and the renamed program's `cg` agree up to the renaming, line
+    for line; or, when not in order, each line with one of the other's. Notes are printed in the
+    order of their positions, and a renamed module moves its columns past the program's on the
+    same line number (a position in a module's code is printed under the program's name)."""
     lf, lg = cf.split("\n"), cg.split("\n")
     if len(lf) != len(lg):
         return False
-    for a, b in zip(lf, lg):
-        a = backF.text(a)
-        if a == back.text(b):
-            continue
-        # Position by position: the text between positions up to the renaming, each position
-        # mapped back or as it is.
-        pa, pb = POS.split(a), POS.split(back.text(b, cols=False))
-        if len(pa) != len(pb):
+    if all(sameLine(a, b, back, backF) for a, b in zip(lf, lg)):
+        return True
+    left = list(lg)
+    for a in lf:
+        k = next((j for j, b in enumerate(left) if sameLine(a, b, back, backF)), None)
+        if k is None:
             return False
-        for i in range(0, len(pa), 3):
-            if pa[i] != pb[i]:
-                return False
-        for i in range(1, len(pa), 3):
-            l, c = int(pb[i]), int(pb[i + 1])
-            if pa[i] != pb[i] or pa[i + 1] not in (str(c), back.col(l, c)):
-                return False
+        left.pop(k)
     return True
 
 

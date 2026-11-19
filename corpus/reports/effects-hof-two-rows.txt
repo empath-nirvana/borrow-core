@@ -1,5 +1,5 @@
 effect 13:1: Wait: wait (ctl, cancellable)
-effect 17:1: Fail: raise (ctl, cancellable, abortive)
+effect 18:1: Fail: raise (ctl, cancellable, abortive)
 lowering 20:1: copy `hof__b0n1`: `hof` for its block `g` at the site 1 of `Wait`
 lowering 20:1: copy `hof__b0n2`: `hof` for its block `g` at the site 2 of `Fail`
 lowering 24:11: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`

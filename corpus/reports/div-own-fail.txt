@@ -1,4 +1,4 @@
-effect 17:1: Fail: raise (ctl, cancellable, abortive)
+effect 18:1: Fail: raise (ctl, cancellable, abortive)
 row 21:1: mean: Fail[DivError], Fail[i32]
 lowering 21:1: copy `mean__n2_n1`: `mean` for the site 2 of `Fail`, the site 1 of `Fail`
 lowering 21:1: copy `mean__n6_n5`: `mean` for the site 6 of `Fail`, the site 5 of `Fail`
@@ -23,6 +23,6 @@ call 21:65: raise (Fail) → abort[2.0], handled by the caller at 21:1: abortive
 call 21:65: raise (Fail) → abort[6.0], handled by the caller at 21:1: abortive, it never resumes
 call 24:63: mean → `mean__n2_n1`
 call 27:84: mean → `mean__n4_n3`
-call 31:14: raise (Fail) → abort[5.0], handled by `with to_result` at 32:11: abortive, it never resumes
-call 31:14: raise (Fail) → abort[3.0], handled by `with to_result` at 27:3: abortive, it never resumes
+call 32:15: raise (Fail) → abort[5.0], handled by `with to_result` at 32:11: abortive, it never resumes
+call 32:15: raise (Fail) → abort[3.0], handled by `with to_result` at 27:3: abortive, it never resumes
 call 32:92: mean → `mean__n6_n5`
