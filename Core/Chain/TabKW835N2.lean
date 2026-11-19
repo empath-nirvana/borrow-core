@@ -60,25 +60,9 @@ theorem tab_lookupNNK : ∀ (F : CTy) {vr : VRel} {g : KW → KW} {δ : LSub} {x
         some (entNK q B (fun k v ρ => vr A δ x₂.Θ k v ρ)
           (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
           (finNK (ℍ := ℍ) vr g₂ fin δ) (fun f y ρ => (g₂ x₂).Owed f (g₂ y) ρ))
-  | .eff m₀ i₀ q A B fin rc C, vr, g, δ, x, m, j, en, h => by
-      simp only [tabNK, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
-      unfold extTabK at h
-      split at h
-      · rename_i hmj
-        cases Option.some.inj h
-        obtain ⟨rfl, rfl⟩ := hmj
-        exact ⟨q, A, B, fin, .inl ⟨rfl, rfl, rfl, rfl⟩, rfl, fun g₂ x₂ => by
-          simp only [tabNK, extTabK, and_self, if_true, tabCK, finCK, cancelOblCK, finNK, cancelOblK]⟩
-      · rename_i hmj
-        obtain ⟨q', A', B', fin', hL, he, hR⟩ := tab_lookupNNK C h
-        exact ⟨q', A', B', fin', .inr hL, he, fun g₂ x₂ => by
-          simp only [tabNK, extTabK, if_neg hmj, tabCK, finCK, cancelOblCK, finNK, cancelOblK]; exact hR g₂ x₂⟩
-  | .ret _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
-  | .arr _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
-  | .amp _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
-  | .top, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
-  | .all _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
-  | .nuSys _ _ _, _, _, _, _, _, _, _, h => by simp [tabNK, OpTabK.empty, tabCK, finCK, cancelOblCK, finNK, cancelOblK] at h
+  | F, vr, g, δ, x, m, j, en, h => by
+      obtain ⟨q, A, B, fin, hL, he, hR⟩ := tab_lookupCK (ℍ := ℍ) (ct := (fun _ lo T => cancelTabK lo T)) F h
+      exact ⟨q, A, B, fin, hL, he, fun g₂ x₂ => hR _ g₂ δ x₂⟩
 
 /-- **An entry of `tabGK` is a layer's, and every `tabGK` at the same world has the layer's entry at
 the same key, its cancel run at its own guard and claim.** -/
@@ -92,25 +76,9 @@ theorem tab_lookupGGK : ∀ (F : CTy) {R : Nat → WProp} {G : ShareG} {vr : VRe
         some (entNK q B (fun k v ρ => vr A δ x.Θ k v ρ)
           (fun y k v ρ => vr B δ y.Θ k v ρ ∧ ConsistentX y.c ρ)
           (finGK (ℍ := ℍ) R' G' vr g fin δ) (fun f y ρ => (g x).Owed f (g y) ρ))
-  | .eff m₀ i₀ q A B fin rc C, R, G, vr, g, δ, x, m, j, en, h => by
-      simp only [tabGK, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
-      unfold extTabK at h
-      split at h
-      · rename_i hmj
-        cases Option.some.inj h
-        obtain ⟨rfl, rfl⟩ := hmj
-        exact ⟨q, A, B, fin, .inl ⟨rfl, rfl, rfl, rfl⟩, rfl, fun R' G' => by
-          simp only [tabGK, extTabK, and_self, if_true, tabCK, finCK, cancelOblCK, finGK, cancelOblGK]⟩
-      · rename_i hmj
-        obtain ⟨q', A', B', fin', hL, he, hR⟩ := tab_lookupGGK C h
-        exact ⟨q', A', B', fin', .inr hL, he, fun R' G' => by
-          simp only [tabGK, extTabK, if_neg hmj, tabCK, finCK, cancelOblCK, finGK, cancelOblGK]; exact hR R' G'⟩
-  | .ret _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
-  | .arr _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
-  | .amp _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
-  | .top, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
-  | .all _ _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
-  | .nuSys _ _ _, _, _, _, _, _, _, _, _, _, h => by simp [tabGK, OpTabK.empty, tabCK, finCK, cancelOblCK, finGK, cancelOblGK] at h
+  | F, R, G, vr, g, δ, x, m, j, en, h => by
+      obtain ⟨q, A, B, fin, hL, he, hR⟩ := tab_lookupCK (ℍ := ℍ) (ct := (fun _ lo T => cancelTabGRK lo T G R)) F h
+      exact ⟨q, A, B, fin, hL, he, fun R' G' => hR (fun _ lo T => cancelTabGRK lo T G' R') g δ x⟩
 
 /-- Two guarded twins at the same world agree but for the cancel obligations. -/
 theorem tabGK_tabGK_twin (R : Nat → WProp) (G : ShareG) (R' : Nat → WProp) (G' : ShareG)
