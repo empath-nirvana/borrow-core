@@ -362,40 +362,46 @@ def rBangThunkV {C : CCTy} (hC : C.isRet = false) (r : Res Δ T (.comp C)) :
   else throw none
 
 def rBangE {A : CVTy} (r : Res Δ T (.val (.bang A))) : Res Δ T (.val A) :=
-  ⟨.bangE i (.val A) A r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.bangE i h⟩
+  ⟨.conv i (.val A) (.val (.bang A)) (.val A) (.bangE A) r.t, r.sigs, r.pins,
+    r.F.map fun _ h => TTied.conv i .bangE h⟩
 
 /-- `boxed[@a] V`: `@a` defined and every live slot outlives it. -/
 def rBoxI {A : CVTy} (a : CLife) (hwf : a.wf Δ = true) (r : Res Δ T (.val A))
     (hs : usedSat (outlivesB Δ a) T r.F.u = true) : Res Δ T (.val (.box a A)) :=
-  ⟨.boxI i (.val (.box a A)) a A r.t, r.sigs, r.pins,
+  ⟨.conv i (.val (.box a A)) (.val A) (.val (.box a A)) (.boxI a A) r.t, r.sigs, r.pins,
     (r.F.restrict (outlivesB Δ a) hs).map fun _ ⟨h, ho⟩ =>
-      TTied.boxI i h ⟨defines_of_wf hwf, fun s hsm hl => outlivesB_sound Δ a s.ty (ho s hsm hl)⟩⟩
+      TTied.conv i
+        (.boxI ⟨defines_of_wf hwf, fun s hsm hl => outlivesB_sound Δ a s.ty (ho s hsm hl)⟩) h⟩
 
 def rBoxE {a : CLife} {A : CVTy} (r : Res Δ T (.val (.box a A))) : Res Δ T (.val A) :=
-  ⟨.boxE i (.val A) a A r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.boxE i h⟩
+  ⟨.conv i (.val A) (.val (.box a A)) (.val A) (.boxE a A) r.t, r.sigs, r.pins,
+    r.F.map fun _ h => TTied.conv i .boxE h⟩
 
 def rImmSub {b : CLife} {A : CVTy} (a : CLife) (hle : leB Δ a b = true)
     (r : Res Δ T (.val (.imm b A))) : Res Δ T (.val (.imm a A)) :=
-  ⟨.immSub i (.val (.imm a A)) a b A r.t, r.sigs, r.pins,
-    r.F.map fun _ h => TTied.immSub i h (leB_sound hle)⟩
+  ⟨.conv i (.val (.imm a A)) (.val (.imm b A)) (.val (.imm a A)) (.immSub a b A) r.t, r.sigs, r.pins,
+    r.F.map fun _ h => TTied.conv i (.immSub (leB_sound hle)) h⟩
 
 def rMutSub {b : CLife} {A : CVTy} (a : CLife) (hle : leB Δ a b = true)
     (r : Res Δ T (.val (.mut b A))) : Res Δ T (.val (.mut a A)) :=
-  ⟨.mutSub i (.val (.mut a A)) a b A r.t, r.sigs, r.pins,
-    r.F.map fun _ h => TTied.mutSub i h (leB_sound hle)⟩
+  ⟨.conv i (.val (.mut a A)) (.val (.mut b A)) (.val (.mut a A)) (.mutSub a b A) r.t, r.sigs, r.pins,
+    r.F.map fun _ h => TTied.conv i (.mutSub (leB_sound hle)) h⟩
 
 def rRoll {A : CVTy} (hA : VTy.noMutB 0 A = true) (hc : VTy.clB 0 (.mu A) = true)
     (r : Res Δ T (.val (BoCa.Fig16.LogRel.Core.VTy.inst (.mu A) A))) : Res Δ T (.val (.mu A)) :=
-  ⟨.roll i (.val (.mu A)) A r.t, r.sigs, r.pins, r.F.map fun _ h =>
-    TTied.roll i (VTy.noMutB_sound 0 A hA) (VTy.clB_sound 0 _ hc) h⟩
+  ⟨.conv i (.val (.mu A)) (.val (BoCa.Fig16.LogRel.Core.VTy.inst (.mu A) A)) (.val (.mu A)) (.roll A)
+    r.t, r.sigs, r.pins, r.F.map fun _ h =>
+    TTied.conv i (.roll (VTy.noMutB_sound 0 A hA) (VTy.clB_sound 0 _ hc)) h⟩
 
 def rUnroll {A : CVTy} (r : Res Δ T (.val (.mu A))) :
     Res Δ T (.val (BoCa.Fig16.LogRel.Core.VTy.inst (.mu A) A)) :=
-  ⟨.unroll i (.val (BoCa.Fig16.LogRel.Core.VTy.inst (.mu A) A)) A r.t, r.sigs, r.pins,
-    r.F.map fun _ h => TTied.unroll i h⟩
+  ⟨.conv i (.val (BoCa.Fig16.LogRel.Core.VTy.inst (.mu A) A)) (.val (.mu A))
+    (.val (BoCa.Fig16.LogRel.Core.VTy.inst (.mu A) A)) (.unroll A) r.t, r.sigs, r.pins,
+    r.F.map fun _ h => TTied.conv i .unroll h⟩
 
 def rOfRet {A : CVTy} (r : Res Δ T (.comp (.ret A))) : Res Δ T (.val A) :=
-  ⟨.ofRet i (.val A) A r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.ofRet i h⟩
+  ⟨.conv i (.val A) (.comp (.ret A)) (.val A) (.ofRet A) r.t, r.sigs, r.pins,
+    r.F.map fun _ h => TTied.conv i .ofRet h⟩
 
 /-- `V W`: the argument on the left of the split, as `lolliE` has it. -/
 def rLolliE {A B : CVTy} (rf : Res Δ T (.val (.lolli A B))) (ra : Res Δ T (.val A))
@@ -413,7 +419,8 @@ def rAllEV {x : LifeVar} {b : CLife} {A : CVTy} (a : CLife) (hlt : ltB Δ a b = 
 /-! ### Computation rules -/
 
 def rRet {A : CVTy} (r : Res Δ T (.val A)) : Res Δ T (.comp (.ret A)) :=
-  ⟨.ret i (.comp (.ret A)) A r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.ret i h⟩
+  ⟨.conv i (.comp (.ret A)) (.val A) (.comp (.ret A)) (.ret A) r.t, r.sigs, r.pins,
+    r.F.map fun _ h => TTied.conv i .ret h⟩
 
 /-- `x <- M; N`: `N`'s binder closed live, then split. -/
 def rBind {A : CVTy} {C : CCTy} {tN : TExpr} {sN : CRow} {pN : Pins}
@@ -531,23 +538,25 @@ def rAllE {x : LifeVar} {b : CLife} {C : CCTy} (a : CLife) (hlt : ltB Δ a b = t
 
 /-- `nu_in M`: `M` at the unrolling of a positive `νX. C`. -/
 def rNuIn {C : CCTy} (hC : C.NuOk) (r : Res Δ T (.comp C.unroll)) : Res Δ T (.comp (.nu C)) :=
-  ⟨.nuIn i (.comp (.nu C)) 0 0 C r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.nuIn i hC h⟩
+  ⟨.conv i (.comp (.nu C)) (.comp C.unroll) (.comp (.nu C)) (.nuIn 0 0 C) r.t, r.sigs, r.pins,
+    r.F.map fun _ h => TTied.conv i (.nuIn (m := 0) (i := 0) hC) h⟩
 
 /-- `nu_out M`. -/
 def rNuOut {C : CCTy} (hC : C.NuOk) (r : Res Δ T (.comp (.nu C))) : Res Δ T (.comp C.unroll) :=
-  ⟨.nuOut i (.comp C.unroll) 0 0 C r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.nuOut i hC h⟩
+  ⟨.conv i (.comp C.unroll) (.comp (.nu C)) (.comp C.unroll) (.nuOut 0 0 C) r.t, r.sigs, r.pins,
+    r.F.map fun _ h => TTied.conv i (.nuOut (m := 0) (i := 0) hC) h⟩
 
 /-- `[α]`: a term at a judgment up to the names of its types' lifetime binders.  `[spec §3]` -/
 def rAlpha {j j' : Jdg} (hα : j.alphaB j' = true) (r : Res Δ T j) : Res Δ T j' :=
-  ⟨.alpha i j' j j' r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.alpha i hα h⟩
+  ⟨.conv i j' j j' .alpha r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.conv i (.alpha hα) h⟩
 
 /-! ### Effects  `[spec §19]` -/
 
 /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` at `Σ ⊆ Σ′`. -/
 def rEffSub {S S' : CRow} {A : CVTy} (hle : rowLeB S S' = true) (r : Res Δ T (.comp (effOf S A))) :
     Res Δ T (.comp (effOf S' A)) :=
-  ⟨.effSub i (.comp (effOf S' A)) S S' A r.t, r.sigs, r.pins,
-    r.F.map fun _ h => TTied.effSub i (rowLeB_sound hle) h⟩
+  ⟨.conv i (.comp (effOf S' A)) (.comp (effOf S A)) (.comp (effOf S' A)) (.effSub S S' A) r.t,
+    r.sigs, r.pins, r.F.map fun _ h => TTied.conv i (.effSub (rowLeB_sound hle)) h⟩
 
 /-- `[perform]`: a non-abortive, unmarked operation of the row, at its argument; it reads the
 row. -/

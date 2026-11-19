@@ -246,7 +246,7 @@ NAME_TY = {"A": "VTy", "B": "VTy", "R": "VTy", "S": "VTy", "T": "VTy", "C": "CTy
            "a": "Lifetime.Life", "b": "Lifetime.Life", "x": "LifeVar", "y": "LifeVar",
            "i": "Nat", "j": "Jdg"}
 EXPR_NAMES = {"e", "e₁", "e₂", "M", "N", "V", "H", "f", "d", "M₁", "M₂", "K", "s0"}
-DATA_TY = {"LendUKind", "VTy", "CTy", "Row", "LifeVar", "Lifetime.Life", "IntLit", "HostOp", "FShape", "Expr",
+DATA_TY = {"LendUKind", "ConvKind", "VTy", "CTy", "Row", "LifeVar", "Lifetime.Life", "IntLit", "HostOp", "FShape", "Expr",
            "Jdg", "OpSig", "UInt32", "Nat", "List (Qual × VTy × VTy)", "Nat → CTy", "Val"}
 TOKEN = r"[^\s()\[\]{}⟨⟩,.:]+"
 # erasures that are a `λ` whatever the children's (`withPair M N = λs. case s {…}`)
@@ -749,6 +749,7 @@ MONO = [
      "(ExtΔ.avoid he (by simp [TExpr.lifeBinders]) {a})"),
     (r"^CtxOutlives Δ ", "(LeΔ.ctxOutlives he.1 {a})"),
     (r"^Row\.AnsOutlives Δ ", "(LeΔ.ansOutlives he.1 {a})"),
+    (r"^JConv Δ ", "(LeΔ.jconv he.1 {a})"),
 ]
 
 

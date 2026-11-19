@@ -55,9 +55,9 @@ theorem CDerives.thunkV {Δ Γ N C} (hC : C.isRet = false) (h : CDerives Δ Γ (
     CDerives Δ Γ (.val (.lam N)) (.val (.thunk C)) :=
   (CDerivesX.thunkV (I := {}) hC h)
 
-theorem CDerives.ret {Δ Γ V A} (h : CDerives Δ Γ V (.val A)) :
-    CDerives Δ Γ V (.comp (.ret A)) :=
-  (CDerivesX.ret (I := {}) h)
+theorem CDerives.conv {Δ Γ e} {j j' : Jdg} (k : ConvKind) (h : CDerives Δ Γ e j) (hc : JConv Δ Γ k j j') :
+    CDerives Δ Γ e j' :=
+  (CDerivesX.conv (I := {}) k h hc)
 
 theorem CDerives.bind {Δ Γ Γ₁ Γ₂ M N A C} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hM : CDerives Δ Γ₁ M (.comp (.ret A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp C)) :
     CDerives Δ Γ (.app (.val (.lam N)) M) (.comp C) :=
@@ -135,18 +135,6 @@ theorem CDerives.codeIB {Δ Γ M C} (hp : Ctx.FlatLive Γ) (h : CDerives Δ Γ (
     CDerives Δ Γ (.val (.lam M)) (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))) :=
   (CDerivesX.codeIB (I := {}) hp h hok)
 
-theorem CDerives.codeErase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerives Δ Γ e (.val (.code N E C))) :
-    CDerives Δ Γ e (.val (.thunk C)) :=
-  (CDerivesX.codeErase (I := {}) h)
-
-theorem CDerives.codeEraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerives Δ Γ e (.val (.bang (.code N E C)))) :
-    CDerives Δ Γ e (.val (.bang (.thunk C))) :=
-  (CDerivesX.codeEraseB (I := {}) h)
-
-theorem CDerives.bangE {Δ Γ e A} (h : CDerives Δ Γ e (.val (.bang A))) :
-    CDerives Δ Γ e (.val A) :=
-  (CDerivesX.bangE (I := {}) h)
-
 theorem CDerives.copyBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
     CDerives Δ Γ BoCa.copy (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A)))))) :=
   (CDerivesX.copyBang (I := {}) hΓ)
@@ -154,22 +142,6 @@ theorem CDerives.copyBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
 theorem CDerives.releaseBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
     CDerives Δ Γ forget (.val (.thunk (.arr (.bang A) (.ret .unit)))) :=
   (CDerivesX.releaseBang (I := {}) hΓ)
-
-theorem CDerives.boxI {Δ Γ e a A} (h : CDerives Δ Γ e (.val A)) (hΓ : CtxOutlives Δ Γ a) :
-    CDerives Δ Γ e (.val (.box a A)) :=
-  (CDerivesX.boxI (I := {}) h hΓ)
-
-theorem CDerives.boxE {Δ Γ e a A} (h : CDerives Δ Γ e (.val (.box a A))) :
-    CDerives Δ Γ e (.val A) :=
-  (CDerivesX.boxE (I := {}) h)
-
-theorem CDerives.immSub {Δ Γ e a b A} (h : CDerives Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) :
-    CDerives Δ Γ e (.val (.imm a A)) :=
-  (CDerivesX.immSub (I := {}) h hle)
-
-theorem CDerives.mutSub {Δ Γ e a b A} (h : CDerives Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) :
-    CDerives Δ Γ e (.val (.mut a A)) :=
-  (CDerivesX.mutSub (I := {}) h hle)
 
 theorem CDerives.alloc {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
     CDerives Δ Γ (.val (.prim .alloc)) (.val (.lolli A (.ref A))) :=
@@ -363,18 +335,6 @@ theorem CDerives.allEV {Δ Γ e x b a A} (h : CDerives Δ Γ e (.val (.all x b A
     CDerives Δ Γ (.app e (.val .unit)) (.val (A.instLife x a)) :=
   (CDerivesX.allEV (I := {}) h hlt)
 
-theorem CDerives.ofRet {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.ret A))) :
-    CDerives Δ Γ e (.val A) :=
-  (CDerivesX.ofRet (I := {}) h)
-
-theorem CDerives.roll {Δ Γ e A} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0) (h : CDerives Δ Γ e (.val (VTy.inst (.mu A) A))) :
-    CDerives Δ Γ e (.val (.mu A)) :=
-  (CDerivesX.roll (I := {}) hA hc h)
-
-theorem CDerives.unroll {Δ Γ e A} (h : CDerives Δ Γ e (.val (.mu A))) :
-    CDerives Δ Γ e (.val (VTy.inst (.mu A) A)) :=
-  (CDerivesX.unroll (I := {}) h)
-
 theorem CDerives.foldImm {Δ Γ} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ' a, VOutlives Δ' a R) :
     CDerives Δ Γ (.val (foldImmV F)) (.val (.lolli (algTy F y R) (foldTy F y c R))) :=
   (CDerivesX.foldImm (I := {}) F y c R hΓ hF hG hyM hyR hR)
@@ -391,14 +351,6 @@ theorem CDerives.foldOwnG {Δ Γ} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP 
     CDerives Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs)) :=
   (CDerivesX.foldOwnG (I := {}) B₀ Rs hΓ hB)
 
-theorem CDerives.nuIn {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerives Δ Γ e (.comp (CTy.unrollS m i C))) :
-    CDerives Δ Γ e (.comp (.nuSys m i C)) :=
-  (CDerivesX.nuIn (I := {}) hC h)
-
-theorem CDerives.nuOut {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerives Δ Γ e (.comp (.nuSys m i C))) :
-    CDerives Δ Γ e (.comp (CTy.unrollS m i C)) :=
-  (CDerivesX.nuOut (I := {}) hC h)
-
 theorem CDerives.unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
     CDerives Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S)) :=
   (CDerivesX.unfoldN (I := {}) C S hC hS hΓ)
@@ -410,10 +362,6 @@ theorem CDerives.unfoldK {Δ Γ} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.for
 theorem CDerives.nuOutK {Δ Γ i} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
     CDerives Δ Γ (.var i) (.comp (C.instT (codeTy C G S))) :=
   (CDerivesX.nuOutK (I := {}) hC hG hS hGf h)
-
-theorem CDerives.effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S') (h : CDerives Δ Γ e (.comp (CTy.effOf S A))) :
-    CDerives Δ Γ e (.comp (CTy.effOf S' A)) :=
-  (CDerivesX.effSub (I := {}) hle h)
 
 theorem CDerives.effPerform {Δ Γ V} {S : Row} {o : OpSig} (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (hac : o.rc = false) (h : CDerives Δ Γ V (.val o.A)) :
     CDerives Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B)) :=
@@ -455,10 +403,6 @@ theorem CDerives.letPoly {Δ Γ N C} {j : Jdg} (b : Expr) (hcl : closedAt 0 (Val
     CDerives Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C) :=
   (CDerivesX.letPoly (I := {}) b hcl hV hN)
 
-theorem CDerives.alpha {Δ Γ e} {j j' : Jdg} (h : CDerives Δ Γ e j) (hα : j.alphaB j' = true) :
-    CDerives Δ Γ e j' :=
-  (CDerivesX.alpha (I := {}) h hα)
-
 theorem CDerives.withbor1UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerives Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
     CDerives Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S)) :=
   (CDerivesX.withbor1UD (I := {}) x hΓ hx hsc₁ hfree₁ hfree₂ hS hMS hDS hSv hP hd)
@@ -470,6 +414,66 @@ theorem CDerives.withbor2UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : C
 theorem CDerives.withbor3UD {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerives Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
     CDerives Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) :=
   (CDerivesX.withbor3UD (I := {}) x hΓ hx hfree₁ hfree₂ hS hMS hDS hSv hP hd)
+
+theorem CDerives.ret {Δ Γ V A} (h : CDerives Δ Γ V (.val A)) :
+    CDerives Δ Γ V (.comp (.ret A)) :=
+  (CDerivesX.ret (I := {}) h)
+
+theorem CDerives.ofRet {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.ret A))) :
+    CDerives Δ Γ e (.val A) :=
+  (CDerivesX.ofRet (I := {}) h)
+
+theorem CDerives.bangE {Δ Γ e A} (h : CDerives Δ Γ e (.val (.bang A))) :
+    CDerives Δ Γ e (.val A) :=
+  (CDerivesX.bangE (I := {}) h)
+
+theorem CDerives.boxI {Δ Γ e a A} (h : CDerives Δ Γ e (.val A)) (hΓ : CtxOutlives Δ Γ a) :
+    CDerives Δ Γ e (.val (.box a A)) :=
+  (CDerivesX.boxI (I := {}) h hΓ)
+
+theorem CDerives.boxE {Δ Γ e a A} (h : CDerives Δ Γ e (.val (.box a A))) :
+    CDerives Δ Γ e (.val A) :=
+  (CDerivesX.boxE (I := {}) h)
+
+theorem CDerives.immSub {Δ Γ e a b A} (h : CDerives Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) :
+    CDerives Δ Γ e (.val (.imm a A)) :=
+  (CDerivesX.immSub (I := {}) h hle)
+
+theorem CDerives.mutSub {Δ Γ e a b A} (h : CDerives Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) :
+    CDerives Δ Γ e (.val (.mut a A)) :=
+  (CDerivesX.mutSub (I := {}) h hle)
+
+theorem CDerives.codeErase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerives Δ Γ e (.val (.code N E C))) :
+    CDerives Δ Γ e (.val (.thunk C)) :=
+  (CDerivesX.codeErase (I := {}) h)
+
+theorem CDerives.codeEraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerives Δ Γ e (.val (.bang (.code N E C)))) :
+    CDerives Δ Γ e (.val (.bang (.thunk C))) :=
+  (CDerivesX.codeEraseB (I := {}) h)
+
+theorem CDerives.roll {Δ Γ e A} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0) (h : CDerives Δ Γ e (.val (VTy.inst (.mu A) A))) :
+    CDerives Δ Γ e (.val (.mu A)) :=
+  (CDerivesX.roll (I := {}) hA hc h)
+
+theorem CDerives.unroll {Δ Γ e A} (h : CDerives Δ Γ e (.val (.mu A))) :
+    CDerives Δ Γ e (.val (VTy.inst (.mu A) A)) :=
+  (CDerivesX.unroll (I := {}) h)
+
+theorem CDerives.nuIn {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerives Δ Γ e (.comp (CTy.unrollS m i C))) :
+    CDerives Δ Γ e (.comp (.nuSys m i C)) :=
+  (CDerivesX.nuIn (I := {}) hC h)
+
+theorem CDerives.nuOut {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerives Δ Γ e (.comp (.nuSys m i C))) :
+    CDerives Δ Γ e (.comp (CTy.unrollS m i C)) :=
+  (CDerivesX.nuOut (I := {}) hC h)
+
+theorem CDerives.effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S') (h : CDerives Δ Γ e (.comp (CTy.effOf S A))) :
+    CDerives Δ Γ e (.comp (CTy.effOf S' A)) :=
+  (CDerivesX.effSub (I := {}) hle h)
+
+theorem CDerives.alpha {Δ Γ e} {j j' : Jdg} (h : CDerives Δ Γ e j) (hα : j.alphaB j' = true) :
+    CDerives Δ Γ e j' :=
+  (CDerivesX.alpha (I := {}) h hα)
 
 theorem CDerives.effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false) (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
     CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
@@ -531,9 +535,9 @@ theorem CDerivesAt.thunkV {Ξ : EffCtx} {Δ Γ N C} (hC : C.isRet = false) (h : 
     CDerivesAt Ξ Δ Γ (.val (.lam N)) (.val (.thunk C)) :=
   (CDerivesX.thunkV (I := {ties := some Ξ}) hC h)
 
-theorem CDerivesAt.ret {Ξ : EffCtx} {Δ Γ V A} (h : CDerivesAt Ξ Δ Γ V (.val A)) :
-    CDerivesAt Ξ Δ Γ V (.comp (.ret A)) :=
-  (CDerivesX.ret (I := {ties := some Ξ}) h)
+theorem CDerivesAt.conv {Ξ : EffCtx} {Δ Γ e} {j j' : Jdg} (k : ConvKind) (h : CDerivesAt Ξ Δ Γ e j) (hc : JConv Δ Γ k j j') :
+    CDerivesAt Ξ Δ Γ e j' :=
+  (CDerivesX.conv (I := {ties := some Ξ}) k h hc)
 
 theorem CDerivesAt.bind {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N A C} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (.ret A))) (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp C)) :
     CDerivesAt Ξ Δ Γ (.app (.val (.lam N)) M) (.comp C) :=
@@ -611,18 +615,6 @@ theorem CDerivesAt.codeIB {Ξ : EffCtx} {Δ Γ M C} (hp : Ctx.FlatLive Γ) (h : 
     CDerivesAt Ξ Δ Γ (.val (.lam M)) (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))) :=
   (CDerivesX.codeIB (I := {ties := some Ξ}) hp h hok)
 
-theorem CDerivesAt.codeErase {Ξ : EffCtx} {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.code N E C))) :
-    CDerivesAt Ξ Δ Γ e (.val (.thunk C)) :=
-  (CDerivesX.codeErase (I := {ties := some Ξ}) h)
-
-theorem CDerivesAt.codeEraseB {Ξ : EffCtx} {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.bang (.code N E C)))) :
-    CDerivesAt Ξ Δ Γ e (.val (.bang (.thunk C))) :=
-  (CDerivesX.codeEraseB (I := {ties := some Ξ}) h)
-
-theorem CDerivesAt.bangE {Ξ : EffCtx} {Δ Γ e A} (h : CDerivesAt Ξ Δ Γ e (.val (.bang A))) :
-    CDerivesAt Ξ Δ Γ e (.val A) :=
-  (CDerivesX.bangE (I := {ties := some Ξ}) h)
-
 theorem CDerivesAt.copyBang {Ξ : EffCtx} {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
     CDerivesAt Ξ Δ Γ BoCa.copy (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A)))))) :=
   (CDerivesX.copyBang (I := {ties := some Ξ}) hΓ)
@@ -630,22 +622,6 @@ theorem CDerivesAt.copyBang {Ξ : EffCtx} {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
 theorem CDerivesAt.releaseBang {Ξ : EffCtx} {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
     CDerivesAt Ξ Δ Γ forget (.val (.thunk (.arr (.bang A) (.ret .unit)))) :=
   (CDerivesX.releaseBang (I := {ties := some Ξ}) hΓ)
-
-theorem CDerivesAt.boxI {Ξ : EffCtx} {Δ Γ e a A} (h : CDerivesAt Ξ Δ Γ e (.val A)) (hΓ : CtxOutlives Δ Γ a) :
-    CDerivesAt Ξ Δ Γ e (.val (.box a A)) :=
-  (CDerivesX.boxI (I := {ties := some Ξ}) h hΓ)
-
-theorem CDerivesAt.boxE {Ξ : EffCtx} {Δ Γ e a A} (h : CDerivesAt Ξ Δ Γ e (.val (.box a A))) :
-    CDerivesAt Ξ Δ Γ e (.val A) :=
-  (CDerivesX.boxE (I := {ties := some Ξ}) h)
-
-theorem CDerivesAt.immSub {Ξ : EffCtx} {Δ Γ e a b A} (h : CDerivesAt Ξ Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) :
-    CDerivesAt Ξ Δ Γ e (.val (.imm a A)) :=
-  (CDerivesX.immSub (I := {ties := some Ξ}) h hle)
-
-theorem CDerivesAt.mutSub {Ξ : EffCtx} {Δ Γ e a b A} (h : CDerivesAt Ξ Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) :
-    CDerivesAt Ξ Δ Γ e (.val (.mut a A)) :=
-  (CDerivesX.mutSub (I := {ties := some Ξ}) h hle)
 
 theorem CDerivesAt.alloc {Ξ : EffCtx} {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
     CDerivesAt Ξ Δ Γ (.val (.prim .alloc)) (.val (.lolli A (.ref A))) :=
@@ -839,18 +815,6 @@ theorem CDerivesAt.allEV {Ξ : EffCtx} {Δ Γ e x b a A} (h : CDerivesAt Ξ Δ �
     CDerivesAt Ξ Δ Γ (.app e (.val .unit)) (.val (A.instLife x a)) :=
   (CDerivesX.allEV (I := {ties := some Ξ}) h hlt)
 
-theorem CDerivesAt.ofRet {Ξ : EffCtx} {Δ Γ e A} (h : CDerivesAt Ξ Δ Γ e (.comp (.ret A))) :
-    CDerivesAt Ξ Δ Γ e (.val A) :=
-  (CDerivesX.ofRet (I := {ties := some Ξ}) h)
-
-theorem CDerivesAt.roll {Ξ : EffCtx} {Δ Γ e A} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0) (h : CDerivesAt Ξ Δ Γ e (.val (VTy.inst (.mu A) A))) :
-    CDerivesAt Ξ Δ Γ e (.val (.mu A)) :=
-  (CDerivesX.roll (I := {ties := some Ξ}) hA hc h)
-
-theorem CDerivesAt.unroll {Ξ : EffCtx} {Δ Γ e A} (h : CDerivesAt Ξ Δ Γ e (.val (.mu A))) :
-    CDerivesAt Ξ Δ Γ e (.val (VTy.inst (.mu A) A)) :=
-  (CDerivesX.unroll (I := {ties := some Ξ}) h)
-
 theorem CDerivesAt.foldImm {Ξ : EffCtx} {Δ Γ} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ' a, VOutlives Δ' a R) :
     CDerivesAt Ξ Δ Γ (.val (foldImmV F)) (.val (.lolli (algTy F y R) (foldTy F y c R))) :=
   (CDerivesX.foldImm (I := {ties := some Ξ}) F y c R hΓ hF hG hyM hyR hR)
@@ -867,14 +831,6 @@ theorem CDerivesAt.foldOwnG {Ξ : EffCtx} {Δ Γ} (B₀ : VTy) (Rs : List VTy) (
     CDerivesAt Ξ Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs)) :=
   (CDerivesX.foldOwnG (I := {ties := some Ξ}) B₀ Rs hΓ hB)
 
-theorem CDerivesAt.nuIn {Ξ : EffCtx} {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesAt Ξ Δ Γ e (.comp (CTy.unrollS m i C))) :
-    CDerivesAt Ξ Δ Γ e (.comp (.nuSys m i C)) :=
-  (CDerivesX.nuIn (I := {ties := some Ξ}) hC h)
-
-theorem CDerivesAt.nuOut {Ξ : EffCtx} {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesAt Ξ Δ Γ e (.comp (.nuSys m i C))) :
-    CDerivesAt Ξ Δ Γ e (.comp (CTy.unrollS m i C)) :=
-  (CDerivesX.nuOut (I := {ties := some Ξ}) hC h)
-
 theorem CDerivesAt.unfoldN {Ξ : EffCtx} {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
     CDerivesAt Ξ Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S)) :=
   (CDerivesX.unfoldN (I := {ties := some Ξ}) C S hC hS hΓ)
@@ -886,10 +842,6 @@ theorem CDerivesAt.unfoldK {Ξ : EffCtx} {Δ Γ} (C : CTy) (G S : VTy) (hC : C.N
 theorem CDerivesAt.nuOutK {Ξ : EffCtx} {Δ Γ i} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
     CDerivesAt Ξ Δ Γ (.var i) (.comp (C.instT (codeTy C G S))) :=
   (CDerivesX.nuOutK (I := {ties := some Ξ}) hC hG hS hGf h)
-
-theorem CDerivesAt.effSub {Ξ : EffCtx} {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S') (h : CDerivesAt Ξ Δ Γ e (.comp (CTy.effOf S A))) :
-    CDerivesAt Ξ Δ Γ e (.comp (CTy.effOf S' A)) :=
-  (CDerivesX.effSub (I := {ties := some Ξ}) hle h)
 
 theorem CDerivesAt.effPerform {Ξ : EffCtx} {Δ Γ V} {S : Row} {o : OpSig} (hAt : RowAt Ξ S) (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (hac : o.rc = false) (h : CDerivesAt Ξ Δ Γ V (.val o.A)) :
     CDerivesAt Ξ Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B)) :=
@@ -931,10 +883,6 @@ theorem CDerivesAt.letPoly {Ξ : EffCtx} {Δ Γ N C} {j : Jdg} (b : Expr) (hcl :
     CDerivesAt Ξ Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C) :=
   (CDerivesX.letPoly (I := {ties := some Ξ}) b hcl hV hN)
 
-theorem CDerivesAt.alpha {Ξ : EffCtx} {Δ Γ e} {j j' : Jdg} (h : CDerivesAt Ξ Δ Γ e j) (hα : j.alphaB j' = true) :
-    CDerivesAt Ξ Δ Γ e j' :=
-  (CDerivesX.alpha (I := {ties := some Ξ}) h hα)
-
 theorem CDerivesAt.withbor1UD {Ξ : EffCtx} {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesAt Ξ Δ Γ d (.val (.thunk (.arr (.ref A) (CTy.effOf SD .unit))))) :
     CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor1UTyD x Δ.meetOfDom A B SM S)) :=
   (CDerivesX.withbor1UD (I := {ties := some Ξ}) x hΓ hx hsc₁ hfree₁ hfree₂ hS hMS hDS hSv hP hd)
@@ -946,6 +894,66 @@ theorem CDerivesAt.withbor2UD {Ξ : EffCtx} {Δ Γ A B d} {SM SD S : Row} (x : L
 theorem CDerivesAt.withbor3UD {Ξ : EffCtx} {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesAt Ξ Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
     CDerivesAt Ξ Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) :=
   (CDerivesX.withbor3UD (I := {ties := some Ξ}) x hΓ hx hfree₁ hfree₂ hS hMS hDS hSv hP hd)
+
+theorem CDerivesAt.ret {Ξ : EffCtx} {Δ Γ V A} (h : CDerivesAt Ξ Δ Γ V (.val A)) :
+    CDerivesAt Ξ Δ Γ V (.comp (.ret A)) :=
+  (CDerivesX.ret (I := {ties := some Ξ}) h)
+
+theorem CDerivesAt.ofRet {Ξ : EffCtx} {Δ Γ e A} (h : CDerivesAt Ξ Δ Γ e (.comp (.ret A))) :
+    CDerivesAt Ξ Δ Γ e (.val A) :=
+  (CDerivesX.ofRet (I := {ties := some Ξ}) h)
+
+theorem CDerivesAt.bangE {Ξ : EffCtx} {Δ Γ e A} (h : CDerivesAt Ξ Δ Γ e (.val (.bang A))) :
+    CDerivesAt Ξ Δ Γ e (.val A) :=
+  (CDerivesX.bangE (I := {ties := some Ξ}) h)
+
+theorem CDerivesAt.boxI {Ξ : EffCtx} {Δ Γ e a A} (h : CDerivesAt Ξ Δ Γ e (.val A)) (hΓ : CtxOutlives Δ Γ a) :
+    CDerivesAt Ξ Δ Γ e (.val (.box a A)) :=
+  (CDerivesX.boxI (I := {ties := some Ξ}) h hΓ)
+
+theorem CDerivesAt.boxE {Ξ : EffCtx} {Δ Γ e a A} (h : CDerivesAt Ξ Δ Γ e (.val (.box a A))) :
+    CDerivesAt Ξ Δ Γ e (.val A) :=
+  (CDerivesX.boxE (I := {ties := some Ξ}) h)
+
+theorem CDerivesAt.immSub {Ξ : EffCtx} {Δ Γ e a b A} (h : CDerivesAt Ξ Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) :
+    CDerivesAt Ξ Δ Γ e (.val (.imm a A)) :=
+  (CDerivesX.immSub (I := {ties := some Ξ}) h hle)
+
+theorem CDerivesAt.mutSub {Ξ : EffCtx} {Δ Γ e a b A} (h : CDerivesAt Ξ Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) :
+    CDerivesAt Ξ Δ Γ e (.val (.mut a A)) :=
+  (CDerivesX.mutSub (I := {ties := some Ξ}) h hle)
+
+theorem CDerivesAt.codeErase {Ξ : EffCtx} {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.code N E C))) :
+    CDerivesAt Ξ Δ Γ e (.val (.thunk C)) :=
+  (CDerivesX.codeErase (I := {ties := some Ξ}) h)
+
+theorem CDerivesAt.codeEraseB {Ξ : EffCtx} {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.bang (.code N E C)))) :
+    CDerivesAt Ξ Δ Γ e (.val (.bang (.thunk C))) :=
+  (CDerivesX.codeEraseB (I := {ties := some Ξ}) h)
+
+theorem CDerivesAt.roll {Ξ : EffCtx} {Δ Γ e A} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0) (h : CDerivesAt Ξ Δ Γ e (.val (VTy.inst (.mu A) A))) :
+    CDerivesAt Ξ Δ Γ e (.val (.mu A)) :=
+  (CDerivesX.roll (I := {ties := some Ξ}) hA hc h)
+
+theorem CDerivesAt.unroll {Ξ : EffCtx} {Δ Γ e A} (h : CDerivesAt Ξ Δ Γ e (.val (.mu A))) :
+    CDerivesAt Ξ Δ Γ e (.val (VTy.inst (.mu A) A)) :=
+  (CDerivesX.unroll (I := {ties := some Ξ}) h)
+
+theorem CDerivesAt.nuIn {Ξ : EffCtx} {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesAt Ξ Δ Γ e (.comp (CTy.unrollS m i C))) :
+    CDerivesAt Ξ Δ Γ e (.comp (.nuSys m i C)) :=
+  (CDerivesX.nuIn (I := {ties := some Ξ}) hC h)
+
+theorem CDerivesAt.nuOut {Ξ : EffCtx} {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesAt Ξ Δ Γ e (.comp (.nuSys m i C))) :
+    CDerivesAt Ξ Δ Γ e (.comp (CTy.unrollS m i C)) :=
+  (CDerivesX.nuOut (I := {ties := some Ξ}) hC h)
+
+theorem CDerivesAt.effSub {Ξ : EffCtx} {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S') (h : CDerivesAt Ξ Δ Γ e (.comp (CTy.effOf S A))) :
+    CDerivesAt Ξ Δ Γ e (.comp (CTy.effOf S' A)) :=
+  (CDerivesX.effSub (I := {ties := some Ξ}) hle h)
+
+theorem CDerivesAt.alpha {Ξ : EffCtx} {Δ Γ e} {j j' : Jdg} (h : CDerivesAt Ξ Δ Γ e j) (hα : j.alphaB j' = true) :
+    CDerivesAt Ξ Δ Γ e j' :=
+  (CDerivesX.alpha (I := {ties := some Ξ}) h hα)
 
 theorem CDerivesAt.effThen {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false) (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
     CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
@@ -1007,9 +1015,9 @@ theorem CDerivesP.thunkV {Δ Γ N C} (hC : C.isRet = false) (h : CDerivesP Δ Γ
     CDerivesP Δ Γ (.val (.lam N)) (.val (.thunk C)) :=
   (CDerivesX.thunkV (I := {pin := true}) hC h)
 
-theorem CDerivesP.ret {Δ Γ V A} (h : CDerivesP Δ Γ V (.val A)) :
-    CDerivesP Δ Γ V (.comp (.ret A)) :=
-  (CDerivesX.ret (I := {pin := true}) h)
+theorem CDerivesP.conv {Δ Γ e} {j j' : Jdg} (k : ConvKind) (h : CDerivesP Δ Γ e j) (hc : JConv Δ Γ k j j') :
+    CDerivesP Δ Γ e j' :=
+  (CDerivesX.conv (I := {pin := true}) k h hc)
 
 theorem CDerivesP.bind {Δ Γ Γ₁ Γ₂ M N A C} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hM : CDerivesP Δ Γ₁ M (.comp (.ret A))) (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp C)) :
     CDerivesP Δ Γ (.app (.val (.lam N)) M) (.comp C) :=
@@ -1087,18 +1095,6 @@ theorem CDerivesP.codeIB {Δ Γ M C} (hp : Ctx.FlatLive Γ) (h : CDerivesP Δ Γ
     CDerivesP Δ Γ (.val (.lam M)) (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))) :=
   (CDerivesX.codeIB (I := {pin := true}) hp h hok)
 
-theorem CDerivesP.codeErase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesP Δ Γ e (.val (.code N E C))) :
-    CDerivesP Δ Γ e (.val (.thunk C)) :=
-  (CDerivesX.codeErase (I := {pin := true}) h)
-
-theorem CDerivesP.codeEraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesP Δ Γ e (.val (.bang (.code N E C)))) :
-    CDerivesP Δ Γ e (.val (.bang (.thunk C))) :=
-  (CDerivesX.codeEraseB (I := {pin := true}) h)
-
-theorem CDerivesP.bangE {Δ Γ e A} (h : CDerivesP Δ Γ e (.val (.bang A))) :
-    CDerivesP Δ Γ e (.val A) :=
-  (CDerivesX.bangE (I := {pin := true}) h)
-
 theorem CDerivesP.copyBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
     CDerivesP Δ Γ BoCa.copy (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A)))))) :=
   (CDerivesX.copyBang (I := {pin := true}) hΓ)
@@ -1106,22 +1102,6 @@ theorem CDerivesP.copyBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
 theorem CDerivesP.releaseBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
     CDerivesP Δ Γ forget (.val (.thunk (.arr (.bang A) (.ret .unit)))) :=
   (CDerivesX.releaseBang (I := {pin := true}) hΓ)
-
-theorem CDerivesP.boxI {Δ Γ e a A} (h : CDerivesP Δ Γ e (.val A)) (hΓ : CtxOutlives Δ Γ a) :
-    CDerivesP Δ Γ e (.val (.box a A)) :=
-  (CDerivesX.boxI (I := {pin := true}) h hΓ)
-
-theorem CDerivesP.boxE {Δ Γ e a A} (h : CDerivesP Δ Γ e (.val (.box a A))) :
-    CDerivesP Δ Γ e (.val A) :=
-  (CDerivesX.boxE (I := {pin := true}) h)
-
-theorem CDerivesP.immSub {Δ Γ e a b A} (h : CDerivesP Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) :
-    CDerivesP Δ Γ e (.val (.imm a A)) :=
-  (CDerivesX.immSub (I := {pin := true}) h hle)
-
-theorem CDerivesP.mutSub {Δ Γ e a b A} (h : CDerivesP Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) :
-    CDerivesP Δ Γ e (.val (.mut a A)) :=
-  (CDerivesX.mutSub (I := {pin := true}) h hle)
 
 theorem CDerivesP.alloc {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
     CDerivesP Δ Γ (.val (.prim .alloc)) (.val (.lolli A (.ref A))) :=
@@ -1315,18 +1295,6 @@ theorem CDerivesP.allEV {Δ Γ e x b a A} (h : CDerivesP Δ Γ e (.val (.all x b
     CDerivesP Δ Γ (.app e (.val .unit)) (.val (A.instLife x a)) :=
   (CDerivesX.allEV (I := {pin := true}) h hlt)
 
-theorem CDerivesP.ofRet {Δ Γ e A} (h : CDerivesP Δ Γ e (.comp (.ret A))) :
-    CDerivesP Δ Γ e (.val A) :=
-  (CDerivesX.ofRet (I := {pin := true}) h)
-
-theorem CDerivesP.roll {Δ Γ e A} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0) (h : CDerivesP Δ Γ e (.val (VTy.inst (.mu A) A))) :
-    CDerivesP Δ Γ e (.val (.mu A)) :=
-  (CDerivesX.roll (I := {pin := true}) hA hc h)
-
-theorem CDerivesP.unroll {Δ Γ e A} (h : CDerivesP Δ Γ e (.val (.mu A))) :
-    CDerivesP Δ Γ e (.val (VTy.inst (.mu A) A)) :=
-  (CDerivesX.unroll (I := {pin := true}) h)
-
 theorem CDerivesP.foldImm {Δ Γ} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ' a, VOutlives Δ' a R) :
     CDerivesP Δ Γ (.val (foldImmV F)) (.val (.lolli (algTy F y R) (foldTy F y c R))) :=
   (CDerivesX.foldImm (I := {pin := true}) F y c R hΓ hF hG hyM hyR hR)
@@ -1343,14 +1311,6 @@ theorem CDerivesP.foldOwnG {Δ Γ} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP
     CDerivesP Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs)) :=
   (CDerivesX.foldOwnG (I := {pin := true}) B₀ Rs hΓ hB)
 
-theorem CDerivesP.nuIn {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesP Δ Γ e (.comp (CTy.unrollS m i C))) :
-    CDerivesP Δ Γ e (.comp (.nuSys m i C)) :=
-  (CDerivesX.nuIn (I := {pin := true}) hC h)
-
-theorem CDerivesP.nuOut {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesP Δ Γ e (.comp (.nuSys m i C))) :
-    CDerivesP Δ Γ e (.comp (CTy.unrollS m i C)) :=
-  (CDerivesX.nuOut (I := {pin := true}) hC h)
-
 theorem CDerivesP.unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
     CDerivesP Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S)) :=
   (CDerivesX.unfoldN (I := {pin := true}) C S hC hS hΓ)
@@ -1362,10 +1322,6 @@ theorem CDerivesP.unfoldK {Δ Γ} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.fo
 theorem CDerivesP.nuOutK {Δ Γ i} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
     CDerivesP Δ Γ (.var i) (.comp (C.instT (codeTy C G S))) :=
   (CDerivesX.nuOutK (I := {pin := true}) hC hG hS hGf h)
-
-theorem CDerivesP.effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S') (h : CDerivesP Δ Γ e (.comp (CTy.effOf S A))) :
-    CDerivesP Δ Γ e (.comp (CTy.effOf S' A)) :=
-  (CDerivesX.effSub (I := {pin := true}) hle h)
 
 theorem CDerivesP.effPerform {Δ Γ V} {S : Row} {o : OpSig} (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (hac : o.rc = false) (h : CDerivesP Δ Γ V (.val o.A)) :
     CDerivesP Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B)) :=
@@ -1407,10 +1363,6 @@ theorem CDerivesP.letPoly {Δ Γ N C} {j : Jdg} (b : Expr) (hcl : closedAt 0 (Va
     CDerivesP Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C) :=
   (CDerivesX.letPoly (I := {pin := true}) b hcl hV hN)
 
-theorem CDerivesP.alpha {Δ Γ e} {j j' : Jdg} (h : CDerivesP Δ Γ e j) (hα : j.alphaB j' = true) :
-    CDerivesP Δ Γ e j' :=
-  (CDerivesX.alpha (I := {pin := true}) h hα)
-
 theorem CDerivesP.lendR {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Life} {T B : VTy} {d M : Expr} {S : Row} (hb : Δ.Defines b) (hx : Δ.find? x = none) (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false) (hT : ¬ VFree x T) (hB : ¬ VFree x B) (hBn : NoThunkT B) (hside : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' T) (hS : Row.ResumeOC S x) (hM1 : closedAt 1 M = true) (hcb : closedAt 0 (lendCb M).1 = true) (hdc : closedAt 0 d = true) (hd : CDerivesP Δ [] d (.val (.lolli (.ref T) .unit))) (hM : CDerivesP (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M (.comp (CTy.effOf S (.box (.var x) B)))) :
     CDerivesP Δ [⟨.ref T, true⟩] (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M))) (.comp (CTy.effOf S (.tensor (.ref T) B))) :=
   (CDerivesX.lendR (I := {pin := true}) rfl hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc hd hM)
@@ -1434,6 +1386,66 @@ theorem CDerivesP.withbor2UD {Δ Γ A B d} {SM SD S : Row} (x : LifeVar) (hΓ : 
 theorem CDerivesP.withbor3UD {Δ Γ a A B d} {SM SD S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : CDerivesP Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
     CDerivesP Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) :=
   (CDerivesX.withbor3UD (I := {pin := true}) x hΓ hx hfree₁ hfree₂ hS hMS hDS hSv hP hd)
+
+theorem CDerivesP.ret {Δ Γ V A} (h : CDerivesP Δ Γ V (.val A)) :
+    CDerivesP Δ Γ V (.comp (.ret A)) :=
+  (CDerivesX.ret (I := {pin := true}) h)
+
+theorem CDerivesP.ofRet {Δ Γ e A} (h : CDerivesP Δ Γ e (.comp (.ret A))) :
+    CDerivesP Δ Γ e (.val A) :=
+  (CDerivesX.ofRet (I := {pin := true}) h)
+
+theorem CDerivesP.bangE {Δ Γ e A} (h : CDerivesP Δ Γ e (.val (.bang A))) :
+    CDerivesP Δ Γ e (.val A) :=
+  (CDerivesX.bangE (I := {pin := true}) h)
+
+theorem CDerivesP.boxI {Δ Γ e a A} (h : CDerivesP Δ Γ e (.val A)) (hΓ : CtxOutlives Δ Γ a) :
+    CDerivesP Δ Γ e (.val (.box a A)) :=
+  (CDerivesX.boxI (I := {pin := true}) h hΓ)
+
+theorem CDerivesP.boxE {Δ Γ e a A} (h : CDerivesP Δ Γ e (.val (.box a A))) :
+    CDerivesP Δ Γ e (.val A) :=
+  (CDerivesX.boxE (I := {pin := true}) h)
+
+theorem CDerivesP.immSub {Δ Γ e a b A} (h : CDerivesP Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) :
+    CDerivesP Δ Γ e (.val (.imm a A)) :=
+  (CDerivesX.immSub (I := {pin := true}) h hle)
+
+theorem CDerivesP.mutSub {Δ Γ e a b A} (h : CDerivesP Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) :
+    CDerivesP Δ Γ e (.val (.mut a A)) :=
+  (CDerivesX.mutSub (I := {pin := true}) h hle)
+
+theorem CDerivesP.codeErase {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesP Δ Γ e (.val (.code N E C))) :
+    CDerivesP Δ Γ e (.val (.thunk C)) :=
+  (CDerivesX.codeErase (I := {pin := true}) h)
+
+theorem CDerivesP.codeEraseB {Δ Γ e C} {N : Expr} {E : VTy} (h : CDerivesP Δ Γ e (.val (.bang (.code N E C)))) :
+    CDerivesP Δ Γ e (.val (.bang (.thunk C))) :=
+  (CDerivesX.codeEraseB (I := {pin := true}) h)
+
+theorem CDerivesP.roll {Δ Γ e A} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0) (h : CDerivesP Δ Γ e (.val (VTy.inst (.mu A) A))) :
+    CDerivesP Δ Γ e (.val (.mu A)) :=
+  (CDerivesX.roll (I := {pin := true}) hA hc h)
+
+theorem CDerivesP.unroll {Δ Γ e A} (h : CDerivesP Δ Γ e (.val (.mu A))) :
+    CDerivesP Δ Γ e (.val (VTy.inst (.mu A) A)) :=
+  (CDerivesX.unroll (I := {pin := true}) h)
+
+theorem CDerivesP.nuIn {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesP Δ Γ e (.comp (CTy.unrollS m i C))) :
+    CDerivesP Δ Γ e (.comp (.nuSys m i C)) :=
+  (CDerivesX.nuIn (I := {pin := true}) hC h)
+
+theorem CDerivesP.nuOut {Δ Γ e} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesP Δ Γ e (.comp (.nuSys m i C))) :
+    CDerivesP Δ Γ e (.comp (CTy.unrollS m i C)) :=
+  (CDerivesX.nuOut (I := {pin := true}) hC h)
+
+theorem CDerivesP.effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S') (h : CDerivesP Δ Γ e (.comp (CTy.effOf S A))) :
+    CDerivesP Δ Γ e (.comp (CTy.effOf S' A)) :=
+  (CDerivesX.effSub (I := {pin := true}) hle h)
+
+theorem CDerivesP.alpha {Δ Γ e} {j j' : Jdg} (h : CDerivesP Δ Γ e j) (hα : j.alphaB j' = true) :
+    CDerivesP Δ Γ e j' :=
+  (CDerivesX.alpha (I := {pin := true}) h hα)
 
 theorem CDerivesP.effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S) (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' → o.finRead = true → ThenLe o.fin SD o'.fin) (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false) (hM : CDerivesP Δ Γ₁ M (.comp (CTy.effOf SM A))) (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) (hD : CDerivesP Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
     CDerivesP Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
@@ -1486,8 +1498,8 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
       motive Δ Γ (.val (.lam M)) (.val (.thunk (.ret A))) (CDerivesX.thunkF (I := {}) (Δ := Δ) (Γ := Γ) (M := M) (A := A) h))
     (thunkV : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hC : C.isRet = false) (h : CDerives Δ Γ (.val (.lam N)) (.comp C)) (h_ih : motive Δ Γ (.val (.lam N)) (.comp C) h),
       motive Δ Γ (.val (.lam N)) (.val (.thunk C)) (CDerivesX.thunkV (I := {}) (Δ := Δ) (Γ := Γ) (N := N) (C := C) hC h))
-    (ret : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {A : VTy} (h : CDerives Δ Γ V (.val A)) (h_ih : motive Δ Γ V (.val A) h),
-      motive Δ Γ V (.comp (.ret A)) (CDerivesX.ret (I := {}) (Δ := Δ) (Γ := Γ) (V := V) (A := A) h))
+    (conv : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j j' : Jdg} (k : ConvKind) (h : CDerives Δ Γ e j) (hc : JConv Δ Γ k j j') (h_ih : motive Δ Γ e j h),
+      motive Δ Γ e j' (CDerivesX.conv (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (j := j) (j' := j') k h hc))
     (bind : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {A : VTy} {C : CTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hM : CDerives Δ Γ₁ M (.comp (.ret A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp C)) (hM_ih : motive Δ Γ₁ M (.comp (.ret A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp C) hN),
       motive Δ Γ (.app (.val (.lam N)) M) (.comp C) (CDerivesX.bind (I := {}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (A := A) (C := C) hs hM hN))
     (force : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {T : VTy} {C : CTy} (h : Ctx.SoloP Γ i T) (hT : T.forceTy = some C),
@@ -1526,24 +1538,10 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
       motive Δ Γ (.val (.lam M)) (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)) (CDerivesX.codeI (I := {}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) h hok))
     (codeIB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} (hp : Ctx.FlatLive Γ) (h : CDerives Δ Γ (.val (.lam M)) (.val (.bang (.thunk C)))) (hok : Ctx.CapOK Γ (.lam M)) (h_ih : motive Δ Γ (.val (.lam M)) (.val (.bang (.thunk C))) h),
       motive Δ Γ (.val (.lam M)) (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))) (CDerivesX.codeIB (I := {}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) hp h hok))
-    (codeErase : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy} {N : Expr} {E : VTy} (h : CDerives Δ Γ e (.val (.code N E C))) (h_ih : motive Δ Γ e (.val (.code N E C)) h),
-      motive Δ Γ e (.val (.thunk C)) (CDerivesX.codeErase (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (C := C) (N := N) (E := E) h))
-    (codeEraseB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy} {N : Expr} {E : VTy} (h : CDerives Δ Γ e (.val (.bang (.code N E C)))) (h_ih : motive Δ Γ e (.val (.bang (.code N E C))) h),
-      motive Δ Γ e (.val (.bang (.thunk C))) (CDerivesX.codeEraseB (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (C := C) (N := N) (E := E) h))
-    (bangE : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (h : CDerives Δ Γ e (.val (.bang A))) (h_ih : motive Δ Γ e (.val (.bang A)) h),
-      motive Δ Γ e (.val A) (CDerivesX.bangE (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) h))
     (copyBang : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ),
       motive Δ Γ BoCa.copy (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A)))))) (CDerivesX.copyBang (I := {}) (Δ := Δ) (Γ := Γ) (A := A) hΓ))
     (releaseBang : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ),
       motive Δ Γ forget (.val (.thunk (.arr (.bang A) (.ret .unit)))) (CDerivesX.releaseBang (I := {}) (Δ := Δ) (Γ := Γ) (A := A) hΓ))
-    (boxI : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a : Lifetime.Life} {A : VTy} (h : CDerives Δ Γ e (.val A)) (hΓ : CtxOutlives Δ Γ a) (h_ih : motive Δ Γ e (.val A) h),
-      motive Δ Γ e (.val (.box a A)) (CDerivesX.boxI (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (a := a) (A := A) h hΓ))
-    (boxE : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a : Lifetime.Life} {A : VTy} (h : CDerives Δ Γ e (.val (.box a A))) (h_ih : motive Δ Γ e (.val (.box a A)) h),
-      motive Δ Γ e (.val A) (CDerivesX.boxE (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (a := a) (A := A) h))
-    (immSub : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a : Lifetime.Life} {b : Lifetime.Life} {A : VTy} (h : CDerives Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) (h_ih : motive Δ Γ e (.val (.imm b A)) h),
-      motive Δ Γ e (.val (.imm a A)) (CDerivesX.immSub (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (a := a) (b := b) (A := A) h hle))
-    (mutSub : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a : Lifetime.Life} {b : Lifetime.Life} {A : VTy} (h : CDerives Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) (h_ih : motive Δ Γ e (.val (.mut b A)) h),
-      motive Δ Γ e (.val (.mut a A)) (CDerivesX.mutSub (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (a := a) (b := b) (A := A) h hle))
     (alloc : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ),
       motive Δ Γ (.val (.prim .alloc)) (.val (.lolli A (.ref A))) (CDerivesX.alloc (I := {}) (Δ := Δ) (Γ := Γ) (A := A) hΓ))
     (free : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ),
@@ -1640,12 +1638,6 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
       motive Δ Γ (.app f a) (.val B) (CDerivesX.lolliE (I := {}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (f := f) (a := a) (A := A) (B := B) hs ha hf))
     (allEV : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {x : LifeVar} {b : Lifetime.Life} {a : Lifetime.Life} {A : VTy} (h : CDerives Δ Γ e (.val (.all x b A))) (hlt : Δ.EntailsLt a b) (h_ih : motive Δ Γ e (.val (.all x b A)) h),
       motive Δ Γ (.app e (.val .unit)) (.val (A.instLife x a)) (CDerivesX.allEV (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (x := x) (b := b) (a := a) (A := A) h hlt))
-    (ofRet : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (h : CDerives Δ Γ e (.comp (.ret A))) (h_ih : motive Δ Γ e (.comp (.ret A)) h),
-      motive Δ Γ e (.val A) (CDerivesX.ofRet (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) h))
-    (roll : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0) (h : CDerives Δ Γ e (.val (VTy.inst (.mu A) A))) (h_ih : motive Δ Γ e (.val (VTy.inst (.mu A) A)) h),
-      motive Δ Γ e (.val (.mu A)) (CDerivesX.roll (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) hA hc h))
-    (unroll : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (h : CDerives Δ Γ e (.val (.mu A))) (h_ih : motive Δ Γ e (.val (.mu A)) h),
-      motive Δ Γ e (.val (VTy.inst (.mu A) A)) (CDerivesX.unroll (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) h))
     (foldImm : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ' a, VOutlives Δ' a R),
       motive Δ Γ (.val (foldImmV F)) (.val (.lolli (algTy F y R) (foldTy F y c R))) (CDerivesX.foldImm (I := {}) (Δ := Δ) (Γ := Γ) F y c R hΓ hF hG hyM hyR hR))
     (foldOwn : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded),
@@ -1654,18 +1646,12 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
       motive Δ Γ (.val (foldReuseV F)) (.val (.lolli (algRTy F R) (foldOTy F R))) (CDerivesX.foldReuse (I := {}) (Δ := Δ) (Γ := Γ) F R hΓ hF hG))
     (foldOwnG : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀),
       motive Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs)) (CDerivesX.foldOwnG (I := {}) (Δ := Δ) (Γ := Γ) B₀ Rs hΓ hB))
-    (nuIn : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerives Δ Γ e (.comp (CTy.unrollS m i C))) (h_ih : motive Δ Γ e (.comp (CTy.unrollS m i C)) h),
-      motive Δ Γ e (.comp (.nuSys m i C)) (CDerivesX.nuIn (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (m := m) (i := i) (C := C) hC h))
-    (nuOut : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerives Δ Γ e (.comp (.nuSys m i C))) (h_ih : motive Δ Γ e (.comp (.nuSys m i C)) h),
-      motive Δ Γ e (.comp (CTy.unrollS m i C)) (CDerivesX.nuOut (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (m := m) (i := i) (C := C) hC h))
     (unfoldN : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ),
       motive Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S)) (CDerivesX.unfoldN (I := {}) (Δ := Δ) (Γ := Γ) C S hC hS hΓ))
     (unfoldK : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ),
       motive Δ Γ (.val (unfoldV C)) (.val (unfoldKTy C G S)) (CDerivesX.unfoldK (I := {}) (Δ := Δ) (Γ := Γ) C G S hC hG hS hΓ))
     (nuOutK : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)),
       motive Δ Γ (.var i) (.comp (C.instT (codeTy C G S))) (CDerivesX.nuOutK (I := {}) (Δ := Δ) (Γ := Γ) (i := i) (C := C) (G := G) (S := S) hC hG hS hGf h))
-    (effSub : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {S S' : Row} {A : VTy} (hle : RowLe S S') (h : CDerives Δ Γ e (.comp (CTy.effOf S A))) (h_ih : motive Δ Γ e (.comp (CTy.effOf S A)) h),
-      motive Δ Γ e (.comp (CTy.effOf S' A)) (CDerivesX.effSub (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (S := S) (S' := S') (A := A) hle h))
     (effPerform : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : OpSig} (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (hac : o.rc = false) (h : CDerives Δ Γ V (.val o.A)) (h_ih : motive Δ Γ V (.val o.A) h),
       motive Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B)) (CDerivesX.effPerform (I := {}) (Δ := Δ) (Γ := Γ) (V := V) (S := S) (o := o) trivial hf hna hac h))
     (effAwait : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {n : UInt32} {a c : OpSig} (hΓ : Ctx.Dead Γ) (hfa : Row.find S n 0 = some a) (ha : a.Cancellable) (haA : a.A = .unit) (hfc : Row.find S n 1 = some c) (hc : c.CancelTarget),
@@ -1686,8 +1672,6 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
       motive Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (lastTuple E 0 Hw Hn)) e) (.comp (CTy.effOf S R)) (CDerivesX.effHandleL (I := {}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (Hr := Hr) (Hw := Hw) (Hn := Hn) (e := e) (S := S) (SW := SW) (E := E) (fs := fs) (Xs := Xs) (n := n) (A := A) (R := R) trivial hs hd hHr hHw hHn hc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin he))
     (letPoly : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} {j : Jdg} (b : Expr) (hcl : closedAt 0 (Val.lam b).1 = true) (hV : CDerives Δ [] (.val (.lam b)) j) (hN : CDerives Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C)) (hV_ih : motive Δ [] (.val (.lam b)) j hV) (hN_ih : motive Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C) hN),
       motive Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C) (CDerivesX.letPoly (I := {}) (Δ := Δ) (Γ := Γ) (N := N) (C := C) (j := j) b hcl hV hN))
-    (alpha : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j j' : Jdg} (h : CDerives Δ Γ e j) (hα : j.alphaB j' = true) (h_ih : motive Δ Γ e j h),
-      motive Δ Γ e j' (CDerivesX.alpha (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (j := j) (j' := j') h hα))
     {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) : motive Δ Γ e j h := by
   induction h with
   | var a0 => exact var a0
@@ -1697,7 +1681,7 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
   | sumI₂ a0 ih0 => exact sumI₂ a0 ih0
   | thunkF a0 ih0 => exact thunkF a0 ih0
   | thunkV a0 a1 ih0 => exact thunkV a0 a1 ih0
-  | ret a0 ih0 => exact ret a0 ih0
+  | conv a0 a1 a2 ih0 => exact conv a0 a1 a2 ih0
   | bind a0 a1 a2 ih0 ih1 => exact bind a0 a1 a2 ih0 ih1
   | force a0 a1 => exact force a0 a1
   | lam a0 ih0 => exact lam a0 ih0
@@ -1717,15 +1701,8 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
   | bangThunkV a0 a1 a2 ih0 => exact bangThunkV a0 a1 a2 ih0
   | codeI a0 a1 ih0 => exact codeI a0 a1 ih0
   | codeIB a0 a1 a2 ih0 => exact codeIB a0 a1 a2 ih0
-  | codeErase a0 ih0 => exact codeErase a0 ih0
-  | codeEraseB a0 ih0 => exact codeEraseB a0 ih0
-  | bangE a0 ih0 => exact bangE a0 ih0
   | copyBang a0 => exact copyBang a0
   | releaseBang a0 => exact releaseBang a0
-  | boxI a0 a1 ih0 => exact boxI a0 a1 ih0
-  | boxE a0 ih0 => exact boxE a0 ih0
-  | immSub a0 a1 ih0 => exact immSub a0 a1 ih0
-  | mutSub a0 a1 ih0 => exact mutSub a0 a1 ih0
   | alloc a0 => exact alloc a0
   | free a0 => exact free a0
   | tokMint a0 => exact tokMint a0
@@ -1774,19 +1751,13 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
   | sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 => exact sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0
   | lolliE a0 a1 a2 ih0 ih1 => exact lolliE a0 a1 a2 ih0 ih1
   | allEV a0 a1 ih0 => exact allEV a0 a1 ih0
-  | ofRet a0 ih0 => exact ofRet a0 ih0
-  | roll a0 a1 a2 ih0 => exact roll a0 a1 a2 ih0
-  | unroll a0 ih0 => exact unroll a0 ih0
   | foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 => exact foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9
   | foldOwn a0 a1 a2 a3 a4 => exact foldOwn a0 a1 a2 a3 a4
   | foldReuse a0 a1 a2 a3 a4 => exact foldReuse a0 a1 a2 a3 a4
   | foldOwnG a0 a1 a2 a3 => exact foldOwnG a0 a1 a2 a3
-  | nuIn a0 a1 ih0 => exact nuIn a0 a1 ih0
-  | nuOut a0 a1 ih0 => exact nuOut a0 a1 ih0
   | unfoldN a0 a1 a2 a3 a4 => exact unfoldN a0 a1 a2 a3 a4
   | unfoldK a0 a1 a2 a3 a4 a5 a6 => exact unfoldK a0 a1 a2 a3 a4 a5 a6
   | nuOutK a0 a1 a2 a3 a4 => exact nuOutK a0 a1 a2 a3 a4
-  | effSub a0 a1 ih0 => exact effSub a0 a1 ih0
   | effPerform a0 a1 a2 a3 a4 ih0 => exact effPerform a1 a2 a3 a4 ih0
   | effAwait a0 a1 a2 a3 a4 a5 a6 => exact effAwait a1 a2 a3 a4 a5 a6
   | effRaise a0 a1 a2 a3 a4 a5 ih0 => exact effRaise a1 a2 a3 a4 a5 ih0
@@ -1797,7 +1768,6 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
   | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 => exact effHandleT a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1
   | effHandleL a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 ih0 ih1 => exact effHandleL a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 ih0 ih1
   | letPoly a0 a1 a2 a3 ih0 ih1 => exact letPoly a0 a1 a2 a3 ih0 ih1
-  | alpha a0 a1 ih0 => exact alpha a0 a1 ih0
   | lendR a0 => exact absurd a0 Bool.false_ne_true
   | lendLoopR a0 => exact absurd a0 Bool.false_ne_true
   | nilDead a0 => exact absurd a0 Bool.false_ne_true
@@ -1819,8 +1789,8 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
       motive Δ Γ (.val (.lam M)) (.val (.thunk (.ret A))) (CDerivesX.thunkF (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (M := M) (A := A) h))
     (thunkV : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hC : C.isRet = false) (h : CDerivesAt Ξ Δ Γ (.val (.lam N)) (.comp C)) (h_ih : motive Δ Γ (.val (.lam N)) (.comp C) h),
       motive Δ Γ (.val (.lam N)) (.val (.thunk C)) (CDerivesX.thunkV (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (N := N) (C := C) hC h))
-    (ret : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {A : VTy} (h : CDerivesAt Ξ Δ Γ V (.val A)) (h_ih : motive Δ Γ V (.val A) h),
-      motive Δ Γ V (.comp (.ret A)) (CDerivesX.ret (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (V := V) (A := A) h))
+    (conv : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j j' : Jdg} (k : ConvKind) (h : CDerivesAt Ξ Δ Γ e j) (hc : JConv Δ Γ k j j') (h_ih : motive Δ Γ e j h),
+      motive Δ Γ e j' (CDerivesX.conv (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (j := j) (j' := j') k h hc))
     (bind : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {A : VTy} {C : CTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (.ret A))) (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp C)) (hM_ih : motive Δ Γ₁ M (.comp (.ret A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp C) hN),
       motive Δ Γ (.app (.val (.lam N)) M) (.comp C) (CDerivesX.bind (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (A := A) (C := C) hs hM hN))
     (force : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {T : VTy} {C : CTy} (h : Ctx.SoloP Γ i T) (hT : T.forceTy = some C),
@@ -1859,24 +1829,10 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
       motive Δ Γ (.val (.lam M)) (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)) (CDerivesX.codeI (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) h hok))
     (codeIB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} (hp : Ctx.FlatLive Γ) (h : CDerivesAt Ξ Δ Γ (.val (.lam M)) (.val (.bang (.thunk C)))) (hok : Ctx.CapOK Γ (.lam M)) (h_ih : motive Δ Γ (.val (.lam M)) (.val (.bang (.thunk C))) h),
       motive Δ Γ (.val (.lam M)) (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))) (CDerivesX.codeIB (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) hp h hok))
-    (codeErase : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy} {N : Expr} {E : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.code N E C))) (h_ih : motive Δ Γ e (.val (.code N E C)) h),
-      motive Δ Γ e (.val (.thunk C)) (CDerivesX.codeErase (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (C := C) (N := N) (E := E) h))
-    (codeEraseB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy} {N : Expr} {E : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.bang (.code N E C)))) (h_ih : motive Δ Γ e (.val (.bang (.code N E C))) h),
-      motive Δ Γ e (.val (.bang (.thunk C))) (CDerivesX.codeEraseB (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (C := C) (N := N) (E := E) h))
-    (bangE : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.bang A))) (h_ih : motive Δ Γ e (.val (.bang A)) h),
-      motive Δ Γ e (.val A) (CDerivesX.bangE (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) h))
     (copyBang : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ),
       motive Δ Γ BoCa.copy (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A)))))) (CDerivesX.copyBang (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) hΓ))
     (releaseBang : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ),
       motive Δ Γ forget (.val (.thunk (.arr (.bang A) (.ret .unit)))) (CDerivesX.releaseBang (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) hΓ))
-    (boxI : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a : Lifetime.Life} {A : VTy} (h : CDerivesAt Ξ Δ Γ e (.val A)) (hΓ : CtxOutlives Δ Γ a) (h_ih : motive Δ Γ e (.val A) h),
-      motive Δ Γ e (.val (.box a A)) (CDerivesX.boxI (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (a := a) (A := A) h hΓ))
-    (boxE : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a : Lifetime.Life} {A : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.box a A))) (h_ih : motive Δ Γ e (.val (.box a A)) h),
-      motive Δ Γ e (.val A) (CDerivesX.boxE (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (a := a) (A := A) h))
-    (immSub : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a : Lifetime.Life} {b : Lifetime.Life} {A : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) (h_ih : motive Δ Γ e (.val (.imm b A)) h),
-      motive Δ Γ e (.val (.imm a A)) (CDerivesX.immSub (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (a := a) (b := b) (A := A) h hle))
-    (mutSub : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a : Lifetime.Life} {b : Lifetime.Life} {A : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) (h_ih : motive Δ Γ e (.val (.mut b A)) h),
-      motive Δ Γ e (.val (.mut a A)) (CDerivesX.mutSub (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (a := a) (b := b) (A := A) h hle))
     (alloc : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ),
       motive Δ Γ (.val (.prim .alloc)) (.val (.lolli A (.ref A))) (CDerivesX.alloc (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) hΓ))
     (free : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ),
@@ -1973,12 +1929,6 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
       motive Δ Γ (.app f a) (.val B) (CDerivesX.lolliE (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (f := f) (a := a) (A := A) (B := B) hs ha hf))
     (allEV : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {x : LifeVar} {b : Lifetime.Life} {a : Lifetime.Life} {A : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.all x b A))) (hlt : Δ.EntailsLt a b) (h_ih : motive Δ Γ e (.val (.all x b A)) h),
       motive Δ Γ (.app e (.val .unit)) (.val (A.instLife x a)) (CDerivesX.allEV (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (x := x) (b := b) (a := a) (A := A) h hlt))
-    (ofRet : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (h : CDerivesAt Ξ Δ Γ e (.comp (.ret A))) (h_ih : motive Δ Γ e (.comp (.ret A)) h),
-      motive Δ Γ e (.val A) (CDerivesX.ofRet (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) h))
-    (roll : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0) (h : CDerivesAt Ξ Δ Γ e (.val (VTy.inst (.mu A) A))) (h_ih : motive Δ Γ e (.val (VTy.inst (.mu A) A)) h),
-      motive Δ Γ e (.val (.mu A)) (CDerivesX.roll (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) hA hc h))
-    (unroll : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (h : CDerivesAt Ξ Δ Γ e (.val (.mu A))) (h_ih : motive Δ Γ e (.val (.mu A)) h),
-      motive Δ Γ e (.val (VTy.inst (.mu A) A)) (CDerivesX.unroll (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) h))
     (foldImm : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ' a, VOutlives Δ' a R),
       motive Δ Γ (.val (foldImmV F)) (.val (.lolli (algTy F y R) (foldTy F y c R))) (CDerivesX.foldImm (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) F y c R hΓ hF hG hyM hyR hR))
     (foldOwn : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded),
@@ -1987,18 +1937,12 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
       motive Δ Γ (.val (foldReuseV F)) (.val (.lolli (algRTy F R) (foldOTy F R))) (CDerivesX.foldReuse (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) F R hΓ hF hG))
     (foldOwnG : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀),
       motive Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs)) (CDerivesX.foldOwnG (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) B₀ Rs hΓ hB))
-    (nuIn : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesAt Ξ Δ Γ e (.comp (CTy.unrollS m i C))) (h_ih : motive Δ Γ e (.comp (CTy.unrollS m i C)) h),
-      motive Δ Γ e (.comp (.nuSys m i C)) (CDerivesX.nuIn (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (m := m) (i := i) (C := C) hC h))
-    (nuOut : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesAt Ξ Δ Γ e (.comp (.nuSys m i C))) (h_ih : motive Δ Γ e (.comp (.nuSys m i C)) h),
-      motive Δ Γ e (.comp (CTy.unrollS m i C)) (CDerivesX.nuOut (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (m := m) (i := i) (C := C) hC h))
     (unfoldN : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ),
       motive Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S)) (CDerivesX.unfoldN (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) C S hC hS hΓ))
     (unfoldK : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ),
       motive Δ Γ (.val (unfoldV C)) (.val (unfoldKTy C G S)) (CDerivesX.unfoldK (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) C G S hC hG hS hΓ))
     (nuOutK : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)),
       motive Δ Γ (.var i) (.comp (C.instT (codeTy C G S))) (CDerivesX.nuOutK (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (i := i) (C := C) (G := G) (S := S) hC hG hS hGf h))
-    (effSub : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {S S' : Row} {A : VTy} (hle : RowLe S S') (h : CDerivesAt Ξ Δ Γ e (.comp (CTy.effOf S A))) (h_ih : motive Δ Γ e (.comp (CTy.effOf S A)) h),
-      motive Δ Γ e (.comp (CTy.effOf S' A)) (CDerivesX.effSub (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (S := S) (S' := S') (A := A) hle h))
     (effPerform : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : OpSig} (hAt : RowAt Ξ S) (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (hac : o.rc = false) (h : CDerivesAt Ξ Δ Γ V (.val o.A)) (h_ih : motive Δ Γ V (.val o.A) h),
       motive Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B)) (CDerivesX.effPerform (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (V := V) (S := S) (o := o) hAt hf hna hac h))
     (effAwait : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {n : UInt32} {a c : OpSig} (hAt : RowAt Ξ S) (hΓ : Ctx.Dead Γ) (hfa : Row.find S n 0 = some a) (ha : a.Cancellable) (haA : a.A = .unit) (hfc : Row.find S n 1 = some c) (hc : c.CancelTarget),
@@ -2019,8 +1963,6 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
       motive Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (lastTuple E 0 Hw Hn)) e) (.comp (CTy.effOf S R)) (CDerivesX.effHandleL (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (Hr := Hr) (Hw := Hw) (Hn := Hn) (e := e) (S := S) (SW := SW) (E := E) (fs := fs) (Xs := Xs) (n := n) (A := A) (R := R) hAt hs hd hHr hHw hHn hc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin he))
     (letPoly : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} {j : Jdg} (b : Expr) (hcl : closedAt 0 (Val.lam b).1 = true) (hV : CDerivesAt Ξ Δ [] (.val (.lam b)) j) (hN : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C)) (hV_ih : motive Δ [] (.val (.lam b)) j hV) (hN_ih : motive Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C) hN),
       motive Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C) (CDerivesX.letPoly (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (N := N) (C := C) (j := j) b hcl hV hN))
-    (alpha : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j j' : Jdg} (h : CDerivesAt Ξ Δ Γ e j) (hα : j.alphaB j' = true) (h_ih : motive Δ Γ e j h),
-      motive Δ Γ e j' (CDerivesX.alpha (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (j := j) (j' := j') h hα))
     {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerivesAt Ξ Δ Γ e j) : motive Δ Γ e j h := by
   induction h with
   | var a0 => exact var a0
@@ -2030,7 +1972,7 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
   | sumI₂ a0 ih0 => exact sumI₂ a0 ih0
   | thunkF a0 ih0 => exact thunkF a0 ih0
   | thunkV a0 a1 ih0 => exact thunkV a0 a1 ih0
-  | ret a0 ih0 => exact ret a0 ih0
+  | conv a0 a1 a2 ih0 => exact conv a0 a1 a2 ih0
   | bind a0 a1 a2 ih0 ih1 => exact bind a0 a1 a2 ih0 ih1
   | force a0 a1 => exact force a0 a1
   | lam a0 ih0 => exact lam a0 ih0
@@ -2050,15 +1992,8 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
   | bangThunkV a0 a1 a2 ih0 => exact bangThunkV a0 a1 a2 ih0
   | codeI a0 a1 ih0 => exact codeI a0 a1 ih0
   | codeIB a0 a1 a2 ih0 => exact codeIB a0 a1 a2 ih0
-  | codeErase a0 ih0 => exact codeErase a0 ih0
-  | codeEraseB a0 ih0 => exact codeEraseB a0 ih0
-  | bangE a0 ih0 => exact bangE a0 ih0
   | copyBang a0 => exact copyBang a0
   | releaseBang a0 => exact releaseBang a0
-  | boxI a0 a1 ih0 => exact boxI a0 a1 ih0
-  | boxE a0 ih0 => exact boxE a0 ih0
-  | immSub a0 a1 ih0 => exact immSub a0 a1 ih0
-  | mutSub a0 a1 ih0 => exact mutSub a0 a1 ih0
   | alloc a0 => exact alloc a0
   | free a0 => exact free a0
   | tokMint a0 => exact tokMint a0
@@ -2107,19 +2042,13 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
   | sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 => exact sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0
   | lolliE a0 a1 a2 ih0 ih1 => exact lolliE a0 a1 a2 ih0 ih1
   | allEV a0 a1 ih0 => exact allEV a0 a1 ih0
-  | ofRet a0 ih0 => exact ofRet a0 ih0
-  | roll a0 a1 a2 ih0 => exact roll a0 a1 a2 ih0
-  | unroll a0 ih0 => exact unroll a0 ih0
   | foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 => exact foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9
   | foldOwn a0 a1 a2 a3 a4 => exact foldOwn a0 a1 a2 a3 a4
   | foldReuse a0 a1 a2 a3 a4 => exact foldReuse a0 a1 a2 a3 a4
   | foldOwnG a0 a1 a2 a3 => exact foldOwnG a0 a1 a2 a3
-  | nuIn a0 a1 ih0 => exact nuIn a0 a1 ih0
-  | nuOut a0 a1 ih0 => exact nuOut a0 a1 ih0
   | unfoldN a0 a1 a2 a3 a4 => exact unfoldN a0 a1 a2 a3 a4
   | unfoldK a0 a1 a2 a3 a4 a5 a6 => exact unfoldK a0 a1 a2 a3 a4 a5 a6
   | nuOutK a0 a1 a2 a3 a4 => exact nuOutK a0 a1 a2 a3 a4
-  | effSub a0 a1 ih0 => exact effSub a0 a1 ih0
   | effPerform a0 a1 a2 a3 a4 ih0 => exact effPerform a0 a1 a2 a3 a4 ih0
   | effAwait a0 a1 a2 a3 a4 a5 a6 => exact effAwait a0 a1 a2 a3 a4 a5 a6
   | effRaise a0 a1 a2 a3 a4 a5 ih0 => exact effRaise a0 a1 a2 a3 a4 a5 ih0
@@ -2130,7 +2059,6 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
   | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 => exact effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1
   | effHandleL a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 ih0 ih1 => exact effHandleL a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 ih0 ih1
   | letPoly a0 a1 a2 a3 ih0 ih1 => exact letPoly a0 a1 a2 a3 ih0 ih1
-  | alpha a0 a1 ih0 => exact alpha a0 a1 ih0
   | lendR a0 => exact absurd a0 Bool.false_ne_true
   | lendLoopR a0 => exact absurd a0 Bool.false_ne_true
   | nilDead a0 => exact absurd a0 Bool.false_ne_true
@@ -2152,8 +2080,8 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
       motive Δ Γ (.val (.lam M)) (.val (.thunk (.ret A))) (CDerivesX.thunkF (I := {pin := true}) (Δ := Δ) (Γ := Γ) (M := M) (A := A) h))
     (thunkV : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hC : C.isRet = false) (h : CDerivesP Δ Γ (.val (.lam N)) (.comp C)) (h_ih : motive Δ Γ (.val (.lam N)) (.comp C) h),
       motive Δ Γ (.val (.lam N)) (.val (.thunk C)) (CDerivesX.thunkV (I := {pin := true}) (Δ := Δ) (Γ := Γ) (N := N) (C := C) hC h))
-    (ret : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {A : VTy} (h : CDerivesP Δ Γ V (.val A)) (h_ih : motive Δ Γ V (.val A) h),
-      motive Δ Γ V (.comp (.ret A)) (CDerivesX.ret (I := {pin := true}) (Δ := Δ) (Γ := Γ) (V := V) (A := A) h))
+    (conv : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j j' : Jdg} (k : ConvKind) (h : CDerivesP Δ Γ e j) (hc : JConv Δ Γ k j j') (h_ih : motive Δ Γ e j h),
+      motive Δ Γ e j' (CDerivesX.conv (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (j := j) (j' := j') k h hc))
     (bind : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {M : Expr} {N : Expr} {A : VTy} {C : CTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hM : CDerivesP Δ Γ₁ M (.comp (.ret A))) (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp C)) (hM_ih : motive Δ Γ₁ M (.comp (.ret A)) hM) (hN_ih : motive Δ (⟨A, true⟩ :: Γ₂) N (.comp C) hN),
       motive Δ Γ (.app (.val (.lam N)) M) (.comp C) (CDerivesX.bind (I := {pin := true}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (N := N) (A := A) (C := C) hs hM hN))
     (force : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {T : VTy} {C : CTy} (h : Ctx.SoloP Γ i T) (hT : T.forceTy = some C),
@@ -2192,24 +2120,10 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
       motive Δ Γ (.val (.lam M)) (.val (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)) (CDerivesX.codeI (I := {pin := true}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) h hok))
     (codeIB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} (hp : Ctx.FlatLive Γ) (h : CDerivesP Δ Γ (.val (.lam M)) (.val (.bang (.thunk C)))) (hok : Ctx.CapOK Γ (.lam M)) (h_ih : motive Δ Γ (.val (.lam M)) (.val (.bang (.thunk C))) h),
       motive Δ Γ (.val (.lam M)) (.val (.bang (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C))) (CDerivesX.codeIB (I := {pin := true}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) hp h hok))
-    (codeErase : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy} {N : Expr} {E : VTy} (h : CDerivesP Δ Γ e (.val (.code N E C))) (h_ih : motive Δ Γ e (.val (.code N E C)) h),
-      motive Δ Γ e (.val (.thunk C)) (CDerivesX.codeErase (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (C := C) (N := N) (E := E) h))
-    (codeEraseB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy} {N : Expr} {E : VTy} (h : CDerivesP Δ Γ e (.val (.bang (.code N E C)))) (h_ih : motive Δ Γ e (.val (.bang (.code N E C))) h),
-      motive Δ Γ e (.val (.bang (.thunk C))) (CDerivesX.codeEraseB (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (C := C) (N := N) (E := E) h))
-    (bangE : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (h : CDerivesP Δ Γ e (.val (.bang A))) (h_ih : motive Δ Γ e (.val (.bang A)) h),
-      motive Δ Γ e (.val A) (CDerivesX.bangE (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) h))
     (copyBang : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ),
       motive Δ Γ BoCa.copy (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A)))))) (CDerivesX.copyBang (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) hΓ))
     (releaseBang : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ),
       motive Δ Γ forget (.val (.thunk (.arr (.bang A) (.ret .unit)))) (CDerivesX.releaseBang (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) hΓ))
-    (boxI : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a : Lifetime.Life} {A : VTy} (h : CDerivesP Δ Γ e (.val A)) (hΓ : CtxOutlives Δ Γ a) (h_ih : motive Δ Γ e (.val A) h),
-      motive Δ Γ e (.val (.box a A)) (CDerivesX.boxI (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (a := a) (A := A) h hΓ))
-    (boxE : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a : Lifetime.Life} {A : VTy} (h : CDerivesP Δ Γ e (.val (.box a A))) (h_ih : motive Δ Γ e (.val (.box a A)) h),
-      motive Δ Γ e (.val A) (CDerivesX.boxE (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (a := a) (A := A) h))
-    (immSub : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a : Lifetime.Life} {b : Lifetime.Life} {A : VTy} (h : CDerivesP Δ Γ e (.val (.imm b A))) (hle : Δ.EntailsLe a b) (h_ih : motive Δ Γ e (.val (.imm b A)) h),
-      motive Δ Γ e (.val (.imm a A)) (CDerivesX.immSub (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (a := a) (b := b) (A := A) h hle))
-    (mutSub : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a : Lifetime.Life} {b : Lifetime.Life} {A : VTy} (h : CDerivesP Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) (h_ih : motive Δ Γ e (.val (.mut b A)) h),
-      motive Δ Γ e (.val (.mut a A)) (CDerivesX.mutSub (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (a := a) (b := b) (A := A) h hle))
     (alloc : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ),
       motive Δ Γ (.val (.prim .alloc)) (.val (.lolli A (.ref A))) (CDerivesX.alloc (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) hΓ))
     (free : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ),
@@ -2306,12 +2220,6 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
       motive Δ Γ (.app f a) (.val B) (CDerivesX.lolliE (I := {pin := true}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (f := f) (a := a) (A := A) (B := B) hs ha hf))
     (allEV : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {x : LifeVar} {b : Lifetime.Life} {a : Lifetime.Life} {A : VTy} (h : CDerivesP Δ Γ e (.val (.all x b A))) (hlt : Δ.EntailsLt a b) (h_ih : motive Δ Γ e (.val (.all x b A)) h),
       motive Δ Γ (.app e (.val .unit)) (.val (A.instLife x a)) (CDerivesX.allEV (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (x := x) (b := b) (a := a) (A := A) h hlt))
-    (ofRet : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (h : CDerivesP Δ Γ e (.comp (.ret A))) (h_ih : motive Δ Γ e (.comp (.ret A)) h),
-      motive Δ Γ e (.val A) (CDerivesX.ofRet (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) h))
-    (roll : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0) (h : CDerivesP Δ Γ e (.val (VTy.inst (.mu A) A))) (h_ih : motive Δ Γ e (.val (VTy.inst (.mu A) A)) h),
-      motive Δ Γ e (.val (.mu A)) (CDerivesX.roll (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) hA hc h))
-    (unroll : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (h : CDerivesP Δ Γ e (.val (.mu A))) (h_ih : motive Δ Γ e (.val (.mu A)) h),
-      motive Δ Γ e (.val (VTy.inst (.mu A) A)) (CDerivesX.unroll (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) h))
     (foldImm : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ' a, VOutlives Δ' a R),
       motive Δ Γ (.val (foldImmV F)) (.val (.lolli (algTy F y R) (foldTy F y c R))) (CDerivesX.foldImm (I := {pin := true}) (Δ := Δ) (Γ := Γ) F y c R hΓ hF hG hyM hyR hR))
     (foldOwn : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded),
@@ -2320,18 +2228,12 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
       motive Δ Γ (.val (foldReuseV F)) (.val (.lolli (algRTy F R) (foldOTy F R))) (CDerivesX.foldReuse (I := {pin := true}) (Δ := Δ) (Γ := Γ) F R hΓ hF hG))
     (foldOwnG : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀),
       motive Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs)) (CDerivesX.foldOwnG (I := {pin := true}) (Δ := Δ) (Γ := Γ) B₀ Rs hΓ hB))
-    (nuIn : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesP Δ Γ e (.comp (CTy.unrollS m i C))) (h_ih : motive Δ Γ e (.comp (CTy.unrollS m i C)) h),
-      motive Δ Γ e (.comp (.nuSys m i C)) (CDerivesX.nuIn (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (m := m) (i := i) (C := C) hC h))
-    (nuOut : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {m i : Nat} {C : CTy} (hC : C.SysOkAt m i) (h : CDerivesP Δ Γ e (.comp (.nuSys m i C))) (h_ih : motive Δ Γ e (.comp (.nuSys m i C)) h),
-      motive Δ Γ e (.comp (CTy.unrollS m i C)) (CDerivesX.nuOut (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (m := m) (i := i) (C := C) hC h))
     (unfoldN : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ),
       motive Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S)) (CDerivesX.unfoldN (I := {pin := true}) (Δ := Δ) (Γ := Γ) C S hC hS hΓ))
     (unfoldK : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ),
       motive Δ Γ (.val (unfoldV C)) (.val (unfoldKTy C G S)) (CDerivesX.unfoldK (I := {pin := true}) (Δ := Δ) (Γ := Γ) C G S hC hG hS hΓ))
     (nuOutK : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)),
       motive Δ Γ (.var i) (.comp (C.instT (codeTy C G S))) (CDerivesX.nuOutK (I := {pin := true}) (Δ := Δ) (Γ := Γ) (i := i) (C := C) (G := G) (S := S) hC hG hS hGf h))
-    (effSub : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {S S' : Row} {A : VTy} (hle : RowLe S S') (h : CDerivesP Δ Γ e (.comp (CTy.effOf S A))) (h_ih : motive Δ Γ e (.comp (CTy.effOf S A)) h),
-      motive Δ Γ e (.comp (CTy.effOf S' A)) (CDerivesX.effSub (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (S := S) (S' := S') (A := A) hle h))
     (effPerform : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : OpSig} (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (hac : o.rc = false) (h : CDerivesP Δ Γ V (.val o.A)) (h_ih : motive Δ Γ V (.val o.A) h),
       motive Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B)) (CDerivesX.effPerform (I := {pin := true}) (Δ := Δ) (Γ := Γ) (V := V) (S := S) (o := o) trivial hf hna hac h))
     (effAwait : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {n : UInt32} {a c : OpSig} (hΓ : Ctx.Dead Γ) (hfa : Row.find S n 0 = some a) (ha : a.Cancellable) (haA : a.A = .unit) (hfc : Row.find S n 1 = some c) (hc : c.CancelTarget),
@@ -2352,8 +2254,6 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
       motive Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (lastTuple E 0 Hw Hn)) e) (.comp (CTy.effOf S R)) (CDerivesX.effHandleL (I := {pin := true}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (Hr := Hr) (Hw := Hw) (Hn := Hn) (e := e) (S := S) (SW := SW) (E := E) (fs := fs) (Xs := Xs) (n := n) (A := A) (R := R) trivial hs hd hHr hHw hHn hc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin he))
     (letPoly : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} {j : Jdg} (b : Expr) (hcl : closedAt 0 (Val.lam b).1 = true) (hV : CDerivesP Δ [] (.val (.lam b)) j) (hN : CDerivesP Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C)) (hV_ih : motive Δ [] (.val (.lam b)) j hV) (hN_ih : motive Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C) hN),
       motive Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C) (CDerivesX.letPoly (I := {pin := true}) (Δ := Δ) (Γ := Γ) (N := N) (C := C) (j := j) b hcl hV hN))
-    (alpha : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j j' : Jdg} (h : CDerivesP Δ Γ e j) (hα : j.alphaB j' = true) (h_ih : motive Δ Γ e j h),
-      motive Δ Γ e j' (CDerivesX.alpha (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (j := j) (j' := j') h hα))
     (lendR : ∀ {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Life} {T B : VTy} {d M : Expr} {S : Row} (hb : Δ.Defines b) (hx : Δ.find? x = none) (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false) (hT : ¬ VFree x T) (hB : ¬ VFree x B) (hBn : NoThunkT B) (hside : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' T) (hS : Row.ResumeOC S x) (hM1 : closedAt 1 M = true) (hcb : closedAt 0 (lendCb M).1 = true) (hdc : closedAt 0 d = true) (hd : CDerivesP Δ [] d (.val (.lolli (.ref T) .unit))) (hM : CDerivesP (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M (.comp (CTy.effOf S (.box (.var x) B)))) (hd_ih : motive Δ [] d (.val (.lolli (.ref T) .unit)) hd) (hM_ih : motive (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M (.comp (CTy.effOf S (.box (.var x) B))) hM),
       motive Δ [⟨.ref T, true⟩] (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M))) (.comp (CTy.effOf S (.tensor (.ref T) B))) (CDerivesX.lendR (I := {pin := true}) (Δ := Δ) (x := x) (b := b) (T := T) (B := B) (d := d) (M := M) (S := S) rfl hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc hd hM))
     (lendLoopR : ∀ {Δ : LifeCtx} {x : LifeVar} {A S B R : VTy} {N K s0 : Expr} (hx : Δ.find? x = none) (hbx : Δ.meetOfDom.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false) (hA : ¬ VFree x A) (hB : ¬ VFree x B) (hR : ¬ VFree x R) (hBn : NoThunkT B) (hRn : NoThunkT R) (hsc : VScoped Δ A) (hN1 : closedAt 1 N = true) (hK1 : closedAt 1 K = true) (hs0c : closedAt 0 s0 = true) (hN : CDerivesP (Δ.extend x Δ.meetOfDom) [⟨.tensor (.imm (.var x) A) S, true⟩] N (.comp (.ret (.sum B S)))) (hK : CDerivesP (Δ.extend x Δ.meetOfDom) [⟨.tensor (.imm (.var x) A) S, true⟩] K (.comp (.ret R))) (hs0 : CDerivesP (Δ.extend x Δ.meetOfDom) [] s0 (.val S)) (hN_ih : motive (Δ.extend x Δ.meetOfDom) [⟨.tensor (.imm (.var x) A) S, true⟩] N (.comp (.ret (.sum B S))) hN) (hK_ih : motive (Δ.extend x Δ.meetOfDom) [⟨.tensor (.imm (.var x) A) S, true⟩] K (.comp (.ret R)) hK) (hs0_ih : motive (Δ.extend x Δ.meetOfDom) [] s0 (.val S) hs0),
@@ -2369,7 +2269,7 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
   | sumI₂ a0 ih0 => exact sumI₂ a0 ih0
   | thunkF a0 ih0 => exact thunkF a0 ih0
   | thunkV a0 a1 ih0 => exact thunkV a0 a1 ih0
-  | ret a0 ih0 => exact ret a0 ih0
+  | conv a0 a1 a2 ih0 => exact conv a0 a1 a2 ih0
   | bind a0 a1 a2 ih0 ih1 => exact bind a0 a1 a2 ih0 ih1
   | force a0 a1 => exact force a0 a1
   | lam a0 ih0 => exact lam a0 ih0
@@ -2389,15 +2289,8 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
   | bangThunkV a0 a1 a2 ih0 => exact bangThunkV a0 a1 a2 ih0
   | codeI a0 a1 ih0 => exact codeI a0 a1 ih0
   | codeIB a0 a1 a2 ih0 => exact codeIB a0 a1 a2 ih0
-  | codeErase a0 ih0 => exact codeErase a0 ih0
-  | codeEraseB a0 ih0 => exact codeEraseB a0 ih0
-  | bangE a0 ih0 => exact bangE a0 ih0
   | copyBang a0 => exact copyBang a0
   | releaseBang a0 => exact releaseBang a0
-  | boxI a0 a1 ih0 => exact boxI a0 a1 ih0
-  | boxE a0 ih0 => exact boxE a0 ih0
-  | immSub a0 a1 ih0 => exact immSub a0 a1 ih0
-  | mutSub a0 a1 ih0 => exact mutSub a0 a1 ih0
   | alloc a0 => exact alloc a0
   | free a0 => exact free a0
   | tokMint a0 => exact tokMint a0
@@ -2446,19 +2339,13 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
   | sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 => exact sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0
   | lolliE a0 a1 a2 ih0 ih1 => exact lolliE a0 a1 a2 ih0 ih1
   | allEV a0 a1 ih0 => exact allEV a0 a1 ih0
-  | ofRet a0 ih0 => exact ofRet a0 ih0
-  | roll a0 a1 a2 ih0 => exact roll a0 a1 a2 ih0
-  | unroll a0 ih0 => exact unroll a0 ih0
   | foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 => exact foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9
   | foldOwn a0 a1 a2 a3 a4 => exact foldOwn a0 a1 a2 a3 a4
   | foldReuse a0 a1 a2 a3 a4 => exact foldReuse a0 a1 a2 a3 a4
   | foldOwnG a0 a1 a2 a3 => exact foldOwnG a0 a1 a2 a3
-  | nuIn a0 a1 ih0 => exact nuIn a0 a1 ih0
-  | nuOut a0 a1 ih0 => exact nuOut a0 a1 ih0
   | unfoldN a0 a1 a2 a3 a4 => exact unfoldN a0 a1 a2 a3 a4
   | unfoldK a0 a1 a2 a3 a4 a5 a6 => exact unfoldK a0 a1 a2 a3 a4 a5 a6
   | nuOutK a0 a1 a2 a3 a4 => exact nuOutK a0 a1 a2 a3 a4
-  | effSub a0 a1 ih0 => exact effSub a0 a1 ih0
   | effPerform a0 a1 a2 a3 a4 ih0 => exact effPerform a1 a2 a3 a4 ih0
   | effAwait a0 a1 a2 a3 a4 a5 a6 => exact effAwait a1 a2 a3 a4 a5 a6
   | effRaise a0 a1 a2 a3 a4 a5 ih0 => exact effRaise a1 a2 a3 a4 a5 ih0
@@ -2469,7 +2356,6 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
   | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 => exact effHandleT a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1
   | effHandleL a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 ih0 ih1 => exact effHandleL a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 ih0 ih1
   | letPoly a0 a1 a2 a3 ih0 ih1 => exact letPoly a0 a1 a2 a3 ih0 ih1
-  | alpha a0 a1 ih0 => exact alpha a0 a1 ih0
   | lendR a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 ih0 ih1 => exact lendR a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 ih0 ih1
   | lendLoopR a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 ih0 ih1 ih2 => exact lendLoopR a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 ih0 ih1 ih2
   | nilDead a0 a1 a2 ih0 => exact nilDead a1 a2 ih0
@@ -2488,7 +2374,7 @@ theorem CDerivesX.mono {I I' : JIdx} (hI : I ≤ I') {Δ : LifeCtx} {Γ : Ctx VT
   | sumI₂ a0 ih0 => exact CDerivesX.sumI₂ ih0
   | thunkF a0 ih0 => exact CDerivesX.thunkF ih0
   | thunkV a0 a1 ih0 => exact CDerivesX.thunkV a0 ih0
-  | ret a0 ih0 => exact CDerivesX.ret ih0
+  | conv a0 a1 a2 ih0 => exact CDerivesX.conv a0 ih0 a2
   | bind a0 a1 a2 ih0 ih1 => exact CDerivesX.bind a0 ih0 ih1
   | force a0 a1 => exact CDerivesX.force a0 a1
   | lam a0 ih0 => exact CDerivesX.lam ih0
@@ -2508,15 +2394,8 @@ theorem CDerivesX.mono {I I' : JIdx} (hI : I ≤ I') {Δ : LifeCtx} {Γ : Ctx VT
   | bangThunkV a0 a1 a2 ih0 => exact CDerivesX.bangThunkV a0 a1 ih0
   | codeI a0 a1 ih0 => exact CDerivesX.codeI ih0 a1
   | codeIB a0 a1 a2 ih0 => exact CDerivesX.codeIB a0 ih0 a2
-  | codeErase a0 ih0 => exact CDerivesX.codeErase ih0
-  | codeEraseB a0 ih0 => exact CDerivesX.codeEraseB ih0
-  | bangE a0 ih0 => exact CDerivesX.bangE ih0
   | copyBang a0 => exact CDerivesX.copyBang a0
   | releaseBang a0 => exact CDerivesX.releaseBang a0
-  | boxI a0 a1 ih0 => exact CDerivesX.boxI ih0 a1
-  | boxE a0 ih0 => exact CDerivesX.boxE ih0
-  | immSub a0 a1 ih0 => exact CDerivesX.immSub ih0 a1
-  | mutSub a0 a1 ih0 => exact CDerivesX.mutSub ih0 a1
   | alloc a0 => exact CDerivesX.alloc a0
   | free a0 => exact CDerivesX.free a0
   | tokMint a0 => exact CDerivesX.tokMint a0
@@ -2565,19 +2444,13 @@ theorem CDerivesX.mono {I I' : JIdx} (hI : I ≤ I') {Δ : LifeCtx} {Γ : Ctx VT
   | sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 => exact CDerivesX.sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 ih0
   | lolliE a0 a1 a2 ih0 ih1 => exact CDerivesX.lolliE a0 ih0 ih1
   | allEV a0 a1 ih0 => exact CDerivesX.allEV ih0 a1
-  | ofRet a0 ih0 => exact CDerivesX.ofRet ih0
-  | roll a0 a1 a2 ih0 => exact CDerivesX.roll a0 a1 ih0
-  | unroll a0 ih0 => exact CDerivesX.unroll ih0
   | foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 => exact CDerivesX.foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9
   | foldOwn a0 a1 a2 a3 a4 => exact CDerivesX.foldOwn a0 a1 a2 a3 a4
   | foldReuse a0 a1 a2 a3 a4 => exact CDerivesX.foldReuse a0 a1 a2 a3 a4
   | foldOwnG a0 a1 a2 a3 => exact CDerivesX.foldOwnG a0 a1 a2 a3
-  | nuIn a0 a1 ih0 => exact CDerivesX.nuIn a0 ih0
-  | nuOut a0 a1 ih0 => exact CDerivesX.nuOut a0 ih0
   | unfoldN a0 a1 a2 a3 a4 => exact CDerivesX.unfoldN a0 a1 a2 a3 a4
   | unfoldK a0 a1 a2 a3 a4 a5 a6 => exact CDerivesX.unfoldK a0 a1 a2 a3 a4 a5 a6
   | nuOutK a0 a1 a2 a3 a4 => exact CDerivesX.nuOutK a0 a1 a2 a3 a4
-  | effSub a0 a1 ih0 => exact CDerivesX.effSub a0 ih0
   | effPerform a0 a1 a2 a3 a4 ih0 => exact CDerivesX.effPerform (hI.rowOK a0) a1 a2 a3 ih0
   | effAwait a0 a1 a2 a3 a4 a5 a6 => exact CDerivesX.effAwait (hI.rowOK a0) a1 a2 a3 a4 a5 a6
   | effRaise a0 a1 a2 a3 a4 a5 ih0 => exact CDerivesX.effRaise (hI.rowOK a0) a1 a2 a3 a4 ih0
@@ -2588,7 +2461,6 @@ theorem CDerivesX.mono {I I' : JIdx} (hI : I ≤ I') {Δ : LifeCtx} {Γ : Ctx VT
   | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 => exact CDerivesX.effHandleT (hI.rowOK a0) a1 a2 a3 a4 ih0 a6 a7 a8 a9 a10 a11 ih1
   | effHandleL a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 ih0 ih1 => exact CDerivesX.effHandleL (hI.rowOK a0) a1 a2 a3 a4 a5 ih0 a7 a8 a9 a10 a11 a12 a13 a14 a15 ih1
   | letPoly a0 a1 a2 a3 ih0 ih1 => exact CDerivesX.letPoly a0 a1 ih0 ih1
-  | alpha a0 a1 ih0 => exact CDerivesX.alpha ih0 a1
   | lendR a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 ih0 ih1 => exact CDerivesX.lendR (hI.pinOK a0) a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1
   | lendLoopR a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 ih0 ih1 ih2 => exact CDerivesX.lendLoopR (hI.pinOK a0) a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 ih2
   | nilDead a0 a1 a2 ih0 => exact CDerivesX.nilDead (hI.pinOK a0) a1 ih0

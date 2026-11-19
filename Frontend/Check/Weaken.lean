@@ -315,10 +315,20 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.thunkV hC d (by rw [e, q]; rfl), e⟩
-  | ret _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.ret d, e⟩
+  | conv k _ hJ ih =>
+      intro Γa Γb Γp f hΓ hf hp; subst hΓ
+      simp only [TExpr.absF] at hf
+      cases ha : k.outl? with
+      | some a =>
+        rw [ha] at hf
+        obtain ⟨f', hf', ho, hp'⟩ := live_withO hf hp
+        obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
+        refine ⟨.conv _ d (hJ.mono (fun a' ha' h => ?_) (fun _ _ => id)), e⟩
+        rw [ha] at ha'; cases ha'; exact ctxOutlives_ins (live_atom ho) h
+      | none =>
+        rw [ha] at hf
+        obtain ⟨d, e⟩ := ih Γa Γb Γp f rfl hf hp
+        exact ⟨.conv _ d (hJ.mono (fun a' ha' => by rw [ha] at ha'; cases ha') (fun _ _ => id)), e⟩
   | bind hs hm hcv _ _ ihM ihN =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
@@ -430,18 +440,6 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       exact ⟨.bangThunkV (flatLive_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
   | codeI => intro _ _ _ _ _ hf _; cases hf
   | codeIB => intro _ _ _ _ _ hf _; cases hf
-  | codeErase _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.codeErase d, e⟩
-  | codeEraseB _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.codeEraseB d, e⟩
-  | bangE _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.bangE d, e⟩
   | copyBang hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.copyBang (deadP_ins (live_eval_atom hf hp) Γa hΓ), (shift_closed0 (by rfl) _ _).symm⟩
@@ -449,23 +447,6 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.releaseBang (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
-  | boxI _ hΓ ih =>
-      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      obtain ⟨f', hf', ho, hp'⟩ := live_withO hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
-      exact ⟨.boxI d (ctxOutlives_ins (live_atom ho) hΓ), e⟩
-  | boxE _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.boxE d, e⟩
-  | immSub _ hle ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.immSub d hle, e⟩
-  | mutSub _ hle ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.mutSub d hle, e⟩
   | alloc hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.alloc (deadP_ins (live_eval_atom hf hp) Γa hΓ), rfl⟩
@@ -641,18 +622,6 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.allEV d hlt, by simp only [TExpr.shift, TExpr.erase, Expr.shift, e]; rfl⟩
-  | ofRet _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.ofRet d, e⟩
-  | roll hA hc _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.roll hA hc d, e⟩
-  | unroll _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.unroll d, e⟩
   | foldImm F y c R hΓ hF hG hyM hyR hR =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.foldImm F y c R (deadP_ins (live_eval_atom hf hp) Γa hΓ) hF hG hyM hyR hR,
@@ -669,14 +638,6 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.foldReuse F R (deadP_ins (live_eval_atom hf hp) Γa hΓ) hF hG,
         (shift_closed0 (foldReuseV_closed F) _ _).symm⟩
-  | nuIn hC _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.nuIn hC d, e⟩
-  | nuOut hC _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.nuOut hC d, e⟩
   | unfoldN C S hC hS hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.unfoldN C S hC hS (deadP_ins (live_eval_atom hf hp) Γa hΓ),
@@ -688,14 +649,6 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
   | nuOutK hC hG hS hGf hs =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       exact ⟨.nuOutK hC hG hS hGf (soloP_ins (live_eval_atom hf hp) Γa hs), (var_shift _ _ _).symm⟩
-  | effSub hle _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.effSub hle d, e⟩
-  | alpha _ hα ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.alpha d hα, e⟩
   | effAwait => intro _ _ _ _ _ hf; simp [TExpr.absF] at hf
   | effPerform hAt hf₀ hna hac _ ih =>
       intro Γa Γb Γp f hΓ hf hp

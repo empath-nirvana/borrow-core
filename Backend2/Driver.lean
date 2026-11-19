@@ -1110,7 +1110,7 @@ def lamFin (n : Nat) (A : VTy) (j : Option Nat) : TExpr :=
   let i : TInfo := default
   let C : CTy := .arr (.ref A) (.ret .unit)
   let use (m : Nat) (k : Nat) : TExpr :=
-    .ret i (.comp (.ret .unit)) .unit
+    .conv i (.comp (.ret .unit)) (.val .unit) (.comp (.ret .unit)) (.ret .unit)
       (.lolliE i (.val .unit) (.ref A) .unit ⟨(List.range m).map fun l => (l == k, false)⟩
         (.var i (.val (.ref A)) k (.ref A))
         (.consume i (.val (.lolli (.ref A) .unit)) (.ref A)))
@@ -1120,7 +1120,8 @@ def lamFin (n : Nat) (A : VTy) (j : Option Nat) : TExpr :=
       let i32 : VTy := .int .w32
       .bind i (.comp (.ret .unit)) i32 (.ret .unit)
         ⟨(false, true) :: only n (some j)⟩
-        (.ret i (.comp (.ret i32)) i32 (.var i (.val i32) (j + 1) i32))
+        (.conv i (.comp (.ret i32)) (.val i32) (.comp (.ret i32)) (.ret i32)
+          (.var i (.val i32) (j + 1) i32))
         (use (n + 2) 1)
   .thunkV i (.val (.thunk C)) C (.lam i (.comp C) (.ref A) (.ret .unit) body)
 
@@ -1148,9 +1149,9 @@ def swapFin (named : Bool) : Nat → Nat → Option Nat → TExpr → TExpr × N
           if k₂ > 0 then give u s false else u
         | none => u
       (.bind i j A C u tM' tN', k₁ + k₂)
-    | .ret i j A t =>
+    | .conv i j j₀ j' (.ret A) t =>
       let (t', m) := swapFin named f n k t
-      (.ret i j A t', m)
+      (.conv i j j₀ j' (.ret A) t', m)
     | .effHandleV i j S E fs cs nm A R u ks site inside tc te =>
       let (tc', k₁) := swapFin named f n k tc
       let (te', k₂) := swapFin named f n k te
