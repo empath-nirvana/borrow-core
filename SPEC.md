@@ -173,7 +173,11 @@ application, `⟨·,·⟩`, projections), the lifetime `∀` (elimination at eve
 context, §10), `[]I` at every value type,
 `⊑Imm`/`⊑Mut`, one constant per borrow axiom of `[TR]` p. 3 at arbitrary value-type payloads,
 three call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), and conversion up to the names of
-lifetime binders (`[α]`, *Lifetime binders and `[α]`* below). No new machine rules.
+lifetime binders (`[α]`, *Lifetime binders and `[α]`* below). No new machine rules. The two
+projections are one rule, `projB`, at a selector `b : Bool` (`M (projArg b) : cond b D C` from
+`M : C & D`), and the two injections are one rule, `sumIB`, at a side `b : Bool` (`injE b e : A ⊕ B`
+from `e : cond b B A`) (#1170). `proj₁`/`proj₂` and `sumI₁`/`sumI₂` stay as derived rules at
+`false`/`true`, with their statements, and their typed nodes as abbreviations of the one node.
 
 **The constants are one rule (#1170).** A *constant* is a closed term typed at a consumed context
 under side conditions that read no derivation: `()`, the borrow axioms, the `!` axioms of §2 and
