@@ -41,7 +41,8 @@ export BCC_SOURCE BCC_WRITE_KEYS source_digest
 # sourceKey FILE INPUT [ARG…]: the source stage's key on FILE with standard input INPUT.
 sourceKey() {
   local f=$1 in=$2; shift 2
-  "${bcc:-.lake/build/bin/bcc}" interp --key --digest "$source_digest" "$f" -- "$@" < "$in"
+  # shellcheck disable=SC2086 # `$dialect`: a driver option, or none (scripts/book-doctest.sh)
+  "${bcc:-.lake/build/bin/bcc}" ${dialect:-} interp --key --digest "$source_digest" "$f" -- "$@" < "$in"
 }
 # goldenHash BASE: the sha256 of corpus program BASE's golden, `.out`, `.err` and `.status`
 # (each named, with its length; an absent file is empty).

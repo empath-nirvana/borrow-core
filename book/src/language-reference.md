@@ -7,7 +7,12 @@ is in [Status](status.md).
 
 ## Lexical structure
 
-**Comments** run from `--` to the end of the line. There are no block comments.
+**Comments** run from `#` to the end of the line. There are no block comments.
+
+**Lines.** A newline ends a statement, as `;` does, except inside `(…)` or `[…]`, after a line
+that ends in a binary operator, `,`, `->`, `=` or `:`, and before a line that starts with a
+binary operator, `else`, `with`, `finally`, `.` or `}`. A line starting with `&` begins a new
+statement. `;` still separates statements on one line.
 
 **Names.** There are three kinds:
 
@@ -36,27 +41,28 @@ is UTF-8, and takes the escapes `\n`, `\t`, `\r`, `\0`, `\\`, `\"` and `\xNN` (t
 hexadecimal value `NN`). There are no negative literals: write `0 - 5`.
 
 ```bc
-include textio
+import textio
 
-main -> 1 =
-  let n = 0x2A;                -- 42
-  let big = i64[5000000000];
-  let c = 'é';                 -- 233
-  print_dec(n);
-  print_byte(b' ');
-  print_dec64(big);
-  print_byte(b' ');
-  print_dec(c);
+fn main() : 1 {
+  let n = 0x2A                # 42
+  let big = i64[5000000000]
+  let c = 'é'                 # 233
+  print_dec(n)
+  print_byte(b' ')
+  print_dec64(big)
+  print_byte(b' ')
+  print_dec(c)
   print_lit(" \x41\"\n")
--- output: 42 5000000000 233 A"
+}
+# output: 42 5000000000 233 A"
 ```
 
 **Reserved words.** These can't be used as names:
 
 - the keywords of programs: `borrow`, `box`, `break`, `clone`, `continue`, `def`, `div`, `effect`,
-  `else`, `fn`, `fold_imm`, `fold_own`, `fold_reuse`, `for`, `handler`, `if`, `imm`, `in`,
-  `include`, `inl`, `inr`, `let`, `loop`, `main`, `match`, `modify`, `mut`, `poly`,
-  `return`, `total`, `type`, `while`, `with`;
+  `else`, `fn`, `fold_imm`, `fold_own`, `fold_reuse`, `for`, `handle`, `handler`, `if`, `imm`,
+  `import`, `in`, `include`, `inl`, `inout`, `inr`, `let`, `local`, `loop`, `main`, `match`,
+  `modify`, `mut`, `poly`, `return`, `sink`, `total`, `type`, `var`, `while`, `with`, `as`;
 - the built-in types and operations: `alloc`, `array`, `array_imm`, `array_mut`, `array_new`,
   `f32`, `f64`, `free`, `host`, `i32`, `i64`, `ref`, `swap`, `u8`;
 - words reserved for the compiler's internal forms: `abort`, `absurd`, `all`, `alloc_s`,
@@ -82,48 +88,58 @@ the other may call each other ([Recursion](guide/data.md#recursion)).
 
 | declaration | form |
 |---|---|
-| library module | `include textio` |
-| function | `fn f[T, …]<'a, …>(x: A, …) -> B with E, … where T: 'a = body` |
-| terminating function | `total fn f(…) -> B = body` |
+| library module | `import textio` |
+| function | `fn f[T, …]<'a, …>(x: A, …) : B / E + … where T: 'a { body }`, or `= e` for one expression |
+| terminating function | `total fn f(…) : B { body }` |
 | constant | `def name : A = e`, `def name[T, …] : A = e` |
 | data type | `data N[T, …]<'a, …> = C₁(A, …) \| C₂(f: A, …) \| C₃` |
 | record type | `data N[T, …]<'a, …> = { f: A, … }` |
 | type alias | `type N[T, …]<'a, …> = A` |
-| effect | `effect E[T, …] { fn op(x: A, …) -> B; ctl op(…) -> B; … }` |
-| handler | `handler h(mut s: S): E = { op(x, …) = e; … }` |
-| control handler | `handler h[T, …](p: A, …): E[…], A -> R with E₂ = { return(x) = e; op(x, …, k) = e; … }` |
-| family | `poly f[T](x: A, …) -> B` |
+| effect | `effect E[T, …] { op(x: A, …) : B; ctl op(…) : B; … }` |
+| handler | `handler h(mut s: S) : E { op(x, …) -> e; … }` |
+| control handler | `handler h[T, …](p: A, …) : E[…], (A) -> R / E₂ { return(x) -> e; op(x, …, k) -> e; … }` |
+| family | `poly f[T](x: A, …) : B` |
 | case of a family | `poly f[P, …] at H = body`, `poly (+) at H = body` |
-| entry point | `main -> T = body` |
+| entry point | `fn main() : T { body }` |
 
 In a function, the type parameters `[T, …]` and the lifetime parameters `<'a, …>` are each
-optional, as are the row `with …` and the bounds `where …`. A lifetime parameter may be bounded
-by another, `<'x, 'w < 'x>`. With no parameters, a function is `fn f() -> B`. Every parameter's
+optional, as are the row `/ …` and the bounds `where …`. A lifetime parameter may be bounded
+by another, `<'x, 'w < 'x>`. With no parameters, a function is `fn f() : B`. Every parameter's
 type and the result type are written.
 
+A parameter's type says how the argument is passed. `x: T` lends the argument shared for the
+call, and `x: inout T` lends it exclusively, when `T` is not by value (a number, `bool`, `lit`,
+`1`, `0`, `never`, a `!` function, or a tuple or sum of these); `x: array A` and
+`x: inout array A` lend an array's elements. `x: sink T` takes the argument by move. A by-value
+`x: T` is a copy, and a written borrow type, `x: imm 'a T`, means what it says
+([Borrowing for one call](guide/ownership.md#borrowing-for-one-call)).
+
 ```bc
-include textio
+import textio
 
 data Pair[A] = { fst: A, snd: A }
 type Grid = i32 * i32
 
 def origin : i32 = 0
 
-fn swapped[A](p: Pair[A]) -> Pair[A] = match p { Pair { fst, snd } -> Pair { fst: snd, snd: fst } }
+fn swapped[A](p: sink Pair[A]) : Pair[A] = match p { Pair { fst, snd } -> Pair { fst: snd, snd: fst } }
 
-fn first<'a>(r: imm 'a Grid) -> i32 = let (x, y) = *r; x
+fn first<'a>(r: imm 'a Grid) : i32 { let (x, y) = *r; x
+}
 
-total fn area(g: Grid) -> i32 = let (w, h) = g; w * h
+total fn area(g: Grid) : i32 { let (w, h) = g; w * h
+}
 
-main -> 1 =
-  let p = swapped(Pair { fst: 1, snd: 2 });
-  let c = alloc((3, 4));
-  let x = first(&c);
-  print_dec(p.fst + origin);
-  print_byte(b' ');
-  print_dec(x * 10 + area(free(c)));
+fn main() : 1 {
+  let p = swapped(Pair { fst: 1, snd: 2 })
+  let c = alloc((3, 4))
+  let x = first(c)
+  print_dec(p.fst + origin)
+  print_byte(b' ')
+  print_dec(x * 10 + area(free(c)))
   print_byte(b'\n')
--- output: 2 42
+}
+# output: 2 42
 ```
 
 - `data` cases with fields hold them positionally, `C(A, B)`, or by name, `C(f: A, g: B)`; a
@@ -131,15 +147,15 @@ main -> 1 =
   `box` ([Data and generics](guide/data.md)).
 - `type` names a type; the name and the type are interchangeable
   ([Tuples and sums](guide/basics.md#tuples-and-sums)).
-- `effect`: an operation declared `fn` answers its caller; `ctl` receives the continuation and
-  resumes it at most once, `must_resume ctl` exactly once, and `ctl op(…) -> never` never. `-> B`
-  left out is `-> 1`. A handler of `fn` operations keeps its state in its `mut` parameter; a
+- `effect`: an unmarked operation answers its caller; `ctl` receives the continuation and
+  resumes it at most once, `must_resume ctl` exactly once, and `ctl op(…) : never` never. The
+  result `: B` is always written. A handler of answering operations keeps its state in its `mut` parameter; a
   control handler names the body's type `A` and its answer `R`, and has a `return(x)` clause
   ([Effects and handlers](guide/effects.md)).
 - `poly`: a family has one type parameter, the type that chooses the case; the operators `+`,
   `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `<=`, `>`, `>=` are families
   ([`poly` families](guide/data.md#poly-families)).
-- `include` brings a library module's declarations into scope ([Standard library](stdlib.md)).
+- `import` brings a library module's declarations into scope ([Standard library](stdlib.md)).
   The prelude (`bool`, `true`, `false`, `not`, `Option`, `Vec`, `to_i32`, `to_u8`) is always in
   scope.
 
@@ -164,21 +180,21 @@ main -> 1 =
 | `text 'a`, `text_mut 'a` | a view of bytes, shared or exclusive | [Buffers and strings](guide/data.md#buffers-and-strings) |
 | `lit` | a string literal | |
 | `imm 'a A`, `mut 'a A` | a shared or exclusive borrow, for the lifetime `'a` | [Ownership](guide/ownership.md#borrowing-for-one-call) |
-| `!(A => B)` | a function that may be called any number of times | [Functions as values](guide/basics.md#functions-as-values) |
-| `A => B` | a closure called at most once | [Functions as values](guide/basics.md#functions-as-values) |
-| `!(A => B with E, …)` | a computation parameter: the callee handles `E` | [Computation parameters](guide/effects.md#computation-parameters-and-) |
+| `!((A) -> B)` | a function that may be called any number of times | [Functions as values](guide/basics.md#functions-as-values) |
+| `(A) -> B` | a closure called at most once | [Functions as values](guide/basics.md#functions-as-values) |
+| `!((A) -> B / E + …)` | a computation parameter: the callee handles `E` | [Computation parameters](guide/effects.md#computation-parameters-and-) |
 | `U (pull A B R)` | a stored generator yielding `A`, returning `B` | [Stored generators](guide/iteration.md#stored-generators) |
 
 A function of several parameters has a tuple as its argument type: `fn f(x: i32, y: bool)` is a
-`!(i32 * bool => B)`. `*` binds tighter than `+`, which binds tighter than `=>`, and all three
-associate to the right: `A * B + C => D` is `((A * B) + C) => D`.
+`!((i32 * bool) -> B)`. An arrow's parameter type is in parentheses; `*` binds tighter than `+`,
+and both associate to the right: `(A * B + C) -> D` takes a `(A * B) + C`.
 
 Copyable types are the numbers, `bool`, `1`, `!` functions, and tuples and sums of copyable
 types; recursive data built from them is copied only by `clone(x)`. Every other type is owned
 and used exactly once ([Ownership and borrows](guide/ownership.md)).
 
 **Rows.** A function's row, the effects it performs, is inferred, and may be written after the
-result type: `-> B with Fail[i32], Stdout`. An entry may be named, `with a: Log, b: Log`, and a
+result type: `: B / Fail[i32] + Stdout`. An entry may be named, `/ a: Log + b: Log`, and a
 written row is checked ([Effects and handlers](guide/effects.md)).
 
 **Lifetimes.** A lifetime is a parameter `'a` of a function, a `data` or a `type`, the lifetime
@@ -188,16 +204,16 @@ lexical, and never elided in signatures
 
 ## Expressions and statements
 
-A body is a sequence of statements separated by `;`, and its value is the last one's. A
-statement is one of:
+A body is a sequence of statements, one per line or separated by `;`, and its value is the last
+one's. A statement is one of:
 
 | statement | meaning |
 |---|---|
-| `let p = e;` `let p: A = e;` | bind the pattern `p`; later `let`s of a name shadow it |
-| `let mut x = e;` | a variable that can be assigned |
-| `let C(p, …) = e;` | take apart a value of a type with one case |
-| `x = e` | assign a `let mut` variable |
-| `x.f = e` | assign a field of a `let mut` record, or of one lent `mut` |
+| `let p = e`, `let p: A = e` | bind the pattern `p`; later `let`s of a name shadow it |
+| `var x = e` | a variable that can be assigned |
+| `let C(p, …) = e` | take apart a value of a type with one case |
+| `x = e` | assign a `var` variable |
+| `x.f = e` | assign a field of a `var` record, or of one lent `mut` |
 | `e` | any expression |
 
 The expressions are:
@@ -213,8 +229,8 @@ The expressions are:
 | `e.f` | a field | [Records and variants](guide/basics.md#records-and-variants) |
 | `(e : A)` | `e`, at the type `A` | |
 | `if c { … } else if d { … } else { … }` | the `else` may be left out when the branch's value is `()` | [Mutable variables](guide/basics.md#mutable-variables-and-loops) |
-| `match e { p -> … \| p -> … }` | the arms must cover every case | [Records and variants](guide/basics.md#records-and-variants) |
-| `&x`, `&mut x` | lend the place `x` to the call it is an argument of | [Borrowing for one call](guide/ownership.md#borrowing-for-one-call) |
+| `match e { p -> … \| p -> … }`, or one arm per line | the arms must cover every case; an arm of several statements is a block, `p -> { … }` | [Records and variants](guide/basics.md#records-and-variants) |
+| `f(x)`, `f(&x)` | lend the place `x` to the call, shared or exclusively, as the parameter's mode says (a loop source writes `&x` and `&mut x`) | [Borrowing for one call](guide/ownership.md#borrowing-for-one-call) |
 | `borrow imm x { r -> … }`, `borrow mut x { m -> … }` | lend `x` for a block; `{ 'b, r -> … }` names the lifetime | [Borrow blocks](guide/ownership.md#borrow-blocks) |
 | `*r` | copy out the contents of a borrow | [Borrowing for one call](guide/ownership.md#borrowing-for-one-call) |
 | `modify m { v -> e }` | replace the contents of a `mut` borrow; with `e = (new, r)`, answer `r` | [Borrowing for one call](guide/ownership.md#borrowing-for-one-call) |
@@ -223,42 +239,43 @@ The expressions are:
 | `!{ p -> … }` | a closure called any number of times, which captures nothing | [Functions as values](guide/basics.md#functions-as-values) |
 | `{ p -> … }` | a closure called once, which may capture anything | [Functions as values](guide/basics.md#functions-as-values) |
 | `fold_imm e { p -> … \| … }`, `fold_own …`, `fold_reuse …` | fold recursive data bottom up | [Folds](guide/data.md#folds) |
-| `with h(e, …) { … }`, `with n = h(…) { … }` | run a block under a handler | [Effects and handlers](guide/effects.md) |
+| `handle { … } with h(e, …)`, `handle { … } with h(…) as n` | run a block under a handler | [Effects and handlers](guide/effects.md) |
 | `n.op(e)` | perform `op` at the handler named `n` | [Several instances](guide/effects.md#several-instances-and-names) |
-| `raise(e)` | raise an error (`include fail`) | [Errors](guide/errors.md) |
-| `e \|> f(a, …)` | `f(e, a, …)`; into a handler, `with f(a, …) { e }` | [Pipelines](guide/iteration.md#pipelines) |
+| `raise(e)` | raise an error (`import fail`) | [Errors](guide/errors.md) |
+| `e \|> f(a, …)` | `f(e, a, …)`; into a handler, `handle { e } with f(a, …)` | [Pipelines](guide/iteration.md#pipelines) |
 | `host[op](…)` | a machine instruction: bitwise, shifts, conversions | [Numbers](guide/basics.md#numbers) |
 
 ```bc
-include textio
+import textio
 
 data Shape = Rect(w: i32, h: i32) | Circle(r: i32)
 data Point = { x: i32, y: i32 }
 
-fn area(s: Shape) -> i32 = match s { Rect(w, h) -> w * h | Circle(r) -> 3 * r * r }
+fn area(s: sink Shape) : i32 = match s { Rect(w, h) -> w * h | Circle(r) -> 3 * r * r }
 
-fn kind(n: i32, b: u8) -> i32 =
+fn kind(n: i32, b: u8) : i32 =
   match (n, b) {
     (0, _) -> 0
   | (_, b'x') -> 1
   | _ -> 2
   }
 
-main -> 1 =
-  let mut p = Point { x: 1, y: 2 };
-  p.x = p.x + 10;
-  let Point { x, y } = p;
-  let (a, b) = (area(Rect(2, 3)), area(Circle(1)));
-  let mut best = a;
-  if b > best { best = b };
-  let sign = if x > y { 1 } else if x == y { 0 } else { 0 - 1 };
-  print_dec(best);
-  print_byte(b' ');
-  print_dec(sign);
-  print_byte(b' ');
-  print_dec(kind(0, b'x') + kind(5, b'x') * 10 + kind(5, b'y') * 100);
+fn main() : 1 {
+  var p = Point { x: 1, y: 2 }
+  p.x = p.x + 10
+  let Point { x, y } = p
+  let (a, b) = (area(Rect(2, 3)), area(Circle(1)))
+  var best = a
+  if b > best { best = b }
+  let sign = if x > y { 1 } else if x == y { 0 } else { 0 - 1 }
+  print_dec(best)
+  print_byte(b' ')
+  print_dec(sign)
+  print_byte(b' ')
+  print_dec(kind(0, b'x') + kind(5, b'x') * 10 + kind(5, b'y') * 100)
   print_byte(b'\n')
--- output: 6 1 210
+}
+# output: 6 1 210
 ```
 
 ### Patterns
@@ -297,8 +314,8 @@ no guards and no or-patterns.
 In a loop's body, `break` leaves the loop, `break e` leaves it with the value `e`, `continue`
 goes on to the next turn, and `return e` returns `e` from the enclosing function. `for … { … }
 else { e }` gives the loop's value when its source ends without a `break`, and
-`let r = for … { … };` binds the loop's value (or, over a generator, what the generator
-returns). A `let mut` variable assigned in the body is carried from turn to turn and is there
+`let r = for … { … }` binds the loop's value (or, over a generator, what the generator
+returns). A `var` variable assigned in the body is carried from turn to turn and is there
 after the loop.
 
 A `for` over data always finishes. A function with a `while` or a `loop`, or that calls one, may
@@ -307,26 +324,27 @@ diverge, which is inferred; `total fn` asks the compiler to check that it can't,
 ([Loops that may not end](guide/iteration.md#loops-that-may-not-end)).
 
 ```bc
-include textio
+import textio
 
-main -> 1 =
-  let a = array_new[i32](5, !{ i -> i * i });
-  let first = for p in &a { let v = *p; if v > 5 { break v } } else { 0 };
-  let mut odd = 0;
-  for i in 0..10 { if i % 2 == 0 { continue }; odd = odd + i };
-  let mut n = 1;
-  while n < 100 { n = n * 3 };
-  let mut k = 0;
-  loop { k = k + 1; if k == 4 { break } };
-  print_dec(first);
-  print_byte(b' ');
-  print_dec(odd);
-  print_byte(b' ');
-  print_dec(n);
-  print_byte(b' ');
-  print_dec(k);
+fn main() : 1 {
+  let a = array_new[i32](5, !{ i -> i * i })
+  let first = for p in &a { let v = *p; if v > 5 { break v } } else { 0 }
+  var odd = 0
+  for i in 0..10 { if i % 2 == 0 { continue }; odd = odd + i }
+  var n = 1
+  while n < 100 { n = n * 3 }
+  var k = 0
+  loop { k = k + 1; if k == 4 { break } }
+  print_dec(first)
+  print_byte(b' ')
+  print_dec(odd)
+  print_byte(b' ')
+  print_dec(n)
+  print_byte(b' ')
+  print_dec(k)
   print_byte(b'\n')
--- output: 9 25 243 4
+}
+# output: 9 25 243 4
 ```
 
 ## Operators and precedence
@@ -336,7 +354,7 @@ From the tightest binding to the loosest:
 | operators | associativity |
 |---|---|
 | calls `f(…)`, type arguments `f[T]`, fields `e.f` | left |
-| prefix `*e`, `inl e`, `inr e`, `&x`, `&mut x` | |
+| prefix `*e`, `inl e`, `inr e`, `&x`; `&mut x` at a loop source | |
 | `*`  `/`  `%` | left |
 | `+`  `-` | left |
 | `==`  `!=`  `<`  `<=`  `>`  `>=` | none: `a < b < c` is an error |
@@ -354,27 +372,28 @@ minus, compound assignment or bitwise operators; bitwise operations and shifts a
 `host[and32](a, b)` and the like ([Numbers](guide/basics.md#numbers)).
 
 ```bc
-include textio
+import textio
 
-fn twice(x: i32) -> i32 = x * 2
+fn twice(x: i32) : i32 = x * 2
 
-main -> 1 =
-  let a = 1 + 2 * 3 - 8 / 2 % 3;
-  let ok = a > 4 && not(a == 5) || false;
-  let b = a |> twice;
-  let o = if ok { 1 } else { 0 };
-  print_dec(a);
-  print_byte(b' ');
-  print_dec(b);
-  print_byte(b' ');
-  print_dec(o);
+fn main() : 1 {
+  let a = 1 + 2 * 3 - 8 / 2 % 3
+  let ok = a > 4 && not(a == 5) || false
+  let b = a |> twice
+  let o = if ok { 1 } else { 0 }
+  print_dec(a)
+  print_byte(b' ')
+  print_dec(b)
+  print_byte(b' ')
+  print_dec(o)
   print_byte(b'\n')
--- output: 6 12 1
+}
+# output: 6 12 1
 ```
 
 ## `main`
 
-`main -> T = body` is where the program starts. `main` performs standard input and output, the
+`fn main() : T { body }` is where the program starts. `main` performs standard input and output, the
 clock and the arguments with nothing written; an operation no handler in the program serves goes
 to the platform ([Input and output](guide/io.md)). An error that no handler catches is a compile
 error, except division, which ends the program with status 1
@@ -386,9 +405,9 @@ The result is printed in a raw form: an integer as its width and its bits read u
 (`i32[42]`, and `i32[4294967295]` for −1), `bool` as `inl ()` (false) or `inr ()` (true),
 records and tuples as tuples of their fields, cases of a sum as `inl …` and `inr …`, a heap
 object as `<loc>` and a function as `<fun>`. Most programs print what they mean to and return
-`()`, with `main -> 1`.
+`()`, with `fn main() : 1`.
 
 ```bc
-main -> i32 * bool = (6 * 7, 1 < 2)
--- answer: (i32[42], inr ())
+fn main() : i32 * bool = (6 * 7, 1 < 2)
+# answer: (i32[42], inr ())
 ```

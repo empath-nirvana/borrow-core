@@ -15,17 +15,18 @@ is the value's one use. Every consume in a program is derived from a type; there
 consumes.
 
 ```bc
-include textio
+import textio
 
 data Note = { tag: i32, body: ref i32 }
 
-main -> 1 =
-  let n = Note { tag: 1, body: alloc(40) };
-  let m = Note { tag: 2, body: alloc(2) };
-  let Note { tag, body } = m;
-  print_dec(free(body) + 40);
+fn main() : 1 {
+  let n = Note { tag: 1, body: alloc(40) }
+  let m = Note { tag: 2, body: alloc(2) }
+  let Note { tag, body } = m
+  print_dec(free(body) + 40)
   print_byte(b'\n')
--- output: 42
+}
+# output: 42
 ```
 
 `n` is never used, so the checker inserts `Note`'s consume where `main` ends: it frees the
@@ -37,19 +38,20 @@ its derived copy, which the checker inserts the way it inserts a consume. Owners
 `twice` reads one borrow twice; a borrow can be passed on as often, too:
 
 ```bc
-include textio
+import textio
 
-fn get<'a>(r: imm 'a i32) -> i32 = *r
+fn get<'a>(r: imm 'a i32) : i32 = *r
 
--- Passes one borrow on to two calls, and reads it a third time.
-fn thrice<'a>(r: imm 'a i32) -> i32 = get(r) + get(r) + *r
+# Passes one borrow on to two calls, and reads it a third time.
+fn thrice<'a>(r: imm 'a i32) : i32 = get(r) + get(r) + *r
 
-main -> 1 =
-  let c = alloc(5);
-  let n = thrice(&c);
-  print_dec(n + free(c));
+fn main() : 1 {
+  let c = alloc(5)
+  let n = thrice(c)
+  print_dec(n + free(c))
   print_byte(b'\n')
--- output: 20
+}
+# output: 20
 ```
 
 `r` has three uses in `thrice`, so the checker inserts two copies of it. `bcc copies <file>`
@@ -66,22 +68,22 @@ program has to say: calling it, resuming it, closing it. They are:
   the arguments). Your program never holds one: the platform's handlers keep them as their state
   ([Input and output](io.md)).
 - **Continuations of `must_resume ctl` operations**, which a handler must resume.
-- **One-shot functions** `A => B`, which can be disposed of only by calling them.
+- **One-shot functions** `(A) -> B`, which can be disposed of only by calling them.
 - **Declared types**: a data declaration whose field is marked `must_close`.
 
 A value of one of these types has to be consumed on every path, and leaving one unused is an
 error that names it:
 
 ```bc,reject
-effect Ask { must_resume ctl ask() -> i32 }
+effect Ask { must_resume ctl ask() : i32 }
 
-handler skip: Ask, i32 -> i32 = {
-  return(a) = a;
-  ask(k) = 0
+handler skip: Ask, (i32) -> i32 {
+  return(a) -> a
+  ask(k) -> 0
 }
 
-main -> i32 = with skip { ask() + 1 }
--- expect: 5:7: `k` is not consumed in its scope, and its type `U ((i32 -o F i32) & top)` is linear and is not consumable
+fn main() : i32 = handle { ask() + 1 } with skip
+# expect: 5:7: `k` is not consumed in its scope, and its type `U ((i32 -o F i32) & top)` is linear and is not consumable
 ```
 
 Messages print types as the core sees them: `U ((i32 -o F i32) & top)` is the continuation, a
@@ -89,12 +91,13 @@ suspended function from the operation's answer with no cancel branch (`top`). Th
 call `k`. A one-shot function has to be called:
 
 ```bc,reject
-fn adder(k: i32) -> i32 => i32 = { x -> x + k }
+fn adder(k: i32) : (i32) -> i32 = { x -> x + k }
 
-main -> i32 =
-  let f = adder(5);
+fn main() : i32 {
+  let f = adder(5)
   5
--- expect: 4:7: `f` is not consumed in its scope, and its type `i32 => i32` is linear and is not consumable
+}
+# expect: 4:7: `f` is not consumed in its scope, and its type `i32 => i32` is linear and is not consumable
 ```
 
 ### Declared types
@@ -108,14 +111,15 @@ the token that makes the type linear and not consumable:
 ```bc,reject
 data Txn = { id: i32, must_close(commit) log: i32 }
 
-fn begin(id: i32) -> Txn = Txn { id: id, log: 0 }
+fn begin(id: i32) : Txn = Txn { id: id, log: 0 }
 
-fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+fn commit(t: sink Txn) : i32 = match t { Txn { id, log } -> id * 100 + log }
 
-main -> i32 =
-  let t = begin(7);
+fn main() : i32 {
+  let t = begin(7)
   5
--- expect: 8:7: `t` is not consumed in its scope, and its type `i32 * i32 * tok` is linear and is not consumable: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before its scope ends
+}
+# expect: 8:7: `t` is not consumed in its scope, and its type `i32 * i32 * tok` is linear and is not consumable: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before its scope ends
 ```
 
 Naming `commit` doesn't make anything call it: the program does, by writing the call. A `match`
@@ -125,18 +129,19 @@ that takes a `Txn` apart:
 ```bc
 data Txn = { id: i32, must_close(commit) log: i32 }
 
-fn begin(id: i32) -> Txn = Txn { id: id, log: 0 }
+fn begin(id: i32) : Txn = Txn { id: id, log: 0 }
 
-fn write(t: Txn, x: i32) -> Txn = match t { Txn { id, log } -> Txn { id: id, log: log + x } }
+fn write(t: sink Txn, x: i32) : Txn = match t { Txn { id, log } -> Txn { id: id, log: log + x } }
 
-fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+fn commit(t: sink Txn) : i32 = match t { Txn { id, log } -> id * 100 + log }
 
-main -> i32 =
-  let t = begin(7);
-  let t = write(t, 5);
-  let t = write(t, 7);
+fn main() : i32 {
+  let t = begin(7)
+  let t = write(t, 5)
+  let t = write(t, 7)
   commit(t)
--- answer: i32[712]
+}
+# answer: i32[712]
 ```
 
 A type that holds a declared value is not consumable either, so a record that stores a guard
@@ -155,26 +160,27 @@ A program's own resource works the same. This handler holds a transaction, logs 
 commits it in its `return` clause:
 
 ```bc
-include textio
+import textio
 
 data Txn = { id: i32, must_close(commit) log: i32 }
 
-fn write(t: Txn, x: i32) -> Txn = match t { Txn { id, log } -> Txn { id: id, log: log + x } }
+fn write(t: sink Txn, x: i32) : Txn = match t { Txn { id, log } -> Txn { id: id, log: log + x } }
 
-fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+fn commit(t: sink Txn) : i32 = match t { Txn { id, log } -> id * 100 + log }
 
-effect Log { must_resume ctl log(x: i32) -> 1 }
+effect Log { must_resume ctl log(x: i32) : 1 }
 
--- Runs a block inside the transaction `t`, and commits it when the block answers.
-handler in_txn(mut t: Txn): Log, i32 -> i32 = {
-  return(a) = a + commit(t);
-  log(x, k) = { t = write(t, x); k(()) }
+# Runs a block inside the transaction `t`, and commits it when the block answers.
+handler in_txn(mut t: Txn): Log, (i32) -> i32 {
+  return(a) -> a + commit(t)
+  log(x, k) -> { t = write(t, x); k(()) }
 }
 
-main -> 1 =
-  print_dec(with in_txn(Txn { id: 7, log: 0 }) { log(5); log(7); 0 });
+fn main() : 1 {
+  print_dec(handle { log(5); log(7); 0 } with in_txn(Txn { id: 7, log: 0 }))
   print_byte(b'\n')
--- output: 712
+}
+# output: 712
 ```
 
 The block holds no transaction and owes no commit. `commit` runs once, in the handler, where
@@ -182,42 +188,46 @@ the program wrote it.
 
 ### `finally`
 
-For cleanup of your own, put `finally { … }` after a `with`. The block runs when the `with` is
+For cleanup of your own, put `finally { … }` after a `handle { … } with h`. The block runs when the `handle` is
 left, whether it answered or an error passed through it. It is written once and placed on both
 exits; each placement is a call you wrote, checked like any other code, so it is not a consume.
 
 ```bc
-include textio
-include fail
+import textio
+import fail
 
 data Guard = { must_close(release) lock: i32 }
 
-fn release(g: Guard) -> 1 = match g { Guard { lock } -> () }
+fn release(g: sink Guard) : 1 = match g { Guard { lock } -> () }
 
-effect Step { fn step(x: i32) }
+effect Step { step(x: i32) : 1 }
 
-handler counted(mut n: i32): Step = { step(x) = { n = n + 1 } }
+handler counted(mut n: i32): Step { step(x) -> { n = n + 1 } }
 
-fn work(x: i32) -> i32 with Step, Fail[i32] =
-  step(x);
+fn work(x: i32) : i32 / Step + Fail[i32] {
+  step(x)
   if x > 100 { raise(x) } else { x * 6 }
+}
 
--- Runs `work` holding a guard, and releases it however `work` ends.
-fn guarded(x: i32) -> i32 + i32 =
+# Runs `work` holding a guard, and releases it however `work` ends.
+fn guarded(x: i32) : i32 + i32 {
   let g = Guard { lock: x };
-  with to_result[i32, i32] {
-    with counted(0) { work(x) } finally { release(g) }
-  }
+  handle {
+    handle { work(x) } with counted(0) finally { release(g) }
+  } with to_result[i32, i32]
+}
 
-fn show(r: i32 + i32) -> 1 with Stdout =
-  match r { inl v -> print_dec(v) | inr e -> print_lit("raised "); print_dec(e) };
+fn show(r: i32 + i32) : 1 / Stdout {
+  match r { inl v -> print_dec(v) | inr e -> { print_lit("raised "); print_dec(e) } }
   print_byte(b'\n')
+}
 
-main -> 1 =
-  show(guarded(7));
+fn main() : 1 {
+  show(guarded(7))
   show(guarded(500))
--- output: 42
--- output: raised 500
+}
+# output: 42
+# output: raised 500
 ```
 
 The second call raises inside `counted`, the error passes through it to `to_result`, and the
@@ -237,27 +247,29 @@ cancelled, and cancelling it is its consume: it frees what the task owns. An unu
 cancelled where its scope ends:
 
 ```bc
-include async
-include textio
+import async
+import textio
 
--- A lookup that takes `steps` turns, holding a cell it owns.
-fn lookup(key: i32, steps: i32) -> i32 with Async =
-  let buf = alloc(key);
-  for _ in 0..steps { await() };
+# A lookup that takes `steps` turns, holding a cell it owns.
+fn lookup(key: i32, steps: i32) : i32 / Async {
+  let buf = alloc(key)
+  for _ in 0..steps { await() }
   free(buf) * 10
+}
 
-main -> 1 =
-  let a = with spawn { lookup(3, 3) };
-  let b = with spawn { lookup(4, 6) };
+fn main() : 1 {
+  let a = handle { lookup(3, 3) } with spawn
+  let b = handle { lookup(4, 6) } with spawn
   match resume(a) {
     inl v -> print_dec(v)
-  | inr ra -> cancel(ra); print_lit("pending")
-  };
+  | inr ra -> { cancel(ra); print_lit("pending") }
+  }
   print_byte(b'\n')
--- output: pending
+}
+# output: pending
 ```
 
-`with spawn` runs each lookup to its first `await`, so both have allocated their cell. `b` is
+`handle … with spawn` runs each lookup to its first `await`, so both have allocated their cell. `b` is
 never resumed, and where `main` ends its consume cancels it, which frees that cell. The
 continuation of an operation declared plain `ctl` has a cancel branch in the same way: a clause
 that doesn't call `k` cancels the rest of the block, and when that cancel performs no operation
@@ -270,16 +282,17 @@ a function that takes it apart and answers nothing is a written way to let it go
 ```bc
 data Txn = { id: i32, must_close(commit) log: i32 }
 
-fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+fn commit(t: sink Txn) : i32 = match t { Txn { id, log } -> id * 100 + log }
 
-fn roll_back(t: Txn) -> 1 = match t { Txn { id, log } -> () }
+fn roll_back(t: sink Txn) : 1 = match t { Txn { id, log } -> () }
 
-main -> i32 =
-  let a = Txn { id: 1, log: 5 };
-  let b = Txn { id: 2, log: 9 };
-  roll_back(a);
+fn main() : i32 {
+  let a = Txn { id: 1, log: 5 }
+  let b = Txn { id: 2, log: 9 }
+  roll_back(a)
   commit(b)
--- answer: i32[209]
+}
+# answer: i32[209]
 ```
 
 The call is in the program, where a reader can see it.
@@ -297,24 +310,25 @@ A value that is not consumable has neither, so it can't be live across a computa
 abort. Consume it before, or close it in a `finally`:
 
 ```bc,reject
-include fail
+import fail
 
 data Guard = { must_close(release) lock: i32 }
 
-fn release(g: Guard) -> 1 = match g { Guard { lock } -> () }
+fn release(g: sink Guard) : 1 = match g { Guard { lock } -> () }
 
-fn work(x: i32) -> i32 with Fail[i32] = if x > 100 { raise(x) } else { x * 6 }
+fn work(x: i32) : i32 / Fail[i32] = if x > 100 { raise(x) } else { x * 6 }
 
-fn guarded(x: i32) -> i32 + i32 =
+fn guarded(x: i32) : i32 + i32 {
   let g = Guard { lock: x };
-  with to_result[i32, i32] {
-    let y = work(x);
-    release(g);
+  handle {
+    let y = work(x)
+    release(g)
     y
-  }
+  } with to_result[i32, i32]
+}
 
-main -> i32 = match guarded(7) { inl v -> v | inr e -> 0 }
--- expect: 12:13: `g`, of type `i32 * tok`, is live across a computation that may abort, and its type is linear and not consumable, and an abort abandons only a value that holds no owned cell: `Guard` holds the field `lock`, marked `must_close`; pass it to `release` before the computation that may abort, or close it in a `finally`
+fn main() : i32 = match guarded(7) { inl v -> v | inr e -> 0 }
+# expect: 12:13: `g`, of type `i32 * tok`, is live across a computation that may abort, and its type is linear and not consumable, and an abort abandons only a value that holds no owned cell: `Guard` holds the field `lock`, marked `must_close`; pass it to `release` before the computation that may abort, or close it in a `finally`
 ```
 
 The `finally` version is the one in [Resources are handlers](#finally).
@@ -324,30 +338,31 @@ abort itself and consumes the state in that clause. Here `abort_txn` is the hand
 operation, and its clause rolls the transaction back:
 
 ```bc
-include textio
+import textio
 
 data Txn = { id: i32, must_close(commit) log: i32 }
 
-fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+fn commit(t: sink Txn) : i32 = match t { Txn { id, log } -> id * 100 + log }
 
-fn roll_back(t: Txn) -> 1 = match t { Txn { id, log } -> () }
+fn roll_back(t: sink Txn) : 1 = match t { Txn { id, log } -> () }
 
-effect Abort { ctl abort_txn(e: i32) -> never }
+effect Abort { ctl abort_txn(e: i32) : never }
 
--- Commits the transaction when the block answers, and rolls it back when it aborts.
-handler in_txn(t: Txn): Abort, i32 -> i32 = {
-  return(a) = a + commit(t);
-  abort_txn(e) = { roll_back(t); e }
+# Commits the transaction when the block answers, and rolls it back when it aborts.
+handler in_txn(t: sink Txn): Abort, (i32) -> i32 {
+  return(a) -> a + commit(t)
+  abort_txn(e) -> { roll_back(t); e }
 }
 
-fn work(x: i32) -> i32 with Abort = if x > 100 { abort_txn(x) } else { x * 6 }
+fn work(x: i32) : i32 / Abort = if x > 100 { abort_txn(x) } else { x * 6 }
 
-main -> 1 =
-  print_dec(with in_txn(Txn { id: 7, log: 5 }) { work(5) });
-  print_byte(b' ');
-  print_dec(with in_txn(Txn { id: 8, log: 0 }) { work(500) });
+fn main() : 1 {
+  print_dec(handle { work(5) } with in_txn(Txn { id: 7, log: 5 }))
+  print_byte(b' ')
+  print_dec(handle { work(500) } with in_txn(Txn { id: 8, log: 0 }))
   print_byte(b'\n')
--- output: 735 500
+}
+# output: 735 500
 ```
 
 An abort that passes through the handler to one further out would leave the state behind, so the
@@ -355,32 +370,33 @@ checker refuses it. Here the `in_txn` of [Resources are handlers](#resources-are
 the transaction, and `work` raises a `Fail[i32]` that only the outer `to_result` handles:
 
 ```bc,reject
-include fail
+import fail
 
 data Txn = { id: i32, must_close(commit) log: i32 }
 
-fn write(t: Txn, x: i32) -> Txn = match t { Txn { id, log } -> Txn { id: id, log: log + x } }
+fn write(t: sink Txn, x: i32) : Txn = match t { Txn { id, log } -> Txn { id: id, log: log + x } }
 
-fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+fn commit(t: sink Txn) : i32 = match t { Txn { id, log } -> id * 100 + log }
 
-effect Log { must_resume ctl log(x: i32) -> 1 }
+effect Log { must_resume ctl log(x: i32) : 1 }
 
-handler in_txn(mut t: Txn): Log, i32 -> i32 = {
-  return(a) = a + commit(t);
-  log(x, k) = { t = write(t, x); k(()) }
+handler in_txn(mut t: Txn): Log, (i32) -> i32 {
+  return(a) -> a + commit(t)
+  log(x, k) -> { t = write(t, x); k(()) }
 }
 
-fn work(x: i32) -> i32 with Log, Fail[i32] =
-  log(x);
+fn work(x: i32) : i32 / Log + Fail[i32] {
+  log(x)
   if x > 100 { raise(x) } else { x * 6 }
+}
 
-fn run_it(x: i32) -> i32 + i32 =
-  with to_result[i32, i32] {
-    with in_txn(Txn { id: 7, log: 0 }) { work(x) }
-  }
+fn run_it(x: i32) : i32 + i32 =
+  handle {
+    handle { work(x) } with in_txn(Txn { id: 7, log: 0 })
+  } with to_result[i32, i32]
 
-main -> i32 = match run_it(5) { inl v -> v | inr e -> 0 - e }
--- expect: 13:34: `t`, of type `i32 * i32 * tok`, is live across a computation that may abort, and its type is linear and not consumable, and an abort abandons only a value that holds no owned cell: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before the computation that may abort, or close it in a `finally`
+fn main() : i32 = match run_it(5) { inl v -> v | inr e -> 0 - e }
+# expect: 13:35: `t`, of type `i32 * i32 * tok`, is live across a computation that may abort, and its type is linear and not consumable, and an abort abandons only a value that holds no owned cell: `Txn` holds the field `log`, marked `must_close`; pass it to `commit` before the computation that may abort, or close it in a `finally`
 ```
 
 ## Compared with Rust
