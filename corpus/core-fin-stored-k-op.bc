@@ -1,15 +1,16 @@
--- check: old-backend-refuses
--- SPEC §27 in the core text: a stored `κ` whose cancel suspends, cancelled after its handler has
--- returned (the shape of `core-fin-stored-k-fin.bc`, the kernel's `stored-k-fin`, with a finaliser
--- that performs instead of raising). Handler 3 stores `κ` in the closure it answers; the closure
--- cancels it, outside the region. The region's finaliser performs `4.0`, whose live handler is
--- handler 4, outside: the cleanup suspends in the canceller (the closure's call), not in the
--- cancelled region, whose handlers are dead. `κ`'s cancel is a machine of `F[4.0, 4.0] 1`'s
--- outcome (Backend2's R4). Handler 4 resumes outside tail position.
---
--- Answer: inr (), and `live 0`: handler 4's clause turns the resumed `inl (inr ())` into `inr ()`.
--- A wrong implementation that skips the stored `κ`'s finaliser on the cancel answers
--- `inl (inr ())`.
+#! dialect 82
+# check: old-backend-refuses
+# SPEC §27 in the core text: a stored `κ` whose cancel suspends, cancelled after its handler has
+# returned (the shape of `core-fin-stored-k-fin.bc`, the kernel's `stored-k-fin`, with a finaliser
+# that performs instead of raising). Handler 3 stores `κ` in the closure it answers; the closure
+# cancels it, outside the region. The region's finaliser performs `4.0`, whose live handler is
+# handler 4, outside: the cleanup suspends in the canceller (the closure's call), not in the
+# cancelled region, whose handlers are dead. `κ`'s cancel is a machine of `F[4.0, 4.0] 1`'s
+# outcome (Backend2's R4). Handler 4 resumes outside tail position.
+#
+# Answer: inr (), and `live 0`: handler 4's clause turns the resumed `inl (inr ())` into `inr ()`.
+# A wrong implementation that skips the stored `κ`'s finaliser on the cancel answers
+# `inl (inr ())`.
 
 main : F ((1 + 1) + 1) =
   handle_with[4](

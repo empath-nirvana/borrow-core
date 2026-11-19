@@ -1,0 +1,42 @@
+-- `data-forms.bc` written by hand in core, by SPEC §42's rules: the declarations are their `type`
+-- and `shape` declarations (D1, D3); `box Node(…)` the block allocated whole and injected and
+-- rolled (E2); the `box` pattern a `case` on the unrolled tree whose block's cells are freed (M1);
+-- the record literal its values bound in the written order, then the pair in the declaration's
+-- (E4); a field read of a persistent record its projection (E5); the match over two columns a
+-- `case` on the state, then an `==` test of the integer (M2).
+type Tree = mu X. 1 + (ref X * (ref i32 * ref X))
+
+shape Tree_Node = node (leaf Tree) (node (leaf i32) (leaf Tree))
+
+type P = i32 * i32
+
+type State = 1 + 1
+
+main : F i32 =
+  t <- return (roll (inr (alloc_s[Tree_Node] ((roll (inl ()) : Tree), (i32[5], (roll (inl ()) : Tree))))) : Tree);
+  n <- case (unroll t) {
+      inl e -> let () = e;
+        return i32[0]
+    | inr b -> let (cl, rest) = b;
+        let (cv, cr) = rest;
+        l <- return free[Tree] cl;
+        v <- return free[i32] cv;
+        r <- return free[Tree] cr;
+        return v
+    };
+  p <- return run (pv <- return i32[4];
+    px <- return i32[3];
+    return ((px, pv) : P));
+  s <- (o <- return (inr () : State);
+    case o {
+      inl lk -> let () = lk;
+        return i32[0]
+    | inr op -> let () = op;
+        case (unbang host[eq32]) (n, i32[5]) {
+          inl no -> return i32[1]
+        | inr yes -> return (unbang host[add32]) (run (let (x1, v1) = p;
+            return x1), run (let (x2, v2) = p;
+            return v2))
+        }
+    });
+  return (unbang host[add32]) (n, s)

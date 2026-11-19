@@ -1,5 +1,6 @@
--- `surface-borrow.bc` written by hand in core: `withbor1`, `withbor2`, `withbor_f2_mut` and
--- `withswap` with every type argument, each callback's tail boxed, each place rebound.
+#! dialect 82
+# `surface-borrow.bc` written by hand in core: `withbor1`, `withbor2`, `withbor_f2_mut` and
+# `withswap` with every type argument, each callback's tail boxed, each place rebound.
 def peek : !(all 'a < top. imm 'a i32 => i32) =
   !thunkv Fun 'a < top. return (thunkv fun (b : imm 'a i32) ->
     return (withload['a, 'y, i32, i32] b (thunkv Fun 'y < dom. return (thunkv fun (v : i32) ->

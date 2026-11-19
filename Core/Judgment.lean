@@ -592,33 +592,17 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   row, and so it is at each cancellable wait of `Σ_M` (`OpSig.finRead`), whose cancel is a resume
   that unwinds through this finaliser.  `Γ₂` is persistent where `Σ` has an unrestricted operation
   at some depth of its cancel rows (`Row.UnrD`), since the finaliser runs in the cancels below it,
-  and the errors pending at the finaliser are persistent where `Σ_D` has one.  The finaliser's row
-  does not hold `Div`: a finaliser must terminate (decision 69).  `[then]` at option A, the
-  finaliser at `F 1`, is `CDerives.effThenA`.  `[spec §14, §19, §24, §27, §29a]` -/
-  | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
+  and the errors pending at the finaliser are persistent where `Σ_D` has one.  `hF`: the
+  finaliser's row does not hold `Div` (a finaliser must terminate, decision 69), or `M`'s row has
+  no capturable operation, so no cancel run (`κ.2`, a least fixed point) reaches the finaliser.
+  At the left disjunct it is `CDerivesX.effThen`, at the right `CDerivesX.effThenDiv`; `[then]` at
+  option A, the finaliser at `F 1`, is `CDerives.effThenA`.  `[spec §14, §19, §24, §27, §29a]` -/
+  | effThenF {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
       (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
       (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
         o.finRead = true → ThenLe o.fin SD o'.fin)
-      (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
-      (hM : CDerivesX I Δ Γ₁ M (.comp (CTy.effOf SM A)))
-      (hN : CDerivesX I Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
-      (hD : CDerivesX I Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
-      CDerivesX I Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
-  /-- **`[then]` with a finaliser that may loop.** `effThen` with `Div` admitted in the
-  finaliser's row `Σ_D`: no `hSD`. `M`'s row has no capturable operation (`hcap`), so no cancel
-  run (`κ.2`, a least fixed point) reaches the finaliser; a cancel at a cancellable wait of `Σ_M`
-  is a resume and reaches it on the ordinary unwind of the cancel target's raise, at `Σ`, which
-  holds `Div` with `Σ_D`. At a `Div`-free `Σ_D` it is `then_compatC`, at a `Div` row
-  `then_compatC_div`. A finaliser whose row holds `Div` puts `Div` in `Σ`, which must be handled
-  before the program is a closed `F A`; one whose row is `Div`-free terminates by totality.
-  The proof reads neither `hfin` nor `hUq`: `hfin` records `Σ_D`, `Div` included, in each
-  cancellable wait's cancel row, where `Row.CancelTotal`/`Row.CancelEnds` read it.
-  `[spec §14, §27, §29a]` -/
-  | effThenDiv {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
-      (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
-      (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-        o.finRead = true → ThenLe o.fin SD o'.fin)
-      (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false)
+      (hP : SD.UnrD → SM.PendPers)
+      (hF : Row.divB SD = false ∨ ∀ o ∈ SM, capB o.q o.B = false)
       (hM : CDerivesX I Δ Γ₁ M (.comp (CTy.effOf SM A)))
       (hN : CDerivesX I Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
       (hD : CDerivesX I Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
@@ -784,6 +768,114 @@ theorem CDerivesX.withbor3UD {I : JIdx} {Δ Γ a A B d} {SM SD S : Row} (x : Lif
     (hd : CDerivesX I Δ Γ d (.val (.thunk (.arr (.mut a A) (CTy.effOf SD .unit))))) :
     CDerivesX I Δ Γ (withborUE d) (.val (withbor3UTyD a x Δ.meetOfDom A B SM S)) :=
   .withborUD (.reborrow a) x hΓ hx trivial hfree₁ hfree₂ hS hMS hDS hSv hP hd
+
+/-! ### Derived rules: `[then]` at a terminating finaliser and at a finaliser that may loop, the
+two sides of `effThenF`'s `hF` -/
+
+/-- `[then]` with a finaliser whose row does not hold `Div` (`effThenF` at the left disjunct).
+`[spec §14, §19, §24, §27, §29a]` -/
+theorem CDerivesX.effThen {I : JIdx} {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
+    (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
+    (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
+      o.finRead = true → ThenLe o.fin SD o'.fin)
+    (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
+    (hM : CDerivesX I Δ Γ₁ M (.comp (CTy.effOf SM A)))
+    (hN : CDerivesX I Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
+    (hD : CDerivesX I Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+    CDerivesX I Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+  .effThenF hs hNZ hUq hU hMS hDS hfin hP (.inl hSD) hM hN hD
+
+/-- **`[then]` with a finaliser that may loop** (`effThenF` at the right disjunct): `Div` admitted
+in the finaliser's row `Σ_D`, `M`'s row with no capturable operation (`hcap`).  `[spec §14, §27, §29a]` -/
+theorem CDerivesX.effThenDiv {I : JIdx} {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
+    (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
+    (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
+      o.finRead = true → ThenLe o.fin SD o'.fin)
+    (hP : SD.UnrD → SM.PendPers) (hcap : ∀ o ∈ SM, capB o.q o.B = false)
+    (hM : CDerivesX I Δ Γ₁ M (.comp (CTy.effOf SM A)))
+    (hN : CDerivesX I Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
+    (hD : CDerivesX I Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
+    CDerivesX I Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+  .effThenF hs hNZ hUq hU hMS hDS hfin hP (.inr hcap) hM hN hD
+
+/-! ### Derived rules at the pure row: `[then]`, `[handle]` at two variables, the unwinding lends -/
+
+/-- `[then]` with its finaliser at the pure row (SPEC §24, option A): `effThen` at `Σ_M = Σ` and
+`Σ_D = ∅`, since `F ⋈ ∅ ≤ F` (`ThenLe.nil`).  `[spec §24, §27, §83]` -/
+theorem CDerivesX.effThenA {I : JIdx} {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
+    (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Ctx.Banged Γ₂)
+    (hM : CDerivesX I Δ Γ₁ M (.comp (CTy.effOf S A)))
+    (hN : CDerivesX I Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
+    (hD : CDerivesX I Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
+    CDerivesX I Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+  .effThen (SD := []) hs hNZ hUq hU (RowLe.refl S) (RowLe.nil S)
+    (fun _ _ o _ hf hf' _ => by rw [hf] at hf'; cases hf'; exact ThenLe.nil o.fin)
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) rfl hM hN hD
+
+/-- `[handle]` at two variables: `handle_n e with (h_ret, hs)`, `h_ret` and `hs` variables of
+slots at their types.  An instance of `effHandleV`: `(h_ret, hs)` is a value form, typed by
+`[⊗I]`, over slots that are persistent.  `[spec §19, §83]` -/
+theorem CDerivesX.effHandle {I : JIdx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)}
+    {n : UInt32} {A R : VTy} {ir ic : Nat} (hAt : I.RowOK (Row.ofEff n E 0 ++ S))
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc)
+    (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : Row.divB (Row.ofEff n E 0 ++ S) = false)
+    (he : CDerivesX I Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
+    CDerivesX I Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) := by
+  obtain ⟨sr, hsr, hlr⟩ := hr.live
+  obtain ⟨sc, hsc, hlc⟩ := hc.live
+  obtain ⟨sr', hsr', hlr'⟩ := hs₁.live_left hsr hlr
+  obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
+  exact .effHandleV (cs := rcsNil) hAt hs
+    (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E finsNil)))
+    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
+
+/-- `[handle]` at two variables with cancel rows `fs` and markers `cs`.  `[spec §19, §27, §29a, §83]` -/
+theorem CDerivesX.effHandleCs {I : JIdx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)}
+    (fs : Nat → CTy) (cs : Nat → Bool)
+    {n : UInt32} {A R : VTy} {ir ic : Nat} (hAt : I.RowOK (Row.ofEff n E 0 fs cs ++ S))
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc)
+    (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E fs))
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : Row.divB (Row.ofEff n E 0 fs cs ++ S) = false)
+    (he : CDerivesX I Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs cs ++ S) A))) :
+    CDerivesX I Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) := by
+  obtain ⟨sr, hsr, hlr⟩ := hr.live
+  obtain ⟨sc, hsc, hlc⟩ := hc.live
+  obtain ⟨sr', hsr', hlr'⟩ := hs₁.live_left hsr hlr
+  obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
+  exact .effHandleV (cs := cs) hAt hs
+    (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E fs)))
+    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
+
+/-- The unwinding form of `withbor` (1) with its finaliser at the pure row: `withbor1UD` at
+`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19, §72, §83]` -/
+theorem CDerivesX.withbor1U {I : JIdx} {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B)
+    (hS : S.Unwind x) (hd : CDerivesX I Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    CDerivesX I Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S)) :=
+  .withbor1UD (SD := []) x hΓ hx hsc₁ hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
+
+/-- The unwinding form of `withbor` (2) with its finaliser at the pure row: `withbor2UD` at
+`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19, §23, §83]` -/
+theorem CDerivesX.withbor2U {I : JIdx} {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+    (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+    (hd : CDerivesX I Δ Γ d (.val (.lolli (.ref A) .unit))) :
+    CDerivesX I Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S)) :=
+  .withbor2UD (SD := []) x hΓ hx hside hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
+
+/-- The unwinding form of `withbor` (3) with its finaliser at the pure row: `withbor3UD` at
+`Σ_D = ∅`, `Σ_M = Σ`.  `[spec §19, §83]` -/
+theorem CDerivesX.withbor3U {I : JIdx} {Δ Γ a A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+    (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+    (hd : CDerivesX I Δ Γ d (.val (.lolli (.mut a A) .unit))) :
+    CDerivesX I Δ Γ (withborUE d) (.val (withbor3UTy a x Δ.meetOfDom A B S)) :=
+  .withbor3UD (SD := []) x hΓ hx hfree₁ hfree₂ hS (RowLe.refl S) (RowLe.nil S) hS.divB
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hd
 
 /-- The kernel's typing judgment: `CDerivesX` with no tie.  `[spec §3, §10, §83]` -/
 abbrev CDerives := CDerivesX {}

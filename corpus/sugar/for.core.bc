@@ -1,6 +1,7 @@
--- The elaboration of `for.bc` (SPEC §11, §14), as `bcc desugar` prints it: an ordinary core
--- program, with the I/O library the sugar brings in, whose `main` is one state machine (SPEC §15).
--- `scripts/check-sugar.sh` checks that both erase to one term.
+#! dialect 82
+# The elaboration of `for.bc` (SPEC §11, §14), as `bcc desugar` prints it: an ordinary core
+# program, with the I/O library the sugar brings in, whose `main` is one state machine (SPEC §15).
+# `scripts/check-sugar.sh` checks that both erase to one term.
 def true : 1 + 1 =
   inr ()
 

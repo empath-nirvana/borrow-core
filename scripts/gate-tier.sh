@@ -35,7 +35,8 @@
 #   scripts    a step's own script (the map below): A, the steps whose script changed, and the
 #              compiler tier's cut. Every result-cache key holds all of scripts/, so every unit
 #              misses after any script change; the cut keeps that to the compiler tier's cost.
-#              Scripts no gate step runs (falsify, the kernel census, new-worktree, gate-daily): A.
+#              Scripts no gate step runs (falsify, the kernel census, new-worktree, gate-daily,
+#              respell-move): A.
 #   compiler   any other .lean, scripts/axioms/*.names, lib/, the CrossCheck corpus files: the
 #              whole build, A, L but research archive (left to the research tier and the daily
 #              run: it catches the research tree no longer building, or its registered names'
@@ -44,17 +45,20 @@
 #              changed path is in the elaborator's or the reference interpreter's import closure
 #              (below), and every step on the touched programs.
 #   full       lean-toolchain, lake-manifest.json, lakefile.toml; the gate's own machinery
-#              (ci-local.sh, par.sh, par_unit.py, slot, slotpool.py, gate_cache.py, gate-tier.sh,
-#              source-stage.sh, interp-digest.sh, corpus-set.sh, the Makefile); and every path that
+#              (ci-local.sh, par.sh, grepq.sh, par_unit.py, slot, slotpool.py, gate_cache.py, gate-tier.sh,
+#              source-stage.sh, interp-digest.sh, corpus-set.sh, exhausted.sh, check-exhausted.sh,
+#              the Makefile); and every path that
 #              matches no rule here: every step on every
 #              program (the full gate, cached).
 #
 # Step groups (ci-local.sh's step names):
 #   A  spec files, judgment freeze, assumptions, gate tiers (scripts/check-gate-tier.sh)
 #   L  hygiene + axioms, type equality, axiom report, insertion pins, research archive, backend2 fence
-#   C  parse corpus, check corpus, corpus (Backend2, final), corpus (old backend, final), result cache
+#   C  parse corpus, check corpus, respell pairs, corpus (Backend2, final), corpus (old backend, final),
+#      result cache
 #   X  compile scaling, kernel (old backend), layout rejects, sugar pairs, book doc-tests, book build
 #   R  renaming, let mut combos
+#   handle exhaustion (scripts/check-exhausted.sh): in every tier that builds
 #   P  corpus (Backend2), corpus (old backend), native facts, native, clause kinds, handled names,
 #      cell classes
 # What the per-PR gate leaves out is checked by the daily full gate on main (scripts/gate-daily.sh).
@@ -112,11 +116,11 @@ paths = [p for p in sys.stdin.read().split("\n") if p]
 
 A = ["spec files", "judgment freeze", "assumptions", "gate tiers"]
 L = ["hygiene + axioms", "type equality", "axiom report", "insertion pins", "research archive", "backend2 fence"]
-C = ["parse corpus", "check corpus", "corpus (Backend2, final)", "corpus (old backend, final)", "result cache"]
+C = ["parse corpus", "check corpus", "respell pairs", "corpus (Backend2, final)", "corpus (old backend, final)", "result cache"]
 X = ["compile scaling", "kernel (old backend)", "layout rejects", "sugar pairs", "book doc-tests", "book build"]
 R = ["renaming", "let mut combos"]
 P = ["corpus (Backend2)", "corpus (old backend)", "native facts", "native", "clause kinds", "handled names", "cell classes"]
-FULL = A + L + ["parse corpus", "check corpus"] + X + R + P + ["result cache"]
+FULL = A + L + ["parse corpus", "check corpus", "respell pairs"] + X + R + P + ["result cache", "handle exhaustion"]
 ORDER = ["docs", "book", "corpus", "research", "scripts", "compiler", "full"]
 
 # The steps each script belongs to (a change to it reruns those steps on every program).
@@ -130,7 +134,7 @@ STEP_SCRIPTS = {
     "AxiomCheck.lean": ["axiom report", "research archive"],
     "check-pins.sh": ["insertion pins"], "PinSites.lean": ["insertion pins"],
     "check-research.sh": ["research archive"],
-    "parse-corpus.sh": ["parse corpus"], "check-corpus.sh": ["check corpus"],
+    "parse-corpus.sh": ["parse corpus"], "check-corpus.sh": ["check corpus"], "check-respell.sh": ["respell pairs"],
     "check-kinds.sh": ["clause kinds"], "check-handled.sh": ["handled names"], "check-cells.sh": ["cell classes"],
     "compile-backend2.sh": ["corpus (Backend2)", "corpus (Backend2, final)", "result cache"],
     "compile-corpus.sh": ["corpus (old backend)", "corpus (old backend, final)"],
@@ -150,10 +154,10 @@ STEP_SCRIPTS = {
     "census-neg/pins.lean": ["insertion pins"],
     "census-neg/": ["hygiene + axioms", "type equality", "axiom report", "insertion pins"],
 }
-MACHINERY = {"ci-local.sh", "par.sh", "gate_cache.py", "gate-tier.sh", "source-stage.sh", "interp-digest.sh",
-             "corpus-set.sh", "par_unit.py", "slot", "slotpool.py"}
+MACHINERY = {"ci-local.sh", "par.sh", "grepq.sh", "gate_cache.py", "gate-tier.sh", "source-stage.sh", "interp-digest.sh",
+             "corpus-set.sh", "par_unit.py", "slot", "slotpool.py", "exhausted.sh", "check-exhausted.sh"}
 NO_STEP = {"falsify.sh", "kernel-census.sh", "KernelCensus.lean", "KernelDecls.lean", "new-worktree.sh",
-           "gate-daily.sh", "gate-daily.plist"}
+           "gate-daily.sh", "gate-daily.plist", "respell-move.sh"}
 TABLES = {"kinds.expected": "clause kinds", "handled.expected": "handled names", "cells.expected": "cell classes",
           "counts.expected": "corpus (old backend)", "counts-backend2.expected": "corpus (Backend2)",
           "erasure-backend2.expected": "corpus (Backend2)", "kernel-counts.expected": "kernel (old backend)"}
@@ -363,6 +367,8 @@ else:
         on("parse corpus", parsed)
         on("check corpus", checked)
         on("renaming", renamed)
+        # A respelled file or its twin in today's spelling (scripts/check-respell.sh): the pair.
+        on("respell pairs", sorted({f for f in progs | touched if f.endswith(".bc") and exists(f)}))
         for s in ("corpus (Backend2)", "corpus (old backend)", "native facts", "native"):
             on(s, programs)
         if set(programs) & native_tail():
@@ -371,6 +377,10 @@ else:
 
 if build == "none" and any(v is not None or k not in A for k, v in steps.items()):
     build = "bins"
+# Every gate that builds checks that running out of file handles is said and fails, and that the
+# job pool bounds the processes that map the library (scripts/check-exhausted.sh).
+if build != "none":
+    every(["handle exhaustion"])
 
 # The plan, in ci-local's step order.
 order = ["compile scaling"] + FULL + ["corpus (Backend2, final)", "corpus (old backend, final)"]

@@ -1,0 +1,6 @@
+-- [spec §80] A zero-width local needs neither an allocation nor a live frame slot.
+main : F (1 * i32) =
+  return (withlocal['l, top, 1, i32] ()
+    (thunkv Fun 'l < dom. return (thunkv fun (m : mut 'l 1) ->
+      let () = release_mut['l, 1] m;
+      return (boxed['l] i32[17]))))

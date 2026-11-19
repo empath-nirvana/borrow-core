@@ -1,11 +1,12 @@
--- swapBoth (Core/FamilyPrograms.lean), from the corpus review's 4a-family-swapBoth, in
--- draft 1: two cells borrowed `mut` as one family by withbor_f2_mut, and swapped.
--- 'a and 'b name the family's two internal borrows (section 9); top is the witness @w. The
--- borrows `mb2` and `ma2` that the withswaps hand back are consumed implicitly (SPEC §12).
---
--- Answer: (i32[500], i32[9]), from the cells a = 9, b = 500. The cells differ, so a swap
--- that does not happen gives (9, 500), one that copies one cell into the other gives
--- (9, 9) or (500, 500), and returning the family's cells in the wrong order gives (9, 500).
+#! dialect 82
+# swapBoth (Core/FamilyPrograms.lean), from the corpus review's 4a-family-swapBoth, in
+# draft 1: two cells borrowed `mut` as one family by withbor_f2_mut, and swapped.
+# 'a and 'b name the family's two internal borrows (section 9); top is the witness @w. The
+# borrows `mb2` and `ma2` that the withswaps hand back are consumed implicitly (SPEC §12).
+#
+# Answer: (i32[500], i32[9]), from the cells a = 9, b = 500. The cells differ, so a swap
+# that does not happen gives (9, 500), one that copies one cell into the other gives
+# (9, 9) or (500, 500), and returning the family's cells in the wrong order gives (9, 500).
 
 main : F (i32 * i32) =
   ra <- return (alloc[i32] i32[9]);

@@ -1,0 +1,29 @@
+-- One identity used at two rows, the twin of the kernel program `poly-id` (Backend/Kernel.lean,
+-- `Shapes.polyId`), in the core text: `id` neither raises nor suspends, and its two uses differ in
+-- row only through what each is given and answers, a pure callback and one that raises `1.0`. It
+-- is generic in the callback's type, so each use is its own instance, as the kernel program's is
+-- lowered per use. The surface cannot write it: a function cannot return the effectful block it
+-- is given (#870, SPEC §30).
+--
+-- Answer: (inr (), inr ()): the pure callback's `true`, and the raise caught by the handler of `1`;
+-- `live 0`. An `id` that ran its callback, or a raise that escaped, would change the pair.
+
+def id[A] : !U (A -o F A) = !thunkv fun (f : A) -> return f
+
+main : F ((1 + 1) * ((1 + 1) + 1)) =
+  pure_cb : U (1 -o F (1 + 1)) <- return (thunkv fun (u : 1) -> let () = u; return (inr () : 1 + 1));
+  i1 <- return (unbang id[U (1 -o F (1 + 1))]);
+  g1 <- (force i1) pure_cb;
+  z1 <- return ();
+  a <- (force g1) z1;
+  b <- handle_with[1](
+      ((!thunkv fun (v : 1 + 1) -> return (inl v : (1 + 1) + 1)) : !U (1 + 1 -o F ((1 + 1) + 1))),
+      (((!thunkv fun (e : 1) -> let () = e; return (inr () : (1 + 1) + 1)), ())
+        : !U (1 -o F ((1 + 1) + 1)) * 1)) (
+    fail_cb : U (1 -o F[1.0 cancel 1 ~> 0] (1 + 1)) <-
+      return (thunkv fun (u : 1) -> x <- abort[1.0] u; absurd x);
+    i2 <- return (unbang id[U (1 -o F[1.0 cancel 1 ~> 0] (1 + 1))]);
+    g2 <- (force i2) fail_cb;
+    z2 <- return ();
+    (force g2) z2);
+  return (a, b)

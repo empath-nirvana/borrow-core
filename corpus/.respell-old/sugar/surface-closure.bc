@@ -1,0 +1,15 @@
+-- Closures, blocks and forces (draft 0 §2.3; typed elaboration, stage 5). `{ n -> S }` is a
+-- closure, its parameter typed by the function type expected of it; `!{ … }` is persistent;
+-- `{ S }` is a thunk of `S`. The forces stay visible: `t!` runs a thunk and `g!(e)` calls a
+-- closure, each at the head of a `<-`. `surface-closure.core.bc` is the program written by hand in
+-- core.
+-- Answer: (i32[42], i32[83]): 41 + 1, then 42 * 2 - 1.
+fn apply(f: !(i32 => i32), x: i32) -> i32 = f(x)
+
+main -> i32 * i32 =
+  let a = apply(!{ n -> n + 1 }, 41);
+  let t = { apply(!{ n -> n * 2 }, a) };
+  let g : U (i32 -o F i32) = { n -> n - 1 };
+  b <- t!;
+  c <- g!(b);
+  (a, c)

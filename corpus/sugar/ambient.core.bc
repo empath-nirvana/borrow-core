@@ -1,5 +1,6 @@
--- The elaboration of `ambient.bc` (SPEC §11), as `bcc desugar` prints it: an ordinary core program, with
--- the I/O library the sugar brings in. `scripts/check-sugar.sh` checks that both erase to one term.
+#! dialect 82
+# The elaboration of `ambient.bc` (SPEC §11), as `bcc desugar` prints it: an ordinary core program, with
+# the I/O library the sugar brings in. `scripts/check-sugar.sh` checks that both erase to one term.
 def true : 1 + 1 =
   inr ()
 

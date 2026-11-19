@@ -1,0 +1,9 @@
+-- A `modify` of a `let mut` value whose body assigns another `let mut` (#586's comment): the body
+-- runs on the value in place and hands `n` back beside the new content (SPEC §41, rule R3).
+-- `mut-modify.core.bc` is its elaboration, written by hand.
+-- Answer: (i32[6], i32[7]).
+main -> i32 * i32 =
+  let mut x = 5;
+  let mut n = 0;
+  modify &mut x { v -> n = 7; v + 1 };
+  (x, n)

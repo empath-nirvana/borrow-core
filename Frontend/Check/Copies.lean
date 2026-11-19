@@ -71,14 +71,14 @@ every other split's left part runs first. `none` at a node whose parts are not s
 handler's clauses and the computation they handle, `absurd`). -/
 def _root_.BoCa.Fig16.LogRel.Core.Check.TExpr.firstPart? : TExpr → Option Bool
   | .tensorI .. | .lolliE .. | .bind .. | .effLet .. | .unitE .. | .tensorE .. | .sumE ..
-  | .effThen .. => some true
+  | .effThenF .. => some true
   | .app .. => some false
   | _ => none
 
 /-- The children of a node in each part of its split: the left part's and the right part's, as
 indices into `TExpr.children`. `M x`'s right part is its own use (`TExpr.ownUse`). -/
 def _root_.BoCa.Fig16.LogRel.Core.Check.TExpr.partKids : TExpr → List Nat × List Nat
-  | .sumE .. | .effThen .. => ([0], [1, 2])
+  | .sumE .. | .effThenF .. => ([0], [1, 2])
   | .app .. => ([0], [])
   | _ => ([0], [1])
 

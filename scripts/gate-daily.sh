@@ -32,7 +32,8 @@
 #      does not run), through gate-serial in the same checkout (about 420 CPU-s; its log is
 #      appended to the gate's). A failure there makes the verdict FAIL, named "warm --final".
 #   6. Writes the log ($out/<date>-<commit>.log; kept whatever the verdict) and one line in
-#      $out/verdicts.tsv: date, commit, verdict (PASS, FAIL or TIMEOUT), failing steps, wall
+#      $out/verdicts.tsv: date, commit, verdict (PASS, FAIL, TIMEOUT, or EXHAUSTED: the machine ran
+#      out of file handles, which like a TIMEOUT settles nothing), failing steps, wall
 #      seconds, CPU seconds, log. The verdict is the gate's own exit status (and its `ALL PASSED`
 #      line), recorded beside the log, not that of the wrappers around it. A FAIL or TIMEOUT log ends with the merges since the last
 #      passing run (`git log --merges --oneline <last-pass>..<commit>`).
@@ -208,6 +209,9 @@ mfile=$out/measure/daily-$(basename "$stem").txt
 # 6. The verdict.
 steps=$(sed -n 's/^    FAILED: \(.*\) ([0-9?]*s)$/\1/p' "$log" | paste -sd ',' - | sed 's/,/, /g')
 if [ "$rc" = 124 ] || [ "$rc" = 137 ]; then verdict=TIMEOUT; steps=${steps:-"none failed before the limit"}
+# The gate's 75: the machine ran out of file handles (scripts/ci-local.sh, scripts/exhausted.sh). No
+# verdict on the commit: recorded like a timeout, so the commit is gated again.
+elif [ "$grc" = 75 ]; then verdict=EXHAUSTED; steps="the machine ran out of file handles${steps:+ (failed: $steps)}"
 elif [ -z "$grc" ]; then verdict=FAIL; steps=${steps:-"the gate's exit status was not recorded; the wrappers exited $rc (see the log)"}
 elif [ "$grc" = 0 ] && grep -q 'ALL PASSED' "$log" && [ "${warmrc:-0}" != 0 ]; then
   verdict=FAIL; steps="warm --final (the gate passed; recording the corpus at the final target exited $warmrc)"
