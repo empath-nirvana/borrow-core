@@ -1,0 +1,41 @@
+-- Advent of Code 2022, day 1, ported from `src/year2022/day01.rs` of
+-- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
+-- `corpus/aoc/LICENSE.md`.
+--
+-- The puzzle: the input is groups of numbers, the groups separated by blank lines. Part 1 is the
+-- largest group total, part 2 the sum of the three largest.
+--
+-- The port reads the whole input, folds its lines (`fold_lines`, sub-views, no copy) into a buffer
+-- of group totals, sorts the totals in place through a `mut` view (`sort`), and reads the top
+-- three. Parsing, a growable buffer, and sorting.
+--
+-- Answer on `2022-01.in` (`corpus/aoc/gen.py`), as the Rust solution gives: `225197` and `654914`,
+-- one per line, then `(i32[225197], i32[654914])`.
+
+include textio
+
+-- One line: a number added to the current group's total, or a blank line, which closes the group.
+fn add_line<'t>(l: text 't, st: buf i32 * i32) -> buf i32 * i32 =
+  let (sums, cur) = st;
+  let (l, u) = array_copy['t, u8] l;
+  if len(u) == 0 { let (sums, _) = push(sums, cur); (sums, 0) }
+  else { (sums, cur + with default(0) { parse_i32(l) }) }
+
+main -> i32 * i32 =
+  let s = read_input();
+  let sums = borrow imm s { 't, t ->
+    let (sums, cur) = fold_lines(t, !{ (l, st) -> add_line(l, st) }, (box buf[i32](16), 0));
+    let (sums, _) = push(sums, cur);
+    sums };
+  let mut sums = sums;
+  borrow mut sums { 'x, v -> let v = sort(v, cmp_i32, 0); () };
+  let (sums, n) = len_of(sums);
+  let r = borrow imm sums { 'x, v ->
+    let (v, w) = array_copy['x, i32] v;
+    let (v, u) = array_copy['x, i32] v;
+    let best = at(v, n - 1, 0);
+    (best, best + at(w, n - 2, 0) + at(u, n - 3, 0)) };
+  let (p1, p2) = r;
+  print_dec(p1); print_byte(b'\n');
+  print_dec(p2); print_byte(b'\n');
+  r

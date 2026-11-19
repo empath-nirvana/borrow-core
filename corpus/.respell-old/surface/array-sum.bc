@@ -1,0 +1,29 @@
+-- `corpus/array-sum.bc` in draft 0's surface (typed elaboration, stages 5–6): an array of 1000
+-- elements built by `array_new` from `i -> i + 1`, and summed by 1024 steps of a loop that
+-- `twice` composes. Each step reads the element at the index by `array_replace` (writing 0, then
+-- the element back); past the end it takes the error branch and does nothing. The constants take
+-- their arguments as a tuple, and `(a, i, acc)` is a triple.
+--
+-- Answer: (i32[500500], i32[1000]), as `corpus/array-sum.bc`.
+
+type S = array i32 * (i32 * i32)
+
+fn tab(i: i32) -> i32 = i + 1
+
+-- One step at (a, (i, acc)): read a[i], and continue at (i + 1, acc + a[i]).
+fn step(a: array i32, i: i32, acc: i32) -> S =
+  let (a, o) = array_replace[i32] (a, i, 0);
+  match o {
+    inl x ->
+      let (a, _) = array_replace[i32] (a, i, x);
+      (a, i + 1, acc + x)
+  | inr _ -> (a, i, acc)
+  }
+
+fn twice(f: !(S => S)) -> !(S => S) = !{ s -> f(f(s)) }
+
+main -> i32 * i32 =
+  let a = array_new[i32] (1000, tab);
+  let f = twice(twice(twice(twice(twice(twice(twice(twice(twice(twice(step))))))))));
+  let (_, i, acc) = f(a, 0, 0);
+  (acc, i)

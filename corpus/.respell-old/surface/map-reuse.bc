@@ -1,0 +1,32 @@
+-- `corpus/map-reuse.bc` in draft 0's surface (typed elaboration, stages 5–6): the list [1, 3, 5],
+-- incremented in place by a `fold_reuse` and read as the digits of one number, head last. The
+-- algebras are `fn`s. `modify &mut l { … }` borrows the `let mut` value `l` in a cell scoped to
+-- the `modify` (`alloc`, `withbor2`, `withswap`, `free`), which is `corpus/map-reuse.bc`'s `main`.
+-- `data` and fold blocks (later stages) would shorten the list's declarations and algebras.
+--
+-- Answer: i32[642], as `corpus/map-reuse.bc`.
+
+type List = mu X. 1 + (ref i32 * ref X)
+shape Node = node (leaf i32) (leaf List)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
+
+fn map_inc_alg(r: 1 + ref i32 * (ref 1 * List)) -> List =
+  match r {
+    inl _ -> nil
+  | inr (c, (d, t)) ->
+      let (c, x) = swap(c, ());
+      let (c, ()) = swap(c, x + 1);
+      let (d, ()) = swap(d, t);
+      roll inr (c, d)
+  }
+def map_inc : !(List => List) = fold_reuse[1 + ref i32 * ref X, List] map_inc_alg
+
+fn digits_alg(r: 1 + ref i32 * i32) -> i32 = match r { inl _ -> 0 | inr (c, t) -> free(c) + t * 10 }
+def digits : !(List => i32) = fold_own[1 + ref i32 * ref X, i32] digits_alg
+
+main -> i32 =
+  let mut l = cons(1, cons(3, cons(5, nil)));
+  modify &mut l { k -> map_inc(k) };
+  digits(l)
