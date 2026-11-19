@@ -13,8 +13,11 @@
 #     the same message up to positions (`msg`: the positions move with the spelling);
 #   * a corpus file with no `main`: `bcc print` of the two (the declarations read, as core text,
 #     with no positions) is byte-identical;
-#   * a library module `lib/m.bc`: judged by its users (below), not by `bcc print`, which does not
-#     see what a generic function's body lends where it is instantiated.
+#   * a library module `lib/m.bc`: `bcc check`'s declarations with their types are the same, each
+#     line's lifetimes renamed in the order they occur (`libsigs`: a mode's fresh lifetime is named
+#     `'io_lf<n>` where the twin writes a name of its own); and it is judged by its users (below),
+#     not by `bcc print`, which does not see what a generic function's body lends where it is
+#     instantiated.
 #
 # It also fails when a file in the new spelling has no twin, or a twin has no file in the new
 # spelling.
@@ -60,6 +63,12 @@ sigs() {
     sort
 }
 export -f sigs
+# What `bcc check` prints of a library module: each declaration with its type, positions blanked,
+# and the lifetimes of each line renamed `'l0`, `'l1`, … in the order they first occur on it.
+libsigs() {
+  perl -pe "s/\\b\\d+:\\d+\\b/L:C/g; my %m; my \$n = 0; s/'([a-z][A-Za-z0-9_]*)/exists \$m{\$1} ? \$m{\$1} : (\$m{\$1} = \"'l\" . \$n++)/ge"
+}
+export -f libsigs
 # A pair: the file in the new spelling and its twin (under `set -e`, as check-sugar.sh's pairs).
 pair() {
   set -e
@@ -67,7 +76,16 @@ pair() {
   old=$(twin "$f")
   if [ ! -f "$old" ]; then echo "$f: in the new spelling, but has no twin $old"; return 1; fi
   if isNew "$old"; then echo "$old: a twin in the new spelling"; return 1; fi
-  case "$f" in lib/*) echo "$f: a library module, judged by the programs that use it (below)"; return 0 ;; esac
+  case "$f" in lib/*)
+    "$bcc" check "$old" 2>&1 | libsigs > "$tmp/os"
+    "$bcc" check "$f" 2>&1 | libsigs > "$tmp/ns"
+    if ! cmp -s "$tmp/os" "$tmp/ns"; then
+      echo "$f: the types of its declarations differ from $old's:"
+      diff "$tmp/os" "$tmp/ns" | sed 's/^/  /'; return 1
+    fi
+    echo "$f: the same declaration types as $old; judged by the programs that use it (below)"
+    return 0 ;;
+  esac
   "$bcc" erase "$old" > "$tmp/o" 2> "$tmp/oe" || ro=$?
   "$bcc" erase "$f" > "$tmp/n" 2> "$tmp/ne" || rn=$?
   if [ "$ro" = 0 ] && [ "$rn" = 0 ]; then

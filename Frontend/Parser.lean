@@ -3639,6 +3639,18 @@ def byValue (t : Data.Table) : Nat → VTy → Bool
         | _, _ => false
       | none => false
 
+/-- The `k`-th of `io_lf0`, `io_lf1`, … that is not a name in `written`: a mode's fresh lifetime
+is named apart from the lifetimes its header writes (§82 *Modes*).  `[spec §82]` -/
+def freshLife (written : List String) (k : Nat) : String :=
+  go (written.length + k + 1) 0 k
+where
+  /-- From `io_lf{j}`, skipping the names written, the `k`-th one left. -/
+  go : Nat → Nat → Nat → String
+    | 0, j, _ => s!"io_lf{j}"
+    | fuel + 1, j, k =>
+      if written.contains s!"io_lf{j}" then go fuel (j + 1) k
+      else if k == 0 then s!"io_lf{j}" else go fuel (j + 1) (k - 1)
+
 /-- The lifetime parameters of a `fn` whose header writes `lives` and whose parameters `ps` each
 give their type's written lifetimes and, for a mode, the fresh lifetime of its region (§82 P1–P3):
 the written ones in their order, each fresh one before the first written one that does not occur
@@ -4130,7 +4142,7 @@ where
     -- In the new spelling a parameter has a mode (§82 P1–P5), whose fresh lifetimes join the
     -- written ones.
     let (ps, lives) ← if (← get).nd then do
-        let mps ← if ← isSym ")" then pure [] else modeParams n 0
+        let mps ← if ← isSym ")" then pure [] else modeParams (lives₀.map (·.1.name)) n 0
         pure (mps.map (fun (x, A, _) => (x, A)), placeFresh lives₀ (mps.map (·.2.2)))
       else do
         let ps ← if ← isSym ")" then pure [] else params n
@@ -4285,11 +4297,12 @@ where
   /-- `x₁: m₁ A₁, …` in a `fn` header of the new spelling, at least one, each with a mode
   (§82 P1–P5, *Modes*): `inout T` is `mut 'f T` (`array_mut 'f A` for `array A`); a bare `T` that
   is not by value (`byValue`) and is not written as a borrow is `imm 'f T` (`array_imm 'f A`);
-  `sink T` and every other bare `T` are as written. `'f` is a fresh lifetime, `'io_lfK` for the
-  header's `K`-th (`k` the next): numbered per header, so headers written alike declare alike
-  (the members of a recursive group take the same lifetime parameters). Each with the lifetimes
-  its type writes and its fresh one, for `placeFresh`.  `[spec §82]` -/
-  modeParams : Nat → Nat → P (List (Ident × VTy × Option Ident × List String))
+  `sink T` and every other bare `T` are as written. `'f` is a fresh lifetime, the header's `K`-th
+  (`k` the next) of `'io_lf0`, `'io_lf1`, … not among the lifetimes `written` it writes
+  (`freshLife`): numbered per header, so headers written alike declare alike (the members of a
+  recursive group take the same lifetime parameters). Each with the lifetimes its type writes and
+  its fresh one, for `placeFresh`.  `[spec §82]` -/
+  modeParams (written : List String) : Nat → Nat → P (List (Ident × VTy × Option Ident × List String))
     | 0, _ => outOfFuel
     | m + 1, k => do
       let x ← ident "a parameter name"
@@ -4310,7 +4323,7 @@ where
         | _ => false
       let lend (mutable : Bool) : P (VTy × Option Ident) := do
         let sp := A.span
-        let f : Ident := ⟨s!"io_lf{k}", sp⟩
+        let f : Ident := ⟨freshLife written k, sp⟩
         let l : Life := .var sp f.name
         pure (match A with
           | .array asp E => if mutable then .arrayMut asp l E else .arrayImm asp l E
@@ -4322,7 +4335,7 @@ where
       let p := (x, A, f, ls)
       if ← isSym "," then
         discard bump
-        return p :: (← modeParams m (if f.isSome then k + 1 else k))
+        return p :: (← modeParams written m (if f.isSome then k + 1 else k))
       pure [p]
   /-- The parameter tuple's type (`1` with no parameters). -/
   tupleTy (sp : Span) : List VTy → VTy
