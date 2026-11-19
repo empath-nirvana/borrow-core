@@ -5988,7 +5988,8 @@ invariant.
   - **The typed term** has one node, `effHandleVO`, holding `d?`. `effHandleV` and `effHandleVB`
     stay as abbreviations of it at `none` and `some d`. Backend2 reads that a handler is boxed as
     `d?.isSome`.
-  - The rule count of `CDerives` and of the checker's judgment each drops by one.
+  - The rule count of `CDerives` and of the checker's judgment each drops by one, and so does the
+    number of rules the tie gates (§83).
   - **Status:** the fold (#1170, `folds/handlev`), after #798. Not built.
 
 ### Semantics
@@ -14939,9 +14940,9 @@ its instances: abbreviations that keep their names, their rules and every statem
     abbrev CDerivesP       := CDerivesX {pin := true}
 
 - **The fields.** A field is a gating premise of the rules it gates.
-  - `ties`: at `some Ξ`, ten rules take `hAt : I.RowOK S`, which is `RowAt Ξ S` (§19, decision
+  - `ties`: at `some Ξ`, nine rules take `hAt : I.RowOK S`, which is `RowAt Ξ S` (§19, decision
     R). These are the rules that read an operation's signature off a row: `iterate`, `divFuel`,
-    `reify`, `effPerform`, `effAwait`, `effRaise`, `effHandleV`, `effHandleVB`, `effHandleT`,
+    `reify`, `effPerform`, `effAwait`, `effRaise`, `effHandleVO` (§28), `effHandleT`,
     `effHandleL`. At `none` the premise is `True`.
   - `pin`: `lendR`, `lendLoopR` and `nilDead` (§29) take `hPin : I.pin = true`. Every other rule
     is the same at every index.
