@@ -1,0 +1,21 @@
+-- Borrow blocks (draft 0 §2.6; typed elaboration, stage 5, §5.1, §5.6, §5.7). Each takes its
+-- type arguments from the place and the body; its lifetime is written (`'x`) or chosen fresh;
+-- the body's tail is boxed at it; a block on a named place rebinds the place. `modify`'s body
+-- returns the new content alone, and its result `()` is elided. `surface-borrow.core.bc` is the
+-- program written by hand in core.
+-- Answer: (i32[1], i32[82]): the cell holds 41, a `mut` block adds what the `imm` block read,
+-- and a family swaps it with a second cell's 1.
+
+-- The number an `imm` borrow of a cell holds.
+def peek : !(all 'a < top. imm 'a i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (b : imm 'a i32) ->
+    withload['a, 'y, i32, i32] b (thunkv Fun 'y < dom. return (thunkv fun (v : i32) ->
+      return (boxed['y] v))))
+
+main -> i32 * i32 =
+  let r = alloc(41);
+  let n = borrow imm r { 'x, b -> (unbang peek) ['x] b };
+  borrow mut r { m -> modify m { v -> v + n } };
+  let s = alloc(1);
+  borrow mut (r, s) { (p, q) -> modify p { a -> let b = modify q { b -> (a, b) }; b } };
+  (free(r), free(s))

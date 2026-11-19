@@ -1,6 +1,7 @@
--- Ambient capabilities in `main` (SPEC §11): no externs are declared, and `main : F A` uses
--- `stdout` by name. It elaborates to the I/O library, `extern stdout`, and `main : F (ref output
--- * A)` handing the capability back; `ambient.core.bc` is that program, as `bcc desugar` prints it.
+#! dialect 82
+# Ambient capabilities in `main` (SPEC §11): no externs are declared, and `main : F A` uses
+# `stdout` by name. It elaborates to the I/O library, `extern stdout`, and `main : F (ref output
+# * A)` handing the capability back; `ambient.core.bc` is that program, as `bcc desugar` prints it.
 main : F i32 =
   q <- return (putb (stdout, u8[104]));
   let (stdout, u) = q;

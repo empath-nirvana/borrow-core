@@ -1,11 +1,12 @@
--- The sum of the numbers on the input's lines, in the style of Advent of Code's day 1 (SPEC §11,
--- §9). Every line goes into one buffer, an array of 16 slots allocated once and kept in a cell:
--- `push` and `parse` each borrow the cell mutably (`withbor2`) and work on the array through
--- `withswap`. The loop threads the cell, the line's length and the sum; the cell and the buffer
--- are freed implicitly at the end.
---
--- Answer: `5496`, the sum of 1721, 979, 366, 299, 675 and 1456. A line lost or read twice, a
--- digit read from a stale slot, or a buffer not reset between lines gives another number.
+#! dialect 82
+# The sum of the numbers on the input's lines, in the style of Advent of Code's day 1 (SPEC §11,
+# §9). Every line goes into one buffer, an array of 16 slots allocated once and kept in a cell:
+# `push` and `parse` each borrow the cell mutably (`withbor2`) and work on the array through
+# `withswap`. The loop threads the cell, the line's length and the sum; the cell and the buffer
+# are freed implicitly at the end.
+#
+# Answer: `5496`, the sum of 1721, 979, 366, 299, 675 and 1456. A line lost or read twice, a
+# digit read from a stale slot, or a buffer not reset between lines gives another number.
 
 type A = array i32
 type Buf = ref A
@@ -13,8 +14,8 @@ type Buf = ref A
 def zero : !(i32 => i32) = !thunkv fun (i : i32) -> return i32[0]
 def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, i32[1]))
 
--- The byte `b` into slot `k` of the buffer; past its 16 slots `array_replace` takes its error
--- branch and the byte is consumed.
+# The byte `b` into slot `k` of the buffer; past its 16 slots `array_replace` takes its error
+# branch and the byte is consumed.
 def push : Buf * (i32 * i32) => Buf * 1 =
   thunkv fun (p : Buf * (i32 * i32)) ->
     let (c, r) = p;
@@ -28,8 +29,8 @@ def push : Buf * (i32 * i32) => Buf * 1 =
          let (m2, u) = s;
          return (boxed['x] u))))
 
--- Parsing the buffer: (buffer, (index, (length, value))). Each digit is read by taking it out
--- of its slot and putting it back.
+# Parsing the buffer: (buffer, (index, (length, value))). Each digit is read by taking it out
+# of its slot and putting it back.
 type PS = A * (i32 * (i32 * i32))
 
 def parse_step : !(PS => PS) =
@@ -56,7 +57,7 @@ def parse_step : !(PS => PS) =
 def parse_twice : !(PS => PS) => !(PS => PS) =
   thunkv fun (f : !(PS => PS)) -> return (!thunkv fun (s : PS) -> return ((unbang f) ((unbang f) s)))
 
--- The number in the first `n` slots of the buffer (at most its 16).
+# The number in the first `n` slots of the buffer (at most its 16).
 def parse : Buf * i32 => Buf * i32 =
   thunkv fun (p : Buf * i32) ->
     let (c, n) = p;

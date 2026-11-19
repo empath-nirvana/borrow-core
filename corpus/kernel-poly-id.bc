@@ -1,12 +1,13 @@
--- One identity used at two rows, the twin of the kernel program `poly-id` (Backend/Kernel.lean,
--- `Shapes.polyId`), in the core text: `id` neither raises nor suspends, and its two uses differ in
--- row only through what each is given and answers, a pure callback and one that raises `1.0`. It
--- is generic in the callback's type, so each use is its own instance, as the kernel program's is
--- lowered per use. The surface cannot write it: a function cannot return the effectful block it
--- is given (#870, SPEC §30).
---
--- Answer: (inr (), inr ()): the pure callback's `true`, and the raise caught by the handler of `1`;
--- `live 0`. An `id` that ran its callback, or a raise that escaped, would change the pair.
+#! dialect 82
+# One identity used at two rows, the twin of the kernel program `poly-id` (Backend/Kernel.lean,
+# `Shapes.polyId`), in the core text: `id` neither raises nor suspends, and its two uses differ in
+# row only through what each is given and answers, a pure callback and one that raises `1.0`. It
+# is generic in the callback's type, so each use is its own instance, as the kernel program's is
+# lowered per use. The surface cannot write it: a function cannot return the effectful block it
+# is given (#870, SPEC §30).
+#
+# Answer: (inr (), inr ()): the pure callback's `true`, and the raise caught by the handler of `1`;
+# `live 0`. An `id` that ran its callback, or a raise that escaped, would change the pair.
 
 def id[A] : !U (A -o F A) = !thunkv fun (f : A) -> return f
 

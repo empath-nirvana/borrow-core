@@ -1,13 +1,14 @@
--- natsSum (Core/StreamPrograms.lean: progS, stepN, sumK), from the corpus review's
--- 5-natsSum, in draft 1, over i32: the stream 7, 17, 27, … by unfold_s, three elements taken
--- and combined. The rest of the stream, `t3`, is consumed implicitly (SPEC §12): its consume
--- is the close.
---
--- Answer: i32[271707], the three elements as base-100 digits, first element last. A state
--- not advanced gives 70707, one advanced twice per element 472707, a first element skipped
--- 372717, and the elements in reverse order 71727.
+#! dialect 82
+# natsSum (Core/StreamPrograms.lean: progS, stepN, sumK), from the corpus review's
+# 5-natsSum, in draft 1, over i32: the stream 7, 17, 27, … by unfold_s, three elements taken
+# and combined. The rest of the stream, `t3`, is consumed implicitly (SPEC §12): its consume
+# is the close.
+#
+# Answer: i32[271707], the three elements as base-100 digits, first element last. A state
+# not advanced gives 70707, one advanced twice per element 472707, a first element skipped
+# 372717, and the elements in reverse order 71727.
 
--- The step at state s: emit s and continue at s + 10; close has nothing to free.
+# The step at state s: emit s and continue at s + 10; close has nothing to free.
 def nats_step : !U (i32 -o F (i32 * i32) & F 1) =
   !thunkv fun (s : i32) ->
     < return (s, (unbang host[add32]) (s, i32[10])),

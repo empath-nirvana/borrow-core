@@ -16,7 +16,7 @@ parses() { "$bcc" parse "$1"; }
 fails() {
   set -e
   local f=$1 want out
-  want=$(sed -n '/^-- expect: /{s///p;q;}' "$f")
+  want=$(sed -nE '/^(--|#) expect: /{s///p;q;}' "$f")
   if out=$("$bcc" parse "$f" 2>&1); then
     echo "$f: accepted, but must fail"; return 1
   elif [ "$out" != "$f:$want" ]; then

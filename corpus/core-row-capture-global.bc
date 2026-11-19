@@ -1,8 +1,9 @@
--- SPEC §76: an instance's own type parameters take fresh names. `tm[A, row r]`'s body names the
--- global `type T = i32`; used from `g[T]` at `A = T`, its instance is `tm__r1[T__p]`, so the
--- global `T` in its result is not captured by `g`'s parameter.
---
--- Answer: (inr (), i32[7]).
+#! dialect 82
+# SPEC §76: an instance's own type parameters take fresh names. `tm[A, row r]`'s body names the
+# global `type T = i32`; used from `g[T]` at `A = T`, its instance is `tm__r1[T__p]`, so the
+# global `T` in its result is not captured by `g`'s parameter.
+#
+# Answer: (inr (), i32[7]).
 
 type T = i32
 

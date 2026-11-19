@@ -1,5 +1,6 @@
--- `surface-mut.bc` written by hand in core: each assignment a binding, the `if` a `case` whose
--- arms return the variables they may assign, and the lend a cell scoped to the call.
+#! dialect 82
+# `surface-mut.bc` written by hand in core: each assignment a binding, the `if` a `case` whose
+# arms return the variables they may assign, and the lend a cell scoped to the call.
 def bump : !(all 'a < top. mut 'a i32 => 1) =
   !thunkv Fun 'a < top. return (thunkv fun (m : mut 'a i32) ->
     w <- return (withswap['a, i32, 1] m (thunkv fun (v : i32) ->

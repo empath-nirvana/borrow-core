@@ -1,5 +1,6 @@
--- [spec §80] freeing the local wrapper returns its owned contents; it does not destroy them.
--- Expected (final contents' payload, body answer): (i32[42], i32[7]), live 0.
+#! dialect 82
+# [spec §80] freeing the local wrapper returns its owned contents; it does not destroy them.
+# Expected (final contents' payload, body answer): (i32[42], i32[7]), live 0.
 main : F (i32 * i32) =
   q <- return (withlocal['l, top, ref i32, i32] (alloc[i32] i32[41])
     (thunkv Fun 'l < dom. return (thunkv fun (m : mut 'l (ref i32)) ->

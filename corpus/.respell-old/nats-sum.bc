@@ -1,0 +1,31 @@
+-- natsSum (Core/StreamPrograms.lean: progS, stepN, sumK), from the corpus review's
+-- 5-natsSum, in draft 1, over i32: the stream 7, 17, 27, … by unfold_s, three elements taken
+-- and combined. The rest of the stream, `t3`, is consumed implicitly (SPEC §12): its consume
+-- is the close.
+--
+-- Answer: i32[271707], the three elements as base-100 digits, first element last. A state
+-- not advanced gives 70707, one advanced twice per element 472707, a first element skipped
+-- 372717, and the elements in reverse order 71727.
+
+-- The step at state s: emit s and continue at s + 10; close has nothing to free.
+def nats_step : !U (i32 -o F (i32 * i32) & F 1) =
+  !thunkv fun (s : i32) ->
+    < return (s, (unbang host[add32]) (s, i32[10])),
+      return () >
+
+def hundred : i32 * i32 => i32 =
+  thunkv fun (p : i32 * i32) ->
+    let (hi, lo) = p;
+    return ((unbang host[add32]) ((unbang host[mul32]) (hi, i32[100]), lo))
+
+main : F i32 =
+  f <- return (unbang (unfold_s[i32, i32] nats_step));
+  z : i32 <- return i32[7];
+  t0 <- return (thunkv stream_in < (stream_out (force f z)).1, (stream_out (force f z)).2 >);
+  p1 <- (stream_out (force t0)).1;
+  let (x1, t1) = p1;
+  p2 <- (stream_out (force t1)).1;
+  let (x2, t2) = p2;
+  p3 <- (stream_out (force t2)).1;
+  let (x3, t3) = p3;
+  return (hundred (hundred (x3, x2), x1))

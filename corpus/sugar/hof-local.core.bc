@@ -1,5 +1,6 @@
--- `hof-local.bc` in core, as `bcc desugar` prints it: `steps` and the copy of `twice` at its type
--- are div functions, each one state machine (SPEC §15) with a state per call of a div function.
+#! dialect 82
+# `hof-local.bc` in core, as `bcc desugar` prints it: `steps` and the copy of `twice` at its type
+# are div functions, each one state machine (SPEC §15) with a state per call of a div function.
 
 def div_bind_step[A, B, R1, R] : !U (U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R -o F (B + U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R) & F R) =
   !thunkv fun (s : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R) ->

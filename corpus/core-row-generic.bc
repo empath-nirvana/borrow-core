@@ -1,9 +1,10 @@
--- SPEC §76: a core-text piece generic over a row, `stopk[A, row r]` (stop_i's shape over one
--- stage's types), used at `F[4.0 cancel i32 ~> 0]` and at `F[]`. Each use writes its row
--- argument and is an instance: `stopk__r1` at the first row, and `stopk` itself, as written, at
--- the empty row. `handle_with[4]` around the uses puts `main` at `F 1`.
---
--- Answer: ().
+#! dialect 82
+# SPEC §76: a core-text piece generic over a row, `stopk[A, row r]` (stop_i's shape over one
+# stage's types), used at `F[4.0 cancel i32 ~> 0]` and at `F[]`. Each use writes its row
+# argument and is an instance: `stopk__r1` at the first row, and `stopk` itself, as written, at
+# the empty row. `handle_with[4]` around the uses puts `main` at `F 1`.
+#
+# Answer: ().
 
 def stopk[A, row r] : !U (U ((A -o F[..r] 1) & F[..r] 1) -o F[..r] 1) =
   !thunkv fun (q : U ((A -o F[..r] 1) & F[..r] 1)) -> (force q).2

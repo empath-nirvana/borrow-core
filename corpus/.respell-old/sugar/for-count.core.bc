@@ -1,0 +1,27 @@
+-- `for-count.bc` written by hand in core: each loop is `count_fold`, its step having no exit.
+-- The outer count starts at the literal `0`, so the machine's counter is the element, counted
+-- from `0` to `n`; the inner count starts at `i`, so it is counted from index 0 over its length
+-- `n − i`, its element the start plus the index, the start in its state. The state is the
+-- variables the body reads or assigns; after each loop they are bound again from its last state.
+total def tri : !(i32 => i32) =
+  !thunkv fun (n : i32) ->
+    acc <- return i32[0];
+    r <- return (unbang count_fold[i32 * i32]) (!thunkv fun (q : i32 * i32 * i32) ->
+        let (i, s) = q;
+        let (n, acc) = s;
+        lo2 <- return i;
+        hi2 <- return n;
+        len2 <- return (unbang host[sub32]) (hi2, lo2);
+        r2 <- return (unbang count_fold[i32 * i32]) (!thunkv fun (q2 : i32 * i32 * i32) ->
+            let (k2, t) = q2;
+            let (lo2, acc) = t;
+            j <- return (unbang host[add32]) (lo2, k2);
+            acc <- return (unbang host[add32]) (acc, j);
+            return (lo2, acc), (len2, (i32[0], (lo2, acc))));
+        let (lo2, acc) = r2;
+        return (n, acc), (n, (i32[0], (n, acc))));
+    let (n, acc) = r;
+    return acc
+
+main : F i32 =
+  return (unbang tri) i32[4]

@@ -1,0 +1,30 @@
+-- The unsigned widths `u32` and `u64` (SPEC §73), in core text: the host operations at the
+-- unsigned widths, on the same bits as at `i32`/`i64`, and the changes of reading
+-- `reinterpret_u` (`u64_reinterpret_i64`) and `reinterpret_s` (`i64_reinterpret_u64`).
+--
+-- Answer, component by component:
+--   u64[1]                       2^64 − 1 + 2 wraps
+--   inl ()                       2^63 <u 1 is false: `lt_u` reads 2^63 unsigned
+--   inr ()                       2^63 <s 1 is true: `lt_s` at `u64` reads the same bits signed
+--   inl u64[9223372036854775807] (2^64 − 1) /u 2
+--   inr ()                       a zero divisor has no answer
+--   u64[9223372036854775811]     (2^63 + 1) × 3 wraps to 2^63 + 3
+--   i64[9223372036854775808]     2^63 read signed: the bits kept, printed unsigned
+--   u64[18446744073709551615]    the `i64` −1 read unsigned
+--   u32[0]                       2^32 − 1 + 1 wraps at 32 bits
+--   u32[4294967295]              the `i32` −1 read unsigned
+-- A `reinterpret` that changed the bits, an operation at `u64` computed at 32 bits, or the
+-- signed and unsigned tests confused gives a different component.
+
+main : F (u64 * ((1 + 1) * ((1 + 1) * ((u64 + 1) * ((u64 + 1) * (u64 * (i64 * (u64 * (u32 * u32))))))))) =
+  a : u64 <- return ((unbang host[addu64]) (u64[18446744073709551615], u64[2]));
+  b : 1 + 1 <- return ((unbang host[lt_uu64]) (u64[9223372036854775808], u64[1]));
+  c : 1 + 1 <- return ((unbang host[lt_su64]) (u64[9223372036854775808], u64[1]));
+  d : u64 + 1 <- return ((unbang host[div_uu64]) (u64[18446744073709551615], u64[2]));
+  e : u64 + 1 <- return ((unbang host[div_uu64]) (u64[7], u64[0]));
+  f : u64 <- return ((unbang host[mulu64]) (u64[9223372036854775809], u64[3]));
+  g : i64 <- return ((unbang host[i64_reinterpret_u64]) u64[9223372036854775808]);
+  h : u64 <- return ((unbang host[u64_reinterpret_i64]) i64[18446744073709551615]);
+  i : u32 <- return ((unbang host[addu32]) (u32[4294967295], u32[1]));
+  j : u32 <- return ((unbang host[u32_reinterpret_i32]) i32[4294967295]);
+  return (a, (b, (c, (d, (e, (f, (g, (h, (i, j)))))))))

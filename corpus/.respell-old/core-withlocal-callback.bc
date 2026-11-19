@@ -1,0 +1,13 @@
+-- [spec §80] A separately passed callback gets a stable frame address, never a heap cell.
+def local_apply : i32 * (all 'l < top. mut 'l i32 => box 'l i32) => i32 * i32 =
+  thunkv fun (p : i32 * (all 'l < top. mut 'l i32 => box 'l i32)) ->
+    let (v, cb) = p;
+    return (withlocal['l, top, i32, i32] v cb)
+
+main : F (i32 * i32) =
+  return (local_apply (i32[3], thunkv Fun 'l < top. return (thunkv fun (m : mut 'l i32) ->
+    p <- return (withswap['l, i32, i32] m (thunkv fun (v : i32) ->
+      return ((unbang host[add32]) (v, i32[4]), v)));
+    let (m, old) = p;
+    let () = release_mut['l, i32] m;
+    return (boxed['l] old))))

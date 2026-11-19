@@ -1,0 +1,11 @@
+-- `mut-modify.bc` as its elaboration reads, written by hand in core. `x` is a `let mut` value,
+-- not a cell: the body runs on its value in place, and hands `n` back beside the new content.
+main : F (i32 * i32) =
+  x <- return i32[5];
+  n <- return i32[0];
+  r <- return run (let (v, u) = (x, ());
+    n <- return i32[7];
+    return ((unbang host[add32]) (v, i32[1]), ((), n)));
+  let (x, w) = r;
+  let (u, n) = w;
+  return (x, n)

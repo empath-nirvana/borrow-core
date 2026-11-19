@@ -1,6 +1,7 @@
--- `surface-defer.bc` in core, as `bcc desugar` prints it: the block is `div_defer` of `< start,
--- abort >`, `start` the machine of the block's body (SPEC §15), whose state holds `once`'s loop,
--- and `abort` handing back `()`. The divergence library (`lib/div.bc`) is copied in.
+#! dialect 82
+# `surface-defer.bc` in core, as `bcc desugar` prints it: the block is `div_defer` of `< start,
+# abort >`, `start` the machine of the block's body (SPEC §15), whose state holds `once`'s loop,
+# and `abort` handing back `()`. The divergence library (`lib/div.bc`) is copied in.
 
 def div_bind_step[A, B, R1, R] : !U (U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R -o F (B + U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R) & F R) =
   !thunkv fun (s : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R) ->

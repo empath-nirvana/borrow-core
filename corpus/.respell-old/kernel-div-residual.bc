@@ -1,0 +1,32 @@
+-- A loop whose state is a cell, closed by fuel, which hands the cell back: a core-text counterpart
+-- of the kernel program `div-residual` (Backend/Kernel.lean, `Core/DivPrograms.lean`'s
+-- `divResidual`; SPEC §14). The loop never finishes on its own; each turn adds one to the cell
+-- (`swap` out, `swap` back in plus one). `div_fuel` observes it 3 times and closes it, and the close
+-- hands back the cell, which `main` frees, answering its content, the number of turns that ran.
+-- The program and its answer are the kernel program's; the loop is the library's codata loop
+-- (`unfold` at `loop i32 (ref i32)`, the library's `div_fuel`), as the frontend elaborates loops
+-- until B2 (#644), where the kernel program's is the kernel's `Div` effect (its `tick`, `iterate`
+-- and handler `div_fuel`), which neither the core text nor the surface spells yet.
+--
+-- Answer: i32[3]; `live 0`. A loop that ran a turn too many or too few gives 4 or 2; a close that
+-- lost the cell would leave it live.
+
+-- One turn: add one to the cell (`next`), or hand it back (`close`).
+def step : !U (ref i32 -o F (i32 + ref i32) & F (ref i32)) =
+  !thunkv fun (c : ref i32) ->
+    < q1 <- return (swap[i32, i32] c i32[0]);
+      let (c1, x) = q1;
+      q2 <- return (swap[i32, i32] c1 ((unbang host[add32]) (x, i32[1])));
+      let (c2, z) = q2;
+      return (inr c2 : i32 + ref i32),
+      return c >
+
+def spin : ref i32 => U (loop i32 (ref i32)) =
+  thunkv fun (c : ref i32) ->
+    f <- return (unbang (unfold[loop i32 (ref i32), ref i32] step));
+    return (thunkv nu_in < (nu_out (force f c)).1, (nu_out (force f c)).2 >)
+
+main : F i32 =
+  c <- return (alloc[i32] i32[0]);
+  r <- return (div_fuel[i32, ref i32] (spin c, i32[3]));
+  case r { inl b -> return b | inr c2 -> return (free[i32] c2) }

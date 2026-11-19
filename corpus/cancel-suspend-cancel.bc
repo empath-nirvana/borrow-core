@@ -1,12 +1,13 @@
--- check: old-backend-refuses
--- SPEC §27 in the core text: a suspended cancel cancelled in turn, which goes on through the rest
--- of the region (`[cfin-cancel]`). `core-fin-nc` with a second finaliser outward: handler 1
--- cancels `κ`; the inner finaliser performs the capturable `4.0`, and the live outer handler 4
--- cancels its continuation. That cancel unwinds the finaliser, reaches the running cancel's `cfin`,
--- and goes on to the outer finaliser, which frees the cell `c` that the rest would have freed.
---
--- Answer: (), and `live 0`. A wrong implementation that stops at the cancelled finaliser leaves
--- `c` live.
+#! dialect 82
+# check: old-backend-refuses
+# SPEC §27 in the core text: a suspended cancel cancelled in turn, which goes on through the rest
+# of the region (`[cfin-cancel]`). `core-fin-nc` with a second finaliser outward: handler 1
+# cancels `κ`; the inner finaliser performs the capturable `4.0`, and the live outer handler 4
+# cancels its continuation. That cancel unwinds the finaliser, reaches the running cancel's `cfin`,
+# and goes on to the outer finaliser, which frees the cell `c` that the rest would have freed.
+#
+# Answer: (), and `live 0`. A wrong implementation that stops at the cancelled finaliser leaves
+# `c` live.
 
 main : F 1 =
   handle_with[4](

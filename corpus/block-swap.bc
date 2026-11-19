@@ -1,13 +1,14 @@
--- blockSwap (Core/BlockPrograms.lean), from the corpus review's 4b-block-blockSwap, in
--- draft 1: one block {a : B, b : B}, both leaves borrowed `mut` at one lifetime by
--- withbor_s_mut, swapped with two nested withswaps, and the block freed whole. The borrows
--- `mb2` and `ma2` that the withswaps hand back are consumed implicitly (SPEC §12).
---
--- Answer: (inr (), inl ()), from the block {a = inl (), b = inr ()}. The leaves differ, so a
--- swap that does not happen gives (inl (), inr ()), and one that writes the same value back
--- into both leaves gives (inl (), inl ()) or (inr (), inr ()). The leaves are `1 + 1`, not
--- `i32`: a block borrow needs plain leaves (`plainV`, Core/BlockBorrow.lean), and `plainV`
--- does not include `i32` (#25).
+#! dialect 82
+# blockSwap (Core/BlockPrograms.lean), from the corpus review's 4b-block-blockSwap, in
+# draft 1: one block {a : B, b : B}, both leaves borrowed `mut` at one lifetime by
+# withbor_s_mut, swapped with two nested withswaps, and the block freed whole. The borrows
+# `mb2` and `ma2` that the withswaps hand back are consumed implicitly (SPEC §12).
+#
+# Answer: (inr (), inl ()), from the block {a = inl (), b = inr ()}. The leaves differ, so a
+# swap that does not happen gives (inl (), inr ()), and one that writes the same value back
+# into both leaves gives (inl (), inl ()) or (inr (), inr ()). The leaves are `1 + 1`, not
+# `i32`: a block borrow needs plain leaves (`plainV`, Core/BlockBorrow.lean), and `plainV`
+# does not include `i32` (#25).
 
 type B = 1 + 1
 shape Pair = node (leaf B) (leaf B)

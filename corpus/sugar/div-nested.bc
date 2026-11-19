@@ -1,10 +1,11 @@
--- A call of a div function nested in an argument (SPEC §14, docs/typed-elaboration.md §2.4).
--- `two_lines` adds one to each line's length, calling the div function `line_length` inside the
--- argument of `inc`, twice in one tuple. Inference sees that each call's type is a loop where a
--- number is expected, so each is run in direct style: the value's applications are lifted out
--- into bindings in evaluation order, and each call of `line_length` becomes a state of the body's
--- machine. `div-nested.core.bc` is its elaboration in core, as `bcc desugar` prints it.
--- their loop types, each call a `div_bind`. Both erase to one term.
+#! dialect 82
+# A call of a div function nested in an argument (SPEC §14, docs/typed-elaboration.md §2.4).
+# `two_lines` adds one to each line's length, calling the div function `line_length` inside the
+# argument of `inc`, twice in one tuple. Inference sees that each call's type is a loop where a
+# number is expected, so each is run in direct style: the value's applications are lifted out
+# into bindings in evaluation order, and each call of `line_length` becomes a state of the body's
+# machine. `div-nested.core.bc` is its elaboration in core, as `bcc desugar` prints it.
+# their loop types, each call a `div_bind`. Both erase to one term.
 extern stdin : ref input
 extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (u8 + 1))
 
@@ -18,7 +19,7 @@ def getb : In => In * (u8 + 1) =
          let (m2, b) = r;
          return (boxed['x] b))))
 
--- One step of `line_length`: the next byte, and whether the line goes on.
+# One step of `line_length`: the next byte, and whether the line goes on.
 def ll_step : !U (In * i32 -o F ((In * i32) + (In * i32)) & F (In * 1)) =
   !thunkv fun (s : In * i32) ->
     < let (c, n) = s;
@@ -35,7 +36,7 @@ def ll_step : !U (In * i32 -o F ((In * i32) + (In * i32)) & F (In * 1)) =
       let (c, n) = s;
       return (c, ()) >
 
--- A loop written in core: its type says it is div.
+# A loop written in core: its type says it is div.
 def line_length : In => U (loop (In * i32) (In * 1)) =
   thunkv fun (c : In) ->
     f <- return (unbang (unfold[loop (In * i32) (In * 1), In * i32] ll_step));
