@@ -803,8 +803,8 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
 /-! ### The nodes of derived rules
 
 A rule's former name, now a derived rule, a step of `conv` or a kind of `constK`
-(`Core/Judgment.lean`, `Core/ConstKind.lean`), keeps its node's name as an abbreviation of the node that now carries it, so that statements over the node
-keep their type. -/
+(`Core/Judgment.lean`, `Core/ConstKind.lean`), keeps its node's name as an abbreviation of the
+node that now carries it, so that statements over the node keep their type. -/
 
 /-- `[then]` at a terminating finaliser: `effThenF`'s node.  `[spec §29a]` -/
 @[match_pattern] abbrev TExpr.effThen (info : TInfo) (jdg : Jdg) (A B : VTy) (S SM SD : Row) (u : Masks)
