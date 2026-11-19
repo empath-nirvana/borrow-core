@@ -3660,6 +3660,19 @@ Six rules, over `CDerives` with its context premises (§10):
   - `[sub]` is `RowLe` (every operation of `Σ` is `Σ′`'s);
   - `[raise]`'s argument type holds no owned cell (`VTy.OwnFree`): the raise abandons it, which
     is not a consume;
+  - `[perform]` and `[raise]` are one rule, `effOp`, over the operation's abort flag
+    `ab : Bool` (#1170). Its term is `opPrim ab` applied to the operation's argument
+    (`perform` at `false`, `raise` at `true`). Its premises are the two rules' shared ones (the
+    tie, `Row.find Σ n i = some o`, `o.rc = false`, `V : A_i`), then `o.abort = ab`, the answer
+    `ab = false → B = B_i`, and `ab = true → A_i.OwnFree`. At `false` it is `[perform]`, the last
+    premise vacuous; at `true` it is `[raise]` at any `B`, the answer premise vacuous. So
+    derivability is exactly the same. `effPerform` and `effRaise` stay as theorems of the judgment
+    and of each instance, with today's statements. The Fundamental Property's case splits on `ab`
+    and applies the unchanged `perform_compatC` or `raise_compatC` (the chain: `_compatN`). The
+    typed term has one node, `effOp`, holding `ab`; `effPerform` and `effRaise` stay as
+    abbreviations of it. The rule count of `CDerives`, of the checker's judgment and of the rules
+    the tie gates (§83) each drops by one. **Status:** the fold (#1170, `folds/perform`), after
+    #798. Not built;
   - `[then]` asks `Σ`'s names to be nonzero and its keys unique, and `!Γ₂` at an unrestricted
     row;
   - `[handle]` takes `H` a value form over a part of the context whose live slots are
@@ -9558,7 +9571,7 @@ the one it was, and its output.
 
 `Backend2/`, the default of `bcc compile|run`, `bcc interp --stage lir|flat` and `bcc-counts`
 (`--backend old` selects the old backend until it is deleted). The fragment is the programs whose typed term has no effect node
-(`effPerform`, `effRaise`, `effHandle*`, `effThenF`, `effLet` at a nonempty row, `effSub`,
+(`effOp`, `effHandle*`, `effThenF`, `effLet` at a nonempty row, `effSub`,
 `lendR`, `lendLoopR`, `nilDead`, the `…U` borrows, `iterate`, `divFuel`, `reify`,
 `bounded_fix`): 222 corpus programs, I/O programs and codata among them. A program outside it is
 refused by the new backend ("outside the pure fragment") and compiled by the old.
@@ -9857,7 +9870,7 @@ No change: no type, rule, term, typing, elaboration or semantics.
   argument types, one summand per operation, each key once, in the row's order (`payOf`); with no
   abortive operation it is `R`. A non-abortive operation has no run-time content in the type.
   `Div`'s operations stay outside the fragment (N4).
-- **`raise`** (`effRaise`): the payload at its operation's summand, `inr`: a jump to the handler's
+- **`raise`** (the `effOp` node at `ab = true`): the payload at its operation's summand, `inr`: a jump to the handler's
   join (`catch_abort`; frames that catch nothing of its name are passed, `abort_absorbs`).
 - **`[let]` at a row** (`effLet`): `N` on `inl`, the abort handed on and `N`'s context consumed
   (`effLet`'s `hW`: it holds no own cell), the branch per call of §19 (`abort_to`, `abort_passes`).
@@ -9874,7 +9887,7 @@ No change: no type, rule, term, typing, elaboration or semantics.
   `tail` with its direct call licensed (below); any other kind leaves the program outside the
   fragment. The handled computation runs in place; a value goes to `h_ret` (`catch_ret`), an abort
   of `n`'s operation `j` to clause `j` (`catch_abort`), an abort of `Σ`'s handed on (`fwd_abort`).
-- **A direct call** (`effPerform`). At a static name, the facts license operation `j`'s direct
+- **A direct call** (the `effOp` node at `ab = false`). At a static name, the facts license operation `j`'s direct
   call when every `handle` node of the name (`Backend2/Driver.lean`, `directFacts`)
   - classifies the clause `tail` (`ks`), so its body `M` resumes on every path in tail position
     and uses `κ` nowhere else (`TailResumesAt 0 M M'`, `TailResumesAt.subst_kappa`,
@@ -14940,9 +14953,9 @@ its instances: abbreviations that keep their names, their rules and every statem
     abbrev CDerivesP       := CDerivesX {pin := true}
 
 - **The fields.** A field is a gating premise of the rules it gates.
-  - `ties`: at `some Ξ`, nine rules take `hAt : I.RowOK S`, which is `RowAt Ξ S` (§19, decision
+  - `ties`: at `some Ξ`, eight rules take `hAt : I.RowOK S`, which is `RowAt Ξ S` (§19, decision
     R). These are the rules that read an operation's signature off a row: `iterate`, `divFuel`,
-    `reify`, `effPerform`, `effAwait`, `effRaise`, `effHandleVO` (§28), `effHandleT`,
+    `reify`, `effOp` (§19), `effAwait`, `effHandleVO` (§28), `effHandleT`,
     `effHandleL`. At `none` the premise is `True`.
   - `pin`: `lendR`, `lendLoopR` and `nilDead` (§29) take `hPin : I.pin = true`. Every other rule
     is the same at every index.
@@ -14957,8 +14970,8 @@ its instances: abbreviations that keep their names, their rules and every statem
     and review. `scripts/check-judgments.sh` sees only a new inductive, not a new field.
     `CDerives` itself carries no index.
 - **Generated per instance** (`Core/JudgmentElim.lean`, by `scripts/gen-pin.py`):
-  - each rule under the instance's name, at the instance's premises: `CDerives.effPerform`
-    without `hAt`, `CDerivesAt.effPerform` with `RowAt Ξ S`, `CDerivesP.lendR` without `hPin`;
+  - each rule under the instance's name, at the instance's premises: `CDerives.effOp`
+    without `hAt`, `CDerivesAt.effOp` with `RowAt Ξ S`, `CDerivesP.lendR` without `hPin`;
   - the instance's eliminator, with the instance's own cases (`induction h using
     CDerives.induct`). A rule whose field is off at the instance is refuted, so it is no case.
 - **A, `ties`.**
