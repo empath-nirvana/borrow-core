@@ -83,13 +83,9 @@ theorem CDerives.withI {Δ Γ M N C D} (hM : CDerives Δ (withCtx Γ) M (.comp C
     CDerives Δ Γ (withPair M N) (.comp (.amp C D)) :=
   (CDerivesX.withI (I := {}) hM hN)
 
-theorem CDerives.proj₁ {Δ Γ M C D} (h : CDerives Δ Γ M (.comp (.amp C D))) :
-    CDerives Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C) :=
-  (CDerivesX.proj₁ (I := {}) h)
-
-theorem CDerives.proj₂ {Δ Γ M C D} (h : CDerives Δ Γ M (.comp (.amp C D))) :
-    CDerives Δ Γ (.app M (.val (.inj₂ .unit))) (.comp D) :=
-  (CDerivesX.proj₂ (I := {}) h)
+theorem CDerives.projB {Δ Γ M C D} (b : Bool) (h : CDerives Δ Γ M (.comp (.amp C D))) :
+    CDerives Δ Γ (.app M (.val (projArg b))) (.comp (cond b D C)) :=
+  (CDerivesX.projB (I := {}) b h)
 
 theorem CDerives.topI {Δ Γ} :
     CDerives Δ Γ (.val .unit) (.comp .top) :=
@@ -471,6 +467,14 @@ theorem CDerives.effThenDiv {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : 
     CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
   (CDerivesX.effThenDiv (I := {}) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD)
 
+theorem CDerives.proj₁ {Δ Γ M C D} (h : CDerives Δ Γ M (.comp (.amp C D))) :
+    CDerives Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C) :=
+  (CDerivesX.proj₁ (I := {}) h)
+
+theorem CDerives.proj₂ {Δ Γ M C D} (h : CDerives Δ Γ M (.comp (.amp C D))) :
+    CDerives Δ Γ (.app M (.val (.inj₂ .unit))) (.comp D) :=
+  (CDerivesX.proj₂ (I := {}) h)
+
 theorem CDerives.effPerform {Δ Γ V} {S : Row} {o : OpSig} (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (hac : o.rc = false) (h : CDerives Δ Γ V (.val o.A)) :
     CDerives Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B)) :=
   (CDerivesX.effPerform (I := {}) trivial hf hna hac h)
@@ -543,13 +547,9 @@ theorem CDerivesAt.withI {Ξ : EffCtx} {Δ Γ M N C D} (hM : CDerivesAt Ξ Δ (w
     CDerivesAt Ξ Δ Γ (withPair M N) (.comp (.amp C D)) :=
   (CDerivesX.withI (I := {ties := some Ξ}) hM hN)
 
-theorem CDerivesAt.proj₁ {Ξ : EffCtx} {Δ Γ M C D} (h : CDerivesAt Ξ Δ Γ M (.comp (.amp C D))) :
-    CDerivesAt Ξ Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C) :=
-  (CDerivesX.proj₁ (I := {ties := some Ξ}) h)
-
-theorem CDerivesAt.proj₂ {Ξ : EffCtx} {Δ Γ M C D} (h : CDerivesAt Ξ Δ Γ M (.comp (.amp C D))) :
-    CDerivesAt Ξ Δ Γ (.app M (.val (.inj₂ .unit))) (.comp D) :=
-  (CDerivesX.proj₂ (I := {ties := some Ξ}) h)
+theorem CDerivesAt.projB {Ξ : EffCtx} {Δ Γ M C D} (b : Bool) (h : CDerivesAt Ξ Δ Γ M (.comp (.amp C D))) :
+    CDerivesAt Ξ Δ Γ (.app M (.val (projArg b))) (.comp (cond b D C)) :=
+  (CDerivesX.projB (I := {ties := some Ξ}) b h)
 
 theorem CDerivesAt.topI {Ξ : EffCtx} {Δ Γ} :
     CDerivesAt Ξ Δ Γ (.val .unit) (.comp .top) :=
@@ -931,6 +931,14 @@ theorem CDerivesAt.effThenDiv {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S SM 
     CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
   (CDerivesX.effThenDiv (I := {ties := some Ξ}) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD)
 
+theorem CDerivesAt.proj₁ {Ξ : EffCtx} {Δ Γ M C D} (h : CDerivesAt Ξ Δ Γ M (.comp (.amp C D))) :
+    CDerivesAt Ξ Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C) :=
+  (CDerivesX.proj₁ (I := {ties := some Ξ}) h)
+
+theorem CDerivesAt.proj₂ {Ξ : EffCtx} {Δ Γ M C D} (h : CDerivesAt Ξ Δ Γ M (.comp (.amp C D))) :
+    CDerivesAt Ξ Δ Γ (.app M (.val (.inj₂ .unit))) (.comp D) :=
+  (CDerivesX.proj₂ (I := {ties := some Ξ}) h)
+
 theorem CDerivesAt.effPerform {Ξ : EffCtx} {Δ Γ V} {S : Row} {o : OpSig} (hAt : RowAt Ξ S) (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (hac : o.rc = false) (h : CDerivesAt Ξ Δ Γ V (.val o.A)) :
     CDerivesAt Ξ Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B)) :=
   (CDerivesX.effPerform (I := {ties := some Ξ}) hAt hf hna hac h)
@@ -1003,13 +1011,9 @@ theorem CDerivesP.withI {Δ Γ M N C D} (hM : CDerivesP Δ (withCtx Γ) M (.comp
     CDerivesP Δ Γ (withPair M N) (.comp (.amp C D)) :=
   (CDerivesX.withI (I := {pin := true}) hM hN)
 
-theorem CDerivesP.proj₁ {Δ Γ M C D} (h : CDerivesP Δ Γ M (.comp (.amp C D))) :
-    CDerivesP Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C) :=
-  (CDerivesX.proj₁ (I := {pin := true}) h)
-
-theorem CDerivesP.proj₂ {Δ Γ M C D} (h : CDerivesP Δ Γ M (.comp (.amp C D))) :
-    CDerivesP Δ Γ (.app M (.val (.inj₂ .unit))) (.comp D) :=
-  (CDerivesX.proj₂ (I := {pin := true}) h)
+theorem CDerivesP.projB {Δ Γ M C D} (b : Bool) (h : CDerivesP Δ Γ M (.comp (.amp C D))) :
+    CDerivesP Δ Γ (.app M (.val (projArg b))) (.comp (cond b D C)) :=
+  (CDerivesX.projB (I := {pin := true}) b h)
 
 theorem CDerivesP.topI {Δ Γ} :
     CDerivesP Δ Γ (.val .unit) (.comp .top) :=
@@ -1403,6 +1407,14 @@ theorem CDerivesP.effThenDiv {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs :
     CDerivesP Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
   (CDerivesX.effThenDiv (I := {pin := true}) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD)
 
+theorem CDerivesP.proj₁ {Δ Γ M C D} (h : CDerivesP Δ Γ M (.comp (.amp C D))) :
+    CDerivesP Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C) :=
+  (CDerivesX.proj₁ (I := {pin := true}) h)
+
+theorem CDerivesP.proj₂ {Δ Γ M C D} (h : CDerivesP Δ Γ M (.comp (.amp C D))) :
+    CDerivesP Δ Γ (.app M (.val (.inj₂ .unit))) (.comp D) :=
+  (CDerivesX.proj₂ (I := {pin := true}) h)
+
 theorem CDerivesP.effPerform {Δ Γ V} {S : Row} {o : OpSig} (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (hac : o.rc = false) (h : CDerivesP Δ Γ V (.val o.A)) :
     CDerivesP Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B)) :=
   (CDerivesX.effPerform (I := {pin := true}) trivial hf hna hac h)
@@ -1452,10 +1464,8 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
       motive Δ Γ (.app M (.var i)) (.comp C) (CDerivesX.app (I := {}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (i := i) (A := A) (C := C) hs hM hx))
     (withI : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {N : Expr} {C : CTy} {D : CTy} (hM : CDerives Δ (withCtx Γ) M (.comp C)) (hN : CDerives Δ (withCtx Γ) N (.comp D)) (hM_ih : motive Δ (withCtx Γ) M (.comp C) hM) (hN_ih : motive Δ (withCtx Γ) N (.comp D) hN),
       motive Δ Γ (withPair M N) (.comp (.amp C D)) (CDerivesX.withI (I := {}) (Δ := Δ) (Γ := Γ) (M := M) (N := N) (C := C) (D := D) hM hN))
-    (proj₁ : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} {D : CTy} (h : CDerives Δ Γ M (.comp (.amp C D))) (h_ih : motive Δ Γ M (.comp (.amp C D)) h),
-      motive Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C) (CDerivesX.proj₁ (I := {}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) (D := D) h))
-    (proj₂ : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} {D : CTy} (h : CDerives Δ Γ M (.comp (.amp C D))) (h_ih : motive Δ Γ M (.comp (.amp C D)) h),
-      motive Δ Γ (.app M (.val (.inj₂ .unit))) (.comp D) (CDerivesX.proj₂ (I := {}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) (D := D) h))
+    (projB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} {D : CTy} (b : Bool) (h : CDerives Δ Γ M (.comp (.amp C D))) (h_ih : motive Δ Γ M (.comp (.amp C D)) h),
+      motive Δ Γ (.app M (.val (projArg b))) (.comp (cond b D C)) (CDerivesX.projB (I := {}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) (D := D) b h))
     (topI : ∀ {Δ : LifeCtx} {Γ : Ctx VTy},
       motive Δ Γ (.val .unit) (.comp .top) (CDerivesX.topI (I := {}) (Δ := Δ) (Γ := Γ)))
     (unitE : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {V : Expr} {M : Expr} {C : CTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hV : CDerives Δ Γ₁ V (.val .unit)) (hM : CDerives Δ Γ₂ M (.comp C)) (hV_ih : motive Δ Γ₁ V (.val .unit) hV) (hM_ih : motive Δ Γ₂ M (.comp C) hM),
@@ -1652,8 +1662,7 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
   | lamDead a0 ih0 => exact lamDead a0 ih0
   | app a0 a1 a2 ih0 => exact app a0 a1 a2 ih0
   | withI a0 a1 ih0 ih1 => exact withI a0 a1 ih0 ih1
-  | proj₁ a0 ih0 => exact proj₁ a0 ih0
-  | proj₂ a0 ih0 => exact proj₂ a0 ih0
+  | projB a0 a1 ih0 => exact projB a0 a1 ih0
   | topI => exact topI
   | unitE a0 a1 a2 ih0 ih1 => exact unitE a0 a1 a2 ih0 ih1
   | tensorE a0 a1 a2 ih0 ih1 => exact tensorE a0 a1 a2 ih0 ih1
@@ -1779,10 +1788,8 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
       motive Δ Γ (.app M (.var i)) (.comp C) (CDerivesX.app (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (i := i) (A := A) (C := C) hs hM hx))
     (withI : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {N : Expr} {C : CTy} {D : CTy} (hM : CDerivesAt Ξ Δ (withCtx Γ) M (.comp C)) (hN : CDerivesAt Ξ Δ (withCtx Γ) N (.comp D)) (hM_ih : motive Δ (withCtx Γ) M (.comp C) hM) (hN_ih : motive Δ (withCtx Γ) N (.comp D) hN),
       motive Δ Γ (withPair M N) (.comp (.amp C D)) (CDerivesX.withI (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (M := M) (N := N) (C := C) (D := D) hM hN))
-    (proj₁ : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} {D : CTy} (h : CDerivesAt Ξ Δ Γ M (.comp (.amp C D))) (h_ih : motive Δ Γ M (.comp (.amp C D)) h),
-      motive Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C) (CDerivesX.proj₁ (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) (D := D) h))
-    (proj₂ : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} {D : CTy} (h : CDerivesAt Ξ Δ Γ M (.comp (.amp C D))) (h_ih : motive Δ Γ M (.comp (.amp C D)) h),
-      motive Δ Γ (.app M (.val (.inj₂ .unit))) (.comp D) (CDerivesX.proj₂ (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) (D := D) h))
+    (projB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} {D : CTy} (b : Bool) (h : CDerivesAt Ξ Δ Γ M (.comp (.amp C D))) (h_ih : motive Δ Γ M (.comp (.amp C D)) h),
+      motive Δ Γ (.app M (.val (projArg b))) (.comp (cond b D C)) (CDerivesX.projB (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) (D := D) b h))
     (topI : ∀ {Δ : LifeCtx} {Γ : Ctx VTy},
       motive Δ Γ (.val .unit) (.comp .top) (CDerivesX.topI (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ)))
     (unitE : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {V : Expr} {M : Expr} {C : CTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hV : CDerivesAt Ξ Δ Γ₁ V (.val .unit)) (hM : CDerivesAt Ξ Δ Γ₂ M (.comp C)) (hV_ih : motive Δ Γ₁ V (.val .unit) hV) (hM_ih : motive Δ Γ₂ M (.comp C) hM),
@@ -1979,8 +1986,7 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
   | lamDead a0 ih0 => exact lamDead a0 ih0
   | app a0 a1 a2 ih0 => exact app a0 a1 a2 ih0
   | withI a0 a1 ih0 ih1 => exact withI a0 a1 ih0 ih1
-  | proj₁ a0 ih0 => exact proj₁ a0 ih0
-  | proj₂ a0 ih0 => exact proj₂ a0 ih0
+  | projB a0 a1 ih0 => exact projB a0 a1 ih0
   | topI => exact topI
   | unitE a0 a1 a2 ih0 ih1 => exact unitE a0 a1 a2 ih0 ih1
   | tensorE a0 a1 a2 ih0 ih1 => exact tensorE a0 a1 a2 ih0 ih1
@@ -2106,10 +2112,8 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
       motive Δ Γ (.app M (.var i)) (.comp C) (CDerivesX.app (I := {pin := true}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (M := M) (i := i) (A := A) (C := C) hs hM hx))
     (withI : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {N : Expr} {C : CTy} {D : CTy} (hM : CDerivesP Δ (withCtx Γ) M (.comp C)) (hN : CDerivesP Δ (withCtx Γ) N (.comp D)) (hM_ih : motive Δ (withCtx Γ) M (.comp C) hM) (hN_ih : motive Δ (withCtx Γ) N (.comp D) hN),
       motive Δ Γ (withPair M N) (.comp (.amp C D)) (CDerivesX.withI (I := {pin := true}) (Δ := Δ) (Γ := Γ) (M := M) (N := N) (C := C) (D := D) hM hN))
-    (proj₁ : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} {D : CTy} (h : CDerivesP Δ Γ M (.comp (.amp C D))) (h_ih : motive Δ Γ M (.comp (.amp C D)) h),
-      motive Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C) (CDerivesX.proj₁ (I := {pin := true}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) (D := D) h))
-    (proj₂ : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} {D : CTy} (h : CDerivesP Δ Γ M (.comp (.amp C D))) (h_ih : motive Δ Γ M (.comp (.amp C D)) h),
-      motive Δ Γ (.app M (.val (.inj₂ .unit))) (.comp D) (CDerivesX.proj₂ (I := {pin := true}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) (D := D) h))
+    (projB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy} {D : CTy} (b : Bool) (h : CDerivesP Δ Γ M (.comp (.amp C D))) (h_ih : motive Δ Γ M (.comp (.amp C D)) h),
+      motive Δ Γ (.app M (.val (projArg b))) (.comp (cond b D C)) (CDerivesX.projB (I := {pin := true}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) (D := D) b h))
     (topI : ∀ {Δ : LifeCtx} {Γ : Ctx VTy},
       motive Δ Γ (.val .unit) (.comp .top) (CDerivesX.topI (I := {pin := true}) (Δ := Δ) (Γ := Γ)))
     (unitE : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {V : Expr} {M : Expr} {C : CTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hV : CDerivesP Δ Γ₁ V (.val .unit)) (hM : CDerivesP Δ Γ₂ M (.comp C)) (hV_ih : motive Δ Γ₁ V (.val .unit) hV) (hM_ih : motive Δ Γ₂ M (.comp C) hM),
@@ -2312,8 +2316,7 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
   | lamDead a0 ih0 => exact lamDead a0 ih0
   | app a0 a1 a2 ih0 => exact app a0 a1 a2 ih0
   | withI a0 a1 ih0 ih1 => exact withI a0 a1 ih0 ih1
-  | proj₁ a0 ih0 => exact proj₁ a0 ih0
-  | proj₂ a0 ih0 => exact proj₂ a0 ih0
+  | projB a0 a1 ih0 => exact projB a0 a1 ih0
   | topI => exact topI
   | unitE a0 a1 a2 ih0 ih1 => exact unitE a0 a1 a2 ih0 ih1
   | tensorE a0 a1 a2 ih0 ih1 => exact tensorE a0 a1 a2 ih0 ih1
@@ -2429,8 +2432,7 @@ theorem CDerivesX.mono {I I' : JIdx} (hI : I ≤ I') {Δ : LifeCtx} {Γ : Ctx VT
   | lamDead a0 ih0 => exact CDerivesX.lamDead ih0
   | app a0 a1 a2 ih0 => exact CDerivesX.app a0 ih0 a2
   | withI a0 a1 ih0 ih1 => exact CDerivesX.withI ih0 ih1
-  | proj₁ a0 ih0 => exact CDerivesX.proj₁ ih0
-  | proj₂ a0 ih0 => exact CDerivesX.proj₂ ih0
+  | projB a0 a1 ih0 => exact CDerivesX.projB a0 ih0
   | topI => exact CDerivesX.topI
   | unitE a0 a1 a2 ih0 ih1 => exact CDerivesX.unitE a0 ih0 ih1
   | tensorE a0 a1 a2 ih0 ih1 => exact CDerivesX.tensorE a0 ih0 ih1

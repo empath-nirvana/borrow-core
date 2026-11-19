@@ -806,6 +806,14 @@ abbreviation of the folded rule's node, so that statements over the node keep th
     (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr) : TExpr :=
   .effHandleVO info jdg S E fs cs n A R (some d) u ks site inside tc te
 
+/-- `&E` at the first component: `projB`'s node at `false`.  `[spec §10]` -/
+@[match_pattern] abbrev TExpr.proj₁ (info : TInfo) (jdg : Jdg) (C D : CTy) (t : TExpr) : TExpr :=
+  .projB info jdg C D false t
+
+/-- `&E` at the second component: `projB`'s node at `true`.  `[spec §10]` -/
+@[match_pattern] abbrev TExpr.proj₂ (info : TInfo) (jdg : Jdg) (C D : CTy) (t : TExpr) : TExpr :=
+  .projB info jdg C D true t
+
 /-- `[perform]`: `effOp`'s node at `ab = false`, its answer the operation's.  `[spec §19]` -/
 abbrev TExpr.effPerform (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (t : TExpr) : TExpr :=
   .effOp info jdg S o o.B false t

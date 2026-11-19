@@ -141,12 +141,12 @@ theorem withI {p₁ p₂ : Pins} {s₁ s₂ : CRow} {tM tN : TExpr} {C D : CCTy}
 theorem proj₁ {p : Pins} {s : CRow} {t : TExpr} {C D : CCTy}
     (h : TTied p s Δ Γ t (.comp (.amp C D))) :
     TTied p s Δ Γ (.proj₁ i (.comp C) C D t) (.comp C) :=
-  ⟨fun hn Ξ hΞ => .proj₁ (h.1 hn Ξ hΞ), .proj₁ h.2⟩
+  ⟨fun hn Ξ hΞ => .projB false (h.1 hn Ξ hΞ), .projB false h.2⟩
 
 theorem proj₂ {p : Pins} {s : CRow} {t : TExpr} {C D : CCTy}
     (h : TTied p s Δ Γ t (.comp (.amp C D))) :
     TTied p s Δ Γ (.proj₂ i (.comp D) C D t) (.comp D) :=
-  ⟨fun hn Ξ hΞ => .proj₂ (h.1 hn Ξ hΞ), .proj₂ h.2⟩
+  ⟨fun hn Ξ hΞ => .projB true (h.1 hn Ξ hΞ), .projB true h.2⟩
 
 theorem unitE (u : Masks) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tV tM : TExpr} {C : CCTy}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)

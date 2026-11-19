@@ -277,8 +277,8 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       have eN := ihN (_ :: _ :: Γa) Γb rfl
       simp only [List.length_cons] at eM eN
       rw [withPair_shift]; exact .withI eM eN
-  | proj₁ _ ih => intro Γa Γb hΓ; exact .proj₁ (ih Γa Γb hΓ)
-  | proj₂ _ ih => intro Γa Γb hΓ; exact .proj₂ (ih Γa Γb hΓ)
+  | projB b _ ih =>
+      intro Γa Γb hΓ; cases b; exacts [.projB false (ih Γa Γb hΓ), .projB true (ih Γa Γb hΓ)]
   | topI => intro Γa Γb _; exact .topI
   | unitE hs _ _ ihV ihM =>
       intro Γa Γb hΓ; subst hΓ

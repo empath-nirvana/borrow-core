@@ -1006,7 +1006,12 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | thunkV _ _ ih | ret _ ih | bangThunkV _ _ _ ih | bangE _ ih | boxI _ _ ih | boxE _ ih
   | immSub _ _ ih | mutSub _ _ ih | ofRet _ ih | roll _ _ _ ih | unroll _ ih | nuIn _ _ ih
   | nuOut _ _ ih | effSub _ _ ih | codeErase _ ih | codeEraseB _ ih => exact ih
-  | proj₁ _ ih | proj₂ _ ih | allE _ _ ih | allEV _ _ ih =>
+  | projB b _ ih =>
+      intro k hk
+      rcases hk with hk | hk
+      · exact ih k hk
+      · cases b <;> simp [projArg, Expr.HasVar, Expr.val, Val.inj₁, Val.inj₂, Val.unit] at hk
+  | allE _ _ ih | allEV _ _ ih =>
       intro k hk
       rcases hk with hk | hk
       · exact ih k hk
@@ -1510,12 +1515,10 @@ theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | allEV hM _ =>
       intro X Y he; cases he
       exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inl ⟨_, _, _, _, rfl, hM, rfl⟩))))), .refl⟩
-  | proj₁ hM =>
-      intro X Y he; cases he
-      exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨_, _, rfl, hM, rfl⟩)))))), .refl⟩
-  | proj₂ hM =>
-      intro X Y he; cases he
-      exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨_, _, rfl, hM, rfl⟩))))))), .refl⟩
+  | projB b hM =>
+      intro X Y he; cases he; cases b
+      · exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨_, _, rfl, hM, rfl⟩)))))), .refl⟩
+      · exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨_, _, rfl, hM, rfl⟩))))))), .refl⟩
   | force =>
       intro X Y he
       rcases forceE_var he with h | h
@@ -1700,7 +1703,7 @@ theorem der_then {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
   | app _ hM _ =>
       intro N D M he; simp only [thenE, Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
-  | allE hM _ | proj₁ hM | proj₂ hM =>
+  | allE hM _ | projB _ hM =>
       intro N D M he; simp only [thenE, Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
   | allEV hM _ =>
@@ -1777,7 +1780,7 @@ theorem der_hnd {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | app _ hM _ =>
       intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
-  | allE hM _ | proj₁ hM | proj₂ hM =>
+  | allE hM _ | projB _ hM =>
       intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
   | allEV hM _ =>
@@ -2952,7 +2955,7 @@ theorem der_hndJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
   | app _ hM _ =>
       intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
-  | allE hM _ | proj₁ hM | proj₂ hM =>
+  | allE hM _ | projB _ hM =>
       intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
   | allEV hM _ =>
@@ -3065,7 +3068,7 @@ theorem der_thenJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeriv
   | app _ hM _ =>
       intro N D M he; simp only [thenE, Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
-  | allE hM _ | proj₁ hM | proj₂ hM =>
+  | allE hM _ | projB _ hM =>
       intro N D M he; simp only [thenE, Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
   | allEV hM _ =>
@@ -3137,7 +3140,7 @@ theorem der_performJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDe
   | app _ hM _ =>
       intro n i V he; simp only [BoCa.BoLo.performE, Expr.app.injEq] at he
       obtain ⟨rfl, -⟩ := he; exact (der_prim hM _ rfl).elim
-  | allE hM _ | proj₁ hM | proj₂ hM =>
+  | allE hM _ | projB _ hM =>
       intro n i V he; simp only [BoCa.BoLo.performE, Expr.app.injEq] at he
       obtain ⟨rfl, -⟩ := he; exact (der_prim hM _ rfl).elim
   | allEV hM _ =>
@@ -3208,7 +3211,7 @@ theorem der_raiseJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
   | app _ hM _ =>
       intro n i V he; simp only [BoCa.BoLo.raiseE, Expr.app.injEq] at he
       obtain ⟨rfl, -⟩ := he; exact (der_prim hM _ rfl).elim
-  | allE hM _ | proj₁ hM | proj₂ hM =>
+  | allE hM _ | projB _ hM =>
       intro n i V he; simp only [BoCa.BoLo.raiseE, Expr.app.injEq] at he
       obtain ⟨rfl, -⟩ := he; exact (der_prim hM _ rfl).elim
   | allEV hM _ =>
@@ -3307,14 +3310,10 @@ theorem der_letJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       intro N M he _ _ hu _ _ _
       simp only [Expr.app.injEq] at he
       exact (hu he.2.symm).elim
-  | proj₁ _ =>
-      intro N M he _ _ _ hu _ _
+  | projB b _ =>
+      intro N M he _ _ _ hu₁ hu₂ _
       simp only [Expr.app.injEq] at he
-      exact (hu he.2.symm).elim
-  | proj₂ _ =>
-      intro N M he _ _ _ _ hu _
-      simp only [Expr.app.injEq] at he
-      exact (hu he.2.symm).elim
+      cases b; exacts [(hu₁ he.2.symm).elim, (hu₂ he.2.symm).elim]
   | force => intro N M he; rcases forceE_var he with h | h <;> simp at h
   | ret _ ih =>
       intro N M he h₁ h₂ h₃ h₄ h₅ h₆

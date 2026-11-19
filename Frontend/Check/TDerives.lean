@@ -74,10 +74,8 @@ inductive TDerivesX (I : JIdx) : LifeCtx → Ctx VTy → TExpr → Jdg → Prop 
       TDerivesX I Δ Γ (TExpr.app (info := info) (jdg := (.comp C)) (i := i) (A := A) (C := C) (u := u) (tM := tM)) (.comp C)
   | withI {Δ Γ C D} {info : TInfo} {tM tN : TExpr} (hM : TDerivesX I Δ (withCtx Γ) tM (.comp C)) (hN : TDerivesX I Δ (withCtx Γ) tN (.comp D)) :
       TDerivesX I Δ Γ (TExpr.withI (info := info) (jdg := (.comp (.amp C D))) (C := C) (D := D) (tM := tM) (tN := tN)) (.comp (.amp C D))
-  | proj₁ {Δ Γ C D} {info : TInfo} {t : TExpr} (h : TDerivesX I Δ Γ t (.comp (.amp C D))) :
-      TDerivesX I Δ Γ (TExpr.proj₁ (info := info) (jdg := (.comp C)) (C := C) (D := D) (t := t)) (.comp C)
-  | proj₂ {Δ Γ C D} {info : TInfo} {t : TExpr} (h : TDerivesX I Δ Γ t (.comp (.amp C D))) :
-      TDerivesX I Δ Γ (TExpr.proj₂ (info := info) (jdg := (.comp D)) (C := C) (D := D) (t := t)) (.comp D)
+  | projB {Δ Γ C D} {info : TInfo} {t : TExpr} (b : Bool) (h : TDerivesX I Δ Γ t (.comp (.amp C D))) :
+      TDerivesX I Δ Γ (TExpr.projB (info := info) (jdg := (.comp (cond b D C))) (C := C) (D := D) (b := b) (t := t)) (.comp (cond b D C))
   | topI {Δ Γ} {info : TInfo} :
       TDerivesX I Δ Γ (TExpr.topI (info := info) (jdg := (.comp .top))) (.comp .top)
   | unitE {Δ Γ Γ₁ Γ₂ C} {info : TInfo} {u : Masks} {tV tM : TExpr} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hcv : Covers u.u₁ 0 tV.erase ∧ Covers u.u₂ 0 tM.erase) (hV : TDerivesX I Δ Γ₁ tV (.val .unit)) (hM : TDerivesX I Δ Γ₂ tM (.comp C)) :
@@ -423,13 +421,9 @@ theorem TDerivesAt.withI {Ξ : EffCtx} {Δ Γ C D} {info : TInfo} {tM tN : TExpr
     TDerivesAt Ξ Δ Γ (TExpr.withI (info := info) (jdg := (.comp (.amp C D))) (C := C) (D := D) (tM := tM) (tN := tN)) (.comp (.amp C D)) :=
   TDerivesX.withI (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (C := C) (D := D) (info := info) (tM := tM) (tN := tN) (hM := hM) (hN := hN)
 
-theorem TDerivesAt.proj₁ {Ξ : EffCtx} {Δ Γ C D} {info : TInfo} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t (.comp (.amp C D))) :
-    TDerivesAt Ξ Δ Γ (TExpr.proj₁ (info := info) (jdg := (.comp C)) (C := C) (D := D) (t := t)) (.comp C) :=
-  TDerivesX.proj₁ (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (C := C) (D := D) (info := info) (t := t) (h := h)
-
-theorem TDerivesAt.proj₂ {Ξ : EffCtx} {Δ Γ C D} {info : TInfo} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t (.comp (.amp C D))) :
-    TDerivesAt Ξ Δ Γ (TExpr.proj₂ (info := info) (jdg := (.comp D)) (C := C) (D := D) (t := t)) (.comp D) :=
-  TDerivesX.proj₂ (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (C := C) (D := D) (info := info) (t := t) (h := h)
+theorem TDerivesAt.projB {Ξ : EffCtx} {Δ Γ C D} {info : TInfo} {t : TExpr} (b : Bool) (h : TDerivesAt Ξ Δ Γ t (.comp (.amp C D))) :
+    TDerivesAt Ξ Δ Γ (TExpr.projB (info := info) (jdg := (.comp (cond b D C))) (C := C) (D := D) (b := b) (t := t)) (.comp (cond b D C)) :=
+  TDerivesX.projB (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (C := C) (D := D) (info := info) (t := t) (b := b) (h := h)
 
 theorem TDerivesAt.topI {Ξ : EffCtx} {Δ Γ} {info : TInfo} :
     TDerivesAt Ξ Δ Γ (TExpr.topI (info := info) (jdg := (.comp .top))) (.comp .top) :=
@@ -923,13 +917,9 @@ theorem TDerivesP.withI {Δ Γ C D} {info : TInfo} {tM tN : TExpr} (hM : TDerive
     TDerivesP Δ Γ (TExpr.withI (info := info) (jdg := (.comp (.amp C D))) (C := C) (D := D) (tM := tM) (tN := tN)) (.comp (.amp C D)) :=
   TDerivesX.withI (I := {pin := true}) (Δ := Δ) (Γ := Γ) (C := C) (D := D) (info := info) (tM := tM) (tN := tN) (hM := hM) (hN := hN)
 
-theorem TDerivesP.proj₁ {Δ Γ C D} {info : TInfo} {t : TExpr} (h : TDerivesP Δ Γ t (.comp (.amp C D))) :
-    TDerivesP Δ Γ (TExpr.proj₁ (info := info) (jdg := (.comp C)) (C := C) (D := D) (t := t)) (.comp C) :=
-  TDerivesX.proj₁ (I := {pin := true}) (Δ := Δ) (Γ := Γ) (C := C) (D := D) (info := info) (t := t) (h := h)
-
-theorem TDerivesP.proj₂ {Δ Γ C D} {info : TInfo} {t : TExpr} (h : TDerivesP Δ Γ t (.comp (.amp C D))) :
-    TDerivesP Δ Γ (TExpr.proj₂ (info := info) (jdg := (.comp D)) (C := C) (D := D) (t := t)) (.comp D) :=
-  TDerivesX.proj₂ (I := {pin := true}) (Δ := Δ) (Γ := Γ) (C := C) (D := D) (info := info) (t := t) (h := h)
+theorem TDerivesP.projB {Δ Γ C D} {info : TInfo} {t : TExpr} (b : Bool) (h : TDerivesP Δ Γ t (.comp (.amp C D))) :
+    TDerivesP Δ Γ (TExpr.projB (info := info) (jdg := (.comp (cond b D C))) (C := C) (D := D) (b := b) (t := t)) (.comp (cond b D C)) :=
+  TDerivesX.projB (I := {pin := true}) (Δ := Δ) (Γ := Γ) (C := C) (D := D) (info := info) (t := t) (b := b) (h := h)
 
 theorem TDerivesP.topI {Δ Γ} {info : TInfo} :
     TDerivesP Δ Γ (TExpr.topI (info := info) (jdg := (.comp .top))) (.comp .top) :=
@@ -1427,12 +1417,9 @@ theorem TDerivesX.erase {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j 
   | withI a0 a1 ih0 ih1 =>
       dsimp only [TExpr.erase]
       exact CDerivesX.withI ih0 ih1
-  | proj₁ a0 ih0 =>
+  | projB a0 a1 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesX.proj₁ ih0
-  | proj₂ a0 ih0 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.proj₂ ih0
+      exact CDerivesX.projB a0 ih0
   | topI =>
       dsimp only [TExpr.erase]
       exact CDerivesX.topI
@@ -1771,8 +1758,7 @@ theorem TDerivesX.mono {I I' : JIdx} (hI : I ≤ I') {Δ : LifeCtx} {Γ : Ctx VT
   | lamDead a0 ih0 => exact TDerivesX.lamDead ih0
   | app a0 a1 a2 a3 a4 ih0 => exact TDerivesX.app a0 a1 a2 ih0 a4
   | withI a0 a1 ih0 ih1 => exact TDerivesX.withI ih0 ih1
-  | proj₁ a0 ih0 => exact TDerivesX.proj₁ ih0
-  | proj₂ a0 ih0 => exact TDerivesX.proj₂ ih0
+  | projB a0 a1 ih0 => exact TDerivesX.projB a0 ih0
   | topI => exact TDerivesX.topI
   | unitE a0 a1 a2 a3 a4 ih0 ih1 => exact TDerivesX.unitE a0 a1 a2 ih0 ih1
   | tensorE a0 a1 a2 a3 a4 ih0 ih1 => exact TDerivesX.tensorE a0 a1 a2 ih0 ih1

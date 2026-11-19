@@ -210,6 +210,20 @@ def Jdg.alphaB : Jdg → Jdg → Bool
   | .comp C, .comp C' => CTy.alphaB [] C C'
   | _, _ => false
 
+/-- The selector a projection applies its pair to: `inj₁ ()` at `false`, `inj₂ ()` at `true`.
+`[spec §10]` -/
+def projArg : Bool → Val
+  | false => .inj₁ .unit
+  | true => .inj₂ .unit
+
+@[simp] theorem projArg_eq_inj₁ {b : Bool} {e : Expr} :
+    (projArg b).1 = .inj₁ e ↔ b = false ∧ e = .unit := by
+  cases b <;> simp [projArg, eq_comm]
+
+@[simp] theorem projArg_eq_inj₂ {b : Bool} {e : Expr} :
+    (projArg b).1 = .inj₂ e ↔ b = true ∧ e = .unit := by
+  cases b <;> simp [projArg, eq_comm]
+
 /-- The CBPV typing judgment.  Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and
 `Ctx.SoloP`: a live slot of persistent type may be duplicated and consumed.  `[spec §3, §10, §83]` -/
 inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
@@ -251,10 +265,10 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   | withI {Δ Γ M N C D} (hM : CDerivesX I Δ (withCtx Γ) M (.comp C))
       (hN : CDerivesX I Δ (withCtx Γ) N (.comp D)) :
       CDerivesX I Δ Γ (withPair M N) (.comp (.amp C D))
-  | proj₁ {Δ Γ M C D} (h : CDerivesX I Δ Γ M (.comp (.amp C D))) :
-      CDerivesX I Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C)
-  | proj₂ {Δ Γ M C D} (h : CDerivesX I Δ Γ M (.comp (.amp C D))) :
-      CDerivesX I Δ Γ (.app M (.val (.inj₂ .unit))) (.comp D)
+  /-- `&E`: a pair applied to its selector `projArg b`, at the first component (`b = false`,
+  `CDerivesX.proj₁`) or the second (`true`, `CDerivesX.proj₂`).  `[spec §10]` -/
+  | projB {Δ Γ M C D} (b : Bool) (h : CDerivesX I Δ Γ M (.comp (.amp C D))) :
+      CDerivesX I Δ Γ (.app M (.val (projArg b))) (.comp (cond b D C))
   /-- `⟨⟩ : ⊤` at any context. -/
   | topI {Δ Γ} : CDerivesX I Δ Γ (.val .unit) (.comp .top)
   | unitE {Δ Γ Γ₁ Γ₂ V M C} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
@@ -787,6 +801,18 @@ theorem CDerivesX.effThenDiv {I : JIdx} {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD :
     (hD : CDerivesX I Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
     CDerivesX I Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
   .effThenF hs hNZ hUq hU hMS hDS hfin hP (.inr hcap) hM hN hD
+
+/-! ### Derived rules: the two projections, the two sides of `projB`'s selector -/
+
+/-- `&E` at the first component (`projB` at `false`).  `[spec §10]` -/
+theorem CDerivesX.proj₁ {I : JIdx} {Δ Γ M C D} (h : CDerivesX I Δ Γ M (.comp (.amp C D))) :
+    CDerivesX I Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C) :=
+  .projB false h
+
+/-- `&E` at the second component (`projB` at `true`).  `[spec §10]` -/
+theorem CDerivesX.proj₂ {I : JIdx} {Δ Γ M C D} (h : CDerivesX I Δ Γ M (.comp (.amp C D))) :
+    CDerivesX I Δ Γ (.app M (.val (.inj₂ .unit))) (.comp D) :=
+  .projB true h
 
 /-! ### Derived rules: `[perform]` and `[raise]`, the two sides of `effOp`'s abort flag -/
 

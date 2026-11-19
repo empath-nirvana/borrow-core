@@ -243,7 +243,11 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
       · exact Ctx.liveAt_cons_succ.mp (Ctx.liveAt_cons_succ.mp (ihM _ hk))
       · omega
       · exact Ctx.liveAt_cons_succ.mp (Ctx.liveAt_cons_succ.mp (ihN _ hk))
-  | proj₁ _ ih | proj₂ _ ih | allE _ _ ih | allEV _ _ ih =>
+  | projB b _ ih =>
+      intro k hk; cases b <;>
+      simp only [projArg, mentions, Expr.val, Val.inj₁, Val.inj₂, Val.unit, Bool.or_false] at hk <;>
+      exact ih k hk
+  | allE _ _ ih | allEV _ _ ih =>
       intro k hk
       simp only [mentions, Expr.val, Val.inj₁, Val.inj₂, Val.unit, Bool.or_false] at hk
       exact ih k hk

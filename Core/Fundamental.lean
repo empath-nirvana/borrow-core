@@ -470,8 +470,7 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
   | lamDead _ ih => exact lamDead_compatC ih
   | app hs _ hx ih => exact app_compatC hs ih hx
   | withI _ _ ihM ihN => exact withI_compatC ihM ihN
-  | proj₁ _ ih => exact proj₁_compatC ih
-  | proj₂ _ ih => exact proj₂_compatC ih
+  | projB b _ ih => cases b; exacts [proj₁_compatC ih, proj₂_compatC ih]
   | topI => exact topI_compatC
   | unitE hs _ _ ihV ihM => exact unitE_compatC hs ihV ihM
   | tensorE hs _ _ ihV ihM => exact tensorE_compatC hs ihV ihM

@@ -661,8 +661,7 @@ inductive TExpr where
   | lamDead (info : TInfo) (jdg : Jdg) (S : Row) (B : VTy) (t : TExpr)
   | app (info : TInfo) (jdg : Jdg) (i : Nat) (A : VTy) (C : CTy) (u : Masks) (tM : TExpr)
   | withI (info : TInfo) (jdg : Jdg) (C : CTy) (D : CTy) (tM tN : TExpr)
-  | proj₁ (info : TInfo) (jdg : Jdg) (C : CTy) (D : CTy) (t : TExpr)
-  | proj₂ (info : TInfo) (jdg : Jdg) (C : CTy) (D : CTy) (t : TExpr)
+  | projB (info : TInfo) (jdg : Jdg) (C : CTy) (D : CTy) (b : Bool) (t : TExpr)
   | topI (info : TInfo) (jdg : Jdg)
   | unitE (info : TInfo) (jdg : Jdg) (C : CTy) (u : Masks) (tV tM : TExpr)
   | tensorE (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (C : CTy) (u : Masks) (tV tM : TExpr)
@@ -825,8 +824,7 @@ def TExpr.erase : TExpr → Expr
   | .lamDead _ _ _ _ t => (.val (.lam (t.erase)))
   | .app _ _ i _ _ _ tM => (.app (tM.erase) (.var i))
   | .withI _ _ _ _ tM tN => (withPair (tM.erase) (tN.erase))
-  | .proj₁ _ _ _ _ t => (.app (t.erase) (.val (.inj₁ .unit)))
-  | .proj₂ _ _ _ _ t => (.app (t.erase) (.val (.inj₂ .unit)))
+  | .projB _ _ _ _ b t => (.app (t.erase) (.val (projArg b)))
   | .topI _ _ => (.val .unit)
   | .unitE _ _ _ _ tV tM => (.seq (tV.erase) (tM.erase))
   | .tensorE _ _ _ _ _ _ tV tM => (.letpair (tV.erase) (tM.erase))
@@ -947,8 +945,7 @@ def TExpr.info : TExpr → TInfo
   | .lamDead i _ _ _ _ => i
   | .app i _ _ _ _ _ _ => i
   | .withI i _ _ _ _ _ => i
-  | .proj₁ i _ _ _ _ => i
-  | .proj₂ i _ _ _ _ => i
+  | .projB i _ _ _ _ _ => i
   | .topI i _ => i
   | .unitE i _ _ _ _ _ => i
   | .tensorE i _ _ _ _ _ _ _ => i
@@ -1065,8 +1062,7 @@ def TExpr.jdg : TExpr → Jdg
   | .lamDead _ j _ _ _ => j
   | .app _ j _ _ _ _ _ => j
   | .withI _ j _ _ _ _ => j
-  | .proj₁ _ j _ _ _ => j
-  | .proj₂ _ j _ _ _ => j
+  | .projB _ j _ _ _ _ => j
   | .topI _ j => j
   | .unitE _ j _ _ _ _ => j
   | .tensorE _ j _ _ _ _ _ _ => j
@@ -1191,8 +1187,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .lamDead _ _ _ _ t => [(.push 1, t)]
   | .app _ _ _ _ _ _ tM => [(.push 0, tM)]
   | .withI _ _ _ _ tM tN => [(.push 2, tM), (.push 2, tN)]
-  | .proj₁ _ _ _ _ t => [(.push 0, t)]
-  | .proj₂ _ _ _ _ t => [(.push 0, t)]
+  | .projB _ _ _ _ _ t => [(.push 0, t)]
   | .topI _ _ => []
   | .unitE _ _ _ _ tV tM => [(.push 0, tV), (.push 0, tM)]
   | .tensorE _ _ _ _ _ _ tV tM => [(.push 0, tV), (.push 2, tM)]
@@ -1328,8 +1323,7 @@ def TExpr.isLam : TExpr → Bool
   | .lamDead _ _ _ _ _ => true
   | .app _ _ _ _ _ _ _ => false
   | .withI _ _ _ _ _ _ => true
-  | .proj₁ _ _ _ _ _ => false
-  | .proj₂ _ _ _ _ _ => false
+  | .projB _ _ _ _ _ _ => false
   | .topI _ _ => false
   | .unitE _ _ _ _ _ _ => false
   | .tensorE _ _ _ _ _ _ _ _ => false
@@ -1450,8 +1444,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .lamDead _ _ _ _ _ => rfl
   | .app _ _ _ _ _ _ _ => rfl
   | .withI _ _ _ _ _ _ => rfl
-  | .proj₁ _ _ _ _ _ => rfl
-  | .proj₂ _ _ _ _ _ => rfl
+  | .projB _ _ _ _ _ _ => rfl
   | .topI _ _ => rfl
   | .unitE _ _ _ _ _ _ => rfl
   | .tensorE _ _ _ _ _ _ _ _ => rfl
@@ -1573,6 +1566,14 @@ abbreviation of the folded rule's node, so that statements over the node keep th
     (fs : Nat → CTy) (cs : Nat → Bool) (n : UInt32) (A R : VTy) (d : Lifetime.Life) (u : Masks)
     (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr) : TExpr :=
   .effHandleVO info jdg S E fs cs n A R (some d) u ks site inside tc te
+
+/-- `&E` at the first component: `projB`'s node at `false`.  `[spec §10]` -/
+@[match_pattern] abbrev TExpr.proj₁ (info : TInfo) (jdg : Jdg) (C D : CTy) (t : TExpr) : TExpr :=
+  .projB info jdg C D false t
+
+/-- `&E` at the second component: `projB`'s node at `true`.  `[spec §10]` -/
+@[match_pattern] abbrev TExpr.proj₂ (info : TInfo) (jdg : Jdg) (C D : CTy) (t : TExpr) : TExpr :=
+  .projB info jdg C D true t
 
 /-- `[perform]`: `effOp`'s node at `ab = false`, its answer the operation's.  `[spec §19]` -/
 abbrev TExpr.effPerform (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (t : TExpr) : TExpr :=

@@ -359,14 +359,10 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       obtain ⟨dN, eN⟩ := ihN (_ :: _ :: Γa) Γb Γp f₂ rfl hf₂ q₂
       simp only [List.length_cons] at dM eM dN eN
       exact ⟨.withI dM dN, by rw [TExpr.erase, withPair_shift, ← eM, ← eN]; rfl⟩
-  | proj₁ _ ih =>
+  | projB b _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.proj₁ d, by simp only [TExpr.shift, TExpr.erase, Expr.shift, e]; rfl⟩
-  | proj₂ _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.proj₂ d, by simp only [TExpr.shift, TExpr.erase, Expr.shift, e]; rfl⟩
+      exact ⟨.projB b d, by cases b <;> simp only [TExpr.shift, TExpr.erase, Expr.shift, e] <;> rfl⟩
   | topI => intro Γa Γb Γp f _ _ _; exact ⟨.topI, rfl⟩
   | unitE hs hm hcv _ _ ihV ihM =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ

@@ -169,8 +169,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .lamDead i j S B t => .lamDead i j S B (t.shift d (c + 1))
   | .app i j k A C u tM => .app i j (sIdx d c k) A C (u.ins d c) (tM.shift d c)
   | .withI i j C D tM tN => .withI i j C D (tM.shift d (c + 2)) (tN.shift d (c + 2))
-  | .proj₁ i j C D t => .proj₁ i j C D (t.shift d c)
-  | .proj₂ i j C D t => .proj₂ i j C D (t.shift d c)
+  | .projB i j C D b t => .projB i j C D b (t.shift d c)
   | .unitE i j C u tV tM => .unitE i j C (u.ins d c) (tV.shift d c) (tM.shift d c)
   | .tensorE i j A B C u tV tM =>
       .tensorE i j A B C (u.ins d c) (tV.shift d c) (tM.shift d (c + 2))
@@ -299,7 +298,7 @@ under `Δ`. -/
 def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .tensorI _ _ _ _ _ t₁ t₂ => AbsF.orO (t₁.absF Δ) (t₂.absF Δ)
   | .sumI₁ _ _ _ _ t | .sumI₂ _ _ _ _ t | .thunkF _ _ _ t | .thunkV _ _ _ t | .ret _ _ _ t
-  | .lam _ _ _ _ t | .lamDead _ _ _ _ t | .proj₁ _ _ _ _ t | .proj₂ _ _ _ _ t
+  | .lam _ _ _ _ t | .lamDead _ _ _ _ t | .projB _ _ _ _ _ t
   | .allE _ _ _ _ _ _ t | .bangE _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t
   | .mutSub _ _ _ _ _ t | .allEV _ _ _ _ _ _ t | .ofRet _ _ _ t | .roll _ _ _ t
   | .unroll _ _ _ t | .nuIn _ _ _ _ _ t | .nuOut _ _ _ _ _ t | .effSub _ _ _ _ _ t | .alpha _ _ _ _ t

@@ -3565,8 +3565,8 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     | _ => do
       let f ← fresh (← repJ tM.jdg)
       return pre (rest (.letv f (← conv fuel c₁ tM) (← withEv (.app f x))))
-  | .proj₁ _ _ _ _ c | .proj₂ _ _ _ _ c => do
-    let j := match t with | .proj₂ .. => 1 | _ => 0
+  | .projB _ _ _ _ b c => do
+    let j := if b then 1 else 0
     let fT ← repJ c.jdg
     bindTm (← conv fuel ctx c) fT fun f => withEv (.sel f j)
   | .unitE _ _ _ u tV tM => do

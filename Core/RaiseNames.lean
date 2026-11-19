@@ -1605,7 +1605,7 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
         Val.lam, Val.unit, rcE, rcE_app, hn]
   | @effOp _ _ V S o _ ab hAt hf _ _ _ _ _ ih =>
       cases ab
-      · first | rfl | simp_all [rcE, rcE_app, opPrim, opArgE, Val.i32]
+      · first | rfl | simp_all [rcE, opPrim, opArgE, Val.i32]
       · simp only [opPrim, opArgE, Expr.val, Val.prim, Val.i32, rcE, ih,
           names_of_rowAt hAt hf, Bool.and_true, Bool.true_and]
         rfl
@@ -1625,7 +1625,8 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
       rw [rcE_fill hb hcl N 0] at ihN
       rw [rcE.eq_9 _ _ _ (fun m r h _ => by cases h)]
       simp [rcE, Expr.val, Val.lam, ihN, hb]
-  | _ => first | rfl | simp_all [rcE, rcE_app, absurdE, thenE, performE, opArgE, Val.i32]
+  | projB b _ ih => cases b <;> simp_all [projArg, rcE, rcE_app, Expr.val, Val.inj₁, Val.inj₂, Val.unit]
+  | _ => first | rfl | simp_all [rcE, rcE_app, absurdE, thenE, opArgE, Val.i32]
 
 /-- **A tied term is at its effect context's names**: every raise and every cancel state in it is
 at `Ξ`'s names, since `rcE` accepts it (`rcE_of_derivesAt`).  `[spec §19]` -/

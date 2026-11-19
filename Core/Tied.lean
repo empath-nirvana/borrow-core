@@ -362,8 +362,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | lamDead _ ih1 => exact .lamDead (ih1 (by eff_free))
   | app hs _ hx ih1 => exact .app hs (ih1 (by eff_free)) hx
   | withI _ _ ih1 ih2 => exact .withI (ih1 (by eff_free)) (ih2 (by eff_free))
-  | proj₁ _ ih1 => exact .proj₁ (ih1 (by eff_free))
-  | proj₂ _ ih1 => exact .proj₂ (ih1 (by eff_free))
+  | projB b _ ih1 => exact .projB b (ih1 (by cases b <;> eff_free))
   | topI => exact .topI
   | unitE hs _ _ ih1 ih2 => exact .unitE hs (ih1 (by eff_free)) (ih2 (by eff_free))
   | tensorE hs _ _ ih1 ih2 => exact .tensorE hs (ih1 (by eff_free)) (ih2 (by eff_free))

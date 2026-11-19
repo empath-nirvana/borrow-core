@@ -158,8 +158,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .lamDead ii jj S B t => t.lifeBinders
   | .app ii jj i A C u tM => tM.lifeBinders
   | .withI ii jj C D tM tN => tM.lifeBinders ++ tN.lifeBinders
-  | .proj₁ ii jj C D t => t.lifeBinders
-  | .proj₂ ii jj C D t => t.lifeBinders
+  | .projB ii jj C D b t => t.lifeBinders
   | .topI ii jj => []
   | .unitE ii jj C u tV tM => tV.lifeBinders ++ tM.lifeBinders
   | .tensorE ii jj A B C u tV tM => tV.lifeBinders ++ tM.lifeBinders
@@ -277,8 +276,7 @@ def TExpr.domFree : TExpr → Bool
   | .lamDead ii jj S B t => t.domFree
   | .app ii jj i A C u tM => tM.domFree
   | .withI ii jj C D tM tN => tM.domFree && tN.domFree
-  | .proj₁ ii jj C D t => t.domFree
-  | .proj₂ ii jj C D t => t.domFree
+  | .projB ii jj C D b t => t.domFree
   | .topI ii jj => true
   | .unitE ii jj C u tV tM => tV.domFree && tM.domFree
   | .tensorE ii jj A B C u tV tM => tV.domFree && tM.domFree
@@ -395,8 +393,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .lamDead ii jj S B t => .lamDead ii jj S B (t.reAb Δr)
   | .app ii jj i A C u tM => .app ii jj i A C u (tM.reAb Δr)
   | .withI ii jj C D tM tN => .withI ii jj C D (tM.reAb Δr) (tN.reAb Δr)
-  | .proj₁ ii jj C D t => .proj₁ ii jj C D (t.reAb Δr)
-  | .proj₂ ii jj C D t => .proj₂ ii jj C D (t.reAb Δr)
+  | .projB ii jj C D b t => .projB ii jj C D b (t.reAb Δr)
   | .topI ii jj => .topI ii jj
   | .unitE ii jj C u tV tM => .unitE ii jj C u (tV.reAb Δr) (tM.reAb Δr)
   | .tensorE ii jj A B C u tV tM => .tensorE ii jj A B C u (tV.reAb Δr) (tM.reAb Δr)
@@ -666,12 +663,9 @@ theorem TDerivesX.weakenΔ {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} 
   | withI a0 a1 ih0 ih1 =>
       intro Δ' he hd
       exact TDerivesX.withI (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | proj₁ a0 ih0 =>
+  | projB a0 a1 ih0 =>
       intro Δ' he hd
-      exact TDerivesX.proj₁ (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | proj₂ a0 ih0 =>
-      intro Δ' he hd
-      exact TDerivesX.proj₂ (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
+      exact TDerivesX.projB a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
   | topI =>
       intro Δ' he hd
       exact TDerivesX.topI

@@ -43,13 +43,13 @@ def TExpr.unSub : TExpr → TExpr
 `[&E₁]` of `[force]` at the slot, of a `&` type. -/
 def resumeB (k : Nat) (t : TExpr) : Bool :=
   match t.unSub with
-  | .app _ _ y _ _ _ (.proj₁ _ _ _ _ (.force _ _ i _ (.amp _ _))) => i == k && y != k
+  | .app _ _ y _ _ _ (.projB _ _ _ _ false (.force _ _ i _ (.amp _ _))) => i == k && y != k
   | _ => false
 
 /-- `t` is the cancel of `κ` in the slot `k`: `[&E₂]` of `[force]` at the slot. -/
 def cancelHeadB (k : Nat) (t : TExpr) : Bool :=
   match t.unSub with
-  | .proj₂ _ _ _ _ (.force _ _ i _ (.amp _ _)) => i == k
+  | .projB _ _ _ _ true (.force _ _ i _ (.amp _ _)) => i == k
   | _ => false
 
 /-- `t` cancels `κ`, then goes on without it: `[let]` whose bound computation is the cancel. -/
