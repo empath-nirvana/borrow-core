@@ -1,0 +1,28 @@
+-- pending: a kernel rule (digging, `!A ⊸ !!A`)
+-- Digging, `!A ⊸ !!A`: a persistent function stored where a persistent value of persistent
+-- functions is expected, by generic code instantiated at a `!` type.
+--
+-- Axes: coeffects. `!` is a comonad in the model (`bang_idem`: `!!A` and `!A` are one
+-- predicate); its comultiplication (digging) is not a rule of the core.
+--
+-- Blocked by: the kernel. Promotion is at `fun` and `Fun` only (SPEC §2: "an arbitrary term can
+-- allocate"), so `!V` of a value that is already persistent has no rule, and neither does
+-- digging. The strict account (§8 item 6) records it as one compatibility lemma the model
+-- already validates. The need is rare in the surface: a persistent variable is already copied
+-- implicitly (SPEC §10), and a `!{ … }` closure may capture it. It shows up where generic code
+-- promotes its argument, as `keep[A]` does here at `A = !(i32 => i32)`.
+--
+-- Spelling (a hypothesis): `!x`, promotion written on a variable.
+--
+-- Today: the parser rejects `!x`: `!` must be followed by `thunk`, `thunkv` or `{`.
+--
+-- Once it lands: `keep` returns its argument doubly persistent, and `main` unwraps it twice.
+-- Golden: `i32[42]`, `live 0`.
+
+def keep[A] : !(!A => !(!A)) = !thunkv fun (x : !A) -> return (!x)
+
+main -> i32 =
+  let g = (unbang keep[i32 => i32]) (!{ n -> n + 1 });
+  let h = unbang g;
+  (unbang h)(41)
+-- now: 22:65: expected `thunk`, `thunkv` or `{` after `!`, found name `x`

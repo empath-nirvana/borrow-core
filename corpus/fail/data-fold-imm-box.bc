@@ -1,8 +1,9 @@
--- A `box` pattern in a `fold_imm` block (SPEC §60, F1): the arms read the block through the
--- views of its cells, and free nothing.
--- expect: 6:61: `fold_imm` reads `Cons` through the views of its cells, and frees nothing: match it without `box`
+#! dialect 82
+# A `box` pattern in a `fold_imm` block (SPEC §60, F1): the arms read the block through the
+# views of its cells, and free nothing.
+# expect: 7:60: `fold_imm` reads `Cons` through the views of its cells, and frees nothing: match it without `box`
 data List = Nil | Cons(head: i32, tail: List)
 
-fn sum<'a>(l: imm 'a List) -> i32 = fold_imm l { Nil -> 0 | box Cons(h, t) -> h + t }
+fn sum<'a>(l: imm 'a List) : i32 = fold_imm l { Nil -> 0 | box Cons(h, t) -> h + t }
 
-main -> i32 = 0
+fn main() : i32 = 0

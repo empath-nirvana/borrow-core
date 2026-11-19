@@ -1,0 +1,2 @@
+-- expect: 2:23: expected `inl`, found `inr`
+main : F 1 = case v { inr y -> return y | inl x -> return x }

@@ -1,0 +1,5 @@
+-- Only a `let mut` variable is assigned (typed elaboration §5.2).
+-- expect: 4:3: `n` is assigned, but it is not declared `let mut`
+main -> i32 =
+  n = 2;
+  n

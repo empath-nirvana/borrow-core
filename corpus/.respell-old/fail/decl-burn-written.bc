@@ -1,0 +1,14 @@
+-- A program that writes `tok_burn` (SPEC §42): the token of a declared type is burned only where a
+-- written `match` on the declaration takes a marked field apart, and the elaboration is the one
+-- place that names `tok_burn`; a program cannot write it, or `tok_mint`, or the type `tok`. Here
+-- the record is taken apart as a tuple to reach its token, and `tok_burn` is no name the program
+-- has, so nothing consumes the token. Refused.
+data Txn = { id: i32, must_close(commit) log: i32 }
+
+main -> i32 =
+  let t = Txn { id: 7, log: 5 };
+  let (i, p) = t;
+  let (l, k) = p;
+  let u = tok_burn(k);
+  i + l
+-- expect: 12:11: unknown variable `tok_burn`

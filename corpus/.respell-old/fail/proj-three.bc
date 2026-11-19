@@ -1,0 +1,2 @@
+-- expect: 2:24: expected `1` or `2` after `.`, found integer `3`
+main : F 1 = (force p).3

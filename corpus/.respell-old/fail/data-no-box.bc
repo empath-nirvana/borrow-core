@@ -1,0 +1,9 @@
+-- A block built without `box` (SPEC §42, E1): `Node` holds the tree's own type, so it is a block,
+-- one cell per field, and every heap allocation is written (§11.1 A7, `docs/data-declarations.md`
+-- §6.11).
+-- expect: 7:47: `Node` builds a block, one cell per field: allocate it with `box Node(…)`
+data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)
+
+fn branch(l: Tree, v: i32, r: Tree) -> Tree = Node(l, v, r)
+
+main -> i32 = 0

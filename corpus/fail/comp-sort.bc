@@ -1,2 +1,3 @@
--- expect: 2:8: this is a value type, but a computation type is expected here
+#! dialect 82
+# expect: 3:8: this is a value type, but a computation type is expected here
 main : 1 + 1 = return (inl ())
