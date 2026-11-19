@@ -1,0 +1,9 @@
+-- expect: 9:86: a `finally` clause can't yet assign `d`, a variable declared outside the handler: its write would be lost (#940)
+-- A `finally` clause that assigns a `let mut` declared outside the handler (SPEC §42; #940). The
+-- finaliser runs in place, but what it writes is not handed back after the `with`, so the write
+-- would be lost and the program would answer the old value. Until it is, the clause is refused.
+include fail
+
+fn chk(n: i32) -> i32 with Fail[i32] = if n > 0 { raise(n) } else { n }
+
+main -> (i32 + i32) * i32 = let mut d = 0; let r = with to_result { chk(2) } finally { d = d + 100 }; (r, d)

@@ -1,0 +1,7 @@
+-- An arm no value reaches (SPEC §42, M4): the arms before it match everything it matches.
+-- expect: 5:44: this arm is never reached: the arms before it match everything it matches
+data State = Locked | Open
+
+fn f(s: State) -> i32 = match s { _ -> 0 | Locked -> 1 }
+
+main -> i32 = f(Open)

@@ -1,0 +1,8 @@
+-- Exhaustiveness over two columns and a nested pattern (SPEC §42, M4): the witness is the value no
+-- arm matches.
+-- expect: 6:40: this `match` is not exhaustive: `(Some(Open), _)` is not matched
+data State = Locked | Open
+
+fn f(s: Option[State], b: u8) -> i32 = match (s, b) { (Some(Locked), _) -> 1 | (None, u8[0]) -> 2 | (None, _) -> 3 }
+
+main -> i32 = f(None, u8[0])

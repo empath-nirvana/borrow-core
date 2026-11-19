@@ -1,0 +1,3 @@
+-- A binding form used as an operand must be parenthesized (section 6.5).
+-- expect: 3:20: expected a value, found `thunk`
+def t : 1 = unbang thunk return ()

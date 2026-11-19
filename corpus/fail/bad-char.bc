@@ -1,2 +1,3 @@
--- expect: 2:13: unexpected character `#`
-def x : 1 = #
+#! dialect 82
+# expect: 3:13: unexpected character `$`
+def x : 1 = $

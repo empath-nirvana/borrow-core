@@ -1,0 +1,2 @@
+-- expect: 2:8: this is a value type, but a computation type is expected here
+main : 1 + 1 = return (inl ())

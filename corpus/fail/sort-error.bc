@@ -1,2 +1,3 @@
--- expect: 2:10: `F A` is a computation type, but a value type is expected here
+#! dialect 82
+# expect: 3:10: `F A` is a computation type, but a value type is expected here
 type T = F A * B
