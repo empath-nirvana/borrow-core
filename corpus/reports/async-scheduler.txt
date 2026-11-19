@@ -1,10 +1,10 @@
 effect 19:1: Exhausted: exhausted (ctl, cancellable, abortive)
-row 19:1: ticker: Async
-lowering 19:1: copy `ticker__n1`: `ticker` for the site 1 of `Async`
-lowering 19:1: copy `ticker__n2`: `ticker` for the site 2 of `Async`
-lowering 31:19: with spawn (Async): a handler, the static name 2; await cancellable: its continuation may be kept, log cancellable: tail-resumptive on every path; the clauses receive the continuation boxed at `top` (BOXED-κ), so what they answer may keep it
-lowering 32:19: with spawn (Async): a handler, the static name 1; await cancellable: its continuation may be kept, log cancellable: tail-resumptive on every path; the clauses receive the continuation boxed at `top` (BOXED-κ), so what they answer may keep it
-call 24:5: await (Async) → perform[2.0], handled by the caller at 19:1
-call 24:5: await (Async) → perform[1.0], handled by the caller at 19:1
-call 31:32: ticker → `ticker__n2`
-call 32:32: ticker → `ticker__n1`
+row 20:1: ticker: Async
+lowering 20:1: copy `ticker__n1`: `ticker` for the site 1 of `Async`
+lowering 20:1: copy `ticker__n2`: `ticker` for the site 2 of `Async`
+lowering 33:19: with spawn (Async): a handler, the static name 2; await cancellable: its continuation may be kept, log cancellable: tail-resumptive on every path; the clauses receive the continuation boxed at `top` (BOXED-κ), so what they answer may keep it
+lowering 34:19: with spawn (Async): a handler, the static name 1; await cancellable: its continuation may be kept, log cancellable: tail-resumptive on every path; the clauses receive the continuation boxed at `top` (BOXED-κ), so what they answer may keep it
+call 25:5: await (Async) → perform[2.0], handled by the caller at 20:1
+call 25:5: await (Async) → perform[1.0], handled by the caller at 20:1
+call 33:28: ticker → `ticker__n2`
+call 34:28: ticker → `ticker__n1`
