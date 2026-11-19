@@ -1,0 +1,66 @@
+-- lowers: corpus/data-fold-forest.bc
+-- `corpus/data-fold-forest.bc` with its declarations and fold blocks written out by SPEC §42's
+-- rules, in the surface: `Forest` the group's `mu`, `Rose` its structure with `Forest` named
+-- (the single-root rule), and each fold the kernel's at `Forest`'s shape and the function's
+-- result, applied to the algebra at `A_R`, `A″_R` or `A′_R`, its arms a `case` on the unrolled
+-- shape in which a `Rose` is a pair.
+
+type Forest = mu X. 1 + ((i32 * ref X) * ref X)
+
+type Rose = i32 * ref Forest
+
+fn rose(v: i32, kids: Forest) -> Rose = ((v, alloc(kids)) : Rose)
+
+fn cons(r: Rose, f: Forest) -> Forest = (roll (inr (r, alloc(f))) : Forest)
+
+fn sum<'a>(f: imm 'a Forest) -> i32 =
+  (unbang fold_imm[1 + (i32 * ref X) * ref X, 'y, top, i32] (!thunkv Fun 'y < top.
+    return (thunkv fun (x : 1 + (i32 * i32) * i32) ->
+      case x {
+        inl e -> let () = e; 0
+      | inr b ->
+          let (cr, crest) = b;
+          let (cv, ck) = cr;
+          let v = cv;
+          let k = ck;
+          let rest = crest;
+          v + k + rest
+      }))) ['a] f
+
+fn inc(f: Forest) -> Forest =
+  (unbang fold_reuse[1 + (i32 * ref X) * ref X, Forest] (!thunkv fun (x : 1 + (i32 * (ref 1 * Forest)) * (ref 1 * Forest)) ->
+    case x {
+      inl e -> let () = e; (roll (inl ()) : Forest)
+    | inr b ->
+        let (cr, pr) = b;
+        let (cv, pk) = cr;
+        let (cdk, ck) = pk;
+        let (cdr, crr) = pr;
+        let dr = cdr;
+        let r = crr;
+        let dk = cdk;
+        let k = ck;
+        let v = cv;
+        let (dk, ()) = swap(dk, k);
+        let (dr, ()) = swap(dr, r);
+        (roll (inr (((v + 1, dk) : Rose), dr)) : Forest)
+    })) f
+
+fn count(f: Forest) -> i32 =
+  (unbang fold_own[1 + (i32 * ref X) * ref X, i32] (!thunkv fun (x : 1 + (i32 * i32) * i32) ->
+    case x {
+      inl e -> let () = e; 0
+    | inr b ->
+        let (cr, crest) = b;
+        let (cv, ck) = cr;
+        let k = ck;
+        let rest = crest;
+        1 + k + rest
+    })) f
+
+main -> i32 =
+  let mut f = cons(rose(1, cons(rose(2, (roll (inl ()) : Forest)), cons(rose(3, (roll (inl ()) : Forest)),
+    (roll (inl ()) : Forest)))), cons(rose(4, (roll (inl ()) : Forest)), (roll (inl ()) : Forest)));
+  modify &mut f { k -> inc(k) };
+  let s = sum(&f);
+  s * 10 + count(f)

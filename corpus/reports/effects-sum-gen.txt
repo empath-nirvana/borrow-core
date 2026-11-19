@@ -1,5 +1,5 @@
-effect 13:1: Yield: yield (ctl, cancellable)
-effect 17:1: Fail: raise (ctl, cancellable, abortive)
+effect 14:1: Yield: yield (ctl, cancellable)
+effect 18:1: Fail: raise (ctl, cancellable, abortive)
 row 21:1: gen1: Yield[1 + 1]
 row 22:1: gen2: Yield[1 + 1], Fail[1]
 lowering 21:1: copy `gen1__n3`: `gen1` for the site 3 of `Yield`

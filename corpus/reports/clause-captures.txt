@@ -1,4 +1,4 @@
-effect 17:1: Fail: raise (ctl, cancellable, abortive)
+effect 18:1: Fail: raise (ctl, cancellable, abortive)
 effect 20:1: Ask: ask (ctl, cancellable)
 effect 21:1: Count: tick
 row 35:1: check: Fail[i32]

@@ -1,0 +1,55 @@
+-- lowers: corpus/data-fold-list.bc
+-- `corpus/data-fold-list.bc` with its fold blocks written out by SPEC §42's rules F1 and F2, in
+-- the surface: each the kernel's fold at the list's shape and the function's result, applied to
+-- the algebra at `A_R`, `A″_R` or `A′_R`, its arms a `case` on the unrolled shape. `Cons(c, d)`
+-- in the `fold_reuse` arm is the block reassembled from its cells, `roll (inr (c, d))`.
+
+type List = mu X. 1 + (ref i32 * ref X)
+
+shape List_Cons = node (leaf i32) (leaf List)
+
+fn sum<'a>(l: imm 'a List) -> i32 =
+  (unbang fold_imm[1 + ref i32 * ref X, 'y, top, i32] (!thunkv Fun 'y < top.
+    return (thunkv fun (x : 1 + imm 'y i32 * i32) ->
+      case x {
+        inl e -> let () = e; 0
+      | inr b ->
+          let (ch, ct) = b;
+          let h = ch;
+          let t = ct;
+          *h + t
+      }))) ['a] l
+
+fn map_inc(l: List) -> List =
+  (unbang fold_reuse[1 + ref i32 * ref X, List] (!thunkv fun (x : 1 + ref i32 * (ref 1 * List)) ->
+    case x {
+      inl e -> let () = e; (roll (inl ()) : List)
+    | inr b ->
+        let (cc, cdt) = b;
+        let (cd, ct) = cdt;
+        let d = cd;
+        let t = ct;
+        let c = cc;
+        let (c, x) = swap(c, ());
+        let (c, ()) = swap(c, x + 1);
+        let (d, ()) = swap(d, t);
+        (roll (inr (c, d)) : List)
+    })) l
+
+fn digits(l: List) -> i32 =
+  (unbang fold_own[1 + ref i32 * ref X, i32] (!thunkv fun (x : 1 + ref i32 * i32) ->
+    case x {
+      inl e -> let () = e; 0
+    | inr b ->
+        let (cc, ct) = b;
+        let c = cc;
+        let t = ct;
+        free(c) + t * 10
+    })) l
+
+main -> i32 =
+  let mut l = (roll (inr (alloc_s[List_Cons] (1, (roll (inr (alloc_s[List_Cons] (3,
+    (roll (inr (alloc_s[List_Cons] (5, (roll (inl ()) : List)))) : List)))) : List)))) : List);
+  let s = sum(&l);
+  modify &mut l { k -> map_inc(k) };
+  digits(l) * 100 + s

@@ -768,12 +768,14 @@ def watTimed (file src : String) : IO (Except String String) := do
   let tot ← IO.mkRef 0
   let stage {α} := @Backend.timed α (some tot)
   let go : ExceptT String IO String := do
-    let p₀ ← ExceptT.mk <| stage "parse" (fun (p : Frontend.Program) => s!"{p.decls.length} declarations")
-      fun _ => match Frontend.parseProgram src (lib := Frontend.Sugar.libSrc) with
+    let p₀ ← ExceptT.mk <| stage "parse"
+        (fun (p : Frontend.Program × Except Frontend.Error Frontend.Elab.Elaborated) =>
+          s!"{p.1.decls.length} declarations")
+      fun _ => match Frontend.Elab.parseLent src with
         | .ok p => pure p
         | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
     let r ← ExceptT.mk <| stage "check" (fun _ => "") fun _ =>
-      match Frontend.Check.checkProgram p₀ with
+      match Frontend.Check.checkProgramWith p₀.1 (fun _ => p₀.2) with
         | .ok r => pure r
         | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
     let some c := r.main | throw s!"{file}: no `main`"
@@ -1001,10 +1003,11 @@ def ms2 : MachSet := ({} : MachSet).insert (2, 0)
 #guard evExcludedNode [5] {} 7 [{ n := 5, i := 0, q := .lin, A := .unit, B := .unit }] true == [5]
 #guard evExcludedNode [5] {} 7 [{ n := 5, i := 0, q := .lin, A := .unit, B := .unit }] false == []
 
-/-- The evidence names of a program (`evNames` on its checked `main`), and its `env` names. -/
+/-- The evidence names of a program (`evNames` on its checked `main`), and its `env` names. The
+program is read as `bcc check` reads it (`Frontend.Elab.parseLent`, SPEC §82).  `[spec §82]` -/
 def evNamesOf (src : String) : Option (List UInt32 × List UInt32) := do
-  let p ← (Frontend.parseProgram src (lib := Frontend.Sugar.libSrc)).toOption
-  let r ← (Frontend.Check.checkProgram p).toOption
+  let (p, el) ← (Frontend.Elab.parseLent src).toOption
+  let r ← (Frontend.Check.checkProgramWith p (fun _ => el)).toOption
   let c ← r.main
   let (kinds, envs) := directFacts c
   pure (evNames c kinds envs, envs.toList.map (·.1))

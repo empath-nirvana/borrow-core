@@ -1,0 +1,45 @@
+-- Lists (SPEC §15, §20): `List[A]`, an owned list of `A`s, and the generic recursive functions
+-- over it. Each function is a template, instantiated at the types of each call, and recursive: a
+-- recursive group, the fixed point of its generator under `bounded` (SPEC §21). Its generator and
+-- its copies are templates in its type parameters, so each type it is used at has its own instance
+-- of each, and a call of itself inside its body is at its own type parameters.
+--
+-- A recursive function performs `Exhausted` when its budget of depth runs out (`lib/rec.bc`):
+-- a call of one needs a handler of `Exhausted` around it, `on_exhausted` or
+-- `exhausted_to_option`.
+--
+-- What a function does with an `A` is decided at its instance (SPEC §15): `filter` hands each
+-- element to its predicate and then keeps it, so its `A` is persistent (`i32`, `bool`, their
+-- products), and an instance at a type that is not is rejected there.
+--
+-- `include list` puts them in scope; only those a program calls are elaborated.
+
+include rec
+
+type List[A] = mu X. 1 + (A * X)
+
+-- The empty list, and `x` in front of `xs`.
+fn nil[A]() -> List[A] = roll inl ()
+
+fn cons[A](x: A, xs: List[A]) -> List[A] = roll inr (x, xs)
+
+-- Each element `x` as `f(x)`, in order.
+fn map[A, B](xs: List[A], f: !(A => B)) -> List[B] =
+  match unroll xs {
+    inl u -> roll inl ()
+  | inr (x, rest) -> let y = f(x); roll inr (y, map(rest, f))
+  }
+
+-- The elements `x` for which `p(x)` is true, in order.
+fn filter[A](xs: List[A], p: !(A => bool)) -> List[A] =
+  match unroll xs {
+    inl u -> roll inl ()
+  | inr (x, rest) -> if p(x) { roll inr (x, filter(rest, p)) } else { filter(rest, p) }
+  }
+
+-- `f(… f(f(z, x₁), x₂) …, xₙ)`: the elements combined from the left, starting from `z`.
+fn fold[A, B](xs: List[A], z: B, f: !(B * A => B)) -> B =
+  match unroll xs {
+    inl u -> z
+  | inr (x, rest) -> fold(rest, f(z, x), f)
+  }

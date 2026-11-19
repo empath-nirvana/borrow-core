@@ -1,4 +1,4 @@
-effect 18:1: Exhausted: exhausted (ctl, cancellable, abortive)
+effect 19:1: Exhausted: exhausted (ctl, cancellable, abortive)
 row 15:1: ticker: Stdout, Async
 row 19:1: quiet: Async
 lowering 15:1: copy `ticker__wasi_stdout_n3`: `ticker` for wasi_stdout, the site 3 of `Async`

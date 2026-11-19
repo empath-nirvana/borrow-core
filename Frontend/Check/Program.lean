@@ -385,10 +385,12 @@ are not reported. An error in code generated for a sugar names the sugar
 recursive data implicitly (`Frontend.Check.implicitCopy`, on the typed terms the check returns):
 such a use is written `clone(x)`.
 
-Everything after the elaboration is `checkElaborated`. -/
-def checkProgram (p : Program) : Except Error Report := do
+Everything after the elaboration is `checkElaborated`. The elaboration is `elabP`'s.  `[spec §82]` -/
+def checkProgramWith (p : Program)
+    (elabP : Program → Except Error Frontend.Elab.Elaborated := Frontend.Elab.elaborate) :
+    Except Error Report := do
   if let some e := reservedDecl? p.decls then throw e
-  let el ← Frontend.Elab.elaborate p
+  let el ← elabP p
   if let some e := reservedDecl? el.prog.decls then throw e
   let r ← checkElaborated el false
   match ← discardEntry el r with
@@ -396,8 +398,19 @@ def checkProgram (p : Program) : Except Error Report := do
       { e with msg := e.msg.replace s!"`{mainResult}`" "`main`'s result" }
   | none => pure r
 
+/-- `checkProgramWith` at the elaboration `Frontend.Elab.elaborate`.  `[spec §82]` -/
+def checkProgram (p : Program) : Except Error Report := checkProgramWith p
+
 
 /-! ### Soundness -/
+
+/-- `checkProgram_typed` for the checker at any elaboration `elabP` (`checkProgramWith`), as the
+drivers run it with the elaboration `Frontend.Elab.parseLent` returns.  `[spec §82]` -/
+theorem checkProgramWith_typed {p : Program} {elabP : Program → Except Error Frontend.Elab.Elaborated}
+    {r : Report} {c : Checked}
+    (_h : checkProgramWith p elabP = .ok r) (_hc : r.main = some c) :
+    TDerivesP LifeCtx.empty c.ctx c.t (.comp c.C) :=
+  c.typedP
 
 /-- **The checker returns a typed derivation of the typed term** (`Frontend/Check/TDerives.lean`):
 if `bcc` accepts a program, its `main`'s typed term `c.t` has a `TDerivesP` derivation at `Δ = ∅`
@@ -406,14 +419,30 @@ at.  `[spec §3, §29]` -/
 theorem checkProgram_typed {p : Program} {r : Report} {c : Checked}
     (_h : checkProgram p = .ok r) (_hc : r.main = some c) :
     TDerivesP LifeCtx.empty c.ctx c.t (.comp c.C) :=
-  c.typedP
+  checkProgramWith_typed _h _hc
+
+/-- `checkProgram_typedAt` for the checker at any elaboration `elabP` (`checkProgramWith`), as the
+drivers run it with the elaboration `Frontend.Elab.parseLent` returns.  `[spec §82]` -/
+theorem checkProgramWith_typedAt {p : Program} {elabP : Program → Except Error Frontend.Elab.Elaborated}
+    {r : Report} {c : Checked}
+    (_h : checkProgramWith p elabP = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
+    ∀ Ξ : EffCtx, SigsAt Ξ c.sigs → TDerivesAt Ξ LifeCtx.empty c.ctx c.t (.comp c.C) :=
+  c.tied.1 hp
 
 /-- **The typed derivation is tied** (decision R): when it uses no relaxed rule, `TDerivesAt Ξ` at
 every effect context `Ξ` at which the rows it reads are.  `[spec §19]` -/
 theorem checkProgram_typedAt {p : Program} {r : Report} {c : Checked}
     (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
     ∀ Ξ : EffCtx, SigsAt Ξ c.sigs → TDerivesAt Ξ LifeCtx.empty c.ctx c.t (.comp c.C) :=
-  c.tied.1 hp
+  checkProgramWith_typedAt _h _hc hp
+
+/-- `checkProgram_tied` for the checker at any elaboration `elabP` (`checkProgramWith`), as the
+drivers run it with the elaboration `Frontend.Elab.parseLent` returns.  `[spec §82]` -/
+theorem checkProgramWith_tied {p : Program} {elabP : Program → Except Error Frontend.Elab.Elaborated}
+    {r : Report} {c : Checked}
+    (_h : checkProgramWith p elabP = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
+    ∀ Ξ : EffCtx, SigsAt Ξ c.sigs → CDerivesAt Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
+  c.tied.tied.1 hp
 
 /-- **Every derivation the checker emits is tied** (decision R): if `bcc` accepts a program, its
 `main`'s typed term erases to an `Expr` with a `CDerivesAt Ξ` derivation at `Δ = ∅` and the context
@@ -422,7 +451,15 @@ of its externs, at every effect context `Ξ` at which the rows the derivation re
 theorem checkProgram_tied {p : Program} {r : Report} {c : Checked}
     (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
     ∀ Ξ : EffCtx, SigsAt Ξ c.sigs → CDerivesAt Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
-  c.tied.tied.1 hp
+  checkProgramWith_tied _h _hc hp
+
+/-- `checkProgram_tiedAt` for the checker at any elaboration `elabP` (`checkProgramWith`), as the
+drivers run it with the elaboration `Frontend.Elab.parseLent` returns.  `[spec §82]` -/
+theorem checkProgramWith_tiedAt {p : Program} {elabP : Program → Except Error Frontend.Elab.Elaborated}
+    {r : Report} {c : Checked}
+    (_h : checkProgramWith p elabP = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
+    CDerivesAt c.Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) ∧ c.Ξ.NoUnrExn :=
+  ⟨c.derivAt hp, noUnrExn_effCtxOf c.ok⟩
 
 /-- **At the program's own effect context**, whose abortive operations are cancellable (decision
 63): `main`'s derivation is `CDerivesAt c.Ξ`, and `c.Ξ` has no unrestricted operation answering `0`.
@@ -430,7 +467,18 @@ theorem checkProgram_tied {p : Program} {r : Report} {c : Checked}
 theorem checkProgram_tiedAt {p : Program} {r : Report} {c : Checked}
     (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
     CDerivesAt c.Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) ∧ c.Ξ.NoUnrExn :=
-  ⟨c.derivAt hp, noUnrExn_effCtxOf c.ok⟩
+  checkProgramWith_tiedAt _h _hc hp
+
+/-- `checkProgram_letPoly` for the checker at any elaboration `elabP` (`checkProgramWith`), as the
+drivers run it with the elaboration `Frontend.Elab.parseLent` returns.  `[spec §82]` -/
+theorem checkProgramWith_letPoly {p : Program} {elabP : Program → Except Error Frontend.Elab.Elaborated}
+    {r : Report} {c : Checked}
+    (_h : checkProgramWith p elabP = .ok r) (_hc : r.main = some c) (hp : c.pins = []) {b : BoCa.Expr}
+    {j : Jdg} (hcl : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Val.lam b).1 = true)
+    (hV : CDerivesAt c.Ξ LifeCtx.empty [] (.val (.lam b)) j) :
+    CDerivesAt c.Ξ LifeCtx.empty c.ctx
+      (.app (.val (.lam (c.t.erase.unfill b 0))) (.val (.lam b))) (.comp c.C) :=
+  BoCa.Fig16.LogRel.Core.CDerivesAt.letPoly_copy b hcl hV (c.derivAt hp)
 
 /-- **The checker's copies are `[let-poly]`'s premise** (decision 45): a `def` is checked at each
 use, so `main`'s erasure holds a function at each of its uses. For a closed λ-value `λb` typed at
@@ -444,7 +492,7 @@ theorem checkProgram_letPoly {p : Program} {r : Report} {c : Checked}
     (hV : CDerivesAt c.Ξ LifeCtx.empty [] (.val (.lam b)) j) :
     CDerivesAt c.Ξ LifeCtx.empty c.ctx
       (.app (.val (.lam (c.t.erase.unfill b 0))) (.val (.lam b))) (.comp c.C) :=
-  BoCa.Fig16.LogRel.Core.CDerivesAt.letPoly_copy b hcl hV (c.derivAt hp)
+  checkProgramWith_letPoly _h _hc hp hcl hV
 
 /-- **A cell's class is closed under the program's swaps** (SPEC §5): every type `main` allocates a
 cell at has a class in `c.cells`, which holds it and every type a `swap` node of `main`'s typed
@@ -478,13 +526,29 @@ theorem Checked.classAt_alloc (c : Checked) {A : BoCa.Fig16.LogRel.Core.VTy} (hA
   obtain ⟨hin, hcl'⟩ := h₂ cl hmem
   exact ⟨cl, hcl, hmem, hroot, hroot ▸ hin, hcl'⟩
 
+/-- `checkProgram_sound` for the checker at any elaboration `elabP` (`checkProgramWith`), as the
+drivers run it with the elaboration `Frontend.Elab.parseLent` returns.  `[spec §82]` -/
+theorem checkProgramWith_sound {p : Program} {elabP : Program → Except Error Frontend.Elab.Elaborated}
+    {r : Report} {c : Checked}
+    (_h : checkProgramWith p elabP = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
+    CDerives LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
+  c.deriv hp
+
 /-- **Soundness of the checker.** If `bcc` accepts a program and reports `assurance:
 unconditional`, its `main`'s typed term erases to an `Expr` with a `CDerives` derivation at
 `Δ = ∅` and the context of its externs. -/
 theorem checkProgram_sound {p : Program} {r : Report} {c : Checked}
     (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
     CDerives LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
-  c.deriv hp
+  checkProgramWith_sound _h _hc hp
+
+/-- `checkProgram_soundP` for the checker at any elaboration `elabP` (`checkProgramWith`), as the
+drivers run it with the elaboration `Frontend.Elab.parseLent` returns.  `[spec §82]` -/
+theorem checkProgramWith_soundP {p : Program} {elabP : Program → Except Error Frontend.Elab.Elaborated}
+    {r : Report} {c : Checked}
+    (_h : checkProgramWith p elabP = .ok r) (_hc : r.main = some c) :
+    CDerivesP LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
+  c.derivP
 
 /-- **Soundness of the checker, at every assurance.** If `bcc` accepts a program, its `main`'s
 typed term erases to an `Expr` with a `CDerivesP` derivation at `Δ = ∅` and the context of its
@@ -492,7 +556,7 @@ externs.  `[spec §29]` -/
 theorem checkProgram_soundP {p : Program} {r : Report} {c : Checked}
     (_h : checkProgram p = .ok r) (_hc : r.main = some c) :
     CDerivesP LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
-  c.derivP
+  checkProgramWith_soundP _h _hc
 
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 

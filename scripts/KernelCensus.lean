@@ -179,10 +179,11 @@ def backend2Reads (file : String) : IO (List (String × Nat)) := do
 
 def checkFile (file : String) : IO (Except String (Nat × TExpr)) := do
   let src ← IO.FS.readFile file
-  match Frontend.parseProgram src with
+  -- As `bcc check` reads it, its calls' lends in the new spelling included (SPEC §82 P8).
+  match Frontend.Elab.parseLent src with
   | .error e => return .error (e.renderIn src)
-  | .ok p =>
-    match Frontend.Check.checkProgram p with
+  | .ok (p, el) =>
+    match Frontend.Check.checkProgramWith p (fun _ => el) with
     | .error e => return .error (e.renderIn src)
     | .ok r => match r.main with
       | some c => return .ok (r.el.lib, c.t)

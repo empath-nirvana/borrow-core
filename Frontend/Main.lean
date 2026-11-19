@@ -204,9 +204,9 @@ def parseInterpArgs : List String → InterpArgs → Option InterpArgs
 /-- Print `file` with its I/O sugar elaborated. -/
 def desugar (file : String) : IO UInt32 := do
   let src ← readSource file
-  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  match Frontend.Elab.parseLent src with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
-  | .ok p => match Frontend.Elab.elaborate p with
+  | .ok (_, el) => match el with
     | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
     | .ok el => IO.print el.prog.pp; return 0
 
@@ -262,10 +262,10 @@ def trusted (file : String) : IO UInt32 := do
 /-- Each `handle` node of `file`'s checked terms, with its clauses' kinds (SPEC §19). -/
 def kinds (file : String) : IO UInt32 := do
   let src ← readSource file
-  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  match Frontend.Elab.parseLent src with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
-  | .ok p =>
-    match Check.checkProgram p with
+  | .ok (p, el) =>
+    match Check.checkProgramWith p (fun _ => el) with
     | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
     | .ok r =>
       for h in r.handles do
@@ -288,10 +288,10 @@ holds for its clauses over those names at `main`'s flow record (`Checked.flows`,
 whether `main` holds a handler whose name is not a literal. -/
 def handled (file : String) : IO UInt32 := do
   let src ← readSource file
-  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  match Frontend.Elab.parseLent src with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
-  | .ok p =>
-    match Check.checkProgram p with
+  | .ok (p, el) =>
+    match Check.checkProgramWith p (fun _ => el) with
     | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
     | .ok r =>
       let some c := r.main | return 0
@@ -329,10 +329,10 @@ def copies (file : String) : IO UInt32 := do
 clause kinds: `sp: handle n: kind eff[args] by handler (as slot), state (x: A, …); kinds`. -/
 def sites (file : String) : IO UInt32 := do
   let src ← readSource file
-  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  match Frontend.Elab.parseLent src with
   | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
-  | .ok p =>
-    match Check.checkProgram p with
+  | .ok (p, el) =>
+    match Check.checkProgramWith p (fun _ => el) with
     | .error e => IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc); return 1
     | .ok r =>
       for h in r.handles do
@@ -635,12 +635,12 @@ first relaxed rule, naming each site's hypothesis and research question (`Pins.u
 `[spec §29]` -/
 def checkCmd (provedOnly : Bool) (file : String) : IO UInt32 := do
   let src ← readSource file
-  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  match Frontend.Elab.parseLent src with
   | .error e =>
     IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc)
     return 1
-  | .ok p =>
-    match Check.checkProgram p with
+  | .ok (p, el) =>
+    match Check.checkProgramWith p (fun _ => el) with
     | .error e =>
       IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc)
       return 1
@@ -785,7 +785,12 @@ def main (argv : List String) : IO UInt32 := do
     if cmd != "parse" && cmd != "print" then
       IO.eprintln s!"unknown command `{cmd}`"; return 2
     let src ← readSource file
-    match parseProgram src (lib := Frontend.Sugar.libSrc) with
+    -- `print` of a text in the new spelling prints the parse its calls' lends are read in
+    -- (SPEC §82 P8, `Frontend.Elab.parseLent`); `parse`, and any text in today's spelling, one
+    -- plain parse.  `[spec §82]`
+    let parsed := if cmd == "print" && isNewDialect src then (·.1) <$> Frontend.Elab.parseLent src
+      else parseProgram src (lib := Frontend.Sugar.libSrc)
+    match parsed with
     | .error e =>
       IO.eprintln (e.renderAt file src Frontend.Sugar.libSrc)
       return 1

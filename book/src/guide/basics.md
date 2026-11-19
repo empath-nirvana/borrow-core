@@ -10,37 +10,41 @@ has the whole syntax in one place.
 A program is a list of declarations ending with `main`, where it starts:
 
 ```bc
-include textio
+import textio
 
-fn square(x: i32) -> i32 = x * x
+fn square(x: i32) : i32 = x * x
 
-main -> 1 =
-  print_dec(square(6) + square(2));
+fn main() : 1 {
+  print_dec(square(6) + square(2))
   print_byte(b'\n')
--- output: 40
+}
+# output: 40
 ```
 
-`fn name(params) -> T = e` declares a function. Every parameter has its type written, and so does
-the result. `main -> 1` returns nothing interesting: `1` is the unit type, whose one value is
+`fn name(params) : T = e` declares a function. Every parameter has its type written, and so does
+the result. `fn main() : 1` returns nothing interesting: `1` is the unit type, whose one value is
 `()`. A function calls the functions declared before it; functions that call themselves or each
 other are in [Recursion](data.md#recursion).
 
-A body is a sequence of statements separated by `;`, and its value is the value of the last one:
+A body is a sequence of statements, one per line or separated by `;`, and its value is the value
+of the last one:
 
 ```bc
-include textio
+import textio
 
-fn hyp2(a: i32, b: i32) -> i32 =
-  let aa = a * a;
-  let bb = b * b;
+fn hyp2(a: i32, b: i32) : i32 {
+  let aa = a * a
+  let bb = b * b
   aa + bb
+}
 
-main -> 1 =
-  let x = hyp2(3, 4);
-  let x = x + 1;
-  print_dec(x);
+fn main() : 1 {
+  let x = hyp2(3, 4)
+  let x = x + 1
+  print_dec(x)
   print_byte(b'\n')
--- output: 26
+}
+# output: 26
 ```
 
 `let x = e;` binds a name, and a later `let` of the same name shadows it. A type can be written,
@@ -49,27 +53,29 @@ level with `def`: `def max_depth : i32 = 64`.
 
 ## Mutable variables and loops
 
-`let mut x = e;` declares a variable that can be assigned, `x = e;`. `while c { … }` repeats its
+`var x = e` declares a variable that can be assigned, `x = e`. `while c { … }` repeats its
 body while `c` is true, and `if c { … } else { … }` chooses one branch; both branches have the
 same type. An `if` whose body is a statement needs no `else`: `if x > max { max = x }`.
 
 ```bc
-include textio
+import textio
 
--- The number of Collatz steps from `n` to 1.
-fn collatz(n: i32) -> i32 =
-  let mut x = n;
-  let mut steps = 0;
+# The number of Collatz steps from `n` to 1.
+fn collatz(n: i32) : i32 {
+  var x = n
+  var steps = 0
   while x != 1 {
-    if x % 2 == 0 { x = x / 2 } else { x = 3 * x + 1 };
+    if x % 2 == 0 { x = x / 2 } else { x = 3 * x + 1 }
     steps = steps + 1
-  };
+  }
   steps
+}
 
-main -> 1 =
-  print_dec(collatz(27));
+fn main() : 1 {
+  print_dec(collatz(27))
   print_byte(b'\n')
--- output: 111
+}
+# output: 111
 ```
 
 A `while` may run forever, and the compiler knows it: a function with one is *div* (it may
@@ -95,21 +101,22 @@ signed, and `0 - x` negates.
 error rather than trapping; [Errors](errors.md#division) shows how to handle it.
 
 ```bc
-include textio
+import textio
 
-fn mean(a: i64, b: i64, c: i64) -> i64 = (a + b + c) / 3
+fn mean(a: i64, b: i64, c: i64) : i64 = (a + b + c) / 3
 
-main -> 1 =
-  let big: i64 = 4000000000;
-  print_dec64(mean(big, big, 1));
-  print_byte(b'\n');
-  print_dec(17 % 5);
-  print_byte(b'\n');
-  print_dec((0 - 7) / 2);
+fn main() : 1 {
+  let big: i64 = 4000000000
+  print_dec64(mean(big, big, 1))
   print_byte(b'\n')
--- output: 2666666667
--- output: 2
--- output: -3
+  print_dec(17 % 5)
+  print_byte(b'\n')
+  print_dec((0 - 7) / 2)
+  print_byte(b'\n')
+}
+# output: 2666666667
+# output: 2
+# output: -3
 ```
 
 `print_dec` prints an `i32` and `print_dec64` an `i64`.
@@ -118,15 +125,16 @@ A byte is a `u8`. Arithmetic on bytes is done at `i32` and narrowed back, and `t
 `to_u8(n)` convert between the two:
 
 ```bc
-include textio
+import textio
 
-main -> 1 =
-  let c = b'a' + 2;
-  print_byte(c);
-  print_byte(b' ');
-  print_dec(to_i32(c) - to_i32(b'a'));
+fn main() : 1 {
+  let c = b'a' + 2
+  print_byte(c)
+  print_byte(b' ')
+  print_dec(to_i32(c) - to_i32(b'a'))
   print_byte(b'\n')
--- output: c 2
+}
+# output: c 2
 ```
 
 The bitwise operations, shifts and integer conversions are written as calls of the machine
@@ -147,26 +155,27 @@ keeps an `i64`'s low 32 bits.
 
 A literal with a fraction or an exponent is a float, an `f64` unless an `f32` is expected. `+ - * /`
 and the comparisons work at floats as IEEE 754 defines them: a NaN compares unequal to
-everything, itself included. `include float` brings the rest: `sqrt_f64`, `abs_f64`, `floor_f64`,
+everything, itself included. `import float` brings the rest: `sqrt_f64`, `abs_f64`, `floor_f64`,
 `round_f64`, conversions such as `f64_of_i32` and `i32_of_f64_sat`, and `print_f64`, which prints
 the shortest decimal that reads back as the same float.
 
 ```bc
-include float
+import float
 
-fn hypot(x: f64, y: f64) -> f64 = sqrt_f64(x * x + y * y)
+fn hypot(x: f64, y: f64) : f64 = sqrt_f64(x * x + y * y)
 
-main -> 1 =
-  let h = hypot(3.0, 4.0);
-  print_f64(h / 3.0);
-  print_byte(b'\n');
-  print_dec(i32_of_f64_sat(h * 10.0));
+fn main() : 1 {
+  let h = hypot(3.0, 4.0)
+  print_f64(h / 3.0)
   print_byte(b'\n')
--- output: 1.6666666666666667
--- output: 50
+  print_dec(i32_of_f64_sat(h * 10.0))
+  print_byte(b'\n')
+}
+# output: 1.6666666666666667
+# output: 50
 ```
 
-A float has no hash or total order of its own, so it can't be a map key directly; `include float`
+A float has no hash or total order of its own, so it can't be a map key directly; `import float`
 has `total_cmp_f64` and `ord_f64` for when you need one.
 
 ## Records and variants
@@ -174,18 +183,19 @@ has `total_cmp_f64` and `ord_f64` for when you need one.
 `data` declares a type of your own. A **record** has named fields, read and written with `.`:
 
 ```bc
-include textio
+import textio
 
 data Point = { x: i32, y: i32 }
 
-fn manhattan(p: Point) -> i32 = p.x + p.y
+fn manhattan(p: sink Point) : i32 = p.x + p.y
 
-main -> 1 =
-  let mut p = Point { x: 3, y: 4 };
-  p.x = p.x * 10;
-  print_dec(manhattan(p));
+fn main() : 1 {
+  var p = Point { x: 3, y: 4 }
+  p.x = p.x * 10
+  print_dec(manhattan(p))
   print_byte(b'\n')
--- output: 34
+}
+# output: 34
 ```
 
 A record pattern, `Point { x, y }`, takes a record apart in a `let` or a `match` and binds each
@@ -193,46 +203,49 @@ field to a variable of its name; `Point { x: a, y: b }` binds them to other name
 has the same shorthand: `Point { x, y }` builds a record from variables named like its fields.
 
 ```bc
-include textio
+import textio
 
 data Point = { x: i32, y: i32 }
 
--- The point reflected in the diagonal.
-fn flip(p: Point) -> Point =
+# The point reflected in the diagonal.
+fn flip(p: sink Point) : Point =
   match p { Point { x, y } -> Point { x: y, y: x } }
 
--- The point moved right by `dx`.
-fn shift(p: Point, dx: i32) -> Point =
-  let Point { x, y } = p;
-  let x = x + dx;
+# The point moved right by `dx`.
+fn shift(p: sink Point, dx: i32) : Point {
+  let Point { x, y } = p
+  let x = x + dx
   Point { x, y }
+}
 
-main -> 1 =
-  let p = shift(flip(Point { x: 1, y: 2 }), 10);
-  print_dec(p.x);
-  print_byte(b' ');
-  print_dec(p.y);
+fn main() : 1 {
+  let p = shift(flip(Point { x: 1, y: 2 }), 10)
+  print_dec(p.x)
+  print_byte(b' ')
+  print_dec(p.y)
   print_byte(b'\n')
--- output: 12 1
+}
+# output: 12 1
 ```
 
 A **variant** is one of several cases, each with its own fields, and `match` takes it apart:
 
 ```bc
-include textio
+import textio
 
 data Shape = Rect(w: i32, h: i32) | Circle(r: i32)
 
-fn area(s: Shape) -> i32 =
+fn area(s: sink Shape) : i32 =
   match s {
     Rect(w, h) -> w * h
   | Circle(r) -> 3 * r * r
   }
 
-main -> 1 =
-  print_dec(area(Rect(3, 4)) + area(Circle(2)));
+fn main() : 1 {
+  print_dec(area(Rect(3, 4)) + area(Circle(2)))
   print_byte(b'\n')
--- output: 24
+}
+# output: 24
 ```
 
 A `match` must cover every case, and it can match several values at once,
@@ -250,22 +263,23 @@ it apart. Library functions use sums for answers that may be missing: `A + 1` is
 nothing (`inr ()`), and an error handler answers `A + E`, the value or the error.
 
 ```bc
-include textio
+import textio
 
 type Size = (i32 * i32) + i32
 
-fn cells(s: Size) -> i32 =
+fn cells(s: Size) : i32 =
   match s {
     inl (w, h) -> w * h
   | inr n -> n
   }
 
-main -> 1 =
-  let a: Size = inl (3, 4);
-  let b: Size = inr 2;
-  print_dec(cells(a) + cells(b));
+fn main() : 1 {
+  let a: Size = inl (3, 4)
+  let b: Size = inr 2
+  print_dec(cells(a) + cells(b))
   print_byte(b'\n')
--- output: 14
+}
+# output: 14
 ```
 
 `type Size = …` gives a type a name; the name and its definition are interchangeable. `inl` and
@@ -278,20 +292,22 @@ A function may take type parameters in brackets. They are inferred at each call 
 arguments, or written, `pick[i32](…)`:
 
 ```bc
-include textio
+import textio
 
-fn swap_pair[A, B](p: A * B) -> B * A = let (a, b) = p; (b, a)
+fn swap_pair[A, B](p: sink A * B) : B * A { let (a, b) = p; (b, a)
+}
 
-fn pick[A](c: bool, x: A, y: A) -> A = if c { x } else { y }
+fn pick[A](c: bool, x: sink A, y: sink A) : A = if c { x } else { y }
 
-main -> 1 =
-  let (n, ok) = swap_pair((true, 7));
-  let m = pick[i64](ok, 1, 2);
-  print_dec(n);
-  print_byte(b' ');
-  print_dec64(m);
+fn main() : 1 {
+  let (n, ok) = swap_pair((true, 7))
+  let m = pick[i64](ok, 1, 2)
+  print_dec(n)
+  print_byte(b' ')
+  print_dec64(m)
   print_byte(b'\n')
--- output: 7 1
+}
+# output: 7 1
 ```
 
 A generic function is compiled once for each type it is used at, as in Rust: there is no boxing
@@ -302,34 +318,35 @@ use: a body that copies an `A` works only where `A` can be copied (next chapter)
 
 A function can be passed to another. Its parameter's type says how often it may be called:
 
-- `!(A => B)` is a function that can be called any number of times. A named function is one, and
+- `!((A) -> B)` is a function that can be called any number of times. A named function is one, and
   so is a closure `!{ x -> … }`, which takes what it needs as arguments rather than capturing
   local variables.
-- `A => B` is a function called at most once. A closure `{ x -> … }` of this type may capture
+- `(A) -> B` is a function called at most once. A closure `{ x -> … }` of this type may capture
   anything in scope, including local variables and owned values.
 
 ```bc
-include textio
+import textio
 
-fn twice(f: !(i32 => i32), x: i32) -> i32 = f(f(x))
+fn twice(f: !((i32) -> i32), x: i32) : i32 = f(f(x))
 
-fn double(x: i32) -> i32 = x * 2
+fn double(x: i32) : i32 = x * 2
 
-fn apply_once(f: i32 => i32, x: i32) -> i32 = f(x)
+fn apply_once(f: sink (i32) -> i32, x: i32) : i32 = f(x)
 
-main -> 1 =
-  let k = 5;
-  print_dec(twice(double, 3));
-  print_byte(b' ');
-  print_dec(twice(!{ x -> x + 1 }, 0));
-  print_byte(b' ');
-  print_dec(apply_once({ x -> x + k }, 1));
+fn main() : 1 {
+  let k = 5
+  print_dec(twice(double, 3))
+  print_byte(b' ')
+  print_dec(twice(!{ x -> x + 1 }, 0))
+  print_byte(b' ')
+  print_dec(apply_once({ x -> x + k }, 1))
   print_byte(b'\n')
--- output: 12 2 6
+}
+# output: 12 2 6
 ```
 
 A closure's parameter types come from the parameter it is passed to, so a closure bound with
-`let` needs its type written: `let f: !(i32 => i32) = !{ x -> x + 1 };`. A pattern can take the
+`let` needs its type written: `let f: !((i32) -> i32) = !{ x -> x + 1 }`. A pattern can take the
 argument apart, `!{ (a, b) -> a + b }`.
 
 A function whose body performs effects, raises an error or waits, is passed the same way, and the

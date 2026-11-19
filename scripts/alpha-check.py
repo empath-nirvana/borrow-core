@@ -134,29 +134,62 @@ class Back:
         return WORD.sub(lambda m: self.names.get(m.group(0), m.group(0)), s)
 
 
-def same(cf, cg, back, backF):
-    """The original's lines `cf` and the renamed program's `cg` agree up to the renaming. A
+def sameLine(a, b, back, backF):
+    """The original's line `a` and the renamed program's `b` agree up to the renaming. A
     position may also agree as it is: a position in a module's code is printed under the
     program's name, where the program's renaming does not apply."""
+    a = backF.text(a)
+    if a == back.text(b):
+        return True
+    # Position by position: the text between positions up to the renaming, each position
+    # mapped back or as it is.
+    pa, pb = POS.split(a), POS.split(back.text(b, cols=False))
+    if len(pa) != len(pb):
+        return False
+    for i in range(0, len(pa), 3):
+        if pa[i] != pb[i]:
+            return False
+    for i in range(1, len(pa), 3):
+        l, c = int(pb[i]), int(pb[i + 1])
+        if pa[i] != pb[i] or pa[i + 1] not in (str(c), back.col(l, c)):
+            return False
+    return True
+
+
+def same(cf, cg, back, backF):
+    """The original's lines `cf` and the renamed program's `cg` agree up to the renaming. The
+    notes are compared in order by groups: consecutive lines whose first position has the same
+    line number (or that have none) form a group, the groups must agree in order, and within a
+    group each line must agree with one line of the other's, one to one. A renaming changes
+    columns only, and the notes are printed in the order of their positions; a position in a
+    module's code is printed under the program's name, so a module's note and the program's on
+    the same line number are ordered by columns the renaming moves, and may swap. Notes on
+    different line numbers keep their order."""
     lf, lg = cf.split("\n"), cg.split("\n")
     if len(lf) != len(lg):
         return False
-    for a, b in zip(lf, lg):
-        a = backF.text(a)
-        if a == back.text(b):
-            continue
-        # Position by position: the text between positions up to the renaming, each position
-        # mapped back or as it is.
-        pa, pb = POS.split(a), POS.split(back.text(b, cols=False))
-        if len(pa) != len(pb):
-            return False
-        for i in range(0, len(pa), 3):
-            if pa[i] != pb[i]:
+
+    def groups(ls):
+        out = []
+        for x in ls:
+            m = POS.search(x)
+            k = m.group(1) if m else None
+            if out and out[-1][0] == k:
+                out[-1][1].append(x)
+            else:
+                out.append((k, [x]))
+        return out
+
+    gf, gg = groups(lf), groups(lg)
+    if [(k, len(xs)) for k, xs in gf] != [(k, len(xs)) for k, xs in gg]:
+        return False
+    for (_, xs), (_, ys) in zip(gf, gg):
+        left = list(ys)
+        for a in xs:
+            k = next((j for j, b in enumerate(left) if sameLine(a, b, back, backF)), None)
+            if k is None:
                 return False
-        for i in range(1, len(pa), 3):
-            l, c = int(pb[i]), int(pb[i + 1])
-            if pa[i] != pb[i] or pa[i + 1] not in (str(c), back.col(l, c)):
-                return False
+            left.pop(k)
     return True
 
 

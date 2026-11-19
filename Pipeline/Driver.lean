@@ -41,10 +41,10 @@ structure CheckedProg where
 
 /-- Parse and check `src`; a `main` with externs must be a standard I/O program (SPEC §11). -/
 def checkedOf (file src : String) : Except String CheckedProg := do
-  let p₀ ← match Frontend.parseProgram src (lib := Frontend.Sugar.libSrc) with
-    | .ok p => pure p
+  let (p₀, el₀) ← match Frontend.Elab.parseLent src with
+    | .ok pe => pure pe
     | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
-  let r ← match Frontend.Check.checkProgram p₀ with
+  let r ← match Frontend.Check.checkProgramWith p₀ (fun _ => el₀) with
     | .ok r => pure r
     | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
   let some c := r.main | throw s!"{file}: no `main`"
@@ -187,10 +187,10 @@ def typingReport (c : Frontend.Check.Checked) (loops : Option Bool := none) : St
 
 /-- The program's trusted boundaries (`bcc trusted`).  `[spec §11, §29]` -/
 def trusted (file src : String) : Except String String := do
-  let p ← match Frontend.parseProgram src (lib := Frontend.Sugar.libSrc) with
-    | .ok p => pure p
+  let (p, el) ← match Frontend.Elab.parseLent src with
+    | .ok pe => pure pe
     | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
-  let r ← match Frontend.Check.checkProgram p with
+  let r ← match Frontend.Check.checkProgramWith p (fun _ => el) with
     | .ok r => pure r
     | .error e => throw (e.renderAt file src Frontend.Sugar.libSrc)
   -- The end-to-end theorems are named only where their hypotheses hold: the wrapper checked,

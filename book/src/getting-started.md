@@ -25,19 +25,21 @@ The compiler is at `.lake/build/bin/bcc`.
 Save this as `hello.bc`:
 
 ```bc
-include textio
+import textio
 
--- The sum of the squares below `n`.
-fn squares(n: i32) -> i32 =
-  let mut s = 0;
-  for i in 0..n { s = s + i * i };
+# The sum of the squares below `n`.
+fn squares(n: i32) : i32 {
+  var s = 0
+  for i in 0..n { s = s + i * i }
   s
+}
 
-main -> 1 =
-  print_lit("squares below 4: ");
-  print_dec(squares(4));
+fn main() : 1 {
+  print_lit("squares below 4: ")
+  print_dec(squares(4))
   print_byte(b'\n')
--- output: squares below 4: 14
+}
+# output: squares below 4: 14
 ```
 
 and run it:
@@ -49,9 +51,9 @@ squares below 4: 14
 live 0
 ```
 
-`fn` declares a function, and `main` is where the program starts. `include textio` brings in
+`fn` declares a function, and `main` is where the program starts. `import textio` brings in
 the text and I/O library: `print_lit` writes a string literal, `print_dec` a number in decimal,
-and `print_byte` one byte. `main -> 1` says that `main` returns nothing interesting: `1` is the
+and `print_byte` one byte. `fn main() : 1` says that `main` returns nothing interesting: `1` is the
 unit type, whose one value is `()`.
 
 The last two lines come from `bcc`, not from the program. `()` is the value `main` returned, and
