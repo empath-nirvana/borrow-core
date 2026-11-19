@@ -351,8 +351,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | var h => exact .var h
   | unitI h => exact .unitI h
   | tensorI hs _ _ ih1 ih2 => exact .tensorI hs (ih1 (by eff_free)) (ih2 (by eff_free))
-  | sumI₁ _ ih1 => exact .sumI₁ (ih1 (by eff_free))
-  | sumI₂ _ ih1 => exact .sumI₂ (ih1 (by eff_free))
+  | sumIB b _ ih1 => cases b; exacts [.sumIB false (ih1 he), .sumIB true (ih1 he)]
   | thunkF _ ih1 => exact .thunkF (ih1 (by eff_free))
   | thunkV hC _ ih1 => exact .thunkV hC (ih1 he)
   | ret _ ih1 => exact .ret (ih1 he)

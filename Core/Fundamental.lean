@@ -459,8 +459,7 @@ theorem fundamentalX {I : JIdx} (hLaw : I.pin = true → PinLaw (ℍ := ℍ)) {�
   | var h => exact var_compatC h
   | unitI h => exact unitI_compatC h
   | tensorI hs _ _ ih₁ ih₂ => exact tensorI_compatC hs ih₁ ih₂
-  | sumI₁ _ ih => exact sumI₁_compatC ih
-  | sumI₂ _ ih => exact sumI₂_compatC ih
+  | sumIB b _ ih => cases b; exacts [sumI₁_compatC ih, sumI₂_compatC ih]
   | thunkF _ ih => exact thunkF_compatC ih
   | thunkV hC _ ih => exact thunkV_compatC hC ih
   | ret _ ih => exact ret_compatC ih

@@ -52,10 +52,8 @@ inductive TDerivesX (I : JIdx) : LifeCtx → Ctx VTy → TExpr → Jdg → Prop 
       TDerivesX I Δ Γ (TExpr.unitI (info := info) (jdg := (.val .unit))) (.val .unit)
   | tensorI {Δ Γ Γ₁ Γ₂ A B} {info : TInfo} {u : Masks} {t₁ t₂ : TExpr} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hcv : Covers u.u₁ 0 t₁.erase ∧ Covers u.u₂ 0 t₂.erase) (h₁ : TDerivesX I Δ Γ₁ t₁ (.val A)) (h₂ : TDerivesX I Δ Γ₂ t₂ (.val B)) :
       TDerivesX I Δ Γ (TExpr.tensorI (info := info) (jdg := (.val (.tensor A B))) (A := A) (B := B) (u := u) (t₁ := t₁) (t₂ := t₂)) (.val (.tensor A B))
-  | sumI₁ {Δ Γ A B} {info : TInfo} {t : TExpr} (h : TDerivesX I Δ Γ t (.val A)) :
-      TDerivesX I Δ Γ (TExpr.sumI₁ (info := info) (jdg := (.val (.sum A B))) (A := A) (B := B) (t := t)) (.val (.sum A B))
-  | sumI₂ {Δ Γ A B} {info : TInfo} {t : TExpr} (h : TDerivesX I Δ Γ t (.val B)) :
-      TDerivesX I Δ Γ (TExpr.sumI₂ (info := info) (jdg := (.val (.sum A B))) (A := A) (B := B) (t := t)) (.val (.sum A B))
+  | sumIB {Δ Γ A B} {info : TInfo} {t : TExpr} (b : Bool) (h : TDerivesX I Δ Γ t (.val (cond b B A))) :
+      TDerivesX I Δ Γ (TExpr.sumIB (info := info) (jdg := (.val (.sum A B))) (A := A) (B := B) (b := b) (t := t)) (.val (.sum A B))
   | thunkF {Δ Γ A} {info : TInfo} {t : TExpr} (h : TDerivesX I Δ (⟨.unit, false⟩ :: Γ) t (.comp (.ret A))) :
       TDerivesX I Δ Γ (TExpr.thunkF (info := info) (jdg := (.val (.thunk (.ret A)))) (A := A) (t := t)) (.val (.thunk (.ret A)))
   | thunkV {Δ Γ N C} {info : TInfo} {t : TExpr} (hC : C.isRet = false) (h : TDerivesX I Δ Γ t (.comp C)) (q : t.erase = ((.val (.lam N)) : Expr)) :
@@ -377,13 +375,9 @@ theorem TDerivesAt.tensorI {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ A B} {info : TInfo} 
     TDerivesAt Ξ Δ Γ (TExpr.tensorI (info := info) (jdg := (.val (.tensor A B))) (A := A) (B := B) (u := u) (t₁ := t₁) (t₂ := t₂)) (.val (.tensor A B)) :=
   TDerivesX.tensorI (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (A := A) (B := B) (info := info) (u := u) (t₁ := t₁) (t₂ := t₂) (hs := hs) (hm := hm) (hcv := hcv) (h₁ := h₁) (h₂ := h₂)
 
-theorem TDerivesAt.sumI₁ {Ξ : EffCtx} {Δ Γ A B} {info : TInfo} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t (.val A)) :
-    TDerivesAt Ξ Δ Γ (TExpr.sumI₁ (info := info) (jdg := (.val (.sum A B))) (A := A) (B := B) (t := t)) (.val (.sum A B)) :=
-  TDerivesX.sumI₁ (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (t := t) (h := h)
-
-theorem TDerivesAt.sumI₂ {Ξ : EffCtx} {Δ Γ A B} {info : TInfo} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t (.val B)) :
-    TDerivesAt Ξ Δ Γ (TExpr.sumI₂ (info := info) (jdg := (.val (.sum A B))) (A := A) (B := B) (t := t)) (.val (.sum A B)) :=
-  TDerivesX.sumI₂ (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (t := t) (h := h)
+theorem TDerivesAt.sumIB {Ξ : EffCtx} {Δ Γ A B} {info : TInfo} {t : TExpr} (b : Bool) (h : TDerivesAt Ξ Δ Γ t (.val (cond b B A))) :
+    TDerivesAt Ξ Δ Γ (TExpr.sumIB (info := info) (jdg := (.val (.sum A B))) (A := A) (B := B) (b := b) (t := t)) (.val (.sum A B)) :=
+  TDerivesX.sumIB (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (t := t) (b := b) (h := h)
 
 theorem TDerivesAt.thunkF {Ξ : EffCtx} {Δ Γ A} {info : TInfo} {t : TExpr} (h : TDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) t (.comp (.ret A))) :
     TDerivesAt Ξ Δ Γ (TExpr.thunkF (info := info) (jdg := (.val (.thunk (.ret A)))) (A := A) (t := t)) (.val (.thunk (.ret A))) :=
@@ -873,13 +867,9 @@ theorem TDerivesP.tensorI {Δ Γ Γ₁ Γ₂ A B} {info : TInfo} {u : Masks} {t�
     TDerivesP Δ Γ (TExpr.tensorI (info := info) (jdg := (.val (.tensor A B))) (A := A) (B := B) (u := u) (t₁ := t₁) (t₂ := t₂)) (.val (.tensor A B)) :=
   TDerivesX.tensorI (I := {pin := true}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (A := A) (B := B) (info := info) (u := u) (t₁ := t₁) (t₂ := t₂) (hs := hs) (hm := hm) (hcv := hcv) (h₁ := h₁) (h₂ := h₂)
 
-theorem TDerivesP.sumI₁ {Δ Γ A B} {info : TInfo} {t : TExpr} (h : TDerivesP Δ Γ t (.val A)) :
-    TDerivesP Δ Γ (TExpr.sumI₁ (info := info) (jdg := (.val (.sum A B))) (A := A) (B := B) (t := t)) (.val (.sum A B)) :=
-  TDerivesX.sumI₁ (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (t := t) (h := h)
-
-theorem TDerivesP.sumI₂ {Δ Γ A B} {info : TInfo} {t : TExpr} (h : TDerivesP Δ Γ t (.val B)) :
-    TDerivesP Δ Γ (TExpr.sumI₂ (info := info) (jdg := (.val (.sum A B))) (A := A) (B := B) (t := t)) (.val (.sum A B)) :=
-  TDerivesX.sumI₂ (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (t := t) (h := h)
+theorem TDerivesP.sumIB {Δ Γ A B} {info : TInfo} {t : TExpr} (b : Bool) (h : TDerivesP Δ Γ t (.val (cond b B A))) :
+    TDerivesP Δ Γ (TExpr.sumIB (info := info) (jdg := (.val (.sum A B))) (A := A) (B := B) (b := b) (t := t)) (.val (.sum A B)) :=
+  TDerivesX.sumIB (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (t := t) (b := b) (h := h)
 
 theorem TDerivesP.thunkF {Δ Γ A} {info : TInfo} {t : TExpr} (h : TDerivesP Δ (⟨.unit, false⟩ :: Γ) t (.comp (.ret A))) :
     TDerivesP Δ Γ (TExpr.thunkF (info := info) (jdg := (.val (.thunk (.ret A)))) (A := A) (t := t)) (.val (.thunk (.ret A))) :=
@@ -1382,12 +1372,9 @@ theorem TDerivesX.erase {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j 
   | tensorI a0 a1 a2 a3 a4 ih0 ih1 =>
       dsimp only [TExpr.erase]
       exact CDerivesX.tensorI a0 ih0 ih1
-  | sumI₁ a0 ih0 =>
+  | sumIB a0 a1 ih0 =>
       dsimp only [TExpr.erase]
-      exact CDerivesX.sumI₁ ih0
-  | sumI₂ a0 ih0 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.sumI₂ ih0
+      exact CDerivesX.sumIB a0 ih0
   | thunkF a0 ih0 =>
       dsimp only [TExpr.erase]
       exact CDerivesX.thunkF ih0
@@ -1747,8 +1734,7 @@ theorem TDerivesX.mono {I I' : JIdx} (hI : I ≤ I') {Δ : LifeCtx} {Γ : Ctx VT
   | var a0 => exact TDerivesX.var a0
   | unitI a0 => exact TDerivesX.unitI a0
   | tensorI a0 a1 a2 a3 a4 ih0 ih1 => exact TDerivesX.tensorI a0 a1 a2 ih0 ih1
-  | sumI₁ a0 ih0 => exact TDerivesX.sumI₁ ih0
-  | sumI₂ a0 ih0 => exact TDerivesX.sumI₂ ih0
+  | sumIB a0 a1 ih0 => exact TDerivesX.sumIB a0 ih0
   | thunkF a0 ih0 => exact TDerivesX.thunkF ih0
   | thunkV a0 a1 a2 ih0 => exact TDerivesX.thunkV a0 ih0 a2
   | ret a0 ih0 => exact TDerivesX.ret ih0

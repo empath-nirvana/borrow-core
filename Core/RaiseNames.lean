@@ -1626,6 +1626,7 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
       rw [rcE.eq_9 _ _ _ (fun m r h _ => by cases h)]
       simp [rcE, Expr.val, Val.lam, ihN, hb]
   | projB b _ ih => cases b <;> simp_all [projArg, rcE, rcE_app, Expr.val, Val.inj₁, Val.inj₂, Val.unit]
+  | sumIB b _ ih => cases b <;> exact ih
   | _ => first | rfl | simp_all [rcE, rcE_app, absurdE, thenE, opArgE, Val.i32]
 
 /-- **A tied term is at its effect context's names**: every raise and every cancel state in it is

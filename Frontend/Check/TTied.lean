@@ -82,11 +82,11 @@ theorem tensorI (u : Masks) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ :
 
 theorem sumI₁ {p : Pins} {s : CRow} {t : TExpr} {A B : CVTy} (h : TTied p s Δ Γ t (.val A)) :
     TTied p s Δ Γ (.sumI₁ i (.val (.sum A B)) A B t) (.val (.sum A B)) :=
-  ⟨fun hn Ξ hΞ => .sumI₁ (h.1 hn Ξ hΞ), .sumI₁ h.2⟩
+  ⟨fun hn Ξ hΞ => .sumIB false (h.1 hn Ξ hΞ), .sumIB false h.2⟩
 
 theorem sumI₂ {p : Pins} {s : CRow} {t : TExpr} {A B : CVTy} (h : TTied p s Δ Γ t (.val B)) :
     TTied p s Δ Γ (.sumI₂ i (.val (.sum A B)) A B t) (.val (.sum A B)) :=
-  ⟨fun hn Ξ hΞ => .sumI₂ (h.1 hn Ξ hΞ), .sumI₂ h.2⟩
+  ⟨fun hn Ξ hΞ => .sumIB true (h.1 hn Ξ hΞ), .sumIB true h.2⟩
 
 theorem thunkF {p : Pins} {s : CRow} {t : TExpr} {A : CVTy}
     (h : TTied p s Δ (⟨.unit, false⟩ :: Γ) t (.comp (.ret A))) :

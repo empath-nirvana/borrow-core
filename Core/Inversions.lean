@@ -1000,7 +1000,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       rcases hk with hk | hk
       · obtain ⟨T, hT⟩ := ihf k hk; exact ⟨T, splitP_le_right hs k T hT⟩
       · obtain ⟨T, hT⟩ := iha k hk; exact ⟨T, splitP_le_left hs k T hT⟩
-  | sumI₁ _ ih | sumI₂ _ ih => exact ih
+  | sumIB b _ ih => cases b <;> exact ih
   | thunkF _ ih | lam _ ih | lamDead _ ih | allI _ _ _ _ ih | bangThunkF _ _ ih =>
       intro k hk; obtain ⟨T, hT⟩ := ih (k + 1) hk; exact ⟨T, slot_succ hT⟩
   | thunkV _ _ ih | ret _ ih | bangThunkV _ _ _ ih | bangE _ ih | boxI _ _ ih | boxE _ ih
@@ -1316,7 +1316,7 @@ theorem der_pair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
 theorem der_inj₁ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ a, e = .inj₁ a → ∃ A B, CDerives Δ Γ a (.val A) ∧ ValCls (.sum A B) j := by
   induction h using CDerives.induct with
-  | sumI₁ h => intro a he; cases he; exact ⟨_, _, h, ValCls.refl _⟩
+  | sumIB b h => intro a he; cases b <;> cases he; exact ⟨_, _, h, ValCls.refl _⟩
   | ret _ ih =>
       intro a he; obtain ⟨A, B, ha, hc⟩ := ih a he; exact ⟨A, B, ha, hc.step (JS.ret _)⟩
   | alpha _ hα ih =>

@@ -234,8 +234,8 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       have e₂ := ih₂ Γa₂ Γb₂ rfl
       rw [h₁] at e₁; rw [h₂] at e₂
       exact .tensorI hs' e₁ e₂
-  | sumI₁ _ ih => intro Γa Γb hΓ; exact .sumI₁ (ih Γa Γb hΓ)
-  | sumI₂ _ ih => intro Γa Γb hΓ; exact .sumI₂ (ih Γa Γb hΓ)
+  | sumIB b _ ih =>
+      intro Γa Γb hΓ; cases b; exacts [.sumIB false (ih Γa Γb hΓ), .sumIB true (ih Γa Γb hΓ)]
   | thunkF _ ih =>
       intro Γa Γb hΓ; subst hΓ
       have e' := ih (_ :: Γa) Γb rfl

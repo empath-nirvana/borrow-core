@@ -806,6 +806,14 @@ abbreviation of the folded rule's node, so that statements over the node keep th
     (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr) : TExpr :=
   .effHandleVO info jdg S E fs cs n A R (some d) u ks site inside tc te
 
+/-- `+I` at the left: `sumIB`'s node at `false`.  `[spec §10]` -/
+@[match_pattern] abbrev TExpr.sumI₁ (info : TInfo) (jdg : Jdg) (A B : VTy) (t : TExpr) : TExpr :=
+  .sumIB info jdg A B false t
+
+/-- `+I` at the right: `sumIB`'s node at `true`.  `[spec §10]` -/
+@[match_pattern] abbrev TExpr.sumI₂ (info : TInfo) (jdg : Jdg) (A B : VTy) (t : TExpr) : TExpr :=
+  .sumIB info jdg A B true t
+
 /-- `&E` at the first component: `projB`'s node at `false`.  `[spec §10]` -/
 @[match_pattern] abbrev TExpr.proj₁ (info : TInfo) (jdg : Jdg) (C D : CTy) (t : TExpr) : TExpr :=
   .projB info jdg C D false t

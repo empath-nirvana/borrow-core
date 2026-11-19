@@ -147,8 +147,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .var ii jj i A => []
   | .unitI ii jj => []
   | .tensorI ii jj A B u t₁ t₂ => t₁.lifeBinders ++ t₂.lifeBinders
-  | .sumI₁ ii jj A B t => t.lifeBinders
-  | .sumI₂ ii jj A B t => t.lifeBinders
+  | .sumIB ii jj A B b t => t.lifeBinders
   | .thunkF ii jj A t => t.lifeBinders
   | .thunkV ii jj C t => t.lifeBinders
   | .ret ii jj A t => t.lifeBinders
@@ -265,8 +264,7 @@ def TExpr.domFree : TExpr → Bool
   | .var ii jj i A => true
   | .unitI ii jj => true
   | .tensorI ii jj A B u t₁ t₂ => t₁.domFree && t₂.domFree
-  | .sumI₁ ii jj A B t => t.domFree
-  | .sumI₂ ii jj A B t => t.domFree
+  | .sumIB ii jj A B b t => t.domFree
   | .thunkF ii jj A t => t.domFree
   | .thunkV ii jj C t => t.domFree
   | .ret ii jj A t => t.domFree
@@ -382,8 +380,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .var ii jj i A => .var ii jj i A
   | .unitI ii jj => .unitI ii jj
   | .tensorI ii jj A B u t₁ t₂ => .tensorI ii jj A B u (t₁.reAb Δr) (t₂.reAb Δr)
-  | .sumI₁ ii jj A B t => .sumI₁ ii jj A B (t.reAb Δr)
-  | .sumI₂ ii jj A B t => .sumI₂ ii jj A B (t.reAb Δr)
+  | .sumIB ii jj A B b t => .sumIB ii jj A B b (t.reAb Δr)
   | .thunkF ii jj A t => .thunkF ii jj A (t.reAb Δr)
   | .thunkV ii jj C t => .thunkV ii jj C (t.reAb Δr)
   | .ret ii jj A t => .ret ii jj A (t.reAb Δr)
@@ -537,7 +534,7 @@ theorem relT_reAb (Δr : LifeCtx) (t : TExpr) : ∀ k, relT k (t.reAb Δr) = rel
   case lolliE _ _ _ _ _ ta tf _ _ =>
     intro k; simp only [TExpr.reAb, relT, TExpr.isVarT_reAb, TExpr.isRelease_reAb]
   case ret _ _ _ t ih | ofRet _ _ _ t ih | effSub _ _ _ _ _ t ih | lendScope _ _ _ t ih
-    | sumI₁ _ _ _ _ t ih | sumI₂ _ _ _ _ t ih | alpha _ _ _ _ t ih =>
+    | sumIB _ _ _ _ _ t ih | alpha _ _ _ _ t ih =>
     intro k; simp only [TExpr.reAb, relT, ih k]
   case bind _ _ _ _ u tM tN ihM ihN | effLet _ _ _ _ _ u tM tN ihM ihN =>
     intro k; simp only [TExpr.reAb, relT, ihM k, ihN (k + 1)]
@@ -630,12 +627,9 @@ theorem TDerivesX.weakenΔ {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} 
   | tensorI a0 a1 a2 a3 a4 ih0 ih1 =>
       intro Δ' he hd
       exact TDerivesX.tensorI a0 a1 (by simpa only [TExpr.reAb_erase] using a2) (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | sumI₁ a0 ih0 =>
+  | sumIB a0 a1 ih0 =>
       intro Δ' he hd
-      exact TDerivesX.sumI₁ (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
-  | sumI₂ a0 ih0 =>
-      intro Δ' he hd
-      exact TDerivesX.sumI₂ (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
+      exact TDerivesX.sumIB a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
   | thunkF a0 ih0 =>
       intro Δ' he hd
       exact TDerivesX.thunkF (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))

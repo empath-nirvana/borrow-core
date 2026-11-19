@@ -211,7 +211,7 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
       rcases hk with hk | hk
       · exact hs.liveAt_right (ihf k hk)
       · exact hs.liveAt_left (iha k hk)
-  | sumI₁ _ ih | sumI₂ _ ih => intro k hk; exact ih k (by simpa [mentions] using hk)
+  | sumIB b _ ih => intro k hk; cases b <;> exact ih k (by simpa [injE, mentions] using hk)
   | thunkV _ _ ih | ret _ ih | bangE _ ih | boxI _ _ ih | boxE _ ih | immSub _ _ ih
   | mutSub _ _ ih | ofRet _ ih | roll _ _ _ ih | unroll _ ih | nuIn _ _ ih | nuOut _ _ ih
   | effSub _ _ ih | bangThunkV _ _ _ ih | alpha _ _ ih | codeI _ _ ih | codeIB _ _ _ ih

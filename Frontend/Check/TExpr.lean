@@ -650,8 +650,7 @@ inductive TExpr where
   | var (info : TInfo) (jdg : Jdg) (i : Nat) (A : VTy)
   | unitI (info : TInfo) (jdg : Jdg)
   | tensorI (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (u : Masks) (t₁ t₂ : TExpr)
-  | sumI₁ (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (t : TExpr)
-  | sumI₂ (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (t : TExpr)
+  | sumIB (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (b : Bool) (t : TExpr)
   | thunkF (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
   | thunkV (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
   | ret (info : TInfo) (jdg : Jdg) (A : VTy) (t : TExpr)
@@ -813,8 +812,7 @@ def TExpr.erase : TExpr → Expr
   | .var _ _ i _ => (.var i)
   | .unitI _ _ => (.val .unit)
   | .tensorI _ _ _ _ _ t₁ t₂ => (.pair (t₁.erase) (t₂.erase))
-  | .sumI₁ _ _ _ _ t => (.inj₁ (t.erase))
-  | .sumI₂ _ _ _ _ t => (.inj₂ (t.erase))
+  | .sumIB _ _ _ _ b t => (injE b (t.erase))
   | .thunkF _ _ _ t => (.val (.lam (t.erase)))
   | .thunkV _ _ _ t => t.erase
   | .ret _ _ _ t => t.erase
@@ -934,8 +932,7 @@ def TExpr.info : TExpr → TInfo
   | .var i _ _ _ => i
   | .unitI i _ => i
   | .tensorI i _ _ _ _ _ _ => i
-  | .sumI₁ i _ _ _ _ => i
-  | .sumI₂ i _ _ _ _ => i
+  | .sumIB i _ _ _ _ _ => i
   | .thunkF i _ _ _ => i
   | .thunkV i _ _ _ => i
   | .ret i _ _ _ => i
@@ -1051,8 +1048,7 @@ def TExpr.jdg : TExpr → Jdg
   | .var _ j _ _ => j
   | .unitI _ j => j
   | .tensorI _ j _ _ _ _ _ => j
-  | .sumI₁ _ j _ _ _ => j
-  | .sumI₂ _ j _ _ _ => j
+  | .sumIB _ j _ _ _ _ => j
   | .thunkF _ j _ _ => j
   | .thunkV _ j _ _ => j
   | .ret _ j _ _ => j
@@ -1176,8 +1172,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .var _ _ _ _ => []
   | .unitI _ _ => []
   | .tensorI _ _ _ _ _ t₁ t₂ => [(.push 0, t₁), (.push 0, t₂)]
-  | .sumI₁ _ _ _ _ t => [(.push 0, t)]
-  | .sumI₂ _ _ _ _ t => [(.push 0, t)]
+  | .sumIB _ _ _ _ _ t => [(.push 0, t)]
   | .thunkF _ _ _ t => [(.push 1, t)]
   | .thunkV _ _ _ t => [(.push 0, t)]
   | .ret _ _ _ t => [(.push 0, t)]
@@ -1312,8 +1307,7 @@ def TExpr.isLam : TExpr → Bool
   | .var _ _ _ _ => false
   | .unitI _ _ => false
   | .tensorI _ _ _ _ _ _ _ => false
-  | .sumI₁ _ _ _ _ _ => false
-  | .sumI₂ _ _ _ _ _ => false
+  | .sumIB _ _ _ _ b t => (((injE b (t.erase)) : Expr) matches .lam _)
   | .thunkF _ _ _ _ => true
   | .thunkV _ _ _ t => t.isLam
   | .ret _ _ _ t => t.isLam
@@ -1433,8 +1427,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .var _ _ _ _ => rfl
   | .unitI _ _ => rfl
   | .tensorI _ _ _ _ _ _ _ => rfl
-  | .sumI₁ _ _ _ _ _ => rfl
-  | .sumI₂ _ _ _ _ _ => rfl
+  | .sumIB _ _ _ _ _ _ => rfl
   | .thunkF _ _ _ _ => rfl
   | .thunkV _ _ _ t => isLam_eq t
   | .ret _ _ _ t => isLam_eq t
@@ -1566,6 +1559,14 @@ abbreviation of the folded rule's node, so that statements over the node keep th
     (fs : Nat → CTy) (cs : Nat → Bool) (n : UInt32) (A R : VTy) (d : Lifetime.Life) (u : Masks)
     (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr) : TExpr :=
   .effHandleVO info jdg S E fs cs n A R (some d) u ks site inside tc te
+
+/-- `+I` at the left: `sumIB`'s node at `false`.  `[spec §10]` -/
+@[match_pattern] abbrev TExpr.sumI₁ (info : TInfo) (jdg : Jdg) (A B : VTy) (t : TExpr) : TExpr :=
+  .sumIB info jdg A B false t
+
+/-- `+I` at the right: `sumIB`'s node at `true`.  `[spec §10]` -/
+@[match_pattern] abbrev TExpr.sumI₂ (info : TInfo) (jdg : Jdg) (A B : VTy) (t : TExpr) : TExpr :=
+  .sumIB info jdg A B true t
 
 /-- `&E` at the first component: `projB`'s node at `false`.  `[spec §10]` -/
 @[match_pattern] abbrev TExpr.proj₁ (info : TInfo) (jdg : Jdg) (C D : CTy) (t : TExpr) : TExpr :=

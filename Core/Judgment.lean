@@ -210,6 +210,16 @@ def Jdg.alphaB : Jdg → Jdg → Bool
   | .comp C, .comp C' => CTy.alphaB [] C C'
   | _, _ => false
 
+/-- The injection of a payload into a sum, by side: `inj₁ e` at `false`, `inj₂ e` at `true`.
+`[spec §10]` -/
+def injE : Bool → Expr → Expr
+  | false, e => .inj₁ e
+  | true, e => .inj₂ e
+
+@[simp] theorem injE_eq_iff {b : Bool} {e t : Expr} :
+    injE b e = t ↔ (b = false ∧ .inj₁ e = t) ∨ (b = true ∧ .inj₂ e = t) := by
+  cases b <;> simp [injE]
+
 /-- The selector a projection applies its pair to: `inj₁ ()` at `false`, `inj₂ ()` at `true`.
 `[spec §10]` -/
 def projArg : Bool → Val
@@ -232,10 +242,10 @@ inductive CDerivesX (I : JIdx) : LifeCtx → Ctx VTy → Expr → Jdg → Prop w
   | tensorI {Δ Γ Γ₁ Γ₂ e₁ e₂ A B} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (h₁ : CDerivesX I Δ Γ₁ e₁ (.val A)) (h₂ : CDerivesX I Δ Γ₂ e₂ (.val B)) :
       CDerivesX I Δ Γ (.pair e₁ e₂) (.val (.tensor A B))
-  | sumI₁ {Δ Γ e A B} (h : CDerivesX I Δ Γ e (.val A)) :
-      CDerivesX I Δ Γ (.inj₁ e) (.val (.sum A B))
-  | sumI₂ {Δ Γ e A B} (h : CDerivesX I Δ Γ e (.val B)) :
-      CDerivesX I Δ Γ (.inj₂ e) (.val (.sum A B))
+  /-- `+I`: the injection `injE b e` of a payload at the side's type, the left (`b = false`,
+  `CDerivesX.sumI₁`) or the right (`true`, `CDerivesX.sumI₂`).  `[spec §10]` -/
+  | sumIB {Δ Γ e A B} (b : Bool) (h : CDerivesX I Δ Γ e (.val (cond b B A))) :
+      CDerivesX I Δ Γ (injE b e) (.val (.sum A B))
   /-- `thunk M : U (F A)`, `M` under a dead binder. -/
   | thunkF {Δ Γ M A} (h : CDerivesX I Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
       CDerivesX I Δ Γ (.val (.lam M)) (.val (.thunk (.ret A)))
@@ -801,6 +811,18 @@ theorem CDerivesX.effThenDiv {I : JIdx} {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD :
     (hD : CDerivesX I Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
     CDerivesX I Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
   .effThenF hs hNZ hUq hU hMS hDS hfin hP (.inr hcap) hM hN hD
+
+/-! ### Derived rules: the two injections, the two sides of `sumIB`'s side -/
+
+/-- `+I` at the left (`sumIB` at `false`).  `[spec §10]` -/
+theorem CDerivesX.sumI₁ {I : JIdx} {Δ Γ e A B} (h : CDerivesX I Δ Γ e (.val A)) :
+    CDerivesX I Δ Γ (.inj₁ e) (.val (.sum A B)) :=
+  .sumIB false h
+
+/-- `+I` at the right (`sumIB` at `true`).  `[spec §10]` -/
+theorem CDerivesX.sumI₂ {I : JIdx} {Δ Γ e A B} (h : CDerivesX I Δ Γ e (.val B)) :
+    CDerivesX I Δ Γ (.inj₂ e) (.val (.sum A B)) :=
+  .sumIB true h
 
 /-! ### Derived rules: the two projections, the two sides of `projB`'s selector -/
 

@@ -157,8 +157,7 @@ child at a context of its own (`letPoly`'s value, the relaxed rules') is left as
 def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .var i j k A => .var i j (sIdx d c k) A
   | .tensorI i j A B u t₁ t₂ => .tensorI i j A B (u.ins d c) (t₁.shift d c) (t₂.shift d c)
-  | .sumI₁ i j A B t => .sumI₁ i j A B (t.shift d c)
-  | .sumI₂ i j A B t => .sumI₂ i j A B (t.shift d c)
+  | .sumIB i j A B b t => .sumIB i j A B b (t.shift d c)
   | .thunkF i j A t => .thunkF i j A (t.shift d (c + 1))
   | .thunkV i j C t => .thunkV i j C (t.shift d c)
   | .ret i j A t => .ret i j A (t.shift d c)
@@ -297,7 +296,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
 under `Δ`. -/
 def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .tensorI _ _ _ _ _ t₁ t₂ => AbsF.orO (t₁.absF Δ) (t₂.absF Δ)
-  | .sumI₁ _ _ _ _ t | .sumI₂ _ _ _ _ t | .thunkF _ _ _ t | .thunkV _ _ _ t | .ret _ _ _ t
+  | .sumIB _ _ _ _ _ t | .thunkF _ _ _ t | .thunkV _ _ _ t | .ret _ _ _ t
   | .lam _ _ _ _ t | .lamDead _ _ _ _ t | .projB _ _ _ _ _ t
   | .allE _ _ _ _ _ _ t | .bangE _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t
   | .mutSub _ _ _ _ _ t | .allEV _ _ _ _ _ _ t | .ofRet _ _ _ t | .roll _ _ _ t

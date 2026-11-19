@@ -298,14 +298,10 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       obtain ⟨d₂, e₂⟩ := ih₂ Γa₂ Γb₂ Γp₂ f₂ rfl hf₂ q₂
       rw [ha₁, hl₁] at d₁ e₁; rw [ha₂, hl₂] at d₂ e₂
       exact ⟨.tensorI hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [e₁]; rfl), hcv.2.ins₂ (by rw [e₂]; rfl)⟩ d₁ d₂, by simp only [TExpr.shift, TExpr.erase, Expr.shift, e₁, e₂]⟩
-  | sumI₁ _ ih =>
+  | sumIB b _ ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.sumI₁ d, by simp only [TExpr.shift, TExpr.erase, Expr.shift, e]⟩
-  | sumI₂ _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.sumI₂ d, by simp only [TExpr.shift, TExpr.erase, Expr.shift, e]⟩
+      exact ⟨.sumIB b d, by cases b <;> simp only [TExpr.shift, TExpr.erase, injE, Expr.shift, e]⟩
   | thunkF _ ih =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f rfl hf hp

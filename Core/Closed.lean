@@ -122,9 +122,10 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | withI _ _ ihM ihN =>
       simp only [List.length_cons] at ihM ihN
       simp [withPair, closedAt, Expr.val, Val.lam, ihM, ihN]
-  | projB b _ ih => cases b <;> simp [projArg, closedAt, Expr.val, Val.inj₁, Val.inj₂, Val.unit, ih]
+  | projB b _ ih => cases b <;> simp [projArg, closedAt, Expr.val, Val.inj₂, Val.unit, ih]
+  | sumIB b _ ih => cases b <;> exact ih
   | allE _ _ ih | allEV _ _ ih =>
-      simp [closedAt, Expr.val, Val.inj₁, Val.inj₂, Val.unit, ih]
+      simp [closedAt, Expr.val, Val.unit, ih]
   | unitE hs _ _ ihV ihM | lolliE hs _ _ ihV ihM =>
       rw [(splitP_length hs).1] at ihV; rw [(splitP_length hs).2] at ihM
       simp [closedAt, ihV, ihM]

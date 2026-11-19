@@ -39,13 +39,9 @@ theorem CDerives.tensorI {Δ Γ Γ₁ Γ₂ e₁ e₂ A B} (hs : Ctx.SplitP Γ �
     CDerives Δ Γ (.pair e₁ e₂) (.val (.tensor A B)) :=
   (CDerivesX.tensorI (I := {}) hs h₁ h₂)
 
-theorem CDerives.sumI₁ {Δ Γ e A B} (h : CDerives Δ Γ e (.val A)) :
-    CDerives Δ Γ (.inj₁ e) (.val (.sum A B)) :=
-  (CDerivesX.sumI₁ (I := {}) h)
-
-theorem CDerives.sumI₂ {Δ Γ e A B} (h : CDerives Δ Γ e (.val B)) :
-    CDerives Δ Γ (.inj₂ e) (.val (.sum A B)) :=
-  (CDerivesX.sumI₂ (I := {}) h)
+theorem CDerives.sumIB {Δ Γ e A B} (b : Bool) (h : CDerives Δ Γ e (.val (cond b B A))) :
+    CDerives Δ Γ (injE b e) (.val (.sum A B)) :=
+  (CDerivesX.sumIB (I := {}) b h)
 
 theorem CDerives.thunkF {Δ Γ M A} (h : CDerives Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
     CDerives Δ Γ (.val (.lam M)) (.val (.thunk (.ret A))) :=
@@ -467,6 +463,14 @@ theorem CDerives.effThenDiv {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : 
     CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
   (CDerivesX.effThenDiv (I := {}) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD)
 
+theorem CDerives.sumI₁ {Δ Γ e A B} (h : CDerives Δ Γ e (.val A)) :
+    CDerives Δ Γ (.inj₁ e) (.val (.sum A B)) :=
+  (CDerivesX.sumI₁ (I := {}) h)
+
+theorem CDerives.sumI₂ {Δ Γ e A B} (h : CDerives Δ Γ e (.val B)) :
+    CDerives Δ Γ (.inj₂ e) (.val (.sum A B)) :=
+  (CDerivesX.sumI₂ (I := {}) h)
+
 theorem CDerives.proj₁ {Δ Γ M C D} (h : CDerives Δ Γ M (.comp (.amp C D))) :
     CDerives Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C) :=
   (CDerivesX.proj₁ (I := {}) h)
@@ -503,13 +507,9 @@ theorem CDerivesAt.tensorI {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ e₁ e₂ A B} (hs :
     CDerivesAt Ξ Δ Γ (.pair e₁ e₂) (.val (.tensor A B)) :=
   (CDerivesX.tensorI (I := {ties := some Ξ}) hs h₁ h₂)
 
-theorem CDerivesAt.sumI₁ {Ξ : EffCtx} {Δ Γ e A B} (h : CDerivesAt Ξ Δ Γ e (.val A)) :
-    CDerivesAt Ξ Δ Γ (.inj₁ e) (.val (.sum A B)) :=
-  (CDerivesX.sumI₁ (I := {ties := some Ξ}) h)
-
-theorem CDerivesAt.sumI₂ {Ξ : EffCtx} {Δ Γ e A B} (h : CDerivesAt Ξ Δ Γ e (.val B)) :
-    CDerivesAt Ξ Δ Γ (.inj₂ e) (.val (.sum A B)) :=
-  (CDerivesX.sumI₂ (I := {ties := some Ξ}) h)
+theorem CDerivesAt.sumIB {Ξ : EffCtx} {Δ Γ e A B} (b : Bool) (h : CDerivesAt Ξ Δ Γ e (.val (cond b B A))) :
+    CDerivesAt Ξ Δ Γ (injE b e) (.val (.sum A B)) :=
+  (CDerivesX.sumIB (I := {ties := some Ξ}) b h)
 
 theorem CDerivesAt.thunkF {Ξ : EffCtx} {Δ Γ M A} (h : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
     CDerivesAt Ξ Δ Γ (.val (.lam M)) (.val (.thunk (.ret A))) :=
@@ -931,6 +931,14 @@ theorem CDerivesAt.effThenDiv {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S SM 
     CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
   (CDerivesX.effThenDiv (I := {ties := some Ξ}) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD)
 
+theorem CDerivesAt.sumI₁ {Ξ : EffCtx} {Δ Γ e A B} (h : CDerivesAt Ξ Δ Γ e (.val A)) :
+    CDerivesAt Ξ Δ Γ (.inj₁ e) (.val (.sum A B)) :=
+  (CDerivesX.sumI₁ (I := {ties := some Ξ}) h)
+
+theorem CDerivesAt.sumI₂ {Ξ : EffCtx} {Δ Γ e A B} (h : CDerivesAt Ξ Δ Γ e (.val B)) :
+    CDerivesAt Ξ Δ Γ (.inj₂ e) (.val (.sum A B)) :=
+  (CDerivesX.sumI₂ (I := {ties := some Ξ}) h)
+
 theorem CDerivesAt.proj₁ {Ξ : EffCtx} {Δ Γ M C D} (h : CDerivesAt Ξ Δ Γ M (.comp (.amp C D))) :
     CDerivesAt Ξ Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C) :=
   (CDerivesX.proj₁ (I := {ties := some Ξ}) h)
@@ -967,13 +975,9 @@ theorem CDerivesP.tensorI {Δ Γ Γ₁ Γ₂ e₁ e₂ A B} (hs : Ctx.SplitP Γ 
     CDerivesP Δ Γ (.pair e₁ e₂) (.val (.tensor A B)) :=
   (CDerivesX.tensorI (I := {pin := true}) hs h₁ h₂)
 
-theorem CDerivesP.sumI₁ {Δ Γ e A B} (h : CDerivesP Δ Γ e (.val A)) :
-    CDerivesP Δ Γ (.inj₁ e) (.val (.sum A B)) :=
-  (CDerivesX.sumI₁ (I := {pin := true}) h)
-
-theorem CDerivesP.sumI₂ {Δ Γ e A B} (h : CDerivesP Δ Γ e (.val B)) :
-    CDerivesP Δ Γ (.inj₂ e) (.val (.sum A B)) :=
-  (CDerivesX.sumI₂ (I := {pin := true}) h)
+theorem CDerivesP.sumIB {Δ Γ e A B} (b : Bool) (h : CDerivesP Δ Γ e (.val (cond b B A))) :
+    CDerivesP Δ Γ (injE b e) (.val (.sum A B)) :=
+  (CDerivesX.sumIB (I := {pin := true}) b h)
 
 theorem CDerivesP.thunkF {Δ Γ M A} (h : CDerivesP Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) :
     CDerivesP Δ Γ (.val (.lam M)) (.val (.thunk (.ret A))) :=
@@ -1407,6 +1411,14 @@ theorem CDerivesP.effThenDiv {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs :
     CDerivesP Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
   (CDerivesX.effThenDiv (I := {pin := true}) hs hNZ hUq hU hMS hDS hfin hP hcap hM hN hD)
 
+theorem CDerivesP.sumI₁ {Δ Γ e A B} (h : CDerivesP Δ Γ e (.val A)) :
+    CDerivesP Δ Γ (.inj₁ e) (.val (.sum A B)) :=
+  (CDerivesX.sumI₁ (I := {pin := true}) h)
+
+theorem CDerivesP.sumI₂ {Δ Γ e A B} (h : CDerivesP Δ Γ e (.val B)) :
+    CDerivesP Δ Γ (.inj₂ e) (.val (.sum A B)) :=
+  (CDerivesX.sumI₂ (I := {pin := true}) h)
+
 theorem CDerivesP.proj₁ {Δ Γ M C D} (h : CDerivesP Δ Γ M (.comp (.amp C D))) :
     CDerivesP Δ Γ (.app M (.val (.inj₁ .unit))) (.comp C) :=
   (CDerivesX.proj₁ (I := {pin := true}) h)
@@ -1442,10 +1454,8 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
       motive Δ Γ (.val .unit) (.val .unit) (CDerivesX.unitI (I := {}) (Δ := Δ) (Γ := Γ) h))
     (tensorI : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {e₁ : Expr} {e₂ : Expr} {A : VTy} {B : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (h₁ : CDerives Δ Γ₁ e₁ (.val A)) (h₂ : CDerives Δ Γ₂ e₂ (.val B)) (h₁_ih : motive Δ Γ₁ e₁ (.val A) h₁) (h₂_ih : motive Δ Γ₂ e₂ (.val B) h₂),
       motive Δ Γ (.pair e₁ e₂) (.val (.tensor A B)) (CDerivesX.tensorI (I := {}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (e₁ := e₁) (e₂ := e₂) (A := A) (B := B) hs h₁ h₂))
-    (sumI₁ : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} {B : VTy} (h : CDerives Δ Γ e (.val A)) (h_ih : motive Δ Γ e (.val A) h),
-      motive Δ Γ (.inj₁ e) (.val (.sum A B)) (CDerivesX.sumI₁ (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) (B := B) h))
-    (sumI₂ : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} {B : VTy} (h : CDerives Δ Γ e (.val B)) (h_ih : motive Δ Γ e (.val B) h),
-      motive Δ Γ (.inj₂ e) (.val (.sum A B)) (CDerivesX.sumI₂ (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) (B := B) h))
+    (sumIB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} {B : VTy} (b : Bool) (h : CDerives Δ Γ e (.val (cond b B A))) (h_ih : motive Δ Γ e (.val (cond b B A)) h),
+      motive Δ Γ (injE b e) (.val (.sum A B)) (CDerivesX.sumIB (I := {}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) (B := B) b h))
     (thunkF : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} (h : CDerives Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) (h_ih : motive Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) h),
       motive Δ Γ (.val (.lam M)) (.val (.thunk (.ret A))) (CDerivesX.thunkF (I := {}) (Δ := Δ) (Γ := Γ) (M := M) (A := A) h))
     (thunkV : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hC : C.isRet = false) (h : CDerives Δ Γ (.val (.lam N)) (.comp C)) (h_ih : motive Δ Γ (.val (.lam N)) (.comp C) h),
@@ -1651,8 +1661,7 @@ theorem CDerives.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Exp
   | var a0 => exact var a0
   | unitI a0 => exact unitI a0
   | tensorI a0 a1 a2 ih0 ih1 => exact tensorI a0 a1 a2 ih0 ih1
-  | sumI₁ a0 ih0 => exact sumI₁ a0 ih0
-  | sumI₂ a0 ih0 => exact sumI₂ a0 ih0
+  | sumIB a0 a1 ih0 => exact sumIB a0 a1 ih0
   | thunkF a0 ih0 => exact thunkF a0 ih0
   | thunkV a0 a1 ih0 => exact thunkV a0 a1 ih0
   | ret a0 ih0 => exact ret a0 ih0
@@ -1766,10 +1775,8 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
       motive Δ Γ (.val .unit) (.val .unit) (CDerivesX.unitI (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) h))
     (tensorI : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {e₁ : Expr} {e₂ : Expr} {A : VTy} {B : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (h₁ : CDerivesAt Ξ Δ Γ₁ e₁ (.val A)) (h₂ : CDerivesAt Ξ Δ Γ₂ e₂ (.val B)) (h₁_ih : motive Δ Γ₁ e₁ (.val A) h₁) (h₂_ih : motive Δ Γ₂ e₂ (.val B) h₂),
       motive Δ Γ (.pair e₁ e₂) (.val (.tensor A B)) (CDerivesX.tensorI (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (e₁ := e₁) (e₂ := e₂) (A := A) (B := B) hs h₁ h₂))
-    (sumI₁ : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} {B : VTy} (h : CDerivesAt Ξ Δ Γ e (.val A)) (h_ih : motive Δ Γ e (.val A) h),
-      motive Δ Γ (.inj₁ e) (.val (.sum A B)) (CDerivesX.sumI₁ (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) (B := B) h))
-    (sumI₂ : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} {B : VTy} (h : CDerivesAt Ξ Δ Γ e (.val B)) (h_ih : motive Δ Γ e (.val B) h),
-      motive Δ Γ (.inj₂ e) (.val (.sum A B)) (CDerivesX.sumI₂ (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) (B := B) h))
+    (sumIB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} {B : VTy} (b : Bool) (h : CDerivesAt Ξ Δ Γ e (.val (cond b B A))) (h_ih : motive Δ Γ e (.val (cond b B A)) h),
+      motive Δ Γ (injE b e) (.val (.sum A B)) (CDerivesX.sumIB (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) (B := B) b h))
     (thunkF : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} (h : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) (h_ih : motive Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) h),
       motive Δ Γ (.val (.lam M)) (.val (.thunk (.ret A))) (CDerivesX.thunkF (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (M := M) (A := A) h))
     (thunkV : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hC : C.isRet = false) (h : CDerivesAt Ξ Δ Γ (.val (.lam N)) (.comp C)) (h_ih : motive Δ Γ (.val (.lam N)) (.comp C) h),
@@ -1975,8 +1982,7 @@ theorem CDerivesAt.induct {Ξ : EffCtx} {motive : (Δ : LifeCtx) → (Γ : Ctx V
   | var a0 => exact var a0
   | unitI a0 => exact unitI a0
   | tensorI a0 a1 a2 ih0 ih1 => exact tensorI a0 a1 a2 ih0 ih1
-  | sumI₁ a0 ih0 => exact sumI₁ a0 ih0
-  | sumI₂ a0 ih0 => exact sumI₂ a0 ih0
+  | sumIB a0 a1 ih0 => exact sumIB a0 a1 ih0
   | thunkF a0 ih0 => exact thunkF a0 ih0
   | thunkV a0 a1 ih0 => exact thunkV a0 a1 ih0
   | ret a0 ih0 => exact ret a0 ih0
@@ -2090,10 +2096,8 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
       motive Δ Γ (.val .unit) (.val .unit) (CDerivesX.unitI (I := {pin := true}) (Δ := Δ) (Γ := Γ) h))
     (tensorI : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {Γ₁ : Ctx VTy} {Γ₂ : Ctx VTy} {e₁ : Expr} {e₂ : Expr} {A : VTy} {B : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (h₁ : CDerivesP Δ Γ₁ e₁ (.val A)) (h₂ : CDerivesP Δ Γ₂ e₂ (.val B)) (h₁_ih : motive Δ Γ₁ e₁ (.val A) h₁) (h₂_ih : motive Δ Γ₂ e₂ (.val B) h₂),
       motive Δ Γ (.pair e₁ e₂) (.val (.tensor A B)) (CDerivesX.tensorI (I := {pin := true}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (e₁ := e₁) (e₂ := e₂) (A := A) (B := B) hs h₁ h₂))
-    (sumI₁ : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} {B : VTy} (h : CDerivesP Δ Γ e (.val A)) (h_ih : motive Δ Γ e (.val A) h),
-      motive Δ Γ (.inj₁ e) (.val (.sum A B)) (CDerivesX.sumI₁ (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) (B := B) h))
-    (sumI₂ : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} {B : VTy} (h : CDerivesP Δ Γ e (.val B)) (h_ih : motive Δ Γ e (.val B) h),
-      motive Δ Γ (.inj₂ e) (.val (.sum A B)) (CDerivesX.sumI₂ (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) (B := B) h))
+    (sumIB : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} {B : VTy} (b : Bool) (h : CDerivesP Δ Γ e (.val (cond b B A))) (h_ih : motive Δ Γ e (.val (cond b B A)) h),
+      motive Δ Γ (injE b e) (.val (.sum A B)) (CDerivesX.sumIB (I := {pin := true}) (Δ := Δ) (Γ := Γ) (e := e) (A := A) (B := B) b h))
     (thunkF : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} (h : CDerivesP Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A))) (h_ih : motive Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) h),
       motive Δ Γ (.val (.lam M)) (.val (.thunk (.ret A))) (CDerivesX.thunkF (I := {pin := true}) (Δ := Δ) (Γ := Γ) (M := M) (A := A) h))
     (thunkV : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy} (hC : C.isRet = false) (h : CDerivesP Δ Γ (.val (.lam N)) (.comp C)) (h_ih : motive Δ Γ (.val (.lam N)) (.comp C) h),
@@ -2305,8 +2309,7 @@ theorem CDerivesP.induct {motive : (Δ : LifeCtx) → (Γ : Ctx VTy) → (e : Ex
   | var a0 => exact var a0
   | unitI a0 => exact unitI a0
   | tensorI a0 a1 a2 ih0 ih1 => exact tensorI a0 a1 a2 ih0 ih1
-  | sumI₁ a0 ih0 => exact sumI₁ a0 ih0
-  | sumI₂ a0 ih0 => exact sumI₂ a0 ih0
+  | sumIB a0 a1 ih0 => exact sumIB a0 a1 ih0
   | thunkF a0 ih0 => exact thunkF a0 ih0
   | thunkV a0 a1 ih0 => exact thunkV a0 a1 ih0
   | ret a0 ih0 => exact ret a0 ih0
@@ -2421,8 +2424,7 @@ theorem CDerivesX.mono {I I' : JIdx} (hI : I ≤ I') {Δ : LifeCtx} {Γ : Ctx VT
   | var a0 => exact CDerivesX.var a0
   | unitI a0 => exact CDerivesX.unitI a0
   | tensorI a0 a1 a2 ih0 ih1 => exact CDerivesX.tensorI a0 ih0 ih1
-  | sumI₁ a0 ih0 => exact CDerivesX.sumI₁ ih0
-  | sumI₂ a0 ih0 => exact CDerivesX.sumI₂ ih0
+  | sumIB a0 a1 ih0 => exact CDerivesX.sumIB a0 ih0
   | thunkF a0 ih0 => exact CDerivesX.thunkF ih0
   | thunkV a0 a1 ih0 => exact CDerivesX.thunkV a0 ih0
   | ret a0 ih0 => exact CDerivesX.ret ih0

@@ -3435,12 +3435,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let .pair aT bT := rT.peel | throw "LIR: a pair at a non-pair type"
     return pre (← bindTm (← conv fuel c₁ t₁) aT fun a => do
       bindTm (← conv fuel c₂ t₂) bT fun b => pure (.pair a b))
-  | .sumI₁ _ j _ _ c => do
-    let .sum aT _ := (← repJ j).peel | throw "LIR: an injection at a non-sum"
-    bindTm (← conv fuel ctx c) aT fun a => pure (.inj false a)
-  | .sumI₂ _ j _ _ c => do
-    let .sum _ bT := (← repJ j).peel | throw "LIR: an injection at a non-sum"
-    bindTm (← conv fuel ctx c) bT fun a => pure (.inj true a)
+  | .sumIB _ j _ _ b c => do
+    let .sum aT bT := (← repJ j).peel | throw "LIR: an injection at a non-sum"
+    bindTm (← conv fuel ctx c) (if b then bT else aT) fun a => pure (.inj b a)
   | .thunkF _ j _ c | .bangThunkF _ j _ c => do
     let .thunk k := (← repJ j).peel | throw "LIR: a thunk at a non-closure type"
     -- A thunk's body is at `F A` (`thunkF`, `bangThunkF`): the empty row.  [spec §50]
