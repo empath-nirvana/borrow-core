@@ -238,7 +238,7 @@ The checker returns a **typed term** `t : TExpr` with its derivation, not an era
   and cancel rows, constants' type arguments;
 - at a split (`Ctx.SplitP`), the use masks of its two parts (`Masks`), as the checker computed
   them;
-- at `[handle]` (`effHandleV`, `effHandleVB`), each operation's qualifier and the kind of its
+- at `[handle]` (`effHandleVO`, §28), each operation's qualifier and the kind of its
   clause, as the checker classifies it (`ks`, §19 *Clause kinds*), and at every `handle` node the
   site as the elaboration of effects records it (`site`, §19 *Handler sites*) and the frames its
   handled computation holds (`inside`, §19 *The clause's names in the continuation*), which the
@@ -6087,6 +6087,27 @@ invariant.
   borrow cell open at a stop.
 - The rule is `CDerives.effHandleVB` (and `CDerivesAt.effHandleVB`, the handled row tied to `Ξ`,
   §19 *Typing*). Its term is `[handle]`'s `hndExpr`: no term former, no type former, no index.
+- **`[handle]` at a value form is one rule (#1170).** The kernel types `[handle]` at a value form,
+  its continuation plain (`effHandleV`, §19) or boxed (`effHandleVB`, this entry), with one rule,
+  `effHandleVO`, at `d? : Option Lifetime`, and the checker with one typed-term node of the same
+  name:
+  - **The premises** are `effHandleV`'s, in the same order, with the clauses at
+    `clausesTyO Σ R d? E fs` (`clausesTy` at `none`, `clausesTyB d` at `some d`), followed by
+    BOXED-κ's two premises read at every `d ∈ d?`: `∀ d ∈ d?, CtxOutlives Δ Γ₂ d` and
+    `∀ d ∈ d?, Row.AnsOutlives Δ d (E_n ⊕ Σ)`. At `none` the two are vacuous, and at `some d` they
+    are this entry's, so derivability is exactly the same.
+  - **The old names stay.** `effHandleV` and `effHandleVB` are theorems of the judgment and of each
+    of its instances (`CDerives`, `CDerivesAt Ξ`, `CDerivesP`) at `none` and `some d`, with today's
+    binders and statements.
+  - **The Fundamental Property's case** splits on `d?` and applies the unchanged
+    `handleV_compatC` or `handleV_compatCB`. The chain's case applies `HandlerLawN.handleV` or
+    `handleVB`, which stay two separate registered assumptions (`HandleVN`, `HandleVBN`).
+  - **The typed term** has one node, `effHandleVO`, holding `d?`. `effHandleV` and `effHandleVB`
+    stay as abbreviations of it at `none` and `some d`. Backend2 reads that a handler is boxed as
+    `d?.isSome`.
+  - The rule count of `CDerives` and of the checker's judgment each drops by one, and so does the
+    number of rules the tie gates (§83).
+  - **Status:** the fold (#1170, `folds/handlev`), after #798. Not built.
 
 ### Semantics
 
@@ -9964,7 +9985,7 @@ No change: no type, rule, term, typing, elaboration or semantics.
   `sliceBorrowIU`; `withborUE d`): the lend as §43's; the callback's abort ends it, runs the
   finaliser `d` on the owner and is handed on (`then_fin`). A finaliser that is not a constant is
   outside the fragment.
-- **`[handle]`** (`effHandleV`, `effHandleVB`), read from the node: its name `n`, its operations
+- **`[handle]`** (`effHandleVO`, §28), read from the node: its name `n`, its operations
   `E`, its clauses' kinds `ks` (§19 *Clause kinds*, `classifyHandler_sound`), its outer row `Σ`,
   the masks, and the clauses of its pair written in place. Every clause must be `abortive`, or
   `tail` with its direct call licensed (below); any other kind leaves the program outside the
@@ -10471,7 +10492,7 @@ IR's interpreter counts the frame slots a run starts.
 - **Handler state in a register (#537 fix 9).** handlers-di's clock is kept in a register only
   with the facts: without them its cell is stored at every step. Under choice 6 that does not
   count; the state as a local of the LIR remains.
-- **The box lifetime of `effHandleVB`** is not read. No storage of the new backend depends on it:
+- **The box lifetime of `effHandleVB`** (the `d` of `effHandleVO`'s `d? = some d`) is not read. No storage of the new backend depends on it:
   `κ`'s environment is by value, and a level's cell lives as long as its level. It would matter
   where a box's contents are allocated, to place them in the scope the lifetime names.
 - **`!noalias` and `!alias.scope`** (#531), where a parameter attribute is too coarse; Alive2.
@@ -10881,7 +10902,7 @@ it.
 
 ### Facts read
 
-The nodes' former (`effHandleVB`), clause kinds (`ks`) and qualifiers (`E`); the machine
+Whether a `[handle]` node is boxed (`effHandleVO`'s `d?`, §28), its clause kinds (`ks`) and qualifiers (`E`); the machine
 operations (§49); and, after a first conversion, the layouts' recursive classes (§35), each call
 point's callee's suspended computations' classes (`MPoint.outVar`, `suspCodes`) and the machines
 whose cell is passed on (§50, `threadedOf`). The backend guesses neither the frames' owner (the
@@ -11010,7 +11031,7 @@ and `CDerivesP` consume the premise as they consume `SplitMasks`.
   the premise `hcv`: each part's term, at the binders its premise pushes, is covered by its part's
   mask; `M x`'s second part is its argument `x`. Generated with the rules (`scripts/gen-pin.py`,
   `cov_premise`): `tensorI`, `bind`, `app`, `unitE`, `tensorE`, `sumE`, `zeroE`, `lolliE`,
-  `effLet`, `effThenF`, `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL`. It names the slots
+  `effLet`, `effThenF`, `effHandleVO`, `effHandleT`, `effHandleL`. It names the slots
   a part's term mentions, not its context's liveness, so the checker's masks are unchanged.
 - **A typed term mentions only live slots** (`CDerivesP.mentions_live`, `Core/Mentions.lean`): a
   term `CDerivesP` types at `Γ` mentions only slots live in `Γ`. Induction on `CDerivesP`, as
@@ -15042,7 +15063,7 @@ its instances: abbreviations that keep their names, their rules and every statem
 - **The fields.** A field is a gating premise of the rules it gates.
   - `ties`: at `some Ξ`, the rules that read an operation's signature off a row take
     `hAt : I.RowOK S`, which is `RowAt Ξ S` (§19, decision R): `reify`, `effPerform`, `effAwait`,
-    `effRaise`, `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL`, and the constants' rule
+    `effRaise`, `effHandleVO` (§28), `effHandleT`, `effHandleL`, and the constants' rule
     `constK` at its kind's row (§3), which is `iterate`'s and `divFuel`'s row and `[]` at every other
     kind. At `none` the premise is `True`.
   - `pin`: `lendR`, `lendLoopR` and `nilDead` (§29) take `hPin : I.pin = true`. Every other rule
