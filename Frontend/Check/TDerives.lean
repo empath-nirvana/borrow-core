@@ -48,8 +48,6 @@ and the derived nodes.  `[spec §3, §19, §29, §83]` -/
 inductive TDerivesX (I : JIdx) : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
   | var {Δ Γ i A} {info : TInfo} (h : Ctx.SoloP Γ i A) :
       TDerivesX I Δ Γ (TExpr.var (info := info) (jdg := (.val A)) (i := i) (A := A)) (.val A)
-  | unitI {Δ Γ} {info : TInfo} (h : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.unitI (info := info) (jdg := (.val .unit))) (.val .unit)
   | tensorI {Δ Γ Γ₁ Γ₂ A B} {info : TInfo} {u : Masks} {t₁ t₂ : TExpr} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hcv : Covers u.u₁ 0 t₁.erase ∧ Covers u.u₂ 0 t₂.erase) (h₁ : TDerivesX I Δ Γ₁ t₁ (.val A)) (h₂ : TDerivesX I Δ Γ₂ t₂ (.val B)) :
       TDerivesX I Δ Γ (TExpr.tensorI (info := info) (jdg := (.val (.tensor A B))) (A := A) (B := B) (u := u) (t₁ := t₁) (t₂ := t₂)) (.val (.tensor A B))
   | sumI₁ {Δ Γ A B} {info : TInfo} {t : TExpr} (h : TDerivesX I Δ Γ t (.val A)) :
@@ -94,98 +92,12 @@ inductive TDerivesX (I : JIdx) : LifeCtx → Ctx VTy → TExpr → Jdg → Prop 
       TDerivesX I Δ Γ (TExpr.allE (info := info) (jdg := (.comp (C.instLife x a))) (x := x) (b := b) (a := a) (C := C) (t := t)) (.comp (C.instLife x a))
   | codeIb {Δ Γ M C T} {info : TInfo} {t : TExpr} (b : Bool) (hp : b = true → Ctx.FlatLive Γ) (h : TDerivesX I Δ Γ t (.val (VTy.bangIf b (.thunk C)))) (q : t.erase = ((.val (.lam M)) : Expr)) (hok : Ctx.CapOK Γ (.lam M)) (hT : T = VTy.bangIf b (.code (Expr.capNorm (.lam M)) (Ctx.capTy Γ (.lam M)) C)) :
       TDerivesX I Δ Γ (TExpr.codeIb (info := info) (jdg := (.val T)) (C := C) (T := T) (b := b) (t := t)) (.val T)
-  | copyBang {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.copyBang (info := info) (jdg := (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A))))))) (A := A)) (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A))))))
-  | releaseBang {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.releaseBang (info := info) (jdg := (.val (.thunk (.arr (.bang A) (.ret .unit))))) (A := A)) (.val (.thunk (.arr (.bang A) (.ret .unit))))
-  | alloc {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.alloc (info := info) (jdg := (.val (.lolli A (.ref A)))) (A := A)) (.val (.lolli A (.ref A)))
-  | free {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.free (info := info) (jdg := (.val (.lolli (.ref A) A))) (A := A)) (.val (.lolli (.ref A) A))
-  | tokMint {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.tokMint (info := info) (jdg := (.val mintTy))) (.val mintTy)
-  | tokBurn {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.tokBurn (info := info) (jdg := (.val burnTy))) (.val burnTy)
-  | swap {Δ Γ A B} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.swap (info := info) (jdg := (.val (axSwapTy A B))) (A := A) (B := B)) (.val (axSwapTy A B))
-  | copy {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.copy (info := info) (jdg := (.val (axCopyTy a A))) (a := a) (A := A)) (.val (axCopyTy a A))
-  | releaseImm {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.releaseImm (info := info) (jdg := (.val (axForgetImmTy a A))) (a := a) (A := A)) (.val (axForgetImmTy a A))
-  | releaseMut {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.releaseMut (info := info) (jdg := (.val (axForgetMutTy a A))) (a := a) (A := A)) (.val (axForgetMutTy a A))
-  | releaseUnk {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.releaseUnk (info := info) (jdg := (.val axForgetUnkTy))) (.val axForgetUnkTy)
-  | lit {Δ Γ} {info : TInfo} (c : IntLit) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.lit (info := info) (jdg := (.val (.int c.width))) (c := c)) (.val (.int c.width))
-  | hostOp {Δ Γ} {info : TInfo} (op : HostOp) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.hostOp (info := info) (jdg := (.val (.bang (hostSig op)))) (op := op)) (.val (.bang (hostSig op)))
-  | arrNew {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.arrNew (info := info) (jdg := (.val (arrNewTy A))) (A := A)) (.val (arrNewTy A))
-  | arrFree {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.arrFree (info := info) (jdg := (.val (arrFreeTy A))) (A := A)) (.val (arrFreeTy A))
-  | arrSize {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.arrSize (info := info) (jdg := (.val (arrSizeTy A))) (A := A)) (.val (arrSizeTy A))
-  | arrReplace {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.arrReplace (info := info) (jdg := (.val (arrReplaceTy A))) (A := A)) (.val (arrReplaceTy A))
-  | arrLen {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.arrLen (info := info) (jdg := (.val (arrLenTy a A))) (a := a) (A := A)) (.val (arrLenTy a A))
-  | arrGet {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.arrGet (info := info) (jdg := (.val (arrGetTy a A))) (a := a) (A := A)) (.val (arrGetTy a A))
-  | arrCopy {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.arrCopy (info := info) (jdg := (.val (arrCopyTy a A))) (a := a) (A := A)) (.val (arrCopyTy a A))
-  | arrRelease {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.arrRelease (info := info) (jdg := (.val (arrReleaseTy a A))) (a := a) (A := A)) (.val (arrReleaseTy a A))
-  | countFold {Δ Γ} {info : TInfo} (S : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.countFold (info := info) (jdg := (.val (countFoldTy S))) (S := S)) (.val (countFoldTy S))
-  | countTry {Δ Γ} {info : TInfo} (S E : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.countTry (info := info) (jdg := (.val (countTryTy S E))) (S := S) (E := E)) (.val (countTryTy S E))
-  | boundedFix {Δ Γ} {info : TInfo} (A : VTy) (C : CTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.boundedFix (info := info) (jdg := (.val (boundedFixTy A C))) (A := A) (C := C)) (.val (boundedFixTy A C))
-  | iterate {Δ Γ} {info : TInfo} (S : Row) (St B R : VTy) (hAt : I.RowOK S) (hS : Row.divB S = true) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.iterate (info := info) (jdg := (.val (iterTy S St B R))) (S := S) (St := St) (B := B) (R := R)) (.val (iterTy S St B R))
-  | divFuel {Δ Γ} {info : TInfo} (S : Row) (A : VTy) (hAt : I.RowOK (tickSig :: S)) (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.divFuel (info := info) (jdg := (.val (divFuelTy S A))) (S := S) (A := A)) (.val (divFuelTy S A))
+  | constK {Δ Γ} {info : TInfo} (k : ConstKind) (hAt : I.RowOK k.row) (hk : k.OK Δ) (hΓ : Ctx.DeadP Γ) :
+      TDerivesX I Δ Γ (TExpr.constK (info := info) (jdg := (.val (k.ty Δ.meetOfDom))) (k := k)) (.val (k.ty Δ.meetOfDom))
   | reify {Δ Γ} {info : TInfo} {tres : TExpr} (S : Row) (B R : VTy) (res : Val) (hAt : I.RowOK (tickSig :: S)) (hS : ∀ o ∈ S, o.n ≠ divEff) (hcl : closedAt 0 res.1 = true) (hres : TDerivesX I Δ [] tres (.val (resTy S B R))) (qres : tres.erase = ((.val res) : Expr)) (hΓ : Ctx.DeadP Γ) :
       TDerivesX I Δ Γ (TExpr.reify (info := info) (jdg := (.val (reifyTy S B R))) (S := S) (B := B) (R := R) (tres := tres)) (.val (reifyTy S B R))
-  | sliceBorrowM {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-      TDerivesX I Δ Γ (TExpr.sliceBorrowM (info := info) (jdg := (.val (sliceBorrowMTy x Δ.meetOfDom A B))) (A := A) (B := B) (x := x)) (.val (sliceBorrowMTy x Δ.meetOfDom A B))
-  | sliceBorrowI {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-      TDerivesX I Δ Γ (TExpr.sliceBorrowI (info := info) (jdg := (.val (sliceBorrowITy x Δ.meetOfDom A B))) (A := A) (B := B) (x := x)) (.val (sliceBorrowITy x Δ.meetOfDom A B))
-  | sliceGetM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.sliceGetM (info := info) (jdg := (.val (sliceGetMTy a A))) (a := a) (A := A)) (.val (sliceGetMTy a A))
-  | sliceLenM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.sliceLenM (info := info) (jdg := (.val (sliceLenMTy a A))) (a := a) (A := A)) (.val (sliceLenMTy a A))
-  | sliceSplitI {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.sliceSplitI (info := info) (jdg := (.val (sliceSplitITy a A))) (a := a) (A := A)) (.val (sliceSplitITy a A))
-  | sliceSplitM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.sliceSplitM (info := info) (jdg := (.val (sliceSplitMTy a A))) (a := a) (A := A)) (.val (sliceSplitMTy a A))
-  | sliceEmptyI {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.sliceEmptyI (info := info) (jdg := (.val (.arrayImm a A))) (a := a) (A := A)) (.val (.arrayImm a A))
-  | sliceEmptyM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.sliceEmptyM (info := info) (jdg := (.val (.sliceMut a A))) (a := a) (A := A)) (.val (.sliceMut a A))
-  | arrEmpty {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.arrEmpty (info := info) (jdg := (.val (.array A))) (A := A)) (.val (.array A))
-  | sliceReplaceM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.sliceReplaceM (info := info) (jdg := (.val (sliceReplaceMTy a A))) (a := a) (A := A)) (.val (sliceReplaceMTy a A))
-  | sliceSwapM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.sliceSwapM (info := info) (jdg := (.val (sliceSwapMTy a A))) (a := a) (A := A)) (.val (sliceSwapMTy a A))
-  | sliceCopyM {Δ Γ} {info : TInfo} (a b : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) (hA : A.Persistent) :
-      TDerivesX I Δ Γ (TExpr.sliceCopyM (info := info) (jdg := (.val (sliceCopyMTy a b A))) (a := a) (b := b) (A := A)) (.val (sliceCopyMTy a b A))
-  | withbor1 {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-      TDerivesX I Δ Γ (TExpr.withbor1 (info := info) (jdg := (.val (axWithbor1Ty x Δ.meetOfDom A B))) (A := A) (B := B) (x := x)) (.val (axWithbor1Ty x Δ.meetOfDom A B))
-  | withbor2 {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-      TDerivesX I Δ Γ (TExpr.withbor2 (info := info) (jdg := (.val (axWithbor2Ty x Δ.meetOfDom A B))) (A := A) (B := B) (x := x)) (.val (axWithbor2Ty x Δ.meetOfDom A B))
-  | withbor3 {Δ Γ a A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-      TDerivesX I Δ Γ (TExpr.withbor3 (info := info) (jdg := (.val (axWithbor3Ty a x Δ.meetOfDom A B))) (a := a) (A := A) (B := B) (x := x)) (.val (axWithbor3Ty a x Δ.meetOfDom A B))
-  | withload {Δ Γ a A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-      TDerivesX I Δ Γ (TExpr.withload (info := info) (jdg := (.val (axWithloadTy a x Δ.meetOfDom A B))) (a := a) (A := A) (B := B) (x := x)) (.val (axWithloadTy a x Δ.meetOfDom A B))
-  | withswap {Δ Γ a A B} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.withswap (info := info) (jdg := (.val (axWithswapTy a A B))) (a := a) (A := A) (B := B)) (.val (axWithswapTy a A B))
   | withborUD {Δ Γ A B} {info : TInfo} {td : TExpr} {SM SD S : Row} (k : LendUKind) (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hk : k.OK Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : TDerivesX I Δ Γ td (.val (.thunk (.arr (k.src A) (CTy.effOf SD .unit))))) :
       TDerivesX I Δ Γ (TExpr.withborUD (info := info) (jdg := (.val (k.ty x Δ.meetOfDom A B SM S))) (A := A) (B := B) (SM := SM) (SD := SD) (S := S) (k := k) (x := x) (td := td)) (.val (k.ty x Δ.meetOfDom A B SM S))
-  | withloadU {Δ Γ a A B} {info : TInfo} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) :
-      TDerivesX I Δ Γ (TExpr.withloadU (info := info) (jdg := (.val (withloadUTy a x Δ.meetOfDom A B S))) (a := a) (A := A) (B := B) (S := S) (x := x)) (.val (withloadUTy a x Δ.meetOfDom A B S))
   | sliceBorrowMU {Δ Γ A B} {info : TInfo} {td : TExpr} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : TDerivesX I Δ Γ td (.val (.lolli (.array A) .unit))) :
       TDerivesX I Δ Γ (TExpr.sliceBorrowMU (info := info) (jdg := (.val (sliceBorrowMUTy x Δ.meetOfDom A B S))) (A := A) (B := B) (S := S) (x := x) (td := td)) (.val (sliceBorrowMUTy x Δ.meetOfDom A B S))
   | sliceBorrowIU {Δ Γ A B} {info : TInfo} {td : TExpr} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : TDerivesX I Δ Γ td (.val (.lolli (.array A) .unit))) :
@@ -194,18 +106,6 @@ inductive TDerivesX (I : JIdx) : LifeCtx → Ctx VTy → TExpr → Jdg → Prop 
       TDerivesX I Δ Γ (TExpr.lolliE (info := info) (jdg := (.val B)) (A := A) (B := B) (u := u) (ta := ta) (tf := tf)) (.val B)
   | allEV {Δ Γ x b a A} {info : TInfo} {t : TExpr} (h : TDerivesX I Δ Γ t (.val (.all x b A))) (hlt : Δ.EntailsLt a b) :
       TDerivesX I Δ Γ (TExpr.allEV (info := info) (jdg := (.val (A.instLife x a))) (x := x) (b := b) (a := a) (A := A) (t := t)) (.val (A.instLife x a))
-  | foldImm {Δ Γ} {info : TInfo} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ' a, VOutlives Δ' a R) :
-      TDerivesX I Δ Γ (TExpr.foldImm (info := info) (jdg := (.val (.lolli (algTy F y R) (foldTy F y c R)))) (F := F) (y := y) (c := c) (R := R)) (.val (.lolli (algTy F y R) (foldTy F y c R)))
-  | foldOwn {Δ Γ} {info : TInfo} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
-      TDerivesX I Δ Γ (TExpr.foldOwn (info := info) (jdg := (.val (.lolli (algOTy F R) (foldOTy F R)))) (F := F) (R := R)) (.val (.lolli (algOTy F R) (foldOTy F R)))
-  | foldReuse {Δ Γ} {info : TInfo} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
-      TDerivesX I Δ Γ (TExpr.foldReuse (info := info) (jdg := (.val (.lolli (algRTy F R) (foldOTy F R)))) (F := F) (R := R)) (.val (.lolli (algRTy F R) (foldOTy F R)))
-  | foldOwnG {Δ Γ} {info : TInfo} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
-      TDerivesX I Δ Γ (TExpr.foldOwnG (info := info) (jdg := (.val (FoldP.foldGTy B₀ Rs))) (B₀ := B₀)) (.val (FoldP.foldGTy B₀ Rs))
-  | unfoldN {Δ Γ} {info : TInfo} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.unfoldN (info := info) (jdg := (.val (unfoldTy C S))) (C := C) (S := S)) (.val (unfoldTy C S))
-  | unfoldK {Δ Γ} {info : TInfo} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
-      TDerivesX I Δ Γ (TExpr.unfoldK (info := info) (jdg := (.val (unfoldKTy C G S))) (C := C) (G := G) (S := S)) (.val (unfoldKTy C G S))
   | nuOutK {Δ Γ i} {info : TInfo} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
       TDerivesX I Δ Γ (TExpr.nuOutK (info := info) (jdg := (.comp (C.instT (codeTy C G S)))) (i := i) (C := C) (G := G) (S := S)) (.comp (C.instT (codeTy C G S)))
   | effPerform {Δ Γ} {info : TInfo} {t : TExpr} {S : Row} {o : OpSig} (hAt : I.RowOK S) (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (hac : o.rc = false) (h : TDerivesX I Δ Γ t (.val o.A)) :
@@ -341,10 +241,6 @@ theorem TDerivesAt.var {Ξ : EffCtx} {Δ Γ i A} {info : TInfo} (h : Ctx.SoloP �
     TDerivesAt Ξ Δ Γ (TExpr.var (info := info) (jdg := (.val A)) (i := i) (A := A)) (.val A) :=
   TDerivesX.var (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (i := i) (A := A) (info := info) (h := h)
 
-theorem TDerivesAt.unitI {Ξ : EffCtx} {Δ Γ} {info : TInfo} (h : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.unitI (info := info) (jdg := (.val .unit))) (.val .unit) :=
-  TDerivesX.unitI (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (h := h)
-
 theorem TDerivesAt.tensorI {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ A B} {info : TInfo} {u : Masks} {t₁ t₂ : TExpr} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hcv : Covers u.u₁ 0 t₁.erase ∧ Covers u.u₂ 0 t₂.erase) (h₁ : TDerivesAt Ξ Δ Γ₁ t₁ (.val A)) (h₂ : TDerivesAt Ξ Δ Γ₂ t₂ (.val B)) :
     TDerivesAt Ξ Δ Γ (TExpr.tensorI (info := info) (jdg := (.val (.tensor A B))) (A := A) (B := B) (u := u) (t₁ := t₁) (t₂ := t₂)) (.val (.tensor A B)) :=
   TDerivesX.tensorI (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (A := A) (B := B) (info := info) (u := u) (t₁ := t₁) (t₂ := t₂) (hs := hs) (hm := hm) (hcv := hcv) (h₁ := h₁) (h₂ := h₂)
@@ -433,189 +329,17 @@ theorem TDerivesAt.codeIb {Ξ : EffCtx} {Δ Γ M C T} {info : TInfo} {t : TExpr}
     TDerivesAt Ξ Δ Γ (TExpr.codeIb (info := info) (jdg := (.val T)) (C := C) (T := T) (b := b) (t := t)) (.val T) :=
   TDerivesX.codeIb (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) (T := T) (info := info) (t := t) (b := b) (hp := hp) (h := h) (q := q) (hok := hok) (hT := hT)
 
-theorem TDerivesAt.copyBang {Ξ : EffCtx} {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.copyBang (info := info) (jdg := (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A))))))) (A := A)) (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A)))))) :=
-  TDerivesX.copyBang (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (info := info) (hΓ := hΓ)
-
-theorem TDerivesAt.releaseBang {Ξ : EffCtx} {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.releaseBang (info := info) (jdg := (.val (.thunk (.arr (.bang A) (.ret .unit))))) (A := A)) (.val (.thunk (.arr (.bang A) (.ret .unit)))) :=
-  TDerivesX.releaseBang (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (info := info) (hΓ := hΓ)
-
-theorem TDerivesAt.alloc {Ξ : EffCtx} {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.alloc (info := info) (jdg := (.val (.lolli A (.ref A)))) (A := A)) (.val (.lolli A (.ref A))) :=
-  TDerivesX.alloc (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (info := info) (hΓ := hΓ)
-
-theorem TDerivesAt.free {Ξ : EffCtx} {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.free (info := info) (jdg := (.val (.lolli (.ref A) A))) (A := A)) (.val (.lolli (.ref A) A)) :=
-  TDerivesX.free (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (info := info) (hΓ := hΓ)
-
-theorem TDerivesAt.tokMint {Ξ : EffCtx} {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.tokMint (info := info) (jdg := (.val mintTy))) (.val mintTy) :=
-  TDerivesX.tokMint (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (hΓ := hΓ)
-
-theorem TDerivesAt.tokBurn {Ξ : EffCtx} {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.tokBurn (info := info) (jdg := (.val burnTy))) (.val burnTy) :=
-  TDerivesX.tokBurn (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (hΓ := hΓ)
-
-theorem TDerivesAt.swap {Ξ : EffCtx} {Δ Γ A B} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.swap (info := info) (jdg := (.val (axSwapTy A B))) (A := A) (B := B)) (.val (axSwapTy A B)) :=
-  TDerivesX.swap (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (hΓ := hΓ)
-
-theorem TDerivesAt.copy {Ξ : EffCtx} {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.copy (info := info) (jdg := (.val (axCopyTy a A))) (a := a) (A := A)) (.val (axCopyTy a A)) :=
-  TDerivesX.copy (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (info := info) (hΓ := hΓ)
-
-theorem TDerivesAt.releaseImm {Ξ : EffCtx} {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.releaseImm (info := info) (jdg := (.val (axForgetImmTy a A))) (a := a) (A := A)) (.val (axForgetImmTy a A)) :=
-  TDerivesX.releaseImm (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (info := info) (hΓ := hΓ)
-
-theorem TDerivesAt.releaseMut {Ξ : EffCtx} {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.releaseMut (info := info) (jdg := (.val (axForgetMutTy a A))) (a := a) (A := A)) (.val (axForgetMutTy a A)) :=
-  TDerivesX.releaseMut (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (info := info) (hΓ := hΓ)
-
-theorem TDerivesAt.releaseUnk {Ξ : EffCtx} {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.releaseUnk (info := info) (jdg := (.val axForgetUnkTy))) (.val axForgetUnkTy) :=
-  TDerivesX.releaseUnk (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (hΓ := hΓ)
-
-theorem TDerivesAt.lit {Ξ : EffCtx} {Δ Γ} {info : TInfo} (c : IntLit) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.lit (info := info) (jdg := (.val (.int c.width))) (c := c)) (.val (.int c.width)) :=
-  TDerivesX.lit (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (c := c) (hΓ := hΓ)
-
-theorem TDerivesAt.hostOp {Ξ : EffCtx} {Δ Γ} {info : TInfo} (op : HostOp) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.hostOp (info := info) (jdg := (.val (.bang (hostSig op)))) (op := op)) (.val (.bang (hostSig op))) :=
-  TDerivesX.hostOp (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (op := op) (hΓ := hΓ)
-
-theorem TDerivesAt.arrNew {Ξ : EffCtx} {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.arrNew (info := info) (jdg := (.val (arrNewTy A))) (A := A)) (.val (arrNewTy A)) :=
-  TDerivesX.arrNew (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.arrFree {Ξ : EffCtx} {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.arrFree (info := info) (jdg := (.val (arrFreeTy A))) (A := A)) (.val (arrFreeTy A)) :=
-  TDerivesX.arrFree (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.arrSize {Ξ : EffCtx} {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.arrSize (info := info) (jdg := (.val (arrSizeTy A))) (A := A)) (.val (arrSizeTy A)) :=
-  TDerivesX.arrSize (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.arrReplace {Ξ : EffCtx} {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.arrReplace (info := info) (jdg := (.val (arrReplaceTy A))) (A := A)) (.val (arrReplaceTy A)) :=
-  TDerivesX.arrReplace (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.arrLen {Ξ : EffCtx} {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.arrLen (info := info) (jdg := (.val (arrLenTy a A))) (a := a) (A := A)) (.val (arrLenTy a A)) :=
-  TDerivesX.arrLen (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.arrGet {Ξ : EffCtx} {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.arrGet (info := info) (jdg := (.val (arrGetTy a A))) (a := a) (A := A)) (.val (arrGetTy a A)) :=
-  TDerivesX.arrGet (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.arrCopy {Ξ : EffCtx} {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.arrCopy (info := info) (jdg := (.val (arrCopyTy a A))) (a := a) (A := A)) (.val (arrCopyTy a A)) :=
-  TDerivesX.arrCopy (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.arrRelease {Ξ : EffCtx} {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.arrRelease (info := info) (jdg := (.val (arrReleaseTy a A))) (a := a) (A := A)) (.val (arrReleaseTy a A)) :=
-  TDerivesX.arrRelease (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.countFold {Ξ : EffCtx} {Δ Γ} {info : TInfo} (S : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.countFold (info := info) (jdg := (.val (countFoldTy S))) (S := S)) (.val (countFoldTy S)) :=
-  TDerivesX.countFold (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (S := S) (hΓ := hΓ)
-
-theorem TDerivesAt.countTry {Ξ : EffCtx} {Δ Γ} {info : TInfo} (S E : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.countTry (info := info) (jdg := (.val (countTryTy S E))) (S := S) (E := E)) (.val (countTryTy S E)) :=
-  TDerivesX.countTry (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (S := S) (E := E) (hΓ := hΓ)
-
-theorem TDerivesAt.boundedFix {Ξ : EffCtx} {Δ Γ} {info : TInfo} (A : VTy) (C : CTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.boundedFix (info := info) (jdg := (.val (boundedFixTy A C))) (A := A) (C := C)) (.val (boundedFixTy A C)) :=
-  TDerivesX.boundedFix (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (A := A) (C := C) (hΓ := hΓ)
-
-theorem TDerivesAt.iterate {Ξ : EffCtx} {Δ Γ} {info : TInfo} (S : Row) (St B R : VTy) (hAt : RowAt Ξ S) (hS : Row.divB S = true) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.iterate (info := info) (jdg := (.val (iterTy S St B R))) (S := S) (St := St) (B := B) (R := R)) (.val (iterTy S St B R)) :=
-  TDerivesX.iterate (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (S := S) (St := St) (B := B) (R := R) (hAt := hAt) (hS := hS) (hΓ := hΓ)
-
-theorem TDerivesAt.divFuel {Ξ : EffCtx} {Δ Γ} {info : TInfo} (S : Row) (A : VTy) (hAt : RowAt Ξ (tickSig :: S)) (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.divFuel (info := info) (jdg := (.val (divFuelTy S A))) (S := S) (A := A)) (.val (divFuelTy S A)) :=
-  TDerivesX.divFuel (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (S := S) (A := A) (hAt := hAt) (hS := hS) (hΓ := hΓ)
+theorem TDerivesAt.constK {Ξ : EffCtx} {Δ Γ} {info : TInfo} (k : ConstKind) (hAt : RowAt Ξ k.row) (hk : k.OK Δ) (hΓ : Ctx.DeadP Γ) :
+    TDerivesAt Ξ Δ Γ (TExpr.constK (info := info) (jdg := (.val (k.ty Δ.meetOfDom))) (k := k)) (.val (k.ty Δ.meetOfDom)) :=
+  TDerivesX.constK (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (k := k) (hAt := hAt) (hk := hk) (hΓ := hΓ)
 
 theorem TDerivesAt.reify {Ξ : EffCtx} {Δ Γ} {info : TInfo} {tres : TExpr} (S : Row) (B R : VTy) (res : Val) (hAt : RowAt Ξ (tickSig :: S)) (hS : ∀ o ∈ S, o.n ≠ divEff) (hcl : closedAt 0 res.1 = true) (hres : TDerivesAt Ξ Δ [] tres (.val (resTy S B R))) (qres : tres.erase = ((.val res) : Expr)) (hΓ : Ctx.DeadP Γ) :
     TDerivesAt Ξ Δ Γ (TExpr.reify (info := info) (jdg := (.val (reifyTy S B R))) (S := S) (B := B) (R := R) (tres := tres)) (.val (reifyTy S B R)) :=
   TDerivesX.reify (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (tres := tres) (S := S) (B := B) (R := R) (res := res) (hAt := hAt) (hS := hS) (hcl := hcl) (hres := hres) (qres := qres) (hΓ := hΓ)
 
-theorem TDerivesAt.sliceBorrowM {Ξ : EffCtx} {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-    TDerivesAt Ξ Δ Γ (TExpr.sliceBorrowM (info := info) (jdg := (.val (sliceBorrowMTy x Δ.meetOfDom A B))) (A := A) (B := B) (x := x)) (.val (sliceBorrowMTy x Δ.meetOfDom A B)) :=
-  TDerivesX.sliceBorrowM (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (x := x) (hΓ := hΓ) (hsideA := hsideA) (hsideB := hsideB) (hfree₁ := hfree₁) (hfree₂ := hfree₂)
-
-theorem TDerivesAt.sliceBorrowI {Ξ : EffCtx} {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-    TDerivesAt Ξ Δ Γ (TExpr.sliceBorrowI (info := info) (jdg := (.val (sliceBorrowITy x Δ.meetOfDom A B))) (A := A) (B := B) (x := x)) (.val (sliceBorrowITy x Δ.meetOfDom A B)) :=
-  TDerivesX.sliceBorrowI (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (x := x) (hΓ := hΓ) (hsc := hsc) (hsideA := hsideA) (hsideB := hsideB) (hfree₁ := hfree₁) (hfree₂ := hfree₂)
-
-theorem TDerivesAt.sliceGetM {Ξ : EffCtx} {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.sliceGetM (info := info) (jdg := (.val (sliceGetMTy a A))) (a := a) (A := A)) (.val (sliceGetMTy a A)) :=
-  TDerivesX.sliceGetM (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.sliceLenM {Ξ : EffCtx} {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.sliceLenM (info := info) (jdg := (.val (sliceLenMTy a A))) (a := a) (A := A)) (.val (sliceLenMTy a A)) :=
-  TDerivesX.sliceLenM (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.sliceSplitI {Ξ : EffCtx} {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.sliceSplitI (info := info) (jdg := (.val (sliceSplitITy a A))) (a := a) (A := A)) (.val (sliceSplitITy a A)) :=
-  TDerivesX.sliceSplitI (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.sliceSplitM {Ξ : EffCtx} {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.sliceSplitM (info := info) (jdg := (.val (sliceSplitMTy a A))) (a := a) (A := A)) (.val (sliceSplitMTy a A)) :=
-  TDerivesX.sliceSplitM (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.sliceEmptyI {Ξ : EffCtx} {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.sliceEmptyI (info := info) (jdg := (.val (.arrayImm a A))) (a := a) (A := A)) (.val (.arrayImm a A)) :=
-  TDerivesX.sliceEmptyI (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.sliceEmptyM {Ξ : EffCtx} {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.sliceEmptyM (info := info) (jdg := (.val (.sliceMut a A))) (a := a) (A := A)) (.val (.sliceMut a A)) :=
-  TDerivesX.sliceEmptyM (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.arrEmpty {Ξ : EffCtx} {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.arrEmpty (info := info) (jdg := (.val (.array A))) (A := A)) (.val (.array A)) :=
-  TDerivesX.arrEmpty (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.sliceReplaceM {Ξ : EffCtx} {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.sliceReplaceM (info := info) (jdg := (.val (sliceReplaceMTy a A))) (a := a) (A := A)) (.val (sliceReplaceMTy a A)) :=
-  TDerivesX.sliceReplaceM (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.sliceSwapM {Ξ : EffCtx} {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.sliceSwapM (info := info) (jdg := (.val (sliceSwapMTy a A))) (a := a) (A := A)) (.val (sliceSwapMTy a A)) :=
-  TDerivesX.sliceSwapM (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesAt.sliceCopyM {Ξ : EffCtx} {Δ Γ} {info : TInfo} (a b : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) (hA : A.Persistent) :
-    TDerivesAt Ξ Δ Γ (TExpr.sliceCopyM (info := info) (jdg := (.val (sliceCopyMTy a b A))) (a := a) (b := b) (A := A)) (.val (sliceCopyMTy a b A)) :=
-  TDerivesX.sliceCopyM (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (b := b) (A := A) (hΓ := hΓ) (hA := hA)
-
-theorem TDerivesAt.withbor1 {Ξ : EffCtx} {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-    TDerivesAt Ξ Δ Γ (TExpr.withbor1 (info := info) (jdg := (.val (axWithbor1Ty x Δ.meetOfDom A B))) (A := A) (B := B) (x := x)) (.val (axWithbor1Ty x Δ.meetOfDom A B)) :=
-  TDerivesX.withbor1 (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (x := x) (hΓ := hΓ) (hx := hx) (hsc₁ := hsc₁) (hfree₁ := hfree₁) (hfree₂ := hfree₂)
-
-theorem TDerivesAt.withbor2 {Ξ : EffCtx} {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-    TDerivesAt Ξ Δ Γ (TExpr.withbor2 (info := info) (jdg := (.val (axWithbor2Ty x Δ.meetOfDom A B))) (A := A) (B := B) (x := x)) (.val (axWithbor2Ty x Δ.meetOfDom A B)) :=
-  TDerivesX.withbor2 (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (x := x) (hΓ := hΓ) (hx := hx) (hside := hside) (hfree₁ := hfree₁) (hfree₂ := hfree₂)
-
-theorem TDerivesAt.withbor3 {Ξ : EffCtx} {Δ Γ a A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-    TDerivesAt Ξ Δ Γ (TExpr.withbor3 (info := info) (jdg := (.val (axWithbor3Ty a x Δ.meetOfDom A B))) (a := a) (A := A) (B := B) (x := x)) (.val (axWithbor3Ty a x Δ.meetOfDom A B)) :=
-  TDerivesX.withbor3 (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) (info := info) (x := x) (hΓ := hΓ) (hx := hx) (hfree₁ := hfree₁) (hfree₂ := hfree₂)
-
-theorem TDerivesAt.withload {Ξ : EffCtx} {Δ Γ a A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-    TDerivesAt Ξ Δ Γ (TExpr.withload (info := info) (jdg := (.val (axWithloadTy a x Δ.meetOfDom A B))) (a := a) (A := A) (B := B) (x := x)) (.val (axWithloadTy a x Δ.meetOfDom A B)) :=
-  TDerivesX.withload (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) (info := info) (x := x) (hΓ := hΓ) (hx := hx) (hfree₁ := hfree₁) (hfree₂ := hfree₂)
-
-theorem TDerivesAt.withswap {Ξ : EffCtx} {Δ Γ a A B} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.withswap (info := info) (jdg := (.val (axWithswapTy a A B))) (a := a) (A := A) (B := B)) (.val (axWithswapTy a A B)) :=
-  TDerivesX.withswap (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) (info := info) (hΓ := hΓ)
-
 theorem TDerivesAt.withborUD {Ξ : EffCtx} {Δ Γ A B} {info : TInfo} {td : TExpr} {SM SD S : Row} (k : LendUKind) (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hk : k.OK Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : TDerivesAt Ξ Δ Γ td (.val (.thunk (.arr (k.src A) (CTy.effOf SD .unit))))) :
     TDerivesAt Ξ Δ Γ (TExpr.withborUD (info := info) (jdg := (.val (k.ty x Δ.meetOfDom A B SM S))) (A := A) (B := B) (SM := SM) (SD := SD) (S := S) (k := k) (x := x) (td := td)) (.val (k.ty x Δ.meetOfDom A B SM S)) :=
   TDerivesX.withborUD (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (td := td) (SM := SM) (SD := SD) (S := S) (k := k) (x := x) (hΓ := hΓ) (hx := hx) (hk := hk) (hfree₁ := hfree₁) (hfree₂ := hfree₂) (hS := hS) (hMS := hMS) (hDS := hDS) (hSv := hSv) (hP := hP) (hd := hd)
-
-theorem TDerivesAt.withloadU {Ξ : EffCtx} {Δ Γ a A B} {info : TInfo} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) :
-    TDerivesAt Ξ Δ Γ (TExpr.withloadU (info := info) (jdg := (.val (withloadUTy a x Δ.meetOfDom A B S))) (a := a) (A := A) (B := B) (S := S) (x := x)) (.val (withloadUTy a x Δ.meetOfDom A B S)) :=
-  TDerivesX.withloadU (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) (info := info) (S := S) (x := x) (hΓ := hΓ) (hx := hx) (hfree₁ := hfree₁) (hfree₂ := hfree₂) (hS := hS)
 
 theorem TDerivesAt.sliceBorrowMU {Ξ : EffCtx} {Δ Γ A B} {info : TInfo} {td : TExpr} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : TDerivesAt Ξ Δ Γ td (.val (.lolli (.array A) .unit))) :
     TDerivesAt Ξ Δ Γ (TExpr.sliceBorrowMU (info := info) (jdg := (.val (sliceBorrowMUTy x Δ.meetOfDom A B S))) (A := A) (B := B) (S := S) (x := x) (td := td)) (.val (sliceBorrowMUTy x Δ.meetOfDom A B S)) :=
@@ -632,30 +356,6 @@ theorem TDerivesAt.lolliE {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ A B} {info : TInfo} {
 theorem TDerivesAt.allEV {Ξ : EffCtx} {Δ Γ x b a A} {info : TInfo} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t (.val (.all x b A))) (hlt : Δ.EntailsLt a b) :
     TDerivesAt Ξ Δ Γ (TExpr.allEV (info := info) (jdg := (.val (A.instLife x a))) (x := x) (b := b) (a := a) (A := A) (t := t)) (.val (A.instLife x a)) :=
   TDerivesX.allEV (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (x := x) (b := b) (a := a) (A := A) (info := info) (t := t) (h := h) (hlt := hlt)
-
-theorem TDerivesAt.foldImm {Ξ : EffCtx} {Δ Γ} {info : TInfo} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ' a, VOutlives Δ' a R) :
-    TDerivesAt Ξ Δ Γ (TExpr.foldImm (info := info) (jdg := (.val (.lolli (algTy F y R) (foldTy F y c R)))) (F := F) (y := y) (c := c) (R := R)) (.val (.lolli (algTy F y R) (foldTy F y c R))) :=
-  TDerivesX.foldImm (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (F := F) (y := y) (c := c) (R := R) (hΓ := hΓ) (hF := hF) (hG := hG) (hyM := hyM) (hyR := hyR) (hR := hR)
-
-theorem TDerivesAt.foldOwn {Ξ : EffCtx} {Δ Γ} {info : TInfo} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
-    TDerivesAt Ξ Δ Γ (TExpr.foldOwn (info := info) (jdg := (.val (.lolli (algOTy F R) (foldOTy F R)))) (F := F) (R := R)) (.val (.lolli (algOTy F R) (foldOTy F R))) :=
-  TDerivesX.foldOwn (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (F := F) (R := R) (hΓ := hΓ) (hF := hF) (hG := hG)
-
-theorem TDerivesAt.foldReuse {Ξ : EffCtx} {Δ Γ} {info : TInfo} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
-    TDerivesAt Ξ Δ Γ (TExpr.foldReuse (info := info) (jdg := (.val (.lolli (algRTy F R) (foldOTy F R)))) (F := F) (R := R)) (.val (.lolli (algRTy F R) (foldOTy F R))) :=
-  TDerivesX.foldReuse (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (F := F) (R := R) (hΓ := hΓ) (hF := hF) (hG := hG)
-
-theorem TDerivesAt.foldOwnG {Ξ : EffCtx} {Δ Γ} {info : TInfo} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
-    TDerivesAt Ξ Δ Γ (TExpr.foldOwnG (info := info) (jdg := (.val (FoldP.foldGTy B₀ Rs))) (B₀ := B₀)) (.val (FoldP.foldGTy B₀ Rs)) :=
-  TDerivesX.foldOwnG (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (B₀ := B₀) (Rs := Rs) (hΓ := hΓ) (hB := hB)
-
-theorem TDerivesAt.unfoldN {Ξ : EffCtx} {Δ Γ} {info : TInfo} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.unfoldN (info := info) (jdg := (.val (unfoldTy C S))) (C := C) (S := S)) (.val (unfoldTy C S)) :=
-  TDerivesX.unfoldN (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (C := C) (S := S) (hC := hC) (hS := hS) (hΓ := hΓ)
-
-theorem TDerivesAt.unfoldK {Ξ : EffCtx} {Δ Γ} {info : TInfo} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
-    TDerivesAt Ξ Δ Γ (TExpr.unfoldK (info := info) (jdg := (.val (unfoldKTy C G S))) (C := C) (G := G) (S := S)) (.val (unfoldKTy C G S)) :=
-  TDerivesX.unfoldK (I := {ties := some Ξ}) (Δ := Δ) (Γ := Γ) (info := info) (C := C) (G := G) (S := S) (hC := hC) (hG := hG) (hS := hS) (hΓ := hΓ)
 
 theorem TDerivesAt.nuOutK {Ξ : EffCtx} {Δ Γ i} {info : TInfo} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
     TDerivesAt Ξ Δ Γ (TExpr.nuOutK (info := info) (jdg := (.comp (C.instT (codeTy C G S)))) (i := i) (C := C) (G := G) (S := S)) (.comp (C.instT (codeTy C G S))) :=
@@ -781,10 +481,6 @@ theorem TDerivesP.var {Δ Γ i A} {info : TInfo} (h : Ctx.SoloP Γ i A) :
     TDerivesP Δ Γ (TExpr.var (info := info) (jdg := (.val A)) (i := i) (A := A)) (.val A) :=
   TDerivesX.var (I := {pin := true}) (Δ := Δ) (Γ := Γ) (i := i) (A := A) (info := info) (h := h)
 
-theorem TDerivesP.unitI {Δ Γ} {info : TInfo} (h : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.unitI (info := info) (jdg := (.val .unit))) (.val .unit) :=
-  TDerivesX.unitI (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (h := h)
-
 theorem TDerivesP.tensorI {Δ Γ Γ₁ Γ₂ A B} {info : TInfo} {u : Masks} {t₁ t₂ : TExpr} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hcv : Covers u.u₁ 0 t₁.erase ∧ Covers u.u₂ 0 t₂.erase) (h₁ : TDerivesP Δ Γ₁ t₁ (.val A)) (h₂ : TDerivesP Δ Γ₂ t₂ (.val B)) :
     TDerivesP Δ Γ (TExpr.tensorI (info := info) (jdg := (.val (.tensor A B))) (A := A) (B := B) (u := u) (t₁ := t₁) (t₂ := t₂)) (.val (.tensor A B)) :=
   TDerivesX.tensorI (I := {pin := true}) (Δ := Δ) (Γ := Γ) (Γ₁ := Γ₁) (Γ₂ := Γ₂) (A := A) (B := B) (info := info) (u := u) (t₁ := t₁) (t₂ := t₂) (hs := hs) (hm := hm) (hcv := hcv) (h₁ := h₁) (h₂ := h₂)
@@ -873,189 +569,17 @@ theorem TDerivesP.codeIb {Δ Γ M C T} {info : TInfo} {t : TExpr} (b : Bool) (hp
     TDerivesP Δ Γ (TExpr.codeIb (info := info) (jdg := (.val T)) (C := C) (T := T) (b := b) (t := t)) (.val T) :=
   TDerivesX.codeIb (I := {pin := true}) (Δ := Δ) (Γ := Γ) (M := M) (C := C) (T := T) (info := info) (t := t) (b := b) (hp := hp) (h := h) (q := q) (hok := hok) (hT := hT)
 
-theorem TDerivesP.copyBang {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.copyBang (info := info) (jdg := (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A))))))) (A := A)) (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A)))))) :=
-  TDerivesX.copyBang (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (info := info) (hΓ := hΓ)
-
-theorem TDerivesP.releaseBang {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.releaseBang (info := info) (jdg := (.val (.thunk (.arr (.bang A) (.ret .unit))))) (A := A)) (.val (.thunk (.arr (.bang A) (.ret .unit)))) :=
-  TDerivesX.releaseBang (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (info := info) (hΓ := hΓ)
-
-theorem TDerivesP.alloc {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.alloc (info := info) (jdg := (.val (.lolli A (.ref A)))) (A := A)) (.val (.lolli A (.ref A))) :=
-  TDerivesX.alloc (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (info := info) (hΓ := hΓ)
-
-theorem TDerivesP.free {Δ Γ A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.free (info := info) (jdg := (.val (.lolli (.ref A) A))) (A := A)) (.val (.lolli (.ref A) A)) :=
-  TDerivesX.free (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (info := info) (hΓ := hΓ)
-
-theorem TDerivesP.tokMint {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.tokMint (info := info) (jdg := (.val mintTy))) (.val mintTy) :=
-  TDerivesX.tokMint (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (hΓ := hΓ)
-
-theorem TDerivesP.tokBurn {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.tokBurn (info := info) (jdg := (.val burnTy))) (.val burnTy) :=
-  TDerivesX.tokBurn (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (hΓ := hΓ)
-
-theorem TDerivesP.swap {Δ Γ A B} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.swap (info := info) (jdg := (.val (axSwapTy A B))) (A := A) (B := B)) (.val (axSwapTy A B)) :=
-  TDerivesX.swap (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (hΓ := hΓ)
-
-theorem TDerivesP.copy {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.copy (info := info) (jdg := (.val (axCopyTy a A))) (a := a) (A := A)) (.val (axCopyTy a A)) :=
-  TDerivesX.copy (I := {pin := true}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (info := info) (hΓ := hΓ)
-
-theorem TDerivesP.releaseImm {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.releaseImm (info := info) (jdg := (.val (axForgetImmTy a A))) (a := a) (A := A)) (.val (axForgetImmTy a A)) :=
-  TDerivesX.releaseImm (I := {pin := true}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (info := info) (hΓ := hΓ)
-
-theorem TDerivesP.releaseMut {Δ Γ a A} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.releaseMut (info := info) (jdg := (.val (axForgetMutTy a A))) (a := a) (A := A)) (.val (axForgetMutTy a A)) :=
-  TDerivesX.releaseMut (I := {pin := true}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (info := info) (hΓ := hΓ)
-
-theorem TDerivesP.releaseUnk {Δ Γ} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.releaseUnk (info := info) (jdg := (.val axForgetUnkTy))) (.val axForgetUnkTy) :=
-  TDerivesX.releaseUnk (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (hΓ := hΓ)
-
-theorem TDerivesP.lit {Δ Γ} {info : TInfo} (c : IntLit) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.lit (info := info) (jdg := (.val (.int c.width))) (c := c)) (.val (.int c.width)) :=
-  TDerivesX.lit (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (c := c) (hΓ := hΓ)
-
-theorem TDerivesP.hostOp {Δ Γ} {info : TInfo} (op : HostOp) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.hostOp (info := info) (jdg := (.val (.bang (hostSig op)))) (op := op)) (.val (.bang (hostSig op))) :=
-  TDerivesX.hostOp (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (op := op) (hΓ := hΓ)
-
-theorem TDerivesP.arrNew {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.arrNew (info := info) (jdg := (.val (arrNewTy A))) (A := A)) (.val (arrNewTy A)) :=
-  TDerivesX.arrNew (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.arrFree {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.arrFree (info := info) (jdg := (.val (arrFreeTy A))) (A := A)) (.val (arrFreeTy A)) :=
-  TDerivesX.arrFree (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.arrSize {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.arrSize (info := info) (jdg := (.val (arrSizeTy A))) (A := A)) (.val (arrSizeTy A)) :=
-  TDerivesX.arrSize (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.arrReplace {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.arrReplace (info := info) (jdg := (.val (arrReplaceTy A))) (A := A)) (.val (arrReplaceTy A)) :=
-  TDerivesX.arrReplace (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.arrLen {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.arrLen (info := info) (jdg := (.val (arrLenTy a A))) (a := a) (A := A)) (.val (arrLenTy a A)) :=
-  TDerivesX.arrLen (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.arrGet {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.arrGet (info := info) (jdg := (.val (arrGetTy a A))) (a := a) (A := A)) (.val (arrGetTy a A)) :=
-  TDerivesX.arrGet (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.arrCopy {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.arrCopy (info := info) (jdg := (.val (arrCopyTy a A))) (a := a) (A := A)) (.val (arrCopyTy a A)) :=
-  TDerivesX.arrCopy (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.arrRelease {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.arrRelease (info := info) (jdg := (.val (arrReleaseTy a A))) (a := a) (A := A)) (.val (arrReleaseTy a A)) :=
-  TDerivesX.arrRelease (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.countFold {Δ Γ} {info : TInfo} (S : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.countFold (info := info) (jdg := (.val (countFoldTy S))) (S := S)) (.val (countFoldTy S)) :=
-  TDerivesX.countFold (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (S := S) (hΓ := hΓ)
-
-theorem TDerivesP.countTry {Δ Γ} {info : TInfo} (S E : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.countTry (info := info) (jdg := (.val (countTryTy S E))) (S := S) (E := E)) (.val (countTryTy S E)) :=
-  TDerivesX.countTry (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (S := S) (E := E) (hΓ := hΓ)
-
-theorem TDerivesP.boundedFix {Δ Γ} {info : TInfo} (A : VTy) (C : CTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.boundedFix (info := info) (jdg := (.val (boundedFixTy A C))) (A := A) (C := C)) (.val (boundedFixTy A C)) :=
-  TDerivesX.boundedFix (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (A := A) (C := C) (hΓ := hΓ)
-
-theorem TDerivesP.iterate {Δ Γ} {info : TInfo} (S : Row) (St B R : VTy) (hS : Row.divB S = true) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.iterate (info := info) (jdg := (.val (iterTy S St B R))) (S := S) (St := St) (B := B) (R := R)) (.val (iterTy S St B R)) :=
-  TDerivesX.iterate (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (S := S) (St := St) (B := B) (R := R) (hAt := trivial) (hS := hS) (hΓ := hΓ)
-
-theorem TDerivesP.divFuel {Δ Γ} {info : TInfo} (S : Row) (A : VTy) (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.divFuel (info := info) (jdg := (.val (divFuelTy S A))) (S := S) (A := A)) (.val (divFuelTy S A)) :=
-  TDerivesX.divFuel (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (S := S) (A := A) (hAt := trivial) (hS := hS) (hΓ := hΓ)
+theorem TDerivesP.constK {Δ Γ} {info : TInfo} (k : ConstKind) (hk : k.OK Δ) (hΓ : Ctx.DeadP Γ) :
+    TDerivesP Δ Γ (TExpr.constK (info := info) (jdg := (.val (k.ty Δ.meetOfDom))) (k := k)) (.val (k.ty Δ.meetOfDom)) :=
+  TDerivesX.constK (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (k := k) (hAt := trivial) (hk := hk) (hΓ := hΓ)
 
 theorem TDerivesP.reify {Δ Γ} {info : TInfo} {tres : TExpr} (S : Row) (B R : VTy) (res : Val) (hS : ∀ o ∈ S, o.n ≠ divEff) (hcl : closedAt 0 res.1 = true) (hres : TDerivesP Δ [] tres (.val (resTy S B R))) (qres : tres.erase = ((.val res) : Expr)) (hΓ : Ctx.DeadP Γ) :
     TDerivesP Δ Γ (TExpr.reify (info := info) (jdg := (.val (reifyTy S B R))) (S := S) (B := B) (R := R) (tres := tres)) (.val (reifyTy S B R)) :=
   TDerivesX.reify (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (tres := tres) (S := S) (B := B) (R := R) (res := res) (hAt := trivial) (hS := hS) (hcl := hcl) (hres := hres) (qres := qres) (hΓ := hΓ)
 
-theorem TDerivesP.sliceBorrowM {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-    TDerivesP Δ Γ (TExpr.sliceBorrowM (info := info) (jdg := (.val (sliceBorrowMTy x Δ.meetOfDom A B))) (A := A) (B := B) (x := x)) (.val (sliceBorrowMTy x Δ.meetOfDom A B)) :=
-  TDerivesX.sliceBorrowM (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (x := x) (hΓ := hΓ) (hsideA := hsideA) (hsideB := hsideB) (hfree₁ := hfree₁) (hfree₂ := hfree₂)
-
-theorem TDerivesP.sliceBorrowI {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-    TDerivesP Δ Γ (TExpr.sliceBorrowI (info := info) (jdg := (.val (sliceBorrowITy x Δ.meetOfDom A B))) (A := A) (B := B) (x := x)) (.val (sliceBorrowITy x Δ.meetOfDom A B)) :=
-  TDerivesX.sliceBorrowI (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (x := x) (hΓ := hΓ) (hsc := hsc) (hsideA := hsideA) (hsideB := hsideB) (hfree₁ := hfree₁) (hfree₂ := hfree₂)
-
-theorem TDerivesP.sliceGetM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.sliceGetM (info := info) (jdg := (.val (sliceGetMTy a A))) (a := a) (A := A)) (.val (sliceGetMTy a A)) :=
-  TDerivesX.sliceGetM (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.sliceLenM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.sliceLenM (info := info) (jdg := (.val (sliceLenMTy a A))) (a := a) (A := A)) (.val (sliceLenMTy a A)) :=
-  TDerivesX.sliceLenM (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.sliceSplitI {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.sliceSplitI (info := info) (jdg := (.val (sliceSplitITy a A))) (a := a) (A := A)) (.val (sliceSplitITy a A)) :=
-  TDerivesX.sliceSplitI (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.sliceSplitM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.sliceSplitM (info := info) (jdg := (.val (sliceSplitMTy a A))) (a := a) (A := A)) (.val (sliceSplitMTy a A)) :=
-  TDerivesX.sliceSplitM (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.sliceEmptyI {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.sliceEmptyI (info := info) (jdg := (.val (.arrayImm a A))) (a := a) (A := A)) (.val (.arrayImm a A)) :=
-  TDerivesX.sliceEmptyI (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.sliceEmptyM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.sliceEmptyM (info := info) (jdg := (.val (.sliceMut a A))) (a := a) (A := A)) (.val (.sliceMut a A)) :=
-  TDerivesX.sliceEmptyM (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.arrEmpty {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.arrEmpty (info := info) (jdg := (.val (.array A))) (A := A)) (.val (.array A)) :=
-  TDerivesX.arrEmpty (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.sliceReplaceM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.sliceReplaceM (info := info) (jdg := (.val (sliceReplaceMTy a A))) (a := a) (A := A)) (.val (sliceReplaceMTy a A)) :=
-  TDerivesX.sliceReplaceM (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.sliceSwapM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.sliceSwapM (info := info) (jdg := (.val (sliceSwapMTy a A))) (a := a) (A := A)) (.val (sliceSwapMTy a A)) :=
-  TDerivesX.sliceSwapM (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (A := A) (hΓ := hΓ)
-
-theorem TDerivesP.sliceCopyM {Δ Γ} {info : TInfo} (a b : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) (hA : A.Persistent) :
-    TDerivesP Δ Γ (TExpr.sliceCopyM (info := info) (jdg := (.val (sliceCopyMTy a b A))) (a := a) (b := b) (A := A)) (.val (sliceCopyMTy a b A)) :=
-  TDerivesX.sliceCopyM (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (a := a) (b := b) (A := A) (hΓ := hΓ) (hA := hA)
-
-theorem TDerivesP.withbor1 {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-    TDerivesP Δ Γ (TExpr.withbor1 (info := info) (jdg := (.val (axWithbor1Ty x Δ.meetOfDom A B))) (A := A) (B := B) (x := x)) (.val (axWithbor1Ty x Δ.meetOfDom A B)) :=
-  TDerivesX.withbor1 (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (x := x) (hΓ := hΓ) (hx := hx) (hsc₁ := hsc₁) (hfree₁ := hfree₁) (hfree₂ := hfree₂)
-
-theorem TDerivesP.withbor2 {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-    TDerivesP Δ Γ (TExpr.withbor2 (info := info) (jdg := (.val (axWithbor2Ty x Δ.meetOfDom A B))) (A := A) (B := B) (x := x)) (.val (axWithbor2Ty x Δ.meetOfDom A B)) :=
-  TDerivesX.withbor2 (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (x := x) (hΓ := hΓ) (hx := hx) (hside := hside) (hfree₁ := hfree₁) (hfree₂ := hfree₂)
-
-theorem TDerivesP.withbor3 {Δ Γ a A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-    TDerivesP Δ Γ (TExpr.withbor3 (info := info) (jdg := (.val (axWithbor3Ty a x Δ.meetOfDom A B))) (a := a) (A := A) (B := B) (x := x)) (.val (axWithbor3Ty a x Δ.meetOfDom A B)) :=
-  TDerivesX.withbor3 (I := {pin := true}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) (info := info) (x := x) (hΓ := hΓ) (hx := hx) (hfree₁ := hfree₁) (hfree₂ := hfree₂)
-
-theorem TDerivesP.withload {Δ Γ a A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
-    TDerivesP Δ Γ (TExpr.withload (info := info) (jdg := (.val (axWithloadTy a x Δ.meetOfDom A B))) (a := a) (A := A) (B := B) (x := x)) (.val (axWithloadTy a x Δ.meetOfDom A B)) :=
-  TDerivesX.withload (I := {pin := true}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) (info := info) (x := x) (hΓ := hΓ) (hx := hx) (hfree₁ := hfree₁) (hfree₂ := hfree₂)
-
-theorem TDerivesP.withswap {Δ Γ a A B} {info : TInfo} (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.withswap (info := info) (jdg := (.val (axWithswapTy a A B))) (a := a) (A := A) (B := B)) (.val (axWithswapTy a A B)) :=
-  TDerivesX.withswap (I := {pin := true}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) (info := info) (hΓ := hΓ)
-
 theorem TDerivesP.withborUD {Δ Γ A B} {info : TInfo} {td : TExpr} {SM SD S : Row} (k : LendUKind) (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hk : k.OK Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : SM.Unwind x) (hMS : RowLe SM S) (hDS : RowLe SD S) (hSv : Row.divB S = false) (hP : SD.UnrD → SM.PendPers) (hd : TDerivesP Δ Γ td (.val (.thunk (.arr (k.src A) (CTy.effOf SD .unit))))) :
     TDerivesP Δ Γ (TExpr.withborUD (info := info) (jdg := (.val (k.ty x Δ.meetOfDom A B SM S))) (A := A) (B := B) (SM := SM) (SD := SD) (S := S) (k := k) (x := x) (td := td)) (.val (k.ty x Δ.meetOfDom A B SM S)) :=
   TDerivesX.withborUD (I := {pin := true}) (Δ := Δ) (Γ := Γ) (A := A) (B := B) (info := info) (td := td) (SM := SM) (SD := SD) (S := S) (k := k) (x := x) (hΓ := hΓ) (hx := hx) (hk := hk) (hfree₁ := hfree₁) (hfree₂ := hfree₂) (hS := hS) (hMS := hMS) (hDS := hDS) (hSv := hSv) (hP := hP) (hd := hd)
-
-theorem TDerivesP.withloadU {Δ Γ a A B} {info : TInfo} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) :
-    TDerivesP Δ Γ (TExpr.withloadU (info := info) (jdg := (.val (withloadUTy a x Δ.meetOfDom A B S))) (a := a) (A := A) (B := B) (S := S) (x := x)) (.val (withloadUTy a x Δ.meetOfDom A B S)) :=
-  TDerivesX.withloadU (I := {pin := true}) (Δ := Δ) (Γ := Γ) (a := a) (A := A) (B := B) (info := info) (S := S) (x := x) (hΓ := hΓ) (hx := hx) (hfree₁ := hfree₁) (hfree₂ := hfree₂) (hS := hS)
 
 theorem TDerivesP.sliceBorrowMU {Δ Γ A B} {info : TInfo} {td : TExpr} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x) (hd : TDerivesP Δ Γ td (.val (.lolli (.array A) .unit))) :
     TDerivesP Δ Γ (TExpr.sliceBorrowMU (info := info) (jdg := (.val (sliceBorrowMUTy x Δ.meetOfDom A B S))) (A := A) (B := B) (S := S) (x := x) (td := td)) (.val (sliceBorrowMUTy x Δ.meetOfDom A B S)) :=
@@ -1072,30 +596,6 @@ theorem TDerivesP.lolliE {Δ Γ Γ₁ Γ₂ A B} {info : TInfo} {u : Masks} {ta 
 theorem TDerivesP.allEV {Δ Γ x b a A} {info : TInfo} {t : TExpr} (h : TDerivesP Δ Γ t (.val (.all x b A))) (hlt : Δ.EntailsLt a b) :
     TDerivesP Δ Γ (TExpr.allEV (info := info) (jdg := (.val (A.instLife x a))) (x := x) (b := b) (a := a) (A := A) (t := t)) (.val (A.instLife x a)) :=
   TDerivesX.allEV (I := {pin := true}) (Δ := Δ) (Γ := Γ) (x := x) (b := b) (a := a) (A := A) (info := info) (t := t) (h := h) (hlt := hlt)
-
-theorem TDerivesP.foldImm {Δ Γ} {info : TInfo} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ' a, VOutlives Δ' a R) :
-    TDerivesP Δ Γ (TExpr.foldImm (info := info) (jdg := (.val (.lolli (algTy F y R) (foldTy F y c R)))) (F := F) (y := y) (c := c) (R := R)) (.val (.lolli (algTy F y R) (foldTy F y c R))) :=
-  TDerivesX.foldImm (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (F := F) (y := y) (c := c) (R := R) (hΓ := hΓ) (hF := hF) (hG := hG) (hyM := hyM) (hyR := hyR) (hR := hR)
-
-theorem TDerivesP.foldOwn {Δ Γ} {info : TInfo} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
-    TDerivesP Δ Γ (TExpr.foldOwn (info := info) (jdg := (.val (.lolli (algOTy F R) (foldOTy F R)))) (F := F) (R := R)) (.val (.lolli (algOTy F R) (foldOTy F R))) :=
-  TDerivesX.foldOwn (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (F := F) (R := R) (hΓ := hΓ) (hF := hF) (hG := hG)
-
-theorem TDerivesP.foldReuse {Δ Γ} {info : TInfo} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
-    TDerivesP Δ Γ (TExpr.foldReuse (info := info) (jdg := (.val (.lolli (algRTy F R) (foldOTy F R)))) (F := F) (R := R)) (.val (.lolli (algRTy F R) (foldOTy F R))) :=
-  TDerivesX.foldReuse (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (F := F) (R := R) (hΓ := hΓ) (hF := hF) (hG := hG)
-
-theorem TDerivesP.foldOwnG {Δ Γ} {info : TInfo} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
-    TDerivesP Δ Γ (TExpr.foldOwnG (info := info) (jdg := (.val (FoldP.foldGTy B₀ Rs))) (B₀ := B₀)) (.val (FoldP.foldGTy B₀ Rs)) :=
-  TDerivesX.foldOwnG (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (B₀ := B₀) (Rs := Rs) (hΓ := hΓ) (hB := hB)
-
-theorem TDerivesP.unfoldN {Δ Γ} {info : TInfo} (C : CTy) (S : VTy) (hC : C.NuOk) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.unfoldN (info := info) (jdg := (.val (unfoldTy C S))) (C := C) (S := S)) (.val (unfoldTy C S)) :=
-  TDerivesX.unfoldN (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (C := C) (S := S) (hC := hC) (hS := hS) (hΓ := hΓ)
-
-theorem TDerivesP.unfoldK {Δ Γ} {info : TInfo} (C : CTy) (G S : VTy) (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hΓ : Ctx.DeadP Γ) :
-    TDerivesP Δ Γ (TExpr.unfoldK (info := info) (jdg := (.val (unfoldKTy C G S))) (C := C) (G := G) (S := S)) (.val (unfoldKTy C G S)) :=
-  TDerivesX.unfoldK (I := {pin := true}) (Δ := Δ) (Γ := Γ) (info := info) (C := C) (G := G) (S := S) (hC := hC) (hG := hG) (hS := hS) (hΓ := hΓ)
 
 theorem TDerivesP.nuOutK {Δ Γ i} {info : TInfo} {C : CTy} {G S : VTy} (hC : C.NuOk) (hG : G.forceTy = some (.arr S (C.instT S))) (hS : C.BindsFresh S) (hGf : C.BindsFresh G) (h : Ctx.SoloP Γ i (codeTy C G S)) :
     TDerivesP Δ Γ (TExpr.nuOutK (info := info) (jdg := (.comp (C.instT (codeTy C G S)))) (i := i) (C := C) (G := G) (S := S)) (.comp (C.instT (codeTy C G S))) :=
@@ -1236,9 +736,6 @@ theorem TDerivesX.erase {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j 
   | var a0 =>
       dsimp only [TExpr.erase]
       exact CDerivesX.var a0
-  | unitI a0 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.unitI a0
   | tensorI a0 a1 a2 a3 a4 ih0 ih1 =>
       dsimp only [TExpr.erase]
       exact CDerivesX.tensorI a0 ih0 ih1
@@ -1309,147 +806,18 @@ theorem TDerivesX.erase {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j 
       rw [a3] at ih0
       rw [a3]
       exact CDerivesX.codeIb a0 a1 ih0 a4 a5
-  | copyBang a0 =>
+  | constK a0 a1 a2 a3 =>
       dsimp only [TExpr.erase]
-      exact CDerivesX.copyBang a0
-  | releaseBang a0 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.releaseBang a0
-  | alloc a0 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.alloc a0
-  | free a0 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.free a0
-  | tokMint a0 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.tokMint a0
-  | tokBurn a0 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.tokBurn a0
-  | swap a0 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.swap a0
-  | copy a0 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.copy a0
-  | releaseImm a0 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.releaseImm a0
-  | releaseMut a0 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.releaseMut a0
-  | releaseUnk a0 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.releaseUnk a0
-  | lit a0 a1 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.lit a0 a1
-  | hostOp a0 a1 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.hostOp a0 a1
-  | arrNew a0 a1 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.arrNew a0 a1
-  | arrFree a0 a1 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.arrFree a0 a1
-  | arrSize a0 a1 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.arrSize a0 a1
-  | arrReplace a0 a1 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.arrReplace a0 a1
-  | arrLen a0 a1 a2 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.arrLen a0 a1 a2
-  | arrGet a0 a1 a2 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.arrGet a0 a1 a2
-  | arrCopy a0 a1 a2 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.arrCopy a0 a1 a2
-  | arrRelease a0 a1 a2 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.arrRelease a0 a1 a2
-  | countFold a0 a1 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.countFold a0 a1
-  | countTry a0 a1 a2 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.countTry a0 a1 a2
-  | boundedFix a0 a1 a2 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.boundedFix a0 a1 a2
-  | iterate a0 a1 a2 a3 a4 a5 a6 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.iterate a0 a1 a2 a3 a4 a5 a6
-  | divFuel a0 a1 a2 a3 a4 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.divFuel a0 a1 a2 a3 a4
+      exact CDerivesX.constK a0 a1 a2 a3
   | reify a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 =>
       dsimp only [TExpr.erase]
       rw [a8] at ih0
       rw [a8]
       rw [Expr.toVal_val]
       exact CDerivesX.reify a0 a1 a2 a3 a4 a5 a6 ih0 a9
-  | sliceBorrowM a0 a1 a2 a3 a4 a5 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.sliceBorrowM a0 a1 a2 a3 a4 a5
-  | sliceBorrowI a0 a1 a2 a3 a4 a5 a6 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.sliceBorrowI a0 a1 a2 a3 a4 a5 a6
-  | sliceGetM a0 a1 a2 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.sliceGetM a0 a1 a2
-  | sliceLenM a0 a1 a2 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.sliceLenM a0 a1 a2
-  | sliceSplitI a0 a1 a2 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.sliceSplitI a0 a1 a2
-  | sliceSplitM a0 a1 a2 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.sliceSplitM a0 a1 a2
-  | sliceEmptyI a0 a1 a2 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.sliceEmptyI a0 a1 a2
-  | sliceEmptyM a0 a1 a2 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.sliceEmptyM a0 a1 a2
-  | arrEmpty a0 a1 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.arrEmpty a0 a1
-  | sliceReplaceM a0 a1 a2 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.sliceReplaceM a0 a1 a2
-  | sliceSwapM a0 a1 a2 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.sliceSwapM a0 a1 a2
-  | sliceCopyM a0 a1 a2 a3 a4 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.sliceCopyM a0 a1 a2 a3 a4
-  | withbor1 a0 a1 a2 a3 a4 a5 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.withbor1 a0 a1 a2 a3 a4 a5
-  | withbor2 a0 a1 a2 a3 a4 a5 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.withbor2 a0 a1 a2 a3 a4 a5
-  | withbor3 a0 a1 a2 a3 a4 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.withbor3 a0 a1 a2 a3 a4
-  | withload a0 a1 a2 a3 a4 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.withload a0 a1 a2 a3 a4
-  | withswap a0 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.withswap a0
   | withborUD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 =>
       dsimp only [TExpr.erase]
       exact CDerivesX.withborUD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0
-  | withloadU a0 a1 a2 a3 a4 a5 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.withloadU a0 a1 a2 a3 a4 a5
   | sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 ih0 =>
       dsimp only [TExpr.erase]
       exact CDerivesX.sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 ih0
@@ -1462,24 +830,6 @@ theorem TDerivesX.erase {I : JIdx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j 
   | allEV a0 a1 ih0 =>
       dsimp only [TExpr.erase]
       exact CDerivesX.allEV ih0 a1
-  | foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9
-  | foldOwn a0 a1 a2 a3 a4 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.foldOwn a0 a1 a2 a3 a4
-  | foldReuse a0 a1 a2 a3 a4 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.foldReuse a0 a1 a2 a3 a4
-  | foldOwnG a0 a1 a2 a3 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.foldOwnG a0 a1 a2 a3
-  | unfoldN a0 a1 a2 a3 a4 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.unfoldN a0 a1 a2 a3 a4
-  | unfoldK a0 a1 a2 a3 a4 a5 a6 =>
-      dsimp only [TExpr.erase]
-      exact CDerivesX.unfoldK a0 a1 a2 a3 a4 a5 a6
   | nuOutK a0 a1 a2 a3 a4 =>
       dsimp only [TExpr.erase]
       exact CDerivesX.nuOutK a0 a1 a2 a3 a4
@@ -1559,7 +909,6 @@ theorem TDerivesX.mono {I I' : JIdx} (hI : I ≤ I') {Δ : LifeCtx} {Γ : Ctx VT
     {j : Jdg} (h : TDerivesX I Δ Γ t j) : TDerivesX I' Δ Γ t j := by
   induction h with
   | var a0 => exact TDerivesX.var a0
-  | unitI a0 => exact TDerivesX.unitI a0
   | tensorI a0 a1 a2 a3 a4 ih0 ih1 => exact TDerivesX.tensorI a0 a1 a2 ih0 ih1
   | sumI₁ a0 ih0 => exact TDerivesX.sumI₁ ih0
   | sumI₂ a0 ih0 => exact TDerivesX.sumI₂ ih0
@@ -1582,62 +931,13 @@ theorem TDerivesX.mono {I I' : JIdx} (hI : I ≤ I') {Δ : LifeCtx} {Γ : Ctx VT
   | allI a0 a1 a2 a3 ih0 => exact TDerivesX.allI a0 a1 a2 ih0
   | allE a0 a1 ih0 => exact TDerivesX.allE ih0 a1
   | codeIb a0 a1 a2 a3 a4 a5 ih0 => exact TDerivesX.codeIb a0 a1 ih0 a3 a4 a5
-  | copyBang a0 => exact TDerivesX.copyBang a0
-  | releaseBang a0 => exact TDerivesX.releaseBang a0
-  | alloc a0 => exact TDerivesX.alloc a0
-  | free a0 => exact TDerivesX.free a0
-  | tokMint a0 => exact TDerivesX.tokMint a0
-  | tokBurn a0 => exact TDerivesX.tokBurn a0
-  | swap a0 => exact TDerivesX.swap a0
-  | copy a0 => exact TDerivesX.copy a0
-  | releaseImm a0 => exact TDerivesX.releaseImm a0
-  | releaseMut a0 => exact TDerivesX.releaseMut a0
-  | releaseUnk a0 => exact TDerivesX.releaseUnk a0
-  | lit a0 a1 => exact TDerivesX.lit a0 a1
-  | hostOp a0 a1 => exact TDerivesX.hostOp a0 a1
-  | arrNew a0 a1 => exact TDerivesX.arrNew a0 a1
-  | arrFree a0 a1 => exact TDerivesX.arrFree a0 a1
-  | arrSize a0 a1 => exact TDerivesX.arrSize a0 a1
-  | arrReplace a0 a1 => exact TDerivesX.arrReplace a0 a1
-  | arrLen a0 a1 a2 => exact TDerivesX.arrLen a0 a1 a2
-  | arrGet a0 a1 a2 => exact TDerivesX.arrGet a0 a1 a2
-  | arrCopy a0 a1 a2 => exact TDerivesX.arrCopy a0 a1 a2
-  | arrRelease a0 a1 a2 => exact TDerivesX.arrRelease a0 a1 a2
-  | countFold a0 a1 => exact TDerivesX.countFold a0 a1
-  | countTry a0 a1 a2 => exact TDerivesX.countTry a0 a1 a2
-  | boundedFix a0 a1 a2 => exact TDerivesX.boundedFix a0 a1 a2
-  | iterate a0 a1 a2 a3 a4 a5 a6 => exact TDerivesX.iterate a0 a1 a2 a3 (hI.rowOK a4) a5 a6
-  | divFuel a0 a1 a2 a3 a4 => exact TDerivesX.divFuel a0 a1 (hI.rowOK a2) a3 a4
+  | constK a0 a1 a2 a3 => exact TDerivesX.constK a0 (hI.rowOK a1) a2 a3
   | reify a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 => exact TDerivesX.reify a0 a1 a2 a3 (hI.rowOK a4) a5 a6 ih0 a8 a9
-  | sliceBorrowM a0 a1 a2 a3 a4 a5 => exact TDerivesX.sliceBorrowM a0 a1 a2 a3 a4 a5
-  | sliceBorrowI a0 a1 a2 a3 a4 a5 a6 => exact TDerivesX.sliceBorrowI a0 a1 a2 a3 a4 a5 a6
-  | sliceGetM a0 a1 a2 => exact TDerivesX.sliceGetM a0 a1 a2
-  | sliceLenM a0 a1 a2 => exact TDerivesX.sliceLenM a0 a1 a2
-  | sliceSplitI a0 a1 a2 => exact TDerivesX.sliceSplitI a0 a1 a2
-  | sliceSplitM a0 a1 a2 => exact TDerivesX.sliceSplitM a0 a1 a2
-  | sliceEmptyI a0 a1 a2 => exact TDerivesX.sliceEmptyI a0 a1 a2
-  | sliceEmptyM a0 a1 a2 => exact TDerivesX.sliceEmptyM a0 a1 a2
-  | arrEmpty a0 a1 => exact TDerivesX.arrEmpty a0 a1
-  | sliceReplaceM a0 a1 a2 => exact TDerivesX.sliceReplaceM a0 a1 a2
-  | sliceSwapM a0 a1 a2 => exact TDerivesX.sliceSwapM a0 a1 a2
-  | sliceCopyM a0 a1 a2 a3 a4 => exact TDerivesX.sliceCopyM a0 a1 a2 a3 a4
-  | withbor1 a0 a1 a2 a3 a4 a5 => exact TDerivesX.withbor1 a0 a1 a2 a3 a4 a5
-  | withbor2 a0 a1 a2 a3 a4 a5 => exact TDerivesX.withbor2 a0 a1 a2 a3 a4 a5
-  | withbor3 a0 a1 a2 a3 a4 => exact TDerivesX.withbor3 a0 a1 a2 a3 a4
-  | withload a0 a1 a2 a3 a4 => exact TDerivesX.withload a0 a1 a2 a3 a4
-  | withswap a0 => exact TDerivesX.withswap a0
   | withborUD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 => exact TDerivesX.withborUD a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0
-  | withloadU a0 a1 a2 a3 a4 a5 => exact TDerivesX.withloadU a0 a1 a2 a3 a4 a5
   | sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 a7 ih0 => exact TDerivesX.sliceBorrowMU a0 a1 a2 a3 a4 a5 a6 ih0
   | sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 => exact TDerivesX.sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 ih0
   | lolliE a0 a1 a2 a3 a4 ih0 ih1 => exact TDerivesX.lolliE a0 a1 a2 ih0 ih1
   | allEV a0 a1 ih0 => exact TDerivesX.allEV ih0 a1
-  | foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 => exact TDerivesX.foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9
-  | foldOwn a0 a1 a2 a3 a4 => exact TDerivesX.foldOwn a0 a1 a2 a3 a4
-  | foldReuse a0 a1 a2 a3 a4 => exact TDerivesX.foldReuse a0 a1 a2 a3 a4
-  | foldOwnG a0 a1 a2 a3 => exact TDerivesX.foldOwnG a0 a1 a2 a3
-  | unfoldN a0 a1 a2 a3 a4 => exact TDerivesX.unfoldN a0 a1 a2 a3 a4
-  | unfoldK a0 a1 a2 a3 a4 a5 a6 => exact TDerivesX.unfoldK a0 a1 a2 a3 a4 a5 a6
   | nuOutK a0 a1 a2 a3 a4 => exact TDerivesX.nuOutK a0 a1 a2 a3 a4
   | effPerform a0 a1 a2 a3 a4 ih0 => exact TDerivesX.effPerform (hI.rowOK a0) a1 a2 a3 ih0
   | effAwait a0 a1 a2 a3 a4 a5 a6 => exact TDerivesX.effAwait (hI.rowOK a0) a1 a2 a3 a4 a5 a6

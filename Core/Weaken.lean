@@ -77,7 +77,7 @@ theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (
     {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerivesX I Δ Γ e j) : CDerivesX I Δ (Γ ++ Γ') e j := by
   induction h with
   | var hs => exact .var (soloP_append h' hs)
-  | unitI hd => exact .unitI (deadP_append h' hd)
+  | constK k hAt hk hΓ => exact .constK k hAt hk (deadP_append h' hΓ)
   | tensorI hs _ _ ih₁ ih₂ => exact .tensorI (splitP_append h' hs) ih₁ ih₂
   | sumI₁ _ ih => exact .sumI₁ ih
   | sumI₂ _ ih => exact .sumI₂ ih
@@ -102,66 +102,14 @@ theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (
   | codeIb b hp _ hok hT ih =>
       obtain ⟨hok', hty⟩ := Ctx.CapOK.append (dead_not_live h') hok
       exact .codeIb b (fun h => flatLive_append h' (hp h)) ih hok' (by rw [hty]; exact hT)
-  | copyBang hΓ => exact .copyBang (deadP_append h' hΓ)
-  | releaseBang hΓ => exact .releaseBang (deadP_append h' hΓ)
-  | alloc hΓ => exact .alloc (deadP_append h' hΓ)
-  | free hΓ => exact .free (deadP_append h' hΓ)
-  | tokMint hΓ => exact .tokMint (deadP_append h' hΓ)
-  | tokBurn hΓ => exact .tokBurn (deadP_append h' hΓ)
-  | swap hΓ => exact .swap (deadP_append h' hΓ)
-  | copy hΓ => exact .copy (deadP_append h' hΓ)
-  | releaseImm hΓ => exact .releaseImm (deadP_append h' hΓ)
-  | releaseMut hΓ => exact .releaseMut (deadP_append h' hΓ)
-  | releaseUnk hΓ => exact .releaseUnk (deadP_append h' hΓ)
-  | lit c hΓ => exact .lit c (deadP_append h' hΓ)
-  | hostOp op hΓ => exact .hostOp op (deadP_append h' hΓ)
-  | arrNew A hΓ => exact .arrNew A (deadP_append h' hΓ)
-  | arrFree A hΓ => exact .arrFree A (deadP_append h' hΓ)
-  | arrSize A hΓ => exact .arrSize A (deadP_append h' hΓ)
-  | arrReplace A hΓ => exact .arrReplace A (deadP_append h' hΓ)
-  | arrLen a A hΓ => exact .arrLen a A (deadP_append h' hΓ)
-  | arrGet a A hΓ => exact .arrGet a A (deadP_append h' hΓ)
-  | arrCopy a A hΓ => exact .arrCopy a A (deadP_append h' hΓ)
-  | arrRelease a A hΓ => exact .arrRelease a A (deadP_append h' hΓ)
-  | countFold S hΓ => exact .countFold S (deadP_append h' hΓ)
-  | countTry S E hΓ => exact .countTry S E (deadP_append h' hΓ)
-  | boundedFix A C hΓ => exact .boundedFix A C (deadP_append h' hΓ)
-  | sliceBorrowM x hΓ hA hB hf₁ hf₂ =>
-      exact .sliceBorrowM x (deadP_append h' hΓ) hA hB hf₁ hf₂
-  | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ =>
-      exact .sliceBorrowI x (deadP_append h' hΓ) hsc hA hB hf₁ hf₂
-  | sliceGetM a A hΓ => exact .sliceGetM a A (deadP_append h' hΓ)
-  | sliceLenM a A hΓ => exact .sliceLenM a A (deadP_append h' hΓ)
-  | sliceSplitI a A hΓ => exact .sliceSplitI a A (deadP_append h' hΓ)
-  | sliceSplitM a A hΓ => exact .sliceSplitM a A (deadP_append h' hΓ)
-  | sliceEmptyI a A hΓ => exact .sliceEmptyI a A (deadP_append h' hΓ)
-  | sliceEmptyM a A hΓ => exact .sliceEmptyM a A (deadP_append h' hΓ)
-  | arrEmpty A hΓ => exact .arrEmpty A (deadP_append h' hΓ)
-  | sliceReplaceM a A hΓ => exact .sliceReplaceM a A (deadP_append h' hΓ)
-  | sliceSwapM a A hΓ => exact .sliceSwapM a A (deadP_append h' hΓ)
-  | sliceCopyM a b A hΓ hA => exact .sliceCopyM a b A (deadP_append h' hΓ) hA
-  | withbor1 x hΓ hx hsc hf₁ hf₂ => exact .withbor1 x (deadP_append h' hΓ) hx hsc hf₁ hf₂
-  | withbor2 x hΓ hx hside hf₁ hf₂ =>
-      exact .withbor2 x (deadP_append h' hΓ) hx hside hf₁ hf₂
-  | withbor3 x hΓ hx hf₁ hf₂ => exact .withbor3 x (deadP_append h' hΓ) hx hf₁ hf₂
-  | withload x hΓ hx hf₁ hf₂ => exact .withload x (deadP_append h' hΓ) hx hf₁ hf₂
-  | withswap hΓ => exact .withswap (deadP_append h' hΓ)
   | withborUD k x hΓ hx hk hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       exact .withborUD k x (deadP_append h' hΓ) hx hk hf₁ hf₂ hS hMS hDS hSv hP ihd
-  | withloadU x hΓ hx hf₁ hf₂ hS => exact .withloadU x (deadP_append h' hΓ) hx hf₁ hf₂ hS
   | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
       exact .sliceBorrowMU x (deadP_append h' hΓ) hA hB hf₁ hf₂ hS ihd
   | sliceBorrowIU x hΓ hsc hA hB hf₁ hf₂ hS _ ihd =>
       exact .sliceBorrowIU x (deadP_append h' hΓ) hsc hA hB hf₁ hf₂ hS ihd
   | lolliE hs _ _ iha ihf => exact .lolliE (splitP_append h' hs) iha ihf
   | allEV _ hlt ih => exact .allEV ih hlt
-  | foldImm F y c R hΓ hF hG hyM hyR hR =>
-      exact .foldImm F y c R (deadP_append h' hΓ) hF hG hyM hyR hR
-  | foldOwn F R hΓ hF hG => exact .foldOwn F R (deadP_append h' hΓ) hF hG
-  | foldOwnG B₀ Rs hΓ hB => exact .foldOwnG B₀ Rs (deadP_append h' hΓ) hB
-  | foldReuse F R hΓ hF hG => exact .foldReuse F R (deadP_append h' hΓ) hF hG
-  | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS (deadP_append h' hΓ)
-  | unfoldK C G S hC hG hS hΓ => exact .unfoldK C G S hC hG hS (deadP_append h' hΓ)
   | nuOutK hC hG hS hGf hs => exact .nuOutK hC hG hS hGf (soloP_append h' hs)
   | effPerform hAt hf hna hac _ ih => exact .effPerform hAt hf hna hac ih
   | effAwait hAt hΓ hfa ha haA hfc hc =>
@@ -186,8 +134,6 @@ theorem CDerivesX.append_dead {I : JIdx} (hpf : I.pin = false) {Γ' : Ctx VTy} (
   | effHandleL hAt hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
       exact .effHandleL hAt (splitP_append h' hs) (deadP_append h' hd) hHr.append hHw.append
         hHn.append ihc hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin ihe
-  | iterate S St B R hAt hS hΓ => exact .iterate S St B R hAt hS (deadP_append h' hΓ)
-  | divFuel S A hAt hS hΓ => exact .divFuel S A hAt hS (deadP_append h' hΓ)
   | reify S B R res hAt hS hcl hres hΓ _ => exact .reify S B R res hAt hS hcl hres (deadP_append h' hΓ)
   | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
   | lendR hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true

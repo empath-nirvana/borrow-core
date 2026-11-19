@@ -802,9 +802,9 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
 
 /-! ### The nodes of derived rules
 
-A rule's former name, now a derived rule or a step of `conv` (`Core/Judgment.lean`), keeps its
-node's name as an abbreviation of the node that now carries it, so that statements over the node
-keep their type. -/
+A rule's former name, now a derived rule, a step of `conv` or a kind of `constK`
+(`Core/Judgment.lean`, `Core/ConstKind.lean`), keeps its node's name as an abbreviation of the
+node that now carries it, so that statements over the node keep their type. -/
 
 /-- `[then]` at a terminating finaliser: `effThenF`'s node.  `[spec §29a]` -/
 @[match_pattern] abbrev TExpr.effThen (info : TInfo) (jdg : Jdg) (A B : VTy) (S SM SD : Row) (u : Masks)
@@ -870,6 +870,34 @@ keep their type. -/
 @[match_pattern] abbrev TExpr.alpha (info : TInfo) (jdg : Jdg) (j : Jdg) (j' : Jdg) (t : TExpr) :
     TExpr :=
   .conv info jdg j j' .alpha t
+
+/-- `()`'s node.  `[spec §3]` -/
+@[match_pattern] abbrev TExpr.unitI (info : TInfo) (jdg : Jdg) : TExpr := .constK info jdg .unitI
+
+/-- `copy`'s node at `Imm @a A`.  `[spec §12]` -/
+@[match_pattern] abbrev TExpr.copy (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) : TExpr :=
+  .constK info jdg (.copy a A)
+
+/-- `array_copy`'s node.  `[spec §9]` -/
+@[match_pattern] abbrev TExpr.arrCopy (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy) :
+    TExpr :=
+  .constK info jdg (.arrCopy a A)
+
+/-- `iterate`'s node.  `[spec §14]` -/
+@[match_pattern] abbrev TExpr.iterate (info : TInfo) (jdg : Jdg) (S : Row) (St B R : VTy) : TExpr :=
+  .constK info jdg (.iterate S St B R)
+
+/-- `div_fuel`'s node.  `[spec §14]` -/
+@[match_pattern] abbrev TExpr.divFuel (info : TInfo) (jdg : Jdg) (S : Row) (A : VTy) : TExpr :=
+  .constK info jdg (.divFuel S A)
+
+/-- `withbor` (2)'s node.  `[spec §23]` -/
+@[match_pattern] abbrev TExpr.withbor2 (info : TInfo) (jdg : Jdg) (A B : VTy) (x : LifeVar) : TExpr :=
+  .constK info jdg (.withbor2 A B x)
+
+/-- `unfold`'s node.  `[spec §7]` -/
+@[match_pattern] abbrev TExpr.unfoldN (info : TInfo) (jdg : Jdg) (C : CTy) (S : VTy) : TExpr :=
+  .constK info jdg (.unfoldN C S)
 
 theorem TExpr.isLam_sound (t : TExpr) (h : t.isLam = true) : ∃ N, t.erase = .val (.lam N) := by
   rw [isLam_eq] at h

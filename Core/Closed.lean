@@ -141,12 +141,7 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | withborUD _ _ _ _ _ _ _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
   | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih =>
       exact withborUE_closedAt ih
-  | foldImm => exact closedAt_of_zero (foldImmV_closed _) _
-  | foldOwn => exact closedAt_of_zero (foldOwnV_closed _) _
-  | foldOwnG => exact closedAt_of_zero (FoldP.foldOwnGV_closed _) _
-  | foldReuse => exact closedAt_of_zero (foldReuseV_closed _) _
-  | unfoldN => exact closedAt_of_zero (unfoldV_closed _) _
-  | unfoldK => exact closedAt_of_zero (unfoldV_closed _) _
+  | constK k _ _ => exact closedAt_of_zero k.closed _
   | nuOutK _ _ _ _ h => simpa [closedAt] using soloP_lt h
   | effPerform _ _ _ _ ih | effRaise _ _ _ _ _ ih =>
       simp [performE, raiseE, opArgE, closedAt, Expr.val, Val.prim, Val.i32, ih]
@@ -170,7 +165,6 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       simp only [closedAt, Bool.and_eq_true] at ihc
       simp [hndExpr, closedAt, Expr.val, Val.prim, Val.i32, closedAt_qualsVal, ihc.1, ihe,
         closedAt_lastTuple ihc.2.1 ihc.2.2]
-  | divFuel => exact closedAt_of_zero divFuelV_closed _
   | reify _ _ _ _ _ hcl => exact closedAt_of_zero (reifyV_closed hcl) _
   | @letPoly _ Γ' N _ _ b hcl _ _ _ ihN =>
       rw [List.length_cons] at ihN

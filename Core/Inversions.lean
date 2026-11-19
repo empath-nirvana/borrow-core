@@ -1105,7 +1105,16 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
         · obtain ⟨T, hT⟩ := ihc k (Or.inr (Or.inl hk')); exact ⟨T, splitP_le_left hs k T hT⟩
         · obtain ⟨T, hT⟩ := ihc k (Or.inr (Or.inr hk')); exact ⟨T, splitP_le_left hs k T hT⟩
       · obtain ⟨T, hT⟩ := ihe k hk; exact ⟨T, splitP_le_right hs k T hT⟩
-  | divFuel => intro k hk; exact absurd hk (not_hasVar_closed divFuelV_closed)
+  | constK k hk hΓ =>
+      cases k with
+      | divFuel => intro k hk; exact absurd hk (not_hasVar_closed divFuelV_closed)
+      | foldImm => intro k hk; exact absurd hk (not_hasVar_closed (foldImmV_closed _))
+      | foldOwn => intro k hk; exact absurd hk (not_hasVar_closed (foldOwnV_closed _))
+      | foldOwnG => intro k hk; exact absurd hk (not_hasVar_closed (FoldP.foldOwnGV_closed _))
+      | foldReuse => intro k hk; exact absurd hk (not_hasVar_closed (foldReuseV_closed _))
+      | unfoldN => intro k hk; exact absurd hk (not_hasVar_closed (unfoldV_closed _))
+      | unfoldK => intro k hk; exact absurd hk (not_hasVar_closed (unfoldV_closed _))
+      | _ => intro k hk; exact absurd hk (not_hasVar_closed (by rfl))
   | reify _ _ _ _ _ hcl => intro k hk; exact absurd hk (not_hasVar_closed (reifyV_closed hcl))
   | letPoly b hcl _ _ _ ihN =>
       intro k hk
@@ -1116,12 +1125,6 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | withborUD _ _ _ _ _ _ _ _ _ _ _ _ _ ih | sliceBorrowMU _ _ _ _ _ _ _ _ ih
   | sliceBorrowIU _ _ _ _ _ _ _ _ _ ih =>
       intro k hk; exact ih k (hasVar_withborUE hk)
-  | foldImm => intro k hk; exact absurd hk (not_hasVar_closed (foldImmV_closed _))
-  | foldOwn => intro k hk; exact absurd hk (not_hasVar_closed (foldOwnV_closed _))
-  | foldOwnG => intro k hk; exact absurd hk (not_hasVar_closed (FoldP.foldOwnGV_closed _))
-  | foldReuse => intro k hk; exact absurd hk (not_hasVar_closed (foldReuseV_closed _))
-  | unfoldN => intro k hk; exact absurd hk (not_hasVar_closed (unfoldV_closed _))
-  | unfoldK => intro k hk; exact absurd hk (not_hasVar_closed (unfoldV_closed _))
   | nuOutK _ _ _ _ hs =>
       intro k hk; simp only [Expr.HasVar] at hk; subst hk; exact ⟨_, soloP_le hs⟩
   | codeIb _ _ _ _ _ ih => exact ih
@@ -1130,11 +1133,11 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
 /-! ### Inversions -/
 
 /-- The term constants of `CDerives`'s conclusions, unfolded to their head constructors, so that a
-rule whose conclusion's term has another head is told apart. -/
-macro "cd_terms" : tactic => `(tactic| (try simp_all [withPair, absurdE, copy, forget, swap,
+rule whose conclusion's term has another head is told apart; a constant (`constK`) at each kind. -/
+macro "cd_terms" : tactic => `(tactic| ((try cases ‹ConstKind›) <;> try simp_all [withPair, absurdE, copy, forget, swap,
     withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, releaseV, emptyFamV, swapV, sliceCopyV,
     Val.arr, withborUE, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
-    BoCa.BoLo.raiseE, opArgE, awaitE, thenE, hndTerm, hndExpr, Expr.val, Val.lam, Val.prim, Val.unit,
+    BoCa.BoLo.raiseE, opArgE, awaitE, thenE, hndTerm, hndExpr, ConstKind.E, Expr.val, Val.lam, Val.prim, Val.unit,
     Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store', mintE, burnE]))
 
 /-- `force x` is `x` or `x ()`. -/
@@ -1145,10 +1148,10 @@ theorem forceE_var {C : CTy} {i : Nat} {e : Expr} (h : forceE C (.var i) = e) :
   · exact .inr rfl
 
 /-- The same, at one hypothesis alone. -/
-macro "cd_at " h:ident : tactic => `(tactic| (simp [withPair, absurdE, copy, forget, swap,
+macro "cd_at " h:ident : tactic => `(tactic| ((try cases ‹ConstKind›) <;> simp [withPair, absurdE, copy, forget, swap,
     withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, releaseV, emptyFamV, swapV, sliceCopyV,
     Val.arr, withborUE, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
-    BoCa.BoLo.raiseE, opArgE, awaitE, thenE, hndTerm, hndExpr, Expr.val, Val.lam, Val.prim, Val.unit,
+    BoCa.BoLo.raiseE, opArgE, awaitE, thenE, hndTerm, hndExpr, ConstKind.E, Expr.val, Val.lam, Val.prim, Val.unit,
     Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store', mintE, burnE] at $h:ident))
 
 /-- The primitives that have a rule of their own. -/
@@ -1216,9 +1219,12 @@ theorem der_pair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
         ValCls (.tensor A B) j) ∨ Expr.pair a b = emptyFamV.1 := by
   induction h using CDerives.induct with
   | tensorI hs h₁ h₂ => intro a b he; cases he; exact .inl ⟨_, _, _, _, hs, h₁, h₂, ValCls.refl _⟩
-  | sliceEmptyI => intro a b he; exact .inr he.symm
-  | sliceEmptyM => intro a b he; exact .inr he.symm
-  | arrEmpty => intro a b he; exact .inr he.symm
+  | constK k hk hΓ =>
+      cases k with
+      | sliceEmptyI => intro a b he; exact .inr he.symm
+      | sliceEmptyM => intro a b he; exact .inr he.symm
+      | arrEmpty => intro a b he; exact .inr he.symm
+      | _ => intro a b he; cd_terms
   | conv _ _ hJ ih =>
       intro a b he
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
@@ -1241,7 +1247,10 @@ theorem der_inj₁ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDeri
 theorem der_unit {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     e = .unit → (Ctx.DeadP Γ ∧ ValCls .unit j) ∨ JR (.comp .top) j := by
   induction h using CDerives.induct with
-  | unitI hd => intro _; exact .inl ⟨hd, ValCls.refl _⟩
+  | constK k hk hΓ =>
+      cases k with
+      | unitI => intro _; exact .inl ⟨hΓ, ValCls.refl _⟩
+      | _ => intro he; cd_terms
   | topI => intro _; exact .inr .refl
   | conv _ _ hJ ih =>
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
@@ -1254,8 +1263,11 @@ theorem der_unit {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
 theorem der_prim_alloc {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     e = .prim .alloc → ∃ A, ValCls (.lolli A (.ref A)) j := by
   induction h using CDerives.induct with
-  | alloc => intro _; exact ⟨_, ValCls.refl _⟩
   | conv _ _ hJ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step hJ.toJS⟩
+  | constK k hk hΓ =>
+      cases k with
+      | alloc => intro _; exact ⟨_, ValCls.refl _⟩
+      | _ => intro he; cd_terms
   | force => intro he; rcases forceE_var he with h | h <;> cases h
   | _ => intro he; cd_terms
 
@@ -1958,79 +1970,89 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro M he; subst hT; cases b; exacts [(ih M he).codeI _ _, (ih M he).codeIB _ _]
   | conv _ _ hJ ih => intro M he; exact (ih M he).step hJ.toJS
   | withI => intro M he; exact .inr (.inr (.inr (.inr (.inl ⟨_, _, he.symm⟩))))
-  | copyBang => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inl rfl) _)
-  | copy => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inl rfl) _)
-  | arrCopy => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inl rfl) _)
-  | swap => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inl rfl)) _)
-  | sliceBorrowM | sliceBorrowI | withbor1 | withbor2 | withbor3 =>
-      intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inl rfl))) _)
-  | withload | withloadU =>
-      intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inl rfl)))) _)
-  | withswap =>
-      intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inl rfl))))) _)
-  | arrSize | sliceLenM =>
-      intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inl rfl)))))) _)
-  | arrReplace | sliceReplaceM =>
-      intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inr (.inl rfl))))))) _)
-  | arrLen =>
-      intro M he
-      exact LamInv.ofAx
-        (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl rfl)))))))) _)
-  | sliceSwapM =>
-      intro M he
-      exact LamInv.ofAx
-        (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl rfl))))))))) _)
-  | foldImm =>
-      intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other
-        (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨_, rfl⟩)))))))))) _)
-  | foldOwn =>
-      intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other
-        (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨_, rfl⟩))))))))))) _)
-  | foldReuse =>
-      intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other
-        (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
-          (.inl ⟨_, rfl⟩)))))))))))) _)
-  | unfoldN =>
-      intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other
-        (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
-          (.inr (.inl ⟨_, rfl⟩))))))))))))) _)
-  | unfoldK =>
-      intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other
-        (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
-          (.inr (.inl ⟨_, rfl⟩))))))))))))) _)
-  | divFuel =>
-      intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other
-        (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
-          (.inr (.inr (.inl rfl)))))))))))))) _)
+  | constK k hk hΓ =>
+      cases k with
+      | copyBang => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inl rfl) _)
+      | copy => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inl rfl) _)
+      | arrCopy => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inl rfl) _)
+      | swap => intro M he; exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inl rfl)) _)
+      | sliceBorrowM | sliceBorrowI | withbor1 | withbor2 | withbor3 =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inl rfl))) _)
+      | withload | withloadU =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inl rfl)))) _)
+      | withswap =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inl rfl))))) _)
+      | arrSize | sliceLenM =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inl rfl)))))) _)
+      | arrReplace | sliceReplaceM =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inr (.inl rfl))))))) _)
+      | arrLen =>
+        intro M he
+        exact LamInv.ofAx
+          (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl rfl)))))))) _)
+      | sliceSwapM =>
+        intro M he
+        exact LamInv.ofAx
+          (he ▸ lamAx_other (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl rfl))))))))) _)
+      | foldImm =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other
+          (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨_, rfl⟩)))))))))) _)
+      | foldOwn =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other
+          (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨_, rfl⟩))))))))))) _)
+      | foldReuse =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other
+          (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
+            (.inl ⟨_, rfl⟩)))))))))))) _)
+      | unfoldN =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other
+          (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
+            (.inr (.inl ⟨_, rfl⟩))))))))))))) _)
+      | unfoldK =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other
+          (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
+            (.inr (.inl ⟨_, rfl⟩))))))))))))) _)
+      | divFuel =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other
+          (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
+            (.inr (.inr (.inl rfl)))))))))))))) _)
+      | foldOwnG =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_other
+          (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
+            (.inr (.inr (.inr (.inr (.inl ⟨_, rfl⟩)))))))))))))))) _)
+      | tokMint => intro M he; exact LamInv.ofAx (he ▸ lamAx_other otherLam_mint _)
+      | tokBurn => intro M he; exact LamInv.ofAx (he ▸ lamAx_other otherLam_burn _)
+      | releaseBang =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inl ⟨_, rfl⟩⟩))
+      | releaseImm =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inl ⟨_, _, rfl⟩)⟩))
+      | releaseMut =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inr (.inl ⟨_, _, rfl⟩))⟩))
+      | releaseUnk =>
+        intro M he
+        exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inr (.inr rfl))⟩))
+      | arrRelease => intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inr ⟨_, _, rfl⟩))
+      | _ => intro M he; cd_at he
   | reify =>
       intro M he
       exact LamInv.ofAx (he ▸ lamAx_other
         (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
           (.inr (.inr (.inr (.inl ⟨_, rfl⟩))))))))))))))) _)
-  | foldOwnG =>
-      intro M he
-      exact LamInv.ofAx (he ▸ lamAx_other
-        (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
-          (.inr (.inr (.inr (.inr (.inl ⟨_, rfl⟩)))))))))))))))) _)
-  | tokMint => intro M he; exact LamInv.ofAx (he ▸ lamAx_other otherLam_mint _)
-  | tokBurn => intro M he; exact LamInv.ofAx (he ▸ lamAx_other otherLam_burn _)
-  | releaseBang => intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inl ⟨_, rfl⟩⟩))
-  | releaseImm =>
-      intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inl ⟨_, _, rfl⟩)⟩))
-  | releaseMut =>
-      intro M he
-      exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inr (.inl ⟨_, _, rfl⟩))⟩))
-  | releaseUnk =>
-      intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inl ⟨_, rfl, .inr (.inr (.inr rfl))⟩))
-  | arrRelease => intro M he; exact LamInv.ofAx (he ▸ lamAx_release (.inr ⟨_, _, rfl⟩))
   | withborUD k x =>
       intro M he
       cases k <;> exact LamInv.ofAx (he ▸ lamAx_withborU _ ⟨_, x, _, _, _, _, _, _, rfl, rfl⟩)
@@ -2232,10 +2254,13 @@ body, it would load its cell. -/
 theorem der_swap {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     e = swap → ∃ A B, ValClsC (axSwapTy A B) j := by
   induction h using CDerives.induct with
-  | swap => intro _; exact ⟨_, _, ValClsC.refl _⟩
   | codeIb b _ _ _ hT ih =>
       intro he; subst hT; cases b <;> obtain ⟨A, B, hc⟩ := ih he
       exacts [⟨A, B, hc.codeI _ _⟩, ⟨A, B, hc.codeIB _ _⟩]
+  | constK k hk hΓ =>
+      cases k with
+      | swap => intro _; exact ⟨_, _, ValClsC.refl _⟩
+      | _ => intro he; cd_terms
   | lam h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
   | lamDead h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
   | allI _ _ _ h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim

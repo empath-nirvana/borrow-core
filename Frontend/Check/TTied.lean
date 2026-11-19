@@ -59,9 +59,15 @@ theorem var {k : Nat} {A : CVTy} (h : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ k A) :
     TTied [] [] Δ Γ (.var i (.val A) k A) (.val A) :=
   ofAt fun _ => .var h
 
+/-- A constant (`ConstKind`), its row tied wherever its signatures are.  `[spec §3, §14]` -/
+theorem constK (k : BoCa.Fig16.LogRel.Core.ConstKind) (hk : k.OK Δ)
+    (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) :
+    TTied [] k.row Δ Γ (.constK i (.val (k.ty Δ.meetOfDom)) k) (.val (k.ty Δ.meetOfDom)) :=
+  ⟨fun _ _ hΞ => .constK k (rowAt_of_sigsAt hΞ) hk hΓ, .constK k hk hΓ⟩
+
 theorem unitI (h : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) :
     TTied [] [] Δ Γ (.unitI i (.val .unit)) (.val .unit) :=
-  ofAt fun _ => .unitI h
+  constK i .unitI trivial h
 
 theorem topI : TTied [] [] Δ Γ (.topI i (.comp .top)) (.comp .top) :=
   ofAt fun _ => .topI
@@ -414,7 +420,7 @@ theorem iterate (S : CRow) (St B R : CVTy) (hS : BoCa.Fig16.LogRel.Core.Row.divB
     (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) :
     TTied [] S Δ Γ (.iterate i (.val (BoCa.Fig16.LogRel.Core.iterTy S St B R)) S St B R)
       (.val (BoCa.Fig16.LogRel.Core.iterTy S St B R)) :=
-  ⟨fun _ _ hΞ => .iterate S St B R (rowAt_of_sigsAt hΞ) hS hΓ, .iterate S St B R hS hΓ⟩
+  constK i (.iterate S St B R) hS hΓ
 
 /-- `div_fuel` reads its handled row `tick, Σ`.  `[spec §14]` -/
 theorem divFuel (S : CRow) (A : CVTy) (hS : ∀ o ∈ S, o.n ≠ divEff)
@@ -422,7 +428,7 @@ theorem divFuel (S : CRow) (A : CVTy) (hS : ∀ o ∈ S, o.n ≠ divEff)
     TTied [] (BoCa.Fig16.LogRel.Core.tickSig :: S) Δ Γ
       (.divFuel i (.val (BoCa.Fig16.LogRel.Core.divFuelTy S A)) S A)
       (.val (BoCa.Fig16.LogRel.Core.divFuelTy S A)) :=
-  ⟨fun _ _ hΞ => .divFuel S A (rowAt_of_sigsAt hΞ) hS hΓ, .divFuel S A hS hΓ⟩
+  constK i (.divFuel S A) hS hΓ
 
 /-- `reify_res` reads its handled row `tick, Σ`, and its residual's premise.  `[spec §14]` -/
 theorem reify {p : Pins} {s : CRow} {t : TExpr} (S : CRow) (B R : CVTy) (res : BoCa.Val)

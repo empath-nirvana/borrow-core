@@ -324,8 +324,9 @@ def jdgsOf : Nat → TExpr → List (Jdg × Bool)
   | 0, _ => []
   | f + 1, t =>
     let helper := match t with
-      | .arrNew .. | .arrFree .. | .countFold .. | .countTry .. | .foldImm .. | .foldOwn ..
-      | .foldReuse .. | .foldOwnG .. | .unfoldN .. => true
+      | .constK _ _ (.arrNew ..) | .constK _ _ (.arrFree ..) | .constK _ _ (.countFold ..)
+      | .constK _ _ (.countTry ..) | .constK _ _ (.foldImm ..) | .constK _ _ (.foldOwn ..)
+      | .constK _ _ (.foldReuse ..) | .constK _ _ (.foldOwnG ..) | .constK _ _ (.unfoldN ..) => true
       | _ => false
     (t.jdg, helper) :: t.children.flatMap fun (_, c) => jdgsOf f c
 
