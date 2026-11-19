@@ -1,8 +1,8 @@
 # Recipes
 
 Short, complete programs for the things you usually try first in a new language. Each one runs
-as it is: save it as a `.bc` file and run it with `bcc run`. The `-- stdin:` lines under a program
-are the input it was run with, and the `-- output:` lines are what it printed.
+as it is: save it as a `.bc` file and run it with `bcc run`. The `# stdin:` lines under a program
+are the input it was run with, and the `# output:` lines are what it printed.
 
 ## Sum the numbers on standard input
 
@@ -72,7 +72,7 @@ fn main() : 1 {
 # output: sum 42
 ```
 
-`parse_i32` raises a `ParseError` when the text isn't a number, and `with to_result { … }` turns
+`parse_i32` raises a `ParseError` when the text isn't a number, and `handle { … } with to_result` turns
 that into a value: `inl` the number, or `inr` the error ([Errors](guide/errors.md)). `fold_lines`
 hands each line to `add_line` with the state so far, a `Tally` record that counts lines, keeps the
 sum and collects the numbers of the bad lines in a `Vec`. `match t { Tally { line, sum, bad } -> … }`
@@ -114,7 +114,7 @@ fn main() : 1 {
 ```
 
 `map_lookup` answers a copy of the count stored for a key, as an `Option`, and `map_insert` stores
-the new one; both take the map lent, `&counts` to read it and `&mut counts` to change it. To visit
+the new one; both take the map lent, `&counts`. To visit
 every entry, `borrow imm counts { 'x, r -> … }` lends the map and `map_iter(r)` yields each key
 with a view of its value, read with `*v`. The iteration order comes from the hash, and it's the
 same on every run. [Maps and sets](guide/data.md#maps-and-sets) lists the rest of the map's
@@ -194,7 +194,7 @@ live 0
 
 In the interpreter they come after `--`: `bcc interp hello.bc -- Ada Grace`.
 
-## Update a record's `Vec` through `&mut`
+## Update a record's `Vec` through `inout`
 
 ```bc
 import textio
@@ -381,7 +381,7 @@ fn main() : 1 {
 # output: ok   fifteen
 ```
 
-`fizzbuzz` writes to `Stdout`, and its signature says so. In a test, `with collect(&mut c) { … }`
+`fizzbuzz` writes to `Stdout`, and its signature says so. In a test, `handle { … } with collect(&c)`
 serves `Stdout` with a handler that appends each byte to a string, instead of the real standard
 output; `fizzbuzz` itself doesn't change. Afterwards the cell `c` holds everything that was
 written, and `eq_lit` compares it with the expected text. A string literal's type is `lit`, which

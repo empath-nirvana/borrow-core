@@ -319,7 +319,7 @@ fn main() : 1 {
 # output: 50
 ```
 
-`|>` into a handler is `with`: `e |> to_result` is `with to_result { e }`
+`|>` into a handler is `handle`: `e |> to_result` is `handle { e } with to_result`
 ([Effects and handlers](effects.md#computation-parameters-and-)).
 
 ## Borrows and loops

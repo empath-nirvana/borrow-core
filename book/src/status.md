@@ -6,7 +6,7 @@ book lists what isn't built yet.
 
 ## What works today
 
-- **Ownership and borrows**: `imm` and `mut` borrows, `&x` and `&mut x`, borrow blocks, `var`
+- **Ownership and borrows**: `imm` and `mut` borrows, lends at a call (`x`, `&x`), borrow blocks, `var`
   ([Ownership and borrows](guide/ownership.md))
 - **Functions and closures**, reusable and one-shot
   ([Functions as values](guide/basics.md#functions-as-values))
@@ -52,14 +52,14 @@ book lists what isn't built yet.
 - An `if` or `borrow` block can't be a call's argument: bind it with `let` first.
 
 **Borrows**
-- `&mut r.field` doesn't parse: take the record apart, borrow the field, and build it again.
-- `&x` and `&mut x` must be the whole call of a `let` or statement: write
-  `let n = len(&v); f(n)`, not `f(len(&v))`
+- `&r.field` doesn't parse: take the record apart, borrow the field, and build it again.
+- A lend (`x` to a borrow parameter, or `&x`) must be the whole call of a `let` or statement:
+  write `let n = len(v); f(n)`, not `f(len(v))`
   ([#510](https://github.com/empath-nirvana/borrow-core/issues/510)).
-- A heap cell can't be lent with `&c` to a function that does I/O or performs an answering
+- A heap cell can't be lent (`f(c)`) to a function that does I/O or performs an answering
   (`fn`) operation; lend it with a block instead, `borrow imm c { r -> show(r) }`. A function
-  that may `raise` takes `&c` like any other.
-- A borrow can't be lent on with `&mut m`; pass it and hand it back instead
+  that may `raise` takes `c` like any other.
+- A borrow can't be lent on with `&m`; pass it and hand it back instead
   ([Borrow blocks](guide/ownership.md#borrow-blocks)).
 - Two borrow blocks can't be nested over two different owners; inside a block, lend the second
   owner to a call with `&d` instead.

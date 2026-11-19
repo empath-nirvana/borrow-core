@@ -68,7 +68,7 @@ program has to say: calling it, resuming it, closing it. They are:
   the arguments). Your program never holds one: the platform's handlers keep them as their state
   ([Input and output](io.md)).
 - **Continuations of `must_resume ctl` operations**, which a handler must resume.
-- **One-shot functions** `A => B`, which can be disposed of only by calling them.
+- **One-shot functions** `(A) -> B`, which can be disposed of only by calling them.
 - **Declared types**: a data declaration whose field is marked `must_close`.
 
 A value of one of these types has to be consumed on every path, and leaving one unused is an
@@ -188,7 +188,7 @@ the program wrote it.
 
 ### `finally`
 
-For cleanup of your own, put `finally { … }` after a `with`. The block runs when the `with` is
+For cleanup of your own, put `finally { … }` after a `handle { … } with h`. The block runs when the `handle` is
 left, whether it answered or an error passed through it. It is written once and placed on both
 exits; each placement is a call you wrote, checked like any other code, so it is not a consume.
 
@@ -269,7 +269,7 @@ fn main() : 1 {
 # output: pending
 ```
 
-`with spawn` runs each lookup to its first `await`, so both have allocated their cell. `b` is
+`handle … with spawn` runs each lookup to its first `await`, so both have allocated their cell. `b` is
 never resumed, and where `main` ends its consume cancels it, which frees that cell. The
 continuation of an operation declared plain `ctl` has a cancel branch in the same way: a clause
 that doesn't call `k` cancels the rest of the block, and when that cancel performs no operation

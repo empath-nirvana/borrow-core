@@ -16,14 +16,14 @@ The library's scheduler is cooperative and single-threaded.
 | name | what it is |
 |---|---|
 | `effect Async { ctl await(); ctl log(x: i32) }` | the operations: let other tasks run, and record an entry with the scheduler |
-| `with spawn { e }` | runs `e` to its first `await` and answers the task, a `Task[A]` |
+| `handle { e } with spawn` | runs `e` to its first `await` and answers the task, a `Task[A]` |
 | `resume(t)` | runs a task to its next `await`: `inl` its value if it finished, else `inr` the rest |
 | `cancel(t)` | cancels a task, running what it must finalise |
 | `queue[A]()`, `push(q, t)` | a queue of tasks |
 | `run_until_empty(q)` | resumes the queued tasks round robin; their values, in the order queued |
-| `with spawn_logged { e }`, `lqueue[A]()`, `lpush(q, t)` | the same for tasks whose `log` entries are kept |
+| `handle { e } with spawn_logged`, `lqueue[A]()`, `lpush(q, t)` | the same for tasks whose `log` entries are kept |
 | `run_logged(q)` | runs logged tasks round robin; their values, and every entry logged, in order |
-| `with spawn_in { e }`, `resume_in`, `cancel_in`, `queue_in`, `push_in` | a task that may hold a borrow from the scope it was spawned in across its `await`s |
+| `handle { e } with spawn_in`, `resume_in`, `cancel_in`, `queue_in`, `push_in` | a task that may hold a borrow from the scope it was spawned in across its `await`s |
 | `run_in(q, rounds)` | runs such tasks round robin for at most `rounds` rounds, inside that scope |
 
 The values come back as a `List`, so the examples below print one with a small helper.

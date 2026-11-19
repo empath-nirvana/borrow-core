@@ -1,7 +1,7 @@
 # Effects and handlers
 
 An **effect** is a set of operations. A **handler** gives each operation a meaning, and
-`with h { … }` runs a block with `h` handling the effect. You call an operation like a function.
+`handle { … } with h` runs a block with `h` handling the effect. You call an operation like a function.
 Errors ([Errors](errors.md)), I/O ([Input and output](io.md)), generators
 ([Iteration](iteration.md)) and tasks ([Async tasks](async.md)) are all effects of this one kind,
 declared in the library. This chapter covers the mechanism they share.
@@ -11,7 +11,7 @@ Its row (the effects it performs) is inferred, and the handler around the call s
 
 ## Answering operations
 
-An operation declared `fn` answers its caller straight away. Its handler can keep state in a
+An operation declared without `ctl` answers its caller straight away. Its handler can keep state in a
 `mut` parameter, which each clause can read and assign:
 
 ```bc
@@ -67,11 +67,11 @@ fn main() : 1 {
 # output: 3 notes, adding up to 30
 ```
 
-`with h(&mut c) { … }` lends the state from a cell, and the cell holds the final state after the
+`handle { … } with h(&c)` lends the state from a cell, and the cell holds the final state after the
 block. `walk` is compiled twice, once per handler, and each copy calls its handler's clause
 directly.
 
-You can write a row after the result type, `fn f(…) -> T with Log, Fail[i32]`, and the checker
+You can write a row after the result type, `fn f(…) : T / Log + Fail[i32]`, and the checker
 holds the function to it.
 
 ## Control operations and their continuation
@@ -83,11 +83,11 @@ body. The declaration says how often `k` may be resumed:
 
 | declared | the clause |
 |---|---|
-| `ctl op(…) -> B` | resumes `k` at most once; if it does not, the rest of the body is cancelled |
-| `must_resume ctl op(…) -> B` | resumes `k` exactly once |
-| `ctl op(…) -> never` | receives no `k`: the operation is **abortive**, as `raise` is |
+| `ctl op(…) : B` | resumes `k` at most once; if it does not, the rest of the body is cancelled |
+| `must_resume ctl op(…) : B` | resumes `k` exactly once |
+| `ctl op(…) : never` | receives no `k`: the operation is **abortive**, as `raise` is |
 
-A control handler names the type of the body it handles and what it returns (`Watch, i32 -> i32`
+A control handler names the type of the body it handles and what it returns (`Watch, (i32) -> i32`
 below), and its `return(a)` clause receives the body's value. This handler resumes while the
 values are small and abandons the body at the first large one:
 
@@ -186,8 +186,8 @@ fn main() : 1 { show(5); show(10); show(0 - 1)
 # output: negative: -1
 ```
 
-Two handlers of the same instance are told apart by name: `with n = h(…) { … }` names a handler,
-`n.op(v)` performs at it, and a row can name its entries, `with a: Log, b: Log`:
+Two handlers of the same instance are told apart by name: `handle { … } with h(…) as n` names a handler,
+`n.op(v)` performs at it, and a row can name its entries, `/ a: Log + b: Log`:
 
 ```bc
 import textio
@@ -253,7 +253,7 @@ A block can also use a handler's capability, or yield to a `for` it's written in
 
 Sometimes the function *should* handle what its argument does: `retry` catches the errors of the
 attempt it's given, and a timeout stops it. A parameter whose type carries a row,
-`f: !(i32 => A with Fail[i32])`, is a **computation parameter**. The callee handles the listed
+`f: !((i32) -> A / Fail[i32])`, is a **computation parameter**. The callee handles the listed
 effects of each call `f(…)` itself. Any other effect of the argument still goes to where the
 argument was written.
 
@@ -306,11 +306,11 @@ fn main() : 1 { attempt(5); attempt(2)
 With five attempts, the third succeeds with 200 after waits of 10 and 20. With two, both fail
 and the last error reaches the caller. `retry` never says which timer it uses: its caller picks
 one, here a fake that just adds up the waits. Had `f` been a plain block parameter,
-`f: !(i32 => A)`, the block's `raise` would go straight to the `to_result` in `attempt` and
+`f: !((i32) -> A)`, the block's `raise` would go straight to the `to_result` in `attempt` and
 nothing would be retried. Passing a named function works too: `retry(3, 10, call)` means
 `retry(3, 10, !{ a -> call(a) })`.
 
-`|>` stacks these stages. When `h` is a handler, `e |> h(…)` is `with h(…) { e }`, and when `h`
+`|>` stacks these stages. When `h` is a handler, `e |> h(…)` is `handle { e } with h(…)`, and when `h`
 is a function whose first parameter is a computation parameter, it's `h(!{ () -> e }, …)`. A
 chain reads in the order it wraps, innermost first: `step() |> timeout |> retry(3, 10) |> logged`.
 For any other function, `e |> f(a)` is `f(e, a)` ([Iteration](iteration.md#pipelines)).

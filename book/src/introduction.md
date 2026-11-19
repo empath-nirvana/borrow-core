@@ -1,7 +1,7 @@
 # Introduction
 
 borrow-core is a systems language for people who like Rust's ownership model and want a simpler
-story for everything else. You own values and borrow them with `&` and `&mut`, as in Rust. There
+story for everything else. You own values and lend them, shared or exclusively (`&x`), as in Rust. There
 is no garbage collector and no hidden reference counting: you write the allocations, and the
 compiler inserts the frees. Programs compile to WebAssembly or, through LLVM, to native code.
 

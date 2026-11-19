@@ -4,7 +4,7 @@ Standard input, standard output, standard error, the clock and the command-line 
 each an effect, and their operations are called like ordinary functions. `main` gets them for
 free. Any other function gets them from its caller, and its row (the list of effects it
 performs) says which ones it uses. You usually don't write the row, since it's inferred, but you
-can (`with Stdout`).
+can (`/ Stdout`).
 
 That gives you two things. A function's signature tells you what it can touch. And a test can
 serve the same effect with a handler of its own, say a fake stdout that collects into a string.
@@ -15,9 +15,9 @@ serve the same effect with a handler of its own, say a fake stdout that collects
 |---|---|
 | `Stdout` | `print_byte(b: u8)`, `print_bytes(v: array_imm 'b u8)` |
 | `Stderr` | `eprint_byte(b: u8)`, `eprint_bytes(v: array_imm 'b u8)` |
-| `Stdin` | `input_byte() -> u8 + 1` (`inr ()` at the end), `input_into(v: array_mut 'b u8) -> array_mut 'b u8 * i32` |
-| `Clock` | `now() -> i64` (nanoseconds, monotonic), `sleep(ns: i64)` |
-| `Args` | `arg_byte() -> u8 + 1`: the arguments' bytes, each argument followed by `0` |
+| `Stdin` | `input_byte() : u8 + 1` (`inr ()` at the end), `input_into(v: array_mut 'b u8) : array_mut 'b u8 * i32` |
+| `Clock` | `now() : i64` (nanoseconds, monotonic), `sleep(ns: i64)` |
+| `Args` | `arg_byte() : u8 + 1`: the arguments' bytes, each argument followed by `0` |
 
 The operations work on bytes and byte views. Text and numbers are library code on top:
 
@@ -38,7 +38,7 @@ fn main() : 1 = print_lit("Hello, world!\n")
 
 ## Functions that do I/O
 
-In `main`, an operation that no `with` handles goes to the platform: the operating system's
+In `main`, an operation that no `handle` handles goes to the platform: the operating system's
 streams, clock and arguments, under WebAssembly and natively alike. Every other function just
 performs its effects, and whoever calls it provides them. This one can write to standard output
 and nothing else:
@@ -67,7 +67,7 @@ fn main() : 1 {
 # output: lines 3, bytes 14
 ```
 
-`with Stdout` is optional here: the row is inferred from `print_lit`. If you write it, the
+`/ Stdout` is optional here: the row is inferred from `print_lit`. If you write it, the
 checker holds you to it, and a function that performs an effect its row leaves out is rejected.
 A function with no effects does no I/O. That's guaranteed, not a convention
 ([Safety guarantees](../safety.md)).
@@ -105,7 +105,7 @@ fn main() : 1 {
 # output: report wrote 18 bytes
 ```
 
-`with collect(&mut c) { … }` runs the block with `collect` serving `Stdout`. Its state is lent
+`handle { … } with collect(&c)` runs the block with `collect` serving `Stdout`. Its state is lent
 from the cell `c`, so afterwards `c` holds everything that was written. A fake clock or scripted
 input works the same way.
 

@@ -141,7 +141,7 @@ fn main() : 1 {
 # output: 16
 ```
 
-`take(&mut kids, i)` moves element `i` out, leaving an empty node in its place. `sum` calls
+`take(&kids, i)` moves element `i` out, leaving an empty node in its place. `sum` calls
 itself, which is what `on_exhausted` is for ([Recursion](#recursion), next). A node with a fixed
 number of children can hold an array of itself in the same way,
 `data Tree = Tip(i32) | Node(i32, array Tree)`, and a trie node is
@@ -156,9 +156,9 @@ stack. When the budget runs out the recursion raises an error, `Exhausted`, whic
 level, freeing what each held, like any other [error](errors.md). The compiler checks that
 something handles it, and `import rec` has the two handlers:
 
-- `with on_exhausted(f) { … }` answers `f(())` if the budget runs out, so `f` is a closure that
+- `handle { … } with on_exhausted(f)` answers `f(())` if the budget runs out, so `f` is a closure that
   ignores its argument: `!{ u -> 0 - 1 }` answers −1;
-- `with deep { … }` keeps the pending calls on the heap instead of the stack, so the recursion is
+- `handle { … } with deep` keeps the pending calls on the heap instead of the stack, so the recursion is
   limited only by memory.
 
 ```bc
@@ -176,7 +176,7 @@ fn main() : 1 {
 # output: 500 -1
 ```
 
-`down(20000)` is deeper than the budget, so its answer is −1. `with deep { down(20000) }` would
+`down(20000)` is deeper than the budget, so its answer is −1. `handle { down(20000) } with deep` would
 run it to the end. A fold doesn't count as recursion and needs no handler.
 
 Functions declared one after the other may call each other, as `even` calling `odd` and `odd`
@@ -211,7 +211,7 @@ and `fold`.
 ### Layers
 
 A **layer** wraps every call a recursion makes of itself, without touching the recursive
-function. It is a generic function of the call and its argument, and `with L { … }` applies it to
+function. It is a generic function of the call and its argument, and `handle { … } with L` applies it to
 the recursions in the block. Here a layer counts the calls of `fib`:
 
 ```bc
@@ -240,7 +240,7 @@ fn main() : 1 {
 
 `fib(10)` makes 176 calls of itself, each counted; the first call, from outside, is not. The same
 shape gives tracing or a step limit. Effects and handlers (`effect`, `handler`,
-`with`) are [their own chapter](effects.md).
+`handle`) are [their own chapter](effects.md).
 
 ## Arrays
 
@@ -294,7 +294,7 @@ quicksort sorts each half in place with no allocation per element.
 `buf A` is a growable array, `import buf`, and `Vec[T]` is the prelude's name for one:
 `data Vec[T] = Vec(buf T)`, and every buffer function works on a `Vec`. `box buf[A](cap)`
 allocates one with room for `cap` elements (`box buf[A](0)` allocates nothing until the first
-push), `push(&mut v, x)` appends, `pop(&mut v)` takes the last as an `Option`, `take(&mut v, i)`
+push), `push(&v, x)` appends, `pop(&v)` takes the last as an `Option`, `take(&v, i)`
 moves element `i` out, and `len_of(&v)` is the length. A buffer lends its elements as a view, as an
 array does, so `get`, `set` and the rest of `import slice` index it:
 
@@ -327,8 +327,8 @@ views, arrays, buffers, and data built from them do, but a heap cell `ref A` doe
 `buf[ref i32]` is refused.
 
 `string` is a buffer of UTF-8 bytes, and `text 'a` a view of some (`import textio`, which brings
-`import text` and the I/O helpers). `box string(cap)` makes one; `push_lit(&mut s, "…")`,
-`push_dec(&mut s, n)` and `push_char(&mut s, 'c')` append. A string literal `"…"` is data the
+`import text` and the I/O helpers). `box string(cap)` makes one; `push_lit(&s, "…")`,
+`push_dec(&s, n)` and `push_char(&s, 'c')` append. A string literal `"…"` is data the
 program owns no copy of. Text views are cut without copying (`split_once`, `trim`, `next_line`,
 `fold_lines`), `eq_lit(t, "…")` compares one with a literal, and `parse_i32` reads a number,
 raising on bad input ([Errors](errors.md)).
@@ -442,18 +442,18 @@ structurally. `==` and `equal` are separate families: a float has `==`, IEEE 754
 ## Maps and sets
 
 `import map` is a hash map, `Map[K, V]`, and a set, `Set[K]`. A map is a value: it is lent to
-each operation, and an operation that changes it takes it `&mut`. [map](../stdlib.md#map) in
+each operation, as `&m`, and an operation may change it. [map](../stdlib.md#map) in
 the standard library lists every operation.
 
 | call | answers |
 |---|---|
 | `map_new[K, V](cap)` | an empty map with room for `cap` entries before it grows |
-| `map_insert(&mut m, k, v)` | the value displaced, as an `Option` |
+| `map_insert(&m, k, v)` | the value displaced, as an `Option` |
 | `map_lookup(&m, k)` | a copy of the value (`V` copyable), as an `Option` |
 | `map_contains(&m, k)` | `bool` |
-| `map_remove(&mut m, k)` | the value taken out, as an `Option` |
+| `map_remove(&m, k)` | the value taken out, as an `Option` |
 | `map_len(&m)` | `i32` |
-| `set_new[K](cap)`, `set_insert(&mut s, k)`, `set_contains(&s, k)`, `set_remove(&mut s, k)`, `set_len(&s)` | `set_insert` answers whether `k` was new |
+| `set_new[K](cap)`, `set_insert(&s, k)`, `set_contains(&s, k)`, `set_remove(&s, k)`, `set_len(&s)` | `set_insert` answers whether `k` was new |
 
 Counting the letters of a word:
 

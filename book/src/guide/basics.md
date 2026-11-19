@@ -26,7 +26,8 @@ the result. `fn main() : 1` returns nothing interesting: `1` is the unit type, w
 `()`. A function calls the functions declared before it; functions that call themselves or each
 other are in [Recursion](data.md#recursion).
 
-A body is a sequence of statements separated by `;`, and its value is the value of the last one:
+A body is a sequence of statements, one per line or separated by `;`, and its value is the value
+of the last one:
 
 ```bc
 import textio
@@ -317,10 +318,10 @@ use: a body that copies an `A` works only where `A` can be copied (next chapter)
 
 A function can be passed to another. Its parameter's type says how often it may be called:
 
-- `!(A => B)` is a function that can be called any number of times. A named function is one, and
+- `!((A) -> B)` is a function that can be called any number of times. A named function is one, and
   so is a closure `!{ x -> … }`, which takes what it needs as arguments rather than capturing
   local variables.
-- `A => B` is a function called at most once. A closure `{ x -> … }` of this type may capture
+- `(A) -> B` is a function called at most once. A closure `{ x -> … }` of this type may capture
   anything in scope, including local variables and owned values.
 
 ```bc
@@ -345,7 +346,7 @@ fn main() : 1 {
 ```
 
 A closure's parameter types come from the parameter it is passed to, so a closure bound with
-`let` needs its type written: `let f: !(i32 => i32) = !{ x -> x + 1 };`. A pattern can take the
+`let` needs its type written: `let f: !((i32) -> i32) = !{ x -> x + 1 }`. A pattern can take the
 argument apart, `!{ (a, b) -> a + b }`.
 
 A function whose body performs effects, raises an error or waits, is passed the same way, and the

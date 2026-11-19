@@ -21,7 +21,7 @@ unrestricted types, and recursive data of these (copied with `clone`). Everythin
 | `ref A` | a heap cell holding an `A` |
 | `array A`, `buf A`, `string` | a run of cells (next chapter) |
 | `imm 'a A`, `mut 'a A` | a borrow, below |
-| `A => B` | a closure that may hold owned values; called once |
+| `(A) -> B` | a closure that may hold owned values; called once |
 
 `alloc(v)` puts `v` in a new heap cell, a `ref A`, and `free(c)` takes the value back out and frees
 the cell. Using an owned value moves it, and a value that has moved can't be used again:
@@ -73,8 +73,8 @@ used, and leaving it unused is an error that names it ([Linear values](linear.md
 
 ## Borrowing for one call
 
-`&x` lends `x` shared, and `&mut x` lends it exclusively, to one call. After the call, `x` is
-usable again, changed if it was lent `&mut`. The function receives a borrow, `imm 'a A` or
+Passing `x` lends it shared, and `&x` lends it exclusively, to one call whose parameter is a
+borrow. After the call, `x` is usable again, changed if it was lent with `&`. The function receives a borrow, `imm 'a A` or
 `mut 'a A`, whose lifetime `'a` is a parameter of the function:
 
 ```bc
@@ -104,7 +104,7 @@ fn main() : 1 {
 - `modify m { v -> e }` replaces the contents `v` of a `mut` borrow by `e`. When `e` is a pair
   `(new, result)`, the contents become `new` and `modify` answers `result`.
 
-`&x` and `&mut x` work on a `let mut` variable too, with no heap cell: the compiler gives the
+`x` and `&x` lend a `var` variable too, with no heap cell: the compiler gives the
 variable a slot in the stack frame for the call. Through a `mut` borrow of a record, a field is
 assigned as on the record itself:
 
@@ -153,7 +153,7 @@ mentions it, in which case it is written first: `borrow imm a { 'x, v -> … }`.
 
 Inside the block, `m` is a value like any other: passing it to a function moves it. So a function
 that takes a `mut` borrow and is meant to be called more than once hands it back,
-`fn f<'a>(m: mut 'a A) -> mut 'a A * B`, and the caller binds it again, `let (m, r) = f(m);`.
+`fn f<'a>(m: mut 'a A) : mut 'a A * B`, and the caller binds it again, `let (m, r) = f(m)`.
 The view functions of the next chapter work this way.
 
 An `imm` borrow is linear too, but it has a derived copy: a second use of it is a copy, which the
@@ -201,7 +201,7 @@ fn main() : i32 {
 ```
 
 Any number of `imm` borrows of a place may be live at once, and a `mut` borrow is exclusive, so
-two `&mut` of one place are never live together. Lifetimes are lexical, as Rust's were before
+two exclusive lends `&x` of one place are never live together. Lifetimes are lexical, as Rust's were before
 non-lexical lifetimes: a borrow lasts for its call or its block.
 
 ## Recursive data is copied only when you say so
@@ -244,4 +244,4 @@ that must not outlive a borrow it was made from. `main` runs under a lifetime of
 `'main`, which lasts for its whole body; a call that needs a lifetime its arguments don't give
 gets the innermost one in scope, and `f['main](…)` passes `main`'s by name. A generic function
 can require that a type argument outlive one of its lifetimes, as in Rust:
-`fn hold[S]<'c>(s: S) -> … where S: 'c`.
+`fn hold[S]<'c>(s: sink S) : … where S: 'c`.

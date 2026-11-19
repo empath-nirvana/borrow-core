@@ -1,6 +1,6 @@
 # Errors
 
-An error is raised with `raise(e)` and handled with `with h { … }` around the code that may raise
+An error is raised with `raise(e)` and handled with `handle { … } with h` around the code that may raise
 it. There is one model: no `Result` type threaded by hand, no `?`, no exceptions separate from
 the rest of the language. `raise` is an operation of an ordinary effect, `Fail[E]`, and its
 handlers are ordinary handlers ([Effects and handlers](effects.md) has the general mechanism).
@@ -11,11 +11,11 @@ handlers are ordinary handlers ([Effects and handlers](effects.md) has the gener
 
 | handler | answers |
 |---|---|
-| `with to_result { e }` | `inl` the value of `e`, or `inr` the error |
-| `with default(d) { e }` | the value of `e`, or `d` |
-| `with map_err(f) { e }` | the value of `e`; an error `x` is raised again as `f(x)`, to the handler around it |
+| `handle { e } with to_result` | `inl` the value of `e`, or `inr` the error |
+| `handle { e } with default(d)` | the value of `e`, or `d` |
+| `handle { e } with map_err(f)` | the value of `e`; an error `x` is raised again as `f(x)`, to the handler around it |
 
-A function that raises says so after its result type, `with Fail[E]`, and a function that calls
+A function that raises says so after its result type, `/ Fail[E]`, and a function that calls
 one that raises raises too, with nothing written: its *row*, the effects it may perform, is
 inferred. A call of a function that raises needs no `?`: the error goes on by itself to the
 nearest handler.
@@ -112,7 +112,7 @@ handler to_result[E, A]: Fail[E], A -> A + E = {
 }
 ```
 
-`ctl raise(e: E) -> never` declares an operation that never returns to its caller (it answers
+`ctl raise(e: E) : never` declares an operation that never returns to its caller (it answers
 the empty type `never`), so the handler's clause receives only the error.
 
 ## Errors of several types
