@@ -79,10 +79,12 @@ deriving instance ToExpr for Frontend.Program
 namespace Frontend.Check
 
 open Elab Term in
-/-- `bcc_program% "file"`: the AST the parser gives the file, as a term. -/
+/-- `bcc_program% "file"`: the AST the parser gives the file, as a term: in the new spelling, the
+parse its calls' lends are read in (`Frontend.Elab.parseLent`, SPEC §82 P8), as `bcc check`
+reads it.  `[spec §82]` -/
 elab "bcc_program% " s:str : term => do
   let src ← IO.FS.readFile s.getString
-  match Frontend.parseProgram src with
+  match (·.1) <$> Frontend.Elab.parseLent src with
   | .ok p => return toExpr p
   | .error e => throwError m!"{s.getString}:{e.render}"
 

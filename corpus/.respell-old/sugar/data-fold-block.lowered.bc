@@ -1,0 +1,31 @@
+-- lowers: corpus/data-fold-block.bc
+-- `corpus/data-fold-block.bc` with its fold block written out by SPEC §42's rule F1, in the
+-- surface: the kernel's `fold_imm` at the tree's shape and the function's result, applied to the
+-- algebra at `A_R = 1 + i32 * (imm 'y i32 * i32)`, its arms a `case` on the unrolled shape.
+-- The declaration and constructors are written out as `corpus/sugar/data-box-tree.lowered.bc`'s.
+
+type Tree = mu X. 1 + (ref X * (ref i32 * ref X))
+
+shape Tree_Node = node (leaf Tree) (node (leaf i32) (leaf Tree))
+
+fn branch(l: Tree, v: i32, r: Tree) -> Tree = (roll (inr (alloc_s[Tree_Node] (l, (v, r)))) : Tree)
+
+fn sum<'a>(t: imm 'a Tree) -> i32 =
+  (unbang fold_imm[1 + ref X * (ref i32 * ref X), 'y, top, i32] (!thunkv Fun 'y < top.
+    return (thunkv fun (x : 1 + i32 * (imm 'y i32 * i32)) ->
+      case x {
+        inl e -> let () = e; 0
+      | inr b ->
+          let (cl, rest) = b;
+          let (cv, cr) = rest;
+          let l = cl;
+          let v = cv;
+          let r = cr;
+          l + *v + r
+      }))) ['a] t
+
+main -> i32 =
+  let t = branch(branch((roll (inl ()) : Tree), 1, (roll (inl ()) : Tree)), 2,
+    branch((roll (inl ()) : Tree), 3, (roll (inl ()) : Tree)));
+  let n = sum(&t);
+  n

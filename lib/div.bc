@@ -1,13 +1,14 @@
--- Divergence (SPEC §14): the delay bind and the fuel handler. A div function of `A` returning
--- `B` is `A => U (loop B R)`: calling it runs its code up to its first loop and returns the rest
--- as a loop, which finishes with `B` or, closed early, hands back the residual `R`. This is
--- ordinary library code over `unfold` (SPEC §7), checked with the program and emitted when the
--- elaborated program names it. An elaborated div body is one state machine (SPEC §15) and uses
--- no `div_bind`; the delay bind sequences the parts of a body the machine does not cover.
+#! dialect 82
+# Divergence (SPEC §14): the delay bind and the fuel handler. A div function of `A` returning
+# `B` is `A => U (loop B R)`: calling it runs its code up to its first loop and returns the rest
+# as a loop, which finishes with `B` or, closed early, hands back the residual `R`. This is
+# ordinary library code over `unfold` (SPEC §7), checked with the program and emitted when the
+# elaborated program names it. An elaborated div body is one state machine (SPEC §15) and uses
+# no `div_bind`; the delay bind sequences the parts of a body the machine does not cover.
 
--- The bind's state: in the first loop, with the continuation; or in the continuation's loop.
--- The continuation has two observations: go on with the first loop's result, or, when the
--- whole is closed during the first loop, turn that loop's residual into the whole's.
+# The bind's state: in the first loop, with the continuation; or in the continuation's loop.
+# The continuation has two observations: go on with the first loop's result, or, when the
+# whole is closed during the first loop, turn that loop's residual into the whole's.
 def div_bind_step[A, B, R1, R] :
     !U ((U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)
         -o F (B + ((U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)))
@@ -38,8 +39,8 @@ def div_bind_step[A, B, R1, R] :
       | inr l -> (nu_out (force l)).2
       } >
 
--- The delay bind: run the first loop, then the continuation on its result. If either never
--- finishes, neither does the whole.
+# The delay bind: run the first loop, then the continuation on its result. If either never
+# finishes, neither does the whole.
 def div_bind[A, B, R1, R] :
     U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R)) => U (loop B R) =
   thunkv fun (p : U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) ->
@@ -50,8 +51,8 @@ def div_bind[A, B, R1, R] :
       return (inl p);
     return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
 
--- Fuel. One observation of a loop that has not finished, at each count: the state is the loop,
--- or once it has finished, its result.
+# Fuel. One observation of a loop that has not finished, at each count: the state is the loop,
+# or once it has finished, its result.
 def div_fuel_step[A, Q] : !(i32 * (U (loop A Q) + (A + Q)) => U (loop A Q) + (A + Q)) =
   !thunkv fun (p : i32 * (U (loop A Q) + (A + Q))) ->
     let (i, s) = p;
@@ -65,9 +66,9 @@ def div_fuel_step[A, Q] : !(i32 * (U (loop A Q) + (A + Q)) => U (loop A Q) + (A 
     | inr r -> return (inr r)
     }
 
--- The fuel handler: observe a loop at most `n` times, and close it if it has not finished.
--- It is `driveE n` (SPEC §7) with the count a value, counted by `count_fold` (SPEC §16): div
--- code under it is total, and the count allocates nothing.
+# The fuel handler: observe a loop at most `n` times, and close it if it has not finished.
+# It is `driveE n` (SPEC §7) with the count a value, counted by `count_fold` (SPEC §16): div
+# code under it is total, and the count allocates nothing.
 def div_fuel[A, Q] : U (loop A Q) * i32 => A + Q =
   thunkv fun (p : U (loop A Q) * i32) ->
     let (l, n) = p;
@@ -80,10 +81,10 @@ def div_fuel[A, Q] : U (loop A Q) * i32 => A + Q =
     | inr r -> return r
     }
 
--- A loop that runs nothing until it is first observed: its state is the code to start it, `t`,
--- whose first observation runs the code up to the loop and returns the loop, and whose second
--- hands back the residual without running anything; or, once started, the loop. `{ S }` of a
--- body `S` that loops is `div_defer` of `< S, abort >` (typed elaboration, decision 2).
+# A loop that runs nothing until it is first observed: its state is the code to start it, `t`,
+# whose first observation runs the code up to the loop and returns the loop, and whose second
+# hands back the residual without running anything; or, once started, the loop. `{ S }` of a
+# body `S` that loops is `div_defer` of `< S, abort >` (typed elaboration, decision 2).
 def div_defer_step[B, R] :
     !U (U (F (U (loop B R)) & F R) + U (loop B R)
         -o F (B + (U (F (U (loop B R)) & F R) + U (loop B R))) & F R) =

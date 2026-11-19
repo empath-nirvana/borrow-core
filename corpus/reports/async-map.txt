@@ -1,4 +1,4 @@
-effect 18:1: Exhausted: exhausted (ctl, cancellable, abortive)
+effect 19:1: Exhausted: exhausted (ctl, cancellable, abortive)
 row 25:1: slow_tens: Exhausted, Async
 lowering 25:1: copy `slow_tens__n2_n1`: `slow_tens` for the site 2 of `Exhausted`, the site 1 of `Async`
 lowering 29:14: with on_exhausted: every operation abortive, so its clauses run after the handler, in the scope of the `with`

@@ -1,4 +1,4 @@
-effect 17:1: Fail: raise (ctl, cancellable, abortive)
+effect 18:1: Fail: raise (ctl, cancellable, abortive)
 effect 43:1: Ask: ask (ctl, cancellable)
 row 28:1: quot: Fail[DivError]
 row 30:1: harmonic: Fail[DivError]

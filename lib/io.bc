@@ -1,24 +1,27 @@
--- The I/O library (SPEC §11, §34): over the system interface's effects (`lib/sys.bc`), and over
--- the streams' cells, each helper there the platform's handler (`lib/wasi.bc`) lent the cell around
--- one operation, so that an extern is called only by a platform handler. It is ordinary library
--- code, checked with the program, and in scope in a program whose `main` uses the streams
--- ambiently or that includes it. Each helper over a cell takes it and hands it back first, so
--- `&mut c` can lend it to one call.
+#! dialect 82
+# The I/O library (SPEC §11, §34): over the system interface's effects (`lib/sys.bc`), and over
+# the streams' cells, each helper there the platform's handler (`lib/wasi.bc`) lent the cell around
+# one operation, so that an extern is called only by a platform handler. It is ordinary library
+# code, checked with the program, and in scope in a program whose `main` uses the streams
+# ambiently or that includes it. Each helper over a cell takes it and hands it back first, so
+# `&mut c` can lend it to one call.
 
-include wasi
+import wasi
 
 type In = ref input
 type Out = ref output
 type Bytes = mu X. 1 + (u8 * X)
 
--- The next byte of an input, or `inr ()` at its end.
-fn getb(c: In) -> In * (u8 + 1) = let r = with wasi_stdin(&mut c) { input_byte() }; (c, r)
+# The next byte of an input, or `inr ()` at its end.
+fn getb(c: sink In) : In * (u8 + 1) { let r = handle { input_byte() } with wasi_stdin(&c); (c, r)
+}
 
--- One byte to an output.
-fn putb(o: Out, b: u8) -> Out * 1 = with wasi_stdout(&mut o) { print_byte(b) }; (o, ())
+# One byte to an output.
+fn putb(o: sink Out, b: u8) : Out * 1 { handle { print_byte(b) } with wasi_stdout(&o); (o, ())
+}
 
--- Decimal output. The state is (output, (n, (d, started))): `d` runs over 10^9, 10^8, …, 1, and
--- the digit `n / d` is written once a nonzero digit has been, or at `d = 1`.
+# Decimal output. The state is (output, (n, (d, started))): `d` runs over 10^9, 10^8, …, 1, and
+# the digit `n / d` is written once a nonzero digit has been, or at `d = 1`.
 def io_dec_step : !(Out * (i32 * (i32 * (1 + 1))) => Out * (i32 * (i32 * (1 + 1)))) =
   !thunkv fun (s : Out * (i32 * (i32 * (1 + 1)))) ->
     let (o, r) = s;
@@ -56,7 +59,7 @@ def io_dec_twice : !(Out * (i32 * (i32 * (1 + 1))) => Out * (i32 * (i32 * (1 + 1
     return (!thunkv fun (s : Out * (i32 * (i32 * (1 + 1)))) ->
       return ((unbang f) ((unbang f) s)))
 
--- A number to an output, in unsigned decimal: sixteen steps cover its ten digits.
+# A number to an output, in unsigned decimal: sixteen steps cover its ten digits.
 def put_dec : Out * i32 => Out * 1 =
   thunkv fun (p : Out * i32) ->
     let (o, n) = p;
@@ -65,17 +68,19 @@ def put_dec : Out * i32 => Out * 1 =
     let (o2, r) = s;
     return (o2, ())
 
--- The bytes of a view to an output, in one write (`write_all`).
-fn write_bytes<'b>(o: Out, v: array_imm 'b u8) -> Out * 1 =
-  with wasi_stdout(&mut o) { print_bytes(v) }; (o, ())
+# The bytes of a view to an output, in one write (`write_all`).
+fn write_bytes(o: sink Out, v: array u8) : Out * 1 {
+  handle { print_bytes(v) } with wasi_stdout(&o); (o, ())
+}
 
--- Bytes of an input read into a view, until it is full or the input ends (`read_into`): the
--- view back, and the number of bytes read, which is less than its length only at the end.
-fn read_bytes<'b>(c: In, v: array_mut 'b u8) -> In * (array_mut 'b u8 * i32) =
-  let r = with wasi_stdin(&mut c) { input_into(v) }; (c, r)
+# Bytes of an input read into a view, until it is full or the input ends (`read_into`): the
+# view back, and the number of bytes read, which is less than its length only at the end.
+fn read_bytes<'b>(c: sink In, v: array_mut 'b u8) : In * (array_mut 'b u8 * i32) {
+  let r = handle { input_into(v) } with wasi_stdin(&c); (c, r)
+}
 
--- The input as a stream of bytes, `iter u8 In In`: `next` reads a byte, and finishes with the
--- capability at the end of the input; `close` hands the capability back.
+# The input as a stream of bytes, `iter u8 In In`: `next` reads a byte, and finishes with the
+# capability at the end of the input; `close` hands the capability back.
 def io_bytes_step : !U (In -o F (u8 * In + In) & F In) =
   !thunkv fun (c : In) ->
     < q <- return (getb c);
@@ -91,48 +96,50 @@ def bytes : In => U (iter u8 In In) =
     f <- return (unbang (unfold[iter u8 In In, In] io_bytes_step));
     return (thunkv nu_in < (nu_out (force f c)).1, (nu_out (force f c)).2 >)
 
--- ### Over the effects  `[spec §34]`
+# ### Over the effects  `[spec §34]`
 
--- The decimal digits of `x`, with a `-` when it is negative, each given to `put`.
-fn dec_each(x: i32, put: !(u8 => 1)) -> 1 =
-  let mut n = x;
-  if x < 0 { put(b'-'); n = 0 - x } else { () };
-  let mut d = 1000000000;
-  let mut started = false;
+# The decimal digits of `x`, with a `-` when it is negative, each given to `put`.
+fn dec_each(x: i32, put: !((u8) -> 1)) : 1 {
+  var n = x
+  if x < 0 { put(b'-'); n = 0 - x } else { () }
+  var d = 1000000000
+  var started = false
   for _ in 0..10 {
-    let q = match host[div_u32](n, d) { inl y -> y | inr u -> 0 };
-    if started || q != 0 || d == 1 { put(to_u8(q + 48)); started = true } else { () };
-    n = n - q * d;
-    let d2 = match host[div_u32](d, 10) { inl y -> y | inr u -> 1 };
+    let q = match host[div_u32](n, d) { inl y -> y | inr u -> 0 }
+    if started || q != 0 || d == 1 { put(to_u8(q + 48)); started = true } else { () }
+    n = n - q * d
+    let d2 = match host[div_u32](d, 10) { inl y -> y | inr u -> 1 }
     d = d2
   };
   ()
+}
 
--- `x` in decimal to standard output, with a `-` when it is negative.
-fn print_dec(x: i32) -> 1 = dec_each(x, !{ b -> print_byte(b) })
+# `x` in decimal to standard output, with a `-` when it is negative.
+fn print_dec(x: i32) : 1 = dec_each(x, !{ b -> print_byte(b) })
 
--- `x` in decimal to standard error, with a `-` when it is negative.
-fn eprint_dec(x: i32) -> 1 = dec_each(x, !{ b -> eprint_byte(b) })
+# `x` in decimal to standard error, with a `-` when it is negative.
+fn eprint_dec(x: i32) : 1 = dec_each(x, !{ b -> eprint_byte(b) })
 
--- `ms` milliseconds as the clock's nanoseconds (SPEC §34).
-fn ns_of_ms(ms: i32) -> i64 = host[extend_s](ms) * 1000000
+# `ms` milliseconds as the clock's nanoseconds (SPEC §34).
+fn ns_of_ms(ms: i32) : i64 = host[extend_s](ms) * 1000000
 
--- The decimal digits of `x`, with a `-` when it is negative, each given to `put`: nineteen steps
--- cover the digits of the magnitude, which is read unsigned so that `-2^63` has one. `[spec §34]`
-fn dec64_each(x: i64, put: !(u8 => 1)) -> 1 =
-  let mut n = x;
-  if x < i64[0] { put(b'-'); n = i64[0] - x } else { () };
-  let mut d = i64[1000000000000000000];
-  let mut started = false;
+# The decimal digits of `x`, with a `-` when it is negative, each given to `put`: nineteen steps
+# cover the digits of the magnitude, which is read unsigned so that `-2^63` has one. `[spec §34]`
+fn dec64_each(x: i64, put: !((u8) -> 1)) : 1 {
+  var n = x
+  if x < i64[0] { put(b'-'); n = i64[0] - x } else { () }
+  var d = i64[1000000000000000000]
+  var started = false
   for _ in 0..19 {
-    let q = match host[div_u64](n, d) { inl y -> y | inr u -> i64[0] };
+    let q = match host[div_u64](n, d) { inl y -> y | inr u -> i64[0] }
     if started || q != i64[0] || d == i64[1] { put(to_u8(host[wrap](q) + 48)); started = true }
-    else { () };
-    n = n - q * d;
-    let d2 = match host[div_u64](d, i64[10]) { inl y -> y | inr u -> i64[1] };
+    else { () }
+    n = n - q * d
+    let d2 = match host[div_u64](d, i64[10]) { inl y -> y | inr u -> i64[1] }
     d = d2
   };
   ()
+}
 
--- `x` in decimal to standard output, with a `-` when it is negative.
-fn print_dec64(x: i64) -> 1 = dec64_each(x, !{ b -> print_byte(b) })
+# `x` in decimal to standard output, with a `-` when it is negative.
+fn print_dec64(x: i64) : 1 = dec64_each(x, !{ b -> print_byte(b) })
