@@ -1,0 +1,11 @@
+-- An operation that two instances in scope could serve (SPEC §38): handlers of `Fail[i32]` and
+-- `Fail[u8]` are both in scope, and `raise(1)`'s argument is a literal, whose width its context
+-- decides, so its instance is not known here. Ascribing it, `raise((1 : u8))`, or naming the
+-- handler, `inner.raise(1)`, says which.
+-- expect: 9:42: the operation `raise` performs `Fail` at type arguments not known here, and handlers of `Fail[u8]`, `Fail[i32]` are in scope: ascribe its argument (`(e : T)`), or perform it at a named handler (`n.op(…)`, SPEC §38)
+include fail
+
+fn f() -> (i32 + u8) + i32 = with to_result[i32, i32 + u8] {
+  with to_result[u8, i32] { let x: i32 = raise(1); x } }
+
+main -> (i32 + u8) + i32 = f()

@@ -1,0 +1,11 @@
+-- expect: 10:14: the type of this argument of `id` is not determined here
+-- SPEC §15 *A local whose type is not known* (#849): `y = inl 3` has no type inference knows, and
+-- the only argument of `id` is `y`, so nothing determines `A`: the call is refused as not
+-- determined, at `y`. Writing `let y: i32 + 1 = inl 3;` makes it check. The refusal must not
+-- name a type `1`, which appears nowhere in the program.
+fn id[A](x: A) -> A = x
+
+main -> i32 =
+  let y = inl 3;
+  let z = id(y);
+  match z { inl a -> a | inr u -> 0 }

@@ -1,8 +1,9 @@
--- expect: 17:3: the clauses box `κ` at `top`, so every operation the handled computation resumes at must answer a type that outlives it: 1.0 answers `U (F i32)`, which cannot be shown to outlive `top`
--- BOXED-κ (SPEC §28), refused at its answer premise. The clauses receive `κ` boxed at `top`, and
--- the operation `1.0` answers a thunk `U (F i32)`, which has no outlives rule: a resumption could
--- hand the handled computation a value whose resource is not in `Res_{top}`, and a later stop's
--- continuation would hold it. The same handler at a bare `κ` is `[handle]`'s and checks.
+#! dialect 82
+# expect: 18:3: the clauses box `κ` at `top`, so every operation the handled computation resumes at must answer a type that outlives it: 1.0 answers `U (F i32)`, which cannot be shown to outlive `top`
+# BOXED-κ (SPEC §28), refused at its answer premise. The clauses receive `κ` boxed at `top`, and
+# the operation `1.0` answers a thunk `U (F i32)`, which has no outlives rule: a resumption could
+# hand the handled computation a value whose resource is not in `Res_{top}`, and a later stop's
+# continuation would hold it. The same handler at a bare `κ` is `[handle]`'s and checks.
 
 main : F i32 =
   hr_ : !U (i32 -o F i32) <- return (!thunkv fun (v : i32) -> return v);

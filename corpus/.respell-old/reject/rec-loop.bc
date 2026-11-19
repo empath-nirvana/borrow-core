@@ -1,0 +1,17 @@
+-- expect: 9:4: `spin` is recursive and its body has a `while` or a `loop`, so it is div: the `Exhausted` of its budget would be performed inside its loop, and a handler around a div computation is not provided
+-- A recursion whose body loops is div (SPEC §14): each level answers a loop. The fixed point is
+-- taken at loops as at any computation type (SPEC §20), but the recursion's budget runs out
+-- inside a loop's observation, where `Exhausted` has no handler: a handler around a div
+-- computation is not provided (SPEC §20, *Open*).
+
+include rec
+
+fn spin(n: i32) -> i32 =
+  if n == 0 { 0 } else {
+    let mut i = n;
+    let mut s = 0;
+    while i > 0 { s = s + 1; i = i - 1 };
+    s + spin(n - 1)
+  }
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) { spin(5) }

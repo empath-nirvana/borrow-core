@@ -1,0 +1,11 @@
+-- expect: 8:4: `report` performs `Stdout`, which its written row does not list
+-- A function uses standard output without being given it (SPEC §34): `report` is given only
+-- `Stderr` by its written row, and writes to standard output. A function's row is the
+-- capabilities it is given; `main`'s caller, the platform, gives `main` every one it performs,
+-- and no other function is given one its row does not name.
+include io
+
+fn report(n: i32) -> 1 with Stderr =
+  print_dec(n)
+
+main -> 1 = report(7)

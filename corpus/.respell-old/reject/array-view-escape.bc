@@ -1,0 +1,22 @@
+-- A leaf view escaping its family's lifetime: the callback of `withload` returns the view of
+-- element 0, to be read after the family's lifetime `'y` has ended.
+type A = array i32
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return i
+
+main : F 1 =
+  a <- return ((unbang array_new[i32]) (i32[2], tab));
+  r <- return (alloc[A] a);
+  q <- return (withbor1['x, A, 1] r
+         (thunkv Fun 'x < top. return (thunkv fun (b : imm 'x A) ->
+            v <- return (withload['x, 'y, A, imm 'x i32] b
+                   (thunkv Fun 'y < dom. return (thunkv fun (f : array_imm 'y i32) ->
+                      g <- return ((unbang array_get['y, i32]) (f, i32[0]));
+                      case g {
+                        inl e -> return (boxed['y] e)
+                      | inr u -> absurd u
+                      })));
+            return (boxed['x] ()))));
+  let (r2, u) = q;
+  return u
+-- expect: 16:52: type mismatch: expected `imm 'x i32`, but this has type `imm 'y i32`

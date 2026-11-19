@@ -1,9 +1,10 @@
--- expect: 26:10: the clauses box `κ` at `'r`, so the handled computation's context must outlive it: `k`, of type `imm 'r i32`, is used inside, and it cannot be shown to outlive `'r`
--- BOXED-κ (SPEC §28), refused at its context premise. The clauses receive `κ` boxed at `'r`, and
--- the handled computation holds `k : imm 'r i32` across its `await`, so its share at the stop
--- holds a borrow at `'r` itself: the context must outlive `'r`, and `imm 'r i32 ⊐ 'r` is
--- `'r ⊏ 'r`, false (the `Imm` rule of the outlives judgment is strict, SPEC §23). The same handler
--- at a bare `κ` is `[handle]`'s and checks.
+#! dialect 82
+# expect: 27:10: the clauses box `κ` at `'r`, so the handled computation's context must outlive it: `k`, of type `imm 'r i32`, is used inside, and it cannot be shown to outlive `'r`
+# BOXED-κ (SPEC §28), refused at its context premise. The clauses receive `κ` boxed at `'r`, and
+# the handled computation holds `k : imm 'r i32` across its `await`, so its share at the stop
+# holds a borrow at `'r` itself: the context must outlive `'r`, and `imm 'r i32 ⊐ 'r` is
+# `'r ⊏ 'r`, false (the `Imm` rule of the outlives judgment is strict, SPEC §23). The same handler
+# at a bare `κ` is `[handle]`'s and checks.
 
 def look : !(all 'r < top. imm 'r i32 => i32) =
   !thunkv Fun 'r < top. return (thunkv fun (b : imm 'r i32) ->

@@ -1,0 +1,10 @@
+-- expect: 9:11: the type `A` of `none` is not determined by its arguments: write them, `none[…](…)`
+-- A type parameter that neither the arguments nor the expected result determine: `none()`
+-- could be at any `A`, and the error is at the call, naming the parameter.
+
+fn none[A]() -> A + 1 = inr ()
+
+main -> i32 =
+  let x : i32 = 0;
+  let o = none();
+  match o { inl y -> x | inr u -> x }

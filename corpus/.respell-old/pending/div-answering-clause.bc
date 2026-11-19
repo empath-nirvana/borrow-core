@@ -1,0 +1,19 @@
+-- pending: SPEC §18 *Not provided* (an operation inside a clause of an answering handler)
+-- A clause of an answering handler that divides by a variable (SPEC §39): such a clause is code over
+-- the handler's state, run in place by `withswap`, and performs no operation, so a division in it
+-- that can raise is refused, as a `raise` is. A literal divisor performs nothing and is accepted;
+-- `checked_div` answers the sum, which the clause may keep in its state.
+
+effect Acc { fn add(x: i32) }
+
+handler shares(mut s: i32): Acc = {
+  add(x) = { s = s + 100 / x }
+}
+
+fn feed() -> 1 with Acc = add(4); add(5)
+
+main -> i32 =
+  let c = alloc(0);
+  with shares(&mut c) { feed() };
+  free(c)
+-- now: 10:3: the clause `add` of `shares` performs an operation of `Fail`: a clause of an answering handler is code over the handler's state, and performs no operation

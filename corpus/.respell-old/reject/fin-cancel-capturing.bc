@@ -1,0 +1,19 @@
+-- The design limit of a dropped continuation cancelled on an abort (SPEC §27 *Open*, `⊤` cancel
+-- rows; #953): `tm`'s clause performs `ask`, which captures a continuation, while its `k` is live
+-- and dropped, and its row has an abortive operation (`Fail`), so an abort through the clause must
+-- cancel `k` on the way out (`… unwind (cancel k)`). That cancel performs the clause's row, `ask`
+-- with it, and runs when `ask`'s continuation is cancelled: `ask`'s cancel row would contain
+-- itself, at every depth (`⊤`), which the core text cannot spell. Refused, naming the operation.
+
+include fail
+
+effect Wait { ctl wait() }
+effect Ask { ctl ask() }
+
+handler asker[A]: Ask, A -> A = { return(x) = x; ask(k) = k(()) }
+handler tm[A]: Wait, A -> A + 1 with Fail[i32], Ask = { return(x) = inl x; wait(k) = { ask(); inr () } }
+
+fn work() -> i32 with Wait, Fail[i32] = x <- wait() unwind (let r = raise((3 : i32)); ()); 5
+
+main -> (i32 + 1) + i32 = with asker[(i32 + 1) + i32] { with to_result[i32, i32 + 1] { with tm[i32] { work() } } }
+-- expect: 14:76: this clause's continuation is live across `Ask.ask` (1.0), an operation that captures a continuation, and its cancel performs: if the continuation captured at `Ask.ask` (1.0) is cancelled, this one must be cancelled with it, and `Ask.ask` (1.0)'s cancel row would contain itself (SPEC §27, `⊤` cancel rows)

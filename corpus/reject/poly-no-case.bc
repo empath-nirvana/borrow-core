@@ -1,9 +1,10 @@
--- expect: 9:16: `equal` has no case at `!(i32 => i32)`
--- A function has no equality (SPEC §36, `lib/key.bc`): no case of `equal` is at a function type,
--- so a use at one is an error at the use.
+#! dialect 82
+# expect: 10:20: `equal` has no case at `!(i32 => i32)`
+# A function has no equality (SPEC §36, `lib/key.bc`): no case of `equal` is at a function type,
+# so a use at one is an error at the use.
 
-include key
+import key
 
-fn inc(x: i32) -> i32 = x + 1
+fn inc(x: i32) : i32 = x + 1
 
-main -> bool = equal(inc, inc)
+fn main() : bool = equal(inc, inc)

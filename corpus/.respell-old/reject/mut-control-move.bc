@@ -1,0 +1,13 @@
+-- expect: 13:99: a value can't be moved out of `buf` here: it is lent for the body of a control handler, which may be abandoned, and its type `array u8 * i32` is linear
+-- A move out of a `let mut` variable lent for the body of a control handler (SPEC §41, R3; §18
+-- *Not provided*). The body lends `buf` to `push_x`, so `buf` is lent around the handler site and
+-- in the body is a borrow of it. `eat(buf)` would move the string out of the borrow, which has no
+-- term: a borrow's content is read by copying it, and a string is linear. The program is refused,
+-- naming the variable; bind what the block answers and move `buf` after the `with` instead.
+include fail
+include text
+
+fn push_x<'a>(m: mut 'a string) -> 1 = modify m { s -> push_byte(s, b'x') }
+fn eat(s: string) -> i32 = let (a, n) = s; n
+
+main -> i32 + i32 = let mut buf = string_new(4); with to_result[i32, i32] { push_x(&mut buf); eat(buf) }

@@ -1,0 +1,6 @@
+-- expect: 4:4: `fib` calls itself: a recursion's depth is bounded, and its exhaustion effect is in `lib/rec.bc`: `include rec`
+-- A function that calls itself is a recursion (SPEC §20), whose default driver performs
+-- `Exhausted` when its budget of depth is spent: the effect is the library's, so it is included.
+fn fib(n: i32) -> i32 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+
+main -> i32 = fib(10)

@@ -1,0 +1,22 @@
+-- pending: a list threaded through a `for` over a generator (an internal error in the `for`'s core)
+-- now: 21:3: internal error in a `for` over a generator: 7:67: this is a value type, but a computation type is expected here
+-- A `for` over a generator whose body conses each element onto a `let mut` list. The same loop
+-- that adds the elements into an `i32`, or pushes them onto a buffer, runs
+-- (`corpus/parse-recover-gen.bc` collects its tokens through a buffer for this reason). The
+-- generator owns its data, a literal, and reads it by index, so no borrow is involved (decision
+-- 71); the failure is in the elaboration of the loop's threaded list.
+--
+-- Once it lands: the bytes of `abc` in reverse, `[99, 98, 97]`, `live 0`.
+
+include yield
+include list
+
+fn bytes_of(src: lit) -> 1 with Yield[i32] =
+  let (n, byte) = src;
+  for i in 0..n { let b = byte(i); yield(to_i32(b)) };
+  ()
+
+main -> List[i32] =
+  let mut s = nil[i32]();
+  for t in bytes_of("abc") { s = cons(t, s) };
+  s

@@ -1,8 +1,9 @@
--- expect: 4:6: the declarations `A`, `B` are mutually recursive with no member on every cycle: not provided (the single-root rule)
--- Mutual recursion with no member on every cycle (SPEC §42): `A` and `B` each name themselves.
+#! dialect 82
+# expect: 5:6: the declarations `A`, `B` are mutually recursive with no member on every cycle: not provided (the single-root rule)
+# Mutual recursion with no member on every cycle (SPEC §42): `A` and `B` each name themselves.
 
 data A = Na | Ma(A, B)
 
 data B = Nb | Mb(B, A)
 
-main -> i32 = 0
+fn main() : i32 = 0

@@ -1,4 +1,5 @@
--- Use after free: the cell `r` is freed, then swapped.
+#! dialect 82
+# Use after free: the cell `r` is freed, then swapped.
 type B = 1 + 1
 
 main : F B =
@@ -7,4 +8,4 @@ main : F B =
   q <- return (swap[B, B] r x);
   let (r2, y) = q;
   return (free[B] r2)
--- expect: 6:3: `r` is used twice here, and its type `ref (1 + 1)` is linear
+# expect: 7:3: `r` is used twice here, and its type `ref (1 + 1)` is linear

@@ -1,6 +1,7 @@
--- expect: 15:10: `twice` is declared `total`, but it calls the div function `count` (SPEC §14)
--- A function that calls a div function in direct style is div, so it cannot be declared `total`:
--- to run one from total code, bound it with `div_fuel`.
+#! dialect 82
+# expect: 16:10: `twice` is declared `total`, but it calls the div function `count` (SPEC §14)
+# A function that calls a div function in direct style is div, so it cannot be declared `total`:
+# to run one from total code, bound it with `div_fuel`.
 def count : In => In * i32 =
   thunkv fun (c : In) ->
     n : i32 <- return i32[0];

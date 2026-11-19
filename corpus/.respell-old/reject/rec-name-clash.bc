@@ -1,0 +1,10 @@
+-- expect: 10:53: `map` is recursive and another function is named `map` too: a call of it is not provided (two modules may declare templates of one name, chosen by the arguments' types, only when none of them is recursive)
+-- A recursive template whose name another module's template has too (SPEC §15, §20): templates of
+-- one name are chosen by the arguments' types, after the effects are elaborated, but a recursive
+-- group is found by its members' names before that, so a call of the shared name is rejected. `lib/list.bc` and `lib/iters.bc` both declare
+-- `map`, and `list`'s calls itself.
+
+include list
+include iters
+
+main -> i32 = with on_exhausted(!{ u -> 0 }) { fold(map(cons(1, nil()), !{ x -> x + 1 }), 0, !{ (a, x) -> a + x }) }

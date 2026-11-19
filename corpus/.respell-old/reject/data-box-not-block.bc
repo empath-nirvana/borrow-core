@@ -1,0 +1,17 @@
+-- expect: 15:17: this allocates a cell, `ref Json`, where a `Json` is expected: written `box C(…)`, the constructor `C` is not a block (SPEC §42, E2), so `box` allocates a cell holding its value; build it without `box`
+-- `box` on a constructor that is not a block (SPEC §42, E2): `Obj` holds `Json` under the array of
+-- the map's values, so it is not a block, and `box Obj(m)` is a cell holding the value, not a
+-- `Json`.
+include rec
+include buf
+include text
+include map
+
+data Json = Null | Num(i32) | Obj(Map[string, Json])
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let m = map_new[string, Json](4);
+  let (m, _) = map_insert(m, string_of_lit("a"), Num(3));
+  let j: Json = box Obj(m);
+  match j { Null -> 0 | Num(n) -> n | Obj(m) -> let (m, n) = map_len(m); n }
+}

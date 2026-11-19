@@ -1,7 +1,8 @@
--- Double free: the cell `r` is freed twice.
+#! dialect 82
+# Double free: the cell `r` is freed twice.
 type B = 1 + 1
 
 main : F (B * B) =
   r <- return (alloc[B] (inl ()));
   return (free[B] r, free[B] r)
--- expect: 6:10: `r` is used twice here, and its type `ref (1 + 1)` is linear
+# expect: 7:10: `r` is used twice here, and its type `ref (1 + 1)` is linear

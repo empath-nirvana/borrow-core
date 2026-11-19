@@ -1,0 +1,11 @@
+-- expect: 9:4: `odds` and `evens` call one another and take different type parameters: a recursive group's members are generic in the same type parameters
+-- Members of a recursive group generic in different type parameters (SPEC §20): the group's
+-- generator is one template, in one list of type parameters, and a call of a member inside the
+-- group is at them. Written with the same parameters (`corpus/rec-generic-mutual.bc`), it checks.
+
+include list
+
+fn evens[A](xs: List[A]) -> List[A] = match unroll xs { inl u -> nil() | inr (x, r) -> cons(x, odds(r)) }
+fn odds[B](xs: List[B]) -> List[B] = match unroll xs { inl u -> nil() | inr (x, r) -> evens(r) }
+
+main -> List[i32] = with on_exhausted(!{ u -> nil() }) { evens(cons(1, nil())) }

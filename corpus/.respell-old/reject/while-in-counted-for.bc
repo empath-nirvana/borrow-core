@@ -1,0 +1,12 @@
+-- expect: 10:5: `while` may appear only on the spine of a function's body or of `main`: not inside a value, the head of `x <- M; N`, or the body of a `for` that is one total step (SPEC §14)
+-- A `while` inside a counted `for`: the `for` is one total step per element, and the `while` is
+-- div, so it cannot be inside that step. The message names the `while`. `docs/loops.md` (§2.2,
+-- §6, U2) makes the counted loop around a div loop a machine loop, which accepts this program.
+main -> i32 =
+  let n = 4;
+  let mut s = 0;
+  for i in 0..n {
+    let mut j = 0;
+    while j < i { s = s + j; j = j + 1 }
+  };
+  s

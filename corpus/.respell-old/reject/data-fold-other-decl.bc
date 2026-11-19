@@ -1,0 +1,10 @@
+-- A fold block whose arms are another declaration's constructors (SPEC §60, F1): the arms are
+-- `Tree`'s and the value folded is a `List`.
+-- expect: 8:36: the arms of this `fold_own` block are `Tree`'s constructors, but it folds a value of type `mu X. 1 + ref i32 * ref X`
+data List = Nil | Cons(head: i32, tail: List)
+
+data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)
+
+fn size(l: List) -> i32 = fold_own l { Leaf -> 0 | Node(a, v, b) -> a + free(v) + b }
+
+main -> i32 = 0

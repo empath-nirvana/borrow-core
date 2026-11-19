@@ -1,0 +1,14 @@
+-- A field read through the record's place copies the field, a split's `dup`, a rule at
+-- unrestricted types only (`Ctx.SplitP.both_live_iff`); the field marked `must_close` holds the
+-- token, `i32 * tok`, linear (`tok_linear`). Refused.
+data Txn = { id: i32, must_close(commit) log: i32 }
+
+fn begin(id: i32) -> Txn = Txn { id: id, log: 0 }
+
+fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+
+main -> i32 =
+  let t = begin(7);
+  let n = t.log;
+  commit(t) + n
+-- expect: 12:13: `.log` through a borrow copies the field, and its type `i32 * tok` is linear: match the record instead
