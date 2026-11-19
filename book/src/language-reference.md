@@ -148,8 +148,8 @@ fn main() : 1 {
 - `type` names a type; the name and the type are interchangeable
   ([Tuples and sums](guide/basics.md#tuples-and-sums)).
 - `effect`: an unmarked operation answers its caller; `ctl` receives the continuation and
-  resumes it at most once, `must_resume ctl` exactly once, and `ctl op(…) : never` never. `-> B`
-  left out is `-> 1`. A handler of answering operations keeps its state in its `mut` parameter; a
+  resumes it at most once, `must_resume ctl` exactly once, and `ctl op(…) : never` never. The
+  result `: B` is always written. A handler of answering operations keeps its state in its `mut` parameter; a
   control handler names the body's type `A` and its answer `R`, and has a `return(x)` clause
   ([Effects and handlers](guide/effects.md)).
 - `poly`: a family has one type parameter, the type that chooses the case; the operators `+`,
