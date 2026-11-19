@@ -784,7 +784,7 @@ theorem stickyScope_eval :
 
 /-! ### `effThenDiv` reached: a finaliser that ticks, under `div_fuel`
 
-`effThenDiv` is a rule of `CDerives`, proved by `then_compatC_div`. Two derivations use it.
+`effThenDiv` is `effThenF` at its right disjunct, proved by `then_compatC_div`. Two derivations use it.
 - `d_thenDivFuel`: a closed program at `F 1`, `return () then x. x unwind (tick; ())` under
   `div_fuel`. Its body does not stop, so the finaliser never runs.
 - `d_thenTickAwait`: `await_1 then x. x unwind (tick; ())` at the row `{tick, await⟨{tick}⟩,
@@ -901,8 +901,8 @@ theorem d_thenDivFuel (k : UInt32) :
       (CTy.effOf [] .unit)) (.here (.cons .nil)) rfl)
     (.there (.here .nil))
 
-/-- Every run of the witness continues to `()` at the empty memory: `effThenDiv` is a rule of
-`CDerives`, sound by `then_compatC_div`, so `adequacyD` applies with no hypothesis. -/
+/-- Every run of the witness continues to `()` at the empty memory: `effThenDiv` is a derived
+rule of `CDerives`, sound by `then_compatC_div`, so `adequacyD` applies with no hypothesis. -/
 theorem thenDivFuel_runs (k : UInt32) {μ₁ : Heap} {e₁ : Expr}
     (hs : Steps (ℍ := ℍ) Adequacy.emptyMem (thenDivFuel k) μ₁ e₁) :
     Steps (ℍ := ℍ) μ₁ e₁ Adequacy.emptyMem (.val .unit) :=

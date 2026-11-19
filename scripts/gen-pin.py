@@ -246,8 +246,8 @@ NAME_TY = {"A": "VTy", "B": "VTy", "R": "VTy", "S": "VTy", "T": "VTy", "C": "CTy
            "a": "Lifetime.Life", "b": "Lifetime.Life", "x": "LifeVar", "y": "LifeVar",
            "i": "Nat", "j": "Jdg"}
 EXPR_NAMES = {"e", "e₁", "e₂", "M", "N", "V", "H", "f", "d", "M₁", "M₂", "K", "s0"}
-DATA_TY = {"LendUKind", "VTy", "CTy", "Row", "LifeVar", "Lifetime.Life", "IntLit", "HostOp", "FShape", "Expr",
-           "Jdg", "OpSig", "UInt32", "Nat", "List (Qual × VTy × VTy)", "Nat → CTy", "Val"}
+DATA_TY = {"LendUKind", "ConvKind", "VTy", "CTy", "Row", "LifeVar", "Lifetime.Life", "IntLit", "HostOp", "FShape", "Expr",
+           "Jdg", "OpSig", "UInt32", "Nat", "List (Qual × VTy × VTy)", "Nat → CTy", "Val", "Bool"}
 TOKEN = r"[^\s()\[\]{}⟨⟩,.:]+"
 # erasures that are a `λ` whatever the children's (`withPair M N = λs. case s {…}`)
 LAM_HEADS = ("(withPair ",)
@@ -749,6 +749,7 @@ MONO = [
      "(ExtΔ.avoid he (by simp [TExpr.lifeBinders]) {a})"),
     (r"^CtxOutlives Δ ", "(LeΔ.ctxOutlives he.1 {a})"),
     (r"^Row\.AnsOutlives Δ ", "(LeΔ.ansOutlives he.1 {a})"),
+    (r"^JConv Δ ", "(LeΔ.jconv he.1 {a})"),
 ]
 
 
@@ -1002,7 +1003,7 @@ if [r.name for r in xrules if not r.pin] != [n for n, _ in ctors]:
 # `Core/Judgment.lean` (a rule's former name, now a kind of a folded rule). Each instance gets them
 # under its own name, as it gets the rules.
 DERIVED_RULES = [XRule(m.group(1), m.group(2)) for m in re.finditer(
-    r"^theorem CDerivesX\.(\w+) \{I : JIdx\} (.*?) :=\n", judg_src, re.S | re.M)]
+    r"^theorem CDerivesX\.(\w+) \{I : JIdx\} (.*?) :=(?: by)?\n", judg_src, re.S | re.M)]
 jel = (TMPL / "JudgmentElim.tmpl.lean").read_text()
 jel = jel.replace("--@ALIASES@", "\n\n".join(alias(r, inst) for inst in INSTANCES
                                                 for r in xrules + DERIVED_RULES

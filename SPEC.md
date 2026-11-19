@@ -208,7 +208,7 @@ The checker returns a **typed term** `t : TExpr` with its derivation, not an era
 checked term is `Checked.e := t.erase`: the term the backend compiles is the term the derivation
 types, by definition. `TDerivesAt Ξ Δ Γ t j` and `TDerivesP Δ Γ t j` are `CDerivesAt Ξ` (§19,
 decision R) and `CDerivesP` (§29) with each premise at a child and the conclusion at the node; a
-premise that types a term built from other arguments (`thunkV`'s `λN`) carries the equation
+premise that types a term built from other arguments (`thunkVb`'s `λN`) carries the equation
 between the child's erasure and that term. They project to `CDerivesAt`/`CDerivesP` at
 `t.erase` (`TDerivesAt.erase`, `TDerivesP.erase`), so a derivation fixes every field of every
 node, and every theorem below, and §19's and §29's, holds of `t.erase` as stated. The node types,
@@ -417,6 +417,45 @@ term at every type equal to its own up to those names, by one rule of `CDerives`
 arguments, or a copy's function and keys (the handlers and sites that serve its effects, its
 blocks'). Copies whose keys differ only in their sites' names have one `body`.
 
+**The conversions are one rule (#1170).** A *conversion* types a term at a new judgment from a
+derivation of the same term: `return` at `F A` (`ret`) and back (`ofRet`), `!E` (`bangE`), `[]I`
+and its elimination (`boxI`, `boxE`), `⊑Imm`/`⊑Mut` (`immSub`, `mutSub`), the code erasures of §68
+(`codeErase`, `codeEraseB`), `roll`/`unroll` (§6), `nuIn`/`nuOut` (§7), `[sub]` (§19, `effSub`)
+and `[α]` (`alpha`). The kernel types all 15 with one rule, `conv`, and the checker with one
+typed-term node of the same name, both indexed by a kind `k : ConvKind` (`Core/Judgment.lean`):
+
+    Δ; Γ ⊢ e : j    JConv Δ Γ k j j′
+    ──────────────────────────────── [conv]
+    Δ; Γ ⊢ e : j′
+
+- **The kind** carries the former node's data (`ret A`, `boxI a A`, `immSub a b A`,
+  `effSub Σ Σ′ A`, `nuIn m i C`, …; `alpha` none). **`JConv Δ Γ k j j′`** has one case per kind,
+  which fixes `j` and `j′` from the kind's data exactly as the former rule's premise and conclusion,
+  and holds exactly the former rule's side premises: `CtxOutlives Δ Γ a` at `boxI`,
+  `Δ.EntailsLe a b` at `immSub`/`mutSub`, `NoMut` and `Cl` at `roll`, `SysOkAt` at `nuIn`/`nuOut`,
+  `RowLe` at `effSub`, `Jdg.alphaB j j′` at `alpha`, none at the others. The conclusion's judgment
+  is the variable `j′`, so a derivation at a concrete judgment still splits by its rules.
+- **The inversions' relations stay.** `JS`/`VS` (`Core/Inversions.lean`) keep their cases and stay
+  without side premises; `JConv.toJS` maps a conversion to its step, and every inversion takes the
+  `conv` case through it.
+- **The old names stay.** Each former rule (`CDerives.ret`, `CDerives.boxI`, `CDerives.effSub`, …)
+  is a theorem of the judgment and of each of its instances (`CDerives`, `CDerivesAt Ξ`,
+  `CDerivesP`) with today's binders and statement, so calls by position and by name are unchanged.
+  Derivability is exactly the same.
+- **The Fundamental Property's case** applies `conv_compatX`, which splits on `JConv` and applies the
+  former rule's unchanged compatibility lemma (`ret_compatC`, `boxI_compatC`, `sub_compatC`,
+  `alpha_compatJ`, …; at `ofRet` the premise's own meaning). The chain does the same with the
+  `_compatN` lemmas (`conv_compatN`). No compatibility lemma changes.
+- **The typed term** has one node `conv` holding the kind and the two judgments. Backend2 reads which
+  conversion a node is off its kind (`effSub`'s rows, `roll`, `codeErase`, …) and rebuilds nothing;
+  it names a `conv` node by its kind, so its fact keys and messages are unchanged. The former nodes
+  `ret`, `ofRet`, `bangE`, `boxI`, `boxE`, `immSub`, `mutSub`, `roll`, `unroll`, `nuIn`, `nuOut`,
+  `effSub` and `alpha` stay as abbreviations of the `conv` node at their kind, so statements over
+  them keep their type; `codeErase` and `codeEraseB`, which no statement names, have none.
+- The rule count of `CDerives` and of the checker's judgment each drops by 14. A later conversion
+  adds a kind and a case of `JConv`, not a rule.
+- **Status:** the fold (#1170, unit 1170-CONV), after #798. Not built.
+
 ### Baseline, restated
 
 - **Fundamental Property** — `CDerives Δ Γ e j → SemV`/`SemC` (`fundamentalC`).
@@ -509,7 +548,7 @@ under `Mut`. `U C` is a leaf for type variables.
 
 ### Typing
 
-`roll`/`unroll` on the same term (no machine step). `Imm̲` at `μ` substitutes the closed `μ` type
+`roll`/`unroll` on the same term (no machine step; kinds of the conversion rule `conv`, §3). `Imm̲` at `μ` substitutes the closed `μ` type
 for `X` under `Ref`, `Imm`, `Mut`, `!` and keeps `X` at head positions.
 
 ### Folds
@@ -585,7 +624,8 @@ binder, and the rules carry it through `NuOk`.
     ──────────────────────  nuIn     ──────────────────────  nuOut
     Γ ⊢ M : νX. C                    Γ ⊢ M : C[U(νX. C)/X]
 
-on the same term, at a positive `C`. Observing a `νX. C` is `nuOut` followed by the projections
+on the same term, at a positive `C` (kinds of the conversion rule `conv`, §3). Observing a
+`νX. C` is `nuOut` followed by the projections
 of the unrolling.
 
 **Coiteration.** At every positive `C` and every state type `S` that mentions no lifetime
@@ -1038,7 +1078,7 @@ A value type is **flat** when it is persistent and holds no recursive data (`VTy
 
 `!Γ` (`Ctx.Banged`, every live slot at a type `!A`) implies it (`Ctx.Banged.flatLive`), since `!A`
 is flat. The premise of Core's two promotion rules, which §3 takes from §2's `!I-λ` and `!I-Λ`, is
-`Flat(Γ)`:
+`Flat(Γ)` (each is its value rule's rule at the promotion tag `true`, below):
 
     Flat(Γ)    Δ; _ : 1 (dead), Γ ⊢ M : F A
     ───────────────────────────────────────  !thunk     (bangThunkF)
@@ -1064,6 +1104,37 @@ duplication (`Copy`, flat captures only) from explicit (`Clone`); the explicit h
   (`Frontend/Check/Rules.lean`) asks `VTy.flat` of each live slot. The inversion of a λ read at a
   `!` thunk (`LamCls`, `lam_bang`) gives a flat context, and AT06's rejection reads that the
   captured cell's type, a view of `Ref`, is not flat.
+- **A value rule and its promotion are one rule (#1170).** The kernel types `thunk` at `U (F A)`
+  and its promotion `!thunk`, `thunk` at `U C` and `!thunkv`, and `[code-I]` and its form under `!`
+  (§68), with three rules over a promotion tag `b : Bool`, and the checker with one typed-term
+  node each of the same name:
+
+  | rule | at `b = false` | at `b = true` |
+  |---|---|---|
+  | `thunkFb` | `thunkF` | `bangThunkF` |
+  | `thunkVb` | `thunkV` | `bangThunkV` |
+  | `codeIb` | `codeI` | `codeIB` |
+
+  - **The type.** `VTy.bangIf b X` is `!X` at `true` and `X` at `false` (a definition, not a
+    type former). Each rule takes the tag, the premise `b = true → Flat(Γ)`, the former rule's
+    other premises in the same order, and an equation `T = VTy.bangIf b X`, where `X` is the former
+    rule's type (`U (F A)`, `U C`, `Code⟨capNorm (λM); Γ.capTy (λM)⟩ C`). It concludes at `T`.
+    `codeIb`'s premise on `λM` is at `VTy.bangIf b (U C)`. With `T` a variable, a derivation at a
+    concrete type still splits by its rules. At `false` the flatness premise is vacuous, and at
+    `true` it is `Flat(Γ)`, so derivability is exactly the same.
+  - **The old names stay.** `thunkF`, `bangThunkF`, `thunkV`, `bangThunkV`, `codeI` and `codeIB`
+    are theorems of the judgment and of each of its instances (`CDerives`, `CDerivesAt Ξ`,
+    `CDerivesP`) at the tag's two values, with today's binders and statements.
+  - **The Fundamental Property's case** splits on the tag and applies the former rule's unchanged
+    compatibility lemma (`thunkF_compatC`/`bangThunkF_compatC`, `thunkV_compatC`/
+    `bangThunkV_compatC`, `codeI_compatC`/`codeIB_compatC`). The chain does the same with the
+    `_compatN` lemmas. No compatibility lemma changes.
+  - **The typed term** has the three nodes `thunkFb`, `thunkVb` and `codeIb`, which hold the tag.
+    `thunkF`, `thunkV`, `bangThunkF` and `bangThunkV` stay as abbreviations of their node at their
+    tag, so statements over them keep their type. `codeI` and `codeIB`, which no statement names,
+    have none.
+  - The rule count of `CDerives` and of the checker's judgment each drops by three.
+  - **Status:** the fold (#1170, PR #1209), after #798. Not built.
 - **Where `!Γ` stays.** `[let]` and `[then]` at a row with an unrestricted operation (§19), and
   `Count`, `Inversions` (`banged_slot`), `Weaken` and `Embedding`, keep `!Γ`.
 - **Backend.** A captured flat value is copied into a `!` closure's environment as a `!` value is,
@@ -2168,7 +2239,7 @@ and `ewp_handle_or` (`Core/EffRules.lean`, `Core/EffFin.lean`), with `ewp_frame_
 `ewp_frame_then` and `ewp_handle` their instances at `Π = ⊥`.
 
 - **`[then]`** at a row holding `Div` (`cwp_then`, `cwp_then_div`): a finaliser whose row is
-  `Div`-free terminates by totality; one whose row holds `Div` (`effThenDiv`, §29a) puts `Div` in the
+  `Div`-free terminates by totality; one whose row holds `Div` (`effThenDiv`, the right disjunct of `effThenF`, §29a) puts `Div` in the
   enclosing row, which must be handled (`div_fuel`, `driveE n`) before the program is a closed
   `F A`. No separate rule is involved. A finaliser may perform operations and raise.
 - **`[handle]` of another name around a computation that ticks** is typed only when its clauses
@@ -3657,7 +3728,8 @@ Six rules, over `CDerives` with its context premises (§10):
 
 - **As built** (`Core/Judgment.lean`, `CDerives.eff*`; `Core/EffRules.lean`):
   - a row is a list of operations `(n, i, q, A_i, B_i)`, and `F_Σ R` is `CTy.effOf Σ R`;
-  - `[sub]` is `RowLe` (every operation of `Σ` is `Σ′`'s);
+  - `[sub]` is `RowLe` (every operation of `Σ` is `Σ′`'s), a kind of the conversion rule `conv`
+    (§3);
   - `[raise]`'s argument type holds no owned cell (`VTy.OwnFree`): the raise abandons it, which
     is not a consume;
   - `[then]` asks `Σ`'s names to be nonzero and its keys unique, and `!Γ₂` at an unrestricted
@@ -5646,8 +5718,8 @@ program and no count changes. Finalisers that raise run at every stage in the ke
 ### The checker (#868)
 
 The checker emits `[then]` with a finaliser at its own row, and the cancel rows `[handle]` gives
-its clauses. No Core change: `CDerives.effThen`, `CDerivesAt.effThen`, `TDerives.effThen` and the
-cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
+its clauses. No Core change: `CDerives.effThen`, `CDerivesAt.effThen`, the typed node of `[then]`
+(`effThenF`, §29a) and the cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
 
 - **Cancel rows in core text.** A row entry of a cancellable or an unrestricted operation may
   carry its cancel row, `n.i cancel[R] A ~> B` or `n.i unr[R] A ~> B`, `R` a row written as a
@@ -5683,8 +5755,8 @@ cancel rows `fs` of `effHandleV`/`effHandleVB` are as above.
   `Row.find SM n i = some o → Row.find S n i = some o' → o.finRead → ThenLe o.fin SD o'.fin`. A
   refusal names the operation that fails, at the cancel row it was checked with (D3), and which
   half of `PendLe` fails; it never says a row lacks what it holds. A nested entry is named as such
-  ("the cancel row of 1.0 … holds 4.0, whose own cancel row … must hold …"). At `Σ_D = []` the checker emits `effThenA`, as before; `effThen` only at a
-  non-empty `Σ_D`.
+  ("the cancel row of 1.0 … holds 4.0, whose own cancel row … must hold …"). At `Σ_D = []` the checker emits `effThenA`, as before; `effThenF` (at `effThen`'s
+  disjunct) only at a non-empty `Σ_D`.
 - **Handlers read their operations' cancel rows.** `[handle]` passes `fs j`, the cancel row the
   handled row gives operation `j`, so a clause's `κ` has its cancel branch at
   `cancelTy (fs j) = F_{F_j} 1`. A clause that cancels `κ` then performs, at its own row,
@@ -6326,6 +6398,25 @@ its lend schema's row widened (§29).
   keeps `Div` out of the task handler's own row only. A closed program uses it and runs
   (`d_thenDivFuel`, `thenDivFuel_runs`). A finaliser whose row holds `Div` puts `Div` in the
   enclosing row, which must be handled before the program is closed; totality covers the rest.
+- **`[then]` is one rule (#1170).** The kernel types `[then]` with one rule, `effThenF`, and the
+  checker with one typed-term node of the same name: `effThen`'s premises, in the same order, with
+  its finaliser condition `Row.divB Σ_D = false` replaced by the disjunction
+
+      hF : Row.divB Σ_D = false ∨ ∀ o ∈ Σ_M, capB o.q o.B = false
+
+  whose right disjunct is `effThenDiv`'s `hcap`. The premise lists of the two rules were otherwise
+  the same, so derivability is exactly the same.
+  - **The old names stay.** `effThen` and `effThenDiv` are theorems of the judgment and of each of
+    its instances (`CDerives`, `CDerivesAt Ξ`, `CDerivesP`) at the left and right disjunct, with
+    today's binders and statements.
+  - **The Fundamental Property's case** splits on `Row.divB Σ_D`, as `effThenDiv`'s case did: at
+    `false` it applies `then_compatC`, at `true` `then_compatC_div` with `hcap` from `hF`. The chain
+    does the same with `then_compatN` and `thenDiv_compatN`. No compatibility lemma changes.
+  - **The typed term** has one node, `effThenF`. The checker emits it at the left disjunct, where it
+    emitted `effThen` (it never built `effThenDiv`'s node). `TExpr.effThen` stays as an abbreviation
+    of the `effThenF` node, so statements over it keep their type. Backend2 reads the one node.
+  - The rule count of `CDerives` and of the checker's judgment each drops by one.
+  - **Status:** the fold (#1170, unit 1170-SMALL), after #798. Not built.
 - **A value that is not consumable is closed on every exit, the cancel included.** No new premise:
   `[await-c]`'s cancel target is abortive, so the row `Cancels` (`Row.cancels_of_await`), and
   `[let]`'s `hW` refuses a value that is not `OwnFree` held across the wait
@@ -6359,7 +6450,7 @@ state; its `await` clause reads it.
 ### Not built
 
 The surface `await` and `complete`, `lib/async.bc`'s `cancelled` clause and a suspending scheduler's
-typing, `run_in`, the checker emitting `effAwait` or `effThenDiv`, the nursery over owned or copied request data
+typing, `run_in`, the checker emitting `effAwait` or `effThenF` at its right disjunct (`effThenDiv`), the nursery over owned or copied request data
 (over borrowed data it stays refused after A1: #821 / #844 Tier 2), cancel scopes inside a task, and the lowering of a
 suspending finaliser.
 
@@ -9518,7 +9609,7 @@ the one it was, and its output.
 
 `Backend2/`, the default of `bcc compile|run`, `bcc interp --stage lir|flat` and `bcc-counts`
 (`--backend old` selects the old backend until it is deleted). The fragment is the programs whose typed term has no effect node
-(`effPerform`, `effRaise`, `effHandle*`, `effThen`, `effLet` at a nonempty row, `effSub`,
+(`effPerform`, `effRaise`, `effHandle*`, `effThenF`, `effLet` at a nonempty row, `effSub`,
 `lendR`, `lendLoopR`, `nilDead`, the `…U` borrows, `iterate`, `divFuel`, `reify`,
 `bounded_fix`): 222 corpus programs, I/O programs and codata among them. A program outside it is
 refused by the new backend ("outside the pure fragment") and compiled by the old.
@@ -9821,8 +9912,8 @@ No change: no type, rule, term, typing, elaboration or semantics.
   join (`catch_abort`; frames that catch nothing of its name are passed, `abort_absorbs`).
 - **`[let]` at a row** (`effLet`): `N` on `inl`, the abort handed on and `N`'s context consumed
   (`effLet`'s `hW`: it holds no own cell), the branch per call of §19 (`abort_to`, `abort_passes`).
-- **`[sub]`** (`effSub`): the payload of `Σ` re-injected at `Σ'`'s summands (`RowLe`).
-- **`[then]`** (`effThen`): `N` on a value; on an abort the finaliser `D`, then the abort, or the
+- **`[sub]`** (the `conv` node at `effSub`): the payload of `Σ` re-injected at `Σ'`'s summands (`RowLe`).
+- **`[then]`** (`effThenF`): `N` on a value; on an abort the finaliser `D`, then the abort, or the
   finaliser's own, which supersedes it, handed on (`then_ret`, `then_fin`, `unwind_prefix`).
 - **The unwinding borrows** (`withbor1U`, `withbor2U`, `withbor3U`, `withloadU`, `sliceBorrowMU`,
   `sliceBorrowIU`; `withborUE d`): the lend as §43's; the callback's abort ends it, runs the
@@ -10874,7 +10965,7 @@ and `CDerivesP` consume the premise as they consume `SplitMasks`.
   the premise `hcv`: each part's term, at the binders its premise pushes, is covered by its part's
   mask; `M x`'s second part is its argument `x`. Generated with the rules (`scripts/gen-pin.py`,
   `cov_premise`): `tensorI`, `bind`, `app`, `unitE`, `tensorE`, `sumE`, `zeroE`, `lolliE`,
-  `effLet`, `effThen`, `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL`. It names the slots
+  `effLet`, `effThenF`, `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL`. It names the slots
   a part's term mentions, not its context's liveness, so the checker's masks are unchanged.
 - **A typed term mentions only live slots** (`CDerivesP.mentions_live`, `Core/Mentions.lean`): a
   term `CDerivesP` types at `Γ` mentions only slots live in `Γ`. Induction on `CDerivesP`, as
@@ -12826,8 +12917,8 @@ new index and no new judgment.
 
 | Rule | Statement | Unit |
 |---|---|---|
-| `codeI` | `Γ ⊢ λM : U C` and `Γ.CapOK (λM)` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` | K3 |
-| `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C`; its premise on the context is `Flat(Γ)` (`Ctx.FlatLive`, §10), as promotion's | K3 |
+| `codeI` | `Γ ⊢ λM : U C` and `Γ.CapOK (λM)` ⟹ `Γ ⊢ λM : Code⟨capNorm (λM); Γ.capTy (λM)⟩ C` (the rule `codeIb` at `false`, §10) | K3 |
+| `codeIB` | the same at `!U C` ⟹ `!Code⟨…⟩ C`; its premise on the context is `Flat(Γ)` (`Ctx.FlatLive`, §10), as promotion's (`codeIb` at `true`) | K3 |
 | `codeErase` | `Γ ⊢ e : Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : U C` | K3 |
 | `codeEraseB` | `Γ ⊢ e : !Code⟨N; E⟩ C` ⟹ `Γ ⊢ e : !U C` | K3 |
 | `force` (restated) | `Ctx.SoloP Γ i T`, `T.forceTy = some C` (`T` is `U C` or `Code⟨N; E⟩ C`) ⟹ `forceE C (.var i) : C` | K3 |
@@ -12849,8 +12940,9 @@ new index and no new judgment.
   K-M.4a).
 - `etaCode C = λo. self x₀ x₁ o`, the code of `unfold step s = etaN C g s`, with the step `x₀` and
   the state `x₁` captured; `hCode C = λs. λo. self x₀ s o`, the code of `unfold step`.
-- `codeErase` is not subsumption: it is a rule on the same term, so the typed term has a node for it,
-  which Backend2 reads (B4). In the machine it is the identity.
+- `codeErase` is not subsumption: it is a conversion on the same term (a kind of the rule `conv`,
+  §3), so the typed term has a `conv` node for it at the kind `codeErase`, which Backend2 reads
+  (B4). In the machine it is the identity.
 - `eraseD` (covariant erasure inside `C`, K6) is not in this entry.
 - **The inversion's cost** (CLAUDE.md, *Do not invert `CDerives` casually*). `codeI` types the
   term `λM` at a new type, and `codeErase`/`codeEraseB` add a view step from a code type to `U`.
@@ -12875,7 +12967,7 @@ new index and no new judgment.
 - **C3, silently at a join.** Two different codes joined (`if`/`match` arms) with no expected type
   are erased to `U C`; S1's census counts these sites.
 - Wherever the expected type is `U C` (parameters written `dyn`, data fields, arrays, `Ref`
-  contents, handler arguments and state), `convVal` inserts the `codeErase` node.
+  contents, handler arguments and state), `convVal` inserts the `conv` node at `codeErase`.
 - **The growing-instantiation guard.** A template whose instantiation reaches itself at a type
   argument containing the previous one is instantiated at the argument's erasure, with a note
   (scope §4.4). It is load-bearing: without it nested `Code⟨…⟩` inside `E` grows without bound.
@@ -14457,8 +14549,8 @@ term, cited by section below. Nothing the language cannot do today is added, exc
 | names, `'a` lifetimes, `[T]` type arguments | unchanged | kaikai writes type parameters in `[…]` too |
 
 Reserved words added: `handle`, `import`, `inout`, `sink`, `as`, `local`, `var`. Operator added:
-`:=`.
-None is removed, since core text uses them.
+`:=`. They are reserved only in a text in the new spelling (*The pragma*). None is removed, since
+core text uses them.
 
 ### The table: today's form, the new form
 
@@ -14485,7 +14577,7 @@ Every row keeps today's kernel term.
 | D15 | `must_resume ctl op(…) -> B`, `multi ctl op(…) -> B`, `-> never` | `must_resume ctl op(…) : B`, `multi ctl op(…) : B`, `: never` | §18, §25 |
 | D16 | `handler h[T](p: P): E[A], A -> R with E2 = { return(x) = M; op(x, k) = N }` | `handler h[T](p: P) : E[A], (A) -> R / E2 { return(x) -> M; op(x, k) -> N }` | §18, §19 |
 | D17 | an answering handler `handler h(mut s: S): E = { op(x) = e }` | `handler h(mut s: S) : E { op(x) -> e }` | §18 |
-| D18 | lent handler state `handler h(&mut i: I): E = { … }` | `handler h(inout i: I) : E { … }` | §18, §32 |
+| D18 | lent handler state `handler h(&mut i: I): E = { … }` | `handler h(i: inout I) : E { … }` | §18, §32 |
 | D19 | the field marker `must_close(release) f: A` | unchanged | §27 |
 | D20 | `def name[P] : A = V`, `main : C = M` | unchanged (core text) | §3, §76 |
 
@@ -14588,8 +14680,9 @@ constant is built (§80); its surface producer is #1115's, not built. No corpus 
 | S3 | `x := e` | a store: a `withswap` answering `(e, ())`, `e` evaluated first. The old contents are consumed by the existing rules | §80 |
 | S4 | the end of the block | the view is released; the final contents come back with the result (`A ⊗ B`) and are consumed | §80 |
 
-Its limits are §80's: the plain variant only, so the scope's row is empty, and no unwind or
-suspension leaves it (§80 *Open*).
+`local` and `:=` are reserved in the new spelling, and until that producer is built a text that
+uses them is refused. Its limits are §80's: the plain variant only, so the scope's row is empty,
+and no unwind or suspension leaves it (§80 *Open*).
 
 ### Modes
 
@@ -14608,6 +14701,136 @@ suspension leaves it (§80 *Open*).
   which region a result borrows from.
 - With `&` gone from shared lends (P8), a lend `at(a, i)` and a move `array_set(a, i, v)` look the
   same at the call; the callee's mode says which, as in Hylo.
+
+**By value.** After aliases are expanded, a type is *by value* when it is a scalar (`i32 i64 u8
+u32 u64 f32 f64`), `bool`, `lit`, `1`, `0`, `never`, `!X`, or a product or sum of by-value types.
+Every other type (a type variable, a `data` type, `array`, `string`, `Option[T]`, a function type)
+is not. The test is on the written type, so a by-value owned parameter of a `data` type is written
+`p: sink P`.
+
+**A `fn` header, exactly.** For each parameter:
+- `x: inout T` means `x: mut 'f T`, and `x: inout array A` means `x: array_mut 'f A`;
+- a bare `x: T`, where `T` is not by value and its head is not a borrow former (`imm`, `mut`,
+  `view`, `array_imm`, `array_mut`, `text`, `text_mut`), means `x: imm 'f T`, and `x: array A`
+  means `x: array_imm 'f A`;
+- `x: sink T` means `x: T`;
+- every other `x: T` means what it says. A shared borrow of a by-value type keeps its explicit
+  type, `r: imm 'a i32`, as P6.
+  A borrow of an array, `imm 'a (array A)` or `mut 'a (array A)`, keeps its explicit type too:
+  `x: array A` and `x: inout array A` are `array_imm` and `array_mut`, different types.
+
+Each `'f` is a new lifetime parameter of the function, named apart from every name in the
+declaration. A parameter whose region is named anywhere else (another parameter, the result, a
+row, a `where`, or the body) keeps its explicit type (P6). The function's lifetime parameters are
+ordered by first occurrence in the parameter list, each `'f` occurring at the start of its
+parameter's type; written lifetimes that occur in no parameter follow, in their written order.
+
+**Handler and operation parameters.** In a `handler` header, `i: inout I` is lent state (D18),
+`mut s: S` answering state (D17), and `p: sink P` an owned parameter; a bare `p: P` means what it
+says, and a handler parameter is never read as a lend. An effect operation's parameters take no
+mode: their types are written as today. A function type has no modes: T1 and T2 respell its arrow
+only, and a parameter type inside it is written as today.
+
+**P8, exactly.** At a call in a surface body, a bare argument `x` is lent, as `&x` lends it today,
+when the callee's declared parameter at that position is a shared borrow `imm 'a A` or
+`array_imm 'a A` whose `'a` is a lifetime parameter of the callee (a mode parameter counts, read as
+above), and `x` is a variable whose type is neither that borrow itself nor a `mut` borrow. Every
+other argument is passed as written. The parameter is read as declared: for a div function (§14),
+before it is elaborated to take its owner. A program in the new spelling means exactly the program
+in today's spelling with `&x` written at the arguments this condition selects. The lend is the one
+`&x` gives today: the kernel checks it, and the elaboration decides no borrow question. The
+diagnostics refer to the text as written.
+
+**Lends that are not P8.**
+- A capability lent to a call and handed back (§11), at a parameter of the place's own type
+  (`map_lookup(&m, k)`, `map_len(&m)`), is written `&x`; there today's `&x` and `&mut x` are the
+  same lend.
+- A loop source and a fold scrutinee keep today's spelling: `for p in &a` and `fold_imm &l { … }`
+  are shared lends, and `for p in &mut a` is a mutable one.
+- `let r = &x` is P9: the `borrow imm` block runs to the end of the enclosing block.
+- A handler argument follows P7: `with h(&mut c) { M }` is `handle { M } with h(&c)`.
+- Outside a loop source, a surface body writes no `&mut x`.
+
+### Reading the new spelling
+
+**The pragma.** A text is in the new spelling when its first line is exactly `#! dialect 82`;
+any other text is today's surface, read as today. The choice is per text: an imported module's
+first line decides its own spelling, so modules in either spelling import each other. A driver
+option sets the spelling of a main text that has no pragma. In the new spelling `#` begins a
+comment, and `--` is not a comment.
+
+**Surface bodies and core text.** The new statement rules (E1–E3, the layout rule, arms separated
+by newlines, P7–P9) hold in *surface bodies*: the bodies of `fn` and `fn main`, handler clauses
+and `poly … at`. A `def` body and a `main : C = M` body are core text (rule 4), read exactly as
+today, with `;`, `|` between arms, `x <- M`, `&x` and `&mut x` as lends, `with`, and `=>`; in a
+new-spelling text only their comments change, and a `let mut` in them is written `var`, as
+everywhere in that text. The core values and builtins inside a surface body
+(`thunkv`, `fun (x : A) ->`, `unbang`, bracket arguments, `<M, N>`) are written as today.
+
+**The layout rule.** In a surface body, where the innermost open bracket is not `(` or `[`:
+- a newline ends a statement, an arm or a clause, unless the line ends in a binary operator, `,`,
+  `->`, `=` or `:`, or the next line starts with a binary operator (`+ - * / % == != < <= > >= &&
+  || |> >|`, so a line starting with `*` or `-` multiplies or subtracts), with `else` (after an
+  `if` or a `for`), with `with` or `finally` (after `handle`), with `unwind (D)` (after a `let`'s
+  right side), with `.` (a `.1`, `.2` or `.f` suffix of the line before), or with `}`. A line
+  starting with `&` begins a new statement;
+- a juxtaposed application (`f x`) and a `[…]` instantiation stop at a newline, and a call's
+  `(…)`, a handler's `[…]`/`(…)` after `with h` and a constructor's `(…)` or `{ f: … }` start on
+  the name's line: `f` with `(1)` on the next line is two statements, so a line starting with `(`
+  needs no `;` before it;
+- `break` and `return` at the end of a line take no value;
+- a line holding only a loop label joins the next line;
+- a `|` at the start of a line, after a newline, is one arm separator;
+- a block `{ … }` inside `(…)` or `[…]` (an `if`, a `match`, a loop or a closure written as an
+  argument) has the rule again inside its braces. The innermost open bracket decides, and
+  `<M, N>` is not a bracket for the rule.
+
+`;` separates statements wherever a newline does; a `;` just before `}` is refused, as today. The
+rule ends statements, arms and clauses only: a declaration's header is read to its `{` or `=`,
+whatever its line breaks.
+
+**Statements.** `let x = M` binds `x` to the result of `M`, a value or a computation (E2).
+`let x = M unwind (D)` takes `unwind (D)` as a postfix of the whole right side, and
+`a <- t!` is `let a = t!`. **`let` never assigns.** Assignment to a `var` is `x = e` (V2), and its
+right side may be a computation: today's `x <- M` on a `let mut` name is `x = M`. Assignment to
+answering handler state stays `s = e`.
+
+**Arm and clause bodies.** An arm (`match`, `case`, a fold) is `pat -> body`, and a handler clause
+is `op(x, k) -> body`. A body `{ S }` is the statements `S`; a closure `{ p -> … }` there is a
+value, and a block value `{ S }` as the whole body is written `({ S })`. A body without braces is
+one expression: several statements need a block. The `= e` form of a body (D1, D6,
+`poly f at T = e`) is likewise one expression, and `poly f at T { S }` takes a block as D1 does.
+A body without braces ends at the first newline at its own bracket nesting where the layout rule
+ends a statement, also when it ends in `fun … -> M`: that `fun`'s body does not read the next arm,
+clause or declaration. Inside a block, a `fun … -> M` reads the following statements to the
+block's end, as today, so a `fun` that is not last is written in parentheses.
+
+**Trailing blocks (E10).** A block trails a call only right after the call's parenthesised
+arguments, on the same line, in a surface body, and it is the call's last argument:
+`f() { b }` is `f({ b })`, and `f(a, c) { b }` is `f(a, c, { b })`. A `{` on a later line begins
+a statement. No block trails the head of `if`, `while`, `for`, `match`, `case`, a fold, `borrow`
+or `modify`, nor the handler of `handle … with h(…)` (H2).
+
+**Where `=>` is respelled (T1, T2).** In every surface declaration (the headers of `fn`,
+`fn main`, `poly`, `effect` and `handler`, and `type` and `data` declarations), and in the
+annotations of `let` and `var` in a surface body. It is kept in `def`, `main : C`, `extern`, and
+the bracket arguments of builtins and core formers inside bodies (rule 4); `=>` is read wherever a
+type is read. An arrow has one parameter type, `(1) -> B` or `(A * B) -> C`; `(A, B) -> C` and
+`() -> B` are not read. A row after an arrow belongs to that arrow, so a `fn` result that is an
+arrow type with a row is written in parentheses.
+
+**Messages.** A refusal keeps its text during the transition, including text that quotes today's
+spelling; the messages are respelled when today's surface is removed.
+
+**Limits** (today's, kept):
+- An effect operation's argument is not lent by P8.
+- A lent argument names a place: an expression is not lent, and one call lends at most one place.
+- A statement that begins with `*` or `-` continues the line before it as a binary operator; a `;`
+  ends that line.
+- `&x` reads as a shared lend at a loop source or a fold, and as a mutable lend at a call.
+- A mode drops a written lifetime name: `fn f<'a>(v: array_mut 'a i32)`, `'a` fresh, is
+  `fn f(v: inout array i32)`, and a refusal that names the region names the lifetime the mode
+  introduces, not `'a`.
 
 ### `let mut` sites
 
@@ -14642,7 +14865,8 @@ question.
 Productions not listed are today's (§3, §42). `NL` is a newline.
 
 ```
-program   ::= (decl NL)*
+program   ::= pragma? (decl NL)*
+pragma    ::= '#! dialect 82' NL                          # the whole first line
 decl      ::= 'import' name
             | 'fn' name tparams? '(' params? ')' ':' type row? where? fbody
             | 'fn' 'main' '(' ')' ':' type row? fbody
@@ -14651,7 +14875,7 @@ decl      ::= 'import' name
             | 'data' name tparams? '=' datadef
             | 'type' name tparams? '=' type
             | 'poly' name tparams? '(' params ')' ':' type
-            | 'poly' name 'at' type '=' expr
+            | 'poly' name 'at' type fbody
             | 'extern' name ':' type
             | coredecl                                    # def …, main : C = M (unchanged)
 tparams   ::= ('[' name (',' name)* ']')? ('<' lifetime (',' lifetime)* '>')?
@@ -14669,6 +14893,7 @@ opdecl    ::= qual? name '(' params? ')' ':' type         # no qual: answering
 qual      ::= 'ctl' | 'must_resume' 'ctl' | 'multi' 'ctl'
 clause    ::= name '(' names? ')' '->' (expr | block)     # return(x) -> …, op(x) -> …, op(x, k) -> …
                                                           # several statements need a block
+arm       ::= pat '->' (expr | block)                     # as clause
 block     ::= '{' (stmt sep)* expr? '}'
 stmt      ::= 'let' pat (':' type)? '=' expr
             | 'var' name (':' type)? '=' expr             # today's let mut (§41)
@@ -14683,7 +14908,7 @@ expr      ::= today's expressions, and
             | call block                                  # a trailing block is the last argument
             | '&' place                                   # today: &mut place
 type      ::= today's types, and
-            | '(' types? ')' '->' type row?               # today: A => B with E
+            | '(' type ')' '->' type row?                 # today: A => B with E
 ```
 
 ### Spelling choices

@@ -35,8 +35,8 @@ open BoCa.Fig16.LogRel.Core.ClauseKinds
 
 /-- `[sub]` at a row (`effSub`) and `[α]`, which keep their premise's term, removed. -/
 def TExpr.unSub : TExpr → TExpr
-  | .effSub _ _ _ _ _ t => t.unSub
-  | .alpha _ _ _ _ t => t.unSub
+  | .conv _ _ _ _ (.effSub ..) t => t.unSub
+  | .conv _ _ _ _ .alpha t => t.unSub
   | t => t
 
 /-- `t` is the resume of `κ` in the slot `k` applied to an answer that is not `κ`: `[app]` of
@@ -60,15 +60,15 @@ def cancelB (k : Nat) : TExpr → Bool
 
 /-- `t` answers its variable `0`, through `[let]`s of `return x` that rebind it. -/
 def returns0B : TExpr → Bool
-  | .ret _ _ _ (.var _ _ 0 _) => true
+  | .conv _ _ _ _ (.ret _) (.var _ _ 0 _) => true
   | .bind _ _ _ _ _ tM tN => isVar0 tM.unSub && returns0B tN
   | .effLet _ _ _ _ _ _ tM tN => isVar0 tM.unSub && returns0B tN
-  | .effSub _ _ _ _ _ t => returns0B t
-  | .alpha _ _ _ _ t => returns0B t
+  | .conv _ _ _ _ (.effSub ..) t => returns0B t
+  | .conv _ _ _ _ .alpha t => returns0B t
   | _ => false
 where
   isVar0 : TExpr → Bool
-    | .ret _ _ _ (.var _ _ 0 _) => true
+    | .conv _ _ _ _ (.ret _) (.var _ _ 0 _) => true
     | _ => false
 
 /-- `t` is the resume of `κ` in the slot `k` in tail position (`resumeB`), or such a resume under
@@ -88,8 +88,8 @@ def forceArrB (g : Nat) (t : TExpr) : Bool :=
 neither it nor `κ` (the slot `k`) before: `[app]` of `[force]` at `g`, of a `⊸` type. -/
 def appliesB : Nat → Nat → TExpr → Bool
   | g, k, .app _ _ s _ _ _ f => forceArrB g f && s != g && s != k
-  | g, k, .effSub _ _ _ _ _ t => appliesB g k t
-  | g, k, .alpha _ _ _ _ t => appliesB g k t
+  | g, k, .conv _ _ _ _ (.effSub ..) t => appliesB g k t
+  | g, k, .conv _ _ _ _ .alpha t => appliesB g k t
   | g, k, .bind _ _ _ _ _ tM tN =>
       (!mentions g tM.erase && !mentions k tM.erase && appliesB (g + 1) (k + 1) tN) ||
         (appliesB g k tM && returns0B tN)
@@ -110,8 +110,8 @@ bound computation of a `[let]` whose body does not use `κ`. -/
 def onceB (k : Nat) : TExpr → Bool
   | .bind _ _ _ _ _ tM tN => onceB k tM && !mentions (k + 1) tN.erase
   | .effLet _ _ _ _ _ _ tM tN => onceB k tM && !mentions (k + 1) tN.erase
-  | .effSub _ _ _ _ _ t => onceB k t
-  | .alpha _ _ _ _ t => onceB k t
+  | .conv _ _ _ _ (.effSub ..) t => onceB k t
+  | .conv _ _ _ _ .alpha t => onceB k t
   | t => resumeB k t || cancelHeadB k t
 
 /-! ### Paths -/
@@ -137,15 +137,15 @@ def onPaths (leaf : Nat → TExpr → Bool) : Nat → TExpr → Bool
   | k, t@(.effLet _ _ _ _ _ _ tM tN) =>
       leaf k t || (!mentions k tM.erase && onPaths leaf (k + 1) tN) ||
         (isVarB k tM.erase && !mentions (k + 1) tN.erase && onPaths leaf 0 tN)
-  | k, t@(.effSub _ _ _ _ _ t') => leaf k t || onPaths leaf k t'
-  | k, t@(.alpha _ _ _ _ t') => leaf k t || onPaths leaf k t'
+  | k, t@(.conv _ _ _ _ (.effSub ..) t') => leaf k t || onPaths leaf k t'
+  | k, t@(.conv _ _ _ _ .alpha t') => leaf k t || onPaths leaf k t'
   | k, t@(.lendScope _ _ _ t') => leaf k t || onPaths leaf k t'
   | k, t => leaf k t
 
 /-- The clause answers the state-passing function `[thunkV]` of `λs. S`, and `S`'s paths end in
 `leaf`. -/
 def stateFnB (leaf : Nat → TExpr → Bool) (k : Nat) : TExpr → Bool
-  | .ret _ _ _ (.thunkV _ _ _ (.lam _ _ _ _ tS)) => onPaths leaf (k + 1) tS
+  | .conv _ _ _ _ (.ret _) (.thunkVb _ _ _ _ false (.lam _ _ _ _ tS)) => onPaths leaf (k + 1) tS
   | _ => false
 
 /-! ### The classifier -/
@@ -173,7 +173,7 @@ when the signature gives the clause no `κ`; the kind of its body `M` when it is
 def classifyClause (o : Qual × VTy × VTy) (c : Option TExpr) : HKind :=
   ⟨o.1, if isAbortive o then .abortive else
     match c.map TExpr.unUse with
-    | some (.bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM))) =>
+    | some (.thunkVb _ _ _ _ true (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM))) =>
         classifyBody tM
     | _ => .stored⟩
 

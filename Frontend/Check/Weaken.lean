@@ -306,19 +306,40 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.sumI₂ d, by simp only [TExpr.shift, TExpr.erase, Expr.shift, e]⟩
-  | thunkF _ ih =>
+  | thunkFb b hpΓ _ hT ih =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f rfl hf hp
-      rw [List.length_cons] at d e
-      exact ⟨.thunkF d, by simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, e]⟩
-  | thunkV hC _ q ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.thunkV hC d (by rw [e, q]; rfl), e⟩
-  | ret _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.ret d, e⟩
+      cases b
+      · obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f rfl hf hp
+        rw [List.length_cons] at d e
+        exact ⟨.thunkFb false (fun h => nomatch h) d hT, by
+          simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, e]⟩
+      · obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
+        obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f' rfl hf' hp'
+        rw [List.length_cons] at d e
+        exact ⟨.thunkFb true (fun _ => flatLive_ins (live_atom hb) (hpΓ rfl)) d hT, by
+          simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, e]⟩
+  | thunkVb b hpΓ hC _ q hT ih =>
+      intro Γa Γb Γp f hΓ hf hp; subst hΓ
+      cases b
+      · obtain ⟨d, e⟩ := ih Γa Γb Γp f rfl hf hp
+        exact ⟨.thunkVb false (fun h => nomatch h) hC d (by rw [e, q]; rfl) hT, e⟩
+      · obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
+        obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
+        exact ⟨.thunkVb true (fun _ => flatLive_ins (live_atom hb) (hpΓ rfl)) hC d (by rw [e, q]; rfl) hT, e⟩
+  | conv k _ hJ ih =>
+      intro Γa Γb Γp f hΓ hf hp; subst hΓ
+      simp only [TExpr.absF] at hf
+      cases ha : k.outl? with
+      | some a =>
+        rw [ha] at hf
+        obtain ⟨f', hf', ho, hp'⟩ := live_withO hf hp
+        obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
+        refine ⟨.conv _ d (hJ.mono (fun a' ha' h => ?_) (fun _ _ => id)), e⟩
+        rw [ha] at ha'; cases ha'; exact ctxOutlives_ins (live_atom ho) h
+      | none =>
+        rw [ha] at hf
+        obtain ⟨d, e⟩ := ih Γa Γb Γp f rfl hf hp
+        exact ⟨.conv _ d (hJ.mono (fun a' ha' => by rw [ha] at ha'; cases ha') (fun _ _ => id)), e⟩
   | bind hs hm hcv _ _ ihM ihN =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
@@ -416,32 +437,7 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.allE d hlt, by simp only [TExpr.shift, TExpr.erase, Expr.shift, e]; rfl⟩
-  | bangThunkF hpΓ _ ih =>
-      intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
-      obtain ⟨d, e⟩ := ih (_ :: Γa) Γb Γp f' rfl hf' hp'
-      rw [List.length_cons] at d e
-      exact ⟨.bangThunkF (flatLive_ins (live_atom hb) hpΓ) d, by
-        simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, e]⟩
-  | bangThunkV hpΓ hC _ q ih =>
-      intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨f', hf', hb, hp'⟩ := live_withO hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
-      exact ⟨.bangThunkV (flatLive_ins (live_atom hb) hpΓ) hC d (by rw [e, q]; rfl), e⟩
-  | codeI => intro _ _ _ _ _ hf _; cases hf
-  | codeIB => intro _ _ _ _ _ hf _; cases hf
-  | codeErase _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.codeErase d, e⟩
-  | codeEraseB _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.codeEraseB d, e⟩
-  | bangE _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.bangE d, e⟩
+  | codeIb => intro _ _ _ _ _ hf _; cases hf
   | copyBang hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.copyBang (deadP_ins (live_eval_atom hf hp) Γa hΓ), (shift_closed0 (by rfl) _ _).symm⟩
@@ -449,23 +445,6 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.releaseBang (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
-  | boxI _ hΓ ih =>
-      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
-      obtain ⟨f', hf', ho, hp'⟩ := live_withO hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f' rfl hf' hp'
-      exact ⟨.boxI d (ctxOutlives_ins (live_atom ho) hΓ), e⟩
-  | boxE _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.boxE d, e⟩
-  | immSub _ hle ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.immSub d hle, e⟩
-  | mutSub _ hle ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.mutSub d hle, e⟩
   | alloc hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.alloc (deadP_ins (live_eval_atom hf hp) Γa hΓ), rfl⟩
@@ -641,18 +620,6 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.allEV d hlt, by simp only [TExpr.shift, TExpr.erase, Expr.shift, e]; rfl⟩
-  | ofRet _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.ofRet d, e⟩
-  | roll hA hc _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.roll hA hc d, e⟩
-  | unroll _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.unroll d, e⟩
   | foldImm F y c R hΓ hF hG hyM hyR hR =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.foldImm F y c R (deadP_ins (live_eval_atom hf hp) Γa hΓ) hF hG hyM hyR hR,
@@ -669,14 +636,6 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.foldReuse F R (deadP_ins (live_eval_atom hf hp) Γa hΓ) hF hG,
         (shift_closed0 (foldReuseV_closed F) _ _).symm⟩
-  | nuIn hC _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.nuIn hC d, e⟩
-  | nuOut hC _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.nuOut hC d, e⟩
   | unfoldN C S hC hS hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.unfoldN C S hC hS (deadP_ins (live_eval_atom hf hp) Γa hΓ),
@@ -688,14 +647,6 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
   | nuOutK hC hG hS hGf hs =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       exact ⟨.nuOutK hC hG hS hGf (soloP_ins (live_eval_atom hf hp) Γa hs), (var_shift _ _ _).symm⟩
-  | effSub hle _ ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.effSub hle d, e⟩
-  | alpha _ hα ih =>
-      intro Γa Γb Γp f hΓ hf hp
-      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.alpha d hα, e⟩
   | effAwait => intro _ _ _ _ _ hf; simp [TExpr.absF] at hf
   | effPerform hAt hf₀ hna hac _ ih =>
       intro Γa Γb Γp f hΓ hf hp
@@ -719,7 +670,7 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       obtain ⟨hW', hU'⟩ := letCond_ins hc hW hU
       exact ⟨.effLet hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [eM]; rfl), hcv.2.ins₂ (by rw [eN])⟩ hW' hU' dM dN, by
         simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, eM, eN]⟩
-  | effThen hs hm hcv hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
+  | effThenF hs hm hcv hNZ hUq hU hMS hDS hfin hP hF _ _ _ ihM ihN ihD =>
       intro Γa Γb Γp f hΓ hf hp; subst hΓ
       obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, Γp₁, Γp₂, rfl, rfl, ha₁, ha₂, hl₁, hl₂, q₁, q₂, hs', pm⟩ :=
@@ -730,25 +681,9 @@ theorem TDerivesX.weaken {I : JIdx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr}
       obtain ⟨dN, eN⟩ := ihN (_ :: Γa₂) Γb₂ Γp₂ k₁ rfl hk₁ w₁
       obtain ⟨dD, eD⟩ := ihD (_ :: Γa₂) Γb₂ Γp₂ k₂ rfl hk₂ w₂
       rw [ha₁, hl₁] at dM eM; rw [List.length_cons, ha₂, hl₂] at dN eN dD eD
-      exact ⟨.effThen hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [eM]; rfl), hcv.2.1.ins₂ (by rw [eN]), hcv.2.2.ins₂ (by rw [eD])⟩ hNZ hUq (fun hu => banged_ins (hc.imp fun A hA => by
+      exact ⟨.effThenF hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [eM]; rfl), hcv.2.1.ins₂ (by rw [eN]), hcv.2.2.ins₂ (by rw [eD])⟩ hNZ hUq (fun hu => banged_ins (hc.imp fun A hA => by
           rw [if_pos (Row.unrDB_iff.mpr hu), AbsF.eval_atom] at hA; exact hA) (hU hu))
-          hMS hDS hfin hP hSD dM dN dD, by
-        simp only [TExpr.shift, TExpr.erase, thenE, Expr.shift, Expr.val, Val.lam, Val.prim, eM,
-          eN, eD]⟩
-  | effThenDiv hs hm hcv hNZ hUq hU hMS hDS hfin hP hcap _ _ _ ihM ihN ihD =>
-      intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
-      obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, Γp₁, Γp₂, rfl, rfl, ha₁, ha₂, hl₁, hl₂, q₁, q₂, hs', pm⟩ :=
-        splitP_route hp' Γa hs
-      obtain ⟨f', hf', hc, q₂'⟩ := live_withO hf₂ q₂
-      obtain ⟨k₁, k₂, hk₁, hk₂, w₁, w₂⟩ := live_andO hf' q₂'
-      obtain ⟨dM, eM⟩ := ihM Γa₁ Γb₁ Γp₁ f₁ rfl hf₁ q₁
-      obtain ⟨dN, eN⟩ := ihN (_ :: Γa₂) Γb₂ Γp₂ k₁ rfl hk₁ w₁
-      obtain ⟨dD, eD⟩ := ihD (_ :: Γa₂) Γb₂ Γp₂ k₂ rfl hk₂ w₂
-      rw [ha₁, hl₁] at dM eM; rw [List.length_cons, ha₂, hl₂] at dN eN dD eD
-      exact ⟨.effThenDiv hs' (hm.ins ha₁ ha₂ pm) ⟨hcv.1.ins₁ (by rw [eM]; rfl), hcv.2.1.ins₂ (by rw [eN]), hcv.2.2.ins₂ (by rw [eD])⟩ hNZ hUq (fun hu => banged_ins (hc.imp fun A hA => by
-          rw [if_pos (Row.unrDB_iff.mpr hu), AbsF.eval_atom] at hA; exact hA) (hU hu))
-          hMS hDS hfin hP hcap dM dN dD, by
+          hMS hDS hfin hP hF dM dN dD, by
         simp only [TExpr.shift, TExpr.erase, thenE, Expr.shift, Expr.val, Val.lam, Val.prim, eM,
           eN, eD]⟩
   | effHandleV hAt hs hm hcv hdd hH _ hn0 hnS hlen hdv _ hins ihc ihe =>

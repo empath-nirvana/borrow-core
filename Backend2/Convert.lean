@@ -2999,15 +2999,16 @@ def constArity : TExpr → Option Nat
 /-- The nodes whose value is their child's: `ret`, a thunk of a λ-value, dereliction, the lifetime
 box and the lifetime coercions, `ν`'s two coercions. -/
 def transparent? : TExpr → Option TExpr
-  | .bangE _ _ _ t | .boxI _ _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t | .mutSub _ _ _ _ _ t
-  | .ofRet _ _ _ t | .ret _ _ _ t | .thunkV _ _ _ t | .bangThunkV _ _ _ t | .nuIn _ _ _ _ _ t
-  | .nuOut _ _ _ _ _ t => some t
   -- `[α]`: a type renamed up to its lifetime binders' names, which no lowered type reads.
-  | .alpha _ _ _ _ t => some t
+  -- `[erase]` (SPEC §68): the same value at another type; the machine's identity.
+  | .conv _ _ _ _ k t => match k with
+    | .roll _ | .unroll _ | .effSub .. => none
+    | _ => some t
+  | .thunkVb _ _ _ _ _ t => some t
   -- The derived nodes over a term the conversion reads as it reads the term (SPEC §57).
   | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => some t
-  -- `[code-I]` and `[erase]` (SPEC §68): the same value at another type; the machine's identity.
-  | .codeI _ _ _ t | .codeIB _ _ _ t | .codeErase _ _ _ _ t | .codeEraseB _ _ _ _ t => some t
+  -- `[code-I]` (SPEC §68): the same value at another type; the machine's identity.
+  | .codeIb _ _ _ _ _ t => some t
   | _ => none
 
 /-- A function position's head through transparent nodes, and through a `use` whose body is a
@@ -3327,9 +3328,10 @@ def joinWith (c₂ : Ctx) (A : VTy) (args : List Var) (body : Ctx → List Var �
 /-- The computation nodes a machine's conversion takes apart with its continuation (`convK`):
 at an outcome, each is converted inside a machine.  `[spec §49]` -/
 def machNode : TExpr → Bool
-  | .effLet .. | .effThen .. | .bind .. | .sumE .. | .tensorE .. | .unitE .. | .zeroE .. | .effSub ..
+  | .effLet .. | .effThenF .. | .bind .. | .sumE .. | .tensorE .. | .unitE .. | .zeroE ..
+  | .conv _ _ _ _ (.effSub ..) _
   | .effRaise .. | .effPerform .. | .nilDead .. | .lendR .. => true
-  | .lendScope _ _ _ t | .alpha _ _ _ _ t => machNode t
+  | .lendScope _ _ _ t | .conv _ _ _ _ .alpha t => machNode t
   | _ => false
 
 /-- The outside of the pure fragment. -/
@@ -3441,9 +3443,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | .sumI₂ _ j _ _ c => do
     let .sum _ bT := (← repJ j).peel | throw "LIR: an injection at a non-sum"
     bindTm (← conv fuel ctx c) bT fun a => pure (.inj true a)
-  | .thunkF _ j _ c | .bangThunkF _ j _ c => do
+  | .thunkFb _ j _ _ _ c => do
     let .thunk k := (← repJ j).peel | throw "LIR: a thunk at a non-closure type"
-    -- A thunk's body is at `F A` (`thunkF`, `bangThunkF`): the empty row.  [spec §50]
+    -- A thunk's body is at `F A` (`thunkFb`): the empty row.  [spec §50]
     mkClos "thunk" ctx k none (← repK k) (fun ctx' => convBody fuel (none :: ctx') c) (source := true)
       (emptyRow := true)
   | .lam _ j A C c => do
@@ -3486,7 +3488,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       let m ← fresh (.sum aT pT); let x ← fresh aT; let e ← fresh pT
       return pre (.letv m (← conv fuel c₁ tM)
         (.case m x (← conv fuel (some x :: c₂) tN) e (abandons .letAbort (live c₂) (.inj true e))))
-  | .effSub _ _ S S' A c => do
+  | .conv _ _ _ _ (.effSub S S' A) c => do
     -- `[sub]`: the payload of `Σ` as one of `Σ'`.  [spec §47]
     readFact "effSub:rows"
     let p ← rowPay S; let q ← rowPay S'
@@ -3531,7 +3533,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => do
       let r ← fresh (resTy bT ph)
       return .letv r (.call fi (v :: evIn)) (← coerceRes bT ph p r)
-  | .effThen _ _ A _ S SM SD u tM tN tD => do
+  | .effThenF _ _ A _ S SM SD u tM tN tD => do
     -- `M then x. N unwind D`: `N` on a value; on an abort the finaliser `D`, then the abort, or
     -- the finaliser's own, handed on (`then_ret`, `then_fin`, `unwind_prefix`).  [spec §47]
     readFact "effThen:rows"
@@ -3598,9 +3600,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     -- An instantiation is its operand.  [spec §44]
     readFact s!"{ruleName t}:erased"
     conv fuel ctx c
-  | .roll _ j _ c => do
+  | .conv _ _ _ _ (.roll _) c => do
     bindTm (← conv fuel ctx c) (← repJ c.jdg) fun x => pure (.prim .roll [x])
-  | .unroll _ j _ c => do
+  | .conv _ _ _ _ (.unroll _) c => do
     bindTm (← conv fuel ctx c) (← repJ c.jdg) fun x => pure (.prim .unroll [x])
   | .lolliE .. => convSpine fuel ctx t
   | .use info j _ decl targs _ body => convUse fuel ctx info j decl targs body
@@ -3742,7 +3744,7 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     let fn ← joinFn fuel c₂ A tN K args
     let own := live c₂
     return pre (← convK fuel c₁ tM (.letF fn own.length (some .letAbort) :: K) (own ++ args))
-  | .effThen _ _ A _ _ _ SD u tM tN tD => do
+  | .effThenF _ _ A _ _ _ SD u tM tN tD => do
     readFact "effThen:machine join"
     let (pre, c₁, c₂) ← splitCtx ctx u "effThen"
     let fn ← joinFn fuel c₂ A tN K args
@@ -3793,10 +3795,10 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     -- `Tm.absurd`, so they are left unconsumed.  [spec §66]
     let (pre, c₁, _) ← splitCtx ctx u "zeroE" (absorbs := true)
     return pre (← bindTm (← conv fuel c₁ tV) .zero fun v => pure (.absurd v))
-  | .effSub _ _ _ _ _ c => do
+  | .conv _ _ _ _ (.effSub ..) c => do
     readFact "effSub:rows"
     convK fuel ctx c K args
-  | .alpha _ _ _ _ c => convK fuel ctx c K args
+  | .conv _ _ _ _ .alpha c => convK fuel ctx c K args
   | .effRaise _ _ _ o _ c => do
     readFact "effRaise:op"
     modify fun st => { st with erased := st.erased.insert "raise" (st.erased.getD "raise" 0 + 1) }
@@ -3880,8 +3882,8 @@ def pointAt (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) (M
 
 /-- A computation through its `[sub]`s. -/
 def unSubK : Nat → TExpr → TExpr
-  | f + 1, .effSub _ _ _ _ _ c => unSubK f c
-  | f + 1, .alpha _ _ _ _ c => unSubK f c
+  | f + 1, .conv _ _ _ _ (.effSub ..) c => unSubK f c
+  | f + 1, .conv _ _ _ _ .alpha c => unSubK f c
   | _, t => t
 
 /-- **A join of a machine**: the body `N` of a `[let]` or `[then]`, a function of its context's
@@ -3938,7 +3940,7 @@ def convWorkK (fuel : Nat) (k : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : 
   | .unitE _ _ _ u tV tM => do
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
     return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .consume .dead v (← convWorkK fuel k c₂ tM K args))
-  | .effSub _ _ _ _ _ c | .alpha _ _ _ _ c => convWorkK fuel k ctx c K args
+  | .conv _ _ _ _ (.effSub ..) c | .conv _ _ _ _ .alpha c => convWorkK fuel k ctx c K args
   | .lendScope _ _ _ c | .litView _ _ c | .unfoldStep _ _ c => convWorkK fuel k ctx c K args
   | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
 
@@ -4290,7 +4292,7 @@ def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
     (o : Qual × VTy × VTy) (c : TExpr) : CM Unit := do
   if (← get).works.contains (n, j) then return
   match c.unUse with
-  | .bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => do
+  | .thunkVb _ _ _ _ true (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => do
     readFact "effHandleV:tail work"
     let x ← fresh (← vty o.2.1)
     let kv ← fresh .unit
@@ -4330,7 +4332,7 @@ def aliasOf : Nat → TExpr → Option Nat
   | 0, _ => none
   | f + 1, t => match t with
     | .var _ _ i _ => some i
-    | .effSub _ _ _ _ _ c => aliasOf f c
+    | .conv _ _ _ _ (.effSub ..) c => aliasOf f c
     | t => match transparent? t with
       | some c => aliasOf f c
       | none => none
@@ -4396,7 +4398,7 @@ def convWork (fuel : Nat) (k : Nat) (ph : Pay) (ctx : Ctx) (t : TExpr) : CM Tm :
   | .unitE _ _ _ u tV tM => do
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
     return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .consume .dead v (← convWork fuel k ph c₂ tM))
-  | .effSub _ _ _ _ _ c | .alpha _ _ _ _ c => convWork fuel k ph ctx c
+  | .conv _ _ _ _ (.effSub ..) c | .conv _ _ _ _ .alpha c => convWork fuel k ph ctx c
   | .lendScope _ _ _ c | .litView _ _ c | .unfoldStep _ _ c => convWork fuel k ph ctx c
   | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
 
@@ -4575,7 +4577,7 @@ def convDivLit (fuel : Nat) (ctx : Ctx) (j : Jdg) (op : HostOp) (c : IntLit) (in
   | _ => conv fuel ctx inner
 where
   peelRet : TExpr → TExpr
-    | .ofRet _ _ _ t | .ret _ _ _ t => peelRet t
+    | .conv _ _ _ _ (.ofRet _) t | .conv _ _ _ _ (.ret _) t => peelRet t
     | t => t
 
 /-- A constant as a value: a closure of a code that applies it, one argument at a time. `dctx`,
