@@ -123,7 +123,7 @@ every() {
   restore "$f"
   expect "$what, undone" 2 0 0 --final
 }
-every "a library module" lib/prelude.bc append
+APPEND="# a comment" every "a library module" lib/prelude.bc append
 APPEND="# a comment" every "a script" scripts/par.sh append
 # A binary that has run is never rewritten in place (macOS kills a process whose validated
 # executable changed under it): a byte is appended to a copy, which is moved over it.
