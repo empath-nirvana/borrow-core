@@ -161,7 +161,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .sumI₂ i j A B t => .sumI₂ i j A B (t.shift d c)
   | .thunkFb i j A T b t => .thunkFb i j A T b (t.shift d (c + 1))
   | .thunkVb i j C T b t => .thunkVb i j C T b (t.shift d c)
-  | .ret i j A t => .ret i j A (t.shift d c)
+  | .conv i j j₀ j' k t => .conv i j j₀ j' k (t.shift d c)
   | .bind i j A C u tM tN => .bind i j A C (u.ins d c) (tM.shift d c) (tN.shift d (c + 1))
   | .force i j k T C => .force i j (sIdx d c k) T C
   | .nuOutK i j k C G S => .nuOutK i j (sIdx d c k) C G S
@@ -180,25 +180,11 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .allI i j x b S C t => .allI i j x b S C (t.shift d (c + 1))
   | .allE i j x b a C t => .allE i j x b a C (t.shift d c)
   | .codeIb i j C T b t => .codeIb i j C T b (t.shift d c)
-  | .codeErase i j C E t => .codeErase i j C E (t.shift d c)
-  | .codeEraseB i j C E t => .codeEraseB i j C E (t.shift d c)
-  | .bangE i j A t => .bangE i j A (t.shift d c)
-  | .boxI i j a A t => .boxI i j a A (t.shift d c)
-  | .boxE i j a A t => .boxE i j a A (t.shift d c)
-  | .immSub i j a b A t => .immSub i j a b A (t.shift d c)
-  | .mutSub i j a b A t => .mutSub i j a b A (t.shift d c)
   | .withborUD i j A B SM SD S k x td => .withborUD i j A B SM SD S k x (td.shift d c)
   | .sliceBorrowMU i j A B S x td => .sliceBorrowMU i j A B S x (td.shift d c)
   | .sliceBorrowIU i j A B S x td => .sliceBorrowIU i j A B S x (td.shift d c)
   | .lolliE i j A B u ta tf => .lolliE i j A B (u.ins d c) (ta.shift d c) (tf.shift d c)
   | .allEV i j x b a A t => .allEV i j x b a A (t.shift d c)
-  | .ofRet i j A t => .ofRet i j A (t.shift d c)
-  | .roll i j A t => .roll i j A (t.shift d c)
-  | .unroll i j A t => .unroll i j A (t.shift d c)
-  | .nuIn i j m k C t => .nuIn i j m k C (t.shift d c)
-  | .nuOut i j m k C t => .nuOut i j m k C (t.shift d c)
-  | .effSub i j S S' A t => .effSub i j S S' A (t.shift d c)
-  | .alpha i j j₀ j' t => .alpha i j j₀ j' (t.shift d c)
   | .effPerform i j S o t => .effPerform i j S o (t.shift d c)
   | .effRaise i j S o B t => .effRaise i j S o B (t.shift d c)
   | .effLet i j A B S u tM tN =>
@@ -294,19 +280,23 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
 
 /-! ### Absorption -/
 
+/-- A same-term step's absorption over its premise's: at `[]I` (`ConvKind.outl?`) every absorbed
+slot must outlive the box's lifetime. -/
+def AbsF.outlO (Δ : LifeCtx) : Option Lifetime.Life → Option AbsF → Option AbsF
+  | some a, f => AbsF.withO (.atom (.outl Δ a)) f
+  | none, f => f
+
 /-- **A body's absorption**: when an unused live slot of a type can be given to its derivation,
 under `Δ`. -/
 def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .tensorI _ _ _ _ _ t₁ t₂ => AbsF.orO (t₁.absF Δ) (t₂.absF Δ)
-  | .sumI₁ _ _ _ _ t | .sumI₂ _ _ _ _ t | .ret _ _ _ t
+  | .sumI₁ _ _ _ _ t | .sumI₂ _ _ _ _ t
   | .lam _ _ _ _ t | .lamDead _ _ _ _ t | .proj₁ _ _ _ _ t | .proj₂ _ _ _ _ t
-  | .allE _ _ _ _ _ _ t | .bangE _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t
-  | .mutSub _ _ _ _ _ t | .allEV _ _ _ _ _ _ t | .ofRet _ _ _ t | .roll _ _ _ t
-  | .unroll _ _ _ t | .nuIn _ _ _ _ _ t | .nuOut _ _ _ _ _ t | .effSub _ _ _ _ _ t | .alpha _ _ _ _ t
+  | .allE _ _ _ _ _ _ t | .allEV _ _ _ _ _ _ t
   | .effPerform _ _ _ _ t | .effRaise _ _ _ _ _ t | .litFn _ _ _ t | .divLit _ _ _ _ t
   | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t
-  | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t | .codeErase _ _ _ _ t
-  | .codeEraseB _ _ _ _ t => t.absF Δ
+  | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => t.absF Δ
+  | .conv _ _ _ _ k t => AbsF.outlO Δ k.outl? (t.absF Δ)
   | .bind _ _ _ _ _ t₁ t₂ | .unitE _ _ _ _ t₁ t₂ | .tensorE _ _ _ _ _ _ t₁ t₂
   | .lolliE _ _ _ _ _ t₁ t₂ => AbsF.orO (t₁.absF Δ) (t₂.absF Δ)
   | .app _ _ _ _ _ _ tM => AbsF.orO (tM.absF Δ) (some (.atom .pers))
@@ -317,7 +307,6 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .allI _ _ x b _ _ t => AbsF.withO (.atom (.nfree x)) (t.absF (Δ.extend x b))
   | .thunkFb _ _ _ _ b t | .thunkVb _ _ _ _ b t =>
       if b then AbsF.withO (.atom .flat) (t.absF Δ) else t.absF Δ
-  | .boxI _ _ a _ t => AbsF.withO (.atom (.outl Δ a)) (t.absF Δ)
   | .withborUD _ _ _ _ _ _ _ _ _ td
   | .sliceBorrowMU _ _ _ _ _ _ td | .sliceBorrowIU _ _ _ _ _ _ td =>
       AbsF.withO (.atom .pers) (td.absF Δ)

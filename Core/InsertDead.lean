@@ -244,7 +244,9 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
   | thunkVb b hp hC _ hT ih =>
       intro Γa Γb hΓ; subst hΓ
       exact .thunkVb b (fun h => live_insert hd (hp h)) hC (ih Γa Γb rfl) hT
-  | ret _ ih => intro Γa Γb hΓ; exact .ret (ih Γa Γb hΓ)
+  | conv _ _ hc ih =>
+      intro Γa Γb hΓ'; subst hΓ'
+      exact .conv _ (ih Γa Γb rfl) (hc.mono (fun _ _ ho => ⟨ho.1, live_insert hd ho.2⟩) (fun _ _ => id))
   | bind hs _ _ ihM ihN =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
@@ -324,21 +326,12 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       have hty' : Ctx.capTy (Γa ++ Γd ++ Γb) (.lam (Expr.shift Γd.length (Γa.length + 1) M)) =
           Ctx.capTy (Γa ++ Γb) (.lam M) := hty
       exact .codeIb b (fun h => live_insert hd (hp h)) (ih Γa Γb rfl) hok' (by rw [hcn, hty']; exact hT)
-  | codeErase _ ih => intro Γa Γb hΓ; exact .codeErase (ih Γa Γb hΓ)
-  | codeEraseB _ ih => intro Γa Γb hΓ; exact .codeEraseB (ih Γa Γb hΓ)
-  | bangE _ ih => intro Γa Γb hΓ; exact .bangE (ih Γa Γb hΓ)
   | copyBang hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := BoCa.copy) (by rfl)]; exact .copyBang (deadP_insert hd Γa hΓ)
   | releaseBang hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := forget) (by rfl)]; exact .releaseBang (deadP_insert hd Γa hΓ)
-  | boxI _ hΓ ih =>
-      intro Γa Γb hΓ'; subst hΓ'
-      exact .boxI (ih Γa Γb rfl) ⟨hΓ.1, live_insert hd hΓ.2⟩
-  | boxE _ ih => intro Γa Γb hΓ; exact .boxE (ih Γa Γb hΓ)
-  | immSub _ hle ih => intro Γa Γb hΓ; exact .immSub (ih Γa Γb hΓ) hle
-  | mutSub _ hle ih => intro Γa Γb hΓ; exact .mutSub (ih Γa Γb hΓ) hle
   | alloc hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .alloc (deadP_insert hd Γa hΓ)
   | free hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .free (deadP_insert hd Γa hΓ)
   | tokMint hΓ =>
@@ -478,9 +471,6 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       rw [h₁] at ea; rw [h₂] at ef
       exact .lolliE hs' ea ef
   | allEV _ hlt ih => intro Γa Γb hΓ; exact .allEV (ih Γa Γb hΓ) hlt
-  | ofRet _ ih => intro Γa Γb hΓ; exact .ofRet (ih Γa Γb hΓ)
-  | roll hA hc _ ih => intro Γa Γb hΓ; exact .roll hA hc (ih Γa Γb hΓ)
-  | unroll _ ih => intro Γa Γb hΓ; exact .unroll (ih Γa Γb hΓ)
   | foldImm F y c R hΓ hF hG hyM hyR hR =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (foldImmV_closed F)]
@@ -497,8 +487,6 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (foldReuseV_closed F)]
       exact .foldReuse F R (deadP_insert hd Γa hΓ) hF hG
-  | nuIn hC _ ih => intro Γa Γb hΓ; exact .nuIn hC (ih Γa Γb hΓ)
-  | nuOut hC _ ih => intro Γa Γb hΓ; exact .nuOut hC (ih Γa Γb hΓ)
   | unfoldN C S hC hS hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (unfoldV_closed C)]
@@ -510,7 +498,6 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
   | nuOutK hC hG hS hGf hs =>
       intro Γa Γb hΓ; subst hΓ
       rw [var_shift]; exact .nuOutK hC hG hS hGf (soloP_insert hd Γa hs)
-  | effSub hle _ ih => intro Γa Γb hΓ; exact .effSub hle (ih Γa Γb hΓ)
   | effPerform hAt hf hna hac _ ih => intro Γa Γb hΓ; exact .effPerform hAt hf hna hac (ih Γa Γb hΓ)
   | effAwait hAt hΓ hfa ha haA hfc hc =>
       intro Γa Γb hΓ'; subst hΓ'
@@ -587,7 +574,6 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
         (Expr.app (Expr.lam (N.shift _ (Γa.length + 1))) ((Expr.lam b).shift _ _)) _
       rw [hb]
       exact .letPoly b hcl hV eN
-  | alpha _ hα ih => intro Γa Γb hΓ; exact .alpha (ih Γa Γb hΓ) hα
   | lendR hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true
   | lendLoopR hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true
   | nilDead hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true

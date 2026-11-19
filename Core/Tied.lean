@@ -309,7 +309,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | sumI₂ _ ih1 => exact .sumI₂ (ih1 (by eff_free))
   | thunkFb b hp _ hT ih1 => exact .thunkFb b hp (ih1 (by eff_free)) hT
   | thunkVb b hp hC _ hT ih1 => exact .thunkVb b hp hC (ih1 he) hT
-  | ret _ ih1 => exact .ret (ih1 he)
+  | conv _ _ hc ih1 => exact .conv _ (ih1 he) hc
   | bind hs _ _ ih1 ih2 => exact .bind hs (ih1 (by eff_free)) (ih2 (by eff_free))
   | force h hT => exact .force h hT
   | lam _ ih1 => exact .lam (ih1 (by eff_free))
@@ -327,15 +327,8 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | allI hbx hΔx hΓx _ ih1 => exact .allI hbx hΔx hΓx (ih1 (by eff_free))
   | allE _ hlt ih1 => exact .allE (ih1 (by eff_free)) hlt
   | codeIb b hp _ hok hT ih1 => exact .codeIb b hp (ih1 he) hok hT
-  | codeErase _ ih1 => exact .codeErase (ih1 he)
-  | codeEraseB _ ih1 => exact .codeEraseB (ih1 he)
-  | bangE _ ih1 => exact .bangE (ih1 he)
   | copyBang hΓ => exact .copyBang hΓ
   | releaseBang hΓ => exact .releaseBang hΓ
-  | boxI _ hΓ ih1 => exact .boxI (ih1 he) hΓ
-  | boxE _ ih1 => exact .boxE (ih1 he)
-  | immSub _ hle ih1 => exact .immSub (ih1 he) hle
-  | mutSub _ hle ih1 => exact .mutSub (ih1 he) hle
   | alloc hΓ => exact .alloc hΓ
   | free hΓ => exact .free hΓ
   | tokMint hΓ => exact .tokMint hΓ
@@ -386,19 +379,13 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
       exact .sliceBorrowIU x hΓ hsc hsideA hsideB hfree₁ hfree₂ hS (ih1 (by eff_free))
   | lolliE hs _ _ ih1 ih2 => exact .lolliE hs (ih1 (by eff_free)) (ih2 (by eff_free))
   | allEV _ hlt ih1 => exact .allEV (ih1 (by eff_free)) hlt
-  | ofRet _ ih1 => exact .ofRet (ih1 he)
-  | roll hA hc _ ih1 => exact .roll hA hc (ih1 he)
-  | unroll _ ih1 => exact .unroll (ih1 he)
   | foldImm F y c R hΓ hF hG hyM hyR hR => exact .foldImm F y c R hΓ hF hG hyM hyR hR
   | foldOwn F R hΓ hF hG => exact .foldOwn F R hΓ hF hG
   | foldOwnG B₀ Rs hΓ hB => exact .foldOwnG B₀ Rs hΓ hB
   | foldReuse F R hΓ hF hG => exact .foldReuse F R hΓ hF hG
-  | nuIn hC _ ih1 => exact .nuIn hC (ih1 he)
-  | nuOut hC _ ih1 => exact .nuOut hC (ih1 he)
   | unfoldN C S hC hS hΓ => exact .unfoldN C S hC hS hΓ
   | unfoldK C G S hC hG hS hΓ => exact .unfoldK C G S hC hG hS hΓ
   | nuOutK hC hG hS hGf h => exact .nuOutK hC hG hS hGf h
-  | effSub hle _ ih1 => exact .effSub hle (ih1 he)
   | effPerform => simp [BoCa.BoLo.performE, Expr.effFree, Expr.val, Val.prim] at he
   | effAwait => simp [awaitE, BoCa.BoLo.performE, BoCa.BoLo.raiseE, Expr.effFree, Expr.val,
       Val.prim] at he
@@ -417,7 +404,6 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
       simp only [Expr.effFree, Expr.val, Val.lam, Bool.and_eq_true] at he
       exact .letPoly b hcl (ihV he.2)
         (ihN (by rw [effFree_shift]; exact effFree_subst N 0 (Val.lam b) he.1 he.2))
-  | alpha _ hα ih => exact .alpha (ih he) hα
 
 /-- **A derivation of a term with no operation is one at every judgment index**: tied at the
 index's effect context, if any (`CDerivesAt.ofEffFree`), then `CDerivesX.mono`.  `[spec §19, §83]` -/

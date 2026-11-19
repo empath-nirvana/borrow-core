@@ -88,6 +88,26 @@ def HandleVBN : Prop :=
 def MissingN : Prop :=
   HandleVN (ℍ := ℍ) ∧ HandleVBN (ℍ := ℍ) ∧ ReifyN (ℍ := ℍ)
 
+/-- **`[conv]` at `SemJN`**: each same-term step by its own `*_compatN`. -/
+theorem conv_compatN {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {k : ConvKind} {j j' : Jdg}
+    (hc : JConv Δ Γ k j j') (h : SemJN (ℍ := ℍ) Δ Γ e j) : SemJN (ℍ := ℍ) Δ Γ e j' := by
+  cases hc with
+  | ret => exact ret_compatN h
+  | ofRet => exact ofRet_compatN h
+  | bangE => exact bangE_compatN h
+  | boxI hΓ => exact boxI_compatN h hΓ
+  | boxE => exact boxE_compatN h
+  | immSub hle => exact immSub_compatN h hle
+  | mutSub hle => exact mutSub_compatN h hle
+  | codeErase => exact codeErase_compatN h
+  | codeEraseB => exact codeEraseB_compatN h
+  | roll hA hc => exact roll_compatN hA hc h
+  | unroll => exact unroll_compatN h
+  | nuIn hC => exact nuIn_compatN hC h
+  | nuOut hC => exact nuOut_compatN hC h
+  | effSub hle => exact sub_compatN hle h
+  | alpha hα => exact alpha_compatN hα h
+
 /-! ### The induction -/
 
 /-- **Every derivation is sound at `SemJN`**, from `MissingN`: Core's `fundamentalC`, case by
@@ -104,7 +124,7 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | thunkFb b hp _ hT ih => subst hT; cases b; exacts [thunkF_compatN ih, bangThunkF_compatN (hp rfl) ih]
   | thunkVb b hp hC _ hT ih =>
       subst hT; cases b; exacts [thunkV_compatN hC ih, bangThunkV_compatN (hp rfl) hC ih]
-  | ret _ ih => exact ret_compatN ih
+  | conv _ _ hc ih => exact conv_compatN hc ih
   | bind hs _ _ ihM ihN => exact bind_compatN hs ihM ihN
   | force h hT => exact force_compatN h hT
   | lam _ ih => exact lam_compatN ih
@@ -122,15 +142,8 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | allE _ hlt ih => exact allE_compatN ih hlt
   | codeIb b hp _ hok hT ih =>
       subst hT; cases b; exacts [codeI_compatN ih hok, codeIB_compatN (hp rfl) ih hok]
-  | codeErase _ ih => exact codeErase_compatN ih
-  | codeEraseB _ ih => exact codeEraseB_compatN ih
-  | bangE _ ih => exact bangE_compatN ih
   | copyBang hΓ => exact copyBang_compatN hΓ
   | releaseBang hΓ => exact releaseBang_compatN hΓ
-  | boxI _ hΓ ih => exact boxI_compatN ih hΓ
-  | boxE _ ih => exact boxE_compatN ih
-  | immSub _ hle ih => exact immSub_compatN ih hle
-  | mutSub _ hle ih => exact mutSub_compatN ih hle
   | alloc hΓ => exact alloc_compatN hΓ
   | free hΓ => exact free_compatN hΓ
   | tokMint hΓ => exact tokMint_compatN hΓ
@@ -182,19 +195,13 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
       exact sliceBorrowIU_compatN x hΓ hsc hA hB hf₁ hf₂ hS ihd
   | lolliE hs _ _ iha ihf => exact lolliE_compatN hs iha ihf
   | allEV _ hlt ih => exact allEV_compatN ih hlt
-  | ofRet _ ih => exact ofRet_compatN ih
-  | roll hA hc _ ih => exact roll_compatN hA hc ih
-  | unroll _ ih => exact unroll_compatN ih
   | foldImm F y c R hΓ hF hG hyM hyR hR => exact foldImm_compatN F hF hG y c R hΓ hyM hyR hR
   | foldOwn F R hΓ hF hG => exact foldOwn_compatN F hF hG R hΓ
   | foldReuse F R hΓ hF hG => exact foldReuse_compatN F hF hG R hΓ
   | foldOwnG B Rs hΓ hB => exact foldOwnG_compatN B hB Rs hΓ
-  | nuIn hC _ ih => exact nuIn_compatN hC ih
-  | nuOut hC _ ih => exact nuOut_compatN hC ih
   | unfoldN C S hC hS hΓ => exact unfoldN_compatN hC S hS hΓ
   | unfoldK C G S hC hG hS hΓ => exact unfoldK_compatN hC hG hS hΓ
   | nuOutK hC hG hS hGf h => exact nuOutK_compatN hC hG hS hGf h
-  | effSub hle _ ih => exact sub_compatN hle ih
   | effPerform hf hna _ _ ih => exact perform_compatN hf hna ih
   | effAwait hΓ hfa ha haA hfc hc =>
       exact semJN_dead .nil hΓ (fun γ γ' => by
@@ -221,7 +228,6 @@ theorem fundamentalN_all (hm : MissingN (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hCancel hSW hSu hFin _ ihc ihe =>
       exact handleL_compatN hs hd hHr hHw hHn ihc hnS hlen hNZ hCancel hSW hSu hFin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatN (Val.lam b) hcl ihN
-  | alpha _ hα ih => exact alpha_compatN hα ih
 
 end BoCa.Fig16.LogRel.Core.Chain.SI.Goal791N
 

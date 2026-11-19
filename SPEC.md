@@ -14433,8 +14433,8 @@ term, cited by section below. Nothing the language cannot do today is added, exc
    - **Hylo modes** spell the lends and moves the language has (*Modes*): `let`, the default, for a
      shared lend of a fresh region; `inout` for a mutable lend of a fresh region; `sink` for an
      owned move; and `&x` at a call that may change `x`.
-   - **No `let mut`** (#1104): its sites are written in the forms of #1104's templates, all of
-     which exist today (*`let mut` sites*).
+   - **`let mut` is written `var`**, for now, with today's elaboration (*`let mut` sites*). Its
+     removal (#1104) is not part of the respelling.
    - `Some`/`None` are today's constructors (`lib/prelude.bc`).
    - An effect operation and a function do not share a name.
 3. **Every other name keeps its spelling.** Keywords (`while`, `loop`, `for`, `break`, `borrow`,
@@ -14456,7 +14456,8 @@ term, cited by section below. Nothing the language cannot do today is added, exc
 | `i32[n]`, `u8[n]`, `u64[n]`; `42`, `1.5`, `b'a'`, `'c'`, `"…"` | unchanged | §8, §17, §37 |
 | names, `'a` lifetimes, `[T]` type arguments | unchanged | kaikai writes type parameters in `[…]` too |
 
-Reserved words added: `handle`, `import`, `inout`, `sink`, `as`, `local`. Operator added: `:=`.
+Reserved words added: `handle`, `import`, `inout`, `sink`, `as`, `local`, `var`. Operator added:
+`:=`.
 None is removed, since core text uses them.
 
 ### The table: today's form, the new form
@@ -14524,7 +14525,7 @@ the `*u` lends, `release_bang`/`release_unk`, `copy_bang`, `:>`).
 | P12 | `modify P { v -> S }`, `modify &mut x { v -> (e, r) }` | `modify P { v -> S }`, `modify &x { v -> (e, r) }` | §12, §41 |
 | P13 | `*e`, `*&mut m` | `*e`, `*&m` | §4 |
 | P14 | `clone(x)` | unchanged | §42 |
-| P15 | `x.f` read; `x.f = e` on a `for`'s `mut` leaf | unchanged; on a `let mut` record, #1104's template | §42, §60 |
+| P15 | `x.f` read; `x.f = e` on a `for`'s `mut` leaf or a `let mut` record | unchanged (a `let mut` record is a `var`) | §41, §42, §60 |
 
 **Expressions and data**
 
@@ -14578,7 +14579,7 @@ the `*u` lends, `release_bang`/`release_unk`, `copy_bang`, `:>`).
 
 The one row beyond today's surface spelling: the explicit form of §80's `withlocal`. Its kernel
 constant is built (§80); its surface producer is #1115's, not built. No corpus program uses it.
-`let mut` does not elaborate to it.
+`let mut` (`var`) does not elaborate to it.
 
 | # | Form | Meaning | SPEC |
 |---|---|---|---|
@@ -14610,8 +14611,17 @@ suspension leaves it (§80 *Open*).
 
 ### `let mut` sites
 
-`let mut` is removed (#1104), so it has no new spelling. Each site is written in the form #1104's
-migration templates give for its pattern; each of those forms exists today and has a row above:
+`let mut` is written `var`. The row is transitional: `var` is today's `let mut` under a new
+keyword, with exactly its elaboration (§41) at every site, so every program keeps its core term.
+
+| # | Today | New | SPEC |
+|---|---|---|---|
+| V1 | `let mut x = e; S`, `let mut x: T = e; S` | `var x = e`, `var x: T = e`, then `S` on the next line or after `;` | §41 |
+| V2 | the assignment `x = e`, the field assignment `x.f = e` | unchanged | §41, §42 |
+
+The removal of `let mut` (#1104) is not part of the respelling. It writes each site in the form
+#1104's migration templates give for its pattern; each of those forms exists today and has a row
+above:
 
 | Template | Today's form | Rows |
 |---|---|---|
@@ -14622,9 +14632,10 @@ migration templates give for its pattern; each of those forms exists today and h
 | T-lend | `modify &mut x { x -> (e, ()) }` on a plain `let` | P12: `modify &x { x -> (e, ()) }` |
 | T-gen | a generator `fn` whose locals are its state | L3, L6 |
 
-Every `let mut` pattern of the corpus has a template that checks and gives the same output, so no
-corpus program is lost. T-lend is threaded by the same elaboration as `let mut`; whether it stays
-is #1111's question.
+The table describes that later work. The respelling does not rely on it: whether every `let mut`
+pattern of the corpus has a template that checks and gives the same output is the removal's
+question. T-lend is threaded by the same elaboration as `let mut`; whether it stays is #1111's
+question.
 
 ### Grammar
 
@@ -14660,6 +14671,8 @@ clause    ::= name '(' names? ')' '->' (expr | block)     # return(x) -> …, op
                                                           # several statements need a block
 block     ::= '{' (stmt sep)* expr? '}'
 stmt      ::= 'let' pat (':' type)? '=' expr
+            | 'var' name (':' type)? '=' expr             # today's let mut (§41)
+            | place '=' expr                              # an assignment, as today
             | 'local' name (':' type)? '=' expr           # one withlocal over the rest of the block
             | name ':=' expr                              # a store into a local
             | expr
@@ -14697,13 +14710,14 @@ only: with no parser, the translations are not run.
 ### Baseline
 
 No kernel, checker, elaborator, backend or library change: every theorem, rule and program answer
-is unchanged. Today's surface is the one `bcc` reads.
+is unchanged. `var` keeps `let mut`'s elaboration (§41). Today's surface is the one `bcc` reads.
 
 ### Units
 
 - The parser for the new spelling (#1131). Not built.
 - The corpus and library rewritten in it (#1132). Not built.
 - `local`'s surface producer (#1115). Not built.
+- The removal of `let mut` by #1104's templates. Not part of the respelling.
 
 ### Open
 
@@ -14715,7 +14729,8 @@ These are not part of the respelling.
 - **The loop-state spelling** (`loop_with`, Futhark's `loop`, `for` over `withlocal`) and whether
   T-lend stays (#1111).
 - **Rebinding** beyond a shadowing `let`.
-- **`let mut` as kaikai's `var x := e` / `x := e`**: the removal stands (#1104).
+- **What `var` finally means**, how its reads and assignments are spelled, and `local` against
+  `var`. `var` is transitional (*`let mut` sites*); the removal of `let mut` (#1104) waits for this.
 - **Views as values and named regions** beyond `imm 'a`, `mut 'a` and `view 'a`.
 - **Borrow extent**, lexical or until last use.
 - **Pipes:** kaikai's `|`, `||`, `|?`, `|!`, and §75's connector (#1103).

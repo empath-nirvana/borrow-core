@@ -18,21 +18,37 @@ elab "ctorNames2% " id:ident : term => do
     | c => c.toString
   return toExpr names.toArray
 
+open Lean Elab Term Meta in
+/-- A constructor's `ctorIdx`, as a literal. -/
+elab "ctorIdx% " id:ident : term => do
+  let n ← realizeGlobalConstNoOverloadWithInfo id
+  let some (.ctorInfo c) := (← getEnv).find? n | throwError "{n} is not a constructor"
+  return toExpr c.cidx
+
 namespace Backend2
 open BoCa BoCa.Fig16.LogRel.Core BoCa.Fig16.LogRel.Core.Check
 
 /-- The rule of each `TExpr` constructor, by `ctorIdx`. -/
 def texprNames : Array String := ctorNames2% TExpr
 
-def ruleName (t : TExpr) : String := texprNames[t.ctorIdx]!
+/-- The same-term steps' names, by `ctorIdx`: a `conv` node is named by its step. -/
+def convNames : Array String := ctorNames2% BoCa.Fig16.LogRel.Core.ConvKind
 
-def ppJ (j : Jdg) (ms : MachSet := {}) : String :=
-  match ofJ ms j with
+/-- A node's rule; a `conv` node's is its step's (`convNames`). The `conv` node is read by its
+`ctorIdx` (`ctorIdx% TExpr.conv`, which `TExpr.conv.elim`'s premise checks) rather than by a
+`match` with a catch-all, which would add `propext` to this definition's axioms. -/
+def ruleName (t : TExpr) : String :=
+  if h : t.ctorIdx = ctorIdx% TExpr.conv then
+    TExpr.conv.elim (motive := fun _ => String) t h fun _ _ _ _ k _ => convNames[k.ctorIdx]!
+  else texprNames[t.ctorIdx]!
+
+def ppJ (j : Jdg) (ms : MachSet := {}) (fd : EvSet := {}) : String :=
+  match ofJ ms fd j with
   | .ok (.inl a) => a.pp
   | .ok (.inr k) => "{" ++ k.pp ++ "}"
   | .error e => s!"<{e}>"
 
-def ppVT (A : VTy) (ms : MachSet := {}) : String := match ofV ms A with
+def ppVT (A : VTy) (ms : MachSet := {}) (fd : EvSet := {}) : String := match ofV ms fd A with
   | .ok a => a.pp
   | .error e => s!"<{e}>"
 
@@ -60,8 +76,8 @@ end
 /-- A type in a `use` key (`useKey`): as `ppVT` prints it; a type holding a per-code closure type
 `Code⟨N; E⟩ C` is its exact serialisation, the code `N` in full, so that two codes are two keys.
 `[spec §68]` -/
-def keyVT (A : VTy) (ms : MachSet := {}) : String :=
-  if hasCodeV A then "exact:" ++ reprStr A else ppVT A ms
+def keyVT (A : VTy) (ms : MachSet := {}) (fd : EvSet := {}) : String :=
+  if hasCodeV A then "exact:" ++ reprStr A else ppVT A ms fd
 
 def ppMasks (m : Masks) : String :=
   String.ofList (m.ms.map fun (a, b) => match a, b with

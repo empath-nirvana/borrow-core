@@ -46,7 +46,7 @@ def TExpr.isLendCell : TExpr → Bool
 
 /-- `return` of a `lendCell` node. -/
 def retLendT : TExpr → Bool
-  | .ret _ _ _ t => t.isLendCell
+  | .conv _ _ _ _ (.ret _) t => t.isLendCell
   | _ => false
 
 /-- `[⊗E]` of the variable `0`. -/
@@ -84,12 +84,13 @@ def lendKindB (m : Bool) : TExpr → Bool
 
 /-- `return` of `array_new` applied. -/
 def tabT : TExpr → Bool
-  | .ret _ _ _ (.lolliE _ _ _ _ _ _ (.bangE _ _ _ (.arrNew ..))) => true
+  | .conv _ _ _ _ (.ret _) (.lolliE _ _ _ _ _ _ (.conv _ _ _ _ (.bangE _) (.arrNew ..))) => true
   | _ => false
 
 /-- `return` of `slice_borrow_imm` applied to the variable `0` and a callback. -/
 def immLendT : TExpr → Bool
-  | .ret _ _ _ (.lolliE _ _ _ _ _ _ (.lolliE _ _ _ _ _ x (.sliceBorrowI ..))) => x.isVarT 0
+  | .conv _ _ _ _ (.ret _) (.lolliE _ _ _ _ _ _ (.lolliE _ _ _ _ _ x (.sliceBorrowI ..))) =>
+      x.isVarT 0
   | _ => false
 
 /-- The consume applied to the variable `1`. -/
@@ -106,7 +107,8 @@ def litBodyT : TExpr → Bool
 
 /-- **A literal's view**: `p <- return lit; let (n, t) = p; …`, the body `litBodyT`. -/
 def litViewT : TExpr → Bool
-  | .ofRet _ _ _ (.bind _ _ _ _ _ _ (.tensorE _ _ _ _ _ _ tV tB)) => tV.isVarT 0 && litBodyT tB
+  | .conv _ _ _ _ (.ofRet _) (.bind _ _ _ _ _ _ (.tensorE _ _ _ _ _ _ tV tB)) =>
+      tV.isVarT 0 && litBodyT tB
   | _ => false
 
 /-- The node is the `unfoldN` constant. -/
@@ -117,7 +119,7 @@ def TExpr.isUnfoldN : TExpr → Bool
 /-- **`unfold step`**: the `unfoldN` constant applied, through `return`, `unbang` and `ofRet`. -/
 def unfoldAppT : TExpr → Bool
   | .lolliE _ _ _ _ _ _ tf => tf.isUnfoldN
-  | .ret _ _ _ t | .bangE _ _ _ t | .ofRet _ _ _ t => unfoldAppT t
+  | .conv _ _ _ _ (.ret _) t | .conv _ _ _ _ (.bangE _) t | .conv _ _ _ _ (.ofRet _) t => unfoldAppT t
   | _ => false
 
 /-! ### A lent cell's free -/
@@ -137,8 +139,8 @@ a `case` passes it to both arms, each of which must release it. Any other use (a
 a capture, a field of a value) is not a release.  `[spec §57]` -/
 def relT (k : Nat) : TExpr → Bool
   | .lolliE _ _ _ _ _ ta tf => ta.isVarT k && tf.isRelease
-  | .ret _ _ _ t | .ofRet _ _ _ t | .effSub _ _ _ _ _ t | .lendScope _ _ _ t | .sumI₁ _ _ _ _ t
-  | .sumI₂ _ _ _ _ t | .alpha _ _ _ _ t => relT k t
+  | .conv _ _ _ _ (.ret _) t | .conv _ _ _ _ (.ofRet _) t | .conv _ _ _ _ (.effSub ..) t
+  | .conv _ _ _ _ .alpha t | .lendScope _ _ _ t | .sumI₁ _ _ _ _ t | .sumI₂ _ _ _ _ t => relT k t
   | .bind _ _ _ _ u tM tN | .effLet _ _ _ _ _ u tM tN =>
     match u.at k with
     | (true, false) => relT k tM
@@ -181,13 +183,13 @@ theorem TExpr.lendKind?_shift (d c : Nat) (t : TExpr) : (t.shift d c).lendKind? 
   cases t <;> rfl
 
 theorem retLendT_shift (d c : Nat) (t : TExpr) : retLendT (t.shift d c) = retLendT t := by
-  cases t <;> simp only [TExpr.shift, retLendT, TExpr.isLendCell_shift]
+  cases t <;> (try cases ‹ConvKind›) <;> simp only [TExpr.shift, retLendT, TExpr.isLendCell_shift]
 
 theorem pairOf0T_shift {d c : Nat} (hc : 0 < c) (t : TExpr) : pairOf0T (t.shift d c) = pairOf0T t := by
   cases t <;> simp only [TExpr.shift, pairOf0T, TExpr.isVarT_shift hc]
 
 theorem lendScopeT_shift (d c : Nat) (t : TExpr) : lendScopeT (t.shift d c) = lendScopeT t := by
-  cases t <;> simp only [TExpr.shift, lendScopeT, TExpr.isLendCell_shift, retLendT_shift,
+  cases t <;> (try cases ‹ConvKind›) <;> simp only [TExpr.shift, lendScopeT, TExpr.isLendCell_shift, retLendT_shift,
     pairOf0T_shift (Nat.succ_pos c)]
 
 theorem lendKindB_shift (m : Bool) (d c : Nat) (t : TExpr) : lendKindB m (t.shift d c) = lendKindB m t := by
@@ -197,18 +199,22 @@ theorem lendKindB_shift (m : Bool) (d c : Nat) (t : TExpr) : lendKindB m (t.shif
 
 theorem tabT_shift (d c : Nat) (t : TExpr) : tabT (t.shift d c) = tabT t := by
   cases t with
-  | ret _ _ _ t =>
+  | conv _ _ _ _ c t =>
+    cases c <;> try rfl
     cases t with
     | lolliE _ _ _ _ _ _ tf =>
       cases tf with
-      | bangE _ _ _ t => cases t <;> rfl
+      | conv _ _ _ _ c t =>
+        cases c <;> try rfl
+        cases t <;> rfl
       | _ => rfl
     | _ => rfl
   | _ => rfl
 
 theorem immLendT_shift {d c : Nat} (hc : 0 < c) (t : TExpr) : immLendT (t.shift d c) = immLendT t := by
   cases t with
-  | ret _ _ _ t =>
+  | conv _ _ _ _ c t =>
+    cases c <;> try rfl
     cases t with
     | lolliE _ _ _ _ _ _ tf =>
       cases tf with
@@ -242,7 +248,8 @@ theorem litBodyT_shift (d c : Nat) (t : TExpr) : litBodyT (t.shift d c) = litBod
 
 theorem litViewT_shift (d c : Nat) (t : TExpr) : litViewT (t.shift d c) = litViewT t := by
   cases t with
-  | ofRet _ _ _ t =>
+  | conv _ _ _ _ c t =>
+    cases c <;> try rfl
     cases t with
     | bind _ _ _ _ _ _ tN =>
       cases tN with
@@ -256,7 +263,7 @@ theorem TExpr.isUnfoldN_shift (d c : Nat) (t : TExpr) : (t.shift d c).isUnfoldN 
   cases t <;> rfl
 
 theorem unfoldAppT_shift (d : Nat) (t : TExpr) : ∀ c, unfoldAppT (t.shift d c) = unfoldAppT t := by
-  induction t <;> intro c <;> simp_all [TExpr.shift, unfoldAppT, TExpr.isUnfoldN_shift]
+  induction t <;> intro c <;> (try cases ‹ConvKind›) <;> simp_all [TExpr.shift, unfoldAppT, TExpr.isUnfoldN_shift]
 
 theorem insPair_getD {d : Nat} : ∀ (c k : Nat) (u : List (Bool × Bool)), k < c →
     (insPair d c u).getD k (false, false) = u.getD k (false, false)
@@ -279,8 +286,8 @@ theorem relT_shift (d : Nat) (t : TExpr) : ∀ k c, k < c → relT k (t.shift d 
   induction t
   case lolliE _ _ _ _ _ ta tf _ _ =>
     intro k c h; simp only [TExpr.shift, relT, TExpr.isVarT_shift h, TExpr.isRelease_shift]
-  case ret _ _ _ t ih | ofRet _ _ _ t ih | effSub _ _ _ _ _ t ih | lendScope _ _ _ t ih
-    | sumI₁ _ _ _ _ t ih | sumI₂ _ _ _ _ t ih | alpha _ _ _ _ t ih =>
+  case conv _ _ _ _ c t ih => intro k c' h; cases c <;> simp only [TExpr.shift, relT, ih k c' h]
+  case lendScope _ _ _ t ih | sumI₁ _ _ _ _ t ih | sumI₂ _ _ _ _ t ih =>
     intro k c h; simp only [TExpr.shift, relT, ih k c h]
   case bind _ _ _ _ u tM tN ihM ihN | effLet _ _ _ _ _ u tM tN ihM ihN =>
     intro k c h

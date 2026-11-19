@@ -45,7 +45,7 @@ export PAR_COLLECT=$skipdir
 bad=0
 checks() {
   local f=$1 out
-  if grep -q '^-- check: parse-only' "$f"; then
+  if grepq '^-- check: parse-only' "$f"; then
     echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0
   fi
   if out=$("$bcc" check "$f" 2>&1); then
@@ -57,7 +57,7 @@ checks() {
 rejects() {
   local f=$1 want out flag
   want=$(sed -n 's/^-- expect: //p; s/^-- expect| //p' "$f")
-  flag=; grep -q '^-- check: proved-only' "$f" && flag=--proved-only
+  flag=; grepq '^-- check: proved-only' "$f" && flag=--proved-only
   if ! "$bcc" parse "$f" >/dev/null 2>&1; then
     echo "$f: does not parse, so it does not test the checker"; return 1
   elif [ -n "$flag" ] && ! out=$("$bcc" check "$f" 2>&1); then

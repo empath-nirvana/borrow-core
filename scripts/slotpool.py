@@ -7,9 +7,9 @@ pool bounds how many run, machine-wide. The locks are this process's: the kernel
 it exits, however it exits. A subprocess's own timeout counts from when it starts, as before.
 
 The pool is off (the body runs at once) with `SLOT_OFF=1`, inside a slot already (`SLOT_HELD`),
-or when scripts/slot does not answer (`slot -s`), as ci-local and scripts/par.sh decide.
+or without perl; with perl, a pool that does not answer (`slot -s`) stops the caller.
 """
-import contextlib, fcntl, os, random, subprocess, time
+import contextlib, fcntl, os, random, shutil, subprocess, time
 
 SLOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "slot")
 DIR = os.environ.get("SLOT_DIR") or os.path.join(os.path.expanduser("~"), "repos", ".gate-slots")
@@ -19,11 +19,16 @@ def _size():
     """The pool's size `(N, M)` (scripts/slot writes it on first use), or None when it is off."""
     if os.environ.get("SLOT_OFF") == "1" or os.environ.get("SLOT_HELD"):
         return None
-    try:
-        n, m = subprocess.run([SLOT, "-s"], capture_output=True, text=True, check=True).stdout.split()
-        return int(n), int(m)
-    except (OSError, subprocess.CalledProcessError, ValueError):
+    if shutil.which("perl") is None:
         return None
+    # With perl, a pool that does not answer stops the caller, saying why (under ENFILE perl cannot
+    # even load its modules), as ci-local and scripts/par.sh do: never unbounded, unannounced.
+    p = subprocess.run([SLOT, "-s"], capture_output=True, text=True)
+    try:
+        n, m = p.stdout.split()[:2]
+        return int(n), int(m)
+    except ValueError:
+        raise SystemExit(f"slotpool: the job pool does not answer (scripts/slot -s: {(p.stderr or p.stdout).strip()[:200]})")
 
 
 SIZE = _size()
