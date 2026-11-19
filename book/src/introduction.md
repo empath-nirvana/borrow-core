@@ -6,15 +6,16 @@ is no garbage collector and no hidden reference counting: you write the allocati
 compiler inserts the frees. Programs compile to WebAssembly or, through LLVM, to native code.
 
 ```bc
-include textio
+import textio
 
-fn greet(n: i32) -> 1 =
-  print_lit("hello, ");
-  print_dec(n);
+fn greet(n: i32) : 1 {
+  print_lit("hello, ")
+  print_dec(n)
   print_byte(b'\n')
+}
 
-main -> 1 = greet(42)
--- output: hello, 42
+fn main() : 1 = greet(42)
+# output: hello, 42
 ```
 
 It's meant for the programs you'd write in Rust or C, such as command-line tools, services and

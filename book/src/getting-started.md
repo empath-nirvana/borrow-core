@@ -25,19 +25,21 @@ The compiler is at `.lake/build/bin/bcc`.
 Save this as `hello.bc`:
 
 ```bc
-include textio
+import textio
 
--- The sum of the squares below `n`.
-fn squares(n: i32) -> i32 =
-  let mut s = 0;
-  for i in 0..n { s = s + i * i };
+# The sum of the squares below `n`.
+fn squares(n: i32) : i32 {
+  var s = 0
+  for i in 0..n { s = s + i * i }
   s
+}
 
-main -> 1 =
-  print_lit("squares below 4: ");
-  print_dec(squares(4));
+fn main() : 1 {
+  print_lit("squares below 4: ")
+  print_dec(squares(4))
   print_byte(b'\n')
--- output: squares below 4: 14
+}
+# output: squares below 4: 14
 ```
 
 and run it:

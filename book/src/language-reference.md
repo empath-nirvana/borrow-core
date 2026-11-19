@@ -36,19 +36,20 @@ is UTF-8, and takes the escapes `\n`, `\t`, `\r`, `\0`, `\\`, `\"` and `\xNN` (t
 hexadecimal value `NN`). There are no negative literals: write `0 - 5`.
 
 ```bc
-include textio
+import textio
 
-main -> 1 =
-  let n = 0x2A;                -- 42
-  let big = i64[5000000000];
-  let c = 'é';                 -- 233
-  print_dec(n);
-  print_byte(b' ');
-  print_dec64(big);
-  print_byte(b' ');
-  print_dec(c);
+fn main() : 1 {
+  let n = 0x2A                # 42
+  let big = i64[5000000000]
+  let c = 'é'                 # 233
+  print_dec(n)
+  print_byte(b' ')
+  print_dec64(big)
+  print_byte(b' ')
+  print_dec(c)
   print_lit(" \x41\"\n")
--- output: 42 5000000000 233 A"
+}
+# output: 42 5000000000 233 A"
 ```
 
 **Reserved words.** These can't be used as names:
@@ -102,28 +103,31 @@ by another, `<'x, 'w < 'x>`. With no parameters, a function is `fn f() -> B`. Ev
 type and the result type are written.
 
 ```bc
-include textio
+import textio
 
 data Pair[A] = { fst: A, snd: A }
 type Grid = i32 * i32
 
 def origin : i32 = 0
 
-fn swapped[A](p: Pair[A]) -> Pair[A] = match p { Pair { fst, snd } -> Pair { fst: snd, snd: fst } }
+fn swapped[A](p: sink Pair[A]) : Pair[A] = match p { Pair { fst, snd } -> Pair { fst: snd, snd: fst } }
 
-fn first<'a>(r: imm 'a Grid) -> i32 = let (x, y) = *r; x
+fn first<'a>(r: imm 'a Grid) : i32 { let (x, y) = *r; x
+}
 
-total fn area(g: Grid) -> i32 = let (w, h) = g; w * h
+total fn area(g: Grid) : i32 { let (w, h) = g; w * h
+}
 
-main -> 1 =
-  let p = swapped(Pair { fst: 1, snd: 2 });
-  let c = alloc((3, 4));
-  let x = first(&c);
-  print_dec(p.fst + origin);
-  print_byte(b' ');
-  print_dec(x * 10 + area(free(c)));
+fn main() : 1 {
+  let p = swapped(Pair { fst: 1, snd: 2 })
+  let c = alloc((3, 4))
+  let x = first(c)
+  print_dec(p.fst + origin)
+  print_byte(b' ')
+  print_dec(x * 10 + area(free(c)))
   print_byte(b'\n')
--- output: 2 42
+}
+# output: 2 42
 ```
 
 - `data` cases with fields hold them positionally, `C(A, B)`, or by name, `C(f: A, g: B)`; a
@@ -230,35 +234,36 @@ The expressions are:
 | `host[op](…)` | a machine instruction: bitwise, shifts, conversions | [Numbers](guide/basics.md#numbers) |
 
 ```bc
-include textio
+import textio
 
 data Shape = Rect(w: i32, h: i32) | Circle(r: i32)
 data Point = { x: i32, y: i32 }
 
-fn area(s: Shape) -> i32 = match s { Rect(w, h) -> w * h | Circle(r) -> 3 * r * r }
+fn area(s: sink Shape) : i32 = match s { Rect(w, h) -> w * h | Circle(r) -> 3 * r * r }
 
-fn kind(n: i32, b: u8) -> i32 =
+fn kind(n: i32, b: u8) : i32 =
   match (n, b) {
     (0, _) -> 0
   | (_, b'x') -> 1
   | _ -> 2
   }
 
-main -> 1 =
-  let mut p = Point { x: 1, y: 2 };
-  p.x = p.x + 10;
-  let Point { x, y } = p;
-  let (a, b) = (area(Rect(2, 3)), area(Circle(1)));
-  let mut best = a;
-  if b > best { best = b };
-  let sign = if x > y { 1 } else if x == y { 0 } else { 0 - 1 };
-  print_dec(best);
-  print_byte(b' ');
-  print_dec(sign);
-  print_byte(b' ');
-  print_dec(kind(0, b'x') + kind(5, b'x') * 10 + kind(5, b'y') * 100);
+fn main() : 1 {
+  var p = Point { x: 1, y: 2 }
+  p.x = p.x + 10
+  let Point { x, y } = p
+  let (a, b) = (area(Rect(2, 3)), area(Circle(1)))
+  var best = a
+  if b > best { best = b }
+  let sign = if x > y { 1 } else if x == y { 0 } else { 0 - 1 }
+  print_dec(best)
+  print_byte(b' ')
+  print_dec(sign)
+  print_byte(b' ')
+  print_dec(kind(0, b'x') + kind(5, b'x') * 10 + kind(5, b'y') * 100)
   print_byte(b'\n')
--- output: 6 1 210
+}
+# output: 6 1 210
 ```
 
 ### Patterns
@@ -307,26 +312,27 @@ diverge, which is inferred; `total fn` asks the compiler to check that it can't,
 ([Loops that may not end](guide/iteration.md#loops-that-may-not-end)).
 
 ```bc
-include textio
+import textio
 
-main -> 1 =
-  let a = array_new[i32](5, !{ i -> i * i });
-  let first = for p in &a { let v = *p; if v > 5 { break v } } else { 0 };
-  let mut odd = 0;
-  for i in 0..10 { if i % 2 == 0 { continue }; odd = odd + i };
-  let mut n = 1;
-  while n < 100 { n = n * 3 };
-  let mut k = 0;
-  loop { k = k + 1; if k == 4 { break } };
-  print_dec(first);
-  print_byte(b' ');
-  print_dec(odd);
-  print_byte(b' ');
-  print_dec(n);
-  print_byte(b' ');
-  print_dec(k);
+fn main() : 1 {
+  let a = array_new[i32](5, !{ i -> i * i })
+  let first = for p in &a { let v = *p; if v > 5 { break v } } else { 0 }
+  var odd = 0
+  for i in 0..10 { if i % 2 == 0 { continue }; odd = odd + i }
+  var n = 1
+  while n < 100 { n = n * 3 }
+  var k = 0
+  loop { k = k + 1; if k == 4 { break } }
+  print_dec(first)
+  print_byte(b' ')
+  print_dec(odd)
+  print_byte(b' ')
+  print_dec(n)
+  print_byte(b' ')
+  print_dec(k)
   print_byte(b'\n')
--- output: 9 25 243 4
+}
+# output: 9 25 243 4
 ```
 
 ## Operators and precedence
@@ -354,22 +360,23 @@ minus, compound assignment or bitwise operators; bitwise operations and shifts a
 `host[and32](a, b)` and the like ([Numbers](guide/basics.md#numbers)).
 
 ```bc
-include textio
+import textio
 
-fn twice(x: i32) -> i32 = x * 2
+fn twice(x: i32) : i32 = x * 2
 
-main -> 1 =
-  let a = 1 + 2 * 3 - 8 / 2 % 3;
-  let ok = a > 4 && not(a == 5) || false;
-  let b = a |> twice;
-  let o = if ok { 1 } else { 0 };
-  print_dec(a);
-  print_byte(b' ');
-  print_dec(b);
-  print_byte(b' ');
-  print_dec(o);
+fn main() : 1 {
+  let a = 1 + 2 * 3 - 8 / 2 % 3
+  let ok = a > 4 && not(a == 5) || false
+  let b = a |> twice
+  let o = if ok { 1 } else { 0 }
+  print_dec(a)
+  print_byte(b' ')
+  print_dec(b)
+  print_byte(b' ')
+  print_dec(o)
   print_byte(b'\n')
--- output: 6 12 1
+}
+# output: 6 12 1
 ```
 
 ## `main`
@@ -389,6 +396,6 @@ object as `<loc>` and a function as `<fun>`. Most programs print what they mean 
 `()`, with `main -> 1`.
 
 ```bc
-main -> i32 * bool = (6 * 7, 1 < 2)
--- answer: (i32[42], inr ())
+fn main() : i32 * bool = (6 * 7, 1 < 2)
+# answer: (i32[42], inr ())
 ```

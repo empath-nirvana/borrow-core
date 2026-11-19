@@ -29,26 +29,29 @@ The library's scheduler is cooperative and single-threaded.
 The values come back as a `List`, so the examples below print one with a small helper.
 
 ```bc
-include async
-include textio
+import async
+import textio
 
-fn print_all(xs: List[i32]) -> 1 =
-  with on_exhausted(!{ u -> false }) {
+fn print_all(xs: sink List[i32]) : 1 {
+  handle {
     fold(xs, true, !{ (first, x) -> if not(first) { print_lit(", ") }; print_dec(x); false })
-  };
+  } with on_exhausted(!{ u -> false })
   print_byte(b'\n')
+}
 
-fn ticker(tag: i32, n: i32) -> i32 with Async =
-  let mut acc = 0;
-  for _ in 0..n { acc = acc * 10 + tag; await() };
+fn ticker(tag: i32, n: i32) : i32 / Async {
+  var acc = 0
+  for _ in 0..n { acc = acc * 10 + tag; await() }
   acc * 10 + tag
+}
 
-main -> 1 =
-  let q = queue[i32]();
-  let q = push(q, with spawn { ticker(1, 2) });
-  let q = push(q, with spawn { ticker(2, 1) });
+fn main() : 1 {
+  let q = queue[i32]()
+  let q = push(q, handle { ticker(1, 2) } with spawn)
+  let q = push(q, handle { ticker(2, 1) } with spawn)
   print_all(run_until_empty(q))
--- output: 111, 22
+}
+# output: 111, 22
 ```
 
 `ticker` doesn't name a scheduler; it runs under whoever spawns it. A task is a value, so a
@@ -59,29 +62,32 @@ A logged task records entries with `log(x)` as it runs, and `run_logged` answers
 order they were logged, interleaved across tasks:
 
 ```bc
-include async
-include textio
+import async
+import textio
 
-fn print_all(xs: List[i32]) -> 1 =
-  with on_exhausted(!{ u -> false }) {
+fn print_all(xs: sink List[i32]) : 1 {
+  handle {
     fold(xs, true, !{ (first, x) -> if not(first) { print_lit(", ") }; print_dec(x); false })
-  };
+  } with on_exhausted(!{ u -> false })
   print_byte(b'\n')
+}
 
--- Logs each step it takes, and answers its tag.
-fn worker(tag: i32, steps: i32) -> i32 with Async =
-  for i in 0..steps { log(tag * 10 + i); await() };
+# Logs each step it takes, and answers its tag.
+fn worker(tag: i32, steps: i32) : i32 / Async {
+  for i in 0..steps { log(tag * 10 + i); await() }
   tag
+}
 
-main -> 1 =
-  let q = lqueue[i32]();
-  let q = lpush(q, with spawn_logged { worker(1, 2) });
-  let q = lpush(q, with spawn_logged { worker(2, 3) });
-  let (values, log) = run_logged(q);
-  print_all(values);
+fn main() : 1 {
+  let q = lqueue[i32]()
+  let q = lpush(q, handle { worker(1, 2) } with spawn_logged)
+  let q = lpush(q, handle { worker(2, 3) } with spawn_logged)
+  let (values, log) = run_logged(q)
+  print_all(values)
   print_all(log)
--- output: 1, 2
--- output: 10, 20, 11, 21, 22
+}
+# output: 1, 2
+# output: 10, 20, 11, 21, 22
 ```
 
 ## Cancellation
@@ -91,38 +97,40 @@ frees everything the task owns, so nothing leaks. Here the first of two lookups 
 the other is cancelled along with the cell it holds:
 
 ```bc
-include async
-include textio
+import async
+import textio
 
--- A lookup that takes `steps` turns, holding a cell it owns.
-fn lookup(key: i32, steps: i32) -> i32 with Async =
-  let buf = alloc(key);
-  for _ in 0..steps { await() };
+# A lookup that takes `steps` turns, holding a cell it owns.
+fn lookup(key: i32, steps: i32) : i32 / Async {
+  let buf = alloc(key)
+  for _ in 0..steps { await() }
   free(buf) * 10
+}
 
--- The value of the first task to finish (`inl` for `a`, `inr` for `b`); the other is cancelled.
-fn race[A](a: Task[A], b: Task[A], turns: i32) -> A + (A + 1) =
+# The value of the first task to finish (`inl` for `a`, `inr` for `b`); the other is cancelled.
+fn race[A](a: sink Task[A], b: sink Task[A], turns: i32) : A + (A + 1) =
   if turns == 0 { cancel(a); cancel(b); inr (inr ()) } else {
     match resume(a) {
-      inl v -> cancel(b); inl v
+      inl v -> { cancel(b); inl v }
     | inr ra ->
         match resume(b) {
-          inl w -> cancel(ra); inr (inl w)
+          inl w -> { cancel(ra); inr (inl w) }
         | inr rb -> race(ra, rb, turns - 1)
         }
     }
   }
 
-main -> 1 =
-  let a = with spawn { lookup(3, 3) };
-  let b = with spawn { lookup(4, 6) };
-  match with on_exhausted(!{ u -> inr (inr ()) }) { race(a, b, 10) } {
-    inl v -> print_lit("first: "); print_dec(v)
-  | inr (inl w) -> print_lit("second: "); print_dec(w)
+fn main() : 1 {
+  let a = handle { lookup(3, 3) } with spawn
+  let b = handle { lookup(4, 6) } with spawn
+  match handle { race(a, b, 10) } with on_exhausted(!{ u -> inr (inr ()) }) {
+    inl v -> { print_lit("first: "); print_dec(v) }
+  | inr (inl w) -> { print_lit("second: "); print_dec(w) }
   | inr (inr u) -> print_lit("neither")
-  };
+  }
   print_byte(b'\n')
--- output: first: 30
+}
+# output: first: 30
 ```
 
 The run ends with nothing allocated: cancelling the slow task freed its cell. `race` calls
@@ -133,30 +141,33 @@ itself, so its call goes under `on_exhausted` ([Recursion](data.md#recursion)).
 A task may borrow its own data across an `await`, with no `Pin` and nothing written:
 
 ```bc
-include async
-include textio
+import async
+import textio
 
-fn print_all(xs: List[i32]) -> 1 =
-  with on_exhausted(!{ u -> false }) {
+fn print_all(xs: sink List[i32]) : 1 {
+  handle {
     fold(xs, true, !{ (first, x) -> if not(first) { print_lit(", ") }; print_dec(x); false })
-  };
+  } with on_exhausted(!{ u -> false })
   print_byte(b'\n')
+}
 
-fn task(n: i32) -> i32 with Async =
-  let c = alloc(n);
+fn task(n: i32) : i32 / Async {
+  let c = alloc(n)
   let v = borrow mut c { m ->
-    let old = modify m { x -> (x + 1, x) };
-    await();
-    let now = modify m { x -> (x * 10, x) };
-    old + now };
+    let old = modify m { x -> (x + 1, x) }
+    await()
+    let now = modify m { x -> (x * 10, x) }
+    old + now }
   v + free(c)
+}
 
-main -> 1 =
-  let q = queue[i32]();
-  let q = push(q, with spawn { task(1) });
-  let q = push(q, with spawn { task(2) });
+fn main() : 1 {
+  let q = queue[i32]()
+  let q = push(q, handle { task(1) } with spawn)
+  let q = push(q, handle { task(2) } with spawn)
   print_all(run_until_empty(q))
--- output: 23, 35
+}
+# output: 23, 35
 ```
 
 Each task holds a `mut` borrow of its own cell while it's suspended, and the compiler checks it

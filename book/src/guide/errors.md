@@ -21,42 +21,45 @@ inferred. A call of a function that raises needs no `?`: the error goes on by it
 nearest handler.
 
 ```bc
-include textio
-include fail
+import textio
+import fail
 
--- The sum of the elements; a negative one raises its index.
-fn checked<'a>(v: array_imm 'a i32) -> i32 with Fail[i32] =
-  let mut s = 0;
-  let mut i = 0;
-  for p in v { let x = *p; if x < 0 { raise(i) }; s = s + x; i = i + 1 };
+# The sum of the elements; a negative one raises its index.
+fn checked(v: array i32) : i32 / Fail[i32] {
+  var s = 0
+  var i = 0
+  for p in v { let x = *p; if x < 0 { raise(i) }; s = s + x; i = i + 1 }
   s
+}
 
--- A function that calls one that raises raises too: its row is inferred.
-fn twice<'a>(v: array_imm 'a i32) -> i32 = checked(v) * 2
+# A function that calls one that raises raises too: its row is inferred.
+fn twice(v: array i32) : i32 = checked(v) * 2
 
-fn report(r: i32 + i32) -> 1 =
+fn report(r: i32 + i32) : 1 {
   match r {
-    inl n -> print_lit("sum "); print_dec(n)
-  | inr i -> print_lit("negative at "); print_dec(i)
-  };
+    inl n -> { print_lit("sum "); print_dec(n) }
+  | inr i -> { print_lit("negative at "); print_dec(i) }
+  }
   print_byte(b'\n')
+}
 
-fn good(i: i32) -> i32 = i * 10
-fn bad(i: i32) -> i32 = if i == 2 { 0 - 1 } else { i }
+fn good(i: i32) : i32 = i * 10
+fn bad(i: i32) : i32 = if i == 2 { 0 - 1 } else { i }
 
-main -> 1 =
-  let a = array_new[i32](3, good);
-  let b = array_new[i32](3, bad);
-  let x = borrow imm a { v -> with to_result { twice(v) } };
-  let y = borrow imm b { v -> with to_result { twice(v) } };
-  let z = borrow imm b { v -> with default(0) { twice(v) } };
-  report(x);
-  report(y);
-  print_dec(z);
+fn main() : 1 {
+  let a = array_new[i32](3, good)
+  let b = array_new[i32](3, bad)
+  let x = borrow imm a { v -> handle { twice(v) } with to_result }
+  let y = borrow imm b { v -> handle { twice(v) } with to_result }
+  let z = borrow imm b { v -> handle { twice(v) } with default(0) }
+  report(x)
+  report(y)
+  print_dec(z)
   print_byte(b'\n')
--- output: sum 60
--- output: negative at 2
--- output: 0
+}
+# output: sum 60
+# output: negative at 2
+# output: 0
 ```
 
 A `raise` that no handler can reach is a compile-time error naming the function that performs it
@@ -73,21 +76,23 @@ it was inside ends, the place going back to its owner. Here the cell that `check
 raises is freed on the way out, and the run ends with nothing live:
 
 ```bc
-include textio
-include fail
+import textio
+import fail
 
--- Holds a cell while it checks `x`; an error frees the cell by its consume.
-fn checked(x: i32) -> i32 with Fail[i32] =
-  let c = alloc(x * 10);
-  if x < 0 { raise(x) };
+# Holds a cell while it checks `x`; an error frees the cell by its consume.
+fn checked(x: i32) : i32 / Fail[i32] {
+  let c = alloc(x * 10)
+  if x < 0 { raise(x) }
   free(c)
+}
 
-main -> 1 =
-  print_dec(with default(0) { checked(4) });
-  print_byte(b' ');
-  print_dec(with default(0) { checked(0 - 3) });
+fn main() : 1 {
+  print_dec(handle { checked(4) } with default(0))
+  print_byte(b' ')
+  print_dec(handle { checked(0 - 3) } with default(0))
   print_byte(b'\n')
--- output: 40 0
+}
+# output: 40 0
 ```
 
 A value that is not consumable (a capability, a one-shot closure that must be called, a
@@ -120,30 +125,32 @@ digits, `inr (inl b)` for a byte `b` that isn't a digit, and `inr (inr ())` for 
 for an `i32`.
 
 ```bc
-include textio
+import textio
 
--- The two numbers of `"a b"`, added.
-fn parse_sum<'t>(t: text 't) -> i32 with Fail[ParseError] =
+# The two numbers of `"a b"`, added.
+fn parse_sum<'t>(t: text 't) : i32 / Fail[ParseError] =
   match split_once(t, b' ') {
     inl (a, b) -> parse_i32(a) + parse_i32(b)
   | inr t -> parse_i32(t)
   }
 
-fn show(s: string) -> 1 =
-  let r = borrow imm s { t -> with to_result { parse_sum(t) } };
+fn show(s: sink string) : 1 {
+  let r = borrow imm s { t -> handle { parse_sum(t) } with to_result }
   match r {
     inl n -> print_dec(n)
   | inr (inl u) -> print_lit("no digits")
-  | inr (inr (inl b)) -> print_lit("not a digit: "); print_byte(b)
+  | inr (inr (inl b)) -> { print_lit("not a digit: "); print_byte(b) }
   | inr (inr (inr u)) -> print_lit("too large")
-  };
+  }
   print_byte(b'\n')
+}
 
-main -> 1 =
-  show(string_of_lit("12 30"));
+fn main() : 1 {
+  show(string_of_lit("12 30"))
   show(string_of_lit("12 x7"))
--- output: 42
--- output: not a digit: x
+}
+# output: 42
+# output: not a digit: x
 ```
 
 [Several instances, and names](effects.md#several-instances-and-names) shows two instances in one
@@ -162,21 +169,22 @@ nonzero literal can't fail and needs no handler. `checked_div` and `checked_rem`
 `include arith` ([arith](../stdlib.md#arith)).
 
 ```bc
-include textio
+import textio
 
-fn mean(sum: i32, n: i32) -> i32 = sum / n
+fn mean(sum: i32, n: i32) : i32 = sum / n
 
-main -> 1 =
-  print_dec(with default(0) { mean(7, 0) });
-  print_byte(b' ');
-  match with to_result { mean(9, 3) } {
+fn main() : 1 {
+  print_dec(handle { mean(7, 0) } with default(0))
+  print_byte(b' ')
+  match handle { mean(9, 3) } with to_result {
     inl m -> print_dec(m)
   | inr e -> print_lit("no mean")
-  };
-  print_byte(b' ');
-  print_dec((0 - 7) / 2);
+  }
+  print_byte(b' ')
+  print_dec((0 - 7) / 2)
   print_byte(b'\n')
--- output: 0 3 -3
+}
+# output: 0 3 -3
 ```
 
 A division error that reaches `main` unhandled is not a compile-time error, so that arithmetic
@@ -184,5 +192,6 @@ reads as it does elsewhere: the program unwinds, writes `error: division by zero
 error, and exits with status 1, after freeing what it held.
 
 ```bc,check
-main -> i32 = let n = 0; 10 / n
+fn main() : i32 { let n = 0; 10 / n
+}
 ```

@@ -83,23 +83,24 @@ Euclidean division, and the names of division's error. `/` and `%` raise `Fail[D
 | `rem_euclid` | `rem_euclid[T](a: T, b: T) -> T` | that `r`, never negative |
 
 ```bc
-include textio
-include arith
+import textio
+import arith
 
--- The minute within its hour of `m` minutes after midnight, which may be negative.
-fn minute(m: i32) -> i32 = rem_euclid(m, 60)
+# The minute within its hour of `m` minutes after midnight, which may be negative.
+fn minute(m: i32) : i32 = rem_euclid(m, 60)
 
-main -> 1 =
-  print_dec(minute(0 - 75));
-  print_byte(b' ');
-  print_dec((0 - 75) % 60);
-  print_byte(b' ');
+fn main() : 1 {
+  print_dec(minute(0 - 75))
+  print_byte(b' ')
+  print_dec((0 - 75) % 60)
+  print_byte(b' ')
   match checked_div(minute(0), 0) {
     inl q -> print_dec(q)
   | inr e -> match e { inl u -> print_lit("division by zero") | inr u -> print_lit("overflow") }
-  };
+  }
   print_byte(b'\n')
--- output: 45 -15 division by zero
+}
+# output: 45 -15 division by zero
 ```
 
 ## rec
@@ -116,20 +117,21 @@ them.
 | `deep` | `with deep { e }` | the recursions in `e` keep their pending calls on the heap: no depth limit |
 
 ```bc
-include textio
-include rec
+import textio
+import rec
 
-fn depth(n: i32) -> i32 = if n == 0 { 0 } else { 1 + depth(n - 1) }
+fn depth(n: i32) : i32 = if n == 0 { 0 } else { 1 + depth(n - 1) }
 
-main -> 1 =
-  match with exhausted_to_option { depth(100) } {
+fn main() : 1 {
+  match handle { depth(100) } with exhausted_to_option {
     inl d -> print_dec(d)
   | inr u -> print_lit("too deep")
-  };
-  print_byte(b' ');
-  print_dec(with deep { depth(100) });
+  }
+  print_byte(b' ')
+  print_dec(handle { depth(100) } with deep)
   print_byte(b'\n')
--- output: 100 100
+}
+# output: 100 100
 ```
 
 ## io
@@ -166,19 +168,20 @@ Text over the standard streams. [Input and output](guide/io.md) teaches them.
 | `next_arg` | `next_arg(s: string) -> string * bool` | the next argument appended to `s`, and whether there was one |
 
 ```bc
-include textio
+import textio
 
-main -> 1 =
-  let s = read_input();
-  let n = borrow imm s { t -> fold_lines(t, !{ (l, k) -> k + 1 }, 0) };
-  let s = print_string(s);
-  print_dec(n);
+fn main() : 1 {
+  let s = read_input()
+  let n = borrow imm s { t -> fold_lines(t, !{ (l, k) -> k + 1 }, 0) }
+  let s = print_string(s)
+  print_dec(n)
   print_lit(" lines\n")
--- stdin: alpha
--- stdin: beta
--- output: alpha
--- output: beta
--- output: 2 lines
+}
+# stdin: alpha
+# stdin: beta
+# output: alpha
+# output: beta
+# output: 2 lines
 ```
 
 ## text
@@ -245,33 +248,34 @@ string is a [`buf`](#buf) of `u8`, so `len_of`, `pop` and the rest work on it.
 | `swap_views` | `swap_views<'a>(b: buf (text 'a), i: i32, j: i32) -> buf (text 'a)` | the views at `i` and `j` exchanged |
 
 ```bc
-include textio
+import textio
 
--- The number after the `=` of `key = value`, or 0 when there is no `=`.
-fn value<'t>(line: text 't) -> i32 with Fail[ParseError] =
+# The number after the `=` of `key = value`, or 0 when there is no `=`.
+fn value<'t>(line: text 't) : i32 / Fail[ParseError] =
   match split_once(line, b'=') {
     inl (k, v) -> parse_i32(trim(v))
   | inr l -> 0
   }
 
-main -> 1 =
-  let mut s = box string(16);
-  push_lit(&mut s, "caf");
-  push_char(&mut s, 0xe9);
-  push_lit(&mut s, " = ");
-  push_dec(&mut s, 42);
-  let bytes = len_of(&s);
-  let chars = borrow imm s { t -> count_chars(t) };
-  let v = borrow imm s { t -> with default(0 - 1) { value(t) } };
-  let s = print_string(s);
-  print_lit(": ");
-  print_dec(bytes);
-  print_lit(" bytes, ");
-  print_dec(chars);
-  print_lit(" characters, value ");
-  print_dec(v);
+fn main() : 1 {
+  var s = box string(16)
+  push_lit(&s, "caf")
+  push_char(&s, 0xe9)
+  push_lit(&s, " = ")
+  push_dec(&s, 42)
+  let bytes = len_of(&s)
+  let chars = borrow imm s { t -> count_chars(t) }
+  let v = borrow imm s { t -> handle { value(t) } with default(0 - 1) }
+  let s = print_string(s)
+  print_lit(": ")
+  print_dec(bytes)
+  print_lit(" bytes, ")
+  print_dec(chars)
+  print_lit(" characters, value ")
+  print_dec(v)
   print_byte(b'\n')
--- output: café = 42: 10 bytes, 9 characters, value 42
+}
+# output: café = 42: 10 bytes, 9 characters, value 42
 ```
 
 ## buf
@@ -305,25 +309,26 @@ data built from them have one; a heap cell `ref A` doesn't. A heap's elements ar
 they lie, so its `A` is copyable (`i32`, `bool`, tuples of them).
 
 ```bc
-include textio
+import textio
 
-main -> 1 =
-  let h = box buf[i32 * i32](4);
-  let h = heap_push(h, 5, 50);
-  let h = heap_push(h, 2, 20);
-  let mut h = heap_push(h, 9, 90);
+fn main() : 1 {
+  let h = box buf[i32 * i32](4)
+  let h = heap_push(h, 5, 50)
+  let h = heap_push(h, 2, 20)
+  var h = heap_push(h, 9, 90)
   for i in 0..3 {
-    let r = heap_pop(&mut h);
-    match r { inl (k, x) -> print_dec(x); print_byte(b' ') | inr u -> () }
-  };
-  let mut b = box buf[i32](2);
-  push(&mut b, 1); push(&mut b, 2); push(&mut b, 3);
-  let mut b = truncate(b, 1);
-  let c = cap_of(&b);
-  let n = len_of(&b);
-  print_dec(n); print_byte(b' '); print_dec(c);
+    let r = heap_pop(&h)
+    match r { inl (k, x) -> { print_dec(x); print_byte(b' ') } | inr u -> () }
+  }
+  var b = box buf[i32](2)
+  push(&b, 1); push(&b, 2); push(&b, 3)
+  var b = truncate(b, 1)
+  let c = cap_of(&b)
+  let n = len_of(&b)
+  print_dec(n); print_byte(b' '); print_dec(c)
   print_byte(b'\n')
--- output: 20 50 90 1 8
+}
+# output: 20 50 90 1 8
 ```
 
 ## slice
@@ -366,21 +371,22 @@ copyable `A`. [Arrays](guide/data.md#arrays) teaches them.
 | `starts_with`, `ends_with` | `starts_with[A]<'a, 'b>(v: array_imm 'a A, p: array_imm 'b A, e: !(A * A => bool)) -> bool` | |
 
 ```bc
-include textio
-include slice
+import textio
+import slice
 
-fn scramble(i: i32) -> i32 = (i * 7) % 10
+fn scramble(i: i32) : i32 = (i * 7) % 10
 
-main -> 1 =
-  let mut a = array_new[i32](6, scramble);
-  borrow mut a { v -> let v = sort(v, cmp_i32, 0); let v = reverse(v); discard_mut(v) };
-  let at5 = borrow imm a { v -> find(v, 5, eq_i32) };
-  let has3 = borrow imm a { v -> contains(v, 3, eq_i32) };
-  for x in &a { print_dec(*x); print_byte(b' ') };
-  match at5 { inl i -> print_lit("5 at "); print_dec(i) | inr u -> print_lit("no 5") };
-  if has3 { print_lit(", has 3") } else { print_lit(", no 3") };
+fn main() : 1 {
+  var a = array_new[i32](6, scramble)
+  borrow mut a { v -> let v = sort(v, cmp_i32, 0); let v = reverse(v); discard_mut(v) }
+  let at5 = borrow imm a { v -> find(v, 5, eq_i32) }
+  let has3 = borrow imm a { v -> contains(v, 3, eq_i32) }
+  for x in &a { print_dec(*x); print_byte(b' ') }
+  match at5 { inl i -> { print_lit("5 at "); print_dec(i) } | inr u -> print_lit("no 5") }
+  if has3 { print_lit(", has 3") } else { print_lit(", no 3") }
   print_byte(b'\n')
--- output: 8 7 5 4 1 0 5 at 2, no 3
+}
+# output: 8 7 5 4 1 0 5 at 2, no 3
 ```
 
 ## key
@@ -400,16 +406,17 @@ A `view 'a T` of an integer, a tuple of them or a view is the value itself, so `
 takes the values.
 
 ```bc
-include textio
-include key
+import textio
+import key
 
-main -> 1 =
-  if equal((1, true), (1, true)) { print_lit("equal ") } else { print_lit("different ") };
-  print_dec(order((1, 5), (2, 0)));
-  print_byte(b' ');
-  if hash(7) == hash(7) { print_lit("same hash") } else { print_lit("?") };
+fn main() : 1 {
+  if equal((1, true), (1, true)) { print_lit("equal ") } else { print_lit("different ") }
+  print_dec(order((1, 5), (2, 0)))
+  print_byte(b' ')
+  if hash(7) == hash(7) { print_lit("same hash") } else { print_lit("?") }
   print_byte(b'\n')
--- output: equal -1 same hash
+}
+# output: equal -1 same hash
 ```
 
 ## map
@@ -444,30 +451,31 @@ order: the same on every run for the same insertions and removals, but neither i
 nor sorted.
 
 ```bc
-include textio
-include map
+import textio
+import map
 
-main -> 1 =
-  let mut seen = set_new[i32](8);
-  let mut dups = 0;
+fn main() : 1 {
+  var seen = set_new[i32](8)
+  var dups = 0
   for x in 0..20 {
-    let fresh = set_insert(&mut seen, (x * x) % 7);
+    let fresh = set_insert(&seen, (x * x) % 7)
     if not(fresh) { dups = dups + 1 }
-  };
-  let mut m = map_new[i32, i32](8);
-  let old = map_insert(&mut m, 1, 10);
-  let old = map_insert(&mut m, 1, 11);
-  let gone = map_remove(&mut m, 2);
-  let n = set_len(&seen);
-  print_dec(n);
-  print_byte(b' ');
-  print_dec(dups);
-  print_byte(b' ');
-  match old { Some(v) -> print_dec(v) | None -> print_lit("none") };
-  print_byte(b' ');
-  match gone { Some(v) -> print_dec(v) | None -> print_lit("none") };
+  }
+  var m = map_new[i32, i32](8)
+  let old = map_insert(&m, 1, 10)
+  let old = map_insert(&m, 1, 11)
+  let gone = map_remove(&m, 2)
+  let n = set_len(&seen)
+  print_dec(n)
+  print_byte(b' ')
+  print_dec(dups)
+  print_byte(b' ')
+  match old { Some(v) -> print_dec(v) | None -> print_lit("none") }
+  print_byte(b' ')
+  match gone { Some(v) -> print_dec(v) | None -> print_lit("none") }
   print_byte(b'\n')
--- output: 4 16 10 none
+}
+# output: 4 16 10 none
 ```
 
 ## list
@@ -485,17 +493,18 @@ it. [Recursion](guide/data.md#recursion) introduces it.
 | `fold` | `fold[A, B](xs: List[A], z: B, f: !(B * A => B)) -> B` | combined from the left, from `z` |
 
 ```bc
-include textio
-include list
+import textio
+import list
 
-main -> 1 =
-  let xs = cons(1, cons(2, cons(3, cons(4, nil()))));
-  let sum = with on_exhausted(!{ u -> 0 - 1 }) {
+fn main() : 1 {
+  let xs = cons(1, cons(2, cons(3, cons(4, nil()))))
+  let sum = handle {
     fold(filter(map(xs, !{ x -> x * x }), !{ x -> x % 2 == 0 }), 0, !{ (a, x) -> a + x })
-  };
-  print_dec(sum);
+  } with on_exhausted(!{ u -> 0 - 1 })
+  print_dec(sum)
   print_byte(b'\n')
--- output: 20
+}
+# output: 20
 ```
 
 `list`'s `map` and `filter` share their names with those of [`adapters`](#adapters) and
@@ -535,26 +544,28 @@ them with `|>` ([Pipelines](guide/iteration.md#pipelines)).
 | `lines` | `lines[K, R](it: U (pull u8 K R)) -> K with Yield[List[u8]]` | a byte source's lines, each last first |
 
 ```bc
-include textio
-include adapters
+import textio
+import adapters
 
-fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
-  let mut i = lo;
+fn range(lo: i32, hi: i32) : 1 / Yield[i32] {
+  var i = lo
   while i < hi { yield(i); i = i + 1 };
   ()
+}
 
-main -> 1 =
-  let mut last = 0;
+fn main() : 1 {
+  var last = 0
   for s in range(1, 100) |> skip(2) |> scan(0, !{ (acc, x) -> acc + x }) |> take_until(!{ s -> s > 40 }) {
     last = s
-  };
-  let mut pairs = 0;
-  for p in zip(range(0, 10), range(100, 103)) { let (a, b) = p; pairs = pairs + a * b };
-  print_dec(last);
-  print_byte(b' ');
-  print_dec(pairs);
+  }
+  var pairs = 0
+  for p in zip(range(0, 10), range(100, 103)) { let (a, b) = p; pairs = pairs + a * b }
+  print_dec(last)
+  print_byte(b' ')
+  print_dec(pairs)
   print_byte(b'\n')
--- output: 33 305
+}
+# output: 33 305
 ```
 
 ## iters
@@ -575,22 +586,24 @@ they feed.
 | `zip(a, b)` | two iterators | pairs, until either ends |
 
 ```bc
-include textio
-include iters
+import textio
+import iters
 
-fn big(x: i32) -> bool = x > 2
+fn big(x: i32) : bool = x > 2
 
-total fn weighted<'a>(v: array_imm 'a i32) -> i32 =
-  let mut s = 0;
-  for p in zip(filter(copied(elems(v)), big), 100..200) { let (x, y) = p; s = s + x * y };
+total fn weighted(v: array i32) : i32 {
+  var s = 0
+  for p in zip(filter(copied(elems(v)), big), 100..200) { let (x, y) = p; s = s + x * y }
   s
+}
 
-main -> 1 =
-  let a = array_new[i32](5, !{ i -> i });
-  let w = borrow imm a { v -> weighted(v) };
-  print_dec(w);
+fn main() : 1 {
+  let a = array_new[i32](5, !{ i -> i })
+  let w = borrow imm a { v -> weighted(v) }
+  print_dec(w)
   print_byte(b'\n')
--- output: 704
+}
+# output: 704
 ```
 
 ## async
@@ -645,19 +658,20 @@ the shortest decimal that reads back as the same float. Each name below exists a
 | `FloatParseError` | `type FloatParseError = 1 + u8` | the text ended early, or the byte that can't stand there |
 
 ```bc
-include float
+import float
 
-main -> 1 =
-  let x = borrow imm "2.5e-3" { t -> with default(0.0) { parse_f64(t) } };
-  let mut s = box string(32);
-  push_f64(&mut s, x * 4.0);
-  push_lit(&mut s, " ");
-  push_f32(&mut s, f32_of_f64(0.1));
-  let s = print_string(s);
-  print_byte(b' ');
-  print_dec(total_cmp_f64(neg_f64(0.0), 0.0));
-  print_byte(b' ');
-  match i32_of_f64(1.0e12) { inl n -> print_dec(n) | inr u -> print_lit("out of range") };
+fn main() : 1 {
+  let x = borrow imm "2.5e-3" { t -> handle { parse_f64(t) } with default(0.0) }
+  var s = box string(32)
+  push_f64(&s, x * 4.0)
+  push_lit(&s, " ")
+  push_f32(&s, f32_of_f64(0.1))
+  let s = print_string(s)
+  print_byte(b' ')
+  print_dec(total_cmp_f64(neg_f64(0.0), 0.0))
+  print_byte(b' ')
+  match i32_of_f64(1.0e12) { inl n -> print_dec(n) | inr u -> print_lit("out of range") }
   print_byte(b'\n')
--- output: 0.01 0.1 -1 out of range
+}
+# output: 0.01 0.1 -1 out of range
 ```

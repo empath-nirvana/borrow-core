@@ -16,25 +16,26 @@ elements, and the source's type decides how, much like Rust's `IntoIterator`:
 - over a view, each of its elements is lent.
 
 ```bc
-include textio
+import textio
 
-fn tab(i: i32) -> i32 = (i + 1) * 10
+fn tab(i: i32) : i32 = (i + 1) * 10
 
-main -> 1 =
-  let mut a = array_new[i32](5, tab);
-  let first = for x in &a { let v = *x; if v > 25 { break v } } else { 0 };
-  let mut odd = 0;
-  for i in 0..10 { if i % 2 == 0 { continue }; odd = odd + i };
-  for p in &mut a { modify p { v -> v + 1 } };
-  let mut sum = 0;
-  for x in a { sum = sum + x };
-  print_dec(first);
-  print_byte(b' ');
-  print_dec(odd);
-  print_byte(b' ');
-  print_dec(sum);
+fn main() : 1 {
+  var a = array_new[i32](5, tab)
+  let first = for x in &a { let v = *x; if v > 25 { break v } } else { 0 }
+  var odd = 0
+  for i in 0..10 { if i % 2 == 0 { continue }; odd = odd + i }
+  for p in &mut a { modify p { v -> v + 1 } }
+  var sum = 0
+  for x in a { sum = sum + x }
+  print_dec(first)
+  print_byte(b' ')
+  print_dec(odd)
+  print_byte(b' ')
+  print_dec(sum)
   print_byte(b'\n')
--- output: 30 25 155
+}
+# output: 30 25 155
 ```
 
 - `break` leaves the loop, and `break v` leaves it with the loop's value `v`; `else { e }` after
@@ -55,29 +56,32 @@ that calls a div function is div too. If you want a guarantee that a function te
 `total` and the compiler checks it:
 
 ```bc
-include textio
+import textio
 
-total fn sum_to(n: i32) -> i32 =
-  let mut s = 0;
-  for i in 0..n { s = s + i };
+total fn sum_to(n: i32) : i32 {
+  var s = 0
+  for i in 0..n { s = s + i }
   s
+}
 
-main -> 1 =
-  print_dec(sum_to(10));
+fn main() : 1 {
+  print_dec(sum_to(10))
   print_byte(b'\n')
--- output: 45
+}
+# output: 45
 ```
 
 A `total fn` with a `while` is rejected:
 
 ```bc,reject
-total fn spin(n: i32) -> i32 =
-  let mut i = 0;
-  while i < n { i = i + 1 };
+total fn spin(n: i32) : i32 {
+  var i = 0
+  while i < n { i = i + 1 }
   i
+}
 
-main -> i32 = spin(3)
--- expect: 3:3: `spin` is declared `total`, but it has a `while` (SPEC §14)
+fn main() : i32 = spin(3)
+# expect: 3:3: `spin` is declared `total`, but it has a `while` (SPEC §14)
 ```
 
 `div_fuel(e, n)` runs a div computation for at most `n` steps: it answers `inl` the value if `e`
@@ -85,29 +89,32 @@ finished in time, and `inr ()` if not. Code that runs a loop this way is total a
 whether the Collatz loop always reaches 1, so `collatz` is div, but a bounded run of it is total:
 
 ```bc
-include textio
+import textio
 
-fn collatz(n: i32) -> i32 =
-  let mut x = n;
-  let mut steps = 0;
+fn collatz(n: i32) : i32 {
+  var x = n
+  var steps = 0
   while x != 1 {
-    if x % 2 == 0 { x = x / 2 } else { x = 3 * x + 1 };
+    if x % 2 == 0 { x = x / 2 } else { x = 3 * x + 1 }
     steps = steps + 1
-  };
+  }
   steps
+}
 
-total fn collatz_within(n: i32, fuel: i32) -> Option[i32] =
+total fn collatz_within(n: i32, fuel: i32) : Option[i32] =
   match div_fuel(collatz(n), fuel) { inl s -> Some(s) | inr u -> None }
 
-fn show(r: Option[i32]) -> 1 =
-  match r { Some(s) -> print_dec(s) | None -> print_lit("gave up") };
+fn show(r: sink Option[i32]) : 1 {
+  match r { Some(s) -> print_dec(s) | None -> print_lit("gave up") }
   print_byte(b'\n')
+}
 
-main -> 1 =
-  show(collatz_within(27, 200));
+fn main() : 1 {
+  show(collatz_within(27, 200))
   show(collatz_within(27, 50))
--- output: 111
--- output: gave up
+}
+# output: 111
+# output: gave up
 ```
 
 A higher-order function written with a total callback in mind works with a div one too: the
@@ -123,24 +130,27 @@ ordinary effect, `Yield[T]`, from the library (`include yield`), with one operat
 the examples below write a small `range` generator where they need one.
 
 ```bc
-include textio
-include yield
+import textio
+import yield
 
-fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
-  let mut i = lo;
+fn range(lo: i32, hi: i32) : 1 / Yield[i32] {
+  var i = lo
   while i < hi { yield(i); i = i + 1 };
   ()
+}
 
-fn squares(lo: i32, hi: i32) -> 1 with Yield[i32] =
+fn squares(lo: i32, hi: i32) : 1 / Yield[i32] {
   for x in range(lo, hi) { yield(x * x) };
   ()
+}
 
-main -> 1 =
+fn main() : 1 {
   for x in squares(1, 5) { print_dec(x); print_byte(b'\n') }
--- output: 1
--- output: 4
--- output: 9
--- output: 16
+}
+# output: 1
+# output: 4
+# output: 9
+# output: 16
 ```
 
 The `for` is a handler of `Yield` (see [Effects](effects.md)), and its body is the handler's
@@ -156,27 +166,30 @@ whose body yields counts as a looping generator, so `squares` is div.
 innermost loop, and `return` ends the generator from any depth.
 
 ```bc
-include textio
-include yield
+import textio
+import yield
 
-fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
-  let mut i = lo;
+fn range(lo: i32, hi: i32) : 1 / Yield[i32] {
+  var i = lo
   while i < hi { yield(i); i = i + 1 };
   ()
+}
 
--- The first square above `k`.
-fn first_square_above(k: i32) -> i32 =
-  for x in range(1, 100) { if x * x > k { return x * x } };
+# The first square above `k`.
+fn first_square_above(k: i32) : i32 {
+  for x in range(1, 100) { if x * x > k { return x * x } }
   0
+}
 
-main -> 1 =
-  let mut acc = 0;
-  for x in range(1, 100) { if x > 4 { break }; acc = acc + x };
-  print_dec(acc);
-  print_byte(b' ');
-  print_dec(first_square_above(50));
+fn main() : 1 {
+  var acc = 0
+  for x in range(1, 100) { if x > 4 { break }; acc = acc + x }
+  print_dec(acc)
+  print_byte(b' ')
+  print_dec(first_square_above(50))
   print_byte(b'\n')
--- output: 10 64
+}
+# output: 10 64
 ```
 
 ### The value of a loop
@@ -185,22 +198,24 @@ A generator returns a value, and `let r = for x in g(…) { … };` keeps it, or
 `break e`:
 
 ```bc
-include textio
-include yield
+import textio
+import yield
 
--- Yields the decimal digits of `n`, last first, and returns how many there were.
-fn digits(n: i32) -> i32 with Yield[i32] =
-  let mut x = n;
-  let mut k = 0;
-  while x > 0 { yield(x % 10); x = x / 10; k = k + 1 };
+# Yields the decimal digits of `n`, last first, and returns how many there were.
+fn digits(n: i32) : i32 / Yield[i32] {
+  var x = n
+  var k = 0
+  while x > 0 { yield(x % 10); x = x / 10; k = k + 1 }
   k
+}
 
-main -> 1 =
-  let k = for d in digits(4096) { print_dec(d) };
-  print_lit(" has ");
-  print_dec(k);
+fn main() : 1 {
+  let k = for d in digits(4096) { print_dec(d) }
+  print_lit(" has ")
+  print_dec(k)
   print_lit(" digits\n")
--- output: 6904 has 4 digits
+}
+# output: 6904 has 4 digits
 ```
 
 A generator that calls another passes on whatever the callee yields, then carries on with what it
@@ -217,34 +232,37 @@ closing it cancels the rest. A `for` over a stored generator pulls from it until
 is how you write adapters like `take`:
 
 ```bc
-include textio
-include yield
+import textio
+import yield
 
-fn fib() -> 0 with Yield[i32] =
-  let mut a = 0;
-  let mut b = 1;
+fn fib() : 0 / Yield[i32] {
+  var a = 0
+  var b = 1
   loop {
-    yield(a);
-    let c = a + b;
-    a = b;
+    yield(a)
+    let c = a + b
+    a = b
     b = c
   }
+}
 
-fn take(n: i32, it: U (pull i32 0 1)) -> 1 with Yield[i32] =
-  let mut i = 0;
+fn take(n: i32, it: sink U (pull i32 0 1)) : 1 / Yield[i32] {
+  var i = 0
   for x in it {
     if i < n { yield(x); i = i + 1 } else { break }
   };
   ()
+}
 
-main -> 1 =
+fn main() : 1 {
   for x in take(6, fib()) { print_dec(x); print_byte(b'\n') }
--- output: 0
--- output: 1
--- output: 1
--- output: 2
--- output: 3
--- output: 5
+}
+# output: 0
+# output: 1
+# output: 1
+# output: 2
+# output: 3
+# output: 5
 ```
 
 `include adapters` gives you the usual ones (`map`, `filter`, `take`, `skip`, `enumerate`,
@@ -252,23 +270,26 @@ main -> 1 =
 generators over stored generators, so a pipeline is just calls:
 
 ```bc
-include textio
-include adapters
+import textio
+import adapters
 
-fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
-  let mut i = lo;
+fn range(lo: i32, hi: i32) : 1 / Yield[i32] {
+  var i = lo
   while i < hi { yield(i); i = i + 1 };
   ()
+}
 
-fn times(p: i32 * i32) -> i32 = let (i, x) = p; i * x
-fn even(x: i32) -> bool = x % 2 == 0
+fn times(p: i32 * i32) : i32 { let (i, x) = p; i * x
+}
+fn even(x: i32) : bool = x % 2 == 0
 
-main -> 1 =
-  let mut acc = 0;
-  for y in take(filter(map(enumerate(range(10, 1000)), times), even), 5) { acc = acc + y };
-  print_dec(acc);
+fn main() : 1 {
+  var acc = 0
+  for y in take(filter(map(enumerate(range(10, 1000)), times), even), 5) { acc = acc + y }
+  print_dec(acc)
   print_byte(b'\n')
--- output: 320
+}
+# output: 320
 ```
 
 ### Pipelines
@@ -278,22 +299,24 @@ the right, so a chain of adapters reads left to right. The adapters are listed i
 [adapters](../stdlib.md#adapters).
 
 ```bc
-include textio
-include adapters
+import textio
+import adapters
 
-fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
-  let mut i = lo;
+fn range(lo: i32, hi: i32) : 1 / Yield[i32] {
+  var i = lo
   while i < hi { yield(i); i = i + 1 };
   ()
+}
 
-main -> 1 =
-  let mut b = 0;
+fn main() : 1 {
+  var b = 0
   for y in range(0, 10) |> map(!{ x -> x * x }) |> filter(!{ x -> x > 5 }) |> take(3) {
     b = b + y
-  };
-  print_dec(b);
+  }
+  print_dec(b)
   print_byte(b'\n')
--- output: 50
+}
+# output: 50
 ```
 
 `|>` into a handler is `with`: `e |> to_result` is `with to_result { e }`
