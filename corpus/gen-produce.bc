@@ -1,22 +1,25 @@
--- A generator in direct style: `produce` performs `yield` (`lib/yield.bc`) three times, and
--- `main` sums what it yields with a `for`.
---
--- `produce` has no loop, so the `for` is one handled call, total: a handler site whose clause is
--- the loop's body, run at each `yield` with the loop's variable `acc` passed through the
--- operation, and resumed at its end (SPEC §15). The clause resumes in tail position, so each
--- `yield` is a direct call (`corpus/counts.expected`: 0, 0, 0).
---
--- Answer: i32[14]. A generator that ran a step twice gives 18 or 23; one that stopped a step
--- early gives 5; one that lost its first element gives 13.
+#! dialect 82
+# A generator in direct style: `produce` performs `yield` (`lib/yield.bc`) three times, and
+# `main` sums what it yields with a `for`.
+#
+# `produce` has no loop, so the `for` is one handled call, total: a handler site whose clause is
+# the loop's body, run at each `yield` with the loop's variable `acc` passed through the
+# operation, and resumed at its end (SPEC §15). The clause resumes in tail position, so each
+# `yield` is a direct call (`corpus/counts.expected`: 0, 0, 0).
+#
+# Answer: i32[14]. A generator that ran a step twice gives 18 or 23; one that stopped a step
+# early gives 5; one that lost its first element gives 13.
 
-include yield
+import yield
 
-fn produce() -> 1 with Yield[i32] =
-  yield(1);
-  yield(4);
+fn produce() : 1 / Yield[i32] {
+  yield(1)
+  yield(4)
   yield(9)
+}
 
-main -> i32 =
-  let mut acc = 0;
-  for x in produce() { acc = acc + x };
+fn main() : i32 {
+  var acc = 0
+  for x in produce() { acc = acc + x }
   acc
+}

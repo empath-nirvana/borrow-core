@@ -1,0 +1,34 @@
+-- A `for` over a generator whose body branches: the body is the `yield` clause, and each arm of
+-- its `if` ends by resuming the generator. Every path resumes once, in tail position, so the
+-- clause is tail-resumptive and `yield` is a direct call of the body (SPEC §19, *A tail-resumptive
+-- operation is a direct call*): the first two loops. The third loop's body leaves with `break` in
+-- one arm, which cancels the generator: that path does not resume, so its `yield` stays a
+-- suspension.
+--
+-- Answer: i32[206495]. The even elements of 0..9 sum to 20 and there are 5 odd ones; of the
+-- squares, 64 + 81 exceed 50 and four more exceed 10, so `big` is 149; the first `x` whose square
+-- exceeds 20 is 5. An arm that skipped its resume would stop the loop early: `evens` 0, say.
+
+include yield
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+main -> i32 =
+  let mut evens = 0;
+  let mut odds = 0;
+  for x in range(0, 10) {
+    if x % 2 == 0 { evens = evens + x } else { odds = odds + 1 }
+  };
+  let mut big = 0;
+  for x in range(0, 10) {
+    let y = x * x;
+    if y > 50 { big = big + y } else { if y > 10 { big = big + 1 } else { () } }
+  };
+  let mut first = 0;
+  for x in range(1, 10) {
+    if x * x > 20 { first = x; break } else { () }
+  };
+  evens * 10000 + odds * 1000 + big * 10 + first

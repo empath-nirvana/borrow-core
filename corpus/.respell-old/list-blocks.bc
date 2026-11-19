@@ -1,0 +1,24 @@
+-- Effectful blocks given to the generic `map` of `lib/list.bc` (SPEC §15, §30): a block's
+-- operations go to the handlers where it is written, and the call is a call of `map`'s copy at the
+-- block's row, a template instantiated at the call's types. The first block calls `len`, itself
+-- a recursion (a `fold`), so it performs `Exhausted`; the second raises `Fail[i32]` at a negative
+-- element, which leaves `map` through its unwinding. (An awaiting block inside a task:
+-- `corpus/async-map.bc`.)
+--
+-- Answer: `([2, 1], (inl [2, 10], inr 4294967291))`: the lengths of `[[1, 2], [3]]`; the doubled
+-- `[1, 5]`; and the error `-5` (printed unsigned) raised at the second element of `[1, -5]`.
+
+include list
+include fail
+
+fn len(xs: List[i32]) -> i32 = fold(xs, 0, !{ (n, x) -> n + 1 })
+
+fn check(x: i32) -> i32 with Fail[i32] = if x < 0 { raise(x) } else { x * 2 }
+
+fn doubled(xs: List[i32]) -> List[i32] + i32 =
+  with to_result { with on_exhausted(!{ u -> nil() }) { map(xs, !{ x -> check(x) }) } }
+
+main -> List[i32] * (List[i32] + i32) * (List[i32] + i32) =
+  let ls = with on_exhausted(!{ u -> nil() }) {
+    map(cons(cons(1, cons(2, nil())), cons(cons(3, nil()), nil())), !{ l -> len(l) }) };
+  (ls, (doubled(cons(1, cons(5, nil()))), doubled(cons(1, cons(0 - 5, nil())))))

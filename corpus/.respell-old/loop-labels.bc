@@ -1,0 +1,15 @@
+-- Labels on loops (`'ℓ:` before a `for`, a `while` or a `loop`; SPEC §14, *The loop node*). A
+-- label is carried on the loop; `break` and `continue` are the innermost loop's.
+main -> i32 =
+  let n = 4;
+  let mut s = 0;
+  'rows: for i in 0..n {
+    'cols: for j in 0..n {
+      if j > i { break } else { s = s + j }
+    }
+  };
+  let mut k = 0;
+  'count: while k < 3 { k = k + 1; s = s + k };
+  'more: loop { if k > 5 { break } else { k = k + 1 } };
+  let r = 'find: for i in 0..10 { if i == 3 { break 0 - 1 - i } else { () } } else { 7 };
+  s + k + r

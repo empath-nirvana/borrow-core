@@ -1,0 +1,28 @@
+-- SPEC §3, §47 (#808): one handler site, copied at two lifetime contexts. `wrap[A]<'a, 'b>` holds
+-- the `with answer` site; its two instances, at `A = unit` and at `A = box 'main i32`, are checked
+-- at different lifetime contexts, so the two `handle` nodes of `answer` spell `ask`'s binder
+-- `all 'x < top. …` differently. The backend reads the nodes as one signature up to `[α]`
+-- (`directFacts`, `tyEqC`/`tyEqEnts`), and the site is erased: its `perform` is a direct call.
+effect Ask { ctl ask(g: !(all 'x < top. imm 'x i32 => i32)) -> i32 }
+handler answer: Ask, i32 -> i32 = {
+  return(a) = a;
+  ask(g, k) = k(i32[5])
+}
+def read : !(all 'z < top. imm 'z i32 => i32) =
+  !thunkv Fun 'z < top. return (thunkv fun (v : imm 'z i32) ->
+    w <- return (*v);
+    return (release_imm['z, i32] v);
+    return (w + i32[1]))
+fn step<'c>(n: box 'c i32) -> i32 with Ask =
+  m <- return (unbox n);
+  r <- ask(read);
+  return (r + m)
+fn wrap[A]<'a, 'b>(x: A, n: box 'b i32) -> A * i32 =
+  m <- return (unbox n);
+  let r = with answer { step(boxed['b] m) };
+  (x, r)
+main -> i32 =
+  let (u, r1) = wrap((), boxed['main] i32[1]);
+  let (bv, r2) = wrap(boxed['main] i32[7], boxed['main] i32[2]);
+  v <- return (unbox bv);
+  r1 * 100 + r2 + v * 1000

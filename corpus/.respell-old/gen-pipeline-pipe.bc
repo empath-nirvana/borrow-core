@@ -1,0 +1,31 @@
+-- check: no-source
+-- The adapters (`lib/adapters.bc`) chained with `|>` (SPEC §33): `e |> f(a, …)` is `f(e, a, …)`,
+-- the piped value first (decision 50), so `range(10, 20) |> enumerate |> map(times)` is
+-- `map(enumerate(range(10, 20)), times)`. Each adapter's first parameter is a stored generator,
+-- so each call piped into one is stored there (SPEC §15). The first pipeline is
+-- `corpus/gen-pipeline-adapters.bc`'s over a shorter source, and the second the first of
+-- `corpus/gen-adapters.bc`'s, with closures; each elaborates to the nested calls. The source
+-- interpreter takes about twenty minutes over it (`check: no-source`); the other stages run it.
+--
+-- Answer: i32[320110], read as 320 and 110: the first five even products `i * x` of each `x` of 10,
+-- 11, … with its position `i`, 0*10 + 2*12 + 4*14 + 6*16 + 8*18; and of the squares of 0 … 9,
+-- those above 5, skipping two, the next three, 25 + 36 + 49.
+
+include adapters
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn times(p: i32 * i32) -> i32 = let (i, x) = p; i * x
+fn even(x: i32) -> bool = host[and32] (x, 1) == 0
+
+main -> i32 =
+  let mut a = 0;
+  for y in range(10, 20) |> enumerate |> map(times) |> filter(even) |> take(5) { a = a + y };
+  let mut b = 0;
+  for y in range(0, 10) |> map(!{ x -> x * x }) |> filter(!{ x -> x > 5 }) |> skip(2) |> take(3) {
+    b = b + y
+  };
+  a * 1000 + b

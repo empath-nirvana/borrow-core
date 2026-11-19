@@ -1,0 +1,47 @@
+-- Handler clauses with captures (SPEC §19, #216), each clause `!` code that holds nothing: what it
+-- uses is passed to it.
+--
+-- * An abortive operation (`Fail`'s `raise`) never resumes, so its clause runs at most once and
+--   runs after the handler: the handler's site answers `inl` the body's value or `inr` the error,
+--   and a `case` on that runs the return clause or the clause, in the scope of the `with`.
+--   `releasing` owns a cell it frees whichever way the body ends, and its error clause ticks a
+--   counter: an owned argument and a capability, used as any code in that scope uses them.
+-- * An operation that resumes (`ask`) may run its clause many times: the handler has a state, its
+--   parameters and the capabilities its clauses use, passed to each clause and, at each resume
+--   `k(v)`, to the rest of the body. `asking` owns a cell, read and replaced at each `ask`, and
+--   ticks the same counter.
+--
+-- Answer: (i32[105], (i32[2200], (i32[63], i32[4]))): `releasing(100)` frees its cell beside the
+-- body's 5; `releasing(200)` frees it in the error clause, after one more tick (2) * 1000; two asks
+-- read 5 and 6 (56), and the cell, 7 by then, is freed by the return clause (63); four ticks.
+
+include fail
+
+effect Ask { ctl ask() -> i32 }
+effect Count { fn tick() -> i32 }
+
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+handler releasing[E](c: ref i32): Fail[E], i32 -> i32 = {
+  return(a) = a + free(c);
+  raise(e) = tick() * 1000 + free(c)
+}
+
+handler asking(mut c: ref i32): Ask, i32 -> i32 = {
+  return(a) = a + free(c);
+  ask(k) = { let v = free(c); c = alloc(v + 1); tick(); k(v) }
+}
+
+fn check(x: i32) -> i32 with Fail[i32] = if x > 10 { raise(x) } else { x }
+
+main -> i32 * (i32 * (i32 * i32)) =
+  let n = alloc(0);
+  let r = with count(&mut n) {
+    let a = with releasing(alloc(100)) { tick(); check(5) };
+    let b = with releasing(alloc(200)) { check(50) };
+    let c = with asking(alloc(5)) { let x = ask(); let y = ask(); x * 10 + y };
+    (a, (b, c))
+  };
+  let (a, bc) = r;
+  let (b, c) = bc;
+  (a, (b, (c, free(n))))

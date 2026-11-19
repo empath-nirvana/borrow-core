@@ -1,0 +1,61 @@
+-- Stored generators over a row that a function does not use (SPEC §12, §15). `h` never reads `b`
+-- and ends in a tail call: `b` is closed just before the call, as `become` drops (its argument
+-- bindings perform nothing, so the close is placed before them), and the call of `drain` stays in
+-- tail position with nothing live across the close. `k` holds `b` in a sum, or closes it in the
+-- other arm, and never reads the sum after: its path does not end in a tail call, so the sum is
+-- dropped (taken apart, its generator closed) at scope end, after the raising `drain` of `a`, or
+-- by the glue when that `drain` raises.
+--
+-- Answer: `((inl i32[4], inl i32[46]), (inl i32[103], (inr i32[2], (inl i32[103], inr i32[2]))))`:
+-- 1 + 2 + 0 + 1, and + 42; 1 + 2 + 100 and `a`'s error 2, with `b` in the sum and with it closed.
+-- `live 0`: `b`'s list is freed on every path.
+
+include adapters
+include fail
+include rec
+
+type Bytes = mu X. 1 + (i32 * X)
+
+def nil : Bytes = roll inl ()
+fn cons(b: i32, t: Bytes) -> Bytes = roll inr (b, t)
+
+-- `own_src(l, bad)` owns a list and yields its elements, raising `bad` when it reaches it.
+fn own_src(l: Bytes, bad: i32) -> 1 with Yield[i32], Fail[i32] =
+  let mut l = l;
+  while true {
+    match unroll l {
+      inl u -> break
+    | inr (b, t) -> l = t; if b == bad { raise(b) } else { () }; yield(b)
+    }
+  };
+  ()
+
+fn drain(it: U (pull i32 1 1), acc: i32) -> i32 with Exhausted =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> drain(it, acc + x)
+  | inr d -> match d { inl u -> acc | inr it -> drain(it, acc) }
+  }
+
+fn h(a: U (pull i32 1 1), b: U (pull i32 1 1), e: i32) -> i32 with Exhausted =
+  let z = e + 1;
+  drain(a, z)
+
+fn t(e: i32) -> i32 + i32 =
+  let l1 = cons(1, cons(2, nil));
+  let l2 = cons(1, cons(2, nil));
+  with on_exhausted(!{ u -> inr 0 }) { with to_result { h(own_src(l1, 0), own_src(l2, 0), e) } }
+
+fn k(a: U (pull i32 1 1), b: U (pull i32 1 1), flag: bool) -> i32 with Exhausted =
+  let s = if flag { (inl b : U (pull i32 1 1) + i32) } else {
+    k <- (nu_out (force b)).2; (inr 40 : U (pull i32 1 1) + i32) };
+  let x = drain(a, 0);
+  x + 100
+
+fn d(ba: i32, flag: bool) -> i32 + i32 =
+  let l1 = cons(1, cons(2, nil));
+  let l2 = cons(3, cons(4, nil));
+  with on_exhausted(!{ u -> inr 0 }) { with to_result { k(own_src(l1, ba), own_src(l2, 0), flag) } }
+
+main -> ((i32 + i32) * (i32 + i32)) * ((i32 + i32) * ((i32 + i32) * ((i32 + i32) * (i32 + i32)))) =
+  ((t(0), t(42)), (d(0, true), (d(2, true), (d(0, false), d(2, false)))))

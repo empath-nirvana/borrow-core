@@ -1,0 +1,21 @@
+-- SPEC §15 *A local whose type is not known* (#849): the generic call `cons(y, rest)` determines
+-- the type of `y`, bound before it by `let y = inl 4` with no annotation. `y` comes first, so its
+-- parameter `A` is still open when it is reached; the later argument `rest : List[i32 + 1]`
+-- solves `A`, and `y` is then left to the checker at `i32 + 1`, its binding typed from the call.
+-- `z = inr ()` is typed the same way by the call after it.
+--
+-- Answer: `i32[412]`: the list is `inl 4, inr (), inl 1, inl 2` and the fold reads it as the
+-- digits `4 0 1 2` from the left, skipping the `inr`, so `4 · 100 + 1 · 10 + 2`. A fix that gave
+-- `y` the type `1` refuses the program; one that took `A` from `y` alone reports it not determined.
+
+include list
+
+fn step(acc: i32, o: i32 + 1) -> i32 = match o { inl d -> acc * 10 + d | inr u -> acc }
+
+main -> i32 =
+  let tail = cons(inl 1, cons(inl 2, nil[i32 + 1]()));
+  let z = inr ();
+  let rest = cons(z, tail);
+  let y = inl 4;
+  let l = cons(y, rest);
+  with on_exhausted(!{ u -> 0 }) { fold(l, 0, !{ (acc, o) -> step(acc, o) }) }

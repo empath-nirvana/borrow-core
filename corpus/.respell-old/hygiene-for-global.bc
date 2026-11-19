@@ -1,0 +1,9 @@
+-- Hygiene (#481): a `let mut` variable named as a function, assigned in a `for` over a count. The
+-- loop threads the variable through its state; the function of the same name is not involved.
+--
+-- Answer: i32[6]: 0 + 1 + 2 + 3.
+fn sum(n: i32) -> i32 = n * 1000
+main -> i32 =
+  let mut sum = 0;
+  for i in 0..4 { sum = sum + i };
+  sum

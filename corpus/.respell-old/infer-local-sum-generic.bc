@@ -1,0 +1,31 @@
+-- SPEC §15 *A local whose type is not known* (#849): `let y = inl 30` binds a local whose type
+-- inference does not synthesize (an injection's other half is not written). It is not known,
+-- not `1`: passed to the generic `array_set`, whose `A` the array `b : array (i32 + 1)` already
+-- determines, it is left to the checker at `i32 + 1`, and the binding's type is solved from that
+-- use. The same for `z = inr ()` at the second slot.
+--
+-- Answer: `i32[3007]`: slot 0 holds `inl 30` (30 · 100), slot 1 `inr ()` (0), slot 2 the
+-- `inl 7` it started with. Typing `y` as `1` refuses the program (`this argument of `array_set`
+-- has type `1``); typing `z` at the wrong half would answer another number.
+
+include buf
+
+fn start(i: i32) -> i32 + 1 = inl (i + 5)
+
+fn num(o: i32 + 1) -> i32 = match o { inl k -> k | inr u -> 0 }
+
+-- What `array_replace` gives back: the old element, or (out of range) the new one.
+fn old(r: (i32 + 1) + (i32 + 1)) -> i32 = match r { inl o -> num(o) | inr o -> 0 - 1 }
+
+fn fill(b: array (i32 + 1)) -> array (i32 + 1) =
+  let y = inl 30;
+  let z = inr ();
+  let b = array_set(b, 0, y);
+  array_set(b, 1, z)
+
+main -> i32 =
+  let b = fill(array_tab(3, start));
+  let (b, a0) = array_replace[i32 + 1](b, 0, inr ());
+  let (b, a1) = array_replace[i32 + 1](b, 1, inr ());
+  let (b, a2) = array_replace[i32 + 1](b, 2, inr ());
+  old(a0) * 100 + old(a1) * 10 + old(a2)

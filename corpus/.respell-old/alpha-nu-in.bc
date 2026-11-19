@@ -1,0 +1,51 @@
+-- SPEC §3, §7, §22 (#808): `nu_in M` whose `M`'s type is the unrolling up to `[α]`. `wrap` builds
+-- an object whose `read` passes the call to `o`'s and whose `close` closes `o` and adds 100. Its
+-- observations are written inside `Fun 'y`, so the `Fun 'x` of `read` is numbered after `'c` and
+-- `'y`, while the rest `box 'c Obs<'c>` comes from `o`'s type, numbered after `'c` alone. `nu_in`'s
+-- operand is synthesized, its `ν` type found in the rest (under the observation's `∀`), and the
+-- operand carried to that type's unrolling by `[α]`.
+--
+-- Answer: see `alpha-nu-in.out`: `read` through `wrap` answers the buffer 10 plus `o`'s state 4,
+-- 14; the rest is `o`'s own, at the state 5, which `close` answers; the buffer is freed at 10:
+-- 14 * 10000 + 5 * 100 + 10; `live 0`.
+
+type Obs<'c> = U (nu X. (forall 'x < top. imm 'x i32 -o F (i32 * box 'c U X)) & F i32)
+
+fn mk<'c>(k: i32) -> box 'c Obs<'c> =
+  f <- return (unfold[nu X. (forall 'x < top. imm 'x i32 -o F (i32 * box 'c U X)) & F i32, i32]
+    (!thunkv fun (s : i32) ->
+      < Fun 'x < top. fun (b : imm 'x i32) ->
+          w <- return (*b);
+          return (release_imm['x, i32] b);
+          return (w + s, boxed['c] (s + i32[1])),
+        return s >));
+  return (boxed['c] (thunkv nu_in
+    < Fun 'x < top. fun (b : imm 'x i32) -> g <- return (unbang f); (nu_out (force g k)).1['x] b,
+      g <- return (unbang f); (nu_out (force g k)).2 >))
+
+fn wrap<'c>(o: box 'c Obs<'c>) -> Obs<'c> =
+  t <- return (thunkv Fun 'y < top. return (thunkv nu_in
+    < Fun 'x < top. fun (b : imm 'x i32) ->
+        g <- return (unbox o);
+        (nu_out (force g)).1['x] b,
+      g <- return (unbox o);
+      r <- (nu_out (force g)).2;
+      return (r + i32[100]) >));
+  h <- (force t)['c];
+  return h
+
+fn obs_read<'a, 'c>(g: Obs<'c>, b: imm 'a i32) -> i32 * box 'c Obs<'c> =
+  (nu_out (force g)).1['a] b
+
+fn obs_close<'c>(f: box 'c Obs<'c>) -> i32 =
+  g <- return (unbox f);
+  (nu_out (force g)).2
+
+main -> i32 =
+  let buf = alloc(10);
+  let o = mk(i32[4]);
+  let w = wrap(o);
+  let (r, rest) = borrow imm buf { 'v, b -> obs_read(w, b) };
+  let c = obs_close(rest);
+  let v = free(buf);
+  r * 10000 + c * 100 + v

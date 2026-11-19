@@ -1,0 +1,68 @@
+-- Recursion inside a load (SPEC §19, §20, §36): `weigh` reads a borrowed tree through a load
+-- (`borrow imm *g { 'y, v -> … }`), and inside it reads its first and last children through loads
+-- of their own, nested in the root's. Each load's body calls `tri`, a recursion, so each performs
+-- `Exhausted` and is the unwinding form of `withload` (`withloadU`). The tree is walked twice by
+-- borrow, and is the same afterwards: `sum` then consumes it.
+--
+-- Answer: `(i32[66], (i32[66], i32[20]))`: for `10 [1, 2 [3], 4]`, `tri(10) + tri(1) + tri(4)`
+-- is `55 + 1 + 10`, twice; the values sum to 20. `live 0`.
+include rec
+include slice
+
+data Tree = Tree(i32, Vec[Tree])
+
+fn tip(n: i32) -> Tree = Tree(n, Vec(box buf[Tree](0)))
+
+-- `t` added as the last child of `p`.
+fn adopt(p: Tree, t: Tree) -> Tree =
+  match p { Tree(n, Vec(b)) -> let (b, _) = push(b, t); Tree(n, Vec(b)) }
+
+-- `0 + 1 + … + n`, by recursion: one level per unit.
+fn tri(n: i32) -> i32 = if n == 0 { 0 } else { n + tri(n - 1) }
+
+-- `tri` of a node's value, read through a load.
+fn pick<'a>(g: imm 'a Tree) -> i32 =
+  let r = borrow imm *g { 'y, v -> match v { Tree(n, _) -> tri(n) } };
+  r
+
+-- `tri` of the root's value plus `tri` of its first and last children's, the children read
+-- through loads nested in the root's. The buffer's array is cut at its length first: the cells
+-- past it are spare.
+fn weigh<'a>(g: imm 'a Tree) -> i32 =
+  let r = borrow imm *g { 'y, v -> match v {
+    Tree(n, Vec(b)) ->
+      let (a, k) = b;
+      let s = tri(n);
+      let kids = match split_at(a, k) { inl (used, spare) -> used | inr w -> w };
+      match split_first(kids) {
+        inl (h, rest) ->
+          let x = pick(h);
+          let y = match split_last(rest) { inl (l, mid) -> pick(l) | inr u -> 0 };
+          s + x + y
+      | inr u -> s
+      }
+  } };
+  r
+
+-- The sum of the values, consuming the tree.
+fn sum(t: Tree) -> i32 =
+  match t {
+    Tree(v, Vec(b)) ->
+      let (b, n) = len_of(b);
+      let mut b = b;
+      let mut s = v;
+      for i in 0..n {
+        let (b2, o) = take(b, i);
+        b = b2;
+        let r = match o { inl x -> sum(x) | inr u -> 0 };
+        s = s + r
+      };
+      s
+  }
+
+main -> i32 * (i32 * i32) = with on_exhausted(!{ u -> (0 - 1, (0 - 1, 0 - 1)) }) {
+  let mut t = adopt(adopt(adopt(tip(10), tip(1)), adopt(tip(2), tip(3))), tip(4));
+  let x = weigh(&t);
+  let y = weigh(&t);
+  (x, (y, sum(t)))
+}

@@ -1,0 +1,75 @@
+-- Float arithmetic and printing (SPEC §37). Each line prints one result in the shortest decimal
+-- that reads back as the same float (`print_f64`, `print_f32`, `lib/float.bc`), spelled as
+-- Rust's `{:?}`: at least one fractional digit, an exponent outside 1e-4 ≤ |x| < 1e16, and `inf`,
+-- `-inf`, `NaN`.
+--
+-- Answer, line by line: `0.30000000000000004` (0.1 + 0.2, not 0.3), `0.3333333333333333`,
+-- `1.4142135623730951` (√2), `5.187377517639621` (the harmonic sum to 100, added in order),
+-- `inf` (1e308 × 10 overflows), `-inf`, `NaN` (0 / 0), `5e-324` (the least subnormal, 2^-1074),
+-- `0.0` (half of it rounds to even, to zero), `-0.0` (0 × −1), `1e16`, `0.0001`,
+-- `123456789012345.67`; then the rounding functions at −2.5, 2.5 and 3.5 (`floor`, `ceil`,
+-- `trunc`, `round`, Wasm's `nearest`, ties to even): `-3.0 -2.0 -2.0 -2.0`, `2.0 3.0 2.0 2.0`,
+-- `3.0 4.0 3.0 4.0`; then at `f32`: `0.3` (0.1 + 0.2 at binary32 is the binary32 nearest 0.3),
+-- `0.33333334`, `16777216.0` (2^24 + 1 is not an `f32`), `3.4028235e38` (the greatest), `1e-45`
+-- (the least subnormal). `main` answers the number of lines, 19.
+--
+-- The results are collected and printed by one loop: every call of a function is compiled as a
+-- copy of its body (Backend README), so the printer is called at one place for each width.
+--
+-- A sum not correctly rounded, a printer that prints more digits than it needs (or too few to
+-- read back), or `round` with ties away from zero (`-3.0`, `3.0` at ±2.5) each change a line.
+
+include float
+
+-- A result and the byte after it.
+type Item = f64 * u8
+
+fn put(b: buf Item, x: f64, sep: u8) -> buf Item = let (b, _) = push(b, (x, sep)); b
+
+fn put32(b: buf (f32 * u8), x: f32) -> buf (f32 * u8) = let (b, _) = push(b, (x, b'\n')); b
+
+-- The four rounding functions at `x`, on one line.
+fn rounds(b: buf Item, x: f64) -> buf Item =
+  put(put(put(put(b, floor_f64(x), b' '), ceil_f64(x), b' '), trunc_f64(x), b' '), round_f64(x), b'\n')
+
+main -> i32 =
+  let mut b = box buf[Item](32);
+  b = put(b, 0.1 + 0.2, b'\n');
+  b = put(b, 1.0 / 3.0, b'\n');
+  b = put(b, sqrt_f64(2.0), b'\n');
+  let mut h = 0.0;
+  for i in 1..101 { h = h + 1.0 / f64_of_i32(i) };
+  b = put(b, h, b'\n');
+  b = put(b, 1.0e308 * 10.0, b'\n');
+  b = put(b, 0.0 - 1.0 / 0.0, b'\n');
+  b = put(b, 0.0 / 0.0, b'\n');
+  let tiny = of_bits_f64(host[extend_s](1));
+  b = put(b, tiny, b'\n');
+  b = put(b, tiny / 2.0, b'\n');
+  b = put(b, 0.0 * (0.0 - 1.0), b'\n');
+  b = put(b, 1.0e16, b'\n');
+  b = put(b, 0.0001, b'\n');
+  b = put(b, 123456789012345.67, b'\n');
+  b = rounds(b, 0.0 - 2.5);
+  b = rounds(b, 2.5);
+  b = rounds(b, 3.5);
+  let mut c = box buf[f32 * u8](8);
+  let a: f32 = 0.1;
+  c = put32(c, a + 0.2);
+  c = put32(c, 1.0 / 3.0);
+  c = put32(c, f32_of_i32(16777217));
+  c = put32(c, of_bits_f32(2139095039));
+  c = put32(c, of_bits_f32(1));
+  let (arr, n) = b;
+  for i in 0..n {
+    let (x, sep) = at(&arr, i, (0.0, b'\n'));
+    print_f64(x);
+    print_byte(sep)
+  };
+  let (arr32, n32) = c;
+  for i in 0..n32 {
+    let (x, sep) = at(&arr32, i, (0.0, b'\n'));
+    print_f32(x);
+    print_byte(sep)
+  };
+  19

@@ -1,0 +1,42 @@
+-- T07 (`docs/research/mutation-paradigms.md` §4): a turnstile driven by the bytes of a literal,
+-- its state a variant (SPEC §42), its step a match over two columns, the state and the byte, whose
+-- arms update the counters. The match is compiled to a decision tree (SPEC §42, M2): a `case` on
+-- the state, then `==` tests of the byte, the wildcard arm last; no pair is built.
+--
+-- As written but for `+=`, `st = match …` (bound first, then assigned) and the `for` over the
+-- string's bytes (`docs/expressiveness.md` §2.2); the state is printed by a function, as `derive`
+-- is a later unit.
+--
+-- Answer: `Locked 3 2 1`.
+include textio
+include text
+
+data State = Locked | Open
+
+fn show(s: State) -> 1 = match s { Locked -> print_lit("Locked") | Open -> print_lit("Open") }
+
+main -> i32 =
+  let mut st = Locked;
+  let mut passed = 0;
+  let mut rejected = 0;
+  let mut wasted = 0;
+  let (evs, k) = string_of_lit("cpppccpcp");
+  for p in &evs {
+    let e = *p;
+    let next = match (st, e) {
+      (Locked, b'c') -> Open
+    | (Locked, _) -> rejected = rejected + 1; Locked
+    | (Open, b'p') -> passed = passed + 1; Locked
+    | (Open, _) -> wasted = wasted + 1; Open
+    };
+    st = next
+  };
+  show(st);
+  print_byte(b' ');
+  print_dec(passed);
+  print_byte(b' ');
+  print_dec(rejected);
+  print_byte(b' ');
+  print_dec(wasted);
+  print_byte(b'\n');
+  0

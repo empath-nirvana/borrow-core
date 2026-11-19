@@ -1,0 +1,27 @@
+-- A `for` over the elements of an owned array lent `mut`, updating them in place (SPEC §16, the
+-- lend of SPEC §9). `&mut a` lends the array as its view for the whole loop
+-- (`slice_borrow_mut`), and the loop is `count_try` over the view's length: each step splits the
+-- first element off the rest of the view (`slice_split_mut`) and lends it to the body, which
+-- writes through it with `modify`. After the loop `a` is the array again. The loop is total and
+-- allocates nothing.
+--
+-- Answer: the array [1, 2, 3, 4] becomes [10, 20, 30, 40], and `main` returns its sum, i32[100].
+
+fn tab(i: i32) -> i32 = i + 1
+
+-- The element at `i` added to `acc`, read by taking it out of its slot and putting it back.
+fn add_at(a: array i32, i: i32, acc: i32) -> array i32 * i32 =
+  let (a, o) = array_replace[i32] (a, i, 0);
+  match o {
+    inl x -> let (a, _) = array_replace[i32] (a, i, x); (a, acc + x)
+  | inr _ -> (a, acc)
+  }
+
+main -> i32 =
+  let mut a = array_new[i32] (4, tab);
+  for x in &mut a { modify x { v -> v * 10 } };
+  let (a, v) = add_at(a, 0, 0);
+  let (a, v) = add_at(a, 1, v);
+  let (a, v) = add_at(a, 2, v);
+  let (a, v) = add_at(a, 3, v);
+  v

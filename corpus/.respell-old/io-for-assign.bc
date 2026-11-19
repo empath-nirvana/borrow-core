@@ -1,0 +1,14 @@
+-- A `let mut` variable assigned in a `for` body but not read there is threaded through the loop.
+-- The first `for` keeps the last byte of the input in `last` and never reads it; the second
+-- `for` is another state of `main`'s machine (SPEC §15), and the first loop's variables are
+-- handed on to it. The second loop finds the input at its end.
+--
+-- Answer: on the input `AB`, i32[66]: the last byte, `B`, and no byte left for the second loop.
+-- A loop that threaded only the variables its body reads hands `last` on as 0 and gives i32[0].
+
+main -> i32 =
+  let mut last = 0;
+  for b in bytes(&mut stdin) { last = to_i32(b) };
+  let mut n = 0;
+  for c in bytes(&mut stdin) { n = n + 1 };
+  last + n

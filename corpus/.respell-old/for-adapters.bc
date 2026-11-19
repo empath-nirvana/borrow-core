@@ -1,0 +1,36 @@
+-- A chain of sized adapters that stays total (SPEC §16, `lib/iters.bc`). Each adapter keeps the
+-- data its source came from, so a `for` over the chain is `count_try` over the length of that
+-- data, computed when the loop starts: `map` and `enumerate` answer one element per element,
+-- `filter` at most one, `take(k)` ends after `k`, and `zip` pulls its two sides, over the pair of
+-- their data. `total` checks it: no loop here is a drain. The pipeline is one loop, with no
+-- allocation and no dispatched call.
+--
+-- Answer: (i32[4278], i32[614]): over the array [0, 3, 6, 9, 12, 15], the elements over 5 zipped
+-- with 100, 101, …: 6·100 + 9·101 + 12·102 + 15·103; and over the count 0..10, the first four
+-- squares with their positions: (0·100 + 0) + (1·100 + 1) + (2·100 + 4) + (3·100 + 9).
+
+include iters
+
+fn tab(i: i32) -> i32 = i * 3
+
+fn big(x: i32) -> bool = x > 5
+
+fn sq(x: i32) -> i32 = x * x
+
+-- Over a view: its elements copied, filtered, and zipped with a count.
+total fn weighted<'a>(v: array_imm 'a i32) -> i32 =
+  let mut s = 0;
+  for p in zip(filter(copied(elems(v)), big), 100..200) { let (x, y) = p; s = s + x * y };
+  s
+
+-- Over a count: squared, the first four, with their positions.
+total fn squares() -> i32 =
+  let mut s = 0;
+  for p in enumerate(take(map(0..10, sq), 4)) { let (i, x) = p; s = s + i * 100 + x };
+  s
+
+main -> i32 * i32 =
+  let a = array_new[i32] (6, tab);
+  let w = borrow imm a { 'x, v -> weighted(v) };
+  let _ = a;
+  (w, squares())

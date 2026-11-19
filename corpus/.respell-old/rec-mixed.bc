@@ -1,0 +1,15 @@
+-- Mutual recursion whose members answer different types (SPEC §20): `ev` answers whether `n` is
+-- even, `od` answers 1 when `n` is odd and 0 otherwise. The group is one fixed point taken at the
+-- record of its members' functions, `(i32 -o F bool) & (i32 -o F i32)` (Bekič), and a call of a
+-- member projects its field from the self-reference. Nothing is allocated or dispatched.
+--
+-- Answer: (i32[1], (inl (), inr ())): 7 is odd, so `ev(7)` is false and `ev(10)` true (`bool` is
+-- `1 + 1`, `inr ()` true). A call of the wrong field does not type.
+
+include rec
+
+fn ev(n: i32) -> bool = if n == 0 { true } else { od(n - 1) == 1 }
+fn od(n: i32) -> i32 = if n == 0 { 0 } else { if ev(n - 1) { 1 } else { 0 } }
+
+main -> i32 * (bool * bool) =
+  with on_exhausted(!{ u -> (0 - 1, (false, false)) }) { (od(7), (ev(7), ev(10))) }

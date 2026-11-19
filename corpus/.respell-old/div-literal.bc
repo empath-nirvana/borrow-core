@@ -1,0 +1,22 @@
+-- Division by a literal costs nothing beyond the instruction (SPEC §39). A nonzero literal divisor
+-- (other than `-1` for `/`) cannot fail: the division performs no effect, so `digits` and
+-- `checksum` have no row, and it is lowered to the bare `i32.div_s` or `i32.rem_s` with no test
+-- (`Backend/Flat/Lower.lean`, `divTest`). `corpus/sugar/div-literal.bc` pins the elaborated code;
+-- its counts are `0 0 0`.
+--
+-- Answer: `(i32[15], i32[49500])`: the digit sum of 12345, and the sum over 0..1000 of
+-- `i % 100` (each of 0..99 ten times, 4950 · 10).
+
+-- The sum of the decimal digits of `n`, at most ten of them.
+fn digits(n: i32) -> i32 =
+  let mut m = n;
+  let mut s = 0;
+  for k in 0..10 { s = s + m % 10; m = m / 10 };
+  s
+
+fn checksum(n: i32) -> i32 =
+  let mut s = 0;
+  for i in 0..n { s = s + i % 100 };
+  s
+
+main -> i32 * i32 = (digits(12345), checksum(1000))

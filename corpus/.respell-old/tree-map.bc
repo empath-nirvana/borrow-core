@@ -1,0 +1,86 @@
+-- A generic binary search tree, used as a set of integers and as a map from integer keys to
+-- values. `insert` and `find` take the order as a block, so one tree serves both: the set's
+-- order compares the elements, the map's compares the keys of (key, value) pairs. An in-order
+-- traversal is a recursive generator; a `for` over it sums the set and lists the map's keys in
+-- order. A lookup of a key that is absent raises `Fail[i32]` with the key, handled by `default`
+-- and by `to_result`.
+--
+-- Exercises: a generic recursive data type, generic recursive functions with comparison blocks at
+-- two element types, a recursive generic generator (`Yield[K]` inside a recursion), `Fail`
+-- raised from a recursion, and the handlers `default` and `to_result`.
+--
+-- Answer: `(i32[29], (i32[1357], (i32[300], inr i32[4])))`: the set {1, 3, 5, 7, 13} sums to 29;
+-- the map's keys in order are 1, 3, 5, 7 (read as the digits of 1357); the value at key 3 is 300;
+-- key 4 is absent. `live 0`.
+
+include rec
+include yield
+include fail
+
+type Tree[K] = mu X. 1 + (X * (K * X))
+
+fn tip[K]() -> Tree[K] = roll inl ()
+
+fn branch[K](l: Tree[K], k: K, r: Tree[K]) -> Tree[K] = roll inr (l, (k, r))
+
+-- `k` added; an element equal to it is replaced.
+fn insert[K](t: Tree[K], k: K, cmp: !(K * K => i32)) -> Tree[K] =
+  match unroll t {
+    inl u -> branch(tip(), k, tip())
+  | inr (l, (x, r)) ->
+      let c = cmp(clone(k), clone(x));
+      if c < 0 { branch(insert(l, k, cmp), x, r) }
+      else { if c > 0 { branch(l, x, insert(r, k, cmp)) } else { branch(l, k, r) } }
+  }
+
+-- The element equal to `k`, or `k`'s key raised.
+fn find[K](t: Tree[K], k: K, cmp: !(K * K => i32), key: !(K => i32)) -> K with Fail[i32], Exhausted =
+  match unroll t {
+    inl u -> raise(key(k))
+  | inr (l, (x, r)) ->
+      let c = cmp(clone(k), clone(x));
+      if c < 0 { find(l, k, cmp, key) } else { if c > 0 { find(r, k, cmp, key) } else { x } }
+  }
+
+-- The elements in order.
+fn inorder[K](t: Tree[K]) -> 1 with Yield[K], Exhausted =
+  match unroll t {
+    inl u -> ()
+  | inr (l, (x, r)) -> inorder(l); yield(x); inorder(r)
+  }
+
+fn cmp_i32(a: i32, b: i32) -> i32 = if a < b { 0 - 1 } else { if a > b { 1 } else { 0 } }
+
+fn cmp_key(a: i32 * i32, b: i32 * i32) -> i32 = let (ka, va) = a; let (kb, vb) = b; cmp_i32(ka, kb)
+
+fn set_sum(xs: Tree[i32]) -> i32 with Exhausted =
+  let mut s = 0;
+  for x in inorder(xs) { s = s + x };
+  s
+
+fn keys(m: Tree[i32 * i32]) -> i32 with Exhausted =
+  let mut ks = 0;
+  for e in inorder(m) { let (k, v) = e; ks = ks * 10 + k };
+  ks
+
+main -> i32 * (i32 * (i32 * (i32 * i32 + i32))) =
+  with on_exhausted(!{ u -> (0, (0, (0, inr 0))) }) {
+    let mut set = tip[i32]();
+    set = insert(set, 7, !{ (a, b) -> cmp_i32(a, b) });
+    set = insert(set, 3, !{ (a, b) -> cmp_i32(a, b) });
+    set = insert(set, 13, !{ (a, b) -> cmp_i32(a, b) });
+    set = insert(set, 1, !{ (a, b) -> cmp_i32(a, b) });
+    set = insert(set, 5, !{ (a, b) -> cmp_i32(a, b) });
+    set = insert(set, 3, !{ (a, b) -> cmp_i32(a, b) });
+    let sum = set_sum(set);
+    let mut m = tip[i32 * i32]();
+    m = insert(m, (5, 500), !{ (a, b) -> cmp_key(a, b) });
+    m = insert(m, (1, 100), !{ (a, b) -> cmp_key(a, b) });
+    m = insert(m, (7, 700), !{ (a, b) -> cmp_key(a, b) });
+    m = insert(m, (3, 300), !{ (a, b) -> cmp_key(a, b) });
+    let ks = keys(clone(m));
+    let found = with default((0, 0)) { find(clone(m), (3, 0), !{ (a, b) -> cmp_key(a, b) }, !{ e -> let (k, v) = e; k }) };
+    let (k3, v3) = found;
+    let missing = with to_result { find(m, (4, 0), !{ (a, b) -> cmp_key(a, b) }, !{ e -> let (k, v) = e; k }) };
+    (sum, (ks, (v3, missing)))
+  }

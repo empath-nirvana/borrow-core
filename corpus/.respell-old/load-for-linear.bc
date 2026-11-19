@@ -1,0 +1,38 @@
+-- A `for` inside a load of a linear content (#880): `f` reads a `Json` through a load (`borrow
+-- imm *v { 'y, j -> … }`, SPEC §36) and, at an array, walks its elements with a `for` over the
+-- view, reading each through a nested load (`num`). The load has no place to lend again at each
+-- step, and its content is linear, so it is not rewritten per observation (SPEC §14): it is
+-- elaborated as a load, the `for` a counted loop over the view (SPEC §16).
+--
+-- Answer: `(i32[304], i32[5])`: the array holds `1`, `null` and `3` among its buffer's slots (the
+-- rest `null`), so 300 for its length 3 and 4 for the numbers; then `Num(5)`. Rewriting the load
+-- per observation, as before, copies the content and is refused ("`*` copies the content, and …
+-- is linear"); a walk that skipped the nested loads would give 300.
+include rec
+include slice
+
+data Json = Null | Num(i32) | Arr(Vec[Json])
+
+fn num<'z>(v: imm 'z Json) -> i32 =
+  let r = borrow imm *v { 'y, j -> match j { Num(k) -> k | Null -> 0 | Arr(_) -> 0 - 100 } };
+  r
+
+fn f<'z>(v: imm 'z Json) -> i32 =
+  let r = borrow imm *v { 'y, j -> match j {
+      Num(k) -> k
+    | Null -> 0
+    | Arr(Vec(b)) ->
+      let (a, n) = b;
+      let mut s = n * 100;
+      for e in a { s = s + num(e) };
+      s } };
+  r
+
+fn arr3() -> Json =
+  let b = box buf[Json](0);
+  let (b, _) = push(b, Num(1));
+  let (b, _) = push(b, Null);
+  let (b, _) = push(b, Num(3));
+  Arr(Vec(b))
+
+main -> i32 * i32 = let a = arr3(); let n = Num(5); let x = f(&a); let y = f(&n); (x, y)

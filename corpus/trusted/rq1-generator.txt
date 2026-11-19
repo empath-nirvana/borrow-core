@@ -1,6 +1,6 @@
 no externs: nothing beyond the compiler and the runtime is trusted
 typing: PinLaw (Core/PinLaw.lean), the hypothesis of fundamentalC_pin and adequacyD_pin: 1 site
-  R1 at 36:11: LendFrame at ref (PinLaw.lendFrame)
+  R1 at 37:11: LendFrame at ref (PinLaw.lendFrame)
 unproved boundaries: 0
 always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime
 backend: LendEnclosesFn (Backend2/Driver.lean), the native borrow facts' lends enclose their functions: 1 function

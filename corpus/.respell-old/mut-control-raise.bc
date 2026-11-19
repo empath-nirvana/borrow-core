@@ -1,0 +1,29 @@
+-- `let mut` variables assigned inside the body of a control handler that raises midway (SPEC §41,
+-- R3; §18): the body of `with to_result` may be abandoned, so it hands nothing back. Each variable
+-- it writes, `c` and `log`, is lent around the handler instead, `borrow mut &mut c { 'l, c -> with
+-- to_result { … } }`, a cell scoped to the handler site; in the body `c = e` is `modify` of the
+-- borrow, `e` reading the old content, and a read of `c` (`check(c)`) copies the content through
+-- the borrow. `check(c)` raises at `c = 11`: the clause abandons the body, the lends end with the
+-- handler site, and `c` and `log` keep the writes made before the raise, as in Rust.
+--
+-- Answer: `(inr i32[11], i32[11012])`: the raise's payload `11`; `c = 11` and `log = 12` (digits
+-- `1`, `2`; the `3` after the raise is never written), as `11 * 1000 + 12`; `live 0`.
+include fail
+
+fn check(n: i32) -> i32 with Fail[i32] = if n > 2 { raise(n) } else { n }
+
+main -> (i32 + i32) * i32 =
+  let mut c = 0;
+  let mut log = 0;
+  let r = with to_result {
+    c = c + 1;
+    log = log * 10 + c;
+    let a = check(c);
+    c = c + 10;
+    log = log * 10 + 2;
+    let b = check(c);
+    c = 100;
+    log = log * 10 + 3;
+    a + b
+  };
+  (r, c * 1000 + log)

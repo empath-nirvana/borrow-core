@@ -1,0 +1,15 @@
+-- SPEC §27 at the surface, the twin of the kernel program `e8b` (`bcc kernel interp e8b`, E8b; its
+-- core text is `corpus/core-fin-e8b.bc`): `ex1` unwinds through a cleanup that raises `ex2`. A raise
+-- during an unwind supersedes the pending one (§19, the finally law): `catch2` catches `ex2`, and
+-- `catch1` wraps its answer.
+--
+-- Answer: inl (inr ()), and `live 0`. A wrong implementation that keeps the pending `ex1` instead
+-- answers `inr ()`.
+
+effect Ex1 { ctl ex1() -> never }
+effect Ex2 { ctl ex2() -> never }
+
+handler catch1: Ex1, never + 1 -> (never + 1) + 1 = { return(v) = inl v; ex1() = inr () }
+handler catch2: Ex2, never -> never + 1 = { return(v) = inl v; ex2() = inr () }
+
+main -> (never + 1) + 1 = with catch1 { with catch2 { x <- ex1() unwind (ex2()); x } }

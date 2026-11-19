@@ -1,0 +1,26 @@
+-- E1, one function at several rows (SPEC §19 Programs, the kernel program `hof-two-rows`; SPEC
+-- §30): `hof` calls its block, and is called with a pure block, under `to_result` with one that
+-- raises, and under `resumer` with one that waits, which `resumer` resumes. Written once, it is
+-- used at three rows, and nothing marks it for any of them: each use is a copy at its block's row
+-- (`hof` itself, `hof__b0n2`, `hof__b0n1`), its block's operation resolved to the site around the
+-- block.
+--
+-- Answer: `(inr (), (inr (), inr ()))`: true, the error, and true after the wait resumed;
+-- `live 0`.
+
+include fail
+
+effect Wait { ctl wait() }
+
+handler resumer[A]: Wait, A -> A = {
+  return(x) = x;
+  wait(k) = k(())
+}
+
+fn hof(g: !(1 => bool)) -> bool = g(())
+
+main -> bool * ((bool + 1) * bool) =
+  let a = hof(!{ u -> true });
+  let b = with to_result[1, bool] { hof(!{ u -> raise(()) }) };
+  let c = with resumer { hof(!{ u -> wait(); true }) };
+  (a, (b, c))

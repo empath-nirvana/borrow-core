@@ -1,0 +1,33 @@
+-- check: old-backend-refuses
+-- SPEC §27, a finaliser that suspends on an ordinary unwind. `inner` raises `5` (`Fail`) after an
+-- `ask`; its finaliser asks again and raises `15`, which supersedes the pending `5`; `body`'s
+-- finaliser asks once more and frees the cell `r` that the rest would have freed. `ask` is
+-- must-resume and `count_asks` resumes outside tail position, so each `ask` suspends the machine,
+-- each finaliser's too: the finaliser is a machine of its own, a call point of the unwinding machine
+-- (its row is within the machine's), the pending raise held across it.
+--
+-- Answer: `(inr i32[15], i32[3])`, `live 0`: the error raised by the inner finaliser, and three
+-- asks. A wrong implementation that skips a finaliser on the unwind counts fewer asks, or keeps
+-- `5`; one that leaks `r` is not `live 0`.
+
+include fail
+
+effect Ask { must_resume ctl ask() -> i32 }
+
+handler count_asks[A]: Ask, A -> A * i32 = {
+  return(x) = (x, 0);
+  ask(k) = { let (a, n) = k(5); (a, n + 1) }
+}
+
+fn inner() -> i32 with Fail[i32], Ask =
+  y <- (let a = ask(); if a > 0 { raise(a) } else { a })
+    unwind (let b = ask(); if b > 0 { raise(b + 10) } else { () });
+  y + 1
+
+fn body() -> i32 with Fail[i32], Ask =
+  let r = alloc(30);
+  x <- inner() unwind (let c = ask(); let v = free(r); ());
+  let v = free(r);
+  x + v
+
+main -> (i32 + i32) * i32 = with count_asks[i32 + i32] { with to_result[i32, i32] { body() } }

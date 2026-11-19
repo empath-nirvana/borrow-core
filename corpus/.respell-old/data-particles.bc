@@ -1,0 +1,33 @@
+-- T09 (`docs/research/mutation-paradigms.md` §4): particles bouncing in [0, 100], each a record
+-- (SPEC §42), updated in place through the `mut` borrow of its slot. `p.x = e` is `modify p { … }`
+-- of the slot, its value reading the record's own fields; `let x = p.x;` reads a field through
+-- the borrow by `withswap`, the borrow handed back; `p.x` through the `imm` borrow of
+-- `for p in &world` is a load.
+--
+-- As written but for `+=` and a read in the `if`'s condition, which reads through a `mut` borrow
+-- only at a binding (SPEC §42, *Fields*).
+--
+-- Answer: `10 92 55` and i32[11], the bounces in 50 steps.
+include io
+
+data P = { x: i32, v: i32 }
+
+fn w0(i: i32) -> P =
+  if i == 0 { P { x: 10, v: 7 } } else if i == 1 { P { x: 50, v: 0 - 3 } } else { P { x: 99, v: 11 } }
+
+fn step<'a>(ps: array_mut 'a P) -> i32 =
+  let mut b = 0;
+  for p in ps {
+    p.x = p.x + p.v;
+    let x = p.x;
+    if x < 0 || x > 100 { p.v = 0 - p.v; p.x = p.x + 2 * p.v; b = b + 1 }
+  };
+  b
+
+main -> i32 =
+  let mut world = array_new[P](3, w0);
+  let mut bounces = 0;
+  for _ in 0..50 { let k = step(&mut world); bounces = bounces + k };
+  for p in &world { print_dec(p.x); print_byte(b' ') };
+  print_byte(b'\n');
+  bounces

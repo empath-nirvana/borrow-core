@@ -1,0 +1,11 @@
+-- Hygiene (#481): a control handler with a state (a parameter that is not `!`) passes its state
+-- to each clause and to the continuation at each resume. Its parameter `c` is not the body's
+-- `c`.
+--
+-- Answer: i32[102]: `ask()` answers 1 and the body adds its own `c`, 100; the return clause adds
+-- the state, 1.
+effect Ask { ctl ask() -> i32 }
+handler cell(mut c: i32): Ask, i32 -> i32 = { return(a) = a + c; ask(k) = { c = c + 1; k(c) } }
+main -> i32 =
+  let c = 100;
+  with cell(0) { ask() + c }

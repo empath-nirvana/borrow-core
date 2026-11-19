@@ -1,20 +1,20 @@
 effect 19:1: Exhausted: exhausted (ctl, cancellable, abortive)
-row 22:1: tot: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
-row 24:1: even, odd: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
-row 31:1: spine: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
-row 33:1: sum: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
-lowering 22:1: recursive group tot under `deep`: the machine `tot__mach`, its pending calls frames in `deep`'s buffer
-lowering 24:1: recursive group even, odd under `deep`: the machine `even__mach`, its pending calls frames in `deep`'s buffer
-lowering 31:1: recursive group spine under `deep`: the machine `spine__mach`, its pending calls frames in `deep`'s buffer
-lowering 33:1: recursive group sum under `deep`: the machine `sum__mach`, its pending calls frames in `deep`'s buffer
-lowering 39:30: with deep: the recursive groups called in its body are driven by `deep`
-call 22:52: tot → a request of the group's machine, driven by the heap driver
-call 24:53: odd → a request of the group's machine, driven by the heap driver
-call 25:53: even → a request of the group's machine, driven by the heap driver
-call 31:58: spine → a request of the group's machine, driven by the heap driver
-call 36:35: sum → a request of the group's machine, driven by the heap driver
-call 36:48: sum → a request of the group's machine, driven by the heap driver
-call 39:43: tot → `tot__deep`
-call 39:56: odd → `odd__deep`
-call 39:68: sum → `sum__deep`
-call 39:72: spine → `spine__deep`
+row 23:1: tot: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
+row 25:1: even, odd: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
+row 32:1: spine: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
+row 34:1: sum: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
+lowering 23:1: recursive group tot under `deep`: the machine `tot__mach`, its pending calls frames in `deep`'s buffer
+lowering 25:1: recursive group even, odd under `deep`: the machine `even__mach`, its pending calls frames in `deep`'s buffer
+lowering 32:1: recursive group spine under `deep`: the machine `spine__mach`, its pending calls frames in `deep`'s buffer
+lowering 34:1: recursive group sum under `deep`: the machine `sum__mach`, its pending calls frames in `deep`'s buffer
+lowering 40:34: with deep: the recursive groups called in its body are driven by `deep`
+call 23:51: tot → a request of the group's machine, driven by the heap driver
+call 25:52: odd → a request of the group's machine, driven by the heap driver
+call 26:52: even → a request of the group's machine, driven by the heap driver
+call 32:57: spine → a request of the group's machine, driven by the heap driver
+call 37:37: sum → a request of the group's machine, driven by the heap driver
+call 37:50: sum → a request of the group's machine, driven by the heap driver
+call 40:44: tot → `tot__deep`
+call 40:57: odd → `odd__deep`
+call 40:69: sum → `sum__deep`
+call 40:73: spine → `spine__deep`

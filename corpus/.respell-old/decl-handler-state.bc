@@ -1,0 +1,31 @@
+-- check: old-backend-refuses
+-- A declared value (SPEC §42) held as a handler's state across an abort: the handler handles the
+-- abortive operation itself, and its clause consumes the state (`roll_back`). The abort does not
+-- pass the handler, so the binding that supplies the state is at a row with no abort, and the
+-- kernel's `[let]` asks nothing of it. When the abort passes the handler instead, the state is live
+-- across it and refused (`corpus/reject/decl-handler-state-abort.bc`). The old backend does not
+-- lower a name with both control and abortive operations; the new one runs it.
+data Txn = { id: i32, must_close(commit) log: i32 }
+
+fn write(t: Txn, x: i32) -> Txn = match t { Txn { id, log } -> Txn { id: id, log: log + x } }
+
+fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+
+fn roll_back(t: Txn) -> 1 = match t { Txn { id, log } -> () }
+
+effect Log { must_resume ctl log(x: i32) -> 1; ctl abort_txn(e: i32) -> never }
+
+handler in_txn(mut t: Txn): Log, i32 -> i32 = {
+  return(a) = a + commit(t);
+  log(x, k) = { t = write(t, x); k(()) };
+  abort_txn(e) = { roll_back(t); 0 - e }
+}
+
+fn work(x: i32) -> i32 with Log =
+  log(x);
+  if x > 100 { abort_txn(x) } else { x * 6 }
+
+main -> i32 * i32 =
+  let a = with in_txn(Txn { id: 7, log: 0 }) { work(5) };
+  let b = with in_txn(Txn { id: 8, log: 0 }) { work(500) };
+  (a, b)

@@ -1,0 +1,78 @@
+-- A recursion's budget spent inside nested loads (SPEC §19, §20, §36): `weigh` reads a borrowed
+-- tree through a load, and its first child through a load nested in it, whose body calls `tri` at
+-- 10001, past `bounded`'s budget of depth (10000). `exhausted()` is performed at the bottom: it
+-- unwinds the recursion's frames, then the two loads, which are the unwinding form of `withload`
+-- (`withloadU`), to the handler in `try_weigh`. A load's source is its `imm` borrow, so the unwind
+-- gives nothing back and leaves the lent place as it was: the tree is read again through a load
+-- (`pick`) and then consumed by `sum`, so a place the unwind had freed would be freed twice.
+--
+-- Answer: `(i32[4294967295], (i32[55], i32[10015]))`: the walk exhausted (−1, printed unsigned);
+-- `tri(10)` read at the root after it; the values `10 + 10001 + 4`. `live 0`.
+include rec
+include slice
+
+data Tree = Tree(i32, Vec[Tree])
+
+fn tip(n: i32) -> Tree = Tree(n, Vec(box buf[Tree](0)))
+
+-- `t` added as the last child of `p`.
+fn adopt(p: Tree, t: Tree) -> Tree =
+  match p { Tree(n, Vec(b)) -> let (b, _) = push(b, t); Tree(n, Vec(b)) }
+
+-- `0 + 1 + … + n`, by recursion: one level per unit.
+fn tri(n: i32) -> i32 = if n == 0 { 0 } else { n + tri(n - 1) }
+
+-- `tri` of a node's value, read through a load.
+fn pick<'a>(g: imm 'a Tree) -> i32 =
+  let r = borrow imm *g { 'y, v -> match v { Tree(n, _) -> tri(n) } };
+  r
+
+-- `tri` of the root's value plus `tri` of its first and last children's, the children read
+-- through loads nested in the root's. The buffer's array is cut at its length first: the cells
+-- past it are spare.
+fn weigh<'a>(g: imm 'a Tree) -> i32 =
+  let r = borrow imm *g { 'y, v -> match v {
+    Tree(n, Vec(b)) ->
+      let (a, k) = b;
+      let s = tri(n);
+      let kids = match split_at(a, k) { inl (used, spare) -> used | inr w -> w };
+      match split_first(kids) {
+        inl (h, rest) ->
+          let x = pick(h);
+          let y = match split_last(rest) { inl (l, mid) -> pick(l) | inr u -> 0 };
+          s + x + y
+      | inr u -> s
+      }
+  } };
+  r
+
+-- The sum of the values, consuming the tree.
+fn sum(t: Tree) -> i32 =
+  match t {
+    Tree(v, Vec(b)) ->
+      let (b, n) = len_of(b);
+      let mut b = b;
+      let mut s = v;
+      for i in 0..n {
+        let (b2, o) = take(b, i);
+        b = b2;
+        let r = match o { inl x -> sum(x) | inr u -> 0 };
+        s = s + r
+      };
+      s
+  }
+
+-- `weigh`, its `Exhausted` caught outside the loads.
+fn try_weigh<'a>(g: imm 'a Tree) -> i32 = with on_exhausted(!{ u -> 0 - 1 }) { weigh(g) }
+
+-- `pick`, its `Exhausted` caught.
+fn try_pick<'a>(g: imm 'a Tree) -> i32 = with on_exhausted(!{ u -> 0 - 1 }) { pick(g) }
+
+-- `sum`, its `Exhausted` caught.
+fn try_sum(t: Tree) -> i32 = with on_exhausted(!{ u -> 0 - 1 }) { sum(t) }
+
+main -> i32 * (i32 * i32) =
+  let mut t = adopt(adopt(tip(10), tip(10001)), tip(4));
+  let x = try_weigh(&t);
+  let y = try_pick(&t);
+  (x, (y, try_sum(t)))

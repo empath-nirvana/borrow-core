@@ -1,0 +1,15 @@
+-- A handler inside a handler that forwards the outer one's operations, the twin of the kernel
+-- program `forward` (Backend/Kernel.lean, `Shapes.forward`): the body performs `y9`, `y10`, `y9`
+-- under `h10` inside `h9`. `h10` handles only `y10`, so each `y9` passes it to `h9`. Each clause
+-- resumes `k` and then answers `()`, so each operation is a resumption point.
+--
+-- Answer: (); `live 0`. A `y9` caught by `h10`, or a continuation that was not resumed, would stop
+-- the body early; a resume that was lost would leave objects live.
+
+effect A9 { ctl y9() }
+effect A10 { ctl y10() }
+
+handler h9[R]: A9, R -> 1 = { return(a) = (); y9(k) = { k(()); () } }
+handler h10[R]: A10, R -> 1 = { return(a) = (); y10(k) = { k(()); () } }
+
+main -> 1 = with h9[1] { with h10[1] { y9(); y10(); y9() } }

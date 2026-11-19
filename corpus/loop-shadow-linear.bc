@@ -1,26 +1,29 @@
--- A name bound in a `for`'s body that is the name of a linear variable outside the loop, already
--- consumed (`v = w`): the body's `w` is a variable of its own (SPEC §41, rule R1), so the loop
--- threads `v` and `k` and not the outer `w` (#493).
---
--- Answer: i32[6].
+#! dialect 82
+# A name bound in a `for`'s body that is the name of a linear variable outside the loop, already
+# consumed (`v = w`): the body's `w` is a variable of its own (SPEC §41, rule R1), so the loop
+# threads `v` and `k` and not the outer `w` (#493).
+#
+# Answer: i32[6].
 
-include slice
+import slice
 
--- The sum of the elements of `v`, each read through a fresh copy of the view.
-fn sum<'a>(v: array_imm 'a i32) -> i32 =
-  let mut v = v;
-  let (w, u) = array_copy['a, i32] v;
-  v = w;
-  let mut k = 0;
+# The sum of the elements of `v`, each read through a fresh copy of the view.
+fn sum<'a>(v: array_imm 'a i32) : i32 {
+  var v = v
+  let (w, u) = array_copy['a, i32] v
+  v = w
+  var k = 0
   for i in 0..len(u) {
-    let (w, x) = array_copy['a, i32] v;
-    v = w;
+    let (w, x) = array_copy['a, i32] v
+    v = w
     k = k + at(x, i, 0)
-  };
-  array_release['a, i32](v);
+  }
+  array_release['a, i32](v)
   k
+}
 
-main -> i32 =
-  let a = array_new[i32] (3, !{ i -> i + 1 });
-  let n = sum(&a);
+fn main() : i32 {
+  let a = array_new[i32] (3, !{ i -> i + 1 })
+  let n = sum(a)
   n
+}

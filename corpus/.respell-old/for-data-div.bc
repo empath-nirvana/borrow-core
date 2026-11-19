@@ -1,0 +1,62 @@
+-- A `for` over data whose body performs an operation that resumes (SPEC §16): here `yield`, in
+-- generators. A counted loop's step is one total computation, which cannot hold the
+-- continuation of such an operation, so each of these loops is a div loop over its source's
+-- cursor instead, a loop of the generator's body (SPEC §14, §15): a count's index, an owned
+-- array's index (each element copied out under a borrow of one turn), a view's index, and a
+-- sized iterator's data and state. `main` sums the first two with a `for`, and pulls two of each
+-- generator over a view of an array it lends (a stored generator, as `corpus/gen-borrowed.bc`).
+--
+-- Answer: (i32[30], (i32[5], (i32[30], i32[6]))): the squares 0 + 1 + 4 + 9 + 16; the owned
+-- array [1, 2] plus one each; the first two of the view [1 … 5] times ten; and the same doubled
+-- through `map`. A loop that skipped an element or ran one past the end gives another sum.
+
+include yield
+include iters
+
+fn squares(n: i32) -> 1 with Yield[i32] =
+  for i in 0..n { yield(i * i) };
+  ()
+
+fn bumped(a: array i32) -> 1 with Yield[i32] =
+  for x in a { yield(x + 1) };
+  ()
+
+fn tens<'a>(xs: array_imm 'a i32) -> 1 with Yield[i32] =
+  for x in xs { yield(*x * 10) };
+  ()
+
+fn doubled<'a>(xs: array_imm 'a i32) -> 1 with Yield[i32] =
+  for x in map(elems(xs), !{ e -> *e * 2 }) { yield(x) };
+  ()
+
+-- The first two elements of a stored generator, added, and the generator closed.
+fn first_two(it: U (pull i32 1 1)) -> i32 =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) ->
+      o <- (nu_out (force it)).1;
+      match o {
+        inl (y, it) -> c <- (nu_out (force it)).2; x + y
+      | inr d -> match d { inl u -> x | inr it -> c <- (nu_out (force it)).2; x }
+      }
+  | inr d -> match d { inl u -> 0 | inr it -> c <- (nu_out (force it)).2; 0 }
+  }
+
+fn tab(i: i32) -> i32 = i + 1
+
+main -> i32 * (i32 * (i32 * i32)) =
+  let mut a = 0;
+  for x in squares(5) { a = a + x };
+  let mut b = 0;
+  for x in bumped(array_new[i32] (2, tab)) { b = b + x };
+  let arr = alloc(array_new[i32] (5, tab));
+  let cd = borrow imm arr { 'x, v ->
+    withload['x, 'z, array i32, i32 * i32] v (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      let (xs, ys) = array_copy['z, i32] xs;
+      let g : U (pull i32 1 1) = tens(xs);
+      let h : U (pull i32 1 1) = doubled(ys);
+      let c = first_two(g);
+      let d = first_two(h);
+      boxed['z] (c, d)))
+  };
+  (a, (b, cd))

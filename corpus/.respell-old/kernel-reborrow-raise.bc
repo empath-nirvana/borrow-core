@@ -1,0 +1,24 @@
+-- SPEC §19's program 3 at the surface, the twin of the kernel program `reborrow-raise`
+-- (Backend/Kernel.lean, `reborrowRaise`): a `raise` inside a reborrow (`borrow mut m`) inside a
+-- `borrow mut c`, with `to_result` outside both. The unwind passes both borrows innermost first:
+-- the reborrow's lend ends and hands `m` back, then the outer lend ends and the cell's finaliser
+-- frees `c`. The `free(c)` after the borrow never runs.
+--
+-- Answer: inr (), the error at `to_result`, with the cell freed (`live 0`). A raise that skipped
+-- either lend's end, or the owner's finaliser, would leave the cell live; a reborrow that caught
+-- the raise would answer `inl ()`.
+
+include fail
+
+fn go() -> 1 + 1 =
+  let v: 1 + 1 = inl ();
+  let c = alloc(v);
+  with to_result[1, 1] {
+    borrow mut c { m ->
+      borrow mut m { m2 -> modify m2 { x -> (inr () : 1 + 1) }; raise(()) }
+    };
+    let _ = free(c);
+    ()
+  }
+
+main -> 1 + 1 = go()

@@ -1,31 +1,32 @@
--- A connection's state machine driven by a script of events. A counted `for` reads each event of
--- the script by its index and feeds it to `step`, which answers the next state or raises
--- `Fail[i32]` for an event the current state does not accept. The driver handles the error per
--- event: it reports the rejected event through `Audit`, an answering effect whose handler keeps
--- the last rejected event and the count, and stays in the same state. The data received while
--- established is counted through the same effect.
---
--- States: 0 closed, 1 listening, 2 established, 3 closing. Events: 10 open, 11 connect,
--- 12 data (its payload in the next event), 13 fin, 14 ack, 15 reset.
---
--- Idiom: iterate by index with a counted `for`. `audit`'s capability is a `mut`
--- borrow of its state, lent to `drive`'s body. A `for` over a generator is a loop of one turn per
--- observation, and no borrow is held across a loop's tick, so that loop could not perform
--- `rejected` or `received` (SPEC §14). A counted `for` over the script's indices is a total fold
--- with no tick, and the capability is used inside it as in any call. `corpus/state-machine.bc` is
--- the generator form, with the records kept in the loop's variables.
---
--- Exercises: a counted loop whose body handles an error per element and performs an answering
--- effect handled outside the loop, a state machine over `i32` constants, and `break` out of the
--- loop once the machine is closed for good.
---
--- Answer: `(i32[0], (i32[2], (i32[11], i32[12])))`: the machine ends closed; two events were
--- rejected (`data` while only listening, and `connect` while established), the last being
--- `connect` (11); 12 bytes were received (5 and 7). `live 0`. A driver that stopped at the first
--- rejected event ends listening; one that lost the payload counts 0 bytes; one that read past the
--- final `ack` ends listening.
+#! dialect 82
+# A connection's state machine driven by a script of events. A counted `for` reads each event of
+# the script by its index and feeds it to `step`, which answers the next state or raises
+# `Fail[i32]` for an event the current state does not accept. The driver handles the error per
+# event: it reports the rejected event through `Audit`, an answering effect whose handler keeps
+# the last rejected event and the count, and stays in the same state. The data received while
+# established is counted through the same effect.
+#
+# States: 0 closed, 1 listening, 2 established, 3 closing. Events: 10 open, 11 connect,
+# 12 data (its payload in the next event), 13 fin, 14 ack, 15 reset.
+#
+# Idiom: iterate by index with a counted `for`. `audit`'s capability is a `mut`
+# borrow of its state, lent to `drive`'s body. A `for` over a generator is a loop of one turn per
+# observation, and no borrow is held across a loop's tick, so that loop could not perform
+# `rejected` or `received` (SPEC §14). A counted `for` over the script's indices is a total fold
+# with no tick, and the capability is used inside it as in any call. `corpus/state-machine.bc` is
+# the generator form, with the records kept in the loop's variables.
+#
+# Exercises: a counted loop whose body handles an error per element and performs an answering
+# effect handled outside the loop, a state machine over `i32` constants, and `break` out of the
+# loop once the machine is closed for good.
+#
+# Answer: `(i32[0], (i32[2], (i32[11], i32[12])))`: the machine ends closed; two events were
+# rejected (`data` while only listening, and `connect` while established), the last being
+# `connect` (11); 12 bytes were received (5 and 7). `live 0`. A driver that stopped at the first
+# rejected event ends listening; one that lost the payload counts 0 bytes; one that read past the
+# final `ack` ends listening.
 
-include fail
+import fail
 
 def s_closed : i32 = 0
 def s_listen : i32 = 1
@@ -39,16 +40,16 @@ def e_fin : i32 = 13
 def e_ack : i32 = 14
 def e_reset : i32 = 15
 
-effect Audit { fn rejected(ev: i32); fn received(n: i32) }
+effect Audit { rejected(ev: i32) : 1; received(n: i32) : 1 }
 
--- The last rejected event, how many were rejected, and the bytes received.
-handler audit(mut st: i32 * (i32 * i32)): Audit = {
-  rejected(ev) = { let (l, (n, b)) = st; st = (ev, (n + 1, b)); () };
-  received(k) = { let (l, (n, b)) = st; st = (l, (n, b + k)); () }
+# The last rejected event, how many were rejected, and the bytes received.
+handler audit(mut st: i32 * (i32 * i32)): Audit {
+  rejected(ev) -> { let (l, (n, b)) = st; st = (ev, (n + 1, b)); () }
+  received(k) -> { let (l, (n, b)) = st; st = (l, (n, b + k)); () }
 }
 
--- The next state on `ev`, or the event raised when `s` does not accept it.
-fn step(s: i32, ev: i32) -> i32 with Fail[i32] =
+# The next state on `ev`, or the event raised when `s` does not accept it.
+fn step(s: i32, ev: i32) : i32 / Fail[i32] =
   if ev == e_reset { s_closed }
   else { if s == s_closed { if ev == e_open { s_listen } else { raise(ev) } }
   else { if s == s_listen { if ev == e_connect { s_up } else { raise(ev) } }
@@ -56,39 +57,42 @@ fn step(s: i32, ev: i32) -> i32 with Fail[i32] =
            if ev == e_data { s_up } else { if ev == e_fin { s_closing } else { raise(ev) } } }
   else { if ev == e_ack { s_closed } else { raise(ev) } } } } }
 
--- A session: open, a stray data event, connect, two payloads, a stray connect, fin, ack; then
--- events that must not be read.
+# A session: open, a stray data event, connect, two payloads, a stray connect, fin, ack; then
+# events that must not be read.
 def n_events : i32 = 12
 
-fn event(i: i32) -> i32 =
+fn event(i: i32) : i32 =
   if i == 0 { e_open } else { if i == 1 { e_data } else { if i == 2 { e_connect } else {
   if i == 3 { e_data } else { if i == 4 { 5 } else { if i == 5 { e_data } else {
   if i == 6 { 7 } else { if i == 7 { e_connect } else { if i == 8 { e_fin } else {
   if i == 9 { e_ack } else { if i == 10 { e_open } else { e_connect } } } } } } } } } } }
 
--- Runs the machine until it closes after having been established.
-fn drive() -> i32 =
-  let mut s = s_closed;
-  let mut payload = false;
-  let mut was_up = false;
+# Runs the machine until it closes after having been established.
+fn drive() : i32 {
+  var s = s_closed
+  var payload = false
+  var was_up = false
   for i in 0..n_events {
-    let ev = event(i);
+    let ev = event(i)
     if payload { received(ev); payload = false }
     else {
-      match with to_result { step(s, ev) } {
-        inl next ->
-          if s == s_up && ev == e_data { payload = true } else { () };
-          if next == s_up { was_up = true } else { () };
+      match handle { step(s, ev) } with to_result {
+        inl next -> {
+          if s == s_up && ev == e_data { payload = true } else { () }
+          if next == s_up { was_up = true } else { () }
           s = next
+        }
       | inr bad -> rejected(bad)
-      };
+      }
       if s == s_closed && was_up { break } else { () }
     }
-  };
+  }
   s
+}
 
-main -> i32 * (i32 * (i32 * i32)) =
-  let st = alloc((0, (0, 0)));
-  let s = with audit(&mut st) { drive() };
+fn main() : i32 * (i32 * (i32 * i32)) {
+  let st = alloc((0, (0, 0)))
+  let s = handle { drive() } with audit(&st)
   let (last, (n, bytes)) = free(st);
   (s, (n, (last, bytes)))
+}

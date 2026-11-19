@@ -1,0 +1,23 @@
+-- A code that suspends at two operations of different answer types (#485): `step` performs
+-- `attempt`, which answers an `i32`, and `note`, which answers `()`, under a handler with a state
+-- around another. Its resume code is resumed at both: the backend carries the answers as variants,
+-- one per operation, as it carries their payloads, and each resumption point takes its answer out
+-- of its operation's variant (`Backend/Clos/Capture.lean`, `Ops.wrapsAnswers`), when the layout
+-- types would otherwise not unify. Before, the flat stage failed: `layout types: 1 and i32
+-- differ`.
+--
+-- Answer: `(i32[201], i32[1])`: the attempt is the first (`calls` is 1), and `step` answers
+-- `200 + 1`.
+
+effect Api { ctl attempt() -> i32 }
+handler fake_api(mut calls: i32): Api, i32 -> i32 * i32 = {
+  return(a) = (a, calls);
+  attempt(k) = { calls = calls + 1; k(calls) }
+}
+effect Note { ctl note(x: i32) }
+handler journal: Note, i32 -> i32 = {
+  return(a) = a;
+  note(x, k) = k(())
+}
+fn step(ms: i32) -> i32 with Api, Note = let n = attempt(); note(n); 200 + n
+main -> i32 * i32 = with fake_api(0) { with journal { step(80) } }

@@ -1,0 +1,28 @@
+-- The arguments as an effect (SPEC §34). `Args` serves the program's arguments as one stream of
+-- bytes, each argument followed by `0`; `next_arg` (`lib/textio.bc`) appends the next one to a
+-- string and says whether there was one. `echo` writes each argument on a line of its own,
+-- numbered, and counts them; it is given `Args` and `Stdout` by its row. The arguments are
+-- `corpus/io-args.args`, one per line, an empty one among them; the program's own name is not
+-- one of them.
+--
+-- Answer: `1 alpha`, `2 beta gamma`, `3 ` (the empty argument) and `4 δ` (two bytes of UTF-8),
+-- then `i32[4]`. An argument split at a space, or the empty one lost, changes the lines.
+
+include textio
+
+fn echo() -> i32 =
+  let mut n = 0;
+  let mut more = true;
+  while more {
+    let (s, got) = next_arg(string_new(16));
+    if got {
+      n = n + 1;
+      print_dec(n);
+      print_byte(b' ');
+      let s = print_string(s);
+      print_byte(b'\n')
+    } else { more = false }
+  };
+  n
+
+main -> i32 = echo()

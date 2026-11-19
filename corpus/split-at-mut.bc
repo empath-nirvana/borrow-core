@@ -1,45 +1,48 @@
--- P10 of `docs/strings-slices-design.md` (§1), in direct style: two exclusive views at a run-time
--- index. The input is read into a byte buffer (an `array u8` of 64 slots, `n` of them filled),
--- lent `mut` once with no cell (`borrow mut`, SPEC §9), and the view cut at `n` and again at
--- `n / 2` (`split_at_mut`, the machine's `split`): two `mut` views at the one lifetime `'x`, used
--- in the same scope. The first half is reversed in place (`reverse`, `lib/slice.bc`) and the
--- second upper-cased by `upper`, a `for` over the view, which lends one `mut` leaf per element.
--- That `for` is over data, so it is a counted loop and `upper` is `total` (SPEC §16); so is the
--- `for` over `0..n` that writes the buffer out, each byte read through `&buf` lent to `at` for one
--- call. The buffer holds the first 64 bytes of the input; growth is stage S5's `buf`.
---
--- Answer: ` ollehWORLD!` and a newline for the input `hello world!` and a newline, and `i32[13]`,
--- the bytes written: the 13 bytes are split at 6, `hello ` is reversed and `world!` is
--- upper-cased. A split at the wrong index, or halves that overlapped, would reverse or
--- upper-case the wrong bytes. The reversal and the upper-casing allocate nothing and make no
--- dispatched call: the three allocations are the buffer and the cells of the two capabilities,
--- the same for any input.
+#! dialect 82
+# P10 of `docs/strings-slices-design.md` (§1), in direct style: two exclusive views at a run-time
+# index. The input is read into a byte buffer (an `array u8` of 64 slots, `n` of them filled),
+# lent `mut` once with no cell (`borrow mut`, SPEC §9), and the view cut at `n` and again at
+# `n / 2` (`split_at_mut`, the machine's `split`): two `mut` views at the one lifetime `'x`, used
+# in the same scope. The first half is reversed in place (`reverse`, `lib/slice.bc`) and the
+# second upper-cased by `upper`, a `for` over the view, which lends one `mut` leaf per element.
+# That `for` is over data, so it is a counted loop and `upper` is `total` (SPEC §16); so is the
+# `for` over `0..n` that writes the buffer out, each byte read through `&buf` lent to `at` for one
+# call. The buffer holds the first 64 bytes of the input; growth is stage S5's `buf`.
+#
+# Answer: ` ollehWORLD!` and a newline for the input `hello world!` and a newline, and `i32[13]`,
+# the bytes written: the 13 bytes are split at 6, `hello ` is reversed and `world!` is
+# upper-cased. A split at the wrong index, or halves that overlapped, would reverse or
+# upper-case the wrong bytes. The reversal and the upper-casing allocate nothing and make no
+# dispatched call: the three allocations are the buffer and the cells of the two capabilities,
+# the same for any input.
 
-include slice
+import slice
 
-fn dot(i: i32) -> u8 = b'.'
+fn dot(i: i32) : u8 = b'.'
 
--- The letters of a view upper-cased in place, one `mut` leaf at a time.
-total fn upper<'a>(v: array_mut 'a u8) -> 1 =
+# The letters of a view upper-cased in place, one `mut` leaf at a time.
+total fn upper(v: inout array u8) : 1 {
   for c in v { modify c { b -> if b'a' <= b && b <= b'z' { b - 32 } else { b } } }
+}
 
-main -> i32 =
-  let mut buf = array_new[u8] (64, dot);
-  let mut n = 0;
-  for b in bytes(&mut stdin) {
-    let (a, _) = array_replace[u8] (buf, n, b);
-    buf = a;
+fn main() : i32 {
+  var buf = array_new[u8] (64, dot)
+  var n = 0
+  for b in bytes(&stdin) {
+    let (a, _) = array_replace[u8] (buf, n, b)
+    buf = a
     if n < 64 { n = n + 1 }
-  };
+  }
   borrow mut buf { 'x, v ->
     match split_at_mut(v, n) {
       inl (text, rest) ->
         match split_at_mut(text, host[shr_u32] (n, 1)) {
-          inl (l, r) -> let l = reverse(l); upper(r)
+          inl (l, r) -> { let l = reverse(l); upper(r) }
         | inr t -> ()
         }
     | inr v -> ()
     }
-  };
-  for i in 0..n { let c = at(&buf, i, b'?'); putb(&mut stdout, c) };
+  }
+  for i in 0..n { let c = at(buf, i, b'?'); putb(&stdout, c) }
   n
+}

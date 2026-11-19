@@ -1,0 +1,60 @@
+-- Two instances of one effect in a row (SPEC §38, #155, #516): `Fail[Bad]` and `Fail[ParseError]`
+-- are two instances of `Fail`, and a function performs both with no `map_err` between them.
+--
+-- `parse_small` raises its own `Fail[Bad]` and calls `parse_i32`, which raises `Fail[ParseError]`
+-- (`lib/text.bc`). Its row lists both; each operation goes to the handler of its own instance,
+-- read off its argument's type (`raise((inl n : Bad))`). `digit_sum` adds the digits of a view in
+-- a counted `for` whose body raises at both instances: `digit` raises `Fail[ParseError]` at a byte
+-- that is not a digit, and the sum raises `Fail[Bad]` past 100. An abortive operation of either
+-- leaves the loop by its exit and is raised again after it (SPEC §16), each to its own handler.
+-- `parse_or` and `sum_or` nest the two handlers in the two orders: the instances, not the order of
+-- the `with`s, decide which catches what.
+--
+-- Answer: `((inl (inl i32[42]), (inl (inr (inl i32[500])), inr (inl ()))), (inl (inl i32[10]),
+-- (inr (inl i32[108]), inl (inr (inr (inl u8[97]))))))`: `42`; `500` is too big (`Bad`'s `inl`);
+-- the empty text is a parse error (`inl ()`); the digits of `1234` add to 10; those of fourteen
+-- 9s pass 100 at 108, a `Bad`; `12a4` is a parse error at `a` (97). A raise that reached the
+-- wrong handler would move a value between the inner and the outer sum.
+
+include text
+
+-- Too big (`inl` the value), or negative (`inr`).
+type Bad = i32 + 1
+
+-- A number of at most 100, not negative.
+fn parse_small<'a>(t: text 'a) -> i32 with Fail[Bad], Fail[ParseError] =
+  let n = parse_i32(t);
+  if n > 100 { raise((inl n : Bad)) } else { () };
+  if n < 0 { raise((inr () : Bad)) } else { () };
+  n
+
+-- The digit `b`, or a parse error at it.
+fn digit(b: u8) -> i32 with Fail[ParseError] =
+  if b < b'0' || b'9' < b { raise((inr (inl b) : ParseError)) } else { to_i32(b) - 48 }
+
+-- The sum of the digits of `v`, which must stay at most 100.
+fn digit_sum<'a>(v: array_imm 'a u8) -> i32 with Fail[Bad], Fail[ParseError] =
+  let mut acc = 0;
+  for p in v {
+    acc = acc + digit(*p);
+    if acc > 100 { raise((inl acc : Bad)) } else { () }
+  };
+  acc
+
+-- The parse, `Bad` handled inside `ParseError`.
+fn parse_or<'a>(t: text 'a) -> (i32 + Bad) + ParseError =
+  with to_result[ParseError, i32 + Bad] { with to_result[Bad, i32] { parse_small(t) } }
+
+-- The total, the two handlers the other way round: still each catches its own instance.
+fn sum_or<'a>(v: array_imm 'a u8) -> (i32 + ParseError) + Bad =
+  with to_result[Bad, i32 + ParseError] { with to_result[ParseError, i32] { digit_sum(v) } }
+
+main -> (((i32 + Bad) + ParseError) * (((i32 + Bad) + ParseError) * ((i32 + Bad) + ParseError))) *
+    (((i32 + ParseError) + Bad) * (((i32 + ParseError) + Bad) * ((i32 + ParseError) + Bad))) =
+  let a: (i32 + Bad) + ParseError = borrow imm "42" { v -> parse_or(v) };
+  let b: (i32 + Bad) + ParseError = borrow imm "500" { v -> parse_or(v) };
+  let c: (i32 + Bad) + ParseError = borrow imm "" { v -> parse_or(v) };
+  let d: (i32 + ParseError) + Bad = borrow imm "1234" { v -> sum_or(v) };
+  let e: (i32 + ParseError) + Bad = borrow imm "99999999999999" { v -> sum_or(v) };
+  let f: (i32 + ParseError) + Bad = borrow imm "12a4" { v -> sum_or(v) };
+  ((a, (b, c)), (d, (e, f)))

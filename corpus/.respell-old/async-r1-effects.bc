@@ -1,0 +1,64 @@
+-- SPEC §29, R1 (docs/async-capabilities.md §1 A5): tasks perform other effects while holding a
+-- borrow across a suspension. `careful` lends its cell for the whole task. Its `yield` is both
+-- a log entry and its `await`: the scheduler, `main`, records what each task yields as the
+-- interleaved log. `Fail` is abortive and handled inside the borrow block, so no abortive
+-- operation crosses the lend (R1 admits resuming operations only, OQ-1;
+-- `corpus/reject/async-r1-raise-across.bc` is the same program with the handler outside).
+--
+-- One relaxed lend, used by both tasks: `assurance: PinLaw (R1 at 19:11)`.
+--
+-- Answer: `((i32[30], i32[4294967294]), (i32[3], (i32[2], (i32[3], i32[2]))))`: the results
+-- 30 (3 times 10) and −2 (the error, negated), and the log 3, 2, 3, 2 in the order the tasks
+-- interleave; `live 0`. A handler that missed the error gives 20; a log 3, 3, 2, 2 means the
+-- first task ran past its `await`.
+include yield
+include fail
+
+fn careful(n: i32) -> i32 with Yield[i32] =
+  let c = alloc(n);
+  let v = borrow mut c { m ->
+    let a = modify m { x -> (x, x) };
+    yield(a);
+    let b = modify m { x -> (x, x) };
+    yield(b);
+    let r = with to_result[i32, i32] {
+      if b == 2 { raise(b) } else { () };
+      modify m { x -> x * 10 };
+      modify m { x -> (x, x) }
+    };
+    match r { inl x -> x | inr e -> 0 - e }
+  };
+  let _ = free(c);
+  v
+
+fn step(it: U (pull i32 i32 1)) -> (i32 * U (pull i32 i32 1)) + i32 =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> inl (x, it)
+  | inr d -> match d { inl r -> inr r | inr it -> inl (0, it) }
+  }
+
+fn stop(it: U (pull i32 i32 1)) -> 1 = (nu_out (force it)).2
+
+main -> (i32 * i32) * (i32 * (i32 * (i32 * i32))) =
+  let a : U (pull i32 i32 1) = careful(3);
+  let b : U (pull i32 i32 1) = careful(2);
+  match step(a) {
+    inl (l1, a) -> match step(b) {
+      inl (l2, b) -> match step(a) {
+        inl (l3, a) -> match step(b) {
+          inl (l4, b) -> match step(a) {
+            inl (x, a) -> stop(a); stop(b); ((0, 0), (0, (0, (0, 0))))
+          | inr ra -> match step(b) {
+              inl (x, b) -> stop(b); ((ra, 0), (l1, (l2, (l3, l4))))
+            | inr rb -> ((ra, rb), (l1, (l2, (l3, l4))))
+            }
+          }
+        | inr rb -> stop(a); ((0, rb), (0, (0, (0, 0))))
+        }
+      | inr ra -> stop(b); ((ra, 0), (0, (0, (0, 0))))
+      }
+    | inr rb -> stop(a); ((0, rb), (0, (0, (0, 0))))
+    }
+  | inr ra -> stop(b); ((ra, 0), (0, (0, (0, 0))))
+  }

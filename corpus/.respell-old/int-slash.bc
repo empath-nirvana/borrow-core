@@ -1,0 +1,7 @@
+-- `/` at an integer type (SPEC §39): integer division, which truncates toward zero. Its divisor is
+-- the literal 2, at which it cannot fail, so it performs nothing and is the bare instruction. (It
+-- was refused while `/` was the float division only, SPEC §37.)
+--
+-- Answer: `i32[3]`.
+main -> i32 =
+  7 / 2

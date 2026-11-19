@@ -1,0 +1,10 @@
+-- An arm that assigns a `let mut` variable and then reads it: the arm sees its own write, and so
+-- does what follows the `let` the `if` heads (#581).
+--
+-- Answer: i32[56]: the arm sets `x` to 5 and answers `x + 1`, 6. Without the join, the arm sees
+-- the write and what follows does not: i32[16].
+
+main -> i32 =
+  let mut x = 1;
+  let a = if x == 1 { x = 5; x + 1 } else { 3 };
+  x * 10 + a

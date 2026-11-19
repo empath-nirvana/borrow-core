@@ -1,0 +1,8 @@
+-- Hygiene (#481): a control handler's parameter does not capture the body's variable of the same
+-- name. `default`'s parameter is named `d` (lib/fail.bc); the site binds it around the body, so
+-- the elaboration gives it a fresh name and the body's `d` is the `let d = 1` written here.
+--
+-- Answer: i32[1]: the body answers its own `d`; nothing is raised.
+include fail
+main -> i32 =
+  let d = 1; with default[i32, i32](0) { d }

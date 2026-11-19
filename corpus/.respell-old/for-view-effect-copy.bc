@@ -1,0 +1,20 @@
+-- A counted `for` over a view parameter, in a function with a lifetime parameter whose body
+-- performs an operation of `Stdout` (#491). The function's copy for the platform's handler takes
+-- the capability's cell as a parameter before the view (`show__wasi_stdout_cell`); the view, a
+-- lone parameter, is the copy's own binder, typed before the elaboration decides whether the body
+-- loops, so the `for` is a counted loop over it.
+--
+-- Answer: `ab`, then i32[2].
+
+include textio
+
+-- The bytes of `l` written one at a time, and how many.
+fn show<'t>(l: text 't) -> i32 =
+  let mut k = 0;
+  for p in l { print_byte(*p); k = k + 1 };
+  k
+
+main -> i32 =
+  let s = string_of_lit("ab");
+  let n = borrow imm s { 't, t -> show(t) };
+  n

@@ -1,0 +1,39 @@
+-- `!` closures that capture flat values directly (SPEC §10, #886). Promotion (`!thunk`) asks
+-- every live slot of its context to be flat (scalars, `!` values, and tuples and sums of them), not
+-- `!`, so a `!{…}` closure captures an `i32`, a `u8`, a `bool`, an `f64` and a pair of scalars as
+-- they are. Each closure is copied and called more than once: `twice` calls its argument on its own
+-- result, `apply3` three times and adds the answers; each copy copies its captures as words.
+-- `digit` is J1's case: an error raised at the byte offset `i` is mapped with
+-- `map_err(!{ e -> (9, i) })`, which captures `i : i32`. Recursive data is not flat: a `!` closure
+-- over a list is refused (`corpus/reject/bang-closure-captures-list.bc`), and an ordinary closure
+-- captures it (`corpus/closure-captures-list.bc`).
+--
+-- Answer: i32[1150], and `live 0`: `add(10)` is 11; `byte(b'a')` 194 (97 added twice);
+-- `pick(true) + pick(false)` 0 (6 and -6); `scale(1.0) + scale(2.0)` 13 (4 and 9); `pair((5, 2))`
+-- 21 (7 three times); `digit(3, 7)` answers 7 and `digit(4, 12)` raises `(9, 4)`, read as 904. A
+-- capture read at the wrong slot or `map_err` not reading the offset changes the sum.
+
+include fail
+
+fn apply(g: !(i32 => i32), x: i32) -> i32 = g(x)
+fn twice(g: !(i32 => i32), x: i32) -> i32 = g(g(x))
+fn apply3(g: !(i32 => i32), x: i32) -> i32 = g(x) + g(x) + g(x)
+
+fn add(i: i32) -> i32 = apply(!{ e -> e + i }, 1)
+fn byte(b: u8) -> i32 = twice(!{ e -> e + to_i32(b) }, 0)
+fn pick(c: bool) -> i32 = apply3(!{ e -> if c { e } else { 0 - e } }, 2)
+fn scale(x: f64) -> i32 = twice(!{ e -> if x < 1.5 { e * 2 } else { e * 3 } }, 1)
+fn pair(p: i32 * u8) -> i32 = apply3(!{ e -> let (a, b) = p; e + a + to_i32(b) }, 0)
+
+fn digit(i: i32, d: i32) -> i32 with Fail[i32 * i32] =
+  with map_err[i32, i32 * i32, i32](!{ e -> (9, i) }) { if d < 10 { () } else { raise(d) }; d }
+
+main -> i32 =
+  let a = add(10);
+  let b = byte(b'a');
+  let c = pick(true) + pick(false);
+  let s = scale(1.0) + scale(2.0);
+  let p = pair((5, u8[2]));
+  let r = match with to_result { digit(3, 7) } { inl n -> n | inr e -> let (k, i) = e; k * 100 + i };
+  let q = match with to_result { digit(4, 12) } { inl n -> n | inr e -> let (k, i) = e; k * 100 + i };
+  a + b + c + s + p + r + q

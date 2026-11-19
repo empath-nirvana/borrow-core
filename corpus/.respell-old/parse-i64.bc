@@ -1,0 +1,49 @@
+-- `parse_i64` and `push_i64` (SPEC §17, `lib/text.bc`) at their edges. Each literal is lent as
+-- text and parsed; a value is appended to a string by `push_i64` and printed, an error printed as
+-- `empty` (no digits), `bad` and the byte, or `overflow` (a value past `i64`, raised, not
+-- wrapped). The literals: `i64`'s maximum and minimum, each one past it, zero, `-0`, negative
+-- values, leading zeros, an id past 2^53, a lone `-`, a doubled `-` and a `+`.
+--
+-- Answer: one line per literal, `9223372036854775807`, `-9223372036854775808`, `overflow`,
+-- `overflow`, `overflow`, `0`, `0`, `-1`, `-42`, `12`, `505874924095815681`,
+-- `-505874924095815681`, `empty`, `bad -`, `bad +`; then `i32[9]`, the count parsed, and
+-- `live 0`. A wrap on overflow prints a number where `overflow` is; `-2^63` read through its
+-- positive magnitude overflows; a digit dropped or a sign lost changes a line.
+
+include textio
+
+-- The literal `l` parsed and printed; 1 when it parsed, 0 when it raised.
+fn show(l: lit) -> i32 =
+  let r = borrow imm l { 'a, t -> with to_result { parse_i64(t) } };
+  match r {
+    inl n ->
+      let mut s = string_new(24);
+      push_i64(&mut s, n);
+      push_byte(&mut s, b'\n');
+      print_string(s);
+      1
+  | inr e -> match e {
+      inl u -> print_lit("empty\n"); 0
+    | inr (inl b) -> print_lit("bad "); print_byte(b); print_byte(b'\n'); 0
+    | inr (inr u) -> print_lit("overflow\n"); 0
+    }
+  }
+
+main -> i32 =
+  let mut k = 0;
+  k = k + show("9223372036854775807");
+  k = k + show("-9223372036854775808");
+  k = k + show("9223372036854775808");
+  k = k + show("-9223372036854775809");
+  k = k + show("100000000000000000000");
+  k = k + show("0");
+  k = k + show("-0");
+  k = k + show("-1");
+  k = k + show("-42");
+  k = k + show("00012");
+  k = k + show("505874924095815681");
+  k = k + show("-505874924095815681");
+  k = k + show("-");
+  k = k + show("--1");
+  k = k + show("+1");
+  k

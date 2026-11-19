@@ -1,0 +1,47 @@
+-- A tree whose nodes hold a `Set[i32]` of tags beside a `Map[i32, Tree]` of children (SPEC §42,
+-- §61). `Set[K]` is the abbreviation `Map[K, 1]`, itself an abbreviation: it does not mention
+-- `Tree` and is left closed, while `Map[i32, Tree]` is opened at its arguments, so `Tree` occurs
+-- under the array of the map's values and `Node` is not a block. `Tree` elaborates to a `mu` in
+-- the fold class `P`; its consume frees each child left in a map, the map's arrays and the set's.
+--
+-- Answer: i32[453]. `walk` reads the children 0 and 1 of each node: 4 tags (2 at the root, 1 at
+-- each of its children 0 and 1) and the leaves 1 + 2 + 20 + 30 under them; 4 * 100 + 53. `live 0`:
+-- each node's child 2, never read (one a whole subtree), and the sets are consumed with their
+-- node. An implementation that does not open `Map` refuses the declaration; one that reads `Node`
+-- as a block refuses `Node(s, m)`, asking for `box`; one whose consume skips a map's values leaves
+-- `live` above 0.
+include rec
+include map
+
+data Tree = Leaf(i32) | Node(Set[i32], Map[i32, Tree])
+
+-- (the number of tags, the sum of the leaves), through the children 0 and 1 of each node.
+fn walk(t: Tree) -> i32 * i32 = match t {
+    Leaf(n) -> (0, n)
+  | Node(s, m) ->
+      let (s, k) = set_len(s);
+      let (m, c0) = map_remove(m, 0);
+      let (m, c1) = map_remove(m, 1);
+      let (k0, v0) = match c0 { inl c -> walk(c) | inr u -> (0, 0) };
+      let (k1, v1) = match c1 { inl c -> walk(c) | inr u -> (0, 0) };
+      (k + k0 + k1, v0 + v1)
+  }
+
+fn mk(tags: i32, a: Tree, b: Tree, c: Tree) -> Tree =
+  let s = set_new[i32](4);
+  let (s, _) = set_insert(s, 7);
+  let (s, _) = if tags > 1 { set_insert(s, 9) } else { (s, false) };
+  let m = map_new[i32, Tree](4);
+  let (m, _) = map_insert(m, 0, a);
+  let (m, _) = map_insert(m, 1, b);
+  let (m, _) = map_insert(m, 2, c);
+  Node(s, m)
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let t = mk(2,
+    mk(1, Leaf(1), Leaf(2), Leaf(1000)),
+    mk(1, Leaf(20), Leaf(30), Leaf(1000)),
+    mk(1, Leaf(5000), Leaf(5000), Leaf(5000)));
+  let (k, v) = walk(t);
+  k * 100 + v
+}

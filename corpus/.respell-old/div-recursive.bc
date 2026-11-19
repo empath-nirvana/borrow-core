@@ -1,0 +1,17 @@
+-- A division in a recursive function (SPEC §20, §39): the recursion's group is elaborated with its
+-- row, `Fail[DivError]` beside `Exhausted`, and a zero divisor raises out of the recursion, which
+-- unwinds to the handler around it. `gcd` never divides by zero (its divisor is tested first);
+-- `count_down` reaches `a % 0`.
+--
+-- Answer: `(i32[12], inr (inl ()))`: the greatest common divisor of 84 and 36, and the zero
+-- divisor's error as a sum.
+
+include rec
+
+fn gcd(a: i32, b: i32) -> i32 = if b == 0 { a } else { gcd(b, a % b) }
+
+fn count_down(a: i32, b: i32) -> i32 = if a == 0 { a } else { count_down(a - 1, a % b) }
+
+main -> i32 * (i32 + DivError) =
+  (with on_exhausted(!{ u -> 0 }) { gcd(84, 36) },
+   with to_result { with on_exhausted(!{ u -> 0 }) { count_down(3, 0) } })

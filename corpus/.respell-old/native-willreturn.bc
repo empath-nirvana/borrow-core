@@ -1,0 +1,32 @@
+-- The native `willreturn` class (SPEC §50): the functions LLVM is told return to their caller.
+-- Each of `twice` and `through` is passed to `array_new` as a closure, so each is a function of
+-- its own. `twice` is at the empty row, allocates nothing and does no I/O, so it is in the class.
+-- `through` allocates a cell, and an allocation aborts when `malloc` fails, so it is not. The
+-- library's `write_lit` closures write through the output capability, and a write may block, so
+-- they are not. `scripts/native-facts.sh` checks the class against the emitted IR, and
+-- `corpus/trusted/native-willreturn.txt` lists it.
+--
+-- Answer: `hi` and a newline, then i32[21]: 0 + 2 + 4 from `twice` and 1 + 2 + 3 + 9 from
+-- `through`.
+
+include textio
+include slice
+
+fn twice(i: i32) -> i32 = i + i
+
+fn through(i: i32) -> i32 =
+  let r = alloc(i);
+  free(r) + 1
+
+fn sum_of<'a>(v: array_imm 'a i32) -> i32 =
+  let mut s = 0;
+  for p in v { s = s + *p };
+  s
+
+main -> i32 =
+  let _ = write_lit(&mut stdout, "hi\n");
+  let a = array_new[i32](3, twice);
+  let b = array_new[i32](3, through);
+  let x = borrow imm a { v -> sum_of(v) };
+  let y = borrow imm b { v -> sum_of(v) };
+  x + y + 9

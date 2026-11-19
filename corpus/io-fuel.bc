@@ -1,18 +1,19 @@
--- Fuel: div code run from total code (SPEC §14). `div_fuel` (the divergence library) observes a
--- loop at most `n` times and closes it if it has not finished, so a function that calls a div
--- function through it is total, and can say so with `total`.
---
--- `collatz` counts the steps from `n` to 1; whether that loop always finishes is an open
--- problem, and its type says it may not. `count_lines` loops over its input. Each has a total
--- wrapper with a bound. A loop closed early hands its capability back, so `main` reads on from
--- where the first, cut-off count stopped.
---
--- Answer: `((inl i32[111], inr ()), (inr (), inl i32[2]))`. From 27 the loop takes 111 steps,
--- more than 50; the first count of the input `ab\ncd\nef\n` is cut off after 3 observations
--- (three bytes read), and the second counts the two newlines left. `live 0`: the cut-off loops were
--- closed, and their state freed.
+#! dialect 82
+# Fuel: div code run from total code (SPEC §14). `div_fuel` (the divergence library) observes a
+# loop at most `n` times and closes it if it has not finished, so a function that calls a div
+# function through it is total, and can say so with `total`.
+#
+# `collatz` counts the steps from `n` to 1; whether that loop always finishes is an open
+# problem, and its type says it may not. `count_lines` loops over its input. Each has a total
+# wrapper with a bound. A loop closed early hands its capability back, so `main` reads on from
+# where the first, cut-off count stopped.
+#
+# Answer: `((inl i32[111], inr ()), (inr (), inl i32[2]))`. From 27 the loop takes 111 steps,
+# more than 50; the first count of the input `ab\ncd\nef\n` is cut off after 3 observations
+# (three bytes read), and the second counts the two newlines left. `live 0`: the cut-off loops were
+# closed, and their state freed.
 
--- One step from `(n, k)`: `k` steps so far.
+# One step from `(n, k)`: `k` steps so far.
 def collatz_step : !U (i32 * i32 -o F (i32 + (i32 * i32)) & F 1) =
   !thunkv fun (s : i32 * i32) ->
     < let (n, k) = s;
@@ -35,7 +36,7 @@ def collatz : i32 => U (loop i32 1) =
     s0 : i32 * i32 <- return (n, i32[0]);
     return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
 
--- The steps from `n`, if at most `fuel` observations reach 1.
+# The steps from `n`, if at most `fuel` observations reach 1.
 total def collatz_within : i32 * i32 => i32 + 1 =
   thunkv fun (p : i32 * i32) ->
     let (n, fuel) = p;
@@ -53,7 +54,7 @@ def count_lines : In => In * i32 =
     };
     return (c, n)
 
--- The lines left, if at most `fuel` observations count them; the capability comes back either way.
+# The lines left, if at most `fuel` observations count them; the capability comes back either way.
 total def lines_within : In * i32 => In * (i32 + 1) =
   thunkv fun (p : In * i32) ->
     let (c, fuel) = p;

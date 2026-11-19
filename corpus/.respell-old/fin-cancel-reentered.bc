@@ -1,0 +1,19 @@
+-- SPEC §27 at the surface, the twin of the kernel program `cancel-reentered` (`bcc kernel interp
+-- cancel-reentered`, Core's `progReT`; its core text is `corpus/core-fin-cancel-reentered.bc`): the
+-- cancelled region holds a second handler of `Ex3`, `h3`, around the `op1` it suspends at; the
+-- cleanup's `ex3` is outside it and resolves to `catch3`. The kernel program re-enters one name
+-- (`3`); the surface gives every site a name of its own, so `h3`'s is not `catch3`'s, and the raise
+-- goes to the live outer handler by its own name. The error is kept, re-raised at the canceller,
+-- and caught by `catch3`.
+--
+-- Answer: inr (), and `live 0`. A wrong implementation that delivers the error to the dead inner
+-- instance, or drops it, answers `inl ()`.
+
+effect Ex3 { ctl ex3() -> never }
+effect Op1 { ctl op1() }
+
+handler catch3: Ex3, 1 -> 1 + 1 = { return(v) = inl v; ex3() = inr () }
+handler canc: Op1, 1 -> 1 = { return(v) = v; op1(k) = () }
+handler h3: Ex3, 1 -> 1 = { return(v) = v; ex3() = () }
+
+main -> 1 + 1 = with catch3 { with canc { x <- (with h3 { op1() }) unwind (ex3()); x } }

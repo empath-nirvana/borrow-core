@@ -1,19 +1,21 @@
--- A field read through a borrow of a declared value (SPEC §42, *Declared types with no derived
--- consume*): `peek` reads `t.id` through `imm 'a Txn` (E5, `withload` around the projection of its
--- view), and the view of the marked field, `Imm̲ 'b (i32 ⊗ Tok) = i32 ⊗ Unk`, is not used. The
--- checker consumes that part by its consume (`Consumable.unk`, `consumeSlot_derives`) at the head of
--- its scope, since a slot of `Unk` cannot stay live under `boxed[@a]`, whose context must outlive
--- `@a` (`[]I`). The borrow ends, the transaction is not consumed, and `commit` consumes it after.
---
--- Answer: i32[712], the 7 read through the borrow and the commit 705; `live 0`.
+#! dialect 82
+# A field read through a borrow of a declared value (SPEC §42, *Declared types with no derived
+# consume*): `peek` reads `t.id` through `imm 'a Txn` (E5, `withload` around the projection of its
+# view), and the view of the marked field, `Imm̲ 'b (i32 ⊗ Tok) = i32 ⊗ Unk`, is not used. The
+# checker consumes that part by its consume (`Consumable.unk`, `consumeSlot_derives`) at the head of
+# its scope, since a slot of `Unk` cannot stay live under `boxed[@a]`, whose context must outlive
+# `@a` (`[]I`). The borrow ends, the transaction is not consumed, and `commit` consumes it after.
+#
+# Answer: i32[712], the 7 read through the borrow and the commit 705; `live 0`.
 
 data Txn = { id: i32, must_close(commit) log: i32 }
 
-fn commit(t: Txn) -> i32 = match t { Txn { id, log } -> id * 100 + log }
+fn commit(t: sink Txn) : i32 = match t { Txn { id, log } -> id * 100 + log }
 
-fn peek<'a>(t: imm 'a Txn) -> i32 = t.id
+fn peek(t: Txn) : i32 = t.id
 
-main -> i32 =
-  let mut t = Txn { id: 7, log: 5 };
-  let k = peek(&t);
+fn main() : i32 {
+  var t = Txn { id: 7, log: 5 }
+  let k = peek(t)
   k + commit(t)
+}

@@ -1,0 +1,13 @@
+-- A `finally` cleanup that raises during an unwind (SPEC §27, §42; the finally law, §19): `work`
+-- raises `1`, which `default[u8, …]` does not handle, so the abort unwinds through the `with` and its
+-- cleanup raises `2`. The cleanup's raise supersedes the pending one; `to_result` catches `2`.
+--
+-- Answer: inr i32[2], and `live 0`. A wrong implementation that keeps the pending error answers
+-- `inr i32[1]`.
+
+include fail
+
+fn work() -> i32 with Fail[i32] = raise((1 : i32))
+
+main -> i32 + i32 =
+  with to_result[i32, i32] { with default[u8, i32](0) { work() } finally { let r = raise((2 : i32)); () } }

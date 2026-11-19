@@ -1,0 +1,57 @@
+-- A recursion that calls itself at a shorter lifetime than its own (SPEC §31, *Generic recursive
+-- groups*). `champion` finds the largest element of a borrowed array by rounds of a tournament:
+-- each round's winners are a new array, which the round lends to the next call
+-- (`borrow imm w { 'x, u -> champion(u) }`), at the lend's `'x`, shorter than the caller's `'a`. A
+-- group's lifetime parameters are quantified in each member's field of its fixed-point record, so
+-- each call of itself instantiates `'a` afresh, here at `'x`; at the group's own `'a` the call
+-- would be a type error at its argument. `last` calls itself at its own `'a` and answers a view at
+-- it: the budget's abort in its call of itself is typed at the call's answer.
+--
+-- Answer: `(i32[94], (i32[4], i32[67]))`: the largest of `0, 37, 74, 10, 47, 84, 20, 57, 94, 30, 67`
+-- (each `37 · i mod 101`), after four rounds (11, 6, 3, 2 entrants), and the last of them. Every
+-- round's array is freed (`live 0`).
+
+include rec
+include buf
+include slice
+
+-- One round: the larger of each pair, the last entrant of an odd round passing through.
+fn round<'a>(v: array_imm 'a i32) -> array i32 =
+  let n = len(v);
+  let m = (n + 1) / 2;
+  let mut b = buf_new[i32](m);
+  for i in 0..m {
+    let x = at(v, 2 * i, 0);
+    let y = at(v, 2 * i + 1, x);
+    let z = if x < y { y } else { x };
+    let (b2, u) = push(b, z);
+    b = b2
+  };
+  let (a, k) = b;
+  a
+
+-- The winner and the number of rounds played.
+fn champion<'a>(v: array_imm 'a i32) -> i32 * i32 =
+  if len(v) <= 1 { (at(v, 0, 0), 0) } else {
+    let mut w = round(v);
+    let r = borrow imm w { 'x, u -> champion(u) };
+    let (c, d) = r;
+    (c, d + 1)
+  }
+
+-- A view of the last element, none for an empty array.
+fn last<'a>(v: array_imm 'a i32) -> imm 'a i32 + 1 =
+  match split_first(v) {
+    inl (h, t) -> if len(t) == 0 { inl h } else { last(t) }
+  | inr u -> inr ()
+  }
+
+fn data(i: i32) -> i32 = (i * 37) % 101
+
+main -> i32 * (i32 * i32) = with on_exhausted(!{ u -> (0 - 1, (0 - 1, 0 - 1)) }) {
+  let mut a = array_new[i32] (11, data);
+  let w = borrow imm a { 'x, v -> champion(v) };
+  let l = borrow imm a { 'x, v -> match last(v) { inl g -> *g | inr u -> 0 - 2 } };
+  let (c, d) = w;
+  (c, (d, l))
+}

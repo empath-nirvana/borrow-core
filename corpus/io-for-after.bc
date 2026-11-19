@@ -1,22 +1,24 @@
--- A `for` over the bytes of the standard input, with code after it (SPEC §14, §16). The source is
--- an iterator made from `stdin`, which may not end: the `for` is a drain, div. After the loop,
--- `stdin` is handed back and the count is written; the body writes each line's length as it goes.
---
--- Answer: on the input `stressed`, `level`, `live on`: the lengths `8 5 7`, then `3`, and the
--- result i32[3].
+#! dialect 82
+# A `for` over the bytes of the standard input, with code after it (SPEC §14, §16). The source is
+# an iterator made from `stdin`, which may not end: the `for` is a drain, div. After the loop,
+# `stdin` is handed back and the count is written; the body writes each line's length as it goes.
+#
+# Answer: on the input `stressed`, `level`, `live on`: the lengths `8 5 7`, then `3`, and the
+# result i32[3].
 
-main -> i32 =
-  let mut n = 0;
-  let mut k = 0;
-  for b in bytes(&mut stdin) {
+fn main() : i32 {
+  var n = 0
+  var k = 0
+  for b in bytes(&stdin) {
     if b == 10 {
-      n = n + 1;
-      put_dec(&mut stdout, k);
-      putb(&mut stdout, 32);
+      n = n + 1
+      put_dec(&stdout, k)
+      putb(&stdout, 32)
       k = 0
     } else { k = k + 1 }
-  };
-  putb(&mut stdout, 10);
-  put_dec(&mut stdout, n);
-  putb(&mut stdout, 10);
+  }
+  putb(&stdout, 10)
+  put_dec(&stdout, n)
+  putb(&stdout, 10)
   n
+}

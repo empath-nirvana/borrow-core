@@ -1,0 +1,10 @@
+-- Blocks inside blocks that assign an enclosing `let mut` (#586): each block's writes are what its
+-- body writes, its inner blocks' included, and each copy passes them in and out (SPEC §41,
+-- rule R3).
+--
+-- Answer: (i32[13], i32[3]).
+fn ap(f: !(i32 => i32)) -> i32 = f(1)
+main -> i32 * i32 =
+  let mut x = 1;
+  let r = ap(!{ u -> let s = ap(!{ v -> x = x + 10; v + 1 }); x = x + u; s + 1 });
+  (x + 1, r)

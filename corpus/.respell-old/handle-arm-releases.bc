@@ -1,0 +1,22 @@
+-- SPEC §12 *Handled bodies* (#848): inside a `with`, a `case` whose `inl` arm raises and whose `inr`
+-- arm returns `s`, an owned string bound outside the `with`. The handled body is owed `s`, so the
+-- raising arm consumes it before its abort and the arms merge.
+--
+-- `g(inr (), "123")` answers the string (length 3); `g(inl 7, "45")` raises 7, and its string is
+-- freed on that path. Answer: `i32[293]` (3 · 100 − 7) and `live 0`: no string is left behind by
+-- the raising arm.
+
+include text
+include fail
+
+fn g(o: i32 + 1, s: string) -> string + i32 =
+  with to_result[i32, string] { let t: string = match o { inl x -> raise(x) | inr u -> s }; t }
+
+fn size(r: string + i32) -> i32 = match r { inl s -> let (s, n) = len_of[u8](s); n | inr e -> 0 - e }
+
+main -> i32 =
+  let (s1, _) = push_dec(string_new(4), 123);
+  let (s2, _) = push_dec(string_new(4), 45);
+  let a = size(g(inr (), s1));
+  let b = size(g(inl 7, s2));
+  a * 100 + b

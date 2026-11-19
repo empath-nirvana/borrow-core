@@ -1,0 +1,21 @@
+-- E5, nested handlers, the twin of the kernel program `nested-log-outside` (Backend/Kernel.lean,
+-- `nestedLogOutside`; SPEC §19 Programs): a state-passing handler of a must-resume `log`, whose
+-- clause sets its state and resumes, outside `to_result`. The body logs `true` and raises; the
+-- raise is caught inside `with_log`, so its state is kept beside the error.
+--
+-- Answer: (inr (), inr ()): the error, and the state `true`; `live 0`. A raise that escaped
+-- `with_log` would lose the pair (`kernel-nested-fail-outside` is the other order); a lost `log`
+-- would leave the state `false` (`inl ()`).
+
+include fail
+
+effect Log { must_resume ctl log(b: bool) }
+
+handler with_log[A](mut s: bool): Log, A -> A * bool = {
+  return(x) = (x, s);
+  log(b, k) = { s = b; k(()) }
+}
+
+fn body() -> 1 with Log, Fail[1] = log(true); raise(())
+
+main -> (1 + 1) * bool = with with_log[1 + 1](false) { with to_result[1, 1] { body() } }
