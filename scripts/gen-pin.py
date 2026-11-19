@@ -246,8 +246,8 @@ NAME_TY = {"A": "VTy", "B": "VTy", "R": "VTy", "S": "VTy", "T": "VTy", "C": "CTy
            "a": "Lifetime.Life", "b": "Lifetime.Life", "x": "LifeVar", "y": "LifeVar",
            "i": "Nat", "j": "Jdg"}
 EXPR_NAMES = {"e", "e₁", "e₂", "M", "N", "V", "H", "f", "d", "M₁", "M₂", "K", "s0"}
-DATA_TY = {"LendUKind", "Option Lifetime.Life", "VTy", "CTy", "Row", "LifeVar", "Lifetime.Life", "IntLit", "HostOp", "FShape", "Expr",
-           "Jdg", "OpSig", "UInt32", "Nat", "List (Qual × VTy × VTy)", "Nat → CTy", "Val"}
+DATA_TY = {"ConstKind", "LendUKind", "Option Lifetime.Life", "ConvKind", "VTy", "CTy", "Row", "LifeVar", "Lifetime.Life", "IntLit", "HostOp", "FShape", "Expr",
+           "Jdg", "OpSig", "UInt32", "Nat", "List (Qual × VTy × VTy)", "Nat → CTy", "Val", "Bool"}
 TOKEN = r"[^\s()\[\]{}⟨⟩,.:]+"
 # erasures that are a `λ` whatever the children's (`withPair M N = λs. case s {…}`)
 LAM_HEADS = ("(withPair ",)
@@ -748,11 +748,21 @@ MONO = [
     (r"^Row\.AnsOutlives Δ ", "(LeΔ.ansOutlives he.1 {a})"),
     (r"^∀ d ∈ d\?, CtxOutlives Δ ", "(fun d h => LeΔ.ctxOutlives he.1 ({a} d h))"),
     (r"^∀ d ∈ d\?, Row\.AnsOutlives Δ ", "(fun d h => LeΔ.ansOutlives he.1 ({a} d h))"),
+    (r"^JConv Δ ", "(LeΔ.jconv he.1 {a})"),
 ]
 
 
 def mentions_delta(ty):
     return re.search(r"(?<![\w'])Δ(?![\w'])", ty) is not None
+
+
+# A rule whose dom-ness is its kind's: `TExpr.domFree`'s case, and `weakenΔ`'s arm, which carries a
+# domain-free kind's side condition and type to the larger context.
+KIND_DOM = {"constK": ("k.domFree", """  | constK a0 a1 a2 a3 =>
+      intro Δ' _ hd
+      have hk : ConstKind.domFree a0 = true := by simpa [TExpr.domFree] using hd
+      rw [ConstKind.ty_domFree hk _ Δ'.meetOfDom]
+      exact TDerivesX.constK a0 a1 (ConstKind.OK_domFree hk a2) a3""")}
 
 
 def is_dom(r):
@@ -777,7 +787,7 @@ def life_cases(r, tag):
     kids_b = [f"{k}.lifeBinders" for k in r.kids]
     bcase = f"  | .{r.name} {pat} => " + (" ++ ".join(binders + kids_b) if binders or kids_b else "[]")
     dom = is_dom(r)
-    dcase = f"  | .{r.name} {pat} => " + ("false" if dom else
+    dcase = f"  | .{r.name} {pat} => " + (KIND_DOM[r.name][0] if r.name in KIND_DOM else "false" if dom else
         (" && ".join(f"{k}.domFree" for k in r.kids) if r.kids else "true"))
     args = ["ii", "jj"] + [n for n, _ in r.fields] + \
         [f"({k}.reAb {kidΔ[k].replace('Δ', 'Δr')})" for k in r.kids]
@@ -788,6 +798,8 @@ def life_cases(r, tag):
 def weaken_life_case(r):
     jn = r.judg.split()[0]
     tj = "T" + jn[1:]
+    if r.name in KIND_DOM:
+        return KIND_DOM[r.name][1]
     if is_dom(r):
         return f"  | {r.name} => intro _ _ hd; simp [TExpr.domFree] at hd"
     pat, args, ihs = [], [], []
@@ -1001,7 +1013,7 @@ if [r.name for r in xrules if not r.pin] != [n for n, _ in ctors]:
 # `Core/Judgment.lean` (a rule's former name, now a kind of a folded rule). Each instance gets them
 # under its own name, as it gets the rules.
 DERIVED_RULES = [XRule(m.group(1), m.group(2)) for m in re.finditer(
-    r"^theorem CDerivesX\.(\w+) \{I : JIdx\} (.*?) :=\n", judg_src, re.S | re.M)]
+    r"^theorem CDerivesX\.(\w+) \{I : JIdx\} (.*?) :=(?: by)?\n", judg_src, re.S | re.M)]
 jel = (TMPL / "JudgmentElim.tmpl.lean").read_text()
 jel = jel.replace("--@ALIASES@", "\n\n".join(alias(r, inst) for inst in INSTANCES
                                                 for r in xrules + DERIVED_RULES

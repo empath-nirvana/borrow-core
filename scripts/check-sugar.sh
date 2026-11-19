@@ -3,7 +3,8 @@
 # corpus/sugar/<name>.core.bc written without the sugar: both must check, and the checked `main`
 # of each must erase to the same term (`bcc erase`). A core form must also be its own
 # elaboration: `bcc desugar` leaves it as it is. A sugared file whose first line is
-# `-- core: <other>.core.bc` is compared with that core form instead.
+# `-- core: <other>.core.bc` is compared with that core form instead (in the new spelling, SPEC
+# §82, the line after the pragma, `# core: …`).
 #
 # A lowering. Every corpus/sugar/<name>.lowered.bc whose first line is `-- lowers: <program>`
 # writes that corpus program's declarations out by their elaboration rules (SPEC §42), in the
@@ -14,13 +15,15 @@ cd "$(dirname "$0")/.."
 export GATE_CACHE_BUILT=1  # the binaries the result cache may key on are this build's
 . scripts/par.sh
 export bcc=.lake/build/bin/bcc
+# A file's marker line: its first, or its second after the pragma of the new spelling (SPEC §82).
+marker() { awk 'NR == 1 && /^#! / { next } { print; exit }' "$1"; }
 # A sugared file and its core form. Under `set -e`, as the script's own loop ran: a command that
 # fails ends the pair as failed.
 pair() {
   set -e
   local f=$1 tmp=$PAR_TMP core named
   core=${f%.bc}.core.bc
-  named=$(sed -n '1s/^-- core: //p' "$f")
+  named=$(marker "$f" | sed -nE 's/^(--|#) core: //p')
   [ -n "$named" ] && core="$(dirname "$f")/$named"
   if [ ! -f "$core" ]; then echo "$f: no $core"; return 1; fi
   if ! "$bcc" check "$f" > /dev/null 2> "$tmp/err" || ! "$bcc" check "$core" > /dev/null 2>> "$tmp/err"; then
@@ -36,7 +39,7 @@ pair() {
 lowered() {
   set -e
   local f=$1 tmp=$PAR_TMP prog
-  prog=$(sed -n '1s/^-- lowers: //p' "$f")
+  prog=$(marker "$f" | sed -nE 's/^(--|#) lowers: //p')
   if [ -z "$prog" ] || [ ! -f "$prog" ]; then echo "$f: no \`-- lowers: <program>\` line"; return 1; fi
   if ! "$bcc" check "$prog" > /dev/null 2> "$tmp/err" || ! "$bcc" check "$f" > /dev/null 2>> "$tmp/err"; then
     echo "$f: does not check: $(cat "$tmp/err")"; return 1
@@ -45,7 +48,7 @@ lowered() {
   if ! cmp -s "$tmp/a" "$tmp/b"; then echo "$f: its erasure differs from $prog's"; return 1
   else echo "$prog: erases as $f"; fi
 }
-export -f pair lowered
+export -f marker pair lowered
 # Each pair is a unit of the result cache (scripts/par.sh), keyed on both files, in a slot of the
 # job pool; reported in order.
 export PAR_CACHE=check-sugar PAR_CACHE_DEPS=sugar

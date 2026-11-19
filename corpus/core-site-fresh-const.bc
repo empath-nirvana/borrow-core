@@ -1,8 +1,9 @@
--- SPEC §76: a private site is fresh above every site of the program, those a constant's bracket
--- writes among them. The only mention of site 1 is the `nu` type in `unfold[…]`; `scoped[site s]`'s
--- instance takes site 2, so the program has one signature for `1.0`.
---
--- Answer: i32[4].
+#! dialect 82
+# SPEC §76: a private site is fresh above every site of the program, those a constant's bracket
+# writes among them. The only mention of site 1 is the `nu` type in `unfold[…]`; `scoped[site s]`'s
+# instance takes site 2, so the program has one signature for `1.0`.
+#
+# Answer: i32[4].
 
 def scoped[site s] : !U (U (F i32) -o F i32) =
   !thunkv fun (k : U (F i32)) ->

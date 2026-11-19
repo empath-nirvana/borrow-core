@@ -1,8 +1,9 @@
--- An injection without an ascription (docs/typed-elaboration.md §2.2, §4). `flag` is bound to
--- `inl ()`, whose type is `1 + ?` on its own; its use as the first component of `pick`'s argument
--- makes it `1 + 1`, which metavariables solve. The binding is given that type, so the checker
--- checks the injection against it. `inject.core.bc` is the program with the types written.
--- Answer: 7 (`pick` returns the number at `inl`).
+#! dialect 82
+# An injection without an ascription (docs/typed-elaboration.md §2.2, §4). `flag` is bound to
+# `inl ()`, whose type is `1 + ?` on its own; its use as the first component of `pick`'s argument
+# makes it `1 + 1`, which metavariables solve. The binding is given that type, so the checker
+# checks the injection against it. `inject.core.bc` is the program with the types written.
+# Answer: 7 (`pick` returns the number at `inl`).
 def pick : (1 + 1) * i32 => i32 =
   thunkv fun (p : (1 + 1) * i32) ->
     let (b, n) = p;

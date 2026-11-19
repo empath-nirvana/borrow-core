@@ -121,15 +121,15 @@ statusOf() {
 }
 # Whether file $1 is a program the corpus runs; if not, says why.
 runnable() {
-  if grepq '^-- check: parse-only' "$1"; then echo "$1: parse-only, skipped"; echo "parse-only $1" >> "$PAR_SIDE/skips"; return 1; fi
-  if ! grepq '^main' "$1"; then echo "$1: no main, skipped"; echo "no-main $1" >> "$PAR_SIDE/skips"; return 1; fi
+  if grepq -E '^(--|#) check: parse-only' "$1"; then echo "$1: parse-only, skipped"; echo "parse-only $1" >> "$PAR_SIDE/skips"; return 1; fi
+  if ! grepq -E '^(main|fn main\()' "$1"; then echo "$1: no main, skipped"; echo "no-main $1" >> "$PAR_SIDE/skips"; return 1; fi
 }
 # --write-goldens: the golden of file $1, from the source stage.
 golden() {
   local f=$1 w=${PAR_TMP:-$tmp} base in
   runnable "$f" || return 0
   base=${f%.bc}
-  if grepq '^-- check: no-source' "$f"; then
+  if grepq -E '^(--|#) check: no-source' "$f"; then
     echo "$f: no-source: $base.out is written by hand, kept"; return 0
   fi
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
@@ -255,7 +255,7 @@ program() {
   stages="clos flat wasm"
   [ "$final" = 0 ] || stages="wasm"
   local old=1
-  if grepq '^-- check: old-backend-refuses' "$f"; then
+  if grepq -E '^(--|#) check: old-backend-refuses' "$f"; then
     old=0; stages=""
     local refused=0
     "$bcc" interp --backend old --stage flat "$f" < "$in" > /dev/null 2> "$w/refused" || refused=$?
@@ -269,9 +269,9 @@ program() {
     # not recorded in the cache.
     [ "$refused" -lt 128 ] || par_nostore
   fi
-  if grepq '^-- check: no-source' "$f"; then
+  if grepq -E '^(--|#) check: no-source' "$f"; then
     local why
-    why=$(sed -n '/^-- check: no-source: */{s///p;q;}' "$f")
+    why=$(sed -nE '/^(--|#) check: no-source: */{s///p;q;}' "$f")
     note=" (no-source: not run at the source stage: ${why:-too large for the source interpreter})"
   elif withSource "$f" "$w/key" "$w/why"; then
     stages="source $stages"

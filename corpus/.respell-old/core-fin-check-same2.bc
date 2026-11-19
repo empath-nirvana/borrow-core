@@ -1,0 +1,8 @@
+-- SPEC §27 in the core text, checked, not run: `main` returns `()` and does not call `f`. two
+-- nested finalisers both perform `11.0`; the site row is the least one. `Σ_M` of the outer `[then]`
+-- and each `Σ_D` are the rows the derivations need (`needRowOf`).
+
+def f : !U (1 -o F[1.0 unr[11.0 unr[11.0 unr 1 ~> 1] 1 ~> 1] 1 ~> 1, 11.0 unr[11.0 unr 1 ~> 1] 1 ~> 1] 1) =
+  !thunkv fun (u : 1) -> y2 <- (y1 <- (perform[1.0] ()) unwind (perform[11.0] ()); return y1) unwind (perform[11.0] ()); return y2
+
+main : F 1 = return ()

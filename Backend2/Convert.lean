@@ -2980,34 +2980,42 @@ def litCode : CM Nat := do
   modify fun s => { s with lits := some c }
   return c
 
+/-- The number of arguments a constant takes before its operation runs; `none` at a constant
+lowered as a leaf or a loop. -/
+def constKArity : ConstKind → Option Nat
+  | .alloc .. | .free .. | .copy .. | .releaseImm .. | .releaseMut .. | .releaseUnk ..
+  | .hostOp .. | .tokMint .. | .tokBurn .. | .arrNew .. | .arrFree .. | .arrSize ..
+  | .arrReplace .. | .arrLen .. | .arrGet .. | .arrCopy .. | .arrRelease .. | .countFold ..
+  | .countTry .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI .. | .sliceSplitM ..
+  | .sliceReplaceM .. | .sliceSwapM .. | .foldImm .. | .foldOwn .. | .foldOwnG .. | .foldReuse ..
+  | .unfoldN .. | .boundedFix .. => some 1
+  | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
+  | .sliceBorrowM .. | .sliceBorrowI .. | .withloadU .. => some 2
+  | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. => some 0
+  | _ => none
+
 /-- The number of arguments a constant takes before its operation runs; `none` at a node that is
 not a constant. -/
 def constArity : TExpr → Option Nat
-  | .alloc .. | .free .. | .copy .. | .releaseImm .. | .releaseMut .. | .releaseUnk .. | .hostOp ..
-  | .tokMint .. | .tokBurn ..
-  | .arrNew .. | .arrFree .. | .arrSize .. | .arrReplace .. | .arrLen .. | .arrGet .. | .arrCopy ..
-  | .arrRelease .. | .countFold .. | .countTry .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
-  | .sliceSplitM .. | .sliceReplaceM .. | .sliceSwapM .. | .consume .. | .foldImm .. | .foldOwn ..
-  | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .boundedFix .. => some 1
-  | .withlocal .. | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
-  | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
-  | .withborF2I .. | .withborUD .. | .withloadU ..
-  | .sliceBorrowMU .. | .sliceBorrowIU .. => some 2
-  | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. => some 0
+  | .constK _ _ k => constKArity k
+  | .consume .. | .allocS .. | .freeS .. => some 1
+  | .withlocal .. | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I ..
+  | .withborUD .. | .sliceBorrowMU .. | .sliceBorrowIU .. => some 2
   | _ => none
 
 /-- The nodes whose value is their child's: `ret`, a thunk of a λ-value, dereliction, the lifetime
 box and the lifetime coercions, `ν`'s two coercions. -/
 def transparent? : TExpr → Option TExpr
-  | .bangE _ _ _ t | .boxI _ _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t | .mutSub _ _ _ _ _ t
-  | .ofRet _ _ _ t | .ret _ _ _ t | .thunkV _ _ _ t | .bangThunkV _ _ _ t | .nuIn _ _ _ _ _ t
-  | .nuOut _ _ _ _ _ t => some t
   -- `[α]`: a type renamed up to its lifetime binders' names, which no lowered type reads.
-  | .alpha _ _ _ _ t => some t
+  -- `[erase]` (SPEC §68): the same value at another type; the machine's identity.
+  | .conv _ _ _ _ k t => match k with
+    | .roll _ | .unroll _ | .effSub .. => none
+    | _ => some t
+  | .thunkVb _ _ _ _ _ t => some t
   -- The derived nodes over a term the conversion reads as it reads the term (SPEC §57).
   | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => some t
-  -- `[code-I]` and `[erase]` (SPEC §68): the same value at another type; the machine's identity.
-  | .codeI _ _ _ t | .codeIB _ _ _ t | .codeErase _ _ _ _ t | .codeEraseB _ _ _ _ t => some t
+  -- `[code-I]` (SPEC §68): the same value at another type; the machine's identity.
+  | .codeIb _ _ _ _ _ t => some t
   | _ => none
 
 /-- A function position's head through transparent nodes, and through a `use` whose body is a
@@ -3327,9 +3335,10 @@ def joinWith (c₂ : Ctx) (A : VTy) (args : List Var) (body : Ctx → List Var �
 /-- The computation nodes a machine's conversion takes apart with its continuation (`convK`):
 at an outcome, each is converted inside a machine.  `[spec §49]` -/
 def machNode : TExpr → Bool
-  | .effLet .. | .effThenF .. | .bind .. | .sumE .. | .tensorE .. | .unitE .. | .zeroE .. | .effSub ..
+  | .effLet .. | .effThenF .. | .bind .. | .sumE .. | .tensorE .. | .unitE .. | .zeroE ..
+  | .conv _ _ _ _ (.effSub ..) _
   | .effRaise .. | .effPerform .. | .nilDead .. | .lendR .. => true
-  | .lendScope _ _ _ t | .alpha _ _ _ _ t => machNode t
+  | .lendScope _ _ _ t | .conv _ _ _ _ .alpha t => machNode t
   | _ => false
 
 /-- The outside of the pure fragment. -/
@@ -3424,11 +3433,11 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     match ctx[i]? with
     | some (some x) => return leaf ctx (some i) (.var x)
     | _ => throw s!"LIR: variable {i} is not live"
-  | .unitI .. => return leaf ctx none .unit
+  | .constK _ _ (.unitI ..) => return leaf ctx none .unit
   -- `⊤` absorbs its whole context (`Check.AbsorbsAt`): it is not split, and every live slot is
   -- abandoned at `topI`, whose premise `Lint` reads from the node (`Abandon.top`).  [spec §66]
   | .topI .. => return abandons .top (live ctx) .unit
-  | .lit _ _ c => return leaf ctx none (.lit c)
+  | .constK _ _ (.lit c) => return leaf ctx none (.lit c)
   | .tensorI _ j _ _ u t₁ t₂ => do
     let (pre, c₁, c₂) ← splitCtx ctx u "tensorI"
     let rT ← repJ j
@@ -3441,9 +3450,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | .sumI₂ _ j _ _ c => do
     let .sum _ bT := (← repJ j).peel | throw "LIR: an injection at a non-sum"
     bindTm (← conv fuel ctx c) bT fun a => pure (.inj true a)
-  | .thunkF _ j _ c | .bangThunkF _ j _ c => do
+  | .thunkFb _ j _ _ _ c => do
     let .thunk k := (← repJ j).peel | throw "LIR: a thunk at a non-closure type"
-    -- A thunk's body is at `F A` (`thunkF`, `bangThunkF`): the empty row.  [spec §50]
+    -- A thunk's body is at `F A` (`thunkFb`): the empty row.  [spec §50]
     mkClos "thunk" ctx k none (← repK k) (fun ctx' => convBody fuel (none :: ctx') c) (source := true)
       (emptyRow := true)
   | .lam _ j A C c => do
@@ -3486,7 +3495,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       let m ← fresh (.sum aT pT); let x ← fresh aT; let e ← fresh pT
       return pre (.letv m (← conv fuel c₁ tM)
         (.case m x (← conv fuel (some x :: c₂) tN) e (abandons .letAbort (live c₂) (.inj true e))))
-  | .effSub _ _ S S' A c => do
+  | .conv _ _ _ _ (.effSub S S' A) c => do
     -- `[sub]`: the payload of `Σ` as one of `Σ'`.  [spec §47]
     readFact "effSub:rows"
     let p ← rowPay S; let q ← rowPay S'
@@ -3596,9 +3605,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     -- An instantiation is its operand.  [spec §44]
     readFact s!"{ruleName t}:erased"
     conv fuel ctx c
-  | .roll _ j _ c => do
+  | .conv _ _ _ _ (.roll _) c => do
     bindTm (← conv fuel ctx c) (← repJ c.jdg) fun x => pure (.prim .roll [x])
-  | .unroll _ j _ c => do
+  | .conv _ _ _ _ (.unroll _) c => do
     bindTm (← conv fuel ctx c) (← repJ c.jdg) fun x => pure (.prim .unroll [x])
   | .lolliE .. => convSpine fuel ctx t
   | .use info j _ decl targs _ body => convUse fuel ctx info j decl targs body
@@ -3673,7 +3682,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     readFact "lend"
     return leaf ctx (some 0)
       (.letv pr (.prim (.lend true) [r]) (.letpair o m pr (.letv b body (.pair o b))))
-  | .effHandleT .. | .lendLoopR .. | .iterate .. | .divFuel ..
+  | .effHandleT .. | .lendLoopR .. | .constK _ _ (.iterate ..) | .constK _ _ (.divFuel ..)
   | .reify .. | .letPoly .. => outside t
   | t =>
     match transparent? t with
@@ -3791,10 +3800,10 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     -- `Tm.absurd`, so they are left unconsumed.  [spec §66]
     let (pre, c₁, _) ← splitCtx ctx u "zeroE" (absorbs := true)
     return pre (← bindTm (← conv fuel c₁ tV) .zero fun v => pure (.absurd v))
-  | .effSub _ _ _ _ _ c => do
+  | .conv _ _ _ _ (.effSub ..) c => do
     readFact "effSub:rows"
     convK fuel ctx c K args
-  | .alpha _ _ _ _ c => convK fuel ctx c K args
+  | .conv _ _ _ _ .alpha c => convK fuel ctx c K args
   | .effRaise _ _ _ o _ c => do
     readFact "effRaise:op"
     modify fun st => { st with erased := st.erased.insert "raise" (st.erased.getD "raise" 0 + 1) }
@@ -3878,8 +3887,8 @@ def pointAt (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) (M
 
 /-- A computation through its `[sub]`s. -/
 def unSubK : Nat → TExpr → TExpr
-  | f + 1, .effSub _ _ _ _ _ c => unSubK f c
-  | f + 1, .alpha _ _ _ _ c => unSubK f c
+  | f + 1, .conv _ _ _ _ (.effSub ..) c => unSubK f c
+  | f + 1, .conv _ _ _ _ .alpha c => unSubK f c
   | _, t => t
 
 /-- **A join of a machine**: the body `N` of a `[let]` or `[then]`, a function of its context's
@@ -3936,7 +3945,7 @@ def convWorkK (fuel : Nat) (k : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : 
   | .unitE _ _ _ u tV tM => do
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
     return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .consume .dead v (← convWorkK fuel k c₂ tM K args))
-  | .effSub _ _ _ _ _ c | .alpha _ _ _ _ c => convWorkK fuel k ctx c K args
+  | .conv _ _ _ _ (.effSub ..) c | .conv _ _ _ _ .alpha c => convWorkK fuel k ctx c K args
   | .lendScope _ _ _ c | .litView _ _ c | .unfoldStep _ _ c => convWorkK fuel k ctx c K args
   | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
 
@@ -4288,7 +4297,7 @@ def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
     (o : Qual × VTy × VTy) (c : TExpr) : CM Unit := do
   if (← get).works.contains (n, j) then return
   match c.unUse with
-  | .bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => do
+  | .thunkVb _ _ _ _ true (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => do
     readFact "effHandleV:tail work"
     let x ← fresh (← vty o.2.1)
     let kv ← fresh .unit
@@ -4328,7 +4337,7 @@ def aliasOf : Nat → TExpr → Option Nat
   | 0, _ => none
   | f + 1, t => match t with
     | .var _ _ i _ => some i
-    | .effSub _ _ _ _ _ c => aliasOf f c
+    | .conv _ _ _ _ (.effSub ..) c => aliasOf f c
     | t => match transparent? t with
       | some c => aliasOf f c
       | none => none
@@ -4394,7 +4403,7 @@ def convWork (fuel : Nat) (k : Nat) (ph : Pay) (ctx : Ctx) (t : TExpr) : CM Tm :
   | .unitE _ _ _ u tV tM => do
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
     return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .consume .dead v (← convWork fuel k ph c₂ tM))
-  | .effSub _ _ _ _ _ c | .alpha _ _ _ _ c => convWork fuel k ph ctx c
+  | .conv _ _ _ _ (.effSub ..) c | .conv _ _ _ _ .alpha c => convWork fuel k ph ctx c
   | .lendScope _ _ _ c | .litView _ _ c | .unfoldStep _ _ c => convWork fuel k ph ctx c
   | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
 
@@ -4443,9 +4452,12 @@ def convSpine (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
 where
   cbConst : TExpr → Bool
     | .withlocal _ _ (.loop ..) _ _ _ => false
-    | .withlocal .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .sliceBorrowM ..
-    | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I ..
-    | .withborUD .. | .withloadU .. | .sliceBorrowMU ..
+    | .withlocal .. | .constK _ _ (.withbor1 ..) | .constK _ _ (.withbor2 ..)
+    | .constK _ _ (.withbor3 ..) | .constK _ _ (.withload ..) | .constK _ _ (.withswap ..)
+    | .constK _ _ (.sliceBorrowM ..)
+    | .constK _ _ (.sliceBorrowI ..) | .withborSM .. | .withborSI .. | .withborF2M ..
+    | .withborF2I ..
+    | .withborUD .. | .constK _ _ (.withloadU ..) | .sliceBorrowMU ..
     | .sliceBorrowIU .. => true
     | _ => false
   go (fuel : Nat) (ctx : Ctx) : List (Masks × TExpr) → List Var → TExpr → LTy → CM Tm
@@ -4487,7 +4499,7 @@ def convLendCell (fuel : Nat) (ctx : Ctx) (t inner : TExpr) : CM Tm := do
   | [(u₁, cb), (u₂, aApp)] =>
     let (bs, ah) := spineOf 8 aApp
     match bs, headOf 64 ah with
-    | [(u₃, v)], .alloc _ _ A => do
+    | [(u₃, v)], .constK _ _ (.alloc A) => do
       readFact "lendCell:cell"
       -- The scope this cell is allocated for (`withScope`), taken before the callback is converted.
       let scope := (← get).scopeCell
@@ -4573,7 +4585,7 @@ def convDivLit (fuel : Nat) (ctx : Ctx) (j : Jdg) (op : HostOp) (c : IntLit) (in
   | _ => conv fuel ctx inner
 where
   peelRet : TExpr → TExpr
-    | .ofRet _ _ _ t | .ret _ _ _ t => peelRet t
+    | .conv _ _ _ _ (.ofRet _) t | .conv _ _ _ _ (.ret _) t => peelRet t
     | t => t
 
 /-- A constant as a value: a closure of a code that applies it, one argument at a time. `dctx`,
@@ -4683,17 +4695,17 @@ def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM 
   readFact s!"{ruleName c}:expand"
   match c with
   | .withlocal _ _ k A _ _ => genLocalKind k A x cbT call
-  | .withbor1 .. | .sliceBorrowI .. => genLend (.lend false) x cbT call
-  | .withbor2 .. | .sliceBorrowM .. => genLend (.lend true) x cbT call
-  | .withbor3 .. => genLend .relend x cbT call
-  | .withload .. => genWithload x cbT call
-  | .withswap .. => genWithswap x cbT call
+  | .constK _ _ (.withbor1 ..) | .constK _ _ (.sliceBorrowI ..) => genLend (.lend false) x cbT call
+  | .constK _ _ (.withbor2 ..) | .constK _ _ (.sliceBorrowM ..) => genLend (.lend true) x cbT call
+  | .constK _ _ (.withbor3 ..) => genLend .relend x cbT call
+  | .constK _ _ (.withload ..) => genWithload x cbT call
+  | .constK _ _ (.withswap ..) => genWithswap x cbT call
   | .withborSM .. | .withborF2M .. => genLendTree true x cbT call
   | .withborSI .. | .withborF2I .. => genLendTree false x cbT call
   | .withborUD _ _ _ _ SM SD S k _ td => genLendU _fuel (lendUOp k) x cbT call SM S (some SD) td dctx
   | .sliceBorrowIU _ _ _ _ S _ td => genLendU _fuel (.lend false) x cbT call S S none td dctx
   | .sliceBorrowMU _ _ _ _ S _ td => genLendU _fuel (.lend true) x cbT call S S none td dctx
-  | .withloadU .. => genWithload x cbT call
+  | .constK _ _ (.withloadU ..) => genWithload x cbT call
   | c => throw s!"LIR: `{ruleName c}` is not a borrow (answer {resT})"
 
 /-- **A constant applied to its arguments**, `args` in the order they apply, its answer of type
@@ -4702,59 +4714,64 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) (dctx : Optio
     CM Tm := do
   readFact s!"{ruleName c}:expand"
   match c, args with
-  | .alloc _ _ A, [v] => return .prim (.alloc (← classOf A)) [v]
-  | .free .., [x] | .tokBurn .., [x] => return .prim .free [x]
-  | .tokMint .., [v] => return .prim (.alloc (← classOf .unit)) [v]
-  | .swap .., [x, v] => return .prim .swap [x, v]
-  | .copy .., [x] | .arrCopy .., [x] => dup .const x fun x x' => pure (.pair x x')
-  | .releaseImm .., [x] | .releaseMut .., [x] | .releaseUnk .., [x] | .arrRelease .., [x] =>
+  | .constK _ _ (.alloc A), [v] => return .prim (.alloc (← classOf A)) [v]
+  | .constK _ _ (.free ..), [x] | .constK _ _ (.tokBurn ..), [x] => return .prim .free [x]
+  | .constK _ _ (.tokMint ..), [v] => return .prim (.alloc (← classOf .unit)) [v]
+  | .constK _ _ (.swap ..), [x, v] => return .prim .swap [x, v]
+  | .constK _ _ (.copy ..), [x] | .constK _ _ (.arrCopy ..), [x] =>
+    dup .const x fun x x' => pure (.pair x x')
+  | .constK _ _ (.releaseImm ..), [x] | .constK _ _ (.releaseMut ..), [x]
+  | .constK _ _ (.releaseUnk ..), [x] | .constK _ _ (.arrRelease ..), [x] =>
     return .consume .release x .unit
   | .consume _ _ A, [x] => do readFact "consume:type"; genConsume 64 A x
-  | .hostOp _ _ op, [x] => return .prim (.host op) [x]
-  | .arrNew _ j _, [p] => do
+  | .constK _ _ (.hostOp op), [x] => return .prim (.host op) [x]
+  | .constK _ j (.arrNew _), [p] => do
     let (pT, aT) ← arrowOf (← repJ j)
     let .pair _ fT := pT.peel | throw "LIR: array_new's argument"
     genTab aT fT p
-  | .arrFree _ j _, [p] => do
+  | .constK _ j (.arrFree _), [p] => do
     let (pT, _) ← arrowOf (← repJ j)
     let .pair fT aT := pT.peel | throw "LIR: array_free's argument"
     genArrFree fT aT p
-  | .arrSize .., [a] | .sliceLenM .., [a] => return .prim .size [a]
-  | .arrLen .., [v] => return .prim .len [v]
-  | .arrReplace .., [p] | .sliceReplaceM .., [p] =>
+  | .constK _ _ (.arrSize ..), [a] | .constK _ _ (.sliceLenM ..), [a] => return .prim .size [a]
+  | .constK _ _ (.arrLen ..), [v] => return .prim .len [v]
+  | .constK _ _ (.arrReplace ..), [p] | .constK _ _ (.sliceReplaceM ..), [p] =>
     letpairM p fun a r => letpairM r fun i x => do
       readFact s!"{ruleName c}:slot swap"
       return .prim .replace [a, i, x]
-  | .arrGet .., [p] | .sliceGetM .., [p] => do
+  | .constK _ _ (.arrGet ..), [p] | .constK _ _ (.sliceGetM ..), [p] => do
     let inRange := (← get).inRange
     if inRange then readFact s!"{ruleName c}:in range"
     letpairM p fun v i => pure (.prim (.idx (!inRange)) [v, i])
-  | .sliceSplitI .., [p] | .sliceSplitM .., [p] =>
+  | .constK _ _ (.sliceSplitI ..), [p] | .constK _ _ (.sliceSplitM ..), [p] =>
     letpairM p fun v i => pure (.prim (.split true) [v, i])
-  | .sliceEmptyI .., [] | .sliceEmptyM .., [] | .arrEmpty .., [] => return .prim .emptyFam []
-  | .sliceSwapM .., [p] =>
+  | .constK _ _ (.sliceEmptyI ..), [] | .constK _ _ (.sliceEmptyM ..), []
+  | .constK _ _ (.arrEmpty ..), [] => return .prim .emptyFam []
+  | .constK _ _ (.sliceSwapM ..), [p] =>
     letpairM p fun v r => letpairM r fun i k => pure (.prim .swapSlots [v, i, k])
-  | .countFold _ j _, [p] => do
+  | .constK _ j (.countFold _), [p] => do
     let (pT, sT) ← arrowOf (← repJ j)
     let .pair fT _ := pT.peel | throw "LIR: count_fold's argument"
     genCount fT sT p
-  | .countTry _ j _ _, [p] => do
+  | .constK _ j (.countTry _ _), [p] => do
     let (pT, rT) ← arrowOf (← repJ j)
     let .pair fT _ := pT.peel | throw "LIR: count_try's argument"
     let .sum sT eT := rT.peel | throw "LIR: count_try's answer"
     genCountTry fT sT eT p
-  | .boundedFix _ j _ _, [p] => do
+  | .constK _ j (.boundedFix _ _), [p] => do
     let (some pT, _) ← answerOf (← repJ j) | throw "LIR: bounded_fix takes no argument"
     let .pair sT _ := pT.peel | throw "LIR: bounded_fix's argument"
     readFact "boundedFix:budget"
     genFix sT p
-  | .withbor1 .., [x, cb] | .sliceBorrowI .., [x, cb] => genLend (.lend false) x (← tyOf cb) (callCb cb)
-  | .withbor2 .., [x, cb] | .sliceBorrowM .., [x, cb] => genLend (.lend true) x (← tyOf cb) (callCb cb)
-  | .withbor3 .., [m, cb] => genLend .relend m (← tyOf cb) (callCb cb)
+  | .constK _ _ (.withbor1 ..), [x, cb] | .constK _ _ (.sliceBorrowI ..), [x, cb] =>
+    genLend (.lend false) x (← tyOf cb) (callCb cb)
+  | .constK _ _ (.withbor2 ..), [x, cb] | .constK _ _ (.sliceBorrowM ..), [x, cb] =>
+    genLend (.lend true) x (← tyOf cb) (callCb cb)
+  | .constK _ _ (.withbor3 ..), [m, cb] => genLend .relend m (← tyOf cb) (callCb cb)
   | .withlocal _ _ (.loop A S B R) _ _ _, [v, st] => genLocalLoop A S B R v st
   | .withlocal _ _ k A _ _, [x, cb] => genLocalKind k A x (← tyOf cb) (callCb cb)
-  | .withload .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
-  | .withswap .., [m, f] => genWithswap m (← tyOf f) fun old => withEv (.app f old)
+  | .constK _ _ (.withload ..), [x, cb] => genWithload x (← tyOf cb) (callCb cb)
+  | .constK _ _ (.withswap ..), [m, f] => genWithswap m (← tyOf f) fun old => withEv (.app f old)
   | .allocS _ _ σ, [v] => allocTree v resT σ
   | .freeS _ j _, [v] => do
     let (_, vT) ← arrowOf (← repJ j)
@@ -4767,9 +4784,9 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) (dctx : Optio
     genLendU fuel (.lend false) x (← tyOf cb) (callCb cb) S S none td dctx
   | .sliceBorrowMU _ _ _ _ S _ td, [x, cb] =>
     genLendU fuel (.lend true) x (← tyOf cb) (callCb cb) S S none td dctx
-  | .withloadU .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
-  | .foldOwn _ _ F _, [g] | .foldReuse _ _ F _, [g] => do
-    let k : FoldKind := match c with | .foldReuse .. => .reuse | _ => .own
+  | .constK _ _ (.withloadU ..), [x, cb] => genWithload x (← tyOf cb) (callCb cb)
+  | .constK _ _ (.foldOwn F _), [g] | .constK _ _ (.foldReuse F _), [g] => do
+    let k : FoldKind := match c with | .constK _ _ (.foldReuse ..) => .reuse | _ => .own
     let .thunk fk := resT.peel | throw "LIR: a fold's answer is not a closure"
     let (some muT, R) ← answerOf resT | throw "LIR: a fold takes no structure"
     readFact s!"{ruleName c}:shape"
@@ -4786,7 +4803,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) (dctx : Optio
       match ctx' with
       | some x :: some g' :: _ => return .call recV [g', x]
       | _ => throw "LIR: a fold's environment"
-  | .foldImm _ _ F y _ _, [g] => do
+  | .constK _ _ (.foldImm F y _ _), [g] => do
     -- The answer's `∀'y` is erased (SPEC §44): a closure on the borrow.
     let .thunk fk := resT.peel | throw "LIR: a fold's answer is not a closure"
     let (some lT, R) ← answerOf resT | throw "LIR: fold_imm takes no borrow"
@@ -4798,7 +4815,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) (dctx : Optio
       match ctx' with
       | some l :: some g' :: _ => return .call recL [g', l]
       | _ => throw "LIR: fold_imm's environment"
-  | .unfoldN _ _ C _, [g] => do
+  | .constK _ _ (.unfoldN C _), [g] => do
     let .thunk uk := resT.peel | throw "LIR: unfold's answer is not a closure"
     let (some sT, _) ← answerOf resT | throw "LIR: unfold takes no state"
     let obs ← genUnfold (← cty C) C (← tyOf g) sT

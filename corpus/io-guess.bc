@@ -1,13 +1,14 @@
--- A guessing game (SPEC §11), played from a scripted input. The secret is 42. Each line is a
--- guess, read a digit at a time; each message is a helper that takes only an output. The number
--- of guesses goes to standard error through `put_dec`, the same function the other programs point
--- at standard output: `stdout` and `stderr` are both `ref output`, and the caller chooses which
--- one a writer gets. After the right guess the rest of the input is ignored (a `for` has no early
--- exit).
---
--- Answer: `too high`, `too low`, `too high`, `correct!` for 50, 30, 45, 42, then 4 guesses on
--- standard error and as the result. A comparison the wrong way round, or a number misparsed,
--- changes a message.
+#! dialect 82
+# A guessing game (SPEC §11), played from a scripted input. The secret is 42. Each line is a
+# guess, read a digit at a time; each message is a helper that takes only an output. The number
+# of guesses goes to standard error through `put_dec`, the same function the other programs point
+# at standard output: `stdout` and `stderr` are both `ref output`, and the caller chooses which
+# one a writer gets. After the right guess the rest of the input is ignored (a `for` has no early
+# exit).
+#
+# Answer: `too high`, `too low`, `too high`, `correct!` for 50, 30, 45, 42, then 4 guesses on
+# standard error and as the result. A comparison the wrong way round, or a number misparsed,
+# changes a message.
 
 type B = 1 + 1
 
@@ -65,7 +66,7 @@ def say_bye : Out => Out * 1 =
     _ <- return (putb (&mut o, u8[101]));
     return (putb (o, u8[10]))
 
--- `too high` or `too low`.
+# `too high` or `too low`.
 def say_wrong : Out * i32 => Out * 1 =
   thunkv fun (p : Out * i32) ->
     let (o, value) = p;
@@ -74,7 +75,7 @@ def say_wrong : Out * i32 => Out * 1 =
     | inr low -> return (say_low o)
     }
 
--- `bye`, unless the game is over.
+# `bye`, unless the game is over.
 def say_bye_if : Out * B => Out * 1 =
   thunkv fun (p : Out * B) ->
     let (o, done) = p;

@@ -1,0 +1,30 @@
+-- `data-update.bc` written by hand in core, by SPEC §42's rules: `p.x = p.x + p.v` of a `let mut`
+-- record is its body run in place, the record taken apart and rebuilt (E6, SPEC §41's rule for a
+-- `let mut` value); `let y = p.x;` of a persistent record its projection (E5); through the `mut`
+-- borrow of a cell, the update is `withswap` around the same body, and `let r = q.x;` a `withswap`
+-- that hands back the record and the field, the borrow rebound.
+type P = i32 * i32
+
+main : F i32 =
+  p <- return ((i32[1], i32[2]) : P);
+  u <- return run (let (r0, m0) = (p, ());
+    let (x0, v0) = r0;
+    return (((unbang host[add32]) (x0, v0), v0), ()));
+  let (p, uu) = u;
+  y <- return run (let (px, pv) = p;
+    return px);
+  c <- return alloc[i32 * i32] ((i32[2], i32[3]) : P);
+  w <- return withbor2['l, dom, i32 * i32, i32] c (thunkv Fun 'l < dom.
+        return (thunkv fun (q : mut 'l (i32 * i32)) ->
+            s <- return withswap['l, i32 * i32, 1] q (thunkv fun (r1 : i32 * i32) ->
+                  let (x1, v1) = r1;
+                  return (((unbang host[add32]) (x1, v1), v1), ()));
+            let (q, su) = s;
+            g <- return withswap['l, i32 * i32, i32] q (thunkv fun (r2 : i32 * i32) ->
+                  let (x2, v2) = r2;
+                  return ((x2, v2), x2));
+            let (q, r) = g;
+            return boxed['l] r));
+  let (c, k) = w;
+  d <- return free[i32 * i32] c;
+  return (unbang host[add32]) (y, k)

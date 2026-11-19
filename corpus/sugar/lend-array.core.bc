@@ -1,6 +1,7 @@
--- `lend-array.bc` written by hand in core: each lend is a slice borrow around the one call, at a
--- fresh lifetime; the view `double` hands back is bound and consumed inside the callback, whose
--- result is `()`, and `a` is bound again from the pair.
+#! dialect 82
+# `lend-array.bc` written by hand in core: each lend is a slice borrow around the one call, at a
+# fresh lifetime; the view `double` hands back is bound and consumed inside the callback, whose
+# result is `()`, and `a` is bound again from the pair.
 def three : !(i32 => i32) =
   !thunkv fun (i : i32) ->
     return i32[3]

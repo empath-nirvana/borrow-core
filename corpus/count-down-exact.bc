@@ -1,7 +1,8 @@
--- countDownProg (Core/DelayPrograms.lean:228) transcribed: `progD (3, 0) countDownStep 10`, the
--- step `countDownStep` (`countDownNext`, `countDownClose`) and the driver `driveE 10` written out.
--- It erases to `countDownProg` exactly (Frontend/Check/CrossCheck.lean). Unlike count-down.bc,
--- `close` frees with `let () = free_nat n; …`, as `countDownClose` does.
+#! dialect 82
+# countDownProg (Core/DelayPrograms.lean:228) transcribed: `progD (3, 0) countDownStep 10`, the
+# step `countDownStep` (`countDownNext`, `countDownClose`) and the driver `driveE 10` written out.
+# It erases to `countDownProg` exactly (Frontend/Check/CrossCheck.lean). Unlike count-down.bc,
+# `close` frees with `let () = free_nat n; …`, as `countDownClose` does.
 
 type Nat = mu X. 1 + X
 

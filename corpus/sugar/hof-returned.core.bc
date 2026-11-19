@@ -1,5 +1,6 @@
--- `hof-returned.bc` in core, as `bcc desugar` prints it: `twice` is called at its copy for div
--- callbacks, one state machine (SPEC §15) with a state per call of the callback.
+#! dialect 82
+# `hof-returned.bc` in core, as `bcc desugar` prints it: `twice` is called at its copy for div
+# callbacks, one state machine (SPEC §15) with a state per call of the callback.
 
 def div_bind_step[A, B, R1, R] : !U (U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R -o F (B + U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R) & F R) =
   !thunkv fun (s : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R) ->

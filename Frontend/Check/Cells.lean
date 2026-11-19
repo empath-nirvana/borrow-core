@@ -154,11 +154,11 @@ def cellsFuel : Nat := 1 <<< 20
 /-- **What a node does to cells**: the types it allocates cells at, and the edges along which it
 changes a cell's type, lifetimes erased. -/
 def TExpr.cellOps : TExpr → List VTy × List (VTy × VTy)
-  | .alloc _ _ A => ([A.eraseLife], [])
+  | .constK _ _ (.alloc A) => ([A.eraseLife], [])
   | .withlocal _ _ _ A _ _ => ([A.eraseLife], [])
   | .allocS _ _ σ => (σ.leaves.map VTy.eraseLife, [])
-  | .swap _ _ A B => ([], [(A.eraseLife, B.eraseLife)])
-  | .foldReuse _ _ F _ =>
+  | .constK _ _ (.swap A B) => ([], [(A.eraseLife, B.eraseLife)])
+  | .constK _ _ (.foldReuse F _) =>
       ([], if F.hasRefX then [((VTy.mu F.ty).eraseLife, .unit)] else [])
   | _ => ([], [])
 

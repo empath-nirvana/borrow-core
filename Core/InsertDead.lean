@@ -224,9 +224,9 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
   | var hs =>
       intro Γa Γb hΓ; subst hΓ
       rw [var_shift]; exact .var (soloP_insert hd Γa hs)
-  | unitI hΓ =>
+  | constK k hAt hk hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
-      exact .unitI (deadP_insert hd Γa hΓ)
+      rw [shift_closed0 k.closed]; exact .constK k hAt hk (deadP_insert hd Γa hΓ)
   | tensorI hs _ _ ih₁ ih₂ =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
@@ -236,13 +236,17 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       exact .tensorI hs' e₁ e₂
   | sumI₁ _ ih => intro Γa Γb hΓ; exact .sumI₁ (ih Γa Γb hΓ)
   | sumI₂ _ ih => intro Γa Γb hΓ; exact .sumI₂ (ih Γa Γb hΓ)
-  | thunkF _ ih =>
+  | thunkFb b hp _ hT ih =>
       intro Γa Γb hΓ; subst hΓ
       have e' := ih (_ :: Γa) Γb rfl
       rw [List.length_cons] at e'
-      exact .thunkF e'
-  | thunkV hC _ ih => intro Γa Γb hΓ; exact .thunkV hC (ih Γa Γb hΓ)
-  | ret _ ih => intro Γa Γb hΓ; exact .ret (ih Γa Γb hΓ)
+      exact .thunkFb b (fun h => live_insert hd (hp h)) e' hT
+  | thunkVb b hp hC _ hT ih =>
+      intro Γa Γb hΓ; subst hΓ
+      exact .thunkVb b (fun h => live_insert hd (hp h)) hC (ih Γa Γb rfl) hT
+  | conv _ _ hc ih =>
+      intro Γa Γb hΓ'; subst hΓ'
+      exact .conv _ (ih Γa Γb rfl) (hc.mono (fun _ _ ho => ⟨ho.1, live_insert hd ho.2⟩) (fun _ _ => id))
   | bind hs _ _ ihM ihN =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
@@ -314,171 +318,23 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       rw [List.length_cons] at e'
       exact .allI hbx hΔx (live_insert hd hΓx) e'
   | allE _ hlt ih => intro Γa Γb hΓ; exact .allE (ih Γa Γb hΓ) hlt
-  | bangThunkF hp _ ih =>
-      intro Γa Γb hΓ; subst hΓ
-      have e' := ih (_ :: Γa) Γb rfl
-      rw [List.length_cons] at e'
-      exact .bangThunkF (live_insert hd hp) e'
-  | bangThunkV hp hC _ ih =>
-      intro Γa Γb hΓ; subst hΓ
-      exact .bangThunkV (live_insert hd hp) hC (ih Γa Γb rfl)
-  | @codeI _ _ M C _ hok ih =>
+  | @codeIb _ _ M C _ b hp _ hok hT ih =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨hok', hty⟩ := Ctx.CapOK.insert (Γa := Γa) (dead_not_live hd) hok
       have hcn : Expr.capNorm (.lam (Expr.shift Γd.length (Γa.length + 1) M)) =
           Expr.capNorm (.lam M) := Expr.capNorm_shift Γd.length Γa.length (.lam M)
       have hty' : Ctx.capTy (Γa ++ Γd ++ Γb) (.lam (Expr.shift Γd.length (Γa.length + 1) M)) =
           Ctx.capTy (Γa ++ Γb) (.lam M) := hty
-      have h' := CDerivesX.codeI (M := Expr.shift Γd.length (Γa.length + 1) M) (ih Γa Γb rfl) hok'
-      rw [hcn, hty'] at h'
-      exact h'
-  | @codeIB _ _ M C hp _ hok ih =>
-      intro Γa Γb hΓ; subst hΓ
-      obtain ⟨hok', hty⟩ := Ctx.CapOK.insert (Γa := Γa) (dead_not_live hd) hok
-      have hcn : Expr.capNorm (.lam (Expr.shift Γd.length (Γa.length + 1) M)) =
-          Expr.capNorm (.lam M) := Expr.capNorm_shift Γd.length Γa.length (.lam M)
-      have hty' : Ctx.capTy (Γa ++ Γd ++ Γb) (.lam (Expr.shift Γd.length (Γa.length + 1) M)) =
-          Ctx.capTy (Γa ++ Γb) (.lam M) := hty
-      have h' := CDerivesX.codeIB (M := Expr.shift Γd.length (Γa.length + 1) M) (live_insert hd hp)
-        (ih Γa Γb rfl) hok'
-      rw [hcn, hty'] at h'
-      exact h'
-  | codeErase _ ih => intro Γa Γb hΓ; exact .codeErase (ih Γa Γb hΓ)
-  | codeEraseB _ ih => intro Γa Γb hΓ; exact .codeEraseB (ih Γa Γb hΓ)
-  | bangE _ ih => intro Γa Γb hΓ; exact .bangE (ih Γa Γb hΓ)
-  | copyBang hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := BoCa.copy) (by rfl)]; exact .copyBang (deadP_insert hd Γa hΓ)
-  | releaseBang hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := forget) (by rfl)]; exact .releaseBang (deadP_insert hd Γa hΓ)
-  | boxI _ hΓ ih =>
-      intro Γa Γb hΓ'; subst hΓ'
-      exact .boxI (ih Γa Γb rfl) ⟨hΓ.1, live_insert hd hΓ.2⟩
-  | boxE _ ih => intro Γa Γb hΓ; exact .boxE (ih Γa Γb hΓ)
-  | immSub _ hle ih => intro Γa Γb hΓ; exact .immSub (ih Γa Γb hΓ) hle
-  | mutSub _ hle ih => intro Γa Γb hΓ; exact .mutSub (ih Γa Γb hΓ) hle
-  | alloc hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .alloc (deadP_insert hd Γa hΓ)
-  | free hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .free (deadP_insert hd Γa hΓ)
-  | tokMint hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := mintE) (by rfl)]; exact .tokMint (deadP_insert hd Γa hΓ)
-  | tokBurn hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := burnE) (by rfl)]; exact .tokBurn (deadP_insert hd Γa hΓ)
-  | swap hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := BoCa.swap) (by rfl)]; exact .swap (deadP_insert hd Γa hΓ)
-  | copy hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := BoCa.copy) (by rfl)]; exact .copy (deadP_insert hd Γa hΓ)
-  | releaseImm hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := forget) (by rfl)]; exact .releaseImm (deadP_insert hd Γa hΓ)
-  | releaseMut hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := forget) (by rfl)]; exact .releaseMut (deadP_insert hd Γa hΓ)
-  | releaseUnk hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := forget) (by rfl)]; exact .releaseUnk (deadP_insert hd Γa hΓ)
-  | lit c hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .lit c (deadP_insert hd Γa hΓ)
-  | hostOp op hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .hostOp op (deadP_insert hd Γa hΓ)
-  | arrNew A hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .arrNew A (deadP_insert hd Γa hΓ)
-  | arrFree A hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .arrFree A (deadP_insert hd Γa hΓ)
-  | arrSize A hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := sizeV.1) (by rfl)]; exact .arrSize A (deadP_insert hd Γa hΓ)
-  | arrReplace A hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := replaceV.1) (by rfl)]; exact .arrReplace A (deadP_insert hd Γa hΓ)
-  | arrLen a A hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := arrLenV.1) (by rfl)]; exact .arrLen a A (deadP_insert hd Γa hΓ)
-  | arrGet a A hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .arrGet a A (deadP_insert hd Γa hΓ)
-  | arrCopy a A hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := copyV.1) (by rfl)]; exact .arrCopy a A (deadP_insert hd Γa hΓ)
-  | arrRelease a A hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := releaseV.1) (by rfl)]; exact .arrRelease a A (deadP_insert hd Γa hΓ)
-  | countFold S hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .countFold S (deadP_insert hd Γa hΓ)
-  | countTry S E hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .countTry S E (deadP_insert hd Γa hΓ)
-  | boundedFix A C hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'; exact .boundedFix A C (deadP_insert hd Γa hΓ)
-  | iterate S St B R hAt hS hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'; exact .iterate S St B R hAt hS (deadP_insert hd Γa hΓ)
-  | divFuel S A hAt hS hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 divFuelV_closed]
-      exact .divFuel S A hAt hS (deadP_insert hd Γa hΓ)
+      exact .codeIb b (fun h => live_insert hd (hp h)) (ih Γa Γb rfl) hok' (by rw [hcn, hty']; exact hT)
   | reify S B R res hAt hS hcl hres hΓ _ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (reifyV_closed hcl)]
       exact .reify S B R res hAt hS hcl hres (deadP_insert hd Γa hΓ)
-  | sliceBorrowM x hΓ hA hB hf₁ hf₂ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := withbor) (by rfl)]
-      exact .sliceBorrowM x (deadP_insert hd Γa hΓ) hA hB hf₁ hf₂
-  | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := withbor) (by rfl)]
-      exact .sliceBorrowI x (deadP_insert hd Γa hΓ) hsc hA hB hf₁ hf₂
-  | sliceGetM a A hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .sliceGetM a A (deadP_insert hd Γa hΓ)
-  | sliceLenM a A hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := sizeV.1) (by rfl)]; exact .sliceLenM a A (deadP_insert hd Γa hΓ)
-  | sliceSplitI a A hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'; exact .sliceSplitI a A (deadP_insert hd Γa hΓ)
-  | sliceSplitM a A hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'; exact .sliceSplitM a A (deadP_insert hd Γa hΓ)
-  | sliceEmptyI a A hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := emptyFamV.1) (by rfl)]; exact .sliceEmptyI a A (deadP_insert hd Γa hΓ)
-  | sliceEmptyM a A hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := emptyFamV.1) (by rfl)]; exact .sliceEmptyM a A (deadP_insert hd Γa hΓ)
-  | arrEmpty A hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := emptyFamV.1) (by rfl)]; exact .arrEmpty A (deadP_insert hd Γa hΓ)
-  | sliceReplaceM a A hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := replaceV.1) (by rfl)]
-      exact .sliceReplaceM a A (deadP_insert hd Γa hΓ)
-  | sliceSwapM a A hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := swapV.1) (by rfl)]; exact .sliceSwapM a A (deadP_insert hd Γa hΓ)
-  | sliceCopyM a b A hΓ hA =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := sliceCopyV.1) (by rfl)]
-      exact .sliceCopyM a b A (deadP_insert hd Γa hΓ) hA
-  | withbor1 x hΓ hx hsc hf₁ hf₂ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := withbor) (by rfl)]
-      exact .withbor1 x (deadP_insert hd Γa hΓ) hx hsc hf₁ hf₂
-  | withbor2 x hΓ hx hside hf₁ hf₂ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := withbor) (by rfl)]
-      exact .withbor2 x (deadP_insert hd Γa hΓ) hx hside hf₁ hf₂
-  | withbor3 x hΓ hx hf₁ hf₂ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := withbor) (by rfl)]
-      exact .withbor3 x (deadP_insert hd Γa hΓ) hx hf₁ hf₂
-  | withload x hΓ hx hf₁ hf₂ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := BoCa.withload) (by rfl)]
-      exact .withload x (deadP_insert hd Γa hΓ) hx hf₁ hf₂
-  | withswap hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := BoCa.withswap) (by rfl)]; exact .withswap (deadP_insert hd Γa hΓ)
   | withborUD k x hΓ hx hk hf₁ hf₂ hS hMS hDS hSv hP _ ihd =>
       intro Γa Γb hΓ'; subst hΓ'
       have ed := ihd Γa Γb rfl
       rw [withborUE_shift]
       exact .withborUD k x (deadP_insert hd Γa hΓ) hx hk hf₁ hf₂ hS hMS hDS hSv hP ed
-  | withloadU x hΓ hx hf₁ hf₂ hS =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (e := BoCa.withload) (by rfl)]
-      exact .withloadU x (deadP_insert hd Γa hΓ) hx hf₁ hf₂ hS
   | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS _ ihd =>
       intro Γa Γb hΓ'; subst hΓ'
       have ed := ihd Γa Γb rfl
@@ -497,39 +353,9 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
       rw [h₁] at ea; rw [h₂] at ef
       exact .lolliE hs' ea ef
   | allEV _ hlt ih => intro Γa Γb hΓ; exact .allEV (ih Γa Γb hΓ) hlt
-  | ofRet _ ih => intro Γa Γb hΓ; exact .ofRet (ih Γa Γb hΓ)
-  | roll hA hc _ ih => intro Γa Γb hΓ; exact .roll hA hc (ih Γa Γb hΓ)
-  | unroll _ ih => intro Γa Γb hΓ; exact .unroll (ih Γa Γb hΓ)
-  | foldImm F y c R hΓ hF hG hyM hyR hR =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (foldImmV_closed F)]
-      exact .foldImm F y c R (deadP_insert hd Γa hΓ) hF hG hyM hyR hR
-  | foldOwn F R hΓ hF hG =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (foldOwnV_closed F)]
-      exact .foldOwn F R (deadP_insert hd Γa hΓ) hF hG
-  | foldOwnG B₀ Rs hΓ hB =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (FoldP.foldOwnGV_closed B₀)]
-      exact .foldOwnG B₀ Rs (deadP_insert hd Γa hΓ) hB
-  | foldReuse F R hΓ hF hG =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (foldReuseV_closed F)]
-      exact .foldReuse F R (deadP_insert hd Γa hΓ) hF hG
-  | nuIn hC _ ih => intro Γa Γb hΓ; exact .nuIn hC (ih Γa Γb hΓ)
-  | nuOut hC _ ih => intro Γa Γb hΓ; exact .nuOut hC (ih Γa Γb hΓ)
-  | unfoldN C S hC hS hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (unfoldV_closed C)]
-      exact .unfoldN C S hC hS (deadP_insert hd Γa hΓ)
-  | unfoldK C G S hC hG hS hΓ =>
-      intro Γa Γb hΓ'; subst hΓ'
-      rw [shift_closed0 (unfoldV_closed C)]
-      exact .unfoldK C G S hC hG hS (deadP_insert hd Γa hΓ)
   | nuOutK hC hG hS hGf hs =>
       intro Γa Γb hΓ; subst hΓ
       rw [var_shift]; exact .nuOutK hC hG hS hGf (soloP_insert hd Γa hs)
-  | effSub hle _ ih => intro Γa Γb hΓ; exact .effSub hle (ih Γa Γb hΓ)
   | effPerform hAt hf hna hac _ ih => intro Γa Γb hΓ; exact .effPerform hAt hf hna hac (ih Γa Γb hΓ)
   | effAwait hAt hΓ hfa ha haA hfc hc =>
       intro Γa Γb hΓ'; subst hΓ'
@@ -597,7 +423,6 @@ theorem CDerivesX.insert_dead {I : JIdx} (hpf : I.pin = false) (hd : Ctx.Dead Γ
         (Expr.app (Expr.lam (N.shift _ (Γa.length + 1))) ((Expr.lam b).shift _ _)) _
       rw [hb]
       exact .letPoly b hcl hV eN
-  | alpha _ hα ih => intro Γa Γb hΓ; exact .alpha (ih Γa Γb hΓ) hα
   | lendR hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true
   | lendLoopR hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true
   | nilDead hPin => exact absurd (hpf.symm.trans hPin) Bool.false_ne_true

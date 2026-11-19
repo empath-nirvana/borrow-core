@@ -85,8 +85,8 @@ localise() {
 # One program: linted, run at every stage, counted.
 program() {
   local f=$1 w=${PAR_TMP:-$tmp} base in err st rc name got a i c l s b want wa wi wc wl ws wb oldc note
-  if grepq '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0; fi
-  if ! grepq '^main' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$PAR_SIDE/skips"; return 0; fi
+  if grepq -E '^(--|#) check: parse-only' "$f"; then echo "$f: parse-only, skipped"; echo "parse-only $f" >> "$PAR_SIDE/skips"; return 0; fi
+  if ! grepq -E '^(main|fn main\()' "$f"; then echo "$f: no main, skipped"; echo "no-main $f" >> "$PAR_SIDE/skips"; return 0; fi
   base=${f%.bc}
   if [ ! -f "$base.out" ]; then
     echo "$f: no golden $base.out: write it from the source stage with \`scripts/compile-corpus.sh --write-goldens $f\`"
