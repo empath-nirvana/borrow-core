@@ -157,21 +157,39 @@ def sameLine(a, b, back, backF):
 
 
 def same(cf, cg, back, backF):
-    """The original's lines `cf` and the renamed program's `cg` agree up to the renaming, line
-    for line; or, when not in order, each line with one of the other's. Notes are printed in the
-    order of their positions, and a renamed module moves its columns past the program's on the
-    same line number (a position in a module's code is printed under the program's name)."""
+    """The original's lines `cf` and the renamed program's `cg` agree up to the renaming. The
+    notes are compared in order by groups: consecutive lines whose first position has the same
+    line number (or that have none) form a group, the groups must agree in order, and within a
+    group each line must agree with one line of the other's, one to one. A renaming changes
+    columns only, and the notes are printed in the order of their positions; a position in a
+    module's code is printed under the program's name, so a module's note and the program's on
+    the same line number are ordered by columns the renaming moves, and may swap. Notes on
+    different line numbers keep their order."""
     lf, lg = cf.split("\n"), cg.split("\n")
     if len(lf) != len(lg):
         return False
-    if all(sameLine(a, b, back, backF) for a, b in zip(lf, lg)):
-        return True
-    left = list(lg)
-    for a in lf:
-        k = next((j for j, b in enumerate(left) if sameLine(a, b, back, backF)), None)
-        if k is None:
-            return False
-        left.pop(k)
+
+    def groups(ls):
+        out = []
+        for x in ls:
+            m = POS.search(x)
+            k = m.group(1) if m else None
+            if out and out[-1][0] == k:
+                out[-1][1].append(x)
+            else:
+                out.append((k, [x]))
+        return out
+
+    gf, gg = groups(lf), groups(lg)
+    if [(k, len(xs)) for k, xs in gf] != [(k, len(xs)) for k, xs in gg]:
+        return False
+    for (_, xs), (_, ys) in zip(gf, gg):
+        left = list(ys)
+        for a in xs:
+            k = next((j for j, b in enumerate(left) if sameLine(a, b, back, backF)), None)
+            if k is None:
+                return False
+            left.pop(k)
     return True
 
 
