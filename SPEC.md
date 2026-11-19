@@ -3660,6 +3660,19 @@ Six rules, over `CDerives` with its context premises (§10):
   - `[sub]` is `RowLe` (every operation of `Σ` is `Σ′`'s);
   - `[raise]`'s argument type holds no owned cell (`VTy.OwnFree`): the raise abandons it, which
     is not a consume;
+  - `[perform]` and `[raise]` are one rule, `effOp`, over the operation's abort flag
+    `ab : Bool` (#1170). Its term is `opPrim ab` applied to the operation's argument
+    (`perform` at `false`, `raise` at `true`). Its premises are the two rules' shared ones (the
+    tie, `Row.find Σ n i = some o`, `o.rc = false`, `V : A_i`), then `o.abort = ab`, the answer
+    `ab = false → B = B_i`, and `ab = true → A_i.OwnFree`. At `false` it is `[perform]`, the last
+    premise vacuous; at `true` it is `[raise]` at any `B`, the answer premise vacuous. So
+    derivability is exactly the same. `effPerform` and `effRaise` stay as theorems of the judgment
+    and of each instance, with today's statements. The Fundamental Property's case splits on `ab`
+    and applies the unchanged `perform_compatC` or `raise_compatC` (the chain: `_compatN`). The
+    typed term has one node, `effOp`, holding `ab`; `effPerform` and `effRaise` stay as
+    abbreviations of it. The rule count of `CDerives`, of the checker's judgment and of the rules
+    the tie gates (§83) each drops by one. **Status:** the fold (#1170, `folds/perform`), after
+    #798. Not built;
   - `[then]` asks `Σ`'s names to be nonzero and its keys unique, and `!Γ₂` at an unrestricted
     row;
   - `[handle]` takes `H` a value form over a part of the context whose live slots are
@@ -5970,6 +5983,27 @@ invariant.
   borrow cell open at a stop.
 - The rule is `CDerives.effHandleVB` (and `CDerivesAt.effHandleVB`, the handled row tied to `Ξ`,
   §19 *Typing*). Its term is `[handle]`'s `hndExpr`: no term former, no type former, no index.
+- **`[handle]` at a value form is one rule (#1170).** The kernel types `[handle]` at a value form,
+  its continuation plain (`effHandleV`, §19) or boxed (`effHandleVB`, this entry), with one rule,
+  `effHandleVO`, at `d? : Option Lifetime`, and the checker with one typed-term node of the same
+  name:
+  - **The premises** are `effHandleV`'s, in the same order, with the clauses at
+    `clausesTyO Σ R d? E fs` (`clausesTy` at `none`, `clausesTyB d` at `some d`), followed by
+    BOXED-κ's two premises read at every `d ∈ d?`: `∀ d ∈ d?, CtxOutlives Δ Γ₂ d` and
+    `∀ d ∈ d?, Row.AnsOutlives Δ d (E_n ⊕ Σ)`. At `none` the two are vacuous, and at `some d` they
+    are this entry's, so derivability is exactly the same.
+  - **The old names stay.** `effHandleV` and `effHandleVB` are theorems of the judgment and of each
+    of its instances (`CDerives`, `CDerivesAt Ξ`, `CDerivesP`) at `none` and `some d`, with today's
+    binders and statements.
+  - **The Fundamental Property's case** splits on `d?` and applies the unchanged
+    `handleV_compatC` or `handleV_compatCB`. The chain's case applies `HandlerLawN.handleV` or
+    `handleVB`, which stay two separate registered assumptions (`HandleVN`, `HandleVBN`).
+  - **The typed term** has one node, `effHandleVO`, holding `d?`. `effHandleV` and `effHandleVB`
+    stay as abbreviations of it at `none` and `some d`. Backend2 reads that a handler is boxed as
+    `d?.isSome`.
+  - The rule count of `CDerives` and of the checker's judgment each drops by one, and so does the
+    number of rules the tie gates (§83).
+  - **Status:** the fold (#1170, `folds/handlev`), after #798. Not built.
 
 ### Semantics
 
@@ -9537,7 +9571,7 @@ the one it was, and its output.
 
 `Backend2/`, the default of `bcc compile|run`, `bcc interp --stage lir|flat` and `bcc-counts`
 (`--backend old` selects the old backend until it is deleted). The fragment is the programs whose typed term has no effect node
-(`effPerform`, `effRaise`, `effHandle*`, `effThenF`, `effLet` at a nonempty row, `effSub`,
+(`effOp`, `effHandle*`, `effThenF`, `effLet` at a nonempty row, `effSub`,
 `lendR`, `lendLoopR`, `nilDead`, the `…U` borrows, `iterate`, `divFuel`, `reify`,
 `bounded_fix`): 222 corpus programs, I/O programs and codata among them. A program outside it is
 refused by the new backend ("outside the pure fragment") and compiled by the old.
@@ -9836,7 +9870,7 @@ No change: no type, rule, term, typing, elaboration or semantics.
   argument types, one summand per operation, each key once, in the row's order (`payOf`); with no
   abortive operation it is `R`. A non-abortive operation has no run-time content in the type.
   `Div`'s operations stay outside the fragment (N4).
-- **`raise`** (`effRaise`): the payload at its operation's summand, `inr`: a jump to the handler's
+- **`raise`** (the `effOp` node at `ab = true`): the payload at its operation's summand, `inr`: a jump to the handler's
   join (`catch_abort`; frames that catch nothing of its name are passed, `abort_absorbs`).
 - **`[let]` at a row** (`effLet`): `N` on `inl`, the abort handed on and `N`'s context consumed
   (`effLet`'s `hW`: it holds no own cell), the branch per call of §19 (`abort_to`, `abort_passes`).
@@ -9847,13 +9881,13 @@ No change: no type, rule, term, typing, elaboration or semantics.
   `sliceBorrowIU`; `withborUE d`): the lend as §43's; the callback's abort ends it, runs the
   finaliser `d` on the owner and is handed on (`then_fin`). A finaliser that is not a constant is
   outside the fragment.
-- **`[handle]`** (`effHandleV`, `effHandleVB`), read from the node: its name `n`, its operations
+- **`[handle]`** (`effHandleVO`, §28), read from the node: its name `n`, its operations
   `E`, its clauses' kinds `ks` (§19 *Clause kinds*, `classifyHandler_sound`), its outer row `Σ`,
   the masks, and the clauses of its pair written in place. Every clause must be `abortive`, or
   `tail` with its direct call licensed (below); any other kind leaves the program outside the
   fragment. The handled computation runs in place; a value goes to `h_ret` (`catch_ret`), an abort
   of `n`'s operation `j` to clause `j` (`catch_abort`), an abort of `Σ`'s handed on (`fwd_abort`).
-- **A direct call** (`effPerform`). At a static name, the facts license operation `j`'s direct
+- **A direct call** (the `effOp` node at `ab = false`). At a static name, the facts license operation `j`'s direct
   call when every `handle` node of the name (`Backend2/Driver.lean`, `directFacts`)
   - classifies the clause `tail` (`ks`), so its body `M` resumes on every path in tail position
     and uses `κ` nowhere else (`TailResumesAt 0 M M'`, `TailResumesAt.subst_kappa`,
@@ -10354,7 +10388,7 @@ IR's interpreter counts the frame slots a run starts.
 - **Handler state in a register (#537 fix 9).** handlers-di's clock is kept in a register only
   with the facts: without them its cell is stored at every step. Under choice 6 that does not
   count; the state as a local of the LIR remains.
-- **The box lifetime of `effHandleVB`** is not read. No storage of the new backend depends on it:
+- **The box lifetime of `effHandleVB`** (the `d` of `effHandleVO`'s `d? = some d`) is not read. No storage of the new backend depends on it:
   `κ`'s environment is by value, and a level's cell lives as long as its level. It would matter
   where a box's contents are allocated, to place them in the scope the lifetime names.
 - **`!noalias` and `!alias.scope`** (#531), where a parameter attribute is too coarse; Alive2.
@@ -10764,7 +10798,7 @@ it.
 
 ### Facts read
 
-The nodes' former (`effHandleVB`), clause kinds (`ks`) and qualifiers (`E`); the machine
+Whether a `[handle]` node is boxed (`effHandleVO`'s `d?`, §28), its clause kinds (`ks`) and qualifiers (`E`); the machine
 operations (§49); and, after a first conversion, the layouts' recursive classes (§35), each call
 point's callee's suspended computations' classes (`MPoint.outVar`, `suspCodes`) and the machines
 whose cell is passed on (§50, `threadedOf`). The backend guesses neither the frames' owner (the
@@ -10893,7 +10927,7 @@ and `CDerivesP` consume the premise as they consume `SplitMasks`.
   the premise `hcv`: each part's term, at the binders its premise pushes, is covered by its part's
   mask; `M x`'s second part is its argument `x`. Generated with the rules (`scripts/gen-pin.py`,
   `cov_premise`): `tensorI`, `bind`, `app`, `unitE`, `tensorE`, `sumE`, `zeroE`, `lolliE`,
-  `effLet`, `effThenF`, `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL`. It names the slots
+  `effLet`, `effThenF`, `effHandleVO`, `effHandleT`, `effHandleL`. It names the slots
   a part's term mentions, not its context's liveness, so the checker's masks are unchanged.
 - **A typed term mentions only live slots** (`CDerivesP.mentions_live`, `Core/Mentions.lean`): a
   term `CDerivesP` types at `Γ` mentions only slots live in `Γ`. Induction on `CDerivesP`, as
@@ -14919,9 +14953,9 @@ its instances: abbreviations that keep their names, their rules and every statem
     abbrev CDerivesP       := CDerivesX {pin := true}
 
 - **The fields.** A field is a gating premise of the rules it gates.
-  - `ties`: at `some Ξ`, ten rules take `hAt : I.RowOK S`, which is `RowAt Ξ S` (§19, decision
+  - `ties`: at `some Ξ`, eight rules take `hAt : I.RowOK S`, which is `RowAt Ξ S` (§19, decision
     R). These are the rules that read an operation's signature off a row: `iterate`, `divFuel`,
-    `reify`, `effPerform`, `effAwait`, `effRaise`, `effHandleV`, `effHandleVB`, `effHandleT`,
+    `reify`, `effOp` (§19), `effAwait`, `effHandleVO` (§28), `effHandleT`,
     `effHandleL`. At `none` the premise is `True`.
   - `pin`: `lendR`, `lendLoopR` and `nilDead` (§29) take `hPin : I.pin = true`. Every other rule
     is the same at every index.
@@ -14936,8 +14970,8 @@ its instances: abbreviations that keep their names, their rules and every statem
     and review. `scripts/check-judgments.sh` sees only a new inductive, not a new field.
     `CDerives` itself carries no index.
 - **Generated per instance** (`Core/JudgmentElim.lean`, by `scripts/gen-pin.py`):
-  - each rule under the instance's name, at the instance's premises: `CDerives.effPerform`
-    without `hAt`, `CDerivesAt.effPerform` with `RowAt Ξ S`, `CDerivesP.lendR` without `hPin`;
+  - each rule under the instance's name, at the instance's premises: `CDerives.effOp`
+    without `hAt`, `CDerivesAt.effOp` with `RowAt Ξ S`, `CDerivesP.lendR` without `hPin`;
   - the instance's eliminator, with the instance's own cases (`induction h using
     CDerives.induct`). A rule whose field is off at the instance is refuted, so it is no case.
 - **A, `ties`.**
