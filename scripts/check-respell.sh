@@ -133,16 +133,24 @@ if [ ${#mods[@]} -gt 0 ]; then
   export oldlib
   # The programs: corpus files with a `main` outside the twins, and which modules they reach.
   progs=$(find corpus -path corpus/.respell-old -prune -o -name '*.bc' -type f -print | sort |
-    while IFS= read -r f; do grepq -E '^(main|fn main\()' "$f" && echo "$f"; done || true)
+    while IFS= read -r f; do if grepq -E '^(main|fn main\()' "$f"; then echo "$f"; fi; done) ||
+    { echo "check-respell: a program could not be read"; exit 2; }
   reach=$(printf '%s\n' "$progs" | python3 -I -c '
 import re, sys
 mods = set(sys.argv[1:])
 imp = re.compile(r"^(?:include|import)\s+([A-Za-z_][A-Za-z0-9_]*)", re.M)
-def imports(path):
+def imports(path, module=False):
+    # A name with no file under lib/ is no library module; any other failure to read is fatal,
+    # never taken for a file that imports nothing.
     try:
-        return imp.findall(open(path, encoding="utf-8", errors="surrogateescape").read())
-    except OSError:
-        return []
+        with open(path, encoding="utf-8", errors="surrogateescape") as fh:
+            return imp.findall(fh.read())
+    except FileNotFoundError:
+        if module:
+            return []
+        raise
+    except OSError as e:
+        sys.exit(f"check-respell: cannot read {path}: {e}")
 lib = {}
 def closure(start):
     seen, todo = set(), list(start)
@@ -152,14 +160,14 @@ def closure(start):
             continue
         seen.add(m)
         if m not in lib:
-            lib[m] = imports(f"lib/{m}.bc")
+            lib[m] = imports(f"lib/{m}.bc", module=True)
         todo += lib[m]
     return seen
 for p in sys.stdin.read().split():
     hit = sorted(closure(["io", "div", "prelude"] + imports(p)) & mods)
     if hit:
         print(p, " ".join(hit))
-' "${mods[@]}")
+' "${mods[@]}") || { echo "check-respell: the modules each program reaches could not be read"; exit 2; }
   for m in "${mods[@]}"; do
     if ! printf '%s\n' "$reach" | grepq -E " $m( |\$)"; then
       ok=0; for u in ${uncovered[@]+"${uncovered[@]}"}; do [ "${u%%:*}" = "$m" ] && ok=1; done
